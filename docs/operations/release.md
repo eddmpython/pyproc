@@ -3,16 +3,17 @@
 ## 버전 정책
 
 - 버전은 `0.0.x` 라인. **릴리즈 때만** 끝자리를 1씩 올린다.
-- `package.json`의 버전과 git 태그(`v0.0.x`)는 항상 같은 값이어야 한다. 태그는 릴리즈 때만 만든다.
+- **태그는 소유자의 명시 지시가 있을 때만 만든다.** 릴리즈 커밋마다 태그를 남발하지 않는다. 태그를 만드는 경우에는 그 시점 `package.json` 버전과 같은 값(`v0.0.x`)이어야 한다.
 - 브레이킹(공개 표면·subpath export·타입 시그니처 변경)은 릴리즈 노트(커밋 메시지 본문)에 명시한다. codaro가 컴파일 의존하는 시그니처는 [소비 계약](../consuming/contract.md) 참조.
 
 ## 릴리즈 절차
 
-1. `npm test` green + 브라우저 실측 green([testing.md](testing.md)).
+1. `npm test` green + 브라우저 게이트 green([testing.md](testing.md)).
 2. `package.json` 버전 끝자리 +1.
 3. 문서 정합: README·mainPlan 진행 원장이 이번 변경을 반영했는가.
-4. 커밋(한국어, 변경 범주 + 내용. 도구 흔적 금지) 후 `git tag v0.0.x` (package.json과 동일 값).
-5. `main -> origin/main` 푸시 + `git push origin v0.0.x`.
+4. 커밋(한국어, 변경 범주 + 내용. 도구 흔적 금지).
+5. `main -> origin/main` 푸시.
+6. 태그는 여기서 만들지 않는다. 소유자가 명시적으로 지시한 경우에만 `git tag v0.0.x` + `git push origin v0.0.x`.
 
 ## 소비 반영 (SHA 핀)
 

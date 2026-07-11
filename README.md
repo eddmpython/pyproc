@@ -42,13 +42,7 @@ Cross-Origin-Embedder-Policy: require-corp
 
 ## Install
 
-```bash
-npm install pyproc
-```
-
-There is no build step (native ESM). You can also import it directly in a `<script type="module">` without a bundler.
-
-Products should pin a commit SHA rather than float on the default branch:
+Install by pinning a commit SHA (publishing to the npm registry is in preparation; floating on the default branch is not allowed):
 
 ```jsonc
 // package.json
@@ -56,6 +50,16 @@ Products should pin a commit SHA rather than float on the default branch:
   "pyproc": "github:eddmpython/pyproc#<commit-sha>"
 }
 ```
+
+There is no build step (native ESM). You can also import straight from a CDN with no install:
+
+```html
+<script type="module">
+  import { boot } from "https://cdn.jsdelivr.net/gh/eddmpython/pyproc@<commit-sha>/index.js";
+</script>
+```
+
+Direct CDN import supports the single-runtime path (`boot`/`Runtime`/reactivity) only. The process OS (`PyProc`) needs its worker file to be same-origin with your page (browsers block cross-origin workers), so use the npm install or vendor the files.
 
 ## Quick start
 
@@ -156,11 +160,12 @@ pyproc becomes an SSOT only through **real imports**, not references. Consumers 
 ## Development
 
 ```bash
-npm test          # Node structure/lint gate (zero dependencies)
-npm run serve     # COOP/COEP static server for browser validation (zero dependencies)
+npm test              # Node structure/lint gate (zero dependencies)
+npm run test:browser  # headless Chromium runtime gate: boot / reactive contract / fork / map (zero dependencies)
+npm run serve         # COOP/COEP static server for manual validation (zero dependencies)
 ```
 
-Browser validation runs the HTML in `examples/` (`basic.html`, `processOs.html`) via `npm run serve` so the page is crossOriginIsolated. Because this is a WASM runtime, real validation only happens in a browser. Procedure: [docs/operations/testing.md](docs/operations/testing.md).
+Because this is a WASM runtime, real validation only happens in a browser: `test:browser` launches your local Edge/Chrome headless and verifies the public surface actually works (the same gate runs in CI). For manual checks and benchmarks, serve `examples/` via `npm run serve`. Procedure: [docs/operations/testing.md](docs/operations/testing.md).
 
 Operating docs (operating model, testing, releases, consumption contract) live in [docs/](docs/README.md), design/roadmap/decision records in [mainPlan/](mainPlan/README.md), and contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
 

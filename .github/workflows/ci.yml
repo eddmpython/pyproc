@@ -1,0 +1,29 @@
+# CI: 구조 게이트 + 브라우저 런타임 게이트. 게이트 정의의 SSOT는 tests/ (여기는 디스패치만).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # ubuntu 러너에 Google Chrome이 프리인스톨되어 있다. CI=true라 --no-sandbox가 자동 적용된다.
+      - run: npm run test:browser
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome

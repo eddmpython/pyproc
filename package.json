@@ -1,6 +1,6 @@
 {
   "name": "pyproc",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "브라우저 파이썬 프로세스 OS - 서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬(프로세스·병렬·복원 리액티브). codaro/dartlab/xlpod 공통 런타임 SSOT.",
   "type": "module",
   "main": "index.js",
@@ -16,6 +16,7 @@
   "files": ["index.js", "index.d.ts", "src", "README.md", "README.ko.md", "LICENSE"],
   "scripts": {
     "test": "node tests/run.mjs",
+    "test:browser": "node tests/browser/run.mjs",
     "serve": "node examples/serve.mjs"
   },
   "keywords": ["pyodide", "python", "browser", "wasm", "process", "parallel", "reactive", "runtime"],
