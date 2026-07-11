@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: envSnapshot</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 환경 스냅샷 = 2차 부팅을 설치가 아니라 복원으로 (uv 레인)</h1>
+<p>1차 실측(2026-07-12): 패키지가 실린 힙은 postImport / loadPyodide({packages}) /
+makeMemorySnapshot({serializer}) 세 레인 모두 "Unexpected hiwire entry at index 6"로 거부
+(#5195 벽, loadPackage가 남기는 JS 참조). 이 probe는 그 벽을 재확인 판정으로 굳히고,
+실전 우회(bare 스냅샷 + OPFS 휠 + import)가 콜드 대비 2배 게이트를 넘는지 실측한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { WheelCache } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+  // WheelCache는 rt.loadPackages만 부르므로 raw pyodide를 계약 모양으로 감싼다(probe 한정).
+  const asRt = (py) => ({ loadPackages: (p) => py.loadPackage(p), install: () => { throw new Error("미사용"); } });
+
+  async function main() {
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = INDEX + "pyodide.js"; s.onload = res;
+      s.onerror = () => rej(new Error("pyodide.js 로드 실패")); document.head.appendChild(s);
+    });
+    const opfs = await navigator.storage.getDirectory();
+    const wheelDir = await opfs.getDirectoryHandle("envProbeWheels", { create: true });
+    const snapDir = await opfs.getDirectoryHandle("envProbeSnaps", { create: true });
+
+    // 콜드 기준선: bare 부팅 + numpy 설치(네트워크, OPFS 휠 캐시 채움) + import/연산
+    let t = performance.now();
+    const p1 = await loadPyodide({ indexURL: INDEX, _makeSnapshot: true });
+    timings.bareBootMs = Math.round(performance.now() - t);
+    const wcFill = new WheelCache(asRt(p1), { dir: wheelDir });
+    t = performance.now();
+    await wcFill.loadPackages(["numpy"]);
+    timings.installColdMs = Math.round(performance.now() - t);
+    t = performance.now();
+    const base = p1.runPython("import numpy\nint(numpy.arange(1000).sum())");
+    timings.importColdMs = Math.round(performance.now() - t);
+    timings.coldTotalMs = timings.bareBootMs + timings.installColdMs + timings.importColdMs;
+    check("콜드 기준선(휠 캐시 채움 포함)", base === 499500 && wcFill.misses > 0,
+      `boot ${timings.bareBootMs} + install ${timings.installColdMs} + import ${timings.importColdMs} = ${timings.coldTotalMs}ms, 휠 miss ${wcFill.misses}`);
+
+    // 벽 재확인: 패키지 실린 힙 스냅샷은 3레인 전부 hiwire 벽이어야 한다(뚫리면 이 판정이
+    // FAIL로 울리고, 더 좋은 레인이 열렸다는 신호다 -> 결론 표 갱신 대상).
+    const walls = [];
+    try { p1.makeMemorySnapshot(); walls.push("postImport 통과?!"); } catch (e) { walls.push("postImport 벽"); }
+    try {
+      p1.makeMemorySnapshot({ serializer: () => null });
+      walls.push("serializer 통과?!");
+    } catch (e) { walls.push("serializer 벽"); }
+    const wallConfirmed = walls.every((w) => w.endsWith("벽"));
+    check("풀 env 스냅샷 hiwire 벽 재확인", wallConfirmed, walls.join(", "));
+
+    // 우회 레인: bare 스냅샷(OPFS) + 휠 OPFS + import = 웜 부팅
+    t = performance.now();
+    const p2 = await loadPyodide({ indexURL: INDEX, _makeSnapshot: true });
+    const snap = p2.makeMemorySnapshot();
+    timings.bareSnapMs = Math.round(performance.now() - t);
+    timings.snapMB = +(snap.byteLength / 1048576).toFixed(1);
+    t = performance.now();
+    const fh = await snapDir.getFileHandle("bare.bin", { create: true });
+    const w = await fh.createWritable(); await w.write(snap); await w.close();
+    timings.opfsWriteMs = Math.round(performance.now() - t);
+    check("bare 스냅샷 채취 + OPFS 저장", snap.byteLength > 0, `${timings.snapMB}MB, 채취 ${timings.bareSnapMs}ms / 쓰기 ${timings.opfsWriteMs}ms`);
+
+    // 웜 부팅(실사용 경로 전체): OPFS 스냅샷 읽기 -> _loadSnapshot 부팅 -> OPFS 휠 설치 -> import
+    t = performance.now();
+    const stored = new Uint8Array(await (await (await snapDir.getFileHandle("bare.bin")).getFile()).arrayBuffer());
+    timings.opfsReadMs = Math.round(performance.now() - t);
+    t = performance.now();
+    const child = await loadPyodide({ indexURL: INDEX, _loadSnapshot: stored });
+    timings.childBootMs = Math.round(performance.now() - t);
+    const wcHit = new WheelCache(asRt(child), { dir: wheelDir });
+    t = performance.now();
+    await wcHit.loadPackages(["numpy"]);
+    timings.installWarmMs = Math.round(performance.now() - t);
+    t = performance.now();
+    const v = child.runPython("import numpy\nint(numpy.arange(2000).sum())");
+    timings.importWarmMs = Math.round(performance.now() - t);
+    check("웜 커널: numpy 연산 정확", v === 1999000, `compute ok`);
+    check("휠이 OPFS에서 서빙됨(네트워크 0)", wcHit.hits > 0 && wcHit.misses === 0, `hit ${wcHit.hits} / miss ${wcHit.misses}`);
+
+    timings.warmTotalMs = timings.opfsReadMs + timings.childBootMs + timings.installWarmMs + timings.importWarmMs;
+    timings.speedup = +(timings.coldTotalMs / timings.warmTotalMs).toFixed(2);
+    check("웜 부팅이 콜드 대비 2배 이상", timings.speedup >= 2,
+      `${timings.coldTotalMs}ms -> ${timings.warmTotalMs}ms (${timings.speedup}배: snap읽기 ${timings.opfsReadMs} + boot ${timings.childBootMs} + install ${timings.installWarmMs} + import ${timings.importWarmMs})`);
+  }
+
+  try { await main(); }
+  catch (e) { check("예외 없음", false, String(e).slice(0, 300)); }
+  await report();
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: swOffline</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: Service Worker 완전 오프라인 부팅 (기둥5의 남은 구멍 봉인)</h1>
+<p>1단계: SW 등록 + 1차 부팅으로 CDN 자산 전량을 Cache Storage에 채우고 새로고침.
+2단계: 통계 리셋 후 부팅 -> CDN 미스 0이면 script 경로까지 포함한 완전 오프라인 등가.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const swCall = (msg) => new Promise((res) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = (e) => res(e.data);
+    navigator.serviceWorker.controller.postMessage(msg, [ch.port2]);
+  });
+
+  try {
+    const phase = sessionStorage.getItem("pyprocSwPhase") || "1";
+    if (phase === "1") {
+      out.textContent = "1단계: 프리캐시 중...";
+      const reg = await navigator.serviceWorker.register("./swOfflineSw.js");
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) {
+        await new Promise((res) => navigator.serviceWorker.addEventListener("controllerchange", res, { once: true }));
+      }
+      const rt = await boot(); // SW 경유 1차 부팅 = 캐시 채움
+      rt.run("x = 1");
+      const s1 = await swCall("stats");
+      sessionStorage.setItem("pyprocSwPhase", "2");
+      sessionStorage.setItem("pyprocSwFill", JSON.stringify(s1));
+      location.reload();
+    } else {
+      sessionStorage.removeItem("pyprocSwPhase");
+      await navigator.serviceWorker.ready;
+      const fill = JSON.parse(sessionStorage.getItem("pyprocSwFill") || "{}");
+      check("1차 프리캐시가 CDN 자산을 채움", (fill.misses || 0) > 0, `1차 채움 ${fill.misses}건: ${(fill.missList || []).join(", ").slice(0, 90)}`);
+
+      await swCall("resetStats");
+      let t = performance.now();
+      const rt = await boot();
+      timings.offlineBootMs = Math.round(performance.now() - t);
+      const v = rt.run("40 + 2");
+      const s2 = await swCall("stats");
+      timings.secondBootHits = s2.hits; timings.secondBootMisses = s2.misses;
+      check("2차 부팅 + 연산 정확", v === 42, `${timings.offlineBootMs}ms`);
+      check("2차 부팅 CDN 네트워크 0 (script 경로 포함)", s2.misses === 0 && s2.hits > 0,
+        `cache hit ${s2.hits} / miss ${s2.misses}${s2.misses ? ": " + s2.missList.join(",") : ""}`);
+
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.unregister();
+      await report();
+    }
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+    await report();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: pep723</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: PEP 723 인라인 메타데이터 = .py 파일의 의존성 자급 (브라우저판 uv run)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    let t = performance.now();
+    const rt = await boot();
+    timings.bootMs = Math.round(performance.now() - t);
+
+    // 의존성을 스스로 선언하는 스크립트 (PEP 723 규격 그대로)
+    const SCRIPT = [
+      "# /// script",
+      '# requires-python = ">=3.11"',
+      "# dependencies = [",
+      '#   "six",',
+      "# ]",
+      "# ///",
+      "import six",
+      "result = six.__version__",
+    ].join("\n");
+
+    // 파서는 전부 파이썬 표준 라이브러리(스펙 정규식 + tomllib): 의존성 0 유지
+    rt.run([
+      "import re, tomllib, json",
+      "def _pep723Read(src):",
+      "    pat = r'(?m)^# /// (?P<type>[a-zA-Z0-9-]+)$\\s(?P<content>(^#(| .*)$\\s)+)^# ///$'",
+      "    found = [m for m in re.finditer(pat, src) if m.group('type') == 'script']",
+      "    if len(found) > 1:",
+      "        raise ValueError('script 블록 중복')",
+      "    if not found:",
+      "        return None",
+      "    content = ''.join(line[2:] if line.startswith('# ') else line[1:] for line in found[0].group('content').splitlines(keepends=True))",
+      "    return tomllib.loads(content)",
+    ].join("\n"));
+
+    rt.setGlobal("_pepSrc", SCRIPT);
+    const meta = JSON.parse(rt.run("json.dumps(_pep723Read(_pepSrc))"));
+    check("파싱: dependencies 추출", meta && Array.isArray(meta.dependencies) && meta.dependencies[0] === "six", JSON.stringify(meta && meta.dependencies));
+    check("파싱: requires-python", meta && meta["requires-python"] === ">=3.11", String(meta && meta["requires-python"]));
+
+    rt.setGlobal("_pepSrc", "print('no block')");
+    check("블록 없는 스크립트 -> None", rt.run("json.dumps(_pep723Read(_pepSrc))") === "null");
+
+    // e2e: 파싱 -> 자동 설치 -> 그 스크립트 실행 (uv run 등가)
+    t = performance.now();
+    for (const dep of meta.dependencies) await rt.install(dep);
+    timings.autoInstallMs = Math.round(performance.now() - t);
+    rt.run(SCRIPT);
+    const v = rt.run("result");
+    check("자동 설치 + 실행 e2e", typeof v === "string" && v.length > 0, `six ${v}, 설치 ${timings.autoInstallMs}ms`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

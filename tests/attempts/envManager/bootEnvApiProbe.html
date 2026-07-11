@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: bootEnvApi</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 승격된 uv 레인 계약 재실측 (bootEnv / freeze -> boot lockFileURL)</h1>
+<p>envSnapshotProbe가 기전을 실측했다면, 이 probe는 배포 코드(bootEnv/freeze/boot)의
+조립 그대로를 검증한다: coldFill -> snapshot 레인 전환, 웜 부팅 절대 시간,
+freeze 락이 boot({lockFileURL})로 관통되는가.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot, bootEnv } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const opfs = await navigator.storage.getDirectory();
+    const dirs = {
+      snapshots: await opfs.getDirectoryHandle("bootEnvSnaps", { create: true }),
+      wheels: await opfs.getDirectoryHandle("bootEnvWheels", { create: true }),
+    };
+    const manifest = { packages: ["numpy"], setup: "import numpy" };
+
+    // 1차: 콜드 + 캐시 채움 레인
+    const rt1 = await bootEnv(manifest, dirs);
+    timings.first = rt1.envBoot;
+    check("1차 부팅: coldFill 레인 + numpy 동작", rt1.envBoot.lane === "coldFill" && rt1.run("int(numpy.arange(1000).sum())") === 499500,
+      `${rt1.envBoot.totalMs}ms (${rt1.envBoot.lane})`);
+
+    // 2차: 스냅샷 웜 레인 (설치는 OPFS 휠, 부팅은 힙 복원)
+    const rt2 = await bootEnv(manifest, dirs);
+    timings.second = rt2.envBoot;
+    check("2차 부팅: snapshot 레인", rt2.envBoot.lane === "snapshot", `boot ${rt2.envBoot.bootMs}ms`);
+    check("2차: setup까지 산 채로(numpy 즉시 사용)", rt2.run("int(numpy.arange(2000).sum())") === 1999000);
+    check("2차 총 시간 3초 이내(웜 게이트)", rt2.envBoot.totalMs <= 3000, `${rt2.envBoot.totalMs}ms = boot ${rt2.envBoot.bootMs} + install ${rt2.envBoot.installMs} + setup ${rt2.envBoot.setupMs}`);
+
+    // freeze 락이 boot 옵션으로 관통되는가: 배포판에 없는 패키지(cowsay)로만 증명된다
+    await rt2.install("cowsay");
+    const lock = await rt2.freeze();
+    const lockUrl = URL.createObjectURL(new Blob([lock], { type: "application/json" }));
+    const rtL = await boot({ lockFileURL: lockUrl });
+    await rtL.loadPackages(["cowsay"]);
+    check("boot({lockFileURL}): 락 관통(비배포판 패키지 핀 설치)",
+      rtL.run("import importlib.metadata\nimportlib.metadata.version('cowsay')") === rt2.run("import importlib.metadata\nimportlib.metadata.version('cowsay')"));
+
+    await opfs.removeEntry("bootEnvSnaps", { recursive: true });
+    await opfs.removeEntry("bootEnvWheels", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

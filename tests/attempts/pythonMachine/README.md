@@ -19,6 +19,8 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 컴퓨터가 파일 하나로 이동하나 | [machineImageProbe.html](machineImageProbe.html) | 단일 파일 + SHA-256 + trust 게이트 + 부활 |
 | 디스크가 커널을 넘어 사나 | [homeDiskProbe.html](homeDiskProbe.html) | /home/web 파일이 새 커널에서 생존 |
 | 네트워크 없이 부팅되나 | [offlineBootProbe.html](offlineBootProbe.html) | 2차 부팅 fetch 계층 miss 0 |
+| script 경로까지 오프라인 되나(구멍 봉인) | [swOfflineProbe.html](swOfflineProbe.html) | SW 캐시-우선으로 2차 부팅 CDN 요청 전량 캐시(miss 0) |
+| 머신이 탭 밖에서 사나(커널 데몬) | [sharedKernelProbe.html](sharedKernelProbe.html) | 연결 2개(=탭 2개)가 같은 파이썬 상태 공유 + 동시 요청 정합 |
 
 ## 결론 표
 
@@ -31,7 +33,9 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 2026-07-12 | machineImageProbe | Edge headless | 13.7MB `.pymachine` 단일 파일(내보내기 59ms), trust 없이는 거부, 1바이트 변조 거부(SHA-256), 파일로 부팅 2.5s에 상태 전부 생존 | **파일 하나 = 살아있는 컴퓨터** 성립(신뢰 모델 포함) | 졸업 -> `exportImage`/`openMachine` |
 | 2026-07-12 | homeDiskProbe | Edge headless | `/home/web` 마운트: python open/os로 쓴 파일·디렉터리·바이너리가 다른 커널에서 생존. 발견: pyodide 기본 /home 비어있지 않아 기본 경로는 /home/web | 영속 디스크 성립 | 졸업 -> `Runtime.mountHome` |
 | 2026-07-12 | offlineBootProbe | Edge headless | 코어 3종(wasm/stdlib/lock) OPFS 캐시, 2차 부팅 hit 3/miss 0(fetch 계층 네트워크 0), 웜 2457ms vs 콜드 4006ms. 한계: pyodide.js/asm.js는 script 경로라 fetch 밖(완전 오프라인은 SW 몫) | boot({coreCacheDir}) 성립 | 졸업 -> runtime.js coreCacheDir 옵션(rt.coreCache 통계). 무한재귀(fetch 재진입) 결함 수정 |
+| 2026-07-12 | swOfflineProbe | Edge headless | SW 캐시-우선: 1차 부팅이 CDN 5건 채움(pyodide.js/asm.mjs **script 경로 포함**), 리로드 후 2차 부팅 **CDN miss 0**(hit 3, 잔여 2건은 브라우저 메모리 캐시 = 역시 네트워크 0), 2391ms | 기둥5의 남은 구멍(script 경로) 봉인 = 완전 오프라인 등가 성립 | 졸업 -> `pyprocSw.js`(?cache=1, coreCache와 상보) |
+| 2026-07-12 | sharedKernelProbe | Edge headless | SharedWorker(module) 커널 부팅 4253ms, 연결 A의 `x=41`을 연결 B가 `x+1=42`로 조회, 동시 요청 정합. **벽: crossOriginIsolated=false**(플랫폼 제약) = SAB 불가, JSPI는 true | **머신이 탭 밖에서 산다**(여러 탭 = 한 상태). interrupt/스냅샷-fork는 이 커널에서 불가(SAB) | 졸업 -> `SharedKernel`(실행/상태 공유 v1). SAB 기능은 플랫폼 COI 지원 대기 |
 
 ## 판정
 
-진행 중 (7개 질문 실측 완료: 결정성/리플레이/성장/이미지/디스크/오프라인. 잔여: /home 포함 이미지 v2, Service Worker 완전 오프라인, 델타 분기)
+진행 중 (9개 질문 실측 완료: 결정성/리플레이/성장/이미지/디스크/오프라인 2단/공유 커널. 잔여: /home 포함 이미지 v2, 델타 분기, SharedKernel과 머신 수명주기 결합)

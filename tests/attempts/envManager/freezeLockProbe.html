@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: freezeLock</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: micropip.freeze 락 = 재현 가능한 환경 (uv lock 등가)</h1>
+<p>A에서 설치한 환경을 freeze로 락 파일화하고, B가 그 락으로 부팅하면
+같은 버전이 해석(resolution) 0으로 설치되는가. 대상 패키지는 pyodide 배포판에
+없는 것(cowsay)이어야 "우리 락이 실제로 쓰였다"가 증명된다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+  try {
+    // A: pypi 패키지 설치 후 freeze
+    const rtA = await boot();
+    let t = performance.now();
+    await rtA.install("cowsay");
+    timings.installAMs = Math.round(performance.now() - t);
+    const vA = rtA.run("import importlib.metadata\nimportlib.metadata.version('cowsay')");
+    const lock = rtA.raw.pyimport("micropip").freeze();
+    const lockObj = JSON.parse(lock);
+    const entry = lockObj.packages && lockObj.packages.cowsay;
+    check("freeze가 pyodide-lock 형식 반환", !!(lockObj.info && lockObj.packages), `packages ${Object.keys(lockObj.packages || {}).length}개`);
+    check("락에 cowsay 핀(URL+sha256)", !!(entry && /^https?:/.test(entry.file_name) && entry.sha256), entry ? `${entry.version} @ ${entry.file_name.slice(0, 60)}...` : "없음");
+
+    // B: 그 락으로 부팅 -> loadPackage만으로(마이크로핍/해석 0) 같은 버전 설치
+    const blobUrl = URL.createObjectURL(new Blob([lock], { type: "application/json" }));
+    t = performance.now();
+    const pyB = await loadPyodide({ indexURL: INDEX, lockFileURL: blobUrl });
+    timings.bootBMs = Math.round(performance.now() - t);
+    t = performance.now();
+    await pyB.loadPackage("cowsay"); // 배포판에 없는 이름: 우리 락이 쓰였을 때만 성공
+    timings.lockInstallMs = Math.round(performance.now() - t);
+    const vB = pyB.runPython("import importlib.metadata\nimportlib.metadata.version('cowsay')");
+    check("B: 락 부팅 + 해석 0 설치", vB === vA, `A=${vA} B=${vB}, 설치 ${timings.lockInstallMs}ms`);
+    const usable = pyB.runPython("import cowsay\nlen(cowsay.get_output_string('cow', 'hi'))");
+    check("B: 패키지 실동작", usable > 0, `${usable} chars`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

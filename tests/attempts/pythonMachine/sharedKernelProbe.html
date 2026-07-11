@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: sharedKernel</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: SharedWorker 커널 - 머신이 탭 밖에서 산다</h1>
+<p>SharedWorker에 커널을 올리면 여러 연결(=여러 탭)이 같은 파이썬 상태를 본다.
+탭은 터미널(화면)일 뿐이고, 컴퓨터는 워커에서 계속 돈다. 판 바꾸는 아키텍처의 성립 실측.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  // 연결 팩토리: 같은 (url, name) 조합이면 브라우저가 같은 SharedWorker 인스턴스를 준다.
+  const mk = () => {
+    const sw = new SharedWorker("./sharedKernelWorker.js", { type: "module", name: "pyprocKernelProbe" });
+    sw.port.start();
+    let seq = 0; const pend = new Map();
+    sw.port.onmessage = (e) => { const p = pend.get(e.data.id); if (p) { pend.delete(e.data.id); p(e.data); } };
+    return { call: (type, code) => new Promise((res) => { const id = ++seq; pend.set(id, res); sw.port.postMessage({ id, type, code }); }) };
+  };
+  try {
+    const a = mk(), b = mk(); // 탭 2개 등가(연결 2개)
+    let t = performance.now();
+    const r1 = await a.call("run", "x = 41\n'ok'");
+    timings.firstRunMs = Math.round(performance.now() - t);
+    timings.kernelBootMs = r1.bootMs;
+    check("SharedWorker 커널 부팅 + 연결 A 실행", r1.ok && r1.result === "ok", `커널 부팅 ${r1.bootMs}ms`);
+
+    const r2 = await b.call("run", "x + 1");
+    check("연결 B가 같은 커널을 본다(상태 공유)", r2.ok && r2.result === 42, `x+1=${r2.result}`);
+
+    const [c1, c2] = await Promise.all([a.call("run", "x"), b.call("run", "x * 2")]);
+    check("두 연결 동시 요청 정합", c1.ok && c2.ok && c1.result === 41 && c2.result === 82, `${c1.result}, ${c2.result}`);
+
+    const info = await a.call("info");
+    timings.crossOriginIsolated = info.result && info.result.coi;
+    timings.jspi = info.result && info.result.jspi;
+    check("워커 환경 능력 기록(SAB/JSPI 가능 여부)", info.ok, `crossOriginIsolated=${timings.crossOriginIsolated}, JSPI=${timings.jspi}`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

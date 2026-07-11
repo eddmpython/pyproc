@@ -21,6 +21,7 @@
 | 대표 라이브러리가 얼마나 깔리나 | [libCoverageProbe.html](libCoverageProbe.html) | 대표군 설치·import 성공률 실측(성공/실패 분류가 산출물) |
 | 기준 힙을 RAM 밖(OPFS)에 둘 수 있나 | [opfsCheckpointProbe.html](opfsCheckpointProbe.html) | 쓰기/읽기 처리량 + 로드본 복원 정확 -> `saveBase`/`loadBase` 승격 |
 | 패키지 로드 후 스냅샷 재수확이 되나(warm-fork 우회) | [reharvestProbe.html](reharvestProbe.html) | 되면 warm-fork·환경=이미지 개방, 안 되면 벽 좌표 확정 |
+| 파이썬 서버가 진짜 URL로 응답하나(가상 오리진) | [swOriginProbe.html](swOriginProbe.html) | SW 가로채기 -> ASGI 위임 fetch가 GET/POST 정합 + 왕복 < 100ms -> SW 자산 + 배선 승격 |
 
 ## 결론 표
 
@@ -51,7 +52,8 @@
 
 | 2026-07-12 | shardMapProbe | Edge headless | 32MB float64 sort+sum: 1워커 570ms vs 4워커 108ms = **5.28배**, 합·sqrt합 정확. 발견 2건: 워커의 loadPackage는 다운로드만이라 부팅 setup 예열 필요, bare 워커엔 numpy 미설치 -> PyProc({packages, setup}) 계약 신설 | numpy 단일스레드 열세를 프로세스 샤딩으로 완화 | 졸업 -> `pyProc.js` `mapArray`(SAB 공유 + 워커 내 1회 복사 numpy화), 게이트 상시 |
 
+| 2026-07-12 | swOriginProbe | Edge headless | SW가 `/pyproc/*` fetch를 가로채 페이지 커널 ASGI로 위임: GET(쿼리 포함)/POST body 왕복 정합, 무관 경로 통과, 평균 **3.4ms/req**(직접 dispatch와 동일 = SW 오버헤드 0) | **가상 오리진 성립**: 파이썬 서버가 진짜 URL이 된다(WebContainers의 localhost 개념을 ASGI 위에) | 졸업 -> `pyprocSw.js`(SW 자산, ?asgi=접두) + `VirtualOrigin`(페이지 배선) |
 
 ## 판정
 
-진행 중 (수명주기·soundness·시스템콜 v1·예외 안전 복원·ASGI 서버 졸업, 버전 관문 통과 / 터미널 승격, 체크포인트 그래프+OPFS, 라이브러리 커버리지, 협조적 취소 잔여)
+진행 중 (수명주기·soundness·시스템콜 v1·예외 안전 복원·ASGI 서버·가상 오리진 졸업, 버전 관문 통과 / 저수준 socket·requests, 라이브러리 실패군 탐색 잔여)

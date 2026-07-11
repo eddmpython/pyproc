@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: swOrigin</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 가상 오리진 - 파이썬 서버가 진짜 URL로 응답한다</h1>
+<p>Service Worker가 <code>/pyproc/*</code> fetch를 가로채 커널의 ASGI로 위임하면,
+iframe/타 스크립트/그냥 fetch()가 브라우저 안 파이썬 서버를 HTTP처럼 때린다(소켓 0).</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  let reg = null;
+  try {
+    // 1) 커널 + ASGI 앱(표준 라이브러리만: 설치 0 -> 배선 자체를 측정)
+    let t = performance.now();
+    const rt = await boot();
+    timings.bootMs = Math.round(performance.now() - t);
+    rt.run([
+      "import json",
+      "async def app(scope, receive, send):",
+      "    msg = await receive()",
+      "    body = msg.get('body', b'')",
+      "    out = json.dumps({'path': scope['path'], 'method': scope['method'], 'q': scope['query_string'].decode(), 'echo': body.decode(), 'n': 42}).encode()",
+      "    await send({'type': 'http.response.start', 'status': 200, 'headers': [(b'content-type', b'application/json')]})",
+      "    await send({'type': 'http.response.body', 'body': out})",
+    ].join("\n"));
+    const asgi = rt.enableAsgiServer({ app: "app" });
+    await asgi.install();
+
+    // 2) SW 등록 + 페이지 장악 (claim)
+    reg = await navigator.serviceWorker.register("./swOriginSw.js");
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) {
+      await new Promise((res) => navigator.serviceWorker.addEventListener("controllerchange", res, { once: true }));
+    }
+    check("SW 등록 + 페이지 장악", !!navigator.serviceWorker.controller);
+
+    // 3) SW -> 커널 배선: SW가 넘긴 요청을 ASGI dispatch로 응답
+    navigator.serviceWorker.addEventListener("message", async (e) => {
+      const req = e.data && e.data.pyprocAsgi;
+      if (!req) return;
+      try {
+        const r = await asgi.serve(req.method, req.path, req.body, req.query);
+        e.ports[0].postMessage({ status: r.status, headers: r.headers, body: r.body });
+      } catch (err) { e.ports[0].postMessage({ error: String(err).slice(-300) }); }
+    });
+
+    // 4) 진짜 fetch가 파이썬 서버에 닿는가
+    t = performance.now();
+    const ping = await (await fetch("./pyproc/api/ping?x=1")).json();
+    timings.firstFetchMs = Math.round(performance.now() - t);
+    check("GET /pyproc/api/ping -> 파이썬 응답", ping.n === 42 && ping.path === "/api/ping" && ping.q === "x=1",
+      `${timings.firstFetchMs}ms, ${JSON.stringify(ping).slice(0, 70)}`);
+
+    const echo = await (await fetch("./pyproc/api/echo", { method: "POST", body: '{"hi":1}' })).json();
+    check("POST body 왕복", echo.method === "POST" && echo.echo === '{"hi":1}');
+
+    const N = 20;
+    t = performance.now();
+    for (let i = 0; i < N; i++) await (await fetch("./pyproc/api/ping")).json();
+    timings.avgFetchMs = +((performance.now() - t) / N).toFixed(1);
+    check("평균 왕복 < 100ms", timings.avgFetchMs < 100, `${timings.avgFetchMs}ms/req x${N}`);
+
+    const st = await fetch("./swOriginProbe.html");
+    check("무관 경로는 정적 서버로 통과", st.ok && (await st.text()).includes("swOrigin"));
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  if (reg) await reg.unregister();
+  await report();
+</script>
+</body>
+</html>
