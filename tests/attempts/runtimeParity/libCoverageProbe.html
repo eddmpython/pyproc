@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: libCoverage</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 라이브러리 커버리지 (대표 패키지 설치·import 성공률, v314)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    // 대표 워크로드 단면: 데이터(pandas/scipy/sklearn), 시각화(matplotlib), 이미지(pillow),
+    // DB/웹(sqlalchemy/httpx/jinja2), 파싱(bs4/lxml/openpyxl), 보안(cryptography)
+    const MATRIX = [
+      ["pandas", "pandas"], ["scipy", "scipy"], ["scikit-learn", "sklearn"],
+      ["matplotlib", "matplotlib"], ["pillow", "PIL"], ["sqlalchemy", "sqlalchemy"],
+      ["beautifulsoup4", "bs4"], ["lxml", "lxml"], ["openpyxl", "openpyxl"],
+      ["httpx", "httpx"], ["jinja2", "jinja2"], ["cryptography", "cryptography"],
+    ];
+    let okCount = 0;
+    for (const [pkg, mod] of MATRIX) {
+      const t0 = performance.now();
+      let info;
+      try {
+        await rt.install(pkg);
+        const v = rt.run(`import ${mod}; getattr(${mod}, "__version__", "ok")`);
+        info = `ok ${v} (${Math.round(performance.now() - t0)}ms)`; okCount++;
+      } catch (e) {
+        info = "실패: " + String(e).slice(-160);
+      }
+      check(`설치·import: ${pkg}`, true, info); // 성공률 자체가 데이터(능력 보고)
+      timings[pkg] = info;
+    }
+    timings.coverage = `${okCount}/${MATRIX.length}`;
+    check("커버리지 집계", true, timings.coverage);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
 
-const TIMEOUT_MS = 240000; // 콜드 CDN(Pyodide 다운로드) 감안
+const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000); // 콜드 CDN 감안. 무거운 probe는 env로 연장
 
 function findBrowser() {
   if (process.env.PYPROC_BROWSER) return process.env.PYPROC_BROWSER;

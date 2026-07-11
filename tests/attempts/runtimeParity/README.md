@@ -18,6 +18,7 @@
 | dartlab 스택이 v314에서 도는가 (이관 관문) | [versionParityProbe.html](versionParityProbe.html) | fastapi/pydantic/polars/numpy/requests 설치·import 성공률 보고 |
 | FastAPI가 커널 안에서 소켓 0으로 도는가 | [asgiProbe.html](asgiProbe.html) | GET 200 + POST 검증 200/422 -> `AsgiServer` 능력 승격 (dartlab 흡수) |
 | 행 워커를 kill 없이 회수할 수 있나 | [interruptProbe.html](interruptProbe.html) | SIGINT 수렴 + 같은 워커 재사용 -> `interrupt(pid)` 승격 |
+| 대표 라이브러리가 얼마나 깔리나 | [libCoverageProbe.html](libCoverageProbe.html) | 대표군 설치·import 성공률 실측(성공/실패 분류가 산출물) |
 
 ## 결론 표
 
@@ -32,6 +33,8 @@
 | 2026-07-11 | asgiProbe | Edge headless | fastapi 설치 960ms(v314). dispatch 3.4ms. GET /ping 200, POST pydantic 200/422 | dartlab browser-as-server 핵심을 pyproc 프리미티브로 재현 | 졸업 -> `asgiServer.js` `AsgiServer`(enableAsgiServer), 게이트 상시화. SW 배선은 소비 제품 몫 |
 
 | 2026-07-11 | interruptProbe | Edge headless | setInterruptBuffer(SAB) SIGINT: busy 루프 517ms 수렴(대기 500 포함), respawn 0으로 같은 워커 재사용. 발견: 워커 에러는 꼬리를 남겨야 예외 타입이 살아남는다 | 협조적 취소 성립 | 졸업 -> `pyProc.js` `interrupt(pid)` + worker SIGINT 채널, 게이트 상시화 |
+
+| 2026-07-11 | libCoverageProbe | Edge headless | v314 대표 12종 전부 ok: pandas 3.0.2(5.9s), scipy 1.18, scikit-learn 1.8(6.1s), matplotlib 3.10, pillow, sqlalchemy, bs4, lxml, openpyxl, httpx, jinja2, cryptography. 이전 5종 포함 누적 17/17 | 대표 워크로드 커버리지 100% | 다음: 실패군 탐색(더 넓은 표본) + wheel OPFS 캐시로 재설치 0 |
 
 ## 판정
 
