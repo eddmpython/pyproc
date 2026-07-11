@@ -23,7 +23,11 @@ export async function boot(opts = {}) {
       document.head.appendChild(s);
     });
   }
-  const py = await loadPyodide({ indexURL, stdout: opts.stdout, stderr: opts.stderr });
+  // env: 초기화 전에 CPython 환경변수로 반영된다(예: PYTHONHASHSEED=0 -> 결정적 부팅).
+  // undefined로 명시 전달하면 pyodide가 env.HOME 접근에서 죽으므로 있을 때만 싣는다.
+  const cfg = { indexURL, stdout: opts.stdout, stderr: opts.stderr };
+  if (opts.env) cfg.env = opts.env;
+  const py = await loadPyodide(cfg);
   if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
   return new Runtime(py);
 }

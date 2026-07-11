@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: replayFork</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 리플레이 fork = 불멸 커널 실증</h1>
+<p>결정적 부팅(시드/엔트로피 고정) + 같은 패키지 리플레이로 B를 A와 동형으로 만들고,
+   A의 "사용자 델타 페이지"만 B에 적용해 A의 파이썬 상태(변수·numpy 배열)가 B에서 사는지.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const stubEntropy = () => {
+    const o = { grv: crypto.getRandomValues.bind(crypto), dn: Date.now, pn: performance.now.bind(performance) };
+    crypto.getRandomValues = (a) => { new Uint8Array(a.buffer, a.byteOffset, a.byteLength).fill(0x42); return a; };
+    Date.now = () => 1750000000000;
+    performance.now = () => 12345;
+    return () => { crypto.getRandomValues = o.grv; Date.now = o.dn; performance.now = o.pn; };
+  };
+  const replayBoot = async () => {
+    const un = stubEntropy();
+    try {
+      const rt = await boot({ env: { PYTHONHASHSEED: "0" } });
+      await rt.loadPackages(["numpy"]);
+      rt.run("import numpy");
+      return rt;
+    } finally { un(); }
+  };
+  try {
+    // 커널 A: 결정적 리플레이 경계에서 체크포인트 -> 사용자 상태 -> 델타 수확
+    const a = await replayBoot();
+    const ra = a.enableReactive();
+    const spBoundary = ra.stackSave();
+    ra.checkpoint(); // cp0 = 리플레이 경계(base)
+    a.run("x = 42\nimport numpy as np\narr = np.arange(100000)\ntotal = float(arr.sum())\nmsg = 'immortal'");
+    const cp1 = ra.checkpoint();
+    const delta = ra.deltas[cp1.index]; // Map(page -> bytes) = 사용자 상태의 전부
+    const spUser = ra.stackSave();
+    timings.userDeltaPages = delta.size;
+    timings.userDeltaKB = Math.round([...delta.values()].reduce((s, b) => s + b.length, 0) / 1024);
+    check("A: 사용자 델타 수확", delta.size > 0, `${delta.size}p, ${timings.userDeltaKB}KB`);
+
+    // 커널 B: 같은 리플레이 -> A의 사용자 델타만 적용
+    const b = await replayBoot();
+    check("전제: A/B 힙 길이 동일", a.memory.byteLength() === b.memory.byteLength(),
+      `${Math.round(b.memory.byteLength() / 1048576)}MB`);
+    const t0 = performance.now();
+    for (const [p, bytes] of delta) b.memory.writePage(p, bytes);
+    b.memory.stackRestore(spUser);
+    timings.applyMs = +(performance.now() - t0).toFixed(1);
+
+    // A의 상태가 B에서 사는가 (변수, 문자열, numpy 배열 연산, 연속 실행)
+    check("B: x == 42", b.run("x") === 42, `델타 적용 ${timings.applyMs}ms`);
+    check("B: msg == 'immortal'", b.run("msg") === "immortal");
+    check("B: numpy 배열 상태 생존 + 연산", b.run("float(arr.sum()) == total and float(np.dot(arr[:3], arr[:3]))") === 5.0);
+    check("B: 연속 실행/신규 할당", b.run("y = np.ones(1000)\nfloat(y.sum()) + x") === 1042.0);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

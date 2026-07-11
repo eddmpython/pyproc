@@ -10,6 +10,8 @@ export interface BootOptions {
   stderr?: (line: string) => void;
   /** 부팅 시 미리 로드할 패키지. */
   packages?: string[];
+  /** CPython 초기화 전에 반영되는 환경변수(예: { PYTHONHASHSEED: "0" } = 결정적 부팅). */
+  env?: Record<string, string>;
 }
 
 export interface CheckpointInfo {

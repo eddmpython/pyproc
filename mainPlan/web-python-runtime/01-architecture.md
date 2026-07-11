@@ -1,6 +1,6 @@
 # 01. 아키텍처 - 레이어, 능력, 발명 계보, 계약 실태
 
-상태: v0.2 (2026-07-11). src 레이어 폴더 재구조화(순환 import 제거)를 반영했다.
+상태: v0.3 (2026-07-11). parity 승격 5종(ASGI/Terminal/interrupt/OPFS 영속/예외안전복원)과 restoreLive 경계 기계 강제를 반영했다.
 
 ## 레이어 (폴더 = 레이어)
 
@@ -10,6 +10,8 @@ Layer 2  src/processOs/     PyProc 커널(pyProc.js: 스냅샷-fork spawn + map 
                             폴더 = new URL 상대경로 계약(번들러 워커 emit).
 Layer 1  src/capabilities/  reactive.js  복원 리액티브 (능력)
                             syscallBridge.js  socket/subprocess/input 브리지 (능력 계약)
+                            asgiServer.js  커널 안 ASGI dispatch (능력 계약)
+                            terminal.js  서버리스 파이썬 REPL (능력 계약)
 Layer 0  src/runtime/       runtime.js  Pyodide 래퍼(boot/Runtime)
                             memoryCapability.js  MemoryCapability 계약 + PAGE_SIZE
 표면     index.js           공개 표면 re-export / index.d.ts 타입 계약(손 유지)
@@ -21,9 +23,11 @@ Layer 0  src/runtime/       runtime.js  Pyodide 래퍼(boot/Runtime)
 
 ## 능력 (capabilities)
 
-- **복원 리액티브** - 실행 경계마다 힙을 완전 해시(Uint32 워드)로 체크포인트. 완전 해시가 soundness의 열쇠다. 샘플링은 불완전 델타를 만들어 복원을 깨뜨린다. 라이브-차분 복원으로 인접 시간여행이 사실상 즉시.
-- **프로세스 OS** - 메인스레드=커널. 프로세스 테이블(pid/state/parentPid), 스냅샷-fork spawn, `map`/`mapSerial` 스케줄러, `ps()`, `terminate()`.
+- **복원 리액티브** - 실행 경계마다 힙을 완전 해시(Uint32 워드)로 체크포인트. 완전 해시가 soundness의 열쇠다. 샘플링은 불완전 델타를 만들어 복원을 깨뜨린다. 라이브-차분 복원으로 인접 시간여행이 사실상 즉시. 경계 위반은 `Runtime.execSeq`(상태 변이 카운터)로 자동 감지해 재해시 경로로 승격한다(기계 강제). `saveBase`/`loadBase`로 기준 힙을 OPFS에 내보내 RAM 부담을 옮긴다.
+- **프로세스 OS** - 메인스레드=커널. 프로세스 테이블(pid/state/parentPid), 스냅샷-fork spawn, `map`/`mapSerial` 스케줄러, `ps()`, 수명주기(`kill(pid)` SIGKILL 등가 + `interrupt(pid)` SIGINT 등가 + `map` taskTimeout 시 respawn), `terminate()`.
 - **빌린 시스템콜 브리지(v1 실배선)** - `input()`(동기 핸들러 + JSPI `pyodide.ffi.run_sync` 블로킹), `urllib`(동기 XHR, 바이너리 보존, proxyUrl 옵션), `subprocess.run(["python","-c",code])`(자식 워커 독립 인터프리터). HTTP 프록시 엔드포인트는 소비 제품이 채운다.
+- **커널 안 ASGI 서버** - FastAPI/Starlette 앱을 TCP 소켓 0으로 dispatch(실측 3.4ms/요청). 엔드포인트 `async def` 강제. Service Worker fetch 배선은 소비 제품 몫, pyproc은 dispatch 프리미티브만 소유한다.
+- **서버리스 파이썬 터미널** - `code.InteractiveConsole` 기반 REPL(탭 = 셸). `input()` 블로킹은 syscallBridge의 JSPI 경로와 조합한다.
 
 ## 발명 계보 (검증된 조각 + 실측)
 

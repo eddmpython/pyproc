@@ -35,4 +35,4 @@ dartlab이 자체 노트북 런타임(`mainPlan/web-notebook-runtime`)과 browse
 2. ~~browserAsServer 흡수~~ 완료(2026-07-11): `AsgiServer` 능력 승격(dispatch 3.4ms, 200/422 검증, 게이트 상시화). Service Worker 배선은 소비 제품 몫.
 3. ~~terminal 승격~~ 완료(2026-07-11): `Terminal` 능력 + examples/terminal.html + 게이트 상시화.
 4. browserAsServer 능력 계약 설계(흡수 3) / 체크포인트 그래프+OPFS(흡수 2) / 라이브러리 커버리지 / 협조적 취소(SIGINT).
-5. 장기: "웹의 uv" - 환경 선언(requirements) + **wheel OPFS 캐시(재다운로드 0)** + bare 스냅샷 fork 조합. "환경 = 힙 이미지"(임포트까지 캐시)는 reharvestProbe로 벽 확정(2026-07-11: v314 스냅샷은 bare 전용, hiwire 거부) -> 프론티어 절로 격상. 불멸 커널도 같은 벽에 걸리므로 자체 체크포인트(base+델타)의 크로스 세션 복원 가능성이 다음 연구 질문.
+5. **리플레이+델타 = 불멸 커널/warm-fork (실증 완료, 2026-07-11)**: 결정적 부팅(PYTHONHASHSEED=0 + 엔트로피/시간 고정)이 바이트 단위 동일 힙을 재현(180p 상이 -> 0p)하고, 사용자 상태는 델타 페이지(10MB급)만 OPFS에 저장해 동형 커널에 1.5ms 적용으로 부활. Pyodide 스냅샷의 hiwire 벽을 upstream 수정 없이 우회(전문 리서치: Cloudflare workerd와 동원리, 단 우리는 리플레이 기반). 승격 후 "웹의 uv"는 (매니페스트=환경 선언) + (wheel OPFS 캐시) + (세션 델타)의 3층이 된다.
