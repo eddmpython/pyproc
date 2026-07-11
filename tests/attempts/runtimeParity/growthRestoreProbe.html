@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: growthRestore</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 힙 성장 후 restore()/restoreLive() 정합 (계약 실태 열린 항목)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    const reactive = rt.enableReactive();
+    const sp0 = reactive.stackSave();
+    rt.run("x = 1");
+    reactive.checkpoint(); // cp0 = base
+    const pagesAtBase = rt.memory.byteLength();
+
+    // 1차 성장: cp1이 성장분을 델타로 아는 상태
+    rt.run("big1 = bytearray(40 * 1024 * 1024)\ny = 2");
+    const cp1 = reactive.checkpoint();
+    const grew1 = rt.memory.byteLength() > pagesAtBase;
+
+    // 2차 성장: cp1의 해시 범위 밖까지 더 큰다(체크포인트 없이)
+    rt.run("big2 = bytearray(30 * 1024 * 1024)\nz = 3");
+    const grew2 = rt.memory.byteLength() > pagesAtBase;
+    check("전제: 힙이 실제로 성장했다", grew1 && grew2, `${Math.round(rt.memory.byteLength() / 1048576)}MB`);
+
+    // restore()는 base 범위 밖 성장 페이지를 되돌리지 않는다(비대칭 의심 지점)
+    reactive.restore(cp1.index, sp0);
+    check("restore(cp1) 후 상태 정확", rt.run("x") === 1 && rt.run("y") === 2 && rt.run("len(big1)") === 40 * 1024 * 1024);
+    check("restore 후 z는 없어야(성장 후 상태 제거)", rt.run("'z' in globals()") === false);
+
+    // dlmalloc 정합: 복원 뒤 대량 할당·해제·GC가 멀쩡한가
+    rt.run("import gc\nbig3 = bytearray(20 * 1024 * 1024)\ndel big3\ngc.collect()\nw = sum(range(100000))");
+    check("복원 후 대량 할당/GC 정상(dlmalloc 정합)", rt.run("w") === 4999950000);
+
+    // 체인 재정합: 이후 checkpoint -> restoreLive 왕복이 정확한가
+    rt.run("x = 77");
+    const cp2 = reactive.checkpoint();
+    const r1 = reactive.restoreLive(cp1.index, sp0);
+    check("restoreLive(cp1): x==1 (경계 준수 즉시 경로)", rt.run("x") === 1 && r1.rehashed === false);
+    // 직전 검증의 rt.run("x") 자체가 상태 변이라 가드가 자동 재해시로 승격한다(설계 의도).
+    // 성장분(cp1 범위 밖 페이지)도 재해시 경로가 전량 커버하는지 함께 검증된다.
+    const r2 = reactive.restoreLive(cp2.index, sp0);
+    check("restoreLive(cp2) 왕복: x==77 (가드 자동 재해시)", rt.run("x") === 77 && r2.rehashed === true);
+    check("왕복 후 연속 실행", rt.run("x + big1[0] + 23") === 100);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
