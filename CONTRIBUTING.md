@@ -4,14 +4,11 @@ Language: English | [한국어](CONTRIBUTING.ko.md)
 
 pyproc is a reusable browser Python runtime (processes, parallelism, restore-based reactivity on top of Pyodide). Thanks for your interest. This document is the contract for participating in the repository.
 
-## License status (read first)
+## License and contribution terms
 
-The license is **not decided yet** (pending an owner decision). Until a LICENSE file lands in the repository root:
+pyproc is licensed under the [Apache License 2.0](LICENSE). By submitting a contribution you agree it is provided under the same license (Apache 2.0 Section 5, inbound = outbound); no separate CLA is required. If you cannot agree to that, do not submit code.
 
-- **Code contributions (pull requests) are on hold.** We cannot merge external code without a clear license and contribution terms; doing so would poison the history.
-- **Everything else is welcome**: bug reports, browser measurements (please include Chrome/Edge version and hardware), reproduction pages, documentation fixes via issues, design discussion.
-
-When the license lands, this section will be replaced by the actual terms.
+Also welcome besides code: bug reports, browser measurements (please include Chrome/Edge version and hardware), reproduction pages, documentation fixes, design discussion.
 
 ## Scope (so you do not waste effort)
 
@@ -46,7 +43,7 @@ Browser validation: open `http://localhost:8788/examples/basic.html` and `proces
 - **No tool or generation traces** in commit messages, comments, or docs (the commit-msg hook blocks a specific trace-term list). Write commit messages yourself: category of change plus what changed. Korean is the repository convention; clear English is accepted for external contributions.
 - Version stays on the `0.0.x` line; only releases bump it, and the tag must match `package.json`. See [docs/operations/release.md](docs/operations/release.md).
 
-## Pull request checklist (once the license lands)
+## Pull request checklist
 
 - [ ] `npm test` green.
 - [ ] Runtime-behavior changes include browser measurements (page, numbers, environment) in the PR description.

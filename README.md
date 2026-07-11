@@ -19,7 +19,7 @@ Under the hood it runs [Pyodide](https://pyodide.org) (CPython compiled to WebAs
 
 ## Why does it exist?
 
-The pieces to run Python in a browser already exist. What did not exist is a **shared layer** that turns them into a real runtime. codaro, dartlab, and xlpod all need the same thing. If each copy-pastes it, the runtime splits into three versions that drift apart. pyproc is that layer, built once and shared version-pinned, so improvements land in one place. See [mainPlan/web-python-runtime/](mainPlan/web-python-runtime/README.md) for the full direction and policy.
+The pieces to run Python in a browser already exist. What did not exist is a **shared layer** that turns them into a real runtime. codaro, dartlab, and xlpod all need the same thing. If each copy-pastes it, the runtime splits into three versions that drift apart. pyproc is that layer, built once and shared version-pinned, so improvements land in one place. See [docs/product/vision.md](docs/product/vision.md) for the full direction and policy.
 
 ## Core concepts, in plain terms
 
@@ -166,4 +166,4 @@ Operating docs (operating model, testing, releases, consumption contract) live i
 
 ## License
 
-Undecided (pending owner decision). Currently for the repository owner's use. See [CONTRIBUTING.md](CONTRIBUTING.md) for what that means for contributions.
+[Apache License 2.0](LICENSE). It comes with an explicit patent grant (Section 3), and contributions are accepted under the same terms (Section 5, inbound = outbound); see [CONTRIBUTING.md](CONTRIBUTING.md).

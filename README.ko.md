@@ -19,7 +19,7 @@ pyproc은 브라우저 파이썬을 "노트북 한 셀"이 아니라 **운영체
 
 ## 왜 만들었나?
 
-브라우저에서 파이썬을 돌리는 조각은 이미 있다. 없던 것은 그 조각을 진짜 런타임으로 엮는 **공유 계층**이다. codaro·dartlab·xlpod가 전부 같은 걸 필요로 하는데, 각자 복붙하면 런타임이 3벌로 갈라져 따로 논다. pyproc은 그 계층을 한 번 만들어 버전 고정으로 공유해서, 개선이 한 곳에 모이게 한다. 전체 방향과 정책은 [mainPlan/web-python-runtime/](mainPlan/web-python-runtime/README.md).
+브라우저에서 파이썬을 돌리는 조각은 이미 있다. 없던 것은 그 조각을 진짜 런타임으로 엮는 **공유 계층**이다. codaro·dartlab·xlpod가 전부 같은 걸 필요로 하는데, 각자 복붙하면 런타임이 3벌로 갈라져 따로 논다. pyproc은 그 계층을 한 번 만들어 버전 고정으로 공유해서, 개선이 한 곳에 모이게 한다. 전체 방향과 정책은 [docs/product/vision.md](docs/product/vision.md).
 
 ## 핵심 개념, 쉽게
 
@@ -166,4 +166,4 @@ npm run serve     # 브라우저 실측용 COOP/COEP 정적 서버 (의존성 0)
 
 ## 라이선스
 
-미정(소유자 결정 대기). 현재는 저장소 소유자 전용. 라이선스 확정 전 기여 조건은 [CONTRIBUTING.ko.md](CONTRIBUTING.ko.md) 참조.
+[Apache License 2.0](LICENSE). 명시적 특허 조항(3절)이 있고, 기여는 같은 조건으로 수락된다(5절, inbound = outbound). [CONTRIBUTING.ko.md](CONTRIBUTING.ko.md) 참조.

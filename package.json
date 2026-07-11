@@ -13,12 +13,12 @@
     "./process-os": "./src/processOs/pyProc.js",
     "./worker": "./src/processOs/worker.js"
   },
-  "files": ["index.js", "index.d.ts", "src", "README.md", "README.ko.md"],
+  "files": ["index.js", "index.d.ts", "src", "README.md", "README.ko.md", "LICENSE"],
   "scripts": {
     "test": "node tests/run.mjs",
     "serve": "node examples/serve.mjs"
   },
   "keywords": ["pyodide", "python", "browser", "wasm", "process", "parallel", "reactive", "runtime"],
-  "license": "SEE README",
+  "license": "Apache-2.0",
   "engines": { "note": "Chromium/Edge (JSPI + SharedArrayBuffer). Firefox/Safari 미지원." }
 }

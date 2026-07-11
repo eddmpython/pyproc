@@ -4,6 +4,12 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-11 라이선스 확정: Apache 2.0
+
+- 소유자 결정으로 **Apache License 2.0** 채택(Copyright 2026 eddmpython). 근거: 명시적 특허 조항(3절)이 스냅샷-fork·복원 리액티브 같은 발명성 기법의 사용자를 보호하고, 기여 조건 내장(5절, inbound=outbound)이 별도 CLA 없이 외부 기여를 연다. Pyodide(MPL-2.0)는 CDN 런타임 로드라 간섭 없음.
+- CONTRIBUTING 2종의 "기여 보류" 절 해제, package.json `Apache-2.0` + `files`에 LICENSE 포함, README 2종 갱신.
+- npm 레지스트리에 `pyproc` 이름 비어 있음 확인(2026-07-11). 퍼블리시는 소유자 npm 계정 필요(NEXT 참조).
+
 ### 2026-07-11 운영 체계 수립 + src 레이어 재구조화 (v0.0.3)
 
 - **운영 체계를 dartlab에서 차용해 수립.** 3층 정보 구조(CLAUDE.md 강행규칙 / 로컬 메모리 약속 / docs 공개 운영 문서), tests/attempts 졸업 게이트, mainPlan 수명주기(_done 이관). 규칙 SSOT: [docs/operations/operatingModel.md](../../docs/operations/operatingModel.md).
@@ -24,7 +30,7 @@
 1. **브라우저 실측 재확인**: src 레이어 재구조화 후 `examples/` 2종을 crossOriginIsolated 서버로 실행해 스냅샷-fork·map 병렬·기본 런타임 green 확인. 리액티브 사용례(checkpoint 경계 포함)를 examples에 추가하는 것도 이때.
 2. **attempts 첫 카테고리 개설 판단**: 소비자 수요 순서상 `processLifecycle`(map 타임아웃/워커 사망 감지)이 첫 후보. 개설 시 [tests/attempts/README.md](../../tests/attempts/README.md) 규칙대로.
 3. **codaro UI 배선 동행**: PyodideEngine이 browserPythonRuntime seam을 실제 사용할 때 나오는 요구를 이 원장에 기록.
-4. **라이선스 확정(소유자 결정)**: 확정 시 LICENSE 추가 + CONTRIBUTING의 보류 문구 해제 + README 라이선스 절 갱신.
+4. **npm 퍼블리시(소유자 계정 필요)**: `pyproc` 이름이 비어 있다. `npm publish`로 선점하면 외부 소비가 `npm install pyproc` 한 줄이 된다. files 배열은 준비 완료.
 
 ## 메모리 포인터
 
