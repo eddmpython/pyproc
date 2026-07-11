@@ -13,7 +13,7 @@
     "./process-os": "./src/processOS.js",
     "./worker": "./src/worker.js"
   },
-  "files": ["index.js", "index.d.ts", "src", "README.md"],
+  "files": ["index.js", "index.d.ts", "src", "README.md", "README.ko.md"],
   "scripts": {
     "test": "node tests/run.mjs"
   },

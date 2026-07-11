@@ -1,87 +1,121 @@
 # pyproc
 
-**서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬.**
-프로세스, 병렬 실행, 복원 기반 리액티브까지. codaro / dartlab / xlpod 공통 런타임의 SSOT.
+**Real runtime Python in a browser tab, with no server.** Processes, parallelism, and restore-based reactivity, packaged as one reusable runtime. The single source of truth for the web Python runtime shared by codaro / dartlab / xlpod.
 
-브라우저 파이썬을 "노트북 한 셀"이 아니라 **운영체제처럼** 다룬다. Web Worker가 프로세스가 되고, 힙 스냅샷이 프로세스 이미지가 되고, 워커에 주입하는 것이 fork가 된다. 독립 인터프리터 N개 = 독립 GIL N개 = N코어 물리 병렬.
+Language: English | [한국어](README.ko.md)
 
-## 지원 환경
+---
 
-**Chromium / Edge 전용.** JSPI(JavaScript Promise Integration), SharedArrayBuffer, `crossOriginIsolated`가 필요하다. Firefox / Safari 미지원은 결함이 아니라 스코프다. SharedArrayBuffer를 쓰려면 페이지가 아래 헤더로 crossOriginIsolated 상태여야 한다.
+## What is this?
+
+pyproc treats browser Python not as "one notebook cell" but as an **operating system**.
+
+- A Web Worker becomes a **process**.
+- A heap snapshot becomes a **process image**.
+- Injecting that snapshot into a worker becomes a **fork**.
+- N independent interpreters mean N independent GILs, which mean **N-core physical parallelism**.
+
+Under the hood it runs [Pyodide](https://pyodide.org) (CPython compiled to WebAssembly), but it adds the runtime properties Pyodide does not give you on its own: spawning processes cheaply, running them in parallel, and restoring interpreter state without re-running your code. It is a plain ESM library with no build step, meant to be imported by real products.
+
+## Why does it exist?
+
+The pieces to run Python in a browser already exist. What did not exist is a **shared layer** that turns them into a real runtime. codaro, dartlab, and xlpod all need the same thing. If each copy-pastes it, the runtime splits into three versions that drift apart. pyproc is that layer, built once and shared version-pinned, so improvements land in one place. See [docs/PRD.md](docs/PRD.md) for the full direction and policy.
+
+## Core concepts, in plain terms
+
+**1. Snapshot-fork (fast process spawn).** Booting a fresh Pyodide interpreter takes about 2.8 seconds. pyproc boots one parent, takes a memory snapshot (the "process image"), and starts workers from that snapshot in about 184ms. That is a 15.4x faster spawn, and each child is an isolated process.
+
+**2. Process OS (real parallelism).** Because each worker is an independent interpreter with its own GIL, running the same function across workers gives you real multi-core execution, not concurrency on one thread. `PyProc.map()` drains a task queue across workers at the same time.
+
+**3. Restore-based reactivity (time travel without re-running).** A reactive notebook normally re-runs cells when something upstream changes. WebAssembly has no OS dirty-page tracking, so pyproc reconstructs it by hashing the heap completely at each execution boundary and storing only the changed pages. Restoring to an earlier state then writes back only the differing pages (about 2.4ms), instead of re-running. The complete hash is what makes this sound; sampling would miss changes and corrupt the restore.
+
+## Supported environment
+
+**Chromium / Edge only.** pyproc needs JSPI (JavaScript Promise Integration), SharedArrayBuffer, and `crossOriginIsolated`. Lack of Firefox / Safari support is a deliberate scope choice, not a defect.
+
+To use SharedArrayBuffer, the page must be crossOriginIsolated, which requires these response headers:
 
 ```
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-## 설치
+## Install
 
 ```bash
 npm install pyproc
 ```
 
-빌드 단계가 없다(네이티브 ESM). 번들러 없이 `<script type="module">`에서 바로 import 해도 된다.
+There is no build step (native ESM). You can also import it directly in a `<script type="module">` without a bundler.
 
-## 빠른 시작
+Products should pin a commit SHA rather than float on the default branch:
+
+```jsonc
+// package.json
+"dependencies": {
+  "pyproc": "github:eddmpython/pyproc#<commit-sha>"
+}
+```
+
+## Quick start
 
 ```js
 import { boot, PyProc } from "pyproc";
 
-// 1) 단일 런타임: 파이썬 실행
+// 1) Single runtime: run Python
 const rt = await boot();
 console.log(rt.run("sum(range(100))"));      // 4950
 await rt.loadPackages(["numpy"]);
 console.log(rt.run("import numpy as np; int(np.arange(10).sum())"));  // 45
 
-// 2) 프로세스 OS: 진짜 병렬 (독립 GIL N개)
-const os = await new PyProc();
-await os.boot(4);                             // 워커 4개를 스냅샷-fork로 spawn
+// 2) Process OS: real parallelism (N independent GILs)
+const os = new PyProc();
+await os.boot(4);                             // spawn 4 workers via snapshot-fork
 const fn = "def _fn(n):\n    return sum(i*i for i in range(n))";
 const out = await os.map(fn, [100000, 100000, 100000, 100000]);
-console.log(out);                             // 4개가 4코어에서 동시 실행
+console.log(out);                             // 4 tasks run across 4 cores
 os.terminate();
 ```
 
-## 능력 (capabilities)
+## Capabilities
 
-능력은 opt-in이다. 런타임에서 필요한 것만 켠다. 소비자는 능력 계약만 쓰고 엔진 내부(`HEAPU8` 등)를 직접 만지지 않는다.
+Capabilities are opt-in. Turn on only what you need from the runtime. The consumer uses the capability contract and never touches engine internals (`HEAPU8` and friends).
 
-### 복원 기반 리액티브
-
-실행 경계마다 힙을 완전 해시로 체크포인트해서 시간여행/재실행을 만든다. WASM은 mprotect/dirty-page가 없어 실행 경계 해시로 델타를 재구성한다. 완전 해시(Uint32 워드 단위)가 soundness의 열쇠다. 샘플링은 불완전 델타를 만들어 복원을 깨뜨린다.
+### Restore-based reactivity
 
 ```js
 const rt = await boot();
 const reactive = rt.enableReactive();
 const sp0 = reactive.stackSave();
 rt.run("x = 1");
-const cp = reactive.checkpoint();             // 상태 저장
-rt.run("x = 999")
-reactive.restoreLive(cp.index, sp0);          // 라이브-차분 복원(바뀐 페이지만 write)
+const cp = reactive.checkpoint();             // save state
+rt.run("x = 999");
+reactive.restoreLive(cp.index, sp0);          // live-diff restore (writes only changed pages)
 console.log(rt.run("x"));                      // 1
 ```
 
-### 빌린 시스템콜 브리지
+### Borrowed syscall bridge
 
-브라우저에는 socket / subprocess / blocking input이 없다. 이 능력이 그 부재를 각각 프록시 / 자식 워커 / JSPI로 빌려 파이썬 코드가 그대로 돌게 한다. 라이브러리는 계약(무엇을 배선하는지)을 노출하고, 실제 엔드포인트는 소비 제품이 채운다.
+A browser has no socket / subprocess / blocking input. This capability borrows those, via a proxy, a child worker, and JSPI respectively, so Python code runs unchanged. The library exposes the contract (what gets wired); the consuming product fills in the real endpoints.
 
 ```js
 const bridge = rt.enableSyscallBridge({ proxyUrl: "/proxy" });
 await bridge.install();
 ```
 
-## 공개 표면
+## Public surface
 
-| export | 무엇 |
+| Export | What |
 | --- | --- |
-| `boot(opts)` | Pyodide 런타임 부팅 -> `Runtime` |
-| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` + 능력 등록 |
-| `MemoryCapability` | WASM 힙 접근을 캡슐화한 능력 계약 |
-| `ReactiveController` | 복원 기반 리액티브(체크포인트/시간여행) |
-| `SyscallBridge` | socket/subprocess/input 능력 계약 |
-| `PyProc` | 프로세스 OS 커널(스냅샷-fork spawn + `map` 병렬) |
+| `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` |
+| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` plus capability registration |
+| `MemoryCapability` | Capability contract that encapsulates WASM heap access |
+| `ReactiveController` | Restore-based reactivity (checkpoint / time travel) |
+| `SyscallBridge` | socket/subprocess/input capability contract |
+| `PyProc` | Process OS kernel (snapshot-fork spawn + `map` parallelism) |
+| `PAGE_SIZE` | WASM page size constant (65536) |
 
-세부 하위 경로 import도 지원한다.
+Subpath imports are also supported:
 
 ```js
 import { boot } from "pyproc/runtime";
@@ -89,23 +123,46 @@ import { ReactiveController } from "pyproc/reactive";
 import { PyProc } from "pyproc/process-os";
 ```
 
-## 검증된 실측
+## Measured results
 
-- **bare 스냅샷 fork**: 자식 부팅 184ms (콜드 2839ms 대비 15.4배), 독립 프로세스.
-- **진짜 N코어 병렬**: 독립 인터프리터 워커로 embarrassingly-parallel 작업 실측 speedup.
-- **복원 리액티브**: 완전 해시로 성장 자동 처리, 라이브-차분 복원 2.4ms(memcpy 대비 12배).
-- **프론티어(오늘 막힘)**: warm-fork / 진짜 스레드 / numpy 제로카피는 전부 하나의 미해결 문제(WASM dlopen)에 걸려 있다. pyproc은 이를 회피(각 워커가 자기 wasmTable/힙/글루 소유)하므로 오늘 가능한 최상단이다.
+- **Snapshot-fork**: child boot 184ms (vs cold 2839ms), a 15.4x faster spawn, isolated process.
+- **Real N-core parallelism**: measured speedup on embarrassingly-parallel work across independent-interpreter workers.
+- **Restore reactivity**: complete hashing handles heap growth automatically, live-diff restore in about 2.4ms (12x vs memcpy), reactive edit about 9.1x faster, zero crashes.
+- **Speed reality**: pure Python logic is at parity with or faster than local (CPython 3.14 > 3.12). Only large numpy arithmetic is about 86x slower (WASM single-thread, no-AVX BLAS). Server / automation / logic workloads are runtime-grade.
 
-## 개발
+## Frontier (stated honestly)
 
-```bash
-npm test          # Node 구조/린트 게이트 (의존성 0)
+warm-fork (cloning after packages load), true shared-memory threads (nogil), and cross-process zero-copy numpy are all blocked by one unsolved problem: **WASM dlopen** plus cross-instance/thread memory sharing. Pyodide threading issue #237 has been open since 2018. pyproc avoids this problem by giving each worker its own wasmTable / heap / glue, which is why it is the achievable ceiling today. The frontier is a wall, not a stepping stone.
+
+## Architecture
+
+```text
+Layer 2  process-os   PyProc kernel (snapshot-fork spawn + map parallelism), worker = a process
+Layer 1  reactive     restore reactivity (capability)
+         syscall      socket/subprocess/input bridge (capability contract)
+Layer 0  runtime      Pyodide wrapper (boot/Runtime) + MemoryCapability contract
+         index.js     public surface / index.d.ts type contract
 ```
 
-브라우저 실측은 `examples/`의 HTML을 crossOriginIsolated 서버로 띄워 확인한다.
+## How products consume it
 
-기여 규칙: main 전용, 빌드 없는 ESM, camelCase, 능력 계약 경유(엔진 내부 직접 접근 금지), 버전 `0.0.x` 라인.
+pyproc becomes an SSOT only through **real imports**, not references. Consumers pin a commit SHA, depend on the public contract plus the shipped `index.d.ts` types, and never import in reverse. Full policy: [docs/PRD.md](docs/PRD.md) section 7.
 
-## 라이선스
+## Development
 
-미정(사용자 결정 대기). 현재는 저장소 소유자 전용.
+```bash
+npm test          # Node structure/lint gate (zero dependencies)
+```
+
+Browser validation runs the HTML in `examples/` (`basic.html`, `processOs.html`) served with COOP/COEP headers so the page is crossOriginIsolated. Because this is a WASM runtime, real validation only happens in a browser.
+
+Contribution rules: main-only, no-build ESM, camelCase, access through capability contracts (no direct engine internals), version `0.0.x` line.
+
+## Documentation
+
+- [docs/PRD.md](docs/PRD.md) - product direction, scope, roadmap, consumption policy (English).
+- [docs/PRD.ko.md](docs/PRD.ko.md) - same, in Korean.
+
+## License
+
+Undecided (pending owner decision). Currently for the repository owner's use.
