@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: sessionGrow</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 힙이 자란 세션의 부활 (Session v2)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("pyprocGrowSess", { recursive: true }); } catch (e) {}
+    const dir = await root.getDirectoryHandle("pyprocGrowSess", { create: true });
+
+    // 세션 A: 40MB를 만들어 힙을 키운다
+    const a = await bootSession({});
+    const lenBefore = a.rt.memory.byteLength();
+    a.rt.run("big = bytearray(40 * 1024 * 1024)\nbig[0] = 7\nbig[-1] = 9\nx = 'grown'");
+    const grew = a.rt.memory.byteLength() > lenBefore;
+    const sv = await a.save(dir, "grow");
+    check("A: 힙 성장 + 저장", grew && sv.pages > 0,
+      `${Math.round(lenBefore / 1048576)}MB -> ${Math.round(a.rt.memory.byteLength() / 1048576)}MB, 저장 ${sv.mb}MB`);
+
+    // 세션 B: 작게 태어나 힙을 늘려 부활
+    const b = await bootSession({});
+    check("B: 부팅 힙은 저장보다 작다", b.rt.memory.byteLength() < a.rt.memory.byteLength());
+    const t0 = performance.now();
+    await b.load(dir, "grow");
+    timings.loadMs = Math.round(performance.now() - t0);
+    check("B: 성장 부활 - 변수 생존", b.rt.run("x") === "grown", `${timings.loadMs}ms`);
+    check("B: 40MB 본문 바이트 생존", b.rt.run("(big[0], big[-1], len(big))[2]") === 40 * 1024 * 1024 && b.rt.run("big[0] + big[-1]") === 16);
+    check("B: 부활 후 연속 실행/추가 할당", b.rt.run("more = bytearray(8 * 1024 * 1024)\nlen(more) // (1024 * 1024)") === 8);
+    await root.removeEntry("pyprocGrowSess", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

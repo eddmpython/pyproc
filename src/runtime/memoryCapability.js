@@ -34,4 +34,6 @@ export class MemoryCapability {
   sliceAll() { const h = this.heap(); return h.slice(0, h.length); }
   writePage(p, bytes) { this.heap().set(bytes, p * PAGE_SIZE); }
   writeBase(base) { const h = this.heap(); h.set(base.subarray(0, Math.min(base.length, h.length))); }
+  // 주의: JS에서 wasm Memory.grow를 직접 호출하지 말 것. Emscripten 글루의 클로저 뷰가
+  // 갱신되지 않아 런타임이 파손된다(실측: sessionGrowProbe). 성장은 파이썬 할당 경로로만.
 }

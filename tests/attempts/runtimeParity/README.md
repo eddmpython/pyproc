@@ -51,6 +51,8 @@
 
 | 2026-07-11 | (게이트 직결) %undo | Edge headless | Terminal({timeTravel:true}): 완결 문장마다 자동 경계, `%undo`가 직전 상태 복원(q=999 -> 1), 게이트 23/23 | 시간여행 REPL 성립(로컬 REPL에 없는 능력 2호) | 졸업 -> `terminal.js` timeTravel 옵션 |
 
+| 2026-07-12 | sessionGrowProbe | Edge headless | 30->65MB로 자란 세션(42.4MB 저장)을 새 커널이 354ms에 부활. 발견 2건: JS에서 Memory.grow 직접 호출은 글루 클로저 뷰 미갱신으로 파손(파이썬 할당 경로가 정답), 성장 루프의 흔적은 restore(0) 되감기 후 델타 적용으로 해소 | 성장 세션 부활 성립(Session v2) | 졸업 -> session.js(load가 파이썬 성장 + 경계 되감기 + 델타), wheelDir 매니페스트 결합 포함 |
+
 ## 판정
 
 진행 중 (수명주기·soundness·시스템콜 v1·예외 안전 복원·ASGI 서버 졸업, 버전 관문 통과 / 터미널 승격, 체크포인트 그래프+OPFS, 라이브러리 커버리지, 협조적 취소 잔여)

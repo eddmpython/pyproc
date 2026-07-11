@@ -6,10 +6,11 @@
 //   "리플레이 경계와 다른 페이지"만 저장하면 되고(10MB급), 새 커널(새 탭·새 세션)에서
 //   같은 리플레이 후 그 델타를 적용(1.5ms 실측)하면 이전 파이썬 상태가 부활한다.
 //   Pyodide 스냅샷의 hiwire 벽(패키지 로드 후 이미지화 불가)을 upstream 수정 없이 우회한다.
-// 한계(v1): 부활은 같은 매니페스트 + 같은 Pyodide 버전 + 같은 힙 크기(성장 세션은 v2)를
-//   전제하며, load()가 전부 명시적 예외로 검사한다.
+// v2(2026-07-12): 힙이 자란 세션도 부활한다(파이썬 할당으로 성장 -> restore(0) 경계 되감기
+//   -> 델타 적용). 매니페스트 wheelDir로 패키지 리플레이가 OPFS 캐시를 경유한다.
 import { boot } from "../runtime/runtime.js";
 import { PAGE_SIZE } from "../runtime/memoryCapability.js";
+import { WheelCache } from "./wheelCache.js";
 
 // 부팅 구간의 비결정 소스를 고정한다(복원 보장). 리플레이 결정성의 필요조건.
 function stubEntropy() {
@@ -26,7 +27,11 @@ export async function bootSession(manifest = {}) {
   let rt;
   try {
     rt = await boot({ indexURL: manifest.indexURL, env: { PYTHONHASHSEED: "0", ...(manifest.env || {}) } });
-    if (manifest.packages && manifest.packages.length) await rt.loadPackages(manifest.packages);
+    if (manifest.packages && manifest.packages.length) {
+      // wheelDir을 주면 패키지 바이트가 OPFS 캐시를 경유한다: 두 번째부터 다운로드 0.
+      if (manifest.wheelDir) await new WheelCache(rt, { dir: manifest.wheelDir }).loadPackages(manifest.packages);
+      else await rt.loadPackages(manifest.packages);
+    }
     if (manifest.setup) rt.run(manifest.setup);
   } finally { restore(); }
   const reactive = rt.enableReactive();
@@ -69,8 +74,29 @@ export class Session {
       throw new Error("session.load: 매니페스트 불일치. 저장 당시와 같은 packages/setup/env로 bootSession해야 부활이 성립한다.");
     }
     const mem = this.rt.memory;
-    if (meta.heapLen !== mem.byteLength()) {
-      throw new Error(`session.load: 힙 크기 불일치(저장 ${meta.heapLen} vs 현재 ${mem.byteLength()}). 성장 세션 부활은 v2 과제.`);
+    // 성장 세션: JS에서 Memory.grow를 직접 하면 Emscripten 글루의 클로저 뷰가 안 갱신되어
+    // 런타임이 깨진다(실측). 파이썬 할당으로 정상 성장 경로를 태운다. 초과 성장은 무해하다:
+    // 델타가 복원하는 A의 할당자 상태가 힙 끝을 결정하고, 잉여 wasm 페이지는 미사용으로 남는다.
+    const grewViaAlloc = meta.heapLen > mem.byteLength();
+    if (grewViaAlloc) {
+      this.rt.setGlobal("_pyproc_target_len", meta.heapLen);
+      this.rt.setGlobal("_pyproc_heap_len", () => mem.byteLength());
+      this.rt.run(
+        "import gc as _pyproc_gc\n" +
+        "_pyproc_hold = []\n" +
+        "while _pyproc_heap_len() < _pyproc_target_len:\n" +
+        "    _pyproc_hold.append(bytearray(8 * 1024 * 1024))\n" +
+        "del _pyproc_hold, _pyproc_target_len, _pyproc_heap_len\n" +
+        "_pyproc_gc.collect()"
+      );
+    }
+    if (meta.heapLen > mem.byteLength()) {
+      throw new Error(`session.load: 힙 성장 실패(목표 ${meta.heapLen}, 현재 ${mem.byteLength()})`);
+    }
+    if (grewViaAlloc) {
+      // 성장 루프가 남긴 할당/GC 흔적을 리플레이 경계 상태로 되감는다. 경계 밖(성장 구간)은
+      // save()가 전량 저장하므로 아래 델타 적용이 그대로 덮는다 -> 결과는 정확히 A의 상태.
+      this.reactive.restore(0, meta.sp);
     }
     const bin = new Uint8Array(await (await (await dir.getFileHandle(name + ".bin")).getFile()).arrayBuffer());
     meta.pages.forEach((p, i) => mem.writePage(p, bin.subarray(i * PAGE_SIZE, (i + 1) * PAGE_SIZE)));
