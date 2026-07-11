@@ -21,6 +21,8 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 네트워크 없이 부팅되나 | [offlineBootProbe.html](offlineBootProbe.html) | 2차 부팅 fetch 계층 miss 0 |
 | script 경로까지 오프라인 되나(구멍 봉인) | [swOfflineProbe.html](swOfflineProbe.html) | SW 캐시-우선으로 2차 부팅 CDN 요청 전량 캐시(miss 0) |
 | 머신이 탭 밖에서 사나(커널 데몬) | [sharedKernelProbe.html](sharedKernelProbe.html) | 연결 2개(=탭 2개)가 같은 파이썬 상태 공유 + 동시 요청 정합 |
+| 헤더 못 다는 호스팅(GH Pages)에서 머신이 뜨나 | [noCoiProbe.html](noCoiProbe.html) | COI=false에서 부팅/세션 부활/.pymachine/디스크 전부 정상(SAB만 경계) |
+| SW 헤더 주입으로 SAB를 열 수 있나 | [swCoiProbe.html](swCoiProbe.html) | ?coi=1 등록 + 1회 새로고침 후 crossOriginIsolated=true + SAB 실사용 |
 
 ## 결론 표
 
@@ -35,7 +37,9 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 2026-07-12 | offlineBootProbe | Edge headless | 코어 3종(wasm/stdlib/lock) OPFS 캐시, 2차 부팅 hit 3/miss 0(fetch 계층 네트워크 0), 웜 2457ms vs 콜드 4006ms. 한계: pyodide.js/asm.js는 script 경로라 fetch 밖(완전 오프라인은 SW 몫) | boot({coreCacheDir}) 성립 | 졸업 -> runtime.js coreCacheDir 옵션(rt.coreCache 통계). 무한재귀(fetch 재진입) 결함 수정 |
 | 2026-07-12 | swOfflineProbe | Edge headless | SW 캐시-우선: 1차 부팅이 CDN 5건 채움(pyodide.js/asm.mjs **script 경로 포함**), 리로드 후 2차 부팅 **CDN miss 0**(hit 3, 잔여 2건은 브라우저 메모리 캐시 = 역시 네트워크 0), 2391ms | 기둥5의 남은 구멍(script 경로) 봉인 = 완전 오프라인 등가 성립 | 졸업 -> `pyprocSw.js`(?cache=1, coreCache와 상보) |
 | 2026-07-12 | sharedKernelProbe | Edge headless | SharedWorker(module) 커널 부팅 4253ms, 연결 A의 `x=41`을 연결 B가 `x+1=42`로 조회, 동시 요청 정합. **벽: crossOriginIsolated=false**(플랫폼 제약) = SAB 불가, JSPI는 true | **머신이 탭 밖에서 산다**(여러 탭 = 한 상태). interrupt/스냅샷-fork는 이 커널에서 불가(SAB) | 졸업 -> `SharedKernel`(실행/상태 공유 v1). SAB 기능은 플랫폼 COI 지원 대기 |
+| 2026-07-12 | noCoiProbe | Edge headless(헤더 제거 서버) | COI=false/SAB 잠김 확인 후: 부팅 3533ms, 세션 부활 115p/7.2MB, .pymachine 왕복 1804ms, /home 디스크, JSPI=true 전부 정상 | **머신 핵심 동선은 COI 불필요**(SAB 쓰는 프로세스 OS만 경계) = GitHub Pages에 그냥 올려도 대표 데모가 돈다 | GH Pages 데모 배포 채택 근거 |
+| 2026-07-12 | swCoiProbe | Edge headless(헤더 제거 서버) | pyprocSw(?coi=1) 등록 + 1회 새로고침 -> crossOriginIsolated=true, SAB 생성 + 워커 Atomics 쓰기 관측, 일반 서빙 무파손 | 헤더 못 다는 호스팅에서도 SAB 복구 성립(opaque는 원본 통과 = CDN 자체 CORP 전제, jsdelivr ok) | 졸업 -> `pyprocSw.js` ?coi=1 + processOs.html 부트스트랩 |
 
 ## 판정
 
-진행 중 (9개 질문 실측 완료: 결정성/리플레이/성장/이미지/디스크/오프라인 2단/공유 커널. 잔여: /home 포함 이미지 v2, 델타 분기, SharedKernel과 머신 수명주기 결합)
+진행 중 (11개 질문 실측 완료: 결정성/리플레이/성장/이미지/디스크/오프라인 2단/공유 커널/호스팅 독립 2단. 잔여: /home 포함 이미지 v2, 델타 분기, SharedKernel과 머신 수명주기 결합)

@@ -25,7 +25,10 @@ const MIME = {
 // COOP/COEP 정적 서버를 만든다(listen은 호출자 몫).
 // onRequest(req, res)가 true를 반환하면 그 요청은 호출자가 처리한 것으로 보고 넘긴다
 // (게이트 하네스의 POST 백채널 같은 동적 엔드포인트용).
-export function createStaticServer(onRequest = null) {
+// opts.coi=false면 COOP/COEP/SW 헤더를 뺀다: GitHub Pages처럼 헤더를 못 다는 호스팅을
+// 로컬에서 재현하는 실측용(pythonMachine/noCoiProbe, swCoiProbe).
+export function createStaticServer(onRequest = null, opts = {}) {
+  const coi = opts.coi !== false;
   return createServer(async (req, res) => {
     if (onRequest && (await onRequest(req, res))) return;
     const urlPath = decodeURIComponent(new URL(req.url, "http://x").pathname);
@@ -34,15 +37,15 @@ export function createStaticServer(onRequest = null) {
     if (!file.startsWith(ROOT + sep)) { res.writeHead(403); return res.end("forbidden"); }
     try {
       const body = await readFile(file);
-      res.writeHead(200, {
-        "Content-Type": MIME[extname(file)] || "application/octet-stream",
+      const headers = { "Content-Type": MIME[extname(file)] || "application/octet-stream", "Cache-Control": "no-store" };
+      if (coi) {
         // crossOriginIsolated 요건: 이 두 헤더가 없으면 SharedArrayBuffer가 잠긴다.
-        "Cross-Origin-Opener-Policy": "same-origin",
-        "Cross-Origin-Embedder-Policy": "require-corp",
+        headers["Cross-Origin-Opener-Policy"] = "same-origin";
+        headers["Cross-Origin-Embedder-Policy"] = "require-corp";
         // src/capabilities/pyprocSw.js를 루트 스코프로 등록할 수 있게(가상 오리진/오프라인).
-        "Service-Worker-Allowed": "/",
-        "Cache-Control": "no-store",
-      });
+        headers["Service-Worker-Allowed"] = "/";
+      }
+      res.writeHead(200, headers);
       res.end(body);
     } catch (e) {
       res.writeHead(e.code === "ENOENT" ? 404 : 500);

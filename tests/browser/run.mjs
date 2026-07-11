@@ -36,6 +36,7 @@ function findBrowser() {
 let reportResolve;
 const reportPromise = new Promise((res) => { reportResolve = res; });
 
+// PYPROC_NO_COI=1이면 헤더 없는 호스팅(GitHub Pages 등가)을 재현한다(noCoi/swCoi probe용).
 const server = createStaticServer(async (req, res) => {
   if (req.method !== "POST" || !req.url.startsWith("/gateReport")) return false;
   let body = "";
@@ -43,7 +44,7 @@ const server = createStaticServer(async (req, res) => {
   res.writeHead(204); res.end();
   try { reportResolve(JSON.parse(body)); } catch (e) { reportResolve({ ok: false, checks: [], parseError: String(e) }); }
   return true;
-});
+}, { coi: !process.env.PYPROC_NO_COI });
 
 await new Promise((res) => server.listen(0, "127.0.0.1", res));
 const page = (process.argv[2] || "tests/browser/gate.html").replaceAll("\\", "/").replace(/^\/+/, "");

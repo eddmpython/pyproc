@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: swCoi</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: SW 헤더 주입(?coi=1)으로 헤더 없는 호스팅에서 SAB를 여나</h1>
+<p>1단계: COI 꺼진 페이지가 pyprocSw(?coi=1)를 등록하고 1회 새로고침.
+2단계: crossOriginIsolated가 true가 되고 SAB가 실사용 가능해야 한다.
+실행: PYPROC_NO_COI=1 node tests/browser/run.mjs tests/attempts/pythonMachine/swCoiProbe.html</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const phase = sessionStorage.getItem("pyprocCoiPhase") || "1";
+    if (phase === "1" && !crossOriginIsolated) {
+      out.textContent = "1단계: COI 주입 SW 등록 + 새로고침...";
+      sessionStorage.setItem("pyprocCoiPhase", "2");
+      // 배포 패턴 재현: 스코프 루트의 사본(래퍼)을 등록한다. 쿼리는 SW URL에 싣는다.
+      await navigator.serviceWorker.register("./coiWrapperSw.js?coi=1");
+      await navigator.serviceWorker.ready;
+      location.reload();
+    } else {
+      sessionStorage.removeItem("pyprocCoiPhase");
+      check("주입 후 crossOriginIsolated === true", crossOriginIsolated === true, String(crossOriginIsolated));
+
+      let sab = null;
+      try { sab = new SharedArrayBuffer(8); } catch (e) {}
+      check("SAB 생성 가능", !!sab);
+
+      // SAB 실사용: 워커와 공유해 원자적 쓰기가 보이는가(프로세스 OS의 최소 전제)
+      const view = new Int32Array(sab);
+      const src = 'onmessage = (e) => { const v = new Int32Array(e.data); Atomics.store(v, 0, 42); postMessage("done"); };';
+      const w = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      await new Promise((res, rej) => {
+        w.onmessage = res; w.onerror = (e) => rej(new Error(e.message));
+        w.postMessage(sab);
+      });
+      check("워커와 SAB 공유 + Atomics 쓰기 관측", Atomics.load(view, 0) === 42, `v=${Atomics.load(view, 0)}`);
+      w.terminate();
+
+      const st = await fetch("./swCoiProbe.html");
+      check("일반 fetch 통과(주입이 서빙을 깨지 않음)", st.ok && (await st.text()).includes("swCoi"));
+
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.unregister();
+      await report();
+    }
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+    await report();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: noCoi</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 헤더 없는 호스팅(GitHub Pages 등가)에서 머신이 뜨나</h1>
+<p>COOP/COEP를 못 다는 호스팅에서 SAB가 잠긴다. 질문: 머신 데모의 핵심(부팅/세션 부활/
+.pymachine/디스크)은 SAB를 안 쓰므로 그대로 돌고, SAB가 필요한 것(프로세스 OS)만
+경계 밖인가? 실행: PYPROC_NO_COI=1 node tests/browser/run.mjs tests/attempts/pythonMachine/noCoiProbe.html</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession, openMachine } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    // 전제 확인: 정말 COI가 꺼진 환경인가(켜져 있으면 이 실측은 무의미)
+    check("전제: crossOriginIsolated === false", crossOriginIsolated === false, String(crossOriginIsolated));
+    let sabBlocked = false;
+    try { new SharedArrayBuffer(8); } catch (e) { sabBlocked = true; }
+    check("전제: SAB 잠김(프로세스 OS 경계 확인)", sabBlocked);
+
+    // 머신 핵심 동선: 부팅 -> 상태 -> 저장 -> 새 커널 부활 -> .pymachine 왕복
+    let t = performance.now();
+    const s1 = await bootSession({});
+    timings.bootMs = Math.round(performance.now() - t);
+    s1.rt.run("x = 4100");
+    check("부팅 + 실행(COI 없이)", s1.rt.run("x + 2") === 4102, `${timings.bootMs}ms`);
+
+    const jspi = typeof WebAssembly.Suspending === "function";
+    timings.jspi = jspi;
+    check("JSPI는 COI와 무관하게 가용(터미널 input 전제)", jspi, `Suspending=${jspi}`);
+
+    const opfs = await navigator.storage.getDirectory();
+    const dir = await opfs.getDirectoryHandle("noCoiProbe", { create: true });
+    const sv = await s1.save(dir, "m");
+    const s2 = await bootSession({});
+    await s2.load(dir, "m");
+    check("세션 부활(OPFS, COI 없이)", s2.rt.run("x + 42") === 4142, `${sv.pages}p/${sv.mb}MB`);
+
+    t = performance.now();
+    const img = await s2.exportImage();
+    const s3 = await openMachine(img, { trust: true });
+    timings.machineRoundtripMs = Math.round(performance.now() - t);
+    check(".pymachine 내보내기/열기(COI 없이)", s3.rt.run("x") === 4100, `${(img.size / 1048576).toFixed(1)}MB, ${timings.machineRoundtripMs}ms`);
+
+    const home = await s3.rt.mountHome(await opfs.getDirectoryHandle("noCoiHome", { create: true }));
+    s3.rt.run("open('/home/web/probe.txt', 'w').write('ok')");
+    await home.sync();
+    check("영속 디스크(COI 없이)", s3.rt.run("open('/home/web/probe.txt').read()") === "ok");
+
+    await opfs.removeEntry("noCoiProbe", { recursive: true });
+    await opfs.removeEntry("noCoiHome", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>
