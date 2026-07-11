@@ -45,7 +45,7 @@
 | 2026-07-11 | crossKernelProbe | Edge headless | A(30MB) 이미지를 새 부팅 B에 전체 되쓰기 + 스택 복원 -> `SystemError: Type does not define the tp_name field` | **벽 좌표**: 커널 상태는 선형 메모리만이 아니다(WASM globals + JS 측 미러가 이미지 밖). 동일 인스턴스 복원(우리 리액티브)은 그래서 되고, 크로스 인스턴스는 전체 머신 상태 캡처가 필요 | 불멸 커널은 (a) 부팅 결정성 실측, (b) 전역/JS 상태 목록화 후 재시도. 프론티어 후보 |
 
 | 2026-07-11 | bootDeterminismProbe | Edge headless | 무조치 2회 부팅 = 180p 상이. **PYTHONHASHSEED=0 + 엔트로피/시간 스텁 = 0p 상이(bare와 numpy 리플레이 모두, 힙 길이 동일)** | 부팅이 바이트 단위 결정적. tp_name 크래시 원인(시드 레이아웃 시프트) 확증 | 리플레이+델타 경로 개방 |
-| 2026-07-11 | replayForkProbe | Edge headless | A의 사용자 상태(변수+numpy 배열)를 델타 160p/10MB로 수확, 동형 리플레이 B에 **1.5ms 적용** -> 상태 생존·연산·연속 실행 전부 정확 | **불멸 커널/warm-fork 실증**. hiwire 벽을 upstream 수정 없이 우회 | 승격: deterministic 부팅 옵션 + 세션 델타 export/import |
+| 2026-07-11 | replayForkProbe | Edge headless | A의 사용자 상태(변수+numpy 배열)를 델타 160p/10MB로 수확, 동형 리플레이 B에 **1.5ms 적용** -> 상태 생존·연산·연속 실행 전부 정확 | **불멸 커널/warm-fork 실증**. hiwire 벽을 upstream 수정 없이 우회 | 졸업 -> `session.js` `bootSession`/`Session.save/load`(게이트 상시: 크로스 커널 부활 95p/5.9MB) |
 
 ## 판정
 

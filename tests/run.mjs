@@ -30,7 +30,7 @@ console.log("[표면]");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 for (const [name, kind] of [
   ["boot", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
-  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["AsgiServer", "function"], ["Terminal", "function"], ["PyProc", "function"],
+  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["AsgiServer", "function"], ["Terminal", "function"], ["bootSession", "function"], ["Session", "function"], ["PyProc", "function"],
   ["PAGE_SIZE", "number"],
 ]) {
   check(`export ${name}:${kind}`, () => {
@@ -69,7 +69,7 @@ for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
-for (const sym of ["boot", "Runtime", "MemoryCapability", "ReactiveController", "SyscallBridge", "AsgiServer", "Terminal", "PyProc", "PAGE_SIZE"]) {
+for (const sym of ["boot", "Runtime", "MemoryCapability", "ReactiveController", "SyscallBridge", "AsgiServer", "Terminal", "Session", "PyProc", "PAGE_SIZE"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
   });

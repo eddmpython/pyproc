@@ -134,6 +134,7 @@ await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"]
 | `SyscallBridge` | socket/subprocess/input 능력 계약 |
 | `AsgiServer` | 커널 안 ASGI 서버(FastAPI를 소켓 0으로, dispatch 3.4ms) |
 | `Terminal` | 서버리스 파이썬 터미널(REPL + 블로킹 input) |
+| `bootSession` / `Session` | 세션 부활(불멸 커널): 결정적 리플레이 + 사용자 델타의 OPFS 영속 |
 | `PyProc` | 프로세스 OS 커널(스냅샷-fork spawn + `map` 병렬) |
 | `PAGE_SIZE` | WASM 페이지 크기 상수(65536) |
 
@@ -154,7 +155,7 @@ import { PyProc } from "pyproc/process-os";
 
 ## 프론티어 (정직하게)
 
-warm-fork(패키지 로드 후 복제), 진짜 공유메모리 스레드(nogil), numpy 프로세스간 제로카피는 전부 하나의 미해결 문제에 걸려 있다: **WASM dlopen** + 크로스 인스턴스/스레드 메모리 공유. Pyodide 스레딩 이슈 #237은 2018년부터 열려 있다. pyproc은 각 워커에 자기 wasmTable / 힙 / 글루를 주어 이 문제를 회피하고, 그래서 오늘 가능한 최상단이다. 프론티어는 발판이 아니라 벽이다.
+진짜 공유메모리 스레드(nogil)와 numpy 프로세스간 제로카피는 여전히 하나의 미해결 문제에 걸려 있다: **WASM dlopen** + 크로스 인스턴스/스레드 메모리 공유(Pyodide 스레딩 이슈 #237, 2018년부터). pyproc은 각 워커에 자기 wasmTable / 힙 / 글루를 주어 이 문제를 회피한다. 한편 warm-fork(패키지 로드 후 복제)는 이 벽에 걸려 있었으나 **결정적 리플레이 + 사용자 델타로 실용 우회를 달성했다**(`Session`, 실측: 리플레이 부팅이 바이트 동일 힙 재현, 델타 1.5ms 적용). Pyodide 스냅샷의 hiwire 제약(패키지 로드 후 이미지화 불가, upstream #5195)은 그대로이며, 그 벽을 넘은 것이 아니라 돌아간 것이다.
 
 ## 아키텍처
 

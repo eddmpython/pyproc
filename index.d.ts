@@ -136,6 +136,36 @@ export class Runtime {
 /** Pyodide 런타임을 부팅한다. Chromium/Edge 전용. */
 export function boot(opts?: BootOptions): Promise<Runtime>;
 
+export interface SessionManifest {
+  indexURL?: string;
+  env?: Record<string, string>;
+  /** 리플레이로 로드할 패키지(환경 선언의 일부). */
+  packages?: string[];
+  /** 리플레이 경계 직전에 실행할 파이썬(예: "import numpy"). */
+  setup?: string;
+}
+
+export interface SessionIo {
+  pages: number;
+  mb: number;
+}
+
+/**
+ * 세션 부활(불멸 커널): 결정적 리플레이 부팅 + 사용자 델타의 OPFS 영속.
+ * 같은 매니페스트로 bootSession한 커널은 바이트 동일 힙을 재현하므로,
+ * save()가 남긴 델타(수 MB)를 load()로 적용하면 이전 세션의 파이썬 상태가 부활한다.
+ */
+export function bootSession(manifest?: SessionManifest): Promise<Session>;
+
+export class Session {
+  readonly rt: Runtime;
+  readonly reactive: ReactiveController;
+  /** 사용자 상태(리플레이 경계와의 차이 페이지)만 저장. base는 리플레이가 대체한다. */
+  save(dir: FileSystemDirectoryHandle, name: string): Promise<SessionIo>;
+  /** 같은 매니페스트·같은 힙 크기 전제(불일치는 명시적 예외). */
+  load(dir: FileSystemDirectoryHandle, name: string): Promise<SessionIo>;
+}
+
 export interface PyProcMapOptions {
   /** 태스크별 타임아웃(ms). 초과 시 해당 태스크는 {error}로 수렴하고 행 워커는 kill + 스냅샷 respawn. */
   taskTimeoutMs?: number;

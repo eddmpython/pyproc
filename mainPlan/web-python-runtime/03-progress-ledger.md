@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-11 발명: Session(불멸 커널/warm-fork) 승격 - 리플레이+델타
+
+- 전문 리서치(웹 조사 에이전트) 협업 결론 채택: 커널 상태 = 선형 메모리 + 함수 테이블 + JS측(hiwire/MEMFS). "부팅된 커널에 되쓰기"가 아니라 **결정적 리플레이 + 델타**가 정답 아키텍처(Cloudflare workerd 동원리).
+- 실측 3연타: (1) bootDeterminism - PYTHONHASHSEED=0 + 엔트로피/시간 고정이면 bare·numpy 리플레이 모두 상이 페이지 0(무조치는 180p). (2) replayFork - 사용자 상태(변수+numpy 배열) 델타 160p/10MB를 동형 커널에 1.5ms 적용, 전부 생존. (3) 승격 후 게이트 상시 검사 - 크로스 커널 부활 95p/5.9MB GREEN.
+- 승격: `bootSession(manifest)`(indexURL/env/packages/setup = 환경 선언) + `Session.save/load`(OPFS, 매니페스트·힙 크기 불일치는 명시적 예외). base는 저장하지 않는다(리플레이가 대체) = 저장물이 힙 43MB가 아니라 델타 수 MB.
+- 의미: hiwire 벽(#5195) 우회로 warm-fork 실용화, 세션 간 부활(로컬 REPL도 없는 능력) 개방. "웹의 uv"는 (매니페스트) + (wheel OPFS 캐시) + (세션 델타) 3층으로 확정.
+- boot()에 env 계약 추가. 남은 v2: 힙 성장 세션, 델타 체인·분기, wheel 캐시 결합.
+
 ### 2026-07-11 외부 리뷰 대응: restoreLive 경계 계약을 기계 강제로
 
 - 외부 코드 리뷰의 최우선 지적("sound를 파는 라이브러리에서 soundness 전제가 강제되지 않는다") 수용. `Runtime.execSeq`(상태 변이 카운터: run/runAsync/setGlobal/install/loadPackages)로 경계 위반을 **O(1) 감지**해 restoreLive가 자동으로 재해시 경로로 승격. 실측: 위반 시 27.4ms 안전 복원, 준수 시 0.69ms 즉시 경로 유지(`rehashed` 플래그로 확인).

@@ -9,6 +9,7 @@
 | 실행 | 순수 파이썬 로직 속도 | **도달** (CPython 3.14 WASM >= 로컬 3.12, numpy 대규모만 86배 열세) | WebGPU 산술(프론티어) |
 | 프로세스 | fork/Pool/kill이 되는 OS | **도달(v1)**: 스냅샷-fork ~380ms, map 병렬, taskTimeout + kill/respawn + `interrupt(pid)`(SIGINT, respawn 0) | 시그널 확장(SIGSTOP/재개), 프로세스간 IPC |
 | 시스템콜 | input/HTTP/subprocess | **도달(v1)**: input(동기+JSPI 블로킹), urllib 실 GET, subprocess(자식 워커, `-c`) | requests 계열, 저수준 socket(프록시 계약), 파일계(FS Access 마운트) |
+| 세션 영속 | (로컬도 없음: REPL은 죽으면 끝) | **로컬 초월(v1)**: `Session` 승격. 결정적 리플레이 + 델타(5.9MB급)로 커널 간·세션 간 부활, 게이트 상시 | 성장 세션(v2), 델타 체인·분기, 매니페스트에 wheel 캐시 결합 |
 | 터미널 | 로컬 REPL과 동일 체감 | **도달(v1)**: `Terminal` 능력 승격 + examples/terminal.html(블로킹 input 재개 24ms) | 히스토리·자동완성·멀티라인 편집 |
 | 라이브러리 | `pip install` 전부 | **실측 17/17**: 대표군(pandas/scipy/sklearn/matplotlib/pillow/sqlalchemy/lxml/httpx/cryptography 등 + fastapi/polars/requests) 전부 설치·import ok(v314) | 표본 확대(실패군 발견), wheel OPFS 캐시(재설치 0), 네이티브 전용군 분류 |
 | 상주/네이티브 | 데몬, 네이티브 휠(torch CUDA), 데스크톱 조작 | **영구 벽**(웹 보안 모델). 정직하게 스코프 밖 | 벽 앞 우회: 소비 제품의 로컬/Actions 티어 몫 |

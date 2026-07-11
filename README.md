@@ -134,6 +134,7 @@ await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"]
 | `SyscallBridge` | socket/subprocess/input capability contract |
 | `AsgiServer` | In-kernel ASGI server (FastAPI with zero sockets, 3.4ms dispatch) |
 | `Terminal` | Serverless Python terminal (REPL plus blocking input) |
+| `bootSession` / `Session` | Session resurrection (immortal kernel): deterministic replay plus user-delta persisted to OPFS |
 | `PyProc` | Process OS kernel (snapshot-fork spawn + `map` parallelism) |
 | `PAGE_SIZE` | WASM page size constant (65536) |
 
@@ -154,7 +155,7 @@ import { PyProc } from "pyproc/process-os";
 
 ## Frontier (stated honestly)
 
-warm-fork (cloning after packages load), true shared-memory threads (nogil), and cross-process zero-copy numpy are all blocked by one unsolved problem: **WASM dlopen** plus cross-instance/thread memory sharing. Pyodide threading issue #237 has been open since 2018. pyproc avoids this problem by giving each worker its own wasmTable / heap / glue, which is why it is the achievable ceiling today. The frontier is a wall, not a stepping stone.
+True shared-memory threads (nogil) and cross-process zero-copy numpy remain blocked by one unsolved problem: **WASM dlopen** plus cross-instance/thread memory sharing (Pyodide threading issue #237, open since 2018). pyproc avoids it by giving each worker its own wasmTable / heap / glue. warm-fork (cloning after packages load) used to sit behind the same wall, but pyproc now has a **practical bypass via deterministic replay plus user delta** (`Session`; measured: replay boots reproduce a byte-identical heap, delta applies in 1.5ms). Pyodide's snapshot hiwire limitation (no imaging after package load, upstream #5195) still stands; the wall was routed around, not broken.
 
 ## Architecture
 
