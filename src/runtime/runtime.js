@@ -5,6 +5,7 @@
 import { MemoryCapability } from "./memoryCapability.js";
 import { ReactiveController } from "../capabilities/reactive.js";
 import { SyscallBridge } from "../capabilities/syscallBridge.js";
+import { AsgiServer } from "../capabilities/asgiServer.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 
@@ -45,6 +46,7 @@ export class Runtime {
   // Layer 1 능력 등록(opt-in). 소비자는 능력 계약만 받고 엔진 내부는 만지지 않는다.
   enableReactive() { return new ReactiveController(this); }
   enableSyscallBridge(cfg = {}) { return new SyscallBridge(this, cfg); }
+  enableAsgiServer(cfg = {}) { return new AsgiServer(this, cfg); }
 
   get raw() { return this._py; }  // 탈출구(권장 안 함)
 }

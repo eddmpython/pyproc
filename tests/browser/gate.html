@@ -66,6 +66,14 @@
       rt.run(`_u = "${location.origin}/README.md"`);
       check("syscall urllib: 실제 HTTP GET", rt.run('import urllib.request\nurllib.request.urlopen(_u).read(8).decode()') === "# pyproc");
 
+      // Layer 1: 커널 안 ASGI 서버 (FastAPI, 소켓 0, async def 강제)
+      await rt.install("fastapi");
+      rt.run("from fastapi import FastAPI\napp = FastAPI()\n@app.get('/ping')\nasync def ping():\n    return {'n': 42}");
+      const asgi = rt.enableAsgiServer();
+      await asgi.install();
+      const resp = await asgi.serve("GET", "/ping");
+      check("asgi: GET /ping -> 200 + JSON", resp.status === 200 && JSON.parse(resp.body).n === 42);
+
       // 3) Layer 2: 프로세스 OS (스냅샷-fork + 진짜 병렬 map)
       const os = new PyProc();
       t = performance.now();

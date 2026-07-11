@@ -85,7 +85,24 @@ export class SyscallBridge {
   install(): Promise<SyscallInstallInfo>;
 }
 
-/** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge). */
+export interface AsgiServerConfig {
+  /** 파이썬 전역의 ASGI 앱 변수명(기본 "app"). */
+  app?: string;
+}
+
+export interface AsgiResponse {
+  status: number;
+  headers: [string, string][];
+  body: string;
+}
+
+/** 커널 안 ASGI 서버: FastAPI/Starlette를 소켓 0으로 dispatch. 엔드포인트는 async def 강제. */
+export class AsgiServer {
+  install(): Promise<{ app: string; transport: string }>;
+  serve(method: string, path: string, body?: string | null, query?: string): Promise<AsgiResponse>;
+}
+
+/** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer). */
 export class Runtime {
   readonly memory: MemoryCapability;
   run(code: string): unknown;
@@ -96,6 +113,7 @@ export class Runtime {
   loadPackages(pkgs: string | string[]): Promise<void>;
   enableReactive(): ReactiveController;
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
+  enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */
   readonly raw: unknown;
 }

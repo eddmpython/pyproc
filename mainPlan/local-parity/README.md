@@ -32,7 +32,7 @@ dartlab이 자체 노트북 런타임(`mainPlan/web-notebook-runtime`)과 browse
 ## NEXT
 
 1. ~~예외 안전 복원 흡수~~ 완료(2026-07-11): `restoreLive({rehash})` 승격 + 게이트 상시화.
-2. browserAsServer 능력 계약 설계·흡수(dartlab e2e PASS 설계 재사용, `async def` 제약 포함).
+2. ~~browserAsServer 흡수~~ 완료(2026-07-11): `AsgiServer` 능력 승격(dispatch 3.4ms, 200/422 검증, 게이트 상시화). Service Worker 배선은 소비 제품 몫.
 3. terminal 승격(게이트 3): `Terminal` 능력 계약 + examples + 게이트 검사.
 4. browserAsServer 능력 계약 설계(흡수 3) / 체크포인트 그래프+OPFS(흡수 2) / 라이브러리 커버리지 / 협조적 취소(SIGINT).
 5. 장기: "웹의 uv" - 노트북/제품 단위 환경 선언(requirements) + wheel 캐시 + 즉시 복원 커널로 로컬 가상환경 등가를 만든다.

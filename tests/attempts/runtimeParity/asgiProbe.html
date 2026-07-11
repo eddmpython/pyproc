@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: asgi</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 커널 안 ASGI dispatch (browserAsServer 흡수, 소켓 0)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    let t = performance.now();
+    await rt.install("fastapi");
+    timings.fastapiInstallMs = Math.round(performance.now() - t);
+
+    // dartlab 제약 반영: 엔드포인트는 async def 강제(sync def는 스레드풀 -> 불가)
+    rt.run(
+      "import json, asyncio\n" +
+      "from fastapi import FastAPI\n" +
+      "from pydantic import BaseModel\n" +
+      "app = FastAPI()\n" +
+      "class Item(BaseModel):\n" +
+      "    name: str\n" +
+      "    price: float\n" +
+      "@app.get('/ping')\n" +
+      "async def ping():\n" +
+      "    return {'ok': True, 'n': 42}\n" +
+      "@app.post('/items')\n" +
+      "async def items(item: Item):\n" +
+      "    return {'name': item.name, 'total': item.price * 2}\n" +
+      "async def _asgi_call(method, path, body):\n" +
+      "    body_bytes = (body or '').encode()\n" +
+      "    scope = {'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1',\n" +
+      "             'method': method, 'scheme': 'http', 'path': path, 'raw_path': path.encode(),\n" +
+      "             'query_string': b'', 'root_path': '', 'headers': [(b'content-type', b'application/json'), (b'content-length', str(len(body_bytes)).encode())],\n" +
+      "             'client': ('127.0.0.1', 0), 'server': ('pyproc', 0)}\n" +
+      "    sent = {'status': None, 'body': b''}\n" +
+      "    got = {'done': False}\n" +
+      "    async def receive():\n" +
+      "        if got['done']:\n" +
+      "            return {'type': 'http.disconnect'}\n" +
+      "        got['done'] = True\n" +
+      "        return {'type': 'http.request', 'body': body_bytes, 'more_body': False}\n" +
+      "    async def send(msg):\n" +
+      "        if msg['type'] == 'http.response.start':\n" +
+      "            sent['status'] = msg['status']\n" +
+      "        elif msg['type'] == 'http.response.body':\n" +
+      "            sent['body'] += msg.get('body', b'')\n" +
+      "    await app(scope, receive, send)\n" +
+      "    return json.dumps({'status': sent['status'], 'body': sent['body'].decode()})"
+    );
+    const call = async (m, p, b) => {
+      rt.setGlobal("_m", m); rt.setGlobal("_p", p); rt.setGlobal("_b", b || "");
+      return JSON.parse(await rt.runAsync("await _asgi_call(_m, _p, _b)"));
+    };
+
+    t = performance.now();
+    const ping = await call("GET", "/ping");
+    timings.dispatchMs = +(performance.now() - t).toFixed(1);
+    check("GET /ping -> 200 + JSON", ping.status === 200 && JSON.parse(ping.body).n === 42, `${timings.dispatchMs}ms`);
+
+    const good = await call("POST", "/items", JSON.stringify({ name: "a", price: 3 }));
+    check("POST /items -> 200 + pydantic 검증", good.status === 200 && JSON.parse(good.body).total === 6);
+
+    const bad = await call("POST", "/items", JSON.stringify({ name: "a" }));
+    check("POST 검증 실패 -> 422", bad.status === 422);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>
