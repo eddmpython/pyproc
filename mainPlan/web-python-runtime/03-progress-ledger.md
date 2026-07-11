@@ -104,7 +104,7 @@
 
 ### 소유자 전용 TODO (계정/승인이 필요해서 대신 못 하는 것, 2026-07-12 정리)
 
-1. **npm 퍼블리시**: `pyproc` 이름이 비어 있다(2026-07-11 확인). 소유자 npm 계정으로 `npm login` 후 루트에서 `npm publish`. 이후 외부 소비가 `npm install pyproc` 한 줄(files 배열 준비 완료). 퍼블리시 개시 시점에 릴리즈 절차(docs/operations/release.md)에 publish 단계를 추가한다.
+1. **npm 퍼블리시(마지막 두 명령만 남음)**: 릴리즈 v0.0.5(버전+태그+GitHub Release)까지 완료됨(2026-07-12). 이 머신의 npm 인증이 없어서(웹 로그인과 별개, ENEEDAUTH 확인) 소유자 터미널에서 저장소 루트 기준 `npm login`(브라우저 인증) -> `npm publish` 두 줄이 남았다. 게시 후 `npm view pyproc version`이 0.0.5면 완료. 릴리즈 절차 문서에 npm 단계(7) 추가됨.
 2. **라이브 데모 연결**: Cloudflare Pages(권장) 또는 Netlify에 이 저장소를 연결(빌드 없음, 출력 `/`). 준비물은 저장소에 있음: 루트 `_headers`(COOP/COEP) + 절차 [docs/operations/demoHosting.md](../../docs/operations/demoHosting.md). URL 확보 후 README 2종에 데모 링크 + `gh repo edit --homepage <URL>`.
 3. **엔진 독립 이니셔티브 착수 승인**: [mainPlan/engine-independence](../engine-independence/README.md) PRD 검토 후 착수 단계 지시.
 
