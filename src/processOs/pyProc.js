@@ -38,13 +38,19 @@ export class PyProc {
       this.table.push({ pid, worker: w, state: "booting", parentPid: 0 });
       this.workers.push(w);
       const idx = this.table.length - 1;
-      boots.push(new Promise((resolve) => {
+      boots.push(new Promise((resolve, reject) => {
+        // 부팅 실패를 조용히 삼키면 boot()가 영원히 pending이다. 에러도 반드시 귀결시킨다.
         const onMsg = (e) => {
-          if (e.data.type === "ready" && e.data.id === pid) {
+          if (e.data.id !== pid) return;
+          if (e.data.type === "ready") {
             w.removeEventListener("message", onMsg); this.table[idx].state = "ready"; resolve(e.data.bootMs);
+          } else if (e.data.type === "error" && e.data.taskId === undefined) {
+            w.removeEventListener("message", onMsg); this.table[idx].state = "dead";
+            reject(new Error(`워커 pid ${pid} 부팅 실패: ${e.data.error}`));
           }
         };
         w.addEventListener("message", onMsg);
+        w.addEventListener("error", (e) => { this.table[idx].state = "dead"; reject(new Error(`워커 pid ${pid} 크래시: ${e.message}`)); }, { once: true });
         w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null });
       }));
     }

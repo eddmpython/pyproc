@@ -1,6 +1,6 @@
 # 테스트 - 게이트와 브라우저 실측
 
-WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다. 그래서 검증은 2단으로 나뉜다: Node 구조 게이트(커밋마다, 기계 강제)와 브라우저 실측(런타임 동작 확인, 절차 강제).
+WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다. 그래서 검증은 3단이다: Node 구조 게이트(커밋마다), 브라우저 런타임 게이트(headless 자동, 공개 표면의 실동작), 수동 실측(examples, 사람 눈 확인·벤치).
 
 ## 1. Node 구조 게이트 (`npm test`)
 
@@ -21,7 +21,21 @@ npm test          # = node tests/run.mjs, 의존성 0
 
 새 규칙을 만들면 가능한 한 여기(또는 `.githooks`)에 기계 가드를 짝지어 추가한다.
 
-## 2. 브라우저 실측 (examples/)
+## 2. 브라우저 런타임 게이트 (`npm run test:browser`)
+
+```bash
+npm run test:browser    # = node tests/browser/run.mjs, 의존성 0
+```
+
+COOP/COEP 서버를 임시 포트로 띄우고, 로컬 Chromium 계열 브라우저(Edge/Chrome 자동 탐색, `PYPROC_BROWSER=<경로>`로 지정 가능)를 headless로 실행해 `tests/browser/gate.html`의 실측 결과를 POST 백채널로 회수한다. 공개 표면이 진짜 브라우저에서 도는지를 커밋 단위로 검증하는 게이트다:
+
+- crossOriginIsolated 전제, `boot()` + 파이썬 실행.
+- 복원 리액티브의 실행 경계 계약(경계를 닫은 `restoreLive`, 안전 기준선 `restore`).
+- 스냅샷-fork spawn, `map` 병렬 결과 정확성, `mapSerial` 일치, `ps`/`terminate`.
+
+런타임 동작을 바꾸는 커밋은 이 게이트 green이 조건이다. 실측 수치(부팅/복원/fork/map ms)가 함께 출력되므로, 의미 있는 변화는 [진행 원장](../../mainPlan/web-python-runtime/03-progress-ledger.md)에 기록한다. CI에서도 같은 게이트가 돈다(`.github/workflows/ci.yml`).
+
+## 3. 수동 실측 (examples/)
 
 crossOriginIsolated(COOP/COEP 헤더) 페이지에서만 SharedArrayBuffer가 열리므로, 동봉된 서버로 띄운다:
 

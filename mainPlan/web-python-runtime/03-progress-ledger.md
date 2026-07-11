@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-11 브라우저 런타임 게이트 신설 + 프로세스 OS 실결함 2건 수정 (v0.0.4)
+
+- **`npm run test:browser` 신설**(의존성 0): COOP/COEP 서버 + headless Chromium(Edge/Chrome 자동 탐색) + POST 백채널로 공개 표면의 실동작을 자동 검증. CI(`.github/workflows/ci.yml`)에서도 같은 게이트가 돈다. examples/serve.mjs는 `createStaticServer()` export로 리팩터링해 게이트가 재사용.
+- **게이트가 첫 실행에서 실결함 2건을 적발, 수정:**
+  1. `PyProc.boot()`가 워커 부팅 실패를 삼켜 영원히 pending(계약 실태 표의 알려진 결함). 부팅 에러를 reject로 전파 + 워커 error 이벤트 처리 + 프로세스 상태 `dead` 기록.
+  2. **스냅샷-fork가 배포 코드에서 부팅 불가였다**: SAB 뷰를 `_loadSnapshot`에 그대로 주면 Pyodide 내부 TextDecoder가 shared buffer를 거부(TypeError). 워커 로컬 일반 버퍼로 1회 복사해 해결. 기존 "검증된 실측"은 codaro 실험 코드 기준이었고, 추출된 pyproc의 SAB 경로는 브라우저 실측이 없어 이 결함이 숨어 있었다. 런타임 게이트 신설의 정당성이 즉시 입증된 사례.
+- **이 머신 실측(게이트 GREEN 10/10, Edge headless)**: 메인 부팅 4004ms, restoreLive 0.84ms, fork 워커 부팅 평균 384ms(콜드 대비 약 10배), map 병렬 39ms vs 직렬 65ms(2워커 1.67배, 결과 정확). v0.0.3 재구조화의 브라우저 검증 완료(NEXT 1 해소).
+- **태그 정책(소유자 지시)**: 태그는 명시 지시가 있을 때만 만든다. 남발 금지. 릴리즈 절차에서 태그 단계 분리.
+
 ### 2026-07-11 라이선스 확정: Apache 2.0
 
 - 소유자 결정으로 **Apache License 2.0** 채택(Copyright 2026 eddmpython). 근거: 명시적 특허 조항(3절)이 스냅샷-fork·복원 리액티브 같은 발명성 기법의 사용자를 보호하고, 기여 조건 내장(5절, inbound=outbound)이 별도 CLA 없이 외부 기여를 연다. Pyodide(MPL-2.0)는 CDN 런타임 로드라 간섭 없음.
@@ -27,9 +36,9 @@
 
 ## NEXT (재개 지점)
 
-1. **브라우저 실측 재확인**: src 레이어 재구조화 후 `examples/` 2종을 crossOriginIsolated 서버로 실행해 스냅샷-fork·map 병렬·기본 런타임 green 확인. 리액티브 사용례(checkpoint 경계 포함)를 examples에 추가하는 것도 이때.
-2. **attempts 첫 카테고리 개설 판단**: 소비자 수요 순서상 `processLifecycle`(map 타임아웃/워커 사망 감지)이 첫 후보. 개설 시 [tests/attempts/README.md](../../tests/attempts/README.md) 규칙대로.
-3. **codaro UI 배선 동행**: PyodideEngine이 browserPythonRuntime seam을 실제 사용할 때 나오는 요구를 이 원장에 기록.
+1. **푸시 후 CI 첫 실행 확인**: GitHub Actions에서 구조 게이트 + 브라우저 게이트가 러너(ubuntu, google-chrome)에서 green인지 확인. 러너 특이사항이 나오면 이 원장에 기록.
+2. **attempts 첫 카테고리 개설 판단**: 소비자 수요 순서상 `processLifecycle`(map 중 워커 사망 감지/타임아웃, 부팅 에러 전파는 2026-07-11 선반영)이 첫 후보. 개설 시 [tests/attempts/README.md](../../tests/attempts/README.md) 규칙대로.
+3. **codaro UI 배선 동행**: PyodideEngine이 browserPythonRuntime seam을 실제 사용할 때 나오는 요구를 이 원장에 기록. 그 시점 SHA로 재핀(스냅샷-fork 결함 수정이 들어간 커밋 이후여야 함).
 4. **npm 퍼블리시(소유자 계정 필요)**: `pyproc` 이름이 비어 있다. `npm publish`로 선점하면 외부 소비가 `npm install pyproc` 한 줄이 된다. files 배열은 준비 완료.
 
 ## 메모리 포인터

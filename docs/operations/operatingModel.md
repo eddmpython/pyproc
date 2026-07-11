@@ -52,5 +52,6 @@ dartlab의 운영 체계를 pyproc 크기에 맞게 차용한 것이다(2026-07-
 | pre-commit | `.githooks/pre-commit` | 스테이징된 `*.md`/`*.js`의 em dash(U+2014) |
 | pre-push / reference-transaction | `.githooks/` | non-main 브랜치 생성·푸시 |
 | 구조 게이트 | `tests/run.mjs` | 공개 표면·타입 커버리지 누락, em dash, 깨진 상대 링크, attempts/mainPlan 구조 위반 |
+| 런타임 게이트 | `tests/browser/run.mjs` | 공개 표면의 실제 브라우저 동작 회귀(부팅, 리액티브 실행 경계 계약, 스냅샷-fork, map 병렬). headless Chromium 자동 실행, 의존성 0 |
 
 클론 후 `git config core.hooksPath .githooks`로 훅을 활성화한다.

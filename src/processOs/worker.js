@@ -11,7 +11,14 @@ onmessage = async (e) => {
       const t0 = performance.now();
       const mod = await import(indexURL + "pyodide.mjs");
       const opts = { indexURL };
-      if (msg.snapshot) opts._loadSnapshot = new Uint8Array(msg.snapshot);  // fast fork
+      if (msg.snapshot) {
+        // fast fork. SAB 뷰를 그대로 주면 Pyodide 내부 TextDecoder가 거부한다
+        // (shared buffer 불가) -> 워커 로컬 일반 버퍼로 1회 복사해 넘긴다.
+        const shared = new Uint8Array(msg.snapshot);
+        const copy = new Uint8Array(shared.byteLength);
+        copy.set(shared);
+        opts._loadSnapshot = copy;
+      }
       py = await mod.loadPyodide(opts);
       postMessage({ type: "ready", id: msg.id, bootMs: Math.round(performance.now() - t0), forked: !!msg.snapshot });
     } else if (msg.type === "task") {

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>pyproc 브라우저 게이트</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style>
+</head>
+<body>
+  <h1>pyproc 브라우저 게이트</h1>
+  <p>공개 표면을 진짜 런타임으로 검증한다: 부팅, 리액티브 실행 경계 계약, 스냅샷-fork, map 병렬.
+     tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
+  <pre id="out">실행 중...</pre>
+  <script type="module">
+    import { boot, PyProc } from "../../index.js";
+
+    const out = document.getElementById("out");
+    const checks = [];
+    const timings = {};
+    const log = (m) => { out.textContent += "\n" + m; };
+    const check = (name, pass, info = "") => {
+      checks.push({ name, pass: !!pass, info: String(info) });
+      log(`${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`);
+    };
+
+    async function report() {
+      const ok = checks.length > 0 && checks.every((c) => c.pass);
+      const body = JSON.stringify({ ok, checks, timings, ua: navigator.userAgent });
+      out.textContent = (ok ? "게이트 GREEN\n" : "게이트 RED\n") + out.textContent;
+      try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body }); } catch (e) {}
+    }
+
+    try {
+      // 0) 전제: crossOriginIsolated (COOP/COEP 서버 검증 겸용)
+      check("crossOriginIsolated", crossOriginIsolated === true);
+
+      // 1) Layer 0: 부팅 + 실행
+      let t = performance.now();
+      const rt = await boot();
+      timings.bootMs = Math.round(performance.now() - t);
+      check("boot()", true, timings.bootMs + "ms");
+      check("run: sum(range(100)) === 4950", rt.run("sum(range(100))") === 4950);
+
+      // 2) Layer 1: 복원 리액티브의 실행 경계 계약
+      const reactive = rt.enableReactive();
+      const sp0 = reactive.stackSave();
+      rt.run("x = 1");
+      const cp = reactive.checkpoint();
+      rt.run("x = 999");
+      reactive.checkpoint(); // 실행 경계를 checkpoint로 닫는다 (계약)
+      t = performance.now();
+      reactive.restoreLive(cp.index, sp0);
+      timings.restoreLiveMs = +(performance.now() - t).toFixed(2);
+      check("restoreLive: 경계를 닫으면 x === 1", rt.run("x") === 1, timings.restoreLiveMs + "ms");
+
+      rt.run("x = 777"); // 경계를 닫지 않은 dirty 상태
+      reactive.restore(cp.index, sp0); // 전체 복원은 경계 없이도 안전 기준선
+      check("restore: 전체 복원으로 x === 1", rt.run("x") === 1);
+
+      // 3) Layer 2: 프로세스 OS (스냅샷-fork + 진짜 병렬 map)
+      const os = new PyProc();
+      t = performance.now();
+      const b = await os.boot(2);
+      timings.forkBootMs = Math.round(performance.now() - t);
+      timings.avgWorkerBootMs = b.avgBootMs;
+      check("PyProc.boot(2) forked", b.forked === true && b.workers === 2, `워커 평균 ${b.avgBootMs}ms`);
+      check("ps(): 2 프로세스 ready", os.ps().length === 2 && os.ps().every((p) => p.state === "ready"));
+
+      const N = 80000;
+      const expected = (N * (N - 1) * (2 * N - 1)) / 6; // sum(i*i for i in range(N))
+      const fn = "def _fn(n):\n    return sum(i*i for i in range(n))";
+      t = performance.now();
+      const par = await os.map(fn, [N, N, N, N]);
+      timings.mapParallelMs = Math.round(performance.now() - t);
+      check("map: 결과 4개 전부 정확", par.length === 4 && par.every((v) => v === expected), timings.mapParallelMs + "ms");
+
+      t = performance.now();
+      const ser = await os.mapSerial(fn, [N, N, N, N]);
+      timings.mapSerialMs = Math.round(performance.now() - t);
+      timings.speedup = +(timings.mapSerialMs / timings.mapParallelMs).toFixed(2);
+      check("mapSerial: 병렬과 결과 일치", JSON.stringify(par) === JSON.stringify(ser),
+        `직렬 ${timings.mapSerialMs}ms, speedup ${timings.speedup}x (참고치)`);
+      os.terminate();
+      check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
+    } catch (e) {
+      check("예외 없음", false, String(e).slice(0, 300));
+    }
+    await report();
+  </script>
+</body>
+</html>
