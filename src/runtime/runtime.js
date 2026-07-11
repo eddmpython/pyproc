@@ -55,7 +55,7 @@ export class Runtime {
   enableReactive() { return new ReactiveController(this); }
   enableSyscallBridge(cfg = {}) { return new SyscallBridge(this, cfg); }
   enableAsgiServer(cfg = {}) { return new AsgiServer(this, cfg); }
-  enableTerminal() { return new Terminal(this); }
+  enableTerminal(cfg = {}) { return new Terminal(this, cfg); }
   enableWheelCache(cfg = {}) { return new WheelCache(this, cfg); }
 
   get raw() { return this._py; }  // 탈출구(권장 안 함)

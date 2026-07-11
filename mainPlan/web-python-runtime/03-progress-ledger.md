@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-11 발명 라운드 2: WheelCache + %undo 시간여행 REPL (게이트 23검사)
+
+- `WheelCache` 승격: install/loadPackages 구간 한정 fetch 래핑으로 .whl을 OPFS에 저장/서빙. 실측 5/5: 커널2가 hit 2/miss 0으로 설치(재다운로드 0). 발견: micropip은 fetch에 URL 객체를 준다.
+- `Terminal({timeTravel})` 승격: 완결 문장마다 자동 체크포인트, `%undo`가 직전 상태로 복원. 로컬 REPL에 없는 능력 2호(1호는 Session 부활).
+- "웹의 uv" 3층 중 2층(매니페스트=bootSession, 저장층=WheelCache) 완성. 남은 결합: Session 매니페스트가 WheelCache를 경유해 "환경 열면 즉시"를 만드는 v2.
+- 남은 발명 큐: parallelMap(numpy 샤딩), 성장 세션(v2), 델타 체인·분기.
+
 ### 2026-07-11 발명: Session(불멸 커널/warm-fork) 승격 - 리플레이+델타
 
 - 전문 리서치(웹 조사 에이전트) 협업 결론 채택: 커널 상태 = 선형 메모리 + 함수 테이블 + JS측(hiwire/MEMFS). "부팅된 커널에 되쓰기"가 아니라 **결정적 리플레이 + 델타**가 정답 아키텍처(Cloudflare workerd 동원리).

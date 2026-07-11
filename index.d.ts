@@ -109,10 +109,15 @@ export class AsgiServer {
   serve(method: string, path: string, body?: string | null, query?: string): Promise<AsgiResponse>;
 }
 
+export interface TerminalConfig {
+  /** 완결 문장마다 자동 체크포인트를 닫고 "%undo"로 직전 상태에 시간여행한다. */
+  timeTravel?: boolean;
+}
+
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
 export class Terminal {
-  install(): Promise<{ repl: string }>;
-  /** 한 줄 입력. more=연속행 대기(... 프롬프트), out=stdout+stderr. */
+  install(): Promise<{ repl: string; timeTravel: boolean }>;
+  /** 한 줄 입력. more=연속행 대기(... 프롬프트), out=stdout+stderr. timeTravel이면 "%undo" 지원. */
   push(line: string): Promise<{ more: boolean; out: string }>;
 }
 
@@ -141,7 +146,7 @@ export class Runtime {
   enableReactive(): ReactiveController;
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
   enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
-  enableTerminal(): Terminal;
+  enableTerminal(cfg?: TerminalConfig): Terminal;
   enableWheelCache(cfg: WheelCacheConfig): WheelCache;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */
   readonly raw: unknown;

@@ -92,6 +92,14 @@
       const tp = await term.push("print(z)");
       check("terminal: REPL push + 상태 유지", tp.out.trim() === "42" && tp.more === false);
 
+      // 시간여행 REPL: %undo가 직전 완결 문장 이전으로 복원
+      const tt = rt.enableTerminal({ timeTravel: true });
+      await tt.install();
+      await tt.push("q = 1");
+      await tt.push("q = 999");
+      await tt.push("%undo");
+      check("terminal %undo: 시간여행", (await tt.push("print(q)")).out.trim() === "1");
+
       // 3) Layer 2: 프로세스 OS (스냅샷-fork + 진짜 병렬 map)
       const os = new PyProc();
       t = performance.now();
