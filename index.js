@@ -19,4 +19,5 @@ export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
 export { AsgiServer } from "./src/capabilities/asgiServer.js";
 export { Terminal } from "./src/capabilities/terminal.js";
 export { bootSession, Session } from "./src/capabilities/session.js";
+export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { PyProc } from "./src/processOs/pyProc.js";

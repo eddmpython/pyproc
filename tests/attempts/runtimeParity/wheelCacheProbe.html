@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: wheelCache</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: wheel OPFS 캐시 (재다운로드 0)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("pyprocWheels", { recursive: true }); } catch (e) {}
+    const dir = await root.getDirectoryHandle("pyprocWheels", { create: true });
+
+    // 커널 1: 콜드 설치(네트워크) -> 캐시 채워짐
+    const a = await boot();
+    const ca = a.enableWheelCache({ dir });
+    let t = performance.now();
+    await ca.install("six");
+    timings.coldMs = Math.round(performance.now() - t);
+    check("커널1: 설치 + import", a.run("import six; six.__version__").length > 0, `${timings.coldMs}ms, miss ${ca.misses}`);
+    check("커널1: 캐시에 wheel 저장(miss>=1)", ca.misses >= 1);
+    let names = []; for await (const k of dir.keys()) names.push(k);
+    check("OPFS에 .whl 실재", names.some((n) => n.endsWith(".whl")), JSON.stringify(names));
+
+    // 커널 2: 같은 설치가 캐시에서(네트워크 0)
+    const b = await boot();
+    const cb = b.enableWheelCache({ dir });
+    t = performance.now();
+    await cb.install("six");
+    timings.warmMs = Math.round(performance.now() - t);
+    check("커널2: 캐시 히트로 설치(hit>=1, miss==0)", cb.hits >= 1 && cb.misses === 0, `${timings.warmMs}ms, hit ${cb.hits}`);
+    check("커널2: import 정상", b.run("import six; 1") === 1);
+    await root.removeEntry("pyprocWheels", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

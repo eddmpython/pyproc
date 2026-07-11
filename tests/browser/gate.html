@@ -138,6 +138,17 @@
       os.terminate();
       check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
 
+      // wheel OPFS 캐시: 두 번째 커널이 네트워크 0으로 설치(재다운로드 0)
+      const wDir = await (await navigator.storage.getDirectory()).getDirectoryHandle("pyprocGateWheels", { create: true });
+      await rt.enableWheelCache({ dir: wDir }).install("six");
+      const rtW = await boot();
+      const wc2 = rtW.enableWheelCache({ dir: wDir });
+      await wc2.install("six");
+      // rt에는 micropip이 이미 있어 six만 캐시됨. 새 커널은 micropip.whl을 miss로 받고
+      // six는 캐시에서 서빙되어야 한다(완전한 재다운로드 0은 wheelCacheProbe가 검증).
+      check("wheelCache: 캐시 히트 서빙", wc2.hits >= 1 && rtW.run("import six; 1") === 1, `hit ${wc2.hits}, miss ${wc2.misses}`);
+      await (await navigator.storage.getDirectory()).removeEntry("pyprocGateWheels", { recursive: true });
+
       // 세션 부활(불멸 커널): 결정적 리플레이 + 델타로 다른 커널에서 상태가 산다
       const sDir = await (await navigator.storage.getDirectory()).getDirectoryHandle("pyprocGateSess", { create: true });
       const s1 = await bootSession({});

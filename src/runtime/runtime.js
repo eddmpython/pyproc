@@ -6,6 +6,7 @@ import { MemoryCapability } from "./memoryCapability.js";
 import { ReactiveController } from "../capabilities/reactive.js";
 import { SyscallBridge } from "../capabilities/syscallBridge.js";
 import { AsgiServer } from "../capabilities/asgiServer.js";
+import { WheelCache } from "../capabilities/wheelCache.js";
 import { Terminal } from "../capabilities/terminal.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
@@ -55,6 +56,7 @@ export class Runtime {
   enableSyscallBridge(cfg = {}) { return new SyscallBridge(this, cfg); }
   enableAsgiServer(cfg = {}) { return new AsgiServer(this, cfg); }
   enableTerminal() { return new Terminal(this); }
+  enableWheelCache(cfg = {}) { return new WheelCache(this, cfg); }
 
   get raw() { return this._py; }  // 탈출구(권장 안 함)
 }

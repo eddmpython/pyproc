@@ -116,7 +116,20 @@ export class Terminal {
   push(line: string): Promise<{ more: boolean; out: string }>;
 }
 
-/** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal). */
+export interface WheelCacheConfig {
+  /** wheel 바이트를 저장할 디렉터리(OPFS 등). 소비자가 제공한다. */
+  dir: FileSystemDirectoryHandle;
+}
+
+/** wheel OPFS 캐시: install/loadPackages 구간에서 .whl을 캐시에 저장/서빙(재다운로드 0). */
+export class WheelCache {
+  hits: number;
+  misses: number;
+  install(pkg: string): Promise<void>;
+  loadPackages(pkgs: string | string[]): Promise<void>;
+}
+
+/** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal/enableWheelCache). */
 export class Runtime {
   readonly memory: MemoryCapability;
   run(code: string): unknown;
@@ -129,6 +142,7 @@ export class Runtime {
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
   enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
   enableTerminal(): Terminal;
+  enableWheelCache(cfg: WheelCacheConfig): WheelCache;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */
   readonly raw: unknown;
 }

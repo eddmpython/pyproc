@@ -47,6 +47,8 @@
 | 2026-07-11 | bootDeterminismProbe | Edge headless | 무조치 2회 부팅 = 180p 상이. **PYTHONHASHSEED=0 + 엔트로피/시간 스텁 = 0p 상이(bare와 numpy 리플레이 모두, 힙 길이 동일)** | 부팅이 바이트 단위 결정적. tp_name 크래시 원인(시드 레이아웃 시프트) 확증 | 리플레이+델타 경로 개방 |
 | 2026-07-11 | replayForkProbe | Edge headless | A의 사용자 상태(변수+numpy 배열)를 델타 160p/10MB로 수확, 동형 리플레이 B에 **1.5ms 적용** -> 상태 생존·연산·연속 실행 전부 정확 | **불멸 커널/warm-fork 실증**. hiwire 벽을 upstream 수정 없이 우회 | 졸업 -> `session.js` `bootSession`/`Session.save/load`(게이트 상시: 크로스 커널 부활 95p/5.9MB) |
 
+| 2026-07-11 | wheelCacheProbe | Edge headless | 커널1이 six+micropip wheel을 OPFS에 저장(miss 2), 커널2는 **hit 2 / miss 0**으로 설치 + import 정상. 발견: micropip은 fetch에 URL 객체를 준다(문자열 아님) | 재다운로드 0 성립("웹의 uv" 저장층) | 졸업 -> `wheelCache.js` `enableWheelCache({dir})`(install/loadPackages 스코프 래핑), 게이트 상시 |
+
 ## 판정
 
 진행 중 (수명주기·soundness·시스템콜 v1·예외 안전 복원·ASGI 서버 졸업, 버전 관문 통과 / 터미널 승격, 체크포인트 그래프+OPFS, 라이브러리 커버리지, 협조적 취소 잔여)
