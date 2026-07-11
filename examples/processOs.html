@@ -14,6 +14,9 @@
     import { PyProc } from "../index.js";
     const out = document.getElementById("out");
     const log = (m) => { out.textContent += "\n" + m; };
+    // 예제 실행 게이트(?gate): 완주 여부를 하네스에 보고. 사람이 열면 no-op.
+    const gateMode = new URLSearchParams(location.search).has("gate");
+    const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: out.textContent.slice(-180) }] }) }).catch(() => {}); };
     // GitHub Pages처럼 헤더를 못 다는 호스팅에서 SAB를 여는 부트스트랩(실측: swCoiProbe).
     // 배포 루트에 pyprocSw.js 사본이 있는 전제(pages 워크플로가 조립). COOP/COEP 서버에선 no-op.
     if (!crossOriginIsolated && "serviceWorker" in navigator && !sessionStorage.getItem("pyprocCoiTried")) {
@@ -45,11 +48,17 @@
       log(`병렬 map: ${parMs}ms`);
       log(`직렬:     ${serMs}ms`);
       log(`speedup:  ${(serMs / parMs).toFixed(2)}x`);
-      log(`결과 일치: ${JSON.stringify(par) === JSON.stringify(ser)}`);
+      // 2^53을 넘는 파이썬 int는 BigInt로 온다(정밀도 보존이 올바른 동작).
+      // JSON.stringify는 BigInt에서 던지므로 비교/표시에 쓰지 않는다(2026-07-12 라이브 데모 실결함).
+      const same = par.length === ser.length && par.every((v, i) => v === ser[i]);
+      log(`결과 일치: ${same}`);
+      log(`결과값(BigInt): ${par[0]}`);
       log(`프로세스 테이블: ${JSON.stringify(os.ps())}`);
       os.terminate();
+      gateReport(same && b.workers === 4);
     } catch (e) {
       log("오류: " + e);
+      gateReport(false);
     }
   </script>
 </body>

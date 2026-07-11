@@ -13,15 +13,22 @@
     import { boot } from "../index.js";
     const out = document.getElementById("out");
     const log = (m) => { out.textContent += "\n" + m; };
+    // 예제 실행 게이트(?gate): 완주 여부를 하네스에 보고. 사람이 열면 no-op.
+    const gateMode = new URLSearchParams(location.search).has("gate");
+    const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: out.textContent.slice(-180) }] }) }).catch(() => {}); };
     try {
       out.textContent = "부팅 중...";
       const rt = await boot();
       log("부팅 완료");
-      log("sum(range(100)) = " + rt.run("sum(range(100))"));
+      const s = rt.run("sum(range(100))");
+      log("sum(range(100)) = " + s);
       await rt.loadPackages(["numpy"]);
-      log("numpy arange(10).sum() = " + rt.run("import numpy as np; int(np.arange(10).sum())"));
+      const n = rt.run("import numpy as np; int(np.arange(10).sum())");
+      log("numpy arange(10).sum() = " + n);
+      gateReport(s === 4950 && n === 45);
     } catch (e) {
       log("오류: " + e);
+      gateReport(false);
     }
   </script>
 </body>

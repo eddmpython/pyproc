@@ -35,3 +35,7 @@ jobs:
           name: gate-measurements
           path: gateMeasurements.json
           if-no-files-found: ignore
+      # 예제 실행 게이트: 데모 페이지가 사람이 여는 그대로 완주하는지(진열장 회귀 방지).
+      - run: npm run test:examples
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome

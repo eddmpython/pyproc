@@ -1,6 +1,6 @@
 # 테스트 - 게이트와 브라우저 실측
 
-WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다. 그래서 검증은 3단이다: Node 구조 게이트(커밋마다), 브라우저 런타임 게이트(headless 자동, 공개 표면의 실동작), 수동 실측(examples, 사람 눈 확인·벤치).
+WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다. 그래서 검증은 4단이다: Node 구조 게이트(커밋마다), 브라우저 런타임 게이트(공개 표면의 실동작), **예제 실행 게이트(데모 페이지 완주)**, 수동 실측(사람 눈 확인·벤치). 셋 다 CI에서 매 푸시마다 돈다.
 
 ## 1. Node 구조 게이트 (`npm test`)
 
@@ -35,7 +35,18 @@ COOP/COEP 서버를 임시 포트로 띄우고, 로컬 Chromium 계열 브라우
 
 런타임 동작을 바꾸는 커밋은 이 게이트 green이 조건이다. 실측 수치(부팅/복원/fork/map ms)가 함께 출력되므로, 의미 있는 변화는 [진행 원장](../../mainPlan/web-python-runtime/03-progress-ledger.md)에 기록한다. CI에서도 같은 게이트가 돈다(`.github/workflows/ci.yml`).
 
-## 3. 수동 실측 (examples/)
+## 3. 예제 실행 게이트 (`npm run test:examples`)
+
+```bash
+npm run test:examples    # = node tests/browser/examples.mjs, 의존성 0
+```
+
+데모 페이지(`examples/*.html`)를 **사람이 여는 그대로** headless로 열어 완주 여부를 회수한다.
+각 예제는 `?gate` 쿼리에서만 POST 백채널로 보고하고, 사람이 열면 아무것도 안 한다.
+생긴 이유(2026-07-12): 라이브러리 게이트는 라이브러리만 검증해서, 예제 코드의 실결함
+(BigInt 직렬화)이 라이브 데모까지 나갔다. 데모는 공개 진열장이므로 이 게이트가 회귀를 막는다.
+
+## 4. 수동 실측 (examples/)
 
 crossOriginIsolated(COOP/COEP 헤더) 페이지에서만 SharedArrayBuffer가 열리므로, 동봉된 서버로 띄운다:
 
@@ -55,6 +66,6 @@ Chromium/Edge에서 확인:
 - 콘솔에 `crossOriginIsolated`가 true인지(`false`면 헤더 문제).
 - 공개 표면·런타임 동작을 바꾼 커밋은 실측 결과(수치)를 [진행 원장](../../mainPlan/web-python-runtime/03-progress-ledger.md)에 남긴다. README의 실측 수치는 이 원장에서만 가져온다.
 
-## 3. 개념증명 실측 (tests/attempts/)
+## 5. 개념증명 실측 (tests/attempts/)
 
 신규 능력의 실측은 examples가 아니라 `tests/attempts/<카테고리>/`의 probe에서 한다. probe도 같은 서버로 띄운다(`http://localhost:8788/tests/attempts/...`). 결과 기록 형식은 [tests/attempts/README.md](../../tests/attempts/README.md) 참조.

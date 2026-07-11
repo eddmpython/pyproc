@@ -6,32 +6,13 @@
 //       브라우저 지정: PYPROC_BROWSER=<실행파일 경로>
 // 이것이 pyproc의 "진짜 검증"이다. tests/run.mjs는 구조만 보고, 여기는 런타임을 본다.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
+import { findBrowser, headlessArgs } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000); // 콜드 CDN 감안. 무거운 probe는 env로 연장
-
-function findBrowser() {
-  if (process.env.PYPROC_BROWSER) return process.env.PYPROC_BROWSER;
-  const candidates = process.platform === "win32" ? [
-    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-    "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
-    "C:/Program Files/Google/Chrome/Application/chrome.exe",
-    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-    join(process.env.LOCALAPPDATA || "", "Google/Chrome/Application/chrome.exe"),
-  ] : process.platform === "darwin" ? [
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-  ] : [
-    "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
-    "/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/bin/microsoft-edge",
-  ];
-  const found = candidates.find((c) => c && existsSync(c));
-  if (!found) throw new Error("Chromium 계열 브라우저를 찾지 못함. PYPROC_BROWSER=<경로>로 지정하라.");
-  return found;
-}
 
 let reportResolve;
 const reportPromise = new Promise((res) => { reportResolve = res; });
@@ -52,12 +33,7 @@ const url = `http://127.0.0.1:${server.address().port}/${page}`;
 
 const browser = findBrowser();
 const profile = mkdtempSync(join(tmpdir(), "pyprocGate-"));
-const args = [
-  "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-  "--disable-extensions", "--disable-background-networking", `--user-data-dir=${profile}`,
-];
-if (process.env.CI) args.push("--no-sandbox"); // 컨테이너 러너 호환
-args.push(url);
+const args = [...headlessArgs(profile), url];
 
 console.log(`pyproc 브라우저 게이트\n  browser: ${browser}\n  url:     ${url}\n`);
 const proc = spawn(browser, args, { stdio: "ignore" });

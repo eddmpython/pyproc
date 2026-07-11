@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 라이브 데모 실결함(소유자 발견) -> 예제 실행 게이트 신설 + 데모 영문 리디자인
+
+- **소유자가 라이브 데모에서 실결함 발견**: processOs 예제가 `TypeError: Do not know how to serialize a BigInt`. 원인: 2^53을 넘는 파이썬 int는 BigInt로 오는데(정밀도 보존 = 라이브러리는 올바름) 예제가 JSON.stringify로 결과를 비교. **구멍의 본질: examples/*.html은 어떤 게이트도 실행하지 않았다**(라이브러리 게이트는 라이브러리만 검증).
+- 대응: ① BigInt-안전 비교로 수정 ② **예제 실행 게이트 신설**(`npm run test:examples` = tests/browser/examples.mjs): 데모 4쪽을 사람이 여는 그대로 headless 완주 검증, 예제는 `?gate`에서만 보고(평시 no-op). CI 매 푸시 실행. 첫 실행 4/4 GREEN. 하네스 공용 조각은 harness.mjs로 추출(run.mjs와 드리프트 방지).
+- **데모 영문 리디자인(소유자 지시 2건)**: "데모가 볼품없다 + 영문 위주여야 한다(개발자는 외국인이 다수)". examples/demo.css 공용 디자인(다크, 카드/패널/배지) + 4예제와 랜딩을 영문 UI로 재작성. 내부 문서·커밋은 규칙대로 한국어 유지(영문화 범위 = 공개 데모 표면).
+- 검증 체계는 이로써 4단: 구조(187) / 브라우저 런타임(26) / 예제 실행(4쪽) / 수동. testing.md 갱신.
+
 ### 2026-07-12 데모 호스팅 결정: GitHub Pages 정본 + npm 게시 완료
 
 - **npm 게시 완료**: 소유자가 `pyproc@0.0.5` 퍼블리시(릴리즈 v0.0.5 = 버전+태그+GitHub Release+npm, 절차 7단계 신설). 설치 실검증(빈 프로젝트 `npm install pyproc` -> 내용물 정합). README 2종/소비 계약 반영.
