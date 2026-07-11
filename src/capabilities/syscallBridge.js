@@ -8,18 +8,18 @@ const BOOTSTRAP = `
 import builtins, sys, io, subprocess, urllib.request
 from pyodide.ffi import can_run_sync, run_sync
 
-def _pyproc_input(prompt=""):
+def _pyprocInput(prompt=""):
     if prompt:
         sys.stdout.write(str(prompt)); sys.stdout.flush()
     # 호출 시점 판정: runAsync(JSPI 서스펜더) 안이면 비동기 핸들러를 블로킹으로 빌린다.
-    if _pyproc_syscall.hasAsyncInput and can_run_sync():
-        r = run_sync(_pyproc_syscall.inputAsync(str(prompt)))
+    if _pyprocSyscall.hasAsyncInput and can_run_sync():
+        r = run_sync(_pyprocSyscall.inputAsync(str(prompt)))
     else:
-        r = _pyproc_syscall.inputSync(str(prompt))
+        r = _pyprocSyscall.inputSync(str(prompt))
     if r is None:
         raise EOFError("pyproc input: 입력 소스가 없다 (install({ input }) 또는 prompt 가능 환경 필요)")
     return str(r)
-builtins.input = _pyproc_input
+builtins.input = _pyprocInput
 
 class _PyprocResponse(io.BytesIO):
     def __init__(self, url, status, body):
@@ -28,28 +28,28 @@ class _PyprocResponse(io.BytesIO):
     def getcode(self): return self.status
     def geturl(self): return self.url
 
-def _pyproc_urlopen(url, data=None, timeout=None, *a, **k):
+def _pyprocUrlopen(url, data=None, timeout=None, *a, **k):
     if hasattr(url, "full_url"):
-        req = url; url_s = req.full_url
+        req = url; urlStr = req.full_url
         if data is None: data = req.data
     else:
-        url_s = str(url)
+        urlStr = str(url)
     body = None if data is None else bytes(data).decode("latin1")
-    r = _pyproc_syscall.httpSync(url_s, "GET" if data is None else "POST", body)
+    r = _pyprocSyscall.httpSync(urlStr, "GET" if data is None else "POST", body)
     if r.status == 0:
-        raise OSError(f"pyproc http: 요청 실패 (CORS/네트워크): {url_s}")
+        raise OSError(f"pyproc http: 요청 실패 (CORS/네트워크): {urlStr}")
     raw = bytes(ord(c) & 0xFF for c in r.body)
-    return _PyprocResponse(url_s, r.status, raw)
-urllib.request.urlopen = _pyproc_urlopen
+    return _PyprocResponse(urlStr, r.status, raw)
+urllib.request.urlopen = _pyprocUrlopen
 
-def _pyproc_subprocess_run(args, capture_output=False, text=None, **k):
+def _pyprocSubprocessRun(args, capture_output=False, text=None, **k):
     if not (isinstance(args, (list, tuple)) and len(args) >= 3 and str(args[1]) == "-c"):
         raise NotImplementedError("pyproc subprocess(v1): ['python', '-c', code] 형태만 지원")
     if not can_run_sync():
         raise NotImplementedError("pyproc subprocess: runAsync(JSPI) 경로에서만 가능")
-    out = run_sync(_pyproc_syscall.subprocessRun(str(args[2])))
+    out = run_sync(_pyprocSyscall.subprocessRun(str(args[2])))
     return subprocess.CompletedProcess(list(args), 0, stdout=str(out), stderr="")
-subprocess.run = _pyproc_subprocess_run
+subprocess.run = _pyprocSubprocessRun
 `;
 
 // 자식 워커에서 code를 실행하고 stdout을 캡처해 돌려주는 래퍼(worker task 프로토콜 재사용).
@@ -115,7 +115,7 @@ export class SyscallBridge {
       httpSync: (url, method, body) => this._httpSync(url, method, body),
       subprocessRun: (code) => this._subprocessRun(code),
     };
-    rt.setGlobal("_pyproc_syscall", bridge);
+    rt.setGlobal("_pyprocSyscall", bridge);
     rt.run(BOOTSTRAP);
     return {
       installed: ["input->js" + (jspi ? "+JSPI" : "(sync)"), "urllib->syncXHR" + (cfg.proxyUrl ? "(proxy)" : "(direct)"), "subprocess->childWorker" + (jspi ? "" : "(JSPI 필요, 미가용)")],

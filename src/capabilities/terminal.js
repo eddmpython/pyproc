@@ -8,12 +8,37 @@
 // timeTravel 옵션: 완결 문장마다 복원 리액티브 체크포인트를 자동으로 닫고,
 // "%undo" 입력이 직전 상태로 시간여행한다(로컬 REPL에는 없는 능력).
 const SETUP = `
-import code as _pyproc_code, io as _pyproc_io, contextlib as _pyproc_ctx
-_pyproc_con = _pyproc_code.InteractiveConsole()
-def _pyproc_term_push(line):
-    buf = _pyproc_io.StringIO()
-    with _pyproc_ctx.redirect_stdout(buf), _pyproc_ctx.redirect_stderr(buf):
-        more = _pyproc_con.push(line)
+import code as _pyprocCode, io as _pyprocIo, contextlib as _pyprocCtx, os as _pyprocOs
+_pyprocCon = _pyprocCode.InteractiveConsole()
+
+def _pyprocMagic(s):
+    # 셸 코어유틸: 셸 언어는 파이썬 그 자체이고, 자주 쓰는 동사만 매직으로 빌린다.
+    cmd, _, arg = s[1:].partition(" ")
+    arg = arg.strip()
+    if cmd == "ls":
+        for n in sorted(_pyprocOs.listdir(arg or ".")):
+            print(n + ("/" if _pyprocOs.path.isdir(_pyprocOs.path.join(arg or ".", n)) else ""))
+    elif cmd == "pwd":
+        print(_pyprocOs.getcwd())
+    elif cmd == "cd":
+        _pyprocOs.chdir(arg or "/home/web"); print(_pyprocOs.getcwd())
+    elif cmd == "cat":
+        print(open(arg).read(), end="")
+    else:
+        print(f"알 수 없는 매직: %{cmd} (지원: %ls %cd %pwd %cat %undo)")
+
+def _pyprocTermPush(line):
+    buf = _pyprocIo.StringIO()
+    with _pyprocCtx.redirect_stdout(buf), _pyprocCtx.redirect_stderr(buf):
+        s = line.strip()
+        if s.startswith("%"):
+            try:
+                _pyprocMagic(s)
+            except Exception as e:
+                print(e)
+            more = False
+        else:
+            more = _pyprocCon.push(line)
     return [bool(more), buf.getvalue()]
 `;
 
@@ -43,8 +68,8 @@ export class Terminal {
       this._reactive.restoreLive(this._marks[this._marks.length - 1], this._sp);
       return { more: false, out: "" };
     }
-    this._rt.setGlobal("_pyproc_term_line", line);
-    const r = await this._rt.runAsync("_pyproc_term_push(_pyproc_term_line)");
+    this._rt.setGlobal("_pyprocTermLine", line);
+    const r = await this._rt.runAsync("_pyprocTermPush(_pyprocTermLine)");
     const [more, out] = r.toJs ? r.toJs() : r;
     if (this._tt && !more) this._marks.push(this._reactive.checkpoint().index); // 완결 문장 = 경계
     return { more, out };

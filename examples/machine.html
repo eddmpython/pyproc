@@ -58,11 +58,11 @@ print('카운터:', n, '| 방문 기록 줄 수:', len(open('/home/web/visits.tx
     document.getElementById("run").onclick = async () => {
       const code = document.getElementById("code").value;
       try {
-        session.rt.setGlobal("_pm_src", code);
+        session.rt.setGlobal("_pmSrc", code);
         const r = await session.rt.runAsync(
           "import io, contextlib\n_buf = io.StringIO()\n" +
           "with contextlib.redirect_stdout(_buf), contextlib.redirect_stderr(_buf):\n" +
-          "    exec(_pm_src, globals())\n_buf.getvalue()"
+          "    exec(_pmSrc, globals())\n_buf.getvalue()"
         );
         if (r) print(String(r).trimEnd());
       } catch (e) { print(String(e).split("\n").slice(-3).join("\n")); }

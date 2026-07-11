@@ -35,11 +35,11 @@
       "@app.post('/items')\n" +
       "async def items(item: Item):\n" +
       "    return {'name': item.name, 'total': item.price * 2}\n" +
-      "async def _asgi_call(method, path, body):\n" +
-      "    body_bytes = (body or '').encode()\n" +
+      "async def _asgiCall(method, path, body):\n" +
+      "    bodyBytes = (body or '').encode()\n" +
       "    scope = {'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1',\n" +
       "             'method': method, 'scheme': 'http', 'path': path, 'raw_path': path.encode(),\n" +
-      "             'query_string': b'', 'root_path': '', 'headers': [(b'content-type', b'application/json'), (b'content-length', str(len(body_bytes)).encode())],\n" +
+      "             'query_string': b'', 'root_path': '', 'headers': [(b'content-type', b'application/json'), (b'content-length', str(len(bodyBytes)).encode())],\n" +
       "             'client': ('127.0.0.1', 0), 'server': ('pyproc', 0)}\n" +
       "    sent = {'status': None, 'body': b''}\n" +
       "    got = {'done': False}\n" +
@@ -47,7 +47,7 @@
       "        if got['done']:\n" +
       "            return {'type': 'http.disconnect'}\n" +
       "        got['done'] = True\n" +
-      "        return {'type': 'http.request', 'body': body_bytes, 'more_body': False}\n" +
+      "        return {'type': 'http.request', 'body': bodyBytes, 'more_body': False}\n" +
       "    async def send(msg):\n" +
       "        if msg['type'] == 'http.response.start':\n" +
       "            sent['status'] = msg['status']\n" +
@@ -58,7 +58,7 @@
     );
     const call = async (m, p, b) => {
       rt.setGlobal("_m", m); rt.setGlobal("_p", p); rt.setGlobal("_b", b || "");
-      return JSON.parse(await rt.runAsync("await _asgi_call(_m, _p, _b)"));
+      return JSON.parse(await rt.runAsync("await _asgiCall(_m, _p, _b)"));
     };
 
     t = performance.now();

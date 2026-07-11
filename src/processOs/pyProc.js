@@ -160,11 +160,11 @@ export class PyProc {
       const start = i * per, count = i === parts - 1 ? typed.length - start : per;
       return { sab, off: base + start * bpe, len: count * bpe, dtype };
     });
-    const harness = fnSrc.replace("def _fn(", "def _pyproc_user(") + "\n"
+    const harness = fnSrc.replace("def _fn(", "def _pyprocUser(") + "\n"
       + "def _fn(meta):\n"
       + "    import js, numpy\n"
       + "    _u8 = js.Uint8Array.new(meta.sab, meta.off, meta.len).slice()\n"
-      + "    return _pyproc_user(numpy.frombuffer(_u8.to_py(), dtype=meta.dtype))\n";
+      + "    return _pyprocUser(numpy.frombuffer(_u8.to_py(), dtype=meta.dtype))\n";
     return this.map(harness, metas, opts);
   }
 

@@ -130,15 +130,15 @@ export class Session {
     // 델타가 복원하는 저장 시점의 할당자 상태가 힙 끝을 결정하고, 잉여 페이지는 미사용으로 남는다.
     const grewViaAlloc = meta.heapLen > mem.byteLength();
     if (grewViaAlloc) {
-      this.rt.setGlobal("_pyproc_target_len", meta.heapLen);
-      this.rt.setGlobal("_pyproc_heap_len", () => mem.byteLength());
+      this.rt.setGlobal("_pyprocTargetLen", meta.heapLen);
+      this.rt.setGlobal("_pyprocHeapLen", () => mem.byteLength());
       this.rt.run(
-        "import gc as _pyproc_gc\n" +
-        "_pyproc_hold = []\n" +
-        "while _pyproc_heap_len() < _pyproc_target_len:\n" +
-        "    _pyproc_hold.append(bytearray(8 * 1024 * 1024))\n" +
-        "del _pyproc_hold, _pyproc_target_len, _pyproc_heap_len\n" +
-        "_pyproc_gc.collect()"
+        "import gc as _pyprocGc\n" +
+        "_pyprocHold = []\n" +
+        "while _pyprocHeapLen() < _pyprocTargetLen:\n" +
+        "    _pyprocHold.append(bytearray(8 * 1024 * 1024))\n" +
+        "del _pyprocHold, _pyprocTargetLen, _pyprocHeapLen\n" +
+        "_pyprocGc.collect()"
       );
     }
     if (meta.heapLen > mem.byteLength()) {

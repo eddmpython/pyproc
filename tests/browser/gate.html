@@ -99,6 +99,8 @@
       await tt.push("q = 999");
       await tt.push("%undo");
       check("terminal %undo: 시간여행", (await tt.push("print(q)")).out.trim() === "1");
+      const mg = await tt.push("%pwd");
+      check("terminal 매직: %pwd", mg.out.includes("/") && mg.more === false);
 
       // 3) Layer 2: 프로세스 OS (스냅샷-fork + 진짜 병렬 map)
       const os = new PyProc();

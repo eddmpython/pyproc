@@ -66,6 +66,24 @@ for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
   });
 }
 
+// 3.5) 네이밍 가드: camelCase는 언어 불문이다(JS 문자열 안의 파이썬 포함).
+//      우리 접두(_pyproc*) 스네이크와, 우리가 정의하는 파이썬 함수명의 스네이크를 차단한다.
+//      외부 기술 명칭(ASGI 키 문자열, pyodide.ffi.run_sync, API kwarg 등)은 정의가 아니라 안 걸린다.
+console.log("\n[네이밍]");
+for (const scope of ["src", "examples", "tests"]) {
+  for (const f of collect(join(ROOT, scope), [".js", ".mjs", ".html"], [])) {
+    check(`camelCase: ${rel(f)}`, () => {
+      const src = readFileSync(f, "utf8");
+      const bad = new Set();
+      for (const m of src.matchAll(/_pyproc_[a-z0-9]\w*/g)) bad.add(m[0]);
+      for (const m of src.matchAll(/def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)) {
+        if (/[a-z0-9]_[a-z]/.test(m[1])) bad.add("def " + m[1]);
+      }
+      if (bad.size) throw new Error("스네이크 식별자: " + [...bad].slice(0, 5).join(", "));
+    });
+  }
+}
+
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
