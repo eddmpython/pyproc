@@ -53,7 +53,7 @@ check("PyProc 메서드", () => {
 });
 check("ReactiveController 메서드", () => {
   const p = api.ReactiveController.prototype;
-  for (const m of ["checkpoint", "restore", "restoreLive", "timeTravel", "storageMB"])
+  for (const m of ["checkpoint", "restore", "restoreLive", "timeTravel", "storageMB", "saveBase", "loadBase"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 

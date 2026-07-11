@@ -78,6 +78,9 @@ export class ReactiveController {
   timeTravel(j: number, savedSP: number | null, opts?: { rehash?: boolean }): RestoreInfo;
   stackSave(): number | null;
   storageMB(): number;
+  /** base(기준 힙)를 파일 핸들로 내보내 RAM 부담을 옮긴다. 핸들은 소비자가 준다. */
+  saveBase(dir: FileSystemDirectoryHandle, name: string): Promise<{ bytes: number }>;
+  loadBase(dir: FileSystemDirectoryHandle, name: string): Promise<{ bytes: number }>;
 }
 
 /** 빌린 시스템콜 v1: input()(동기/JSPI), urllib(동기 XHR, proxyUrl 옵션), subprocess(자식 워커). */

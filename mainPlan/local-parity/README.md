@@ -24,7 +24,7 @@
 dartlab이 자체 노트북 런타임(`mainPlan/web-notebook-runtime`)과 browser-as-server(`mainPlan/browser-as-server-ssot`, e2e PASS)를 Pyodide 0.27.5로 병행 구현했다. 세 소비자의 개별 풀이는 동결 상태이고, pyproc이 서면 전부 pyproc을 바라보게 한다(소유자 결정). pyproc이 가져올 것:
 
 1. **예외 안전 복원**: 실행 중 예외는 checkpoint 없이 힙을 더럽혀 restoreLive 경계 계약을 조용히 깬다. dartlab 해법 = 복원 전 현재 힙 재해시. pyproc은 옵션(`rehash`)으로 흡수.
-2. **체크포인트 그래프 + OPFS**: 분기 복원(부모 그래프), content-addressed 상태, OPFS 원장, 기준 힙 RAM 부담(156MB 실측) 완화(압축/OPFS 내보내기, 256MB 상한).
+2. **체크포인트 그래프 + OPFS**: 분기 복원(부모 그래프), content-addressed 상태, OPFS 원장. 기준 힙 영속은 2026-07-11 `saveBase`/`loadBase`로 1단계 흡수(30MB 쓰기 256ms/읽기 46ms). 남은 것: 델타 체인 영속 + 분기 그래프 + 세션 간 커널 복원.
 3. **browserAsServer**: "로컬 서버 = 소켓이 아니라 ASGI". SW fetch -> ASGI dispatch, HTTP 오버헤드 8ms, `async def` 강제 제약까지 검증 완료. 능력 계약으로 흡수.
 4. **라이브러리·파일계 체크리스트**: wheel OPFS 캐시, requirements manifest, `%pip` 영속, 부팅+복구+첫 셀 시간 기준선.
 5. ~~버전 정합 관문~~ **통과(2026-07-11 실측)**: v314.0.2에서 fastapi/pydantic/polars/numpy/requests 전부 설치·import ok. dartlab 이관에 버전 장애물 없음.

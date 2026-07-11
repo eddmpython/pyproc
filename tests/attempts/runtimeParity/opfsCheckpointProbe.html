@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: opfsCheckpoint</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 체크포인트의 OPFS 영속 (기준 힙을 RAM 밖으로)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    check("OPFS 사용 가능", !!(navigator.storage && navigator.storage.getDirectory));
+
+    const rt = await boot();
+    const reactive = rt.enableReactive();
+    const sp0 = reactive.stackSave();
+    rt.run("x = 1");
+    const cp = reactive.checkpoint(); // base 통째(RAM)
+    const baseMB = +(reactive.base.length / 1048576).toFixed(1);
+
+    // 1) base를 OPFS에 내보내기 (쓰기 처리량)
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle("pyprocProbe", { create: true });
+    const fh = await dir.getFileHandle("base.bin", { create: true });
+    let t = performance.now();
+    const w = await fh.createWritable();
+    await w.write(reactive.base);
+    await w.close();
+    timings.writeMs = Math.round(performance.now() - t);
+    check("base -> OPFS 쓰기", true, `${baseMB}MB, ${timings.writeMs}ms`);
+
+    // 2) RAM의 base를 버리고 OPFS에서 되읽어 교체 (읽기 처리량)
+    t = performance.now();
+    const file = await (await dir.getFileHandle("base.bin")).getFile();
+    const loaded = new Uint8Array(await file.arrayBuffer());
+    timings.readMs = Math.round(performance.now() - t);
+    check("OPFS -> base 읽기 + 크기 일치", loaded.length === reactive.base.length, `${timings.readMs}ms`);
+    reactive.base = loaded; // RAM 사본을 OPFS 로드본으로 교체
+
+    // 3) 교체된 base로 복원이 성립하는가 (예외 오염까지 섞어서)
+    try { rt.run("x = 999\nraise ValueError('boom')"); } catch (e) {}
+    reactive.restoreLive(cp.index, sp0, { rehash: true });
+    check("OPFS 로드본 base로 복원 정확", rt.run("x") === 1);
+    check("복원 후 연속 실행", rt.run("x + 41") === 42);
+
+    await root.removeEntry("pyprocProbe", { recursive: true }); // 청소
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

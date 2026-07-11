@@ -69,6 +69,26 @@ export class ReactiveController {
     return { pagesWritten: written, mbWritten: +(wroteBytes / 1048576).toFixed(2) };
   }
   timeTravel(j, savedSP, opts = {}) { return this.restoreLive(j, savedSP, opts); }
+
+  // base(기준 힙 사본)를 OPFS 등 파일 핸들로 내보내 RAM 부담을 옮긴다.
+  // 실측(attempts/runtimeParity/opfsCheckpointProbe): 30MB 쓰기 256ms, 읽기 46ms, 로드본 복원 정확.
+  // 핸들은 소비자가 준다(위치·이름 하드코딩 없음). dir는 FileSystemDirectoryHandle.
+  async saveBase(dir, name) {
+    if (this.base === null) throw new Error("saveBase: base가 없다(checkpoint() 먼저)");
+    const fh = await dir.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(this.base); await w.close();
+    return { bytes: this.base.length };
+  }
+  async loadBase(dir, name) {
+    const file = await (await dir.getFileHandle(name)).getFile();
+    const loaded = new Uint8Array(await file.arrayBuffer());
+    if (this.base !== null && loaded.length !== this.base.length) {
+      throw new Error(`loadBase: 크기 불일치 (파일 ${loaded.length} vs base ${this.base.length})`);
+    }
+    this.base = loaded;
+    return { bytes: loaded.length };
+  }
   stackSave() { return this._mem.stackSave(); }
   storageMB() { let b = this.base ? this.base.length : 0; for (let k = 1; k < this.deltas.length; k++) for (const x of this.deltas[k].values()) b += x.length; return Math.round(b / 1048576); }
 }

@@ -60,6 +60,17 @@
       reactive.restoreLive(cp.index, sp0, { rehash: true });
       check("restoreLive({rehash}): 예외 오염 복원", rt.run("x") === 1);
 
+      // base의 OPFS 영속: 내보내고 되읽은 base로도 복원이 성립해야 한다
+      const opfsRoot = await navigator.storage.getDirectory();
+      const opfsDir = await opfsRoot.getDirectoryHandle("pyprocGate", { create: true });
+      await reactive.saveBase(opfsDir, "base.bin");
+      await reactive.loadBase(opfsDir, "base.bin");
+      rt.run("x = 321");
+      reactive.checkpoint();
+      reactive.restoreLive(cp.index, sp0);
+      check("saveBase/loadBase: OPFS 로드본으로 복원", rt.run("x") === 1);
+      await opfsRoot.removeEntry("pyprocGate", { recursive: true });
+
       // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)
       await rt.enableSyscallBridge({ input: () => "ok" }).install();
       check("syscall input(): 동기 핸들러", rt.run("input()") === "ok");
