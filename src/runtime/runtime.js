@@ -75,14 +75,17 @@ export async function boot(opts = {}) {
     py = await loadPyodide(cfg);
     if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
   }
-  const rt = new Runtime(py);
+  const rt = new Runtime(py, indexURL);
   if (cache) rt.coreCache = { hits: cache.hits, misses: cache.misses }; // 부팅 자산 캐시 통계
   return rt;
 }
 
 export class Runtime {
-  constructor(py) {
+  constructor(py, indexURL) {
     this._py = py;
+    // 이 커널이 어느 배포 지점에서 부팅됐는지. 자식 워커(subprocess 등)가 같은 지점을
+    // 쓰게 하는 근거다(자가호스팅/오프라인 배포에서 자식만 CDN으로 새는 결함 방지).
+    this.indexURL = indexURL || DEFAULT_INDEX;
     this.memory = new MemoryCapability(py);
     this._micropip = null;
     this.execSeq = 0; // 상태 변이 카운터. 리액티브가 실행 경계 위반을 O(1)로 감지하는 근거.

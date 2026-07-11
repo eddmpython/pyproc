@@ -64,7 +64,7 @@ export async function openMachine(blob, opts = {}) {
     throw new Error(`openMachine: 머신 파일은 임의 코드 실행과 동급 위험이다. 출처를 신뢰하면 { trust: true }로 여시라. sha256=${hash.slice(0, 16)}...`);
   }
   const session = await bootSession(JSON.parse(meta.manifest));
-  session._applyMeta(meta, bin);
+  await session._applyMeta(meta, bin);
   return session;
 }
 
@@ -92,9 +92,18 @@ export class Session {
     return { bin, meta };
   }
 
+  // cp0(리플레이 경계) 해시 배열의 다이제스트. 델타는 "같은 cp0 힙" 위에서만 유효하므로,
+  // 엔진 버전/엔트로피 변화로 리플레이가 달라진 커널에 델타를 덮는 조용한 오염을
+  // load 시점의 명시적 예외로 바꾸는 근거다.
+  async _cp0Digest() {
+    const h = this.reactive.hashes[0];
+    return sha256Hex(new Uint8Array(h.buffer, h.byteOffset, h.byteLength));
+  }
+
   // 사용자 상태만 OPFS에 저장. base는 리플레이가 대체하므로 저장하지 않는다.
   async save(dir, name) {
     const { bin, meta } = this._collectDelta();
+    meta.h0 = await this._cp0Digest();
     const mf = await dir.getFileHandle(name + ".json", { create: true });
     let w = await mf.createWritable(); await w.write(JSON.stringify(meta)); await w.close();
     const bf = await dir.getFileHandle(name + ".bin", { create: true });
@@ -105,6 +114,7 @@ export class Session {
   // 이 컴퓨터 전체를 .pymachine 파일 하나로 내보낸다(무결성 해시 포함).
   async exportImage() {
     const { bin, meta } = this._collectDelta();
+    meta.h0 = await this._cp0Digest();
     meta.sha256 = await sha256Hex(bin);
     const head = new TextEncoder().encode(JSON.stringify(meta));
     const lenBuf = new Uint8Array(4);
@@ -123,7 +133,15 @@ export class Session {
   }
 
   // 저장분 적용(성장 + 경계 되감기 + 페이지 쓰기). load/openMachine 공용.
-  _applyMeta(meta, bin) {
+  async _applyMeta(meta, bin) {
+    // 리플레이 결정성 대조: 저장 당시 cp0과 지금 cp0이 다르면(엔진 버전/엔트로피 변화)
+    // 델타를 덮는 순간 조용한 오염이 된다. 구버전 저장물(h0 없음)은 검사 없이 통과.
+    if (meta.h0) {
+      const cur = await this._cp0Digest();
+      if (cur !== meta.h0) {
+        throw new Error(`session.load: 리플레이 결정성 불일치(cp0 ${cur.slice(0, 12)}.. != 저장 당시 ${meta.h0.slice(0, 12)}..). 엔진 버전이나 매니페스트가 저장 당시와 다르다.`);
+      }
+    }
     const mem = this.rt.memory;
     // 성장 세션: JS에서 Memory.grow를 직접 하면 Emscripten 글루의 클로저 뷰가 안 갱신되어
     // 런타임이 깨진다(실측). 파이썬 할당으로 정상 성장 경로를 태운다. 초과 성장은 무해하다:

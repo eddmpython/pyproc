@@ -221,6 +221,8 @@ export class WheelCache {
 /** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal/enableWheelCache). */
 export class Runtime {
   readonly memory: MemoryCapability;
+  /** 이 커널이 부팅된 엔진 배포 지점. 자식 워커(subprocess)가 같은 지점을 쓴다. */
+  readonly indexURL: string;
   run(code: string): unknown;
   runAsync(code: string): Promise<unknown>;
   setGlobal(name: string, value: unknown): void;

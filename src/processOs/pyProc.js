@@ -54,7 +54,9 @@ export class PyProc {
   // 올린다 = 인터프리터 상태 보존 + respawn 비용 0. 행이 계속되면 kill/taskTimeoutMs가 최후 수단.
   interrupt(pid) {
     const entry = this.table.find((t) => t.pid === pid);
-    if (!entry || entry.state !== "ready") return false;
+    // 워커가 setInterruptBuffer 미지원이면 SAB에 써봤자 무시된다(무증상 no-op).
+    // ready 응답의 interrupts 플래그를 소비해 정직하게 false를 돌려준다.
+    if (!entry || entry.state !== "ready" || !entry.interrupts) return false;
     entry.interrupt[0] = 2; // SIGINT
     return true;
   }

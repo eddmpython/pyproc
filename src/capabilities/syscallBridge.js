@@ -84,7 +84,8 @@ export class SyscallBridge {
           if (e.data.type === "ready") { w.removeEventListener("message", onMsg); resolve(); }
           else if (e.data.type === "error") { w.removeEventListener("message", onMsg); reject(new Error(e.data.error)); }
         });
-        w.postMessage({ type: "boot", id: 1, snapshot: null }); // indexURL은 worker 기본값(CDN) 사용
+        // 부모 커널과 같은 배포 지점으로 부팅한다(자가호스팅/오프라인에서 자식만 CDN으로 새지 않게).
+        w.postMessage({ type: "boot", id: 1, snapshot: null, indexURL: this._rt.indexURL });
       });
       return await new Promise((resolve, reject) => {
         w.addEventListener("message", (e) => {
