@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: crossKernel</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 자체 체크포인트의 크로스 커널 복원 (불멸 커널 관문)</h1>
+<p>커널 A의 힙 이미지를 "새로 부팅한" 커널 B에 되써서 A의 파이썬 상태가 B에서 사는지.
+   Pyodide 스냅샷(hiwire 벽)과 달리 우리 체크포인트는 순수 힙 바이트라 벽을 우회할 가능성 검증.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    // 커널 A: 상태를 만들고 힙 이미지 + 스택 포인터 확보
+    const a = await boot();
+    a.run("x = 42\nacc = [i * i for i in range(1000)]\nmsg = 'immortal'");
+    const spA = a.memory.stackSave();
+    const imageA = a.memory.sliceAll();
+    timings.imageMB = Math.round(imageA.length / 1048576);
+
+    // 커널 B: 같은 페이지에서 새로 부팅(= 새 세션의 근사). 같은 버전/같은 부팅 경로.
+    const b = await boot();
+    const lenB = b.memory.byteLength();
+    check("전제: B 부팅 + 힙 크기 보고", true, `A ${timings.imageMB}MB vs B ${Math.round(lenB / 1048576)}MB`);
+
+    // B의 힙을 A의 이미지로 되쓰기 (부족하면 성장 불가 -> 앞부분만이라도 기록)
+    let verdict = "";
+    try {
+      b.memory.writeBase(imageA);
+      b.memory.stackRestore(spA);
+      const x = b.run("x");
+      const m = b.run("msg");
+      const s = b.run("sum(acc)");
+      verdict = `x=${x}, msg=${m}, sum=${s}`;
+      check("크로스 커널: A의 상태가 B에서 산다", x === 42 && m === "immortal" && s === 332833500, verdict);
+      check("복원 후 연속 실행", b.run("x + 8") === 50);
+    } catch (e) {
+      check("크로스 커널: A의 상태가 B에서 산다", false, "벽: " + String(e).slice(-220));
+    }
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

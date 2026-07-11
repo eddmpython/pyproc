@@ -42,6 +42,8 @@
 
 | 2026-07-11 | reharvestProbe | Edge headless | 런타임 중 loadPackage 후, 부팅 옵션 packages 후 **양 경로 모두** makeMemorySnapshot이 `Unexpected hiwire entry at index 6`으로 거부 | **벽 좌표 확정**: v314 스냅샷은 bare 전용. 패키지 로드 상태(JS FFI 흔적)는 이미지화 불가 | warm-fork·환경=힙이미지는 upstream 프론티어로 격상. 웹의 uv는 wheel OPFS 캐시(다운로드 0) 경로로 진행 |
 
+| 2026-07-11 | crossKernelProbe | Edge headless | A(30MB) 이미지를 새 부팅 B에 전체 되쓰기 + 스택 복원 -> `SystemError: Type does not define the tp_name field` | **벽 좌표**: 커널 상태는 선형 메모리만이 아니다(WASM globals + JS 측 미러가 이미지 밖). 동일 인스턴스 복원(우리 리액티브)은 그래서 되고, 크로스 인스턴스는 전체 머신 상태 캡처가 필요 | 불멸 커널은 (a) 부팅 결정성 실측, (b) 전역/JS 상태 목록화 후 재시도. 프론티어 후보 |
+
 ## 판정
 
 진행 중 (수명주기·soundness·시스템콜 v1·예외 안전 복원·ASGI 서버 졸업, 버전 관문 통과 / 터미널 승격, 체크포인트 그래프+OPFS, 라이브러리 커버리지, 협조적 취소 잔여)
