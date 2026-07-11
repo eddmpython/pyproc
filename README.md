@@ -48,7 +48,13 @@ Cross-Origin-Embedder-Policy: require-corp
 
 ## Install
 
-Install by pinning a commit SHA (publishing to the npm registry is in preparation; floating on the default branch is not allowed):
+From the npm registry ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)):
+
+```sh
+npm install pyproc
+```
+
+Products consuming pyproc as their runtime SSOT should keep pinning a commit SHA (floating on the default branch is not allowed):
 
 ```jsonc
 // package.json

@@ -48,7 +48,13 @@ Cross-Origin-Embedder-Policy: require-corp
 
 ## 설치
 
-커밋 SHA 핀으로 설치한다(npm 레지스트리 퍼블리시는 준비 중이다. 기본 브랜치를 따라가는 플로팅은 금지).
+npm 레지스트리에서 설치한다([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)):
+
+```sh
+npm install pyproc
+```
+
+pyproc을 런타임 SSOT로 소비하는 제품은 계속 커밋 SHA 핀을 쓴다(기본 브랜치를 따라가는 플로팅은 금지):
 
 ```jsonc
 // package.json
