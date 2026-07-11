@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: interrupt</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 협조적 취소 (SIGINT, 행 워커를 kill 없이 회수)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { PyProc } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const os = new PyProc();
+    await os.boot(1);
+    const pid = os.ps()[0].pid;
+    check("워커가 인터럽트 채널 배선 보고", os.table[0].interrupts === true, String(os.table[0].interrupts));
+
+    // 순수 파이썬 busy 루프(eval 루프가 시그널을 검사하는 지점이 있어야 SIGINT가 잡힌다)
+    const busy = "def _fn(n):\n    while True:\n        pass";
+    const t0 = performance.now();
+    const mapP = os.map(busy, [0]);
+    setTimeout(() => os.interrupt(pid), 500);
+    const r = await Promise.race([mapP, new Promise((res) => setTimeout(() => res("hang"), 6000))]);
+    timings.interruptMs = Math.round(performance.now() - t0);
+    if (r === "hang") {
+      check("SIGINT: busy 루프가 KeyboardInterrupt로 수렴", false, "인터럽트 미도달(행). 재사용 검사 생략");
+    } else {
+      const interrupted = Array.isArray(r) && r[0] && r[0].error && r[0].error.includes("KeyboardInterrupt");
+      check("SIGINT: busy 루프가 KeyboardInterrupt로 수렴", interrupted, `${timings.interruptMs}ms, ${JSON.stringify(r).slice(0, 120)}`);
+      // 핵심 가치: kill/respawn 없이 같은 워커 재사용 (인터프리터 상태 보존)
+      const rr = await os.map("def _fn(n):\n    return n * 3", [14]);
+      check("취소 후 같은 워커 재사용(respawn 0)", rr[0] === 42);
+      check("프로세스 테이블: 여전히 1개 ready", os.ps().length === 1 && os.ps()[0].state === "ready");
+    }
+    os.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

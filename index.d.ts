@@ -143,5 +143,7 @@ export class PyProc {
   ps(): PyProcEntry[];
   /** 프로세스 강제 종료(SIGKILL 등가). 성공 시 true, 테이블에는 dead로 남는다. */
   kill(pid: number): boolean;
+  /** 협조적 취소(SIGINT 등가). 실행 중 파이썬에 KeyboardInterrupt, 워커는 살아서 재사용된다. */
+  interrupt(pid: number): boolean;
   terminate(): void;
 }

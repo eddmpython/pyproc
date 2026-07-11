@@ -7,7 +7,7 @@
 | 축 | 로컬의 기준 | 현재 (2026-07-11) | 다음 attempts |
 |---|---|---|---|
 | 실행 | 순수 파이썬 로직 속도 | **도달** (CPython 3.14 WASM >= 로컬 3.12, numpy 대규모만 86배 열세) | WebGPU 산술(프론티어) |
-| 프로세스 | fork/Pool/kill이 되는 OS | **도달(v1)**: 스냅샷-fork 384ms, map 병렬, taskTimeout + kill/respawn | 협조적 취소(SIGINT, `setInterruptBuffer`) |
+| 프로세스 | fork/Pool/kill이 되는 OS | **도달(v1)**: 스냅샷-fork ~380ms, map 병렬, taskTimeout + kill/respawn + `interrupt(pid)`(SIGINT, respawn 0) | 시그널 확장(SIGSTOP/재개), 프로세스간 IPC |
 | 시스템콜 | input/HTTP/subprocess | **도달(v1)**: input(동기+JSPI 블로킹), urllib 실 GET, subprocess(자식 워커, `-c`) | requests 계열, 저수준 socket(프록시 계약), 파일계(FS Access 마운트) |
 | 터미널 | 로컬 REPL과 동일 체감 | **도달(v1)**: `Terminal` 능력 승격 + examples/terminal.html(블로킹 input 재개 24ms) | 히스토리·자동완성·멀티라인 편집 |
 | 라이브러리 | `pip install` 전부 | **부분**: Pyodide 배포판(numpy/pandas/scipy 등 컴파일 완료분) + micropip(순수 파이썬 휠 전부) | 휠 커버리지 실측 카테고리(상위 PyPI 100 설치율), 실패군 분류 |

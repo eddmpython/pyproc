@@ -33,13 +33,15 @@ export class PyProc {
   _spawn(useSnapshot) {
     const w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
     const pid = ++this._seq;
-    const entry = { pid, worker: w, state: "booting", parentPid: 0 };
+    // SIGINT 채널: 커널이 이 SAB에 2를 쓰면 워커의 CPython eval 루프가 KeyboardInterrupt를 던진다.
+    const interruptSab = new SharedArrayBuffer(1);
+    const entry = { pid, worker: w, state: "booting", parentPid: 0, interrupt: new Uint8Array(interruptSab) };
     this.table.push(entry);
     const ready = new Promise((resolve, reject) => {
       const onMsg = (e) => {
         if (e.data.id !== pid) return;
         if (e.data.type === "ready") {
-          w.removeEventListener("message", onMsg); entry.state = "ready"; resolve(e.data.bootMs);
+          w.removeEventListener("message", onMsg); entry.state = "ready"; entry.interrupts = !!e.data.interrupts; resolve(e.data.bootMs);
         } else if (e.data.type === "error" && e.data.taskId === undefined) {
           w.removeEventListener("message", onMsg); entry.state = "dead";
           reject(new Error(`워커 pid ${pid} 부팅 실패: ${e.data.error}`));
@@ -47,9 +49,18 @@ export class PyProc {
       };
       w.addEventListener("message", onMsg);
       w.addEventListener("error", (e) => { entry.state = "dead"; reject(new Error(`워커 pid ${pid} 크래시: ${e.message}`)); }, { once: true });
-      w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null });
+      w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null, interruptSab });
     });
     return { worker: w, entry, ready };
+  }
+
+  // 협조적 취소(SIGINT 등가). 워커를 죽이지 않고 실행 중인 파이썬에 KeyboardInterrupt를
+  // 올린다 = 인터프리터 상태 보존 + respawn 비용 0. 행이 계속되면 kill/taskTimeoutMs가 최후 수단.
+  interrupt(pid) {
+    const entry = this.table.find((t) => t.pid === pid);
+    if (!entry || entry.state !== "ready") return false;
+    entry.interrupt[0] = 2; // SIGINT
+    return true;
   }
 
   // N개 프로세스 spawn: 스냅샷으로 부팅(fast fork). useSnapshot=false면 콜드 대조.

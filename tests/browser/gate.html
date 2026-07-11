@@ -113,6 +113,14 @@
       check("map 타임아웃: 행에서 유한 수렴", tr[0] && tr[0].error && tr[0].error.includes("timeout"), timings.timeoutConvergeMs + "ms");
       const after = await os.map(fn, [N]);
       check("타임아웃 후 풀 자동 복구(respawn)", after[0] === expected);
+      // 협조적 취소: SIGINT로 busy 루프 회수 + 같은 워커 재사용(respawn 0)
+      const lane0 = os.table.find((t) => t.worker === os.workers[0]).pid; // 태스크 0은 workers[0] 레인
+      const busyP = os.map("def _fn(n):\n    while True:\n        pass", [0]);
+      setTimeout(() => os.interrupt(lane0), 400);
+      const ir = await busyP;
+      check("interrupt(pid): SIGINT 수렴 + 워커 생존", ir[0] && ir[0].error && ir[0].error.includes("KeyboardInterrupt")
+        && (await os.map(fn, [1000]))[0] === (1000 * 999 * 1999) / 6);
+
       const victim = os.ps().find((p) => p.state === "ready").pid;
       check("kill(pid): dead 전이", os.kill(victim) === true && os.ps().find((p) => p.pid === victim).state === "dead");
 
