@@ -11,7 +11,7 @@
 //   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬)
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
-export { boot, Runtime, MemoryCapability, PAGE_SIZE } from "./src/runtime.js";
-export { ReactiveController } from "./src/reactive.js";
-export { SyscallBridge } from "./src/syscallBridge.js";
-export { PyProc } from "./src/processOS.js";
+export { boot, Runtime, MemoryCapability, PAGE_SIZE } from "./src/runtime/runtime.js";
+export { ReactiveController } from "./src/capabilities/reactive.js";
+export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
+export { PyProc } from "./src/processOs/pyProc.js";

@@ -19,7 +19,7 @@ pyproc은 브라우저 파이썬을 "노트북 한 셀"이 아니라 **운영체
 
 ## 왜 만들었나?
 
-브라우저에서 파이썬을 돌리는 조각은 이미 있다. 없던 것은 그 조각을 진짜 런타임으로 엮는 **공유 계층**이다. codaro·dartlab·xlpod가 전부 같은 걸 필요로 하는데, 각자 복붙하면 런타임이 3벌로 갈라져 따로 논다. pyproc은 그 계층을 한 번 만들어 버전 고정으로 공유해서, 개선이 한 곳에 모이게 한다. 전체 방향과 정책은 [docs/PRD.ko.md](docs/PRD.ko.md).
+브라우저에서 파이썬을 돌리는 조각은 이미 있다. 없던 것은 그 조각을 진짜 런타임으로 엮는 **공유 계층**이다. codaro·dartlab·xlpod가 전부 같은 걸 필요로 하는데, 각자 복붙하면 런타임이 3벌로 갈라져 따로 논다. pyproc은 그 계층을 한 번 만들어 버전 고정으로 공유해서, 개선이 한 곳에 모이게 한다. 전체 방향과 정책은 [mainPlan/web-python-runtime/](mainPlan/web-python-runtime/README.md).
 
 ## 핵심 개념, 쉽게
 
@@ -90,13 +90,18 @@ const sp0 = reactive.stackSave();
 rt.run("x = 1");
 const cp = reactive.checkpoint();             // 상태 저장
 rt.run("x = 999");
+reactive.checkpoint();                        // 실행 경계는 checkpoint로 닫는다 (계약)
 reactive.restoreLive(cp.index, sp0);          // 라이브-차분 복원(바뀐 페이지만 write)
 console.log(rt.run("x"));                      // 1
 ```
 
+**실행 경계 계약**: `restoreLive`는 저장된 해시끼리만 비교한다(재해싱 0 = 즉시성의 근거). 그래서 파이썬을 실행했다면 복원 전에 반드시 `checkpoint()`로 경계를 닫아야 한다. 경계를 보장할 수 없으면 `restore()`(전체 복원, 안전 기준선)를 쓴다.
+
 ### 빌린 시스템콜 브리지
 
 브라우저에는 socket / subprocess / blocking input이 없다. 이 능력이 그걸 각각 프록시 / 자식 워커 / JSPI로 빌려 파이썬 코드가 그대로 돌게 한다. 라이브러리는 계약(무엇을 배선하는지)을 노출하고, 실제 엔드포인트는 소비 제품이 채운다.
+
+**현재 상태(정직)**: 계약 단계 스텁이다. `install()`은 배선 선언을 반환할 뿐 아직 실제 몽키패치를 하지 않는다. 실배선은 [로드맵](mainPlan/web-python-runtime/02-phasing-and-wiring.md)의 attempts 졸업 대상이다.
 
 ```js
 const bridge = rt.enableSyscallBridge({ proxyUrl: "/proxy" });
@@ -146,23 +151,19 @@ Layer 0  runtime      Pyodide 래퍼(boot/Runtime) + MemoryCapability 계약
 
 ## 제품이 소비하는 법
 
-pyproc은 "참조"가 아니라 **실제 import**로만 SSOT가 된다. 소비자는 커밋 SHA를 핀하고, 공개 계약 + 함께 실린 `index.d.ts` 타입에만 의존하며, 역방향으로 import하지 않는다. 전체 정책: [docs/PRD.ko.md](docs/PRD.ko.md) 7절.
+pyproc은 "참조"가 아니라 **실제 import**로만 SSOT가 된다. 소비자는 커밋 SHA를 핀하고, 공개 계약 + 함께 실린 `index.d.ts` 타입에만 의존하며, 역방향으로 import하지 않는다. 전체 정책: [docs/consuming/contract.md](docs/consuming/contract.md).
 
 ## 개발
 
 ```bash
 npm test          # Node 구조/린트 게이트 (의존성 0)
+npm run serve     # 브라우저 실측용 COOP/COEP 정적 서버 (의존성 0)
 ```
 
-브라우저 실측은 `examples/`의 HTML(`basic.html`, `processOs.html`)을 COOP/COEP 헤더로 crossOriginIsolated 서버에 띄워 확인한다. WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다.
+브라우저 실측은 `npm run serve`로 `examples/`의 HTML(`basic.html`, `processOs.html`)을 crossOriginIsolated 상태로 띄워 확인한다. WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다. 절차: [docs/operations/testing.md](docs/operations/testing.md).
 
-기여 규칙: main 전용, 빌드 없는 ESM, camelCase, 능력 계약 경유(엔진 내부 직접 접근 금지), 버전 `0.0.x` 라인.
-
-## 문서
-
-- [docs/PRD.md](docs/PRD.md) - 제품 방향·스코프·로드맵·소비 정책 (영어).
-- [docs/PRD.ko.md](docs/PRD.ko.md) - 같은 내용, 한국어.
+운영 문서(운영 모델·테스트·릴리즈·소비 계약)는 [docs/](docs/README.md), 설계·로드맵·결정 기록은 [mainPlan/](mainPlan/README.md), 기여 규칙은 [CONTRIBUTING.ko.md](CONTRIBUTING.ko.md)에 있다.
 
 ## 라이선스
 
-미정(소유자 결정 대기). 현재는 저장소 소유자 전용.
+미정(소유자 결정 대기). 현재는 저장소 소유자 전용. 라이선스 확정 전 기여 조건은 [CONTRIBUTING.ko.md](CONTRIBUTING.ko.md) 참조.

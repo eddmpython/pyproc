@@ -1,7 +1,8 @@
-// processOS.js - Layer 2: 브라우저 파이썬 프로세스 OS 커널.
+// pyProc.js - Layer 2: 브라우저 파이썬 프로세스 OS 커널.
 // 메인스레드=커널. 프로세스 테이블 + 스냅샷-fork spawn + Pool.map 스케줄러.
 // 검증조각 통합: bare 스냅샷 fork(콜드 대비 15.4배 spawn) + 워커풀 병렬(독립 GIL N개 = N코어).
 // WASM dlopen 문제를 회피(각 워커가 자기 wasmTable/힙/글루 소유)하므로 오늘 가능한 최상단.
+// worker.js는 반드시 이 파일과 같은 폴더에 둔다(new URL 상대경로 = 번들러 워커 emit 계약).
 const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
 
 export class PyProc {

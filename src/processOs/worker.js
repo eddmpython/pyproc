@@ -1,5 +1,6 @@
 // worker.js - PyProc의 "프로세스" (Web Worker 안 Pyodide 인터프리터).
 // 스냅샷으로 부팅(fast fork) 또는 콜드 부팅. 태스크를 받아 실행하고 결과 반환.
+// pyProc.js가 같은 폴더의 이 파일을 new URL 상대경로로 spawn한다(위치 = 계약).
 let py = null;
 
 onmessage = async (e) => {

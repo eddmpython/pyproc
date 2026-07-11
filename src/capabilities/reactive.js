@@ -2,7 +2,13 @@
 // page-diff 체크포인트 체인 + 라이브-차분 복원 + 시간여행.
 // WASM은 mprotect/dirty-page가 없어 실행 경계마다 완전 해시로 델타를 재구성한다.
 // 완전 해시(Uint32 워드)가 sound의 열쇠 - 샘플링은 불완전 델타 -> 복원 크래시.
-import { PAGE_SIZE as PAGE } from "./runtime.js";
+//
+// 실행 경계 계약 (소비자가 지켜야 하는 규율):
+//   restoreLive()는 "마지막 checkpoint()/restore() 이후 파이썬 실행이 없었다"를 전제한다.
+//   저장된 liveIdx 해시가 현재 힙을 대변한다고 믿고 재해싱 없이 비교하기 때문이다(그래서 즉시).
+//   실행을 했다면 반드시 checkpoint()로 경계를 닫고 나서 복원하라. 전제를 보장할 수 없으면
+//   restore()(전체 복원, 안전 기준선)를 쓴다. 이 계약은 README 사용례와 함께 유지한다.
+import { PAGE_SIZE as PAGE } from "../runtime/memoryCapability.js";
 
 // Runtime.enableReactive()가 이 컨트롤러를 만든다. 소비자는 checkpoint/restore만 쓴다.
 export class ReactiveController {
@@ -38,8 +44,8 @@ export class ReactiveController {
     this.liveIdx = j; this.prevHashes = this.hashes[j];
   }
   // 라이브-차분 복원: 저장 해시 비교만(재해싱 0) -> 다른 페이지만 write. 인접 시간여행 즉시.
-  // 성장 처리: 현재 힙이 목표보다 크면 목표 범위 밖 페이지도 base로 되돌려야
-  // dlmalloc/break 정합이 깨지지 않는다. liveH.length 기준으로 순회.
+  // 전제는 파일 상단의 "실행 경계 계약" 참조. 성장 처리: 현재 힙이 목표보다 크면 목표 범위
+  // 밖 페이지도 base로 되돌려야 dlmalloc/break 정합이 깨지지 않는다. liveH.length 기준 순회.
   restoreLive(j, savedSP) {
     const mem = this._mem, liveH = this.hashes[this.liveIdx], targetH = this.hashes[j];
     const nLive = liveH.length, nTarget = targetH.length;

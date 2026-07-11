@@ -19,7 +19,7 @@ Under the hood it runs [Pyodide](https://pyodide.org) (CPython compiled to WebAs
 
 ## Why does it exist?
 
-The pieces to run Python in a browser already exist. What did not exist is a **shared layer** that turns them into a real runtime. codaro, dartlab, and xlpod all need the same thing. If each copy-pastes it, the runtime splits into three versions that drift apart. pyproc is that layer, built once and shared version-pinned, so improvements land in one place. See [docs/PRD.md](docs/PRD.md) for the full direction and policy.
+The pieces to run Python in a browser already exist. What did not exist is a **shared layer** that turns them into a real runtime. codaro, dartlab, and xlpod all need the same thing. If each copy-pastes it, the runtime splits into three versions that drift apart. pyproc is that layer, built once and shared version-pinned, so improvements land in one place. See [mainPlan/web-python-runtime/](mainPlan/web-python-runtime/README.md) for the full direction and policy.
 
 ## Core concepts, in plain terms
 
@@ -90,13 +90,18 @@ const sp0 = reactive.stackSave();
 rt.run("x = 1");
 const cp = reactive.checkpoint();             // save state
 rt.run("x = 999");
+reactive.checkpoint();                        // close the execution boundary (the contract)
 reactive.restoreLive(cp.index, sp0);          // live-diff restore (writes only changed pages)
 console.log(rt.run("x"));                      // 1
 ```
 
+**Execution boundary contract**: `restoreLive` compares stored hashes only (zero re-hashing is what makes it instant). So if you ran Python, you must close that boundary with `checkpoint()` before restoring. If you cannot guarantee the boundary, use `restore()` (full restore, the safe baseline).
+
 ### Borrowed syscall bridge
 
 A browser has no socket / subprocess / blocking input. This capability borrows those, via a proxy, a child worker, and JSPI respectively, so Python code runs unchanged. The library exposes the contract (what gets wired); the consuming product fills in the real endpoints.
+
+**Current state (honestly)**: this is a contract-stage stub. `install()` returns the wiring declaration but does not monkey-patch anything yet. The real wiring is an attempts-graduation item on the [roadmap](mainPlan/web-python-runtime/02-phasing-and-wiring.md).
 
 ```js
 const bridge = rt.enableSyscallBridge({ proxyUrl: "/proxy" });
@@ -146,23 +151,19 @@ Layer 0  runtime      Pyodide wrapper (boot/Runtime) + MemoryCapability contract
 
 ## How products consume it
 
-pyproc becomes an SSOT only through **real imports**, not references. Consumers pin a commit SHA, depend on the public contract plus the shipped `index.d.ts` types, and never import in reverse. Full policy: [docs/PRD.md](docs/PRD.md) section 7.
+pyproc becomes an SSOT only through **real imports**, not references. Consumers pin a commit SHA, depend on the public contract plus the shipped `index.d.ts` types, and never import in reverse. Full policy: [docs/consuming/contract.md](docs/consuming/contract.md).
 
 ## Development
 
 ```bash
 npm test          # Node structure/lint gate (zero dependencies)
+npm run serve     # COOP/COEP static server for browser validation (zero dependencies)
 ```
 
-Browser validation runs the HTML in `examples/` (`basic.html`, `processOs.html`) served with COOP/COEP headers so the page is crossOriginIsolated. Because this is a WASM runtime, real validation only happens in a browser.
+Browser validation runs the HTML in `examples/` (`basic.html`, `processOs.html`) via `npm run serve` so the page is crossOriginIsolated. Because this is a WASM runtime, real validation only happens in a browser. Procedure: [docs/operations/testing.md](docs/operations/testing.md).
 
-Contribution rules: main-only, no-build ESM, camelCase, access through capability contracts (no direct engine internals), version `0.0.x` line.
-
-## Documentation
-
-- [docs/PRD.md](docs/PRD.md) - product direction, scope, roadmap, consumption policy (English).
-- [docs/PRD.ko.md](docs/PRD.ko.md) - same, in Korean.
+Operating docs (operating model, testing, releases, consumption contract) live in [docs/](docs/README.md), design/roadmap/decision records in [mainPlan/](mainPlan/README.md), and contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Undecided (pending owner decision). Currently for the repository owner's use.
+Undecided (pending owner decision). Currently for the repository owner's use. See [CONTRIBUTING.md](CONTRIBUTING.md) for what that means for contributions.
