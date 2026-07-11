@@ -58,7 +58,7 @@
 
 ## NEXT (재개 지점)
 
-1. **terminal 승격(local-parity NEXT 1)**: `Terminal` 능력 계약(`push(line) -> {more, out}`) + examples 터미널 페이지 + 게이트 검사. 개념 실측은 완료.
+1. **다음 발명 라운드(local-parity NEXT)**: 델타 체인 영속 + 분기 그래프 + 세션 간 커널 복원, "웹의 uv"(wheel OPFS 캐시 + requirements manifest). 전부 runtimeParity 캠페인 안에서 probe로.
 2. **푸시 후 CI 첫 실행 확인**: GitHub Actions에서 구조 게이트 + 브라우저 게이트가 러너(ubuntu, google-chrome)에서 green인지 확인. 러너 특이사항이 나오면 이 원장에 기록.
 3. **codaro UI 배선 동행**: PyodideEngine이 browserPythonRuntime seam을 실제 사용할 때 나오는 요구를 이 원장에 기록. 그 시점 SHA로 재핀(스냅샷-fork 결함 수정이 들어간 커밋 이후여야 함).
 4. **npm 퍼블리시(소유자 계정 필요)**: `pyproc` 이름이 비어 있다. `npm publish`로 선점하면 외부 소비가 `npm install pyproc` 한 줄이 된다. files 배열은 준비 완료.
