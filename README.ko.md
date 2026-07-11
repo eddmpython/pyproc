@@ -132,6 +132,8 @@ await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"]
 | `MemoryCapability` | WASM 힙 접근을 캡슐화한 능력 계약 |
 | `ReactiveController` | 복원 기반 리액티브(체크포인트 / 시간여행) |
 | `SyscallBridge` | socket/subprocess/input 능력 계약 |
+| `AsgiServer` | 커널 안 ASGI 서버(FastAPI를 소켓 0으로, dispatch 3.4ms) |
+| `Terminal` | 서버리스 파이썬 터미널(REPL + 블로킹 input) |
 | `PyProc` | 프로세스 OS 커널(스냅샷-fork spawn + `map` 병렬) |
 | `PAGE_SIZE` | WASM 페이지 크기 상수(65536) |
 

@@ -102,7 +102,14 @@ export class AsgiServer {
   serve(method: string, path: string, body?: string | null, query?: string): Promise<AsgiResponse>;
 }
 
-/** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer). */
+/** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
+export class Terminal {
+  install(): Promise<{ repl: string }>;
+  /** 한 줄 입력. more=연속행 대기(... 프롬프트), out=stdout+stderr. */
+  push(line: string): Promise<{ more: boolean; out: string }>;
+}
+
+/** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal). */
 export class Runtime {
   readonly memory: MemoryCapability;
   run(code: string): unknown;
@@ -114,6 +121,7 @@ export class Runtime {
   enableReactive(): ReactiveController;
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
   enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
+  enableTerminal(): Terminal;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */
   readonly raw: unknown;
 }

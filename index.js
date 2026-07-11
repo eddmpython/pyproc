@@ -15,4 +15,5 @@ export { boot, Runtime, MemoryCapability, PAGE_SIZE } from "./src/runtime/runtim
 export { ReactiveController } from "./src/capabilities/reactive.js";
 export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
 export { AsgiServer } from "./src/capabilities/asgiServer.js";
+export { Terminal } from "./src/capabilities/terminal.js";
 export { PyProc } from "./src/processOs/pyProc.js";

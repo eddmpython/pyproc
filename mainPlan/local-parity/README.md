@@ -9,7 +9,7 @@
 | 실행 | 순수 파이썬 로직 속도 | **도달** (CPython 3.14 WASM >= 로컬 3.12, numpy 대규모만 86배 열세) | WebGPU 산술(프론티어) |
 | 프로세스 | fork/Pool/kill이 되는 OS | **도달(v1)**: 스냅샷-fork 384ms, map 병렬, taskTimeout + kill/respawn | 협조적 취소(SIGINT, `setInterruptBuffer`) |
 | 시스템콜 | input/HTTP/subprocess | **도달(v1)**: input(동기+JSPI 블로킹), urllib 실 GET, subprocess(자식 워커, `-c`) | requests 계열, 저수준 socket(프록시 계약), 파일계(FS Access 마운트) |
-| 터미널 | 로컬 REPL과 동일 체감 | **개념 입증**: InteractiveConsole + JSPI input 블로킹 재개(24ms) 실측 | Terminal 능력 계약(`push(line)`) 승격 + examples 터미널 |
+| 터미널 | 로컬 REPL과 동일 체감 | **도달(v1)**: `Terminal` 능력 승격 + examples/terminal.html(블로킹 input 재개 24ms) | 히스토리·자동완성·멀티라인 편집 |
 | 라이브러리 | `pip install` 전부 | **부분**: Pyodide 배포판(numpy/pandas/scipy 등 컴파일 완료분) + micropip(순수 파이썬 휠 전부) | 휠 커버리지 실측 카테고리(상위 PyPI 100 설치율), 실패군 분류 |
 | 상주/네이티브 | 데몬, 네이티브 휠(torch CUDA), 데스크톱 조작 | **영구 벽**(웹 보안 모델). 정직하게 스코프 밖 | 벽 앞 우회: 소비 제품의 로컬/Actions 티어 몫 |
 
@@ -33,6 +33,6 @@ dartlab이 자체 노트북 런타임(`mainPlan/web-notebook-runtime`)과 browse
 
 1. ~~예외 안전 복원 흡수~~ 완료(2026-07-11): `restoreLive({rehash})` 승격 + 게이트 상시화.
 2. ~~browserAsServer 흡수~~ 완료(2026-07-11): `AsgiServer` 능력 승격(dispatch 3.4ms, 200/422 검증, 게이트 상시화). Service Worker 배선은 소비 제품 몫.
-3. terminal 승격(게이트 3): `Terminal` 능력 계약 + examples + 게이트 검사.
+3. ~~terminal 승격~~ 완료(2026-07-11): `Terminal` 능력 + examples/terminal.html + 게이트 상시화.
 4. browserAsServer 능력 계약 설계(흡수 3) / 체크포인트 그래프+OPFS(흡수 2) / 라이브러리 커버리지 / 협조적 취소(SIGINT).
 5. 장기: "웹의 uv" - 노트북/제품 단위 환경 선언(requirements) + wheel 캐시 + 즉시 복원 커널로 로컬 가상환경 등가를 만든다.

@@ -74,6 +74,13 @@
       const resp = await asgi.serve("GET", "/ping");
       check("asgi: GET /ping -> 200 + JSON", resp.status === 200 && JSON.parse(resp.body).n === 42);
 
+      // Layer 1: 서버리스 터미널 (REPL 상태 유지)
+      const term = rt.enableTerminal();
+      await term.install();
+      await term.push("z = 6 * 7");
+      const tp = await term.push("print(z)");
+      check("terminal: REPL push + 상태 유지", tp.out.trim() === "42" && tp.more === false);
+
       // 3) Layer 2: 프로세스 OS (스냅샷-fork + 진짜 병렬 map)
       const os = new PyProc();
       t = performance.now();

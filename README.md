@@ -132,6 +132,8 @@ await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"]
 | `MemoryCapability` | Capability contract that encapsulates WASM heap access |
 | `ReactiveController` | Restore-based reactivity (checkpoint / time travel) |
 | `SyscallBridge` | socket/subprocess/input capability contract |
+| `AsgiServer` | In-kernel ASGI server (FastAPI with zero sockets, 3.4ms dispatch) |
+| `Terminal` | Serverless Python terminal (REPL plus blocking input) |
 | `PyProc` | Process OS kernel (snapshot-fork spawn + `map` parallelism) |
 | `PAGE_SIZE` | WASM page size constant (65536) |
 

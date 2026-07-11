@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>pyproc - 서버리스 파이썬 터미널</title>
+  <style>
+    body{font:14px/1.5 ui-monospace,Consolas,monospace;margin:2rem;max-width:52rem;background:#111;color:#ddd}
+    pre{white-space:pre-wrap;margin:0}
+    #row{display:flex;gap:.5rem}
+    #ps{color:#7c6}
+    #line{flex:1;background:#111;color:#ddd;border:0;outline:0;font:inherit}
+  </style>
+</head>
+<body>
+  <h1 style="color:#7c6">pyproc 터미널</h1>
+  <p>브라우저 탭 = 파이썬 REPL. input()도 진짜로 블록된다(JSPI). Chromium/Edge, crossOriginIsolated 서버로 열 것.</p>
+  <pre id="out">부팅 중...</pre>
+  <div id="row"><span id="ps">&gt;&gt;&gt;</span><input id="line" autofocus disabled></div>
+  <script type="module">
+    import { boot } from "../index.js";
+    const out = document.getElementById("out"), line = document.getElementById("line"), ps = document.getElementById("ps");
+    const print = (t) => { out.textContent += t; window.scrollTo(0, document.body.scrollHeight); };
+
+    const rt = await boot();
+    // input(): 터미널 입력줄을 그대로 입력 소스로 빌려준다(REPL 라인 실행이 멈추고 기다린다).
+    let pendingInput = null;
+    await rt.enableSyscallBridge({
+      inputAsync: (prompt) => new Promise((resolve) => { ps.textContent = prompt || "input"; pendingInput = resolve; }),
+    }).install();
+    const term = rt.enableTerminal();
+    await term.install();
+
+    out.textContent = `Python ${rt.run("import sys; sys.version.split()[0]")} (pyproc, 브라우저 탭)\n`;
+    line.disabled = false; line.focus();
+
+    line.addEventListener("keydown", async (e) => {
+      if (e.key !== "Enter") return;
+      const text = line.value; line.value = "";
+      if (pendingInput) { print(ps.textContent + " " + text + "\n"); const r = pendingInput; pendingInput = null; ps.textContent = ">>>"; r(text); return; }
+      print((ps.textContent === "..." ? "... " : ">>> ") + text + "\n");
+      line.disabled = true;
+      const { more, out: o } = await term.push(text);
+      if (o) print(o);
+      ps.textContent = more ? "..." : ">>>";
+      line.disabled = false; line.focus();
+    });
+  </script>
+</body>
+</html>
