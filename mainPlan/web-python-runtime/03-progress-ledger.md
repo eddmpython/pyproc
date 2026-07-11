@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 엔진 독립 연구 + 평가 후속 정비 (전문 에이전트 2종 연구 종합)
+
+- 소유자 질문("Pyodide 의존 제거, 독립, 아니면 더 훌륭한 방법") -> 생태계 리서치 + 코드 결합 감사 에이전트 연구 종합. **결론: 완전 제거는 지금 손해, "갇히지 않는 사다리"(P0 자가호스팅 -> P1 EngineContract seam -> P2 스냅샷 사전 제조 -> P3 업스트림 워치 -> P4 조건부 fork 보험)가 정답.** 정본: [engine-independence PRD](../engine-independence/README.md). 핵심 증거: PEP 783 Accepted(2026-04, pyemscripten 휠 = Pyodide-agnostic 탈출구), Pyodide의 CPython 패치는 9개 파일(모트는 FFI·패키지 생태·스냅샷 3덩어리), Cloudflare fork 코드 전부 공개(MPL = 공짜 보험), WASI는 동적 C 확장 불가로 현재 양립 불가.
+- 결합 감사 판정: 보석(리액티브 접점 0, 세션/.pymachine, SW 층, PyProc 스케줄링, SharedKernel)은 이미 엔진 중립 - "선형 메모리 + 스택 포인터 + 결정적 부팅 + 엔진 스냅샷" 4프리미티브 위 순수 알고리즘. EngineContract seam 설계(~250 LOC, 동작 무변경) 확보.
+- **감사 적발 결함 3건 즉시 수정**: ① subprocess 자식 워커에 indexURL 미전달(자가호스팅/오프라인에서 자식만 CDN으로 새는 누수) -> `Runtime.indexURL` 계약 신설 ② `PyProc.interrupt`가 SIGINT 미지원 워커에도 true 반환(무증상 no-op) -> ready의 interrupts 플래그 소비 ③ 세션 리플레이 결정성 무대조(엔진/엔트로피 변화로 cp0이 달라져도 델타를 덮어 조용한 오염) -> 저장물에 cp0 다이제스트(h0) 포함 + load/openMachine 대조 예외(구 저장물은 무검사 통과, .pymachine에도 적용).
+- 평가 후속 정비 완료: README 표면 동기화 기계 가드(부채 해소), 데모 배포 준비물(루트 _headers + docs/operations/demoHosting.md), CI 실측 JSON 아티팩트(PYPROC_GATE_OUT), 레포 설명/토픽. 계약 실태 표에 "암묵 FFI/fetch 가정" 행 신설.
+
 ### 2026-07-12 발명 라운드 4: uv 레인 + SW 계층 + 공유 커널 (probe 7종 GREEN, 게이트 26검사)
 
 - 타 세계 개념 흡수 라운드(소유자 지시: "판을 바꿀 아이디어 + 개념부터 확실히"). 새 캠페인 envManager 개설(캠페인 3개째: 개념 = 환경의 선언·캐시·재현).
@@ -95,10 +102,22 @@
 
 ## NEXT (재개 지점)
 
-1. **다음 발명 라운드(local-parity NEXT)**: 델타 체인 영속 + 분기 그래프 + 세션 간 커널 복원, "웹의 uv"(wheel OPFS 캐시 + requirements manifest). 전부 runtimeParity 캠페인 안에서 probe로.
-2. ~~푸시 후 CI 첫 실행 확인~~ 완료(2026-07-12, 사고 기록): 확인을 방치한 대가로 **전 이력 적색**이었다. 원인은 러너 특이사항이 아니라 로컬-CI 게이트 불일치: docs 2곳이 git 미추적 로컬 규칙 문서를 상대 링크로 걸어 로컬(파일 존재)만 green이었다. 링크 게이트를 "git 추적 기준"으로 격상해 부류째 봉인했고, 이후 structure + browser(러너 chrome, 26검사) 둘 다 **첫 GREEN**. 교훈: 게이트는 로컬 통과가 아니라 러너 통과가 완료 정의다.
+### 소유자 전용 TODO (계정/승인이 필요해서 대신 못 하는 것, 2026-07-12 정리)
+
+1. **npm 퍼블리시**: `pyproc` 이름이 비어 있다(2026-07-11 확인). 소유자 npm 계정으로 `npm login` 후 루트에서 `npm publish`. 이후 외부 소비가 `npm install pyproc` 한 줄(files 배열 준비 완료). 퍼블리시 개시 시점에 릴리즈 절차(docs/operations/release.md)에 publish 단계를 추가한다.
+2. **라이브 데모 연결**: Cloudflare Pages(권장) 또는 Netlify에 이 저장소를 연결(빌드 없음, 출력 `/`). 준비물은 저장소에 있음: 루트 `_headers`(COOP/COEP) + 절차 [docs/operations/demoHosting.md](../../docs/operations/demoHosting.md). URL 확보 후 README 2종에 데모 링크 + `gh repo edit --homepage <URL>`.
+3. **엔진 독립 이니셔티브 착수 승인**: [mainPlan/engine-independence](../engine-independence/README.md) PRD 검토 후 착수 단계 지시.
+
+### 작업 큐 (다음 세션 재개 지점)
+
+1. **엔진 독립 P0**(소유자 승인 시): engine-independence PRD의 첫 단계부터.
+2. **다음 발명 라운드 후보**: 리액티브/%undo 델타 rebase·prune(장수 세션 메모리 부채, 계약 실태 표), Session 리플레이의 스냅샷 베이스 결합(머신 resume 가속), 델타 분기(머신의 git), /home 포함 이미지 v2, SharedKernel+hibernate 결합.
 3. **codaro UI 배선 동행**: PyodideEngine이 browserPythonRuntime seam을 실제 사용할 때 나오는 요구를 이 원장에 기록. 그 시점 SHA로 재핀(스냅샷-fork 결함 수정이 들어간 커밋 이후여야 함).
-4. **npm 퍼블리시(소유자 계정 필요)**: `pyproc` 이름이 비어 있다. `npm publish`로 선점하면 외부 소비가 `npm install pyproc` 한 줄이 된다. files 배열은 준비 완료.
+
+### 종결 기록
+
+- ~~푸시 후 CI 첫 실행 확인~~ 완료(2026-07-12, 사고 기록): 확인을 방치한 대가로 **전 이력 적색**이었다. 원인은 러너 특이사항이 아니라 로컬-CI 게이트 불일치: docs 2곳이 git 미추적 로컬 규칙 문서를 상대 링크로 걸어 로컬(파일 존재)만 green이었다. 링크 게이트를 "git 추적 기준"으로 격상해 부류째 봉인했고, 이후 structure + browser(러너 chrome, 26검사) 둘 다 **첫 GREEN**. 교훈: 게이트는 로컬 통과가 아니라 러너 통과가 완료 정의다.
+- ~~"웹의 uv" 라운드~~ 완료(2026-07-12): 발명 라운드 4 참조.
 
 ## 메모리 포인터
 
