@@ -66,7 +66,22 @@ for (const f of collect(ROOT, [".md", ".js"], [])) {
   });
 }
 
-// 4) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.
+// 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
+console.log("\n[타입]");
+const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
+for (const sym of ["boot", "Runtime", "MemoryCapability", "ReactiveController", "SyscallBridge", "PyProc", "PAGE_SIZE"]) {
+  check(`d.ts가 ${sym} 선언`, () => {
+    if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
+  });
+}
+const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+check("package.json types -> index.d.ts", () => {
+  if (pkg.types !== "./index.d.ts") throw new Error(String(pkg.types));
+  if (pkg.exports["."].types !== "./index.d.ts") throw new Error("exports['.'].types 누락");
+  if (!pkg.files.includes("index.d.ts")) throw new Error("files에 index.d.ts 누락");
+});
+
+// 5) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.
 console.log("\n[worker]");
 check("worker.js가 boot/task 처리", () => {
   const src = readFileSync(join(ROOT, "src", "worker.js"), "utf8");
