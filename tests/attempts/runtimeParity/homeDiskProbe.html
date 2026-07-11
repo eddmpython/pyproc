@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: homeDisk</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: /home 영속 디스크 (OPFS 마운트)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("pyprocHome", { recursive: true }); } catch (e) {}
+    const home = await root.getDirectoryHandle("pyprocHome", { create: true });
+
+    // 커널 A: /home에 파일을 쓴다 (진짜 python open)
+    const a = await boot();
+    const fsA = await a.mountHome(home);
+    a.run("open('/home/web/note.txt', 'w').write('immortal disk')\nimport os\nos.makedirs('/home/web/data', exist_ok=True)\nopen('/home/web/data/n.bin', 'wb').write(bytes(range(10)))");
+    await fsA.sync();
+    check("A: /home 쓰기 + sync", true, fsA.path);
+
+    // 커널 B: 같은 디스크를 마운트해 읽는다 (커널이 달라도 디스크는 산다)
+    const b = await boot();
+    await b.mountHome(home);
+    check("B: 파일 내용 생존", b.run("open('/home/web/note.txt').read()") === "immortal disk");
+    check("B: 디렉터리/바이너리 생존", b.run("sorted(__import__('os').listdir('/home/web'))[0]") === "data" && b.run("open('/home/web/data/n.bin','rb').read()[9]") === 9);
+    check("B: 파이썬 os 표면 동작", b.run("__import__('os').path.getsize('/home/web/note.txt')") === 13);
+    await root.removeEntry("pyprocHome", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

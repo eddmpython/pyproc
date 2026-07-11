@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: machineImage</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: .pymachine = 파일 하나로 이동하는 컴퓨터</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession, openMachine } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    // 컴퓨터 A: 상태를 만들고 파일 하나로 내보낸다
+    const a = await bootSession({});
+    a.rt.run("x = 42\nnotes = ['hello', 'machine']\nblob = bytearray(9 * 1024 * 1024)\nblob[123] = 7");
+    const t0 = performance.now();
+    const file = await a.exportImage();
+    timings.exportMs = Math.round(performance.now() - t0);
+    timings.fileMB = +(file.size / 1048576).toFixed(1);
+    check("A: exportImage -> 단일 파일", file.size > 0, `${timings.fileMB}MB, ${timings.exportMs}ms`);
+
+    // 신뢰 게이트: trust 없이 열면 거부되어야 한다
+    let refused = false;
+    try { await openMachine(file); } catch (e) { refused = String(e).includes("trust"); }
+    check("신뢰 게이트: trust 없이는 거부", refused);
+
+    // 무결성: 한 바이트 변조하면 열리지 않아야 한다
+    const buf = new Uint8Array(await file.arrayBuffer());
+    buf[buf.length - 100] ^= 0xff;
+    let integrity = false;
+    try { await openMachine(new Blob([buf]), { trust: true }); } catch (e) { integrity = String(e).includes("무결성"); }
+    check("무결성: 변조 파일 거부", integrity);
+
+    // 컴퓨터 B: 파일로 부팅(매니페스트는 파일 안에 있다) -> A의 상태가 산다
+    const t1 = performance.now();
+    const b = await openMachine(file, { trust: true });
+    timings.openMs = Math.round(performance.now() - t1);
+    check("B: openMachine으로 부활", b.rt.run("x") === 42, `${timings.openMs}ms(부팅 포함)`);
+    check("B: 리스트/바이트 상태 생존", b.rt.run("notes[1]") === "machine" && b.rt.run("blob[123]") === 7 && b.rt.run("len(blob)") === 9 * 1024 * 1024);
+    check("B: 연속 실행", b.rt.run("x + len(notes)") === 44);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

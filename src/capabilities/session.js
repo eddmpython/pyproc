@@ -39,6 +39,35 @@ export async function bootSession(manifest = {}) {
   return new Session(rt, reactive, manifest);
 }
 
+// .pymachine 단일 파일 포맷: MAGIC + u32(헤더 길이) + 헤더 JSON + 델타 바이너리.
+// 헤더에 SHA-256(델타)을 넣어 무결성을 검증한다. 머신 파일은 "살아있는 상태"라서
+// 실행 파일과 동급 위험이다: openMachine은 { trust: true } 명시 승인 없이는 열지 않는다.
+const MACHINE_MAGIC = "PYMACHINE1\n";
+
+async function sha256Hex(bytes) {
+  const d = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// .pymachine 파일로 같은 컴퓨터를 부팅한다(매니페스트가 파일 안에 있다).
+export async function openMachine(blob, opts = {}) {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  const magic = new TextDecoder().decode(buf.subarray(0, MACHINE_MAGIC.length));
+  if (magic !== MACHINE_MAGIC) throw new Error("openMachine: .pymachine 파일이 아니다(매직 불일치)");
+  const hl = new DataView(buf.buffer, buf.byteOffset + MACHINE_MAGIC.length, 4).getUint32(0);
+  const headStart = MACHINE_MAGIC.length + 4;
+  const meta = JSON.parse(new TextDecoder().decode(buf.subarray(headStart, headStart + hl)));
+  const bin = buf.subarray(headStart + hl);
+  const hash = await sha256Hex(bin);
+  if (hash !== meta.sha256) throw new Error("openMachine: 무결성 검증 실패(파일 손상 또는 변조)");
+  if (opts.trust !== true) {
+    throw new Error(`openMachine: 머신 파일은 임의 코드 실행과 동급 위험이다. 출처를 신뢰하면 { trust: true }로 여시라. sha256=${hash.slice(0, 16)}...`);
+  }
+  const session = await bootSession(JSON.parse(meta.manifest));
+  session._applyMeta(meta, bin);
+  return session;
+}
+
 export class Session {
   constructor(rt, reactive, manifest) {
     this.rt = rt; this.reactive = reactive;
@@ -48,8 +77,8 @@ export class Session {
     });
   }
 
-  // 사용자 상태(리플레이 경계와 다른 페이지)만 OPFS에 저장. base는 리플레이가 대체하므로 저장하지 않는다.
-  async save(dir, name) {
+  // 사용자 상태(리플레이 경계와 다른 페이지) 수집. save/exportImage 공용.
+  _collectDelta() {
     const r = this.reactive, mem = this.rt.memory;
     r.checkpoint(); // 경계 닫기(사용자 상태 확정)
     const h0 = r.hashes[0], hl = r.hashes[r.liveIdx];
@@ -60,11 +89,27 @@ export class Session {
     const bin = new Uint8Array(pages.length * PAGE_SIZE);
     pages.forEach((p, i) => bin.set(mem.slicePage(p), i * PAGE_SIZE));
     const meta = { version: 1, manifest: this._manifest, pages, sp: r.stackSave(), heapLen: mem.byteLength() };
+    return { bin, meta };
+  }
+
+  // 사용자 상태만 OPFS에 저장. base는 리플레이가 대체하므로 저장하지 않는다.
+  async save(dir, name) {
+    const { bin, meta } = this._collectDelta();
     const mf = await dir.getFileHandle(name + ".json", { create: true });
     let w = await mf.createWritable(); await w.write(JSON.stringify(meta)); await w.close();
     const bf = await dir.getFileHandle(name + ".bin", { create: true });
     w = await bf.createWritable(); await w.write(bin); await w.close();
-    return { pages: pages.length, mb: +(bin.length / 1048576).toFixed(1) };
+    return { pages: meta.pages.length, mb: +(bin.length / 1048576).toFixed(1) };
+  }
+
+  // 이 컴퓨터 전체를 .pymachine 파일 하나로 내보낸다(무결성 해시 포함).
+  async exportImage() {
+    const { bin, meta } = this._collectDelta();
+    meta.sha256 = await sha256Hex(bin);
+    const head = new TextEncoder().encode(JSON.stringify(meta));
+    const lenBuf = new Uint8Array(4);
+    new DataView(lenBuf.buffer).setUint32(0, head.length);
+    return new Blob([MACHINE_MAGIC, lenBuf, head, bin], { type: "application/x-pymachine" });
   }
 
   // 같은 매니페스트로 리플레이된 커널에서 저장분을 적용해 세션을 부활시킨다.
@@ -73,10 +118,16 @@ export class Session {
     if (meta.manifest !== this._manifest) {
       throw new Error("session.load: 매니페스트 불일치. 저장 당시와 같은 packages/setup/env로 bootSession해야 부활이 성립한다.");
     }
+    const bin = new Uint8Array(await (await (await dir.getFileHandle(name + ".bin")).getFile()).arrayBuffer());
+    return this._applyMeta(meta, bin);
+  }
+
+  // 저장분 적용(성장 + 경계 되감기 + 페이지 쓰기). load/openMachine 공용.
+  _applyMeta(meta, bin) {
     const mem = this.rt.memory;
     // 성장 세션: JS에서 Memory.grow를 직접 하면 Emscripten 글루의 클로저 뷰가 안 갱신되어
     // 런타임이 깨진다(실측). 파이썬 할당으로 정상 성장 경로를 태운다. 초과 성장은 무해하다:
-    // 델타가 복원하는 A의 할당자 상태가 힙 끝을 결정하고, 잉여 wasm 페이지는 미사용으로 남는다.
+    // 델타가 복원하는 저장 시점의 할당자 상태가 힙 끝을 결정하고, 잉여 페이지는 미사용으로 남는다.
     const grewViaAlloc = meta.heapLen > mem.byteLength();
     if (grewViaAlloc) {
       this.rt.setGlobal("_pyproc_target_len", meta.heapLen);
@@ -95,10 +146,9 @@ export class Session {
     }
     if (grewViaAlloc) {
       // 성장 루프가 남긴 할당/GC 흔적을 리플레이 경계 상태로 되감는다. 경계 밖(성장 구간)은
-      // save()가 전량 저장하므로 아래 델타 적용이 그대로 덮는다 -> 결과는 정확히 A의 상태.
+      // 저장이 전량 포함하므로 아래 델타 적용이 그대로 덮는다 -> 결과는 정확히 저장 시점 상태.
       this.reactive.restore(0, meta.sp);
     }
-    const bin = new Uint8Array(await (await (await dir.getFileHandle(name + ".bin")).getFile()).arrayBuffer());
     meta.pages.forEach((p, i) => mem.writePage(p, bin.subarray(i * PAGE_SIZE, (i + 1) * PAGE_SIZE)));
     mem.stackRestore(meta.sp);
     this.reactive.checkpoint(); // 부활 상태를 새 경계로

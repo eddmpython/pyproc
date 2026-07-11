@@ -152,6 +152,8 @@ export class Runtime {
   enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
   enableTerminal(cfg?: TerminalConfig): Terminal;
   enableWheelCache(cfg: WheelCacheConfig): WheelCache;
+  /** 디렉터리 핸들(OPFS 등)을 파이썬 경로로 마운트(기본 /home/web). 반환된 sync()로 영속화. */
+  mountHome(dirHandle: FileSystemDirectoryHandle, path?: string): Promise<{ path: string; sync: () => Promise<void> }>;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */
   readonly raw: unknown;
 }
@@ -180,9 +182,14 @@ export interface SessionIo {
  */
 export function bootSession(manifest?: SessionManifest): Promise<Session>;
 
+/** .pymachine 파일로 같은 컴퓨터를 부팅한다. 머신 파일은 실행 파일과 동급 위험이라 { trust: true } 명시 승인 필수, SHA-256 무결성 검증. */
+export function openMachine(file: Blob, opts?: { trust?: boolean }): Promise<Session>;
+
 export class Session {
   readonly rt: Runtime;
   readonly reactive: ReactiveController;
+  /** 이 컴퓨터 전체를 .pymachine 단일 파일(무결성 해시 포함)로 내보낸다. */
+  exportImage(): Promise<Blob>;
   /** 사용자 상태(리플레이 경계와의 차이 페이지)만 저장. base는 리플레이가 대체한다. */
   save(dir: FileSystemDirectoryHandle, name: string): Promise<SessionIo>;
   /** 같은 매니페스트·같은 힙 크기 전제(불일치는 명시적 예외). */

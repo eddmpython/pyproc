@@ -55,6 +55,9 @@
 
 | 2026-07-12 | shardMapProbe | Edge headless | 32MB float64 sort+sum: 1워커 570ms vs 4워커 108ms = **5.28배**, 합·sqrt합 정확. 발견 2건: 워커의 loadPackage는 다운로드만이라 부팅 setup 예열 필요, bare 워커엔 numpy 미설치 -> PyProc({packages, setup}) 계약 신설 | numpy 단일스레드 열세를 프로세스 샤딩으로 완화 | 졸업 -> `pyProc.js` `mapArray`(SAB 공유 + 워커 내 1회 복사 numpy화), 게이트 상시 |
 
+| 2026-07-12 | machineImageProbe | Edge headless | 13.7MB `.pymachine` 단일 파일(내보내기 59ms), trust 없이는 거부, 1바이트 변조 거부(SHA-256), 파일로 부팅 2.5s에 상태 전부 생존 | **파일 하나 = 살아있는 컴퓨터** 성립(신뢰 모델 포함) | 졸업 -> `exportImage`/`openMachine` |
+| 2026-07-12 | homeDiskProbe | Edge headless | `/home/web` 마운트: python open/os로 쓴 파일·디렉터리·바이너리가 다른 커널에서 생존. 발견: pyodide 기본 /home 비어있지 않아 기본 경로는 /home/web | 영속 디스크 성립 | 졸업 -> `Runtime.mountHome` |
+
 ## 판정
 
 진행 중 (수명주기·soundness·시스템콜 v1·예외 안전 복원·ASGI 서버 졸업, 버전 관문 통과 / 터미널 승격, 체크포인트 그래프+OPFS, 라이브러리 커버리지, 협조적 취소 잔여)

@@ -30,7 +30,7 @@ console.log("[표면]");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 for (const [name, kind] of [
   ["boot", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
-  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["AsgiServer", "function"], ["Terminal", "function"], ["bootSession", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"],
+  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["AsgiServer", "function"], ["Terminal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"],
   ["PAGE_SIZE", "number"],
 ]) {
   check(`export ${name}:${kind}`, () => {

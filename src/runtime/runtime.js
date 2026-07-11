@@ -58,5 +58,13 @@ export class Runtime {
   enableTerminal(cfg = {}) { return new Terminal(this, cfg); }
   enableWheelCache(cfg = {}) { return new WheelCache(this, cfg); }
 
+  // 영속 디스크: OPFS 등 디렉터리 핸들을 파이썬 파일시스템 경로로 마운트한다.
+  // 파이썬 open()이 진짜 지속 파일을 읽고 쓴다. 변경 반영은 반환된 sync() 호출(핸들은 소비자 제공).
+  async mountHome(dirHandle, path = "/home/web") {
+    this.execSeq++;
+    const fs = await this._py.mountNativeFS(path, dirHandle);
+    return { path, sync: () => fs.syncfs() };
+  }
+
   get raw() { return this._py; }  // 탈출구(권장 안 함)
 }

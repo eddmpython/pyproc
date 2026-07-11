@@ -23,3 +23,4 @@
 |---|---|---|
 | [web-python-runtime/](web-python-runtime/) | 운영 체계 + 수명주기/soundness/시스템콜 v1 승격 (2026-07-11) | 서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬. codaro/dartlab/xlpod 공유 SSOT. |
 | [local-parity/](local-parity/) | 개시 (2026-07-11) | 실행·터미널·라이브러리에서 로컬 파이썬과 구분 불가능해지는 발명 프로그램. |
+| [browser-os/](browser-os/) | 개시 (2026-07-12) | 로컬에도 없는 것: 꺼지지 않고 파일 하나로 이동하는 파이썬 컴퓨터(머신 이미지·영속 디스크·셸·수명주기). |
