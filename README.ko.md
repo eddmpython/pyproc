@@ -2,6 +2,8 @@
 
 **서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬.** 진짜 프로세스와 멀티코어 병렬, 체크포인트 / 시간여행, 커널 안 ASGI 서버, 터미널, 그리고 이동 가능한 머신 이미지(도는 파이썬 컴퓨터를 파일 하나로)를 [Pyodide](https://pyodide.org) / WebAssembly 위 하나의 재사용 런타임으로 묶었다. codaro / dartlab / xlpod가 공유하는 웹 파이썬 런타임의 SSOT.
 
+**라이브 데모**: [eddmpython.github.io/pyproc](https://eddmpython.github.io/pyproc/) - 파이썬 머신, 터미널, 프로세스 OS를 브라우저에서 바로(Chromium/Edge).
+
 언어: [English](README.md) | 한국어
 
 ---

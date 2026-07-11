@@ -2,6 +2,8 @@
 
 **Real runtime Python in a browser tab, with no server.** Real processes and multi-core parallelism, checkpoint / time-travel, an in-kernel ASGI server, a terminal, and portable machine images (a running Python computer as a single file), packaged as one reusable runtime on [Pyodide](https://pyodide.org) / WebAssembly. The single source of truth for the web Python runtime shared by codaro / dartlab / xlpod.
 
+**Live demo**: [eddmpython.github.io/pyproc](https://eddmpython.github.io/pyproc/) - the Python machine, terminal, and process OS in your browser (Chromium/Edge).
+
 Language: English | [한국어](README.ko.md)
 
 ---
