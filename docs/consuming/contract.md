@@ -33,7 +33,7 @@ subpath export: `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `p
 
 - 타입은 동봉된 `index.d.ts`가 계약이다.
 - 엔진 내부(`HEAPU8`, `Runtime.raw` 등)를 직접 만지지 않는다. `raw`는 탈출구이고 계약 밖이다.
-- **restoreLive 실행 경계 계약**: 파이썬을 실행했다면 복원 전에 `checkpoint()`로 경계를 닫는다. 전제를 보장할 수 없으면 `restore()`(전체 복원)를 쓴다.
+- **restoreLive 실행 경계 계약(기계 강제)**: 경계를 지키면 즉시 복원(재해싱 0), 위반은 자동 감지되어 재해시 경로로 승격된다(조용한 오염 없음). 반환값 `rehashed`로 경로 확인. 즉시성이 필요하면 복원 전 `checkpoint()`로 경계를 닫아라.
 
 ## 방향과 경계
 

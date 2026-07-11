@@ -25,16 +25,19 @@
     try { rt.run("x = 999\nraise ValueError('boom')"); } catch (e) {}
     check("전제: 예외 후 힙은 더럽다(x==999)", rt.run("x") === 999);
 
-    // 결함 재현: 저장 해시 신뢰 복원은 stale 비교라 오염을 못 본다
-    reactive.restoreLive(cp.index, sp0);
-    check("결함 재현: rehash 없는 restoreLive는 오염 잔존(x==999)", rt.run("x") === 999);
-
-    // 흡수한 해법: 현재 힙 재해시 후 복원
-    try { rt.run("x = 555\nraise ValueError('boom2')"); } catch (e) {}
+    // 기계 가드: 경계 위반을 execSeq로 감지해 자동 재해시 승격 -> 옵션 없이도 안전
     const t0 = performance.now();
-    const r = reactive.restoreLive(cp.index, sp0, { rehash: true });
-    timings.rehashRestoreMs = +(performance.now() - t0).toFixed(1);
-    check("해법: restoreLive({rehash})가 x==1 복원", rt.run("x") === 1, `${timings.rehashRestoreMs}ms, ${r.pagesWritten}p`);
+    const r = reactive.restoreLive(cp.index, sp0);
+    timings.autoRehashMs = +(performance.now() - t0).toFixed(1);
+    check("가드: 경계 위반 자동 감지 + 재해시 복원(x==1)", rt.run("x") === 1 && r.rehashed === true, `${timings.autoRehashMs}ms, ${r.pagesWritten}p`);
+
+    // 경계를 지키면 즉시 경로 유지(재해싱 0)
+    rt.run("x = 5");
+    reactive.checkpoint();
+    const t1 = performance.now();
+    const r2 = reactive.restoreLive(cp.index, sp0);
+    timings.fastPathMs = +(performance.now() - t1).toFixed(2);
+    check("경계 준수 시 즉시 경로 유지(rehashed=false)", r2.rehashed === false && rt.run("x") === 1, `${timings.fastPathMs}ms`);
 
     // 복원 뒤 인터프리터 연속 실행(파이썬이 멀쩡한가)
     check("복원 후 연속 실행", rt.run("x + 41") === 42);

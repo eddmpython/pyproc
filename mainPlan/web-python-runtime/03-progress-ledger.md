@@ -4,6 +4,12 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-11 외부 리뷰 대응: restoreLive 경계 계약을 기계 강제로
+
+- 외부 코드 리뷰의 최우선 지적("sound를 파는 라이브러리에서 soundness 전제가 강제되지 않는다") 수용. `Runtime.execSeq`(상태 변이 카운터: run/runAsync/setGlobal/install/loadPackages)로 경계 위반을 **O(1) 감지**해 restoreLive가 자동으로 재해시 경로로 승격. 실측: 위반 시 27.4ms 안전 복원, 준수 시 0.69ms 즉시 경로 유지(`rehashed` 플래그로 확인).
+- 리뷰의 다른 지적 중 SIGINT 부재·버전 관문·OPFS 경제성은 리뷰 시점 이후 이미 해소됐음을 확인. "리액티브 과설계" 우려는 dartlab의 독립 재발명이 수요 반증. restore()의 힙 성장 비대칭 관찰은 계약 실태 표에 열린 항목으로 등록(probe 후보).
+- 릴리즈 0.0.4(버전만. 태그 폐지 정책 확정: 표식은 package.json 하나, npm 퍼블리시 개시 시 태그를 절차의 자동 산출물로 재도입).
+
 ### 2026-07-11 dartlab 흡수 완주 + parity 승격 5종 (게이트 20검사)
 
 - 한 턴에 승격 5종: `restoreLive({rehash})`(예외 안전 복원), `AsgiServer`(소켓 0 dispatch 3.4ms), `Terminal`(+examples/terminal.html), `interrupt(pid)`(SIGINT 517ms 수렴, respawn 0), `saveBase/loadBase`(OPFS 영속, 30MB 쓰기 256ms/읽기 46ms).

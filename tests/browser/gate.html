@@ -57,8 +57,8 @@
       check("restore: 전체 복원으로 x === 1", rt.run("x") === 1);
 
       try { rt.run("x = 555\nraise ValueError('boom')"); } catch (e) {} // 예외 = 경계 없는 오염
-      reactive.restoreLive(cp.index, sp0, { rehash: true });
-      check("restoreLive({rehash}): 예외 오염 복원", rt.run("x") === 1);
+      const rr1 = reactive.restoreLive(cp.index, sp0); // 옵션 없이: 가드가 자동 재해시 승격
+      check("restoreLive 가드: 경계 위반 자동 감지 복원", rt.run("x") === 1 && rr1.rehashed === true);
 
       // base의 OPFS 영속: 내보내고 되읽은 base로도 복원이 성립해야 한다
       const opfsRoot = await navigator.storage.getDirectory();

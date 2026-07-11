@@ -33,16 +33,18 @@ export class Runtime {
     this._py = py;
     this.memory = new MemoryCapability(py);
     this._micropip = null;
+    this.execSeq = 0; // 상태 변이 카운터. 리액티브가 실행 경계 위반을 O(1)로 감지하는 근거.
   }
-  run(code) { return this._py.runPython(code); }
-  runAsync(code) { return this._py.runPythonAsync(code); }
-  setGlobal(name, value) { this._py.globals.set(name, value); }
+  run(code) { this.execSeq++; return this._py.runPython(code); }
+  runAsync(code) { this.execSeq++; return this._py.runPythonAsync(code); }
+  setGlobal(name, value) { this.execSeq++; this._py.globals.set(name, value); }
   getGlobal(name) { return this._py.globals.get(name); }
   async install(pkg) {
+    this.execSeq++;
     if (!this._micropip) { await this._py.loadPackage("micropip"); this._micropip = this._py.pyimport("micropip"); }
     await this._micropip.install(pkg);
   }
-  async loadPackages(pkgs) { await this._py.loadPackage(pkgs); }
+  async loadPackages(pkgs) { this.execSeq++; await this._py.loadPackage(pkgs); }
 
   // Layer 1 능력 등록(opt-in). 소비자는 능력 계약만 받고 엔진 내부는 만지지 않는다.
   enableReactive() { return new ReactiveController(this); }

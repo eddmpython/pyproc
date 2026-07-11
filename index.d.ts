@@ -22,6 +22,8 @@ export interface CheckpointInfo {
 export interface RestoreInfo {
   pagesWritten: number;
   mbWritten: number;
+  /** 이번 복원이 재해시 경로였는지. 경계 위반이 자동 감지되면 true. */
+  rehashed: boolean;
 }
 
 export interface SyscallBridgeConfig {
@@ -73,7 +75,7 @@ export class MemoryCapability {
 export class ReactiveController {
   checkpoint(): CheckpointInfo;
   restore(j: number, savedSP: number | null): void;
-  /** opts.rehash: 실행 경계 계약이 깨졌을 수 있으면(예외로 더러워진 힙) 현재 힙을 재해시해 비교. */
+  /** 경계 위반(마지막 checkpoint/restore 이후 실행·변이)은 자동 감지되어 재해시 경로로 복원된다. opts.rehash는 강제 재해시. */
   restoreLive(j: number, savedSP: number | null, opts?: { rehash?: boolean }): RestoreInfo;
   timeTravel(j: number, savedSP: number | null, opts?: { rehash?: boolean }): RestoreInfo;
   stackSave(): number | null;

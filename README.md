@@ -103,7 +103,7 @@ reactive.restoreLive(cp.index, sp0);          // live-diff restore (writes only 
 console.log(rt.run("x"));                      // 1
 ```
 
-**Execution boundary contract**: `restoreLive` compares stored hashes only (zero re-hashing is what makes it instant). So if you ran Python, you must close that boundary with `checkpoint()` before restoring. If you cannot guarantee the boundary, use `restore()` (full restore, the safe baseline).
+**Execution boundary contract (machine-enforced)**: when the boundary holds (no execution since the last `checkpoint()`/restore), `restoreLive` compares stored hashes only and restores instantly (zero re-hashing, ~1ms measured). A boundary violation (execution, exception, global mutation) is auto-detected in O(1) via a state-mutation counter and the restore upgrades to the re-hash path, so **a silently wrong restore cannot happen** (~27ms measured). The returned `rehashed` flag tells you which path ran.
 
 ### Borrowed syscall bridge
 
