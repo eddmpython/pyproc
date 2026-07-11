@@ -49,8 +49,11 @@ export class ReactiveController {
   // 라이브-차분 복원: 저장 해시 비교만(재해싱 0) -> 다른 페이지만 write. 인접 시간여행 즉시.
   // 전제는 파일 상단의 "실행 경계 계약" 참조. 성장 처리: 현재 힙이 목표보다 크면 목표 범위
   // 밖 페이지도 base로 되돌려야 dlmalloc/break 정합이 깨지지 않는다. liveH.length 기준 순회.
-  restoreLive(j, savedSP) {
-    const mem = this._mem, liveH = this.hashes[this.liveIdx], targetH = this.hashes[j];
+  // opts.rehash: 경계 계약이 깨졌을 수 있으면(실행 중 예외 = checkpoint 없이 더러워진 힙)
+  // 저장 해시 대신 현재 힙을 재해시해 비교한다(dartlab 노트북 런타임에서 흡수, 2026-07-11).
+  restoreLive(j, savedSP, opts = {}) {
+    const mem = this._mem, targetH = this.hashes[j];
+    const liveH = opts.rehash ? mem.pageHashes() : this.hashes[this.liveIdx];
     const nLive = liveH.length / 2, nTarget = targetH.length / 2; // 페이지당 2워드 interleave
     let written = 0, wroteBytes = 0;
     for (let p = 0; p < nLive; p++) {
@@ -65,7 +68,7 @@ export class ReactiveController {
     this.liveIdx = j; this.prevHashes = this.hashes[j];
     return { pagesWritten: written, mbWritten: +(wroteBytes / 1048576).toFixed(2) };
   }
-  timeTravel(j, savedSP) { return this.restoreLive(j, savedSP); }
+  timeTravel(j, savedSP, opts = {}) { return this.restoreLive(j, savedSP, opts); }
   stackSave() { return this._mem.stackSave(); }
   storageMB() { let b = this.base ? this.base.length : 0; for (let k = 1; k < this.deltas.length; k++) for (const x of this.deltas[k].values()) b += x.length; return Math.round(b / 1048576); }
 }

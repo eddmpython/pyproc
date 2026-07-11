@@ -56,6 +56,10 @@
       reactive.restore(cp.index, sp0); // 전체 복원은 경계 없이도 안전 기준선
       check("restore: 전체 복원으로 x === 1", rt.run("x") === 1);
 
+      try { rt.run("x = 555\nraise ValueError('boom')"); } catch (e) {} // 예외 = 경계 없는 오염
+      reactive.restoreLive(cp.index, sp0, { rehash: true });
+      check("restoreLive({rehash}): 예외 오염 복원", rt.run("x") === 1);
+
       // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)
       await rt.enableSyscallBridge({ input: () => "ok" }).install();
       check("syscall input(): 동기 핸들러", rt.run("input()") === "ok");

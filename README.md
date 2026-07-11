@@ -6,6 +6,10 @@ Language: English | [한국어](README.ko.md)
 
 ---
 
+## One goal
+
+**Make Python in the browser behave like local Python.** Local-grade execution speed, real processes and parallelism, a terminal, package installation, and eventually embedded-Python / uv-grade environment management - all inside a tab, with no server. Whatever works locally should work in the browser; that is this repository's only goal, and every claim counts only when measured in a real browser. The gap map and progress live in [local-parity](mainPlan/local-parity/README.md).
+
 ## What is this?
 
 pyproc treats browser Python not as "one notebook cell" but as an **operating system**.

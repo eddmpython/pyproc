@@ -19,8 +19,20 @@
 2. **벽은 벽이라고 쓴다.** WASM dlopen(warm-fork/nogil/제로카피)과 네이티브 휠은 upstream 연구 문제다. 로드맵이 아니라 프론티어 절에 둔다.
 3. 아키텍처·계약 상세는 [web-python-runtime](../web-python-runtime/01-architecture.md)이 정본이고, 이 이니셔티브는 격차 지도와 우선순위만 소유한다.
 
+## 흡수 계획 (dartlab 병행 구현 발견, 2026-07-11)
+
+dartlab이 자체 노트북 런타임(`mainPlan/web-notebook-runtime`)과 browser-as-server(`mainPlan/browser-as-server-ssot`, e2e PASS)를 Pyodide 0.27.5로 병행 구현했다. 세 소비자의 개별 풀이는 동결 상태이고, pyproc이 서면 전부 pyproc을 바라보게 한다(소유자 결정). pyproc이 가져올 것:
+
+1. **예외 안전 복원**: 실행 중 예외는 checkpoint 없이 힙을 더럽혀 restoreLive 경계 계약을 조용히 깬다. dartlab 해법 = 복원 전 현재 힙 재해시. pyproc은 옵션(`rehash`)으로 흡수.
+2. **체크포인트 그래프 + OPFS**: 분기 복원(부모 그래프), content-addressed 상태, OPFS 원장, 기준 힙 RAM 부담(156MB 실측) 완화(압축/OPFS 내보내기, 256MB 상한).
+3. **browserAsServer**: "로컬 서버 = 소켓이 아니라 ASGI". SW fetch -> ASGI dispatch, HTTP 오버헤드 8ms, `async def` 강제 제약까지 검증 완료. 능력 계약으로 흡수.
+4. **라이브러리·파일계 체크리스트**: wheel OPFS 캐시, requirements manifest, `%pip` 영속, 부팅+복구+첫 셀 시간 기준선.
+5. ~~버전 정합 관문~~ **통과(2026-07-11 실측)**: v314.0.2에서 fastapi/pydantic/polars/numpy/requests 전부 설치·import ok. dartlab 이관에 버전 장애물 없음.
+
 ## NEXT
 
-1. terminal 승격(게이트 3): `Terminal` 능력 계약 + examples 터미널 페이지 + 브라우저 게이트 검사.
-2. 라이브러리 커버리지 카테고리 개설: 상위 PyPI 패키지 설치·import 성공률 실측(성공/실패군 분류표가 산출물).
-3. 협조적 취소 카테고리: `setInterruptBuffer` 기반 SIGINT(행 워커를 kill 없이 회수).
+1. ~~예외 안전 복원 흡수~~ 완료(2026-07-11): `restoreLive({rehash})` 승격 + 게이트 상시화.
+2. browserAsServer 능력 계약 설계·흡수(dartlab e2e PASS 설계 재사용, `async def` 제약 포함).
+3. terminal 승격(게이트 3): `Terminal` 능력 계약 + examples + 게이트 검사.
+4. browserAsServer 능력 계약 설계(흡수 3) / 체크포인트 그래프+OPFS(흡수 2) / 라이브러리 커버리지 / 협조적 취소(SIGINT).
+5. 장기: "웹의 uv" - 노트북/제품 단위 환경 선언(requirements) + wheel 캐시 + 즉시 복원 커널로 로컬 가상환경 등가를 만든다.

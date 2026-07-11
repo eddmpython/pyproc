@@ -73,8 +73,9 @@ export class MemoryCapability {
 export class ReactiveController {
   checkpoint(): CheckpointInfo;
   restore(j: number, savedSP: number | null): void;
-  restoreLive(j: number, savedSP: number | null): RestoreInfo;
-  timeTravel(j: number, savedSP: number | null): RestoreInfo;
+  /** opts.rehash: 실행 경계 계약이 깨졌을 수 있으면(예외로 더러워진 힙) 현재 힙을 재해시해 비교. */
+  restoreLive(j: number, savedSP: number | null, opts?: { rehash?: boolean }): RestoreInfo;
+  timeTravel(j: number, savedSP: number | null, opts?: { rehash?: boolean }): RestoreInfo;
   stackSave(): number | null;
   storageMB(): number;
 }
