@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: offlineBoot</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 오프라인 부팅 (코어 자산 OPFS 캐시)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("pyprocCore", { recursive: true }); } catch (e) {}
+    const dir = await root.getDirectoryHandle("pyprocCore", { create: true });
+
+    // 부팅 1: 캐시 적재(콜드)
+    let t = performance.now();
+    const a = await boot({ coreCacheDir: dir });
+    timings.coldMs = Math.round(performance.now() - t);
+    check("부팅1: 코어 자산 캐시 적재", a.coreCache.misses > 0 && a.run("1+1") === 2,
+      `${timings.coldMs}ms, miss ${a.coreCache.misses}/hit ${a.coreCache.hits}`);
+    const names = []; for await (const k of dir.keys()) names.push(k);
+    check("OPFS에 코어 파일 실재", names.length > 0, JSON.stringify(names));
+
+    // 부팅 2: 캐시에서(웜). misses===0이면 fetch 계층은 네트워크 0.
+    t = performance.now();
+    const b = await boot({ coreCacheDir: dir });
+    timings.warmMs = Math.round(performance.now() - t);
+    check("부팅2: 실행 정상", b.run("sum(range(10))") === 45, `${timings.warmMs}ms`);
+    check("부팅2: fetch 계층 네트워크 0 (miss==0)", b.coreCache.misses === 0,
+      `hit ${b.coreCache.hits}, miss ${b.coreCache.misses}`);
+    timings.note = "pyodide.js/asm.js 등 script/import 경로 자산은 fetch 밖(한계 기록용)";
+    await root.removeEntry("pyprocCore", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

@@ -13,8 +13,31 @@ export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 
 const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
 
+// 코어 자산 MIME(캐시 서빙용). instantiateStreaming이 wasm 타입을 요구한다.
+const CORE_MIME = { ".wasm": "application/wasm", ".zip": "application/zip", ".json": "application/json", ".js": "text/javascript", ".mjs": "text/javascript" };
+
 export async function boot(opts = {}) {
   const indexURL = opts.indexURL || DEFAULT_INDEX;
+  // 오프라인 부팅(기둥5): coreCacheDir을 주면 indexURL 자산을 OPFS에 저장/서빙한다.
+  // fetch를 타는 자산(wasm/stdlib/lock 등 대용량)이 대상이고, 부팅 구간에만 fetch를 감싼다.
+  const cache = opts.coreCacheDir ? { dir: opts.coreCacheDir, hits: 0, misses: 0 } : null;
+  const cachedFetch = cache ? async (url) => {
+    const name = new URL(url).pathname.split("/").pop();
+    const ext = name.slice(name.lastIndexOf("."));
+    const type = CORE_MIME[ext] || "application/octet-stream";
+    try {
+      const f = await (await cache.dir.getFileHandle(name)).getFile();
+      cache.hits++;
+      return new Response(f, { headers: { "Content-Type": type } });
+    } catch (e) { /* 미스 -> 네트워크 */ }
+    const resp = await (cache.orig || fetch)(url); // 감싼 fetch 재진입(무한 재귀) 방지
+    if (!resp.ok) return resp;
+    const data = await resp.arrayBuffer();
+    const fh = await cache.dir.getFileHandle(name, { create: true });
+    const w = await fh.createWritable(); await w.write(data); await w.close();
+    cache.misses++;
+    return new Response(data, { headers: { "Content-Type": type } });
+  } : null;
   if (!globalThis.loadPyodide) {
     await new Promise((res, rej) => {
       const s = document.createElement("script");
@@ -28,9 +51,25 @@ export async function boot(opts = {}) {
   // undefined로 명시 전달하면 pyodide가 env.HOME 접근에서 죽으므로 있을 때만 싣는다.
   const cfg = { indexURL, stdout: opts.stdout, stderr: opts.stderr };
   if (opts.env) cfg.env = opts.env;
-  const py = await loadPyodide(cfg);
-  if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
-  return new Runtime(py);
+  let py;
+  if (cache) {
+    const fetchOrig = globalThis.fetch;
+    cache.orig = fetchOrig;
+    globalThis.fetch = (input, init) => {
+      const u = typeof input === "string" ? input : (input && input.url) || String(input);
+      return u.startsWith(indexURL) ? cachedFetch(u) : fetchOrig(input, init);
+    };
+    try {
+      py = await loadPyodide(cfg);
+      if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
+    } finally { globalThis.fetch = fetchOrig; }
+  } else {
+    py = await loadPyodide(cfg);
+    if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
+  }
+  const rt = new Runtime(py);
+  if (cache) rt.coreCache = { hits: cache.hits, misses: cache.misses }; // 부팅 자산 캐시 통계
+  return rt;
 }
 
 export class Runtime {

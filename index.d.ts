@@ -12,6 +12,8 @@ export interface BootOptions {
   packages?: string[];
   /** CPython 초기화 전에 반영되는 환경변수(예: { PYTHONHASHSEED: "0" } = 결정적 부팅). */
   env?: Record<string, string>;
+  /** 코어 자산(wasm/stdlib/lock)을 이 디렉터리에 캐시해 재부팅 시 fetch 계층 네트워크 0. */
+  coreCacheDir?: FileSystemDirectoryHandle;
 }
 
 export interface CheckpointInfo {

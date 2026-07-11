@@ -42,21 +42,15 @@
 
 | 2026-07-11 | reharvestProbe | Edge headless | 런타임 중 loadPackage 후, 부팅 옵션 packages 후 **양 경로 모두** makeMemorySnapshot이 `Unexpected hiwire entry at index 6`으로 거부 | **벽 좌표 확정**: v314 스냅샷은 bare 전용. 패키지 로드 상태(JS FFI 흔적)는 이미지화 불가 | warm-fork·환경=힙이미지는 upstream 프론티어로 격상. 웹의 uv는 wheel OPFS 캐시(다운로드 0) 경로로 진행 |
 
-| 2026-07-11 | crossKernelProbe | Edge headless | A(30MB) 이미지를 새 부팅 B에 전체 되쓰기 + 스택 복원 -> `SystemError: Type does not define the tp_name field` | **벽 좌표**: 커널 상태는 선형 메모리만이 아니다(WASM globals + JS 측 미러가 이미지 밖). 동일 인스턴스 복원(우리 리액티브)은 그래서 되고, 크로스 인스턴스는 전체 머신 상태 캡처가 필요 | 불멸 커널은 (a) 부팅 결정성 실측, (b) 전역/JS 상태 목록화 후 재시도. 프론티어 후보 |
 
-| 2026-07-11 | bootDeterminismProbe | Edge headless | 무조치 2회 부팅 = 180p 상이. **PYTHONHASHSEED=0 + 엔트로피/시간 스텁 = 0p 상이(bare와 numpy 리플레이 모두, 힙 길이 동일)** | 부팅이 바이트 단위 결정적. tp_name 크래시 원인(시드 레이아웃 시프트) 확증 | 리플레이+델타 경로 개방 |
-| 2026-07-11 | replayForkProbe | Edge headless | A의 사용자 상태(변수+numpy 배열)를 델타 160p/10MB로 수확, 동형 리플레이 B에 **1.5ms 적용** -> 상태 생존·연산·연속 실행 전부 정확 | **불멸 커널/warm-fork 실증**. hiwire 벽을 upstream 수정 없이 우회 | 졸업 -> `session.js` `bootSession`/`Session.save/load`(게이트 상시: 크로스 커널 부활 95p/5.9MB) |
 
 | 2026-07-11 | wheelCacheProbe | Edge headless | 커널1이 six+micropip wheel을 OPFS에 저장(miss 2), 커널2는 **hit 2 / miss 0**으로 설치 + import 정상. 발견: micropip은 fetch에 URL 객체를 준다(문자열 아님) | 재다운로드 0 성립("웹의 uv" 저장층) | 졸업 -> `wheelCache.js` `enableWheelCache({dir})`(install/loadPackages 스코프 래핑), 게이트 상시 |
 
 | 2026-07-11 | (게이트 직결) %undo | Edge headless | Terminal({timeTravel:true}): 완결 문장마다 자동 경계, `%undo`가 직전 상태 복원(q=999 -> 1), 게이트 23/23 | 시간여행 REPL 성립(로컬 REPL에 없는 능력 2호) | 졸업 -> `terminal.js` timeTravel 옵션 |
 
-| 2026-07-12 | sessionGrowProbe | Edge headless | 30->65MB로 자란 세션(42.4MB 저장)을 새 커널이 354ms에 부활. 발견 2건: JS에서 Memory.grow 직접 호출은 글루 클로저 뷰 미갱신으로 파손(파이썬 할당 경로가 정답), 성장 루프의 흔적은 restore(0) 되감기 후 델타 적용으로 해소 | 성장 세션 부활 성립(Session v2) | 졸업 -> session.js(load가 파이썬 성장 + 경계 되감기 + 델타), wheelDir 매니페스트 결합 포함 |
 
 | 2026-07-12 | shardMapProbe | Edge headless | 32MB float64 sort+sum: 1워커 570ms vs 4워커 108ms = **5.28배**, 합·sqrt합 정확. 발견 2건: 워커의 loadPackage는 다운로드만이라 부팅 setup 예열 필요, bare 워커엔 numpy 미설치 -> PyProc({packages, setup}) 계약 신설 | numpy 단일스레드 열세를 프로세스 샤딩으로 완화 | 졸업 -> `pyProc.js` `mapArray`(SAB 공유 + 워커 내 1회 복사 numpy화), 게이트 상시 |
 
-| 2026-07-12 | machineImageProbe | Edge headless | 13.7MB `.pymachine` 단일 파일(내보내기 59ms), trust 없이는 거부, 1바이트 변조 거부(SHA-256), 파일로 부팅 2.5s에 상태 전부 생존 | **파일 하나 = 살아있는 컴퓨터** 성립(신뢰 모델 포함) | 졸업 -> `exportImage`/`openMachine` |
-| 2026-07-12 | homeDiskProbe | Edge headless | `/home/web` 마운트: python open/os로 쓴 파일·디렉터리·바이너리가 다른 커널에서 생존. 발견: pyodide 기본 /home 비어있지 않아 기본 경로는 /home/web | 영속 디스크 성립 | 졸업 -> `Runtime.mountHome` |
 
 ## 판정
 
