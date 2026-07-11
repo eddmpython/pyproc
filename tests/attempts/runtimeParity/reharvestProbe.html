@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: reharvest</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 스냅샷 재수확 = warm-fork 우회 (dlopen 벽의 좌표 실측)</h1>
+<pre id="out">실행 중...</pre>
+<script>
+  // pyodide.js (전역 loadPyodide) - _makeSnapshot은 loadPyodide 옵션이라 부모는 메인스레드에서 띄운다.
+  document.write('<scr' + 'ipt src="https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.js"><\/scr' + 'ipt>');
+</script>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const spawnFromSnapshot = (sab) => new Promise((resolve, reject) => {
+    const w = new Worker(new URL("../../../src/processOs/worker.js", import.meta.url), { type: "module" });
+    w.addEventListener("message", (e) => {
+      if (e.data.type === "ready") resolve({ w, bootMs: e.data.bootMs });
+      else if (e.data.type === "error") reject(new Error(e.data.error));
+    });
+    w.postMessage({ type: "boot", id: 1, snapshot: sab });
+  });
+  const runTask = (w, fnSrc, arg) => new Promise((resolve, reject) => {
+    const onMsg = (e) => {
+      if (e.data.type === "result") { w.removeEventListener("message", onMsg); resolve(e.data.result); }
+      else if (e.data.type === "error") { w.removeEventListener("message", onMsg); reject(new Error(e.data.error)); }
+    };
+    w.addEventListener("message", onMsg);
+    w.postMessage({ type: "task", taskId: 0, fnSrc, arg });
+  });
+  try {
+    // 1) 부모: 스냅샷 모드 부팅. 경로 A(런타임 중 loadPackage)는 hiwire 벽 확인됨 ->
+    //    경로 B: 부팅 옵션 packages로 numpy를 '부팅의 일부'로 로드 후 재수확.
+    const parent = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/", _makeSnapshot: true, packages: ["numpy"] });
+    let warmOk = true, snapMB = 0, sab = null;
+    try {
+      // 2) 재수확: 패키지 로드 후 시점의 이미지
+      const t0 = performance.now();
+      const snap = parent.makeMemorySnapshot();
+      timings.reharvestMs = Math.round(performance.now() - t0);
+      snapMB = Math.round(snap.byteLength / 1048576);
+      sab = new SharedArrayBuffer(snap.byteLength);
+      new Uint8Array(sab).set(snap);
+    } catch (e) {
+      warmOk = false;
+      check("재수확: 패키지 로드 후 makeMemorySnapshot", true, "벽 확인: " + String(e).slice(-200));
+    }
+    if (warmOk) {
+      check("재수확: 패키지 로드 후 makeMemorySnapshot", true, `${snapMB}MB, ${timings.reharvestMs}ms`);
+      // 3) 그 이미지로 fork -> 자식에서 numpy가 '재임포트 0'으로 즉시 사는가
+      try {
+        const { w, bootMs } = await spawnFromSnapshot(sab);
+        timings.warmForkBootMs = bootMs;
+        const t1 = performance.now();
+        const r = await runTask(w, "def _fn(n):\n    import numpy as np\n    return float(np.arange(n).sum())", 100000);
+        timings.firstNumpyTaskMs = Math.round(performance.now() - t1);
+        check("warm-fork: 자식 부팅 + numpy 태스크 정확", r === 4999950000.0, `부팅 ${bootMs}ms, 첫 numpy 태스크 ${timings.firstNumpyTaskMs}ms`);
+        const t2 = performance.now();
+        await runTask(w, "def _fn(n):\n    import numpy as np\n    return float(np.arange(n).sum())", 100000);
+        timings.secondNumpyTaskMs = Math.round(performance.now() - t2);
+        check("판정 데이터: 2차 태스크(임포트 캐시 후)", true, `${timings.secondNumpyTaskMs}ms`);
+        w.terminate();
+      } catch (e) {
+        check("warm-fork: 자식 부팅 + numpy 태스크 정확", false, "벽 확인: " + String(e).slice(-200));
+      }
+    }
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

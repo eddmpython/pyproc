@@ -20,6 +20,7 @@
 | 행 워커를 kill 없이 회수할 수 있나 | [interruptProbe.html](interruptProbe.html) | SIGINT 수렴 + 같은 워커 재사용 -> `interrupt(pid)` 승격 |
 | 대표 라이브러리가 얼마나 깔리나 | [libCoverageProbe.html](libCoverageProbe.html) | 대표군 설치·import 성공률 실측(성공/실패 분류가 산출물) |
 | 기준 힙을 RAM 밖(OPFS)에 둘 수 있나 | [opfsCheckpointProbe.html](opfsCheckpointProbe.html) | 쓰기/읽기 처리량 + 로드본 복원 정확 -> `saveBase`/`loadBase` 승격 |
+| 패키지 로드 후 스냅샷 재수확이 되나(warm-fork 우회) | [reharvestProbe.html](reharvestProbe.html) | 되면 warm-fork·환경=이미지 개방, 안 되면 벽 좌표 확정 |
 
 ## 결론 표
 
@@ -38,6 +39,8 @@
 | 2026-07-11 | libCoverageProbe | Edge headless | v314 대표 12종 전부 ok: pandas 3.0.2(5.9s), scipy 1.18, scikit-learn 1.8(6.1s), matplotlib 3.10, pillow, sqlalchemy, bs4, lxml, openpyxl, httpx, jinja2, cryptography. 이전 5종 포함 누적 17/17 | 대표 워크로드 커버리지 100% | 다음: 실패군 탐색(더 넓은 표본) + wheel OPFS 캐시로 재설치 0 |
 
 | 2026-07-11 | opfsCheckpointProbe | Edge headless | 30MB base: OPFS 쓰기 256ms, 읽기 46ms. 로드본 base로 rehash 복원 정확 + 연속 실행 | 기준 힙 영속 성립(dartlab 156MB RAM 부담의 해법 방향) | 졸업 -> `reactive.js` `saveBase`/`loadBase`(핸들은 소비자 제공), 게이트 상시화 |
+
+| 2026-07-11 | reharvestProbe | Edge headless | 런타임 중 loadPackage 후, 부팅 옵션 packages 후 **양 경로 모두** makeMemorySnapshot이 `Unexpected hiwire entry at index 6`으로 거부 | **벽 좌표 확정**: v314 스냅샷은 bare 전용. 패키지 로드 상태(JS FFI 흔적)는 이미지화 불가 | warm-fork·환경=힙이미지는 upstream 프론티어로 격상. 웹의 uv는 wheel OPFS 캐시(다운로드 0) 경로로 진행 |
 
 ## 판정
 

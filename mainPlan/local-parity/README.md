@@ -35,4 +35,4 @@ dartlab이 자체 노트북 런타임(`mainPlan/web-notebook-runtime`)과 browse
 2. ~~browserAsServer 흡수~~ 완료(2026-07-11): `AsgiServer` 능력 승격(dispatch 3.4ms, 200/422 검증, 게이트 상시화). Service Worker 배선은 소비 제품 몫.
 3. ~~terminal 승격~~ 완료(2026-07-11): `Terminal` 능력 + examples/terminal.html + 게이트 상시화.
 4. browserAsServer 능력 계약 설계(흡수 3) / 체크포인트 그래프+OPFS(흡수 2) / 라이브러리 커버리지 / 협조적 취소(SIGINT).
-5. 장기: "웹의 uv" - 노트북/제품 단위 환경 선언(requirements) + wheel 캐시 + 즉시 복원 커널로 로컬 가상환경 등가를 만든다.
+5. 장기: "웹의 uv" - 환경 선언(requirements) + **wheel OPFS 캐시(재다운로드 0)** + bare 스냅샷 fork 조합. "환경 = 힙 이미지"(임포트까지 캐시)는 reharvestProbe로 벽 확정(2026-07-11: v314 스냅샷은 bare 전용, hiwire 거부) -> 프론티어 절로 격상. 불멸 커널도 같은 벽에 걸리므로 자체 체크포인트(base+델타)의 크로스 세션 복원 가능성이 다음 연구 질문.
