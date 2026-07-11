@@ -1,3 +1,7 @@
+# 내부 에이전트/개발 규칙 문서는 로컬 전용(공개 레포/패키지에 올리지 않음). codaro/dartlab 동급.
+CLAUDE.md
+AGENTS.md
+
 node_modules/
 npm-debug.log*
 *.tgz

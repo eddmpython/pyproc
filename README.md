@@ -104,7 +104,7 @@ npm test          # Node 구조/린트 게이트 (의존성 0)
 
 브라우저 실측은 `examples/`의 HTML을 crossOriginIsolated 서버로 띄워 확인한다.
 
-기여 규칙은 [CLAUDE.md](CLAUDE.md)를 따른다. main 전용, 빌드 없는 ESM, camelCase.
+기여 규칙: main 전용, 빌드 없는 ESM, camelCase, 능력 계약 경유(엔진 내부 직접 접근 금지), 버전 `0.0.x` 라인.
 
 ## 라이선스
 
