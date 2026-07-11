@@ -116,6 +116,17 @@ check("exports 경로 실존", () => {
   }
 });
 
+// 4.5) README 표면 동기화: index.js의 모든 export가 양쪽 README에 등장해야 한다.
+//      승격이 문서를 앞지르는 드리프트를 차단한다(계약 실태 표의 부채 해소, 2026-07-12).
+console.log("\n[README 표면]");
+for (const readme of ["README.md", "README.ko.md"]) {
+  check(`${readme}가 공개 표면 전부 언급`, () => {
+    const text = readFileSync(join(ROOT, readme), "utf8");
+    const missing = Object.keys(api).filter((name) => !text.includes("`" + name));
+    if (missing.length) throw new Error(`표면 누락: ${missing.join(", ")}`);
+  });
+}
+
 // 5) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.
 //    worker.js는 pyProc.js와 같은 폴더 = new URL 상대경로(번들러 워커 emit) 계약.
 console.log("\n[worker]");
