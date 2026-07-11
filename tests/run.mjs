@@ -4,6 +4,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 let passed = 0, failed = 0;
@@ -136,18 +137,36 @@ check("virtualOrigin.js와 pyprocSw.js가 같은 폴더(자산 경로 계약)", 
   if (!existsSync(join(ROOT, "src", "capabilities", "virtualOrigin.js"))) throw new Error("virtualOrigin.js 없음");
 });
 
-// 6) 상대 링크 생존: 모든 *.md의 상대 링크가 실존 경로를 가리키는가(죽은 링크 차단).
+// 6) 상대 링크 생존: 모든 *.md의 상대 링크가 "git 추적" 경로를 가리키는가.
+//    존재 검사만으로는 부족하다: 로컬에만 있는 미추적 파일(로컬 규칙 문서 등)을 가리키면
+//    로컬은 green인데 CI 러너는 red가 된다(2026-07-12 실제 사고: CI 전 이력 적색의 원인).
+//    추적 집합이 기준이면 로컬 게이트 = CI 게이트다. 대소문자 불일치(Windows 관용)도 잡힌다.
 //    코드 펜스 안은 예제라 제외. http(s)/mailto/앵커 전용 링크 제외.
 console.log("\n[링크]");
+const trackedFiles = new Set(
+  spawnSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" })
+    .stdout.split("\n").map((p) => p.trim()).filter(Boolean)
+);
+const isTracked = (absPath) => {
+  const relPath = absPath.slice(ROOT.length + 1).replaceAll("\\", "/");
+  if (trackedFiles.has(relPath)) return true;
+  const prefix = relPath + "/"; // 디렉터리 링크: 그 아래 추적 파일이 하나라도 있으면 유효
+  for (const t of trackedFiles) if (t.startsWith(prefix)) return true;
+  return false;
+};
 for (const f of collect(ROOT, [".md"], [])) {
   check(`links ok: ${rel(f)}`, () => {
     const text = readFileSync(f, "utf8").replace(/```[\s\S]*?```/g, "");
+    // 추적 문서의 링크만 추적 대상을 강제한다. 로컬 전용 문서(AGENTS.md 등, 미추적)는
+    // CI에 아예 없으므로 존재 검사로 충분하다.
+    const srcTracked = trackedFiles.has(rel(f));
     const dead = [];
     for (const m of text.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
       const target = m[1];
       if (/^(https?:|mailto:|#)/.test(target)) continue;
-      const path = resolve(dirname(f), target.split("#")[0]);
+      const path = resolve(dirname(f), decodeURIComponent(target.split("#")[0]));
       if (!existsSync(path)) dead.push(target);
+      else if (srcTracked && !isTracked(path)) dead.push(`${target} (git 미추적: CI에서 죽는 링크)`);
     }
     if (dead.length) throw new Error(`죽은 링크: ${dead.join(", ")}`);
   });

@@ -1,6 +1,6 @@
 # docs - 운영 문서 트리
 
-pyproc의 공개 지속 문서. "무엇을 지향하는가"(product)와 "어떻게 운영하는가"(operations/consuming)의 SSOT다. 그때그때의 개발 계획·결정 기록은 [mainPlan/](../mainPlan/)이 담당하고(완료 시 `_done` 이관), 강행규칙 요약은 [CLAUDE.md](../CLAUDE.md)에 있다.
+pyproc의 공개 지속 문서. "무엇을 지향하는가"(product)와 "어떻게 운영하는가"(operations/consuming)의 SSOT다. 그때그때의 개발 계획·결정 기록은 [mainPlan/](../mainPlan/)이 담당하고(완료 시 `_done` 이관), 강행규칙 요약은 저장소 루트의 `CLAUDE.md`(로컬 규칙 문서, git 미추적)에 있다.
 
 ## 카테고리 규칙
 
