@@ -11,7 +11,7 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, PyProc, bootSession } from "../../index.js";
+    import { boot, PyProc, bootSession, runScript } from "../../index.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -160,6 +160,19 @@
       // rt에는 micropip이 이미 있어 six만 캐시됨. 새 커널은 micropip.whl을 miss로 받고
       // six는 캐시에서 서빙되어야 한다(완전한 재다운로드 0은 wheelCacheProbe가 검증).
       check("wheelCache: 캐시 히트 서빙", wc2.hits >= 1 && rtW.run("import six; 1") === 1, `hit ${wc2.hits}, miss ${wc2.misses}`);
+
+      // uv 레인: PEP 723 스크립트 자급(runScript) + freeze 락 (실측 정본: envManager 캠페인.
+      // bootEnv의 스냅샷 웜 부팅은 무게 때문에 bootEnvApiProbe가 담당한다)
+      const scriptOut = await runScript(rtW, [
+        "# /// script",
+        '# dependencies = ["six"]',
+        "# ///",
+        "import six",
+        "six.__version__",
+      ].join("\n"), { wheelDir: wDir });
+      check("runScript: PEP 723 의존성 자급 실행", scriptOut.dependencies[0] === "six" && typeof scriptOut.result === "string" && scriptOut.result.length > 0, `six ${scriptOut.result}`);
+      const lock = JSON.parse(await rtW.freeze());
+      check("freeze: pyodide-lock 형식 + six 포함", !!(lock.packages && lock.packages.six), `packages ${Object.keys(lock.packages || {}).length}개`);
       await (await navigator.storage.getDirectory()).removeEntry("pyprocGateWheels", { recursive: true });
 
       // 세션 부활(불멸 커널): 결정적 리플레이 + 델타로 다른 커널에서 상태가 산다

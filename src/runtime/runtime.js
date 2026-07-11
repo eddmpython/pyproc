@@ -11,7 +11,21 @@ import { Terminal } from "../capabilities/terminal.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 
-const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+// 기본 엔진 배포 지점(출처: docs/consuming/contract.md의 Pyodide 버전 계약). 이 상수의
+// 유일한 정의처다: boot/bootEnv/PyProc이 여기서 가져간다. 버전 변경 = 릴리즈 사유.
+export const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+
+// 엔진 스크립트 1회 로드(전역 loadPyodide 확보). boot/bootEnv/PyProc 공용.
+export async function ensureEngineScript(indexURL) {
+  if (globalThis.loadPyodide) return;
+  await new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = indexURL + "pyodide.js";
+    s.onload = res;
+    s.onerror = () => rej(new Error("pyodide.js 로드 실패: " + indexURL));
+    document.head.appendChild(s);
+  });
+}
 
 // 코어 자산 MIME(캐시 서빙용). instantiateStreaming이 wasm 타입을 요구한다.
 const CORE_MIME = { ".wasm": "application/wasm", ".zip": "application/zip", ".json": "application/json", ".js": "text/javascript", ".mjs": "text/javascript" };
@@ -38,19 +52,13 @@ export async function boot(opts = {}) {
     cache.misses++;
     return new Response(data, { headers: { "Content-Type": type } });
   } : null;
-  if (!globalThis.loadPyodide) {
-    await new Promise((res, rej) => {
-      const s = document.createElement("script");
-      s.src = indexURL + "pyodide.js";
-      s.onload = res;
-      s.onerror = () => rej(new Error("pyodide.js 로드 실패: " + indexURL));
-      document.head.appendChild(s);
-    });
-  }
+  await ensureEngineScript(indexURL);
   // env: 초기화 전에 CPython 환경변수로 반영된다(예: PYTHONHASHSEED=0 -> 결정적 부팅).
   // undefined로 명시 전달하면 pyodide가 env.HOME 접근에서 죽으므로 있을 때만 싣는다.
   const cfg = { indexURL, stdout: opts.stdout, stderr: opts.stderr };
   if (opts.env) cfg.env = opts.env;
+  // 락 파일 교체(freeze 산출물 등): 환경 재현의 축. 실측: envManager/freezeLockProbe.
+  if (opts.lockFileURL) cfg.lockFileURL = opts.lockFileURL;
   let py;
   if (cache) {
     const fetchOrig = globalThis.fetch;
@@ -89,6 +97,14 @@ export class Runtime {
     await this._micropip.install(pkg);
   }
   async loadPackages(pkgs) { this.execSeq++; await this._py.loadPackage(pkgs); }
+
+  // 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정한다(uv lock 등가).
+  // boot({ lockFileURL })에 되먹이면 같은 버전이 해석 0으로 재현된다. 실측: freezeLockProbe.
+  async freeze() {
+    this.execSeq++;
+    if (!this._micropip) { await this._py.loadPackage("micropip"); this._micropip = this._py.pyimport("micropip"); }
+    return this._micropip.freeze();
+  }
 
   // Layer 1 능력 등록(opt-in). 소비자는 능력 계약만 받고 엔진 내부는 만지지 않는다.
   enableReactive() { return new ReactiveController(this); }

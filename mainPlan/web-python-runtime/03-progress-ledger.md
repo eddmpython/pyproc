@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 발명 라운드 4: uv 레인 + SW 계층 + 공유 커널 (probe 7종 GREEN, 게이트 26검사)
+
+- 타 세계 개념 흡수 라운드(소유자 지시: "판을 바꿀 아이디어 + 개념부터 확실히"). 새 캠페인 envManager 개설(캠페인 3개째: 개념 = 환경의 선언·캐시·재현).
+- **uv 레인 승격**: ① `bootEnv(manifest, dirs)` - bare 스냅샷(_loadSnapshot 부팅 227ms, 콜드 3623ms) + OPFS 휠로 2차 환경 부팅 5109ms -> **1229ms(4.2배)**. 패키지 실린 힙 스냅샷은 hiwire 벽 재확인(3레인: postImport/{packages}/serializer 전부 "index 6" 거부, reharvestProbe와 교차 확인) -> bare가 유일한 스냅샷 단위로 확정. ② `runScript` - PEP 723(# /// script) 파싱은 표준 라이브러리(re+tomllib)로, 의존성 자동 설치 + 실행 = 브라우저판 uv run. ③ `Runtime.freeze` + `boot({lockFileURL})` - micropip.freeze 락(355패키지)으로 커널 B가 해석 0/164ms 핀 설치(비배포판 패키지로 관통 증명).
+- **SW 계층 승격**: `pyprocSw.js`(등록형 자산, 쿼리로 기능 선택) + `VirtualOrigin`. ?asgi= 가상 오리진: fetch가 파이썬 ASGI로 응답, 평균 **3.4ms/req = 직접 dispatch와 동일(SW 오버헤드 0)**. ?cache=1 완전 오프라인: 기둥5의 남은 구멍(script 경로)을 봉인, 2차 부팅 CDN miss 0. "SW 배선은 소비 제품 몫" 방침 폐기(배선도 pyproc 프리미티브, 등록/스코프만 소비자 몫). serve.mjs에 Service-Worker-Allowed 헤더.
+- **공유 커널 승격**: `SharedKernel`(SharedWorker) - 여러 탭 = 한 파이썬 상태, 탭이 닫혀도 커널 생존(머신이 탭 밖에서 산다). 벽 실측: SharedWorker는 crossOriginIsolated=false(플랫폼) = SAB 불가 -> interrupt/스냅샷-fork 제외한 실행/상태 공유가 v1 스코프.
+- 구조 정리: 엔진 스크립트 로더/DEFAULT_INDEX 3중 복제를 runtime.js `ensureEngineScript`/`DEFAULT_INDEX`로 단일화(pyProc 리팩터). 구조 게이트 173검사(네이밍 가드가 새 파일 전부 커버).
+- 남은 큐: Session 리플레이의 스냅샷 베이스 결합(머신 resume 가속 v2), SharedKernel과 hibernate 결합, 델타 분기, /home 포함 이미지 v2.
+
 ### 2026-07-12 발명 라운드 3: 파이썬 머신 5기둥 완결 + 네이밍·캠페인 정정 (게이트 24검사)
 
 - browser-os 이니셔티브의 5기둥 전부 실측 승격: ① `.pymachine` 단일 파일(SHA-256 무결성 + `trust` 승인 게이트, 13.7MB 부팅 2.5s) = `exportImage`/`openMachine` ② 영속 디스크 `Runtime.mountHome`(/home/web, 커널 간 생존) ③ 셸 매직(%ls/%cd/%pwd/%cat) ④ 수명주기 데모 examples/machine.html(pagehide 자동 hibernate + 재방문 resume) ⑤ 오프라인 부팅 `boot({coreCacheDir})`(코어 3종 OPFS, 2차 부팅 fetch 계층 miss 0. 한계 정직 기록: pyodide.js/asm.js는 script 경로 = 완전 오프라인은 SW 몫).

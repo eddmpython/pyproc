@@ -29,8 +29,8 @@ console.log("pyproc 게이트\n");
 console.log("[표면]");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 for (const [name, kind] of [
-  ["boot", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
-  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["AsgiServer", "function"], ["Terminal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"],
+  ["boot", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
+  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
   ["PAGE_SIZE", "number"],
 ]) {
   check(`export ${name}:${kind}`, () => {
@@ -43,7 +43,17 @@ check("PAGE_SIZE === 65536", () => { if (api.PAGE_SIZE !== 65536) throw new Erro
 console.log("\n[계약]");
 check("Runtime 메서드", () => {
   const p = api.Runtime.prototype;
-  for (const m of ["run", "runAsync", "install", "loadPackages", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableTerminal", "enableWheelCache"])
+  for (const m of ["run", "runAsync", "install", "loadPackages", "freeze", "mountHome", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableTerminal", "enableWheelCache"])
+    if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
+});
+check("SharedKernel 메서드", () => {
+  const p = api.SharedKernel.prototype;
+  for (const m of ["connect", "run", "runAsync", "setGlobal", "status"])
+    if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
+});
+check("VirtualOrigin 메서드", () => {
+  const p = api.VirtualOrigin.prototype;
+  for (const m of ["bind", "unbind"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("PyProc 메서드", () => {
@@ -87,7 +97,7 @@ for (const scope of ["src", "examples", "tests"]) {
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
-for (const sym of ["boot", "Runtime", "MemoryCapability", "ReactiveController", "SyscallBridge", "AsgiServer", "Terminal", "Session", "WheelCache", "PyProc", "PAGE_SIZE"]) {
+for (const sym of ["boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "ReactiveController", "SyscallBridge", "AsgiServer", "VirtualOrigin", "Terminal", "Session", "WheelCache", "PyProc", "SharedKernel", "PAGE_SIZE"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
   });
@@ -116,6 +126,14 @@ check("worker.js가 boot/task 처리", () => {
 check("pyProc.js가 같은 폴더 worker를 spawn", () => {
   const src = readFileSync(join(ROOT, "src", "processOs", "pyProc.js"), "utf8");
   if (!src.includes('new URL("./worker.js", import.meta.url)')) throw new Error("워커 상대경로 계약 위반");
+});
+check("sharedKernel.js가 같은 폴더 host를 연다", () => {
+  const src = readFileSync(join(ROOT, "src", "processOs", "sharedKernel.js"), "utf8");
+  if (!src.includes('new URL("./sharedKernelHost.js", import.meta.url)')) throw new Error("호스트 상대경로 계약 위반");
+});
+check("virtualOrigin.js와 pyprocSw.js가 같은 폴더(자산 경로 계약)", () => {
+  if (!existsSync(join(ROOT, "src", "capabilities", "pyprocSw.js"))) throw new Error("pyprocSw.js 없음");
+  if (!existsSync(join(ROOT, "src", "capabilities", "virtualOrigin.js"))) throw new Error("virtualOrigin.js 없음");
 });
 
 // 6) 상대 링크 생존: 모든 *.md의 상대 링크가 실존 경로를 가리키는가(죽은 링크 차단).

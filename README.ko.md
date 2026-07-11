@@ -1,6 +1,6 @@
 # pyproc
 
-**서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬.** 프로세스, 병렬 실행, 복원 기반 리액티브를 하나의 재사용 런타임으로 묶었다. codaro / dartlab / xlpod가 공유하는 웹 파이썬 런타임의 SSOT.
+**서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬.** 진짜 프로세스와 멀티코어 병렬, 체크포인트 / 시간여행, 커널 안 ASGI 서버, 터미널, 그리고 이동 가능한 머신 이미지(도는 파이썬 컴퓨터를 파일 하나로)를 [Pyodide](https://pyodide.org) / WebAssembly 위 하나의 재사용 런타임으로 묶었다. codaro / dartlab / xlpod가 공유하는 웹 파이썬 런타임의 SSOT.
 
 언어: [English](README.md) | 한국어
 
@@ -32,6 +32,8 @@ pyproc은 브라우저 파이썬을 "노트북 한 셀"이 아니라 **운영체
 **2. 프로세스 OS (진짜 병렬).** 각 워커가 자기 GIL을 가진 독립 인터프리터라, 같은 함수를 워커들에 돌리면 한 스레드 위의 동시성이 아니라 진짜 멀티코어 실행이 된다. `PyProc.map()`이 워커들이 태스크 큐를 동시에 소진하게 한다.
 
 **3. 복원 기반 리액티브 (재실행 없는 시간여행).** 리액티브 노트북은 보통 상류가 바뀌면 셀을 재실행한다. WebAssembly에는 OS의 dirty-page 추적이 없어서, pyproc은 실행 경계마다 힙을 완전 해시해 바뀐 페이지만 저장하는 방식으로 그걸 재구성한다. 이전 상태로 복원할 땐 재실행 대신 다른 페이지만 되써서(약 2.4ms) 되돌린다. 완전 해시가 soundness의 열쇠다. 샘플링하면 변경을 놓쳐 복원이 깨진다.
+
+**4. 이동 가능한 머신 이미지 (도는 컴퓨터를 파일 하나로).** 결정적 부팅(해시 시드 고정 + 엔트로피·시간 스텁)이 바이트 동일 힙을 재현하므로 base는 옮길 필요가 없다: `Session`은 사용자 작업(리플레이 경계와 다른 페이지, 약 10MB)만 저장하고, `exportImage()`가 그 델타를 `.pymachine` 파일 하나로 packs한다. 다시 열면 같은 base를 리플레이한 뒤 델타를 적용(약 1.5ms)해 파이썬 상태가 되살아난다. VM 이미지는 수 GB인데 이건 살아있는 머신이 수 MB 파일이다. 같은 머신에서 다시 열기는 오늘 증명됐고, cross-machine 결정성("남에게 이메일로" 주장)은 [local-parity](mainPlan/local-parity/README.md)의 열린 probe다.
 
 ## 지원 환경
 
@@ -123,19 +125,87 @@ rt.run('import urllib.request; body = urllib.request.urlopen(url).read()');  // 
 await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"], capture_output=True).stdout');
 ```
 
+### 커널 안 ASGI 서버, 그리고 진짜 URL
+
+"로컬 서버"는 TCP 소켓이 아니라 ASGI 인터페이스다. `AsgiServer`는 FastAPI / Starlette 앱을 커널 안에서 소켓 0으로 dispatch한다(요청당 약 3.4ms). 엔드포인트는 `async def` 강제.
+
+```js
+rt.run("from fastapi import FastAPI\napp = FastAPI()\n@app.get('/ping')\nasync def ping(): return {'ok': True}");
+const server = rt.enableAsgiServer();          // `app` 전역을 읽는다
+await server.install();
+await server.serve("GET", "/ping");            // { status: 200, headers, body: '{"ok":true}' }
+```
+
+동봉된 Service Worker 자산(`src/capabilities/pyprocSw.js`)을 쓰면 파이썬 서버가 **진짜 URL**로도 응답한다: `?asgi=/pyproc/`로 SW를 등록하고 `new VirtualOrigin(server).bind()`를 호출하면, 페이지(또는 iframe)의 `fetch("/pyproc/api/...")`가 FastAPI에 닿는다. 실측 왕복 3.4ms(직접 dispatch와 동일). 같은 자산의 `?cache=1`은 Pyodide CDN 자산 전부를 캐시-우선으로 서빙해서(`coreCacheDir`가 못 덮는 script 경로 포함) 2차 부팅의 CDN 요청이 0이 된다(비행기 모드 부팅).
+
+### 서버리스 파이썬 터미널
+
+탭이 진짜 파이썬 REPL이 된다. `Terminal`은 CPython 정식 `code.InteractiveConsole`을 커널 안에 세운다. syscall 브리지의 JSPI 경로와 조합하면 `input()`이 진짜로 블록된다.
+
+```js
+const term = rt.enableTerminal();
+await term.install();
+await term.push("x = 40");
+await term.push("x + 2");                       // { more: false, out: "42\n" }
+```
+
+### 세션 부활과 이동 가능한 머신 이미지
+
+결정적 리플레이 + 사용자 델타가 인터프리터를 불멸이자 이동 가능으로 만든다. 매니페스트(환경 선언)로 부팅해 작업한 뒤, 델타만 OPFS에 영속하거나 컴퓨터 전체를 `.pymachine` 파일 하나로 내보낸다.
+
+```js
+import { bootSession, openMachine } from "pyproc";
+
+const s = await bootSession({ packages: ["numpy"], setup: "import numpy as np" });
+s.rt.run("data = np.arange(1_000_000)");        // 작업
+const file = await s.exportImage();             // 도는 컴퓨터를 Blob 하나로(.pymachine)
+
+// 나중에, 새 탭에서: base를 리플레이하고 델타를 적용해 재개
+const revived = await openMachine(file, { trust: true });
+revived.rt.run("int(data.sum())");              // 상태가 되살아난다
+```
+
+머신 파일은 살아있는 상태라 실행 파일과 동급 위험이다: `openMachine`은 SHA-256 무결성 해시를 검증하고, 명시적 `{ trust: true }` 없이는 열지 않는다.
+
+### wheel 캐시 (오프라인, 재다운로드 0 패키지)
+
+`WheelCache`는 설치된 `.whl` 바이트를 OPFS에 저장하고 다음 설치부터 캐시에서 서빙한다. 패키지 로드가 오프라인으로 돌고 재다운로드가 0이 된다. 전역 `fetch`를 상시 오염시키지 않고 `install` / `loadPackages` 구간만 감싼다.
+
+### uv 레인: 즉시 부팅되는 환경, 재현 가능한 락, 자급하는 스크립트
+
+`bootEnv`는 환경의 2차 부팅을 설치가 아니라 복원으로 바꾼다: bare 힙 스냅샷(부팅 ~3.6초 -> ~227ms) + OPFS 휠. 실측: numpy 환경 콜드 5109ms -> 웜 **1229ms**(4.2배). `Runtime.freeze()`는 환경 전체를 pyodide-lock JSON으로 고정하고, `boot({ lockFileURL })`에 되먹이면 해석 0으로 같은 환경이 재현된다. `runScript`는 PEP 723(`# /// script`의 인라인 `dependencies`) 스크립트를 자동 설치 + 실행한다. 브라우저판 `uv run`.
+
+```js
+import { bootEnv, runScript } from "pyproc";
+
+const dirs = { snapshots: snapDir, wheels: wheelDir };            // 소비자가 소유한 OPFS 핸들
+const rt = await bootEnv({ packages: ["numpy"], setup: "import numpy" }, dirs);
+rt.envBoot;                                                       // { lane: "snapshot", totalMs: 1229, ... }
+await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six\nsix.__version__");
+```
+
+### 탭보다 오래 사는 커널
+
+`SharedKernel`은 인터프리터를 SharedWorker에 올린다: 연결한 모든 탭이 같은 파이썬 상태를 보고, 연결이 하나라도 남아 있으면 커널은 계속 돈다. 원격 커널이라 모든 호출이 Promise다. 플랫폼 한계(정직 기록): SharedWorker는 현재 crossOriginIsolated가 안 되므로 SAB 기능(interrupt, 스냅샷-fork)은 탭별 `PyProc` 몫이다.
+
 ## 공개 표면
 
 | export | 무엇 |
 | --- | --- |
-| `boot(opts)` | Pyodide 런타임 부팅, `Runtime` 반환 |
-| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` + 능력 등록 |
+| `boot(opts)` | Pyodide 런타임 부팅, `Runtime` 반환 (`lockFileURL` 락 재현, `coreCacheDir` 코어 오프라인) |
+| `bootEnv(manifest, dirs)` | uv 레인: bare 스냅샷 + 휠 캐시 웜 부팅(2차 1229ms vs 콜드 5109ms) |
+| `runScript(rt, src, opts)` | 브라우저판 `uv run`: PEP 723 인라인 의존성 자동 설치 + 실행 |
+| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `freeze` / `mountHome` + 능력 등록 |
 | `MemoryCapability` | WASM 힙 접근을 캡슐화한 능력 계약 |
 | `ReactiveController` | 복원 기반 리액티브(체크포인트 / 시간여행) |
 | `SyscallBridge` | socket/subprocess/input 능력 계약 |
 | `AsgiServer` | 커널 안 ASGI 서버(FastAPI를 소켓 0으로, dispatch 3.4ms) |
+| `VirtualOrigin` | 파이썬 서버를 진짜 URL로(`pyprocSw.js` SW 자산과 짝) |
 | `Terminal` | 서버리스 파이썬 터미널(REPL + 블로킹 input) |
-| `bootSession` / `Session` | 세션 부활(불멸 커널): 결정적 리플레이 + 사용자 델타의 OPFS 영속 |
-| `PyProc` | 프로세스 OS 커널(스냅샷-fork spawn + `map` 병렬) |
+| `bootSession` / `Session` / `openMachine` | 세션 부활(불멸 커널)과 이동 가능한 `.pymachine` 머신 이미지: 결정적 리플레이 + 사용자 델타를 OPFS에 영속(`save`/`load`)하거나 파일 하나로 내보냄(`exportImage`/`openMachine`) |
+| `WheelCache` | 오프라인·재다운로드 0 패키지 설치를 위한 wheel / OPFS 캐시 |
+| `PyProc` | 프로세스 OS 커널: 스냅샷-fork spawn, `map` / `mapArray`(SharedArrayBuffer TypedArray) 병렬, 수명주기(`kill` / `interrupt` / respawn) |
+| `SharedKernel` | 탭보다 오래 사는 공유 커널(SharedWorker): 여러 탭 = 한 파이썬 상태 |
 | `PAGE_SIZE` | WASM 페이지 크기 상수(65536) |
 
 하위 경로 import도 지원한다.
@@ -160,9 +230,13 @@ import { PyProc } from "pyproc/process-os";
 ## 아키텍처
 
 ```text
-Layer 2  process-os   PyProc 커널(스냅샷-fork spawn + map 병렬), 워커 = 프로세스
-Layer 1  reactive     복원 리액티브 (능력)
-         syscall      socket/subprocess/input 브리지 (능력 계약)
+Layer 2  process-os   PyProc 커널: 스냅샷-fork spawn, map/mapArray 병렬, 수명주기; 워커 = 프로세스
+Layer 1  reactive     복원 리액티브 (체크포인트 / 시간여행)
+         syscall      socket / subprocess / input 브리지
+         asgi         커널 안 ASGI dispatch
+         terminal     서버리스 파이썬 REPL
+         session      세션 부활 + .pymachine 머신 이미지
+         wheelcache   wheel / OPFS 패키지 캐시
 Layer 0  runtime      Pyodide 래퍼(boot/Runtime) + MemoryCapability 계약
          index.js     공개 표면 / index.d.ts 타입 계약
 ```

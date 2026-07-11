@@ -3,7 +3,7 @@
 // 검증조각 통합: bare 스냅샷 fork(콜드 대비 15.4배 spawn) + 워커풀 병렬(독립 GIL N개 = N코어).
 // WASM dlopen 문제를 회피(각 워커가 자기 wasmTable/힙/글루 소유)하므로 오늘 가능한 최상단.
 // worker.js는 반드시 이 파일과 같은 폴더에 둔다(new URL 상대경로 = 번들러 워커 emit 계약).
-const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
 
 export class PyProc {
   constructor(opts = {}) {
@@ -15,13 +15,7 @@ export class PyProc {
 
   // 부모 하나 부팅해 bare 스냅샷(프로세스 이미지)을 만들고, SAB에 실어 워커가 공유하게.
   async _makeSnapshot() {
-    if (!globalThis.loadPyodide) {
-      await new Promise((res, rej) => {
-        const s = document.createElement("script");
-        s.src = this.indexURL + "pyodide.js"; s.onload = res;
-        s.onerror = () => rej(new Error("pyodide.js 로드 실패")); document.head.appendChild(s);
-      });
-    }
+    await ensureEngineScript(this.indexURL);
     const parent = await loadPyodide({ indexURL: this.indexURL, _makeSnapshot: true });
     const snap = parent.makeMemorySnapshot();
     const sab = new SharedArrayBuffer(snap.byteLength);  // 모든 워커가 detach 없이 공유(N번 복사 회피)

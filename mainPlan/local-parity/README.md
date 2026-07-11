@@ -11,7 +11,7 @@
 | 시스템콜 | input/HTTP/subprocess | **도달(v1)**: input(동기+JSPI 블로킹), urllib 실 GET, subprocess(자식 워커, `-c`) | requests 계열, 저수준 socket(프록시 계약), 파일계(FS Access 마운트) |
 | 세션 영속 | (로컬도 없음: REPL은 죽으면 끝) | **로컬 초월(v1)**: `Session` 승격. 결정적 리플레이 + 델타(5.9MB급)로 커널 간·세션 간 부활, 게이트 상시 | 성장 세션(v2), 델타 체인·분기, 매니페스트에 wheel 캐시 결합 |
 | 터미널 | 로컬 REPL과 동일 체감 | **도달(v1) + 초월**: `Terminal` 승격(블로킹 input 24ms) + `{timeTravel}` 옵션의 `%undo`(완결 문장 단위 시간여행) | 히스토리·자동완성·멀티라인 편집 |
-| 라이브러리 | `pip install` 전부 + 오프라인 재설치 | **실측 17/17 + wheel OPFS 캐시(v1)**: 두 번째 커널 hit 2/miss 0 설치(`WheelCache`), 게이트 상시. 잔여: Session 매니페스트와 결합해 '환경 열면 즉시' 완성 | 기존: **실측 17/17**: 대표군(pandas/scipy/sklearn/matplotlib/pillow/sqlalchemy/lxml/httpx/cryptography 등 + fastapi/polars/requests) 전부 설치·import ok(v314) | 표본 확대(실패군 발견), wheel OPFS 캐시(재설치 0), 네이티브 전용군 분류 |
+| 라이브러리/환경 | `pip install` 전부 + uv급 환경(즉시 부팅·재현·스크립트 자급) | **uv 레인 v1 완성(2026-07-12)**: `bootEnv`(bare 스냅샷 + OPFS 휠) 웜 부팅 **1229ms**(콜드 5109ms, 4.2배) + `runScript`(PEP 723 자급 실행) + `freeze` 락(`boot({lockFileURL})` 관통, 해석 0 재현). 커버리지 실측 17/17(pandas/scipy/sklearn/matplotlib 등, v314) | 실패군 표본 확대, Session 리플레이의 스냅샷 베이스 결합(v2), requires-python 해석, 네이티브 전용군 분류 |
 | 상주/네이티브 | 데몬, 네이티브 휠(torch CUDA), 데스크톱 조작 | **영구 벽**(웹 보안 모델). 정직하게 스코프 밖 | 벽 앞 우회: 소비 제품의 로컬/Actions 티어 몫 |
 
 ## 원칙
@@ -33,7 +33,8 @@ dartlab이 자체 노트북 런타임(`mainPlan/web-notebook-runtime`)과 browse
 ## NEXT
 
 1. ~~예외 안전 복원 흡수~~ 완료(2026-07-11): `restoreLive({rehash})` 승격 + 게이트 상시화.
-2. ~~browserAsServer 흡수~~ 완료(2026-07-11): `AsgiServer` 능력 승격(dispatch 3.4ms, 200/422 검증, 게이트 상시화). Service Worker 배선은 소비 제품 몫.
+2. ~~browserAsServer 흡수~~ 완료(2026-07-11 dispatch + **2026-07-12 SW 배선까지**): `AsgiServer` 승격에 이어 `pyprocSw.js`(?asgi=접두) + `VirtualOrigin` 승격으로 파이썬 서버가 진짜 URL이 됐다(왕복 3.4ms = SW 오버헤드 0). "SW 배선은 소비 제품 몫" 방침은 폐기: 배선도 pyproc 프리미티브다(등록/스코프만 소비자 몫).
 3. ~~terminal 승격~~ 완료(2026-07-11): `Terminal` 능력 + examples/terminal.html + 게이트 상시화.
-4. browserAsServer 능력 계약 설계(흡수 3) / 체크포인트 그래프+OPFS(흡수 2) / 라이브러리 커버리지 / 협조적 취소(SIGINT).
-5. **리플레이+델타 = 불멸 커널/warm-fork (실증 완료, 2026-07-11)**: 결정적 부팅(PYTHONHASHSEED=0 + 엔트로피/시간 고정)이 바이트 단위 동일 힙을 재현(180p 상이 -> 0p)하고, 사용자 상태는 델타 페이지(10MB급)만 OPFS에 저장해 동형 커널에 1.5ms 적용으로 부활. Pyodide 스냅샷의 hiwire 벽을 upstream 수정 없이 우회(전문 리서치: Cloudflare workerd와 동원리, 단 우리는 리플레이 기반). 승격 후 "웹의 uv"는 (매니페스트=환경 선언) + (wheel OPFS 캐시) + (세션 델타)의 3층이 된다.
+4. 체크포인트 그래프(델타 체인·분기) / 라이브러리 실패군 탐색 / 저수준 socket·requests 계열.
+5. **리플레이+델타 = 불멸 커널/warm-fork (실증 완료, 2026-07-11)**: 결정적 부팅(PYTHONHASHSEED=0 + 엔트로피/시간 고정)이 바이트 단위 동일 힙을 재현(180p 상이 -> 0p)하고, 사용자 상태는 델타 페이지(10MB급)만 OPFS에 저장해 동형 커널에 1.5ms 적용으로 부활. Pyodide 스냅샷의 hiwire 벽을 upstream 수정 없이 우회(전문 리서치: Cloudflare workerd와 동원리, 단 우리는 리플레이 기반).
+6. ~~"웹의 uv" 3층 결합~~ 완료(2026-07-12): (매니페스트) + (bare 스냅샷 + wheel OPFS) + (락)이 `bootEnv`/`runScript`/`freeze`로 승격. 실측·잔여는 [tests/attempts/envManager](../../tests/attempts/envManager/README.md) 결론 표가 정본.

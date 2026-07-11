@@ -39,6 +39,8 @@ export function createStaticServer(onRequest = null) {
         // crossOriginIsolated 요건: 이 두 헤더가 없으면 SharedArrayBuffer가 잠긴다.
         "Cross-Origin-Opener-Policy": "same-origin",
         "Cross-Origin-Embedder-Policy": "require-corp",
+        // src/capabilities/pyprocSw.js를 루트 스코프로 등록할 수 있게(가상 오리진/오프라인).
+        "Service-Worker-Allowed": "/",
         "Cache-Control": "no-store",
       });
       res.end(body);

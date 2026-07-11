@@ -33,7 +33,7 @@
 
 ## 원칙
 
-- local-parity와 동일: **모든 주장은 probe 실측으로만.** 실측 레인은 tests/attempts/runtimeParity 캠페인을 공유한다(증식 금지).
+- local-parity와 동일: **모든 주장은 probe 실측으로만.** 실측 레인은 [tests/attempts/pythonMachine](../../tests/attempts/pythonMachine/README.md) 캠페인이다(2026-07-12 runtimeParity에서 분리).
 - 제품 UI(창/작업 관리)는 소비 제품 몫. pyproc은 머신 프리미티브까지만.
 
 ## NEXT
@@ -41,5 +41,6 @@
 1. ~~머신 이미지 v1~~ 완료(2026-07-12): `.pymachine`(SHA-256 + trust 게이트) -> `exportImage`/`openMachine` 승격. 13.7MB 파일로 부팅 2.5s 실측.
 2. ~~영속 디스크~~ 완료(2026-07-12): `Runtime.mountHome`(기본 /home/web), 커널 간 생존 실측.
 3. ~~수명주기 데모~~ 완료(2026-07-12): examples/machine.html - 탭 pagehide 자동 hibernate, 재방문 resume, 내보내기/열기 버튼, /home 방문 기록.
-4. 오프라인 부팅: 코어 자산 OPFS 캐시 probe -> boot 옵션 승격.
-5. 셸 코어유틸(%ls/%cat/%pip) + 델타 분기(머신의 git). hibernate에 /home 포함 여부의 이미지 포맷 v2도 여기서.
+4. ~~오프라인 부팅~~ 완료(2026-07-12, 2단): `boot({coreCacheDir})`(fetch 계층) + `pyprocSw.js?cache=1`(script 경로까지, 2차 부팅 CDN miss 0). 비행기 모드 컴퓨터 성립.
+5. ~~커널 데몬(탭 밖에서 사는 머신) v1~~ 완료(2026-07-12): `SharedKernel`(SharedWorker) - 여러 탭 = 한 파이썬 상태. 벽: SharedWorker COI=false = SAB 불가(interrupt/fork 제외, 플랫폼 대기).
+6. 셸 코어유틸(%pip) + 델타 분기(머신의 git) + /home 포함 이미지 포맷 v2 + SharedKernel과 hibernate/resume 결합(데몬이 자기 상태를 스스로 저장).

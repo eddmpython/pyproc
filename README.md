@@ -1,6 +1,6 @@
 # pyproc
 
-**Real runtime Python in a browser tab, with no server.** Processes, parallelism, and restore-based reactivity, packaged as one reusable runtime. The single source of truth for the web Python runtime shared by codaro / dartlab / xlpod.
+**Real runtime Python in a browser tab, with no server.** Real processes and multi-core parallelism, checkpoint / time-travel, an in-kernel ASGI server, a terminal, and portable machine images (a running Python computer as a single file), packaged as one reusable runtime on [Pyodide](https://pyodide.org) / WebAssembly. The single source of truth for the web Python runtime shared by codaro / dartlab / xlpod.
 
 Language: English | [한국어](README.ko.md)
 
@@ -32,6 +32,8 @@ The pieces to run Python in a browser already exist. What did not exist is a **s
 **2. Process OS (real parallelism).** Because each worker is an independent interpreter with its own GIL, running the same function across workers gives you real multi-core execution, not concurrency on one thread. `PyProc.map()` drains a task queue across workers at the same time.
 
 **3. Restore-based reactivity (time travel without re-running).** A reactive notebook normally re-runs cells when something upstream changes. WebAssembly has no OS dirty-page tracking, so pyproc reconstructs it by hashing the heap completely at each execution boundary and storing only the changed pages. Restoring to an earlier state then writes back only the differing pages (about 2.4ms), instead of re-running. The complete hash is what makes this sound; sampling would miss changes and corrupt the restore.
+
+**4. Portable machine image (a running computer as a single file).** Because a deterministic boot (fixed hash seed plus stubbed entropy and time) reproduces a byte-identical heap, the base never has to travel: `Session` stores only your work (the pages that differ from the replay boundary, about 10MB), and `exportImage()` packs that delta into one `.pymachine` file. Reopening replays the same base and applies the delta (about 1.5ms), and your Python state is alive again. A VM image is gigabytes; this is a live machine as a few-MB file. Proven today when reopened on the same machine; cross-machine determinism (the "email it to someone" claim) is the open probe under [local-parity](mainPlan/local-parity/README.md).
 
 ## Supported environment
 
@@ -123,19 +125,87 @@ rt.run('import urllib.request; body = urllib.request.urlopen(url).read()');  // 
 await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"], capture_output=True).stdout');
 ```
 
+### In-kernel ASGI server, with a real URL
+
+A "local server" is not a TCP socket, it is an ASGI interface. `AsgiServer` dispatches a FastAPI / Starlette app inside the kernel with zero sockets (about 3.4ms per request). Endpoints must be `async def`.
+
+```js
+rt.run("from fastapi import FastAPI\napp = FastAPI()\n@app.get('/ping')\nasync def ping(): return {'ok': True}");
+const server = rt.enableAsgiServer();          // reads the `app` global
+await server.install();
+await server.serve("GET", "/ping");            // { status: 200, headers, body: '{"ok":true}' }
+```
+
+With the bundled Service Worker asset (`src/capabilities/pyprocSw.js`) the Python server also answers on a **real URL**: register the SW with `?asgi=/pyproc/`, call `new VirtualOrigin(server).bind()`, and any `fetch("/pyproc/api/...")` from your page (or an iframe) hits FastAPI. Measured round trip: 3.4ms, identical to direct dispatch. The same asset with `?cache=1` serves every Pyodide CDN asset cache-first, including the script paths that `coreCacheDir` cannot reach, so the second boot makes zero CDN requests (airplane-mode boot).
+
+### Serverless terminal
+
+The tab becomes a real Python REPL. `Terminal` stands up CPython's own `code.InteractiveConsole` inside the kernel; combined with the syscall bridge's JSPI path, `input()` blocks for real.
+
+```js
+const term = rt.enableTerminal();
+await term.install();
+await term.push("x = 40");
+await term.push("x + 2");                       // { more: false, out: "42\n" }
+```
+
+### Session revival and portable machine images
+
+Deterministic replay plus a user delta makes the interpreter immortal and movable. Boot from a manifest (the environment declaration), work, then persist only your delta to OPFS, or export the whole computer as one `.pymachine` file.
+
+```js
+import { bootSession, openMachine } from "pyproc";
+
+const s = await bootSession({ packages: ["numpy"], setup: "import numpy as np" });
+s.rt.run("data = np.arange(1_000_000)");        // do work
+const file = await s.exportImage();             // a running computer as a single Blob (.pymachine)
+
+// later, in a fresh tab: replay the base, apply the delta, resume
+const revived = await openMachine(file, { trust: true });
+revived.rt.run("int(data.sum())");              // state is alive again
+```
+
+A machine file is live state, so it carries the same risk as an executable: `openMachine` verifies a SHA-256 integrity hash and refuses to open without an explicit `{ trust: true }`.
+
+### Wheel cache (offline, zero-redownload packages)
+
+`WheelCache` stores installed `.whl` bytes in OPFS and serves them from cache on the next install, so package loads go offline and re-download nothing. It wraps only the `install` / `loadPackages` window rather than polluting global `fetch`.
+
+### The uv lane: instant environments, reproducible locks, self-sufficient scripts
+
+`bootEnv` turns the second boot of an environment from an install into a restore: a bare heap snapshot (boots in ~227ms instead of ~3.6s) plus OPFS-cached wheels. Measured: numpy environment cold 5109ms, warm **1229ms** (4.2x). `Runtime.freeze()` pins the whole environment as a pyodide-lock JSON you can feed back through `boot({ lockFileURL })` for zero-resolution reproduction, and `runScript` runs PEP 723 scripts (`# /// script` with inline `dependencies`) by auto-installing what they declare, like `uv run` in the browser.
+
+```js
+import { bootEnv, runScript } from "pyproc";
+
+const dirs = { snapshots: snapDir, wheels: wheelDir };            // OPFS handles you own
+const rt = await bootEnv({ packages: ["numpy"], setup: "import numpy" }, dirs);
+rt.envBoot;                                                       // { lane: "snapshot", totalMs: 1229, ... }
+await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six\nsix.__version__");
+```
+
+### A kernel that outlives the tab
+
+`SharedKernel` hosts the interpreter in a SharedWorker: every tab that connects sees the same Python state, and the kernel keeps running as long as any connection is alive. Calls are Promise-based (the kernel is remote). Platform limit, measured honestly: SharedWorkers are not crossOriginIsolated today, so SharedArrayBuffer features (interrupt, snapshot-fork) stay on the per-tab `PyProc` until the platform catches up.
+
 ## Public surface
 
 | Export | What |
 | --- | --- |
-| `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` |
-| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` plus capability registration |
+| `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` (`lockFileURL` for lock reproduction, `coreCacheDir` for offline core) |
+| `bootEnv(manifest, dirs)` | The uv lane: bare-snapshot + wheel-cache warm boot (second boot 1229ms vs 5109ms cold) |
+| `runScript(rt, src, opts)` | `uv run` in the browser: auto-install PEP 723 inline dependencies, then run |
+| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `freeze` / `mountHome` plus capability registration |
 | `MemoryCapability` | Capability contract that encapsulates WASM heap access |
 | `ReactiveController` | Restore-based reactivity (checkpoint / time travel) |
 | `SyscallBridge` | socket/subprocess/input capability contract |
 | `AsgiServer` | In-kernel ASGI server (FastAPI with zero sockets, 3.4ms dispatch) |
+| `VirtualOrigin` | The Python server on a real URL, paired with the `pyprocSw.js` Service Worker asset |
 | `Terminal` | Serverless Python terminal (REPL plus blocking input) |
-| `bootSession` / `Session` | Session resurrection (immortal kernel): deterministic replay plus user-delta persisted to OPFS |
-| `PyProc` | Process OS kernel (snapshot-fork spawn + `map` parallelism) |
+| `bootSession` / `Session` / `openMachine` | Session revival (immortal kernel) and portable `.pymachine` machine images: deterministic replay plus user delta, persisted to OPFS (`save`/`load`) or exported as one file (`exportImage`/`openMachine`) |
+| `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
+| `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` (SharedArrayBuffer typed-array) parallelism, lifecycle (`kill` / `interrupt` / respawn) |
+| `SharedKernel` | A kernel that outlives the tab (SharedWorker): many tabs, one Python state |
 | `PAGE_SIZE` | WASM page size constant (65536) |
 
 Subpath imports are also supported:
@@ -160,9 +230,13 @@ True shared-memory threads (nogil) and cross-process zero-copy numpy remain bloc
 ## Architecture
 
 ```text
-Layer 2  process-os   PyProc kernel (snapshot-fork spawn + map parallelism), worker = a process
-Layer 1  reactive     restore reactivity (capability)
-         syscall      socket/subprocess/input bridge (capability contract)
+Layer 2  process-os   PyProc kernel: snapshot-fork spawn, map/mapArray parallelism, lifecycle; worker = a process
+Layer 1  reactive     restore-based reactivity (checkpoint / time-travel)
+         syscall      socket / subprocess / input bridge
+         asgi         in-kernel ASGI dispatch
+         terminal     serverless Python REPL
+         session      session revival + .pymachine machine image
+         wheelcache   wheel / OPFS package cache
 Layer 0  runtime      Pyodide wrapper (boot/Runtime) + MemoryCapability contract
          index.js     public surface / index.d.ts type contract
 ```
