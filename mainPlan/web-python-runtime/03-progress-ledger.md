@@ -96,7 +96,7 @@
 ## NEXT (재개 지점)
 
 1. **다음 발명 라운드(local-parity NEXT)**: 델타 체인 영속 + 분기 그래프 + 세션 간 커널 복원, "웹의 uv"(wheel OPFS 캐시 + requirements manifest). 전부 runtimeParity 캠페인 안에서 probe로.
-2. **푸시 후 CI 첫 실행 확인**: GitHub Actions에서 구조 게이트 + 브라우저 게이트가 러너(ubuntu, google-chrome)에서 green인지 확인. 러너 특이사항이 나오면 이 원장에 기록.
+2. ~~푸시 후 CI 첫 실행 확인~~ 완료(2026-07-12, 사고 기록): 확인을 방치한 대가로 **전 이력 적색**이었다. 원인은 러너 특이사항이 아니라 로컬-CI 게이트 불일치: docs 2곳이 git 미추적 로컬 규칙 문서를 상대 링크로 걸어 로컬(파일 존재)만 green이었다. 링크 게이트를 "git 추적 기준"으로 격상해 부류째 봉인했고, 이후 structure + browser(러너 chrome, 26검사) 둘 다 **첫 GREEN**. 교훈: 게이트는 로컬 통과가 아니라 러너 통과가 완료 정의다.
 3. **codaro UI 배선 동행**: PyodideEngine이 browserPythonRuntime seam을 실제 사용할 때 나오는 요구를 이 원장에 기록. 그 시점 SHA로 재핀(스냅샷-fork 결함 수정이 들어간 커밋 이후여야 함).
 4. **npm 퍼블리시(소유자 계정 필요)**: `pyproc` 이름이 비어 있다. `npm publish`로 선점하면 외부 소비가 `npm install pyproc` 한 줄이 된다. files 배열은 준비 완료.
 
