@@ -14,6 +14,17 @@
     import { PyProc } from "../index.js";
     const out = document.getElementById("out");
     const log = (m) => { out.textContent += "\n" + m; };
+    // GitHub Pages처럼 헤더를 못 다는 호스팅에서 SAB를 여는 부트스트랩(실측: swCoiProbe).
+    // 배포 루트에 pyprocSw.js 사본이 있는 전제(pages 워크플로가 조립). COOP/COEP 서버에선 no-op.
+    if (!crossOriginIsolated && "serviceWorker" in navigator && !sessionStorage.getItem("pyprocCoiTried")) {
+      try {
+        sessionStorage.setItem("pyprocCoiTried", "1");
+        await navigator.serviceWorker.register("../pyprocSw.js?coi=1");
+        await navigator.serviceWorker.ready;
+        location.reload();
+        await new Promise(() => {}); // 새 문서로 넘어갈 때까지 정지
+      } catch (e) { /* 사본 없는 환경(로컬 직접 서빙 등) -> 그대로 진행 */ }
+    }
     try {
       out.textContent = "워커 spawn 중...";
       const os = new PyProc();

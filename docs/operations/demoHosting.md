@@ -1,28 +1,38 @@
-# 데모 호스팅 - 라이브 URL 절차
+# 데모 호스팅 - 라이브 URL 운영
 
-외부인이 "꺼지지 않는 파이썬 컴퓨터"를 클릭 한 번으로 만져보게 하는 절차. 저장소는 빌드 없는 정적
-파일이라 정적 호스팅에 그대로 올라간다. 준비물은 저장소에 이미 있다.
+정본은 **GitHub Pages**다(소유자 방침: 외부 서비스 최소화, 깃헙 안에서). 저장소는 빌드 없는
+정적 파일이라 [.github/workflows/pages.yml](../../.github/workflows/pages.yml)이 push마다
+데모 사이트를 조립해 자동 배포한다. 소유자 액션은 없다.
 
-## 제약 (왜 아무 데나 안 되나)
+## GH Pages의 헤더 제약과 실측된 해법
 
-- SharedArrayBuffer/JSPI는 **crossOriginIsolated** 페이지에서만 열린다 = 응답에 COOP/COEP 헤더 필요.
-- **GitHub Pages는 커스텀 응답 헤더를 못 달아서 불가.** Cloudflare Pages / Netlify는 루트의
-  [_headers](../../_headers) 파일로 해결된다(저장소에 포함됨).
+GitHub Pages는 커스텀 응답 헤더(COOP/COEP)를 못 단다. 실측(pythonMachine 캠페인)으로 경로를 확보했다:
 
-## 절차 (소유자, 1회)
+- **머신 핵심 동선은 COI가 필요 없다**(noCoiProbe 7/7): 부팅, 세션 부활, `.pymachine` 왕복,
+  /home 디스크, JSPI(터미널 input)까지 헤더 없이 정상. machine/terminal/basic 데모는 그대로 돈다.
+- **SAB가 필요한 것(프로세스 OS)만** SW 헤더 주입으로 연다(swCoiProbe 4/4):
+  `pyprocSw.js?coi=1`이 문서/워커 응답에 COOP/COEP를 주입하고, 첫 방문은 1회 자동 새로고침.
+  processOs.html에 부트스트랩이 내장되어 있고, pages 워크플로가 SW 사본을 배포 루트에 둔다
+  (SW는 스코프 상위 파일을 등록할 수 없어서 사본이 계약이다).
 
-1. Cloudflare Pages(권장) 또는 Netlify에서 이 GitHub 저장소를 연결한다.
-   - 빌드 명령: 없음. 출력 디렉터리: `/` (저장소 루트 그대로).
-2. 배포되면 확인 경로:
-   - `/examples/machine.html` - 파이썬 머신(잠자기/부활/.pymachine 내보내기)
-   - `/examples/terminal.html`, `/examples/processOs.html`, `/examples/basic.html`
-   - 페이지 콘솔에서 `crossOriginIsolated === true`면 헤더가 산 것.
-3. 데모 URL을 얻으면:
-   - README 2종 상단에 라이브 데모 링크 추가.
-   - `gh repo edit --homepage <URL>`.
+## 배포 구조 (pages.yml이 조립)
 
-## 주의
+```text
+_site/
+  index.html        <- 랜딩(워크플로가 생성. 저장소 루트를 오염시키지 않는다)
+  pyprocSw.js       <- src/capabilities/pyprocSw.js의 루트 사본(?coi=1 스코프 확보)
+  examples/  src/  index.js  index.d.ts  LICENSE
+```
 
-- 데모는 Pyodide 코어를 CDN(jsdelivr)에서 받는다. 오프라인 데모까지 보이려면 machine.html이
-  이미 쓰는 OPFS 캐시(coreCacheDir) 경로로 충분하다(2차 방문부터 네트워크 0).
-- 커스텀 도메인/analytics는 소비 제품 몫. 여기는 라이브러리 데모까지만.
+## 예비: Cloudflare (연결하지 않음, 기록만)
+
+- 루트 [_headers](../../_headers)는 Cloudflare Pages/Netlify가 그대로 읽는 형식으로 유지한다.
+  GH Pages가 막히거나 진짜 헤더가 필요한 데모가 생기면 전환할 예비.
+- dartlab의 wrangler 인증이 이 머신에 살아 있어(eddmpython 계정, CLOUDFLARE_API_TOKEN)
+  전환 결정 시 대시보드 없이 `wrangler pages deploy`로 몇 분 안에 열 수 있다(2026-07-12 확인).
+
+## 확인 절차 (배포 후)
+
+- `https://eddmpython.github.io/pyproc/` 랜딩 -> examples 링크 4종.
+- machine.html: 새 컴퓨터 부팅 메시지 + 탭 닫았다 열기 resume.
+- processOs.html: 첫 방문 1회 새로고침 후 워커 4개 병렬 수치.

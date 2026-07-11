@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 데모 호스팅 결정: GitHub Pages 정본 + npm 게시 완료
+
+- **npm 게시 완료**: 소유자가 `pyproc@0.0.5` 퍼블리시(릴리즈 v0.0.5 = 버전+태그+GitHub Release+npm, 절차 7단계 신설). 설치 실검증(빈 프로젝트 `npm install pyproc` -> 내용물 정합). README 2종/소비 계약 반영.
+- **데모 = GitHub Pages(소유자 방침: 외부 서비스 최소화)**. Cloudflare 질문에 대한 답: 필수가 아니라 "헤더 되는 곳" 중 하나였고, 실측 2건이 깃헙 경로를 열었다. ① noCoiProbe 7/7 - 머신 핵심 동선(부팅/세션 부활/.pymachine/디스크/JSPI)은 COI 불필요, SAB(프로세스 OS)만 경계. ② swCoiProbe 4/4 - `pyprocSw.js?coi=1` 헤더 주입 + 1회 새로고침으로 crossOriginIsolated=true + SAB 실사용 복구.
+- 승격: pyprocSw 쿼리 3호 `?coi=1`(opaque는 원본 통과 = CDN 자체 CORP 전제), processOs.html 부트스트랩 내장, serve.mjs `{coi:false}` 옵션 + 하네스 `PYPROC_NO_COI`(헤더 없는 호스팅 재현 실측 레인).
+- 배포: pages.yml(push마다 자동, 랜딩/SW 루트 사본은 워크플로가 조립해 저장소 루트 무오염). Cloudflare는 예비로 기록(dartlab wrangler 인증이 이 머신에 유효함을 확인, 전환 시 분 단위).
+
 ### 2026-07-12 엔진 독립 연구 + 평가 후속 정비 (전문 에이전트 2종 연구 종합)
 
 - 소유자 질문("Pyodide 의존 제거, 독립, 아니면 더 훌륭한 방법") -> 생태계 리서치 + 코드 결합 감사 에이전트 연구 종합. **결론: 완전 제거는 지금 손해, "갇히지 않는 사다리"(P0 자가호스팅 -> P1 EngineContract seam -> P2 스냅샷 사전 제조 -> P3 업스트림 워치 -> P4 조건부 fork 보험)가 정답.** 정본: [engine-independence PRD](../engine-independence/README.md). 핵심 증거: PEP 783 Accepted(2026-04, pyemscripten 휠 = Pyodide-agnostic 탈출구), Pyodide의 CPython 패치는 9개 파일(모트는 FFI·패키지 생태·스냅샷 3덩어리), Cloudflare fork 코드 전부 공개(MPL = 공짜 보험), WASI는 동적 C 확장 불가로 현재 양립 불가.
@@ -105,7 +112,7 @@
 ### 소유자 전용 TODO (계정/승인이 필요해서 대신 못 하는 것, 2026-07-12 정리)
 
 1. ~~npm 퍼블리시~~ **완료(2026-07-12)**: 소유자가 `pyproc@0.0.5`를 게시(레지스트리 확인 23:08 UTC). 외부 설치 = `npm install pyproc`. README 2종/소비 계약에 반영 완료. 이후 릴리즈마다 절차 7단계(npm publish)가 표준.
-2. **라이브 데모 연결**: Cloudflare Pages(권장) 또는 Netlify에 이 저장소를 연결(빌드 없음, 출력 `/`). 준비물은 저장소에 있음: 루트 `_headers`(COOP/COEP) + 절차 [docs/operations/demoHosting.md](../../docs/operations/demoHosting.md). URL 확보 후 README 2종에 데모 링크 + `gh repo edit --homepage <URL>`.
+2. ~~라이브 데모 연결~~ **GitHub Pages 자동 배포로 대체(2026-07-12, 소유자 방침: 외부 최소화)**: 소유자 액션 0. 실측 2건이 경로를 열었다(noCoiProbe: 머신 동선은 COI 불필요 / swCoiProbe: SAB는 pyprocSw ?coi=1 주입으로). pages.yml이 push마다 배포, Cloudflare는 예비로만 기록(wrangler 인증 확인됨, [demoHosting.md](../../docs/operations/demoHosting.md)).
 3. **엔진 독립 이니셔티브 착수 승인**: [mainPlan/engine-independence](../engine-independence/README.md) PRD 검토 후 착수 단계 지시.
 
 ### 작업 큐 (다음 세션 재개 지점)
