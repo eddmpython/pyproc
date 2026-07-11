@@ -14,6 +14,7 @@
 3. `package.json` 버전 끝자리 +1 + 릴리즈 커밋(릴리즈 노트 = 커밋 메시지, 위 정책).
 4. `git tag v0.0.x` (릴리즈 커밋에, package.json과 동일 값).
 5. `main -> origin/main` 푸시 + `git push origin v0.0.x`.
+6. **GitHub Release 발행**: `gh release create v0.0.x --title "v0.0.x - <한 줄>" --notes-file <노트>`. 노트는 릴리즈 커밋 메시지 내용을 사람이 읽기 좋게 옮긴 것(한국어, 변경 성격 + 실제 변경 + 실측 수치, 브레이킹 여부 명시). 태그만 있고 Release가 비면 배선 누락이다.
 
 ## 소비 반영 (SHA 핀)
 
