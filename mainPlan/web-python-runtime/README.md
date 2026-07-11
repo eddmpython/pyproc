@@ -6,7 +6,7 @@
 
 ## 문서 지도
 
-1. [00-product-vision.md](00-product-vision.md) - 무엇을, 누구를 위해, 왜. 무엇이 아닌가. 소비자 실태. 성공/실패 기준. 지원 경계.
+1. [00-product-vision.md](00-product-vision.md) - 이 이니셔티브의 범위와 소비자 실태. (제품 방향의 정본은 [docs/product/vision.md](../../docs/product/vision.md). 지속 문서는 docs, 여기는 완료 시 `_done`으로 빠지는 개발 계획.)
 2. [01-architecture.md](01-architecture.md) - 레이어, 능력, 발명 계보(검증조각 + 실측), 계약 실태(계약 vs 실제), 프론티어(정직한 벽).
 3. [02-phasing-and-wiring.md](02-phasing-and-wiring.md) - 소비 정책·배선, 로드맵(승격 후보 + 졸업 게이트 초안), 거버넌스, 롤백.
 4. [03-progress-ledger.md](03-progress-ledger.md) - 결정 원장, 세션 간 재개 지점(NEXT). **재개 시 여기부터.**
