@@ -56,6 +56,12 @@
       reactive.restore(cp.index, sp0); // 전체 복원은 경계 없이도 안전 기준선
       check("restore: 전체 복원으로 x === 1", rt.run("x") === 1);
 
+      // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)
+      await rt.enableSyscallBridge({ input: () => "ok" }).install();
+      check("syscall input(): 동기 핸들러", rt.run("input()") === "ok");
+      rt.run(`_u = "${location.origin}/README.md"`);
+      check("syscall urllib: 실제 HTTP GET", rt.run('import urllib.request\nurllib.request.urlopen(_u).read(8).decode()') === "# pyproc");
+
       // 3) Layer 2: 프로세스 OS (스냅샷-fork + 진짜 병렬 map)
       const os = new PyProc();
       t = performance.now();
@@ -79,6 +85,18 @@
       timings.speedup = +(timings.mapSerialMs / timings.mapParallelMs).toFixed(2);
       check("mapSerial: 병렬과 결과 일치", JSON.stringify(par) === JSON.stringify(ser),
         `직렬 ${timings.mapSerialMs}ms, speedup ${timings.speedup}x (참고치)`);
+
+      // 수명주기: 행 태스크가 유한 시간에 {error}로 수렴 + 행 워커 자동 respawn
+      const hang = "def _fn(n):\n    import time\n    time.sleep(999)";
+      t = performance.now();
+      const tr = await os.map(hang, [0], { taskTimeoutMs: 1500 });
+      timings.timeoutConvergeMs = Math.round(performance.now() - t);
+      check("map 타임아웃: 행에서 유한 수렴", tr[0] && tr[0].error && tr[0].error.includes("timeout"), timings.timeoutConvergeMs + "ms");
+      const after = await os.map(fn, [N]);
+      check("타임아웃 후 풀 자동 복구(respawn)", after[0] === expected);
+      const victim = os.ps().find((p) => p.state === "ready").pid;
+      check("kill(pid): dead 전이", os.kill(victim) === true && os.ps().find((p) => p.pid === victim).state === "dead");
+
       os.terminate();
       check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
     } catch (e) {

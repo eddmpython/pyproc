@@ -23,15 +23,19 @@
 
 현재 승격된 것: 런타임·복원 리액티브·프로세스 OS·능력 계약(코어 4모듈, src 레이어 구조).
 
-다음 후보는 전부 **tests/attempts의 카테고리에서 졸업 게이트를 통과한 뒤에만** src로 승격한다(운영 규칙: [tests/attempts/README.md](../../tests/attempts/README.md)). 후보와 게이트 초안:
+다음 후보는 전부 **tests/attempts의 카테고리에서 졸업 게이트를 통과한 뒤에만** src로 승격한다(운영 규칙: [tests/attempts/README.md](../../tests/attempts/README.md)). 로컬 parity 전반의 격차 지도는 [local-parity](../local-parity/README.md)가 소유한다.
 
-1. **processLifecycle** - map 타임아웃, 워커 사망 감지, kill(pid)/respawn. 게이트: 워커 강제 종료 시나리오에서 map이 유한 시간 안에 오류로 수렴하는 브라우저 실측.
+졸업 완료(2026-07-11): ~~processLifecycle~~(taskTimeout/kill/respawn), ~~reactiveSoundness~~(이중 해시), ~~syscallBridge~~(v1: input/urllib/subprocess).
+
+진행/후보:
+
+1. **terminal** - 탭 = 파이썬 터미널. 개념 입증 완료(REPL + JSPI input 블로킹). 남은 게이트: `Terminal` 능력 계약 승격 + examples.
 2. **browserAsServer** - WSGI/ASGI(Flask/FastAPI)를 소켓 0으로 Service Worker fetch에 연결. 게이트: GET 200/POST 201/422 검증 실측(codaro 실험에서 1회 입증, pyproc 모듈 형태로 재현).
 3. **warmPool** - 페이지 로드 시 패키지까지 warm-up된 워커 풀 + live-diff pristine 복귀. 게이트: 재임포트 0으로 태스크 즉시 처리 실측.
 4. **syncUdfBridge** - xlpod의 동기 UDF 브리지(SAB Atomics 왕복·인터럽트·오류 토큰)를 능력 계약으로 흡수. 게이트: xlpod 스모크(8/8) 동등 통과.
-5. **sabIpc** - SharedArrayBuffer + Atomics 고속 채널(postMessage 대비 실측 우위). 
-6. **fsMount** - File System Access 마운트(진짜 로컬 폴더).
-7. **reactiveSoundness** - 64비트/이중 페이지 해시, restoreLive 실행 경계 위반 가드. 게이트: 해시 강화 비용(체크포인트 지연) 실측이 수용 범위 안.
+5. **coopCancel** - 협조적 취소(SIGINT, `setInterruptBuffer`): 행 워커를 kill 없이 회수.
+6. **libCoverage** - 라이브러리 parity 실측: 상위 PyPI 패키지 설치·import 성공률 분류표.
+7. **sabIpc** - SharedArrayBuffer + Atomics 고속 채널. / **fsMount** - File System Access 마운트.
 
 우선순위는 소비자 수요가 정한다: codaro UI 배선(1·2·3) > xlpod 이관(4) > 나머지.
 

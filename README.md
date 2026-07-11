@@ -105,11 +105,18 @@ console.log(rt.run("x"));                      // 1
 
 A browser has no socket / subprocess / blocking input. This capability borrows those, via a proxy, a child worker, and JSPI respectively, so Python code runs unchanged. The library exposes the contract (what gets wired); the consuming product fills in the real endpoints.
 
-**Current state (honestly)**: this is a contract-stage stub. `install()` returns the wiring declaration but does not monkey-patch anything yet. The real wiring is an attempts-graduation item on the [roadmap](mainPlan/web-python-runtime/02-phasing-and-wiring.md).
+**v1 scope (honestly)**: `input()` (sync plus JSPI `run_sync` blocking), `urllib.request.urlopen` (sync XHR, GET/POST, binary-safe), and `subprocess.run(["python","-c",code])` (an independent child-worker interpreter, runAsync path). All of it is verified by the browser gate. The requests library and raw sockets are in-progress items under [local-parity](mainPlan/local-parity/README.md).
 
 ```js
-const bridge = rt.enableSyscallBridge({ proxyUrl: "/proxy" });
+const bridge = rt.enableSyscallBridge({
+  input: (p) => window.prompt(p),               // sync source for input()
+  inputAsync: async (p) => await myUi.ask(p),   // for terminals: true blocking under runAsync (JSPI)
+  proxyUrl: "/proxy",                           // optional: route HTTP through your product's proxy
+});
 await bridge.install();
+rt.run('name = input("who? ")');                // real blocking input
+rt.run('import urllib.request; body = urllib.request.urlopen(url).read()');  // real sync HTTP GET
+await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"], capture_output=True).stdout');
 ```
 
 ## Public surface

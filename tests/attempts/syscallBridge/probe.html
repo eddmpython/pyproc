@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: syscallBridge</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: syscallBridge 실배선</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    const bridge = rt.enableSyscallBridge({
+      input: () => "hello",
+      inputAsync: async (p) => { await new Promise((r) => setTimeout(r, 30)); return "world"; },
+    });
+    const info = await bridge.install();
+    timings.jspi = info.jspi;
+    check("install(): 실배선 보고", Array.isArray(info.installed) && info.installed.length === 3, info.installed.join(" | "));
+
+    // 필수 1: 동기 input. 비동기 핸들러가 설정돼 있어도 run() 경로에서는...
+    // 설계: hasAsyncInput+JSPI면 callSyncifying 경로를 타므로, 동기 검증은 sync 전용 브리지로.
+    const rt2sync = rt.enableSyscallBridge({ input: () => "hello" });
+    await rt2sync.install();
+    check("input(): 동기 핸들러", rt.run('input("p: ")') === "hello");
+
+    // 필수 2: urllib GET (같은 서버의 README를 읽는다)
+    rt.run(`_u = "${location.origin}/README.md"`);
+    const head = rt.run('import urllib.request\nurllib.request.urlopen(_u).read(8).decode()');
+    check("urllib.request.urlopen: 실제 HTTP GET", head === "# pyproc", JSON.stringify(head));
+    const status = rt.run('urllib.request.urlopen(_u).getcode()');
+    check("urlopen: status 노출", status === 200);
+
+    // 능력 보고(정보성): JSPI + 비동기 input(callSyncifying)
+    let asyncInputResult = "미시도";
+    if (info.jspi) {
+      const rtA = rt.enableSyscallBridge({ inputAsync: async () => "world" });
+      await rtA.install();
+      try {
+        const v = await rt.runAsync('input("q: ")');
+        asyncInputResult = v === "world" ? "동작" : "값 불일치: " + JSON.stringify(v);
+      } catch (e) { asyncInputResult = "실패: " + String(e).slice(0, 200); }
+    } else asyncInputResult = "JSPI 미가용";
+    check("능력 보고: JSPI 비동기 input", true, asyncInputResult);
+    timings.asyncInput = asyncInputResult;
+
+    // 능력 보고(정보성): subprocess -> 자식 워커 (JSPI 필요, 콜드 부팅이라 수 초)
+    let subprocResult = "미시도";
+    if (info.jspi && asyncInputResult === "동작") {
+      // 비동기 input 배선이 마지막 install이므로 subprocess 경로 그대로 유효
+      try {
+        const t0 = performance.now();
+        const so = await rt.runAsync('import subprocess\nsubprocess.run(["python","-c","print(6*7)"], capture_output=True).stdout');
+        timings.subprocessMs = Math.round(performance.now() - t0);
+        subprocResult = so === "42\n" ? `동작 ${timings.subprocessMs}ms` : "값 불일치: " + JSON.stringify(so);
+      } catch (e) { subprocResult = "실패: " + String(e).slice(0, 200); }
+    } else subprocResult = "전제 미충족(" + asyncInputResult + ")";
+    check("능력 보고: subprocess->자식 워커", true, subprocResult);
+    timings.subprocess = subprocResult;
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

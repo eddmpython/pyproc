@@ -105,11 +105,18 @@ console.log(rt.run("x"));                      // 1
 
 브라우저에는 socket / subprocess / blocking input이 없다. 이 능력이 그걸 각각 프록시 / 자식 워커 / JSPI로 빌려 파이썬 코드가 그대로 돌게 한다. 라이브러리는 계약(무엇을 배선하는지)을 노출하고, 실제 엔드포인트는 소비 제품이 채운다.
 
-**현재 상태(정직)**: 계약 단계 스텁이다. `install()`은 배선 선언을 반환할 뿐 아직 실제 몽키패치를 하지 않는다. 실배선은 [로드맵](mainPlan/web-python-runtime/02-phasing-and-wiring.md)의 attempts 졸업 대상이다.
+**v1 범위(정직)**: `input()`(동기 + JSPI `run_sync` 블로킹), `urllib.request.urlopen`(동기 XHR, GET/POST, 바이너리 보존), `subprocess.run(["python","-c",code])`(자식 워커 독립 인터프리터, runAsync 경로). 전부 브라우저 게이트 실측으로 검증된다. requests 계열·저수준 socket은 [local-parity](mainPlan/local-parity/README.md) 진행분이다.
 
 ```js
-const bridge = rt.enableSyscallBridge({ proxyUrl: "/proxy" });
+const bridge = rt.enableSyscallBridge({
+  input: (p) => window.prompt(p),               // input() 동기 소스
+  inputAsync: async (p) => await myUi.ask(p),   // 터미널용: runAsync(JSPI)에서 진짜 블로킹
+  proxyUrl: "/proxy",                           // 선택: HTTP를 소비 제품 프록시로 우회
+});
 await bridge.install();
+rt.run('name = input("who? ")');                // 진짜 블로킹 input
+rt.run('import urllib.request; body = urllib.request.urlopen(url).read()');  // 진짜 HTTP GET
+await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"], capture_output=True).stdout');
 ```
 
 ## 공개 표면

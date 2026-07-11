@@ -24,8 +24,19 @@ export interface RestoreInfo {
   mbWritten: number;
 }
 
+export interface SyscallBridgeConfig {
+  /** 동기 입력 핸들러. run()/runAsync() 어디서나 input()이 이 값을 받는다. */
+  input?: (prompt: string) => string | null;
+  /** 비동기 입력 핸들러(터미널용). runAsync(JSPI) 경로에서 input()이 블로킹으로 받는다. */
+  inputAsync?: (prompt: string) => Promise<string | null>;
+  /** HTTP 요청을 우회시킬 프록시 URL. 없으면 direct(CORS/same-origin 대상만). */
+  proxyUrl?: string;
+}
+
 export interface SyscallInstallInfo {
   installed: string[];
+  /** JSPI(WebAssembly.Suspending) 가용 여부. subprocess/비동기 input의 전제. */
+  jspi: boolean;
   proxyUrl: string | null;
 }
 
@@ -68,7 +79,7 @@ export class ReactiveController {
   storageMB(): number;
 }
 
-/** socket/subprocess/input을 빌려주는 능력 계약. 소비 제품이 엔드포인트를 채운다. */
+/** 빌린 시스템콜 v1: input()(동기/JSPI), urllib(동기 XHR, proxyUrl 옵션), subprocess(자식 워커). */
 export class SyscallBridge {
   install(): Promise<SyscallInstallInfo>;
 }
@@ -83,7 +94,7 @@ export class Runtime {
   install(pkg: string): Promise<void>;
   loadPackages(pkgs: string | string[]): Promise<void>;
   enableReactive(): ReactiveController;
-  enableSyscallBridge(cfg?: { proxyUrl?: string }): SyscallBridge;
+  enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */
   readonly raw: unknown;
 }
@@ -91,12 +102,19 @@ export class Runtime {
 /** Pyodide 런타임을 부팅한다. Chromium/Edge 전용. */
 export function boot(opts?: BootOptions): Promise<Runtime>;
 
-/** 브라우저 파이썬 프로세스 OS 커널: 스냅샷-fork spawn + map 병렬. */
+export interface PyProcMapOptions {
+  /** 태스크별 타임아웃(ms). 초과 시 해당 태스크는 {error}로 수렴하고 행 워커는 kill + 스냅샷 respawn. */
+  taskTimeoutMs?: number;
+}
+
+/** 브라우저 파이썬 프로세스 OS 커널: 스냅샷-fork spawn + map 병렬 + 수명주기(kill/respawn). */
 export class PyProc {
   constructor(opts?: PyProcOptions);
   boot(n: number, useSnapshot?: boolean): Promise<PyProcBootInfo>;
-  map(fnSrc: string, args: unknown[]): Promise<unknown[]>;
+  map(fnSrc: string, args: unknown[], opts?: PyProcMapOptions): Promise<unknown[]>;
   mapSerial(fnSrc: string, args: unknown[]): Promise<unknown[]>;
   ps(): PyProcEntry[];
+  /** 프로세스 강제 종료(SIGKILL 등가). 성공 시 true, 테이블에는 dead로 남는다. */
+  kill(pid: number): boolean;
   terminate(): void;
 }

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: processLifecycle</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: processLifecycle</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { PyProc } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const os = new PyProc();
+    await os.boot(2);
+
+    // 1) 결함 재현: 행 태스크에서 map이 무한 pending (4초 레이스로 판정)
+    const hang = "def _fn(n):\n    import time\n    time.sleep(999)";
+    const raced = await Promise.race([
+      os.map(hang, [0]).then(() => "resolved"),
+      new Promise((r) => setTimeout(() => r("hang"), 4000)),
+    ]);
+    check("결함 재현: 행 워커에서 map 무한 대기", raced === "hang");
+
+    // 2) respawn 실측: 행 워커 kill 후 기존 스냅샷에서 재생성
+    const deadW = os.workers[0];
+    deadW.terminate();
+    const t0 = performance.now();
+    const w = new Worker(new URL("../../../src/processOs/worker.js", import.meta.url), { type: "module" });
+    const bootMs = await new Promise((resolve, reject) => {
+      w.addEventListener("message", (e) => {
+        if (e.data.type === "ready") resolve(e.data.bootMs);
+        else if (e.data.type === "error") reject(new Error(e.data.error));
+      });
+      w.postMessage({ type: "boot", id: 99, indexURL: os.indexURL, snapshot: os._snapshot });
+    });
+    timings.respawnMs = Math.round(performance.now() - t0);
+    check("respawn: 스냅샷 재부팅 1초 미만", timings.respawnMs < 1000, `${timings.respawnMs}ms (워커 내부 ${bootMs}ms)`);
+    os.workers[0] = w;
+
+    // 3) 재생성 풀에서 map 정상
+    const sq = "def _fn(n):\n    return n*n";
+    const rr = await os.map(sq, [3, 4]);
+    check("복구 풀에서 map 정상", rr[0] === 9 && rr[1] === 16);
+    os.terminate(); w.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

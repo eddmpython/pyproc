@@ -28,58 +28,98 @@ export class PyProc {
     return sab.byteLength;
   }
 
+  // 워커 1개 생성 + 부팅 시작. ready는 bootMs로 resolve, 부팅 실패는 reject.
+  // 부팅 실패를 조용히 삼키면 boot()가 영원히 pending이다. 에러도 반드시 귀결시킨다.
+  _spawn(useSnapshot) {
+    const w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+    const pid = ++this._seq;
+    const entry = { pid, worker: w, state: "booting", parentPid: 0 };
+    this.table.push(entry);
+    const ready = new Promise((resolve, reject) => {
+      const onMsg = (e) => {
+        if (e.data.id !== pid) return;
+        if (e.data.type === "ready") {
+          w.removeEventListener("message", onMsg); entry.state = "ready"; resolve(e.data.bootMs);
+        } else if (e.data.type === "error" && e.data.taskId === undefined) {
+          w.removeEventListener("message", onMsg); entry.state = "dead";
+          reject(new Error(`워커 pid ${pid} 부팅 실패: ${e.data.error}`));
+        }
+      };
+      w.addEventListener("message", onMsg);
+      w.addEventListener("error", (e) => { entry.state = "dead"; reject(new Error(`워커 pid ${pid} 크래시: ${e.message}`)); }, { once: true });
+      w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null });
+    });
+    return { worker: w, entry, ready };
+  }
+
   // N개 프로세스 spawn: 스냅샷으로 부팅(fast fork). useSnapshot=false면 콜드 대조.
   async boot(n, useSnapshot = true) {
     if (useSnapshot && !this._snapshot) await this._makeSnapshot();
-    const boots = [];
+    const spawns = [];
     for (let i = 0; i < n; i++) {
-      const w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-      const pid = ++this._seq;
-      this.table.push({ pid, worker: w, state: "booting", parentPid: 0 });
-      this.workers.push(w);
-      const idx = this.table.length - 1;
-      boots.push(new Promise((resolve, reject) => {
-        // 부팅 실패를 조용히 삼키면 boot()가 영원히 pending이다. 에러도 반드시 귀결시킨다.
-        const onMsg = (e) => {
-          if (e.data.id !== pid) return;
-          if (e.data.type === "ready") {
-            w.removeEventListener("message", onMsg); this.table[idx].state = "ready"; resolve(e.data.bootMs);
-          } else if (e.data.type === "error" && e.data.taskId === undefined) {
-            w.removeEventListener("message", onMsg); this.table[idx].state = "dead";
-            reject(new Error(`워커 pid ${pid} 부팅 실패: ${e.data.error}`));
-          }
-        };
-        w.addEventListener("message", onMsg);
-        w.addEventListener("error", (e) => { this.table[idx].state = "dead"; reject(new Error(`워커 pid ${pid} 크래시: ${e.message}`)); }, { once: true });
-        w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null });
-      }));
+      const s = this._spawn(useSnapshot);
+      this.workers.push(s.worker);
+      spawns.push(s.ready);
     }
-    const bootMsArr = await Promise.all(boots);
+    const bootMsArr = await Promise.all(spawns);
     return { workers: n, avgBootMs: Math.round(bootMsArr.reduce((a, b) => a + b, 0) / n), forked: useSnapshot };
+  }
+
+  // 프로세스 강제 종료(커널 주도, SIGKILL 등가). 테이블에는 dead로 남긴다(이력 조회용).
+  kill(pid) {
+    const entry = this.table.find((t) => t.pid === pid);
+    if (!entry || entry.state === "dead") return false;
+    entry.worker.terminate(); entry.state = "dead";
+    const idx = this.workers.indexOf(entry.worker);
+    if (idx >= 0) this.workers.splice(idx, 1);
+    return true;
+  }
+
+  // 행/죽은 워커를 kill하고 스냅샷에서 대체 프로세스를 respawn(풀 자리 유지).
+  // 실측(attempts/processLifecycle): respawn 302ms, 행 감지는 이벤트가 없어 타임아웃만 가능.
+  async _replace(oldW) {
+    const entry = this.table.find((t) => t.worker === oldW);
+    oldW.terminate(); if (entry) entry.state = "dead";
+    const s = this._spawn(!!this._snapshot);
+    await s.ready;
+    const idx = this.workers.indexOf(oldW);
+    if (idx >= 0) this.workers[idx] = s.worker; else this.workers.push(s.worker);
+    return s.worker;
   }
 
   // Pool.map: 파이썬 함수 소스 fnSrc(def _fn(arg): ...)를 args 리스트에 병렬 적용.
   // 워커들이 동시에 태스크 큐를 소진 = 진짜 병렬(독립 인터프리터).
-  async map(fnSrc, args) {
+  // opts.taskTimeoutMs: 태스크별 타임아웃. 초과 시 해당 태스크는 {error}로 수렴하고,
+  // 행 워커는 회수 불가(협조적 취소 없음)라 kill + 스냅샷 respawn으로 레인을 복구한다.
+  async map(fnSrc, args, opts = {}) {
+    const timeoutMs = opts.taskTimeoutMs || 0;
     const results = new Array(args.length);
     let next = 0;
-    const runOn = (w) => new Promise((resolve) => {
+    const lane = (initialW) => new Promise((resolve) => {
+      let w = initialW;
       const step = () => {
         if (next >= args.length) return resolve();
         const taskId = next++;
+        let timer = null;
         const onMsg = (e) => {
           if ((e.data.type === "result" || e.data.type === "error") && e.data.taskId === taskId) {
+            if (timer) clearTimeout(timer);
             w.removeEventListener("message", onMsg);
             results[taskId] = e.data.type === "result" ? e.data.result : { error: e.data.error };
             step();
           }
         };
+        if (timeoutMs) timer = setTimeout(() => {
+          w.removeEventListener("message", onMsg);
+          results[taskId] = { error: `timeout: ${timeoutMs}ms 초과` };
+          this._replace(w).then((nw) => { w = nw; step(); });
+        }, timeoutMs);
         w.addEventListener("message", onMsg);
         w.postMessage({ type: "task", taskId, fnSrc, arg: args[taskId] });
       };
       step();
     });
-    await Promise.all(this.workers.map(runOn));
+    await Promise.all(this.workers.map(lane));
     return results;
   }
 

@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-11 잔여 결함 전량 개선(attempts 3종 졸업) + local-parity 발명 개시
+
+- **processLifecycle 졸업**: 행 시 map 무한 대기 재현 -> `map(.., {taskTimeoutMs})` 유한 수렴(1786ms 실측) + `kill(pid)` + 스냅샷 respawn(302ms). `_spawn`/`_replace` 리팩터.
+- **reactiveSoundness 졸업**: 페이지당 이중 32비트 해시(실효 64비트, ~2^-64). 비용 1.54배(30MB 힙 14.3ms), restoreLive 1.06ms 유지.
+- **syscallBridge v1 졸업(스텁 탈피)**: input(동기 핸들러 + JSPI 블로킹), urllib 실 HTTP GET(동기 XHR, 바이너리 보존, proxyUrl 옵션), subprocess `-c`(자식 워커, 2007ms). 발견: v314에 `callSyncifying` 없음, JSPI 경로는 `pyodide.ffi.run_sync` + `can_run_sync()` 호출 시점 판정.
+- **terminal 개념 입증**(승격 전): InteractiveConsole REPL + REPL 안 `input()` 블로킹 재개(24ms). 게이트 3(능력 계약 승격) 남음.
+- **local-parity 이니셔티브 개시**: 축별 격차 지도(실행/프로세스/시스템콜/터미널/라이브러리/영구 벽). [mainPlan/local-parity](../local-parity/README.md).
+- 하네스 범용화: `node tests/browser/run.mjs <페이지>`로 attempts probe도 headless 실측. 메인 게이트 15검사로 확장(수명주기 3 + 시스템콜 2 추가).
+
 ### 2026-07-11 브라우저 런타임 게이트 신설 + 프로세스 OS 실결함 2건 수정
 
 - **`npm run test:browser` 신설**(의존성 0): COOP/COEP 서버 + headless Chromium(Edge/Chrome 자동 탐색) + POST 백채널로 공개 표면의 실동작을 자동 검증. CI(`.github/workflows/ci.yml`)에서도 같은 게이트가 돈다. examples/serve.mjs는 `createStaticServer()` export로 리팩터링해 게이트가 재사용.
@@ -36,8 +45,8 @@
 
 ## NEXT (재개 지점)
 
-1. **푸시 후 CI 첫 실행 확인**: GitHub Actions에서 구조 게이트 + 브라우저 게이트가 러너(ubuntu, google-chrome)에서 green인지 확인. 러너 특이사항이 나오면 이 원장에 기록.
-2. **attempts 첫 카테고리 개설 판단**: 소비자 수요 순서상 `processLifecycle`(map 중 워커 사망 감지/타임아웃, 부팅 에러 전파는 2026-07-11 선반영)이 첫 후보. 개설 시 [tests/attempts/README.md](../../tests/attempts/README.md) 규칙대로.
+1. **terminal 승격(local-parity NEXT 1)**: `Terminal` 능력 계약(`push(line) -> {more, out}`) + examples 터미널 페이지 + 게이트 검사. 개념 실측은 완료.
+2. **푸시 후 CI 첫 실행 확인**: GitHub Actions에서 구조 게이트 + 브라우저 게이트가 러너(ubuntu, google-chrome)에서 green인지 확인. 러너 특이사항이 나오면 이 원장에 기록.
 3. **codaro UI 배선 동행**: PyodideEngine이 browserPythonRuntime seam을 실제 사용할 때 나오는 요구를 이 원장에 기록. 그 시점 SHA로 재핀(스냅샷-fork 결함 수정이 들어간 커밋 이후여야 함).
 4. **npm 퍼블리시(소유자 계정 필요)**: `pyproc` 이름이 비어 있다. `npm publish`로 선점하면 외부 소비가 `npm install pyproc` 한 줄이 된다. files 배열은 준비 완료.
 

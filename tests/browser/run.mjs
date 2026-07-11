@@ -1,7 +1,9 @@
-// tests/browser/run.mjs - 브라우저 런타임 게이트 하네스. Node 전용, 의존성 0.
+// tests/browser/run.mjs - 브라우저 런타임 게이트/probe 하네스. Node 전용, 의존성 0.
 // COOP/COEP 서버(examples/serve.mjs 재사용)를 임시 포트로 띄우고, 로컬 Chromium 계열
-// 브라우저를 headless로 실행해 gate.html의 실측 결과를 POST /gateReport로 회수한다.
-// 사용: npm run test:browser   (브라우저 지정: PYPROC_BROWSER=<실행파일 경로>)
+// 브라우저를 headless로 실행해 페이지의 실측 결과를 POST /gateReport로 회수한다.
+// 사용: npm run test:browser                          (기본: tests/browser/gate.html)
+//       node tests/browser/run.mjs tests/attempts/<카테고리>/probe.html   (attempts probe)
+//       브라우저 지정: PYPROC_BROWSER=<실행파일 경로>
 // 이것이 pyproc의 "진짜 검증"이다. tests/run.mjs는 구조만 보고, 여기는 런타임을 본다.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -44,7 +46,8 @@ const server = createStaticServer(async (req, res) => {
 });
 
 await new Promise((res) => server.listen(0, "127.0.0.1", res));
-const url = `http://127.0.0.1:${server.address().port}/tests/browser/gate.html`;
+const page = (process.argv[2] || "tests/browser/gate.html").replaceAll("\\", "/").replace(/^\/+/, "");
+const url = `http://127.0.0.1:${server.address().port}/${page}`;
 
 const browser = findBrowser();
 const profile = mkdtempSync(join(tmpdir(), "pyprocGate-"));

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: terminal</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 서버리스 파이썬 터미널</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    // "사용자 타이핑" 등가: 큐에서 꺼내주는 비동기 입력 소스
+    const typed = ["kim"];
+    await rt.enableSyscallBridge({ inputAsync: async () => { await new Promise((r) => setTimeout(r, 20)); return typed.shift(); } }).install();
+
+    rt.run(
+      "import code, io, contextlib\n" +
+      "_con = code.InteractiveConsole()\n" +
+      "def _push(line):\n" +
+      "    buf = io.StringIO()\n" +
+      "    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):\n" +
+      "        more = _con.push(line)\n" +
+      "    return [more, buf.getvalue()]"
+    );
+    const push = async (line) => {
+      rt.setGlobal("_line", line);
+      const r = await rt.runAsync("_push(_line)"); // runAsync = JSPI 서스펜더 = input() 블로킹 가능
+      const [more, text] = r.toJs ? r.toJs() : r;
+      return { more, text };
+    };
+
+    let r = await push("2 + 2");
+    check("REPL 식 평가: 2+2 -> 4", r.text.trim() === "4" && r.more === false, JSON.stringify(r.text));
+
+    r = await push("def f(n):");
+    const cont = r.more === true;
+    r = await push("    return n * 10");
+    await push("");
+    r = await push("f(7)");
+    check("다중행 정의 + 상태 유지", cont && r.text.trim() === "70", JSON.stringify(r.text));
+
+    const t0 = performance.now();
+    r = await push("name = input('who? ')");
+    timings.blockingInputMs = Math.round(performance.now() - t0);
+    r = await push("print('hi ' + name)");
+    check("REPL 안 블로킹 input() -> 재개", r.text.includes("hi kim"), `${timings.blockingInputMs}ms, ${JSON.stringify(r.text)}`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

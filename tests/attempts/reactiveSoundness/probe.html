@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: reactiveSoundness</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: reactiveSoundness</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot, PAGE_SIZE } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  // 단일: 현행 FNV-1a. 이중: FNV-1a + 두 번째 독립 믹서(다른 초기값/연산) 같은 루프.
+  function hashSingle(words, len) {
+    const wpp = PAGE_SIZE / 4, n = Math.ceil(len / PAGE_SIZE), digs = new Uint32Array(n);
+    for (let p = 0; p < n; p++) {
+      let a = 2166136261 >>> 0;
+      const s = p * wpp, e = Math.min(s + wpp, words.length);
+      for (let i = s; i < e; i++) { a = (a ^ words[i]) >>> 0; a = Math.imul(a, 16777619) >>> 0; }
+      digs[p] = a;
+    }
+    return digs;
+  }
+  function hashDual(words, len) {
+    const wpp = PAGE_SIZE / 4, n = Math.ceil(len / PAGE_SIZE), digs = new Uint32Array(2 * n);
+    for (let p = 0; p < n; p++) {
+      let a = 2166136261 >>> 0, b = 2654435761 >>> 0;
+      const s = p * wpp, e = Math.min(s + wpp, words.length);
+      for (let i = s; i < e; i++) {
+        const w = words[i];
+        a = (a ^ w) >>> 0; a = Math.imul(a, 16777619) >>> 0;
+        b = (b + w) >>> 0; b = Math.imul(b ^ (b >>> 15), 2246822519) >>> 0;
+      }
+      digs[2 * p] = a; digs[2 * p + 1] = b;
+    }
+    return digs;
+  }
+  const median = (xs) => xs.slice().sort((x, y) => x - y)[Math.floor(xs.length / 2)];
+
+  try {
+    const rt = await boot();
+    rt.run("import json, random\nblob = [random.random() for _ in range(200000)]"); // 힙에 실데이터
+    const heap = rt.memory.heap(), len = rt.memory.byteLength();
+    const words = new Uint32Array(heap.buffer, 0, (len - (len % 4)) / 4);
+    timings.heapMB = Math.round(len / 1048576);
+
+    const s1 = [], s2 = [];
+    for (let r = 0; r < 5; r++) {
+      let t = performance.now(); hashSingle(words, len); s1.push(performance.now() - t);
+      t = performance.now(); hashDual(words, len); s2.push(performance.now() - t);
+    }
+    timings.singleMs = +median(s1).toFixed(1);
+    timings.dualMs = +median(s2).toFixed(1);
+    timings.ratio = +(timings.dualMs / timings.singleMs).toFixed(2);
+    check("이중 해시 비용 <= 단일의 2.2배", timings.ratio <= 2.2, `단일 ${timings.singleMs}ms, 이중 ${timings.dualMs}ms, ${timings.ratio}x, 힙 ${timings.heapMB}MB`);
+    check("이중 해시 절대치 수용(<= 150ms)", timings.dualMs <= 150, timings.dualMs + "ms");
+
+    // 이중 해시가 단일 충돌을 실제로 분리하는지 개념 확인: 한 워드 변경 감지
+    const before = hashDual(words, len);
+    heap[PAGE_SIZE * 100] = heap[PAGE_SIZE * 100] ^ 0xff; // 페이지 100 1바이트 뒤집기
+    const after = hashDual(words, len);
+    heap[PAGE_SIZE * 100] = heap[PAGE_SIZE * 100] ^ 0xff; // 복구
+    check("1바이트 변경을 두 해시 모두 감지", before[200] !== after[200] && before[201] !== after[201]);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

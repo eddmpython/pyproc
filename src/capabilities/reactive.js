@@ -24,9 +24,12 @@ export class ReactiveController {
       this.hashes.push(hashes); this.prevHashes = hashes; this.liveIdx = 0;
       return { index: 0, changedPages: 0, deltaBytes: this.base.length, kind: "base" };
     }
-    const delta = new Map(), n = Math.min(hashes.length, this.prevHashes.length);
-    for (let p = 0; p < n; p++) if (hashes[p] !== this.prevHashes[p]) delta.set(p, mem.slicePage(p));
-    for (let p = this.prevHashes.length; p < hashes.length; p++) delta.set(p, mem.slicePage(p)); // 성장분
+    // 해시 배열은 페이지당 2워드 interleave(실효 64비트). 두 워드 모두 같아야 "안 바뀜".
+    const delta = new Map(), n = Math.min(hashes.length, this.prevHashes.length) / 2;
+    for (let p = 0; p < n; p++)
+      if (hashes[2 * p] !== this.prevHashes[2 * p] || hashes[2 * p + 1] !== this.prevHashes[2 * p + 1])
+        delta.set(p, mem.slicePage(p));
+    for (let p = this.prevHashes.length / 2; p < hashes.length / 2; p++) delta.set(p, mem.slicePage(p)); // 성장분
     this.deltas.push(delta); this.hashes.push(hashes); this.prevHashes = hashes;
     this.liveIdx = this.deltas.length - 1;
     let bytes = 0; for (const b of delta.values()) bytes += b.length;
@@ -48,12 +51,12 @@ export class ReactiveController {
   // 밖 페이지도 base로 되돌려야 dlmalloc/break 정합이 깨지지 않는다. liveH.length 기준 순회.
   restoreLive(j, savedSP) {
     const mem = this._mem, liveH = this.hashes[this.liveIdx], targetH = this.hashes[j];
-    const nLive = liveH.length, nTarget = targetH.length;
+    const nLive = liveH.length / 2, nTarget = targetH.length / 2; // 페이지당 2워드 interleave
     let written = 0, wroteBytes = 0;
     for (let p = 0; p < nLive; p++) {
-      const th = p < nTarget ? targetH[p] : undefined;  // 목표 범위 밖(성장분)
-      if (th !== undefined && liveH[p] === th) continue; // 이미 같으면 skip
-      const want = p < nTarget ? this._targetBytes(j, p)
+      const inTarget = p < nTarget; // 밖이면 성장분
+      if (inTarget && liveH[2 * p] === targetH[2 * p] && liveH[2 * p + 1] === targetH[2 * p + 1]) continue; // 이미 같으면 skip
+      const want = inTarget ? this._targetBytes(j, p)
                    : this.base.subarray(p * PAGE, Math.min((p + 1) * PAGE, this.base.length));
       if (want.length === 0) continue; // base 범위도 밖이면 손대지 않음(진짜 목표엔 없던 물리페이지)
       mem.writePage(p, want); written++; wroteBytes += want.length;
