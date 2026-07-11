@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-11 dartlab 흡수 완주 + parity 승격 5종 (게이트 20검사)
+
+- 한 턴에 승격 5종: `restoreLive({rehash})`(예외 안전 복원), `AsgiServer`(소켓 0 dispatch 3.4ms), `Terminal`(+examples/terminal.html), `interrupt(pid)`(SIGINT 517ms 수렴, respawn 0), `saveBase/loadBase`(OPFS 영속, 30MB 쓰기 256ms/읽기 46ms).
+- 실측 관문 2종 통과: v314에서 dartlab 스택 + 대표 라이브러리 17/17 설치·import.
+- 결함 수정: 워커 에러 문자열을 꼬리로 잘라 예외 타입 보존.
+- 남은 큰 덩어리(다음 세션): 델타 체인 영속 + 분기 그래프 + 세션 간 커널 복원, "웹의 uv"(wheel OPFS 캐시 + requirements), requests/저수준 socket, 시그널 확장. 정본: local-parity NEXT.
+
 ### 2026-07-11 dartlab 병행 구현 발견 -> 흡수 결정 + 목표 확장(소유자 지시)
 
 - dartlab `mainPlan/web-notebook-runtime`(자체 워커·체크포인트 그래프·OPFS, Pyodide 0.27.5)과 `browser-as-server-ssot`(FastAPI in pyodide, e2e PASS)를 발견. 런타임이 3벌로 갈라진 상태 확인.
