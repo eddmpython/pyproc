@@ -6,7 +6,7 @@
 
 | 축 | 로컬의 기준 | 현재 (2026-07-11) | 다음 attempts |
 |---|---|---|---|
-| 실행 | 순수 파이썬 로직 속도 | **도달** (CPython 3.14 WASM >= 로컬 3.12, numpy 대규모만 86배 열세) | WebGPU 산술(프론티어) |
+| 실행 | 순수 파이썬 로직 속도 | **도달** + numpy 열세 완화: `mapArray` 샤딩 4워커 **5.28배**(32MB sort+sum 실측) | WebGPU 산술(프론티어), 2D 샤딩(matmul) |
 | 프로세스 | fork/Pool/kill이 되는 OS | **도달(v1)**: 스냅샷-fork ~380ms, map 병렬, taskTimeout + kill/respawn + `interrupt(pid)`(SIGINT, respawn 0) | 시그널 확장(SIGSTOP/재개), 프로세스간 IPC |
 | 시스템콜 | input/HTTP/subprocess | **도달(v1)**: input(동기+JSPI 블로킹), urllib 실 GET, subprocess(자식 워커, `-c`) | requests 계열, 저수준 socket(프록시 계약), 파일계(FS Access 마운트) |
 | 세션 영속 | (로컬도 없음: REPL은 죽으면 끝) | **로컬 초월(v1)**: `Session` 승격. 결정적 리플레이 + 델타(5.9MB급)로 커널 간·세션 간 부활, 게이트 상시 | 성장 세션(v2), 델타 체인·분기, 매니페스트에 wheel 캐시 결합 |

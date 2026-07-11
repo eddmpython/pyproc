@@ -46,6 +46,10 @@ export interface SyscallInstallInfo {
 
 export interface PyProcOptions {
   indexURL?: string;
+  /** 각 프로세스가 부팅 시 로드할 패키지(예: ["numpy"]). */
+  packages?: string[];
+  /** 부팅 시 실행할 파이썬 예열 코드(예: "import numpy"). */
+  setup?: string;
 }
 
 export interface PyProcBootInfo {
@@ -195,6 +199,8 @@ export class PyProc {
   constructor(opts?: PyProcOptions);
   boot(n: number, useSnapshot?: boolean): Promise<PyProcBootInfo>;
   map(fnSrc: string, args: unknown[], opts?: PyProcMapOptions): Promise<unknown[]>;
+  /** TypedArray를 조각내 워커들에 numpy 배열로 병렬 적용(샤딩). fnSrc: def _fn(a). 실측 4워커 5.28배. */
+  mapArray(fnSrc: string, typed: ArrayBufferView, opts?: PyProcMapOptions & { parts?: number }): Promise<unknown[]>;
   mapSerial(fnSrc: string, args: unknown[]): Promise<unknown[]>;
   ps(): PyProcEntry[];
   /** 프로세스 강제 종료(SIGKILL 등가). 성공 시 true, 테이블에는 dead로 남는다. */

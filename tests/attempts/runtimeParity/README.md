@@ -53,6 +53,8 @@
 
 | 2026-07-12 | sessionGrowProbe | Edge headless | 30->65MB로 자란 세션(42.4MB 저장)을 새 커널이 354ms에 부활. 발견 2건: JS에서 Memory.grow 직접 호출은 글루 클로저 뷰 미갱신으로 파손(파이썬 할당 경로가 정답), 성장 루프의 흔적은 restore(0) 되감기 후 델타 적용으로 해소 | 성장 세션 부활 성립(Session v2) | 졸업 -> session.js(load가 파이썬 성장 + 경계 되감기 + 델타), wheelDir 매니페스트 결합 포함 |
 
+| 2026-07-12 | shardMapProbe | Edge headless | 32MB float64 sort+sum: 1워커 570ms vs 4워커 108ms = **5.28배**, 합·sqrt합 정확. 발견 2건: 워커의 loadPackage는 다운로드만이라 부팅 setup 예열 필요, bare 워커엔 numpy 미설치 -> PyProc({packages, setup}) 계약 신설 | numpy 단일스레드 열세를 프로세스 샤딩으로 완화 | 졸업 -> `pyProc.js` `mapArray`(SAB 공유 + 워커 내 1회 복사 numpy화), 게이트 상시 |
+
 ## 판정
 
 진행 중 (수명주기·soundness·시스템콜 v1·예외 안전 복원·ASGI 서버 졸업, 버전 관문 통과 / 터미널 승격, 체크포인트 그래프+OPFS, 라이브러리 커버리지, 협조적 취소 잔여)

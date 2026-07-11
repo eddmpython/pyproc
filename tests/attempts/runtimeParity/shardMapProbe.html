@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: shardMap</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 큰 배열을 워커들로 쪼개 numpy 병렬 (86배 열세 완화)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { PyProc } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    // 32MB float64 배열을 SAB에 준비 (모든 워커가 복사 전송 없이 접근)
+    const N = 4_000_000;
+    const sab = new SharedArrayBuffer(N * 8);
+    const data = new Float64Array(sab);
+    for (let i = 0; i < N; i++) data[i] = i % 1000;
+    const closedSum = (N / 1000) * (999 * 1000 / 2); // sum(i%1000) 닫힌형
+
+    const os = new PyProc({ packages: ["numpy"], setup: "import numpy" }); // 부팅 시 로드+예열
+    await os.boot(4);
+
+    // 조각 실행 fn: SAB 구간을 복사 한 번으로 numpy 배열화(연구 결론: memcpy 1회는 불가피)
+    const fn = "def _fn(meta):\n"
+      + "    import js, numpy as np\n"
+      + "    u8 = js.Uint8Array.new(meta.sab, meta.off, meta.len).slice()\n"
+      + "    a = np.frombuffer(u8.to_py(), dtype='float64')\n"
+      + "    return [float(a.sum()), float(np.sort(a)[0]) + float(np.sqrt(a).sum())]"; // sort = 계산 지배 op
+    const metas = (parts) => Array.from({ length: parts }, (_, i) => {
+      const per = Math.floor(N / parts);
+      const start = i * per, count = i === parts - 1 ? N - start : per;
+      return { sab, off: start * 8, len: count * 8 };
+    });
+
+    // 1조각(1워커) 기준선 vs 4조각(4워커)
+    let t = performance.now();
+    const one = await os.map(fn, metas(1));
+    timings.oneWorkerMs = Math.round(performance.now() - t);
+    t = performance.now();
+    const four = await os.map(fn, metas(4));
+    timings.fourWorkerMs = Math.round(performance.now() - t);
+    timings.speedup = +(timings.oneWorkerMs / timings.fourWorkerMs).toFixed(2);
+
+    if (four[0] && four[0].error) check("샤드 태스크 에러", false, four[0].error);
+    if (one[0] && one[0].error) check("1조각 태스크 에러", false, one[0].error);
+    const sum4 = four.reduce((s, r) => s + r[0], 0);
+    const sqrt4 = four.reduce((s, r) => s + r[1], 0);
+    check("정확성: 4조각 합 == 닫힌형", Math.abs(sum4 - closedSum) < 1e-6 * closedSum, `${sum4}`);
+    check("정확성: 4조각 sqrt합 == 1조각", Math.abs(sqrt4 - one[0][1]) < 1e-9 * Math.abs(one[0][1]));
+    check("속도: 4워커 샤딩 speedup > 1.3", timings.speedup > 1.3, `1워커 ${timings.oneWorkerMs}ms vs 4워커 ${timings.fourWorkerMs}ms = ${timings.speedup}x`);
+    os.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

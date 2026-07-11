@@ -48,7 +48,7 @@ check("Runtime 메서드", () => {
 });
 check("PyProc 메서드", () => {
   const p = api.PyProc.prototype;
-  for (const m of ["boot", "map", "mapSerial", "ps", "kill", "interrupt", "terminate"])
+  for (const m of ["boot", "map", "mapArray", "mapSerial", "ps", "kill", "interrupt", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("ReactiveController 메서드", () => {

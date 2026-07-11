@@ -8,6 +8,8 @@ const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
 export class PyProc {
   constructor(opts = {}) {
     this.indexURL = opts.indexURL || DEFAULT_INDEX;
+    this.packages = opts.packages || []; // 각 프로세스가 부팅 시 로드할 패키지(numpy 등)
+    this.setup = opts.setup || null;     // 부팅 시 실행할 파이썬(예: "import numpy" 예열)
     this.workers = []; this.table = []; this._seq = 0; this._snapshot = null;
   }
 
@@ -49,7 +51,7 @@ export class PyProc {
       };
       w.addEventListener("message", onMsg);
       w.addEventListener("error", (e) => { entry.state = "dead"; reject(new Error(`워커 pid ${pid} 크래시: ${e.message}`)); }, { once: true });
-      w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null, interruptSab });
+      w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null, interruptSab, packages: this.packages, setup: this.setup });
     });
     return { worker: w, entry, ready };
   }
@@ -132,6 +134,38 @@ export class PyProc {
     });
     await Promise.all(this.workers.map(lane));
     return results;
+  }
+
+  // 큰 TypedArray를 조각내 워커들에 numpy 배열로 병렬 적용(샤딩 map).
+  // 실측(attempts/runtimeParity/shardMapProbe): 32MB sort+sum 4워커 5.28배.
+  // 데이터는 SAB로 공유되고 각 워커 안에서 1회 복사로 numpy화된다(memcpy 1회는 불가피).
+  // fnSrc: "def _fn(a): ..." (a = 해당 조각의 numpy 1차원 배열). 워커에 numpy가 필요하므로
+  // new PyProc({ packages: ["numpy"], setup: "import numpy" })로 부팅하라.
+  async mapArray(fnSrc, typed, opts = {}) {
+    const parts = opts.parts || this.workers.length;
+    const dtypeMap = {
+      Float64Array: "float64", Float32Array: "float32", Int32Array: "int32", Uint32Array: "uint32",
+      Int16Array: "int16", Uint16Array: "uint16", Int8Array: "int8", Uint8Array: "uint8",
+    };
+    const dtype = dtypeMap[typed.constructor.name];
+    if (!dtype) throw new Error(`mapArray: 지원하지 않는 TypedArray(${typed.constructor.name})`);
+    let sab = typed.buffer, base = typed.byteOffset;
+    if (!(sab instanceof SharedArrayBuffer)) { // SAB가 아니면 1회 복사로 전 워커 공유화
+      sab = new SharedArrayBuffer(typed.byteLength);
+      new Uint8Array(sab).set(new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength));
+      base = 0;
+    }
+    const bpe = typed.BYTES_PER_ELEMENT, per = Math.floor(typed.length / parts);
+    const metas = Array.from({ length: parts }, (_, i) => {
+      const start = i * per, count = i === parts - 1 ? typed.length - start : per;
+      return { sab, off: base + start * bpe, len: count * bpe, dtype };
+    });
+    const harness = fnSrc.replace("def _fn(", "def _pyproc_user(") + "\n"
+      + "def _fn(meta):\n"
+      + "    import js, numpy\n"
+      + "    _u8 = js.Uint8Array.new(meta.sab, meta.off, meta.len).slice()\n"
+      + "    return _pyproc_user(numpy.frombuffer(_u8.to_py(), dtype=meta.dtype))\n";
+    return this.map(harness, metas, opts);
   }
 
   // 직렬 대조(벤치 baseline): 모든 태스크를 워커 1개에서 순차 실행.

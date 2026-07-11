@@ -146,6 +146,9 @@
       os.terminate();
       check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
 
+      // mapArray(numpy 샤딩)의 런타임 검증은 무게 때문에 전용 probe가 담당한다:
+      // tests/attempts/runtimeParity/shardMapProbe.html (4워커 5.28배 실측)
+
       // wheel OPFS 캐시: 두 번째 커널이 네트워크 0으로 설치(재다운로드 0)
       const wDir = await (await navigator.storage.getDirectory()).getDirectoryHandle("pyprocGateWheels", { create: true });
       await rt.enableWheelCache({ dir: wDir }).install("six");

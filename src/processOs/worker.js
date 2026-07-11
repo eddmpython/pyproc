@@ -21,6 +21,8 @@ onmessage = async (e) => {
         opts._loadSnapshot = copy;
       }
       py = await mod.loadPyodide(opts);
+      if (msg.packages && msg.packages.length) await py.loadPackage(msg.packages); // 프로세스별 패키지
+      if (msg.setup) py.runPython(msg.setup); // 부팅 시 예열(임포트 초기화를 태스크 밖으로)
       if (msg.interruptSab && py.setInterruptBuffer) {
         interruptView = new Uint8Array(msg.interruptSab); // 커널의 SIGINT 채널(SAB)
         py.setInterruptBuffer(interruptView);
