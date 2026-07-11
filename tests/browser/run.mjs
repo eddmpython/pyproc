@@ -6,7 +6,7 @@
 //       브라우저 지정: PYPROC_BROWSER=<실행파일 경로>
 // 이것이 pyproc의 "진짜 검증"이다. tests/run.mjs는 구조만 보고, 여기는 런타임을 본다.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
@@ -77,5 +77,7 @@ if (result.timedOut) {
 }
 for (const c of result.checks) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.name}${c.info ? " (" + c.info + ")" : ""}`);
 if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
+// 실측 수치 아카이브(CI 아티팩트용): 러너 숫자와 로컬 숫자를 비교 가능하게 보존한다.
+if (process.env.PYPROC_GATE_OUT) writeFileSync(process.env.PYPROC_GATE_OUT, JSON.stringify({ page, browser, ...result }, null, 2));
 console.log(`\n결과: ${result.ok ? "GREEN" : "RED"} (${result.checks.filter((c) => c.pass).length}/${result.checks.length})`);
 process.exit(result.ok ? 0 : 1);

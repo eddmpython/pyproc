@@ -1,0 +1,8 @@
+# 정적 호스팅(Cloudflare Pages/Netlify)용 응답 헤더. 데모 배포 준비물.
+# SharedArrayBuffer/JSPI는 crossOriginIsolated 페이지에서만 열리므로 COOP/COEP가 필수다
+# (examples/serve.mjs의 로컬 서버와 같은 계약). GitHub Pages는 헤더를 못 달아서 불가.
+# 절차: docs/operations/demoHosting.md
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Service-Worker-Allowed: /
