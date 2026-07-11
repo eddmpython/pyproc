@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>pyproc - 기본 런타임</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style>
+</head>
+<body>
+  <h1>pyproc - 기본 런타임</h1>
+  <p>브라우저에서 파이썬을 실행한다. Chromium/Edge에서 crossOriginIsolated 서버로 열 것.</p>
+  <pre id="out">부팅 중...</pre>
+  <script type="module">
+    import { boot } from "../index.js";
+    const out = document.getElementById("out");
+    const log = (m) => { out.textContent += "\n" + m; };
+    try {
+      out.textContent = "부팅 중...";
+      const rt = await boot();
+      log("부팅 완료");
+      log("sum(range(100)) = " + rt.run("sum(range(100))"));
+      await rt.loadPackages(["numpy"]);
+      log("numpy arange(10).sum() = " + rt.run("import numpy as np; int(np.arange(10).sum())"));
+    } catch (e) {
+      log("오류: " + e);
+    }
+  </script>
+</body>
+</html>

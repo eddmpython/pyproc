@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>pyproc - 프로세스 OS 병렬</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style>
+</head>
+<body>
+  <h1>pyproc - 프로세스 OS 병렬</h1>
+  <p>워커 4개를 스냅샷-fork로 spawn하고, 같은 작업을 병렬 map vs 직렬로 비교한다.
+     crossOriginIsolated(COOP/COEP) 서버로 열 것. Chromium/Edge 전용.</p>
+  <pre id="out">준비 중...</pre>
+  <script type="module">
+    import { PyProc } from "../index.js";
+    const out = document.getElementById("out");
+    const log = (m) => { out.textContent += "\n" + m; };
+    try {
+      out.textContent = "워커 spawn 중...";
+      const os = new PyProc();
+      const b = await os.boot(4);
+      log(`워커 ${b.workers}개 부팅(평균 ${b.avgBootMs}ms, forked=${b.forked})`);
+
+      const fn = "def _fn(n):\n    return sum(i*i for i in range(n))";
+      const args = [2000000, 2000000, 2000000, 2000000];
+
+      let t = performance.now();
+      const par = await os.map(fn, args);
+      const parMs = Math.round(performance.now() - t);
+
+      t = performance.now();
+      const ser = await os.mapSerial(fn, args);
+      const serMs = Math.round(performance.now() - t);
+
+      log(`병렬 map: ${parMs}ms`);
+      log(`직렬:     ${serMs}ms`);
+      log(`speedup:  ${(serMs / parMs).toFixed(2)}x`);
+      log(`결과 일치: ${JSON.stringify(par) === JSON.stringify(ser)}`);
+      log(`프로세스 테이블: ${JSON.stringify(os.ps())}`);
+      os.terminate();
+    } catch (e) {
+      log("오류: " + e);
+    }
+  </script>
+</body>
+</html>
