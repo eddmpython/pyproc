@@ -4,6 +4,16 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 WASI 세션 src 승격 - bootWasi/WasiSession 공개 표면 (구조 328 + WASI 게이트 6/6)
+
+- enginePort 캠페인(완전 시간여행 12/12)을 src 본진으로 승격. 전문 에이전트 아키텍처 설계로 결정: **Runtime에 끼우는 boot({engine})이 아니라 별도 async 표면 bootWasi -> WasiSession**. 근거: Pyodide는 메인 스레드 동기(Runtime.run)지만 WASI는 워커 안 비동기(메인 Atomics.wait 불법)라 동기 계약을 못 지킨다. 별도 표면이면 소비자 4표면(boot/Runtime/PyProc/ReactiveController)을 하나도 안 건드린다(codaro SHA 핀 무영향, 전부 additive).
+- **배치**: `src/runtime/engines/wasi/`(자기완결 서브트리) - wasiSession.js(facade + 워커 spawner + 직렬화 큐), wasiWorker.js(shim 부팅 + SabStdin + 경계 체크포인트), wasiReplDriver.js(파이썬 드라이버를 .js 문자열로 = naming 가드 사각 회피), wasiProtocol.js(와이어 상수 한 곳 = 하드코딩 금지), browserWasiShim.js(vendored @bjorn3 0.4.2, LICENSE.browserWasiShim 고지 후 커밋).
+- **공개 표면**: index.js/index.d.ts에 bootWasi + WasiSession(async run/get/set/checkpoint/timeTravel) additive. run.mjs 표면·타입 리스트 + README 2종 표에 추가. 값 다리는 JSON 직렬화 한정(FFI 없음) 명시.
+- **자산 정책**: wasm은 wasmURL 소비자 제공(indexURL 패턴, 기본 WLR 3.12 핀). 레포 자산 0. shim만 커밋(라이선스 고지). 게이트는 SKIP-on-absent(CI 자산 없어 SKIP green, 로컬/자산 환경 GREEN).
+- **실배선 게이트**(tests/browser/wasiGate.html) GREEN 6/6: bootWasi 부팅 122ms, 반복 실행 상태 유지, 값 다리 get/set, 완전 시간여행(checkpoint -> 변이 -> timeTravel -> 복원 후 재개 100/False -> 분기 999), 파이썬 예외 전달. CI 편입(ci.yml, SKIP green). 구조 게이트 328.
+- 함정 8개 전부 회피(sync/async category error / reactive 재사용 착각 / shim gitignore 파손 / 라이선스 누락 / 30MB 커밋 / 자산 없이 게이트 / camelCase 사각 / 매직 상수). 잔여(v2): reactive 페이지-델타 트리의 워커-내 재사용(현 v1은 전체-힙 스냅샷 = proven).
+- **의미**: "Pyodide를 뗀다"가 실증(enginePort)을 넘어 **제품 표면**이 됐다. Pyodide는 이제 삭제 대상이 아니라 기본 엔진이고, WASI는 소비 가능한 opt-in 세션이다. 엔진 무관성이 계약으로 노출됐다.
+
 ### 2026-07-12 완전 시간여행 벽 돌파 - non-Pyodide WASI에서 reactive 완전 성립 (enginePort 12/12)
 
 - 앞 실측이 "완전 상태복귀는 값 채널 무상태화가 전제인 다음 관문"으로 정직하게 미뤄뒀던 벽을, 같은 날 실제로 뚫었다. **엔진 무관 완전 시간여행이 non-Pyodide CPython(WASI)에서 성립**.
