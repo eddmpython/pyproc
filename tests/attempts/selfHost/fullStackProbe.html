@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<!--
+결과(2026-07-12, Edge headless / 로컬 COOP+COEP):
+- GREEN 8/8. FastAPI 설치 916ms(micropip), 파이썬 서버가 HTML 페이지(프론트 fetch 포함) 서빙,
+  POST -> sqlite -> GET 왕복 성립, 반복 GET p50 2.1ms.
+- 재부팅 생존: 새 커널 + 같은 디스크에서 코드/DB 살아나 재서빙까지 3435ms(fastapi 재설치 포함).
+- dev loop: app.py 수정 -> importlib.reload -> 바뀐 응답 7ms.
+- 결론: 신규 프리미티브 0. 기존 공개 표면(mountHome/install/AsgiServer)의 조합만으로
+  "OS 위에서 웹 서비스를 개발-운영-생존"이 선다. 패키지 환경은 디스크가 아니라 커널에 살므로
+  재부팅 시 재설치가 정직한 계약이다(uv 레인 wheels 캐시로 상쇄).
+- 다음: examples에 보이는 데모로 승격 검토(swOrigin 조합 = 주소창 URL로 도는 웹앱).
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: fullStack</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 풀스택 셀프호스팅 - 이 OS 위에서 웹 서비스를 개발-운영-생존시킨다</h1>
+<p>검증 시나리오: /home 디스크에 멀티파일 프로젝트를 쓰고(store.py + app.py), FastAPI를 설치하고,
+sqlite에 영속하는 HTML+JSON 서비스를 띄운다. 커널을 버리고 새 커널로 같은 디스크를 마운트하면
+코드와 데이터가 살아나 앱이 다시 서야 하고, 파일을 고치면 reload로 즉시 반영되어야 한다.
+전부 기존 공개 표면(mountHome/install/AsgiServer)의 조합이다. URL 배선은 swOriginProbe가 GREEN.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  const STORE_SRC = `import sqlite3
+
+dbPath = "/home/web/site/data.db"
+
+def getConn():
+    conn = sqlite3.connect(dbPath)
+    conn.execute("CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY, text TEXT)")
+    return conn
+
+def addTodo(text):
+    conn = getConn()
+    conn.execute("INSERT INTO todos (text) VALUES (?)", (text,))
+    conn.commit()
+    conn.close()
+
+def listTodos():
+    conn = getConn()
+    rows = [{"id": r[0], "text": r[1]} for r in conn.execute("SELECT id, text FROM todos ORDER BY id")]
+    conn.close()
+    return rows
+`;
+
+  const APP_SRC = `from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+import store
+
+version = "v1"
+app = FastAPI()
+
+page = """<!doctype html>
+<html><body>
+<h1>todos on pyproc</h1>
+<ul id="list"></ul>
+<script>
+fetch("/pyproc/api/todos").then((r) => r.json()).then((rows) => {
+  document.getElementById("list").innerHTML = rows.map((x) => "<li>" + x.text + "</li>").join("");
+});
+</scr""" + """ipt>
+</body></html>"""
+
+@app.get("/", response_class=HTMLResponse)
+async def home():
+    return page
+
+@app.get("/api/version")
+async def getVersion():
+    return {"version": version}
+
+@app.get("/api/todos")
+async def getTodos():
+    return store.listTodos()
+
+@app.post("/api/todos")
+async def postTodo(req: Request):
+    body = await req.json()
+    store.addTodo(body["text"])
+    return {"ok": True, "count": len(store.listTodos())}
+`;
+
+  try {
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("selfHostProbe", { recursive: true }); } catch (e) {}
+    const disk = await root.getDirectoryHandle("selfHostProbe", { create: true });
+
+    // 1) 커널 A: 디스크 마운트 + 프로젝트 파일 작성(머신 안에서 개발한다)
+    let t = performance.now();
+    const a = await boot();
+    const homeA = await a.mountHome(disk);
+    timings.bootAMs = Math.round(performance.now() - t);
+    a.setGlobal("storeSrc", STORE_SRC);
+    a.setGlobal("appSrc", APP_SRC);
+    a.run("import os\nos.makedirs('/home/web/site', exist_ok=True)\nopen('/home/web/site/store.py','w').write(storeSrc)\nopen('/home/web/site/app.py','w').write(appSrc)");
+    check("A: 멀티파일 프로젝트 작성(/home/web/site)", a.run("', '.join(sorted(os.listdir('/home/web/site')))").includes("app.py"));
+
+    // 2) 프레임워크 설치(진짜 pip 생태계에서)
+    t = performance.now();
+    await a.install("fastapi");
+    timings.installFastapiMs = Math.round(performance.now() - t);
+    check("A: FastAPI 설치(micropip)", true, `${timings.installFastapiMs}ms`);
+
+    // 3) 앱 기동 + 풀스택 왕복(HTML 페이지 + JSON API + sqlite)
+    a.run("import sys\nsys.path.insert(0, '/home/web/site')\nfrom app import app");
+    const asgiA = a.enableAsgiServer();
+    await asgiA.install();
+    const html = await asgiA.serve("GET", "/");
+    check("A: 파이썬 서버가 웹 페이지를 서빙", html.status === 200 && html.body.includes("<h1>todos on pyproc</h1>") && html.body.includes("fetch("),
+      `${html.body.length}B, 프론트 fetch 포함`);
+    const p1 = await asgiA.serve("POST", "/api/todos", JSON.stringify({ text: "ship pyproc" }));
+    const p2 = await asgiA.serve("POST", "/api/todos", JSON.stringify({ text: "prove selfhost" }));
+    const g1 = await asgiA.serve("GET", "/api/todos");
+    const rows = JSON.parse(g1.body);
+    check("A: POST -> sqlite -> GET 왕복", p1.status === 200 && p2.status === 200 && rows.length === 2 && rows[1].text === "prove selfhost",
+      JSON.stringify(rows));
+    const lat = [];
+    for (let i = 0; i < 20; i++) { const s = performance.now(); await asgiA.serve("GET", "/api/todos"); lat.push(performance.now() - s); }
+    lat.sort((x, y) => x - y);
+    timings.serveP50Ms = Math.round(lat[10] * 10) / 10;
+    check("A: 반복 GET p50 <= 20ms", timings.serveP50Ms <= 20, `p50 ${timings.serveP50Ms}ms`);
+
+    // 4) 디스크 영속 + 커널 폐기(서비스 셧다운 등가)
+    await homeA.sync();
+    check("A: 코드+DB 디스크 영속(sync)", true);
+
+    // 5) 커널 B: 재부팅 생존 - 같은 디스크에서 코드/DB가 살아나 앱이 다시 선다
+    t = performance.now();
+    const b = await boot();
+    await b.mountHome(disk);
+    await b.install("fastapi");
+    b.run("import sys\nsys.path.insert(0, '/home/web/site')\nfrom app import app");
+    const asgiB = b.enableAsgiServer();
+    await asgiB.install();
+    timings.rebootToServeMs = Math.round(performance.now() - t);
+    const g2 = await asgiB.serve("GET", "/api/todos");
+    const rows2 = JSON.parse(g2.body);
+    check("B: 재부팅 후 데이터 생존 + 앱 재기동", rows2.length === 2 && rows2[0].text === "ship pyproc",
+      `${JSON.stringify(rows2.map((r) => r.text))}, 재부팅->서빙 ${timings.rebootToServeMs}ms`);
+
+    // 6) dev loop: 파일 수정 -> reload -> 바뀐 응답 (편집기가 머신 안에 있는 것과 등가)
+    t = performance.now();
+    b.run(`src = open('/home/web/site/app.py').read()
+open('/home/web/site/app.py','w').write(src.replace('version = "v1"', 'version = "v2"'))
+import importlib, app as appModule
+appModule = importlib.reload(appModule)
+app = appModule.app`);
+    const v2 = await asgiB.serve("GET", "/api/version");
+    timings.devLoopMs = Math.round(performance.now() - t);
+    check("B: dev loop(수정 -> reload -> 반영) <= 1500ms", JSON.parse(v2.body).version === "v2" && timings.devLoopMs <= 1500,
+      `${timings.devLoopMs}ms, version=${JSON.parse(v2.body).version}`);
+
+    await root.removeEntry("selfHostProbe", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
