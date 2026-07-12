@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!--
+결과(2026-07-12, Edge headless / 로컬 COOP+COEP):
+- GREEN 7/7. 요청 헤더(Authorization) 파이썬 도달, PNG 응답/0x00-0xFF 512B 요청 바디 무손상,
+  204(no-body)/404 정상, 커널 배선이 끊기면 10s 후 504(무한 대기 소거).
+- 핵심: 가상 오리진에서 서빙된 iframe(커널 밖 문서)의 fetch가 hello 등록 라우팅으로 커널에 도달,
+  내비게이션부터 API 응답까지 20ms.
+- 발견 1(JsNull): setGlobal(null)은 Python None이 아니라 JsNull 프록시다. 널 정규화는 JS 경계
+  (serve)에서 해야 한다. 발견 2(COEP): SW 합성 응답에 COI 헤더가 없으면 부모의 require-corp가
+  iframe 로드를 차단한다. 가상 오리진 응답은 COI 헤더를 기본 탑재해야 조합이 성립한다.
+- 결론: 배선 3종(헤더/바이너리/커널 라우팅+타임아웃) 승격 완료. 남은 벽: Set-Cookie 스트립
+  (쿠키 세션 불가 = 토큰 방식), WebSocket 미가로채기, 스트리밍/SSE 미지원(축적 후 일괄).
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: originFidelity</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 가상 오리진 충실화 - 커널 밖 문서, 바이너리, 헤더, 무응답 계약</h1>
+<p>swOriginProbe는 "커널 페이지 자신의 fetch"만 실측했다. 진짜 웹앱 동선의 4구멍을 판정한다:
+① 가상 오리진에서 서빙된 문서(iframe)의 fetch가 커널로 라우팅되는가(hello 등록)
+② 바이너리 응답/요청이 손상 없이 왕복하는가 ③ 요청 헤더(Authorization)가 앱에 닿는가
+④ 204 같은 no-body 상태와 404가 HTTP답게 사는가.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot, VirtualOrigin } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  let reg = null;
+  try {
+    // 1) 커널 + 표준 라이브러리 ASGI 앱(설치 0): HTML 페이지, JSON, 바이너리(PNG), 헤더 에코, 204
+    const rt = await boot();
+    rt.run(`import base64, json
+pngBytes = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mMAAQAABQABDQottAAAAABJRU5ErkJggg==")
+pageHtml = ('<!doctype html><html><body><h1>served by python</h1><script>'
+    'fetch("api/data").then(async (r) => parent.postMessage({ pyprocServed: r.ok ? await r.json() : { ok: false, status: r.status, tail: (await r.text()).slice(-120) } }, "*"))'
+    '.catch((e) => parent.postMessage({ pyprocServed: { ok: false, err: String(e) } }, "*"));'
+    '</scr' 'ipt></body></html>')
+
+async def app(scope, receive, send):
+    path = scope["path"]
+    hdrs = {k.decode(): v.decode() for k, v in scope["headers"]}
+    data = b""
+    if scope["method"] == "POST":
+        msg = await receive()
+        data = msg.get("body", b"")
+    status = 200
+    if path == "/":
+        body = pageHtml.encode(); ctype = b"text/html"
+    elif path == "/api/data":
+        body = json.dumps({"ok": True, "src": "python"}).encode(); ctype = b"application/json"
+    elif path == "/api/auth":
+        body = json.dumps({"auth": hdrs.get("authorization", "none")}).encode(); ctype = b"application/json"
+    elif path == "/api/logo.png":
+        body = pngBytes; ctype = b"image/png"
+    elif path == "/api/size":
+        body = json.dumps({"n": len(data), "first": data[0] if data else -1, "last": data[-1] if data else -1}).encode(); ctype = b"application/json"
+    elif path == "/api/reset":
+        await send({"type": "http.response.start", "status": 204, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+        return
+    else:
+        body = b"not found"; ctype = b"text/plain"; status = 404
+    await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", ctype)]})
+    await send({"type": "http.response.body", "body": body})`);
+    const asgi = rt.enableAsgiServer({ app: "app" });
+    await asgi.install();
+    const origin = new VirtualOrigin(asgi).bind(); // hello는 controllerchange에도 재전송된다
+
+    // 2) 승격된 pyprocSw.js(래퍼 경유)를 등록하고 페이지를 장악시킨다
+    reg = await navigator.serviceWorker.register("./originAsgiWrapperSw.js?asgi=/pyproc/");
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) {
+      await new Promise((res) => navigator.serviceWorker.addEventListener("controllerchange", res, { once: true }));
+    }
+    check("SW 등록 + 페이지 장악", !!navigator.serviceWorker.controller);
+
+    // 3) 헤더 전달: Authorization이 파이썬 scope["headers"]에 닿는다
+    const auth = await (await fetch("./pyproc/api/auth", { headers: { Authorization: "Bearer pyprocToken" } })).json();
+    check("요청 헤더 전달(Authorization)", auth.auth === "Bearer pyprocToken", JSON.stringify(auth));
+
+    // 4) 바이너리 응답: PNG 매직 + content-type 생존
+    const imgResp = await fetch("./pyproc/api/logo.png");
+    const img = new Uint8Array(await imgResp.arrayBuffer());
+    check("바이너리 응답(PNG) 무손상", img[0] === 0x89 && img[1] === 0x50 && img[2] === 0x4e && img[3] === 0x47 && imgResp.headers.get("content-type") === "image/png",
+      `${img.length}B, ${imgResp.headers.get("content-type")}`);
+
+    // 5) 바이너리 요청: 0x00~0xFF 포함 512B가 텍스트 손상 없이 파이썬 bytes로 닿는다
+    const payload = new Uint8Array(512); for (let i = 0; i < 512; i++) payload[i] = i % 256;
+    const size = await (await fetch("./pyproc/api/size", { method: "POST", body: payload })).json();
+    check("바이너리 요청 바디 무손상", size.n === 512 && size.first === 0 && size.last === 255, JSON.stringify(size));
+
+    // 6) no-body 상태(204)와 404가 HTTP답게 산다
+    const reset = await fetch("./pyproc/api/reset");
+    const missing = await fetch("./pyproc/api/nothing");
+    check("204(no-body 가드) + 404", reset.status === 204 && missing.status === 404, `${reset.status}/${missing.status}`);
+
+    // 7) 핵심: 가상 오리진에서 서빙된 문서(iframe)가 커널 밖에서 API를 부른다
+    let t = performance.now();
+    const served = await new Promise((res) => {
+      const frame = document.createElement("iframe");
+      const timer = setTimeout(() => {
+        let diag = "iframe 문서 접근 불가";
+        try { diag = `url=${frame.contentWindow.location.href} body=${(frame.contentDocument && frame.contentDocument.body ? frame.contentDocument.body.textContent : "(없음)").slice(0, 120)}`; } catch (e) { diag = String(e).slice(0, 120); }
+        res({ ok: false, err: diag });
+      }, 15000);
+      window.addEventListener("message", (e) => {
+        if (e.data && e.data.pyprocServed) { clearTimeout(timer); res(e.data.pyprocServed); }
+      });
+      frame.src = "./pyproc/";
+      frame.style.display = "none";
+      document.body.appendChild(frame);
+    });
+    timings.iframeServeMs = Math.round(performance.now() - t);
+    check("iframe(커널 밖 문서)의 fetch가 커널로 라우팅", !!served && served.ok === true && served.src === "python",
+      served ? `${timings.iframeServeMs}ms ${JSON.stringify(served).slice(0, 200)}` : "15s 무응답(내비게이션부터 실패)");
+
+    // 8) 무응답 계약: 커널 배선을 끊으면 영원히 매달리는 대신 504가 온다(기본 10s)
+    origin.unbind();
+    t = performance.now();
+    const dead = await fetch("./pyproc/api/data");
+    timings.timeoutMs = Math.round(performance.now() - t);
+    check("커널 부재 = 504(무한 대기 아님)", dead.status === 504 && timings.timeoutMs >= 9000, `${dead.status}, ${timings.timeoutMs}ms`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  if (reg) await reg.unregister();
+  await report();
+</script>
+</body>
+</html>

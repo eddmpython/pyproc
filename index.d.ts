@@ -115,6 +115,8 @@ export const SIGNAL: { INT: 2; USR1: 10; USR2: 12; TERM: 15 };
 export interface ForkInfo {
   pages: number;
   mb: number;
+  /** 자식(dst)의 델타 밖 드리프트를 리플레이 경계로 되돌린 페이지 수. fork는 정확히 "경계 + 부모 델타"를 만든다. */
+  reverted: number;
   harvestMs: number;
   applyMs: number;
 }
@@ -177,19 +179,29 @@ export interface AsgiServerConfig {
 export interface AsgiResponse {
   status: number;
   headers: [string, string][];
+  /** 응답 바디의 utf-8 텍스트 뷰(JSON/HTML용). */
   body: string;
+  /** 응답 바디의 원시 바이트(바이너리 응답의 정본). requests의 .text/.content 등가. */
+  bodyBytes: Uint8Array;
 }
 
-/** 커널 안 ASGI 서버: FastAPI/Starlette를 소켓 0으로 dispatch. 엔드포인트는 async def 강제. */
+/**
+ * 커널 안 ASGI 서버: FastAPI/Starlette를 소켓 0으로 dispatch. 엔드포인트는 async def 강제.
+ * body는 텍스트 또는 바이트 버퍼, headers는 [k, v] 배열(content-type 미지정 시 json 기본).
+ * 헬퍼가 매 요청 앱 전역을 다시 읽으므로 전역 재대입 = 핫스왑(dev loop). lifespan은 발화하지 않는다.
+ */
 export class AsgiServer {
   install(): Promise<{ app: string; transport: string }>;
-  serve(method: string, path: string, body?: string | null, query?: string): Promise<AsgiResponse>;
+  serve(method: string, path: string, body?: string | Uint8Array | null, query?: string, headers?: [string, string][] | null): Promise<AsgiResponse>;
 }
 
 /**
  * 파이썬 서버를 진짜 URL로: pyprocSw.js(같은 폴더 자산)를 소비자 오리진에 등록하면
  * (navigator.serviceWorker.register(".../pyprocSw.js?asgi=/pyproc/")), 그 접두 fetch가
  * 이 배선을 거쳐 AsgiServer로 응답된다. 실측 왕복 3.4ms(SW 오버헤드 0).
+ * bind()는 SW에 커널을 등록(hello)하므로 가상 오리진에서 서빙된 문서(iframe/딴 탭)의
+ * fetch도 커널로 라우팅된다. 커널 무응답은 SW가 504로 끊는다(?asgiTimeout= 조정).
+ * 벽: SW 합성 응답의 Set-Cookie는 스트립됨(쿠키 세션 불가, 토큰 방식 사용), WebSocket 미가로채기.
  */
 export class VirtualOrigin {
   constructor(asgi: AsgiServer);
