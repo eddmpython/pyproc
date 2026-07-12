@@ -26,9 +26,7 @@
     ]);
     check("결함 재현: 행 워커에서 map 무한 대기", raced === "hang");
 
-    // 2) respawn 실측: 행 워커 kill 후 기존 스냅샷에서 재생성
-    const deadW = os.workers[0];
-    deadW.terminate();
+    // 2) respawn 원가 실측: 스냅샷에서 워커 1개를 처음부터 세우는 비용(커널 밖 직접 측정)
     const t0 = performance.now();
     const w = new Worker(new URL("../../../src/processOs/worker.js", import.meta.url), { type: "module" });
     const bootMs = await new Promise((resolve, reject) => {
@@ -36,17 +34,24 @@
         if (e.data.type === "ready") resolve(e.data.bootMs);
         else if (e.data.type === "error") reject(new Error(e.data.error));
       });
-      w.postMessage({ type: "boot", id: 99, indexURL: os.indexURL, snapshot: os._snapshot });
+      w.postMessage({ type: "boot", id: 99, reqId: 1, indexURL: os.indexURL, snapshot: os._snapshot });
     });
     timings.respawnMs = Math.round(performance.now() - t0);
     check("respawn: 스냅샷 재부팅 1초 미만", timings.respawnMs < 1000, `${timings.respawnMs}ms (워커 내부 ${bootMs}ms)`);
-    os.workers[0] = w;
+    w.terminate();
 
-    // 3) 재생성 풀에서 map 정상
+    // 3) 커널의 사망 수렴(2026-07-12 승격): 프로세스가 예고 없이 죽어도 map은 매달리지 않고,
+    //    죽은 자리를 respawn으로 채워 전체 태스크가 완주해야 한다.
+    const victim = os.ps().find((p) => p.state === "ready").pid;
     const sq = "def _fn(n):\n    return n*n";
-    const rr = await os.map(sq, [3, 4]);
-    check("복구 풀에서 map 정상", rr[0] === 9 && rr[1] === 16);
-    os.terminate(); w.terminate();
+    const running = os.map(sq, [3, 4, 5, 6]);
+    os.kill(victim); // 태스크 진행 중 프로세스 1개 강제 사망
+    const rr = await running;
+    const survivors = rr.filter((r) => typeof r === "number");
+    check("사망 수렴: map이 매달리지 않고 완주", rr.length === 4 && survivors.length >= 3, JSON.stringify(rr));
+    const after = await os.map(sq, [7]);
+    check("사망 후 풀 자동 복구(respawn)", after[0] === 49);
+    os.terminate();
   } catch (e) {
     check("예외 없음", false, String(e).slice(0, 300));
   }

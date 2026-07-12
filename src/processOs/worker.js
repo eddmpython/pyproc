@@ -2,10 +2,14 @@
 // 부팅 3경로: 스냅샷(fast fork) / 콜드 / **리플레이**(결정적 부팅 = forkLive의 전제).
 // pyProc.js가 같은 폴더의 이 파일을 new URL 상대경로로 spawn한다(위치 = 계약).
 //
+// 프로토콜(2026-07-12 수리): 모든 요청은 reqId를 싣고 오고, 모든 응답은 그 reqId를
+// 그대로 되돌린다. 커널은 pid가 아니라 reqId로 응답을 상관시키므로 같은 워커에
+// 요청이 겹쳐도(harvest 중 task 등) 교차 수신이 없다.
+//
 // forkLive(살아있는 커널의 진짜 fork(2)) 실측 - pythonMachine/forkLiveProbe 8/8:
 //   메인 커널과 워커 커널의 리플레이는 힙 길이는 같아도 **바이트가 다르다**(로더/컨텍스트 차이).
 //   워커 대 워커는 **바이트 동일**하다. 그래서 fork는 워커끼리만 성립하고, PyProc은 조율자다.
-//   델타 10.3MB 수확 43.6ms, 적용 1.4ms, 부모 상태(변수·배열·계산) 전부 생존, 주소공간 독립.
+//   델타 10.3MB 수확 43.6ms, 부모 상태(변수·배열·계산) 전부 생존, 주소공간 독립.
 const PAGE = 65536;
 let py = null;
 let interruptView = null;
@@ -20,6 +24,13 @@ function stubEntropy() {
   Date.now = () => 1750000000000;
   performance.now = () => 12345;
   return () => { crypto.getRandomValues = o.grv; Date.now = o.dn; performance.now = o.pn; };
+}
+
+// 복제 고유성: 스냅샷/리플레이로 태어난 프로세스들은 random 모듈 상태(메르센)까지 같다.
+// 부팅 직후(리플레이는 cp0 확정 뒤) 실제 엔트로피로 재시드해 프로세스들을 갈라놓는다.
+// fork는 예외로 부모 상태를 그대로 물려받는다(fork(2) 의미론. 델타가 이 재시드를 덮는다).
+function reseedRandom() {
+  py.runPython("import random as _pyprocR\n_pyprocR.seed()\ndel _pyprocR");
 }
 
 onmessage = async (e) => {
@@ -50,17 +61,25 @@ onmessage = async (e) => {
         if (setup) py.runPython(setup); // 부팅 시 예열(임포트 초기화를 태스크 밖으로)
       } finally { if (restore) restore(); }
       if (replay) { const h = heap(); cp0 = h.slice(0, h.length); } // 경계 사본 = 델타의 기준
+      reseedRandom(); // cp0 확정 뒤에 실행: 경계 결정성은 지키고 프로세스는 갈라놓는다
       if (msg.interruptSab && py.setInterruptBuffer) {
         interruptView = new Uint8Array(msg.interruptSab); // 커널의 시그널 채널(SAB)
         py.setInterruptBuffer(interruptView);
       }
-      postMessage({ type: "ready", id: msg.id, bootMs: Math.round(performance.now() - t0), forked: !!msg.snapshot, replayed: !!replay, interrupts: !!interruptView });
+      postMessage({ type: "ready", id: msg.id, reqId: msg.reqId, bootMs: Math.round(performance.now() - t0), forked: !!msg.snapshot, replayed: !!replay, interrupts: !!interruptView });
     } else if (msg.type === "task") {
       // fnSrc = 파이썬 함수 정의 소스(def _fn(arg): ...), arg = 인자(JSON 직렬화 가능)
       py.globals.set("_arg", msg.arg);
-      const r = py.runPython(msg.fnSrc + "\n_result = _fn(_arg)\n_result");
-      const result = r === undefined ? null : (typeof r === "object" && r && r.toJs ? r.toJs() : r);
-      postMessage({ type: "result", id: msg.id, taskId: msg.taskId, result });
+      let r;
+      try {
+        r = py.runPython(msg.fnSrc + "\n_result = _fn(_arg)\n_result");
+        // create_pyproxies:false = 결과는 직렬화 가능해야 한다는 계약을 기계로 강제한다
+        // (숨은 PyProxy가 새지 않게). 변환 불가면 여기서 명시적 예외.
+        const result = r === undefined ? null : (typeof r === "object" && r && r.toJs ? r.toJs({ create_pyproxies: false }) : r);
+        postMessage({ type: "result", id: msg.id, reqId: msg.reqId, result });
+      } finally {
+        if (r && typeof r === "object" && r.destroy) r.destroy(); // WASM측 참조 해제(누적 방지)
+      }
     } else if (msg.type === "harvest") {
       // fork의 부모측: cp0(리플레이 경계) 대비 바뀐 페이지 = 지금 이 커널의 사용자 상태.
       if (!cp0) throw new Error("harvest: 리플레이 부팅한 프로세스에서만 가능하다");
@@ -75,11 +94,11 @@ onmessage = async (e) => {
         if (same) { for (let i = 0; i < PAGE; i++) { if (a[i] !== b[i]) { same = false; break; } } } // 확정 비교
         if (!same) pages.push(p);
       }
-      for (let p = cp0.length / PAGE; p < h.length / PAGE; p++) pages.push(p); // 성장분
+      for (let p = cp0.length / PAGE; p < h.length / PAGE; p++) pages.push(p); // 성장분 전량
       const bin = new Uint8Array(pages.length * PAGE);
       pages.forEach((p, i) => bin.set(h.subarray(p * PAGE, (p + 1) * PAGE), i * PAGE));
       const sp = py._module._emscripten_stack_get_current ? py._module._emscripten_stack_get_current() : null;
-      postMessage({ type: "harvested", id: msg.id, pages, bin: bin.buffer, sp, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
+      postMessage({ type: "harvested", id: msg.id, reqId: msg.reqId, pages, bin: bin.buffer, sp, heapLen: h.length, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
     } else if (msg.type === "applyDelta") {
       // fork의 자식측: 이 워커를 정확히 "cp0 + 부모 델타" 상태로 만든다(주소공간은 독립).
       // 델타만 덮으면 안 된다: dst가 경계 이후 실행으로 더럽힌 페이지 중 델타 밖의 것이 남아
@@ -88,10 +107,19 @@ onmessage = async (e) => {
       if (!cp0) throw new Error("applyDelta: 리플레이 부팅한 프로세스에서만 가능하다");
       const t0 = performance.now();
       const bin = new Uint8Array(msg.bin);
+      // 부모 힙이 더 크면(성장 세션) 자식도 같은 길이까지 성장시킨다. JS에서 Memory.grow를
+      // 직접 하면 Emscripten 글루가 깨지므로(session.js 실측) 파이썬 할당으로 정상 경로를 탄다.
+      // 성장 루프의 흔적은 아래 드리프트 복원(cp0 범위)과 델타(성장 범위 전량 포함)가 지운다.
+      if (msg.heapLen && msg.heapLen > heap().length) {
+        py.runPython("_pyprocHold = []");
+        while (heap().length < msg.heapLen) py.runPython("_pyprocHold.append(bytearray(8 * 1024 * 1024))");
+        py.runPython("del _pyprocHold");
+        if (heap().length < msg.heapLen) throw new Error(`applyDelta: 힙 성장 실패(목표 ${msg.heapLen}, 현재 ${heap().length})`);
+      }
       const h = heap();
       let maxEnd = 0;
       for (const p of msg.pages) if ((p + 1) * PAGE > maxEnd) maxEnd = (p + 1) * PAGE;
-      if (maxEnd > h.length) throw new Error(`applyDelta: 델타가 힙 밖(${maxEnd} > ${h.length}). 성장 세션 간 fork는 미지원 좌표`);
+      if (maxEnd > h.length) throw new Error(`applyDelta: 델타가 힙 밖(${maxEnd} > ${h.length})`);
       const incoming = new Set(msg.pages);
       let reverted = 0;
       const nCommon = Math.min(h.length, cp0.length) / PAGE;
@@ -103,14 +131,15 @@ onmessage = async (e) => {
         if (same) { for (let i = 0; i < PAGE; i++) { if (a[i] !== b[i]) { same = false; break; } } } // 확정 비교
         if (!same) { a.set(b); reverted++; }
       }
-      // cp0 길이 밖(성장분)의 dst 잔재는 복원된 상태가 참조하지 않으므로 그대로 둔다.
+      // cp0 길이 밖(성장분)의 dst 잔재는 델타가 성장 범위를 전량 포함하므로 부모 길이까지
+      // 전부 덮이고, 그 너머는 복원된 상태가 참조하지 않는다.
       msg.pages.forEach((p, i) => h.set(bin.subarray(i * PAGE, (i + 1) * PAGE), p * PAGE));
       if (msg.sp !== null && py._module._emscripten_stack_restore) py._module._emscripten_stack_restore(msg.sp);
-      postMessage({ type: "applied", id: msg.id, pages: msg.pages.length, reverted, ms: Math.round((performance.now() - t0) * 10) / 10 });
+      postMessage({ type: "applied", id: msg.id, reqId: msg.reqId, pages: msg.pages.length, reverted, ms: Math.round((performance.now() - t0) * 10) / 10 });
     }
   } catch (err) {
     if (interruptView) interruptView[0] = 0; // 시그널 소진 후 채널 리셋(다음 태스크 오염 방지)
     // traceback은 예외 타입이 끝에 온다. 자를 거면 꼬리를 남겨야 원인이 살아남는다.
-    postMessage({ type: "error", id: msg.id, taskId: msg.taskId, error: String(err).slice(-300) });
+    postMessage({ type: "error", id: msg.id, reqId: msg.reqId, error: String(err).slice(-300) });
   }
 };
