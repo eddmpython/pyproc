@@ -269,6 +269,34 @@ export class Init {
   stop(): void;
 }
 
+export interface JournalConfig {
+  /** 저널을 둘 디렉터리(OPFS 등). 소비자가 제공한다. */
+  dir: FileSystemDirectoryHandle;
+  /** cp0이 리플레이 경계인 컨트롤러(bootSession의 reactive). 부활의 전제. */
+  reactive: ReactiveController;
+  /** 유휴 판정 ms(기본 2000). 이 시간 동안 상태 변이가 없으면 커밋한다. */
+  idleMs?: number;
+}
+
+/**
+ * WAL(write-ahead log): 강제종료 내성. 유휴마다 변경 페이지를 content-addressed로 저장하고,
+ * 다음 부팅이 `recover()`로 마지막 커밋에서 부활한다(hibernate 훅이 실패해도 산다).
+ * 커밋 단위가 문장이 아니라 **유휴**인 이유: 실측상 no-op 문장조차 ~95페이지를 더럽히므로
+ * (CPython eval/GC의 고정 scratch) 문장마다 쓰면 쓰기량이 폭증한다. 유휴 배치가 88% 절감.
+ * 계약: 크래시 시 잃는 것은 "마지막 커밋 이후"다(경계 일관성이지 문장 단위 내구성이 아니다).
+ */
+export class MachineJournal {
+  readonly commits: number;
+  readonly pagesWritten: number;
+  /** 유휴 감시 시작(실행 중에는 끼어들지 않는다). */
+  start(): MachineJournal;
+  stop(): void;
+  /** 지금 상태를 커밋(수동 경계). 반환: 변경 페이지 수와 실제 쓴 양(dedupe 후). */
+  commit(): Promise<{ pages: number; wrote: number; mb: number } | null>;
+  /** 마지막 커밋으로 부활. 저널이 없으면 null(첫 부팅). */
+  recover(): Promise<{ pages: number; mb: number } | null>;
+}
+
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
 export class Terminal {
   install(): Promise<{ repl: string; timeTravel: boolean }>;
@@ -311,6 +339,7 @@ export class Runtime {
   enableWheelCache(cfg: WheelCacheConfig): WheelCache;
   enableDeviceFs(cfg?: DeviceFsConfig): DeviceFs;
   enableInit(cfg?: InitConfig): Init;
+  enableJournal(cfg: JournalConfig): MachineJournal;
   /** 디렉터리 핸들(OPFS 등)을 파이썬 경로로 마운트(기본 /home/web). 반환된 sync()로 영속화. */
   mountHome(dirHandle: FileSystemDirectoryHandle, path?: string): Promise<{ path: string; sync: () => Promise<void> }>;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */

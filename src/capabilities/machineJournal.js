@@ -1,0 +1,116 @@
+// machineJournal.js - Layer 1 능력: WAL(write-ahead log) = 강제종료 내성.
+// 머신이 자기 상태를 유휴마다 디스크에 남긴다. 탭이 크래시하거나 전원이 나가도
+// 다음 부팅이 마지막 커밋으로 부활한다(hibernate는 pagehide 훅이 성공해야 살지만 이건 아니다).
+//
+// 설계 근거(실측 2종, 2026-07-12):
+//   journalProbe 5/5 - clean save 없이 커널을 버려도 리플레이 + 저널 재생으로 상태 재구성.
+//   churnProbe 7/7  - **문장마다 커밋하면 안 된다**: no-op 문장조차 ~95페이지(6MB)를 더럽히고
+//                     그 집합은 97% 고정이다(CPython eval/GC의 scratch 워킹셋, 사용자 상태와 무관).
+//                     배치해도 고유 페이지는 1-5%만 주는데, **총 쓰기량은 88% 준다**(커밋 빈도가
+//                     비용을 지배). 그래서 커밋 단위는 문장이 아니라 **유휴**다.
+//
+// 계약(정직하게): 크래시 시 잃는 것은 "마지막 커밋 이후"다. 문장 단위 내구성이 아니라
+// 경계 일관성을 준다. 커밋 주기는 소비자가 정한다(하드코딩 없음).
+// 저장 형식: blob/<sha256> (content-addressed 페이지, 자동 dedupe) + HEAD.json (페이지->해시 맵 + sp).
+import { PAGE_SIZE as PAGE } from "../runtime/memoryCapability.js";
+
+async function sha256Hex(bytes) {
+  const d = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export class MachineJournal {
+  // cfg.dir: FileSystemDirectoryHandle (필수. 위치는 소비자가 준다)
+  // cfg.reactive: ReactiveController (필수. cp0 = 리플레이 경계여야 부활이 성립한다)
+  // cfg.idleMs: 유휴 판정(기본 2000). 이 시간 동안 상태 변이가 없으면 커밋한다.
+  constructor(rt, cfg = {}) {
+    this._rt = rt;
+    this._dir = cfg.dir;
+    this._reactive = cfg.reactive;
+    this._idleMs = cfg.idleMs || 2000;
+    this._timer = null;
+    this._lastSeq = -1;
+    this._sp = null;
+    this._busy = false;
+    this.commits = 0;
+    this.pagesWritten = 0; // 실제 디스크에 쓴 페이지(dedupe로 걸러진 것은 제외)
+  }
+
+  // 유휴 감시 시작. execSeq가 멈춘 채 idleMs가 지나면 커밋한다(실행 중에는 끼어들지 않는다).
+  start() {
+    if (!this._dir) throw new Error("journal: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
+    if (!this._reactive) throw new Error("journal: cfg.reactive(ReactiveController)가 필요하다");
+    if (this._timer) return this;
+    this._sp = this._reactive.stackSave();
+    this._lastSeq = this._rt.execSeq;
+    let idleSince = null;
+    this._timer = setInterval(() => {
+      if (this._busy) return;
+      if (this._rt.execSeq !== this._lastSeq) { this._lastSeq = this._rt.execSeq; idleSince = Date.now(); return; }
+      if (idleSince === null) return;                 // 변이가 아직 없었다(커밋할 게 없다)
+      if (Date.now() - idleSince < this._idleMs) return;
+      idleSince = null;
+      this.commit().catch((e) => console.warn("pyproc journal:", e)); // 커밋 실패가 머신을 죽이지 않는다
+    }, Math.max(200, Math.floor(this._idleMs / 4)));
+    return this;
+  }
+
+  stop() { if (this._timer) { clearInterval(this._timer); this._timer = null; } }
+
+  // 지금 상태를 커밋한다(수동 호출도 계약: 중요한 경계에서 명시적으로 남길 수 있다).
+  async commit() {
+    if (this._busy) return null;
+    this._busy = true;
+    try {
+      const r = this._reactive, mem = this._rt.memory;
+      r.checkpoint(); // 경계 닫기(cp0 대비 차이가 곧 사용자 상태)
+      const h0 = r.hashes[0], hl = r.hashes[r.liveIdx];
+      const n = Math.min(h0.length, hl.length) / 2;
+      const pages = [];
+      for (let p = 0; p < n; p++) if (hl[2 * p] !== h0[2 * p] || hl[2 * p + 1] !== h0[2 * p + 1]) pages.push(p);
+      for (let p = h0.length / 2; p < hl.length / 2; p++) pages.push(p); // 성장분
+      const blobDir = await this._dir.getDirectoryHandle("blob", { create: true });
+      const map = {};
+      let wrote = 0;
+      for (const p of pages) {
+        const bytes = mem.slicePage(p);
+        const key = await sha256Hex(bytes);
+        map[p] = key;
+        try { await (await blobDir.getFileHandle(key)).getFile(); } // 이미 있으면 dedupe(내용 주소)
+        catch (e) {
+          const fh = await blobDir.getFileHandle(key, { create: true });
+          const w = await fh.createWritable(); await w.write(bytes); await w.close();
+          wrote++;
+        }
+      }
+      // HEAD는 마지막에 쓴다(append-only 순서 = 크래시가 어디서 나든 이전 HEAD는 무결).
+      const head = { version: 1, pages: map, sp: this._reactive.stackSave() ?? this._sp, heapLen: mem.byteLength() };
+      const hf = await this._dir.getFileHandle("HEAD.json", { create: true });
+      const w = await hf.createWritable(); await w.write(JSON.stringify(head)); await w.close();
+      this.commits++; this.pagesWritten += wrote;
+      return { pages: pages.length, wrote, mb: +(wrote * PAGE / 1048576).toFixed(1) };
+    } finally { this._busy = false; }
+  }
+
+  // 저널 재생: 같은 매니페스트로 리플레이한 커널에 마지막 커밋을 적용한다(= 부활).
+  // 저널이 없으면 null(첫 부팅). 힙 크기 불일치는 명시적 예외(다른 엔진/매니페스트).
+  async recover() {
+    let head;
+    try { head = JSON.parse(await (await (await this._dir.getFileHandle("HEAD.json")).getFile()).text()); }
+    catch (e) { return null; } // 저널 없음 = 첫 부팅
+    const mem = this._rt.memory;
+    if (head.heapLen > mem.byteLength()) {
+      throw new Error(`journal.recover: 힙이 저널보다 작다(저널 ${head.heapLen} > 현재 ${mem.byteLength()}). 성장 세션은 Session.load 경로를 쓴다.`);
+    }
+    const blobDir = await this._dir.getDirectoryHandle("blob");
+    const entries = Object.entries(head.pages);
+    for (const [p, key] of entries) {
+      const bytes = new Uint8Array(await (await (await blobDir.getFileHandle(key)).getFile()).arrayBuffer());
+      mem.writePage(+p, bytes);
+    }
+    mem.stackRestore(head.sp);
+    this._reactive.checkpoint(); // 부활 상태를 새 경계로
+    this._lastSeq = this._rt.execSeq;
+    return { pages: entries.length, mb: +(entries.length * PAGE / 1048576).toFixed(1) };
+  }
+}

@@ -214,6 +214,7 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `Terminal` | 서버리스 파이썬 터미널(REPL, 블로킹 input, `%pip`/`%undo`) |
 | `DeviceFs` | 모든 것은 파일: 브라우저 능력을 파이썬 `open()`으로(`/dev/clipboard`, `/proc`) |
 | `Init` | OS의 init: `/home/web/boot.py` 오토스타트 + `cron.py` 주기 틱(전부 파일 주도) |
+| `MachineJournal` | WAL: 머신이 유휴마다 스스로 체크포인트해서 **탭이 크래시해도 마지막 커밋으로 부팅**된다(hibernate 훅 불필요) |
 | `bootSession` / `Session` / `openMachine` | 세션 부활(불멸 커널)과 이동 가능한 `.pymachine` 머신 이미지: 결정적 리플레이 + 사용자 델타를 OPFS에 영속(`save`/`load`)하거나 파일 하나로 내보냄(`exportImage`/`openMachine`) |
 | `WheelCache` | 오프라인·재다운로드 0 패키지 설치를 위한 wheel / OPFS 캐시 |
 | `PyProc` | 프로세스 OS 커널: 스냅샷-fork spawn, `map` / `mapArray` 병렬, 수명주기(`kill` / `signal` / respawn), 그리고 **`fork(2)`**: 살아있는 프로세스 복제(변수·배열이 자식으로 실린다, 적용 1.4ms) |

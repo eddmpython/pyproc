@@ -214,6 +214,7 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `Terminal` | Serverless Python terminal (REPL, blocking input, `%pip` / `%undo`) |
 | `DeviceFs` | Everything is a file: browser capabilities as Python `open()` (`/dev/clipboard`, `/proc`) |
 | `Init` | OS init: `/home/web/boot.py` autorun plus `cron.py` ticks, all file-driven |
+| `MachineJournal` | Write-ahead log: the machine checkpoints itself while idle, so a **crashed tab still boots back into its last commit** (no hibernate hook required) |
 | `bootSession` / `Session` / `openMachine` | Session revival (immortal kernel) and portable `.pymachine` machine images: deterministic replay plus user delta, persisted to OPFS (`save`/`load`) or exported as one file (`exportImage`/`openMachine`) |
 | `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
 | `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), and **`fork(2)`**: clone a *live* process (its variables and arrays travel, 1.4ms apply) |

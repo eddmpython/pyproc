@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: churn</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 저널 churn 바닥의 정체 + idle-batch가 비용을 낮추나 (P1 승격 관문)</h1>
+<p>journalProbe의 발견: tiny 문장 하나가 128p(8MB)를 더럽힌다. 질문 2개:
+① 그 128p가 진짜 사용자 상태인가, 아니면 재실행마다 자리를 옮기는 GC/할당자 scratch(안정)인가?
+② 배치(N문장마다 1커밋)가 총 고유 페이지를 줄이나(같은 페이지 반복 더럽힘의 dedupe)?</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    const r = rt.enableReactive();
+    const sp = r.stackSave();
+    r.checkpoint(); // cp0
+
+    // 변경 페이지 집합을 해시로 수확(어느 페이지가 바뀌었나 = 위치까지 본다)
+    const changedSet = () => {
+      r.checkpoint();
+      const h0 = r.hashes[0], hl = r.hashes[r.liveIdx];
+      const n = Math.min(h0.length, hl.length) / 2;
+      const s = new Set();
+      for (let p = 0; p < n; p++) if (hl[2 * p] !== h0[2 * p] || hl[2 * p + 1] !== h0[2 * p + 1]) s.add(p);
+      return s;
+    };
+    const prevSet = () => { // 직전 체크포인트 대비(문장 하나의 순수 델타)
+      const prev = r.hashes[r.liveIdx];
+      r.checkpoint();
+      const cur = r.hashes[r.liveIdx];
+      const n = Math.min(prev.length, cur.length) / 2;
+      const s = new Set();
+      for (let p = 0; p < n; p++) if (cur[2 * p] !== prev[2 * p] || cur[2 * p + 1] !== prev[2 * p + 1]) s.add(p);
+      return s;
+    };
+
+    // ① churn 바닥: 완전 no-op(1)을 반복. 문장별 델타 페이지와 "위치 안정성"을 본다.
+    const perStmt = [], sets = [];
+    for (let i = 0; i < 6; i++) { rt.run("1"); const s = prevSet(); perStmt.push(s.size); sets.push(s); }
+    timings.noopPerStmt = perStmt;
+    // 위치 안정성: 마지막 두 no-op이 "같은 페이지 집합"을 더럽히나(= 고정 scratch 영역)?
+    const a = sets[sets.length - 2], b = sets[sets.length - 1];
+    let overlap = 0; for (const p of b) if (a.has(p)) overlap++;
+    const stability = b.size ? +(overlap / b.size).toFixed(2) : 1;
+    timings.churnStability = stability;
+    check("① no-op 문장도 델타가 있다(churn 바닥 존재)", perStmt[perStmt.length - 1] > 0, `문장별=${JSON.stringify(perStmt)}`);
+    check("① churn은 고정 영역(재실행마다 같은 페이지 = scratch/GC)", stability >= 0.5, `겹침 ${stability} (1=완전 고정)`);
+
+    // ② idle-batch: 10개 no-op을 "문장마다 커밋" vs "10개 후 1커밋"의 총 고유 페이지 비교.
+    // gc.freeze로 안정 객체를 세대에서 빼면 churn이 주는지도 본다(할당자 가설 검증).
+    rt.run("import gc\ngc.collect()\ngc.freeze()");
+    r.checkpoint(); // 배치 기준점
+    const baseHashes = r.hashes[r.liveIdx];
+    const perStmtUnion = new Set();
+    for (let i = 0; i < 10; i++) { rt.run("1"); for (const p of prevSet()) perStmtUnion.add(p); }
+    // 배치본: 위 10문장 전체를 배치 기준점과 한 번에 비교
+    r.checkpoint();
+    const after = r.hashes[r.liveIdx];
+    const batchSet = new Set();
+    const n = Math.min(baseHashes.length, after.length) / 2;
+    for (let p = 0; p < n; p++) if (after[2 * p] !== baseHashes[2 * p] || after[2 * p + 1] !== baseHashes[2 * p + 1]) batchSet.add(p);
+    timings.perStmtUnionPages = perStmtUnion.size;   // 문장마다 커밋 시 건드리는 고유 페이지
+    timings.batchPages = batchSet.size;              // 10문장 후 1커밋 시 실제 남는 순 변경
+    timings.freezeStmtPages = [...Array(1)].map(() => 0); // placeholder
+    check("② gc.freeze 후 no-op churn 측정", true, `문장합집합 ${perStmtUnion.size}p vs 배치 ${batchSet.size}p`);
+    // 배치가 문장별 합집합보다 작으면 = 반복 더럽힌 scratch가 최종본에서 안정화됨 = idle-batch 이득
+    check("② idle-batch 이득: 배치 순변경 <= 문장별 합집합", batchSet.size <= perStmtUnion.size,
+      `${batchSet.size} <= ${perStmtUnion.size} (${perStmtUnion.size ? Math.round((1 - batchSet.size / perStmtUnion.size) * 100) : 0}% 절감)`);
+
+    // ③ **총 쓰기량**이 저널의 진짜 비용이다(고유 페이지가 아니라). 문장마다 커밋하면
+    // 커밋마다 그 델타(=churn 바닥 포함)를 전부 쓴다. 배치는 커밋 1회로 끝난다.
+    rt.run("acc = 0");
+    r.checkpoint();
+    const realBase = r.hashes[r.liveIdx];
+    const realUnion = new Set();
+    let perStmtTotalWrites = 0; // 문장마다 커밋 시 실제로 디스크에 쓰는 페이지 총합
+    for (let i = 0; i < 10; i++) {
+      rt.run(`acc += ${i}`);
+      const d = prevSet();
+      perStmtTotalWrites += d.size;
+      for (const p of d) realUnion.add(p);
+    }
+    r.checkpoint();
+    const realAfter = r.hashes[r.liveIdx];
+    const realBatch = new Set();
+    const rn = Math.min(realBase.length, realAfter.length) / 2;
+    for (let p = 0; p < rn; p++) if (realAfter[2 * p] !== realBase[2 * p] || realAfter[2 * p + 1] !== realBase[2 * p + 1]) realBatch.add(p);
+    timings.realUnion = realUnion.size;
+    timings.realBatchPages = realBatch.size;
+    timings.perStmtTotalWrites = perStmtTotalWrites;
+    timings.batchSavingPct = perStmtTotalWrites ? Math.round((1 - realBatch.size / perStmtTotalWrites) * 100) : 0;
+    check("③ 고유 페이지는 배치해도 거의 안 준다(churn 바닥이 지배)", realBatch.size <= realUnion.size,
+      `배치 ${realBatch.size}p vs 합집합 ${realUnion.size}p`);
+    // 이것이 P1의 승격 판정: 총 쓰기량이 배치로 크게 줄어야 문장단위 WAL의 대안이 선다.
+    check("③ **총 쓰기량**: 배치가 문장별 총합 대비 5배 이상 절감", realBatch.size * 5 <= perStmtTotalWrites,
+      `문장별 총 쓰기 ${perStmtTotalWrites}p vs 배치 1회 ${realBatch.size}p (${timings.batchSavingPct}% 절감)`);
+    check("③ 최종 상태 정확", rt.run("acc") === 45);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

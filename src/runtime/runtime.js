@@ -10,6 +10,7 @@ import { WheelCache } from "../capabilities/wheelCache.js";
 import { Terminal } from "../capabilities/terminal.js";
 import { DeviceFs } from "../capabilities/deviceFs.js";
 import { Init } from "../capabilities/init.js";
+import { MachineJournal } from "../capabilities/machineJournal.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 
@@ -119,6 +120,7 @@ export class Runtime {
   enableWheelCache(cfg = {}) { return new WheelCache(this, cfg); }
   enableDeviceFs(cfg = {}) { return new DeviceFs(this, cfg); }
   enableInit(cfg = {}) { return new Init(this, cfg); }
+  enableJournal(cfg = {}) { return new MachineJournal(this, cfg); }
 
   // 영속 디스크: OPFS 등 디렉터리 핸들을 파이썬 파일시스템 경로로 마운트한다.
   // 파이썬 open()이 진짜 지속 파일을 읽고 쓴다. 변경 반영은 반환된 sync() 호출(핸들은 소비자 제공).

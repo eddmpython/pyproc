@@ -27,7 +27,8 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 머신이 스스로 일하나(init/cron) | [initProbe.html](initProbe.html) | boot.py 오토스타트 + cron 주기 틱 + /home으로 세대 계승 + 파일 없으면 no-op |
 | 체크포인트가 나무가 되나(머신의 git) | [branchProbe.html](branchProbe.html) | 분기 후 임의 노드 스위치가 형제 델타에 오염되지 않음(선형 체인이면 RED) |
 | 살아있는 커널을 진짜 fork할 수 있나 | [forkLiveProbe.html](forkLiveProbe.html) | 두 커널의 cp0이 바이트 동일 + 부모 상태(변수·배열·계산)가 자식에서 생존 + 주소공간 독립 |
-| 강제종료해도 마지막 문장으로 부활하나(WAL) | [journalProbe.html](journalProbe.html) | clean save 없이 커널을 버려도 저널 재생으로 상태 재구성 + CAS dedupe + 문장당 비용 캘리브레이션 |
+| 강제종료해도 마지막 커밋으로 부활하나(WAL) | [journalProbe.html](journalProbe.html) | clean save 없이 커널을 버려도 유휴 커밋 + recover()로 부활 + CAS dedupe(승격 계약 재실측 창구) |
+| 저널 비용의 정체와 배치 이득은 | [churnProbe.html](churnProbe.html) | no-op 문장의 churn 바닥과 그 고정성 + 배치 시 총 쓰기량 절감률(승격 설계 판정) |
 
 ## 결론 표
 
@@ -49,8 +50,10 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 
 | 2026-07-12 | branchProbe | Edge headless | **선형 체인의 실결함 재현**: 분기 노드로 스위치하면 `RuntimeError: memory access out of bounds`(6/7 RED). 원인 = 델타 해석이 배열 역순(k-1)이라 버려진 형제 분기의 페이지를 집는다. **부모 체인 walk로 수정 후 10/10 GREEN**(분기 왕복/형제 가지/삼중 스위치 전부 정확, 판별 검사는 라이브를 base로 고정해 우연 일치를 제거) | **체크포인트 나무 = 머신의 git 성립**. %undo(뒤로만)에서는 무증상이었고 분기를 여는 순간 힙이 깨지는 결함이었다 | 졸업 -> `reactive.js` parents 체인 + `tree()`. 게이트 상시 |
 | 2026-07-12 | forkLiveProbe | Edge headless | **관문 1차 RED**: 메인 커널 vs 워커 커널 리플레이는 힙 길이는 같아도 **바이트가 다르다**(로더/컨텍스트 차이 = 벽 좌표). **워커 대 워커는 바이트 동일 -> 8/8 GREEN**: 델타 164p/10.3MB 수확 43.6ms, 적용 1.4ms, 왕복 4ms. 부모의 변수·bytearray·계산 결과가 자식에서 생존, 자식 변이는 부모에 무영향(독립 주소공간), 자식이 부모 상태 위에서 연속 계산 | **살아있는 커널의 진짜 fork(2) 성립**. 스냅샷-fork(bare 이미지 복제)와 다르다: `x = bigDf`가 자식으로 실린다. 단 대칭 컨텍스트(워커끼리)가 전제 | 졸업 -> `PyProc({replay})` + `fork(src, dst)`. 커널을 워커로 옮기는 설계(P3)의 근거 |
-| 2026-07-12 | journalProbe | Edge headless | 문장 경계마다 변경 페이지를 CAS(blob/sha256)에 append + HEAD commit. **clean save 없이 커널 A를 버리고 커널 B가 리플레이+재생으로 부활 5/5 GREEN**(x=15, 배열 생존, 연속 실행). dedupe blob 622 < 누적 750. **비용 캘리브레이션(핵심 발견)**: 문장당 변경 중앙값 **128p(8MB)**, 문장당 커밋 ~1s, 복구 2093ms | **강제종료 내성 실증**(로컬 REPL도 못 주는 것). 그러나 문장당 churn 바닥이 GC/할당자 탓에 128p로 높아 **naive 문장단위 WAL은 무겁다** | 개념 졸업, **승격 보류**: idle-batch(유휴 시 커밋) 또는 churn 바닥 조사가 선행. P1 설계 입력 |
+| 2026-07-12 | journalProbe(1차, 문장단위) | Edge headless | 문장 경계마다 CAS append + HEAD commit. **clean save 없이 커널을 버려도 부활 5/5 GREEN**. **비용 발견**: 문장당 변경 중앙값 **128p(8MB)**, 문장당 커밋 ~1s | 강제종료 내성 실증. 그러나 **naive 문장단위 WAL은 무겁다** | 개념 졸업, 승격 보류 -> churnProbe로 원인 규명 |
+| 2026-07-12 | churnProbe | Edge headless | **churn 바닥의 정체 규명**: no-op 문장(`1`)조차 90~106p(6MB)를 더럽히고, 그 페이지 **집합은 97~98% 고정**이다(CPython eval/GC의 scratch 워킹셋 = 사용자 상태와 무관). gc.freeze도 못 줄인다. 배치의 고유 페이지 절감은 1~5%뿐이지만 **총 쓰기량은 88% 절감**(문장별 765p vs 배치 1회 91p = 8.4배) | **커밋 단위는 문장이 아니라 유휴다**: churn 바닥은 못 줄이므로 **커밋 빈도**가 비용을 지배한다. 문장단위 WAL 기각, 유휴 배치 확정 | P1 승격 설계 확정 |
+| 2026-07-12 | journalProbe(승격 계약) | Edge headless | `rt.enableJournal({dir, reactive, idleMs})`: 유휴 판정 후 자동 커밋(139p), **hibernate 없이 커널을 버려도 새 커널이 recover()로 부활**(140p/8.8MB, 2330ms), 저널 없으면 null(첫 부팅), CAS dedupe 동작. 7/7 GREEN | **강제종료 내성이 계약이 됐다**. 커밋은 비동기라 REPL 비차단(커밋 1회 완료 ~2s는 OPFS 파일 생성 비용 - 다음 최적화 후보: blob을 개별 파일 대신 append-only 팩으로) | 졸업 -> `MachineJournal`(enableJournal). 재실측 창구로 유지 |
 
 ## 판정
 
-진행 중 (16개 질문 실측 완료: 결정성/리플레이/성장/이미지/디스크/오프라인 2단/공유 커널/호스팅 독립 2단/파일 세계/init/체크포인트 나무/forkLive/**저널(WAL, 개념 졸업·승격 보류)**. 잔여: WAL idle-batch 설계 후 승격, 커널 선출, /home 포함 이미지 v2)
+진행 중 (17개 질문 실측 완료: 결정성/리플레이/성장/이미지/디스크/오프라인 2단/공유 커널/호스팅 독립 2단/파일 세계/init/체크포인트 나무/forkLive/**저널 WAL(churn 규명 -> 유휴 커밋으로 승격)**. 잔여: 커널 선출(P2), /home 포함 이미지 v2, 저널 blob 팩 최적화)

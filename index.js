@@ -15,6 +15,7 @@
 //   Terminal             - 서버리스 파이썬 REPL(code.InteractiveConsole, %pip/%undo)
 //   DeviceFs             - 모든 것은 파일: 브라우저 능력을 파이썬 open()으로(/dev, /proc)
 //   Init                 - OS의 init: /home/web/boot.py 오토스타트 + cron.py 주기 틱
+//   MachineJournal       - WAL: 유휴마다 상태를 디스크에 남겨 강제종료에도 부활(hibernate 훅 불필요)
 //   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/signal/respawn + fork(2))
 //   SIGNAL               - 시그널 번호(INT/TERM/USR1/USR2). PyProc.signal(pid, signum)
 //   SharedKernel         - 탭 밖에서 사는 공유 커널(SharedWorker, 여러 탭 = 한 파이썬 상태)
@@ -28,6 +29,7 @@ export { VirtualOrigin } from "./src/capabilities/virtualOrigin.js";
 export { Terminal } from "./src/capabilities/terminal.js";
 export { DeviceFs } from "./src/capabilities/deviceFs.js";
 export { Init } from "./src/capabilities/init.js";
+export { MachineJournal } from "./src/capabilities/machineJournal.js";
 export { bootSession, openMachine, Session } from "./src/capabilities/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
