@@ -176,16 +176,22 @@
       check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
 
       // fork(2): 살아있는 프로세스의 상태 복제. 리플레이 풀(대칭 커널)에서만 성립 = 계약.
-      // 여기서는 기전(수확+적용 왕복이 델타를 실어 나름)을 상시 확인하고, 상태 생존/격리의
-      // 정확성은 전용 probe가 정본으로 검증한다(mapArray와 같은 분업): pythonMachine/forkLiveProbe.
+      // 두 워커에 서로 다른 상태를 만든 뒤(더러운 dst) fork하므로, 자식이 정확히
+      // "경계 + 부모 델타"가 되는지(dst 잔재 정화)까지 상시 검증한다. 마커 배타 검사는
+      // 스케줄 배정을 몰라도 성립한다: 혼합 상태면 only0/only1이 둘 다 남는다.
       const fos = new PyProc({ replay: {} });
       await fos.boot(2, false); // 리플레이 부팅(스냅샷 아님 = 바이트 동일한 경계)
       const [p1, p2] = fos.ps().map((p) => p.pid);
-      // 태스크 2개 = 워커 2개가 각각 하나씩(레인당 1개) -> 양쪽에 사용자 상태가 생긴다.
-      await fos.map("def _fn(a):\n    global tag, payload\n    tag = 'proc'\n    payload = bytearray(b'X' * 300000)\n    return 1", [0, 1]);
+      // 태스크 2개 = 워커 2개가 각각 하나씩(레인당 1개) -> 양쪽에 서로 다른 사용자 상태.
+      await fos.map("def _fn(a):\n    global tag, payload\n    tag = 'proc'\n    payload = bytearray(b'X' * (300000 + a * 50000))\n    globals()['only%d' % a] = 1\n    return 1", [0, 1]);
       const fk = await fos.fork(p1, p2).catch((e) => ({ error: String(e) }));
-      check("fork(2): 살아있는 상태 복제(델타 수확 + 적용)", !fk.error && fk.pages > 0,
-        fk.error ? String(fk.error).slice(0, 90) : `${fk.pages}p/${fk.mb}MB, 수확 ${fk.harvestMs}ms + 적용 ${fk.applyMs}ms`);
+      check("fork(2): 살아있는 상태 복제(델타 수확 + 적용)", !fk.error && fk.pages > 0 && fk.reverted > 0,
+        fk.error ? String(fk.error).slice(0, 90) : `${fk.pages}p/${fk.mb}MB, 수확 ${fk.harvestMs}ms + 적용 ${fk.applyMs}ms, 정화 ${fk.reverted}p`);
+      check("fork(2): 계보 기록(parentPid)", fos.ps().find((p) => p.pid === p2).parentPid === p1);
+      fos.kill(p1); // 남은 ready = p2(자식)만 -> 다음 map은 반드시 자식에서 돈다
+      const [forkState] = await fos.map("def _fn(a):\n    src = 1 if 'only1' in globals() else 0\n    clean = ('only0' in globals()) != ('only1' in globals())\n    return [clean, tag, len(payload) - 50000 * src]", [0]);
+      check("fork(2): 더러운 dst 정화(부모+자식 혼합 상태 없음)", !!forkState && forkState[0] === true && forkState[1] === "proc" && forkState[2] === 300000,
+        JSON.stringify(forkState));
       fos.terminate();
 
       // mapArray(numpy 샤딩)의 런타임 검증은 무게 때문에 전용 probe가 담당한다:

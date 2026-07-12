@@ -81,14 +81,32 @@ onmessage = async (e) => {
       const sp = py._module._emscripten_stack_get_current ? py._module._emscripten_stack_get_current() : null;
       postMessage({ type: "harvested", id: msg.id, pages, bin: bin.buffer, sp, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
     } else if (msg.type === "applyDelta") {
-      // fork의 자식측: 부모의 델타를 적용하면 이 워커가 부모의 상태가 된다(주소공간은 독립).
+      // fork의 자식측: 이 워커를 정확히 "cp0 + 부모 델타" 상태로 만든다(주소공간은 독립).
+      // 델타만 덮으면 안 된다: dst가 경계 이후 실행으로 더럽힌 페이지 중 델타 밖의 것이 남아
+      // 부모+자식 혼합 상태가 조용히 생긴다(2026-07-12 심판 발견). 그래서 먼저 델타 밖의
+      // 드리프트를 cp0으로 되돌리고 그 위에 델타를 덮는다. 비용 = 힙 1회 스캔(수확과 동급).
       if (!cp0) throw new Error("applyDelta: 리플레이 부팅한 프로세스에서만 가능하다");
       const t0 = performance.now();
       const bin = new Uint8Array(msg.bin);
       const h = heap();
+      let maxEnd = 0;
+      for (const p of msg.pages) if ((p + 1) * PAGE > maxEnd) maxEnd = (p + 1) * PAGE;
+      if (maxEnd > h.length) throw new Error(`applyDelta: 델타가 힙 밖(${maxEnd} > ${h.length}). 성장 세션 간 fork는 미지원 좌표`);
+      const incoming = new Set(msg.pages);
+      let reverted = 0;
+      const nCommon = Math.min(h.length, cp0.length) / PAGE;
+      for (let p = 0; p < nCommon; p++) {
+        if (incoming.has(p)) continue;
+        const a = h.subarray(p * PAGE, (p + 1) * PAGE), b = cp0.subarray(p * PAGE, (p + 1) * PAGE);
+        let same = true;
+        for (let i = 0; i < PAGE; i += 8) { if (a[i] !== b[i]) { same = false; break; } } // 성긴 비교(빠른 기각)
+        if (same) { for (let i = 0; i < PAGE; i++) { if (a[i] !== b[i]) { same = false; break; } } } // 확정 비교
+        if (!same) { a.set(b); reverted++; }
+      }
+      // cp0 길이 밖(성장분)의 dst 잔재는 복원된 상태가 참조하지 않으므로 그대로 둔다.
       msg.pages.forEach((p, i) => h.set(bin.subarray(i * PAGE, (i + 1) * PAGE), p * PAGE));
       if (msg.sp !== null && py._module._emscripten_stack_restore) py._module._emscripten_stack_restore(msg.sp);
-      postMessage({ type: "applied", id: msg.id, pages: msg.pages.length, ms: Math.round((performance.now() - t0) * 10) / 10 });
+      postMessage({ type: "applied", id: msg.id, pages: msg.pages.length, reverted, ms: Math.round((performance.now() - t0) * 10) / 10 });
     }
   } catch (err) {
     if (interruptView) interruptView[0] = 0; // 시그널 소진 후 채널 리셋(다음 태스크 오염 방지)

@@ -82,9 +82,11 @@ export class PyProc {
     if (!dst || dst.state !== "ready") throw new Error(`fork: dst pid ${dstPid} 준비되지 않음`);
     const h = await this._call(src, { type: "harvest" });
     const applied = await this._call(dst, { type: "applyDelta", bin: h.bin, pages: h.pages, sp: h.sp }, [h.bin]);
+    dst.parentPid = srcPid; // 계보 기록: fork된 프로세스의 부모(ps()에 노출)
     return {
       pages: h.pages.length,
       mb: +(h.pages.length * 65536 / 1048576).toFixed(1),
+      reverted: applied.reverted, // dst의 델타 밖 드리프트를 cp0으로 되돌린 페이지 수(정화 증거)
       harvestMs: h.ms,
       applyMs: applied.ms,
     };
