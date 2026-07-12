@@ -30,14 +30,14 @@ reactive를 이 엔진 위에서(엔진 무관성의 최종 증명).
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-07-12 | wasiBootProbe | Edge headless, 로컬 COOP+COEP | GREEN 6/6. WLR CPython 3.12(WASI) 워커 부팅+print 253ms(Pyodide 콜드 ~3s 대비 빠름), exports.memory(heapU8 등가) 접근, json/sys 동작, **결정적 부팅 = 두 커널 파이썬 가시 상태 바이트 동일**(비결정 대조로 확인) | **"Pyodide를 뗀다"가 실측이 됐다.** 계약 코어 2축(선형 메모리 + 결정적 부팅)이 non-Pyodide에서 성립. WASI는 엔트로피가 import 2개로 수렴 = 더 깨끗한 결정성 | 값 프로토콜, 반복 실행, reactive 이식 |
-| 2026-07-12 | wasiReplProbe | Edge headless, 로컬 COOP+COEP | GREEN 10/10. 인터프리터를 세워두고 반복 실행(상태 유지 x=41->+1->42), 값 프로토콜 양방향(get/set, FFI 없이), 결정적 부팅+반복 실행, **엔진 선형 메모리 위 힙 시간여행**(경계 체크포인트 10MB -> 변이 -> 복원이 2페이지 되돌림) | **pyproc 프리미티브(반복 실행/값 다리/힙 시간여행)가 non-Pyodide 위에서 성립.** 파이썬 엔진 드라이버는 pyproc 소유(wasiReplDriver.py). 돌파한 벽 3(compile 스택/UTF-8 argv/Fd 초기화) | 복원 후 재개(값 채널을 stdin과 분리), WasiEngine 승격 |
+| 2026-07-12 | wasiReplProbe | Edge headless, 로컬 COOP+COEP | GREEN 11/11. 인터프리터를 세워두고 반복 실행(상태 유지 x=41->+1->42), 값 프로토콜 양방향(get/set, FFI 없이), 결정적 부팅+반복 실행, **엔진 선형 메모리 위 힙 시간여행**(경계 체크포인트 10MB -> 변이 -> 복원이 변이 페이지 되돌림), 복원 후 파이썬 재개(wasm 크래시 0) | **pyproc 프리미티브(반복 실행/값 다리/힙 시간여행/재개)가 non-Pyodide 위에서 성립.** 파이썬 엔진 드라이버는 pyproc 소유(wasiReplDriver.py, unbuffered os.read). 돌파한 벽 3(compile 스택/UTF-8 argv/Fd 초기화) | 완전 상태복귀(값 채널 무상태화), WasiEngine 승격 |
 
 ## 정직한 벽 (실측으로 특정)
 
-- **복원 후 파이썬 재개**: 힙 전체 복원이 stdin BufferedReader 상태까지 되돌려 다음 readline이 깨진다(드라이버가 stdin REPL이라 값 채널과 힙이 결합). 완전한 시간여행 재개는 값 전달을 stdin과 분리하는 채널(preopen 파일/공유 메모리)이 전제. 힙 스냅샷/복원 자체는 성립.
+- **완전 상태복귀(복원 후 재개)**: 힙 스냅샷/복원 자체는 성립하고, unbuffered os.read 드라이버로 복원 후 파이썬이 wasm 크래시 없이 재개한다(인터프리터 살아있음). 잔여 벽은 stdin 입력 스트림의 1바이트 재동기화 - 복원이 CPython os.read의 내부 상태와 미세하게 어긋난다. **근본 원인은 WASI FFI 부재**: Pyodide reactive는 FFI로 코드를 힙에 직접 주입해 입력 스트림이 없지만, WASI는 값/코드를 stdin으로 넣어야 해 입력 상태가 힙에 결합된다. 완전 해결 = 값 채널을 완전 무상태화하는 프로토콜(다음 관문).
 - **스택 sp 미노출**: WASI 프리빌트는 emscripten_stack_* 미노출(null 계약으로 흡수, 경계 스냅샷이 스택 영역을 포함하므로 경계-대-경계 복원은 성립).
 - **네이티브 확장**: 정적 링크(dlopen 없음). PEP 783 휠은 Pyodide ABI 대상.
-- **argv UTF-8**: 한글 주석을 -c로 실으면 크래시. 소스는 파일로 전달(회피 확정).
+- **argv UTF-8**: 한글 주석을 -c로 실으면 크래시. 소스는 preopen 파일로 전달(회피 확정).
 
 ## 판정
 

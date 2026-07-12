@@ -58,6 +58,8 @@ class SabStdin extends OpenFile {
             const nCommon = Math.min(cur.length, snap.length);
             for (let p = 0; p < nCommon; p += 65536) if (cur[p] !== snap[p]) diffBefore++;
             cur.set(snap); // 힙 전체를 경계 스냅샷으로 되돌림(스택 포함)
+            this.buf = new Uint8Array(0); // stdin 버퍼를 fresh로: 복원된 파이썬 os.read가 다음
+            this.pos = 0;                 // 명령을 새로 받게(복원과 JS측 버퍼 재동기화)
             postMessage({ type: "meta", kind: "restore", idx: i, diffBefore });
           }
           continue; // 메타는 다음 입력을 계속 기다린다(파이썬 왕복 아님)

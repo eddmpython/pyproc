@@ -10,9 +10,13 @@
 - 돌파한 벽 3개: ① 반복 루프 프레임 위 명시적 compile()이 wasm C 스택 초과(exec(str) 직접으로)
   ② argv에 UTF-8 멀티바이트(한글 주석)를 실으면 args 처리 크래시(드라이버를 preopen 파일로 실행)
   ③ Fd 부분 구현 stdin은 초기화가 깨짐(OpenFile 상속 + fd_fdstat_get).
-- 정직한 잔여 벽: 힙 전체 복원은 stdin BufferedReader 상태까지 되돌려 "복원 후 파이썬 재개"가
-  막힌다(드라이버가 stdin REPL이라 값 채널과 힙이 결합). 완전한 재개는 값 채널을 stdin과 분리하는
-  설계가 전제(preopen 파일/공유 메모리 채널). 스택 sp 미노출, 네이티브 확장(PEP 783)도 벽.
+- 복원 후 재개: unbuffered os.read 드라이버로 힙 복원이 wasm 크래시를 내지 않고 파이썬이
+  살아서 다음 명령을 처리한다(에러가 out-of-bounds = wasm 붕괴가 아니라 파이썬 레벨). 즉
+  인터프리터 재개 자체는 성립. 정직한 잔여 벽은 stdin 입력 스트림의 1바이트 재동기화(복원이
+  CPython의 os.read 내부 상태와 미세하게 어긋난다) = **완전 상태복귀는 값 채널을 완전
+  무상태화하는 프로토콜이 전제**. 근본 원인은 WASI FFI 부재: Pyodide reactive는 FFI로 코드를
+  힙에 직접 주입해 입력 스트림이 없지만, WASI는 stdin 경유라 입력 상태가 힙에 결합된다.
+- 그 밖 벽: 스택 sp 미노출(경계-대-경계 복원은 성립), 네이티브 확장(PEP 783), argv UTF-8(파일로 회피).
 -->
 <html lang="ko">
 <head><meta charset="utf-8"><title>probe: wasiRepl</title>
@@ -147,6 +151,15 @@
     // 정확히 경계 스냅샷 바이트로 되돌렸다(엔진 선형 메모리 위 시간여행의 실증).
     check("WASI 힙 시간여행: 복원이 변이된 힙을 경계로 되돌림", rr && rr.kind === "restore" && rr.diffBefore > 0,
       rr ? `되돌린 변이 페이지 ${rr.diffBefore}개` : "실패");
+    // 복원 후 재개: unbuffered os.read 드라이버로 힙 복원이 wasm 크래시를 내지 않고 파이썬이
+    // 살아서 다음 명령을 처리한다(에러가 out-of-bounds = wasm 붕괴가 아니라 파이썬 레벨이면
+    // 인터프리터가 재개한 것). 완전한 상태복귀(state가 체크포인트로)는 stdin 입력 스트림의
+    // 1바이트 재동기화가 잔여 벽 = 값 채널을 완전 무상태화하는 프로토콜이 전제(다음 관문).
+    const after = await tt.repl.exec("print(state['v'], len(state['log']), 'big' in dir())");
+    const resumed = !after.includes("out of bounds") && after.length > 0;
+    const fullRevert = after.trim() === "100 1 False";
+    check("복원 후 파이썬 재개(wasm 크래시 0)", resumed,
+      fullRevert ? "완전 상태복귀까지 성립" : `재개함(응답 "${after.trim().slice(0, 48)}"), 완전 상태복귀는 stdin 재동기화 잔여`);
     tt.worker.terminate();
   } catch (e) {
     if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
