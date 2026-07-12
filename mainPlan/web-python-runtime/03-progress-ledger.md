@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 라운드 8: 객관 판정(심판 3종) + 셀프호스팅 증명 + 판정의 코드화 (구조 278 + 브라우저 35 + probe 3종)
+
+- 질문: "정말 OS인가, 그 위에서 서버·웹을 개발할 수 있는가". 독립 심판 3종(OS 점수표 / 개발 플랫폼 / 적대적 반박)을 돌려 객관 좌표를 받고, 지적을 당일 코드로 갚았다. 정본: [browser-os/02-os-verdict.md](../browser-os/02-os-verdict.md).
+- **판정 요지**: OS 간판은 조건부 49/100(조건 = P4 파이프 / P2 커널 탭독립 / P6 집행되는 보호). 셀프호스팅은 **성립을 실측으로 확정**: 신설 캠페인 [selfHost](../../tests/attempts/selfHost/README.md) fullStackProbe 8/8 - FastAPI(설치 916ms) + sqlite + HTML을 /home에 개발, GET p50 2.1ms, 재부팅->재서빙 3.4s(코드/DB 디스크 생존), dev loop(수정->반영) 7ms.
+- **가상 오리진 충실화 3종 승격**(개발 플랫폼 심판의 4구멍): 요청 헤더 전달 + 바이너리 바디(b64 채널, .text/.content 등가 계약) + **커널 클라이언트 라우팅(hello 등록부)** + 무응답 504 타임아웃. originFidelityProbe 7/7: **가상 오리진에서 서빙된 iframe(커널 밖 문서)의 fetch가 커널에 20ms로 도달** = 서빙된 웹앱이 진짜 문서로 산다. 발견 2건: `setGlobal(null)`은 JsNull 프록시(널 정규화는 JS 경계), SW 합성 응답에 COI 헤더 없으면 부모 COEP가 iframe 차단(기본 탑재로 해소). 잔여 벽: Set-Cookie 스트립/WebSocket/스트리밍.
+- **조용한 오염 경로 2개 폐쇄**(심판 적발 실결함): ① fork 자식측이 델타 밖 드리프트를 cp0으로 복원(더러운 dst 정화, 게이트 마커 배타 검사로 상시화. 적용 1.4->33ms는 정확성의 값) + parentPid 계보 기록 ② journal recover가 경계 지문(h0) 불일치 시 명시적 예외(journalProbe 8/8) + start()의 storage.persist() 요청(디스크의 캐시 강등 방지).
+- 표기 정직화: 랜딩 5.28배를 "sharded numpy sort vs one pass"로(샤딩 배속이지 same-work 병렬 효율이 아님을 명시. same-work 정직 수치는 게이트 map 검사).
+- 다음 지렛대(판정 문서 §다음 지렛대): P2 > P4 > P6, 대형 힙(500MB+) 성능 봉투 실측, 부트 SRI/.pymachine 서명/저장물 포맷 버전, WebVM 정면 벤치.
+
 ### 2026-07-12 발명 라운드 7: WAL 승격 - 강제종료해도 부활하는 머신 (구조 275 + 브라우저 33)
 
 - 로드맵 P1(machineJournal) 완주. 1차 개념증명(문장단위 WAL)이 무겁다는 신호를 남겼고, **churnProbe로 원인을 규명해 설계를 확정**한 뒤 승격했다.
