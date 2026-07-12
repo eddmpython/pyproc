@@ -4,7 +4,16 @@
 
 ## 결정 원장 (최신이 위)
 
-### 2026-07-12 라운드 11: D2 관문 - "Pyodide를 뗀다"가 실측이 됐다 (enginePort 캠페인 6/6)
+### 2026-07-12 non-Pyodide 위 pyproc 프리미티브 실증 - 반복 실행/값 프로토콜/힙 시간여행 (enginePort 10/10)
+
+- D2 관문(부팅+결정성)에 이어 pyproc의 실제 프리미티브가 non-Pyodide CPython(WASI) 위에서 도는지 실측. GREEN 10/10.
+- **반복 실행 + 값 프로토콜**: 인터프리터를 세워두고 코드 조각을 N회 실행(상태 유지 x=41->+1->42), FFI 없는 값 다리(get=json.dumps, set=json.loads), 예외 생존, 결정적 부팅+반복 실행(두 커널 random 스트림 바이트 동일). 파이썬 엔진 드라이버는 pyproc이 정본 소유(wasiReplDriver.py, SSOT). 외부 CPython 바이너리는 참조만.
+- **엔진 선형 메모리 위 힙 시간여행**: 경계(fd_read = 파이썬이 다음 입력 대기, 스택 항상 동일 깊이)에서 힙 체크포인트(10MB 스냅샷) -> 변이 -> 복원이 변이된 2페이지를 경계 스냅샷 바이트로 되돌림. **pyproc의 리액티브/세션/.pymachine 전제(페이지 스냅샷/복원)가 Pyodide `_module.HEAPU8` 없이 exports.memory 위에서 성립**. Pyodide의 "실행 경계 스택 휴지" 가정을 WASI의 fd_read 경계로 옮긴 것.
+- **돌파한 벽 3(실측 특정)**: ① 반복 루프 프레임 위 명시적 compile()이 wasm C 스택 초과 -> exec(str) 직접 ② argv에 UTF-8 멀티바이트(한글 주석) -> args 처리 크래시 -> 드라이버를 preopen 파일로 실행 ③ Fd 부분 구현 stdin 초기화 크래시 -> OpenFile 상속 + fd_fdstat_get.
+- **정직한 잔여 벽**: 힙 전체 복원이 stdin BufferedReader 상태까지 되돌려 "복원 후 재개"가 막힌다(드라이버가 stdin REPL이라 값 채널과 힙 결합). 완전한 재개는 값 채널을 stdin과 분리하는 설계(preopen 파일/공유 메모리)가 전제. 스택 sp 미노출(경계-대-경계 복원은 성립), 네이티브 확장(PEP 783)도 벽.
+- **의미**: EngineContract(계약만으로 프리미티브가 돈다) + enginePort(그 프리미티브가 non-Pyodide 위에서 실제로 돈다)로 "Pyodide를 뗀다"의 개념+프리미티브 실증이 닫혔다. 승격 경로 = EngineContract에 WasiEngine 구현 -> `boot({engine})` 옵션화. 그 전 실측: 값 채널 분리(복원 후 재개).
+
+### 2026-07-12 D2 관문 - "Pyodide를 뗀다"가 실측이 됐다 (enginePort 부팅 6/6)
 
 - 목표의 심장("Pyodide를 떼고 진짜 파이썬이 굴러갈 수준")을 실측으로 관통했다. [enginePort 캠페인](../../tests/attempts/enginePort/README.md): non-Pyodide CPython 3.12(VMware WLR, WASI 빌드)을 vendored browser_wasi_shim(의존성 0, MIT)으로 우리 워커에서 부팅.
 - **GREEN 6/6**: ① 부팅 + print(1+1)="2" **253ms**(Pyodide 콜드 ~3s보다 빠르다) ② 계약 코어 = exports.memory(heapU8 등가) 접근 성립 ③ 표준 라이브러리(json/sys) 동작 ④ **결정적 부팅** = random_get + clock_time_get을 shim에서 고정하면 두 커널의 파이썬 가시 상태(random.random(), hash)가 바이트 동일 ⑤ 비결정 대조(고정 끄면 갈림)로 우연 아님 확인.
