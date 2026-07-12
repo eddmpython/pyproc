@@ -19,15 +19,21 @@ export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
 
 // 엔진 스크립트 1회 로드(전역 loadPyodide 확보). boot/bootEnv/PyProc 공용.
-export async function ensureEngineScript(indexURL) {
-  if (globalThis.loadPyodide) return;
-  await new Promise((res, rej) => {
-    const s = document.createElement("script");
-    s.src = indexURL + "pyodide.js";
-    s.onload = res;
-    s.onerror = () => rej(new Error("pyodide.js 로드 실패: " + indexURL));
-    document.head.appendChild(s);
-  });
+// 진행 중 로드는 공유한다: 동시 첫 호출이 script 태그를 중복 삽입하지 않게(부팅 동시성 수리).
+// 전역 loadPyodide는 오리진당 하나이므로 스크립트 출처는 첫 호출의 indexURL이 이긴다.
+let engineScriptLoad = null;
+export function ensureEngineScript(indexURL) {
+  if (globalThis.loadPyodide) return Promise.resolve();
+  if (!engineScriptLoad) {
+    engineScriptLoad = new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = indexURL + "pyodide.js";
+      s.onload = res;
+      s.onerror = () => { engineScriptLoad = null; rej(new Error("pyodide.js 로드 실패: " + indexURL)); };
+      document.head.appendChild(s);
+    });
+  }
+  return engineScriptLoad;
 }
 
 // 코어 자산 MIME(캐시 서빙용). instantiateStreaming이 wasm 타입을 요구한다.

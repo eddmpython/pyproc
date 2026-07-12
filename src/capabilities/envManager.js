@@ -50,7 +50,9 @@ export async function bootEnv(manifest = {}, dirs = {}) {
   }
   const bootMs = Math.round(performance.now() - t0);
 
-  const rt = new Runtime(py);
+  // indexURL을 반드시 넘긴다: 빠뜨리면 기본 CDN으로 되돌아가 자식 워커/subprocess가
+  // 자체 호스팅·오프라인 배포 지점에서 샌다(외부 평가 적발 실버그, 2026-07-12).
+  const rt = new Runtime(py, indexURL);
   const t1 = performance.now();
   if (manifest.packages && manifest.packages.length) {
     if (dirs.wheels) await new WheelCache(rt, { dir: dirs.wheels }).loadPackages(manifest.packages);
