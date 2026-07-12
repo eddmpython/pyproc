@@ -29,6 +29,14 @@ Under the hood it runs [Pyodide](https://pyodide.org) (CPython compiled to WebAs
 
 The pieces to run Python in a browser already exist. What did not exist is a **shared layer** that turns them into a real runtime. codaro, dartlab, and xlpod all need the same thing. If each copy-pastes it, the runtime splits into three versions that drift apart. pyproc is that layer, built once and shared version-pinned, so improvements land in one place. See [docs/product/vision.md](docs/product/vision.md) for the full direction and policy.
 
+## Who uses it
+
+- **dartlab** (live): financial-disclosure notebooks over DART and SEC filings. A notebook worker boots its own Pyodide and adopts pyproc with `new Runtime(py)`, running the in-kernel `AsgiServer` as its browser-as-server backend (`fetch("/pyapi/...")` answered by a Python app, no socket) in production today.
+- **codaro**: first consumer, pinned by commit SHA, wiring the `Runtime` and `PyProc` seam.
+- **xlpod** (adopting): a browser spreadsheet that runs real Python inside cell formulas (`=PYUDF`). Uses the `Runtime`, `setInterruptBuffer` (cancel a runaway UDF), and the PyProxy value bridge; its own synchronous SAB bridge stays on xlpod.
+
+A worker that already booted its own Pyodide adopts pyproc with `new Runtime(py)`: no second interpreter, all the capabilities. See [docs/consuming/contract.md](docs/consuming/contract.md).
+
 ## Core concepts, in plain terms
 
 **1. Snapshot-fork (fast process spawn).** Booting a fresh Pyodide interpreter takes about 2.8 seconds. pyproc boots one parent, takes a memory snapshot (the "process image"), and starts workers from that snapshot in about 184ms. That is a 15.4x faster spawn, and each child is an isolated process.

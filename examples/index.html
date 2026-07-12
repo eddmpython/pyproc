@@ -95,6 +95,13 @@
       <div class="card"><h3>Persistent disk and offline</h3><p>/home/web is a real OPFS-backed disk that survives kernels. Core assets cache so the second boot needs no network at all.</p></div>
     </div>
 
+    <h2 id="used-by">Used by real products</h2>
+    <div class="cards">
+      <div class="card"><h3>dartlab</h3><p>Financial-disclosure notebooks over DART and SEC filings. pyproc's in-kernel ASGI server is the live browser-as-server backend: a Python FastAPI app answers <code>fetch("/pyapi/...")</code> with no socket, in production today.</p></div>
+      <div class="card"><h3>xlpod</h3><p>A browser spreadsheet that runs real Python inside cell formulas (<code>=PYUDF(...)</code>). Adopting pyproc's Runtime for the interpreter, interrupt-driven cancellation of runaway UDFs, and the value bridge.</p></div>
+    </div>
+    <p class="dim" style="margin:.2rem 0 0">A worker that already booted its own Pyodide adopts pyproc with <code>new Runtime(py)</code>: no second interpreter, all the capabilities.</p>
+
     <h2 id="install">Install</h2>
     <div class="panel">
       <div class="term">npm install pyproc</div>

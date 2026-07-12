@@ -75,8 +75,27 @@ subpath export: `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `p
 
 | 소비자 | 상태 |
 |---|---|
-| codaro | first consumer. SHA 핀 + `browserPythonRuntime.ts` seam 완료, UI 배선 예정 |
-| xlpod | 자체 Pyodide 워커 운용 중. pyproc이 동기 UDF 요구를 흡수하면 이관(로드맵 syncUdfBridge) |
-| dartlab | 미착수(점진 이관 대상) |
+| dartlab | **라이브 소비자.** 노트북 워커가 자체 부팅한 Pyodide를 `new Runtime(py)`로 채택하고 `enableAsgiServer`를 기본 ASGI 커널로 프로덕션 배포(browser-as-server /pyapi). 프로세스 병렬(scan)/시간여행 UI는 후속 채택 후보 |
+| codaro | first consumer. SHA 핀 + `browserPythonRuntime.ts` seam. Runtime + PyProc 타입 import |
+| xlpod | 준비 중(스프레드시트 =PYUDF 셀 안 파이썬 동기 호출). pyproc 소비를 PRD로 확정. 하드 블로커였던 `setInterruptBuffer`가 공개 표면으로 승격돼 이관 경로가 열림. 자체 SAB 동기 브리지(formualizer 콜백)는 잔류(로드맵 syncUdfBridge가 흡수 예정) |
+
+## 자체 부팅한 Pyodide 채택 (dartlab/xlpod 패턴)
+
+워커에서 자체 부팅한 Pyodide가 이미 있으면 pyproc의 `boot()`을 또 부르지 않고 그 인스턴스를 채택한다:
+
+```js
+// 워커: 자체 부팅한 Pyodide(예: dartlab의 노트북 워커)
+const py = await loadPyodide({ indexURL });
+// pyproc 능력을 그 위에 얹는다(두 번째 인터프리터를 만들지 않는다)
+const rt = new Runtime(py);              // Runtime(py)는 Pyodide 인스턴스를 감싼다(하위 호환)
+const asgi = rt.enableAsgiServer({ app: "app" });   // 커널 안 서버
+rt.setInterruptBuffer(interruptSab);     // 동기 UDF 무한 실행 취소(SIGINT)
+const fn = rt.getGlobal("myUdf");        // PyProxy: call/toJs/destroy 재사용(셀마다 재조회 0)
+```
+
+- `new Runtime(py)`는 EngineContract가 아니라 로드된 Pyodide를 주면 감싼다(구분: `runSync` 유무). `boot()`을 못 쓰는 워커 소비자의 채택 경로다.
+- `setInterruptBuffer(sab)`: 이 SAB의 `[0]`에 시그널 번호(2=SIGINT)를 쓰면 실행 중 파이썬이 취소된다. 엔진 `raw` 없이 계약으로 도달한다.
+- `getGlobal(name)`은 엔진 프록시(PyProxy)를 그대로 반환한다. `call`/`toJs`/`destroy`가 계약상 지원된다(재사용 캐시 패턴).
+- WASI 세션(`bootWasi`)은 별도 async 표면이며 값 다리 JSON 한정이라, C 확장(polars/pyarrow)에 의존하는 dartlab/xlpod의 정본 경로는 Pyodide다.
 
 배선 로드맵 상세: [mainPlan/web-python-runtime/02-phasing-and-wiring.md](../../mainPlan/web-python-runtime/02-phasing-and-wiring.md)

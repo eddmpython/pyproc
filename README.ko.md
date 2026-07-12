@@ -29,6 +29,14 @@ pyproc은 브라우저 파이썬을 "노트북 한 셀"이 아니라 **운영체
 
 브라우저에서 파이썬을 돌리는 조각은 이미 있다. 없던 것은 그 조각을 진짜 런타임으로 엮는 **공유 계층**이다. codaro·dartlab·xlpod가 전부 같은 걸 필요로 하는데, 각자 복붙하면 런타임이 3벌로 갈라져 따로 논다. pyproc은 그 계층을 한 번 만들어 버전 고정으로 공유해서, 개선이 한 곳에 모이게 한다. 전체 방향과 정책은 [docs/product/vision.md](docs/product/vision.md).
 
+## 누가 쓰나
+
+- **dartlab** (라이브): DART + SEC 공시 데이터 노트북. 노트북 워커가 자체 부팅한 Pyodide를 `new Runtime(py)`로 채택하고, 커널 안 `AsgiServer`를 browser-as-server 백엔드로 프로덕션 운영한다(`fetch("/pyapi/...")`를 파이썬 앱이 소켓 없이 응답).
+- **codaro**: first consumer. 커밋 SHA 핀, `Runtime` + `PyProc` seam 배선.
+- **xlpod** (준비 중): 셀 수식 안에서 진짜 파이썬을 부르는 브라우저 스프레드시트(`=PYUDF`). `Runtime`, `setInterruptBuffer`(무한 UDF 취소), PyProxy 값 다리를 쓴다. 자체 SAB 동기 브리지는 xlpod에 잔류.
+
+자체 부팅한 Pyodide가 이미 있으면 `new Runtime(py)`로 채택한다: 두 번째 인터프리터 없이 능력만 얹는다. 상세: [docs/consuming/contract.md](docs/consuming/contract.md).
+
 ## 핵심 개념, 쉽게
 
 **1. 스냅샷-fork (빠른 프로세스 생성).** Pyodide 인터프리터를 새로 부팅하면 약 2.8초 걸린다. pyproc은 부모 하나를 부팅해 메모리 스냅샷("프로세스 이미지")을 뜨고, 워커를 그 스냅샷에서 약 184ms에 시작한다. 15.4배 빠른 spawn이고, 각 자식은 독립 프로세스다.

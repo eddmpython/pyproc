@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 소비자 실태 조사 + 채택 표면 - dartlab 라이브 소비자 발견 + 회귀 복원 (구조 330 + 게이트 39/39)
+
+- 형제 레포(dartlab/xlpod) 실태를 전문 에이전트 2종으로 조사. **가장 중요한 발견: dartlab은 이미 라이브 소비자다**(문서엔 "미착수"로 낡아 있었다). 노트북 워커가 자체 부팅 Pyodide를 `new Runtime(py)`로 채택하고 `enableAsgiServer`를 기본 ASGI 커널로 프로덕션 배포(browser-as-server /pyapi, `USE_PYPROC_ASGI=true`). SHA 핀 + 주간 핀 범프 워크플로 운영.
+- **회귀 발견·복원(급소)**: EngineContract seam이 `Runtime(engine)`으로 바꿔 dartlab의 `new Runtime(py)` 채택 경로를 깰 뻔했다(py엔 runSync 없음 -> engine.runSync 호출 실패). constructor가 runSync 유무로 판별해 Pyodide 인스턴스면 PyodideEngine으로 감싸도록 복원(하위 호환). 게이트에 채택 경로 상시 가드 + consumerAdoptProbe 5/5. **소비자 파손을 막았다.**
+- **xlpod 하드 블로커 해소**: xlpod(브라우저 스프레드시트, =PYUDF 셀 안 파이썬 동기 호출)의 유일한 이관 블로커였던 `setInterruptBuffer`가 엔진 어댑터엔 있으나 Runtime 공개 표면에 없어 raw 탈출구로만 도달했다. `Runtime.setInterruptBuffer` 공개 승격 + `getGlobal`의 PyProxy 반환 계약(call/toJs/destroy 재사용) 명문화.
+- **소비 방안 반영**: docs/consuming/contract.md 소비자 표 갱신(dartlab 라이브 / codaro / xlpod 준비 중) + "자체 부팅 Pyodide 채택" 절(new Runtime(py) + setInterruptBuffer + getGlobal PyProxy 패턴). 랜딩(examples/index.html) "Used by real products" 카드(dartlab/xlpod) + README 2종 "누가 쓰나" 섹션. 메모리 갱신(dartlab=라이브).
+- **똑똑하게 쓸 여지**(조사가 특정, 후속 후보): dartlab scan 병렬화(PyProc.map, P4 crossOriginIsolated 전제), 두 Pyodide 경로 통합+웜부팅(bootEnv/WheelCache), browser-as-server 배선 흡수(VirtualOrigin), OPFS 시간여행 UI(ReactiveController saveBase). xlpod: syncUdfBridge 능력 승격(로드맵 #4, SAB 왕복 흡수). 남은 마찰: 서브패스 타입 동봉, boot({loadPyodide}) 워커 옵션, 명명/분기 체크포인트, github npm ci 워크어라운드 문서화.
+
 ### 2026-07-12 WASI 세션 src 승격 - bootWasi/WasiSession 공개 표면 (구조 328 + WASI 게이트 6/6)
 
 - enginePort 캠페인(완전 시간여행 12/12)을 src 본진으로 승격. 전문 에이전트 아키텍처 설계로 결정: **Runtime에 끼우는 boot({engine})이 아니라 별도 async 표면 bootWasi -> WasiSession**. 근거: Pyodide는 메인 스레드 동기(Runtime.run)지만 WASI는 워커 안 비동기(메인 Atomics.wait 불법)라 동기 계약을 못 지킨다. 별도 표면이면 소비자 4표면(boot/Runtime/PyProc/ReactiveController)을 하나도 안 건드린다(codaro SHA 핀 무영향, 전부 additive).
