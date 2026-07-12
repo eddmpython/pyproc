@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: signalTable</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 시그널 표가 열리나 (SIGINT 한 칸 -> 유닉스 시그널)</h1>
+<p>결정 실험: interrupt SAB는 이미 "시그널 번호를 쓰는 채널"이다(워커가 2를 SIGINT로 읽는다).
+같은 채널에 15(SIGTERM)/10(SIGUSR1)를 쓰면 파이썬 signal.signal 핸들러가 발화하나?
+열리면 잡 컨트롤(%kill/%stop)과 협조적 종료가 발명 0으로 서고, 안 열리면 대체 설계를 간다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { PyProc } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  // 워커에 핸들러를 심고 타이트 루프를 돌린 뒤, 커널이 SAB에 signum을 쓴다.
+  // 핸들러가 불리면 파이썬 예외/플래그로 관측된다. 외부 기술 명칭(signal.SIGTERM 등)은 원어.
+  const SETUP = [
+    "import signal, time",
+    "_pyprocHits = []",
+    "def _pyprocOnTerm(signum, frame):",
+    "    _pyprocHits.append(signum)",
+    "    raise SystemExit('term')",
+    "def _pyprocOnUsr(signum, frame):",
+    "    _pyprocHits.append(signum)",
+    "signal.signal(signal.SIGTERM, _pyprocOnTerm)",
+    "signal.signal(signal.SIGUSR1, _pyprocOnUsr)",
+  ].join("\n");
+  // 타이트 루프: 커널이 시그널을 쓰면 CPython eval 루프가 핸들러를 부른다.
+  // 핸들러가 SystemExit을 던지면 error로, USR1은 계속 돌다 카운트를 반환한다.
+  const LOOP = [
+    "def _fn(ms):",
+    "    import time",
+    "    end = time.time() + ms / 1000",
+    "    n = 0",
+    "    while time.time() < end:",
+    "        n += 1",
+    "    return (n > 0, list(_pyprocHits))",
+  ].join("\n");
+  try {
+    const os = new PyProc({ setup: SETUP });
+    await os.boot(1);
+    const entry = os.table[0];
+    check("워커 부팅 + 핸들러 등록(SIGTERM/SIGUSR1)", entry.state === "ready" && entry.interrupts === true, `interrupts=${entry.interrupts}`);
+
+    // 1) SIGUSR1(10): 핸들러가 불리지만 실행은 계속되어야 한다(비치명 시그널).
+    let t = performance.now();
+    const usrRun = os.map(LOOP, [700]);
+    await new Promise((res) => setTimeout(res, 200));
+    entry.interrupt[0] = 10; // SIGUSR1
+    const usrRes = (await usrRun)[0];
+    timings.usrMs = Math.round(performance.now() - t);
+    const usrHits = usrRes && usrRes.error ? [] : (usrRes ? usrRes[1] : []);
+    const usrArr = usrHits && usrHits.length !== undefined ? usrHits : [];
+    check("SIGUSR1(10): 핸들러 발화 + 실행 계속", !!(usrRes && !usrRes.error) && usrArr.includes(10),
+      usrRes && usrRes.error ? `error: ${String(usrRes.error).slice(-90)}` : `hits=${JSON.stringify(usrArr)}, ${timings.usrMs}ms`);
+
+    // 2) SIGTERM(15): 핸들러가 SystemExit -> 태스크가 오류로 수렴해야 한다(협조적 종료).
+    entry.interrupt[0] = 0;
+    t = performance.now();
+    const termRun = os.map(LOOP, [3000]);
+    await new Promise((res) => setTimeout(res, 250));
+    entry.interrupt[0] = 15; // SIGTERM
+    const termRes = (await termRun)[0];
+    timings.termConvergeMs = Math.round(performance.now() - t);
+    const terminated = !!(termRes && termRes.error && /SystemExit|term/.test(String(termRes.error)));
+    check("SIGTERM(15): 협조적 종료로 수렴", terminated, termRes && termRes.error ? `${String(termRes.error).slice(-70)}, ${timings.termConvergeMs}ms` : `종료 안 됨(결과 반환): ${JSON.stringify(termRes).slice(0, 60)}`);
+    check("SIGTERM 후 워커 생존(재사용 가능)", entry.state === "ready");
+    entry.interrupt[0] = 0;
+    const after = (await os.map("def _fn(a):\n    return a + 1", [41]))[0];
+    check("종료 후 같은 워커에서 재실행", after === 42, `result=${after}`);
+
+    // 3) 대조: SIGINT(2)는 기존 계약대로 KeyboardInterrupt.
+    t = performance.now();
+    const intRun = os.map(LOOP, [3000]);
+    await new Promise((res) => setTimeout(res, 200));
+    entry.interrupt[0] = 2;
+    const intRes = (await intRun)[0];
+    timings.intConvergeMs = Math.round(performance.now() - t);
+    check("대조 SIGINT(2): KeyboardInterrupt 유지", !!(intRes && intRes.error && /KeyboardInterrupt/.test(String(intRes.error))), `${timings.intConvergeMs}ms`);
+    os.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

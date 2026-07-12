@@ -23,6 +23,7 @@
 | 패키지 로드 후 스냅샷 재수확이 되나(warm-fork 우회) | [reharvestProbe.html](reharvestProbe.html) | 되면 warm-fork·환경=이미지 개방, 안 되면 벽 좌표 확정 |
 | 파이썬 서버가 진짜 URL로 응답하나(가상 오리진) | [swOriginProbe.html](swOriginProbe.html) | SW 가로채기 -> ASGI 위임 fetch가 GET/POST 정합 + 왕복 < 100ms -> SW 자산 + 배선 승격 |
 | requests가 진짜로 도나 | [requestsProbe.html](requestsProbe.html) | pyodide-http patch_all 후 requests.get/헤더/재사용 전부 200 -> syscallBridge 옵션 승격 |
+| 시그널 표가 열리나(SIGINT 너머) | [signalTableProbe.html](signalTableProbe.html) | SAB에 15/10을 쓰면 파이썬 signal 핸들러 발화 + 협조적 종료 + 워커 재사용 |
 
 ## 결론 표
 
@@ -56,6 +57,8 @@
 | 2026-07-12 | swOriginProbe | Edge headless | SW가 `/pyproc/*` fetch를 가로채 페이지 커널 ASGI로 위임: GET(쿼리 포함)/POST body 왕복 정합, 무관 경로 통과, 평균 **3.4ms/req**(직접 dispatch와 동일 = SW 오버헤드 0) | **가상 오리진 성립**: 파이썬 서버가 진짜 URL이 된다(WebContainers의 localhost 개념을 ASGI 위에) | 졸업 -> `pyprocSw.js`(SW 자산, ?asgi=접두) + `VirtualOrigin`(페이지 배선) |
 
 | 2026-07-12 | requestsProbe | Edge headless | requests+pyodide-http 설치 247ms, patch_all 후 requests.get **15ms**(자기 자신 200), 재사용/커스텀 헤더 정상. 1차 실측 발견: requests는 절대 URL만(상대 경로 MissingSchema) | 파이썬 생태계 표준 HTTP 성립(dartlab 체크리스트의 requests 계열 해소) | 졸업 -> `SyscallBridge({requests:true})` |
+
+| 2026-07-12 | signalTableProbe | Edge headless | interrupt SAB에 **10(SIGUSR1)**을 쓰면 파이썬 `signal.signal` 핸들러가 발화하고 실행이 계속된다(hits=[10]). **15(SIGTERM)**는 핸들러의 SystemExit로 **협조적 종료 264ms**, 그 뒤 같은 워커에서 재실행 성공(42). 대조 SIGINT(2)는 KeyboardInterrupt 유지(203ms) | **시그널 표가 발명 0으로 열렸다**: SAB 채널은 이미 "시그널 번호를 쓰는 채널"이었고, CPython eval 루프가 번호대로 핸들러를 부른다. 잡 컨트롤(%kill/%stop)의 토대 | 졸업 -> `PyProc.signal(pid, signum)` + `SIGNAL` 표(INT/USR1/USR2/TERM). `interrupt`는 별칭으로 유지 |
 
 ## 판정
 

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: forkLive</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: forkLive - 살아있는 커널의 진짜 fork(2)</h1>
+<p>스냅샷-fork는 bare 이미지 복제라 <code>x = bigDf</code>를 자식에 못 넘긴다. 진짜 fork는
+"지금 이 커널 상태"의 복제다. 관문은 <b>두 커널의 리플레이 cp0이 바이트 동일한가</b>.
+1차 실측(2026-07-12)에서 메인 커널 vs 워커 커널은 힙 길이는 같아도 바이트가 달랐다
+(로더/컨텍스트 차이). 그래서 이 probe는 <b>워커 대 워커</b>(대칭 컨텍스트)로 판정한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  let seq = 0;
+  const call = (w, msg, transfer = []) => new Promise((res, rej) => {
+    const id = ++seq;
+    const onMsg = (e) => {
+      if (e.data.id !== id) return;
+      w.removeEventListener("message", onMsg);
+      if (e.data.type === "error") rej(new Error(e.data.error)); else res(e.data);
+    };
+    w.addEventListener("message", onMsg);
+    w.postMessage({ ...msg, id }, transfer);
+  });
+  const spawn = () => new Worker(new URL("./forkLiveWorker.js", import.meta.url), { type: "module" });
+
+  try {
+    // 부모(A)와 자식 템플릿(B): 둘 다 워커 = 대칭 컨텍스트
+    const a = spawn(), b = spawn();
+    let t = performance.now();
+    const [ra, rb] = await Promise.all([
+      call(a, { type: "replayBoot", env: {}, packages: [], setup: null }),
+      call(b, { type: "replayBoot", env: {}, packages: [], setup: null }),
+    ]);
+    timings.replayBootMs = Math.round(performance.now() - t);
+    check("워커 커널 2개 리플레이 부팅", ra.type === "replayReady" && rb.type === "replayReady", `${timings.replayBootMs}ms(병렬), heap ${(ra.heapLen / 1048576).toFixed(0)}MB`);
+    check("관문: 힙 길이 동일", ra.heapLen === rb.heapLen, `${ra.heapLen} vs ${rb.heapLen}`);
+    // 이 검사가 forkLive의 성립 여부다. 워커-워커가 GREEN이면 "커널을 워커에 두는" 설계로 열린다.
+    const symmetric = ra.digest === rb.digest;
+    timings.symmetric = symmetric;
+    check("관문: cp0 힙 바이트 동일(워커 대 워커 결정성)", symmetric, `${ra.digest.slice(0, 12)} vs ${rb.digest.slice(0, 12)}`);
+
+    // 부모가 살아있는 상태를 만든다(변수 + 큰 배열 = 여러 페이지)
+    await call(a, { type: "run", code: "payload = bytearray(b'FORKED' * 200000)\ntag = 'parentState'\ntotal = sum(range(100000))\n1" });
+    // 델타 수확: cp0 대비 바뀐 페이지(= 지금 이 커널의 사용자 상태)
+    const h = await call(a, { type: "harvest" });
+    timings.harvestMs = h.ms;
+    timings.deltaPages = h.pages.length;
+    timings.deltaMB = +(h.bin.byteLength / 1048576).toFixed(1);
+    check("델타 수확(부모의 살아있는 상태)", h.pages.length > 0, `${h.pages.length}p / ${timings.deltaMB}MB, ${h.ms}ms`);
+
+    // fork: 델타를 자식에 실어 적용 -> 자식이 부모 상태에서 이어서 실행
+    const CHECK = "(tag, len(payload), total, payload[:6].decode())";
+    t = performance.now();
+    const applied = await call(b, { type: "applyDelta", bin: h.bin, pages: h.pages, sp: h.sp, check: CHECK }, [h.bin]);
+    timings.forkTotalMs = Math.round(performance.now() - t);
+    timings.applyMs = applied.applyMs;
+    check("fork: 자식이 부모 상태에서 실행", !applied.error, applied.error ? applied.error : `적용 ${applied.applyMs}ms / 왕복 ${timings.forkTotalMs}ms`);
+    const arr = applied.evaled ? [...applied.evaled] : null;
+    check("fork: 부모의 변수/배열/계산이 자식에서 생존",
+      !!arr && arr[0] === "parentState" && arr[1] === 1200000 && arr[2] === 4999950000 && arr[3] === "FORKED",
+      JSON.stringify(arr));
+
+    // 자식은 독립 주소공간: 자식의 변이가 부모에 새지 않는다
+    await call(b, { type: "run", code: "tag = 'childOnly'\n1" });
+    const parentTag = await call(a, { type: "run", code: "tag" });
+    const childTag = await call(b, { type: "run", code: "tag" });
+    check("fork: 독립 주소공간(자식 변이가 부모에 무영향)", parentTag.result === "parentState" && childTag.result === "childOnly",
+      `parent=${parentTag.result}, child=${childTag.result}`);
+
+    // 자식이 이어서 계산까지 하는가(fork 후 연속 실행)
+    const cont = await call(b, { type: "run", code: "total + len(payload)" });
+    check("fork: 자식이 부모 상태 위에서 연속 계산", cont.result === 4999950000 + 1200000, String(cont.result));
+    a.terminate(); b.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

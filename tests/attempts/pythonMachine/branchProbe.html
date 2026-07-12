@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: branch</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 체크포인트 나무(머신의 git) - 분기 후 어느 노드로든 정확히 스위치되나</h1>
+<p>발견된 구조적 결함의 재현이자 수정 판정: 선형 체인은 "시간여행으로 되돌아가 새로
+체크포인트"를 만들면(=%undo 후 새 문장) 버려진 분기의 델타를 참조해 조용히 오염될 수
+있다. 체크포인트가 부모 체인(나무)을 가지면 분기(branch)/체크아웃(checkout)이 성립한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    const r = rt.enableReactive();
+    rt.run("a = bytearray(300000)"); // 여러 페이지에 걸친 상태(오염이 보이는 캔버스)
+    const sp = r.stackSave();
+    r.checkpoint(); // 0: base
+
+    rt.run("a[:5] = b'MAIN1'\nm = 'main1'");
+    const c1 = r.checkpoint().index; // 1: 분기점
+
+    rt.run("a[:5] = b'MAIN2'\nm = 'main2'");
+    const c2 = r.checkpoint().index; // 2: 본선 끝
+
+    // 분기점으로 시간여행 후, a는 건드리지 않는 실험 분기를 만든다.
+    let t = performance.now();
+    r.restoreLive(c1, sp);
+    check("분기점 복귀 정확", rt.run("m") === "main1" && rt.run("bytes(a[:5]).decode()") === "MAIN1");
+    rt.run("expData = list(range(50000))\nm = 'expA'");
+    const c3 = r.checkpoint().index; // 3: 실험 분기(부모 = 1)
+
+    // 본선으로 스위치
+    r.restoreLive(c2, sp);
+    check("본선 스위치: m/a 모두 main2", rt.run("m") === "main2" && rt.run("bytes(a[:5]).decode()") === "MAIN2");
+
+    // 실험 분기로 스위치: 선형 체인의 결함 지점.
+    // c3의 a 목표 내용은 분기점 값(MAIN1)인데, 선형 walk는 델타[2](MAIN2)를 먼저 만난다.
+    r.restoreLive(c3, sp);
+    const aAtExp = rt.run("bytes(a[:5]).decode()");
+    check("분기 스위치: m=expA + 데이터 생존", rt.run("m") === "expA" && rt.run("len(expData)") === 50000);
+    check("분기의 a = 분기점 값 MAIN1 (선형 체인이면 MAIN2로 오염)", aAtExp === "MAIN1", `a[:5]=${aAtExp}`);
+
+    // 왕복 내성: 본선 <-> 분기 <-> 분기점을 오가도 각 노드가 정확해야 한다.
+    r.restoreLive(c2, sp);
+    r.restoreLive(c3, sp);
+    r.restoreLive(c1, sp);
+    timings.tripleSwitchMs = +(performance.now() - t).toFixed(1);
+    check("삼중 왕복 후 분기점 정확", rt.run("m") === "main1" && rt.run("bytes(a[:5]).decode()") === "MAIN1");
+
+    // 같은 분기점에서 두 번째 가지: 나무가 계속 자란다.
+    rt.run("m = 'expB'");
+    const c4 = r.checkpoint().index; // 4: 두 번째 가지(부모 = 1)
+    r.restoreLive(c3, sp);
+    check("가지 A 재방문 정확", rt.run("m") === "expA");
+    r.restoreLive(c4, sp);
+    check("가지 B(같은 부모의 형제) 정확", rt.run("m") === "expB" && rt.run("bytes(a[:5]).decode()") === "MAIN1");
+
+    // 결정적 판별(선형 vs 나무): 라이브를 base(a=zeros)로 되돌린 뒤 분기로 간다.
+    // 이러면 a 페이지는 라이브/목표가 확실히 달라 반드시 재작성되고, "쓰인 값"이 곧
+    // 델타 해석 경로의 증거다. 선형 walk(k-1)는 형제 분기의 델타[2](MAIN2)를 먼저 만나고,
+    // 부모 체인 walk는 조상 델타[1](MAIN1)을 만난다. 앞선 검사들은 라이브 값이 우연히
+    // 정답과 같아 hash-skip으로 가려졌다(선형 코드도 통과 = 실측으로 확인).
+    r.restore(0, sp); // 완전 복원으로 라이브를 base(zeros)에 고정
+    check("판별 준비: base의 a는 zeros", rt.run("bytes(a[:5])") .length !== undefined ? rt.run("a[0] == 0 and a[4] == 0") === true : false);
+    t = performance.now();
+    r.restoreLive(c3, sp);
+    timings.branchSwitchFromBaseMs = +(performance.now() - t).toFixed(1);
+    const decisive = rt.run("bytes(a[:5]).decode()");
+    check("판별: 형제 분기 델타 오염 없음(MAIN1)", decisive === "MAIN1", `a[:5]=${decisive} (선형이면 MAIN2)`);
+    check("판별 시점의 분기 상태도 정확", rt.run("m") === "expA" && rt.run("len(expData)") === 50000, `${timings.branchSwitchFromBaseMs}ms`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>
