@@ -11,7 +11,12 @@
 //
 // 실측 주의(WLR CPython 3.12): 반복 루프 프레임 위 명시적 compile()은 wasm C 스택을 넘겨 죽는다.
 // exec(str)의 내부 컴파일은 C 레벨이라 안전하므로 exec(소스문자열)을 직접 쓴다.
-export const DRIVER_SOURCE = String.raw`import os
+export const DRIVER_SOURCE = String.raw`import os, sys
+
+# 패키지 검색 경로: 쓰기 가능한 preopen /site를 sys.path에 끼운다. installWheel이 여기에 순수
+# 파이썬 wheel 파일을 쓰면 path-based finder가 찾아 import한다(= 브라우저판 site-packages).
+if "/site" not in sys.path:
+    sys.path.insert(0, "/site")
 
 userNs = {}
 while True:

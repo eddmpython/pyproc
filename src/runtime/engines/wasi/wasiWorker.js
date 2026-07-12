@@ -4,9 +4,9 @@
 // 값 채널 무상태화(완전 시간여행): 코드는 preopen 파일 /cmd(힙 밖), stdin은 신호 1바이트.
 // 실행 경계(fd_read = 파이썬이 다음 신호 대기)에서 힙 체크포인트/복원 메타를 처리하므로
 // 복원이 파이썬 I/O 상태를 어긋내지 않는다(reactive 완전 시간여행이 exports.memory 위에서 성립).
-import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory, wasi } from "./browserWasiShim.js";
+import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory, Directory, wasi } from "./browserWasiShim.js";
 import { DRIVER_SOURCE } from "./wasiReplDriver.js";
-import { SIGNAL_META, EOT, CMD_PATH, DRIVER_PATH, FILETYPE_CHARACTER_DEVICE } from "./wasiProtocol.js";
+import { SIGNAL_META, EOT, CMD_PATH, DRIVER_PATH, SITE_PATH, FILETYPE_CHARACTER_DEVICE } from "./wasiProtocol.js";
 
 // 결정적 부팅: WASI는 엔트로피/시간이 import 2개로 수렴한다(Pyodide 3소스 스텁보다 깨끗).
 function makeDeterministic(wasiInst, getInst) {
@@ -67,9 +67,13 @@ onmessage = async (e) => {
     const emit = (stream) => (line) => postMessage({ type: "out", stream, line });
     // 드라이버/코드는 preopen 파일로 실행한다(argv에 UTF-8을 실으면 args 처리가 크래시).
     const cmdFile = new File([]);
+    // /site = 쓰기 가능한 빈 preopen 디렉터리(브라우저판 site-packages). installWheel이 파이썬을
+    // 통해 여기에 순수 파이썬 wheel 파일을 쓰고, 드라이버가 /site를 sys.path에 끼워 import한다.
+    // 파일은 shim(JS) 쪽에 산다 = wasm 힙 밖 = 시간여행 스냅샷과 무관(패키지는 안정 상태).
     const preopen = new PreopenDirectory("/", [
       [DRIVER_PATH.slice(1), new File(new TextEncoder().encode(DRIVER_SOURCE))],
       [CMD_PATH.slice(1), cmdFile],
+      [SITE_PATH.slice(1), new Directory([])],
     ]);
     const stdin = new SabStdin(ctlSab, dataSab, cmdFile);
     const fds = [stdin, ConsoleStdout.lineBuffered(emit("stdout")), ConsoleStdout.lineBuffered(emit("stderr")), preopen];

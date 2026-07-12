@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 WASI 위 패키지 생태계 - "진짜 파이썬"이 stdlib를 넘었다 (구조 337 + WASI 게이트 9/9)
+
+- 목표("Pyodide를 떼고 진짜 파이썬이 굴러갈 수준")의 다음 벽을 뚫었다. WASI CPython은 부팅/결정성/반복실행/값프로토콜/완전 시간여행까지 실증됐지만 거기서 도는 건 stdlib뿐이었다. "그 수준"(Pyodide 급)과의 최대 간극 = **패키지**. `2+2`는 돌지만 `import`가 안 되면 그 수준이 아니다.
+- **가설 -> 실측 GREEN 9/9**([wasiPackages 캠페인](../../tests/attempts/wasiPackages/README.md), 부팅 52ms/unzip 27ms): 순수 파이썬 패키지는 그냥 `.py` 묶음이고 WASI CPython은 preopen FS를 가진다 -> `sys.path`에 preopen `/site`를 끼우면 path-based finder가 찾는다. ① 단일 모듈 ② 중첩 패키지(`__init__.py`+서브모듈, shim `Directory` 트리) ③ **post-boot 라이브 설치**(파이썬이 `/site`에 파일 쓰기 = preopen 쓰기 가능 -> `invalidate_caches` -> import = "pip install을 라이브 세션에"가 기계적으로 가능) ④⑤ 진짜 wheel(`six` 단일 + `packaging` 중첩)을 fetch -> **네이티브 `DecompressionStream` unzip(의존성 0)** -> 마운트 -> import -> 실작업 ⑥ **정직한 벽**: `EXTENSION_SUFFIXES == []` = C 확장은 구조적 import 불가(WASI 동적 링크 부재, PEP 783 대기)를 값으로 못박음.
+- **src 승격(한 메커니즘으로 깎아서)**: `src/runtime/engines/wasi/wheelUnzip.js`(중앙 디렉터리 기반 ZIP, data-descriptor wheel도 정확), `WasiSession.installWheel(bytes)`(라이브 pip = unzip + 파이썬이 base64로 `/site`에 쓰기 + invalidate, 청크로 채널 상한 흡수), `bootWasi({ wheels })`(그 위 sugar). 드라이버에 `sys.path += /site`, 워커에 쓰기 가능 `/site` preopen(빈 `Directory`). 파일은 shim(JS)에 살아 wasm 힙 밖 = **시간여행 스냅샷과 독립**(패키지는 안정 상태). 값 다리(JSON) 불변 - 패키지는 파일 채널이라 FFI 무관.
+- **표면**: index.d.ts에 `installWheel` + `WasiManifest.wheels` additive(index.d.ts의 기존 주석 델리미터 오타 `\**`은 표시 아티팩트였음, 실제 정상). run.mjs에 WasiSession 메서드 계약 가드 신설. README 2종 표 갱신. wasiGate에 six(단일)+packaging(중첩)+C확장벽 영구 검사(SKIP-on-absent, CI는 wheel 미추적이라 SKIP green / 로컬 GREEN 9/9). 캠페인 졸업 = 프로브 코드 삭제, 폴더는 재현 wheel 자산 홈 + 기록으로 잔존(enginePort 선례).
+- **의미**: "떼기"가 프리미티브를 넘어 **생태계**로 갔다. 순수 파이썬 패키지가 non-Pyodide에서 산다 = 브라우저판 pip가 진짜 CPython 위에 성립. 남은 간극은 C 확장 하나(PEP 783 = pyemscripten 휠 = 그때 정면 흡수). 소비자 조율 불요(대원칙: pyproc이 세우면 dartlab이 따른다) - 목표만 보고 달렸다.
+
 ### 2026-07-12 소비자 실태 조사 + 채택 표면 - dartlab 라이브 소비자 발견 + 회귀 복원 (구조 330 + 게이트 39/39)
 
 - 형제 레포(dartlab/xlpod) 실태를 전문 에이전트 2종으로 조사. **가장 중요한 발견: dartlab은 이미 라이브 소비자다**(문서엔 "미착수"로 낡아 있었다). 노트북 워커가 자체 부팅 Pyodide를 `new Runtime(py)`로 채택하고 `enableAsgiServer`를 기본 ASGI 커널로 프로덕션 배포(browser-as-server /pyapi, `USE_PYPROC_ASGI=true`). SHA 핀 + 주간 핀 범프 워크플로 운영.

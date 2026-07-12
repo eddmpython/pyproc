@@ -20,3 +20,5 @@ scratch/
 tests/attempts/enginePort/*.wasm
 tests/attempts/enginePort/browserWasiShim.js
 tests/browser/*.wasm
+# wasiPackages probe의 순수 파이썬 wheel(재현: pip download, README 레시피). 레포 자산 0.
+tests/attempts/wasiPackages/*.whl

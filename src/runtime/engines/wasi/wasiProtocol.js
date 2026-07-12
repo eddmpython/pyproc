@@ -9,6 +9,9 @@ export const SIGNAL_EXEC = 1; // 뒤에 실행할 코드 바이트(워커가 /cm
 export const EOT = 4;              // 한 왕복의 끝(드라이버가 stdout에 쓰는 EOT, \x04)
 export const CMD_PATH = "/cmd";    // 코드 채널: preopen 파일 경로(힙 밖 = 힙 복원 무관)
 export const DRIVER_PATH = "/driver.py"; // 드라이버 소스 경로(argv UTF-8 회피: 파일로 실행)
+// 패키지 경로: 쓰기 가능한 preopen 디렉터리. 드라이버가 sys.path에 끼우고, installWheel이 여기에
+// 순수 파이썬 wheel의 파일을 써서 import 가능하게 한다(= 브라우저판 site-packages).
+export const SITE_PATH = "/site";
 
 // SAB 크기: ctl은 [플래그, 길이] 2워드. data는 한 왕복의 코드 상한(초과 시 명시 예외).
 export const CTL_WORDS = 2;

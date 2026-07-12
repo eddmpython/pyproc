@@ -243,6 +243,11 @@ export interface WasiManifest {
   wasmURL?: string;
   /** true면 엔트로피/시간을 고정해 결정적으로 부팅한다(리플레이/시간여행의 전제). */
   deterministic?: boolean;
+  /**
+   * 부팅 직후 설치할 순수 파이썬 wheel(바이트) 목록. 소비자가 제공한다(pyproc은 PyPI를 fetch하지
+   * 않는다 - wasmURL과 같은 계약). 각 wheel은 installWheel로 /site에 풀려 import 가능해진다.
+   */
+  wheels?: (ArrayBuffer | Uint8Array)[];
 }
 
 /**
@@ -263,6 +268,12 @@ export class WasiSession {
   checkpoint(): Promise<{ idx: number; mb: number }>;
   /** 시간여행: 체크포인트 idx로 복원한다. 복원 후 파이썬이 그 시점 상태로 재개(분기 가능). */
   timeTravel(idx: number): Promise<void>;
+  /**
+   * 순수 파이썬 wheel(바이트)을 라이브 세션에 설치한다(= 브라우저판 pip install). 네이티브로 풀어
+   * /site에 파일을 쓰고 import 캐시를 무효화한다. 이후 그 패키지를 import할 수 있다. 순수 파이썬
+   * 한정: C 확장(.so)은 WASI 동적 링크 부재로 불가(PEP 783 대기). 반환: 쓴 파일 수 + 최상위 이름들.
+   */
+  installWheel(wheel: ArrayBuffer | Uint8Array): Promise<{ files: number; names: string[] }>;
   terminate(): void;
 }
 

@@ -7,7 +7,16 @@
 // 값 채널 무상태화(완전 시간여행의 열쇠)는 여기서 완전히 캡슐화한다: 소비자는 async run/get/set/
 // checkpoint/timeTravel만 보고, /cmd 파일 + 신호 1바이트 + EOT 와이어(wasiProtocol.js)는 모른다.
 // 값 다리는 JSON 직렬화 한정이다(WASI엔 FFI가 없어 함수/numpy/live 객체는 못 넘긴다).
-import { SIGNAL_META, EOT, CTL_WORDS, DATA_SAB_BYTES } from "./wasiProtocol.js";
+import { SIGNAL_META, EOT, CTL_WORDS, DATA_SAB_BYTES, SITE_PATH } from "./wasiProtocol.js";
+import { unzipWheel } from "./wheelUnzip.js";
+
+// 바이트를 base64로(파이썬에 코드로 실어 /site에 쓰기 위함). 큰 배열은 청크로 스택 초과 방지.
+function base64FromBytes(bytes) {
+  let s = "";
+  const step = 0x8000;
+  for (let i = 0; i < bytes.length; i += step) s += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+  return btoa(s);
+}
 
 // 기본 엔진 배포 지점(WLR CPython 3.12 WASI). COOP/COEP(crossOriginIsolated) 하에서는 CDN 직
 // fetch가 CORP에 걸릴 수 있으므로 소비자 셀프 호스팅이 권장이다(manifest.wasmURL로 교체). 출처를
@@ -22,6 +31,9 @@ export async function bootWasi(manifest = {}) {
   const wasmBytes = await resp.arrayBuffer();
   const session = new WasiSession(wasmBytes, !!manifest.deterministic);
   await session._boot();
+  // manifest.wheels: 소비자가 제공한 순수 파이썬 wheel(ArrayBuffer) 목록. 부팅 직후 설치한다.
+  // wasmURL과 같은 계약: pyproc은 PyPI를 fetch하지 않고 소비자가 바이트를 준다(오프라인/CORP 무관).
+  for (const wheel of manifest.wheels || []) await session.installWheel(wheel);
   return session;
 }
 
@@ -91,6 +103,38 @@ export class WasiSession {
   // 값 다리(JSON 직렬화 한정): 파이썬 전역 값을 회수/주입한다.
   async get(name) { return JSON.parse((await this.run(`import json as pyprocJson\nprint(pyprocJson.dumps(${name}))`)).trim()); }
   async set(name, value) { await this.run(`import json as pyprocJson\n${name} = pyprocJson.loads(${JSON.stringify(JSON.stringify(value))})`); }
+
+  // 순수 파이썬 wheel을 이 라이브 세션에 설치한다(= 브라우저판 pip install). wheel(ArrayBuffer/
+  // Uint8Array)을 네이티브로 풀어 /site에 파일을 쓰고 import 캐시를 무효화한다. 이후 그 패키지를
+  // import할 수 있다. 순수 파이썬 한정: C 확장(.so)은 WASI 동적 링크 부재로 import 불가(PEP 783
+  // 대기). 값 다리(JSON 한정)와 무관하다 - 패키지는 파일 채널이라 FFI가 필요 없다.
+  // 반환: { files, names } = 쓴 파일 수 + 최상위 패키지 이름들.
+  async installWheel(wheel) {
+    const files = await unzipWheel(wheel);
+    const names = new Set();
+    for (const [path, bytes] of files) {
+      await this._writeSiteFile(path, bytes);
+      const top = path.split("/")[0];
+      if (top && !top.endsWith(".dist-info") && !top.endsWith(".data")) names.add(top.replace(/\.py$/, ""));
+    }
+    await this.run("import importlib as pyprocImportlib\npyprocImportlib.invalidate_caches()");
+    return { files: files.length, names: [...names] };
+  }
+
+  // /site 아래 한 파일을 파이썬을 통해 쓴다(base64로 실어 바이너리 보존). 중첩 경로는 makedirs로
+  // 만들고, 채널 상한(DATA_SAB_BYTES)을 넘는 큰 파일은 append로 청크한다. 파일은 shim(JS)에 살아
+  // wasm 힙 밖 = 시간여행 스냅샷과 독립(패키지는 안정 상태, 되돌릴 값이 아니다).
+  async _writeSiteFile(relPath, bytes) {
+    const full = SITE_PATH + "/" + relPath;
+    const dir = full.slice(0, full.lastIndexOf("/"));
+    const q = (s) => JSON.stringify(s);
+    await this.run(`import os\nos.makedirs(${q(dir)}, exist_ok=True)\nopen(${q(full)}, "wb").close()`);
+    const step = 480 * 1024; // base64 후 ~640KB < 1MiB 채널(파이썬 래퍼 여유분 확보)
+    for (let off = 0; off < bytes.length; off += step) {
+      const b64 = base64FromBytes(bytes.subarray(off, off + step));
+      await this.run(`import base64\nwith open(${q(full)}, "ab") as siteFile:\n    siteFile.write(base64.b64decode(${q(b64)}))`);
+    }
+  }
 
   // 지금 상태를 체크포인트(경계 힙 스냅샷). 반환: { idx, mb }.
   async checkpoint() { const m = await this._send(new TextEncoder().encode(String.fromCharCode(SIGNAL_META) + "checkpoint")); return { idx: m.idx, mb: m.mb }; }

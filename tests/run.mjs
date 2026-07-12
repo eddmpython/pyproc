@@ -80,6 +80,11 @@ check("ReactiveController 메서드", () => {
   for (const m of ["checkpoint", "restore", "restoreLive", "timeTravel", "tree", "storageMB", "saveBase", "loadBase"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
+check("WasiSession 메서드", () => {
+  const p = api.WasiSession.prototype;
+  for (const m of ["run", "get", "set", "checkpoint", "timeTravel", "installWheel", "terminate"])
+    if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
+});
 
 // 3) em dash(U+2014) 0 - 훅과 같은 스코프(*.md, *.js).
 console.log("\n[em dash]");

@@ -54,6 +54,28 @@ wasm 자산(30MB)이 없으면 SKIP한다(게이트 적색 아님). CI는 자산
     let threw = false;
     try { await s.run("1/0"); } catch (e) { threw = String(e).includes("ZeroDivision"); }
     check("파이썬 예외를 세션 에러로 전달", threw);
+
+    // 5) 패키지 설치: 순수 파이썬 wheel을 라이브 세션에 installWheel -> import(브라우저판 pip).
+    //    단일 모듈(six) + 중첩 패키지(packaging, stdlib만 의존하는 실 작업)로 두 경로를 가드한다.
+    //    wheel 자산은 wasiPackages 캠페인에 있다(미추적). 없으면 SKIP. 재현: 그 README 레시피.
+    const wheelDir = "../attempts/wasiPackages/";
+    const sixResp = await fetch(wheelDir + "six-1.17.0-py2.py3-none-any.whl").catch(() => ({ ok: false }));
+    const pkgResp = await fetch(wheelDir + "packaging-26.2-py3-none-any.whl").catch(() => ({ ok: false }));
+    if (sixResp.ok && pkgResp.ok) {
+      let tw = performance.now();
+      const info = await s.installWheel(await sixResp.arrayBuffer());
+      await s.installWheel(await pkgResp.arrayBuffer());
+      timings.installMs = Math.round(performance.now() - tw);
+      const six = await s.run("import six\nprint(six.__version__)");
+      check("installWheel(단일 모듈 wheel: six) -> import", six.trim() === "1.17.0" && info.names.includes("six"), `names=${JSON.stringify(info.names)}`);
+      const pg = await s.run("from packaging.version import Version\nprint(Version('2.0') > Version('1.9.9'), Version('1.9.9').micro)");
+      check("installWheel(중첩 패키지 wheel: packaging) -> 실작업", pg.trim() === "True 9", `설치 ${timings.installMs}ms`);
+    } else {
+      check("SKIP: wheel 자산 없음(tests/attempts/wasiPackages README 레시피)", true);
+    }
+    // 정직한 벽: C 확장은 구조적으로 import 불가(WASI 동적 링크 부재, PEP 783 대기). 값으로 못박는다.
+    const suffixes = await s.run("import importlib.machinery as m\nprint(len(m.EXTENSION_SUFFIXES))");
+    check("정직한 벽: C 확장 구조적 불가(EXTENSION_SUFFIXES 비어있음)", suffixes.trim() === "0", `len=${suffixes.trim()}`);
     s.terminate();
   } catch (e) {
     if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
