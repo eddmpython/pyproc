@@ -77,6 +77,17 @@ for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
   });
 }
 
+// 3.4) 문서 주체 가드: 문서·주석의 주체는 나다(1인칭/주어 생략). 나를 3인칭 호칭으로
+//      지칭하는 표현을 차단한다(커밋 메시지 주체 중립 규칙의 문서판, 2026-07-12 확정).
+//      금칙어는 리터럴로 쓰면 이 게이트가 자기 자신에 걸리므로 조립한다.
+console.log("\n[문서 주체]");
+const OWNER_WORD = ["소유", "자"].join(""); // "소유" + "자"
+for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
+  check(`주체 중립: ${rel(f)}`, () => {
+    if (readFileSync(f, "utf8").includes(OWNER_WORD)) throw new Error("3인칭 호칭 발견");
+  });
+}
+
 // 3.5) 네이밍 가드: camelCase는 언어 불문이다(JS 문자열 안의 파이썬 포함).
 //      우리 접두(_pyproc*) 스네이크와, 우리가 정의하는 파이썬 함수명의 스네이크를 차단한다.
 //      외부 기술 명칭(ASGI 키 문자열, pyodide.ffi.run_sync, API kwarg 등)은 정의가 아니라 안 걸린다.

@@ -4,30 +4,31 @@
 
 ## 결정 원장 (최신이 위)
 
-### 2026-07-12 라이브 데모 실결함(소유자 발견) -> 예제 실행 게이트 신설 + 데모 영문 리디자인
+### 2026-07-12 라이브 데모 실결함 발견 -> 예제 실행 게이트 신설 + 데모 영문 리디자인
 
-- **소유자가 라이브 데모에서 실결함 발견**: processOs 예제가 `TypeError: Do not know how to serialize a BigInt`. 원인: 2^53을 넘는 파이썬 int는 BigInt로 오는데(정밀도 보존 = 라이브러리는 올바름) 예제가 JSON.stringify로 결과를 비교. **구멍의 본질: examples/*.html은 어떤 게이트도 실행하지 않았다**(라이브러리 게이트는 라이브러리만 검증).
+- **라이브 데모에서 실결함을 직접 발견**: processOs 예제가 `TypeError: Do not know how to serialize a BigInt`. 원인: 2^53을 넘는 파이썬 int는 BigInt로 오는데(정밀도 보존 = 라이브러리는 올바름) 예제가 JSON.stringify로 결과를 비교. **구멍의 본질: examples/*.html은 어떤 게이트도 실행하지 않았다**(라이브러리 게이트는 라이브러리만 검증).
 - 대응: ① BigInt-안전 비교로 수정 ② **예제 실행 게이트 신설**(`npm run test:examples` = tests/browser/examples.mjs): 데모 4쪽을 사람이 여는 그대로 headless 완주 검증, 예제는 `?gate`에서만 보고(평시 no-op). CI 매 푸시 실행. 첫 실행 4/4 GREEN. 하네스 공용 조각은 harness.mjs로 추출(run.mjs와 드리프트 방지).
-- **데모 영문 리디자인(소유자 지시 2건)**: "데모가 볼품없다 + 영문 위주여야 한다(개발자는 외국인이 다수)". examples/demo.css 공용 디자인(다크, 카드/패널/배지) + 4예제와 랜딩을 영문 UI로 재작성. 내부 문서·커밋은 규칙대로 한국어 유지(영문화 범위 = 공개 데모 표면).
-- 검증 체계는 이로써 4단: 구조(187) / 브라우저 런타임(26) / 예제 실행(4쪽) / 수동. testing.md 갱신.
+- **데모 영문 리디자인(결정 2건)**: 데모에도 기본기가 있어야 하고, 영문 위주여야 한다(개발자는 외국인이 다수). examples/demo.css 공용 디자인(다크, 카드/패널/배지) + 4예제와 랜딩을 영문 UI로 재작성. 내부 문서·커밋은 규칙대로 한국어 유지(영문화 범위 = 공개 데모 표면).
+- **문서 주체 규칙 명문화 + 기계 가드**: 문서·주석·독스트링의 주체는 나다(1인칭/주어 생략 중립, 3인칭 호칭 금지 - 커밋 주체 중립 규칙의 문서판). 기존 문서 전량 스윕 + `tests/run.mjs` 주체 가드 신설로 영구 차단. 공개 데모 표면 영문 우선도 규칙화(로컬 규칙 문서 언어 절).
+- 검증 체계는 이로써 4단: 구조(239) / 브라우저 런타임(26) / 예제 실행(4쪽) / 수동. testing.md 갱신.
 
 ### 2026-07-12 데모 호스팅 결정: GitHub Pages 정본 + npm 게시 완료
 
-- **npm 게시 완료**: 소유자가 `pyproc@0.0.5` 퍼블리시(릴리즈 v0.0.5 = 버전+태그+GitHub Release+npm, 절차 7단계 신설). 설치 실검증(빈 프로젝트 `npm install pyproc` -> 내용물 정합). README 2종/소비 계약 반영.
-- **데모 = GitHub Pages(소유자 방침: 외부 서비스 최소화)**. Cloudflare 질문에 대한 답: 필수가 아니라 "헤더 되는 곳" 중 하나였고, 실측 2건이 깃헙 경로를 열었다. ① noCoiProbe 7/7 - 머신 핵심 동선(부팅/세션 부활/.pymachine/디스크/JSPI)은 COI 불필요, SAB(프로세스 OS)만 경계. ② swCoiProbe 4/4 - `pyprocSw.js?coi=1` 헤더 주입 + 1회 새로고침으로 crossOriginIsolated=true + SAB 실사용 복구.
+- **npm 게시 완료**: `pyproc@0.0.5` 퍼블리시(릴리즈 v0.0.5 = 버전+태그+GitHub Release+npm, 절차 7단계 신설). 설치 실검증(빈 프로젝트 `npm install pyproc` -> 내용물 정합). README 2종/소비 계약 반영.
+- **데모 = GitHub Pages(방침: 외부 서비스 최소화)**. Cloudflare 질문에 대한 답: 필수가 아니라 "헤더 되는 곳" 중 하나였고, 실측 2건이 깃헙 경로를 열었다. ① noCoiProbe 7/7 - 머신 핵심 동선(부팅/세션 부활/.pymachine/디스크/JSPI)은 COI 불필요, SAB(프로세스 OS)만 경계. ② swCoiProbe 4/4 - `pyprocSw.js?coi=1` 헤더 주입 + 1회 새로고침으로 crossOriginIsolated=true + SAB 실사용 복구.
 - 승격: pyprocSw 쿼리 3호 `?coi=1`(opaque는 원본 통과 = CDN 자체 CORP 전제), processOs.html 부트스트랩 내장, serve.mjs `{coi:false}` 옵션 + 하네스 `PYPROC_NO_COI`(헤더 없는 호스팅 재현 실측 레인).
 - 배포: pages.yml(push마다 자동, 랜딩/SW 루트 사본은 워크플로가 조립해 저장소 루트 무오염). Cloudflare는 예비로 기록(dartlab wrangler 인증이 이 머신에 유효함을 확인, 전환 시 분 단위).
 
 ### 2026-07-12 엔진 독립 연구 + 평가 후속 정비 (전문 에이전트 2종 연구 종합)
 
-- 소유자 질문("Pyodide 의존 제거, 독립, 아니면 더 훌륭한 방법") -> 생태계 리서치 + 코드 결합 감사 에이전트 연구 종합. **결론: 완전 제거는 지금 손해, "갇히지 않는 사다리"(P0 자가호스팅 -> P1 EngineContract seam -> P2 스냅샷 사전 제조 -> P3 업스트림 워치 -> P4 조건부 fork 보험)가 정답.** 정본: [engine-independence PRD](../engine-independence/README.md). 핵심 증거: PEP 783 Accepted(2026-04, pyemscripten 휠 = Pyodide-agnostic 탈출구), Pyodide의 CPython 패치는 9개 파일(모트는 FFI·패키지 생태·스냅샷 3덩어리), Cloudflare fork 코드 전부 공개(MPL = 공짜 보험), WASI는 동적 C 확장 불가로 현재 양립 불가.
+- 출발 질문("Pyodide 의존 제거, 독립, 아니면 더 훌륭한 방법") -> 생태계 리서치 + 코드 결합 감사 에이전트 연구 종합. **결론: 완전 제거는 지금 손해, "갇히지 않는 사다리"(P0 자가호스팅 -> P1 EngineContract seam -> P2 스냅샷 사전 제조 -> P3 업스트림 워치 -> P4 조건부 fork 보험)가 정답.** 정본: [engine-independence PRD](../engine-independence/README.md). 핵심 증거: PEP 783 Accepted(2026-04, pyemscripten 휠 = Pyodide-agnostic 탈출구), Pyodide의 CPython 패치는 9개 파일(모트는 FFI·패키지 생태·스냅샷 3덩어리), Cloudflare fork 코드 전부 공개(MPL = 공짜 보험), WASI는 동적 C 확장 불가로 현재 양립 불가.
 - 결합 감사 판정: 보석(리액티브 접점 0, 세션/.pymachine, SW 층, PyProc 스케줄링, SharedKernel)은 이미 엔진 중립 - "선형 메모리 + 스택 포인터 + 결정적 부팅 + 엔진 스냅샷" 4프리미티브 위 순수 알고리즘. EngineContract seam 설계(~250 LOC, 동작 무변경) 확보.
 - **감사 적발 결함 3건 즉시 수정**: ① subprocess 자식 워커에 indexURL 미전달(자가호스팅/오프라인에서 자식만 CDN으로 새는 누수) -> `Runtime.indexURL` 계약 신설 ② `PyProc.interrupt`가 SIGINT 미지원 워커에도 true 반환(무증상 no-op) -> ready의 interrupts 플래그 소비 ③ 세션 리플레이 결정성 무대조(엔진/엔트로피 변화로 cp0이 달라져도 델타를 덮어 조용한 오염) -> 저장물에 cp0 다이제스트(h0) 포함 + load/openMachine 대조 예외(구 저장물은 무검사 통과, .pymachine에도 적용).
 - 평가 후속 정비 완료: README 표면 동기화 기계 가드(부채 해소), 데모 배포 준비물(루트 _headers + docs/operations/demoHosting.md), CI 실측 JSON 아티팩트(PYPROC_GATE_OUT), 레포 설명/토픽. 계약 실태 표에 "암묵 FFI/fetch 가정" 행 신설.
 
 ### 2026-07-12 발명 라운드 4: uv 레인 + SW 계층 + 공유 커널 (probe 7종 GREEN, 게이트 26검사)
 
-- 타 세계 개념 흡수 라운드(소유자 지시: "판을 바꿀 아이디어 + 개념부터 확실히"). 새 캠페인 envManager 개설(캠페인 3개째: 개념 = 환경의 선언·캐시·재현).
+- 타 세계 개념 흡수 라운드(주제: 판을 바꿀 아이디어를 개념부터 확실히 잡고 구현). 새 캠페인 envManager 개설(캠페인 3개째: 개념 = 환경의 선언·캐시·재현).
 - **uv 레인 승격**: ① `bootEnv(manifest, dirs)` - bare 스냅샷(_loadSnapshot 부팅 227ms, 콜드 3623ms) + OPFS 휠로 2차 환경 부팅 5109ms -> **1229ms(4.2배)**. 패키지 실린 힙 스냅샷은 hiwire 벽 재확인(3레인: postImport/{packages}/serializer 전부 "index 6" 거부, reharvestProbe와 교차 확인) -> bare가 유일한 스냅샷 단위로 확정. ② `runScript` - PEP 723(# /// script) 파싱은 표준 라이브러리(re+tomllib)로, 의존성 자동 설치 + 실행 = 브라우저판 uv run. ③ `Runtime.freeze` + `boot({lockFileURL})` - micropip.freeze 락(355패키지)으로 커널 B가 해석 0/164ms 핀 설치(비배포판 패키지로 관통 증명).
 - **SW 계층 승격**: `pyprocSw.js`(등록형 자산, 쿼리로 기능 선택) + `VirtualOrigin`. ?asgi= 가상 오리진: fetch가 파이썬 ASGI로 응답, 평균 **3.4ms/req = 직접 dispatch와 동일(SW 오버헤드 0)**. ?cache=1 완전 오프라인: 기둥5의 남은 구멍(script 경로)을 봉인, 2차 부팅 CDN miss 0. "SW 배선은 소비 제품 몫" 방침 폐기(배선도 pyproc 프리미티브, 등록/스코프만 소비자 몫). serve.mjs에 Service-Worker-Allowed 헤더.
 - **공유 커널 승격**: `SharedKernel`(SharedWorker) - 여러 탭 = 한 파이썬 상태, 탭이 닫혀도 커널 생존(머신이 탭 밖에서 산다). 벽 실측: SharedWorker는 crossOriginIsolated=false(플랫폼) = SAB 불가 -> interrupt/스냅샷-fork 제외한 실행/상태 공유가 v1 스코프.
@@ -38,7 +39,7 @@
 
 - browser-os 이니셔티브의 5기둥 전부 실측 승격: ① `.pymachine` 단일 파일(SHA-256 무결성 + `trust` 승인 게이트, 13.7MB 부팅 2.5s) = `exportImage`/`openMachine` ② 영속 디스크 `Runtime.mountHome`(/home/web, 커널 간 생존) ③ 셸 매직(%ls/%cd/%pwd/%cat) ④ 수명주기 데모 examples/machine.html(pagehide 자동 hibernate + 재방문 resume) ⑤ 오프라인 부팅 `boot({coreCacheDir})`(코어 3종 OPFS, 2차 부팅 fetch 계층 miss 0. 한계 정직 기록: pyodide.js/asm.js는 script 경로 = 완전 오프라인은 SW 몫).
 - 성장 세션(Session v2): 힙이 자란 세션 부활(30->65MB, 354ms). 발견 2건 기록: JS Memory.grow 직접 호출은 글루 뷰 파손(파이썬 할당 경로가 정답), 성장 흔적은 restore(0) 되감기로 해소.
-- 소유자 질책 2건 반영: (a) camelCase는 언어 불문(JS 문자열 안 파이썬 포함) - 전량 정정 + `tests/run.mjs` 네이밍 기계 가드 신설. (b) attempts 캠페인 양극단 금지 - runtimeParity에서 pythonMachine 캠페인 분리(질문 7개 이관), 규칙 명문화.
+- 규칙 위반 정정 2건: (a) camelCase는 언어 불문(JS 문자열 안 파이썬 포함) - 전량 정정 + `tests/run.mjs` 네이밍 기계 가드 신설. (b) attempts 캠페인 양극단 금지 - runtimeParity에서 pythonMachine 캠페인 분리(질문 7개 이관), 규칙 명문화.
 - 결함 수정: coreCacheDir 감싼 fetch의 재진입 무한 재귀.
 
 ### 2026-07-11 발명 라운드 2: WheelCache + %undo 시간여행 REPL (게이트 23검사)
@@ -69,10 +70,10 @@
 - 결함 수정: 워커 에러 문자열을 꼬리로 잘라 예외 타입 보존.
 - 남은 큰 덩어리(다음 세션): 델타 체인 영속 + 분기 그래프 + 세션 간 커널 복원, "웹의 uv"(wheel OPFS 캐시 + requirements), requests/저수준 socket, 시그널 확장. 정본: local-parity NEXT.
 
-### 2026-07-11 dartlab 병행 구현 발견 -> 흡수 결정 + 목표 확장(소유자 지시)
+### 2026-07-11 dartlab 병행 구현 발견 -> 흡수 결정 + 목표 확장
 
 - dartlab `mainPlan/web-notebook-runtime`(자체 워커·체크포인트 그래프·OPFS, Pyodide 0.27.5)과 `browser-as-server-ssot`(FastAPI in pyodide, e2e PASS)를 발견. 런타임이 3벌로 갈라진 상태 확인.
-- **소유자 결정**: 세 소비자의 개별 풀이는 동결. pyproc이 서면 dartlab/codaro/xlpod 전부 pyproc을 바라본다. pyproc = 혁신·발명 레인, 목표는 "웹에서 로컬처럼: 실행 + 패키지 설치 + 임베디드 파이썬/uv급 환경". 하드코딩 원칙 금지(CLAUDE.md 개발 원칙 6).
+- **결정**: 세 소비자의 개별 풀이는 동결. pyproc이 서면 dartlab/codaro/xlpod 전부 pyproc을 바라본다. pyproc = 혁신·발명 레인, 목표는 "웹에서 로컬처럼: 실행 + 패키지 설치 + 임베디드 파이썬/uv급 환경". 하드코딩 원칙 금지(CLAUDE.md 개발 원칙 6).
 - 흡수 목록과 순서는 [local-parity](../local-parity/README.md) "흡수 계획" 절이 정본. 1순위 = 예외 안전 복원(재해시), 관문 = Pyodide 버전 정합(0.27.5 vs v314) 실측.
 
 ### 2026-07-11 잔여 결함 전량 개선(attempts 3종 졸업) + local-parity 발명 개시
@@ -91,13 +92,13 @@
   1. `PyProc.boot()`가 워커 부팅 실패를 삼켜 영원히 pending(계약 실태 표의 알려진 결함). 부팅 에러를 reject로 전파 + 워커 error 이벤트 처리 + 프로세스 상태 `dead` 기록.
   2. **스냅샷-fork가 배포 코드에서 부팅 불가였다**: SAB 뷰를 `_loadSnapshot`에 그대로 주면 Pyodide 내부 TextDecoder가 shared buffer를 거부(TypeError). 워커 로컬 일반 버퍼로 1회 복사해 해결. 기존 "검증된 실측"은 codaro 실험 코드 기준이었고, 추출된 pyproc의 SAB 경로는 브라우저 실측이 없어 이 결함이 숨어 있었다. 런타임 게이트 신설의 정당성이 즉시 입증된 사례.
 - **이 머신 실측(게이트 GREEN 10/10, Edge headless)**: 메인 부팅 4004ms, restoreLive 0.84ms, fork 워커 부팅 평균 384ms(콜드 대비 약 10배), map 병렬 39ms vs 직렬 65ms(2워커 1.67배, 결과 정확). v0.0.3 재구조화의 브라우저 검증 완료(NEXT 1 해소).
-- **릴리즈 정책(소유자 지시)**: 버전 올림 = 태그 = 릴리즈, 하나다. 소유자의 명시 지시가 있을 때만 같은 값으로 함께 올린다. 남발 금지. 지시 없이 올렸던 0.0.4는 철회하고 0.0.3(태그 v0.0.3과 동일 값)으로 되돌렸다. 일상 커밋은 버전을 건드리지 않는다(소비자는 SHA 핀).
+- **릴리즈 정책(확정)**: 버전 올림 = 태그 = 릴리즈, 하나다. 명시 지시가 있을 때만 같은 값으로 함께 올린다. 남발 금지. 지시 없이 올렸던 0.0.4는 철회하고 0.0.3(태그 v0.0.3과 동일 값)으로 되돌렸다. 일상 커밋은 버전을 건드리지 않는다(소비자는 SHA 핀).
 
 ### 2026-07-11 라이선스 확정: Apache 2.0
 
-- 소유자 결정으로 **Apache License 2.0** 채택(Copyright 2026 eddmpython). 근거: 명시적 특허 조항(3절)이 스냅샷-fork·복원 리액티브 같은 발명성 기법의 사용자를 보호하고, 기여 조건 내장(5절, inbound=outbound)이 별도 CLA 없이 외부 기여를 연다. Pyodide(MPL-2.0)는 CDN 런타임 로드라 간섭 없음.
+- **Apache License 2.0** 채택 확정(Copyright 2026 eddmpython). 근거: 명시적 특허 조항(3절)이 스냅샷-fork·복원 리액티브 같은 발명성 기법의 사용자를 보호하고, 기여 조건 내장(5절, inbound=outbound)이 별도 CLA 없이 외부 기여를 연다. Pyodide(MPL-2.0)는 CDN 런타임 로드라 간섭 없음.
 - CONTRIBUTING 2종의 "기여 보류" 절 해제, package.json `Apache-2.0` + `files`에 LICENSE 포함, README 2종 갱신.
-- npm 레지스트리에 `pyproc` 이름 비어 있음 확인(2026-07-11). 퍼블리시는 소유자 npm 계정 필요(NEXT 참조).
+- npm 레지스트리에 `pyproc` 이름 비어 있음 확인(2026-07-11). 퍼블리시는 npm 계정 인증 필요(NEXT 참조).
 
 ### 2026-07-11 운영 체계 수립 + src 레이어 재구조화 (v0.0.3)
 
@@ -106,7 +107,7 @@
 - **restoreLive 실행 경계 계약을 명문화.** "복원 전 마지막 실행을 checkpoint()로 닫는다"가 계약. 구 README 예제는 이 계약을 어겨 조용히 오동작하는 코드였다(checkpoint 없이 restoreLive 호출 = stale 해시 비교 = 0페이지 복원). 예제 수정 + reactive.js 상단 계약 주석 추가.
 - **구 docs/PRD 2종을 이 이니셔티브 문서(00~02)로 이관.** docs/는 운영 문서 트리로 재편.
 - **기여 정책 신설.** CONTRIBUTING 2종(en/ko). 라이선스는 미정 상태라 외부 코드 기여는 라이선스 확정 전까지 보류로 명시.
-- 출처: 소유자 지시(2026-07-11, 운영 체계 전면 세팅) + dartlab/codaro/xlpod 실태 조사.
+- 출처: 2026-07-11 운영 체계 전면 세팅 결정 + dartlab/codaro/xlpod 실태 조사.
 
 ### 2026-07-11 레포 추출 + codaro import 검증 (v0.0.1 ~ v0.0.2)
 
@@ -116,15 +117,15 @@
 
 ## NEXT (재개 지점)
 
-### 소유자 전용 TODO (계정/승인이 필요해서 대신 못 하는 것, 2026-07-12 정리)
+### 직접 처리 TODO (계정/승인이 필요한 것, 2026-07-12 정리)
 
-1. ~~npm 퍼블리시~~ **완료(2026-07-12)**: 소유자가 `pyproc@0.0.5`를 게시(레지스트리 확인 23:08 UTC). 외부 설치 = `npm install pyproc`. README 2종/소비 계약에 반영 완료. 이후 릴리즈마다 절차 7단계(npm publish)가 표준.
-2. ~~라이브 데모 연결~~ **GitHub Pages 자동 배포로 대체(2026-07-12, 소유자 방침: 외부 최소화)**: 소유자 액션 0. 실측 2건이 경로를 열었다(noCoiProbe: 머신 동선은 COI 불필요 / swCoiProbe: SAB는 pyprocSw ?coi=1 주입으로). pages.yml이 push마다 배포, Cloudflare는 예비로만 기록(wrangler 인증 확인됨, [demoHosting.md](../../docs/operations/demoHosting.md)).
+1. ~~npm 퍼블리시~~ **완료(2026-07-12)**: `pyproc@0.0.5` 게시(레지스트리 확인 23:08 UTC). 외부 설치 = `npm install pyproc`. README 2종/소비 계약에 반영 완료. 이후 릴리즈마다 절차 7단계(npm publish)가 표준.
+2. ~~라이브 데모 연결~~ **GitHub Pages 자동 배포로 대체(2026-07-12, 방침: 외부 최소화)**: 추가 조작 0. 실측 2건이 경로를 열었다(noCoiProbe: 머신 동선은 COI 불필요 / swCoiProbe: SAB는 pyprocSw ?coi=1 주입으로). pages.yml이 push마다 배포, Cloudflare는 예비로만 기록(wrangler 인증 확인됨, [demoHosting.md](../../docs/operations/demoHosting.md)).
 3. **엔진 독립 이니셔티브 착수 승인**: [mainPlan/engine-independence](../engine-independence/README.md) PRD 검토 후 착수 단계 지시.
 
 ### 작업 큐 (다음 세션 재개 지점)
 
-1. **엔진 독립 P0**(소유자 승인 시): engine-independence PRD의 첫 단계부터.
+1. **엔진 독립 P0**(착수 결정 시): engine-independence PRD의 첫 단계부터.
 2. **다음 발명 라운드 후보**: 리액티브/%undo 델타 rebase·prune(장수 세션 메모리 부채, 계약 실태 표), Session 리플레이의 스냅샷 베이스 결합(머신 resume 가속), 델타 분기(머신의 git), /home 포함 이미지 v2, SharedKernel+hibernate 결합.
 3. **codaro UI 배선 동행**: PyodideEngine이 browserPythonRuntime seam을 실제 사용할 때 나오는 요구를 이 원장에 기록. 그 시점 SHA로 재핀(스냅샷-fork 결함 수정이 들어간 커밋 이후여야 함).
 
