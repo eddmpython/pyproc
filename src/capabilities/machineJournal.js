@@ -32,8 +32,19 @@ export class MachineJournal {
     this._lastSeq = -1;
     this._sp = null;
     this._busy = false;
+    this._h0Key = null; // 리플레이 경계(cp0) 지문 캐시. 커밋/부활의 결정성 대조 축.
     this.commits = 0;
     this.pagesWritten = 0; // 실제 디스크에 쓴 페이지(dedupe로 걸러진 것은 제외)
+  }
+
+  // 리플레이 경계(cp0)의 지문: 경계 해시 배열 전체의 SHA-256. 같은 엔진 + 같은 매니페스트라야 같다.
+  // 커밋마다 HEAD에 싣고, recover가 대조한다(엔진이 바뀐 채 부활하면 조용한 힙 오염이므로).
+  async _boundaryKey() {
+    if (!this._h0Key) {
+      const h0 = this._reactive.hashes[0];
+      this._h0Key = await sha256Hex(new Uint8Array(h0.buffer, h0.byteOffset, h0.byteLength));
+    }
+    return this._h0Key;
   }
 
   // 유휴 감시 시작. execSeq가 멈춘 채 idleMs가 지나면 커밋한다(실행 중에는 끼어들지 않는다).
@@ -41,6 +52,9 @@ export class MachineJournal {
     if (!this._dir) throw new Error("journal: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
     if (!this._reactive) throw new Error("journal: cfg.reactive(ReactiveController)가 필요하다");
     if (this._timer) return this;
+    // 저널 디스크(OPFS)가 브라우저 압박 시 지워지는 best-effort 캐시로 남지 않게 지속 스토리지를
+    // 요청한다. 거부돼도 동작은 계속된다(내구성 능력의 계약상 요청은 이 능력의 몫이다).
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     this._sp = this._reactive.stackSave();
     this._lastSeq = this._rt.execSeq;
     let idleSince = null;
@@ -84,7 +98,7 @@ export class MachineJournal {
         }
       }
       // HEAD는 마지막에 쓴다(append-only 순서 = 크래시가 어디서 나든 이전 HEAD는 무결).
-      const head = { version: 1, pages: map, sp: this._reactive.stackSave() ?? this._sp, heapLen: mem.byteLength() };
+      const head = { version: 2, h0: await this._boundaryKey(), pages: map, sp: this._reactive.stackSave() ?? this._sp, heapLen: mem.byteLength() };
       const hf = await this._dir.getFileHandle("HEAD.json", { create: true });
       const w = await hf.createWritable(); await w.write(JSON.stringify(head)); await w.close();
       this.commits++; this.pagesWritten += wrote;
@@ -93,12 +107,15 @@ export class MachineJournal {
   }
 
   // 저널 재생: 같은 매니페스트로 리플레이한 커널에 마지막 커밋을 적용한다(= 부활).
-  // 저널이 없으면 null(첫 부팅). 힙 크기 불일치는 명시적 예외(다른 엔진/매니페스트).
+  // 저널이 없으면 null(첫 부팅). 힙 크기/경계 지문 불일치는 명시적 예외(다른 엔진/매니페스트).
   async recover() {
     let head;
     try { head = JSON.parse(await (await (await this._dir.getFileHandle("HEAD.json")).getFile()).text()); }
     catch (e) { return null; } // 저널 없음 = 첫 부팅
     const mem = this._rt.memory;
+    if (head.h0 && head.h0 !== await this._boundaryKey()) {
+      throw new Error("journal.recover: 리플레이 경계 지문(h0) 불일치. 다른 엔진/매니페스트의 저널이다(조용한 힙 오염 방지).");
+    }
     if (head.heapLen > mem.byteLength()) {
       throw new Error(`journal.recover: 힙이 저널보다 작다(저널 ${head.heapLen} > 현재 ${mem.byteLength()}). 성장 세션은 Session.load 경로를 쓴다.`);
     }

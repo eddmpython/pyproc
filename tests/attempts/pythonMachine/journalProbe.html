@@ -64,6 +64,15 @@
     timings.blobCount = blobCount;
     check("CAS dedupe 동작(blob = 고유 내용 수)", blobCount > 0 && blobCount <= ja.pagesWritten, `blob ${blobCount} <= 쓴 ${ja.pagesWritten}`);
 
+    // 경계 지문 가드: 다른 엔진/매니페스트의 저널(h0 불일치)로 부활을 시도하면
+    // 조용한 힙 오염 대신 명시적 예외가 나야 한다.
+    const hf = await dir.getFileHandle("HEAD.json");
+    const headJson = JSON.parse(await (await hf.getFile()).text());
+    headJson.h0 = "deadbeef";
+    const hw = await hf.createWritable(); await hw.write(JSON.stringify(headJson)); await hw.close();
+    const bad = await b.rt.enableJournal({ dir, reactive: b.reactive }).recover().then(() => null, (e) => String(e));
+    check("경계 지문(h0) 불일치 -> 명시적 예외(조용한 오염 방지)", !!bad && bad.includes("h0"), String(bad).slice(0, 90));
+
     await opfs.removeEntry("journalProbe", { recursive: true });
     await opfs.removeEntry("journalProbeEmpty", { recursive: true });
   } catch (e) {
