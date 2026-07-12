@@ -5,11 +5,18 @@
 // worker.js는 반드시 이 파일과 같은 폴더에 둔다(new URL 상대경로 = 번들러 워커 emit 계약).
 import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
 
+// 시그널 번호(POSIX 관례. 외부 기술 명칭이라 번호는 원어 규격 그대로).
+// 워커의 SAB 채널에 쓰면 CPython eval 루프가 해당 핸들러를 부른다(signalTableProbe 실측).
+export const SIGNAL = { INT: 2, USR1: 10, USR2: 12, TERM: 15 };
+
 export class PyProc {
   constructor(opts = {}) {
     this.indexURL = opts.indexURL || DEFAULT_INDEX;
     this.packages = opts.packages || []; // 각 프로세스가 부팅 시 로드할 패키지(numpy 등)
     this.setup = opts.setup || null;     // 부팅 시 실행할 파이썬(예: "import numpy" 예열)
+    // 리플레이 매니페스트({env, packages, setup}): 주면 워커들이 결정적 리플레이로 부팅해
+    // 바이트 동일한 힙에 선다 = fork(살아있는 상태 복제)가 가능한 대칭 풀.
+    this.replay = opts.replay || null;
     this.workers = []; this.table = []; this._seq = 0; this._snapshot = null;
   }
 
@@ -45,21 +52,60 @@ export class PyProc {
       };
       w.addEventListener("message", onMsg);
       w.addEventListener("error", (e) => { entry.state = "dead"; reject(new Error(`워커 pid ${pid} 크래시: ${e.message}`)); }, { once: true });
-      w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null, interruptSab, packages: this.packages, setup: this.setup });
+      w.postMessage({ type: "boot", id: pid, indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null, interruptSab, packages: this.packages, setup: this.setup, replay: this.replay });
     });
     return { worker: w, entry, ready };
   }
 
-  // 협조적 취소(SIGINT 등가). 워커를 죽이지 않고 실행 중인 파이썬에 KeyboardInterrupt를
-  // 올린다 = 인터프리터 상태 보존 + respawn 비용 0. 행이 계속되면 kill/taskTimeoutMs가 최후 수단.
-  interrupt(pid) {
+  // 워커 1개와의 요청/응답 왕복(harvest/applyDelta 같은 단발 프로토콜).
+  _call(entry, msg, transfer = []) {
+    return new Promise((resolve, reject) => {
+      const onMsg = (e) => {
+        if (e.data.id !== entry.pid) return;
+        entry.worker.removeEventListener("message", onMsg);
+        if (e.data.type === "error") reject(new Error(e.data.error)); else resolve(e.data);
+      };
+      entry.worker.addEventListener("message", onMsg);
+      entry.worker.postMessage({ ...msg, id: entry.pid }, transfer);
+    });
+  }
+
+  // fork(2) 등가: 살아있는 프로세스 src의 현재 상태를 프로세스 dst에 복제한다.
+  // 스냅샷-fork(bare 이미지 복제)와 다르다: 부모가 만든 변수·배열·계산 결과가 자식에 실린다.
+  // 전제: 두 프로세스 모두 같은 replay 매니페스트로 부팅했을 것(바이트 동일한 경계 = 델타 유효).
+  // 실측(pythonMachine/forkLiveProbe 8/8): 델타 10.3MB 수확 43.6ms, 적용 1.4ms, 왕복 4ms,
+  // 부모 상태 전부 생존, 자식 변이는 부모에 새지 않음(독립 주소공간).
+  async fork(srcPid, dstPid) {
+    if (!this.replay) throw new Error("fork: replay 매니페스트로 부팅한 풀에서만 가능하다(new PyProc({ replay }))");
+    const src = this.table.find((t) => t.pid === srcPid), dst = this.table.find((t) => t.pid === dstPid);
+    if (!src || src.state !== "ready") throw new Error(`fork: src pid ${srcPid} 준비되지 않음`);
+    if (!dst || dst.state !== "ready") throw new Error(`fork: dst pid ${dstPid} 준비되지 않음`);
+    const h = await this._call(src, { type: "harvest" });
+    const applied = await this._call(dst, { type: "applyDelta", bin: h.bin, pages: h.pages, sp: h.sp }, [h.bin]);
+    return {
+      pages: h.pages.length,
+      mb: +(h.pages.length * 65536 / 1048576).toFixed(1),
+      harvestMs: h.ms,
+      applyMs: applied.ms,
+    };
+  }
+
+  // 시그널 전달(유닉스 시그널 표). 워커를 죽이지 않고 실행 중인 파이썬의 eval 루프에
+  // 시그널을 올린다 = 인터프리터 상태 보존 + respawn 비용 0.
+  // 실측(runtimeParity/signalTableProbe 6/6): SAB에 signum을 쓰면 CPython이 그 번호의
+  // 핸들러를 부른다. SIGINT(2)=KeyboardInterrupt(기본), SIGTERM(15)/SIGUSR1(10) 등은
+  // 파이썬이 signal.signal로 건 핸들러가 발화한다(핸들러 없으면 기본 동작).
+  // 협조적 종료 실측 264ms, 종료 후 같은 워커 재사용 가능. 행이 계속되면 kill이 최후 수단.
+  signal(pid, signum = SIGNAL.INT) {
     const entry = this.table.find((t) => t.pid === pid);
     // 워커가 setInterruptBuffer 미지원이면 SAB에 써봤자 무시된다(무증상 no-op).
     // ready 응답의 interrupts 플래그를 소비해 정직하게 false를 돌려준다.
     if (!entry || entry.state !== "ready" || !entry.interrupts) return false;
-    entry.interrupt[0] = 2; // SIGINT
+    entry.interrupt[0] = signum;
     return true;
   }
+  // SIGINT 별칭(기존 계약 유지).
+  interrupt(pid) { return this.signal(pid, SIGNAL.INT); }
 
   // N개 프로세스 spawn: 스냅샷으로 부팅(fast fork). useSnapshot=false면 콜드 대조.
   async boot(n, useSnapshot = true) {

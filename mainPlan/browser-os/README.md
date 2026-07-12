@@ -43,5 +43,7 @@
 3. ~~수명주기 데모~~ 완료(2026-07-12): examples/machine.html - 탭 pagehide 자동 hibernate, 재방문 resume, 내보내기/열기 버튼, /home 방문 기록.
 4. ~~오프라인 부팅~~ 완료(2026-07-12, 2단): `boot({coreCacheDir})`(fetch 계층) + `pyprocSw.js?cache=1`(script 경로까지, 2차 부팅 CDN miss 0). 비행기 모드 컴퓨터 성립.
 5. ~~커널 데몬(탭 밖에서 사는 머신) v1~~ 완료(2026-07-12): `SharedKernel`(SharedWorker) - 여러 탭 = 한 파이썬 상태. 벽: SharedWorker COI=false = SAB 불가(interrupt/fork 제외, 플랫폼 대기).
-6. **진짜 OS 표면 라운드(2026-07-12 개시, "파이썬이 모든 것을 다룬다")**: ① 모든 것은 파일 - `/dev/clipboard`·`/proc/ps`·`/proc/meminfo`(Plan 9. 브라우저 능력 = 파이썬 파일, 새 API 표면 0) ② init/cron - 부팅 시 `/home/web/boot.py` 자동 실행 + 크론 틱(머신이 스스로 일한다) ③ requests 실동작(pyodide-http 흡수) ④ 셸 %pip. 전부 attempts 실측 후 승격.
-7. 델타 분기(머신의 git) + /home 포함 이미지 포맷 v2 + SharedKernel과 hibernate/resume 결합(데몬이 자기 상태를 스스로 저장) + 파이프/시그널 확장.
+6. ~~진짜 OS 표면 라운드~~ 완료(2026-07-12): ① 모든 것은 파일 `DeviceFs`(/dev/clipboard·/proc, 새 API 표면 0) ② init/cron `Init`(boot.py 오토스타트 + 크론) ③ requests 실동작 ④ 셸 %pip.
+7. ~~근본 OS 라운드 1차~~ 완료(2026-07-12): **fork(2)**(`PyProc({replay})`+`fork` - 살아있는 상태 복제, 적용 1.4ms) + **시그널 표**(`signal(pid, signum)` - SIGTERM/SIGUSR1 핸들러 발화) + **체크포인트 나무**(머신의 git. 선형 체인의 힙 파손 결함을 재현하고 수정).
+8. **다음 프리미티브 로드맵**: [01-os-primitives.md](01-os-primitives.md)가 정본(전문 에이전트 3종 토론 종합). 우선순위: P1 저널(WAL = 강제종료 내성) -> P2 커널 선출(커널을 워커로 = fork 비대칭 해소 + 탭 죽음 생존) -> P3 잡 컨트롤(&) -> P4 파이프/shm -> P5 머신 컨테이너 -> P6 권한 감옥 -> P7 파일 세계 v2. 터미널 비전("스크롤백이 살아있다")과 안티 추천 8종도 같은 문서.
+9. /home 포함 이미지 포맷 v2 + SharedKernel과 hibernate/resume 결합.

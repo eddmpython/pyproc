@@ -15,7 +15,8 @@
 //   Terminal             - 서버리스 파이썬 REPL(code.InteractiveConsole, %pip/%undo)
 //   DeviceFs             - 모든 것은 파일: 브라우저 능력을 파이썬 open()으로(/dev, /proc)
 //   Init                 - OS의 init: /home/web/boot.py 오토스타트 + cron.py 주기 틱
-//   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/interrupt/respawn)
+//   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/signal/respawn + fork(2))
+//   SIGNAL               - 시그널 번호(INT/TERM/USR1/USR2). PyProc.signal(pid, signum)
 //   SharedKernel         - 탭 밖에서 사는 공유 커널(SharedWorker, 여러 탭 = 한 파이썬 상태)
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
@@ -30,5 +31,5 @@ export { Init } from "./src/capabilities/init.js";
 export { bootSession, openMachine, Session } from "./src/capabilities/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
-export { PyProc } from "./src/processOs/pyProc.js";
+export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
 export { SharedKernel } from "./src/processOs/sharedKernel.js";

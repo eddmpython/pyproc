@@ -11,7 +11,7 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, PyProc, bootSession, runScript } from "../../index.js";
+    import { boot, PyProc, SIGNAL, bootSession, runScript } from "../../index.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -59,6 +59,22 @@
       try { rt.run("x = 555\nraise ValueError('boom')"); } catch (e) {} // 예외 = 경계 없는 오염
       const rr1 = reactive.restoreLive(cp.index, sp0); // 옵션 없이: 가드가 자동 재해시 승격
       check("restoreLive 가드: 경계 위반 자동 감지 복원", rt.run("x") === 1 && rr1.rehashed === true);
+
+      // 체크포인트 나무(머신의 git): 과거로 복원 후 새 체크포인트 = 분기. 형제 델타가 새면
+      // 힙이 깨진다(선형 체인의 실결함, branchProbe로 재현). 정본 실측: pythonMachine/branchProbe.
+      rt.run("br = bytearray(100000)\nbr[:4] = b'ROOT'");
+      const b0 = reactive.checkpoint().index;
+      rt.run("br[:4] = b'MAIN'");
+      const bMain = reactive.checkpoint().index;
+      reactive.restoreLive(b0, sp0);
+      rt.run("brTag = 'exp'");            // 분기: 부모 = b0, br은 안 건드림
+      const bExp = reactive.checkpoint().index;
+      reactive.restore(b0, sp0);          // 라이브를 분기점으로(판별을 가리는 우연 제거)
+      reactive.restoreLive(bExp, sp0);
+      check("체크포인트 나무: 분기가 형제 델타에 오염되지 않음",
+        rt.run("bytes(br[:4]).decode()") === "ROOT" && rt.run("brTag") === "exp" && reactive.tree()[bExp].parent === b0);
+      reactive.restoreLive(bMain, sp0);
+      check("나무: 본선 복귀 정확", rt.run("bytes(br[:4]).decode()") === "MAIN");
 
       // base의 OPFS 영속: 내보내고 되읽은 base로도 복원이 성립해야 한다
       const opfsRoot = await navigator.storage.getDirectory();
@@ -148,6 +164,8 @@
       const busyP = os.map("def _fn(n):\n    while True:\n        pass", [0]);
       setTimeout(() => os.interrupt(lane0), 400);
       const ir = await busyP;
+      // 시그널 표(정본 실측: runtimeParity/signalTableProbe). SIGINT 외 번호가 파이썬 핸들러를 부른다.
+      check("SIGNAL 표 노출", SIGNAL.TERM === 15 && SIGNAL.USR1 === 10);
       check("interrupt(pid): SIGINT 수렴 + 워커 생존", ir[0] && ir[0].error && ir[0].error.includes("KeyboardInterrupt")
         && (await os.map(fn, [1000]))[0] === (1000 * 999 * 1999) / 6);
 
@@ -156,6 +174,19 @@
 
       os.terminate();
       check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
+
+      // fork(2): 살아있는 프로세스의 상태 복제. 리플레이 풀(대칭 커널)에서만 성립 = 계약.
+      // 여기서는 기전(수확+적용 왕복이 델타를 실어 나름)을 상시 확인하고, 상태 생존/격리의
+      // 정확성은 전용 probe가 정본으로 검증한다(mapArray와 같은 분업): pythonMachine/forkLiveProbe.
+      const fos = new PyProc({ replay: {} });
+      await fos.boot(2, false); // 리플레이 부팅(스냅샷 아님 = 바이트 동일한 경계)
+      const [p1, p2] = fos.ps().map((p) => p.pid);
+      // 태스크 2개 = 워커 2개가 각각 하나씩(레인당 1개) -> 양쪽에 사용자 상태가 생긴다.
+      await fos.map("def _fn(a):\n    global tag, payload\n    tag = 'proc'\n    payload = bytearray(b'X' * 300000)\n    return 1", [0, 1]);
+      const fk = await fos.fork(p1, p2).catch((e) => ({ error: String(e) }));
+      check("fork(2): 살아있는 상태 복제(델타 수확 + 적용)", !fk.error && fk.pages > 0,
+        fk.error ? String(fk.error).slice(0, 90) : `${fk.pages}p/${fk.mb}MB, 수확 ${fk.harvestMs}ms + 적용 ${fk.applyMs}ms`);
+      fos.terminate();
 
       // mapArray(numpy 샤딩)의 런타임 검증은 무게 때문에 전용 probe가 담당한다:
       // tests/attempts/runtimeParity/shardMapProbe.html (4워커 5.28배 실측)

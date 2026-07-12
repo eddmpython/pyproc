@@ -32,7 +32,7 @@ const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 for (const [name, kind] of [
   ["boot", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
   ["ReactiveController", "function"], ["SyscallBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["Init", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
-  ["PAGE_SIZE", "number"],
+  ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
 ]) {
   check(`export ${name}:${kind}`, () => {
     if (typeof api[name] !== kind) throw new Error(`got ${typeof api[name]}`);
@@ -63,12 +63,16 @@ check("VirtualOrigin 메서드", () => {
 });
 check("PyProc 메서드", () => {
   const p = api.PyProc.prototype;
-  for (const m of ["boot", "map", "mapArray", "mapSerial", "ps", "kill", "interrupt", "terminate"])
+  for (const m of ["boot", "map", "mapArray", "mapSerial", "ps", "kill", "signal", "interrupt", "fork", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
+});
+check("SIGNAL 표(POSIX 번호)", () => {
+  const s = api.SIGNAL;
+  if (s.INT !== 2 || s.TERM !== 15 || s.USR1 !== 10 || s.USR2 !== 12) throw new Error(JSON.stringify(s));
 });
 check("ReactiveController 메서드", () => {
   const p = api.ReactiveController.prototype;
-  for (const m of ["checkpoint", "restore", "restoreLive", "timeTravel", "storageMB", "saveBase", "loadBase"])
+  for (const m of ["checkpoint", "restore", "restoreLive", "timeTravel", "tree", "storageMB", "saveBase", "loadBase"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 
@@ -113,7 +117,7 @@ for (const scope of ["src", "examples", "tests"]) {
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
-for (const sym of ["boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "ReactiveController", "SyscallBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "Session", "WheelCache", "PyProc", "SharedKernel", "PAGE_SIZE"]) {
+for (const sym of ["boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "ReactiveController", "SyscallBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "Session", "WheelCache", "PyProc", "SIGNAL", "SharedKernel", "PAGE_SIZE"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
   });

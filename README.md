@@ -216,7 +216,8 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `Init` | OS init: `/home/web/boot.py` autorun plus `cron.py` ticks, all file-driven |
 | `bootSession` / `Session` / `openMachine` | Session revival (immortal kernel) and portable `.pymachine` machine images: deterministic replay plus user delta, persisted to OPFS (`save`/`load`) or exported as one file (`exportImage`/`openMachine`) |
 | `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
-| `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` (SharedArrayBuffer typed-array) parallelism, lifecycle (`kill` / `interrupt` / respawn) |
+| `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), and **`fork(2)`**: clone a *live* process (its variables and arrays travel, 1.4ms apply) |
+| `SIGNAL` | POSIX signal numbers for `PyProc.signal(pid, signum)`: real `SIGTERM` / `SIGUSR1` handlers fire inside Python |
 | `SharedKernel` | A kernel that outlives the tab (SharedWorker): many tabs, one Python state |
 | `PAGE_SIZE` | WASM page size constant (65536) |
 

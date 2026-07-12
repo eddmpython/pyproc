@@ -216,7 +216,8 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `Init` | OS의 init: `/home/web/boot.py` 오토스타트 + `cron.py` 주기 틱(전부 파일 주도) |
 | `bootSession` / `Session` / `openMachine` | 세션 부활(불멸 커널)과 이동 가능한 `.pymachine` 머신 이미지: 결정적 리플레이 + 사용자 델타를 OPFS에 영속(`save`/`load`)하거나 파일 하나로 내보냄(`exportImage`/`openMachine`) |
 | `WheelCache` | 오프라인·재다운로드 0 패키지 설치를 위한 wheel / OPFS 캐시 |
-| `PyProc` | 프로세스 OS 커널: 스냅샷-fork spawn, `map` / `mapArray`(SharedArrayBuffer TypedArray) 병렬, 수명주기(`kill` / `interrupt` / respawn) |
+| `PyProc` | 프로세스 OS 커널: 스냅샷-fork spawn, `map` / `mapArray` 병렬, 수명주기(`kill` / `signal` / respawn), 그리고 **`fork(2)`**: 살아있는 프로세스 복제(변수·배열이 자식으로 실린다, 적용 1.4ms) |
+| `SIGNAL` | `PyProc.signal(pid, signum)`용 POSIX 시그널 번호: 진짜 `SIGTERM`/`SIGUSR1` 핸들러가 파이썬 안에서 발화한다 |
 | `SharedKernel` | 탭보다 오래 사는 공유 커널(SharedWorker): 여러 탭 = 한 파이썬 상태 |
 | `PAGE_SIZE` | WASM 페이지 크기 상수(65536) |
 

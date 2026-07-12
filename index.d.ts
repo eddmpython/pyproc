@@ -61,6 +61,14 @@ export interface CheckpointInfo {
   changedPages: number;
   deltaBytes: number;
   kind: "base" | "delta";
+  /** 이 노드의 부모(= 만들 당시의 live 노드). 과거로 복원한 뒤 체크포인트하면 분기가 된다. */
+  parent?: number;
+}
+
+export interface CheckpointNode {
+  index: number;
+  parent: number;
+  children: number[];
 }
 
 export interface RestoreInfo {
@@ -94,6 +102,21 @@ export interface PyProcOptions {
   packages?: string[];
   /** 부팅 시 실행할 파이썬 예열 코드(예: "import numpy"). */
   setup?: string;
+  /**
+   * 리플레이 매니페스트: 주면 워커들이 결정적 리플레이로 부팅해 바이트 동일한 힙에 선다.
+   * fork(살아있는 상태 복제)의 전제다. 프로세스 간 대칭이라야 델타가 유효하다.
+   */
+  replay?: { env?: Record<string, string>; packages?: string[]; setup?: string };
+}
+
+/** 시그널 번호(POSIX). SAB 채널로 워커의 CPython eval 루프에 전달된다. */
+export const SIGNAL: { INT: 2; USR1: 10; USR2: 12; TERM: 15 };
+
+export interface ForkInfo {
+  pages: number;
+  mb: number;
+  harvestMs: number;
+  applyMs: number;
 }
 
 export interface PyProcBootInfo {
@@ -121,8 +144,14 @@ export class MemoryCapability {
   writeBase(base: Uint8Array): void;
 }
 
-/** 복원 기반 리액티브: 완전 해시 체크포인트 체인 + 라이브-차분 복원 + 시간여행. */
+/**
+ * 복원 기반 리액티브: 완전 해시 체크포인트 **나무** + 라이브-차분 복원 + 시간여행/분기.
+ * 과거 노드로 복원한 뒤 checkpoint()하면 그 노드를 부모로 하는 분기가 생긴다(머신의 git).
+ * 델타 해석은 부모 체인을 따르므로 형제 분기의 페이지가 새지 않는다.
+ */
 export class ReactiveController {
+  /** 체크포인트 나무: 각 노드의 부모/자식. */
+  tree(): CheckpointNode[];
   checkpoint(): CheckpointInfo;
   restore(j: number, savedSP: number | null): void;
   /** 경계 위반(마지막 checkpoint/restore 이후 실행·변이)은 자동 감지되어 재해시 경로로 복원된다. opts.rehash는 강제 재해시. */
@@ -355,7 +384,19 @@ export class PyProc {
   ps(): PyProcEntry[];
   /** 프로세스 강제 종료(SIGKILL 등가). 성공 시 true, 테이블에는 dead로 남는다. */
   kill(pid: number): boolean;
-  /** 협조적 취소(SIGINT 등가). 실행 중 파이썬에 KeyboardInterrupt, 워커는 살아서 재사용된다. */
+  /**
+   * 시그널 전달(유닉스 시그널 표). 실행 중 파이썬의 signal 핸들러가 발화한다.
+   * SIGINT(2)=KeyboardInterrupt 기본, SIGTERM(15)/SIGUSR1(10) 등은 파이썬이 signal.signal로 건 핸들러가 받는다.
+   * 워커는 살아남아 재사용된다(협조적 종료 실측 264ms). 미지원 워커면 false.
+   */
+  signal(pid: number, signum?: number): boolean;
+  /** SIGINT 별칭(기존 계약). */
   interrupt(pid: number): boolean;
+  /**
+   * fork(2) 등가: 살아있는 프로세스 src의 현재 상태(변수·배열·계산 결과)를 dst에 복제한다.
+   * replay 매니페스트로 부팅한 풀에서만 가능(바이트 동일한 경계가 델타의 전제).
+   * 자식은 독립 주소공간이다(자식의 변이는 부모에 새지 않는다).
+   */
+  fork(srcPid: number, dstPid: number): Promise<ForkInfo>;
   terminate(): void;
 }
