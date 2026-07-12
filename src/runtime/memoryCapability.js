@@ -8,11 +8,13 @@
 export const PAGE_SIZE = 65536;
 
 export class MemoryCapability {
-  constructor(py) { this._py = py; }
-  heap() { return this._py._module.HEAPU8; }              // 항상 최신 뷰(성장 후 detach 대응)
-  byteLength() { return this._py._module.HEAPU8.length; }
-  stackSave() { const M = this._py._module; return M._emscripten_stack_get_current ? M._emscripten_stack_get_current() : null; }
-  stackRestore(sp) { const M = this._py._module; if (sp != null && M._emscripten_stack_restore) { try { M._emscripten_stack_restore(sp); } catch (e) {} } }
+  // engine: EngineContract. 선형 메모리·스택 접근을 계약 뒤에서 받는다(엔진 내부 직접 접근 0).
+  // 이 격리가 엔진 독립의 축이다: 엔진이 바뀌어도 heapU8()만 제공하면 아래 알고리즘이 그대로 산다.
+  constructor(engine) { this._e = engine; }
+  heap() { return this._e.heapU8(); }                    // 항상 최신 뷰(성장 후 detach 대응)
+  byteLength() { return this._e.heapU8().length; }
+  stackSave() { return this._e.stackSave(); }
+  stackRestore(sp) { this._e.stackRestore(sp); }
   // 페이지당 [2p]=FNV-1a, [2p+1]=독립 믹서를 interleave로 반환(길이 = 2 * 페이지 수).
   pageHashes() {
     const buf = this.heap().buffer, len = this.byteLength();

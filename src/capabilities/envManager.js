@@ -6,6 +6,7 @@
 //     import = 환경 웜 부팅 5465ms -> 1515ms (3.61배). 이 파일은 그 조립이다.
 //   - PEP 723 인라인 메타데이터로 .py 파일이 의존성을 자급한다(브라우저판 uv run).
 import { DEFAULT_INDEX, ensureEngineScript, Runtime } from "../runtime/runtime.js";
+import { PyodideEngine } from "../runtime/engines/pyodideEngine.js";
 import { WheelCache } from "./wheelCache.js";
 
 async function hashHex(s) {
@@ -52,7 +53,7 @@ export async function bootEnv(manifest = {}, dirs = {}) {
 
   // indexURL을 반드시 넘긴다: 빠뜨리면 기본 CDN으로 되돌아가 자식 워커/subprocess가
   // 자체 호스팅·오프라인 배포 지점에서 샌다(외부 평가 적발 실버그, 2026-07-12).
-  const rt = new Runtime(py, indexURL);
+  const rt = new Runtime(new PyodideEngine(py), indexURL);
   const t1 = performance.now();
   if (manifest.packages && manifest.packages.length) {
     if (dirs.wheels) await new WheelCache(rt, { dir: dirs.wheels }).loadPackages(manifest.packages);

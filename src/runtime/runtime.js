@@ -3,6 +3,7 @@
 // enableReactive()/enableSyscallBridge()로 opt-in 등록한다. 빌드 단계 없음(네이티브 ESM).
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated).
 import { MemoryCapability } from "./memoryCapability.js";
+import { PyodideEngine } from "./engines/pyodideEngine.js";
 import { ReactiveController } from "../capabilities/reactive.js";
 import { SyscallBridge } from "../capabilities/syscallBridge.js";
 import { AsgiServer } from "../capabilities/asgiServer.js";
@@ -84,39 +85,31 @@ export async function boot(opts = {}) {
     py = await loadPyodide(cfg);
     if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
   }
-  const rt = new Runtime(py, indexURL);
+  const rt = new Runtime(new PyodideEngine(py), indexURL);
   if (cache) rt.coreCache = { hits: cache.hits, misses: cache.misses }; // 부팅 자산 캐시 통계
   return rt;
 }
 
 export class Runtime {
-  constructor(py, indexURL) {
-    this._py = py;
+  // engine: EngineContract(기본 PyodideEngine). 엔진 접점을 계약 뒤에 격리한다.
+  constructor(engine, indexURL) {
+    this._engine = engine;
     // 이 커널이 어느 배포 지점에서 부팅됐는지. 자식 워커(subprocess 등)가 같은 지점을
     // 쓰게 하는 근거다(자가호스팅/오프라인 배포에서 자식만 CDN으로 새는 결함 방지).
     this.indexURL = indexURL || DEFAULT_INDEX;
-    this.memory = new MemoryCapability(py);
-    this._micropip = null;
+    this.memory = new MemoryCapability(engine);
     this.execSeq = 0; // 상태 변이 카운터. 리액티브가 실행 경계 위반을 O(1)로 감지하는 근거.
   }
-  run(code) { this.execSeq++; return this._py.runPython(code); }
-  runAsync(code) { this.execSeq++; return this._py.runPythonAsync(code); }
-  setGlobal(name, value) { this.execSeq++; this._py.globals.set(name, value); }
-  getGlobal(name) { return this._py.globals.get(name); }
-  async install(pkg) {
-    this.execSeq++;
-    if (!this._micropip) { await this._py.loadPackage("micropip"); this._micropip = this._py.pyimport("micropip"); }
-    await this._micropip.install(pkg);
-  }
-  async loadPackages(pkgs) { this.execSeq++; await this._py.loadPackage(pkgs); }
+  run(code) { this.execSeq++; return this._engine.runSync(code); }
+  runAsync(code) { this.execSeq++; return this._engine.runAsync(code); }
+  setGlobal(name, value) { this.execSeq++; this._engine.setGlobal(name, value); }
+  getGlobal(name) { return this._engine.getGlobal(name); }
+  async install(pkg) { this.execSeq++; return this._engine.install(pkg); }
+  async loadPackages(pkgs) { this.execSeq++; return this._engine.loadPackages(pkgs); }
 
   // 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정한다(uv lock 등가).
   // boot({ lockFileURL })에 되먹이면 같은 버전이 해석 0으로 재현된다. 실측: freezeLockProbe.
-  async freeze() {
-    this.execSeq++;
-    if (!this._micropip) { await this._py.loadPackage("micropip"); this._micropip = this._py.pyimport("micropip"); }
-    return this._micropip.freeze();
-  }
+  async freeze() { this.execSeq++; return this._engine.freeze(); }
 
   // Layer 1 능력 등록(opt-in). 소비자는 능력 계약만 받고 엔진 내부는 만지지 않는다.
   enableReactive() { return new ReactiveController(this); }
@@ -132,9 +125,8 @@ export class Runtime {
   // 파이썬 open()이 진짜 지속 파일을 읽고 쓴다. 변경 반영은 반환된 sync() 호출(핸들은 소비자 제공).
   async mountHome(dirHandle, path = "/home/web") {
     this.execSeq++;
-    const fs = await this._py.mountNativeFS(path, dirHandle);
-    return { path, sync: () => fs.syncfs() };
+    return this._engine.mountDir(path, dirHandle);
   }
 
-  get raw() { return this._py; }  // 탈출구(권장 안 함)
+  get raw() { return this._engine.raw(); }  // 탈출구(권장 안 함). 미이관 접점(deviceFs의 FS 등)용
 }
