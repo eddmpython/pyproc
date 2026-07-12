@@ -19,6 +19,8 @@
 //   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/signal/respawn + fork(2))
 //   SIGNAL               - 시그널 번호(INT/TERM/USR1/USR2). PyProc.signal(pid, signum)
 //   SharedKernel         - 탭 밖에서 사는 공유 커널(SharedWorker, 여러 탭 = 한 파이썬 상태)
+//   bootWasi/WasiSession - Pyodide 아닌 CPython(WASI) 세션(엔진 무관 실증). async run/get/set +
+//                          완전 시간여행(checkpoint/timeTravel). 값 다리는 JSON 한정, wasmURL 소비자 제공
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
 export { boot, Runtime, MemoryCapability, PAGE_SIZE } from "./src/runtime/runtime.js";
@@ -35,3 +37,4 @@ export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
 export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
 export { SharedKernel } from "./src/processOs/sharedKernel.js";
+export { bootWasi, WasiSession } from "./src/runtime/engines/wasi/wasiSession.js";

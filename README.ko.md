@@ -220,6 +220,7 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `PyProc` | 프로세스 OS 커널: 스냅샷-fork spawn, `map` / `mapArray` 병렬, 수명주기(`kill` / `signal` / respawn), 그리고 **`fork(2)`**: 살아있는 프로세스 복제(변수·배열이 자식으로 실린다, 적용 1.4ms) |
 | `SIGNAL` | `PyProc.signal(pid, signum)`용 POSIX 시그널 번호: 진짜 `SIGTERM`/`SIGUSR1` 핸들러가 파이썬 안에서 발화한다 |
 | `SharedKernel` | 탭보다 오래 사는 공유 커널(SharedWorker): 여러 탭 = 한 파이썬 상태 |
+| `bootWasi` / `WasiSession` | Pyodide 아닌 CPython(WASI) 세션, 프리미티브가 엔진 무관임의 실증: async `run` / `get` / `set` + 완전 시간여행(`checkpoint` / `timeTravel`, 복원 후 재개·분기). 값 다리는 JSON 한정(WASI엔 FFI 없음), `wasmURL`은 소비자 제공 |
 | `PAGE_SIZE` | WASM 페이지 크기 상수(65536) |
 
 하위 경로 import도 지원한다.

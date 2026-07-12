@@ -220,6 +220,7 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), and **`fork(2)`**: clone a *live* process (its variables and arrays travel, 1.4ms apply) |
 | `SIGNAL` | POSIX signal numbers for `PyProc.signal(pid, signum)`: real `SIGTERM` / `SIGUSR1` handlers fire inside Python |
 | `SharedKernel` | A kernel that outlives the tab (SharedWorker): many tabs, one Python state |
+| `bootWasi` / `WasiSession` | A session on non-Pyodide CPython (WASI), proving the primitives are engine-independent: async `run` / `get` / `set` plus full time travel (`checkpoint` / `timeTravel`, resume and branch after restore). Value bridge is JSON-only (WASI has no FFI); `wasmURL` is consumer-provided |
 | `PAGE_SIZE` | WASM page size constant (65536) |
 
 Subpath imports are also supported:
