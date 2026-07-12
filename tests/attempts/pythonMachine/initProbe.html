@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: init</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: init/cron - 머신이 스스로 일하나 (/home/web/boot.py 오토스타트 + 크론 틱)</h1>
+<p>진짜 OS의 init: 디스크에 놓인 boot.py가 부팅 때 저절로 돌고(rc.local),
+cron.py가 주기 틱마다 돈다. 상태는 /home(OPFS)에 남아 다음 부팅이 이어받는다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  // 개념 규약(승격 후보 계약): 부팅 시 bootPath가 존재하면 1회 실행, cronPath가 존재하면
+  // cronMs 간격으로 실행. 전부 파일 주도(코드 배선 0)이며 없으면 아무 일도 없다.
+  const runInit = async (rt, { bootPath, cronPath, cronMs }) => {
+    const exists = (p) => rt.run(`import os\nos.path.exists('${p}')`) === true;
+    const runFile = (p) => rt.run(`exec(open('${p}').read(), globals())`);
+    const outcome = { boot: false, timer: null };
+    if (exists(bootPath)) { runFile(bootPath); outcome.boot = true; }
+    if (exists(cronPath)) outcome.timer = setInterval(() => { try { runFile(cronPath); } catch (e) { console.warn("cron:", e); } }, cronMs);
+    return outcome;
+  };
+  try {
+    const opfs = await navigator.storage.getDirectory();
+    try { await opfs.removeEntry("initProbeHome", { recursive: true }); } catch (e) {}
+    const homeDir = await opfs.getDirectoryHandle("initProbeHome", { create: true });
+
+    // 1세대 커널: 디스크에 init 파일들을 심는다(사용자가 머신 안에서 만들었다고 치자)
+    const rt1 = await boot();
+    const home1 = await rt1.mountHome(homeDir);
+    rt1.run([
+      "open('/home/web/boot.py', 'w').write(",
+      "    \"counter = int(open('/home/web/count.txt').read()) if __import__('os').path.exists('/home/web/count.txt') else 0\\n\"",
+      "    \"counter += 1\\n\"",
+      "    \"open('/home/web/count.txt', 'w').write(str(counter))\\n\"",
+      ")",
+      "open('/home/web/cron.py', 'w').write(",
+      "    \"ticks = globals().get('ticks', 0) + 1\\n\"",
+      ")",
+    ].join("\n"));
+    await home1.sync();
+    check("디스크에 boot.py/cron.py 심기", rt1.run("import os\nos.path.exists('/home/web/boot.py')") === true);
+
+    // 2세대 커널: 마운트 + init -> boot.py가 저절로 돌고 카운터가 1이 된다
+    const rt2 = await boot();
+    const home2 = await rt2.mountHome(homeDir);
+    let t = performance.now();
+    const init2 = await runInit(rt2, { bootPath: "/home/web/boot.py", cronPath: "/home/web/cron.py", cronMs: 300 });
+    timings.initMs = Math.round(performance.now() - t);
+    check("오토스타트: boot.py 1회 실행", init2.boot === true && rt2.run("counter") === 1, `counter=${rt2.run("counter")}, ${timings.initMs}ms`);
+
+    // 크론: 300ms 틱이 실제로 반복 실행되는가
+    await new Promise((res) => setTimeout(res, 1050));
+    clearInterval(init2.timer);
+    const ticks = rt2.run("ticks");
+    check("크론: 주기 실행(1.05s 동안 2회 이상)", typeof ticks === "number" && ticks >= 2, `ticks=${ticks}`);
+    await home2.sync();
+
+    // 3세대 커널: 다음 부팅이 상태를 이어받는다(카운터 2)
+    const rt3 = await boot();
+    await rt3.mountHome(homeDir);
+    const init3 = await runInit(rt3, { bootPath: "/home/web/boot.py", cronPath: "/nope", cronMs: 0 });
+    check("다음 부팅이 이어받음: counter=2", init3.boot === true && rt3.run("counter") === 2, `counter=${rt3.run("counter")}`);
+
+    // init 파일이 없으면 아무 일도 없어야 한다(플래그/특수 케이스 0)
+    const rtBare = await boot();
+    const initBare = await runInit(rtBare, { bootPath: "/home/web/boot.py", cronPath: "/home/web/cron.py", cronMs: 300 });
+    check("파일 없으면 no-op(마운트 안 한 커널)", initBare.boot === false && initBare.timer === null);
+
+    await opfs.removeEntry("initProbeHome", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

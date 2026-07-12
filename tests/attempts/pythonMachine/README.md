@@ -23,6 +23,8 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 머신이 탭 밖에서 사나(커널 데몬) | [sharedKernelProbe.html](sharedKernelProbe.html) | 연결 2개(=탭 2개)가 같은 파이썬 상태 공유 + 동시 요청 정합 |
 | 헤더 못 다는 호스팅(GH Pages)에서 머신이 뜨나 | [noCoiProbe.html](noCoiProbe.html) | COI=false에서 부팅/세션 부활/.pymachine/디스크 전부 정상(SAB만 경계) |
 | SW 헤더 주입으로 SAB를 열 수 있나 | [swCoiProbe.html](swCoiProbe.html) | ?coi=1 등록 + 1회 새로고침 후 crossOriginIsolated=true + SAB 실사용 |
+| 브라우저 능력이 파이썬 파일이 되나(Plan 9) | [deviceFsProbe.html](deviceFsProbe.html) | open() 쌍방 브리지 + 동적 읽기 + /proc 커널 상태 + with/부분읽기 정합 |
+| 머신이 스스로 일하나(init/cron) | [initProbe.html](initProbe.html) | boot.py 오토스타트 + cron 주기 틱 + /home으로 세대 계승 + 파일 없으면 no-op |
 
 ## 결론 표
 
@@ -39,7 +41,9 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 2026-07-12 | sharedKernelProbe | Edge headless | SharedWorker(module) 커널 부팅 4253ms, 연결 A의 `x=41`을 연결 B가 `x+1=42`로 조회, 동시 요청 정합. **벽: crossOriginIsolated=false**(플랫폼 제약) = SAB 불가, JSPI는 true | **머신이 탭 밖에서 산다**(여러 탭 = 한 상태). interrupt/스냅샷-fork는 이 커널에서 불가(SAB) | 졸업 -> `SharedKernel`(실행/상태 공유 v1). SAB 기능은 플랫폼 COI 지원 대기 |
 | 2026-07-12 | noCoiProbe | Edge headless(헤더 제거 서버) | COI=false/SAB 잠김 확인 후: 부팅 3533ms, 세션 부활 115p/7.2MB, .pymachine 왕복 1804ms, /home 디스크, JSPI=true 전부 정상 | **머신 핵심 동선은 COI 불필요**(SAB 쓰는 프로세스 OS만 경계) = GitHub Pages에 그냥 올려도 대표 데모가 돈다 | GH Pages 데모 배포 채택 근거 |
 | 2026-07-12 | swCoiProbe | Edge headless(헤더 제거 서버) | pyprocSw(?coi=1) 등록 + 1회 새로고침 -> crossOriginIsolated=true, SAB 생성 + 워커 Atomics 쓰기 관측, 일반 서빙 무파손 | 헤더 못 다는 호스팅에서도 SAB 복구 성립(opaque는 원본 통과 = CDN 자체 CORP 전제, jsdelivr ok) | 졸업 -> `pyprocSw.js` ?coi=1 + processOs.html 부트스트랩 |
+| 2026-07-12 | deviceFsProbe | Edge headless | Emscripten FS 장치 등록: 파이썬 write -> JS 싱크 / JS 소스 -> read, /dev/clock 열 때마다 신선, /proc/meminfo가 실제 힙과 일치, /proc/ps 제공자 배선, read(4)/with문/os.path.exists 정합. 클립보드 쓰기는 headless 권한 거부(정직 기록) | **모든 것은 파일 성립**(새 API 표면 0: open()이 계약). 비동기 소스는 캐시+refresh가 정직한 계약 | 졸업 -> `DeviceFs`(enableDeviceFs: 내장 /proc/meminfo·/dev/clipboard + 소비자 장치) |
+| 2026-07-12 | initProbe | Edge headless | 디스크에 심은 boot.py가 다음 부팅에서 자동 실행(4ms, counter 1), cron.py 300ms 틱 1.05s에 3회, 3세대 부팅이 counter=2로 계승, 파일 없으면 no-op | **머신이 스스로 일한다**(rc.local+cron, 전부 파일 주도 = 배선 코드 0) | 졸업 -> `Init`(enableInit) + machine.html 배선 |
 
 ## 판정
 
-진행 중 (11개 질문 실측 완료: 결정성/리플레이/성장/이미지/디스크/오프라인 2단/공유 커널/호스팅 독립 2단. 잔여: /home 포함 이미지 v2, 델타 분기, SharedKernel과 머신 수명주기 결합)
+진행 중 (13개 질문 실측 완료: 결정성/리플레이/성장/이미지/디스크/오프라인 2단/공유 커널/호스팅 독립 2단/파일 세계/init. 잔여: /home 포함 이미지 v2, 델타 분기, SharedKernel과 머신 수명주기 결합)

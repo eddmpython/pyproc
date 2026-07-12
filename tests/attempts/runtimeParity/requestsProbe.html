@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: requests</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: requests가 진짜로 도나 (pyodide-http 흡수)</h1>
+<p>파이썬 생태계의 표준 HTTP는 urllib이 아니라 requests다. pyodide-http의 patch_all이
+requests를 동기 XHR로 배선한다(dartlab 체크리스트의 requests 계열 항목). 실측으로 판정.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    let t = performance.now();
+    await rt.loadPackages(["requests", "pyodide-http"]);
+    timings.installMs = Math.round(performance.now() - t);
+    check("requests + pyodide-http 설치", true, `${timings.installMs}ms`);
+
+    // 외부 기술 명칭(패키지/함수명)은 원어 유지 규칙에 따라 그대로 쓴다.
+    rt.run("import pyodide_http\npyodide_http.patch_all()");
+    // requests는 절대 URL만 받는다(상대 경로는 MissingSchema). 1차 실측에서 확인된 제약.
+    rt.setGlobal("_probeUrl", location.origin + "/tests/attempts/runtimeParity/requestsProbe.html");
+    t = performance.now();
+    const got = rt.run([
+      "import requests",
+      "r = requests.get(_probeUrl)",
+      "(r.status_code, 'pyodide-http' in r.text)",
+    ].join("\n"));
+    timings.getMs = Math.round(performance.now() - t);
+    const arr = got.toJs ? got.toJs() : got;
+    check("requests.get 동기 GET(자기 자신)", arr[0] === 200 && arr[1] === true, `${timings.getMs}ms`);
+
+    const second = rt.run("requests.get(_probeUrl).status_code");
+    check("requests 재사용(2번째 호출)", second === 200);
+
+    const headers = rt.run("requests.get(_probeUrl, headers={'X-Probe': '1'}).status_code");
+    check("커스텀 헤더 경로", headers === 200);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

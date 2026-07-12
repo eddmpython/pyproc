@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: deviceFs</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 모든 것은 파일 - /dev와 /proc이 파이썬 open()으로 열리나 (Plan 9)</h1>
+<p>Emscripten FS 장치 등록으로 브라우저 능력을 파이썬 파일로 만든다. 새 API 표면 0:
+open('/dev/...')이 곧 계약이다. 읽기 콜백은 동기여야 하므로(비동기 브라우저 API는
+캐시+refresh가 정직한 계약) 이 probe는 장치 기전 자체를 실측한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const rt = await boot();
+    const FS = rt.raw.FS; // probe 한정 내부 접근. 승격 시 능력 계약 뒤로 격리한다.
+    const enc = new TextEncoder(), dec = new TextDecoder();
+
+    // 장치 팩토리: read()가 문자열을 주고 write(bytes)가 바이트를 받는 파일을 만든다.
+    // open 시점에 내용을 고정(스트림별)해 position 기반 부분 읽기와 EOF가 정확하다.
+    const makeDevice = (path, provider) => {
+      const dev = FS.makedev(64, Math.floor(Math.random() * 1000) + 1);
+      FS.registerDevice(dev, {
+        open(stream) { stream.pyprocData = enc.encode(provider.read ? provider.read() : ""); },
+        close() {},
+        read(stream, buffer, offset, length, position) {
+          const data = stream.pyprocData;
+          let i = 0;
+          while (i < length && position + i < data.length) { buffer[offset + i] = data[position + i]; i++; }
+          return i;
+        },
+        write(stream, buffer, offset, length) {
+          if (provider.write) provider.write(new Uint8Array(buffer.subarray ? buffer.subarray(offset, offset + length) : buffer.slice(offset, offset + length)));
+          return length;
+        },
+      });
+      FS.mkdev(path, dev);
+    };
+
+    // 1) 쌍방 브리지: 파이썬 write -> JS 싱크 / JS 소스 -> 파이썬 read
+    let sink = null;
+    makeDevice("/dev/pyEcho", { read: () => "pong from js", write: (bytes) => { sink = dec.decode(bytes); } });
+    rt.run("open('/dev/pyEcho', 'w').write('hi from python')");
+    check("파이썬 write -> JS 싱크", sink === "hi from python", String(sink));
+    const echo = rt.run("open('/dev/pyEcho').read()");
+    check("JS 소스 -> 파이썬 read", echo === "pong from js", String(echo));
+
+    // 2) 동적 장치: 열 때마다 값이 갱신되는가(/dev/clock)
+    makeDevice("/dev/clock", { read: () => String(performance.now()) });
+    const c1 = rt.run("float(open('/dev/clock').read())");
+    const c2 = rt.run("float(open('/dev/clock').read())");
+    check("/dev/clock: 열 때마다 신선한 값", c2 > c1, `${c1} -> ${c2}`);
+
+    // 3) /proc: 커널 상태가 파일로 보이나
+    try { FS.mkdir("/proc"); } catch (e) { /* 이미 있으면 무시 */ }
+    makeDevice("/proc/meminfo", { read: () => JSON.stringify({ heapBytes: rt.memory.byteLength(), execSeq: rt.execSeq }) });
+    makeDevice("/proc/ps", { read: () => JSON.stringify([{ pid: 1, state: "ready" }, { pid: 2, state: "ready" }]) });
+    const mem = rt.run("import json\njson.loads(open('/proc/meminfo').read())['heapBytes']");
+    check("/proc/meminfo: 실제 힙 크기와 일치", mem === rt.memory.byteLength(), `${mem}`);
+    const nps = rt.run("import json\nlen(json.loads(open('/proc/ps').read()))");
+    check("/proc/ps: 프로세스 표 제공자 배선", nps === 2);
+
+    // 4) 파이썬다운 사용: with문 + 부분 읽기 + 존재 확인
+    const partial = rt.run("with open('/dev/pyEcho') as f:\n    part = f.read(4)\npart");
+    check("부분 읽기(read(4))와 with문", partial === "pong");
+    check("os.path.exists 인식", rt.run("import os\nos.path.exists('/dev/clock') and os.path.exists('/proc/ps')") === true);
+
+    // 5) 실제 브라우저 장치 후보의 능력 기록(헤드리스는 권한이 없을 수 있어 정보성)
+    let clip = "미지원";
+    try { await navigator.clipboard.writeText("pyproc probe"); clip = "writeText ok"; } catch (e) { clip = "거부(권한): " + String(e).slice(0, 60); }
+    check("클립보드 능력 기록(정보성, 항상 통과)", true, clip);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>
