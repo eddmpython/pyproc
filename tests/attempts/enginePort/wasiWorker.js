@@ -14,18 +14,16 @@ function makeDeterministic(wasi, getInst) {
   wasi.wasiImport.clock_time_get = (id, prec, out) => { new DataView(getInst().exports.memory.buffer).setBigUint64(out, 1750000000000000000n, true); return 0; };
 }
 
-// SAB 블로킹 stdin: 메인이 ctl/data SAB에 코드를 쓰고 notify하면 fd_read가 깨어나 반환한다.
-// ctl[0]: 입력 준비 플래그(1=준비, 0=소비됨). ctl[1]: 이번 입력의 바이트 길이.
-// OpenFile을 상속한다: 파이썬 stdin 초기화가 fdstat/filestat/seek 등을 조회하는데, Fd(부분
-// 구현)로 두면 memory access out of bounds로 깨진다(File은 되고 SabStdin은 안 되던 원인).
-// OpenFile(완전 구현)을 상속하고 fd_read만 SAB로 오버라이드하면 배선이 산다.
+// SAB 블로킹 신호 stdin. 값 채널 무상태화: stdin은 "실행 신호 1바이트"만 나르고, 코드는
+// preopen 파일 /cmd(힙 밖)로 나른다. 그래서 fd_read는 항상 정확히 1바이트만 반환하고, 그
+// 1바이트가 유일한 입력 상태라 힙 복원이 스트림을 어긋낼 여지가 없다(가변 길이 stdin의 밀림 제거).
+// OpenFile 상속: 파이썬 stdin 초기화가 fdstat/filestat/seek를 조회하는데 Fd(부분 구현)면 깨진다.
 class SabStdin extends OpenFile {
-  constructor(ctlSab, dataSab) {
+  constructor(ctlSab, dataSab, cmdFile) {
     super(new File([]));
     this.ctl = new Int32Array(ctlSab);
     this.data = new Uint8Array(dataSab);
-    this.buf = new Uint8Array(0);
-    this.pos = 0;
+    this.cmdFile = cmdFile;  // /cmd preopen File: 실행할 코드를 여기에 싣는다(힙 밖 채널)
     this.inst = null;        // exports.memory 접근용(체크포인트/복원)
     this.snapshots = [];     // 시간여행: 경계에서 찍은 힙 스냅샷
   }
@@ -33,46 +31,31 @@ class SabStdin extends OpenFile {
   _heapU8() { return new Uint8Array(this.inst.exports.memory.buffer); }
   fd_fdstat_get() { return { ret: 0, fdstat: new wasi.Fdstat(wasi.FILETYPE_CHARACTER_DEVICE, 0) }; }
   fd_read(size) {
-    if (this.pos >= this.buf.length) {
-      // 이 지점이 실행 경계(파이썬이 다음 입력 대기 = 스택이 항상 같은 깊이/내용). reactive의
-      // checkpoint/restore를 여기서 처리하면 스택이 경계에서 일관되므로 복원이 안전하다.
-      // 메타 명령(첫 바이트 0x00)은 여기서 소비하고 파이썬에 넘기지 않는다.
-      for (;;) {
-        postMessage({ type: "idle" });
-        Atomics.wait(this.ctl, 0, 0);
-        const n = Atomics.load(this.ctl, 1);
-        const raw = this.data.slice(0, n);
-        Atomics.store(this.ctl, 0, 0);
-        Atomics.notify(this.ctl, 0);
-        if (raw.length > 0 && raw[0] === 0) {
-          const cmd = new TextDecoder().decode(raw.subarray(1));
-          if (cmd === "checkpoint") {
-            this.snapshots.push(this._heapU8().slice());
-            postMessage({ type: "meta", kind: "checkpoint", idx: this.snapshots.length - 1, mb: +(this._heapU8().length / 1048576).toFixed(1) });
-          } else if (cmd.startsWith("restore ")) {
-            const i = +cmd.slice(8);
-            const cur = this._heapU8(), snap = this.snapshots[i];
-            // 복원이 힙을 실제로 되돌렸음을 증명: 복원 전 스냅샷과 다르던 페이지 수(diffBefore)를
-            // 센 뒤 덮는다. diffBefore>0 = 변이가 있었고 복원이 그걸 경계 스냅샷으로 되돌렸다.
-            let diffBefore = 0;
-            const nCommon = Math.min(cur.length, snap.length);
-            for (let p = 0; p < nCommon; p += 65536) if (cur[p] !== snap[p]) diffBefore++;
-            cur.set(snap); // 힙 전체를 경계 스냅샷으로 되돌림(스택 포함)
-            this.buf = new Uint8Array(0); // stdin 버퍼를 fresh로: 복원된 파이썬 os.read가 다음
-            this.pos = 0;                 // 명령을 새로 받게(복원과 JS측 버퍼 재동기화)
-            postMessage({ type: "meta", kind: "restore", idx: i, diffBefore });
-          }
-          continue; // 메타는 다음 입력을 계속 기다린다(파이썬 왕복 아님)
+    // 이 지점이 실행 경계(파이썬이 신호 1바이트 대기 = 스택 항상 같은 깊이, 입력 상태 = 없음).
+    // reactive checkpoint/restore를 여기서 처리하면 복원이 파이썬 I/O 상태를 어긋내지 않는다.
+    for (;;) {
+      postMessage({ type: "idle" });
+      Atomics.wait(this.ctl, 0, 0);
+      const n = Atomics.load(this.ctl, 1);
+      const raw = this.data.slice(0, n);
+      Atomics.store(this.ctl, 0, 0);
+      Atomics.notify(this.ctl, 0);
+      if (raw.length > 0 && raw[0] === 0) {
+        const cmd = new TextDecoder().decode(raw.subarray(1));
+        if (cmd === "checkpoint") {
+          this.snapshots.push(this._heapU8().slice());
+          postMessage({ type: "meta", kind: "checkpoint", idx: this.snapshots.length - 1, mb: +(this._heapU8().length / 1048576).toFixed(1) });
+        } else if (cmd.startsWith("restore ")) {
+          const i = +cmd.slice(8);
+          this._heapU8().set(this.snapshots[i]); // 힙 전체를 경계 스냅샷으로 되돌림(스택 포함).
+          postMessage({ type: "meta", kind: "restore", idx: i });
         }
-        this.buf = raw;
-        this.pos = 0;
-        break;
+        continue; // 메타는 파이썬 왕복 아님(다음 신호 계속 대기)
       }
+      // exec 신호: raw = "\x01" + 코드바이트. 코드를 /cmd 파일에 싣고 신호 1바이트만 반환한다.
+      this.cmdFile.data = raw.subarray(1).slice();
+      return { ret: 0, data: new Uint8Array([1]) }; // 파이썬 os.read(0,1)이 받는 무상태 신호
     }
-    const end = Math.min(this.pos + size, this.buf.length);
-    const chunk = this.buf.slice(this.pos, end);
-    this.pos = end;
-    return { ret: 0, data: chunk };
   }
 }
 
@@ -105,8 +88,14 @@ onmessage = async (e) => {
       // 주석)를 실으면 WLR/shim의 args 처리가 memory access out of bounds로 깨진다(실측 특정).
       // 파일 경로(ASCII)만 argv에 싣고 소스는 파일 내용(정상 UTF-8)으로 둔다. 파이썬 엔진을
       // 파일로 소유하는 정식 실행 모델이기도 하다.
-      const preopen = new PreopenDirectory("/", [["driver.py", new File(new TextEncoder().encode(driverSource))]]);
-      const stdin = new SabStdin(ctlSab, dataSab);
+      // /cmd = 코드 채널(힙 밖). 드라이버 소스도 파일로(argv UTF-8 회피). SabStdin이 cmdFile을
+      // 매 실행 갱신하고, 파이썬은 open("/cmd").read()로 fresh하게 읽는다.
+      const cmdFile = new File([]);
+      const preopen = new PreopenDirectory("/", [
+        ["driver.py", new File(new TextEncoder().encode(driverSource))],
+        ["cmd", cmdFile],
+      ]);
+      const stdin = new SabStdin(ctlSab, dataSab, cmdFile);
       const fds = [
         stdin,
         ConsoleStdout.lineBuffered(emit("stdout")),

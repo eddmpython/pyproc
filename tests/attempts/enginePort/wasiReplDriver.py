@@ -3,40 +3,29 @@
 # N회 실행"하게 만드는 엔진 로직은 pyproc이 정본으로 소유한다(SSOT). 승격 위치 후보:
 # src/runtime/engines/wasi/. camelCase 규칙은 언어 불문(파이썬 식별자도 camelCase).
 #
-# 값 다리(WASI엔 FFI 없음): stdin으로 base64 소스를, stdout으로 결과를 주고받는 값 프로토콜.
-#   실행  = base64(코드) 한 줄 -> exec
-#   set   = 'name = <json>' 코드로 전역 주입
-#   get   = 'print(json.dumps(name))' 코드로 stdout 회수
+# 값 채널 무상태화(reactive 완전 시간여행의 열쇠): 코드/값을 stdin 스트림으로 넣으면 그 입력
+# 상태(누적 바이트)가 힙에 남아, 힙 복원 시 스트림이 어긋난다(실측: 복원 후 명령이 3바이트
+# 밀림). 그래서 값 채널을 둘로 나눈다:
+#   - 코드 = preopen 파일 /cmd (힙 밖 = 복원 무관, 호출자가 매번 갱신)
+#   - 신호 = stdin 1바이트 (무상태: 복원 시점에 이것만 대기하므로 재동기화가 자명)
+# 이러면 복원이 파이썬 I/O 상태를 어긋내지 않아 "복원 후 재개 + 완전 상태복귀"가 성립한다.
+#   실행 = 신호 1바이트 -> /cmd를 통째로 읽어 exec
+#   set/get = 코드가 json으로 값을 주입/회수(FFI 없는 값 다리)
 # 한 왕복의 끝은 EOT(\x04) 한 줄.
 #
-# 실측 주의 1(WLR CPython 3.12 프리빌트): 반복 루프 프레임 위에서 명시적 compile()을 호출하면
-# wasm C 스택을 넘겨 "memory access out of bounds"로 죽는다. exec(str)의 내부 컴파일은 C
-# 레벨이라 안전하므로 exec(소스문자열)을 직접 쓴다(명시적 compile 금지).
-# 실측 주의 2(힙 시간여행): sys.stdin(io.BufferedReader)은 내부 버퍼를 힙에 두어, 힙 복원이
-# 그 버퍼까지 되돌려 "복원 후 재개"가 깨진다. os.read/os.write(unbuffered)로 직접 읽고 쓰면
-# 파이썬측 I/O 상태가 없어, 경계(입력 대기)에서 찍은 스냅샷으로 복원해도 재개가 일관된다.
+# 실측 주의(WLR CPython 3.12): 반복 루프 프레임 위 명시적 compile()은 wasm C 스택을 넘겨
+# 죽는다. exec(str)의 내부 컴파일은 C 레벨이라 안전하므로 exec(소스문자열)을 직접 쓴다.
 import os
-import base64
 
 userNs = {}
-
-
-def readCommandLine():
-    data = bytearray()
-    while True:
-        chunk = os.read(0, 1)  # unbuffered: 파이썬측 버퍼 상태를 남기지 않는다(복원 안전)
-        if not chunk or chunk == b"\n":
-            break
-        data += chunk
-    return bytes(data)
-
-
 while True:
-    commandLine = readCommandLine()
-    if not commandLine:
+    signal = os.read(0, 1)  # 신호 1바이트 대기(무상태). 힙 복원이 어긋낼 상태가 없다.
+    if not signal:
         break
+    with open("/cmd", "rb") as commandFile:  # 코드는 파일(힙 밖). 매 실행 fresh하게 읽는다.
+        source = commandFile.read()
     try:
-        exec(base64.b64decode(commandLine).decode(), userNs)
+        exec(source.decode(), userNs)
     except BaseException as execError:
         os.write(2, (repr(execError) + "\n").encode())
     os.write(1, b"\x04\n")

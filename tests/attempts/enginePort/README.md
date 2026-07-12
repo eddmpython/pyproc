@@ -30,17 +30,22 @@ reactive를 이 엔진 위에서(엔진 무관성의 최종 증명).
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-07-12 | wasiBootProbe | Edge headless, 로컬 COOP+COEP | GREEN 6/6. WLR CPython 3.12(WASI) 워커 부팅+print 253ms(Pyodide 콜드 ~3s 대비 빠름), exports.memory(heapU8 등가) 접근, json/sys 동작, **결정적 부팅 = 두 커널 파이썬 가시 상태 바이트 동일**(비결정 대조로 확인) | **"Pyodide를 뗀다"가 실측이 됐다.** 계약 코어 2축(선형 메모리 + 결정적 부팅)이 non-Pyodide에서 성립. WASI는 엔트로피가 import 2개로 수렴 = 더 깨끗한 결정성 | 값 프로토콜, 반복 실행, reactive 이식 |
-| 2026-07-12 | wasiReplProbe | Edge headless, 로컬 COOP+COEP | GREEN 11/11. 인터프리터를 세워두고 반복 실행(상태 유지 x=41->+1->42), 값 프로토콜 양방향(get/set, FFI 없이), 결정적 부팅+반복 실행, **엔진 선형 메모리 위 힙 시간여행**(경계 체크포인트 10MB -> 변이 -> 복원이 변이 페이지 되돌림), 복원 후 파이썬 재개(wasm 크래시 0) | **pyproc 프리미티브(반복 실행/값 다리/힙 시간여행/재개)가 non-Pyodide 위에서 성립.** 파이썬 엔진 드라이버는 pyproc 소유(wasiReplDriver.py, unbuffered os.read). 돌파한 벽 3(compile 스택/UTF-8 argv/Fd 초기화) | 완전 상태복귀(값 채널 무상태화), WasiEngine 승격 |
+| 2026-07-12 | wasiReplProbe | Edge headless, 로컬 COOP+COEP | GREEN 12/12. 반복 실행(상태 유지), 값 프로토콜 양방향(get/set, FFI 없이), 결정적 부팅+반복 실행, **엔진 선형 메모리 위 완전 시간여행**(체크포인트 10MB -> 변이 v=200/big 2MB -> 복원 -> 복원 후 파이썬이 정확히 체크포인트 상태 v=100으로 재개 -> 분기 v=999) | **pyproc 프리미티브(반복 실행/값 다리/완전 시간여행)가 non-Pyodide 위에서 완전히 성립.** 파이썬 엔진은 pyproc 소유(wasiReplDriver.py). 돌파한 벽 4(compile 스택/UTF-8 argv/Fd 초기화/**완전 상태복귀**) | WasiEngine 승격 |
 
-## 정직한 벽 (실측으로 특정)
+## 돌파한 벽 (실측으로 특정 + 해결)
 
-- **완전 상태복귀(복원 후 재개)**: 힙 스냅샷/복원 자체는 성립하고, unbuffered os.read 드라이버로 복원 후 파이썬이 wasm 크래시 없이 재개한다(인터프리터 살아있음). 잔여 벽은 stdin 입력 스트림의 1바이트 재동기화 - 복원이 CPython os.read의 내부 상태와 미세하게 어긋난다. **근본 원인은 WASI FFI 부재**: Pyodide reactive는 FFI로 코드를 힙에 직접 주입해 입력 스트림이 없지만, WASI는 값/코드를 stdin으로 넣어야 해 입력 상태가 힙에 결합된다. 완전 해결 = 값 채널을 완전 무상태화하는 프로토콜(다음 관문).
-- **스택 sp 미노출**: WASI 프리빌트는 emscripten_stack_* 미노출(null 계약으로 흡수, 경계 스냅샷이 스택 영역을 포함하므로 경계-대-경계 복원은 성립).
+- **완전 상태복귀(가장 어려운 것) - 해결**: 힙 복원이 파이썬 stdin 입력 스트림 상태(누적 바이트)를 되돌려 복원 후 재개가 어긋났다(실측: 명령이 3바이트 밀림). 근본 원인은 WASI FFI 부재 - Pyodide는 FFI로 코드를 힙에 직접 주입해 입력 스트림이 없지만, WASI는 stdin 경유라 입력 상태가 힙에 결합. **값 채널 무상태화로 뚫었다**: 코드는 preopen 파일 `/cmd`(힙 밖 = 복원 무관), stdin은 실행 신호 1바이트(무상태 = 복원 시점에 어긋날 상태 없음). 이로써 복원 후 파이썬이 정확히 체크포인트 상태로 재개하고 분기까지 성립.
+- **compile 스택 초과**: 반복 루프 프레임 위 명시적 compile()이 wasm C 스택 초과 -> exec(str) 직접(내부 컴파일은 C 레벨).
+- **argv UTF-8**: 한글 주석을 -c로 실으면 args 처리 크래시 -> 드라이버/코드를 preopen 파일로 전달.
+- **Fd stdin 초기화**: Fd 부분 구현 stdin은 fdstat/seek 조회에서 깨짐 -> OpenFile 상속 + fd_fdstat_get.
+
+## 남은 벽 (진짜)
+
+- **스택 sp 미노출**: WASI 프리빌트는 emscripten_stack_* 미노출(null 계약으로 흡수, 경계 스냅샷이 스택 영역을 포함하므로 경계-대-경계 복원은 성립 - 완전 시간여행이 이를 실증).
 - **네이티브 확장**: 정적 링크(dlopen 없음). PEP 783 휠은 Pyodide ABI 대상.
-- **argv UTF-8**: 한글 주석을 -c로 실으면 크래시. 소스는 preopen 파일로 전달(회피 확정).
 
 ## 판정
 
-진행 중 (2관문 졸업: non-Pyodide 부팅 + 계약 코어 2축 + 반복 실행/값 프로토콜/힙 시간여행 GREEN).
-"Pyodide를 뗀다"의 개념+프리미티브 실증 완료. 승격 경로 = EngineContract에 WasiEngine 구현 추가 ->
-`boot({engine})` 옵션화. 그 전 남은 실측: 값 채널 분리(복원 후 재개), preopen 기반 값 다리.
+진행 중 (핵심 관문 졸업: non-Pyodide 부팅 + 계약 코어 2축 + 반복 실행/값 프로토콜/**완전 시간여행** GREEN).
+"Pyodide를 뗀다"의 프리미티브 실증 완료 - pyproc의 리액티브/세션/.pymachine이 엔진 무관임이 실증됐다.
+승격 경로 = EngineContract에 WasiEngine 구현 추가 -> `boot({engine})` 옵션화(코드/신호 분리 프로토콜 포함).

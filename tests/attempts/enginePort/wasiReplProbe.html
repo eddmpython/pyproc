@@ -1,22 +1,22 @@
 <!DOCTYPE html>
 <!--
 결과(2026-07-12, Edge headless / 로컬 COOP+COEP):
-- GREEN 10/10. non-Pyodide CPython(WASI)에서 인터프리터를 세워두고 코드 조각을 반복 실행:
+- GREEN 12/12. non-Pyodide CPython(WASI)에서 인터프리터를 세워두고 코드 조각을 반복 실행:
   상태 유지(x=41 -> +1 -> print=42), 값 프로토콜 양방향(get=json.dumps / set=json.loads, FFI 없이),
   예외 생존, 표준 라이브러리, 결정적 부팅 + 반복 실행(두 커널 random 스트림 바이트 동일).
-- **엔진 선형 메모리 위 시간여행**: 경계(fd_read)에서 힙 체크포인트(10MB 스냅샷) -> 변이 ->
-  복원이 변이된 2페이지를 경계 스냅샷 바이트로 되돌림. pyproc의 리액티브/세션/.pymachine 전제
-  (페이지 스냅샷/복원)가 Pyodide `_module.HEAPU8` 없이 exports.memory 위에서 성립.
-- 돌파한 벽 3개: ① 반복 루프 프레임 위 명시적 compile()이 wasm C 스택 초과(exec(str) 직접으로)
-  ② argv에 UTF-8 멀티바이트(한글 주석)를 실으면 args 처리 크래시(드라이버를 preopen 파일로 실행)
-  ③ Fd 부분 구현 stdin은 초기화가 깨짐(OpenFile 상속 + fd_fdstat_get).
-- 복원 후 재개: unbuffered os.read 드라이버로 힙 복원이 wasm 크래시를 내지 않고 파이썬이
-  살아서 다음 명령을 처리한다(에러가 out-of-bounds = wasm 붕괴가 아니라 파이썬 레벨). 즉
-  인터프리터 재개 자체는 성립. 정직한 잔여 벽은 stdin 입력 스트림의 1바이트 재동기화(복원이
-  CPython의 os.read 내부 상태와 미세하게 어긋난다) = **완전 상태복귀는 값 채널을 완전
-  무상태화하는 프로토콜이 전제**. 근본 원인은 WASI FFI 부재: Pyodide reactive는 FFI로 코드를
-  힙에 직접 주입해 입력 스트림이 없지만, WASI는 stdin 경유라 입력 상태가 힙에 결합된다.
-- 그 밖 벽: 스택 sp 미노출(경계-대-경계 복원은 성립), 네이티브 확장(PEP 783), argv UTF-8(파일로 회피).
+- **엔진 선형 메모리 위 완전 시간여행**: 경계에서 힙 체크포인트(10MB) -> 변이(v=200, big 2MB) ->
+  복원 -> **복원 후 파이썬이 정확히 체크포인트 상태(v=100, log 1, big 없음)로 재개** -> 거기서
+  분기(v=999)까지. pyproc의 리액티브/세션/.pymachine 전제(페이지 스냅샷/복원 + 재개)가 Pyodide
+  `_module.HEAPU8` 없이 exports.memory 위에서 완전히 성립.
+- 돌파한 벽 4개:
+  1) 반복 루프 프레임 위 명시적 compile()이 wasm C 스택 초과 -> exec(str) 직접.
+  2) argv에 UTF-8 멀티바이트(한글 주석) -> args 처리 크래시 -> 드라이버/코드를 preopen 파일로.
+  3) Fd 부분 구현 stdin 초기화 크래시 -> OpenFile 상속 + fd_fdstat_get.
+  4) **완전 상태복귀 벽(가장 어려운 것)**: 힙 복원이 파이썬 stdin 입력 스트림 상태(누적 바이트)를
+     되돌려 재개가 어긋난다 -> **값 채널 무상태화**로 해결: 코드는 preopen 파일 /cmd(힙 밖 =
+     복원 무관), stdin은 실행 신호 1바이트(무상태 = 복원 시점에 어긋날 상태가 없음). Pyodide
+     FFI(코드를 힙에 직접 주입)가 없는 WASI에서도 완전 시간여행이 성립한다.
+- 남은 벽(진짜): 스택 sp 미노출(경계-대-경계 복원은 성립), 네이티브 확장(PEP 783, 정적 링크).
 -->
 <html lang="ko">
 <head><meta charset="utf-8"><title>probe: wasiRepl</title>
@@ -35,7 +35,6 @@
     const ok = checks.length > 0 && checks.every((c) => c.pass);
     try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
   };
-  const b64 = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
 
   // 메인측 REPL 클라이언트: 워커의 SAB 블로킹 stdin에 base64 코드를 밀어넣고 EOT까지 출력을 모은다.
   class WasiRepl {
@@ -52,10 +51,15 @@
         else this.lines.push(m.stream === "stderr" ? "[stderr] " + m.line : m.line);
       }
     }
-    exec(code, timeoutMs = 12000) { return this._send({ payload: b64(code) + "\n" }, timeoutMs); }
-    // 메타 명령(체크포인트/복원)은 첫 바이트 0x00으로 fd_read가 파이썬에 넘기지 않고 소비한다.
-    checkpoint(timeoutMs = 12000) { return this._send({ payload: "\x00checkpoint" }, timeoutMs); }
-    restore(i, timeoutMs = 12000) { return this._send({ payload: "\x00restore " + i }, timeoutMs); }
+    // exec 신호(0x01) + 코드 바이트. 코드는 /cmd 파일로 실려 파이썬이 읽는다(stdin은 신호만).
+    exec(code, timeoutMs = 12000) {
+      const b = new TextEncoder().encode(code);
+      const payload = new Uint8Array(1 + b.length); payload[0] = 1; payload.set(b, 1);
+      return this._send({ payload }, timeoutMs);
+    }
+    // 메타(체크포인트/복원)는 0x00으로 fd_read가 파이썬에 넘기지 않고 소비한다.
+    checkpoint(timeoutMs = 12000) { return this._send({ payload: new TextEncoder().encode("\x00checkpoint") }, timeoutMs); }
+    restore(i, timeoutMs = 12000) { return this._send({ payload: new TextEncoder().encode("\x00restore " + i) }, timeoutMs); }
     _send(item, timeoutMs) {
       return new Promise((resolve) => {
         item.resolve = resolve;
@@ -67,7 +71,7 @@
     _pump() {
       if (!this.idle || this.cur || !this.queue.length) return;
       this.cur = this.queue.shift(); this.idle = false;
-      const bytes = new TextEncoder().encode(this.cur.payload);
+      const bytes = this.cur.payload;
       this.data.set(bytes);
       Atomics.store(this.ctl, 1, bytes.length);
       Atomics.store(this.ctl, 0, 1);
@@ -147,19 +151,20 @@
     const before = await tt.repl.exec("print(state['v'], len(state['log']), 'big' in dir())");
     check("변이 확인(v=200, log 2, big 존재)", before.trim() === "200 2 True", before.trim());
     const rr = await tt.repl.restore(0);
-    // diffBefore = 복원 전 스냅샷과 다르던 페이지 수. >0 이면 변이가 실재했고 복원이 그 힙을
-    // 정확히 경계 스냅샷 바이트로 되돌렸다(엔진 선형 메모리 위 시간여행의 실증).
-    check("WASI 힙 시간여행: 복원이 변이된 힙을 경계로 되돌림", rr && rr.kind === "restore" && rr.diffBefore > 0,
-      rr ? `되돌린 변이 페이지 ${rr.diffBefore}개` : "실패");
+    check("WASI 힙 복원(경계 스냅샷으로 되돌림)", rr && rr.kind === "restore", rr ? "복원 성립" : "실패");
     // 복원 후 재개: unbuffered os.read 드라이버로 힙 복원이 wasm 크래시를 내지 않고 파이썬이
     // 살아서 다음 명령을 처리한다(에러가 out-of-bounds = wasm 붕괴가 아니라 파이썬 레벨이면
     // 인터프리터가 재개한 것). 완전한 상태복귀(state가 체크포인트로)는 stdin 입력 스트림의
     // 1바이트 재동기화가 잔여 벽 = 값 채널을 완전 무상태화하는 프로토콜이 전제(다음 관문).
+    // 완전 시간여행: 값 채널 무상태화(코드=/cmd 파일, stdin=신호 1바이트)로 복원이 파이썬 I/O
+    // 상태를 어긋내지 않으므로, 복원 후 파이썬이 재개해 상태가 정확히 체크포인트 시점으로 돌아간다.
     const after = await tt.repl.exec("print(state['v'], len(state['log']), 'big' in dir())");
-    const resumed = !after.includes("out of bounds") && after.length > 0;
-    const fullRevert = after.trim() === "100 1 False";
-    check("복원 후 파이썬 재개(wasm 크래시 0)", resumed,
-      fullRevert ? "완전 상태복귀까지 성립" : `재개함(응답 "${after.trim().slice(0, 48)}"), 완전 상태복귀는 stdin 재동기화 잔여`);
+    check("완전 시간여행: 복원 후 파이썬이 체크포인트 상태로 재개", after.trim() === "100 1 False",
+      `"${after.trim()}" (기대 "100 1 False")`);
+    // 한 번 더: 복원 지점에서 분기(다른 미래)해도 정상 = 시간여행이 반복 가능
+    await tt.repl.exec("state['v'] = 999");
+    const branched = await tt.repl.exec("print(state['v'], len(state['log']))");
+    check("복원 후 분기 실행(반복 시간여행)", branched.trim() === "999 1", `"${branched.trim()}"`);
     tt.worker.terminate();
   } catch (e) {
     if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
