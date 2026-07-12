@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 라운드 10: 엔진 독립 P1 착수 완료 - EngineContract seam (구조 298 + 브라우저 38 무변경)
+
+- 목표 재확인: "Pyodide를 떼고 진짜 파이썬이 굴러갈 수준". 그 인프라가 EngineContract seam이다(엔진을 삭제가 아니라 교체 가능한 옵션으로). 개념이 불확실한 부분("우리 프리미티브가 엔진 계약만으로 도는가")은 규칙대로 attempts에서 검증 후 합류했다.
+- **개념 증명**([engineContract 캠페인](../browser-os/../../tests/attempts/engineContract/README.md)): PyodideEngine 어댑터로 부팅 -> memory 능력을 계약(heapU8/stack) 위에 세움 -> src ReactiveController가 그 위에서 양방향 시간여행(cp0<->cp1). **엔진 내부(`_module`/`globals`/`_emscripten_stack_*`) 직접 접근 0으로 GREEN 8/8**. 발견: execSeq(실행 경계 카운터)도 계약의 일부다(우회 실행은 reactive가 힙 변이를 놓쳐 복원이 깨진다).
+- **승격**: `src/runtime/engines/pyodideEngine.js`(EngineContract Pyodide 구현). MemoryCapability는 `constructor(engine)`로, Runtime은 run/setGlobal/install/freeze/mountHome/raw를 engine 경유로 리팩터. **동작 무변경 게이트**: 구조 298 + 브라우저 38 + 예제 4 전부 수정 없이 GREEN. 엔진 접점이 8파일 40지점 -> 1파일 뒤로 격리(덕지덕지 제거).
+- **WASI 매핑 확정**(D2 관문 설계): 계약 메서드별로 non-Pyodide 구현 경로를 표로. 우리 보석이 요구하는 건 heapU8 + 결정적 부팅뿐이고 둘 다 WASI에서 성립(부팅 결정성은 `random_get` import 하나로 수렴 = 오히려 더 깨끗). 벽은 값 다리(FFI 부재) = 계약이 값 프로토콜을 기본으로 두면 우회. 스택 sp는 null 허용 계약이라 프리빌트에서도 복원이 선다.
+- 다음: [engine-independence](../engine-independence/README.md) P0 자가 호스팅(유일한 실시간 리스크 CDN 제거) 또는 D2 관문 캠페인(non-Pyodide CPython 실부팅 + 값 프로토콜 재설계). worker.js/pyProc의 프로세스 부팅 경로는 자체 엔진이라 seam 후속 정합 대상.
+
 ### 2026-07-12 라운드 9: 외부 평가 수용 = 정확성 라운드(불변조건 부여) (구조 285 + 브라우저 38 + probe)
 
 - 외부 코드 리뷰 2건(정적 분석 + 참조 프로젝트 조사)을 받아 지적을 당일 코드로 갚았다. 정본: [browser-os/03-external-review-response.md](../browser-os/03-external-review-response.md). 리뷰의 결론("기능 추가가 아니라 이미 발명한 기능에 프로토콜·복원·장애 불변조건을 부여할 단계")이 같은 날 우리 심판 3종의 결론과 독립 수렴했다.

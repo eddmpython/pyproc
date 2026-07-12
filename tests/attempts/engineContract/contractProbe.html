@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: engineContract</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: EngineContract - 프리미티브가 엔진 내부 직접 접근 0으로 도는가</h1>
+<p>가설: reactive/session의 핵심(체크포인트·델타·시간여행)은 엔진의 "선형 메모리 + 스택 +
+실행 + 결정적 부팅" 위의 순수 알고리즘이다. Pyodide를 EngineContract 어댑터 뒤로 격리하고,
+그 계약 표면(heapU8/stackSave/stackRestore/runSync)만으로 memory 능력을 세운 뒤 src의
+ReactiveController를 그 위에서 돌려 시간여행을 실증한다. `_module.HEAPU8`, `globals`,
+`_emscripten_stack_*`을 이 probe 코드에서 단 한 번도 직접 만지지 않는 것이 졸업 조건이다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { ReactiveController } from "../../../src/capabilities/reactive.js";
+  import { PAGE_SIZE } from "../../../src/runtime/memoryCapability.js";
+  import { ensureEngineScript, DEFAULT_INDEX } from "../../../src/runtime/runtime.js";
+  import { PyodideEngine } from "./pyodideEngineDraft.js";
+
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  // memory 능력을 EngineContract 위에 세운 어댑터(승격 후보: src MemoryCapability가 engine을 받는 형태).
+  // src MemoryCapability와 동일 알고리즘이되 데이터 소스가 engine.heapU8()/stackSave()/stackRestore()다.
+  // 이 클래스가 성립하면 "MemoryCapability를 engine 기반으로 바꾸면 된다"가 증명된다.
+  class MemoryFromEngine {
+    constructor(engine) { this._e = engine; }
+    heap() { return this._e.heapU8(); }
+    byteLength() { return this._e.heapU8().length; }
+    stackSave() { return this._e.stackSave(); }
+    stackRestore(sp) { this._e.stackRestore(sp); }
+    pageHashes() {
+      const buf = this.heap().buffer, len = this.byteLength();
+      const words = new Uint32Array(buf, 0, (len - (len % 4)) / 4);
+      const wpp = PAGE_SIZE / 4, n = Math.ceil(len / PAGE_SIZE), digs = new Uint32Array(2 * n);
+      for (let p = 0; p < n; p++) {
+        let a = 2166136261 >>> 0, b = 2654435761 >>> 0;
+        const s = p * wpp, e = Math.min(s + wpp, words.length);
+        for (let i = s; i < e; i++) {
+          const w = words[i];
+          a = (a ^ w) >>> 0; a = Math.imul(a, 16777619) >>> 0;
+          b = (b + w) >>> 0; b = Math.imul(b ^ (b >>> 15), 2246822519) >>> 0;
+        }
+        digs[2 * p] = a; digs[2 * p + 1] = b;
+      }
+      return digs;
+    }
+    slicePage(p) { const h = this.heap(); return h.slice(p * PAGE_SIZE, Math.min((p + 1) * PAGE_SIZE, h.length)); }
+    sliceAll() { const h = this.heap(); return h.slice(0, h.length); }
+    writePage(p, bytes) { this.heap().set(bytes, p * PAGE_SIZE); }
+    writeBase(base) { const h = this.heap(); h.set(base.subarray(0, Math.min(base.length, h.length))); }
+  }
+
+  try {
+    // 1) 부팅도 계약이다: 엔진 팩토리가 EngineContract를 반환한다.
+    await ensureEngineScript(DEFAULT_INDEX);
+    let t = performance.now();
+    const engine = await PyodideEngine.boot(loadPyodide, { indexURL: DEFAULT_INDEX, env: { PYTHONHASHSEED: "0" } });
+    timings.bootMs = Math.round(performance.now() - t);
+    check("계약: 엔진 팩토리 부팅", !!engine && typeof engine.runSync === "function", `${timings.bootMs}ms`);
+
+    // 2) 실행/값 다리 계약만으로 파이썬을 부린다
+    engine.setGlobal("seed", 40);
+    const two = engine.runSync("seed + 2");
+    check("계약: runSync + 값 다리(set/get)", two === 42 && engine.getGlobal("seed") === 40, `two=${two}`);
+
+    // 3) memory 능력을 계약 위에 세우고 src ReactiveController를 그 위에서 돌린다.
+    //    rt는 Runtime 호환 최소 shim(계약 경유): memory + execSeq + run.
+    const memory = new MemoryFromEngine(engine);
+    // 모든 실행은 execSeq를 통과한다(실행 경계 카운터 = reactive가 경계 위반을 O(1) 감지하는 근거).
+    // 이 계약을 우회해 engine.runSync를 직접 부르면 reactive가 힙 변이를 놓쳐 복원이 깨진다
+    // (probe에서 실측). 즉 execSeq도 EngineContract 위 Runtime 계약의 일부다.
+    const rt = {
+      memory, execSeq: 0,
+      run(code) { this.execSeq++; return engine.runSync(code); },
+    };
+    const reactive = new ReactiveController(rt);
+
+    // 4) 체크포인트 -> 상태 변이 -> 체크포인트: 계약의 heap만으로 델타가 잡히는가.
+    //    각 체크포인트 시점의 스택 포인터(계약 stackSave)를 함께 기억한다(복원의 짝).
+    rt.run("x = 100\nbig = bytearray(4 * 1024 * 1024)\nbig[7] = 1");
+    const cp0 = reactive.checkpoint();
+    const sp0 = reactive.stackSave();
+    check("계약: 체크포인트 0(base) 성립", cp0.index === 0 && cp0.kind === "base", `changed ${cp0.changedPages}p`);
+    rt.run("x = 200\nbig[7] = 9\nnote = 'mutated'");
+    const cp1 = reactive.checkpoint();
+    const sp1 = reactive.stackSave();
+    check("계약: 델타 체크포인트(heap 변이 포착)", cp1.index === 1 && cp1.kind === "delta" && cp1.changedPages > 0, `델타 ${cp1.changedPages}p`);
+
+    // 5) 시간여행: 과거(cp0)로 복원 = 계약의 writePage/stackRestore만으로 상태가 되돌아간다.
+    //    검증 쿼리도 rt.run(execSeq 통과)으로 해야 다음 복원이 경계 위반을 감지해 rehash한다.
+    const r = reactive.timeTravel(0, sp0);
+    const backX = rt.run("x"), backNote = rt.run("'note' in dir()"), backBig = rt.run("big[7]");
+    check("계약: 시간여행(cp0 복원)", backX === 100 && backBig === 1 && backNote === false,
+      `x=${backX}, big[7]=${backBig}, note존재=${backNote}, 복원 ${r.pagesWritten}p`);
+
+    // 6) 미래로 다시(cp1) = 계약만으로 양방향 시간여행
+    reactive.timeTravel(1, sp1);
+    check("계약: 재실행 없이 미래(cp1)로 복귀", rt.run("x") === 200 && rt.run("big[7]") === 9);
+
+    // 7) 인터럽트 계약: Pyodide는 지원(true). 미지원 엔진은 false를 정직하게 반환하는 계약.
+    const sab = new SharedArrayBuffer(1);
+    check("계약: setInterruptBuffer 지원 보고", engine.setInterruptBuffer(sab) === true);
+
+    // 8) 격리 확인: 이 probe는 engine 계약 표면만 썼다(엔진 내부 직접 접근 0). raw는 탈출구로만 존재.
+    check("계약: raw 탈출구 존재(권장 안 함)", typeof engine.raw === "function" && !!engine.raw());
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
