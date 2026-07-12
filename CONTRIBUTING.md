@@ -6,7 +6,9 @@ pyproc is a reusable browser Python runtime (processes, parallelism, restore-bas
 
 ## License and contribution terms
 
-pyproc is licensed under the [Apache License 2.0](LICENSE). By submitting a contribution you agree it is provided under the same license (Apache 2.0 Section 5, inbound = outbound); no separate CLA is required. If you cannot agree to that, do not submit code.
+pyproc is licensed under the [Mozilla Public License 2.0](LICENSE), the same license as Pyodide. By submitting a contribution you agree it is provided under the same license: under MPL-2.0 a contributor grants the copyright and patent licenses for their contribution by contributing it (Section 2.1), so inbound = outbound holds and no separate CLA is required. If you cannot agree to that, do not submit code.
+
+What this means in practice: you may embed pyproc in a closed-source app freely, but changes to pyproc's own files are published as source under MPL-2.0.
 
 Also welcome besides code: bug reports, browser measurements (please include Chrome/Edge version and hardware), reproduction pages, documentation fixes, design discussion.
 

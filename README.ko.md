@@ -273,4 +273,12 @@ WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능해서, `t
 
 ## 라이선스
 
-[Apache License 2.0](LICENSE). 명시적 특허 조항(3절)이 있고, 기여는 같은 조건으로 수락된다(5절, inbound = outbound). [CONTRIBUTING.ko.md](CONTRIBUTING.ko.md) 참조.
+[Mozilla Public License 2.0](LICENSE). 밑에 깔린 엔진 Pyodide와 같은 라이선스다. Copyright 2026 eddmpython.
+
+MPL-2.0은 파일 단위 카피레프트라서 실질 조건은 이렇다.
+
+- **임베드는 자유다.** 비공개 앱에 pyproc을 import해서 브라우저로 배포하고 판매해도 된다. 내 코드는 내 것으로 남는다.
+- **pyproc 자체의 포크는 열려 있다.** 이 라이선스가 덮는 파일을 고치면 그 파일의 소스를 MPL-2.0으로 공개한다. 런타임 개선분은 돌아오고, 포크가 어둠 속으로 가지 못한다.
+- **특허는 허여된다.** 각 기여자가 자기 기여분에 대해 특허 라이선스를 준다(2.1(b)절). 통상의 방어적 종료 조항 포함.
+
+기여는 별도 CLA 없이 같은 라이선스로 수락된다. MPL-2.0에서는 기여하는 행위 자체가 그 기여분에 대한 라이선스 허여이므로(2.1절) inbound = outbound가 구조적으로 성립한다. [CONTRIBUTING.ko.md](CONTRIBUTING.ko.md) 참조.

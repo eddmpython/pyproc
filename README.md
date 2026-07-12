@@ -273,4 +273,12 @@ Operating docs (operating model, testing, releases, consumption contract) live i
 
 ## License
 
-[Apache License 2.0](LICENSE). It comes with an explicit patent grant (Section 3), and contributions are accepted under the same terms (Section 5, inbound = outbound); see [CONTRIBUTING.md](CONTRIBUTING.md).
+[Mozilla Public License 2.0](LICENSE), the same license as Pyodide, the engine underneath. Copyright 2026 eddmpython.
+
+MPL-2.0 is file-level copyleft, so the practical terms are:
+
+- **Embedding is free.** Import pyproc into a closed-source app, ship it to browsers, sell it. Your own code stays yours.
+- **Forks of pyproc itself stay open.** Modify a file covered by this license and you publish that file's source under MPL-2.0. Improvements to the runtime come back; a fork cannot go dark.
+- **Patents are granted** by every contributor for their contributions (Section 2.1(b)), with the usual defensive termination.
+
+Contributions are accepted under the same license without a separate CLA: under MPL-2.0 a contributor grants the license for their contribution by contributing it (Section 2.1), so inbound = outbound holds structurally. See [CONTRIBUTING.md](CONTRIBUTING.md).
