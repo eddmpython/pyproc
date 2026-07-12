@@ -4,6 +4,23 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 라운드 9: 외부 평가 수용 = 정확성 라운드(불변조건 부여) (구조 285 + 브라우저 38 + probe)
+
+- 외부 코드 리뷰 2건(정적 분석 + 참조 프로젝트 조사)을 받아 지적을 당일 코드로 갚았다. 정본: [browser-os/03-external-review-response.md](../browser-os/03-external-review-response.md). 리뷰의 결론("기능 추가가 아니라 이미 발명한 기능에 프로토콜·복원·장애 불변조건을 부여할 단계")이 같은 날 우리 심판 3종의 결론과 독립 수렴했다.
+- **수용 -> 코드(전부 실측 GREEN)**: ① .pymachine **포맷 v2** = 봉투 전체(헤더+델타) 해시 인증(v1은 델타만 해시라 manifest.setup 변조가 통과 = 부팅 코드 주입 구멍) + 입력 검증 상한, v1 지원 종료. ② **reqId RPC** = 워커당 상시 라우터 + pending map, map taskId가 호출마다 0부터라 동시 호출 응답이 교차하던 결함 제거 + 워커 사망 시 대기 요청 전량 즉시 reject(영원히 매달리는 Promise 소거). ③ **ASGI 동시 요청** = 요청을 전역이 아니라 함수 인자로(코루틴 지역, iframe 라우팅으로 실시나리오화된 경쟁). ④ **PyProxy destroy** + 직렬화 계약. ⑤ **성장 세션 fork** = harvest heapLen + 자식 힙 성장 후 적용(부모 73MB>자식 30MB 실측). ⑥ **저널 HEAD/PREV 2세대** + 손상/첫부팅 구분 + blob SHA 재검증. ⑦ **복제 고유성** random 재시드(fork는 예외). ⑧ **부팅 직렬화**(bootChain) + ensureEngineScript in-flight 공유. ⑨ bootEnv indexURL 유실 수정.
+- **게이트 확장**: 동시 map 3건 격리, ASGI 동시 요청 4건 격리, 봉투(헤더) 변조 거부, v1 거부, 성장 fork 무손상, 저널 2세대 후퇴, 손상/첫부팅 구분, 복제 random 갈림. 게이트 35->38, journalProbe 8->11, forkLiveProbe 8->10, machineImageProbe 4->8.
+- **기각(원칙 충돌)**: SQLite WASM(의존성 0. 구조만 차용), 즉시 WASI ABI(P6로), tsc 게이트(CI 전용 후보), 이벤트 로그(보완이지 대체 아님, 장수 캠페인 후보).
+- **진짜 목표 합류(Pyodide 제거)**: 이 라운드가 곧 디커플링이다(엔진 특이 접점을 좁은 계약 뒤로 이동). D2 관문 조사 완료 - non-Pyodide CPython wasm 실재(WASI brettcannon 3.14.6 + browser_wasi_shim 114KB vendoring), 벽 = JS FFI 부재(값 프로토콜 재설계 필요)·스택/인터럽트는 emscripten 자가 빌드에만. 다음: [engine-independence](../engine-independence/README.md) P1 EngineContract seam(떼기의 인프라).
+
+### 2026-07-12 라이선스 재확정: Apache 2.0 -> MPL-2.0 (전일 결정 번복)
+
+- 하루 전 확정한 Apache 2.0을 **MPL-2.0으로 교체**했다. 재검 트리거는 "AGPL이 더 낫지 않나"라는 질문이었고, 검토 결과 AGPL은 기각하되 **Apache도 최적이 아니라는 결론**이 나왔다.
+- **AGPL 기각 근거(구조적)**: AGPL이 GPL과 갈리는 유일한 지점은 §13(네트워크 서비스로만 제공하고 소스는 안 주는 SaaS 구멍)이다. pyproc은 정의상 코드가 브라우저 탭으로 **반드시 전달**되므로 모든 사용이 이미 배포다. 막을 구멍이 없다. 받을 수 없는 이익에 최대 채택세(프론트엔드 의존성 전염 = 기업 법무 자동 반려)를 내는 거래라 기각.
+- **Apache -> MPL 근거**: 진짜 방어 동기는 "포크가 닫힌 채 굴러가는 것"이었는데, 그에 정확히 대응하는 도구는 강한 카피레프트가 아니라 **파일 단위 카피레프트**다. MPL-2.0은 비공개 앱 임베드를 자유롭게 허용하면서 pyproc 자체 파일의 수정분은 소스 공개를 강제한다. 런타임 인프라에 필요한 보호는 이것으로 충분하다.
+- 부수 이득: **엔진 Pyodide와 동일 라이선스**라 "엔진과 같은 조건" 한 줄로 설명이 끝나고, Pyodide를 이미 수용한 법무팀은 정의상 MPL을 수용한다(채택 비용 ~0). 특허 허여는 MPL 2.1(b)로 유지되므로 Apache 3절을 버려서 잃는 것도 없다. CLA 불요도 유지(2.1절 기여 = 라이선스 허여, inbound = outbound).
+- 상실한 유일한 것: Apache의 GPLv2 비호환 회피 등 permissive 특유의 무마찰. 채택 마찰이 실제로 관측되면 MPL -> Apache 완화는 저작권 단독 보유 상태라 언제든 가능하다(역방향은 SHA 핀 계약상 불가).
+- 반영: LICENSE(정본 373줄 verbatim), package.json `MPL-2.0`, README 2종 실질 조건 3줄 명시, CONTRIBUTING 2종 기여 조건 갱신, examples 랜딩 푸터. Exhibit A 파일 헤더는 미부착(레포 전체가 단일 라이선스라 루트 LICENSE + README로 3.1절 고지 의무 충족, 덕지덕지 회피).
+
 ### 2026-07-12 라운드 8: 객관 판정(심판 3종) + 셀프호스팅 증명 + 판정의 코드화 (구조 278 + 브라우저 35 + probe 3종)
 
 - 질문: "정말 OS인가, 그 위에서 서버·웹을 개발할 수 있는가". 독립 심판 3종(OS 점수표 / 개발 플랫폼 / 적대적 반박)을 돌려 객관 좌표를 받고, 지적을 당일 코드로 갚았다. 정본: [browser-os/02-os-verdict.md](../browser-os/02-os-verdict.md).
