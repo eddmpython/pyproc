@@ -29,12 +29,40 @@
     try { await openMachine(file); } catch (e) { refused = String(e).includes("trust"); }
     check("신뢰 게이트: trust 없이는 거부", refused);
 
-    // 무결성: 한 바이트 변조하면 열리지 않아야 한다
+    // 무결성: 델타 바이트 변조하면 열리지 않아야 한다
     const buf = new Uint8Array(await file.arrayBuffer());
     buf[buf.length - 100] ^= 0xff;
     let integrity = false;
     try { await openMachine(new Blob([buf]), { trust: true }); } catch (e) { integrity = String(e).includes("무결성"); }
-    check("무결성: 변조 파일 거부", integrity);
+    check("무결성: 델타 변조 파일 거부", integrity);
+
+    // 봉투 인증(v2 핵심): 공격자가 헤더의 manifest.setup(부팅 시 실행되는 코드)을 바꿔 심고
+    // 델타는 그대로 두는 실제 공격을 재현한다. v1은 해시가 델타만 덮어서 이 파일이 열렸고
+    // 심어둔 코드가 bootSession에서 실행됐다(외부 평가 적발). v2 봉투해시는 헤더까지 덮는다.
+    // 포맷 v2: MAGIC(11) + 봉투해시 hex(64) + u32(4) + 헤더 + 델타.
+    const raw = new Uint8Array(await file.arrayBuffer());
+    const HEAD_AT = 11 + 64;
+    const envelope = raw.subarray(11, HEAD_AT); // 원본 해시를 그대로 재사용(공격자의 수단)
+    const hLen = new DataView(raw.buffer, HEAD_AT, 4).getUint32(0);
+    const meta = JSON.parse(new TextDecoder().decode(raw.subarray(HEAD_AT + 4, HEAD_AT + 4 + hLen)));
+    const delta = raw.subarray(HEAD_AT + 4 + hLen);
+    const evil = JSON.parse(meta.manifest);
+    evil.setup = "import os\nos.environ['PWNED'] = '1'"; // 심어진 부팅 코드
+    meta.manifest = JSON.stringify(evil);
+    const evilHead = new TextEncoder().encode(JSON.stringify(meta));
+    const evilLen = new Uint8Array(4);
+    new DataView(evilLen.buffer).setUint32(0, evilHead.length);
+    let headerAuth = false;
+    try {
+      await openMachine(new Blob(["PYMACHINE2\n", envelope, evilLen, evilHead, delta]), { trust: true });
+    } catch (e) { headerAuth = String(e).includes("무결성"); }
+    check("봉투 인증: 헤더(manifest.setup) 변조도 거부", headerAuth);
+
+    // v1 파일은 헤더 무인증이라 지원 종료 = 조용히 열지 않고 명시적으로 거부한다.
+    let v1Refused = false;
+    try { await openMachine(new Blob(["PYMACHINE1\n", new Uint8Array(4), delta]), { trust: true }); }
+    catch (e) { v1Refused = String(e).includes("v1"); }
+    check("포맷 v1(헤더 무인증) 지원 종료 거부", v1Refused);
 
     // 컴퓨터 B: 파일로 부팅(매니페스트는 파일 안에 있다) -> A의 상태가 산다
     const t1 = performance.now();
