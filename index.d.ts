@@ -362,13 +362,21 @@ export class WheelCache {
 
 /** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal/enableWheelCache). */
 export class Runtime {
+  /**
+   * EngineContract 또는 **로드된 Pyodide 인스턴스**를 받는다. 후자를 주면 감싸므로, 워커에서
+   * 자체 부팅한 Pyodide를 `new Runtime(py)`로 채택할 수 있다(dartlab 라이브 소비 패턴).
+   */
+  constructor(engineOrPyodide: unknown, indexURL?: string);
   readonly memory: MemoryCapability;
   /** 이 커널이 부팅된 엔진 배포 지점. 자식 워커(subprocess)가 같은 지점을 쓴다. */
   readonly indexURL: string;
   run(code: string): unknown;
   runAsync(code: string): Promise<unknown>;
   setGlobal(name: string, value: unknown): void;
+  /** 엔진 프록시(Pyodide면 PyProxy)를 그대로 반환한다. call/toJs로 값 회수, destroy로 파기(재사용 캐시). */
   getGlobal(name: string): unknown;
+  /** 인터럽트 SAB: [0]에 시그널 번호(2=SIGINT)를 쓰면 실행 중 파이썬이 반응한다. 미지원 엔진은 false. */
+  setInterruptBuffer(sab: SharedArrayBuffer): boolean;
   install(pkg: string): Promise<void>;
   loadPackages(pkgs: string | string[]): Promise<void>;
   /** 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정(uv lock 등가). boot({ lockFileURL })에 되먹인다. */

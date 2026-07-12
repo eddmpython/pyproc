@@ -11,7 +11,7 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, PyProc, SIGNAL, bootSession, runScript } from "../../index.js";
+    import { boot, Runtime, PyProc, SIGNAL, bootSession, runScript } from "../../index.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -93,6 +93,16 @@
       // 대상은 첫 바이트가 안정적인 파일이어야 한다(README는 상단이 바뀔 수 있음: 로고 삽입으로 실제 파손된 전례).
       rt.run(`_u = "${location.origin}/index.js"`);
       check("syscall urllib: 실제 HTTP GET", rt.run('import urllib.request\nurllib.request.urlopen(_u).read(8).decode()') === "// pypro");
+
+      // 소비자 채택 경로(하위 호환): 자체 부팅한 Pyodide를 new Runtime(py)로 감싼다(dartlab 라이브
+      // 패턴). EngineContract seam이 이 경로를 깰 뻔한 회귀의 상시 가드.
+      // 소비자 채택 경로(하위 호환): 자체 부팅한 Pyodide를 new Runtime(py)로 감싼다(dartlab 라이브
+      // 패턴). EngineContract seam이 이 경로를 깰 뻔한 회귀의 상시 가드. setInterruptBuffer 공개 +
+      // getGlobal PyProxy 계약의 실동작은 격리된 전용 probe가 검증한다(runtimeParity/consumerAdoptProbe):
+      // 공유 rt에 인터럽트 버퍼를 걸거나 PyProxy를 호출하면 이 게이트의 무거운 후속 실행이 방해된다.
+      const adopted = new Runtime(rt.raw);
+      check("Runtime(py) 채택 경로(하위 호환)", adopted.run("40 + 2") === 42 && adopted.memory.byteLength() > 0
+        && typeof rt.setInterruptBuffer === "function");
 
       // Layer 1: 커널 안 ASGI 서버 (FastAPI, 소켓 0, async def 강제)
       await rt.install("fastapi");

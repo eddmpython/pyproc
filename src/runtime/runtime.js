@@ -91,19 +91,28 @@ export async function boot(opts = {}) {
 }
 
 export class Runtime {
-  // engine: EngineContract(기본 PyodideEngine). 엔진 접점을 계약 뒤에 격리한다.
-  constructor(engine, indexURL) {
-    this._engine = engine;
+  // engineOrPy: EngineContract(기본 PyodideEngine) 또는 **로드된 Pyodide 인스턴스**.
+  // 후자면 PyodideEngine으로 감싼다(하위 호환 + 채택 경로): dartlab처럼 워커에서 자체 부팅한
+  // Pyodide를 `new Runtime(py)`로 채택하는 라이브 소비자를 지원한다. EngineContract seam(계약
+  // 격리) 도입 시 `Runtime(py)` 채택 경로가 깨질 뻔한 회귀를 이 판별로 복원한다(runSync 유무로 구분).
+  constructor(engineOrPy, indexURL) {
+    this._engine = engineOrPy && typeof engineOrPy.runSync === "function" ? engineOrPy : new PyodideEngine(engineOrPy);
     // 이 커널이 어느 배포 지점에서 부팅됐는지. 자식 워커(subprocess 등)가 같은 지점을
     // 쓰게 하는 근거다(자가호스팅/오프라인 배포에서 자식만 CDN으로 새는 결함 방지).
     this.indexURL = indexURL || DEFAULT_INDEX;
-    this.memory = new MemoryCapability(engine);
+    this.memory = new MemoryCapability(this._engine);
     this.execSeq = 0; // 상태 변이 카운터. 리액티브가 실행 경계 위반을 O(1)로 감지하는 근거.
   }
   run(code) { this.execSeq++; return this._engine.runSync(code); }
   runAsync(code) { this.execSeq++; return this._engine.runAsync(code); }
   setGlobal(name, value) { this.execSeq++; this._engine.setGlobal(name, value); }
+  // getGlobal은 엔진 프록시(Pyodide면 PyProxy)를 그대로 반환한다. 소비자는 call/toJs로 값을
+  // 회수하고 destroy로 파기할 수 있다(재사용 프록시 캐시 패턴). 이 프록시는 계약이 축복한다.
   getGlobal(name) { return this._engine.getGlobal(name); }
+  // 인터럽트 SAB 배선: 이 버퍼의 [0]에 시그널 번호를 쓰면 실행 중 파이썬이 반응한다
+  // (2=SIGINT=KeyboardInterrupt). 워커에서 파이썬을 돌리는 소비자(예: 동기 UDF의 무한 실행
+  // 취소)의 계약. 미지원 엔진이면 false. 엔진 내부(setInterruptBuffer)를 raw로 만지지 않게 한다.
+  setInterruptBuffer(sab) { return this._engine.setInterruptBuffer(sab); }
   async install(pkg) { this.execSeq++; return this._engine.install(pkg); }
   async loadPackages(pkgs) { this.execSeq++; return this._engine.loadPackages(pkgs); }
 

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: consumerAdopt</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 소비자 채택 표면 - dartlab/xlpod가 pyproc을 똑똑하게 쓰는 계약</h1>
+<p>실측 소비자 요구를 격리 검증한다. dartlab: 워커에서 자체 부팅한 Pyodide를 <code>new Runtime(py)</code>로
+채택(EngineContract seam이 이 경로를 깰 뻔한 회귀). xlpod: 동기 UDF의 무한 실행을 <code>setInterruptBuffer</code>로
+취소 + <code>getGlobal</code>이 PyProxy를 반환해 call/toJs/destroy 재사용. 각각 신선한 Runtime에서(공유 커널의
+후속 방해 없이) 검증한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot, Runtime } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    // dartlab 채택 경로: 자체 부팅한 Pyodide를 new Runtime(py)로 감싼다(하위 호환 + 채택).
+    const rt = await boot();
+    const py = rt.raw; // = 로드된 Pyodide 인스턴스(dartlab은 자체 loadPyodide 결과를 쓴다)
+    const adopted = new Runtime(py);
+    check("dartlab: new Runtime(py) 채택 -> run/memory 동작", adopted.run("6 * 7") === 42 && adopted.memory.byteLength() > 0);
+    // 채택한 Runtime의 능력 등록도 동작(dartlab은 enableAsgiServer를 쓴다)
+    const asgi = adopted.enableAsgiServer({ app: "_probeApp" });
+    adopted.run("async def _probeApp(scope, receive, send):\n    await send({'type':'http.response.start','status':200,'headers':[(b'x',b'y')]})\n    await send({'type':'http.response.body','body':b'ok'})");
+    await asgi.install();
+    const resp = await asgi.serve("GET", "/");
+    check("dartlab: 채택 Runtime의 enableAsgiServer 동작", resp.status === 200 && resp.body === "ok");
+
+    // xlpod: getGlobal이 PyProxy를 반환해 재사용 호출 + toJs + destroy (UDF 0.6us 경로)
+    adopted.run("def _udf(a, b):\n    return {'sum': a + b, 'items': [a, b]}");
+    const fn = adopted.getGlobal("_udf");
+    const r = fn(3, 4);
+    const asJs = r.toJs ? r.toJs() : r;
+    const sum = asJs instanceof Map ? asJs.get("sum") : asJs.sum;
+    check("xlpod: getGlobal -> PyProxy call/toJs 재사용", typeof fn === "function" && typeof fn.destroy === "function" && sum === 7,
+      `sum=${sum}`);
+    if (r && r.destroy) r.destroy();
+    fn.destroy();
+
+    // xlpod: setInterruptBuffer로 무한 실행 취소(동기 UDF 타임아웃). raw 없이 Runtime 표면에서.
+    const interruptSab = new SharedArrayBuffer(1);
+    const view = new Uint8Array(interruptSab);
+    const wired = adopted.setInterruptBuffer(interruptSab);
+    check("xlpod: Runtime.setInterruptBuffer 공개 표면", wired === true);
+    let interrupted = false;
+    view[0] = 2; // SIGINT: 다음 실행에서 KeyboardInterrupt
+    try { adopted.run("while True:\n    pass"); } catch (e) { interrupted = String(e).includes("KeyboardInterrupt"); }
+    view[0] = 0;
+    check("xlpod: 인터럽트로 무한 루프 취소(동기 UDF 타임아웃 계약)", interrupted);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
