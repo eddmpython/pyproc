@@ -62,6 +62,17 @@ export class Terminal {
   // 한 줄 입력 -> { more: 연속행 대기 여부(... 프롬프트), out: stdout+stderr 출력 }.
   // timeTravel이면 "%undo"가 직전 완결 문장 이전 상태로 복원한다.
   async push(line) {
+    // %pip install <spec>: 머신 안에서 환경을 키운다(micropip 경유, 셸 코어유틸).
+    const pip = /^%pip\s+install\s+(.+)$/.exec(line.trim());
+    if (pip) {
+      const spec = pip[1].trim();
+      try {
+        await this._rt.install(spec);
+        return { more: false, out: `installed: ${spec}\n` };
+      } catch (e) {
+        return { more: false, out: `%pip 실패: ${String(e).slice(-200)}\n` };
+      }
+    }
     if (this._tt && line.trim() === "%undo") {
       if (this._marks.length < 2) return { more: false, out: "%undo: 되돌릴 상태가 없다\n" };
       this._marks.pop();

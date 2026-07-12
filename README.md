@@ -211,7 +211,9 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `SyscallBridge` | socket/subprocess/input capability contract |
 | `AsgiServer` | In-kernel ASGI server (FastAPI with zero sockets, 3.4ms dispatch) |
 | `VirtualOrigin` | The Python server on a real URL, paired with the `pyprocSw.js` Service Worker asset |
-| `Terminal` | Serverless Python terminal (REPL plus blocking input) |
+| `Terminal` | Serverless Python terminal (REPL, blocking input, `%pip` / `%undo`) |
+| `DeviceFs` | Everything is a file: browser capabilities as Python `open()` (`/dev/clipboard`, `/proc`) |
+| `Init` | OS init: `/home/web/boot.py` autorun plus `cron.py` ticks, all file-driven |
 | `bootSession` / `Session` / `openMachine` | Session revival (immortal kernel) and portable `.pymachine` machine images: deterministic replay plus user delta, persisted to OPFS (`save`/`load`) or exported as one file (`exportImage`/`openMachine`) |
 | `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
 | `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` (SharedArrayBuffer typed-array) parallelism, lifecycle (`kill` / `interrupt` / respawn) |

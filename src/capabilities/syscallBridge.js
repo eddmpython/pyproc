@@ -102,9 +102,15 @@ export class SyscallBridge {
   // 실제 배선을 수행한다.
   // cfg.input: (prompt) => string        동기 핸들러. run()/runAsync() 어디서나 동작.
   // cfg.inputAsync: (prompt) => Promise  비동기 핸들러. JSPI + runAsync() 경로에서만(터미널용).
+  // cfg.requests: true                   requests 계열 배선(pyodide-http의 patch_all 흡수).
   async install() {
     const cfg = this._cfg, rt = this._rt;
     const jspi = typeof WebAssembly !== "undefined" && "Suspending" in WebAssembly;
+    if (cfg.requests) {
+      // 파이썬 생태계 표준 HTTP. 실측: runtimeParity/requestsProbe. 절대 URL만 받는다.
+      await rt.loadPackages(["requests", "pyodide-http"]);
+      rt.run("import pyodide_http\npyodide_http.patch_all()");
+    }
     const bridge = {
       hasAsyncInput: !!cfg.inputAsync,
       // 동기 경로: 동기 핸들러 또는 마지막 수단으로 브라우저 prompt().
@@ -118,10 +124,8 @@ export class SyscallBridge {
     };
     rt.setGlobal("_pyprocSyscall", bridge);
     rt.run(BOOTSTRAP);
-    return {
-      installed: ["input->js" + (jspi ? "+JSPI" : "(sync)"), "urllib->syncXHR" + (cfg.proxyUrl ? "(proxy)" : "(direct)"), "subprocess->childWorker" + (jspi ? "" : "(JSPI 필요, 미가용)")],
-      jspi,
-      proxyUrl: cfg.proxyUrl || null,
-    };
+    const installed = ["input->js" + (jspi ? "+JSPI" : "(sync)"), "urllib->syncXHR" + (cfg.proxyUrl ? "(proxy)" : "(direct)"), "subprocess->childWorker" + (jspi ? "" : "(JSPI 필요, 미가용)")];
+    if (cfg.requests) installed.push("requests->pyodide-http(patch_all)");
+    return { installed, jspi, proxyUrl: cfg.proxyUrl || null };
   }
 }

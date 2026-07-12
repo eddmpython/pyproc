@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 발명 라운드 5: 진짜 OS 표면 - 파이썬이 모든 것을 다룬다 (probe 3종 GREEN, 게이트 29검사)
+
+- 근본 복귀 라운드(주제: 웹 OS, 파이썬이 모두 할 수 있는 진짜 OS). 기둥 4개를 실측 -> 승격.
+- **모든 것은 파일(Plan 9)**: Emscripten FS 장치 등록으로 브라우저 능력이 파이썬 파일이 된다. deviceFsProbe 8/8(쌍방 브리지, 열 때마다 신선한 /dev/clock, /proc/meminfo = 실제 힙, with문/부분읽기 정합) -> `DeviceFs`(enableDeviceFs) 승격: 내장 /proc/meminfo + /dev/clipboard(쓰기 즉시 반영 시도, 읽기는 캐시 + refreshClipboard) + 소비자 장치 주입 + /proc/ps 제공자. 새 API 표면 0(open()이 계약). 비동기 소스는 캐시+refresh가 정직한 계약(FS read 콜백은 동기라 JSPI로도 중단 불가).
+- **init/cron**: initProbe 5/5(boot.py 오토스타트 4ms, cron 300ms 틱 3회/1.05s, /home으로 세대 계승 counter 1->2, 파일 없으면 no-op) -> `Init`(enableInit) 승격 + machine.html 배선(데모 머신이 rc.local을 지원). 크론 실패는 크론을 죽이지 않는다(경고 후 지속).
+- **requests 실동작**: requestsProbe 4/4(pyodide-http patch_all, GET 15ms, 재사용/커스텀 헤더. 1차 RED의 원인 = requests는 절대 URL만 받음) -> `SyscallBridge({requests:true})` 옵션 승격. dartlab 체크리스트의 requests 계열 항목 해소.
+- **셸 %pip**: Terminal.push가 `%pip install <spec>`을 micropip으로 배선(머신 안에서 환경 성장). 게이트 상시 검사.
+- 게이트 29검사(+%pip, deviceFs 브리지, /proc/meminfo). 잔여(다음 라운드 후보): 파이프/시그널 확장, /home 포함 이미지 v2, 델타 분기, SharedKernel+hibernate.
+
 ### 2026-07-12 라이브 데모 실결함 발견 -> 예제 실행 게이트 신설 + 데모 영문 리디자인
 
 - **라이브 데모에서 실결함을 직접 발견**: processOs 예제가 `TypeError: Do not know how to serialize a BigInt`. 원인: 2^53을 넘는 파이썬 int는 BigInt로 오는데(정밀도 보존 = 라이브러리는 올바름) 예제가 JSON.stringify로 결과를 비교. **구멍의 본질: examples/*.html은 어떤 게이트도 실행하지 않았다**(라이브러리 게이트는 라이브러리만 검증).

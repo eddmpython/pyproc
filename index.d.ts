@@ -77,6 +77,8 @@ export interface SyscallBridgeConfig {
   inputAsync?: (prompt: string) => Promise<string | null>;
   /** HTTP 요청을 우회시킬 프록시 URL. 없으면 direct(CORS/same-origin 대상만). */
   proxyUrl?: string;
+  /** true면 requests 계열을 배선한다(pyodide-http patch_all. 절대 URL만). */
+  requests?: boolean;
 }
 
 export interface SyscallInstallInfo {
@@ -198,6 +200,46 @@ export interface TerminalConfig {
   timeTravel?: boolean;
 }
 
+export interface DeviceProvider {
+  /** open 시점에 호출되어 파일 내용을 확정한다(동기). */
+  read?: () => string;
+  /** 파이썬 write의 바이트를 받는다(동기). */
+  write?: (bytes: Uint8Array) => void;
+}
+
+export interface DeviceFsConfig {
+  /** 추가 장치: { "/dev/이름": { read, write } }. */
+  devices?: Record<string, DeviceProvider>;
+  /** /proc/ps 내용 제공자(예: () => pyProc.ps()). */
+  ps?: () => unknown;
+}
+
+/**
+ * 모든 것은 파일(Plan 9): 브라우저 능력을 파이썬 open()으로 노출한다.
+ * 내장: /proc/meminfo, /dev/clipboard(쓰기 즉시 반영 시도, 읽기는 캐시 + refreshClipboard()).
+ * 장치 read는 동기 계약이다(비동기 소스는 캐시가 정직한 계약).
+ */
+export class DeviceFs {
+  install(): { installed: string[] };
+  /** 시스템 클립보드를 읽기 캐시로 끌어온다(권한 필요할 수 있음). */
+  refreshClipboard(): Promise<string>;
+}
+
+export interface InitConfig {
+  /** 부팅 시 1회 실행할 파일(기본 /home/web/boot.py). 없으면 no-op. */
+  bootPath?: string;
+  /** 주기 실행할 파일(기본 /home/web/cron.py). 없으면 no-op. */
+  cronPath?: string;
+  /** 크론 간격 ms(기본 60000). */
+  cronMs?: number;
+}
+
+/** OS의 init(rc.local + cron): 마운트된 디스크의 파일이 머신을 스스로 움직이게 한다. */
+export class Init {
+  install(): { boot: boolean; cron: boolean };
+  stop(): void;
+}
+
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
 export class Terminal {
   install(): Promise<{ repl: string; timeTravel: boolean }>;
@@ -238,6 +280,8 @@ export class Runtime {
   enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
   enableTerminal(cfg?: TerminalConfig): Terminal;
   enableWheelCache(cfg: WheelCacheConfig): WheelCache;
+  enableDeviceFs(cfg?: DeviceFsConfig): DeviceFs;
+  enableInit(cfg?: InitConfig): Init;
   /** 디렉터리 핸들(OPFS 등)을 파이썬 경로로 마운트(기본 /home/web). 반환된 sync()로 영속화. */
   mountHome(dirHandle: FileSystemDirectoryHandle, path?: string): Promise<{ path: string; sync: () => Promise<void> }>;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */

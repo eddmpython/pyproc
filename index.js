@@ -12,7 +12,9 @@
 //   SyscallBridge        - socket/subprocess/input을 빌려주는 능력 계약
 //   AsgiServer           - 커널 안 ASGI 서버(FastAPI/Starlette를 소켓 0으로 dispatch)
 //   VirtualOrigin        - 파이썬 서버를 진짜 URL로(pyprocSw.js와 짝, fetch -> ASGI 3.4ms)
-//   Terminal             - 서버리스 파이썬 REPL(code.InteractiveConsole)
+//   Terminal             - 서버리스 파이썬 REPL(code.InteractiveConsole, %pip/%undo)
+//   DeviceFs             - 모든 것은 파일: 브라우저 능력을 파이썬 open()으로(/dev, /proc)
+//   Init                 - OS의 init: /home/web/boot.py 오토스타트 + cron.py 주기 틱
 //   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/interrupt/respawn)
 //   SharedKernel         - 탭 밖에서 사는 공유 커널(SharedWorker, 여러 탭 = 한 파이썬 상태)
 //
@@ -23,6 +25,8 @@ export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
 export { AsgiServer } from "./src/capabilities/asgiServer.js";
 export { VirtualOrigin } from "./src/capabilities/virtualOrigin.js";
 export { Terminal } from "./src/capabilities/terminal.js";
+export { DeviceFs } from "./src/capabilities/deviceFs.js";
+export { Init } from "./src/capabilities/init.js";
 export { bootSession, openMachine, Session } from "./src/capabilities/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";

@@ -72,6 +72,11 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       st.textContent = "Fresh boot (first visit). Make some state, then close the tab and come back.";
     }
 
+    // OS의 init: /home/web/boot.py가 있으면 부팅마다 저절로 돈다(rc.local). cron.py는 60초 틱.
+    const init = session.rt.enableInit();
+    const ran = init.install();
+    if (ran.boot) print("init: ran /home/web/boot.py");
+
     const runCode = async () => {
       const code = document.getElementById("code").value;
       session.rt.setGlobal("_pmSrc", code);

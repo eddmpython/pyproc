@@ -211,7 +211,9 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `SyscallBridge` | socket/subprocess/input 능력 계약 |
 | `AsgiServer` | 커널 안 ASGI 서버(FastAPI를 소켓 0으로, dispatch 3.4ms) |
 | `VirtualOrigin` | 파이썬 서버를 진짜 URL로(`pyprocSw.js` SW 자산과 짝) |
-| `Terminal` | 서버리스 파이썬 터미널(REPL + 블로킹 input) |
+| `Terminal` | 서버리스 파이썬 터미널(REPL, 블로킹 input, `%pip`/`%undo`) |
+| `DeviceFs` | 모든 것은 파일: 브라우저 능력을 파이썬 `open()`으로(`/dev/clipboard`, `/proc`) |
+| `Init` | OS의 init: `/home/web/boot.py` 오토스타트 + `cron.py` 주기 틱(전부 파일 주도) |
 | `bootSession` / `Session` / `openMachine` | 세션 부활(불멸 커널)과 이동 가능한 `.pymachine` 머신 이미지: 결정적 리플레이 + 사용자 델타를 OPFS에 영속(`save`/`load`)하거나 파일 하나로 내보냄(`exportImage`/`openMachine`) |
 | `WheelCache` | 오프라인·재다운로드 0 패키지 설치를 위한 wheel / OPFS 캐시 |
 | `PyProc` | 프로세스 OS 커널: 스냅샷-fork spawn, `map` / `mapArray`(SharedArrayBuffer TypedArray) 병렬, 수명주기(`kill` / `interrupt` / respawn) |

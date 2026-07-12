@@ -43,4 +43,5 @@
 3. ~~수명주기 데모~~ 완료(2026-07-12): examples/machine.html - 탭 pagehide 자동 hibernate, 재방문 resume, 내보내기/열기 버튼, /home 방문 기록.
 4. ~~오프라인 부팅~~ 완료(2026-07-12, 2단): `boot({coreCacheDir})`(fetch 계층) + `pyprocSw.js?cache=1`(script 경로까지, 2차 부팅 CDN miss 0). 비행기 모드 컴퓨터 성립.
 5. ~~커널 데몬(탭 밖에서 사는 머신) v1~~ 완료(2026-07-12): `SharedKernel`(SharedWorker) - 여러 탭 = 한 파이썬 상태. 벽: SharedWorker COI=false = SAB 불가(interrupt/fork 제외, 플랫폼 대기).
-6. 셸 코어유틸(%pip) + 델타 분기(머신의 git) + /home 포함 이미지 포맷 v2 + SharedKernel과 hibernate/resume 결합(데몬이 자기 상태를 스스로 저장).
+6. **진짜 OS 표면 라운드(2026-07-12 개시, "파이썬이 모든 것을 다룬다")**: ① 모든 것은 파일 - `/dev/clipboard`·`/proc/ps`·`/proc/meminfo`(Plan 9. 브라우저 능력 = 파이썬 파일, 새 API 표면 0) ② init/cron - 부팅 시 `/home/web/boot.py` 자동 실행 + 크론 틱(머신이 스스로 일한다) ③ requests 실동작(pyodide-http 흡수) ④ 셸 %pip. 전부 attempts 실측 후 승격.
+7. 델타 분기(머신의 git) + /home 포함 이미지 포맷 v2 + SharedKernel과 hibernate/resume 결합(데몬이 자기 상태를 스스로 저장) + 파이프/시그널 확장.
