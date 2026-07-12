@@ -54,22 +54,24 @@ async def _pyprocAsgiCall(method, path, body, query="", reqHeaders=None):
 export class AsgiServer {
   // cfg.app: 파이썬 전역에 있는 ASGI 앱 변수명(기본 "app"). 하드코딩 대신 계약으로 받는다.
   // 헬퍼는 매 요청 그 전역을 다시 읽으므로, 전역 재대입만으로 앱이 핫스왑된다(dev loop의 근거).
-  constructor(rt, cfg = {}) { this._rt = rt; this._appVar = cfg.app || "app"; }
+  constructor(rt, cfg = {}) { this._rt = rt; this._appVar = cfg.app || "app"; this._fn = null; }
 
   async install() {
     this._rt.run(HELPER(this._appVar));
+    if (this._fn && this._fn.destroy) this._fn.destroy(); // 재설치 시 이전 프록시 해제
+    this._fn = this._rt.getGlobal("_pyprocAsgiCall"); // 비동기 함수 프록시(세션 수명 동안 유지)
     return { app: this._appVar, transport: "asgi-dispatch (소켓 0)" };
   }
 
   // 요청 1건을 앱에 dispatch한다. 반환: { status, headers, body(utf-8 문자열 뷰), bodyBytes(Uint8Array) }.
-  // null/undefined 정규화는 이 JS 경계에서 한다: setGlobal(null)은 Python None이 아니라
-  // JsNull 프록시가 되므로(실측 AttributeError), 파이썬 쪽은 str 또는 버퍼/배열만 받는다.
+  // 요청 데이터는 파이썬 전역이 아니라 **함수 인자**로 넘긴다: 동시 요청(커널 페이지 + 서빙된
+  // iframe 등)이 겹쳐도 서로의 값을 덮지 않는다(외부 평가 적발 경쟁 수리). 인자 코루틴은
+  // 각자의 지역이라 인터리빙에 안전하다. null/undefined 정규화는 JS 경계에서 한다
+  // (null 전달은 Python None이 아니라 JsNull 프록시가 되는 실측 함정).
   async serve(method, path, body = null, query = "", headers = null) {
-    const rt = this._rt;
-    rt.setGlobal("_pyprocM", method); rt.setGlobal("_pyprocP", path);
-    rt.setGlobal("_pyprocB", body == null ? "" : body); rt.setGlobal("_pyprocQ", query);
-    rt.setGlobal("_pyprocH", headers == null ? [] : headers);
-    const raw = await rt.runAsync("await _pyprocAsgiCall(_pyprocM, _pyprocP, _pyprocB, _pyprocQ, _pyprocH)");
+    if (!this._fn) throw new Error("asgi.serve: install() 이후에 호출하라");
+    this._rt.execSeq++; // 전역 무변이라 수동 증가: 저널 유휴 판정이 요청 처리를 실행으로 본다
+    const raw = await this._fn(method, path, body == null ? "" : body, query, headers == null ? [] : headers);
     const r = JSON.parse(raw);
     const bodyBytes = Uint8Array.from(atob(r.bodyB64), (c) => c.charCodeAt(0));
     return { status: r.status, headers: r.headers, body: new TextDecoder().decode(bodyBytes), bodyBytes };

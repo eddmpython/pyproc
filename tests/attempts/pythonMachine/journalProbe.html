@@ -64,14 +64,38 @@
     timings.blobCount = blobCount;
     check("CAS dedupe 동작(blob = 고유 내용 수)", blobCount > 0 && blobCount <= ja.pagesWritten, `blob ${blobCount} <= 쓴 ${ja.pagesWritten}`);
 
-    // 경계 지문 가드: 다른 엔진/매니페스트의 저널(h0 불일치)로 부활을 시도하면
-    // 조용한 힙 오염 대신 명시적 예외가 나야 한다.
+    // 세대(HEAD/PREV): 명시적 2커밋으로 두 세대를 만들고 값(x)으로 구분한다.
+    // 커밋 단위는 유휴지만 commit()은 수동 경계로도 계약이다(중요한 지점을 명시 저장).
+    const gj = b.rt.enableJournal({ dir, reactive: b.reactive });
+    b.rt.run("x = 100");
+    await gj.commit();                 // 세대 1 = x가 100
+    b.rt.run("x = 200");
+    await gj.commit();                 // 세대 2 = x가 200 (세대 1은 PREV로 밀린다)
+    check("커널 B: 2세대 커밋(HEAD=200, PREV=100)", gj.commits === 2, `커밋 ${gj.commits}회`);
+
+    // 유효한 세대 1(x=100) JSON을 지금 확보해 둔다(뒤 검사들이 HEAD를 덮어쓰기 전에).
     const hf = await dir.getFileHandle("HEAD.json");
-    const headJson = JSON.parse(await (await hf.getFile()).text());
-    headJson.h0 = "deadbeef";
-    const hw = await hf.createWritable(); await hw.write(JSON.stringify(headJson)); await hw.close();
-    const bad = await b.rt.enableJournal({ dir, reactive: b.reactive }).recover().then(() => null, (e) => String(e));
-    check("경계 지문(h0) 불일치 -> 명시적 예외(조용한 오염 방지)", !!bad && bad.includes("h0"), String(bad).slice(0, 90));
+    const pf = await dir.getFileHandle("PREV.json");
+    const gen1Json = await (await pf.getFile()).text(); // x=100 세대(유효)
+
+    // (a) HEAD를 파손시키면 PREV(세대 1: x=100)로 후퇴 부활해야 한다(첫 부팅 위장 금지).
+    let hw = await hf.createWritable(); await hw.write("{ 이건 JSON이 아니다"); await hw.close();
+    const c = await bootSession({});
+    const rec2 = await c.rt.enableJournal({ dir, reactive: c.reactive }).recover();
+    check("HEAD 파손 -> PREV 세대로 후퇴 부활(마지막 커밋만 유실)", !!rec2 && rec2.fallback === true && c.rt.run("x") === 100,
+      rec2 ? `fallback, x=${c.rt.run("x")}` : "부활 실패");
+
+    // (b) 경계 지문 가드: 유효하지만 h0만 틀린 HEAD는 후퇴 없이 즉시 예외(환경 불일치).
+    const headJson = JSON.parse(gen1Json); headJson.h0 = "deadbeef";
+    hw = await hf.createWritable(); await hw.write(JSON.stringify(headJson)); await hw.close();
+    const bad = await c.rt.enableJournal({ dir, reactive: c.reactive }).recover().then(() => null, (e) => String(e));
+    check("경계 지문(h0) 불일치 -> 명시적 예외(조용한 오염 방지)", !!bad && bad.includes("h0"), String(bad).slice(0, 80));
+
+    // (c) 손상과 첫 부팅의 구분: HEAD/PREV 둘 다 파손이면 첫 부팅(null)이 아니라 명시적 예외.
+    hw = await hf.createWritable(); await hw.write("깨진 HEAD"); await hw.close();
+    let pw = await pf.createWritable(); await pw.write("깨진 PREV"); await pw.close();
+    const corrupt = await c.rt.enableJournal({ dir, reactive: c.reactive }).recover().then(() => null, (e) => String(e));
+    check("HEAD+PREV 파손 -> 첫 부팅 위장 없이 예외", !!corrupt && corrupt.includes("파손"), String(corrupt).slice(0, 80));
 
     await opfs.removeEntry("journalProbe", { recursive: true });
     await opfs.removeEntry("journalProbeEmpty", { recursive: true });

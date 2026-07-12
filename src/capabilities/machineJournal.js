@@ -98,7 +98,14 @@ export class MachineJournal {
         }
       }
       // HEAD는 마지막에 쓴다(append-only 순서 = 크래시가 어디서 나든 이전 HEAD는 무결).
+      // 세대 2개: 새 HEAD를 쓰기 전에 현 HEAD를 PREV로 남긴다. HEAD가 손상돼도(파일 파손,
+      // 미완 커밋) 직전 세대로 부활한다. createWritable은 close 시 원자 교체라 부분 쓰기는 없다.
       const head = { version: 2, h0: await this._boundaryKey(), pages: map, sp: this._reactive.stackSave() ?? this._sp, heapLen: mem.byteLength() };
+      try {
+        const cur = await (await (await this._dir.getFileHandle("HEAD.json")).getFile()).text();
+        const pf = await this._dir.getFileHandle("PREV.json", { create: true });
+        const pw = await pf.createWritable(); await pw.write(cur); await pw.close();
+      } catch (e) { if (e.name !== "NotFoundError") throw e; } // 첫 커밋은 PREV 없음
       const hf = await this._dir.getFileHandle("HEAD.json", { create: true });
       const w = await hf.createWritable(); await w.write(JSON.stringify(head)); await w.close();
       this.commits++; this.pagesWritten += wrote;
@@ -106,12 +113,23 @@ export class MachineJournal {
     } finally { this._busy = false; }
   }
 
-  // 저널 재생: 같은 매니페스트로 리플레이한 커널에 마지막 커밋을 적용한다(= 부활).
-  // 저널이 없으면 null(첫 부팅). 힙 크기/경계 지문 불일치는 명시적 예외(다른 엔진/매니페스트).
-  async recover() {
-    let head;
-    try { head = JSON.parse(await (await (await this._dir.getFileHandle("HEAD.json")).getFile()).text()); }
-    catch (e) { return null; } // 저널 없음 = 첫 부팅
+  // 세대 파일 1개 판독: { head } | { missing: true } | { corrupt: 사유 }.
+  // "파일 없음"(첫 부팅)과 "파일 파손"(손상)을 구분한다: 손상을 첫 부팅으로 위장하면
+  // 저널이 있는데도 조용히 빈 머신으로 부팅하는 데이터 유실이 된다(외부 평가 적발).
+  async _readGeneration(name) {
+    let text;
+    try { text = await (await (await this._dir.getFileHandle(name)).getFile()).text(); }
+    catch (e) {
+      if (e.name === "NotFoundError") return { missing: true };
+      return { corrupt: `${name} 읽기 실패: ${e.name}` };
+    }
+    try { return { head: JSON.parse(text) }; }
+    catch (e) { return { corrupt: `${name} JSON 파손` }; }
+  }
+
+  // 세대 1개를 힙에 적용한다. blob은 내용 주소(파일명 = SHA-256)와 실제 바이트를 재대조해
+  // 저장 후 파손을 잡는다. h0/heapLen 불일치는 손상이 아니라 환경 불일치라 즉시 던진다.
+  async _applyGeneration(head) {
     const mem = this._rt.memory;
     if (head.h0 && head.h0 !== await this._boundaryKey()) {
       throw new Error("journal.recover: 리플레이 경계 지문(h0) 불일치. 다른 엔진/매니페스트의 저널이다(조용한 힙 오염 방지).");
@@ -121,13 +139,38 @@ export class MachineJournal {
     }
     const blobDir = await this._dir.getDirectoryHandle("blob");
     const entries = Object.entries(head.pages);
+    const buffered = [];
     for (const [p, key] of entries) {
       const bytes = new Uint8Array(await (await (await blobDir.getFileHandle(key)).getFile()).arrayBuffer());
-      mem.writePage(+p, bytes);
+      if (await sha256Hex(bytes) !== key) throw new Error(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
+      buffered.push([+p, bytes]); // 전량 검증 후에 쓴다(부분 적용 상태 방지)
     }
+    for (const [p, bytes] of buffered) mem.writePage(p, bytes);
     mem.stackRestore(head.sp);
     this._reactive.checkpoint(); // 부활 상태를 새 경계로
     this._lastSeq = this._rt.execSeq;
     return { pages: entries.length, mb: +(entries.length * PAGE / 1048576).toFixed(1) };
+  }
+
+  // 저널 재생: HEAD 세대로 부활하고, HEAD가 파손이면 PREV 세대로 후퇴한다(잃는 것은 마지막
+  // 커밋 하나). 둘 다 없으면 null(첫 부팅), 둘 다 파손이면 명시적 예외.
+  // 힙 크기/경계 지문 불일치는 손상이 아니므로 후퇴 없이 즉시 예외(다른 엔진/매니페스트).
+  async recover() {
+    const cur = await this._readGeneration("HEAD.json");
+    if (cur.head) {
+      try { return await this._applyGeneration(cur.head); }
+      catch (e) {
+        if (!String(e.message).includes("blob 파손")) throw e; // 환경 불일치는 후퇴 대상이 아니다
+        cur.corrupt = e.message;
+      }
+    }
+    const prev = await this._readGeneration("PREV.json");
+    if (prev.head) {
+      const r = await this._applyGeneration(prev.head);
+      r.fallback = true; // 직전 세대로 부활했음을 알린다(마지막 커밋 1개 유실)
+      return r;
+    }
+    if (cur.missing && prev.missing) return null; // 저널 없음 = 첫 부팅
+    throw new Error(`journal.recover: 저널 파손(${cur.corrupt || "HEAD 없음"} / ${prev.corrupt || "PREV 없음"}). 첫 부팅으로 위장하지 않는다.`);
   }
 }
