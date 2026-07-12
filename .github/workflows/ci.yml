@@ -39,3 +39,8 @@ jobs:
       - run: npm run test:examples
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # WASI 세션 게이트: 승격된 bootWasi/WasiSession의 실배선. CI엔 30MB wasm 자산이 없어
+      # SKIP green(자산 있는 로컬/환경에서만 완전 검증). import/워커 배선은 여기서도 확인된다.
+      - run: node tests/browser/run.mjs tests/browser/wasiGate.html
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome

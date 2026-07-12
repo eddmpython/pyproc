@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>pyproc WASI 게이트</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>pyproc WASI 게이트 - 승격된 WasiSession 실배선</h1>
+<p>승격된 공개 표면(bootWasi/WasiSession)을 진짜 런타임으로 검증한다: non-Pyodide CPython(WASI)
+반복 실행 + 값 다리(get/set) + 완전 시간여행(checkpoint/timeTravel, 복원 후 재개·분기).
+wasm 자산(30MB)이 없으면 SKIP한다(게이트 적색 아님). CI는 자산 없이 SKIP green, 로컬은 자산으로 GREEN.
+자산 재현: tests/attempts/enginePort/README.md 레시피(python-3.12.0.wasm).</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootWasi } from "../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  // 자산은 enginePort 캠페인에 있다(미추적). 없으면 SKIP.
+  const WASM_URL = "../attempts/enginePort/pythonWasi.wasm";
+  try {
+    const head = await fetch(WASM_URL, { method: "HEAD" }).catch(() => ({ ok: false }));
+    if (!head.ok) { check("SKIP: WASI wasm 자산 없음(enginePort README 레시피로 재현)", true); await report(); throw new Error("__skip__"); }
+
+    // 1) 부팅 + 반복 실행(상태 유지): 공개 표면 bootWasi -> WasiSession.run
+    let t = performance.now();
+    const s = await bootWasi({ wasmURL: WASM_URL });
+    timings.bootMs = Math.round(performance.now() - t);
+    await s.run("x = 41");
+    await s.run("x = x + 1");
+    const r1 = await s.run("print(x)");
+    check("bootWasi + 반복 실행(상태 유지)", r1.trim() === "42", `"${r1.trim()}", 부팅 ${timings.bootMs}ms`);
+
+    // 2) 값 다리(JSON 한정): set으로 주입, get으로 회수
+    await s.set("payload", { a: [1, 2, 3], n: 42 });
+    const got = await s.get("payload");
+    check("값 다리 get/set(JSON)", JSON.stringify(got) === '{"a":[1,2,3],"n":42}', JSON.stringify(got));
+
+    // 3) 완전 시간여행: 체크포인트 -> 변이 -> 복원 -> 재개(체크포인트 상태) -> 분기
+    await s.run("state = {'v': 100}");
+    const cp = await s.checkpoint();
+    check("checkpoint(경계 힙 스냅샷)", cp.idx === 0 && cp.mb > 0, `idx=${cp.idx}, ${cp.mb}MB`);
+    await s.run("state['v'] = 200\nbig = bytearray(2*1024*1024)");
+    await s.timeTravel(0);
+    const after = await s.run("print(state['v'], 'big' in dir())");
+    check("시간여행: 복원 후 체크포인트 상태로 재개", after.trim() === "100 False", `"${after.trim()}"`);
+    await s.run("state['v'] = 999");
+    const branched = await s.run("print(state['v'])");
+    check("복원 후 분기(반복 시간여행)", branched.trim() === "999", `"${branched.trim()}"`);
+
+    // 4) 예외는 던진다(파이썬 예외 -> WasiSession 에러)
+    let threw = false;
+    try { await s.run("1/0"); } catch (e) { threw = String(e).includes("ZeroDivision"); }
+    check("파이썬 예외를 세션 에러로 전달", threw);
+    s.terminate();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
