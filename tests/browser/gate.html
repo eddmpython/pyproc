@@ -101,6 +101,13 @@
       await asgi.install();
       const resp = await asgi.serve("GET", "/ping");
       check("asgi: GET /ping -> 200 + JSON", resp.status === 200 && JSON.parse(resp.body).n === 42);
+      // 동시 요청 계약(2026-07-12 승격): 요청 데이터를 파이썬 전역이 아니라 인자로 넘기므로
+      // 겹친 요청이 서로의 값을 덮지 않는다. 커널 페이지 + 서빙된 iframe이 동시에 때리는 실동선.
+      rt.run("@app.get('/echo/{v}')\nasync def echo(v: str):\n    import asyncio\n    await asyncio.sleep(0.02)\n    return {'v': v}");
+      const conc = await Promise.all(["a", "b", "c", "d"].map((v) => asgi.serve("GET", `/echo/${v}`)));
+      check("asgi: 동시 요청이 서로를 덮지 않는다",
+        conc.every((r, i) => JSON.parse(r.body).v === ["a", "b", "c", "d"][i]),
+        conc.map((r) => JSON.parse(r.body).v).join(""));
 
       // Layer 1: 서버리스 터미널 (REPL 상태 유지)
       const term = rt.enableTerminal();
@@ -160,7 +167,7 @@
       const after = await os.map(fn, [N]);
       check("타임아웃 후 풀 자동 복구(respawn)", after[0] === expected);
       // 협조적 취소: SIGINT로 busy 루프 회수 + 같은 워커 재사용(respawn 0)
-      const lane0 = os.table.find((t) => t.worker === os.workers[0]).pid; // 태스크 0은 workers[0] 레인
+      const lane0 = os.ps().find((p) => p.state === "ready").pid; // 태스크 0은 풀 첫 레인이 집는다
       const busyP = os.map("def _fn(n):\n    while True:\n        pass", [0]);
       setTimeout(() => os.interrupt(lane0), 400);
       const ir = await busyP;
@@ -193,6 +200,24 @@
       check("fork(2): 더러운 dst 정화(부모+자식 혼합 상태 없음)", !!forkState && forkState[0] === true && forkState[1] === "proc" && forkState[2] === 300000,
         JSON.stringify(forkState));
       fos.terminate();
+
+      // RPC 계약(2026-07-12 승격): 같은 인스턴스에서 map 3개가 동시에 돌아도 응답이 섞이지
+      // 않는다. reqId 상관 이전에는 taskId가 호출마다 0부터라 교차 수신이 가능했다.
+      const cos = new PyProc();
+      await cos.boot(2);
+      const idFn = "def _fn(a):\n    import time\n    time.sleep(0.05 * (a % 3))\n    return a * 10";
+      const [r1, r2, r3] = await Promise.all([
+        cos.map(idFn, [1, 2, 3]),
+        cos.map(idFn, [4, 5]),
+        cos.map(idFn, [6, 7, 8, 9]),
+      ]);
+      check("RPC: 동시 map 3건이 서로의 응답을 먹지 않는다",
+        JSON.stringify(r1) === "[10,20,30]" && JSON.stringify(r2) === "[40,50]" && JSON.stringify(r3) === "[60,70,80,90]",
+        `${JSON.stringify(r1)} ${JSON.stringify(r2)} ${JSON.stringify(r3)}`);
+      // 복제 고유성: 같은 스냅샷에서 태어난 프로세스들의 random 스트림이 갈라져 있어야 한다.
+      const rnd = await cos.map("def _fn(a):\n    import random\n    return random.random()", [0, 1]);
+      check("복제 고유성: 프로세스마다 random 재시드", rnd[0] !== rnd[1], JSON.stringify(rnd));
+      cos.terminate();
 
       // mapArray(numpy 샤딩)의 런타임 검증은 무게 때문에 전용 probe가 담당한다:
       // tests/attempts/runtimeParity/shardMapProbe.html (4워커 5.28배 실측)

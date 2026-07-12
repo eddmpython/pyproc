@@ -77,7 +77,28 @@
     // 자식이 이어서 계산까지 하는가(fork 후 연속 실행)
     const cont = await call(b, { type: "run", code: "total + len(payload)" });
     check("fork: 자식이 부모 상태 위에서 연속 계산", cont.result === 4999950000 + 1200000, String(cont.result));
-    a.terminate(); b.terminate();
+
+    // 성장 세션 fork: 부모 힙이 자식보다 커진 경우(외부 평가 적발 - 이전엔 자식 힙을 안 키워
+    // 뒤쪽 페이지가 범위를 벗어났다). 신선한 쌍으로 부모만 크게 성장시킨 뒤 fork한다.
+    const c = spawn(), d = spawn();
+    const [rc, rd] = await Promise.all([
+      call(c, { type: "replayBoot", env: {}, packages: [], setup: null }),
+      call(d, { type: "replayBoot", env: {}, packages: [], setup: null }),
+    ]);
+    const baseLen = rc.heapLen;
+    // 부모(c)에 큰 배열 = 힙을 확실히 성장(자식 d는 경계 그대로 = 부모가 더 크다).
+    await call(c, { type: "run", code: "grown = bytearray(48 * 1024 * 1024)\ngrown[999] = 5\nmark = 'grownParent'\n1" });
+    const hg = await call(c, { type: "harvest" });
+    timings.grownParentLen = hg.heapLen;
+    check("성장 fork: 부모 힙이 자식보다 크다(전제)", hg.heapLen > baseLen && hg.heapLen > rd.heapLen,
+      `부모 ${(hg.heapLen / 1048576).toFixed(0)}MB > 자식 ${(rd.heapLen / 1048576).toFixed(0)}MB`);
+    const GROWN_CHECK = "(mark, len(grown), grown[999])";
+    const ag = await call(d, { type: "applyDelta", bin: hg.bin, pages: hg.pages, sp: hg.sp, heapLen: hg.heapLen, check: GROWN_CHECK }, [hg.bin]);
+    const garr = ag.evaled ? [...ag.evaled] : null;
+    check("성장 fork: 자식 힙 성장 + 뒤쪽 페이지 무손상",
+      !ag.error && !!garr && garr[0] === "grownParent" && garr[1] === 48 * 1024 * 1024 && garr[2] === 5,
+      ag.error ? ag.error : JSON.stringify(garr));
+    a.terminate(); b.terminate(); c.terminate(); d.terminate();
   } catch (e) {
     check("예외 없음", false, String(e).slice(0, 300));
   }

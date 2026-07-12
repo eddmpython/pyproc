@@ -55,11 +55,17 @@ onmessage = async (e) => {
       const bin = new Uint8Array(pages.length * PAGE);
       pages.forEach((p, i) => bin.set(h.subarray(p * PAGE, (p + 1) * PAGE), i * PAGE));
       const sp = py._module._emscripten_stack_get_current ? py._module._emscripten_stack_get_current() : null;
-      postMessage({ type: "harvested", id: msg.id, pages, bin: bin.buffer, sp, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
+      postMessage({ type: "harvested", id: msg.id, pages, bin: bin.buffer, sp, heapLen: h.length, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
     } else if (msg.type === "applyDelta") {
       // 부모의 델타 페이지를 자식 힙에 적용 = 살아있는 상태의 fork.
       const t0 = performance.now();
       const bin = new Uint8Array(msg.bin);
+      // 부모 힙이 더 크면(성장 세션) 자식도 파이썬 할당으로 같은 길이까지 성장(src worker.js와 동일).
+      if (msg.heapLen && msg.heapLen > heap().length) {
+        py.runPython("_pyprocHold = []");
+        while (heap().length < msg.heapLen) py.runPython("_pyprocHold.append(bytearray(8 * 1024 * 1024))");
+        py.runPython("del _pyprocHold");
+      }
       const h = heap();
       msg.pages.forEach((p, i) => h.set(bin.subarray(i * PAGE, (i + 1) * PAGE), p * PAGE));
       if (msg.sp !== null && py._module._emscripten_stack_restore) py._module._emscripten_stack_restore(msg.sp);
