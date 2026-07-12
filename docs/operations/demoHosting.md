@@ -19,7 +19,8 @@ GitHub Pages는 커스텀 응답 헤더(COOP/COEP)를 못 단다. 실측(pythonM
 
 ```text
 _site/
-  index.html        <- 랜딩(워크플로가 생성. 저장소 루트를 오염시키지 않는다)
+  index.html        <- 랜딩. 정본은 examples/index.html이고 배포 루트로 승격된다
+                       (상대 경로가 루트 기준. 로컬은 serve.mjs가 "/"에서 서빙)
   pyprocSw.js       <- src/capabilities/pyprocSw.js의 루트 사본(?coi=1 스코프 확보)
   examples/  src/  index.js  index.d.ts  LICENSE
 ```

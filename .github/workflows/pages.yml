@@ -26,62 +26,14 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: 데모 사이트 조립 (예제 + 라이브러리 + SW 루트 사본 + 랜딩)
+      - name: 데모 사이트 조립 (예제 + 라이브러리 + SW 루트 사본 + 랜딩 루트 승격)
         run: |
           mkdir -p _site
           cp -r examples src _site/
           cp index.js index.d.ts LICENSE _site/
           cp src/capabilities/pyprocSw.js _site/pyprocSw.js
-          cat > _site/index.html <<'EOF'
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>pyproc - real Python in your browser tab</title>
-            <link rel="stylesheet" href="examples/demo.css">
-          </head>
-          <body>
-            <div class="wrap">
-              <header class="site">
-                <a class="logo" href="./">pyproc</a>
-                <nav>
-                  <a href="https://github.com/eddmpython/pyproc">GitHub</a>
-                  <a href="https://www.npmjs.com/package/pyproc">npm</a>
-                </nav>
-              </header>
-              <h1>Real Python in your browser tab. No server.</h1>
-              <p class="lead">CPython 3.14 on WebAssembly with real processes, multi-core parallelism,
-              checkpoint/time-travel, and portable machine images. Live demos below (Chromium/Edge).</p>
-              <div>
-                <span class="badge green">npm install pyproc</span>
-                <span class="badge">Apache-2.0</span>
-                <span class="badge">zero dependencies, no build step</span>
-              </div>
-              <div class="cards">
-                <a class="card" href="examples/machine.html">
-                  <h3>The Python Machine</h3>
-                  <p>A computer that never turns off: close the tab, it hibernates as a few MB; reopen, it resumes. Export it as one .pymachine file.</p>
-                </a>
-                <a class="card" href="examples/terminal.html">
-                  <h3>Terminal</h3>
-                  <p>A real REPL: input() genuinely blocks, and %undo time-travels the heap to before your last statement.</p>
-                </a>
-                <a class="card" href="examples/processOs.html">
-                  <h3>Process OS</h3>
-                  <p>Fork workers from a memory snapshot and run on real CPU cores in parallel. First visit reloads once to unlock SharedArrayBuffer.</p>
-                </a>
-                <a class="card" href="examples/basic.html">
-                  <h3>Basics</h3>
-                  <p>Boot CPython, run code, load numpy. The smallest possible start.</p>
-                </a>
-              </div>
-              <footer class="site">Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> ·
-                <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a> · Chromium/Edge only (JSPI + SharedArrayBuffer)</footer>
-            </div>
-          </body>
-          </html>
-          EOF
+          # 랜딩은 examples/index.html이 정본이고 배포 루트로 승격된다(상대 경로가 루트 기준).
+          mv _site/examples/index.html _site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

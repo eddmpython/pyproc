@@ -32,7 +32,8 @@ export function createStaticServer(onRequest = null, opts = {}) {
   return createServer(async (req, res) => {
     if (onRequest && (await onRequest(req, res))) return;
     const urlPath = decodeURIComponent(new URL(req.url, "http://x").pathname);
-    const rel = urlPath === "/" ? "/examples/basic.html" : urlPath;
+    // "/"는 랜딩을 서빙한다(URL은 루트 유지: 랜딩의 상대 경로가 배포 루트 기준이라서).
+    const rel = urlPath === "/" ? "/examples/index.html" : urlPath;
     const file = normalize(join(ROOT, rel));
     if (!file.startsWith(ROOT + sep)) { res.writeHead(403); return res.end("forbidden"); }
     try {

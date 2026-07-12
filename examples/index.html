@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pyproc - real Python in your browser tab</title>
+  <meta name="description" content="Real CPython in the browser: processes and multi-core parallelism, checkpoint/time-travel, portable .pymachine images, uv-grade instant environments. No server, no build step.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f14'/%3E%3Cpath d='M8 11l6 5-6 5' stroke='%237ce38b' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Crect x='17' y='19' width='8' height='3' rx='1.5' fill='%237ce38b'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="examples/demo.css">
+  <!-- 이 파일은 배포 루트(index.html)로 복사되어 서빙된다(pages.yml). 상대 경로는 루트 기준. -->
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <a class="logo" href="./" aria-label="pyproc home">
+        <svg class="logoMark" viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#0f1720"/><path d="M8 11l6 5-6 5" stroke="#7ce38b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/><rect x="17" y="19" width="8" height="3" rx="1.5" fill="#7ce38b"/></svg>
+        pyproc
+      </a>
+      <nav>
+        <a href="#demos">Demos</a>
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+      </nav>
+      <nav class="sns" aria-label="channels">
+        <a class="snsBtn" href="https://github.com/eddmpython/pyproc" target="_blank" rel="noopener" title="GitHub" aria-label="GitHub">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+        </a>
+        <a class="snsBtn snsHeart" href="https://buymeacoffee.com/eddmpython" target="_blank" rel="noopener" title="Support and contribute" aria-label="Support">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="rgba(251,113,133,.32)" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+        </a>
+        <a class="snsBtn" href="https://www.youtube.com/@eddmpython" target="_blank" rel="noopener" title="YouTube" aria-label="YouTube">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+        </a>
+        <a class="snsBtn" href="https://www.threads.com/@eddmpython" target="_blank" rel="noopener" title="Threads" aria-label="Threads">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.589 12c.027 3.086.718 5.496 2.057 7.164 1.43 1.783 3.631 2.698 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.964-.065-1.19.408-2.285 1.33-3.082.88-.76 2.119-1.207 3.583-1.291a13.853 13.853 0 0 1 3.02.142c-.126-.742-.375-1.332-.75-1.757-.513-.586-1.308-.883-2.359-.89h-.029c-.844 0-1.992.232-2.721 1.32L7.734 7.847c.98-1.454 2.568-2.256 4.478-2.256h.044c3.194.02 5.097 1.975 5.287 5.388.108.046.216.094.321.142 1.49.7 2.58 1.761 3.154 3.07.797 1.82.871 4.79-1.548 7.158-1.85 1.81-4.094 2.628-7.277 2.65Zm1.003-11.69c-.242 0-.487.007-.739.021-1.836.103-2.98.946-2.916 2.143.067 1.256 1.452 1.839 2.784 1.767 1.224-.065 2.818-.543 3.086-3.71a10.5 10.5 0 0 0-2.215-.221z"/></svg>
+        </a>
+        <a class="snsBtn" href="https://www.instagram.com/dartlab.ai/" target="_blank" rel="noopener" title="Instagram" aria-label="Instagram">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M12 0C8.74 0 8.333.015 7.053.072 5.775.132 4.905.333 4.14.63c-.789.306-1.459.717-2.126 1.384S.935 3.35.63 4.14C.333 4.905.131 5.775.072 7.053.012 8.333 0 8.74 0 12s.015 3.667.072 4.947c.06 1.277.261 2.148.558 2.913.306.788.717 1.459 1.384 2.126.667.666 1.336 1.079 2.126 1.384.766.296 1.636.499 2.913.558C8.333 23.988 8.74 24 12 24s3.667-.015 4.947-.072c1.277-.06 2.148-.262 2.913-.558.788-.306 1.459-.718 2.126-1.384.666-.667 1.079-1.335 1.384-2.126.296-.765.499-1.636.558-2.913.06-1.28.072-1.687.072-4.947s-.015-3.667-.072-4.947c-.06-1.277-.262-2.149-.558-2.913-.306-.789-.718-1.459-1.384-2.126C21.319 1.347 20.651.935 19.86.63c-.765-.297-1.636-.499-2.913-.558C15.667.012 15.26 0 12 0zm0 2.16c3.203 0 3.585.016 4.85.071 1.17.055 1.805.249 2.227.415.562.217.96.477 1.382.896.419.42.679.819.896 1.381.164.422.36 1.057.413 2.227.057 1.266.07 1.646.07 4.85s-.015 3.585-.074 4.85c-.061 1.17-.256 1.805-.421 2.227-.224.562-.479.96-.899 1.382-.419.419-.824.679-1.38.896-.42.164-1.065.36-2.235.413-1.274.057-1.649.07-4.859.07-3.211 0-3.586-.015-4.859-.074-1.171-.061-1.816-.256-2.236-.421-.569-.224-.96-.479-1.379-.899-.421-.419-.69-.824-.9-1.38-.165-.42-.359-1.065-.42-2.235-.045-1.26-.061-1.649-.061-4.844 0-3.196.016-3.586.061-4.861.061-1.17.255-1.814.42-2.234.21-.57.479-.96.9-1.381.419-.419.81-.689 1.379-.898.42-.166 1.051-.361 2.221-.421 1.275-.045 1.65-.06 4.859-.06l.045.03zm0 3.678c-3.405 0-6.162 2.76-6.162 6.162 0 3.405 2.76 6.162 6.162 6.162 3.405 0 6.162-2.76 6.162-6.162 0-3.405-2.76-6.162-6.162-6.162zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm7.846-10.405c0 .795-.646 1.44-1.44 1.44-.795 0-1.44-.646-1.44-1.44 0-.794.646-1.439 1.44-1.439.793-.001 1.44.645 1.44 1.439z"/></svg>
+        </a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <h1>Real Python in your browser tab.<br><span class="accent">No server.</span></h1>
+      <p class="lead">CPython 3.14 on WebAssembly with real processes, multi-core parallelism,
+      checkpoint/time-travel, and a computer you can export as a single file.
+      Zero dependencies, no build step. Chromium/Edge.</p>
+      <div class="row heroCta">
+        <a class="btn" href="examples/machine.html">Open the Python Machine</a>
+        <a class="btn ghostBtn" href="https://github.com/eddmpython/pyproc">GitHub</a>
+        <code class="chip" id="installChip" title="click to copy">npm install pyproc</code>
+      </div>
+      <div class="term heroTerm" aria-hidden="true"><span class="dim"># the machine demo, in 5 lines</span>
+<span class="ok">&gt;&gt;&gt;</span> data = train_for_ten_minutes()
+<span class="dim"># close the tab. reopen tomorrow.</span>
+<span class="ok">&gt;&gt;&gt;</span> data.score()          <span class="dim"># still here. nothing re-ran.</span>
+<span class="ok">&gt;&gt;&gt;</span> %undo                 <span class="dim"># time-travel the heap, ~1ms</span></div>
+    </section>
+
+    <section class="stats" aria-label="measured results">
+      <div class="stat"><b>4.2x</b><span>faster environment boot<br>(warm 1.2s vs cold 5.1s)</span></div>
+      <div class="stat"><b>5.28x</b><span>numpy across 4 forked<br>workers, real cores</span></div>
+      <div class="stat"><b>3.4ms</b><span>fetch() to in-browser<br>FastAPI (virtual origin)</span></div>
+      <div class="stat"><b>13.7MB</b><span>a running computer as<br>one .pymachine file</span></div>
+      <div class="stat"><b>0</b><span>CDN requests on second<br>boot (offline-ready)</span></div>
+    </section>
+
+    <h2 id="demos">Live demos</h2>
+    <div class="cards">
+      <a class="card" href="examples/machine.html">
+        <h3>The Python Machine</h3>
+        <p>A computer that never turns off: close the tab, it hibernates as a few MB; reopen, it resumes. Export it as one .pymachine file and open it anywhere.</p>
+      </a>
+      <a class="card" href="examples/terminal.html">
+        <h3>Terminal</h3>
+        <p>A real REPL: input() genuinely blocks (WebAssembly JSPI), and %undo time-travels the heap to before your last statement.</p>
+      </a>
+      <a class="card" href="examples/processOs.html">
+        <h3>Process OS</h3>
+        <p>Fork workers from a memory snapshot and run on real CPU cores in parallel. First visit reloads once to unlock SharedArrayBuffer.</p>
+      </a>
+      <a class="card" href="examples/basic.html">
+        <h3>Basics</h3>
+        <p>Boot CPython, run code, load numpy. The smallest possible start.</p>
+      </a>
+    </div>
+
+    <h2 id="features">What makes it an OS, not a sandbox</h2>
+    <div class="cards features">
+      <div class="card"><h3>Processes and fork</h3><p>Web Worker = process. Boot once, snapshot the heap, fork N interpreters: N GILs, N cores, kill/interrupt/respawn lifecycle.</p></div>
+      <div class="card"><h3>Checkpoint and time-travel</h3><p>Full-hash heap checkpoints at execution boundaries. Restore in ~1ms, guarded against silent corruption by a mutation counter.</p></div>
+      <div class="card"><h3>Portable machine images</h3><p>The whole running computer in one .pymachine file: SHA-256 integrity, explicit trust gate, and a determinism check before any delta is applied.</p></div>
+      <div class="card"><h3>uv-grade environments</h3><p>bootEnv restores a bare-heap snapshot and installs wheels from an OPFS cache. runScript runs PEP 723 self-sufficient scripts. freeze() pins it all.</p></div>
+      <div class="card"><h3>A server on a real URL</h3><p>The bundled service worker maps fetch("/pyproc/...") to your in-kernel FastAPI app: 3.4ms round trips with zero sockets.</p></div>
+      <div class="card"><h3>Persistent disk and offline</h3><p>/home/web is a real OPFS-backed disk that survives kernels. Core assets cache so the second boot needs no network at all.</p></div>
+    </div>
+
+    <h2 id="install">Install</h2>
+    <div class="panel">
+      <div class="term">npm install pyproc</div>
+      <div class="term" style="margin-top:.6rem"><span class="dim">// boot, compute in parallel, keep the state</span>
+import { boot, PyProc, bootSession } from "pyproc";
+
+const os = new PyProc();
+await os.boot(4);                              <span class="dim">// fork 4 interpreters from one snapshot</span>
+await os.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</div>
+      <p class="dim" style="margin:.7rem 0 0">Pin a commit SHA for product use. Docs and contracts live in the <a href="https://github.com/eddmpython/pyproc">repository</a>.</p>
+    </div>
+
+    <footer class="site">
+      <span>Apache-2.0 · built on <a href="https://pyodide.org">Pyodide</a>/WebAssembly · Chromium/Edge (JSPI + SharedArrayBuffer)</span><br>
+      <span><a href="https://github.com/eddmpython/pyproc">GitHub</a> · <a href="https://www.npmjs.com/package/pyproc">npm</a> · <a href="https://buymeacoffee.com/eddmpython">support</a></span>
+    </footer>
+  </div>
+  <script>
+    // 설치 칩 클릭 = 클립보드 복사(랜딩의 유일한 JS. 실패해도 무해).
+    document.getElementById("installChip").addEventListener("click", async (e) => {
+      try { await navigator.clipboard.writeText("npm install pyproc"); e.target.textContent = "copied!"; setTimeout(() => { e.target.textContent = "npm install pyproc"; }, 1200); } catch (err) {}
+    });
+  </script>
+</body>
+</html>
