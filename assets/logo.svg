@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128">
+  <!-- pyproc 브랜드 마크: 전원 심볼(꺼지지 않는 컴퓨터)이자 터미널 커서(살아있는 프롬프트).
+       배지(둥근 사각) = .pymachine 파일 안에서 도는 컴퓨터. 색은 demo.css 팔레트와 동일. -->
+  <rect width="64" height="64" rx="14" fill="#0f1720"/>
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="13.25" fill="none" stroke="#223042" stroke-width="1.5"/>
+  <path d="M 24.4 23.3 A 14 14 0 1 0 39.6 23.3" fill="none" stroke="#7ce38b" stroke-width="5.5" stroke-linecap="round"/>
+  <rect x="29" y="12" width="6" height="16" rx="3" fill="#7ce38b"/>
+</svg>

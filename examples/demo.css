@@ -8,7 +8,7 @@
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 ui-monospace,'Cascadia Code',Consolas,'SF Mono',monospace}
 .wrap{max-width:58rem;margin:0 auto;padding:1.1rem 1.2rem 4rem}
 header.site{display:flex;align-items:baseline;gap:1.1rem;padding:.9rem 0;border-bottom:1px solid var(--border);margin-bottom:1.5rem;flex-wrap:wrap}
-header.site .logo{color:var(--green);font-weight:700;text-decoration:none;font-size:1.05rem}
+header.site .logo{color:var(--text);font-weight:700;text-decoration:none;font-size:1.05rem}
 header.site nav{display:flex;gap:.9rem;flex-wrap:wrap}
 header.site nav a{color:var(--dim);text-decoration:none;font-size:.92rem}
 header.site nav a:hover{color:var(--text)}
@@ -41,8 +41,9 @@ textarea,input.line{width:100%;background:var(--deep);color:var(--text);border:1
 footer.site{margin-top:2.6rem;padding-top:1rem;border-top:1px solid var(--border);color:var(--dim);font-size:.86rem;line-height:1.9}
 
 /* 랜딩(브랜딩/히어로/수치 스트립/SNS) */
-.logo{display:inline-flex;align-items:center;gap:.5rem}
-.logoMark{border-radius:6px;flex:none}
+.logo{display:inline-flex;align-items:center;gap:.5rem;color:var(--text)}
+.logo .py{color:var(--green)}
+.logoMark{border-radius:7px;flex:none}
 header.site .sns{margin-left:auto}
 .sns{display:flex;align-items:center;gap:2px}
 .snsBtn{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);text-decoration:none;transition:color .15s,background .15s}

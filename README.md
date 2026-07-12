@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/eddmpython/pyproc/main/assets/logo.svg" width="88" alt="pyproc logo"></p>
+
 # pyproc
 
 **Real runtime Python in a browser tab, with no server.** Real processes and multi-core parallelism, checkpoint / time-travel, an in-kernel ASGI server, a terminal, and portable machine images (a running Python computer as a single file), packaged as one reusable runtime on [Pyodide](https://pyodide.org) / WebAssembly. The single source of truth for the web Python runtime shared by codaro / dartlab / xlpod.
