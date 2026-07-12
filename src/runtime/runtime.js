@@ -62,13 +62,18 @@ export async function boot(opts = {}) {
     cache.misses++;
     return new Response(data, { headers: { "Content-Type": type } });
   } : null;
-  await ensureEngineScript(indexURL);
   // env: 초기화 전에 CPython 환경변수로 반영된다(예: PYTHONHASHSEED=0 -> 결정적 부팅).
   // undefined로 명시 전달하면 pyodide가 env.HOME 접근에서 죽으므로 있을 때만 싣는다.
   const cfg = { indexURL, stdout: opts.stdout, stderr: opts.stderr };
   if (opts.env) cfg.env = opts.env;
   // 락 파일 교체(freeze 산출물 등): 환경 재현의 축. 실측: envManager/freezeLockProbe.
   if (opts.lockFileURL) cfg.lockFileURL = opts.lockFileURL;
+  // opts.loadPyodide: 워커 소비자(document 없음)가 자체 import한 loadPyodide를 준다. 그러면
+  // document 기반 script 로드(ensureEngineScript)를 건너뛰고 globalThis를 오염시키지 않는다.
+  // dartlab/xlpod처럼 워커에서 boot의 캐시/env/packages 로직을 쓰려는 소비자의 경로.
+  const doLoad = opts.loadPyodide
+    ? () => opts.loadPyodide(cfg)
+    : async () => { await ensureEngineScript(indexURL); return loadPyodide(cfg); };
   let py;
   if (cache) {
     const fetchOrig = globalThis.fetch;
@@ -78,11 +83,11 @@ export async function boot(opts = {}) {
       return u.startsWith(indexURL) ? cachedFetch(u) : fetchOrig(input, init);
     };
     try {
-      py = await loadPyodide(cfg);
+      py = await doLoad();
       if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
     } finally { globalThis.fetch = fetchOrig; }
   } else {
-    py = await loadPyodide(cfg);
+    py = await doLoad();
     if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
   }
   const rt = new Runtime(new PyodideEngine(py), indexURL);

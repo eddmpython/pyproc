@@ -16,6 +16,8 @@ export interface BootOptions {
   coreCacheDir?: FileSystemDirectoryHandle;
   /** 락 파일 교체(Runtime.freeze() 산출물 등): 같은 버전이 해석 0으로 재현된다. */
   lockFileURL?: string;
+  /** 워커 소비자(document 없음)가 자체 import한 loadPyodide. 주면 script 로드를 건너뛴다(globalThis 무오염). */
+  loadPyodide?: (cfg: unknown) => Promise<unknown>;
 }
 
 export interface EnvManifest {

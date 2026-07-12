@@ -21,6 +21,10 @@
   try {
     // dartlab 채택 경로: 자체 부팅한 Pyodide를 new Runtime(py)로 감싼다(하위 호환 + 채택).
     const rt = await boot();
+    // 워커 부팅 옵션: opts.loadPyodide를 주면 document 기반 script 로드를 건너뛴다(워커 소비자).
+    // 여기선 첫 boot이 심은 전역 loadPyodide를 주입해 그 경로가 도는지 최소 검증한다.
+    const rtViaLoad = await boot({ loadPyodide: (cfg) => globalThis.loadPyodide(cfg) });
+    check("boot({loadPyodide}) 워커 부팅 옵션", rtViaLoad.run("2 ** 8") === 256);
     const py = rt.raw; // = 로드된 Pyodide 인스턴스(dartlab은 자체 loadPyodide 결과를 쓴다)
     const adopted = new Runtime(py);
     check("dartlab: new Runtime(py) 채택 -> run/memory 동작", adopted.run("6 * 7") === 42 && adopted.memory.byteLength() > 0);
