@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: journal</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: machineJournal (WAL) - 강제종료해도 마지막 문장으로 부활하나</h1>
+<p>진짜 OS의 죽음 내성: 문장 경계마다 변경 페이지를 content-addressed로 OPFS에 append하고
+commit 레코드를 쓴다. 부팅 = 리플레이 + 저널 재생. hibernate(clean save) 없이 커널을
+버리고 새로 부팅해도 마지막 커밋 상태가 재구성되어야 한다. 페이지 해시가 CAS 키다(공짜).</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const PAGE = 65536;
+  const hex = async (bytes) => { const d = await crypto.subtle.digest("SHA-256", bytes); return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join(""); };
+
+  // 저널: cp0 대비 변경 페이지를 CAS(blob/<hash>)에 저장 + commit(페이지->해시 맵 + sp).
+  // append-only이므로 크래시 시점이 어디든 마지막 완결 commit까지는 무결하다.
+  async function appendCommit(reactive, mem, dir) {
+    reactive.checkpoint();
+    const h0 = reactive.hashes[0], hl = reactive.hashes[reactive.liveIdx];
+    const n = Math.min(h0.length, hl.length) / 2;
+    const map = {};
+    let wrote = 0;
+    const blobDir = await dir.getDirectoryHandle("blob", { create: true });
+    const put = async (p) => {
+      const bytes = mem.slicePage(p);
+      const key = await hex(bytes);
+      map[p] = key;
+      try { await (await blobDir.getFileHandle(key)).getFile(); } // 이미 있으면 dedupe
+      catch (e) { const fh = await blobDir.getFileHandle(key, { create: true }); const w = await fh.createWritable(); await w.write(bytes); await w.close(); wrote++; }
+    };
+    for (let p = 0; p < n; p++) if (hl[2 * p] !== h0[2 * p] || hl[2 * p + 1] !== h0[2 * p + 1]) await put(p);
+    for (let p = h0.length / 2; p < hl.length / 2; p++) await put(p); // 성장분
+    // commit 레코드(append). 최신 것이 진실.
+    const commit = { pages: map, sp: reactive.stackSave(), heapLen: mem.byteLength() };
+    const cf = await dir.getFileHandle("HEAD.json", { create: true });
+    const w = await cf.createWritable(); await w.write(JSON.stringify(commit)); await w.close();
+    return { pagesWrote: wrote, pagesTotal: Object.keys(map).length };
+  }
+  async function recover(reactive, mem, dir) {
+    const commit = JSON.parse(await (await (await dir.getFileHandle("HEAD.json")).getFile()).text());
+    const blobDir = await dir.getDirectoryHandle("blob");
+    for (const [p, key] of Object.entries(commit.pages)) {
+      const bytes = new Uint8Array(await (await (await blobDir.getFileHandle(key)).getFile()).arrayBuffer());
+      mem.writePage(+p, bytes);
+    }
+    mem.stackRestore(commit.sp);
+    reactive.checkpoint();
+    return { pages: Object.keys(commit.pages).length };
+  }
+
+  try {
+    const opfs = await navigator.storage.getDirectory();
+    try { await opfs.removeEntry("journalProbe", { recursive: true }); } catch (e) {}
+    const dir = await opfs.getDirectoryHandle("journalProbe", { create: true });
+
+    // 커널 A: 문장마다 저널에 커밋(hibernate 없음 = 크래시 시나리오)
+    const a = await bootSession({});
+    const ra = a.reactive, ma = a.rt.memory;
+    ra.checkpoint(); // cp0
+    const perStmt = [];
+    a.rt.run("log = []\nx = 0");
+    let c = await appendCommit(ra, ma, dir); perStmt.push(c.pagesTotal);
+    for (let i = 1; i <= 5; i++) {
+      let t = performance.now();
+      a.rt.run(`x += ${i}\nlog.append(('step', ${i}, x))\nbig_${i} = bytearray(${i} * 40000)`);
+      c = await appendCommit(ra, ma, dir);
+      perStmt.push(c.pagesTotal);
+      timings[`stmt${i}Ms`] = +(performance.now() - t).toFixed(0);
+    }
+    const finalX = a.rt.run("x");        // 0 + 1+2+3+4+5 = 15
+    const finalLog = a.rt.run("len(log)"); // 루프 5회 = 5
+    timings.perStmtPages = perStmt;
+    // 비용 캘리브레이션: 문장당 변경 페이지 중앙값(설계 판정의 정본). GC/할당자 churn 바닥이 보인다.
+    const sorted = [...perStmt].sort((x, y) => x - y);
+    timings.medianPagesPerStmt = sorted[Math.floor(sorted.length / 2)];
+    check("커널 A: 문장별 저널 커밋", finalX === 15 && finalLog === 5, `x=${finalX}, log=${finalLog}, 문장당 중앙값 ${timings.medianPagesPerStmt}p`);
+    // A를 그냥 버린다(clean save 호출 없음 = 강제종료 등가)
+
+    // 커널 B: 리플레이 + 저널 재생 = 부활(핵심 판정: 죽음 내성)
+    let t = performance.now();
+    const b = await bootSession({});
+    const rec = await recover(b.reactive, b.rt.memory, dir);
+    timings.recoverMs = +(performance.now() - t).toFixed(0);
+    check("커널 B: 저널 재생으로 부활(강제종료 내성)", b.rt.run("x") === 15 && b.rt.run("len(log)") === 5,
+      `x=${b.rt.run("x")}, log=${b.rt.run("len(log)")}, ${rec.pages}p, ${timings.recoverMs}ms`);
+    check("부활 후 연속 실행", b.rt.run("x += 100\nx") === 115);
+    check("부활 상태의 배열 생존", b.rt.run("len(big_5)") === 200000);
+
+    // CAS dedupe: 같은 페이지 반복 커밋은 blob을 늘리지 않는다
+    const blobDir = await dir.getDirectoryHandle("blob");
+    let blobCount = 0; for await (const _ of blobDir.keys()) blobCount++;
+    const totalCommitted = perStmt.reduce((a, b) => a + b, 0);
+    timings.blobCount = blobCount; timings.totalCommittedPages = totalCommitted;
+    check("CAS dedupe: blob 수 < 누적 커밋 페이지 수", blobCount < totalCommitted, `blob ${blobCount} < 누적 ${totalCommitted}`);
+
+    await opfs.removeEntry("journalProbe", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>
