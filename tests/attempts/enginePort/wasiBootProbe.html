@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<!--
+결과(2026-07-12, Edge headless / 로컬 COOP+COEP):
+- GREEN 6/6. non-Pyodide CPython 3.12(WLR, WASI)이 우리 워커에서 vendored browser_wasi_shim
+  (의존성 0)으로 부팅 + print(1+1)="2". 부팅+실행 253ms(Pyodide 콜드 ~3s보다 빠르다).
+- 계약 코어 실증: exports.memory(heapU8 등가) 접근 성립(10MB). 표준 라이브러리(json/sys) 동작.
+- **결정적 부팅**: random_get + clock_time_get을 shim에서 고정하면 두 커널의 파이썬 가시 상태
+  (random.random(), hash)가 바이트 동일. 비결정 대조(고정 끄면 갈림)로 우연 아님 확인.
+  = 우리 리플레이/세션/.pymachine/체크포인트의 전제가 Pyodide 없이 성립. WASI는 엔트로피가
+  import 2개로 수렴해 Pyodide의 3소스 스텁보다 깨끗하다.
+- 결론: "Pyodide를 뗀다"가 개념이 아니라 실측. 계약 코어 2축(선형 메모리 + 결정적 부팅)이
+  non-Pyodide에서 GREEN. 남은 것: 값 프로토콜(FFI 우회 get/set), reactive를 이 엔진 위에서,
+  반복 실행(stdin 프레임 드라이버). 벽: 스택 sp 미노출(null 계약), 네이티브 확장(PEP 783 대기).
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: wasiBoot</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: non-Pyodide CPython(WASI)이 우리 워커에서 도는가 (D2 관문)</h1>
+<p>"Pyodide를 뗀다"의 첫 실증: vendored browser_wasi_shim(의존성 0)으로 WLR CPython 3.12를
+워커에서 부팅해 파이썬을 실행하고, 계약 코어(선형 메모리 접근 + 결정적 부팅)가 성립하는지 본다.
+자산은 레포 미추적(README 레시피로 재현). 없으면 SKIP(게이트 적색 아님).</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const run = (worker, msg, transfer) => new Promise((res) => {
+    worker.onmessage = (e) => res(e.data);
+    worker.postMessage(msg, transfer);
+  });
+
+  try {
+    // 자산 존재 확인(없으면 SKIP = 게이트 적색 아님. 재현 레시피는 README).
+    const wasmResp = await fetch("./pythonWasi.wasm");
+    if (!wasmResp.ok) {
+      check("SKIP: pythonWasi.wasm 없음(README 레시피로 재현)", true, `${wasmResp.status}`);
+      await report(); throw new Error("__skip__");
+    }
+    let t = performance.now();
+    const wasmBytes = await wasmResp.arrayBuffer();
+    timings.wasmMB = +(wasmBytes.byteLength / 1048576).toFixed(1);
+    timings.fetchMs = Math.round(performance.now() - t);
+    check("자산 로드(WLR CPython wasm)", wasmBytes.byteLength > 1e7, `${timings.wasmMB}MB, ${timings.fetchMs}ms`);
+
+    const spawn = () => new Worker(new URL("./wasiWorker.js", import.meta.url), { type: "module" });
+
+    // 1) 부팅 + 실행: print(1+1)이 non-Pyodide 파이썬에서 "2"로 나온다
+    t = performance.now();
+    const w1 = spawn();
+    const r1 = await run(w1, { code: "print(1 + 1)", deterministic: false, wasmBytes: wasmBytes.slice(0) });
+    timings.bootRunMs = Math.round(performance.now() - t);
+    w1.terminate();
+    check("WASI CPython 부팅 + print 실행", r1.ok && r1.stdout.trim() === "2", r1.ok ? `stdout="${r1.stdout.trim()}", ${timings.bootRunMs}ms` : r1.error);
+
+    // 2) 계약 코어: 선형 메모리(exports.memory) 접근 성립 = heapU8 등가가 있다
+    check("계약 코어: 선형 메모리 접근(heapU8 등가)", r1.heapLen > 0 && r1.heapLenAfter >= r1.heapLen,
+      `heap ${(r1.heapLen / 1048576).toFixed(0)}MB -> ${(r1.heapLenAfter / 1048576).toFixed(0)}MB`);
+
+    // 3) 파이썬 능력: 표준 라이브러리가 실제로 돈다(단순 print 이상)
+    const w2 = spawn();
+    const r2 = await run(w2, { code: "import sys, json\nprint(json.dumps({'v': sys.version_info[:2], 'sum': sum(range(100))}))", deterministic: false, wasmBytes: wasmBytes.slice(0) });
+    w2.terminate();
+    const parsed = r2.ok && r2.stdout.trim() ? JSON.parse(r2.stdout.trim()) : null;
+    check("표준 라이브러리 동작(json/sys)", !!parsed && parsed.sum === 4950 && parsed.v[0] === 3, r2.ok ? r2.stdout.trim() : r2.error);
+
+    // 4) 결정적 부팅(계약의 핵심): random/hash를 고정하면 두 부팅의 파이썬 가시 상태가 동일하다.
+    //    WASI는 엔트로피가 random_get 하나로 수렴 = Pyodide의 3소스 스텁보다 깨끗한 결정성.
+    const detCode = "import random\nprint(random.random(), hash('pyproc'))";
+    const w3 = spawn(), w4 = spawn();
+    const [d1, d2] = await Promise.all([
+      run(w3, { code: detCode, deterministic: true, wasmBytes: wasmBytes.slice(0) }),
+      run(w4, { code: detCode, deterministic: true, wasmBytes: wasmBytes.slice(0) }),
+    ]);
+    w3.terminate(); w4.terminate();
+    check("결정적 부팅: 두 커널의 파이썬 가시 상태 동일", d1.ok && d2.ok && d1.stdout.trim() === d2.stdout.trim() && d1.stdout.trim().length > 0,
+      d1.ok ? `"${d1.stdout.trim()}" == "${d2.stdout.trim()}"` : d1.error);
+
+    // 5) 비결정 대조: 고정을 끄면 달라진다(= 위 동일이 우연이 아니라 고정의 효과)
+    const w5 = spawn(), w6 = spawn();
+    const [n1, n2] = await Promise.all([
+      run(w5, { code: "import random\nprint(random.random())", deterministic: false, wasmBytes: wasmBytes.slice(0) }),
+      run(w6, { code: "import random\nprint(random.random())", deterministic: false, wasmBytes: wasmBytes.slice(0) }),
+    ]);
+    w5.terminate(); w6.terminate();
+    check("비결정 대조: 고정 끄면 random 갈림", n1.ok && n2.ok && n1.stdout.trim() !== n2.stdout.trim(),
+      `"${n1.stdout.trim()}" != "${n2.stdout.trim()}"`);
+  } catch (e) {
+    if (String(e).includes("__skip__")) { /* SKIP은 이미 보고 */ }
+    else check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

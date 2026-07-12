@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-12 라운드 11: D2 관문 - "Pyodide를 뗀다"가 실측이 됐다 (enginePort 캠페인 6/6)
+
+- 목표의 심장("Pyodide를 떼고 진짜 파이썬이 굴러갈 수준")을 실측으로 관통했다. [enginePort 캠페인](../../tests/attempts/enginePort/README.md): non-Pyodide CPython 3.12(VMware WLR, WASI 빌드)을 vendored browser_wasi_shim(의존성 0, MIT)으로 우리 워커에서 부팅.
+- **GREEN 6/6**: ① 부팅 + print(1+1)="2" **253ms**(Pyodide 콜드 ~3s보다 빠르다) ② 계약 코어 = exports.memory(heapU8 등가) 접근 성립 ③ 표준 라이브러리(json/sys) 동작 ④ **결정적 부팅** = random_get + clock_time_get을 shim에서 고정하면 두 커널의 파이썬 가시 상태(random.random(), hash)가 바이트 동일 ⑤ 비결정 대조(고정 끄면 갈림)로 우연 아님 확인.
+- **의미**: 우리 보석(reactive/session/.pymachine/체크포인트)이 요구하는 계약 코어 2축(선형 메모리 + 결정적 부팅)이 **Pyodide 없이 성립**한다. 라운드 10의 EngineContract가 "계약만으로 프리미티브가 돈다"를 증명했고, 이번 라운드가 "그 계약을 non-Pyodide가 구현한다"를 실측했다. 둘을 합치면 "떼기"의 개념 증명이 닫힌다. 역설: WASI는 엔트로피가 import 2개(random_get/clock_time_get)로 수렴해 Pyodide의 3소스 전역 스텁보다 결정성이 깨끗하다.
+- **자산 정책**: WLR wasm(25MB) + shim(29KB)은 레포 미추적(.gitignore, README 레시피로 재현). "레포 자산 0 + 서드파티 라이선스 고지 부담 회피" = 의존성 0/빌드 0 기조 유지. attempts probe라 CI(gate.html) 무관.
+- **남은 것**(승격 전): 값 프로토콜(FFI 부재 우회 = JSON 직렬화 get/set), reactive를 이 엔진 위에서 실동작, 반복 실행(stdin 프레임 드라이버 = 인터프리터 세워두고 코드 조각 N회). 승격 경로 = EngineContract에 WasiEngine 구현 추가 -> `boot({engine})` 옵션화. 벽: 스택 sp 미노출(null 계약으로 흡수), 네이티브 확장(PEP 783 대기).
+- 협업 규율 기계화: AskUserQuestion(4지선다/객관식) 전역 PreToolUse 훅으로 영구 차단(대원칙 = 열화판 금지, 최고 품질 자체 판단). 규칙 정본은 CLAUDE.md + 메모리(로컬 전용), 집행은 사용자 전역 `~/.claude`(레포 `.claude/`는 일회성이라 규칙/집행 미배치).
+
 ### 2026-07-12 라운드 10: 엔진 독립 P1 착수 완료 - EngineContract seam (구조 298 + 브라우저 38 무변경)
 
 - 목표 재확인: "Pyodide를 떼고 진짜 파이썬이 굴러갈 수준". 그 인프라가 EngineContract seam이다(엔진을 삭제가 아니라 교체 가능한 옵션으로). 개념이 불확실한 부분("우리 프리미티브가 엔진 계약만으로 도는가")은 규칙대로 attempts에서 검증 후 합류했다.
