@@ -1,33 +1,60 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>pyproc - 기본 런타임</title>
-  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Basics - pyproc</title>
+  <link rel="stylesheet" href="demo.css">
 </head>
 <body>
-  <h1>pyproc - 기본 런타임</h1>
-  <p>브라우저에서 파이썬을 실행한다. Chromium/Edge에서 crossOriginIsolated 서버로 열 것.</p>
-  <pre id="out">부팅 중...</pre>
+  <div class="wrap">
+    <header class="site">
+      <a class="logo" href="../">pyproc</a>
+      <nav>
+        <a href="machine.html">Machine</a>
+        <a href="terminal.html">Terminal</a>
+        <a href="processOs.html">Process OS</a>
+        <a href="basic.html" class="on">Basics</a>
+        <a href="https://github.com/eddmpython/pyproc">GitHub</a>
+      </nav>
+    </header>
+
+    <h1>Boot and run</h1>
+    <p class="lead">Real CPython 3.14 booting in this tab via WebAssembly, then running code and loading numpy. No server involved.</p>
+
+    <div class="panel">
+      <div class="status" id="st">Booting CPython...</div>
+      <div class="term" id="out"></div>
+    </div>
+
+    <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> · <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
+  </div>
   <script type="module">
     import { boot } from "../index.js";
-    const out = document.getElementById("out");
-    const log = (m) => { out.textContent += "\n" + m; };
+    const out = document.getElementById("out"), st = document.getElementById("st");
+    const log = (m) => { out.textContent += m + "\n"; };
     // 예제 실행 게이트(?gate): 완주 여부를 하네스에 보고. 사람이 열면 no-op.
     const gateMode = new URLSearchParams(location.search).has("gate");
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: out.textContent.slice(-180) }] }) }).catch(() => {}); };
     try {
-      out.textContent = "부팅 중...";
+      let t = performance.now();
       const rt = await boot();
-      log("부팅 완료");
+      st.textContent = `Ready in ${Math.round(performance.now() - t)}ms`;
+      log(">>> sum(range(100))");
       const s = rt.run("sum(range(100))");
-      log("sum(range(100)) = " + s);
+      log(String(s));
+      log("");
+      log("# pip-grade packages work too:");
+      t = performance.now();
       await rt.loadPackages(["numpy"]);
+      log(`# numpy loaded in ${Math.round(performance.now() - t)}ms`);
+      log(">>> import numpy as np; int(np.arange(10).sum())");
       const n = rt.run("import numpy as np; int(np.arange(10).sum())");
-      log("numpy arange(10).sum() = " + n);
+      log(String(n));
       gateReport(s === 4950 && n === 45);
     } catch (e) {
-      log("오류: " + e);
+      st.textContent = "Failed";
+      log("Error: " + e);
       gateReport(false);
     }
   </script>

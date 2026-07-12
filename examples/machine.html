@@ -1,33 +1,55 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>pyproc - 파이썬 머신 (꺼지지 않는 컴퓨터)</title>
-  <style>
-    body{font:14px/1.5 ui-monospace,Consolas,monospace;margin:2rem;max-width:56rem;background:#0d1117;color:#d7dde3}
-    h1{color:#7ce38b} #st{color:#8ab4ff} pre{white-space:pre-wrap;background:#161b22;padding:1rem;border-radius:8px;min-height:8rem}
-    textarea{width:100%;height:6rem;background:#161b22;color:#d7dde3;border:1px solid #333;border-radius:8px;font:inherit;padding:.6rem}
-    button{background:#238636;color:#fff;border:0;border-radius:6px;padding:.5rem .9rem;margin:.3rem .3rem 0 0;font:inherit;cursor:pointer}
-    button.gray{background:#30363d}
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Python Machine - pyproc</title>
+  <link rel="stylesheet" href="demo.css">
 </head>
 <body>
-  <h1>파이썬 머신</h1>
-  <p id="st">부팅 중...</p>
-  <p>해보기: 아래에 <code>n = globals().get('n', 0) + 1; print('부팅 후에도 이어지는 카운터:', n)</code> 를 실행하고
-     <b>탭을 닫았다가 다시 여세요.</b> 변수도, /home/web의 파일도 그대로입니다. 컴퓨터를 통째로
-     <code>.pymachine</code> 파일로 내보내 다른 브라우저에서 열 수도 있습니다.</p>
-  <textarea id="code">n = globals().get('n', 0) + 1
+  <div class="wrap">
+    <header class="site">
+      <a class="logo" href="../">pyproc</a>
+      <nav>
+        <a href="machine.html" class="on">Machine</a>
+        <a href="terminal.html">Terminal</a>
+        <a href="processOs.html">Process OS</a>
+        <a href="basic.html">Basics</a>
+        <a href="https://github.com/eddmpython/pyproc">GitHub</a>
+      </nav>
+    </header>
+
+    <h1>A computer that never turns off</h1>
+    <p class="lead">This page is a Python machine. Close the tab and it hibernates as a few MB;
+    reopen and it wakes exactly where it was, variables and files intact. Export the whole
+    running computer as a single <span class="ok">.pymachine</span> file and open it anywhere.</p>
+
+    <div class="panel">
+      <div class="status" id="st">Booting...</div>
+      <div class="row" style="margin:.6rem 0 .2rem">
+        <span class="badge green">state survives the tab</span>
+        <span class="badge blue">/home/web is a real disk (OPFS)</span>
+        <span class="badge">SHA-256 + explicit trust on import</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <p class="dim" style="margin:0 0 .5rem">Try it: run this, then close the tab and come back. The counter and the file keep counting.</p>
+      <textarea id="code" rows="4" spellcheck="false">n = globals().get('n', 0) + 1
 open('/home/web/visits.txt', 'a').write(f'visit {n}\n')
-print('카운터:', n, '| 방문 기록 줄 수:', len(open('/home/web/visits.txt').readlines()))</textarea>
-  <div>
-    <button id="run">실행</button>
-    <button id="sleep" class="gray">지금 잠자기(수동 저장)</button>
-    <button id="exp" class="gray">.pymachine 내보내기</button>
-    <button id="imp" class="gray">파일로 열기</button>
-    <input id="file" type="file" accept=".pymachine" style="display:none">
+print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').readlines()))</textarea>
+      <div class="row">
+        <button id="run">Run</button>
+        <button id="sleep" class="ghost">Sleep now (manual save)</button>
+        <button id="exp" class="ghost">Export .pymachine</button>
+        <button id="imp" class="ghost">Open machine file</button>
+        <input id="file" type="file" accept=".pymachine" style="display:none">
+      </div>
+      <div class="term" id="out"></div>
+    </div>
+
+    <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> · <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
   </div>
-  <pre id="out"></pre>
   <script type="module">
     import { bootSession, openMachine } from "../index.js";
     const st = document.getElementById("st"), out = document.getElementById("out");
@@ -44,21 +66,27 @@ print('카운터:', n, '| 방문 기록 줄 수:', len(open('/home/web/visits.tx
     // resume: 이전 hibernate가 있으면 그 자리에서 깨어난다
     try {
       const r = await session.load(stateDir, "machine");
-      st.textContent = `깨어남: 이전 세션 부활 (${r.pages}p, ${r.mb}MB). 이 컴퓨터는 꺼지지 않았습니다.`;
+      st.textContent = `Awake: previous session revived (${r.pages} pages, ${r.mb}MB). This computer never turned off.`;
     } catch (e) {
-      st.textContent = "새 컴퓨터로 부팅됨 (첫 방문). 상태를 만들고 탭을 닫아보세요.";
+      st.textContent = "Fresh boot (first visit). Make some state, then close the tab and come back.";
     }
+
+    const runCode = async () => {
+      const code = document.getElementById("code").value;
+      session.rt.setGlobal("_pmSrc", code);
+      const r = await session.rt.runAsync(
+        "import io, contextlib\n_buf = io.StringIO()\n" +
+        "with contextlib.redirect_stdout(_buf), contextlib.redirect_stderr(_buf):\n" +
+        "    exec(_pmSrc, globals())\n_buf.getvalue()"
+      );
+      return r ? String(r).trimEnd() : "";
+    };
 
     if (gateMode) {
       try {
-        session.rt.setGlobal("_pmSrc", document.getElementById("code").value);
-        const r = await session.rt.runAsync(
-          "import io, contextlib\n_buf = io.StringIO()\n" +
-          "with contextlib.redirect_stdout(_buf), contextlib.redirect_stderr(_buf):\n" +
-          "    exec(_pmSrc, globals())\n_buf.getvalue()"
-        );
-        print(String(r).trimEnd());
-        gateReport(String(r).includes("카운터"));
+        const r = await runCode();
+        print(r);
+        gateReport(r.includes("counter"));
       } catch (e) { print(String(e).slice(-160)); gateReport(false); }
     }
 
@@ -72,20 +100,12 @@ print('카운터:', n, '| 방문 기록 줄 수:', len(open('/home/web/visits.tx
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") hibernate(); });
 
     document.getElementById("run").onclick = async () => {
-      const code = document.getElementById("code").value;
-      try {
-        session.rt.setGlobal("_pmSrc", code);
-        const r = await session.rt.runAsync(
-          "import io, contextlib\n_buf = io.StringIO()\n" +
-          "with contextlib.redirect_stdout(_buf), contextlib.redirect_stderr(_buf):\n" +
-          "    exec(_pmSrc, globals())\n_buf.getvalue()"
-        );
-        if (r) print(String(r).trimEnd());
-      } catch (e) { print(String(e).split("\n").slice(-3).join("\n")); }
+      try { print(await runCode()); }
+      catch (e) { print(String(e).split("\n").slice(-3).join("\n")); }
     };
     document.getElementById("sleep").onclick = async () => {
       const r = await hibernate();
-      print(`잠자기 완료: 델타 ${r.pages}p / ${r.mb}MB (OPFS)`);
+      print(`Hibernated: ${r.pages} pages / ${r.mb}MB delta written to OPFS.`);
     };
     document.getElementById("exp").onclick = async () => {
       const blob = await session.exportImage();
@@ -93,17 +113,17 @@ print('카운터:', n, '| 방문 기록 줄 수:', len(open('/home/web/visits.tx
       a.href = URL.createObjectURL(blob);
       a.download = "computer.pymachine";
       a.click();
-      print(`내보내기: computer.pymachine (${(blob.size / 1048576).toFixed(1)}MB) - 이 파일이 곧 이 컴퓨터입니다.`);
+      print(`Exported computer.pymachine (${(blob.size / 1048576).toFixed(1)}MB). That file IS this computer.`);
     };
     document.getElementById("imp").onclick = () => document.getElementById("file").click();
     document.getElementById("file").onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
-      if (!confirm("머신 파일은 실행 파일과 동급 위험입니다. 출처를 신뢰합니까?")) return;
-      st.textContent = "파일에서 컴퓨터 부팅 중...";
+      if (!confirm("A machine file is live state: treat it like an executable. Trust its source?")) return;
+      st.textContent = "Booting the imported computer...";
       session = await openMachine(f, { trust: true });
       home = await session.rt.mountHome(homeDir);
-      st.textContent = "가져온 컴퓨터로 전환됨. (이후 잠자기/내보내기는 이 머신 기준)";
-      print("openMachine 완료: 보낸 사람의 상태 그대로입니다.");
+      st.textContent = "Switched to the imported machine (sleep/export now apply to it).";
+      print("openMachine done: the sender's exact state is alive here.");
     };
   </script>
 </body>

@@ -1,27 +1,58 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>pyproc - 프로세스 OS 병렬</title>
-  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Process OS - pyproc</title>
+  <link rel="stylesheet" href="demo.css">
 </head>
 <body>
-  <h1>pyproc - 프로세스 OS 병렬</h1>
-  <p>워커 4개를 스냅샷-fork로 spawn하고, 같은 작업을 병렬 map vs 직렬로 비교한다.
-     crossOriginIsolated(COOP/COEP) 서버로 열 것. Chromium/Edge 전용.</p>
-  <pre id="out">준비 중...</pre>
+  <div class="wrap">
+    <header class="site">
+      <a class="logo" href="../">pyproc</a>
+      <nav>
+        <a href="machine.html">Machine</a>
+        <a href="terminal.html">Terminal</a>
+        <a href="processOs.html" class="on">Process OS</a>
+        <a href="basic.html">Basics</a>
+        <a href="https://github.com/eddmpython/pyproc">GitHub</a>
+      </nav>
+    </header>
+
+    <h1>Fork and real multi-core</h1>
+    <p class="lead">One interpreter boots, takes a memory snapshot, and forks 4 worker processes from the image.
+    Each worker is an independent interpreter with its own GIL, so the same job runs on real CPU cores in parallel.
+    <span class="dim">On header-less hosting the first visit reloads once to unlock SharedArrayBuffer.</span></p>
+
+    <div class="panel">
+      <div class="status" id="st">Spawning workers...</div>
+      <div class="kv" id="stats" style="display:none">
+        <div class="k">workers</div><div id="kWorkers"></div>
+        <div class="k">parallel map</div><div><div class="barWrap"><div class="bar green" id="barPar"></div></div><span id="kPar"></span></div>
+        <div class="k">serial</div><div><div class="barWrap"><div class="bar" id="barSer"></div></div><span id="kSer"></span></div>
+        <div class="k">speedup</div><div id="kSpeed"></div>
+        <div class="k">results match</div><div id="kSame"></div>
+        <div class="k">value</div><div id="kVal" class="dim"></div>
+      </div>
+      <div class="term" id="out" style="margin-top:.7rem">The job: <span class="ok">def _fn(n): return sum(i*i for i in range(n))</span> over 4 tasks of n=2,000,000.</div>
+    </div>
+
+    <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> · <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
+  </div>
   <script type="module">
     import { PyProc } from "../index.js";
-    const out = document.getElementById("out");
+    const out = document.getElementById("out"), st = document.getElementById("st");
+    const el = (id) => document.getElementById(id);
     const log = (m) => { out.textContent += "\n" + m; };
     // 예제 실행 게이트(?gate): 완주 여부를 하네스에 보고. 사람이 열면 no-op.
     const gateMode = new URLSearchParams(location.search).has("gate");
-    const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: out.textContent.slice(-180) }] }) }).catch(() => {}); };
+    const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-180) }] }) }).catch(() => {}); };
     // GitHub Pages처럼 헤더를 못 다는 호스팅에서 SAB를 여는 부트스트랩(실측: swCoiProbe).
     // 배포 루트에 pyprocSw.js 사본이 있는 전제(pages 워크플로가 조립). COOP/COEP 서버에선 no-op.
     if (!crossOriginIsolated && "serviceWorker" in navigator && !sessionStorage.getItem("pyprocCoiTried")) {
       try {
         sessionStorage.setItem("pyprocCoiTried", "1");
+        st.textContent = "Unlocking SharedArrayBuffer (one-time reload)...";
         await navigator.serviceWorker.register("../pyprocSw.js?coi=1");
         await navigator.serviceWorker.ready;
         location.reload();
@@ -29,35 +60,43 @@
       } catch (e) { /* 사본 없는 환경(로컬 직접 서빙 등) -> 그대로 진행 */ }
     }
     try {
-      out.textContent = "워커 spawn 중...";
       const os = new PyProc();
       const b = await os.boot(4);
-      log(`워커 ${b.workers}개 부팅(평균 ${b.avgBootMs}ms, forked=${b.forked})`);
+      st.textContent = `4 workers forked from one snapshot (avg boot ${b.avgBootMs}ms)`;
 
       const fn = "def _fn(n):\n    return sum(i*i for i in range(n))";
       const args = [2000000, 2000000, 2000000, 2000000];
 
+      log("running parallel map across 4 workers...");
       let t = performance.now();
       const par = await os.map(fn, args);
       const parMs = Math.round(performance.now() - t);
 
+      log("running the same 4 tasks on 1 worker (serial baseline)...");
       t = performance.now();
       const ser = await os.mapSerial(fn, args);
       const serMs = Math.round(performance.now() - t);
 
-      log(`병렬 map: ${parMs}ms`);
-      log(`직렬:     ${serMs}ms`);
-      log(`speedup:  ${(serMs / parMs).toFixed(2)}x`);
       // 2^53을 넘는 파이썬 int는 BigInt로 온다(정밀도 보존이 올바른 동작).
-      // JSON.stringify는 BigInt에서 던지므로 비교/표시에 쓰지 않는다(2026-07-12 라이브 데모 실결함).
+      // JSON.stringify는 BigInt에서 던지므로 비교/표시에 쓰지 않는다(2026-07-12 라이브 실결함).
       const same = par.length === ser.length && par.every((v, i) => v === ser[i]);
-      log(`결과 일치: ${same}`);
-      log(`결과값(BigInt): ${par[0]}`);
-      log(`프로세스 테이블: ${JSON.stringify(os.ps())}`);
+
+      el("stats").style.display = "grid";
+      el("kWorkers").textContent = `${b.workers} (forked=${b.forked})`;
+      el("kPar").textContent = ` ${parMs}ms`;
+      el("kSer").textContent = ` ${serMs}ms`;
+      el("barPar").style.width = `${Math.round((parMs / serMs) * 100)}%`;
+      el("barSer").style.width = "100%";
+      el("kSpeed").innerHTML = `<span class="badge green">${(serMs / parMs).toFixed(2)}x</span>`;
+      el("kSame").textContent = String(same);
+      el("kVal").textContent = `${par[0]} (BigInt: exact 64-bit integer, no precision loss)`;
+      st.textContent = "Done. Same result, real cores.";
+      log(`process table: ${JSON.stringify(os.ps())}`);
       os.terminate();
       gateReport(same && b.workers === 4);
     } catch (e) {
-      log("오류: " + e);
+      st.textContent = "Failed";
+      log("Error: " + e);
       gateReport(false);
     }
   </script>
