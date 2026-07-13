@@ -11,17 +11,25 @@
 //
 // 실측 주의(WLR CPython 3.12): 반복 루프 프레임 위 명시적 compile()은 wasm C 스택을 넘겨 죽는다.
 // exec(str)의 내부 컴파일은 C 레벨이라 안전하므로 exec(소스문자열)을 직접 쓴다.
-export const DRIVER_SOURCE = String.raw`import os, sys
+export const DRIVER_SOURCE = String.raw`import os, io, gc, sys
 
 # 패키지 검색 경로: 쓰기 가능한 preopen /site를 sys.path에 끼운다. installWheel이 여기에 순수
 # 파이썬 wheel 파일을 쓰면 path-based finder가 찾아 import한다(= 브라우저판 site-packages).
 if "/site" not in sys.path:
     sys.path.insert(0, "/site")
 
+# 시간여행 복원 안정성(할당 불변 경계): os.read(0,1)은 매 반복 새 bytes를 힙에 할당하고, 그
+# 포인터가 fd_read 경계를 넘어 살아있다(shadow stack + WASM VM 로컬 = 선형메모리 밖, 복원 불가).
+# 힙 복원이 그 객체를 어긋내면 재개가 그 포인터를 dereference하며 트랩한다(버전/엔진에 따라 3.14는
+# 트랩, 3.12는 obmalloc 우연으로 생존). 모듈 레벨 1회 할당 버퍼에 readinto로 읽어 경계-넘는 유일한
+# 힙 포인터를 안정시킨다 = 복원 무해. gc.freeze로 시작 객체를 영구 세대로(경계 churn 최소화).
+rawStdin = io.FileIO(0, closefd=False)
+sigBuf = bytearray(1)
 userNs = {}
+gc.collect()
+gc.freeze()
 while True:
-    signal = os.read(0, 1)  # 신호 1바이트 대기(무상태). 힙 복원이 어긋낼 상태가 없다.
-    if not signal:
+    if not rawStdin.readinto(sigBuf):  # 대상에 in-place 기록 = 매 반복 힙 할당 없음
         break
     with open("/cmd", "rb") as commandFile:  # 코드는 파일(힙 밖). 매 실행 fresh하게 읽는다.
         source = commandFile.read()

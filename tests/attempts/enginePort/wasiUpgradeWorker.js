@@ -5,12 +5,21 @@
 // zlib 부재로 zipimport 대신 loose 파일 트리(shim readdir가 서빙, wasiPackages가 이미 실증).
 import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory, Directory, wasi } from "../../../src/runtime/engines/wasi/browserWasiShim.js";
 
-// REPL 드라이버(enginePort 승격본과 동형). stdlib가 마운트돼야 import os,sys가 산다.
-const DRIVER = String.raw`import os, sys
+// REPL 드라이버. 벽3 핵심: os.read(0,1)은 매 반복 새 bytes를 힙에 할당하고, 그 포인터가 fd_read
+// 경계를 넘어 살아있다(shadow stack iovec + WASM VM 로컬 = 선형메모리 밖, 복원 불가). 3.12는
+// obmalloc이 같은 슬롯을 우연히 줘 주소가 안정(생존)하지만 3.14는 주소가 바뀌어 복원 후 재개가
+// 그 포인터를 dereference하며 트랩한다. 해법(할당 불변): 모듈 레벨 1회 할당 버퍼에 readinto로 읽어
+// 경계를 넘는 유일한 힙 포인터(rawStdin/sigBuf)를 안정시킨다 = 복원이 그 객체를 어긋낼 여지 제거.
+// gc.freeze로 시작 객체를 영구 세대로(경계 churn 최소화). 파이썬 식별자도 camelCase(규칙).
+const DRIVER = String.raw`import os, io, gc, sys
+rawStdin = io.FileIO(0, closefd=False)  # unbuffered raw 리더(1회 할당, 안정 주소)
+sigBuf = bytearray(1)                    # readinto 대상(1회 할당, 안정 주소)
 userNs = {}
+gc.collect()
+gc.freeze()
 while True:
-    signal = os.read(0, 1)
-    if not signal:
+    n = rawStdin.readinto(sigBuf)        # 대상에 in-place 기록 = 매 반복 힙 할당 없음
+    if not n:
         break
     with open("/cmd", "rb") as commandFile:
         source = commandFile.read()

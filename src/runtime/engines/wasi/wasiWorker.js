@@ -14,6 +14,21 @@ function makeDeterministic(wasiInst, getInst) {
   wasiInst.wasiImport.clock_time_get = (id, prec, out) => { new DataView(getInst().exports.memory.buffer).setBigUint64(out, 1750000000000000000n, true); return 0; };
 }
 
+// 시간여행 파티션 경계: wasm global[0](관례상 __stack_pointer)의 init = 스택 top = 정적 데이터 시작
+// (CPython WASI는 --stack-first 링크). 복원 시 [0, stackTop)=shadow stack(라이브 실행)은 보존하고
+// [stackTop, end)=정적데이터+힙은 되돌린다. export 심볼이 없어도(memory/_start만) 파싱으로 얻는다.
+function parseStackTop(bytes) {
+  const u = new Uint8Array(bytes); let p = 8; // magic(4)+version(4)
+  const uLEB = () => { let r = 0, s = 0, b; do { b = u[p++]; r |= (b & 0x7f) << s; s += 7; } while (b & 0x80); return r >>> 0; };
+  const sLEB = () => { let r = 0, s = 0, b; do { b = u[p++]; r |= (b & 0x7f) << s; s += 7; } while (b & 0x80); if (s < 32 && (b & 0x40)) r |= (-1 << s); return r; };
+  while (p < u.length) {
+    const id = u[p++]; const size = uLEB(); const end = p + size;
+    if (id === 6) { const count = uLEB(); if (count > 0) { p++; p++; if (u[p++] === 0x41) return sLEB() >>> 0; } return 0; }
+    p = end;
+  }
+  return 0;
+}
+
 // SAB 블로킹 신호 stdin. stdin은 "실행 신호 1바이트"만 나르고, 코드는 /cmd 파일(힙 밖)로 나른다.
 // 그래서 fd_read는 항상 1바이트만 반환하고, 그 1바이트가 유일한 입력 상태라 힙 복원이 스트림을
 // 어긋낼 여지가 없다. OpenFile 상속: 파이썬 stdin 초기화가 fdstat/seek를 조회하는데 Fd(부분
@@ -26,6 +41,7 @@ class SabStdin extends OpenFile {
     this.cmdFile = cmdFile;  // /cmd preopen File: 실행할 코드를 여기에 싣는다(힙 밖 채널)
     this.inst = null;        // exports.memory 접근용(체크포인트/복원)
     this.snapshots = [];     // 시간여행: 경계에서 찍은 힙 스냅샷
+    this.stackTop = 0;       // 파티션 복원 경계(parseStackTop, 0이면 전체 복원 폴백)
   }
   setInst(inst) { this.inst = inst; }
   _heapU8() { return new Uint8Array(this.inst.exports.memory.buffer); }
@@ -47,7 +63,11 @@ class SabStdin extends OpenFile {
           postMessage({ type: "meta", kind: "checkpoint", idx: this.snapshots.length - 1, mb: +(this._heapU8().length / 1048576).toFixed(1) });
         } else if (cmd.startsWith("restore ")) {
           const i = +cmd.slice(8);
-          this._heapU8().set(this.snapshots[i]); // 힙 전체를 경계 스냅샷으로 되돌림(스택 포함)
+          // 파티션 복원: [0, stackTop)=shadow stack(라이브 fd_read 호출 체인)은 보존, [stackTop, end)=
+          // 정적데이터(_PyRuntime/allocator 상태)+힙은 되돌린다(둘이 lockstep이라야 allocator 정합).
+          // 할당 불변 드라이버(readinto)와 짝: 경계-넘는 힙 포인터가 안정이라 복원이 무해하다.
+          const snap = this.snapshots[i]; const cur = this._heapU8(); const part = this.stackTop || 0;
+          cur.set(snap.subarray(part), part);
           postMessage({ type: "meta", kind: "restore", idx: i });
         }
         continue; // 메타는 파이썬 왕복 아님(다음 신호 계속 대기)
@@ -82,6 +102,7 @@ onmessage = async (e) => {
     if (deterministic) makeDeterministic(wasiInst, () => inst);
     ({ instance: inst } = await WebAssembly.instantiate(wasmBytes, { wasi_snapshot_preview1: wasiInst.wasiImport }));
     stdin.setInst(inst);
+    stdin.stackTop = parseStackTop(wasmBytes); // 시간여행 파티션 경계(global[0] init = stack top)
     postMessage({ type: "ready", heapLen: inst.exports.memory.buffer.byteLength, eot: EOT });
     try { wasiInst.start(inst); } catch (err) { postMessage({ type: "out", stream: "stderr", line: String(err) }); }
     postMessage({ type: "exited" });

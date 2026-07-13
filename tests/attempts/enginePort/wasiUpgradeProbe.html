@@ -92,12 +92,12 @@ stdlib를 /lib/python3.14로 마운트(PYTHONHOME=/). 기존 결정적 게이트
     await tt.repl.exec("state = {'v': 100}");
     const cp = await tt.repl.checkpoint();
     check("시간여행 체크포인트(3.14.6)", cp && cp.kind === "checkpoint" && cp.idx === 0, cp ? `idx=${cp.idx}, ${cp.mb}MB` : "실패");
-    const mut = await tt.repl.exec("state['v'] = 200\nprint('mutated', state['v'])"); // 성장 없는 변이
-    check("변이(성장 없음)", mut.trim() === "mutated 200", `"${mut.trim()}"`);
+    const mut = await tt.repl.exec("state['v'] = 200\nbig = bytearray(3*1024*1024)\nprint('mutated', state['v'], len(big))"); // 변이 + 힙 성장(grow 경로)
+    check("변이 + 힙 성장 3MB(grow-after-checkpoint 경로)", mut.trim() === "mutated 200 3145728", `"${mut.trim()}"`);
     const rr = await tt.repl.restore(0);
     check("restore 반환(3.14.6)", rr && rr.kind === "restore", rr ? `idx=${rr.idx}` : `반환=${JSON.stringify(rr)}`);
-    const after = await tt.repl.exec("print(state['v'])");
-    check("시간여행 복원 후 재개(3.14.6): 체크포인트 상태로", after.trim() === "100", after === "__TIMEOUT__" ? `TIMEOUT / 워커로그: ${tt.repl.log.slice(-4).join(" || ")}` : `"${after.trim()}"`);
+    const after = await tt.repl.exec("print(state['v'], 'big' in dir())");
+    check("시간여행 복원 후 재개(3.14.6): 체크포인트 상태로", after.trim() === "100 False", after === "__TIMEOUT__" ? `TIMEOUT / 워커로그: ${tt.repl.log.slice(-4).join(" || ")}` : `"${after.trim()}"`);
     await tt.repl.exec("state['v'] = 999");
     const br = await tt.repl.exec("print(state['v'])");
     check("복원 후 분기(3.14.6)", br.trim() === "999", `"${br.trim()}"`);
