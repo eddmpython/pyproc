@@ -18,29 +18,53 @@ function base64FromBytes(bytes) {
   return btoa(s);
 }
 
-// 기본 엔진 배포 지점(WLR CPython 3.12 WASI). COOP/COEP(crossOriginIsolated) 하에서는 CDN 직
-// fetch가 CORP에 걸릴 수 있으므로 소비자 셀프 호스팅이 권장이다(manifest.wasmURL로 교체). 출처를
-// 명시하는 이름 붙인 상수(하드코딩 금지): 버전 변경 = 릴리즈 사유.
-const DEFAULT_WASM_URL = "https://github.com/vmware-labs/webassembly-language-runtimes/releases/download/python%2F3.12.0%2B20231211-040d5a6/python-3.12.0.wasm";
+// 기본 엔진 핀 = brettcannon CPython 3.14.6(살아있는 소스, 업스트림 당일 추적). WLR 3.12는 죽어서
+// (2023-12 마지막) 3.14로 이전했다. brettcannon은 python.wasm + 외부 stdlib를 한 릴리즈 zip으로
+// 준다. COOP/COEP(crossOriginIsolated) 하에선 CDN 직 fetch가 CORP에 걸릴 수 있으므로 소비자 셀프
+// 호스팅 권장(manifest.wasmURL + manifest.stdlibURL로 분리 교체). 버전 변경 = 릴리즈 사유(하드코딩
+// 금지: 버전/경로/URL을 이름 붙인 핀 한 곳에). engine-watch가 이 핀을 새 릴리즈로 범프하고 게이트로 인증.
+const WASI_ENGINE_PIN = {
+  version: "3.14.6",
+  stdlibDir: "python3.14", // 릴리즈 zip 안 stdlib 경로(lib/<stdlibDir>/). 버전과 함께 이동.
+  releaseURL: "https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.6/python-3.14.6-wasi_sdk-24.zip",
+};
 
-// WASI 세션을 부팅한다. manifest.wasmURL(소비자 제공, 기본 위), deterministic(리플레이 결정성).
+async function fetchBytes(url, what) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`bootWasi: ${what} 로드 실패(${resp.status}) ${url}`);
+  return resp.arrayBuffer();
+}
+
+// WASI 세션을 부팅한다. 기본은 brettcannon 릴리즈 zip(python.wasm + stdlib)을 풀어 마운트한다.
+// 셀프 호스팅: manifest.wasmURL(+ manifest.stdlibURL). stdlibURL 없이 wasmURL만 주면 self-contained
+// 빌드(WLR = stdlib baked-in)로 본다. deterministic(리플레이 결정성). wheels(부팅 직후 설치).
 export async function bootWasi(manifest = {}) {
-  const wasmURL = manifest.wasmURL || DEFAULT_WASM_URL;
-  const resp = await fetch(wasmURL);
-  if (!resp.ok) throw new Error(`bootWasi: wasm 로드 실패(${resp.status}) ${wasmURL}`);
-  const wasmBytes = await resp.arrayBuffer();
-  const session = new WasiSession(wasmBytes, !!manifest.deterministic);
+  const stdlibDir = manifest.stdlibDir || WASI_ENGINE_PIN.stdlibDir;
+  let wasmBytes, stdlibFiles = null;
+  if (manifest.wasmURL) {
+    wasmBytes = await fetchBytes(manifest.wasmURL, "wasm");
+    if (manifest.stdlibURL) stdlibFiles = await unzipWheel(await fetchBytes(manifest.stdlibURL, "stdlib"));
+  } else {
+    // 기본: 릴리즈 zip 하나를 풀어 python.wasm + lib/<dir>/*을 얻는다(네이티브 DecompressionStream).
+    const entries = await unzipWheel(await fetchBytes(WASI_ENGINE_PIN.releaseURL, "release zip"));
+    const wasmEntry = entries.find(([p]) => p === "python.wasm" || p.endsWith("/python.wasm"));
+    if (!wasmEntry) throw new Error("bootWasi: 릴리즈 zip에 python.wasm 없음");
+    wasmBytes = wasmEntry[1];
+    const prefix = "lib/" + stdlibDir + "/";
+    stdlibFiles = entries.filter(([p]) => p.startsWith(prefix)).map(([p, b]) => [p.slice(prefix.length), b]);
+  }
+  const session = new WasiSession(wasmBytes, !!manifest.deterministic, stdlibFiles, stdlibDir);
   await session._boot();
-  // manifest.wheels: 소비자가 제공한 순수 파이썬 wheel(ArrayBuffer) 목록. 부팅 직후 설치한다.
-  // wasmURL과 같은 계약: pyproc은 PyPI를 fetch하지 않고 소비자가 바이트를 준다(오프라인/CORP 무관).
   for (const wheel of manifest.wheels || []) await session.installWheel(wheel);
   return session;
 }
 
 export class WasiSession {
-  constructor(wasmBytes, deterministic) {
+  constructor(wasmBytes, deterministic, stdlibFiles, stdlibDir) {
     this._wasmBytes = wasmBytes;
     this._deterministic = deterministic;
+    this._stdlibFiles = stdlibFiles || null; // 외부 stdlib 빌드면 [[상대경로,바이트]], self-contained면 null
+    this._stdlibDir = stdlibDir || null;     // /lib/<stdlibDir> 마운트 지점
     this._worker = null;
     this._ctl = new Int32Array(new SharedArrayBuffer(CTL_WORDS * 4));
     this._data = new Uint8Array(new SharedArrayBuffer(DATA_SAB_BYTES));
@@ -56,7 +80,7 @@ export class WasiSession {
         else if (e.data.type === "bootError") { this._worker.removeEventListener("message", onReady); reject(new Error(e.data.error)); }
       };
       this._worker.addEventListener("message", onReady);
-      this._worker.postMessage({ type: "boot", deterministic: this._deterministic, wasmBytes: this._wasmBytes, ctlSab: this._ctl.buffer, dataSab: this._data.buffer });
+      this._worker.postMessage({ type: "boot", deterministic: this._deterministic, wasmBytes: this._wasmBytes, stdlibFiles: this._stdlibFiles, stdlibDir: this._stdlibDir, ctlSab: this._ctl.buffer, dataSab: this._data.buffer });
     });
   }
 

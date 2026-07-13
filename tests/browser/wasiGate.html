@@ -5,9 +5,10 @@
 <body>
 <h1>pyproc WASI 게이트 - 승격된 WasiSession 실배선</h1>
 <p>승격된 공개 표면(bootWasi/WasiSession)을 진짜 런타임으로 검증한다: non-Pyodide CPython(WASI)
-반복 실행 + 값 다리(get/set) + 완전 시간여행(checkpoint/timeTravel, 복원 후 재개·분기).
-wasm 자산(30MB)이 없으면 SKIP한다(게이트 적색 아님). CI는 자산 없이 SKIP green, 로컬은 자산으로 GREEN.
-자산 재현: tests/attempts/enginePort/README.md 레시피(python-3.12.0.wasm).</p>
+반복 실행 + 값 다리(get/set) + 완전 시간여행(checkpoint/timeTravel, 복원 후 재개·분기) + installWheel.
+엔진 = brettcannon CPython 3.14.6(살아있는 소스, python.wasm + 외부 stdlib zip). 자산(30MB+2.6MB)이
+없으면 SKIP한다(게이트 적색 아님). CI는 자산 없이 SKIP green, 로컬은 자산으로 GREEN.
+자산 재현: tests/attempts/enginePort/README.md 레시피(python-3.14.6.wasm + python314-stdlib.zip).</p>
 <pre id="out">실행 중...</pre>
 <script type="module">
   import { bootWasi } from "../../index.js";
@@ -18,20 +19,21 @@ wasm 자산(30MB)이 없으면 SKIP한다(게이트 적색 아님). CI는 자산
     const ok = checks.length > 0 && checks.every((c) => c.pass);
     try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
   };
-  // 자산은 enginePort 캠페인에 있다(미추적). 없으면 SKIP.
-  const WASM_URL = "../attempts/enginePort/pythonWasi.wasm";
+  // 자산은 enginePort 캠페인에 있다(미추적). 없으면 SKIP. brettcannon 3.14.6 = python.wasm + stdlib zip.
+  const WASM_URL = "../attempts/enginePort/python-3.14.6.wasm";
+  const STDLIB_URL = "../attempts/enginePort/python314-stdlib.zip";
   try {
-    const head = await fetch(WASM_URL, { method: "HEAD" }).catch(() => ({ ok: false }));
-    if (!head.ok) { check("SKIP: WASI wasm 자산 없음(enginePort README 레시피로 재현)", true); await report(); throw new Error("__skip__"); }
+    const [h1, h2] = await Promise.all([fetch(WASM_URL, { method: "HEAD" }).catch(() => ({ ok: false })), fetch(STDLIB_URL, { method: "HEAD" }).catch(() => ({ ok: false }))]);
+    if (!h1.ok || !h2.ok) { check("SKIP: WASI 3.14.6 자산 없음(enginePort README 레시피로 재현)", true); await report(); throw new Error("__skip__"); }
 
-    // 1) 부팅 + 반복 실행(상태 유지): 공개 표면 bootWasi -> WasiSession.run
+    // 1) 부팅 + 반복 실행(상태 유지): 공개 표면 bootWasi(분리 자산) -> WasiSession.run. 버전 3.14.6 확인.
     let t = performance.now();
-    const s = await bootWasi({ wasmURL: WASM_URL });
+    const s = await bootWasi({ wasmURL: WASM_URL, stdlibURL: STDLIB_URL });
     timings.bootMs = Math.round(performance.now() - t);
     await s.run("x = 41");
     await s.run("x = x + 1");
-    const r1 = await s.run("print(x)");
-    check("bootWasi + 반복 실행(상태 유지)", r1.trim() === "42", `"${r1.trim()}", 부팅 ${timings.bootMs}ms`);
+    const r1 = await s.run("import sys\nprint(x, sys.version.split()[0])");
+    check("bootWasi(brettcannon 3.14.6) + 반복 실행(상태 유지)", r1.trim() === "42 3.14.6", `"${r1.trim()}", 부팅 ${timings.bootMs}ms`);
 
     // 2) 값 다리(JSON 한정): set으로 주입, get으로 회수
     await s.set("payload", { a: [1, 2, 3], n: 42 });
@@ -74,9 +76,11 @@ wasm 자산(30MB)이 없으면 SKIP한다(게이트 적색 아님). CI는 자산
       check("SKIP: wheel 자산 없음(tests/attempts/wasiPackages README 레시피)", true);
     }
     // 정직한 경계(재구성): "C 확장 불가"가 아니라 "동적은 불가, 정적은 이미 됨".
-    // (a) 동적 C 확장(.so dlopen)은 불가 - EXTENSION_SUFFIXES가 비어있다(WASI 동적 링크 부재).
-    const dyn = await s.run("import importlib.machinery as m\nprint(len(m.EXTENSION_SUFFIXES))");
-    check("동적 C 확장(.so dlopen) 불가(EXTENSION_SUFFIXES 비어있음)", dyn.trim() === "0", `len=${dyn.trim()}`);
+    // (a) 동적 C 확장(.so를 런타임에 dlopen)은 불가 - WASI엔 dlopen이 없다. EXTENSION_SUFFIXES는
+    //     빌드별(WLR 0, brettcannon 3.14는 등록됨)이라 카운트는 브리틀하다. 진짜 판정은 기능:
+    //     ctypes는 dlopen을 부르므로 import가 실패한다 = dlopen 부재의 함수적 증거(빌드 무관).
+    const dyn = await s.run("import importlib.machinery as m\ntry:\n    import ctypes\n    r = 'dlopen-ok'\nexcept BaseException as e:\n    r = 'no-dlopen:' + type(e).__name__\nprint(r, len(m.EXTENSION_SUFFIXES))");
+    check("동적 C 확장 로딩 불가(WASI dlopen 부재: ctypes import 실패)", dyn.trim().startsWith("no-dlopen"), `"${dyn.trim()}"`);
     // (b) 정적 링크된 C 확장은 이미 브라우저에서 실행 중 - python.wasm 자체가 정적 C 확장 묶음이다
     //     (_struct/array/math 등이 builtin). numpy도 정적 fat 바이너리로 이 경로에 오른다(빌드 소유).
     const stat = await s.run("import sys, _struct, array\nprint('_struct' in sys.builtin_module_names, _struct.calcsize('iii'), array.array('i', [1, 2, 3]).itemsize)");

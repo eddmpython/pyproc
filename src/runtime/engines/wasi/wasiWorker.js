@@ -29,6 +29,20 @@ function parseStackTop(bytes) {
   return 0;
 }
 
+// 평평한 [상대경로, 바이트]를 shim File/Directory 트리로. 외부 stdlib(python.wasm + 별도 lib)
+// 빌드를 마운트할 때 쓴다. self-contained 빌드(WLR = stdlib baked-in)는 이게 필요 없다.
+function buildTree(files) {
+  const root = new Map();
+  for (const [rel, bytes] of files) {
+    const parts = rel.split("/").filter(Boolean);
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) { if (!node.has(parts[i])) node.set(parts[i], new Map()); node = node.get(parts[i]); }
+    node.set(parts[parts.length - 1], bytes);
+  }
+  const mat = (node) => { const e = []; for (const [n, v] of node) e.push([n, v instanceof Map ? mat(v) : new File(v)]); return new Directory(e); };
+  return mat(root);
+}
+
 // SAB 블로킹 신호 stdin. stdin은 "실행 신호 1바이트"만 나르고, 코드는 /cmd 파일(힙 밖)로 나른다.
 // 그래서 fd_read는 항상 1바이트만 반환하고, 그 1바이트가 유일한 입력 상태라 힙 복원이 스트림을
 // 어긋낼 여지가 없다. OpenFile 상속: 파이썬 stdin 초기화가 fdstat/seek를 조회하는데 Fd(부분
@@ -83,21 +97,29 @@ onmessage = async (e) => {
   const msg = e.data;
   if (msg.type !== "boot") return;
   try {
-    const { deterministic, wasmBytes, ctlSab, dataSab } = msg;
+    const { deterministic, wasmBytes, stdlibFiles, stdlibDir, ctlSab, dataSab } = msg;
     const emit = (stream) => (line) => postMessage({ type: "out", stream, line });
     // 드라이버/코드는 preopen 파일로 실행한다(argv에 UTF-8을 실으면 args 처리가 크래시).
     const cmdFile = new File([]);
     // /site = 쓰기 가능한 빈 preopen 디렉터리(브라우저판 site-packages). installWheel이 파이썬을
     // 통해 여기에 순수 파이썬 wheel 파일을 쓰고, 드라이버가 /site를 sys.path에 끼워 import한다.
     // 파일은 shim(JS) 쪽에 산다 = wasm 힙 밖 = 시간여행 스냅샷과 무관(패키지는 안정 상태).
-    const preopen = new PreopenDirectory("/", [
+    const entries = [
       [DRIVER_PATH.slice(1), new File(new TextEncoder().encode(DRIVER_SOURCE))],
       [CMD_PATH.slice(1), cmdFile],
       [SITE_PATH.slice(1), new Directory([])],
-    ]);
+    ];
+    const env = ["PYTHONHASHSEED=0", "PYTHONDONTWRITEBYTECODE=1"];
+    // 외부 stdlib 빌드(brettcannon = python.wasm + 별도 lib): stdlibFiles를 /lib/<dir>로 마운트하고
+    // PYTHONHOME을 줘 getpath가 찾게 한다. self-contained 빌드(WLR)는 stdlibFiles 없이 그대로.
+    if (stdlibFiles && stdlibFiles.length && stdlibDir) {
+      entries.push(["lib", new Directory([[stdlibDir, buildTree(stdlibFiles)]])]);
+      env.push("PYTHONHOME=/", "PYTHONPATH=/lib/" + stdlibDir);
+    }
+    const preopen = new PreopenDirectory("/", entries);
     const stdin = new SabStdin(ctlSab, dataSab, cmdFile);
     const fds = [stdin, ConsoleStdout.lineBuffered(emit("stdout")), ConsoleStdout.lineBuffered(emit("stderr")), preopen];
-    const wasiInst = new WASI(["python", "-B", DRIVER_PATH], ["PYTHONHASHSEED=0", "PYTHONDONTWRITEBYTECODE=1"], fds);
+    const wasiInst = new WASI(["python", "-B", DRIVER_PATH], env, fds);
     let inst = null;
     if (deterministic) makeDeterministic(wasiInst, () => inst);
     ({ instance: inst } = await WebAssembly.instantiate(wasmBytes, { wasi_snapshot_preview1: wasiInst.wasiImport }));

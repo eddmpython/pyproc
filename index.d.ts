@@ -239,8 +239,18 @@ export class SharedKernel {
 }
 
 export interface WasiManifest {
-  /** WASI CPython wasm 배포 URL. 미지정 시 기본 WLR 3.12(COOP/COEP 하에선 셀프 호스팅 권장). */
+  /**
+   * python.wasm URL(소비자 셀프 호스팅). 미지정 시 기본 brettcannon CPython 3.14.6 릴리즈 zip을
+   * 받아 python.wasm + stdlib를 함께 푼다. COOP/COEP 하에선 CORP 때문에 셀프 호스팅 권장.
+   */
   wasmURL?: string;
+  /**
+   * 외부 stdlib 빌드(brettcannon = python.wasm + 별도 lib)의 stdlib zip URL. wasmURL과 함께 준다.
+   * 생략하면 wasmURL을 self-contained 빌드(WLR = stdlib baked-in)로 본다.
+   */
+  stdlibURL?: string;
+  /** stdlib 마운트 디렉터리명(기본 "python3.14"). 릴리즈 zip 안 lib/<stdlibDir>/ 경로. */
+  stdlibDir?: string;
   /** true면 엔트로피/시간을 고정해 결정적으로 부팅한다(리플레이/시간여행의 전제). */
   deterministic?: boolean;
   /**
