@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<!--
+결과(append): 블로킹 소켓(파이썬 socket.recv() 동기 의미)이 비동기 WS 위에서 성립하는가.
+worker가 recv()에서 Atomics.wait으로 멈추고, main(WS 보유)이 데이터를 SAB로 넣어 깨운다.
+이게 되면 파이썬 socket/requests/urllib3가 그대로 얹힌다(어려운 절반 = 블로킹 over 비동기).
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: socketBridge blocking</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 블로킹 소켓 over 비동기 WS (파이썬 socket.recv 동기 의미)</h1>
+<p>파이썬 <code>socket.recv()</code>는 동기 블로킹이다. 워커에서 Atomics.wait으로 그 의미를 만든다:
+recv()는 main이 데이터를 넣을 때까지 워커를 멈춘다. main은 WS와 릴레이를 서비스한다. 워커 코드는
+동기 <code>connect/send/recv</code>로 example.com:80에 raw HTTP를 왕복한다. 릴레이 없으면 SKIP.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const RELAY = "ws://127.0.0.1:8791";
+
+  try {
+    // 릴레이 가용성 확인(없으면 SKIP)
+    let up = false;
+    try { await new Promise((res, rej) => { const w = new WebSocket(RELAY); w.onopen = () => { up = true; w.close(); res(); }; w.onerror = () => rej(); setTimeout(rej, 2500); }); } catch (e) { up = false; }
+    if (!up) { check("SKIP: 릴레이 미기동(node tests/attempts/socketBridge/relay.mjs 8791)", true); await report(); throw new Error("__skip__"); }
+
+    const ctl = new Int32Array(new SharedArrayBuffer(16)); // [flag, type, len, _]
+    const data = new Uint8Array(new SharedArrayBuffer(256 * 1024));
+    let ws = null; const queue = [];
+    const pump = () => {
+      if (Atomics.load(ctl, 0) !== 0 || !queue.length) return;
+      const ev = queue.shift();
+      data.set(ev.bytes);
+      Atomics.store(ctl, 2, ev.bytes.length);
+      Atomics.store(ctl, 1, ev.type);
+      Atomics.store(ctl, 0, 1);
+      Atomics.notify(ctl, 0);
+    };
+    const push = (type, bytes = new Uint8Array(0)) => {
+      if (type === 2 && bytes.length > data.length) { for (let o = 0; o < bytes.length; o += data.length) queue.push({ type: 2, bytes: bytes.subarray(o, o + data.length) }); }
+      else queue.push({ type, bytes });
+      pump();
+    };
+
+    const worker = new Worker(new URL("./socketWorker.js", import.meta.url), { type: "module" });
+    const done = new Promise((resolve) => {
+      worker.onmessage = (m) => {
+        const d = m.data;
+        if (d.type === "drained") pump();
+        else if (d.type === "dial") {
+          ws = new WebSocket(RELAY); ws.binaryType = "arraybuffer";
+          ws.onopen = () => ws.send(JSON.stringify({ host: d.host, port: d.port }));
+          ws.onmessage = (ev) => { if (typeof ev.data === "string") { const mm = JSON.parse(ev.data); if (mm.type === "connected") push(1); else if (mm.type === "closed") push(3); else if (mm.type === "error") push(4); } else push(2, new Uint8Array(ev.data)); };
+          ws.onerror = () => push(4);
+          ws.onclose = () => push(3);
+        } else if (d.type === "send") { if (ws) ws.send(d.bytes); }
+        else if (d.type === "result") resolve(d);
+      };
+    });
+    worker.postMessage({ type: "boot", ctlSab: ctl.buffer, dataSab: data.buffer });
+
+    const r = await Promise.race([done, new Promise((res) => setTimeout(() => res({ ok: false, error: "timeout" }), 20000))]);
+    timings.blockingMs = r.ms;
+    check("워커에서 동기 connect/send/recv 완주(블로킹 recv over 비동기 WS)", r.ok === true, r.error || `status="${r.status}", ${r.len}바이트, ${r.ms}ms`);
+    check("동기 소켓으로 받은 응답이 진짜 200 + 바디", r.ok && /HTTP\/1\.[01] 200/.test(r.status || "") && r.hasBody === true, `status="${r.status}"`);
+    worker.terminate();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

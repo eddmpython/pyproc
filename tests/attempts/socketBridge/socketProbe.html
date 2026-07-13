@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<!--
+결과(append): 브라우저 탭에서 진짜 아웃바운드 TCP가 얇은 WS->TCP 릴레이를 통해 성립하는가.
+탭은 raw 소켓을 못 열지만 밖으로 다이얼하는 WebSocket은 연다 = 릴레이가 진짜 NIC를 만진다.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: socketBridge</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 브라우저 아웃바운드 진짜 TCP (WS -> 릴레이 -> TCP)</h1>
+<p>파이썬 <code>socket</code>이 원하는 것은 임의 host:port로의 진짜 TCP다. 탭은 raw 소켓을 못
+열지만 밖으로 다이얼하는 WebSocket은 연다. 얇은 릴레이가 WS를 받아 실제 TCP를 열고 바이트를
+펌프한다. 여기선 example.com:80에 raw HTTP를 보내 raw 응답이 돌아오는지 = HTTP가 아니라 소켓
+층에서 진짜 왕복하는지 실측한다. 릴레이 없으면(포트 닫힘) SKIP.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  const RELAY = "ws://127.0.0.1:8791"; // probe 릴레이(relay.mjs, 재현: node relay.mjs 8791)
+
+  // 진짜 TCP 왕복: WS로 다이얼 -> raw 바이트 송신 -> raw 응답 수집.
+  function tcpRoundTrip(host, port, request, { idleMs = 4000, capMs = 12000 } = {}) {
+    return new Promise((resolve) => {
+      let ws;
+      try { ws = new WebSocket(RELAY); } catch (e) { return resolve({ error: "ws ctor: " + e }); }
+      ws.binaryType = "arraybuffer";
+      let connected = false; const chunks = []; let idle, done = false;
+      const finish = (r) => { if (done) return; done = true; clearTimeout(idle); clearTimeout(cap); try { ws.close(); } catch (e) {} resolve(r); };
+      const cap = setTimeout(() => finish(connected ? { bytes: concat(chunks) } : { error: "capMs 초과(릴레이 없음?)" }), capMs);
+      const bump = () => { clearTimeout(idle); idle = setTimeout(() => finish({ bytes: concat(chunks) }), idleMs); };
+      ws.onopen = () => ws.send(JSON.stringify({ host, port }));
+      ws.onerror = () => finish({ error: "ws error(릴레이 미기동?)" });
+      ws.onclose = () => finish(connected ? { bytes: concat(chunks) } : { error: "연결 전 close" });
+      ws.onmessage = (ev) => {
+        if (typeof ev.data === "string") {
+          const m = JSON.parse(ev.data);
+          if (m.type === "connected") { connected = true; ws.send(request); bump(); }
+          else if (m.type === "error") finish({ error: "relay: " + m.msg });
+          else if (m.type === "closed") finish({ bytes: concat(chunks) });
+        } else { chunks.push(new Uint8Array(ev.data)); bump(); }
+      };
+    });
+  }
+  const concat = (arrs) => { const n = arrs.reduce((s, a) => s + a.length, 0); const o = new Uint8Array(n); let i = 0; for (const a of arrs) { o.set(a, i); i += a.length; } return o; };
+
+  try {
+    // 릴레이 가용성: 없으면 SKIP(게이트 적색 아님).
+    let up = false;
+    try { await new Promise((res, rej) => { const w = new WebSocket(RELAY); w.onopen = () => { up = true; w.close(); res(); }; w.onerror = () => rej(); setTimeout(rej, 2500); }); } catch (e) { up = false; }
+    if (!up) { check("SKIP: 릴레이 미기동(node tests/attempts/socketBridge/relay.mjs 8791)", true); await report(); throw new Error("__skip__"); }
+
+    // 1) 진짜 TCP: example.com:80에 raw HTTP/1.0 -> raw 200 응답
+    let t = performance.now();
+    const req = new TextEncoder().encode("GET / HTTP/1.0\r\nHost: example.com\r\nConnection: close\r\n\r\n");
+    const r = await tcpRoundTrip("example.com", 80, req);
+    timings.roundTripMs = Math.round(performance.now() - t);
+    const text = r.bytes ? new TextDecoder().decode(r.bytes) : "";
+    const status = text.split("\r\n")[0] || "";
+    check("아웃바운드 진짜 TCP 왕복(WS -> 릴레이 -> example.com:80)", /HTTP\/1\.[01] 200/.test(status) && r.bytes.length > 200,
+      r.error ? r.error : `status="${status}", ${r.bytes.length}바이트, ${timings.roundTripMs}ms`);
+
+    // 2) raw 응답이 진짜 소켓 바이트다(HTTP 어댑터가 아니라): 헤더+바디가 원문 그대로
+    check("응답이 raw 소켓 바이트(헤더+바디 원문)", /content-type/i.test(text) && /<html/i.test(text), `길이 ${text.length}`);
+
+    // 3) 다른 포트/호스트도 진짜 다이얼(임의 host:port). 존재하지 않는 포트는 릴레이 error로 전달.
+    const bad = await tcpRoundTrip("127.0.0.1", 9, new Uint8Array([0]), { capMs: 4000 });
+    check("임의 host:port 다이얼 시도(닫힌 포트는 소켓 에러로 전달)", !!bad.error || (bad.bytes && bad.bytes.length === 0),
+      bad.error ? `에러 전달: ${bad.error.slice(0, 60)}` : "빈 응답");
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

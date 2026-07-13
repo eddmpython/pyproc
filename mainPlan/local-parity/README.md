@@ -12,7 +12,29 @@
 | 세션 영속 | (로컬도 없음: REPL은 죽으면 끝) | **로컬 초월(v1)**: `Session` 승격. 결정적 리플레이 + 델타(5.9MB급)로 커널 간·세션 간 부활, 게이트 상시 | 성장 세션(v2), 델타 체인·분기, 매니페스트에 wheel 캐시 결합 |
 | 터미널 | 로컬 REPL과 동일 체감 | **도달(v1) + 초월**: `Terminal` 승격(블로킹 input 24ms) + `{timeTravel}` 옵션의 `%undo`(완결 문장 단위 시간여행) | 히스토리·자동완성·멀티라인 편집 |
 | 라이브러리/환경 | `pip install` 전부 + uv급 환경(즉시 부팅·재현·스크립트 자급) | **uv 레인 v1 완성(2026-07-12)**: `bootEnv`(bare 스냅샷 + OPFS 휠) 웜 부팅 **1229ms**(콜드 5109ms, 4.2배) + `runScript`(PEP 723 자급 실행) + `freeze` 락(`boot({lockFileURL})` 관통, 해석 0 재현). 커버리지 실측 17/17(pandas/scipy/sklearn/matplotlib 등, v314) | 실패군 표본 확대, Session 리플레이의 스냅샷 베이스 결합(v2), requires-python 해석, 네이티브 전용군 분류 |
-| 상주/네이티브 | 데몬, 네이티브 휠(torch CUDA), 데스크톱 조작 | **영구 벽**(웹 보안 모델). 정직하게 스코프 밖 | 벽 앞 우회: 소비 제품의 로컬/Actions 티어 몫 |
+| 상주/네이티브 | 데몬, 네이티브 휠(torch CUDA), 데스크톱 조작 | **분리**(아래 네 상태 지도): 인바운드 서버·임의 네이티브 바이너리·데스크톱은 영구 벽, 네이티브 C확장·GPU·threading은 upstream 대기 | 각 항목별 프론티어(네 상태 지도) |
+
+## 네 가지 상태 (목표는 무한대, 현재형 주장은 증명된 만큼)
+
+North Star("로컬에서 되는 모든 파이썬을 브라우저에서")는 방향이다. 각 능력은 네 상태 중 하나에 있고, pyproc의 일은 위 칸으로 밀어 올리는 것과 upstream이 벽을 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다. "불가능"은 현재 조건 판정이지 포기가 아니다.
+
+### 현재 달성 (오늘 브라우저 실측)
+순수 파이썬 + Pyodide 빌드 패키지, 멀티코어 프로세스/스냅샷-fork/map, 체크포인트/시간여행(Pyodide 경로), 세션 영속·부활, 터미널, 커널 내 ASGI, 영속 FS(OPFS), input/HTTP/subprocess(`-c`), non-Pyodide WASI CPython 3.14.6 부팅 + 순수 파이썬 wheel `installWheel`([enginePort](../../tests/attempts/enginePort/README.md), [wasiPackages 졸업](../../tests/attempts/wasiPackages/README.md)).
+
+### 우회 가능 (브라우저 방식으로 가상화, 실측)
+- **아웃바운드 소켓**: 진짜 임의 host:port TCP + **블로킹 recv 동기 의미**가 얇은 WS->TCP 릴레이 + SAB/Atomics로 성립([socketBridge GREEN 3/3 + 2/2](../../tests/attempts/socketBridge/README.md)). 남은 배선 = 파이썬 socket 모듈 -> 이 브리지.
+- **서버**: TCP `listen()`을 `AsgiServer`/`VirtualOrigin`으로(파이썬 앱이 진짜 URL, 왕복 3.4ms).
+- **프로세스**: `os.fork`를 워커 커널로, subprocess를 자식 워커로.
+
+### upstream 대기 (지금 막혔으나 플랫폼 발전으로 다시 열림 - 프론티어)
+- **네이티브 C확장 wheel**(numpy 등): WASI 정적 fat 바이너리(빌드 소유) 또는 PEP 783 pyemscripten 휠 / WebAssembly 컴포넌트 모델. 프론티어 = enginePort 후속(정적 링크 실증).
+- **WASI 시간여행 이식**: 3.14.6에서 전체-힙 복원이 트랩(스택 인지 복원 필요). 프론티어 = 스택 인지 복원 캠페인([enginePort 결론 표](../../tests/attempts/enginePort/README.md)).
+- **GPU**: WebGPU 산술(실행 축 프론티어).
+- **진짜 threading / nogil**: WASM threads + 공유 메모리, upstream nogil.
+
+### 웹 보안상 영구 벽 (외부 조각 없이는 불가)
+- **인바운드 서버**(탭이 공개 인터넷의 서버가 되는 것): SW는 같은 브라우저만, WebRTC는 시그널링 필요. 최소 = 역터널 릴레이("탭용 ngrok").
+- **임의 네이티브 바이너리 실행**(`subprocess`로 `/bin/ls`, ssh 클라이언트), 로컬 드라이버 직접(CUDA), 데스크톱 자동화(pyautogui). 소비 제품의 로컬 에이전트/클라우드 티어 몫.
 
 ## 원칙
 
