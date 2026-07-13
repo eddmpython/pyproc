@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--
+결과(append): Phase 1 승격 계약 검증 - PyProc.matmul(a, b)가 전체 결과 행렬을 정확히 조립하나.
+공유 출력 SAB에 워커들이 자기 행블록을 써서 병합하는 경로(체크섬 아닌 원소 단위 검증).
+비정사각(M!=N!=K) + 워커수로 안 나눠떨어지는 M(잔여 행블록) 포함. 배속도 재확인.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: matmul surface</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: PyProc.matmul 승격 계약 (전체 결과 원소 검증)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { PyProc } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  // JS 참조 matmul(작은 크기 정확성 대조용).
+  function refMatmul(A, M, K, B, N) {
+    const C = new Float64Array(M * N);
+    for (let i = 0; i < M; i++) for (let j = 0; j < N; j++) { let s = 0; for (let k = 0; k < K; k++) s += A[i * K + k] * B[k * N + j]; C[i * N + j] = s; }
+    return C;
+  }
+
+  try {
+    const os = new PyProc({ indexURL: INDEX, packages: ["numpy"], setup: "import numpy" });
+    await os.boot(4);
+    check("PyProc(numpy) 4워커 부팅", os.ps().filter((p) => p.state === "ready").length === 4);
+
+    // 1) 작은 비정사각 + 안 나눠떨어지는 M(잔여 행블록): 전체 원소 == JS 참조.
+    const M = 37, K = 23, N = 19; // 37은 4로 안 나눠떨어짐(마지막 워커가 잔여 흡수)
+    const A = new Float64Array(M * K), B = new Float64Array(K * N);
+    for (let i = 0; i < A.length; i++) A[i] = ((i * 7 + 3) % 29) / 29 - 0.4;
+    for (let i = 0; i < B.length; i++) B[i] = ((i * 5 + 1) % 31) / 31 - 0.6;
+    const C = await os.matmul({ data: A, rows: M, cols: K }, { data: B, rows: K, cols: N });
+    const ref = refMatmul(A, M, K, B, N);
+    let maxErr = 0; for (let i = 0; i < ref.length; i++) maxErr = Math.max(maxErr, Math.abs(C.data[i] - ref[i]));
+    check("전체 결과 == 참조(비정사각 + 잔여 행블록)", C.rows === M && C.cols === N && C.data.length === M * N && maxErr < 1e-10, `maxErr ${maxErr.toExponential(2)}`);
+
+    // 2) 차원/입력 검증 에러(계약 방어).
+    let threw = false;
+    try { await os.matmul({ data: A, rows: M, cols: K }, { data: B, rows: K + 1, cols: N }); } catch (e) { threw = /차원 불일치/.test(String(e)); }
+    check("차원 불일치는 명시적 에러", threw);
+
+    // 3) 대형 정사각 배속: 같은 코드 경로(matmul)를 parts:1(단일워커) vs 전 워커로 비교(공정).
+    //    두 경로 모두 동일한 SAB 셋업/재구성/조립 오버헤드를 지므로 배속 = 순수 병렬 이득.
+    const S = 1024;
+    const AA = new Float64Array(S * S), BB = new Float64Array(S * S);
+    for (let i = 0; i < AA.length; i++) { AA[i] = ((i * 3 + 1) % 17) / 17 - 0.5; BB[i] = ((i * 5 + 2) % 13) / 13 - 0.5; }
+    let t = performance.now();
+    const C1 = await os.matmul({ data: AA, rows: S, cols: S }, { data: BB, rows: S, cols: S }, { parts: 1 });
+    const singleMs = Math.round(performance.now() - t);
+    t = performance.now();
+    const CC = await os.matmul({ data: AA, rows: S, cols: S }, { data: BB, rows: S, cols: S });
+    timings.matmulMs = Math.round(performance.now() - t);
+    // parts:1과 전 워커 결과가 동일해야 한다(정확성 교차 확인).
+    let sameErr = 0; for (let i = 0; i < CC.data.length; i++) sameErr = Math.max(sameErr, Math.abs(CC.data[i] - C1.data[i]));
+    check("대형: parts:1 == 전 워커 결과(정확성)", CC.rows === S && CC.cols === S && sameErr < 1e-10, `maxErr ${sameErr.toExponential(2)}`);
+    timings.speedup = +(singleMs / timings.matmulMs).toFixed(2);
+    check("승격 후 near-linear(4워커 종단 >= 2.0x)", timings.speedup >= 2.0, `단일워커(parts:1) ${singleMs}ms, 전 워커 ${timings.matmulMs}ms, ${timings.speedup}x`);
+
+    os.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

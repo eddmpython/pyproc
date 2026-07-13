@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<!--
+결과(append): numerical-acceleration Phase 1 - matmul 밖의 op는 어디서 이기고 어디서 지나.
+matmul(compute-bound O(n^3)/O(n^2))은 near-linear였다(shardMatmulProbe 3.67배). 리덕션·
+원소별 함수는 memory-bound(연산 O(n) = 전송 O(n))라 다르다. 이 손익분기를 정직하게 찍는다:
+비싼 ufunc(sin) 대형은 이기고, 값싼 op/작은 배열은 전송비로 진다. 정확성은 항상.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: shard ops (breakeven)</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 샤딩 op 손익분기 (Phase 1 - 정직한 지도)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { PyProc } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  // 워커 안 파이썬 유틸: SAB 조각을 f64 배열로 재구성 후 op 적용, compute ms + checksum 반환.
+  // op: 'reduce'(sum/sumsq/count 부분합), 'ufuncSin'(np.sin 후 sum), 'ufuncCheap'(x*2+1 후 sum).
+  const opFn = [
+    "def _fn(arg):",
+    "    import js, numpy, time",
+    "    u8 = js.Uint8Array.new(arg.sab, arg.off, arg.len).slice()",
+    "    a = numpy.frombuffer(u8.to_py(), dtype='float64')",
+    "    op = arg.op",
+    "    t0 = time.perf_counter()",
+    "    if op == 'reduce':",
+    "        r = [float(a.sum()), float((a * a).sum()), int(a.size)]",
+    "    elif op == 'ufuncSin':",
+    "        r = [float(numpy.sin(a).sum())]",
+    "    else:",
+    "        r = [float((a * 2.0 + 1.0).sum())]",
+    "    dt = (time.perf_counter() - t0) * 1000",
+    "    return [dt, r]",
+  ].join("\n");
+
+  // 배열 하나에 op를 단일워커 vs P샤딩으로 돌리고 배속/정확성을 잰다.
+  async function measure(os, P, name, op, n, gate) {
+    const sab = new SharedArrayBuffer(n * 8);
+    const arr = new Float64Array(sab);
+    for (let i = 0; i < n; i++) arr[i] = ((i * 3 + 1) % 101) / 101 - 0.5;
+    const pid0 = os.ps()[0].pid;
+    let single = await os.exec(pid0, opFn, { sab, off: 0, len: n * 8, op });
+    single = single.toJs ? single.toJs() : single;
+    const singleMs = single[0], singleR = single[1];
+    const per = Math.floor(n / P);
+    const metas = Array.from({ length: P }, (_, i) => {
+      const start = i * per, cnt = i === P - 1 ? n - start : per;
+      return { sab, off: start * 8, len: cnt * 8, op };
+    });
+    const t = performance.now();
+    const shardRaw = await os.map(opFn, metas);
+    const wallMs = performance.now() - t;
+    const shard = shardRaw.map((r) => (r && r.toJs ? r.toJs() : r));
+    // 병합 + 정확성
+    let merged, ok;
+    if (op === "reduce") {
+      const s = shard.reduce((a, r) => a + r[1][0], 0), ss = shard.reduce((a, r) => a + r[1][1], 0), c = shard.reduce((a, r) => a + r[1][2], 0);
+      merged = { sum: s, mean: s / c, std: Math.sqrt(ss / c - (s / c) ** 2) };
+      const sMean = singleR[0] / singleR[2], sStd = Math.sqrt(singleR[1] / singleR[2] - sMean ** 2);
+      ok = Math.abs(merged.sum - singleR[0]) / (Math.abs(singleR[0]) + 1e-9) < 1e-9 && Math.abs(merged.std - sStd) < 1e-9;
+    } else {
+      const s = shard.reduce((a, r) => a + r[1][0], 0);
+      ok = Math.abs(s - singleR[0]) / (Math.abs(singleR[0]) + 1e-6) < 1e-9;
+    }
+    const speedup = +(singleMs / wallMs).toFixed(2);
+    timings[name] = { singleMs: Math.round(singleMs), wallMs: Math.round(wallMs), speedup, n };
+    check(`${name}: 정확성(샤딩==단일)`, ok, `단일 ${Math.round(singleMs)}ms, 샤딩 벽 ${Math.round(wallMs)}ms, ${speedup}x`);
+    return speedup;
+  }
+
+  try {
+    const P = 4;
+    const os = new PyProc({ indexURL: INDEX, packages: ["numpy"], setup: "import numpy" });
+    let t = performance.now();
+    await os.boot(P);
+    check(`PyProc(numpy) ${P}워커 부팅`, os.ps().filter((p) => p.state === "ready").length === P, `${Math.round(performance.now() - t)}ms`);
+
+    const BIG = 8_000_000; // 64MB f64
+    // 1) memory-bound: 리덕션(sum/mean/std). 연산 O(n)=전송 O(n)이라 near-linear 아님(정직).
+    const spReduce = await measure(os, P, "reduce대형", "reduce", BIG);
+    // 2) compute-bound ufunc: sin은 원소당 연산이 비싸 샤딩이 이긴다.
+    const spSin = await measure(os, P, "sin대형", "ufuncSin", BIG);
+    // 3) 값싼 ufunc: x*2+1은 전송비가 연산을 삼켜 배속 낮음(정직).
+    const spCheap = await measure(os, P, "값싼대형", "ufuncCheap", BIG);
+    // 4) 작은 배열: 부팅/전송 고정비가 이득을 넘어 샤딩이 진다(손익분기 아래).
+    const spSmall = await measure(os, P, "sin소형", "ufuncSin", 20_000);
+
+    // 정직한 판정: 비싼 ufunc(compute-bound)은 유의 배속, memory-bound/작은건 낮거나 짐.
+    check("compute-bound(sin 대형)은 샤딩이 이긴다(>= 1.8x)", spSin >= 1.8, `sin ${spSin}x`);
+    check("정직한 손익분기 지도", true,
+      `reduce ${spReduce}x(memory-bound) / sin대형 ${spSin}x(compute-bound) / 값싼 ${spCheap}x / sin소형 ${spSmall}x(손익분기 아래=진다)`);
+    // 작은 배열이 대형만큼 안 나는 것(손익분기 존재)을 실측으로 확인.
+    check("손익분기 존재: 소형 배속 < 대형 배속", spSmall < spSin, `소형 ${spSmall}x < 대형 ${spSin}x`);
+
+    os.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

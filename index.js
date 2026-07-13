@@ -22,7 +22,8 @@
 //   MachineJail          - 권한 감옥: permissions{net,clipboard,home,workers} 2단 집행(협조 초크포인트
 //                          + 감옥 컨텍스트의 CSP connect-src = 브라우저 벽). trust 이진 게이트의 스코프 진화
 //   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/signal/respawn + fork(2)
-//                          + exec/pipe/lock/semaphore/shm = 흐름 IPC: SAB 링버퍼 파이프·명명 공유메모리·락)
+//                          + exec/pipe/lock/semaphore/shm = 흐름 IPC: SAB 링버퍼 파이프·명명 공유메모리·락
+//                          + matmul = 샤딩 행렬곱: A 행블록을 N코어에 분산, compute-bound near-linear 배속)
 //   SIGNAL               - 시그널 번호(INT/TERM/USR1/USR2). PyProc.signal(pid, signum)
 //   MachineContainer     - 머신 안 머신: .pymachine급 컨테이너 커널을 워커에 띄우고 파이썬 값(m)으로
 //                          노출(m.run/spawn/kill). 중첩(깊이 2+) = 컨테이너 속 컨테이너 = 도커 3요소

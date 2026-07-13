@@ -16,6 +16,28 @@ import { createPipe, createLock, createSemaphore, createShm, pipeWriteAsync, pip
 // 워커의 SAB 채널에 쓰면 CPython eval 루프가 해당 핸들러를 부른다(signalTableProbe 실측).
 export const SIGNAL = { INT: 2, USR1: 10, USR2: 12, TERM: 15 };
 
+// TypedArray를 SharedArrayBuffer로 1회 복사(제로카피 불가 = memcpy 1회 계약). matmul 입력 공유용.
+function _toSab(typed) {
+  const sab = new SharedArrayBuffer(typed.byteLength);
+  new Uint8Array(sab).set(new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength));
+  return sab;
+}
+
+// matmul 워커 파이썬: arg의 SAB에서 A블록(mp x k)과 전체 B(k x n)를 numpy로 재구성해 C_p = A_p @ B를
+// 계산하고, 공유 출력 SAB의 자기 행블록 위치(outOff)에 바이트로 쓴다. SAB는 to_py/frombuffer가
+// 직접 못 쓰므로 입력은 .slice()로 워커 로컬 복사, 출력은 pyodide TypedArray.assign(파이썬 버퍼)로
+// 공유 뷰에 직접 복사(assign은 파이썬 bytes/memoryview를 버퍼 프로토콜로 받는다).
+const MATMUL_FN = [
+  "def _fn(arg):",
+  "    import js, numpy",
+  "    mp = arg.mp; k = arg.k; n = arg.n",
+  "    a = numpy.frombuffer(js.Uint8Array.new(arg.aSab, arg.aOff, mp * k * 8).slice().to_py(), dtype='float64').reshape(mp, k)",
+  "    b = numpy.frombuffer(js.Uint8Array.new(arg.bSab, 0, k * n * 8).slice().to_py(), dtype='float64').reshape(k, n)",
+  "    c = numpy.ascontiguousarray(a @ b)",
+  "    js.Uint8Array.new(arg.outSab, arg.outOff, mp * n * 8).assign(c.view(numpy.uint8).reshape(-1))",
+  "    return 1",
+].join("\n");
+
 export class PyProc {
   constructor(opts = {}) {
     this.indexURL = opts.indexURL || DEFAULT_INDEX;
@@ -272,6 +294,36 @@ export class PyProc {
       + "    _u8 = js.Uint8Array.new(meta.sab, meta.off, meta.len).slice()\n"
       + "    return _pyprocUser(numpy.frombuffer(_u8.to_py(), dtype=meta.dtype))\n";
     return this.map(harness, metas, opts);
+  }
+
+  // 샤딩 matmul: C = A@B를 A의 행블록으로 P(워커수)분할, 워커 p가 C_p = A_p @ B를 계산해
+  // 공유 출력 SAB에 자기 행블록으로 쓴다(B는 워커당 memcpy 1회 복제). compute-bound(N^3)이라
+  // near-linear 배속: 실측(numericShard/shardMatmulProbe) 4워커 3.67배(92% 효율), 전송 오버헤드
+  // 무시 가능(14ms). numpy 필요: new PyProc({ packages: ["numpy"], setup: "import numpy" }).
+  // a/b = { data: Float64Array, rows, cols }. 반환 { data: Float64Array, rows: a.rows, cols: b.cols }.
+  // 정직: 이 배속은 compute-bound 커널의 것이다. memory-bound op(리덕션/값싼 원소별)는 mapArray로
+  // 돌리되 배속은 modest하고(전송 O(n)=연산 O(n)), 작은 배열은 전송비로 진다(shardOpsProbe 실측).
+  // opts.parts: 샤딩할 워커 수 상한(기본 = 풀 전체). parts:1이면 단일워커 대조(같은 코드 경로 =
+  // 공정한 배속 비교의 baseline). 그 외 소비자는 생략(전 코어 활용).
+  async matmul(a, b, opts = {}) {
+    if (!a || !b || !a.data || !b.data) throw new Error("matmul: a/b는 { data: Float64Array, rows, cols }");
+    if (!(a.data instanceof Float64Array) || !(b.data instanceof Float64Array)) throw new Error("matmul: data는 Float64Array(f64 = numpy 기본)");
+    if (a.cols !== b.rows) throw new Error(`matmul: 차원 불일치 (${a.rows}x${a.cols}) @ (${b.rows}x${b.cols})`);
+    if (a.data.length !== a.rows * a.cols || b.data.length !== b.rows * b.cols) throw new Error("matmul: data 길이가 rows*cols와 불일치");
+    const pool = this._pool();
+    if (!pool.length) throw new Error("matmul: 준비된 워커 없음(boot 먼저)");
+    const M = a.rows, K = a.cols, N = b.cols, P = Math.max(1, Math.min(opts.parts || pool.length, pool.length, M));
+    // A, B, 출력 C를 SAB로(공유). A/B 입력은 memcpy 1회로 SAB화(계약: 제로카피 불가).
+    const aSab = _toSab(a.data), bSab = _toSab(b.data), outSab = new SharedArrayBuffer(M * N * 8);
+    const per = Math.floor(M / P);
+    const metas = Array.from({ length: P }, (_, i) => {
+      const startRow = i * per, rows = i === P - 1 ? M - startRow : per;
+      return { aSab, aOff: startRow * K * 8, mp: rows, k: K, n: N, bSab, outSab, outOff: startRow * N * 8 };
+    }).filter((m) => m.mp > 0);
+    const res = await this.map(MATMUL_FN, metas);
+    const bad = res.find((r) => r && r.error);
+    if (bad) throw new Error("matmul: 워커 실패 " + bad.error);
+    return { data: new Float64Array(outSab), rows: M, cols: N };
   }
 
   // 직렬 대조(벤치 baseline): 모든 태스크를 워커 1개에서 순차 실행.

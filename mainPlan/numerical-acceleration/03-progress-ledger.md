@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 Phase 1 완료 + src 승격: PyProc.matmul + 손익분기 지도 (shardOps 8/8 + matmulSurface 5/5)
+
+- Phase 1(제품 경로)을 실측 완료하고 `PyProc.matmul`로 src 승격했다.
+- **shardOpsProbe(손익분기 지도)**: 8M f64. compute-bound(sin) 1.93배 vs memory-bound(reduce 1.45배, 값싼 op 1.32배) vs 작은 배열 0.04배(진다). **헤드라인은 matmul(compute-bound O(n^3))이지 "numpy 전반 4배"가 아니다** - 정직한 경계.
+- **src 승격(`PyProc.matmul(a, b, {parts})`)**: A 행블록을 워커수만큼 분산, 각 워커가 A_p @ B를 공유 출력 SAB의 자기 행블록에 assign(pyodide 버퍼 프로토콜)으로 쓰고 main이 조립. `_toSab`(memcpy-1 계약) + `MATMUL_FN`(모듈 상수). opts.parts로 워커수 상한(parts:1 = 공정 baseline). Matrix 타입 = { data: Float64Array, rows, cols }.
+- **matmulSurfaceProbe(승격 계약 검증) GREEN 5/5**: 전체 결과 원소 == JS 참조(비정사각 + 잔여 행블록 maxErr 0.00), 차원 불일치 명시적 에러, parts:1==전워커, **공정 종단 배속 2.48배**(1024, 조립 비용 포함한 실사용 숫자. 순수 3.67배보다 낮은 건 SAB 재구성+결과 조립 오버헤드 = 정직). index.js/index.d.ts(Matrix)/run.mjs 표면 가드.
+- **정직**: 종단 2.48배는 대형 compute-bound에서의 것. 실환경 numpy 절대 속도가 매우 느려(1024 parts:1 5366ms) 여전히 로컬과 큰 격차 = 샤딩은 "덜 아프게"이지 parity 아님(vision 정합).
+
 ### 2026-07-13 Phase 1 착수 실측: 샤딩 matmul near-linear 배속 (shardMatmulProbe GREEN 5/5)
 
 - Phase 1의 핵심 가설(horizontal 샤딩이 멀티코어 인자를 벽 0으로 회수)을 브라우저 실측으로 확증했다. 캠페인 `tests/attempts/numericShard/` 개설.
