@@ -59,7 +59,7 @@ reactive를 이 엔진 위에서(엔진 무관성의 최종 증명).
 
 **졸업 -> src (2026-07-12).** `src/runtime/engines/wasi/`(wasiSession/wasiWorker/wasiReplDriver/wasiProtocol
 /browserWasiShim). 공개 표면 `bootWasi`/`WasiSession`(async run/get/set + checkpoint/timeTravel).
-전문 에이전트 설계로 **별도 async 표면**(Runtime에 끼우지 않음 = 소비자 무영향, 8함정 회피). 실배선
+설계 검토로 **별도 async 표면**(Runtime에 끼우지 않음 = 소비자 무영향, 8함정 회피). 실배선
 게이트 tests/browser/wasiGate.html GREEN 6/6(부팅 122ms, 값 다리, 완전 시간여행 재개+분기). shim은
 라이선스 고지 후 커밋, wasm은 wasmURL 소비자 제공. 이 캠페인은 승격 완료로 다음 정리 시 폴더 삭제 대상
 (기록은 이 원장 + git). 잔여(v2): reactive 페이지-델타 트리의 워커-내 재사용(현 v1은 전체-힙 스냅샷).

@@ -4,9 +4,9 @@
 
 ## 결정 원장 (최신이 위)
 
-### 2026-07-14 Phase 2 착수: 설계 확정(전문 에이전트) + 구현
+### 2026-07-14 Phase 2 착수: 설계 확정 + 구현
 
-전문 에이전트가 Phase 2 각 축의 기술 설계를 확정했다. 구현으로 간다.
+Phase 2 각 축의 기술 설계를 확정했다. 구현으로 간다.
 
 - **(a) iframe 셸(고정 화면)**: non-COI 셸 = 확장이 여는 http 탭 + content script(A안). 확장 페이지는 COEP
   전역이라 non-COI 불가(후보 B 원천봉쇄, 후보 C 열등). localhost/127.0.0.1 cross-site 쌍으로 헤더 제거 +
@@ -69,10 +69,10 @@
 
 - **게이트9(영속 세션 모델)**: 파이썬 `pyprocBrowser.tab(url, mode).evaluate/type/click/close`가 한 핸들로
   op 사이에 탭/attach를 유지하며 실동. debugger+script 두 mode GREEN. **offscreen 메인스레드에서 블로킹
-  `run_sync` 실동**(3에이전트 최대 리스크 해소). TabSession(수명) + Driver(전략, 생성 시 1회 선택) + 프로토콜
-  계약(버전 필드)의 깎인 형태가 섰다.
+  `run_sync` 실동**(설계 검토가 지목한 최대 리스크 해소). TabSession(수명) + Driver(전략, 생성 시 1회 선택) +
+  프로토콜 계약(버전 필드)의 깎인 형태가 섰다.
 - **게이트10(세션 수명)**: 탭 외부 종료 -> `onDetach` -> 세션 무효화 -> 이후 op가 `SessionLost: debugger
-  detached` 예외로 깨끗이 실패(행 금지). 3에이전트 최대 파손 지점(onDetach 미배선) 해결.
+  detached` 예외로 깨끗이 실패(행 금지). 설계 검토가 지목한 최대 파손 지점(onDetach 미배선) 해결.
 - **블로킹 표면 순차성(정직)**: pyprocBrowser 블로킹 표면은 한 offscreen 인터프리터에서 **순차**다(게이트7의
   async gather 병렬과 다름). 진짜 세션 병렬(세션 N 동시)은 Phase 2 워커 N = 인터프리터 N에서. 블로킹 표면의
   순차는 설계 정합(한 인터프리터 = 한 실행 흐름).
@@ -84,9 +84,9 @@
   (enableBrowserControl 능력, 핸드셰이크 + chrome.runtime 전제 가드). runtime.js 등록, index/d.ts/README 표면.
   러너 승격(tests/browser, 픽스처가 실 src import)은 후속 단계.
 
-### 2026-07-13 Phase 1 승격 설계 토론(전문 에이전트 3) -> 정공법 확정: 승격 전 영속 세션 모델 실측
+### 2026-07-13 Phase 1 승격 설계 토론 -> 정공법 확정: 승격 전 영속 세션 모델 실측
 
-전문 에이전트 3(아키텍처/소비계약/구현리스크)이 승격 설계를 병렬 검토했고 강한 합의가 나왔다.
+승격 설계를 아키텍처/소비계약/구현리스크 세 각도로 검토해 합의에 이르렀다.
 
 - **핵심 결론(공통)**: 현재 attempts는 **일회성 probe**(탭 생성->조작->즉시 detach/close, 핸들러 3개 복붙)인데
   승격 대상은 **영속 세션 핸들**(`tab().navigate().click().close()` 한 핸들). 이 간극에 미검증 축 셋 = MV3 SW
