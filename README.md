@@ -2,241 +2,210 @@
 
 # pyproc
 
-**Real runtime Python in a browser tab, with no server.** Real processes and multi-core parallelism, checkpoint / time-travel, an in-kernel ASGI server, a terminal, and portable machine images (a running Python computer as a single file), packaged as one reusable runtime on [Pyodide](https://pyodide.org) / WebAssembly. The single source of truth for the web Python runtime shared by codaro / dartlab / xlpod.
+**A stateful, browser-native Python runtime for AI agents.**
 
-**Live demo**: [eddmpython.github.io/pyproc](https://eddmpython.github.io/pyproc/) - the Python machine, terminal, and process OS in your browser (Chromium/Edge).
+Run Python inside the browser, keep the runtime state alive, branch it into isolated execution paths, and restore earlier states without rebuilding the environment. No server, no fresh container per run.
 
-Language: English | [한국어](README.ko.md)
+[Quick start](#quick-start) · [AI-agent patterns](#using-it-from-an-ai-agent) · [Status](#feature-status) · [Live demo](https://eddmpython.github.io/pyproc/) · [한국어](README.ko.md)
 
 ---
 
-## One goal
+## The problem it solves
 
-**North Star: whatever runs locally should eventually run in the browser, with no server.** This is a *direction*, not a claim of current compatibility - the goal is set deliberately to infinity (the snapshot-fork, time-travel, and portable machine images all came from aiming this high), while present-tense claims stay only as large as a real browser has measured. Everything local sorts into four states, and pyproc's job is to push things up this list and to be the first structure that absorbs a wall the moment the platform reopens it:
+AI agents don't run Python once. They generate code, run it, read the failure, fix it, and run again. They try several approaches in parallel, or roll back to a known-good state before the last mess.
 
-- **Delivered** (browser-measured today): pure-Python and Pyodide-built packages, multi-core processes, checkpoint / time-travel, in-kernel ASGI, terminal, persistent FS, portable machine images.
-- **Virtualized** (re-expressed the browser way): a TCP `listen()` becomes an ASGI app, `os.fork` becomes worker kernels, outbound sockets ride a relay.
-- **Upstream-pending** (walled now, reopenable as the platform evolves): native C-extension wheels (Emscripten static builds / the WebAssembly component model), GPU (WebGPU), real threading - tracked, with the engine seam ready to adopt them first.
-- **Permanent web-security wall**: a tab cannot accept arbitrary inbound connections, or run arbitrary native binaries, without an external relay or agent.
+The usual answer is a server container or a fresh Python environment per attempt: slow to start, costly to keep, and thrown away between tries. pyproc keeps a prepared Python state alive **in the user's browser**, and lets you **checkpoint, branch, and restore** it, so the retry loop costs milliseconds instead of a cold boot - and the user's data never has to leave the tab.
 
-The principle: aim the goal at infinity, keep present-tense claims to what is proven. Every capability is browser-measured; every wall is named. The gap map lives in [local-parity](mainPlan/local-parity/README.md).
+## In one example
 
-## What is this?
+```js
+import { boot } from "pyproc";
 
-pyproc treats browser Python not as "one notebook cell" but as an **operating system**.
-
-- A Web Worker becomes a **process**.
-- A heap snapshot becomes a **process image**.
-- Injecting that snapshot into a worker becomes a **fork**.
-- N independent interpreters mean N independent GILs, which mean **N-core physical parallelism**.
-
-Under the hood it runs [Pyodide](https://pyodide.org) (CPython compiled to WebAssembly), but it adds the runtime properties Pyodide does not give you on its own: spawning processes cheaply, running them in parallel, and restoring interpreter state without re-running your code. It is a plain ESM library with no build step, meant to be imported by real products.
-
-## Why does it exist?
-
-The pieces to run Python in a browser already exist. What did not exist is a **shared layer** that turns them into a real runtime. codaro, dartlab, and xlpod all need the same thing. If each copy-pastes it, the runtime splits into three versions that drift apart. pyproc is that layer, built once and shared version-pinned, so improvements land in one place. See [docs/product/vision.md](docs/product/vision.md) for the full direction and policy.
-
-## Who uses it
-
-- **dartlab** (live): financial-disclosure notebooks over DART and SEC filings. A notebook worker boots its own Pyodide and adopts pyproc with `new Runtime(py)`, running the in-kernel `AsgiServer` as its browser-as-server backend (`fetch("/pyapi/...")` answered by a Python app, no socket) in production today.
-- **codaro**: first consumer, pinned by commit SHA, wiring the `Runtime` and `PyProc` seam.
-- **xlpod** (adopting): a browser spreadsheet that runs real Python inside cell formulas (`=PYUDF`). Uses the `Runtime`, `setInterruptBuffer` (cancel a runaway UDF), and the PyProxy value bridge; its own synchronous SAB bridge stays on xlpod.
-
-A worker that already booted its own Pyodide adopts pyproc with `new Runtime(py)`: no second interpreter, all the capabilities. See [docs/consuming/contract.md](docs/consuming/contract.md).
-
-## Core concepts, in plain terms
-
-**1. Snapshot-fork (fast process spawn).** Booting a fresh Pyodide interpreter takes about 2.8 seconds. pyproc boots one parent, takes a memory snapshot (the "process image"), and starts workers from that snapshot in about 184ms. That is a 15.4x faster spawn, and each child is an isolated process.
-
-**2. Process OS (real parallelism).** Because each worker is an independent interpreter with its own GIL, running the same function across workers gives you real multi-core execution, not concurrency on one thread. `PyProc.map()` drains a task queue across workers at the same time.
-
-**3. Restore-based reactivity (time travel without re-running).** A reactive notebook normally re-runs cells when something upstream changes. WebAssembly has no OS dirty-page tracking, so pyproc reconstructs it by hashing the heap completely at each execution boundary and storing only the changed pages. Restoring to an earlier state then writes back only the differing pages (about 2.4ms), instead of re-running. The complete hash is what makes this sound; sampling would miss changes and corrupt the restore.
-
-**4. Portable machine image (a running computer as a single file).** Because a deterministic boot (fixed hash seed plus stubbed entropy and time) reproduces a byte-identical heap, the base never has to travel: `Session` stores only your work (the pages that differ from the replay boundary, about 10MB), and `exportImage()` packs that delta into one `.pymachine` file. Reopening replays the same base and applies the delta (about 1.5ms), and your Python state is alive again. A VM image is gigabytes; this is a live machine as a few-MB file. Proven today when reopened on the same machine; cross-machine determinism (the "email it to someone" claim) is the open probe under [local-parity](mainPlan/local-parity/README.md).
-
-## Supported environment
-
-**Chromium / Edge only.** pyproc needs JSPI (JavaScript Promise Integration), SharedArrayBuffer, and `crossOriginIsolated`. Lack of Firefox / Safari support is a deliberate scope choice, not a defect.
-
-To use SharedArrayBuffer, the page must be crossOriginIsolated, which requires these response headers:
-
-```
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
+const rt = await boot();
+rt.run("values = [10, 20, 30]");
+console.log(rt.run("sum(values)"));   // 60
 ```
 
-## Install
+Real CPython (via [Pyodide](https://pyodide.org) / WebAssembly), running in the tab, returning real values.
 
-From the npm registry ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)):
+## Where a browser Python sandbox helps
+
+| Use case | How it's used | What pyproc gives |
+|---|---|---|
+| AI data analysis | Run AI-written pandas / NumPy on the user's file | Analyze without shipping the raw file to a server |
+| AI coding tools | Checkpoint before running AI code; restore on failure | Cheap trial-and-error, no environment reset |
+| Multi-agent analysis | Branch many runs from one prepared state | Compare independent approaches in isolation |
+| Browser notebooks | Keep packages and data loaded across runs | No re-boot, no re-install |
+| Coding education | Save the student state; test AI fixes on a branch | Feedback without touching their work |
+| Internal analytics | Process sensitive CSV / Excel in the local tab | Minimize sending data off-device |
+| Offline tools | Cache the runtime and packages | Runs where the network is limited |
+
+The through-line: **an AI agent needs a Python environment it can prepare once, then save, branch, and restore** - and a browser sandbox keeps the user's data local while doing it.
+
+## What you get (results, not internals)
+
+- **Runs in the browser.** Python executes in the user's tab, so simple analysis needs no per-run server environment.
+- **Restore without rebuilding.** Checkpoint a state with packages and data already loaded, then roll back to it - no re-run, no re-install.
+- **Branch from one state.** An agent runs several code candidates from the same prepared state, independently, and compares results.
+- **Data stays local.** Process CSV / Excel / enterprise data in the tab and send only the summarized result onward.
+- **Isolated execution.** Python runs off the main UI thread, across multiple workers you manage.
+
+## Quick start
 
 ```sh
 npm install pyproc
 ```
 
-Products consuming pyproc as their runtime SSOT should keep pinning a commit SHA (floating on the default branch is not allowed):
-
-```jsonc
-// package.json
-"dependencies": {
-  "pyproc": "github:eddmpython/pyproc#<commit-sha>"
-}
-```
-
-There is no build step (native ESM). You can also import straight from a CDN with no install:
-
-```html
-<script type="module">
-  import { boot } from "https://cdn.jsdelivr.net/gh/eddmpython/pyproc@<commit-sha>/index.js";
-</script>
-```
-
-Direct CDN import supports the single-runtime path (`boot`/`Runtime`/reactivity) only. The process OS (`PyProc`) needs its worker file to be same-origin with your page (browsers block cross-origin workers), so use the npm install or vendor the files.
-
-## Quick start
-
 ```js
-import { boot, PyProc } from "pyproc";
+import { boot } from "pyproc";
 
-// 1) Single runtime: run Python
 const rt = await boot();
-console.log(rt.run("sum(range(100))"));      // 4950
 await rt.loadPackages(["numpy"]);
-console.log(rt.run("import numpy as np; int(np.arange(10).sum())"));  // 45
-
-// 2) Process OS: real parallelism (N independent GILs)
-const os = new PyProc();
-await os.boot(4);                             // spawn 4 workers via snapshot-fork
-const fn = "def _fn(n):\n    return sum(i*i for i in range(n))";
-const out = await os.map(fn, [100000, 100000, 100000, 100000]);
-console.log(out);                             // 4 tasks run across 4 cores
-os.terminate();
+console.log(rt.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
 ```
 
-## Capabilities
-
-Capabilities are opt-in. Turn on only what you need from the runtime. The consumer uses the capability contract and never touches engine internals (`HEAPU8` and friends).
-
-### Restore-based reactivity
+Checkpoint and restore. Reactivity is opt-in via `enableReactive`; the closing `checkpoint()` marks the execution boundary that makes the restore sound:
 
 ```js
-const rt = await boot();
 const reactive = rt.enableReactive();
-const sp0 = reactive.stackSave();
-rt.run("x = 1");
-const cp = reactive.checkpoint();             // save state
-rt.run("x = 999");
+const sp = reactive.stackSave();
+rt.run("values = [10, 20, 30]");
+const cp = reactive.checkpoint();            // save this state
+rt.run("values.append(999)");
 reactive.checkpoint();                        // close the execution boundary (the contract)
-reactive.restoreLive(cp.index, sp0);          // live-diff restore (writes only changed pages)
-console.log(rt.run("x"));                      // 1
+reactive.restoreLive(cp.index, sp);           // back to the checkpoint - writes only changed pages
+console.log(rt.run("len(values)"));           // 3
 ```
 
-**Execution boundary contract (machine-enforced)**: when the boundary holds (no execution since the last `checkpoint()`/restore), `restoreLive` compares stored hashes only and restores instantly (zero re-hashing, ~1ms measured). A boundary violation (execution, exception, global mutation) is auto-detected in O(1) via a state-mutation counter and the restore upgrades to the re-hash path, so **a silently wrong restore cannot happen** (~27ms measured). The returned `rehashed` flag tells you which path ran.
+> pyproc is Chromium / Edge only and needs a `crossOriginIsolated` page (`COOP: same-origin`, `COEP: require-corp`). See [Supported environment](#supported-environment).
 
-### Borrowed syscall bridge
+## Using it from an AI agent
 
-A browser has no socket / subprocess / blocking input. This capability borrows those, via a proxy, a child worker, and JSPI respectively, so Python code runs unchanged. The library exposes the contract (what gets wired); the consuming product fills in the real endpoints.
+**Pattern 1 - restore on failure.** Prepare the environment, checkpoint, run AI-generated code; if it throws or dirties the interpreter, restore the boundary and run the fix. The AI can't corrupt state you can't get back to.
 
-**v1 scope (honestly)**: `input()` (sync plus JSPI `run_sync` blocking), `urllib.request.urlopen` (sync XHR, GET/POST, binary-safe), and `subprocess.run(["python","-c",code])` (an independent child-worker interpreter, runAsync path). All of it is verified by the browser gate. The requests library and raw sockets are in-progress items under [local-parity](mainPlan/local-parity/README.md).
-
-```js
-const bridge = rt.enableSyscallBridge({
-  input: (p) => window.prompt(p),               // sync source for input()
-  inputAsync: async (p) => await myUi.ask(p),   // for terminals: true blocking under runAsync (JSPI)
-  proxyUrl: "/proxy",                           // optional: route HTTP through your product's proxy
-});
-await bridge.install();
-rt.run('name = input("who? ")');                // real blocking input
-rt.run('import urllib.request; body = urllib.request.urlopen(url).read()');  // real sync HTTP GET
-await rt.runAsync('import subprocess; subprocess.run(["python","-c","print(42)"], capture_output=True).stdout');
+```text
+prepare env  ->  checkpoint  ->  run AI code  ->  (fails)  ->  restore  ->  run fixed code
 ```
 
-### In-kernel ASGI server, with a real URL
+**Pattern 2 - branch candidates.** Load shared data and packages once, then run several approaches from the same prepared state, each isolated - via `PyProc` workers, or by repeated restore from one checkpoint.
 
-A "local server" is not a TCP socket, it is an ASGI interface. `AsgiServer` dispatches a FastAPI / Starlette app inside the kernel with zero sockets (about 3.4ms per request). Endpoints must be `async def`.
-
-```js
-rt.run("from fastapi import FastAPI\napp = FastAPI()\n@app.get('/ping')\nasync def ping(): return {'ok': True}");
-const server = rt.enableAsgiServer();          // reads the `app` global
-await server.install();
-await server.serve("GET", "/ping");            // { status: 200, headers, body: '{"ok":true}' }
+```text
+load data + packages
+        |-- pandas approach
+        |-- SQL approach
+        \-- NumPy approach
 ```
 
-With the bundled Service Worker asset (`src/capabilities/pyprocSw.js`) the Python server also answers on a **real URL**: register the SW with `?asgi=/pyproc/`, call `new VirtualOrigin(server).bind()`, and any `fetch("/pyproc/api/...")` from your page (or an iframe) hits FastAPI. Measured round trip: 3.4ms, identical to direct dispatch. The same asset with `?cache=1` serves every Pyodide CDN asset cache-first, including the script paths that `coreCacheDir` cannot reach, so the second boot makes zero CDN requests (airplane-mode boot).
+**Pattern 3 - local-first data.** The user's file is analyzed in the tab; only the summary leaves. The raw data never reaches the model server.
 
-### Serverless terminal
-
-The tab becomes a real Python REPL. `Terminal` stands up CPython's own `code.InteractiveConsole` inside the kernel; combined with the syscall bridge's JSPI path, `input()` blocks for real.
-
-```js
-const term = rt.enableTerminal();
-await term.install();
-await term.push("x = 40");
-await term.push("x + 2");                       // { more: false, out: "42\n" }
+```text
+user file  ->  browser Python  ->  summary only  ->  AI model
 ```
 
-### Session revival and portable machine images
+## Feature status
 
-Deterministic replay plus a user delta makes the interpreter immortal and movable. Boot from a manifest (the environment declaration), work, then persist only your delta to OPFS, or export the whole computer as one `.pymachine` file.
+Honest maturity by browser-gate coverage. Everything below has a runtime gate; the label is how much to stake on it today.
 
-```js
-import { bootSession, openMachine } from "pyproc";
+| Area | Status |
+|---|---|
+| Python execution (`boot` / `run` / `loadPackages`) | Stable |
+| Process OS: snapshot-fork spawn, `map` parallelism (`PyProc`) | Beta |
+| Restore-based reactivity (`enableReactive`: checkpoint / time-travel) | Beta |
+| In-kernel ASGI (`AsgiServer` - in dartlab production today) | Beta |
+| uv lane (`bootEnv` / `freeze` / `runScript`), wheel cache, terminal, syscall bridge | Beta |
+| Session revival + `.pymachine` images, machine journal (WAL) | Experimental |
+| Live process fork, device FS, init / cron, virtual-origin URL | Experimental |
+| Outbound Python sockets (`SocketBridge`), shared kernel | Experimental |
+| non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 
-const s = await bootSession({ packages: ["numpy"], setup: "import numpy as np" });
-s.rt.run("data = np.arange(1_000_000)");        // do work
-const file = await s.exportImage();             // a running computer as a single Blob (.pymachine)
+## What it guarantees, and what it doesn't
 
-// later, in a fresh tab: replay the base, apply the delta, resume
-const revived = await openMachine(file, { trust: true });
-revived.rt.run("int(data.sum())");              // state is alive again
+**Guaranteed (browser-measured):**
+
+- Pyodide-based Python on supported browsers.
+- WASM heap state saved at declared execution boundaries.
+- State restore under compatible runtime conditions.
+- Worker-based execution isolation.
+
+**Not (yet) guaranteed:**
+
+- Full process capture at an arbitrary instant - in-flight network requests and Promises are not restored.
+- Every Python package - native C-extension wheels need a static build; pure-Python and Pyodide-built packages work.
+- Snapshot compatibility across Pyodide versions, or across machines (cross-machine `.pymachine` is an open probe).
+- GPU / native Linux packages, full POSIX `fork`, arbitrary native binaries.
+
+Naming these up front is deliberate: a hidden limit reads as a bug later; a stated one reads as a managed boundary.
+
+## The honest scope: aim at infinity, claim what's proven
+
+**North Star: whatever runs locally should eventually run in the browser, with no server.** A *direction*, not a current-compatibility claim (snapshot-fork, time-travel, and portable machine images all came from aiming this high). Everything local sorts into four states, and pyproc's job is to push things up the list and to be the first structure that absorbs a wall the moment the platform reopens it:
+
+- **Delivered** (measured today): pure-Python + Pyodide packages, multi-core processes, checkpoint / restore, in-kernel ASGI, terminal, persistent FS, portable images, outbound Python sockets.
+- **Virtualized** (the browser way): a TCP `listen()` becomes an ASGI app, `os.fork` becomes worker kernels, outbound sockets ride a thin relay.
+- **Upstream-pending** (walled now, reopenable): native C-extension wheels (Emscripten static builds / the WebAssembly component model), GPU (WebGPU), real threading.
+- **Permanent web-security wall**: inbound connections and arbitrary native binaries need an external relay or agent.
+
+The gap map lives in [local-parity](mainPlan/local-parity/README.md).
+
+## Security model
+
+pyproc runs Python inside the browser's WebAssembly and Web Worker isolation boundaries. That is not a claim of safety for arbitrary untrusted code: an application running untrusted code is still responsible for its own network, storage, package, memory, and execution-time policies appropriate to its threat model. A `.pymachine` file is live state and carries the same risk as an executable - `openMachine` verifies a SHA-256 integrity hash and refuses to open without an explicit `{ trust: true }`.
+
+## How it works (one page)
+
+pyproc treats browser Python not as "one notebook cell" but with an **OS-like process model**: a Web Worker is a process, a heap snapshot is a process image, injecting that snapshot is a fork, and N interpreters mean N GILs = N-core parallelism. It runs [Pyodide](https://pyodide.org) (CPython on WebAssembly) and adds what Pyodide doesn't give you alone: cheap process spawn, real parallelism, and interpreter-state restore without re-running your code.
+
+```text
+Application / AI agent
+        |
+     pyproc API
+   +----+----------+
+Runtime  Process OS  Capabilities
+   |        |        (reactive / syscall / socket / asgi / terminal / session / ...)
+Pyodide  Workers
+        |
+ Snapshot / Journal / Restore
 ```
 
-A machine file is live state, so it carries the same risk as an executable: `openMachine` verifies a SHA-256 integrity hash and refuses to open without an explicit `{ trust: true }`.
+Four primitives make it sound: complete heap hashing at each execution boundary (sampling would miss changes and corrupt a restore); deterministic boot (a byte-identical base, so only your delta has to travel); snapshot-fork; and an engine seam (the same primitives also run on non-Pyodide CPython 3.14, proving they don't depend on Pyodide internals). Deep design lives in [mainPlan](mainPlan/README.md); the axis-by-axis gap map in [local-parity](mainPlan/local-parity/README.md).
 
-### Wheel cache (offline, zero-redownload packages)
+## Benchmarks
 
-`WheelCache` stores installed `.whl` bytes in OPFS and serves them from cache on the next install, so package loads go offline and re-download nothing. It wraps only the `install` / `loadPackages` window rather than polluting global `fetch`.
+The numbers below come from one machine and are meant to be **reproduced, not taken on faith** - run `npm run serve`, open `examples/`, and report with conditions (browser, OS, Pyodide version, warm / cold, heap size, sample count). Representative local measurements (Edge, Windows 11, Pyodide v314.0.2, warm cache):
 
-### The uv lane: instant environments, reproducible locks, self-sufficient scripts
+- Snapshot-fork child boot ~184-300ms vs cold ~2.8s.
+- Restore-based reactivity: live-diff restore ~1-2.4ms (writes only changed pages, no re-run).
+- uv-lane warm environment boot ~1229ms vs ~5109ms cold (numpy).
+- non-Pyodide CPython 3.14 (WASI) boot ~70-120ms.
 
-`bootEnv` turns the second boot of an environment from an install into a restore: a bare heap snapshot (boots in ~227ms instead of ~3.6s) plus OPFS-cached wheels. Measured: numpy environment cold 5109ms, warm **1229ms** (4.2x). `Runtime.freeze()` pins the whole environment as a pyodide-lock JSON you can feed back through `boot({ lockFileURL })` for zero-resolution reproduction, and `runScript` runs PEP 723 scripts (`# /// script` with inline `dependencies`) by auto-installing what they declare, like `uv run` in the browser.
-
-```js
-import { bootEnv, runScript } from "pyproc";
-
-const dirs = { snapshots: snapDir, wheels: wheelDir };            // OPFS handles you own
-const rt = await bootEnv({ packages: ["numpy"], setup: "import numpy" }, dirs);
-rt.envBoot;                                                       // { lane: "snapshot", totalMs: 1229, ... }
-await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six\nsix.__version__");
-```
-
-### A kernel that outlives the tab
-
-`SharedKernel` hosts the interpreter in a SharedWorker: every tab that connects sees the same Python state, and the kernel keeps running as long as any connection is alive. Calls are Promise-based (the kernel is remote). Platform limit, measured honestly: SharedWorkers are not crossOriginIsolated today, so SharedArrayBuffer features (interrupt, snapshot-fork) stay on the per-tab `PyProc` until the platform catches up.
+Reality check: pure-Python logic is at or above local speed; large numpy arithmetic is ~86x slower (WASM single-thread, no-AVX BLAS). Logic / analysis / server workloads are runtime-grade; heavy numeric crunching is not the target.
 
 ## Public surface
+
+Capabilities are opt-in - turn on only what you need, and consume the capability contract rather than engine internals (`HEAPU8` and friends).
 
 | Export | What |
 | --- | --- |
 | `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` (`lockFileURL` for lock reproduction, `coreCacheDir` for offline core) |
-| `bootEnv(manifest, dirs)` | The uv lane: bare-snapshot + wheel-cache warm boot (second boot 1229ms vs 5109ms cold) |
+| `bootEnv(manifest, dirs)` | The uv lane: bare-snapshot + wheel-cache warm boot (second boot ~1229ms vs ~5109ms cold) |
 | `runScript(rt, src, opts)` | `uv run` in the browser: auto-install PEP 723 inline dependencies, then run |
-| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `freeze` / `mountHome` plus capability registration |
+| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `freeze` / `mountHome` plus capability registration; adopt an existing Pyodide with `new Runtime(py)` |
 | `MemoryCapability` | Capability contract that encapsulates WASM heap access |
-| `ReactiveController` | Restore-based reactivity (checkpoint / time travel) |
+| `ReactiveController` | Restore-based reactivity: `checkpoint` / `restoreLive` / `timeTravel`, branch tree |
 | `SyscallBridge` | Borrowed syscalls: `input()` (sync / JSPI), `urllib` (sync XHR), `subprocess` (child worker) |
 | `SocketBridge` | Real outbound TCP for Python sockets via a thin WS->TCP relay: `socket` / `requests` / `urllib3` reach arbitrary host:port (blocking recv over JSPI, `runAsync`). Inbound is a physical wall |
-| `AsgiServer` | In-kernel ASGI server (FastAPI with zero sockets, 3.4ms dispatch) |
+| `AsgiServer` | In-kernel ASGI server (FastAPI with zero sockets, ~3.4ms dispatch) |
 | `VirtualOrigin` | The Python server on a real URL, paired with the `pyprocSw.js` Service Worker asset |
 | `Terminal` | Serverless Python terminal (REPL, blocking input, `%pip` / `%undo`) |
 | `DeviceFs` | Everything is a file: browser capabilities as Python `open()` (`/dev/clipboard`, `/proc`) |
 | `Init` | OS init: `/home/web/boot.py` autorun plus `cron.py` ticks, all file-driven |
-| `MachineJournal` | Write-ahead log: the machine checkpoints itself while idle, so a **crashed tab still boots back into its last commit** (no hibernate hook required) |
-| `bootSession` / `Session` / `openMachine` | Session revival (immortal kernel) and portable `.pymachine` machine images: deterministic replay plus user delta, persisted to OPFS (`save`/`load`) or exported as one file (`exportImage`/`openMachine`) |
+| `MachineJournal` | Write-ahead log: the machine checkpoints itself while idle, so a crashed tab still boots back into its last commit |
+| `bootSession` / `Session` / `openMachine` | Session revival and portable `.pymachine` images: deterministic replay plus user delta, persisted to OPFS (`save` / `load`) or exported as one file (`exportImage` / `openMachine`) |
 | `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
-| `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), and **`fork(2)`**: clone a *live* process (its variables and arrays travel, 1.4ms apply) |
+| `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), and `fork(2)`: clone a live process (its variables and arrays travel) |
 | `SIGNAL` | POSIX signal numbers for `PyProc.signal(pid, signum)`: real `SIGTERM` / `SIGUSR1` handlers fire inside Python |
 | `SharedKernel` | A kernel that outlives the tab (SharedWorker): many tabs, one Python state |
-| `bootWasi` / `WasiSession` | A session on non-Pyodide CPython (WASI), proving the primitives are engine-independent: async `run` / `get` / `set` plus full time travel (`checkpoint` / `timeTravel`, resume and branch after restore). `installWheel(bytes)` installs a pure-Python wheel into the live session (browser-side pip: native unzip to `/site`, then `import`); C extensions are out (no WASI dynamic linking). Value bridge is JSON-only (WASI has no FFI); `wasmURL` / wheels are consumer-provided |
+| `bootWasi` / `WasiSession` | A session on non-Pyodide CPython 3.14 (WASI), proving the primitives are engine-independent: async `run` / `get` / `set`, full time-travel, `installWheel(bytes)` (browser-side pip for pure-Python wheels). Value bridge is JSON-only; C extensions need a static build |
 | `PAGE_SIZE` | WASM page size constant (65536) |
 
 Subpath imports are also supported:
@@ -247,55 +216,54 @@ import { ReactiveController } from "pyproc/reactive";
 import { PyProc } from "pyproc/process-os";
 ```
 
-## Measured results
+Deep, example-driven docs for each capability live in [docs/](docs/README.md); this README stays the map.
 
-- **Snapshot-fork**: child boot 184ms (vs cold 2839ms), a 15.4x faster spawn, isolated process.
-- **Real N-core parallelism**: measured speedup on embarrassingly-parallel work across independent-interpreter workers.
-- **Restore reactivity**: complete hashing handles heap growth automatically, live-diff restore in about 2.4ms (12x vs memcpy), reactive edit about 9.1x faster, zero crashes.
-- **Speed reality**: pure Python logic is at parity with or faster than local (CPython 3.14 > 3.12). Only large numpy arithmetic is about 86x slower (WASM single-thread, no-AVX BLAS). Server / automation / logic workloads are runtime-grade.
+## Supported environment
 
-## Frontier (stated honestly)
-
-True shared-memory threads (nogil) and cross-process zero-copy numpy remain blocked by one unsolved problem: **WASM dlopen** plus cross-instance/thread memory sharing (Pyodide threading issue #237, open since 2018). pyproc avoids it by giving each worker its own wasmTable / heap / glue. warm-fork (cloning after packages load) used to sit behind the same wall, but pyproc now has a **practical bypass via deterministic replay plus user delta** (`Session`; measured: replay boots reproduce a byte-identical heap, delta applies in 1.5ms). Pyodide's snapshot hiwire limitation (no imaging after package load, upstream #5195) still stands; the wall was routed around, not broken.
-
-## Architecture
+**Chromium / Edge only.** pyproc needs JSPI (JavaScript Promise Integration), SharedArrayBuffer, and `crossOriginIsolated`. Lack of Firefox / Safari support is a deliberate scope choice, not a defect. To use SharedArrayBuffer, serve the page with:
 
 ```text
-Layer 2  process-os   PyProc kernel: snapshot-fork spawn, map/mapArray parallelism, lifecycle; worker = a process
-Layer 1  reactive     restore-based reactivity (checkpoint / time-travel)
-         syscall      socket / subprocess / input bridge
-         asgi         in-kernel ASGI dispatch
-         terminal     serverless Python REPL
-         session      session revival + .pymachine machine image
-         wheelcache   wheel / OPFS package cache
-Layer 0  runtime      Pyodide wrapper (boot/Runtime) + MemoryCapability contract
-         index.js     public surface / index.d.ts type contract
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
 ```
 
-## How products consume it
+## Install and pinning
 
-pyproc becomes an SSOT only through **real imports**, not references. Consumers pin a commit SHA, depend on the public contract plus the shipped `index.d.ts` types, and never import in reverse. Full policy: [docs/consuming/contract.md](docs/consuming/contract.md).
+From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc`. There is no build step (native ESM). Products consuming pyproc as their runtime SSOT pin a commit SHA (floating on the default branch is not allowed):
+
+```jsonc
+// package.json
+"dependencies": { "pyproc": "github:eddmpython/pyproc#<commit-sha>" }
+```
+
+You can also import straight from a CDN with no install (single-runtime path only; the process OS needs its worker file same-origin with your page):
+
+```html
+<script type="module">
+  import { boot } from "https://cdn.jsdelivr.net/gh/eddmpython/pyproc@<commit-sha>/index.js";
+</script>
+```
+
+## Who uses it
+
+- **dartlab** (live): financial-disclosure notebooks over DART and SEC filings. A notebook worker boots its own Pyodide and adopts pyproc with `new Runtime(py)`, running the in-kernel `AsgiServer` as its browser-as-server backend (`fetch("/pyapi/...")` answered by a Python app, no socket) in production today.
+- **codaro**: first consumer, pinned by commit SHA, wiring the `Runtime` and `PyProc` seam.
+- **xlpod** (adopting): a browser spreadsheet that runs real Python inside cell formulas (`=PYUDF`), via `Runtime`, `setInterruptBuffer`, and the PyProxy value bridge.
+
+pyproc becomes an SSOT only through **real imports**, not references: consumers pin a SHA, depend on the public surface plus the shipped `index.d.ts`, and never import in reverse. Full policy: [docs/consuming/contract.md](docs/consuming/contract.md).
 
 ## Development
 
 ```bash
-npm test              # Node structure/lint gate (zero dependencies)
-npm run test:browser  # headless Chromium runtime gate: boot / reactive contract / fork / map (zero dependencies)
-npm run serve         # COOP/COEP static server for manual validation (zero dependencies)
+npm test              # Node structure / lint gate (zero dependencies)
+npm run test:browser  # headless Chromium runtime gate: boot / reactive / fork / map (zero dependencies)
+npm run serve         # COOP/COEP static server for manual validation and benchmarks
 ```
 
-Because this is a WASM runtime, real validation only happens in a browser: `test:browser` launches your local Edge/Chrome headless and verifies the public surface actually works (the same gate runs in CI). For manual checks and benchmarks, serve `examples/` via `npm run serve`. Procedure: [docs/operations/testing.md](docs/operations/testing.md).
-
-Operating docs (operating model, testing, releases, consumption contract) live in [docs/](docs/README.md), design/roadmap/decision records in [mainPlan/](mainPlan/README.md), and contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
+Because this is a WASM runtime, real validation only happens in a browser: `test:browser` launches your local Edge / Chrome headless and verifies the public surface actually works (the same gate runs in CI). Operating docs live in [docs/](docs/README.md), design and decision records in [mainPlan/](mainPlan/README.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
 [Mozilla Public License 2.0](LICENSE), the same license as Pyodide, the engine underneath. Copyright 2026 eddmpython.
 
-MPL-2.0 is file-level copyleft, so the practical terms are:
-
-- **Embedding is free.** Import pyproc into a closed-source app, ship it to browsers, sell it. Your own code stays yours.
-- **Forks of pyproc itself stay open.** Modify a file covered by this license and you publish that file's source under MPL-2.0. Improvements to the runtime come back; a fork cannot go dark.
-- **Patents are granted** by every contributor for their contributions (Section 2.1(b)), with the usual defensive termination.
-
-Contributions are accepted under the same license without a separate CLA: under MPL-2.0 a contributor grants the license for their contribution by contributing it (Section 2.1), so inbound = outbound holds structurally. See [CONTRIBUTING.md](CONTRIBUTING.md).
+MPL-2.0 is file-level copyleft, so the practical terms are: **embedding is free** (import pyproc into a closed-source app, ship it, sell it; your own code stays yours); **forks of pyproc itself stay open** (modify a covered file and you publish that file's source under MPL-2.0); **patents are granted** by every contributor for their contributions (Section 2.1(b)). Contributions are accepted under the same license without a separate CLA (inbound = outbound). See [CONTRIBUTING.md](CONTRIBUTING.md).
