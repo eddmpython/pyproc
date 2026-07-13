@@ -37,13 +37,21 @@ async function ensureOffscreen() {
 // 새 탭 생성 -> attach -> Page.navigate -> load 대기 -> Runtime.evaluate -> 정리.
 // 이것이 "파이썬이 브라우저 자체를 조작한다"의 실체다(offscreen은 chrome.debugger에 못 닿으므로
 // 파이썬 -> offscreen JS -> runtime 메시지 -> SW -> chrome.debugger 경로).
-async function handleCdp({ url, expr }) {
+async function handleCdp({ url, expr, override }) {
   let tab = null, target = null;
   try {
     tab = await chrome.tabs.create({ url: "about:blank", active: false });
     target = { tabId: tab.id };
     await chrome.debugger.attach(target, "1.3");
     await chrome.debugger.sendCommand(target, "Page.enable");
+    // 선제 개입: 페이지의 어떤 스크립트보다 먼저 실행되는 스크립트를 등록한다(문서 생성 최우선).
+    // navigator.webdriver getter를 undefined로 덮어, 탐지 JS가 읽기 전에 표시등을 끈다.
+    // = 확장 링(페이지 상위)이라 가능한 스텔스. chrome.debugger 경로의 webdriver 약점을 덮는지 실측.
+    if (override) {
+      await chrome.debugger.sendCommand(target, "Page.addScriptToEvaluateOnNewDocument", {
+        source: "try { Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => undefined, configurable: true }); } catch (e) {}",
+      });
+    }
     const loaded = new Promise((resolve) => {
       const onEvent = (source, method) => {
         if (source.tabId === tab.id && method === "Page.loadEventFired") {

@@ -4,6 +4,20 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 스텔스 심화: 페이지 상위 선제 개입으로 webdriver 덮기 (bootIsolationRunner 오버라이드 GREEN)
+
+- "페이지 JS를 막을 수 있지 않나"라는 방향을 실측으로 확증했다. 정확히는 "막기"가 아니라 **"페이지보다 먼저
+  값을 조작하기"**다. 확장은 페이지 JS보다 먼저 실행할 수 있는 위치라 가능하다.
+- **실측(bootIsolationRunner 오버라이드)**: 하네스가 포트로 `navigator.webdriver=true`인 최악 조건에서, CDP
+  `Page.addScriptToEvaluateOnNewDocument`로 `navigator.webdriver` getter를 페이지의 어떤 스크립트보다 먼저
+  undefined로 덮으니 페이지 읽힘값 off=true -> **on=undefined**. 진짜 켜진 표시등을 껐다.
+- **의미**: chrome.debugger 경로의 유일한 약점(webdriver 노출)까지 이 선제 개입으로 덮인다 = 신뢰입력이 필요해
+  debugger를 써야 할 때도 표시등을 끌 수 있다. content script 경로(baseline false) + 선제 개입 = 이중 방벽.
+- **정직한 경계**: 표면 값만 끈 것. 정교한 탐지는 오버라이드 자체를 되검사(네이티브 getter 여부, iframe 원본
+  대조)할 수 있고, 서버측(TLS 지문/IP 평판/행동)은 페이지 조작으로 못 넘는다. puppeteer-stealth 동급의 한 수 +
+  확장이라 모든 페이지에 영속 적용. 완전 스텔스는 단일 기법이 아니라 층위(선제 조작 + 실 프로필/IP/하드웨어 +
+  행동 자연성)로만.
+
 ### 2026-07-13 스텔스 인과 격리: content script webdriver 미점화 논리 확정 (webdriverCauseRunner GREEN)
 
 - Phase 0-b(스텔스)가 "수동 전용"인 줄 알았으나, **인과 격리로 핵심을 자동 확정했다**. bootIsolationRunner의

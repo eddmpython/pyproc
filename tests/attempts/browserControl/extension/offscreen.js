@@ -63,7 +63,7 @@ async function run() {
     // 게이트 3: 파이썬이 chrome.debugger로 다른 탭을 운전한다(브라우저 자체 조작).
     // 브리지: 파이썬 -> 이 JS 함수 -> runtime 메시지 -> SW의 chrome.debugger -> 결과.
     try {
-      py.globals.set("cdpNavigateEval", async (url, expr) => chrome.runtime.sendMessage({ type: "cdp", url, expr }));
+      py.globals.set("cdpNavigateEval", async (url, expr, override) => chrome.runtime.sendMessage({ type: "cdp", url, expr, override: !!override }));
       py.globals.set("contentScriptEval", async (url, expr) => chrome.runtime.sendMessage({ type: "contentScript", url, expr }));
       const targetUrl = `http://127.0.0.1:${backchannelPort}/cdpTarget`;
       const signalExpr = "JSON.stringify({webdriver: navigator.webdriver, uaHeadless: /Headless/.test(navigator.userAgent), plugins: navigator.plugins.length, hasWindowChrome: typeof window.chrome, languages: (navigator.languages||[]).length})";
@@ -75,10 +75,11 @@ markerResult = await cdpNavigateEval(target, "document.getElementById('marker').
 computeResult = await cdpNavigateEval(target, "6 * 7")
 cdpSignal = await cdpNavigateEval(target, ${JSON.stringify(signalExpr)})
 scriptSignal = await contentScriptEval(target, ${JSON.stringify(signalExpr)})
-[titleResult.ok, titleResult.value, markerResult.value, computeResult.ok, computeResult.value, cdpSignal.value, scriptSignal.ok, scriptSignal.value]
+overrideRead = await cdpNavigateEval(target, "String(navigator.webdriver)", True)
+[titleResult.ok, titleResult.value, markerResult.value, computeResult.ok, computeResult.value, cdpSignal.value, scriptSignal.ok, scriptSignal.value, overrideRead.value]
 `)).toJs();
       timings.cdpMs = Math.round(performance.now() - t1);
-      const [navOk, title, marker, evalOk, compute, cdpSignals, scriptOk, scriptSignals] = arr;
+      const [navOk, title, marker, evalOk, compute, cdpSignals, scriptOk, scriptSignals, overrideRead] = arr;
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate",
         navOk === true && title === "pyprocCdpTarget" && marker === "cdpMarkerOk" && evalOk === true && compute === 42,
         `title=${title}, marker=${marker}, compute=${compute}, cdpMs=${timings.cdpMs}`);
@@ -86,6 +87,9 @@ scriptSignal = await contentScriptEval(target, ${JSON.stringify(signalExpr)})
       // headless라 uaHeadless는 이 실측의 산물이고 실배포(headed)에선 진짜 UA.
       add("[측정] chrome.debugger 경로(CDP attach) 신호", true, cdpSignals);
       add("[측정] content script 경로(chrome.scripting, CDP 없음) 신호", true, `ok=${scriptOk}, ${scriptSignals}`);
+      // 측정: 페이지 상위 선제 개입. 하네스는 포트로 webdriver=true인데, addScriptToEvaluateOnNewDocument로
+      // 페이지 JS보다 먼저 navigator.webdriver를 덮으면 페이지가 읽는 값이 undefined가 되는가(= 표시등 끔).
+      add("[측정] 페이지 상위 선제 개입 후 webdriver 읽힘값(override)", true, `off=true(포트), on=${overrideRead}`);
     } catch (e) {
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate", false, String(e));
     }
