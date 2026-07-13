@@ -36,6 +36,8 @@ node tests/attempts/browserControl/bootIsolationRunner.mjs
 | 파이썬에서 chrome.debugger로 다른 탭 CDP 왕복이 되는가 | bootIsolationRunner | 파이썬발 새 탭 attach -> `Page.navigate` -> `Runtime.evaluate`가 페이지 title/DOM/계산값 회수 |
 | 조작 경로별 자동화 지문(스텔스) 차이가 있는가 | bootIsolationRunner(측정) | chrome.debugger(CDP) vs content script(chrome.scripting)의 `navigator.webdriver` 등 대비. **자동 하네스로는 실측 불가**(아래 한계) = 수동 실측 영역 |
 | iframe 역전으로 임의 사이트를 셸 창에 담나(고정 화면) | bootIsolationRunner(게이트4) | `X-Frame-Options: DENY` 페이지가 규칙 없이 iframe 차단 + declarativeNetRequest 헤더 제거 + credentialless(COI 우회) 후 로드 성공(postMessage 수신) |
+| 신뢰 입력(isTrusted)과 실제 DOM 조작이 되나 | bootIsolationRunner(게이트5,6) | chrome.debugger `Input.*` 클릭이 isTrusted=true + `insertText`가 입력칸 값 변경 |
+| 다중 세션 병렬이 되나(프로세스 OS) | bootIsolationRunner(게이트7) | asyncio.gather로 2탭 동시 CDP 조작이 각각 정확 |
 
 승격 조건(전 게이트 GREEN): `mainPlan/`에 이니셔티브 개설 후 확장 어댑터 능력 설계. 하나라도 RED면
 결론 표에 사유 기록하고 접는다(정직한 경계).
@@ -77,6 +79,7 @@ undefined로 덮으면, 하네스가 포트로 `webdriver=true`인 최악 조건
 | 2026-07-13 | webdriverCauseRunner | Edge 150 headless(확장·조작 없음) | webdriver 인과 격리(3조건): 평범 실행 **false**, +원격포트 **true**, +원격포트+확장디버그 true(추가영향 0). GREEN | **범인 = `--remote-debugging-port` 단독**. 조작 경로(content script) 무죄 = 실배포(포트 없음)에서 content script는 webdriver 미점화 **논리 확정**. bootIsolationRunner의 "둘 다 true"가 하네스 오염임이 실증됨. chrome.debugger 경로는 CDP라 webdriver 노출 확정(설계상 신뢰입력 전용). 잔여 수동: attach 실배포 효과 + 실 봇방어 통과 | 스텔스 (거의) 자동 확정 |
 | 2026-07-13 | bootIsolationRunner(오버라이드) | Edge 150 headless(포트로 webdriver=true) | 페이지 상위 선제 개입: `Page.addScriptToEvaluateOnNewDocument`로 navigator.webdriver를 페이지 JS 전에 덮음. 읽힘값 off=true -> **on=undefined** | **진짜 켜진 표시등을 선제 조작으로 껐다**. chrome.debugger 경로의 webdriver 약점도 이 개입으로 덮인다. 경계: 표면값만(네이티브 되검사·서버측은 못 넘음) = puppeteer-stealth 동급 + 확장 영속 | 스텔스 심화(선제 조작) |
 | 2026-07-13 | bootIsolationRunner(게이트4) | Edge 150 headless | iframe 역전: `X-Frame-Options: DENY` 사이트가 규칙 전=차단(false), declarativeNetRequest 헤더 제거 + credentialless(COI 우회) 후=로드(true, postMessage 수신). GREEN 13/13 | **임의 cross-origin 사이트를 셸의 iframe 창에 담는다** = 고정 화면(페이지 navigate와 무관한 셸). **발견**: crossOriginIsolated(프로세스 OS)와 cross-origin iframe이 COEP 충돌 -> credentialless로 해결하나 **쿠키 격리**(로그인 세션 미실림). 쿠키 필요시 셸을 non-COI 문서로 런타임과 분리 | 영속 셸 iframe 역전 실증(쿠키 트레이드오프) |
+| 2026-07-13 | bootIsolationRunner(게이트5-7) | Edge 150 headless | 신뢰입력+실제조작+다중세션: chrome.debugger `Input.dispatchMouseEvent` 클릭이 **isTrusted=true**, `Input.insertText`가 입력칸 값 변경(hello42), asyncio.gather로 2탭 동시 CDP 조작(222/444 정확). GREEN 16/16 | **신뢰 입력(봇 방어의 isTrusted 검사 통과) + 실제 DOM 조작 + 프로세스 OS 다중 세션 병렬 실증**. chrome.debugger 경로는 사람 입력과 구분 안 되는 이벤트 생성 | 조작 능력 코어 실증 |
 
 ## 판정
 

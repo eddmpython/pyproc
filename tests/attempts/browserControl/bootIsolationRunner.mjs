@@ -69,9 +69,16 @@ async function main() {
       return;
     }
     // 게이트 3 타깃 페이지: 파이썬이 chrome.debugger로 여기 navigate 후 title/marker/eval을 회수한다.
+    // 게이트 5/6용 버튼 + 입력칸: 신뢰 입력(isTrusted)과 실제 조작(값 변경)을 관측한다.
     if (req.url.startsWith("/cdpTarget")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end("<!doctype html><html><head><title>pyprocCdpTarget</title></head><body><div id=\"marker\">cdpMarkerOk</div></body></html>");
+      res.end("<!doctype html><html><head><title>pyprocCdpTarget</title></head><body>"
+        + "<div id=\"marker\">cdpMarkerOk</div>"
+        + "<button id=\"btn\" style=\"position:absolute;top:20px;left:20px;width:140px;height:44px\">click</button>"
+        + "<input id=\"field\" value=\"\">"
+        + "<script>window.clickReport={clicked:false};"
+        + "document.getElementById('btn').addEventListener('click',function(e){window.clickReport={clicked:true,trusted:e.isTrusted};});"
+        + "</script></body></html>");
       return;
     }
     // 게이트 4 iframe 역전 타깃: X-Frame-Options: DENY로 프레이밍을 거부한다(강방어 사이트 재현).

@@ -90,6 +90,7 @@ async function run() {
     try {
       py.globals.set("cdpNavigateEval", async (url, expr, override) => chrome.runtime.sendMessage({ type: "cdp", url, expr, override: !!override }));
       py.globals.set("contentScriptEval", async (url, expr) => chrome.runtime.sendMessage({ type: "contentScript", url, expr }));
+      py.globals.set("trustedInput", async (url) => chrome.runtime.sendMessage({ type: "trustedInput", url }));
       const targetUrl = `http://127.0.0.1:${backchannelPort}/cdpTarget`;
       const signalExpr = "JSON.stringify({webdriver: navigator.webdriver, uaHeadless: /Headless/.test(navigator.userAgent), plugins: navigator.plugins.length, hasWindowChrome: typeof window.chrome, languages: (navigator.languages||[]).length})";
       const t1 = performance.now();
@@ -101,10 +102,13 @@ computeResult = await cdpNavigateEval(target, "6 * 7")
 cdpSignal = await cdpNavigateEval(target, ${JSON.stringify(signalExpr)})
 scriptSignal = await contentScriptEval(target, ${JSON.stringify(signalExpr)})
 overrideRead = await cdpNavigateEval(target, "String(navigator.webdriver)", True)
-[titleResult.ok, titleResult.value, markerResult.value, computeResult.ok, computeResult.value, cdpSignal.value, scriptSignal.ok, scriptSignal.value, overrideRead.value]
+inputResult = await trustedInput(target)
+import asyncio
+multiA, multiB = await asyncio.gather(cdpNavigateEval(target, "111 + 111"), cdpNavigateEval(target, "222 + 222"))
+[titleResult.ok, titleResult.value, markerResult.value, computeResult.ok, computeResult.value, cdpSignal.value, scriptSignal.ok, scriptSignal.value, overrideRead.value, inputResult.ok, inputResult.value, multiA.value, multiB.value]
 `)).toJs();
       timings.cdpMs = Math.round(performance.now() - t1);
-      const [navOk, title, marker, evalOk, compute, cdpSignals, scriptOk, scriptSignals, overrideRead] = arr;
+      const [navOk, title, marker, evalOk, compute, cdpSignals, scriptOk, scriptSignals, overrideRead, inputOk, inputValue, multiA, multiB] = arr;
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate",
         navOk === true && title === "pyprocCdpTarget" && marker === "cdpMarkerOk" && evalOk === true && compute === 42,
         `title=${title}, marker=${marker}, compute=${compute}, cdpMs=${timings.cdpMs}`);
@@ -115,6 +119,21 @@ overrideRead = await cdpNavigateEval(target, "String(navigator.webdriver)", True
       // 측정: 페이지 상위 선제 개입. 하네스는 포트로 webdriver=true인데, addScriptToEvaluateOnNewDocument로
       // 페이지 JS보다 먼저 navigator.webdriver를 덮으면 페이지가 읽는 값이 undefined가 되는가(= 표시등 끔).
       add("[측정] 페이지 상위 선제 개입 후 webdriver 읽힘값(override)", true, `off=true(포트), on=${overrideRead}`);
+      // 게이트5+6: 신뢰 입력(isTrusted)과 실제 조작(입력칸 값 변경).
+      try {
+        const inputData = JSON.parse(inputValue);
+        add("게이트5: 신뢰 입력(chrome.debugger Input.* -> isTrusted=true)",
+          inputOk === true && inputData.click && inputData.click.clicked === true && inputData.click.trusted === true,
+          `clicked=${inputData.click && inputData.click.clicked}, trusted=${inputData.click && inputData.click.trusted}`);
+        add("게이트6: 실제 DOM 조작(신뢰 키 입력이 입력칸 값을 바꿈)",
+          inputOk === true && inputData.field === "hello42",
+          `field=${JSON.stringify(inputData.field)}`);
+      } catch (e) {
+        add("게이트5/6: 신뢰 입력 + 실제 조작", false, `${String(e)} (raw=${inputValue})`);
+      }
+      // 게이트7: 다중 세션 병렬(2탭 동시 조작 = 프로세스 OS 차별점). asyncio.gather로 두 CDP 왕복 동시.
+      add("게이트7: 다중 세션 병렬(2탭 동시 CDP 조작)",
+        multiA === 222 && multiB === 444, `sessionA=${multiA}, sessionB=${multiB}`);
     } catch (e) {
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate", false, String(e));
     }

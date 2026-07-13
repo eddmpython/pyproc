@@ -4,6 +4,18 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 조작 능력 체크: 신뢰 입력 + 실제 조작 + 다중 세션 (게이트5-7 GREEN 16/16)
+
+- Phase 1의 핵심 조작 프리미티브를 실측으로 앞당겨 확인했다(구현은 나중에 능력 계약으로 승격).
+- **게이트5 신뢰 입력**: chrome.debugger `Input.dispatchMouseEvent`(버튼 중심 좌표 계산 후 press+release)가
+  `isTrusted=true` 이벤트 생성 = **봇 방어의 isTrusted 검사 통과**. 가짜 `dispatchEvent`(isTrusted=false)와 격차.
+- **게이트6 실제 조작**: `Input.insertText`가 입력칸 값을 실제로 바꿈(hello42). navigate/evaluate를 넘어 쓰기 조작.
+- **게이트7 다중 세션 병렬**: 파이썬 `asyncio.gather`로 두 CDP 왕복 동시(각 새 탭) -> 222/444 정확. 프로세스
+  OS의 워커 N = 세션 N 기초 실동(물리 chrome.debugger는 SW 큐로 직렬화되나 논리 병렬·결과 정확).
+- **의미**: 스텔스(무신호 경로 + 선제 개입) + 신뢰 입력(isTrusted) + 다중 세션이 다 섰다 = "탐지 안 걸리는
+  신뢰 입력 자동화 + 프로세스 OS 병렬"의 기술 리스크가 실측으로 제거됨. 남은 자동 체크: 쿠키 분리(non-COI 셸),
+  frame-busting 무력화.
+
 ### 2026-07-13 iframe 역전 실측 GREEN + COEP 긴장 발견 (bootIsolationRunner 게이트4)
 
 - 고정 화면 층위 C(iframe 역전)를 실측했다. `X-Frame-Options: DENY` 페이지가 규칙 없이는 iframe 차단(false),

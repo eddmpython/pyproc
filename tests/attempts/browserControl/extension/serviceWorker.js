@@ -74,6 +74,53 @@ async function handleCdp({ url, expr, override }) {
   }
 }
 
+// 게이트 5/6: 신뢰 입력 + 실제 조작. chrome.debugger `Input.*`로 진짜 마우스/키 이벤트를 디스패치해
+// isTrusted=true인지(봇 방어가 검사하는 핵심), 그리고 입력칸 값이 실제로 바뀌는지 관측한다.
+async function handleTrustedInput({ url }) {
+  let tab = null, target = null;
+  try {
+    tab = await chrome.tabs.create({ url: "about:blank", active: false });
+    target = { tabId: tab.id };
+    await chrome.debugger.attach(target, "1.3");
+    await chrome.debugger.sendCommand(target, "Page.enable");
+    const loaded = new Promise((resolve) => {
+      const onEvent = (source, method) => {
+        if (source.tabId === tab.id && method === "Page.loadEventFired") {
+          chrome.debugger.onEvent.removeListener(onEvent);
+          resolve();
+        }
+      };
+      chrome.debugger.onEvent.addListener(onEvent);
+      setTimeout(resolve, 10000);
+    });
+    await chrome.debugger.sendCommand(target, "Page.navigate", { url });
+    await loaded;
+    // 버튼 중심 좌표를 페이지에서 구한다(하드코딩 금지).
+    const rectRes = await chrome.debugger.sendCommand(target, "Runtime.evaluate", {
+      expression: "(() => { const r = document.getElementById('btn').getBoundingClientRect(); return JSON.stringify({ x: r.x + r.width/2, y: r.y + r.height/2 }); })()",
+      returnByValue: true,
+    });
+    const { x, y } = JSON.parse(rectRes.result.value);
+    // 신뢰 마우스 클릭(press+release).
+    await chrome.debugger.sendCommand(target, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await chrome.debugger.sendCommand(target, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+    // 입력칸에 신뢰 키 입력(focus 후 문자별 insertText).
+    await chrome.debugger.sendCommand(target, "Runtime.evaluate", { expression: "document.getElementById('field').focus()" });
+    await chrome.debugger.sendCommand(target, "Input.insertText", { text: "hello42" });
+    // 결과 회수: 클릭 신뢰성 + 입력칸 값.
+    const res = await chrome.debugger.sendCommand(target, "Runtime.evaluate", {
+      expression: "JSON.stringify({ click: window.clickReport, field: document.getElementById('field').value })",
+      returnByValue: true,
+    });
+    return { ok: true, value: res.result.value };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  } finally {
+    try { if (target) await chrome.debugger.detach(target); } catch (e) {}
+    try { if (tab) await chrome.tabs.remove(tab.id); } catch (e) {}
+  }
+}
+
 // 대안 경로: content script(chrome.scripting)로 조작한다. CDP attach를 하지 않으므로
 // navigator.webdriver가 켜지는지가 chrome.debugger 경로와의 스텔스 차이를 가른다(측정 대상).
 async function handleContentScript({ url, expr }) {
@@ -144,6 +191,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.type === "enableFrameStrip") {
     enableFrameHeaderStrip().then(() => sendResponse({ ok: true })).catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg && msg.type === "trustedInput") {
+    handleTrustedInput(msg).then(sendResponse);
     return true;
   }
   return true;
