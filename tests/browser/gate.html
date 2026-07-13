@@ -17,6 +17,11 @@
     const checks = [];
     const timings = {};
     const log = (m) => { out.textContent += "\n" + m; };
+    // 배포 지점 오버라이드(?indexURL=/vendor/pyodide/): 같은 게이트를 CDN이 아니라
+    // 자가 호스팅 경로로 전 검사한다(engine-independence P0의 게이트). 절대 URL로 정규화:
+    // 워커/캐시 계층의 URL 대조(startsWith)가 상대 경로에서 어긋나지 않게.
+    const indexParam = new URLSearchParams(location.search).get("indexURL");
+    const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
     const check = (name, pass, info = "") => {
       checks.push({ name, pass: !!pass, info: String(info) });
       log(`${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`);
@@ -35,9 +40,9 @@
 
       // 1) Layer 0: 부팅 + 실행
       let t = performance.now();
-      const rt = await boot();
+      const rt = await boot({ indexURL: INDEX });
       timings.bootMs = Math.round(performance.now() - t);
-      check("boot()", true, timings.bootMs + "ms");
+      check("boot()", true, timings.bootMs + "ms" + (INDEX ? " @" + INDEX : ""));
       check("run: sum(range(100)) === 4950", rt.run("sum(range(100))") === 4950);
 
       // 2) Layer 1: 복원 리액티브의 실행 경계 계약
@@ -145,7 +150,7 @@
       check("deviceFs: /proc/meminfo = 실제 힙", rt.run("import json\njson.loads(open('/proc/meminfo').read())['heapBytes']") === rt.memory.byteLength());
 
       // 3) Layer 2: 프로세스 OS (스냅샷-fork + 진짜 병렬 map)
-      const os = new PyProc();
+      const os = new PyProc({ indexURL: INDEX });
       t = performance.now();
       const b = await os.boot(2);
       timings.forkBootMs = Math.round(performance.now() - t);
@@ -196,7 +201,7 @@
       // 두 워커에 서로 다른 상태를 만든 뒤(더러운 dst) fork하므로, 자식이 정확히
       // "경계 + 부모 델타"가 되는지(dst 잔재 정화)까지 상시 검증한다. 마커 배타 검사는
       // 스케줄 배정을 몰라도 성립한다: 혼합 상태면 only0/only1이 둘 다 남는다.
-      const fos = new PyProc({ replay: {} });
+      const fos = new PyProc({ replay: {}, indexURL: INDEX });
       await fos.boot(2, false); // 리플레이 부팅(스냅샷 아님 = 바이트 동일한 경계)
       const [p1, p2] = fos.ps().map((p) => p.pid);
       // 태스크 2개 = 워커 2개가 각각 하나씩(레인당 1개) -> 양쪽에 서로 다른 사용자 상태.
@@ -213,7 +218,7 @@
 
       // RPC 계약(2026-07-12 승격): 같은 인스턴스에서 map 3개가 동시에 돌아도 응답이 섞이지
       // 않는다. reqId 상관 이전에는 taskId가 호출마다 0부터라 교차 수신이 가능했다.
-      const cos = new PyProc();
+      const cos = new PyProc({ indexURL: INDEX });
       await cos.boot(2);
       const idFn = "def _fn(a):\n    import time\n    time.sleep(0.05 * (a % 3))\n    return a * 10";
       const [r1, r2, r3] = await Promise.all([
@@ -235,7 +240,7 @@
       // wheel OPFS 캐시: 두 번째 커널이 네트워크 0으로 설치(재다운로드 0)
       const wDir = await (await navigator.storage.getDirectory()).getDirectoryHandle("pyprocGateWheels", { create: true });
       await rt.enableWheelCache({ dir: wDir }).install("six");
-      const rtW = await boot();
+      const rtW = await boot({ indexURL: INDEX });
       const wc2 = rtW.enableWheelCache({ dir: wDir });
       await wc2.install("six");
       // rt에는 micropip이 이미 있어 six만 캐시됨. 새 커널은 micropip.whl을 miss로 받고
@@ -262,10 +267,10 @@
 
       // 세션 부활(불멸 커널): 결정적 리플레이 + 델타로 다른 커널에서 상태가 산다
       const sDir = await (await navigator.storage.getDirectory()).getDirectoryHandle("pyprocGateSess", { create: true });
-      const s1 = await bootSession({});
+      const s1 = await bootSession({ indexURL: INDEX });
       s1.rt.run("k = 4100");
       const sv = await s1.save(sDir, "gate");
-      const s2 = await bootSession({});
+      const s2 = await bootSession({ indexURL: INDEX });
       await s2.load(sDir, "gate");
       check("session: 델타로 크로스 커널 부활", s2.rt.run("k + 42") === 4142, `${sv.pages}p, ${sv.mb}MB`);
       await (await navigator.storage.getDirectory()).removeEntry("pyprocGateSess", { recursive: true });

@@ -3,7 +3,8 @@
 // Service Worker의 fetch 이벤트는 script/wasm/zip 전부를 가로챈다. 2차 부팅의 CDN
 // 미스가 0이면 "비행기 모드에서도 켜지는 컴퓨터"가 fetch 계층 너머까지 성립한다.
 const CACHE = "pyprocCoreProbe";
-const CDN = "https://cdn.jsdelivr.net/pyodide/";
+// 배포 지점 2종을 모두 가로챈다: CDN(기본)과 자가 호스팅 /vendor/(engine-independence P0 재실측).
+const PREFIXES = ["https://cdn.jsdelivr.net/pyodide/", self.location.origin + "/vendor/"];
 let hits = 0, misses = 0, missList = [];
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -15,7 +16,7 @@ self.addEventListener("message", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
-  if (!e.request.url.startsWith(CDN)) return; // 코어 밖(로컬 페이지/게이트 백채널)은 그대로
+  if (!PREFIXES.some((p) => e.request.url.startsWith(p))) return; // 코어 밖(로컬 페이지/게이트 백채널)은 그대로
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
     const cached = await cache.match(e.request.url);

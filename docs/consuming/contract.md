@@ -67,7 +67,13 @@ subpath export: `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `p
 
 ## 런타임 정합 (하드 제약)
 
-- 기본 Pyodide: **v314.0.2 (CPython 3.14)**, CDN 로드. 소비 제품이 자체 Pyodide 코드를 병행하는 동안(xlpod)에는 같은 버전을 유지해야 이관이 성립한다.
+- 기본 Pyodide: **v314.0.2 (CPython 3.14)**, 기본은 CDN 로드. 소비 제품이 자체 Pyodide 코드를 병행하는 동안(xlpod)에는 같은 버전을 유지해야 이관이 성립한다.
+- **자가 호스팅(유통 독립)**: CDN 가용성·정책은 우리 통제 밖이므로, 배포 지점을 통째로 옮길 수 있다.
+  `npm run fetch:engine`이 GitHub Releases의 전체 배포판(코어 + 전 패키지 wheel, 426MB)을 `vendor/pyodide/`로
+  준비하고, `boot({ indexURL: "/vendor/pyodide/" })`로 소비한다(패키지 설치·lock 해석까지 CDN 0).
+  게이트 전 검사도 같은 스위치로 돈다: `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:browser`
+  (실측 2026-07-13: 자가 경로에서 39/39 GREEN + offlineBoot/swOffline 재실측 GREEN). `indexURL`은
+  부팅 커널의 속성으로 기록되어 자식 워커(subprocess)도 같은 지점을 쓴다(CDN 누수 없음).
 - **WASI 세션(bootWasi/WasiSession)은 별도 async 표면이다.** Pyodide 기반 표면(boot/Runtime/PyProc/ReactiveController)과 무관하게 additive로 추가됐다(기존 소비자 무영향). 엔진 무관 실증용 opt-in이며, `wasmURL`은 소비자가 제공한다(COOP/COEP 하에선 셀프 호스팅). 제약: 값 다리는 JSON 직렬화 한정(FFI 없음), 네이티브 확장 불가(정적 링크), 크로스 엔진 .pymachine 불가. 프로덕션 상용 파이썬은 Pyodide 표면이 정본이다.
 - 번들러 계약: `moduleResolution: "Bundler"` + `allowJs: false`에서 타입 해석, Vite가 `new Worker(new URL(...))`를 워커 청크로 emit(codaro에서 3단계 검증 완료).
 

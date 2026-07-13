@@ -29,7 +29,10 @@ const server = createStaticServer(async (req, res) => {
 
 await new Promise((res) => server.listen(0, "127.0.0.1", res));
 const page = (process.argv[2] || "tests/browser/gate.html").replaceAll("\\", "/").replace(/^\/+/, "");
-const url = `http://127.0.0.1:${server.address().port}/${page}`;
+// PYPROC_INDEX_URL: 게이트/probe를 다른 배포 지점으로 전 검사한다(자가 호스팅 P0 게이트:
+// PYPROC_INDEX_URL=/vendor/pyodide/ 가 CDN 0으로 같은 검사를 돌린다). 페이지는 ?indexURL=로 받는다.
+const indexQuery = process.env.PYPROC_INDEX_URL ? `?indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
+const url = `http://127.0.0.1:${server.address().port}/${page}${indexQuery}`;
 
 const browser = findBrowser();
 const profile = mkdtempSync(join(tmpdir(), "pyprocGate-"));

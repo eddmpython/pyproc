@@ -21,7 +21,8 @@
     "test": "node tests/run.mjs",
     "test:browser": "node tests/browser/run.mjs",
     "test:examples": "node tests/browser/examples.mjs",
-    "serve": "node examples/serve.mjs"
+    "serve": "node examples/serve.mjs",
+    "fetch:engine": "node scripts/fetchEngine.mjs"
   },
   "keywords": ["pyodide", "python", "browser", "wasm", "process", "parallel", "reactive", "runtime"],
   "license": "MPL-2.0"

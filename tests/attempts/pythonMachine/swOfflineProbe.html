@@ -16,6 +16,9 @@
     const ok = checks.length > 0 && checks.every((c) => c.pass);
     try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
   };
+  // 배포 지점 오버라이드(자가 호스팅 P0 재실측): swOfflineSw.js가 /vendor/ 접두도 가로챈다.
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
   const swCall = (msg) => new Promise((res) => {
     const ch = new MessageChannel();
     ch.port1.onmessage = (e) => res(e.data);
@@ -31,7 +34,7 @@
       if (!navigator.serviceWorker.controller) {
         await new Promise((res) => navigator.serviceWorker.addEventListener("controllerchange", res, { once: true }));
       }
-      const rt = await boot(); // SW 경유 1차 부팅 = 캐시 채움
+      const rt = await boot({ indexURL: INDEX }); // SW 경유 1차 부팅 = 캐시 채움
       rt.run("x = 1");
       const s1 = await swCall("stats");
       sessionStorage.setItem("pyprocSwPhase", "2");
@@ -45,7 +48,7 @@
 
       await swCall("resetStats");
       let t = performance.now();
-      const rt = await boot();
+      const rt = await boot({ indexURL: INDEX });
       timings.offlineBootMs = Math.round(performance.now() - t);
       const v = rt.run("40 + 2");
       const s2 = await swCall("stats");

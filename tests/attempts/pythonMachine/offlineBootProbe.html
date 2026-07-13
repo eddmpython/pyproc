@@ -14,6 +14,10 @@
     const ok = checks.length > 0 && checks.every((c) => c.pass);
     try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
   };
+  // 배포 지점 오버라이드(자가 호스팅 P0 재실측): ?indexURL=/vendor/pyodide/ 로 같은 검사를
+  // CDN 0으로 돌린다. 절대 URL 정규화 = 캐시 계층의 startsWith 대조가 성립하는 조건.
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
   try {
     const root = await navigator.storage.getDirectory();
     try { await root.removeEntry("pyprocCore", { recursive: true }); } catch (e) {}
@@ -21,7 +25,7 @@
 
     // 부팅 1: 캐시 적재(콜드)
     let t = performance.now();
-    const a = await boot({ coreCacheDir: dir });
+    const a = await boot({ coreCacheDir: dir, indexURL: INDEX });
     timings.coldMs = Math.round(performance.now() - t);
     check("부팅1: 코어 자산 캐시 적재", a.coreCache.misses > 0 && a.run("1+1") === 2,
       `${timings.coldMs}ms, miss ${a.coreCache.misses}/hit ${a.coreCache.hits}`);
@@ -30,7 +34,7 @@
 
     // 부팅 2: 캐시에서(웜). misses===0이면 fetch 계층은 네트워크 0.
     t = performance.now();
-    const b = await boot({ coreCacheDir: dir });
+    const b = await boot({ coreCacheDir: dir, indexURL: INDEX });
     timings.warmMs = Math.round(performance.now() - t);
     check("부팅2: 실행 정상", b.run("sum(range(10))") === 45, `${timings.warmMs}ms`);
     check("부팅2: fetch 계층 네트워크 0 (miss==0)", b.coreCache.misses === 0,
