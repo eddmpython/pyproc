@@ -66,7 +66,40 @@ async function handleCdp({ url, expr }) {
   }
 }
 
-// offscreen -> SW 메시지 분기: gateResult(릴레이) / cdp(chrome.debugger 왕복).
+// 대안 경로: content script(chrome.scripting)로 조작한다. CDP attach를 하지 않으므로
+// navigator.webdriver가 켜지는지가 chrome.debugger 경로와의 스텔스 차이를 가른다(측정 대상).
+async function handleContentScript({ url, expr }) {
+  let tab = null;
+  try {
+    tab = await chrome.tabs.create({ url, active: false });
+    await new Promise((resolve) => {
+      const listener = (tabId, info) => {
+        if (tabId === tab.id && info.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      setTimeout(resolve, 10000);
+    });
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: "MAIN", // 페이지가 실제로 보는 컨텍스트에서 측정
+      func: (expression) => {
+        try { return { ok: true, value: String(eval(expression)) }; }
+        catch (e) { return { ok: false, error: String(e) }; }
+      },
+      args: [expr],
+    });
+    return res?.result || { ok: false, error: "no result" };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  } finally {
+    try { if (tab) await chrome.tabs.remove(tab.id); } catch (e) {}
+  }
+}
+
+// offscreen -> SW 메시지 분기: gateResult(릴레이) / cdp(chrome.debugger) / contentScript(chrome.scripting).
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "gateResult") {
     report(msg);
@@ -76,6 +109,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "cdp") {
     handleCdp(msg).then(sendResponse);
     return true; // 비동기 sendResponse
+  }
+  if (msg && msg.type === "contentScript") {
+    handleContentScript(msg).then(sendResponse);
+    return true;
   }
   return true;
 });

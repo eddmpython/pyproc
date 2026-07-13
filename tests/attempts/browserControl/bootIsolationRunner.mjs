@@ -117,7 +117,12 @@ async function main() {
     const loaded = await send("Extensions.loadUnpacked", { path: extDir });
     const extId = loaded.result?.id;
     if (!extId) throw new Error(`loadUnpacked 실패: ${JSON.stringify(loaded)}`);
-    console.log(`  확장 로드됨: ${extId} -> offscreen 부팅 대기\n`);
+    // 확장 로드 후 러너의 CDP 세션을 끊는다: 활성 CDP가 navigator.webdriver를 브라우저 전역으로
+    // 켜므로(경로별 스텔스 실측을 오염), ws를 닫아 그 오염을 걷어낸다. 백채널은 http라 ws와 무관.
+    // 이후 chrome.debugger 경로는 파이썬이 직접 그 탭에 attach하므로 여전히 켜지고, content script
+    // 경로는 CDP를 안 붙이니 꺼질 것(이 대비가 실측의 목적).
+    ws.close();
+    console.log(`  확장 로드됨: ${extId} -> CDP 세션 종료 후 offscreen 부팅 대기\n`);
 
     const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);
     const result = await reportPromise;

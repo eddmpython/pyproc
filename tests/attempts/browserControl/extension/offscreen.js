@@ -64,20 +64,28 @@ async function run() {
     // 브리지: 파이썬 -> 이 JS 함수 -> runtime 메시지 -> SW의 chrome.debugger -> 결과.
     try {
       py.globals.set("cdpNavigateEval", async (url, expr) => chrome.runtime.sendMessage({ type: "cdp", url, expr }));
+      py.globals.set("contentScriptEval", async (url, expr) => chrome.runtime.sendMessage({ type: "contentScript", url, expr }));
       const targetUrl = `http://127.0.0.1:${backchannelPort}/cdpTarget`;
+      const signalExpr = "JSON.stringify({webdriver: navigator.webdriver, uaHeadless: /Headless/.test(navigator.userAgent), plugins: navigator.plugins.length, hasWindowChrome: typeof window.chrome, languages: (navigator.languages||[]).length})";
       const t1 = performance.now();
       const arr = (await py.runPythonAsync(`
 target = "${targetUrl}"
 titleResult = await cdpNavigateEval(target, "document.title")
 markerResult = await cdpNavigateEval(target, "document.getElementById('marker').textContent")
 computeResult = await cdpNavigateEval(target, "6 * 7")
-[titleResult.ok, titleResult.value, markerResult.value, computeResult.ok, computeResult.value]
+cdpSignal = await cdpNavigateEval(target, ${JSON.stringify(signalExpr)})
+scriptSignal = await contentScriptEval(target, ${JSON.stringify(signalExpr)})
+[titleResult.ok, titleResult.value, markerResult.value, computeResult.ok, computeResult.value, cdpSignal.value, scriptSignal.ok, scriptSignal.value]
 `)).toJs();
       timings.cdpMs = Math.round(performance.now() - t1);
-      const [navOk, title, marker, evalOk, compute] = arr;
+      const [navOk, title, marker, evalOk, compute, cdpSignals, scriptOk, scriptSignals] = arr;
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate",
         navOk === true && title === "pyprocCdpTarget" && marker === "cdpMarkerOk" && evalOk === true && compute === 42,
         `title=${title}, marker=${marker}, compute=${compute}, cdpMs=${timings.cdpMs}`);
+      // 측정(pass/fail 아님): 두 조작 경로가 남기는 자동화 지문 대비. navigator.webdriver가 핵심 신호.
+      // headless라 uaHeadless는 이 실측의 산물이고 실배포(headed)에선 진짜 UA.
+      add("[측정] chrome.debugger 경로(CDP attach) 신호", true, cdpSignals);
+      add("[측정] content script 경로(chrome.scripting, CDP 없음) 신호", true, `ok=${scriptOk}, ${scriptSignals}`);
     } catch (e) {
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate", false, String(e));
     }

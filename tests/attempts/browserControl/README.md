@@ -34,9 +34,23 @@ node tests/attempts/browserControl/bootIsolationRunner.mjs
 | MV3 offscreen에서 Pyodide가 뜨는가(번들 자산 + wasm CSP) | bootIsolationRunner | `loadPyodide` 성공 + `runPython("1+1")==2`. 실패면 사유 기록 |
 | 그 문서가 crossOriginIsolated = 프로세스 OS가 실리는가 | bootIsolationRunner | `crossOriginIsolated===true` + `SharedArrayBuffer` 생성 + module Worker 스폰 + SAB Atomics 왕복 |
 | 파이썬에서 chrome.debugger로 다른 탭 CDP 왕복이 되는가 | bootIsolationRunner | 파이썬발 새 탭 attach -> `Page.navigate` -> `Runtime.evaluate`가 페이지 title/DOM/계산값 회수 |
+| 조작 경로별 자동화 지문(스텔스) 차이가 있는가 | bootIsolationRunner(측정) | chrome.debugger(CDP) vs content script(chrome.scripting)의 `navigator.webdriver` 등 대비. **자동 하네스로는 실측 불가**(아래 한계) = 수동 실측 영역 |
 
 승격 조건(전 게이트 GREEN): `mainPlan/`에 이니셔티브 개설 후 확장 어댑터 능력 설계. 하나라도 RED면
 결론 표에 사유 기록하고 접는다(정직한 경계).
+
+## 스텔스(봇 탐지) 실측의 경계
+
+"내부에서 움직이니 봇 탐지에 안 걸리나"의 답: **경로에 따라 다르다.** `chrome.debugger`는 결국 CDP라
+attach하는 순간 그 탭의 `navigator.webdriver`가 켜진다(Playwright의 대표 신호와 동일). 스텔스는
+`chrome.debugger`를 쓴다는 사실이 아니라 **(a) content script 경로(CDP 없음) + (b) 실제 사용자 프로필
+/쿠키/하드웨어 지문**에서 나온다. 후자는 확장이 진짜 사용자 브라우저에 사는 태생적 강점이다.
+
+**자동 하네스 한계(중요)**: 이 러너는 확장 로드에 `Extensions.loadUnpacked`(CDP)가 필수라
+브라우저를 `--remote-debugging-port`로 시작한다. 그 시작 플래그가 `navigator.webdriver`를 브라우저
+**전역**으로 켜므로(ws를 닫아도 유지), content script 경로마저 haness 안에서는 `webdriver:true`로 보인다.
+경로별 스텔스 대비의 확정은 정상 설치 확장(개발자모드 로드, CDP 없이 시작)으로 하는 **수동 실측** 몫이다
+(GPU 창모드와 같은 계급).
 
 ## 결론 표
 
@@ -44,6 +58,7 @@ node tests/attempts/browserControl/bootIsolationRunner.mjs
 |---|---|---|---|---|---|
 | 2026-07-13 | 사전 게이트 0(로딩 경로) | Chrome 150 headless | `--load-extension` 신호 0 = 죽음. CDP `Extensions.loadUnpacked`(+`--enable-unsafe-extension-debugging`) 확장 ID 반환 + SW에서 `chrome.debugger`=object | 확장 로딩은 CDP 경로 단일 확정. 러너 분기 불필요 | 러너 경로 고정 |
 | 2026-07-13 | bootIsolationRunner | Edge 150 headless + vendor 번들 | **게이트 1+2+3 GREEN 9/9.** offscreen `crossOriginIsolated===true`, `SharedArrayBuffer`, module Worker + SAB Atomics 왕복(view0=42), Pyodide 부팅 **2.5-3.0s** + `runPython(1+1)==2`, `runPythonAsync==42`(JSPI 실동작), **게이트3: 파이썬 -> chrome.debugger로 새 탭 attach -> `Page.navigate` -> `Runtime.evaluate`가 title=pyprocCdpTarget + DOM marker=cdpMarkerOk + 계산 42 회수, 왕복 405ms** | **세 게이트 전부 실측 성립.** MV3 offscreen에 프로세스 OS가 통째로 실리고(SAB/워커/JSPI), 파이썬이 서버·네트워크 홉 0으로 브라우저 자체를 조작한다. manifest COEP/COOP 키가 확장 문서를 격리시킨다 = 최대 미검증 지점 해소 | **졸업 -> mainPlan 이니셔티브 개설 대상** |
+| 2026-07-13 | bootIsolationRunner(측정) | Edge 150 headless(러너 CDP) | 두 조작 경로의 자동화 지문 측정: chrome.debugger(CDP) `webdriver:true`, content script(chrome.scripting) 도 `webdriver:true`. plugins=5/hasWindowChrome=object/languages=3(정상). **둘 다 true인 것은 하네스 오염**: 러너가 확장 로드에 쓴 `--remote-debugging-port`가 webdriver를 전역으로 켬(ws close 후에도 유지) | **경로별 스텔스 대비는 자동 하네스로 실측 불가**(확장 로드 CDP <-> webdriver 전역 오염 순환). chrome.debugger가 CDP인 이상 그 경로는 webdriver 노출은 확정. content script 경로의 스텔스와 실프로필 지문 우위는 수동 실측 몫 | 한계 기록(수동 실측 영역) |
 
 ## 판정
 
