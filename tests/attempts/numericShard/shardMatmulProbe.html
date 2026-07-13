@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!--
+결과(append): numerical-acceleration Phase 1 - 행블록 샤딩 matmul이 선형 배속을 내나.
+C = A@B를 A의 행블록으로 P분할 -> 워커 p가 A_p @ B(B는 워커당 memcpy 1회) -> 병합.
+단일워커(WASM numpy) baseline 대비 P워커 배속을 실측한다. 게이트: speedup >= 0.7P +
+샤딩==단일 수치 동등 + 전송비 정직 보고. numpy를 각 워커에 로드(무거운 부팅).
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: shard matmul</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 행블록 샤딩 matmul (Phase 1 - 멀티코어 인자 회수)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { PyProc } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  // 워커 안 파이썬: arg의 SAB에서 A블록(mp x k)과 전체 B(k x n)를 numpy로 재구성, C_p = A_p @ B.
+  // compute 시간과 checksum(sum)만 돌려준다(결과 직렬화 비용 배제 = 순수 병렬 배속 측정).
+  const matmulFn = [
+    "def _fn(arg):",
+    "    import js, numpy, time",
+    "    mp = arg.mp; k = arg.k; n = arg.n",
+    "    aU8 = js.Uint8Array.new(arg.aSab, arg.aOff, mp * k * 8).slice()",
+    "    bU8 = js.Uint8Array.new(arg.bSab, 0, k * n * 8).slice()",
+    "    a = numpy.frombuffer(aU8.to_py(), dtype='float64').reshape(mp, k)",
+    "    b = numpy.frombuffer(bU8.to_py(), dtype='float64').reshape(k, n)",
+    "    t0 = time.perf_counter()",
+    "    c = a @ b",
+    "    dt = (time.perf_counter() - t0) * 1000",
+    "    return [dt, float(c.sum())]",
+  ].join("\n");
+
+  try {
+    const P = 4;               // 워커 = 코어
+    const M = 1024, K = 1024, N = 1024; // 정사각 matmul (f64 = numpy 기본, 정직한 워크로드)
+    const os = new PyProc({ indexURL: INDEX, packages: ["numpy"], setup: "import numpy" });
+    let t = performance.now();
+    const b = await os.boot(P);
+    timings.bootMs = Math.round(performance.now() - t);
+    check(`PyProc(numpy) ${P}워커 부팅`, os.ps().filter((p) => p.state === "ready").length === P, `${timings.bootMs}ms`);
+
+    // A(M x K), B(K x N)를 SAB에 채운다(결정적 값 = 재현 가능 checksum).
+    const aSab = new SharedArrayBuffer(M * K * 8), bSab = new SharedArrayBuffer(K * N * 8);
+    const A = new Float64Array(aSab), B = new Float64Array(bSab);
+    for (let i = 0; i < A.length; i++) A[i] = ((i * 7 + 3) % 17) / 17 - 0.5;
+    for (let i = 0; i < B.length; i++) B[i] = ((i * 5 + 1) % 13) / 13 - 0.5;
+
+    // 1) 단일워커 baseline: 워커 하나가 전체 A@B. compute ms + 전체 checksum.
+    const pid0 = os.ps()[0].pid;
+    let single = await os.exec(pid0, matmulFn, { aSab, aOff: 0, mp: M, k: K, n: N, bSab });
+    single = single.toJs ? single.toJs() : single;
+    timings.singleComputeMs = Math.round(single[0]);
+    const fullChecksum = single[1];
+    check("단일워커 matmul 완주", timings.singleComputeMs > 0, `compute ${timings.singleComputeMs}ms`);
+
+    // 2) P워커 샤딩: A를 행블록 P분할, 각 워커가 A_p @ B. os.map 벽시계 = 종단(전송+스케줄+연산).
+    const per = Math.floor(M / P);
+    const metas = Array.from({ length: P }, (_, i) => {
+      const startRow = i * per, rows = i === P - 1 ? M - startRow : per;
+      return { aSab, aOff: startRow * K * 8, mp: rows, k: K, n: N, bSab };
+    });
+    t = performance.now();
+    const shardRaw = await os.map(matmulFn, metas);
+    timings.shardWallMs = Math.round(performance.now() - t);
+    const shard = shardRaw.map((r) => (r && r.toJs ? r.toJs() : r));
+
+    // 정확성: 샤딩 결과의 checksum 합 == 단일워커 전체 checksum(행블록 분할이므로 합이 보존).
+    const shardChecksum = shard.reduce((s, r) => s + r[1], 0);
+    const relErr = Math.abs(shardChecksum - fullChecksum) / (Math.abs(fullChecksum) + 1e-9);
+    check("정확성: 샤딩 == 단일워커(수치 동등)", relErr < 1e-9, `상대오차 ${relErr.toExponential(2)}`);
+
+    // 배속: 종단(정직) + 순수 연산(천장). 순수 = 단일 compute / 최대 워커 compute.
+    const maxShardCompute = Math.max(...shard.map((r) => r[0]));
+    timings.speedupE2E = +(timings.singleComputeMs / timings.shardWallMs).toFixed(2);
+    timings.speedupPure = +(timings.singleComputeMs / maxShardCompute).toFixed(2);
+    check(`선형성: ${P}워커 종단 speedup >= 0.7P(${(0.7 * P).toFixed(1)})`, timings.speedupE2E >= 0.7 * P,
+      `종단 ${timings.speedupE2E}x (벽 ${timings.shardWallMs}ms), 순수연산 ${timings.speedupPure}x`);
+
+    // 전송비 정직 보고: 종단 - (단일compute/P 이상적) 차이 = 전송/스케줄 오버헤드.
+    const idealMs = timings.singleComputeMs / P;
+    timings.overheadMs = Math.round(timings.shardWallMs - Math.max(...shard.map((r) => r[0])));
+    check("전송비 정직 보고", true, `이상적 ${Math.round(idealMs)}ms, 최대워커연산 ${Math.round(maxShardCompute)}ms, 오버헤드(전송+병합+스케줄) ${timings.overheadMs}ms`);
+
+    os.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

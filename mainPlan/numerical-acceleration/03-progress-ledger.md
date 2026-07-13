@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 Phase 1 착수 실측: 샤딩 matmul near-linear 배속 (shardMatmulProbe GREEN 5/5)
+
+- Phase 1의 핵심 가설(horizontal 샤딩이 멀티코어 인자를 벽 0으로 회수)을 브라우저 실측으로 확증했다. 캠페인 `tests/attempts/numericShard/` 개설.
+- **실측(자가 호스팅 경로, CDN 0)**: 1024^3 f64 matmul. 단일워커 compute **14238ms**(이 환경 numpy 절대 속도가 매우 느림 = 속도 벽 자체를 실증), 4워커 행블록 샤딩 **종단 3.67배**(순수 연산 3.68배 = 4워커 92% 효율, 게이트 0.7P=2.8 크게 상회), **정확성 상대오차 0.00**(샤딩 결과 == 단일워커, 행블록 분할이라 checksum 보존), **전송+병합+스케줄 오버헤드 14ms**(연산 3882ms 대비 무시 가능).
+- **의미**: memcpy-1 계약이 대형 compute-bound 커널에서 실증됐다(전송비 14ms << 연산). horizontal 샤딩 논제가 숫자로 섰다. **정직**: 이건 샤딩의 최선 케이스(연산 N^3 >> 전송 N^2). 작은 배열/전송 헤비 op(elementwise 단발)는 손익분기 아래에서 배속이 낮거나 진다 - shardUfuncProbe가 실측 예정.
+- **Phase 1 핵심 게이트 GREEN.** NEXT: shardReduce/shardUfunc probe -> mapArray 2D/matmul + 병렬 op src 승격.
+
 ### 2026-07-13 이니셔티브 개시: 문제 재조준 + 접지 실측 + 연구 3종
 
 - browser-os P1~P7 + engine-independence 사다리가 닫힌 뒤, "핵심 진짜 목표"(로컬급 진짜 파이썬)의 최대 남은 격차를 뚫는 단일 경로로 개시했다.
