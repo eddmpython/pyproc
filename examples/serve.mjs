@@ -20,6 +20,9 @@ const MIME = {
   ".md": "text/plain; charset=utf-8",
   ".map": "application/json; charset=utf-8",
   ".py": "text/plain; charset=utf-8",
+  // 브랜드 마크(assets/logo.svg): 파비콘·헤더 로고가 파일로 참조한다. 이 타입이 없으면
+  // 브라우저가 octet-stream을 이미지로 안 그린다(GitHub Pages는 알아서 붙이지만 로컬은 여기가 정본).
+  ".svg": "image/svg+xml",
 };
 
 // COOP/COEP 정적 서버를 만든다(listen은 호출자 몫).

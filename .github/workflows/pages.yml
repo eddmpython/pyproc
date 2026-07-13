@@ -26,10 +26,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: 데모 사이트 조립 (예제 + 라이브러리 + SW 루트 사본 + 랜딩 루트 승격)
+      - name: 데모 사이트 조립 (예제 + 라이브러리 + 브랜드 자산 + SW 루트 사본 + 랜딩 루트 승격)
         run: |
           mkdir -p _site
-          cp -r examples src _site/
+          # assets: 파비콘·헤더 로고가 참조하는 브랜드 마크 정본(랜딩은 assets/, 예제는 ../assets/).
+          cp -r examples src assets _site/
           cp index.js index.d.ts LICENSE _site/
           cp src/capabilities/pyprocSw.js _site/pyprocSw.js
           # 랜딩은 examples/index.html이 정본이고 배포 루트로 승격된다(상대 경로가 루트 기준).

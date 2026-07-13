@@ -4,14 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>The Python Machine - pyproc</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f1720'/%3E%3Cpath d='M 24.4 23.3 A 14 14 0 1 0 39.6 23.3' fill='none' stroke='%237ce38b' stroke-width='6' stroke-linecap='round'/%3E%3Crect x='29' y='12' width='6' height='16' rx='3' fill='%237ce38b'/%3E%3C/svg%3E">
+  <link rel="icon" href="../assets/logo.svg">
+  <meta name="theme-color" content="#0a0f1c">
   <link rel="stylesheet" href="demo.css">
   <script type="module" src="siteChrome.js"></script>
 </head>
 <body>
   <div class="wrap">
     <header class="site">
-      <a class="logo" href="../"><svg class="logoMark" viewBox="0 0 64 64" width="22" height="22" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#0f1720"/><rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="#223042" stroke-width="2"/><path d="M 24.4 23.3 A 14 14 0 1 0 39.6 23.3" fill="none" stroke="#7ce38b" stroke-width="5.5" stroke-linecap="round"/><rect x="29" y="12" width="6" height="16" rx="3" fill="#7ce38b"/></svg> <span><span class="py">py</span>proc</span></a>
+      <a class="logo" href="../"><img class="logoMark" src="../assets/logo.svg" width="22" height="22" alt=""> <span><span class="py">py</span>proc</span></a>
       <nav>
         <a href="agentSandbox.html">Agent</a>
         <a href="machine.html" class="on">Machine</a>
@@ -30,8 +31,8 @@
     <div class="panel">
       <div class="status" id="st">Booting...</div>
       <div class="row" style="margin:.6rem 0 .2rem">
-        <span class="badge green">state survives the tab</span>
-        <span class="badge blue">/home/web is a real disk (OPFS)</span>
+        <span class="badge ok">state survives the tab</span>
+        <span class="badge info">/home/web is a real disk (OPFS)</span>
         <span class="badge">SHA-256 + explicit trust on import</span>
       </div>
     </div>
