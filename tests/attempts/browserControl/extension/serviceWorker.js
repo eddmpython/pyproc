@@ -5,6 +5,11 @@
 // 백채널 포트는 config.js에서 온다: 러너가 서버 포트를 확보한 뒤 조립 시점에 구워 넣는다
 // (실측 산출값의 로컬 주입. CDP evaluate 주입은 SW 실행 컨텍스트가 불안정해 폐기 - 결론 표 참조).
 import { BACKCHANNEL_PORT } from "./config.js";
+import { openBrowserControlHost } from "./browserControlHost.js";
+
+// Phase A 영속 세션 호스트 등록(파이썬 pyprocBrowser의 SW 절반). 게이트9가 이걸 왕복한다.
+// 기존 게이트(3/5/6/7 일회성 핸들러)는 개념 실측으로 남기고, 이 호스트가 승격될 깎인 형태다.
+openBrowserControlHost();
 
 async function report(payload) {
   const body = JSON.stringify({

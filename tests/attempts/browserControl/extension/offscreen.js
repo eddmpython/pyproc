@@ -1,9 +1,55 @@
 // offscreen.js - Pyodide 런타임 호스트(게이트 1+2 실측).
 // 확장 문서에서: (1) crossOriginIsolated 여부, (2) SAB 생성, (3) module Worker 스폰 + SAB Atomics 왕복,
 // (4) 번들 Pyodide 부팅(indexURL = 확장 루트) + runPython. 결과를 SW로 보내 러너로 릴레이한다.
+import { makeMessage } from "./browserControlProtocol.js";
+
 const backchannelPort = new URL(location.href).searchParams.get("port");
 const checks = [];
 const add = (name, pass, info) => checks.push({ name, pass: !!pass, info: info || "" });
+
+// 파이썬 pyprocBrowser 표면(승격될 블로킹 계약의 원형). run_sync로 SW 왕복을 동기화한다(socketBridge 패턴).
+// 입력=문자열/JSON, 출력=JSON-값(structured clone 경계라 PyProxy 금지). ok=false면 파이썬 예외로 승격.
+const PYPROC_BROWSER_MODULE = `
+import json, sys, types
+from pyodide.ffi import run_sync
+
+def _send(op, **fields):
+    respJson = run_sync(_pyprocBrowserSend(op, json.dumps(fields)))
+    resp = json.loads(respJson)
+    if not resp.get("ok"):
+        raise RuntimeError("browserControl " + op + ": " + str(resp.get("error")))
+    return resp
+
+class BrowserTab:
+    def __init__(self, sessionId, mode):
+        self._sid = sessionId
+        self.mode = mode
+    def navigate(self, url):
+        _send("navigate", sessionId=self._sid, args={"url": url})
+        return self
+    def evaluate(self, expr):
+        return _send("evaluate", sessionId=self._sid, args={"expr": expr}).get("value")
+    def click(self, selector):
+        _send("click", sessionId=self._sid, args={"selector": selector})
+        return self
+    def type(self, selector, text):
+        _send("type", sessionId=self._sid, args={"selector": selector, "text": text})
+        return self
+    def close(self):
+        _send("closeSession", sessionId=self._sid)
+
+def tab(url=None, mode="script"):
+    resp = _send("openSession", mode=mode)
+    handle = BrowserTab(resp["sessionId"], mode)
+    if url:
+        handle.navigate(url)
+    return handle
+
+_mod = types.ModuleType("pyprocBrowser")
+_mod.tab = tab
+_mod.BrowserTab = BrowserTab
+sys.modules["pyprocBrowser"] = _mod
+`;
 
 // iframe 역전 실측 헬퍼: 주어진 URL을 offscreen(chrome-extension:// origin)의 iframe에 담고,
 // 내부 페이지가 postMessage로 로드를 알리면 true. 타임아웃(차단)이면 false. cross-origin이라
@@ -136,6 +182,43 @@ multiA, multiB = await asyncio.gather(cdpNavigateEval(target, "111 + 111"), cdpN
       // 게이트7: 다중 세션 병렬(2탭 동시 조작 = 프로세스 OS 차별점). asyncio.gather로 두 CDP 왕복 동시.
       add("게이트7: 다중 세션 병렬(2탭 동시 CDP 조작)",
         multiA === 222 && multiB === 444, `sessionA=${multiA}, sessionB=${multiB}`);
+
+      // 게이트9: 영속 세션 표면(pyprocBrowser). one-shot이 아니라 한 핸들로 op 사이에 탭/attach가 유지되는지 +
+      // 블로킹 run_sync가 offscreen 메인스레드에서 도는지(3에이전트 최대 리스크) 실측. debugger/script 두 mode.
+      try {
+        py.globals.set("_pyprocBrowserSend", async (op, fieldsJson) => {
+          const resp = await chrome.runtime.sendMessage(makeMessage(op, JSON.parse(fieldsJson)));
+          return JSON.stringify(resp);
+        });
+        await py.runPythonAsync(PYPROC_BROWSER_MODULE);
+        const sessionArr = (await py.runPythonAsync(`
+import pyprocBrowser as browser
+persistTarget = "${targetUrl}"
+dbg = browser.tab(persistTarget, mode="debugger")
+dbgTitle = dbg.evaluate("document.title")
+dbg.type("#field", "persistDbg")
+dbgField = dbg.evaluate("document.getElementById('field').value")
+dbg.click("#btn")
+dbgClicked = dbg.evaluate("JSON.stringify(window.clickReport)")
+dbg.close()
+scr = browser.tab(persistTarget, mode="script")
+scrTitle = scr.evaluate("document.title")
+scr.type("#field", "persistScr")
+scrField = scr.evaluate("document.getElementById('field').value")
+scr.close()
+[dbgTitle, dbgField, dbgClicked, scrTitle, scrField]
+`)).toJs();
+        const [dbgTitle, dbgField, dbgClicked, scrTitle, scrField] = sessionArr;
+        const dbgClickData = JSON.parse(dbgClicked || "{}");
+        add("게이트9a: 영속 세션(debugger) 한 핸들 다중 op + 블로킹 run_sync",
+          dbgTitle === "pyprocCdpTarget" && dbgField === "persistDbg" && dbgClickData.trusted === true,
+          `title=${dbgTitle}, field=${dbgField}, clickTrusted=${dbgClickData.trusted}`);
+        add("게이트9b: 영속 세션(script) 한 핸들 다중 op",
+          scrTitle === "pyprocCdpTarget" && scrField === "persistScr",
+          `title=${scrTitle}, field=${scrField}`);
+      } catch (e) {
+        add("게이트9: 영속 세션(pyprocBrowser) 표면", false, String(e));
+      }
     } catch (e) {
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate", false, String(e));
     }
