@@ -194,6 +194,61 @@ for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
   });
 }
 
+// 3.7) 브랜드: 마크 정본은 assets/logo.svg 하나다. 파비콘·헤더 로고·색이 여기서만 나온다.
+//      마크를 인라인으로 복제하거나(6쪽이 갈라진다), 마크와 CSS 색이 어긋나는 드리프트를 차단한다.
+console.log("\n[브랜드]");
+const logoSvg = readFileSync(join(ROOT, "assets", "logo.svg"), "utf8");
+const cssSrc = readFileSync(join(ROOT, "examples", "demo.css"), "utf8");
+const markColors = {
+  // 마크의 그라디언트 양 끝과 터미널 패널 색 = 브랜드 색의 출처.
+  markFrom: logoSvg.match(/<stop offset="0%" stop-color="(#[0-9a-f]{6})"\/>/)?.[1],
+  markTo: logoSvg.match(/<stop offset="100%" stop-color="(#[0-9a-f]{6})"\/>\s*<\/linearGradient>/)?.[1],
+  ink: logoSvg.match(/<path [^>]*fill="(#[0-9a-f]{6})"\/>/g)?.map((m) => m.match(/fill="(#[0-9a-f]{6})"/)[1])[0],
+};
+for (const [name, color] of Object.entries(markColors)) {
+  check(`demo.css --${name}이 마크 실측색(${color})과 일치`, () => {
+    if (!color) throw new Error("logo.svg에서 색을 못 읽음(마크 구조 변경?)");
+    const declared = cssSrc.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`))?.[1];
+    if (declared !== color) throw new Error(`demo.css는 ${declared}, 마크는 ${color}`);
+  });
+}
+const landing = readFileSync(join(ROOT, "examples", "index.html"), "utf8");
+for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
+  const html = readFileSync(f, "utf8");
+  const prefix = html === landing ? "assets/" : "../assets/"; // 랜딩만 배포 루트로 승격된다
+  check(`마크 참조 고정: ${rel(f)}`, () => {
+    if (!html.includes(`<link rel="icon" href="${prefix}logo.svg">`)) throw new Error("파비콘이 마크 정본을 안 씀");
+    if (!html.includes(`<img class="logoMark" src="${prefix}logo.svg"`)) throw new Error("헤더 로고가 마크 정본을 안 씀");
+    if (/<svg[^>]*class="logoMark"/.test(html)) throw new Error("마크 인라인 복제(SSOT 우회)");
+    if (/rel="icon" href="data:/.test(html)) throw new Error("파비콘 data URI 복제(SSOT 우회)");
+  });
+}
+check("pages.yml이 assets를 배포(안 그러면 파비콘·로고가 404)", () => {
+  const pages = readFileSync(join(ROOT, ".github", "workflows", "pages.yml"), "utf8");
+  if (!/cp -r [^\n]*\bassets\b/.test(pages)) throw new Error("assets 복사 없음");
+});
+// SVG는 XML이다: 주석 안의 연속 하이픈은 XML이 금지한다. 어기면 마크가 파싱 불가가 되어
+// 브라우저가 에러 한 줄 없이 이미지를 통째로 버린다(파비콘·헤더 로고가 동시에 사라진다).
+check("logo.svg 주석에 연속 하이픈 없음(XML 위반 = 마크 소멸)", () => {
+  for (const c of logoSvg.match(/<!--[\s\S]*?-->/g) || []) {
+    if (c.slice(4, -3).includes("--")) throw new Error("주석 본문에 연속 하이픈: XML 파싱 불가");
+  }
+});
+// 주석 본문에 종료 기호가 섞이면 주석이 거기서 닫히고, 뒤따르는 문장이 선택자로 먹혀
+// :root 블록이 통째로 무효가 된다(색이 전부 사라지는데 에러는 없다). CSS 파서와 같은 방식으로
+// (여는 기호부터 첫 종료 기호까지) 주석을 걷어낸 뒤, 코드에 종료 기호가 남으면 조기 종료다.
+check("demo.css 주석 무결성(조기 종료가 시트를 무력화)", () => {
+  const code = cssSrc.replace(/\/\*[\s\S]*?\*\//g, "");
+  if (code.includes("*/")) throw new Error("주석 밖에 종료 기호가 남음: 주석 본문이 주석을 조기에 닫았다");
+  if (code.includes("/*")) throw new Error("닫히지 않은 주석");
+});
+// 이름을 바꾼 변수를 어딘가 놓치면 그 자리만 색이 사라진다(계산 시점 무효 -> 초기값). 참조는 전부 해석돼야 한다.
+check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
+  const declared = new Set([...cssSrc.matchAll(/(--[a-zA-Z][\w-]*)\s*:/g)].map((m) => m[1]));
+  const missing = [...new Set([...cssSrc.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]))].filter((v) => !declared.has(v));
+  if (missing.length) throw new Error("선언 없는 변수 참조: " + missing.join(", "));
+});
+
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");

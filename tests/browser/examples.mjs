@@ -11,7 +11,10 @@ import { createStaticServer } from "../../examples/serve.mjs";
 import { findBrowser, headlessArgs } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
-const PAGES = ["examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/processOs.html"];
+// brandGate: 예제가 쓰는 브랜드 자산(마크 SVG + demo.css 팔레트)이 실제로 그려지는지 먼저 본다.
+// 이 층의 실패는 조용하다(파싱 실패 = 이미지가 사라지고, 색만 초기값으로 돌아간다). 파이썬을
+// 안 띄우므로 몇 초면 끝난다: 예제 5쪽을 다 돌리기 전에 진열장이 깨졌는지부터 알려준다.
+const PAGES = ["tests/browser/brandGate.html", "examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/processOs.html"];
 
 const browser = findBrowser();
 let resolveReport = null;

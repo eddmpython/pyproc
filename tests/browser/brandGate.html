@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>pyproc 브랜드 게이트</title>
+  <link rel="stylesheet" href="../../examples/demo.css">
+</head>
+<body>
+  <h1>pyproc 브랜드 게이트</h1>
+  <p>브랜드 자산(마크 + 팔레트)이 <em>진짜로 그려지는지</em> 검증한다. 이 층의 실패는 전부 조용하다:
+     SVG는 XML이라 주석 하나로 파싱 불가가 되고(브라우저가 에러 없이 이미지를 버린다), CSS 주석이
+     조기에 닫히면 :root 블록이 통째로 무효가 되며(색만 사라진다), 서버 MIME이 틀리면 이미지가
+     안 그려진다. 어느 것도 정적 검사로는 끝까지 못 막는다. 그래서 실제로 띄워서 본다.</p>
+  <img id="mark" src="../../assets/logo.svg" width="64" height="64" alt="pyproc">
+  <span class="badge ok">ok</span><span class="badge info">info</span>
+  <pre id="out">실행 중...</pre>
+  <script type="module">
+    const out = document.getElementById("out");
+    const checks = [];
+    const check = (name, pass, info = "") => {
+      checks.push({ name, pass: !!pass, info: String(info) });
+      out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`;
+    };
+    const rgb = (el, prop) => getComputedStyle(el)[prop];
+
+    // 1) 마크가 이미지로 디코드된다 = SVG가 XML로 파싱됐고 MIME도 맞다.
+    const mark = document.getElementById("mark");
+    await mark.decode().then(() => {}, () => {});
+    check("마크가 디코드된다(SVG 파싱 + MIME)", mark.naturalWidth > 0,
+      `naturalWidth=${mark.naturalWidth}`);
+
+    // 2) 팔레트가 적용된다 = demo.css가 파싱됐고 :root 변수가 살아있다.
+    //    기대값은 demo.css의 정의와 같아야 한다(--bg #0a0f1c, --teal #00d4c8, --blue #5b8cff).
+    const bg = rgb(document.body, "backgroundColor");
+    check("배경이 브랜드 네이비(--bg)", bg === "rgb(10, 15, 28)", bg);
+    const ok = rgb(document.querySelector(".badge.ok"), "color");
+    check("성공색이 브랜드 틸(--teal)", ok === "rgb(0, 212, 200)", ok);
+    const info = rgb(document.querySelector(".badge.info"), "color");
+    check("정보색이 브랜드 블루(--blue)", info === "rgb(91, 140, 255)", info);
+
+    const ok2 = checks.length > 0 && checks.every((c) => c.pass);
+    out.textContent = (ok2 ? "게이트 GREEN\n" : "게이트 RED\n") + out.textContent;
+    try {
+      await fetch("/gateReport", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: ok2, checks }),
+      });
+    } catch (e) {}
+  </script>
+</body>
+</html>
