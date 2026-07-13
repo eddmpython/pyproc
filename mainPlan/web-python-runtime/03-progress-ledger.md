@@ -4,6 +4,33 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 browser-os P5 + P7 승격: 머신 안 머신 + fsWorld v2 (machineContainerProbe 6/6 + fsWorldProbe 5/5)
+
+- browser-os 로드맵의 두 프리미티브를 더 실증·승격했다.
+- **P7 fsWorld v2(`DeviceFs` 확장)**: 장치 성장(/dev/random 신선, /dev/fb0 프레임버퍼) + Plan 9 `/proc/<pid>/ctl`(쓰기=시그널) + /var/log 재부팅 생존. 실측: fb0 640x480 **379.2fps**(파이썬 RGBA bytearray -> 장치 close flush 훅 -> putImageData), ctl 쓰기=시그널 왕복 **55ms**(< 60, 프로세스 SystemExit 회수), /var/log OPFS 마운트 세대 계승, /dev/random 두 open 상이. **새 능력 0으로 한 네임스페이스에 흡수**(Plan 9): DeviceFs에 track(pid)/framebuffer/signal cfg + write 장치 close flush 훅만 추가. mount는 mountHome 재사용(homeDiskProbe 검증분).
+- **P5 machineContainers(`MachineContainer` = Layer 2 독립, PyProc 패턴)**: 컨테이너 커널을 워커에 스냅샷 fast fork로 띄우고 부모 파이썬에 값(m)으로 노출. 도커 3요소 완성(이미지 .pymachine + 레지스트리 OPFS + 실행 이 능력). 실측: warm 부팅 **274ms**(스냅샷 1회 제조 2383ms amortize), 외부-내부 RPC **p50 1.38ms**(< 2), **깊이 2**(컨테이너가 자기 자식 컨테이너 spawn, 값이 층 거슬러 옴), 격리(네임스페이스 안 샘), 파이썬 값(`m = pyprocMachine.spawn(); m.run(...)`, 블로킹=JSPI), 내부 kill 외부 무영향. 설계: `machineWorker.js`는 boot 순환 회피 위해 loadPyodide 직접 + `new Runtime(py)`, 스냅샷을 SAB로 중첩 자식까지 물려 fast fork 계승. runtime.js가 Layer 2를 import하면 순환이라 enable 메서드 대신 `new MachineContainer(rt)`.
+- **표면**: index.js/index.d.ts(Pipe/Lock/Shm/MachineContainer/ContainerHandle) + run.mjs 표면·계약 가드 + README 2종 공개 표면 표(PyProc에 IPC, MachineContainer 신규 행). 구조 게이트 381 passed.
+
+### 2026-07-13 browser-os P4 승격: pipes + shm = 흐름 IPC (pipeShmProbe GREEN 6/6)
+
+- browser-os 로드맵 P4(map은 배치, 파이프는 흐름)를 실증·승격했다. map/fork/시그널에 이어 **스트리밍 IPC**가 커널 프리미티브가 됐다.
+- **메커니즘(`src/processOs/ipc.js`)**: SAB 링버퍼(헤더 Int32 head/tail/closed + Atomics) 파이프 + 명명 shm + 락/세마포어. 워커(프로세스)의 블로킹 read는 **유한 슬라이스 Atomics.wait**(WAIT_SLICE_MS=50)로 끊어 파이썬 eval 루프에 주기 복귀시킨다 = 블로킹 중에도 시그널(SIGTERM)이 낀다(무한 wait면 시그널 영구 차단). 메인(커널)측은 Atomics.wait 불가라 `waitAsync` 엔드포인트. 파이썬 표면은 `pyprocIpc` 모듈(open/lock/semaphore/shm, with 지원). 공유메모리는 "memcpy 1회" 계약(단일 선형 메모리 벽, 제로카피 불가 = 안티 추천 4 준수).
+- **승격 표면**: `PyProc.pipe()/lock()/semaphore()/shm()` + `exec(pid, fnSrc, arg)`(지정 프로세스 실행). bindReader/bindWriter/bind로 프로세스에 SAB 참조 공유 배선. index.js/index.d.ts(Pipe/Lock/Shm)/run.mjs 표면 가드.
+- **실측(자가 호스팅 경로, CDN 0)**: 처리량 **982.9MB/s**(64MB, 1MB 링, 게이트 200 초과) + 소메시지 편도 **p50 0.092ms**(게이트 0.5 미만) + backpressure 무손실(8MB를 256KB 링으로, md5 동일) + **블로킹 read 중 SIGTERM 회수 + 워커 생존**(535ms) + 락 상호배제(2프로세스 x 300 = 정확히 600) + 커널이 파이프 한쪽(커널->프로세스->커널 왕복). 실측 버그: EOF를 null로 주면 Pyodide가 JsNull 프록시로 만들어 `.to_py()` 실패 -> undefined(None)로 정정.
+
+### 2026-07-13 engine-independence P2 실측: 스냅샷 사전 제조 벽 = loadPackage 기계지 dlopen 아님 (prefabSnapshotProbe GREEN 8/8)
+
+- engine-independence 사다리 P2를 실측으로 닫았다. **벽 좌표 정밀화(소스 + 실측)**: Pyodide 직렬화기가 부팅 확정 hiwire 슬롯 0..6(정확히 7개)을 `checkEntry`로 먼저 검사하고, 슬롯 6은 매 호출 새 `{}`라 "빈 객체" 구조 검사만 성립한다. `loadPackage`가 그 객체에 채널 dict(`{"numpy":"default channel"}`)를 남기는 순간 `Unexpected hiwire entry at index 6`. serializer 인자는 검사 이후 개입이라 우회 불가(스톡 knob 0, 소스로 확인: checkEntryFn 인자는 사장 코드).
+- **결정적 발견: 벽은 loadPackage 기계지 dlopen이 아니다.** 순수 휠을 `FS.writeFile` + `zipfile.extractall(purelib)` + import로 주입(loadPackage 우회)하면 slot diff 0/extra 1로 **채취 성공**(six 채취 4ms) + 웜 부팅 재설치 0 생존(109ms, deserializer 0회). Cloudflare workerd 패턴(자체 FS 마운트 + import 후 캡처)의 순수 휠 부분이 스톡 v314에서 재현됨을 확증. 정직 경계: 미import 서브모듈·데이터 파일은 스냅샷 밖, C확장 휠은 dlopen 상태(soMemoryBases 등) 재생 없어 벽.
+- **승격 보류(정직)**: 순수 휠은 bootEnv(bare + OPFS 휠 + import)가 이미 3.49배를 내고 순수 휠 import는 짧아 prefab의 한계 이득이 작다. 덕지덕지 금지 원칙상 probe로 벽 좌표를 확정하고 upstream(#5195 FS 스냅샷 채용, #5971 draft 해제)을 관찰하는 것이 옳은 착지. P4(조건부 fork 보험)만 미발동으로 남고, 사다리의 실측 rung은 전부 닫혔다.
+
+### 2026-07-13 engine-independence P0 완결: 자가 호스팅 = 유일한 실시간 리스크(CDN) 제거 (자가 경로 게이트 39/39 + 오프라인 재실측 7/7)
+
+- **유통 독립이 실물이 됐다**: `scripts/fetchEngine.mjs`(`npm run fetch:engine`)가 GitHub Releases의 v314.0.2 전체 배포판(426MB, 전 패키지 wheel + PEP 783 `pyemscripten_2026_0` 태그 실물 확인)을 `vendor/pyodide/`(gitignore, 레포 자산 0)로 준비한다. 멱등(락 파일 존재 시 no-op), 해제는 OS 내장 bsdtar(의존성 0. 함정 실측: PATH의 MSYS GNU tar는 `C:\` 경로를 원격 호스트로 해석 -> System32 bsdtar 명시).
+- **같은 게이트를 배포 지점만 바꿔 전 검사**: 게이트/probe가 `?indexURL=` 오버라이드를 받고(절대 URL 정규화 = 캐시 startsWith/워커 import 안전), 러너는 `PYPROC_INDEX_URL`로 관통. **실측: 자가 경로에서 게이트 전 검사 39/39 GREEN**(부팅 2760ms, micropip six 설치·freeze 락 354패키지·세션 부활까지 CDN 요청 0) + offlineBootProbe 4/4 + swOfflineProbe 3/3(script 경로 포함 miss 0. SW가 CDN/자가 두 접두를 가로챈다). MSYS 경로 변환 함정도 기록(env는 PowerShell에서).
+- 핀 정합(fetchEngine `ENGINE_VERSION` == runtime.js `DEFAULT_INDEX`)은 tests/run.mjs 기계 가드. docs/consuming/contract.md에 자가 호스팅 절 추가.
+- **의미**: engine-independence 사다리에서 "오늘 우리 통제 밖에서 깨질 수 있는" 마지막 지점이 닫혔다. 남은 rung은 P2(스냅샷 사전 제조 probe)뿐.
+
 ### 2026-07-13 완성 스프린트: HTTPS 소켓 + 에이전트 샌드박스 데모 (구조 363 + 예제 5/5 + 소켓 능력 3/3)
 
 - "진짜 강력한 기능으로 완전히 세운다" 목표. 소켓을 http+https로 완성하고, 핵심 가치를 실물 데모로 세웠다.

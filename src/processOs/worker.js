@@ -10,6 +10,8 @@
 //   메인 커널과 워커 커널의 리플레이는 힙 길이는 같아도 **바이트가 다르다**(로더/컨텍스트 차이).
 //   워커 대 워커는 **바이트 동일**하다. 그래서 fork는 워커끼리만 성립하고, PyProc은 조율자다.
 //   델타 10.3MB 수확 43.6ms, 부모 상태(변수·배열·계산) 전부 생존, 주소공간 독립.
+import { installIpc } from "./ipc.js";
+
 const PAGE = 65536;
 let py = null;
 let interruptView = null;
@@ -80,6 +82,11 @@ onmessage = async (e) => {
       } finally {
         if (r && typeof r === "object" && r.destroy) r.destroy(); // WASM측 참조 해제(누적 방지)
       }
+    } else if (msg.type === "bindIpc") {
+      // IPC 배선: SAB 항목들을 이 프로세스의 레지스트리에 등록하고(참조 공유), 파이썬
+      // pyprocIpc 모듈을 세운다(1회). 이후 파이썬이 파이프/락/공유메모리를 파일처럼 만진다.
+      installIpc(py, msg.items);
+      postMessage({ type: "bound", id: msg.id, reqId: msg.reqId });
     } else if (msg.type === "harvest") {
       // fork의 부모측: cp0(리플레이 경계) 대비 바뀐 페이지 = 지금 이 커널의 사용자 상태.
       if (!cp0) throw new Error("harvest: 리플레이 부팅한 프로세스에서만 가능하다");

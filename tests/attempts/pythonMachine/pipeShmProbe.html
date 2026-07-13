@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<!--
+결과(append): P4 파이프+공유메모리 - map은 배치, 파이프는 흐름.
+SAB 링버퍼 파이프(진짜 블로킹 read + backpressure)와 명명 shm/락이 프로세스(워커) 사이에
+서는가. 게이트: 처리량 >= 200MB/s, 소메시지 p50 < 0.5ms, backpressure 무손실(md5 동일),
+블로킹 read 중 SIGTERM 회수(워커 생존), 락 상호배제(카운터 정확), 커널 엔드포인트 왕복.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: pipes + shm</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 파이프 + 공유메모리 (P4 - 흐름 IPC)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { PyProc, SIGNAL } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  try {
+    const os = new PyProc({ indexURL: INDEX });
+    await os.boot(2);
+    const [pidA, pidB] = os.ps().map((p) => p.pid);
+
+    // 1) 처리량: 64MB를 1MB 링으로 A -> B 스트리밍(중간 산출이 램에 안 쌓인다).
+    const bulk = os.pipe(1 << 20);
+    await bulk.bindWriter(pidA, "bulk");
+    await bulk.bindReader(pidB, "bulk");
+    const producer = os.exec(pidA, [
+      "def _fn(a):",
+      "    import pyprocIpc, time",
+      "    w = pyprocIpc.open('bulk', 'w')",
+      "    chunk = b'\\x37' * 262144",
+      "    t0 = time.perf_counter()",
+      "    for i in range(256):",
+      "        w.write(chunk)",
+      "    w.close()",
+      "    return time.perf_counter() - t0",
+    ].join("\n"));
+    const consumer = os.exec(pidB, [
+      "def _fn(a):",
+      "    import pyprocIpc, time",
+      "    r = pyprocIpc.open('bulk', 'r')",
+      "    total = 0",
+      "    t0 = time.perf_counter()",
+      "    while True:",
+      "        data = r.read(262144)",
+      "        if not data:",
+      "            break",
+      "        total += len(data)",
+      "    return [total, time.perf_counter() - t0]",
+    ].join("\n"));
+    const [prodSec, cons] = await Promise.all([producer, consumer]);
+    timings.throughputMBs = +(64 / cons[1]).toFixed(1);
+    check("처리량 >= 200MB/s (64MB, 1MB 링)", cons[0] === 64 * 1048576 && timings.throughputMBs >= 200,
+      `${timings.throughputMBs}MB/s (수신 ${(cons[0] / 1048576) | 0}MB, 생산 ${(prodSec * 1000) | 0}ms)`);
+
+    // 2) 소메시지 지연: 1바이트 핑퐁 200회, 편도 p50.
+    const ping = os.pipe(4096), pong = os.pipe(4096);
+    await ping.bindWriter(pidA, "ping"); await ping.bindReader(pidB, "ping");
+    await pong.bindWriter(pidB, "pong"); await pong.bindReader(pidA, "pong");
+    const echo = os.exec(pidB, [
+      "def _fn(a):",
+      "    import pyprocIpc",
+      "    r = pyprocIpc.open('ping', 'r')",
+      "    w = pyprocIpc.open('pong', 'w')",
+      "    for i in range(200):",
+      "        w.write(r.read(1))",
+      "    return 1",
+    ].join("\n"));
+    const rounds = await os.exec(pidA, [
+      "def _fn(a):",
+      "    import pyprocIpc, time",
+      "    w = pyprocIpc.open('ping', 'w')",
+      "    r = pyprocIpc.open('pong', 'r')",
+      "    times = []",
+      "    for i in range(200):",
+      "        t0 = time.perf_counter()",
+      "        w.write(b'x')",
+      "        r.read(1)",
+      "        times.append(time.perf_counter() - t0)",
+      "    return times",
+    ].join("\n"));
+    await echo;
+    const sorted = rounds.map((s) => s * 1000 / 2).sort((a, b) => a - b); // 왕복 -> 편도 ms
+    timings.smallMsgP50Ms = +sorted[100].toFixed(3);
+    check("소메시지 편도 p50 < 0.5ms", timings.smallMsgP50Ms < 0.5, `p50 ${timings.smallMsgP50Ms}ms, p90 ${sorted[180].toFixed(3)}ms`);
+
+    // 3) backpressure 무손실: 8MB를 링과 같은 크기(256KB) 창으로 밀면 생산자는 소비를
+    //    기다릴 수밖에 없다(블로킹 write). md5 동일 = 바이트 무손실.
+    const bp = os.pipe(262144);
+    await bp.bindWriter(pidA, "bp"); await bp.bindReader(pidB, "bp");
+    const bpProd = os.exec(pidA, [
+      "def _fn(a):",
+      "    import pyprocIpc, hashlib",
+      "    w = pyprocIpc.open('bp', 'w')",
+      "    h = hashlib.md5()",
+      "    for i in range(128):",
+      "        chunk = bytes([i % 251]) * 65536",
+      "        h.update(chunk)",
+      "        w.write(chunk)",
+      "    w.close()",
+      "    return h.hexdigest()",
+    ].join("\n"));
+    const bpCons = os.exec(pidB, [
+      "def _fn(a):",
+      "    import pyprocIpc, hashlib",
+      "    r = pyprocIpc.open('bp', 'r')",
+      "    h = hashlib.md5()",
+      "    total = 0",
+      "    while True:",
+      "        data = r.read(65536)",
+      "        if not data:",
+      "            break",
+      "        total += len(data)",
+      "        h.update(data)",
+      "    return [total, h.hexdigest()]",
+    ].join("\n"));
+    const [sentMd5, got] = await Promise.all([bpProd, bpCons]);
+    check("backpressure 무손실(8MB, 256KB 링, md5 동일)", got[0] === 8 * 1048576 && got[1] === sentMd5, `${got[1].slice(0, 12)}...`);
+
+    // 4) 블로킹 read 중 SIGTERM 회수: 유한 슬라이스 wait 덕에 시그널이 파이썬 핸들러에 닿고,
+    //    워커는 죽지 않는다(인터프리터 상태 보존).
+    const idle = os.pipe(4096);
+    await idle.bindReader(pidB, "idle");
+    const blocked = os.exec(pidB, [
+      "def _fn(a):",
+      "    import pyprocIpc, signal",
+      "    def onTerm(signum, frame):",
+      "        raise SystemExit('sigterm')",
+      "    signal.signal(signal.SIGTERM, onTerm)",
+      "    pyprocIpc.open('idle', 'r').read()",
+      "    return 'unreachable'",
+    ].join("\n"));
+    const tSig = performance.now();
+    setTimeout(() => os.signal(pidB, SIGNAL.TERM), 300);
+    const sigOut = await blocked.then((v) => ({ v }), (e) => ({ err: String(e) }));
+    timings.sigtermRecoverMs = Math.round(performance.now() - tSig - 300);
+    const aliveAfter = await os.exec(pidB, "def _fn(a):\n    return 'alive'");
+    check("블로킹 read 중 SIGTERM 회수 + 워커 생존", !!sigOut.err && sigOut.err.includes("sigterm") && aliveAfter === "alive",
+      `${timings.sigtermRecoverMs}ms, SystemExit(sigterm) 회수 후 alive`);
+
+    // 5) 락 상호배제: 두 프로세스가 shm 카운터를 락 아래에서 300회씩 증가 -> 정확히 600.
+    //    read-modify-write가 JS 경계를 두 번 건너 레이스 창이 크다(락 없으면 유실).
+    const m = os.lock(); const ctr = os.shm(4);
+    await m.bind(pidA, "m"); await m.bind(pidB, "m");
+    await ctr.bind(pidA, "ctr"); await ctr.bind(pidB, "ctr");
+    const incFn = [
+      "def _fn(a):",
+      "    import pyprocIpc",
+      "    lk = pyprocIpc.lock('m')",
+      "    sm = pyprocIpc.shm('ctr')",
+      "    for i in range(300):",
+      "        with lk:",
+      "            cur = int.from_bytes(sm.read(0, 4), 'little')",
+      "            sm.write(0, (cur + 1).to_bytes(4, 'little'))",
+      "    return 1",
+    ].join("\n");
+    await Promise.all([os.exec(pidA, incFn), os.exec(pidB, incFn)]);
+    const finalCount = new DataView(ctr.sab).getInt32(0, true);
+    check("락 상호배제: 2프로세스 x 300 증가 = 정확히 600", finalCount === 600, `counter ${finalCount}`);
+
+    // 6) 커널 엔드포인트: 커널(메인)도 파이프의 한쪽이 된다(waitAsync). 커널 -> 프로세스 -> 커널 왕복.
+    const k2p = os.pipe(4096), p2k = os.pipe(4096);
+    await k2p.bindReader(pidA, "k2p"); await p2k.bindWriter(pidA, "p2k");
+    const relay = os.exec(pidA, [
+      "def _fn(a):",
+      "    import pyprocIpc",
+      "    data = pyprocIpc.open('k2p', 'r').read(64)",
+      "    pyprocIpc.open('p2k', 'w').write(data.upper())",
+      "    return 1",
+    ].join("\n"));
+    await k2p.write(new TextEncoder().encode("hello pipe"));
+    const back = await p2k.read(64);
+    await relay;
+    check("커널 엔드포인트: 커널 -> 프로세스 -> 커널 왕복", new TextDecoder().decode(back) === "HELLO PIPE", new TextDecoder().decode(back));
+
+    os.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

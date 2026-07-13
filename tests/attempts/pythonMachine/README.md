@@ -29,6 +29,9 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 살아있는 커널을 진짜 fork할 수 있나 | [forkLiveProbe.html](forkLiveProbe.html) | 두 커널의 cp0이 바이트 동일 + 부모 상태(변수·배열·계산)가 자식에서 생존 + 주소공간 독립 |
 | 강제종료해도 마지막 커밋으로 부활하나(WAL) | [journalProbe.html](journalProbe.html) | clean save 없이 커널을 버려도 유휴 커밋 + recover()로 부활 + CAS dedupe(승격 계약 재실측 창구) |
 | 저널 비용의 정체와 배치 이득은 | [churnProbe.html](churnProbe.html) | no-op 문장의 churn 바닥과 그 고정성 + 배치 시 총 쓰기량 절감률(승격 설계 판정) |
+| 파이프+공유메모리 = 흐름 IPC가 서나 (P4) | [pipeShmProbe.html](pipeShmProbe.html) | 처리량 >= 200MB/s + 소메시지 편도 p50 < 0.5ms + backpressure 무손실(md5) + 블로킹 read 중 SIGTERM 회수 + 워커 생존 + 락 상호배제 + 커널 엔드포인트 왕복 |
+| 파일이 브라우저의 전부를 만지나 (P7 fsWorld) | [fsWorldProbe.html](fsWorldProbe.html) | /dev/random 신선 + /dev/fb0 640x480 >= 30fps + /var/log 재부팅 생존 + /proc/<pid>/ctl 쓰기=시그널 왕복 < 60ms |
+| 머신 안에 머신이 서나 (P5 containers) | [machineContainerProbe.html](machineContainerProbe.html) | 컨테이너 부팅 < 1500ms(스냅샷 fork) + 외부-내부 RPC + 깊이 2 + 파이썬 값 노출 + 내부 kill 외부 무영향 |
 
 ## 결론 표
 
@@ -54,6 +57,9 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 2026-07-12 | churnProbe | Edge headless | **churn 바닥의 정체 규명**: no-op 문장(`1`)조차 90~106p(6MB)를 더럽히고, 그 페이지 **집합은 97~98% 고정**이다(CPython eval/GC의 scratch 워킹셋 = 사용자 상태와 무관). gc.freeze도 못 줄인다. 배치의 고유 페이지 절감은 1~5%뿐이지만 **총 쓰기량은 88% 절감**(문장별 765p vs 배치 1회 91p = 8.4배) | **커밋 단위는 문장이 아니라 유휴다**: churn 바닥은 못 줄이므로 **커밋 빈도**가 비용을 지배한다. 문장단위 WAL 기각, 유휴 배치 확정 | P1 승격 설계 확정 |
 | 2026-07-12 | journalProbe(승격 계약) | Edge headless | `rt.enableJournal({dir, reactive, idleMs})`: 유휴 판정 후 자동 커밋(139p), **hibernate 없이 커널을 버려도 새 커널이 recover()로 부활**(140p/8.8MB, 2330ms), 저널 없으면 null(첫 부팅), CAS dedupe 동작. 7/7 GREEN | **강제종료 내성이 계약이 됐다**. 커밋은 비동기라 REPL 비차단(커밋 1회 완료 ~2s는 OPFS 파일 생성 비용 - 다음 최적화 후보: blob을 개별 파일 대신 append-only 팩으로) | 졸업 -> `MachineJournal`(enableJournal). 재실측 창구로 유지 |
 | 2026-07-12 | journalProbe(심판 수리) + 게이트 fork | Edge headless | 객관 심판이 찾은 급소 2건 수리 실측: ① recover가 **경계 지문(h0) 불일치 시 명시적 예외**(오염 HEAD 조작 -> 예외 발화, 8/8 GREEN. 이전엔 다른 엔진의 저널을 조용히 덮었다) + start()가 `storage.persist()` 요청(디스크의 best-effort 캐시 강등 방지) ② fork 자식측이 **델타 밖 드리프트를 cp0으로 되돌린다**(더러운 dst 정화 2p 실증, 마커 배타 검사, 게이트 35/35). 적용 비용 1.4ms -> 33ms(힙 1회 스캔 = 정확성의 값) + parentPid 계보 기록 | 조용한 힙 오염 경로 2개가 닫혔다. fork는 이제 정확히 "경계 + 부모 델타"를 만든다 | `machineJournal.js`(h0/persist) + `worker.js`(정화) + `pyProc.js`(parentPid) 반영 완료 |
+| 2026-07-13 | pipeShmProbe (P4) | Edge headless(자가 호스팅 경로) | SAB 링버퍼 파이프 + 명명 shm + 락. 처리량 **982.9MB/s**(64MB/1MB 링) + 소메시지 편도 **p50 0.092ms**(p90 0.135) + backpressure 무손실(8MB를 256KB 링으로, md5 동일) + **블로킹 read 중 SIGTERM 회수 + 워커 생존**(535ms) + 락 상호배제(2프로세스 x 300 = 정확히 600) + 커널 엔드포인트 왕복. GREEN 6/6 | **흐름 IPC 성립**: map(배치)과 다른 스트리밍이 섰다. 유한 슬라이스 wait가 블로킹 read에 시그널을 끼운다. 공유메모리는 memcpy 1회 계약(제로카피 불가 = 안티 추천 4 준수) | 졸업 -> `PyProc.pipe/lock/semaphore/shm/exec` + `src/processOs/ipc.js`. EOF는 undefined(null은 JsNull 프록시) |
+| 2026-07-13 | fsWorldProbe (P7) | Edge headless(자가 호스팅 경로) | DeviceFs 확장. /dev/random 신선(두 open 상이, 16바이트) + **/dev/fb0 640x480 379.2fps**(파이썬 RGBA bytearray -> close flush -> putImageData) + /var/log 재부팅 생존(OPFS 마운트, 세대 계승) + **/proc/<pid>/ctl 쓰기=시그널 왕복 55ms**(< 60, SystemExit 회수). GREEN 5/5 | **모든 것은 파일 v2 성립**: 장치 성장 + Plan 9 ctl(쓰기=시그널) + 프레임버퍼가 새 능력 0으로 한 네임스페이스에 들어왔다. mount는 mountHome 재사용 | 졸업 -> `DeviceFs.track` + framebuffer/signal cfg + /dev/random. write 장치 close flush 훅 추가 |
+| 2026-07-13 | machineContainerProbe (P5) | Edge headless(자가 호스팅 경로) | 컨테이너 커널을 워커에 스냅샷 fast fork로 띄운다. **warm 부팅 274ms**(bootMs 239, 스냅샷 1회 제조 2383ms amortize) + **외부-내부 RPC p50 1.38ms**(< 2) + **깊이 2**(컨테이너가 자기 자식 컨테이너 spawn, 값이 층 거슬러 옴, 503ms) + 격리(네임스페이스 부모에 안 샘) + **파이썬 값 노출**(`m = pyprocMachine.spawn(); m.run(...)`, 블로킹=JSPI run_sync) + 내부 kill 외부 무영향(주소공간 독립). GREEN 6/6 | **머신 안 머신 = 도커 3요소 성립**: 이미지(.pymachine)+레지스트리(OPFS)+실행(이 능력). 스냅샷을 SAB로 중첩 자식까지 물려 fast fork 계승 | 졸업 -> `MachineContainer`(new MachineContainer(rt)) + `machineWorker.js`. Layer 2 독립(PyProc 패턴, runtime.js 순환 회피) |
 
 ## 판정
 

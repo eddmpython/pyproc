@@ -15,7 +15,8 @@ function check(name, fn) { try { fn(); ok(name); } catch (e) { bad(name, e.messa
 // 재귀로 지정 확장자 파일 수집(node_modules 제외).
 function collect(dir, exts, acc = []) {
   for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry.startsWith(".git")) continue;
+    // vendor/는 fetchEngine이 받은 서드파티 배포판(gitignore) = 우리 린트 표면이 아니다.
+    if (entry === "node_modules" || entry === "vendor" || entry.startsWith(".git")) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) collect(full, exts, acc);
     else if (exts.some((e) => entry.endsWith(e))) acc.push(full);
@@ -32,7 +33,7 @@ const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 for (const [name, kind] of [
   ["boot", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
   ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
-  ["bootWasi", "function"], ["WasiSession", "function"],
+  ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"],
   ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
 ]) {
   check(`export ${name}:${kind}`, () => {
@@ -40,6 +41,15 @@ for (const [name, kind] of [
   });
 }
 check("PAGE_SIZE === 65536", () => { if (api.PAGE_SIZE !== 65536) throw new Error(String(api.PAGE_SIZE)); });
+// 자가 호스팅(engine-independence P0)의 핀 정합: fetchEngine이 받는 배포판 버전과
+// DEFAULT_INDEX(배포 지점의 유일 정의처)가 같은 값이어야 한다. 버전 변경 = 릴리즈 사유.
+check("자가 호스팅 핀 정합(fetchEngine == DEFAULT_INDEX)", () => {
+  const fe = readFileSync(join(ROOT, "scripts", "fetchEngine.mjs"), "utf8");
+  const m = fe.match(/ENGINE_VERSION = "([^"]+)"/);
+  if (!m) throw new Error("scripts/fetchEngine.mjs에서 ENGINE_VERSION을 못 찾음");
+  const rt = readFileSync(join(ROOT, "src", "runtime", "runtime.js"), "utf8");
+  if (!rt.includes(`/v${m[1]}/`)) throw new Error(`DEFAULT_INDEX에 v${m[1]} 없음(핀 불일치)`);
+});
 
 // 2) 능력 계약이 런타임 없이도 형태를 갖추는가(메서드 존재).
 console.log("\n[계약]");
@@ -49,7 +59,7 @@ check("Runtime 메서드", () => {
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("DeviceFs/Init 메서드", () => {
-  for (const m of ["install", "refreshClipboard"]) if (typeof api.DeviceFs.prototype[m] !== "function") throw new Error(`DeviceFs.${m}`);
+  for (const m of ["install", "track", "refreshClipboard"]) if (typeof api.DeviceFs.prototype[m] !== "function") throw new Error(`DeviceFs.${m}`);
   for (const m of ["install", "stop"]) if (typeof api.Init.prototype[m] !== "function") throw new Error(`Init.${m}`);
 });
 check("MachineJournal 메서드", () => {
@@ -68,7 +78,12 @@ check("VirtualOrigin 메서드", () => {
 });
 check("PyProc 메서드", () => {
   const p = api.PyProc.prototype;
-  for (const m of ["boot", "map", "mapArray", "mapSerial", "ps", "kill", "signal", "interrupt", "fork", "terminate"])
+  for (const m of ["boot", "map", "mapArray", "mapSerial", "ps", "kill", "signal", "interrupt", "fork", "exec", "pipe", "lock", "semaphore", "shm", "terminate"])
+    if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
+});
+check("MachineContainer 메서드", () => {
+  const p = api.MachineContainer.prototype;
+  for (const m of ["spawn", "kill", "install", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("SIGNAL 표(POSIX 번호)", () => {

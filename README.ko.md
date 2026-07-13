@@ -202,7 +202,8 @@ Pyodide  Workers
 | `MachineJournal` | WAL: 유휴에 스스로 체크포인트해, 강제종료된 탭도 마지막 커밋으로 부활 |
 | `bootSession` / `Session` / `openMachine` | 세션 부활 + 이동 가능한 `.pymachine` 이미지: 결정적 리플레이 + 사용자 델타, OPFS 영속(`save` / `load`) 또는 한 파일 내보내기(`exportImage` / `openMachine`) |
 | `WheelCache` | 오프라인 / 재다운로드 0 패키지 설치용 wheel / OPFS 캐시 |
-| `PyProc` | 프로세스 OS 커널: 스냅샷-fork 스폰, `map` / `mapArray` 병렬, 수명주기(`kill` / `signal` / respawn), `fork(2)`: 살아있는 프로세스 복제(변수·배열이 실린다) |
+| `PyProc` | 프로세스 OS 커널: 스냅샷-fork 스폰, `map` / `mapArray` 병렬, 수명주기(`kill` / `signal` / respawn), `fork(2)`(살아있는 프로세스 복제, 변수·배열이 실린다), 흐름 IPC(`pipe` / `lock` / `semaphore` / `shm`: SAB 링버퍼 파이프, 진짜 블로킹 read + backpressure) |
+| `MachineContainer` | 머신 안의 머신: 컨테이너 커널을 워커에 자기 패키지 세트로 띄우고 파이썬 값으로 노출(`m.run` / `m.spawn` / `m.kill`), 중첩 가능(컨테이너 속 컨테이너) |
 | `SIGNAL` | `PyProc.signal(pid, signum)`용 POSIX 시그널 번호: 진짜 `SIGTERM` / `SIGUSR1` 핸들러가 파이썬 안에서 발화 |
 | `SharedKernel` | 탭보다 오래 사는 커널(SharedWorker): 여러 탭, 한 파이썬 상태 |
 | `bootWasi` / `WasiSession` | non-Pyodide CPython 3.14(WASI) 세션, 프리미티브가 엔진 무관임의 실증: async `run` / `get` / `set`, 완전 시간여행, `installWheel(bytes)`(순수 파이썬 wheel용 브라우저판 pip). 값 다리는 JSON 한정, C 확장은 정적 빌드 필요 |

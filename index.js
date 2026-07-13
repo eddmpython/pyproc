@@ -16,8 +16,11 @@
 //   DeviceFs             - 모든 것은 파일: 브라우저 능력을 파이썬 open()으로(/dev, /proc)
 //   Init                 - OS의 init: /home/web/boot.py 오토스타트 + cron.py 주기 틱
 //   MachineJournal       - WAL: 유휴마다 상태를 디스크에 남겨 강제종료에도 부활(hibernate 훅 불필요)
-//   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/signal/respawn + fork(2))
+//   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/signal/respawn + fork(2)
+//                          + exec/pipe/lock/semaphore/shm = 흐름 IPC: SAB 링버퍼 파이프·명명 공유메모리·락)
 //   SIGNAL               - 시그널 번호(INT/TERM/USR1/USR2). PyProc.signal(pid, signum)
+//   MachineContainer     - 머신 안 머신: .pymachine급 컨테이너 커널을 워커에 띄우고 파이썬 값(m)으로
+//                          노출(m.run/spawn/kill). 중첩(깊이 2+) = 컨테이너 속 컨테이너 = 도커 3요소
 //   SharedKernel         - 탭 밖에서 사는 공유 커널(SharedWorker, 여러 탭 = 한 파이썬 상태)
 //   bootWasi/WasiSession - Pyodide 아닌 CPython(WASI) 세션(엔진 무관 실증). async run/get/set +
 //                          완전 시간여행(checkpoint/timeTravel). 값 다리는 JSON 한정, wasmURL 소비자 제공
@@ -37,5 +40,6 @@ export { bootSession, openMachine, Session } from "./src/capabilities/session.js
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
 export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
+export { MachineContainer } from "./src/processOs/machineContainer.js";
 export { SharedKernel } from "./src/processOs/sharedKernel.js";
 export { bootWasi, WasiSession } from "./src/runtime/engines/wasi/wasiSession.js";

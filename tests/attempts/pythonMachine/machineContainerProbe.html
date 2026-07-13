@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<!--
+결과(append): P5 machineContainers - 머신 안의 머신. 컨테이너 커널을 워커에 띄우고 파이썬
+값(m)으로 노출. 게이트: 내부 부팅 < 1500ms, 외부-내부 RPC(값 왕복), 깊이 2(컨테이너 속
+컨테이너), 내부 kill이 외부에 무영향(주소공간 독립).
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: machineContainers</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: machineContainers (P5 - 머신 안의 머신)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot, MachineContainer } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  try {
+    const rt = await boot({ indexURL: INDEX });
+    const host = new MachineContainer(rt, { indexURL: INDEX });
+
+    // 1) JS API: 컨테이너 부팅 + 실행. 자기 매니페스트(setup)로 상태를 갖는다.
+    // 첫 spawn은 bare 스냅샷을 1회 제조한다(PyProc._makeSnapshot과 같은 amortize 비용).
+    // 게이트는 스냅샷이 준비된 뒤의 warm spawn(steady-state 컨테이너 부팅)을 잰다.
+    let t = performance.now();
+    const a = await host.spawn({ setup: "container_id = 'A'\nstate = {}" });
+    timings.firstSpawnMs = Math.round(performance.now() - t); // 스냅샷 제조 포함(1회성)
+    t = performance.now();
+    const warm = await host.spawn({ setup: "warm = True" });
+    timings.innerBootMs = Math.round(performance.now() - t);
+    check("컨테이너 부팅 < 1500ms(스냅샷 fast fork)", timings.innerBootMs < 1500, `warm ${timings.innerBootMs}ms (bootMs ${warm.bootMs}), 스냅샷 1회 제조 ${timings.firstSpawnMs}ms`);
+    warm.kill();
+
+    // 2) 외부-내부 RPC: 컨테이너 안 코드가 값을 계산해 밖으로 돌려준다. 상태는 컨테이너에 산다.
+    await a.run("state['x'] = 41");
+    const rpcTimes = [];
+    for (let i = 0; i < 20; i++) { const t0 = performance.now(); await a.run("1 + 1"); rpcTimes.push(performance.now() - t0); }
+    timings.rpcP50Ms = +rpcTimes.sort((x, y) => x - y)[10].toFixed(2);
+    const rr = await a.run("state['x'] + 1");
+    check("외부-내부 RPC: 값 왕복 + 컨테이너 상태 유지", rr === 42, `state.x+1=${rr}, RPC p50 ${timings.rpcP50Ms}ms`);
+
+    // 3) 격리: 컨테이너의 변수는 부모(rt)에 없다(독립 주소공간/네임스페이스).
+    const parentSees = rt.run("'container_id' in dir()");
+    check("격리: 컨테이너 네임스페이스가 부모에 안 샌다", parentSees === false, `parent sees container_id: ${parentSees}`);
+
+    // 4) 파이썬 값으로 노출: pyprocMachine.spawn()이 부모 파이썬에서 컨테이너를 값으로 만든다.
+    host.install();
+    const pyMachineOut = await rt.runAsync([
+      "import pyprocMachine",
+      "m = pyprocMachine.spawn({'setup': 'depth = 1'})",
+      "m.run('depth + 100')",
+    ].join("\n"));
+    check("파이썬 값 노출: m = pyprocMachine.spawn(); m.run(...)", pyMachineOut === 101, `m.run -> ${pyMachineOut}`);
+
+    // 5) 깊이 2: 컨테이너가 자기 자식 컨테이너를 만든다(컨테이너 속 컨테이너). 값이 층을 거슬러 온다.
+    t = performance.now();
+    const depth2 = await rt.runAsync([
+      "import pyprocMachine",
+      "outer = pyprocMachine.spawn({'setup': 'level = \"outer\"'})",
+      // outer 컨테이너 안에서 다시 컨테이너를 spawn하고 그 안의 값을 받아 온다.
+      "inner = outer.spawn({'setup': 'level = \"inner\"'})",
+      "[outer.run('level'), inner.run('level'), inner.run('7 * 6')]",
+    ].join("\n"));
+    timings.depth2Ms = Math.round(performance.now() - t);
+    const d2 = depth2 && depth2.toJs ? depth2.toJs() : depth2;
+    check("깊이 2: 컨테이너 속 컨테이너(값이 층 거슬러 옴)", Array.isArray(d2) && d2[0] === "outer" && d2[1] === "inner" && d2[2] === 42,
+      `${JSON.stringify(d2)}, ${timings.depth2Ms}ms`);
+
+    // 6) 내부 kill이 외부에 무영향: 컨테이너 하나를 죽여도 다른 컨테이너와 부모는 산다.
+    const b = await host.spawn({ setup: "victim = True" });
+    await b.run("survivor_check = 1");
+    host.kill(b.cid);
+    const bDead = await b.run("1").then(() => false, () => true); // killed 컨테이너 호출은 reject
+    const aStillAlive = await a.run("state['x']"); // 다른 컨테이너는 멀쩡
+    const parentAlive = rt.run("1 + 1"); // 부모도 멀쩡
+    check("내부 kill이 외부에 무영향(주소공간 독립)", bDead === true && aStillAlive === 41 && parentAlive === 2,
+      `죽은 컨테이너 reject=${bDead}, 이웃 생존=${aStillAlive}, 부모 생존=${parentAlive}`);
+
+    host.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

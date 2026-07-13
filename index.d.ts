@@ -227,6 +227,49 @@ export class VirtualOrigin {
   unbind(): void;
 }
 
+export interface MachineContainerOptions {
+  /** 컨테이너 커널이 부팅할 엔진 배포 지점(기본 부모 rt.indexURL). */
+  indexURL?: string;
+}
+
+export interface ContainerManifest {
+  env?: Record<string, string>;
+  /** 이 컨테이너가 부팅 시 로드할 패키지(자기 패키지 세트 = 도커 이미지의 레이어 등가). */
+  packages?: string[];
+  /** 부팅 직후 실행할 파이썬(컨테이너 초기 상태). */
+  setup?: string;
+}
+
+export interface ContainerHandle {
+  readonly cid: string;
+  readonly bootMs: number;
+  /** 컨테이너 안에서 코드 실행(RPC). 반환: 결과 값(JSON 직렬화 가능). */
+  run(code: string): Promise<unknown>;
+  /** 컨테이너 힙 바이트 길이. */
+  heapLen(): Promise<number>;
+  /** 이 컨테이너를 죽인다(워커 종료, 주소공간 독립이라 외부 무영향). */
+  kill(): boolean;
+}
+
+/**
+ * 머신 안의 머신(P5): 컨테이너 커널을 워커에 띄우고 부모 파이썬에 값(m)으로 노출한다.
+ * 도커의 3요소가 브라우저에 완성된다: 이미지(.pymachine + SHA-256 + trust) + 레지스트리(OPFS)
+ * + 실행(이 능력). 각 컨테이너는 자기 매니페스트(자기 패키지 세트)로 부팅한 독립 커널이고,
+ * 중첩(깊이 2+)이 가능하다(컨테이너 속 컨테이너). 내부 kill은 그 워커만 죽인다(외부 무영향).
+ * install() 후 파이썬은 pyprocMachine.spawn()으로 컨테이너를 값으로 만든다(블로킹 = JSPI, runAsync 경로).
+ */
+export class MachineContainer {
+  constructor(rt: Runtime, opts?: MachineContainerOptions);
+  /** 컨테이너 부팅(JS API). manifest = 자기 패키지 세트. */
+  spawn(manifest?: ContainerManifest): Promise<ContainerHandle>;
+  /** 컨테이너 종료. */
+  kill(cid: string): boolean;
+  /** 파이썬 표면 배선: pyprocMachine.spawn()이 파이썬 값을 돌려준다. */
+  install(): { installed: string };
+  /** 모든 컨테이너 종료. */
+  terminate(): void;
+}
+
 export interface SharedKernelOptions {
   indexURL?: string;
   /** 커널 식별자. 같은 name으로 연결한 모든 탭이 같은 커널을 공유한다. */
@@ -316,22 +359,31 @@ export interface DeviceProvider {
   read?: () => string;
   /** 파이썬 write의 바이트를 받는다(동기). */
   write?: (bytes: Uint8Array) => void;
+  /** write 장치가 닫힐 때 축적된 전체 바이트를 받는다(예: /dev/fb0 프레임 blit). */
+  flush?: (bytes: Uint8Array) => void;
 }
 
 export interface DeviceFsConfig {
-  /** 추가 장치: { "/dev/이름": { read, write } }. */
+  /** 추가 장치: { "/dev/이름": { read, write, flush } }. */
   devices?: Record<string, DeviceProvider>;
   /** /proc/ps 내용 제공자(예: () => pyProc.ps()). */
   ps?: () => unknown;
+  /** fsWorld v2: /dev/fb0 프레임버퍼. 파이썬이 raw RGBA를 쓰면 close 시 onFrame(rgba, w, h)이 화면에 blit. */
+  framebuffer?: { width: number; height: number; onFrame: (rgba: Uint8Array, width: number, height: number) => void };
+  /** fsWorld v2: /proc/<pid>/ctl 쓰기=시그널의 배선(보통 (pid, signum) => pyProc.signal(pid, signum)). track()의 전제. */
+  signal?: (pid: number, signum: number) => boolean;
 }
 
 /**
  * 모든 것은 파일(Plan 9): 브라우저 능력을 파이썬 open()으로 노출한다.
- * 내장: /proc/meminfo, /dev/clipboard(쓰기 즉시 반영 시도, 읽기는 캐시 + refreshClipboard()).
+ * 내장: /proc/meminfo, /dev/clipboard(쓰기 즉시 반영 시도, 읽기는 캐시 + refreshClipboard()),
+ * /dev/random(열 때마다 신선한 난수). fsWorld v2: /dev/fb0(framebuffer), /proc/<pid>/ctl(track).
  * 장치 read는 동기 계약이다(비동기 소스는 캐시가 정직한 계약).
  */
 export class DeviceFs {
   install(): { installed: string[] };
+  /** fsWorld v2: /proc/<pid>/ctl + /proc/<pid>/status 등록(Plan 9). ctl에 시그널명("term"/"int"/숫자)을 쓰면 시그널 발화. cfg.signal 필수. */
+  track(pid: number): string;
   /** 시스템 클립보드를 읽기 캐시로 끌어온다(권한 필요할 수 있음). */
   refreshClipboard(): Promise<string>;
 }
@@ -493,6 +545,39 @@ export interface PyProcMapOptions {
   taskTimeoutMs?: number;
 }
 
+/**
+ * 파이프(SAB 링버퍼): 프로세스 사이의 흐름 IPC. 커널이 만들어 bindReader/bindWriter로
+ * 프로세스에 배선하면, 프로세스 안 파이썬은 pyprocIpc.open(name, mode)로 읽고 쓴다(진짜
+ * 블로킹 read + backpressure). 커널도 read/write(Atomics.waitAsync)로 한쪽이 될 수 있다.
+ */
+export interface Pipe {
+  readonly kind: "pipe";
+  readonly sab: SharedArrayBuffer;
+  bindReader(pid: number, name: string): Promise<boolean>;
+  bindWriter(pid: number, name: string): Promise<boolean>;
+  /** 커널 엔드포인트: 링에 밀어 넣는다(가득이면 소비를 기다린다). 반환: 쓴 바이트. */
+  write(bytes: Uint8Array): Promise<number>;
+  /** 커널 엔드포인트: 링에서 꺼낸다. 반환: 바이트, 또는 null(EOF = 닫힘 + 소진). */
+  read(max?: number): Promise<Uint8Array | null>;
+  close(): void;
+}
+
+/** 락/세마포어: SAB 카운터 + Atomics. 프로세스 안 파이썬은 pyprocIpc.lock(name)/semaphore(name)로 acquire/release(with 지원). */
+export interface Lock {
+  readonly kind: "lock" | "semaphore";
+  readonly sab: SharedArrayBuffer;
+  bind(pid: number, name: string): Promise<boolean>;
+}
+
+/** 명명 공유메모리: SAB. 프로세스 안 파이썬은 pyprocIpc.shm(name)로 read(off, n)/write(off, data)(memcpy 1회 계약). */
+export interface Shm {
+  readonly kind: "shm";
+  readonly sab: SharedArrayBuffer;
+  /** 커널측 직접 뷰(프로세스와 참조 공유). */
+  readonly u8: Uint8Array;
+  bind(pid: number, name: string): Promise<boolean>;
+}
+
 /** 브라우저 파이썬 프로세스 OS 커널: 스냅샷-fork spawn + map 병렬 + 수명주기(kill/respawn). */
 export class PyProc {
   constructor(opts?: PyProcOptions);
@@ -518,5 +603,15 @@ export class PyProc {
    * 자식은 독립 주소공간이다(자식의 변이는 부모에 새지 않는다).
    */
   fork(srcPid: number, dstPid: number): Promise<ForkInfo>;
+  /** 특정 프로세스에서 태스크를 실행한다(map은 풀 스케줄, exec는 지정 프로세스). 반환: 태스크 결과. */
+  exec(pid: number, fnSrc: string, arg?: unknown): Promise<unknown>;
+  /** 파이프 생성(SAB 링버퍼, 기본 1MB). bindReader/bindWriter로 프로세스에 배선. */
+  pipe(capacity?: number): Pipe;
+  /** 락 생성(상호배제). bind(pid, name)로 프로세스에 배선. */
+  lock(): Lock;
+  /** 세마포어 생성(초기 카운트). bind(pid, name)로 배선. */
+  semaphore(count?: number): Lock;
+  /** 명명 공유메모리 생성(byteLength). bind(pid, name)로 배선. */
+  shm(byteLength: number): Shm;
   terminate(): void;
 }

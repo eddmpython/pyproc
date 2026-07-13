@@ -202,7 +202,8 @@ Capabilities are opt-in - turn on only what you need, and consume the capability
 | `MachineJournal` | Write-ahead log: the machine checkpoints itself while idle, so a crashed tab still boots back into its last commit |
 | `bootSession` / `Session` / `openMachine` | Session revival and portable `.pymachine` images: deterministic replay plus user delta, persisted to OPFS (`save` / `load`) or exported as one file (`exportImage` / `openMachine`) |
 | `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
-| `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), and `fork(2)`: clone a live process (its variables and arrays travel) |
+| `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), `fork(2)` (clone a live process, its variables and arrays travel), and flow IPC (`pipe` / `lock` / `semaphore` / `shm`: SAB ring-buffer pipes with real blocking read and backpressure) |
+| `MachineContainer` | Machine inside a machine: boots a container kernel in a worker with its own package set, exposed to Python as a value (`m.run` / `m.spawn` / `m.kill`); nests (containers inside containers) |
 | `SIGNAL` | POSIX signal numbers for `PyProc.signal(pid, signum)`: real `SIGTERM` / `SIGUSR1` handlers fire inside Python |
 | `SharedKernel` | A kernel that outlives the tab (SharedWorker): many tabs, one Python state |
 | `bootWasi` / `WasiSession` | A session on non-Pyodide CPython 3.14 (WASI), proving the primitives are engine-independent: async `run` / `get` / `set`, full time-travel, `installWheel(bytes)` (browser-side pip for pure-Python wheels). Value bridge is JSON-only; C extensions need a static build |

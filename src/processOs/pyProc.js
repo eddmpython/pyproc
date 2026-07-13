@@ -9,6 +9,7 @@
 // 겹쳐도 응답이 교차하지 않고, 워커가 죽으면(사고/kill) 그 워커의 대기 중 요청 전부가
 // 즉시 명시적으로 reject된다(영원히 매달리는 Promise 금지).
 import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
+import { createPipe, createLock, createSemaphore, createShm, pipeWriteAsync, pipeReadAsync, pipeClose } from "./ipc.js";
 
 // 시그널 번호(POSIX 관례. 외부 기술 명칭이라 번호는 원어 규격 그대로).
 // 워커의 SAB 채널에 쓰면 CPython eval 루프가 해당 핸들러를 부른다(signalTableProbe 실측).
@@ -107,6 +108,43 @@ export class PyProc {
       harvestMs: h.ms,
       applyMs: applied.ms,
     };
+  }
+
+  // 특정 프로세스 지정 실행. map(풀 스케줄)과 달리 "어느 프로세스에서 도는가"가 의미인
+  // 소비자(IPC 생산자/소비자, 잡 컨트롤의 잡 본체)의 프리미티브다. 반환 = 태스크 결과 Promise.
+  exec(pid, fnSrc, arg = null) {
+    const entry = this.table.find((t) => t.pid === pid);
+    if (!entry || entry.state !== "ready") return Promise.reject(new Error(`exec: pid ${pid} 준비되지 않음`));
+    return this._call(entry, { type: "task", fnSrc, arg }).then((d) => d.result);
+  }
+
+  // ---- IPC 팩토리(파이프/락/세마포어/공유메모리): 커널이 만들고 bind로 프로세스에 배선한다.
+  // SAB라 배선은 참조 공유(복사 0)다. 프로세스 안 파이썬은 pyprocIpc 모듈로 만진다.
+  // 커널(메인)측 엔드포인트는 read/write(Atomics.waitAsync) = 커널도 파이프의 한쪽이 될 수 있다.
+  _bindIpc(pid, item) {
+    const entry = this.table.find((t) => t.pid === pid);
+    if (!entry || entry.state !== "ready") return Promise.reject(new Error(`bindIpc: pid ${pid} 준비되지 않음`));
+    return this._call(entry, {
+      type: "bindIpc",
+      items: [{ kind: item.kind, name: item.name, sab: item.sab, cap: item.cap || 0, mode: item.mode || null }],
+    }).then(() => true);
+  }
+  pipe(capacity = 1 << 20) {
+    const p = createPipe(capacity);
+    return {
+      ...p,
+      bindReader: (pid, name) => this._bindIpc(pid, { ...p, name, mode: "r" }),
+      bindWriter: (pid, name) => this._bindIpc(pid, { ...p, name, mode: "w" }),
+      write: (bytes) => pipeWriteAsync(p, bytes),
+      read: (max = 65536) => pipeReadAsync(p, max),
+      close: () => pipeClose(p),
+    };
+  }
+  lock() { const l = createLock(); return { ...l, bind: (pid, name) => this._bindIpc(pid, { ...l, name }) }; }
+  semaphore(count = 1) { const s = createSemaphore(count); return { ...s, bind: (pid, name) => this._bindIpc(pid, { ...s, name }) }; }
+  shm(byteLength) {
+    const s = createShm(byteLength);
+    return { ...s, u8: new Uint8Array(s.sab), bind: (pid, name) => this._bindIpc(pid, { ...s, name }) };
   }
 
   // 시그널 전달(유닉스 시그널 표). 워커를 죽이지 않고 실행 중인 파이썬의 eval 루프에

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<!--
+결과(append): P7 fsWorld v2 - 장치 성장 + /proc/<pid>/ctl(쓰기=시그널, Plan 9) +
+/var/log 재부팅 생존 + /dev/fb0(파이썬 raw RGBA -> 화면). 게이트: ctl 왕복 < 60ms,
+/var/log 재부팅 생존, fb0 640x480 >= 30fps, /dev/random 신선.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: fsWorld v2</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: fsWorld v2 (P7 - 파일이 브라우저의 전부를 만진다)</h1>
+<pre id="out">실행 중...</pre>
+<canvas id="fb" width="640" height="480" style="display:none"></canvas>
+<script type="module">
+  import { boot, PyProc, SIGNAL } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  try {
+    const rt = await boot({ indexURL: INDEX });
+
+    // 1) /dev/random: 열 때마다 신선한 암호학적 난수(파이썬은 latin-1 경계로 되받는다).
+    const dev = rt.enableDeviceFs({});
+    dev.install();
+    const rnd = rt.run([
+      "a = open('/dev/random').read(16).encode('latin-1')",
+      "b = open('/dev/random').read(16).encode('latin-1')",
+      "[a.hex(), b.hex(), len(a), a != b]",
+    ].join("\n")).toJs();
+    check("/dev/random: 신선한 난수(두 번 열면 다름, 16바이트)", rnd[2] === 16 && rnd[3] === true, `${rnd[0].slice(0, 12)}.. vs ${rnd[1].slice(0, 12)}..`);
+
+    // 2) /dev/fb0: 파이썬이 640x480 RGBA를 쓰면 canvas putImageData로 화면에 뜬다. 30프레임 fps.
+    const canvas = document.getElementById("fb");
+    const ctx = canvas.getContext("2d");
+    let frames = 0;
+    const dev2 = rt.enableDeviceFs({ framebuffer: { width: 640, height: 480, onFrame: (rgba, w, h) => {
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, rgba.byteLength), w, h), 0, 0);
+      frames++;
+    } } });
+    dev2.install();
+    const fbSetup = rt.run([
+      "import os",
+      "def _pyprocFrame(i):",
+      "    buf = bytearray(640 * 480 * 4)",
+      "    buf[0::4] = bytes([(i * 8) % 256]) * (640 * 480)",   // R 채널을 프레임마다 바꾼다
+      "    buf[3::4] = bytes([255]) * (640 * 480)",             // A = 불투명
+      "    with open('/dev/fb0', 'wb') as f:",
+      "        f.write(buf)",
+      "1",
+    ].join("\n"));
+    const FB_N = 30;
+    let t = performance.now();
+    for (let i = 0; i < FB_N; i++) { rt.setGlobal("_pyprocFbI", i); rt.run("_pyprocFrame(_pyprocFbI)"); }
+    const fbMs = performance.now() - t;
+    timings.fbFps = +(FB_N / (fbMs / 1000)).toFixed(1);
+    check("/dev/fb0 640x480 >= 30fps (파이썬 RGBA -> putImageData)", frames === FB_N && timings.fbFps >= 30,
+      `${timings.fbFps}fps (${frames}프레임, ${Math.round(fbMs)}ms)`);
+
+    // 3) /var/log 재부팅 생존: OPFS 마운트 -> 로그 기록 -> 새 커널이 같은 디스크에서 읽는다.
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("pyprocVarLog", { recursive: true }); } catch (e) {}
+    const logDir = await root.getDirectoryHandle("pyprocVarLog", { create: true });
+    const m1 = await rt.mountHome(logDir, "/var/log");
+    rt.run("import os\nos.makedirs('/var/log', exist_ok=True)\nopen('/var/log/machine.log', 'w').write('boot generation 1\\n')");
+    await m1.sync();
+    const rt2 = await boot({ indexURL: INDEX });
+    await rt2.mountHome(logDir, "/var/log");
+    const logBack = rt2.run("open('/var/log/machine.log').read().strip()");
+    check("/var/log 재부팅 생존(OPFS 마운트)", logBack === "boot generation 1", logBack);
+    await root.removeEntry("pyprocVarLog", { recursive: true });
+
+    // 4) /proc/<pid>/ctl: 파이썬이 여기에 시그널명을 쓰면 그 프로세스에 시그널이 발화한다(Plan 9).
+    //    메인 커널의 DeviceFs가 PyProc.signal에 배선되고, ctl 쓰기 = 프로세스 협조적 종료.
+    const os = new PyProc({ indexURL: INDEX });
+    await os.boot(1);
+    const pid = os.ps()[0].pid;
+    const ctlDev = rt.enableDeviceFs({ signal: (p, s) => os.signal(p, s), ps: () => os.ps() });
+    ctlDev.install();
+    ctlDev.track(pid);
+    // 프로세스가 SIGTERM 핸들러를 걸고 블로킹 대기에 들어간다.
+    const waiting = os.exec(pid, [
+      "def _fn(a):",
+      "    import signal, time",
+      "    def onTerm(s, f):",
+      "        raise SystemExit('ctl-term')",
+      "    signal.signal(signal.SIGTERM, onTerm)",
+      "    for i in range(2000):",
+      "        time.sleep(0.005)",
+      "    return 'not-signaled'",
+    ].join("\n"));
+    await new Promise((r) => setTimeout(r, 300)); // 프로세스가 핸들러 걸 시간
+    const tCtl = performance.now();
+    rt.setGlobal("_pyprocCtlPid", pid);
+    rt.run("open('/proc/' + str(_pyprocCtlPid) + '/ctl', 'w').write('term')");
+    const ctlOut = await waiting.then((v) => ({ v }), (e) => ({ err: String(e) }));
+    timings.ctlRoundtripMs = Math.round(performance.now() - tCtl);
+    check("/proc/<pid>/ctl: 쓰기=시그널 왕복 + 프로세스 회수", !!ctlOut.err && ctlOut.err.includes("ctl-term"),
+      `${timings.ctlRoundtripMs}ms, SystemExit(ctl-term) 회수`);
+    check("/proc/<pid>/ctl 왕복 < 60ms(신호 지연)", timings.ctlRoundtripMs < 60, `${timings.ctlRoundtripMs}ms`);
+    os.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
