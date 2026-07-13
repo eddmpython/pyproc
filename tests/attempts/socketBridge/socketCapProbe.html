@@ -62,6 +62,11 @@ body = resp.read()
     const rs = rawS && rawS.toJs ? rawS.toJs() : rawS;
     check("urllib HTTPS over 릴레이 TLS -> 진짜 200", Array.isArray(rs) && rs[0] === 200 && rs[2] === true, rs ? `status=${rs[0]}, ${rs[1]}바이트, ${timings.httpsMs}ms` : "null");
     if (rawS && rawS.destroy) rawS.destroy();
+
+    // 경계(정직): requests/urllib3는 Pyodide에서 socket이 아니라 JS fetch(emscripten 백엔드)를 쓴다.
+    // 그래서 이 socket 심을 안 타고 CORS 제약을 받는다("Failed to fetch"). 이 브리지는 stdlib HTTP
+    // 스택(urllib/http.client, 위 http+https 실측)을 진짜 소켓으로 돌린다. requests를 소켓으로 돌리려면
+    // Pyodide의 urllib3-fetch 패치를 되돌려야 하는데 깊고 취약해 스코프 밖(정직하게 벽으로 둔다).
   } catch (e) {
     if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
   }

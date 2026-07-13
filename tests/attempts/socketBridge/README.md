@@ -32,4 +32,6 @@
 - **socketCapProbe GREEN 3/3 (src 능력 승격, http + https)**: `Runtime.enableSocketBridge({relayURL})`로 승격. 메인 스레드 Runtime에서 파이썬 socket.socket()/create_connection을 릴레이에 심하고(블로킹 recv = JSPI/run_sync, runAsync 경로), **`urllib.request.urlopen`이 진짜 소켓으로 HTTP 200**(`http://example.com/` 559바이트 516ms) **와 HTTPS 200**(`https://example.com/` 219ms)을 수신. HTTPS는 릴레이가 port 443에서 TLS 종단하고 파이썬 `ssl.SSLContext.wrap_socket`은 패스스루(이중 암호화 방지). http.client가 심한 socket(create_connection + makefile)을 그대로 써서 진짜 TCP로 왕복. **파이썬 HTTP 스택이 브라우저에서 진짜 소켓으로 http + https 둘 다 돈다.**
   - 실측 특정 버그: http.client는 `Connection: close` 응답에서 헤더만 읽고 소켓을 닫은 뒤 바디를 makefile로 읽는다(CPython 소켓은 refcount로 생존). `close()`가 즉시 WS를 닫으면 릴레이가 in-flight 응답을 끊어 truncation(IncompleteRead 559바이트). `close()`를 유예해 데이터 드레인이 끝나게 해결.
 
-**의미**: 벽2 아웃바운드가 개념 -> 진짜 파이썬 소켓 -> **src 능력(http + https)**으로 완결됐다. `SocketBridge`가 공개 표면. 남은 것 = 릴레이 강화(Wisp 멀티플렉싱, in-tab TLS = e2e), requests/urllib3(urllib3의 ssl 속성 추가 심). 인바운드는 정직한 물리 벽으로 남는다(역터널 릴레이 = 별도 조각).
+**정직한 경계(실측)**: 이 브리지는 **stdlib HTTP 스택**(`urllib`/`http.client`)을 진짜 소켓으로 돌린다(http+https 실측). `requests`/`urllib3`는 Pyodide에서 socket이 아니라 **JS fetch(emscripten 백엔드)**를 써서(실측: `Failed to fetch`) 이 심을 안 타고 CORS 제약을 받는다. requests를 소켓으로 돌리려면 Pyodide의 urllib3-fetch 패치를 되돌려야 하는데 깊고 취약해 스코프 밖.
+
+**의미**: 벽2 아웃바운드가 개념 -> 진짜 파이썬 소켓 -> **src 능력(http + https, stdlib HTTP 스택)**으로 완결됐다. `SocketBridge`가 공개 표면. 남은 강화 = 릴레이 Wisp 멀티플렉싱, in-tab TLS(e2e). 인바운드는 정직한 물리 벽으로 남는다(역터널 릴레이 = 별도 조각).
