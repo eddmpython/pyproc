@@ -57,8 +57,32 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   c[i] = __EXPR__;
 }`;
 
+// 병렬 리덕션 WGSL(256 워크그룹 공유메모리 트리). __OP__(a,b)로 두 값을 합치고 __IDENTITY__로
+// 범위 밖을 채운다. 워크그룹당 부분 결과 하나 -> 1개가 될 때까지 JS가 다단계 반복(reduce).
+const REDUCE_WGSL = `
+@group(0) @binding(0) var<storage, read> inp: array<f32>;
+@group(0) @binding(1) var<storage, read_write> outp: array<f32>;
+@group(0) @binding(2) var<uniform> len: u32;
+var<workgroup> sdata: array<f32, 256>;
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>, @builtin(workgroup_id) wid: vec3<u32>) {
+  var v = __IDENTITY__;
+  if (gid.x < len) { v = inp[gid.x]; }
+  sdata[lid.x] = v;
+  workgroupBarrier();
+  var stride = 128u;
+  loop {
+    if (stride == 0u) { break; }
+    if (lid.x < stride) { let a = sdata[lid.x]; let b = sdata[lid.x + stride]; sdata[lid.x] = __OP__; }
+    workgroupBarrier();
+    stride = stride / 2u;
+  }
+  if (lid.x == 0u) { outp[wid.x] = sdata[0]; }
+}`;
+const REDUCE_OPS = { sum: ["a + b", "0.0"], max: ["max(a, b)", "-3.4e38"], min: ["min(a, b)", "3.4e38"] };
+
 export class GpuCompute {
-  constructor(device) { this._device = device; this._matmul = null; this._elementwise = new Map(); }
+  constructor(device) { this._device = device; this._matmul = null; this._elementwise = new Map(); this._reduce = new Map(); }
 
   // WebGPU 디바이스를 확보한다(async). 어댑터가 없으면(헤드리스) 실행 가능한 에러.
   static async create() {
@@ -90,6 +114,18 @@ export class GpuCompute {
       const module = this._device.createShaderModule({ code: ELEMENTWISE_WGSL.replace("__EXPR__", expr) });
       p = this._device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
       this._elementwise.set(expr, p);
+    }
+    return p;
+  }
+
+  // 리덕션 파이프라인(op별 캐시). op = sum|max|min.
+  _reducePipeline(op) {
+    let p = this._reduce.get(op);
+    if (!p) {
+      const [expr, identity] = REDUCE_OPS[op];
+      const module = this._device.createShaderModule({ code: REDUCE_WGSL.replace("__OP__", expr).replace("__IDENTITY__", identity) });
+      p = this._device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
+      this._reduce.set(op, p);
     }
     return p;
   }
@@ -150,6 +186,38 @@ export class GpuArray {
     device.queue.submit([enc.finish()]);
     nBuf.destroy();
     return new GpuArray(this._gc, cBuf, this.rows, this.cols);
+  }
+
+  // 전체 리덕션(sum|max|min): GPU에서 모든 원소를 하나로 줄여 스칼라를 돌려준다(종단 = 리드백 1).
+  // 잔류 체이닝의 종착: g.matmul(w).map("max(x,0.0)").reduce("sum") 같은 loss/norm 패턴이 GPU에 남는다.
+  // 다단계(워크그룹당 부분 -> 1개가 될 때까지) = 큰 배열도 정확. 입력 핸들은 보존한다(자기 임시 버퍼).
+  async reduce(op) {
+    if (!REDUCE_OPS[op]) throw new Error(`GpuArray.reduce: op는 sum|max|min (받음: ${op})`);
+    const device = this._gc._device, pipeline = this._gc._reducePipeline(op);
+    let n = this.rows * this.cols, inBuf = this.buffer;
+    const temps = [];
+    while (n > 1) {
+      const groups = Math.ceil(n / 256);
+      const outBuf = device.createBuffer({ size: Math.max(groups, 1) * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+      const nBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true });
+      new Uint32Array(nBuf.getMappedRange()).set([n, 0, 0, 0]); nBuf.unmap();
+      const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: inBuf } }, { binding: 1, resource: { buffer: outBuf } }, { binding: 2, resource: { buffer: nBuf } } ] });
+      const enc = device.createCommandEncoder();
+      const pass = enc.beginComputePass(); pass.setPipeline(pipeline); pass.setBindGroup(0, bind); pass.dispatchWorkgroups(groups); pass.end();
+      device.queue.submit([enc.finish()]);
+      nBuf.destroy();
+      temps.push(outBuf); inBuf = outBuf; n = groups;
+    }
+    const readBuf = device.createBuffer({ size: 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const enc = device.createCommandEncoder();
+    enc.copyBufferToBuffer(inBuf, 0, readBuf, 0, 4);
+    device.queue.submit([enc.finish()]);
+    await readBuf.mapAsync(GPUMapMode.READ);
+    const val = new Float32Array(readBuf.getMappedRange().slice(0))[0];
+    readBuf.destroy();
+    temps.forEach((b) => b.destroy());
+    return val;
   }
 
   // GPU -> CPU 회수(리드백 1복사). 반환 { data: Float32Array, rows, cols }.

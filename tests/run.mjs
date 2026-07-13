@@ -111,7 +111,7 @@ check("JobControl 메서드", () => {
 check("GpuCompute/GpuArray/GpuBridge 메서드", () => {
   if (typeof api.GpuCompute.create !== "function") throw new Error("GpuCompute.create(static)");
   for (const m of ["array", "destroy"]) if (typeof api.GpuCompute.prototype[m] !== "function") throw new Error(`GpuCompute.${m}`);
-  for (const m of ["matmul", "map", "toArray", "destroy"]) if (typeof api.GpuArray.prototype[m] !== "function") throw new Error(`GpuArray.${m}`);
+  for (const m of ["matmul", "map", "reduce", "toArray", "destroy"]) if (typeof api.GpuArray.prototype[m] !== "function") throw new Error(`GpuArray.${m}`);
   for (const m of ["install", "destroy"]) if (typeof api.GpuBridge.prototype[m] !== "function") throw new Error(`GpuBridge.${m}`);
 });
 check("Runtime.enableGpu", () => { if (typeof api.Runtime.prototype.enableGpu !== "function") throw new Error("Runtime.enableGpu"); });

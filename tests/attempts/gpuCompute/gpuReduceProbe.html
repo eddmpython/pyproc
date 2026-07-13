@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!--
+결과(append): GpuArray.reduce - 병렬 리덕션(sum/max/min)이 정확하고 잔류 체이닝의 종착이 되나.
+(1) reduce(sum/max/min) == CPU 참조(다양한 크기, 워크그룹 경계 포함).
+(2) 전체 잔류 체인: matmul -> relu(map) -> reduce(sum)이 리드백 없이 == CPU 참조(loss 패턴).
+어댑터 없으면 SKIP. 실행: PYPROC_HEADED=1 ... gpuReduceProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: gpu reduce</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: GpuArray.reduce + 전체 잔류 체인 (matmul->relu->sum)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { GpuCompute } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const rel = (a, b) => Math.abs(a - b) / (Math.abs(b) + 1e-6);
+
+  try {
+    let gc;
+    try { gc = await GpuCompute.create(); }
+    catch (e) { check("SKIP: 어댑터 없음(실 GPU 머신에서 PYPROC_HEADED=1)", /어댑터/.test(String(e)) || /navigator.gpu/.test(String(e))); await report(); throw new Error("__skip__"); }
+    check("GpuCompute.create(실 GPU)", !!gc);
+
+    // 1) reduce 정확성: 여러 크기(워크그룹 경계 300, 정확히 256, 큰 100000)에서 sum/max/min == CPU.
+    for (const n of [300, 256, 100000]) {
+      const arr = new Float32Array(n);
+      for (let i = 0; i < n; i++) arr[i] = Math.sin(i * 0.7) * 3 + Math.cos(i * 0.3);
+      const g = gc.array(arr, 1, n);
+      const [sum, mx, mn] = [await g.reduce("sum"), await g.reduce("max"), await g.reduce("min")];
+      let cSum = 0, cMax = -Infinity, cMin = Infinity;
+      for (let i = 0; i < n; i++) { cSum += arr[i]; cMax = Math.max(cMax, arr[i]); cMin = Math.min(cMin, arr[i]); }
+      check(`reduce n=${n}: sum/max/min == CPU`, rel(sum, cSum) < 1e-3 && Math.abs(mx - cMax) < 1e-3 && Math.abs(mn - cMin) < 1e-3,
+        `sum ${sum.toFixed(2)}/${cSum.toFixed(2)}, max ${mx.toFixed(3)}, min ${mn.toFixed(3)}`);
+      g.destroy();
+    }
+
+    // 2) 전체 잔류 체인(loss 패턴): matmul -> relu -> sum이 리드백 없이 GPU에서 == CPU 참조.
+    const M = 64, K = 48, N = 40;
+    const A = new Float32Array(M * K), B = new Float32Array(K * N);
+    for (let i = 0; i < A.length; i++) A[i] = ((i * 7 + 3) % 29) / 29 - 0.4;
+    for (let i = 0; i < B.length; i++) B[i] = ((i * 5 + 1) % 31) / 31 - 0.5;
+    const total = await gc.array(A, M, K).matmul(gc.array(B, K, N)).map("max(x, 0.0)").reduce("sum");
+    // CPU 참조: (A@B) -> relu -> sum.
+    let cpu = 0;
+    for (let i = 0; i < M; i++) for (let j = 0; j < N; j++) { let s = 0; for (let x = 0; x < K; x++) s += A[i * K + x] * B[x * N + j]; cpu += Math.max(s, 0); }
+    check("전체 잔류 체인 matmul->relu->sum == CPU 참조(리드백 0)", rel(total, cpu) < 1e-3, `GPU ${total.toFixed(3)} vs CPU ${cpu.toFixed(3)}`);
+
+    // 3) op 검증(계약 방어).
+    let threw = false;
+    try { await gc.array(A, M, K).reduce("mean"); } catch (e) { threw = /sum\|max\|min/.test(String(e)); }
+    check("reduce 잘못된 op는 명시적 에러", threw);
+    gc.destroy();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
