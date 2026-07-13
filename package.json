@@ -21,6 +21,7 @@
   "scripts": {
     "test": "node tests/run.mjs",
     "test:browser": "node tests/browser/run.mjs",
+    "test:browser:ext": "node tests/browser/runExtension.mjs",
     "test:examples": "node tests/browser/examples.mjs",
     "serve": "node examples/serve.mjs",
     "fetch:engine": "node scripts/fetchEngine.mjs"
