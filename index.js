@@ -3,6 +3,9 @@
 // codaro / dartlab / xlpod 공통 런타임의 SSOT.
 //
 // 공개 표면:
+//   checkEnvironment()   - 환경 진단: crossOriginIsolated/SAB/JSPI가 준비됐는지 + 안 됐으면 무엇을
+//                          어떻게 고치는지. 기본 표면(boot/run/enableReactive)은 준비 없이 Chromium에서
+//                          돌지만, 프로세스 OS(PyProc)/소켓은 COOP/COEP 헤더가 필요하다
 //   boot()               - Pyodide 런타임 부팅 -> Runtime
 //   bootEnv()            - uv 레인: 환경 선언 + 캐시 디렉터리 -> 웜 부팅(스냅샷+휠, 실측 3.61배)
 //   runScript()          - 브라우저판 uv run: PEP 723 인라인 의존성 자동 설치 + 실행
@@ -32,7 +35,7 @@
 //                          완전 시간여행(checkpoint/timeTravel). 값 다리는 JSON 한정, wasmURL 소비자 제공
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
-export { boot, Runtime, MemoryCapability, PAGE_SIZE } from "./src/runtime/runtime.js";
+export { boot, Runtime, MemoryCapability, PAGE_SIZE, checkEnvironment } from "./src/runtime/runtime.js";
 export { ReactiveController } from "./src/capabilities/reactive.js";
 export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
 export { SocketBridge } from "./src/capabilities/socketBridge.js";

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<!--
+소비자 온보딩 안전 게이트: 헤더 없는 페이지(PYPROC_NO_COI=1로 서빙)에서 (1) checkEnvironment가
+정확히 무엇이 빠졌는지 + 어떻게 고칠지 돌려주고 (2) 프로세스 OS를 그냥 쓰면 암호 같은
+SharedArrayBuffer 실패 대신 실행 가능한 에러(어느 헤더를 달지)가 나는가.
+실행: PYPROC_NO_COI=1 node tests/browser/run.mjs tests/browser/preflightNoCoi.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>preflight (no COI)</title></head>
+<body>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { checkEnvironment, PyProc, boot } from "../../index.js";
+  const out = document.getElementById("out");
+  const checks = [];
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks }) }); } catch (e) {}
+  };
+  try {
+    check("전제: 헤더 없는 페이지(crossOriginIsolated=false)", crossOriginIsolated === false, `crossOriginIsolated=${crossOriginIsolated}`);
+
+    // 1) 진단: SAB 없음을 정확히 잡고 조치를 준다.
+    const env = checkEnvironment();
+    const coiIssue = env.issues.find((i) => i.code === "no-cross-origin-isolation");
+    check("checkEnvironment: COI 부재를 issue로 보고 + 조치 포함", env.ok === false && !!coiIssue && coiIssue.fix.includes("Cross-Origin-Embedder-Policy"),
+      coiIssue ? coiIssue.need : "issue 없음");
+
+    // 2) 기본 표면은 헤더 없이도 동작(온보딩의 관대함): boot + run + 리액티브.
+    const rt = await boot();
+    const reactive = rt.enableReactive();
+    const sp = reactive.stackSave();
+    rt.run("x = 1");
+    const cp = reactive.checkpoint();
+    rt.run("x = 999");
+    reactive.checkpoint();
+    reactive.restoreLive(cp.index, sp);
+    check("헤더 없이 기본 표면 동작(boot/run/reactive)", rt.run("x") === 1 && rt.run("sum(range(10))") === 45);
+
+    // 3) 프로세스 OS는 실행 가능한 에러(암호 SharedArrayBuffer 실패 대신).
+    let msg = "";
+    try { await new PyProc().boot(1); check("PyProc가 헤더 없이 성공하면 안 됨", false); }
+    catch (e) { msg = String(e); }
+    check("PyProc: 실행 가능한 에러(헤더 안내 포함)", msg.includes("Cross-Origin-Embedder-Policy") && msg.includes("crossOriginIsolated") && !msg.includes("is not defined"),
+      msg.slice(0, 80));
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-200));
+  }
+  await report();
+</script>
+</body>
+</html>

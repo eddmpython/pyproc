@@ -77,7 +77,7 @@ reactive.restoreLive(cp.index, sp);           // 체크포인트로 복귀 - 바
 console.log(rt.run("len(values)"));           // 3
 ```
 
-> pyproc은 Chromium / Edge 전용이고 `crossOriginIsolated` 페이지가 필요하다(`COOP: same-origin`, `COEP: require-corp`). [지원 환경](#지원-환경) 참조.
+> 위 기본은 Chromium 브라우저만 있으면 된다. `PyProc`(프로세스 OS)와 소켓은 `crossOriginIsolated`(`COOP: same-origin`, `COEP: require-corp`)와 same-origin 워커도 필요하다 - [셋업](#셋업) 참조. `checkEnvironment()`로 확인하라.
 
 ## AI 에이전트에서 쓰기
 
@@ -186,6 +186,7 @@ Pyodide  Workers
 
 | Export | 무엇 |
 | --- | --- |
+| `checkEnvironment()` | 환경 진단: `crossOriginIsolated` / SAB / JSPI가 준비됐는지, 부족하면 무엇을 어떻게 고칠지(복붙 조치 포함) |
 | `boot(opts)` | Pyodide 런타임 부팅, `Runtime` 반환(`lockFileURL` 락 재현, `coreCacheDir` 오프라인 코어) |
 | `bootEnv(manifest, dirs)` | uv 레인: bare 스냅샷 + wheel 캐시 웜 부팅(2차 ~1229ms vs 콜드 ~5109ms) |
 | `runScript(rt, src, opts)` | 브라우저판 `uv run`: PEP 723 인라인 의존성 자동 설치 후 실행 |
@@ -222,14 +223,55 @@ import { PyProc } from "pyproc/process-os";
 
 능력별 예제 중심 상세 문서는 [docs/](docs/README.md)에 있다. 이 README는 지도로 둔다.
 
-## 지원 환경
+## 셋업
 
-**Chromium / Edge 전용.** JSPI(JavaScript Promise Integration), SharedArrayBuffer, `crossOriginIsolated`가 필요하다. Firefox / Safari 미지원은 결함이 아니라 의도된 스코프다. SharedArrayBuffer를 쓰려면 페이지를 다음 헤더로 서빙한다:
+**Chromium / Edge 전용.** JSPI(JavaScript Promise Integration, Chrome 137부터 기본), SharedArrayBuffer, `crossOriginIsolated`가 필요하다. Firefox / Safari 미지원은 결함이 아니라 의도된 스코프다.
+
+셋업은 두 티어다. "그냥 설치하고 import"는 기본에서 참이지만 전부에서는 아니다:
+
+| 하고 싶은 것 | 필요한 것 |
+|---|---|
+| `boot` / `run` / `loadPackages`, `enableReactive`(체크포인트·시간여행) | `npm install` + Chromium 브라우저. 헤더 불필요. |
+| `PyProc`(fork·`map`·interrupt), IPC, 블로킹 소켓 | 아래 두 헤더 + **same-origin 워커 파일**(= npm 설치/벤더링, CDN 직접 import 불가) |
+
+pyproc을 띄우는 페이지를 다음 헤더로 서빙한다:
 
 ```text
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
+
+`checkEnvironment()`가 지금 무엇이 준비됐고 부족하면 무엇을 어떻게 고칠지 알려준다. 프로세스 OS에 의존하기 전에 한 번 부른다:
+
+```js
+import { checkEnvironment } from "pyproc";
+
+const env = checkEnvironment();
+if (!env.ok) console.warn(env.issues);   // 각 issue = { code, need, why, fix }
+// env.ok true  -> 프로세스 OS 포함 전부 가능
+// env.ok false -> 기본은 여전히 동작. issues가 PyProc/소켓을 여는 조건을 알려준다
+```
+
+헤더를 빼고 `PyProc`를 쓰면 암호 같은 `SharedArrayBuffer is not defined` 대신 **실행 가능한 에러**(어느 헤더를 달지)가 난다.
+
+헤더 보내는 흔한 방법:
+
+```js
+// Vite (vite.config.js)
+export default { server: { headers: {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+} } };
+```
+
+```text
+# _headers 파일을 읽는 정적 호스팅(Netlify, Cloudflare Pages)
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+```
+
+헤더를 아예 못 다는 호스팅(GitHub Pages 등)이면 `pyprocSw.js?coi=1`로 등록하고 1회 새로고침 - 서비스 워커가 헤더를 주입한다(가상 COI).
 
 ## 설치와 핀
 

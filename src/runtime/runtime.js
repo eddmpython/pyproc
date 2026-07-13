@@ -15,6 +15,7 @@ import { Init } from "../capabilities/init.js";
 import { MachineJournal } from "../capabilities/machineJournal.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
+export { checkEnvironment } from "./preflight.js";
 
 // 기본 엔진 배포 지점(출처: docs/consuming/contract.md의 Pyodide 버전 계약). 이 상수의
 // 유일한 정의처다: boot/bootEnv/PyProc이 여기서 가져간다. 버전 변경 = 릴리즈 사유.

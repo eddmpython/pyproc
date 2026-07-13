@@ -11,7 +11,7 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, Runtime, PyProc, SIGNAL, bootSession, runScript } from "../../index.js";
+    import { boot, Runtime, PyProc, SIGNAL, bootSession, runScript, checkEnvironment } from "../../index.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -37,6 +37,10 @@
     try {
       // 0) 전제: crossOriginIsolated (COOP/COEP 서버 검증 겸용)
       check("crossOriginIsolated", crossOriginIsolated === true);
+      // 환경 진단: COI 하에서 전부 준비(ok) + 세 능력 true. 소비자 온보딩의 첫 계약.
+      const env = checkEnvironment();
+      check("checkEnvironment: COI 하에서 ok", env.ok === true && env.crossOriginIsolated && env.sharedArrayBuffer && env.jspi && env.issues.length === 0,
+        `sab=${env.sharedArrayBuffer} jspi=${env.jspi}`);
 
       // 1) Layer 0: 부팅 + 실행
       let t = performance.now();

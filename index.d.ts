@@ -3,6 +3,34 @@
 
 export const PAGE_SIZE: number;
 
+export interface EnvIssue {
+  /** 기계 판별용 코드: "no-cross-origin-isolation" | "no-jspi". */
+  code: string;
+  /** 빠진 플랫폼 능력. */
+  need: string;
+  /** 왜 필요한가(어느 기능이 막히는가). */
+  why: string;
+  /** 어떻게 고치는가(복붙 가능한 조치). */
+  fix: string;
+}
+
+export interface EnvReport {
+  /** true면 프로세스 OS 포함 모든 능력 가능. false여도 기본 표면(boot/run/enableReactive)은 된다. */
+  ok: boolean;
+  crossOriginIsolated: boolean;
+  sharedArrayBuffer: boolean;
+  jspi: boolean;
+  /** 준비 안 된 능력과 조치. 기본 표면만 쓸 거면 무시해도 된다. */
+  issues: EnvIssue[];
+}
+
+/**
+ * 환경 진단. "그냥 import하면 되나?"의 정직한 답: 기본 표면(boot/run/enableReactive)은 준비 없이
+ * Chromium에서 돌지만, PyProc(프로세스 OS)/IPC/소켓 블로킹은 crossOriginIsolated(COOP/COEP 헤더)와
+ * JSPI를 요구한다. 이 함수가 무엇이 준비됐는지, 안 됐으면 무엇을 어떻게 고치는지 돌려준다.
+ */
+export function checkEnvironment(): EnvReport;
+
 export interface BootOptions {
   /** Pyodide 배포 URL. 기본 jsdelivr v314.0.2. */
   indexURL?: string;

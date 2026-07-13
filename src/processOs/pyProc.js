@@ -9,6 +9,7 @@
 // 겹쳐도 응답이 교차하지 않고, 워커가 죽으면(사고/kill) 그 워커의 대기 중 요청 전부가
 // 즉시 명시적으로 reject된다(영원히 매달리는 Promise 금지).
 import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
+import { requireCoi } from "../runtime/preflight.js";
 import { createPipe, createLock, createSemaphore, createShm, pipeWriteAsync, pipeReadAsync, pipeClose } from "./ipc.js";
 
 // 시그널 번호(POSIX 관례. 외부 기술 명칭이라 번호는 원어 규격 그대로).
@@ -174,6 +175,9 @@ export class PyProc {
 
   // N개 프로세스 spawn: 스냅샷으로 부팅(fast fork). useSnapshot=false면 콜드 대조.
   async boot(n, useSnapshot = true) {
+    // 프로세스 OS는 SAB(crossOriginIsolated)를 요구한다. 헤더 누락 시 여기서 실행 가능한 에러를
+    // 던진다(워커 안에서 SharedArrayBuffer is not defined로 죽는 암호 실패를 대신한다).
+    requireCoi("PyProc(프로세스 OS)");
     if (useSnapshot && !this._snapshot) await this._makeSnapshot();
     const spawns = [];
     for (let i = 0; i < n; i++) spawns.push(this._spawn(useSnapshot).ready);

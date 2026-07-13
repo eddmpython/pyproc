@@ -77,7 +77,7 @@ reactive.restoreLive(cp.index, sp);           // back to the checkpoint - writes
 console.log(rt.run("len(values)"));           // 3
 ```
 
-> pyproc is Chromium / Edge only and needs a `crossOriginIsolated` page (`COOP: same-origin`, `COEP: require-corp`). See [Supported environment](#supported-environment).
+> The basics above need only a Chromium browser. `PyProc` (process OS) and sockets also need `crossOriginIsolated` (`COOP: same-origin`, `COEP: require-corp`) and same-origin workers - see [Setup](#setup). Run `checkEnvironment()` to check.
 
 ## Using it from an AI agent
 
@@ -186,6 +186,7 @@ Capabilities are opt-in - turn on only what you need, and consume the capability
 
 | Export | What |
 | --- | --- |
+| `checkEnvironment()` | Environment preflight: are `crossOriginIsolated` / SAB / JSPI ready, and if not, what to add (each gap comes with a copy-paste fix) |
 | `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` (`lockFileURL` for lock reproduction, `coreCacheDir` for offline core) |
 | `bootEnv(manifest, dirs)` | The uv lane: bare-snapshot + wheel-cache warm boot (second boot ~1229ms vs ~5109ms cold) |
 | `runScript(rt, src, opts)` | `uv run` in the browser: auto-install PEP 723 inline dependencies, then run |
@@ -222,14 +223,55 @@ import { PyProc } from "pyproc/process-os";
 
 Deep, example-driven docs for each capability live in [docs/](docs/README.md); this README stays the map.
 
-## Supported environment
+## Setup
 
-**Chromium / Edge only.** pyproc needs JSPI (JavaScript Promise Integration), SharedArrayBuffer, and `crossOriginIsolated`. Lack of Firefox / Safari support is a deliberate scope choice, not a defect. To use SharedArrayBuffer, serve the page with:
+**Chromium / Edge only.** pyproc needs JSPI (JavaScript Promise Integration, default since Chrome 137), SharedArrayBuffer, and `crossOriginIsolated`. Lack of Firefox / Safari support is a deliberate scope choice, not a defect.
+
+There are two tiers of setup, so "just install and import" is true for the basics but not for everything:
+
+| You want | You need |
+|---|---|
+| `boot` / `run` / `loadPackages`, `enableReactive` (checkpoint, time-travel) | Just `npm install` plus a Chromium browser. No headers. |
+| `PyProc` (fork, `map`, interrupt), IPC, blocking sockets | The two headers below, plus **same-origin worker files** (so npm install / vendoring, not CDN import) |
+
+Serve the page that hosts pyproc with:
 
 ```text
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
+
+`checkEnvironment()` tells you exactly where you stand and how to fix any gap - call it once before you rely on the process OS:
+
+```js
+import { checkEnvironment } from "pyproc";
+
+const env = checkEnvironment();
+if (!env.ok) console.warn(env.issues);   // each issue has { code, need, why, fix }
+// env.ok true  -> everything works, process OS included
+// env.ok false -> basics still work; issues list what unlocks PyProc / sockets
+```
+
+Skip the headers and reach for `PyProc` anyway and you get an actionable error (which headers to add), not a cryptic `SharedArrayBuffer is not defined`.
+
+Common ways to send the headers:
+
+```js
+// Vite (vite.config.js)
+export default { server: { headers: {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+} } };
+```
+
+```text
+# Static hosts that read a _headers file (Netlify, Cloudflare Pages)
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+```
+
+Can't set headers at all (e.g. GitHub Pages)? Register `pyprocSw.js?coi=1` and reload once - the service worker injects the headers (virtual COI).
 
 ## Install and pinning
 
