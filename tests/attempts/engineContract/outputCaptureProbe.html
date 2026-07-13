@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+결과(append): Runtime.setStdout/setStderr - 실행 출력 캡처가 셀별 가변 싱크로 도는가.
+핸들러 수신, 셀 도중 핸들러 교체 격리(buf1은 두 번째 출력을 안 받음), null 복원, stderr 분리.
+실행: node tests/browser/run.mjs tests/attempts/engineContract/outputCaptureProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: output capture</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: Runtime.setStdout / setStderr (셀별 가변 싱크)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  try {
+    let t = performance.now();
+    const rt = await boot();
+    timings.bootMs = Math.round(performance.now() - t);
+    check("boot + setStdout 존재", typeof rt.setStdout === "function", `${timings.bootMs}ms`);
+
+    // 1) 핸들러가 출력을 받는다(셀 1).
+    const buf1 = [];
+    rt.setStdout((s) => buf1.push(s));
+    rt.run("print('hello-one')");
+    check("stdout 핸들러 수신(셀1)", buf1.join("\n").includes("hello-one"), JSON.stringify(buf1));
+
+    // 2) 셀 도중 핸들러 교체 = 격리(셀2는 buf2로, buf1은 안 받음).
+    const buf2 = [];
+    rt.setStdout((s) => buf2.push(s));
+    rt.run("print('world-two')");
+    check("핸들러 교체 격리(셀2=buf2, buf1 불변)", buf2.join("\n").includes("world-two") && !buf1.join("\n").includes("world-two"), `buf2=${JSON.stringify(buf2)}`);
+
+    // 3) null 복원 = 이후 출력은 buf2로 안 간다.
+    const buf2Len = buf2.length;
+    rt.setStdout(null);
+    rt.run("print('after-reset')");
+    check("setStdout(null) 복원(buf2 불변)", buf2.length === buf2Len);
+
+    // 4) stderr 분리 캡처.
+    const bufE = [];
+    rt.setStderr((s) => bufE.push(s));
+    rt.run("import sys\nprint('err-line', file=sys.stderr)");
+    check("stderr 핸들러 수신", bufE.join("\n").includes("err-line"), JSON.stringify(bufE));
+    rt.setStderr(null);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

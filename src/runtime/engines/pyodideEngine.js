@@ -10,7 +10,7 @@
 // 기본이고, 프록시는 Pyodide 어댑터의 편의다. 매핑 표: engineContract/README.md.
 
 export class PyodideEngine {
-  constructor(py) { this._py = py; this._micropip = null; }
+  constructor(py) { this._py = py; this._micropip = null; this._fs = null; }
 
   // --- 실행 --- (WASI: stdin 프레임 드라이버로 exec 후 stdout 프로토콜 회수)
   runSync(code) { return this._py.runPython(code); }
@@ -36,6 +36,8 @@ export class PyodideEngine {
 
   // --- 패키지 --- (선택)
   async loadPackages(pkgs) { return this._py.loadPackage(pkgs); }
+  // 셀 코드의 import 문을 스캔해 필요한 C확장 휠을 자동 로드(선택). WASI: 정적 스캔 불가 = no-op.
+  async loadPackagesFromImports(code) { return this._py.loadPackagesFromImports(code); }
   async install(pkg) {
     if (!this._micropip) { await this._py.loadPackage("micropip"); this._micropip = this._py.pyimport("micropip"); }
     return this._micropip.install(pkg);
@@ -45,8 +47,42 @@ export class PyodideEngine {
     return this._micropip.freeze();
   }
 
+  // --- 실행 출력 --- (Pyodide: setStdout({batched}). WASI: stdout 프로토콜 회수)
+  // handler는 문자열 청크 수신(batched = 개행 경계 flush). null 전달 = 기본 복원. 셀별 라이브 스트리밍 = 가변 싱크.
+  setStdout(handler) { if (handler == null) this._py.setStdout(); else this._py.setStdout({ batched: handler }); }
+  setStderr(handler) { if (handler == null) this._py.setStderr(); else this._py.setStderr({ batched: handler }); }
+
   // --- FS/영속 --- (선택. 장치 세계(P7)는 아직 엔진 특유라 raw 탈출구로도 접근한다)
   async mountDir(path, handle) { const fs = await this._py.mountNativeFS(path, handle); return { path, sync: () => fs.syncfs() }; }
+
+  // 파일 IO 중립 파사드(1회 빌드 후 캐시). Pyodide는 _py.FS, WASI는 자체 FS를 여기 매핑한다.
+  // 파일-op만 담는다(장치 등록 registerDevice 등은 파일 IO가 아니라 별개 seam = raw). 소비자는
+  // FileSystem 능력(Runtime.fs)이 이 파사드에 위임한 것만 본다. 계약이 Pyodide FS 모양으로 안 굳게 중립 어휘.
+  get fs() {
+    if (this._fs) return this._fs;
+    const FS = this._py.FS;
+    this._fs = {
+      // data가 문자열이면 utf8, Uint8Array면 binary(opts.encoding으로 명시 가능).
+      writeFile(path, data, opts = {}) {
+        const encoding = opts.encoding || (typeof data === "string" ? "utf8" : "binary");
+        FS.writeFile(path, data, { encoding });
+      },
+      // 기본 binary(Uint8Array). { encoding: "utf8" }면 문자열.
+      readFile(path, opts = {}) { return FS.readFile(path, { encoding: opts.encoding || "binary" }); },
+      mkdir(path) { FS.mkdir(path); },
+      mkdirTree(path) { FS.mkdirTree(path); },
+      readdir(path) { return FS.readdir(path).filter((n) => n !== "." && n !== ".."); },
+      stat(path) {
+        const s = FS.stat(path);
+        const mtimeMs = s.mtime && typeof s.mtime.getTime === "function" ? s.mtime.getTime() : null;
+        return { size: s.size, isDir: FS.isDir(s.mode), isFile: FS.isFile(s.mode), mtimeMs };
+      },
+      exists(path) { return FS.analyzePath(path).exists; },
+      unlink(path) { FS.unlink(path); },
+      rmdir(path) { FS.rmdir(path); },
+    };
+    return this._fs;
+  }
 
   // --- 스냅샷 --- (선택: bare fork. WASI는 memory.buffer 전체 복사로 대응 전망)
   makeSnapshot() { return this._py.makeMemorySnapshot(); }

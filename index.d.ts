@@ -628,6 +628,26 @@ export class WheelCache {
 }
 
 /** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal/enableWheelCache). */
+/**
+ * 엔진-무관 일반 파일 IO(Runtime.fs). 소비자가 rt.raw.FS를 안 만지고 파일을 읽고 쓴다.
+ * 영속(OPFS)은 mountHome이 마운트하고 이건 그 위 파일-op 레이어(새 VFS 아님). 변이는 execSeq를 올린다(리액티브 가드).
+ */
+export class FileSystem {
+  /** data가 문자열이면 utf8, Uint8Array면 binary(opts.encoding으로 명시 가능). */
+  writeFile(path: string, data: string | Uint8Array, opts?: { encoding?: "utf8" | "binary" }): void;
+  /** 기본 binary(Uint8Array). { encoding: "utf8" }면 문자열. */
+  readFile(path: string, opts?: { encoding?: "utf8" | "binary" }): Uint8Array | string;
+  mkdir(path: string): void;
+  /** 중첩 경로 생성(존재해도 무해). */
+  mkdirTree(path: string): void;
+  /** . / .. 제외한 이름 배열. */
+  readdir(path: string): string[];
+  stat(path: string): { size: number; isDir: boolean; isFile: boolean; mtimeMs: number | null };
+  exists(path: string): boolean;
+  unlink(path: string): void;
+  rmdir(path: string): void;
+}
+
 export class Runtime {
   /**
    * EngineContract 또는 **로드된 Pyodide 인스턴스**를 받는다. 후자를 주면 감싸므로, 워커에서
@@ -635,6 +655,8 @@ export class Runtime {
    */
   constructor(engineOrPyodide: unknown, indexURL?: string);
   readonly memory: MemoryCapability;
+  /** 엔진-무관 일반 파일 IO(상시 능력, memory와 동급). 미지원 엔진이면 호출 시 에러. */
+  readonly fs: FileSystem;
   /** 이 커널이 부팅된 엔진 배포 지점. 자식 워커(subprocess)가 같은 지점을 쓴다. */
   readonly indexURL: string;
   run(code: string): unknown;
@@ -646,6 +668,11 @@ export class Runtime {
   setInterruptBuffer(sab: SharedArrayBuffer): boolean;
   install(pkg: string): Promise<void>;
   loadPackages(pkgs: string | string[]): Promise<void>;
+  /** 셀 코드의 import 문을 스캔해 필요한 패키지를 자동 로드. 미지원 엔진(WASI)은 no-op(명시 loadPackages 폴백). */
+  loadPackagesFromImports(code: string): Promise<void>;
+  /** 실행 출력 캡처(셀별 가변 싱크). handler는 문자열 청크 수신, null = 기본 복원. */
+  setStdout(handler: ((chunk: string) => void) | null): void;
+  setStderr(handler: ((chunk: string) => void) | null): void;
   /** 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정(uv lock 등가). boot({ lockFileURL })에 되먹인다. */
   freeze(): Promise<string>;
   /** bootEnv()로 부팅된 경우의 부팅 통계. */

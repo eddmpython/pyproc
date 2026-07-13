@@ -190,8 +190,9 @@ Capabilities are opt-in - turn on only what you need, and consume the capability
 | `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` (`lockFileURL` for lock reproduction, `coreCacheDir` for offline core) |
 | `bootEnv(manifest, dirs)` | The uv lane: bare-snapshot + wheel-cache warm boot (second boot ~1229ms vs ~5109ms cold) |
 | `runScript(rt, src, opts)` | `uv run` in the browser: auto-install PEP 723 inline dependencies, then run |
-| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `freeze` / `mountHome` plus capability registration; adopt an existing Pyodide with `new Runtime(py)` |
+| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `loadPackagesFromImports` / `setStdout` / `setStderr` / `freeze` / `mountHome` / `fs` plus capability registration; adopt an existing Pyodide with `new Runtime(py)` |
 | `MemoryCapability` | Capability contract that encapsulates WASM heap access |
+| `FileSystem` (`Runtime.fs`) | Engine-agnostic general file IO so consumers never touch `rt.raw.FS`: `writeFile` / `readFile` (utf8 or binary) / `mkdir` / `mkdirTree` / `readdir` / `stat` / `exists` / `unlink` / `rmdir`. Persistence (OPFS) is `mountHome`; this is the file-op layer over the mounted FS |
 | `ReactiveController` | Restore-based reactivity: `checkpoint` / `restoreLive` / `timeTravel`, branch tree |
 | `SyscallBridge` | Borrowed syscalls: `input()` (sync / JSPI), `urllib` (sync XHR), `subprocess` (child worker) |
 | `SocketBridge` | Real outbound TCP for Python sockets (HTTP + HTTPS) via a thin WS->TCP relay: `socket` / `urllib` / `http.client` reach arbitrary host:port; the relay terminates TLS for `https` (blocking recv over JSPI, `runAsync`). Inbound is a physical wall |

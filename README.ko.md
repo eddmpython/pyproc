@@ -190,8 +190,9 @@ Pyodide  Workers
 | `boot(opts)` | Pyodide 런타임 부팅, `Runtime` 반환(`lockFileURL` 락 재현, `coreCacheDir` 오프라인 코어) |
 | `bootEnv(manifest, dirs)` | uv 레인: bare 스냅샷 + wheel 캐시 웜 부팅(2차 ~1229ms vs 콜드 ~5109ms) |
 | `runScript(rt, src, opts)` | 브라우저판 `uv run`: PEP 723 인라인 의존성 자동 설치 후 실행 |
-| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `freeze` / `mountHome` + 능력 등록; 기존 Pyodide는 `new Runtime(py)`로 채택 |
+| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `loadPackagesFromImports` / `setStdout` / `setStderr` / `freeze` / `mountHome` / `fs` + 능력 등록; 기존 Pyodide는 `new Runtime(py)`로 채택 |
 | `MemoryCapability` | WASM 힙 접근을 캡슐화하는 능력 계약 |
+| `FileSystem` (`Runtime.fs`) | 소비자가 `rt.raw.FS`를 안 만지는 엔진-무관 일반 파일 IO: `writeFile` / `readFile`(utf8/binary) / `mkdir` / `mkdirTree` / `readdir` / `stat` / `exists` / `unlink` / `rmdir`. 영속(OPFS)은 `mountHome`, 이건 마운트된 FS 위 파일-op 레이어 |
 | `ReactiveController` | 복원 기반 리액티비티: `checkpoint` / `restoreLive` / `timeTravel`, 분기 나무 |
 | `SyscallBridge` | 빌린 시스템콜: `input()`(동기 / JSPI), `urllib`(동기 XHR), `subprocess`(자식 워커) |
 | `SocketBridge` | 파이썬 소켓을 얇은 WS->TCP 릴레이로 진짜 아웃바운드 TCP에(HTTP + HTTPS): `socket` / `urllib` / `http.client`가 임의 host:port 도달, https는 릴레이가 TLS 종단(블로킹 recv = JSPI, `runAsync`). 인바운드는 물리 벽 |

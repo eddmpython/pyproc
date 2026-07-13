@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<!--
+결과(append): Runtime.loadPackagesFromImports - 셀 import 스캔 자동 패키지 로드가 성립하는가.
+stdlib-only 코드는 무에러 no-op, 실 C확장 휠(numpy)은 import 문 스캔만으로 자동 로드되어 동작.
+실행: node tests/browser/run.mjs tests/attempts/engineContract/loadImportsProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: loadPackagesFromImports</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: Runtime.loadPackagesFromImports (import 스캔 자동 로드)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  try {
+    let t = performance.now();
+    const rt = await boot();
+    timings.bootMs = Math.round(performance.now() - t);
+    check("boot + loadPackagesFromImports 존재", typeof rt.loadPackagesFromImports === "function", `${timings.bootMs}ms`);
+
+    // 1) stdlib-only 코드는 무에러 no-op(로드할 휠 없음).
+    let stdlibOk = true;
+    try { await rt.loadPackagesFromImports("import json\nimport sys"); } catch (e) { stdlibOk = false; }
+    check("stdlib-only는 무에러", stdlibOk && rt.run("__import__('json').dumps({'a': 1})") === '{"a": 1}');
+
+    // 2) 실 C확장 휠(numpy)이 import 문 스캔만으로 자동 로드되어 동작한다.
+    t = performance.now();
+    await rt.loadPackagesFromImports("import numpy as np");
+    timings.numpyLoadMs = Math.round(performance.now() - t);
+    const sum = await rt.runAsync("import numpy as np\nint(np.array([1, 2, 3]).sum())");
+    check("numpy import 자동 로드 + 동작", sum === 6, `sum=${sum}, load ${timings.numpyLoadMs}ms`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

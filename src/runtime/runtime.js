@@ -14,6 +14,7 @@ import { DeviceFs } from "../capabilities/deviceFs.js";
 import { Init } from "../capabilities/init.js";
 import { MachineJournal } from "../capabilities/machineJournal.js";
 import { GpuBridge } from "../capabilities/gpuCompute.js";
+import { FileSystem } from "../capabilities/fileSystem.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
@@ -109,6 +110,7 @@ export class Runtime {
     // 쓰게 하는 근거다(자가호스팅/오프라인 배포에서 자식만 CDN으로 새는 결함 방지).
     this.indexURL = indexURL || DEFAULT_INDEX;
     this.memory = new MemoryCapability(this._engine);
+    this.fs = new FileSystem(this); // 엔진-무관 일반 파일 IO(상시 능력, memory와 동급). 미지원 엔진이면 호출 시 에러.
     this.execSeq = 0; // 상태 변이 카운터. 리액티브가 실행 경계 위반을 O(1)로 감지하는 근거.
   }
   run(code) { this.execSeq++; return this._engine.runSync(code); }
@@ -123,6 +125,11 @@ export class Runtime {
   setInterruptBuffer(sab) { return this._engine.setInterruptBuffer(sab); }
   async install(pkg) { this.execSeq++; return this._engine.install(pkg); }
   async loadPackages(pkgs) { this.execSeq++; return this._engine.loadPackages(pkgs); }
+  // 셀 코드의 import 문을 스캔해 필요한 패키지를 자동 로드. 미지원 엔진(WASI)은 no-op(명시 loadPackages 폴백).
+  async loadPackagesFromImports(code) { this.execSeq++; return this._engine.loadPackagesFromImports(code); }
+  // 실행 출력 캡처(셀별 가변 싱크). handler는 문자열 청크 수신, null = 기본 복원. 엔진 setStdout를 raw로 안 만지게.
+  setStdout(handler) { return this._engine.setStdout(handler); }
+  setStderr(handler) { return this._engine.setStderr(handler); }
 
   // 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정한다(uv lock 등가).
   // boot({ lockFileURL })에 되먹이면 같은 버전이 해석 0으로 재현된다. 실측: freezeLockProbe.

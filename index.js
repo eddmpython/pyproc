@@ -9,8 +9,9 @@
 //   boot()               - Pyodide 런타임 부팅 -> Runtime
 //   bootEnv()            - uv 레인: 환경 선언 + 캐시 디렉터리 -> 웜 부팅(스냅샷+휠, 실측 3.61배)
 //   runScript()          - 브라우저판 uv run: PEP 723 인라인 의존성 자동 설치 + 실행
-//   Runtime              - run/install/loadPackages/freeze + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal/enableWheelCache)
+//   Runtime              - run/install/loadPackages/loadPackagesFromImports/setStdout/setStderr/freeze + fs + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal/enableWheelCache)
 //   MemoryCapability     - WASM 힙 접근을 캡슐화한 능력 계약
+//   FileSystem           - 엔진-무관 일반 파일 IO(Runtime.fs): writeFile/readFile/mkdir/readdir/stat/exists/unlink/rmdir
 //   ReactiveController   - 복원 기반 리액티브(체크포인트/시간여행/OPFS 영속)
 //   SyscallBridge        - socket/subprocess/input을 빌려주는 능력 계약
 //   AsgiServer           - 커널 안 ASGI 서버(FastAPI/Starlette를 소켓 0으로 dispatch)
@@ -46,6 +47,7 @@ export { AsgiServer } from "./src/capabilities/asgiServer.js";
 export { VirtualOrigin } from "./src/capabilities/virtualOrigin.js";
 export { Terminal } from "./src/capabilities/terminal.js";
 export { DeviceFs } from "./src/capabilities/deviceFs.js";
+export { FileSystem } from "./src/capabilities/fileSystem.js";
 export { Init } from "./src/capabilities/init.js";
 export { MachineJournal } from "./src/capabilities/machineJournal.js";
 export { MachineJail } from "./src/capabilities/machineJail.js";

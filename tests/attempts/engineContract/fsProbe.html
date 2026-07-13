@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!--
+결과(append): Runtime.fs - 엔진-무관 일반 파일 IO가 정확한가(engine-agnostic-surface P1 접지).
+utf8/binary 왕복, mkdirTree, readdir(./.. 필터), stat.isDir/isFile/size, exists, unlink/rmdir,
+미존재 읽기 에러, 변이 시 execSeq 상승(리액티브 가드), 그리고 파이썬 open()이 같은 FS를 본다.
+실행: node tests/browser/run.mjs tests/attempts/engineContract/fsProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: runtime fs</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: Runtime.fs (엔진-무관 파일 IO)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const bytesEq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+  try {
+    let t = performance.now();
+    const rt = await boot();
+    timings.bootMs = Math.round(performance.now() - t);
+    check("boot + rt.fs 상시 능력", !!rt.fs && typeof rt.fs.writeFile === "function", `${timings.bootMs}ms`);
+
+    // 1) utf8 왕복(비ASCII 포함).
+    rt.fs.writeFile("/tmp/a.txt", "héllo 안녕");
+    check("utf8 writeFile -> readFile", rt.fs.readFile("/tmp/a.txt", { encoding: "utf8" }) === "héllo 안녕");
+
+    // 2) binary 왕복 + 기본 readFile은 Uint8Array.
+    const bytes = new Uint8Array([0, 1, 2, 255, 128, 64]);
+    rt.fs.writeFile("/tmp/b.bin", bytes);
+    const back = rt.fs.readFile("/tmp/b.bin");
+    check("binary writeFile -> readFile(기본 Uint8Array)", back instanceof Uint8Array && bytesEq(back, bytes), `len ${back.length}`);
+
+    // 3) mkdirTree 중첩 + exists.
+    rt.fs.mkdirTree("/work/data/sub");
+    check("mkdirTree 중첩 + exists", rt.fs.exists("/work/data/sub") && !rt.fs.exists("/work/nope"));
+
+    // 4) readdir(. / .. 필터).
+    rt.fs.writeFile("/work/data/x.txt", "1");
+    rt.fs.writeFile("/work/data/y.txt", "22");
+    const names = rt.fs.readdir("/work/data").sort();
+    check("readdir(. / .. 필터)", names.includes("x.txt") && names.includes("y.txt") && names.includes("sub") && !names.includes(".") && !names.includes(".."), names.join(","));
+
+    // 5) stat: isDir / isFile / size.
+    const sd = rt.fs.stat("/work/data"), sf = rt.fs.stat("/work/data/y.txt");
+    check("stat isDir/isFile/size", sd.isDir && !sd.isFile && sf.isFile && !sf.isDir && sf.size === 2, `dir=${sd.isDir}, file.size=${sf.size}`);
+
+    // 6) 변이 시 execSeq 상승(리액티브 가드 근거), 읽기는 불변.
+    const before = rt.execSeq;
+    rt.fs.writeFile("/work/data/z.txt", "z");
+    const afterWrite = rt.execSeq;
+    rt.fs.readFile("/work/data/z.txt");
+    const afterRead = rt.execSeq;
+    check("변이 execSeq++ / 읽기 불변", afterWrite === before + 1 && afterRead === afterWrite, `${before}->${afterWrite}->${afterRead}`);
+
+    // 7) unlink / rmdir.
+    rt.fs.unlink("/work/data/x.txt");
+    rt.fs.mkdir("/work/empty");
+    rt.fs.rmdir("/work/empty");
+    check("unlink + rmdir", !rt.fs.exists("/work/data/x.txt") && !rt.fs.exists("/work/empty"));
+
+    // 8) 미존재 읽기는 에러.
+    let threw = false;
+    try { rt.fs.readFile("/work/data/nope.txt"); } catch (e) { threw = true; }
+    check("미존재 readFile은 에러", threw);
+
+    // 9) 파이썬 open()이 같은 FS를 본다(JS 모의가 아니라 진짜 파이썬 FS).
+    rt.fs.writeFile("/tmp/py.txt", "from js");
+    const seen = await rt.runAsync("open('/tmp/py.txt').read()");
+    rt.run("open('/tmp/frompy.txt', 'w').write('from py')");
+    check("파이썬 open() <-> rt.fs 동일 FS", seen === "from js" && rt.fs.readFile("/tmp/frompy.txt", { encoding: "utf8" }) === "from py", `py가 본 값: ${seen}`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
