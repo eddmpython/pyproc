@@ -39,7 +39,7 @@
 목표는 "Pyodide를 떼고 진짜 파이썬이 굴러갈 수준". 이 정확성 라운드가 곧 그 준비다:
 지적의 대부분이 "Pyodide 특이 접점을 좁은 계약 뒤로 모으는" 작업이었다(RPC 프로토콜화, 실행 직렬화, 값 프로토콜화). 수리가 곧 디커플링이다.
 
-조사 결론(전문 에이전트, [engine-independence](../engine-independence/README.md) P1~P4 + D2 관문):
+조사 결론([engine-independence](../engine-independence/README.md) P1~P4 + D2 관문):
 - non-Pyodide CPython wasm은 실재한다. WASI 프리빌트(brettcannon 3.14.6, 받아서 부팅 가능) + browser_wasi_shim(114KB, MIT, vendoring 가능, 의존성 0). emscripten은 자가 빌드(공개 아티팩트 없음).
 - **벽**: WASI엔 JS FFI가 없다 = jsProxy/pyProxy급 전역 표면은 원리적으로 불가. 엔진 계약을 "값 프로토콜"(직렬화 get/set)로 낮추는 재설계가 D2의 실제 비용. 스택 save/restore·인터럽트는 emscripten 자가 빌드에만 있음(WASI 프리빌트 미노출).
 - **역설적 이점**: WASI의 엔트로피는 `random_get` import 하나로 수렴 = 우리 결정적 부팅이 오히려 더 깨끗해질 수 있다. Pyodide 스냅샷의 hiwire 벽이 upstream엔 없다.

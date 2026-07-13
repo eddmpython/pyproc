@@ -88,7 +88,7 @@
 
 ### 2026-07-13 세 벽 리서치(C확장/소켓/자동성장) + 벽3 착수 - non-Pyodide CPython 3.14.6 부팅 + 3.12 동결 진단
 
-- "두 벽(C확장/소켓)을 깔끔히 뚫을 방법 + 파이썬과 함께 자라는 개념"에 전문 에이전트 3종(웹 리서치, 2026 실태 그라운드)으로 답을 갈았다. 관통 인사이트: 세 벽 모두 이미 지불한 값(엔진 무관 seam) 위에서 풀린다.
+- "두 벽(C확장/소켓)을 깔끔히 뚫을 방법 + 파이썬과 함께 자라는 개념"에 3종 웹 리서치(2026 실태 그라운드)로 답을 갈았다. 관통 인사이트: 세 벽 모두 이미 지불한 값(엔진 무관 seam) 위에서 풀린다.
 - **벽1 C 확장 - 정적 fat 바이너리가 유일한 깨끗한 절단.** numpy를 wasm32-wasi CPython에 정적 링크(`PyImport_AppendInittab`, 2023 BuiltinImporter 네임스페이스 수정으로 numpy import 확인)하면 Pyodide+Emscripten **둘 다** 떼고 우리 워커에 그대로. 대가: 빌드 소유(wasi-sdk) + 고정 스택 + ~20MB. "런타임 dlopen"은 vaporware(WASI 표준 dlopen 없음, 2025-12 CPython 플래그는 빌드 설정만 열음), PEP 783 pyemscripten 휠은 표준화됐으나(2026-04 PyPI) Emscripten 툴체인을 못 뗌. WASIX(Wasmer)는 진짜 dlopen이나 Wasmer 런타임 종속.
 - **벽2 소켓 - 어려운 절반은 이미 우리 것.** 블로킹 소켓 over 비동기 전송 = JSPI+Atomics.wait(이미 보유). "진짜 소켓" = syscallBridge에 전송 배선. BSD 소켓 층에서 가로챈다(탭 안 TCP/IP 스택은 덕지덕지, 기각). 아웃바운드 진짜 TCP/UDP = WebSocket + 얇은 Wisp 릴레이(~100-300줄, 교체 가능, epoxy-tls로 탭 내 TLS). **인바운드는 확정 물리 벽**(SW=같은 브라우저, WebRTC=시그널링, WT/WS=클라 개시): 최소 = 역터널 릴레이("탭용 ngrok"). Direct Sockets는 relay-free 리스너지만 IWA/ChromeOS 게이트.
 - **벽3 자동성장 - 착수. 살아있는 결함 진단**: 우리 WASI 소스(VMware WLR python-3.12.0)가 2023-12 이후 죽어 WASI 레인이 3.12에 2.5년 동결(Pyodide는 3.14). 살아있는 소스 = brettcannon/cpython-wasi-build(3.14.6/3.15β, 업스트림 당일 추적, 메인테이너 = PEP 816 + `Tools/wasm/wasi.py` 저자). 자동성장 = 버전 템플릿 핀 + SHA256 + engine-watch CI(감지->결정적 게이트->green이면 후보 Issue, 봇 머지 없음 = main 전용 준수). 소버린 폴백 = `Tools/wasm/wasi.py` 자체 빌드.
@@ -105,7 +105,7 @@
 
 ### 2026-07-12 소비자 실태 조사 + 채택 표면 - dartlab 라이브 소비자 발견 + 회귀 복원 (구조 330 + 게이트 39/39)
 
-- 형제 레포(dartlab/xlpod) 실태를 전문 에이전트 2종으로 조사. **가장 중요한 발견: dartlab은 이미 라이브 소비자다**(문서엔 "미착수"로 낡아 있었다). 노트북 워커가 자체 부팅 Pyodide를 `new Runtime(py)`로 채택하고 `enableAsgiServer`를 기본 ASGI 커널로 프로덕션 배포(browser-as-server /pyapi, `USE_PYPROC_ASGI=true`). SHA 핀 + 주간 핀 범프 워크플로 운영.
+- 형제 레포(dartlab/xlpod) 실태를 2종 조사로 파악. **가장 중요한 발견: dartlab은 이미 라이브 소비자다**(문서엔 "미착수"로 낡아 있었다). 노트북 워커가 자체 부팅 Pyodide를 `new Runtime(py)`로 채택하고 `enableAsgiServer`를 기본 ASGI 커널로 프로덕션 배포(browser-as-server /pyapi, `USE_PYPROC_ASGI=true`). SHA 핀 + 주간 핀 범프 워크플로 운영.
 - **회귀 발견·복원(급소)**: EngineContract seam이 `Runtime(engine)`으로 바꿔 dartlab의 `new Runtime(py)` 채택 경로를 깰 뻔했다(py엔 runSync 없음 -> engine.runSync 호출 실패). constructor가 runSync 유무로 판별해 Pyodide 인스턴스면 PyodideEngine으로 감싸도록 복원(하위 호환). 게이트에 채택 경로 상시 가드 + consumerAdoptProbe 5/5. **소비자 파손을 막았다.**
 - **xlpod 하드 블로커 해소**: xlpod(브라우저 스프레드시트, =PYUDF 셀 안 파이썬 동기 호출)의 유일한 이관 블로커였던 `setInterruptBuffer`가 엔진 어댑터엔 있으나 Runtime 공개 표면에 없어 raw 탈출구로만 도달했다. `Runtime.setInterruptBuffer` 공개 승격 + `getGlobal`의 PyProxy 반환 계약(call/toJs/destroy 재사용) 명문화.
 - **소비 방안 반영**: docs/consuming/contract.md 소비자 표 갱신(dartlab 라이브 / codaro / xlpod 준비 중) + "자체 부팅 Pyodide 채택" 절(new Runtime(py) + setInterruptBuffer + getGlobal PyProxy 패턴). 랜딩(examples/index.html) "Used by real products" 카드(dartlab/xlpod) + README 2종 "누가 쓰나" 섹션. 메모리 갱신(dartlab=라이브).
@@ -113,7 +113,7 @@
 
 ### 2026-07-12 WASI 세션 src 승격 - bootWasi/WasiSession 공개 표면 (구조 328 + WASI 게이트 6/6)
 
-- enginePort 캠페인(완전 시간여행 12/12)을 src 본진으로 승격. 전문 에이전트 아키텍처 설계로 결정: **Runtime에 끼우는 boot({engine})이 아니라 별도 async 표면 bootWasi -> WasiSession**. 근거: Pyodide는 메인 스레드 동기(Runtime.run)지만 WASI는 워커 안 비동기(메인 Atomics.wait 불법)라 동기 계약을 못 지킨다. 별도 표면이면 소비자 4표면(boot/Runtime/PyProc/ReactiveController)을 하나도 안 건드린다(codaro SHA 핀 무영향, 전부 additive).
+- enginePort 캠페인(완전 시간여행 12/12)을 src 본진으로 승격. 아키텍처 설계로 결정: **Runtime에 끼우는 boot({engine})이 아니라 별도 async 표면 bootWasi -> WasiSession**. 근거: Pyodide는 메인 스레드 동기(Runtime.run)지만 WASI는 워커 안 비동기(메인 Atomics.wait 불법)라 동기 계약을 못 지킨다. 별도 표면이면 소비자 4표면(boot/Runtime/PyProc/ReactiveController)을 하나도 안 건드린다(codaro SHA 핀 무영향, 전부 additive).
 - **배치**: `src/runtime/engines/wasi/`(자기완결 서브트리) - wasiSession.js(facade + 워커 spawner + 직렬화 큐), wasiWorker.js(shim 부팅 + SabStdin + 경계 체크포인트), wasiReplDriver.js(파이썬 드라이버를 .js 문자열로 = naming 가드 사각 회피), wasiProtocol.js(와이어 상수 한 곳 = 하드코딩 금지), browserWasiShim.js(vendored @bjorn3 0.4.2, LICENSE.browserWasiShim 고지 후 커밋).
 - **공개 표면**: index.js/index.d.ts에 bootWasi + WasiSession(async run/get/set/checkpoint/timeTravel) additive. run.mjs 표면·타입 리스트 + README 2종 표에 추가. 값 다리는 JSON 직렬화 한정(FFI 없음) 명시.
 - **자산 정책**: wasm은 wasmURL 소비자 제공(indexURL 패턴, 기본 WLR 3.12 핀). 레포 자산 0. shim만 커밋(라이선스 고지). 게이트는 SKIP-on-absent(CI 자산 없어 SKIP green, 로컬/자산 환경 GREEN).
@@ -191,7 +191,7 @@
 
 ### 2026-07-12 발명 라운드 6: 근본 OS - fork(2) + 시그널 표 + 체크포인트 나무 (게이트 33검사)
 
-- 근본 OS 연구 라운드(전문 에이전트 3종 토론: OS 아키텍처 / 혁신 터미널 / 가상화). 연구 종합과 다음 로드맵의 정본: [browser-os/01-os-primitives.md](../browser-os/01-os-primitives.md).
+- 근본 OS 연구 라운드(3종 설계 토론: OS 아키텍처 / 혁신 터미널 / 가상화). 연구 종합과 다음 로드맵의 정본: [browser-os/01-os-primitives.md](../browser-os/01-os-primitives.md).
 - **forkLive = 진짜 fork(2) 승격**: `PyProc({replay})` + `fork(src, dst)`. 스냅샷-fork(bare 이미지 복제)와 달리 **살아있는 프로세스의 변수·배열·계산 결과가 자식으로 실린다**(델타 10.3MB 수확 43.6ms, 적용 1.4ms, 왕복 4ms, 주소공간 독립). **벽 좌표**: 메인 커널 vs 워커 커널의 리플레이는 힙 길이는 같아도 바이트가 다르다(로더/컨텍스트 차이). 워커끼리는 바이트 동일 -> fork는 대칭 컨텍스트에서만 성립하고 메인은 조율자다. 이 사실이 다음 P2(커널을 워커로)의 근거.
 - **시그널 표 승격**: `PyProc.signal(pid, signum)` + `SIGNAL{INT,TERM,USR1,USR2}`. SAB 채널에 번호를 쓰면 CPython eval 루프가 그 번호의 파이썬 핸들러를 부른다(SIGUSR1 발화 후 실행 계속, SIGTERM 협조적 종료 264ms + 워커 재사용). 발명 0으로 유닉스 시그널이 열렸다. `interrupt`는 별칭 유지.
 - **체크포인트 나무(머신의 git) 승격 + 실결함 수정**: `reactive.parents` + `tree()`. **선형 체인의 결함을 재현**했다 - 분기 노드로 스위치하면 버려진 형제 분기의 델타를 집어 `memory access out of bounds`로 힙이 깨진다(branchProbe 6/7 RED). %undo는 뒤로만 가서 무증상이었고, 분기(Time Rail)를 여는 순간 밟는 지뢰였다. 델타 해석을 부모 체인 walk로 수정 -> 10/10 GREEN. 터미널 에이전트가 코드 리뷰로 독립 지목한 지점과 일치.
@@ -223,7 +223,7 @@
 - 승격: pyprocSw 쿼리 3호 `?coi=1`(opaque는 원본 통과 = CDN 자체 CORP 전제), processOs.html 부트스트랩 내장, serve.mjs `{coi:false}` 옵션 + 하네스 `PYPROC_NO_COI`(헤더 없는 호스팅 재현 실측 레인).
 - 배포: pages.yml(push마다 자동, 랜딩/SW 루트 사본은 워크플로가 조립해 저장소 루트 무오염). Cloudflare는 예비로 기록(dartlab wrangler 인증이 이 머신에 유효함을 확인, 전환 시 분 단위).
 
-### 2026-07-12 엔진 독립 연구 + 평가 후속 정비 (전문 에이전트 2종 연구 종합)
+### 2026-07-12 엔진 독립 연구 + 평가 후속 정비 (2종 연구 종합)
 
 - 출발 질문("Pyodide 의존 제거, 독립, 아니면 더 훌륭한 방법") -> 생태계 리서치 + 코드 결합 감사 에이전트 연구 종합. **결론: 완전 제거는 지금 손해, "갇히지 않는 사다리"(P0 자가호스팅 -> P1 EngineContract seam -> P2 스냅샷 사전 제조 -> P3 업스트림 워치 -> P4 조건부 fork 보험)가 정답.** 정본: [engine-independence PRD](../engine-independence/README.md). 핵심 증거: PEP 783 Accepted(2026-04, pyemscripten 휠 = Pyodide-agnostic 탈출구), Pyodide의 CPython 패치는 9개 파일(모트는 FFI·패키지 생태·스냅샷 3덩어리), Cloudflare fork 코드 전부 공개(MPL = 공짜 보험), WASI는 동적 C 확장 불가로 현재 양립 불가.
 - 결합 감사 판정: 보석(리액티브 접점 0, 세션/.pymachine, SW 층, PyProc 스케줄링, SharedKernel)은 이미 엔진 중립 - "선형 메모리 + 스택 포인터 + 결정적 부팅 + 엔진 스냅샷" 4프리미티브 위 순수 알고리즘. EngineContract seam 설계(~250 LOC, 동작 무변경) 확보.
@@ -255,7 +255,7 @@
 
 ### 2026-07-11 발명: Session(불멸 커널/warm-fork) 승격 - 리플레이+델타
 
-- 전문 리서치(웹 조사 에이전트) 협업 결론 채택: 커널 상태 = 선형 메모리 + 함수 테이블 + JS측(hiwire/MEMFS). "부팅된 커널에 되쓰기"가 아니라 **결정적 리플레이 + 델타**가 정답 아키텍처(Cloudflare workerd 동원리).
+- 웹 조사 리서치 결론 채택: 커널 상태 = 선형 메모리 + 함수 테이블 + JS측(hiwire/MEMFS). "부팅된 커널에 되쓰기"가 아니라 **결정적 리플레이 + 델타**가 정답 아키텍처(Cloudflare workerd 동원리).
 - 실측 3연타: (1) bootDeterminism - PYTHONHASHSEED=0 + 엔트로피/시간 고정이면 bare·numpy 리플레이 모두 상이 페이지 0(무조치는 180p). (2) replayFork - 사용자 상태(변수+numpy 배열) 델타 160p/10MB를 동형 커널에 1.5ms 적용, 전부 생존. (3) 승격 후 게이트 상시 검사 - 크로스 커널 부활 95p/5.9MB GREEN.
 - 승격: `bootSession(manifest)`(indexURL/env/packages/setup = 환경 선언) + `Session.save/load`(OPFS, 매니페스트·힙 크기 불일치는 명시적 예외). base는 저장하지 않는다(리플레이가 대체) = 저장물이 힙 43MB가 아니라 델타 수 MB.
 - 의미: hiwire 벽(#5195) 우회로 warm-fork 실용화, 세션 간 부활(로컬 REPL도 없는 능력) 개방. "웹의 uv"는 (매니페스트) + (wheel OPFS 캐시) + (세션 델타) 3층으로 확정.

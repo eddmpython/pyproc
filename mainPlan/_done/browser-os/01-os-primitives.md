@@ -1,6 +1,6 @@
 # 01. 근본 OS 프리미티브 - 연구 종합과 로드맵
 
-작성: 2026-07-12. 근거: 전문 에이전트 3종 토론(OS 아키텍처 / 혁신 터미널 / 가상화) + 같은 날 실측 5종.
+작성: 2026-07-12. 근거: 3종 설계 토론(OS 아키텍처 / 혁신 터미널 / 가상화) + 같은 날 실측 5종.
 정본 실측 레인: [tests/attempts/pythonMachine](../../../tests/attempts/pythonMachine/README.md), [runtimeParity](../../../tests/attempts/runtimeParity/README.md).
 
 ## 진단: 커널에 없던 4가지
