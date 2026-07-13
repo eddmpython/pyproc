@@ -96,16 +96,23 @@ tab.close()
 - **층위 B - 페이지 위 오버레이**: 페이지 위에 겹치는 UI가 필요하면 content script로 오버레이 DOM 주입.
   navigate마다 문서와 함께 죽으므로 `registerContentScripts`(document_start, 전 URL)로 매 페이지 자동 재주입.
   상태는 층위 A에 두고 UI만 다시 그린다 = 사용자에겐 고정처럼 보임(재마운트).
-- **층위 C - iframe 역전(가장 OS다운, 킬러)**: 앱 셸이 최상위 문서이고 대상 사이트를 그 안의 iframe(창)에 담는다.
-  페이지가 iframe 내부에서 navigate해도 최상위 셸은 불변 = "웹 위 OS 셸에서 사이트를 창으로". 벽: 다수 사이트가
-  `X-Frame-Options`/CSP `frame-ancestors`로 iframe을 거부. **확장 링에선 이 응답 헤더를 제거할 수 있다**
-  (`declarativeNetRequest` 규칙 또는 CDP `Fetch`) = 임의 사이트가 우리 셸의 iframe에 담긴다. Playwright는
-  브라우저 밖이라 이 역전을 못 한다. **실측 예정**: X-Frame-Options 제거로 cross-origin 사이트가 iframe에
-  로드되는지 + frame-busting JS(top!==self 탈출) 무력화.
+- **층위 C - iframe 역전(가장 OS다운, 킬러. 실측 GREEN)**: 앱 셸이 최상위 문서이고 대상 사이트를 그 안의
+  iframe(창)에 담는다. 페이지가 iframe 내부에서 navigate해도 최상위 셸은 불변 = "웹 위 OS 셸에서 사이트를
+  창으로". 벽: 다수 사이트가 `X-Frame-Options`/CSP `frame-ancestors`로 iframe을 거부. **확장 링에선 이 응답
+  헤더를 `declarativeNetRequest`로 제거할 수 있다** = 임의 사이트가 셸의 iframe에 담긴다(게이트4 실측: XFO:DENY
+  사이트 전=차단, 헤더 제거 후=로드). Playwright는 브라우저 밖이라 이 역전을 못 한다.
+
+**실측이 드러낸 핵심 긴장(COEP)**: 프로세스 OS는 crossOriginIsolated(COEP require-corp)를 요구하는데, 그런
+문서 안의 cross-origin iframe은 COEP로 막힌다. 즉 **프로세스 OS와 iframe 역전이 같은 문서에서 충돌**한다.
+- `credentialless` iframe으로 COEP 벽은 넘지만(게이트4가 이걸로 GREEN) **쿠키가 격리**된다 = 사용자 로그인
+  세션이 iframe에 안 실린다. 스텔스의 축(실 프로필/쿠키)과 어긋난다.
+- 해결: **셸(iframe 담는 문서)과 런타임(프로세스 OS)을 다른 문서로 분리**한다. 런타임 offscreen은 COI(SAB),
+  셸은 non-COI 문서(sidePanel/탭)로 두면 cross-origin iframe에 쿠키가 실린다. 층위 A(영속 호스트)와 층위 C가
+  자연히 다른 문서라는 뜻이라 설계상 정합. Phase 2에서 이 분리 형태를 확정한다.
 
 경계: iframe 안 사이트도 자기 JS를 돌리고 cross-origin이라 셸 JS의 직접 DOM 접근은 제한된다(확장 content
-script를 iframe에도 주입 + CDP로 조작해 우회). 이것이 browser-os(웹 위 OS)와 browser-control(브라우저 조작)의
-융합점이다: 셸은 고정, 사이트는 그 안의 창.
+script를 iframe에도 주입 + CDP로 조작해 우회). frame-busting(top!==self 탈출) 무력화는 후속. 이것이
+browser-os(웹 위 OS)와 browser-control(브라우저 조작)의 융합점이다: 셸은 고정, 사이트는 그 안의 창.
 
 ## 정직한 벽
 

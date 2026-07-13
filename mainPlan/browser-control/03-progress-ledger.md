@@ -4,7 +4,21 @@
 
 ## 결정 원장 (최신이 위)
 
-### 2026-07-13 고정 화면(영속 셸) 설계: iframe 역전 + 헤더 제거 (실측 예정)
+### 2026-07-13 iframe 역전 실측 GREEN + COEP 긴장 발견 (bootIsolationRunner 게이트4)
+
+- 고정 화면 층위 C(iframe 역전)를 실측했다. `X-Frame-Options: DENY` 페이지가 규칙 없이는 iframe 차단(false),
+  declarativeNetRequest로 헤더 제거 + `credentialless`(COEP 우회) 후 로드 성공(true, 내부 postMessage 수신).
+  GREEN 13/13. **임의 cross-origin 사이트를 셸의 iframe 창에 담을 수 있다** = 페이지 navigate와 무관한 고정 셸.
+- **실측이 드러낸 핵심 긴장**: 프로세스 OS는 crossOriginIsolated(COEP require-corp) 요구인데 그런 문서의
+  cross-origin iframe은 COEP로 막힌다. `credentialless`로 넘었으나 **쿠키 격리**(로그인 세션 미실림) = 스텔스의
+  실 프로필 축과 어긋남.
+- **해결(설계 확정)**: 셸(iframe 담는 non-COI 문서, sidePanel/탭)과 런타임(프로세스 OS, COI offscreen)을 다른
+  문서로 분리. 층위 A(영속 호스트)와 층위 C가 자연히 다른 문서라 정합. Phase 2에서 분리 형태 확정 + 쿠키 실림
+  재실측.
+- **의미**: browser-os와 browser-control의 융합점을 실측으로 짚었다(셸 고정 + 사이트는 창). 킬러 기능의 기술
+  실현성 확인 + 정직한 제약(COEP/쿠키) 발견.
+
+### 2026-07-13 고정 화면(영속 셸) 설계: iframe 역전 + 헤더 제거 (설계 착수)
 
 - "앱이 탭에 살아있으면 페이지가 바뀌어도 고정 화면 유지"를 3층위로 설계했다(01-architecture 영속 셸 절):
   층위 A 영속 호스트(offscreen + sidePanel, 이미 우리 구조) / 층위 B 페이지 위 오버레이(content script 재주입,

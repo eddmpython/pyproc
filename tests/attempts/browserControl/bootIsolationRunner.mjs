@@ -74,6 +74,13 @@ async function main() {
       res.end("<!doctype html><html><head><title>pyprocCdpTarget</title></head><body><div id=\"marker\">cdpMarkerOk</div></body></html>");
       return;
     }
+    // 게이트 4 iframe 역전 타깃: X-Frame-Options: DENY로 프레이밍을 거부한다(강방어 사이트 재현).
+    // declarativeNetRequest가 이 헤더를 벗기면 iframe에 담기고, 내부 스크립트가 부모에 로드를 알린다.
+    if (req.url.startsWith("/framedTarget")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "X-Frame-Options": "DENY" });
+      res.end("<!doctype html><title>framed</title><script>parent.postMessage('framedLoaded','*')</script>OK");
+      return;
+    }
     res.writeHead(404); res.end();
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));

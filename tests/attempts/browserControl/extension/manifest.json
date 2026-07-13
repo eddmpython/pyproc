@@ -4,7 +4,7 @@
   "version": "1.0",
   "description": "browserControl 캠페인 실측 확장(비승격). offscreen Pyodide 부팅 + crossOriginIsolated + chrome.debugger CDP 왕복.",
   "minimum_chrome_version": "116",
-  "permissions": ["offscreen", "debugger", "tabs", "scripting"],
+  "permissions": ["offscreen", "debugger", "tabs", "scripting", "declarativeNetRequest"],
   "host_permissions": ["http://127.0.0.1/*"],
   "background": { "service_worker": "serviceWorker.js", "type": "module" },
   "cross_origin_embedder_policy": { "value": "require-corp" },

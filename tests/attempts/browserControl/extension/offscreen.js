@@ -5,6 +5,31 @@ const backchannelPort = new URL(location.href).searchParams.get("port");
 const checks = [];
 const add = (name, pass, info) => checks.push({ name, pass: !!pass, info: info || "" });
 
+// iframe 역전 실측 헬퍼: 주어진 URL을 offscreen(chrome-extension:// origin)의 iframe에 담고,
+// 내부 페이지가 postMessage로 로드를 알리면 true. 타임아웃(차단)이면 false. cross-origin이라
+// contentDocument 직접 접근 대신 postMessage로 로드 성공을 관측한다.
+function tryFrame(url, timeoutMs) {
+  return new Promise((resolve) => {
+    const iframe = document.createElement("iframe");
+    // offscreen은 crossOriginIsolated(COEP require-corp)라 cross-origin iframe이 COEP로 막힌다.
+    // credentialless(쿠키 격리 조건)로 그 벽을 넘는다. X-Frame-Options 제거와 별개의 축.
+    iframe.credentialless = true;
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("message", onMsg);
+      try { iframe.remove(); } catch (e) {}
+      resolve(val);
+    };
+    const onMsg = (ev) => { if (ev.data === "framedLoaded") finish(true); };
+    window.addEventListener("message", onMsg);
+    setTimeout(() => finish(false), timeoutMs);
+    iframe.src = url;
+    document.body.appendChild(iframe);
+  });
+}
+
 async function run() {
   const timings = {};
 
@@ -95,6 +120,20 @@ overrideRead = await cdpNavigateEval(target, "String(navigator.webdriver)", True
     }
   } catch (e) {
     add("Pyodide 부팅 + runPython(1+1)==2", false, String(e));
+  }
+
+  // 게이트(영속 셸): iframe 역전. X-Frame-Options: DENY 페이지가 규칙 없이는 iframe에서 차단되고,
+  // declarativeNetRequest로 헤더를 벗기면 로드되는가 = 임의 사이트를 우리 셸의 창에 담을 수 있는가.
+  try {
+    const framedUrl = `http://127.0.0.1:${backchannelPort}/framedTarget`;
+    const before = await tryFrame(framedUrl, 5000);
+    await chrome.runtime.sendMessage({ type: "enableFrameStrip" });
+    const after = await tryFrame(framedUrl, 8000);
+    add("게이트4: iframe 역전(X-Frame-Options 제거로 cross-origin 사이트를 셸의 창에)",
+      before === false && after === true,
+      `헤더제거_전=${before}(차단 기대), 후=${after}(로드 기대)`);
+  } catch (e) {
+    add("게이트4: iframe 역전(X-Frame-Options 제거로 cross-origin 사이트를 셸의 창에)", false, String(e));
   }
 
   const ok = checks.every((c) => c.pass);

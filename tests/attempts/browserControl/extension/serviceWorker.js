@@ -107,7 +107,27 @@ async function handleContentScript({ url, expr }) {
   }
 }
 
-// offscreen -> SW 메시지 분기: gateResult(릴레이) / cdp(chrome.debugger) / contentScript(chrome.scripting).
+// iframe 역전(영속 셸): declarativeNetRequest로 응답 헤더 X-Frame-Options / CSP frame-ancestors를 제거해
+// 임의 cross-origin 사이트가 우리 셸의 iframe(창)에 담기게 한다. 확장 링이라 가능한 헤더 조작.
+async function enableFrameHeaderStrip() {
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [1],
+    addRules: [{
+      id: 1,
+      priority: 1,
+      action: {
+        type: "modifyHeaders",
+        responseHeaders: [
+          { header: "x-frame-options", operation: "remove" },
+          { header: "content-security-policy", operation: "remove" },
+        ],
+      },
+      condition: { urlFilter: "*", resourceTypes: ["sub_frame"] },
+    }],
+  });
+}
+
+// offscreen -> SW 메시지 분기: gateResult(릴레이) / cdp / contentScript / enableFrameStrip(iframe 역전).
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "gateResult") {
     report(msg);
@@ -120,6 +140,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.type === "contentScript") {
     handleContentScript(msg).then(sendResponse);
+    return true;
+  }
+  if (msg && msg.type === "enableFrameStrip") {
+    enableFrameHeaderStrip().then(() => sendResponse({ ok: true })).catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
   return true;
