@@ -4,6 +4,20 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 (a) 고정 화면 실측 GREEN: non-COI 셸에서 쿠키 실림 + frame-busting 방어 (게이트11)
+
+iframe 셸의 남은 축을 non-COI 셸(A안)에서 실증했다. 확장이 localhost(COEP 없음 = non-COI) 셸 탭을 열고,
+그 안에 cross-site iframe(127.0.0.1)을 credentialless 없이 담는다.
+- **credentialless-free 로드**: XFO를 declarativeNetRequest로 제거하면 cross-site iframe이 로드된다(GREEN).
+- **쿠키 실림**: `SameSite=None; Secure`는 cross-site iframe 요청에 실리고(noneSess, 서버측 Cookie 헤더로 확인),
+  `SameSite=Lax`는 차단(differential). 로그인 세션이 창에 산다.
+- **sandbox frame-busting 방어**: `sandbox`(allow-top-navigation 제외)로 top 이탈이 막히고 셸이 유지(shellPath 불변).
+- 게이트4/8(COI offscreen이 credentialless 강제 -> 쿠키/sandbox 막힘)의 반대 = non-COI 셸에서 전부 풀림.
+  셸(non-COI localhost 탭)/런타임(COI offscreen) 문서 분리가 실측으로 닫힘. 셸 게이트는 offscreen 게이트 완료
+  후 실행(헤더 제거 전제 오염 방지). **"앱 셸은 고정, 사이트는 그 안의 창(로그인 세션까지)"이 섰다.**
+- 3PC 벽(정직): headless 기본 3PC 허용에서 실림. 실배포 3rd-party 쿠키 phaseout/유저 설정은 chrome.contentSettings
+  완화 + 수동.
+
 ### 2026-07-14 Phase 2 착수: 설계 확정 + 구현
 
 Phase 2 각 축의 기술 설계를 확정했다. 구현으로 간다.
