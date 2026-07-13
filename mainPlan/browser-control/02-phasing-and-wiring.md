@@ -18,15 +18,14 @@ navigator.webdriver 전역 오염**이 지배한다. 갈래:
 
 - **0-a 코어 재사용 실증** (자동, 절반 done): offscreen에서 코어 `boot()`가 그대로 실림 = 게이트 1에서 확인.
   잔여: 소비자 셸이 import하는 형태(offscreen 부트스트랩 + SW host)로 리팩터해도 부팅 유지되는지.
-- **0-b 스텔스 수동 실측** (수동, 미착수): 정상 설치 확장 + headed 크롬(CDP 없이 시작)에서 content script 경로
-  `navigator.webdriver` 측정.
-  - **게이트**: `script` 경로 webdriver=false 확정 -> 스텔스 우위 실측 성립.
-  - **RED 처리**: 어느 경로든 true면 스텔스 논거를 버리고 "실 프로필/하드웨어 지문 + 세션 되감기"로 가치
-    축소. 그마저 Playwright 대비 차별이 약하면 **이니셔티브 접기**(결론 원장 기록, attempts 폴더 삭제).
-
-절차(0-b): attempts/browserControl에 수동 실측 가이드를 추가한다. 확장 폴더를 조립(vendor 코어 포함)해두고,
-크롬 개발자모드 "압축해제된 확장 로드"로 넣은 뒤, offscreen이 백채널로 신호를 보고하게 한다(GPU 창모드
-`PYPROC_HEADED` 절차와 같은 계급의 수동 게이트).
+- **0-b 스텔스** (핵심 자동 확정, 잔여 수동): content script 경로 webdriver 미점화를 인과 격리로 자동 확정했다.
+  - **자동 확정(webdriverCauseRunner GREEN)**: webdriver를 켜는 범인이 `--remote-debugging-port` 단독임을
+    확장·조작 없이 3조건 대조로 격리(평범 false / +포트 true / +확장디버그 추가영향 0). 실배포엔 포트가 없고
+    content script는 CDP를 안 쓰므로 webdriver 미점화가 논리 확정 = **스텔스 우위 핵심 근거 성립**.
+  - **잔여 수동(선택, 착수 정당성엔 불필요)**: chrome.debugger `attach`의 실배포 webdriver 효과(포트와 별개인
+    attach 자체) + 실 봇 방어(Cloudflare 등) 통과. 정상 설치 확장을 개발자모드로 로드(CDP 없이 시작)해 검증.
+  - **RED 처리**: (자동 확정으로 리스크 감소) 잔여 수동에서 실 방어 통과가 전면 실패하고 실 프로필/세션 되감기
+    논거도 약하면 가치 축소 또는 접기(결론 원장 기록, attempts 폴더 삭제).
 
 ## Phase 1 - 능력 계약 최소 표면 (제품 경로)
 
@@ -74,7 +73,8 @@ navigator.webdriver 전역 오염**이 지배한다. 갈래:
 | Phase | 게이트 | 자동/수동 |
 |---|---|---|
 | 0-a 코어 재사용 | offscreen boot() 유지(소비자 셸 형태) | 자동(bootIsolationRunner) |
-| 0-b 스텔스 | content script webdriver=false | **수동**(headed 정상 설치) |
+| 0-b 스텔스(핵심) | webdriver 범인=포트 격리(content script 미점화 확정) | 자동(webdriverCauseRunner) |
+| 0-b 잔여(선택) | attach 실배포 효과 + 실 봇 방어 통과 | 수동(headed 정상 설치) |
 | 1 능력 표면 | 파이썬 tab/navigate/evaluate/click/type 왕복 | 자동 |
 | 2 프로세스 OS | N세션 병렬 + 스냅샷 되감기 | 자동 |
 | 3 신뢰 입력/폭 | Input.* isTrusted + 소비 배선 | 자동 + 수동(UX) |

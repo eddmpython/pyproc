@@ -4,6 +4,20 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 스텔스 인과 격리: content script webdriver 미점화 논리 확정 (webdriverCauseRunner GREEN)
+
+- Phase 0-b(스텔스)가 "수동 전용"인 줄 알았으나, **인과 격리로 핵심을 자동 확정했다**. bootIsolationRunner의
+  "두 경로 다 webdriver=true"가 하네스 오염이라는 가설을, 확장·조작 없이 크롬을 조건별로 켜서 직접 검증.
+- **실측(webdriverCauseRunner, Edge 150 headless, GREEN)**: 평범 실행 `webdriver=false`, `--remote-debugging-port`
+  추가 시 `true`, `--enable-unsafe-extension-debugging`은 추가 영향 0. **범인 = 원격 포트 플래그 단독**(조작
+  경로가 아니다).
+- **결론(논리 확정)**: webdriver를 켜는 유일 범인이 포트 플래그이고, 실배포(정상 설치)엔 그 플래그가 없으며,
+  content script 경로는 CDP를 안 쓰므로 -> **실배포에서 content script 경로는 webdriver를 안 켠다**. 스텔스
+  우위의 핵심 근거가 수동 실측 없이 섰다.
+- **잔여 수동(축소됨)**: chrome.debugger `attach`가 실배포에서 그 탭 webdriver를 켜는지(포트와 별개인 attach
+  자체 효과, 설계상 신뢰입력 전용 경로라 노출 감수 이미 표기) + 실제 봇 방어(Cloudflare/DataDome 등) 통과 여부.
+  Phase 0 착수 정당성은 이 자동 확정으로 확보됨(스텔스 논거 붕괴로 접을 리스크 크게 감소).
+
 ### 2026-07-13 이니셔티브 개시: attempts 3게이트 GREEN + ROI 재검 + Phase 0 게이트 설정
 
 - attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이 링 1(MV3 확장)의 세 게이트를
@@ -37,13 +51,14 @@
 
 ### NEXT
 
-1. **Phase 0-b 스텔스 수동 실측**: attempts/browserControl에 수동 실측 가이드 추가(확장 조립 + 개발자모드
-   로드 + offscreen 백채널 신호). 정상 설치 확장 headed 크롬에서 content script `navigator.webdriver=false`
-   확정. 이 게이트가 이니셔티브 착수 정당성을 가른다.
+1. **Phase 0-b 스텔스**: 핵심(content script webdriver 미점화)은 webdriverCauseRunner로 자동 확정됨. 잔여 =
+   chrome.debugger `attach`의 실배포 webdriver 효과 + 실 봇 방어 통과. 이건 정상 설치 확장 수동 검증(선택,
+   착수 정당성엔 불필요 = 스텔스 논거는 이미 섰다).
 2. **Phase 0-a 마무리**: offscreen 부트스트랩 + SW host 형태로 리팩터해도 부팅 유지되는지(소비자 셸 계약 형태).
 3. Phase 0 GREEN -> **Phase 1**: `BrowserControl` 능력 최소 표면(tab/navigate/evaluate/click/type) attempts
    확정 -> `src/capabilities/browserBridge.js` + `src/processOs/browserHost.js` 승격 + index/d.ts/README + `npm test`.
 4. Phase 0 RED(스텔스 + 실 프로필 논거 붕괴) -> 결론 원장 기록 + attempts 폴더 삭제 + 이니셔티브 `_done` 이관(폐기).
+   스텔스 자동 확정으로 이 경로 리스크는 크게 감소.
 
 ## 재개 지침
 

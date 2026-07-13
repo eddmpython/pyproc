@@ -46,11 +46,17 @@ attach하는 순간 그 탭의 `navigator.webdriver`가 켜진다(Playwright의 
 `chrome.debugger`를 쓴다는 사실이 아니라 **(a) content script 경로(CDP 없음) + (b) 실제 사용자 프로필
 /쿠키/하드웨어 지문**에서 나온다. 후자는 확장이 진짜 사용자 브라우저에 사는 태생적 강점이다.
 
-**자동 하네스 한계(중요)**: 이 러너는 확장 로드에 `Extensions.loadUnpacked`(CDP)가 필수라
-브라우저를 `--remote-debugging-port`로 시작한다. 그 시작 플래그가 `navigator.webdriver`를 브라우저
-**전역**으로 켜므로(ws를 닫아도 유지), content script 경로마저 haness 안에서는 `webdriver:true`로 보인다.
-경로별 스텔스 대비의 확정은 정상 설치 확장(개발자모드 로드, CDP 없이 시작)으로 하는 **수동 실측** 몫이다
-(GPU 창모드와 같은 계급).
+**자동 하네스 한계**: 이 러너는 확장 로드에 `Extensions.loadUnpacked`(CDP)가 필수라 브라우저를
+`--remote-debugging-port`로 시작한다. 그 시작 플래그가 `navigator.webdriver`를 브라우저 **전역**으로
+켜므로(ws를 닫아도 유지), content script 경로마저 하네스 안에서는 `webdriver:true`로 보인다.
+
+**인과 격리로 스텔스 (거의) 자동 확정**: [webdriverCauseRunner](webdriverCauseRunner.mjs)가 확장·조작
+없이 크롬을 조건별로 켜서 범인을 직접 잡았다. 평범 실행 `webdriver:false`, `--remote-debugging-port`
+추가 시 `true`, 확장디버그 플래그는 추가 영향 0. **범인 = 원격 포트 플래그 하나**(조작 경로가 아니다).
+따라서 실배포(정상 설치, 포트 없음)에서 content script 경로는 CDP를 안 쓰므로 `webdriver`를 켜지 않는다
+= **스텔스 논리 확정**. bootIsolationRunner의 "둘 다 true"는 하네스 오염임이 실증됐다. **잔여 수동 실측**:
+chrome.debugger `attach`가 실배포에서 그 탭 webdriver를 켜는지(포트와 별개인 attach 자체 효과) + 실제
+봇 방어(Cloudflare 등) 통과 여부. 정상 설치 확장 수동 검증 몫(GPU 창모드와 같은 계급).
 
 ## 결론 표
 
@@ -58,7 +64,8 @@ attach하는 순간 그 탭의 `navigator.webdriver`가 켜진다(Playwright의 
 |---|---|---|---|---|---|
 | 2026-07-13 | 사전 게이트 0(로딩 경로) | Chrome 150 headless | `--load-extension` 신호 0 = 죽음. CDP `Extensions.loadUnpacked`(+`--enable-unsafe-extension-debugging`) 확장 ID 반환 + SW에서 `chrome.debugger`=object | 확장 로딩은 CDP 경로 단일 확정. 러너 분기 불필요 | 러너 경로 고정 |
 | 2026-07-13 | bootIsolationRunner | Edge 150 headless + vendor 번들 | **게이트 1+2+3 GREEN 9/9.** offscreen `crossOriginIsolated===true`, `SharedArrayBuffer`, module Worker + SAB Atomics 왕복(view0=42), Pyodide 부팅 **2.5-3.0s** + `runPython(1+1)==2`, `runPythonAsync==42`(JSPI 실동작), **게이트3: 파이썬 -> chrome.debugger로 새 탭 attach -> `Page.navigate` -> `Runtime.evaluate`가 title=pyprocCdpTarget + DOM marker=cdpMarkerOk + 계산 42 회수, 왕복 405ms** | **세 게이트 전부 실측 성립.** MV3 offscreen에 프로세스 OS가 통째로 실리고(SAB/워커/JSPI), 파이썬이 서버·네트워크 홉 0으로 브라우저 자체를 조작한다. manifest COEP/COOP 키가 확장 문서를 격리시킨다 = 최대 미검증 지점 해소 | **졸업 -> mainPlan 이니셔티브 개설 대상** |
-| 2026-07-13 | bootIsolationRunner(측정) | Edge 150 headless(러너 CDP) | 두 조작 경로의 자동화 지문 측정: chrome.debugger(CDP) `webdriver:true`, content script(chrome.scripting) 도 `webdriver:true`. plugins=5/hasWindowChrome=object/languages=3(정상). **둘 다 true인 것은 하네스 오염**: 러너가 확장 로드에 쓴 `--remote-debugging-port`가 webdriver를 전역으로 켬(ws close 후에도 유지) | **경로별 스텔스 대비는 자동 하네스로 실측 불가**(확장 로드 CDP <-> webdriver 전역 오염 순환). chrome.debugger가 CDP인 이상 그 경로는 webdriver 노출은 확정. content script 경로의 스텔스와 실프로필 지문 우위는 수동 실측 몫 | 한계 기록(수동 실측 영역) |
+| 2026-07-13 | bootIsolationRunner(측정) | Edge 150 headless(러너 CDP) | 두 조작 경로의 자동화 지문 측정: chrome.debugger(CDP) `webdriver:true`, content script(chrome.scripting) 도 `webdriver:true`. plugins=5/hasWindowChrome=object/languages=3(정상). **둘 다 true인 것은 하네스 오염**: 러너가 확장 로드에 쓴 `--remote-debugging-port`가 webdriver를 전역으로 켬(ws close 후에도 유지) | 경로별 대비를 이 러너로는 직접 실측 불가 -> webdriverCauseRunner로 인과 격리 | 오염 규명 -> 인과 격리로 이관 |
+| 2026-07-13 | webdriverCauseRunner | Edge 150 headless(확장·조작 없음) | webdriver 인과 격리(3조건): 평범 실행 **false**, +원격포트 **true**, +원격포트+확장디버그 true(추가영향 0). GREEN | **범인 = `--remote-debugging-port` 단독**. 조작 경로(content script) 무죄 = 실배포(포트 없음)에서 content script는 webdriver 미점화 **논리 확정**. bootIsolationRunner의 "둘 다 true"가 하네스 오염임이 실증됨. chrome.debugger 경로는 CDP라 webdriver 노출 확정(설계상 신뢰입력 전용). 잔여 수동: attach 실배포 효과 + 실 봇방어 통과 | 스텔스 (거의) 자동 확정 |
 
 ## 판정
 
