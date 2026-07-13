@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "pyprocBrowserControlProbe",
+  "version": "1.0",
+  "description": "browserControl 캠페인 실측 확장(비승격). offscreen Pyodide 부팅 + crossOriginIsolated + chrome.debugger CDP 왕복.",
+  "minimum_chrome_version": "116",
+  "permissions": ["offscreen", "debugger", "tabs", "storage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "serviceWorker.js", "type": "module" },
+  "cross_origin_embedder_policy": { "value": "require-corp" },
+  "cross_origin_opener_policy": { "value": "same-origin" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

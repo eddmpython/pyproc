@@ -1,6 +1,6 @@
 # gpuCompute - 수치 성능 도약 Phase 2 실측 레인 (WebGPU 컴퓨트 오프로드)
 
-이니셔티브 [mainPlan/numerical-acceleration](../../../mainPlan/numerical-acceleration/README.md) Phase 2(프론티어). numericShard(CPU 샤딩)와 별개: **f32 대규모 선형대수를 WebGPU 컴퓨트 셰이더로 오프로드해 10-100배를 노린다.** 좁은 고피크 레인(f32 한정, 잔류 모델).
+이니셔티브 [mainPlan/_done/numerical-acceleration](../../../mainPlan/_done/numerical-acceleration/README.md) Phase 2(프론티어). numericShard(CPU 샤딩)와 별개: **f32 대규모 선형대수를 WebGPU 컴퓨트 셰이더로 오프로드해 10-100배를 노린다.** 좁은 고피크 레인(f32 한정, 잔류 모델).
 
 ## 가설
 

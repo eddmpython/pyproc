@@ -1,5 +1,7 @@
 # numerical-acceleration - 수치 성능 도약 (브라우저 파이썬의 마지막 큰 격차)
 
+> ✅ 완료 (2026-07-13, v0.0.7 릴리즈): numpy 86배 격차를 두 레인으로 뚫었다. (1) CPU 샤딩 `PyProc.matmul`(종단 2.48배) (2) WebGPU 잔류 핸들 `GpuCompute`/`GpuArray`(f32 matmul 실 GPU 109배, `map` 체이닝) + `Runtime.enableGpu()` Python numpy 직결(92배). 잔여(커널 차용 최적화, GPU reduce, worker 내 GPU, SIMD 흡수 감시)는 코어 밖 선택 후속 = 재개 시 새 이니셔티브.
+
 상태: **Phase 1 + Phase 2 + 후속 심화 완료 (2026-07-13).** browser-os P1~P7 + engine-independence 사다리가 닫힌 뒤 개시. **수치 연산 속도**(numpy 86배)를 두 레인으로 뚫었다: (1) CPU 샤딩 `PyProc.matmul`(compute-bound near-linear, 종단 2.48배) (2) **WebGPU 잔류 핸들 `GpuCompute`/`GpuArray`**(f32 대규모 matmul **실 GPU 109배**, `map`으로 활성화 체이닝) + **`Runtime.enableGpu()`로 Python numpy 직결**(`pyprocGpu.matmul`이 numpy 배열을 GPU에서, **92배**). 잔여(커널 최적화 차용, GPU reduce, worker 내 GPU)는 코어 밖 선택 후속 = [02-phasing NEXT](02-phasing-and-wiring.md).
 
 ## 한 문장
