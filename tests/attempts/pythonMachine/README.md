@@ -1,7 +1,7 @@
 # pythonMachine - 파이썬 머신 캠페인 (browser-os 이니셔티브의 실측 레인)
 
 runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지지 않고 파일 하나로 이동하는 컴퓨터.**
-세부 질문은 폴더가 아니라 probe 파일로 늘린다. 정본 계획: [mainPlan/browser-os](../../../mainPlan/browser-os/README.md)
+세부 질문은 폴더가 아니라 probe 파일로 늘린다. 정본 계획: [mainPlan/_done/browser-os](../../../mainPlan/_done/browser-os/README.md)
 
 ## 가설
 

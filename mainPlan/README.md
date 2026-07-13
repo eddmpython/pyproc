@@ -21,7 +21,6 @@
 
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
-| [web-python-runtime/](web-python-runtime/) | 운영 체계 + 수명주기/soundness/시스템콜 v1 승격 (2026-07-11) | 서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬. codaro/dartlab/xlpod 공유 SSOT. |
-| [local-parity/](local-parity/) | 개시 (2026-07-11) | 실행·터미널·라이브러리에서 로컬 파이썬과 구분 불가능해지는 발명 프로그램. |
-| [browser-os/](browser-os/) | 개시 (2026-07-12) | 로컬에도 없는 것: 꺼지지 않고 파일 하나로 이동하는 파이썬 컴퓨터(머신 이미지·영속 디스크·셸·수명주기). |
-| [engine-independence/](engine-independence/) | PRD, 착수 승인 대기 (2026-07-12) | Pyodide에 갇히지 않는 사다리: 자가 호스팅 -> EngineContract seam -> 스냅샷 사전 제조 -> 조건부 fork 보험. |
+| (없음) | | 활성 이니셔티브 0. 완결 이니셔티브는 [_done/](_done/README.md) 보관 목록. 새 작업은 새 이니셔티브 개설부터. |
+
+착수 시점(2026-07-11~13)의 4개 이니셔티브(web-python-runtime, local-parity, browser-os, engine-independence)는 전부 완결되어 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 `_done/web-python-runtime/03-progress-ledger.md`의 결정 원장이다.

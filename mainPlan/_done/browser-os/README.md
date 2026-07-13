@@ -1,5 +1,7 @@
 # browser-os - 파이썬 머신 (세상에 없던 것)
 
+> ✅ 완료 (2026-07-13): 파이썬 머신 5기둥 + 근본 프리미티브 P1~P7 전부 실증·승격(저널 WAL·커널 선출·잡 컨트롤·파이프+shm·머신 컨테이너·권한 감옥·fsWorld) + 객관 판정·셀프호스팅 실측. 안티 추천 8종은 [docs/product/vision.md](../../../docs/product/vision.md)로, 가상 오리진 벽은 [docs/consuming/contract.md](../../../docs/consuming/contract.md)로 승격. 터미널 UI 6종과 이미지 v2는 소비 제품/프론티어(코어 밖).
+
 상태: 개시 (2026-07-12, 토론 합의 반영). local-parity가 "로컬 따라잡기"라면, 이 이니셔티브는 **로컬에도 없는 컴퓨터**를 만든다. 커널은 이미 완성됐다는 인식에서 출발한다.
 
 ## 한 문장
@@ -33,7 +35,7 @@
 
 ## 원칙
 
-- local-parity와 동일: **모든 주장은 probe 실측으로만.** 실측 레인은 [tests/attempts/pythonMachine](../../tests/attempts/pythonMachine/README.md) 캠페인이다(2026-07-12 runtimeParity에서 분리).
+- local-parity와 동일: **모든 주장은 probe 실측으로만.** 실측 레인은 [tests/attempts/pythonMachine](../../../tests/attempts/pythonMachine/README.md) 캠페인이다(2026-07-12 runtimeParity에서 분리).
 - 제품 UI(창/작업 관리)는 소비 제품 몫. pyproc은 머신 프리미티브까지만.
 
 ## NEXT
@@ -45,6 +47,6 @@
 5. ~~커널 데몬(탭 밖에서 사는 머신) v1~~ 완료(2026-07-12): `SharedKernel`(SharedWorker) - 여러 탭 = 한 파이썬 상태. 벽: SharedWorker COI=false = SAB 불가(interrupt/fork 제외, 플랫폼 대기).
 6. ~~진짜 OS 표면 라운드~~ 완료(2026-07-12): ① 모든 것은 파일 `DeviceFs`(/dev/clipboard·/proc, 새 API 표면 0) ② init/cron `Init`(boot.py 오토스타트 + 크론) ③ requests 실동작 ④ 셸 %pip.
 7. ~~근본 OS 라운드 1차~~ 완료(2026-07-12): **fork(2)**(`PyProc({replay})`+`fork` - 살아있는 상태 복제, 적용 1.4ms) + **시그널 표**(`signal(pid, signum)` - SIGTERM/SIGUSR1 핸들러 발화) + **체크포인트 나무**(머신의 git. 선형 체인의 힙 파손 결함을 재현하고 수정).
-8. **다음 프리미티브 로드맵**: [01-os-primitives.md](01-os-primitives.md)가 정본(전문 에이전트 3종 토론 종합). 우선순위: ~~P1 저널(WAL)~~ 완료 -> P2 커널 선출(커널을 워커로 = fork 비대칭 해소 + 탭 죽음 생존) -> P3 잡 컨트롤(&) -> P4 파이프/shm -> P5 머신 컨테이너 -> P6 권한 감옥 -> P7 파일 세계 v2. 터미널 비전("스크롤백이 살아있다")과 안티 추천 8종도 같은 문서.
-9. ~~객관 판정 + 셀프호스팅 증명~~ 완료(2026-07-12): [02-os-verdict.md](02-os-verdict.md) - 심판 3종 토론(OS 점수표 49/100 조건부 / 개발 플랫폼 성립 / 반론 10) + 당일 수리 6건(배선 3종·fork 정화·h0 가드·persist·표기 정직화) + 풀스택 셀프호스팅 실측([selfHost](../../tests/attempts/selfHost/README.md) 8/8).
-10. /home 포함 이미지 포맷 v2 + SharedKernel과 hibernate/resume 결합.
+8. ~~**다음 프리미티브 로드맵**~~ **P1~P7 전부 완료(2026-07-13)**: [01-os-primitives.md](01-os-primitives.md)가 정본(승격 실측 포함). ~~P1 저널(WAL)~~ -> ~~P2 커널 선출(탭 죽음 생존)~~ -> ~~P3 잡 컨트롤(&)~~ -> ~~P4 파이프/shm~~ -> ~~P5 머신 컨테이너~~ -> ~~P6 권한 감옥~~ -> ~~P7 파일 세계 v2~~ 전부 probe GREEN + src 승격. **터미널 비전 6종(/dev/display, ghost history+rlcompleter, Time Rail, addressable blocks, session cast, & UI)은 전부 이미 승격된 프리미티브(DeviceFs flush/framebuffer, reactive.tree, openMachine, jobControl) 위의 소비 제품/examples UI 표면**이라 새 src 작업 없음("제품 UI는 소비 제품 몫" 원칙). 안티 추천 8종은 지속 원칙이라 docs/product/vision.md로 승격.
+9. ~~객관 판정 + 셀프호스팅 증명~~ 완료(2026-07-12): [02-os-verdict.md](02-os-verdict.md) - 심판 3종 토론(OS 점수표 49/100 조건부 / 개발 플랫폼 성립 / 반론 10) + 당일 수리 6건(배선 3종·fork 정화·h0 가드·persist·표기 정직화) + 풀스택 셀프호스팅 실측([selfHost](../../../tests/attempts/selfHost/README.md) 8/8).
+10. **/home 포함 이미지 포맷 v2 + SharedKernel과 hibernate/resume 결합**: 프론티어(코어 프리미티브 완결 후의 심화). exportImage는 세션 델타 + 매니페스트를 담고 /home(OPFS)은 이미 커널 간 생존하므로(homeDiskProbe) 이미지에 /home 스냅샷을 결합하는 것은 포맷 확장이다. SharedKernel과 저널/hibernate 결합도 같은 심화. 재개 시 새 이니셔티브(코어 로드맵 밖).

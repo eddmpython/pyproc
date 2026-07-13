@@ -53,6 +53,8 @@ await navigator.serviceWorker.register("/pyprocSw.js?coi=1");
 루트 스코프로 등록하려면 서버가 `Service-Worker-Allowed: /` 헤더를 줘야 한다(examples/serve.mjs 참조).
 이 파일은 `virtualOrigin.js`와 같은 폴더에 있는 것이 경로 계약이다.
 
+**가상 오리진 경계 (정직한 벽)**: SW 합성 응답이라 진짜 오리진과 다르다. (1) `Set-Cookie`는 스트립된다(쿠키 세션 불가 = 토큰 방식 사용). (2) WebSocket 업그레이드는 가로채지 않는다(ASGI dispatch는 HTTP 요청/응답 단위). (3) 스트리밍/SSE는 축적 후 일괄 응답이다(청크 스트림 아님). (4) 엔드포인트는 `async def` 강제(동기 dispatch 없음). 부활(저널/세션/openMachine) 후에는 파일 핸들·DB 커넥션 같은 프로세스 자원이 되살아나지 않는다: 리플레이+델타는 파이썬 힙 상태를 복원하지 그 밖의 OS 자원을 복원하지 않으므로, 소비자는 부팅 훅(`boot.py` 또는 `Init`)에서 그런 자원을 재개설한다.
+
 subpath export: `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `pyproc/process-os`, `pyproc/worker`. **src 내부 경로 deep import 금지** (내부 파일 배치는 릴리즈 간 바뀔 수 있다. 실제로 v0.0.3에서 레이어 폴더로 재배치됐고 subpath 이름은 불변이었다).
 
 - 타입은 동봉된 `index.d.ts`가 계약이다.
@@ -104,4 +106,4 @@ const fn = rt.getGlobal("myUdf");        // PyProxy: call/toJs/destroy 재사용
 - `getGlobal(name)`은 엔진 프록시(PyProxy)를 그대로 반환한다. `call`/`toJs`/`destroy`가 계약상 지원된다(재사용 캐시 패턴).
 - WASI 세션(`bootWasi`)은 별도 async 표면이며 값 다리 JSON 한정이라, C 확장(polars/pyarrow)에 의존하는 dartlab/xlpod의 정본 경로는 Pyodide다.
 
-배선 로드맵 상세: [mainPlan/web-python-runtime/02-phasing-and-wiring.md](../../mainPlan/web-python-runtime/02-phasing-and-wiring.md)
+배선 로드맵 상세: [mainPlan/_done/web-python-runtime/02-phasing-and-wiring.md](../../mainPlan/_done/web-python-runtime/02-phasing-and-wiring.md)

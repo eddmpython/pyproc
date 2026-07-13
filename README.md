@@ -145,7 +145,7 @@ Naming these up front is deliberate: a hidden limit reads as a bug later; a stat
 - **Upstream-pending** (walled now, reopenable): native C-extension wheels (Emscripten static builds / the WebAssembly component model), GPU (WebGPU), real threading.
 - **Permanent web-security wall**: inbound connections and arbitrary native binaries need an external relay or agent.
 
-The gap map lives in [local-parity](mainPlan/local-parity/README.md).
+The gap map lives in [local-parity](mainPlan/_done/local-parity/README.md).
 
 ## Security model
 
@@ -167,7 +167,7 @@ Pyodide  Workers
  Snapshot / Journal / Restore
 ```
 
-Four primitives make it sound: complete heap hashing at each execution boundary (sampling would miss changes and corrupt a restore); deterministic boot (a byte-identical base, so only your delta has to travel); snapshot-fork; and an engine seam (the same primitives also run on non-Pyodide CPython 3.14, proving they don't depend on Pyodide internals). Deep design lives in [mainPlan](mainPlan/README.md); the axis-by-axis gap map in [local-parity](mainPlan/local-parity/README.md).
+Four primitives make it sound: complete heap hashing at each execution boundary (sampling would miss changes and corrupt a restore); deterministic boot (a byte-identical base, so only your delta has to travel); snapshot-fork; and an engine seam (the same primitives also run on non-Pyodide CPython 3.14, proving they don't depend on Pyodide internals). Deep design lives in [mainPlan](mainPlan/README.md); the axis-by-axis gap map in [local-parity](mainPlan/_done/local-parity/README.md).
 
 ## Benchmarks
 

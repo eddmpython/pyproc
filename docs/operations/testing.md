@@ -33,7 +33,7 @@ COOP/COEP 서버를 임시 포트로 띄우고, 로컬 Chromium 계열 브라우
 - 복원 리액티브의 실행 경계 계약(경계를 닫은 `restoreLive`, 안전 기준선 `restore`).
 - 스냅샷-fork spawn, `map` 병렬 결과 정확성, `mapSerial` 일치, `ps`/`terminate`.
 
-런타임 동작을 바꾸는 커밋은 이 게이트 green이 조건이다. 실측 수치(부팅/복원/fork/map ms)가 함께 출력되므로, 의미 있는 변화는 [진행 원장](../../mainPlan/web-python-runtime/03-progress-ledger.md)에 기록한다. CI에서도 같은 게이트가 돈다(`.github/workflows/ci.yml`).
+런타임 동작을 바꾸는 커밋은 이 게이트 green이 조건이다. 실측 수치(부팅/복원/fork/map ms)가 함께 출력되므로, 의미 있는 변화는 활성 이니셔티브의 진행 원장에 기록한다(활성이 없으면 다음 이니셔티브 개설과 함께 시작. 직전 원장: [mainPlan/_done/web-python-runtime/03-progress-ledger.md](../../mainPlan/_done/web-python-runtime/03-progress-ledger.md)). CI에서도 같은 게이트가 돈다(`.github/workflows/ci.yml`).
 
 ## 3. 예제 실행 게이트 (`npm run test:examples`)
 
@@ -64,7 +64,7 @@ Chromium/Edge에서 확인:
 체크리스트:
 
 - 콘솔에 `crossOriginIsolated`가 true인지(`false`면 헤더 문제).
-- 공개 표면·런타임 동작을 바꾼 커밋은 실측 결과(수치)를 [진행 원장](../../mainPlan/web-python-runtime/03-progress-ledger.md)에 남긴다. README의 실측 수치는 이 원장에서만 가져온다.
+- 공개 표면·런타임 동작을 바꾼 커밋은 실측 결과(수치)를 활성 이니셔티브의 진행 원장에 남긴다(활성 0이면 다음 이니셔티브에서). README의 실측 수치는 그 원장에서만 가져온다. 과거 수치의 출처: [mainPlan/_done/web-python-runtime/03-progress-ledger.md](../../mainPlan/_done/web-python-runtime/03-progress-ledger.md).
 
 ## 5. 개념증명 실측 (tests/attempts/)
 

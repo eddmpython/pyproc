@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 mainPlan 4개 이니셔티브 완결·_done 이관 + 지속 정책 docs 승격 (구조 게이트 403)
+
+- 4개 이니셔티브(web-python-runtime, local-parity, browser-os, engine-independence)가 전부 완결됐다. 폴더째 `mainPlan/_done/`으로 이관(git mv)하고 각 README 상단에 완료 배너 + 참조 경로 전량 갱신(내부 아웃바운드 링크 depth +1, 외부 참조 28지점, CLAUDE.md 3곳, 메모리 2파일). `mainPlan/README.md` 활성 표는 "활성 0"로, `_done/README.md`에 4행 보관 목록.
+- **지속 정책 docs 승격**(mainPlan은 완료 시 _done으로 빠지므로 지속 정본이 될 수 없다는 정보구조 규칙 집행): (1) 계약 실태 표 -> `docs/operations/contractReality.md`(열린 부채·상시 재검증·트레이드오프·프론티어. CLAUDE.md 개발원칙 4 + operatingModel.md가 여기를 가리킨다). (2) "능력의 네 가지 상태" + North Star -> `docs/product/vision.md`(+ 낡은 "네이티브 휠 영원히 불가" 주장 정정: 정적 링크는 이미 됨, 동적만 upstream 대기). (3) 안티 추천 8종 -> vision.md "안 만드는 것". (4) 가상 오리진 벽 + 부활-후-fd 재개설 -> `docs/consuming/contract.md`(02-os-verdict가 남긴 미이행 지시 상환).
+- **완결 판정 근거**: browser-os 근본 프리미티브 P1~P7 전부 probe GREEN + src 승격, engine-independence 사다리 실측 rung 전부 닫힘(P0 자가호스팅·P2 스냅샷 벽까지), local-parity 6축 v1 도달 + 네 상태 지도, web-python-runtime 코어 + 운영 체계 + 소비 성립. 남은 것은 전부 프론티어(numpy 정적 빌드·GPU·동적 dlopen·이미지 v2)거나 소비 제품 몫(터미널 UI 6종)이라 코어 로드맵 밖 = 재개 시 새 이니셔티브.
+- 이 원장은 `_done`으로 이관됐지만 세션 간 마지막 상태 기록으로 계속 참조된다(재개 시 여기부터).
+
 ### 2026-07-13 browser-os P6 승격 + 프리미티브 로드맵(P2~P7) 완결: 권한 감옥 (jailProbe 8/8)
 
 - browser-os 근본 프리미티브 로드맵의 마지막 칸 P6(machineJail)을 승격했다. **이로써 P1~P7이 전부 실증·승격됐다**(P1 저널·P2 커널선출·P3 잡컨트롤·P4 파이프+shm·P5 컨테이너·P6 감옥·P7 fsWorld).
@@ -73,8 +80,8 @@
 ### 2026-07-13 세 벽 정면(전부 착수): 소켓 아웃바운드 실증 + C확장 재구성 + 네 상태 지도 + 벽3 근원 규명
 
 - "전부 다 하라"는 지시로 세 벽을 동시에 쳤다(연구 2종 + 손 3종). 목표 = North Star 유지, 현재형 주장은 증명된 만큼.
-- **벽2 아웃바운드 소켓 GREEN(실증 완료)**: [socketBridge 캠페인](../../tests/attempts/socketBridge/README.md). zero-dep WS->TCP 릴레이(RFC 6455 직접) + 브라우저 probe. socketProbe 3/3(example.com:80 raw HTTP -> `HTTP/1.1 200` 828바이트 원문 = 소켓 층, 임의 host:port, 닫힌 포트 ECONNREFUSED 전달) + socketBlockingProbe 2/2(**워커에서 동기 connect/send/recv, 블로킹 recv를 Atomics.wait으로** = 파이썬 socket.recv() 동기 의미가 비동기 WS 위에서 성립). 어려운 절반(블로킹 over 비동기)이 pyproc이 이미 쓰는 메커니즘으로 열렸다. 남은 것 = 파이썬 socket 모듈 배선(src), Wisp 멀티플렉싱/TLS. 인바운드는 정직한 물리 벽(역터널 릴레이).
-- **벽1 C확장 재구성(내 게이트 과장 정정)**: wasiGate의 "C 확장 구조적 불가"는 절반만 맞았다 - **동적(.so dlopen)만 불가, 정적 링크는 이미 됨**. python.wasm 자체가 정적 C 확장 묶음이라 `_struct`/`array`/`math`가 builtin으로 브라우저 위 진짜 C 코드로 실행(wasiGate 실측 "True 12 4", GREEN 10/10). numpy도 정적 fat 바이너리로 이 경로(kesmit 2023 numpy 1.24.2 선례 + 3.14가 dotted-name importer 블로커 해소). 빌드는 CI 아티팩트(wasi-sdk 109MB, brettcannon 레시피). 레시피 = [enginePort README](../../tests/attempts/enginePort/README.md).
+- **벽2 아웃바운드 소켓 GREEN(실증 완료)**: [socketBridge 캠페인](../../../tests/attempts/socketBridge/README.md). zero-dep WS->TCP 릴레이(RFC 6455 직접) + 브라우저 probe. socketProbe 3/3(example.com:80 raw HTTP -> `HTTP/1.1 200` 828바이트 원문 = 소켓 층, 임의 host:port, 닫힌 포트 ECONNREFUSED 전달) + socketBlockingProbe 2/2(**워커에서 동기 connect/send/recv, 블로킹 recv를 Atomics.wait으로** = 파이썬 socket.recv() 동기 의미가 비동기 WS 위에서 성립). 어려운 절반(블로킹 over 비동기)이 pyproc이 이미 쓰는 메커니즘으로 열렸다. 남은 것 = 파이썬 socket 모듈 배선(src), Wisp 멀티플렉싱/TLS. 인바운드는 정직한 물리 벽(역터널 릴레이).
+- **벽1 C확장 재구성(내 게이트 과장 정정)**: wasiGate의 "C 확장 구조적 불가"는 절반만 맞았다 - **동적(.so dlopen)만 불가, 정적 링크는 이미 됨**. python.wasm 자체가 정적 C 확장 묶음이라 `_struct`/`array`/`math`가 builtin으로 브라우저 위 진짜 C 코드로 실행(wasiGate 실측 "True 12 4", GREEN 10/10). numpy도 정적 fat 바이너리로 이 경로(kesmit 2023 numpy 1.24.2 선례 + 3.14가 dotted-name importer 블로커 해소). 빌드는 CI 아티팩트(wasi-sdk 109MB, brettcannon 레시피). 레시피 = [enginePort README](../../../tests/attempts/enginePort/README.md).
 - **네 상태 지도 정본화**([local-parity](../local-parity/README.md)): 현재 달성 / 우회 가능(빌드 미완 포함) / upstream 대기 / 영구 벽. 정적 C확장은 현재 달성으로, numpy 정적빌드는 우회 가능(미완)으로, 동적 로딩만 upstream 대기로 정확히 재배치. README 2종도 North Star + 네 상태로 정직화.
 - **벽3 근원 규명(수정 전략 확정)**: 3.14.6 시간여행 트랩의 진짜 원인을 레이아웃 파싱으로 특정. `--stack-first` 레이아웃(스택 [0,16MB] 아래로, 정적데이터 [16-19MB], 힙 [19-40MB], 640페이지=40MB). 근원 = fd_read 안(진행 중 os.read)에서 스냅샷을 찍어 **in-flight 버퍼 포인터 + WASM VM 콜스택(선형 메모리 밖, 되돌리기 불가)**이 힙 복원과 어긋난다. WLR 3.12는 우연히 생존, 3.14.6은 트랩. 진짜 해법 = **빈 스택 경계에서 체크포인트**(프로덕션 Pyodide 방식). 연구 A(스택 인지 복원 설계) 진행 중.
 - 순서 무관하게 전부 전진. 소비자 조율 불요.
@@ -85,13 +92,13 @@
 - **벽1 C 확장 - 정적 fat 바이너리가 유일한 깨끗한 절단.** numpy를 wasm32-wasi CPython에 정적 링크(`PyImport_AppendInittab`, 2023 BuiltinImporter 네임스페이스 수정으로 numpy import 확인)하면 Pyodide+Emscripten **둘 다** 떼고 우리 워커에 그대로. 대가: 빌드 소유(wasi-sdk) + 고정 스택 + ~20MB. "런타임 dlopen"은 vaporware(WASI 표준 dlopen 없음, 2025-12 CPython 플래그는 빌드 설정만 열음), PEP 783 pyemscripten 휠은 표준화됐으나(2026-04 PyPI) Emscripten 툴체인을 못 뗌. WASIX(Wasmer)는 진짜 dlopen이나 Wasmer 런타임 종속.
 - **벽2 소켓 - 어려운 절반은 이미 우리 것.** 블로킹 소켓 over 비동기 전송 = JSPI+Atomics.wait(이미 보유). "진짜 소켓" = syscallBridge에 전송 배선. BSD 소켓 층에서 가로챈다(탭 안 TCP/IP 스택은 덕지덕지, 기각). 아웃바운드 진짜 TCP/UDP = WebSocket + 얇은 Wisp 릴레이(~100-300줄, 교체 가능, epoxy-tls로 탭 내 TLS). **인바운드는 확정 물리 벽**(SW=같은 브라우저, WebRTC=시그널링, WT/WS=클라 개시): 최소 = 역터널 릴레이("탭용 ngrok"). Direct Sockets는 relay-free 리스너지만 IWA/ChromeOS 게이트.
 - **벽3 자동성장 - 착수. 살아있는 결함 진단**: 우리 WASI 소스(VMware WLR python-3.12.0)가 2023-12 이후 죽어 WASI 레인이 3.12에 2.5년 동결(Pyodide는 3.14). 살아있는 소스 = brettcannon/cpython-wasi-build(3.14.6/3.15β, 업스트림 당일 추적, 메인테이너 = PEP 816 + `Tools/wasm/wasi.py` 저자). 자동성장 = 버전 템플릿 핀 + SHA256 + engine-watch CI(감지->결정적 게이트->green이면 후보 Issue, 봇 머지 없음 = main 전용 준수). 소버린 폴백 = `Tools/wasm/wasi.py` 자체 빌드.
-- **벽3 실측**([wasiUpgradeProbe](../../tests/attempts/enginePort/README.md), RED 7/9): brettcannon **3.14.6이 브라우저에서 부팅 79ms**(WLR은 stdlib baked-in 단일 wasm, brettcannon은 python.wasm + 외부 stdlib라 `/lib/python3.14` loose 파일 preopen + `PYTHONHOME=/`로 이전. zlib 부재라 stdlib zip은 JS DecompressionStream으로 언집). **부팅/버전/stdlib/결정성/체크포인트 성립 = 동결 해제.** 그러나 **전체-힙 시간여행 복원이 트랩**(`memory access out of bounds`): WLR 3.12는 살고 3.14.6은 죽는다. wasm이 `memory`/`_start`만 export(레이아웃 심볼 없음), global 0 파싱으로 heapBase=16MB 얻어 heap-only 복원해도 트랩(_PyRuntime 정적데이터+힙+라이브스택 삼자 정합). **시간여행의 버전 이식 = 스택 인지 복원이 필요한 깊은 엔진 연구**(Agent가 예측한 "게이트가 per-version 비호환을 노출"의 실체). src 이전은 이 해결 전까지 보류(wasiGate 시간여행 회귀 방지).
+- **벽3 실측**([wasiUpgradeProbe](../../../tests/attempts/enginePort/README.md), RED 7/9): brettcannon **3.14.6이 브라우저에서 부팅 79ms**(WLR은 stdlib baked-in 단일 wasm, brettcannon은 python.wasm + 외부 stdlib라 `/lib/python3.14` loose 파일 preopen + `PYTHONHOME=/`로 이전. zlib 부재라 stdlib zip은 JS DecompressionStream으로 언집). **부팅/버전/stdlib/결정성/체크포인트 성립 = 동결 해제.** 그러나 **전체-힙 시간여행 복원이 트랩**(`memory access out of bounds`): WLR 3.12는 살고 3.14.6은 죽는다. wasm이 `memory`/`_start`만 export(레이아웃 심볼 없음), global 0 파싱으로 heapBase=16MB 얻어 heap-only 복원해도 트랩(_PyRuntime 정적데이터+힙+라이브스택 삼자 정합). **시간여행의 버전 이식 = 스택 인지 복원이 필요한 깊은 엔진 연구**(Agent가 예측한 "게이트가 per-version 비호환을 노출"의 실체). src 이전은 이 해결 전까지 보류(wasiGate 시간여행 회귀 방지).
 - **순서 확정**: 벽3(자동성장, 가장 쌈 + 동결 해제 + 나머지 토대) -> 벽1(정적 fat) -> 벽2(Wisp 릴레이). 소비자 조율 불요(pyproc이 세우면 dartlab이 따른다).
 
 ### 2026-07-13 WASI 위 패키지 생태계 - "진짜 파이썬"이 stdlib를 넘었다 (구조 337 + WASI 게이트 9/9)
 
 - 목표("Pyodide를 떼고 진짜 파이썬이 굴러갈 수준")의 다음 벽을 뚫었다. WASI CPython은 부팅/결정성/반복실행/값프로토콜/완전 시간여행까지 실증됐지만 거기서 도는 건 stdlib뿐이었다. "그 수준"(Pyodide 급)과의 최대 간극 = **패키지**. `2+2`는 돌지만 `import`가 안 되면 그 수준이 아니다.
-- **가설 -> 실측 GREEN 9/9**([wasiPackages 캠페인](../../tests/attempts/wasiPackages/README.md), 부팅 52ms/unzip 27ms): 순수 파이썬 패키지는 그냥 `.py` 묶음이고 WASI CPython은 preopen FS를 가진다 -> `sys.path`에 preopen `/site`를 끼우면 path-based finder가 찾는다. ① 단일 모듈 ② 중첩 패키지(`__init__.py`+서브모듈, shim `Directory` 트리) ③ **post-boot 라이브 설치**(파이썬이 `/site`에 파일 쓰기 = preopen 쓰기 가능 -> `invalidate_caches` -> import = "pip install을 라이브 세션에"가 기계적으로 가능) ④⑤ 진짜 wheel(`six` 단일 + `packaging` 중첩)을 fetch -> **네이티브 `DecompressionStream` unzip(의존성 0)** -> 마운트 -> import -> 실작업 ⑥ **정직한 벽**: `EXTENSION_SUFFIXES == []` = C 확장은 구조적 import 불가(WASI 동적 링크 부재, PEP 783 대기)를 값으로 못박음.
+- **가설 -> 실측 GREEN 9/9**([wasiPackages 캠페인](../../../tests/attempts/wasiPackages/README.md), 부팅 52ms/unzip 27ms): 순수 파이썬 패키지는 그냥 `.py` 묶음이고 WASI CPython은 preopen FS를 가진다 -> `sys.path`에 preopen `/site`를 끼우면 path-based finder가 찾는다. ① 단일 모듈 ② 중첩 패키지(`__init__.py`+서브모듈, shim `Directory` 트리) ③ **post-boot 라이브 설치**(파이썬이 `/site`에 파일 쓰기 = preopen 쓰기 가능 -> `invalidate_caches` -> import = "pip install을 라이브 세션에"가 기계적으로 가능) ④⑤ 진짜 wheel(`six` 단일 + `packaging` 중첩)을 fetch -> **네이티브 `DecompressionStream` unzip(의존성 0)** -> 마운트 -> import -> 실작업 ⑥ **정직한 벽**: `EXTENSION_SUFFIXES == []` = C 확장은 구조적 import 불가(WASI 동적 링크 부재, PEP 783 대기)를 값으로 못박음.
 - **src 승격(한 메커니즘으로 깎아서)**: `src/runtime/engines/wasi/wheelUnzip.js`(중앙 디렉터리 기반 ZIP, data-descriptor wheel도 정확), `WasiSession.installWheel(bytes)`(라이브 pip = unzip + 파이썬이 base64로 `/site`에 쓰기 + invalidate, 청크로 채널 상한 흡수), `bootWasi({ wheels })`(그 위 sugar). 드라이버에 `sys.path += /site`, 워커에 쓰기 가능 `/site` preopen(빈 `Directory`). 파일은 shim(JS)에 살아 wasm 힙 밖 = **시간여행 스냅샷과 독립**(패키지는 안정 상태). 값 다리(JSON) 불변 - 패키지는 파일 채널이라 FFI 무관.
 - **표면**: index.d.ts에 `installWheel` + `WasiManifest.wheels` additive(index.d.ts의 기존 주석 델리미터 오타 `\**`은 표시 아티팩트였음, 실제 정상). run.mjs에 WasiSession 메서드 계약 가드 신설. README 2종 표 갱신. wasiGate에 six(단일)+packaging(중첩)+C확장벽 영구 검사(SKIP-on-absent, CI는 wheel 미추적이라 SKIP green / 로컬 GREEN 9/9). 캠페인 졸업 = 프로브 코드 삭제, 폴더는 재현 wheel 자산 홈 + 기록으로 잔존(enginePort 선례).
 - **의미**: "떼기"가 프리미티브를 넘어 **생태계**로 갔다. 순수 파이썬 패키지가 non-Pyodide에서 산다 = 브라우저판 pip가 진짜 CPython 위에 성립. 남은 간극은 C 확장 하나(PEP 783 = pyemscripten 휠 = 그때 정면 흡수). 소비자 조율 불요(대원칙: pyproc이 세우면 dartlab이 따른다) - 목표만 보고 달렸다.
@@ -133,7 +140,7 @@
 
 ### 2026-07-12 D2 관문 - "Pyodide를 뗀다"가 실측이 됐다 (enginePort 부팅 6/6)
 
-- 목표의 심장("Pyodide를 떼고 진짜 파이썬이 굴러갈 수준")을 실측으로 관통했다. [enginePort 캠페인](../../tests/attempts/enginePort/README.md): non-Pyodide CPython 3.12(VMware WLR, WASI 빌드)을 vendored browser_wasi_shim(의존성 0, MIT)으로 우리 워커에서 부팅.
+- 목표의 심장("Pyodide를 떼고 진짜 파이썬이 굴러갈 수준")을 실측으로 관통했다. [enginePort 캠페인](../../../tests/attempts/enginePort/README.md): non-Pyodide CPython 3.12(VMware WLR, WASI 빌드)을 vendored browser_wasi_shim(의존성 0, MIT)으로 우리 워커에서 부팅.
 - **GREEN 6/6**: ① 부팅 + print(1+1)="2" **253ms**(Pyodide 콜드 ~3s보다 빠르다) ② 계약 코어 = exports.memory(heapU8 등가) 접근 성립 ③ 표준 라이브러리(json/sys) 동작 ④ **결정적 부팅** = random_get + clock_time_get을 shim에서 고정하면 두 커널의 파이썬 가시 상태(random.random(), hash)가 바이트 동일 ⑤ 비결정 대조(고정 끄면 갈림)로 우연 아님 확인.
 - **의미**: 우리 보석(reactive/session/.pymachine/체크포인트)이 요구하는 계약 코어 2축(선형 메모리 + 결정적 부팅)이 **Pyodide 없이 성립**한다. 라운드 10의 EngineContract가 "계약만으로 프리미티브가 돈다"를 증명했고, 이번 라운드가 "그 계약을 non-Pyodide가 구현한다"를 실측했다. 둘을 합치면 "떼기"의 개념 증명이 닫힌다. 역설: WASI는 엔트로피가 import 2개(random_get/clock_time_get)로 수렴해 Pyodide의 3소스 전역 스텁보다 결정성이 깨끗하다.
 - **자산 정책**: WLR wasm(25MB) + shim(29KB)은 레포 미추적(.gitignore, README 레시피로 재현). "레포 자산 0 + 서드파티 라이선스 고지 부담 회피" = 의존성 0/빌드 0 기조 유지. attempts probe라 CI(gate.html) 무관.
@@ -143,7 +150,7 @@
 ### 2026-07-12 라운드 10: 엔진 독립 P1 착수 완료 - EngineContract seam (구조 298 + 브라우저 38 무변경)
 
 - 목표 재확인: "Pyodide를 떼고 진짜 파이썬이 굴러갈 수준". 그 인프라가 EngineContract seam이다(엔진을 삭제가 아니라 교체 가능한 옵션으로). 개념이 불확실한 부분("우리 프리미티브가 엔진 계약만으로 도는가")은 규칙대로 attempts에서 검증 후 합류했다.
-- **개념 증명**([engineContract 캠페인](../browser-os/../../tests/attempts/engineContract/README.md)): PyodideEngine 어댑터로 부팅 -> memory 능력을 계약(heapU8/stack) 위에 세움 -> src ReactiveController가 그 위에서 양방향 시간여행(cp0<->cp1). **엔진 내부(`_module`/`globals`/`_emscripten_stack_*`) 직접 접근 0으로 GREEN 8/8**. 발견: execSeq(실행 경계 카운터)도 계약의 일부다(우회 실행은 reactive가 힙 변이를 놓쳐 복원이 깨진다).
+- **개념 증명**([engineContract 캠페인](../../../tests/attempts/engineContract/README.md)): PyodideEngine 어댑터로 부팅 -> memory 능력을 계약(heapU8/stack) 위에 세움 -> src ReactiveController가 그 위에서 양방향 시간여행(cp0<->cp1). **엔진 내부(`_module`/`globals`/`_emscripten_stack_*`) 직접 접근 0으로 GREEN 8/8**. 발견: execSeq(실행 경계 카운터)도 계약의 일부다(우회 실행은 reactive가 힙 변이를 놓쳐 복원이 깨진다).
 - **승격**: `src/runtime/engines/pyodideEngine.js`(EngineContract Pyodide 구현). MemoryCapability는 `constructor(engine)`로, Runtime은 run/setGlobal/install/freeze/mountHome/raw를 engine 경유로 리팩터. **동작 무변경 게이트**: 구조 298 + 브라우저 38 + 예제 4 전부 수정 없이 GREEN. 엔진 접점이 8파일 40지점 -> 1파일 뒤로 격리(덕지덕지 제거).
 - **WASI 매핑 확정**(D2 관문 설계): 계약 메서드별로 non-Pyodide 구현 경로를 표로. 우리 보석이 요구하는 건 heapU8 + 결정적 부팅뿐이고 둘 다 WASI에서 성립(부팅 결정성은 `random_get` import 하나로 수렴 = 오히려 더 깨끗). 벽은 값 다리(FFI 부재) = 계약이 값 프로토콜을 기본으로 두면 우회. 스택 sp는 null 허용 계약이라 프리빌트에서도 복원이 선다.
 - 다음: [engine-independence](../engine-independence/README.md) P0 자가 호스팅(유일한 실시간 리스크 CDN 제거) 또는 D2 관문 캠페인(non-Pyodide CPython 실부팅 + 값 프로토콜 재설계). worker.js/pyProc의 프로세스 부팅 경로는 자체 엔진이라 seam 후속 정합 대상.
@@ -168,7 +175,7 @@
 ### 2026-07-12 라운드 8: 객관 판정(심판 3종) + 셀프호스팅 증명 + 판정의 코드화 (구조 278 + 브라우저 35 + probe 3종)
 
 - 질문: "정말 OS인가, 그 위에서 서버·웹을 개발할 수 있는가". 독립 심판 3종(OS 점수표 / 개발 플랫폼 / 적대적 반박)을 돌려 객관 좌표를 받고, 지적을 당일 코드로 갚았다. 정본: [browser-os/02-os-verdict.md](../browser-os/02-os-verdict.md).
-- **판정 요지**: OS 간판은 조건부 49/100(조건 = P4 파이프 / P2 커널 탭독립 / P6 집행되는 보호). 셀프호스팅은 **성립을 실측으로 확정**: 신설 캠페인 [selfHost](../../tests/attempts/selfHost/README.md) fullStackProbe 8/8 - FastAPI(설치 916ms) + sqlite + HTML을 /home에 개발, GET p50 2.1ms, 재부팅->재서빙 3.4s(코드/DB 디스크 생존), dev loop(수정->반영) 7ms.
+- **판정 요지**: OS 간판은 조건부 49/100(조건 = P4 파이프 / P2 커널 탭독립 / P6 집행되는 보호). 셀프호스팅은 **성립을 실측으로 확정**: 신설 캠페인 [selfHost](../../../tests/attempts/selfHost/README.md) fullStackProbe 8/8 - FastAPI(설치 916ms) + sqlite + HTML을 /home에 개발, GET p50 2.1ms, 재부팅->재서빙 3.4s(코드/DB 디스크 생존), dev loop(수정->반영) 7ms.
 - **가상 오리진 충실화 3종 승격**(개발 플랫폼 심판의 4구멍): 요청 헤더 전달 + 바이너리 바디(b64 채널, .text/.content 등가 계약) + **커널 클라이언트 라우팅(hello 등록부)** + 무응답 504 타임아웃. originFidelityProbe 7/7: **가상 오리진에서 서빙된 iframe(커널 밖 문서)의 fetch가 커널에 20ms로 도달** = 서빙된 웹앱이 진짜 문서로 산다. 발견 2건: `setGlobal(null)`은 JsNull 프록시(널 정규화는 JS 경계), SW 합성 응답에 COI 헤더 없으면 부모 COEP가 iframe 차단(기본 탑재로 해소). 잔여 벽: Set-Cookie 스트립/WebSocket/스트리밍.
 - **조용한 오염 경로 2개 폐쇄**(심판 적발 실결함): ① fork 자식측이 델타 밖 드리프트를 cp0으로 복원(더러운 dst 정화, 게이트 마커 배타 검사로 상시화. 적용 1.4->33ms는 정확성의 값) + parentPid 계보 기록 ② journal recover가 경계 지문(h0) 불일치 시 명시적 예외(journalProbe 8/8) + start()의 storage.persist() 요청(디스크의 캐시 강등 방지).
 - 표기 정직화: 랜딩 5.28배를 "sharded numpy sort vs one pass"로(샤딩 배속이지 same-work 병렬 효율이 아님을 명시. same-work 정직 수치는 게이트 map 검사).
@@ -299,7 +306,7 @@
 
 ### 2026-07-11 운영 체계 수립 + src 레이어 재구조화 (v0.0.3)
 
-- **운영 체계를 dartlab에서 차용해 수립.** 3층 정보 구조(CLAUDE.md 강행규칙 / 로컬 메모리 약속 / docs 공개 운영 문서), tests/attempts 졸업 게이트, mainPlan 수명주기(_done 이관). 규칙 SSOT: [docs/operations/operatingModel.md](../../docs/operations/operatingModel.md).
+- **운영 체계를 dartlab에서 차용해 수립.** 3층 정보 구조(CLAUDE.md 강행규칙 / 로컬 메모리 약속 / docs 공개 운영 문서), tests/attempts 졸업 게이트, mainPlan 수명주기(_done 이관). 규칙 SSOT: [docs/operations/operatingModel.md](../../../docs/operations/operatingModel.md).
 - **src를 레이어 폴더로 재구조화.** `src/runtime/`(runtime.js + memoryCapability.js), `src/capabilities/`(reactive.js + syscallBridge.js), `src/processOs/`(pyProc.js + worker.js). runtime<->reactive 순환 import를 memoryCapability 분리로 제거. 공개 표면과 subpath export 이름은 불변(소비자 무영향).
 - **restoreLive 실행 경계 계약을 명문화.** "복원 전 마지막 실행을 checkpoint()로 닫는다"가 계약. 구 README 예제는 이 계약을 어겨 조용히 오동작하는 코드였다(checkpoint 없이 restoreLive 호출 = stale 해시 비교 = 0페이지 복원). 예제 수정 + reactive.js 상단 계약 주석 추가.
 - **구 docs/PRD 2종을 이 이니셔티브 문서(00~02)로 이관.** docs/는 운영 문서 트리로 재편.
@@ -317,7 +324,7 @@
 ### 직접 처리 TODO (계정/승인이 필요한 것, 2026-07-12 정리)
 
 1. ~~npm 퍼블리시~~ **완료(2026-07-12)**: `pyproc@0.0.5` 게시(레지스트리 확인 23:08 UTC). 외부 설치 = `npm install pyproc`. README 2종/소비 계약에 반영 완료. 이후 릴리즈마다 절차 7단계(npm publish)가 표준.
-2. ~~라이브 데모 연결~~ **GitHub Pages 자동 배포로 대체(2026-07-12, 방침: 외부 최소화)**: 추가 조작 0. 실측 2건이 경로를 열었다(noCoiProbe: 머신 동선은 COI 불필요 / swCoiProbe: SAB는 pyprocSw ?coi=1 주입으로). pages.yml이 push마다 배포, Cloudflare는 예비로만 기록(wrangler 인증 확인됨, [demoHosting.md](../../docs/operations/demoHosting.md)).
+2. ~~라이브 데모 연결~~ **GitHub Pages 자동 배포로 대체(2026-07-12, 방침: 외부 최소화)**: 추가 조작 0. 실측 2건이 경로를 열었다(noCoiProbe: 머신 동선은 COI 불필요 / swCoiProbe: SAB는 pyprocSw ?coi=1 주입으로). pages.yml이 push마다 배포, Cloudflare는 예비로만 기록(wrangler 인증 확인됨, [demoHosting.md](../../../docs/operations/demoHosting.md)).
 3. **엔진 독립 이니셔티브 착수 승인**: [mainPlan/engine-independence](../engine-independence/README.md) PRD 검토 후 착수 단계 지시.
 
 ### 작업 큐 (다음 세션 재개 지점)

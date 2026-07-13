@@ -2,7 +2,7 @@
 
 runtimeParity(런타임 동작)와 별개의 개념 캠페인이다: **환경(패키지 세트)의 선언·캐시·재현.**
 uv가 로컬에서 하는 것(즉시 부팅, 재현 가능한 락, 스크립트 자급)을 브라우저에서 성립시킨다.
-정본 계획: [mainPlan/local-parity](../../../mainPlan/local-parity/README.md) 라이브러리 축.
+정본 계획: [mainPlan/_done/local-parity](../../../mainPlan/_done/local-parity/README.md) 라이브러리 축.
 
 ## 가설
 
@@ -13,7 +13,7 @@ uv가 로컬에서 하는 것(즉시 부팅, 재현 가능한 락, 스크립트 
 (3) micropip.freeze()의 락으로 부팅하면 환경이 "찍은 스냅샷"이 아니라 재현 가능한 빌드가 된다.
 (4) 벽(#5195)의 원인은 패키지가 아니라 loadPackage 기계가 남기는 JS 참조다: loadPackage를 우회해
 순수 휠을 FS로 주입하고 import까지 끝낸 힙은 스톡에서도 스냅샷·복원이 성립한다
-(Cloudflare workerd 패턴의 브라우저판, 정본: [mainPlan/engine-independence](../../../mainPlan/engine-independence/README.md) P2).
+(Cloudflare workerd 패턴의 브라우저판, 정본: [mainPlan/_done/engine-independence](../../../mainPlan/_done/engine-independence/README.md) P2).
 
 ## 졸업 게이트 (질문별)
 

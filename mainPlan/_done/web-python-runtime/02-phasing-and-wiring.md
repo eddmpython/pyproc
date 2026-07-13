@@ -23,7 +23,7 @@
 
 현재 승격된 것: 런타임·복원 리액티브·프로세스 OS·능력 계약(코어 4모듈, src 레이어 구조).
 
-다음 후보는 전부 **tests/attempts의 카테고리에서 졸업 게이트를 통과한 뒤에만** src로 승격한다(운영 규칙: [tests/attempts/README.md](../../tests/attempts/README.md)). 로컬 parity 전반의 격차 지도는 [local-parity](../local-parity/README.md)가 소유한다.
+다음 후보는 전부 **tests/attempts의 카테고리에서 졸업 게이트를 통과한 뒤에만** src로 승격한다(운영 규칙: [tests/attempts/README.md](../../../tests/attempts/README.md)). 로컬 parity 전반의 격차 지도는 [local-parity](../local-parity/README.md)가 소유한다.
 
 졸업 완료(2026-07-11): ~~processLifecycle~~(taskTimeout/kill/respawn), ~~reactiveSoundness~~(이중 해시), ~~syscallBridge~~(v1: input/urllib/subprocess).
 
@@ -45,7 +45,7 @@
 - **빌드 없는 ESM.** 번들러/트랜스파일러 도입 금지. 타입 선언은 손으로 유지(`index.d.ts`).
 - **능력 계약 경유.** 엔진 내부 접근은 능력 뒤에 격리. `camelCase` 파일/함수, `PascalCase` 클래스.
 - **버전 `0.0.x` 라인.** 릴리즈 때만 끝자리를 올리고, `package.json`과 태그 `v0.0.x`를 같은 값으로 맞춘다.
-- **테스트 게이트.** `npm test`(Node, 의존성 0)가 공개 표면·타입 커버리지·문서 링크·구조 불변식을 검사한다. 커밋 전 green. 브라우저 실측 절차는 [docs/operations/testing.md](../../docs/operations/testing.md).
+- **테스트 게이트.** `npm test`(Node, 의존성 0)가 공개 표면·타입 커버리지·문서 링크·구조 불변식을 검사한다. 커밋 전 green. 브라우저 실측 절차는 [docs/operations/testing.md](../../../docs/operations/testing.md).
 - **착수 전 정합성·ROI 재검(필수 게이트).** 이 플랜을 무비판 실행하지 않는다. 착수 시점의 코드/소비자 상태와 대조해 어긋나면 플랜부터 고친다.
 
 ## 롤백

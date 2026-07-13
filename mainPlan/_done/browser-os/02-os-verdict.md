@@ -6,7 +6,7 @@
 ## 한 줄 판정
 
 - **OS 간판: 조건부(49/100).** 무수식 "웹 OS"는 아직 과장이다. 오늘의 정확한 좌표는 "가장 OS에 가까운 브라우저 파이썬 런타임"이고, 간판 조건은 P4(파이프) / P2(커널 탭독립) / P6(집행되는 보호) 셋이다. 전부 기존 로드맵에 있다.
-- **셀프호스팅: 성립(실측).** FastAPI + sqlite + HTML 풀스택 서비스를 브라우저 탭 안에서 개발-구동-영속-재부팅생존-핫리로드까지 완주했다([selfHost/fullStackProbe](../../tests/attempts/selfHost/fullStackProbe.html) 8/8). 서빙된 웹앱이 커널 페이지 밖 문서(iframe)에서도 20ms에 산다([runtimeParity/originFidelityProbe](../../tests/attempts/runtimeParity/originFidelityProbe.html) 7/7). "OS에서 서버도 웹도 개발 가능한가"의 답은 **가능하다, 실측으로**.
+- **셀프호스팅: 성립(실측).** FastAPI + sqlite + HTML 풀스택 서비스를 브라우저 탭 안에서 개발-구동-영속-재부팅생존-핫리로드까지 완주했다([selfHost/fullStackProbe](../../../tests/attempts/selfHost/fullStackProbe.html) 8/8). 서빙된 웹앱이 커널 페이지 밖 문서(iframe)에서도 20ms에 산다([runtimeParity/originFidelityProbe](../../../tests/attempts/runtimeParity/originFidelityProbe.html) 7/7). "OS에서 서버도 웹도 개발 가능한가"의 답은 **가능하다, 실측으로**.
 
 ## 심판 A: OS 점수표 (교과서 10축, 리눅스급 = 10)
 

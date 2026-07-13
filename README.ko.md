@@ -145,7 +145,7 @@ console.log(rt.run("len(values)"));           // 3
 - **upstream 대기**(지금 막혔으나 다시 열림): 네이티브 C 확장 wheel(Emscripten 정적 빌드 / WebAssembly 컴포넌트 모델), GPU(WebGPU), 진짜 threading.
 - **웹 보안상 영구 벽**: 임의 인바운드 연결과 임의 네이티브 바이너리는 외부 릴레이나 에이전트가 필요하다.
 
-축별 격차는 [local-parity](mainPlan/local-parity/README.md)가 추적한다.
+축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md)가 추적한다.
 
 ## 보안 모델
 
@@ -167,7 +167,7 @@ Pyodide  Workers
  Snapshot / Journal / Restore
 ```
 
-네 프리미티브가 건전성을 만든다: 실행 경계마다 완전 힙 해시(샘플링은 변화를 놓쳐 복원을 오염시킨다), 결정적 부팅(바이트 동일 base라 델타만 이동하면 된다), 스냅샷-fork, 엔진 seam(같은 프리미티브가 non-Pyodide CPython 3.14에서도 돌아 Pyodide 내부에 안 묶임을 증명). 상세 설계는 [mainPlan](mainPlan/README.md), 축별 격차는 [local-parity](mainPlan/local-parity/README.md).
+네 프리미티브가 건전성을 만든다: 실행 경계마다 완전 힙 해시(샘플링은 변화를 놓쳐 복원을 오염시킨다), 결정적 부팅(바이트 동일 base라 델타만 이동하면 된다), 스냅샷-fork, 엔진 seam(같은 프리미티브가 non-Pyodide CPython 3.14에서도 돌아 Pyodide 내부에 안 묶임을 증명). 상세 설계는 [mainPlan](mainPlan/README.md), 축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md).
 
 ## 벤치마크
 

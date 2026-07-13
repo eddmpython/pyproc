@@ -1,6 +1,6 @@
 # runtimeParity - 런타임을 로컬 파이썬급으로 (개념 캠페인 하나 = 카테고리 하나)
 
-로컬 parity 발명([mainPlan/local-parity](../../../mainPlan/local-parity/README.md))의 실측 레인. 세부 질문은 **폴더가 아니라 probe 파일로** 늘린다. 이 캠페인이 끝날 때까지 이 폴더 하나에서 운영한다.
+로컬 parity 발명([mainPlan/_done/local-parity](../../../mainPlan/_done/local-parity/README.md))의 실측 레인. 세부 질문은 **폴더가 아니라 probe 파일로** 늘린다. 이 캠페인이 끝날 때까지 이 폴더 하나에서 운영한다.
 
 ## 가설
 

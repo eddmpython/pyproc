@@ -3,7 +3,7 @@
 // 뒤로 격리한다. 상위(Runtime/MemoryCapability/능력)는 계약만 보고 `_module.HEAPU8`,
 // `globals`, `_emscripten_stack_*` 같은 엔진 내부를 직접 만지지 않는다.
 // 승격 근거: tests/attempts/engineContract/contractProbe 8/8 - reactive 시간여행이 이 계약
-// 표면만으로 성립(엔진 내부 직접 접근 0). 정본: mainPlan/engine-independence(P1 seam).
+// 표면만으로 성립(엔진 내부 직접 접근 0). 정본: mainPlan/_done/engine-independence(P1 seam).
 //
 // 엔진 독립 설계: 각 메서드에 "다른 엔진(WASI CPython)이 어떻게 구현하나"를 명시해 계약이
 // Pyodide 어휘로 굳지 않게 한다. FFI(프록시)에 기대는 값 다리는 계약상 "직렬화 가능 값"이
