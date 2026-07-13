@@ -21,6 +21,6 @@
 
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
-| (없음) | | 활성 이니셔티브 0. 완결 이니셔티브는 [_done/](_done/README.md) 보관 목록. 새 작업은 새 이니셔티브 개설부터. |
+| [numerical-acceleration/](numerical-acceleration/) | PRD 수립, Phase 1 착수 대기 (2026-07-13) | 브라우저 파이썬의 마지막 큰 격차인 수치 연산 속도(numpy 86배)를 뚫는다. horizontal 샤딩(제품) -> GPU 잔류 레인(프론티어) -> SIMD 흡수. |
 
-착수 시점(2026-07-11~13)의 4개 이니셔티브(web-python-runtime, local-parity, browser-os, engine-independence)는 전부 완결되어 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 `_done/web-python-runtime/03-progress-ledger.md`의 결정 원장이다.
+앞선 4개 이니셔티브(web-python-runtime, local-parity, browser-os, engine-independence)는 완결되어 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README다.

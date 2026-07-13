@@ -51,12 +51,12 @@ pyproc은 이 계층을 **한 번 제대로 만들어 버전 고정으로 공유
 
 North Star("로컬에서 되는 모든 파이썬을 브라우저에서")는 방향이다. 각 능력은 아래 네 상태 중 하나에 있고, pyproc의 일은 위 칸으로 밀어 올리는 것과 upstream이 벽을 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다. "불가능"은 현재 조건 판정이지 포기가 아니다. 축별 실측 좌표의 정본은 관련 이니셔티브의 실측 원장이다.
 
-1. **현재 달성 (오늘 브라우저 실측)**: 순수 파이썬 + Pyodide 빌드 패키지, 멀티코어 프로세스/스냅샷-fork/map, 체크포인트/시간여행, 세션 영속·부활, 터미널, 커널 내 ASGI, 영속 FS(OPFS), input/HTTP/subprocess, 프로세스 OS 전반(파이프/shm/락, 잡 컨트롤, 커널 선출, 머신 컨테이너, 권한 감옥, fsWorld), non-Pyodide WASI CPython 3.14.6 부팅 + 순수 파이썬 wheel 설치. **정적 링크 C 확장도 이미 실행**(`_struct`/`array`/`math` 등 stdlib C 모듈이 브라우저 위 진짜 C 코드로 돈다). "C 확장 불가"는 틀렸다 - **동적만 불가, 정적은 이미 됨.**
-2. **우회 가능 (브라우저 방식으로 가상화, 실측)**: 아웃바운드 소켓(`SocketBridge`가 WS->TCP 릴레이에 파이썬 socket을 심어 urllib http+https), 서버(`AsgiServer`/`VirtualOrigin`으로 TCP listen을 진짜 URL로), 프로세스(워커 커널). **네이티브 패키지(numpy 등)는 정적 fat 바이너리로 이 경로에 오른다**(C 소스를 wasi-sdk로 정적 링크해 python.wasm builtin으로. 빌드 경로 확정, 아티팩트는 CI 단계 = 프론티어).
-3. **upstream 대기 (지금 막혔으나 플랫폼 발전으로 다시 열림)**: 동적 C확장 로딩(.so dlopen = 임의 wheel 즉시 설치, PEP 783 pyemscripten 휠 / WebAssembly 컴포넌트 모델), GPU(WebGPU 산술), 진짜 threading/nogil(WASM threads + 공유 메모리). 정적 fat 빌드가 있으면 동적 로딩은 없어도 되지만, 임의 패키지 즉시 설치는 이게 열려야 한다.
-4. **웹 보안상 영구 벽 (외부 조각 없이는 불가)**: 인바운드 서버(탭이 공개 인터넷의 서버 = 역터널 릴레이 필요), 임의 네이티브 바이너리 실행(`/bin/ls`, ssh 클라이언트), 로컬 드라이버 직접(CUDA), 데스크톱 자동화(pyautogui/xlwings). 이 몫은 소비 제품의 로컬/Actions 티어가 진다.
+1. **현재 달성 (오늘 브라우저 실측)**: 순수 파이썬 + **네이티브 C확장 패키지**(numpy/pandas/scipy/scikit-learn/matplotlib 등 - Pyodide 배포판의 pyemscripten(PEP 783) 휠 158개를 dlopen으로 로드 = 이미 실동), 멀티코어 프로세스/스냅샷-fork/map, 체크포인트/시간여행, 세션 영속·부활, 터미널, 커널 내 ASGI, 영속 FS(OPFS), input/HTTP/subprocess, 프로세스 OS 전반(파이프/shm/락, 잡 컨트롤, 커널 선출, 머신 컨테이너, 권한 감옥, fsWorld), non-Pyodide WASI CPython 3.14.6 부팅 + 순수 파이썬 wheel 설치. **Pyodide는 동적 C확장 .so를 dlopen한다** - "동적 C확장 불가"는 WASI 레인 한정이었다(Pyodide 레인은 됨).
+2. **우회 가능 (브라우저 방식으로 가상화, 실측)**: 아웃바운드 소켓(`SocketBridge`), 서버(`AsgiServer`/`VirtualOrigin`), 프로세스(워커 커널). **GPU 수치 가속**(WebGPU 컴퓨트 - 워커 접근 + JSPI 동기 구동, 선행자 WgPy가 Pyodide 위 matmul 340배 실측. f32 대규모 선형대수라는 좁은 계급에서 오늘 됨. numpy 투명 가속은 아니고 별도 배열 API). numpy를 WASI 정적 fat 바이너리로 빌드하는 경로도 있으나(빌드 확정) **속도 이득 없음, 오히려 느림**(참조 BLAS + no-SIMD, WASI 값 다리 JSON 한정) = 커버리지 실험이지 속도 경로 아님.
+3. **upstream 대기 (지금 막혔으나 플랫폼 발전으로 다시 열림)**: **임의 C확장 즉시 설치**(Pyodide dlopen은 되나 그 패키지의 pyemscripten 휠이 발행돼야 = PEP 783 생태계 채택 ~28개, ABI 락스텝. 대다수 긴 꼬리는 미발행), WASI 동적 링킹(cpython#142234), **numpy SIMD 빌드**(Pyodide가 아직 SIMD로 안 빌드 = 2-4배 대기), 진짜 threading/nogil(WASM threads + 공유 메모리, PR #6285 draft).
+4. **웹 보안상 영구 벽 (외부 조각 없이는 불가)**: 인바운드 서버, 임의 네이티브 바이너리 실행, 로컬 드라이버 직접(CUDA), 데스크톱 자동화. 이 몫은 소비 제품의 로컬/Actions 티어가 진다.
 
-정정(정직): 이전 판의 "네이티브 휠은 브라우저에서 영원히 불가"는 틀렸다. 정적 링크는 이미 실행되고(상태 1), numpy 정적 빌드는 경로가 확정됐으며(상태 2), 동적 로딩만 upstream 대기(상태 3)다. 영구 벽은 인바운드 서버·임의 네이티브 바이너리·데스크톱 조작(상태 4)이다.
+정정(정직, 2026-07-13 연구 종합): (1) 네이티브 수치 패키지 **가용성은 이미 해결**(numpy 등 158 휠 dlopen). (2) "동적 C확장 불가"는 WASI 한정 - Pyodide는 dlopen을 한다. (3) 진짜 남은 벽은 **속도**(numpy 대규모 산술 86배 느림 = 이 격차가 다음 도약. 경로: [mainPlan numerical-acceleration](../../mainPlan/numerical-acceleration/README.md) = horizontal 샤딩 + GPU 잔류 레인)와 **임의 패키지 커버리지**(pyemscripten 휠 생태계 채택). (4) GPU는 상태2로 정정(오늘 라이브러리로 됨, 이전 판의 상태3은 stale).
 
 ## 지원 경계 (Chromium/Edge 전용)
 
