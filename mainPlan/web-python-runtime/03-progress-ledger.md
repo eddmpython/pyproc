@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 세 벽 리서치(C확장/소켓/자동성장) + 벽3 착수 - non-Pyodide CPython 3.14.6 부팅 + 3.12 동결 진단
+
+- "두 벽(C확장/소켓)을 깔끔히 뚫을 방법 + 파이썬과 함께 자라는 개념"에 전문 에이전트 3종(웹 리서치, 2026 실태 그라운드)으로 답을 갈았다. 관통 인사이트: 세 벽 모두 이미 지불한 값(엔진 무관 seam) 위에서 풀린다.
+- **벽1 C 확장 - 정적 fat 바이너리가 유일한 깨끗한 절단.** numpy를 wasm32-wasi CPython에 정적 링크(`PyImport_AppendInittab`, 2023 BuiltinImporter 네임스페이스 수정으로 numpy import 확인)하면 Pyodide+Emscripten **둘 다** 떼고 우리 워커에 그대로. 대가: 빌드 소유(wasi-sdk) + 고정 스택 + ~20MB. "런타임 dlopen"은 vaporware(WASI 표준 dlopen 없음, 2025-12 CPython 플래그는 빌드 설정만 열음), PEP 783 pyemscripten 휠은 표준화됐으나(2026-04 PyPI) Emscripten 툴체인을 못 뗌. WASIX(Wasmer)는 진짜 dlopen이나 Wasmer 런타임 종속.
+- **벽2 소켓 - 어려운 절반은 이미 우리 것.** 블로킹 소켓 over 비동기 전송 = JSPI+Atomics.wait(이미 보유). "진짜 소켓" = syscallBridge에 전송 배선. BSD 소켓 층에서 가로챈다(탭 안 TCP/IP 스택은 덕지덕지, 기각). 아웃바운드 진짜 TCP/UDP = WebSocket + 얇은 Wisp 릴레이(~100-300줄, 교체 가능, epoxy-tls로 탭 내 TLS). **인바운드는 확정 물리 벽**(SW=같은 브라우저, WebRTC=시그널링, WT/WS=클라 개시): 최소 = 역터널 릴레이("탭용 ngrok"). Direct Sockets는 relay-free 리스너지만 IWA/ChromeOS 게이트.
+- **벽3 자동성장 - 착수. 살아있는 결함 진단**: 우리 WASI 소스(VMware WLR python-3.12.0)가 2023-12 이후 죽어 WASI 레인이 3.12에 2.5년 동결(Pyodide는 3.14). 살아있는 소스 = brettcannon/cpython-wasi-build(3.14.6/3.15β, 업스트림 당일 추적, 메인테이너 = PEP 816 + `Tools/wasm/wasi.py` 저자). 자동성장 = 버전 템플릿 핀 + SHA256 + engine-watch CI(감지->결정적 게이트->green이면 후보 Issue, 봇 머지 없음 = main 전용 준수). 소버린 폴백 = `Tools/wasm/wasi.py` 자체 빌드.
+- **벽3 실측**([wasiUpgradeProbe](../../tests/attempts/enginePort/README.md), RED 7/9): brettcannon **3.14.6이 브라우저에서 부팅 79ms**(WLR은 stdlib baked-in 단일 wasm, brettcannon은 python.wasm + 외부 stdlib라 `/lib/python3.14` loose 파일 preopen + `PYTHONHOME=/`로 이전. zlib 부재라 stdlib zip은 JS DecompressionStream으로 언집). **부팅/버전/stdlib/결정성/체크포인트 성립 = 동결 해제.** 그러나 **전체-힙 시간여행 복원이 트랩**(`memory access out of bounds`): WLR 3.12는 살고 3.14.6은 죽는다. wasm이 `memory`/`_start`만 export(레이아웃 심볼 없음), global 0 파싱으로 heapBase=16MB 얻어 heap-only 복원해도 트랩(_PyRuntime 정적데이터+힙+라이브스택 삼자 정합). **시간여행의 버전 이식 = 스택 인지 복원이 필요한 깊은 엔진 연구**(Agent가 예측한 "게이트가 per-version 비호환을 노출"의 실체). src 이전은 이 해결 전까지 보류(wasiGate 시간여행 회귀 방지).
+- **순서 확정**: 벽3(자동성장, 가장 쌈 + 동결 해제 + 나머지 토대) -> 벽1(정적 fat) -> 벽2(Wisp 릴레이). 소비자 조율 불요(pyproc이 세우면 dartlab이 따른다).
+
 ### 2026-07-13 WASI 위 패키지 생태계 - "진짜 파이썬"이 stdlib를 넘었다 (구조 337 + WASI 게이트 9/9)
 
 - 목표("Pyodide를 떼고 진짜 파이썬이 굴러갈 수준")의 다음 벽을 뚫었다. WASI CPython은 부팅/결정성/반복실행/값프로토콜/완전 시간여행까지 실증됐지만 거기서 도는 건 stdlib뿐이었다. "그 수준"(Pyodide 급)과의 최대 간극 = **패키지**. `2+2`는 돌지만 `import`가 안 되면 그 수준이 아니다.

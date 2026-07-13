@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<!--
+결과(append): brettcannon CPython 3.14.6(WASI) 부팅 = 죽은 WLR 3.12 소스 이전의 실측.
+자동 성장 명제("seam + 결정적 게이트 = 새 CPython으로 성장")를 실제 새 바이너리로 검증한다.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: wasiUpgrade 3.14.6</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: non-Pyodide CPython 3.14.6 부팅 (WLR 3.12 -> brettcannon 소스 이전)</h1>
+<p>죽은 WLR(python-3.12.0, 2023) 대신 살아있는 brettcannon 빌드(3.14.6, stdlib 외부)를 부팅한다.
+stdlib를 /lib/python3.14로 마운트(PYTHONHOME=/). 기존 결정적 게이트 축(부팅·결정성·시간여행)이
+새 바이너리에서 그대로 green이면 "엔진 무관 코어 = 자동 성장" 명제가 실측으로 참이 된다. 자산 없으면 SKIP.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { unzipWheel } from "../../../src/runtime/engines/wasi/wheelUnzip.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  class Repl {
+    constructor(worker, ctl, data) { this.worker = worker; this.ctl = ctl; this.data = data; this.queue = []; this.idle = false; this.cur = null; this.lines = []; worker.addEventListener("message", (e) => this._on(e.data)); }
+    _on(m) {
+      if (m.type === "idle") { this.idle = true; this._pump(); }
+      else if (m.type === "meta") { const c = this.cur; this.cur = null; if (c) c.resolve(m); this._pump(); }
+      else if (m.type === "out") {
+        if (m.line === "\x04") { const r = this.lines; this.lines = []; const c = this.cur; this.cur = null; if (c) c.resolve(r.join("\n")); this._pump(); }
+        else this.lines.push(m.stream === "stderr" ? "[stderr] " + m.line : m.line);
+      }
+    }
+    exec(code, t = 20000) { const b = new TextEncoder().encode(code); const p = new Uint8Array(1 + b.length); p[0] = 1; p.set(b, 1); return this._send(p, t); }
+    checkpoint(t = 20000) { return this._send(new TextEncoder().encode("\x00checkpoint"), t); }
+    restore(i, t = 20000) { return this._send(new TextEncoder().encode("\x00restore " + i), t); }
+    _send(payload, t) { return new Promise((resolve) => { const item = { payload, resolve }; this.queue.push(item); this._pump(); setTimeout(() => { if (this.cur === item) { this.cur = null; resolve("__TIMEOUT__"); } else { const i = this.queue.indexOf(item); if (i >= 0) { this.queue.splice(i, 1); resolve("__TIMEOUT__"); } } }, t); }); }
+    _pump() { if (!this.idle || this.cur || !this.queue.length) return; this.cur = this.queue.shift(); this.idle = false; const b = this.cur.payload; this.data.set(b); Atomics.store(this.ctl, 1, b.length); Atomics.store(this.ctl, 0, 1); Atomics.notify(this.ctl, 0); }
+  }
+
+  const boot = async (wasmBytes, stdlibFiles, deterministic) => {
+    const w = new Worker(new URL("./wasiUpgradeWorker.js", import.meta.url), { type: "module" });
+    const ctl = new Int32Array(new SharedArrayBuffer(8));
+    const data = new Uint8Array(new SharedArrayBuffer(1 << 20));
+    const repl = new Repl(w, ctl, data);
+    repl.log = []; repl.exportsInfo = "";
+    w.addEventListener("message", (e) => { const m = e.data; if (m.type === "out") repl.log.push(m.stream + ":" + m.line); else if (m.type === "exited") repl.log.push("EXITED"); else if (m.type === "bootError") repl.log.push("BOOTERR:" + m.error); else if (m.type === "exports") repl.exportsInfo = "heapBase=" + m.heapBase + " keys=" + JSON.stringify(m.keys); });
+    w.addEventListener("error", (e) => repl.log.push("WORKERERR:" + (e.message || e)));
+    await new Promise((res, rej) => {
+      const onReady = (e) => { if (e.data.type === "ready") { w.removeEventListener("message", onReady); res(); } else if (e.data.type === "bootError") { w.removeEventListener("message", onReady); rej(new Error(e.data.error)); } };
+      w.addEventListener("message", onReady);
+      w.postMessage({ type: "boot", deterministic, wasmBytes: wasmBytes.slice(0), stdlibFiles, ctlSab: ctl.buffer, dataSab: data.buffer });
+    });
+    return { worker: w, repl };
+  };
+
+  try {
+    const wasmResp = await fetch("./python-3.14.6.wasm");
+    const zipResp = await fetch("./python314-stdlib.zip");
+    if (!wasmResp.ok || !zipResp.ok) { check("SKIP: 3.14.6 자산 없음(README 레시피로 재현)", true); await report(); throw new Error("__skip__"); }
+    const wasmBytes = await wasmResp.arrayBuffer();
+    let tu = performance.now();
+    const stdlibFiles = await unzipWheel(await zipResp.arrayBuffer()); // JS 측 DecompressionStream(파이썬 zlib 부재 우회)
+    timings.unzipMs = Math.round(performance.now() - tu);
+    check("stdlib zip 언집(JS DecompressionStream, 파이썬 zlib 부재 우회)", stdlibFiles.length > 400, `${stdlibFiles.length}개 파일, ${timings.unzipMs}ms`);
+
+    // 0) 부팅 + 버전: non-Pyodide CPython 3.14.6이 브라우저에서 부팅한다(WLR 3.12 동결 해제)
+    let t = performance.now();
+    const a = await boot(wasmBytes, stdlibFiles, false);
+    timings.bootMs = Math.round(performance.now() - t);
+    const ver = await a.repl.exec("import sys\nprint(sys.version.split()[0])");
+    check("brettcannon CPython 3.14.6 부팅(WLR 3.12 소스 이전)", ver.trim() === "3.14.6", `version="${ver.trim()}", 부팅 ${timings.bootMs}ms, exports[${a.repl.exportsInfo}]`);
+
+    // 1) stdlib 실동작(마운트된 loose 파일을 shim readdir로 import)
+    const std = await a.repl.exec("import json, hashlib, re, collections\nprint(json.dumps({'v':[1,2]}), hashlib.sha256(b'x').hexdigest()[:8], bool(re.match('a.c','abc')))");
+    check("stdlib 실동작(json/hashlib/re, /lib/python3.14 마운트)", std.trim() === '{"v": [1, 2]} 2d711642 True', `"${std.trim()}"`);
+    a.worker.terminate();
+
+    // 2) 결정적 부팅: 두 3.14.6 커널의 random 스트림 동일(리액티브/리플레이 전제가 새 버전에서도)
+    const [d1, d2] = await Promise.all([boot(wasmBytes, stdlibFiles, true), boot(wasmBytes, stdlibFiles, true)]);
+    const [s1, s2] = await Promise.all([
+      d1.repl.exec("import random\nprint(random.random(), random.random())"),
+      d2.repl.exec("import random\nprint(random.random(), random.random())"),
+    ]);
+    check("결정적 부팅(3.14.6): 두 커널 random 스트림 동일", s1.trim() === s2.trim() && s1.trim().length > 0, `"${s1.trim()}"`);
+    d1.worker.terminate(); d2.worker.terminate();
+
+    // 3) 완전 시간여행(3.14.6): 체크포인트 -> 변이 -> 복원 -> 재개 -> 분기.
+    //    진단: 성장 없는 변이로 격리한다(3.12는 10MB, 3.14는 40MB 힙 = 성장 경로 차이 의심).
+    const tt = await boot(wasmBytes, stdlibFiles, false);
+    await tt.repl.exec("state = {'v': 100}");
+    const cp = await tt.repl.checkpoint();
+    check("시간여행 체크포인트(3.14.6)", cp && cp.kind === "checkpoint" && cp.idx === 0, cp ? `idx=${cp.idx}, ${cp.mb}MB` : "실패");
+    const mut = await tt.repl.exec("state['v'] = 200\nprint('mutated', state['v'])"); // 성장 없는 변이
+    check("변이(성장 없음)", mut.trim() === "mutated 200", `"${mut.trim()}"`);
+    const rr = await tt.repl.restore(0);
+    check("restore 반환(3.14.6)", rr && rr.kind === "restore", rr ? `idx=${rr.idx}` : `반환=${JSON.stringify(rr)}`);
+    const after = await tt.repl.exec("print(state['v'])");
+    check("시간여행 복원 후 재개(3.14.6): 체크포인트 상태로", after.trim() === "100", after === "__TIMEOUT__" ? `TIMEOUT / 워커로그: ${tt.repl.log.slice(-4).join(" || ")}` : `"${after.trim()}"`);
+    await tt.repl.exec("state['v'] = 999");
+    const br = await tt.repl.exec("print(state['v'])");
+    check("복원 후 분기(3.14.6)", br.trim() === "999", `"${br.trim()}"`);
+    tt.worker.terminate();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

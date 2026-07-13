@@ -17,6 +17,8 @@ reactive를 이 엔진 위에서(엔진 무관성의 최종 증명).
   `curl -sL "https://cdn.jsdelivr.net/npm/@bjorn3/browser_wasi_shim@0.4.2/+esm" -o browserWasiShim.js`
 - `pythonWasi.wasm` = WLR CPython 3.12.0 단일 파일(stdlib 내장 26MB, PSF/Apache-2.0, .gitignore로 미추적):
   `curl -sL -o pythonWasi.wasm "https://github.com/vmware-labs/webassembly-language-runtimes/releases/download/python%2F3.12.0%2B20231211-040d5a6/python-3.12.0.wasm"`
+- `python-3.14.6.wasm` + `python314-stdlib.zip` = brettcannon/cpython-wasi-build(살아있는 소스, 3.14.6, python.wasm 30MB + 외부 stdlib, .gitignore로 미추적). 재현: 릴리즈 zip을 받아 `python.wasm`을 `python-3.14.6.wasm`으로, `lib/python3.14/` 내용을 deflate zip으로 묶어 `python314-stdlib.zip`(모듈이 zip 루트).
+  `curl -sL -o cpy.zip "https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.6/python-3.14.6-wasi_sdk-24.zip"` 후 압축 해제 + `python -c "import zipfile,os; ..."`(모듈을 zip 루트로 재압축).
 
 ## 졸업 게이트
 
@@ -31,6 +33,7 @@ reactive를 이 엔진 위에서(엔진 무관성의 최종 증명).
 |---|---|---|---|---|---|
 | 2026-07-12 | wasiBootProbe | Edge headless, 로컬 COOP+COEP | GREEN 6/6. WLR CPython 3.12(WASI) 워커 부팅+print 253ms(Pyodide 콜드 ~3s 대비 빠름), exports.memory(heapU8 등가) 접근, json/sys 동작, **결정적 부팅 = 두 커널 파이썬 가시 상태 바이트 동일**(비결정 대조로 확인) | **"Pyodide를 뗀다"가 실측이 됐다.** 계약 코어 2축(선형 메모리 + 결정적 부팅)이 non-Pyodide에서 성립. WASI는 엔트로피가 import 2개로 수렴 = 더 깨끗한 결정성 | 값 프로토콜, 반복 실행, reactive 이식 |
 | 2026-07-12 | wasiReplProbe | Edge headless, 로컬 COOP+COEP | GREEN 12/12. 반복 실행(상태 유지), 값 프로토콜 양방향(get/set, FFI 없이), 결정적 부팅+반복 실행, **엔진 선형 메모리 위 완전 시간여행**(체크포인트 10MB -> 변이 v=200/big 2MB -> 복원 -> 복원 후 파이썬이 정확히 체크포인트 상태 v=100으로 재개 -> 분기 v=999) | **pyproc 프리미티브(반복 실행/값 다리/완전 시간여행)가 non-Pyodide 위에서 완전히 성립.** 파이썬 엔진은 pyproc 소유(wasiReplDriver.py). 돌파한 벽 4(compile 스택/UTF-8 argv/Fd 초기화/**완전 상태복귀**) | WasiEngine 승격 |
+| 2026-07-13 | wasiUpgradeProbe | Edge headless, 로컬 COOP+COEP | RED 7/9(부분 성립). **brettcannon CPython 3.14.6 부팅 79ms**(죽은 WLR 3.12 소스 이전), stdlib를 `/lib/python3.14` loose 파일 preopen으로 마운트(shim readdir 서빙, zlib 부재라 JS DecompressionStream으로 언집), **결정적 부팅 성립**(두 3.14.6 커널 random 스트림 동일), **체크포인트 성립**(40MB). 그러나 **시간여행 복원 후 재개가 트랩**(`RuntimeError: memory access out of bounds`) | **소스 이전의 코어는 성립(부팅/버전/stdlib/결정성/체크포인트) = 3.12 동결 해제.** 그러나 WASI 전체-힙 시간여행 복원이 WLR 3.12에선 살아남고 3.14.6에선 트랩. wasm이 `memory`/`_start`만 export(레이아웃 심볼 없음), global 0 파싱으로 heapBase=16MB 얻어 heap-only 복원 시도했으나 여전히 트랩(_PyRuntime 정적 데이터 + 힙 + 라이브 스택 삼자 정합 문제). 시간여행의 버전 이식은 깊은 엔진 연구 = per-version 실작업 | 스택 인지 복원(정적+힙 복원, 라이브 스택 보존) 캠페인. 그때까지 src 이전 보류(wasiGate 시간여행 회귀 방지) |
 
 ## 돌파한 벽 (실측으로 특정 + 해결)
 

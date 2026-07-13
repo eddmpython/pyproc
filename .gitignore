@@ -18,6 +18,7 @@ scratch/
 # src의 vendored shim(browser_wasi_shim)은 라이선스 고지(LICENSE.browserWasiShim) 후 추적한다.
 # enginePort probe의 자산만 미추적(실험 레인).
 tests/attempts/enginePort/*.wasm
+tests/attempts/enginePort/*.zip
 tests/attempts/enginePort/browserWasiShim.js
 tests/browser/*.wasm
 # wasiPackages probe의 순수 파이썬 wheel(재현: pip download, README 레시피). 레포 자산 0.
