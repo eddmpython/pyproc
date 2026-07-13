@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<!--
+결과(append): P2 kernelElection - OS가 탭 죽음에서 생존한다. iframe 3개 = 탭 3개가 Web Locks로
+리더 하나를 뽑고, 리더만 커널(bootSession + 저널)을 부팅한다. 나머지는 BroadcastChannel RPC 뷰다.
+리더 iframe 제거 = 탭 죽음 -> 락 자동 해제 -> 팔로워 승격 -> 저널 resume. 게이트: 3탭 RPC 정합,
+lock 자동 해제, failover < 5s + 상태 생존(저널), RPC 왕복 p50 < 3ms.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: kernelElection</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: kernelElection (P2 - OS가 탭 죽음에서 산다)</h1>
+<pre id="out">실행 중...</pre>
+<div id="tabs"></div>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const qs = indexParam ? "?indexURL=" + encodeURIComponent(indexParam) : "";
+  const KNAME = "electProbe";
+  const JOURNAL = "pyprocElectJournal";
+
+  // iframe(탭) 관리. 각 탭에 postMessage로 명령하고 reqId로 응답을 상관한다.
+  const tabs = new Map(); // tabId -> { frame, pending: Map, leaderEvents: [] }
+  const leaderAnnouncements = [];
+  let seq = 0;
+  window.addEventListener("message", (e) => {
+    const m = e.data;
+    if (!m || m.from !== "kernelTab") return;
+    if (m.event === "leader") { leaderAnnouncements.push({ id: m.id, recovered: m.recovered, t: performance.now() }); return; }
+    if (m.reqId != null) {
+      for (const [, tab] of tabs) { const p = tab.pending.get(m.reqId); if (p) { tab.pending.delete(m.reqId); p(m); break; } }
+    }
+  });
+
+  function makeTab(tabId) {
+    return new Promise((resolve) => {
+      const frame = document.createElement("iframe");
+      frame.style.width = frame.style.height = "1px";
+      const pending = new Map();
+      tabs.set(tabId, { frame, pending });
+      // ready 이벤트를 한 번 받으면 resolve. kernelTab이 로드되면 ready를 쏜다.
+      const onReady = (e) => { if (e.data && e.data.from === "kernelTab" && e.source === frame.contentWindow) { window.removeEventListener("message", onReady); resolve(); } };
+      window.addEventListener("message", onReady);
+      frame.src = "kernelTab.html" + qs;
+      document.getElementById("tabs").appendChild(frame);
+    });
+  }
+  function cmd(tabId, payload) {
+    const tab = tabs.get(tabId);
+    if (!tab) return Promise.reject(new Error("no tab " + tabId));
+    const reqId = "r" + (++seq);
+    return new Promise((resolve, reject) => {
+      tab.pending.set(reqId, (m) => (m.ok ? resolve(m) : reject(new Error(m.error))));
+      tab.frame.contentWindow.postMessage({ to: "kernelTab", tabId, reqId, ...payload }, "*");
+    });
+  }
+  const waitFor = async (pred, timeoutMs, stepMs = 150) => {
+    const dl = performance.now() + timeoutMs;
+    while (performance.now() < dl) { const v = pred(); if (v) return v; await new Promise((r) => setTimeout(r, stepMs)); }
+    return null;
+  };
+
+  try {
+    // OPFS 저널 초기화(이전 실행 잔재 제거).
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry(JOURNAL, { recursive: true }); } catch (e) {}
+
+    // 1) 탭 3개 생성 + 선출 참여.
+    await Promise.all([makeTab("A"), makeTab("B"), makeTab("C")]);
+    await Promise.all(["A", "B", "C"].map((id) => cmd(id, { cmd: "join", name: KNAME, journalName: JOURNAL, tabId: id })));
+
+    // 2) 리더 하나가 선출됐는가(락은 배타 = 정확히 하나).
+    let t = performance.now();
+    const firstLeader = await waitFor(() => leaderAnnouncements[0], 15000);
+    timings.leaderBootMs = firstLeader ? Math.round(firstLeader.t - t) : -1;
+    check("Web Locks 선출: 리더 정확히 하나", leaderAnnouncements.length === 1 && !!firstLeader,
+      firstLeader ? `리더=${firstLeader.id}, ${timings.leaderBootMs}ms` : "리더 없음");
+    const leaderId = firstLeader ? firstLeader.id : null;
+    const followers = ["A", "B", "C"].filter((id) => id !== leaderId);
+
+    // 3) 3탭 RPC 정합: 팔로워가 리더 커널에 상태를 쓰고, 다른 팔로워가 읽는다(여러 탭 = 한 상태).
+    await cmd(followers[0], { cmd: "run", code: "x = 41", tabId: followers[0] });
+    const readBack = await cmd(followers[1], { cmd: "run", code: "x + 1", tabId: followers[1] });
+    check("3탭 RPC 정합: 여러 탭 = 한 파이썬 상태", readBack.result === 42, `follower ${followers[1]} sees x+1=${readBack.result}`);
+
+    // 4) RPC 왕복 p50: 팔로워에서 소요청 30회.
+    const rpcTimes = [];
+    for (let i = 0; i < 30; i++) { const t0 = performance.now(); await cmd(followers[0], { cmd: "run", code: "1 + 1", tabId: followers[0] }); rpcTimes.push(performance.now() - t0); }
+    timings.rpcP50Ms = +rpcTimes.sort((a, b) => a - b)[15].toFixed(2);
+    check("RPC 왕복 p50 < 3ms(BroadcastChannel)", timings.rpcP50Ms < 3, `p50 ${timings.rpcP50Ms}ms, p90 ${rpcTimes[27].toFixed(2)}ms`);
+
+    // 5) 저널 커밋(failover 생존 경계) + 리더 탭 죽음.
+    await cmd(leaderId, { cmd: "commit", tabId: leaderId });
+    const killT = performance.now();
+    tabs.get(leaderId).frame.remove(); // 탭 죽음 = 컨텍스트 파괴 = 락 자동 해제
+    tabs.delete(leaderId);
+
+    // 6) failover: 팔로워가 승격(<5s) + 저널 resume으로 상태 생존.
+    const newLeader = await waitFor(() => leaderAnnouncements.find((a) => a.id !== leaderId), 6000);
+    timings.failoverMs = newLeader ? Math.round(newLeader.t - killT) : -1;
+    check("failover: lock 자동 해제 -> 팔로워 승격 < 5s", !!newLeader && timings.failoverMs < 5000,
+      newLeader ? `새 리더=${newLeader.id}, ${timings.failoverMs}ms, recovered=${newLeader.recovered}` : "승격 없음");
+
+    // 7) 상태 생존: 새 리더가 저널에서 resume했으므로 x가 산다(재실행 아님).
+    const survivor = ["A", "B", "C"].find((id) => id !== leaderId && tabs.has(id));
+    const afterFailover = await cmd(survivor, { cmd: "run", code: "x", tabId: survivor, timeoutMs: 8000 }).catch((e) => ({ result: "ERR:" + e.message }));
+    check("failover 상태 생존: 저널 resume으로 x=41", afterFailover.result === 41 && newLeader && newLeader.recovered === true,
+      `x=${afterFailover.result}, recovered=${newLeader ? newLeader.recovered : "n/a"}`);
+
+    // 정리.
+    for (const id of ["A", "B", "C"]) if (tabs.has(id)) { try { await cmd(id, { cmd: "leave", tabId: id }); } catch (e) {} }
+    await root.removeEntry(JOURNAL, { recursive: true }).catch(() => {});
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

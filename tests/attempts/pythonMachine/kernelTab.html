@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!-- kernelElectionProbe의 "탭" 하나. iframe으로 N개 띄우면 N개 탭이 된다. 부모 probe가
+     postMessage로 join/run/commit/leave를 지시하고, 리더 승격은 이 페이지가 부모로 알린다. -->
+<html lang="ko"><head><meta charset="utf-8"><title>kernel tab</title></head>
+<body>
+<script type="module">
+  import { KernelElection } from "../../../index.js";
+  const parent = window.parent;
+  const post = (m) => parent.postMessage({ from: "kernelTab", ...m }, "*");
+  let el = null;
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  window.addEventListener("message", async (e) => {
+    const msg = e.data;
+    if (!msg || msg.to !== "kernelTab") return;
+    try {
+      if (msg.cmd === "join") {
+        const root = await navigator.storage.getDirectory();
+        const journalDir = await root.getDirectoryHandle(msg.journalName, { create: true });
+        el = new KernelElection({
+          name: msg.name,
+          manifest: { indexURL: INDEX },
+          journalDir,
+          onLeader: ({ recovered }) => post({ id: msg.tabId, event: "leader", recovered }),
+        });
+        el.join();
+        post({ id: msg.tabId, reqId: msg.reqId, ok: true, role: el.role() });
+      } else if (msg.cmd === "run") {
+        const r = await el.run(msg.code, { async: !!msg.async });
+        post({ id: msg.tabId, reqId: msg.reqId, ok: true, result: r });
+      } else if (msg.cmd === "commit") {
+        const c = await el.commit();
+        post({ id: msg.tabId, reqId: msg.reqId, ok: true, commit: c });
+      } else if (msg.cmd === "role") {
+        post({ id: msg.tabId, reqId: msg.reqId, ok: true, role: el.role() });
+      } else if (msg.cmd === "leave") {
+        el.leave();
+        post({ id: msg.tabId, reqId: msg.reqId, ok: true });
+      }
+    } catch (err) {
+      post({ id: msg.tabId, reqId: msg.reqId, ok: false, error: String(err).slice(-300) });
+    }
+  });
+  post({ event: "ready" });
+</script>
+</body>
+</html>

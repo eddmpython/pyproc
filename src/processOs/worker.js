@@ -82,6 +82,24 @@ onmessage = async (e) => {
       } finally {
         if (r && typeof r === "object" && r.destroy) r.destroy(); // WASM측 참조 해제(누적 방지)
       }
+    } else if (msg.type === "repl") {
+      // 자유 문장 실행 + stdout 캡처 + 마지막 식 값(REPL/잡 컨트롤 본체). 전역 상태는 누적된다
+      // (대화형 레인). 식이면 값을 repr로, 문장이면 실행만. 잡은 이 위에서 fork된 레인에서 돈다.
+      py.globals.set("_pyprocReplSrc", msg.code);
+      const r = py.runPython(
+        "import io as _pyprocIo, contextlib as _pyprocCtx\n" +
+        "_pyprocBuf = _pyprocIo.StringIO()\n" +
+        "_pyprocVal = None\n" +
+        "with _pyprocCtx.redirect_stdout(_pyprocBuf), _pyprocCtx.redirect_stderr(_pyprocBuf):\n" +
+        "    try:\n" +
+        "        _pyprocVal = eval(compile(_pyprocReplSrc, '<repl>', 'eval'), globals())\n" +
+        "    except SyntaxError:\n" +
+        "        exec(_pyprocReplSrc, globals())\n" +
+        "[_pyprocBuf.getvalue(), None if _pyprocVal is None else repr(_pyprocVal)]",
+      );
+      const [out, value] = r.toJs ? r.toJs() : r;
+      if (r && r.destroy) r.destroy();
+      postMessage({ type: "replResult", id: msg.id, reqId: msg.reqId, out, value });
     } else if (msg.type === "bindIpc") {
       // IPC 배선: SAB 항목들을 이 프로세스의 레지스트리에 등록하고(참조 공유), 파이썬
       // pyprocIpc 모듈을 세운다(1회). 이후 파이썬이 파이프/락/공유메모리를 파일처럼 만진다.

@@ -118,6 +118,14 @@ export class PyProc {
     return this._call(entry, { type: "task", fnSrc, arg }).then((d) => d.result);
   }
 
+  // REPL 실행: 자유 문장 + stdout 캡처 + 마지막 식 값(jobControl/터미널 본체). 전역 상태 누적.
+  // 반환: { out, value }(value = 식의 repr 또는 null). exec와 달리 함수 래핑 없이 raw 실행.
+  repl(pid, code) {
+    const entry = this.table.find((t) => t.pid === pid);
+    if (!entry || entry.state !== "ready") return Promise.reject(new Error(`repl: pid ${pid} 준비되지 않음`));
+    return this._call(entry, { type: "repl", code }).then((d) => ({ out: d.out, value: d.value }));
+  }
+
   // ---- IPC 팩토리(파이프/락/세마포어/공유메모리): 커널이 만들고 bind로 프로세스에 배선한다.
   // SAB라 배선은 참조 공유(복사 0)다. 프로세스 안 파이썬은 pyprocIpc 모듈로 만진다.
   // 커널(메인)측 엔드포인트는 read/write(Atomics.waitAsync) = 커널도 파이프의 한쪽이 될 수 있다.

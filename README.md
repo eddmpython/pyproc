@@ -205,6 +205,8 @@ Capabilities are opt-in - turn on only what you need, and consume the capability
 | `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), `fork(2)` (clone a live process, its variables and arrays travel), and flow IPC (`pipe` / `lock` / `semaphore` / `shm`: SAB ring-buffer pipes with real blocking read and backpressure) |
 | `MachineContainer` | Machine inside a machine: boots a container kernel in a worker with its own package set, exposed to Python as a value (`m.run` / `m.spawn` / `m.kill`); nests (containers inside containers) |
 | `SIGNAL` | POSIX signal numbers for `PyProc.signal(pid, signum)`: real `SIGTERM` / `SIGUSR1` handlers fire inside Python |
+| `JobControl` | Shell job control: `expr &` forks the live interactive namespace onto another core (prompt returns immediately); `%jobs` / `%fg` / `%kill` drive the jobs |
+| `KernelElection` | The OS survives tab death: tabs elect a leader via Web Locks, only the leader boots a kernel, the rest are RPC views; when the leader tab dies a follower is promoted and resumes from the journal |
 | `SharedKernel` | A kernel that outlives the tab (SharedWorker): many tabs, one Python state |
 | `bootWasi` / `WasiSession` | A session on non-Pyodide CPython 3.14 (WASI), proving the primitives are engine-independent: async `run` / `get` / `set`, full time-travel, `installWheel(bytes)` (browser-side pip for pure-Python wheels). Value bridge is JSON-only; C extensions need a static build |
 | `PAGE_SIZE` | WASM page size constant (65536) |

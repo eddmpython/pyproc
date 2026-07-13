@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!--
+결과(append): P3 jobControl - 셸의 &. 브라우저 파이썬에 job control이 존재한 적 없다.
+`expr &`가 대화형 네임스페이스를 살아있는 채로 fork(2)해 딴 코어에서 돌린다. 게이트:
+프롬프트 복귀 < 100ms, 잡 실행 중 대화형 5문장 성공, %fg 결과 회수(fork된 네임스페이스),
+%kill < 200ms.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: jobControl</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: jobControl (P3 - 셸의 &)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { JobControl } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  try {
+    const jc = new JobControl({ indexURL: INDEX, workers: 3 });
+    const info = await jc.boot();
+    check("잡 컨트롤 부팅(대화형 1 + 잡 슬롯 N)", info.jobSlots === 2, `대화형 pid ${info.interactivePid}, 잡 슬롯 ${info.jobSlots}`);
+
+    // 대화형 레인에 상태를 만든다(이 네임스페이스가 잡으로 fork된다).
+    await jc.push("data = list(range(100000))");
+    const rr = await jc.push("len(data)");
+    check("대화형 REPL: 상태 누적 + 식 값", rr.value === "100000", `len(data)=${rr.value}`);
+
+    // 1) `expr &` = 잡. 프롬프트가 즉시 돌아온다(잡은 백그라운드). 잡은 fork된 data를 쓴다.
+    let t = performance.now();
+    const j1 = await jc.push("sum(x * x for x in data) &");
+    timings.promptReturnMs = +(performance.now() - t).toFixed(1);
+    check("프롬프트 복귀 < 100ms(잡은 백그라운드)", timings.promptReturnMs < 100 && j1.job, `job ${j1.job}, ${timings.promptReturnMs}ms`);
+
+    // 2) 잡 실행 중 대화형 5문장 성공(대화형 레인은 잡과 독립 = 반응성 유지).
+    let interactiveOk = 0;
+    for (let i = 0; i < 5; i++) { const r = await jc.push(`${i} * 10`); if (r.value === String(i * 10)) interactiveOk++; }
+    check("잡 실행 중 대화형 5문장 성공", interactiveOk === 5, `${interactiveOk}/5`);
+
+    // 3) %fg: 잡 결과 회수. fork된 네임스페이스(data)로 계산한 값이 정확해야 한다.
+    const expected = String([...Array(100000).keys()].reduce((a, x) => a + x * x, 0));
+    const fg1 = await jc.fg(j1.job);
+    check("%fg: 잡 결과 회수(fork된 네임스페이스로 계산)", fg1.value === expected, `sum(x*x)=${fg1.value}`);
+    check("잡 상태 done", jc.jobs().find((j) => j.jobId === j1.job).state === "done");
+
+    // 4) %kill: 무한 루프 잡을 회수한다(< 200ms). 잡 레인은 살아남아 재사용된다.
+    const j2 = await jc.push("while True:\n    pass &");
+    await new Promise((r) => setTimeout(r, 300)); // 잡이 루프에 진입할 시간
+    t = performance.now();
+    jc.kill(j2.job);
+    const fg2 = await jc.fg(j2.job);
+    timings.killMs = +(performance.now() - t).toFixed(1);
+    check("%kill < 200ms(무한 루프 잡 회수)", fg2.error && jc.jobs().find((j) => j.jobId === j2.job).state === "killed" && timings.killMs < 200,
+      `${timings.killMs}ms, state=${jc.jobs().find((j) => j.jobId === j2.job).state}`);
+
+    // 5) kill 후 잡 슬롯 재사용: 새 잡이 회수된 레인에서 돈다.
+    const j3 = await jc.push("6 * 7 &");
+    const fg3 = await jc.fg(j3.job);
+    check("kill 후 잡 슬롯 재사용", fg3.value === "42", `새 잡 값=${fg3.value}`);
+
+    jc.terminate();
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

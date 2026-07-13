@@ -270,6 +270,79 @@ export class MachineContainer {
   terminate(): void;
 }
 
+export interface JobControlOptions {
+  indexURL?: string;
+  /** 풀 크기(대화형 1 + 잡 슬롯 N-1). 기본 3. */
+  workers?: number;
+  /** 리플레이 매니페스트(fork 대칭의 전제, 기본 {}). */
+  replay?: { env?: Record<string, string>; packages?: string[]; setup?: string };
+}
+
+export interface JobInfo {
+  jobId: number;
+  pid: number;
+  /** running | done | killed | error. */
+  state: string;
+  code: string;
+}
+
+export interface ReplOutcome {
+  /** stdout + stderr 캡처. */
+  out: string;
+  /** 식이면 repr 문자열, 문장이면 null. */
+  value: string | null;
+}
+
+/**
+ * 셸의 잡 컨트롤(P3): `expr &`가 대화형 네임스페이스를 살아있는 채로 fork(2)해 딴 코어에서
+ * 돌린다(프롬프트 즉시 복귀). fork는 워커끼리만 대칭이므로 대화형 REPL도 워커 레인에서 돈다
+ * (PyProc replay 풀 위: 레인 0 = 대화형, 나머지 = 잡 슬롯). %jobs/%fg/%kill로 조종한다.
+ */
+export class JobControl {
+  constructor(opts?: JobControlOptions);
+  boot(): Promise<{ workers: number; interactivePid: number; jobSlots: number }>;
+  /** 한 줄 입력. `&`로 끝나면 잡({ job, pid }), 아니면 대화형 실행(ReplOutcome). */
+  push(line: string): Promise<ReplOutcome | { job: number; pid: number }>;
+  /** 잡 테이블. */
+  jobs(): JobInfo[];
+  /** 잡을 포그라운드로: 완료를 기다려 결과를 반환. */
+  fg(jobId: number): Promise<ReplOutcome | { error: string }>;
+  /** 잡에 시그널(기본 SIGINT = 하드 인터럽트). 워커는 생존·재사용. */
+  kill(jobId: number, signum?: number): boolean;
+  terminate(): void;
+}
+
+export interface KernelElectionOptions {
+  /** 커널 식별자(같은 name = 같은 선출/커널). */
+  name?: string;
+  /** 리더가 부팅할 세션 매니페스트(결정적 리플레이 = failover 저널 resume의 전제). */
+  manifest?: SessionManifest;
+  /** 저널 디렉터리(OPFS). 주면 failover 시 마지막 커밋에서 상태가 부활한다(없으면 상태 소실). */
+  journalDir?: FileSystemDirectoryHandle;
+  /** 이 참여자가 리더가 됐을 때(초기 또는 failover) 콜백. recovered = 저널에서 부활했는지. */
+  onLeader?: (info: { recovered: boolean }) => void;
+}
+
+/**
+ * 커널 선출(P2): 여러 탭이 Web Locks로 리더 하나를 뽑고 리더만 커널(bootSession + 저널)을
+ * 부팅한다. 나머지 탭은 BroadcastChannel로 리더에 RPC하는 뷰다(여러 탭 = 한 파이썬 상태).
+ * 리더 탭이 죽으면 락이 자동 해제되고 팔로워가 승격 + 저널에서 resume한다(탭 죽음 생존).
+ * SharedWorker(COI=false)와 달리 리더 커널은 자기 문서에 살아 SAB 전능력을 유지한다.
+ */
+export class KernelElection {
+  constructor(opts?: KernelElectionOptions);
+  /** 선출 참여. 락을 얻으면 리더(커널 부팅), 못 얻으면 팔로워(RPC 뷰). */
+  join(): KernelElection;
+  /** 코드 실행. 리더면 자기 커널, 팔로워면 리더에 RPC(failover 중이면 재선출 대기 후 재시도). */
+  run(code: string, opts?: { async?: boolean; timeoutMs?: number }): Promise<unknown>;
+  /** 저널 커밋(상태를 디스크에 확정 = failover 생존 경계). 리더만 유효. */
+  commit(): Promise<{ pages: number; wrote: number; mb: number } | null>;
+  /** 현재 역할: idle | pending | leader | follower. */
+  role(): string;
+  /** 선출에서 나간다(탭 닫힘). 리더면 락을 놓아 failover를 튼다. */
+  leave(): void;
+}
+
 export interface SharedKernelOptions {
   indexURL?: string;
   /** 커널 식별자. 같은 name으로 연결한 모든 탭이 같은 커널을 공유한다. */

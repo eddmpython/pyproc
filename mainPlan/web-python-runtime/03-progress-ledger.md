@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 browser-os P2 + P3 승격: OS가 탭 죽음에서 산다 + 셸의 잡 컨트롤 (kernelElectionProbe 5/5 + jobControlProbe 8/8)
+
+- browser-os 로드맵의 커널 선출(탭 죽음 생존)과 잡 컨트롤을 실증·승격했다. 둘 다 "로컬에도 없는" OS 기능이다.
+- **P2 kernelElection(`KernelElection`)**: 여러 탭이 Web Locks로 리더 하나를 뽑고 리더만 커널(bootSession + MachineJournal) 부팅, 나머지는 BroadcastChannel RPC 뷰. 리더 탭이 죽으면 락 자동 해제 -> 팔로워 승격 -> 저널 resume. **헤드리스 실측**: iframe 3개 = 탭 3개(별도 browsing context = 별도 lock-holder). 리더 정확히 하나(2739ms), 3탭 RPC 정합(여러 탭 한 상태), RPC 왕복 **p50 1.07ms**(< 3), 리더 iframe 제거 = 탭 죽음 -> **failover 2763ms(< 5s) + 저널 resume으로 x=41 생존**(recovered=true). 리더 커널은 자기 문서에 살아 COI 상속(SAB 유지) = SharedWorker(COI=false)의 약속을 SAB 포기 없이 달성.
+- **P3 jobControl(`JobControl` + `PyProc.repl` + worker repl 메시지)**: `expr &`가 대화형 네임스페이스를 살아있는 채로 fork(2)해 딴 코어에서 실행(프롬프트 즉시 복귀). **벽 해소**: fork는 워커끼리만 대칭이므로(forkLiveProbe 벽: 메인 vs 워커 리플레이 바이트 상이) 대화형 REPL도 워커 레인(PyProc replay 풀 레인 0)에서 돈다 = P2가 예고한 "커널을 워커로"의 실현. 실측: 프롬프트 복귀 76.6ms(< 100), 잡 실행 중 대화형 5/5, %fg가 fork된 data=range(100000)로 sum(x*x) 회수, **%kill 45.2ms**(< 200, 무한 루프 SIGINT 회수 = killed), 슬롯 재사용. **브라우저 파이썬 최초의 job control**.
+- **표면**: index.js/index.d.ts(KernelElection/JobControl/JobInfo/ReplOutcome) + run.mjs 표면·계약 가드(PyProc.repl/exec 포함) + README 2종 공개 표면 표. 구조 게이트 395 passed.
+
 ### 2026-07-13 browser-os P5 + P7 승격: 머신 안 머신 + fsWorld v2 (machineContainerProbe 6/6 + fsWorldProbe 5/5)
 
 - browser-os 로드맵의 두 프리미티브를 더 실증·승격했다.

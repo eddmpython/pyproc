@@ -33,7 +33,7 @@ const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 for (const [name, kind] of [
   ["boot", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
   ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
-  ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"],
+  ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"],
   ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
 ]) {
   check(`export ${name}:${kind}`, () => {
@@ -85,6 +85,20 @@ check("MachineContainer 메서드", () => {
   const p = api.MachineContainer.prototype;
   for (const m of ["spawn", "kill", "install", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
+});
+check("KernelElection 메서드", () => {
+  const p = api.KernelElection.prototype;
+  for (const m of ["join", "run", "commit", "role", "leave"])
+    if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
+});
+check("JobControl 메서드", () => {
+  const p = api.JobControl.prototype;
+  for (const m of ["boot", "push", "jobs", "fg", "kill", "terminate"])
+    if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
+});
+check("PyProc.repl/exec 메서드", () => {
+  const p = api.PyProc.prototype;
+  for (const m of ["repl", "exec"]) if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("SIGNAL 표(POSIX 번호)", () => {
   const s = api.SIGNAL;
