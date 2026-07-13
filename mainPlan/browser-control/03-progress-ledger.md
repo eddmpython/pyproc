@@ -4,6 +4,19 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 고정 화면(영속 셸) 설계: iframe 역전 + 헤더 제거 (실측 예정)
+
+- "앱이 탭에 살아있으면 페이지가 바뀌어도 고정 화면 유지"를 3층위로 설계했다(01-architecture 영속 셸 절):
+  층위 A 영속 호스트(offscreen + sidePanel, 이미 우리 구조) / 층위 B 페이지 위 오버레이(content script 재주입,
+  상태는 A에) / 층위 C iframe 역전.
+- **킬러 = iframe 역전**: 앱 셸이 최상위, 대상 사이트를 iframe(창)에. 페이지가 iframe 안에서 navigate해도 셸
+  불변. 확장 링이라 `X-Frame-Options`/CSP frame-ancestors를 제거할 수 있어(declarativeNetRequest/CDP Fetch)
+  임의 사이트를 담는다. Playwright는 브라우저 밖이라 이 역전 불가.
+- **관건 실측(Phase 2 게이트)**: `X-Frame-Options: DENY` 사이트가 헤더 제거 후 iframe에 로드되는지 +
+  frame-busting JS 무력화. 경계: cross-origin DOM 접근 제한(확장 content script + CDP로 우회), 강방어 사이트는
+  온전히 안 담길 수 있음.
+- **의미**: browser-os(웹 위 OS)와 browser-control(브라우저 조작)의 융합점. 셸은 고정, 사이트는 그 안의 창.
+
 ### 2026-07-13 스텔스 심화: 페이지 상위 선제 개입으로 webdriver 덮기 (bootIsolationRunner 오버라이드 GREEN)
 
 - "페이지 JS를 막을 수 있지 않나"라는 방향을 실측으로 확증했다. 정확히는 "막기"가 아니라 **"페이지보다 먼저

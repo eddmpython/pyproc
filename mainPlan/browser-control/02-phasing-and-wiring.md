@@ -46,6 +46,10 @@ navigator.webdriver 전역 오염**이 지배한다. 갈래:
 - 자동화 세션 스냅샷(파이썬 상태 완전 해시) + fork(한 세션에서 N갈래).
 - **게이트**(자동): 2세션 병렬 조작 + 한 세션 스냅샷 후 되감기(파이썬 상태 복원 + 탭 조작 로그 재생) 실측.
 - **정직**: 탭 DOM 재구성은 조작 로그 재생 의존(서버측 세션·외부 상태는 재생 불가). 경계 명시.
+- **영속 셸(고정 화면)**: iframe 역전으로 사이트를 셸의 창에 담는다(01-architecture 영속 셸 절). 관건 =
+  `X-Frame-Options` 제거로 cross-origin 사이트가 iframe에 로드되는지 + frame-busting JS 무력화.
+- **게이트**(자동): `X-Frame-Options: DENY` 페이지가 규칙 없이는 iframe 차단(postMessage 미수신), declarativeNetRequest
+  규칙 적용 후 로드 성공(iframe 내부 postMessage 수신) 실측.
 
 ## Phase 3 - 선택 후속 (수요 실측 후)
 
@@ -77,4 +81,5 @@ navigator.webdriver 전역 오염**이 지배한다. 갈래:
 | 0-b 잔여(선택) | attach 실배포 효과 + 실 봇 방어 통과 | 수동(headed 정상 설치) |
 | 1 능력 표면 | 파이썬 tab/navigate/evaluate/click/type 왕복 | 자동 |
 | 2 프로세스 OS | N세션 병렬 + 스냅샷 되감기 | 자동 |
+| 2 영속 셸 | X-Frame-Options 제거로 cross-origin iframe 로드 성공 | 자동 |
 | 3 신뢰 입력/폭 | Input.* isTrusted + 소비 배선 | 자동 + 수동(UX) |

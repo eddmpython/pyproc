@@ -85,10 +85,34 @@ tab.close()
 | navigator.webdriver(chrome.debugger) | `true` | debugger 경로 스텔스 없음 확정 |
 | navigator.webdriver(content script) | 미확정(하네스 오염) | Phase 0 수동 실측 대상 |
 
+## 영속 셸 / 고정 화면 (페이지가 바뀌어도 앱은 산다)
+
+페이지 navigate = 문서 파괴 + 재생성. 대상 페이지에 얹은 UI는 navigate마다 죽는다. "앱이 탭에 살아있으면
+페이지가 바뀌어도 고정 화면 유지"를 세 층위로 실현한다(용도별 조합):
+
+- **층위 A - 영속 호스트(상태/제어 UI)**: 앱의 상태와 셸 UI는 페이지가 아니라 확장 문서에 산다. offscreen은
+  navigate하지 않으므로 영속(이미 우리 구조). `chrome.sidePanel`은 페이지 옆 브라우저 크롬 영역이라 navigate와
+  완전 독립 = 가장 견고한 고정 화면. 상태 소유가 여기 있으면 페이지가 몇 번 바뀌어도 앱은 불변.
+- **층위 B - 페이지 위 오버레이**: 페이지 위에 겹치는 UI가 필요하면 content script로 오버레이 DOM 주입.
+  navigate마다 문서와 함께 죽으므로 `registerContentScripts`(document_start, 전 URL)로 매 페이지 자동 재주입.
+  상태는 층위 A에 두고 UI만 다시 그린다 = 사용자에겐 고정처럼 보임(재마운트).
+- **층위 C - iframe 역전(가장 OS다운, 킬러)**: 앱 셸이 최상위 문서이고 대상 사이트를 그 안의 iframe(창)에 담는다.
+  페이지가 iframe 내부에서 navigate해도 최상위 셸은 불변 = "웹 위 OS 셸에서 사이트를 창으로". 벽: 다수 사이트가
+  `X-Frame-Options`/CSP `frame-ancestors`로 iframe을 거부. **확장 링에선 이 응답 헤더를 제거할 수 있다**
+  (`declarativeNetRequest` 규칙 또는 CDP `Fetch`) = 임의 사이트가 우리 셸의 iframe에 담긴다. Playwright는
+  브라우저 밖이라 이 역전을 못 한다. **실측 예정**: X-Frame-Options 제거로 cross-origin 사이트가 iframe에
+  로드되는지 + frame-busting JS(top!==self 탈출) 무력화.
+
+경계: iframe 안 사이트도 자기 JS를 돌리고 cross-origin이라 셸 JS의 직접 DOM 접근은 제한된다(확장 content
+script를 iframe에도 주입 + CDP로 조작해 우회). 이것이 browser-os(웹 위 OS)와 browser-control(브라우저 조작)의
+융합점이다: 셸은 고정, 사이트는 그 안의 창.
+
 ## 정직한 벽
 
 - **offscreen 1개 제약**: 확장당 offscreen document 하나. 병렬 세션은 그 안의 워커로 논리 병렬이고, 물리
   chrome.debugger 큐는 SW 단일이라 조작 자체는 직렬화될 수 있다(스루풋 상한).
+- **iframe 역전의 한계**: X-Frame-Options 제거는 되지만 frame-busting JS·cross-origin DOM 경계는 군비경쟁.
+  일부 강방어 사이트는 셸 안에 온전히 담기지 않을 수 있다(실측이 경계를 그린다).
 - **chrome.debugger 인포바**: `debugger` 모드는 지속 UX 비용. `chrome://`·웹스토어엔 attach 불가.
 - **스텔스 미검증**: `script` 모드 webdriver=false는 수동 실측 전까지 가정.
 - **번들 13MB+**: 원격 코드 금지라 vendor 코어를 확장에 물리 번들. 확장 크기로 흡수.
