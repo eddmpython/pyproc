@@ -11,7 +11,7 @@ import { createStaticServer } from "../../examples/serve.mjs";
 import { findBrowser, headlessArgs } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
-const PAGES = ["examples/basic.html", "examples/terminal.html", "examples/machine.html", "examples/processOs.html"];
+const PAGES = ["examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/processOs.html"];
 
 const browser = findBrowser();
 let resolveReport = null;

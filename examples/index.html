@@ -67,6 +67,10 @@
 
     <h2 id="demos">Live demos</h2>
     <div class="cards">
+      <a class="card" href="examples/agentSandbox.html">
+        <h3>The agent sandbox loop</h3>
+        <p>Prepare a Python environment once, checkpoint, let buggy code corrupt it, restore in milliseconds (no re-run), then branch two approaches from the same state. The agent retry loop, in the tab.</p>
+      </a>
       <a class="card" href="examples/machine.html">
         <h3>The Python Machine</h3>
         <p>A computer that never turns off: close the tab, it hibernates as a few MB; reopen, it resumes. Export it as one .pymachine file and open it anywhere.</p>
@@ -85,7 +89,7 @@
       </a>
     </div>
 
-    <h2 id="features">What makes it an OS, not a sandbox</h2>
+    <h2 id="features">The OS primitives underneath</h2>
     <div class="cards features">
       <div class="card"><h3>Processes and fork</h3><p>Web Worker = process. Boot once, snapshot the heap, fork N interpreters: N GILs, N cores, kill/interrupt/respawn lifecycle.</p></div>
       <div class="card"><h3>Checkpoint and time-travel</h3><p>Full-hash heap checkpoints at execution boundaries. Restore in ~1ms, guarded against silent corruption by a mutation counter.</p></div>
