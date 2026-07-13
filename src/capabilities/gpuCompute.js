@@ -57,6 +57,39 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   c[i] = __EXPR__;
 }`;
 
+// 이항 원소별 WGSL 템플릿(EXPR = 소비자 표현식, a/b = 두 입력 원소). 같은 shape 두 잔류 배열을
+// 원소별로 합친다. map(단항)이 못 잇던 잔차 a+b, 게이팅 a*b, 바이어스 같은 잔류 패턴을 잇는다.
+// 예: binary(other, "a + b"), binary(other, "a * b"), binary(other, "max(a, b)").
+const BINARY_WGSL = `
+@group(0) @binding(0) var<storage, read> inA: array<f32>;
+@group(0) @binding(1) var<storage, read> inB: array<f32>;
+@group(0) @binding(2) var<storage, read_write> outC: array<f32>;
+@group(0) @binding(3) var<uniform> len: u32;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x;
+  if (i >= len) { return; }
+  let a = inA[i];
+  let b = inB[i];
+  outC[i] = __EXPR__;
+}`;
+
+// 전치 WGSL(naive). 입력(rows x cols)의 [r,c]를 출력(cols x rows)의 [c,r]로 옮긴다. A.T @ B
+// (그래디언트 x.T @ dy, 그람행렬 X.T @ X) 같은 패턴을 리드백 없이 GPU에 남긴다. 정확성 우선
+// naive(합체 접근 타일드 = 후속 최적화). 경계는 early-return(배리어 없어 균일 흐름 불필요).
+const TRANSPOSE_WGSL = `
+struct Dims { rows: u32, cols: u32 };
+@group(0) @binding(0) var<storage, read> inp: array<f32>;
+@group(0) @binding(1) var<storage, read_write> outp: array<f32>;
+@group(0) @binding(2) var<uniform> d: Dims;
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let r = gid.x;
+  let c = gid.y;
+  if (r >= d.rows || c >= d.cols) { return; }
+  outp[c * d.rows + r] = inp[r * d.cols + c];
+}`;
+
 // 병렬 리덕션 WGSL(256 워크그룹 공유메모리 트리). __OP__(a,b)로 두 값을 합치고 __IDENTITY__로
 // 범위 밖을 채운다. 워크그룹당 부분 결과 하나 -> 1개가 될 때까지 JS가 다단계 반복(reduce).
 const REDUCE_WGSL = `
@@ -82,7 +115,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
 const REDUCE_OPS = { sum: ["a + b", "0.0"], max: ["max(a, b)", "-3.4e38"], min: ["min(a, b)", "3.4e38"] };
 
 export class GpuCompute {
-  constructor(device) { this._device = device; this._matmul = null; this._elementwise = new Map(); this._reduce = new Map(); }
+  constructor(device) { this._device = device; this._matmul = null; this._elementwise = new Map(); this._reduce = new Map(); this._binary = new Map(); this._transpose = null; }
 
   // WebGPU 디바이스를 확보한다(async). 어댑터가 없으면(헤드리스) 실행 가능한 에러.
   static async create() {
@@ -116,6 +149,26 @@ export class GpuCompute {
       this._elementwise.set(expr, p);
     }
     return p;
+  }
+
+  // 이항 원소별 파이프라인(표현식별 캐시). expr는 WGSL 표현식(a/b = 두 입력 원소).
+  _binaryPipeline(expr) {
+    let p = this._binary.get(expr);
+    if (!p) {
+      const module = this._device.createShaderModule({ code: BINARY_WGSL.replace("__EXPR__", expr) });
+      p = this._device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
+      this._binary.set(expr, p);
+    }
+    return p;
+  }
+
+  // 전치 파이프라인(1회 컴파일 후 캐시).
+  _transposePipeline() {
+    if (!this._transpose) {
+      const module = this._device.createShaderModule({ code: TRANSPOSE_WGSL });
+      this._transpose = this._device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
+    }
+    return this._transpose;
   }
 
   // 리덕션 파이프라인(op별 캐시). op = sum|max|min.
@@ -186,6 +239,48 @@ export class GpuArray {
     device.queue.submit([enc.finish()]);
     nBuf.destroy();
     return new GpuArray(this._gc, cBuf, this.rows, this.cols);
+  }
+
+  // 이항 원소별: 같은 shape의 다른 잔류 배열과 원소별로 WGSL 표현식 expr(a=이 원소, b=상대 원소)를
+  // 적용한 새 잔류 핸들(같은 shape). map(단항)이 못 잇던 잔차 a+b, 게이팅 a*b를 리드백 없이 잇는다.
+  binary(other, expr) {
+    if (!(other instanceof GpuArray)) throw new Error("GpuArray.binary: 인자는 GpuArray다");
+    if (this.rows !== other.rows || this.cols !== other.cols) throw new Error(`GpuArray.binary: shape 불일치 (${this.rows}x${this.cols}) vs (${other.rows}x${other.cols})`);
+    if (typeof expr !== "string" || !expr.length) throw new Error("GpuArray.binary: expr는 WGSL 표현식 문자열(a/b = 두 원소). 예: \"a + b\"");
+    const device = this._gc._device, len = this.rows * this.cols;
+    const cBuf = device.createBuffer({ size: len * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const nBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true });
+    new Uint32Array(nBuf.getMappedRange()).set([len, 0, 0, 0]); nBuf.unmap();
+    const pipeline = this._gc._binaryPipeline(expr);
+    const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: this.buffer } }, { binding: 1, resource: { buffer: other.buffer } },
+      { binding: 2, resource: { buffer: cBuf } }, { binding: 3, resource: { buffer: nBuf } },
+    ] });
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass(); pass.setPipeline(pipeline); pass.setBindGroup(0, bind);
+    pass.dispatchWorkgroups(Math.ceil(len / 64)); pass.end();
+    device.queue.submit([enc.finish()]);
+    nBuf.destroy();
+    return new GpuArray(this._gc, cBuf, this.rows, this.cols);
+  }
+
+  // 전치: (rows x cols) -> (cols x rows) 새 잔류 핸들. A.T @ B 패턴(x.T @ dy, X.T @ X)을 리드백
+  // 없이 GPU에 남긴다. this.transpose().matmul(other)로 잇는다.
+  transpose() {
+    const device = this._gc._device, rows = this.rows, cols = this.cols;
+    const cBuf = device.createBuffer({ size: rows * cols * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const dBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true });
+    new Uint32Array(dBuf.getMappedRange()).set([rows, cols, 0, 0]); dBuf.unmap();
+    const pipeline = this._gc._transposePipeline();
+    const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: this.buffer } }, { binding: 1, resource: { buffer: cBuf } }, { binding: 2, resource: { buffer: dBuf } },
+    ] });
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass(); pass.setPipeline(pipeline); pass.setBindGroup(0, bind);
+    pass.dispatchWorkgroups(Math.ceil(rows / 16), Math.ceil(cols / 16)); pass.end();
+    device.queue.submit([enc.finish()]);
+    dBuf.destroy();
+    return new GpuArray(this._gc, cBuf, cols, rows);
   }
 
   // 전체 리덕션(sum|max|min): GPU에서 모든 원소를 하나로 줄여 스칼라를 돌려준다(종단 = 리드백 1).

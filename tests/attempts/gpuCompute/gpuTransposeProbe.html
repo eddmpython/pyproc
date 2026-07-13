@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<!--
+결과(append): GpuArray.transpose - 전치가 정확하고 A.T @ B 잔류 패턴을 리드백 없이 잇나.
+(1) transpose(비정사각) == CPU 참조 + 이중 전치 == 원본.
+(2) 그람행렬 X.T @ X 잔류(전치->matmul, 리드백 0) == CPU 참조.
+(3) 그래디언트 x.T @ dy 잔류((b x f).T @ (b x o) = (f x o)) == CPU 참조.
+어댑터 없으면 SKIP. 실행: PYPROC_HEADED=1 ... gpuTransposeProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: gpu transpose</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: GpuArray.transpose + A.T @ B 잔류 패턴</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { GpuCompute } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  try {
+    let gc;
+    try { gc = await GpuCompute.create(); }
+    catch (e) { check("SKIP: 어댑터 없음(실 GPU 머신에서 PYPROC_HEADED=1)", /어댑터/.test(String(e)) || /navigator.gpu/.test(String(e))); await report(); throw new Error("__skip__"); }
+    check("GpuCompute.create(실 GPU)", !!gc);
+
+    // 1) 전치 정확성(비정사각 40x24 -> 24x40) + 이중 전치 == 원본. 전치는 데이터 이동뿐이라 오차 0.
+    const R = 40, C = 24;
+    const X = new Float32Array(R * C);
+    for (let i = 0; i < X.length; i++) X[i] = Math.sin(i * 0.9) * 2 + (i % 7);
+    const gt = await gc.array(X, R, C).transpose().toArray();
+    check("transpose shape (40x24 -> 24x40)", gt.rows === C && gt.cols === R, `${gt.rows}x${gt.cols}`);
+    let te = 0;
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) te = Math.max(te, Math.abs(gt.data[c * R + r] - X[r * C + c]));
+    check("transpose == CPU 참조(오차 0)", te === 0, `maxErr ${te}`);
+    const gd = await gc.array(X, R, C).transpose().transpose().toArray();
+    let de = 0; for (let i = 0; i < X.length; i++) de = Math.max(de, Math.abs(gd.data[i] - X[i]));
+    check("이중 전치 == 원본", de === 0 && gd.rows === R && gd.cols === C, `maxErr ${de}`);
+
+    // 2) 그람행렬 X.T @ X 잔류(전치 -> matmul, 리드백 0): (n x d) -> (d x d).
+    const nS = 32, dS = 20;
+    const Xs = new Float32Array(nS * dS);
+    for (let i = 0; i < Xs.length; i++) Xs[i] = ((i * 11 + 5) % 23) / 23 - 0.4;
+    const gx = gc.array(Xs, nS, dS);
+    const gram = await gx.transpose().matmul(gx).toArray();
+    check("그람 shape (d x d)", gram.rows === dS && gram.cols === dS, `${gram.rows}x${gram.cols}`);
+    let ge = 0;
+    for (let i = 0; i < dS; i++) for (let j = 0; j < dS; j++) { let s = 0; for (let k = 0; k < nS; k++) s += Xs[k * dS + i] * Xs[k * dS + j]; ge = Math.max(ge, Math.abs(gram.data[i * dS + j] - s)); }
+    check("X.T @ X == CPU 참조(전치->matmul 리드백 0)", ge < 1e-2, `maxErr ${ge.toExponential(2)}`);
+    gx.destroy();
+
+    // 3) 그래디언트 x.T @ dy 잔류: (b x f).T @ (b x o) = (f x o).
+    const bS = 16, fS = 12, oS = 8;
+    const xg = new Float32Array(bS * fS), dyg = new Float32Array(bS * oS);
+    for (let i = 0; i < xg.length; i++) xg[i] = Math.sin(i * 0.4);
+    for (let i = 0; i < dyg.length; i++) dyg[i] = Math.cos(i * 0.6);
+    const grad = await gc.array(xg, bS, fS).transpose().matmul(gc.array(dyg, bS, oS)).toArray();
+    check("grad shape (f x o)", grad.rows === fS && grad.cols === oS, `${grad.rows}x${grad.cols}`);
+    let gr = 0;
+    for (let i = 0; i < fS; i++) for (let j = 0; j < oS; j++) { let s = 0; for (let k = 0; k < bS; k++) s += xg[k * fS + i] * dyg[k * oS + j]; gr = Math.max(gr, Math.abs(grad.data[i * oS + j] - s)); }
+    check("x.T @ dy == CPU 참조(그래디언트 패턴)", gr < 1e-3, `maxErr ${gr.toExponential(2)}`);
+    gc.destroy();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

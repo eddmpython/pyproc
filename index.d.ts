@@ -571,6 +571,10 @@ export class GpuArray {
   matmul(other: GpuArray): GpuArray;
   /** 원소별 변환(WGSL 표현식, x = 원소)을 적용한 새 잔류 핸들(같은 shape). 예: map("max(x, 0.0)"). matmul 뒤 활성화 체이닝. */
   map(expr: string): GpuArray;
+  /** 이항 원소별(WGSL 표현식, a=이 원소/b=상대 원소): 같은 shape의 다른 잔류 배열과 합친 새 핸들. 예: binary(other, "a + b")(잔차), "a * b"(게이팅). */
+  binary(other: GpuArray, expr: string): GpuArray;
+  /** 전치: (rows x cols) -> (cols x rows) 새 잔류 핸들. A.T @ B 패턴(x.T @ dy, X.T @ X)을 리드백 없이. */
+  transpose(): GpuArray;
   /** 전체 리덕션(sum|max|min): GPU에서 모든 원소를 스칼라로 줄인다(종단, 리드백 1). 잔류 체이닝의 종착(loss/norm). */
   reduce(op: "sum" | "max" | "min"): Promise<number>;
   /** GPU -> CPU 회수. 반환 { data: Float32Array, rows, cols }. */

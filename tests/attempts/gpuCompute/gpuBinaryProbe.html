@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!--
+결과(append): GpuArray.binary - 이항 원소별(a op b)이 정확하고 map(단항)이 못 잇던 잔류 패턴을 잇나.
+(1) binary add/sub/mul/max == CPU 참조(비정사각 shape).
+(2) 잔차 패턴: (A@B) + C가 리드백 없이 GPU에서 == CPU 참조(map으로 못 잇던 것).
+(3) shape 불일치 + 빈 expr는 명시적 에러(계약 방어).
+어댑터 없으면 SKIP. 실행: PYPROC_HEADED=1 ... gpuBinaryProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: gpu binary</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: GpuArray.binary + 잔차 잔류 패턴 ((A@B)+C)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { GpuCompute } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  try {
+    let gc;
+    try { gc = await GpuCompute.create(); }
+    catch (e) { check("SKIP: 어댑터 없음(실 GPU 머신에서 PYPROC_HEADED=1)", /어댑터/.test(String(e)) || /navigator.gpu/.test(String(e))); await report(); throw new Error("__skip__"); }
+    check("GpuCompute.create(실 GPU)", !!gc);
+
+    // 1) 이항 원소별 정확성(비정사각 30x50): add/sub/mul/max == CPU.
+    const R = 30, C = 50, n = R * C;
+    const A = new Float32Array(n), B = new Float32Array(n);
+    for (let i = 0; i < n; i++) { A[i] = Math.sin(i * 0.5) * 2; B[i] = Math.cos(i * 0.3) + 0.5; }
+    const ga = gc.array(A, R, C), gb = gc.array(B, R, C);
+    for (const [name, expr, fn] of [["add", "a + b", (x, y) => x + y], ["sub", "a - b", (x, y) => x - y], ["mul", "a * b", (x, y) => x * y], ["max", "max(a, b)", (x, y) => Math.max(x, y)]]) {
+      const gres = ga.binary(gb, expr); const r = await gres.toArray(); gres.destroy();
+      let maxErr = 0;
+      for (let i = 0; i < n; i++) maxErr = Math.max(maxErr, Math.abs(r.data[i] - fn(A[i], B[i])));
+      check(`binary ${name} == CPU`, maxErr < 1e-4, `maxErr ${maxErr.toExponential(2)}`);
+    }
+    ga.destroy(); gb.destroy();
+
+    // 2) 잔차 패턴: (A@B) + C가 리드백 없이 GPU에서 == CPU 참조. map(단항)으로는 두 배열을 못 더한다.
+    const M = 48, K = 32, N = 40;
+    const Am = new Float32Array(M * K), Bm = new Float32Array(K * N), Cm = new Float32Array(M * N);
+    for (let i = 0; i < Am.length; i++) Am[i] = ((i * 7 + 3) % 29) / 29 - 0.4;
+    for (let i = 0; i < Bm.length; i++) Bm[i] = ((i * 5 + 1) % 31) / 31 - 0.5;
+    for (let i = 0; i < Cm.length; i++) Cm[i] = ((i * 3 + 2) % 17) / 17 - 0.5;
+    const prod = gc.array(Am, M, K).matmul(gc.array(Bm, K, N)); // 잔류 (M x N)
+    const cResid = gc.array(Cm, M, N);
+    const residHandle = prod.binary(cResid, "a + b"); const resid = await residHandle.toArray(); residHandle.destroy();
+    const cpu = new Float32Array(M * N);
+    for (let i = 0; i < M; i++) for (let j = 0; j < N; j++) { let s = 0; for (let x = 0; x < K; x++) s += Am[i * K + x] * Bm[x * N + j]; cpu[i * N + j] = s + Cm[i * N + j]; }
+    let re = 0; for (let i = 0; i < M * N; i++) re = Math.max(re, Math.abs(resid.data[i] - cpu[i]));
+    check("잔차 (A@B)+C == CPU 참조(리드백 0)", re < 1e-3, `maxErr ${re.toExponential(2)}`);
+    prod.destroy(); cResid.destroy();
+
+    // 3) 계약 방어: shape 불일치 + 빈 expr는 명시적 에러.
+    let threw1 = false;
+    try { gc.array(new Float32Array(6), 2, 3).binary(gc.array(new Float32Array(4), 2, 2), "a + b"); } catch (e) { threw1 = /shape 불일치/.test(String(e)); }
+    check("binary shape 불일치는 명시적 에러", threw1);
+    let threw2 = false;
+    const gself = gc.array(new Float32Array(4), 2, 2);
+    try { gself.binary(gself, ""); } catch (e) { threw2 = /expr/.test(String(e)); }
+    check("binary 빈 expr는 명시적 에러", threw2);
+    gself.destroy();
+    gc.destroy();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
