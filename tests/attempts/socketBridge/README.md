@@ -27,4 +27,6 @@
 - **socketProbe GREEN 3/3**: 브라우저 -> WS -> 릴레이 -> `example.com:80` raw HTTP/1.0 -> **`HTTP/1.1 200 OK` 828바이트 원문**(헤더+`<html>` 바디, 소켓 층 그대로), 왕복 143ms. 임의 host:port 다이얼도 진짜(닫힌 127.0.0.1:9 -> `ECONNREFUSED` 소켓 에러 전달).
 - **socketBlockingProbe GREEN 2/2**: 워커에서 **동기 `connect/send/recv`**(블로킹 recv를 Atomics.wait으로) 완주, `HTTP/1.1 200 OK` 828바이트, 118ms. 파이썬 `socket.recv()`의 동기 의미가 비동기 WS 위에서 성립.
 
-**의미**: 벽2 아웃바운드의 두 핵심(진짜 TCP + 블로킹 의미)이 실측으로 열렸다. 남은 건 배선(파이썬 socket 모듈 -> 이 브리지)과 릴레이 프로토콜 강화(Wisp 멀티플렉싱, TLS in-tab). 인바운드는 정직한 물리 벽으로 남는다(역터널 릴레이 = 별도 조각).
+- **socketPyProbe GREEN 2/2**: **진짜 파이썬(Pyodide)이 소켓을 연다.** 파이썬 `socket.socket()`을 릴레이 소켓으로 심하고(Python->js.bridge* 동기 호출, 블로킹 recv는 워커 Atomics.wait), Python 코드 `sock.connect(('example.com',80)); sock.sendall(b'GET...'); sock.recv()`가 `HTTP/1.1 200 OK` 828바이트 `<html>` 바디를 받는다(총 3864ms, 대부분 Pyodide 부팅). JS가 아니라 파이썬이 진짜 인터넷 바이트를 받는다. `requests`/`urllib3`/`http.client`가 같은 socket API라 이 심을 그대로 쓴다(makefile 등 확장은 v2).
+
+**의미**: 벽2 아웃바운드가 개념을 넘어 **진짜 파이썬 소켓**으로 실측됐다(진짜 TCP + 블로킹 의미 + Python socket API). 남은 건 src 능력 승격(SocketBridge = Runtime.enableSocketBridge, socket 모듈 완전 심 + 릴레이 계약)과 릴레이 강화(Wisp 멀티플렉싱, TLS in-tab). 인바운드는 정직한 물리 벽으로 남는다(역터널 릴레이 = 별도 조각).
