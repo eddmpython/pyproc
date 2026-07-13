@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<!--
+결과(append): Phase 2 승격 계약 - GpuCompute/GpuArray 잔류 핸들이 정확하고 체이닝 이득이 사나.
+gc.array(f32)로 업로드 -> a.matmul(b)는 GPU 잔류 새 핸들 -> chain -> toArray로 회수.
+정확성(CPU 참조) + 잔류 이득(체인 matmul 2회가 재업로드 없이 = 중간 리드백 0). 어댑터 없으면 SKIP.
+실행: PYPROC_HEADED=1 node tests/browser/run.mjs tests/attempts/gpuCompute/gpuSurfaceProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: GpuCompute surface</title></head>
+<body>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { GpuCompute } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  // JS CPU 참조 matmul(f32).
+  const ref = (A, M, K, B, N) => { const C = new Float32Array(M * N); for (let i = 0; i < M; i++) for (let j = 0; j < N; j++) { let s = 0; for (let x = 0; x < K; x++) s += A[i * K + x] * B[x * N + j]; C[i * N + j] = s; } return C; };
+
+  try {
+    let gc;
+    try { gc = await GpuCompute.create(); }
+    catch (e) { check("SKIP: WebGPU 어댑터 없음(헤드리스 = 실 GPU 머신에서 PYPROC_HEADED=1로)", /어댑터/.test(String(e)) || /navigator.gpu/.test(String(e))); await report(); throw new Error("__skip__"); }
+    check("GpuCompute.create(실 GPU 디바이스)", !!gc);
+
+    // 1) 정확성: gc.array -> matmul -> toArray가 CPU 참조와 일치(f32 허용오차).
+    const M = 48, K = 33, N = 27;
+    const A = new Float32Array(M * K), B = new Float32Array(K * N);
+    for (let i = 0; i < A.length; i++) A[i] = ((i * 7 + 3) % 29) / 29 - 0.4;
+    for (let i = 0; i < B.length; i++) B[i] = ((i * 5 + 1) % 31) / 31 - 0.6;
+    const ga = gc.array(A, M, K), gb = gc.array(B, K, N);
+    const gc1 = ga.matmul(gb);
+    const R = await gc1.toArray();
+    const expect = ref(A, M, K, B, N);
+    let maxErr = 0; for (let i = 0; i < expect.length; i++) maxErr = Math.max(maxErr, Math.abs(R.data[i] - expect[i]));
+    check("정확성: array->matmul->toArray == CPU 참조", R.rows === M && R.cols === N && maxErr < 1e-3, `maxErr ${maxErr.toExponential(2)}`);
+
+    // 2) 잔류 체이닝: (A@B)@C를 GPU에 남긴 채 이어붙임(중간 리드백 0). 결과 == CPU 참조.
+    const N2 = 21;
+    const Cc = new Float32Array(N * N2);
+    for (let i = 0; i < Cc.length; i++) Cc[i] = ((i * 3 + 2) % 23) / 23 - 0.5;
+    const gcc = gc.array(Cc, N, N2);
+    const chain = ga.matmul(gb).matmul(gcc); // (M x K)@(K x N)@(N x N2) = M x N2, 전부 GPU 잔류
+    const RC = await chain.toArray();
+    const mid = ref(A, M, K, B, N);
+    const expect2 = ref(mid, M, N, Cc, N2);
+    let maxErr2 = 0; for (let i = 0; i < expect2.length; i++) maxErr2 = Math.max(maxErr2, Math.abs(RC.data[i] - expect2[i]));
+    check("잔류 체이닝: (A@B)@C == CPU 참조(재업로드 0)", RC.rows === M && RC.cols === N2 && maxErr2 < 1e-2, `maxErr ${maxErr2.toExponential(2)}`);
+
+    // 3) matmul 차원 검증(계약 방어): 각 배열은 자기 shape에 맞는 길이지만 내부 차원(K)이 안 맞음.
+    let threw = false;
+    const badB = new Float32Array((K + 1) * N); // (K+1) x N = 자체는 정상, A의 K와 안 맞음
+    try { gc.array(A, M, K).matmul(gc.array(badB, K + 1, N)); } catch (e) { threw = /차원 불일치/.test(String(e)); }
+    check("matmul 차원 불일치는 명시적 에러", threw);
+
+    // 4) 대형 잔류 배속 재확인(승격 후에도 실 GPU에서 대형 matmul 빠름).
+    const S = 1024;
+    const AA = new Float32Array(S * S), BB = new Float32Array(S * S);
+    for (let i = 0; i < AA.length; i++) { AA[i] = ((i * 3 + 1) % 17) / 17 - 0.5; BB[i] = ((i * 5 + 2) % 13) / 13 - 0.5; }
+    const gAA = gc.array(AA, S, S), gBB = gc.array(BB, S, S);
+    (await gAA.matmul(gBB).toArray()); // 워밍업
+    let t = performance.now();
+    const big = await gAA.matmul(gBB).toArray();
+    timings.gpuBigMs = +(performance.now() - t).toFixed(1);
+    check("대형 잔류 matmul 완주(결과 유한)", Number.isFinite(big.data[0]) && big.rows === S, `${timings.gpuBigMs}ms`);
+
+    [ga, gb, gc1, gcc, chain, gAA, gBB].forEach((h) => { try { h.destroy(); } catch (e) {} });
+    gc.destroy();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

@@ -27,8 +27,10 @@
     let device = null;
     if (hasGpu) {
       try {
-        const adapter = await navigator.gpu.requestAdapter();
-        report_("WebGPU 어댑터 확보", !!adapter, adapter ? "" : "어댑터 null = 헤드리스 CI엔 GPU 없음(실 GPU 머신에서만)");
+        // 기본 어댑터 -> 없으면 소프트웨어 폴백(Dawn SwiftShader) 명시 요청.
+        let adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) adapter = await navigator.gpu.requestAdapter({ forceFallbackAdapter: true });
+        report_("WebGPU 어댑터 확보(폴백 포함)", !!adapter, adapter ? "" : "어댑터 null = 헤드리스 CI엔 GPU/소프트웨어 폴백 없음(실 GPU 머신에서만)");
         if (adapter) { device = await adapter.requestDevice(); report_("WebGPU 디바이스 확보", !!device); }
       } catch (e) { report_("WebGPU 어댑터/디바이스", false, String(e).slice(0, 80)); }
     }

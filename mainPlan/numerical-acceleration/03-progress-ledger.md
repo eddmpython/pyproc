@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 Phase 2 완료 + src 승격: GpuCompute WebGPU 잔류 핸들 (실 GPU gpuMatmul 4/4 + gpuSurface 5/5)
+
+- Phase 2(프론티어, GPU)를 실 GPU로 실증하고 `GpuCompute`/`GpuArray`로 src 승격했다. **"GPU 검증 불가"는 헤드리스 한정**이었음이 드러났다.
+- **핵심 발견(하네스 PYPROC_HEADED)**: WebGPU는 헤드리스에서 어댑터가 안 뜬다(requestAdapter/forceFallbackAdapter/SwiftShader 3시도 실패). 그러나 **창 모드(실 하드웨어 GPU)에서 어댑터+디바이스+컴퓨트 왕복 실동**(gpuCapProbe headed 7/7). 소켓 릴레이와 같은 계급 = 실 머신 수동 검증. harness.mjs에 PYPROC_HEADED=1(창 모드) 추가, GPU probe는 어댑터 부재 시 SKIP(헤드리스 CI 무해).
+- **gpuMatmulProbe(개념, 실 GPU GREEN 4/4)**: naive 타일드 WGSL matmul. 정확성 GPU==CPU 참조 maxErr 3.58e-7(f32), 1024 f32 GPU 종단(업로드+연산+리드백) 65.9ms vs WASM numpy 단일워커 7221ms = **109.6배**. naive 커널로도 109배(최적화 WgPy 340배).
+- **src 승격(`GpuCompute`/`GpuArray`, src/capabilities/gpuCompute.js)**: 연구가 설계한 **잔류 핸들 모델**. `GpuCompute.create()`(어댑터 확보, 부재 시 실행 가능 에러) -> `array(f32, rows, cols)`(업로드) -> `GpuArray.matmul(other)`(GPU 잔류 새 핸들, 재업로드 0) -> `toArray()`(리드백 1). 셰이더 1회 컴파일 캐시. f32 한정(WGSL f64 부재 = 경성 벽, 암묵 강등 금지).
+- **gpuSurfaceProbe(승격 계약, 실 GPU GREEN 5/5)**: create + array->matmul->toArray == CPU 참조(maxErr 2.38e-7) + **잔류 체이닝 (A@B)@C == 참조**(maxErr 2.68e-7, 중간 리드백 0) + 차원 불일치 에러 + 대형 잔류 matmul 37.1ms. 헤드리스는 SKIP GREEN(CI 무해). index.js/index.d.ts(GpuCompute/GpuArray)/run.mjs/README 2종 표면.
+- **정직**: 이 109배는 f32 대규모 matmul(compute-bound + 잔류)의 것. f64/작은 배열/값싼 op는 GPU가 이득 없거나 짐(전송비). 창 모드 필요(헤드리스 불가). numpy 대체가 아니라 좁은 고피크 레인. 후속: worker+JSPI 통합(파이썬 워커가 GPU 구동), 커널 최적화(타일링/jax-js 차용), reduce/fused elementwise op.
+
 ### 2026-07-13 Phase 1 완료 + src 승격: PyProc.matmul + 손익분기 지도 (shardOps 8/8 + matmulSurface 5/5)
 
 - Phase 1(제품 경로)을 실측 완료하고 `PyProc.matmul`로 src 승격했다.

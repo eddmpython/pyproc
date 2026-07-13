@@ -34,6 +34,7 @@ for (const [name, kind] of [
   ["boot", "function"], ["checkEnvironment", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
   ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
   ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"],
+  ["GpuCompute", "function"], ["GpuArray", "function"],
   ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
 ]) {
   check(`export ${name}:${kind}`, () => {
@@ -107,6 +108,11 @@ check("JobControl 메서드", () => {
   for (const m of ["boot", "push", "jobs", "fg", "kill", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
+check("GpuCompute/GpuArray 메서드", () => {
+  if (typeof api.GpuCompute.create !== "function") throw new Error("GpuCompute.create(static)");
+  for (const m of ["array", "destroy"]) if (typeof api.GpuCompute.prototype[m] !== "function") throw new Error(`GpuCompute.${m}`);
+  for (const m of ["matmul", "toArray", "destroy"]) if (typeof api.GpuArray.prototype[m] !== "function") throw new Error(`GpuArray.${m}`);
+});
 check("PyProc.repl/exec 메서드", () => {
   const p = api.PyProc.prototype;
   for (const m of ["repl", "exec"]) if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
@@ -162,6 +168,24 @@ for (const scope of ["src", "examples", "tests"]) {
       if (bad.size) throw new Error("스네이크 식별자: " + [...bad].slice(0, 5).join(", "));
     });
   }
+}
+
+// 3.6) 사이트 크롬: 채널(SNS) 행은 라우트마다 고정이고 정의처는 examples/siteChrome.js 하나다.
+//      라우트가 늘 때 채널을 빠뜨리거나 마크업을 다시 인라인으로 복제하는 드리프트를 차단한다.
+console.log("\n[사이트 크롬]");
+const chromeSrc = readFileSync(join(ROOT, "examples", "siteChrome.js"), "utf8");
+check("siteChrome.js가 sns-links를 정의", () => {
+  if (!chromeSrc.includes('customElements.define("sns-links"')) throw new Error("정의 없음");
+  if (!/export const channels\s*=\s*\[/.test(chromeSrc)) throw new Error("channels export 없음");
+});
+for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
+  check(`채널 행 고정: ${rel(f)}`, () => {
+    const html = readFileSync(f, "utf8");
+    if (!html.includes("<sns-links></sns-links>")) throw new Error("<sns-links> 없음");
+    if (!/<script type="module" src="(examples\/)?siteChrome\.js"><\/script>/.test(html))
+      throw new Error("siteChrome.js 모듈 스크립트 없음");
+    if (html.includes("snsBtn")) throw new Error("채널 마크업 인라인 복제(SSOT 우회)");
+  });
 }
 
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.

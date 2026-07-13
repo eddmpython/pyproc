@@ -45,6 +45,9 @@ footer.site{margin-top:2.6rem;padding-top:1rem;border-top:1px solid var(--border
 .logo .py{color:var(--green)}
 .logoMark{border-radius:7px;flex:none}
 header.site .sns{margin-left:auto}
+/* 채널 행은 siteChrome.js의 <sns-links>가 그린다(라우트 공통 SSOT). 커스텀 엘리먼트 자체는
+   레이아웃에서 비운다: 안의 nav.sns가 헤더의 flex 아이템이 되어 마크업이 있던 때와 같다. */
+sns-links{display:contents}
 .sns{display:flex;align-items:center;gap:2px}
 .snsBtn{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);text-decoration:none;transition:color .15s,background .15s}
 .snsBtn:hover{color:var(--text);background:rgba(255,255,255,.08)}

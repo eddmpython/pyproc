@@ -560,6 +560,35 @@ export class MachineJail {
   install(rt: Runtime): { permissions: JailPermissions; connectSrc: string };
 }
 
+/**
+ * GPU 잔류 배열 핸들(f32). matmul은 GPU에 남는 새 핸들을 돌려주므로 체이닝에 재업로드가 없다.
+ * toArray로 CPU 회수(리드백 1복사). f64 없음(WGSL 한계) = f32만.
+ */
+export class GpuArray {
+  readonly rows: number;
+  readonly cols: number;
+  /** 이 배열(M x K) @ other(K x N) = 새 잔류 핸들(M x N). 재업로드 0. */
+  matmul(other: GpuArray): GpuArray;
+  /** GPU -> CPU 회수. 반환 { data: Float32Array, rows, cols }. */
+  toArray(): Promise<{ data: Float32Array; rows: number; cols: number }>;
+  destroy(): void;
+}
+
+/**
+ * WebGPU 컴퓨트로 f32 대규모 선형대수 가속(수치 성능 도약 Phase 2). numpy 대체가 아니라 좁은
+ * 고피크 레인: matmul 실측 109배 vs WASM numpy(실 GPU). 잔류 핸들(업로드1/체이닝/다운로드1)이
+ * 설계의 핵심(arithmetic intensity가 손익분기: 큰 matmul 압승, 작은 배열/값싼 op는 전송비로 짐).
+ * f64는 WGSL 근본 부재 = f32만(암묵 강등 금지). WebGPU는 헤드리스에서 어댑터가 안 뜬다 =
+ * 창 있는 브라우저 + 하드웨어 GPU 필요(create()가 어댑터 부재 시 실행 가능한 에러).
+ */
+export class GpuCompute {
+  /** WebGPU 디바이스 확보(async). 어댑터 없으면 실행 가능한 에러. */
+  static create(): Promise<GpuCompute>;
+  /** f32 배열을 GPU에 올린다(잔류 시작). data.length === rows*cols. */
+  array(data: Float32Array, rows: number, cols: number): GpuArray;
+  destroy(): void;
+}
+
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
 export class Terminal {
   install(): Promise<{ repl: string; timeTravel: boolean }>;

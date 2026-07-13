@@ -19,6 +19,8 @@
 //   DeviceFs             - 모든 것은 파일: 브라우저 능력을 파이썬 open()으로(/dev, /proc)
 //   Init                 - OS의 init: /home/web/boot.py 오토스타트 + cron.py 주기 틱
 //   MachineJournal       - WAL: 유휴마다 상태를 디스크에 남겨 강제종료에도 부활(hibernate 훅 불필요)
+//   GpuCompute/GpuArray  - WebGPU 컴퓨트로 f32 대규모 선형대수 가속(잔류 핸들: 업로드1/체이닝/다운로드1).
+//                          matmul 실측 109배 vs WASM numpy(실 GPU). f32 한정(f64 WGSL 부재), 창 모드 필요
 //   MachineJail          - 권한 감옥: permissions{net,clipboard,home,workers} 2단 집행(협조 초크포인트
 //                          + 감옥 컨텍스트의 CSP connect-src = 브라우저 벽). trust 이진 게이트의 스코프 진화
 //   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/signal/respawn + fork(2)
@@ -50,6 +52,7 @@ export { MachineJail } from "./src/capabilities/machineJail.js";
 export { bootSession, openMachine, Session } from "./src/capabilities/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
+export { GpuCompute, GpuArray } from "./src/capabilities/gpuCompute.js";
 export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
 export { MachineContainer } from "./src/processOs/machineContainer.js";
 export { JobControl } from "./src/processOs/jobControl.js";

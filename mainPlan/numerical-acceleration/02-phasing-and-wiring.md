@@ -53,8 +53,15 @@
 
 임의 패키지 커버리지는 속도와 직교한다. Pyodide dlopen은 이미 됨(C확장 148개 실동), 벽은 pyemscripten(PEP 783) 휠 생태계 채택(~28개, 완만 증가) + ABI 락스텝. pyproc 최선 = 자체 빌드팜이 아니라 micropip PEP 783 레인을 1급으로 흡수(생태계 성장 자동 상속). 착지 = 신규 이니셔티브 `arbitrary-packages`(effort LOW-MEDIUM, attempts `pep783Wheels` 캠페인). **이 이니셔티브(numerical-acceleration)에 섞지 않는다** = 하나의 길 유지.
 
-## NEXT (재개 지점)
+## 실행 상태 (2026-07-13)
 
-1. vision.md 정정 반영(GPU 상태, WASI 단서) + mainPlan 활성 표에 이 이니셔티브 등록.
-2. Phase 1 착수: `tests/attempts/numericShard/` 개설 + shardMatmulProbe 실측(4워커 대형 matmul speedup + native 배율).
-3. Phase 1 게이트 GREEN -> mapArray 확장 src 승격 -> Phase 2 착수 결정(ROI 재검).
+- **Phase 1 완료·승격**: `tests/attempts/numericShard/`(shardMatmul 3.67배 / shardOps 손익분기 / matmulSurface 2.48배 종단) -> `PyProc.matmul(a, b, {parts})` + Matrix 타입 src 승격.
+- **Phase 2 완료·승격**: `tests/attempts/gpuCompute/`(gpuMatmul 109배 / gpuSurface 잔류 체이닝, **실 GPU 창 모드**) -> `GpuCompute`/`GpuArray` 잔류 핸들 src 승격. 헤드리스는 SKIP(CI 무해), 실 GPU는 PYPROC_HEADED=1.
+- **교차 반영**: vision.md 네 상태 정정(GPU 상태3->2, WASI numpy 느림 단서), harness.mjs PYPROC_HEADED/PYPROC_GPU.
+
+## NEXT (재개 지점 = 후속 심화, 코어 밖)
+
+1. **worker+JSPI GPU 통합**: 파이썬 워커가 numpy 배열을 f32로 GpuArray에 올려 GPU 구동(현재는 JS TypedArray 표면). 파이썬 seam.
+2. **커널 최적화**: naive 타일드(109배) -> 프로덕션 타일링 또는 jax-js/WgPy 차용(WgPy 340배). 자작 금지 원칙상 차용.
+3. **op 확장**: GpuArray에 reduce/fused elementwise(matmul 외 compute-bound). 손익분기 재실측.
+4. **SIMD 흡수 감시**: Pyodide numpy SIMD 빌드 릴리즈 시 핀 이동(engine-watch 창구).
