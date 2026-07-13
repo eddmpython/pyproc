@@ -35,6 +35,14 @@ reactive를 이 엔진 위에서(엔진 무관성의 최종 증명).
 | 2026-07-12 | wasiReplProbe | Edge headless, 로컬 COOP+COEP | GREEN 12/12. 반복 실행(상태 유지), 값 프로토콜 양방향(get/set, FFI 없이), 결정적 부팅+반복 실행, **엔진 선형 메모리 위 완전 시간여행**(체크포인트 10MB -> 변이 v=200/big 2MB -> 복원 -> 복원 후 파이썬이 정확히 체크포인트 상태 v=100으로 재개 -> 분기 v=999) | **pyproc 프리미티브(반복 실행/값 다리/완전 시간여행)가 non-Pyodide 위에서 완전히 성립.** 파이썬 엔진은 pyproc 소유(wasiReplDriver.py). 돌파한 벽 4(compile 스택/UTF-8 argv/Fd 초기화/**완전 상태복귀**) | WasiEngine 승격 |
 | 2026-07-13 | wasiUpgradeProbe | Edge headless, 로컬 COOP+COEP | RED 7/9(부분 성립). **brettcannon CPython 3.14.6 부팅 79ms**(죽은 WLR 3.12 소스 이전), stdlib를 `/lib/python3.14` loose 파일 preopen으로 마운트(shim readdir 서빙, zlib 부재라 JS DecompressionStream으로 언집), **결정적 부팅 성립**(두 3.14.6 커널 random 스트림 동일), **체크포인트 성립**(40MB). 그러나 **시간여행 복원 후 재개가 트랩**(`RuntimeError: memory access out of bounds`) | **소스 이전의 코어는 성립(부팅/버전/stdlib/결정성/체크포인트) = 3.12 동결 해제.** 그러나 WASI 전체-힙 시간여행 복원이 WLR 3.12에선 살아남고 3.14.6에선 트랩. wasm이 `memory`/`_start`만 export(레이아웃 심볼 없음), global 0 파싱으로 heapBase=16MB 얻어 heap-only 복원 시도했으나 여전히 트랩(_PyRuntime 정적 데이터 + 힙 + 라이브 스택 삼자 정합 문제). 시간여행의 버전 이식은 깊은 엔진 연구 = per-version 실작업 | 스택 인지 복원(정적+힙 복원, 라이브 스택 보존) 캠페인. 그때까지 src 이전 보류(wasiGate 시간여행 회귀 방지) |
 
+## 네이티브 C확장 = 정적 fat 바이너리 (벽1, 빌드 경로 확정)
+
+"C 확장 불가"는 틀렸다: **동적 로딩만 불가, 정적 링크는 이미 됨**(wasiGate 실측 - `_struct`/`array` 등 stdlib C 모듈이 builtin으로 브라우저 위 실행). numpy도 정적 링크로 이 경로에 오른다.
+
+- **메커니즘**: numpy C 확장(`_multiarray_umath` 등)을 wasi-sdk로 정적 아카이브로 컴파일 -> `PyImport_AppendInittab("numpy._core._multiarray_umath", ...)`로 dotted-name 등록 -> python.wasm에 링크. 순수 파이썬 트리는 installWheel로. (CPython 3.14가 dotted-name BuiltinImporter 블로커 [cpython#102768](https://github.com/python/cpython/issues/102768) 해소 = kesmit 2023 numpy 1.24.2 선례의 잔여 장벽 제거.)
+- **최소 증명(Tier 1, ~반나절)**: 손수 만든 C 모듈 하나를 `Modules/Setup.local`에 추가하고 `python3 Tools/wasm/wasi` 빌드 -> shim에서 `import probe; probe.answer()==42`. wasi-sdk 24 필요(109MB, brettcannon release.yml CI 레시피 재사용). 이 환경엔 wasi-sdk 미설치 = CI 아티팩트 단계.
+- **numpy(Tier 2)**: Meson 크로스빌드(`blas=none/lapack=none` + 번들 lapack_lite, longdouble_format 지정, SIMD off, ctypes/mmap 회피) + wasm-strip(wasi-sdk 23+ DWARF 강제라 필수). 크기 ~25-45MB. 원본 작업(days-to-weeks), 프리빌트 없음.
+
 ## 돌파한 벽 (실측으로 특정 + 해결)
 
 - **완전 상태복귀(가장 어려운 것) - 해결**: 힙 복원이 파이썬 stdin 입력 스트림 상태(누적 바이트)를 되돌려 복원 후 재개가 어긋났다(실측: 명령이 3바이트 밀림). 근본 원인은 WASI FFI 부재 - Pyodide는 FFI로 코드를 힙에 직접 주입해 입력 스트림이 없지만, WASI는 stdin 경유라 입력 상태가 힙에 결합. **값 채널 무상태화로 뚫었다**: 코드는 preopen 파일 `/cmd`(힙 밖 = 복원 무관), stdin은 실행 신호 1바이트(무상태 = 복원 시점에 어긋날 상태 없음). 이로써 복원 후 파이썬이 정확히 체크포인트 상태로 재개하고 분기까지 성립.

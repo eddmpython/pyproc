@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 세 벽 정면(전부 착수): 소켓 아웃바운드 실증 + C확장 재구성 + 네 상태 지도 + 벽3 근원 규명
+
+- "전부 다 하라"는 지시로 세 벽을 동시에 쳤다(연구 2종 + 손 3종). 목표 = North Star 유지, 현재형 주장은 증명된 만큼.
+- **벽2 아웃바운드 소켓 GREEN(실증 완료)**: [socketBridge 캠페인](../../tests/attempts/socketBridge/README.md). zero-dep WS->TCP 릴레이(RFC 6455 직접) + 브라우저 probe. socketProbe 3/3(example.com:80 raw HTTP -> `HTTP/1.1 200` 828바이트 원문 = 소켓 층, 임의 host:port, 닫힌 포트 ECONNREFUSED 전달) + socketBlockingProbe 2/2(**워커에서 동기 connect/send/recv, 블로킹 recv를 Atomics.wait으로** = 파이썬 socket.recv() 동기 의미가 비동기 WS 위에서 성립). 어려운 절반(블로킹 over 비동기)이 pyproc이 이미 쓰는 메커니즘으로 열렸다. 남은 것 = 파이썬 socket 모듈 배선(src), Wisp 멀티플렉싱/TLS. 인바운드는 정직한 물리 벽(역터널 릴레이).
+- **벽1 C확장 재구성(내 게이트 과장 정정)**: wasiGate의 "C 확장 구조적 불가"는 절반만 맞았다 - **동적(.so dlopen)만 불가, 정적 링크는 이미 됨**. python.wasm 자체가 정적 C 확장 묶음이라 `_struct`/`array`/`math`가 builtin으로 브라우저 위 진짜 C 코드로 실행(wasiGate 실측 "True 12 4", GREEN 10/10). numpy도 정적 fat 바이너리로 이 경로(kesmit 2023 numpy 1.24.2 선례 + 3.14가 dotted-name importer 블로커 해소). 빌드는 CI 아티팩트(wasi-sdk 109MB, brettcannon 레시피). 레시피 = [enginePort README](../../tests/attempts/enginePort/README.md).
+- **네 상태 지도 정본화**([local-parity](../local-parity/README.md)): 현재 달성 / 우회 가능(빌드 미완 포함) / upstream 대기 / 영구 벽. 정적 C확장은 현재 달성으로, numpy 정적빌드는 우회 가능(미완)으로, 동적 로딩만 upstream 대기로 정확히 재배치. README 2종도 North Star + 네 상태로 정직화.
+- **벽3 근원 규명(수정 전략 확정)**: 3.14.6 시간여행 트랩의 진짜 원인을 레이아웃 파싱으로 특정. `--stack-first` 레이아웃(스택 [0,16MB] 아래로, 정적데이터 [16-19MB], 힙 [19-40MB], 640페이지=40MB). 근원 = fd_read 안(진행 중 os.read)에서 스냅샷을 찍어 **in-flight 버퍼 포인터 + WASM VM 콜스택(선형 메모리 밖, 되돌리기 불가)**이 힙 복원과 어긋난다. WLR 3.12는 우연히 생존, 3.14.6은 트랩. 진짜 해법 = **빈 스택 경계에서 체크포인트**(프로덕션 Pyodide 방식). 연구 A(스택 인지 복원 설계) 진행 중.
+- 순서 무관하게 전부 전진. 소비자 조율 불요.
+
 ### 2026-07-13 세 벽 리서치(C확장/소켓/자동성장) + 벽3 착수 - non-Pyodide CPython 3.14.6 부팅 + 3.12 동결 진단
 
 - "두 벽(C확장/소켓)을 깔끔히 뚫을 방법 + 파이썬과 함께 자라는 개념"에 전문 에이전트 3종(웹 리서치, 2026 실태 그라운드)으로 답을 갈았다. 관통 인사이트: 세 벽 모두 이미 지불한 값(엔진 무관 seam) 위에서 풀린다.

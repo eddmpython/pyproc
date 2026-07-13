@@ -73,9 +73,14 @@ wasm 자산(30MB)이 없으면 SKIP한다(게이트 적색 아님). CI는 자산
     } else {
       check("SKIP: wheel 자산 없음(tests/attempts/wasiPackages README 레시피)", true);
     }
-    // 정직한 벽: C 확장은 구조적으로 import 불가(WASI 동적 링크 부재, PEP 783 대기). 값으로 못박는다.
-    const suffixes = await s.run("import importlib.machinery as m\nprint(len(m.EXTENSION_SUFFIXES))");
-    check("정직한 벽: C 확장 구조적 불가(EXTENSION_SUFFIXES 비어있음)", suffixes.trim() === "0", `len=${suffixes.trim()}`);
+    // 정직한 경계(재구성): "C 확장 불가"가 아니라 "동적은 불가, 정적은 이미 됨".
+    // (a) 동적 C 확장(.so dlopen)은 불가 - EXTENSION_SUFFIXES가 비어있다(WASI 동적 링크 부재).
+    const dyn = await s.run("import importlib.machinery as m\nprint(len(m.EXTENSION_SUFFIXES))");
+    check("동적 C 확장(.so dlopen) 불가(EXTENSION_SUFFIXES 비어있음)", dyn.trim() === "0", `len=${dyn.trim()}`);
+    // (b) 정적 링크된 C 확장은 이미 브라우저에서 실행 중 - python.wasm 자체가 정적 C 확장 묶음이다
+    //     (_struct/array/math 등이 builtin). numpy도 정적 fat 바이너리로 이 경로에 오른다(빌드 소유).
+    const stat = await s.run("import sys, _struct, array\nprint('_struct' in sys.builtin_module_names, _struct.calcsize('iii'), array.array('i', [1, 2, 3]).itemsize)");
+    check("정적 C 확장은 이미 실행(builtin _struct/array = 브라우저 위 진짜 C 코드)", stat.trim() === "True 12 4", `"${stat.trim()}"`);
     s.terminate();
   } catch (e) {
     if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));

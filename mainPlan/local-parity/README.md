@@ -19,15 +19,18 @@
 North Star("로컬에서 되는 모든 파이썬을 브라우저에서")는 방향이다. 각 능력은 네 상태 중 하나에 있고, pyproc의 일은 위 칸으로 밀어 올리는 것과 upstream이 벽을 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다. "불가능"은 현재 조건 판정이지 포기가 아니다.
 
 ### 현재 달성 (오늘 브라우저 실측)
-순수 파이썬 + Pyodide 빌드 패키지, 멀티코어 프로세스/스냅샷-fork/map, 체크포인트/시간여행(Pyodide 경로), 세션 영속·부활, 터미널, 커널 내 ASGI, 영속 FS(OPFS), input/HTTP/subprocess(`-c`), non-Pyodide WASI CPython 3.14.6 부팅 + 순수 파이썬 wheel `installWheel`([enginePort](../../tests/attempts/enginePort/README.md), [wasiPackages 졸업](../../tests/attempts/wasiPackages/README.md)).
+순수 파이썬 + Pyodide 빌드 패키지, 멀티코어 프로세스/스냅샷-fork/map, 체크포인트/시간여행(Pyodide 경로), 세션 영속·부활, 터미널, 커널 내 ASGI, 영속 FS(OPFS), input/HTTP/subprocess(`-c`), non-Pyodide WASI CPython 3.14.6 부팅 + 순수 파이썬 wheel `installWheel`([enginePort](../../tests/attempts/enginePort/README.md), [wasiPackages 졸업](../../tests/attempts/wasiPackages/README.md)). **정적 링크 C 확장도 이미 실행**: `_struct`/`array`/`math` 등 stdlib C 모듈이 브라우저 위 진짜 C 코드로 돈다(python.wasm 자체가 정적 C 확장 묶음 = wasiGate 실측). "C 확장 불가"는 틀렸다 - **동적만 불가, 정적은 이미 됨**.
 
 ### 우회 가능 (브라우저 방식으로 가상화, 실측)
 - **아웃바운드 소켓**: 진짜 임의 host:port TCP + **블로킹 recv 동기 의미**가 얇은 WS->TCP 릴레이 + SAB/Atomics로 성립([socketBridge GREEN 3/3 + 2/2](../../tests/attempts/socketBridge/README.md)). 남은 배선 = 파이썬 socket 모듈 -> 이 브리지.
 - **서버**: TCP `listen()`을 `AsgiServer`/`VirtualOrigin`으로(파이썬 앱이 진짜 URL, 왕복 3.4ms).
 - **프로세스**: `os.fork`를 워커 커널로, subprocess를 자식 워커로.
 
+### 우회 가능 - 빌드 경로 확정, 아티팩트 미완
+- **네이티브 패키지(numpy 등)**: 정적 fat 바이너리로 이 경로에 오른다 - numpy C 소스를 wasi-sdk로 정적 링크해 python.wasm에 builtin으로 등록(`PyImport_AppendInittab`). 선례 = kesmit 2023 numpy 1.24.2 정적 링크 실증, CPython 3.14가 dotted-name importer 블로커([cpython#102768](https://github.com/python/cpython/issues/102768)) 해소. 빌드는 CI 아티팩트 단계(wasi-sdk 109MB, brettcannon release.yml 레시피 재사용, blas/lapack=none + 번들 lapack_lite, longdouble/SIMD off, wasm-strip). 미완 = 프론티어(enginePort 후속).
+
 ### upstream 대기 (지금 막혔으나 플랫폼 발전으로 다시 열림 - 프론티어)
-- **네이티브 C확장 wheel**(numpy 등): WASI 정적 fat 바이너리(빌드 소유) 또는 PEP 783 pyemscripten 휠 / WebAssembly 컴포넌트 모델. 프론티어 = enginePort 후속(정적 링크 실증).
+- **동적 C확장 로딩**(.so를 런타임에 dlopen = 임의 wheel 즉시 설치): PEP 783 pyemscripten 휠 / WebAssembly 컴포넌트 모델 / WASI 동적 링킹. 정적 fat 빌드가 있으면 이건 없어도 되지만, 임의 패키지 즉시 설치는 이게 열려야.
 - **WASI 시간여행 이식**: 3.14.6에서 전체-힙 복원이 트랩(스택 인지 복원 필요). 프론티어 = 스택 인지 복원 캠페인([enginePort 결론 표](../../tests/attempts/enginePort/README.md)).
 - **GPU**: WebGPU 산술(실행 축 프론티어).
 - **진짜 threading / nogil**: WASM threads + 공유 메모리, upstream nogil.
