@@ -4,6 +4,13 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 완성 스프린트: HTTPS 소켓 + 에이전트 샌드박스 데모 (구조 363 + 예제 5/5 + 소켓 능력 3/3)
+
+- "진짜 강력한 기능으로 완전히 세운다" 목표. 소켓을 http+https로 완성하고, 핵심 가치를 실물 데모로 세웠다.
+- **HTTPS 소켓(SocketBridge 완성)**: 릴레이가 port 443(또는 tls 플래그)에서 node:tls로 TLS를 종단하고, 파이썬 `ssl.SSLContext.wrap_socket`은 패스스루(이중 암호화 방지). **`urllib.request.urlopen('https://…')`가 진짜 소켓으로 200**(219ms). 실측 버그 특정·해결: http.client는 `Connection: close` 응답에서 헤더만 읽고 소켓을 닫은 뒤 바디를 makefile로 읽는데(CPython은 refcount 생존), `close()`가 즉시 WS를 닫으면 릴레이가 in-flight 응답을 끊어 truncation(IncompleteRead 559바이트) -> `close()` 유예로 드레인 보장. socketCapProbe GREEN 3/3(http 200 + https 200). 정직: 릴레이가 평문을 봄 = e2e 아님(in-tab TLS는 v2). requests/urllib3는 ssl 속성 추가 심 필요.
+- **에이전트 샌드박스 데모(혼자 서는 증명)**: examples/agentSandbox.html - README 핵심 가치를 실측 시나리오로. numpy 데이터 준비 -> 체크포인트 -> 버그 코드로 오염(sum 0) -> **복원(sum 5050, 재실행 없이 ms)** -> 같은 상태에서 분기 A(mean 50.5)/B(filtered 3775). 실제 `enableReactive` API. 예제 게이트 편입(5쪽 GREEN, 매 CI 검증) + 4개 예제 nav + 랜딩 카드(맨 앞). 랜딩 헤딩 "an OS, not a sandbox" -> "The OS primitives underneath"(새 에이전트-샌드박스 포지셔닝과 용어 정합).
+- **의미**: 소켓이 http+https로 실용 완성됐고, "에이전트가 상태를 준비/저장/분기/복원한다"는 핵심 가치가 문구가 아니라 매 CI에서 도는 데모로 섰다. 남은 강화: in-tab TLS(e2e), Wisp 멀티플렉싱, requests, numpy 정적 빌드(CI 아티팩트).
+
 ### 2026-07-13 벽2 완결: SocketBridge 능력 승격 - urllib이 브라우저에서 진짜 소켓으로 (구조 362 + probe 3종)
 
 - 벽2 아웃바운드를 개념 -> 진짜 파이썬 소켓 -> **src 능력**으로 완결했다. `Runtime.enableSocketBridge({relayURL})` 승격(공개 표면).
