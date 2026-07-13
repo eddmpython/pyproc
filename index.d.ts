@@ -569,8 +569,20 @@ export class GpuArray {
   readonly cols: number;
   /** 이 배열(M x K) @ other(K x N) = 새 잔류 핸들(M x N). 재업로드 0. */
   matmul(other: GpuArray): GpuArray;
+  /** 원소별 변환(WGSL 표현식, x = 원소)을 적용한 새 잔류 핸들(같은 shape). 예: map("max(x, 0.0)"). matmul 뒤 활성화 체이닝. */
+  map(expr: string): GpuArray;
   /** GPU -> CPU 회수. 반환 { data: Float32Array, rows, cols }. */
   toArray(): Promise<{ data: Float32Array; rows: number; cols: number }>;
+  destroy(): void;
+}
+
+/**
+ * Python numpy -> GPU 직결. Runtime.enableGpu()로 얻고 install() 후 파이썬이 pyprocGpu.matmul(a, b)로
+ * numpy 배열을 GPU에서 곱한다(블로킹 = JSPI, rt.runAsync 경로). 실 GPU + 창 모드 + numpy 필요.
+ * f64는 f32로 강등(WGSL 한계, 정밀도 손실은 계약).
+ */
+export class GpuBridge {
+  install(): Promise<{ installed: string; note: string }>;
   destroy(): void;
 }
 
@@ -641,6 +653,8 @@ export class Runtime {
   enableDeviceFs(cfg?: DeviceFsConfig): DeviceFs;
   enableInit(cfg?: InitConfig): Init;
   enableJournal(cfg: JournalConfig): MachineJournal;
+  /** Python numpy -> GPU 직결(install()로 pyprocGpu 배선). 실 GPU + 창 모드 + numpy 필요. */
+  enableGpu(cfg?: object): GpuBridge;
   /** 디렉터리 핸들(OPFS 등)을 파이썬 경로로 마운트(기본 /home/web). 반환된 sync()로 영속화. */
   mountHome(dirHandle: FileSystemDirectoryHandle, path?: string): Promise<{ path: string; sync: () => Promise<void> }>;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */

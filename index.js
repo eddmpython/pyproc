@@ -52,7 +52,7 @@ export { MachineJail } from "./src/capabilities/machineJail.js";
 export { bootSession, openMachine, Session } from "./src/capabilities/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
-export { GpuCompute, GpuArray } from "./src/capabilities/gpuCompute.js";
+export { GpuCompute, GpuArray, GpuBridge } from "./src/capabilities/gpuCompute.js";
 export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
 export { MachineContainer } from "./src/processOs/machineContainer.js";
 export { JobControl } from "./src/processOs/jobControl.js";

@@ -4,6 +4,15 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 후속 심화 완료: Python numpy -> GPU 직결 + map 체이닝 (gpuPythonProbe 실 GPU 4/4)
+
+- Phase 2의 후속 심화(파이썬 통합 + 원소별 op)를 실 GPU로 완성했다. **GPU가 파이썬에 실제로 연결됐다 = pyproc 정체성 완성.**
+- **`GpuArray.map(expr)`(원소별 잔류)**: WGSL 표현식(x=원소)을 각 원소에 적용한 새 잔류 핸들. matmul 뒤 활성화(`max(x,0)` relu 등)를 **리드백 없이** 잇는다. 표현식별 파이프라인 캐시.
+- **`Runtime.enableGpu()` -> `GpuBridge`(Python numpy 직결)**: install()이 GPU 디바이스 확보 + 파이썬 `pyprocGpu` 모듈 배선. `pyprocGpu.matmul(a, b)`가 numpy 배열을 f32로 GPU에서 곱해 numpy로 반환(블로킹 = JSPI run_sync, socketBridge 패턴). numpy 필요, 실 GPU + 창 모드.
+- **실측(gpuPythonProbe GREEN 4/4, 실 GPU)**: 파이썬 GPU matmul == CPU numpy **maxerr 0.00**, 1024 f32 **92배**(GPU 84ms vs CPU 7682ms). map 잔류 체이닝 matmul->relu == CPU 참조 maxErr 1.19e-7. 헤드리스는 SKIP.
+- **커널 최적화 판정(정직)**: 연구가 "커널 자작 금지"(naive vs 최적 600-1000배 격차, jax-js/WgPy 차용 권장)를 명시했고 이 GPU 하나에서만 검증 가능하므로, **naive 타일드(검증된 92-109배)를 유지하고 프로덕션 타일링/차용은 후속으로 정직하게 둔다**. 위험한 자작 커널이 정공법이 아니다.
+- **표면**: index.js/index.d.ts(GpuBridge/map/enableGpu)/run.mjs/README 2종. **Phase 2 = 개념 + src 승격 + 파이썬 통합 + 원소별 op까지 완결.** 잔여(커널 최적화 차용, GPU reduce, worker 내 GPU)는 코어 밖 선택 후속.
+
 ### 2026-07-13 Phase 2 완료 + src 승격: GpuCompute WebGPU 잔류 핸들 (실 GPU gpuMatmul 4/4 + gpuSurface 5/5)
 
 - Phase 2(프론티어, GPU)를 실 GPU로 실증하고 `GpuCompute`/`GpuArray`로 src 승격했다. **"GPU 검증 불가"는 헤드리스 한정**이었음이 드러났다.

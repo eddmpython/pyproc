@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!--
+결과(append): Phase 2 후속 - Python numpy가 GPU를 쓴다(pyproc 정체성 완성) + GpuArray.map 잔류 체이닝.
+(1) Runtime.enableGpu -> 파이썬 pyprocGpu.matmul(numpy a, b)가 GPU에서 곱해 numpy로 돌려준다
+    (JSPI run_sync). CPU numpy 참조와 일치 + 속도.
+(2) GpuArray.map: matmul 뒤 relu(max(x,0))를 리드백 없이 잇는다(체이닝 == CPU 참조).
+어댑터 없으면 SKIP. 실행: PYPROC_HEADED=1 ... gpuPythonProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: python gpu</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: Python numpy -> GPU + map 체이닝 (Phase 2 후속)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot, GpuCompute } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+
+  try {
+    // 어댑터 선확인(헤드리스면 SKIP).
+    if (!("gpu" in navigator)) { check("SKIP: WebGPU 미노출", true); await report(); throw new Error("__skip__"); }
+    let adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) adapter = await navigator.gpu.requestAdapter({ forceFallbackAdapter: true });
+    if (!adapter) { check("SKIP: WebGPU 어댑터 없음(실 GPU 머신에서 PYPROC_HEADED=1)", true); await report(); throw new Error("__skip__"); }
+
+    // 1) Python numpy -> GPU: Runtime + numpy + enableGpu -> pyprocGpu.matmul(runAsync).
+    const rt = await boot({ indexURL: INDEX });
+    await rt.loadPackages(["numpy"]);
+    const info = await rt.enableGpu().install();
+    check("enableGpu 설치(pyprocGpu 배선)", info.installed === "pyprocGpu");
+
+    // 파이썬이 numpy 배열을 GPU에서 곱하고, CPU numpy 참조와 일치하는지 파이썬 안에서 검증.
+    const pyOk = await rt.runAsync([
+      "import numpy, pyprocGpu",
+      "numpy.random.seed(0)",
+      "a = (numpy.random.rand(256, 192).astype(numpy.float32) - 0.5)",
+      "b = (numpy.random.rand(192, 160).astype(numpy.float32) - 0.5)",
+      "g = pyprocGpu.matmul(a, b)",           // GPU
+      "c = a @ b",                             // CPU numpy 참조(f32)
+      "maxerr = float(numpy.max(numpy.abs(g - c)))",
+      "[list(g.shape), maxerr]",
+    ].join("\n"));
+    const pr = pyOk && pyOk.toJs ? pyOk.toJs() : pyOk;
+    check("파이썬 numpy가 GPU에서 matmul == CPU numpy 참조", Array.isArray(pr) && pr[0][0] === 256 && pr[0][1] === 160 && pr[1] < 1e-2, `shape ${JSON.stringify(pr && pr[0])}, maxerr ${pr && pr[1].toExponential ? pr[1].toExponential(2) : pr[1]}`);
+
+    // 속도: 대형 f32 matmul 파이썬 GPU 경로 vs CPU numpy(파이썬 안 측정).
+    const spd = await rt.runAsync([
+      "import numpy, pyprocGpu, time",
+      "s = 1024",
+      "a = (numpy.random.rand(s, s).astype(numpy.float32) - 0.5)",
+      "b = (numpy.random.rand(s, s).astype(numpy.float32) - 0.5)",
+      "pyprocGpu.matmul(a, b)",  // 워밍업
+      "t0 = time.perf_counter(); pyprocGpu.matmul(a, b); gpu = (time.perf_counter()-t0)*1000",
+      "t0 = time.perf_counter(); a @ b; cpu = (time.perf_counter()-t0)*1000",
+      "[gpu, cpu]",
+    ].join("\n"));
+    const sp = spd && spd.toJs ? spd.toJs() : spd;
+    timings.pyGpuMs = Math.round(sp[0]); timings.pyCpuMs = Math.round(sp[1]); timings.pySpeedup = +(sp[1] / sp[0]).toFixed(1);
+    check("파이썬 GPU matmul이 CPU numpy보다 빠름(>= 5x)", timings.pySpeedup >= 5, `GPU ${timings.pyGpuMs}ms, CPU ${timings.pyCpuMs}ms, ${timings.pySpeedup}x`);
+
+    // 2) GpuArray.map 잔류 체이닝: matmul -> relu(max(x,0)) 리드백 없이. CPU 참조 일치.
+    const gc = await GpuCompute.create();
+    const M = 40, K = 30, N = 24;
+    const A = new Float32Array(M * K), B = new Float32Array(K * N);
+    for (let i = 0; i < A.length; i++) A[i] = ((i * 7 + 3) % 29) / 29 - 0.5;
+    for (let i = 0; i < B.length; i++) B[i] = ((i * 5 + 1) % 31) / 31 - 0.5;
+    const chained = gc.array(A, M, K).matmul(gc.array(B, K, N)).map("max(x, 0.0)"); // matmul then relu, GPU 잔류
+    const R = await chained.toArray();
+    // CPU 참조: (A@B) 후 relu.
+    const ref = new Float32Array(M * N);
+    for (let i = 0; i < M; i++) for (let j = 0; j < N; j++) { let s = 0; for (let x = 0; x < K; x++) s += A[i * K + x] * B[x * N + j]; ref[i * N + j] = Math.max(s, 0); }
+    let maxErr = 0, anyPos = false, anyZero = false;
+    for (let i = 0; i < ref.length; i++) { maxErr = Math.max(maxErr, Math.abs(R.data[i] - ref[i])); if (R.data[i] > 0) anyPos = true; if (R.data[i] === 0) anyZero = true; }
+    check("map 잔류 체이닝: matmul->relu == CPU 참조(리드백 0)", maxErr < 1e-3 && anyPos && anyZero, `maxErr ${maxErr.toExponential(2)}, relu 적용됨(양수+0 공존)`);
+    gc.destroy();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

@@ -28,8 +28,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   c[row * d.n + col] = sum;
 }`;
 
+// 원소별 WGSL 템플릿(EXPR = 소비자 표현식, x = 원소). matmul 뒤 활성화 등 잔류 체이닝용.
+// 예: map("max(x, 0.0)")(relu), map("x * 2.0 + 1.0"), map("1.0 / (1.0 + exp(-x))")(sigmoid).
+const ELEMENTWISE_WGSL = `
+@group(0) @binding(0) var<storage, read> a: array<f32>;
+@group(0) @binding(1) var<storage, read_write> c: array<f32>;
+@group(0) @binding(2) var<uniform> len: u32;
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x;
+  if (i >= len) { return; }
+  let x = a[i];
+  c[i] = __EXPR__;
+}`;
+
 export class GpuCompute {
-  constructor(device) { this._device = device; this._matmul = null; }
+  constructor(device) { this._device = device; this._matmul = null; this._elementwise = new Map(); }
 
   // WebGPU 디바이스를 확보한다(async). 어댑터가 없으면(헤드리스) 실행 가능한 에러.
   static async create() {
@@ -52,6 +66,17 @@ export class GpuCompute {
       this._matmul = this._device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
     }
     return this._matmul;
+  }
+
+  // 원소별 파이프라인(표현식별 캐시). expr는 소비자 WGSL 표현식(x = 원소).
+  _elementwisePipeline(expr) {
+    let p = this._elementwise.get(expr);
+    if (!p) {
+      const module = this._device.createShaderModule({ code: ELEMENTWISE_WGSL.replace("__EXPR__", expr) });
+      p = this._device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
+      this._elementwise.set(expr, p);
+    }
+    return p;
   }
 
   // f32 배열을 GPU에 올린다(잔류 시작). data = Float32Array(길이 rows*cols). 반환 = 잔류 핸들.
@@ -92,6 +117,26 @@ export class GpuArray {
     return new GpuArray(this._gc, cBuf, M, N);
   }
 
+  // 원소별 변환: 각 원소 x에 WGSL 표현식 expr를 적용한 새 잔류 핸들(같은 shape). 재업로드 0.
+  // 잔류 체이닝의 핵심: m.matmul(w).map("max(x, 0.0)")처럼 matmul 뒤 활성화를 리드백 없이 잇는다.
+  map(expr) {
+    if (typeof expr !== "string" || !expr.length) throw new Error("GpuArray.map: expr는 WGSL 표현식 문자열(x = 원소). 예: \"max(x, 0.0)\"");
+    const device = this._gc._device, len = this.rows * this.cols;
+    const cBuf = device.createBuffer({ size: len * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const nBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true });
+    new Uint32Array(nBuf.getMappedRange()).set([len, 0, 0, 0]); nBuf.unmap();
+    const pipeline = this._gc._elementwisePipeline(expr);
+    const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: this.buffer } }, { binding: 1, resource: { buffer: cBuf } }, { binding: 2, resource: { buffer: nBuf } },
+    ] });
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass(); pass.setPipeline(pipeline); pass.setBindGroup(0, bind);
+    pass.dispatchWorkgroups(Math.ceil(len / 64)); pass.end();
+    device.queue.submit([enc.finish()]);
+    nBuf.destroy();
+    return new GpuArray(this._gc, cBuf, this.rows, this.cols);
+  }
+
   // GPU -> CPU 회수(리드백 1복사). 반환 { data: Float32Array, rows, cols }.
   async toArray() {
     const device = this._gc._device, size = this.rows * this.cols * 4;
@@ -106,4 +151,50 @@ export class GpuArray {
   }
 
   destroy() { this.buffer.destroy(); }
+}
+
+// Python numpy -> GPU 직결(pyproc 정체성 완성). Runtime의 파이썬이 numpy 배열을 f32로 GPU에서
+// matmul한다: pyprocGpu.matmul(a, b). 블로킹은 JSPI(run_sync)라 rt.runAsync 경로에서 동작한다
+// (socketBridge/machineContainer와 같은 패턴). 실 GPU + 창 모드 필요(navigator.gpu는 메인 스레드).
+// numpy 필요(rt.loadPackages(["numpy"])). f64는 f32로 강등(WGSL 한계) - 정밀도 손실은 계약이다.
+const GPU_BOOTSTRAP = `
+import sys as _pyprocSysG, types as _pyprocTypesG
+import numpy as _pyprocNumpyG
+from pyodide.ffi import to_js as _pyprocToJsG, run_sync as _pyprocRunSyncG
+
+_pyprocGpuMod = _pyprocTypesG.ModuleType('pyprocGpu')
+
+def _pyprocGpuMatmul(a, b):
+    a = _pyprocNumpyG.ascontiguousarray(a, dtype=_pyprocNumpyG.float32)
+    b = _pyprocNumpyG.ascontiguousarray(b, dtype=_pyprocNumpyG.float32)
+    res = _pyprocRunSyncG(_pyprocGpuMatmulBridge(
+        _pyprocToJsG(a.tobytes()), a.shape[0], a.shape[1],
+        _pyprocToJsG(b.tobytes()), b.shape[0], b.shape[1]))
+    return _pyprocNumpyG.frombuffer(bytes(res.to_py()), dtype=_pyprocNumpyG.float32).reshape(a.shape[0], b.shape[1])
+
+_pyprocGpuMod.matmul = _pyprocGpuMatmul
+_pyprocSysG.modules['pyprocGpu'] = _pyprocGpuMod
+`;
+
+export class GpuBridge {
+  constructor(rt) { this._rt = rt; this._gc = null; }
+
+  // GPU 디바이스 확보 + 파이썬 pyprocGpu 모듈 배선. 어댑터 부재(헤드리스) 시 실행 가능한 에러.
+  async install() {
+    this._gc = await GpuCompute.create();
+    const gc = this._gc;
+    // 파이썬이 부를 브리지(JSPI가 서스펜드하는 async): f32 바이트를 받아 GPU matmul 후 결과 바이트.
+    const bridge = async (aU8, aRows, aCols, bU8, bRows, bCols) => {
+      const A = new Float32Array(aU8.slice().buffer), B = new Float32Array(bU8.slice().buffer);
+      const ga = gc.array(A, aRows, aCols), gb = gc.array(B, bRows, bCols), gout = ga.matmul(gb);
+      const r = await gout.toArray();
+      ga.destroy(); gb.destroy(); gout.destroy();
+      return new Uint8Array(r.data.buffer);
+    };
+    this._rt.setGlobal("_pyprocGpuMatmulBridge", bridge);
+    this._rt.run(GPU_BOOTSTRAP);
+    return { installed: "pyprocGpu", note: "블로킹은 JSPI(run_sync)라 rt.runAsync 경로에서. numpy 필요" };
+  }
+
+  destroy() { if (this._gc) this._gc.destroy(); }
 }

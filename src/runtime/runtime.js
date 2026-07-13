@@ -13,6 +13,7 @@ import { Terminal } from "../capabilities/terminal.js";
 import { DeviceFs } from "../capabilities/deviceFs.js";
 import { Init } from "../capabilities/init.js";
 import { MachineJournal } from "../capabilities/machineJournal.js";
+import { GpuBridge } from "../capabilities/gpuCompute.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
@@ -137,6 +138,8 @@ export class Runtime {
   enableDeviceFs(cfg = {}) { return new DeviceFs(this, cfg); }
   enableInit(cfg = {}) { return new Init(this, cfg); }
   enableJournal(cfg = {}) { return new MachineJournal(this, cfg); }
+  // Python numpy -> GPU 직결(install()로 pyprocGpu 모듈 배선). 실 GPU + 창 모드 + numpy 필요.
+  enableGpu(cfg = {}) { return new GpuBridge(this); }
 
   // 영속 디스크: OPFS 등 디렉터리 핸들을 파이썬 파일시스템 경로로 마운트한다.
   // 파이썬 open()이 진짜 지속 파일을 읽고 쓴다. 변경 반영은 반환된 sync() 호출(핸들은 소비자 제공).

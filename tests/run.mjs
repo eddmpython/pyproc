@@ -34,7 +34,7 @@ for (const [name, kind] of [
   ["boot", "function"], ["checkEnvironment", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
   ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
   ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"],
-  ["GpuCompute", "function"], ["GpuArray", "function"],
+  ["GpuCompute", "function"], ["GpuArray", "function"], ["GpuBridge", "function"],
   ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
 ]) {
   check(`export ${name}:${kind}`, () => {
@@ -108,11 +108,13 @@ check("JobControl 메서드", () => {
   for (const m of ["boot", "push", "jobs", "fg", "kill", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
-check("GpuCompute/GpuArray 메서드", () => {
+check("GpuCompute/GpuArray/GpuBridge 메서드", () => {
   if (typeof api.GpuCompute.create !== "function") throw new Error("GpuCompute.create(static)");
   for (const m of ["array", "destroy"]) if (typeof api.GpuCompute.prototype[m] !== "function") throw new Error(`GpuCompute.${m}`);
-  for (const m of ["matmul", "toArray", "destroy"]) if (typeof api.GpuArray.prototype[m] !== "function") throw new Error(`GpuArray.${m}`);
+  for (const m of ["matmul", "map", "toArray", "destroy"]) if (typeof api.GpuArray.prototype[m] !== "function") throw new Error(`GpuArray.${m}`);
+  for (const m of ["install", "destroy"]) if (typeof api.GpuBridge.prototype[m] !== "function") throw new Error(`GpuBridge.${m}`);
 });
+check("Runtime.enableGpu", () => { if (typeof api.Runtime.prototype.enableGpu !== "function") throw new Error("Runtime.enableGpu"); });
 check("PyProc.repl/exec 메서드", () => {
   const p = api.PyProc.prototype;
   for (const m of ["repl", "exec"]) if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
