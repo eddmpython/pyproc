@@ -49,6 +49,19 @@ body = resp.read()
     const r = raw && raw.toJs ? raw.toJs() : raw;
     check("urllib.request.urlopen over 릴레이 -> 진짜 HTTP 200", Array.isArray(r) && r[0] === 200 && r[2] === true, r ? `status=${r[0]}, ${r[1]}바이트, "${r[3]}", ${timings.httpMs}ms` : "null");
     if (raw && raw.destroy) raw.destroy();
+
+    // HTTPS: 릴레이가 port 443에서 TLS 종단, ssl.wrap_socket 패스스루. urllib https가 그대로 돈다.
+    t = performance.now();
+    const rawS = await rt.runAsync(`
+import urllib.request
+resp = urllib.request.urlopen('https://example.com/', timeout=15)
+body = resp.read()
+[int(resp.status), len(body), (b'<html' in body.lower())]
+`);
+    timings.httpsMs = Math.round(performance.now() - t);
+    const rs = rawS && rawS.toJs ? rawS.toJs() : rawS;
+    check("urllib HTTPS over 릴레이 TLS -> 진짜 200", Array.isArray(rs) && rs[0] === 200 && rs[2] === true, rs ? `status=${rs[0]}, ${rs[1]}바이트, ${timings.httpsMs}ms` : "null");
+    if (rawS && rawS.destroy) rawS.destroy();
   } catch (e) {
     if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
   }

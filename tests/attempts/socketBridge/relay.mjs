@@ -4,6 +4,7 @@
 // 의존성 0(RFC 6455 핸드셰이크 + 프레이밍을 node:crypto/net으로 직접). 소비자 교체 가능한 계약.
 import { createServer } from "node:http";
 import { connect } from "node:net";
+import { connect as tlsConnect } from "node:tls";
 import { createHash } from "node:crypto";
 
 const PORT = Number(process.argv[2] || process.env.RELAY_PORT || 8791);
@@ -65,7 +66,14 @@ server.on("upgrade", (req, socket) => {
       if (f.opcode === 0x1 && !tcp) {
         // 첫 텍스트 = 다이얼 요청 {host, port}
         let req2; try { req2 = JSON.parse(f.payload.toString()); } catch (e) { sendText({ type: "error", msg: "bad dial" }); continue; }
-        tcp = connect({ host: req2.host, port: req2.port }, () => sendText({ type: "connected" }));
+        // TLS 종단: port 443(또는 tls 플래그)이면 릴레이가 TLS 핸드셰이크를 한다. 그러면 파이썬은
+        // 평문 HTTP를 보내고(ssl.wrap_socket은 패스스루로 스텁), 릴레이가 암복호화한다. 릴레이가
+        // 평문을 보므로 end-to-end는 아니다(정직: 소비 제품이 신뢰하는 릴레이여야 한다).
+        const useTls = req2.tls === true || req2.port === 443;
+        const onReady = () => sendText({ type: "connected" });
+        tcp = useTls
+          ? tlsConnect({ host: req2.host, port: req2.port, servername: req2.host }, onReady)
+          : connect({ host: req2.host, port: req2.port }, onReady);
         tcp.on("data", (d) => sendBin(d));
         tcp.on("error", (e) => sendText({ type: "error", msg: String(e.message || e) }));
         tcp.on("close", () => { sendText({ type: "closed" }); socket.end(encodeFrame(0x8, Buffer.alloc(0))); });

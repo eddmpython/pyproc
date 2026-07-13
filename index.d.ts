@@ -179,10 +179,11 @@ export interface SocketBridgeConfig {
 }
 
 /**
- * 파이썬 socket을 진짜 아웃바운드 TCP에 배선한다. socket.socket()/create_connection을 얇은 WS->TCP
- * 릴레이 소켓으로 심해 Python connect/send/recv가 임의 host:port로 진짜 TCP를 연다. requests/urllib3/
- * http.client가 같은 socket API라 따라온다. 블로킹 recv = JSPI(run_sync)라 rt.runAsync 경로에서 동작.
- * 인바운드(공개 서버)는 물리 벽(역터널 릴레이 = 별도 조각). Chromium/Edge 전용.
+ * 파이썬 socket을 진짜 아웃바운드 TCP에 배선한다(http + https). socket.socket()/create_connection을
+ * 얇은 WS->TCP 릴레이 소켓으로 심해 Python connect/send/recv가 임의 host:port로 진짜 TCP를 연다.
+ * urllib/http.client가 같은 socket API라 따라오고, https는 릴레이가 port 443에서 TLS 종단(ssl.wrap_socket
+ * 패스스루). 블로킹 recv = JSPI(run_sync)라 rt.runAsync 경로에서 동작. https는 릴레이가 평문을 보므로
+ * e2e가 아니다(신뢰하는 릴레이 필요). 인바운드(공개 서버)는 물리 벽(역터널 릴레이). Chromium/Edge 전용.
  */
 export class SocketBridge {
   install(): { installed: string[]; relayURL: string; jspi: boolean; note: string };

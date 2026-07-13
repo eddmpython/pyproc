@@ -193,7 +193,7 @@ Pyodide  Workers
 | `MemoryCapability` | WASM 힙 접근을 캡슐화하는 능력 계약 |
 | `ReactiveController` | 복원 기반 리액티비티: `checkpoint` / `restoreLive` / `timeTravel`, 분기 나무 |
 | `SyscallBridge` | 빌린 시스템콜: `input()`(동기 / JSPI), `urllib`(동기 XHR), `subprocess`(자식 워커) |
-| `SocketBridge` | 파이썬 소켓을 얇은 WS->TCP 릴레이로 진짜 아웃바운드 TCP에: `socket` / `requests` / `urllib3`가 임의 host:port 도달(블로킹 recv = JSPI, `runAsync`). 인바운드는 물리 벽 |
+| `SocketBridge` | 파이썬 소켓을 얇은 WS->TCP 릴레이로 진짜 아웃바운드 TCP에(HTTP + HTTPS): `socket` / `urllib` / `http.client`가 임의 host:port 도달, https는 릴레이가 TLS 종단(블로킹 recv = JSPI, `runAsync`). 인바운드는 물리 벽 |
 | `AsgiServer` | 커널 내 ASGI 서버(소켓 0 FastAPI, ~3.4ms 디스패치) |
 | `VirtualOrigin` | 파이썬 서버를 진짜 URL로(`pyprocSw.js` 서비스 워커 자산과 쌍) |
 | `Terminal` | 서버리스 파이썬 터미널(REPL, 블로킹 input, `%pip` / `%undo`) |
