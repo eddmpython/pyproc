@@ -14,7 +14,8 @@
     "./reactive": "./src/capabilities/reactive.js",
     "./syscall-bridge": "./src/capabilities/syscallBridge.js",
     "./process-os": "./src/processOs/pyProc.js",
-    "./worker": "./src/processOs/worker.js"
+    "./worker": "./src/processOs/worker.js",
+    "./browser-control-host": "./src/capabilities/browserControlHost.js"
   },
   "files": ["index.js", "index.d.ts", "src", "README.md", "README.ko.md", "LICENSE"],
   "scripts": {

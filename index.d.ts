@@ -607,6 +607,30 @@ export class GpuCompute {
   destroy(): void;
 }
 
+/**
+ * MV3 확장 offscreen에서 파이썬이 브라우저를 조작하는 능력. Runtime.enableBrowserControl()로 얻고
+ * install() 후 파이썬이 pyprocBrowser.tab(url, mode)로 탭을 연다(블로킹 = JSPI, rt.runAsync 경로).
+ * 조작은 서비스워커의 openBrowserControlHost(별도 subpath "pyproc/browser-control-host")가 chrome.debugger/
+ * scripting으로 대행한다. 전제: 확장 offscreen(chrome.runtime) + 호스트가 열려 있음(install이 핸드셰이크로 검증).
+ */
+export class BrowserControl {
+  install(): Promise<BrowserControl>;
+}
+
+/**
+ * 파이썬 pyprocBrowser.tab(url, mode)이 반환하는 탭 핸들(파이썬 표면 문서화용 타입).
+ * mode="script": chrome.scripting(스텔스, isTrusted=false). mode="debugger": chrome.debugger(신뢰입력 isTrusted=true).
+ * sessionId는 불투명(tabId 비노출). 탭이 외부 종료되면 이후 op가 SessionLost 예외.
+ */
+export interface BrowserTab {
+  readonly mode: "script" | "debugger";
+  navigate(url: string): BrowserTab;
+  evaluate(expr: string): unknown;
+  click(selector: string): BrowserTab;
+  type(selector: string, text: string): BrowserTab;
+  close(): void;
+}
+
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
 export class Terminal {
   install(): Promise<{ repl: string; timeTravel: boolean }>;
@@ -688,6 +712,8 @@ export class Runtime {
   enableJournal(cfg: JournalConfig): MachineJournal;
   /** Python numpy -> GPU 직결(install()로 pyprocGpu 배선). 실 GPU + 창 모드 + numpy 필요. */
   enableGpu(cfg?: object): GpuBridge;
+  /** MV3 확장 offscreen에서 파이썬이 브라우저 조작(install()로 pyprocBrowser 배선). 확장 컨텍스트 + 호스트 필요. */
+  enableBrowserControl(cfg?: object): BrowserControl;
   /** 디렉터리 핸들(OPFS 등)을 파이썬 경로로 마운트(기본 /home/web). 반환된 sync()로 영속화. */
   mountHome(dirHandle: FileSystemDirectoryHandle, path?: string): Promise<{ path: string; sync: () => Promise<void> }>;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */

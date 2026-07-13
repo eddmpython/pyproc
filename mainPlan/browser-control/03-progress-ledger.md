@@ -4,6 +4,64 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 Phase A 실측 완료: 영속 세션 모델 GREEN (게이트9/10) -> Phase B(src 승격) 착수
+
+- **게이트9(영속 세션 모델)**: 파이썬 `pyprocBrowser.tab(url, mode).evaluate/type/click/close`가 한 핸들로
+  op 사이에 탭/attach를 유지하며 실동. debugger+script 두 mode GREEN. **offscreen 메인스레드에서 블로킹
+  `run_sync` 실동**(3에이전트 최대 리스크 해소). TabSession(수명) + Driver(전략, 생성 시 1회 선택) + 프로토콜
+  계약(버전 필드)의 깎인 형태가 섰다.
+- **게이트10(세션 수명)**: 탭 외부 종료 -> `onDetach` -> 세션 무효화 -> 이후 op가 `SessionLost: debugger
+  detached` 예외로 깨끗이 실패(행 금지). 3에이전트 최대 파손 지점(onDetach 미배선) 해결.
+- **블로킹 표면 순차성(정직)**: pyprocBrowser 블로킹 표면은 한 offscreen 인터프리터에서 **순차**다(게이트7의
+  async gather 병렬과 다름). 진짜 세션 병렬(세션 N 동시)은 Phase 2 워커 N = 인터프리터 N에서. 블로킹 표면의
+  순차는 설계 정합(한 인터프리터 = 한 실행 흐름).
+- **미검증(테스트 재현 난이)**: MV3 SW 30초 소멸 -> keep-alive(alarms/port) + 재attach. 게이트로 재현 어려워
+  Phase B 구현 + 실배포 검증. onDetach 경로는 게이트10으로 확증됨(SW 소멸도 같은 onDetach를 탄다).
+- **졸업 게이트 진척**: ④모듈화 설계 + ⑤덕지덕지 제거(TabSession+Driver, per-verb 플래그 0) + ⑥클린코드를
+  실측으로 채웠다. -> Phase B = ⑦계약 확정(index.d.ts/README) + ⑧src 배치.
+- **Phase B 착수**: src/capabilities에 browserControlProtocol.js + browserControlHost.js + browserControl.js
+  (enableBrowserControl 능력, 핸드셰이크 + chrome.runtime 전제 가드). runtime.js 등록, index/d.ts/README 표면.
+  러너 승격(tests/browser, 픽스처가 실 src import)은 후속 단계.
+
+### 2026-07-13 Phase 1 승격 설계 토론(전문 에이전트 3) -> 정공법 확정: 승격 전 영속 세션 모델 실측
+
+전문 에이전트 3(아키텍처/소비계약/구현리스크)이 승격 설계를 병렬 검토했고 강한 합의가 나왔다.
+
+- **핵심 결론(공통)**: 현재 attempts는 **일회성 probe**(탭 생성->조작->즉시 detach/close, 핸들러 3개 복붙)인데
+  승격 대상은 **영속 세션 핸들**(`tab().navigate().click().close()` 한 핸들). 이 간극에 미검증 축 셋 = MV3 SW
+  소멸(~30초 유휴 사망 -> attach 풀림), 영속 탭/attach 수명(onDetach/onRemoved 미배선, load 대기가 실패를
+  성공 위장), 블로킹 JSPI 동시성(게이트7 병렬이 run_sync 표면서 죽을 수 있음). **바로 src 승격 = 졸업 게이트
+  (④모듈화⑤덕지덕지⑥클린코드) 위반.** 정공법 = attempts에서 깎인 영속 세션 모델 먼저 실측.
+- **배치 정정**: `browserHost`를 processOs가 아니라 **`src/capabilities/browserControlHost.js`**로(한 능력=한 폴더,
+  `pyprocSw.js` 선례. processOs는 프로세스 추상만). 짝 이름: `browserControl.js`(능력) + `browserControlHost.js`(SW).
+- **mode 깎기**: per-verb 플래그(`override`/`trusted`) 금지. `tab(url, mode)` 생성 시 `ScriptDriver`/`DebuggerDriver`
+  1회 선택. `TabSession`(수명, mode-무관, 3중 복붙 제거) + Driver(전략, `{ok,value,error}` 균일 반환) 분리.
+- **프로토콜 계약**: offscreen<->SW 메시지를 named 모듈 `browserControlProtocol.js`로 뽑아 양쪽이 함께 import +
+  버전 핸드셰이크(두 절반 SHA 드리프트 시 loud fail). 전송 타입 분기(`type:"cdp"/"contentScript"`) 대신
+  `{op, mode, sessionId, args}` 스키마(Phase 2 target 확장 forward-compat).
+- **세션 수명 계약**: load 대기 타임아웃 = **reject**(resolve 금지, SPA는 loadEventFired 안 옴 -> readyState 폴링
+  병용), onEvent 리스너 finally 제거 + sessionId 디스패치, onDetach -> `SessionLost` 파이썬 예외(행 금지),
+  SW keep-alive(alarms/port) + 재attach. named config 타임아웃(하드코딩 10s 금지).
+- **JSPI 가드**: `run_sync`는 runAsync/JSPI 경로에서만 동작 -> 동기 경로면 명확한 에러. sendMessage reject를
+  typed 파이썬 에러로 전파. SW 리스너 무조건 `return true` 버그(미처리 메시지 채널 닫힘 reject) 수정.
+- **script 경로 함정**: MAIN world `eval`은 페이지 CSP(unsafe-eval)로 차단 -> `func` 주입/ISOLATED world.
+  script click/type은 isTrusted=false(native setter 필수, React 제어입력). mode 자동 폴백 금지(정직).
+- **러너 승격**: `tests/browser/runExtension.mjs`(run.mjs는 `--disable-extensions`라 확장 불가, 별 파일). 픽스처
+  확장이 **실 src를 import**(복제 금지 = SSOT). vendor 런타임 조립. `npm test`는 구조/표면만, `test:browser:ext` 추가.
+  webdriverCauseRunner는 발견 기록으로 충분(승격 대상 아님).
+- **공개 표면**: `enableBrowserControl` + `BrowserControl`/`BrowserTab`(index.js/d.ts/README 2종 + Runtime 메서드
+  게이트 + camelCase `_pyprocBrowser`). `browserControlHost`는 별도 subpath export(`./browser-control-host`).
+  offscreen 부트스트랩은 export 말고 examples 스캐폴드 몇 줄. 프로토콜 타입 d.ts 노출.
+- **소비 계약(Phase C)**: manifest 필수 키(COEP/COOP + CSP wasm-unsafe-eval + permissions + minimum_chrome_version
+  + **web_accessible_resources 누락 발견**)는 제품 몫이 아니라 pyproc 런타임 요구 -> docs/consuming에 확장 manifest
+  요구 계약 + vendoring 계약(확장은 SHA-핀 단일 import 불가, src 트리 구조보존 vendoring 필요, deep-import 규칙과
+  충돌 해소). examples 레퍼런스 스캐폴드. contract.md 핀 모델은 npm 버전 핀 정본(문서 정합).
+- **수요(정직)**: codaro의 browserControl 수요는 여전히 가설(product-vision 실패 기준). 사용자 지시가 "구현 완성"
+  이라 진행하되, 수요 미확인을 원장에 유지. Phase 2(프로세스 OS 통합/셸)는 소비자가 Phase 1을 실제 import한 뒤.
+
+**정공법 계획**: Phase A(attempts 영속 세션 모델 실측: TabSession+Driver+protocol+수명) -> Phase B(src 승격
++ 러너 승격 + 표면) -> Phase C(소비 계약 문서 + examples 스캐폴드). Phase A가 졸업 게이트의 ④~⑥을 실측으로 채운다.
+
 ### 2026-07-13 iframe 역전 부가 축 체크: non-COI 셸 필요 3중 확증 (게이트8 관측)
 
 - frame-busting 무력화(sandbox로 top 이탈 차단)를 체크했으나, COI offscreen이 강제하는 credentialless와
