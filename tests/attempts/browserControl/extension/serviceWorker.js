@@ -213,5 +213,16 @@ async function boot() {
   }
 }
 
+// 게이트10 전용 헬퍼(테스트 하네스, 승격 안 됨): 탭을 외부 종료해 세션 수명(onRemoved -> SessionLost)을 재현한다.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === "testKillTab") {
+    chrome.tabs.remove(Number(String(msg.sid).slice(1)))
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  return false;
+});
+
 chrome.runtime.onInstalled.addListener(boot);
 boot(); // 콜드 스타트(설치 이벤트를 놓친 재기동) 대비

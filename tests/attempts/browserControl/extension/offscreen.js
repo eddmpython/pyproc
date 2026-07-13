@@ -216,8 +216,27 @@ scr.close()
         add("게이트9b: 영속 세션(script) 한 핸들 다중 op",
           scrTitle === "pyprocCdpTarget" && scrField === "persistScr",
           `title=${scrTitle}, field=${scrField}`);
+
+        // 게이트10: 세션 수명. 탭이 외부 종료(onRemoved)되면 이후 op가 SessionLost로 깨끗이 실패해야(행 금지).
+        py.globals.set("_testKillTab", async (sid) => JSON.stringify(await chrome.runtime.sendMessage({ type: "testKillTab", sid })));
+        const lifecycleArr = (await py.runPythonAsync(`
+from pyodide.ffi import run_sync
+victim = browser.tab(persistTarget, mode="debugger")
+victimSid = victim._sid
+run_sync(_testKillTab(victimSid))
+lostError = "NO_ERROR"
+try:
+    victim.evaluate("1 + 1")
+except Exception as e:
+    lostError = str(e)
+[lostError]
+`)).toJs();
+        const [lostError] = lifecycleArr;
+        add("게이트10: 세션 수명(탭 외부 종료 -> 죽은 세션 op가 깨끗이 실패, 행 금지)",
+          typeof lostError === "string" && lostError !== "NO_ERROR",
+          `error=${lostError}`);
       } catch (e) {
-        add("게이트9: 영속 세션(pyprocBrowser) 표면", false, String(e));
+        add("게이트9/10: 영속 세션(pyprocBrowser) 표면", false, String(e));
       }
     } catch (e) {
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate", false, String(e));
