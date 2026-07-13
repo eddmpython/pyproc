@@ -4,6 +4,51 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 2 후속 재검(전문 에이전트 3) -> 정공법: 설계·백로그 정본화 + 수요 상충 정직 기록
+
+전문 에이전트 3(iframe 셸 / 프로세스 OS·SW 수명 / 우선순위·수요)이 Phase 2를 병렬 검토했다.
+
+- **수요 실태(냉정, 실측)**: first consumer codaro는 pyproc 핀 `74d30810`(2026-07-12, 이 이니셔티브 개시
+  전날)에 고정 + 코드베이스에 browserControl/chrome.debugger/offscreen **0건** + PyProc조차 미import(boot만).
+  codaro는 COI 회피 웹앱(정적 호스팅, 브라우저 파이썬 보조 티어)이라 browserControl(MV3 확장 + COI 강제 +
+  13MB + 웹스토어)과 **정면 상충**. "수요는 가설"이 아니라 현 소비자 아키텍처와 반대 극(product-vision 실패
+  기준 "아무 소비자도 원하지 않음"에 근접).
+- **정공법 판정("후속처리까지"의 정직한 이행 = (B))**: 자동 실측 가능 + pyproc 고유 자산인 것만 실측, 나머지
+  백로그. (A) 전체 구현 = 소비자 0인데 표면 대량 = 열화판(죽은 표면, 대원칙 위반). (C) 수요 확인 먼저 = 지시
+  정지 + 외부 사실이라 액션 불성립.
+- **Phase 2 축 우선순위**:
+  - **(b) 프로세스 OS 워커 N=세션 N + 스냅샷/fork**: 유일하게 자동게이트 + 고유자산 + 진짜 차별점(vision이
+    지목한 "왜 pyproc이 자동화를 하나"의 마지막 미실증). **제약 A**: dedicated Worker엔 `chrome`이 없다 ->
+    워커가 자기 물리 세션 소유 불가 -> offscreen 메인이 유일 chrome.runtime 채널 = 라우터(4-홉: 워커->offscreen
+    ->SW->CDP). **정직한 천장**: 물리 chrome.debugger는 SW 단일 큐 = "N배 파이썬 연산 병렬 + 1배 브라우저-op
+    레이트"(N배 스루풋 아님). 워커 N이 이기는 곳 = op 사이 CPU 연산(N GIL) + 격리 + 스냅샷/fork 단위. **백로그
+    최상단.**
+  - **(a) iframe 셸(고정 화면)**: pyproc 기여분(declarativeNetRequest 헤더 제거)은 이미 게이트4 GREEN, 셸 UI는
+    제품 몫 = src 추가 코드 거의 0. non-COI 셸은 **A안(http 탭 + content script)만 성립**(확장 페이지는 COEP
+    전역이라 non-COI 불가 = 후보B 원천봉쇄, 후보C는 A에 열등). **3PC 쿠키 벽**: iframe 역전이 first-party 세션을
+    3rd-party 쿠키로 변환 = COEP를 풀어도 남는 근본 벽(Chrome 3rd-party 쿠키 phaseout 직격). 자동 게이트 가능한
+    건 메커니즘(헤더 제거 + credentialless-free 로드 + sandbox frame-busting, localhost/127.0.0.1 cross-site 쌍),
+    실 로그인 세션은 실배포/수동.
+  - **(d) API 폭(waitForSelector/screenshot)**: 죽은 표면 위험 최고("실측 없이 표면만 늘림"). 수요 후(Phase 3).
+  - **(c) MV3 SW keep-alive**: 30초 자연 소멸 재현 난이하나 CDP `ServiceWorker.stopAllWorkers` 강제종료 ->
+    재attach는 자동 게이트 가능. 설계: offscreen 소유 Port keepalive(세션>0일 때만) 주 + storage.session 메타 +
+    lazy 재attach(WEBDRIVER_MASK 재등록 필수) + `_pyprocBrowserSend` **타임아웃 필수**(현재 무타임아웃 = SW 죽으면
+    run_sync 영구 행, pyProc pending-reject 교훈 이식). onDetach를 복구가능(SW-death) vs terminal(onRemoved/attach
+    실패)로 분리. 소비자 전제.
+  - **(e) 실 봇 방어(Cloudflare 등)**: 수동, 스텔스는 이미 논리 확정이라 확인 사살.
+- **수명주기**: Phase 1(스텔스 + 조작 실증) 완성. (b) 차별점만 미실증이나 소비자 상충 + 큰 구현이라 지금 실측은
+  죽은 표면. 이니셔티브를 **활성 유지하되 재개 트리거 명기**("소비자가 browserControl을 실제 import"). codaro가
+  정반대 방향이라 트리거는 당분간 안 켜진다(정직 기록). 무기한 활성이 아니라 명확한 재개 조건.
+
+### NEXT (Phase 2 백로그, 재개 트리거 = 소비자가 browserControl 실제 import)
+
+1. **(b) 프로세스 OS 워커 N=세션 N**(백로그 최상단, 착수 시 attempts에서 offscreen 라우터 4-홉 실측 -> 워커 N
+   각자 세션 소유 + 세션별 독립 파이썬 상태 + 스냅샷/fork 되감기. 정직한 천장 게이트에 명시).
+2. **(c) SW 수명**(강제종료 -> 재attach 복구 게이트 신설, offscreen Port keepalive + storage.session + 마스크
+   재등록 + 송신 타임아웃).
+3. **(a) iframe 셸 배선 문서**(non-COI 셸 A안 메커니즘 자동 게이트 1건 + 3PC 쿠키 벽 정직 기록 + 셸 UI는 제품 몫).
+4. **(d) API 폭 / (e) 봇 방어**: 수요/수동.
+
 ### 2026-07-14 Phase C 완료: 확장 소비 계약 문서화 -> Phase 1(조작 능력) 구현 완성
 
 - **소비 계약(docs/consuming/contract.md BrowserControl 절)**: 두 절반(offscreen 능력 + SW 호스트, 같은 핀

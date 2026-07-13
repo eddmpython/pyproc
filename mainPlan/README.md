@@ -21,6 +21,6 @@
 
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
-| [browser-control/](browser-control/README.md) | Phase 0 (실측 절반 GREEN) | MV3 확장 안에 프로세스 OS를 들여 파이썬이 서버·홉 0으로 브라우저를 운전. attempts 3게이트 GREEN, 스텔스 수동 실측이 착수 게이트. |
+| [browser-control/](browser-control/README.md) | Phase 1 완성, Phase 2 백로그 | 파이썬이 MV3 확장에서 브라우저 운전(`enableBrowserControl`). Phase 1(조작 능력: navigate/evaluate/click/type, script/debugger 두 mode) src 승격 + 실 src 런타임 게이트 GREEN. Phase 2(프로세스 OS 워커 N=세션 N / iframe 셸 / SW 수명)는 소비자가 실제 import하면 재개(현 소비자 codaro는 COI 회피 웹앱이라 정면 상충 = 트리거 미점화). |
 
 완결 이니셔티브 6개(web-python-runtime, local-parity, browser-os, engine-independence, numerical-acceleration, engine-agnostic-surface)는 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README다.

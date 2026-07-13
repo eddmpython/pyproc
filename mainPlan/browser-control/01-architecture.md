@@ -67,6 +67,13 @@ tab.close()
 
 - **워커 N = 인터프리터 N = 세션 N**: offscreen 안 파이썬 워커 각자가 논리 세션(탭 + 조작 스크립트)을 소유한다.
   물리 `chrome.debugger`는 SW 단일 큐라 조작은 직렬화되지만, 스크립트 진행·상태는 N개 독립 인터프리터에 병렬.
+- **제약(Phase 2 설계)**: dedicated Web Worker에는 `chrome.*`이 없다(제약 A, 플랫폼 확정). 그래서 워커가 자기
+  물리 세션을 소유할 수 없다 = **offscreen 메인이 유일한 chrome.runtime 채널 = 라우터**(4-홉: 워커 run_sync ->
+  워커 postMessage -> offscreen 라우터 -> SW chrome.debugger -> CDP -> 역류). 워커는 논리 세션(불투명 sid)만 소유.
+- **정직한 천장**: 순수 브라우저-op 워크로드는 SW 단일 큐가 병목이라 워커 N의 스루풋 = async gather 한 인터프리터와
+  같다(N배 스루풋 아님). 워커 N이 실제로 이기는 곳 = **op 사이에 낀 파이썬 연산**(파싱/추론/의사결정, N개 독립 GIL
+  물리 병렬) + 세션 격리 + 스냅샷/fork 단위. = "N배 파이썬 연산 병렬 + 1배 브라우저-op 레이트". 이 경계를 소비
+  계약에 명시한다.
 - **스냅샷 = 세션 이미지, fork = 세션 복제**: 파이썬 런타임 상태(자동화 스크립트가 어디까지 갔나)를 완전 해시
   체크포인트한다(reactive 자산). 탭의 DOM 상태는 CDP 조작 로그 재생으로 재구성. = **"로그인까지 한 세션을
   스냅샷하고, 거기서 10갈래로 fork해 각기 다른 경로 탐색"**. Playwright/browser-use가 구조적으로 못 하는 축.
@@ -106,9 +113,17 @@ tab.close()
 문서 안의 cross-origin iframe은 COEP로 막힌다. 즉 **프로세스 OS와 iframe 역전이 같은 문서에서 충돌**한다.
 - `credentialless` iframe으로 COEP 벽은 넘지만(게이트4가 이걸로 GREEN) **쿠키가 격리**된다 = 사용자 로그인
   세션이 iframe에 안 실린다. 스텔스의 축(실 프로필/쿠키)과 어긋난다.
-- 해결: **셸(iframe 담는 문서)과 런타임(프로세스 OS)을 다른 문서로 분리**한다. 런타임 offscreen은 COI(SAB),
-  셸은 non-COI 문서(sidePanel/탭)로 두면 cross-origin iframe에 쿠키가 실린다. 층위 A(영속 호스트)와 층위 C가
-  자연히 다른 문서라는 뜻이라 설계상 정합. Phase 2에서 이 분리 형태를 확정한다.
+- **해결(Phase 2 설계 확정)**: non-COI 셸을 **확장이 여는 http 탭 + content script**로 둔다(A안). manifest의
+  COEP/COOP는 확장 **모든** 페이지에 전역이라 `chrome-extension://` 문서(offscreen/sidePanel/팝업/확장 탭)는
+  전부 COI가 된다 = 확장 페이지로는 non-COI 셸을 못 만든다(후보 B 원천봉쇄, 두 확장 후보 C는 A에 열등). 유일한
+  non-COI 문서는 http(s) 웹 탭이다. 런타임(COI offscreen)과 셸(non-COI http 탭)이 다른 문서라 정합. 파이썬
+  (offscreen)이 chrome.debugger/scripting으로 셸 탭과 그 안 iframe을 조작한다. 셸 페이지는 제품이 자기 origin에
+  호스팅(정적 = serverless 정합) 또는 임의 http 탭 + content script 주입.
+- **3PC 근본 벽(정직)**: iframe 역전은 first-party 세션을 **3rd-party 쿠키 접근**으로 변환한다(셸 top origin !=
+  프레임 사이트 origin). COEP를 non-COI 셸로 완벽히 풀어도, 실 사이트의 `SameSite=Lax` 세션 쿠키는 cross-site
+  iframe에 안 실리고 `SameSite=None`조차 3rd-party 쿠키 phaseout에 걸린다. 자동 실측 가능한 건 메커니즘(헤더
+  제거 + credentialless-free 로드 + sandbox frame-busting, localhost/127.0.0.1 cross-site 쌍), 실 로그인 세션은
+  실배포/수동(chrome.contentSettings 완화 + 수동 검증). 이것이 GPU 창모드와 같은 계급의 정직한 벽.
 
 경계: iframe 안 사이트도 자기 JS를 돌리고 cross-origin이라 셸 JS의 직접 DOM 접근은 제한된다(확장 content
 script를 iframe에도 주입 + CDP로 조작해 우회). frame-busting(top!==self 탈출) 무력화는 후속. 이것이
