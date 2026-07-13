@@ -588,7 +588,7 @@ export class GpuBridge {
 
 /**
  * WebGPU 컴퓨트로 f32 대규모 선형대수 가속(수치 성능 도약 Phase 2). numpy 대체가 아니라 좁은
- * 고피크 레인: matmul 실측 109배 vs WASM numpy(실 GPU). 잔류 핸들(업로드1/체이닝/다운로드1)이
+ * 고피크 레인: matmul 실측 ~127배 vs WASM numpy(실 GPU, 타일드 커널). 잔류 핸들(업로드1/체이닝/다운로드1)이
  * 설계의 핵심(arithmetic intensity가 손익분기: 큰 matmul 압승, 작은 배열/값싼 op는 전송비로 짐).
  * f64는 WGSL 근본 부재 = f32만(암묵 강등 금지). WebGPU는 헤드리스에서 어댑터가 안 뜬다 =
  * 창 있는 브라우저 + 하드웨어 GPU 필요(create()가 어댑터 부재 시 실행 가능한 에러).

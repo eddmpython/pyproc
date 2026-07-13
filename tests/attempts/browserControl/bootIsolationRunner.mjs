@@ -5,7 +5,7 @@
 // 백채널 포트 주입(Runtime.evaluate) -> offscreen이 부팅/격리 검사 결과를 /gateReport로 릴레이.
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { cpSync, mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { cpSync, mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,9 @@ const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 180000);
 // 번들할 엔진 코어 최소 세트(MV3 원격 코드 금지 = 확장에 물리 번들). loadPyodide가 실제로 타는 자산.
 const CORE = ["pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json", "package.json"];
 
-function assembleExtension() {
+// temp에 [확장 소스 + vendor 코어 + config.js(백채널 포트)] 조립. config는 조립 시점 주입이라
+// 확장 소스에 커밋되지 않는다(러너가 항상 생성). 이래서 CDP evaluate 주입이 불필요해진다.
+function assembleExtension(backPort) {
   if (!existsSync(join(VENDOR, "pyodide-lock.json"))) {
     console.error(`vendor 엔진 없음: ${VENDOR}\n먼저 준비: npm run fetch:engine`);
     process.exit(2);
@@ -31,10 +33,11 @@ function assembleExtension() {
     if (!existsSync(src)) { console.error(`코어 자산 없음: ${src}`); process.exit(2); }
     cpSync(src, join(dir, f));
   }
+  writeFileSync(join(dir, "config.js"), `export const BACKCHANNEL_PORT = ${backPort};\n`);
   return dir;
 }
 
-// --- 최소 CDP 클라이언트(browser ws + flatten 세션). 의존성 0.
+// --- 최소 CDP 클라이언트(browser ws). 의존성 0.
 function cdpClient(ws) {
   let nextId = 1;
   const pending = new Map();
@@ -54,9 +57,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const killTree = (p) => { if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" }); else p.kill("SIGKILL"); };
 
 async function main() {
-  const extDir = assembleExtension();
-
-  // 백채널 서버: offscreen 결과를 서비스워커가 fetch로 릴레이한다.
+  // 백채널 서버: offscreen 결과를 서비스워커가 fetch로 릴레이한다. 포트를 먼저 확보해 조립에 굽는다.
   let reportResolve;
   const reportPromise = new Promise((res) => { reportResolve = res; });
   const server = createServer((req, res) => {
@@ -67,10 +68,17 @@ async function main() {
       });
       return;
     }
+    // 게이트 3 타깃 페이지: 파이썬이 chrome.debugger로 여기 navigate 후 title/marker/eval을 회수한다.
+    if (req.url.startsWith("/cdpTarget")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end("<!doctype html><html><head><title>pyprocCdpTarget</title></head><body><div id=\"marker\">cdpMarkerOk</div></body></html>");
+      return;
+    }
     res.writeHead(404); res.end();
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const backPort = server.address().port;
+  const extDir = assembleExtension(backPort);
 
   const browser = findBrowser();
   const profile = mkdtempSync(join(tmpdir(), "browserControlProf-"));
@@ -104,38 +112,12 @@ async function main() {
     await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error("browser ws 연결 실패")); });
     const { send } = cdpClient(ws);
 
-    // 확장 로드.
+    // 확장 로드. 백채널 포트는 config.js로 이미 구워져 있으므로 SW attach/주입이 불필요하다:
+    // 확장이 설치 이벤트로 깨어나 offscreen을 만들고 결과를 백채널로 릴레이한다.
     const loaded = await send("Extensions.loadUnpacked", { path: extDir });
     const extId = loaded.result?.id;
     if (!extId) throw new Error(`loadUnpacked 실패: ${JSON.stringify(loaded)}`);
-    console.log(`  확장 로드됨: ${extId}`);
-
-    // 서비스워커 타깃 발견 -> attach -> 백채널 포트 주입(storage.session).
-    await send("Target.setDiscoverTargets", { discover: true });
-    let swSession = null;
-    for (let i = 0; i < 40 && !swSession; i++) {
-      const { result } = await send("Target.getTargets", {});
-      const sw = result?.targetInfos?.find((t) => t.type === "service_worker" && t.url.includes(extId));
-      if (sw) {
-        const a = await send("Target.attachToTarget", { targetId: sw.targetId, flatten: true });
-        swSession = a.result?.sessionId || a.sessionId;
-      } else { await wait(250); }
-    }
-    if (!swSession) throw new Error("서비스워커 타깃을 찾지 못함(SW가 안 깨어남)");
-    console.log(`  서비스워커 attach: ${swSession}`);
-
-    const diag = await send("Runtime.evaluate", {
-      expression: `JSON.stringify({ chrome: typeof chrome, keys: (typeof chrome==='object'&&chrome?Object.keys(chrome):[]).slice(0,60), storage: typeof (chrome&&chrome.storage), dbg: typeof (chrome&&chrome.debugger), ctx: typeof self })`,
-      returnByValue: true,
-    }, swSession);
-    console.log(`  [진단] SW 컨텍스트: ${diag.result?.result?.value || JSON.stringify(diag.result?.exceptionDetails)}`);
-
-    const inj = await send("Runtime.evaluate", {
-      expression: `chrome.storage.session.set({ backchannelPort: ${backPort} })`,
-      awaitPromise: true,
-    }, swSession);
-    if (inj.result?.exceptionDetails) throw new Error(`포트 주입 실패: ${JSON.stringify(inj.result.exceptionDetails)}`);
-    console.log(`  백채널 포트 주입 완료 -> offscreen 부팅 대기\n`);
+    console.log(`  확장 로드됨: ${extId} -> offscreen 부팅 대기\n`);
 
     const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);
     const result = await reportPromise;

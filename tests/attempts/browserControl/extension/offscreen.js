@@ -59,6 +59,28 @@ async function run() {
     } catch (e) {
       add("runPythonAsync(JSPI 실동작)==42", false, String(e));
     }
+
+    // 게이트 3: 파이썬이 chrome.debugger로 다른 탭을 운전한다(브라우저 자체 조작).
+    // 브리지: 파이썬 -> 이 JS 함수 -> runtime 메시지 -> SW의 chrome.debugger -> 결과.
+    try {
+      py.globals.set("cdpNavigateEval", async (url, expr) => chrome.runtime.sendMessage({ type: "cdp", url, expr }));
+      const targetUrl = `http://127.0.0.1:${backchannelPort}/cdpTarget`;
+      const t1 = performance.now();
+      const arr = (await py.runPythonAsync(`
+target = "${targetUrl}"
+titleResult = await cdpNavigateEval(target, "document.title")
+markerResult = await cdpNavigateEval(target, "document.getElementById('marker').textContent")
+computeResult = await cdpNavigateEval(target, "6 * 7")
+[titleResult.ok, titleResult.value, markerResult.value, computeResult.ok, computeResult.value]
+`)).toJs();
+      timings.cdpMs = Math.round(performance.now() - t1);
+      const [navOk, title, marker, evalOk, compute] = arr;
+      add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate",
+        navOk === true && title === "pyprocCdpTarget" && marker === "cdpMarkerOk" && evalOk === true && compute === 42,
+        `title=${title}, marker=${marker}, compute=${compute}, cdpMs=${timings.cdpMs}`);
+    } catch (e) {
+      add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate", false, String(e));
+    }
   } catch (e) {
     add("Pyodide 부팅 + runPython(1+1)==2", false, String(e));
   }

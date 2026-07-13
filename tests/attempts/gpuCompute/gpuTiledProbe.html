@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<!--
+결과(append): 커널 최적화 - 공유메모리 타일드 matmul이 naive보다 빠르고 정확한가(실 GPU).
+naive(원소당 전역 메모리 K회 읽기) vs 타일드(16x16 워크그룹 공유메모리로 재사용). 여러 크기에서
+GPU 연산 시간 비교 + 두 커널 결과 일치(+ 작은 크기는 CPU 참조). 타일드가 명확히 빠르고 정확하면
+src(GpuCompute) 채택, 아니면 naive 유지(정직). 자작 최적이 아니라 텍스트북 타일링(바운드 개선).
+어댑터 없으면 SKIP. 실행: PYPROC_HEADED=1 ... gpuTiledProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: tiled matmul</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 공유메모리 타일드 matmul (커널 최적화)</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  const NAIVE = `
+struct Dims { m: u32, k: u32, n: u32, pad: u32 };
+@group(0) @binding(0) var<storage, read> a: array<f32>;
+@group(0) @binding(1) var<storage, read> b: array<f32>;
+@group(0) @binding(2) var<storage, read_write> c: array<f32>;
+@group(0) @binding(3) var<uniform> d: Dims;
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let row = gid.x; let col = gid.y;
+  if (row >= d.m || col >= d.n) { return; }
+  var sum = 0.0;
+  for (var k = 0u; k < d.k; k = k + 1u) { sum = sum + a[row * d.k + k] * b[k * d.n + col]; }
+  c[row * d.n + col] = sum;
+}`;
+
+  // 타일드: 16x16 블록을 공유메모리에 실어 전역 읽기를 재사용. 경계는 0 패딩(배리어는 균일 제어).
+  const TILED = `
+struct Dims { m: u32, k: u32, n: u32, pad: u32 };
+@group(0) @binding(0) var<storage, read> a: array<f32>;
+@group(0) @binding(1) var<storage, read> b: array<f32>;
+@group(0) @binding(2) var<storage, read_write> c: array<f32>;
+@group(0) @binding(3) var<uniform> d: Dims;
+const T: u32 = 16u;
+var<workgroup> tileA: array<f32, 256>;
+var<workgroup> tileB: array<f32, 256>;
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let row = gid.x; let col = gid.y;
+  let lr = lid.x; let lc = lid.y;
+  var sum = 0.0;
+  let tiles = (d.k + T - 1u) / T;
+  for (var t = 0u; t < tiles; t = t + 1u) {
+    let aCol = t * T + lc;
+    if (row < d.m && aCol < d.k) { tileA[lr * T + lc] = a[row * d.k + aCol]; } else { tileA[lr * T + lc] = 0.0; }
+    let bRow = t * T + lr;
+    if (bRow < d.k && col < d.n) { tileB[lr * T + lc] = b[bRow * d.n + col]; } else { tileB[lr * T + lc] = 0.0; }
+    workgroupBarrier();
+    for (var kk = 0u; kk < T; kk = kk + 1u) { sum = sum + tileA[lr * T + kk] * tileB[kk * T + lc]; }
+    workgroupBarrier();
+  }
+  if (row < d.m && col < d.n) { c[row * d.n + col] = sum; }
+}`;
+
+  let device;
+  function makePipeline(code) {
+    const module = device.createShaderModule({ code });
+    return device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
+  }
+  async function run(pipeline, A, B, M, K, N) {
+    const mk = (arr) => { const buf = device.createBuffer({ size: arr.byteLength, usage: GPUBufferUsage.STORAGE, mappedAtCreation: true }); new Float32Array(buf.getMappedRange()).set(arr); buf.unmap(); return buf; };
+    const aBuf = mk(A), bBuf = mk(B);
+    const cBuf = device.createBuffer({ size: M * N * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const dBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true }); new Uint32Array(dBuf.getMappedRange()).set([M, K, N, 0]); dBuf.unmap();
+    const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+      { binding: 0, resource: { buffer: aBuf } }, { binding: 1, resource: { buffer: bBuf } }, { binding: 2, resource: { buffer: cBuf } }, { binding: 3, resource: { buffer: dBuf } } ] });
+    const readBuf = device.createBuffer({ size: M * N * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass(); pass.setPipeline(pipeline); pass.setBindGroup(0, bind); pass.dispatchWorkgroups(Math.ceil(M / 16), Math.ceil(N / 16)); pass.end();
+    enc.copyBufferToBuffer(cBuf, 0, readBuf, 0, M * N * 4);
+    device.queue.submit([enc.finish()]);
+    await readBuf.mapAsync(GPUMapMode.READ);
+    const C = new Float32Array(readBuf.getMappedRange().slice(0));
+    [aBuf, bBuf, cBuf, dBuf, readBuf].forEach((x) => x.destroy());
+    return C;
+  }
+
+  try {
+    if (!("gpu" in navigator)) { check("SKIP: WebGPU 미노출", true); await report(); throw new Error("__skip__"); }
+    let adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) adapter = await navigator.gpu.requestAdapter({ forceFallbackAdapter: true });
+    if (!adapter) { check("SKIP: 어댑터 없음(실 GPU 머신에서 PYPROC_HEADED=1)", true); await report(); throw new Error("__skip__"); }
+    device = await adapter.requestDevice();
+    const naive = makePipeline(NAIVE), tiled = makePipeline(TILED);
+
+    // 정확성: 작은 비정사각(경계 패딩 검증) 두 커널 == JS CPU 참조.
+    const m = 40, k = 33, n = 27;
+    const A0 = new Float32Array(m * k), B0 = new Float32Array(k * n);
+    for (let i = 0; i < A0.length; i++) A0[i] = ((i * 7 + 3) % 29) / 29 - 0.4;
+    for (let i = 0; i < B0.length; i++) B0[i] = ((i * 5 + 1) % 31) / 31 - 0.6;
+    const cpu = new Float32Array(m * n);
+    for (let i = 0; i < m; i++) for (let j = 0; j < n; j++) { let s = 0; for (let x = 0; x < k; x++) s += A0[i * k + x] * B0[x * n + j]; cpu[i * n + j] = s; }
+    const gn = await run(naive, A0, B0, m, k, n), gt = await run(tiled, A0, B0, m, k, n);
+    let en = 0, et = 0; for (let i = 0; i < cpu.length; i++) { en = Math.max(en, Math.abs(gn[i] - cpu[i])); et = Math.max(et, Math.abs(gt[i] - cpu[i])); }
+    check("정확성: naive == CPU 참조(비정사각+경계)", en < 1e-3, `maxErr ${en.toExponential(2)}`);
+    check("정확성: 타일드 == CPU 참조(경계 패딩)", et < 1e-3, `maxErr ${et.toExponential(2)}`);
+
+    // 속도: 여러 크기에서 naive vs 타일드 GPU 종단(연산+리드백). 워밍업 후 측정.
+    for (const S of [1024, 2048]) {
+      const AA = new Float32Array(S * S), BB = new Float32Array(S * S);
+      for (let i = 0; i < AA.length; i++) { AA[i] = ((i * 3 + 1) % 17) / 17 - 0.5; BB[i] = ((i * 5 + 2) % 13) / 13 - 0.5; }
+      await run(naive, AA, BB, S, S, S); await run(tiled, AA, BB, S, S, S); // 워밍업
+      let t = performance.now(); const rn = await run(naive, AA, BB, S, S, S); const nMs = performance.now() - t;
+      t = performance.now(); const rt = await run(tiled, AA, BB, S, S, S); const tMs = performance.now() - t;
+      let diff = 0; for (let i = 0; i < rn.length; i += 997) diff = Math.max(diff, Math.abs(rn[i] - rt[i])); // 두 커널 일치(샘플)
+      timings["s" + S] = { naiveMs: +nMs.toFixed(1), tiledMs: +tMs.toFixed(1), speedup: +(nMs / tMs).toFixed(2), diff: +diff.toExponential(1) };
+      check(`${S}: 두 커널 결과 일치`, diff < 1e-2, `diff ${diff.toExponential(2)}`);
+      check(`${S}: naive vs 타일드 배속 보고`, true, `naive ${nMs.toFixed(1)}ms, 타일드 ${tMs.toFixed(1)}ms, 타일드/naive ${(nMs / tMs).toFixed(2)}x`);
+    }
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

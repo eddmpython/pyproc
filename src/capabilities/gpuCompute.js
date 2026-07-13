@@ -1,6 +1,6 @@
 // gpuCompute.js - Layer 1 능력: WebGPU 컴퓨트로 f32 대규모 선형대수 가속(수치 성능 도약 Phase 2).
 // numpy 대체가 아니라 좁은 고피크 레인: f32 matmul을 GPU 컴퓨트 셰이더로 오프로드해 WASM numpy
-// 대비 10-100배(실측 gpuMatmulProbe: naive 타일드 커널로도 1024 f32 matmul 109.6배, maxErr 3.58e-7).
+// 대비 10-100배+(실측 gpuMatmulProbe: 공유메모리 타일드 커널로 1024 f32 matmul 126.7배, maxErr 3.58e-7).
 //
 // 정답은 단발 오프로드가 아니라 **잔류 핸들**(gpuArray): 업로드 1회 -> GPU 위에서 연산 체이닝 ->
 // 다운로드 1회. arithmetic intensity가 손익분기를 정한다(matmul O(n^3)/O(n^2) = 압승, 작은 배열/
@@ -11,21 +11,36 @@
 // 실측 환경: WebGPU는 헤드리스에서 어댑터가 안 뜬다(gpuCapProbe). 창 있는 브라우저 + 하드웨어
 // GPU에서만(소켓 릴레이와 같은 계급). create()가 어댑터 부재 시 실행 가능한 에러를 던진다.
 
-// 정확성 우선 타일드 WGSL matmul(16x16 워크그룹). C[row,col] = sum_k A[row,k]*B[k,col].
-// WGSL 키워드(read_write/global_invocation_id/workgroup_size 등)는 외부 기술 명칭이라 원어 유지.
+// 공유메모리 타일드 WGSL matmul(16x16 블록). 각 워크그룹이 A/B의 16x16 타일을 공유메모리에
+// 실어 전역 읽기를 재사용한다. C[row,col] = sum_k A[row,k]*B[k,col]. 경계는 0 패딩(배리어를
+// 균일 제어 흐름에 두려고 early-return 대신 패딩). 실측(gpuTiledProbe): naive 대비 1.32-1.34배,
+// 결과 동일(diff 0). 프로덕션 최적(jax-js/WgPy 차용)이 아니라 텍스트북 타일링(바운드 개선).
+// WGSL 키워드(read_write/global_invocation_id/workgroup_size/workgroupBarrier 등)는 외부 기술 명칭이라 원어 유지.
 const MATMUL_WGSL = `
 struct Dims { m: u32, k: u32, n: u32, pad: u32 };
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
 @group(0) @binding(2) var<storage, read_write> c: array<f32>;
 @group(0) @binding(3) var<uniform> d: Dims;
+const T: u32 = 16u;
+var<workgroup> tileA: array<f32, 256>;
+var<workgroup> tileB: array<f32, 256>;
 @compute @workgroup_size(16, 16)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
   let row = gid.x; let col = gid.y;
-  if (row >= d.m || col >= d.n) { return; }
+  let lr = lid.x; let lc = lid.y;
   var sum = 0.0;
-  for (var k = 0u; k < d.k; k = k + 1u) { sum = sum + a[row * d.k + k] * b[k * d.n + col]; }
-  c[row * d.n + col] = sum;
+  let tiles = (d.k + T - 1u) / T;
+  for (var t = 0u; t < tiles; t = t + 1u) {
+    let aCol = t * T + lc;
+    if (row < d.m && aCol < d.k) { tileA[lr * T + lc] = a[row * d.k + aCol]; } else { tileA[lr * T + lc] = 0.0; }
+    let bRow = t * T + lr;
+    if (bRow < d.k && col < d.n) { tileB[lr * T + lc] = b[bRow * d.n + col]; } else { tileB[lr * T + lc] = 0.0; }
+    workgroupBarrier();
+    for (var kk = 0u; kk < T; kk = kk + 1u) { sum = sum + tileA[lr * T + kk] * tileB[kk * T + lc]; }
+    workgroupBarrier();
+  }
+  if (row < d.m && col < d.n) { c[row * d.n + col] = sum; }
 }`;
 
 // 원소별 WGSL 템플릿(EXPR = 소비자 표현식, x = 원소). matmul 뒤 활성화 등 잔류 체이닝용.
