@@ -4,6 +4,19 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 GPU 잔류 커널 엔진 완성 + 선택 후속 수요 게이트 판정
+
+- Phase 2 후속으로 잔류 선형대수 표면을 닫았다. `GpuArray`가 `matmul -> map -> binary -> transpose -> reduce` 체이닝 커널 엔진이 됐다(전부 리드백 없이 GPU 잔류). 실 GPU 창 모드 검증, 헤드리스는 SKIP(CI 무해).
+- **타일드 커널 채택(gpuTiledProbe 실 GPU 6/6)**: 공유메모리 16x16 타일링이 naive 대비 1.32-1.34배, 결과 동일(diff 0). matmul 재측정 109 -> **126.7배**. MATMUL_WGSL 반영. 프로덕션 최적이 아니라 텍스트북 타일링.
+- **`GpuArray.reduce(sum|max|min)`(gpuReduceProbe 6/6)**: 256 워크그룹 공유메모리 트리 다단계. 전체 잔류 체인 matmul->relu->sum == CPU 참조(358.377==358.377, 리드백 0). loss/norm 종착.
+- **`GpuArray.binary(other, expr)`(gpuBinaryProbe 8/8)**: 두 잔류 배열 원소별 결합(a/b, 표현식별 파이프라인 캐시). 잔차 (A@B)+C == CPU maxErr 1.79e-7. map(단항)이 못 잇던 잔차 a+b, 게이팅 a*b를 리드백 없이 잇는다.
+- **`GpuArray.transpose()`(gpuTransposeProbe 8/8)**: (rows x cols) -> (cols x rows), 데이터 이동뿐이라 오차 0. A.T @ B 잔류(그래디언트 x.T @ dy maxErr 1.35e-6, 그람 X.T @ X maxErr 5.34e-7) == CPU. 전치->matmul 리드백 0.
+- **선택 후속 2종은 수요 게이트로 정지(정직)**. 안 하는 게 맞되 이유는 "무가치"가 아니라 "당길 소비자 부재":
+  - **커널 차용(126.7 -> 최대 340배, jax-js/WgPy)**: 통째 벤더링 = 무거운 의존성(빌드 없음·네이티브 ESM·소비자 SHA 핀 원칙과 충돌). 126.7배는 이미 numpy 대비 압도. **트리거 = codaro가 대규모 f32 matmul에서 GPU 병목을 실측으로 증명**하는 순간.
+  - **worker 내부 GPU**: 처리량 무의미(물리 GPU 1개 = 하드웨어 큐에서 워커 N개 직렬화, 샤딩과 합성 불가). 유일 이점은 메인 스레드 응답성(부차적). **트리거 = 무거운 디스패치가 실사용 UI를 끊는 게 드러나는** 순간.
+  - 소비자 견인 없이 GPU 표면을 더 늘리면 "능력이 실측 없이 표면만 늘거나"(vision 실패 기준)에 정확히 걸린다. 여기서 멈추는 게 정공법.
+- **표면**: src/capabilities/gpuCompute.js(BINARY_WGSL/TRANSPOSE_WGSL 커널 + binary/transpose 메서드 + 파이프라인 캐시), index.d.ts, run.mjs 메서드 가드, README 2종. 구조 게이트 493/0, 브라우저 런타임 게이트 40/40.
+
 ### 2026-07-13 후속 심화 완료: Python numpy -> GPU 직결 + map 체이닝 (gpuPythonProbe 실 GPU 4/4)
 
 - Phase 2의 후속 심화(파이썬 통합 + 원소별 op)를 실 GPU로 완성했다. **GPU가 파이썬에 실제로 연결됐다 = pyproc 정체성 완성.**
@@ -59,8 +72,8 @@
 - **세 연구 합의**: 벽은 가용성이 아니라 속도. pyproc 정답은 horizontal 샤딩(코어) + GPU 잔류 레인(프론티어) + SIMD 흡수. GPU는 상태2(오늘 됨)로 재분류, WASI numpy는 "느림" 단서 필요(vision 정정 산출물).
 - **단일 경로 확정 = 수치 성능 도약**: Phase 1 mapArray 2D/matmul 샤딩(제품) -> Phase 2 gpuArray 잔류 레인(프론티어, 실 GPU 수동 검증) -> 교차 SIMD 흡수. 상세 [01-architecture](01-architecture.md) + [02-phasing](02-phasing-and-wiring.md).
 
-### NEXT
+### 상태 (완결)
 
-1. vision.md 정정(GPU 상태3 -> 상태2, WASI numpy "느림" 단서) + mainPlan 활성 표에 이 이니셔티브 등록. (이 세션에 반영)
-2. Phase 1 착수: `tests/attempts/numericShard/` 개설 + shardMatmulProbe(4워커 대형 matmul speedup >= 0.7P + native 배율 좁힘 실측).
-3. Phase 1 게이트 GREEN -> mapArray 확장 src 승격 -> Phase 2(gpuArray) 착수 결정(ROI 재검). 축 C는 별개 이니셔티브로.
+이니셔티브 완결(_done 이관). Phase 1(PyProc.matmul 샤딩 종단 2.48배) + Phase 2(GPU 잔류 커널 엔진: matmul 126.7배 / map / binary / transpose / reduce, Python numpy 직결 92배)까지 전부 src 승격 + 실 GPU 검증. 잔류 선형대수 표면 완성.
+
+남은 GPU 후속(커널 차용 340배, worker 내부 GPU)은 최신 엔트리 판정대로 **수요 게이트** = 소비자(codaro) 견인이 실측으로 증명될 때만 재개. 그 전엔 표면만 늘리기라 정지가 정공법. 축 C(임의 패키지 커버리지)는 별개 미래 이니셔티브 `arbitrary-packages`로 분리됨(이 경로와 직교).
