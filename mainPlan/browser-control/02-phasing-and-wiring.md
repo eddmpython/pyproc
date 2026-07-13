@@ -51,7 +51,9 @@ navigator.webdriver 전역 오염**이 지배한다. 갈래:
   쿠키 격리 극복) + frame-busting JS 무력화.
 - **게이트4(자동, GREEN)**: `X-Frame-Options: DENY` 페이지가 규칙 없이는 iframe 차단(postMessage 미수신),
   declarativeNetRequest 헤더 제거 + credentialless 후 로드 성공(iframe 내부 postMessage 수신). 실측 완료.
-- **게이트(잔여)**: non-COI 셸 문서에서 cross-origin iframe에 사용자 쿠키가 실리는지(로그인 세션 유지).
+- **게이트(잔여, non-COI 셸에서)**: cross-origin iframe에 사용자 쿠키가 실리는지(로그인 세션 유지) +
+  sandbox(allow-top-navigation 제외)로 frame-busting 무력화. 둘 다 COI offscreen에선 credentialless 충돌로
+  불가함이 게이트8로 확증됨(non-COI 셸 필수의 3중 근거: 로드 트레이드오프/sandbox/쿠키).
 
 ## Phase 3 - 선택 후속 (수요 실측 후)
 

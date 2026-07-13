@@ -88,6 +88,16 @@ async function main() {
       res.end("<!doctype html><title>framed</title><script>parent.postMessage('framedLoaded','*')</script>OK");
       return;
     }
+    // 게이트 8: frame-busting 사이트 재현. top!==self면 상위를 이탈시키려 한다. sandbox(allow-top-navigation
+    // 없음)로 담으면 그 이탈이 막히고 셸이 유지되는가. 로드되면 내부가 부모에 알린다.
+    if (req.url.startsWith("/bustTarget")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end("<!doctype html><title>bust</title><script>"
+        + "try { if (top !== self) { top.location.href = 'about:blank'; } } catch (e) {}"
+        + "parent.postMessage('bustLoaded','*');"
+        + "</script>OK");
+      return;
+    }
     res.writeHead(404); res.end();
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));

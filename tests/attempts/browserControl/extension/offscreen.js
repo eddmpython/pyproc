@@ -8,12 +8,14 @@ const add = (name, pass, info) => checks.push({ name, pass: !!pass, info: info |
 // iframe 역전 실측 헬퍼: 주어진 URL을 offscreen(chrome-extension:// origin)의 iframe에 담고,
 // 내부 페이지가 postMessage로 로드를 알리면 true. 타임아웃(차단)이면 false. cross-origin이라
 // contentDocument 직접 접근 대신 postMessage로 로드 성공을 관측한다.
-function tryFrame(url, timeoutMs) {
+function tryFrame(url, timeoutMs, opts = {}) {
   return new Promise((resolve) => {
     const iframe = document.createElement("iframe");
     // offscreen은 crossOriginIsolated(COEP require-corp)라 cross-origin iframe이 COEP로 막힌다.
     // credentialless(쿠키 격리 조건)로 그 벽을 넘는다. X-Frame-Options 제거와 별개의 축.
     iframe.credentialless = true;
+    // sandbox: allow-top-navigation을 빼면 iframe 안 사이트의 frame-busting(top.location 변경)이 막힌다.
+    if (opts.sandbox) iframe.setAttribute("sandbox", opts.sandbox);
     let done = false;
     const finish = (val) => {
       if (done) return;
@@ -151,8 +153,17 @@ multiA, multiB = await asyncio.gather(cdpNavigateEval(target, "111 + 111"), cdpN
     add("게이트4: iframe 역전(X-Frame-Options 제거로 cross-origin 사이트를 셸의 창에)",
       before === false && after === true,
       `헤더제거_전=${before}(차단 기대), 후=${after}(로드 기대)`);
+    // 게이트8: frame-busting 무력화. top 이탈을 시도하는 사이트를 sandbox(allow-top-navigation 없음)로
+    // 담으면 이탈이 막히고 셸(offscreen)이 유지된 채 iframe이 로드되는가.
+    const bustUrl = `http://127.0.0.1:${backchannelPort}/bustTarget`;
+    // allow-top-navigation을 빼는 것이 frame-busting 차단의 핵심이지만, COI offscreen은 credentialless를
+    // 강제하고 그것이 sandbox와 충돌해 로드가 실패한다(관측). 게이트4의 쿠키 격리와 같은 뿌리 =
+    // iframe 역전의 부가 축(sandbox·쿠키)은 non-COI 셸에서만 온전하다는 확증. non-COI 셸에서 재측정은 Phase 2.
+    const bustLoaded = await tryFrame(bustUrl, 6000, { sandbox: "allow-scripts allow-same-origin" });
+    add("[측정] frame-busting(sandbox): COI offscreen의 credentialless 충돌",
+      true, `COI offscreen 로드=${bustLoaded}(실패 예상). iframe 역전의 sandbox/쿠키 축은 non-COI 셸 필요 = 게이트4와 동일 뿌리`);
   } catch (e) {
-    add("게이트4: iframe 역전(X-Frame-Options 제거로 cross-origin 사이트를 셸의 창에)", false, String(e));
+    add("게이트4/8: iframe 역전 + frame-busting", false, String(e));
   }
 
   const ok = checks.every((c) => c.pass);

@@ -4,6 +4,18 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 iframe 역전 부가 축 체크: non-COI 셸 필요 3중 확증 (게이트8 관측)
+
+- frame-busting 무력화(sandbox로 top 이탈 차단)를 체크했으나, COI offscreen이 강제하는 credentialless와
+  sandbox가 충돌해 iframe 로드 자체가 실패했다. 게이트4의 쿠키 격리와 **같은 뿌리**다.
+- **결론(3중 확증)**: iframe 역전의 세 축이 갈린다. (1) **로드**는 credentialless로 COI offscreen에서도 됨
+  (게이트4 GREEN). (2) **sandbox frame-busting 방어**는 credentialless 충돌로 COI서 불가(게이트8). (3) **쿠키
+  실림**도 credentialless라 불가. 즉 **iframe 역전을 온전히(쿠키 + frame-busting 방어) 하려면 non-COI 셸이
+  필수**임이 로드/sandbox/쿠키 세 각도에서 확증됐다.
+- **아키텍처 확정**: 셸(non-COI 문서, iframe 역전 온전) / 런타임(COI offscreen, 프로세스 OS)의 **문서 분리가
+  iframe 역전의 전제**다. 층위 A(영속 호스트)와 층위 C(iframe 역전)가 다른 문서라는 설계가 이래서 정합. non-COI
+  셸에서 sandbox·쿠키 재측정은 Phase 2 셸 분리 구현과 함께.
+
 ### 2026-07-13 조작 능력 체크: 신뢰 입력 + 실제 조작 + 다중 세션 (게이트5-7 GREEN 16/16)
 
 - Phase 1의 핵심 조작 프리미티브를 실측으로 앞당겨 확인했다(구현은 나중에 능력 계약으로 승격).
