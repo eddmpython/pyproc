@@ -12,7 +12,14 @@ Language: English | [한국어](README.ko.md)
 
 ## One goal
 
-**Make Python in the browser behave like local Python.** Local-grade execution speed, real processes and parallelism, a terminal, package installation, and eventually embedded-Python / uv-grade environment management - all inside a tab, with no server. Whatever works locally should work in the browser; that is this repository's only goal, and every claim counts only when measured in a real browser. The gap map and progress live in [local-parity](mainPlan/local-parity/README.md).
+**North Star: whatever runs locally should eventually run in the browser, with no server.** This is a *direction*, not a claim of current compatibility - the goal is set deliberately to infinity (the snapshot-fork, time-travel, and portable machine images all came from aiming this high), while present-tense claims stay only as large as a real browser has measured. Everything local sorts into four states, and pyproc's job is to push things up this list and to be the first structure that absorbs a wall the moment the platform reopens it:
+
+- **Delivered** (browser-measured today): pure-Python and Pyodide-built packages, multi-core processes, checkpoint / time-travel, in-kernel ASGI, terminal, persistent FS, portable machine images.
+- **Virtualized** (re-expressed the browser way): a TCP `listen()` becomes an ASGI app, `os.fork` becomes worker kernels, outbound sockets ride a relay.
+- **Upstream-pending** (walled now, reopenable as the platform evolves): native C-extension wheels (Emscripten static builds / the WebAssembly component model), GPU (WebGPU), real threading - tracked, with the engine seam ready to adopt them first.
+- **Permanent web-security wall**: a tab cannot accept arbitrary inbound connections, or run arbitrary native binaries, without an external relay or agent.
+
+The principle: aim the goal at infinity, keep present-tense claims to what is proven. Every capability is browser-measured; every wall is named. The gap map lives in [local-parity](mainPlan/local-parity/README.md).
 
 ## What is this?
 
