@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 browser-os P6 승격 + 프리미티브 로드맵(P2~P7) 완결: 권한 감옥 (jailProbe 8/8)
+
+- browser-os 근본 프리미티브 로드맵의 마지막 칸 P6(machineJail)을 승격했다. **이로써 P1~P7이 전부 실증·승격됐다**(P1 저널·P2 커널선출·P3 잡컨트롤·P4 파이프+shm·P5 컨테이너·P6 감옥·P7 fsWorld).
+- **P6 machineJail(`MachineJail`)**: trust:true 이진 게이트가 스코프 승인으로 진화. 2단 집행 - (1) 협조 초크포인트(`pyprocJail.net(host)` 등, 파이썬 레벨 = import js로 우회 가능 = 정직) (2) **브라우저 벽**(감옥 컨텍스트의 CSP `connect-src`). 감옥을 CSP iframe에서 부팅하면 파이썬이 `import js; js.fetch`로 우회를 시도해도 그 fetch는 감옥의 CSP를 따라 브라우저가 차단한다.
+- **실측(jailProbe GREEN 8/8)**: 협조 티어(허용 통과, 비허용 net/home PermissionError) + **CSP connect-src 'self'가 example.com fetch 차단**(self 허용) + 감옥 CSP에서 pyodide 부팅(6*7=42) **오버헤드 0.93x**(CSP는 헤더일 뿐 부팅 무영향) + 정직 경계: same-origin 감옥은 window.parent 도달(네트워크 벽만) vs **opaque origin 감옥은 부모 차단**(완전 격리지만 crossOriginIsolated 상실 = SAB 포기 = 감옥 머신은 단일 Runtime).
+- **정직한 네 상태 프레임을 감옥 자체에 적용**: "네트워크 egress 차단"은 same-origin 감옥에서 성립(브라우저 벽), "부모 완전 격리"는 opaque origin(SAB 트레이드)의 몫. 감옥은 자가 호스팅 엔진(connect-src 'self')을 전제 = P0 자가 호스팅과 짝. 실측 함정: 초기 probe가 3중 부팅 + 무타임아웃 fetch로 240s 행 -> 하드 타임아웃 + CSP 벽을 plain fetch로 분리(파이썬 fetch도 같은 iframe CSP를 타므로 등가).
+- **표면**: index.js/index.d.ts(MachineJail/JailPermissions) + run.mjs 표면·계약 가드 + README 2종. **browser-os 프리미티브 로드맵 종결** = 이니셔티브 완결 준비 완료.
+
 ### 2026-07-13 browser-os P2 + P3 승격: OS가 탭 죽음에서 산다 + 셸의 잡 컨트롤 (kernelElectionProbe 5/5 + jobControlProbe 8/8)
 
 - browser-os 로드맵의 커널 선출(탭 죽음 생존)과 잡 컨트롤을 실증·승격했다. 둘 다 "로컬에도 없는" OS 기능이다.

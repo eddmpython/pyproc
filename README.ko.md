@@ -200,6 +200,7 @@ Pyodide  Workers
 | `DeviceFs` | 모든 것은 파일: 브라우저 능력이 파이썬 `open()`으로(`/dev/clipboard`, `/proc`) |
 | `Init` | OS init: `/home/web/boot.py` 오토런 + `cron.py` 틱, 전부 파일 구동 |
 | `MachineJournal` | WAL: 유휴에 스스로 체크포인트해, 강제종료된 탭도 마지막 커밋으로 부활 |
+| `MachineJail` | 권한 감옥: `permissions{net, clipboard, home, workers}`를 2단 집행. 협조 파이썬 초크포인트 + 브라우저 벽(감옥 컨텍스트의 `connect-src` CSP가 비허용 host 차단, 감옥 코드가 `import js`로 우회해도 무력) |
 | `bootSession` / `Session` / `openMachine` | 세션 부활 + 이동 가능한 `.pymachine` 이미지: 결정적 리플레이 + 사용자 델타, OPFS 영속(`save` / `load`) 또는 한 파일 내보내기(`exportImage` / `openMachine`) |
 | `WheelCache` | 오프라인 / 재다운로드 0 패키지 설치용 wheel / OPFS 캐시 |
 | `PyProc` | 프로세스 OS 커널: 스냅샷-fork 스폰, `map` / `mapArray` 병렬, 수명주기(`kill` / `signal` / respawn), `fork(2)`(살아있는 프로세스 복제, 변수·배열이 실린다), 흐름 IPC(`pipe` / `lock` / `semaphore` / `shm`: SAB 링버퍼 파이프, 진짜 블로킹 read + backpressure) |

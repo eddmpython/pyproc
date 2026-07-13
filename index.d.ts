@@ -504,6 +504,34 @@ export class MachineJournal {
   recover(): Promise<{ pages: number; mb: number } | null>;
 }
 
+export interface JailPermissions {
+  /** 네트워크: false 전부 차단 / true 전부 허용 / ["host", ...] 허용 목록. */
+  net?: boolean | string[];
+  clipboard?: boolean;
+  home?: boolean;
+  workers?: boolean;
+}
+
+/**
+ * 권한 감옥(P6): trust:true 이진 게이트가 스코프 승인으로 진화한다. 2단 집행 -
+ * (1) 협조 초크포인트(pyprocJail.net(host) 등, import js로 우회 가능 = 정직)
+ * (2) 브라우저 벽(감옥 컨텍스트의 CSP connect-src): 감옥을 CSP iframe에서 부팅하면 파이썬이
+ * 우회를 시도해도 비허용 host fetch는 브라우저가 차단한다. connect-src 'self'는 자가 호스팅
+ * 엔진을 전제한다(P0과 짝). 정직: same-origin 감옥은 자기 egress를 막지만 window.parent
+ * 측면통로가 열린다 - 완전 격리는 opaque origin(sandbox)이고 그 대가로 SAB(fork/interrupt)를 잃는다.
+ */
+export class MachineJail {
+  constructor(permissions?: JailPermissions);
+  /** 협조 티어 판정(우회 가능). perm: net|clipboard|home|workers. */
+  allows(perm: string, arg?: string): boolean;
+  /** 감옥 컨텍스트의 CSP connect-src 값('self' + 허용 host). */
+  connectSrc(): string;
+  /** 감옥 iframe에 실을 CSP 전체 문자열(엔진 self 로드 허용 + connect-src 제한). */
+  csp(): string;
+  /** 협조 초크포인트를 파이썬에 심는다(pyprocJail 모듈). */
+  install(rt: Runtime): { permissions: JailPermissions; connectSrc: string };
+}
+
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
 export class Terminal {
   install(): Promise<{ repl: string; timeTravel: boolean }>;

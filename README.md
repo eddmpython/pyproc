@@ -200,6 +200,7 @@ Capabilities are opt-in - turn on only what you need, and consume the capability
 | `DeviceFs` | Everything is a file: browser capabilities as Python `open()` (`/dev/clipboard`, `/proc`) |
 | `Init` | OS init: `/home/web/boot.py` autorun plus `cron.py` ticks, all file-driven |
 | `MachineJournal` | Write-ahead log: the machine checkpoints itself while idle, so a crashed tab still boots back into its last commit |
+| `MachineJail` | Permission jail: `permissions{net, clipboard, home, workers}` enforced in two tiers, a cooperative Python chokepoint plus the browser's own wall (a `connect-src` CSP on the jail context blocks disallowed hosts even if the jailed code tries `import js`) |
 | `bootSession` / `Session` / `openMachine` | Session revival and portable `.pymachine` images: deterministic replay plus user delta, persisted to OPFS (`save` / `load`) or exported as one file (`exportImage` / `openMachine`) |
 | `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
 | `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), `fork(2)` (clone a live process, its variables and arrays travel), and flow IPC (`pipe` / `lock` / `semaphore` / `shm`: SAB ring-buffer pipes with real blocking read and backpressure) |

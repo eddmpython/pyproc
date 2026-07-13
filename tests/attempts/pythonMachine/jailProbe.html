@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!--
+결과(append): P6 machineJail - 권한 감옥. 2단 집행: (1) 협조 초크포인트(pyprocJail, 우회 가능)
+(2) 브라우저 벽(감옥 컨텍스트의 CSP connect-src). 게이트: 협조 티어 권한 판정, 감옥 안 비허용
+host fetch가 CSP로 차단(엔진/self는 허용), 감옥 CSP에서 머신(pyodide) 부팅 + 오버헤드 < 1.5x.
+정직: same-origin 감옥은 자기 egress를 막지만 window.parent 측면통로가 열린다 -> 완전 격리는
+opaque origin(SAB 포기). 감옥은 자가 호스팅 엔진(connect-src 'self')을 전제한다(P0과 짝).
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: machineJail</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: machineJail (P6 - 권한 감옥)</h1>
+<pre id="out">실행 중...</pre>
+<div id="frames"></div>
+<script type="module">
+  import { boot, MachineJail } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+  const indexJsUrl = new URL("../../../index.js", location.href).href;
+  const selfUrl = indexJsUrl; // 같은 오리진 자원(존재 확실)
+
+  // CSP를 건 srcdoc iframe을 만들고, 그 안의 스크립트가 부모로 결과를 보낼 때까지 기다린다.
+  const runInJail = (csp, body, tag, timeoutMs) => new Promise((resolve) => {
+    const frame = document.createElement("iframe");
+    if (tag === "opaque") frame.setAttribute("sandbox", "allow-scripts");
+    const onMsg = (e) => { if (e.data && e.data.from === tag) { window.removeEventListener("message", onMsg); resolve(e.data); } };
+    window.addEventListener("message", onMsg);
+    const meta = csp ? "<meta http-equiv='Content-Security-Policy' content=\"" + csp + "\">" : "";
+    frame.srcdoc = "<!DOCTYPE html><html><head><meta charset='utf-8'>" + meta + "</head><body><script type='module'>"
+      + "const send=(m)=>parent.postMessage(Object.assign({from:'" + tag + "'},m),'*');\n" + body + "<\/script></body></html>";
+    document.getElementById("frames").appendChild(frame);
+    setTimeout(() => resolve({ timeout: true }), timeoutMs);
+  });
+
+  try {
+    // 1) 협조 티어: 권한 매니페스트로 능력 접근을 판정한다(우회 가능, 명시 계약 + 실수 방지).
+    let t = performance.now();
+    const rt = await boot({ indexURL: INDEX });
+    timings.baseBootMs = Math.round(performance.now() - t);
+    const jail = new MachineJail({ net: ["api.allowed.test"], clipboard: true, home: false, workers: false });
+    const info = jail.install(rt);
+    check("협조 티어 설치(pyprocJail)", info.permissions.clipboard === true && info.connectSrc.includes("api.allowed.test"), info.connectSrc);
+    const coop = rt.run([
+      "import pyprocJail",
+      "r = []",
+      "r.append(pyprocJail.net('api.allowed.test'))",
+      "r.append(pyprocJail.clipboard())",
+      "try:\n    pyprocJail.net('evil.example.com')\n    r.append('net-leak')\nexcept PermissionError:\n    r.append('net-blocked')",
+      "try:\n    pyprocJail.home()\n    r.append('home-leak')\nexcept PermissionError:\n    r.append('home-blocked')",
+      "r",
+    ].join("\n")).toJs();
+    check("협조 티어: 허용은 통과, 비허용은 PermissionError",
+      coop[0] === true && coop[1] === true && coop[2] === "net-blocked" && coop[3] === "home-blocked", JSON.stringify(coop));
+
+    // 2) 브라우저 벽(핵심): CSP connect-src 'self'를 건 감옥 컨텍스트에서 fetch가 어떻게 갈리는가.
+    //    감옥 안의 어떤 코드(파이썬 import js든 순수 JS든)도 이 iframe의 CSP를 따른다. self는 허용,
+    //    비허용 host는 브라우저가 차단(우리 코드가 아니라 브라우저의 벽). AbortController로 행 방지.
+    const jailCsp = new MachineJail({ net: false }).csp(); // 엔진 self만 허용, 외부 전부 차단
+    const wallBody =
+      "const tryFetch=async(url)=>{const ac=new AbortController();const to=setTimeout(()=>ac.abort(),4000);"
+      + "try{await fetch(url,{signal:ac.signal});clearTimeout(to);return 'allowed';}"
+      + "catch(e){clearTimeout(to);return (''+e).includes('Content Security Policy')||(''+e).includes('CSP')?'blocked-csp':'blocked';}};"
+      + "(async()=>{const s=await tryFetch(" + JSON.stringify(selfUrl) + ");const e=await tryFetch('https://example.com/');"
+      + "let pr;try{void parent.location.href;pr=true}catch(x){pr=false}send({selfRes:s,evilRes:e,parentReach:pr});})();";
+    const wall = await runInJail(jailCsp, wallBody, "wall", 30000);
+    check("감옥 안 self fetch는 CSP connect-src 'self'로 허용", wall.selfRes === "allowed", `self=${wall.selfRes}`);
+    check("감옥 안 비허용 host fetch가 CSP로 차단(브라우저 벽, 감옥 코드 우회 무력)", wall.evilRes && wall.evilRes.startsWith("blocked"), `example.com=${wall.evilRes}`);
+    check("정직 경계: same-origin 감옥은 window.parent 도달(완전 격리는 opaque origin의 몫)", wall.parentReach === true,
+      `parentReach=${wall.parentReach} = 네트워크 벽은 서지만 부모 격리는 opaque(SAB 포기)`);
+
+    // 3) opaque origin(sandbox allow-scripts): 측면통로(window.parent)가 봉인된다.
+    const opaque = await runInJail(null, "let r;try{void parent.location.href;r=true}catch(e){r=false}send({parentReach:r});", "opaque", 8000);
+    check("opaque origin 감옥은 window.parent 차단(완전 격리 = SAB 트레이드)", opaque.parentReach === false, `opaque parentReach=${opaque.parentReach}`);
+
+    // 4) 감옥 CSP에서 머신(pyodide)이 실제로 부팅되는가 + 오버헤드 < 1.5x. 하드 타임아웃으로 행 방지.
+    const bootBody =
+      "(async()=>{try{const t0=performance.now();"
+      + "const m=await import(" + JSON.stringify(indexJsUrl) + ");"
+      + "const rt=await m.boot({indexURL:" + JSON.stringify(INDEX || "") + "||undefined});"
+      + "const v=rt.run('6*7');send({bootMs:Math.round(performance.now()-t0),val:v});}"
+      + "catch(e){send({error:(''+e).slice(-160)});}})();";
+    const jailBoot = await runInJail(jailCsp, bootBody, "jailboot", 120000);
+    check("감옥 CSP에서 머신(pyodide) 부팅 + 실행", jailBoot.val === 42, jailBoot.error || jailBoot.timeout ? (jailBoot.error || "타임아웃") : `6*7=${jailBoot.val}, ${jailBoot.bootMs}ms`);
+    if (jailBoot.bootMs) {
+      timings.jailBootMs = jailBoot.bootMs;
+      timings.bootOverhead = +(jailBoot.bootMs / timings.baseBootMs).toFixed(2);
+      check("감옥 부팅 오버헤드 < 1.5x(CSP는 헤더일 뿐)", timings.bootOverhead < 1.5, `감옥 ${jailBoot.bootMs}ms / 기준 ${timings.baseBootMs}ms = ${timings.bootOverhead}x`);
+    }
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

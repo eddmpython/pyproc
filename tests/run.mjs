@@ -66,6 +66,10 @@ check("MachineJournal 메서드", () => {
   for (const m of ["start", "stop", "commit", "recover"])
     if (typeof api.MachineJournal.prototype[m] !== "function") throw new Error(`MachineJournal.${m}`);
 });
+check("MachineJail 메서드", () => {
+  for (const m of ["allows", "connectSrc", "csp", "install"])
+    if (typeof api.MachineJail.prototype[m] !== "function") throw new Error(`MachineJail.${m}`);
+});
 check("SharedKernel 메서드", () => {
   const p = api.SharedKernel.prototype;
   for (const m of ["connect", "run", "runAsync", "setGlobal", "status"])

@@ -16,6 +16,8 @@
 //   DeviceFs             - 모든 것은 파일: 브라우저 능력을 파이썬 open()으로(/dev, /proc)
 //   Init                 - OS의 init: /home/web/boot.py 오토스타트 + cron.py 주기 틱
 //   MachineJournal       - WAL: 유휴마다 상태를 디스크에 남겨 강제종료에도 부활(hibernate 훅 불필요)
+//   MachineJail          - 권한 감옥: permissions{net,clipboard,home,workers} 2단 집행(협조 초크포인트
+//                          + 감옥 컨텍스트의 CSP connect-src = 브라우저 벽). trust 이진 게이트의 스코프 진화
 //   PyProc               - 프로세스 OS 커널(스냅샷-fork spawn + Pool.map 병렬 + kill/signal/respawn + fork(2)
 //                          + exec/pipe/lock/semaphore/shm = 흐름 IPC: SAB 링버퍼 파이프·명명 공유메모리·락)
 //   SIGNAL               - 시그널 번호(INT/TERM/USR1/USR2). PyProc.signal(pid, signum)
@@ -40,6 +42,7 @@ export { Terminal } from "./src/capabilities/terminal.js";
 export { DeviceFs } from "./src/capabilities/deviceFs.js";
 export { Init } from "./src/capabilities/init.js";
 export { MachineJournal } from "./src/capabilities/machineJournal.js";
+export { MachineJail } from "./src/capabilities/machineJail.js";
 export { bootSession, openMachine, Session } from "./src/capabilities/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
