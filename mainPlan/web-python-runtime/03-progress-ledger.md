@@ -10,7 +10,8 @@
 - **트랩 근원(연구 A 정밀 진단, 두 바이너리 파싱으로 확정)**: 내 레이아웃 모델이 거울상이었다. 실제는 `--stack-first`(CPython WASI가 스택 오버플로를 즉시 트랩시키려 의도적으로): 스택 `[0,16MB)` 아래로, 정적데이터 `[16-19MB]`(_PyRuntime + obmalloc/dlmalloc 상태), 힙 `>19MB`. 그래서 heap-only 복원(base=16MB = 스택 보존 + 정적데이터+힙 복원)은 **이미 올바른 파티션**이었다. 진짜 원인은 바이트 범위가 아니라 **할당**: `os.read(0,1)`이 매 반복 새 bytes를 할당하고 그 포인터가 fd_read 경계를 넘어 산다(shadow stack iovec + WASM VM 로컬 = 선형메모리 밖, 복원 불가). 3.12는 obmalloc이 우연히 같은 슬롯을 줘 주소 안정(생존), 3.14는 주소가 바뀌어 복원 후 재개가 그 포인터를 dereference하며 `memory access out of bounds`.
 - **해법 = 할당 불변 경계 + 파티션 복원**: 드라이버가 `os.read` 대신 모듈 레벨 1회 할당 버퍼에 `io.FileIO.readinto`로 읽어 경계-넘는 유일한 힙 포인터를 안정시킨다(+ gc.freeze). 복원은 `[0, stackTop)` 스택 보존, `[stackTop, end)` 정적데이터+힙 복원. stackTop = wasm global[0](관례상 __stack_pointer) init 파싱(export 심볼 `memory`/`_start`만이라도 바이너리 파싱으로). 실측: 변이+3MB 힙성장 -> 복원 후 "100 False" -> 분기 "999" GREEN 9/9.
 - **src 승격 완료**: `wasiReplDriver.js`(readinto 할당 불변) + `wasiWorker.js`(parseStackTop + 파티션 복원). **엔진 무관 개선**이라 WLR 3.12 게이트도 그대로 GREEN 10/10(우연 생존 -> 원리적 생존). 프로덕션 리액티브가 빈 스택에서 스냅샷하는 것과 같은 원리를, WASI의 fd_read 경계에서 할당 불변으로 달성.
-- **의미**: "Pyodide를 뗀다 + 파이썬과 함께 자란다"의 마지막 엔진 벽이 내려갔다. 이제 남은 건 배관(DEFAULT를 brettcannon로, engine-watch CI) = 계약 작업이지 미해결 문제가 아니다. 기둥별 실증 완결: 부팅/결정성/반복실행/값프로토콜/**완전 시간여행**/패키지/정적C확장이 non-Pyodide 3.14.6에서 성립.
+- **의미**: "Pyodide를 뗀다 + 파이썬과 함께 자란다"의 마지막 엔진 벽이 내려갔다. 기둥별 실증 완결: 부팅/결정성/반복실행/값프로토콜/**완전 시간여행**/패키지/정적C확장이 non-Pyodide 3.14.6에서 성립.
+- **배관까지 완료(같은 날)**: DEFAULT 엔진을 죽은 WLR 3.12 -> brettcannon 3.14.6로 이전(`WASI_ENGINE_PIN` 한 곳, 릴리즈 zip을 네이티브 언집해 python.wasm + stdlib 마운트, 셀프호스팅은 wasmURL+stdlibURL 분리). wasiGate를 3.14.6로 전환 GREEN 10/10(부팅 609ms/version 3.14.6 + 완전 시간여행 + installWheel + 정적C확장 + 동적C확장 로딩 불가를 ctypes로 함수적 정직화, suffixes 카운트 브리틀 제거). `engine-watch.yml`(주간 cron): 최신 brettcannon 릴리즈 감지 -> 핀과 다르면 후보 Issue(봇 커밋 없음, 승격은 사람 릴리즈 결정). 자동 성장 루프 완성.
 
 ### 2026-07-13 세 벽 정면(전부 착수): 소켓 아웃바운드 실증 + C확장 재구성 + 네 상태 지도 + 벽3 근원 규명
 

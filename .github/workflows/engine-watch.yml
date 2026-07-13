@@ -1,0 +1,42 @@
+# engine-watch: WASI 엔진(brettcannon CPython)이 파이썬과 함께 자라게 한다.
+# 자동 성장 = 감지 + 후보 제시. 새 업스트림 릴리즈를 주기적으로 감지해 Issue로 올린다.
+# 봇은 커밋하지 않는다(main 전용 + 버전 범프 = 릴리즈 결정). 승격은 사람이: 핀 범프 + 게이트 인증.
+# 코어가 엔진 무관이라(리액티브/시간여행이 exports.memory 위 순수 알고리즘) "새 바이너리 + 게이트
+# 통과 = 성장"이 성립한다. 이 워치는 그 감지 단계를 자동화할 뿐이다.
+name: engine-watch
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # 매주 월 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 핀 vs 최신 릴리즈 비교, 새 버전이면 후보 Issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # 현재 WASI 엔진 핀(WASI_ENGINE_PIN.version)을 소스에서 읽는다(SSOT 한 곳).
+          pin=$(grep -oP 'version:\s*"\K[0-9][0-9.]*' src/runtime/engines/wasi/wasiSession.js | head -1)
+          # 살아있는 소스의 최신 안정 릴리즈(prerelease/beta 제외 = releases/latest).
+          tag=$(curl -sf https://api.github.com/repos/brettcannon/cpython-wasi-build/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' || true)
+          latest=${tag#v}
+          echo "핀=$pin 최신=$latest"
+          if [ -z "$latest" ] || [ "$latest" = "$pin" ]; then echo "변화 없음(또는 조회 실패)"; exit 0; fi
+          title="engine-watch: CPython WASI $latest 사용 가능 (현재 핀 $pin)"
+          if gh issue list --state open --search "in:title $latest" | grep -q "engine-watch"; then echo "이미 후보 Issue 있음"; exit 0; fi
+          gh issue create --title "$title" --body "brettcannon/cpython-wasi-build 최신 릴리즈 \`$tag\`가 현재 WASI 엔진 핀 \`v$pin\`과 다르다.
+
+          자동 성장 절차(봇은 커밋하지 않는다 = 승격은 릴리즈 결정):
+          1. 릴리즈 zip을 \`tests/attempts/enginePort/\` 자산으로 받는다(README 레시피).
+          2. \`src/runtime/engines/wasi/wasiSession.js\`의 \`WASI_ENGINE_PIN\`(version/stdlibDir/releaseURL)을 범프한다.
+          3. 로컬에서 \`node tests/browser/run.mjs tests/browser/wasiGate.html\` GREEN을 확인한다(부팅/결정성/완전 시간여행/installWheel/C확장). 결정적 게이트가 새 버전의 호환을 인증한다 = 여기서 결정성/reactive가 깨지면 그 자체가 진짜 발견.
+          4. 게이트 green이면 버전 범프를 릴리즈 결정으로 승격한다."
