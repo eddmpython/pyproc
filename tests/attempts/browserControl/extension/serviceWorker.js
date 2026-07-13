@@ -183,6 +183,7 @@ async function enableFrameHeaderStrip() {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === "gateResult") {
     report(msg);
+    runShellGate(); // offscreen 게이트(헤더 제거 전제 포함) 완료 후에 셸 게이트를 시작해 오염 방지
     sendResponse({ ok: true });
     return true;
   }
@@ -204,6 +205,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   return true;
 });
+
+function waitTabComplete(tabId, ms) {
+  return new Promise((resolve) => {
+    let done = false;
+    const h = (id, info) => { if (id === tabId && info.status === "complete" && !done) { done = true; chrome.tabs.onUpdated.removeListener(h); resolve(); } };
+    chrome.tabs.onUpdated.addListener(h);
+    setTimeout(() => { if (!done) { done = true; chrome.tabs.onUpdated.removeListener(h); resolve(); } }, ms);
+  });
+}
+
+// 게이트11 non-COI 셸: 127.0.0.1에 쿠키를 심고 헤더 제거를 켠 뒤 localhost(non-COI) 셸 탭을 연다.
+// 셸 페이지가 cross-site iframe(127.0.0.1)을 credentialless 없이 담아 쿠키/frame-busting을 스스로 백채널 보고한다.
+async function runShellGate() {
+  try {
+    const cookieTab = await chrome.tabs.create({ url: `http://127.0.0.1:${BACKCHANNEL_PORT}/cookieSet`, active: false });
+    await waitTabComplete(cookieTab.id, 6000);
+    await chrome.tabs.remove(cookieTab.id);
+    await enableFrameHeaderStrip();
+    await chrome.tabs.create({ url: `http://localhost:${BACKCHANNEL_PORT}/shellHost`, active: false });
+  } catch (e) { /* 러너 타임아웃으로 드러난다 */ }
+}
 
 async function boot() {
   try {

@@ -60,6 +60,9 @@ async function main() {
   // 백채널 서버: offscreen 결과를 서비스워커가 fetch로 릴레이한다. 포트를 먼저 확보해 조립에 굽는다.
   let reportResolve;
   const reportPromise = new Promise((res) => { reportResolve = res; });
+  // 게이트11 non-COI 셸: 별도 백채널(셸 http 탭이 직접 fetch. 확장 아니라 chrome.runtime 없음).
+  let shellResolve;
+  const shellPromise = new Promise((res) => { shellResolve = res; });
   const server = createServer((req, res) => {
     if (req.method === "POST" && req.url.startsWith("/gateReport")) {
       let body = ""; req.on("data", (c) => (body += c)); req.on("end", () => {
@@ -96,6 +99,37 @@ async function main() {
         + "try { if (top !== self) { top.location.href = 'about:blank'; } } catch (e) {}"
         + "parent.postMessage('bustLoaded','*');"
         + "</script>OK");
+      return;
+    }
+    // 게이트 11 non-COI 셸(고정 화면): 확장이 여는 http 탭(localhost, COEP 없음 = non-COI)에서 cross-origin
+    // iframe이 credentialless 없이 로드 + 쿠키 실림 + sandbox frame-busting. localhost/127.0.0.1 = cross-site 쌍.
+    if (req.url.startsWith("/cookieSet")) { // 127.0.0.1에서 방문해 프레임 origin에 쿠키를 심는다
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Set-Cookie": ["noneSess=abc; SameSite=None; Secure; Path=/", "laxSess=def; SameSite=Lax; Path=/"] });
+      res.end("cookieSet");
+      return;
+    }
+    if (req.url.startsWith("/framedCookieTarget")) { // 프레이밍 거부 + frame-busting 시도 + 요청 Cookie 반영
+      const cookie = req.headers.cookie || "";
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "X-Frame-Options": "DENY" });
+      res.end(`<!doctype html><title>framedCookie</title><script>try{if(top!==self){top.location.href='about:blank'}}catch(e){}parent.postMessage({framed:true,cookie:${JSON.stringify(cookie)}},"*")</script>OK`);
+      return;
+    }
+    if (req.url.startsWith("/shellHost")) { // non-COI 셸(COEP 헤더 없음). credentialless 없이 cross-site iframe을 담는다
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><title>shell</title><body><script>
+const frame=document.createElement("iframe");
+frame.setAttribute("sandbox","allow-scripts allow-same-origin");
+frame.src="http://127.0.0.1:${backPort}/framedCookieTarget";
+let done=false;
+const finish=(d)=>{if(done)return;done=true;fetch("http://localhost:${backPort}/shellReport",{method:"POST",body:JSON.stringify(d)});};
+window.addEventListener("message",(ev)=>{if(ev.data&&ev.data.framed)finish({loaded:true,cookie:ev.data.cookie,shellPath:location.pathname});});
+setTimeout(()=>finish({loaded:false}),9000);
+document.body.appendChild(frame);
+</script></body>`);
+      return;
+    }
+    if (req.method === "POST" && req.url.startsWith("/shellReport")) {
+      let body = ""; req.on("data", (c) => (body += c)); req.on("end", () => { res.writeHead(204, { "Access-Control-Allow-Origin": "*" }); res.end(); try { shellResolve(JSON.parse(body)); } catch (e) { shellResolve({ loaded: false, parseError: String(e) }); } });
       return;
     }
     res.writeHead(404); res.end();
@@ -154,7 +188,15 @@ async function main() {
 
     if (result.timedOut) { console.log(`FAIL 타임아웃(${TIMEOUT_MS / 1000}s)`); cleanup(); process.exit(1); }
     if (result.fatal) console.log(`  FATAL: ${result.fatal}`);
-    const allChecks = [...(result.checks || []), ...(result.swChecks || [])];
+    // 게이트11 non-COI 셸 결과(별도 백채널, SW가 offscreen과 병렬로 셸 탭을 연다).
+    const shellResult = await Promise.race([shellPromise, new Promise((r) => setTimeout(() => r({ loaded: false, timedOut: true }), 30000))]);
+    const shellCookie = shellResult.cookie || "";
+    const shellChecks = [
+      { name: "게이트11: non-COI 셸에서 credentialless-free cross-origin iframe 로드(XFO 제거)", pass: shellResult.loaded === true, info: `loaded=${shellResult.loaded}` },
+      { name: "게이트11: 쿠키 실림(SameSite None cross-site) + Lax 차단", pass: shellCookie.includes("noneSess") && !shellCookie.includes("laxSess"), info: `cookie=[${shellCookie}]` },
+      { name: "게이트11: sandbox frame-busting 무력화(셸 유지)", pass: shellResult.shellPath === "/shellHost", info: `shellPath=${shellResult.shellPath}` },
+    ];
+    const allChecks = [...(result.checks || []), ...(result.swChecks || []), ...shellChecks];
     for (const c of allChecks) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.name}${c.info ? " (" + c.info + ")" : ""}`);
     if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
     const green = allChecks.length > 0 && allChecks.every((c) => c.pass) && !result.fatal;
