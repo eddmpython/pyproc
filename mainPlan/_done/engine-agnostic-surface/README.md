@@ -1,6 +1,8 @@
 # engine-agnostic-surface - 소비자가 raw를 버리게 하는 엔진-무관 능력 3건
 
-> 이니셔티브 인덱스. 상세는 번호 문서. 재개는 [03-progress-ledger.md](03-progress-ledger.md)의 NEXT부터.
+> **완결(2026-07-13, v0.0.9 릴리즈).** pyproc 측 3능력(`Runtime.fs`, `loadPackagesFromImports`, `setStdout/setStderr`)을 승격 + 실 브라우저 검증(fs 10/10, output 5/5, imports 3/3) + 릴리즈했다. 남은 P4(dartlab 워커의 raw 3접점 교체)는 소비자 측 작업이라 pyproc 밖. 소비는 npm 버전 핀(`"pyproc": "0.0.9"`).
+
+> 이니셔티브 인덱스. 상세는 번호 문서. 최종 상태는 [03-progress-ledger.md](03-progress-ledger.md).
 
 ## 한 줄
 
@@ -14,7 +16,7 @@ dartlab이 pyproc 노트북 런타임을 완전 채택하려면 아직 `rt.raw`(
 | 2 | 일반 파일 IO | `raw.FS.*` (writeFile/readFile/mkdir/readdir/stat/unlink...) | 19회 |
 | 3 | 실행 출력 캡처(셀별 교체) | `raw.setStdout/setStderr` | 각 1회 |
 
-전부 기존 위임 규약([runtime.js](../../src/runtime/runtime.js)의 `loadPackages`/`setInterruptBuffer`)에 올라탄다. 비브레이킹(새 메서드 추가, 기존 표면 무변경).
+전부 기존 위임 규약([runtime.js](../../../src/runtime/runtime.js)의 `loadPackages`/`setInterruptBuffer`)에 올라탄다. 비브레이킹(새 메서드 추가, 기존 표면 무변경).
 
 ## 문서
 
@@ -25,4 +27,4 @@ dartlab이 pyproc 노트북 런타임을 완전 채택하려면 아직 `rt.raw`(
 
 ## 왜 지금
 
-engine-independence(P1 EngineContract seam)가 [_done](../_done/engine-independence/README.md)으로 닫혔고, [runtime.js:151](../../src/runtime/runtime.js#L151)의 `raw` 주석이 이미 "미이관 접점(deviceFs의 FS 등)용"이라 스스로 이 갭을 인정한다. 소비자가 당긴 응집된 한 덩어리 = 계약을 넓히기에 정확한 시점.
+engine-independence(P1 EngineContract seam)가 [_done](../engine-independence/README.md)으로 닫혔고, [runtime.js:151](../../../src/runtime/runtime.js#L151)의 `raw` 주석이 이미 "미이관 접점(deviceFs의 FS 등)용"이라 스스로 이 갭을 인정한다. 소비자가 당긴 응집된 한 덩어리 = 계약을 넓히기에 정확한 시점.

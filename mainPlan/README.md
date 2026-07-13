@@ -22,6 +22,5 @@
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
 | [browser-control/](browser-control/README.md) | Phase 0 (실측 절반 GREEN) | MV3 확장 안에 프로세스 OS를 들여 파이썬이 서버·홉 0으로 브라우저를 운전. attempts 3게이트 GREEN, 스텔스 수동 실측이 착수 게이트. |
-| [engine-agnostic-surface/](engine-agnostic-surface/README.md) | Phase 1 (접지) | dartlab이 raw를 버리게 하는 엔진-무관 능력 3건(loadPackagesFromImports, Runtime.fs, setStdout/setStderr). 첫 실 소비자가 engine-independence를 실증. |
 
-완결 이니셔티브 5개(web-python-runtime, local-parity, browser-os, engine-independence, numerical-acceleration)는 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README다.
+완결 이니셔티브 6개(web-python-runtime, local-parity, browser-os, engine-independence, numerical-acceleration, engine-agnostic-surface)는 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README다.

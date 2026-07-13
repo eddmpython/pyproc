@@ -14,3 +14,4 @@
 | [browser-os/](browser-os/) | ✅ 완료 (2026-07-13) | 파이썬 머신 5기둥 + 근본 프리미티브 P1~P7 실증·승격 + 객관 판정. 안티 추천은 vision.md, 가상 오리진 벽은 contract.md로 승격. |
 | [engine-independence/](engine-independence/) | ✅ 완료 (2026-07-13) | P1 seam + non-Pyodide 완전 실증 + 3.14.6 이전 + engine-watch + P0 자가 호스팅 + P2 스냅샷 벽 실측. P4 조건부 보험만 미발동. |
 | [numerical-acceleration/](numerical-acceleration/) | ✅ 완료 (2026-07-13, v0.0.7) | numpy 86배를 CPU 샤딩(PyProc.matmul 2.48배) + WebGPU 잔류 핸들(GpuCompute 실 GPU 109배, Python numpy 직결 92배)로. 커널 최적화 등은 코어 밖 후속. |
+| [engine-agnostic-surface/](engine-agnostic-surface/) | ✅ 완료 (2026-07-13, v0.0.9) | 소비자가 raw를 버리게 하는 엔진-무관 능력 3건(Runtime.fs, loadPackagesFromImports, setStdout/setStderr). 실 브라우저 fs 10/10 + output 5/5 + imports 3/3. P4(dartlab raw 교체)는 소비자 측. |

@@ -18,9 +18,9 @@
 - 전부 `this._engine`에 위임(엔진-무관). 비브레이킹. 우리 내부(`DeviceFs`)의 파일-op raw 사용도 같이 이관.
 
 **이 이니셔티브가 아니다:**
-- OPFS 영속의 재발명. 영속은 이미 [`mountHome`/`mountDir`](../../src/runtime/runtime.js#L146)(mountNativeFS)가 한다. 이건 **마운트된 FS 위 파일-op 레이어**지 새 VFS가 아니다(덕지덕지 금지).
+- OPFS 영속의 재발명. 영속은 이미 [`mountHome`/`mountDir`](../../../src/runtime/runtime.js#L146)(mountNativeFS)가 한다. 이건 **마운트된 FS 위 파일-op 레이어**지 새 VFS가 아니다(덕지덕지 금지).
 - 장치 등록(registerDevice/makedev/mkdev). 그건 파일 IO가 아니라 별개 엔진 seam = DeviceFs의 몫으로 남는다.
-- 체크포인트. [ReactiveController](../../src/capabilities/reactive.js)(나무·분기·64bit·OPFS)가 dartlab CheckpointGraph보다 상위 = 소비자가 id/savedSP 어댑터로 채택. pyproc 추가 작업 없음(소비자 요청도 없음).
+- 체크포인트. [ReactiveController](../../../src/capabilities/reactive.js)(나무·분기·64bit·OPFS)가 dartlab CheckpointGraph보다 상위 = 소비자가 id/savedSP 어댑터로 채택. pyproc 추가 작업 없음(소비자 요청도 없음).
 - 스코프 밖 FS 확장(chmod/symlink/rename 등). dartlab 실사용 8op만. 요구가 서면 그때.
 
 ## 정직한 WASI 경계
