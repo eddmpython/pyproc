@@ -6,6 +6,7 @@ import { MemoryCapability } from "./memoryCapability.js";
 import { PyodideEngine } from "./engines/pyodideEngine.js";
 import { ReactiveController } from "../capabilities/reactive.js";
 import { SyscallBridge } from "../capabilities/syscallBridge.js";
+import { SocketBridge } from "../capabilities/socketBridge.js";
 import { AsgiServer } from "../capabilities/asgiServer.js";
 import { WheelCache } from "../capabilities/wheelCache.js";
 import { Terminal } from "../capabilities/terminal.js";
@@ -128,6 +129,7 @@ export class Runtime {
   // Layer 1 능력 등록(opt-in). 소비자는 능력 계약만 받고 엔진 내부는 만지지 않는다.
   enableReactive() { return new ReactiveController(this); }
   enableSyscallBridge(cfg = {}) { return new SyscallBridge(this, cfg); }
+  enableSocketBridge(cfg = {}) { return new SocketBridge(this, cfg); }
   enableAsgiServer(cfg = {}) { return new AsgiServer(this, cfg); }
   enableTerminal(cfg = {}) { return new Terminal(this, cfg); }
   enableWheelCache(cfg = {}) { return new WheelCache(this, cfg); }

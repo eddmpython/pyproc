@@ -173,6 +173,21 @@ export class SyscallBridge {
   install(): Promise<SyscallInstallInfo>;
 }
 
+export interface SocketBridgeConfig {
+  /** WS->TCP 릴레이 URL(진짜 NIC를 만지는 외부 조각). 예: "ws://127.0.0.1:8791". 소비자 교체 가능. */
+  relayURL: string;
+}
+
+/**
+ * 파이썬 socket을 진짜 아웃바운드 TCP에 배선한다. socket.socket()/create_connection을 얇은 WS->TCP
+ * 릴레이 소켓으로 심해 Python connect/send/recv가 임의 host:port로 진짜 TCP를 연다. requests/urllib3/
+ * http.client가 같은 socket API라 따라온다. 블로킹 recv = JSPI(run_sync)라 rt.runAsync 경로에서 동작.
+ * 인바운드(공개 서버)는 물리 벽(역터널 릴레이 = 별도 조각). Chromium/Edge 전용.
+ */
+export class SocketBridge {
+  install(): { installed: string[]; relayURL: string; jspi: boolean; note: string };
+}
+
 export interface AsgiServerConfig {
   /** 파이썬 전역의 ASGI 앱 변수명(기본 "app"). */
   app?: string;
@@ -408,6 +423,7 @@ export class Runtime {
   envBoot?: EnvBootStats;
   enableReactive(): ReactiveController;
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
+  enableSocketBridge(cfg: SocketBridgeConfig): SocketBridge;
   enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
   enableTerminal(cfg?: TerminalConfig): Terminal;
   enableWheelCache(cfg: WheelCacheConfig): WheelCache;

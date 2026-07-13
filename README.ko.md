@@ -223,7 +223,8 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `freeze` / `mountHome` + 능력 등록 |
 | `MemoryCapability` | WASM 힙 접근을 캡슐화한 능력 계약 |
 | `ReactiveController` | 복원 기반 리액티브(체크포인트 / 시간여행) |
-| `SyscallBridge` | socket/subprocess/input 능력 계약 |
+| `SyscallBridge` | 빌린 시스템콜: `input()`(동기/JSPI), `urllib`(동기 XHR), `subprocess`(자식 워커) |
+| `SocketBridge` | 파이썬 socket을 얇은 WS->TCP 릴레이로 진짜 아웃바운드 TCP에: `socket`/`requests`/`urllib3`가 임의 host:port에 도달(블로킹 recv = JSPI, `runAsync`). 인바운드는 물리 벽 |
 | `AsgiServer` | 커널 안 ASGI 서버(FastAPI를 소켓 0으로, dispatch 3.4ms) |
 | `VirtualOrigin` | 파이썬 서버를 진짜 URL로(`pyprocSw.js` SW 자산과 짝) |
 | `Terminal` | 서버리스 파이썬 터미널(REPL, 블로킹 input, `%pip`/`%undo`) |

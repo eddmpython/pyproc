@@ -223,7 +223,8 @@ await runScript(rt, "# /// script\n# dependencies = [\"six\"]\n# ///\nimport six
 | `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `freeze` / `mountHome` plus capability registration |
 | `MemoryCapability` | Capability contract that encapsulates WASM heap access |
 | `ReactiveController` | Restore-based reactivity (checkpoint / time travel) |
-| `SyscallBridge` | socket/subprocess/input capability contract |
+| `SyscallBridge` | Borrowed syscalls: `input()` (sync / JSPI), `urllib` (sync XHR), `subprocess` (child worker) |
+| `SocketBridge` | Real outbound TCP for Python sockets via a thin WS->TCP relay: `socket` / `requests` / `urllib3` reach arbitrary host:port (blocking recv over JSPI, `runAsync`). Inbound is a physical wall |
 | `AsgiServer` | In-kernel ASGI server (FastAPI with zero sockets, 3.4ms dispatch) |
 | `VirtualOrigin` | The Python server on a real URL, paired with the `pyprocSw.js` Service Worker asset |
 | `Terminal` | Serverless Python terminal (REPL, blocking input, `%pip` / `%undo`) |

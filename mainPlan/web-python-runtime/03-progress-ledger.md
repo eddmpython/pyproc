@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-13 벽2 완결: SocketBridge 능력 승격 - urllib이 브라우저에서 진짜 소켓으로 (구조 362 + probe 3종)
+
+- 벽2 아웃바운드를 개념 -> 진짜 파이썬 소켓 -> **src 능력**으로 완결했다. `Runtime.enableSocketBridge({relayURL})` 승격(공개 표면).
+- **메커니즘**: 파이썬 `socket.socket()`/`create_connection`을 얇은 WS->TCP 릴레이 소켓으로 심한다(`src/capabilities/socketBridge.js`). 탭은 raw 소켓을 못 열지만 밖으로 다이얼하는 WebSocket은 연다 = 릴레이가 진짜 NIC. 블로킹 recv는 **JSPI(`run_sync`)로 파이썬을 서스펜드**해 WS 데이터 대기(메인 스레드는 Atomics 불가라 JSPI = runAsync 경로, syscallBridge input과 같은 패턴). `makefile`(BufferedReader over `io.RawIOBase`)까지 심해 `http.client`/`urllib`이 그대로 돈다.
+- **실측(tests/attempts/socketBridge)**: ① 진짜 TCP 왕복 3/3(example.com:80 raw HTTP 200) ② 블로킹 소켓 2/2(워커+SAB) ③ 진짜 파이썬 socket 2/2(Pyodide 워커) ④ **능력 2/2**: 메인 Runtime + enableSocketBridge -> `urllib.request.urlopen('http://example.com/')` -> **HTTP 200 559바이트 `<!doctype html>` 516ms**. requests/urllib3가 같은 socket API라 따라온다.
+- **표면**: index.js `SocketBridge` export + `Runtime.enableSocketBridge` + index.d.ts(SocketBridgeConfig/SocketBridge) + run.mjs 표면/계약/심볼 가드 + README 2종 표(SyscallBridge의 "socket"을 SocketBridge로 정정: syscallBridge는 input/urllib/subprocess). 릴레이는 진짜 네트워크라 CI 상시 아님(수동/로컬).
+- **남은 것 = 강화**: 소켓당 WS -> Wisp 멀티플렉싱, TLS in-tab(epoxy-tls)로 HTTPS. 인바운드는 영구 물리 벽(역터널 릴레이 = 별도 조각). 미해결 문제 아님.
+
 ### 2026-07-13 벽3 돌파: 3.14.6 완전 시간여행 성립 = 3.12 동결 완전 해제 (src 승격, 게이트 WLR 10/10 + 3.14.6 9/9)
 
 - 앞 항목에서 "깊은 엔진 연구"로 미룬 3.14.6 시간여행 트랩을 **같은 날 뚫었다**(연구 A 설계 + 실측). WASI 레인이 죽은 3.12에서 살아있는 3.14.6로 **완전히** 해동됐다(부팅/stdlib/결정성/체크포인트에 이어 시간여행까지).

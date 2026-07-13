@@ -29,4 +29,6 @@
 
 - **socketPyProbe GREEN 2/2**: **진짜 파이썬(Pyodide)이 소켓을 연다.** 파이썬 `socket.socket()`을 릴레이 소켓으로 심하고(Python->js.bridge* 동기 호출, 블로킹 recv는 워커 Atomics.wait), Python 코드 `sock.connect(('example.com',80)); sock.sendall(b'GET...'); sock.recv()`가 `HTTP/1.1 200 OK` 828바이트 `<html>` 바디를 받는다(총 3864ms, 대부분 Pyodide 부팅). JS가 아니라 파이썬이 진짜 인터넷 바이트를 받는다. `requests`/`urllib3`/`http.client`가 같은 socket API라 이 심을 그대로 쓴다(makefile 등 확장은 v2).
 
-**의미**: 벽2 아웃바운드가 개념을 넘어 **진짜 파이썬 소켓**으로 실측됐다(진짜 TCP + 블로킹 의미 + Python socket API). 남은 건 src 능력 승격(SocketBridge = Runtime.enableSocketBridge, socket 모듈 완전 심 + 릴레이 계약)과 릴레이 강화(Wisp 멀티플렉싱, TLS in-tab). 인바운드는 정직한 물리 벽으로 남는다(역터널 릴레이 = 별도 조각).
+- **socketCapProbe GREEN 2/2 (src 능력 승격)**: `Runtime.enableSocketBridge({relayURL})`로 승격. 메인 스레드 Runtime에서 파이썬 socket.socket()/create_connection을 릴레이에 심하고(블로킹 recv = JSPI/run_sync, runAsync 경로), **`urllib.request.urlopen('http://example.com/')`가 진짜 소켓으로 HTTP 200 수신**(559바이트 `<!doctype html>`, 516ms). http.client가 심한 socket(create_connection + makefile)을 그대로 써서 진짜 TCP로 왕복. **파이썬 HTTP 생태계가 브라우저에서 진짜 소켓으로 돈다.** requests도 같은 경로.
+
+**의미**: 벽2 아웃바운드가 개념 -> 진짜 파이썬 소켓 -> **src 능력(생태계 포함)**으로 완결됐다. `SocketBridge`가 공개 표면. 남은 것 = 릴레이 강화(Wisp 멀티플렉싱, TLS in-tab로 HTTPS), 소켓당 WS -> 멀티플렉싱. 인바운드는 정직한 물리 벽으로 남는다(역터널 릴레이 = 별도 조각).

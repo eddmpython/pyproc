@@ -26,6 +26,7 @@
 export { boot, Runtime, MemoryCapability, PAGE_SIZE } from "./src/runtime/runtime.js";
 export { ReactiveController } from "./src/capabilities/reactive.js";
 export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
+export { SocketBridge } from "./src/capabilities/socketBridge.js";
 export { AsgiServer } from "./src/capabilities/asgiServer.js";
 export { VirtualOrigin } from "./src/capabilities/virtualOrigin.js";
 export { Terminal } from "./src/capabilities/terminal.js";

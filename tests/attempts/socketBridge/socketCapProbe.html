@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<!--
+결과(append): 승격된 SocketBridge 능력(Runtime.enableSocketBridge)이 메인 스레드 Runtime에서
+파이썬 HTTP 생태계를 진짜 소켓으로 돌리는가. urllib.request.urlopen이 socket 심 -> 릴레이 ->
+진짜 TCP로 example.com에 요청한다. 블로킹 recv = JSPI(runAsync). 릴레이 없으면 SKIP.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: SocketBridge capability</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: SocketBridge 능력 - urllib이 진짜 소켓으로 (벽2 생태계)</h1>
+<p>메인 스레드 Runtime에 <code>enableSocketBridge({relayURL})</code>로 파이썬 socket을 릴레이에
+심하고, <code>runAsync</code>로 <code>urllib.request.urlopen</code>을 돌린다. http.client가 심한
+socket(create_connection + makefile)을 그대로 써서 진짜 TCP로 HTTP를 왕복한다. 블로킹 recv는
+JSPI. requests도 같은 경로다. 릴레이 없으면 SKIP.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const RELAY = "ws://127.0.0.1:8791";
+
+  try {
+    let up = false;
+    try { await new Promise((res, rej) => { const w = new WebSocket(RELAY); w.onopen = () => { up = true; w.close(); res(); }; w.onerror = () => rej(); setTimeout(rej, 2500); }); } catch (e) { up = false; }
+    if (!up) { check("SKIP: 릴레이 미기동(node tests/attempts/socketBridge/relay.mjs 8791)", true); await report(); throw new Error("__skip__"); }
+
+    let t = performance.now();
+    const rt = await boot();
+    timings.bootMs = Math.round(performance.now() - t);
+
+    const info = rt.enableSocketBridge({ relayURL: RELAY }).install();
+    check("SocketBridge 설치(socket.socket/create_connection 심 + JSPI)", info.jspi === true && info.installed.length >= 2, JSON.stringify(info.installed));
+
+    // runAsync(JSPI) 경로에서 urllib.request.urlopen -> socket 심 -> 릴레이 -> 진짜 TCP.
+    t = performance.now();
+    const raw = await rt.runAsync(`
+import urllib.request
+resp = urllib.request.urlopen('http://example.com/', timeout=10)
+body = resp.read()
+[int(resp.status), len(body), (b'<html' in body.lower()), body[:15].decode('latin-1')]
+`);
+    timings.httpMs = Math.round(performance.now() - t);
+    const r = raw && raw.toJs ? raw.toJs() : raw;
+    check("urllib.request.urlopen over 릴레이 -> 진짜 HTTP 200", Array.isArray(r) && r[0] === 200 && r[2] === true, r ? `status=${r[0]}, ${r[1]}바이트, "${r[3]}", ${timings.httpMs}ms` : "null");
+    if (raw && raw.destroy) raw.destroy();
+  } catch (e) {
+    if (!String(e).includes("__skip__")) check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>
