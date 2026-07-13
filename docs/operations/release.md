@@ -15,9 +15,15 @@
 4. `git tag v0.0.x` (릴리즈 커밋에, package.json과 동일 값).
 5. `main -> origin/main` 푸시 + `git push origin v0.0.x`.
 6. **GitHub Release 발행**: `gh release create v0.0.x --title "v0.0.x - <한 줄>" --notes-file <노트>`. 노트는 릴리즈 커밋 메시지 내용을 사람이 읽기 좋게 옮긴 것(한국어, 변경 성격 + 실제 변경 + 실측 수치, 브레이킹 여부 명시). 태그만 있고 Release가 비면 배선 누락이다.
-7. **npm 퍼블리시**: 자동이다. 5번의 태그 푸시가 [`publish.yml`](../../.github/workflows/publish.yml)을 깨우고, 워크플로가 태그와 `package.json` 버전 일치를 검증한 뒤 구조·브라우저 게이트를 돌리고 `npm publish`한다. 게시 확인은 `npm view pyproc version`. 손으로 `npm publish`하지 않는다(로컬 머신 인증 불필요).
+7. **npm 퍼블리시**: 자동이다. 5번의 태그 푸시가 [`publish.yml`](../../.github/workflows/publish.yml)을 깨우고, 워크플로가 태그와 `package.json` 버전 일치를 검증한 뒤 구조·브라우저 게이트를 돌리고 `npm publish`한다. 게시 확인은 `npm view pyproc version`.
 
-인증은 **npm Trusted Publishing(OIDC)**이다. 장수 토큰(`NPM_TOKEN` 시크릿)을 두지 않고 러너가 GitHub OIDC로 신원을 증명하면 npm이 단기 자격을 발급한다. 유출될 비밀이 없고 provenance가 자동으로 붙는다. 패키지당 1회 설정이 전제다: npmjs.com > pyproc > Settings > Trusted Publisher > GitHub Actions(repository `eddmpython/pyproc`, workflow `publish.yml`). 이 설정이 없으면 워크플로가 인증 단계에서 실패한다.
+## npm 퍼블리시 배선 (2026-07-12 확정)
+
+- **손으로 `npm publish`하지 않는다.** 게시 경로는 워크플로 하나뿐이다. 로컬 게시는 게이트를 우회하고 provenance가 붙지 않으며, 로컬 npm 로그인은 조용히 만료된다(만료 시 `npm publish`가 권한 오류가 아니라 `404 PUT`으로 떨어져 원인 오독을 부른다. 실제로 겪었다). 게시 자격은 러너에만 있으면 된다.
+- **인증은 npm Trusted Publishing(OIDC)**이다. 장수 토큰(`NPM_TOKEN` 시크릿)을 두지 않는다. 러너가 GitHub OIDC로 신원을 증명하면 npm이 단기 자격을 발급하므로 유출될 비밀이 없고 provenance(SLSA 출처 증명)가 자동으로 붙는다. 설정은 npmjs.com > pyproc > Settings > Trusted Publisher > GitHub Actions(repository `eddmpython/pyproc`, workflow `publish.yml`, Environment 없음, Allowed actions = `npm publish`). 패키지당 1회이고 **등록 완료 상태다**.
+- **게시 전 관문 3개**(퍼블리시는 되돌릴 수 없다. 버전 번호는 재사용 불가): 태그와 `package.json` 버전 일치, 구조 게이트, 브라우저 게이트. 하나라도 적색이면 게시하지 않는다.
+- **재시도·백필은 수동 실행**(`gh workflow run publish.yml --ref <ref>`). 게시 버전은 언제나 체크아웃한 ref의 `package.json`이다. 태그-버전 일치 검증은 태그 ref일 때만 돈다. 태그가 워크플로보다 먼저 나간 경우 태그 push로는 발동하지 않으므로(그 태그가 가리키는 커밋에 워크플로 파일이 없다) 이 경로로 게시한다.
+- npm CLI는 워크플로가 `npm@latest`로 올린다. trusted publishing은 npm 11.5.1+에서만 동작하는데 node 22 번들은 10.x다.
 
 ## 소비 반영 (SHA 핀)
 
