@@ -14,7 +14,7 @@ Run Python inside the browser, keep the runtime state alive, branch it into isol
 
 AI agents don't run Python once. They generate code, run it, read the failure, fix it, and run again. They try several approaches in parallel, or roll back to a known-good state before the last mess.
 
-The usual answer is a server container or a fresh Python environment per attempt: slow to start, costly to keep, and thrown away between tries. pyproc keeps a prepared Python state alive **in the user's browser**, and lets you **checkpoint, branch, and restore** it, so the retry loop costs milliseconds instead of a cold boot - and the user's data never has to leave the tab.
+The usual answer is a server container or a fresh Python environment per attempt: slow to start, costly to keep, and thrown away between tries. pyproc keeps a prepared Python state alive **in the user's browser**, and lets you **checkpoint, branch, and restore** it, so the retry loop costs milliseconds instead of a cold boot - and the user's data never has to leave the tab. For a product, the per-session sandbox you would otherwise run server-side moves into the user's browser: sandboxed execution you don't provision or pay for, on a boundary (Chrome + WASM) already hardened against the whole web.
 
 ## In one example
 
@@ -44,7 +44,7 @@ The through-line: **an AI agent needs a Python environment it can prepare once, 
 
 ## What you get (results, not internals)
 
-- **Runs in the browser.** Python executes in the user's tab, so simple analysis needs no per-run server environment.
+- **Runs in the user's browser - no server sandbox to run or pay for.** Python executes in the tab, inside Chrome's renderer sandbox plus WASM isolation, a boundary hardened against the whole web. You move sandboxed code execution off your own infrastructure and the user's data stays local. (You still set resource and network limits yourself; the browser isolates escape, not resource exhaustion - see [Security model](#security-model). It protects the user from the code, not your secrets from the user.)
 - **Restore without rebuilding.** Checkpoint a state with packages and data already loaded, then roll back to it - no re-run, no re-install.
 - **Branch from one state.** An agent runs several code candidates from the same prepared state, independently, and compares results.
 - **Data stays local.** Process CSV / Excel / enterprise data in the tab and send only the summarized result onward.
