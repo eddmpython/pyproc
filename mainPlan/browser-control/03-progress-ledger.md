@@ -4,6 +4,40 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase C 완료: 확장 소비 계약 문서화 -> Phase 1(조작 능력) 구현 완성
+
+- **소비 계약(docs/consuming/contract.md BrowserControl 절)**: 두 절반(offscreen 능력 + SW 호스트, 같은 핀
+  강제 + 프로토콜 핸드셰이크) + manifest 필수 키(COEP/COOP/CSP wasm-unsafe-eval/permissions/minimum_chrome_version
+  = pyproc 요구, name/host_permissions = 제품) + vendoring(src 트리 구조 보존, 번들 소비자는 subpath) +
+  offscreen(COI)/iframe 셸(non-COI) 분리. 조립 레퍼런스 = tests/browser/runExtension.mjs + extensionFixture
+  (실 src import). **examples 별도 스캐폴드는 sns-links 가드 충돌 + 픽스처와 중복이라 픽스처 포인터로 대체**
+  (덕지덕지 금지). package.json exports에 `./browser-control-host` 추가.
+- **Phase 1(조작 능력) 구현 완성**: attempts 졸업(게이트1-10: 부팅/격리/CDP왕복/iframe역전/신뢰입력/실제조작/
+  다중세션/스텔스/영속세션/세션수명) -> src 승격(browserControl 능력 + host + protocol) -> 공개 표면 ->
+  실 src 런타임 게이트(SSOT) -> 소비 계약. `npm test` green + `test:browser:ext` GREEN. 능력이 브라우저에서
+  실동 검증됨. 파이썬 `pyprocBrowser.tab(url, mode).navigate/evaluate/click/type/close`(script/debugger 두 mode).
+- **남은 것(Phase 2, 별도 착수)**: iframe 역전 non-COI 셸 분리(쿠키/frame-busting 재측정, 셸 UI는 제품 몫) +
+  프로세스 OS 워커 N=세션 N 병렬(블로킹 표면은 한 인터프리터 순차) + MV3 SW keep-alive(alarms/port, 실배포) +
+  신뢰입력 API 폭(waitForSelector/screenshot, 수요 실측 후) + 실 봇 방어(Cloudflare 등) 수동 통과.
+- **수요(정직 유지)**: codaro의 browserControl 실제 seam은 아직 미배선. Phase 2 착수는 소비자가 Phase 1을 실제
+  import한 뒤가 정합(product-vision 실패 기준). 사용자 지시로 Phase 1은 완성했다.
+
+### 2026-07-14 Phase B 완료: src 승격 + 실 src 런타임 게이트 GREEN -> Phase C(소비 계약) 착수
+
+- **src 배치**: browserControl 능력(`enableBrowserControl`) + browserControlHost + browserControlProtocol을
+  `src/capabilities/`에(한 능력=한 폴더). runtime.js 등록. 공개 표면: index.js export `BrowserControl`,
+  index.d.ts(`BrowserControl`/`BrowserTab`/`enableBrowserControl`), README 2종(영문 우선), package.json
+  exports `./browser-control-host`(SW 절반 subpath). 능력 install()에 chrome.runtime 전제 가드 + 프로토콜
+  버전 핸드셰이크. `npm test` 542 green.
+- **실 src 런타임 게이트(tests/browser/runExtension.mjs + extensionFixture, `test:browser:ext`)**: 픽스처
+  확장이 **사본이 아니라 실 src를 import**(SSOT). src 트리 구조보존 vendoring + vendor 코어 조립 -> CDP
+  loadUnpacked. GREEN 3/3: boot()가 offscreen에서 실 src로 부팅(리스크 실증) + enableBrowserControl().install()
+  + 핸드셰이크 + pyprocBrowser 왕복(tab/evaluate/type/close, field=srcPromoted).
+- **졸업 게이트 ⑦계약 + ⑧src 배치 완료.** 능력이 브라우저에서 실동 검증됨.
+- **Phase C 착수**: docs/consuming에 확장 manifest 요구 계약(COEP/COOP/CSP/permissions/minimum_chrome_version는
+  pyproc 런타임 요구) + vendoring 계약(SHA-핀 단일 import 불가, src 트리 구조보존) + examples 레퍼런스 확장
+  스캐폴드(codaro 복붙용, 실 src import).
+
 ### 2026-07-13 Phase A 실측 완료: 영속 세션 모델 GREEN (게이트9/10) -> Phase B(src 승격) 착수
 
 - **게이트9(영속 세션 모델)**: 파이썬 `pyprocBrowser.tab(url, mode).evaluate/type/click/close`가 한 핸들로

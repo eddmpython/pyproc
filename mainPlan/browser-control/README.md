@@ -1,9 +1,11 @@
 # browser-control - 서버리스 · 프로세스 내 브라우저 자동화 파이썬 런타임
 
-상태: **개시 (2026-07-13). Phase 0 실측 절반 GREEN.** attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이
-링 1(MV3 확장) 세 게이트를 브라우저 실측으로 통과시켰다(offscreen Pyodide 부팅 / 프로세스 OS 격리 /
-파이썬발 chrome.debugger CDP 왕복, GREEN 9/9). 이 이니셔티브는 그 실측을 승격 가능한 능력 계약으로
-설계한다. **착수는 Phase 0 게이트(스텔스 수동 실측 + 코어 재사용 실증)가 지배한다**(무비판 확장 착수 금지).
+상태: **Phase 1(조작 능력) 구현 완성 (2026-07-14).** attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이
+링 1(MV3 확장) 게이트 1-10을 브라우저 실측으로 통과(부팅/격리/CDP왕복/iframe역전/신뢰입력/실제조작/다중세션/
+스텔스/영속세션/세션수명)한 뒤, 능력을 `src/capabilities/`로 승격했다: `Runtime.enableBrowserControl()` ->
+파이썬 `pyprocBrowser.tab(url, mode).navigate/evaluate/click/type/close`(script/debugger 두 mode). 실 src
+런타임 게이트(`test:browser:ext`, 픽스처가 실 src import = SSOT) GREEN + 확장 소비 계약 문서화. 남은 것은
+Phase 2(iframe 셸 분리/프로세스 OS 통합/실배포 keep-alive/실 봇 방어)로 별도 착수([03-progress-ledger](03-progress-ledger.md) NEXT).
 
 ## 한 문장
 
