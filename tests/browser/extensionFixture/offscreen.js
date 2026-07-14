@@ -139,18 +139,22 @@ d.setGeolocation(37.5665, 126.9780)
 d.evaluate("window.__geo=null; navigator.geolocation.getCurrentPosition(function(p){window.__geo=p.coords.latitude}, function(e){window.__geo='err'})")
 d.waitForFunction("window.__geo !== null", 5000)
 r["geo"] = d.evaluate("window.__geo")
+d.setLocale("fr-FR")
+d.navigate("${target}")
+r["navLang"] = d.evaluate("navigator.language")
 d.close()
 json.dumps(r)
 `)));
-  add("실 src 다이얼로그/네트워크/프레임/에뮬/다운로드/콘솔/접근성/OOPIF/지오",
+  add("실 src 다이얼로그/네트워크/프레임/에뮬/다운로드/콘솔/접근성/OOPIF/지오/로케일",
     g2.dialog === true && g2.dialogMsg === "proceed?" && g2.respStatus === 200 &&
     g2.blocked === "blocked" && g2.mocked === "MOCKED" && g2.heldFulfill === "HELD" &&
     typeof g2.respBody === "string" && g2.respBody.includes("apihit") &&
     g2.frameText === "childOk" && g2.frameField === "framedSrc" &&
     g2.dark === true && g2.tz === "Asia/Seoul" && g2.offline === false && g2.dlFile === "report.txt" &&
     String(g2.consoleText).includes("srcConsole") && g2.axCount > 0 && g2.axButton === true &&
-    g2.oopifText === "childOk" && typeof g2.geo === "number" && Math.abs(g2.geo - 37.5665) < 0.01,
-    `dlFile=${g2.dlFile}, axCount=${g2.axCount}, oopifText=${g2.oopifText}, geo=${g2.geo}`);
+    g2.oopifText === "childOk" && typeof g2.geo === "number" && Math.abs(g2.geo - 37.5665) < 0.01 &&
+    g2.navLang === "fr-FR",
+    `axCount=${g2.axCount}, oopifText=${g2.oopifText}, geo=${g2.geo}, navLang=${g2.navLang}`);
 
   // 프로세스 OS x 브라우저 컨트롤: 실 src routeBrowserWorker + installBrowserWorker로 Pyodide 워커가
   // 자기 인터프리터(독립 GIL)로 run_sync + 라우터를 거쳐 자기 세션을 몬다(SSOT 회귀).

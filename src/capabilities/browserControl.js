@@ -138,6 +138,8 @@ class BrowserTab:
         self._op("setOffline", offline=offline); return self
     def setGeolocation(self, latitude, longitude, accuracy=10):
         self._op("setGeolocation", latitude=latitude, longitude=longitude, accuracy=accuracy); return self
+    def setLocale(self, locale):
+        self._op("setLocale", locale=locale); return self
     # 다운로드 관측(debugger mode 전용): downloadWillBegin으로 무엇이 다운로드되는지(파일명/URL) 회수.
     def enableDownloads(self):
         self._op("enableDownloads"); return self

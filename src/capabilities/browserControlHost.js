@@ -83,6 +83,7 @@ class DebuggerDriver {
     this.networkOn = false; this.fetchOn = false; this.netEventsOn = false;
     this.routes = []; this.responseLog = []; this.heldRequests = new Map();
     this.dialogAccept = true; this.dialogPromptText = ""; this.lastDialogMessage = null;
+    this.extraHeaders = {};
     this.frameWorlds = new Map();
     this.attachedOopifs = new Set();
     this.downloadsOn = false; this.downloadLog = [];
@@ -425,7 +426,18 @@ class DebuggerDriver {
   }
   async setHeaders(headers) {
     await this.ensureNetwork();
-    await this.send("Network.setExtraHTTPHeaders", { headers: headers || {} });
+    this.extraHeaders = { ...this.extraHeaders, ...(headers || {}) };
+    await this.send("Network.setExtraHTTPHeaders", { headers: this.extraHeaders });
+    return { ok: true };
+  }
+  // 로케일 스푸핑: Emulation.setLocaleOverride가 Edge서 navigator/Intl에 미반영이라, Accept-Language 헤더 +
+  // navigator.language/languages 선제 오버라이드로 대행한다(navigator는 다음 항법부터). Intl 기본 로케일은 미반영(정직).
+  async setLocale(locale) {
+    await this.ensureNetwork();
+    this.extraHeaders = { ...this.extraHeaders, "Accept-Language": locale };
+    await this.send("Network.setExtraHTTPHeaders", { headers: this.extraHeaders });
+    const l = JSON.stringify(locale);
+    await this.send("Page.addScriptToEvaluateOnNewDocument", { source: `try { Object.defineProperty(Navigator.prototype, 'language', { get: () => ${l}, configurable: true }); Object.defineProperty(Navigator.prototype, 'languages', { get: () => [${l}], configurable: true }); } catch (e) {}` });
     return { ok: true };
   }
   async cookies(urls) {
@@ -674,6 +686,7 @@ class ScriptDriver {
   setTimezone() { return Promise.resolve(this._unsupported("setTimezone")); }
   setOffline() { return Promise.resolve(this._unsupported("setOffline")); }
   setGeolocation() { return Promise.resolve(this._unsupported("setGeolocation")); }
+  setLocale() { return Promise.resolve(this._unsupported("setLocale")); }
   enableDownloads() { return Promise.resolve(this._unsupported("enableDownloads")); }
   waitForDownload() { return Promise.resolve(this._unsupported("waitForDownload")); }
   enableConsole() { return Promise.resolve(this._unsupported("enableConsole")); }
@@ -774,6 +787,7 @@ function dispatch(driver, op, a) {
     case OP.setTimezone: return driver.setTimezone(a.timezoneId);
     case OP.setOffline: return driver.setOffline(a.offline);
     case OP.setGeolocation: return driver.setGeolocation(a);
+    case OP.setLocale: return driver.setLocale(a.locale);
     case OP.enableDownloads: return driver.enableDownloads(a.path);
     case OP.waitForDownload: return driver.waitForDownload(a.timeout);
     case OP.enableConsole: return driver.enableConsole();

@@ -707,6 +707,8 @@ export interface BrowserTab {
   setOffline(offline?: boolean): BrowserTab;
   /** 지오로케이션 스푸핑. 권한은 chrome.contentSettings.location로 부여(manifest "contentSettings" 필요), 좌표는 Emulation.setGeolocationOverride. debugger mode 전용. */
   setGeolocation(latitude: number, longitude: number, accuracy?: number): BrowserTab;
+  /** 로케일 스푸핑. Accept-Language 헤더 + navigator.language/languages 선제 오버라이드(다음 항법부터). Intl 기본 로케일은 미반영. debugger mode 전용. */
+  setLocale(locale: string): BrowserTab;
   /** 다운로드 관측(CDP Page.downloadWillBegin). enableDownloads 후 waitForDownload로 파일명/URL 회수(저장 경로 지정은 browser-level이라 미지원). debugger mode 전용. */
   enableDownloads(): BrowserTab;
   waitForDownload(timeout?: number): { url: string; filename: string; state: string };
