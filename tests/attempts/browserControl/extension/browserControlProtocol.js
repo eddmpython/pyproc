@@ -79,6 +79,8 @@ export const OP = {
   enableConsole: "enableConsole",
   consoleLogs: "consoleLogs",
   waitForConsole: "waitForConsole",
+  // 접근성 트리(CDP Accessibility.getFullAXTree). role/name 의미 구조(에이전트 시맨틱 네비게이션). debugger 전용.
+  accessibilityTree: "accessibilityTree",
 };
 
 // mode = 조작 전략. 생성 시 1회 선택(per-verb 플래그 금지).

@@ -150,6 +150,9 @@ class BrowserTab:
         return self._op("consoleLogs").get("value")
     def waitForConsole(self, pattern, timeout=10000):
         return self._op("waitForConsole", pattern=pattern, timeout=timeout).get("value")
+    # 접근성 트리(debugger mode 전용): role/name 의미 구조(에이전트가 DOM 대신 의미로 페이지를 이해).
+    def accessibilityTree(self):
+        return self._op("accessibilityTree").get("value")
     # 프레임 traversal(iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
     def frames(self):
         return self._op("frames").get("value")
@@ -727,6 +730,23 @@ json.dumps(r)
           g22.hasErr === true && g22.hasThrow === true &&
           g22.types.includes("log") && g22.types.includes("error") && g22.types.includes("exception"),
           `logText=${g22.logText}, types=${JSON.stringify(g22.types)}, hasErr=${g22.hasErr}, hasThrow=${g22.hasThrow}`);
+
+        // 게이트23: 접근성 트리. 페이지를 role/name 시맨틱으로 회수한다(에이전트가 DOM 셀렉터 대신 의미로 이해).
+        // 타깃의 button/textbox 등이 접근성 트리에 role+name으로 잡히는지 검증.
+        const g23 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+r = {}
+ax = d.accessibilityTree()
+r["count"] = len(ax)
+r["roles"] = sorted(set(n["role"] for n in ax if n.get("role")))
+r["hasButton"] = any(n.get("role") == "button" for n in ax)
+r["buttonNames"] = [n.get("name") for n in ax if n.get("role") == "button"]
+d.close()
+json.dumps(r)
+`)));
+        add("게이트23: 접근성 트리(role/name 시맨틱 회수)",
+          g23.count > 0 && g23.hasButton === true && g23.buttonNames.includes("click"),
+          `count=${g23.count}, hasButton=${g23.hasButton}, buttonNames=${JSON.stringify(g23.buttonNames)}, roles=${JSON.stringify(g23.roles)}`);
 
         // 게이트20: 파이썬 워커 N=세션 N 진짜 병렬. 각 워커가 자기 Pyodide 인터프리터(독립 GIL)를 부팅하고
         // run_sync(JSPI) + offscreen 라우터로 자기 세션을 몰아 조작한다(제약 A 우회). 프로세스 OS x 브라우저

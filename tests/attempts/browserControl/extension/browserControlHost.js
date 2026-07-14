@@ -236,6 +236,18 @@ class DebuggerDriver {
     }
     return { ok: false, error: "waitForConsole 타임아웃: " + pattern };
   }
+  // 접근성 트리: role/name/value의 시맨틱 구조(에이전트가 DOM 대신 의미로 페이지를 이해). 무-role 노드는 제외.
+  async accessibilityTree() {
+    await this.send("Accessibility.enable");
+    const r = await this.send("Accessibility.getFullAXTree");
+    const nodes = (r && r.nodes) || [];
+    const out = nodes.map((n) => ({
+      role: n.role && n.role.value,
+      name: n.name && n.name.value,
+      value: n.value && n.value.value,
+    })).filter((n) => n.role);
+    return { ok: true, value: out };
+  }
   async frames() {
     const tree = await this.send("Page.getFrameTree");
     const out = [];
@@ -622,6 +634,7 @@ class ScriptDriver {
   enableConsole() { return Promise.resolve(this._unsupported("enableConsole")); }
   consoleLogs() { return Promise.resolve(this._unsupported("consoleLogs")); }
   waitForConsole() { return Promise.resolve(this._unsupported("waitForConsole")); }
+  accessibilityTree() { return Promise.resolve(this._unsupported("accessibilityTree")); }
   async detach() { /* CDP 없음 */ }
 }
 
@@ -720,6 +733,7 @@ function dispatch(driver, op, a) {
     case OP.enableConsole: return driver.enableConsole();
     case OP.consoleLogs: return driver.consoleLogs();
     case OP.waitForConsole: return driver.waitForConsole(a.pattern, a.timeout);
+    case OP.accessibilityTree: return driver.accessibilityTree();
     default: return Promise.resolve({ ok: false, error: `알 수 없는 op: ${op}` });
   }
 }
