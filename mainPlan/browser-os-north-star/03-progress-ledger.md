@@ -628,3 +628,45 @@ NEXT:
 
 1. codaro가 pyproc `Runtime.fs`/`.pymachine` 또는 `AsgiServer`/`VirtualOrigin` 중 하나를 더 소비하게 만들어 "OS 프리미티브 둘 이상" 조건을 닫는다.
 2. pyproc의 Service Worker 등록 경로와 Pyodide 내부 import 모듈까지 같은 manifest 정책으로 봉인한다.
+
+## 2026-07-15 - codaro Runtime.fs product gate로 두 번째 OS primitive 소비 확인
+
+문제:
+
+- 직전 상태는 codaro가 기본 `Runtime` boot, `assetIntegrity`, build 산출물의 same-origin asset graph를 실제 브라우저에서 검증하는 단계였다.
+- Browser OS 목표에서 외부 제품 증거로 인정하려면 브라우저 파일 세계가 단순 문서 표면이 아니라 실제 제품 실행 결과와 Python `open()`에 동시에 보여야 한다.
+- `Runtime.fs`가 JS에서만 보이고 Python 파일 IO와 분리되면 OS primitive가 아니라 포장된 저장 헬퍼에 그친다.
+
+완료:
+
+- codaro `e862593f090e471f4bc0345a6c7fefc1c0e91576`가 `pyproc-runtime-fs-browser` product gate를 추가했다.
+- gate는 `npm run build` 후 정적 editor 산출물을 띄우고, `?codaroBrowserRuntimeDiagnostics=1`일 때만 브라우저 Python diagnostic hook을 설치한다.
+- 첫 셀은 실제 pyproc 런타임에서 실행되고, codaro runtime seam은 `Runtime.fs`로 `/home/web/codaro/cells/<cell>.py`와 `/home/web/codaro/runs/<cell>.json`을 쓴다.
+- JS `Runtime.fs.readFile()` readback과 Python `open()` readback을 모두 검증한다.
+- 두 번째 셀은 Python `open('/home/web/codaro/runs/cell-fs-source.json')`으로 첫 번째 셀의 실행 기록을 읽고, `Runtime.fs`와 `cell-fs-source:success`를 stdout으로 증명한다.
+- 실행 결과 UI는 `data-runtime-artifacts`로 브라우저 FS 셀 소스와 실행 기록 경로를 노출한다.
+- 첫 실측에서 Vite `BASE_URL="/"`를 `URL` 생성자 base로 직접 쓰던 결함이 `Invalid base URL`로 드러났고, 현재 origin 기준 절대 base로 고쳤다. 이 수정도 같은 gate로 재검증했다.
+- codaro `quality-cycle`과 `product-quality-audit`는 `output/test-runner/pyproc-runtime-fs-browser/pyproc-runtime-fs-report.json`을 artifact freshness evidence로 대조한다.
+
+검증:
+
+- codaro `npm run check` GREEN.
+- codaro `uv run python -X utf8 tests/run.py gate editor-runtime-preflight` GREEN.
+- codaro `uv run python -X utf8 tests/run.py gate product-quality-audit` GREEN.
+- codaro `uv run python -X utf8 -m pytest tests/runtime/testRunEntrypoint.py tests/product/verifyProductQualityAudit.py -q --tb=short` GREEN 14/14.
+- codaro `uv run python -X utf8 tests/run.py gate pyproc-runtime-fs-browser` GREEN.
+- codaro `pyproc-runtime-fs-report.json` signals: `runtimeFileSystem: Runtime.fs`, `pythonOpenShared: true`, source path `/home/web/codaro/cells/cell-fs-source.py`, run record path `/home/web/codaro/runs/cell-fs-source.json`.
+- codaro `uv run python -X utf8 tests/run.py gate docs` GREEN.
+- codaro `uv run python -X utf8 tests/run.py preflight` GREEN 3/3.
+- codaro `git push origin main` 완료: `838997d3..e862593f`.
+
+판정:
+
+- 이전 NEXT 1번은 제품 증거 기준으로 닫혔다. codaro는 이제 기본 브라우저 `Runtime` boot/asset preflight에 더해 `Runtime.fs`를 실제 제품 실행 경계에서 소비한다.
+- "파일 세계"는 pyproc의 OS 방향에서 핵심 primitive다. 이번 gate는 JS 파일 API와 Python `open()`이 같은 `/home/web/codaro` 세계를 본다는 점을 브라우저에서 직접 증명한다.
+- Phase 5의 외부 제품 소비 조건은 실질적으로 닫힌 것으로 본다. 단 pyproc 자체의 실행 자산 봉인 과제는 남아 있다.
+
+NEXT:
+
+1. pyproc의 Service Worker 등록 경로와 Pyodide 내부 import 모듈까지 같은 manifest 정책으로 봉인한다.
+2. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `AsgiServer`/`VirtualOrigin` 중 하나로 잡는다. 파일 세계가 닫혔으므로 다음은 상태 부활 또는 브라우저 서버다.
