@@ -58,7 +58,7 @@ export { bootSession, openMachine, Session } from "./src/capabilities/session.js
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
 export { GpuCompute, GpuArray, GpuBridge } from "./src/capabilities/gpuCompute.js";
-export { BrowserControl } from "./src/capabilities/browserControl.js";
+export { BrowserControl, routeBrowserWorker, installBrowserWorker } from "./src/capabilities/browserControl.js";
 export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
 export { MachineContainer } from "./src/processOs/machineContainer.js";
 export { JobControl } from "./src/processOs/jobControl.js";

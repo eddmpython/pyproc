@@ -1,6 +1,7 @@
 // offscreen.js - 픽스처 런타임 셸. 실 src의 boot() + Runtime.enableBrowserControl()을 쓴다(SSOT 검증).
 // 코어 boot()가 offscreen에서 실 src 경로로 부팅되는지 + 승격된 pyprocBrowser 표면이 실동하는지 게이트한다.
 import { boot } from "./src/runtime/runtime.js";
+import { routeBrowserWorker } from "./src/capabilities/browserControl.js";
 
 const backchannelPort = new URL(location.href).searchParams.get("port");
 const checks = [];
@@ -129,6 +130,25 @@ json.dumps(r)
     g2.frameText === "childOk" && g2.frameField === "framedSrc" &&
     g2.dark === true && g2.tz === "Asia/Seoul" && g2.offline === false,
     `held=${g2.heldFulfill}, frameText=${g2.frameText}, dark=${g2.dark}, tz=${g2.tz}, offline=${g2.offline}`);
+
+  // 프로세스 OS x 브라우저 컨트롤: 실 src routeBrowserWorker + installBrowserWorker로 Pyodide 워커가
+  // 자기 인터프리터(독립 GIL)로 run_sync + 라우터를 거쳐 자기 세션을 몬다(SSOT 회귀).
+  try {
+    const pyw = await new Promise((resolve, reject) => {
+      const w = new Worker(new URL("./pyWorker.js", import.meta.url), { type: "module" });
+      routeBrowserWorker(w);
+      w.addEventListener("message", (ev) => {
+        if (ev.data && ev.data.type === "done") { w.terminate(); resolve(ev.data.result); }
+        else if (ev.data && ev.data.type === "error") { w.terminate(); reject(new Error(ev.data.error)); }
+      });
+      w.onerror = (ev) => { w.terminate(); reject(new Error(ev.message || "pyWorker error")); };
+      w.postMessage({ type: "run", indexURL: chrome.runtime.getURL("/"), target, label: "srcWorker" });
+    });
+    add("실 src 파이썬 워커 병렬(routeBrowserWorker + installBrowserWorker)",
+      pyw.readback === "srcWorker" && pyw.title === "pyprocCdpTarget", `readback=${pyw.readback}, title=${pyw.title}`);
+  } catch (e) {
+    add("실 src 파이썬 워커 병렬(routeBrowserWorker + installBrowserWorker)", false, String(e));
+  }
 
   const ok = checks.every((c) => c.pass);
   chrome.runtime.sendMessage({ type: "gateResult", ok, checks });

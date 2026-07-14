@@ -619,6 +619,19 @@ export class BrowserControl {
 }
 
 /**
+ * 프로세스 OS x 브라우저 컨트롤 융합: 워커 N = 독립 인터프리터 N(독립 GIL) = 세션 N.
+ * offscreen 측에서 호출: 스폰한 Pyodide 워커의 브라우저 op를 SW 호스트로 릴레이한다(4-홉 라우터).
+ */
+export function routeBrowserWorker(worker: Worker): Worker;
+
+/**
+ * 워커 측에서 호출: 그 워커의 파이썬이 브라우저를 몰 수 있게 배선한다(_pyprocBrowserSend를 offscreen postMessage로).
+ * 워커는 offscreen(COI)에서 스폰돼 crossOriginIsolated 상속 = SAB/JSPI 생존. 이후 파이썬은 pyprocBrowser로 조작.
+ * py는 Pyodide 인스턴스. JSPI(run_sync) 경로가 필요하다.
+ */
+export function installBrowserWorker(py: unknown): Promise<unknown>;
+
+/**
  * 파이썬 pyprocBrowser.tab(url, mode)이 반환하는 탭 핸들(파이썬 표면 문서화용 타입).
  * mode="script": chrome.scripting(스텔스, isTrusted=false, 캡처/에뮬 미지원). mode="debugger": chrome.debugger
  * (신뢰입력 isTrusted=true + 캡처/에뮬 전 표면). sessionId는 불투명(tabId 비노출). 탭 외부 종료 시 이후 op가 SessionLost 예외.

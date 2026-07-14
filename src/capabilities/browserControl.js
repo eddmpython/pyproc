@@ -220,4 +220,42 @@ export class BrowserControl {
   }
 }
 
+// 프로세스 OS x 브라우저 컨트롤 융합: 워커 N = 독립 인터프리터 N(독립 GIL) = 세션 N. dedicated Worker엔 chrome.*이
+// 없어(제약 A) offscreen이 유일 chrome.runtime 채널이므로, 워커의 브라우저 op를 offscreen이 SW 호스트로 릴레이한다
+// (4-홉: 워커 -> offscreen -> SW -> CDP). 파이썬 연산은 워커별 GIL로 물리 병렬, 브라우저-op은 SW 단일 큐(정직한 천장).
+const WORKER_OP = "pyprocBrowserOp";
+const WORKER_OP_RESULT = "pyprocBrowserOpResult";
+
+// offscreen 측: 워커의 브라우저 op 메시지를 SW 호스트로 릴레이한다. 소비자는 워커를 스폰한 뒤 이걸 호출한다.
+export function routeBrowserWorker(worker) {
+  worker.addEventListener("message", async (ev) => {
+    const m = ev.data;
+    if (!m || m.type !== WORKER_OP) return;
+    const result = await chrome.runtime.sendMessage(makeMessage(m.op, m.fields));
+    worker.postMessage({ type: WORKER_OP_RESULT, reqId: m.reqId, result });
+  });
+  return worker;
+}
+
+// 워커 측: 그 워커의 파이썬이 브라우저를 몰 수 있게 배선한다. _pyprocBrowserSend가 chrome.runtime 대신 부모
+// (offscreen)로 postMessage하고 opResult까지 run_sync(JSPI)로 블로킹한다. 워커도 offscreen(COI)에서 스폰되면
+// crossOriginIsolated를 상속해 SAB/JSPI가 산다. 호출 후 워커 파이썬은 `import pyprocBrowser as browser`로 조작한다.
+export async function installBrowserWorker(py) {
+  const pending = new Map();
+  let nextReqId = 1;
+  self.addEventListener("message", (ev) => {
+    const m = ev.data;
+    if (!m || m.type !== WORKER_OP_RESULT) return;
+    const resolve = pending.get(m.reqId);
+    if (resolve) { pending.delete(m.reqId); resolve(m.result); }
+  });
+  py.globals.set("_pyprocBrowserSend", (op, fieldsJson) => new Promise((resolve) => {
+    const reqId = nextReqId++;
+    pending.set(reqId, (result) => resolve(JSON.stringify(result)));
+    self.postMessage({ type: WORKER_OP, reqId, op, fields: JSON.parse(fieldsJson) });
+  }));
+  await py.runPythonAsync(PYPROC_BROWSER_MODULE);
+  return py;
+}
+
 export { openBrowserControlHost } from "./browserControlHost.js";
