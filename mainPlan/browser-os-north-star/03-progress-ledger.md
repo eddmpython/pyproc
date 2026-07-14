@@ -968,3 +968,39 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. 제품별 `resume.py` 자원 정책 카탈로그를 실제 소비 표면에 붙인다.
+
+## 2026-07-15 - resume.py 제품 자원 카탈로그와 Machine demo 적용
+
+문제:
+
+- `Init.resume(reason)`은 API와 probe로 닫혔지만, 제품이 실제로 어떤 자원을 다시 열어야 하는지의 표가 없었다.
+- 부활 후 열린 fd/socket/DB connection을 다시 여는 정책이 제품마다 임의 코드로 흩어지면 `.pymachine`과 journal의 OS 구조가 약해진다.
+- 대표 제품 표면인 Machine demo도 `Session.load`와 `openMachine` 뒤 `resume.py`를 호출하지 않아, 공개 데모가 소비 계약을 완전히 보여주지 못했다.
+
+완료:
+
+- `examples/machine.html`에 실제 `/home/web/resume.py` 사용을 추가했다.
+- Machine demo는 첫 부팅 또는 부활 뒤 `resume.py`로 `appDb` SQLite connection을 열고, `resumeEvent` 테이블에 `fresh.boot`, `session.load`, `openMachine` 같은 reason을 기록한다.
+- signed `.pymachine` cast 후 `openMachine`에서도 runtime의 `/home/web`을 OPFS로 다시 연결하고 `resume.py`를 실행해 `appDb`를 재개설한다.
+- 새 문서 `docs/consuming/resumeCatalog.md`를 추가했다. 공통 계약, reason 값, 현재 고정 표면, codaro/dartlab/xlpod/외부 제품별 재개설 정책을 한 곳에 묶었다.
+- 소비 계약, docs 지도, 테스트 운영 문서, README/README.ko, OS 판정표, 대형 힙 봉투, 아키텍처 질문을 카탈로그 기준으로 갱신했다.
+
+검증:
+
+- `node tests/browser/run.mjs examples/machine.html?gate=1` GREEN 1/1.
+- `npm run test:examples` GREEN 9/9.
+- `npm test` GREEN 578/578.
+- Machine demo gate에서 `fresh.boot`로 `appDb`를 열고, 사용자 코드 실행 후 signed `.pymachine` cast, `openMachine`, `resume.py` 재실행까지 통과했다.
+- 실측 출력: `resume.py: reopened appDb (openMachine, events=3)`, signed machine size 11.1MB.
+
+판정:
+
+- 이전 NEXT 3번의 "제품별 resume.py 자원 정책 카탈로그를 실제 소비 표면에 붙인다"는 pyproc 내부 표면에서는 닫혔다.
+- 남은 것은 codaro/dartlab/xlpod 같은 외부 제품 gate다. 즉 카탈로그와 대표 demo는 정본이 됐고, 외부 제품 적용은 별도 제품 소비 축으로 남긴다.
+- OS 점수는 70/100 유지. 점수 상승은 외부 제품 `.pymachine` 또는 `VirtualOrigin` 채택과 공개키·권한 UI가 닫힌 뒤 재산정한다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. 외부 제품의 `resume.py` 정책을 제품 gate로 고정한다.

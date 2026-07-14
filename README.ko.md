@@ -132,7 +132,7 @@ console.log(rt.run("len(values)"));           // 3
 | 커널 내 ASGI (`AsgiServer` - dartlab 프로덕션 사용 중) | Beta |
 | uv 레인 (`bootEnv` / `freeze` / `runScript`), wheel 캐시, 터미널, syscall 브리지 | Beta |
 | 세션 부활 + `.pymachine` 이미지, 머신 저널(WAL) | Experimental |
-| 라이브 프로세스 fork, 장치 FS, init / cron, 가상 오리진 URL | Experimental |
+| 라이브 프로세스 fork, 장치 FS, init / cron / resume hook, 가상 오리진 URL | Experimental |
 | 아웃바운드 Python 소켓 (`SocketBridge`), 공유 커널 | Experimental |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 

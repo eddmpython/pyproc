@@ -1,6 +1,6 @@
 # 04. OS 판정표 v2 - P2/P4/P6 이후 재판정
 
-작성: 2026-07-14. 갱신: 2026-07-15. 근거: `browser-os` 판정 이후 완료된 커널 선출(P2), 잡 컨트롤(P3), 파이프/shm(P4), 머신 컨테이너(P5), 권한 감옥(P6), 파일 세계 v2(P7), MachineJournal pack/prune/autoPack, `Init.resume`, 대표 데모 3종의 src 승격, codaro의 `Runtime.fs`/`AsgiServer` 제품 소비, 설치 패키지 consumer gate의 `VirtualOrigin` URL 동선, VirtualOrigin 제품 경계 compatibility lab과 browser/example gate 실측.
+작성: 2026-07-14. 갱신: 2026-07-15. 근거: `browser-os` 판정 이후 완료된 커널 선출(P2), 잡 컨트롤(P3), 파이프/shm(P4), 머신 컨테이너(P5), 권한 감옥(P6), 파일 세계 v2(P7), MachineJournal pack/prune/autoPack, `Init.resume`, `resume.py` 제품 자원 카탈로그와 Machine demo 적용, 대표 데모 3종의 src 승격, codaro의 `Runtime.fs`/`AsgiServer` 제품 소비, 설치 패키지 consumer gate의 `VirtualOrigin` URL 동선, VirtualOrigin 제품 경계 compatibility lab과 browser/example gate 실측.
 
 ## 한 줄 판정
 
@@ -32,7 +32,7 @@
 | 보호·격리 | 5 | 7 | worker 주소공간 격리, `.pymachine` trust gate + WebCrypto signature, 부트 자산 SRI v2, `registerPyProcServiceWorker`, SW `coreIntegrity`, `MachineJail` 협조 티어 + CSP connect-src 집행. 근거: [machineJail.js](../../src/capabilities/machineJail.js), [session.js](../../src/capabilities/session.js), [runtime.js](../../src/runtime/runtime.js), [assets.js](../../src/runtime/assets.js), [pyprocSw.js](../../src/capabilities/pyprocSw.js), [jailProbe](../../tests/attempts/pythonMachine/README.md) | same-origin parent 측면통로, 공개키 배포 UI 없음, 권한 UI 없음, 힙 평문 비밀 경고 필요 |
 | 네트워크 | 4 | 6 | ASGI/VirtualOrigin으로 브라우저 안 서버, 설치 패키지 consumer gate의 `/pyproc/` URL fetch, VirtualOrigin 경계 lab, SocketBridge로 outbound HTTP/HTTPS socket. 근거: [asgiServer.js](../../src/capabilities/asgiServer.js), [virtualOrigin.js](../../src/capabilities/virtualOrigin.js), [pyprocSw.js](../../src/capabilities/pyprocSw.js), [productConsumer](../../tests/browser/productConsumer.mjs), [virtualOriginBoundaryProbe](../../tests/attempts/runtimeParity/virtualOriginBoundaryProbe.html), [socketBridge probes](../../tests/attempts/socketBridge/README.md) | 공개 inbound port는 브라우저 벽. 쿠키 세션, WebSocket upgrade, streaming/SSE는 실행 계약으로 명시됐지만 로컬 서버와 동등한 네트워크는 아니다 |
 | 부팅·초기화 | 7 | 8 | boot/freeze/uv lane, offline core cache, Init boot.py/cron/resume.py, KernelElection leader failover. 근거: [envManager.js](../../src/capabilities/envManager.js), [init.js](../../src/capabilities/init.js), [kernelElection.js](../../src/processOs/kernelElection.js) | Pyodide private snapshot API와 버전 핀 의존 |
-| 영속·크래시 내성 | 7 | 8 | MachineJournal WAL, recover h0 대조, `pack()`/`prune()` live blob compaction, `autoPack` opt-in 정책, `Init.resume` 부활 후 자원 재개설, KernelElection failover, Session revival, `/home` 포함 signed `.pymachine`. 512MB journal commit/recover는 2-3초대, pack은 1.1초대로 진입했다. 근거: [machineJournal.js](../../src/capabilities/machineJournal.js), [session.js](../../src/capabilities/session.js), [init.js](../../src/capabilities/init.js), [kernelElectionProbe](../../tests/attempts/pythonMachine/README.md), [journalPackProbe](../../tests/attempts/pythonMachine/journalPackProbe.html), [resumeHookProbe](../../tests/attempts/pythonMachine/resumeHookProbe.html), [largeHeapEnvelope](../../tests/attempts/largeHeapEnvelope/README.md) | 공개키·권한 UI 없음, 제품별 resume.py 적용 범위 표 필요 |
+| 영속·크래시 내성 | 7 | 8 | MachineJournal WAL, recover h0 대조, `pack()`/`prune()` live blob compaction, `autoPack` opt-in 정책, `Init.resume` 부활 후 자원 재개설, resume catalog, Machine demo의 SQLite connection 재개설, KernelElection failover, Session revival, `/home` 포함 signed `.pymachine`. 512MB journal commit/recover는 2-3초대, pack은 1.1초대로 진입했다. 근거: [machineJournal.js](../../src/capabilities/machineJournal.js), [session.js](../../src/capabilities/session.js), [init.js](../../src/capabilities/init.js), [resumeCatalog](../../docs/consuming/resumeCatalog.md), [machine demo](../../examples/machine.html), [kernelElectionProbe](../../tests/attempts/pythonMachine/README.md), [journalPackProbe](../../tests/attempts/pythonMachine/journalPackProbe.html), [resumeHookProbe](../../tests/attempts/pythonMachine/resumeHookProbe.html), [largeHeapEnvelope](../../tests/attempts/largeHeapEnvelope/README.md) | 공개키·권한 UI 없음, 외부 제품 resume.py gate 필요 |
 | 개발자 표면 | 5 | 8 | Terminal, `%pip`, `%undo`, JobControl, self-hosting FastAPI/sqlite/html, signed machine cast, Speed Lab public benchmark, `/dev/fb0`, codaro 제품 gate의 `Runtime.fs`/`AsgiServer` 소비, 설치 패키지 consumer gate의 `VirtualOrigin` 소비, VirtualOrigin compatibility lab. 근거: [terminal.js](../../src/capabilities/terminal.js), [selfHost](../../tests/attempts/selfHost/README.md), [runtimeParity](../../tests/attempts/runtimeParity/README.md), [productConsumer](../../tests/browser/productConsumer.mjs), [examples](../../examples/), [소비 계약](../../docs/consuming/contract.md) | `.pymachine` 제품 소비, 외부 제품 VirtualOrigin 소비, completion/history polish |
 
 합계: **70/100**.
@@ -50,7 +50,7 @@
 7. **journal recover 병목이 1차 해소됐다**: 같은 blob key를 반복 읽고 검증하던 비용을 제거해 512MB recover가 24.8s에서 2.3s로 줄었다.
 8. **journal loose blob 누적이 구조와 대형 수치로 닫혔다**: `MachineJournal.pack()`/`prune()`이 HEAD/PREV live blob만 pack 파일로 묶고, pack-only recover와 PREV fallback을 통과했다. 512MB에서도 pack은 1081ms, pack-only recover는 2481ms다.
 9. **journal 자동 pack 기준이 계약화됐다**: `autoPack: true`는 512MB 실측점에서 나온 loose 128개 또는 8MB 기준으로 커밋 직후 pack한다. pack 뒤 재커밋도 packed blob을 loose로 재생성하지 않는다.
-10. **부활 후 자원 재개설 계약이 닫혔다**: `Init.resume(reason)`이 `resume.py`를 실행하고, `resumeHookProbe`가 Session.load/MachineJournal.recover/openMachine 뒤 sqlite connection 재개설을 실측했다.
+10. **부활 후 자원 재개설 계약이 제품 표면까지 닫혔다**: `Init.resume(reason)`이 `resume.py`를 실행하고, `resumeHookProbe`가 Session.load/MachineJournal.recover/openMachine 뒤 sqlite connection 재개설을 실측했다. `examples/machine.html`은 signed `.pymachine` cast 뒤 `resume.py`로 `appDb`를 다시 열고, [resumeCatalog](../../docs/consuming/resumeCatalog.md)는 제품별 정책을 공개 계약으로 둔다.
 11. **`.pymachine`이 `/home`까지 싣는다**: 힙 델타와 파일 트리가 한 봉투 해시 안에 들어가 portable machine image가 됐다.
 12. **`.pymachine`이 서명 출처를 검증한다**: trusted public key가 있으면 `trust: true` 없이 열리고, 다른 공개키는 거부된다.
 13. **부트 자산 SRI v2가 들어갔다**: `pyodide.js`와 fetch 경로 core 자산은 SRI manifest로 검증되고, pyproc worker graph는 `assetIntegrity` preflight로 spawn 전에 검증된다. OPFS 캐시 변조와 잘못된 worker SRI는 거부된다.
@@ -77,10 +77,10 @@
 
 > pyproc은 로컬급 범용 OS다.
 
-보류 문장을 열려면 외부 제품 소비 배선을 machine image 또는 VirtualOrigin 축까지 넓히고 공개키·권한 UI 계약을 닫아야 한다. journal pack/prune/autoPack과 `Init.resume`은 구조와 운영 기준을 닫았고, VirtualOrigin 경계 lab은 쿠키/WS/스트리밍 벽을 공개 계약으로 닫았다. 남은 영속 축은 제품별 `resume.py` 자원 정책을 문서화하고 실제 소비 표면에 붙이는 일이다.
+보류 문장을 열려면 외부 제품 소비 배선을 machine image 또는 VirtualOrigin 축까지 넓히고 공개키·권한 UI 계약을 닫아야 한다. journal pack/prune/autoPack과 `Init.resume`은 구조와 운영 기준을 닫았고, VirtualOrigin 경계 lab은 쿠키/WS/스트리밍 벽을 공개 계약으로 닫았다. `resume.py` 자원 정책은 Machine demo와 카탈로그까지 닫혔지만, codaro/dartlab/xlpod 같은 외부 제품 gate에는 아직 붙지 않았다.
 
 ## 다음 게이트
 
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
-3. 제품별 `resume.py` 자원 정책 카탈로그를 실제 소비 표면에 붙인다.
+3. 외부 제품의 `resume.py` 정책을 제품 gate로 고정한다.

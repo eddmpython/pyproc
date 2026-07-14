@@ -36,6 +36,7 @@
       <div class="row" style="margin:.6rem 0 .2rem">
         <span class="badge ok">state survives the tab</span>
         <span class="badge info">/home/web is a real disk (OPFS)</span>
+        <span class="badge">resume.py reopens SQLite</span>
         <span class="badge">WebCrypto signature on export</span>
         <span class="badge">trusted public-key import</span>
       </div>
@@ -45,8 +46,11 @@
     <div class="panel">
       <p class="dim" style="margin:0 0 .5rem">Try it: run this, then close the tab and come back. The counter and the file keep counting.</p>
       <textarea id="code" rows="4" spellcheck="false">n = globals().get('n', 0) + 1
+appDb.execute('insert into resumeEvent(reason, n) values (?, ?)', ('run', n))
+appDb.commit()
+resumeEvents = appDb.execute('select count(*) from resumeEvent').fetchone()[0]
 open('/home/web/visits.txt', 'a').write(f'visit {n}\n')
-print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').readlines()))</textarea>
+print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').readlines()), '| resume events:', resumeEvents)</textarea>
       <div class="row">
         <button id="run">Run</button>
         <button id="sleep" class="ghost">Sleep now (manual save)</button>
@@ -69,6 +73,18 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     const gateMode = params.has("gate");
     const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-180) }] }) }).catch(() => {}); };
+    const q = (value) => JSON.stringify(value);
+    const resumeSrc = [
+      "import os, sqlite3",
+      "os.makedirs('/home/web', exist_ok=True)",
+      "resumeReasonSeen = pyprocResumeReason",
+      "appDbPath = '/home/web/app.db'",
+      "appDb = sqlite3.connect(appDbPath)",
+      "appDb.execute('create table if not exists resumeEvent(reason text, n integer)')",
+      "appDb.execute('insert into resumeEvent(reason, n) values (?, ?)', (resumeReasonSeen, globals().get('n', 0)))",
+      "appDb.commit()",
+      "resumeEvents = appDb.execute('select count(*) from resumeEvent').fetchone()[0]",
+    ].join("\n");
     const opfs = await navigator.storage.getDirectory();
     const stateDir = await opfs.getDirectoryHandle("pyMachineState", { create: true });
     const homeDir = await opfs.getDirectoryHandle("pyMachineHome", { create: true });
@@ -154,18 +170,36 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
 
     let session = await bootSession({ indexURL: INDEX });
     let home = await session.rt.mountHome(homeDir);
+    async function ensureResumeHook() {
+      session.rt.setGlobal("_pmResumeSrc", resumeSrc);
+      session.rt.run([
+        "import os",
+        "os.makedirs('/home/web', exist_ok=True)",
+        "if not os.path.exists('/home/web/resume.py'):",
+        "    open('/home/web/resume.py', 'w').write(_pmResumeSrc)",
+      ].join("\n"));
+    }
+    function resumeMachine(reason, init = session.rt.enableInit()) {
+      const r = init.resume(reason);
+      if (r.resume) print(`resume.py: reopened appDb (${reason}, events=${session.rt.run("resumeEvents")}).`);
+      return r;
+    }
     // resume: 이전 hibernate가 있으면 그 자리에서 깨어난다
+    let resumeReason = "fresh.boot";
     try {
       const r = await session.load(stateDir, "machine");
       st.textContent = `Awake: previous session revived (${r.pages} pages, ${r.mb}MB). This computer never turned off.`;
+      resumeReason = "session.load";
     } catch (e) {
       st.textContent = "Fresh boot (first visit). Make some state, then close the tab and come back.";
     }
+    await ensureResumeHook();
 
     // OS의 init: /home/web/boot.py가 있으면 부팅마다 저절로 돈다(rc.local). cron.py는 60초 틱.
     const init = session.rt.enableInit();
     const ran = init.install();
     if (ran.boot) print("init: ran /home/web/boot.py");
+    resumeMachine(resumeReason, init);
 
     const runCode = async () => {
       const code = document.getElementById("code").value;
@@ -193,6 +227,8 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       clearRuntimeDir(next.rt, "/home/web");
       session = next;
       home = await session.rt.mountHome(homeDir);
+      await ensureResumeHook();
+      resumeMachine("openMachine");
       st.textContent = `Switched to a signed machine verified by key ${trustedKeyFp}.`;
       return next;
     };
@@ -209,7 +245,8 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
         const blob = await castSigned();
         const stateOk = session.rt.run("n >= 1") === true;
         const fileOk = String(session.rt.run("open('/home/web/visits.txt').read()")).includes("visit");
-        gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && st.textContent.includes("verified"));
+        const resumeOk = session.rt.run("resumeReasonSeen == 'openMachine' and appDb.execute('select count(*) from resumeEvent').fetchone()[0] >= 3") === true;
+        gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && resumeOk && st.textContent.includes("verified"));
       } catch (e) { print(String(e).slice(-160)); gateReport(false); }
     }
     // 수명주기: 탭이 사라질 때 자동 hibernate

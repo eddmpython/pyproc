@@ -132,7 +132,7 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 | In-kernel ASGI (`AsgiServer` - in dartlab production today) | Beta |
 | uv lane (`bootEnv` / `freeze` / `runScript`), wheel cache, terminal, syscall bridge | Beta |
 | Session revival + `.pymachine` images, machine journal (WAL) | Experimental |
-| Live process fork, device FS, init / cron, virtual-origin URL | Experimental |
+| Live process fork, device FS, init / cron / resume hooks, virtual-origin URL | Experimental |
 | Outbound Python sockets (`SocketBridge`), shared kernel | Experimental |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 
