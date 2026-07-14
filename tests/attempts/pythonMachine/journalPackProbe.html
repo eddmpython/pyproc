@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: journal pack</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: machineJournal pack/prune - 장기 OPFS 파일 수를 줄일 수 있나</h1>
+<p>WAL의 장기 병목은 live state가 아니라 loose blob 파일 수다. 이 probe는 승격된
+<code>MachineJournal</code> 위에서 <code>pack()</code>과 <code>prune()</code>을 실측한다:
+HEAD/PREV가 참조하는 live blob만 pack 파일 1개로 묶고, loose/stale 파일을 줄여도
+recover와 PREV fallback이 유지되어야 한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const blobName = /^[0-9a-f]{64}$/;
+  async function countEntries(dir, predicate = () => true) {
+    let n = 0;
+    for await (const name of dir.keys()) if (predicate(name)) n++;
+    return n;
+  }
+  async function maybeDir(parent, name) {
+    try { return await parent.getDirectoryHandle(name); } catch (e) { if (e.name === "NotFoundError") return null; throw e; }
+  }
+  try {
+    const opfs = await navigator.storage.getDirectory();
+    try { await opfs.removeEntry("journalPackProbe", { recursive: true }); } catch (e) {}
+    const dir = await opfs.getDirectoryHandle("journalPackProbe", { create: true });
+
+    const a = await bootSession({});
+    const ja = a.rt.enableJournal({ dir, reactive: a.reactive });
+    a.rt.run("value = 11\npayloadOne = bytearray(180000)\npayloadOne[0] = value");
+    const first = await ja.commit();
+    a.rt.run("value = 22\npayloadTwo = bytearray(220000)\npayloadTwo[0] = value");
+    const second = await ja.commit();
+    check("커밋 2세대 준비", !!first && !!second && ja.commits === 2, `커밋 ${ja.commits}회`);
+
+    const blobDir = await dir.getDirectoryHandle("blob");
+    const looseBefore = await countEntries(blobDir, (name) => blobName.test(name));
+    check("pack 전 loose blob 존재", looseBefore > 0, `loose=${looseBefore}`);
+
+    let t = performance.now();
+    const packResult = await ja.pack();
+    timings.packMs = Math.round(performance.now() - t);
+    const looseAfterPack = await countEntries(blobDir, (name) => blobName.test(name));
+    const packDir = await dir.getDirectoryHandle("pack");
+    const packCount = await countEntries(packDir);
+    const packIndex = JSON.parse(await (await (await dir.getFileHandle("PACKS.json")).getFile()).text());
+    check("pack: live blob을 pack 파일 1개로 압축", !!packResult && packResult.packed > 0 && packCount === 1 && packIndex.packs.length === 1,
+      `packed=${packResult ? packResult.packed : "n/a"}, pack=${packCount}, ${timings.packMs}ms`);
+    check("pack: loose blob 제거", looseAfterPack === 0, `loose=${looseAfterPack}`);
+
+    const staleKey = "0".repeat(64);
+    const staleLoose = await blobDir.getFileHandle(staleKey, { create: true });
+    let w = await staleLoose.createWritable(); await w.write(new Uint8Array([1, 2, 3])); await w.close();
+    const stalePack = await packDir.getFileHandle("stale.bin", { create: true });
+    w = await stalePack.createWritable(); await w.write(new Uint8Array([4, 5, 6])); await w.close();
+    const pruneResult = await ja.prune();
+    const looseAfterPrune = await countEntries(blobDir, (name) => blobName.test(name));
+    const packAfterPrune = await countEntries(packDir);
+    check("prune: stale loose/stale pack 제거", pruneResult.looseRemoved === 1 && pruneResult.packsRemoved === 1 && looseAfterPrune === 0 && packAfterPrune === 1,
+      `looseRemoved=${pruneResult.looseRemoved}, packsRemoved=${pruneResult.packsRemoved}`);
+
+    const b = await bootSession({});
+    const rec = await b.rt.enableJournal({ dir, reactive: b.reactive }).recover();
+    check("recover: pack 파일만으로 HEAD 부활", !!rec && b.rt.run("value") === 22 && b.rt.run("len(payloadTwo)") === 220000,
+      rec ? `value=${b.rt.run("value")}, pages=${rec.pages}` : "저널 없음");
+
+    const headFile = await dir.getFileHandle("HEAD.json");
+    w = await headFile.createWritable(); await w.write("{ broken head"); await w.close();
+    const c = await bootSession({});
+    const fallback = await c.rt.enableJournal({ dir, reactive: c.reactive }).recover();
+    check("recover: HEAD 파손 후 pack에서 PREV fallback", !!fallback && fallback.fallback === true && c.rt.run("value") === 11,
+      fallback ? `value=${c.rt.run("value")}` : "fallback 없음");
+
+    await opfs.removeEntry("journalPackProbe", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 300));
+  }
+  await report();
+</script>
+</body>
+</html>

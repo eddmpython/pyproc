@@ -11,12 +11,28 @@
 //
 // 계약(정직하게): 크래시 시 잃는 것은 "마지막 커밋 이후"다. 문장 단위 내구성이 아니라
 // 경계 일관성을 준다. 커밋 주기는 소비자가 정한다(하드코딩 없음).
-// 저장 형식: blob/<sha256> (content-addressed 페이지, 자동 dedupe) + HEAD.json (페이지->해시 맵 + sp).
+// 저장 형식: blob/<sha256> loose CAS + HEAD.json/PREV.json. pack() 후에는 PACKS.json + pack/*.bin도
+// 같은 CAS blob 저장소로 읽는다(loose와 pack 모두 recover 호환).
 import { PAGE_SIZE as PAGE } from "../runtime/memoryCapability.js";
+
+const BLOB_DIR = "blob";
+const PACK_DIR = "pack";
+const PACK_INDEX = "PACKS.json";
+const BLOB_KEY = /^[0-9a-f]{64}$/;
 
 async function sha256Hex(bytes) {
   const d = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function notFound(e) {
+  return e && e.name === "NotFoundError";
+}
+
+function newPackFileName() {
+  const r = new Uint32Array(2);
+  crypto.getRandomValues(r);
+  return `pack-${Date.now().toString(36)}-${r[0].toString(36)}${r[1].toString(36)}.bin`;
 }
 
 export class MachineJournal {
@@ -83,7 +99,7 @@ export class MachineJournal {
       const pages = [];
       for (let p = 0; p < n; p++) if (hl[2 * p] !== h0[2 * p] || hl[2 * p + 1] !== h0[2 * p + 1]) pages.push(p);
       for (let p = h0.length / 2; p < hl.length / 2; p++) pages.push(p); // 성장분
-      const blobDir = await this._dir.getDirectoryHandle("blob", { create: true });
+      const blobDir = await this._dir.getDirectoryHandle(BLOB_DIR, { create: true });
       const map = {};
       const knownKeys = new Set();
       let wrote = 0;
@@ -118,6 +134,201 @@ export class MachineJournal {
       this.commits++; this.pagesWritten += wrote;
       return { pages: pages.length, wrote, mb: +(wrote * PAGE / 1048576).toFixed(1) };
     } finally { this._busy = false; }
+  }
+
+  async _readPackIndex() {
+    let text;
+    try { text = await (await (await this._dir.getFileHandle(PACK_INDEX)).getFile()).text(); }
+    catch (e) {
+      if (notFound(e)) return { version: 1, packs: [] };
+      throw e;
+    }
+    const index = JSON.parse(text);
+    if (index.version !== 1 || !Array.isArray(index.packs)) {
+      throw new Error("journal.pack: PACKS.json 형식이 맞지 않는다");
+    }
+    return index;
+  }
+
+  async _writePackIndex(index) {
+    const fh = await this._dir.getFileHandle(PACK_INDEX, { create: true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(index));
+    await w.close();
+  }
+
+  async _readLiveHeads() {
+    const heads = [];
+    for (const name of ["HEAD.json", "PREV.json"]) {
+      const generation = await this._readGeneration(name);
+      if (generation.head) heads.push(generation.head);
+      else if (generation.corrupt) throw new Error(`journal.pack: ${generation.corrupt}`);
+    }
+    return heads;
+  }
+
+  _liveKeys(heads) {
+    const keys = new Set();
+    for (const head of heads) {
+      for (const key of Object.values(head.pages || {})) keys.add(key);
+    }
+    return keys;
+  }
+
+  async _readLooseBlob(key) {
+    let blobDir;
+    try { blobDir = await this._dir.getDirectoryHandle(BLOB_DIR); }
+    catch (e) {
+      if (notFound(e)) return null;
+      throw e;
+    }
+    try {
+      return new Uint8Array(await (await (await blobDir.getFileHandle(key)).getFile()).arrayBuffer());
+    } catch (e) {
+      if (notFound(e)) return null;
+      throw e;
+    }
+  }
+
+  async _readPackedBlob(key, cache = {}) {
+    if (!cache.packIndex) cache.packIndex = await this._readPackIndex();
+    const index = cache.packIndex;
+    if (!index.packs.length) return null;
+    if (!cache.packDir) {
+      try { cache.packDir = await this._dir.getDirectoryHandle(PACK_DIR); }
+      catch (e) {
+        if (notFound(e)) return null;
+        throw e;
+      }
+    }
+    if (!cache.packFiles) cache.packFiles = new Map();
+    for (let i = index.packs.length - 1; i >= 0; i--) {
+      const pack = index.packs[i];
+      const entry = pack.blobs && pack.blobs[key];
+      if (!entry) continue;
+      let file = cache.packFiles.get(pack.file);
+      if (!file) {
+        file = await (await cache.packDir.getFileHandle(pack.file)).getFile();
+        cache.packFiles.set(pack.file, file);
+      }
+      const offset = Number(entry.offset);
+      const length = Number(entry.length);
+      if (!Number.isFinite(offset) || !Number.isFinite(length) || offset < 0 || length <= 0) {
+        throw new Error(`journal.pack: pack index entry 파손(${key.slice(0, 12)}..)`);
+      }
+      return new Uint8Array(await file.slice(offset, offset + length).arrayBuffer());
+    }
+    return null;
+  }
+
+  async _readBlob(key, cache = {}) {
+    const loose = await this._readLooseBlob(key);
+    if (loose) return loose;
+    const packed = await this._readPackedBlob(key, cache);
+    if (packed) return packed;
+    throw new Error(`journal.recover: blob 없음(${key.slice(0, 12)}..)`);
+  }
+
+  async _removeLooseBlobs(predicate) {
+    let removed = 0;
+    let blobDir;
+    try { blobDir = await this._dir.getDirectoryHandle(BLOB_DIR); }
+    catch (e) {
+      if (notFound(e)) return removed;
+      throw e;
+    }
+    for await (const name of blobDir.keys()) {
+      if (!BLOB_KEY.test(name) || !predicate(name)) continue;
+      await blobDir.removeEntry(name);
+      removed++;
+    }
+    return removed;
+  }
+
+  async _removePackFilesExcept(kept) {
+    let removed = 0;
+    let packDir;
+    try { packDir = await this._dir.getDirectoryHandle(PACK_DIR); }
+    catch (e) {
+      if (notFound(e)) return removed;
+      throw e;
+    }
+    for await (const name of packDir.keys()) {
+      if (kept.has(name)) continue;
+      await packDir.removeEntry(name);
+      removed++;
+    }
+    return removed;
+  }
+
+  // 현재 HEAD/PREV가 참조하는 live blob만 새 pack 파일 1개에 묶는다. recover는 loose와 pack을
+  // 모두 읽으므로 기존 저널과 호환된다. PACKS.json은 pack 데이터 파일을 쓴 뒤 마지막에 교체한다.
+  async pack() {
+    if (this._busy) return null;
+    this._busy = true;
+    try {
+      const heads = await this._readLiveHeads();
+      const liveKeys = [...this._liveKeys(heads)].filter((key) => BLOB_KEY.test(key)).sort();
+      if (!liveKeys.length) {
+        const looseRemoved = await this._removeLooseBlobs(() => true);
+        const packsRemoved = await this._removePackFilesExcept(new Set());
+        await this._writePackIndex({ version: 1, packs: [] });
+        return { liveKeys: 0, packed: 0, bytes: 0, mb: 0, looseRemoved, packsRemoved };
+      }
+
+      const packDir = await this._dir.getDirectoryHandle(PACK_DIR, { create: true });
+      const file = newPackFileName();
+      const fh = await packDir.getFileHandle(file, { create: true });
+      const w = await fh.createWritable();
+      const blobs = {};
+      let offset = 0;
+      const readCache = {};
+      try {
+        for (const key of liveKeys) {
+          const bytes = await this._readBlob(key, readCache);
+          if (await sha256Hex(bytes) !== key) throw new Error(`journal.pack: blob 파손(${key.slice(0, 12)}..)`);
+          await w.write(bytes);
+          blobs[key] = { offset, length: bytes.byteLength };
+          offset += bytes.byteLength;
+        }
+        await w.close();
+      } catch (e) {
+        if (w.abort) await w.abort().catch(() => {});
+        throw e;
+      }
+
+      await this._writePackIndex({
+        version: 1,
+        packs: [{
+          file,
+          createdAt: new Date().toISOString(),
+          bytes: offset,
+          blobs,
+        }],
+      });
+      const looseRemoved = await this._removeLooseBlobs(() => true);
+      const packsRemoved = await this._removePackFilesExcept(new Set([file]));
+      return {
+        liveKeys: liveKeys.length,
+        packed: liveKeys.length,
+        bytes: offset,
+        mb: +(offset / 1048576).toFixed(1),
+        looseRemoved,
+        packsRemoved,
+      };
+    } finally { this._busy = false; }
+  }
+
+  // HEAD/PREV가 더 이상 참조하지 않는 loose blob과 PACKS.json에 없는 stale pack 파일을 지운다.
+  // pack을 새로 만들지는 않으므로, 긴 실행 중간의 가벼운 청소에 쓴다.
+  async prune() {
+    const heads = await this._readLiveHeads();
+    const liveKeys = this._liveKeys(heads);
+    const looseRemoved = await this._removeLooseBlobs((key) => !liveKeys.has(key));
+    const index = await this._readPackIndex();
+    const indexedPacks = new Set(index.packs.map((pack) => pack.file));
+    const packsRemoved = await this._removePackFilesExcept(indexedPacks);
+    return { liveKeys: liveKeys.size, looseRemoved, packsRemoved };
   }
 
   // 세대 파일 1개 판독: { head } | { missing: true } | { corrupt: 사유 }.
@@ -161,14 +372,14 @@ export class MachineJournal {
     }
     // 성장 루프와 부팅 뒤 드리프트를 cp0으로 지운 위에 저널 페이지를 적용한다.
     this._reactive.restore(0, head.sp);
-    const blobDir = await this._dir.getDirectoryHandle("blob");
     const entries = Object.entries(head.pages);
     const buffered = [];
     const blobCache = new Map();
+    const readCache = {};
     for (const [p, key] of entries) {
       let bytes = blobCache.get(key);
       if (!bytes) {
-        bytes = new Uint8Array(await (await (await blobDir.getFileHandle(key)).getFile()).arrayBuffer());
+        bytes = await this._readBlob(key, readCache);
         if (await sha256Hex(bytes) !== key) throw new Error(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
         blobCache.set(key, bytes);
       }

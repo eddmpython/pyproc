@@ -664,6 +664,21 @@ export interface JournalConfig {
   idleMs?: number;
 }
 
+export interface JournalPackResult {
+  liveKeys: number;
+  packed: number;
+  bytes: number;
+  mb: number;
+  looseRemoved: number;
+  packsRemoved: number;
+}
+
+export interface JournalPruneResult {
+  liveKeys: number;
+  looseRemoved: number;
+  packsRemoved: number;
+}
+
 /**
  * WAL(write-ahead log): 강제종료 내성. 유휴마다 변경 페이지를 content-addressed로 저장하고,
  * 다음 부팅이 `recover()`로 마지막 커밋에서 부활한다(hibernate 훅이 실패해도 산다).
@@ -679,6 +694,10 @@ export class MachineJournal {
   stop(): void;
   /** 지금 상태를 커밋(수동 경계). 반환: 변경 페이지 수와 실제 쓴 양(dedupe 후). */
   commit(): Promise<{ pages: number; wrote: number; mb: number } | null>;
+  /** HEAD/PREV live blob만 pack 파일 1개로 묶고 loose/stale 파일을 줄인다. */
+  pack(): Promise<JournalPackResult | null>;
+  /** HEAD/PREV가 더 이상 참조하지 않는 loose blob과 stale pack 파일을 지운다. */
+  prune(): Promise<JournalPruneResult>;
   /** 마지막 커밋으로 부활. 저널이 없으면 null(첫 부팅). */
   recover(): Promise<{ pages: number; mb: number } | null>;
 }

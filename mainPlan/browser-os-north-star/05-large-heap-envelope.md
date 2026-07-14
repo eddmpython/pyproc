@@ -1,10 +1,10 @@
-# 05. 대형 힙 성능 봉투 - 512MB 실측과 journal 1차 최적화
+# 05. 대형 힙 성능 봉투 - 512MB 실측과 journal 최적화
 
-작성: 2026-07-14. 정본 probe: [largeHeapEnvelope](../../tests/attempts/largeHeapEnvelope/README.md).
+작성: 2026-07-14. 갱신: 2026-07-15. 정본 probe: [largeHeapEnvelope](../../tests/attempts/largeHeapEnvelope/README.md), [journalPackProbe](../../tests/attempts/pythonMachine/journalPackProbe.html).
 
 ## 한 줄 판정
 
-**512MB 사용자 힙에서 checkpoint/session save/load/forkLive/journal은 모두 성립하고, journal recover 병목은 24.8s에서 2.3s로 줄었다.** 500MB 이상 힙이 막연한 미검증 구간이던 상태는 해소됐다. 남은 병목은 제품 배선, 런타임 자산 신뢰, 장기 OPFS pack/prune이다.
+**512MB 사용자 힙에서 checkpoint/session save/load/forkLive/journal은 모두 성립하고, journal recover 병목은 24.8s에서 2.3s로 줄었다.** 500MB 이상 힙이 막연한 미검증 구간이던 상태는 해소됐다. 장기 OPFS 파일 수 축은 `MachineJournal.pack()`/`prune()`으로 구조를 닫았고, 남은 병목은 제품 배선, 공개키·권한 UI, 512MB급 pack 정책 수치다.
 
 ## 실측표
 
@@ -24,6 +24,7 @@
 3. **session save/load는 저장량이 병목이다.** 512MB 저장 3.7s, 로드 3.2s는 "즉시"는 아니지만 머신 이미지/부활 동선으로는 실용 범위다.
 4. **forkLive는 512MB에서도 빠르다.** 수확 132.3ms, 적용 187.4ms다. OPFS 저장이 없고 워커 간 델타 전송+적용이라 session save/load보다 훨씬 작다.
 5. **journal의 반복 blob IO 병목은 1차 해소됐다.** 512MB에서 commit 14.0s -> 2.9s, recover 24.8s -> 2.3s다. 실제 신규 blob은 8.2MB뿐인데 같은 content-addressed key를 수천 번 조회·읽기·검증하던 비용이 지배했고, key별 1회 IO 캐시로 제거했다.
+6. **journal의 장기 파일 수 병목은 구조를 닫았다.** `journalPackProbe`는 2세대 커밋의 loose blob 223개를 pack 파일 1개 + loose 0개로 줄였고, pack-only HEAD recover와 PREV fallback을 모두 통과했다. pack 시간은 1614ms다. 이 수치는 512MB 봉투가 아니라 pack/prune 계약 실측이다.
 
 ## 수리된 결함
 
@@ -33,20 +34,24 @@
 
 512MB journal 1차 실행은 GREEN이었지만 느렸다. `pages` map은 8239개였고 실제 신규 blob은 131개뿐이었다. `MachineJournal.commit()`은 같은 커밋 안에서 이미 확인한 key의 OPFS 존재 확인을 생략하고, `recover()`는 같은 key의 blob을 한 번만 읽고 SHA-256 검증 결과를 재사용한다. 저장 포맷은 바꾸지 않아 기존 HEAD와 blob 파일을 그대로 읽는다.
 
+## 수리된 장기 파일 수
+
+`MachineJournal.pack()`은 현재 HEAD/PREV가 참조하는 live blob만 `pack/*.bin` 파일 1개로 묶고, `PACKS.json`을 마지막에 교체한다. `recover()`는 기존 loose blob과 새 pack 계층을 모두 읽으므로 기존 저널과 호환된다. `prune()`은 HEAD/PREV가 더 이상 참조하지 않는 loose blob과 index에 없는 stale pack 파일을 지운다. `journalPackProbe`는 loose blob 223개 -> pack 파일 1개, loose 0개, stale loose 1개와 stale pack 1개 제거, pack-only HEAD recover, HEAD 파손 후 PREV fallback을 GREEN 7/7로 확인했다.
+
 ## OS 판정 영향
 
-`04-os-verdict-v2.md`의 가장 큰 보류 사유 중 "500MB 이상 checkpoint/session/fork/journal 비용 미공개"는 닫혔고, journal 속도 병목도 1차 해소됐다. 따라서 메모리 관리 점수는 6에서 7로 올릴 근거가 생겼다. 단 영속·크래시 내성은 `/home` 이미지 결합과 fd 재개설이 남아 있어 유지한다.
+`04-os-verdict-v2.md`의 가장 큰 보류 사유 중 "500MB 이상 checkpoint/session/fork/journal 비용 미공개"는 닫혔고, journal 속도 병목과 장기 loose blob 누적 구조도 1차 해소됐다. 따라서 메모리 관리 점수는 6에서 7로 올릴 근거가 생겼다. 영속·크래시 내성은 이미 8점 구간이지만, 부활 후 fd 재개설과 제품 권한 UI가 남아 있어 추가 상향은 보류한다.
 
 남은 축:
 
-1. WebCrypto 서명/SRI/포맷 마이그레이션.
-2. 대표 데모와 제품 배선.
-3. journal append-only pack/prune으로 장기 OPFS 파일 수와 GC 축소.
+1. 공개키 배포와 권한 UI.
+2. machine image 또는 VirtualOrigin 제품 배선.
+3. 512MB급 pack 정책 수치와 자동 실행 기준.
 
 이 셋이 통과하면 75점대 제품 표면 구간 진입 여부를 재산정한다.
 
 ## 다음
 
-1. 신뢰 체인 설계.
-2. 대표 데모와 제품 배선.
-3. journal append-only pack/prune은 장기 최적화로 분리.
+1. 공개키 배포와 권한 UI 계약.
+2. machine image 또는 VirtualOrigin 제품 배선.
+3. 512MB급 pack 정책 수치와 자동 실행 기준.

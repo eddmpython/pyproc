@@ -152,7 +152,7 @@ check("DeviceFs/Init 메서드", () => {
   for (const m of ["install", "stop"]) if (typeof api.Init.prototype[m] !== "function") throw new Error(`Init.${m}`);
 });
 check("MachineJournal 메서드", () => {
-  for (const m of ["start", "stop", "commit", "recover"])
+  for (const m of ["start", "stop", "commit", "pack", "prune", "recover"])
     if (typeof api.MachineJournal.prototype[m] !== "function") throw new Error(`MachineJournal.${m}`);
 });
 check("MachineJail 메서드", () => {

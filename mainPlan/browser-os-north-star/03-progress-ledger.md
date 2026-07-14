@@ -750,3 +750,41 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. MachineJournal append-only pack/prune으로 장기 OPFS 파일 수와 GC를 줄인다.
+
+## 2026-07-15 - MachineJournal pack/prune으로 장기 OPFS 파일 수 구조 수리
+
+문제:
+
+- 512MB journal commit/recover는 중복 blob IO 캐시로 2-3초대까지 내려왔지만, 장수 머신이 loose blob 파일을 계속 누적하는 구조는 남아 있었다.
+- 기존 저장 형식은 `blob/<sha256>` 파일 하나가 page blob 하나라서, 장기 실행에서는 OPFS 파일 수와 GC가 다음 병목이 된다.
+- pack/prune은 속도와 라이브러리 구조 모두에 걸린다. recover가 loose 전용이면 저장소 포맷 확장이 소비자에게 새 마이그레이션 부담으로 번진다.
+
+완료:
+
+- `MachineJournal.pack()` 추가. 현재 HEAD/PREV가 참조하는 live blob만 `pack/*.bin` 파일 1개로 묶고, `PACKS.json`을 마지막에 교체한다.
+- `MachineJournal.prune()` 추가. HEAD/PREV가 더 이상 참조하지 않는 loose blob과 `PACKS.json`에 없는 stale pack 파일을 제거한다.
+- recover 경로는 기존 loose blob과 새 pack 계층을 모두 읽는다. 기존 HEAD/blob 저널은 그대로 호환된다.
+- pack-only recover 속도 경로를 위해 한 recover/pack 작업 안에서 `PACKS.json`, pack directory, pack File을 캐시한다. 같은 pack 파일을 key마다 다시 열지 않는다.
+- 공개 타입 `index.d.ts`, 구조 게이트, README/README.ko/소비 계약을 `pack()`/`prune()`까지 포함하도록 갱신했다.
+- `journalPackProbe.html` 추가. 2세대 커밋 후 pack, prune, pack-only HEAD recover, HEAD 파손 후 PREV fallback을 실제 브라우저 OPFS에서 확인한다.
+
+검증:
+
+- `node tests/browser/run.mjs tests/attempts/pythonMachine/journalPackProbe.html` GREEN 7/7.
+- 실측: loose blob 223개 -> pack 파일 1개 + loose 0개.
+- `MachineJournal.pack()` 1614ms.
+- `MachineJournal.prune()`이 stale loose 1개와 stale pack 1개를 제거.
+- pack-only HEAD recover: `value=22`, `pages=122`.
+- HEAD 파손 후 pack PREV fallback: `value=11`.
+
+판정:
+
+- 이전 NEXT 3번의 장기 OPFS 파일 수 구조는 닫혔다.
+- OS 점수는 보수적으로 70/100 유지한다. 이유는 512MB급 자동 pack 정책 수치, 공개키 배포/권한 UI, `.pymachine` 또는 `VirtualOrigin` 제품 소비가 아직 남아 있기 때문이다.
+- 즉시 성능 병목은 commit/recover 2-3초대, 구조 병목은 pack/prune으로 각각 1차 수리됐다. 다음 속도 작업은 "언제 자동 pack할지"를 512MB급 장수 머신에서 실측하는 것이다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. MachineJournal pack 자동 실행 기준을 512MB급 장수 머신에서 실측한다.
