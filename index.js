@@ -24,7 +24,8 @@
 //   VirtualOrigin        - 파이썬 서버를 진짜 URL로(pyprocSw.js와 짝, fetch -> ASGI 3.4ms)
 //   Terminal             - 서버리스 파이썬 REPL(code.InteractiveConsole, %pip/%undo)
 //   DeviceFs             - 모든 것은 파일: 브라우저 능력을 파이썬 open()으로(/dev, /proc)
-//   Init                 - OS의 init: /home/web/boot.py 오토스타트 + cron.py 주기 틱
+//   Init                 - OS의 init: /home/web/boot.py 오토스타트 + cron.py 주기 틱 +
+//                          resume.py로 부활 후 fd/socket/DB connection 재개설
 //   MachineJournal       - WAL: 유휴마다 상태를 디스크에 남겨 강제종료에도 부활 + pack/prune으로
 //                          장수 OPFS blob 저장소를 압축·정리. autoPack으로 loose blob 임계값 도달 시
 //                          커밋 직후 pack 실행

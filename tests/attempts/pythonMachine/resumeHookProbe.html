@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: resume hook</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: init resume hook - 부활 후 프로세스 자원을 다시 여는가</h1>
+<p>힙 델타와 머신 이미지는 열린 fd, socket, DB connection 같은 프로세스 자원을 보장하지 않는다.
+이 probe는 <code>Init.resume(reason)</code>이 디스크의 <code>resume.py</code>를 실행해
+복원 직후 자원을 다시 여는 계약을 검증한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession, openMachine } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const q = (s) => JSON.stringify(s);
+  const resumeSrc = [
+    "import os, sqlite3",
+    "os.makedirs('/home/web/resume', exist_ok=True)",
+    "resumeReasonSeen = pyprocResumeReason",
+    "resumeDbPath = '/home/web/resume/app.db'",
+    "resumeConn = sqlite3.connect(resumeDbPath)",
+    "resumeConn.execute('create table if not exists event(reason text, value integer)')",
+    "resumeConn.execute('insert into event(reason, value) values (?, ?)', (resumeReasonSeen, globals().get('resumeValue', -1)))",
+    "resumeConn.commit()",
+    "resumeRows = resumeConn.execute('select reason, value from event order by rowid').fetchall()",
+    "resumeCount = len(resumeRows)",
+  ].join("\n");
+  try {
+    const opfs = await navigator.storage.getDirectory();
+    for (const name of ["resumeHookHome", "resumeHookSession", "resumeHookJournal"]) {
+      try { await opfs.removeEntry(name, { recursive: true }); } catch (e) {}
+    }
+    const homeDir = await opfs.getDirectoryHandle("resumeHookHome", { create: true });
+    const sessionDir = await opfs.getDirectoryHandle("resumeHookSession", { create: true });
+    const journalDir = await opfs.getDirectoryHandle("resumeHookJournal", { create: true });
+
+    const a = await bootSession({});
+    const homeA = await a.rt.mountHome(homeDir);
+    a.rt.run([
+      "import os",
+      "os.makedirs('/home/web', exist_ok=True)",
+      `open('/home/web/resume.py', 'w').write(${q(resumeSrc)})`,
+      "resumeValue = 41",
+    ].join("\n"));
+    await homeA.sync();
+    const saved = await a.save(sessionDir, "resume");
+    const journal = a.rt.enableJournal({ dir: journalDir, reactive: a.reactive });
+    const committed = await journal.commit();
+    const machine = await a.exportImage({ includeHome: true });
+    check("준비: 세션/저널/머신 이미지 저장", !!saved && !!committed && machine.size > 0,
+      `session=${saved.pages}p, journal=${committed.pages}p, image=${machine.size}`);
+
+    const b = await bootSession({});
+    const loaded = await b.load(sessionDir, "resume");
+    const homeB = await b.rt.mountHome(homeDir);
+    let t = performance.now();
+    const resumeB = b.rt.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("session.load");
+    timings.sessionResumeMs = Math.round(performance.now() - t);
+    check("Session.load: resume.py 실행", resumeB.resume === true && b.rt.run("resumeReasonSeen") === "session.load" && b.rt.run("resumeValue") === 41,
+      `reason=${b.rt.run("resumeReasonSeen")}, ${timings.sessionResumeMs}ms`);
+    check("Session.load: sqlite connection 재개설", b.rt.run("resumeConn.execute('select count(*) from event').fetchone()[0]") === 1,
+      `rows=${b.rt.run("resumeCount")}, loaded=${loaded.pages}p`);
+    await homeB.sync();
+
+    const c = await bootSession({});
+    const recovered = await c.rt.enableJournal({ dir: journalDir, reactive: c.reactive }).recover();
+    const homeC = await c.rt.mountHome(homeDir);
+    t = performance.now();
+    const resumeC = c.rt.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("journal.recover");
+    timings.journalResumeMs = Math.round(performance.now() - t);
+    check("MachineJournal.recover: resume.py 실행", !!recovered && resumeC.resume === true && c.rt.run("resumeReasonSeen") === "journal.recover" && c.rt.run("resumeValue") === 41,
+      `reason=${c.rt.run("resumeReasonSeen")}, ${timings.journalResumeMs}ms`);
+    check("MachineJournal.recover: sqlite connection 재개설", c.rt.run("resumeConn.execute('select count(*) from event').fetchone()[0]") === 2,
+      `rows=${c.rt.run("resumeCount")}`);
+    await homeC.sync();
+
+    const d = await openMachine(machine, { trust: true });
+    t = performance.now();
+    const resumeD = d.rt.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("openMachine");
+    timings.machineResumeMs = Math.round(performance.now() - t);
+    check("openMachine: resume.py 실행", resumeD.resume === true && d.rt.run("resumeReasonSeen") === "openMachine" && d.rt.run("resumeValue") === 41,
+      `reason=${d.rt.run("resumeReasonSeen")}, ${timings.machineResumeMs}ms`);
+    check("openMachine: sqlite connection 재개설", d.rt.run("resumeConn.execute('select count(*) from event').fetchone()[0]") === 1,
+      `rows=${d.rt.run("resumeCount")}`);
+
+    const missing = d.rt.enableInit({ resumePath: "/home/web/missingResume.py" }).resume("missing");
+    check("resume.py 없으면 no-op", missing.resume === false && missing.reason === "missing");
+
+    for (const name of ["resumeHookHome", "resumeHookSession", "resumeHookJournal"]) {
+      try { await opfs.removeEntry(name, { recursive: true }); } catch (e) {}
+    }
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 400));
+  }
+  await report();
+</script>
+</body>
+</html>

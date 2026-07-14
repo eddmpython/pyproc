@@ -149,7 +149,7 @@ check("FileSystem 메서드", () => {
 });
 check("DeviceFs/Init 메서드", () => {
   for (const m of ["install", "track", "refreshClipboard"]) if (typeof api.DeviceFs.prototype[m] !== "function") throw new Error(`DeviceFs.${m}`);
-  for (const m of ["install", "stop"]) if (typeof api.Init.prototype[m] !== "function") throw new Error(`Init.${m}`);
+  for (const m of ["install", "resume", "stop"]) if (typeof api.Init.prototype[m] !== "function") throw new Error(`Init.${m}`);
 });
 check("MachineJournal 메서드", () => {
   for (const m of ["start", "stop", "commit", "pack", "prune", "recover"])

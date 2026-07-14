@@ -643,15 +643,19 @@ export class DeviceFs {
 export interface InitConfig {
   /** 부팅 시 1회 실행할 파일(기본 /home/web/boot.py). 없으면 no-op. */
   bootPath?: string;
+  /** 부활 후 프로세스 자원 재개설 파일(기본 /home/web/resume.py). 없으면 no-op. */
+  resumePath?: string;
   /** 주기 실행할 파일(기본 /home/web/cron.py). 없으면 no-op. */
   cronPath?: string;
   /** 크론 간격 ms(기본 60000). */
   cronMs?: number;
 }
 
-/** OS의 init(rc.local + cron): 마운트된 디스크의 파일이 머신을 스스로 움직이게 한다. */
+/** OS의 init(rc.local + cron + resume): 마운트된 디스크의 파일이 머신을 스스로 움직이게 한다. */
 export class Init {
-  install(): { boot: boolean; cron: boolean };
+  install(): { boot: boolean; resume: false; cron: boolean };
+  /** Session.load/MachineJournal.recover/openMachine 뒤 resume.py를 실행해 fd/socket/DB connection을 재개설한다. */
+  resume(reason?: string): { resume: boolean; reason: string };
   stop(): void;
 }
 

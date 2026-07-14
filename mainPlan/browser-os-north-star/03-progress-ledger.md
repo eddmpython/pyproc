@@ -862,3 +862,39 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. 부활 후 fd·socket·DB connection 재개설을 `Init` 또는 소비 제품 boot hook 계약으로 고정한다.
+
+## 2026-07-15 - Init resume hook으로 부활 후 자원 재개설 계약 고정
+
+문제:
+
+- 문서에는 부활 후 fd/socket/DB connection을 다시 열어야 한다는 경고가 있었지만, 호출 계약과 실측 probe가 없었다.
+- 힙 델타와 `.pymachine`은 파이썬 힙과 `/home/web` 파일 바이트를 복원하지만, 열린 fd/socket/DB connection의 외부 자원 상태까지 보장하지 않는다.
+- Browser OS 간판에서는 부활 후 자원 재개설이 제품마다 임의 boot 코드로 흩어지면 안 된다.
+
+완료:
+
+- `InitConfig.resumePath`를 추가했다. 기본 경로는 `/home/web/resume.py`다.
+- `Init.resume(reason)`을 추가했다. `Session.load`, `MachineJournal.recover`, `openMachine` 뒤 소비자가 명시 호출하고, `resume.py`에는 전역 `pyprocResumeReason`을 주입한다.
+- `resume.py`가 없으면 no-op으로 끝나게 해 기존 boot/cron 계약과 같은 파일 주도 구조를 유지했다.
+- `resumeHookProbe.html`을 추가했다. 세 부활 경로 뒤 `resume.py`가 sqlite connection을 다시 열고, `reason`을 기록하며, 누락 파일 no-op을 확인한다.
+- README, README.ko, 소비 계약, OS 판정표, pythonMachine 원장에 `resume.py` 계약을 반영했다.
+
+검증:
+
+- `node tests/browser/run.mjs tests/attempts/pythonMachine/resumeHookProbe.html` GREEN 8/8.
+- Session.load 뒤 resume.py 실행 24ms.
+- MachineJournal.recover 뒤 resume.py 실행 8ms.
+- openMachine 뒤 resume.py 실행 10ms.
+- 세 경로 모두 `resumeValue=41`을 유지했고, sqlite connection은 `resumeConn`으로 재개설됐다.
+
+판정:
+
+- 이전 NEXT 3번의 "부활 후 fd·socket·DB connection 재개설 계약"은 닫혔다.
+- 힙 델타/머신 이미지는 열린 자원을 보존하지 않고, `resume.py`가 부활 후 다시 연다는 경계가 공개 API 계약이 됐다.
+- OS 점수는 70/100을 유지한다. 점수 상승은 제품 소비 배선(`.pymachine` 또는 `VirtualOrigin`)과 공개키·권한 UI가 닫힌 뒤 재산정한다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. 제품별 `resume.py` 자원 정책 카탈로그를 만든다.

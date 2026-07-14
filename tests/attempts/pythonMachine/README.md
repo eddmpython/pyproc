@@ -26,6 +26,7 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | SW 헤더 주입으로 SAB를 열 수 있나 | [swCoiProbe.html](swCoiProbe.html) | ?coi=1 등록 + 1회 새로고침 후 crossOriginIsolated=true + SAB 실사용 |
 | 브라우저 능력이 파이썬 파일이 되나(Plan 9) | [deviceFsProbe.html](deviceFsProbe.html) | open() 쌍방 브리지 + 동적 읽기 + /proc 커널 상태 + with/부분읽기 정합 |
 | 머신이 스스로 일하나(init/cron) | [initProbe.html](initProbe.html) | boot.py 오토스타트 + cron 주기 틱 + /home으로 세대 계승 + 파일 없으면 no-op |
+| 부활 후 프로세스 자원을 다시 여나 | [resumeHookProbe.html](resumeHookProbe.html) | Session.load/MachineJournal.recover/openMachine 뒤 resume.py가 sqlite connection 재개설 + reason 주입 + 파일 없으면 no-op |
 | 체크포인트가 나무가 되나(머신의 git) | [branchProbe.html](branchProbe.html) | 분기 후 임의 노드 스위치가 형제 델타에 오염되지 않음(선형 체인이면 RED) |
 | 살아있는 커널을 진짜 fork할 수 있나 | [forkLiveProbe.html](forkLiveProbe.html) | 두 커널의 cp0이 바이트 동일 + 부모 상태(변수·배열·계산)가 자식에서 생존 + 주소공간 독립 |
 | 강제종료해도 마지막 커밋으로 부활하나(WAL) | [journalProbe.html](journalProbe.html) | clean save 없이 커널을 버려도 유휴 커밋 + recover()로 부활 + CAS dedupe(승격 계약 재실측 창구) |
@@ -58,7 +59,7 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 2026-07-12 | swCoiProbe | Edge headless(헤더 제거 서버) | pyprocSw(?coi=1) 등록 + 1회 새로고침 -> crossOriginIsolated=true, SAB 생성 + 워커 Atomics 쓰기 관측, 일반 서빙 무파손 | 헤더 못 다는 호스팅에서도 SAB 복구 성립(opaque는 원본 통과 = CDN 자체 CORP 전제, jsdelivr ok) | 졸업 -> `pyprocSw.js` ?coi=1 + processOs.html 부트스트랩 |
 | 2026-07-12 | deviceFsProbe | Edge headless | Emscripten FS 장치 등록: 파이썬 write -> JS 싱크 / JS 소스 -> read, /dev/clock 열 때마다 신선, /proc/meminfo가 실제 힙과 일치, /proc/ps 제공자 배선, read(4)/with문/os.path.exists 정합. 클립보드 쓰기는 headless 권한 거부(정직 기록) | **모든 것은 파일 성립**(새 API 표면 0: open()이 계약). 비동기 소스는 캐시+refresh가 정직한 계약 | 졸업 -> `DeviceFs`(enableDeviceFs: 내장 /proc/meminfo·/dev/clipboard + 소비자 장치) |
 | 2026-07-12 | initProbe | Edge headless | 디스크에 심은 boot.py가 다음 부팅에서 자동 실행(4ms, counter 1), cron.py 300ms 틱 1.05s에 3회, 3세대 부팅이 counter=2로 계승, 파일 없으면 no-op | **머신이 스스로 일한다**(rc.local+cron, 전부 파일 주도 = 배선 코드 0) | 졸업 -> `Init`(enableInit) + machine.html 배선 |
-
+| 2026-07-15 | resumeHookProbe | Edge headless | GREEN 8/8. Session.load resume.py 24ms, MachineJournal.recover 8ms, openMachine 10ms. resume.py가 `pyprocResumeReason`을 받고 sqlite connection을 `resumeConn`으로 재개설. 세 경로 모두 `resumeValue=41` 유지, missing resume.py no-op | 힙 델타/머신 이미지는 열린 fd/socket/DB connection을 보장하지 않는다는 경계를 API 계약으로 닫았다. 부활 후 자원은 resume.py가 다시 연다 | 승격 -> `Init.resume(reason)`, `resumePath` |
 | 2026-07-12 | branchProbe | Edge headless | **선형 체인의 실결함 재현**: 분기 노드로 스위치하면 `RuntimeError: memory access out of bounds`(6/7 RED). 원인 = 델타 해석이 배열 역순(k-1)이라 버려진 형제 분기의 페이지를 집는다. **부모 체인 walk로 수정 후 10/10 GREEN**(분기 왕복/형제 가지/삼중 스위치 전부 정확, 판별 검사는 라이브를 base로 고정해 우연 일치를 제거) | **체크포인트 나무 = 머신의 git 성립**. %undo(뒤로만)에서는 무증상이었고 분기를 여는 순간 힙이 깨지는 결함이었다 | 졸업 -> `reactive.js` parents 체인 + `tree()`. 게이트 상시 |
 | 2026-07-12 | forkLiveProbe | Edge headless | **관문 1차 RED**: 메인 커널 vs 워커 커널 리플레이는 힙 길이는 같아도 **바이트가 다르다**(로더/컨텍스트 차이 = 벽 좌표). **워커 대 워커는 바이트 동일 -> 8/8 GREEN**: 델타 164p/10.3MB 수확 43.6ms, 적용 1.4ms, 왕복 4ms. 부모의 변수·bytearray·계산 결과가 자식에서 생존, 자식 변이는 부모에 무영향(독립 주소공간), 자식이 부모 상태 위에서 연속 계산 | **살아있는 커널의 진짜 fork(2) 성립**. 스냅샷-fork(bare 이미지 복제)와 다르다: `x = bigDf`가 자식으로 실린다. 단 대칭 컨텍스트(워커끼리)가 전제 | 졸업 -> `PyProc({replay})` + `fork(src, dst)`. 커널을 워커로 옮기는 설계(P3)의 근거 |
 | 2026-07-12 | journalProbe(1차, 문장단위) | Edge headless | 문장 경계마다 CAS append + HEAD commit. **clean save 없이 커널을 버려도 부활 5/5 GREEN**. **비용 발견**: 문장당 변경 중앙값 **128p(8MB)**, 문장당 커밋 ~1s | 강제종료 내성 실증. 그러나 **naive 문장단위 WAL은 무겁다** | 개념 졸업, 승격 보류 -> churnProbe로 원인 규명 |
@@ -75,4 +76,4 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 
 ## 판정
 
-진행 중. 결정성/리플레이/성장/이미지+/home/디스크/오프라인 2단/부트 자산 SRI v2/Service Worker 자산 봉인/공유 커널/호스팅 독립 2단/파일 세계/init/체크포인트 나무/forkLive/저널 WAL/저널 pack-prune/autoPack/IPC/컨테이너/커널 선출/잡 컨트롤/권한 감옥은 실측과 승격을 통과했다. 잔여 심화축은 공개키 배포/권한 UI, 제품 표면 배선 확장이다.
+진행 중. 결정성/리플레이/성장/이미지+/home/디스크/오프라인 2단/부트 자산 SRI v2/Service Worker 자산 봉인/공유 커널/호스팅 독립 2단/파일 세계/init/resumeHook/체크포인트 나무/forkLive/저널 WAL/저널 pack-prune/autoPack/IPC/컨테이너/커널 선출/잡 컨트롤/권한 감옥은 실측과 승격을 통과했다. 잔여 심화축은 공개키 배포/권한 UI, 제품 표면 배선 확장이다.
