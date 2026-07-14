@@ -12,6 +12,7 @@
 <pre id="out">실행 중...</pre>
 <script type="module">
   import { PyProc } from "../../../index.js";
+  import { summarizePairedLatencyBench } from "../../../examples/benchStats.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
@@ -27,32 +28,6 @@
     const C = new Float64Array(M * N);
     for (let i = 0; i < M; i++) for (let j = 0; j < N; j++) { let s = 0; for (let k = 0; k < K; k++) s += A[i * K + k] * B[k * N + j]; C[i * N + j] = s; }
     return C;
-  }
-
-  function percentile(values, pct) {
-    const sorted = values.slice().sort((a, b) => a - b);
-    const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * pct / 100) - 1));
-    return sorted[index];
-  }
-
-  function median(values) {
-    return percentile(values, 50);
-  }
-
-  function summarizeBench(rows) {
-    const single = rows.map((r) => r.singleMs);
-    const parallel = rows.map((r) => r.parallelMs);
-    const speedups = rows.map((r) => r.speedup);
-    return {
-      samples: rows,
-      sampleCount: rows.length,
-      singleMedian: median(single),
-      singleP95: percentile(single, 95),
-      parallelMedian: median(parallel),
-      parallelP95: percentile(parallel, 95),
-      medianSpeedup: median(speedups),
-      maxErr: Math.max(...rows.map((r) => r.maxErr)),
-    };
   }
 
   try {
@@ -103,7 +78,7 @@
       let sameErr = 0; for (let i = 0; i < CC.data.length; i++) sameErr = Math.max(sameErr, Math.abs(CC.data[i] - C1.data[i]));
       rows.push({ singleMs, parallelMs, speedup: +(singleMs / parallelMs).toFixed(2), maxErr: sameErr });
     }
-    const bench = summarizeBench(rows);
+    const bench = summarizePairedLatencyBench(rows);
     timings.bench = bench;
     timings.matmulMs = bench.parallelMedian;
     timings.speedup = +bench.medianSpeedup.toFixed(2);

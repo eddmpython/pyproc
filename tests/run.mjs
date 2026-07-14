@@ -261,6 +261,16 @@ check("siteChrome.js가 sns-links를 정의", () => {
   if (!chromeSrc.includes('customElements.define("sns-links"')) throw new Error("정의 없음");
   if (!/export const channels\s*=\s*\[/.test(chromeSrc)) throw new Error("channels export 없음");
 });
+check("Speed Lab 반복 벤치 통계 helper 공유", () => {
+  const helper = readFileSync(join(ROOT, "examples", "benchStats.js"), "utf8");
+  const speedLab = readFileSync(join(ROOT, "examples", "speedLab.html"), "utf8");
+  const matmulProbe = readFileSync(join(ROOT, "tests", "attempts", "numericShard", "matmulSurfaceProbe.html"), "utf8");
+  for (const sym of ["percentile", "median", "summarizePairedLatencyBench", "isShardedSpeedBenchGreen"]) {
+    if (!helper.includes(`export function ${sym}`)) throw new Error(`benchStats.${sym} 누락`);
+  }
+  if (!speedLab.includes('from "./benchStats.js"')) throw new Error("Speed Lab이 benchStats.js를 쓰지 않음");
+  if (!matmulProbe.includes('from "../../../examples/benchStats.js"')) throw new Error("matmulSurfaceProbe가 benchStats.js를 쓰지 않음");
+});
 for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
   check(`채널 행 고정: ${rel(f)}`, () => {
     const html = readFileSync(f, "utf8");

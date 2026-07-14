@@ -1117,3 +1117,37 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포, 권한 UI, `resume.py` 정책을 외부 제품 gate로 고정한다.
 3. WebVM/JupyterLite/marimo 대비 정면 벤치 표를 Speed Lab 방식의 반복 봉투로 설계한다.
+
+## 2026-07-15 - 반복 벤치 통계 helper 공유
+
+문제:
+
+- Speed Lab과 `matmulSurfaceProbe.html`이 같은 반복 벤치 계약을 각자 구현했다.
+- median/p95 계산과 green 판정이 두 곳에 중복되면 다음 속도 gate 조정 때 데모와 probe가 갈라진다.
+- 이 로직은 런타임 공개 API가 아니라 측정 표면의 계약이므로 `src/` 공개 능력으로 올리면 오해가 생긴다.
+
+완료:
+
+- `examples/benchStats.js`를 추가했다.
+- `percentile()`, `median()`, `summarizePairedLatencyBench()`, `isShardedSpeedBenchGreen()`를 단일 helper로 묶었다.
+- `examples/speedLab.html`과 `tests/attempts/numericShard/matmulSurfaceProbe.html`이 같은 helper를 import하게 했다.
+- `tests/run.mjs`에 "Speed Lab 반복 벤치 통계 helper 공유" 구조 가드를 추가했다. helper export와 두 소비 파일의 import 경로가 갈라지면 Node gate가 막는다.
+
+검증:
+
+- `npm test` GREEN 588/588.
+- `PYPROC_INDEX_URL=/vendor/pyodide/ node tests/browser/run.mjs tests/attempts/numericShard/matmulSurfaceProbe.html` GREEN 7/7.
+- numericShard 반복 실측: 768x768 f64, 3회 warmed sample, single median 1315ms, shard median 490ms, median speedup 2.68x, shard p95 490ms.
+- `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:examples` GREEN 9/9.
+- Speed Lab 반복 실측: single median 1347ms, shard median 472ms, median speedup 2.90x, shard p95 477ms.
+
+판정:
+
+- 반복 벤치 계약은 이제 문서상 원칙이 아니라 공유 구현과 구조 가드를 가진다.
+- 이 작업은 속도 자체를 올린 것이 아니라, 속도 주장의 측정 구조와 라이브러리 품질을 개선한 것이다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포, 권한 UI, `resume.py` 정책을 외부 제품 gate로 고정한다.
+3. WebVM/JupyterLite/marimo 대비 정면 벤치 표를 Speed Lab 방식의 반복 봉투로 설계한다.

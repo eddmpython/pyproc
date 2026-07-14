@@ -59,6 +59,7 @@ await os.matmul(a, b, { parts: 4 });</div>
 
   <script type="module">
     import { PyProc } from "../index.js";
+    import { isShardedSpeedBenchGreen, summarizePairedLatencyBench } from "./benchStats.js";
 
     const st = document.getElementById("st"), out = document.getElementById("out");
     const el = (id) => document.getElementById(id);
@@ -102,32 +103,6 @@ await os.matmul(a, b, { parts: 4 });</div>
       return max;
     }
 
-    function percentile(values, pct) {
-      const sorted = values.slice().sort((a, b) => a - b);
-      const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * pct / 100) - 1));
-      return sorted[index];
-    }
-
-    function median(values) {
-      return percentile(values, 50);
-    }
-
-    function summarizeBench(rows) {
-      const single = rows.map((r) => r.singleMs);
-      const parallel = rows.map((r) => r.parallelMs);
-      const speedups = rows.map((r) => r.speedup);
-      return {
-        samples: rows,
-        sampleCount: rows.length,
-        singleMedian: median(single),
-        singleP95: percentile(single, 95),
-        parallelMedian: median(parallel),
-        parallelP95: percentile(parallel, 95),
-        medianSpeedup: median(speedups),
-        maxErr: Math.max(...rows.map((r) => r.maxErr)),
-      };
-    }
-
     try {
       const workers = 4;
       const size = 768;
@@ -167,7 +142,7 @@ await os.matmul(a, b, { parts: 4 });</div>
         log(`sample ${i + 1}: ${speedup}x (${singleMs}ms -> ${parallelMs}ms), max error ${maxErr.toExponential(2)}`);
       }
 
-      const bench = summarizeBench(rows);
+      const bench = summarizePairedLatencyBench(rows);
       const width = Math.max(8, Math.min(100, Math.round((bench.parallelMedian / bench.singleMedian) * 100)));
       el("stats").style.display = "grid";
       el("workers").textContent = `${boot.workers} (forked=${boot.forked})`;
@@ -184,7 +159,7 @@ await os.matmul(a, b, { parts: 4 });</div>
       log(`p95 envelope: single ${bench.singleP95}ms, shard ${bench.parallelP95}ms`);
       log(`correctness: max sample error ${bench.maxErr.toExponential(2)}`);
       os.terminate();
-      gateReport(bench.maxErr < 1e-9 && bench.medianSpeedup >= 2.0 && bench.parallelP95 < bench.singleMedian);
+      gateReport(isShardedSpeedBenchGreen(bench));
     } catch (e) {
       st.textContent = "Failed";
       log("Error: " + e);
