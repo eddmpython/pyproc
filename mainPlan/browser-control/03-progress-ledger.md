@@ -4,6 +4,22 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 8: 파이썬 워커 N=세션 N 진짜 병렬(프로세스 OS x 브라우저 컨트롤 융합) 실측 GREEN + src 승격
+
+vision이 지목한 최대 차별점을 **진짜 Pyodide 인터프리터로** 실증. attempts 게이트20, `bootIsolationRunner` **54/54 GREEN**.
+
+- **실증(게이트20)**: 워커 2개가 각자 Pyodide를 부팅(offscreen COI 상속 = SAB/JSPI 생존)하고, run_sync(JSPI)로
+  브라우저 op를 블로킹하면서 offscreen 라우터(제약 A 우회: chrome.runtime 대신 postMessage)로 자기 세션을 몬다.
+  각 워커가 CPU 연산(total=19999900000, 자기 GIL) + 자기 label을 자기 탭에 쓰고 되읽어 **격리**(workerA/workerB
+  안 섞임) + **병렬**(Promise.all 동시 부팅·실행) 확인. 게이트12(plain JS 워커 라우터)를 진짜 파이썬 인터프리터로 격상.
+- **의미**: 워커 N = 독립 인터프리터 N = 독립 GIL N = 세션 N. 파이썬 연산은 물리 병렬, 브라우저-op은 SW 단일
+  CDP 큐로 직렬(정직한 천장). Playwright/browser-use가 구조적으로 못 하는 축(인탭·서버리스·N코어 파이썬 자동화).
+- **src 승격(재사용 조각)**: `routeBrowserWorker(worker)`(offscreen 릴레이) + `installBrowserWorker(py)`(워커 측
+  배선, `_pyprocBrowserSend`를 postMessage로 + pyprocBrowser 모듈 실행)를 browserControl.js에 + index.js/index.d.ts
+  공개 표면 + contract.md 융합 패턴. 워커 측 파이썬 조작 모듈은 offscreen과 동일 소스(SSOT). 실 src 픽스처에
+  Pyodide 워커(pyWorker.js)가 실 src installBrowserWorker로 자기 세션을 모는 회귀 추가 -> **GREEN 6/6**.
+  `npm test` **568 green**(README 공개 표면 게이트 = 두 export 언급).
+
 ### 2026-07-14 Phase 7: 에뮬레이션 심화(다크모드·타임존·오프라인) 실측 GREEN + src 승격
 
 페이지가 실제로 관측하는 환경을 스푸핑. attempts 게이트19(a-c), `bootIsolationRunner` **53/53 GREEN**.
