@@ -12,6 +12,9 @@ const LOAD_TIMEOUT_MS = 15000;
 const DEFAULT_WAIT_MS = 10000;
 const J = JSON.stringify;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// CDP 헤더 리스트 변환 + UTF-8 안전 base64(fulfill 응답 바디용).
+const toHeaderList = (obj) => Object.entries(obj || {}).map(([name, value]) => ({ name, value: String(value) }));
+const b64 = (s) => btoa(unescape(encodeURIComponent(s || "")));
 
 // sessionId -> { tabId, mode, driver, lost }. lost는 detach/removed 사유 문자열(이후 op가 SessionLost로 실패).
 const sessions = new Map();
@@ -78,7 +81,7 @@ class DebuggerDriver {
   constructor(tabId) {
     this.tabId = tabId; this.target = { tabId };
     this.networkOn = false; this.fetchOn = false; this.netEventsOn = false;
-    this.routes = []; this.responseLog = [];
+    this.routes = []; this.responseLog = []; this.heldRequests = new Map();
     this.dialogAccept = true; this.dialogPromptText = ""; this.lastDialogMessage = null;
     this._eventListener = null;
   }
@@ -108,7 +111,7 @@ class DebuggerDriver {
       this.lastDialogMessage = params && params.message;
       try { await this.send("Page.handleJavaScriptDialog", { accept: this.dialogAccept, promptText: this.dialogPromptText }); } catch (e) { /* 이미 닫힘 */ }
     } else if (method === "Network.responseReceived" && this.netEventsOn) {
-      this.responseLog.push({ url: params.response.url, status: params.response.status });
+      this.responseLog.push({ url: params.response.url, status: params.response.status, requestId: params.requestId });
     } else if (method === "Fetch.requestPaused" && this.fetchOn) {
       await this._handleFetch(params);
     }
@@ -304,12 +307,18 @@ class DebuggerDriver {
       if (rule && rule.action === "block") {
         await this.send("Fetch.failRequest", { requestId: params.requestId, errorReason: "BlockedByClient" });
       } else if (rule && rule.action === "fulfill") {
-        await this.send("Fetch.fulfillRequest", {
-          requestId: params.requestId,
-          responseCode: rule.status || 200,
-          responseHeaders: Object.entries(rule.headers || {}).map(([name, value]) => ({ name, value: String(value) })),
-          body: btoa(unescape(encodeURIComponent(rule.body || ""))),
-        });
+        await this.send("Fetch.fulfillRequest", { requestId: params.requestId, responseCode: rule.status || 200, responseHeaders: toHeaderList(rule.headers), body: b64(rule.body) });
+      } else if (rule && rule.action === "modify") {
+        // 요청 변조: 헤더 주입(원본과 병합)/URL·메서드 교체 후 continue. 콜백 없이 선언형으로 나가는 요청을 바꾼다.
+        const p = { requestId: params.requestId };
+        if (rule.url) p.url = rule.url;
+        if (rule.method) p.method = rule.method;
+        if (rule.headers) p.headers = toHeaderList({ ...params.request.headers, ...rule.headers });
+        await this.send("Fetch.continueRequest", p);
+      } else if (rule && rule.action === "hold") {
+        // 콜백형: 요청을 붙잡아 두고 Python이 pendingRequests로 관측 -> continue/fulfill/abort로 동적 결정.
+        // 주의: 블로킹 navigate가 기다리는 메인 문서 하위요청을 hold하면 교착(단일 스레드). XHR 등 비-항법에 쓴다.
+        this.heldRequests.set(params.requestId, { url, method: params.request.method, headers: params.request.headers });
       } else {
         await this.send("Fetch.continueRequest", { requestId: params.requestId });
       }
@@ -317,8 +326,48 @@ class DebuggerDriver {
   }
   async route(pattern, action, opts) {
     await this._ensureFetch();
-    this.routes.push({ pattern, action, status: opts && opts.status, body: opts && opts.body, headers: opts && opts.headers });
+    this.routes.push({ pattern, action, status: opts && opts.status, body: opts && opts.body, headers: opts && opts.headers, url: opts && opts.url, method: opts && opts.method });
     return { ok: true };
+  }
+  pendingRequests() {
+    return { ok: true, value: [...this.heldRequests].map(([id, v]) => ({ id, url: v.url, method: v.method })) };
+  }
+  async continueRequest(id, overrides) {
+    const held = this.heldRequests.get(id);
+    if (!held) return { ok: false, error: "held 요청 없음: " + id };
+    const o = overrides || {};
+    const p = { requestId: id };
+    if (o.url) p.url = o.url;
+    if (o.method) p.method = o.method;
+    if (o.headers) p.headers = toHeaderList({ ...held.headers, ...o.headers });
+    await this.send("Fetch.continueRequest", p);
+    this.heldRequests.delete(id);
+    return { ok: true };
+  }
+  async fulfillRequest(id, opts) {
+    if (!this.heldRequests.has(id)) return { ok: false, error: "held 요청 없음: " + id };
+    const o = opts || {};
+    await this.send("Fetch.fulfillRequest", { requestId: id, responseCode: o.status || 200, responseHeaders: toHeaderList(o.headers), body: b64(o.body) });
+    this.heldRequests.delete(id);
+    return { ok: true };
+  }
+  async abortRequest(id) {
+    if (!this.heldRequests.has(id)) return { ok: false, error: "held 요청 없음: " + id };
+    await this.send("Fetch.failRequest", { requestId: id, errorReason: "Aborted" });
+    this.heldRequests.delete(id);
+    return { ok: true };
+  }
+  async responseBody(pattern) {
+    await this._ensureNetEvents();
+    const hits = this.responseLog.filter((r) => r.url.includes(pattern));
+    const hit = hits[hits.length - 1];
+    if (!hit) return { ok: false, error: "응답 없음: " + pattern };
+    try {
+      const r = await this.send("Network.getResponseBody", { requestId: hit.requestId });
+      return { ok: true, value: { body: r.body, base64Encoded: r.base64Encoded } };
+    } catch (e) {
+      return { ok: false, error: "responseBody: " + String(e) };
+    }
   }
   async unroute(pattern) {
     this.routes = pattern ? this.routes.filter((r) => r.pattern !== pattern) : [];
@@ -436,6 +485,11 @@ class ScriptDriver {
   unroute() { return Promise.resolve(this._unsupported("unroute")); }
   waitForResponse() { return Promise.resolve(this._unsupported("waitForResponse")); }
   requests() { return Promise.resolve(this._unsupported("requests")); }
+  pendingRequests() { return Promise.resolve(this._unsupported("pendingRequests")); }
+  continueRequest() { return Promise.resolve(this._unsupported("continueRequest")); }
+  fulfillRequest() { return Promise.resolve(this._unsupported("fulfillRequest")); }
+  abortRequest() { return Promise.resolve(this._unsupported("abortRequest")); }
+  responseBody() { return Promise.resolve(this._unsupported("responseBody")); }
   async detach() { /* CDP 없음 */ }
 }
 
@@ -519,6 +573,11 @@ function dispatch(driver, op, a) {
     case OP.unroute: return driver.unroute(a.pattern);
     case OP.waitForResponse: return driver.waitForResponse(a.pattern, a.timeout);
     case OP.requests: return driver.requests();
+    case OP.pendingRequests: return driver.pendingRequests();
+    case OP.continueRequest: return driver.continueRequest(a.id, { url: a.url, method: a.method, headers: a.headers });
+    case OP.fulfillRequest: return driver.fulfillRequest(a.id, { status: a.status, body: a.body, headers: a.headers });
+    case OP.abortRequest: return driver.abortRequest(a.id);
+    case OP.responseBody: return driver.responseBody(a.pattern);
     default: return Promise.resolve({ ok: false, error: `알 수 없는 op: ${op}` });
   }
 }

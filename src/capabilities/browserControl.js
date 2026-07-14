@@ -109,15 +109,26 @@ class BrowserTab:
         self._op("setDialogHandler", accept=accept, promptText=promptText); return self
     def lastDialog(self):
         return self._op("lastDialog").get("value")
-    # 네트워크 가로채기/관측(debugger mode 전용)
-    def route(self, pattern, action="block", status=None, body=None, headers=None):
-        self._op("route", pattern=pattern, action=action, status=status, body=body, headers=headers); return self
+    # 네트워크 가로채기/관측(debugger mode 전용). action: block(차단) | fulfill(정적 응답) | modify(요청 변조) | hold(붙잡기)
+    def route(self, pattern, action="block", status=None, body=None, headers=None, url=None, method=None):
+        self._op("route", pattern=pattern, action=action, status=status, body=body, headers=headers, url=url, method=method); return self
     def unroute(self, pattern=None):
         self._op("unroute", pattern=pattern); return self
     def waitForResponse(self, pattern, timeout=10000):
         return self._op("waitForResponse", pattern=pattern, timeout=timeout).get("value")
     def requests(self):
         return self._op("requests").get("value")
+    # 콜백형 held routing: action="hold"로 붙잡힌 요청을 관측하고 동적으로 결정한다(비-항법 요청에 쓴다).
+    def pendingRequests(self):
+        return self._op("pendingRequests").get("value")
+    def continueRequest(self, id, url=None, method=None, headers=None):
+        self._op("continueRequest", id=id, url=url, method=method, headers=headers); return self
+    def fulfillRequest(self, id, status=200, body="", headers=None):
+        self._op("fulfillRequest", id=id, status=status, body=body, headers=headers); return self
+    def abortRequest(self, id):
+        self._op("abortRequest", id=id); return self
+    def responseBody(self, pattern):
+        return self._op("responseBody", pattern=pattern).get("value")
     def close(self):
         self._op("closeSession")
 

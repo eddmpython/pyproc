@@ -675,12 +675,19 @@ export interface BrowserTab {
   /** 다이얼로그(alert/confirm/prompt) 세션 정책. 기본 accept=true(무처리 시 렌더러가 멈춘다). debugger mode 전용. */
   setDialogHandler(accept?: boolean, promptText?: string): BrowserTab;
   lastDialog(): string | null;
-  /** 네트워크 가로채기(CDP Fetch). action="block"(차단) | "fulfill"(정적 응답). debugger mode 전용. */
-  route(pattern: string, action?: "block" | "fulfill", status?: number, body?: string, headers?: Record<string, string>): BrowserTab;
+  /** 네트워크 가로채기(CDP Fetch). action="block"(차단) | "fulfill"(정적 응답) | "modify"(요청 변조: url/method/헤더) | "hold"(붙잡기). debugger mode 전용. */
+  route(pattern: string, action?: "block" | "fulfill" | "modify" | "hold", status?: number, body?: string, headers?: Record<string, string>, url?: string, method?: string): BrowserTab;
   unroute(pattern?: string): BrowserTab;
   /** 응답 관측(CDP Network). waitForResponse는 URL 부분일치 응답을 대기, requests는 관측 로그. debugger mode 전용. */
   waitForResponse(pattern: string, timeout?: number): { url: string; status: number };
   requests(): Array<{ url: string; status: number }>;
+  /** 콜백형 held routing: route(action="hold")로 붙잡은 요청을 관측(pendingRequests)하고 동적으로 결정한다(continue/fulfill/abort). 비-항법 요청에 쓴다(항법 하위요청 hold는 교착). debugger mode 전용. */
+  pendingRequests(): Array<{ id: string; url: string; method: string }>;
+  continueRequest(id: string, url?: string, method?: string, headers?: Record<string, string>): BrowserTab;
+  fulfillRequest(id: string, status?: number, body?: string, headers?: Record<string, string>): BrowserTab;
+  abortRequest(id: string): BrowserTab;
+  /** 응답 바디 캡처(CDP Network.getResponseBody). URL 부분일치 최근 응답의 바디. debugger mode 전용. */
+  responseBody(pattern: string): { body: string; base64Encoded: boolean };
   close(): void;
 }
 

@@ -95,13 +95,27 @@ d.route("/mockme", "fulfill", status=200, body="MOCKED")
 d.evaluate("window.mockBody=null; fetch('/mockme').then(function(x){return x.text()}).then(function(t){window.mockBody=t})")
 d.waitForFunction("window.mockBody !== null", 3000)
 r["mocked"] = d.evaluate("window.mockBody")
+def waitPending(pat):
+    for _ in range(60):
+        for p in d.pendingRequests():
+            if pat in p["url"]:
+                return p["id"]
+    return None
+d.route("/heldMock", "hold")
+d.evaluate("window.heldF=null; fetch('/heldMock').then(function(x){return x.text()}).then(function(t){window.heldF=t})")
+d.fulfillRequest(waitPending("/heldMock"), status=200, body="HELD")
+d.waitForFunction("window.heldF !== null", 3000)
+r["heldFulfill"] = d.evaluate("window.heldF")
+rb = d.responseBody("/jsonApi")
+r["respBody"] = rb["body"] if rb else None
 d.close()
 json.dumps(r)
 `)));
-  add("실 src 다이얼로그/네트워크(setDialogHandler/route/waitForResponse)",
+  add("실 src 다이얼로그/네트워크(setDialogHandler/route/waitForResponse/held/responseBody)",
     g2.dialog === true && g2.dialogMsg === "proceed?" && g2.respStatus === 200 &&
-    g2.blocked === "blocked" && g2.mocked === "MOCKED",
-    `dialog=${g2.dialog}, msg=${g2.dialogMsg}, status=${g2.respStatus}, blocked=${g2.blocked}, mocked=${g2.mocked}`);
+    g2.blocked === "blocked" && g2.mocked === "MOCKED" && g2.heldFulfill === "HELD" &&
+    typeof g2.respBody === "string" && g2.respBody.includes("apihit"),
+    `dialog=${g2.dialog}, status=${g2.respStatus}, blocked=${g2.blocked}, mocked=${g2.mocked}, held=${g2.heldFulfill}, respBody=${g2.respBody}`);
 
   const ok = checks.every((c) => c.pass);
   chrome.runtime.sendMessage({ type: "gateResult", ok, checks });
