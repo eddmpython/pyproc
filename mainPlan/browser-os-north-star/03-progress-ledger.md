@@ -1255,3 +1255,40 @@ NEXT:
 1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
 2. 외부 후보 raw artifact도 S1 JSON 봉투에 맞춘다.
 3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+
+## 2026-07-15 - S1 벤치 artifact 비교 CLI 추가
+
+문제:
+
+- `bench:speed`는 pyproc S1 JSON을 만들지만, 여러 후보 JSON을 같은 표로 합치고 schema를 검증하는 도구가 없었다.
+- 외부 후보를 측정하더라도 수동 복사 표가 되면 candidate, dirty SHA, browser, sample 수, p95 같은 필드가 빠질 수 있다.
+- 비교 표 생성 자체가 기계화되어야 외부 후보 측정이 구조화된다.
+
+완료:
+
+- `tests/browser/benchCompare.mjs`를 추가했다. S1 JSON artifact들을 읽어 schemaVersion, scenario, candidate, metrics, samples 길이를 검증하고 Markdown 비교 표를 출력한다.
+- `benchCompare`는 `notApplicableReason`도 지원한다. 외부 후보가 같은 시나리오를 수행하지 못하면 0점이 아니라 N/A 행으로 남길 수 있다.
+- `tests/browser/speedBench.mjs` artifact에 `candidate: "pyproc"`을 추가했다.
+- `package.json`에 `npm run bench:compare`를 추가했다.
+- `tests/run.mjs` 구조 가드가 `bench:compare`, `benchCompare.mjs`, `candidate`, `medianSpeedup`, `notApplicableReason`, `renderMarkdown`을 고정한다.
+- 벤치마크 운영 문서와 속도 비교 matrix에 `bench:compare` 사용법을 추가했다.
+
+검증:
+
+- `node --check tests/browser/benchCompare.mjs` PASS.
+- `node --check tests/browser/speedBench.mjs` PASS.
+- `npm test` GREEN 601/601.
+- `npm run bench:speed -- --out .tmp/pyproc-s1.json` GREEN.
+- `npm run bench:compare -- .tmp/pyproc-s1.json --out .tmp/s1-compare.md` PASS.
+- 샘플 비교 행: pyproc, single median 1462ms, shard median 516ms, shard p95 520ms, median speedup 2.89x, maxErr 0.
+
+판정:
+
+- 외부 후보 측정 전 마지막 구조 축이 닫혔다. 이제 S1 후보 artifact를 만들면 표 생성과 schema 검증이 자동이다.
+- OS 점수는 70/100 유지한다. 실제 외부 후보 숫자는 아직 없다.
+
+NEXT:
+
+1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
+2. 외부 후보 raw artifact를 `candidate`와 `notApplicableReason` 규칙까지 포함해 저장한다.
+3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.

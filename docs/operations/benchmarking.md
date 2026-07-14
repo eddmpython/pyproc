@@ -26,6 +26,8 @@
 | metrics | median, p95, min/max, error, speedup 계산식 |
 | raw output | 명령 출력 또는 gate report 위치 |
 
+S1 artifact는 추가로 `candidate`를 가진다. pyproc의 기준 artifact는 `candidate: "pyproc"`이다.
+
 ## canonical scenario
 
 | ID | 이름 | pyproc 정본 경로 | 비교 metric | green 기준 |
@@ -55,4 +57,5 @@ S1은 현재 공개 속도 간판이다. S0, S2, S3, S4는 "로컬처럼 쓰는 
 - README의 속도 숫자는 진행 원장 또는 gate output에서 온 값만 쓴다.
 - 외부 비교 표는 [mainPlan/browser-os-north-star/06-speed-comparison.md](../../mainPlan/browser-os-north-star/06-speed-comparison.md)가 활성 작업 정본이다.
 - S1 raw JSON은 `npm run bench:speed -- --out <path>` 또는 `PYPROC_BENCH_OUT=<path> npm run bench:speed`로 남긴다.
+- 여러 S1 artifact는 `npm run bench:compare -- <artifact...> --out <path>`로 Markdown 표로 합친다.
 - 새 benchmark helper나 runner를 추가하면 `npm test` 구조 가드에 연결한다.

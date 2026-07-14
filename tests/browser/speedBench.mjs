@@ -83,6 +83,7 @@ const primaryCpu = cpus()[0] || {};
 const artifact = {
   schemaVersion: 1,
   scenario: "S1",
+  candidate: "pyproc",
   name: "numpy sharded matmul",
   command: `node tests/browser/speedBench.mjs${outPath ? " --out " + outPath : ""}`,
   commit: gitCommit(),

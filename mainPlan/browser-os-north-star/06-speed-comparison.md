@@ -37,6 +37,12 @@
 | S3 browser server | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 | S4 machine resume | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 
+S1 artifact가 여러 개 생기면 아래 명령으로 표를 만든다.
+
+```bash
+npm run bench:compare -- .tmp/pyproc-s1.json .tmp/jupyterlite-s1.json --out .tmp/s1-compare.md
+```
+
 ## 첫 실측 합격 기준
 
 1. 같은 머신, 같은 브라우저, 같은 캐시 정책에서 pyproc과 외부 후보를 연속 측정한다.
@@ -48,5 +54,5 @@
 ## 다음 작업
 
 1. S1부터 외부 후보별 실행 가능한 최소 페이지나 절차를 `tests/attempts/`에 만든다.
-2. 외부 후보도 S1 raw JSON에 맞춘 산출물 형식으로 기록한다.
+2. 외부 후보도 S1 raw JSON에 맞춘 산출물 형식으로 기록하고 `bench:compare`로 표를 만든다.
 3. README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
