@@ -126,6 +126,7 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 `npm run test:consumer`는 repo 상대 import 없이 설치된 `node_modules/pyproc`만 노출한 브라우저 앱에서 이 계약을 같이 검증한다. 같은 게이트가 `MachineJail` 권한 manifest, signed `.pymachine` export/open, trusted public key와 wrong key 거부, signer fingerprint, `/home/web/resume.py`의 SQLite connection 재개설까지 실행하므로, 외부 제품은 이 흐름을 그대로 자기 UI와 배포 키 관리에 붙이면 된다.
 
 subpath export: `pyproc/assets`, `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `pyproc/process-os`, `pyproc/worker`. **src 내부 경로 deep import 금지** (내부 파일 배치는 릴리즈 간 바뀔 수 있다. 실제로 v0.0.3에서 레이어 폴더로 재배치됐고 subpath 이름은 불변이었다).
+`npm test`는 이 경계를 기계로 막는다. `package.json exports`는 위 안정 subpath만 노출할 수 있고, 공개 예제는 root API나 subpath export만 소비한다. Service Worker wrapper처럼 같은 오리진 정적 자산 경로가 필요한 경우만 좁은 예외로 둔다.
 
 - 타입은 동봉된 `index.d.ts`가 계약이다.
 - 엔진 내부(`HEAPU8`, `Runtime.raw` 등)를 직접 만지지 않는다. `raw`는 탈출구이고 계약 밖이다.

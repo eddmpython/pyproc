@@ -13,6 +13,8 @@ npm test          # = node tests/run.mjs, 의존성 0
 - **공개 표면**: `index.js`가 계약한 export(이름·타입)를 전부 내는가.
 - **능력 계약 형태**: `Runtime`/`PyProc`/`ReactiveController` 프로토타입 메서드 존재.
 - **타입 커버리지**: `index.d.ts`가 공개 표면을 전부 선언하고 `package.json`이 이를 배선하는가.
+- **공개 import 경계**: `package.json exports`가 승인된 안정 subpath만 노출하고, `examples/`는 `src/` 내부 파일을 모듈 import로 직접 소비하지 않는가.
+- **src module 참조**: `src/` 내부 상대 module 참조가 `.js` 확장자를 가진 실제 `src/` 파일을 가리키는가.
 - **문서 위생**: 전체 `*.md`/`*.js`에 em dash(U+2014) 0.
 - **상대 링크**: 모든 `*.md`의 상대 링크가 실존 파일을 가리키는가(죽은 링크 차단).
 - **attempts 구조**: `tests/attempts/` 각 카테고리에 README(+ 졸업 게이트 절)가 있는가.

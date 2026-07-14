@@ -27,6 +27,22 @@ function collect(dir, exts, acc = []) {
   return acc;
 }
 const rel = (f) => f.slice(ROOT.length + 1).replaceAll("\\", "/");
+function jsModuleRefs(file) {
+  const src = readFileSync(file, "utf8");
+  const refs = [];
+  const add = (kind, match) => refs.push({ kind, spec: match[1] });
+  for (const m of src.matchAll(/^\s*(?:import|export)\s+(?:[^'"\n]*?\s+from\s+)?["']([^"']+)["']/gm)) add("module", m);
+  for (const m of src.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g)) add("dynamic", m);
+  for (const m of src.matchAll(/\bimportScripts\s*\(\s*["']([^"']+)["']\s*\)/g)) add("importScripts", m);
+  for (const m of src.matchAll(/new\s+URL\s*\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g)) add("newURL", m);
+  return refs;
+}
+function moduleTarget(file, spec) {
+  const clean = spec.split(/[?#]/)[0];
+  if (clean.startsWith("/")) return join(ROOT, clean.slice(1));
+  if (clean.startsWith(".")) return resolve(dirname(file), clean);
+  return null;
+}
 
 console.log("pyproc 게이트\n");
 
@@ -398,6 +414,15 @@ check("exports 경로 실존", () => {
     if (!existsSync(join(ROOT, t))) throw new Error(`${sub} -> ${t} 없음`);
   }
 });
+check("exports 안정 subpath 고정", () => {
+  const allowed = new Set([".", "./assets", "./runtime", "./reactive", "./syscall-bridge", "./process-os", "./worker"]);
+  const keys = Object.keys(pkg.exports);
+  for (const key of keys) {
+    if (!allowed.has(key)) throw new Error(`승인 안 된 export key: ${key}`);
+    if (key.startsWith("./src/")) throw new Error(`src deep export 금지: ${key}`);
+  }
+  for (const key of allowed) if (!keys.includes(key)) throw new Error(`export key 누락: ${key}`);
+});
 
 // 4.5) README 표면 동기화: index.js의 모든 export가 양쪽 README에 등장해야 한다.
 //      승격이 문서를 앞지르는 드리프트를 차단한다(계약 실태 표의 부채 해소, 2026-07-12).
@@ -539,6 +564,36 @@ for (const f of collect(ROOT, [".md"], [])) {
 
 // 7) 구조 불변식: attempts 카테고리와 mainPlan 이니셔티브의 README 의무.
 console.log("\n[구조]");
+check("src module 참조 실존", () => {
+  const srcRoot = join(ROOT, "src");
+  const problems = [];
+  for (const f of collect(srcRoot, [".js"], [])) {
+    for (const ref of jsModuleRefs(f)) {
+      const target = moduleTarget(f, ref.spec);
+      if (!target) continue;
+      const targetRel = rel(target);
+      if (!ref.spec.split(/[?#]/)[0].endsWith(".js")) problems.push(`${rel(f)} -> ${ref.spec}: .js 확장자 필요`);
+      if (!existsSync(target)) problems.push(`${rel(f)} -> ${ref.spec}: 파일 없음`);
+      else if (!targetRel.startsWith("src/")) problems.push(`${rel(f)} -> ${ref.spec}: src 밖 참조`);
+    }
+  }
+  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+check("examples는 공개 표면으로만 pyproc 소비", () => {
+  const examplesRoot = join(ROOT, "examples");
+  const allowedStaticAssets = new Set(["examples/serverDevSw.js -> ../src/capabilities/pyprocSw.js"]);
+  const problems = [];
+  for (const f of collect(examplesRoot, [".js", ".html"], [])) {
+    for (const ref of jsModuleRefs(f)) {
+      const target = moduleTarget(f, ref.spec);
+      const pair = `${rel(f)} -> ${ref.spec}`;
+      if (allowedStaticAssets.has(pair) && ref.kind === "importScripts") continue;
+      if (target && rel(target).startsWith("src/")) problems.push(pair);
+      if (/^(\.\.\/)+src\//.test(ref.spec) || ref.spec.startsWith("/src/")) problems.push(pair);
+    }
+  }
+  if (problems.length) throw new Error([...new Set(problems)].slice(0, 8).join("; "));
+});
 check("tests/attempts/README.md 존재(운영 규칙 SSOT)", () => {
   if (!existsSync(join(ROOT, "tests", "attempts", "README.md"))) throw new Error("없음");
 });

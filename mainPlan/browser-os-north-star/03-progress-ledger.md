@@ -1292,3 +1292,35 @@ NEXT:
 1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
 2. 외부 후보 raw artifact를 `candidate`와 `notApplicableReason` 규칙까지 포함해 저장한다.
 3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+
+## 2026-07-15 - 공개 import 경계 게이트 추가
+
+문제:
+
+- pyproc는 재사용 라이브러리이므로 제품과 예제는 root API와 안정 subpath만 소비해야 한다.
+- `src/` 내부 경로 deep import 금지는 문서 계약으로는 있었지만, 공개 예제가 실수로 내부 파일을 module import해도 막는 기계 가드가 없었다.
+- `src/` 내부 상대 module 참조도 파일 이동 때 깨질 수 있으므로 구조 게이트가 필요했다.
+
+완료:
+
+- `tests/run.mjs`에 JS module 참조 추출 helper를 추가했다. 정적 import/export, dynamic import, `importScripts`, `new URL(..., import.meta.url)`를 같은 방식으로 본다.
+- `src module 참조 실존` 게이트를 추가했다. `src/` 내부 상대 참조는 `.js` 확장자를 가진 실제 `src/` 파일이어야 한다.
+- `exports 안정 subpath 고정` 게이트를 추가했다. `package.json exports`는 `.`, `./assets`, `./runtime`, `./reactive`, `./syscall-bridge`, `./process-os`, `./worker`만 허용한다.
+- `examples는 공개 표면으로만 pyproc 소비` 게이트를 추가했다. 공개 예제가 `src/`를 module import하면 실패한다. `serverDevSw.js`의 Service Worker 정적 wrapper만 좁은 예외로 유지했다.
+- 테스트 운영 문서, 소비 계약, OS 아키텍처 표를 새 구조 게이트에 맞췄다.
+
+검증:
+
+- `node --check tests/run.mjs` PASS.
+- `npm test` GREEN 604/604.
+
+판정:
+
+- 라이브러리 구조의 핵심 경계 하나가 관례에서 기계 게이트로 이동했다.
+- 이번 작업은 내부 레이어 순환을 한 번에 제거한 것이 아니다. 현재 현실과 맞지 않는 이상 규칙을 걸지 않고, 공개 소비 경계와 참조 실존성부터 잠갔다.
+
+NEXT:
+
+1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
+2. 내부 `src/` 레이어 graph를 별도로 산출하고, 허용 edge와 제거할 cycle을 나눠 다음 구조 게이트로 좁힌다.
+3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
