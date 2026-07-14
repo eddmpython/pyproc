@@ -705,6 +705,8 @@ export interface BrowserTab {
   emulateMedia(colorScheme?: "dark" | "light" | "no-preference", media?: string, reducedMotion?: string): BrowserTab;
   setTimezone(timezoneId: string): BrowserTab;
   setOffline(offline?: boolean): BrowserTab;
+  /** 지오로케이션 스푸핑. 권한은 chrome.contentSettings.location로 부여(manifest "contentSettings" 필요), 좌표는 Emulation.setGeolocationOverride. debugger mode 전용. */
+  setGeolocation(latitude: number, longitude: number, accuracy?: number): BrowserTab;
   /** 다운로드 관측(CDP Page.downloadWillBegin). enableDownloads 후 waitForDownload로 파일명/URL 회수(저장 경로 지정은 browser-level이라 미지원). debugger mode 전용. */
   enableDownloads(): BrowserTab;
   waitForDownload(timeout?: number): { url: string; filename: string; state: string };
