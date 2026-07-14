@@ -4,6 +4,18 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 (d) waitForSelector + Phase 2 완료
+
+(d) waitForSelector(요소 나타날 때까지 폴링, 자동화 안정성) 게이트14 GREEN. Phase 2 (c)(d) + 송신 타임아웃을
+src 능력에 승격(browserControlHost/browserControl/protocol, index.d.ts BrowserTab.waitFor, contract.md storage
+권한). 실 src 런타임 게이트(test:browser:ext) GREEN 유지.
+
+**Phase 2 전체 실측 완료**: (a) 고정 화면 non-COI 셸(게이트11) + (b) 프로세스 OS 워커 N=세션 N(게이트12) +
+(c) SW 재attach 복구(게이트13) + (d) waitForSelector(게이트14). 파이썬 `pyprocBrowser` 표면 =
+navigate/evaluate/click/type/waitFor/close, script/debugger 두 mode, 영속 세션 + SW 소멸 복구 + 고정 화면 셸.
+잔여(정직): 파이썬 워커 Pyodide 통합(라우터 메커니즘은 실증됨), 실 봇 방어(Cloudflare 등) 수동, 3PC 쿠키 실배포
+/수동. 게이트12는 첫 실행 flaky(워커/SW 콜드 경합), 재실행 안정 GREEN = 수동 실측 레인.
+
 ### 2026-07-14 (c) SW keep-alive/재attach 복구 실측 GREEN (게이트13)
 
 MV3 SW 30초 소멸/크래시 대응. 세션 메타를 `storage.session`에 write-through + op 진입 시 lazy 재attach.
