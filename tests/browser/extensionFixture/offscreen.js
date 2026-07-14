@@ -113,15 +113,22 @@ fr.waitFor("#cmarker", 3000)
 r["frameText"] = fr.text("#cmarker")
 fr.fill("#cfield", "framedSrc")
 r["frameField"] = fr.value("#cfield")
+d.emulateMedia(colorScheme="dark")
+r["dark"] = d.evaluate("matchMedia('(prefers-color-scheme: dark)').matches")
+d.setTimezone("Asia/Seoul")
+r["tz"] = d.evaluate("Intl.DateTimeFormat().resolvedOptions().timeZone")
+d.setOffline(True)
+r["offline"] = d.evaluate("navigator.onLine")
 d.close()
 json.dumps(r)
 `)));
-  add("실 src 다이얼로그/네트워크/프레임(setDialogHandler/route/waitForResponse/held/responseBody/frame)",
+  add("실 src 다이얼로그/네트워크/프레임/에뮬(setDialogHandler/route/held/responseBody/frame/emulateMedia/setTimezone/setOffline)",
     g2.dialog === true && g2.dialogMsg === "proceed?" && g2.respStatus === 200 &&
     g2.blocked === "blocked" && g2.mocked === "MOCKED" && g2.heldFulfill === "HELD" &&
     typeof g2.respBody === "string" && g2.respBody.includes("apihit") &&
-    g2.frameText === "childOk" && g2.frameField === "framedSrc",
-    `dialog=${g2.dialog}, held=${g2.heldFulfill}, respBody=${g2.respBody}, frameText=${g2.frameText}, frameField=${g2.frameField}`);
+    g2.frameText === "childOk" && g2.frameField === "framedSrc" &&
+    g2.dark === true && g2.tz === "Asia/Seoul" && g2.offline === false,
+    `held=${g2.heldFulfill}, frameText=${g2.frameText}, dark=${g2.dark}, tz=${g2.tz}, offline=${g2.offline}`);
 
   const ok = checks.every((c) => c.pass);
   chrome.runtime.sendMessage({ type: "gateResult", ok, checks });

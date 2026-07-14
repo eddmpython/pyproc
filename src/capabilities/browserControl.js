@@ -129,6 +129,13 @@ class BrowserTab:
         self._op("abortRequest", id=id); return self
     def responseBody(self, pattern):
         return self._op("responseBody", pattern=pattern).get("value")
+    # 에뮬레이션 심화(debugger mode 전용): 다크모드/타임존/오프라인 스푸핑(페이지 관측값을 바꾼다)
+    def emulateMedia(self, colorScheme=None, media=None, reducedMotion=None):
+        self._op("emulateMedia", colorScheme=colorScheme, media=media, reducedMotion=reducedMotion); return self
+    def setTimezone(self, timezoneId):
+        self._op("setTimezone", timezoneId=timezoneId); return self
+    def setOffline(self, offline=True):
+        self._op("setOffline", offline=offline); return self
     # 프레임 traversal(same-origin iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
     def frames(self):
         return self._op("frames").get("value")

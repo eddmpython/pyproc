@@ -688,6 +688,10 @@ export interface BrowserTab {
   abortRequest(id: string): BrowserTab;
   /** 응답 바디 캡처(CDP Network.getResponseBody). URL 부분일치 최근 응답의 바디. debugger mode 전용. */
   responseBody(pattern: string): { body: string; base64Encoded: boolean };
+  /** 에뮬레이션 심화(CDP Emulation/Network): 페이지가 관측하는 환경을 스푸핑. debugger mode 전용. */
+  emulateMedia(colorScheme?: "dark" | "light" | "no-preference", media?: string, reducedMotion?: string): BrowserTab;
+  setTimezone(timezoneId: string): BrowserTab;
+  setOffline(offline?: boolean): BrowserTab;
   /** 프레임 traversal(same-origin iframe). frames는 프레임 목록, frame(url/name)은 프레임 핸들. cross-origin OOPIF는 미지원. debugger mode 전용. */
   frames(): Array<{ frameId: string; url: string; name: string }>;
   frame(url?: string, name?: string): BrowserFrame;
