@@ -4,6 +4,20 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 14: 로케일 스푸핑 실측 GREEN + src 승격 (Phase 7 두 번째 벽 돌파)
+
+Phase 7에서 "Edge CDP 미반영으로 미승격"으로 잘랐던 두 번째 컷 setLocale을 대행 경로로 되살렸다. attempts 게이트26,
+`bootIsolationRunner` **60/60 GREEN**.
+
+- **벽 돌파**: `Emulation.setLocaleOverride`가 Edge서 navigator/Intl에 미반영이라, **Accept-Language 헤더
+  (Network.setExtraHTTPHeaders) + navigator.language/languages 선제 오버라이드(Page.addScriptToEvaluateOnNewDocument,
+  WEBDRIVER_MASK와 같은 기법)**로 대행. 게이트26: 항법 후 navigator.language=fr-FR + Accept-Language 헤더 반영.
+- **정직한 경계**: Intl 기본 로케일(Intl.DateTimeFormat().resolvedOptions().locale)은 이 경로로 안 바뀐다.
+  대부분 사이트는 navigator.language/Accept-Language로 로케일을 감지하므로 실사용엔 충분(index.d.ts/contract 명시).
+  extraHeaders를 driver에 누적(setHeaders/setLocale 병합)해 Accept-Language가 다른 헤더를 지우지 않게 함.
+- **src 승격**: protocol/host + browserControl.js + index.d.ts + contract.md. 실 src 픽스처에 로케일 슬라이스 ->
+  **GREEN 6/6**. `npm test` **568 green**. **Phase 7의 두 컷(지오·로케일)을 Phase 13/14로 모두 되살림.**
+
 ### 2026-07-14 Phase 13: 지오로케이션 스푸핑 실측 GREEN + src 승격 (Phase 7 벽 돌파)
 
 Phase 7에서 "grantPermissions가 browser-level이라 막혀 미승격"으로 잘랐던 setGeolocation을 확장 API로 되살렸다.

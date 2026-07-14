@@ -92,6 +92,7 @@ undefined로 덮으면, 하네스가 포트로 `webdriver=true`인 최악 조건
 | 2026-07-14 | bootIsolationRunner(게이트23) | Edge headless | Phase 11 접근성 트리: Accessibility.getFullAXTree로 role/name/value 회수(54노드, role에 button/textbox/combobox/link/form/list, button 이름 click/dialog/파일 선택/far). **57/57 GREEN** | 에이전트가 DOM 셀렉터 대신 의미(role/name)로 페이지를 이해(시맨틱 네비게이션) | src 승격(실 src 픽스처 6/6 GREEN) |
 | 2026-07-14 | bootIsolationRunner(게이트24) | Edge headless | Phase 12 cross-origin OOPIF 프레임 드릴다운(게이트18 벽 돌파): OOPIF는 getFrameTree엔 없지만 chrome.debugger.getTargets엔 뜬다 -> 이 페이지 iframe src로 스코프 + targetId로 직접 attach. same-origin(#fr) + cross-origin(#xfr localhost) 둘 다 text/fill 드릴다운. **58/58 GREEN** | 게이트18의 "cross-origin은 OOPIF라 미지원"을 정공법으로 뚫음. 고정 화면 셸이 담는 cross-origin 사이트 내부까지 조작 = 셸 비전 완성 | src 승격(실 src 픽스처 6/6 GREEN) |
 | 2026-07-14 | bootIsolationRunner(게이트25) | Edge headless | Phase 13 지오로케이션 스푸핑(게이트19 벽 돌파): 좌표는 Emulation.setGeolocationOverride, 권한은 CDP Browser.grantPermissions(browser-level 막힘) 대신 chrome.contentSettings.location로 우회 부여. getCurrentPosition이 스푸핑 좌표(37.5665) 회수. **59/59 GREEN** | Phase 7의 "권한 부여 경로 없어 미승격"을 확장 API로 뚫음. 비용: manifest contentSettings 권한 | src 승격(실 src 픽스처 6/6 GREEN) |
+| 2026-07-14 | bootIsolationRunner(게이트26) | Edge headless | Phase 14 로케일 스푸핑(Phase 7 두 번째 컷 되살림): setLocaleOverride 미반영이라 Accept-Language 헤더 + navigator.language/languages 선제 오버라이드로 대행. 항법 후 navigator.language=fr-FR + Accept-Language 반영. **60/60 GREEN** | Intl 기본 로케일은 미반영(정직) but navigator/Accept-Language로 사이트 로케일 감지엔 충분 | src 승격(실 src 픽스처 6/6 GREEN) |
 
 ## 판정
 

@@ -1,7 +1,7 @@
 # browser-control - 서버리스 · 프로세스 내 브라우저 자동화 파이썬 런타임
 
-상태: **Phase 1-13 구현 완성 (2026-07-14).** attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이
-링 1(MV3 확장) 게이트 1-25를 브라우저 실측으로 통과했다(**59/59 GREEN**): Phase 1(부팅/격리/CDP왕복/신뢰입력/
+상태: **Phase 1-14 구현 완성 (2026-07-14).** attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이
+링 1(MV3 확장) 게이트 1-26을 브라우저 실측으로 통과했다(**60/60 GREEN**): Phase 1(부팅/격리/CDP왕복/신뢰입력/
 조작/다중세션/스텔스/영속세션/세션수명) + Phase 2(고정 화면 non-COI 셸 쿠키·frame-busting / 프로세스 OS 워커
 N=세션 N / SW 재attach 복구 / waitForSelector) + Phase 3(Playwright급 조작 표면: 추출·조회/입력 확장/대기/캡처/
 에뮬레이션/쿠키) + Phase 4(자동 스크롤 / 다이얼로그 자동 처리 / 파일 업로드 / 쿠키 삭제 / 네트워크 가로채기
@@ -13,13 +13,14 @@ abort / 응답 바디 캡처 responseBody) + Phase 6(프레임 traversal = same-
 (콘솔·에러 캡처 = enableConsole/consoleLogs/waitForConsole로 페이지 console.* + 미처리 예외 관측) + Phase 11
 (접근성 트리 = accessibilityTree로 role/name 시맨틱 회수, 에이전트의 의미 네비게이션) + Phase 12(cross-origin
 OOPIF 프레임 드릴다운 = getTargets attach로 별 프로세스 iframe 내부까지 조작, Phase 6 벽 돌파) + Phase 13
-(지오로케이션 스푸핑 = chrome.contentSettings로 권한 우회 + setGeolocationOverride, Phase 7 벽 돌파).
+(지오로케이션 스푸핑 = chrome.contentSettings로 권한 우회 + setGeolocationOverride, Phase 7 벽 돌파) + Phase 14
+(로케일 스푸핑 = navigator.language 선제 오버라이드 + Accept-Language 헤더, Phase 7 두 번째 벽 돌파).
 능력을 `src/capabilities/`로 승격: `Runtime.enableBrowserControl()` -> 파이썬 `pyprocBrowser.tab(url, mode)`가 항법/
 입력/조회·추출/대기/캡처·에뮬/쿠키/다이얼로그/네트워크(선언형 + 콜백형)/프레임을 노출한다(script/debugger 두 mode,
 영속 세션 + SW 소멸 복구, 정본 타입 index.d.ts BrowserTab/BrowserFrame). 실 src 런타임 게이트(`test:browser:ext`,
 픽스처가 실 src import = SSOT) GREEN 6/6 + 확장 소비 계약 문서화(protocol v2). 프로세스 OS 융합(routeBrowserWorker
-+ installBrowserWorker)까지 실 src로 검증. 잔여(정직, 전부 실제 벽/수동): 다운로드 저장 경로 지정(browser-level)·
-로케일(Edge CDP 미반영), 실 봇 방어(Cloudflare) 수동, 3PC 쿠키 실배포/수동([03-progress-ledger](03-progress-ledger.md) NEXT).
++ installBrowserWorker)까지 실 src로 검증. 잔여(정직, 전부 실제 벽/수동): 다운로드 저장 경로 지정(browser-level,
+관측은 됨)·Intl 기본 로케일, 실 봇 방어(Cloudflare) 수동, 3PC 쿠키 실배포/수동([03-progress-ledger](03-progress-ledger.md) NEXT).
 
 ## 한 문장
 
