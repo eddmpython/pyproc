@@ -4,6 +4,19 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 10: 콘솔/에러 캡처(페이지 로그·에러 관측) 실측 GREEN + src 승격
+
+AI 에이전트가 페이지가 무엇을 로그·에러냈는지 본다. attempts 게이트22, `bootIsolationRunner` **56/56 GREEN**.
+
+- **enableConsole/consoleLogs/waitForConsole**: `Runtime.consoleAPICalled`(console.log/warn/error/info) +
+  `Runtime.exceptionThrown`(미처리 예외)를 관측한다(Network 응답 로그와 같은 이벤트-버퍼-폴 패턴). 게이트22:
+  console.log('pyprocLog', 42) -> "pyprocLog 42", console.error -> type "error", 미처리 throw -> type "exception"
+  (세 종류 다 잡힘).
+- **미처리 예외 텍스트**: exceptionDetails.text는 보통 "Uncaught"만이고 실제 메시지는 exception.description에
+  있어 둘을 합쳐 로그(실측이 드러냄).
+- **src 승격**: protocol/host(단일 이벤트 라우터에 두 줄 추가) + browserControl.js + index.d.ts + contract.md.
+  실 src 픽스처에 콘솔 캡처 슬라이스 추가 -> **GREEN 6/6**. `npm test` **568 green**.
+
 ### 2026-07-14 Phase 9: 다운로드 관측(무엇이 다운로드되는가) 실측 GREEN + src 승격
 
 파일 스크래핑/내보내기 자동화. attempts 게이트21, `bootIsolationRunner` **55/55 GREEN**.
