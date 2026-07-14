@@ -67,17 +67,20 @@ sns-links{display:contents}
 .snsBtn:hover{color:var(--text);background:rgba(255,255,255,.08)}
 .snsHeart{color:var(--red)}
 .snsHeart:hover{color:#ff9aa6}
-.hero{padding:2.2rem 0 1rem}
-.hero h1{font-size:clamp(1.7rem,4.5vw,2.6rem);line-height:1.25;margin:.4rem 0 .8rem}
+/* 히어로: 마크가 주인공. 마크/슬로건/CTA만 가운데 세우고, 코드(예시 터미널)는 왼쪽 정렬을 지킨다.
+   마크 뒤의 번짐은 마크 그라디언트와 같은 두 색이라 배경에서 색이 겉돌지 않는다. */
+.hero{padding:2.6rem 0 1rem;text-align:center}
+.heroMark{width:clamp(84px,13vw,112px);height:auto;filter:drop-shadow(0 14px 38px rgba(42,107,242,.35))}
+.hero h1{font-size:clamp(1.7rem,4.5vw,2.6rem);line-height:1.25;margin:.9rem 0 .8rem}
 /* 히어로 강조는 마크와 같은 각도의 그라디언트 텍스트. 배경 클립이 안 되는 환경에서는
    color 값이 그대로 보이므로 폴백이 저절로 성립한다. */
 .hero .accent{color:var(--violet);background:linear-gradient(111deg,var(--blue),var(--violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.hero .lead{max-width:38rem;font-size:1.02rem}
-.heroCta{margin:1.2rem 0}
+.hero .lead{max-width:38rem;margin:0 auto;font-size:1.02rem}
+.heroCta{margin:1.4rem 0;justify-content:center}
 .btn{display:inline-block;background:linear-gradient(111deg,var(--ctaFrom),var(--ctaTo));color:#fff;border-radius:8px;padding:.6rem 1.1rem;font-weight:700;text-decoration:none}
 .ghostBtn{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:400}
 .chip{background:var(--deep);border:1px dashed #14453f;color:var(--teal);border-radius:8px;padding:.55rem .9rem;cursor:pointer;user-select:none}
-.heroTerm{max-width:34rem;margin-top:1.4rem;box-shadow:0 0 0 1px var(--border),0 18px 55px rgba(42,107,242,.18)}
+.heroTerm{max-width:34rem;margin:1.8rem auto 0;text-align:left;box-shadow:0 0 0 1px var(--border),0 18px 55px rgba(42,107,242,.18)}
 h2{font-size:1.15rem;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin:2.6rem 0 .2rem;padding-top:.6rem}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:1rem;margin:2rem 0 1rem;padding:1.1rem 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
 .stat b{display:block;color:var(--teal);font-size:1.5rem}
