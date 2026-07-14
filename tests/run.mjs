@@ -348,6 +348,12 @@ check("package.json 소비자 게이트 스크립트", () => {
   if (pkg.scripts?.["test:package"] !== "node tests/packageConsumer.mjs") throw new Error("test:package 누락");
   if (pkg.scripts?.["test:consumer"] !== "node tests/browser/productConsumer.mjs") throw new Error("test:consumer 누락");
 });
+check("d.ts가 PyProc 샤딩 옵션 계약을 선언", () => {
+  if (!dts.includes("export interface PyProcShardOptions extends PyProcMapOptions")) throw new Error("PyProcShardOptions 누락");
+  if (!dts.includes("export interface PyProcMatmulOptions extends PyProcShardOptions")) throw new Error("PyProcMatmulOptions 누락");
+  if (!dts.includes("mapArray(fnSrc: string, typed: ArrayBufferView, opts?: PyProcShardOptions): Promise<unknown[]>;")) throw new Error("mapArray parts 타입 누락");
+  if (!dts.includes("matmul(a: Matrix, b: Matrix, opts?: PyProcMatmulOptions): Promise<Matrix>;")) throw new Error("matmul parts 타입 누락");
+});
 check("exports 경로 실존", () => {
   for (const [sub, target] of Object.entries(pkg.exports)) {
     const t = typeof target === "string" ? target : target.default;

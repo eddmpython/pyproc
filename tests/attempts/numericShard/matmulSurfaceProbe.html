@@ -48,6 +48,9 @@
     let threw = false;
     try { await os.matmul({ data: A, rows: M, cols: K }, { data: B, rows: K + 1, cols: N }); } catch (e) { threw = /차원 불일치/.test(String(e)); }
     check("차원 불일치는 명시적 에러", threw);
+    threw = false;
+    try { await os.matmul({ data: A, rows: M, cols: K }, { data: B, rows: K, cols: N }, { parts: 0 }); } catch (e) { threw = /parts는 양의 정수/.test(String(e)); }
+    check("parts는 양의 정수로 검증", threw);
 
     // 3) 대형 정사각 배속: 같은 코드 경로(matmul)를 parts:1(단일워커) vs 전 워커로 비교(공정).
     //    두 경로 모두 동일한 SAB 셋업/재구성/조립 오버헤드를 지므로 배속 = 순수 병렬 이득.

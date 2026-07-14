@@ -975,6 +975,13 @@ export interface PyProcMapOptions {
   taskTimeoutMs?: number;
 }
 
+export interface PyProcShardOptions extends PyProcMapOptions {
+  /** 샤딩할 워커 수 상한. 생략하면 준비된 워커 전체를 쓰고, 지정하면 풀 크기/행 수로 clamp된다. */
+  parts?: number;
+}
+
+export interface PyProcMatmulOptions extends PyProcShardOptions {}
+
 /** 행렬(행 우선 f64). matmul 입출력. data.length === rows*cols. */
 export interface Matrix {
   data: Float64Array;
@@ -1021,14 +1028,14 @@ export class PyProc {
   boot(n: number, useSnapshot?: boolean): Promise<PyProcBootInfo>;
   map(fnSrc: string, args: unknown[], opts?: PyProcMapOptions): Promise<unknown[]>;
   /** TypedArray를 조각내 워커들에 numpy 배열로 병렬 적용(샤딩). fnSrc: def _fn(a). 실측 4워커 5.28배. */
-  mapArray(fnSrc: string, typed: ArrayBufferView, opts?: PyProcMapOptions & { parts?: number }): Promise<unknown[]>;
+  mapArray(fnSrc: string, typed: ArrayBufferView, opts?: PyProcShardOptions): Promise<unknown[]>;
   /**
    * 샤딩 matmul: C = A@B를 A의 행블록으로 워커수만큼 분할해 병렬 계산(compute-bound = near-linear,
    * 실측 4워커 3.67배). numpy 필요(packages:["numpy"]). f64(numpy 기본). 반환 = 결과 행렬.
    * 정직: 이 배속은 compute-bound 커널의 것. memory-bound op(리덕션/값싼 원소별)는 mapArray로,
    * 배속은 modest하고 작은 배열은 전송비로 진다(shardOpsProbe 실측).
    */
-  matmul(a: Matrix, b: Matrix): Promise<Matrix>;
+  matmul(a: Matrix, b: Matrix, opts?: PyProcMatmulOptions): Promise<Matrix>;
   mapSerial(fnSrc: string, args: unknown[]): Promise<unknown[]>;
   ps(): PyProcEntry[];
   /** 프로세스 강제 종료(SIGKILL 등가). 성공 시 true, 테이블에는 dead로 남는다. */

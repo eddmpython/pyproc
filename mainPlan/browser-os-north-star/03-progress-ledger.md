@@ -1043,3 +1043,40 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 외부 제품 gate로 고정한다.
 3. 외부 제품의 `resume.py` 정책을 제품 gate로 고정한다.
+
+## 2026-07-15 - PyProc.matmul parts 공개 타입과 입력 계약 고정
+
+문제:
+
+- Speed Lab과 numericShard probe는 이미 `PyProc.matmul(a, b, { parts })`를 쓰고 있었지만, `index.d.ts`의 공개 타입은 `matmul(a, b)`만 선언했다.
+- 구현은 `parts`를 받았지만 0, 음수, 소수 같은 잘못된 병렬도 입력이 명시 계약 에러가 아니라 우발적인 JS 배열 길이 오류나 기본값 우회로 수렴할 수 있었다.
+- 속도 표면은 데모 코드만 빨라서는 안 되고, 소비자가 TypeScript와 런타임 양쪽에서 같은 계약을 보아야 한다.
+
+완료:
+
+- `PyProcShardOptions`와 `PyProcMatmulOptions`를 공개 타입에 추가했다.
+- `mapArray()`와 `matmul()`의 `parts`를 양의 정수로 검증하고, 풀 크기와 행 수를 넘으면 안전하게 clamp한다.
+- `matmul()`은 `taskTimeoutMs`도 내부 `map()`에 전달하므로 무거운 샤딩 작업의 timeout 계약이 public option과 맞는다.
+- `matmulSurfaceProbe.html`에 잘못된 `parts` 거부 검증을 추가했다.
+- README, README.ko, 소비 계약, numericShard 원장을 `matmul(a, b, { parts })` 기준으로 정리했다.
+- `tests/run.mjs`가 d.ts의 샤딩 옵션 선언과 `matmul` 시그니처를 구조 게이트로 검사한다.
+
+검증:
+
+- `npm test` GREEN 584/584.
+- `node tests/browser/run.mjs tests/attempts/numericShard/matmulSurfaceProbe.html` 1차 RED 5/6. 기능 검증은 모두 PASS였고, 단발 속도 gate만 1.65x로 흔들렸다.
+- 같은 probe 재실행 GREEN 6/6: 단일워커 4390ms, 전 워커 2163ms, 2.03x.
+- `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:examples` GREEN 9/9. Speed Lab은 768x768 f64에서 3.67x(1827ms -> 498ms).
+- `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:browser` GREEN 47/47.
+
+판정:
+
+- `PyProc.matmul(..., { parts })`는 데모 관례가 아니라 공개 타입, 런타임 검증, 브라우저 probe가 맞물린 속도 API 계약이 됐다.
+- OS 점수는 70/100 유지한다. 이 작업은 라이브러리 구조와 speed surface 정합을 닫는 수리이지, 외부 제품 소비 배선 자체는 아니다.
+- 단발 배속 gate는 환경 민감도가 확인됐다. 다음 속도 꼭지는 threshold를 낮추는 게 아니라 반복 벤치/median/p95 봉투로 분리하는 것이다.
+
+NEXT:
+
+1. Speed Lab과 numericShard 속도 gate를 단발 threshold가 아니라 반복 벤치/median/p95 봉투로 구조화한다.
+2. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+3. 공개키 배포, 권한 UI, `resume.py` 정책을 외부 제품 gate로 고정한다.

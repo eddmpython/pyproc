@@ -226,7 +226,7 @@ Pyodide  Workers
 | `GpuCompute` / `GpuArray` / `GpuBridge` | f32 대규모 선형대수를 WebGPU 컴퓨트로 오프로드: 잔류 핸들(업로드 1회, GPU 위에서 `matmul` / `map` / `binary` / `transpose` / `reduce` 체이닝, 다운로드 1회, 공유메모리 타일드 커널). 전체 파이프라인이 GPU에 남는다: `matmul -> relu -> sum`(loss), `x.transpose() @ dy`, 잔차 `(A@B) + C`. `Runtime.enableGpu()`가 파이썬에 배선(`pyprocGpu.matmul`이 numpy 배열을). 실 GPU에서 WASM numpy 대비 ~127배 실측. f32 한정(WGSL은 f64 없음), 창 있는 브라우저 + GPU 필요 |
 | `bootSession` / `Session` / `openMachine` / `createMachineKeyPair` / `exportMachinePublicKey` / `fingerprintMachinePublicKey` | 세션 부활 + 이동 가능한 `.pymachine` 이미지: 결정적 리플레이 + 사용자 델타, OPFS 영속(`save` / `load`) 또는 한 파일 내보내기(`exportImage` / `openMachine`). `/home/web`이 있으면 그 파일 트리도 이미지에 함께 실린다. WebCrypto signature가 있으면 `trust: true` 대신 검증된 공개키로 열 수 있고, `fingerprintMachinePublicKey`는 제품 신뢰 UI에 안정 signer fingerprint를 준다 |
 | `WheelCache` | 오프라인 / 재다운로드 0 패키지 설치용 wheel / OPFS 캐시 |
-| `PyProc` | 프로세스 OS 커널: 스냅샷-fork 스폰, `map` / `mapArray` 병렬, 수명주기(`kill` / `signal` / respawn), `fork(2)`(살아있는 프로세스 복제, 변수·배열이 실린다), 흐름 IPC(`pipe` / `lock` / `semaphore` / `shm`: SAB 링버퍼 파이프, 진짜 블로킹 read + backpressure) |
+| `PyProc` | 프로세스 OS 커널: 스냅샷-fork 스폰, `map` / `mapArray` 병렬, compute-bound f64 NumPy 가속용 샤딩 `matmul(a, b, { parts })`, 수명주기(`kill` / `signal` / respawn), `fork(2)`(살아있는 프로세스 복제, 변수·배열이 실린다), 흐름 IPC(`pipe` / `lock` / `semaphore` / `shm`: SAB 링버퍼 파이프, 진짜 블로킹 read + backpressure) |
 | `MachineContainer` | 머신 안의 머신: 컨테이너 커널을 워커에 자기 패키지 세트로 띄우고 파이썬 값으로 노출(`m.run` / `m.spawn` / `m.kill`), 중첩 가능(컨테이너 속 컨테이너) |
 | `SIGNAL` | `PyProc.signal(pid, signum)`용 POSIX 시그널 번호: 진짜 `SIGTERM` / `SIGUSR1` 핸들러가 파이썬 안에서 발화 |
 | `JobControl` | 셸의 잡 컨트롤: `expr &`가 살아있는 대화형 네임스페이스를 딴 코어로 fork(프롬프트 즉시 복귀). `%jobs` / `%fg` / `%kill`로 조종 |

@@ -24,6 +24,13 @@ function _toSab(typed) {
   return sab;
 }
 
+function _resolveShardParts(rawParts, maxParts, label) {
+  if (!Number.isInteger(maxParts) || maxParts < 1) throw new Error(`${label}: 준비된 워커 없음(boot 먼저)`);
+  if (rawParts === undefined || rawParts === null) return maxParts;
+  if (!Number.isInteger(rawParts) || rawParts < 1) throw new Error(`${label}: parts는 양의 정수여야 한다`);
+  return Math.min(rawParts, maxParts);
+}
+
 // matmul 워커 파이썬: arg의 SAB에서 A블록(mp x k)과 전체 B(k x n)를 numpy로 재구성해 C_p = A_p @ B를
 // 계산하고, 공유 출력 SAB의 자기 행블록 위치(outOff)에 바이트로 쓴다. SAB는 to_py/frombuffer가
 // 직접 못 쓰므로 입력은 .slice()로 워커 로컬 복사, 출력은 pyodide TypedArray.assign(파이썬 버퍼)로
@@ -280,7 +287,7 @@ export class PyProc {
   // fnSrc: "def _fn(a): ..." (a = 해당 조각의 numpy 1차원 배열). 워커에 numpy가 필요하므로
   // new PyProc({ packages: ["numpy"], setup: "import numpy" })로 부팅하라.
   async mapArray(fnSrc, typed, opts = {}) {
-    const parts = opts.parts || this._pool().length;
+    const parts = _resolveShardParts(opts.parts, this._pool().length, "mapArray");
     const dtypeMap = {
       Float64Array: "float64", Float32Array: "float32", Int32Array: "int32", Uint32Array: "uint32",
       Int16Array: "int16", Uint16Array: "uint16", Int8Array: "int8", Uint8Array: "uint8",
@@ -318,11 +325,12 @@ export class PyProc {
   async matmul(a, b, opts = {}) {
     if (!a || !b || !a.data || !b.data) throw new Error("matmul: a/b는 { data: Float64Array, rows, cols }");
     if (!(a.data instanceof Float64Array) || !(b.data instanceof Float64Array)) throw new Error("matmul: data는 Float64Array(f64 = numpy 기본)");
+    if (![a.rows, a.cols, b.rows, b.cols].every((n) => Number.isInteger(n) && n > 0)) throw new Error("matmul: rows/cols는 양의 정수여야 한다");
     if (a.cols !== b.rows) throw new Error(`matmul: 차원 불일치 (${a.rows}x${a.cols}) @ (${b.rows}x${b.cols})`);
     if (a.data.length !== a.rows * a.cols || b.data.length !== b.rows * b.cols) throw new Error("matmul: data 길이가 rows*cols와 불일치");
     const pool = this._pool();
     if (!pool.length) throw new Error("matmul: 준비된 워커 없음(boot 먼저)");
-    const M = a.rows, K = a.cols, N = b.cols, P = Math.max(1, Math.min(opts.parts || pool.length, pool.length, M));
+    const M = a.rows, K = a.cols, N = b.cols, P = _resolveShardParts(opts.parts, Math.min(pool.length, M), "matmul");
     // A, B, 출력 C를 SAB로(공유). A/B 입력은 memcpy 1회로 SAB화(계약: 제로카피 불가).
     const aSab = _toSab(a.data), bSab = _toSab(b.data), outSab = new SharedArrayBuffer(M * N * 8);
     const per = Math.floor(M / P);
@@ -330,7 +338,7 @@ export class PyProc {
       const startRow = i * per, rows = i === P - 1 ? M - startRow : per;
       return { aSab, aOff: startRow * K * 8, mp: rows, k: K, n: N, bSab, outSab, outOff: startRow * N * 8 };
     }).filter((m) => m.mp > 0);
-    const res = await this.map(MATMUL_FN, metas);
+    const res = await this.map(MATMUL_FN, metas, opts);
     const bad = res.find((r) => r && r.error);
     if (bad) throw new Error("matmul: 워커 실패 " + bad.error);
     return { data: new Float64Array(outSab), rows: M, cols: N };
