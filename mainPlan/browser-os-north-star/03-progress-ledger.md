@@ -1151,3 +1151,38 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포, 권한 UI, `resume.py` 정책을 외부 제품 gate로 고정한다.
 3. WebVM/JupyterLite/marimo 대비 정면 벤치 표를 Speed Lab 방식의 반복 봉투로 설계한다.
+
+## 2026-07-15 - 설치 패키지 제품 게이트에 signed machine 동선 추가
+
+문제:
+
+- `npm run test:consumer`는 설치된 패키지 기준으로 public specifier, SRI, SW 등록, `VirtualOrigin`, `PyProc` worker를 검증했지만, 브라우저 OS의 핵심인 signed `.pymachine`, trust fingerprint, 권한 manifest, `resume.py` 자원 재개설까지는 제품 소비자 관점에서 묶지 못했다.
+- Machine demo와 attempts는 repo 상대 import 경로라 "라이브러리 내부에서는 되지만 설치 소비 앱에서 깨지는" 결함을 막는 근거가 약했다.
+- 외부 제품으로 바로 건너가기 전에 pyproc이 소유한 설치 패키지 소비자 게이트가 제품 시나리오의 최소 계약을 강제해야 한다.
+
+완료:
+
+- `tests/browser/productConsumer.mjs`의 설치 앱 import를 `bootSession`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `MachineJail`까지 넓혔다.
+- 같은 headless 소비 앱이 `MachineJail({ net:false, clipboard:false, home:true, workers:false })`를 설치하고, policy object와 Python `pyprocJail` 초크포인트가 같은 권한을 집행하는지 검증한다.
+- 설치 앱이 `/home/web/resume.py`와 SQLite DB 상태를 가진 세션을 signed `.pymachine`으로 export하고, signer fingerprint 안정성, 무신뢰 공개키 거부, wrong key 거부, trusted public key open을 검증한다.
+- trusted open 뒤 `Init.resume("product.openMachine")`을 실행해 `/home/web/product/state.txt`와 `resume.db` row 2개가 살아 있는지 확인한다.
+- 소비 계약, 테스트 운영 문서, OS 판정표를 "설치 패키지 게이트는 닫힘, 실제 외부 제품 UI gate는 남음"으로 맞췄다.
+
+검증:
+
+- `node --check tests/browser/productConsumer.mjs` PASS.
+- `npm test` GREEN 588/588.
+- `npm run test:consumer` GREEN 15/15.
+- 실측: Runtime boot 3662ms, VirtualOrigin 18ms, PyProc worker 1646ms, machine boot 1540ms, signed `.pymachine` 10.8MB export 57ms, trusted open 1706ms.
+
+판정:
+
+- pyproc이 직접 통제하는 설치 패키지 소비자 게이트는 이제 Browser Python OS 제품 최소 흐름을 한 번에 검증한다: 실행 자산 SRI, Python URL server, worker process, 권한 manifest, signed machine image, resume hook.
+- 이것은 codaro/dartlab/xlpod 같은 실제 외부 제품 적용을 대체하지 않는다. 다만 외부 제품이 붙어야 할 계약을 `node_modules/pyproc` 소비 앱에서 먼저 고정했으므로, 다음 외부 배선의 실패 원인을 제품 UI/배포키/라우팅으로 좁힐 수 있다.
+- OS 점수는 70/100 유지한다. 75점대 제품 표면 구간은 실제 외부 제품 gate에서 `.pymachine` 또는 `VirtualOrigin` UI 동선을 닫은 뒤 재산정한다.
+
+NEXT:
+
+1. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+2. 외부 제품의 공개키 배포, 권한 UI, `resume.py` 정책을 gate로 닫는다.
+3. WebVM/JupyterLite/marimo 대비 정면 벤치 표를 Speed Lab 방식의 반복 봉투로 설계한다.

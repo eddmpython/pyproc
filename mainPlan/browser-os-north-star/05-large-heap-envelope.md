@@ -46,7 +46,7 @@
 남은 축:
 
 1. 공개키 배포와 권한 UI의 외부 제품 gate.
-2. machine image 또는 VirtualOrigin 제품 배선.
+2. 외부 제품의 machine image 또는 VirtualOrigin 제품 배선.
 3. 외부 제품 `resume.py` gate.
 
 이 셋이 통과하면 75점대 제품 표면 구간 진입 여부를 재산정한다.
@@ -54,5 +54,5 @@
 ## 다음
 
 1. 공개키 배포와 권한 UI의 외부 제품 gate.
-2. machine image 또는 VirtualOrigin 제품 배선.
+2. 외부 제품의 machine image 또는 VirtualOrigin 제품 배선.
 3. 외부 제품 `resume.py` gate.

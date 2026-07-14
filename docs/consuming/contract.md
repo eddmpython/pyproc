@@ -123,6 +123,8 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 
 부활(저널/세션/openMachine) 후에는 파일 핸들·DB 커넥션 같은 프로세스 자원이 힙 델타만으로 보장되지 않는다: `.pymachine`은 파이썬 힙과 `/home/web` 파일 바이트를 복원하지만 열린 fd, 소켓, DB 커넥션은 다시 열어야 하므로, 소비자는 `Init.resume(reason)`으로 `/home/web/resume.py`를 실행해 그런 자원을 재개설한다. 제품별 정책은 [resumeCatalog.md](resumeCatalog.md)가 정본이다. signature는 출처 검증이지 sandbox 권한 허가가 아니므로, 제품은 공개키 배포와 권한 UI를 별도로 관리한다. 이 정책은 [trustPermissions.md](trustPermissions.md)가 정본이다.
 
+`npm run test:consumer`는 repo 상대 import 없이 설치된 `node_modules/pyproc`만 노출한 브라우저 앱에서 이 계약을 같이 검증한다. 같은 게이트가 `MachineJail` 권한 manifest, signed `.pymachine` export/open, trusted public key와 wrong key 거부, signer fingerprint, `/home/web/resume.py`의 SQLite connection 재개설까지 실행하므로, 외부 제품은 이 흐름을 그대로 자기 UI와 배포 키 관리에 붙이면 된다.
+
 subpath export: `pyproc/assets`, `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `pyproc/process-os`, `pyproc/worker`. **src 내부 경로 deep import 금지** (내부 파일 배치는 릴리즈 간 바뀔 수 있다. 실제로 v0.0.3에서 레이어 폴더로 재배치됐고 subpath 이름은 불변이었다).
 
 - 타입은 동봉된 `index.d.ts`가 계약이다.

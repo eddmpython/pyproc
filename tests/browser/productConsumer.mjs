@@ -86,7 +86,19 @@ const html = `<!DOCTYPE html>
 <body>
   <pre id="out">running</pre>
   <script type="module">
-    import { boot, PyProc, VirtualOrigin, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc";
+    import {
+      boot,
+      bootSession,
+      PyProc,
+      VirtualOrigin,
+      verifyPyProcAssetIntegrity,
+      registerPyProcServiceWorker,
+      openMachine,
+      createMachineKeyPair,
+      exportMachinePublicKey,
+      fingerprintMachinePublicKey,
+      MachineJail
+    } from "pyproc";
     import { getPyProcAssetManifest } from "pyproc/assets";
 
     const out = document.getElementById("out");
@@ -121,9 +133,12 @@ const html = `<!DOCTYPE html>
         ]);
       }
     };
+    const uniqueName = (prefix) => prefix + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
 
     let sw = null;
     let origin = null;
+    let opfsRoot = null;
+    const cleanupEntries = [];
     try {
       check("crossOriginIsolated", crossOriginIsolated === true);
 
@@ -194,6 +209,22 @@ const html = `<!DOCTYPE html>
         virtualJson.gate === "installed-virtual-origin",
         timings.virtualOriginMs + "ms");
 
+      const jail = new MachineJail({ net: false, clipboard: false, home: true, workers: false });
+      const jailPolicy = jail.install(rt);
+      let blockedNet = false;
+      try { rt.run("import pyprocJail\\npyprocJail.net('https://example.com')"); }
+      catch (e) { blockedNet = String(e).includes("PermissionError") || String(e).includes("jail"); }
+      const homeAllowed = rt.run("import pyprocJail\\npyprocJail.home()") === true;
+      check("MachineJail enforces installed product permission manifest",
+        jailPolicy.connectSrc === "'self'" &&
+        jailPolicy.permissions.net === false &&
+        jailPolicy.permissions.clipboard === false &&
+        jailPolicy.permissions.home === true &&
+        jailPolicy.permissions.workers === false &&
+        blockedNet &&
+        homeAllowed,
+        "connect-src=" + jailPolicy.connectSrc);
+
       t = performance.now();
       const os = new PyProc({ indexURL: INDEX, assetIntegrity });
       const workerBoot = await os.boot(1, false);
@@ -201,11 +232,89 @@ const html = `<!DOCTYPE html>
       await os.terminate();
       timings.processMs = Math.round(performance.now() - t);
       check("PyProc worker runs from installed package", JSON.stringify(mapped) === JSON.stringify([36, 49, 64]), workerBoot.avgBootMs + "ms");
+
+      opfsRoot = await navigator.storage.getDirectory();
+      const homeName = uniqueName("pyprocProductHome");
+      cleanupEntries.push(homeName);
+      const homeDir = await opfsRoot.getDirectoryHandle(homeName, { create: true });
+      const resumeSrc = [
+        "import os, sqlite3",
+        "os.makedirs('/home/web/product', exist_ok=True)",
+        "resumeReasonSeen = pyprocResumeReason",
+        "resumeDbPath = '/home/web/product/resume.db'",
+        "resumeConn = sqlite3.connect(resumeDbPath)",
+        "resumeConn.execute('create table if not exists event(reason text, value integer)')",
+        "resumeConn.execute('insert into event(reason, value) values (?, ?)', (resumeReasonSeen, globals().get('resumeValue', -1)))",
+        "resumeConn.commit()",
+        "resumeCount = resumeConn.execute('select count(*) from event').fetchone()[0]",
+      ].join("\\n");
+
+      t = performance.now();
+      const machine = await bootSession({ indexURL: INDEX });
+      timings.machineBootMs = Math.round(performance.now() - t);
+      const home = await machine.rt.mountHome(homeDir);
+      machine.rt.fs.mkdirTree("/home/web/product");
+      machine.rt.fs.writeFile("/home/web/resume.py", resumeSrc);
+      machine.rt.fs.writeFile("/home/web/product/state.txt", "product-state=41");
+      machine.rt.run("resumeValue = 41\\nresumeNote = 'browser-os-product'");
+      const freshResume = machine.rt.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("product.fresh");
+      await home.sync();
+      check("installed product resume.py prepares machine resources",
+        freshResume.resume === true &&
+        machine.rt.run("resumeReasonSeen") === "product.fresh" &&
+        machine.rt.run("resumeCount") === 1,
+        timings.machineBootMs + "ms");
+
+      t = performance.now();
+      const keyPair = await createMachineKeyPair();
+      const trustedPublicKey = await exportMachinePublicKey(keyPair);
+      const fpFromPair = await fingerprintMachinePublicKey(keyPair);
+      const fpFromJwk = await fingerprintMachinePublicKey(trustedPublicKey);
+      check("installed product trust fingerprint is stable",
+        fpFromPair === fpFromJwk && /^sha256:[0-9a-f]{64}$/.test(fpFromPair),
+        fpFromPair.slice(0, 23));
+
+      const imageBlob = await machine.exportImage({ includeHome: true, signingKey: keyPair });
+      timings.machineExportMs = Math.round(performance.now() - t);
+      timings.machineMB = +(imageBlob.size / 1048576).toFixed(1);
+      check("installed product exports signed .pymachine with home",
+        imageBlob.size > 0 && imageBlob.type === "application/x-pymachine",
+        timings.machineMB + "MB, " + timings.machineExportMs + "ms");
+
+      let untrustedDenied = false;
+      try { await openMachine(imageBlob, { requireSignature: true }); }
+      catch (e) { untrustedDenied = String(e).includes("signature") || String(e).includes("공개키"); }
+      check("installed product refuses untrusted .pymachine", untrustedDenied);
+
+      const wrongKeyPair = await createMachineKeyPair();
+      const wrongPublicKey = await exportMachinePublicKey(wrongKeyPair);
+      let wrongKeyDenied = false;
+      try { await openMachine(imageBlob, { trustedPublicKeys: [wrongPublicKey], requireSignature: true }); }
+      catch (e) { wrongKeyDenied = String(e).includes("signature") || String(e).includes("공개키"); }
+      check("installed product refuses wrong signer key", wrongKeyDenied);
+
+      t = performance.now();
+      const openedMachine = await openMachine(imageBlob, { trustedPublicKeys: [trustedPublicKey], requireSignature: true });
+      timings.machineOpenMs = Math.round(performance.now() - t);
+      const openedResume = openedMachine.rt.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("product.openMachine");
+      const openedRows = openedMachine.rt.run("resumeConn.execute('select count(*) from event').fetchone()[0]");
+      check("installed product opens trusted .pymachine and resumes resources",
+        openedResume.resume === true &&
+        openedMachine.rt.fs.readFile("/home/web/product/state.txt", { encoding: "utf8" }) === "product-state=41" &&
+        openedMachine.rt.run("resumeReasonSeen") === "product.openMachine" &&
+        openedMachine.rt.run("resumeValue") === 41 &&
+        openedRows === 2,
+        "open=" + timings.machineOpenMs + "ms, rows=" + openedRows);
     } catch (e) {
       check("uncaught", false, e && (e.stack || e.message || String(e)));
     } finally {
       if (origin) origin.unbind();
       if (sw) await sw.registration.unregister();
+      if (opfsRoot) {
+        for (const name of cleanupEntries) {
+          try { await opfsRoot.removeEntry(name, { recursive: true }); } catch (e) {}
+        }
+      }
       await report();
     }
   </script>
