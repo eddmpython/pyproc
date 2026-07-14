@@ -708,3 +708,45 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `AsgiServer`/`VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. MachineJournal append-only pack/prune으로 장기 OPFS 파일 수와 GC를 줄인다.
+
+## 2026-07-15 - codaro AsgiServer product gate로 브라우저 서버 소비 확인
+
+문제:
+
+- 직전 NEXT는 codaro가 `.pymachine` 또는 `AsgiServer`/`VirtualOrigin` 중 하나를 더 소비해 OS primitive 제품 증거를 넓히는 것이었다.
+- `Runtime.fs` 제품 gate는 파일 세계를 닫았지만, 브라우저 OS에서 "서버" 축은 아직 제품 표면 아래에서 검증되지 않았다.
+- pyproc의 `AsgiServer`가 examples와 dartlab에서 성립해도 codaro가 공개 표면으로 가져가지 않으면 공통 커널 SSOT 증거가 약하다.
+
+완료:
+
+- codaro가 pyproc pin을 `a7fc83906cfa7bf24c009c8631043738423fa84a`로 올렸다.
+- codaro `527e0e2627e7e85f75a2b760b3bf3e59d5b4b184`가 `pyproc-asgi-browser` product gate를 추가했다.
+- `browserPythonRuntime.ts` diagnostic hook에 `verifyAsgiServer()`가 추가됐다. 이 hook은 실제 pyproc runtime을 boot한 뒤 `rt.enableAsgiServer({ app })`를 호출한다.
+- 브라우저 커널 안 Python ASGI 앱은 `POST /codaro/pyproc-asgi?value=41` 요청의 method, path, query, body, `x-codaro-gate: browser-os-server` header를 읽고, `207` 응답과 `x-codaro-runtime: pyproc-asgi` header를 돌려준다.
+- Playwright gate는 build된 editor를 정적 서버로 띄운 뒤 Chromium page context에서 `diagnostics.verifyAsgiServer()`를 실행하고, `output/test-runner/pyproc-asgi-browser/pyproc-asgi-report.json`에 status, path, query, request header, response header, body byte length, transport signal을 남긴다.
+- codaro `quality-cycle`과 `product-quality-audit`는 `pyproc-asgi-report.json`을 artifact freshness evidence로 대조한다.
+- pyproc 소비 계약과 OS 판정표는 codaro가 `Runtime.fs`와 `AsgiServer`를 제품 gate로 소비하는 상태로 갱신했다.
+
+검증:
+
+- codaro `npm run check` GREEN.
+- codaro `uv run python -X utf8 -m pytest tests/runtime/testRunEntrypoint.py -q --tb=short` GREEN 14/14.
+- codaro `uv run python -X utf8 tests/run.py gate editor-runtime-preflight` GREEN.
+- codaro `uv run python -X utf8 tests/run.py gate product-quality-audit` GREEN.
+- codaro `uv run python -X utf8 tests/run.py gate pyproc-asgi-browser` GREEN.
+- codaro `uv run python -X utf8 tests/run.py gate pyproc-assets-browser` GREEN.
+- codaro `uv run python -X utf8 tests/run.py gate pyproc-runtime-fs-browser` GREEN.
+- codaro `uv run python -X utf8 tests/run.py preflight` GREEN 3/3.
+- codaro `git push origin main` 완료: `e862593f..527e0e26`.
+
+판정:
+
+- 이전 NEXT 1번의 `AsgiServer` 축은 닫혔다. codaro는 이제 pyproc 공개 표면으로 브라우저 파일 세계와 브라우저 안 Python 서버를 모두 제품 gate에서 소비한다.
+- Phase 5의 "제품 하나가 복원, 파일, 서버 또는 프로세스 OS 중 둘 이상을 공개 표면으로 사용" 조건은 파일 + 서버 조합으로 충족된다.
+- 다만 `VirtualOrigin`은 아직 제품 URL fetch로 닫히지 않았고, `.pymachine` 세션 이미지는 제품 소비 증거가 없다. OS 점수는 보수적으로 70/100 유지한다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. MachineJournal append-only pack/prune으로 장기 OPFS 파일 수와 GC를 줄인다.

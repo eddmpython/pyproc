@@ -104,7 +104,8 @@
 2. deep import 또는 `raw` 접점이 생기면 pyproc 표면을 확장하거나 소비 설계를 고친다.
 3. `getPyProcAssetManifest()`, `pyproc-assets` CLI, `verifyPyProcAssetIntegrity()`를 소비 배포 파이프라인의 copy/SRI/runtime preflight 정본으로 쓴다.
 4. 소비자 문서에 버전 핀과 권한 경계를 남긴다.
-5. codaro는 Vite base-aware `pyproc-assets.json` fetch와 editor build 후처리 생성기를 갖췄고, pyproc SHA `7ac859b2f09c8a3a83d2f808afb48550293f63df` 핀 뒤 실제 editor build가 25개 파일 graph와 5개 entrypoint role을 산출한다.
+5. codaro는 Vite base-aware `pyproc-assets.json` fetch와 editor build 후처리 생성기를 갖췄고, pyproc SHA `a7fc83906cfa7bf24c009c8631043738423fa84a` 핀 뒤 실제 editor build가 25개 파일 graph와 5개 entrypoint role을 산출한다.
+6. codaro는 `Runtime.fs`와 `AsgiServer`를 공개 표면으로 소비하는 제품 gate를 갖췄다. `pyproc-runtime-fs-browser`는 JS `Runtime.fs`와 Python `open()`이 같은 파일 세계를 보는지 확인하고, `pyproc-asgi-browser`는 브라우저 커널 안 Python ASGI 앱 요청/응답 왕복을 확인한다.
 
 완료 조건:
 
