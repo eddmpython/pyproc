@@ -4,6 +4,26 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 6: 프레임 traversal(same-origin iframe 내부 조작) 실측 GREEN + src 승격
+
+고정 화면 셸이 사이트를 iframe에 담는 비전과 직결되는 프레임 드릴다운. attempts 게이트18(a-c), `bootIsolationRunner`
+**50/50 GREEN**.
+
+- **frames/frame**: `frames()`가 `Page.getFrameTree`로 프레임 목록(톱 + 자식), `frame(url=/name=)`이 프레임 핸들
+  (`Frame`)을 돌려준다. Frame op는 `Page.createIsolatedWorld`로 프레임별 isolated world contextId를 즉시 얻어
+  (executionContextCreated 이벤트 추적 불필요 = 강건) 그 컨텍스트에서 `Runtime.evaluate`.
+- **프레임 내부 표면**: evaluate/text/html/attr/value/exists/count + click(element.click())/type/fill(value setter)/
+  waitFor. isolated world는 DOM 공유·페이지 JS 변수 격리라, 클릭 검증은 window 플래그가 아니라 DOM 변경으로 관측
+  (게이트18c: 자식 프레임 버튼 클릭 -> cmarker 텍스트 변경). fill/value/text/exists/location.pathname 전부 성립.
+- **카빙**: `evaluate(expr, frameId?)`에 frameId 옵션만 추가(기존 호출 무영향), 프레임 문맥 op는 `frameOp` 단일
+  진입 + 내부 verb 분기(frameWorlds 캐시). protocol op 2개(frames/frameOp)만 는다.
+- **정직한 경계(실측이 드러냄)**: cross-origin iframe은 site isolation으로 **OOPIF(별도 프로세스)** = 메인 세션
+  `getFrameTree`에 안 잡히고 createIsolatedWorld 불가(localhost/127.0.0.1 자식 실측: count=1). cross-origin 프레임
+  드릴다운은 `Target.setAutoAttach(flatten)` + per-frame 세션이 필요한 별개 축. **현재는 same-origin 프레임 전용**으로
+  명시(index.d.ts/contract.md). 대부분의 임베드 앱/에디터는 same-origin이라 실사용 가치 있음.
+- **src 승격**: protocol/host + browserControl.js `Frame` 클래스 + index.d.ts `BrowserFrame` 인터페이스 + contract.md.
+  실 src 픽스처에 프레임 드릴다운(text/fill/value) 회귀 추가 -> **GREEN 5/5**. `npm test` **559 green**.
+
 ### 2026-07-14 Phase 5: 네트워크 심화(콜백형 held routing·요청 변조·응답 바디) 실측 GREEN + src 승격
 
 Phase 4 네트워크 가로채기를 요청 단위 동적 제어까지 밀었다. attempts 게이트17(a-e) 신설, `bootIsolationRunner`
