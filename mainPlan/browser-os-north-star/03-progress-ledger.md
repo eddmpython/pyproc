@@ -898,3 +898,38 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. 제품별 `resume.py` 자원 정책 카탈로그를 만든다.
+
+## 2026-07-15 - 설치 패키지 consumer gate에 VirtualOrigin URL 동선 추가
+
+문제:
+
+- `VirtualOrigin`은 examples와 runtimeParity probe에서는 성립했지만, 설치된 npm 패키지를 임시 제품 앱에서 소비하는 `test:consumer`는 Runtime/PyProc/SW 등록까지만 봤다.
+- 제품 배포에서 중요한 것은 repo 상대 import가 아니라 `node_modules/pyproc` 공개 표면, 설치된 `pyproc-assets`, 등록된 `pyprocSw.js`가 함께 실제 URL fetch를 처리하는지다.
+- 기존 `pyprocSw.js`의 ASGI 라우팅은 `pathname.indexOf(ASGI_PREFIX)`라서 `/node_modules/pyproc/...` 안의 `/pyproc/`도 ASGI 경로로 오인할 수 있었다.
+
+완료:
+
+- `tests/browser/productConsumer.mjs`에 설치 패키지 기준 `VirtualOrigin` 소비를 추가했다.
+- consumer gate가 `registerPyProcServiceWorker(assetIntegrity, { cache: true, asgi: "/pyproc/", scope: "/" })`로 검증된 SW를 등록하고, 설치된 `boot` + `Runtime.enableAsgiServer` + `VirtualOrigin` 공개 표면만으로 `/pyproc/product/api?value=41` fetch를 Python ASGI까지 보낸다.
+- `pyprocSw.js`의 ASGI 매칭을 `pathname` exact prefix로 고쳤다. `/pyproc/...`는 가로채고, `/node_modules/pyproc/...` 같은 패키지 자산은 가로채지 않는다.
+- 테스트 문서, 소비 계약, README, OS 판정표에 설치 패키지 consumer gate의 `VirtualOrigin` 동선을 반영했다.
+
+검증:
+
+- 1차 `npm run test:consumer`는 의도치 않게 RED를 만들었다. 원인: `/node_modules/pyproc/src/processOs/ipc.js`가 ASGI prefix에 오인되어 Python JSON 응답으로 바뀌고, `assetIntegrity`가 해시 불일치를 잡았다.
+- scope-relative prefix 수리 후 `node tests/browser/run.mjs tests/attempts/runtimeParity/originFidelityProbe.html` GREEN 7/7.
+- `npm run test:consumer` GREEN 8/8.
+- 실측: originFidelity iframe serve 21ms, timeout 10009ms. Product consumer Runtime boot 3239ms, VirtualOrigin fetch 15ms, PyProc worker run 1706ms.
+- VirtualOrigin fetch 뒤에도 PyProc worker graph SRI 검증과 실행이 통과하므로, SW가 설치 패키지 자산을 가로채지 않는다는 회귀 가드가 생겼다.
+
+판정:
+
+- pyproc 자체의 설치 패키지 소비자 표면에서는 `VirtualOrigin` URL 동선이 닫혔다.
+- 이것은 codaro 외부 제품의 `VirtualOrigin` 채택을 대체하지 않는다. 다만 pyproc 패키지 구조가 제품 앱 안에서 Runtime, SW, VirtualOrigin, PyProc을 동시에 소비할 수 있음을 증명한다.
+- OS 점수는 70/100 유지. 외부 제품의 `.pymachine` 또는 `VirtualOrigin` 채택과 공개키·권한 UI가 다음 상승 조건이다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. VirtualOrigin 쿠키/WS/스트리밍 벽을 product-facing compatibility lab으로 묶는다.

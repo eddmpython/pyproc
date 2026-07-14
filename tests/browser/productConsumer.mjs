@@ -86,7 +86,7 @@ const html = `<!DOCTYPE html>
 <body>
   <pre id="out">running</pre>
   <script type="module">
-    import { boot, PyProc, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc";
+    import { boot, PyProc, VirtualOrigin, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc";
     import { getPyProcAssetManifest } from "pyproc/assets";
 
     const out = document.getElementById("out");
@@ -109,7 +109,21 @@ const html = `<!DOCTYPE html>
         });
       } catch (e) {}
     };
+    const waitForServiceWorkerControl = async () => {
+      await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("service worker ready timeout")), 10000)),
+      ]);
+      if (!navigator.serviceWorker.controller) {
+        await Promise.race([
+          new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true })),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("service worker controller timeout")), 10000)),
+        ]);
+      }
+    };
 
+    let sw = null;
+    let origin = null;
     try {
       check("crossOriginIsolated", crossOriginIsolated === true);
 
@@ -120,11 +134,11 @@ const html = `<!DOCTYPE html>
       const verified = await verifyPyProcAssetIntegrity(assetIntegrity, { roles: ["processWorker"] });
       check("installed worker graph SRI verifies", verified.files.includes("src/processOs/worker.js") && verified.files.includes("src/processOs/ipc.js"), verified.verified + " files");
 
-      const sw = await registerPyProcServiceWorker(assetIntegrity, { cache: true, scope: "/" });
+      sw = await registerPyProcServiceWorker(assetIntegrity, { cache: true, asgi: "/pyproc/", scope: "/" });
       check("installed package SW registers from manifest URL",
-        sw.integrity.files.includes("src/capabilities/pyprocSw.js") && sw.url.includes("/node_modules/pyproc/src/capabilities/pyprocSw.js"),
+        sw.integrity.files.includes("src/capabilities/pyprocSw.js") && sw.url.includes("/node_modules/pyproc/src/capabilities/pyprocSw.js") && sw.url.includes("asgi=%2Fpyproc%2F"),
         sw.url);
-      await sw.registration.unregister();
+      await waitForServiceWorkerControl();
 
       let denied = false;
       const badAssetIntegrity = {
@@ -140,6 +154,46 @@ const html = `<!DOCTYPE html>
       timings.bootMs = Math.round(performance.now() - t);
       check("Runtime boots from installed package", rt.run("sum(range(20))") === 190, timings.bootMs + "ms");
 
+      rt.run([
+        "import json",
+        "async def app(scope, receive, send):",
+        "    message = await receive()",
+        "    bodyBytes = message.get('body', b'')",
+        "    requestHeaders = {k.decode(): v.decode() for k, v in scope['headers']}",
+        "    result = {",
+        "        'path': scope['path'],",
+        "        'method': scope['method'],",
+        "        'query': scope['query_string'].decode(),",
+        "        'body': bodyBytes.decode(),",
+        "        'gate': requestHeaders.get('x-product-gate', 'missing'),",
+        "        'runtime': 'pyproc-virtual-origin'",
+        "    }",
+        "    responseBody = json.dumps(result).encode()",
+        "    responseHeaders = [(b'content-type', b'application/json'), (b'x-product-runtime', b'pyproc-virtual-origin')]",
+        "    await send({'type': 'http.response.start', 'status': 207, 'headers': responseHeaders})",
+        "    await send({'type': 'http.response.body', 'body': responseBody})",
+      ].join("\\n"));
+      const asgi = rt.enableAsgiServer({ app: "app" });
+      await asgi.install();
+      origin = new VirtualOrigin(asgi).bind();
+      t = performance.now();
+      const virtualResp = await fetch("/pyproc/product/api?value=41", {
+        method: "POST",
+        headers: { "x-product-gate": "installed-virtual-origin" },
+        body: "hello-from-product",
+      });
+      const virtualJson = await virtualResp.json();
+      timings.virtualOriginMs = Math.round(performance.now() - t);
+      check("VirtualOrigin fetch reaches Python server from installed package",
+        virtualResp.status === 207 &&
+        virtualResp.headers.get("x-product-runtime") === "pyproc-virtual-origin" &&
+        virtualJson.path === "/product/api" &&
+        virtualJson.method === "POST" &&
+        virtualJson.query === "value=41" &&
+        virtualJson.body === "hello-from-product" &&
+        virtualJson.gate === "installed-virtual-origin",
+        timings.virtualOriginMs + "ms");
+
       t = performance.now();
       const os = new PyProc({ indexURL: INDEX, assetIntegrity });
       const workerBoot = await os.boot(1, false);
@@ -150,6 +204,8 @@ const html = `<!DOCTYPE html>
     } catch (e) {
       check("uncaught", false, e && (e.stack || e.message || String(e)));
     } finally {
+      if (origin) origin.unbind();
+      if (sw) await sw.registration.unregister();
       await report();
     }
   </script>

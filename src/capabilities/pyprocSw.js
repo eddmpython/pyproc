@@ -12,7 +12,7 @@
 //       pythonMachine/swOfflineProbe(2차 부팅 CDN miss 0), pythonMachine/swCoiProbe(COI 주입).
 const params = new URL(self.location.href).searchParams;
 const CACHE_ON = params.get("cache") === "1";
-const ASGI_PREFIX = params.get("asgi"); // 예: "/pyproc/". 없으면 위임 꺼짐.
+const ASGI_PREFIX = params.get("asgi"); // 예: "/pyproc/". 없으면 위임 꺼짐. pathname/scope prefix로만 매칭한다.
 const COI_ON = params.get("coi") === "1";
 const CDN = params.get("cdn") || "https://cdn.jsdelivr.net/pyodide/"; // 기본 엔진 배포 지점(runtime.js DEFAULT_INDEX의 버전 상위 접두)
 const CORE_INTEGRITY_URL = params.get("coreIntegrity");
@@ -21,6 +21,36 @@ const CACHE_NAME = "pyprocCore";
 // 커널 무응답 상한(ms). 등록 쿼리로 조정: ?asgiTimeout=30000. 커널이 죽었거나 bind() 전이면
 // 요청이 영원히 매달리는 대신 504로 정직하게 실패한다.
 const ASGI_TIMEOUT_MS = Number(params.get("asgiTimeout") || 10000);
+
+function normalizePathPrefix(value) {
+  if (!value) return null;
+  const raw = String(value);
+  const prefixed = raw.startsWith("/") ? raw : `/${raw}`;
+  return prefixed.endsWith("/") ? prefixed : `${prefixed}/`;
+}
+
+function asgiPathPrefixes(value) {
+  const primary = normalizePathPrefix(value);
+  if (!primary) return [];
+  const prefixes = [primary];
+  const scopePath = new URL(self.registration.scope).pathname;
+  const scopePrefix = scopePath.endsWith("/") ? scopePath : `${scopePath}/`;
+  const relative = String(value).replace(/^\/+/, "");
+  const scoped = normalizePathPrefix(`${scopePrefix}${relative}`);
+  if (scoped && !prefixes.includes(scoped)) prefixes.push(scoped);
+  return prefixes;
+}
+
+const ASGI_PATH_PREFIXES = asgiPathPrefixes(ASGI_PREFIX);
+
+function asgiDispatchPath(pathname) {
+  for (const prefix of ASGI_PATH_PREFIXES) {
+    const rootPath = prefix.slice(0, -1);
+    if (pathname === rootPath) return "/";
+    if (pathname.startsWith(prefix)) return pathname.slice(prefix.length - 1);
+  }
+  return null;
+}
 
 // 커널 클라이언트 등록부(hello). VirtualOrigin.bind()가 보낸다. SW 재시작 시 증발하며,
 // 그 경우 아래 dispatch의 폴백(요청 클라이언트 -> 첫 창)과 타임아웃이 안전망이다.
@@ -36,9 +66,9 @@ self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (CACHE_ON && e.request.url.startsWith(CDN)) return e.respondWith(coreCache(e));
-  if (ASGI_PREFIX && url.origin === self.location.origin) {
-    const i = url.pathname.indexOf(ASGI_PREFIX);
-    if (i !== -1) return e.respondWith(dispatch(e, url.pathname.slice(i + ASGI_PREFIX.length - 1), url.search.slice(1)));
+  if (ASGI_PATH_PREFIXES.length && url.origin === self.location.origin) {
+    const path = asgiDispatchPath(url.pathname);
+    if (path) return e.respondWith(dispatch(e, path, url.search.slice(1)));
   }
   if (COI_ON) return e.respondWith(coiInject(e));
 });
