@@ -14,7 +14,11 @@ const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 // brandGate: 예제가 쓰는 브랜드 자산(마크 SVG + demo.css 팔레트)이 실제로 그려지는지 먼저 본다.
 // 이 층의 실패는 조용하다(파싱 실패 = 이미지가 사라지고, 색만 초기값으로 돌아간다). 파이썬을
 // 안 띄우므로 몇 초면 끝난다: 예제 5쪽을 다 돌리기 전에 진열장이 깨졌는지부터 알려준다.
-const PAGES = ["tests/browser/brandGate.html", "examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/processOs.html"];
+// 빈 문자열 = 랜딩("/"). 랜딩 히어로가 진짜로 CPython을 부팅해 체크포인트/복원을 돌리므로 예제와
+// 같은 급의 실행 표면이다. 랜딩은 배포 루트 기준 상대 경로를 쓰니 반드시 "/"로 열어야 한다
+// (examples/index.html 경로로 열면 assets/와 index.js가 어긋난다. serve.mjs가 "/"를 랜딩에 매핑한다).
+const PAGES = ["tests/browser/brandGate.html", "", "examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/processOs.html"];
+const label = (page) => page || "/ (랜딩 히어로 라이브 데모)";
 
 const browser = findBrowser();
 let resolveReport = null;
@@ -44,7 +48,7 @@ for (const page of PAGES) {
   try { rmSync(profile, { recursive: true, force: true }); } catch (e) {}
   const info = ((result.checks && result.checks[0] && result.checks[0].info) || "").replaceAll("\n", " | ").slice(-150);
   if (result.ok !== true) failed++;
-  console.log(`  ${result.ok === true ? "PASS" : "FAIL"} ${page}${result.timedOut ? " (타임아웃)" : ""}${info ? "\n        " + info : ""}`);
+  console.log(`  ${result.ok === true ? "PASS" : "FAIL"} ${label(page)}${result.timedOut ? " (타임아웃)" : ""}${info ? "\n        " + info : ""}`);
 }
 server.close();
 console.log(`\n결과: ${PAGES.length - failed}/${PAGES.length} ${failed ? "RED" : "GREEN"}`);

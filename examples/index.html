@@ -39,11 +39,22 @@
         <a class="btn ghostBtn" href="https://github.com/eddmpython/pyproc">GitHub</a>
         <code class="chip" id="installChip" title="click to copy">npm install pyproc</code>
       </div>
-      <div class="term heroTerm" aria-hidden="true"><span class="dim"># the machine demo, in 5 lines</span>
-<span class="ok">&gt;&gt;&gt;</span> data = train_for_ten_minutes()
-<span class="dim"># close the tab. reopen tomorrow.</span>
-<span class="ok">&gt;&gt;&gt;</span> data.score()          <span class="dim"># still here. nothing re-ran.</span>
-<span class="ok">&gt;&gt;&gt;</span> %undo                 <span class="dim"># time-travel the heap, ~1ms</span></div>
+
+      <!-- 히어로 데모는 그림이 아니라 진짜다: 누르면 이 탭에서 CPython이 부팅되고, 아래 숫자(부팅 ms,
+           복원 ms, 값)는 전부 그 자리에서 측정된다. 엔진은 누르기 전에 내려받지 않는다(동적 import):
+           랜딩의 첫 로드는 파이썬 없이 가볍고, 증거가 필요한 사람만 비용을 낸다. -->
+      <div class="panel heroDemo">
+        <div class="term" id="heroTerm" aria-live="polite"><span class="dim"># checkpoint, wreck it, time-travel back. live, in this tab.</span>
+<span class="ok">&gt;&gt;&gt;</span> data = list(range(1_000_000))   <span class="dim"># the prepared state</span>
+<span class="ok">&gt;&gt;&gt;</span> cp = checkpoint()               <span class="dim"># a point to return to</span>
+<span class="ok">&gt;&gt;&gt;</span> data.clear()                    <span class="dim"># an agent wrecks it</span>
+<span class="ok">&gt;&gt;&gt;</span> restore(cp)                     <span class="dim"># changed pages only</span>
+<span class="ok">&gt;&gt;&gt;</span> len(data)                       <span class="dim"># whole again, no re-run</span></div>
+        <div class="row heroRun">
+          <button id="runHero">Run this in your browser</button>
+          <span class="status" id="heroStatus">Real CPython, booted here. Nothing downloads until you press it.</span>
+        </div>
+      </div>
     </section>
 
     <section class="stats" aria-label="measured results">
@@ -112,11 +123,76 @@ await os.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</di
       <span><a href="https://github.com/eddmpython/pyproc">GitHub</a> · <a href="https://www.npmjs.com/package/pyproc">npm</a> · <a href="https://buymeacoffee.com/eddmpython">support</a></span>
     </footer>
   </div>
-  <script>
-    // 설치 칩 클릭 = 클립보드 복사(랜딩의 유일한 JS. 실패해도 무해).
+  <script type="module">
+    // 설치 칩 클릭 = 클립보드 복사(실패해도 무해).
     document.getElementById("installChip").addEventListener("click", async (e) => {
       try { await navigator.clipboard.writeText("npm install pyproc"); e.target.textContent = "copied!"; setTimeout(() => { e.target.textContent = "npm install pyproc"; }, 1200); } catch (err) {}
     });
+
+    // 히어로 라이브 데모. index.js는 배포 루트에 있다(pages.yml이 올리고, 로컬 serve.mjs는 "/"를
+    // 이 페이지로 매핑한다). import를 클릭 시점으로 미루는 게 핵심이다: 엔진(수 MB)은 증거를
+    // 보겠다고 누른 사람만 받는다. 숫자는 하나도 하드코딩하지 않는다. 전부 지금 여기서 잰다.
+    const term = document.getElementById("heroTerm");
+    const status = document.getElementById("heroStatus");
+    const runBtn = document.getElementById("runHero");
+    const gateMode = new URLSearchParams(location.search).has("gate");
+    const print = (html) => { term.insertAdjacentHTML("beforeend", "\n" + html); };
+    const gateReport = (ok) => {
+      if (!gateMode) return;
+      fetch("/gateReport", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: term.textContent.slice(-200) }] }),
+      }).catch(() => {});
+    };
+
+    async function runHeroDemo() {
+      runBtn.disabled = true;
+      status.textContent = "Downloading CPython (WebAssembly)...";
+      try {
+        const t0 = performance.now();
+        const { boot } = await import("./index.js");
+        const rt = await boot();
+        const bootMs = Math.round(performance.now() - t0);
+        const version = rt.run("import sys; sys.version.split()[0]");
+        status.innerHTML = `CPython <b class="ok">${version}</b> booted in this tab in <b class="ok">${bootMs}ms</b>`;
+        print("");
+        print(`<span class="dim"># live now, in this tab</span>`);
+
+        const reactive = rt.enableReactive();
+        rt.run("data = list(range(1_000_000))");
+        const sp = reactive.stackSave();
+        const cp = reactive.checkpoint();
+        const prepared = rt.run("len(data)");
+        print(`<span class="ok">&gt;&gt;&gt;</span> len(data)  <span class="ok">${prepared.toLocaleString()}</span>  <span class="dim"># prepared, checkpoint saved</span>`);
+
+        rt.run("data.clear()");
+        const wrecked = rt.run("len(data)");
+        print(`<span class="ok">&gt;&gt;&gt;</span> len(data)  <span class="err">${wrecked}</span>        <span class="dim"># the agent wrecked it</span>`);
+
+        reactive.checkpoint();                     // 실행 경계를 닫는다(복원을 건전하게 만드는 계약)
+        const tr = performance.now();
+        reactive.restoreLive(cp.index, sp);
+        const restoreMs = performance.now() - tr;
+        const restored = rt.run("len(data)");
+        print(`<span class="ok">&gt;&gt;&gt;</span> len(data)  <span class="ok">${restored.toLocaleString()}</span>  <span class="dim"># restored in ${restoreMs.toFixed(1)}ms, no re-run</span>`);
+
+        const ok = prepared === 1000000 && wrecked === 0 && restored === 1000000;
+        status.innerHTML += ok
+          ? ` · heap time-travel in <b class="ok">${restoreMs.toFixed(1)}ms</b>`
+          : ` · <span class="err">unexpected result</span>`;
+        runBtn.textContent = "Run again";
+        runBtn.disabled = false;
+        runBtn.onclick = () => location.reload();
+        gateReport(ok);
+      } catch (e) {
+        status.innerHTML = `<span class="err">Failed: ${e}</span> (needs Chromium/Edge)`;
+        runBtn.disabled = false;
+        gateReport(false);
+      }
+    }
+
+    runBtn.addEventListener("click", runHeroDemo, { once: true });
+    if (gateMode) runHeroDemo(); // 예제 게이트가 랜딩도 사람처럼 연다(?gate=1)
   </script>
 </body>
 </html>
