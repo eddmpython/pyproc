@@ -610,6 +610,7 @@ export class GpuCompute {
 /**
  * MV3 확장 offscreen에서 파이썬이 브라우저를 조작하는 능력. Runtime.enableBrowserControl()로 얻고
  * install() 후 파이썬이 pyprocBrowser.tab(url, mode)로 탭을 연다(블로킹 = JSPI, rt.runAsync 경로).
+ * 표면은 Playwright급: 항법/입력(신뢰)/추출·조회/대기/캡처/에뮬레이션/쿠키(BrowserTab 참조).
  * 조작은 서비스워커의 openBrowserControlHost(별도 subpath "pyproc/browser-control-host")가 chrome.debugger/
  * scripting으로 대행한다. 전제: 확장 offscreen(chrome.runtime) + 호스트가 열려 있음(install이 핸드셰이크로 검증).
  */
@@ -619,16 +620,52 @@ export class BrowserControl {
 
 /**
  * 파이썬 pyprocBrowser.tab(url, mode)이 반환하는 탭 핸들(파이썬 표면 문서화용 타입).
- * mode="script": chrome.scripting(스텔스, isTrusted=false). mode="debugger": chrome.debugger(신뢰입력 isTrusted=true).
- * sessionId는 불투명(tabId 비노출). 탭이 외부 종료되면 이후 op가 SessionLost 예외.
+ * mode="script": chrome.scripting(스텔스, isTrusted=false, 캡처/에뮬 미지원). mode="debugger": chrome.debugger
+ * (신뢰입력 isTrusted=true + 캡처/에뮬 전 표면). sessionId는 불투명(tabId 비노출). 탭 외부 종료 시 이후 op가 SessionLost 예외.
+ * 조작(navigate/click/type/... 체이닝)은 self를 돌려주고, 조회(text/attr/screenshot/...)는 값을 돌려준다.
  */
 export interface BrowserTab {
   readonly mode: "script" | "debugger";
+  /** 항법(load 완료까지 블로킹). back/forward는 히스토리 이동. */
   navigate(url: string): BrowserTab;
+  reload(): BrowserTab;
+  back(): BrowserTab;
+  forward(): BrowserTab;
+  /** 페이지 컨텍스트에서 식을 평가하고 JSON-값을 돌려준다(PyProxy 아님). */
   evaluate(expr: string): unknown;
+  /** 입력. debugger mode는 CDP Input.*(isTrusted=true), script mode는 합성 이벤트(isTrusted=false). */
   click(selector: string): BrowserTab;
+  doubleClick(selector: string): BrowserTab;
+  rightClick(selector: string): BrowserTab;
+  hover(selector: string): BrowserTab;
   type(selector: string, text: string): BrowserTab;
+  fill(selector: string, text: string): BrowserTab;
+  /** 키/조합 입력(예: "Enter", "Tab", "Control+a"). selector 생략 시 활성 요소. */
+  press(key: string, selector?: string): BrowserTab;
+  select(selector: string, value: string): BrowserTab;
+  /** 조회/추출(요소 미발견 시 예외). */
+  text(selector: string): string | null;
+  html(selector: string): string | null;
+  attr(selector: string, name: string): string | null;
+  value(selector: string): string | null;
+  exists(selector: string): boolean;
+  count(selector: string): number;
+  texts(selector: string): string[];
+  boundingBox(selector: string): { x: number; y: number; width: number; height: number; top: number; left: number };
+  title(): string;
+  url(): string;
+  content(): string;
+  /** 대기(타임아웃이면 예외). */
   waitFor(selector: string, timeout?: number): BrowserTab;
+  waitForFunction(expr: string, timeout?: number): BrowserTab;
+  /** 캡처/에뮬레이션(debugger mode 전용, script mode는 미지원 예외). screenshot/pdf는 base64 문자열. */
+  screenshot(fullPage?: boolean, format?: "png" | "jpeg", quality?: number): string;
+  pdf(landscape?: boolean, printBackground?: boolean): string;
+  setViewport(width: number, height: number, deviceScaleFactor?: number, mobile?: boolean): BrowserTab;
+  setUserAgent(userAgent: string): BrowserTab;
+  setHeaders(headers: Record<string, string>): BrowserTab;
+  cookies(urls?: string[]): Array<Record<string, unknown>>;
+  setCookie(name: string, value: string, options?: Record<string, unknown>): BrowserTab;
   close(): void;
 }
 

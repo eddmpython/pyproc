@@ -34,6 +34,45 @@ handle.close()
     pageTitle === "pyprocCdpTarget" && fieldValue === "srcPromoted",
     `title=${pageTitle}, field=${fieldValue}`);
 
+  // 확장 표면(Playwright급)이 실 src로 실동하는지 회귀 게이트: 추출/폼/포인터/대기/캡처/에뮬/쿠키/항법을 관통.
+  const echoTarget = target.replace("/cdpTarget", "/echoHeaders");
+  const g = JSON.parse((await rt.runAsync(`
+import json
+ex = browser.tab("${target}", mode="debugger")
+r = {}
+r["title"] = ex.title()
+r["marker"] = ex.text("#marker")
+r["fieldId"] = ex.attr("#field", "id")
+r["itemCount"] = ex.count("li.item")
+ex.fill("#field", "srcFill")
+r["filled"] = ex.value("#field")
+ex.select("#sel", "two")
+r["selected"] = ex.value("#sel")
+ex.doubleClick("#dbl")
+r["dbl"] = ex.evaluate("JSON.stringify(window.dblReport)")
+ex.press("Enter", "#formField")
+r["submit"] = ex.evaluate("String(window.submitReport)")
+ex.waitForFunction("window.__ready === true", 4000)
+r["ready"] = ex.evaluate("window.__ready === true")
+shot = ex.screenshot()
+r["shotHead"] = shot[:8] if shot else ""
+ex.setViewport(480, 360)
+r["innerWidth"] = ex.evaluate("window.innerWidth")
+ex.setHeaders({"x-pyproc": "srcgate"})
+ex.navigate("${echoTarget}")
+r["echo"] = ("x-pyproc" in ex.text("#h"))
+ex.setCookie("srcCk", "v", url="${target}")
+r["cookieNames"] = [c.get("name") for c in ex.cookies(["${target}"])]
+ex.close()
+json.dumps(r)
+`)));
+  add("실 src 확장 표면(추출/폼/포인터/대기/캡처/에뮬/쿠키)",
+    g.title === "pyprocCdpTarget" && g.marker === "cdpMarkerOk" && g.fieldId === "field" && g.itemCount === 3 &&
+    g.filled === "srcFill" && g.selected === "two" && JSON.parse(g.dbl || "null") && JSON.parse(g.dbl).trusted === true &&
+    g.submit === "true" && g.ready === true && g.shotHead === "iVBORw0K" && g.innerWidth === 480 &&
+    g.echo === true && Array.isArray(g.cookieNames) && g.cookieNames.includes("srcCk"),
+    `filled=${g.filled}, selected=${g.selected}, dbl=${g.dbl}, submit=${g.submit}, shot=${g.shotHead}, innerWidth=${g.innerWidth}, echo=${g.echo}, cookies=${JSON.stringify(g.cookieNames)}`);
+
   const ok = checks.every((c) => c.pass);
   chrome.runtime.sendMessage({ type: "gateResult", ok, checks });
 }

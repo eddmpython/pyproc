@@ -22,22 +22,82 @@ class BrowserTab:
     def __init__(self, sessionId, mode):
         self._sid = sessionId
         self.mode = mode
+    def _op(self, op, **args):
+        return _send(op, sessionId=self._sid, args=args)
+    # 항법
     def navigate(self, url):
-        _send("navigate", sessionId=self._sid, args={"url": url})
-        return self
+        self._op("navigate", url=url); return self
+    def reload(self):
+        self._op("reload"); return self
+    def back(self):
+        self._op("back"); return self
+    def forward(self):
+        self._op("forward"); return self
+    # 실행
     def evaluate(self, expr):
-        return _send("evaluate", sessionId=self._sid, args={"expr": expr}).get("value")
+        return self._op("evaluate", expr=expr).get("value")
+    # 입력
     def click(self, selector):
-        _send("click", sessionId=self._sid, args={"selector": selector})
-        return self
+        self._op("click", selector=selector); return self
+    def doubleClick(self, selector):
+        self._op("doubleClick", selector=selector); return self
+    def rightClick(self, selector):
+        self._op("rightClick", selector=selector); return self
+    def hover(self, selector):
+        self._op("hover", selector=selector); return self
     def type(self, selector, text):
-        _send("type", sessionId=self._sid, args={"selector": selector, "text": text})
-        return self
+        self._op("type", selector=selector, text=text); return self
+    def fill(self, selector, text):
+        self._op("fill", selector=selector, text=text); return self
+    def press(self, key, selector=None):
+        self._op("press", key=key, selector=selector); return self
+    def select(self, selector, value):
+        self._op("select", selector=selector, value=value); return self
+    # 조회/추출
+    def text(self, selector):
+        return self._op("text", selector=selector).get("value")
+    def html(self, selector):
+        return self._op("html", selector=selector).get("value")
+    def attr(self, selector, name):
+        return self._op("attr", selector=selector, name=name).get("value")
+    def value(self, selector):
+        return self._op("value", selector=selector).get("value")
+    def exists(self, selector):
+        return self._op("exists", selector=selector).get("value")
+    def count(self, selector):
+        return self._op("count", selector=selector).get("value")
+    def texts(self, selector):
+        return self._op("texts", selector=selector).get("value")
+    def boundingBox(self, selector):
+        return self._op("boundingBox", selector=selector).get("value")
+    def title(self):
+        return self._op("title").get("value")
+    def url(self):
+        return self._op("url").get("value")
+    def content(self):
+        return self._op("content").get("value")
+    # 대기
     def waitFor(self, selector, timeout=10000):
-        _send("waitFor", sessionId=self._sid, args={"selector": selector, "timeout": timeout})
-        return self
+        self._op("waitFor", selector=selector, timeout=timeout); return self
+    def waitForFunction(self, expr, timeout=10000):
+        self._op("waitForFunction", expr=expr, timeout=timeout); return self
+    # 캡처/에뮬레이션(debugger mode 전용, script mode는 미지원 예외)
+    def screenshot(self, fullPage=False, format="png", quality=None):
+        return self._op("screenshot", fullPage=fullPage, format=format, quality=quality).get("value")
+    def pdf(self, landscape=False, printBackground=True):
+        return self._op("pdf", landscape=landscape, printBackground=printBackground).get("value")
+    def setViewport(self, width, height, deviceScaleFactor=1, mobile=False):
+        self._op("setViewport", width=width, height=height, deviceScaleFactor=deviceScaleFactor, mobile=mobile); return self
+    def setUserAgent(self, userAgent):
+        self._op("setUserAgent", userAgent=userAgent); return self
+    def setHeaders(self, headers):
+        self._op("setHeaders", headers=headers); return self
+    def cookies(self, urls=None):
+        return self._op("cookies", urls=urls).get("value")
+    def setCookie(self, name, value, **kwargs):
+        self._op("setCookie", name=name, value=value, **kwargs); return self
     def close(self):
-        _send("closeSession", sessionId=self._sid)
+        self._op("closeSession")
 
 def tab(url=None, mode="script"):
     resp = _send("openSession", mode=mode)

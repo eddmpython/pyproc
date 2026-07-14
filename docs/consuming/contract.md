@@ -65,7 +65,9 @@ subpath export: `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `p
 **두 절반(같은 핀 강제)**:
 - offscreen: `boot()` + `Runtime.enableBrowserControl()` + `install()` (능력, index import). JSPI 필요 = `rt.runAsync` 경로.
 - service worker: `openBrowserControlHost()` (subpath `pyproc/browser-control-host`).
-- 두 절반은 `browserControlProtocol`의 버전된 메시지로 통신하고, `install()`이 핸드셰이크로 버전 불일치를 loud fail한다. **두 절반은 반드시 같은 pyproc 핀**이어야 한다(다른 핀 = 프로토콜 드리프트 = 런타임 파손).
+- 두 절반은 `browserControlProtocol`의 버전된 메시지로 통신하고(현재 `PROTOCOL_VERSION=2`), `install()`이 핸드셰이크로 버전 불일치를 loud fail한다. **두 절반은 반드시 같은 pyproc 핀**이어야 한다(다른 핀 = 프로토콜 드리프트 = 런타임 파손).
+
+**조작 표면(`pyprocBrowser.tab(url, mode)` -> `BrowserTab`)**: 항법(navigate/reload/back/forward), 입력(click/doubleClick/rightClick/hover/type/fill/press/select), 조회·추출(evaluate/text/html/attr/value/exists/count/texts/boundingBox/title/url/content), 대기(waitFor/waitForFunction), 캡처·에뮬레이션(screenshot/pdf/setViewport/setUserAgent/setHeaders/cookies/setCookie). 조작 계열은 핸들을 돌려 체이닝되고, 조회 계열은 JSON-값을 돌려준다(structured clone 경계라 PyProxy 아님). mode="debugger"는 CDP 신뢰 입력(isTrusted=true) + 캡처·에뮬 전 표면, mode="script"는 chrome.scripting 합성 입력(isTrusted=false)이고 캡처·에뮬은 미지원 예외다. 캡처·에뮬은 추가 권한이 아니라 `debugger`가 여는 CDP Page/Network/Emulation 도메인으로 대행한다. 전 표면은 attempts 게이트 + 실 src 픽스처로 브라우저 실측 통과(정본 타입: `index.d.ts`의 `BrowserTab`).
 
 **manifest 필수 키(pyproc 런타임 요구, 제품이 못 바꾸는 계약)**:
 

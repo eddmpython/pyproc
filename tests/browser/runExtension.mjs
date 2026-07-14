@@ -54,10 +54,27 @@ async function main() {
       let body = ""; req.on("data", (c) => (body += c)); req.on("end", () => { res.writeHead(204); res.end(); try { reportResolve(JSON.parse(body)); } catch (e) { reportResolve({ ok: false, checks: [], parseError: String(e) }); } });
       return;
     }
-    // 조작 타깃 페이지(버튼/입력칸): 픽스처 offscreen이 pyprocBrowser로 navigate 후 evaluate/type한다.
+    // 조작 타깃 페이지: 픽스처 offscreen이 실 src pyprocBrowser로 확장 표면(추출/폼/포인터/에뮬/쿠키)을 왕복한다.
     if (req.url.startsWith("/cdpTarget")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end("<!doctype html><html><head><title>pyprocCdpTarget</title></head><body><div id=\"marker\">cdpMarkerOk</div><input id=\"field\" value=\"\"><script>window.clickReport={clicked:false};</script></body></html>");
+      res.end(`<!doctype html><html><head><title>pyprocCdpTarget</title></head><body>
+<div id="marker">cdpMarkerOk</div>
+<input id="field" value="">
+<select id="sel"><option value="one">1</option><option value="two">2</option></select>
+<ul><li class="item">a</li><li class="item">b</li><li class="item">c</li></ul>
+<div id="dbl" style="position:absolute;top:80px;left:220px;width:160px;height:40px">dbl</div>
+<form id="form" style="position:absolute;top:160px;left:220px"><input id="formField" value=""></form>
+<script>
+window.clickReport={clicked:false};
+document.getElementById('dbl').addEventListener('dblclick',function(e){window.dblReport={trusted:e.isTrusted};});
+document.getElementById('form').addEventListener('submit',function(e){e.preventDefault();window.submitReport=true;});
+setTimeout(function(){window.__ready=true;},400);
+</script></body></html>`);
+      return;
+    }
+    if (req.url.startsWith("/echoHeaders")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html><head><title>echo</title></head><body><pre id="h">${JSON.stringify(req.headers)}</pre></body></html>`);
       return;
     }
     res.writeHead(404); res.end();
