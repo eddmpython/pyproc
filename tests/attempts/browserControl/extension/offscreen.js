@@ -143,6 +143,13 @@ class BrowserTab:
         self._op("enableDownloads"); return self
     def waitForDownload(self, timeout=10000):
         return self._op("waitForDownload", timeout=timeout).get("value")
+    # 콘솔/에러 캡처(debugger mode 전용): console.* + 미처리 예외를 관측(AI 에이전트가 페이지 로그·에러를 본다).
+    def enableConsole(self):
+        self._op("enableConsole"); return self
+    def consoleLogs(self):
+        return self._op("consoleLogs").get("value")
+    def waitForConsole(self, pattern, timeout=10000):
+        return self._op("waitForConsole", pattern=pattern, timeout=timeout).get("value")
     # 프레임 traversal(iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
     def frames(self):
         return self._op("frames").get("value")
@@ -697,6 +704,29 @@ json.dumps(r)
         add("게이트21: 다운로드 관측(downloadWillBegin -> 파일명/URL 회수)",
           g21.filename === "report.txt" && String(g21.url).includes("/downloadFile"),
           `filename=${g21.filename}, state=${g21.state}, url=${g21.url}`);
+
+        // 게이트22: 콘솔/에러 캡처. 페이지의 console.*(consoleAPICalled) + 미처리 예외(exceptionThrown)를 관측한다
+        // (AI 에이전트가 페이지가 무엇을 로그·에러냈는지 본다). log/error/exception 세 종류를 다 잡는지 검증.
+        const g22 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+r = {}
+d.enableConsole()
+d.evaluate("console.log('pyprocLog', 42); console.error('pyprocErr'); setTimeout(function(){ throw new Error('pyprocThrow') }, 30)")
+hit = d.waitForConsole("pyprocLog", 3000)
+r["logText"] = hit["text"] if hit else None
+d.waitForConsole("pyprocThrow", 3000)
+logs = d.consoleLogs()
+r["types"] = sorted(set(l["type"] for l in logs))
+r["hasErr"] = any("pyprocErr" in l["text"] for l in logs)
+r["hasThrow"] = any("pyprocThrow" in l["text"] for l in logs)
+d.close()
+json.dumps(r)
+`)));
+        add("게이트22: 콘솔/에러 캡처(console.log/error + 미처리 예외 관측)",
+          String(g22.logText).includes("pyprocLog") && String(g22.logText).includes("42") &&
+          g22.hasErr === true && g22.hasThrow === true &&
+          g22.types.includes("log") && g22.types.includes("error") && g22.types.includes("exception"),
+          `logText=${g22.logText}, types=${JSON.stringify(g22.types)}, hasErr=${g22.hasErr}, hasThrow=${g22.hasThrow}`);
 
         // 게이트20: 파이썬 워커 N=세션 N 진짜 병렬. 각 워커가 자기 Pyodide 인터프리터(독립 GIL)를 부팅하고
         // run_sync(JSPI) + offscreen 라우터로 자기 세션을 몰아 조작한다(제약 A 우회). 프로세스 OS x 브라우저
