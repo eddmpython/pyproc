@@ -10,6 +10,8 @@
 //                        - 제품 배포가 같은 오리진에 둬야 하는 Worker/SW 실행 자산 manifest
 //   verifyPyProcAssetIntegrity
 //                        - pyproc-assets SRI manifest를 Worker spawn 전 실제 배포 바이트와 대조
+//   registerPyProcServiceWorker
+//                        - pyprocServiceWorker graph를 SRI 검증한 뒤 같은 manifest URL로만 SW 등록
 //   boot()               - Pyodide 런타임 부팅 -> Runtime(engineScriptIntegrity/coreIntegrity로 부트 자산 SRI 검증)
 //   bootEnv()            - uv 레인: 환경 선언 + 캐시 디렉터리 -> 웜 부팅(스냅샷+휠, 실측 3.61배)
 //   runScript()          - 브라우저판 uv run: PEP 723 인라인 의존성 자동 설치 + 실행
@@ -46,7 +48,7 @@
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
 export { boot, Runtime, MemoryCapability, PAGE_SIZE, checkEnvironment } from "./src/runtime/runtime.js";
-export { getPyProcAssetManifest, verifyPyProcAssetIntegrity, PYPROC_ASSET_MANIFEST_VERSION } from "./src/runtime/assets.js";
+export { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker, PYPROC_ASSET_MANIFEST_VERSION } from "./src/runtime/assets.js";
 export { ReactiveController } from "./src/capabilities/reactive.js";
 export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
 export { SocketBridge } from "./src/capabilities/socketBridge.js";

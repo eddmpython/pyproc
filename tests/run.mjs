@@ -35,6 +35,7 @@ console.log("[표면]");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 for (const [name, kind] of [
   ["getPyProcAssetManifest", "function"], ["verifyPyProcAssetIntegrity", "function"], ["PYPROC_ASSET_MANIFEST_VERSION", "number"],
+  ["registerPyProcServiceWorker", "function"],
   ["boot", "function"], ["checkEnvironment", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
   ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["FileSystem", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["createMachineKeyPair", "function"], ["exportMachinePublicKey", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
   ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"],
@@ -81,6 +82,42 @@ await checkAsync("asset integrity preflight가 graph 바이트를 검증", async
     rejected = String(e).includes("해시 불일치");
   }
   if (!rejected) throw new Error("잘못된 SRI를 거부하지 않음");
+});
+await checkAsync("Service Worker 등록 helper가 검증한 manifest URL만 사용", async () => {
+  const path = "src/capabilities/pyprocSw.js";
+  const bytes = readFileSync(join(ROOT, path));
+  const integrity = "sha256-" + createHash("sha256").update(bytes).digest("base64");
+  const manifest = { files: [{ path, url: "/src/capabilities/pyprocSw.js", bytes: bytes.byteLength, integrity, roles: ["pyprocServiceWorker"] }] };
+  const calls = [];
+  const nav = {
+    serviceWorker: {
+      register: async (url, options) => {
+        calls.push({ url, options });
+        return { ok: true, unregister: async () => true };
+      },
+    },
+  };
+  const fetchOk = async () => ({
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+  const r = await api.registerPyProcServiceWorker(manifest, {
+    navigator: nav,
+    fetch: fetchOk,
+    cache: true,
+    asgi: "/pyproc/",
+    coreIntegrity: "/pyodide-integrity.json",
+    coreRequired: false,
+    scope: "/",
+  });
+  if (calls.length !== 1) throw new Error("register 호출 수 오류");
+  const u = new URL(calls[0].url, "https://example.test/");
+  if (u.pathname !== "/src/capabilities/pyprocSw.js") throw new Error(`register 경로 오류: ${calls[0].url}`);
+  if (u.searchParams.get("cache") !== "1" || u.searchParams.get("asgi") !== "/pyproc/") throw new Error(`query 오류: ${u.search}`);
+  if (u.searchParams.get("coreIntegrity") !== "/pyodide-integrity.json" || u.searchParams.get("coreRequired") !== "0") throw new Error(`coreIntegrity query 오류: ${u.search}`);
+  if (calls[0].options.scope !== "/") throw new Error("scope 전달 누락");
+  if (r.file !== path || r.integrity.verified !== 1 || r.url !== calls[0].url) throw new Error("반환값 오류");
 });
 // checkEnvironment는 표준 전역만 읽어 구조화된 진단을 돌려준다(Node에서도 던지지 않는다).
 check("checkEnvironment() 진단 형태", () => {
@@ -292,7 +329,7 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
-for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE"]) {
+for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
   });
@@ -409,6 +446,8 @@ check("브라우저 게이트가 CLI asset manifest를 소비", () => {
   if (!runSrc.includes('"/pyproc-assets.json"')) throw new Error("run.mjs가 asset manifest endpoint를 제공하지 않음");
   if (!gateSrc.includes('fetch("/pyproc-assets.json"')) throw new Error("gate.html이 CLI 산출 manifest를 fetch하지 않음");
   if (!gateSrc.includes('assetOk.verified > 1') || !gateSrc.includes('"src/processOs/ipc.js"')) throw new Error("gate.html이 graph 단위 preflight를 검증하지 않음");
+  if (!gateSrc.includes("registerPyProcServiceWorker") || !gateSrc.includes("coreIntegrity=/pyproc-assets.json"))
+    throw new Error("gate.html이 Service Worker 등록 경로와 SW coreIntegrity를 검증하지 않음");
   if (!gateSrc.includes("Runtime -> SyscallBridge 상속 거부") || !gateSrc.includes("assetIntegrity 상속 childWorker"))
     throw new Error("gate.html이 Runtime assetIntegrity 상속 경로를 검증하지 않음");
   if (!ciSrc.includes("npm run test:consumer")) throw new Error("CI가 제품 소비자 브라우저 게이트를 실행하지 않음");

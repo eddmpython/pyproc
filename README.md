@@ -205,7 +205,7 @@ Capabilities are opt-in - turn on only what you need, and consume the capability
 
 | Export | What |
 | --- | --- |
-| `getPyProcAssetManifest` / `verifyPyProcAssetIntegrity` / `PYPROC_ASSET_MANIFEST_VERSION` | Deployment asset contract: lists the Worker/SharedWorker/Service Worker entrypoints that must be served from the consumer's same origin, emits stable roles for copy/SRI pipelines, and verifies a `pyproc-assets` SRI manifest before worker spawn |
+| `getPyProcAssetManifest` / `verifyPyProcAssetIntegrity` / `registerPyProcServiceWorker` / `PYPROC_ASSET_MANIFEST_VERSION` | Deployment asset contract: lists the Worker/SharedWorker/Service Worker entrypoints that must be served from the consumer's same origin, emits stable roles for copy/SRI pipelines, verifies a `pyproc-assets` SRI manifest before worker spawn, and registers `pyprocSw.js` only after the matching service-worker asset is verified |
 | `checkEnvironment()` | Environment preflight: are `crossOriginIsolated` / SAB / JSPI ready, and if not, what to add (each gap comes with a copy-paste fix) |
 | `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` (`lockFileURL` for lock reproduction, `coreCacheDir` for offline core, `engineScriptIntegrity` / `coreIntegrity` for boot asset SRI) |
 | `bootEnv(manifest, dirs)` | The uv lane: bare-snapshot + wheel-cache warm boot (second boot ~1229ms vs ~5109ms cold) |
@@ -252,7 +252,7 @@ Deployment asset manifest:
 npx pyproc-assets --baseURL /vendor/pyproc/ --out public/vendor/pyproc-assets.json --copy-to public/vendor/pyproc
 ```
 
-The CLI follows the Worker / SharedWorker / Service Worker import graph, copies the required files when `--copy-to` is set, and emits `sha256-...` integrity for every file. Load that JSON and pass it as `assetIntegrity` to `boot`, `PyProc`, `SharedKernel`, `MachineContainer`, `JobControl`, or `bootWasi` to preflight the relevant worker graph before it is spawned. The same path contract is available at runtime through `getPyProcAssetManifest()`, and direct checks can call `verifyPyProcAssetIntegrity()`.
+The CLI follows the Worker / SharedWorker / Service Worker import graph, copies the required files when `--copy-to` is set, and emits `sha256-...` integrity for every file. Load that JSON and pass it as `assetIntegrity` to `boot`, `PyProc`, `SharedKernel`, `MachineContainer`, `JobControl`, or `bootWasi` to preflight the relevant worker graph before it is spawned. Register the service worker through `registerPyProcServiceWorker(assetIntegrity, { cache: true, coreIntegrity: "/pyodide-integrity.json" })` so the verified manifest URL is the one registered, and so `pyprocSw.js` can SRI-check script/module/wasm/zip requests that browser dynamic imports would otherwise fetch outside a JavaScript `fetch` wrapper. The same path contract is available at runtime through `getPyProcAssetManifest()`, and direct checks can call `verifyPyProcAssetIntegrity()`.
 
 ## Setup
 

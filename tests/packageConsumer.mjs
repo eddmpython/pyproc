@@ -8,7 +8,7 @@ const { tmp, appDir } = await installPackedPyProc("pyprocConsumer-");
 
 try {
   const smoke = `
-    import { PyProc, getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc";
+    import { PyProc, getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc";
     import { getPyProcAssetManifest as fromAssets } from "pyproc/assets";
 
     const manifest = getPyProcAssetManifest({ baseURL: "/vendor/pyproc/" });
@@ -17,6 +17,7 @@ try {
     if (subpathManifest.assets.length !== manifest.assets.length) throw new Error("assets subpath drift");
     if (typeof PyProc !== "function") throw new Error("PyProc export missing");
     if (typeof verifyPyProcAssetIntegrity !== "function") throw new Error("verify export missing");
+    if (typeof registerPyProcServiceWorker !== "function") throw new Error("service worker register export missing");
     if (!manifest.assets.some((a) => a.role === "processWorker")) throw new Error("processWorker role missing");
   `;
   run(process.execPath, ["--input-type=module", "-e", smoke], { cwd: appDir });

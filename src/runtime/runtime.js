@@ -43,7 +43,17 @@ function normalizeCoreIntegrity(policy) {
 function expectedCoreIntegrity(policy, url, name) {
   if (!policy) return null;
   const href = new URL(url, location.href).href;
-  return policy.files[href] || policy.files[url] || policy.files[name] || null;
+  const pathname = new URL(href).pathname;
+  let relative = null;
+  const indexRoot = policy.indexURL ? new URL(policy.indexURL, location.href).href : "";
+  if (indexRoot && href.startsWith(indexRoot)) relative = href.slice(indexRoot.length);
+  return policy.files[href]
+    || policy.files[url]
+    || policy.files[pathname]
+    || policy.files[pathname.replace(/^\/+/, "")]
+    || (relative ? policy.files[relative] : null)
+    || policy.files[name]
+    || null;
 }
 
 async function verifyIntegrity(data, expected, label) {
@@ -104,6 +114,7 @@ export async function boot(opts = {}) {
   // manifest가 strict(required 기본 true)일 때 누락된 자산은 실패한다. 변조 캐시는 네트워크로
   // 조용히 우회하지 않는다: 로컬 캐시도 실행 바이트이므로 파손이면 부팅을 멈춘다.
   const coreIntegrity = normalizeCoreIntegrity(opts.coreIntegrity);
+  if (coreIntegrity) coreIntegrity.indexURL = indexURL;
   const cache = opts.coreCacheDir || coreIntegrity
     ? { dir: opts.coreCacheDir || null, hits: 0, misses: 0, verified: 0, integrityMissing: 0, integrity: coreIntegrity }
     : null;

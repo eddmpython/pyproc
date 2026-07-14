@@ -86,7 +86,7 @@ const html = `<!DOCTYPE html>
 <body>
   <pre id="out">running</pre>
   <script type="module">
-    import { boot, PyProc, verifyPyProcAssetIntegrity } from "pyproc";
+    import { boot, PyProc, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc";
     import { getPyProcAssetManifest } from "pyproc/assets";
 
     const out = document.getElementById("out");
@@ -119,6 +119,12 @@ const html = `<!DOCTYPE html>
       const assetIntegrity = await fetch("/pyproc-assets.json", { cache: "no-store" }).then((r) => r.json());
       const verified = await verifyPyProcAssetIntegrity(assetIntegrity, { roles: ["processWorker"] });
       check("installed worker graph SRI verifies", verified.files.includes("src/processOs/worker.js") && verified.files.includes("src/processOs/ipc.js"), verified.verified + " files");
+
+      const sw = await registerPyProcServiceWorker(assetIntegrity, { cache: true, scope: "/" });
+      check("installed package SW registers from manifest URL",
+        sw.integrity.files.includes("src/capabilities/pyprocSw.js") && sw.url.includes("/node_modules/pyproc/src/capabilities/pyprocSw.js"),
+        sw.url);
+      await sw.registration.unregister();
 
       let denied = false;
       const badAssetIntegrity = {

@@ -670,3 +670,41 @@ NEXT:
 
 1. pyproc의 Service Worker 등록 경로와 Pyodide 내부 import 모듈까지 같은 manifest 정책으로 봉인한다.
 2. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `AsgiServer`/`VirtualOrigin` 중 하나로 잡는다. 파일 세계가 닫혔으므로 다음은 상태 부활 또는 브라우저 서버다.
+
+## 2026-07-15 - Service Worker 등록 자산과 내부 import 경로 SRI 봉인
+
+문제:
+
+- `assetIntegrity`는 worker graph를 spawn 전에 검증하지만, Service Worker는 소비자가 직접 `navigator.serviceWorker.register("<문자열>")`를 조합했다.
+- 이 구조에서는 "검증한 pyprocSw.js"와 "실제로 등록한 pyprocSw.js"가 갈라질 수 있다.
+- `boot({ coreIntegrity })`는 JS `fetch` wrapper로 indexURL fetch 경로를 검증하지만, 브라우저 동적 `import()`가 가져가는 script/module 경로는 wrapper 밖이다. 이 경로는 SW fetch 이벤트에서 봉인해야 한다.
+
+완료:
+
+- 공개 표면 `registerPyProcServiceWorker()` 추가. `pyproc-assets` 산출물의 `pyprocServiceWorker` role을 SRI 검증한 뒤 그 manifest `file.url`만 등록한다.
+- helper가 `cache`, `asgi`, `coi`, `cdn`, `coreIntegrity`, `coreRequired`, `asgiTimeout`, `scope`를 안전하게 query/registration option으로 조립한다.
+- `pyprocSw.js?cache=1&coreIntegrity=<manifest>` 모드 추가. SW가 cache 대상 response를 캐시 전과 cache hit 반환 전에 SHA-256으로 검증한다.
+- SW `coreIntegrity`는 URL/path 기준으로 매칭한다. 파일명 단독 매칭은 이름 충돌 여지를 남기므로 SW 봉인 경로에서는 쓰지 않는다.
+- `runtime.js`의 `coreIntegrity` 매칭은 indexURL 상대 path와 URL pathname을 추가로 인식하게 했다. 기존 filename manifest와도 호환된다.
+- 브라우저 게이트가 `registerPyProcServiceWorker()`로 실제 SW를 root scope에 등록하고, `/src/capabilities/pyprocSw.js`는 200, manifest에 없는 `/src/capabilities/virtualOrigin.js`는 500으로 수렴하는지 확인한다.
+- 제품 소비자 게이트도 설치된 npm package에서 helper가 `/node_modules/pyproc/src/capabilities/pyprocSw.js`를 등록하는지 확인한다.
+- README/README.ko/소비 계약/OS 판정표/pythonMachine README를 현재 계약으로 갱신했다.
+
+검증:
+
+- `npm test` GREEN 572/572.
+- `npm run test:consumer` GREEN 7/7. installed package SW registers from manifest URL PASS.
+- `npm run test:browser` GREEN 47/47. Service Worker register 경로 봉인 PASS, SW `coreIntegrity` import 경로 검증 PASS.
+- `node tests/browser/run.mjs tests/attempts/pythonMachine/runtimeIntegrityProbe.html` GREEN 6/6. 기존 `engineScriptIntegrity`/`coreIntegrity`/OPFS 변조 거부 회귀 없음.
+
+판정:
+
+- 이전 NEXT 1번은 닫혔다. pyproc 자체의 실행 자산 신뢰 체인은 `pyodide.js` SRI, fetch core `coreIntegrity`, worker graph `assetIntegrity`, Service Worker 등록 helper, SW `coreIntegrity`로 나뉘어 각 브라우저 경로에서 집행된다.
+- 이 변경은 속도 직접 개선은 아니지만, 로컬급 OS 목표의 배포 신뢰성과 구조 완성도를 올린다. 신뢰할 수 없는 바이트를 빠르게 실행하는 것은 목표가 아니다.
+- OS 점수는 보수적으로 70/100을 유지한다. 남은 상승 근거는 공개키 배포/권한 UI, `.pymachine` 또는 `AsgiServer`/`VirtualOrigin`의 제품 소비 확장, journal pack/prune이다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `AsgiServer`/`VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. MachineJournal append-only pack/prune으로 장기 OPFS 파일 수와 GC를 줄인다.

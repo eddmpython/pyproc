@@ -11,7 +11,7 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, Runtime, PyProc, SIGNAL, bootSession, runScript, checkEnvironment, verifyPyProcAssetIntegrity } from "../../index.js";
+    import { boot, Runtime, PyProc, SIGNAL, bootSession, runScript, checkEnvironment, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "../../index.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -48,6 +48,31 @@
       const assetIntegrity = await fetch("/pyproc-assets.json", { cache: "no-store" }).then((r) => r.json());
       const assetOk = await verifyPyProcAssetIntegrity(assetIntegrity, { roles: ["processWorker"] });
       check("assetIntegrity: CLI graph preflight", assetOk.verified > 1 && assetOk.files.includes("src/processOs/worker.js") && assetOk.files.includes("src/processOs/ipc.js"), `${assetOk.verified} files, ${assetOk.bytes} bytes`);
+      const sealedSw = await registerPyProcServiceWorker(assetIntegrity, {
+        cache: true,
+        cdn: `${location.origin}/src/capabilities/`,
+        coreIntegrity: "/pyproc-assets.json",
+        scope: "/",
+      });
+      check("assetIntegrity: Service Worker register 경로 봉인",
+        sealedSw.integrity.files.includes("src/capabilities/pyprocSw.js") && sealedSw.url.includes("/src/capabilities/pyprocSw.js"),
+        sealedSw.url);
+      await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("service worker ready timeout")), 10000)),
+      ]);
+      if (!navigator.serviceWorker.controller) {
+        await Promise.race([
+          new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true })),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("service worker controller timeout")), 10000)),
+        ]);
+      }
+      const swGood = await fetch(`/src/capabilities/pyprocSw.js?swSeal=${Date.now()}`, { cache: "reload" });
+      const swDenied = await fetch(`/src/capabilities/virtualOrigin.js?swSeal=${Date.now()}`, { cache: "reload" });
+      check("assetIntegrity: SW coreIntegrity가 import 경로를 검증",
+        swGood.ok && swDenied.status === 500,
+        `coreIntegrity=/pyproc-assets.json good ${swGood.status}, missing ${swDenied.status}`);
+      await sealedSw.registration.unregister();
       const badAssetIntegrity = {
         ...assetIntegrity,
         files: assetIntegrity.files.map((f) => f.path === "src/processOs/worker.js" ? { ...f, integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" } : f),

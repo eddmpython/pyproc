@@ -95,6 +95,39 @@ function matchesSelection(file, roleSet, pathSet) {
   return roles.some((r) => roleSet.has(r));
 }
 
+function serviceWorkerFile(manifest) {
+  const files = Array.isArray(manifest?.files) ? manifest.files : [];
+  const selected = files.filter((file) => Array.isArray(file.roles) && file.roles.includes("pyprocServiceWorker"));
+  if (!selected.length) throw new Error("assetIntegrity: pyprocServiceWorker 파일이 없다");
+  const exact = selected.find((file) => file.path === "src/capabilities/pyprocSw.js");
+  return exact || selected[0];
+}
+
+function applyServiceWorkerQuery(url, opts) {
+  const base = globalThis.location?.href || "https://pyproc.invalid/";
+  const u = new URL(url, base);
+  const setParam = (name, value) => {
+    if (value === undefined || value === null || value === false) return;
+    u.searchParams.set(name, value === true ? "1" : String(value));
+  };
+  setParam("cache", opts.cache);
+  setParam("asgi", opts.asgi);
+  setParam("coi", opts.coi);
+  setParam("cdn", opts.cdn);
+  setParam("coreIntegrity", opts.coreIntegrity);
+  if (opts.coreRequired === false) u.searchParams.set("coreRequired", "0");
+  else setParam("coreRequired", opts.coreRequired);
+  setParam("asgiTimeout", opts.asgiTimeout);
+  const query = opts.query;
+  if (query instanceof URLSearchParams) {
+    for (const [key, value] of query) setParam(key, value);
+  } else if (query && typeof query === "object") {
+    for (const [key, value] of Object.entries(query)) setParam(key, value);
+  }
+  if (globalThis.location) return u.href;
+  return `${u.pathname}${u.search}${u.hash}`;
+}
+
 /**
  * pyproc 실행 자산 manifest.
  *
@@ -155,4 +188,29 @@ export async function verifyPyProcAssetIntegrity(manifest, opts = {}) {
     verified.push(file.path);
   }
   return { verified: verified.length, bytes: total, files: verified };
+}
+
+/**
+ * pyproc Service Worker 자산을 SRI 검증한 뒤 manifest에 기록된 URL로 등록한다.
+ *
+ * 소비자가 별도 문자열로 register 경로를 만들면 "검증한 파일"과 "등록한 파일"이 갈라질 수 있다.
+ * 이 helper는 pyproc-assets 산출물의 pyprocServiceWorker role을 먼저 검증하고, 같은 file.url만
+ * register에 넘긴다. query 옵션은 pyprocSw.js의 cache/asgi/coi 모드를 켜는 공개 계약이다.
+ */
+export async function registerPyProcServiceWorker(manifest, opts = {}) {
+  const nav = opts.navigator || globalThis.navigator;
+  if (!nav?.serviceWorker?.register) throw new Error("pyprocServiceWorker: navigator.serviceWorker.register가 필요하다");
+  const file = serviceWorkerFile(manifest);
+  const integrity = await verifyPyProcAssetIntegrity(manifest, {
+    roles: ["pyprocServiceWorker"],
+    fetch: opts.fetch,
+    cache: opts.verifyCache,
+    credentials: opts.credentials,
+  });
+  const url = applyServiceWorkerQuery(file.url, opts);
+  const registrationOptions = {};
+  if (opts.scope) registrationOptions.scope = opts.scope;
+  if (opts.updateViaCache) registrationOptions.updateViaCache = opts.updateViaCache;
+  const registration = await nav.serviceWorker.register(url, registrationOptions);
+  return { registration, integrity, url, file: file.path };
 }

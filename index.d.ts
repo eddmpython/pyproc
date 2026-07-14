@@ -76,6 +76,48 @@ export interface PyProcAssetIntegrityResult {
 
 export function verifyPyProcAssetIntegrity(manifest: PyProcAssetIntegrityManifest, opts?: PyProcAssetIntegrityVerifyOptions): Promise<PyProcAssetIntegrityResult | null>;
 
+export interface PyProcServiceWorkerRegisterOptions {
+  /** 테스트나 특수 실행 환경용 navigator 대체. 생략하면 globalThis.navigator를 쓴다. */
+  navigator?: Navigator;
+  /** SRI preflight용 fetch 대체. */
+  fetch?: typeof fetch;
+  /** SRI preflight fetch cache 옵션. */
+  verifyCache?: RequestCache;
+  credentials?: RequestCredentials;
+  /** pyprocSw.js ?cache=1. script/module/wasm/zip 캐시와 coreIntegrity 검증 경로를 켠다. */
+  cache?: boolean;
+  /** pyprocSw.js ?asgi=/prefix/. VirtualOrigin fetch 위임 접두 경로. */
+  asgi?: string;
+  /** pyprocSw.js ?coi=1. 헤더를 못 다는 호스팅에서 COOP/COEP를 주입한다. */
+  coi?: boolean;
+  /** pyprocSw.js ?cdn=<prefix>. cache/coreIntegrity 대상으로 볼 URL 접두. */
+  cdn?: string;
+  /** pyprocSw.js ?coreIntegrity=<url>. SW가 캐시 대상 바이트를 SRI로 검증할 manifest URL. */
+  coreIntegrity?: string;
+  /** false면 SW coreIntegrity manifest 누락을 통과시킨다. 기본은 strict. */
+  coreRequired?: boolean;
+  asgiTimeout?: number;
+  /** 추가 pyprocSw.js query. true는 "1"로 직렬화한다. */
+  query?: URLSearchParams | Record<string, string | number | boolean | null | undefined>;
+  /** ServiceWorkerRegistrationOptions.scope. */
+  scope?: string;
+  updateViaCache?: ServiceWorkerUpdateViaCache;
+}
+
+export interface PyProcServiceWorkerRegisterResult {
+  registration: ServiceWorkerRegistration;
+  integrity: PyProcAssetIntegrityResult | null;
+  /** 실제 register에 넘긴 URL. */
+  url: string;
+  /** 검증한 manifest 파일 경로. */
+  file: string;
+}
+
+export function registerPyProcServiceWorker(
+  manifest: PyProcAssetIntegrityManifest,
+  opts?: PyProcServiceWorkerRegisterOptions,
+): Promise<PyProcServiceWorkerRegisterResult>;
+
 export interface EnvIssue {
   /** 기계 판별용 코드: "no-cross-origin-isolation" | "no-jspi". */
   code: string;
@@ -100,7 +142,7 @@ export interface EnvReport {
 export type CoreIntegrityMap = Record<string, string>;
 
 export interface CoreIntegrityPolicy {
-  /** 파일명, 절대 URL, 원본 URL 중 하나를 키로 쓰고 값은 표준 SRI 문자열(sha256-...)이다. */
+  /** indexURL 상대 경로, URL pathname, 절대 URL, 파일명 중 하나를 키로 쓰고 값은 표준 SRI 문자열(sha256-...)이다. */
   files: CoreIntegrityMap;
   /** true(기본)면 fetch되는 indexURL 자산이 manifest에 없을 때 실패한다. */
   required?: boolean;

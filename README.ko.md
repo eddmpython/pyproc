@@ -205,7 +205,7 @@ Pyodide  Workers
 
 | Export | 무엇 |
 | --- | --- |
-| `getPyProcAssetManifest` / `verifyPyProcAssetIntegrity` / `PYPROC_ASSET_MANIFEST_VERSION` | 배포 자산 계약: 소비자 same-origin에 둬야 하는 Worker/SharedWorker/Service Worker 엔트리포인트와 안정 role을 돌려준다. 복사/SRI 파이프라인의 정본이고, `pyproc-assets` SRI manifest를 worker spawn 전에 검증한다 |
+| `getPyProcAssetManifest` / `verifyPyProcAssetIntegrity` / `registerPyProcServiceWorker` / `PYPROC_ASSET_MANIFEST_VERSION` | 배포 자산 계약: 소비자 same-origin에 둬야 하는 Worker/SharedWorker/Service Worker 엔트리포인트와 안정 role을 돌려준다. 복사/SRI 파이프라인의 정본이고, `pyproc-assets` SRI manifest를 worker spawn 전에 검증하며, 검증된 service-worker URL만 등록한다 |
 | `checkEnvironment()` | 환경 진단: `crossOriginIsolated` / SAB / JSPI가 준비됐는지, 부족하면 무엇을 어떻게 고칠지(복붙 조치 포함) |
 | `boot(opts)` | Pyodide 런타임 부팅, `Runtime` 반환(`lockFileURL` 락 재현, `coreCacheDir` 오프라인 코어, `engineScriptIntegrity` / `coreIntegrity` 부트 자산 SRI) |
 | `bootEnv(manifest, dirs)` | uv 레인: bare 스냅샷 + wheel 캐시 웜 부팅(2차 ~1229ms vs 콜드 ~5109ms) |
@@ -252,7 +252,7 @@ import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/asset
 npx pyproc-assets --baseURL /vendor/pyproc/ --out public/vendor/pyproc-assets.json --copy-to public/vendor/pyproc
 ```
 
-CLI는 Worker / SharedWorker / Service Worker import graph를 따라가고, `--copy-to`가 있으면 필요한 파일을 복사하며, 모든 파일에 `sha256-...` integrity를 붙인다. 이 JSON을 읽어 `assetIntegrity`로 `boot`, `PyProc`, `SharedKernel`, `MachineContainer`, `JobControl`, `bootWasi`에 넘기면 해당 worker graph를 spawn 전에 검증한다. 같은 경로 정본은 런타임의 `getPyProcAssetManifest()`로도 얻고, 직접 검증은 `verifyPyProcAssetIntegrity()`로 수행한다.
+CLI는 Worker / SharedWorker / Service Worker import graph를 따라가고, `--copy-to`가 있으면 필요한 파일을 복사하며, 모든 파일에 `sha256-...` integrity를 붙인다. 이 JSON을 읽어 `assetIntegrity`로 `boot`, `PyProc`, `SharedKernel`, `MachineContainer`, `JobControl`, `bootWasi`에 넘기면 해당 worker graph를 spawn 전에 검증한다. Service Worker는 `registerPyProcServiceWorker(assetIntegrity, { cache: true, coreIntegrity: "/pyodide-integrity.json" })`로 등록한다. 그래야 검증한 manifest URL과 실제 등록 URL이 갈라지지 않고, 브라우저 동적 import가 JavaScript `fetch` wrapper 밖에서 가져가는 script/module/wasm/zip도 `pyprocSw.js`가 SRI로 검증한다. 같은 경로 정본은 런타임의 `getPyProcAssetManifest()`로도 얻고, 직접 검증은 `verifyPyProcAssetIntegrity()`로 수행한다.
 
 ## 셋업
 

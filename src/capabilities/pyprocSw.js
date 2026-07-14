@@ -2,6 +2,8 @@
 // virtualOrigin.js와 같은 폴더 고정(자산 경로 계약). 이 파일은 SW 컨텍스트에서 돌므로
 // 모듈 import 없이 자기충족이다. 기능은 등록 URL 쿼리로 켠다:
 //   pyprocSw.js?cache=1                 - Pyodide CDN 자산 캐시-우선(2차 부팅 네트워크 0).
+//   pyprocSw.js?cache=1&coreIntegrity=/pyodide-integrity.json
+//                                       - SW가 script/module/wasm/zip 바이트를 캐시 전 SRI 검증.
 //   pyprocSw.js?asgi=/pyproc/           - 그 접두 경로 fetch를 페이지 커널 ASGI로 위임(가상 오리진).
 //   pyprocSw.js?coi=1                   - COOP/COEP 헤더 주입: 헤더를 못 다는 호스팅(GitHub Pages)에서
 //                                         crossOriginIsolated를 성립시켜 SAB(프로세스 OS)를 연다.
@@ -13,6 +15,8 @@ const CACHE_ON = params.get("cache") === "1";
 const ASGI_PREFIX = params.get("asgi"); // 예: "/pyproc/". 없으면 위임 꺼짐.
 const COI_ON = params.get("coi") === "1";
 const CDN = params.get("cdn") || "https://cdn.jsdelivr.net/pyodide/"; // 기본 엔진 배포 지점(runtime.js DEFAULT_INDEX의 버전 상위 접두)
+const CORE_INTEGRITY_URL = params.get("coreIntegrity");
+const CORE_REQUIRED = params.get("coreRequired") !== "0";
 const CACHE_NAME = "pyprocCore";
 // 커널 무응답 상한(ms). 등록 쿼리로 조정: ?asgiTimeout=30000. 커널이 죽었거나 bind() 전이면
 // 요청이 영원히 매달리는 대신 504로 정직하게 실패한다.
@@ -21,6 +25,7 @@ const ASGI_TIMEOUT_MS = Number(params.get("asgiTimeout") || 10000);
 // 커널 클라이언트 등록부(hello). VirtualOrigin.bind()가 보낸다. SW 재시작 시 증발하며,
 // 그 경우 아래 dispatch의 폴백(요청 클라이언트 -> 첫 창)과 타임아웃이 안전망이다.
 let kernelClientId = null;
+let coreIntegrityLoad = null;
 self.addEventListener("message", (e) => {
   if (e.data && e.data.pyprocKernelHello && e.source) kernelClientId = e.source.id;
 });
@@ -55,15 +60,97 @@ async function coiInject(e) {
   return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers });
 }
 
-// 코어 캐시-우선: 한 번 받은 엔진 자산(js/mjs/wasm/zip/lock)은 다시 네트워크에 묻지 않는다.
-// opaque(no-cors script)도 캐시 가능하며 원 응답 헤더가 보존되어 재생 시 CORP/MIME이 산다.
-async function coreCache(e) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(e.request.url);
-  if (cached) return cached;
-  const resp = await fetch(e.request);
-  if (resp.ok || resp.type === "opaque") await cache.put(e.request.url, resp.clone());
+function base64FromBytes(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+async function sha256Sri(data) {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  return "sha256-" + base64FromBytes(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+}
+
+function parseSri(value) {
+  return String(value || "").trim().split(/\s+/).filter((v) => v.startsWith("sha256-"));
+}
+
+function addIntegrityKey(map, key, value) {
+  if (!key || !value) return;
+  map.set(String(key), value);
+  const u = new URL(key, self.location.href);
+  map.set(u.href, value);
+  map.set(u.pathname, value);
+  map.set(u.pathname.replace(/^\/+/, ""), value);
+}
+
+function normalizeIntegrityMap(payload) {
+  const map = new Map();
+  if (Array.isArray(payload?.files)) {
+    for (const file of payload.files) {
+      addIntegrityKey(map, file.url, file.integrity);
+      addIntegrityKey(map, file.path, file.integrity);
+    }
+    return map;
+  }
+  const files = payload?.files && typeof payload.files === "object" ? payload.files : payload;
+  for (const [key, value] of Object.entries(files || {})) addIntegrityKey(map, key, value);
+  return map;
+}
+
+async function coreIntegrityMap() {
+  if (!CORE_INTEGRITY_URL) return null;
+  if (!coreIntegrityLoad) {
+    coreIntegrityLoad = fetch(new URL(CORE_INTEGRITY_URL, self.location.href).href, { cache: "no-store", credentials: "same-origin" })
+      .then((resp) => {
+        if (!resp.ok) throw new Error(`coreIntegrity manifest 로드 실패(${resp.status})`);
+        return resp.json();
+      })
+      .then(normalizeIntegrityMap);
+  }
+  return coreIntegrityLoad;
+}
+
+async function verifyCoreResponse(requestUrl, resp) {
+  const map = await coreIntegrityMap();
+  if (!map) return resp;
+  const u = new URL(requestUrl);
+  const expected = map.get(u.href) || map.get(u.pathname) || map.get(u.pathname.replace(/^\/+/, ""));
+  if (!expected) {
+    if (CORE_REQUIRED) throw new Error(`coreIntegrity: ${u.pathname} 항목이 없다`);
+    return resp;
+  }
+  if (resp.type === "opaque" || resp.type === "opaqueredirect" || resp.status === 0) {
+    throw new Error(`coreIntegrity: ${u.pathname} opaque 응답은 검증할 수 없다`);
+  }
+  const data = await resp.clone().arrayBuffer();
+  const actual = await sha256Sri(data);
+  if (!parseSri(expected).includes(actual)) throw new Error(`coreIntegrity: ${u.pathname} 해시 불일치`);
   return resp;
+}
+
+function integrityFailure(error) {
+  return new Response(String(error instanceof Error ? error.message : error), {
+    status: 500,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+// 코어 캐시-우선: 한 번 받은 엔진 자산(js/mjs/wasm/zip/lock)은 다시 네트워크에 묻지 않는다.
+// coreIntegrity를 주면 script/module import처럼 JS fetch 오버라이드가 못 보는 경로도 SW가 검증한다.
+// opaque(no-cors script)는 검증할 수 없으므로 strict 모드에서는 거부한다.
+async function coreCache(e) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(e.request.url);
+    if (cached) return await verifyCoreResponse(e.request.url, cached);
+    const resp = await fetch(e.request);
+    await verifyCoreResponse(e.request.url, resp);
+    if (resp.ok || resp.type === "opaque") await cache.put(e.request.url, resp.clone());
+    return resp;
+  } catch (error) {
+    return integrityFailure(error);
+  }
 }
 
 // 가상 오리진: 등록된 커널 클라이언트의 VirtualOrigin 배선으로 위임한다.
