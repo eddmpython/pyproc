@@ -271,6 +271,21 @@ check("Speed Lab 반복 벤치 통계 helper 공유", () => {
   if (!speedLab.includes('from "./benchStats.js"')) throw new Error("Speed Lab이 benchStats.js를 쓰지 않음");
   if (!matmulProbe.includes('from "../../../examples/benchStats.js"')) throw new Error("matmulSurfaceProbe가 benchStats.js를 쓰지 않음");
 });
+check("속도 비교 벤치 계약 고정", () => {
+  const contract = readFileSync(join(ROOT, "docs", "operations", "benchmarking.md"), "utf8");
+  const plan = readFileSync(join(ROOT, "mainPlan", "browser-os-north-star", "06-speed-comparison.md"), "utf8");
+  const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");
+  const initiativeMap = readFileSync(join(ROOT, "mainPlan", "browser-os-north-star", "README.md"), "utf8");
+  for (const term of ["S0", "S1", "S2", "S3", "S4", "median", "p95", "raw output", "WebVM", "JupyterLite", "marimo"]) {
+    if (!contract.includes(term)) throw new Error(`benchmarking.md 필수 항목 누락: ${term}`);
+    if (!plan.includes(term)) throw new Error(`06-speed-comparison.md 필수 항목 누락: ${term}`);
+  }
+  for (const term of ["commit", "command", "browser", "engine", "samples", "metrics"]) {
+    if (!contract.includes(term)) throw new Error(`실측 봉투 필드 누락: ${term}`);
+  }
+  if (!docsMap.includes("operations/benchmarking.md")) throw new Error("docs 지도에 benchmarking.md 없음");
+  if (!initiativeMap.includes("06-speed-comparison.md")) throw new Error("이니셔티브 지도에 06-speed-comparison.md 없음");
+});
 for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
   check(`채널 행 고정: ${rel(f)}`, () => {
     const html = readFileSync(f, "utf8");

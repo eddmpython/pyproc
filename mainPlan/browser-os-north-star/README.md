@@ -18,6 +18,7 @@
 4. [03-progress-ledger.md](03-progress-ledger.md) - 결정 원장과 NEXT.
 5. [04-os-verdict-v2.md](04-os-verdict-v2.md) - P2/P4/P6 완료 이후 OS 판정표 v2.
 6. [05-large-heap-envelope.md](05-large-heap-envelope.md) - 512MB 대형 힙 성능 봉투 1차 실측.
+7. [06-speed-comparison.md](06-speed-comparison.md) - WebVM/JupyterLite/marimo 대비 속도 비교 계약과 측정 슬롯.
 
 ## 이번 이니셔티브의 완료 조건
 

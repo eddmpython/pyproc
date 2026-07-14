@@ -1186,3 +1186,36 @@ NEXT:
 1. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
 2. 외부 제품의 공개키 배포, 권한 UI, `resume.py` 정책을 gate로 닫는다.
 3. WebVM/JupyterLite/marimo 대비 정면 벤치 표를 Speed Lab 방식의 반복 봉투로 설계한다.
+
+## 2026-07-15 - 속도 정면 비교 계약 고정
+
+문제:
+
+- Speed Lab은 pyproc 내부 속도 간판으로 정리됐지만, WebVM/JupyterLite/marimo 대비 표를 만들 때 어떤 scenario와 sample 규칙으로 비교할지 아직 문서 계약이 없었다.
+- 비교 표가 먼저 생기면 측정 조건이 섞이고, 단발 수치나 서로 다른 일을 비교한 숫자가 README 문구로 올라갈 위험이 있다.
+- 속도 목표를 강하게 밀려면 외부 비교 전에 "무엇을 재고, 무엇을 주장하지 않는가"부터 기계 가드로 고정해야 한다.
+
+완료:
+
+- `docs/operations/benchmarking.md`를 추가했다. 속도 주장 금지 조건, 실측 봉투 필드(commit/command/browser/host/engine/scenario/samples/metrics/raw output), canonical scenario S0-S4를 정했다.
+- canonical scenario는 basic boot, NumPy sharded matmul, process map, browser server, signed machine resume로 잡았다.
+- `mainPlan/browser-os-north-star/06-speed-comparison.md`를 추가했다. WebVM/JupyterLite/marimo 비교 matrix는 측정 슬롯만 만들고, 외부 성능 주장은 전부 "미측정/보류"로 둔다.
+- docs 지도, 테스트 운영 문서, browser-os 이니셔티브 지도를 새 벤치 계약에 연결했다.
+- `tests/run.mjs`에 "속도 비교 벤치 계약 고정" 구조 가드를 추가했다. S0-S4, median/p95/raw output, WebVM/JupyterLite/marimo, 실측 봉투 필드, 문서 지도 링크가 빠지면 `npm test`가 실패한다.
+
+검증:
+
+- `node --check tests/run.mjs` PASS.
+- `npm test` GREEN 595/595.
+
+판정:
+
+- 이전 NEXT 3번의 "WebVM/JupyterLite/marimo 대비 정면 벤치 표를 Speed Lab 방식의 반복 봉투로 설계한다"는 계약 단계에서는 닫혔다.
+- 아직 외부 실측은 없다. 다음 상승 조건은 S1부터 실제 외부 후보를 같은 브라우저/머신에서 측정하고, raw output을 원장에 남기는 것이다.
+- OS 점수는 70/100 유지한다. 이 작업은 속도 비교의 구조를 닫은 것이고, 실제 상대 성능 증명은 다음 단계다.
+
+NEXT:
+
+1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
+2. pyproc Speed Lab raw report를 JSON으로 저장하는 옵션을 검토한다.
+3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
