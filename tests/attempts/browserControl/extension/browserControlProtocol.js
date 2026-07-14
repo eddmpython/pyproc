@@ -12,6 +12,7 @@ export const OP = {
   evaluate: "evaluate",
   click: "click",
   type: "type",
+  waitFor: "waitFor",
   closeSession: "closeSession",
 };
 

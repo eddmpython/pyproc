@@ -35,6 +35,9 @@ class BrowserTab:
     def type(self, selector, text):
         _send("type", sessionId=self._sid, args={"selector": selector, "text": text})
         return self
+    def waitFor(self, selector, timeout=10000):
+        _send("waitFor", sessionId=self._sid, args={"selector": selector, "timeout": timeout})
+        return self
     def close(self):
         _send("closeSession", sessionId=self._sid)
 
@@ -271,6 +274,16 @@ except Exception as e:
           recEval && recEval.ok === true && recEval.value === "pyprocCdpTarget",
           `recovered=${recEval && recEval.value}, ok=${recEval && recEval.ok}, err=${recEval && recEval.error}${killErr}`);
         try { await chrome.runtime.sendMessage(makeMessage("closeSession", { sessionId: recSid })); } catch (e) {}
+
+        // 게이트14: waitForSelector. 700ms 뒤 등장하는 요소를 대기 후 확인(자동화 안정성 = 요소 나타날 때까지).
+        const waitArr = (await py.runPythonAsync(`
+wt = browser.tab(persistTarget, mode="debugger")
+wt.waitFor("#delayed", 5000)
+appeared = wt.evaluate("document.getElementById('delayed').textContent")
+wt.close()
+[appeared]
+`)).toJs();
+        add("게이트14: waitForSelector(지연 등장 요소 대기)", waitArr[0] === "appeared", `text=${waitArr[0]}`);
       } catch (e) {
         add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }

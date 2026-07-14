@@ -72,6 +72,15 @@ class DebuggerDriver {
     await this.send("Input.insertText", { text });
     return { ok: true };
   }
+  async waitFor(selector, timeoutMs) {
+    const deadline = Date.now() + (timeoutMs || 10000);
+    while (Date.now() < deadline) {
+      const r = await this.evaluate("!!document.querySelector(" + JSON.stringify(selector) + ")");
+      if (r.ok && r.value === true) return { ok: true };
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    return { ok: false, error: "waitFor 타임아웃: " + selector };
+  }
   async detach() { try { await chrome.debugger.detach(this.target); } catch (e) { /* 이미 풀림 */ } }
 }
 
@@ -112,6 +121,15 @@ class ScriptDriver {
       e.dispatchEvent(new Event("change", { bubbles: true }));
       return { ok: true };
     }, [selector, text]);
+  }
+  async waitFor(selector, timeoutMs) {
+    const deadline = Date.now() + (timeoutMs || 10000);
+    while (Date.now() < deadline) {
+      const r = await this.exec((s) => !!document.querySelector(s), [selector]);
+      if (r === true) return { ok: true };
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    return { ok: false, error: "waitFor 타임아웃: " + selector };
   }
   async detach() { /* CDP 없음 */ }
 }
@@ -160,6 +178,7 @@ async function handleOp(msg) {
     if (op === OP.evaluate) return await s.driver.evaluate(args.expr);
     if (op === OP.click) return await s.driver.click(args.selector);
     if (op === OP.type) return await s.driver.type(args.selector, args.text);
+    if (op === OP.waitFor) return await s.driver.waitFor(args.selector, args.timeout);
     if (op === OP.closeSession) {
       await s.driver.detach();
       try { await chrome.tabs.remove(s.tabId); } catch (e) { /* 이미 닫힘 */ }

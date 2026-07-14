@@ -91,6 +91,7 @@ async function main() {
         + "<input id=\"field\" value=\"\">"
         + "<script>window.clickReport={clicked:false};"
         + "document.getElementById('btn').addEventListener('click',function(e){window.clickReport={clicked:true,trusted:e.isTrusted};});"
+        + "setTimeout(function(){var d=document.createElement('div');d.id='delayed';d.textContent='appeared';document.body.appendChild(d);},700);"
         + "</script></body></html>");
       return;
     }

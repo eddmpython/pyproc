@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 (c) SW keep-alive/재attach 복구 실측 GREEN (게이트13)
+
+MV3 SW 30초 소멸/크래시 대응. 세션 메타를 `storage.session`에 write-through + op 진입 시 lazy 재attach.
+러너가 CDP `Target.closeTarget`으로 확장 SW를 강제종료한 뒤, offscreen sendMessage가 SW를 깨우고 재attach로
+세션 복구(recovered=pyprocCdpTarget, ok=true). **발견**: 확장 debugger attach는 SW death에 살아남으므로
+재attach는 "Another debugger already attached"를 기존 attach 재사용으로 처리 + Page.enable/WEBDRIVER_MASK
+재등록. 탭은 렌더러 소유라 SW가 죽어도 살아있다. 30초 자연 소멸은 CDP 강제종료로 대체 검증(자연 타이밍은 환경 의존).
+
 ### 2026-07-14 (b) 프로세스 OS 워커 N=세션 N 실측 GREEN (게이트12)
 
 워커(dedicated Worker, `chrome` 미접근 = 제약 A)가 offscreen 라우터를 거쳐 브라우저를 조작한다(4-홉:
