@@ -4,6 +4,16 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 11: 접근성 트리(role/name 시맨틱 회수) 실측 GREEN + src 승격
+
+에이전트가 DOM 셀렉터 대신 의미(role/name)로 페이지를 이해한다. attempts 게이트23, `bootIsolationRunner` **57/57 GREEN**.
+
+- **accessibilityTree**: `Accessibility.getFullAXTree`로 role/name/value 노드 목록을 회수(무-role 노드 제외).
+  게이트23: 타깃 페이지가 54노드로 잡히고 role에 button/textbox/combobox/link/form/list/option 등, button 이름
+  ["click","dialog","파일 선택","far"]. 시맨틱 네비게이션(button "Submit" 찾기 등)이 성립.
+- **src 승격**: protocol/host + browserControl.js + index.d.ts + contract.md. 실 src 픽스처에 접근성 슬라이스
+  추가 -> **GREEN 6/6**(axCount=41, axButton=true). `npm test` **568 green**.
+
 ### 2026-07-14 Phase 10: 콘솔/에러 캡처(페이지 로그·에러 관측) 실측 GREEN + src 승격
 
 AI 에이전트가 페이지가 무엇을 로그·에러냈는지 본다. attempts 게이트22, `bootIsolationRunner` **56/56 GREEN**.

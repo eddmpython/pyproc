@@ -1,7 +1,7 @@
 # browser-control - 서버리스 · 프로세스 내 브라우저 자동화 파이썬 런타임
 
-상태: **Phase 1-10 구현 완성 (2026-07-14).** attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이
-링 1(MV3 확장) 게이트 1-22를 브라우저 실측으로 통과했다(**56/56 GREEN**): Phase 1(부팅/격리/CDP왕복/신뢰입력/
+상태: **Phase 1-11 구현 완성 (2026-07-14).** attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이
+링 1(MV3 확장) 게이트 1-23을 브라우저 실측으로 통과했다(**57/57 GREEN**): Phase 1(부팅/격리/CDP왕복/신뢰입력/
 조작/다중세션/스텔스/영속세션/세션수명) + Phase 2(고정 화면 non-COI 셸 쿠키·frame-busting / 프로세스 OS 워커
 N=세션 N / SW 재attach 복구 / waitForSelector) + Phase 3(Playwright급 조작 표면: 추출·조회/입력 확장/대기/캡처/
 에뮬레이션/쿠키) + Phase 4(자동 스크롤 / 다이얼로그 자동 처리 / 파일 업로드 / 쿠키 삭제 / 네트워크 가로채기
@@ -10,7 +10,8 @@ abort / 응답 바디 캡처 responseBody) + Phase 6(프레임 traversal = same-
 다크모드 emulateMedia / 타임존 setTimezone / 오프라인 setOffline) + Phase 8(파이썬 워커 N=세션 N 진짜 병렬 =
 각 워커가 자기 Pyodide 인터프리터 + run_sync + offscreen 라우터로 자기 세션을 몬다 = 프로세스 OS x 브라우저 컨트롤 융합)
 + Phase 9(다운로드 관측 = enableDownloads/waitForDownload로 무엇이 다운로드되는지 파일명·URL 회수) + Phase 10
-(콘솔·에러 캡처 = enableConsole/consoleLogs/waitForConsole로 페이지 console.* + 미처리 예외 관측).
+(콘솔·에러 캡처 = enableConsole/consoleLogs/waitForConsole로 페이지 console.* + 미처리 예외 관측) + Phase 11
+(접근성 트리 = accessibilityTree로 role/name 시맨틱 회수, 에이전트의 의미 네비게이션).
 능력을 `src/capabilities/`로 승격: `Runtime.enableBrowserControl()` -> 파이썬 `pyprocBrowser.tab(url, mode)`가 항법/
 입력/조회·추출/대기/캡처·에뮬/쿠키/다이얼로그/네트워크(선언형 + 콜백형)/프레임을 노출한다(script/debugger 두 mode,
 영속 세션 + SW 소멸 복구, 정본 타입 index.d.ts BrowserTab/BrowserFrame). 실 src 런타임 게이트(`test:browser:ext`,
