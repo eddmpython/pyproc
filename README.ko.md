@@ -1,12 +1,30 @@
-<p align="center"><img src="https://raw.githubusercontent.com/eddmpython/pyproc/main/assets/logo.svg" width="88" alt="pyproc logo"></p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/eddmpython/pyproc/main/assets/logo.svg" width="132" alt="pyproc">
+</p>
 
-# pyproc
+<h1 align="center">pyproc</h1>
 
-**AI 에이전트를 위한 상태 보존형 브라우저 Python 런타임.**
+<p align="center"><b>브라우저 탭에서 도는 진짜 파이썬. 서버 없이.</b></p>
 
-브라우저에서 Python을 실행하고, 실행 상태를 살려두고, 격리된 실행 분기로 나누고, 환경을 다시 만들지 않고 이전 상태로 복원한다. 서버도, 실행마다 새 컨테이너도 필요 없다.
+<p align="center">
+  AI 에이전트를 위한 상태 보존형 브라우저 Python 런타임: 실행 상태를 살려두고,<br>
+  격리된 분기로 나누고, 밀리초에 복원한다. 실행마다 새 컨테이너를 띄우지 않는다.
+</p>
 
-[빠른 시작](#빠른-시작) · [AI 에이전트에서 쓰기](#ai-에이전트에서-쓰기) · [상태](#기능-상태) · [라이브 데모](https://eddmpython.github.io/pyproc/) · [English](README.md)
+<p align="center">
+  <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=5b8cff&labelColor=0a0f1c" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-7c4dff?labelColor=0a0f1c" alt="license MPL-2.0"></a>
+  <img src="https://img.shields.io/badge/dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero dependencies">
+  <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-5b8cff?labelColor=0a0f1c" alt="CPython 3.14 on WebAssembly">
+</p>
+
+<p align="center">
+  <a href="https://eddmpython.github.io/pyproc/"><b>라이브 데모</b></a> ·
+  <a href="#빠른-시작">빠른 시작</a> ·
+  <a href="#ai-에이전트에서-쓰기">AI 에이전트에서 쓰기</a> ·
+  <a href="#기능-상태">상태</a> ·
+  <a href="README.md">English</a>
+</p>
 
 ---
 

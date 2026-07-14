@@ -1,12 +1,30 @@
-<p align="center"><img src="https://raw.githubusercontent.com/eddmpython/pyproc/main/assets/logo.svg" width="88" alt="pyproc logo"></p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/eddmpython/pyproc/main/assets/logo.svg" width="132" alt="pyproc">
+</p>
 
-# pyproc
+<h1 align="center">pyproc</h1>
 
-**A stateful, browser-native Python runtime for AI agents.**
+<p align="center"><b>Real Python in your browser tab. No server.</b></p>
 
-Run Python inside the browser, keep the runtime state alive, branch it into isolated execution paths, and restore earlier states without rebuilding the environment. No server, no fresh container per run.
+<p align="center">
+  A stateful, browser-native Python runtime for AI agents: keep the runtime state alive,<br>
+  branch it into isolated paths, restore it in milliseconds. No fresh container per run.
+</p>
 
-[Quick start](#quick-start) · [AI-agent patterns](#using-it-from-an-ai-agent) · [Status](#feature-status) · [Live demo](https://eddmpython.github.io/pyproc/) · [한국어](README.ko.md)
+<p align="center">
+  <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=5b8cff&labelColor=0a0f1c" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-7c4dff?labelColor=0a0f1c" alt="license MPL-2.0"></a>
+  <img src="https://img.shields.io/badge/dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero dependencies">
+  <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-5b8cff?labelColor=0a0f1c" alt="CPython 3.14 on WebAssembly">
+</p>
+
+<p align="center">
+  <a href="https://eddmpython.github.io/pyproc/"><b>Live demo</b></a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#using-it-from-an-ai-agent">AI-agent patterns</a> ·
+  <a href="#feature-status">Status</a> ·
+  <a href="README.ko.md">한국어</a>
+</p>
 
 ---
 
