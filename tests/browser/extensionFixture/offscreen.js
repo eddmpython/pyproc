@@ -108,14 +108,20 @@ d.waitForFunction("window.heldF !== null", 3000)
 r["heldFulfill"] = d.evaluate("window.heldF")
 rb = d.responseBody("/jsonApi")
 r["respBody"] = rb["body"] if rb else None
+fr = d.frame(url="/frameChild")
+fr.waitFor("#cmarker", 3000)
+r["frameText"] = fr.text("#cmarker")
+fr.fill("#cfield", "framedSrc")
+r["frameField"] = fr.value("#cfield")
 d.close()
 json.dumps(r)
 `)));
-  add("실 src 다이얼로그/네트워크(setDialogHandler/route/waitForResponse/held/responseBody)",
+  add("실 src 다이얼로그/네트워크/프레임(setDialogHandler/route/waitForResponse/held/responseBody/frame)",
     g2.dialog === true && g2.dialogMsg === "proceed?" && g2.respStatus === 200 &&
     g2.blocked === "blocked" && g2.mocked === "MOCKED" && g2.heldFulfill === "HELD" &&
-    typeof g2.respBody === "string" && g2.respBody.includes("apihit"),
-    `dialog=${g2.dialog}, status=${g2.respStatus}, blocked=${g2.blocked}, mocked=${g2.mocked}, held=${g2.heldFulfill}, respBody=${g2.respBody}`);
+    typeof g2.respBody === "string" && g2.respBody.includes("apihit") &&
+    g2.frameText === "childOk" && g2.frameField === "framedSrc",
+    `dialog=${g2.dialog}, held=${g2.heldFulfill}, respBody=${g2.respBody}, frameText=${g2.frameText}, frameField=${g2.frameField}`);
 
   const ok = checks.every((c) => c.pass);
   chrome.runtime.sendMessage({ type: "gateResult", ok, checks });

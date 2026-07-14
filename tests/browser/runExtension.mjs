@@ -65,6 +65,7 @@ async function main() {
 <div id="dbl" style="position:absolute;top:80px;left:220px;width:160px;height:40px">dbl</div>
 <form id="form" style="position:absolute;top:160px;left:220px"><input id="formField" value=""></form>
 <button id="dialogBtn" style="position:absolute;top:220px;left:220px;width:160px;height:40px">dialog</button>
+<iframe id="fr" src="/frameChild" style="position:absolute;top:280px;left:220px;width:300px;height:100px"></iframe>
 <script>
 window.clickReport={clicked:false};
 window.dialogResult=null;
@@ -73,6 +74,11 @@ document.getElementById('form').addEventListener('submit',function(e){e.preventD
 document.getElementById('dialogBtn').addEventListener('click',function(){window.dialogResult=window.confirm('proceed?');});
 setTimeout(function(){window.__ready=true;},400);
 </script></body></html>`);
+      return;
+    }
+    if (req.url.startsWith("/frameChild")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html><head><title>child</title></head><body><div id="cmarker">childOk</div><input id="cfield" value=""></body></html>`);
       return;
     }
     if (req.url.startsWith("/echoHeaders")) {

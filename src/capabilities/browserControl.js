@@ -129,8 +129,48 @@ class BrowserTab:
         self._op("abortRequest", id=id); return self
     def responseBody(self, pattern):
         return self._op("responseBody", pattern=pattern).get("value")
+    # 프레임 traversal(same-origin iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
+    def frames(self):
+        return self._op("frames").get("value")
+    def frame(self, url=None, name=None):
+        for f in self.frames():
+            if url is not None and url in (f.get("url") or ""):
+                return Frame(self, f["frameId"])
+            if name is not None and name == f.get("name"):
+                return Frame(self, f["frameId"])
+        raise RuntimeError("frame 미발견: " + str(url or name))
     def close(self):
         self._op("closeSession")
+
+class Frame:
+    # iframe 내부 핸들. op는 프레임의 isolated world에서 실행(합성 입력). cross-origin OOPIF는 별도 축(미지원).
+    def __init__(self, tab, frameId):
+        self._tab = tab
+        self._fid = frameId
+    def _fop(self, verb, **args):
+        return self._tab._op("frameOp", frameId=self._fid, verb=verb, **args)
+    def evaluate(self, expr):
+        return self._fop("evaluate", expr=expr).get("value")
+    def text(self, selector):
+        return self._fop("text", selector=selector).get("value")
+    def html(self, selector):
+        return self._fop("html", selector=selector).get("value")
+    def attr(self, selector, name):
+        return self._fop("attr", selector=selector, name=name).get("value")
+    def value(self, selector):
+        return self._fop("value", selector=selector).get("value")
+    def exists(self, selector):
+        return self._fop("exists", selector=selector).get("value")
+    def count(self, selector):
+        return self._fop("count", selector=selector).get("value")
+    def click(self, selector):
+        self._fop("click", selector=selector); return self
+    def type(self, selector, text):
+        self._fop("type", selector=selector, text=text); return self
+    def fill(self, selector, text):
+        self._fop("fill", selector=selector, text=text); return self
+    def waitFor(self, selector, timeout=10000):
+        self._fop("waitFor", selector=selector, timeout=timeout); return self
 
 def tab(url=None, mode="script"):
     resp = _send("openSession", mode=mode)
@@ -142,6 +182,7 @@ def tab(url=None, mode="script"):
 _mod = types.ModuleType("pyprocBrowser")
 _mod.tab = tab
 _mod.BrowserTab = BrowserTab
+_mod.Frame = Frame
 sys.modules["pyprocBrowser"] = _mod
 `;
 

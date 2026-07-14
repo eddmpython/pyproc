@@ -688,7 +688,28 @@ export interface BrowserTab {
   abortRequest(id: string): BrowserTab;
   /** 응답 바디 캡처(CDP Network.getResponseBody). URL 부분일치 최근 응답의 바디. debugger mode 전용. */
   responseBody(pattern: string): { body: string; base64Encoded: boolean };
+  /** 프레임 traversal(same-origin iframe). frames는 프레임 목록, frame(url/name)은 프레임 핸들. cross-origin OOPIF는 미지원. debugger mode 전용. */
+  frames(): Array<{ frameId: string; url: string; name: string }>;
+  frame(url?: string, name?: string): BrowserFrame;
   close(): void;
+}
+
+/**
+ * 프레임(iframe) 핸들. op는 프레임의 isolated world에서 실행(합성 입력, DOM 공유·JS 변수 격리).
+ * BrowserTab.frame(url/name)으로 얻는다. cross-origin OOPIF는 별도 프로세스라 미지원(same-origin 프레임 전용).
+ */
+export interface BrowserFrame {
+  evaluate(expr: string): unknown;
+  text(selector: string): string | null;
+  html(selector: string): string | null;
+  attr(selector: string, name: string): string | null;
+  value(selector: string): string | null;
+  exists(selector: string): boolean;
+  count(selector: string): number;
+  click(selector: string): BrowserFrame;
+  type(selector: string, text: string): BrowserFrame;
+  fill(selector: string, text: string): BrowserFrame;
+  waitFor(selector: string, timeout?: number): BrowserFrame;
 }
 
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
