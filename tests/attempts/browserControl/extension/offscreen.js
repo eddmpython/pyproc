@@ -138,6 +138,8 @@ class BrowserTab:
         self._op("setTimezone", timezoneId=timezoneId); return self
     def setOffline(self, offline=True):
         self._op("setOffline", offline=offline); return self
+    def setGeolocation(self, latitude, longitude, accuracy=10):
+        self._op("setGeolocation", latitude=latitude, longitude=longitude, accuracy=accuracy); return self
     # 다운로드 관측(debugger mode 전용): downloadWillBegin/Progress로 무엇이 다운로드되는지 회수.
     def enableDownloads(self):
         self._op("enableDownloads"); return self
@@ -690,6 +692,21 @@ json.dumps(r)
           g19.tz === "Asia/Seoul", `tz=${g19.tz}`);
         add("게이트19c: 오프라인 에뮬레이션(navigator.onLine)",
           g19.offline === false && g19.online === true, `offline->onLine=${g19.offline}, online->onLine=${g19.online}`);
+
+        // 게이트25: 지오로케이션 스푸핑(Phase 7 벽 돌파). Browser.grantPermissions는 browser-level이라 막혔지만
+        // chrome.contentSettings.location(확장 API)로 권한을 우회 부여 + Emulation.setGeolocationOverride로 좌표.
+        const g25 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+r = {}
+d.setGeolocation(37.5665, 126.9780)
+d.evaluate("window.__geo=null; navigator.geolocation.getCurrentPosition(function(p){window.__geo=p.coords.latitude}, function(e){window.__geo='err:'+e.code})")
+d.waitForFunction("window.__geo !== null", 5000)
+r["geo"] = d.evaluate("window.__geo")
+d.close()
+json.dumps(r)
+`)));
+        add("게이트25: 지오로케이션 스푸핑(contentSettings 권한 우회 + setGeolocationOverride)",
+          typeof g25.geo === "number" && Math.abs(g25.geo - 37.5665) < 0.01, `geo=${g25.geo}`);
 
         // 게이트21: 다운로드 관측. attachment 링크를 신뢰 클릭하면 다운로드가 시작되고, downloadWillBegin으로
         // 무엇이 다운로드되는지(파일명/URL) 관측한다. 저장 경로 지정은 browser-level이라 tab-session에선 못 두는 게 정직.

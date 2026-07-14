@@ -205,6 +205,16 @@ class DebuggerDriver {
     await this.send("Network.emulateNetworkConditions", { offline: !!offline, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
     return { ok: true };
   }
+  // 지오로케이션 스푸핑: 좌표는 Emulation.setGeolocationOverride(page-level, 동작). 권한은 Browser.grantPermissions가
+  // browser-level이라 tab-session서 막히므로 확장 API chrome.contentSettings.location로 우회 부여(정공법 우회).
+  async setGeolocation(opts = {}) {
+    const origin = (opts.origin || (await this.evaluate("location.origin")).value || "").replace(/:\d+$/, "");
+    if (origin && chrome.contentSettings && chrome.contentSettings.location) {
+      try { await chrome.contentSettings.location.set({ primaryPattern: origin + "/*", setting: "allow" }); } catch (e) { /* 패턴/권한 미지원 빌드 */ }
+    }
+    await this.send("Emulation.setGeolocationOverride", { latitude: opts.latitude, longitude: opts.longitude, accuracy: opts.accuracy || 10 });
+    return { ok: true };
+  }
   // 다운로드 관측 시작. 저장 경로 지정(Page.setDownloadBehavior)은 browser-level 명령이라 tab-session에서 막히므로
   // 두지 않는다(정직). downloadWillBegin/Progress(Page 이벤트)로 "무엇이 다운로드되는가"를 관측한다.
   async enableDownloads() {
@@ -662,6 +672,7 @@ class ScriptDriver {
   emulateMedia() { return Promise.resolve(this._unsupported("emulateMedia")); }
   setTimezone() { return Promise.resolve(this._unsupported("setTimezone")); }
   setOffline() { return Promise.resolve(this._unsupported("setOffline")); }
+  setGeolocation() { return Promise.resolve(this._unsupported("setGeolocation")); }
   enableDownloads() { return Promise.resolve(this._unsupported("enableDownloads")); }
   waitForDownload() { return Promise.resolve(this._unsupported("waitForDownload")); }
   enableConsole() { return Promise.resolve(this._unsupported("enableConsole")); }
@@ -761,6 +772,7 @@ function dispatch(driver, op, a) {
     case OP.emulateMedia: return driver.emulateMedia(a);
     case OP.setTimezone: return driver.setTimezone(a.timezoneId);
     case OP.setOffline: return driver.setOffline(a.offline);
+    case OP.setGeolocation: return driver.setGeolocation(a);
     case OP.enableDownloads: return driver.enableDownloads(a.path);
     case OP.waitForDownload: return driver.waitForDownload(a.timeout);
     case OP.enableConsole: return driver.enableConsole();
