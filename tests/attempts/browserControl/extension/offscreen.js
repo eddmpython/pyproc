@@ -138,6 +138,11 @@ class BrowserTab:
         self._op("setTimezone", timezoneId=timezoneId); return self
     def setOffline(self, offline=True):
         self._op("setOffline", offline=offline); return self
+    # 다운로드 관측(debugger mode 전용): downloadWillBegin/Progress로 무엇이 다운로드되는지 회수.
+    def enableDownloads(self):
+        self._op("enableDownloads"); return self
+    def waitForDownload(self, timeout=10000):
+        return self._op("waitForDownload", timeout=timeout).get("value")
     # 프레임 traversal(iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
     def frames(self):
         return self._op("frames").get("value")
@@ -674,6 +679,24 @@ json.dumps(r)
           g19.tz === "Asia/Seoul", `tz=${g19.tz}`);
         add("게이트19c: 오프라인 에뮬레이션(navigator.onLine)",
           g19.offline === false && g19.online === true, `offline->onLine=${g19.offline}, online->onLine=${g19.online}`);
+
+        // 게이트21: 다운로드 관측. attachment 링크를 신뢰 클릭하면 다운로드가 시작되고, downloadWillBegin으로
+        // 무엇이 다운로드되는지(파일명/URL) 관측한다. 저장 경로 지정은 browser-level이라 tab-session에선 못 두는 게 정직.
+        const g21 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+r = {}
+d.enableDownloads()
+d.click("#dl")
+dl = d.waitForDownload(6000)
+r["filename"] = dl["filename"] if dl else None
+r["url"] = dl["url"] if dl else None
+r["state"] = dl["state"] if dl else None
+d.close()
+json.dumps(r)
+`)));
+        add("게이트21: 다운로드 관측(downloadWillBegin -> 파일명/URL 회수)",
+          g21.filename === "report.txt" && String(g21.url).includes("/downloadFile"),
+          `filename=${g21.filename}, state=${g21.state}, url=${g21.url}`);
 
         // 게이트20: 파이썬 워커 N=세션 N 진짜 병렬. 각 워커가 자기 Pyodide 인터프리터(독립 GIL)를 부팅하고
         // run_sync(JSPI) + offscreen 라우터로 자기 세션을 몰아 조작한다(제약 A 우회). 프로세스 OS x 브라우저

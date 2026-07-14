@@ -101,6 +101,7 @@ async function main() {
 <form id="form" style="position:absolute;top:260px;left:220px"><input id="formField" value=""></form>
 <button id="dialogBtn" style="position:absolute;top:320px;left:220px;width:160px;height:40px">dialog</button>
 <input type="file" id="file" style="position:absolute;top:380px;left:220px">
+<a id="dl" href="/downloadFile" download="report.txt" style="position:absolute;top:410px;left:420px;width:120px;height:30px">download</a>
 <button id="far" style="position:absolute;top:2000px;left:20px;width:140px;height:40px">far</button>
 <iframe id="fr" src="/frameChild" style="position:absolute;top:440px;left:20px;width:320px;height:120px"></iframe>
 <script>
@@ -137,6 +138,12 @@ setTimeout(function(){window.__ready=true;},500);
     if (req.url.startsWith("/heldApi")) {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ held: "ok" }));
+      return;
+    }
+    // 게이트21 다운로드: attachment로 내려보내는 파일(#dl 클릭 -> downloadWillBegin 관측).
+    if (req.url.startsWith("/downloadFile")) {
+      res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Disposition": "attachment; filename=report.txt" });
+      res.end("pyprocDownloadContent");
       return;
     }
     // 게이트18 프레임 traversal: /cdpTarget이 same-origin으로 담는 자식 프레임. isolated world로 내부를 드릴다운.

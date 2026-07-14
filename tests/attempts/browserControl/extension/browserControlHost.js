@@ -83,6 +83,7 @@ class DebuggerDriver {
     this.routes = []; this.responseLog = []; this.heldRequests = new Map();
     this.dialogAccept = true; this.dialogPromptText = ""; this.lastDialogMessage = null;
     this.frameWorlds = new Map();
+    this.downloadsOn = false; this.downloadLog = [];
     this._eventListener = null;
   }
   send(method, params) { return chrome.debugger.sendCommand(this.target, method, params); }
@@ -114,6 +115,11 @@ class DebuggerDriver {
       this.responseLog.push({ url: params.response.url, status: params.response.status, requestId: params.requestId });
     } else if (method === "Fetch.requestPaused" && this.fetchOn) {
       await this._handleFetch(params);
+    } else if (method === "Page.downloadWillBegin" && this.downloadsOn) {
+      this.downloadLog.push({ guid: params.guid, url: params.url, filename: params.suggestedFilename, state: "begin" });
+    } else if (method === "Page.downloadProgress" && this.downloadsOn) {
+      const d = this.downloadLog.find((x) => x.guid === params.guid);
+      if (d) d.state = params.state;
     }
   }
   async navigate(url) {
@@ -188,6 +194,22 @@ class DebuggerDriver {
     await this.ensureNetwork();
     await this.send("Network.emulateNetworkConditions", { offline: !!offline, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
     return { ok: true };
+  }
+  // 다운로드 관측 시작. 저장 경로 지정(Page.setDownloadBehavior)은 browser-level 명령이라 tab-session에서 막히므로
+  // 두지 않는다(정직). downloadWillBegin/Progress(Page 이벤트)로 "무엇이 다운로드되는가"를 관측한다.
+  async enableDownloads() {
+    this.downloadsOn = true;
+    return { ok: true };
+  }
+  // 다운로드 관측 대기(downloadWillBegin이 잡히면 그 메타 반환). state는 관측된 진행 상태(begin/inProgress/completed).
+  async waitForDownload(timeoutMs) {
+    const deadline = Date.now() + (timeoutMs || DEFAULT_WAIT_MS);
+    while (Date.now() < deadline) {
+      const d = this.downloadLog.find((x) => x.state === "completed") || this.downloadLog[0];
+      if (d) return { ok: true, value: { url: d.url, filename: d.filename, state: d.state } };
+      await sleep(100);
+    }
+    return { ok: false, error: "waitForDownload 타임아웃" };
   }
   async frames() {
     const tree = await this.send("Page.getFrameTree");
@@ -570,6 +592,8 @@ class ScriptDriver {
   emulateMedia() { return Promise.resolve(this._unsupported("emulateMedia")); }
   setTimezone() { return Promise.resolve(this._unsupported("setTimezone")); }
   setOffline() { return Promise.resolve(this._unsupported("setOffline")); }
+  enableDownloads() { return Promise.resolve(this._unsupported("enableDownloads")); }
+  waitForDownload() { return Promise.resolve(this._unsupported("waitForDownload")); }
   async detach() { /* CDP 없음 */ }
 }
 
@@ -663,6 +687,8 @@ function dispatch(driver, op, a) {
     case OP.emulateMedia: return driver.emulateMedia(a);
     case OP.setTimezone: return driver.setTimezone(a.timezoneId);
     case OP.setOffline: return driver.setOffline(a.offline);
+    case OP.enableDownloads: return driver.enableDownloads(a.path);
+    case OP.waitForDownload: return driver.waitForDownload(a.timeout);
     default: return Promise.resolve({ ok: false, error: `알 수 없는 op: ${op}` });
   }
 }
