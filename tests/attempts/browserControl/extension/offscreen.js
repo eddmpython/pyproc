@@ -674,6 +674,35 @@ json.dumps(r)
           g19.tz === "Asia/Seoul", `tz=${g19.tz}`);
         add("게이트19c: 오프라인 에뮬레이션(navigator.onLine)",
           g19.offline === false && g19.online === true, `offline->onLine=${g19.offline}, online->onLine=${g19.online}`);
+
+        // 게이트20: 파이썬 워커 N=세션 N 진짜 병렬. 각 워커가 자기 Pyodide 인터프리터(독립 GIL)를 부팅하고
+        // run_sync(JSPI) + offscreen 라우터로 자기 세션을 몰아 조작한다(제약 A 우회). 프로세스 OS x 브라우저
+        // 컨트롤의 최대 차별점. 워커 2개가 각자 CPU 연산(총합) + 자기 label을 자기 탭에 쓰고 되읽어 격리·병렬 실증.
+        const spawnPyWorker = (label) => new Promise((resolve, reject) => {
+          const w = new Worker(new URL("./browserPyWorker.js", import.meta.url), { type: "module" });
+          w.onmessage = async (ev) => {
+            const wm = ev.data;
+            if (wm.type === "op") {
+              const opResult = await chrome.runtime.sendMessage(makeMessage(wm.op, wm.fields));
+              w.postMessage({ type: "opResult", reqId: wm.reqId, result: opResult });
+            } else if (wm.type === "done") {
+              w.terminate(); resolve(wm.result);
+            } else if (wm.type === "error") {
+              w.terminate(); reject(new Error(wm.error));
+            }
+          };
+          w.onerror = (ev) => { w.terminate(); reject(new Error(ev.message || "pyWorker onerror")); };
+          w.postMessage({ type: "run", indexURL: chrome.runtime.getURL("/"), label, target: targetUrl, moduleSource: PYPROC_BROWSER_MODULE });
+        });
+        try {
+          const [pa, pb] = await Promise.all([spawnPyWorker("workerA"), spawnPyWorker("workerB")]);
+          add("게이트20: 파이썬 워커 N=세션 N 병렬(각 워커 자기 Pyodide + run_sync 라우터 + 세션 격리)",
+            pa.readback === "workerA" && pb.readback === "workerB" &&
+            pa.total === 19999900000 && pb.total === 19999900000 && pa.title === "pyprocCdpTarget",
+            `A={readback:${pa.readback},total:${pa.total}}, B={readback:${pb.readback},total:${pb.total}}`);
+        } catch (e) {
+          add("게이트20: 파이썬 워커 N=세션 N 병렬", false, String(e));
+        }
       } catch (e) {
         add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }
