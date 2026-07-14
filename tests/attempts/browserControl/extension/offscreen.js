@@ -111,15 +111,26 @@ class BrowserTab:
         self._op("setDialogHandler", accept=accept, promptText=promptText); return self
     def lastDialog(self):
         return self._op("lastDialog").get("value")
-    # 네트워크 가로채기/관측(debugger mode 전용)
-    def route(self, pattern, action="block", status=None, body=None, headers=None):
-        self._op("route", pattern=pattern, action=action, status=status, body=body, headers=headers); return self
+    # 네트워크 가로채기/관측(debugger mode 전용). action: block(차단) | fulfill(정적 응답) | modify(요청 변조) | hold(붙잡기)
+    def route(self, pattern, action="block", status=None, body=None, headers=None, url=None, method=None):
+        self._op("route", pattern=pattern, action=action, status=status, body=body, headers=headers, url=url, method=method); return self
     def unroute(self, pattern=None):
         self._op("unroute", pattern=pattern); return self
     def waitForResponse(self, pattern, timeout=10000):
         return self._op("waitForResponse", pattern=pattern, timeout=timeout).get("value")
     def requests(self):
         return self._op("requests").get("value")
+    # 콜백형 held routing: action="hold"로 붙잡힌 요청을 관측하고 동적으로 결정한다(비-항법 요청에 쓴다).
+    def pendingRequests(self):
+        return self._op("pendingRequests").get("value")
+    def continueRequest(self, id, url=None, method=None, headers=None):
+        self._op("continueRequest", id=id, url=url, method=method, headers=headers); return self
+    def fulfillRequest(self, id, status=200, body="", headers=None):
+        self._op("fulfillRequest", id=id, status=status, body=body, headers=headers); return self
+    def abortRequest(self, id):
+        self._op("abortRequest", id=id); return self
+    def responseBody(self, pattern):
+        return self._op("responseBody", pattern=pattern).get("value")
     def close(self):
         self._op("closeSession")
 
@@ -514,6 +525,52 @@ json.dumps(r)
           g16.respStatus === 200 && g16.apiReal === "apihit", `status=${g16.respStatus}, api=${g16.apiReal}`);
         add("게이트16f: 네트워크 가로채기(route block -> fetch 실패)", g16.blocked === "blocked", `blockErr=${g16.blocked}`);
         add("게이트16g: 네트워크 가로채기(route fulfill -> 정적 응답 주입)", g16.mocked === "MOCKED", `mockBody=${g16.mocked}`);
+
+        // 게이트17: 네트워크 심화(콜백형). 요청 변조(헤더 주입) + held routing(요청을 붙잡아 continue/fulfill/abort로
+        // 동적 결정) + 응답 바디 캡처. 선언형 route를 넘어 요청 단위 동적 제어를 블로킹 모델과 정합하게 실측.
+        const g17 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+echoTarget = "${echoTarget}"
+r = {}
+d.requests()
+d.route("/echoHeaders", "modify", headers={"x-injected": "yes17"})
+d.navigate(echoTarget)
+r["injected"] = "x-injected" in d.text("#h")
+d.navigate(persistTarget)
+def waitPending(pat):
+    for _ in range(60):
+        for p in d.pendingRequests():
+            if pat in p["url"]:
+                return p["id"]
+    return None
+d.route("/heldApi", "hold")
+d.evaluate("window.heldC=null; fetch('/heldApi').then(function(x){return x.json()}).then(function(j){window.heldC=j.held})")
+d.continueRequest(waitPending("/heldApi"))
+d.waitForFunction("window.heldC !== null", 3000)
+r["heldContinue"] = d.evaluate("window.heldC")
+d.route("/heldMock", "hold")
+d.evaluate("window.heldF=null; fetch('/heldMock').then(function(x){return x.text()}).then(function(t){window.heldF=t})")
+d.fulfillRequest(waitPending("/heldMock"), status=200, body="HELD-MOCK")
+d.waitForFunction("window.heldF !== null", 3000)
+r["heldFulfill"] = d.evaluate("window.heldF")
+d.route("/heldAbort", "hold")
+d.evaluate("window.heldA=null; fetch('/heldAbort').then(function(){window.heldA='loaded'}).catch(function(){window.heldA='aborted'})")
+d.abortRequest(waitPending("/heldAbort"))
+d.waitForFunction("window.heldA !== null", 3000)
+r["heldAbort"] = d.evaluate("window.heldA")
+d.evaluate("window.rb=null; fetch('/jsonApi').then(function(x){return x.json()}).then(function(j){window.rb=j.msg})")
+d.waitForResponse("/jsonApi", 5000)
+d.waitForFunction("window.rb !== null", 3000)
+rb = d.responseBody("/jsonApi")
+r["respBody"] = rb["body"] if rb else None
+d.close()
+json.dumps(r)
+`)));
+        add("게이트17a: 요청 변조(route modify 헤더 주입 -> 서버 반영)", g17.injected === true, `injected=${g17.injected}`);
+        add("게이트17b: held routing continue(붙잡은 요청을 통과 -> 실제 응답)", g17.heldContinue === "ok", `heldContinue=${g17.heldContinue}`);
+        add("게이트17c: held routing fulfill(붙잡은 요청에 정적 응답 주입)", g17.heldFulfill === "HELD-MOCK", `heldFulfill=${g17.heldFulfill}`);
+        add("게이트17d: held routing abort(붙잡은 요청 취소)", g17.heldAbort === "aborted", `heldAbort=${g17.heldAbort}`);
+        add("게이트17e: 응답 바디 캡처(responseBody)", typeof g17.respBody === "string" && g17.respBody.includes("apihit"), `respBody=${g17.respBody}`);
       } catch (e) {
         add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }

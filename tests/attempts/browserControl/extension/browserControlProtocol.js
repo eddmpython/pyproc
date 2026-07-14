@@ -59,6 +59,12 @@ export const OP = {
   unroute: "unroute",
   waitForResponse: "waitForResponse",
   requests: "requests",
+  // 콜백형 held routing(요청을 붙잡아 동적 결정) + 응답 바디 캡처
+  pendingRequests: "pendingRequests",
+  continueRequest: "continueRequest",
+  fulfillRequest: "fulfillRequest",
+  abortRequest: "abortRequest",
+  responseBody: "responseBody",
 };
 
 // mode = 조작 전략. 생성 시 1회 선택(per-verb 플래그 금지).

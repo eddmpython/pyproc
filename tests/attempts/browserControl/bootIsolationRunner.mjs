@@ -132,6 +132,12 @@ setTimeout(function(){window.__ready=true;},500);
       res.end(JSON.stringify({ msg: "apihit" }));
       return;
     }
+    // 게이트17 held routing: 붙잡았다 continue한 요청이 실제 서버에 도달하는지(continueRequest 검증).
+    if (req.url.startsWith("/heldApi")) {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ held: "ok" }));
+      return;
+    }
     // 게이트16 업로드: offscreen(COI)이 fetch로 호스트 프로브 파일 경로를 얻는다(CORP 필요). setFileInputFiles용 경로.
     if (req.url.startsWith("/uploadProbe")) {
       res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cross-Origin-Resource-Policy": "cross-origin" });
