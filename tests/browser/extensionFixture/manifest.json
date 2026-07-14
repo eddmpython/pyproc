@@ -4,7 +4,7 @@
   "version": "1.0",
   "description": "browserControl 능력의 실 src 런타임 게이트 픽스처. 실 src를 import해 SSOT를 검증한다(비배포).",
   "minimum_chrome_version": "116",
-  "permissions": ["offscreen", "debugger", "tabs", "scripting", "declarativeNetRequest"],
+  "permissions": ["offscreen", "debugger", "tabs", "scripting", "declarativeNetRequest", "storage"],
   "host_permissions": ["http://127.0.0.1/*"],
   "background": { "service_worker": "serviceWorker.js", "type": "module" },
   "cross_origin_embedder_policy": { "value": "require-corp" },

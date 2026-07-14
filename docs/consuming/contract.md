@@ -75,6 +75,7 @@ subpath export: `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `p
 | `content_security_policy.extension_pages: "... 'wasm-unsafe-eval' ..."` | 원격 코드 금지 하 Pyodide WASM 구동 조건 |
 | `permissions: offscreen, debugger, scripting, tabs` | 능력이 쓰는 chrome API(debugger 모드 = CDP 신뢰입력, script 모드 = chrome.scripting, 탭 수명) |
 | `permissions: declarativeNetRequest` | iframe 역전(고정 화면) 헤더 제거. 조작만 쓰면 생략 가능 |
+| `permissions: storage` | 세션 메타 storage.session write-through(SW 소멸 후 재attach 복구) |
 | `minimum_chrome_version: 116` | offscreen API 하한 |
 
 제품 결정(소비자 몫): `name`/`description`/`host_permissions` 범위/웹스토어 메타. offscreen이 자기 확장 자산을 로드하는 경로엔 `web_accessible_resources`가 불필요하다(same-origin 확장 문서, 픽스처 실측 확인).

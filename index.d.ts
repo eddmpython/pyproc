@@ -628,6 +628,7 @@ export interface BrowserTab {
   evaluate(expr: string): unknown;
   click(selector: string): BrowserTab;
   type(selector: string, text: string): BrowserTab;
+  waitFor(selector: string, timeout?: number): BrowserTab;
   close(): void;
 }
 

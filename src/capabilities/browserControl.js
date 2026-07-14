@@ -33,6 +33,9 @@ class BrowserTab:
     def type(self, selector, text):
         _send("type", sessionId=self._sid, args={"selector": selector, "text": text})
         return self
+    def waitFor(self, selector, timeout=10000):
+        _send("waitFor", sessionId=self._sid, args={"selector": selector, "timeout": timeout})
+        return self
     def close(self):
         _send("closeSession", sessionId=self._sid)
 
@@ -63,8 +66,14 @@ export class BrowserControl {
     if (!hs || hs.version !== PROTOCOL_VERSION) {
       throw new Error(`BrowserControl: 프로토콜 버전 불일치(능력 ${PROTOCOL_VERSION} vs 호스트 ${hs && hs.version}). 확장 두 절반의 pyproc 핀을 맞춰라.`);
     }
-    this._rt.setGlobal("_pyprocBrowserSend", async (op, fieldsJson) =>
-      JSON.stringify(await chrome.runtime.sendMessage(makeMessage(op, JSON.parse(fieldsJson)))));
+    // 송신 타임아웃: SW가 죽어 무응답이면 run_sync가 영구 행하지 않도록 typed 에러로 끊는다.
+    this._rt.setGlobal("_pyprocBrowserSend", async (op, fieldsJson) => {
+      const resp = await Promise.race([
+        chrome.runtime.sendMessage(makeMessage(op, JSON.parse(fieldsJson))),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("browserControl: 서비스워커 무응답 타임아웃")), 30000)),
+      ]);
+      return JSON.stringify(resp);
+    });
     this._rt.run(PYPROC_BROWSER_MODULE);
     return this;
   }
