@@ -149,7 +149,7 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 
 - Full process capture at an arbitrary instant - in-flight network requests and Promises are not restored.
 - Every Python package - native C-extension wheels need a static build; pure-Python and Pyodide-built packages work.
-- Snapshot compatibility across Pyodide versions, or across machines (cross-machine `.pymachine` is an open probe).
+- Snapshot compatibility across Pyodide versions. `.pymachine` portability assumes the same engine/manifest and either an explicit trusted source or a verified signer.
 - GPU / native Linux packages, full POSIX `fork`, arbitrary native binaries.
 
 Naming these up front is deliberate: a hidden limit reads as a bug later; a stated one reads as a managed boundary.
@@ -167,7 +167,7 @@ The gap map lives in [local-parity](mainPlan/_done/local-parity/README.md).
 
 ## Security model
 
-pyproc runs Python inside the browser's WebAssembly and Web Worker isolation boundaries. That is not a claim of safety for arbitrary untrusted code: an application running untrusted code is still responsible for its own network, storage, package, memory, and execution-time policies appropriate to its threat model. A `.pymachine` file is live state and carries the same risk as an executable - `openMachine` verifies a SHA-256 integrity hash and refuses to open without an explicit `{ trust: true }`.
+pyproc runs Python inside the browser's WebAssembly and Web Worker isolation boundaries. That is not a claim of safety for arbitrary untrusted code: an application running untrusted code is still responsible for its own network, storage, package, memory, and execution-time policies appropriate to its threat model. A `.pymachine` file is live state and carries the same risk as an executable - `openMachine` verifies a SHA-256 envelope and refuses to open without either explicit `{ trust: true }` or a signature verified by `trustedPublicKeys`.
 
 ## How it works (one page)
 
@@ -194,6 +194,7 @@ The numbers below come from one machine and are meant to be **reproduced, not ta
 - Snapshot-fork child boot ~184-300ms vs cold ~2.8s.
 - Restore-based reactivity: live-diff restore ~1-2.4ms (writes only changed pages, no re-run).
 - uv-lane warm environment boot ~1229ms vs ~5109ms cold (numpy).
+- Speed Lab sharded numpy matmul: 4.02x on 4 workers for 768x768 f64 (`examples/speedLab.html` gate).
 - non-Pyodide CPython 3.14 (WASI) boot ~70-120ms.
 
 Reality check: pure-Python logic is at or above local speed; large numpy arithmetic is ~86x slower (WASM single-thread, no-AVX BLAS). Logic / analysis / server workloads are runtime-grade; heavy numeric crunching is not the target.
@@ -204,8 +205,9 @@ Capabilities are opt-in - turn on only what you need, and consume the capability
 
 | Export | What |
 | --- | --- |
+| `getPyProcAssetManifest` / `verifyPyProcAssetIntegrity` / `PYPROC_ASSET_MANIFEST_VERSION` | Deployment asset contract: lists the Worker/SharedWorker/Service Worker entrypoints that must be served from the consumer's same origin, emits stable roles for copy/SRI pipelines, and verifies a `pyproc-assets` SRI manifest before worker spawn |
 | `checkEnvironment()` | Environment preflight: are `crossOriginIsolated` / SAB / JSPI ready, and if not, what to add (each gap comes with a copy-paste fix) |
-| `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` (`lockFileURL` for lock reproduction, `coreCacheDir` for offline core) |
+| `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` (`lockFileURL` for lock reproduction, `coreCacheDir` for offline core, `engineScriptIntegrity` / `coreIntegrity` for boot asset SRI) |
 | `bootEnv(manifest, dirs)` | The uv lane: bare-snapshot + wheel-cache warm boot (second boot ~1229ms vs ~5109ms cold) |
 | `runScript(rt, src, opts)` | `uv run` in the browser: auto-install PEP 723 inline dependencies, then run |
 | `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `loadPackagesFromImports` / `setStdout` / `setStderr` / `freeze` / `mountHome` / `fs` plus capability registration; adopt an existing Pyodide with `new Runtime(py)` |
@@ -222,7 +224,7 @@ Capabilities are opt-in - turn on only what you need, and consume the capability
 | `MachineJournal` | Write-ahead log: the machine checkpoints itself while idle, so a crashed tab still boots back into its last commit |
 | `MachineJail` | Permission jail: `permissions{net, clipboard, home, workers}` enforced in two tiers, a cooperative Python chokepoint plus the browser's own wall (a `connect-src` CSP on the jail context blocks disallowed hosts even if the jailed code tries `import js`) |
 | `GpuCompute` / `GpuArray` / `GpuBridge` | Offload large f32 linear algebra to WebGPU compute: a residency handle (upload once, chain `matmul` / `map` / `binary` / `transpose` / `reduce` on the GPU, download once) with a shared-memory tiled kernel. Full pipelines stay GPU-resident: `matmul -> relu -> sum` (loss) and `x.transpose() @ dy` / residual `(A@B) + C`. `Runtime.enableGpu()` wires it into Python (`pyprocGpu.matmul` on numpy arrays). Measured ~127x vs WASM numpy on a real GPU; f32 only (WGSL has no f64), needs a windowed browser with a GPU |
-| `bootSession` / `Session` / `openMachine` | Session revival and portable `.pymachine` images: deterministic replay plus user delta, persisted to OPFS (`save` / `load`) or exported as one file (`exportImage` / `openMachine`) |
+| `bootSession` / `Session` / `openMachine` / `createMachineKeyPair` / `exportMachinePublicKey` | Session revival and portable `.pymachine` images: deterministic replay plus user delta, persisted to OPFS (`save` / `load`) or exported as one file (`exportImage` / `openMachine`). If `/home/web` exists, the image carries that file tree too. WebCrypto signatures let `openMachine` trust a verified public key instead of a raw `trust: true` |
 | `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
 | `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, lifecycle (`kill` / `signal` / respawn), `fork(2)` (clone a live process, its variables and arrays travel), and flow IPC (`pipe` / `lock` / `semaphore` / `shm`: SAB ring-buffer pipes with real blocking read and backpressure) |
 | `MachineContainer` | Machine inside a machine: boots a container kernel in a worker with its own package set, exposed to Python as a value (`m.run` / `m.spawn` / `m.kill`); nests (containers inside containers) |
@@ -239,9 +241,18 @@ Subpath imports are also supported:
 import { boot } from "pyproc/runtime";
 import { ReactiveController } from "pyproc/reactive";
 import { PyProc } from "pyproc/process-os";
+import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
 ```
 
 Deep, example-driven docs for each capability live in [docs/](docs/README.md); this README stays the map.
+
+Deployment asset manifest:
+
+```bash
+npx pyproc-assets --baseURL /vendor/pyproc/ --out public/vendor/pyproc-assets.json --copy-to public/vendor/pyproc
+```
+
+The CLI follows the Worker / SharedWorker / Service Worker import graph, copies the required files when `--copy-to` is set, and emits `sha256-...` integrity for every file. Load that JSON and pass it as `assetIntegrity` to `boot`, `PyProc`, `SharedKernel`, `MachineContainer`, `JobControl`, or `bootWasi` to preflight the relevant worker graph before it is spawned. The same path contract is available at runtime through `getPyProcAssetManifest()`, and direct checks can call `verifyPyProcAssetIntegrity()`.
 
 ## Setup
 
@@ -322,11 +333,12 @@ pyproc becomes an SSOT only through **real imports**, not references: consumers 
 
 ```bash
 npm test              # Node structure / lint gate (zero dependencies)
+npm run test:consumer # installed package browser consumer gate
 npm run test:browser  # headless Chromium runtime gate: boot / reactive / fork / map (zero dependencies)
 npm run serve         # COOP/COEP static server for manual validation and benchmarks
 ```
 
-Because this is a WASM runtime, real validation only happens in a browser: `test:browser` launches your local Edge / Chrome headless and verifies the public surface actually works (the same gate runs in CI). Operating docs live in [docs/](docs/README.md), design and decision records in [mainPlan/](mainPlan/README.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
+Because this is a WASM runtime, real validation only happens in a browser: `test:browser` verifies the repo public surface, and `test:consumer` verifies an installed npm package inside a temporary browser app. Both run in CI. Operating docs live in [docs/](docs/README.md), design and decision records in [mainPlan/](mainPlan/README.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

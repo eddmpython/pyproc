@@ -2,6 +2,79 @@
 // 계약을 제공한다. 빌드 단계 없이 손으로 유지한다(소스와 함께 갱신).
 
 export const PAGE_SIZE: number;
+export const PYPROC_ASSET_MANIFEST_VERSION: 1;
+
+export interface PyProcAssetEntry {
+  role: "processWorker" | "sharedKernelHost" | "machineWorker" | "wasiWorker" | "pyprocServiceWorker";
+  /** 패키지 루트 기준 상대 경로. */
+  path: string;
+  kind: "module-worker" | "shared-worker" | "service-worker";
+  sameOrigin: true;
+  usedBy: string[];
+  reason: string;
+  /** baseURL 기준 절대 URL. */
+  url: string;
+}
+
+export interface PyProcAssetManifest {
+  version: 1;
+  /** 이 manifest가 URL을 계산한 패키지 루트. */
+  packageRoot: string;
+  policy: {
+    sameOriginRequired: true;
+    preserveRelativeImports: true;
+    runtimePreflight?: true;
+    note: string;
+  };
+  assets: PyProcAssetEntry[];
+}
+
+export function getPyProcAssetManifest(opts?: { baseURL?: string | URL }): PyProcAssetManifest;
+
+export interface PyProcAssetIntegrityFile {
+  /** 패키지 루트 기준 상대 경로. */
+  path: string;
+  /** 배포된 실제 URL. root-relative URL 가능. */
+  url: string;
+  bytes: number;
+  /** 표준 SRI 문자열(sha256-...). */
+  integrity: string;
+  /** 이 파일을 쓰는 entrypoint role 목록. */
+  roles: PyProcAssetEntry["role"][];
+}
+
+export interface PyProcAssetEntrypoint extends PyProcAssetEntry {
+  /** entrypoint에서 상대 import/importScripts로 닿는 로컬 파일 graph. */
+  graph: string[];
+  bytes: number;
+  integrity: string;
+}
+
+export interface PyProcAssetIntegrityManifest extends Omit<PyProcAssetManifest, "assets"> {
+  entrypoints: PyProcAssetEntrypoint[];
+  files: PyProcAssetIntegrityFile[];
+}
+
+export interface PyProcAssetIntegrityVerifyOptions {
+  /** 검증할 실행 자산 role. 생략하면 files 전체를 검증한다. */
+  roles?: PyProcAssetEntry["role"][];
+  /** role 대신 특정 상대 경로만 검증한다. */
+  paths?: string[];
+  /** 테스트나 특수 배포 환경용 fetch 대체. */
+  fetch?: typeof fetch;
+  cache?: RequestCache;
+  credentials?: RequestCredentials;
+  /** false면 선택 대상 없음이 예외가 아니라 verified 0이 된다. */
+  required?: boolean;
+}
+
+export interface PyProcAssetIntegrityResult {
+  verified: number;
+  bytes: number;
+  files: string[];
+}
+
+export function verifyPyProcAssetIntegrity(manifest: PyProcAssetIntegrityManifest, opts?: PyProcAssetIntegrityVerifyOptions): Promise<PyProcAssetIntegrityResult | null>;
 
 export interface EnvIssue {
   /** 기계 판별용 코드: "no-cross-origin-isolation" | "no-jspi". */
@@ -24,6 +97,24 @@ export interface EnvReport {
   issues: EnvIssue[];
 }
 
+export type CoreIntegrityMap = Record<string, string>;
+
+export interface CoreIntegrityPolicy {
+  /** 파일명, 절대 URL, 원본 URL 중 하나를 키로 쓰고 값은 표준 SRI 문자열(sha256-...)이다. */
+  files: CoreIntegrityMap;
+  /** true(기본)면 fetch되는 indexURL 자산이 manifest에 없을 때 실패한다. */
+  required?: boolean;
+}
+
+export interface CoreAssetStats {
+  hits: number;
+  misses: number;
+  /** coreIntegrity로 SHA-256 검증을 통과한 자산 수. */
+  verified: number;
+  /** required manifest에서 누락되어 거부된 자산 수. */
+  integrityMissing: number;
+}
+
 /**
  * 환경 진단. "그냥 import하면 되나?"의 정직한 답: 기본 표면(boot/run/enableReactive)은 준비 없이
  * Chromium에서 돌지만, PyProc(프로세스 OS)/IPC/소켓 블로킹은 crossOriginIsolated(COOP/COEP 헤더)와
@@ -42,6 +133,12 @@ export interface BootOptions {
   env?: Record<string, string>;
   /** 코어 자산(wasm/stdlib/lock)을 이 디렉터리에 캐시해 재부팅 시 fetch 계층 네트워크 0. */
   coreCacheDir?: FileSystemDirectoryHandle;
+  /** pyproc이 삽입하는 pyodide.js script 태그의 브라우저 SRI 값(sha256-...). 첫 부팅 전에만 강제 가능. */
+  engineScriptIntegrity?: string;
+  /** fetch 경로의 indexURL 자산(wasm/stdlib/lock/휠 등)을 SRI로 검증한다. */
+  coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy;
+  /** pyproc-assets CLI 산출물. Runtime에서 만든 worker 능력이 spawn 전 graph를 SRI 검증한다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
   /** 락 파일 교체(Runtime.freeze() 산출물 등): 같은 버전이 해석 0으로 재현된다. */
   lockFileURL?: string;
   /** 워커 소비자(document 없음)가 자체 import한 loadPyodide. 주면 script 로드를 건너뛴다(globalThis 무오염). */
@@ -117,6 +214,8 @@ export interface SyscallBridgeConfig {
   proxyUrl?: string;
   /** true면 requests 계열을 배선한다(pyodide-http patch_all. 절대 URL만). */
   requests?: boolean;
+  /** subprocess child worker를 만들기 전에 processWorker graph를 검증한다. 생략하면 Runtime.assetIntegrity를 상속한다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
 }
 
 export interface SyscallInstallInfo {
@@ -137,6 +236,8 @@ export interface PyProcOptions {
    * fork(살아있는 상태 복제)의 전제다. 프로세스 간 대칭이라야 델타가 유효하다.
    */
   replay?: { env?: Record<string, string>; packages?: string[]; setup?: string };
+  /** worker pool spawn 전에 processWorker graph를 SRI 검증한다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
 }
 
 /** 시그널 번호(POSIX). SAB 채널로 워커의 CPython eval 루프에 전달된다. */
@@ -258,6 +359,8 @@ export class VirtualOrigin {
 export interface MachineContainerOptions {
   /** 컨테이너 커널이 부팅할 엔진 배포 지점(기본 부모 rt.indexURL). */
   indexURL?: string;
+  /** 컨테이너 worker spawn 전에 machineWorker graph를 SRI 검증한다. 생략하면 Runtime.assetIntegrity를 상속한다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
 }
 
 export interface ContainerManifest {
@@ -304,6 +407,8 @@ export interface JobControlOptions {
   workers?: number;
   /** 리플레이 매니페스트(fork 대칭의 전제, 기본 {}). */
   replay?: { env?: Record<string, string>; packages?: string[]; setup?: string };
+  /** 내부 PyProc worker pool spawn 전에 processWorker graph를 SRI 검증한다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
 }
 
 export interface JobInfo {
@@ -375,6 +480,8 @@ export interface SharedKernelOptions {
   indexURL?: string;
   /** 커널 식별자. 같은 name으로 연결한 모든 탭이 같은 커널을 공유한다. */
   name?: string;
+  /** SharedWorker 생성 전에 sharedKernelHost graph를 SRI 검증한다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
 }
 
 export interface SharedKernelStatus {
@@ -418,6 +525,8 @@ export interface WasiManifest {
    * 않는다 - wasmURL과 같은 계약). 각 wheel은 installWheel로 /site에 풀려 import 가능해진다.
    */
   wheels?: (ArrayBuffer | Uint8Array)[];
+  /** WASI worker 생성 전에 wasiWorker graph를 SRI 검증한다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
 }
 
 /**
@@ -653,12 +762,14 @@ export class Runtime {
    * EngineContract 또는 **로드된 Pyodide 인스턴스**를 받는다. 후자를 주면 감싸므로, 워커에서
    * 자체 부팅한 Pyodide를 `new Runtime(py)`로 채택할 수 있다(dartlab 라이브 소비 패턴).
    */
-  constructor(engineOrPyodide: unknown, indexURL?: string);
+  constructor(engineOrPyodide: unknown, indexURL?: string, opts?: { assetIntegrity?: PyProcAssetIntegrityManifest });
   readonly memory: MemoryCapability;
   /** 엔진-무관 일반 파일 IO(상시 능력, memory와 동급). 미지원 엔진이면 호출 시 에러. */
   readonly fs: FileSystem;
   /** 이 커널이 부팅된 엔진 배포 지점. 자식 워커(subprocess)가 같은 지점을 쓴다. */
   readonly indexURL: string;
+  /** pyproc-assets CLI 산출물. Runtime에서 만든 worker 능력이 spawn 전 graph를 검증할 때 쓴다. */
+  readonly assetIntegrity: PyProcAssetIntegrityManifest | null;
   run(code: string): unknown;
   runAsync(code: string): Promise<unknown>;
   setGlobal(name: string, value: unknown): void;
@@ -677,6 +788,8 @@ export class Runtime {
   freeze(): Promise<string>;
   /** bootEnv()로 부팅된 경우의 부팅 통계. */
   envBoot?: EnvBootStats;
+  /** boot({ coreCacheDir/coreIntegrity })로 부팅한 경우의 코어 자산 캐시/검증 통계. */
+  coreCache?: CoreAssetStats;
   enableReactive(): ReactiveController;
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
   enableSocketBridge(cfg: SocketBridgeConfig): SocketBridge;
@@ -724,6 +837,20 @@ export interface SessionIo {
   mb: number;
 }
 
+export interface SessionImageOptions {
+  /**
+   * true 또는 기본값이면 존재하는 /home/web 파일 트리를 .pymachine에 포함한다.
+   * false면 힙 델타만 내보낸다. true인데 경로가 없으면 명시적 예외.
+   */
+  includeHome?: boolean;
+  /** 포함할 디스크 루트. 기본 /home/web. */
+  homePath?: string;
+  /** WebCrypto ECDSA P-256 개인키 또는 CryptoKeyPair. 주면 .pymachine에 signature를 싣는다. */
+  signingKey?: CryptoKey | CryptoKeyPair;
+  /** signingKey가 개인키 단독일 때 함께 넣을 공개키. CryptoKeyPair를 주면 생략 가능. */
+  publicKey?: CryptoKey | JsonWebKey;
+}
+
 /**
  * 세션 부활(불멸 커널): 결정적 리플레이 부팅 + 사용자 델타의 OPFS 영속.
  * 같은 매니페스트로 bootSession한 커널은 바이트 동일 힙을 재현하므로,
@@ -731,14 +858,20 @@ export interface SessionIo {
  */
 export function bootSession(manifest?: SessionManifest): Promise<Session>;
 
-/** .pymachine 파일로 같은 컴퓨터를 부팅한다. 머신 파일은 실행 파일과 동급 위험이라 { trust: true } 명시 승인 필수, SHA-256 무결성 검증. */
-export function openMachine(file: Blob, opts?: { trust?: boolean }): Promise<Session>;
+/** .pymachine 서명용 WebCrypto ECDSA P-256 키쌍을 만든다. */
+export function createMachineKeyPair(): Promise<CryptoKeyPair>;
+
+/** .pymachine 검증용 공개키를 JWK로 내보낸다. */
+export function exportMachinePublicKey(key: CryptoKey | CryptoKeyPair | JsonWebKey): Promise<JsonWebKey>;
+
+/** .pymachine 파일로 같은 컴퓨터를 부팅한다. trust:true 또는 trustedPublicKeys 중 하나가 필요하다. */
+export function openMachine(file: Blob, opts?: { trust?: boolean; trustedPublicKey?: CryptoKey | JsonWebKey; trustedPublicKeys?: (CryptoKey | JsonWebKey)[]; requireSignature?: boolean }): Promise<Session>;
 
 export class Session {
   readonly rt: Runtime;
   readonly reactive: ReactiveController;
-  /** 이 컴퓨터 전체를 .pymachine 단일 파일(무결성 해시 포함)로 내보낸다. */
-  exportImage(): Promise<Blob>;
+  /** 이 컴퓨터 전체를 .pymachine 단일 파일(무결성 해시 포함)로 내보낸다. /home/web이 있으면 함께 포함한다. */
+  exportImage(opts?: SessionImageOptions): Promise<Blob>;
   /** 사용자 상태(리플레이 경계와의 차이 페이지)만 저장. base는 리플레이가 대체한다. */
   save(dir: FileSystemDirectoryHandle, name: string): Promise<SessionIo>;
   /** 같은 매니페스트·같은 힙 크기 전제(불일치는 명시적 예외). */

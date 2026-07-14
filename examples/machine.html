@@ -16,6 +16,8 @@
       <nav>
         <a href="agentSandbox.html">Agent</a>
         <a href="machine.html" class="on">Machine</a>
+        <a href="serverDev.html">Server</a>
+        <a href="speedLab.html">Speed</a>
         <a href="terminal.html">Terminal</a>
         <a href="processOs.html">Process OS</a>
         <a href="basic.html">Basics</a>
@@ -26,15 +28,18 @@
     <h1>A computer that never turns off</h1>
     <p class="lead">This page is a Python machine. Close the tab and it hibernates as a few MB;
     reopen and it wakes exactly where it was, variables and files intact. Export the whole
-    running computer as a single <span class="ok">.pymachine</span> file and open it anywhere.</p>
+    running computer as a signed <span class="ok">.pymachine</span> file and open it only when
+    its public key is trusted.</p>
 
     <div class="panel">
       <div class="status" id="st">Booting...</div>
       <div class="row" style="margin:.6rem 0 .2rem">
         <span class="badge ok">state survives the tab</span>
         <span class="badge info">/home/web is a real disk (OPFS)</span>
-        <span class="badge">SHA-256 + explicit trust on import</span>
+        <span class="badge">WebCrypto signature on export</span>
+        <span class="badge">trusted public-key import</span>
       </div>
+      <div class="dim" id="keyFp" style="font-size:.86rem"></div>
     </div>
 
     <div class="panel">
@@ -45,8 +50,9 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       <div class="row">
         <button id="run">Run</button>
         <button id="sleep" class="ghost">Sleep now (manual save)</button>
-        <button id="exp" class="ghost">Export .pymachine</button>
-        <button id="imp" class="ghost">Open machine file</button>
+        <button id="cast" class="ghost">Cast signed copy</button>
+        <button id="exp" class="ghost">Export signed .pymachine</button>
+        <button id="imp" class="ghost">Open signed machine file</button>
         <input id="file" type="file" accept=".pymachine" style="display:none">
       </div>
       <div class="term" id="out"></div>
@@ -55,17 +61,98 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> · <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
   </div>
   <script type="module">
-    import { bootSession, openMachine } from "../index.js";
-    const st = document.getElementById("st"), out = document.getElementById("out");
+    import { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey } from "../index.js";
+    const st = document.getElementById("st"), out = document.getElementById("out"), keyFp = document.getElementById("keyFp");
     const print = (t) => { out.textContent += t + "\n"; };
     // 예제 실행 게이트(?gate): 부팅+실행 완주를 보고. 사람이 열면 no-op.
-    const gateMode = new URLSearchParams(location.search).has("gate");
+    const params = new URLSearchParams(location.search);
+    const gateMode = params.has("gate");
+    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-180) }] }) }).catch(() => {}); };
     const opfs = await navigator.storage.getDirectory();
     const stateDir = await opfs.getDirectoryHandle("pyMachineState", { create: true });
     const homeDir = await opfs.getDirectoryHandle("pyMachineHome", { create: true });
+    const keyStoreName = "pyprocMachineDemo";
 
-    let session = await bootSession({});
+    const reqAsPromise = (req) => new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const openKeyDb = () => new Promise((resolve, reject) => {
+      const req = indexedDB.open(keyStoreName, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("keys");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    async function loadMachineKeys() {
+      try {
+        const db = await openKeyDb();
+        const tx = db.transaction("keys", "readonly");
+        const stored = await reqAsPromise(tx.objectStore("keys").get("machine"));
+        db.close();
+        if (stored && stored.privateKey && stored.publicKey) return stored;
+      } catch (e) {}
+      const keys = await createMachineKeyPair();
+      try {
+        const db = await openKeyDb();
+        const tx = db.transaction("keys", "readwrite");
+        tx.objectStore("keys").put(keys, "machine");
+        await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+        db.close();
+      } catch (e) {}
+      return keys;
+    }
+    const bytesToHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    async function keyFingerprint(publicKey) {
+      const jwk = await exportMachinePublicKey(publicKey);
+      const bytes = new TextEncoder().encode(JSON.stringify(jwk));
+      return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).slice(0, 16);
+    }
+    const machineKeys = await loadMachineKeys();
+    const trustedPublicKey = await exportMachinePublicKey(machineKeys);
+    const trustedKeyFp = await keyFingerprint(trustedPublicKey);
+    keyFp.textContent = `trusted machine key: ${trustedKeyFp}. Unsigned or unknown-signer files are rejected.`;
+
+    async function clearDirectory(dir) {
+      for await (const [name, handle] of dir.entries()) {
+        await dir.removeEntry(name, { recursive: handle.kind === "directory" });
+      }
+    }
+
+    async function copyHomeToOpfs(rt, srcPath, dstDir) {
+      await clearDirectory(dstDir);
+      const copyDir = async (path, dir) => {
+        for (const name of rt.fs.readdir(path)) {
+          const full = `${path.replace(/\/+$/, "")}/${name}`;
+          const stat = rt.fs.stat(full);
+          if (stat.isDir) {
+            const child = await dir.getDirectoryHandle(name, { create: true });
+            await copyDir(full, child);
+          } else if (stat.isFile) {
+            const data = rt.fs.readFile(full);
+            const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+            await w.write(data);
+            await w.close();
+          }
+        }
+      };
+      await copyDir(srcPath, dstDir);
+    }
+
+    function clearRuntimeDir(rt, path) {
+      for (const name of rt.fs.readdir(path)) {
+        const full = `${path.replace(/\/+$/, "")}/${name}`;
+        const stat = rt.fs.stat(full);
+        if (stat.isDir) {
+          clearRuntimeDir(rt, full);
+          rt.fs.rmdir(full);
+        } else if (stat.isFile) {
+          rt.fs.unlink(full);
+        }
+      }
+    }
+
+    let session = await bootSession({ indexURL: INDEX });
     let home = await session.rt.mountHome(homeDir);
     // resume: 이전 hibernate가 있으면 그 자리에서 깨어난다
     try {
@@ -91,19 +178,40 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       return r ? String(r).trimEnd() : "";
     };
 
-    if (gateMode) {
-      try {
-        const r = await runCode();
-        print(r);
-        gateReport(r.includes("counter"));
-      } catch (e) { print(String(e).slice(-160)); gateReport(false); }
-    }
-
     const hibernate = async () => {
       const r = await session.save(stateDir, "machine");
       await home.sync();
       return r;
     };
+    const exportSignedImage = async () => {
+      await home.sync();
+      return session.exportImage({ signingKey: machineKeys, includeHome: true });
+    };
+    const switchToSignedImage = async (blob) => {
+      const next = await openMachine(blob, { trustedPublicKeys: [trustedPublicKey], requireSignature: true });
+      await copyHomeToOpfs(next.rt, "/home/web", homeDir);
+      clearRuntimeDir(next.rt, "/home/web");
+      session = next;
+      home = await session.rt.mountHome(homeDir);
+      st.textContent = `Switched to a signed machine verified by key ${trustedKeyFp}.`;
+      return next;
+    };
+    const castSigned = async () => {
+      const blob = await exportSignedImage();
+      await switchToSignedImage(blob);
+      print(`Cast complete: signed .pymachine verified (${(blob.size / 1048576).toFixed(1)}MB).`);
+      return blob;
+    };
+    if (gateMode) {
+      try {
+        const r = await runCode();
+        print(r);
+        const blob = await castSigned();
+        const stateOk = session.rt.run("n >= 1") === true;
+        const fileOk = String(session.rt.run("open('/home/web/visits.txt').read()")).includes("visit");
+        gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && st.textContent.includes("verified"));
+      } catch (e) { print(String(e).slice(-160)); gateReport(false); }
+    }
     // 수명주기: 탭이 사라질 때 자동 hibernate
     addEventListener("pagehide", () => { hibernate(); });
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") hibernate(); });
@@ -116,23 +224,29 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       const r = await hibernate();
       print(`Hibernated: ${r.pages} pages / ${r.mb}MB delta written to OPFS.`);
     };
+    document.getElementById("cast").onclick = async () => {
+      try { await castSigned(); }
+      catch (e) { print(String(e).split("\n").slice(-3).join("\n")); }
+    };
     document.getElementById("exp").onclick = async () => {
-      const blob = await session.exportImage();
+      const blob = await exportSignedImage();
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "computer.pymachine";
       a.click();
-      print(`Exported computer.pymachine (${(blob.size / 1048576).toFixed(1)}MB). That file IS this computer.`);
+      print(`Exported signed computer.pymachine (${(blob.size / 1048576).toFixed(1)}MB, key ${trustedKeyFp}). That file IS this computer.`);
     };
     document.getElementById("imp").onclick = () => document.getElementById("file").click();
     document.getElementById("file").onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
-      if (!confirm("A machine file is live state: treat it like an executable. Trust its source?")) return;
       st.textContent = "Booting the imported computer...";
-      session = await openMachine(f, { trust: true });
-      home = await session.rt.mountHome(homeDir);
-      st.textContent = "Switched to the imported machine (sleep/export now apply to it).";
-      print("openMachine done: the sender's exact state is alive here.");
+      try {
+        await switchToSignedImage(f);
+        print("openMachine done: signature verified, the sender's exact state is alive here.");
+      } catch (err) {
+        st.textContent = "Import rejected.";
+        print(`Rejected machine file: ${String(err).slice(-220)}`);
+      }
     };
   </script>
 </body>

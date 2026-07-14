@@ -23,20 +23,72 @@ export { checkEnvironment } from "./preflight.js";
 // 유일한 정의처다: boot/bootEnv/PyProc이 여기서 가져간다. 버전 변경 = 릴리즈 사유.
 export const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
 
+function base64FromBytes(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+async function sha256Sri(data) {
+  const buf = data instanceof ArrayBuffer ? data : data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  return "sha256-" + base64FromBytes(new Uint8Array(await crypto.subtle.digest("SHA-256", buf)));
+}
+
+function normalizeCoreIntegrity(policy) {
+  if (!policy) return null;
+  const files = policy.files || policy;
+  return { files, required: policy.required !== false };
+}
+
+function expectedCoreIntegrity(policy, url, name) {
+  if (!policy) return null;
+  const href = new URL(url, location.href).href;
+  return policy.files[href] || policy.files[url] || policy.files[name] || null;
+}
+
+async function verifyIntegrity(data, expected, label) {
+  const entries = String(expected || "").trim().split(/\s+/).filter((v) => v.startsWith("sha256-"));
+  if (!entries.length) throw new Error(`integrity: ${label}의 sha256 SRI 값이 없다`);
+  const actual = await sha256Sri(data);
+  if (!entries.includes(actual)) throw new Error(`integrity: ${label} 해시 불일치(expected ${entries[0].slice(0, 19)}..., actual ${actual.slice(0, 19)}...)`);
+  return actual;
+}
+
+function failIntegrity(cache, err) {
+  const e = err instanceof Error ? err : new Error(String(err));
+  if (cache.rejectIntegrity) cache.rejectIntegrity(e);
+  throw e;
+}
+
 // 엔진 스크립트 1회 로드(전역 loadPyodide 확보). boot/bootEnv/PyProc 공용.
 // 진행 중 로드는 공유한다: 동시 첫 호출이 script 태그를 중복 삽입하지 않게(부팅 동시성 수리).
-// 전역 loadPyodide는 오리진당 하나이므로 스크립트 출처는 첫 호출의 indexURL이 이긴다.
+// 전역 loadPyodide는 오리진당 하나이므로 스크립트 출처와 SRI는 첫 호출의 indexURL/integrity가 이긴다.
 let engineScriptLoad = null;
-export function ensureEngineScript(indexURL) {
-  if (globalThis.loadPyodide) return Promise.resolve();
+let engineScriptPending = null;
+let engineScriptState = null;
+export function ensureEngineScript(indexURL, opts = {}) {
+  const integrity = opts.integrity || null;
+  if (globalThis.loadPyodide) {
+    if (integrity && engineScriptState?.integrity !== integrity) {
+      return Promise.reject(new Error("pyodide.js는 이미 다른 integrity 상태로 로드됐다. engineScriptIntegrity 검증은 첫 부팅 전에만 강제할 수 있다."));
+    }
+    return Promise.resolve();
+  }
   if (!engineScriptLoad) {
+    engineScriptPending = { indexURL, integrity };
     engineScriptLoad = new Promise((res, rej) => {
       const s = document.createElement("script");
       s.src = indexURL + "pyodide.js";
-      s.onload = res;
-      s.onerror = () => { engineScriptLoad = null; rej(new Error("pyodide.js 로드 실패: " + indexURL)); };
+      if (integrity) {
+        s.integrity = integrity;
+        s.crossOrigin = opts.crossOrigin || "anonymous";
+      }
+      s.onload = () => { engineScriptState = engineScriptPending; engineScriptPending = null; res(); };
+      s.onerror = () => { engineScriptLoad = null; engineScriptPending = null; rej(new Error("pyodide.js 로드 실패: " + indexURL)); };
       document.head.appendChild(s);
     });
+  } else if (integrity && engineScriptPending?.integrity !== integrity) {
+    return Promise.reject(new Error("pyodide.js 로드가 이미 다른 integrity 상태로 진행 중이다."));
   }
   return engineScriptLoad;
 }
@@ -48,21 +100,48 @@ export async function boot(opts = {}) {
   const indexURL = opts.indexURL || DEFAULT_INDEX;
   // 오프라인 부팅(기둥5): coreCacheDir을 주면 indexURL 자산을 OPFS에 저장/서빙한다.
   // fetch를 타는 자산(wasm/stdlib/lock 등 대용량)이 대상이고, 부팅 구간에만 fetch를 감싼다.
-  const cache = opts.coreCacheDir ? { dir: opts.coreCacheDir, hits: 0, misses: 0 } : null;
+  // coreIntegrity를 주면 캐시 hit와 네트워크 miss 모두 SRI(sha256-...)로 검증한다.
+  // manifest가 strict(required 기본 true)일 때 누락된 자산은 실패한다. 변조 캐시는 네트워크로
+  // 조용히 우회하지 않는다: 로컬 캐시도 실행 바이트이므로 파손이면 부팅을 멈춘다.
+  const coreIntegrity = normalizeCoreIntegrity(opts.coreIntegrity);
+  const cache = opts.coreCacheDir || coreIntegrity
+    ? { dir: opts.coreCacheDir || null, hits: 0, misses: 0, verified: 0, integrityMissing: 0, integrity: coreIntegrity }
+    : null;
   const cachedFetch = cache ? async (url) => {
     const name = new URL(url).pathname.split("/").pop();
     const ext = name.slice(name.lastIndexOf("."));
     const type = CORE_MIME[ext] || "application/octet-stream";
-    try {
-      const f = await (await cache.dir.getFileHandle(name)).getFile();
-      cache.hits++;
-      return new Response(f, { headers: { "Content-Type": type } });
-    } catch (e) { /* 미스 -> 네트워크 */ }
+    const expected = expectedCoreIntegrity(cache.integrity, url, name);
+    if (cache.integrity?.required && !expected) {
+      cache.integrityMissing++;
+      failIntegrity(cache, new Error(`integrity: ${name}의 coreIntegrity 항목이 없다`));
+    }
+    if (cache.dir) {
+      try {
+        const f = await (await cache.dir.getFileHandle(name)).getFile();
+        const data = await f.arrayBuffer();
+        if (expected) {
+          try { await verifyIntegrity(data, expected, name); cache.verified++; }
+          catch (e) { failIntegrity(cache, e); }
+        }
+        cache.hits++;
+        return new Response(data, { headers: { "Content-Type": type } });
+      } catch (e) {
+        if (String(e).includes("integrity:")) throw e;
+        // 미스 -> 네트워크
+      }
+    }
     const resp = await (cache.orig || fetch)(url); // 감싼 fetch 재진입(무한 재귀) 방지
     if (!resp.ok) return resp;
     const data = await resp.arrayBuffer();
-    const fh = await cache.dir.getFileHandle(name, { create: true });
-    const w = await fh.createWritable(); await w.write(data); await w.close();
+    if (expected) {
+      try { await verifyIntegrity(data, expected, name); cache.verified++; }
+      catch (e) { failIntegrity(cache, e); }
+    }
+    if (cache.dir) {
+      const fh = await cache.dir.getFileHandle(name, { create: true });
+      const w = await fh.createWritable(); await w.write(data); await w.close();
+    }
     cache.misses++;
     return new Response(data, { headers: { "Content-Type": type } });
   } : null;
@@ -77,25 +156,31 @@ export async function boot(opts = {}) {
   // dartlab/xlpod처럼 워커에서 boot의 캐시/env/packages 로직을 쓰려는 소비자의 경로.
   const doLoad = opts.loadPyodide
     ? () => opts.loadPyodide(cfg)
-    : async () => { await ensureEngineScript(indexURL); return loadPyodide(cfg); };
+    : async () => { await ensureEngineScript(indexURL, { integrity: opts.engineScriptIntegrity }); return loadPyodide(cfg); };
+  if (opts.loadPyodide && opts.engineScriptIntegrity) throw new Error("engineScriptIntegrity는 pyproc이 pyodide.js를 로드하는 경로에서만 검증할 수 있다.");
   let py;
   if (cache) {
     const fetchOrig = globalThis.fetch;
     cache.orig = fetchOrig;
+    const integrityFailure = new Promise((_, reject) => { cache.rejectIntegrity = reject; });
+    const loadAll = async () => {
+      const loaded = await doLoad();
+      if (opts.packages && opts.packages.length) await loaded.loadPackage(opts.packages);
+      return loaded;
+    };
     globalThis.fetch = (input, init) => {
       const u = typeof input === "string" ? input : (input && input.url) || String(input);
       return u.startsWith(indexURL) ? cachedFetch(u) : fetchOrig(input, init);
     };
     try {
-      py = await doLoad();
-      if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
+      py = await Promise.race([loadAll(), integrityFailure]);
     } finally { globalThis.fetch = fetchOrig; }
   } else {
     py = await doLoad();
     if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
   }
-  const rt = new Runtime(new PyodideEngine(py), indexURL);
-  if (cache) rt.coreCache = { hits: cache.hits, misses: cache.misses }; // 부팅 자산 캐시 통계
+  const rt = new Runtime(new PyodideEngine(py), indexURL, { assetIntegrity: opts.assetIntegrity || null });
+  if (cache) rt.coreCache = { hits: cache.hits, misses: cache.misses, verified: cache.verified, integrityMissing: cache.integrityMissing }; // 부팅 자산 캐시/검증 통계
   return rt;
 }
 
@@ -104,11 +189,12 @@ export class Runtime {
   // 후자면 PyodideEngine으로 감싼다(하위 호환 + 채택 경로): dartlab처럼 워커에서 자체 부팅한
   // Pyodide를 `new Runtime(py)`로 채택하는 라이브 소비자를 지원한다. EngineContract seam(계약
   // 격리) 도입 시 `Runtime(py)` 채택 경로가 깨질 뻔한 회귀를 이 판별로 복원한다(runSync 유무로 구분).
-  constructor(engineOrPy, indexURL) {
+  constructor(engineOrPy, indexURL, opts = {}) {
     this._engine = engineOrPy && typeof engineOrPy.runSync === "function" ? engineOrPy : new PyodideEngine(engineOrPy);
     // 이 커널이 어느 배포 지점에서 부팅됐는지. 자식 워커(subprocess 등)가 같은 지점을
     // 쓰게 하는 근거다(자가호스팅/오프라인 배포에서 자식만 CDN으로 새는 결함 방지).
     this.indexURL = indexURL || DEFAULT_INDEX;
+    this.assetIntegrity = opts.assetIntegrity || null;
     this.memory = new MemoryCapability(this._engine);
     this.fs = new FileSystem(this); // 엔진-무관 일반 파일 IO(상시 능력, memory와 동급). 미지원 엔진이면 호출 시 에러.
     this.execSeq = 0; // 상태 변이 카운터. 리액티브가 실행 경계 위반을 O(1)로 감지하는 근거.
@@ -137,7 +223,7 @@ export class Runtime {
 
   // Layer 1 능력 등록(opt-in). 소비자는 능력 계약만 받고 엔진 내부는 만지지 않는다.
   enableReactive() { return new ReactiveController(this); }
-  enableSyscallBridge(cfg = {}) { return new SyscallBridge(this, cfg); }
+  enableSyscallBridge(cfg = {}) { return new SyscallBridge(this, { ...cfg, assetIntegrity: cfg.assetIntegrity || this.assetIntegrity }); }
   enableSocketBridge(cfg = {}) { return new SocketBridge(this, cfg); }
   enableAsgiServer(cfg = {}) { return new AsgiServer(this, cfg); }
   enableTerminal(cfg = {}) { return new Terminal(this, cfg); }

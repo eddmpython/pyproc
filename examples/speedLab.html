@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Speed Lab - pyproc</title>
+  <link rel="icon" href="../assets/logo.svg">
+  <meta name="theme-color" content="#0a0f1c">
+  <link rel="stylesheet" href="demo.css">
+  <script type="module" src="siteChrome.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <a class="logo" href="../"><img class="logoMark" src="../assets/logo.svg" width="22" height="22" alt=""> <span><span class="py">py</span>proc</span></a>
+      <nav>
+        <a href="agentSandbox.html">Agent</a>
+        <a href="machine.html">Machine</a>
+        <a href="serverDev.html">Server</a>
+        <a href="speedLab.html" class="on">Speed</a>
+        <a href="terminal.html">Terminal</a>
+        <a href="processOs.html">Process OS</a>
+        <a href="basic.html">Basics</a>
+      </nav>
+      <sns-links></sns-links>
+    </header>
+
+    <h1>Web Python speed, measured in the tab</h1>
+    <p class="lead">This page uses the public <code>PyProc</code> API only: boot a worker pool,
+    run a single-worker numpy matrix multiply, then run the same matrix multiply sharded across
+    4 Python workers. The result is checked before the speed number is accepted.</p>
+
+    <div class="panel">
+      <div class="status" id="st">Booting 4 Python workers with numpy...</div>
+      <div class="row" style="margin:.6rem 0 .2rem">
+        <span class="badge ok">4 interpreters</span>
+        <span class="badge info">4 independent GILs</span>
+        <span class="badge">Float64 numpy matmul</span>
+      </div>
+      <div class="kv" id="stats" style="display:none">
+        <div class="k">workers</div><div id="workers"></div>
+        <div class="k">single worker</div><div><div class="barWrap"><div class="bar" id="barSingle"></div></div><span id="singleMs"></span></div>
+        <div class="k">4-worker shard</div><div><div class="barWrap"><div class="bar ok" id="barParallel"></div></div><span id="parallelMs"></span></div>
+        <div class="k">speedup</div><div id="speedup"></div>
+        <div class="k">correctness</div><div id="correctness"></div>
+      </div>
+      <div class="term" id="out" style="margin-top:.7rem">The API under test:
+const os = new PyProc({ packages: ["numpy"], setup: "import numpy" });
+await os.boot(4);
+await os.matmul(a, b, { parts: 1 });
+await os.matmul(a, b, { parts: 4 });</div>
+    </div>
+
+    <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> 쨌 <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
+  </div>
+
+  <script type="module">
+    import { PyProc } from "../index.js";
+
+    const st = document.getElementById("st"), out = document.getElementById("out");
+    const el = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+    const gateMode = params.has("gate");
+    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
+    const log = (m) => { out.textContent += "\n" + m; out.scrollTop = out.scrollHeight; };
+    const gateReport = (ok) => {
+      if (!gateMode) return;
+      fetch("/gateReport", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-220) }] }),
+      }).catch(() => {});
+    };
+
+    if (!crossOriginIsolated && "serviceWorker" in navigator && !sessionStorage.getItem("pyprocSpeedCoiTried")) {
+      try {
+        sessionStorage.setItem("pyprocSpeedCoiTried", "1");
+        st.textContent = "Unlocking SharedArrayBuffer (one-time reload)...";
+        await navigator.serviceWorker.register("../pyprocSw.js?coi=1");
+        await navigator.serviceWorker.ready;
+        location.reload();
+        await new Promise(() => {});
+      } catch (e) {
+        log("COI bootstrap failed: " + e);
+      }
+    }
+
+    function makeMatrix(rows, cols, mul, mod) {
+      const data = new Float64Array(rows * cols);
+      for (let i = 0; i < data.length; i++) data[i] = (((i * mul + 3) % mod) / mod) - 0.5;
+      return { data, rows, cols };
+    }
+
+    function sampleMaxErr(a, b) {
+      let max = 0;
+      const stride = Math.max(1, Math.floor(a.length / 2048));
+      for (let i = 0; i < a.length; i += stride) max = Math.max(max, Math.abs(a[i] - b[i]));
+      max = Math.max(max, Math.abs(a[a.length - 1] - b[b.length - 1]));
+      return max;
+    }
+
+    try {
+      const workers = 4;
+      const size = 768;
+      const os = new PyProc({ indexURL: INDEX, packages: ["numpy"], setup: "import numpy" });
+      let t = performance.now();
+      const boot = await os.boot(workers);
+      const bootMs = Math.round(performance.now() - t);
+      st.textContent = `Ready: ${boot.workers} workers forked from one snapshot.`;
+      log(`boot: ${bootMs}ms, avg worker boot ${boot.avgBootMs}ms`);
+
+      const a = makeMatrix(size, size, 7, 17);
+      const b = makeMatrix(size, size, 5, 13);
+      log(`matrix: ${size}x${size} @ ${size}x${size}, Float64`);
+
+      log("single worker baseline...");
+      t = performance.now();
+      const single = await os.matmul(a, b, { parts: 1 });
+      const singleMs = Math.round(performance.now() - t);
+
+      log("4-worker sharded run...");
+      t = performance.now();
+      const parallel = await os.matmul(a, b, { parts: workers });
+      const parallelMs = Math.round(performance.now() - t);
+
+      const maxErr = sampleMaxErr(single.data, parallel.data);
+      const speed = singleMs / parallelMs;
+      const width = Math.max(8, Math.min(100, Math.round((parallelMs / singleMs) * 100)));
+      el("stats").style.display = "grid";
+      el("workers").textContent = `${boot.workers} (forked=${boot.forked})`;
+      el("singleMs").textContent = ` ${singleMs}ms`;
+      el("parallelMs").textContent = ` ${parallelMs}ms`;
+      el("barSingle").style.width = "100%";
+      el("barParallel").style.width = `${width}%`;
+      el("speedup").innerHTML = `<span class="badge ok">${speed.toFixed(2)}x</span>`;
+      el("correctness").textContent = `sample max error ${maxErr.toExponential(2)}`;
+      st.textContent = `Done. ${speed.toFixed(2)}x faster on this run.`;
+      log(`speedup: ${speed.toFixed(2)}x (${singleMs}ms -> ${parallelMs}ms)`);
+      log(`correctness: sample max error ${maxErr.toExponential(2)}`);
+      os.terminate();
+      gateReport(maxErr < 1e-9 && speed > 1.05);
+    } catch (e) {
+      st.textContent = "Failed";
+      log("Error: " + e);
+      gateReport(false);
+    }
+  </script>
+</body>
+</html>

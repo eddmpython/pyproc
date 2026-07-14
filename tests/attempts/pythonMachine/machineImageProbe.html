@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+결과(2026-07-15, Edge headless / 로컬 COOP+COEP):
+.pymachine home payload + WebCrypto signature GREEN 11/11. /home/web OPFS 마운트에 쓴
+텍스트/디렉터리/바이너리 파일을 단일 파일에 포함했고, trusted public key로 `trust: true` 없이
+openMachine이 부활했다. 다른 공개키는 거부. 파일 15MB, export 75ms, open 1608ms.
+-->
 <html lang="ko">
 <head><meta charset="utf-8"><title>probe: machineImage</title>
 <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
@@ -6,7 +12,7 @@
 <h1>probe: .pymachine = 파일 하나로 이동하는 컴퓨터</h1>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { bootSession, openMachine } from "../../../index.js";
+  import { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey } from "../../../index.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
@@ -15,11 +21,25 @@
     try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
   };
   try {
+    const opfs = await navigator.storage.getDirectory();
+    try { await opfs.removeEntry("machineImageHome", { recursive: true }); } catch (e) {}
+    const homeDir = await opfs.getDirectoryHandle("machineImageHome", { create: true });
+
     // 컴퓨터 A: 상태를 만들고 파일 하나로 내보낸다
     const a = await bootSession({});
+    const home = await a.rt.mountHome(homeDir);
     a.rt.run("x = 42\nnotes = ['hello', 'machine']\nblob = bytearray(9 * 1024 * 1024)\nblob[123] = 7");
+    a.rt.run(
+      "import os\n" +
+      "os.makedirs('/home/web/project/data', exist_ok=True)\n" +
+      "open('/home/web/project/README.txt', 'w').write('portable home')\n" +
+      "open('/home/web/project/data/payload.bin', 'wb').write(bytes(range(64)))"
+    );
+    await home.sync();
     const t0 = performance.now();
-    const file = await a.exportImage();
+    const keyPair = await createMachineKeyPair();
+    const trustedPublicKey = await exportMachinePublicKey(keyPair);
+    const file = await a.exportImage({ includeHome: true, signingKey: keyPair });
     timings.exportMs = Math.round(performance.now() - t0);
     timings.fileMB = +(file.size / 1048576).toFixed(1);
     check("A: exportImage -> 단일 파일", file.size > 0, `${timings.fileMB}MB, ${timings.exportMs}ms`);
@@ -27,7 +47,13 @@
     // 신뢰 게이트: trust 없이 열면 거부되어야 한다
     let refused = false;
     try { await openMachine(file); } catch (e) { refused = String(e).includes("trust"); }
-    check("신뢰 게이트: trust 없이는 거부", refused);
+    check("신뢰 게이트: trusted key나 trust 없이는 거부", refused);
+
+    const otherKeyPair = await createMachineKeyPair();
+    const otherPublicKey = await exportMachinePublicKey(otherKeyPair);
+    let wrongKey = false;
+    try { await openMachine(file, { trustedPublicKeys: [otherPublicKey] }); } catch (e) { wrongKey = String(e).includes("공개키") || String(e).includes("signature"); }
+    check("서명 신뢰: 다른 공개키는 거부", wrongKey);
 
     // 무결성: 델타 바이트 변조하면 열리지 않아야 한다
     const buf = new Uint8Array(await file.arrayBuffer());
@@ -66,11 +92,14 @@
 
     // 컴퓨터 B: 파일로 부팅(매니페스트는 파일 안에 있다) -> A의 상태가 산다
     const t1 = performance.now();
-    const b = await openMachine(file, { trust: true });
+    const b = await openMachine(file, { trustedPublicKeys: [trustedPublicKey] });
     timings.openMs = Math.round(performance.now() - t1);
-    check("B: openMachine으로 부활", b.rt.run("x") === 42, `${timings.openMs}ms(부팅 포함)`);
+    check("B: trusted public key로 trust 없이 부활", b.rt.run("x") === 42, `${timings.openMs}ms(부팅 포함)`);
     check("B: 리스트/바이트 상태 생존", b.rt.run("notes[1]") === "machine" && b.rt.run("blob[123]") === 7 && b.rt.run("len(blob)") === 9 * 1024 * 1024);
+    check("B: /home 텍스트 파일 생존", b.rt.run("open('/home/web/project/README.txt').read()") === "portable home");
+    check("B: /home 디렉터리/바이너리 생존", b.rt.run("__import__('os').path.isdir('/home/web/project/data')") === true && b.rt.run("open('/home/web/project/data/payload.bin','rb').read()[63]") === 63);
     check("B: 연속 실행", b.rt.run("x + len(notes)") === 44);
+    await opfs.removeEntry("machineImageHome", { recursive: true });
   } catch (e) {
     check("예외 없음", false, String(e).slice(-300));
   }

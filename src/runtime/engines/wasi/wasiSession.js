@@ -9,6 +9,7 @@
 // 값 다리는 JSON 직렬화 한정이다(WASI엔 FFI가 없어 함수/numpy/live 객체는 못 넘긴다).
 import { SIGNAL_META, EOT, CTL_WORDS, DATA_SAB_BYTES, SITE_PATH } from "./wasiProtocol.js";
 import { unzipWheel } from "./wheelUnzip.js";
+import { verifyPyProcAssetIntegrity } from "../../assets.js";
 
 // 바이트를 base64로(파이썬에 코드로 실어 /site에 쓰기 위함). 큰 배열은 청크로 스택 초과 방지.
 function base64FromBytes(bytes) {
@@ -53,25 +54,27 @@ export async function bootWasi(manifest = {}) {
     const prefix = "lib/" + stdlibDir + "/";
     stdlibFiles = entries.filter(([p]) => p.startsWith(prefix)).map(([p, b]) => [p.slice(prefix.length), b]);
   }
-  const session = new WasiSession(wasmBytes, !!manifest.deterministic, stdlibFiles, stdlibDir);
+  const session = new WasiSession(wasmBytes, !!manifest.deterministic, stdlibFiles, stdlibDir, manifest.assetIntegrity || null);
   await session._boot();
   for (const wheel of manifest.wheels || []) await session.installWheel(wheel);
   return session;
 }
 
 export class WasiSession {
-  constructor(wasmBytes, deterministic, stdlibFiles, stdlibDir) {
+  constructor(wasmBytes, deterministic, stdlibFiles, stdlibDir, assetIntegrity = null) {
     this._wasmBytes = wasmBytes;
     this._deterministic = deterministic;
     this._stdlibFiles = stdlibFiles || null; // 외부 stdlib 빌드면 [[상대경로,바이트]], self-contained면 null
     this._stdlibDir = stdlibDir || null;     // /lib/<stdlibDir> 마운트 지점
     this._worker = null;
+    this._assetIntegrity = assetIntegrity;
     this._ctl = new Int32Array(new SharedArrayBuffer(CTL_WORDS * 4));
     this._data = new Uint8Array(new SharedArrayBuffer(DATA_SAB_BYTES));
     this._queue = []; this._idle = false; this._cur = null; this._lines = { stdout: [], stderr: [] };
   }
 
   async _boot() {
+    if (this._assetIntegrity) await verifyPyProcAssetIntegrity(this._assetIntegrity, { roles: ["wasiWorker"] });
     this._worker = new Worker(new URL("./wasiWorker.js", import.meta.url), { type: "module" });
     this._worker.addEventListener("message", (e) => this._onMessage(e.data));
     await new Promise((resolve, reject) => {

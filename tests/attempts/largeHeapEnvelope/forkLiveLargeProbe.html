@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<!--
+결과(2026-07-15, Edge headless / 로컬 COOP+COEP):
+64MB GREEN 7/7. replayBoot 4142ms, delta 1075p/67.2MB,
+harvest 51.5ms, apply 32.8ms, child state exact.
+512MB GREEN 7/7. replayBoot 3942ms, delta 8243p/515.2MB,
+harvest 132.3ms, apply 187.4ms, child state exact.
+실행: node tests/browser/run.mjs tests/attempts/largeHeapEnvelope/forkLiveLargeProbe.html
+대형 수동: PYPROC_GATE_TIMEOUT=900000 node tests/browser/run.mjs "tests/attempts/largeHeapEnvelope/forkLiveLargeProbe.html?target=512"
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: forkLive large heap envelope</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: forkLiveLarge - 대형 힙 live fork 비용 봉투</h1>
+<p>워커 대 워커 결정적 리플레이 위에서 살아있는 프로세스 상태를 fork한다. query: <code>?target=512</code>.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  const out = document.getElementById("out");
+  const params = new URL(location.href).searchParams;
+  const targetMB = Math.max(1, Number(params.get("target") || 64));
+  const checks = []; const timings = { targetMB };
+  const workers = [];
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const mb = (bytes) => +(bytes / 1048576).toFixed(1);
+  const now = () => performance.now();
+  let seq = 0;
+  const call = (w, msg, transfer = []) => new Promise((res, rej) => {
+    const id = ++seq;
+    const onMsg = (e) => {
+      if (e.data.id !== id) return;
+      w.removeEventListener("message", onMsg);
+      if (e.data.type === "error") rej(new Error(e.data.error)); else res(e.data);
+    };
+    w.addEventListener("message", onMsg);
+    w.postMessage({ ...msg, id }, transfer);
+  });
+  const spawn = () => {
+    const w = new Worker(new URL("../pythonMachine/forkLiveWorker.js", import.meta.url), { type: "module" });
+    workers.push(w);
+    return w;
+  };
+  try {
+    const parent = spawn();
+    const child = spawn();
+    let t = now();
+    const [rp, rc] = await Promise.all([
+      call(parent, { type: "replayBoot", env: {}, packages: [], setup: null }),
+      call(child, { type: "replayBoot", env: {}, packages: [], setup: null }),
+    ]);
+    timings.replayBootMs = Math.round(now() - t);
+    timings.baseHeapMB = mb(rp.heapLen);
+    check("워커 리플레이 부팅 2개", rp.type === "replayReady" && rc.type === "replayReady",
+      `${timings.replayBootMs}ms, base ${timings.baseHeapMB}MB`);
+    check("cp0 결정성", rp.heapLen === rc.heapLen && rp.digest === rc.digest,
+      `${rp.digest.slice(0, 12)} vs ${rc.digest.slice(0, 12)}`);
+
+    t = now();
+    await call(parent, {
+      type: "run",
+      code:
+        `payload = bytearray(${targetMB} * 1024 * 1024)\n` +
+        "payload[0] = 17\n" +
+        "payload[len(payload) - 1] = 23\n" +
+        "forkTag = 'largeParent'\n" +
+        "payloadSize = len(payload)\n" +
+        "1",
+    });
+    timings.allocMs = Math.round(now() - t);
+    check("부모 payload 할당", true, `${targetMB}MB, ${timings.allocMs}ms`);
+
+    t = now();
+    const harvested = await call(parent, { type: "harvest" });
+    timings.harvestWallMs = Math.round(now() - t);
+    timings.harvestMs = harvested.ms;
+    timings.deltaPages = harvested.pages.length;
+    timings.deltaMB = mb(harvested.bin.byteLength);
+    timings.parentHeapMB = mb(harvested.heapLen);
+    check("fork delta 수확", harvested.pages.length > 0,
+      `${harvested.pages.length}p/${timings.deltaMB}MB, heap ${timings.parentHeapMB}MB, ${harvested.ms}ms`);
+
+    t = now();
+    const applied = await call(child, {
+      type: "applyDelta",
+      bin: harvested.bin,
+      pages: harvested.pages,
+      sp: harvested.sp,
+      heapLen: harvested.heapLen,
+      check: "(forkTag, payloadSize, payload[0], payload[len(payload) - 1])",
+    }, [harvested.bin]);
+    timings.applyWallMs = Math.round(now() - t);
+    timings.applyMs = applied.applyMs;
+    const evaled = applied.evaled ? [...applied.evaled] : null;
+    check("fork delta 적용", !applied.error,
+      applied.error ? applied.error : `${applied.applyMs}ms, wall ${timings.applyWallMs}ms`);
+    check("자식 상태 정확", !!evaled && evaled[0] === "largeParent" && evaled[1] === targetMB * 1024 * 1024 && evaled[2] === 17 && evaled[3] === 23,
+      JSON.stringify(evaled));
+
+    await call(child, { type: "run", code: "forkTag = 'childOnly'\n1" });
+    const parentTag = await call(parent, { type: "run", code: "forkTag" });
+    const childTag = await call(child, { type: "run", code: "forkTag" });
+    check("독립 주소공간", parentTag.result === "largeParent" && childTag.result === "childOnly",
+      `parent=${parentTag.result}, child=${childTag.result}`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 500));
+  } finally {
+    for (const w of workers) w.terminate();
+  }
+  await report();
+</script>
+</body>
+</html>

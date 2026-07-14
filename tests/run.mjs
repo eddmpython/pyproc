@@ -1,16 +1,19 @@
 // tests/run.mjs - pyproc 구조/린트 게이트. Node 전용, 의존성 0.
 // WASM 런타임 진짜 검증은 브라우저에서만 가능(docs/operations/testing.md). 여기서는 브라우저
 // 없이 확인 가능한 것만 본다: 공개 표면·타입, em dash 0, 상대 링크 생존, 구조 불변식.
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 let passed = 0, failed = 0;
 const ok = (name) => { passed++; console.log(`  PASS ${name}`); };
 const bad = (name, msg) => { failed++; console.log(`  FAIL ${name}: ${msg}`); };
 function check(name, fn) { try { fn(); ok(name); } catch (e) { bad(name, e.message); } }
+async function checkAsync(name, fn) { try { await fn(); ok(name); } catch (e) { bad(name, e.message); } }
 
 // 재귀로 지정 확장자 파일 수집(node_modules 제외).
 function collect(dir, exts, acc = []) {
@@ -31,8 +34,9 @@ console.log("pyproc 게이트\n");
 console.log("[표면]");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 for (const [name, kind] of [
+  ["getPyProcAssetManifest", "function"], ["verifyPyProcAssetIntegrity", "function"], ["PYPROC_ASSET_MANIFEST_VERSION", "number"],
   ["boot", "function"], ["checkEnvironment", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
-  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["FileSystem", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
+  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["FileSystem", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["createMachineKeyPair", "function"], ["exportMachinePublicKey", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
   ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"],
   ["GpuCompute", "function"], ["GpuArray", "function"], ["GpuBridge", "function"],
   ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
@@ -42,6 +46,42 @@ for (const [name, kind] of [
   });
 }
 check("PAGE_SIZE === 65536", () => { if (api.PAGE_SIZE !== 65536) throw new Error(String(api.PAGE_SIZE)); });
+check("asset manifest 형태", () => {
+  const m = api.getPyProcAssetManifest({ baseURL: "https://example.test/pkg/" });
+  if (m.version !== api.PYPROC_ASSET_MANIFEST_VERSION) throw new Error("version 불일치");
+  if (m.packageRoot !== "https://example.test/pkg/") throw new Error("packageRoot 정규화 실패");
+  const relRoot = api.getPyProcAssetManifest({ baseURL: "/vendor/pyproc" });
+  if (relRoot.packageRoot !== "/vendor/pyproc/") throw new Error("root-relative baseURL 보존 실패");
+  if (!relRoot.assets[0].url.startsWith("/vendor/pyproc/src/")) throw new Error("root-relative asset URL 계산 실패");
+  if (!m.policy.sameOriginRequired || !m.policy.preserveRelativeImports || !m.policy.runtimePreflight) throw new Error("policy 불충분");
+  const roles = new Set(m.assets.map((a) => a.role));
+  for (const role of ["processWorker", "sharedKernelHost", "machineWorker", "wasiWorker", "pyprocServiceWorker"])
+    if (!roles.has(role)) throw new Error(`role 누락: ${role}`);
+  for (const a of m.assets) {
+    if (!a.path.startsWith("src/")) throw new Error(`src 밖 자산: ${a.path}`);
+    if (!a.url.startsWith("https://example.test/pkg/src/")) throw new Error(`URL 계산 실패: ${a.url}`);
+  }
+});
+await checkAsync("asset integrity preflight가 graph 바이트를 검증", async () => {
+  const path = "src/processOs/ipc.js";
+  const bytes = readFileSync(join(ROOT, path));
+  const integrity = "sha256-" + createHash("sha256").update(bytes).digest("base64");
+  const manifest = { files: [{ path, url: "mem://ipc", bytes: bytes.byteLength, integrity, roles: ["processWorker"] }] };
+  const fetchOk = async () => ({
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+  const r = await api.verifyPyProcAssetIntegrity(manifest, { roles: ["processWorker"], fetch: fetchOk });
+  if (r.verified !== 1 || r.bytes !== bytes.byteLength || r.files[0] !== path) throw new Error("검증 결과 형식 오류");
+  let rejected = false;
+  try {
+    await api.verifyPyProcAssetIntegrity({ files: [{ ...manifest.files[0], integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }] }, { roles: ["processWorker"], fetch: fetchOk });
+  } catch (e) {
+    rejected = String(e).includes("해시 불일치");
+  }
+  if (!rejected) throw new Error("잘못된 SRI를 거부하지 않음");
+});
 // checkEnvironment는 표준 전역만 읽어 구조화된 진단을 돌려준다(Node에서도 던지지 않는다).
 check("checkEnvironment() 진단 형태", () => {
   const r = api.checkEnvironment();
@@ -252,7 +292,7 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
-for (const sym of ["boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "WheelCache", "PyProc", "SIGNAL", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE"]) {
+for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
   });
@@ -262,6 +302,14 @@ check("package.json types -> index.d.ts", () => {
   if (pkg.types !== "./index.d.ts") throw new Error(String(pkg.types));
   if (pkg.exports["."].types !== "./index.d.ts") throw new Error("exports['.'].types 누락");
   if (!pkg.files.includes("index.d.ts")) throw new Error("files에 index.d.ts 누락");
+});
+check("package.json bin -> assetManifest CLI", () => {
+  if (pkg.bin?.["pyproc-assets"] !== "./scripts/assetManifest.mjs") throw new Error("pyproc-assets bin 누락");
+  if (!pkg.files.includes("scripts/assetManifest.mjs")) throw new Error("files에 assetManifest.mjs 누락");
+});
+check("package.json 소비자 게이트 스크립트", () => {
+  if (pkg.scripts?.["test:package"] !== "node tests/packageConsumer.mjs") throw new Error("test:package 누락");
+  if (pkg.scripts?.["test:consumer"] !== "node tests/browser/productConsumer.mjs") throw new Error("test:consumer 누락");
 });
 check("exports 경로 실존", () => {
   for (const [sub, target] of Object.entries(pkg.exports)) {
@@ -300,6 +348,75 @@ check("sharedKernel.js가 같은 폴더 host를 연다", () => {
 check("virtualOrigin.js와 pyprocSw.js가 같은 폴더(자산 경로 계약)", () => {
   if (!existsSync(join(ROOT, "src", "capabilities", "pyprocSw.js"))) throw new Error("pyprocSw.js 없음");
   if (!existsSync(join(ROOT, "src", "capabilities", "virtualOrigin.js"))) throw new Error("virtualOrigin.js 없음");
+});
+check("asset manifest가 실행 자산 경로와 동기화", () => {
+  const manifest = api.getPyProcAssetManifest({ baseURL: "https://example.test/pkg/" });
+  const byRole = Object.fromEntries(manifest.assets.map((a) => [a.role, a.path]));
+  const expected = {
+    processWorker: "src/processOs/worker.js",
+    sharedKernelHost: "src/processOs/sharedKernelHost.js",
+    machineWorker: "src/processOs/machineWorker.js",
+    wasiWorker: "src/runtime/engines/wasi/wasiWorker.js",
+    pyprocServiceWorker: "src/capabilities/pyprocSw.js",
+  };
+  for (const [role, path] of Object.entries(expected)) {
+    if (byRole[role] !== path) throw new Error(`${role}: ${byRole[role]} != ${path}`);
+    if (!existsSync(join(ROOT, path))) throw new Error(`manifest 자산 없음: ${path}`);
+  }
+  const checks = [
+    ["src/processOs/pyProc.js", 'new URL("./worker.js", import.meta.url)', expected.processWorker],
+    ["src/capabilities/syscallBridge.js", 'new URL("../processOs/worker.js", import.meta.url)', expected.processWorker],
+    ["src/processOs/sharedKernel.js", 'new URL("./sharedKernelHost.js", import.meta.url)', expected.sharedKernelHost],
+    ["src/processOs/machineContainer.js", 'new URL("./machineWorker.js", import.meta.url)', expected.machineWorker],
+    ["src/processOs/machineWorker.js", 'new URL("./machineWorker.js", import.meta.url)', expected.machineWorker],
+    ["src/runtime/engines/wasi/wasiSession.js", 'new URL("./wasiWorker.js", import.meta.url)', expected.wasiWorker],
+  ];
+  for (const [file, needle] of checks) {
+    const src = readFileSync(join(ROOT, file), "utf8");
+    if (!src.includes(needle)) throw new Error(`${file}의 worker 경로가 manifest 계약과 어긋남`);
+  }
+});
+check("assetManifest CLI가 graph SRI manifest 생성", () => {
+  const r = spawnSync(process.execPath, ["scripts/assetManifest.mjs", "--baseURL", "/vendor/pyproc/"], { cwd: ROOT, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(r.stderr || r.stdout);
+  const m = JSON.parse(r.stdout);
+  if (m.packageRoot !== "/vendor/pyproc/") throw new Error("baseURL 반영 실패");
+  if (!Array.isArray(m.entrypoints) || !Array.isArray(m.files)) throw new Error("entrypoints/files 없음");
+  const byPath = new Map(m.files.map((f) => [f.path, f]));
+  for (const p of ["src/processOs/worker.js", "src/processOs/ipc.js", "src/runtime/runtime.js", "src/runtime/engines/wasi/wasiProtocol.js", "src/capabilities/pyprocSw.js"]) {
+    const f = byPath.get(p);
+    if (!f) throw new Error(`graph 파일 누락: ${p}`);
+    if (!/^sha256-[A-Za-z0-9+/]+=*$/.test(f.integrity)) throw new Error(`SRI 형식 오류: ${p}`);
+    if (!(f.bytes > 0)) throw new Error(`bytes 오류: ${p}`);
+  }
+  const processEntry = m.entrypoints.find((e) => e.role === "processWorker");
+  if (!processEntry?.graph.includes("src/processOs/ipc.js")) throw new Error("processWorker graph가 ipc.js를 포함하지 않음");
+  const tmp = mkdtempSync(join(tmpdir(), "pyprocAssets-"));
+  try {
+    const c = spawnSync(process.execPath, ["scripts/assetManifest.mjs", "--baseURL", "/vendor/pyproc/", "--copy-to", tmp], { cwd: ROOT, encoding: "utf8" });
+    if (c.status !== 0) throw new Error(c.stderr || c.stdout);
+    if (!existsSync(join(tmp, "src", "processOs", "worker.js"))) throw new Error("copy-to가 worker.js를 복사하지 않음");
+    if (!existsSync(join(tmp, "src", "runtime", "runtime.js"))) throw new Error("copy-to가 import graph를 복사하지 않음");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+check("브라우저 게이트가 CLI asset manifest를 소비", () => {
+  const runSrc = readFileSync(join(ROOT, "tests", "browser", "run.mjs"), "utf8");
+  const gateSrc = readFileSync(join(ROOT, "tests", "browser", "gate.html"), "utf8");
+  const ciSrc = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
+  if (!runSrc.includes('"scripts/assetManifest.mjs", "--baseURL", "/"')) throw new Error("run.mjs가 pyproc-assets CLI를 실행하지 않음");
+  if (!runSrc.includes('"/pyproc-assets.json"')) throw new Error("run.mjs가 asset manifest endpoint를 제공하지 않음");
+  if (!gateSrc.includes('fetch("/pyproc-assets.json"')) throw new Error("gate.html이 CLI 산출 manifest를 fetch하지 않음");
+  if (!gateSrc.includes('assetOk.verified > 1') || !gateSrc.includes('"src/processOs/ipc.js"')) throw new Error("gate.html이 graph 단위 preflight를 검증하지 않음");
+  if (!gateSrc.includes("Runtime -> SyscallBridge 상속 거부") || !gateSrc.includes("assetIntegrity 상속 childWorker"))
+    throw new Error("gate.html이 Runtime assetIntegrity 상속 경로를 검증하지 않음");
+  if (!ciSrc.includes("npm run test:consumer")) throw new Error("CI가 제품 소비자 브라우저 게이트를 실행하지 않음");
+});
+check("패키지 소비자가 공개 표면과 설치된 pyproc-assets를 사용", () => {
+  const r = spawnSync(process.execPath, ["tests/packageConsumer.mjs"], { cwd: ROOT, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`${r.stdout ?? ""}\n${r.stderr ?? ""}`.trim().slice(-4000));
+  if (!r.stdout.includes("package consumer ok:")) throw new Error("package consumer 완료 신호 없음");
 });
 
 // 6) 상대 링크 생존: 모든 *.md의 상대 링크가 "git 추적" 경로를 가리키는가.

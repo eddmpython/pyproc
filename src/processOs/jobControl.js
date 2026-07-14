@@ -9,7 +9,7 @@ import { PyProc, SIGNAL } from "./pyProc.js";
 export class JobControl {
   constructor(opts = {}) {
     this._workers = opts.workers || 3; // 대화형 1 + 잡 슬롯 N-1
-    this._os = new PyProc({ replay: opts.replay || {}, indexURL: opts.indexURL });
+    this._os = new PyProc({ replay: opts.replay || {}, indexURL: opts.indexURL, assetIntegrity: opts.assetIntegrity || null });
     this._interactivePid = null;
     this._free = [];   // 자유 잡 레인 pid 큐
     this._jobs = new Map(); // jobId -> { pid, code, state, promise, result }

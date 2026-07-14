@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe helper: runtimeIntegrityFrame</title></head>
+<body>
+<script type="module">
+  import { boot } from "../../../index.js";
+
+  const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+  const params = new URLSearchParams(location.search);
+  const indexParam = params.get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : DEFAULT_INDEX;
+
+  function withTimeout(p, ms) {
+    return Promise.race([
+      p,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+    ]);
+  }
+
+  const mode = params.get("mode") || "badScript";
+  let ok = false;
+  let info = "";
+
+  if (mode === "badScript") {
+    try {
+      await withTimeout(boot({ indexURL: INDEX, engineScriptIntegrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }), 15000);
+      info = "wrong SRI booted";
+    } catch (e) {
+      info = String(e);
+      ok = info.includes("pyodide.js") || info.includes("integrity");
+    }
+  } else if (mode === "coreReject") {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle("pyprocIntegrityCore");
+      const manifest = JSON.parse(params.get("manifest") || "{}");
+      const scriptSri = params.get("scriptSri");
+      await withTimeout(boot({ indexURL: INDEX, engineScriptIntegrity: scriptSri, coreCacheDir: dir, coreIntegrity: { files: manifest } }), 60000);
+      info = "core booted";
+    } catch (e) {
+      info = String(e);
+      ok = info.includes("integrity") || info.includes("coreIntegrity") || info.includes("항목이 없다") || info.includes("불일치");
+    }
+  }
+  parent.postMessage({ kind: "runtimeIntegrityFrame", mode, ok, info }, location.origin);
+</script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: runtimeIntegrity</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 런타임 자산 SRI</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : DEFAULT_INDEX;
+
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+
+  function base64FromBytes(bytes) {
+    let s = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+
+  async function sriFromBytes(bytes) {
+    return "sha256-" + base64FromBytes(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+  }
+
+  async function sriFromUrl(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`fetch failed ${resp.status}: ${url}`);
+    return sriFromBytes(await resp.arrayBuffer());
+  }
+
+  function withTimeout(p, ms, label) {
+    return Promise.race([
+      p,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timeout`)), ms)),
+    ]);
+  }
+
+  async function runFrame(mode, extra = {}) {
+    return new Promise((resolve) => {
+      const frameUrl = new URL("runtimeIntegrityFrame.html", location.href);
+      frameUrl.searchParams.set("indexURL", INDEX);
+      frameUrl.searchParams.set("mode", mode);
+      for (const [k, v] of Object.entries(extra)) frameUrl.searchParams.set(k, v);
+      const f = document.createElement("iframe");
+      f.hidden = true;
+      const timer = setTimeout(() => { f.remove(); resolve({ ok: false, info: "frame timeout" }); }, mode === "coreReject" ? 90000 : 25000);
+      const onMsg = (e) => {
+        if (e.origin !== location.origin || e.data?.kind !== "runtimeIntegrityFrame" || e.data.mode !== mode) return;
+        clearTimeout(timer);
+        removeEventListener("message", onMsg);
+        f.remove();
+        resolve(e.data);
+      };
+      addEventListener("message", onMsg);
+      f.src = frameUrl.href;
+      document.body.appendChild(f);
+    });
+  }
+
+  async function readFile(dir, name) {
+    return new Uint8Array(await (await (await dir.getFileHandle(name)).getFile()).arrayBuffer());
+  }
+
+  async function writeFile(dir, name, bytes) {
+    const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+    await w.write(bytes);
+    await w.close();
+  }
+
+  try {
+    const badFrame = await runFrame("badScript");
+    check("pyodide.js: 잘못된 SRI 거부", badFrame.ok, badFrame.info.slice(-120));
+
+    const scriptSri = await sriFromUrl(INDEX + "pyodide.js");
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("pyprocIntegrityCore", { recursive: true }); } catch (e) {}
+    const dir = await root.getDirectoryHandle("pyprocIntegrityCore", { create: true });
+
+    let t = performance.now();
+    const cold = await withTimeout(boot({ indexURL: INDEX, engineScriptIntegrity: scriptSri, coreCacheDir: dir }), 180000, "cold boot");
+    timings.coldMs = Math.round(performance.now() - t);
+    check("pyodide.js: 올바른 SRI로 부팅", cold.run("6 * 7") === 42, `${timings.coldMs}ms`);
+
+    const names = [];
+    for await (const name of dir.keys()) names.push(name);
+    check("코어 캐시 파일 수집", names.length > 0, names.join(", "));
+
+    const manifest = {};
+    for (const name of names) manifest[name] = await sriFromBytes(await readFile(dir, name));
+
+    t = performance.now();
+    const warm = await withTimeout(boot({ indexURL: INDEX, engineScriptIntegrity: scriptSri, coreCacheDir: dir, coreIntegrity: { files: manifest } }), 180000, "warm boot");
+    timings.warmMs = Math.round(performance.now() - t);
+    check("coreIntegrity: 캐시 hit를 SRI로 검증", warm.run("sum(range(10))") === 45 && warm.coreCache.verified > 0 && warm.coreCache.misses === 0,
+      `${timings.warmMs}ms, verified ${warm.coreCache.verified}, hit ${warm.coreCache.hits}, miss ${warm.coreCache.misses}`);
+
+    const target = names.find((n) => n.endsWith(".wasm")) || names.find((n) => n.endsWith(".zip")) || names[0];
+    const missing = { ...manifest };
+    delete missing[target];
+    const missingFrame = await runFrame("coreReject", { manifest: JSON.stringify(missing), scriptSri });
+    check("coreIntegrity: strict manifest 누락 거부", missingFrame.ok, `${target}, ${missingFrame.info.slice(-90)}`);
+
+    const clean = await readFile(dir, target);
+    const broken = clean.slice();
+    broken[0] = broken[0] ^ 0xff;
+    await writeFile(dir, target, broken);
+    const tamperFrame = await runFrame("coreReject", { manifest: JSON.stringify(manifest), scriptSri });
+    check("coreIntegrity: OPFS 캐시 변조 거부", tamperFrame.ok, `${target}, ${tamperFrame.info.slice(-90)}`);
+    await writeFile(dir, target, clean);
+    await root.removeEntry("pyprocIntegrityCore", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  await report();
+</script>
+</body>
+</html>

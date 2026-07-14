@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!--
+결과(2026-07-14, Edge headless / 로컬 COOP+COEP):
+64MB smoke GREEN 7/7. bootSession 3162ms, payload 할당 8ms, heap 88.8MB,
+checkpoint 1072p/67MB 82ms, restoreLive 109p/6.81MB 40ms,
+Session.save 1071p/66.9MB 806ms, Session.load 1071p/66.9MB 2320ms.
+512MB GREEN 7/7. bootSession 3251ms, payload 할당 76ms, heap 536.8MB,
+checkpoint 8240p/515MB 552ms, restoreLive 109p/6.81MB 225ms,
+Session.save 8239p/514.9MB 3665ms, Session.load 8239p/514.9MB 3191ms.
+128MB + journal=1 1차 RED: journal.commit은 됐지만 recover가 성장 힙을 못 열어 실패.
+수리 후 GREEN 9/9. journal.commit 2095p, wrote 131p/8.2MB, 5593ms.
+journal.recover 2095p/130.9MB, 9116ms.
+512MB + journal=1 GREEN 9/9. checkpoint 8240p/515MB 454ms,
+Session.save 514.9MB 3756ms, Session.load 2879ms,
+journal.commit 8239p, wrote 131p/8.2MB, 14047ms,
+journal.recover 8239p/514.9MB, 24769ms.
+MachineJournal 반복 blob IO 캐시 후 512MB + journal=1 GREEN 9/9.
+journal.commit 8239p, wrote 131p/8.2MB, 2895ms,
+journal.recover 8239p/514.9MB, 2312ms.
+실행: node tests/browser/run.mjs tests/attempts/largeHeapEnvelope/largeHeapProbe.html
+대형 수동: PYPROC_GATE_TIMEOUT=900000 node tests/browser/run.mjs "tests/attempts/largeHeapEnvelope/largeHeapProbe.html?target=512"
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: large heap envelope</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: largeHeapEnvelope - 대형 힙 비용 봉투</h1>
+<p>대형 사용자 힙에서 checkpoint, restoreLive, session save/load 비용을 잰다. query: <code>?target=512</code>, <code>&journal=1</code>.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession } from "../../../index.js";
+  const out = document.getElementById("out");
+  const params = new URL(location.href).searchParams;
+  const targetMB = Math.max(1, Number(params.get("target") || 64));
+  const includeJournal = params.get("journal") === "1";
+  const checks = []; const timings = { targetMB, includeJournal };
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const mb = (bytes) => +(bytes / 1048576).toFixed(1);
+  const now = () => performance.now();
+  async function clean(root, name) {
+    try { await root.removeEntry(name, { recursive: true }); } catch (e) {}
+    return root.getDirectoryHandle(name, { create: true });
+  }
+  try {
+    check("OPFS 사용 가능", !!(navigator.storage && navigator.storage.getDirectory));
+    const root = await navigator.storage.getDirectory();
+    const dir = await clean(root, "largeHeapEnvelope");
+
+    let t = now();
+    const session = await bootSession({});
+    timings.bootMs = Math.round(now() - t);
+    const { rt, reactive } = session;
+    const sp0 = reactive.stackSave();
+    check("bootSession 부팅", !!rt && !!reactive, `${timings.bootMs}ms`);
+
+    t = now();
+    rt.setGlobal("_targetBytes", targetMB * 1024 * 1024);
+    rt.run(
+      "payload = bytearray(_targetBytes)\n" +
+      "payload[0] = 7\n" +
+      "payload[len(payload)-1] = 9\n" +
+      "del _targetBytes"
+    );
+    timings.allocMs = Math.round(now() - t);
+    timings.heapMB = mb(rt.memory.byteLength());
+    check("대형 payload 할당", rt.run("len(payload)") === targetMB * 1024 * 1024, `${targetMB}MB payload, heap ${timings.heapMB}MB, ${timings.allocMs}ms`);
+
+    t = now();
+    const cp = reactive.checkpoint();
+    const spLarge = reactive.stackSave();
+    timings.checkpointMs = Math.round(now() - t);
+    timings.checkpointPages = cp.changedPages;
+    timings.checkpointDeltaMB = mb(cp.deltaBytes);
+    check("checkpoint large", cp.changedPages > 0, `${cp.changedPages}p/${timings.checkpointDeltaMB}MB, ${timings.checkpointMs}ms`);
+
+    rt.run("payload[0] = 11\npayload[len(payload)-1] = 13");
+    t = now();
+    const restored = reactive.restoreLive(cp.index, spLarge, { rehash: true });
+    timings.restoreMs = Math.round(now() - t);
+    timings.restorePages = restored.pagesWritten;
+    timings.restoreMB = restored.mbWritten;
+    check("restoreLive large", rt.run("payload[0]") === 7 && rt.run("payload[len(payload)-1]") === 9,
+      `${restored.pagesWritten}p/${restored.mbWritten}MB, ${timings.restoreMs}ms`);
+
+    t = now();
+    const saved = await session.save(dir, "large");
+    timings.sessionSaveMs = Math.round(now() - t);
+    timings.sessionPages = saved.pages;
+    timings.sessionMB = saved.mb;
+    check("Session.save large", saved.pages > 0, `${saved.pages}p/${saved.mb}MB, ${timings.sessionSaveMs}ms`);
+
+    t = now();
+    const restoredSession = await bootSession({});
+    const loaded = await restoredSession.load(dir, "large");
+    timings.sessionLoadMs = Math.round(now() - t);
+    check("Session.load large", restoredSession.rt.run("len(payload)") === targetMB * 1024 * 1024
+      && restoredSession.rt.run("payload[0]") === 7
+      && restoredSession.rt.run("payload[len(payload)-1]") === 9,
+      `${loaded.pages}p/${loaded.mb}MB, ${timings.sessionLoadMs}ms`);
+
+    if (includeJournal) {
+      const journalDir = await clean(root, "largeHeapEnvelopeJournal");
+      const journal = rt.enableJournal({ dir: journalDir, reactive });
+      t = now();
+      const committed = await journal.commit();
+      timings.journalCommitMs = Math.round(now() - t);
+      timings.journalPages = committed ? committed.pages : 0;
+      timings.journalWrote = committed ? committed.wrote : 0;
+      check("journal.commit large", !!committed && committed.pages > 0,
+        committed ? `${committed.pages}p, wrote ${committed.wrote}p/${committed.mb}MB, ${timings.journalCommitMs}ms` : "null");
+
+      t = now();
+      const jr = await bootSession({});
+      const recovered = await jr.rt.enableJournal({ dir: journalDir, reactive: jr.reactive }).recover();
+      timings.journalRecoverMs = Math.round(now() - t);
+      check("journal.recover large", !!recovered && jr.rt.run("len(payload)") === targetMB * 1024 * 1024,
+        recovered ? `${recovered.pages}p/${recovered.mb}MB, ${timings.journalRecoverMs}ms` : "null");
+      await root.removeEntry("largeHeapEnvelopeJournal", { recursive: true });
+    }
+
+    reactive.restoreLive(0, sp0, { rehash: true });
+    await root.removeEntry("largeHeapEnvelope", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(0, 500));
+  }
+  await report();
+</script>
+</body>
+</html>

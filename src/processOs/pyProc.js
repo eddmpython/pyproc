@@ -10,6 +10,7 @@
 // 즉시 명시적으로 reject된다(영원히 매달리는 Promise 금지).
 import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
 import { requireCoi } from "../runtime/preflight.js";
+import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
 import { createPipe, createLock, createSemaphore, createShm, pipeWriteAsync, pipeReadAsync, pipeClose } from "./ipc.js";
 
 // 시그널 번호(POSIX 관례. 외부 기술 명칭이라 번호는 원어 규격 그대로).
@@ -43,6 +44,8 @@ export class PyProc {
     this.indexURL = opts.indexURL || DEFAULT_INDEX;
     this.packages = opts.packages || []; // 각 프로세스가 부팅 시 로드할 패키지(numpy 등)
     this.setup = opts.setup || null;     // 부팅 시 실행할 파이썬(예: "import numpy" 예열)
+    this.assetIntegrity = opts.assetIntegrity || null; // pyproc-assets CLI 산출물. Worker spawn 전 graph를 SRI 검증.
+    this._assetIntegrityCheck = null;
     // 리플레이 매니페스트({env, packages, setup}): 주면 워커들이 결정적 리플레이로 부팅해
     // 바이트 동일한 힙에 선다 = fork(살아있는 상태 복제)가 가능한 대칭 풀.
     this.replay = opts.replay || null;
@@ -51,6 +54,12 @@ export class PyProc {
 
   // 살아있는 프로세스 풀(스케줄 대상).
   _pool() { return this.table.filter((t) => t.state === "ready"); }
+
+  async _verifyWorkerAssets() {
+    if (!this.assetIntegrity) return null;
+    this._assetIntegrityCheck ||= verifyPyProcAssetIntegrity(this.assetIntegrity, { roles: ["processWorker"] });
+    return this._assetIntegrityCheck;
+  }
 
   // 부모 하나 부팅해 bare 스냅샷(프로세스 이미지)을 만들고, SAB에 실어 워커가 공유하게.
   async _makeSnapshot() {
@@ -200,6 +209,7 @@ export class PyProc {
     // 프로세스 OS는 SAB(crossOriginIsolated)를 요구한다. 헤더 누락 시 여기서 실행 가능한 에러를
     // 던진다(워커 안에서 SharedArrayBuffer is not defined로 죽는 암호 실패를 대신한다).
     requireCoi("PyProc(프로세스 OS)");
+    await this._verifyWorkerAssets();
     if (useSnapshot && !this._snapshot) await this._makeSnapshot();
     const spawns = [];
     for (let i = 0; i < n; i++) spawns.push(this._spawn(useSnapshot).ready);

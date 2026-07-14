@@ -4,6 +4,8 @@
 //   urllib(HTTP) -> 동기 XHR(fetch의 동기 형태). proxyUrl을 주면 소비 제품의 프록시 경유
 //   subprocess   -> 자식 워커의 독립 인터프리터(콜드 부팅). JSPI 필요, ["python","-c",code]만 (v1)
 // 실측 근거: tests/attempts/syscallBridge. 저수준 socket 자체의 배선은 프론티어(로드맵) 몫이다.
+import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
+
 const BOOTSTRAP = `
 import builtins, sys, io, subprocess, urllib.request
 from pyodide.ffi import can_run_sync, run_sync
@@ -74,7 +76,7 @@ const SUBPROC_FN = "def _fn(code):\n"
   + "    return buf.getvalue()";
 
 export class SyscallBridge {
-  constructor(rt, cfg) { this._rt = rt; this._cfg = cfg; }
+  constructor(rt, cfg) { this._rt = rt; this._cfg = cfg; this._assetIntegrityCheck = null; }
 
   _httpSync(url, method, body) {
     const target = this._cfg.proxyUrl ? this._cfg.proxyUrl + "?url=" + encodeURIComponent(url) : url;
@@ -90,6 +92,10 @@ export class SyscallBridge {
   }
 
   async _subprocessRun(code) {
+    if (this._cfg.assetIntegrity) {
+      this._assetIntegrityCheck ||= verifyPyProcAssetIntegrity(this._cfg.assetIntegrity, { roles: ["processWorker"] });
+      await this._assetIntegrityCheck;
+    }
     const w = new Worker(new URL("../processOs/worker.js", import.meta.url), { type: "module" });
     try {
       await new Promise((resolve, reject) => {

@@ -17,8 +17,9 @@ const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 // 빈 문자열 = 랜딩("/"). 랜딩 히어로가 진짜로 CPython을 부팅해 체크포인트/복원을 돌리므로 예제와
 // 같은 급의 실행 표면이다. 랜딩은 배포 루트 기준 상대 경로를 쓰니 반드시 "/"로 열어야 한다
 // (examples/index.html 경로로 열면 assets/와 index.js가 어긋난다. serve.mjs가 "/"를 랜딩에 매핑한다).
-const PAGES = ["tests/browser/brandGate.html", "", "examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/processOs.html"];
+const PAGES = ["tests/browser/brandGate.html", "", "examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/serverDev.html", "examples/speedLab.html", "examples/processOs.html"];
 const label = (page) => page || "/ (랜딩 히어로 라이브 데모)";
+const indexQuery = process.env.PYPROC_INDEX_URL ? `&indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
 
 const browser = findBrowser();
 let resolveReport = null;
@@ -38,7 +39,7 @@ console.log(`pyproc 예제 게이트\n  browser: ${browser}\n`);
 let failed = 0;
 for (const page of PAGES) {
   const profile = mkdtempSync(join(tmpdir(), "pyprocExample-"));
-  const proc = spawn(browser, [...headlessArgs(profile), `http://127.0.0.1:${port}/${page}?gate=1`], { stdio: "ignore" });
+  const proc = spawn(browser, [...headlessArgs(profile), `http://127.0.0.1:${port}/${page}?gate=1${indexQuery}`], { stdio: "ignore" });
   const result = await new Promise((res) => {
     resolveReport = res;
     setTimeout(() => { if (resolveReport === res) { resolveReport = null; res({ ok: false, timedOut: true }); } }, TIMEOUT_MS);

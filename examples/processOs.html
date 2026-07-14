@@ -16,6 +16,8 @@
       <nav>
         <a href="agentSandbox.html">Agent</a>
         <a href="machine.html">Machine</a>
+        <a href="serverDev.html">Server</a>
+        <a href="speedLab.html">Speed</a>
         <a href="terminal.html">Terminal</a>
         <a href="processOs.html" class="on">Process OS</a>
         <a href="basic.html">Basics</a>
@@ -49,7 +51,9 @@
     const el = (id) => document.getElementById(id);
     const log = (m) => { out.textContent += "\n" + m; };
     // 예제 실행 게이트(?gate): 완주 여부를 하네스에 보고. 사람이 열면 no-op.
-    const gateMode = new URLSearchParams(location.search).has("gate");
+    const params = new URLSearchParams(location.search);
+    const gateMode = params.has("gate");
+    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-180) }] }) }).catch(() => {}); };
     // GitHub Pages처럼 헤더를 못 다는 호스팅에서 SAB를 여는 부트스트랩(실측: swCoiProbe).
     // 배포 루트에 pyprocSw.js 사본이 있는 전제(pages 워크플로가 조립). COOP/COEP 서버에선 no-op.
@@ -64,7 +68,7 @@
       } catch (e) { /* 사본 없는 환경(로컬 직접 서빙 등) -> 그대로 진행 */ }
     }
     try {
-      const os = new PyProc();
+      const os = new PyProc({ indexURL: INDEX });
       const b = await os.boot(4);
       st.textContent = `4 workers forked from one snapshot (avg boot ${b.avgBootMs}ms)`;
 

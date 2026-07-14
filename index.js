@@ -6,7 +6,11 @@
 //   checkEnvironment()   - 환경 진단: crossOriginIsolated/SAB/JSPI가 준비됐는지 + 안 됐으면 무엇을
 //                          어떻게 고치는지. 기본 표면(boot/run/enableReactive)은 준비 없이 Chromium에서
 //                          돌지만, 프로세스 OS(PyProc)/소켓은 COOP/COEP 헤더가 필요하다
-//   boot()               - Pyodide 런타임 부팅 -> Runtime
+//   getPyProcAssetManifest
+//                        - 제품 배포가 같은 오리진에 둬야 하는 Worker/SW 실행 자산 manifest
+//   verifyPyProcAssetIntegrity
+//                        - pyproc-assets SRI manifest를 Worker spawn 전 실제 배포 바이트와 대조
+//   boot()               - Pyodide 런타임 부팅 -> Runtime(engineScriptIntegrity/coreIntegrity로 부트 자산 SRI 검증)
 //   bootEnv()            - uv 레인: 환경 선언 + 캐시 디렉터리 -> 웜 부팅(스냅샷+휠, 실측 3.61배)
 //   runScript()          - 브라우저판 uv run: PEP 723 인라인 의존성 자동 설치 + 실행
 //   Runtime              - run/install/loadPackages/loadPackagesFromImports/setStdout/setStderr/freeze + fs + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal/enableWheelCache)
@@ -30,6 +34,8 @@
 //   SIGNAL               - 시그널 번호(INT/TERM/USR1/USR2). PyProc.signal(pid, signum)
 //   MachineContainer     - 머신 안 머신: .pymachine급 컨테이너 커널을 워커에 띄우고 파이썬 값(m)으로
 //                          노출(m.run/spawn/kill). 중첩(깊이 2+) = 컨테이너 속 컨테이너 = 도커 3요소
+//   createMachineKeyPair/exportMachinePublicKey
+//                        - .pymachine WebCrypto 서명 신뢰 체인: 검증된 공개키면 trust:true 없이 openMachine
 //   JobControl           - 셸의 잡 컨트롤: `expr &`가 대화형 네임스페이스를 살아있는 채로 fork해
 //                          딴 코어에서 돌린다(프롬프트 즉시 복귀). %jobs/%fg/%kill로 조종
 //   KernelElection       - 커널 선출: 여러 탭이 Web Locks로 리더 하나를 뽑고 리더만 커널을 부팅,
@@ -40,6 +46,7 @@
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
 export { boot, Runtime, MemoryCapability, PAGE_SIZE, checkEnvironment } from "./src/runtime/runtime.js";
+export { getPyProcAssetManifest, verifyPyProcAssetIntegrity, PYPROC_ASSET_MANIFEST_VERSION } from "./src/runtime/assets.js";
 export { ReactiveController } from "./src/capabilities/reactive.js";
 export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
 export { SocketBridge } from "./src/capabilities/socketBridge.js";
@@ -51,7 +58,7 @@ export { FileSystem } from "./src/capabilities/fileSystem.js";
 export { Init } from "./src/capabilities/init.js";
 export { MachineJournal } from "./src/capabilities/machineJournal.js";
 export { MachineJail } from "./src/capabilities/machineJail.js";
-export { bootSession, openMachine, Session } from "./src/capabilities/session.js";
+export { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey, Session } from "./src/capabilities/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
 export { GpuCompute, GpuArray, GpuBridge } from "./src/capabilities/gpuCompute.js";

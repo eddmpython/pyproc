@@ -21,6 +21,8 @@
       <nav>
         <a href="agentSandbox.html">Agent</a>
         <a href="machine.html">Machine</a>
+        <a href="serverDev.html">Server</a>
+        <a href="speedLab.html">Speed</a>
         <a href="terminal.html" class="on">Terminal</a>
         <a href="processOs.html">Process OS</a>
         <a href="basic.html">Basics</a>
@@ -50,10 +52,12 @@
     const out = document.getElementById("out"), line = document.getElementById("line"), ps = document.getElementById("ps");
     const print = (t) => { out.textContent += t; out.scrollTop = out.scrollHeight; };
     // 예제 실행 게이트(?gate): REPL 왕복 자기검사 후 보고. 사람이 열면 no-op.
-    const gateMode = new URLSearchParams(location.search).has("gate");
+    const params = new URLSearchParams(location.search);
+    const gateMode = params.has("gate");
+    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: out.textContent.slice(-180) }] }) }).catch(() => {}); };
 
-    const rt = await boot();
+    const rt = await boot({ indexURL: INDEX });
     // input(): 터미널 입력줄을 그대로 입력 소스로 빌려준다(REPL 라인 실행이 멈추고 기다린다).
     let pendingInput = null;
     await rt.enableSyscallBridge({

@@ -16,6 +16,8 @@
       <nav>
         <a href="agentSandbox.html" class="on">Agent</a>
         <a href="machine.html">Machine</a>
+        <a href="serverDev.html">Server</a>
+        <a href="speedLab.html">Speed</a>
         <a href="terminal.html">Terminal</a>
         <a href="processOs.html">Process OS</a>
         <a href="basic.html">Basics</a>
@@ -37,12 +39,14 @@
     import { boot } from "../index.js";
     const out = document.getElementById("out"), st = document.getElementById("st");
     const log = (m = "") => { out.textContent += m + "\n"; };
-    const gateMode = new URLSearchParams(location.search).has("gate");
+    const params = new URLSearchParams(location.search);
+    const gateMode = params.has("gate");
+    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: out.textContent.slice(-200) }] }) }).catch(() => {}); };
 
     try {
       let t = performance.now();
-      const rt = await boot();
+      const rt = await boot({ indexURL: INDEX });
       const reactive = rt.enableReactive();
       await rt.loadPackages(["numpy"]);
       rt.run("import numpy as np");

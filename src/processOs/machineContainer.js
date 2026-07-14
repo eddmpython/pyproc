@@ -9,6 +9,8 @@
 // run은 async RPC라 파이썬은 run_sync(JSPI)로 서스펜드해 결과를 동기처럼 받는다(rt.runAsync 경로).
 // 브리지는 pyodide 전역 객체(_pyprocMachineBridge)로 준다(socketBridge와 같은 패턴 = js 모듈이
 // 아니라 전역 이름으로 접근). 반환 프록시(Promise)는 run_sync가 서스펜드해 값으로 만든다.
+import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
+
 const BOOTSTRAP = `
 import sys as _pyprocSys, types as _pyprocTypes, json as _pyprocJson
 from pyodide.ffi import run_sync as _pyprocRunSync
@@ -43,6 +45,8 @@ export class MachineContainer {
     this._containers = new Map(); // cid -> { worker, pending, parentCid|null }
     this._seq = 0;
     this._snapshot = null; // bare 스냅샷(1회 제조, 모든 컨테이너가 fast fork로 공유)
+    this._assetIntegrity = cfg.assetIntegrity || rt.assetIntegrity || null;
+    this._assetIntegrityCheck = null;
   }
 
   // 컨테이너 fast fork용 bare 스냅샷을 1회 제조한다(PyProc._makeSnapshot과 같은 원리).
@@ -73,6 +77,12 @@ export class MachineContainer {
     return cid;
   }
 
+  async _verifyWorkerAssets() {
+    if (!this._assetIntegrity) return null;
+    this._assetIntegrityCheck ||= verifyPyProcAssetIntegrity(this._assetIntegrity, { roles: ["machineWorker"] });
+    return this._assetIntegrityCheck;
+  }
+
   _call(cid, msg) {
     const c = this._containers.get(cid);
     if (!c) return Promise.reject(new Error(`machineContainer: ${cid} 없음(killed?)`));
@@ -85,6 +95,7 @@ export class MachineContainer {
 
   // JS API: 컨테이너 부팅. manifest = { env, packages, setup }(컨테이너의 자기 패키지 세트).
   async spawn(manifest = {}) {
+    await this._verifyWorkerAssets();
     if (!this._snapshot) await this._makeSnapshot(); // 첫 컨테이너에서 스냅샷 제조(이후 fast fork)
     const cid = this._spawnWorker();
     const booted = await this._call(cid, { type: "boot", indexURL: this._indexURL, snapshot: this._snapshot, manifest });

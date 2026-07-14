@@ -28,6 +28,10 @@ jobs:
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
           PYPROC_GATE_OUT: gateMeasurements.json
+      # 제품 소비자 게이트: npm pack으로 설치한 pyproc을 브라우저 앱이 public specifier로 import한다.
+      - run: npm run test:consumer
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       # 러너 실측 수치를 보존한다: 원장/리드미의 로컬 수치와 비교 가능한 근거.
       - uses: actions/upload-artifact@v4
         if: always()

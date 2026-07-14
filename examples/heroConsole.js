@@ -14,6 +14,10 @@ const dim = (t) => `<span class="dim">${t}</span>`;
 const ok = (t) => `<span class="ok">${t}</span>`;
 const err = (t) => `<span class="err">${t}</span>`;
 const ms = (t) => `${t.toFixed(1)}ms`;
+const pageIndexURL = () => {
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  return indexParam ? new URL(indexParam, location.href).href : undefined;
+};
 
 // 공유 런타임. 세션으로 부팅한다: 머신 탭(최면/부활/이미지 내보내기)이 같은 런타임을 쓴다.
 let sessionPromise = null;
@@ -23,7 +27,7 @@ async function sharedSession(ctx) {
     ctx.status("Downloading CPython (WebAssembly)...");
     const t0 = performance.now();
     const { bootSession } = await import("../index.js");
-    const session = await bootSession({});
+    const session = await bootSession({ indexURL: pageIndexURL() });
     const bootMs = performance.now() - t0;
     const version = session.rt.run("import sys; sys.version.split()[0]");
     ctx.status(`CPython <b class="ok">${version}</b> booted in this tab in <b class="ok">${Math.round(bootMs)}ms</b>. Every tab below now shares it.`);
@@ -180,7 +184,7 @@ export const demos = [
         await new Promise(() => {}); // 새 문서로 넘어갈 때까지 정지
       }
       ctx.status("Forking 4 interpreters from one memory snapshot...");
-      const os = new PyProc();
+      const os = new PyProc({ indexURL: pageIndexURL() });
       const boot = await os.boot(4);
       ctx.print("");
       ctx.print(dim(`# ${boot.workers} workers, ${boot.forked} forked from one snapshot (avg ${boot.avgBootMs}ms each)`));

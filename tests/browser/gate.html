@@ -11,7 +11,7 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, Runtime, PyProc, SIGNAL, bootSession, runScript, checkEnvironment } from "../../index.js";
+    import { boot, Runtime, PyProc, SIGNAL, bootSession, runScript, checkEnvironment, verifyPyProcAssetIntegrity } from "../../index.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -42,12 +42,28 @@
       check("checkEnvironment: COI 하에서 ok", env.ok === true && env.crossOriginIsolated && env.sharedArrayBuffer && env.jspi && env.issues.length === 0,
         `sab=${env.sharedArrayBuffer} jspi=${env.jspi}`);
 
+      // 실행 자산 SRI preflight: 테스트 서버가 pyproc-assets CLI 산출물을 같은 오리진에서 제공하고,
+      // 브라우저가 그 JSON을 그대로 assetIntegrity로 소비한다. 브라우저는 module Worker import에
+      // SRI 속성을 직접 못 걸기 때문에 이 preflight가 런타임 집행 지점이다.
+      const assetIntegrity = await fetch("/pyproc-assets.json", { cache: "no-store" }).then((r) => r.json());
+      const assetOk = await verifyPyProcAssetIntegrity(assetIntegrity, { roles: ["processWorker"] });
+      check("assetIntegrity: CLI graph preflight", assetOk.verified > 1 && assetOk.files.includes("src/processOs/worker.js") && assetOk.files.includes("src/processOs/ipc.js"), `${assetOk.verified} files, ${assetOk.bytes} bytes`);
+      const badAssetIntegrity = {
+        ...assetIntegrity,
+        files: assetIntegrity.files.map((f) => f.path === "src/processOs/worker.js" ? { ...f, integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" } : f),
+      };
+      let badAssetDenied = false;
+      try { await new PyProc({ indexURL: INDEX, assetIntegrity: badAssetIntegrity }).boot(1, false); }
+      catch (e) { badAssetDenied = String(e).includes("assetIntegrity"); }
+      check("assetIntegrity: 잘못된 worker SRI가 spawn 전 거부", badAssetDenied);
+
       // 1) Layer 0: 부팅 + 실행
       let t = performance.now();
-      const rt = await boot({ indexURL: INDEX });
+      const rt = await boot({ indexURL: INDEX, assetIntegrity });
       timings.bootMs = Math.round(performance.now() - t);
       check("boot()", true, timings.bootMs + "ms" + (INDEX ? " @" + INDEX : ""));
       check("run: sum(range(100)) === 4950", rt.run("sum(range(100))") === 4950);
+      check("Runtime.assetIntegrity 보관", rt.assetIntegrity === assetIntegrity);
 
       // 2) Layer 1: 복원 리액티브의 실행 경계 계약
       const reactive = rt.enableReactive();
@@ -97,8 +113,16 @@
       await opfsRoot.removeEntry("pyprocGate", { recursive: true });
 
       // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)
+      const badInheritedRt = new Runtime(rt.raw, rt.indexURL, { assetIntegrity: badAssetIntegrity });
+      await badInheritedRt.enableSyscallBridge({ input: () => "bad" }).install();
+      let badInheritedDenied = false;
+      try { await badInheritedRt.runAsync('import subprocess\nsubprocess.run(["python","-c","print(6*7)"], capture_output=True).stdout'); }
+      catch (e) { badInheritedDenied = String(e).includes("assetIntegrity"); }
+      check("assetIntegrity: Runtime -> SyscallBridge 상속 거부", badInheritedDenied);
       await rt.enableSyscallBridge({ input: () => "ok" }).install();
       check("syscall input(): 동기 핸들러", rt.run("input()") === "ok");
+      const subOut = await rt.runAsync('import subprocess\nsubprocess.run(["python","-c","print(6*7)"], capture_output=True).stdout');
+      check("syscall subprocess: assetIntegrity 상속 childWorker", subOut === "42\n");
       // 대상은 첫 바이트가 안정적인 파일이어야 한다(README는 상단이 바뀔 수 있음: 로고 삽입으로 실제 파손된 전례).
       rt.run(`_u = "${location.origin}/index.js"`);
       check("syscall urllib: 실제 HTTP GET", rt.run('import urllib.request\nurllib.request.urlopen(_u).read(8).decode()') === "// pypro");
@@ -154,7 +178,7 @@
       check("deviceFs: /proc/meminfo = 실제 힙", rt.run("import json\njson.loads(open('/proc/meminfo').read())['heapBytes']") === rt.memory.byteLength());
 
       // 3) Layer 2: 프로세스 OS (스냅샷-fork + 진짜 병렬 map)
-      const os = new PyProc({ indexURL: INDEX });
+      const os = new PyProc({ indexURL: INDEX, assetIntegrity });
       t = performance.now();
       const b = await os.boot(2);
       timings.forkBootMs = Math.round(performance.now() - t);

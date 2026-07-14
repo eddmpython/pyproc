@@ -8,19 +8,24 @@
   "bugs": { "url": "https://github.com/eddmpython/pyproc/issues" },
   "main": "index.js",
   "types": "./index.d.ts",
+  "bin": { "pyproc-assets": "./scripts/assetManifest.mjs" },
   "exports": {
     ".": { "types": "./index.d.ts", "default": "./index.js" },
+    "./assets": "./src/runtime/assets.js",
     "./runtime": "./src/runtime/runtime.js",
     "./reactive": "./src/capabilities/reactive.js",
     "./syscall-bridge": "./src/capabilities/syscallBridge.js",
     "./process-os": "./src/processOs/pyProc.js",
     "./worker": "./src/processOs/worker.js"
   },
-  "files": ["index.js", "index.d.ts", "src", "README.md", "README.ko.md", "LICENSE"],
+  "files": ["index.js", "index.d.ts", "src", "scripts/assetManifest.mjs", "README.md", "README.ko.md", "LICENSE"],
   "scripts": {
     "test": "node tests/run.mjs",
+    "test:package": "node tests/packageConsumer.mjs",
+    "test:consumer": "node tests/browser/productConsumer.mjs",
     "test:browser": "node tests/browser/run.mjs",
     "test:examples": "node tests/browser/examples.mjs",
+    "assets:manifest": "node scripts/assetManifest.mjs --pretty",
     "serve": "node examples/serve.mjs",
     "fetch:engine": "node scripts/fetchEngine.mjs"
   },

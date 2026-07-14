@@ -85,15 +85,22 @@ export class MachineJournal {
       for (let p = h0.length / 2; p < hl.length / 2; p++) pages.push(p); // 성장분
       const blobDir = await this._dir.getDirectoryHandle("blob", { create: true });
       const map = {};
+      const knownKeys = new Set();
       let wrote = 0;
       for (const p of pages) {
         const bytes = mem.slicePage(p);
         const key = await sha256Hex(bytes);
         map[p] = key;
-        try { await (await blobDir.getFileHandle(key)).getFile(); } // 이미 있으면 dedupe(내용 주소)
+        if (knownKeys.has(key)) continue; // 같은 커밋 안의 반복 페이지는 OPFS 조회도 중복하지 않는다.
+        try {
+          await (await blobDir.getFileHandle(key)).getFile();
+          knownKeys.add(key);
+        } // 이미 있으면 dedupe(내용 주소)
         catch (e) {
+          if (e.name !== "NotFoundError") throw e;
           const fh = await blobDir.getFileHandle(key, { create: true });
           const w = await fh.createWritable(); await w.write(bytes); await w.close();
+          knownKeys.add(key);
           wrote++;
         }
       }
@@ -128,21 +135,43 @@ export class MachineJournal {
   }
 
   // 세대 1개를 힙에 적용한다. blob은 내용 주소(파일명 = SHA-256)와 실제 바이트를 재대조해
-  // 저장 후 파손을 잡는다. h0/heapLen 불일치는 손상이 아니라 환경 불일치라 즉시 던진다.
+  // 저장 후 파손을 잡는다. h0 불일치는 손상이 아니라 환경 불일치라 즉시 던진다.
+  // heapLen이 현재 커널보다 크면 Session.load와 같은 원리로 파이썬 할당 경로를 태워 성장시킨다.
+  // JS에서 Memory.grow를 직접 부르면 Emscripten 글루의 클로저 뷰가 안 갱신되어 런타임이 깨진다.
   async _applyGeneration(head) {
     const mem = this._rt.memory;
     if (head.h0 && head.h0 !== await this._boundaryKey()) {
       throw new Error("journal.recover: 리플레이 경계 지문(h0) 불일치. 다른 엔진/매니페스트의 저널이다(조용한 힙 오염 방지).");
     }
     if (head.heapLen > mem.byteLength()) {
-      throw new Error(`journal.recover: 힙이 저널보다 작다(저널 ${head.heapLen} > 현재 ${mem.byteLength()}). 성장 세션은 Session.load 경로를 쓴다.`);
+      this._rt.setGlobal("_pyprocJournalTargetLen", head.heapLen);
+      this._rt.setGlobal("_pyprocJournalHeapLen", () => mem.byteLength());
+      this._rt.run(
+        "import gc as _pyprocJournalGc\n" +
+        "_pyprocJournalHold = []\n" +
+        "while _pyprocJournalHeapLen() < _pyprocJournalTargetLen:\n" +
+        "    _pyprocJournalHold.append(bytearray(8 * 1024 * 1024))\n" +
+        "del _pyprocJournalHold, _pyprocJournalTargetLen, _pyprocJournalHeapLen\n" +
+        "_pyprocJournalGc.collect()\n" +
+        "del _pyprocJournalGc"
+      );
+      if (head.heapLen > mem.byteLength()) {
+        throw new Error(`journal.recover: 힙 성장 실패(저널 ${head.heapLen} > 현재 ${mem.byteLength()})`);
+      }
     }
+    // 성장 루프와 부팅 뒤 드리프트를 cp0으로 지운 위에 저널 페이지를 적용한다.
+    this._reactive.restore(0, head.sp);
     const blobDir = await this._dir.getDirectoryHandle("blob");
     const entries = Object.entries(head.pages);
     const buffered = [];
+    const blobCache = new Map();
     for (const [p, key] of entries) {
-      const bytes = new Uint8Array(await (await (await blobDir.getFileHandle(key)).getFile()).arrayBuffer());
-      if (await sha256Hex(bytes) !== key) throw new Error(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
+      let bytes = blobCache.get(key);
+      if (!bytes) {
+        bytes = new Uint8Array(await (await (await blobDir.getFileHandle(key)).getFile()).arrayBuffer());
+        if (await sha256Hex(bytes) !== key) throw new Error(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
+        blobCache.set(key, bytes);
+      }
       buffered.push([+p, bytes]); // 전량 검증 후에 쓴다(부분 적용 상태 방지)
     }
     for (const [p, bytes] of buffered) mem.writePage(p, bytes);

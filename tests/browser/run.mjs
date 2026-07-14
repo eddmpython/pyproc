@@ -17,8 +17,18 @@ const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000); // 콜드 
 let reportResolve;
 const reportPromise = new Promise((res) => { reportResolve = res; });
 
+// 제품 배포 파이프라인 등가: pyproc-assets CLI가 만든 graph/SRI manifest를 테스트 서버가
+// 같은 오리진에서 제공하고, 브라우저 게이트가 그 JSON을 assetIntegrity로 소비한다.
+const assetManifest = spawnSync(process.execPath, ["scripts/assetManifest.mjs", "--baseURL", "/"], { encoding: "utf8" });
+if (assetManifest.status !== 0) throw new Error(assetManifest.stderr || assetManifest.stdout);
+
 // PYPROC_NO_COI=1이면 헤더 없는 호스팅(GitHub Pages 등가)을 재현한다(noCoi/swCoi probe용).
 const server = createStaticServer(async (req, res) => {
+  if (req.method === "GET" && req.url.startsWith("/pyproc-assets.json")) {
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(assetManifest.stdout);
+    return true;
+  }
   if (req.method !== "POST" || !req.url.startsWith("/gateReport")) return false;
   let body = "";
   for await (const chunk of req) body += chunk;
