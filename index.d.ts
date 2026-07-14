@@ -666,6 +666,21 @@ export interface BrowserTab {
   setHeaders(headers: Record<string, string>): BrowserTab;
   cookies(urls?: string[]): Array<Record<string, unknown>>;
   setCookie(name: string, value: string, options?: Record<string, unknown>): BrowserTab;
+  clearCookies(urls?: string[]): BrowserTab;
+  deleteCookie(name: string, url?: string): BrowserTab;
+  /** 좌표 입력 전 자동 스크롤은 click/hover에 내장. 명시 스크롤이 필요할 때. */
+  scrollIntoView(selector: string): BrowserTab;
+  /** 파일 업로드(setFileInputFiles). files는 브라우저 프로세스가 접근 가능한 호스트 경로. debugger mode 전용. */
+  upload(selector: string, files: string[]): BrowserTab;
+  /** 다이얼로그(alert/confirm/prompt) 세션 정책. 기본 accept=true(무처리 시 렌더러가 멈춘다). debugger mode 전용. */
+  setDialogHandler(accept?: boolean, promptText?: string): BrowserTab;
+  lastDialog(): string | null;
+  /** 네트워크 가로채기(CDP Fetch). action="block"(차단) | "fulfill"(정적 응답). debugger mode 전용. */
+  route(pattern: string, action?: "block" | "fulfill", status?: number, body?: string, headers?: Record<string, string>): BrowserTab;
+  unroute(pattern?: string): BrowserTab;
+  /** 응답 관측(CDP Network). waitForResponse는 URL 부분일치 응답을 대기, requests는 관측 로그. debugger mode 전용. */
+  waitForResponse(pattern: string, timeout?: number): { url: string; status: number };
+  requests(): Array<{ url: string; status: number }>;
   close(): void;
 }
 

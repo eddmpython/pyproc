@@ -73,6 +73,36 @@ json.dumps(r)
     g.echo === true && Array.isArray(g.cookieNames) && g.cookieNames.includes("srcCk"),
     `filled=${g.filled}, selected=${g.selected}, dbl=${g.dbl}, submit=${g.submit}, shot=${g.shotHead}, innerWidth=${g.innerWidth}, echo=${g.echo}, cookies=${JSON.stringify(g.cookieNames)}`);
 
+  // 실 src로 이벤트 리스너 기반 신규 경로(다이얼로그 자동 처리 + Fetch 가로채기 + Network 관측) 회귀 게이트.
+  const g2 = JSON.parse((await rt.runAsync(`
+import json
+d = browser.tab("${target}", mode="debugger")
+r = {}
+d.setDialogHandler(True)
+d.click("#dialogBtn")
+d.waitForFunction("window.dialogResult !== null", 3000)
+r["dialog"] = d.evaluate("window.dialogResult")
+r["dialogMsg"] = d.lastDialog()
+d.requests()
+d.evaluate("window.apiResult=null; fetch('/jsonApi').then(function(x){return x.json()}).then(function(j){window.apiResult=j.msg})")
+resp = d.waitForResponse("/jsonApi", 5000)
+r["respStatus"] = resp["status"] if resp else None
+d.route("/blockme", "block")
+d.evaluate("window.blockErr=null; fetch('/blockme').then(function(){window.blockErr='loaded'}).catch(function(){window.blockErr='blocked'})")
+d.waitForFunction("window.blockErr !== null", 3000)
+r["blocked"] = d.evaluate("window.blockErr")
+d.route("/mockme", "fulfill", status=200, body="MOCKED")
+d.evaluate("window.mockBody=null; fetch('/mockme').then(function(x){return x.text()}).then(function(t){window.mockBody=t})")
+d.waitForFunction("window.mockBody !== null", 3000)
+r["mocked"] = d.evaluate("window.mockBody")
+d.close()
+json.dumps(r)
+`)));
+  add("실 src 다이얼로그/네트워크(setDialogHandler/route/waitForResponse)",
+    g2.dialog === true && g2.dialogMsg === "proceed?" && g2.respStatus === 200 &&
+    g2.blocked === "blocked" && g2.mocked === "MOCKED",
+    `dialog=${g2.dialog}, msg=${g2.dialogMsg}, status=${g2.respStatus}, blocked=${g2.blocked}, mocked=${g2.mocked}`);
+
   const ok = checks.every((c) => c.pass);
   chrome.runtime.sendMessage({ type: "gateResult", ok, checks });
 }

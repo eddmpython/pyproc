@@ -96,6 +96,28 @@ class BrowserTab:
         return self._op("cookies", urls=urls).get("value")
     def setCookie(self, name, value, **kwargs):
         self._op("setCookie", name=name, value=value, **kwargs); return self
+    def clearCookies(self, urls=None):
+        self._op("clearCookies", urls=urls); return self
+    def deleteCookie(self, name, url=None):
+        self._op("deleteCookie", name=name, url=url); return self
+    def scrollIntoView(self, selector):
+        self._op("scrollIntoView", selector=selector); return self
+    def upload(self, selector, files):
+        self._op("upload", selector=selector, files=files); return self
+    # 다이얼로그 자동 처리(alert/confirm/prompt는 렌더러를 멈추므로 세션 단위 정책으로 즉시 응답)
+    def setDialogHandler(self, accept=True, promptText=""):
+        self._op("setDialogHandler", accept=accept, promptText=promptText); return self
+    def lastDialog(self):
+        return self._op("lastDialog").get("value")
+    # 네트워크 가로채기/관측(debugger mode 전용)
+    def route(self, pattern, action="block", status=None, body=None, headers=None):
+        self._op("route", pattern=pattern, action=action, status=status, body=body, headers=headers); return self
+    def unroute(self, pattern=None):
+        self._op("unroute", pattern=pattern); return self
+    def waitForResponse(self, pattern, timeout=10000):
+        return self._op("waitForResponse", pattern=pattern, timeout=timeout).get("value")
+    def requests(self):
+        return self._op("requests").get("value")
     def close(self):
         self._op("closeSession")
 

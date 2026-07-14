@@ -48,6 +48,17 @@ export const OP = {
   setHeaders: "setHeaders",
   cookies: "cookies",
   setCookie: "setCookie",
+  clearCookies: "clearCookies",
+  deleteCookie: "deleteCookie",
+  scrollIntoView: "scrollIntoView",
+  upload: "upload",
+  // 다이얼로그 자동 처리(alert/confirm/prompt) + 네트워크 가로채기/관측(CDP Fetch/Network = debugger 전용)
+  setDialogHandler: "setDialogHandler",
+  lastDialog: "lastDialog",
+  route: "route",
+  unroute: "unroute",
+  waitForResponse: "waitForResponse",
+  requests: "requests",
 };
 
 // mode = 조작 전략. 생성 시 1회 선택(per-verb 플래그 금지).

@@ -4,7 +4,7 @@
 // 한 탭을 여러 op에 걸쳐 조작한다. tabId는 파이썬에 노출하지 않는다(iframe 셸 backing 교체 여지). offscreen은
 // chrome.debugger에 못 닿으므로 능력(browserControl.js)이 chrome.runtime 메시지로 이 호스트에 위임한다.
 // 표면 카빙: evaluate 합성 op(추출/조회/대기)는 driver.evaluate 위 단일 구현(queryEval/waitFor*), mode별
-// 메커니즘이 다른 것(신뢰 입력·항법·캡처·에뮬)만 Driver 메서드. 새 op는 dispatch 테이블 한 줄로 는다.
+// 메커니즘이 다른 것(신뢰 입력·항법·캡처·에뮬·다이얼로그·네트워크)만 Driver 메서드. 새 op는 dispatch 한 줄로 는다.
 import { PROTOCOL_VERSION, OP, MODE } from "./browserControlProtocol.js";
 
 // named config(하드코딩 금지). navigation/op 대기 상한과 기본 대기.
@@ -75,7 +75,13 @@ function waitForLoad(target, tabId) {
 
 // debugger 전략: chrome.debugger CDP. 신뢰 입력(Input.*, isTrusted=true) + 캡처/에뮬 전 표면 + 임의 evaluate.
 class DebuggerDriver {
-  constructor(tabId) { this.tabId = tabId; this.target = { tabId }; this.networkOn = false; }
+  constructor(tabId) {
+    this.tabId = tabId; this.target = { tabId };
+    this.networkOn = false; this.fetchOn = false; this.netEventsOn = false;
+    this.routes = []; this.responseLog = [];
+    this.dialogAccept = true; this.dialogPromptText = ""; this.lastDialogMessage = null;
+    this._eventListener = null;
+  }
   send(method, params) { return chrome.debugger.sendCommand(this.target, method, params); }
   async ensureNetwork() { if (!this.networkOn) { await this.send("Network.enable"); this.networkOn = true; } }
   async attach() {
@@ -88,6 +94,24 @@ class DebuggerDriver {
     await this.send("Page.enable");
     // 스텔스: 페이지의 어떤 스크립트보다 먼저 webdriver를 덮는다(재attach 시 마스크 재등록).
     await this.send("Page.addScriptToEvaluateOnNewDocument", { source: WEBDRIVER_MASK });
+    // 단일 이벤트 라우터: 다이얼로그 자동 처리 + Fetch 가로채기 + Network 응답 로그를 한 리스너가 tabId로 분기.
+    // driver 인스턴스당 1회 등록(재attach 시 driver 재생성이라 중복 없음). detach가 제거.
+    if (!this._eventListener) {
+      this._eventListener = (source, method, params) => this._onEvent(source, method, params);
+      chrome.debugger.onEvent.addListener(this._eventListener);
+    }
+  }
+  async _onEvent(source, method, params) {
+    if (source.tabId !== this.tabId) return;
+    if (method === "Page.javascriptDialogOpening") {
+      // 다이얼로그(alert/confirm/prompt)는 렌더러를 멈추므로 즉시 자동 응답(무처리 = 영구 행). 메시지는 기록.
+      this.lastDialogMessage = params && params.message;
+      try { await this.send("Page.handleJavaScriptDialog", { accept: this.dialogAccept, promptText: this.dialogPromptText }); } catch (e) { /* 이미 닫힘 */ }
+    } else if (method === "Network.responseReceived" && this.netEventsOn) {
+      this.responseLog.push({ url: params.response.url, status: params.response.status });
+    } else if (method === "Fetch.requestPaused" && this.fetchOn) {
+      await this._handleFetch(params);
+    }
   }
   async navigate(url) {
     const loaded = waitForLoad(this.target, this.tabId);
@@ -128,6 +152,8 @@ class DebuggerDriver {
     return r.ok ? r.value : null;
   }
   async _pointAt(selector) {
+    // 좌표 입력 전 요소를 뷰포트로 스크롤(폴드 아래 요소도 신뢰 클릭이 맞도록). script 경로는 e.click()이라 불필요.
+    await this.evaluate(`(() => { const e = document.querySelector(${J(selector)}); if (e && e.scrollIntoView) e.scrollIntoView({ block: "center", inline: "center" }); })()`);
     const c = await this.elementCenter(selector);
     if (!c || c.w === 0 || c.h === 0) return null;
     return c;
@@ -232,7 +258,88 @@ class DebuggerDriver {
     const r = await this.send("Network.setCookie", c || {});
     return { ok: !(r && r.success === false), value: r && r.success };
   }
-  async detach() { try { await chrome.debugger.detach(this.target); } catch (e) { /* 이미 풀림 */ } }
+  async clearCookies(urls) {
+    await this.ensureNetwork();
+    const list = (await this.cookies(urls)).value || [];
+    for (const c of list) await this.send("Network.deleteCookies", { name: c.name, domain: c.domain, path: c.path });
+    return { ok: true, value: list.length };
+  }
+  async deleteCookie(name, url) {
+    await this.ensureNetwork();
+    await this.send("Network.deleteCookies", url ? { name, url } : { name });
+    return { ok: true };
+  }
+  // 파일 업로드: <input type=file>에 호스트 경로 배열을 심는다(setFileInputFiles). 경로는 브라우저 프로세스가
+  // 접근 가능한 호스트 파일시스템 경로(자기 기기 자동화 전제). objectId로 요소를 지목하고 사용 후 해제.
+  async upload(selector, files) {
+    const obj = await this.send("Runtime.evaluate", { expression: `document.querySelector(${J(selector)})`, returnByValue: false });
+    const objectId = obj && obj.result && obj.result.objectId;
+    if (!objectId) return { ok: false, error: `요소 미발견: ${selector}` };
+    try {
+      await this.send("DOM.setFileInputFiles", { files: files || [], objectId });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: "upload: " + String(e) };
+    } finally {
+      try { await this.send("Runtime.releaseObject", { objectId }); } catch (e) { /* 이미 해제 */ }
+    }
+  }
+  setDialogHandler(accept, promptText) {
+    this.dialogAccept = accept !== false;
+    this.dialogPromptText = promptText || "";
+    return { ok: true };
+  }
+  lastDialog() { return { ok: true, value: this.lastDialogMessage }; }
+  // 네트워크 가로채기(Fetch 도메인). route가 처음 붙을 때만 Fetch.enable(모든 요청 latency 부담 회피).
+  // 규칙: pattern(부분일치) -> block(fail) | fulfill(정적 응답) | 미지정(continue). 모든 requestPaused는 반드시 처리.
+  async _ensureFetch() {
+    if (this.fetchOn) return;
+    await this.send("Fetch.enable", { patterns: [{ urlPattern: "*" }] });
+    this.fetchOn = true;
+  }
+  async _handleFetch(params) {
+    const url = params.request.url;
+    const rule = this.routes.find((r) => url.includes(r.pattern));
+    try {
+      if (rule && rule.action === "block") {
+        await this.send("Fetch.failRequest", { requestId: params.requestId, errorReason: "BlockedByClient" });
+      } else if (rule && rule.action === "fulfill") {
+        await this.send("Fetch.fulfillRequest", {
+          requestId: params.requestId,
+          responseCode: rule.status || 200,
+          responseHeaders: Object.entries(rule.headers || {}).map(([name, value]) => ({ name, value: String(value) })),
+          body: btoa(unescape(encodeURIComponent(rule.body || ""))),
+        });
+      } else {
+        await this.send("Fetch.continueRequest", { requestId: params.requestId });
+      }
+    } catch (e) { /* 요청이 이미 취소/완료됨 */ }
+  }
+  async route(pattern, action, opts) {
+    await this._ensureFetch();
+    this.routes.push({ pattern, action, status: opts && opts.status, body: opts && opts.body, headers: opts && opts.headers });
+    return { ok: true };
+  }
+  async unroute(pattern) {
+    this.routes = pattern ? this.routes.filter((r) => r.pattern !== pattern) : [];
+    return { ok: true };
+  }
+  async _ensureNetEvents() { await this.ensureNetwork(); this.netEventsOn = true; }
+  async waitForResponse(pattern, timeoutMs) {
+    await this._ensureNetEvents();
+    const deadline = Date.now() + (timeoutMs || DEFAULT_WAIT_MS);
+    while (Date.now() < deadline) {
+      const hit = this.responseLog.find((r) => r.url.includes(pattern));
+      if (hit) return { ok: true, value: hit };
+      await sleep(100);
+    }
+    return { ok: false, error: "waitForResponse 타임아웃: " + pattern };
+  }
+  async requests() { await this._ensureNetEvents(); return { ok: true, value: this.responseLog }; }
+  async detach() {
+    if (this._eventListener) { chrome.debugger.onEvent.removeListener(this._eventListener); this._eventListener = null; }
+    try { await chrome.debugger.detach(this.target); } catch (e) { /* 이미 풀림 */ }
+  }
 }
 
 // script 전략: chrome.scripting(CDP 없음 = 스텔스). isTrusted=false. 페이지 CSP unsafe-eval에 evaluate가 걸릴 수 있다(정직).
@@ -320,6 +427,15 @@ class ScriptDriver {
   setHeaders() { return Promise.resolve(this._unsupported("setHeaders")); }
   cookies() { return Promise.resolve(this._unsupported("cookies")); }
   setCookie() { return Promise.resolve(this._unsupported("setCookie")); }
+  clearCookies() { return Promise.resolve(this._unsupported("clearCookies")); }
+  deleteCookie() { return Promise.resolve(this._unsupported("deleteCookie")); }
+  upload() { return Promise.resolve(this._unsupported("upload")); }
+  setDialogHandler() { return Promise.resolve(this._unsupported("setDialogHandler")); }
+  lastDialog() { return Promise.resolve(this._unsupported("lastDialog")); }
+  route() { return Promise.resolve(this._unsupported("route")); }
+  unroute() { return Promise.resolve(this._unsupported("unroute")); }
+  waitForResponse() { return Promise.resolve(this._unsupported("waitForResponse")); }
+  requests() { return Promise.resolve(this._unsupported("requests")); }
   async detach() { /* CDP 없음 */ }
 }
 
@@ -393,6 +509,16 @@ function dispatch(driver, op, a) {
     case OP.setHeaders: return driver.setHeaders(a.headers);
     case OP.cookies: return driver.cookies(a.urls);
     case OP.setCookie: return driver.setCookie(a);
+    case OP.clearCookies: return driver.clearCookies(a.urls);
+    case OP.deleteCookie: return driver.deleteCookie(a.name, a.url);
+    case OP.scrollIntoView: return queryEval(driver, a.selector, `e => { e.scrollIntoView({ block: "center", inline: "center" }); return true; }`);
+    case OP.upload: return driver.upload(a.selector, a.files);
+    case OP.setDialogHandler: return driver.setDialogHandler(a.accept, a.promptText);
+    case OP.lastDialog: return driver.lastDialog();
+    case OP.route: return driver.route(a.pattern, a.action, a);
+    case OP.unroute: return driver.unroute(a.pattern);
+    case OP.waitForResponse: return driver.waitForResponse(a.pattern, a.timeout);
+    case OP.requests: return driver.requests();
     default: return Promise.resolve({ ok: false, error: `알 수 없는 op: ${op}` });
   }
 }

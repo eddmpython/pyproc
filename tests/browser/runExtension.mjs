@@ -64,10 +64,13 @@ async function main() {
 <ul><li class="item">a</li><li class="item">b</li><li class="item">c</li></ul>
 <div id="dbl" style="position:absolute;top:80px;left:220px;width:160px;height:40px">dbl</div>
 <form id="form" style="position:absolute;top:160px;left:220px"><input id="formField" value=""></form>
+<button id="dialogBtn" style="position:absolute;top:220px;left:220px;width:160px;height:40px">dialog</button>
 <script>
 window.clickReport={clicked:false};
+window.dialogResult=null;
 document.getElementById('dbl').addEventListener('dblclick',function(e){window.dblReport={trusted:e.isTrusted};});
 document.getElementById('form').addEventListener('submit',function(e){e.preventDefault();window.submitReport=true;});
+document.getElementById('dialogBtn').addEventListener('click',function(){window.dialogResult=window.confirm('proceed?');});
 setTimeout(function(){window.__ready=true;},400);
 </script></body></html>`);
       return;
@@ -75,6 +78,11 @@ setTimeout(function(){window.__ready=true;},400);
     if (req.url.startsWith("/echoHeaders")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(`<!doctype html><html><head><title>echo</title></head><body><pre id="h">${JSON.stringify(req.headers)}</pre></body></html>`);
+      return;
+    }
+    if (req.url.startsWith("/jsonApi")) {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ msg: "apihit" }));
       return;
     }
     res.writeHead(404); res.end();
