@@ -4,6 +4,19 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 13: 지오로케이션 스푸핑 실측 GREEN + src 승격 (Phase 7 벽 돌파)
+
+Phase 7에서 "grantPermissions가 browser-level이라 막혀 미승격"으로 잘랐던 setGeolocation을 확장 API로 되살렸다.
+attempts 게이트25, `bootIsolationRunner` **59/59 GREEN**.
+
+- **벽 돌파**: 좌표는 `Emulation.setGeolocationOverride`(page-level, 동작)로 덮되, 권한은 CDP `Browser.grantPermissions`
+  (browser-level, tab-session서 막힘) 대신 **확장 API `chrome.contentSettings.location.set({primaryPattern, setting:
+  "allow"})`**로 우회 부여. origin의 포트를 뗀 패턴(contentSettings는 포트 미포함)으로 허용. 게이트25: getCurrentPosition이
+  스푸핑 좌표(37.5665) 회수.
+- **비용(정직)**: manifest에 `contentSettings` 권한 추가 필요(지오로케이션 안 쓰면 생략 가능, 계약 표에 명시).
+- **src 승격**: protocol/host(contentSettings 우회) + browserControl.js + index.d.ts + contract.md(권한 표 +
+  표면). 실 src 픽스처에 지오 슬라이스 추가(픽스처 manifest contentSettings) -> **GREEN 6/6**. `npm test` **568 green**.
+
 ### 2026-07-14 Phase 12: cross-origin OOPIF 프레임 드릴다운 실측 GREEN + src 승격 (Phase 6 벽 돌파)
 
 Phase 6에서 "OOPIF는 별 프로세스라 미지원(same-origin 전용)"으로 남겼던 벽을 정공법으로 뚫었다. attempts 게이트24,
