@@ -75,6 +75,10 @@ export const OP = {
   // 다운로드(CDP Page.setDownloadBehavior + downloadWillBegin/Progress 관측). debugger 전용.
   enableDownloads: "enableDownloads",
   waitForDownload: "waitForDownload",
+  // 콘솔/에러 캡처(CDP Runtime.consoleAPICalled/exceptionThrown). 페이지 로그·에러 관측. debugger 전용.
+  enableConsole: "enableConsole",
+  consoleLogs: "consoleLogs",
+  waitForConsole: "waitForConsole",
 };
 
 // mode = 조작 전략. 생성 시 1회 선택(per-verb 플래그 금지).

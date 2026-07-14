@@ -125,16 +125,21 @@ d.enableDownloads()
 d.click("#dl")
 dl = d.waitForDownload(6000)
 r["dlFile"] = dl["filename"] if dl else None
+d.enableConsole()
+d.evaluate("console.log('srcConsole', 7)")
+c = d.waitForConsole("srcConsole", 3000)
+r["consoleText"] = c["text"] if c else None
 d.close()
 json.dumps(r)
 `)));
-  add("실 src 다이얼로그/네트워크/프레임/에뮬/다운로드",
+  add("실 src 다이얼로그/네트워크/프레임/에뮬/다운로드/콘솔",
     g2.dialog === true && g2.dialogMsg === "proceed?" && g2.respStatus === 200 &&
     g2.blocked === "blocked" && g2.mocked === "MOCKED" && g2.heldFulfill === "HELD" &&
     typeof g2.respBody === "string" && g2.respBody.includes("apihit") &&
     g2.frameText === "childOk" && g2.frameField === "framedSrc" &&
-    g2.dark === true && g2.tz === "Asia/Seoul" && g2.offline === false && g2.dlFile === "report.txt",
-    `held=${g2.heldFulfill}, frameText=${g2.frameText}, dark=${g2.dark}, tz=${g2.tz}, dlFile=${g2.dlFile}`);
+    g2.dark === true && g2.tz === "Asia/Seoul" && g2.offline === false && g2.dlFile === "report.txt" &&
+    String(g2.consoleText).includes("srcConsole"),
+    `held=${g2.heldFulfill}, frameText=${g2.frameText}, dark=${g2.dark}, dlFile=${g2.dlFile}, console=${g2.consoleText}`);
 
   // 프로세스 OS x 브라우저 컨트롤: 실 src routeBrowserWorker + installBrowserWorker로 Pyodide 워커가
   // 자기 인터프리터(독립 GIL)로 run_sync + 라우터를 거쳐 자기 세션을 몬다(SSOT 회귀).

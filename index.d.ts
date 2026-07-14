@@ -708,6 +708,10 @@ export interface BrowserTab {
   /** 다운로드 관측(CDP Page.downloadWillBegin). enableDownloads 후 waitForDownload로 파일명/URL 회수(저장 경로 지정은 browser-level이라 미지원). debugger mode 전용. */
   enableDownloads(): BrowserTab;
   waitForDownload(timeout?: number): { url: string; filename: string; state: string };
+  /** 콘솔/에러 캡처(CDP Runtime.consoleAPICalled/exceptionThrown). enableConsole 후 consoleLogs/waitForConsole로 페이지 로그·에러 회수. debugger mode 전용. */
+  enableConsole(): BrowserTab;
+  consoleLogs(): Array<{ type: string; text: string }>;
+  waitForConsole(pattern: string, timeout?: number): { type: string; text: string };
   /** 프레임 traversal(same-origin iframe). frames는 프레임 목록, frame(url/name)은 프레임 핸들. cross-origin OOPIF는 미지원. debugger mode 전용. */
   frames(): Array<{ frameId: string; url: string; name: string }>;
   frame(url?: string, name?: string): BrowserFrame;

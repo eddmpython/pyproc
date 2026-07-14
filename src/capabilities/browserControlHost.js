@@ -4,7 +4,7 @@
 // 한 탭을 여러 op에 걸쳐 조작한다. tabId는 파이썬에 노출하지 않는다(iframe 셸 backing 교체 여지). offscreen은
 // chrome.debugger에 못 닿으므로 능력(browserControl.js)이 chrome.runtime 메시지로 이 호스트에 위임한다.
 // 표면 카빙: evaluate 합성 op(추출/조회/대기)는 driver.evaluate 위 단일 구현(queryEval/waitFor*), mode별
-// 메커니즘(신뢰 입력·항법·캡처·에뮬·다이얼로그·네트워크·프레임·다운로드)만 Driver 메서드. 새 op는 dispatch 한 줄.
+// 메커니즘(신뢰 입력·항법·캡처·에뮬·다이얼로그·네트워크·프레임·다운로드·콘솔)만 Driver 메서드. 새 op는 dispatch 한 줄.
 import { PROTOCOL_VERSION, OP, MODE } from "./browserControlProtocol.js";
 
 // named config(하드코딩 금지). navigation/op 대기 상한과 기본 대기.
@@ -85,6 +85,7 @@ class DebuggerDriver {
     this.dialogAccept = true; this.dialogPromptText = ""; this.lastDialogMessage = null;
     this.frameWorlds = new Map();
     this.downloadsOn = false; this.downloadLog = [];
+    this.consoleOn = false; this.consoleLog = [];
     this._eventListener = null;
   }
   send(method, params) { return chrome.debugger.sendCommand(this.target, method, params); }
@@ -121,6 +122,14 @@ class DebuggerDriver {
     } else if (method === "Page.downloadProgress" && this.downloadsOn) {
       const d = this.downloadLog.find((x) => x.guid === params.guid);
       if (d) d.state = params.state;
+    } else if (method === "Runtime.consoleAPICalled" && this.consoleOn) {
+      const text = (params.args || []).map((a) => (a.value !== undefined ? String(a.value) : (a.description || ""))).join(" ");
+      this.consoleLog.push({ type: params.type, text });
+    } else if (method === "Runtime.exceptionThrown" && this.consoleOn) {
+      // 미처리 예외: text는 보통 "Uncaught"만이고 실제 메시지는 exception.description에 있어 둘을 합친다.
+      const d = params.exceptionDetails || {};
+      const desc = (d.exception && d.exception.description) || "";
+      this.consoleLog.push({ type: "exception", text: ((d.text || "") + " " + desc).trim() || "exception" });
     }
   }
   async navigate(url) {
@@ -211,6 +220,22 @@ class DebuggerDriver {
       await sleep(100);
     }
     return { ok: false, error: "waitForDownload 타임아웃" };
+  }
+  // 콘솔/에러 캡처 관측 시작. console.*(consoleAPICalled) + 미처리 예외(exceptionThrown)를 로그한다.
+  async enableConsole() {
+    await this.send("Runtime.enable");
+    this.consoleOn = true;
+    return { ok: true };
+  }
+  consoleLogs() { return { ok: true, value: this.consoleLog }; }
+  async waitForConsole(pattern, timeoutMs) {
+    const deadline = Date.now() + (timeoutMs || DEFAULT_WAIT_MS);
+    while (Date.now() < deadline) {
+      const hit = this.consoleLog.find((x) => x.text.includes(pattern));
+      if (hit) return { ok: true, value: hit };
+      await sleep(100);
+    }
+    return { ok: false, error: "waitForConsole 타임아웃: " + pattern };
   }
   async frames() {
     const tree = await this.send("Page.getFrameTree");
@@ -595,6 +620,9 @@ class ScriptDriver {
   setOffline() { return Promise.resolve(this._unsupported("setOffline")); }
   enableDownloads() { return Promise.resolve(this._unsupported("enableDownloads")); }
   waitForDownload() { return Promise.resolve(this._unsupported("waitForDownload")); }
+  enableConsole() { return Promise.resolve(this._unsupported("enableConsole")); }
+  consoleLogs() { return Promise.resolve(this._unsupported("consoleLogs")); }
+  waitForConsole() { return Promise.resolve(this._unsupported("waitForConsole")); }
   async detach() { /* CDP 없음 */ }
 }
 
@@ -690,6 +718,9 @@ function dispatch(driver, op, a) {
     case OP.setOffline: return driver.setOffline(a.offline);
     case OP.enableDownloads: return driver.enableDownloads(a.path);
     case OP.waitForDownload: return driver.waitForDownload(a.timeout);
+    case OP.enableConsole: return driver.enableConsole();
+    case OP.consoleLogs: return driver.consoleLogs();
+    case OP.waitForConsole: return driver.waitForConsole(a.pattern, a.timeout);
     default: return Promise.resolve({ ok: false, error: `알 수 없는 op: ${op}` });
   }
 }
