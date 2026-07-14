@@ -136,6 +136,11 @@ class BrowserTab:
         self._op("setTimezone", timezoneId=timezoneId); return self
     def setOffline(self, offline=True):
         self._op("setOffline", offline=offline); return self
+    # 다운로드 관측(debugger mode 전용): downloadWillBegin으로 무엇이 다운로드되는지(파일명/URL) 회수.
+    def enableDownloads(self):
+        self._op("enableDownloads"); return self
+    def waitForDownload(self, timeout=10000):
+        return self._op("waitForDownload", timeout=timeout).get("value")
     # 프레임 traversal(same-origin iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
     def frames(self):
         return self._op("frames").get("value")

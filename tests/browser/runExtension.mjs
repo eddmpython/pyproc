@@ -65,6 +65,7 @@ async function main() {
 <div id="dbl" style="position:absolute;top:80px;left:220px;width:160px;height:40px">dbl</div>
 <form id="form" style="position:absolute;top:160px;left:220px"><input id="formField" value=""></form>
 <button id="dialogBtn" style="position:absolute;top:220px;left:220px;width:160px;height:40px">dialog</button>
+<a id="dl" href="/downloadFile" download="report.txt" style="position:absolute;top:400px;left:420px">download</a>
 <iframe id="fr" src="/frameChild" style="position:absolute;top:280px;left:220px;width:300px;height:100px"></iframe>
 <script>
 window.clickReport={clicked:false};
@@ -89,6 +90,11 @@ setTimeout(function(){window.__ready=true;},400);
     if (req.url.startsWith("/jsonApi")) {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ msg: "apihit" }));
+      return;
+    }
+    if (req.url.startsWith("/downloadFile")) {
+      res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Disposition": "attachment; filename=report.txt" });
+      res.end("pyprocDownloadContent");
       return;
     }
     res.writeHead(404); res.end();

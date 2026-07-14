@@ -72,6 +72,9 @@ export const OP = {
   emulateMedia: "emulateMedia",
   setTimezone: "setTimezone",
   setOffline: "setOffline",
+  // 다운로드(CDP Page.setDownloadBehavior + downloadWillBegin/Progress 관측). debugger 전용.
+  enableDownloads: "enableDownloads",
+  waitForDownload: "waitForDownload",
 };
 
 // mode = 조작 전략. 생성 시 1회 선택(per-verb 플래그 금지).
