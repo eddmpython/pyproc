@@ -235,8 +235,30 @@ except Exception as e:
         add("게이트10: 세션 수명(탭 외부 종료 -> 죽은 세션 op가 깨끗이 실패, 행 금지)",
           typeof lostError === "string" && lostError !== "NO_ERROR",
           `error=${lostError}`);
+
+        // 게이트12: 프로세스 OS 워커 N=세션 N. 워커(chrome 미접근, 제약 A)가 offscreen 라우터 4-홉으로
+        // 각자 세션을 조작한다. 워커 2개가 병렬로 다른 label을 쓰고 되읽어 세션 격리 + 라우터를 실증.
+        const spawnRouterWorker = (label) => new Promise((resolve, reject) => {
+          const w = new Worker(new URL("./browserRouterWorker.js", import.meta.url), { type: "module" });
+          w.onmessage = async (ev) => {
+            const m = ev.data;
+            if (m.type === "op") {
+              const opResult = await chrome.runtime.sendMessage(makeMessage(m.op, m.fields));
+              w.postMessage({ type: "opResult", reqId: m.reqId, result: opResult });
+            } else if (m.type === "done") {
+              w.terminate();
+              resolve(m.result);
+            }
+          };
+          w.onerror = (ev) => { w.terminate(); reject(new Error(ev.message || "router worker error")); };
+          w.postMessage({ type: "run", label, target: targetUrl });
+        });
+        const [workerA, workerB] = await Promise.all([spawnRouterWorker("workerA"), spawnRouterWorker("workerB")]);
+        add("게이트12: 프로세스 OS 워커 N=세션 N(offscreen 라우터 4-홉, 워커 chrome 미접근 우회)",
+          workerA.title === "pyprocCdpTarget" && workerA.label === "workerA" && workerB.label === "workerB",
+          `A={title:${workerA.title},label:${workerA.label}}, B={label:${workerB.label}}`);
       } catch (e) {
-        add("게이트9/10: 영속 세션(pyprocBrowser) 표면", false, String(e));
+        add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }
     } catch (e) {
       add("게이트3: 파이썬 -> chrome.debugger Page.navigate + Runtime.evaluate", false, String(e));
