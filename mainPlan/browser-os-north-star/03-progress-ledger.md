@@ -1080,3 +1080,40 @@ NEXT:
 1. Speed Lab과 numericShard 속도 gate를 단발 threshold가 아니라 반복 벤치/median/p95 봉투로 구조화한다.
 2. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 3. 공개키 배포, 권한 UI, `resume.py` 정책을 외부 제품 gate로 고정한다.
+
+## 2026-07-15 - Speed Lab 반복 벤치 봉투 고정
+
+문제:
+
+- 직전 `matmulSurfaceProbe`는 기능은 모두 PASS였지만 단발 speedup만 1.65x로 흔들린 적이 있다.
+- 속도 주장을 단 한 번의 wall time에 걸면 브라우저 스케줄링, 첫 BLAS lane, 헤드리스 부하에 흔들린다.
+- threshold를 낮추는 것은 목표와 어긋난다. 반복 샘플, median, p95 latency 봉투로 속도 주장의 형태를 고쳐야 한다.
+
+완료:
+
+- `examples/speedLab.html`을 3회 warmed sample 벤치로 바꿨다.
+- public demo는 median speedup, single/shard median, single/shard p95, max sample error를 UI와 gate report에 표시한다.
+- Speed Lab gate는 `maxErr < 1e-9`, `medianSpeedup >= 2.0`, `shard p95 < single median`을 동시에 요구한다.
+- `matmulSurfaceProbe.html`도 같은 반복 벤치 봉투로 바꿨다.
+- 첫 구현의 1024x1024 반복 surface gate는 GREEN이었지만 150초까지 늘었다. 상시 surface probe에는 과하므로 768x768로 조정하고, 1024급 선형성은 heavy `shardMatmulProbe`에 남겼다.
+- 테스트 운영 문서, 데모 호스팅 문서, README/README.ko, numericShard 원장을 반복 벤치 기준으로 갱신했다.
+
+검증:
+
+- `npm test` GREEN 584/584.
+- `PYPROC_INDEX_URL=/vendor/pyodide/ node tests/browser/run.mjs tests/attempts/numericShard/matmulSurfaceProbe.html` GREEN 7/7.
+- numericShard 반복 실측: 768x768 f64, 3회 warmed sample, single median 1442ms, shard median 650ms, median speedup 2.22x, shard p95 659ms, maxErr 0.00.
+- `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:examples` GREEN 9/9.
+- Speed Lab 반복 실측: 768x768 f64, 3회 warmed sample, single median 1430ms, shard median 547ms, median speedup 2.52x, shard p95 604ms, maxErr 0.00.
+
+판정:
+
+- 이전 NEXT 1번의 "Speed Lab과 numericShard 속도 gate를 반복 벤치/median/p95 봉투로 구조화한다"는 닫혔다.
+- 속도 주장은 단발 스파이크가 아니라 반복 샘플의 중심값과 tail latency까지 포함하는 계약이 됐다.
+- OS 점수는 70/100 유지한다. 외부 제품 소비 배선이 아니라 내부 speed surface 품질과 재현성 개선이다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포, 권한 UI, `resume.py` 정책을 외부 제품 gate로 고정한다.
+3. WebVM/JupyterLite/marimo 대비 정면 벤치 표를 Speed Lab 방식의 반복 봉투로 설계한다.

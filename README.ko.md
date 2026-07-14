@@ -194,7 +194,7 @@ Pyodide  Workers
 - 스냅샷-fork 자식 부팅 ~184-300ms vs 콜드 ~2.8s.
 - 복원 기반 리액티비티: 라이브-델타 복원 ~1-2.4ms(바뀐 페이지만 되쓰기, 재실행 없음).
 - uv 레인 웜 환경 부팅 ~1229ms vs 콜드 ~5109ms(numpy).
-- Speed Lab sharded numpy matmul: 768x768 f64에서 4 worker 4.02x(`examples/speedLab.html` gate).
+- Speed Lab sharded numpy matmul: 768x768 f64에서 3회 warmed sample median 2.52x, shard p95 604ms < single-worker median 1430ms(`examples/speedLab.html` gate).
 - non-Pyodide CPython 3.14(WASI) 부팅 ~70-120ms.
 
 현실 점검: 순수 파이썬 로직은 로컬 급 이상이고, 대형 numpy 산술은 ~86x 느리다(WASM 단일 스레드, no-AVX BLAS). 로직 / 분석 / 서버 워크로드는 런타임 급이고, 무거운 수치 연산은 대상이 아니다.

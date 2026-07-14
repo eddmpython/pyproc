@@ -29,6 +29,32 @@
     return C;
   }
 
+  function percentile(values, pct) {
+    const sorted = values.slice().sort((a, b) => a - b);
+    const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * pct / 100) - 1));
+    return sorted[index];
+  }
+
+  function median(values) {
+    return percentile(values, 50);
+  }
+
+  function summarizeBench(rows) {
+    const single = rows.map((r) => r.singleMs);
+    const parallel = rows.map((r) => r.parallelMs);
+    const speedups = rows.map((r) => r.speedup);
+    return {
+      samples: rows,
+      sampleCount: rows.length,
+      singleMedian: median(single),
+      singleP95: percentile(single, 95),
+      parallelMedian: median(parallel),
+      parallelP95: percentile(parallel, 95),
+      medianSpeedup: median(speedups),
+      maxErr: Math.max(...rows.map((r) => r.maxErr)),
+    };
+  }
+
   try {
     const os = new PyProc({ indexURL: INDEX, packages: ["numpy"], setup: "import numpy" });
     await os.boot(4);
@@ -54,20 +80,38 @@
 
     // 3) 대형 정사각 배속: 같은 코드 경로(matmul)를 parts:1(단일워커) vs 전 워커로 비교(공정).
     //    두 경로 모두 동일한 SAB 셋업/재구성/조립 오버헤드를 지므로 배속 = 순수 병렬 이득.
-    const S = 1024;
+    const S = 768;
+    const benchSamples = 3;
     const AA = new Float64Array(S * S), BB = new Float64Array(S * S);
     for (let i = 0; i < AA.length; i++) { AA[i] = ((i * 3 + 1) % 17) / 17 - 0.5; BB[i] = ((i * 5 + 2) % 13) / 13 - 0.5; }
-    let t = performance.now();
-    const C1 = await os.matmul({ data: AA, rows: S, cols: S }, { data: BB, rows: S, cols: S }, { parts: 1 });
-    const singleMs = Math.round(performance.now() - t);
-    t = performance.now();
-    const CC = await os.matmul({ data: AA, rows: S, cols: S }, { data: BB, rows: S, cols: S });
-    timings.matmulMs = Math.round(performance.now() - t);
-    // parts:1과 전 워커 결과가 동일해야 한다(정확성 교차 확인).
-    let sameErr = 0; for (let i = 0; i < CC.data.length; i++) sameErr = Math.max(sameErr, Math.abs(CC.data[i] - C1.data[i]));
-    check("대형: parts:1 == 전 워커 결과(정확성)", CC.rows === S && CC.cols === S && sameErr < 1e-10, `maxErr ${sameErr.toExponential(2)}`);
-    timings.speedup = +(singleMs / timings.matmulMs).toFixed(2);
-    check("승격 후 near-linear(4워커 종단 >= 2.0x)", timings.speedup >= 2.0, `단일워커(parts:1) ${singleMs}ms, 전 워커 ${timings.matmulMs}ms, ${timings.speedup}x`);
+
+    // 워밍업: 같은 코드 경로에서 BLAS/워커 lane을 모두 깨운 뒤 반복 벤치를 잰다.
+    const warm = 128;
+    const WA = new Float64Array(warm * warm), WB = new Float64Array(warm * warm);
+    for (let i = 0; i < WA.length; i++) { WA[i] = ((i * 3 + 1) % 17) / 17 - 0.5; WB[i] = ((i * 5 + 2) % 13) / 13 - 0.5; }
+    await os.matmul({ data: WA, rows: warm, cols: warm }, { data: WB, rows: warm, cols: warm }, { parts: 1 });
+    await os.matmul({ data: WA, rows: warm, cols: warm }, { data: WB, rows: warm, cols: warm });
+
+    const rows = [];
+    for (let sample = 0; sample < benchSamples; sample++) {
+      let t = performance.now();
+      const C1 = await os.matmul({ data: AA, rows: S, cols: S }, { data: BB, rows: S, cols: S }, { parts: 1 });
+      const singleMs = Math.round(performance.now() - t);
+      t = performance.now();
+      const CC = await os.matmul({ data: AA, rows: S, cols: S }, { data: BB, rows: S, cols: S });
+      const parallelMs = Math.round(performance.now() - t);
+      let sameErr = 0; for (let i = 0; i < CC.data.length; i++) sameErr = Math.max(sameErr, Math.abs(CC.data[i] - C1.data[i]));
+      rows.push({ singleMs, parallelMs, speedup: +(singleMs / parallelMs).toFixed(2), maxErr: sameErr });
+    }
+    const bench = summarizeBench(rows);
+    timings.bench = bench;
+    timings.matmulMs = bench.parallelMedian;
+    timings.speedup = +bench.medianSpeedup.toFixed(2);
+    check("대형 반복: parts:1 == 전 워커 결과(정확성)", bench.maxErr < 1e-10, `samples ${bench.sampleCount}, maxErr ${bench.maxErr.toExponential(2)}`);
+    check("반복 벤치: median speedup >= 2.0x", bench.medianSpeedup >= 2.0,
+      `single median ${bench.singleMedian}ms, shard median ${bench.parallelMedian}ms, ${bench.medianSpeedup.toFixed(2)}x`);
+    check("반복 벤치: shard p95 < single median", bench.parallelP95 < bench.singleMedian,
+      `single p95 ${bench.singleP95}ms, shard p95 ${bench.parallelP95}ms`);
 
     os.terminate();
   } catch (e) {

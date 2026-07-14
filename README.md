@@ -194,7 +194,7 @@ The numbers below come from one machine and are meant to be **reproduced, not ta
 - Snapshot-fork child boot ~184-300ms vs cold ~2.8s.
 - Restore-based reactivity: live-diff restore ~1-2.4ms (writes only changed pages, no re-run).
 - uv-lane warm environment boot ~1229ms vs ~5109ms cold (numpy).
-- Speed Lab sharded numpy matmul: 4.02x on 4 workers for 768x768 f64 (`examples/speedLab.html` gate).
+- Speed Lab sharded numpy matmul: median 2.52x on 4 workers for 768x768 f64 across 3 warmed samples, with shard p95 604ms below single-worker median 1430ms (`examples/speedLab.html` gate).
 - non-Pyodide CPython 3.14 (WASI) boot ~70-120ms.
 
 Reality check: pure-Python logic is at or above local speed; large numpy arithmetic is ~86x slower (WASM single-thread, no-AVX BLAS). Logic / analysis / server workloads are runtime-grade; heavy numeric crunching is not the target.

@@ -37,5 +37,5 @@ _site/
 - `https://eddmpython.github.io/pyproc/` 랜딩 -> examples 링크 7종.
 - machine.html: 새 컴퓨터 부팅 메시지 + 탭 닫았다 열기 resume + signed `.pymachine` cast.
 - serverDev.html: FastAPI/SQLite 서버 부팅 + iframe preview + app.py 수정 후 v2 반영.
-- speedLab.html: 단일 worker numpy matmul과 4-worker sharded matmul 비교 + 결과 일치 검증.
+- speedLab.html: 단일 worker numpy matmul과 4-worker sharded matmul의 3회 warmed sample median/p95 비교 + 결과 일치 검증.
 - processOs.html: 첫 방문 1회 새로고침 후 워커 4개 병렬 수치.
