@@ -148,6 +148,9 @@ class BrowserTab:
         return self._op("consoleLogs").get("value")
     def waitForConsole(self, pattern, timeout=10000):
         return self._op("waitForConsole", pattern=pattern, timeout=timeout).get("value")
+    # 접근성 트리(debugger mode 전용): role/name 의미 구조(에이전트가 DOM 대신 의미로 페이지를 이해).
+    def accessibilityTree(self):
+        return self._op("accessibilityTree").get("value")
     # 프레임 traversal(same-origin iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
     def frames(self):
         return self._op("frames").get("value")

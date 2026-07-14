@@ -712,6 +712,8 @@ export interface BrowserTab {
   enableConsole(): BrowserTab;
   consoleLogs(): Array<{ type: string; text: string }>;
   waitForConsole(pattern: string, timeout?: number): { type: string; text: string };
+  /** 접근성 트리(CDP Accessibility.getFullAXTree). 페이지를 role/name 시맨틱으로 회수(DOM 셀렉터 대신 의미 네비게이션). debugger mode 전용. */
+  accessibilityTree(): Array<{ role: string; name: string; value: string }>;
   /** 프레임 traversal(same-origin iframe). frames는 프레임 목록, frame(url/name)은 프레임 핸들. cross-origin OOPIF는 미지원. debugger mode 전용. */
   frames(): Array<{ frameId: string; url: string; name: string }>;
   frame(url?: string, name?: string): BrowserFrame;

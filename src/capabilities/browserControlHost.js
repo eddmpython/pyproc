@@ -4,7 +4,7 @@
 // 한 탭을 여러 op에 걸쳐 조작한다. tabId는 파이썬에 노출하지 않는다(iframe 셸 backing 교체 여지). offscreen은
 // chrome.debugger에 못 닿으므로 능력(browserControl.js)이 chrome.runtime 메시지로 이 호스트에 위임한다.
 // 표면 카빙: evaluate 합성 op(추출/조회/대기)는 driver.evaluate 위 단일 구현(queryEval/waitFor*), mode별
-// 메커니즘(신뢰 입력·항법·캡처·에뮬·다이얼로그·네트워크·프레임·다운로드·콘솔)만 Driver 메서드. 새 op는 dispatch 한 줄.
+// 메커니즘(신뢰 입력·항법·캡처·에뮬·다이얼로그·네트워크·프레임·다운로드·콘솔·접근성)만 Driver 메서드. 새 op는 dispatch 한 줄.
 import { PROTOCOL_VERSION, OP, MODE } from "./browserControlProtocol.js";
 
 // named config(하드코딩 금지). navigation/op 대기 상한과 기본 대기.
@@ -236,6 +236,18 @@ class DebuggerDriver {
       await sleep(100);
     }
     return { ok: false, error: "waitForConsole 타임아웃: " + pattern };
+  }
+  // 접근성 트리: role/name/value의 시맨틱 구조(에이전트가 DOM 대신 의미로 페이지를 이해). 무-role 노드는 제외.
+  async accessibilityTree() {
+    await this.send("Accessibility.enable");
+    const r = await this.send("Accessibility.getFullAXTree");
+    const nodes = (r && r.nodes) || [];
+    const out = nodes.map((n) => ({
+      role: n.role && n.role.value,
+      name: n.name && n.name.value,
+      value: n.value && n.value.value,
+    })).filter((n) => n.role);
+    return { ok: true, value: out };
   }
   async frames() {
     const tree = await this.send("Page.getFrameTree");
@@ -623,6 +635,7 @@ class ScriptDriver {
   enableConsole() { return Promise.resolve(this._unsupported("enableConsole")); }
   consoleLogs() { return Promise.resolve(this._unsupported("consoleLogs")); }
   waitForConsole() { return Promise.resolve(this._unsupported("waitForConsole")); }
+  accessibilityTree() { return Promise.resolve(this._unsupported("accessibilityTree")); }
   async detach() { /* CDP 없음 */ }
 }
 
@@ -721,6 +734,7 @@ function dispatch(driver, op, a) {
     case OP.enableConsole: return driver.enableConsole();
     case OP.consoleLogs: return driver.consoleLogs();
     case OP.waitForConsole: return driver.waitForConsole(a.pattern, a.timeout);
+    case OP.accessibilityTree: return driver.accessibilityTree();
     default: return Promise.resolve({ ok: false, error: `알 수 없는 op: ${op}` });
   }
 }
