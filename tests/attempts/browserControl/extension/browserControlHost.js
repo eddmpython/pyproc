@@ -82,6 +82,7 @@ class DebuggerDriver {
     this.networkOn = false; this.fetchOn = false; this.netEventsOn = false;
     this.routes = []; this.responseLog = []; this.heldRequests = new Map();
     this.dialogAccept = true; this.dialogPromptText = ""; this.lastDialogMessage = null;
+    this.frameWorlds = new Map();
     this._eventListener = null;
   }
   send(method, params) { return chrome.debugger.sendCommand(this.target, method, params); }
@@ -144,10 +145,68 @@ class DebuggerDriver {
     await changed;
     return { ok: true };
   }
-  async evaluate(expr) {
-    const res = await this.send("Runtime.evaluate", { expression: expr, returnByValue: true });
-    if (res && res.exceptionDetails) return { ok: false, error: res.exceptionDetails.text || "evaluate 예외" };
+  async evaluate(expr, frameId) {
+    // frameId가 있으면 그 프레임의 isolated world에서 평가(cross-origin iframe 포함). 없으면 메인 컨텍스트.
+    const params = { expression: expr, returnByValue: true };
+    if (frameId) {
+      const ctx = await this._frameContext(frameId);
+      if (ctx == null) return { ok: false, error: "프레임 컨텍스트 없음: " + frameId };
+      params.contextId = ctx;
+    }
+    const res = await this.send("Runtime.evaluate", params);
+    if (res && res.exceptionDetails) {
+      // 컨텍스트가 항법으로 파기됐으면 캐시를 비워 다음 호출이 재생성하게 한다.
+      if (frameId) this.frameWorlds.delete(frameId);
+      return { ok: false, error: res.exceptionDetails.text || "evaluate 예외" };
+    }
     return { ok: true, value: res && res.result ? res.result.value : undefined };
+  }
+  // 프레임 isolated world 컨텍스트(캐시). createIsolatedWorld는 프레임별 격리 컨텍스트 id를 즉시 돌려준다
+  // (executionContextCreated 이벤트 추적 불필요 = 강건). isolated world는 DOM을 공유하나 페이지 JS 변수와는 격리.
+  async _frameContext(frameId) {
+    if (this.frameWorlds.has(frameId)) return this.frameWorlds.get(frameId);
+    try {
+      const r = await this.send("Page.createIsolatedWorld", { frameId, worldName: "pyprocFrame" });
+      const ctx = r && r.executionContextId;
+      if (ctx) this.frameWorlds.set(frameId, ctx);
+      return ctx || null;
+    } catch (e) { return null; }
+  }
+  async frames() {
+    const tree = await this.send("Page.getFrameTree");
+    const out = [];
+    const walk = (node) => { if (!node || !node.frame) return; out.push({ frameId: node.frame.id, url: node.frame.url, name: node.frame.name || "" }); (node.childFrames || []).forEach(walk); };
+    if (tree && tree.frameTree) walk(tree.frameTree);
+    return { ok: true, value: out };
+  }
+  // 프레임 문맥 op(evaluate 합성). 프레임의 신뢰 입력은 좌표 교차라 범위 밖 = element.click()/value setter(합성).
+  async frameOp(frameId, verb, a) {
+    const ev = (expr) => this.evaluate(expr, frameId);
+    const q = async (fnBody) => {
+      const r = await ev(`(() => { const el = document.querySelector(${J(a.selector)}); if (!el) return { __m: true }; return { __v: (${fnBody})(el) }; })()`);
+      if (!r.ok) return r;
+      if (r.value && r.value.__m) return { ok: false, error: "요소 미발견: " + a.selector };
+      return { ok: true, value: r.value ? r.value.__v : undefined };
+    };
+    const setValue = (val) => `e => { e.focus(); const p = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e), 'value'); (p && p.set) ? p.set.call(e, ${val}) : (e.value = ${val}); e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); return true; }`;
+    switch (verb) {
+      case "evaluate": return ev(a.expr);
+      case "text": return q("e => e.textContent");
+      case "html": return q("e => e.innerHTML");
+      case "attr": return q(`e => e.getAttribute(${J(a.name)})`);
+      case "value": return q("e => e.value");
+      case "exists": return ev(`!!document.querySelector(${J(a.selector)})`);
+      case "count": return ev(`document.querySelectorAll(${J(a.selector)}).length`);
+      case "click": return q("e => { e.click(); return true; }");
+      case "type": return q(setValue(`(e.value || '') + ${J(a.text)}`));
+      case "fill": return q(setValue(J(a.text)));
+      case "waitFor": {
+        const deadline = Date.now() + (a.timeout || DEFAULT_WAIT_MS);
+        while (Date.now() < deadline) { const r = await ev(`!!document.querySelector(${J(a.selector)})`); if (r.ok && r.value === true) return { ok: true }; await sleep(100); }
+        return { ok: false, error: "frame waitFor 타임아웃: " + a.selector };
+      }
+      default: return { ok: false, error: "알 수 없는 frame verb: " + verb };
+    }
   }
   async elementCenter(selector) {
     const r = await this.evaluate(`(() => { const e = document.querySelector(${J(selector)}); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x + b.width/2, y: b.y + b.height/2, w: b.width, h: b.height }; })()`);
@@ -489,6 +548,8 @@ class ScriptDriver {
   fulfillRequest() { return Promise.resolve(this._unsupported("fulfillRequest")); }
   abortRequest() { return Promise.resolve(this._unsupported("abortRequest")); }
   responseBody() { return Promise.resolve(this._unsupported("responseBody")); }
+  frames() { return Promise.resolve(this._unsupported("frames")); }
+  frameOp() { return Promise.resolve(this._unsupported("frameOp")); }
   async detach() { /* CDP 없음 */ }
 }
 
@@ -577,6 +638,8 @@ function dispatch(driver, op, a) {
     case OP.fulfillRequest: return driver.fulfillRequest(a.id, { status: a.status, body: a.body, headers: a.headers });
     case OP.abortRequest: return driver.abortRequest(a.id);
     case OP.responseBody: return driver.responseBody(a.pattern);
+    case OP.frames: return driver.frames();
+    case OP.frameOp: return driver.frameOp(a.frameId, a.verb, a);
     default: return Promise.resolve({ ok: false, error: `알 수 없는 op: ${op}` });
   }
 }

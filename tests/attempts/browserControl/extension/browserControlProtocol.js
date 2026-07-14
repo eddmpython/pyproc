@@ -65,6 +65,9 @@ export const OP = {
   fulfillRequest: "fulfillRequest",
   abortRequest: "abortRequest",
   responseBody: "responseBody",
+  // 프레임 traversal(iframe 내부 조작 = isolated world). frames는 프레임 목록, frameOp는 프레임 문맥 op.
+  frames: "frames",
+  frameOp: "frameOp",
 };
 
 // mode = 조작 전략. 생성 시 1회 선택(per-verb 플래그 금지).

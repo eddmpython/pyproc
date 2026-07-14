@@ -131,8 +131,48 @@ class BrowserTab:
         self._op("abortRequest", id=id); return self
     def responseBody(self, pattern):
         return self._op("responseBody", pattern=pattern).get("value")
+    # 프레임 traversal(iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
+    def frames(self):
+        return self._op("frames").get("value")
+    def frame(self, url=None, name=None):
+        for f in self.frames():
+            if url is not None and url in (f.get("url") or ""):
+                return Frame(self, f["frameId"])
+            if name is not None and name == f.get("name"):
+                return Frame(self, f["frameId"])
+        raise RuntimeError("frame 미발견: " + str(url or name))
     def close(self):
         self._op("closeSession")
+
+class Frame:
+    # iframe 내부 핸들. op는 프레임의 isolated world에서 실행(합성 입력, cross-origin 프레임 포함).
+    def __init__(self, tab, frameId):
+        self._tab = tab
+        self._fid = frameId
+    def _fop(self, verb, **args):
+        return self._tab._op("frameOp", frameId=self._fid, verb=verb, **args)
+    def evaluate(self, expr):
+        return self._fop("evaluate", expr=expr).get("value")
+    def text(self, selector):
+        return self._fop("text", selector=selector).get("value")
+    def html(self, selector):
+        return self._fop("html", selector=selector).get("value")
+    def attr(self, selector, name):
+        return self._fop("attr", selector=selector, name=name).get("value")
+    def value(self, selector):
+        return self._fop("value", selector=selector).get("value")
+    def exists(self, selector):
+        return self._fop("exists", selector=selector).get("value")
+    def count(self, selector):
+        return self._fop("count", selector=selector).get("value")
+    def click(self, selector):
+        self._fop("click", selector=selector); return self
+    def type(self, selector, text):
+        self._fop("type", selector=selector, text=text); return self
+    def fill(self, selector, text):
+        self._fop("fill", selector=selector, text=text); return self
+    def waitFor(self, selector, timeout=10000):
+        self._fop("waitFor", selector=selector, timeout=timeout); return self
 
 def tab(url=None, mode="script"):
     resp = _send("openSession", mode=mode)
@@ -144,6 +184,7 @@ def tab(url=None, mode="script"):
 _mod = types.ModuleType("pyprocBrowser")
 _mod.tab = tab
 _mod.BrowserTab = BrowserTab
+_mod.Frame = Frame
 sys.modules["pyprocBrowser"] = _mod
 `;
 
@@ -571,6 +612,36 @@ json.dumps(r)
         add("게이트17c: held routing fulfill(붙잡은 요청에 정적 응답 주입)", g17.heldFulfill === "HELD-MOCK", `heldFulfill=${g17.heldFulfill}`);
         add("게이트17d: held routing abort(붙잡은 요청 취소)", g17.heldAbort === "aborted", `heldAbort=${g17.heldAbort}`);
         add("게이트17e: 응답 바디 캡처(responseBody)", typeof g17.respBody === "string" && g17.respBody.includes("apihit"), `respBody=${g17.respBody}`);
+
+        // 게이트18: 프레임 traversal. /cdpTarget이 same-origin 자식 프레임을 담고, isolated world로 드릴다운해
+        // 프레임 내부를 조회/입력/클릭한다(고정 화면 셸이 사이트를 iframe에 담는 비전과 직결).
+        // cross-origin(OOPIF)은 별도 프로세스라 setAutoAttach가 필요한 별개 축(정직한 경계, 원장 기록).
+        const g18 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+r = {}
+frs = d.frames()
+r["frameCount"] = len(frs)
+r["hasChild"] = any("/frameChild" in (f.get("url") or "") for f in frs)
+f = d.frame(url="/frameChild")
+f.waitFor("#cmarker", 3000)
+r["childMarker"] = f.text("#cmarker")
+r["childExists"] = f.exists("#cmarker")
+f.fill("#cfield", "framedIn")
+r["childField"] = f.value("#cfield")
+f.click("#cbtn")
+r["afterClick"] = f.text("#cmarker")
+r["childPath"] = f.evaluate("location.pathname")
+d.close()
+json.dumps(r)
+`)));
+        add("게이트18a: 프레임 목록(frames = 톱 + 자식)",
+          g18.frameCount >= 2 && g18.hasChild === true, `count=${g18.frameCount}, hasChild=${g18.hasChild}`);
+        add("게이트18b: 프레임 내부 조회(text/exists/value, isolated world)",
+          g18.childMarker === "childOk" && g18.childExists === true && g18.childPath === "/frameChild",
+          `marker=${g18.childMarker}, exists=${g18.childExists}, path=${g18.childPath}`);
+        add("게이트18c: 프레임 내부 조작(fill + click -> DOM 변경)",
+          g18.childField === "framedIn" && g18.afterClick === "clicked",
+          `field=${g18.childField}, afterClick=${g18.afterClick}`);
       } catch (e) {
         add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }

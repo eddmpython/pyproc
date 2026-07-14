@@ -102,6 +102,7 @@ async function main() {
 <button id="dialogBtn" style="position:absolute;top:320px;left:220px;width:160px;height:40px">dialog</button>
 <input type="file" id="file" style="position:absolute;top:380px;left:220px">
 <button id="far" style="position:absolute;top:2000px;left:20px;width:140px;height:40px">far</button>
+<iframe id="fr" src="/frameChild" style="position:absolute;top:440px;left:20px;width:320px;height:120px"></iframe>
 <script>
 window.clickReport={clicked:false};
 window.keyReport=[];
@@ -136,6 +137,12 @@ setTimeout(function(){window.__ready=true;},500);
     if (req.url.startsWith("/heldApi")) {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ held: "ok" }));
+      return;
+    }
+    // 게이트18 프레임 traversal: /cdpTarget이 same-origin으로 담는 자식 프레임. isolated world로 내부를 드릴다운.
+    if (req.url.startsWith("/frameChild")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html><head><title>child</title></head><body><div id="cmarker">childOk</div><input id="cfield" value=""><button id="cbtn">cbtn</button><script>document.getElementById('cbtn').addEventListener('click',function(){document.getElementById('cmarker').textContent='clicked';});</script></body></html>`);
       return;
     }
     // 게이트16 업로드: offscreen(COI)이 fetch로 호스트 프로브 파일 경로를 얻는다(CORP 필요). setFileInputFiles용 경로.
