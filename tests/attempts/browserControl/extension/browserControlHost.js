@@ -34,9 +34,14 @@ class DebuggerDriver {
   constructor(tabId) { this.tabId = tabId; this.target = { tabId }; }
   send(method, params) { return chrome.debugger.sendCommand(this.target, method, params); }
   async attach() {
-    await chrome.debugger.attach(this.target, "1.3");
+    try {
+      await chrome.debugger.attach(this.target, "1.3");
+    } catch (e) {
+      // SW 재시작 후 재구성: 확장 레벨 attach는 SW death에 살아남으므로 "already attached"면 기존 것을 재사용.
+      if (!String(e).includes("Another debugger is already attached")) throw e;
+    }
     await this.send("Page.enable");
-    // 스텔스: 페이지의 어떤 스크립트보다 먼저 webdriver를 덮는다(드라이버 셋업 관심사, per-verb 플래그 아님).
+    // 스텔스: 페이지의 어떤 스크립트보다 먼저 webdriver를 덮는다(재attach 시 마스크 재등록).
     await this.send("Page.addScriptToEvaluateOnNewDocument", { source: WEBDRIVER_MASK });
   }
   async navigate(url) {
@@ -115,6 +120,26 @@ class ScriptDriver {
 // 출처: attempts 게이트(선제 개입) 실측(off=true(포트) -> on=undefined).
 const WEBDRIVER_MASK = "try { Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => undefined, configurable: true }); } catch (e) {}";
 
+// SW 재시작 생존: 세션 메타를 storage.session에 write-through. SW가 죽으면 in-memory 맵은 소실되나 메타는
+// 생존하고, 탭 자체는 렌더러 소유라 살아있다. 다음 op에서 lazy 재attach로 복구한다(WEBDRIVER_MASK는
+// driver.attach가 재등록). MV3 SW 30초 소멸/크래시에 대한 복구망.
+function persistSession(sid, meta) { return chrome.storage.session.set({ ["bc_" + sid]: meta }); }
+async function loadSessionMeta(sid) { const r = await chrome.storage.session.get("bc_" + sid); return r["bc_" + sid]; }
+
+let lastEnsureFail = "";
+async function ensureSession(sid) {
+  const existing = sessions.get(sid);
+  if (existing) return existing;
+  const meta = await loadSessionMeta(sid);
+  if (!meta) { lastEnsureFail = "no-meta-in-storage"; return null; }
+  // SW 재시작 후 재구성: driver 재생성 + 재attach(debugger는 마스크 재등록 포함). 탭이 없으면 재구성 실패.
+  const driver = meta.mode === MODE.debugger ? new DebuggerDriver(meta.tabId) : new ScriptDriver(meta.tabId);
+  try { await driver.attach(); } catch (e) { lastEnsureFail = "reattach:" + String(e); return null; }
+  const s = { tabId: meta.tabId, mode: meta.mode, driver, lost: null };
+  sessions.set(sid, s);
+  return s;
+}
+
 async function handleOp(msg) {
   const { op, sessionId, mode, args } = msg;
   if (op === OP.handshake) return { ok: true, version: PROTOCOL_VERSION };
@@ -124,10 +149,11 @@ async function handleOp(msg) {
     await driver.attach();
     const sid = "s" + tab.id; // 불투명 핸들(파이썬엔 sid만, tabId 미노출)
     sessions.set(sid, { tabId: tab.id, mode, driver, lost: null });
+    await persistSession(sid, { tabId: tab.id, mode });
     return { ok: true, sessionId: sid };
   }
-  const s = sessions.get(sessionId);
-  if (!s) return { ok: false, error: "세션 없음(닫혔거나 미개설)" };
+  const s = await ensureSession(sessionId);
+  if (!s) return { ok: false, error: "세션 없음: " + lastEnsureFail };
   if (s.lost) return { ok: false, error: `SessionLost: ${s.lost}` };
   try {
     if (op === OP.navigate) return await s.driver.navigate(args.url);
@@ -138,6 +164,7 @@ async function handleOp(msg) {
       await s.driver.detach();
       try { await chrome.tabs.remove(s.tabId); } catch (e) { /* 이미 닫힘 */ }
       sessions.delete(sessionId);
+      await chrome.storage.session.remove("bc_" + sessionId);
       return { ok: true };
     }
     return { ok: false, error: `알 수 없는 op: ${op}` };

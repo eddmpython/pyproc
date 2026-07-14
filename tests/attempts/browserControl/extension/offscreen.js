@@ -257,6 +257,20 @@ except Exception as e:
         add("게이트12: 프로세스 OS 워커 N=세션 N(offscreen 라우터 4-홉, 워커 chrome 미접근 우회)",
           workerA.title === "pyprocCdpTarget" && workerA.label === "workerA" && workerB.label === "workerB",
           `A={title:${workerA.title},label:${workerA.label}}, B={label:${workerB.label}}`);
+
+        // 게이트13: MV3 SW 강제종료 -> 다음 op 재attach 복구. 세션을 열고 러너가 CDP로 SW를 죽인 뒤,
+        // storage.session 메타 + 살아있는 탭으로 재attach해 op가 복구되는가(SW 30초 소멸/크래시 대응).
+        const recOpen = await chrome.runtime.sendMessage(makeMessage("openSession", { mode: "debugger" }));
+        const recSid = recOpen.sessionId;
+        await chrome.runtime.sendMessage(makeMessage("navigate", { sessionId: recSid, args: { url: targetUrl } }));
+        let killErr = "";
+        try { await fetch(`http://127.0.0.1:${backchannelPort}/killSW`); } catch (e) { killErr = "fetch:" + String(e); } // 러너가 서비스워커를 강제종료
+        await new Promise((r) => setTimeout(r, 2000)); // SW 재시작 여유
+        const recEval = await chrome.runtime.sendMessage(makeMessage("evaluate", { sessionId: recSid, args: { expr: "document.title" } }));
+        add("게이트13: MV3 SW 강제종료 후 재attach 복구",
+          recEval && recEval.ok === true && recEval.value === "pyprocCdpTarget",
+          `recovered=${recEval && recEval.value}, ok=${recEval && recEval.ok}, err=${recEval && recEval.error}${killErr}`);
+        try { await chrome.runtime.sendMessage(makeMessage("closeSession", { sessionId: recSid })); } catch (e) {}
       } catch (e) {
         add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }

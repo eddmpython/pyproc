@@ -53,6 +53,16 @@ function cdpClient(ws) {
   return { send };
 }
 
+// 게이트13: 확장 서비스워커를 강제종료한다(SW target을 닫는다). offscreen의 sendMessage가 다시 깨운다.
+let cdpSend = null, loadedExtId = null;
+async function killServiceWorker() {
+  if (!cdpSend || !loadedExtId) return;
+  await cdpSend("Target.setDiscoverTargets", { discover: true });
+  const { result } = await cdpSend("Target.getTargets", {});
+  const sw = result?.targetInfos?.find((t) => t.type === "service_worker" && t.url.includes(loadedExtId));
+  if (sw) await cdpSend("Target.closeTarget", { targetId: sw.targetId });
+}
+
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const killTree = (p) => { if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(p.pid), "/T", "/F"], { stdio: "ignore" }); else p.kill("SIGKILL"); };
 
@@ -132,6 +142,13 @@ document.body.appendChild(frame);
       let body = ""; req.on("data", (c) => (body += c)); req.on("end", () => { res.writeHead(204, { "Access-Control-Allow-Origin": "*" }); res.end(); try { shellResolve(JSON.parse(body)); } catch (e) { shellResolve({ loaded: false, parseError: String(e) }); } });
       return;
     }
+    // 게이트13: offscreen이 세션을 연 뒤 이걸 호출하면 확장 SW를 강제종료한다(재attach 복구 검증).
+    if (req.url.startsWith("/killSW")) {
+      // offscreen은 COEP require-corp라 cross-origin 응답에 CORP가 필요하다(안 그러면 fetch 차단).
+      const h = { "Access-Control-Allow-Origin": "*", "Cross-Origin-Resource-Policy": "cross-origin" };
+      killServiceWorker().then(() => { res.writeHead(204, h); res.end(); }).catch(() => { res.writeHead(500, h); res.end(); });
+      return;
+    }
     res.writeHead(404); res.end();
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -169,18 +186,16 @@ document.body.appendChild(frame);
     const ws = new WebSocket(wsUrl);
     await new Promise((r, j) => { ws.onopen = r; ws.onerror = () => j(new Error("browser ws 연결 실패")); });
     const { send } = cdpClient(ws);
+    cdpSend = send;
 
     // 확장 로드. 백채널 포트는 config.js로 이미 구워져 있으므로 SW attach/주입이 불필요하다:
     // 확장이 설치 이벤트로 깨어나 offscreen을 만들고 결과를 백채널로 릴레이한다.
     const loaded = await send("Extensions.loadUnpacked", { path: extDir });
     const extId = loaded.result?.id;
     if (!extId) throw new Error(`loadUnpacked 실패: ${JSON.stringify(loaded)}`);
-    // 확장 로드 후 러너의 CDP 세션을 끊는다: 활성 CDP가 navigator.webdriver를 브라우저 전역으로
-    // 켜므로(경로별 스텔스 실측을 오염), ws를 닫아 그 오염을 걷어낸다. 백채널은 http라 ws와 무관.
-    // 이후 chrome.debugger 경로는 파이썬이 직접 그 탭에 attach하므로 여전히 켜지고, content script
-    // 경로는 CDP를 안 붙이니 꺼질 것(이 대비가 실측의 목적).
-    ws.close();
-    console.log(`  확장 로드됨: ${extId} -> CDP 세션 종료 후 offscreen 부팅 대기\n`);
+    loadedExtId = extId;
+    // ws는 유지한다(게이트13 SW 강제종료에 CDP 필요). webdriver 전역 오염은 게이트11/12/13 결과와 무관(측정은 관측).
+    console.log(`  확장 로드됨: ${extId} -> offscreen 부팅 대기\n`);
 
     const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);
     const result = await reportPromise;
