@@ -788,3 +788,41 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. MachineJournal pack 자동 실행 기준을 512MB급 장수 머신에서 실측한다.
+
+## 2026-07-15 - 512MB MachineJournal pack 비용 실측
+
+문제:
+
+- 직전 항목은 `MachineJournal.pack()`/`prune()`의 구조와 소형 probe 계약을 닫았다.
+- 그러나 OS 속도 목표에서는 512MB급 장수 머신에서 pack이 실제로 어느 비용인지 확인해야 한다.
+- pack이 loose blob 파일 수를 줄여도 512MB에서 수십 초가 걸리면 자동 운영 정책에 올릴 수 없다.
+
+완료:
+
+- `largeHeapProbe.html`에 `&pack=1` query를 추가했다. `pack=1`은 journal 경로를 켜고, `journal.commit`, `journal.recover`, `journal.pack`, pack-only `journal.recover`를 한 번에 검증한다.
+- 64MB smoke와 512MB 수동 실측을 모두 실행했다.
+- `tests/attempts/largeHeapEnvelope/README.md`와 `05-large-heap-envelope.md`에 512MB pack 수치를 추가했다.
+- OS 판정표의 영속·크래시 내성 보류 사유를 "512MB급 자동 pack 정책 수치 없음"에서 "자동 pack 정책 기준 없음"으로 좁혔다.
+
+검증:
+
+- `node tests/browser/run.mjs "tests/attempts/largeHeapEnvelope/largeHeapProbe.html?target=64&pack=1"` GREEN 11/11.
+- 64MB 수치: journal commit 1302ms, recover 2049ms, pack 883ms, loose 131 -> 0, pack-only recover 1772ms.
+- `PYPROC_GATE_TIMEOUT=900000 node tests/browser/run.mjs "tests/attempts/largeHeapEnvelope/largeHeapProbe.html?target=512&pack=1"` GREEN 11/11.
+- 512MB 수치: checkpoint 515MB 538ms, restoreLive 222ms, Session.save 514.9MB 3740ms, Session.load 2700ms.
+- 512MB journal: commit 2702ms(wrote 131p/8.2MB), recover 2490ms.
+- 512MB pack: 131 keys/8.2MB, loose 131 -> 0, pack 1081ms.
+- 512MB pack-only recover: 8239p/514.9MB, 2481ms.
+
+판정:
+
+- 이전 NEXT 3번의 "512MB급 pack 수치"는 닫혔다.
+- pack은 장수 머신의 loose blob 누적을 줄이는 데 512MB 기준 약 1.1초다. commit/recover 2-3초대 봉투 안에 들어간다.
+- 자동 pack은 이제 성능 미지수가 아니라 정책 문제다. 즉 언제 pack할지, UI/제품이 어떤 idle boundary에서 호출할지를 소비 제품 계약으로 정하면 된다.
+- OS 점수는 보수적으로 70/100 유지한다. 점수 상승은 제품 소비 배선(`.pymachine` 또는 `VirtualOrigin`)과 공개키·권한 UI가 닫힌 뒤 재산정한다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. MachineJournal pack 자동 실행 기준을 제품 장수 운영 정책으로 고정한다.

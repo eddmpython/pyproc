@@ -17,6 +17,11 @@ journal.recover 8239p/514.9MB, 24769ms.
 MachineJournal 반복 blob IO 캐시 후 512MB + journal=1 GREEN 9/9.
 journal.commit 8239p, wrote 131p/8.2MB, 2895ms,
 journal.recover 8239p/514.9MB, 2312ms.
+MachineJournal pack 후 512MB + pack=1 GREEN 11/11.
+journal.commit 8239p, wrote 131p/8.2MB, 2702ms,
+journal.recover 8239p/514.9MB, 2490ms,
+journal.pack 131 keys/8.2MB, loose 131->0, 1081ms,
+journal.recover pack-only 8239p/514.9MB, 2481ms.
 실행: node tests/browser/run.mjs tests/attempts/largeHeapEnvelope/largeHeapProbe.html
 대형 수동: PYPROC_GATE_TIMEOUT=900000 node tests/browser/run.mjs "tests/attempts/largeHeapEnvelope/largeHeapProbe.html?target=512"
 -->
@@ -25,15 +30,16 @@ journal.recover 8239p/514.9MB, 2312ms.
 <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
 <body>
 <h1>probe: largeHeapEnvelope - 대형 힙 비용 봉투</h1>
-<p>대형 사용자 힙에서 checkpoint, restoreLive, session save/load 비용을 잰다. query: <code>?target=512</code>, <code>&journal=1</code>.</p>
+<p>대형 사용자 힙에서 checkpoint, restoreLive, session save/load 비용을 잰다. query: <code>?target=512</code>, <code>&journal=1</code>, <code>&pack=1</code>.</p>
 <pre id="out">실행 중...</pre>
 <script type="module">
   import { bootSession } from "../../../index.js";
   const out = document.getElementById("out");
   const params = new URL(location.href).searchParams;
   const targetMB = Math.max(1, Number(params.get("target") || 64));
-  const includeJournal = params.get("journal") === "1";
-  const checks = []; const timings = { targetMB, includeJournal };
+  const includePack = params.get("pack") === "1";
+  const includeJournal = params.get("journal") === "1" || includePack;
+  const checks = []; const timings = { targetMB, includeJournal, includePack };
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
   const report = async () => {
     const ok = checks.length > 0 && checks.every((c) => c.pass);
@@ -44,6 +50,11 @@ journal.recover 8239p/514.9MB, 2312ms.
   async function clean(root, name) {
     try { await root.removeEntry(name, { recursive: true }); } catch (e) {}
     return root.getDirectoryHandle(name, { create: true });
+  }
+  async function countEntries(dir, predicate = () => true) {
+    let n = 0;
+    for await (const name of dir.keys()) if (predicate(name)) n++;
+    return n;
   }
   try {
     check("OPFS 사용 가능", !!(navigator.storage && navigator.storage.getDirectory));
@@ -119,6 +130,29 @@ journal.recover 8239p/514.9MB, 2312ms.
       timings.journalRecoverMs = Math.round(now() - t);
       check("journal.recover large", !!recovered && jr.rt.run("len(payload)") === targetMB * 1024 * 1024,
         recovered ? `${recovered.pages}p/${recovered.mb}MB, ${timings.journalRecoverMs}ms` : "null");
+
+      if (includePack) {
+        const blobName = /^[0-9a-f]{64}$/;
+        const blobDir = await journalDir.getDirectoryHandle("blob");
+        timings.journalLooseBeforePack = await countEntries(blobDir, (name) => blobName.test(name));
+        t = now();
+        const packed = await journal.pack();
+        timings.journalPackMs = Math.round(now() - t);
+        timings.journalPackLiveKeys = packed ? packed.liveKeys : 0;
+        timings.journalPackMB = packed ? packed.mb : 0;
+        timings.journalLooseAfterPack = await countEntries(blobDir, (name) => blobName.test(name));
+        const packDir = await journalDir.getDirectoryHandle("pack");
+        timings.journalPackFileCount = await countEntries(packDir);
+        check("journal.pack large", !!packed && packed.packed > 0 && timings.journalPackFileCount === 1 && timings.journalLooseAfterPack === 0,
+          packed ? `${packed.packed} keys/${packed.mb}MB, loose ${timings.journalLooseBeforePack}->${timings.journalLooseAfterPack}, ${timings.journalPackMs}ms` : "null");
+
+        t = now();
+        const packedKernel = await bootSession({});
+        const packedRecovered = await packedKernel.rt.enableJournal({ dir: journalDir, reactive: packedKernel.reactive }).recover();
+        timings.journalPackedRecoverMs = Math.round(now() - t);
+        check("journal.recover pack-only large", !!packedRecovered && packedKernel.rt.run("len(payload)") === targetMB * 1024 * 1024,
+          packedRecovered ? `${packedRecovered.pages}p/${packedRecovered.mb}MB, ${timings.journalPackedRecoverMs}ms` : "null");
+      }
       await root.removeEntry("largeHeapEnvelopeJournal", { recursive: true });
     }
 
