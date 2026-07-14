@@ -14,14 +14,12 @@
     "./reactive": "./src/capabilities/reactive.js",
     "./syscall-bridge": "./src/capabilities/syscallBridge.js",
     "./process-os": "./src/processOs/pyProc.js",
-    "./worker": "./src/processOs/worker.js",
-    "./browser-control-host": "./src/capabilities/browserControlHost.js"
+    "./worker": "./src/processOs/worker.js"
   },
   "files": ["index.js", "index.d.ts", "src", "README.md", "README.ko.md", "LICENSE"],
   "scripts": {
     "test": "node tests/run.mjs",
     "test:browser": "node tests/browser/run.mjs",
-    "test:browser:ext": "node tests/browser/runExtension.mjs",
     "test:examples": "node tests/browser/examples.mjs",
     "serve": "node examples/serve.mjs",
     "fetch:engine": "node scripts/fetchEngine.mjs"

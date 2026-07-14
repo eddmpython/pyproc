@@ -56,38 +56,7 @@ await navigator.serviceWorker.register("/pyprocSw.js?coi=1");
 
 **가상 오리진 경계 (정직한 벽)**: SW 합성 응답이라 진짜 오리진과 다르다. (1) `Set-Cookie`는 스트립된다(쿠키 세션 불가 = 토큰 방식 사용). (2) WebSocket 업그레이드는 가로채지 않는다(ASGI dispatch는 HTTP 요청/응답 단위). (3) 스트리밍/SSE는 축적 후 일괄 응답이다(청크 스트림 아님). (4) 엔드포인트는 `async def` 강제(동기 dispatch 없음). 부활(저널/세션/openMachine) 후에는 파일 핸들·DB 커넥션 같은 프로세스 자원이 되살아나지 않는다: 리플레이+델타는 파이썬 힙 상태를 복원하지 그 밖의 OS 자원을 복원하지 않으므로, 소비자는 부팅 훅(`boot.py` 또는 `Init`)에서 그런 자원을 재개설한다.
 
-subpath export: `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `pyproc/process-os`, `pyproc/worker`, `pyproc/browser-control-host`. **src 내부 경로 deep import 금지** (내부 파일 배치는 릴리즈 간 바뀔 수 있다. 실제로 v0.0.3에서 레이어 폴더로 재배치됐고 subpath 이름은 불변이었다).
-
-### 브라우저 컨트롤 확장 (BrowserControl)
-
-`BrowserControl`은 MV3 확장 안에서만 성립한다(offscreen document = 런타임 호스트, service worker = 권한 소유). 코어의 "단일 import + 버전 핀"과 달리, 확장은 파일이 확장 패키지 안에 물리적으로 있어야 하고 manifest 키의 상당수가 제품 결정이 아니라 pyproc 런타임 요구다. 조립 레퍼런스(실 src를 import하는 최소 픽스처): `tests/browser/runExtension.mjs` + `tests/browser/extensionFixture/`.
-
-**두 절반(같은 핀 강제)**:
-- offscreen: `boot()` + `Runtime.enableBrowserControl()` + `install()` (능력, index import). JSPI 필요 = `rt.runAsync` 경로.
-- service worker: `openBrowserControlHost()` (subpath `pyproc/browser-control-host`).
-- 두 절반은 `browserControlProtocol`의 버전된 메시지로 통신하고(현재 `PROTOCOL_VERSION=2`), `install()`이 핸드셰이크로 버전 불일치를 loud fail한다. **두 절반은 반드시 같은 pyproc 핀**이어야 한다(다른 핀 = 프로토콜 드리프트 = 런타임 파손).
-
-**프로세스 OS 융합(워커 N = 세션 N, 독립 GIL N)**: `install()`은 offscreen 메인 인터프리터를 배선한다. N개 워커가 각자 파이썬으로 브라우저를 몰려면(진짜 병렬), dedicated Worker엔 `chrome.*`이 없으므로(제약 A) offscreen이 라우터가 된다. 워커 측은 `installBrowserWorker(py)`(그 워커 파이썬의 `_pyprocBrowserSend`를 offscreen postMessage로 배선 + `pyprocBrowser` 모듈 실행), offscreen 측은 스폰한 워커마다 `routeBrowserWorker(worker)`(워커 op를 SW 호스트로 릴레이). 워커는 offscreen(COI)에서 스폰돼 crossOriginIsolated를 상속해야 SAB/JSPI(run_sync)가 산다. 파이썬 연산은 워커별 GIL로 물리 병렬, 브라우저-op은 SW 단일 CDP 큐로 직렬(정직한 천장: N배 연산 병렬 + 1배 op 레이트). 실측: 실 src 픽스처가 Pyodide 워커를 이 경로로 몰아 검증.
-
-**조작 표면(`pyprocBrowser.tab(url, mode)` -> `BrowserTab`)**: 항법(navigate/reload/back/forward), 입력(click/doubleClick/rightClick/hover/type/fill/press/select, 좌표 입력은 자동 스크롤 내장 + scrollIntoView/upload), 조회·추출(evaluate/text/html/attr/value/exists/count/texts/boundingBox/title/url/content), 대기(waitFor/waitForFunction), 캡처·에뮬레이션(screenshot/pdf/setViewport/setUserAgent/setHeaders/emulateMedia 다크모드·setTimezone·setOffline·setGeolocation 좌표 스푸핑·setLocale 언어 스푸핑), 다운로드 관측(enableDownloads/waitForDownload = 무엇이 다운로드되는지 파일명·URL 회수, 저장 경로 지정은 browser-level이라 미지원), 콘솔·에러 캡처(enableConsole/consoleLogs/waitForConsole = 페이지 console.* + 미처리 예외 관측), 접근성 트리(accessibilityTree = role/name 시맨틱으로 페이지 회수), 쿠키(cookies/setCookie/clearCookies/deleteCookie), 다이얼로그(setDialogHandler/lastDialog = alert/confirm/prompt 세션 정책 자동 응답), 네트워크(route/unroute = CDP Fetch 차단·정적 응답·요청 변조·붙잡기, 붙잡은 요청의 콜백형 결정 pendingRequests/continueRequest/fulfillRequest/abortRequest, waitForResponse/requests/responseBody = 응답 관측·바디 캡처), 프레임(frames/frame = iframe 내부 드릴다운. same-origin은 isolated world, cross-origin OOPIF는 chrome.debugger.getTargets에서 이 페이지 iframe src로 스코프해 targetId로 직접 attach = 둘 다 지원). 조작 계열은 핸들을 돌려 체이닝되고, 조회 계열은 JSON-값을 돌려준다(structured clone 경계라 PyProxy 아님). mode="debugger"는 CDP 신뢰 입력(isTrusted=true) + 캡처·에뮬·다이얼로그·네트워크 전 표면, mode="script"는 chrome.scripting 합성 입력(isTrusted=false)이고 CDP 전용 표면은 미지원 예외다. CDP 전용 표면은 추가 권한이 아니라 `debugger`가 여는 CDP Page/Network/Emulation/Fetch/DOM 도메인으로 대행한다. 전 표면은 attempts 게이트(1-16) + 실 src 픽스처로 브라우저 실측 통과(정본 타입: `index.d.ts`의 `BrowserTab`).
-
-**manifest 필수 키(pyproc 런타임 요구, 제품이 못 바꾸는 계약)**:
-
-| 키 | 이유 |
-| --- | --- |
-| `cross_origin_embedder_policy: require-corp` + `cross_origin_opener_policy: same-origin` | crossOriginIsolated = 프로세스 OS(SAB/워커) 전제 |
-| `content_security_policy.extension_pages: "... 'wasm-unsafe-eval' ..."` | 원격 코드 금지 하 Pyodide WASM 구동 조건 |
-| `permissions: offscreen, debugger, scripting, tabs` | 능력이 쓰는 chrome API(debugger 모드 = CDP 신뢰입력, script 모드 = chrome.scripting, 탭 수명) |
-| `permissions: declarativeNetRequest` | iframe 역전(고정 화면) 헤더 제거. 조작만 쓰면 생략 가능 |
-| `permissions: storage` | 세션 메타 storage.session write-through(SW 소멸 후 재attach 복구) |
-| `permissions: contentSettings` | setGeolocation 권한 부여. CDP Browser.grantPermissions가 browser-level이라 막혀 chrome.contentSettings.location로 우회. 지오로케이션 안 쓰면 생략 가능 |
-| `minimum_chrome_version: 116` | offscreen API 하한 |
-
-제품 결정(소비자 몫): `name`/`description`/`host_permissions` 범위/웹스토어 메타. offscreen이 자기 확장 자산을 로드하는 경로엔 `web_accessible_resources`가 불필요하다(same-origin 확장 문서, 픽스처 실측 확인).
-
-**vendoring(SHA-핀 단일 import로는 부족)**: 확장은 번들러 없이 상대 경로로 로드되므로, pyproc `src` 트리를 구조 보존해 확장에 vendoring한다(offscreen이 `boot()`로 워커를 스폰하면 `worker.js`가 같은 폴더 계약을 확장 안으로 끌고 온다). vendor Pyodide 코어도 확장에 번들(`npm run fetch:engine`). 번들 소비자(Vite)는 subpath export로, 언번들 확장은 구조 보존 vendoring으로 도달한다.
-
-**offscreen 격리 vs iframe 역전(Phase 2)**: 프로세스 OS는 COI(COEP require-corp)를 요구하는데 cross-origin iframe 역전(고정 화면)은 credentialless를 강제해 쿠키/sandbox가 막힌다(실측 3중 확증). 그래서 런타임(COI offscreen)과 iframe 셸(non-COI 문서)은 **다른 문서로 분리**한다. iframe 셸 UI는 제품 몫이고 pyproc은 헤더 제거 프리미티브만 기여한다.
+subpath export: `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `pyproc/process-os`, `pyproc/worker`. **src 내부 경로 deep import 금지** (내부 파일 배치는 릴리즈 간 바뀔 수 있다. 실제로 v0.0.3에서 레이어 폴더로 재배치됐고 subpath 이름은 불변이었다).
 
 - 타입은 동봉된 `index.d.ts`가 계약이다.
 - 엔진 내부(`HEAPU8`, `Runtime.raw` 등)를 직접 만지지 않는다. `raw`는 탈출구이고 계약 밖이다.

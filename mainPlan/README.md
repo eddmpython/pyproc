@@ -19,8 +19,6 @@
 
 ## 활성 이니셔티브
 
-| 폴더 | 상태 | 한 줄 |
-|---|---|---|
-| [browser-control/](browser-control/README.md) | Phase 1 완성, Phase 2 백로그 | 파이썬이 MV3 확장에서 브라우저 운전(`enableBrowserControl`). Phase 1(조작 능력: navigate/evaluate/click/type, script/debugger 두 mode) src 승격 + 실 src 런타임 게이트 GREEN. Phase 2(프로세스 OS 워커 N=세션 N / iframe 셸 / SW 수명)는 소비자가 실제 import하면 재개(현 소비자 codaro는 COI 회피 웹앱이라 정면 상충 = 트리거 미점화). |
+현재 활성 이니셔티브 없음. 새 작업은 새 이니셔티브 개설부터(§2). 마지막 상태 기록은 [_done/](_done/README.md) 최신 원장이다.
 
 완결 이니셔티브 6개(web-python-runtime, local-parity, browser-os, engine-independence, numerical-acceleration, engine-agnostic-surface)는 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README다.
