@@ -4,6 +4,14 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 (b) 프로세스 OS 워커 N=세션 N 실측 GREEN (게이트12)
+
+워커(dedicated Worker, `chrome` 미접근 = 제약 A)가 offscreen 라우터를 거쳐 브라우저를 조작한다(4-홉:
+워커 -> offscreen chrome.runtime -> SW chrome.debugger -> 역류). 워커 2개가 각자 세션을 열고 자기 label을
+페이지에 쓰고 되읽어 세션 격리 확인(A=workerA, B=workerB, 안 섞임). 제약 A를 라우터로 우회 = 워커 N =
+세션 N의 핵심 기술 리스크 해소. 파이썬 워커 통합(각 워커 Pyodide)은 후속(라우터 메커니즘은 실증됨).
+정직한 천장(설계): 물리 chrome.debugger는 SW 단일 큐 = N배 파이썬 연산 병렬 + 1배 브라우저-op 레이트.
+
 ### 2026-07-14 (a) 고정 화면 실측 GREEN: non-COI 셸에서 쿠키 실림 + frame-busting 방어 (게이트11)
 
 iframe 셸의 남은 축을 non-COI 셸(A안)에서 실증했다. 확장이 localhost(COEP 없음 = non-COI) 셸 탭을 열고,
