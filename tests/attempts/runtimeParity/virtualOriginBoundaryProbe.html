@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<!--
+결과(2026-07-15, Edge headless / 로컬 COOP+COEP):
+- 가상 오리진의 제품 경계 4종을 계약으로 고정한다.
+- 목표: Set-Cookie 기반 세션은 쓰지 않는다, WebSocket upgrade는 ASGI로 가지 않는다,
+  SSE/streaming은 청크 스트림이 아니라 축적 후 일괄 응답이다.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: virtualOriginBoundary</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 가상 오리진 제품 경계 - Cookie, WebSocket, SSE/streaming</h1>
+<p>VirtualOrigin은 파이썬 ASGI 앱을 진짜 URL처럼 노출하지만, 브라우저 Service Worker 합성 응답의
+플랫폼 경계까지 로컬 서버와 같지는 않다. 이 probe는 제품이 의존하면 안 되는 벽을 실행 계약으로 고정한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot, VirtualOrigin } from "../../../index.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try {
+      await fetch("/gateReport", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ok, checks, timings }),
+      });
+    } catch (e) {}
+  };
+  const websocketOutcome = async (path) => {
+    let ws;
+    try {
+      const url = new URL(path, location.href);
+      url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      return await new Promise((resolve) => {
+        let done = false;
+        const finish = (value) => {
+          if (done) return;
+          done = true;
+          try { if (ws && ws.readyState <= 1) ws.close(); } catch (e) {}
+          resolve(value);
+        };
+        ws = new WebSocket(url.href);
+        ws.onopen = () => finish("open");
+        ws.onerror = () => finish("error");
+        ws.onclose = () => finish("close");
+        setTimeout(() => finish("timeout"), 1500);
+      });
+    } catch (e) {
+      return `throw:${String(e).slice(0, 80)}`;
+    }
+  };
+
+  let reg = null;
+  let origin = null;
+  try {
+    document.cookie = "pyprocSession=; Max-Age=0; Path=/";
+
+    const rt = await boot();
+    rt.run(`import asyncio, json
+seenPaths = []
+
+async def app(scope, receive, send):
+    path = scope["path"]
+    seenPaths.append(path)
+    requestHeaders = {k.decode().lower(): v.decode() for k, v in scope["headers"]}
+    if path == "/set-cookie":
+        body = json.dumps({"ok": True}).encode()
+        await send({"type": "http.response.start", "status": 200, "headers": [
+            (b"content-type", b"application/json"),
+            (b"set-cookie", b"pyprocSession=from-python; Path=/; SameSite=Lax"),
+        ]})
+        await send({"type": "http.response.body", "body": body})
+    elif path == "/cookie-echo":
+        body = json.dumps({"cookie": requestHeaders.get("cookie", "")}).encode()
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body", "body": body})
+    elif path == "/state":
+        body = json.dumps({"seenPaths": seenPaths}).encode()
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body", "body": body})
+    elif path == "/sse":
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"text/event-stream")]})
+        await send({"type": "http.response.body", "body": b"data: first\\n\\n", "more_body": True})
+        await asyncio.sleep(0.16)
+        await send({"type": "http.response.body", "body": b"data: second\\n\\n", "more_body": False})
+    else:
+        await send({"type": "http.response.start", "status": 404, "headers": [(b"content-type", b"text/plain")]})
+        await send({"type": "http.response.body", "body": b"not found"})`);
+    const asgi = rt.enableAsgiServer({ app: "app" });
+    await asgi.install();
+    origin = new VirtualOrigin(asgi).bind();
+
+    reg = await navigator.serviceWorker.register("./originAsgiWrapperSw.js?asgi=/pyproc/");
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) {
+      await new Promise((res) => navigator.serviceWorker.addEventListener("controllerchange", res, { once: true }));
+    }
+    check("SW 등록 + 페이지 장악", !!navigator.serviceWorker.controller);
+
+    const setResp = await fetch("./pyproc/set-cookie", { credentials: "include" });
+    const setJson = await setResp.json();
+    const echo = await (await fetch("./pyproc/cookie-echo", { credentials: "include" })).json();
+    check("Set-Cookie는 저장/노출되지 않음",
+      setJson.ok === true &&
+        setResp.headers.get("set-cookie") === null &&
+        !document.cookie.includes("pyprocSession=") &&
+        !String(echo.cookie || "").includes("pyprocSession="),
+      `header=${setResp.headers.get("set-cookie")}, document.cookie=${document.cookie || "(empty)"}, request.cookie=${echo.cookie || "(empty)"}`);
+
+    const wsResult = await websocketOutcome("./pyproc/ws");
+    const stateAfterWs = await (await fetch("./pyproc/state")).json();
+    check("WebSocket upgrade는 ASGI로 안 들어옴",
+      wsResult !== "open" && !stateAfterWs.seenPaths.includes("/ws"),
+      `ws=${wsResult}, paths=${stateAfterWs.seenPaths.join(",")}`);
+
+    const sseStart = performance.now();
+    const sseResp = await fetch("./pyproc/sse");
+    timings.sseFetchMs = Math.round(performance.now() - sseStart);
+    const sseText = await sseResp.text();
+    check("SSE/streaming은 청크가 아니라 일괄 응답",
+      sseResp.headers.get("content-type") === "text/event-stream" &&
+        sseText === "data: first\n\ndata: second\n\n" &&
+        timings.sseFetchMs >= 120,
+      `${timings.sseFetchMs}ms, ${JSON.stringify(sseText)}`);
+  } catch (e) {
+    check("예외 없음", false, String(e).slice(-300));
+  }
+  if (origin) origin.unbind();
+  if (reg) await reg.unregister();
+  await report();
+</script>
+</body>
+</html>

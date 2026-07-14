@@ -24,6 +24,7 @@
 | 파이썬 서버가 진짜 URL로 응답하나(가상 오리진) | [swOriginProbe.html](swOriginProbe.html) | SW 가로채기 -> ASGI 위임 fetch가 GET/POST 정합 + 왕복 < 100ms -> SW 자산 + 배선 승격 |
 | requests가 진짜로 도나 | [requestsProbe.html](requestsProbe.html) | pyodide-http patch_all 후 requests.get/헤더/재사용 전부 200 -> syscallBridge 옵션 승격 |
 | 시그널 표가 열리나(SIGINT 너머) | [signalTableProbe.html](signalTableProbe.html) | SAB에 15/10을 쓰면 파이썬 signal 핸들러 발화 + 협조적 종료 + 워커 재사용 |
+| 가상 오리진의 제품 경계가 정직한가 | [virtualOriginBoundaryProbe.html](virtualOriginBoundaryProbe.html) | Set-Cookie 저장/노출 없음 + WebSocket upgrade 미가로채기 + SSE/streaming 일괄 응답 |
 
 ## 결론 표
 
@@ -61,7 +62,8 @@
 | 2026-07-12 | signalTableProbe | Edge headless | interrupt SAB에 **10(SIGUSR1)**을 쓰면 파이썬 `signal.signal` 핸들러가 발화하고 실행이 계속된다(hits=[10]). **15(SIGTERM)**는 핸들러의 SystemExit로 **협조적 종료 264ms**, 그 뒤 같은 워커에서 재실행 성공(42). 대조 SIGINT(2)는 KeyboardInterrupt 유지(203ms) | **시그널 표가 발명 0으로 열렸다**: SAB 채널은 이미 "시그널 번호를 쓰는 채널"이었고, CPython eval 루프가 번호대로 핸들러를 부른다. 잡 컨트롤(%kill/%stop)의 토대 | 졸업 -> `PyProc.signal(pid, signum)` + `SIGNAL` 표(INT/USR1/USR2/TERM). `interrupt`는 별칭으로 유지 |
 
 | 2026-07-12 | originFidelityProbe | Edge headless | 셀프호스팅 심판이 찾은 4구멍 수리 실측 GREEN 7/7: 요청 헤더 전달(Authorization), 바이너리 응답(PNG)/요청(512B, 0x00-0xFF) 무손상, 204/404 정합, **iframe(커널 밖 문서)의 fetch가 hello 등록 라우팅으로 커널 도달 20ms**, 커널 부재 시 10s 후 504(무한 대기 소거). 발견 2건: `setGlobal(null)`은 None이 아니라 JsNull 프록시(널 정규화는 JS 경계에서), SW 합성 응답에 COI 헤더가 없으면 부모 COEP가 iframe을 차단 | **서빙된 웹앱이 커널 페이지 밖에서 산다**(진짜 웹앱 동선 성립) | 졸업 -> `pyprocSw.js`(커널 등록부 + 타임아웃 + COI 헤더) + `virtualOrigin.js`(hello) + `asgiServer.js`(headers/bodyBytes). 벽: Set-Cookie 스트립(토큰 방식), WebSocket 미가로채기, 스트리밍/SSE 미지원 |
+| 2026-07-15 | virtualOriginBoundaryProbe | Edge headless | GREEN 4/4. Set-Cookie 응답 후 `set-cookie` header null, `document.cookie` empty, 다음 요청 cookie empty. WebSocket `/pyproc/ws`는 `error`이고 Python ASGI `seenPaths`에 `/ws` 없음. SSE body는 `asyncio.sleep(0.16)` 뒤 fetch 170ms에 `data: first` + `data: second` 일괄 수신 | **VirtualOrigin의 로컬 서버 흉내 한계가 실행 계약이 됐다**. 쿠키 세션, WebSocket upgrade, 청크 스트리밍은 의존 대상이 아니다 | 승격 -> 소비 계약의 product-facing compatibility lab. 제품은 토큰/header auth, 별도 WS relay, 일괄 응답 또는 다른 스트림 경로를 쓴다 |
 
 ## 판정
 
-진행 중 (수명주기·soundness·시스템콜 v1(+requests)·예외 안전 복원·ASGI 서버·가상 오리진 졸업, 버전 관문 통과 / 저수준 socket, 라이브러리 실패군 탐색 잔여)
+진행 중 (수명주기·soundness·시스템콜 v1(+requests)·예외 안전 복원·ASGI 서버·가상 오리진·가상 오리진 경계 계약 졸업, 버전 관문 통과 / 저수준 socket, 라이브러리 실패군 탐색 잔여)

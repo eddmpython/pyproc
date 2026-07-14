@@ -1,6 +1,6 @@
 # 04. OS 판정표 v2 - P2/P4/P6 이후 재판정
 
-작성: 2026-07-14. 갱신: 2026-07-15. 근거: `browser-os` 판정 이후 완료된 커널 선출(P2), 잡 컨트롤(P3), 파이프/shm(P4), 머신 컨테이너(P5), 권한 감옥(P6), 파일 세계 v2(P7), MachineJournal pack/prune/autoPack, `Init.resume`, 대표 데모 3종의 src 승격, codaro의 `Runtime.fs`/`AsgiServer` 제품 소비, 설치 패키지 consumer gate의 `VirtualOrigin` URL 동선과 browser/example gate 실측.
+작성: 2026-07-14. 갱신: 2026-07-15. 근거: `browser-os` 판정 이후 완료된 커널 선출(P2), 잡 컨트롤(P3), 파이프/shm(P4), 머신 컨테이너(P5), 권한 감옥(P6), 파일 세계 v2(P7), MachineJournal pack/prune/autoPack, `Init.resume`, 대표 데모 3종의 src 승격, codaro의 `Runtime.fs`/`AsgiServer` 제품 소비, 설치 패키지 consumer gate의 `VirtualOrigin` URL 동선, VirtualOrigin 제품 경계 compatibility lab과 browser/example gate 실측.
 
 ## 한 줄 판정
 
@@ -30,10 +30,10 @@
 | IPC | 3 | 7 | SAB ring pipe, blocking read, backpressure, shm, lock, semaphore, kernel endpoint. 근거: [ipc.js](../../src/processOs/ipc.js), [pipeShmProbe](../../tests/attempts/pythonMachine/README.md) | select/poll, 다중 producer/consumer 정책, 오류 전파 계약 보강 필요 |
 | 스케줄링 | 3 | 5 | map queue, task timeout, signal, background job, prompt immediate return. 근거: [pyProc.js](../../src/processOs/pyProc.js), [jobControlProbe](../../tests/attempts/pythonMachine/README.md) | 선점 스케줄링은 의도적으로 기각, priority/fairness 없음, 백그라운드 탭 스로틀은 플랫폼 벽 |
 | 보호·격리 | 5 | 7 | worker 주소공간 격리, `.pymachine` trust gate + WebCrypto signature, 부트 자산 SRI v2, `registerPyProcServiceWorker`, SW `coreIntegrity`, `MachineJail` 협조 티어 + CSP connect-src 집행. 근거: [machineJail.js](../../src/capabilities/machineJail.js), [session.js](../../src/capabilities/session.js), [runtime.js](../../src/runtime/runtime.js), [assets.js](../../src/runtime/assets.js), [pyprocSw.js](../../src/capabilities/pyprocSw.js), [jailProbe](../../tests/attempts/pythonMachine/README.md) | same-origin parent 측면통로, 공개키 배포 UI 없음, 권한 UI 없음, 힙 평문 비밀 경고 필요 |
-| 네트워크 | 4 | 6 | ASGI/VirtualOrigin으로 브라우저 안 서버, 설치 패키지 consumer gate의 `/pyproc/` URL fetch, SocketBridge로 outbound HTTP/HTTPS socket. 근거: [asgiServer.js](../../src/capabilities/asgiServer.js), [virtualOrigin.js](../../src/capabilities/virtualOrigin.js), [pyprocSw.js](../../src/capabilities/pyprocSw.js), [productConsumer](../../tests/browser/productConsumer.mjs), [socketBridge probes](../../tests/attempts/socketBridge/README.md) | 공개 inbound port, 쿠키 세션, WebSocket upgrade, streaming/SSE는 벽 또는 미지원 |
+| 네트워크 | 4 | 6 | ASGI/VirtualOrigin으로 브라우저 안 서버, 설치 패키지 consumer gate의 `/pyproc/` URL fetch, VirtualOrigin 경계 lab, SocketBridge로 outbound HTTP/HTTPS socket. 근거: [asgiServer.js](../../src/capabilities/asgiServer.js), [virtualOrigin.js](../../src/capabilities/virtualOrigin.js), [pyprocSw.js](../../src/capabilities/pyprocSw.js), [productConsumer](../../tests/browser/productConsumer.mjs), [virtualOriginBoundaryProbe](../../tests/attempts/runtimeParity/virtualOriginBoundaryProbe.html), [socketBridge probes](../../tests/attempts/socketBridge/README.md) | 공개 inbound port는 브라우저 벽. 쿠키 세션, WebSocket upgrade, streaming/SSE는 실행 계약으로 명시됐지만 로컬 서버와 동등한 네트워크는 아니다 |
 | 부팅·초기화 | 7 | 8 | boot/freeze/uv lane, offline core cache, Init boot.py/cron/resume.py, KernelElection leader failover. 근거: [envManager.js](../../src/capabilities/envManager.js), [init.js](../../src/capabilities/init.js), [kernelElection.js](../../src/processOs/kernelElection.js) | Pyodide private snapshot API와 버전 핀 의존 |
 | 영속·크래시 내성 | 7 | 8 | MachineJournal WAL, recover h0 대조, `pack()`/`prune()` live blob compaction, `autoPack` opt-in 정책, `Init.resume` 부활 후 자원 재개설, KernelElection failover, Session revival, `/home` 포함 signed `.pymachine`. 512MB journal commit/recover는 2-3초대, pack은 1.1초대로 진입했다. 근거: [machineJournal.js](../../src/capabilities/machineJournal.js), [session.js](../../src/capabilities/session.js), [init.js](../../src/capabilities/init.js), [kernelElectionProbe](../../tests/attempts/pythonMachine/README.md), [journalPackProbe](../../tests/attempts/pythonMachine/journalPackProbe.html), [resumeHookProbe](../../tests/attempts/pythonMachine/resumeHookProbe.html), [largeHeapEnvelope](../../tests/attempts/largeHeapEnvelope/README.md) | 공개키·권한 UI 없음, 제품별 resume.py 적용 범위 표 필요 |
-| 개발자 표면 | 5 | 8 | Terminal, `%pip`, `%undo`, JobControl, self-hosting FastAPI/sqlite/html, signed machine cast, Speed Lab public benchmark, `/dev/fb0`, codaro 제품 gate의 `Runtime.fs`/`AsgiServer` 소비, 설치 패키지 consumer gate의 `VirtualOrigin` 소비. 근거: [terminal.js](../../src/capabilities/terminal.js), [selfHost](../../tests/attempts/selfHost/README.md), [runtimeParity](../../tests/attempts/runtimeParity/README.md), [productConsumer](../../tests/browser/productConsumer.mjs), [examples](../../examples/), [소비 계약](../../docs/consuming/contract.md) | `.pymachine` 제품 소비, 외부 제품 VirtualOrigin 소비, completion/history polish, compatibility lab 미완 |
+| 개발자 표면 | 5 | 8 | Terminal, `%pip`, `%undo`, JobControl, self-hosting FastAPI/sqlite/html, signed machine cast, Speed Lab public benchmark, `/dev/fb0`, codaro 제품 gate의 `Runtime.fs`/`AsgiServer` 소비, 설치 패키지 consumer gate의 `VirtualOrigin` 소비, VirtualOrigin compatibility lab. 근거: [terminal.js](../../src/capabilities/terminal.js), [selfHost](../../tests/attempts/selfHost/README.md), [runtimeParity](../../tests/attempts/runtimeParity/README.md), [productConsumer](../../tests/browser/productConsumer.mjs), [examples](../../examples/), [소비 계약](../../docs/consuming/contract.md) | `.pymachine` 제품 소비, 외부 제품 VirtualOrigin 소비, completion/history polish |
 
 합계: **70/100**.
 
@@ -77,10 +77,10 @@
 
 > pyproc은 로컬급 범용 OS다.
 
-보류 문장을 열려면 외부 제품 소비 배선을 machine image 또는 VirtualOrigin 축까지 넓히고 공개키·권한 UI 계약을 닫아야 한다. journal pack/prune/autoPack과 `Init.resume`은 구조와 운영 기준을 닫았으므로, 남은 영속 축은 제품별 `resume.py` 자원 정책을 문서화하고 실제 소비 표면에 붙이는 일이다.
+보류 문장을 열려면 외부 제품 소비 배선을 machine image 또는 VirtualOrigin 축까지 넓히고 공개키·권한 UI 계약을 닫아야 한다. journal pack/prune/autoPack과 `Init.resume`은 구조와 운영 기준을 닫았고, VirtualOrigin 경계 lab은 쿠키/WS/스트리밍 벽을 공개 계약으로 닫았다. 남은 영속 축은 제품별 `resume.py` 자원 정책을 문서화하고 실제 소비 표면에 붙이는 일이다.
 
 ## 다음 게이트
 
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
-3. 제품별 `resume.py` 자원 정책 카탈로그와 VirtualOrigin 쿠키/WS/스트리밍 벽을 공개 계약으로 고정한다.
+3. 제품별 `resume.py` 자원 정책 카탈로그를 실제 소비 표면에 붙인다.

@@ -95,3 +95,4 @@ Chromium/Edge에서 확인:
 ## 6. 개념증명 실측 (tests/attempts/)
 
 신규 능력의 실측은 examples가 아니라 `tests/attempts/<카테고리>/`의 probe에서 한다. probe도 같은 서버로 띄운다(`http://localhost:8788/tests/attempts/...`). 결과 기록 형식은 [tests/attempts/README.md](../../tests/attempts/README.md) 참조.
+`runtimeParity/virtualOriginBoundaryProbe.html`처럼 "지원하지 않는 벽"을 제품 계약으로 고정하는 probe도 여기에 둔다. 이런 probe는 기능 확장이 아니라 소비자가 쿠키 세션, WebSocket upgrade, 청크 스트리밍 같은 플랫폼 벽에 의존하지 않도록 막는 compatibility lab이다.

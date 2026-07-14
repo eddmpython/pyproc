@@ -119,7 +119,9 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 전제로 한다. Service Worker는 `registerPyProcServiceWorker()`로 `pyprocServiceWorker` graph를 먼저 검증하고,
 `pyprocSw.js?cache=1&coreIntegrity=<manifest>`가 script/module/wasm/zip fetch를 SW 계층에서 다시 검증한다.
 
-**가상 오리진 경계 (정직한 벽)**: SW 합성 응답이라 진짜 오리진과 다르다. (1) `Set-Cookie`는 스트립된다(쿠키 세션 불가 = 토큰 방식 사용). (2) WebSocket 업그레이드는 가로채지 않는다(ASGI dispatch는 HTTP 요청/응답 단위). (3) 스트리밍/SSE는 축적 후 일괄 응답이다(청크 스트림 아님). (4) 엔드포인트는 `async def` 강제(동기 dispatch 없음). 부활(저널/세션/openMachine) 후에는 파일 핸들·DB 커넥션 같은 프로세스 자원이 힙 델타만으로 보장되지 않는다: `.pymachine`은 파이썬 힙과 `/home/web` 파일 바이트를 복원하지만 열린 fd, 소켓, DB 커넥션은 다시 열어야 하므로, 소비자는 `Init.resume(reason)`으로 `/home/web/resume.py`를 실행해 그런 자원을 재개설한다. signature는 출처 검증이지 sandbox 권한 허가가 아니므로, 제품은 공개키 배포와 권한 UI를 별도로 관리한다.
+**가상 오리진 경계 (정직한 벽)**: SW 합성 응답이라 진짜 오리진과 다르다. `tests/attempts/runtimeParity/virtualOriginBoundaryProbe.html`이 이 경계를 브라우저에서 계속 실측한다. (1) `Set-Cookie`는 응답 header로 노출되지 않고 저장되지 않는다. 쿠키 세션에 의존하지 말고 `Authorization` header, bearer token, signed URL 같은 명시 토큰을 쓴다. (2) WebSocket upgrade는 Service Worker fetch 이벤트가 가로채지 않으므로 ASGI dispatch로 들어오지 않는다. 양방향 스트림은 별도 relay나 SocketBridge 계열로 설계한다. (3) 스트리밍/SSE는 `AsgiServer`가 `http.response.body` 조각을 축적한 뒤 일괄 `Response`로 돌려준다. 청크 단위 UI 갱신이 필요한 제품은 이 경로에 의존하지 않는다. (4) 엔드포인트는 `async def` 강제(동기 dispatch 없음).
+
+부활(저널/세션/openMachine) 후에는 파일 핸들·DB 커넥션 같은 프로세스 자원이 힙 델타만으로 보장되지 않는다: `.pymachine`은 파이썬 힙과 `/home/web` 파일 바이트를 복원하지만 열린 fd, 소켓, DB 커넥션은 다시 열어야 하므로, 소비자는 `Init.resume(reason)`으로 `/home/web/resume.py`를 실행해 그런 자원을 재개설한다. signature는 출처 검증이지 sandbox 권한 허가가 아니므로, 제품은 공개키 배포와 권한 UI를 별도로 관리한다.
 
 subpath export: `pyproc/assets`, `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `pyproc/process-os`, `pyproc/worker`. **src 내부 경로 deep import 금지** (내부 파일 배치는 릴리즈 간 바뀔 수 있다. 실제로 v0.0.3에서 레이어 폴더로 재배치됐고 subpath 이름은 불변이었다).
 

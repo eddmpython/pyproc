@@ -933,3 +933,38 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. VirtualOrigin 쿠키/WS/스트리밍 벽을 product-facing compatibility lab으로 묶는다.
+
+## 2026-07-15 - VirtualOrigin 제품 경계 compatibility lab 고정
+
+문제:
+
+- `VirtualOrigin`은 URL fetch, 헤더, 바이너리, iframe 동선까지 성립했지만, 로컬 서버와 다른 플랫폼 벽은 문서 경고에 가까웠다.
+- 제품이 쿠키 세션, WebSocket upgrade, SSE 청크 스트림을 기대하면 pyproc의 가상 오리진이 "되는 척"하다가 런타임에서 어긋난다.
+- Browser OS 간판에서는 되는 것뿐 아니라 안 되는 것도 실행 계약이어야 한다. 그래야 소비 제품이 안전한 인증/통신 경로를 고른다.
+
+완료:
+
+- `virtualOriginBoundaryProbe.html`을 추가했다.
+- `Set-Cookie` 응답을 Python ASGI 앱에서 실제로 내보낸 뒤, 브라우저 fetch 응답 header와 `document.cookie`, 다음 요청의 `cookie` header를 모두 확인한다.
+- `/pyproc/ws` WebSocket 연결을 시도하고, Service Worker/ASGI 경로로 `/ws`가 들어오지 않는지 `seenPaths`로 확인한다.
+- ASGI 앱이 `text/event-stream` 응답에서 첫 body 뒤 `asyncio.sleep(0.16)`을 두고 두 번째 body를 보내도록 만들고, fetch가 청크가 아니라 완료 후 일괄 body로 끝나는지 시간과 body로 확인한다.
+- 소비 계약, runtimeParity README, 테스트 운영 문서, 아키텍처 질문, OS 판정표에 이 경계를 product-facing compatibility lab으로 반영했다.
+
+검증:
+
+- `node tests/browser/run.mjs tests/attempts/runtimeParity/virtualOriginBoundaryProbe.html` GREEN 4/4.
+- Set-Cookie: `header=null`, `document.cookie=(empty)`, 다음 요청 `cookie=(empty)`.
+- WebSocket: 결과 `error`, Python ASGI `seenPaths=/set-cookie,/cookie-echo,/state`, `/ws` 없음.
+- SSE/streaming: fetch 170ms 뒤 `data: first\n\ndata: second\n\n` 일괄 수신.
+
+판정:
+
+- 이전 NEXT 3번의 "VirtualOrigin 쿠키/WS/스트리밍 벽 product-facing compatibility lab"은 닫혔다.
+- VirtualOrigin은 로컬 서버와 같은 척하지 않는다. HTTP 요청/응답, 헤더, 바이너리, iframe 서빙은 제품 표면이고, 쿠키 세션/WebSocket upgrade/청크 스트리밍은 명시 벽이다.
+- OS 점수는 70/100 유지. 점수 상승은 외부 제품의 `.pymachine` 또는 `VirtualOrigin` 채택과 공개키·권한 UI가 닫힌 뒤 재산정한다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. 제품별 `resume.py` 자원 정책 카탈로그를 실제 소비 표면에 붙인다.
