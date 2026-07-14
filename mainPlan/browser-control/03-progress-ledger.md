@@ -4,6 +4,23 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 12: cross-origin OOPIF 프레임 드릴다운 실측 GREEN + src 승격 (Phase 6 벽 돌파)
+
+Phase 6에서 "OOPIF는 별 프로세스라 미지원(same-origin 전용)"으로 남겼던 벽을 정공법으로 뚫었다. attempts 게이트24,
+`bootIsolationRunner` **58/58 GREEN**.
+
+- **탐침(실측)**: cross-origin iframe(localhost 자식)은 OOPIF라 `Page.getFrameTree`엔 없지만 **chrome.debugger.
+  getTargets()엔 type "other", attached=false로 뜬다**(= attachable). tabId=null이라 부모 탭 링크는 없다.
+- **구현**: `frames()`가 same-origin(getFrameTree) + OOPIF(getTargets를 **이 페이지 iframe src와 교차 스코프** =
+  브라우저 전역 누수 차단)를 병합. `frame(url/name)`이 돌려주는 핸들은 frameId(same-origin) 또는 targetId(OOPIF).
+  OOPIF는 `chrome.debugger.attach({targetId})`로 직접 세션을 열어 그 프레임 컨텍스트에서 evaluate(isolated world
+  불필요). detach가 OOPIF 세션들도 정리. frameOp는 target에 따라 ev 함수만 갈아끼움(로직 공유).
+- **게이트24**: same-origin(#fr) + cross-origin(#xfr localhost) 둘 다 text/fill/evaluate 드릴다운 성립
+  (oopifMarker=childOk, href=localhost/frameChild, oopifField=oopifFilled, sameMarker=childOk).
+- **src 승격**: protocol/host + browserControl.js Frame(frameId/targetId) + index.d.ts(frames oopif 필드,
+  cross-origin 지원으로 갱신) + contract.md. 실 src 픽스처에 OOPIF 드릴 슬라이스 추가 -> **GREEN 6/6**.
+  `npm test` **568 green**. **고정 화면 셸이 담는 cross-origin 사이트도 이제 내부 조작 가능** = 셸 비전 완성.
+
 ### 2026-07-14 Phase 11: 접근성 트리(role/name 시맨틱 회수) 실측 GREEN + src 승격
 
 에이전트가 DOM 셀렉터 대신 의미(role/name)로 페이지를 이해한다. attempts 게이트23, `bootIsolationRunner` **57/57 GREEN**.

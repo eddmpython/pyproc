@@ -90,6 +90,7 @@ undefined로 덮으면, 하네스가 포트로 `webdriver=true`인 최악 조건
 | 2026-07-14 | bootIsolationRunner(게이트21) | Edge headless | Phase 9 다운로드 관측: attachment 링크 신뢰 클릭 -> Page.downloadWillBegin -> waitForDownload가 파일명(report.txt)/URL 회수. **55/55 GREEN** | 무엇이 다운로드되는지 관측(파일 스크래핑/내보내기 자동화). 정직한 컷: Page.setDownloadBehavior(저장 경로)는 이제 browser-level이라 tab-session서 막힘(지오로케이션과 같은 벽) = 관측만 싣고 저장 경로는 미지원 | src 승격(실 src 픽스처 6/6 GREEN) |
 | 2026-07-14 | bootIsolationRunner(게이트22) | Edge headless | Phase 10 콘솔/에러 캡처: Runtime.consoleAPICalled(console.log/error) + exceptionThrown(미처리 예외)를 관측. log/error/exception 세 종류 다 잡힘("pyprocLog 42", pyprocErr, pyprocThrow). **56/56 GREEN** | 에이전트가 페이지 로그·에러를 본다. 미처리 예외 텍스트는 exceptionDetails.text + exception.description 합침 | src 승격(실 src 픽스처 6/6 GREEN) |
 | 2026-07-14 | bootIsolationRunner(게이트23) | Edge headless | Phase 11 접근성 트리: Accessibility.getFullAXTree로 role/name/value 회수(54노드, role에 button/textbox/combobox/link/form/list, button 이름 click/dialog/파일 선택/far). **57/57 GREEN** | 에이전트가 DOM 셀렉터 대신 의미(role/name)로 페이지를 이해(시맨틱 네비게이션) | src 승격(실 src 픽스처 6/6 GREEN) |
+| 2026-07-14 | bootIsolationRunner(게이트24) | Edge headless | Phase 12 cross-origin OOPIF 프레임 드릴다운(게이트18 벽 돌파): OOPIF는 getFrameTree엔 없지만 chrome.debugger.getTargets엔 뜬다 -> 이 페이지 iframe src로 스코프 + targetId로 직접 attach. same-origin(#fr) + cross-origin(#xfr localhost) 둘 다 text/fill 드릴다운. **58/58 GREEN** | 게이트18의 "cross-origin은 OOPIF라 미지원"을 정공법으로 뚫음. 고정 화면 셸이 담는 cross-origin 사이트 내부까지 조작 = 셸 비전 완성 | src 승격(실 src 픽스처 6/6 GREEN) |
 
 ## 판정
 
