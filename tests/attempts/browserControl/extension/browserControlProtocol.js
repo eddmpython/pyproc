@@ -73,6 +73,7 @@ export const OP = {
   setTimezone: "setTimezone",
   setOffline: "setOffline",
   setGeolocation: "setGeolocation",
+  setLocale: "setLocale",
   // 다운로드(CDP Page.setDownloadBehavior + downloadWillBegin/Progress 관측). debugger 전용.
   enableDownloads: "enableDownloads",
   waitForDownload: "waitForDownload",

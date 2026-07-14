@@ -140,6 +140,8 @@ class BrowserTab:
         self._op("setOffline", offline=offline); return self
     def setGeolocation(self, latitude, longitude, accuracy=10):
         self._op("setGeolocation", latitude=latitude, longitude=longitude, accuracy=accuracy); return self
+    def setLocale(self, locale):
+        self._op("setLocale", locale=locale); return self
     # 다운로드 관측(debugger mode 전용): downloadWillBegin/Progress로 무엇이 다운로드되는지 회수.
     def enableDownloads(self):
         self._op("enableDownloads"); return self
@@ -707,6 +709,24 @@ json.dumps(r)
 `)));
         add("게이트25: 지오로케이션 스푸핑(contentSettings 권한 우회 + setGeolocationOverride)",
           typeof g25.geo === "number" && Math.abs(g25.geo - 37.5665) < 0.01, `geo=${g25.geo}`);
+
+        // 게이트26: 로케일 스푸핑(Phase 7 벽 돌파). setLocaleOverride는 Edge서 미반영이라 Accept-Language 헤더 +
+        // navigator.language 선제 오버라이드로 대행. 항법 후 navigator.language + echoHeaders Accept-Language 검증.
+        const g26 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+r = {}
+d.setLocale("fr-FR")
+d.navigate(echoTarget)
+r["acceptLang"] = "fr-FR" in d.text("#h")
+d.navigate(persistTarget)
+r["navLang"] = d.evaluate("navigator.language")
+r["navLang0"] = d.evaluate("navigator.languages[0]")
+d.close()
+json.dumps(r)
+`)));
+        add("게이트26: 로케일 스푸핑(navigator.language 선제 오버라이드 + Accept-Language 헤더)",
+          g26.navLang === "fr-FR" && g26.navLang0 === "fr-FR" && g26.acceptLang === true,
+          `navLang=${g26.navLang}, navLang0=${g26.navLang0}, acceptLang=${g26.acceptLang}`);
 
         // 게이트21: 다운로드 관측. attachment 링크를 신뢰 클릭하면 다운로드가 시작되고, downloadWillBegin으로
         // 무엇이 다운로드되는지(파일명/URL) 관측한다. 저장 경로 지정은 browser-level이라 tab-session에선 못 두는 게 정직.
