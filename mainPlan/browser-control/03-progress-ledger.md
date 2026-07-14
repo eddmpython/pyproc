@@ -4,6 +4,30 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 3: 조작 표면 확대(Playwright급) 실측 GREEN + src 승격
+
+MVP 6개 메서드(navigate/evaluate/click/type/waitFor/close)를 실전 자동화 표면으로 확대했다. 지시: MVP에서
+멈추지 말고 강력하면 계속 밀 것. attempts 게이트15(a-i) 9개 신설, `bootIsolationRunner` **35/35 GREEN**(첫 실행 통과).
+
+- **추가 표면**: 항법(reload/back/forward), 입력(doubleClick/rightClick/hover/fill/press/select), 조회·추출
+  (text/html/attr/value/exists/count/texts/boundingBox/title/url/content), 대기(waitForFunction), 캡처·에뮬레이션
+  (screenshot/pdf/setViewport/setUserAgent/setHeaders/cookies/setCookie).
+- **카빙(덕지덕지 금지)**: op 33개를 두 부류로 나눴다. evaluate 합성(추출·조회·대기)은 `queryEval`/`waitFor*`
+  **driver 무관 단일 구현**, mode별 메커니즘이 다른 것(신뢰 입력·항법·캡처·에뮬)만 Driver 메서드. 새 op는
+  `dispatch` 테이블 한 줄로 는다. `press`는 named `KEY_DEFS`+수식키 비트마스크 파서로 "Control+a" 같은 조합 지원.
+  캡처·에뮬은 신규 권한이 아니라 `debugger`가 여는 CDP Page/Network/Emulation 도메인으로 대행. script mode의
+  캡처·에뮬은 정직하게 미지원 예외(조용한 성공 위장 금지).
+- **실측 관통(게이트15)**: 추출/미발견 예외, fill 값 대체+select, 포인터(hover/dbl/ctx) **isTrusted=true**,
+  신뢰 키보드(Enter 폼 제출 + Control+a 단축키 isTrusted), waitForFunction, screenshot PNG magic, 에뮬레이션
+  (setViewport innerWidth=540 + setUserAgent navigator.userAgent + setHeaders 요청 헤더 에코 반영), 항법 히스토리
+  (back/forward/reload URL), 쿠키 왕복(setCookie -> cookies). debugger mode 전 표면 실동.
+- **src 승격**: browserControlProtocol(v1 -> **v2** = 표면 확장, 핸드셰이크가 두 절반 v2 강제) + browserControlHost
+  (확장 Driver + dispatch) + browserControl.js 파이썬 `BrowserTab` 전 표면 + index.d.ts BrowserTab 갱신 +
+  contract.md 조작 표면 절. 실 src 픽스처(`test:browser:ext`)에 확장 표면 회귀 게이트 추가 -> **GREEN 4/4**
+  (실 src로 추출/폼/포인터/대기/캡처/에뮬/쿠키 관통). `npm test` **559 green**(네이밍/주체/em-dash/표면 게이트 통과).
+- **잔여(정직, 변동 없음)**: 파이썬 워커 Pyodide 통합(라우터 실증됨), 실 봇 방어(Cloudflare) 수동, 3PC 쿠키
+  실배포/수동. 표면은 이제 넓다 = 다음은 소비 배선(codaro seam)과 실배포 검증이 값을 만든다.
+
 ### 2026-07-14 (d) waitForSelector + Phase 2 완료
 
 (d) waitForSelector(요소 나타날 때까지 폴링, 자동화 안정성) 게이트14 GREEN. Phase 2 (c)(d) + 송신 타임아웃을

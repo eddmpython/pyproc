@@ -1,13 +1,17 @@
 # browser-control - 서버리스 · 프로세스 내 브라우저 자동화 파이썬 런타임
 
-상태: **Phase 1 + Phase 2 구현 완성 (2026-07-14).** attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이
-링 1(MV3 확장) 게이트 1-14를 브라우저 실측으로 통과했다: Phase 1(부팅/격리/CDP왕복/신뢰입력/조작/다중세션/
-스텔스/영속세션/세션수명) + Phase 2(고정 화면 non-COI 셸 쿠키·frame-busting / 프로세스 OS 워커 N=세션 N /
-SW 재attach 복구 / waitForSelector). 능력을 `src/capabilities/`로 승격: `Runtime.enableBrowserControl()` ->
-파이썬 `pyprocBrowser.tab(url, mode).navigate/evaluate/click/type/waitFor/close`(script/debugger 두 mode,
-영속 세션 + SW 소멸 복구). 실 src 런타임 게이트(`test:browser:ext`, 픽스처가 실 src import = SSOT) GREEN +
-확장 소비 계약 문서화. 잔여(정직): 파이썬 워커 Pyodide 통합(라우터 메커니즘 실증), 실 봇 방어(Cloudflare) 수동,
-3PC 쿠키 실배포/수동([03-progress-ledger](03-progress-ledger.md) NEXT).
+상태: **Phase 1 + Phase 2 + Phase 3 구현 완성 (2026-07-14).** attempts 캠페인 [browserControl](../../tests/attempts/browserControl/README.md)이
+링 1(MV3 확장) 게이트 1-15를 브라우저 실측으로 통과했다(**35/35 GREEN**): Phase 1(부팅/격리/CDP왕복/신뢰입력/
+조작/다중세션/스텔스/영속세션/세션수명) + Phase 2(고정 화면 non-COI 셸 쿠키·frame-busting / 프로세스 OS 워커
+N=세션 N / SW 재attach 복구 / waitForSelector) + Phase 3(Playwright급 조작 표면 확대: 추출·조회/입력 확장/대기/
+캡처/에뮬레이션/쿠키). 능력을 `src/capabilities/`로 승격: `Runtime.enableBrowserControl()` -> 파이썬
+`pyprocBrowser.tab(url, mode)`가 항법(navigate/reload/back/forward) + 입력(click/doubleClick/rightClick/hover/
+type/fill/press/select) + 조회·추출(evaluate/text/html/attr/value/exists/count/texts/boundingBox/title/url/
+content) + 대기(waitFor/waitForFunction) + 캡처·에뮬레이션(screenshot/pdf/setViewport/setUserAgent/setHeaders/
+cookies/setCookie)를 노출한다(script/debugger 두 mode, 영속 세션 + SW 소멸 복구). 실 src 런타임 게이트
+(`test:browser:ext`, 픽스처가 실 src import = SSOT) GREEN + 확장 소비 계약 문서화(protocol v2). 잔여(정직):
+파이썬 워커 Pyodide 통합(라우터 메커니즘 실증), 실 봇 방어(Cloudflare) 수동, 3PC 쿠키 실배포/수동
+([03-progress-ledger](03-progress-ledger.md) NEXT).
 
 ## 한 문장
 
