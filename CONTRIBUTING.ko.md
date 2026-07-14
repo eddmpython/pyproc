@@ -1,6 +1,6 @@
 # pyproc 기여 안내
 
-언어: [English](CONTRIBUTING.md) | 한국어
+언어: [English](CONTRIBUTING.md) · 한국어
 
 pyproc은 재사용 가능한 브라우저 파이썬 런타임이다(Pyodide 위의 프로세스·병렬·복원 리액티브). 관심에 감사한다. 이 문서가 저장소 참여의 계약이다.
 

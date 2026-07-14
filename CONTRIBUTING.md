@@ -1,6 +1,6 @@
 # Contributing to pyproc
 
-Language: English | [한국어](CONTRIBUTING.ko.md)
+Language: English · [한국어](CONTRIBUTING.ko.md)
 
 pyproc is a reusable browser Python runtime (processes, parallelism, restore-based reactivity on top of Pyodide). Thanks for your interest. This document is the contract for participating in the repository.
 
