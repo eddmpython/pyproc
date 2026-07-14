@@ -4,6 +4,32 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 4: 실전 자동화 강력 배치(다이얼로그·업로드·네트워크 가로채기) 실측 GREEN + src 승격
+
+Phase 3 표면 위에 "실제 사이트에서 진짜 돌아가는" 데 필요한 배치를 더했다. attempts 게이트16(a-g) 신설,
+`bootIsolationRunner` **42/42 GREEN**.
+
+- **자동 스크롤**: 좌표 입력(click/hover/dbl/right) 전에 `scrollIntoView`를 내장해 폴드 아래 요소도 신뢰 클릭이
+  맞는다(게이트16a: top:2000px 버튼 클릭 성립). 명시 `scrollIntoView(selector)` op도 노출.
+- **다이얼로그 자동 처리**: alert/confirm/prompt는 렌더러를 멈춰 자동화를 영구 행시킨다. driver당 단일 이벤트
+  라우터(`_onEvent`)가 `Page.javascriptDialogOpening`을 세션 정책(`setDialogHandler(accept, promptText)`)으로
+  즉시 응답 + 메시지 기록(`lastDialog`). 게이트16b: accept=true -> confirm true, reject -> false, 메시지 회수.
+- **파일 업로드**: `upload(selector, files)` = `DOM.setFileInputFiles`(objectId 지목 후 해제). 호스트 FS 경로
+  (자기 기기 자동화 전제). 게이트16c: probe.txt 심어짐(files.length=1, name 일치).
+- **쿠키 관리 완성**: `clearCookies`/`deleteCookie`(`Network.deleteCookies`). 게이트16d.
+- **네트워크 가로채기(CDP Fetch)**: `route(pattern, "block"|"fulfill", ...)`가 요청을 차단(트래커/광고)하거나 정적
+  응답을 주입(API 목킹). 첫 route에서만 `Fetch.enable`(모든 요청 latency 부담 회피), 모든 `requestPaused`는 반드시
+  처리(미처리 = 페이지 행). 게이트16f/g: block -> fetch 실패, fulfill -> 정적 응답 주입 확인.
+- **응답 관측(CDP Network)**: `waitForResponse(pattern)`/`requests()`가 `Network.responseReceived` 로그를 폴한다
+  (동기 블로킹 모델과 정합: 이벤트를 버퍼링하고 Python이 폴). 게이트16e: fetch 후 status=200 회수 + 실제 응답값.
+- **카빙 유지**: 이벤트 소비(다이얼로그/Fetch/Network)를 driver당 **단일 리스너** `_onEvent`가 tabId+method로
+  분기(리스너 증식 금지), detach가 제거. dispatch 테이블에 op 9개 한 줄씩 추가(총 42 op). script mode의 CDP 전용
+  op는 정직하게 미지원 예외.
+- **src 승격**: protocol/host 갱신 + browserControl.js 파이썬 표면 + index.d.ts + contract.md 조작 표면 절 확장.
+  실 src 픽스처에 이벤트 리스너 신규 경로(다이얼로그/Fetch/Network) 회귀 게이트 추가 -> **GREEN 5/5**.
+  `npm test` **559 green**. **표면은 이제 Playwright 실사용 대비 핵심 격차가 좁다**(잔여: 프레임 traversal, 다운로드,
+  콜백형 route는 후속 판단).
+
 ### 2026-07-14 Phase 3: 조작 표면 확대(Playwright급) 실측 GREEN + src 승격
 
 MVP 6개 메서드(navigate/evaluate/click/type/waitFor/close)를 실전 자동화 표면으로 확대했다. 지시: MVP에서
