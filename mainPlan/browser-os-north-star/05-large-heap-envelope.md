@@ -4,7 +4,7 @@
 
 ## 한 줄 판정
 
-**512MB 사용자 힙에서 checkpoint/session save/load/forkLive/journal은 모두 성립하고, journal recover 병목은 24.8s에서 2.3-2.5s로 줄었다.** 500MB 이상 힙이 막연한 미검증 구간이던 상태는 해소됐다. 장기 OPFS 파일 수 축은 `MachineJournal.pack()`/`prune()`으로 구조를 닫았고, 512MB급 pack도 1.1s로 실측됐다. `autoPack`은 loose 128개 또는 8MB 기준의 opt-in 정책으로 고정했다. 부활 후 프로세스 자원 재개설은 `Init.resume(reason)`과 `/home/web/resume.py` 계약, Machine demo 적용, resume catalog까지 닫았다. 남은 병목은 외부 제품 배선과 공개키·권한 UI다.
+**512MB 사용자 힙에서 checkpoint/session save/load/forkLive/journal은 모두 성립하고, journal recover 병목은 24.8s에서 2.3-2.5s로 줄었다.** 500MB 이상 힙이 막연한 미검증 구간이던 상태는 해소됐다. 장기 OPFS 파일 수 축은 `MachineJournal.pack()`/`prune()`으로 구조를 닫았고, 512MB급 pack도 1.1s로 실측됐다. `autoPack`은 loose 128개 또는 8MB 기준의 opt-in 정책으로 고정했다. 부활 후 프로세스 자원 재개설은 `Init.resume(reason)`과 `/home/web/resume.py` 계약, Machine demo 적용, resume catalog까지 닫았다. 공개키/권한 UI는 fingerprint API와 trust/permission contract까지 닫았다. 남은 병목은 외부 제품 배선과 외부 제품 UI gate다.
 
 ## 실측표
 
@@ -41,11 +41,11 @@
 
 ## OS 판정 영향
 
-`04-os-verdict-v2.md`의 가장 큰 보류 사유 중 "500MB 이상 checkpoint/session/fork/journal 비용 미공개"는 닫혔고, journal 속도 병목과 장기 loose blob 누적 구조도 1차 해소됐다. 512MB급 pack 수치도 1.1s로 들어왔고, 자동 실행 기준도 opt-in 정책으로 고정했다. 따라서 메모리 관리 점수는 6에서 7로 올릴 근거가 생겼다. 영속·크래시 내성은 이미 8점 구간이고, 부활 후 fd/socket/DB connection 재개설은 `Init.resume` 계약, demo gate, resume catalog로 닫혔다. 추가 상향은 제품 권한 UI와 외부 제품 resume gate가 정리된 뒤 재산정한다.
+`04-os-verdict-v2.md`의 가장 큰 보류 사유 중 "500MB 이상 checkpoint/session/fork/journal 비용 미공개"는 닫혔고, journal 속도 병목과 장기 loose blob 누적 구조도 1차 해소됐다. 512MB급 pack 수치도 1.1s로 들어왔고, 자동 실행 기준도 opt-in 정책으로 고정했다. 따라서 메모리 관리 점수는 6에서 7로 올릴 근거가 생겼다. 영속·크래시 내성은 이미 8점 구간이고, 부활 후 fd/socket/DB connection 재개설은 `Init.resume` 계약, demo gate, resume catalog로 닫혔다. 추가 상향은 외부 제품 trust/permission UI와 resume gate가 정리된 뒤 재산정한다.
 
 남은 축:
 
-1. 공개키 배포와 권한 UI.
+1. 공개키 배포와 권한 UI의 외부 제품 gate.
 2. machine image 또는 VirtualOrigin 제품 배선.
 3. 외부 제품 `resume.py` gate.
 
@@ -53,6 +53,6 @@
 
 ## 다음
 
-1. 공개키 배포와 권한 UI 계약.
+1. 공개키 배포와 권한 UI의 외부 제품 gate.
 2. machine image 또는 VirtualOrigin 제품 배선.
 3. 외부 제품 `resume.py` gate.

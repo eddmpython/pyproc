@@ -133,6 +133,20 @@ export async function exportMachinePublicKey(key) {
   return crypto.subtle.exportKey("jwk", publicKey);
 }
 
+function canonicalMachinePublicKey(jwk) {
+  if (typeof jwk !== "object" || jwk === null) throw new Error("machine: publicKey JWK 형식 위반");
+  if (jwk.kty !== "EC" || jwk.crv !== "P-256" || typeof jwk.x !== "string" || typeof jwk.y !== "string") {
+    throw new Error("machine: P-256 공개키 JWK가 필요하다");
+  }
+  return { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y };
+}
+
+export async function fingerprintMachinePublicKey(key) {
+  const jwk = canonicalMachinePublicKey(await exportMachinePublicKey(key));
+  const bytes = new TextEncoder().encode(JSON.stringify(jwk));
+  return `sha256:${await sha256Hex(bytes)}`;
+}
+
 async function importMachinePublicKey(key) {
   if (isCryptoKey(key)) return key;
   if (typeof key !== "object" || key === null) throw new Error("machine: publicKey 형식 위반");

@@ -65,14 +65,14 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> · <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
   </div>
   <script type="module">
-    import { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey } from "../index.js";
+    import { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey, MachineJail } from "../index.js";
     const st = document.getElementById("st"), out = document.getElementById("out"), keyFp = document.getElementById("keyFp");
     const print = (t) => { out.textContent += t + "\n"; };
     // 예제 실행 게이트(?gate): 부팅+실행 완주를 보고. 사람이 열면 no-op.
     const params = new URLSearchParams(location.search);
     const gateMode = params.has("gate");
     const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
-    const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-180) }] }) }).catch(() => {}); };
+    const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + keyFp.textContent + " | " + out.textContent).slice(-220) }] }) }).catch(() => {}); };
     const q = (value) => JSON.stringify(value);
     const resumeSrc = [
       "import os, sqlite3",
@@ -118,16 +118,12 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       } catch (e) {}
       return keys;
     }
-    const bytesToHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-    async function keyFingerprint(publicKey) {
-      const jwk = await exportMachinePublicKey(publicKey);
-      const bytes = new TextEncoder().encode(JSON.stringify(jwk));
-      return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).slice(0, 16);
-    }
+    const machineJail = new MachineJail({ net: false, clipboard: false, home: true, workers: false });
     const machineKeys = await loadMachineKeys();
     const trustedPublicKey = await exportMachinePublicKey(machineKeys);
-    const trustedKeyFp = await keyFingerprint(trustedPublicKey);
-    keyFp.textContent = `trusted machine key: ${trustedKeyFp}. Unsigned or unknown-signer files are rejected.`;
+    const trustedKeyFp = await fingerprintMachinePublicKey(trustedPublicKey);
+    const trustedKeyShort = trustedKeyFp.slice("sha256:".length, "sha256:".length + 16);
+    keyFp.textContent = `trusted signer: ${trustedKeyShort}. permissions: home=yes, net=no, clipboard=no, workers=no. connect-src ${machineJail.connectSrc()}. Unsigned or unknown-signer files are rejected.`;
 
     async function clearDirectory(dir) {
       for await (const [name, handle] of dir.entries()) {
@@ -229,7 +225,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       home = await session.rt.mountHome(homeDir);
       await ensureResumeHook();
       resumeMachine("openMachine");
-      st.textContent = `Switched to a signed machine verified by key ${trustedKeyFp}.`;
+      st.textContent = `Switched to a signed machine verified by key ${trustedKeyShort}.`;
       return next;
     };
     const castSigned = async () => {
@@ -246,7 +242,8 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
         const stateOk = session.rt.run("n >= 1") === true;
         const fileOk = String(session.rt.run("open('/home/web/visits.txt').read()")).includes("visit");
         const resumeOk = session.rt.run("resumeReasonSeen == 'openMachine' and appDb.execute('select count(*) from resumeEvent').fetchone()[0] >= 3") === true;
-        gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && resumeOk && st.textContent.includes("verified"));
+        const trustUiOk = keyFp.textContent.includes("trusted signer:") && keyFp.textContent.includes("home=yes") && keyFp.textContent.includes("net=no") && keyFp.textContent.includes("connect-src 'self'");
+        gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && resumeOk && trustUiOk && st.textContent.includes("verified"));
       } catch (e) { print(String(e).slice(-160)); gateReport(false); }
     }
     // 수명주기: 탭이 사라질 때 자동 hibernate
@@ -271,7 +268,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       a.href = URL.createObjectURL(blob);
       a.download = "computer.pymachine";
       a.click();
-      print(`Exported signed computer.pymachine (${(blob.size / 1048576).toFixed(1)}MB, key ${trustedKeyFp}). That file IS this computer.`);
+      print(`Exported signed computer.pymachine (${(blob.size / 1048576).toFixed(1)}MB, key ${trustedKeyShort}). That file IS this computer.`);
     };
     document.getElementById("imp").onclick = () => document.getElementById("file").click();
     document.getElementById("file").onchange = async (e) => {

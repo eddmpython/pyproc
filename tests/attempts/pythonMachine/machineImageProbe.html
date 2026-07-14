@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <!--
 결과(2026-07-15, Edge headless / 로컬 COOP+COEP):
-.pymachine home payload + WebCrypto signature GREEN 11/11. /home/web OPFS 마운트에 쓴
+.pymachine home payload + WebCrypto signature GREEN 12/12. /home/web OPFS 마운트에 쓴
 텍스트/디렉터리/바이너리 파일을 단일 파일에 포함했고, trusted public key로 `trust: true` 없이
-openMachine이 부활했다. 다른 공개키는 거부. 파일 15MB, export 75ms, open 1608ms.
+openMachine이 부활했다. 공개키 fingerprint는 CryptoKeyPair/JWK 양쪽에서 안정적이고, 다른 공개키는 거부.
+파일 15MB, export 75ms, open 1608ms.
 -->
 <html lang="ko">
 <head><meta charset="utf-8"><title>probe: machineImage</title>
@@ -12,7 +13,7 @@ openMachine이 부활했다. 다른 공개키는 거부. 파일 15MB, export 75m
 <h1>probe: .pymachine = 파일 하나로 이동하는 컴퓨터</h1>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey } from "../../../index.js";
+  import { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey } from "../../../index.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
@@ -39,6 +40,9 @@ openMachine이 부활했다. 다른 공개키는 거부. 파일 15MB, export 75m
     const t0 = performance.now();
     const keyPair = await createMachineKeyPair();
     const trustedPublicKey = await exportMachinePublicKey(keyPair);
+    const fpFromPair = await fingerprintMachinePublicKey(keyPair);
+    const fpFromJwk = await fingerprintMachinePublicKey(trustedPublicKey);
+    check("공개키 fingerprint 안정", fpFromPair === fpFromJwk && /^sha256:[0-9a-f]{64}$/.test(fpFromPair), fpFromPair.slice(0, 23));
     const file = await a.exportImage({ includeHome: true, signingKey: keyPair });
     timings.exportMs = Math.round(performance.now() - t0);
     timings.fileMB = +(file.size / 1048576).toFixed(1);

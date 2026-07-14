@@ -1004,3 +1004,42 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. 외부 제품의 `resume.py` 정책을 제품 gate로 고정한다.
+
+## 2026-07-15 - 공개키 fingerprint와 권한 UI 계약 고정
+
+문제:
+
+- `.pymachine` signature와 `MachineJail`은 있었지만, 제품 UI가 사용자에게 어떤 공개키를 신뢰하는지 안정적으로 보여줄 공개 API가 없었다.
+- Machine demo는 trusted key를 자체 로컬 해시로 표시했고, 권한 정책은 UI에 드러나지 않았다.
+- signature는 출처 검증이고 권한 승인이 아니다. 이 둘을 분리한 제품 계약이 없으면 `trust: true` 같은 이진 승인으로 회귀하기 쉽다.
+
+완료:
+
+- `fingerprintMachinePublicKey(key)`를 공개 API로 추가했다. CryptoKeyPair, CryptoKey, JWK를 받아 안정적인 `sha256:<hex>` fingerprint를 만든다.
+- `machineImageProbe.html`에 fingerprint 안정성 검증을 추가했다. 같은 키의 CryptoKeyPair와 JWK가 같은 fingerprint를 내야 한다.
+- `examples/machine.html`이 로컬 해시 구현을 버리고 `fingerprintMachinePublicKey()`를 사용한다.
+- Machine demo UI에 signer fingerprint와 permission policy를 표시한다: `home=yes, net=no, clipboard=no, workers=no`, `MachineJail.connectSrc()` 기준 `connect-src 'self'`.
+- `docs/consuming/trustPermissions.md`를 추가했다. 공개키 JWK 배포, fingerprint 표시, `openMachine({ trustedPublicKeys, requireSignature: true })`, `trust: true` 금지, MachineJail 권한 UI, 제품별 적용을 한 문서에 묶었다.
+- README/README.ko, 소비 계약, 테스트 운영 문서, pythonMachine/largeHeap README, OS 아키텍처/판정표/대형 힙 봉투를 새 계약에 맞췄다.
+
+검증:
+
+- `node tests/browser/run.mjs tests/attempts/pythonMachine/machineImageProbe.html` GREEN 12/12.
+- `node tests/browser/run.mjs examples/machine.html?gate=1` GREEN 1/1.
+- `npm run test:examples` GREEN 9/9.
+- 1차 `npm test`는 RED였다. 원인: 새 문서 `docs/consuming/trustPermissions.md`가 아직 git index에 없어 링크 가드가 CI 기준 죽은 링크로 판정했다. stage 후 재실행한다.
+- stage 후 `npm test` GREEN 583/583.
+- `npm run test:browser` GREEN 47/47.
+- 실측: fingerprint `sha256:4c7f3bc29416cb70...`, `.pymachine` export 15MB/89ms, trusted key open 2101ms.
+
+판정:
+
+- 이전 NEXT 2번의 "공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다"는 pyproc 내부 계약과 대표 demo 표면에서는 닫혔다.
+- 남은 것은 codaro/dartlab/xlpod 같은 외부 제품 gate다. 즉 공개 API, 카탈로그, Machine demo는 정본이 됐고, 외부 제품 적용은 제품 소비 축으로 남긴다.
+- OS 점수는 70/100 유지. 점수 상승은 외부 제품 `.pymachine` 또는 `VirtualOrigin` 채택과 외부 제품 trust/permission UI gate가 닫힌 뒤 재산정한다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 외부 제품 gate로 고정한다.
+3. 외부 제품의 `resume.py` 정책을 제품 gate로 고정한다.

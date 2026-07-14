@@ -52,4 +52,4 @@ PYPROC_GATE_TIMEOUT=900000 node tests/browser/run.mjs "tests/attempts/largeHeapE
 
 ## 판정
 
-진행 중. 512MB checkpoint/session/fork/journal 수치는 확보했고 journal 반복 blob IO 병목과 pack/prune 장기 파일 수 축도 1차 해소했다. 다음 목표는 제품 표면의 `.pymachine`/`VirtualOrigin` 소비와 공개키·권한 UI 계약이다.
+진행 중. 512MB checkpoint/session/fork/journal 수치는 확보했고 journal 반복 blob IO 병목과 pack/prune 장기 파일 수 축도 1차 해소했다. 다음 목표는 제품 표면의 `.pymachine`/`VirtualOrigin` 소비와 외부 제품 trust/permission UI gate다.

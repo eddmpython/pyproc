@@ -41,6 +41,8 @@
 //                          노출(m.run/spawn/kill). 중첩(깊이 2+) = 컨테이너 속 컨테이너 = 도커 3요소
 //   createMachineKeyPair/exportMachinePublicKey
 //                        - .pymachine WebCrypto 서명 신뢰 체인: 검증된 공개키면 trust:true 없이 openMachine
+//   fingerprintMachinePublicKey
+//                        - 공개키 배포/승인 UI용 안정 fingerprint(sha256:<hex>)
 //   JobControl           - 셸의 잡 컨트롤: `expr &`가 대화형 네임스페이스를 살아있는 채로 fork해
 //                          딴 코어에서 돌린다(프롬프트 즉시 복귀). %jobs/%fg/%kill로 조종
 //   KernelElection       - 커널 선출: 여러 탭이 Web Locks로 리더 하나를 뽑고 리더만 커널을 부팅,
@@ -63,7 +65,7 @@ export { FileSystem } from "./src/capabilities/fileSystem.js";
 export { Init } from "./src/capabilities/init.js";
 export { MachineJournal } from "./src/capabilities/machineJournal.js";
 export { MachineJail } from "./src/capabilities/machineJail.js";
-export { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey, Session } from "./src/capabilities/session.js";
+export { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey, Session } from "./src/capabilities/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
 export { GpuCompute, GpuArray, GpuBridge } from "./src/capabilities/gpuCompute.js";

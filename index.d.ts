@@ -953,6 +953,9 @@ export function createMachineKeyPair(): Promise<CryptoKeyPair>;
 /** .pymachine 검증용 공개키를 JWK로 내보낸다. */
 export function exportMachinePublicKey(key: CryptoKey | CryptoKeyPair | JsonWebKey): Promise<JsonWebKey>;
 
+/** 제품 신뢰 UI와 공개키 배포 manifest에 표시할 안정 fingerprint. 반환 형식: sha256:<hex>. */
+export function fingerprintMachinePublicKey(key: CryptoKey | CryptoKeyPair | JsonWebKey): Promise<string>;
+
 /** .pymachine 파일로 같은 컴퓨터를 부팅한다. trust:true 또는 trustedPublicKeys 중 하나가 필요하다. */
 export function openMachine(file: Blob, opts?: { trust?: boolean; trustedPublicKey?: CryptoKey | JsonWebKey; trustedPublicKeys?: (CryptoKey | JsonWebKey)[]; requireSignature?: boolean }): Promise<Session>;
 
