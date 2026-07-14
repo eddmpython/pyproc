@@ -1,4 +1,4 @@
-// fileSystem.js - Layer 1 능력: 엔진-무관 일반 파일 IO(Runtime.fs).
+// fileSystem.js - Runtime core: 엔진-무관 일반 파일 IO(Runtime.fs).
 // "브라우저에서 로컬처럼 + 영속 FS"가 pyproc 목표인데 일반 파일-op 능력이 없던 갭을 닫는다.
 // 소비자(dartlab/codaro)는 이 능력만 쓰고 rt.raw.FS 같은 엔진 내부를 직접 만지지 않는다.
 // 영속(OPFS)은 Runtime.mountHome이 마운트하고, 이 능력은 그 위 파일-op 레이어다(새 VFS 아님).

@@ -15,7 +15,7 @@
 //   /home/web 파일 트리를 한 .pymachine 안에서 함께 이동한다.
 // 서명(2026-07-15): WebCrypto ECDSA P-256으로 unsigned body 해시를 서명한다. outer envelope는
 //   signature까지 포함한 최종 body를 다시 해시하므로 무결성과 출처 검증이 분리된다.
-import { boot } from "../runtime/runtime.js";
+import { boot } from "../runtime/runtimeApi.js";
 import { PAGE_SIZE } from "../runtime/memoryCapability.js";
 import { WheelCache } from "./wheelCache.js";
 

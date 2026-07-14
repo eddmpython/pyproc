@@ -5,7 +5,7 @@
 //   - 실전 우회: bare 스냅샷(_loadSnapshot 197ms, 콜드 부팅 3645ms 대비 18배) + OPFS 휠 +
 //     import = 환경 웜 부팅 5465ms -> 1515ms (3.61배). 이 파일은 그 조립이다.
 //   - PEP 723 인라인 메타데이터로 .py 파일이 의존성을 자급한다(브라우저판 uv run).
-import { DEFAULT_INDEX, ensureEngineScript, Runtime } from "../runtime/runtime.js";
+import { DEFAULT_INDEX, ensureEngineScript, Runtime } from "../runtime/runtimeApi.js";
 import { PyodideEngine } from "../runtime/engines/pyodideEngine.js";
 import { WheelCache } from "./wheelCache.js";
 

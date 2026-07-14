@@ -13,7 +13,7 @@
 ### 2026-07-13 P1~P3 완료: 3능력 승격 + 실 브라우저 GREEN + DeviceFs 판정
 
 - **P1 접지(engineContract 실 브라우저)**: fsProbe **GREEN 10/10**(utf8/binary 왕복 == 원본, mkdirTree, readdir ./.. 필터, stat isDir/isFile/size, unlink/rmdir, 미존재 에러, **변이 시 execSeq++/읽기 불변**, **파이썬 open() <-> rt.fs 동일 FS** from js/from py 교차), outputCaptureProbe **GREEN 5/5**(핸들러 수신 + 셀 도중 교체 격리 + null 복원 + stderr 분리), loadImportsProbe **GREEN 3/3**(stdlib no-op + numpy가 import 스캔만으로 995ms 자동 로드 + 동작).
-- **P2 승격**: EngineContract(pyodideEngine)에 `loadPackagesFromImports`/`setStdout`/`setStderr`/`get fs`(중립 파사드) 추가. `FileSystem` 능력 신규(src/capabilities/fileSystem.js, 변이만 execSeq 상승). Runtime에 `this.fs` 상시 + 위임 3. index.js/index.d.ts(FileSystem export + Runtime 타입)/run.mjs(export + 메서드 가드)/README 2종.
+- **P2 승격**: EngineContract(pyodideEngine)에 `loadPackagesFromImports`/`setStdout`/`setStderr`/`get fs`(중립 파사드) 추가. `FileSystem` 능력 신규(src/runtime/fileSystem.js, 변이만 execSeq 상승). Runtime에 `this.fs` 상시 + 위임 3. index.js/index.d.ts(FileSystem export + Runtime 타입)/run.mjs(export + 메서드 가드)/README 2종.
 - **P3 DeviceFs 판정(착수 전 계획 뒤집음, 정직)**: 실제 코드 검토 결과 DeviceFs의 raw.FS는 핵심이 장치-등록(`registerDevice`/`makedev`/`mkdev`) = 파일 IO 아닌 별개 seam(runtime.js:151이 축복). 부수 파일-op도 `_mk` 한 함수에서 device 등록과 얽혀, 분리 시 혼합 API = 열화. **이관 안 함.** 소비자 raw 제거는 `Runtime.fs`로 완전 성립(우리 device seam이 아니라 소비 코드 목표).
 - **정합 발견**: engineContract README 계약 표면표가 이미 `fs()`를 FS 계약으로 예정해뒀다 = 이 승격이 그 예정 계약의 실현. 비브레이킹(새 메서드/능력만).
 

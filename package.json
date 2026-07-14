@@ -12,7 +12,7 @@
   "exports": {
     ".": { "types": "./index.d.ts", "default": "./index.js" },
     "./assets": "./src/runtime/assets.js",
-    "./runtime": "./src/runtime/runtime.js",
+    "./runtime": "./src/runtime/runtimeApi.js",
     "./reactive": "./src/capabilities/reactive.js",
     "./syscall-bridge": "./src/capabilities/syscallBridge.js",
     "./process-os": "./src/processOs/pyProc.js",

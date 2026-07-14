@@ -33,6 +33,6 @@
 
 ## 산출물 표면
 
-- src: [pyodideEngine.js](../../../src/runtime/engines/pyodideEngine.js)(fs/loadPackagesFromImports/setStdout/setStderr), [runtime.js](../../../src/runtime/runtime.js)(Runtime.fs/위임 3), `src/capabilities/fileSystem.js`(신규 FileSystem 능력). DeviceFs는 무변경(장치-등록 seam).
+- src: [pyodideEngine.js](../../../src/runtime/engines/pyodideEngine.js)(fs/loadPackagesFromImports/setStdout/setStderr), [runtime.js](../../../src/runtime/runtime.js)(Runtime.fs/위임 3), `src/runtime/fileSystem.js`(신규 FileSystem 능력). DeviceFs는 무변경(장치-등록 seam).
 - 표면: index.js/index.d.ts(FileSystem export + Runtime 메서드 타입), tests/run.mjs(export + 메서드 가드), README 2종(능력 표에 Runtime.fs 행).
 - 접지: tests/attempts/engineContract/(probe 3 + README 결론 표).

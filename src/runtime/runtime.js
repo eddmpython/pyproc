@@ -1,20 +1,10 @@
-// runtime.js - Layer 0: Pyodide 엔진 래퍼(boot/Runtime).
-// 설계 원칙: 엔진 내부 접근은 memoryCapability.js 계약 뒤에 격리하고, Layer 1 능력은
-// enableReactive()/enableSyscallBridge()로 opt-in 등록한다. 빌드 단계 없음(네이티브 ESM).
+// runtime.js - Layer 0: Pyodide 엔진 래퍼(boot/Runtime core).
+// 설계 원칙: 엔진 내부 접근은 memoryCapability.js 계약 뒤에 격리하고, 선택 능력 등록은
+// runtimeApi.js의 public binding이 주입한다. 빌드 단계 없음(네이티브 ESM).
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated).
 import { MemoryCapability } from "./memoryCapability.js";
 import { PyodideEngine } from "./engines/pyodideEngine.js";
-import { ReactiveController } from "../capabilities/reactive.js";
-import { SyscallBridge } from "../capabilities/syscallBridge.js";
-import { SocketBridge } from "../capabilities/socketBridge.js";
-import { AsgiServer } from "../capabilities/asgiServer.js";
-import { WheelCache } from "../capabilities/wheelCache.js";
-import { Terminal } from "../capabilities/terminal.js";
-import { DeviceFs } from "../capabilities/deviceFs.js";
-import { Init } from "../capabilities/init.js";
-import { MachineJournal } from "../capabilities/machineJournal.js";
-import { GpuBridge } from "../capabilities/gpuCompute.js";
-import { FileSystem } from "../capabilities/fileSystem.js";
+import { FileSystem } from "./fileSystem.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
@@ -231,19 +221,6 @@ export class Runtime {
   // 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정한다(uv lock 등가).
   // boot({ lockFileURL })에 되먹이면 같은 버전이 해석 0으로 재현된다. 실측: freezeLockProbe.
   async freeze() { this.execSeq++; return this._engine.freeze(); }
-
-  // Layer 1 능력 등록(opt-in). 소비자는 능력 계약만 받고 엔진 내부는 만지지 않는다.
-  enableReactive() { return new ReactiveController(this); }
-  enableSyscallBridge(cfg = {}) { return new SyscallBridge(this, { ...cfg, assetIntegrity: cfg.assetIntegrity || this.assetIntegrity }); }
-  enableSocketBridge(cfg = {}) { return new SocketBridge(this, cfg); }
-  enableAsgiServer(cfg = {}) { return new AsgiServer(this, cfg); }
-  enableTerminal(cfg = {}) { return new Terminal(this, cfg); }
-  enableWheelCache(cfg = {}) { return new WheelCache(this, cfg); }
-  enableDeviceFs(cfg = {}) { return new DeviceFs(this, cfg); }
-  enableInit(cfg = {}) { return new Init(this, cfg); }
-  enableJournal(cfg = {}) { return new MachineJournal(this, cfg); }
-  // Python numpy -> GPU 직결(install()로 pyprocGpu 모듈 배선). 실 GPU + 창 모드 + numpy 필요.
-  enableGpu(cfg = {}) { return new GpuBridge(this); }
 
   // 영속 디스크: OPFS 등 디렉터리 핸들을 파이썬 파일시스템 경로로 마운트한다.
   // 파이썬 open()이 진짜 지속 파일을 읽고 쓴다. 변경 반영은 반환된 sync() 호출(핸들은 소비자 제공).

@@ -444,6 +444,7 @@ check("exports 안정 subpath 고정", () => {
     if (key.startsWith("./src/")) throw new Error(`src deep export 금지: ${key}`);
   }
   for (const key of allowed) if (!keys.includes(key)) throw new Error(`export key 누락: ${key}`);
+  if (pkg.exports["./runtime"] !== "./src/runtime/runtimeApi.js") throw new Error("pyproc/runtime은 runtimeApi.js를 가리켜야 함");
 });
 
 // 4.5) README 표면 동기화: index.js의 모든 export가 양쪽 README에 등장해야 한다.
@@ -608,6 +609,14 @@ check("src module 참조 실존", () => {
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
+check("Runtime core는 capability class를 직접 import하지 않음", () => {
+  const src = readFileSync(join(ROOT, "src", "runtime", "runtime.js"), "utf8");
+  if (src.includes("../capabilities/")) throw new Error("runtime.js가 capabilities를 직접 import함");
+  const apiSrc = readFileSync(join(ROOT, "src", "runtime", "runtimeApi.js"), "utf8");
+  for (const term of ["installRuntimeCapabilities", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableGpu"]) {
+    if (!apiSrc.includes(term)) throw new Error(`runtimeApi.js binding 누락: ${term}`);
+  }
+});
 check("src ESM import graph cycle 없음", () => {
   const files = collect(join(ROOT, "src"), [".js"], []);
   const byRel = new Set(files.map(rel));
@@ -642,6 +651,10 @@ check("src layer edge 승인 목록", () => {
       const toLayer = srcLayerName(targetRel);
       if (!fromLayer || !toLayer || fromLayer === toLayer) continue;
       const key = `${ref.kind}:${fromLayer}->${toLayer}`;
+      if (key === "module:runtime->capabilities" && rel(f) !== "src/runtime/runtimeApi.js") {
+        problems.push(`${rel(f)} -> ${ref.spec} (${key}, runtimeApi.js만 허용)`);
+        continue;
+      }
       if (!allowedCrossLayer.has(key)) problems.push(`${rel(f)} -> ${ref.spec} (${key})`);
     }
   }

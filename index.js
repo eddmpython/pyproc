@@ -52,7 +52,7 @@
 //                          완전 시간여행(checkpoint/timeTravel). 값 다리는 JSON 한정, wasmURL 소비자 제공
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
-export { boot, Runtime, MemoryCapability, PAGE_SIZE, checkEnvironment } from "./src/runtime/runtime.js";
+export { boot, Runtime, MemoryCapability, PAGE_SIZE, checkEnvironment } from "./src/runtime/runtimeApi.js";
 export { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker, PYPROC_ASSET_MANIFEST_VERSION } from "./src/runtime/assets.js";
 export { ReactiveController } from "./src/capabilities/reactive.js";
 export { SyscallBridge } from "./src/capabilities/syscallBridge.js";
@@ -61,7 +61,7 @@ export { AsgiServer } from "./src/capabilities/asgiServer.js";
 export { VirtualOrigin } from "./src/capabilities/virtualOrigin.js";
 export { Terminal } from "./src/capabilities/terminal.js";
 export { DeviceFs } from "./src/capabilities/deviceFs.js";
-export { FileSystem } from "./src/capabilities/fileSystem.js";
+export { FileSystem } from "./src/runtime/fileSystem.js";
 export { Init } from "./src/capabilities/init.js";
 export { MachineJournal } from "./src/capabilities/machineJournal.js";
 export { MachineJail } from "./src/capabilities/machineJail.js";

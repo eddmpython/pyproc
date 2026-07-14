@@ -1358,3 +1358,43 @@ NEXT:
 1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
 2. `runtime`의 capability factory 의존을 분리해 cross-layer edge를 더 단방향으로 줄일 수 있는지 설계한다.
 3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+
+## 2026-07-15 - Runtime core와 capability binding 분리
+
+문제:
+
+- `runtime.js`가 엔진 core이면서 `ReactiveController`, `SyscallBridge`, `AsgiServer`, `Terminal`, `GpuBridge` 같은 선택 능력 클래스를 직접 import했다.
+- 이 구조는 `runtime -> capabilities` edge를 넓히고, `Runtime` core를 얇은 엔진 래퍼로 유지한다는 레이어 목표와 맞지 않았다.
+- 단, 공개 API는 `rt.enableReactive()` 같은 opt-in factory를 유지해야 하므로 메서드를 제거하면 소비 계약이 깨진다.
+
+완료:
+
+- `src/runtime/runtimeApi.js`를 추가했다. public `Runtime` wrapper가 core `Runtime`에 `enableReactive`, `enableSyscallBridge`, `enableSocketBridge`, `enableAsgiServer`, `enableTerminal`, `enableWheelCache`, `enableDeviceFs`, `enableInit`, `enableJournal`, `enableGpu` binding을 주입한다.
+- `src/runtime/runtime.js`에서 capability class direct import를 제거했다. 이 파일은 엔진 부팅, `Runtime` core, `MemoryCapability`, `FileSystem`만 소유한다.
+- `FileSystem`은 선택 능력이 아니라 `Runtime.fs` 상시 core라서 `src/capabilities/fileSystem.js`에서 `src/runtime/fileSystem.js`로 이동했다.
+- root export와 `pyproc/runtime` subpath를 `runtimeApi.js`로 전환했다.
+- `bootSession()`과 `bootEnv()`는 public Runtime wrapper를 사용해 `enable*` 계약이 유지되도록 조정했다.
+- `tests/run.mjs` 구조 게이트를 강화했다: `pyproc/runtime -> runtimeApi.js`, `runtime.js`의 capability direct import 금지, `runtimeApi.js` binding 존재를 검사한다.
+- 설치 패키지 소비자 게이트가 `pyproc/runtime` subpath에서 같은 `Runtime`과 `boot`를 받는지, `Runtime.prototype.enableReactive`가 살아 있는지 확인한다.
+- 소비 계약, 테스트 운영 문서, OS 아키텍처 표, 파일시스템 링크를 새 구조에 맞췄다.
+
+검증:
+
+- `node --check src/runtime/runtime.js` PASS.
+- `node --check src/runtime/runtimeApi.js` PASS.
+- `node --check src/runtime/fileSystem.js` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` GREEN 611/611.
+- `npm run test:browser` GREEN 47/47.
+- `npm run test:consumer` GREEN 15/15.
+
+판정:
+
+- Runtime core가 선택 능력 구현을 직접 끌어안지 않게 됐다.
+- 공개 API는 유지하면서 내부 레이어 응집도를 높였다. 다음 구조 개선은 `runtimeApi.js`가 허용한 binding edge를 더 세분화하거나, capability factory registry를 별도 계약으로 좁히는 단계다.
+
+NEXT:
+
+1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
+2. `runtimeApi.js` binding edge를 capability registry 계약으로 더 좁힐 수 있는지 설계한다.
+3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
