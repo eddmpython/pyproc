@@ -84,6 +84,7 @@ class DebuggerDriver {
     this.routes = []; this.responseLog = []; this.heldRequests = new Map();
     this.dialogAccept = true; this.dialogPromptText = ""; this.lastDialogMessage = null;
     this.frameWorlds = new Map();
+    this.attachedOopifs = new Set();
     this.downloadsOn = false; this.downloadLog = [];
     this.consoleOn = false; this.consoleLog = [];
     this._eventListener = null;
@@ -252,13 +253,43 @@ class DebuggerDriver {
   async frames() {
     const tree = await this.send("Page.getFrameTree");
     const out = [];
-    const walk = (node) => { if (!node || !node.frame) return; out.push({ frameId: node.frame.id, url: node.frame.url, name: node.frame.name || "" }); (node.childFrames || []).forEach(walk); };
+    const walk = (node) => { if (!node || !node.frame) return; out.push({ frameId: node.frame.id, targetId: null, url: node.frame.url, name: node.frame.name || "", oopif: false }); (node.childFrames || []).forEach(walk); };
     if (tree && tree.frameTree) walk(tree.frameTree);
+    // cross-origin iframe은 OOPIF(별 프로세스)라 getFrameTree에 없다. getTargets에 별 타깃으로 뜨므로, 이 페이지의
+    // 실제 iframe src와 교차해 스코프한다(getTargets는 브라우저 전역이라 이 교차로 다른 탭 누수를 막는다).
+    const srcsR = await this.evaluate("Array.from(document.querySelectorAll('iframe'), f => f.src)");
+    const srcs = (srcsR.ok && Array.isArray(srcsR.value)) ? srcsR.value : [];
+    if (srcs.length) {
+      const targets = await chrome.debugger.getTargets();
+      for (const t of targets) {
+        const url = t.url || "";
+        if (/^https?:/.test(url) && srcs.includes(url) && !out.some((f) => f.url === url)) {
+          out.push({ frameId: null, targetId: t.id, url, name: "", oopif: true });
+        }
+      }
+    }
     return { ok: true, value: out };
   }
-  // 프레임 문맥 op(evaluate 합성). 프레임의 신뢰 입력은 좌표 교차라 범위 밖 = element.click()/value setter(합성).
-  async frameOp(frameId, verb, a) {
-    const ev = (expr) => this.evaluate(expr, frameId);
+  // OOPIF(별 프로세스 프레임) 세션: targetId로 직접 attach해 그 프레임 컨텍스트에서 evaluate한다(isolated world 불필요).
+  async _oopifSend(targetId, method, params) {
+    const t = { targetId };
+    if (!this.attachedOopifs.has(targetId)) {
+      try { await chrome.debugger.attach(t, "1.3"); } catch (e) { if (!String(e).includes("Another debugger is already attached")) throw e; }
+      this.attachedOopifs.add(targetId);
+    }
+    return chrome.debugger.sendCommand(t, method, params);
+  }
+  async oopifEvaluate(targetId, expr) {
+    const res = await this._oopifSend(targetId, "Runtime.evaluate", { expression: expr, returnByValue: true });
+    if (res && res.exceptionDetails) return { ok: false, error: res.exceptionDetails.text || "evaluate 예외" };
+    return { ok: true, value: res && res.result ? res.result.value : undefined };
+  }
+  // 프레임 문맥 op(evaluate 합성). same-origin은 isolated world(frameId), cross-origin OOPIF는 별 세션(targetId).
+  // 프레임의 신뢰 입력은 좌표 교차라 범위 밖 = element.click()/value setter(합성).
+  async frameOp(target, verb, a) {
+    const ev = target.targetId
+      ? (expr) => this.oopifEvaluate(target.targetId, expr)
+      : (expr) => this.evaluate(expr, target.frameId);
     const q = async (fnBody) => {
       const r = await ev(`(() => { const el = document.querySelector(${J(a.selector)}); if (!el) return { __m: true }; return { __v: (${fnBody})(el) }; })()`);
       if (!r.ok) return r;
@@ -522,6 +553,8 @@ class DebuggerDriver {
   async requests() { await this._ensureNetEvents(); return { ok: true, value: this.responseLog }; }
   async detach() {
     if (this._eventListener) { chrome.debugger.onEvent.removeListener(this._eventListener); this._eventListener = null; }
+    for (const targetId of this.attachedOopifs) { try { await chrome.debugger.detach({ targetId }); } catch (e) { /* 이미 풀림 */ } }
+    this.attachedOopifs.clear();
     try { await chrome.debugger.detach(this.target); } catch (e) { /* 이미 풀림 */ }
   }
 }
@@ -725,7 +758,7 @@ function dispatch(driver, op, a) {
     case OP.abortRequest: return driver.abortRequest(a.id);
     case OP.responseBody: return driver.responseBody(a.pattern);
     case OP.frames: return driver.frames();
-    case OP.frameOp: return driver.frameOp(a.frameId, a.verb, a);
+    case OP.frameOp: return driver.frameOp({ frameId: a.frameId, targetId: a.targetId }, a.verb, a);
     case OP.emulateMedia: return driver.emulateMedia(a);
     case OP.setTimezone: return driver.setTimezone(a.timezoneId);
     case OP.setOffline: return driver.setOffline(a.offline);

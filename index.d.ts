@@ -714,15 +714,15 @@ export interface BrowserTab {
   waitForConsole(pattern: string, timeout?: number): { type: string; text: string };
   /** 접근성 트리(CDP Accessibility.getFullAXTree). 페이지를 role/name 시맨틱으로 회수(DOM 셀렉터 대신 의미 네비게이션). debugger mode 전용. */
   accessibilityTree(): Array<{ role: string; name: string; value: string }>;
-  /** 프레임 traversal(same-origin iframe). frames는 프레임 목록, frame(url/name)은 프레임 핸들. cross-origin OOPIF는 미지원. debugger mode 전용. */
-  frames(): Array<{ frameId: string; url: string; name: string }>;
+  /** 프레임 traversal. frames는 프레임 목록(oopif=cross-origin 여부), frame(url/name)은 프레임 핸들. same-origin은 isolated world, cross-origin OOPIF는 getTargets attach로 둘 다 드릴다운. debugger mode 전용. */
+  frames(): Array<{ frameId: string | null; targetId: string | null; url: string; name: string; oopif: boolean }>;
   frame(url?: string, name?: string): BrowserFrame;
   close(): void;
 }
 
 /**
- * 프레임(iframe) 핸들. op는 프레임의 isolated world에서 실행(합성 입력, DOM 공유·JS 변수 격리).
- * BrowserTab.frame(url/name)으로 얻는다. cross-origin OOPIF는 별도 프로세스라 미지원(same-origin 프레임 전용).
+ * 프레임(iframe) 핸들. BrowserTab.frame(url/name)으로 얻는다. same-origin은 그 프레임의 isolated world에서,
+ * cross-origin OOPIF는 그 프레임 타깃에 직접 attach해 실행한다(둘 다 지원, 합성 입력). DOM 공유·JS 변수 격리.
  */
 export interface BrowserFrame {
   evaluate(expr: string): unknown;

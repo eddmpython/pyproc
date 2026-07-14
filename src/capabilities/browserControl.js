@@ -157,20 +157,21 @@ class BrowserTab:
     def frame(self, url=None, name=None):
         for f in self.frames():
             if url is not None and url in (f.get("url") or ""):
-                return Frame(self, f["frameId"])
+                return Frame(self, f.get("frameId"), f.get("targetId"))
             if name is not None and name == f.get("name"):
-                return Frame(self, f["frameId"])
+                return Frame(self, f.get("frameId"), f.get("targetId"))
         raise RuntimeError("frame 미발견: " + str(url or name))
     def close(self):
         self._op("closeSession")
 
 class Frame:
-    # iframe 내부 핸들. op는 프레임의 isolated world에서 실행(합성 입력). cross-origin OOPIF는 별도 축(미지원).
-    def __init__(self, tab, frameId):
+    # iframe 내부 핸들. same-origin은 isolated world(frameId), cross-origin OOPIF는 별 세션(targetId)에서 실행.
+    def __init__(self, tab, frameId=None, targetId=None):
         self._tab = tab
         self._fid = frameId
+        self._tid = targetId
     def _fop(self, verb, **args):
-        return self._tab._op("frameOp", frameId=self._fid, verb=verb, **args)
+        return self._tab._op("frameOp", frameId=self._fid, targetId=self._tid, verb=verb, **args)
     def evaluate(self, expr):
         return self._fop("evaluate", expr=expr).get("value")
     def text(self, selector):

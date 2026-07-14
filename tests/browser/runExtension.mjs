@@ -67,6 +67,7 @@ async function main() {
 <button id="dialogBtn" style="position:absolute;top:220px;left:220px;width:160px;height:40px">dialog</button>
 <a id="dl" href="/downloadFile" download="report.txt" style="position:absolute;top:400px;left:420px">download</a>
 <iframe id="fr" src="/frameChild" style="position:absolute;top:280px;left:220px;width:300px;height:100px"></iframe>
+<iframe id="xfr" src="http://localhost:${backPort}/frameChild" style="position:absolute;top:280px;left:540px;width:300px;height:100px"></iframe>
 <script>
 window.clickReport={clicked:false};
 window.dialogResult=null;
