@@ -1324,3 +1324,37 @@ NEXT:
 1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
 2. 내부 `src/` 레이어 graph를 별도로 산출하고, 허용 edge와 제거할 cycle을 나눠 다음 구조 게이트로 좁힌다.
 3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+
+## 2026-07-15 - src import graph cycle 게이트 추가
+
+문제:
+
+- `CLAUDE.md`는 `src/runtime`, `src/capabilities`, `src/processOs` 레이어와 순환 금지를 강행규칙으로 둔다.
+- 직전 작업은 공개 import 경계와 참조 실존성을 막았지만, 내부 ESM graph의 cycle과 cross-layer edge 드리프트는 아직 기계로 막지 못했다.
+- 단순히 모든 자기참조를 cycle로 잡으면 `machineWorker.js`의 중첩 컨테이너 worker spawn처럼 ESM import가 아닌 실행 자산 참조까지 오탐한다.
+
+완료:
+
+- `tests/run.mjs`에 `findCycles()`와 `srcLayerName()` 구조 helper를 추가했다.
+- `src 레이어 폴더 고정` 게이트를 추가했다. `src/`의 JS 파일은 `runtime`, `capabilities`, `processOs` 중 하나에만 있어야 한다.
+- `src ESM import graph cycle 없음` 게이트를 추가했다. 정적 import/export와 literal dynamic import만 ESM graph로 보고 cycle을 차단한다.
+- `src layer edge 승인 목록` 게이트를 추가했다. cross-layer edge는 현재 승인된 edge만 허용한다: `runtime->capabilities`, `capabilities->runtime`, `processOs->runtime`, `processOs->capabilities`, `newURL:capabilities->processOs`.
+- `new URL("./machineWorker.js", import.meta.url)` 자기참조는 중첩 컨테이너용 실행 자산 참조로 남기고, ESM cycle 판정에서는 제외했다.
+- 테스트 운영 문서와 아키텍처 표를 새 graph 게이트에 맞췄다.
+
+검증:
+
+- graph 조사: `src` JS 파일 36개, 참조 edge 48개, ESM cycle 0. 실행 자산 graph의 자기참조 1개는 `machineWorker.js` 중첩 컨테이너 spawn이다.
+- `node --check tests/run.mjs` PASS.
+- `npm test` GREEN 607/607.
+
+판정:
+
+- 내부 구조 품질이 한 단계 더 기계화됐다. 공개 표면, 파일 실존성, ESM cycle, 레이어 edge가 함께 잠긴다.
+- 현재 layer edge 목록은 현실을 봉인하는 안전장치다. 다음 구조 작업은 `runtime->capabilities`와 `capabilities->runtime` 양방향 edge를 어떻게 더 깎을지 별도 설계로 좁힌다.
+
+NEXT:
+
+1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
+2. `runtime`의 capability factory 의존을 분리해 cross-layer edge를 더 단방향으로 줄일 수 있는지 설계한다.
+3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.

@@ -43,6 +43,28 @@ function moduleTarget(file, spec) {
   if (clean.startsWith(".")) return resolve(dirname(file), clean);
   return null;
 }
+function srcLayerName(relPath) {
+  const parts = relPath.split("/");
+  return parts[0] === "src" ? parts[1] : null;
+}
+function findCycles(graph) {
+  const cycles = [];
+  const state = new Map();
+  const stack = [];
+  const visit = (node) => {
+    state.set(node, 1);
+    stack.push(node);
+    for (const next of graph.get(node) || []) {
+      if (!graph.has(next)) continue;
+      if (!state.has(next)) visit(next);
+      else if (state.get(next) === 1) cycles.push(stack.slice(stack.indexOf(next)).concat(next));
+    }
+    stack.pop();
+    state.set(node, 2);
+  };
+  for (const node of graph.keys()) if (!state.has(node)) visit(node);
+  return cycles;
+}
 
 console.log("pyproc 게이트\n");
 
@@ -564,6 +586,13 @@ for (const f of collect(ROOT, [".md"], [])) {
 
 // 7) 구조 불변식: attempts 카테고리와 mainPlan 이니셔티브의 README 의무.
 console.log("\n[구조]");
+check("src 레이어 폴더 고정", () => {
+  const allowedLayers = new Set(["runtime", "capabilities", "processOs"]);
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    const layer = srcLayerName(rel(f));
+    if (!allowedLayers.has(layer)) throw new Error(`승인 안 된 src 레이어: ${rel(f)}`);
+  }
+});
 check("src module 참조 실존", () => {
   const srcRoot = join(ROOT, "src");
   const problems = [];
@@ -578,6 +607,45 @@ check("src module 참조 실존", () => {
     }
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+check("src ESM import graph cycle 없음", () => {
+  const files = collect(join(ROOT, "src"), [".js"], []);
+  const byRel = new Set(files.map(rel));
+  const graph = new Map(files.map((f) => [rel(f), []]));
+  for (const f of files) {
+    for (const ref of jsModuleRefs(f)) {
+      if (ref.kind !== "module" && ref.kind !== "dynamic") continue;
+      const target = moduleTarget(f, ref.spec);
+      if (!target) continue;
+      const targetRel = rel(target);
+      if (byRel.has(targetRel)) graph.get(rel(f)).push(targetRel);
+    }
+  }
+  const cycles = findCycles(graph);
+  if (cycles.length) throw new Error(cycles.slice(0, 4).map((c) => c.join(" -> ")).join("; "));
+});
+check("src layer edge 승인 목록", () => {
+  const allowedCrossLayer = new Set([
+    "module:runtime->capabilities",
+    "module:capabilities->runtime",
+    "module:processOs->runtime",
+    "module:processOs->capabilities",
+    "newURL:capabilities->processOs",
+  ]);
+  const problems = [];
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    for (const ref of jsModuleRefs(f)) {
+      const target = moduleTarget(f, ref.spec);
+      if (!target || !existsSync(target)) continue;
+      const fromLayer = srcLayerName(rel(f));
+      const targetRel = rel(target);
+      const toLayer = srcLayerName(targetRel);
+      if (!fromLayer || !toLayer || fromLayer === toLayer) continue;
+      const key = `${ref.kind}:${fromLayer}->${toLayer}`;
+      if (!allowedCrossLayer.has(key)) problems.push(`${rel(f)} -> ${ref.spec} (${key})`);
+    }
+  }
+  if (problems.length) throw new Error([...new Set(problems)].slice(0, 8).join("; "));
 });
 check("examples는 공개 표면으로만 pyproc 소비", () => {
   const examplesRoot = join(ROOT, "examples");
