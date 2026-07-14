@@ -4,6 +4,23 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 7: 에뮬레이션 심화(다크모드·타임존·오프라인) 실측 GREEN + src 승격
+
+페이지가 실제로 관측하는 환경을 스푸핑. attempts 게이트19(a-c), `bootIsolationRunner` **53/53 GREEN**.
+
+- **emulateMedia**: `Emulation.setEmulatedMedia`로 prefers-color-scheme(dark/light) 등. 검증: matchMedia 관측값
+  전환(게이트19a).
+- **setTimezone**: `Emulation.setTimezoneOverride`. 검증: `Intl.DateTimeFormat().resolvedOptions().timeZone` ==
+  Asia/Seoul(게이트19b, 라이브).
+- **setOffline**: `Network.emulateNetworkConditions`. 검증: navigator.onLine true<->false 전환(게이트19c).
+- **정직한 컷(실측이 드러냄, 안 싣는다)**: (1) **setGeolocation** = `Emulation.setGeolocationOverride`는 좌표를
+  덮지만 `Browser.grantPermissions`(권한 부여)가 chrome.debugger tab-session에서 Browser 도메인 미접근이라 안 먹혀
+  getCurrentPosition이 PERMISSION_DENIED. 권한 부여 경로가 없으면 무용이라 제거. (2) **setLocale** =
+  `Emulation.setLocaleOverride`가 Edge CDP에서 navigator.language/Intl에 반영 안 됨(항법 후에도 ko 유지). 검증
+  불가라 제거. 게이트 통과 못 하는 건 승격 안 한다(졸업 게이트 원칙).
+- **src 승격**: protocol/host + browserControl.js(emulateMedia/setTimezone/setOffline) + index.d.ts + contract.md.
+  실 src 픽스처에 에뮬 슬라이스 추가 -> **GREEN 5/5**. `npm test` **562 green**.
+
 ### 2026-07-14 Phase 6: 프레임 traversal(same-origin iframe 내부 조작) 실측 GREEN + src 승격
 
 고정 화면 셸이 사이트를 iframe에 담는 비전과 직결되는 프레임 드릴다운. attempts 게이트18(a-c), `bootIsolationRunner`
