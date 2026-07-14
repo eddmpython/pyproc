@@ -172,6 +172,23 @@ class DebuggerDriver {
       return ctx || null;
     } catch (e) { return null; }
   }
+  // 에뮬레이션 심화(CDP Emulation/Network). 페이지가 실제로 관측하는 환경을 스푸핑한다.
+  async emulateMedia(opts = {}) {
+    const features = [];
+    if (opts.colorScheme) features.push({ name: "prefers-color-scheme", value: opts.colorScheme });
+    if (opts.reducedMotion) features.push({ name: "prefers-reduced-motion", value: opts.reducedMotion });
+    await this.send("Emulation.setEmulatedMedia", { media: opts.media || "", features });
+    return { ok: true };
+  }
+  async setTimezone(timezoneId) {
+    await this.send("Emulation.setTimezoneOverride", { timezoneId });
+    return { ok: true };
+  }
+  async setOffline(offline) {
+    await this.ensureNetwork();
+    await this.send("Network.emulateNetworkConditions", { offline: !!offline, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    return { ok: true };
+  }
   async frames() {
     const tree = await this.send("Page.getFrameTree");
     const out = [];
@@ -550,6 +567,9 @@ class ScriptDriver {
   responseBody() { return Promise.resolve(this._unsupported("responseBody")); }
   frames() { return Promise.resolve(this._unsupported("frames")); }
   frameOp() { return Promise.resolve(this._unsupported("frameOp")); }
+  emulateMedia() { return Promise.resolve(this._unsupported("emulateMedia")); }
+  setTimezone() { return Promise.resolve(this._unsupported("setTimezone")); }
+  setOffline() { return Promise.resolve(this._unsupported("setOffline")); }
   async detach() { /* CDP 없음 */ }
 }
 
@@ -640,6 +660,9 @@ function dispatch(driver, op, a) {
     case OP.responseBody: return driver.responseBody(a.pattern);
     case OP.frames: return driver.frames();
     case OP.frameOp: return driver.frameOp(a.frameId, a.verb, a);
+    case OP.emulateMedia: return driver.emulateMedia(a);
+    case OP.setTimezone: return driver.setTimezone(a.timezoneId);
+    case OP.setOffline: return driver.setOffline(a.offline);
     default: return Promise.resolve({ ok: false, error: `알 수 없는 op: ${op}` });
   }
 }

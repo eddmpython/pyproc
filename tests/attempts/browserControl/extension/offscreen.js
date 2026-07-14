@@ -131,6 +131,13 @@ class BrowserTab:
         self._op("abortRequest", id=id); return self
     def responseBody(self, pattern):
         return self._op("responseBody", pattern=pattern).get("value")
+    # 에뮬레이션 심화(debugger mode 전용): 다크모드/타임존/로케일/오프라인/지오로케이션 스푸핑
+    def emulateMedia(self, colorScheme=None, media=None, reducedMotion=None):
+        self._op("emulateMedia", colorScheme=colorScheme, media=media, reducedMotion=reducedMotion); return self
+    def setTimezone(self, timezoneId):
+        self._op("setTimezone", timezoneId=timezoneId); return self
+    def setOffline(self, offline=True):
+        self._op("setOffline", offline=offline); return self
     # 프레임 traversal(iframe 내부 조작). frames는 목록, frame(url/name)은 프레임 핸들.
     def frames(self):
         return self._op("frames").get("value")
@@ -642,6 +649,31 @@ json.dumps(r)
         add("게이트18c: 프레임 내부 조작(fill + click -> DOM 변경)",
           g18.childField === "framedIn" && g18.afterClick === "clicked",
           `field=${g18.childField}, afterClick=${g18.afterClick}`);
+
+        // 게이트19: 에뮬레이션 심화. 페이지가 실제로 관측하는 환경을 스푸핑한다(다크모드/타임존/오프라인).
+        // matchMedia/Intl/navigator.onLine으로 페이지 관측값이 실제로 바뀌는지 검증(전부 라이브).
+        const g19 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+r = {}
+d.emulateMedia(colorScheme="dark")
+r["dark"] = d.evaluate("matchMedia('(prefers-color-scheme: dark)').matches")
+d.emulateMedia(colorScheme="light")
+r["light"] = d.evaluate("matchMedia('(prefers-color-scheme: light)').matches")
+d.setTimezone("Asia/Seoul")
+r["tz"] = d.evaluate("Intl.DateTimeFormat().resolvedOptions().timeZone")
+d.setOffline(True)
+r["offline"] = d.evaluate("navigator.onLine")
+d.setOffline(False)
+r["online"] = d.evaluate("navigator.onLine")
+d.close()
+json.dumps(r)
+`)));
+        add("게이트19a: 미디어 에뮬레이션(prefers-color-scheme dark/light)",
+          g19.dark === true && g19.light === true, `dark=${g19.dark}, light=${g19.light}`);
+        add("게이트19b: 타임존 오버라이드(Intl 관측)",
+          g19.tz === "Asia/Seoul", `tz=${g19.tz}`);
+        add("게이트19c: 오프라인 에뮬레이션(navigator.onLine)",
+          g19.offline === false && g19.online === true, `offline->onLine=${g19.offline}, online->onLine=${g19.online}`);
       } catch (e) {
         add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }
