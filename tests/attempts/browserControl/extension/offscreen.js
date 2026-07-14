@@ -159,20 +159,21 @@ class BrowserTab:
     def frame(self, url=None, name=None):
         for f in self.frames():
             if url is not None and url in (f.get("url") or ""):
-                return Frame(self, f["frameId"])
+                return Frame(self, f.get("frameId"), f.get("targetId"))
             if name is not None and name == f.get("name"):
-                return Frame(self, f["frameId"])
+                return Frame(self, f.get("frameId"), f.get("targetId"))
         raise RuntimeError("frame 미발견: " + str(url or name))
     def close(self):
         self._op("closeSession")
 
 class Frame:
-    # iframe 내부 핸들. op는 프레임의 isolated world에서 실행(합성 입력, cross-origin 프레임 포함).
-    def __init__(self, tab, frameId):
+    # iframe 내부 핸들. same-origin은 isolated world(frameId), cross-origin OOPIF는 별 세션(targetId)에서 실행.
+    def __init__(self, tab, frameId=None, targetId=None):
         self._tab = tab
         self._fid = frameId
+        self._tid = targetId
     def _fop(self, verb, **args):
-        return self._tab._op("frameOp", frameId=self._fid, verb=verb, **args)
+        return self._tab._op("frameOp", frameId=self._fid, targetId=self._tid, verb=verb, **args)
     def evaluate(self, expr):
         return self._fop("evaluate", expr=expr).get("value")
     def text(self, selector):
@@ -747,6 +748,29 @@ json.dumps(r)
         add("게이트23: 접근성 트리(role/name 시맨틱 회수)",
           g23.count > 0 && g23.hasButton === true && g23.buttonNames.includes("click"),
           `count=${g23.count}, hasButton=${g23.hasButton}, buttonNames=${JSON.stringify(g23.buttonNames)}, roles=${JSON.stringify(g23.roles)}`);
+
+        // 게이트24: cross-origin OOPIF 프레임 드릴다운. localhost(별 origin) 자식은 OOPIF(별 프로세스)라
+        // getFrameTree에 없지만 getTargets에 뜬다. 이 페이지 iframe src로 스코프해 targetId로 직접 attach,
+        // 그 프레임 컨텍스트에서 조회/입력. same-origin(#fr) + cross-origin(#xfr) 둘 다 드릴다운을 실증.
+        const g24 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+d.waitFor("#xfr", 4000)
+r = {}
+r["frameUrls"] = [{"url": f.get("url"), "oopif": f.get("oopif")} for f in d.frames()]
+xf = d.frame(url="localhost")
+r["oopifMarker"] = xf.text("#cmarker")
+r["oopifHref"] = xf.evaluate("location.href")
+xf.fill("#cfield", "oopifFilled")
+r["oopifField"] = xf.value("#cfield")
+sf = d.frame(url="/frameChild")
+r["sameMarker"] = sf.text("#cmarker")
+d.close()
+json.dumps(r)
+`)));
+        add("게이트24: cross-origin OOPIF 프레임 드릴다운(getTargets attach)",
+          g24.oopifMarker === "childOk" && String(g24.oopifHref).includes("localhost") &&
+          String(g24.oopifHref).includes("/frameChild") && g24.oopifField === "oopifFilled" && g24.sameMarker === "childOk",
+          `oopifMarker=${g24.oopifMarker}, href=${g24.oopifHref}, field=${g24.oopifField}, sameMarker=${g24.sameMarker}, frames=${JSON.stringify(g24.frameUrls)}`);
 
         // 게이트20: 파이썬 워커 N=세션 N 진짜 병렬. 각 워커가 자기 Pyodide 인터프리터(독립 GIL)를 부팅하고
         // run_sync(JSPI) + offscreen 라우터로 자기 세션을 몰아 조작한다(제약 A 우회). 프로세스 OS x 브라우저

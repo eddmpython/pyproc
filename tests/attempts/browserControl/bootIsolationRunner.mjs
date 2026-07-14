@@ -104,6 +104,7 @@ async function main() {
 <a id="dl" href="/downloadFile" download="report.txt" style="position:absolute;top:410px;left:420px;width:120px;height:30px">download</a>
 <button id="far" style="position:absolute;top:2000px;left:20px;width:140px;height:40px">far</button>
 <iframe id="fr" src="/frameChild" style="position:absolute;top:440px;left:20px;width:320px;height:120px"></iframe>
+<iframe id="xfr" src="http://localhost:${backPort}/frameChild" style="position:absolute;top:440px;left:360px;width:320px;height:120px"></iframe>
 <script>
 window.clickReport={clicked:false};
 window.keyReport=[];
