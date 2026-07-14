@@ -4,6 +4,26 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 5: 네트워크 심화(콜백형 held routing·요청 변조·응답 바디) 실측 GREEN + src 승격
+
+Phase 4 네트워크 가로채기를 요청 단위 동적 제어까지 밀었다. attempts 게이트17(a-e) 신설, `bootIsolationRunner`
+**47/47 GREEN**.
+
+- **요청 변조**: `route(pattern, "modify", url=/method=/headers=)`가 나가는 요청의 헤더 주입(원본과 병합)/URL·
+  메서드 교체 후 continue. 콜백 없이 선언형으로 요청을 바꾼다(게이트17a: 헤더 주입 서버 반영).
+- **콜백형 held routing**: `route(pattern, "hold")`가 매칭 요청을 붙잡아 두고(resolve 안 함), Python이
+  `pendingRequests()`로 관측한 뒤 `continueRequest`/`fulfillRequest`/`abortRequest`(요청 id로)로 동적 결정한다.
+  이것이 "요청마다 Python이 판단"의 블로킹 모델 정합 실현이다(게이트17b/c/d: continue 실제 응답 / fulfill 정적
+  주입 / abort 취소). **정직한 경계**: 단일 스레드라 블로킹 navigate가 기다리는 메인 문서 하위요청을 hold하면
+  교착 = held는 비-항법 XHR 대상. 이 제약은 계약/타입에 명시.
+- **응답 바디 캡처**: `responseBody(pattern)` = `Network.getResponseBody`(URL 부분일치 최근 응답). 스크래핑에서
+  응답 원문 회수(게이트17e).
+- **카빙 유지**: `_handleFetch`의 action 분기에 modify/hold 두 줄, held 결정은 driver 메서드 5개(단일 heldRequests
+  맵). 헤더 변환/base64는 module 헬퍼(`toHeaderList`/`b64`)로 공유. dispatch에 op 5개 추가.
+- **src 승격**: protocol/host + browserControl.js 파이썬 표면 + index.d.ts(held 교착 경계 주석 포함) + contract.md.
+  실 src 픽스처에 held fulfill + responseBody 회귀 추가 -> **GREEN 5/5**. `npm test` **559 green**(파이썬 식별자
+  camelCase 가드: `waitPending`).
+
 ### 2026-07-14 Phase 4: 실전 자동화 강력 배치(다이얼로그·업로드·네트워크 가로채기) 실측 GREEN + src 승격
 
 Phase 3 표면 위에 "실제 사이트에서 진짜 돌아가는" 데 필요한 배치를 더했다. attempts 게이트16(a-g) 신설,
