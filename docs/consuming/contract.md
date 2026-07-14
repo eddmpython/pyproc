@@ -145,7 +145,7 @@ subpath export: `pyproc/assets`, `pyproc/runtime`, `pyproc/reactive`, `pyproc/sy
 | 소비자 | 상태 |
 |---|---|
 | dartlab | **라이브 소비자.** 노트북 워커가 자체 부팅한 Pyodide를 `new Runtime(py)`로 채택하고 `enableAsgiServer`를 기본 ASGI 커널로 프로덕션 배포(browser-as-server /pyapi). 프로세스 병렬(scan)/시간여행 UI는 후속 채택 후보 |
-| codaro | first consumer. SHA 핀 + `browserPythonRuntime.ts` seam. Runtime + PyProc 타입 import. 새 pyproc SHA 핀 전까지는 현재 구 SHA로 동작하지만, codaro seam은 Vite `BASE_URL` 기준 `pyproc-assets.json`을 읽어 `boot({ assetIntegrity })`로 넘긴다. editor build 후처리에는 설치된 pyproc 패키지에서 실행 자산 graph/SRI를 뽑아 `webBuild/pyproc-assets.json`과 `webBuild/vendor/pyproc/**`로 쓰는 `pyproc:assets` 단계가 붙었다. 현재 구 SHA는 asset contract가 없어 안전하게 skip하고, 새 SHA 핀 후 실제 manifest가 산출된다 |
+| codaro | first consumer. `7ac859b2f09c8a3a83d2f808afb48550293f63df` SHA 핀 + `browserPythonRuntime.ts` seam. Runtime + PyProc 타입 import. codaro seam은 Vite `BASE_URL` 기준 `pyproc-assets.json`을 읽어 `boot({ assetIntegrity })`로 넘긴다. editor build 후처리는 설치된 pyproc 패키지에서 실행 자산 graph/SRI를 뽑아 `webBuild/pyproc-assets.json`과 `webBuild/vendor/pyproc/**`로 쓴다. 실측: codaro editor build가 25개 파일 graph와 5개 entrypoint role을 산출했고, preflight가 설치 패키지 manifest 생성을 검증한다 |
 | xlpod | 준비 중(스프레드시트 =PYUDF 셀 안 파이썬 동기 호출). pyproc 소비를 PRD로 확정. 하드 블로커였던 `setInterruptBuffer`가 공개 표면으로 승격돼 이관 경로가 열림. 자체 SAB 동기 브리지(formualizer 콜백)는 잔류(로드맵 syncUdfBridge가 흡수 예정) |
 
 ## 자체 부팅한 Pyodide 채택 (dartlab/xlpod 패턴)

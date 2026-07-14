@@ -558,3 +558,38 @@ NEXT:
 1. pyproc 변경을 immutable SHA로 만든 뒤 codaro `editor/package.json`의 pyproc 핀을 올린다.
 2. codaro editor build 산출물의 `/pyproc-assets.json`과 `/vendor/pyproc/**`를 브라우저 product gate에서 fetch 검증한다.
 3. codaro가 복원, 파일, 서버 또는 프로세스 OS 중 둘 이상을 pyproc 공개 표면으로 쓰게 만들어 Phase 5 완료 조건을 닫는다.
+
+## 2026-07-15 - codaro를 새 pyproc SHA로 올리고 manifest 산출을 실측
+
+문제:
+
+- codaro build 후처리는 준비됐지만, 이전 상태에서는 핀된 pyproc SHA가 asset contract 이전이라 실제 배포 산출물이 skip됐다.
+- Phase 5 소비 배선은 "준비된 seam"이 아니라 설치된 외부 제품 repo에서 새 pyproc SHA를 실제로 소비해야 진전이다.
+
+완료:
+
+- pyproc 변경을 `7ac859b2f09c8a3a83d2f808afb48550293f63df`로 main 커밋하고 `origin/main`에 반영했다.
+- codaro `editor/package.json`과 `editor/package-lock.json`의 pyproc 핀을 해당 SHA로 올렸다.
+- codaro `editor build`가 `pyproc:assets` 후처리에서 skip 없이 `src/codaro/webBuild/pyproc-assets.json`과 `src/codaro/webBuild/vendor/pyproc/**`를 생성했다.
+- codaro preflight에 설치된 실제 pyproc 패키지 기준 manifest 생성 검증을 추가했다. fixture가 아니라 `node_modules/pyproc`에서 5개 entrypoint role과 graph copy/SRI를 확인한다.
+
+검증:
+
+- pyproc `npm test` GREEN 569/569.
+- pyproc `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:browser` GREEN 45/45.
+- pyproc `git push origin main` 완료: `218d973..7ac859b`.
+- codaro `npm install pyproc@github:eddmpython/pyproc#7ac859b2f09c8a3a83d2f808afb48550293f63df` 완료.
+- codaro `npm run build` GREEN, `pyproc assets: 25 files`.
+- codaro `uv run python -X utf8 tests/run.py gate editor-runtime-preflight` GREEN.
+- 생성 manifest 확인: files 25개, entrypoint role 5개(`processWorker`, `sharedKernelHost`, `machineWorker`, `wasiWorker`, `pyprocServiceWorker`).
+
+판정:
+
+- "pyproc 자체 CI에서 소비 가능"을 넘어 실제 외부 제품 codaro가 새 pyproc 공개 표면과 자산 manifest 배포 계약을 소비한다.
+- Phase 5는 아직 완전 종료가 아니다. codaro가 현재 쓰는 것은 기본 브라우저 커널 부팅과 asset preflight이고, 완료 조건은 복원, 파일, 서버, 프로세스 OS 중 둘 이상을 제품 표면에서 공개 API만으로 쓰는 것이다.
+
+NEXT:
+
+1. codaro 브라우저 product gate에서 `/pyproc-assets.json`과 `/vendor/pyproc/**`를 fetch해 manifest/SRI를 실제 페이지 기준으로 검증한다.
+2. codaro가 pyproc `Runtime.fs`/`.pymachine` 또는 `AsgiServer`/`VirtualOrigin` 중 하나를 더 소비하게 만들어 "OS 프리미티브 둘 이상" 조건을 닫는다.
+3. pyproc의 Service Worker 등록 경로와 Pyodide 내부 import 모듈까지 같은 manifest 정책으로 봉인한다.
