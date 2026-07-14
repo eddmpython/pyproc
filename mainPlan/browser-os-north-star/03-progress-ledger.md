@@ -593,3 +593,38 @@ NEXT:
 1. codaro 브라우저 product gate에서 `/pyproc-assets.json`과 `/vendor/pyproc/**`를 fetch해 manifest/SRI를 실제 페이지 기준으로 검증한다.
 2. codaro가 pyproc `Runtime.fs`/`.pymachine` 또는 `AsgiServer`/`VirtualOrigin` 중 하나를 더 소비하게 만들어 "OS 프리미티브 둘 이상" 조건을 닫는다.
 3. pyproc의 Service Worker 등록 경로와 Pyodide 내부 import 모듈까지 같은 manifest 정책으로 봉인한다.
+
+## 2026-07-15 - codaro pyproc 자산 브라우저 product gate 추가
+
+문제:
+
+- 직전 상태는 codaro editor build가 `pyproc-assets.json`과 `vendor/pyproc/**`를 만든다는 산출 확인까지였다.
+- Browser OS 목표에서 외부 제품 증거로 인정하려면 실제 브라우저 page context가 배포 산출물을 fetch하고, manifest role과 SRI를 재계산해야 한다.
+
+완료:
+
+- codaro `838997d31cd6ed2ab8c3e448a681256e5f3c133b`가 `pyproc-assets-browser` product gate를 추가했다.
+- gate는 `npm run build` 후 정적 editor 산출물을 띄우고, 브라우저에서 `/pyproc-assets.json`을 읽는다.
+- manifest의 5개 entrypoint role, `/vendor/pyproc/` package root, same-origin policy, `vendor/pyproc/**` 파일 URL을 확인한다.
+- 모든 vendor 파일을 fetch한 뒤 브라우저 `crypto.subtle.digest`로 `sha256-...` SRI를 다시 계산한다.
+- process worker payload가 실행 가능한 module 형태를 유지하는지도 별도 case로 본다.
+- codaro product quality cycle은 이 gate의 `output/test-runner/pyproc-assets-browser/pyproc-assets-report.json`을 artifact freshness evidence로 대조한다.
+
+검증:
+
+- codaro `uv run python -X utf8 tests/run.py gate pyproc-assets-browser` GREEN, 25개 파일, 187129 bytes 검증.
+- codaro `uv run python -X utf8 -m pytest tests/runtime/testRunEntrypoint.py tests/product/verifyProductQualityAudit.py -q --tb=short` GREEN 14/14.
+- codaro `uv run python -X utf8 tests/run.py gate docs` GREEN.
+- codaro `uv run python -X utf8 tests/run.py gate product-quality-audit` GREEN.
+- codaro `uv run python -X utf8 tests/run.py preflight` GREEN 3/3.
+- codaro `git push origin main` 완료: `7550d5b5..838997d3`.
+
+판정:
+
+- 이전 NEXT 1번은 닫혔다. 외부 제품 codaro의 실제 브라우저 표면이 pyproc same-origin 자산 graph와 SRI를 검증한다.
+- Phase 5는 아직 완전 종료가 아니다. codaro가 현재 쓰는 것은 기본 `Runtime` boot, `assetIntegrity`, `PyProc` 타입 seam이고, 완료 조건은 복원, 파일, 서버, 프로세스 OS 중 둘 이상을 제품 표면에서 공개 API만으로 쓰는 것이다.
+
+NEXT:
+
+1. codaro가 pyproc `Runtime.fs`/`.pymachine` 또는 `AsgiServer`/`VirtualOrigin` 중 하나를 더 소비하게 만들어 "OS 프리미티브 둘 이상" 조건을 닫는다.
+2. pyproc의 Service Worker 등록 경로와 Pyodide 내부 import 모듈까지 같은 manifest 정책으로 봉인한다.
