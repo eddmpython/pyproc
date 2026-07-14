@@ -4,6 +4,20 @@
 
 ## 결정 원장 (최신이 위)
 
+### 2026-07-14 Phase 9: 다운로드 관측(무엇이 다운로드되는가) 실측 GREEN + src 승격
+
+파일 스크래핑/내보내기 자동화. attempts 게이트21, `bootIsolationRunner` **55/55 GREEN**.
+
+- **enableDownloads/waitForDownload**: `Page.downloadWillBegin`(다운로드 시작 이벤트)로 파일명/URL을 관측한다.
+  attachment 링크를 신뢰 클릭 -> downloadWillBegin -> waitForDownload가 {filename, url, state} 회수(게이트21:
+  filename=report.txt, url=/downloadFile).
+- **정직한 컷(실측이 드러냄)**: `Page.setDownloadBehavior`(저장 경로 지정)는 이제 **browser-level 명령**이라
+  chrome.debugger tab-session에서 "Cannot access browser-level commands"로 막힌다(지오로케이션 grantPermissions와
+  같은 벽). 그래서 저장 경로는 안 두고 **관측만** 싣는다(무엇이 다운로드되는지 = 파일명/URL은 유용, 실제 저장은
+  브라우저 기본 동작). 이벤트는 setDownloadBehavior 없이도 뜬다(실측 확인).
+- **src 승격**: protocol/host + browserControl.js(enableDownloads/waitForDownload) + index.d.ts + contract.md.
+  실 src 픽스처에 다운로드 관측 슬라이스 추가 -> **GREEN 6/6**. `npm test` **568 green**.
+
 ### 2026-07-14 Phase 8: 파이썬 워커 N=세션 N 진짜 병렬(프로세스 OS x 브라우저 컨트롤 융합) 실측 GREEN + src 승격
 
 vision이 지목한 최대 차별점을 **진짜 Pyodide 인터프리터로** 실증. attempts 게이트20, `bootIsolationRunner` **54/54 GREEN**.
