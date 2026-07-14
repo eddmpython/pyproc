@@ -1219,3 +1219,39 @@ NEXT:
 1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
 2. pyproc Speed Lab raw report를 JSON으로 저장하는 옵션을 검토한다.
 3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+
+## 2026-07-15 - Speed Lab raw JSON 벤치 러너 추가
+
+문제:
+
+- 속도 비교 계약은 생겼지만, Speed Lab의 S1 결과가 `/gateReport`의 사람이 읽는 문자열에만 묶여 있었다.
+- 외부 후보와 비교하려면 pyproc 기준점부터 commit, command, browser, host, engine, samples, metrics를 JSON으로 남겨야 한다.
+- 브라우저 버전이나 dirty worktree 여부가 빠지면 나중에 숫자의 출처를 재현하기 어렵다.
+
+완료:
+
+- `examples/speedLab.html`의 gate report에 `scenario: "S1"`, config, boot timing, boot summary, `bench` 객체를 싣게 했다.
+- `tests/browser/speedBench.mjs`를 추가했다. headless Chromium으로 Speed Lab만 실행하고, `--out <path>` 또는 `PYPROC_BENCH_OUT=<path>`로 raw JSON artifact를 저장한다.
+- artifact에는 schemaVersion, scenario, command, commit, worktreeDirty, browser path/version, host CPU/메모리, engine indexURL, raw report, metrics를 담는다.
+- `package.json`에 `npm run bench:speed`를 추가했다.
+- `tests/run.mjs` 구조 가드가 `bench:speed`, `speedBench.mjs`, Speed Lab S1 JSON report 계약을 확인한다.
+- 벤치마크 운영 문서, 테스트 문서, 속도 비교 matrix를 새 러너 기준으로 갱신했다.
+
+검증:
+
+- `node --check tests/browser/speedBench.mjs` PASS.
+- `npm test` GREEN 598/598.
+- `npm run bench:speed -- --out .tmp/speed-s1.json` GREEN.
+- S1 실측: Edge 150.0.4078.65, 768x768 f64, 3 warmed samples, single median 1524ms, shard median 491ms, median speedup 3.10x, shard p95 500ms, maxErr 0.
+
+판정:
+
+- 이전 NEXT 2번의 "pyproc Speed Lab raw report를 JSON으로 저장하는 옵션"은 닫혔다.
+- 이제 외부 후보 측정은 같은 JSON 봉투를 목표 형식으로 삼을 수 있다.
+- OS 점수는 70/100 유지한다. 속도 비교의 증거 파이프라인이 닫힌 것이고, 실제 외부 비교 수치는 다음 단계다.
+
+NEXT:
+
+1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
+2. 외부 후보 raw artifact도 S1 JSON 봉투에 맞춘다.
+3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.

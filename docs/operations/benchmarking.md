@@ -54,4 +54,5 @@ S1은 현재 공개 속도 간판이다. S0, S2, S3, S4는 "로컬처럼 쓰는 
 
 - README의 속도 숫자는 진행 원장 또는 gate output에서 온 값만 쓴다.
 - 외부 비교 표는 [mainPlan/browser-os-north-star/06-speed-comparison.md](../../mainPlan/browser-os-north-star/06-speed-comparison.md)가 활성 작업 정본이다.
+- S1 raw JSON은 `npm run bench:speed -- --out <path>` 또는 `PYPROC_BENCH_OUT=<path> npm run bench:speed`로 남긴다.
 - 새 benchmark helper나 runner를 추가하면 `npm test` 구조 가드에 연결한다.

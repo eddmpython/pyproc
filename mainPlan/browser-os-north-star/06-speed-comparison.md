@@ -32,7 +32,7 @@
 | scenario | pyproc command | WebVM | JupyterLite | marimo web runtime | 판정 |
 |---|---|---|---|---|---|
 | S0 basic boot | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
-| S1 numpy sharded matmul | `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:examples` | 미측정 | 미측정 | 미측정 | 보류 |
+| S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | 미측정 | 미측정 | 미측정 | 보류 |
 | S2 process map | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
 | S3 browser server | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 | S4 machine resume | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
@@ -48,5 +48,5 @@
 ## 다음 작업
 
 1. S1부터 외부 후보별 실행 가능한 최소 페이지나 절차를 `tests/attempts/`에 만든다.
-2. pyproc Speed Lab의 raw report를 JSON으로 저장하는 옵션을 검토한다.
+2. 외부 후보도 S1 raw JSON에 맞춘 산출물 형식으로 기록한다.
 3. README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.

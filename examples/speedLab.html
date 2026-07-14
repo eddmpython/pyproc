@@ -67,12 +67,17 @@ await os.matmul(a, b, { parts: 4 });</div>
     const gateMode = params.has("gate");
     const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
     const log = (m) => { out.textContent += "\n" + m; out.scrollTop = out.scrollHeight; };
-    const gateReport = (ok) => {
+    const gateReport = (ok, detail = {}) => {
       if (!gateMode) return;
       fetch("/gateReport", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-220) }] }),
+        body: JSON.stringify({
+          ok: !!ok,
+          scenario: "S1",
+          checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-220) }],
+          ...detail,
+        }),
       }).catch(() => {});
     };
 
@@ -108,9 +113,11 @@ await os.matmul(a, b, { parts: 4 });</div>
       const size = 768;
       const benchSamples = 3;
       const os = new PyProc({ indexURL: INDEX, packages: ["numpy"], setup: "import numpy" });
+      const timings = {};
       let t = performance.now();
       const boot = await os.boot(workers);
       const bootMs = Math.round(performance.now() - t);
+      timings.bootMs = bootMs;
       st.textContent = `Ready: ${boot.workers} workers forked from one snapshot.`;
       log(`boot: ${bootMs}ms, avg worker boot ${boot.avgBootMs}ms`);
 
@@ -159,7 +166,12 @@ await os.matmul(a, b, { parts: 4 });</div>
       log(`p95 envelope: single ${bench.singleP95}ms, shard ${bench.parallelP95}ms`);
       log(`correctness: max sample error ${bench.maxErr.toExponential(2)}`);
       os.terminate();
-      gateReport(isShardedSpeedBenchGreen(bench));
+      gateReport(isShardedSpeedBenchGreen(bench), {
+        config: { workers, size, benchSamples, indexURL: INDEX || null },
+        timings,
+        boot,
+        bench,
+      });
     } catch (e) {
       st.textContent = "Failed";
       log("Error: " + e);

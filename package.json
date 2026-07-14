@@ -25,6 +25,7 @@
     "test:consumer": "node tests/browser/productConsumer.mjs",
     "test:browser": "node tests/browser/run.mjs",
     "test:examples": "node tests/browser/examples.mjs",
+    "bench:speed": "node tests/browser/speedBench.mjs",
     "assets:manifest": "node scripts/assetManifest.mjs --pretty",
     "serve": "node examples/serve.mjs",
     "fetch:engine": "node scripts/fetchEngine.mjs"

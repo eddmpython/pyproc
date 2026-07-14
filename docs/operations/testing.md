@@ -90,6 +90,12 @@ Chromium/Edge에서 확인:
 | `http://localhost:8788/examples/speedLab.html` | 단일 worker numpy matmul vs 4-worker sharded matmul | 결과 일치, 3회 warmed sample median speedup >= 2.0, shard p95 < single median |
 | `http://localhost:8788/examples/processOs.html` | 스냅샷-fork spawn + map 병렬 vs 직렬 | forked=true, speedup > 1, 결과 일치 true |
 
+Speed Lab의 S1 raw JSON은 별도 러너로 남긴다:
+
+```bash
+npm run bench:speed -- --out .tmp/speed-s1.json
+```
+
 체크리스트:
 
 - 콘솔에 `crossOriginIsolated`가 true인지(`false`면 헤더 문제).
