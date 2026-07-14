@@ -98,6 +98,28 @@ class BrowserTab:
         return self._op("cookies", urls=urls).get("value")
     def setCookie(self, name, value, **kwargs):
         self._op("setCookie", name=name, value=value, **kwargs); return self
+    def clearCookies(self, urls=None):
+        self._op("clearCookies", urls=urls); return self
+    def deleteCookie(self, name, url=None):
+        self._op("deleteCookie", name=name, url=url); return self
+    def scrollIntoView(self, selector):
+        self._op("scrollIntoView", selector=selector); return self
+    def upload(self, selector, files):
+        self._op("upload", selector=selector, files=files); return self
+    # 다이얼로그 자동 처리(alert/confirm/prompt는 렌더러를 멈추므로 세션 단위 정책으로 즉시 응답)
+    def setDialogHandler(self, accept=True, promptText=""):
+        self._op("setDialogHandler", accept=accept, promptText=promptText); return self
+    def lastDialog(self):
+        return self._op("lastDialog").get("value")
+    # 네트워크 가로채기/관측(debugger mode 전용)
+    def route(self, pattern, action="block", status=None, body=None, headers=None):
+        self._op("route", pattern=pattern, action=action, status=status, body=body, headers=headers); return self
+    def unroute(self, pattern=None):
+        self._op("unroute", pattern=pattern); return self
+    def waitForResponse(self, pattern, timeout=10000):
+        return self._op("waitForResponse", pattern=pattern, timeout=timeout).get("value")
+    def requests(self):
+        return self._op("requests").get("value")
     def close(self):
         self._op("closeSession")
 
@@ -435,6 +457,63 @@ json.dumps(res)
         add("게이트15i: 쿠키 왕복(setCookie -> cookies)",
           Array.isArray(g15.cookieNames) && g15.cookieNames.includes("pyprocCk"),
           `cookies=${JSON.stringify(g15.cookieNames)}`);
+
+        // 게이트16: 실전 자동화 강력 배치. 자동 스크롤(폴드 아래 신뢰 클릭) + 다이얼로그 자동 처리(accept/reject)
+        // + 파일 업로드(setFileInputFiles) + 쿠키 삭제 + 네트워크 관측(waitForResponse) + 가로채기(block/fulfill).
+        let uploadProbePath = "";
+        try { uploadProbePath = await (await fetch(`http://127.0.0.1:${backchannelPort}/uploadProbe`)).text(); } catch (e) { uploadProbePath = ""; }
+        const g16 = JSON.parse((await py.runPythonAsync(`
+d = browser.tab(persistTarget, mode="debugger")
+uploadProbePath = ${JSON.stringify(uploadProbePath)}
+r = {}
+d.click("#far")
+r["farClicked"] = d.evaluate("window.farClicked === true")
+d.scrollIntoView("#marker")
+d.setDialogHandler(True)
+d.click("#dialogBtn")
+d.waitForFunction("window.dialogResult !== null", 3000)
+r["dialogAccept"] = d.evaluate("window.dialogResult")
+r["dialogMsg"] = d.lastDialog()
+d.setDialogHandler(False)
+d.evaluate("window.dialogResult = null")
+d.click("#dialogBtn")
+d.waitForFunction("window.dialogResult !== null", 3000)
+r["dialogReject"] = d.evaluate("window.dialogResult")
+d.upload("#file", [uploadProbePath])
+r["fileCount"] = d.evaluate("document.querySelector('#file').files.length")
+r["fileName"] = d.evaluate("document.querySelector('#file').files.length ? document.querySelector('#file').files[0].name : ''")
+d.setCookie("delCk", "1", url=persistTarget)
+d.deleteCookie("delCk", url=persistTarget)
+r["afterDelete"] = [c.get("name") for c in d.cookies([persistTarget])]
+d.requests()
+d.evaluate("window.apiResult=null; fetch('/jsonApi').then(x=>x.json()).then(j=>{window.apiResult=j.msg})")
+resp = d.waitForResponse("/jsonApi", 5000)
+r["respStatus"] = resp["status"] if resp else None
+d.waitForFunction("window.apiResult !== null", 3000)
+r["apiReal"] = d.evaluate("window.apiResult")
+d.route("/blockme", "block")
+d.evaluate("window.blockErr=null; fetch('/blockme').then(function(){window.blockErr='loaded'}).catch(function(){window.blockErr='blocked'})")
+d.waitForFunction("window.blockErr !== null", 3000)
+r["blocked"] = d.evaluate("window.blockErr")
+d.route("/mockme", "fulfill", status=200, body="MOCKED")
+d.evaluate("window.mockBody=null; fetch('/mockme').then(function(x){return x.text()}).then(function(t){window.mockBody=t})")
+d.waitForFunction("window.mockBody !== null", 3000)
+r["mocked"] = d.evaluate("window.mockBody")
+d.close()
+json.dumps(r)
+`)));
+        add("게이트16a: 자동 스크롤(폴드 아래 요소 신뢰 클릭)", g16.farClicked === true, `farClicked=${g16.farClicked}`);
+        add("게이트16b: 다이얼로그 자동 처리(confirm accept -> true, reject -> false, 메시지 회수)",
+          g16.dialogAccept === true && g16.dialogReject === false && g16.dialogMsg === "proceed?",
+          `accept=${g16.dialogAccept}, reject=${g16.dialogReject}, msg=${g16.dialogMsg}`);
+        add("게이트16c: 파일 업로드(setFileInputFiles)", g16.fileCount === 1 && g16.fileName === "probe.txt",
+          `count=${g16.fileCount}, name=${g16.fileName}`);
+        add("게이트16d: 쿠키 삭제(deleteCookie)", Array.isArray(g16.afterDelete) && !g16.afterDelete.includes("delCk"),
+          `after=${JSON.stringify(g16.afterDelete)}`);
+        add("게이트16e: 네트워크 관측(waitForResponse + 실제 응답 수신)",
+          g16.respStatus === 200 && g16.apiReal === "apihit", `status=${g16.respStatus}, api=${g16.apiReal}`);
+        add("게이트16f: 네트워크 가로채기(route block -> fetch 실패)", g16.blocked === "blocked", `blockErr=${g16.blocked}`);
+        add("게이트16g: 네트워크 가로채기(route fulfill -> 정적 응답 주입)", g16.mocked === "MOCKED", `mockBody=${g16.mocked}`);
       } catch (e) {
         add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }

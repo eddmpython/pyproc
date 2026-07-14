@@ -73,6 +73,10 @@ async function main() {
   // 게이트11 non-COI 셸: 별도 백채널(셸 http 탭이 직접 fetch. 확장 아니라 chrome.runtime 없음).
   let shellResolve;
   const shellPromise = new Promise((res) => { shellResolve = res; });
+  // 게이트16 업로드 프로브: 호스트 FS에 실제 파일을 만들어 setFileInputFiles 경로로 쓴다(핸들러가 /uploadProbe로 노출).
+  const uploadDir = mkdtempSync(join(tmpdir(), "bcUpload-"));
+  const uploadProbePath = join(uploadDir, "probe.txt");
+  writeFileSync(uploadProbePath, "pyprocUploadProbe");
   const server = createServer((req, res) => {
     if (req.method === "POST" && req.url.startsWith("/gateReport")) {
       let body = ""; req.on("data", (c) => (body += c)); req.on("end", () => {
@@ -95,14 +99,21 @@ async function main() {
 <div id="ctx" style="position:absolute;top:140px;left:220px;width:160px;height:40px">ctx</div>
 <div id="hoverbox" style="position:absolute;top:200px;left:220px;width:160px;height:40px">hover</div>
 <form id="form" style="position:absolute;top:260px;left:220px"><input id="formField" value=""></form>
+<button id="dialogBtn" style="position:absolute;top:320px;left:220px;width:160px;height:40px">dialog</button>
+<input type="file" id="file" style="position:absolute;top:380px;left:220px">
+<button id="far" style="position:absolute;top:2000px;left:20px;width:140px;height:40px">far</button>
 <script>
 window.clickReport={clicked:false};
 window.keyReport=[];
+window.dialogResult=null;
+window.farClicked=false;
 document.getElementById('btn').addEventListener('click',function(e){window.clickReport={clicked:true,trusted:e.isTrusted};});
 document.getElementById('dbl').addEventListener('dblclick',function(e){window.dblReport={trusted:e.isTrusted};});
 document.getElementById('ctx').addEventListener('contextmenu',function(e){e.preventDefault();window.ctxReport={trusted:e.isTrusted};});
 document.getElementById('hoverbox').addEventListener('mouseover',function(e){window.hoverReport={trusted:e.isTrusted};});
 document.getElementById('form').addEventListener('submit',function(e){e.preventDefault();window.submitReport=true;});
+document.getElementById('dialogBtn').addEventListener('click',function(){window.dialogResult=window.confirm('proceed?');});
+document.getElementById('far').addEventListener('click',function(){window.farClicked=true;});
 document.addEventListener('keydown',function(e){window.keyReport.push({key:e.key,ctrl:e.ctrlKey,trusted:e.isTrusted});});
 setTimeout(function(){var d=document.createElement('div');d.id='delayed';d.textContent='appeared';document.body.appendChild(d);},700);
 setTimeout(function(){window.__ready=true;},500);
@@ -113,6 +124,18 @@ setTimeout(function(){window.__ready=true;},500);
     if (req.url.startsWith("/echoHeaders")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(`<!doctype html><html><head><title>echo</title></head><body><pre id="h">${JSON.stringify(req.headers)}</pre></body></html>`);
+      return;
+    }
+    // 게이트16 네트워크 관측: 타깃 페이지가 fetch하는 JSON API(waitForResponse/requests 로그 대상).
+    if (req.url.startsWith("/jsonApi")) {
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ msg: "apihit" }));
+      return;
+    }
+    // 게이트16 업로드: offscreen(COI)이 fetch로 호스트 프로브 파일 경로를 얻는다(CORP 필요). setFileInputFiles용 경로.
+    if (req.url.startsWith("/uploadProbe")) {
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cross-Origin-Resource-Policy": "cross-origin" });
+      res.end(uploadProbePath);
       return;
     }
     // 게이트 4 iframe 역전 타깃: X-Frame-Options: DENY로 프레이밍을 거부한다(강방어 사이트 재현).
@@ -190,6 +213,7 @@ document.body.appendChild(frame);
     killTree(proc); server.close();
     try { rmSync(profile, { recursive: true, force: true }); } catch (e) {}
     try { rmSync(extDir, { recursive: true, force: true }); } catch (e) {}
+    try { rmSync(uploadDir, { recursive: true, force: true }); } catch (e) {}
   };
 
   try {
