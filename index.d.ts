@@ -662,6 +662,26 @@ export interface JournalConfig {
   reactive: ReactiveController;
   /** 유휴 판정 ms(기본 2000). 이 시간 동안 상태 변이가 없으면 커밋한다. */
   idleMs?: number;
+  /**
+   * true면 커밋 직후 loose blob이 임계값을 넘을 때 pack한다. 기본은 false.
+   * true의 기본 정책은 loose blob 128개 또는 8MB 이상이다.
+   */
+  autoPack?: boolean | JournalAutoPackPolicy;
+}
+
+export interface JournalAutoPackPolicy {
+  /** 이 개수 이상의 loose blob이 있으면 커밋 직후 pack한다. 기본 128. */
+  looseBlobs?: number;
+  /** 이 용량 이상의 loose blob이 있으면 커밋 직후 pack한다. 기본 8MB. */
+  looseMB?: number;
+}
+
+export interface JournalCommitResult {
+  pages: number;
+  wrote: number;
+  mb: number;
+  /** autoPack 정책으로 같은 커밋 뒤 pack이 실행됐으면 그 결과가 들어온다. */
+  autoPack?: JournalPackResult;
 }
 
 export interface JournalPackResult {
@@ -671,6 +691,8 @@ export interface JournalPackResult {
   mb: number;
   looseRemoved: number;
   packsRemoved: number;
+  /** autoPack으로 실행됐을 때의 발화 기준. 수동 pack이면 없다. */
+  trigger?: { looseBlobs: number; looseMB: number };
 }
 
 export interface JournalPruneResult {
@@ -689,11 +711,13 @@ export interface JournalPruneResult {
 export class MachineJournal {
   readonly commits: number;
   readonly pagesWritten: number;
+  readonly packs: number;
+  readonly packBytes: number;
   /** 유휴 감시 시작(실행 중에는 끼어들지 않는다). */
   start(): MachineJournal;
   stop(): void;
   /** 지금 상태를 커밋(수동 경계). 반환: 변경 페이지 수와 실제 쓴 양(dedupe 후). */
-  commit(): Promise<{ pages: number; wrote: number; mb: number } | null>;
+  commit(): Promise<JournalCommitResult | null>;
   /** HEAD/PREV live blob만 pack 파일 1개로 묶고 loose/stale 파일을 줄인다. */
   pack(): Promise<JournalPackResult | null>;
   /** HEAD/PREV가 더 이상 참조하지 않는 loose blob과 stale pack 파일을 지운다. */

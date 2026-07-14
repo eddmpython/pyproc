@@ -5,7 +5,7 @@
 <body>
 <h1>probe: machineJournal pack/prune - 장기 OPFS 파일 수를 줄일 수 있나</h1>
 <p>WAL의 장기 병목은 live state가 아니라 loose blob 파일 수다. 이 probe는 승격된
-<code>MachineJournal</code> 위에서 <code>pack()</code>과 <code>prune()</code>을 실측한다:
+<code>MachineJournal</code> 위에서 <code>pack()</code>, <code>prune()</code>, <code>autoPack</code>을 실측한다:
 HEAD/PREV가 참조하는 live blob만 pack 파일 1개로 묶고, loose/stale 파일을 줄여도
 recover와 PREV fallback이 유지되어야 한다.</p>
 <pre id="out">실행 중...</pre>
@@ -78,6 +78,37 @@ recover와 PREV fallback이 유지되어야 한다.</p>
     check("recover: HEAD 파손 후 pack에서 PREV fallback", !!fallback && fallback.fallback === true && c.rt.run("value") === 11,
       fallback ? `value=${c.rt.run("value")}` : "fallback 없음");
 
+    try { await opfs.removeEntry("journalAutoPackProbe", { recursive: true }); } catch (e) {}
+    const autoDir = await opfs.getDirectoryHandle("journalAutoPackProbe", { create: true });
+    const d = await bootSession({});
+    const jd = d.rt.enableJournal({ dir: autoDir, reactive: d.reactive, autoPack: { looseBlobs: 1, looseMB: 1024 } });
+    d.rt.run("autoValue = 77\nautoPayload = bytearray(180000)\nautoPayload[0] = autoValue");
+    const autoCommit = await jd.commit();
+    const autoBlobDir = await autoDir.getDirectoryHandle("blob");
+    const autoLoose = await countEntries(autoBlobDir, (name) => blobName.test(name));
+    const autoPackDir = await autoDir.getDirectoryHandle("pack");
+    const autoPackCount = await countEntries(autoPackDir);
+    check("autoPack: 임계값 도달 시 커밋 직후 pack", !!autoCommit && !!autoCommit.autoPack && jd.packs === 1 && autoLoose === 0 && autoPackCount === 1,
+      autoCommit && autoCommit.autoPack ? `trigger=${autoCommit.autoPack.trigger.looseBlobs}, packed=${autoCommit.autoPack.packed}` : "autoPack 없음");
+    const e = await bootSession({});
+    const autoRec = await e.rt.enableJournal({ dir: autoDir, reactive: e.reactive }).recover();
+    check("autoPack: pack-only recover 유지", !!autoRec && e.rt.run("autoValue") === 77 && e.rt.run("len(autoPayload)") === 180000,
+      autoRec ? `pages=${autoRec.pages}` : "저널 없음");
+    await opfs.removeEntry("journalAutoPackProbe", { recursive: true });
+
+    try { await opfs.removeEntry("journalPackDedupeProbe", { recursive: true }); } catch (e) {}
+    const dedupeDir = await opfs.getDirectoryHandle("journalPackDedupeProbe", { create: true });
+    const f = await bootSession({});
+    const jf = f.rt.enableJournal({ dir: dedupeDir, reactive: f.reactive });
+    f.rt.run("dedupeValue = 31\ndedupePayload = bytearray(180000)\ndedupePayload[0] = dedupeValue");
+    await jf.commit();
+    await jf.pack();
+    const dedupeBlobDir = await dedupeDir.getDirectoryHandle("blob");
+    const dedupePostPackCommit = await jf.commit();
+    const dedupeLoose = await countEntries(dedupeBlobDir, (name) => blobName.test(name));
+    check("commit: pack에 있는 blob은 loose로 재생성하지 않음", !!dedupePostPackCommit && dedupePostPackCommit.wrote === 0 && dedupeLoose === 0,
+      dedupePostPackCommit ? `wrote=${dedupePostPackCommit.wrote}, loose=${dedupeLoose}` : "commit null");
+    await opfs.removeEntry("journalPackDedupeProbe", { recursive: true });
     await opfs.removeEntry("journalPackProbe", { recursive: true });
   } catch (e) {
     check("예외 없음", false, String(e).slice(0, 300));

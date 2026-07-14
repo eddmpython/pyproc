@@ -826,3 +826,39 @@ NEXT:
 1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
 2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
 3. MachineJournal pack 자동 실행 기준을 제품 장수 운영 정책으로 고정한다.
+
+## 2026-07-15 - MachineJournal autoPack 정책 고정
+
+문제:
+
+- 직전 항목에서 512MB pack 비용은 1081ms로 닫혔다.
+- 그러나 제품이 직접 `pack()`을 호출해야만 장수 머신 파일 수가 줄어드는 구조면 운영 정책이 라이브러리 밖으로 새고, 소비 제품마다 임계값이 흔들린다.
+- 또 `pack()` 후 loose blob이 0개가 되면, 다음 `commit()`이 pack index를 dedupe 대상으로 보지 않아 같은 live blob을 loose 파일로 다시 만들 수 있는 구조 결함이 있었다.
+
+완료:
+
+- `MachineJournal`에 `autoPack` config를 추가했다. 기본은 비활성이고, `autoPack: true`는 loose blob 128개 또는 8MB 이상에서 커밋 직후 pack한다.
+- 임계값 128개/8MB는 512MB 실측의 131 keys/8.2MB, pack 1081ms 지점을 기준으로 잡았다.
+- 객체 옵션 `autoPack: { looseBlobs, looseMB }`로 소비 제품이 더 빡빡하거나 느슨한 정책을 명시할 수 있게 했다.
+- `commit()`이 loose blob뿐 아니라 `PACKS.json`의 packed blob도 dedupe 대상으로 본다. pack 후 no-op 재커밋이 같은 blob을 loose 파일로 재생성하지 않는다.
+- `commit()` 결과에 `autoPack` 실행 결과를 붙이고, `MachineJournal.packs`/`packBytes`를 공개 타입에 추가해 정책 발화가 관측 가능하다.
+- README, README.ko, 소비 계약, OS 판정표, 대형 힙 봉투 문서에 autoPack 계약을 반영했다.
+
+검증:
+
+- `node tests/browser/run.mjs tests/attempts/pythonMachine/journalPackProbe.html` GREEN 10/10.
+- pack 수동 경로: loose 223 -> pack 파일 1개 + loose 0개, pack-only HEAD recover 정상, HEAD 파손 후 PREV fallback 정상.
+- autoPack 경로: `autoPack: { looseBlobs: 1, looseMB: 1024 }`에서 커밋 직후 pack 발화, trigger=121, packed=121, loose 0, pack-only recover 정상.
+- pack-aware dedupe: pack 후 no-op 재커밋 `wrote=0`, loose 0.
+
+판정:
+
+- 이전 NEXT 3번의 "MachineJournal pack 자동 실행 기준"은 닫혔다.
+- 자동 pack은 성능 미지수도, 제품마다 새로 만들어야 하는 임시 정책도 아니다. 라이브러리 계약은 opt-in이고, 기본 정책은 512MB 실측 지점에 맞춘다.
+- OS 점수는 70/100을 유지한다. 점수 상승은 제품 소비 배선(`.pymachine` 또는 `VirtualOrigin`)과 공개키·권한 UI가 닫힌 뒤 재산정한다.
+
+NEXT:
+
+1. codaro 다음 소비 축은 `.pymachine` 세션 이미지 또는 `VirtualOrigin` 중 하나로 잡는다.
+2. 공개키 배포와 권한 UI를 소비 제품 계약으로 고정한다.
+3. 부활 후 fd·socket·DB connection 재개설을 `Init` 또는 소비 제품 boot hook 계약으로 고정한다.
