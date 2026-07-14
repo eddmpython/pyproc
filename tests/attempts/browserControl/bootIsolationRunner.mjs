@@ -85,14 +85,34 @@ async function main() {
     // 게이트 5/6용 버튼 + 입력칸: 신뢰 입력(isTrusted)과 실제 조작(값 변경)을 관측한다.
     if (req.url.startsWith("/cdpTarget")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end("<!doctype html><html><head><title>pyprocCdpTarget</title></head><body>"
-        + "<div id=\"marker\">cdpMarkerOk</div>"
-        + "<button id=\"btn\" style=\"position:absolute;top:20px;left:20px;width:140px;height:44px\">click</button>"
-        + "<input id=\"field\" value=\"\">"
-        + "<script>window.clickReport={clicked:false};"
-        + "document.getElementById('btn').addEventListener('click',function(e){window.clickReport={clicked:true,trusted:e.isTrusted};});"
-        + "setTimeout(function(){var d=document.createElement('div');d.id='delayed';d.textContent='appeared';document.body.appendChild(d);},700);"
-        + "</script></body></html>");
+      res.end(`<!doctype html><html><head><title>pyprocCdpTarget</title></head><body>
+<div id="marker">cdpMarkerOk</div>
+<button id="btn" style="position:absolute;top:20px;left:20px;width:140px;height:44px">click</button>
+<input id="field" value="">
+<select id="sel"><option value="one">1</option><option value="two">2</option></select>
+<ul><li class="item">a</li><li class="item">b</li><li class="item">c</li></ul>
+<div id="dbl" style="position:absolute;top:80px;left:220px;width:160px;height:40px">dbl</div>
+<div id="ctx" style="position:absolute;top:140px;left:220px;width:160px;height:40px">ctx</div>
+<div id="hoverbox" style="position:absolute;top:200px;left:220px;width:160px;height:40px">hover</div>
+<form id="form" style="position:absolute;top:260px;left:220px"><input id="formField" value=""></form>
+<script>
+window.clickReport={clicked:false};
+window.keyReport=[];
+document.getElementById('btn').addEventListener('click',function(e){window.clickReport={clicked:true,trusted:e.isTrusted};});
+document.getElementById('dbl').addEventListener('dblclick',function(e){window.dblReport={trusted:e.isTrusted};});
+document.getElementById('ctx').addEventListener('contextmenu',function(e){e.preventDefault();window.ctxReport={trusted:e.isTrusted};});
+document.getElementById('hoverbox').addEventListener('mouseover',function(e){window.hoverReport={trusted:e.isTrusted};});
+document.getElementById('form').addEventListener('submit',function(e){e.preventDefault();window.submitReport=true;});
+document.addEventListener('keydown',function(e){window.keyReport.push({key:e.key,ctrl:e.ctrlKey,trusted:e.isTrusted});});
+setTimeout(function(){var d=document.createElement('div');d.id='delayed';d.textContent='appeared';document.body.appendChild(d);},700);
+setTimeout(function(){window.__ready=true;},500);
+</script></body></html>`);
+      return;
+    }
+    // 게이트15 에뮬레이션: setHeaders/setUserAgent가 요청 헤더에 반영되는지 회수한다(request 헤더를 #h로 에코).
+    if (req.url.startsWith("/echoHeaders")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html><head><title>echo</title></head><body><pre id="h">${JSON.stringify(req.headers)}</pre></body></html>`);
       return;
     }
     // 게이트 4 iframe 역전 타깃: X-Frame-Options: DENY로 프레이밍을 거부한다(강방어 사이트 재현).

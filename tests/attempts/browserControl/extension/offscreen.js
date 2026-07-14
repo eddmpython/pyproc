@@ -24,22 +24,82 @@ class BrowserTab:
     def __init__(self, sessionId, mode):
         self._sid = sessionId
         self.mode = mode
+    def _op(self, op, **args):
+        return _send(op, sessionId=self._sid, args=args)
+    # 항법
     def navigate(self, url):
-        _send("navigate", sessionId=self._sid, args={"url": url})
-        return self
+        self._op("navigate", url=url); return self
+    def reload(self):
+        self._op("reload"); return self
+    def back(self):
+        self._op("back"); return self
+    def forward(self):
+        self._op("forward"); return self
+    # 실행
     def evaluate(self, expr):
-        return _send("evaluate", sessionId=self._sid, args={"expr": expr}).get("value")
+        return self._op("evaluate", expr=expr).get("value")
+    # 입력
     def click(self, selector):
-        _send("click", sessionId=self._sid, args={"selector": selector})
-        return self
+        self._op("click", selector=selector); return self
+    def doubleClick(self, selector):
+        self._op("doubleClick", selector=selector); return self
+    def rightClick(self, selector):
+        self._op("rightClick", selector=selector); return self
+    def hover(self, selector):
+        self._op("hover", selector=selector); return self
     def type(self, selector, text):
-        _send("type", sessionId=self._sid, args={"selector": selector, "text": text})
-        return self
+        self._op("type", selector=selector, text=text); return self
+    def fill(self, selector, text):
+        self._op("fill", selector=selector, text=text); return self
+    def press(self, key, selector=None):
+        self._op("press", key=key, selector=selector); return self
+    def select(self, selector, value):
+        self._op("select", selector=selector, value=value); return self
+    # 조회/추출
+    def text(self, selector):
+        return self._op("text", selector=selector).get("value")
+    def html(self, selector):
+        return self._op("html", selector=selector).get("value")
+    def attr(self, selector, name):
+        return self._op("attr", selector=selector, name=name).get("value")
+    def value(self, selector):
+        return self._op("value", selector=selector).get("value")
+    def exists(self, selector):
+        return self._op("exists", selector=selector).get("value")
+    def count(self, selector):
+        return self._op("count", selector=selector).get("value")
+    def texts(self, selector):
+        return self._op("texts", selector=selector).get("value")
+    def boundingBox(self, selector):
+        return self._op("boundingBox", selector=selector).get("value")
+    def title(self):
+        return self._op("title").get("value")
+    def url(self):
+        return self._op("url").get("value")
+    def content(self):
+        return self._op("content").get("value")
+    # 대기
     def waitFor(self, selector, timeout=10000):
-        _send("waitFor", sessionId=self._sid, args={"selector": selector, "timeout": timeout})
-        return self
+        self._op("waitFor", selector=selector, timeout=timeout); return self
+    def waitForFunction(self, expr, timeout=10000):
+        self._op("waitForFunction", expr=expr, timeout=timeout); return self
+    # 캡처/에뮬레이션(debugger mode 전용, script mode는 미지원 예외)
+    def screenshot(self, fullPage=False, format="png", quality=None):
+        return self._op("screenshot", fullPage=fullPage, format=format, quality=quality).get("value")
+    def pdf(self, landscape=False, printBackground=True):
+        return self._op("pdf", landscape=landscape, printBackground=printBackground).get("value")
+    def setViewport(self, width, height, deviceScaleFactor=1, mobile=False):
+        self._op("setViewport", width=width, height=height, deviceScaleFactor=deviceScaleFactor, mobile=mobile); return self
+    def setUserAgent(self, userAgent):
+        self._op("setUserAgent", userAgent=userAgent); return self
+    def setHeaders(self, headers):
+        self._op("setHeaders", headers=headers); return self
+    def cookies(self, urls=None):
+        return self._op("cookies", urls=urls).get("value")
+    def setCookie(self, name, value, **kwargs):
+        self._op("setCookie", name=name, value=value, **kwargs); return self
     def close(self):
-        _send("closeSession", sessionId=self._sid)
+        self._op("closeSession")
 
 def tab(url=None, mode="script"):
     resp = _send("openSession", mode=mode)
@@ -284,6 +344,97 @@ wt.close()
 [appeared]
 `)).toJs();
         add("게이트14: waitForSelector(지연 등장 요소 대기)", waitArr[0] === "appeared", `text=${waitArr[0]}`);
+
+        // 게이트15: 확장 표면(Playwright급). 한 debugger 세션에서 추출/조회 + 폼 입력 + 포인터 확장 +
+        // 신뢰 키보드(폼 제출/단축키) + waitForFunction + screenshot + 에뮬레이션(viewport/UA/헤더) +
+        // 항법 히스토리(back/forward/reload) + 쿠키 왕복을 실측한다. evaluate 합성 op와 CDP 전용 op를 모두 관통.
+        const echoTarget = targetUrl.replace("/cdpTarget", "/echoHeaders");
+        const g15 = JSON.parse((await py.runPythonAsync(`
+ex = browser.tab(persistTarget, mode="debugger")
+echoTarget = "${echoTarget}"
+res = {}
+res["title"] = ex.title()
+res["url"] = ex.url()
+res["marker"] = ex.text("#marker")
+res["markerHtml"] = ex.html("#marker")
+res["fieldId"] = ex.attr("#field", "id")
+res["itemCount"] = ex.count("li.item")
+res["itemTexts"] = ex.texts("li.item")
+res["missingExists"] = ex.exists("#nope")
+res["btnW"] = ex.boundingBox("#btn")["width"]
+try:
+    ex.text("#nope"); res["missingRaises"] = False
+except Exception:
+    res["missingRaises"] = True
+ex.fill("#field", "filled15")
+res["filled"] = ex.value("#field")
+ex.select("#sel", "two")
+res["selected"] = ex.value("#sel")
+ex.hover("#hoverbox")
+res["hover"] = ex.evaluate("JSON.stringify(window.hoverReport)")
+ex.doubleClick("#dbl")
+res["dbl"] = ex.evaluate("JSON.stringify(window.dblReport)")
+ex.rightClick("#ctx")
+res["ctx"] = ex.evaluate("JSON.stringify(window.ctxReport)")
+ex.fill("#formField", "submitme")
+ex.press("Enter", "#formField")
+res["submit"] = ex.evaluate("String(window.submitReport)")
+ex.press("Control+a", "#formField")
+res["keyReport"] = ex.evaluate("JSON.stringify(window.keyReport)")
+ex.waitForFunction("window.__ready === true", 4000)
+res["ready"] = ex.evaluate("window.__ready === true")
+shot = ex.screenshot()
+res["shotHead"] = shot[:8] if shot else ""
+res["shotLen"] = len(shot) if shot else 0
+ex.setViewport(540, 480)
+res["innerWidth"] = ex.evaluate("window.innerWidth")
+ex.setUserAgent("pyprocUA/15")
+res["uaJs"] = ex.evaluate("navigator.userAgent")
+ex.navigate(persistTarget + "?p=1")
+ex.navigate(persistTarget + "?p=2")
+ex.back()
+res["afterBack"] = ex.url()
+ex.forward()
+res["afterForward"] = ex.url()
+ex.reload()
+res["afterReload"] = ex.url()
+ex.setHeaders({"x-pyproc": "gate15"})
+ex.navigate(echoTarget)
+res["echo"] = ex.text("#h")
+ex.setCookie("pyprocCk", "v15", url=persistTarget)
+res["cookieNames"] = [c.get("name") for c in ex.cookies([persistTarget])]
+ex.close()
+json.dumps(res)
+`)));
+        const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        add("게이트15a: 추출/조회(title/url/text/html/attr/count/texts/exists/boundingBox + 미발견 예외)",
+          g15.title === "pyprocCdpTarget" && g15.url.includes("/cdpTarget") && g15.marker === "cdpMarkerOk" &&
+          g15.markerHtml === "cdpMarkerOk" && g15.fieldId === "field" && g15.itemCount === 3 &&
+          eq(g15.itemTexts, ["a", "b", "c"]) && g15.missingExists === false && g15.btnW > 0 && g15.missingRaises === true,
+          `count=${g15.itemCount}, texts=${JSON.stringify(g15.itemTexts)}, btnW=${g15.btnW}, missingRaises=${g15.missingRaises}`);
+        add("게이트15b: 폼 입력(fill 값 대체 + select 옵션)",
+          g15.filled === "filled15" && g15.selected === "two", `filled=${g15.filled}, selected=${g15.selected}`);
+        const hov = JSON.parse(g15.hover || "null"), dbl = JSON.parse(g15.dbl || "null"), ctx = JSON.parse(g15.ctx || "null");
+        add("게이트15c: 포인터 확장(hover/doubleClick/rightClick 신뢰 이벤트)",
+          hov && hov.trusted === true && dbl && dbl.trusted === true && ctx && ctx.trusted === true,
+          `hover=${g15.hover}, dbl=${g15.dbl}, ctx=${g15.ctx}`);
+        const keys = JSON.parse(g15.keyReport || "[]");
+        const ctrlA = keys.find((k) => k.key === "a" && k.ctrl === true);
+        add("게이트15d: 신뢰 키보드(Enter 폼 제출 + Control+a 단축키 isTrusted)",
+          g15.submit === "true" && !!ctrlA && ctrlA.trusted === true,
+          `submit=${g15.submit}, ctrlA=${JSON.stringify(ctrlA)}`);
+        add("게이트15e: waitForFunction(임의 조건 수렴 대기)", g15.ready === true, `ready=${g15.ready}`);
+        add("게이트15f: screenshot(Page.captureScreenshot -> PNG base64)",
+          g15.shotHead === "iVBORw0K" && g15.shotLen > 100, `head=${g15.shotHead}, len=${g15.shotLen}`);
+        add("게이트15g: 에뮬레이션(setViewport innerWidth + setUserAgent + setHeaders 요청 반영)",
+          g15.innerWidth === 540 && g15.uaJs === "pyprocUA/15" && g15.echo.includes("x-pyproc") && g15.echo.includes("gate15") && g15.echo.includes("pyprocUA/15"),
+          `innerWidth=${g15.innerWidth}, ua=${g15.uaJs}, echoHasHeader=${g15.echo.includes("x-pyproc")}`);
+        add("게이트15h: 항법 히스토리(back/forward/reload)",
+          g15.afterBack.endsWith("?p=1") && g15.afterForward.endsWith("?p=2") && g15.afterReload.includes("?p=2"),
+          `back=${g15.afterBack}, forward=${g15.afterForward}, reload=${g15.afterReload}`);
+        add("게이트15i: 쿠키 왕복(setCookie -> cookies)",
+          Array.isArray(g15.cookieNames) && g15.cookieNames.includes("pyprocCk"),
+          `cookies=${JSON.stringify(g15.cookieNames)}`);
       } catch (e) {
         add("게이트9/10/12: 영속 세션 + 워커 라우터", false, String(e));
       }
