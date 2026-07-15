@@ -972,5 +972,107 @@ check("mainPlan 이니셔티브마다 README", () => {
   walk(dir); if (existsSync(join(dir, "_done"))) walk(join(dir, "_done"));
 });
 
+const webMachineRoot = join(ROOT, "tests", "attempts", "webMachine");
+check("Web Machine attempts 레이어 구조 고정", () => {
+  const allowedRootEntries = new Set(["README.md", "host", "adapters", "fixtures", "probes"]);
+  const rootEntries = readdirSync(webMachineRoot);
+  const unexpected = rootEntries.filter((entry) => !allowedRootEntries.has(entry));
+  if (unexpected.length) throw new Error(`root dump 금지: ${unexpected.join(", ")}`);
+  for (const entry of allowedRootEntries) {
+    if (!rootEntries.includes(entry)) throw new Error(`필수 경계 없음: ${entry}`);
+  }
+  const requiredHostFiles = ["adapterContract.js", "snapshotEnvelope.js", "webMachineError.js", "webMachineHostDraft.js"];
+  for (const file of requiredHostFiles) {
+    if (!existsSync(join(webMachineRoot, "host", file))) throw new Error(`host 계약 누락: ${file}`);
+  }
+  const forbiddenFolderNames = new Set(["utils", "common", "shared", "helpers"]);
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (!statSync(full).isDirectory()) continue;
+      if (forbiddenFolderNames.has(entry)) throw new Error(`책임 없는 공유 폴더 금지: ${rel(full)}`);
+      walk(full);
+    }
+  };
+  walk(webMachineRoot);
+});
+check("Web Machine host는 guest와 browser 구현을 모름", () => {
+  const hostRoot = join(webMachineRoot, "host");
+  const guestTerms = /\b(?:pyproc|pyodide|wasi|v86|x86|linux|buildroot)\b/i;
+  const browserTerms = /\b(?:window|document|navigator|location|indexedDB|localStorage|sessionStorage|caches|fetch|XMLHttpRequest|WebSocket|BroadcastChannel|Worker|SharedWorker|MessageChannel|crypto|performance|Date|setTimeout|setInterval)\b/;
+  const problems = [];
+  for (const file of collect(hostRoot, [".js"], [])) {
+    const source = readFileSync(file, "utf8");
+    if (guestTerms.test(source)) problems.push(`${rel(file)}: guest/engine 이름`);
+    if (browserTerms.test(source)) problems.push(`${rel(file)}: browser 구현 직접 접근`);
+    for (const ref of jsModuleRefs(file)) {
+      const target = moduleTarget(file, ref.spec);
+      if (!target || !rel(target).startsWith("tests/attempts/webMachine/host/")) {
+        problems.push(`${rel(file)} -> ${ref.spec}: host 밖 import`);
+      }
+    }
+  }
+  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+check("Web Machine adapter 경계와 공개 surface", () => {
+  const adapterRoot = join(webMachineRoot, "adapters");
+  const problems = [];
+  for (const file of collect(adapterRoot, [".js"], [])) {
+    for (const ref of jsModuleRefs(file)) {
+      const target = moduleTarget(file, ref.spec);
+      if (!target) {
+        problems.push(`${rel(file)} -> ${ref.spec}: engine은 외부 주입 필요`);
+        continue;
+      }
+      const targetRel = rel(target);
+      if (targetRel.startsWith("tests/attempts/webMachine/adapters/")) problems.push(`${rel(file)} -> ${targetRel}: adapter 사이 import`);
+      else if (targetRel !== "index.js") problems.push(`${rel(file)} -> ${targetRel}: 공개 root 이외 import`);
+    }
+    if (readFileSync(file, "utf8").includes("/src/")) problems.push(`${rel(file)}: src deep import`);
+  }
+  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+check("Web Machine 조립은 probes에만 존재", () => {
+  const problems = [];
+  for (const file of collect(webMachineRoot, [".js", ".mjs", ".html"], [])) {
+    if (rel(file).includes("/fixtures/v86/assets/")) continue;
+    const source = readFileSync(file, "utf8");
+    if (source.includes(".registerAdapter(") && !rel(file).startsWith("tests/attempts/webMachine/probes/")) {
+      problems.push(rel(file));
+    }
+  }
+  if (problems.length) throw new Error(`composition root 밖 adapter 등록: ${problems.join(", ")}`);
+});
+check("Web Machine source는 named ESM과 명시 확장자", () => {
+  const problems = [];
+  for (const file of collect(webMachineRoot, [".js", ".mjs", ".html"], [])) {
+    if (rel(file).includes("/fixtures/v86/assets/")) continue;
+    const source = readFileSync(file, "utf8");
+    if (/\bexport\s+default\b/.test(source)) problems.push(`${rel(file)}: default export`);
+    for (const ref of jsModuleRefs(file)) {
+      if (!ref.spec.startsWith(".")) continue;
+      const clean = ref.spec.split(/[?#]/)[0];
+      if (!/\.(?:js|mjs)$/.test(clean)) problems.push(`${rel(file)} -> ${ref.spec}: 명시 확장자 없음`);
+    }
+  }
+  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+check("Web Machine import graph cycle 없음", () => {
+  const files = collect(webMachineRoot, [".js", ".mjs", ".html"], [])
+    .filter((file) => !rel(file).includes("/fixtures/v86/assets/"));
+  const byRel = new Set(files.map(rel));
+  const graph = new Map(files.map((file) => [rel(file), []]));
+  for (const file of files) {
+    for (const ref of jsModuleRefs(file)) {
+      const target = moduleTarget(file, ref.spec);
+      if (!target) continue;
+      const targetRel = rel(target);
+      if (byRel.has(targetRel)) graph.get(rel(file)).push(targetRel);
+    }
+  }
+  const cycles = findCycles(graph);
+  if (cycles.length) throw new Error(cycles.slice(0, 4).map((cycle) => cycle.join(" -> ")).join("; "));
+});
+
 console.log(`\n결과: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -16,11 +16,11 @@ Python OS + Linux 동시 boot 5404/5422/5513ms, dual snapshot 141-190ms,
 <p>pyproc Python OS와 x86 Linux를 같은 host registry에서 동시에 부팅하고 두 portable image를 복원한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { V86 } from "./assets/libv86.mjs";
-  import { WebMachineHostDraft } from "./webMachineDraft.js";
-  import { createPyprocGuestFactory } from "./guestAdaptersDraft.js";
-  import { createV86GuestFactory } from "./v86GuestAdapterDraft.js";
-  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "./v86ProbeConfig.js";
+  import { V86 } from "../fixtures/v86/assets/libv86.mjs";
+  import { WebMachineHostDraft } from "../host/webMachineHostDraft.js";
+  import { createPyprocGuestFactory } from "../adapters/pyprocGuestAdapter.js";
+  import { createV86GuestFactory } from "../adapters/v86GuestAdapter.js";
+  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../fixtures/v86/config.js";
 
   const out = document.getElementById("out");
   const checks = [];
@@ -38,7 +38,9 @@ Python OS + Linux 동시 boot 5404/5422/5513ms, dual snapshot 141-190ms,
   const complete = (history) => ["booted", "paused", "snapshotted", "restored", "resumed", "shutdown"].every((event) => history.some((entry) => entry.event === event));
 
   const consoleLines = [];
+  let instanceSequence = 0;
   const host = new WebMachineHostDraft({
+    idFactory: () => `dual-boot-${++instanceSequence}`,
     devices: { console: { kind: "console", write: (line) => consoleLines.push(String(line)) } },
   });
   host.registerAdapter("pyproc", createPyprocGuestFactory());

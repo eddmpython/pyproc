@@ -1,4 +1,4 @@
-// prepareV86Assets.mjs - v86/Linux probe 자산을 해시 검증해 로컬 실험 캐시에 준비한다.
+// prepareAssets.mjs - v86/Linux probe 자산을 해시 검증해 로컬 실험 캐시에 준비한다.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

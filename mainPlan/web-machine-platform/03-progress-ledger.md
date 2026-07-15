@@ -71,7 +71,7 @@ NEXT:
 
 1. v86 constructor를 integration layer에서 주입받는 `V86GuestAdapterDraft`를 만들었다. host core와 pyproc dependency에는 x86 code가 들어가지 않는다.
 2. adapter는 실제 emulator의 `run/stop/destroy/save_state/restore_state`와 serial console을 공통 lifecycle에 연결했다.
-3. v86 0.5.424 module/wasm, revision `2f1346b` BIOS, 공식 예제 Buildroot image를 SHA-256으로 고정하는 `prepareV86Assets.mjs`를 만들었다. 바이너리는 레포에 넣지 않는다.
+3. v86 0.5.424 module/wasm, revision `2f1346b` BIOS, 공식 예제 Buildroot image를 SHA-256으로 고정하는 `fixtures/v86/prepareAssets.mjs`를 만들었다. 바이너리는 레포에 넣지 않는다.
 4. pyproc image는 `includeHome: true`로 바꾸고 빈 guest도 `/home/web`을 생성해 사용자 파일 없는 machine 경계를 제거했다.
 
 실패에서 고친 계약:
@@ -102,3 +102,47 @@ NEXT:
 2. display framebuffer와 input을 capability로 연결하되 headless console을 core에 강제하지 않는다.
 3. pyproc + Linux snapshot을 공통 HEAD/PREV generation에 commit하고 모든 탭 종료 뒤 cold reopen한다.
 4. 위 경계가 통과되면 host를 `src/` 내부가 아니라 독립 package로 둘지 결정한다.
+
+## 2026-07-15 - 클린 아키텍처와 코드 경계 고정
+
+결정:
+
+1. Web Machine Host는 pyproc `src/`의 새 레이어가 아니라 독립 platform package로 승격한다.
+2. 최초 package는 `core`, `browser`, `guest-pyproc`, `guest-v86` 네 개로 제한한다. device별 package 증식은 실제 독립 release 수요 전까지 금지한다.
+3. core는 guest/engine 이름과 browser 구현을 모두 모른다. ID, clock, entropy, persistence도 port로 주입한다.
+4. browser host는 guest를 import하지 않고, guest adapter끼리도 import하지 않는다. 유일한 조립 지점은 composition root다.
+5. `utils`, `common`, `shared`, `helpers` 같은 책임 없는 공유 폴더를 금지한다.
+
+구현:
+
+1. `tests/attempts/webMachine/`을 `host`, `adapters`, `fixtures`, `probes`로 재배치했다.
+2. 318줄 단일 host 초안을 `adapterContract`, `snapshotEnvelope`, `webMachineError`, `webMachineHostDraft` 책임으로 분리했다.
+3. host의 직접 random 접근을 제거하고 `idFactory`를 composition root에서 주입한다.
+4. pyproc과 WASI가 한 파일을 공유하던 구조를 guest별 adapter 파일로 분리했다.
+5. v86 module, BIOS, Buildroot image recipe는 `fixtures/v86/` 아래 한 경계로 모았다.
+6. 최종 package tree, 의존성 방향, contract, error, naming, durable commit 순서를 [04-clean-architecture-and-code-rules.md](04-clean-architecture-and-code-rules.md)에 고정했다.
+
+기계 게이트:
+
+- attempts root dump와 `utils/common/shared/helpers` 폴더를 차단한다.
+- host의 guest/engine 이름과 browser API 접근을 차단한다.
+- host 역방향 import, adapter 사이 import, pyproc deep import를 차단한다.
+- `probes/` 밖 adapter 등록과 Web Machine import cycle을 차단한다.
+
+회귀 실측:
+
+- 재배치 뒤 `hostContractProbe` GREEN 27/27.
+- 재배치 뒤 `dualEngineProbe` GREEN 13/13.
+- 재배치 뒤 `linuxGuestProbe` GREEN 8/8.
+- 재배치 뒤 `dualBootProbe` GREEN 8/8. 두 OS의 memory/file cold restore가 유지됐다.
+
+판정:
+
+기능 추가보다 먼저 구조를 잠갔다. 다음 block/network/persistence 구현은 이 경계를 통과하는 plugin과 port로만
+들어갈 수 있다. 구조 게이트를 완화해야만 기능이 들어간다면 기능 구현이 아니라 설계를 다시 한다.
+
+NEXT:
+
+1. `browser/src/devices/blockDevice`에 해당하는 attempts port를 먼저 계약으로 만든다.
+2. pyproc home과 v86 disk를 같은 block generation에 연결하기 전에 fake device로 write/flush/torn commit을 검증한다.
+3. HEAD/PREV + CAS persistence를 adapter와 분리된 browser 구현으로 만든다.

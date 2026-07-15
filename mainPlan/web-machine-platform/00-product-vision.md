@@ -62,7 +62,7 @@ Python OS        WASI guest        x86/Linux guest
 - **Web Machine Host**: 여러 guest engine의 생명주기와 장치를 중재하는 상위 플랫폼이다.
 - **제품**: host 위에 데스크톱, IDE, 데이터 도구, 에이전트 작업공간 같은 사용자 표면을 얹는다.
 
-pyproc 공개 API에 x86 또는 Linux 특수 로직을 바로 넣지 않는다. host 계약이 두 엔진에서 실측되기 전에는 [tests/attempts/webMachine](../../tests/attempts/) 캠페인에서만 검증하고, 졸업 시 독립 패키지 또는 별도 최상위 레이어 여부를 결정한다.
+pyproc 공개 API에 x86 또는 Linux 특수 로직을 바로 넣지 않는다. [tests/attempts/webMachine](../../tests/attempts/webMachine/) 캠페인에서 공통 장치와 durable commit까지 검증하고, 졸업 시 [독립 package 구조](04-clean-architecture-and-code-rules.md)로 승격한다.
 
 ## 만들지 않는 것
 

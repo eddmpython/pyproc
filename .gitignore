@@ -22,7 +22,7 @@ tests/attempts/enginePort/*.zip
 tests/attempts/enginePort/browserWasiShim.js
 tests/browser/*.wasm
 # webMachine x86/Linux probe 자산(prepareV86Assets.mjs로 해시 검증 후 준비).
-tests/attempts/webMachine/assets/
+tests/attempts/webMachine/fixtures/v86/assets/
 # wasiPackages probe의 순수 파이썬 wheel(재현: pip download, README 레시피). 레포 자산 0.
 tests/attempts/wasiPackages/*.whl
 # 자가 호스팅 엔진 배포판(scripts/fetchEngine.mjs가 준비, 약 509MB). 레포 자산 0.

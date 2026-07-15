@@ -1,4 +1,4 @@
-// v86GuestAdapterDraft.js - attempts 전용 외부 주입형 x86 guest adapter.
+// v86GuestAdapter.js - attempts 전용 외부 주입형 x86 guest adapter.
 // host와 pyproc 패키지는 v86에 의존하지 않고 integration probe만 생성자를 주입한다.
 
 function consoleWrite(context, message) {

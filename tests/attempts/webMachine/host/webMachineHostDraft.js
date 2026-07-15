@@ -1,37 +1,17 @@
-// webMachineDraft.js - attempts 전용 Web Machine Host 계약 초안.
-// engine 내부를 모르는 얇은 lifecycle/device/image/fencing 계층만 둔다.
-
-const SNAPSHOT_SCOPES = new Set(["portable", "session", "none"]);
-
-function randomId() {
-  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") return globalThis.crypto.randomUUID();
-  const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
-  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
-}
-function asBytes(value, label) {
-  if (value instanceof Uint8Array) return value.slice();
-  if (value instanceof ArrayBuffer) return new Uint8Array(value.slice(0));
-  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
-  throw new WebMachineError("WEB_MACHINE_SNAPSHOT_INVALID", `${label}: snapshot payload는 bytes여야 한다`);
-}
+// webMachineHostDraft.js - engine과 browser 구현을 모르는 lifecycle/device/fencing core.
+import { instantiateAdapter } from "./adapterContract.js";
+import { createSnapshotEnvelope, validateSnapshotEnvelope } from "./snapshotEnvelope.js";
+import { WebMachineError } from "./webMachineError.js";
 
 function copyRecord(value) {
   if (!value || typeof value !== "object") return {};
   return { ...value };
 }
 
-export class WebMachineError extends Error {
-  constructor(code, message, details = null) {
-    super(message);
-    this.name = "WebMachineError";
-    this.code = code;
-    this.details = details;
-  }
-}
-
 export class WebMachineHostDraft {
-  constructor({ devices = {} } = {}) {
+  constructor({ devices = {}, idFactory } = {}) {
+    if (typeof idFactory !== "function") throw new TypeError("idFactory가 필요하다");
+    this._idFactory = idFactory;
     this._adapterFactories = new Map();
     this._devices = new Map();
     this._machines = new Map();
@@ -59,7 +39,13 @@ export class WebMachineHostDraft {
     if (!machineId || typeof machineId !== "string") throw new TypeError("machineId가 필요하다");
     if (this._machines.has(machineId)) throw new WebMachineError("WEB_MACHINE_DUPLICATE", `machine 중복: ${machineId}`);
     if (!this._adapterFactories.has(adapterId)) throw new WebMachineError("WEB_MACHINE_ADAPTER_UNAVAILABLE", `adapter 없음: ${adapterId}`);
-    const machine = new WebMachineDraft(this, { machineId, adapterId, manifest, permissions });
+    const machine = new WebMachineDraft(this, {
+      machineId,
+      adapterId,
+      manifest,
+      permissions,
+      instanceId: this._nextInstanceId(),
+    });
     this._machines.set(machineId, machine);
     return machine;
   }
@@ -68,26 +54,16 @@ export class WebMachineHostDraft {
     return this._machines.get(machineId) || null;
   }
 
+  _nextInstanceId() {
+    const instanceId = String(this._idFactory() || "");
+    if (!instanceId) throw new TypeError("idFactory는 비어 있지 않은 ID를 반환해야 한다");
+    return instanceId;
+  }
+
   _createAdapter(adapterId) {
     const factory = this._adapterFactories.get(adapterId);
     if (!factory) throw new WebMachineError("WEB_MACHINE_ADAPTER_UNAVAILABLE", `adapter 없음: ${adapterId}`);
-    const adapter = factory();
-    if (!adapter || typeof adapter !== "object") throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: adapter object가 아니다`);
-    const required = ["boot", "pause", "resume", "snapshot", "restore", "shutdown", "request", "inspect"];
-    for (const method of required) {
-      if (typeof adapter[method] !== "function") throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: ${method}() 없음`);
-    }
-    const capabilities = {
-      adapterVersion: String(adapter.capabilities?.adapterVersion || "0"),
-      snapshotScope: String(adapter.capabilities?.snapshotScope || "none"),
-      pauseMode: String(adapter.capabilities?.pauseMode || "cooperative"),
-      shutdownMode: String(adapter.capabilities?.shutdownMode || "terminate"),
-      requiredDevices: Array.isArray(adapter.capabilities?.requiredDevices) ? adapter.capabilities.requiredDevices.map(copyRecord) : [],
-    };
-    if (!SNAPSHOT_SCOPES.has(capabilities.snapshotScope)) {
-      throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: snapshotScope ${capabilities.snapshotScope} 미지원`);
-    }
-    return { adapter, capabilities };
+    return instantiateAdapter(adapterId, factory);
   }
 
   _openContext(machine, capabilities) {
@@ -117,13 +93,13 @@ export class WebMachineHostDraft {
 }
 
 class WebMachineDraft {
-  constructor(host, { machineId, adapterId, manifest, permissions }) {
+  constructor(host, { machineId, adapterId, manifest, permissions, instanceId }) {
     this.host = host;
     this.machineId = machineId;
     this.adapterId = adapterId;
     this.manifest = copyRecord(manifest);
     this.permissions = { devices: [...(permissions?.devices || [])] };
-    this.instanceId = randomId();
+    this.instanceId = instanceId;
     this.state = "created";
     this.epoch = 1;
     this._adapter = null;
@@ -139,7 +115,9 @@ class WebMachineDraft {
   }
 
   get capabilities() {
-    return this._capabilities ? { ...this._capabilities, requiredDevices: this._capabilities.requiredDevices.map(copyRecord) } : null;
+    return this._capabilities
+      ? { ...this._capabilities, requiredDevices: this._capabilities.requiredDevices.map(copyRecord) }
+      : null;
   }
 
   invalidateOwnership(reason = "owner lost") {
@@ -198,17 +176,20 @@ class WebMachineDraft {
       if (!this._capabilities || this._capabilities.snapshotScope === "none") {
         throw new WebMachineError("WEB_MACHINE_SNAPSHOT_UNSUPPORTED", `${this.machineId}: snapshot 미지원`);
       }
-      const payload = asBytes(await this._adapter.snapshot(), this.machineId);
-      const envelope = Object.freeze({
-        schemaVersion: 1,
+      const envelope = createSnapshotEnvelope({
         machineId: this.machineId,
         adapterId: this.adapterId,
-        adapterVersion: this._capabilities.adapterVersion,
-        snapshotScope: this._capabilities.snapshotScope,
-        originInstanceId: this.instanceId,
-        payload,
+        capabilities: this._capabilities,
+        instanceId: this.instanceId,
+        payload: await this._adapter.snapshot(),
       });
-      this._history.push({ event: "snapshotted", state: this.state, epoch: this.epoch, bytes: payload.byteLength, scope: envelope.snapshotScope });
+      this._history.push({
+        event: "snapshotted",
+        state: this.state,
+        epoch: this.epoch,
+        bytes: envelope.payload.byteLength,
+        scope: envelope.snapshotScope,
+      });
       return envelope;
     });
   }
@@ -216,7 +197,11 @@ class WebMachineDraft {
   async restore(envelope) {
     return this._enqueue("restore", async () => {
       this._expect(["created", "paused", "stopped"], "restore");
-      this._validateEnvelope(envelope);
+      const payload = validateSnapshotEnvelope(envelope, {
+        machineId: this.machineId,
+        adapterId: this.adapterId,
+        adapterVersion: this._capabilities?.adapterVersion || null,
+      });
       const cold = this.state === "created" || this.state === "stopped";
       if (cold && envelope.snapshotScope !== "portable") {
         throw new WebMachineError("WEB_MACHINE_SNAPSHOT_SCOPE", `${this.machineId}: ${envelope.snapshotScope} snapshot은 cold restore 불가`);
@@ -233,7 +218,7 @@ class WebMachineDraft {
       } else if (envelope.snapshotScope === "session" && envelope.originInstanceId !== this.instanceId) {
         throw new WebMachineError("WEB_MACHINE_SNAPSHOT_SCOPE", `${this.machineId}: 다른 session snapshot`);
       }
-      await this._adapter.restore(asBytes(envelope.payload, this.machineId), this._context, this.manifest);
+      await this._adapter.restore(payload, this._context, this.manifest);
       this._setState("paused", "restored");
       return this.inspectNow();
     });
@@ -267,20 +252,12 @@ class WebMachineDraft {
     };
   }
 
-  _validateEnvelope(envelope) {
-    if (!envelope || envelope.schemaVersion !== 1) throw new WebMachineError("WEB_MACHINE_SNAPSHOT_INVALID", "snapshot schema 불일치");
-    if (envelope.machineId !== this.machineId) throw new WebMachineError("WEB_MACHINE_SNAPSHOT_INCOMPATIBLE", `${this.machineId}: machineId 불일치`);
-    if (envelope.adapterId !== this.adapterId) throw new WebMachineError("WEB_MACHINE_SNAPSHOT_INCOMPATIBLE", `${this.machineId}: adapterId 불일치`);
-    if (this._capabilities && envelope.adapterVersion !== this._capabilities.adapterVersion) {
-      throw new WebMachineError("WEB_MACHINE_SNAPSHOT_INCOMPATIBLE", `${this.machineId}: adapterVersion 불일치`);
-    }
-    if (!SNAPSHOT_SCOPES.has(envelope.snapshotScope)) throw new WebMachineError("WEB_MACHINE_SNAPSHOT_INVALID", "snapshotScope 불일치");
-    asBytes(envelope.payload, this.machineId);
-  }
-
   _expect(states, operation) {
     if (!states.includes(this.state)) {
-      throw new WebMachineError("WEB_MACHINE_INVALID_STATE", `${this.machineId}: ${operation}은 ${this.state}에서 불가`, { expected: states, actual: this.state });
+      throw new WebMachineError("WEB_MACHINE_INVALID_STATE", `${this.machineId}: ${operation}은 ${this.state}에서 불가`, {
+        expected: states,
+        actual: this.state,
+      });
     }
   }
 

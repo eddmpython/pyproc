@@ -16,8 +16,8 @@ ownership 상실 request 실행 1회·자동 replay 0회·late response 오염 0
 <p>두 fake guest에 같은 lifecycle suite를 적용하고 paused snapshot, device permission/mode, portable/session scope, ownership fencing을 검증한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { WebMachineHostDraft } from "./webMachineDraft.js";
-  import { createFakeGuestFactory } from "./fakeGuestAdapter.js";
+  import { WebMachineHostDraft } from "../host/webMachineHostDraft.js";
+  import { createFakeGuestFactory } from "../adapters/fakeGuestAdapter.js";
 
   const out = document.getElementById("out");
   const checks = [];
@@ -37,7 +37,9 @@ ownership 상실 request 실행 1회·자동 replay 0회·late response 오염 0
   };
 
   const consoleLines = [];
+  let instanceSequence = 0;
   const host = new WebMachineHostDraft({
+    idFactory: () => `contract-${++instanceSequence}`,
     devices: {
       console: { kind: "console", write: (line) => consoleLines.push(String(line)) },
       network: { kind: "network", mode: "request" },

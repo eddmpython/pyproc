@@ -18,7 +18,7 @@
 
 ## Phase 1 - host contract 실험
 
-상태: 완료. [hostContractProbe](../../tests/attempts/webMachine/hostContractProbe.html) 3회 연속 GREEN 27/27.
+상태: 완료. [hostContractProbe](../../tests/attempts/webMachine/probes/hostContractProbe.html) 3회 연속 GREEN 27/27.
 
 위치: `tests/attempts/webMachine/`.
 
@@ -37,7 +37,7 @@
 
 ## Phase 2 - pyproc + WASI 이중 엔진
 
-상태: 완료. [dualEngineProbe](../../tests/attempts/webMachine/dualEngineProbe.html) 3회 연속 GREEN 13/13.
+상태: 완료. [dualEngineProbe](../../tests/attempts/webMachine/probes/dualEngineProbe.html) 3회 연속 GREEN 13/13.
 
 작업:
 
@@ -54,7 +54,7 @@
 
 ## Phase 3 - Dual-Boot Linux
 
-상태: 핵심 Dual-Boot 완료, 공통 장치 배선 진행 중. [linuxGuestProbe](../../tests/attempts/webMachine/linuxGuestProbe.html)와 [dualBootProbe](../../tests/attempts/webMachine/dualBootProbe.html) 각각 3회 연속 GREEN 8/8.
+상태: 핵심 Dual-Boot 완료, 공통 장치 배선 진행 중. [linuxGuestProbe](../../tests/attempts/webMachine/probes/linuxGuestProbe.html)와 [dualBootProbe](../../tests/attempts/webMachine/probes/dualBootProbe.html) 각각 3회 연속 GREEN 8/8.
 
 작업:
 

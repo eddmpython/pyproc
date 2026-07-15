@@ -16,10 +16,10 @@ snapshot 57-71ms, live restore 54-83ms, v86 destroy 뒤 cold restore 163-175ms.
 <p>외부 주입한 x86 엔진으로 Linux를 부팅하고 같은 host lifecycle에서 RAM state를 복원한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { V86 } from "./assets/libv86.mjs";
-  import { WebMachineHostDraft } from "./webMachineDraft.js";
-  import { createV86GuestFactory } from "./v86GuestAdapterDraft.js";
-  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "./v86ProbeConfig.js";
+  import { V86 } from "../fixtures/v86/assets/libv86.mjs";
+  import { WebMachineHostDraft } from "../host/webMachineHostDraft.js";
+  import { createV86GuestFactory } from "../adapters/v86GuestAdapter.js";
+  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../fixtures/v86/config.js";
 
   const out = document.getElementById("out");
   const checks = [];
@@ -36,7 +36,9 @@ snapshot 57-71ms, live restore 54-83ms, v86 destroy 뒤 cold restore 163-175ms.
   };
 
   const consoleLines = [];
+  let instanceSequence = 0;
   const host = new WebMachineHostDraft({
+    idFactory: () => `linux-${++instanceSequence}`,
     devices: { console: { kind: "console", write: (line) => consoleLines.push(String(line)) } },
   });
   host.registerAdapter("x86-linux", createV86GuestFactory({ V86, adapterVersion: V86_ADAPTER_VERSION }));
