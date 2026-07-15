@@ -2154,3 +2154,44 @@ NEXT:
 1. S4 machine resume를 파일 이미지와 resume hook 기준으로 외부 후보 대비 봉인한다.
 2. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
 3. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
+
+## 2026-07-15 - S4 machine resume benchmark 축 고정
+
+완료:
+
+- `bench:artifact`와 `bench:compare`가 `S4` scenario를 받도록 확장했다.
+- `npm run test:consumer`의 timing report에 `machineResumeRows`를 추가하고, `machineExportMs`를 key 생성/지문 계산과 분리한 signed image export 시간으로 좁혔다.
+- [s4-pyproc-2026-07-15.json](benchmarks/s4-pyproc-2026-07-15.json)을 생성했다.
+- [s4-webvm-na-2026-07-15.json](benchmarks/s4-webvm-na-2026-07-15.json), [s4-jupyterlite-na-2026-07-15.json](benchmarks/s4-jupyterlite-na-2026-07-15.json), [s4-marimo-wasm-na-2026-07-15.json](benchmarks/s4-marimo-wasm-na-2026-07-15.json)을 생성했다.
+- [s4-compare-2026-07-15.md](benchmarks/s4-compare-2026-07-15.md)를 생성했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md)의 S4 상태를 갱신했다.
+
+실측:
+
+- Browser: Edge `150.0.4078.65`.
+- S4 작업: `npm run test:consumer`의 설치 패키지 consumer gate. `bootSession`, `/home/web/resume.py`, SQLite resource, signed `.pymachine` export, trusted public key `openMachine`, `resume.py` 재실행과 row count 확인.
+- 측정값은 `timings.machineExportMs`, `timings.machineOpenMs`, `timings.machineMB`, `timings.machineResumeRows`에서 가져왔다.
+- 유효 sample: `(export 76ms, open 2264ms, image 10.8MB, rows 2)`, `(export 75ms, open 2346ms, image 10.8MB, rows 2)`, `(export 80ms, open 2136ms, image 10.8MB, rows 2)`.
+- pyproc S4 median: export 76ms, open 2264ms, image 10.8MB, resume rows 2-2, maxErr 0.
+- artifact 생성 commit: `a50d997f65d32765cb2d8e8d078babb9e99b613e`, `worktreeDirty: false`.
+- 외부 후보 N/A artifact 생성 commit: WebVM `a55cff66`, JupyterLite `7eadfeb4`, marimo WASM `3cb223e7`. 모두 `worktreeDirty: false`.
+
+검증:
+
+- `npm test` PASS, 644 passed, 0 failed.
+- `npm run test:consumer` GREEN 15/15 유효 3회.
+- `npm run bench:artifact -- --scenario S4 --candidate pyproc --browser-version 150.0.4078.65 --engine "Pyodide + signed .pymachine" --source "npm run test:consumer" --command "npm run test:consumer, collect timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows from installed package signed .pymachine gate" --note "derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, signed exportImage includeHome, trusted public key openMachine, and resume.py SQLite resource reopen" --sample 76,2264,10.8,2,0 --sample 75,2346,10.8,2,0 --sample 80,2136,10.8,2,0 --out mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s4-webvm-na-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s4-jupyterlite-na-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s4-marimo-wasm-na-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md` PASS.
+
+판정:
+
+- S4는 pyproc의 “브라우저 안 machine image” 차별화 축이다. 단순 파일 저장이 아니라 signer trust, `/home/web`, `resume.py`, SQLite connection 재개설까지 product consumer gate에서 묶인다.
+- pyproc 기준 S4는 signed `.pymachine` export median 76ms, trusted open median 2264ms, image 10.8MB, resume rows 2-2다.
+- WebVM, JupyterLite, marimo WASM은 0점 처리하지 않고 N/A로 봉인했다. 이유는 같은 pyproc signed `.pymachine`/trusted open/`resume.py` resource reopen contract를 제공하는 후보로 측정하지 않았기 때문이다.
+- S0-S4까지 속도 비교의 기본 축이 닫혔다. pyproc의 공개 속도 간판은 여전히 S1 병렬 worker pool이고, OS 차별화 증거는 S2 process map, S3 browser server, S4 machine resume다.
+
+NEXT:
+
+1. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
+2. README benchmark 섹션에 S0-S4를 모두 올릴 경우, 숫자보다 계약 차이를 먼저 설명한다.
+3. 다음 구조 강화는 benchmark artifact schema v2 또는 product-facing capability matrix 중 하나로 잡는다.

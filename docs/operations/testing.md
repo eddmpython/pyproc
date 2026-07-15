@@ -131,7 +131,7 @@ npm run bench:compare -- .tmp/pyproc-s3.json --out .tmp/s3-compare.md
 S4 machine resume는 설치 패키지 consumer gate의 signed `.pymachine` export/open/resume 값을 sample로 남긴다:
 
 ```bash
-npm run bench:artifact -- --scenario S4 --candidate pyproc --command "npm run test:consumer timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows" --sample 80,2321,10.8,2,0 --sample 84,2260,10.8,2,0 --sample 82,2472,10.8,2,0 --out .tmp/pyproc-s4.json
+npm run bench:artifact -- --scenario S4 --candidate pyproc --command "npm run test:consumer timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows" --sample 76,2264,10.8,2,0 --sample 75,2346,10.8,2,0 --sample 80,2136,10.8,2,0 --out .tmp/pyproc-s4.json
 npm run bench:compare -- .tmp/pyproc-s4.json --out .tmp/s4-compare.md
 ```
 
