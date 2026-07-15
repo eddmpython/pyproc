@@ -37,6 +37,7 @@ snapshot 보장은 숨기지 않는다.
 16. 독립 browsing context 네 개가 같은 machine owner를 경쟁하고, 정상 양도와 owner 강제 제거 뒤 정확히 한 successor가 durable epoch와 같은 generation을 복구한다.
 17. `rgba-frame` display와 `relative-pointer` input을 실제 graphical x86 guest에 연결하고, paused input 차단과 새 browser process의 pixel redraw·pointer 재연결을 검증한다.
 18. `wall-monotonic` clock과 `cryptographic-random` entropy를 실제 Linux CMOS·timer·RDRAND에 연결하고, 새 browser process가 boot 없이 새 공급원을 사용한다.
+19. signed `.webmachine` 하나로 두 guest snapshot과 두 block volume을 새 browser profile에 옮기고, trust·integrity·adapter·capability·permission 사전검증 뒤 boot 없이 복원한다.
 
 ## 결론 표
 
@@ -64,11 +65,12 @@ snapshot 보장은 숨기지 않는다.
 | 2026-07-15 | clockEntropyProbe 직접 옵션 첫 시도 | Edge headless, v86 0.5.424 + Buildroot Linux | **RED 2/3**. monotonic tick 11,106회와 Linux RDRAND 56회는 주입됐지만 RTC는 browser 현재시각 | 공식 `wasm_fn`은 CPU tick과 RDRAND import를 바꿀 수 있지만 CMOS RTC가 `Date.now()`를 직접 읽었다. engine 전용 RTC bridge로 분리 | 실제 CMOS port와 process cold restore |
 | 2026-07-15 | clockEntropyProbe 2040 target | Edge headless, Buildroot Linux i686 | **RED 0/1**. `date +%s`가 `-2085881048` | guest가 32-bit `time_t`를 사용해 Y2038 이후 시각이 overflow했다. clock 계약 결함과 guest ABI 한계를 분리하고 2030/2035 target으로 검증 | i686 범위 내 하드웨어 끝단 검증 |
 | 2026-07-15 | clockEntropyProbe | Edge headless, v86 0.5.424 + Buildroot Linux + 새 Edge process, 3회 | **3회 연속 GREEN 19/19**. boot 3844/3913/3872ms, guest read 356/307/391ms, commit 337/301/491ms, process cold restore 308/335/342ms, 재연결 guest read 477/526/471ms | Linux root가 ioperm으로 CMOS 0x70/0x71을 읽어 2030 boot와 2035 cold reattach를 확인했다. RDRAND 결과 4 bytes는 새 process의 CSPRNG 공급 bytes와 매회 정확히 일치했고 boot 0, snapshot device 0이었다 | 이동 가능한 envelope, 배포 검토 |
+| 2026-07-15 | machineEnvelopeProbe | Edge headless, pyproc + v86 Linux + 새 browser profile, 3회 | **3회 연속 GREEN 19/19**. image 64,600,085-64,628,757 bytes, export 207/227/256ms, signed blob verify 152/162/188ms, fresh-profile import 2402/2477/2490ms | canonical manifest와 연속 blob으로 된 signed `.webmachine` 하나가 두 snapshot, 두 실제 block, permissions, capability requirements를 운반했다. 원본 localStorage/IndexedDB가 없는 profile에서 두 OS를 boot 없이 복원했고 모든 fault는 engine constructor 0회에서 구분됐다 | license·SBOM 배포 검토 |
 
 ## 모듈화 설계
 
-- `host/`: engine과 browser 구현을 모르는 state machine, adapter contract, snapshot envelope, 구조화 오류.
-- `browser/`: device, content-addressed generation, IndexedDB persistence, Web Lock owner coordination 구현.
+- `host/`: engine과 browser 구현을 모르는 state machine, adapter contract, snapshot envelope, machine manifest, 구조화 오류.
+- `browser/`: device, content-addressed generation, IndexedDB persistence, Web Lock owner coordination, signed image file과 import 조정 구현.
 - `adapters/`: 파일 하나당 guest adapter 하나. 같은 guest의 wire format/engine bridge만 이름 있는 하위 폴더에 두며 guest끼리는 import하지 않는다.
 - `fixtures/v86/`: hash 고정 자산 recipe와 manifest. binary는 미추적이다.
 - `probes/`: adapter와 device를 조립할 수 있는 유일한 composition root다.
@@ -87,6 +89,7 @@ node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 node tests/browser/run.mjs tests/attempts/webMachine/probes/ownerSuccessorProbe.html
 node tests/browser/run.mjs tests/attempts/webMachine/probes/framebufferPointerProbe.html
 node tests/browser/run.mjs tests/attempts/webMachine/probes/clockEntropyProbe.html
+node tests/browser/run.mjs tests/attempts/webMachine/probes/machineEnvelopeProbe.html
 ```
 
 두 실제 엔진, Linux guest, 원자 generation, 브라우저 프로세스 cold reopen, 실제 guest file의 block
@@ -94,7 +97,8 @@ node tests/browser/run.mjs tests/attempts/webMachine/probes/clockEntropyProbe.ht
 file은 guest snapshot에 중복되지 않고 별도 block volume이 완료 generation의 원본이다. Web Lock 단일 owner와
 IndexedDB 단조 epoch도 정상 양도와 강제 context 제거에서 통과했다. RGBA framebuffer와 relative pointer도
 별도 capability로 graphical guest와 process cold restore에서 통과했다. wall/monotonic clock과 cryptographic
-entropy도 Linux CMOS, timer, RDRAND와 process cold restore에서 통과했다. 이동 가능한 envelope와 배포 검토가 남았으므로
+entropy도 Linux CMOS, timer, RDRAND와 process cold restore에서 통과했다. signed `.webmachine`도 새 browser
+profile에서 pyproc과 Linux의 snapshot·block을 boot 없이 복원했다. license와 SBOM 배포 검토가 남았으므로
 `src/` 또는 `index.js`로 승격하지 않는다. 승격 위치는 독립 `core`, `browser`, `guest-pyproc`,
 `guest-v86` package로 확정했다.
 
@@ -110,11 +114,11 @@ entropy도 Linux CMOS, timer, RDRAND와 process cold restore에서 통과했다.
 
 ## 판정
 
-**Phase 1/2 졸업, Phase 3 Dual-Boot·실제 block-backed file·packet network 핵심 GREEN, Phase 4 durable
-generation과 프로세스 cold reopen 핵심 GREEN, 캠페인 진행 중.** pyproc home과 Linux 9P file을 각 guest
+**Phase 1/2 졸업, Phase 3 Dual-Boot·공통 장치 GREEN, Phase 4 durable generation·프로세스 cold reopen
+GREEN, Phase 5 signed `.webmachine`·새 profile import GREEN, 배포 게이트 진행 중.** pyproc home과 Linux 9P file을 각 guest
 snapshot에서 제거하고 별도 block volume으로 복원했다. Linux NIC는 bounded packet switch에서 실제 ARP와
 ICMP를 왕복하고 새 process에서 port를 다시 연결한다. VGA text frame과 PS/2 keyboard도 console과 분리해
 재연결한다. owner context 제거 뒤에는 정확히 한 successor가 21-23ms에 같은 generation을 복구한다.
 1024x768 RGBA frame과 PS/2 pointer도 새 process에서 재연결한다. Linux CMOS와 RDRAND도 새 process의
-clock/entropy 공급원에 다시 연결한다. 이동 가능한 envelope와
-배포 license 게이트가 남았으므로 완성된 브라우저 컴퓨터 또는 공개 API라고 부르지 않는다.
+clock/entropy 공급원에 다시 연결한다. 이동 가능한 envelope도 storage identity 밖 새 profile에서 통과했다.
+배포 license 게이트가 남았으므로 공개 API라고 부르지 않는다.

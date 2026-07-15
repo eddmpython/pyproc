@@ -15,7 +15,9 @@ Linux eth0를 bounded packet switch에 연결해 실제 ARP/ICMP와 process cold
 실제 guest 화면을 바꾸며 새 browser process의 paused restore와 resume 재연결까지 통과했다.
 이어 browser가 공급한 wall/monotonic clock을 Linux CMOS와 CPU timer에, cryptographic entropy를 RDRAND에
 연결했다. 새 process의 CMOS 값과 RDRAND bytes를 guest 하드웨어 끝단에서 직접 검증했다. 이동 가능한
-`.webmachine` envelope와 배포 검토는 남아 있다.
+`.webmachine`은 canonical manifest와 연속 blob으로 두 OS snapshot, block, permissions, capability requirements를
+서명해 운반한다. 원본 storage가 없는 새 browser profile에서 trust와 전체 integrity를 확인한 뒤 두 OS를 boot
+없이 복원했다. 기술 완료 조건은 통과했고 독립 package 승격 전 license와 SBOM 배포 검토가 남아 있다.
 
 ## 한 문장
 

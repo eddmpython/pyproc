@@ -981,7 +981,7 @@ check("Web Machine attempts 레이어 구조 고정", () => {
   for (const entry of allowedRootEntries) {
     if (!rootEntries.includes(entry)) throw new Error(`필수 경계 없음: ${entry}`);
   }
-  const requiredHostFiles = ["adapterContract.js", "snapshotEnvelope.js", "webMachineError.js", "webMachineHostDraft.js"];
+  const requiredHostFiles = ["adapterContract.js", "machineManifest.js", "snapshotEnvelope.js", "webMachineError.js", "webMachineHostDraft.js"];
   for (const file of requiredHostFiles) {
     if (!existsSync(join(webMachineRoot, "host", file))) throw new Error(`host 계약 누락: ${file}`);
   }
@@ -1002,6 +1002,10 @@ check("Web Machine attempts 레이어 구조 고정", () => {
   const requiredBrowserCoordination = ["indexedDbOwnerEpochStore.js", "webLockOwnerCoordinator.js"];
   for (const file of requiredBrowserCoordination) {
     if (!existsSync(join(webMachineRoot, "browser", "coordination", file))) throw new Error(`browser coordination 계약 누락: ${file}`);
+  }
+  const requiredBrowserImage = ["machineEnvelopeCoordinator.js", "webMachineFile.js", "webMachineTrust.js"];
+  for (const file of requiredBrowserImage) {
+    if (!existsSync(join(webMachineRoot, "browser", "image", file))) throw new Error(`browser image 계약 누락: ${file}`);
   }
   const requiredV86Bridges = [
     "v86BlockBuffer.js",

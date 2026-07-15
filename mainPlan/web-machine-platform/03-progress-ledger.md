@@ -476,3 +476,55 @@ NEXT:
 2. 다른 browser profile에서 pyproc과 Linux envelope를 import하고 adapter missing, version mismatch,
    permission denied, corruption, untrusted signature를 선실행 거부한다.
 3. v86, BIOS, Buildroot, KolibriOS 구성물의 정확한 license와 SBOM 배포 게이트를 닫는다.
+
+## 2026-07-15 - signed `.webmachine`과 새 browser profile import
+
+구현:
+
+1. core image 경계에 schema version 1의 `machineManifest`를 추가했다. machine별 adapter identity/version,
+   portable snapshot scope, required capabilities, permissions, 실행 manifest와 payload reference를 고정한다.
+2. browser image 경계를 `webMachineFile`, `webMachineTrust`, `machineEnvelopeCoordinator` 세 책임으로 나눴다.
+   파일 형식, 외부 trusted key, host/device 조정을 한 파일이나 guest adapter에 섞지 않는다.
+3. 파일은 `WEBMACHINE1` magic, 4-byte manifest 길이, canonical JSON manifest, blob 연속 영역으로 구성한다.
+   snapshot과 block을 JSON이나 archive dependency로 재인코딩하지 않으며 blob 단위로 읽고 검증한다.
+4. manifest digest가 adapter, capability, permissions, 실행 manifest, 모든 blob digest를 덮고 ECDSA P-256
+   signature가 그 digest를 서명한다. embedded key의 서명 유효성과 외부 trusted key 승인을 별도로 확인한다.
+5. host에 `preflightMachine`을 추가했다. import coordinator는 모든 target block, 사용자 승인, 환경 capability,
+   adapter 설치/version/scope/device permission을 먼저 확인하고 성공 뒤에만 device restore와 machine restore를 연다.
+6. browser runner가 probe artifact를 profile 밖 임시 파일로 streaming하고 `freshProfile: true` 요청 시 별도
+   user-data-dir을 만든다. 같은 origin이어도 원본 localStorage와 IndexedDB가 없는 실제 새 profile이다.
+
+실패에서 고친 계약:
+
+- 첫 import는 RED 3/6이었다. 전체 manifest를 content 전용 validator에 그대로 넘겨 `integrity`와 `signature`를
+  예상 밖 key로 거부했다. 서명 대상 content를 명시적 필드로 잘라 검증하도록 고쳤다.
+- 두 번째 import는 v86 options의 `bzimage.async` 수정에서 실패했다. 검증 archive의 manifest는 끝까지 deep
+  freeze하고 adapter에 넘기는 JSON manifest만 복제해 신뢰 원본과 실행용 설정을 분리했다.
+- 공개 class 모양을 복제해 검증 archive를 가장하지 못하도록 module-private `WeakSet` brand를 추가했다.
+  canonical record 정렬도 locale 규칙이 아니라 code-unit 비교로 고정했다.
+
+실측:
+
+- `machineEnvelopeProbe` 최종 수정본 3회 연속 GREEN 19/19.
+- image는 64,600,085-64,628,757 bytes, export는 207/227/256ms, signature와 4개 blob verify는
+  152/162/188ms, 새 profile의 두 OS cold import는 2402/2477/2490ms였다.
+- source profile에 만든 localStorage marker와 IndexedDB database는 target profile에 없었다. runner가 옮긴
+  `.webmachine` bytes만 같았고 pyproc memory/home과 Linux memory/9P file 값 73이 boot 없이 다시 실행됐다.
+- untrusted signer는 파일 slice 두 번으로 manifest까지만 읽고 payload 전에 거부됐다. blob 마지막 한 byte
+  손상, adapter 미설치, version 불일치, permission 부족, capability 부족은 서로 다른 code로 끝났다.
+- 검증 archive 위조와 모든 fault preflight에서 v86 engine constructor는 0회였다. 정상 import 뒤에만 1회였다.
+
+판정:
+
+1. `.webmachine`은 같은 profile의 IndexedDB generation을 다른 이름으로 읽는 기능이 아니다. 실제 file bytes가
+   storage identity와 분리돼 새 profile로 이동했다.
+2. 파일 신뢰와 device 권한을 합치지 않았다. signer가 trusted여도 사용자가 승인하지 않은 device는 열리지 않는다.
+3. core는 두 payload를 해석하지 않고 adapter identity로만 route했다. 두 OS를 담기 위해 guest 분기를 추가하지 않았다.
+4. Phase 5 기술 게이트와 이니셔티브의 기능 완료 조건은 통과했다. 공개 package 승격은 engine/image license와
+   SBOM 배포 검토가 끝난 뒤에만 진행한다.
+
+NEXT:
+
+1. v86, BIOS, Buildroot, KolibriOS 구성물의 license provenance와 재배포 조건을 파일 단위로 확정한다.
+2. Web Machine package가 배포할 engine/image SBOM과 외부 asset pin 계약을 만든다.
+3. 배포 게이트 통과 뒤 독립 `core`, `browser`, `guest-pyproc`, `guest-v86` package로 attempts를 승격한다.

@@ -1,19 +1,24 @@
 // tests/browser/run.mjs - 브라우저 런타임 게이트/probe 하네스. Node 전용, 의존성 0.
 // COOP/COEP 서버(examples/serve.mjs 재사용)를 임시 포트로 띄우고, 로컬 Chromium 계열
 // 브라우저를 headless로 실행해 페이지의 실측 결과를 POST /gateReport로 회수한다.
-// POST /gateRestart는 현재 브라우저 프로세스 트리를 종료하고 같은 profile로 새 프로세스를 연다.
+// POST /gateRestart는 현재 브라우저 프로세스 트리를 종료하고 같은 profile 또는 요청한 새 profile로 연다.
+// /gateArtifact는 profile 밖 임시 파일로 큰 probe 산출물을 스트리밍해 process 사이에 전달한다.
 // 사용: npm run test:browser                          (기본: tests/browser/gate.html)
 //       node tests/browser/run.mjs tests/attempts/<카테고리>/probe.html   (attempts probe)
 //       브라우저 지정: PYPROC_BROWSER=<실행파일 경로>
 // 이것이 pyproc의 "진짜 검증"이다. tests/run.mjs는 구조만 보고, 여기는 런타임을 본다.
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
 import { findBrowser, headlessArgs } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000); // 콜드 CDN 감안. 무거운 probe는 env로 연장
+const MAX_ARTIFACT_BYTES = Number(process.env.PYPROC_GATE_ARTIFACT_MAX || 512 * 1024 * 1024);
+const runRoot = mkdtempSync(join(tmpdir(), "pyprocGate-"));
+const artifactPath = join(runRoot, "gateArtifact.bin");
 
 let reportResolve;
 const reportPromise = new Promise((res) => { reportResolve = res; });
@@ -42,10 +47,52 @@ const server = createStaticServer(async (req, res) => {
     res.writeHead(204); res.end();
     try {
       const request = JSON.parse(body || "{}");
-      restartResolve({ nextSearch: String(request.nextSearch || ""), timings: request.timings || {} });
+      restartResolve({
+        freshProfile: request.freshProfile === true,
+        nextSearch: String(request.nextSearch || ""),
+        timings: request.timings || {},
+      });
     } catch (e) {
       reportResolve({ ok: false, checks: [], restartParseError: String(e) });
     }
+    return true;
+  }
+  if (req.method === "POST" && req.url.startsWith("/gateArtifact")) {
+    const writer = createWriteStream(artifactPath, { flags: "w" });
+    let byteLength = 0;
+    try {
+      for await (const chunk of req) {
+        byteLength += chunk.byteLength;
+        if (byteLength > MAX_ARTIFACT_BYTES) {
+          writer.destroy();
+          try { rmSync(artifactPath, { force: true }); } catch (e) {}
+          res.writeHead(413); res.end();
+          return true;
+        }
+        if (!writer.write(chunk)) await once(writer, "drain");
+      }
+      writer.end();
+      await once(writer, "finish");
+      res.writeHead(204, { "X-Gate-Artifact-Bytes": String(byteLength) }); res.end();
+    } catch (e) {
+      writer.destroy();
+      try { rmSync(artifactPath, { force: true }); } catch (ignored) {}
+      res.writeHead(500); res.end(String(e));
+    }
+    return true;
+  }
+  if (req.method === "GET" && req.url.startsWith("/gateArtifact")) {
+    if (!existsSync(artifactPath)) {
+      res.writeHead(404); res.end();
+      return true;
+    }
+    const byteLength = statSync(artifactPath).size;
+    res.writeHead(200, {
+      "Content-Type": "application/x-webmachine",
+      "Content-Length": String(byteLength),
+      "Cache-Control": "no-store",
+    });
+    createReadStream(artifactPath).pipe(res);
     return true;
   }
   if (req.method !== "POST" || !req.url.startsWith("/gateReport")) return false;
@@ -69,10 +116,10 @@ function pageUrl(nextSearch = "") {
 }
 
 const browser = findBrowser();
-const profile = mkdtempSync(join(tmpdir(), "pyprocGate-"));
+let currentProfile = mkdtempSync(join(runRoot, "profile-"));
 function launch(url, phase) {
   console.log(`${phase === 1 ? "pyproc 브라우저 게이트" : `\n브라우저 재시작 phase ${phase}`}\n  browser: ${browser}\n  url:     ${url}\n`);
-  return spawn(browser, [...headlessArgs(profile), url], { stdio: "ignore" });
+  return spawn(browser, [...headlessArgs(currentProfile), url], { stdio: "ignore" });
 }
 function stop(processHandle) {
   if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(processHandle.pid), "/T", "/F"], { stdio: "ignore" });
@@ -100,6 +147,7 @@ while (!result) {
   }
   stop(proc);
   Object.assign(restartTimings, event.value.timings);
+  if (event.value.freshProfile) currentProfile = mkdtempSync(join(runRoot, "profile-"));
   resetRestartPromise();
   phase += 1;
   proc = launch(pageUrl(event.value.nextSearch), phase);
@@ -110,7 +158,7 @@ result.timings = { ...restartTimings, ...(result.timings || {}) };
 // headless 브라우저는 자식 프로세스를 거느리므로 트리째 정리한다.
 stop(proc);
 server.close();
-try { rmSync(profile, { recursive: true, force: true }); } catch (e) {}
+try { rmSync(runRoot, { recursive: true, force: true }); } catch (e) {}
 
 if (result.timedOut) {
   console.log(`FAIL 게이트 타임아웃(${TIMEOUT_MS / 1000}s). 네트워크(Pyodide CDN) 또는 브라우저 실행을 확인하라.`);

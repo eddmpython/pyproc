@@ -54,6 +54,29 @@ export class WebMachineHostDraft {
     return this._machines.get(machineId) || null;
   }
 
+  preflightMachine({ machineId, adapterId, adapterVersion, snapshotScope, permissions = { devices: [] } }) {
+    if (!machineId || typeof machineId !== "string") throw new TypeError("machineId가 필요하다");
+    if (this._machines.has(machineId)) throw new WebMachineError("WEB_MACHINE_DUPLICATE", `machine 중복: ${machineId}`);
+    const created = this._createAdapter(adapterId);
+    if (created.capabilities.adapterVersion !== adapterVersion) {
+      throw new WebMachineError(
+        "WEB_MACHINE_IMAGE_ADAPTER_VERSION",
+        `${machineId}: adapterVersion ${created.capabilities.adapterVersion} != ${adapterVersion}`,
+      );
+    }
+    if (created.capabilities.snapshotScope !== snapshotScope) {
+      throw new WebMachineError(
+        "WEB_MACHINE_IMAGE_ADAPTER_SCOPE",
+        `${machineId}: snapshotScope ${created.capabilities.snapshotScope} != ${snapshotScope}`,
+      );
+    }
+    this._openContext({ machineId, permissions }, created.capabilities);
+    return Object.freeze({
+      ...created.capabilities,
+      requiredDevices: Object.freeze(created.capabilities.requiredDevices.map((entry) => Object.freeze(copyRecord(entry)))),
+    });
+  }
+
   _nextInstanceId() {
     const instanceId = String(this._idFactory() || "");
     if (!instanceId) throw new TypeError("idFactory는 비어 있지 않은 ID를 반환해야 한다");

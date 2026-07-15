@@ -217,8 +217,8 @@ tests/attempts/webMachine/
 공통 block과 영속 commit은 실제 guest file까지, packet network는 실제 Linux NIC까지, text display/input은
 실제 VGA와 PS/2 keyboard까지 통과했다. 단일 owner와 durable epoch successor도 실제 browsing context
 경쟁과 강제 제거까지 통과했다. RGBA framebuffer와 relative pointer도 실제 graphical x86 guest와 process
-cold reattach를 통과했다. clock/entropy도 실제 Linux CMOS, timer, RDRAND와 process cold reattach를 통과했다. 이동 가능한 envelope,
-배포 검토 전에는 pyproc 공개 export를 늘리지 않는다.
+cold reattach를 통과했다. clock/entropy도 실제 Linux CMOS, timer, RDRAND와 process cold reattach를 통과했다.
+이동 가능한 envelope도 새 browser profile에서 두 OS를 boot 없이 복원했다. 배포 검토 전에는 pyproc 공개 export를 늘리지 않는다.
 
 ## 가장 큰 위험
 

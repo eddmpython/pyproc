@@ -54,7 +54,7 @@
 
 ## Phase 3 - Dual-Boot Linux
 
-상태: 핵심 Dual-Boot 완료, 공통 장치 배선 진행 중. [linuxGuestProbe](../../tests/attempts/webMachine/probes/linuxGuestProbe.html)와 [dualBootProbe](../../tests/attempts/webMachine/probes/dualBootProbe.html) 각각 3회 연속 GREEN 8/8.
+상태: 완료. [linuxGuestProbe](../../tests/attempts/webMachine/probes/linuxGuestProbe.html)와 [dualBootProbe](../../tests/attempts/webMachine/probes/dualBootProbe.html) 각각 3회 연속 GREEN 8/8.
 
 작업:
 
@@ -98,20 +98,20 @@
 
 ## Phase 5 - 이동 가능한 `.webmachine`
 
-상태: 대기.
+상태: 완료. [machineEnvelopeProbe](../../tests/attempts/webMachine/probes/machineEnvelopeProbe.html) 3회 연속 GREEN 19/19.
 
 작업:
 
-1. schema version, adapter identity, capability requirements를 봉투에 고정한다.
-2. snapshot, disk, permissions 전체를 integrity hash로 덮는다.
-3. signature와 trusted key 경계를 재사용한다.
-4. 다른 origin 또는 새 browser profile에서 import gate를 실행한다.
+1. [완료] schema version, adapter identity, capability requirements를 봉투에 고정한다.
+2. [완료] snapshot, disk, permissions 전체를 integrity hash로 덮는다.
+3. [완료] signature와 trusted key 경계를 재사용한다.
+4. [완료] 원본 storage가 없는 새 browser profile에서 import gate를 실행한다.
 
 게이트:
 
-- 같은 image envelope가 pyproc과 Linux guest를 구분해 올바른 adapter로 연다.
-- adapter 미설치, version 불일치, 권한 부족, blob 손상이 구분된 오류를 낸다.
-- 신뢰되지 않은 image는 실행 전에 거부된다.
+- [통과] 같은 image envelope가 pyproc과 Linux guest를 구분해 올바른 adapter로 연다.
+- [통과] adapter 미설치, version 불일치, 권한 부족, capability 부족, blob 손상이 구분된 오류를 낸다.
+- [통과] 신뢰되지 않은 image는 payload를 읽거나 engine을 생성하기 전에 거부된다.
 
 ## 중단 또는 축소 조건
 

@@ -51,6 +51,10 @@ packages/
 │     │  ├─ generationStore.js
 │     │  ├─ blobStore.js
 │     │  └─ recovery.js
+│     ├─ image/
+│     │  ├─ webMachineFile.js
+│     │  ├─ webMachineTrust.js
+│     │  └─ machineEnvelopeCoordinator.js
 │     └─ devices/
 │        ├─ consoleDevice.js
 │        ├─ blockDevice.js
@@ -120,6 +124,7 @@ tests/attempts/webMachine/
 ├─ README.md
 ├─ host/                       # engine/browser 중립 계약 초안
 │  ├─ adapterContract.js
+│  ├─ machineManifest.js
 │  ├─ snapshotEnvelope.js
 │  ├─ webMachineError.js
 │  └─ webMachineHostDraft.js
@@ -137,11 +142,15 @@ tests/attempts/webMachine/
 │  │  ├─ memoryRelativePointerDevice.js
 │  │  ├─ browserClockDevice.js
 │  │  └─ browserEntropyDevice.js
-│  └─ persistence/
-│     ├─ generationIntegrity.js
-│     ├─ memoryGenerationStore.js
-│     ├─ indexedDbGenerationStore.js
-│     └─ machineCommitCoordinator.js
+│  ├─ persistence/
+│  │  ├─ generationIntegrity.js
+│  │  ├─ memoryGenerationStore.js
+│  │  ├─ indexedDbGenerationStore.js
+│  │  └─ machineCommitCoordinator.js
+│  └─ image/
+│     ├─ webMachineFile.js
+│     ├─ webMachineTrust.js
+│     └─ machineEnvelopeCoordinator.js
 ├─ adapters/                   # guest별 변환, 파일 하나당 adapter 하나
 │  ├─ fakeGuestAdapter.js
 │  ├─ pyprocGuestAdapter.js
@@ -181,6 +190,7 @@ tests/attempts/webMachine/
    ├─ displayInputProbe.html
    ├─ framebufferPointerProbe.html
    ├─ clockEntropyProbe.html
+   ├─ machineEnvelopeProbe.html
    ├─ ownerSuccessorParticipant.html
    └─ ownerSuccessorProbe.html
 ```
@@ -192,7 +202,7 @@ tests/attempts/webMachine/
 Host의 public verb는 아래로 제한한다.
 
 ```text
-registerAdapter / registerDevice / createMachine / getMachine
+registerAdapter / registerDevice / createMachine / getMachine / preflightMachine
 adoptOwnership / invalidateOwnership
 boot / pause / resume / snapshot / restore / shutdown / inspect
 ```
