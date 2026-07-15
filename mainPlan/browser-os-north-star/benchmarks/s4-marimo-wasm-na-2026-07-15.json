@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S4",
+  "candidate": "marimo-wasm",
+  "name": "machine resume",
+  "command": null,
+  "commit": "3cb223e7d4853d3f7a808e62145ba268ac9b6f5b",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T02:54:38.750Z",
+  "finishedAt": "2026-07-15T02:54:38.752Z",
+  "browser": {
+    "path": null,
+    "version": null
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 17085583360
+  },
+  "engine": {
+    "name": "marimo WASM Pyodide"
+  },
+  "source": "mainPlan/browser-os-north-star/06-speed-comparison.md",
+  "note": null,
+  "ok": false,
+  "metrics": null,
+  "notApplicableReason": "S4는 pyproc signed .pymachine image, trusted public key open, /home/web/resume.py resource reopen 계약이다. marimo WASM은 이 pyproc machine resume contract를 제공하는 후보로 측정하지 않는다."
+}
