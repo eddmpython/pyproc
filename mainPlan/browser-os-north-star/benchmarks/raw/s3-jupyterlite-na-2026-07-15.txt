@@ -1,0 +1,15 @@
+artifact: ../s3-jupyterlite-na-2026-07-15.json
+schemaVersion: 2
+scenario: S3
+candidate: jupyterlite
+ok: false
+commit: a92332c557212a5bc40a9637c9eba4ea608467b5
+browser: N/A N/A
+engine: JupyterLite Pyodide
+profile: gate
+command: N/A
+source: mainPlan/browser-os-north-star/06-speed-comparison.md
+note: N/A
+previousRawOutputRef: mainPlan/browser-os-north-star/06-speed-comparison.md
+notApplicableReason: S3는 pyproc VirtualOrigin이 Service Worker URL fetch를 같은 탭의 Python ASGI app으로 라우팅하는 계약이다. JupyterLite는 이 pyproc VirtualOrigin/ASGI service-worker URL contract를 제공하는 후보로 측정하지 않는다.
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

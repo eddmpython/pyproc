@@ -1,0 +1,41 @@
+artifact: ../s1l-pyproc-2026-07-15.json
+schemaVersion: 2
+scenario: S1L
+candidate: pyproc
+ok: true
+commit: 5c867ee86f6f802896e73177b0acdb078b5acb8b
+browser: N/A 150.0.4078.65
+engine: Pyodide
+profile: warmed
+command: N/A
+source: mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json
+note: derived from S1 raw artifact single-worker samples
+previousRawOutputRef: mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json
+samples:
+- {"latencyMs":10067,"maxErr":0}
+- {"latencyMs":9633,"maxErr":0}
+- {"latencyMs":10073,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 10067,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 9633,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 10073,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 10067,
+  "p95Ms": 10073,
+  "minMs": 9633,
+  "maxMs": 10073,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

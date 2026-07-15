@@ -2335,3 +2335,36 @@ NEXT:
 1. artifact raw output 보관 위치를 표준화한다. 지금은 `rawOutput` reference가 문자열이므로 다음 단계는 실제 로그 파일 또는 embedded report 정책을 분리하는 것이다.
 2. capability matrix 행별 runnable example 링크를 연결한다.
 3. README Public surface를 matrix와 중복되지 않게 줄이고, 예제 중심 진입로를 강화한다.
+
+## 2026-07-15 - benchmark rawOutput 보관 표준화
+
+완료:
+
+- `evidence.rawOutput`을 자유 문자열에서 `embedded:report` 또는 `file:raw/<artifact-name>.txt`로 제한했다.
+- [benchArtifacts.mjs](../../tests/browser/benchArtifacts.mjs)에 `RAW_OUTPUT_EMBEDDED_REPORT`, `RAW_OUTPUT_FILE_PREFIX`, `rawOutputPathForArtifact()`를 추가했다.
+- normalizer가 rawOutput reference 형식, 상대경로 안전성, 파일 존재 여부를 검증하게 했다.
+- `npm test`가 tracked benchmark JSON의 raw sidecar가 git 추적 대상인지 확인하게 했다.
+- [benchArtifact.mjs](../../tests/browser/benchArtifact.mjs)가 `--raw-output` text를 `raw/<artifact-name>.txt` sidecar로 저장하고, `--raw-output-file`로 기존 raw file을 연결할 수 있게 했다.
+- [speedBench.mjs](../../tests/browser/speedBench.mjs)의 S1 artifact는 gate report가 JSON에 들어 있으므로 `embedded:report`를 쓰게 했다.
+- 기존 benchmark JSON 28개 중 embedded report가 있는 S1 pyproc을 제외한 27개에 [raw sidecar](benchmarks/raw/)를 추가했다.
+- [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 rawOutput reference 계약을 반영했다.
+
+판정:
+
+- 속도 증거 구조가 한 단계 더 닫혔다. 이제 숫자 artifact는 raw evidence가 JSON 안에 있거나, tracked sidecar 파일로 연결돼야 한다.
+- 과거 수동 측정 artifact는 원본 terminal transcript를 새로 만들지 않고, tracked artifact metadata의 command/source/note/sample/metric을 raw sidecar로 보존했다.
+- 새 측정부터는 실제 콘솔 출력이나 gate report를 `--raw-output` 또는 `--raw-output-file`로 같이 남길 수 있다.
+
+검증:
+
+- raw sidecar 27개 생성 확인.
+- 28개 benchmark JSON `normalizeBenchArtifactFile()` PASS.
+- `npm run bench:artifact -- --candidate schema-v2-raw-sample ... --raw-output "raw fixture transcript" --out .tmp/schema-v2-raw-sample.json` PASS.
+- `git diff --check` PASS.
+- `npm test` PASS, 651 passed, 0 failed.
+
+NEXT:
+
+1. capability matrix 행별 runnable example 링크를 연결한다.
+2. README Public surface를 matrix와 중복되지 않게 줄이고, 예제 중심 진입로를 강화한다.
+3. 새 실측을 할 때는 raw sidecar에 실제 console/gate transcript를 우선 저장한다.

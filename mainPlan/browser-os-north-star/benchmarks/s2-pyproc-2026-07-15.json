@@ -79,7 +79,7 @@
   },
   "evidence": {
     "source": "npm run test:browser",
-    "rawOutput": "npm run test:browser",
+    "rawOutput": "file:raw/s2-pyproc-2026-07-15.txt",
     "note": "derived from three browser gate runs on tests/browser/gate.html; each run uses a fresh temporary browser profile via --user-data-dir; serialMs is timings.mapSerialMs and parallelMs is timings.mapParallelMs",
     "runner": null,
     "page": null,

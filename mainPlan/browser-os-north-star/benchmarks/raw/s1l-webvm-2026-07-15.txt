@@ -1,0 +1,41 @@
+artifact: ../s1l-webvm-2026-07-15.json
+schemaVersion: 2
+scenario: S1L
+candidate: webvm
+ok: true
+commit: e8ecb78025d7e8e034ef5bf075f7d41647f2812d
+browser: N/A 150.0.4078.65
+engine: WebVM/CheerpX Python 3.7.3 NumPy
+profile: warmed
+command: WebVM terminal, Python perf_counter S1L 1024 f64 numpy matmul, 128 warmup, 3 samples
+source: https://webvm.io/ via playwright-cli
+note: warmed WebVM session; numpy import and matrix construction excluded from sample timings; checksum stayed 3.2149321267 across all samples
+previousRawOutputRef: https://webvm.io/ via playwright-cli
+samples:
+- {"latencyMs":12825,"maxErr":0}
+- {"latencyMs":11406,"maxErr":0}
+- {"latencyMs":11349,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 12825,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 11406,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 11349,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 11406,
+  "p95Ms": 12825,
+  "minMs": 11349,
+  "maxMs": 12825,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

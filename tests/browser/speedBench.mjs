@@ -7,7 +7,7 @@ import { cpus, freemem, platform, release, tmpdir, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
 import { findBrowser, headlessArgs } from "./harness.mjs";
-import { BENCH_ARTIFACT_SCHEMA_VERSION, S1_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
+import { BENCH_ARTIFACT_SCHEMA_VERSION, RAW_OUTPUT_EMBEDDED_REPORT, S1_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_BENCH_TIMEOUT || process.env.PYPROC_GATE_TIMEOUT || 240000);
 const DEFAULT_WORKERS = 4;
@@ -160,7 +160,7 @@ const measurement = {
 };
 const evidence = {
   source: "examples/speedLab.html gate report",
-  rawOutput: "embedded report from POST /gateReport",
+  rawOutput: RAW_OUTPUT_EMBEDDED_REPORT,
   note: null,
   runner: { workers: benchWorkers, size: benchSize, samples: benchSamples },
   page: url,

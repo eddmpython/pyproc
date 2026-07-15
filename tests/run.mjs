@@ -340,10 +340,10 @@ check("속도 비교 벤치 계약 고정", () => {
   for (const term of ["PYPROC_BENCH_OUT", "PYPROC_BENCH_SIZE", '"--size"', "DEFAULT_SIZE = 1024", "BENCH_ARTIFACT_SCHEMA_VERSION", "scenarioDefinition", "measurement", "environment", "evidence", "schemaVersion", 'scenario: S1_SCENARIO', 'candidate: "pyproc"', "metrics", "runner", "browserVersion", "normalizeBenchArtifact"]) {
     if (!speedBench.includes(term)) throw new Error(`speedBench.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "SCENARIO_DEFINITIONS", "scenarioDefinitionFor", "assertV2Envelope", "sampleSchema", "measurement", "environment", "evidence", "rawOutput", "browser server roundtrip", "machine resume", "S0_SCENARIO", "S0C_SCENARIO", "S1L_SCENARIO", "S2_SCENARIO", "S3_SCENARIO", "S4_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs", "openMedianMs"]) {
+  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "SCENARIO_DEFINITIONS", "scenarioDefinitionFor", "RAW_OUTPUT_EMBEDDED_REPORT", "RAW_OUTPUT_FILE_PREFIX", "rawOutputPathForArtifact", "assertV2Envelope", "sampleSchema", "measurement", "environment", "evidence", "rawOutput", "browser server roundtrip", "machine resume", "S0_SCENARIO", "S0C_SCENARIO", "S1L_SCENARIO", "S2_SCENARIO", "S3_SCENARIO", "S4_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs", "openMedianMs"]) {
     if (!benchArtifacts.includes(term)) throw new Error(`benchArtifacts.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--raw-output", "--profile", "--warmup-count", "--browser-headless", "--na", "scenarioDefinition", "measurement", "environment", "evidence", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "normalizeBenchArtifact"]) {
+  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--raw-output", "--raw-output-file", "--profile", "--warmup-count", "--browser-headless", "--na", "scenarioDefinition", "measurement", "environment", "evidence", "rawOutputSidecar", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "normalizeBenchArtifact"]) {
     if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
   }
   const artifactDir = join(ROOT, "mainPlan", "browser-os-north-star", "benchmarks");
@@ -355,6 +355,15 @@ check("속도 비교 벤치 계약 고정", () => {
     if (raw.schemaVersion !== benchArtifactContract.BENCH_ARTIFACT_SCHEMA_VERSION) throw new Error(`${name}: schemaVersion v2 아님`);
     if (!raw.scenarioDefinition || !raw.measurement || !raw.environment || !raw.evidence) throw new Error(`${name}: v2 봉투 누락`);
     benchArtifactContract.normalizeBenchArtifactFile(file);
+    const rawOutputPath = benchArtifactContract.rawOutputPathForArtifact(raw, file);
+    if (rawOutputPath) {
+      const relativeRawOutput = rel(rawOutputPath);
+      const tracked = spawnSync("git", ["ls-files", "--error-unmatch", relativeRawOutput], { cwd: ROOT, encoding: "utf8", timeout: 5000 });
+      if (tracked.status !== 0) throw new Error(`${name}: rawOutput file git 미추적: ${relativeRawOutput}`);
+      if (!readFileSync(rawOutputPath, "utf8").trim()) throw new Error(`${name}: rawOutput file 비어 있음`);
+    } else if (raw.evidence.rawOutput !== benchArtifactContract.RAW_OUTPUT_EMBEDDED_REPORT) {
+      throw new Error(`${name}: rawOutput reference 형식 불명`);
+    }
   }
   const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
   for (const term of ["machineExportMs", "machineOpenMs", "machineMB", "machineResumeRows"]) {

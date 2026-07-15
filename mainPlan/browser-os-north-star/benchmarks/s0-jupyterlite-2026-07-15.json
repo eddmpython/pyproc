@@ -77,7 +77,7 @@
   },
   "evidence": {
     "source": "https://jupyterlite.github.io/demo/repl/index.html?kernel=python via playwright-cli",
-    "rawOutput": "https://jupyterlite.github.io/demo/repl/index.html?kernel=python via playwright-cli",
+    "rawOutput": "file:raw/s0-jupyterlite-2026-07-15.txt",
     "note": "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param",
     "runner": null,
     "page": null,

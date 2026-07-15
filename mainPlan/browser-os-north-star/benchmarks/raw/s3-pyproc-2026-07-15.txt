@@ -1,0 +1,41 @@
+artifact: ../s3-pyproc-2026-07-15.json
+schemaVersion: 2
+scenario: S3
+candidate: pyproc
+ok: true
+commit: 7a2f699e6fb0db973c208ef2699900214a0f8ab2
+browser: Edge 150.0.4078.65
+engine: Pyodide + VirtualOrigin
+profile: gate
+command: npm run test:consumer, collect timings.virtualOriginMs from installed package VirtualOrigin POST
+source: npm run test:consumer
+note: derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, verified SRI Service Worker asgi=/pyproc/, Runtime.enableAsgiServer, and VirtualOrigin POST /pyproc/product/api?value=41
+previousRawOutputRef: npm run test:consumer
+samples:
+- {"latencyMs":18,"maxErr":0}
+- {"latencyMs":17,"maxErr":0}
+- {"latencyMs":18,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 18,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 17,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 18,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 18,
+  "p95Ms": 18,
+  "minMs": 17,
+  "maxMs": 18,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

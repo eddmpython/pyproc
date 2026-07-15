@@ -1,0 +1,41 @@
+artifact: ../s0-jupyterlite-2026-07-15.json
+schemaVersion: 2
+scenario: S0
+candidate: jupyterlite
+ok: true
+commit: 88bd8c15d6e18d0ad1ec65cbe3c6c9095d09c32f
+browser: Edge 150.0.0.0
+engine: JupyterLite Pyodide
+profile: warm
+command: page.goto JupyterLite REPL, fill first code cell with print(marker), Shift+Enter, wait marker output
+source: https://jupyterlite.github.io/demo/repl/index.html?kernel=python via playwright-cli
+note: Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param
+previousRawOutputRef: https://jupyterlite.github.io/demo/repl/index.html?kernel=python via playwright-cli
+samples:
+- {"latencyMs":17749,"maxErr":0}
+- {"latencyMs":12352,"maxErr":0}
+- {"latencyMs":9401,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 17749,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 12352,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 9401,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 12352,
+  "p95Ms": 17749,
+  "minMs": 9401,
+  "maxMs": 17749,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

@@ -80,7 +80,7 @@
   },
   "evidence": {
     "source": "npm run test:consumer",
-    "rawOutput": "npm run test:consumer",
+    "rawOutput": "file:raw/s4-pyproc-2026-07-15.txt",
     "note": "derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, signed exportImage includeHome, trusted public key openMachine, and resume.py SQLite resource reopen",
     "runner": null,
     "page": null,

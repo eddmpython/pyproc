@@ -1,0 +1,41 @@
+artifact: ../s0c-marimo-wasm-2026-07-15.json
+schemaVersion: 2
+scenario: S0C
+candidate: marimo-wasm
+ok: true
+commit: db334965dd4105a2caaad08572095019004b3e8a
+browser: Edge 150.0.4078.65
+engine: marimo WASM Pyodide
+profile: cold
+command: fresh persistent browser profile, open about:blank, page.goto marimo.app, fill first iframe code cell with print(marker), Control+Enter, wait iframe marker output
+source: https://marimo.app/ via playwright-cli
+note: Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto
+previousRawOutputRef: https://marimo.app/ via playwright-cli
+samples:
+- {"latencyMs":11377,"maxErr":0}
+- {"latencyMs":9584,"maxErr":0}
+- {"latencyMs":10136,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 11377,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 9584,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 10136,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 10136,
+  "p95Ms": 11377,
+  "minMs": 9584,
+  "maxMs": 11377,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

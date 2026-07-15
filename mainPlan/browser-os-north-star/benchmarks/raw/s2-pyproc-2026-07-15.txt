@@ -1,0 +1,48 @@
+artifact: ../s2-pyproc-2026-07-15.json
+schemaVersion: 2
+scenario: S2
+candidate: pyproc
+ok: true
+commit: 662c123a02d26dafadd8c19906a33700532c1f16
+browser: N/A 150.0.4078.65
+engine: Pyodide
+profile: gate
+command: npm run test:browser, collect timings.mapSerialMs and timings.mapParallelMs from PyProc.map N=80000 x 4
+source: npm run test:browser
+note: derived from three browser gate runs on tests/browser/gate.html; each run uses a fresh temporary browser profile via --user-data-dir; serialMs is timings.mapSerialMs and parallelMs is timings.mapParallelMs
+previousRawOutputRef: npm run test:browser
+samples:
+- {"singleMs":44,"parallelMs":29,"speedup":1.52,"maxErr":0}
+- {"singleMs":74,"parallelMs":46,"speedup":1.61,"maxErr":0}
+- {"singleMs":73,"parallelMs":43,"speedup":1.7,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "singleMs": 44,
+      "parallelMs": 29,
+      "speedup": 1.52,
+      "maxErr": 0
+    },
+    {
+      "singleMs": 74,
+      "parallelMs": 46,
+      "speedup": 1.61,
+      "maxErr": 0
+    },
+    {
+      "singleMs": 73,
+      "parallelMs": 43,
+      "speedup": 1.7,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "singleMedian": 73,
+  "singleP95": 74,
+  "parallelMedian": 43,
+  "parallelP95": 46,
+  "medianSpeedup": 1.61,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

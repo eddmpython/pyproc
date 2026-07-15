@@ -2,9 +2,9 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, freemem, platform, release, totalmem } from "node:os";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, extname, relative, resolve } from "node:path";
 import { isLatencyBenchGreen, isMachineResumeBenchGreen, isProcessMapBenchGreen, isShardedSpeedBenchGreen, summarizeLatencyBench, summarizeMachineResumeBench, summarizePairedLatencyBench } from "../../examples/benchStats.js";
-import { BENCH_ARTIFACT_SCHEMA_VERSION, S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
+import { BENCH_ARTIFACT_SCHEMA_VERSION, RAW_OUTPUT_EMBEDDED_REPORT, RAW_OUTPUT_FILE_PREFIX, S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
 
 function takeArg(name) {
   const idx = process.argv.indexOf(name);
@@ -60,6 +60,46 @@ function parseOptionalInt(value, name) {
   return n;
 }
 
+function rawOutputDefaultText({ scenario, candidate, command, source, note, notApplicableReason, sampleTexts, metrics }) {
+  const lines = [
+    `scenario: ${scenario}`,
+    `candidate: ${candidate}`,
+    `command: ${command || "N/A"}`,
+    `source: ${source || "N/A"}`,
+    `note: ${note || "N/A"}`,
+  ];
+  if (notApplicableReason) lines.push(`notApplicableReason: ${notApplicableReason}`);
+  if (sampleTexts.length) {
+    lines.push("samples:");
+    for (const sample of sampleTexts) lines.push(`- ${sample}`);
+  }
+  if (metrics) {
+    lines.push("metrics:");
+    lines.push(JSON.stringify(metrics, null, 2));
+  }
+  return lines.join("\n") + "\n";
+}
+
+function normalizeRawOutputFileRef(rawOutputFile, outPath) {
+  if (!outPath) fail("--raw-output-file은 --out과 같이 써야 한다");
+  const outDir = dirname(resolve(outPath));
+  const absoluteRawOutputFile = resolve(rawOutputFile);
+  const relativePath = relative(outDir, absoluteRawOutputFile).replaceAll("\\", "/");
+  if (!relativePath || relativePath.startsWith("../") || relativePath === ".." || /^[A-Za-z]:/u.test(relativePath)) {
+    fail("--raw-output-file은 --out 파일과 같은 디렉터리 트리 아래에 있어야 한다");
+  }
+  return `${RAW_OUTPUT_FILE_PREFIX}${relativePath}`;
+}
+
+function rawOutputSidecar(outPath) {
+  if (!outPath) fail("--raw-output 텍스트를 sidecar로 저장하려면 --out이 필요하다");
+  const outDir = dirname(resolve(outPath));
+  const ext = extname(outPath);
+  const stem = ext ? basename(outPath, ext) : basename(outPath);
+  const absolutePath = resolve(outDir, "raw", `${stem}.txt`);
+  return { absolutePath, ref: `${RAW_OUTPUT_FILE_PREFIX}raw/${stem}.txt` };
+}
+
 function gitCommit() {
   const r = spawnSync("git", ["rev-parse", "HEAD"], { cwd: process.cwd(), encoding: "utf8", timeout: 5000 });
   return r.status === 0 ? r.stdout.trim() : null;
@@ -110,6 +150,7 @@ const engineName = takeArg("--engine");
 const command = takeArg("--command") || process.env.PYPROC_BENCH_COMMAND || null;
 const source = takeArg("--source") || null;
 const rawOutput = takeArg("--raw-output") || null;
+const rawOutputFile = takeArg("--raw-output-file") || null;
 const note = takeArg("--note") || null;
 const profileArg = takeArg("--profile");
 const warmupCount = parseOptionalInt(takeArg("--warmup-count"), "--warmup-count");
@@ -121,7 +162,8 @@ if (![S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCEN
 const scenarioDefinition = scenarioDefinitionFor(scenario);
 if (notApplicableReason && sampleTexts.length) fail("--na와 --sample은 같이 쓸 수 없다");
 if (!notApplicableReason && sampleTexts.length < 3) fail("측정 artifact는 --sample을 최소 3개 요구한다");
-if (!notApplicableReason && !command && !source && !rawOutput) fail("측정 artifact는 --command, --source 또는 --raw-output이 필요하다");
+if (rawOutput && rawOutputFile) fail("--raw-output과 --raw-output-file은 같이 쓸 수 없다");
+if (!notApplicableReason && !command && !source && !rawOutput && !rawOutputFile) fail("측정 artifact는 --command, --source, --raw-output 또는 --raw-output-file이 필요하다");
 
 let metrics = null;
 if (!notApplicableReason) {
@@ -139,6 +181,20 @@ if (!notApplicableReason) {
 const primaryCpu = cpus()[0] || {};
 const startedAt = new Date().toISOString();
 const finishedAt = new Date().toISOString();
+let rawOutputRef = null;
+let rawOutputSidecarWrite = null;
+if (rawOutputFile) {
+  rawOutputRef = normalizeRawOutputFileRef(rawOutputFile, outPath);
+} else if (rawOutput === RAW_OUTPUT_EMBEDDED_REPORT || rawOutput?.startsWith(RAW_OUTPUT_FILE_PREFIX)) {
+  rawOutputRef = rawOutput;
+} else {
+  const sidecar = rawOutputSidecar(outPath);
+  rawOutputSidecarWrite = {
+    absolutePath: sidecar.absolutePath,
+    text: rawOutput || rawOutputDefaultText({ scenario, candidate, command, source, note, notApplicableReason, sampleTexts, metrics }),
+  };
+  rawOutputRef = sidecar.ref;
+}
 const browser = { name: browserName || null, path: browserPath || null, version: browserVersion || null, headless: browserHeadless };
 const host = {
   platform: platform(),
@@ -160,7 +216,7 @@ const measurement = {
 };
 const evidence = {
   source,
-  rawOutput: rawOutput || source || command || notApplicableReason || null,
+  rawOutput: rawOutputRef,
   note,
   runner: null,
   page: null,
@@ -198,6 +254,11 @@ const artifact = {
   metrics,
 };
 if (notApplicableReason) artifact.notApplicableReason = notApplicableReason;
+
+if (rawOutputSidecarWrite) {
+  await mkdir(dirname(rawOutputSidecarWrite.absolutePath), { recursive: true });
+  await writeFile(rawOutputSidecarWrite.absolutePath, rawOutputSidecarWrite.text.endsWith("\n") ? rawOutputSidecarWrite.text : rawOutputSidecarWrite.text + "\n");
+}
 
 try {
   normalizeBenchArtifact(artifact, outPath || candidate);

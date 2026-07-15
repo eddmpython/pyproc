@@ -77,7 +77,7 @@
   },
   "evidence": {
     "source": "npm run test:consumer",
-    "rawOutput": "npm run test:consumer",
+    "rawOutput": "file:raw/s3-pyproc-2026-07-15.txt",
     "note": "derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, verified SRI Service Worker asgi=/pyproc/, Runtime.enableAsgiServer, and VirtualOrigin POST /pyproc/product/api?value=41",
     "runner": null,
     "page": null,

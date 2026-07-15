@@ -1,0 +1,41 @@
+artifact: ../s1l-jupyterlite-2026-07-15.json
+schemaVersion: 2
+scenario: S1L
+candidate: jupyterlite
+ok: true
+commit: 98934a9041c91db5c33ae52aa944b9f0532274b1
+browser: N/A 150.0.4078.65
+engine: JupyterLite Pyodide
+profile: warmed
+command: JupyterLite demo REPL, Python perf_counter S1L 1024 matmul
+source: https://jupyterlite.github.io/demo/repl/index.html?kernel=python
+note: manual browser measurement, import and warmup excluded
+previousRawOutputRef: https://jupyterlite.github.io/demo/repl/index.html?kernel=python
+samples:
+- {"latencyMs":9844,"maxErr":0}
+- {"latencyMs":10149,"maxErr":0}
+- {"latencyMs":10153,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 9844,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 10149,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 10153,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 10149,
+  "p95Ms": 10153,
+  "minMs": 9844,
+  "maxMs": 10153,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

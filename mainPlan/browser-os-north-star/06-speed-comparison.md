@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인. raw JSON은 schema v2 봉투로 올려 scenarioDefinition, measurement, environment, evidence를 함께 검증한다.
+상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인. raw JSON은 schema v2 봉투로 올려 scenarioDefinition, measurement, environment, evidence, rawOutput reference를 함께 검증한다.
 
 ## 목표
 
@@ -15,6 +15,7 @@
 - 외부 런타임이 같은 시나리오를 수행하지 못하면 `N/A`와 사유를 남긴다.
 - pyproc 숫자는 gate output이나 원장에 있는 값만 승격한다.
 - tracked benchmark JSON은 모두 `benchArtifacts.mjs`의 schema v2 normalizer를 통과해야 한다.
+- `evidence.rawOutput`은 `embedded:report` 또는 tracked `file:raw/<artifact-name>.txt`만 허용한다.
 
 ## 현재 pyproc 기준점
 

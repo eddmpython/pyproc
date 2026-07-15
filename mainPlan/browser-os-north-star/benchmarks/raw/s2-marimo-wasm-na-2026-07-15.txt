@@ -1,0 +1,15 @@
+artifact: ../s2-marimo-wasm-na-2026-07-15.json
+schemaVersion: 2
+scenario: S2
+candidate: marimo-wasm
+ok: false
+commit: 3fa6478c8bfbf128a5f8285c625f64765cbae6e9
+browser: N/A N/A
+engine: marimo WASM
+profile: gate
+command: N/A
+source: mainPlan/browser-os-north-star/06-speed-comparison.md
+note: N/A
+previousRawOutputRef: mainPlan/browser-os-north-star/06-speed-comparison.md
+notApplicableReason: S2는 PyProc.map과 mapSerial로 같은 Python 함수를 같은 입력 묶음에 대해 process pool과 직렬 실행으로 비교하는 계약이다. marimo WASM은 이 pyproc process-pool API 계약을 제공하는 후보로 측정하지 않는다.
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

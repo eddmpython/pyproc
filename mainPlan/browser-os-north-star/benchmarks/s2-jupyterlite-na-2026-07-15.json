@@ -79,7 +79,7 @@
   },
   "evidence": {
     "source": "mainPlan/browser-os-north-star/06-speed-comparison.md",
-    "rawOutput": "mainPlan/browser-os-north-star/06-speed-comparison.md",
+    "rawOutput": "file:raw/s2-jupyterlite-na-2026-07-15.txt",
     "note": null,
     "runner": null,
     "page": null,

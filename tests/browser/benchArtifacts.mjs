@@ -1,5 +1,6 @@
 // benchArtifacts.mjs - benchmark artifact schema와 비교 표 렌더러.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export const BENCH_ARTIFACT_SCHEMA_VERSION = 2;
 export const S0_SCENARIO = "S0";
@@ -9,6 +10,8 @@ export const S1L_SCENARIO = "S1L";
 export const S2_SCENARIO = "S2";
 export const S3_SCENARIO = "S3";
 export const S4_SCENARIO = "S4";
+export const RAW_OUTPUT_EMBEDDED_REPORT = "embedded:report";
+export const RAW_OUTPUT_FILE_PREFIX = "file:";
 export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO]);
 export const SCENARIO_DEFINITIONS = Object.freeze({
   [S0_SCENARIO]: Object.freeze({
@@ -73,6 +76,14 @@ export function scenarioDefinitionFor(scenario) {
   const definition = SCENARIO_DEFINITIONS[scenario];
   if (!definition) throw new Error(`지원하지 않는 scenario: ${scenario}`);
   return definition;
+}
+
+export function rawOutputPathForArtifact(artifact, file = "artifact") {
+  const rawOutput = artifact?.evidence?.rawOutput;
+  if (rawOutput === RAW_OUTPUT_EMBEDDED_REPORT) return null;
+  if (typeof rawOutput !== "string" || !rawOutput.startsWith(RAW_OUTPUT_FILE_PREFIX)) return null;
+  const relativePath = rawOutput.slice(RAW_OUTPUT_FILE_PREFIX.length);
+  return join(dirname(file), relativePath);
 }
 
 export function readBenchArtifact(file) {
@@ -146,6 +157,24 @@ function assertBooleanOrNull(value, path, file) {
   if (value !== null && typeof value !== "boolean") throw new Error(`${file}: ${path}는 boolean 또는 null이어야 함`);
 }
 
+function assertRawOutputRef(artifact, file, evidence) {
+  const rawOutput = evidence.rawOutput;
+  if (rawOutput === RAW_OUTPUT_EMBEDDED_REPORT) {
+    if (!evidence.report && !artifact.report) throw new Error(`${file}: embedded rawOutput에는 report 필요`);
+    return;
+  }
+  if (typeof rawOutput !== "string" || !rawOutput.startsWith(RAW_OUTPUT_FILE_PREFIX)) {
+    throw new Error(`${file}: evidence.rawOutput은 embedded:report 또는 file:<relative> 필요`);
+  }
+  const relativePath = rawOutput.slice(RAW_OUTPUT_FILE_PREFIX.length);
+  if (!relativePath || relativePath.includes("\\") || relativePath.startsWith("/") || /^[A-Za-z]:/u.test(relativePath)) {
+    throw new Error(`${file}: rawOutput file 경로는 slash 상대경로여야 함`);
+  }
+  if (relativePath.split("/").includes("..")) throw new Error(`${file}: rawOutput file 경로에 .. 금지`);
+  const rawPath = rawOutputPathForArtifact(artifact, file);
+  if (!existsSync(rawPath) || !statSync(rawPath).isFile()) throw new Error(`${file}: rawOutput file 없음: ${relativePath}`);
+}
+
 function assertSampleField(sample, key, file) {
   if (typeof sample?.[key] !== "number" || !Number.isFinite(sample[key]) || sample[key] < 0) throw new Error(`${file}: sample.${key} 숫자 누락`);
 }
@@ -210,7 +239,7 @@ function assertV2Envelope(artifact, file, candidate, notApplicableReason) {
   assertStringOrNull(evidence.source, "evidence.source", file);
   assertStringOrNull(evidence.rawOutput, "evidence.rawOutput", file);
   assertStringOrNull(evidence.note, "evidence.note", file);
-  if (!evidence.rawOutput && !evidence.source) throw new Error(`${file}: evidence.rawOutput 또는 evidence.source 필요`);
+  assertRawOutputRef(artifact, file, evidence);
   assertFiniteOrNull(evidence.timeoutMs, "evidence.timeoutMs", file);
   if (measurement.sampleCount !== (artifact.metrics?.sampleCount || 0)) throw new Error(`${file}: measurement.sampleCount와 metrics.sampleCount 불일치`);
   if (!notApplicableReason && !measurement.command && !evidence.source && !evidence.rawOutput) throw new Error(`${file}: 측정 artifact는 command/source/rawOutput 중 하나 필요`);

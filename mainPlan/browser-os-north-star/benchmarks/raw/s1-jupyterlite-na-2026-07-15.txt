@@ -1,0 +1,15 @@
+artifact: ../s1-jupyterlite-na-2026-07-15.json
+schemaVersion: 2
+scenario: S1
+candidate: jupyterlite
+ok: false
+commit: 9b697a4e80824daf8def1859eeebd6aecd94488b
+browser: N/A N/A
+engine: JupyterLite
+profile: warmed
+command: N/A
+source: https://jupyterlite.readthedocs.io/en/latest/
+note: N/A
+previousRawOutputRef: https://jupyterlite.readthedocs.io/en/latest/
+notApplicableReason: JupyterLite는 브라우저 Jupyter와 Pyodide 커널 표면이며 pyproc S1의 단일 API로 4개 worker에 NumPy matmul shard를 분배하는 계약을 제공하지 않는다.
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

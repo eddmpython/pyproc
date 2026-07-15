@@ -79,7 +79,7 @@
   },
   "evidence": {
     "source": "https://jupyterlite.readthedocs.io/en/latest/",
-    "rawOutput": "https://jupyterlite.readthedocs.io/en/latest/",
+    "rawOutput": "file:raw/s1-jupyterlite-na-2026-07-15.txt",
     "note": null,
     "runner": null,
     "page": null,

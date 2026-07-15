@@ -77,7 +77,7 @@
   },
   "evidence": {
     "source": "https://marimo.app/ via playwright-cli",
-    "rawOutput": "https://marimo.app/ via playwright-cli",
+    "rawOutput": "file:raw/s0c-marimo-wasm-2026-07-15.txt",
     "note": "Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto",
     "runner": null,
     "page": null,

@@ -77,7 +77,7 @@
   },
   "evidence": {
     "source": "https://jupyterlite.github.io/demo/repl/index.html?kernel=python",
-    "rawOutput": "https://jupyterlite.github.io/demo/repl/index.html?kernel=python",
+    "rawOutput": "file:raw/s1l-jupyterlite-2026-07-15.txt",
     "note": "manual browser measurement, import and warmup excluded",
     "runner": null,
     "page": null,

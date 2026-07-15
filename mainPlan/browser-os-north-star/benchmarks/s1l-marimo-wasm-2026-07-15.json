@@ -77,7 +77,7 @@
   },
   "evidence": {
     "source": "https://marimo.app/",
-    "rawOutput": "https://marimo.app/",
+    "rawOutput": "file:raw/s1l-marimo-wasm-2026-07-15.txt",
     "note": "manual browser measurement, import and warmup excluded",
     "runner": null,
     "page": null,

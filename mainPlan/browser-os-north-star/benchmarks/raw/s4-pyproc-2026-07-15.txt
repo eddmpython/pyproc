@@ -1,0 +1,54 @@
+artifact: ../s4-pyproc-2026-07-15.json
+schemaVersion: 2
+scenario: S4
+candidate: pyproc
+ok: true
+commit: a50d997f65d32765cb2d8e8d078babb9e99b613e
+browser: Edge 150.0.4078.65
+engine: Pyodide + signed .pymachine
+profile: gate
+command: npm run test:consumer, collect timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows from installed package signed .pymachine gate
+source: npm run test:consumer
+note: derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, signed exportImage includeHome, trusted public key openMachine, and resume.py SQLite resource reopen
+previousRawOutputRef: npm run test:consumer
+samples:
+- {"exportMs":76,"openMs":2264,"machineMB":10.8,"resumeRows":2,"maxErr":0}
+- {"exportMs":75,"openMs":2346,"machineMB":10.8,"resumeRows":2,"maxErr":0}
+- {"exportMs":80,"openMs":2136,"machineMB":10.8,"resumeRows":2,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "exportMs": 76,
+      "openMs": 2264,
+      "machineMB": 10.8,
+      "resumeRows": 2,
+      "maxErr": 0
+    },
+    {
+      "exportMs": 75,
+      "openMs": 2346,
+      "machineMB": 10.8,
+      "resumeRows": 2,
+      "maxErr": 0
+    },
+    {
+      "exportMs": 80,
+      "openMs": 2136,
+      "machineMB": 10.8,
+      "resumeRows": 2,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "exportMedianMs": 76,
+  "exportP95Ms": 80,
+  "openMedianMs": 2264,
+  "openP95Ms": 2346,
+  "machineMBMedian": 10.8,
+  "machineMBMax": 10.8,
+  "resumeRowsMin": 2,
+  "resumeRowsMax": 2,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

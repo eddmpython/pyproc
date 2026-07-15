@@ -1,0 +1,15 @@
+artifact: ../s4-webvm-na-2026-07-15.json
+schemaVersion: 2
+scenario: S4
+candidate: webvm
+ok: false
+commit: a55cff66b5f0eff63b0448928a9bf07037e14c86
+browser: N/A N/A
+engine: WebVM
+profile: gate
+command: N/A
+source: mainPlan/browser-os-north-star/06-speed-comparison.md
+note: N/A
+previousRawOutputRef: mainPlan/browser-os-north-star/06-speed-comparison.md
+notApplicableReason: S4는 pyproc signed .pymachine image, trusted public key open, /home/web/resume.py resource reopen 계약이다. WebVM은 이 pyproc machine resume contract를 제공하는 후보로 측정하지 않는다.
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

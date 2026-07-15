@@ -77,7 +77,7 @@
   },
   "evidence": {
     "source": "mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
-    "rawOutput": "mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
+    "rawOutput": "file:raw/s1l-pyproc-2026-07-15.txt",
     "note": "derived from S1 raw artifact single-worker samples",
     "runner": null,
     "page": null,

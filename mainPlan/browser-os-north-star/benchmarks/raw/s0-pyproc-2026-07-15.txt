@@ -1,0 +1,41 @@
+artifact: ../s0-pyproc-2026-07-15.json
+schemaVersion: 2
+scenario: S0
+candidate: pyproc
+ok: true
+commit: 491c4ffe94e2651c16f58c6e40c64dd4eb031729
+browser: N/A 150.0.4078.65
+engine: Pyodide
+profile: warm
+command: npm run test:browser, boot() ready and run sum(range(100))
+source: npm run test:browser
+note: derived from three browser gate runs; latencyMs is bootMs until Python boot ready
+previousRawOutputRef: npm run test:browser
+samples:
+- {"latencyMs":3642,"maxErr":0}
+- {"latencyMs":3471,"maxErr":0}
+- {"latencyMs":3450,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 3642,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 3471,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 3450,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 3471,
+  "p95Ms": 3642,
+  "minMs": 3450,
+  "maxMs": 3642,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

@@ -77,7 +77,7 @@
   },
   "evidence": {
     "source": "https://webvm.io/ via playwright-cli",
-    "rawOutput": "https://webvm.io/ via playwright-cli",
+    "rawOutput": "file:raw/s1l-webvm-2026-07-15.txt",
     "note": "warmed WebVM session; numpy import and matrix construction excluded from sample timings; checksum stayed 3.2149321267 across all samples",
     "runner": null,
     "page": null,

@@ -1,0 +1,41 @@
+artifact: ../s0c-webvm-2026-07-15.json
+schemaVersion: 2
+scenario: S0C
+candidate: webvm
+ok: true
+commit: 667fd59ce0547dfb2b6aaed60effb14dc0c1a6ba
+browser: Edge 150.0.0.0
+engine: WebVM/CheerpX
+profile: cold
+command: fresh persistent browser profile, open about:blank, page.goto webvm.io, wait user prompt, run python3 -c print(marker), wait marker output
+source: https://webvm.io/ via playwright-cli
+note: Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto
+previousRawOutputRef: https://webvm.io/ via playwright-cli
+samples:
+- {"latencyMs":46534,"maxErr":0}
+- {"latencyMs":47796,"maxErr":0}
+- {"latencyMs":45949,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 46534,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 47796,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 45949,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 46534,
+  "p95Ms": 47796,
+  "minMs": 45949,
+  "maxMs": 47796,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata

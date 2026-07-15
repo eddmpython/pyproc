@@ -20,10 +20,17 @@
 | scenarioDefinition | canonical scenario ID, 이름, primary metric, sampleSchema, 기본 profile |
 | measurement | 실행 명령 전체, startedAt/finishedAt, cold/warm/gate profile, warmupCount, sampleCount |
 | environment | commit, worktreeDirty, browser 이름/버전/headless, host OS/CPU/메모리/전원 힌트, engine 이름/Python/NumPy/indexURL |
-| evidence | source, raw output 또는 gate report 위치, note, runner config, page URL, timeoutMs, embedded report |
+| evidence | source, rawOutput reference, note, runner config, page URL, timeoutMs, embedded report |
 | metrics | sample 배열, median, p95, min/max, error, speedup 계산식 |
 
 외부 비교 artifact는 추가로 `candidate`를 가진다. pyproc의 기준 artifact는 `candidate: "pyproc"`이다.
+
+`evidence.rawOutput`은 자유 문자열이 아니다. 아래 둘 중 하나여야 한다.
+
+- `embedded:report`: browser gate report가 artifact JSON 안에 들어 있는 경우.
+- `file:raw/<artifact-name>.txt`: artifact JSON과 같은 `benchmarks/` 디렉터리 아래의 tracked raw sidecar 파일을 가리키는 경우. 경로는 artifact 파일 기준 slash 상대경로이며 `..`와 절대경로는 금지한다.
+
+과거 수동 측정 artifact는 raw sidecar에 command, source, note, sample, metric을 보존한다. 새 측정은 가능하면 실제 콘솔 출력이나 gate report를 `--raw-output` 또는 `--raw-output-file`로 함께 남긴다.
 
 ## canonical scenario
 
@@ -60,8 +67,9 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 - S1 canonical raw JSON은 `npm run bench:speed -- --out <path>` 또는 `PYPROC_BENCH_OUT=<path> npm run bench:speed`로 남긴다. 기본 조건은 `workers=4`, `size=1024`, `samples=3`이다.
 - Speed Lab 사람용 UI의 기본 행렬 크기는 반응성을 위해 768이고, canonical runner는 `?workers=4&size=1024&samples=3`를 URL에 명시한다.
 - S1 조건을 바꿀 때는 `--workers`, `--size`, `--samples` 또는 `PYPROC_BENCH_WORKERS`, `PYPROC_BENCH_SIZE`, `PYPROC_BENCH_SAMPLES`를 쓰고, command 필드에 남긴다.
-- 외부 S1 후보 raw JSON은 `npm run bench:artifact -- --candidate <name> --command "<command>" --source "<source>" --raw-output "<raw-output-ref>" --sample singleMs,parallelMs,maxErr --sample ... --out <path>`로 남긴다. 최소 3개 sample이 필요하다.
+- 외부 S1 후보 raw JSON은 `npm run bench:artifact -- --candidate <name> --command "<command>" --source "<source>" --raw-output "<raw-output-text>" --sample singleMs,parallelMs,maxErr --sample ... --out <path>`로 남긴다. `--out`이 있으면 raw output text는 `raw/<artifact-name>.txt` sidecar로 저장되고 artifact에는 `file:raw/<artifact-name>.txt`가 들어간다. 최소 3개 sample이 필요하다.
 - 같은 S1을 수행하지 못한 외부 후보도 `npm run bench:artifact -- --candidate <name> --source "<source>" --na "<reason>" --out <path>`로 N/A artifact를 남긴다.
+- 이미 보관한 raw file을 연결할 때는 `--raw-output-file <path>`를 쓴다. 이 파일은 `--out` artifact와 같은 디렉터리 트리 아래에 있어야 한다.
 - 여러 S1 artifact는 `npm run bench:compare -- <artifact...> --out <path>`로 Markdown 표로 합친다.
 - S0 raw JSON은 `npm run bench:artifact -- --scenario S0 --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다. `latencyMs`는 artifact note에 기록한 조건에서 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지다.
 - S0C raw JSON은 `npm run bench:artifact -- --scenario S0C --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다. `latencyMs`는 cold profile/cache-clear 조건에서 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지다.
@@ -71,4 +79,4 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 - S4 raw JSON은 `npm run bench:artifact -- --scenario S4 --candidate <name> --command "<command>" --sample exportMs,openMs,machineMB,resumeRows,maxErr --sample ... --out <path>`로 남긴다. pyproc 기준 값은 `npm run test:consumer`의 `timings.machineExportMs`, `timings.machineOpenMs`, `timings.machineMB`, `timings.machineResumeRows`에서 가져온다.
 - `bench:compare`는 같은 scenario끼리만 표로 합친다. S1과 S1L을 한 표에 섞으면 실패해야 한다.
 - 새 benchmark helper나 runner를 추가하면 `npm test` 구조 가드에 연결한다.
-- `npm test`는 tracked benchmark JSON 전부를 `normalizeBenchArtifactFile()`로 읽어 schema v2 봉투와 sampleSchema를 검증한다.
+- `npm test`는 tracked benchmark JSON 전부를 `normalizeBenchArtifactFile()`로 읽어 schema v2 봉투, sampleSchema, rawOutput reference, raw sidecar의 git 추적 상태를 검증한다.

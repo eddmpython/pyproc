@@ -1,0 +1,41 @@
+artifact: ../s1l-marimo-wasm-2026-07-15.json
+schemaVersion: 2
+scenario: S1L
+candidate: marimo-wasm
+ok: true
+commit: 4e30f3a82bee8491f0a5759a73082bdbec96c9fc
+browser: N/A 150.0.4078.65
+engine: marimo WASM Pyodide
+profile: warmed
+command: marimo.app playground, Python perf_counter S1L 1024 matmul
+source: https://marimo.app/
+note: manual browser measurement, import and warmup excluded
+previousRawOutputRef: https://marimo.app/
+samples:
+- {"latencyMs":11424,"maxErr":0}
+- {"latencyMs":9355,"maxErr":0}
+- {"latencyMs":9239,"maxErr":0}
+metrics:
+{
+  "samples": [
+    {
+      "latencyMs": 11424,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 9355,
+      "maxErr": 0
+    },
+    {
+      "latencyMs": 9239,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "medianMs": 9355,
+  "p95Ms": 11424,
+  "minMs": 9239,
+  "maxMs": 11424,
+  "maxErr": 0
+}
+recordType: raw evidence sidecar generated from the tracked benchmark artifact metadata
