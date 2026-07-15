@@ -6,7 +6,8 @@ export const S0_SCENARIO = "S0";
 export const S0C_SCENARIO = "S0C";
 export const S1_SCENARIO = "S1";
 export const S1L_SCENARIO = "S1L";
-export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO]);
+export const S2_SCENARIO = "S2";
+export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO]);
 
 export function readBenchArtifact(file) {
   try {
@@ -31,7 +32,7 @@ export function normalizeBenchArtifact(artifact, file = "artifact") {
   }
   if (!artifact.metrics || typeof artifact.metrics !== "object") throw new Error(`${file}: metrics 객체 누락`);
   if (artifact.scenario === S0_SCENARIO || artifact.scenario === S0C_SCENARIO) return normalizeReadyLatencyArtifact(artifact, file, candidate);
-  if (artifact.scenario === S1_SCENARIO) return normalizeS1Artifact(artifact, file, candidate);
+  if (artifact.scenario === S1_SCENARIO || artifact.scenario === S2_SCENARIO) return normalizePairedSpeedArtifact(artifact, file, candidate);
   return normalizeS1LArtifact(artifact, file, candidate);
 }
 
@@ -55,7 +56,7 @@ function assertSamples(artifact, sampleCount, file) {
   }
 }
 
-function normalizeS1Artifact(artifact, file, candidate) {
+function normalizePairedSpeedArtifact(artifact, file, candidate) {
   const sampleCount = requireFiniteNumber(artifact.metrics, "sampleCount", file);
   assertSamples(artifact, sampleCount, file);
   return baseRow(artifact, file, candidate, {
@@ -122,17 +123,26 @@ export function renderBenchCompareMarkdown(rows) {
   if (scenario === S0_SCENARIO) return renderS0Markdown(rows);
   if (scenario === S0C_SCENARIO) return renderS0CMarkdown(rows);
   if (scenario === S1L_SCENARIO) return renderS1LMarkdown(rows);
+  if (scenario === S2_SCENARIO) return renderS2Markdown(rows);
   return renderS1Markdown(rows);
 }
 
 function renderS1Markdown(rows) {
+  return renderPairedSpeedMarkdown(rows, "single median ms", "shard median ms", "shard p95 ms");
+}
+
+function renderS2Markdown(rows) {
+  return renderPairedSpeedMarkdown(rows, "serial median ms", "process pool median ms", "process pool p95 ms");
+}
+
+function renderPairedSpeedMarkdown(rows, singleHeader, parallelHeader, parallelP95Header) {
   const sorted = rows.slice().sort((a, b) => {
     const av = typeof a.medianSpeedup === "number" ? a.medianSpeedup : -1;
     const bv = typeof b.medianSpeedup === "number" ? b.medianSpeedup : -1;
     return bv - av;
   });
   const lines = [
-    "| candidate | ok | samples | single median ms | shard median ms | shard p95 ms | median speedup | maxErr | browser | commit | source |",
+    `| candidate | ok | samples | ${singleHeader} | ${parallelHeader} | ${parallelP95Header} | median speedup | maxErr | browser | commit | source |`,
     "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|",
   ];
   for (const r of sorted) {

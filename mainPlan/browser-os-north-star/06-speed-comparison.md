@@ -23,7 +23,7 @@
 | S0C python cold ready latency | `npm run bench:artifact -- --scenario S0C` | cold profile/cache-clear 조건에서 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지 |
 | S1 numpy sharded matmul | `examples/speedLab.html`, `npm run bench:speed` | `workers=4`, `size=1024`, `samples=3`, `medianSpeedup >= 2.0`, `shard p95 < single median`, `maxErr < 1e-9` |
 | S1L single-kernel numpy latency | `npm run bench:artifact -- --scenario S1L` | warmed latency median, p95, min/max, maxErr |
-| S2 process map | `npm run test:browser` | 결과 일치와 worker pool speedup |
+| S2 process map | `npm run bench:artifact -- --scenario S2` | serial vs process pool wall time, 결과 일치, worker pool speedup |
 | S3 browser server | `npm run test:consumer` | `VirtualOrigin` POST roundtrip |
 | S4 machine resume | `npm run test:consumer` | signed `.pymachine` export/open/resume |
 
@@ -55,7 +55,7 @@
 | S0C python cold ready latency | [artifact](benchmarks/s0c-pyproc-2026-07-15.json) | [artifact](benchmarks/s0c-webvm-2026-07-15.json) | [artifact](benchmarks/s0c-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s0c-marimo-wasm-2026-07-15.json) | pyproc 3660ms, marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms. cold profile/cache-clear 전용. S0 warm/observed 표와 섞지 않음 |
 | S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | [N/A](benchmarks/s1-webvm-na-2026-07-15.json) | [N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | pyproc만 같은 S1 계약 충족 |
 | S1L single-kernel numpy latency | [artifact](benchmarks/s1l-pyproc-2026-07-15.json) | 미측정 | [artifact](benchmarks/s1l-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s1l-marimo-wasm-2026-07-15.json) | WebVM 제외 3자 측정 완료 |
-| S2 process map | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
+| S2 process map | `npm run bench:artifact -- --scenario S2` | 미측정 | 미측정 | 미측정 | 보류 |
 | S3 browser server | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 | S4 machine resume | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 
@@ -87,6 +87,13 @@ S1L artifact는 S1을 single-lane으로 바꿔치기하지 않기 위한 보조 
 npm run bench:artifact -- --scenario S1L --candidate jupyterlite --command "manual single-kernel S1L run" --sample 9844,0 --sample 10149,0 --sample 10153,0 --out .tmp/jupyterlite-s1l.json
 npm run bench:artifact -- --scenario S1L --candidate marimo-wasm --command "manual single-kernel S1L run" --sample 11424,0 --sample 9355,0 --sample 9239,0 --out .tmp/marimo-wasm-s1l.json
 npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/jupyterlite-s1l.json .tmp/marimo-wasm-s1l.json --out .tmp/s1l-compare.md
+```
+
+S2 artifact는 `test:browser`의 `PyProc.map` timing을 paired sample로 승격한다. 같은 process pool에서 같은 함수와 입력을 serial과 parallel로 돌린 wall time만 받는다.
+
+```bash
+npm run bench:artifact -- --scenario S2 --candidate pyproc --command "npm run test:browser timings.mapSerialMs/mapParallelMs" --sample 2000,1000,0 --sample 1900,950,0 --sample 2100,1050,0 --out .tmp/pyproc-s2.json
+npm run bench:compare -- .tmp/pyproc-s2.json --out .tmp/s2-compare.md
 ```
 
 ## 첫 실측 합격 기준

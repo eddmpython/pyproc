@@ -37,6 +37,14 @@ export function isShardedSpeedBenchGreen(bench, opts = {}) {
     && bench.parallelP95 < bench.singleMedian;
 }
 
+export function isProcessMapBenchGreen(bench, opts = {}) {
+  const minMedianSpeedup = opts.minMedianSpeedup ?? 1.01;
+  const maxErr = opts.maxErr ?? 1e-9;
+  return bench.maxErr < maxErr
+    && bench.medianSpeedup >= minMedianSpeedup
+    && bench.parallelP95 < bench.singleMedian;
+}
+
 export function summarizeLatencyBench(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeLatencyBench: rows가 비었다");
   const latencies = rows.map((r) => r.latencyMs);

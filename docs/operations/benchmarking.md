@@ -36,7 +36,7 @@
 | S0C | python cold ready latency | cold profile/cache-clear 조건의 첫 Python 명령 성공 | cold ready median, p95, min/max, maxErr | 최소 3회 sample, 실행 성공 |
 | S1 | numpy sharded matmul | `examples/speedLab.html`, `npm run bench:speed` | single median, shard median, speedup, shard p95 | `maxErr < 1e-9`, `medianSpeedup >= 2.0`, `shard p95 < single median` |
 | S1L | single-kernel numpy latency | `bench:artifact --scenario S1L` | warmed latency median, p95, min/max, maxErr | 최소 3회 sample, `maxErr < 1e-9` |
-| S2 | process map | `npm run test:browser`의 `PyProc.map` | serial vs worker pool wall time | 결과 일치, speedup > 1 |
+| S2 | process map | `bench:artifact --scenario S2` | serial median, process pool median, speedup, p95, maxErr | 결과 일치, speedup > 1 |
 | S3 | browser server | `npm run test:consumer`의 `VirtualOrigin` | POST roundtrip ms | Python ASGI 응답 도달 |
 | S4 | machine resume | `npm run test:consumer`의 signed `.pymachine` | export MB/ms, open ms, resume rows | trusted key open, `resume.py` 재개설 |
 
@@ -52,7 +52,7 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 | S0C python cold ready latency | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0c-webvm-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0c-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0c-marimo-wasm-2026-07-15.json) | cold profile/cache-clear 조건. warm S0와 한 표에 섞지 않음 |
 | S1 numpy sharded matmul | Speed Lab 반복 봉투 | N/A 가능 | N/A 가능 | N/A 가능 | 병렬 worker 모델이 다르면 single-lane으로 재정의하지 않음 |
 | S1L single-kernel numpy latency | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | 측정 필요 | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-marimo-wasm-2026-07-15.json) | S1 대체가 아니라 별도 single-lane 보조 축 |
-| S2 process map | browser gate | 측정 필요 | 측정 필요 | 측정 필요 | 같은 순수 Python 또는 NumPy 작업 |
+| S2 process map | browser gate artifact | 측정 필요 | 측정 필요 | 측정 필요 | 같은 순수 Python 또는 NumPy 작업 |
 | S3 browser server | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | URL fetch로 Python까지 가는지 구분 |
 | S4 machine resume | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | 파일 이미지, persistence, resume hook 동등성 |
 
@@ -69,5 +69,6 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 - S0 raw JSON은 `npm run bench:artifact -- --scenario S0 --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다. `latencyMs`는 artifact note에 기록한 조건에서 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지다.
 - S0C raw JSON은 `npm run bench:artifact -- --scenario S0C --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다. `latencyMs`는 cold profile/cache-clear 조건에서 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지다.
 - S1L raw JSON은 `npm run bench:artifact -- --scenario S1L --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다.
+- S2 raw JSON은 `npm run bench:artifact -- --scenario S2 --candidate <name> --command "<command>" --sample serialMs,parallelMs,maxErr --sample ... --out <path>`로 남긴다. `serialMs`는 같은 작업을 같은 process pool에서 직렬로 돌린 wall time이고, `parallelMs`는 worker pool에 분산한 wall time이다.
 - `bench:compare`는 같은 scenario끼리만 표로 합친다. S1과 S1L을 한 표에 섞으면 실패해야 한다.
 - 새 benchmark helper나 runner를 추가하면 `npm test` 구조 가드에 연결한다.

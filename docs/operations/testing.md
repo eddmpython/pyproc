@@ -114,6 +114,13 @@ npm run bench:artifact -- --scenario S0C --candidate pyproc --command "<command>
 npm run bench:compare -- .tmp/pyproc-s0c.json --out .tmp/s0c-compare.md
 ```
 
+S2 process map은 같은 Python 함수를 같은 입력 묶음으로 직렬 실행한 wall time과 `PyProc.map` process pool wall time을 paired sample로 남긴다:
+
+```bash
+npm run bench:artifact -- --scenario S2 --candidate pyproc --command "npm run test:browser timings.mapSerialMs/mapParallelMs" --sample 2000,1000,0 --sample 1900,950,0 --sample 2100,1050,0 --out .tmp/pyproc-s2.json
+npm run bench:compare -- .tmp/pyproc-s2.json --out .tmp/s2-compare.md
+```
+
 S1L single-kernel NumPy latency는 S1을 대체하지 않는 별도 보조 축이다:
 
 ```bash
