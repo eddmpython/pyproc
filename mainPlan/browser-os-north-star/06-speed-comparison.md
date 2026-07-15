@@ -40,6 +40,8 @@
 S1 artifact가 여러 개 생기면 아래 명령으로 표를 만든다.
 
 ```bash
+npm run bench:artifact -- --candidate jupyterlite --command "manual S1 page run" --sample 1500,1500,0 --sample 1490,1510,0 --sample 1520,1505,0 --out .tmp/jupyterlite-s1.json
+npm run bench:artifact -- --candidate webvm --na "S1 sharded worker model 미측정" --out .tmp/webvm-s1-na.json
 npm run bench:compare -- .tmp/pyproc-s1.json .tmp/jupyterlite-s1.json --out .tmp/s1-compare.md
 ```
 
@@ -54,5 +56,5 @@ npm run bench:compare -- .tmp/pyproc-s1.json .tmp/jupyterlite-s1.json --out .tmp
 ## 다음 작업
 
 1. S1부터 외부 후보별 실행 가능한 최소 페이지나 절차를 `tests/attempts/`에 만든다.
-2. 외부 후보도 S1 raw JSON에 맞춘 산출물 형식으로 기록하고 `bench:compare`로 표를 만든다.
+2. 외부 후보도 `bench:artifact`로 S1 raw JSON 또는 N/A JSON을 만들고 `bench:compare`로 표를 만든다.
 3. README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.

@@ -316,6 +316,8 @@ check("속도 비교 벤치 계약 고정", () => {
   const initiativeMap = readFileSync(join(ROOT, "mainPlan", "browser-os-north-star", "README.md"), "utf8");
   const speedLab = readFileSync(join(ROOT, "examples", "speedLab.html"), "utf8");
   const speedBench = readFileSync(join(ROOT, "tests", "browser", "speedBench.mjs"), "utf8");
+  const benchArtifact = readFileSync(join(ROOT, "tests", "browser", "benchArtifact.mjs"), "utf8");
+  const benchArtifacts = readFileSync(join(ROOT, "tests", "browser", "benchArtifacts.mjs"), "utf8");
   const benchCompare = readFileSync(join(ROOT, "tests", "browser", "benchCompare.mjs"), "utf8");
   const pkgForBench = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   for (const term of ["S0", "S1", "S2", "S3", "S4", "median", "p95", "raw output", "WebVM", "JupyterLite", "marimo"]) {
@@ -328,12 +330,19 @@ check("속도 비교 벤치 계약 고정", () => {
   if (!docsMap.includes("operations/benchmarking.md")) throw new Error("docs 지도에 benchmarking.md 없음");
   if (!initiativeMap.includes("06-speed-comparison.md")) throw new Error("이니셔티브 지도에 06-speed-comparison.md 없음");
   if (pkgForBench.scripts?.["bench:speed"] !== "node tests/browser/speedBench.mjs") throw new Error("bench:speed 스크립트 없음");
+  if (pkgForBench.scripts?.["bench:artifact"] !== "node tests/browser/benchArtifact.mjs") throw new Error("bench:artifact 스크립트 없음");
   if (pkgForBench.scripts?.["bench:compare"] !== "node tests/browser/benchCompare.mjs") throw new Error("bench:compare 스크립트 없음");
   if (!speedLab.includes('scenario: "S1"') || !speedLab.includes("bench,")) throw new Error("Speed Lab gate report가 S1 bench JSON을 싣지 않음");
   for (const term of ["PYPROC_BENCH_OUT", "schemaVersion", 'scenario: "S1"', 'candidate: "pyproc"', "metrics", "browserVersion"]) {
     if (!speedBench.includes(term)) throw new Error(`speedBench.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["schemaVersion", "candidate", "medianSpeedup", "notApplicableReason", "renderMarkdown"]) {
+  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup"]) {
+    if (!benchArtifacts.includes(term)) throw new Error(`benchArtifacts.mjs 필수 항목 누락: ${term}`);
+  }
+  for (const term of ["--candidate", "--sample", "--command", "--source", "--na", "summarizePairedLatencyBench", "normalizeBenchArtifact"]) {
+    if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
+  }
+  for (const term of ["normalizeBenchArtifactFile", "renderBenchCompareMarkdown"]) {
     if (!benchCompare.includes(term)) throw new Error(`benchCompare.mjs 필수 항목 누락: ${term}`);
   }
 });

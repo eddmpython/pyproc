@@ -1470,3 +1470,42 @@ NEXT:
 1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
 2. `envManager`와 `session`의 `runtimeApi.js` 의존을 부트 facade 또는 factory 주입으로 좁힐 수 있는지 본다.
 3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+
+## 2026-07-15 - S1 외부 후보 artifact 생성기 추가
+
+문제:
+
+- `bench:speed`와 `bench:compare`는 pyproc S1 JSON을 만들고 비교할 수 있었지만, WebVM/JupyterLite/marimo 같은 외부 후보를 같은 schema로 기록하는 안전한 CLI가 없었다.
+- 외부 후보 측정값을 수기 JSON으로 만들면 필드 누락, sample 수 불일치, N/A 사유 누락이 비교표까지 흘러갈 수 있었다.
+- S1 비교를 실제로 진행하려면 "측정값"과 "같은 시나리오 불가"를 둘 다 표준 artifact로 남길 수 있어야 한다.
+
+완료:
+
+- `tests/browser/benchArtifacts.mjs`를 추가했다. S1 artifact schema 검증, 정규화, Markdown 비교 표 렌더링을 이 모듈이 담당한다.
+- `tests/browser/benchCompare.mjs`는 schema/렌더링 로직을 직접 들고 있지 않고 `benchArtifacts.mjs`를 사용한다.
+- `tests/browser/benchArtifact.mjs`를 추가했다. `--candidate`, `--command` 또는 `--source`, 반복 `--sample singleMs,parallelMs,maxErr`, `--out`으로 외부 후보 S1 JSON을 만들고, `--na "<reason>"`으로 N/A JSON도 만든다.
+- `package.json`에 `bench:artifact`를 추가했다.
+- `tests/run.mjs` 구조 가드가 `bench:artifact`, `benchArtifacts.mjs`, `benchArtifact.mjs`, `benchCompare.mjs`의 역할을 함께 고정한다.
+- 벤치마크 운영 문서와 속도 비교 계약 문서에 외부 후보 artifact 생성 명령을 추가했다.
+
+검증:
+
+- `node --check tests/browser/benchArtifacts.mjs` PASS.
+- `node --check tests/browser/benchArtifact.mjs` PASS.
+- `node --check tests/browser/benchCompare.mjs` PASS.
+- `npm run bench:artifact -- --candidate sample --command "manual sample fixture" --sample 100,50,0 --sample 110,55,0 --sample 90,45,0 --out .tmp/sample-s1.json` PASS.
+- `npm run bench:artifact -- --candidate webvm --na "S1 sharded worker model 미측정" --out .tmp/webvm-s1-na.json` PASS.
+- `npm run bench:compare -- .tmp/sample-s1.json .tmp/webvm-s1-na.json --out .tmp/sample-compare.md` PASS.
+- `npm test` GREEN 623/623.
+
+판정:
+
+- 외부 후보 비교가 수기 JSON이 아니라 표준 CLI를 통과하게 됐다.
+- S1을 수행하지 못하는 후보도 누락하지 않고 N/A 사유로 비교표에 남긴다.
+- 다음 단계는 실제 WebVM/JupyterLite/marimo 후보 중 하나를 같은 머신에서 돌려 S1 artifact를 남기는 것이다.
+
+NEXT:
+
+1. `bench:speed`로 pyproc S1 최신 artifact를 만들고, 외부 후보 하나를 `bench:artifact`로 측정하거나 N/A로 봉인한다.
+2. S1 후보별 실행 페이지나 절차를 `tests/attempts/` 아래에 최소 재현으로 만든다.
+3. README 속도 문구는 비교 artifact가 생긴 뒤에만 갱신한다.
