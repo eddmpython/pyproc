@@ -1677,3 +1677,42 @@ NEXT:
 1. JupyterLite 또는 marimo WASM의 S1L 측정 절차를 만든다.
 2. 같은 브라우저와 행렬 크기에서 외부 후보 S1L artifact를 생성한다.
 3. [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)에 외부 후보를 합친다.
+
+## 2026-07-15 - JupyterLite S1L 외부 후보 실측
+
+완료:
+
+- 공식 JupyterLite demo REPL을 Edge에서 열고, Pyodide Python kernel에서 S1L 1024 NumPy matmul을 실행했다.
+- [s1l-jupyterlite-2026-07-15.json](benchmarks/s1l-jupyterlite-2026-07-15.json)을 생성했다.
+- [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)를 pyproc + JupyterLite 두 행으로 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [externalS1](../../tests/attempts/externalS1/README.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S1L 상태를 갱신했다.
+
+근거:
+
+- JupyterLite 공식 [사용 문서](https://jupyterlite.readthedocs.io/en/stable/quickstart/using.html)는 배포 URL 방문으로 브라우저에서 실행하고, Python kernel은 Pyodide 기반이라고 설명한다.
+- 사용한 실행 표면은 공식 [demo REPL](https://jupyterlite.github.io/demo/repl/index.html?kernel=python)이다.
+- S1은 여전히 JupyterLite N/A다. 이번 측정은 S1을 single-lane으로 바꾼 것이 아니라 별도 S1L scenario다.
+
+실측:
+
+- Edge 150.0.4078.65, Windows, AMD Ryzen 7 8845HS, `size=1024`, warmed sample 3회.
+- JupyterLite S1L samples: 9844ms, 10149ms, 10153ms.
+- median 10149ms, p95 10153ms, min 9844ms, max 10153ms, maxErr 0.
+- artifact 생성 commit: `98934a9041c91db5c33ae52aa944b9f0532274b1`, `worktreeDirty: false`.
+
+검증:
+
+- `npm run bench:artifact -- --scenario S1L --candidate jupyterlite --browser-version 150.0.4078.65 --engine "JupyterLite Pyodide" --source "https://jupyterlite.github.io/demo/repl/index.html?kernel=python" --command "JupyterLite demo REPL, Python perf_counter S1L 1024 matmul" --note "manual browser measurement, import and warmup excluded" --sample 9844,0 --sample 10149,0 --sample 10153,0 --out mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md` PASS.
+
+판정:
+
+- 첫 외부 S1L 숫자가 생겼다.
+- pyproc S1 간판은 4-worker sharded worker pool 증거로 유지하고, JupyterLite는 single-kernel latency 축에서만 비교한다.
+- 현재 숫자는 거의 같은 등급의 single-kernel Pyodide matmul latency다. pyproc이 내세울 차별점은 S1L 단일 커널 속도가 아니라 S1 병렬 worker pool과 OS 표면이다.
+
+NEXT:
+
+1. marimo WASM을 같은 S1L 방식으로 측정한다.
+2. WebVM은 S1L이 아니라 S0 boot와 Python shell latency로 분리한다.
+3. S0/S1L 숫자가 더 쌓이기 전까지 README에 외부 상대 우위 문구를 넣지 않는다.

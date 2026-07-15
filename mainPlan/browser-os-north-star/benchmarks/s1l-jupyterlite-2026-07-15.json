@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S1L",
+  "candidate": "jupyterlite",
+  "name": "single-kernel numpy matmul latency",
+  "command": "JupyterLite demo REPL, Python perf_counter S1L 1024 matmul",
+  "commit": "98934a9041c91db5c33ae52aa944b9f0532274b1",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T00:56:01.748Z",
+  "finishedAt": "2026-07-15T00:56:01.750Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 14051086336
+  },
+  "engine": {
+    "name": "JupyterLite Pyodide"
+  },
+  "source": "https://jupyterlite.github.io/demo/repl/index.html?kernel=python",
+  "note": "manual browser measurement, import and warmup excluded",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 9844,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 10149,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 10153,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 10149,
+    "p95Ms": 10153,
+    "minMs": 9844,
+    "maxMs": 10153,
+    "maxErr": 0
+  }
+}

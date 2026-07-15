@@ -43,13 +43,13 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 
 ## 외부 비교 표 규칙
 
-첫 비교 후보는 WebVM, JupyterLite, marimo web runtime이다. 이 문서는 해당 프로젝트의 현재 성능을 주장하지 않는다. 비교는 측정한 뒤에만 채운다.
+첫 비교 후보는 WebVM, JupyterLite, marimo web runtime이다. 이 문서는 측정된 artifact가 있는 항목만 숫자로 채운다.
 
 | 비교 축 | pyproc | WebVM | JupyterLite | marimo web runtime | caveat |
 |---|---|---|---|---|---|
 | S0 basic boot | 측정 필요 | 측정 필요 | 측정 필요 | 측정 필요 | 같은 브라우저와 캐시 상태 |
 | S1 numpy sharded matmul | Speed Lab 반복 봉투 | N/A 가능 | N/A 가능 | N/A 가능 | 병렬 worker 모델이 다르면 single-lane으로 재정의하지 않음 |
-| S1L single-kernel numpy latency | 측정 필요 | 측정 필요 | 측정 필요 | 측정 필요 | S1 대체가 아니라 별도 single-lane 보조 축 |
+| S1L single-kernel numpy latency | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | 측정 필요 | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json) | 측정 필요 | S1 대체가 아니라 별도 single-lane 보조 축 |
 | S2 process map | browser gate | 측정 필요 | 측정 필요 | 측정 필요 | 같은 순수 Python 또는 NumPy 작업 |
 | S3 browser server | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | URL fetch로 Python까지 가는지 구분 |
 | S4 machine resume | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | 파일 이미지, persistence, resume hook 동등성 |
