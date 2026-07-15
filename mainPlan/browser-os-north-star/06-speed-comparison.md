@@ -19,7 +19,7 @@
 
 | scenario | 현재 증거 | 기준 |
 |---|---|---|
-| S0 basic boot | `npm run test:browser` | boot ms와 전체 gate GREEN |
+| S0 python ready latency | `npm run bench:artifact -- --scenario S0` | 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지 |
 | S1 numpy sharded matmul | `examples/speedLab.html`, `npm run bench:speed` | `workers=4`, `size=1024`, `samples=3`, `medianSpeedup >= 2.0`, `shard p95 < single median`, `maxErr < 1e-9` |
 | S1L single-kernel numpy latency | `npm run bench:artifact -- --scenario S1L` | warmed latency median, p95, min/max, maxErr |
 | S2 process map | `npm run test:browser` | 결과 일치와 worker pool speedup |
@@ -42,7 +42,7 @@
 
 | scenario | pyproc command | WebVM | JupyterLite | marimo web runtime | 판정 |
 |---|---|---|---|---|---|
-| S0 basic boot | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
+| S0 python ready latency | `npm run bench:artifact -- --scenario S0` | 미측정 | 미측정 | 미측정 | 보류 |
 | S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | [N/A](benchmarks/s1-webvm-na-2026-07-15.json) | [N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | pyproc만 같은 S1 계약 충족 |
 | S1L single-kernel numpy latency | [artifact](benchmarks/s1l-pyproc-2026-07-15.json) | 미측정 | [artifact](benchmarks/s1l-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s1l-marimo-wasm-2026-07-15.json) | WebVM 제외 3자 측정 완료 |
 | S2 process map | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
@@ -57,6 +57,13 @@ S1 artifact가 여러 개 생기면 아래 명령으로 표를 만든다.
 npm run bench:artifact -- --candidate jupyterlite --command "manual S1 page run" --sample 1500,1500,0 --sample 1490,1510,0 --sample 1520,1505,0 --out .tmp/jupyterlite-s1.json
 npm run bench:artifact -- --candidate webvm --na "S1 sharded worker model 미측정" --out .tmp/webvm-s1-na.json
 npm run bench:compare -- .tmp/pyproc-s1.json .tmp/jupyterlite-s1.json --out .tmp/s1-compare.md
+```
+
+S0 artifact는 후보별로 "첫 Python 명령이 성공한 시점"을 잰다. WebVM은 Linux VM boot 뒤 `python3` 명령 출력까지를 S0로 본다.
+
+```bash
+npm run bench:artifact -- --scenario S0 --candidate webvm --command "manual WebVM python ready run" --sample 30000,0 --sample 31000,0 --sample 29500,0 --out .tmp/webvm-s0.json
+npm run bench:compare -- .tmp/pyproc-s0.json .tmp/webvm-s0.json --out .tmp/s0-compare.md
 ```
 
 S1L artifact는 S1을 single-lane으로 바꿔치기하지 않기 위한 보조 축이다. 같은 행렬 크기와 같은 브라우저에서 단일 Python kernel 또는 단일 worker의 warmed NumPy matmul latency만 비교한다.

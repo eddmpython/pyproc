@@ -100,6 +100,13 @@ npm run bench:speed -- --out .tmp/speed-s1.json
 
 기본 S1 조건은 `workers=4`, `size=1024`, `samples=3`이다. 다른 조건은 `--workers`, `--size`, `--samples`로 명시하고 raw artifact의 `command` 필드에 남긴다.
 
+S0 Python ready latency는 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지의 시간이다:
+
+```bash
+npm run bench:artifact -- --scenario S0 --candidate pyproc --command "<command>" --sample 2500,0 --sample 2400,0 --sample 2450,0 --out .tmp/pyproc-s0.json
+npm run bench:compare -- .tmp/pyproc-s0.json --out .tmp/s0-compare.md
+```
+
 S1L single-kernel NumPy latency는 S1을 대체하지 않는 별도 보조 축이다:
 
 ```bash

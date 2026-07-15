@@ -1756,3 +1756,45 @@ NEXT:
 1. WebVM S0 boot와 Python shell latency를 별도 artifact로 정의한다.
 2. S1L 표는 단일 커널 보조 축으로 유지하고 README 상대 우위 문구에는 쓰지 않는다.
 3. pyproc 내부 speed work는 S1 병렬 안정성, worker warmup, worker pool 재사용 비용 쪽으로 이어간다.
+
+## 2026-07-15 - S0 python ready benchmark schema 추가
+
+문제:
+
+- WebVM은 Pyodide single-kernel 축이 아니라 브라우저 안 Linux VM 축이다.
+- WebVM을 S1L에 억지로 넣으면 Python runtime ready 시간과 Linux VM boot 시간이 섞이지 않고 누락된다.
+- 따라서 WebVM 비교 전 S0를 "첫 Python 명령이 성공하는 시점"으로 기계화해야 한다.
+
+결정:
+
+1. S0의 이름은 `python ready latency`로 둔다.
+2. `latencyMs`는 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지다.
+3. S0 sample 형식은 S1L과 같은 `latencyMs[,maxErr]`를 쓴다.
+4. S0와 S1/S1L artifact는 같은 비교표에 섞지 않는다.
+
+완료:
+
+- `tests/browser/benchArtifacts.mjs`가 `S0_SCENARIO`를 지원하고 S0 전용 비교표를 렌더링하게 했다.
+- `tests/browser/benchArtifact.mjs`가 `--scenario S0`를 받아 latency artifact를 만들게 했다.
+- `tests/run.mjs` 구조 가드가 `S0_SCENARIO`를 확인한다.
+- [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 S0 artifact 계약을 추가했다.
+
+검증:
+
+- `node --check tests/browser/benchArtifacts.mjs` PASS.
+- `node --check tests/browser/benchArtifact.mjs` PASS.
+- `node --check tests/browser/benchCompare.mjs` PASS.
+- `npm run bench:artifact -- --scenario S0 --candidate sample-s0 --command "fixture S0" --sample 300,0 --sample 200,0 --sample 250,0 --out .tmp/sample-s0.json` PASS.
+- `npm run bench:compare -- .tmp/sample-s0.json --out .tmp/sample-s0-compare.md` PASS.
+- `npm run bench:compare -- .tmp/sample-s0.json mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json` FAIL expected: 서로 다른 scenario artifact는 한 표로 합칠 수 없다.
+
+판정:
+
+- WebVM을 S1이나 S1L로 왜곡하지 않고 별도 S0 축에서 측정할 준비가 됐다.
+- 다음 단계는 schema 변경을 clean commit으로 고정한 뒤 pyproc/WebVM S0 artifact를 만든다.
+
+NEXT:
+
+1. pyproc S0 기준 artifact를 생성한다.
+2. WebVM에서 VM boot 뒤 `python3` 첫 출력까지 측정한다.
+3. `benchmarks/s0-compare-2026-07-15.md`를 만든다.
