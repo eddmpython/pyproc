@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S2",
+  "candidate": "webvm",
+  "name": "process map",
+  "command": null,
+  "commit": "15d8cf38833b28a379394c3067b3183e963bbb0d",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T02:34:45.523Z",
+  "finishedAt": "2026-07-15T02:34:45.525Z",
+  "browser": {
+    "path": null,
+    "version": null
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 14640558080
+  },
+  "engine": {
+    "name": "WebVM"
+  },
+  "source": "mainPlan/browser-os-north-star/06-speed-comparison.md",
+  "note": null,
+  "ok": false,
+  "metrics": null,
+  "notApplicableReason": "S2는 PyProc.map과 mapSerial로 같은 Python 함수를 같은 입력 묶음에 대해 process pool과 직렬 실행으로 비교하는 계약이다. WebVM은 이 pyproc process-pool API 계약을 제공하는 후보로 측정하지 않는다."
+}
