@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S0/S1/S2 기준 artifact 기록. S0와 S0C는 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1과 S2 계약을 N/A artifact로 봉인. S1L은 pyproc, JupyterLite, marimo WASM을 같은 브라우저에서 측정.
+상태: pyproc S0/S1/S2/S3 기준 artifact 기록. S0와 S0C는 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3 계약을 N/A artifact로 봉인. S1L은 pyproc, JupyterLite, marimo WASM을 같은 브라우저에서 측정.
 
 ## 목표
 
@@ -46,6 +46,8 @@
 | 2026-07-15 | S1L marimo WASM | [s1l-marimo-wasm-2026-07-15.json](benchmarks/s1l-marimo-wasm-2026-07-15.json) | [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md) | GREEN, 3 samples, median 9355ms, p95 11424ms, maxErr 0 |
 | 2026-07-15 | S2 pyproc | [s2-pyproc-2026-07-15.json](benchmarks/s2-pyproc-2026-07-15.json) | [s2-compare-2026-07-15.md](benchmarks/s2-compare-2026-07-15.md) | GREEN, 3 samples, serial median 73ms, process pool median 43ms, speedup 1.61x, maxErr 0 |
 | 2026-07-15 | S2 external candidates | [webvm N/A](benchmarks/s2-webvm-na-2026-07-15.json), [jupyterlite N/A](benchmarks/s2-jupyterlite-na-2026-07-15.json), [marimo-wasm N/A](benchmarks/s2-marimo-wasm-na-2026-07-15.json) | [s2-compare-2026-07-15.md](benchmarks/s2-compare-2026-07-15.md) | 같은 `PyProc.map` process pool API 계약 없음 |
+| 2026-07-15 | S3 pyproc | [s3-pyproc-2026-07-15.json](benchmarks/s3-pyproc-2026-07-15.json) | [s3-compare-2026-07-15.md](benchmarks/s3-compare-2026-07-15.md) | GREEN, 3 samples, `VirtualOrigin` POST roundtrip median 18ms, p95 18ms, maxErr 0 |
+| 2026-07-15 | S3 external candidates | [webvm N/A](benchmarks/s3-webvm-na-2026-07-15.json), [jupyterlite N/A](benchmarks/s3-jupyterlite-na-2026-07-15.json), [marimo-wasm N/A](benchmarks/s3-marimo-wasm-na-2026-07-15.json) | [s3-compare-2026-07-15.md](benchmarks/s3-compare-2026-07-15.md) | 같은 pyproc `VirtualOrigin`/ASGI Service Worker URL contract 없음 |
 
 ## 외부 비교 matrix
 
@@ -58,7 +60,7 @@
 | S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | [N/A](benchmarks/s1-webvm-na-2026-07-15.json) | [N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | pyproc만 같은 S1 계약 충족 |
 | S1L single-kernel numpy latency | [artifact](benchmarks/s1l-pyproc-2026-07-15.json) | 미측정 | [artifact](benchmarks/s1l-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s1l-marimo-wasm-2026-07-15.json) | WebVM 제외 3자 측정 완료 |
 | S2 process map | [artifact](benchmarks/s2-pyproc-2026-07-15.json) | [N/A](benchmarks/s2-webvm-na-2026-07-15.json) | [N/A](benchmarks/s2-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s2-marimo-wasm-na-2026-07-15.json) | pyproc serial 73ms, process pool 43ms, median speedup 1.61x. 외부 후보는 같은 `PyProc.map` process pool API 계약 없음 |
-| S3 browser server | `npm run bench:artifact -- --scenario S3` | 미측정 | 미측정 | 미측정 | 보류 |
+| S3 browser server | [artifact](benchmarks/s3-pyproc-2026-07-15.json) | [N/A](benchmarks/s3-webvm-na-2026-07-15.json) | [N/A](benchmarks/s3-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s3-marimo-wasm-na-2026-07-15.json) | pyproc `VirtualOrigin` POST roundtrip median 18ms, p95 18ms. 외부 후보는 같은 pyproc `VirtualOrigin`/ASGI Service Worker URL contract 없음 |
 | S4 machine resume | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 
 `bench:speed`의 기본 S1 조건은 `workers=4`, `size=1024`, `samples=3`이다. 사람용 Speed Lab UI는 반응성을 위해 768 기본값을 쓰지만, runner는 URL query로 canonical 크기를 명시한다.
@@ -117,6 +119,6 @@ npm run bench:compare -- .tmp/pyproc-s3.json .tmp/webvm-s3-na.json --out .tmp/s3
 
 ## 다음 작업
 
-1. S3 browser server를 외부 후보 대비 OS 기능 축으로 강화한다.
-2. S4 machine resume를 파일 이미지와 resume hook 기준으로 외부 후보 대비 봉인한다.
+1. S4 machine resume를 파일 이미지와 resume hook 기준으로 외부 후보 대비 봉인한다.
+2. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
 3. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.

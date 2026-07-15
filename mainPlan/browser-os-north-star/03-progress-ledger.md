@@ -2114,3 +2114,43 @@ NEXT:
 1. S3 browser server를 WebVM/JupyterLite/marimo 대비 가능한 최단 경로로 비교한다.
 2. S4 machine resume를 파일 이미지와 resume hook 기준으로 외부 후보 대비 봉인한다.
 3. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
+
+## 2026-07-15 - S3 browser server benchmark 축 고정
+
+완료:
+
+- `bench:artifact`와 `bench:compare`가 `S3` scenario를 받도록 확장했다.
+- [s3-pyproc-2026-07-15.json](benchmarks/s3-pyproc-2026-07-15.json)을 생성했다.
+- [s3-webvm-na-2026-07-15.json](benchmarks/s3-webvm-na-2026-07-15.json), [s3-jupyterlite-na-2026-07-15.json](benchmarks/s3-jupyterlite-na-2026-07-15.json), [s3-marimo-wasm-na-2026-07-15.json](benchmarks/s3-marimo-wasm-na-2026-07-15.json)을 생성했다.
+- [s3-compare-2026-07-15.md](benchmarks/s3-compare-2026-07-15.md)를 생성했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md)의 S3 상태를 갱신했다.
+
+실측:
+
+- Browser: Edge `150.0.4078.65`.
+- S3 작업: `npm run test:consumer`의 설치 패키지 consumer gate. `pyproc` public import, graph SRI, `registerPyProcServiceWorker(..., { asgi: "/pyproc/" })`, `Runtime.enableAsgiServer`, `VirtualOrigin` bind 뒤 `POST /pyproc/product/api?value=41`.
+- 측정값은 `timings.virtualOriginMs`에서 가져왔다.
+- 유효 sample: 18ms, 17ms, 18ms.
+- pyproc S3 median: 18ms, p95 18ms, min 17ms, max 18ms, maxErr 0.
+- artifact 생성 commit: `7a2f699e6fb0db973c208ef2699900214a0f8ab2`, `worktreeDirty: false`.
+- 외부 후보 N/A artifact 생성 commit: WebVM `0effa021`, JupyterLite `a92332c5`, marimo WASM `cb9fd091`. 모두 `worktreeDirty: false`.
+
+검증:
+
+- `npm test` PASS, 641 passed, 0 failed.
+- `npm run test:consumer` GREEN 15/15 유효 3회.
+- `npm run bench:artifact -- --scenario S3 --candidate pyproc --browser-version 150.0.4078.65 --engine "Pyodide + VirtualOrigin" --source "npm run test:consumer" --command "npm run test:consumer, collect timings.virtualOriginMs from installed package VirtualOrigin POST" --note "derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, verified SRI Service Worker asgi=/pyproc/, Runtime.enableAsgiServer, and VirtualOrigin POST /pyproc/product/api?value=41" --sample 18,0 --sample 17,0 --sample 18,0 --out mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s3-webvm-na-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s3-jupyterlite-na-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s3-marimo-wasm-na-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md` PASS.
+
+판정:
+
+- S3는 pyproc의 “브라우저 안 서버” 차별화 축이다. 설치 패키지 앱에서 URL fetch가 Service Worker를 지나 같은 탭의 Python ASGI app까지 왕복한다.
+- pyproc 기준 S3 roundtrip은 median 18ms, p95 18ms다. 이 숫자는 서버 부팅 시간이 아니라 이미 뜬 ASGI server로 POST가 왕복한 시간이다.
+- WebVM, JupyterLite, marimo WASM은 0점 처리하지 않고 N/A로 봉인했다. 이유는 같은 pyproc `VirtualOrigin`/ASGI Service Worker URL contract를 제공하는 후보로 측정하지 않았기 때문이다.
+- S3는 S0 부팅 속도나 S1 계산 속도와 다른 OS affordance다. URL namespace, SW routing, ASGI app, 설치 패키지 public surface가 한 번에 묶인다.
+
+NEXT:
+
+1. S4 machine resume를 파일 이미지와 resume hook 기준으로 외부 후보 대비 봉인한다.
+2. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
+3. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
