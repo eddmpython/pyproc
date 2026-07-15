@@ -1716,3 +1716,43 @@ NEXT:
 1. marimo WASM을 같은 S1L 방식으로 측정한다.
 2. WebVM은 S1L이 아니라 S0 boot와 Python shell latency로 분리한다.
 3. S0/S1L 숫자가 더 쌓이기 전까지 README에 외부 상대 우위 문구를 넣지 않는다.
+
+## 2026-07-15 - marimo WASM S1L 외부 후보 실측
+
+완료:
+
+- 공식 marimo playground를 Edge에서 열고, WASM Pyodide Python kernel에서 S1L 1024 NumPy matmul을 실행했다.
+- [s1l-marimo-wasm-2026-07-15.json](benchmarks/s1l-marimo-wasm-2026-07-15.json)을 생성했다.
+- [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)를 pyproc + JupyterLite + marimo WASM 세 행으로 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [externalS1](../../tests/attempts/externalS1/README.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S1L 상태를 갱신했다.
+
+근거:
+
+- marimo 공식 [WebAssembly 문서](https://docs.marimo.io/guides/wasm/)는 notebook이 Python backend 없이 브라우저에서 실행되고 Pyodide 기반이라고 설명한다.
+- 같은 문서는 NumPy가 WASM notebook에 사전 포함된 패키지라고 설명한다.
+- 같은 문서는 WASM concurrency adapter가 현재 Pyodide interpreter 안에서 동작하며 true CPU parallelism이나 공유 메모리 process를 만들지 않는다고 설명한다. 따라서 marimo는 S1이 아니라 S1L 비교 대상으로만 둔다.
+- 사용한 실행 표면은 공식 [marimo playground](https://marimo.app/)다.
+
+실측:
+
+- Edge 150.0.4078.65, Windows, AMD Ryzen 7 8845HS, `size=1024`, warmed sample 3회.
+- marimo WASM S1L samples: 11424ms, 9355ms, 9239ms.
+- median 9355ms, p95 11424ms, min 9239ms, max 11424ms, maxErr 0.
+- artifact 생성 commit: `4e30f3a82bee8491f0a5759a73082bdbec96c9fc`, `worktreeDirty: false`.
+
+검증:
+
+- `npm run bench:artifact -- --scenario S1L --candidate marimo-wasm --browser-version 150.0.4078.65 --engine "marimo WASM Pyodide" --source "https://marimo.app/" --command "marimo.app playground, Python perf_counter S1L 1024 matmul" --note "manual browser measurement, import and warmup excluded" --sample 11424,0 --sample 9355,0 --sample 9239,0 --out mainPlan/browser-os-north-star/benchmarks/s1l-marimo-wasm-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1l-marimo-wasm-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md` PASS.
+
+판정:
+
+- S1L은 pyproc, JupyterLite, marimo WASM 3자 측정으로 닫혔다. WebVM은 같은 single-kernel Pyodide 축이 아니므로 S0 boot와 Python shell latency로 분리한다.
+- marimo WASM은 median이 낮고 p95가 높다. 단일 커널 수치만으로 pyproc의 차별점을 주장하지 않는다.
+- pyproc의 속도 간판은 S1 4-worker sharded worker pool이고, Browser OS 차별점은 process, snapshot fork, file/session/machine surface다.
+
+NEXT:
+
+1. WebVM S0 boot와 Python shell latency를 별도 artifact로 정의한다.
+2. S1L 표는 단일 커널 보조 축으로 유지하고 README 상대 우위 문구에는 쓰지 않는다.
+3. pyproc 내부 speed work는 S1 병렬 안정성, worker warmup, worker pool 재사용 비용 쪽으로 이어간다.

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S1L",
+  "candidate": "marimo-wasm",
+  "name": "single-kernel numpy matmul latency",
+  "command": "marimo.app playground, Python perf_counter S1L 1024 matmul",
+  "commit": "4e30f3a82bee8491f0a5759a73082bdbec96c9fc",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T01:02:59.327Z",
+  "finishedAt": "2026-07-15T01:02:59.329Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 13900709888
+  },
+  "engine": {
+    "name": "marimo WASM Pyodide"
+  },
+  "source": "https://marimo.app/",
+  "note": "manual browser measurement, import and warmup excluded",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 11424,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 9355,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 9239,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 9355,
+    "p95Ms": 11424,
+    "minMs": 9239,
+    "maxMs": 11424,
+    "maxErr": 0
+  }
+}
