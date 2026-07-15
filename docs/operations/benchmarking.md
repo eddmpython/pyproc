@@ -52,7 +52,7 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 | S0C python cold ready latency | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0c-webvm-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0c-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0c-marimo-wasm-2026-07-15.json) | cold profile/cache-clear 조건. warm S0와 한 표에 섞지 않음 |
 | S1 numpy sharded matmul | Speed Lab 반복 봉투 | N/A 가능 | N/A 가능 | N/A 가능 | 병렬 worker 모델이 다르면 single-lane으로 재정의하지 않음 |
 | S1L single-kernel numpy latency | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | 측정 필요 | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-marimo-wasm-2026-07-15.json) | S1 대체가 아니라 별도 single-lane 보조 축 |
-| S2 process map | browser gate artifact | 측정 필요 | 측정 필요 | 측정 필요 | 같은 순수 Python 또는 NumPy 작업 |
+| S2 process map | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s2-webvm-na-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s2-jupyterlite-na-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s2-marimo-wasm-na-2026-07-15.json) | `PyProc.map` process pool 계약. 같은 API 후보가 없으면 N/A |
 | S3 browser server | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | URL fetch로 Python까지 가는지 구분 |
 | S4 machine resume | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | 파일 이미지, persistence, resume hook 동등성 |
 

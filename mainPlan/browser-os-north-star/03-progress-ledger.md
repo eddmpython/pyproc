@@ -2075,3 +2075,42 @@ NEXT:
 1. S2 process map 비교 축을 외부 후보 N/A 또는 제한 artifact로 봉인한다.
 2. S3 browser server를 WebVM/JupyterLite/marimo 대비 가능한 최단 경로로 비교한다.
 3. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
+
+## 2026-07-15 - S2 process map benchmark 축 고정
+
+완료:
+
+- `bench:artifact`와 `bench:compare`가 `S2` scenario를 받도록 확장했다.
+- [s2-pyproc-2026-07-15.json](benchmarks/s2-pyproc-2026-07-15.json)을 생성했다.
+- [s2-webvm-na-2026-07-15.json](benchmarks/s2-webvm-na-2026-07-15.json), [s2-jupyterlite-na-2026-07-15.json](benchmarks/s2-jupyterlite-na-2026-07-15.json), [s2-marimo-wasm-na-2026-07-15.json](benchmarks/s2-marimo-wasm-na-2026-07-15.json)을 생성했다.
+- [s2-compare-2026-07-15.md](benchmarks/s2-compare-2026-07-15.md)를 생성했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md)의 S2 상태를 갱신했다.
+
+실측:
+
+- Browser: Edge `150.0.4078.65`.
+- S2 작업: `tests/browser/gate.html`의 `PyProc.map` 구간. `N = 80000`, 같은 Python 함수 `sum(i*i for i in range(n))`, 입력 `[N, N, N, N]`.
+- 측정값은 `timings.mapSerialMs`와 `timings.mapParallelMs`에서 가져왔다.
+- 유효 sample: `(serial 44ms, parallel 29ms)`, `(serial 74ms, parallel 46ms)`, `(serial 73ms, parallel 43ms)`.
+- pyproc S2 median: serial 73ms, process pool 43ms, speedup 1.61x, process pool p95 46ms, maxErr 0.
+- artifact 생성 commit: `662c123a02d26dafadd8c19906a33700532c1f16`, `worktreeDirty: false`.
+- 중간에 browser gate timeout 1회와 조기 종료 2회가 있었고, 유효 report가 없어서 sample에서 제외했다. 최종 sample은 모두 GREEN 47/47 또는 동일 console output에서 나온 값이다.
+
+검증:
+
+- `npm test` PASS, 638 passed, 0 failed.
+- `npm run test:browser` GREEN 47/47 유효 3회.
+- `npm run bench:artifact -- --scenario S2 --candidate pyproc --browser-version 150.0.4078.65 --engine Pyodide --source "npm run test:browser" --command "npm run test:browser, collect timings.mapSerialMs and timings.mapParallelMs from PyProc.map N=80000 x 4" --note "derived from three browser gate runs on tests/browser/gate.html; each run uses a fresh temporary browser profile via --user-data-dir; serialMs is timings.mapSerialMs and parallelMs is timings.mapParallelMs" --sample 44,29,0 --sample 74,46,0 --sample 73,43,0 --out mainPlan/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s2-webvm-na-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s2-jupyterlite-na-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s2-marimo-wasm-na-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md` PASS.
+
+판정:
+
+- S2는 pyproc의 “브라우저 OS” 차별화 축이다. 같은 탭 안에서 process pool을 만들고, 같은 Python 함수를 serial과 parallel로 비교할 수 있다.
+- 외부 후보는 이번 S2 계약에서 0점 처리하지 않고 N/A로 봉인했다. 이유는 같은 `PyProc.map` process pool API 계약을 제공하는 후보로 측정하지 않았기 때문이다.
+- S2는 S1처럼 큰 수치 간판은 아니지만, process table, worker pool, timeout, interrupt, kill, fork, RPC 상관까지 한 gate에서 묶이는 구조 증거다.
+
+NEXT:
+
+1. S3 browser server를 WebVM/JupyterLite/marimo 대비 가능한 최단 경로로 비교한다.
+2. S4 machine resume를 파일 이미지와 resume hook 기준으로 외부 후보 대비 봉인한다.
+3. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
