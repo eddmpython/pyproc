@@ -2648,3 +2648,46 @@ NEXT:
 1. 다음 probe 전용 승격 후보는 `JobControl`이다. 셸의 `&`, `%fg`, `%kill`이 제품 UI로 보일 때 OS성이 가장 직접적으로 전달된다.
 2. coverage manifest를 benchmark artifact처럼 schema 검증 가능한 산출물로 승격할지 결정한다.
 3. 소비자별 배선 상태를 실제 제품 gate freshness evidence와 더 직접 연결한다.
+
+## 2026-07-15 - JobControl product consumer gate 승격
+
+문제:
+
+- `JobControl`은 probe에서 브라우저 파이썬 셸의 `&`, `%fg`, `%kill` 축을 검증했지만, 설치 패키지 product consumer gate에는 없었다.
+- OS 목표를 제품 표면으로 전달하려면 "백그라운드 job을 띄우고 포그라운드 회수/kill한다"는 흐름이 공개 패키지 소비 경로에서 계속 green이어야 한다.
+
+완료:
+
+- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - shell jobs` 행을 추가했다.
+- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `JobControl`을 import하고, `JobControl({ assetIntegrity })`로 설치 패키지 worker graph를 검증한 뒤 잡 수명주기를 실행한다.
+- product consumer gate가 `boot`, 대화형 namespace 상태 누적, `expr &`, `fg`, 무한 루프 job `kill`, `terminate`를 검증한다.
+- [contract.md](../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 `JobControl`을 연결했다.
+- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)의 Machine container and jobs 행을 product consumer gate 실행 표면으로 갱신했다.
+- `npm test`가 `JobControl` coverage 행과 실제 product consumer check 문자열을 함께 감시하게 했다.
+
+실측:
+
+- `npm run test:consumer` GREEN 19/19.
+- JobControl boot 2614ms, background prompt return 86ms, kill 40ms.
+- product consumer coverage manifest 9 rows.
+- 같은 run의 참고 수치: VirtualOrigin 25ms, MachineJournal commit 1402ms/recover 2946ms, signed `.pymachine` export 165ms, trusted open 2371ms.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/browser/productConsumerCoverage.mjs` PASS.
+- `node --check tests/browser/productConsumer.mjs` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 659 passed, 0 failed.
+- `npm run test:consumer` PASS, GREEN 19/19.
+
+판정:
+
+- 셸 job control이 probe 근거에서 설치 패키지 기준 제품 소비 증거로 올라갔다.
+- 브라우저 OS 목표에서 중요한 "대화형 셸이 살아있는 채로 다른 코어에 잡을 넘긴다"는 주장이 문서가 아니라 product gate에서 증명된다.
+
+NEXT:
+
+1. coverage manifest를 benchmark artifact처럼 schema 검증 가능한 산출물로 승격할지 결정한다.
+2. `MachineContainer`도 product consumer gate로 승격할지 판정한다. `JobControl`과 같은 행이지만 아직 제품 gate 직접 실행은 없다.
+3. 소비자별 배선 상태를 실제 제품 gate freshness evidence와 더 직접 연결한다.

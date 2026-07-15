@@ -93,6 +93,7 @@ const html = `<!DOCTYPE html>
       boot,
       bootSession,
       PyProc,
+      JobControl,
       VirtualOrigin,
       DeviceFs,
       verifyPyProcAssetIntegrity,
@@ -143,6 +144,7 @@ const html = `<!DOCTYPE html>
 
     let sw = null;
     let origin = null;
+    let jobs = null;
     let opfsRoot = null;
     const cleanupEntries = [];
     try {
@@ -268,6 +270,35 @@ const html = `<!DOCTYPE html>
       timings.processMs = Math.round(performance.now() - t);
       check("PyProc worker runs from installed package", JSON.stringify(mapped) === JSON.stringify([36, 49, 64]), workerBoot.avgBootMs + "ms");
 
+      t = performance.now();
+      jobs = new JobControl({ indexURL: INDEX, workers: 2, assetIntegrity });
+      const jobBoot = await jobs.boot();
+      timings.jobBootMs = Math.round(performance.now() - t);
+      await jobs.push("productBase = 41");
+      const interactiveValue = await jobs.push("productBase + 1");
+      t = performance.now();
+      const backgroundJob = await jobs.push("productBase * 2 &");
+      timings.jobPromptReturnMs = Math.round(performance.now() - t);
+      const foregroundResult = await jobs.fg(backgroundJob.job);
+      const loopJob = await jobs.push("while True:\\n    pass &");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      t = performance.now();
+      const killAccepted = jobs.kill(loopJob.job);
+      const killedResult = await jobs.fg(loopJob.job);
+      timings.jobKillMs = Math.round(performance.now() - t);
+      const killedState = jobs.jobs().find((j) => j.jobId === loopJob.job)?.state;
+      check("JobControl runs installed product shell jobs",
+        jobBoot.jobSlots === 1 &&
+        interactiveValue.value === "42" &&
+        backgroundJob.job &&
+        foregroundResult.value === "82" &&
+        killAccepted === true &&
+        killedState === "killed" &&
+        killedResult.error,
+        "boot=" + timings.jobBootMs + "ms, prompt=" + timings.jobPromptReturnMs + "ms, kill=" + timings.jobKillMs + "ms");
+      jobs.terminate();
+      jobs = null;
+
       opfsRoot = await navigator.storage.getDirectory();
       const homeName = uniqueName("pyprocProductHome");
       cleanupEntries.push(homeName);
@@ -373,6 +404,7 @@ const html = `<!DOCTYPE html>
       check("uncaught", false, e && (e.stack || e.message || String(e)));
     } finally {
       if (origin) origin.unbind();
+      if (jobs) jobs.terminate();
       if (sw) await sw.registration.unregister();
       if (opfsRoot) {
         for (const name of cleanupEntries) {

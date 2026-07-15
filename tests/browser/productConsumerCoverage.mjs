@@ -46,6 +46,12 @@ export const PRODUCT_CONSUMER_COVERAGE = Object.freeze([
     contract: "설치 패키지 worker graph로 `boot`, `map`, `terminate` 실행, SRI와 ASGI Service Worker prefix 충돌 없음",
   }),
   Object.freeze({
+    gate: "product consumer - shell jobs",
+    specifiers: Object.freeze(["`pyproc`"]),
+    publicSurface: Object.freeze(["`JobControl`"]),
+    contract: "설치 패키지 worker graph로 대화형 namespace를 만들고 `expr &`, `fg`, `kill`, `terminate` 잡 수명주기 실행",
+  }),
+  Object.freeze({
     gate: "product consumer - crash resume",
     specifiers: Object.freeze(["`pyproc`"]),
     publicSurface: Object.freeze(["`bootSession`", "`MachineJournal`", "Runtime `enableJournal`"]),
