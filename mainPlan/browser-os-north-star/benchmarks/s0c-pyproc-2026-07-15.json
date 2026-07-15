@@ -1,6 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S0C",
+  "scenarioDefinition": {
+    "id": "S0C",
+    "name": "python cold ready latency",
+    "profile": "cold",
+    "primaryMetric": "medianMs",
+    "sampleSchema": [
+      "latencyMs",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "pyproc",
   "name": "python cold ready latency",
   "command": "npm run test:browser with fresh temporary browser profile, boot() ready and run sum(range(100))",
@@ -9,8 +20,10 @@
   "startedAt": "2026-07-15T01:51:38.648Z",
   "finishedAt": "2026-07-15T01:51:38.649Z",
   "browser": {
+    "name": null,
     "path": null,
-    "version": "150.0.4078.65"
+    "version": "150.0.4078.65",
+    "headless": true
   },
   "host": {
     "platform": "win32",
@@ -18,10 +31,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 12799406080
+    "freeMemBytes": 12799406080,
+    "powerProfile": null
   },
   "engine": {
-    "name": "Pyodide"
+    "name": "Pyodide",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": "npm run test:browser with fresh temporary browser profile, boot() ready and run sum(range(100))",
+    "startedAt": "2026-07-15T01:51:38.648Z",
+    "finishedAt": "2026-07-15T01:51:38.649Z",
+    "profile": "cold",
+    "warmupCount": null,
+    "sampleCount": 3
+  },
+  "environment": {
+    "commit": "5a8dedca988f3658a46c786775b5111116123a3e",
+    "worktreeDirty": false,
+    "browser": {
+      "name": null,
+      "path": null,
+      "version": "150.0.4078.65",
+      "headless": true
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 12799406080,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "Pyodide",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "npm run test:browser",
+    "rawOutput": "npm run test:browser",
+    "note": "derived from three browser gate runs; each run uses a fresh temporary browser profile via --user-data-dir and removes it after completion; latencyMs is bootMs until Python boot ready",
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "npm run test:browser",
   "note": "derived from three browser gate runs; each run uses a fresh temporary browser profile via --user-data-dir and removes it after completion; latencyMs is bootMs until Python boot ready",

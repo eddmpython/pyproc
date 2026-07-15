@@ -100,6 +100,8 @@ npm run bench:speed -- --out .tmp/speed-s1.json
 
 기본 S1 조건은 `workers=4`, `size=1024`, `samples=3`이다. 다른 조건은 `--workers`, `--size`, `--samples`로 명시하고 raw artifact의 `command` 필드에 남긴다.
 
+`bench:artifact`가 만드는 raw JSON은 schema v2다. 새 측정은 가능하면 `--source`, `--raw-output`, `--profile`, `--warmup-count`, `--browser-name`, `--browser-headless`를 같이 남긴다. 기존 최소 명령도 동작하지만, README에 올릴 수치는 source와 raw output reference가 있는 artifact만 승격한다.
+
 S0 Python ready latency는 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지의 시간이다:
 
 ```bash

@@ -1,6 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S0C",
+  "scenarioDefinition": {
+    "id": "S0C",
+    "name": "python cold ready latency",
+    "profile": "cold",
+    "primaryMetric": "medianMs",
+    "sampleSchema": [
+      "latencyMs",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "marimo-wasm",
   "name": "python cold ready latency",
   "command": "fresh persistent browser profile, open about:blank, page.goto marimo.app, fill first iframe code cell with print(marker), Control+Enter, wait iframe marker output",
@@ -9,8 +20,10 @@
   "startedAt": "2026-07-15T02:16:48.289Z",
   "finishedAt": "2026-07-15T02:16:48.291Z",
   "browser": {
+    "name": "Edge",
     "path": null,
-    "version": "150.0.4078.65"
+    "version": "150.0.4078.65",
+    "headless": true
   },
   "host": {
     "platform": "win32",
@@ -18,10 +31,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 15311347712
+    "freeMemBytes": 15311347712,
+    "powerProfile": null
   },
   "engine": {
-    "name": "marimo WASM Pyodide"
+    "name": "marimo WASM Pyodide",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": "fresh persistent browser profile, open about:blank, page.goto marimo.app, fill first iframe code cell with print(marker), Control+Enter, wait iframe marker output",
+    "startedAt": "2026-07-15T02:16:48.289Z",
+    "finishedAt": "2026-07-15T02:16:48.291Z",
+    "profile": "cold",
+    "warmupCount": null,
+    "sampleCount": 3
+  },
+  "environment": {
+    "commit": "db334965dd4105a2caaad08572095019004b3e8a",
+    "worktreeDirty": false,
+    "browser": {
+      "name": "Edge",
+      "path": null,
+      "version": "150.0.4078.65",
+      "headless": true
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 15311347712,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "marimo WASM Pyodide",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "https://marimo.app/ via playwright-cli",
+    "rawOutput": "https://marimo.app/ via playwright-cli",
+    "note": "Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto",
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "https://marimo.app/ via playwright-cli",
   "note": "Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto",

@@ -7,6 +7,7 @@ import { cpus, freemem, platform, release, tmpdir, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
 import { findBrowser, headlessArgs } from "./harness.mjs";
+import { BENCH_ARTIFACT_SCHEMA_VERSION, S1_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_BENCH_TIMEOUT || process.env.PYPROC_GATE_TIMEOUT || 240000);
 const DEFAULT_WORKERS = 4;
@@ -50,6 +51,14 @@ function browserVersion(browser) {
   return clean(ps.stdout || ps.stderr);
 }
 
+function browserName(browser) {
+  const lower = browser.toLowerCase();
+  if (lower.includes("edge") || lower.includes("msedge")) return "Edge";
+  if (lower.includes("chrome")) return "Chrome";
+  if (lower.includes("chromium")) return "Chromium";
+  return null;
+}
+
 function gitCommit() {
   const r = spawnSync("git", ["rev-parse", "HEAD"], { cwd: process.cwd(), encoding: "utf8", timeout: 5000 });
   return r.status === 0 ? r.stdout.trim() : null;
@@ -65,7 +74,7 @@ const benchWorkers = intOption("--workers", "PYPROC_BENCH_WORKERS", DEFAULT_WORK
 const benchSize = intOption("--size", "PYPROC_BENCH_SIZE", DEFAULT_SIZE, { min: 128, max: 1536 });
 const benchSamples = intOption("--samples", "PYPROC_BENCH_SAMPLES", DEFAULT_SAMPLES, { min: 3, max: 9 });
 const browser = findBrowser();
-const browserInfo = { path: browser, version: browserVersion(browser) };
+const browserInfo = { name: browserName(browser), path: browser, version: browserVersion(browser), headless: true };
 
 let resolveReport = null;
 const server = createStaticServer(async (req, res) => {
@@ -116,29 +125,66 @@ const command = [
   String(benchSamples),
   ...(outPath ? ["--out", outPath] : []),
 ].map(commandArg).join(" ");
-const artifact = {
-  schemaVersion: 1,
-  scenario: "S1",
-  candidate: "pyproc",
-  name: "numpy sharded matmul",
-  command,
+const finishedAt = new Date().toISOString();
+const scenarioDefinition = scenarioDefinitionFor(S1_SCENARIO);
+const host = {
+  platform: platform(),
+  release: release(),
+  cpuModel: primaryCpu.model || null,
+  cpuCount: cpus().length,
+  totalMemBytes: totalmem(),
+  freeMemBytes: freemem(),
+  powerProfile: process.env.PYPROC_POWER_PROFILE || null,
+};
+const engine = {
+  name: "Pyodide",
+  indexURL: process.env.PYPROC_INDEX_URL || null,
+  selfHosted: !!process.env.PYPROC_INDEX_URL,
+  pythonVersion: null,
+  numpyVersion: null,
+};
+const environment = {
   commit: gitCommit(),
   worktreeDirty: gitDirty(),
-  startedAt,
-  finishedAt: new Date().toISOString(),
   browser: browserInfo,
-  host: {
-    platform: platform(),
-    release: release(),
-    cpuModel: primaryCpu.model || null,
-    cpuCount: cpus().length,
-    totalMemBytes: totalmem(),
-    freeMemBytes: freemem(),
-  },
-  engine: {
-    indexURL: process.env.PYPROC_INDEX_URL || null,
-    selfHosted: !!process.env.PYPROC_INDEX_URL,
-  },
+  host,
+  engine,
+};
+const measurement = {
+  command,
+  startedAt,
+  finishedAt,
+  profile: scenarioDefinition.profile,
+  warmupCount: 0,
+  sampleCount: result.bench?.sampleCount || 0,
+};
+const evidence = {
+  source: "examples/speedLab.html gate report",
+  rawOutput: "embedded report from POST /gateReport",
+  note: null,
+  runner: { workers: benchWorkers, size: benchSize, samples: benchSamples },
+  page: url,
+  timeoutMs: TIMEOUT_MS,
+  report: result,
+};
+const artifact = {
+  schemaVersion: BENCH_ARTIFACT_SCHEMA_VERSION,
+  scenario: S1_SCENARIO,
+  scenarioDefinition,
+  candidate: "pyproc",
+  name: scenarioDefinition.name,
+  command,
+  commit: environment.commit,
+  worktreeDirty: environment.worktreeDirty,
+  startedAt,
+  finishedAt,
+  browser: browserInfo,
+  host,
+  engine,
+  measurement,
+  environment,
+  evidence,
+  producer: { name: "speedBench.mjs", schemaVersion: BENCH_ARTIFACT_SCHEMA_VERSION },
   runner: {
     workers: benchWorkers,
     size: benchSize,
@@ -150,6 +196,8 @@ const artifact = {
   report: result,
   metrics: result.bench || null,
 };
+
+normalizeBenchArtifact(artifact, outPath || "speedBench");
 
 if (outPath) {
   await mkdir(dirname(resolve(outPath)), { recursive: true });

@@ -1,6 +1,20 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S4",
+  "scenarioDefinition": {
+    "id": "S4",
+    "name": "machine resume",
+    "profile": "gate",
+    "primaryMetric": "openMedianMs",
+    "sampleSchema": [
+      "exportMs",
+      "openMs",
+      "machineMB",
+      "resumeRows",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "pyproc",
   "name": "machine resume",
   "command": "npm run test:consumer, collect timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows from installed package signed .pymachine gate",
@@ -9,8 +23,10 @@
   "startedAt": "2026-07-15T02:53:13.233Z",
   "finishedAt": "2026-07-15T02:53:13.234Z",
   "browser": {
+    "name": "Edge",
     "path": null,
-    "version": "150.0.4078.65"
+    "version": "150.0.4078.65",
+    "headless": true
   },
   "host": {
     "platform": "win32",
@@ -18,10 +34,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 16845234176
+    "freeMemBytes": 16845234176,
+    "powerProfile": null
   },
   "engine": {
-    "name": "Pyodide + signed .pymachine"
+    "name": "Pyodide + signed .pymachine",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": "npm run test:consumer, collect timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows from installed package signed .pymachine gate",
+    "startedAt": "2026-07-15T02:53:13.233Z",
+    "finishedAt": "2026-07-15T02:53:13.234Z",
+    "profile": "gate",
+    "warmupCount": null,
+    "sampleCount": 3
+  },
+  "environment": {
+    "commit": "a50d997f65d32765cb2d8e8d078babb9e99b613e",
+    "worktreeDirty": false,
+    "browser": {
+      "name": "Edge",
+      "path": null,
+      "version": "150.0.4078.65",
+      "headless": true
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 16845234176,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "Pyodide + signed .pymachine",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "npm run test:consumer",
+    "rawOutput": "npm run test:consumer",
+    "note": "derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, signed exportImage includeHome, trusted public key openMachine, and resume.py SQLite resource reopen",
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "npm run test:consumer",
   "note": "derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, signed exportImage includeHome, trusted public key openMachine, and resume.py SQLite resource reopen",

@@ -1,6 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S0",
+  "scenarioDefinition": {
+    "id": "S0",
+    "name": "python ready latency",
+    "profile": "warm",
+    "primaryMetric": "medianMs",
+    "sampleSchema": [
+      "latencyMs",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "marimo-wasm",
   "name": "python ready latency",
   "command": "page.goto marimo.app, fill first iframe code cell with print(marker), Control+Enter, wait iframe marker output",
@@ -9,8 +20,10 @@
   "startedAt": "2026-07-15T01:41:05.404Z",
   "finishedAt": "2026-07-15T01:41:05.407Z",
   "browser": {
+    "name": "Edge",
     "path": null,
-    "version": "150.0.0.0"
+    "version": "150.0.0.0",
+    "headless": true
   },
   "host": {
     "platform": "win32",
@@ -18,10 +31,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 13385773056
+    "freeMemBytes": 13385773056,
+    "powerProfile": null
   },
   "engine": {
-    "name": "marimo WASM Pyodide"
+    "name": "marimo WASM Pyodide",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": "page.goto marimo.app, fill first iframe code cell with print(marker), Control+Enter, wait iframe marker output",
+    "startedAt": "2026-07-15T01:41:05.404Z",
+    "finishedAt": "2026-07-15T01:41:05.407Z",
+    "profile": "warm",
+    "warmupCount": null,
+    "sampleCount": 3
+  },
+  "environment": {
+    "commit": "8ae6cc2779eef605ef8df355bec6d740c61184b8",
+    "worktreeDirty": false,
+    "browser": {
+      "name": "Edge",
+      "path": null,
+      "version": "150.0.0.0",
+      "headless": true
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 13385773056,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "marimo WASM Pyodide",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "https://marimo.app/ via playwright-cli",
+    "rawOutput": "https://marimo.app/ via playwright-cli",
+    "note": "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param",
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "https://marimo.app/ via playwright-cli",
   "note": "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param",

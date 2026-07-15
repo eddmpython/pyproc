@@ -1,6 +1,19 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S1",
+  "scenarioDefinition": {
+    "id": "S1",
+    "name": "numpy sharded matmul",
+    "profile": "warmed",
+    "primaryMetric": "medianSpeedup",
+    "sampleSchema": [
+      "singleMs",
+      "parallelMs",
+      "speedup",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "marimo-wasm",
   "name": "numpy sharded matmul",
   "command": null,
@@ -9,8 +22,10 @@
   "startedAt": "2026-07-15T00:34:29.359Z",
   "finishedAt": "2026-07-15T00:34:29.361Z",
   "browser": {
+    "name": null,
     "path": null,
-    "version": null
+    "version": null,
+    "headless": null
   },
   "host": {
     "platform": "win32",
@@ -18,10 +33,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 15001886720
+    "freeMemBytes": 15001886720,
+    "powerProfile": null
   },
   "engine": {
-    "name": "marimo WASM"
+    "name": "marimo WASM",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": null,
+    "startedAt": "2026-07-15T00:34:29.359Z",
+    "finishedAt": "2026-07-15T00:34:29.361Z",
+    "profile": "warmed",
+    "warmupCount": 0,
+    "sampleCount": 0
+  },
+  "environment": {
+    "commit": "9b697a4e80824daf8def1859eeebd6aecd94488b",
+    "worktreeDirty": false,
+    "browser": {
+      "name": null,
+      "path": null,
+      "version": null,
+      "headless": null
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 15001886720,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "marimo WASM",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "https://docs.marimo.io/guides/wasm/",
+    "rawOutput": "https://docs.marimo.io/guides/wasm/",
+    "note": null,
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "https://docs.marimo.io/guides/wasm/",
   "note": null,

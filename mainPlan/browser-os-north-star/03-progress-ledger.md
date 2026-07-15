@@ -2298,3 +2298,40 @@ NEXT:
 1. capability matrix를 기준으로 README Public surface의 장황한 설명을 점진적으로 슬림화할 수 있다.
 2. 다음 구조 강화 후보는 benchmark artifact schema v2다.
 3. 제품 데모 관점에서는 matrix 행별로 최소 runnable example을 연결하는 것이 다음 품질 상승 지점이다.
+
+## 2026-07-15 - benchmark artifact schema v2 승격
+
+완료:
+
+- [benchArtifacts.mjs](../../tests/browser/benchArtifacts.mjs)의 `BENCH_ARTIFACT_SCHEMA_VERSION`을 2로 올렸다.
+- `SCENARIO_DEFINITIONS`를 추가해 S0, S0C, S1, S1L, S2, S3, S4의 이름, 기본 profile, primary metric, sampleSchema를 한 곳에 고정했다.
+- v2 봉투를 `scenarioDefinition`, `measurement`, `environment`, `evidence`로 분리했다.
+- sampleSchema 검증을 추가해 latency, paired speed, machine resume sample 필드와 speedup 계산이 어긋나면 실패하게 했다.
+- [benchArtifact.mjs](../../tests/browser/benchArtifact.mjs)에 `--raw-output`, `--profile`, `--warmup-count`, `--browser-name`, `--browser-headless` 입력을 추가했다.
+- [speedBench.mjs](../../tests/browser/speedBench.mjs)가 S1 artifact를 v2로 만들고, 생성 직전에 `normalizeBenchArtifact()`로 자기 검증하게 했다.
+- [benchmarks](benchmarks/) 아래 tracked JSON artifact 28개를 schema v2로 승격했다. 측정 sample과 metrics는 바꾸지 않고 evidence 봉투만 보강했다.
+- `npm test`가 tracked benchmark JSON 전부를 `normalizeBenchArtifactFile()`로 읽어 schema v2를 검증하게 했다.
+- [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 v2 계약을 반영했다.
+
+판정:
+
+- 속도 표면이 "숫자와 표"에서 "검증 가능한 측정 봉투"로 한 단계 올라갔다.
+- 앞으로 README에 올라갈 속도 수치는 scenarioDefinition, measurement, environment, evidence, metrics가 모두 있는 artifact만 출처가 될 수 있다.
+- 기존 S0-S4, S1L 비교 값은 유지됐다. S3/S4 compare markdown은 Windows backslash 경로가 slash 경로로 정규화된 것 외에 수치 변화가 없다.
+
+검증:
+
+- `node --check tests/browser/benchArtifacts.mjs` PASS.
+- `node --check tests/browser/benchArtifact.mjs` PASS.
+- `node --check tests/browser/speedBench.mjs` PASS.
+- `npm run bench:artifact -- --candidate schema-v2-sample ... --out .tmp/schema-v2-sample.json` PASS.
+- 28개 benchmark JSON `normalizeBenchArtifactFile()` PASS.
+- S0, S0C, S1, S1L, S2, S3, S4 compare markdown 재생성 PASS.
+- `git diff --check` PASS.
+- `npm test` PASS, 651 passed, 0 failed.
+
+NEXT:
+
+1. artifact raw output 보관 위치를 표준화한다. 지금은 `rawOutput` reference가 문자열이므로 다음 단계는 실제 로그 파일 또는 embedded report 정책을 분리하는 것이다.
+2. capability matrix 행별 runnable example 링크를 연결한다.
+3. README Public surface를 matrix와 중복되지 않게 줄이고, 예제 중심 진입로를 강화한다.

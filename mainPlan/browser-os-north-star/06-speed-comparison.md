@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인.
+상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인. raw JSON은 schema v2 봉투로 올려 scenarioDefinition, measurement, environment, evidence를 함께 검증한다.
 
 ## 목표
 
@@ -14,6 +14,7 @@
 - 단발 결과가 아니라 최소 3회 warmed sample의 median/p95를 쓴다.
 - 외부 런타임이 같은 시나리오를 수행하지 못하면 `N/A`와 사유를 남긴다.
 - pyproc 숫자는 gate output이나 원장에 있는 값만 승격한다.
+- tracked benchmark JSON은 모두 `benchArtifacts.mjs`의 schema v2 normalizer를 통과해야 한다.
 
 ## 현재 pyproc 기준점
 
@@ -133,4 +134,4 @@ npm run bench:compare -- .tmp/pyproc-s4.json .tmp/webvm-s4-na.json --out .tmp/s4
 
 1. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
 2. S0-S4와 S1L 비교 축을 제품 README에 올릴 경우 숫자보다 계약 차이를 먼저 설명한다.
-3. 다음 구조 강화는 benchmark artifact schema v2 또는 product-facing capability matrix 중 하나로 잡는다.
+3. 다음 구조 강화는 matrix 행별 runnable example 연결 또는 artifact raw output 보관 위치 표준화 중 하나로 잡는다.

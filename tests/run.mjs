@@ -71,6 +71,7 @@ console.log("pyproc 게이트\n");
 // 1) 공개 표면: index.js가 기대 export를 내는가.
 console.log("[표면]");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
+const benchArtifactContract = await import(pathToFileURL(join(ROOT, "tests", "browser", "benchArtifacts.mjs")).href);
 for (const [name, kind] of [
   ["getPyProcAssetManifest", "function"], ["verifyPyProcAssetIntegrity", "function"], ["PYPROC_ASSET_MANIFEST_VERSION", "number"],
   ["registerPyProcServiceWorker", "function"],
@@ -324,7 +325,7 @@ check("속도 비교 벤치 계약 고정", () => {
     if (!contract.includes(term)) throw new Error(`benchmarking.md 필수 항목 누락: ${term}`);
     if (!plan.includes(term)) throw new Error(`06-speed-comparison.md 필수 항목 누락: ${term}`);
   }
-  for (const term of ["commit", "command", "browser", "engine", "samples", "metrics"]) {
+  for (const term of ["schema v2", "schemaVersion", "scenarioDefinition", "measurement", "environment", "evidence", "commit", "command", "browser", "engine", "samples", "metrics"]) {
     if (!contract.includes(term)) throw new Error(`실측 봉투 필드 누락: ${term}`);
   }
   if (!docsMap.includes("operations/benchmarking.md")) throw new Error("docs 지도에 benchmarking.md 없음");
@@ -336,14 +337,24 @@ check("속도 비교 벤치 계약 고정", () => {
   for (const term of ['readIntParam("size"', 'readIntParam("workers"', 'readIntParam("samples"']) {
     if (!speedLab.includes(term)) throw new Error(`Speed Lab query 계약 누락: ${term}`);
   }
-  for (const term of ["PYPROC_BENCH_OUT", "PYPROC_BENCH_SIZE", '"--size"', "DEFAULT_SIZE = 1024", "schemaVersion", 'scenario: "S1"', 'candidate: "pyproc"', "metrics", "runner", "browserVersion"]) {
+  for (const term of ["PYPROC_BENCH_OUT", "PYPROC_BENCH_SIZE", '"--size"', "DEFAULT_SIZE = 1024", "BENCH_ARTIFACT_SCHEMA_VERSION", "scenarioDefinition", "measurement", "environment", "evidence", "schemaVersion", 'scenario: S1_SCENARIO', 'candidate: "pyproc"', "metrics", "runner", "browserVersion", "normalizeBenchArtifact"]) {
     if (!speedBench.includes(term)) throw new Error(`speedBench.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "S0_SCENARIO", "S0C_SCENARIO", "S1L_SCENARIO", "S2_SCENARIO", "S3_SCENARIO", "S4_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs", "openMedianMs"]) {
+  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "SCENARIO_DEFINITIONS", "scenarioDefinitionFor", "assertV2Envelope", "sampleSchema", "measurement", "environment", "evidence", "rawOutput", "browser server roundtrip", "machine resume", "S0_SCENARIO", "S0C_SCENARIO", "S1L_SCENARIO", "S2_SCENARIO", "S3_SCENARIO", "S4_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs", "openMedianMs"]) {
     if (!benchArtifacts.includes(term)) throw new Error(`benchArtifacts.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--na", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "normalizeBenchArtifact", "browser server roundtrip", "machine resume"]) {
+  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--raw-output", "--profile", "--warmup-count", "--browser-headless", "--na", "scenarioDefinition", "measurement", "environment", "evidence", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "normalizeBenchArtifact"]) {
     if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
+  }
+  const artifactDir = join(ROOT, "mainPlan", "browser-os-north-star", "benchmarks");
+  const artifactFiles = readdirSync(artifactDir).filter((name) => name.endsWith(".json")).sort();
+  if (!artifactFiles.length) throw new Error("benchmark JSON artifact 없음");
+  for (const name of artifactFiles) {
+    const file = join(artifactDir, name);
+    const raw = JSON.parse(readFileSync(file, "utf8"));
+    if (raw.schemaVersion !== benchArtifactContract.BENCH_ARTIFACT_SCHEMA_VERSION) throw new Error(`${name}: schemaVersion v2 아님`);
+    if (!raw.scenarioDefinition || !raw.measurement || !raw.environment || !raw.evidence) throw new Error(`${name}: v2 봉투 누락`);
+    benchArtifactContract.normalizeBenchArtifactFile(file);
   }
   const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
   for (const term of ["machineExportMs", "machineOpenMs", "machineMB", "machineResumeRows"]) {

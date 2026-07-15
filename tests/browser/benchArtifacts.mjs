@@ -1,7 +1,7 @@
 // benchArtifacts.mjs - benchmark artifact schema와 비교 표 렌더러.
 import { readFileSync } from "node:fs";
 
-export const BENCH_ARTIFACT_SCHEMA_VERSION = 1;
+export const BENCH_ARTIFACT_SCHEMA_VERSION = 2;
 export const S0_SCENARIO = "S0";
 export const S0C_SCENARIO = "S0C";
 export const S1_SCENARIO = "S1";
@@ -10,6 +10,70 @@ export const S2_SCENARIO = "S2";
 export const S3_SCENARIO = "S3";
 export const S4_SCENARIO = "S4";
 export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO]);
+export const SCENARIO_DEFINITIONS = Object.freeze({
+  [S0_SCENARIO]: Object.freeze({
+    id: S0_SCENARIO,
+    name: "python ready latency",
+    profile: "warm",
+    primaryMetric: "medianMs",
+    sampleSchema: Object.freeze(["latencyMs", "maxErr"]),
+    metricUnit: "ms",
+  }),
+  [S0C_SCENARIO]: Object.freeze({
+    id: S0C_SCENARIO,
+    name: "python cold ready latency",
+    profile: "cold",
+    primaryMetric: "medianMs",
+    sampleSchema: Object.freeze(["latencyMs", "maxErr"]),
+    metricUnit: "ms",
+  }),
+  [S1_SCENARIO]: Object.freeze({
+    id: S1_SCENARIO,
+    name: "numpy sharded matmul",
+    profile: "warmed",
+    primaryMetric: "medianSpeedup",
+    sampleSchema: Object.freeze(["singleMs", "parallelMs", "speedup", "maxErr"]),
+    metricUnit: "ms",
+  }),
+  [S1L_SCENARIO]: Object.freeze({
+    id: S1L_SCENARIO,
+    name: "single-kernel numpy matmul latency",
+    profile: "warmed",
+    primaryMetric: "medianMs",
+    sampleSchema: Object.freeze(["latencyMs", "maxErr"]),
+    metricUnit: "ms",
+  }),
+  [S2_SCENARIO]: Object.freeze({
+    id: S2_SCENARIO,
+    name: "process map",
+    profile: "gate",
+    primaryMetric: "medianSpeedup",
+    sampleSchema: Object.freeze(["singleMs", "parallelMs", "speedup", "maxErr"]),
+    metricUnit: "ms",
+  }),
+  [S3_SCENARIO]: Object.freeze({
+    id: S3_SCENARIO,
+    name: "browser server roundtrip",
+    profile: "gate",
+    primaryMetric: "medianMs",
+    sampleSchema: Object.freeze(["latencyMs", "maxErr"]),
+    metricUnit: "ms",
+  }),
+  [S4_SCENARIO]: Object.freeze({
+    id: S4_SCENARIO,
+    name: "machine resume",
+    profile: "gate",
+    primaryMetric: "openMedianMs",
+    sampleSchema: Object.freeze(["exportMs", "openMs", "machineMB", "resumeRows", "maxErr"]),
+    metricUnit: "ms",
+  }),
+});
+
+export function scenarioDefinitionFor(scenario) {
+  const definition = SCENARIO_DEFINITIONS[scenario];
+  if (!definition) throw new Error(`지원하지 않는 scenario: ${scenario}`);
+  return definition;
+}
 
 export function readBenchArtifact(file) {
   try {
@@ -29,6 +93,7 @@ export function normalizeBenchArtifact(artifact, file = "artifact") {
   if (!SUPPORTED_SCENARIOS.has(artifact.scenario)) throw new Error(`${file}: 지원하지 않는 scenario: ${artifact.scenario}`);
   const candidate = artifact.candidate || artifact.name || file;
   const notApplicableReason = artifact.notApplicableReason || null;
+  assertV2Envelope(artifact, file, candidate, notApplicableReason);
   if (notApplicableReason) {
     return baseRow(artifact, file, candidate, { ok: false, notApplicableReason });
   }
@@ -40,15 +105,16 @@ export function normalizeBenchArtifact(artifact, file = "artifact") {
 }
 
 function baseRow(artifact, file, candidate, extra = {}) {
+  const environment = artifact.environment || {};
   return {
     file,
     candidate,
     scenario: artifact.scenario,
     ok: artifact.ok === true,
     notApplicableReason: "",
-    browser: artifact.browser?.version || "N/A",
-    commit: artifact.commit ? String(artifact.commit).slice(0, 8) : "N/A",
-    dirty: artifact.worktreeDirty === true ? "dirty" : "",
+    browser: environment.browser?.version || artifact.browser?.version || "N/A",
+    commit: environment.commit ? String(environment.commit).slice(0, 8) : (artifact.commit ? String(artifact.commit).slice(0, 8) : "N/A"),
+    dirty: environment.worktreeDirty === true || artifact.worktreeDirty === true ? "dirty" : "",
     ...extra,
   };
 }
@@ -57,6 +123,99 @@ function assertSamples(artifact, sampleCount, file) {
   if (!Array.isArray(artifact.metrics.samples) || artifact.metrics.samples.length !== sampleCount) {
     throw new Error(`${file}: samples 길이 불일치`);
   }
+}
+
+function assertObject(value, path, file) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${file}: ${path} 객체 누락`);
+  return value;
+}
+
+function assertStringOrNull(value, path, file) {
+  if (value !== null && typeof value !== "string") throw new Error(`${file}: ${path}는 문자열 또는 null이어야 함`);
+}
+
+function assertIsoDate(value, path, file) {
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) throw new Error(`${file}: ${path} ISO 날짜 누락`);
+}
+
+function assertFiniteOrNull(value, path, file) {
+  if (value !== null && (typeof value !== "number" || !Number.isFinite(value))) throw new Error(`${file}: ${path}는 숫자 또는 null이어야 함`);
+}
+
+function assertBooleanOrNull(value, path, file) {
+  if (value !== null && typeof value !== "boolean") throw new Error(`${file}: ${path}는 boolean 또는 null이어야 함`);
+}
+
+function assertSampleField(sample, key, file) {
+  if (typeof sample?.[key] !== "number" || !Number.isFinite(sample[key]) || sample[key] < 0) throw new Error(`${file}: sample.${key} 숫자 누락`);
+}
+
+function assertSampleSchema(artifact, file) {
+  if (!artifact.metrics) return;
+  const samples = artifact.metrics.samples;
+  if (!Array.isArray(samples)) throw new Error(`${file}: metrics.samples 배열 누락`);
+  for (const sample of samples) {
+    if (artifact.scenario === S4_SCENARIO) {
+      for (const key of ["exportMs", "openMs", "machineMB", "resumeRows", "maxErr"]) assertSampleField(sample, key, file);
+      if (!Number.isInteger(sample.resumeRows)) throw new Error(`${file}: sample.resumeRows 정수 아님`);
+      continue;
+    }
+    if (artifact.scenario === S1_SCENARIO || artifact.scenario === S2_SCENARIO) {
+      for (const key of ["singleMs", "parallelMs", "speedup", "maxErr"]) assertSampleField(sample, key, file);
+      if (sample.parallelMs === 0) throw new Error(`${file}: sample.parallelMs는 0일 수 없음`);
+      const expected = +(sample.singleMs / sample.parallelMs).toFixed(2);
+      if (Math.abs(expected - sample.speedup) > 0.02) throw new Error(`${file}: sample.speedup 계산 불일치`);
+      continue;
+    }
+    for (const key of ["latencyMs", "maxErr"]) assertSampleField(sample, key, file);
+  }
+}
+
+function assertV2Envelope(artifact, file, candidate, notApplicableReason) {
+  if (!candidate || typeof candidate !== "string") throw new Error(`${file}: candidate 문자열 누락`);
+  const expectedDefinition = scenarioDefinitionFor(artifact.scenario);
+  const scenarioDefinition = assertObject(artifact.scenarioDefinition, "scenarioDefinition", file);
+  if (scenarioDefinition.id !== artifact.scenario) throw new Error(`${file}: scenarioDefinition.id 불일치`);
+  if (scenarioDefinition.name !== expectedDefinition.name) throw new Error(`${file}: scenarioDefinition.name 불일치`);
+  if (scenarioDefinition.primaryMetric !== expectedDefinition.primaryMetric) throw new Error(`${file}: scenarioDefinition.primaryMetric 불일치`);
+  if (scenarioDefinition.profile !== expectedDefinition.profile) throw new Error(`${file}: scenarioDefinition.profile 불일치`);
+  if (!Array.isArray(scenarioDefinition.sampleSchema) || scenarioDefinition.sampleSchema.join(",") !== expectedDefinition.sampleSchema.join(",")) {
+    throw new Error(`${file}: scenarioDefinition.sampleSchema 불일치`);
+  }
+  const measurement = assertObject(artifact.measurement, "measurement", file);
+  assertIsoDate(measurement.startedAt, "measurement.startedAt", file);
+  assertIsoDate(measurement.finishedAt, "measurement.finishedAt", file);
+  assertStringOrNull(measurement.command, "measurement.command", file);
+  if (typeof measurement.profile !== "string" || !measurement.profile) throw new Error(`${file}: measurement.profile 누락`);
+  assertFiniteOrNull(measurement.warmupCount, "measurement.warmupCount", file);
+  if (typeof measurement.sampleCount !== "number" || !Number.isInteger(measurement.sampleCount) || measurement.sampleCount < 0) throw new Error(`${file}: measurement.sampleCount 정수 누락`);
+  const environment = assertObject(artifact.environment, "environment", file);
+  assertStringOrNull(environment.commit, "environment.commit", file);
+  assertBooleanOrNull(environment.worktreeDirty, "environment.worktreeDirty", file);
+  const browser = assertObject(environment.browser, "environment.browser", file);
+  assertStringOrNull(browser.name, "environment.browser.name", file);
+  assertStringOrNull(browser.path, "environment.browser.path", file);
+  assertStringOrNull(browser.version, "environment.browser.version", file);
+  assertBooleanOrNull(browser.headless, "environment.browser.headless", file);
+  const host = assertObject(environment.host, "environment.host", file);
+  for (const key of ["platform", "release", "cpuModel"]) assertStringOrNull(host[key], `environment.host.${key}`, file);
+  for (const key of ["cpuCount", "totalMemBytes", "freeMemBytes"]) {
+    if (typeof host[key] !== "number" || !Number.isFinite(host[key])) throw new Error(`${file}: environment.host.${key} 숫자 누락`);
+  }
+  assertStringOrNull(host.powerProfile, "environment.host.powerProfile", file);
+  const engine = assertObject(environment.engine, "environment.engine", file);
+  for (const key of ["name", "indexURL", "pythonVersion", "numpyVersion"]) assertStringOrNull(engine[key], `environment.engine.${key}`, file);
+  assertBooleanOrNull(engine.selfHosted, "environment.engine.selfHosted", file);
+  const evidence = assertObject(artifact.evidence, "evidence", file);
+  assertStringOrNull(evidence.source, "evidence.source", file);
+  assertStringOrNull(evidence.rawOutput, "evidence.rawOutput", file);
+  assertStringOrNull(evidence.note, "evidence.note", file);
+  if (!evidence.rawOutput && !evidence.source) throw new Error(`${file}: evidence.rawOutput 또는 evidence.source 필요`);
+  assertFiniteOrNull(evidence.timeoutMs, "evidence.timeoutMs", file);
+  if (measurement.sampleCount !== (artifact.metrics?.sampleCount || 0)) throw new Error(`${file}: measurement.sampleCount와 metrics.sampleCount 불일치`);
+  if (!notApplicableReason && !measurement.command && !evidence.source && !evidence.rawOutput) throw new Error(`${file}: 측정 artifact는 command/source/rawOutput 중 하나 필요`);
+  if (notApplicableReason && typeof notApplicableReason !== "string") throw new Error(`${file}: notApplicableReason 문자열 필요`);
+  assertSampleSchema(artifact, file);
 }
 
 function normalizePairedSpeedArtifact(artifact, file, candidate) {

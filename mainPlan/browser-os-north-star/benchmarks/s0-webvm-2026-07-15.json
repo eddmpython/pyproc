@@ -1,6 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S0",
+  "scenarioDefinition": {
+    "id": "S0",
+    "name": "python ready latency",
+    "profile": "warm",
+    "primaryMetric": "medianMs",
+    "sampleSchema": [
+      "latencyMs",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "webvm",
   "name": "python ready latency",
   "command": "page.goto webvm.io, wait user prompt, run python3 -c print(marker), wait marker output",
@@ -9,8 +20,10 @@
   "startedAt": "2026-07-15T01:24:27.971Z",
   "finishedAt": "2026-07-15T01:24:27.973Z",
   "browser": {
+    "name": "Edge",
     "path": null,
-    "version": "150.0.0.0"
+    "version": "150.0.0.0",
+    "headless": true
   },
   "host": {
     "platform": "win32",
@@ -18,10 +31,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 14692507648
+    "freeMemBytes": 14692507648,
+    "powerProfile": null
   },
   "engine": {
-    "name": "WebVM/CheerpX"
+    "name": "WebVM/CheerpX",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": "page.goto webvm.io, wait user prompt, run python3 -c print(marker), wait marker output",
+    "startedAt": "2026-07-15T01:24:27.971Z",
+    "finishedAt": "2026-07-15T01:24:27.973Z",
+    "profile": "warm",
+    "warmupCount": null,
+    "sampleCount": 3
+  },
+  "environment": {
+    "commit": "96aeebbed213f8a02bf0def8a24fc68a068e67dc",
+    "worktreeDirty": false,
+    "browser": {
+      "name": "Edge",
+      "path": null,
+      "version": "150.0.0.0",
+      "headless": true
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 14692507648,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "WebVM/CheerpX",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "https://webvm.io/ via playwright-cli",
+    "rawOutput": "https://webvm.io/ via playwright-cli",
+    "note": "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param",
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "https://webvm.io/ via playwright-cli",
   "note": "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param",

@@ -1,6 +1,17 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S1L",
+  "scenarioDefinition": {
+    "id": "S1L",
+    "name": "single-kernel numpy matmul latency",
+    "profile": "warmed",
+    "primaryMetric": "medianMs",
+    "sampleSchema": [
+      "latencyMs",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "pyproc",
   "name": "single-kernel numpy matmul latency",
   "command": null,
@@ -9,8 +20,10 @@
   "startedAt": "2026-07-15T00:44:33.048Z",
   "finishedAt": "2026-07-15T00:44:33.050Z",
   "browser": {
+    "name": null,
     "path": null,
-    "version": "150.0.4078.65"
+    "version": "150.0.4078.65",
+    "headless": null
   },
   "host": {
     "platform": "win32",
@@ -18,10 +31,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 15378432000
+    "freeMemBytes": 15378432000,
+    "powerProfile": null
   },
   "engine": {
-    "name": "Pyodide"
+    "name": "Pyodide",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": null,
+    "startedAt": "2026-07-15T00:44:33.048Z",
+    "finishedAt": "2026-07-15T00:44:33.050Z",
+    "profile": "warmed",
+    "warmupCount": null,
+    "sampleCount": 3
+  },
+  "environment": {
+    "commit": "5c867ee86f6f802896e73177b0acdb078b5acb8b",
+    "worktreeDirty": false,
+    "browser": {
+      "name": null,
+      "path": null,
+      "version": "150.0.4078.65",
+      "headless": null
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 15378432000,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "Pyodide",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
+    "rawOutput": "mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
+    "note": "derived from S1 raw artifact single-worker samples",
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
   "note": "derived from S1 raw artifact single-worker samples",

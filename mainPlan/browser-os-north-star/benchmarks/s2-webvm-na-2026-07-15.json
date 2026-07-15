@@ -1,6 +1,19 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S2",
+  "scenarioDefinition": {
+    "id": "S2",
+    "name": "process map",
+    "profile": "gate",
+    "primaryMetric": "medianSpeedup",
+    "sampleSchema": [
+      "singleMs",
+      "parallelMs",
+      "speedup",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "webvm",
   "name": "process map",
   "command": null,
@@ -9,8 +22,10 @@
   "startedAt": "2026-07-15T02:34:45.523Z",
   "finishedAt": "2026-07-15T02:34:45.525Z",
   "browser": {
+    "name": null,
     "path": null,
-    "version": null
+    "version": null,
+    "headless": null
   },
   "host": {
     "platform": "win32",
@@ -18,10 +33,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 14640558080
+    "freeMemBytes": 14640558080,
+    "powerProfile": null
   },
   "engine": {
-    "name": "WebVM"
+    "name": "WebVM",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": null,
+    "startedAt": "2026-07-15T02:34:45.523Z",
+    "finishedAt": "2026-07-15T02:34:45.525Z",
+    "profile": "gate",
+    "warmupCount": null,
+    "sampleCount": 0
+  },
+  "environment": {
+    "commit": "15d8cf38833b28a379394c3067b3183e963bbb0d",
+    "worktreeDirty": false,
+    "browser": {
+      "name": null,
+      "path": null,
+      "version": null,
+      "headless": null
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 14640558080,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "WebVM",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "mainPlan/browser-os-north-star/06-speed-comparison.md",
+    "rawOutput": "mainPlan/browser-os-north-star/06-speed-comparison.md",
+    "note": null,
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "mainPlan/browser-os-north-star/06-speed-comparison.md",
   "note": null,

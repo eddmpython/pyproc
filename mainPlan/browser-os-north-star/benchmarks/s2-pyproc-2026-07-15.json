@@ -1,6 +1,19 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scenario": "S2",
+  "scenarioDefinition": {
+    "id": "S2",
+    "name": "process map",
+    "profile": "gate",
+    "primaryMetric": "medianSpeedup",
+    "sampleSchema": [
+      "singleMs",
+      "parallelMs",
+      "speedup",
+      "maxErr"
+    ],
+    "metricUnit": "ms"
+  },
   "candidate": "pyproc",
   "name": "process map",
   "command": "npm run test:browser, collect timings.mapSerialMs and timings.mapParallelMs from PyProc.map N=80000 x 4",
@@ -9,8 +22,10 @@
   "startedAt": "2026-07-15T02:33:39.685Z",
   "finishedAt": "2026-07-15T02:33:39.687Z",
   "browser": {
+    "name": null,
     "path": null,
-    "version": "150.0.4078.65"
+    "version": "150.0.4078.65",
+    "headless": true
   },
   "host": {
     "platform": "win32",
@@ -18,10 +33,62 @@
     "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
     "cpuCount": 16,
     "totalMemBytes": 33557934080,
-    "freeMemBytes": 15553851392
+    "freeMemBytes": 15553851392,
+    "powerProfile": null
   },
   "engine": {
-    "name": "Pyodide"
+    "name": "Pyodide",
+    "indexURL": null,
+    "selfHosted": null,
+    "pythonVersion": null,
+    "numpyVersion": null
+  },
+  "measurement": {
+    "command": "npm run test:browser, collect timings.mapSerialMs and timings.mapParallelMs from PyProc.map N=80000 x 4",
+    "startedAt": "2026-07-15T02:33:39.685Z",
+    "finishedAt": "2026-07-15T02:33:39.687Z",
+    "profile": "gate",
+    "warmupCount": null,
+    "sampleCount": 3
+  },
+  "environment": {
+    "commit": "662c123a02d26dafadd8c19906a33700532c1f16",
+    "worktreeDirty": false,
+    "browser": {
+      "name": null,
+      "path": null,
+      "version": "150.0.4078.65",
+      "headless": true
+    },
+    "host": {
+      "platform": "win32",
+      "release": "10.0.26200",
+      "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+      "cpuCount": 16,
+      "totalMemBytes": 33557934080,
+      "freeMemBytes": 15553851392,
+      "powerProfile": null
+    },
+    "engine": {
+      "name": "Pyodide",
+      "indexURL": null,
+      "selfHosted": null,
+      "pythonVersion": null,
+      "numpyVersion": null
+    }
+  },
+  "evidence": {
+    "source": "npm run test:browser",
+    "rawOutput": "npm run test:browser",
+    "note": "derived from three browser gate runs on tests/browser/gate.html; each run uses a fresh temporary browser profile via --user-data-dir; serialMs is timings.mapSerialMs and parallelMs is timings.mapParallelMs",
+    "runner": null,
+    "page": null,
+    "timeoutMs": null,
+    "report": null
+  },
+  "producer": {
+    "name": "benchArtifact.mjs",
+    "schemaVersion": 2
   },
   "source": "npm run test:browser",
   "note": "derived from three browser gate runs on tests/browser/gate.html; each run uses a fresh temporary browser profile via --user-data-dir; serialMs is timings.mapSerialMs and parallelMs is timings.mapParallelMs",
