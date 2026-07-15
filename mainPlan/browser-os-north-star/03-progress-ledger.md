@@ -2564,3 +2564,44 @@ NEXT:
 1. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
 2. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
 3. coverage manifest를 장기적으로 benchmark artifact처럼 schema 검증 가능한 외부 산출물로 승격할지 판정한다.
+
+## 2026-07-15 - MachineJournal product consumer gate 승격
+
+문제:
+
+- 능력 매트릭스의 Machine journal 행은 product consumer gate를 검증 근거로 적고 있었지만, 설치 패키지 consumer gate coverage manifest에는 WAL/crash resume 행이 없었다.
+- `MachineJournal`은 probe에서 충분히 검증됐지만, 설치된 npm 패키지를 쓰는 제품 경로에서는 실제 commit/recover를 통과하지 않았다.
+
+완료:
+
+- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - crash resume` 행을 추가했다.
+- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `MachineJournal`을 import하고, `bootSession`으로 만든 제품 세션 상태를 `MachineJournal.commit()`으로 남긴 뒤 새 `bootSession`이 `recover()`로 되살리는 경로를 실행한다.
+- [contract.md](../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명을 같은 행으로 갱신했다.
+- `npm test`가 `MachineJournal` coverage 행과 실제 product consumer check 문자열을 함께 감시하게 했다.
+
+실측:
+
+- `npm run test:consumer` GREEN 17/17.
+- MachineJournal commit 1332ms, recover 2938ms.
+- product consumer coverage manifest 7 rows.
+- 같은 run의 참고 수치: VirtualOrigin 18ms, signed `.pymachine` export 163ms, trusted open 2438ms.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/browser/productConsumerCoverage.mjs` PASS.
+- `node --check tests/browser/productConsumer.mjs` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 659 passed, 0 failed.
+- `npm run test:consumer` PASS, GREEN 17/17.
+
+판정:
+
+- crash resume가 probe 전용 근거에서 설치 패키지 기준 제품 소비 증거로 한 단계 올라갔다.
+- 브라우저 OS 목표에서 중요한 점은 WAL이 있다는 설명이 아니라, 설치된 라이브러리만으로 제품 상태를 commit하고 새 커널이 recover하는 경로가 계속 green이어야 한다는 것이다.
+
+NEXT:
+
+1. 소비자별 배선 상태를 실제 제품 gate freshness evidence와 더 직접 연결한다.
+2. probe 전용 capability 중 `DeviceFs` 또는 `JobControl`처럼 제품 UI로 보일 가치가 큰 행을 다음 승격 후보로 판정한다.
+3. coverage manifest를 benchmark artifact처럼 schema 검증 가능한 산출물로 승격할지 결정한다.

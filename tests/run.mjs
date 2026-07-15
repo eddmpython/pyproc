@@ -599,6 +599,7 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
     "createMachineKeyPair",
     "exportMachinePublicKey",
     "fingerprintMachinePublicKey",
+    "MachineJournal",
     "MachineJail",
     "getPyProcAssetManifest",
   ]) {
@@ -621,6 +622,7 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
     "VirtualOrigin fetch reaches Python server from installed package",
     "MachineJail enforces installed product permission manifest",
     "PyProc worker runs from installed package",
+    "MachineJournal recovers installed product state after crash boundary",
     "installed product exports signed .pymachine with home",
     "installed product opens trusted .pymachine and resumes resources",
   ]) {

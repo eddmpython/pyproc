@@ -132,7 +132,7 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 
 - `npm test`는 `package.json exports`가 승인된 stable specifier만 노출하는지, 공개 예제가 root API나 subpath export만 소비하는지, `index.d.ts`가 공개 타입 계약을 덮는지 검사한다.
 - `npm run test:consumer`는 repo 상대 import 없이 설치된 `node_modules/pyproc`만 노출한 브라우저 앱에서 설치 패키지 계약을 검증한다.
-- 같은 consumer gate가 `MachineJail` 권한 manifest, signed `.pymachine` export/open, trusted public key와 wrong key 거부, signer fingerprint, `/home/web/resume.py`의 SQLite connection 재개설까지 실행한다.
+- 같은 consumer gate가 `MachineJournal` commit/recover, `MachineJail` 권한 manifest, signed `.pymachine` export/open, trusted public key와 wrong key 거부, signer fingerprint, `/home/web/resume.py`의 SQLite connection 재개설까지 실행한다.
 - `pyproc/runtime`은 public Runtime wrapper다. 내부 `runtime.js` core는 엔진 래퍼와 `Runtime.fs`만 담당하고, `runtimeApi.js`는 `src/capabilities/runtimeBindings.js` registry를 설치해 `enableReactive` 같은 opt-in capability factory를 제공한다.
 - `restoreLive` 실행 경계는 기계 검증 대상이다. 경계를 지키면 즉시 복원(재해싱 0), 위반은 자동 감지되어 재해시 경로로 승격된다. 반환값 `rehashed`로 경로를 확인한다.
 
@@ -146,6 +146,7 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 | product consumer - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | `/node_modules/pyproc/` 기준 asset manifest, worker graph SRI, 설치된 `pyprocSw.js` registration, bad worker SRI spawn 전 거부 |
 | product consumer - runtime/server | `pyproc` | `boot`, `VirtualOrigin`, Runtime `enableAsgiServer` | 설치 패키지 Runtime boot, Python ASGI app, `fetch("/pyproc/...")` virtual origin 왕복, S3 timing source |
 | product consumer - process OS | `pyproc` | `PyProc` | 설치 패키지 worker graph로 `boot`, `map`, `terminate` 실행, SRI와 ASGI Service Worker prefix 충돌 없음 |
+| product consumer - crash resume | `pyproc` | `bootSession`, `MachineJournal`, Runtime `enableJournal` | 설치 패키지 Session reactive boundary를 `MachineJournal.commit()`으로 남기고 새 Session이 `recover()`로 제품 상태를 복구 |
 | product consumer - product policy | `pyproc` | `MachineJail` | 제품 permission manifest(`net=false`, `clipboard=false`, `home=true`, `workers=false`)와 Python choke point 집행 |
 | product consumer - portable machine | `pyproc` | `bootSession`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, Session `exportImage`, Runtime `enableInit` | signed `.pymachine` + `/home/web` export, signer fingerprint, untrusted/wrong key 거부, trusted open, `resume.py` SQLite resource 재개설, S4 timing source |
 

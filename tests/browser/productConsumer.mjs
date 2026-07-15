@@ -100,6 +100,7 @@ const html = `<!DOCTYPE html>
       createMachineKeyPair,
       exportMachinePublicKey,
       fingerprintMachinePublicKey,
+      MachineJournal,
       MachineJail
     } from "pyproc";
     import { getPyProcAssetManifest } from "pyproc/assets";
@@ -241,6 +242,9 @@ const html = `<!DOCTYPE html>
       const homeName = uniqueName("pyprocProductHome");
       cleanupEntries.push(homeName);
       const homeDir = await opfsRoot.getDirectoryHandle(homeName, { create: true });
+      const journalName = uniqueName("pyprocProductJournal");
+      cleanupEntries.push(journalName);
+      const journalDir = await opfsRoot.getDirectoryHandle(journalName, { create: true });
       const resumeSrc = [
         "import os, sqlite3",
         "os.makedirs('/home/web/product', exist_ok=True)",
@@ -256,6 +260,29 @@ const html = `<!DOCTYPE html>
       t = performance.now();
       const machine = await bootSession({ indexURL: INDEX });
       timings.machineBootMs = Math.round(performance.now() - t);
+
+      machine.rt.run("productJournalValue = 41\\nproductJournalNote = 'installed-journal'");
+      t = performance.now();
+      const journal = machine.rt.enableJournal({ dir: journalDir, reactive: machine.reactive, idleMs: 100000 });
+      const journalCommit = await journal.commit();
+      timings.journalCommitMs = Math.round(performance.now() - t);
+      t = performance.now();
+      const recoveredMachine = await bootSession({ indexURL: INDEX });
+      const recoveredJournal = recoveredMachine.rt.enableJournal({ dir: journalDir, reactive: recoveredMachine.reactive });
+      const journalRecover = await recoveredJournal.recover();
+      timings.journalRecoverMs = Math.round(performance.now() - t);
+      check("MachineJournal recovers installed product state after crash boundary",
+        journal instanceof MachineJournal &&
+        recoveredJournal instanceof MachineJournal &&
+        journalCommit &&
+        journalCommit.pages > 0 &&
+        journalCommit.wrote > 0 &&
+        journalRecover &&
+        journalRecover.pages > 0 &&
+        recoveredMachine.rt.run("productJournalValue") === 41 &&
+        recoveredMachine.rt.run("productJournalNote") === "installed-journal",
+        "commit=" + timings.journalCommitMs + "ms, recover=" + timings.journalRecoverMs + "ms");
+
       const home = await machine.rt.mountHome(homeDir);
       machine.rt.fs.mkdirTree("/home/web/product");
       machine.rt.fs.writeFile("/home/web/resume.py", resumeSrc);
