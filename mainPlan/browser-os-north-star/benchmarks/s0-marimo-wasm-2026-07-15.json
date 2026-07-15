@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S0",
+  "candidate": "marimo-wasm",
+  "name": "python ready latency",
+  "command": "page.goto marimo.app, fill first iframe code cell with print(marker), Control+Enter, wait iframe marker output",
+  "commit": "8ae6cc2779eef605ef8df355bec6d740c61184b8",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T01:41:05.404Z",
+  "finishedAt": "2026-07-15T01:41:05.407Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.0.0"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 13385773056
+  },
+  "engine": {
+    "name": "marimo WASM Pyodide"
+  },
+  "source": "https://marimo.app/ via playwright-cli",
+  "note": "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 8385,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 8276,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 8702,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 8385,
+    "p95Ms": 8702,
+    "minMs": 8276,
+    "maxMs": 8702,
+    "maxErr": 0
+  }
+}

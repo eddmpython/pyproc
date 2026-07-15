@@ -1871,3 +1871,47 @@ NEXT:
 1. JupyterLite와 marimo WASM도 S0 python ready latency로 같은 표에 합친다.
 2. WebVM cold profile/cache clear S0를 별도 artifact로 재측정한다.
 3. pyproc은 S2 process map과 S3 browser server를 외부 후보가 따라오기 어려운 OS 기능 축으로 강화한다.
+
+## 2026-07-15 - JupyterLite와 marimo WASM S0 외부 후보 합류
+
+완료:
+
+- JupyterLite demo REPL에서 첫 Python 출력까지의 S0를 실제 브라우저로 측정했다.
+- marimo WASM playground에서 첫 Python 출력까지의 S0를 실제 브라우저로 측정했다.
+- [s0-jupyterlite-2026-07-15.json](benchmarks/s0-jupyterlite-2026-07-15.json), [s0-marimo-wasm-2026-07-15.json](benchmarks/s0-marimo-wasm-2026-07-15.json)을 생성했다.
+- [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md)를 pyproc, WebVM, marimo WASM, JupyterLite 4자 표로 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 외부 비교 상태를 갱신했다.
+
+실측:
+
+- Browser: Headless Edge user agent `HeadlessChrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0`.
+- JupyterLite URL: `https://jupyterlite.github.io/demo/repl/index.html?kernel=python`.
+- JupyterLite 절차: fresh `page.goto` query URL, 첫 code textbox에 `print(<marker>)` 입력, `Shift+Enter`, 마커가 입력 echo와 Python 출력으로 2회 등장할 때 성공 처리.
+- JupyterLite S0 samples: 17749ms, 12352ms, 9401ms.
+- JupyterLite median 12352ms, p95 17749ms, min 9401ms, max 17749ms, maxErr 0.
+- marimo URL: `https://marimo.app/`.
+- marimo 절차: fresh `page.goto` query URL, iframe 내부 첫 code textbox에 `print(<marker>)` 입력, `Control+Enter`, iframe 본문에서 마커가 입력 echo와 Python 출력으로 2회 등장할 때 성공 처리.
+- marimo WASM S0 samples: 8385ms, 8276ms, 8702ms.
+- marimo WASM median 8385ms, p95 8702ms, min 8276ms, max 8702ms, maxErr 0.
+- caveat: 모두 warm browser profile/cache 조건이다. cold browser profile, cache clear, first network download까지 포함한 수치는 아직 아니다.
+
+검증:
+
+- JupyterLite probe `print(<marker>)` PASS, marker occurrence 2회 확인.
+- marimo WASM probe `print(<marker>)` PASS, iframe marker occurrence 2회 확인.
+- `npm run bench:artifact -- --scenario S0 --candidate jupyterlite --browser-version 150.0.0.0 --engine "JupyterLite Pyodide" --source "https://jupyterlite.github.io/demo/repl/index.html?kernel=python via playwright-cli" --command "page.goto JupyterLite REPL, fill first code cell with print(marker), Shift+Enter, wait marker output" --note "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param" --sample 17749,0 --sample 12352,0 --sample 9401,0 --out mainPlan/browser-os-north-star/benchmarks/s0-jupyterlite-2026-07-15.json` PASS.
+- `npm run bench:artifact -- --scenario S0 --candidate marimo-wasm --browser-version 150.0.0.0 --engine "marimo WASM Pyodide" --source "https://marimo.app/ via playwright-cli" --command "page.goto marimo.app, fill first iframe code cell with print(marker), Control+Enter, wait iframe marker output" --note "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param" --sample 8385,0 --sample 8276,0 --sample 8702,0 --out mainPlan/browser-os-north-star/benchmarks/s0-marimo-wasm-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0-webvm-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0-jupyterlite-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0-marimo-wasm-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md` PASS.
+- `npm test` PASS.
+
+판정:
+
+- warm S0 표는 이제 pyproc 3471ms, WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms다.
+- pyproc은 JupyterLite와 marimo WASM보다 Python 첫 실행 체감에서 빠르다. WebVM과는 warm S0에서 사실상 동률이다.
+- 따라서 속도 간판은 계속 S1 병렬 worker pool로 유지하고, OS 차별화는 S2 process map, S3 browser server, S4 machine resume로 밀어야 한다.
+
+NEXT:
+
+1. S0 cold profile/cache-clear artifact를 warm S0와 분리해서 정의하고 측정한다.
+2. S2 process map을 외부 후보가 같은 일을 못 하는 경우 N/A 또는 제한 artifact로 봉인한다.
+3. S3 browser server를 WebVM/JupyterLite/marimo 대비 가능한 최단 경로로 비교한다.
