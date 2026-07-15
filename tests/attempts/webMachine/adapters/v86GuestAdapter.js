@@ -11,6 +11,9 @@ import { V86DisplayPort } from "./v86/v86DisplayPort.js";
 import { V86InputPort } from "./v86/v86InputPort.js";
 import { V86FramebufferPort } from "./v86/v86FramebufferPort.js";
 import { V86PointerPort } from "./v86/v86PointerPort.js";
+import { V86ClockPort } from "./v86/v86ClockPort.js";
+import { V86EntropyPort } from "./v86/v86EntropyPort.js";
+import { createV86WasmHostFunction } from "./v86/v86WasmHostBridge.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
@@ -31,8 +34,14 @@ export function createV86GuestFactory({
   framebufferDeviceName = null,
   framebufferSource = null,
   pointerDeviceName = null,
+  clockDeviceName = null,
+  entropyDeviceName = null,
+  instantiateWasm = null,
 }) {
   if (typeof V86 !== "function") throw new TypeError("V86 constructor가 필요하다");
+  if ((clockDeviceName || entropyDeviceName) && typeof instantiateWasm !== "function") {
+    throw new TypeError("v86 clock/entropy device에는 instantiateWasm 함수가 필요하다");
+  }
   return () => new V86GuestAdapterDraft({
     V86,
     adapterVersion,
@@ -44,6 +53,9 @@ export function createV86GuestFactory({
     framebufferDeviceName,
     framebufferSource,
     pointerDeviceName,
+    clockDeviceName,
+    entropyDeviceName,
+    instantiateWasm,
   });
 }
 
@@ -59,6 +71,9 @@ class V86GuestAdapterDraft {
     framebufferDeviceName,
     framebufferSource,
     pointerDeviceName,
+    clockDeviceName,
+    entropyDeviceName,
+    instantiateWasm,
   }) {
     this._blockDeviceName = blockDeviceName ? String(blockDeviceName) : null;
     this._blockMode = this._blockDeviceName ? String(blockMode || "ata") : null;
@@ -73,6 +88,9 @@ class V86GuestAdapterDraft {
     }
     if (!this._framebufferDeviceName && framebufferSource) throw new TypeError("framebuffer source에는 device name이 필요하다");
     this._pointerDeviceName = pointerDeviceName ? String(pointerDeviceName) : null;
+    this._clockDeviceName = clockDeviceName ? String(clockDeviceName) : null;
+    this._entropyDeviceName = entropyDeviceName ? String(entropyDeviceName) : null;
+    this._instantiateWasm = instantiateWasm;
     this.capabilities = {
       adapterVersion,
       snapshotScope: "portable",
@@ -86,6 +104,8 @@ class V86GuestAdapterDraft {
         ...(this._inputDeviceName ? [{ name: this._inputDeviceName, kind: "input", mode: "ps2-scan-code" }] : []),
         ...(this._framebufferDeviceName ? [{ name: this._framebufferDeviceName, kind: "display", mode: "rgba-frame" }] : []),
         ...(this._pointerDeviceName ? [{ name: this._pointerDeviceName, kind: "input", mode: "relative-pointer" }] : []),
+        ...(this._clockDeviceName ? [{ name: this._clockDeviceName, kind: "clock", mode: "wall-monotonic" }] : []),
+        ...(this._entropyDeviceName ? [{ name: this._entropyDeviceName, kind: "entropy", mode: "cryptographic-random" }] : []),
       ],
     };
     this._V86 = V86;
@@ -100,6 +120,8 @@ class V86GuestAdapterDraft {
     this._inputPort = null;
     this._framebufferPort = null;
     this._pointerPort = null;
+    this._clockPort = null;
+    this._entropyPort = null;
     this._serial = "";
     this._line = "";
     this._waiters = new Set();
@@ -146,6 +168,7 @@ class V86GuestAdapterDraft {
   }
 
   async resume() {
+    this._clockPort?.synchronizeWallClock();
     this._inputPort?.attach(this._requireEmulator());
     this._pointerPort?.attach(this._requireEmulator());
     try {
@@ -179,6 +202,7 @@ class V86GuestAdapterDraft {
     this._manifest = manifest;
     if (!this._emulator) await this._createEmulator({ autostart: false, attachInteractiveInputs: false });
     await this._emulator.restore_state(toArrayBuffer(payload));
+    this._clockPort?.synchronizeWallClock();
     if (this._blockMode === "filesystem") {
       this._volumeStats = await readV86FileSystemVolume({
         device: this._blockDevice(),
@@ -211,6 +235,7 @@ class V86GuestAdapterDraft {
       this._packetPort?.detach();
       this._displayPort?.detach();
       this._framebufferPort?.detach();
+      this._clockPort?.detach();
       await this._emulator.destroy();
     }
     this._emulator = null;
@@ -219,6 +244,8 @@ class V86GuestAdapterDraft {
     this._inputPort = null;
     this._framebufferPort = null;
     this._pointerPort = null;
+    this._clockPort = null;
+    this._entropyPort = null;
     consoleWrite(this._context, "x86:shutdown");
   }
 
@@ -248,6 +275,8 @@ class V86GuestAdapterDraft {
       input: this._inputPort?.inspect() || null,
       framebuffer: this._framebufferPort?.inspect() || null,
       pointer: this._pointerPort?.inspect() || null,
+      clock: this._clockPort?.inspect() || null,
+      entropy: this._entropyPort?.inspect() || null,
     };
   }
 
@@ -259,6 +288,16 @@ class V86GuestAdapterDraft {
       throw new Error("x86 adapter: packet device와 relay 동시 사용 불가");
     }
     if (this._packetDeviceName) options.preserve_mac_from_state_image = true;
+    if (this._clockDeviceName) this._clockPort = new V86ClockPort({ device: this._clockDevice() });
+    if (this._entropyDeviceName) this._entropyPort = new V86EntropyPort({ device: this._entropyDevice() });
+    if (this._clockPort || this._entropyPort) {
+      if (options.wasm_fn) throw new Error("x86 adapter: manifest wasm_fn과 clock/entropy bridge 동시 사용 불가");
+      options.wasm_fn = createV86WasmHostFunction({
+        instantiateWasm: this._instantiateWasm,
+        clockPort: this._clockPort,
+        entropyPort: this._entropyPort,
+      });
+    }
     if (this._blockMode === "ata") {
       const device = this._context?.devices?.[this._blockDeviceName];
       this._blockBuffer = new V86BlockBuffer(device);
@@ -267,7 +306,7 @@ class V86GuestAdapterDraft {
     }
     this._serial = "";
     this._line = "";
-    const emulator = new this._V86({ ...options, autostart });
+    const emulator = new this._V86({ ...options, autostart: this._clockPort ? false : autostart });
     this._emulator = emulator;
     emulator.add_listener("serial0-output-byte", this._onSerialByte);
     if (this._packetDeviceName) {
@@ -328,6 +367,10 @@ class V86GuestAdapterDraft {
       emulator.add_listener("emulator-ready", onReady);
       emulator.add_listener("download-error", onDownloadError);
     });
+    if (this._clockPort) {
+      this._clockPort.attach(emulator);
+      if (autostart) await emulator.run();
+    }
     if (this._blockMode === "filesystem") {
       this._emptyFileSystemState = serializeV86FileSystemState(this._fileSystem());
     }
@@ -445,6 +488,23 @@ class V86GuestAdapterDraft {
     const device = this._context?.devices?.[this._pointerDeviceName];
     if (!device || device.kind !== "input" || device.mode !== "relative-pointer" || typeof device.connect !== "function") {
       throw new Error(`x86 adapter: relative pointer device 없음 ${this._pointerDeviceName}`);
+    }
+    return device;
+  }
+
+  _clockDevice() {
+    const device = this._context?.devices?.[this._clockDeviceName];
+    if (!device || device.kind !== "clock" || device.mode !== "wall-monotonic"
+      || typeof device.readWallTimeMs !== "function" || typeof device.readMonotonicTimeMs !== "function") {
+      throw new Error(`x86 adapter: wall-monotonic clock device 없음 ${this._clockDeviceName}`);
+    }
+    return device;
+  }
+
+  _entropyDevice() {
+    const device = this._context?.devices?.[this._entropyDeviceName];
+    if (!device || device.kind !== "entropy" || device.mode !== "cryptographic-random" || typeof device.read !== "function") {
+      throw new Error(`x86 adapter: cryptographic entropy device 없음 ${this._entropyDeviceName}`);
     }
     return device;
   }

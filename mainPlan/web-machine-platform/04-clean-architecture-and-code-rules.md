@@ -134,7 +134,9 @@ tests/attempts/webMachine/
 │  │  ├─ memoryScanCodeInputDevice.js
 │  │  ├─ memoryRgbaDisplayDevice.js
 │  │  ├─ canvasRgbaFrameSource.js
-│  │  └─ memoryRelativePointerDevice.js
+│  │  ├─ memoryRelativePointerDevice.js
+│  │  ├─ browserClockDevice.js
+│  │  └─ browserEntropyDevice.js
 │  └─ persistence/
 │     ├─ generationIntegrity.js
 │     ├─ memoryGenerationStore.js
@@ -154,7 +156,10 @@ tests/attempts/webMachine/
 │     ├─ v86DisplayPort.js
 │     ├─ v86InputPort.js
 │     ├─ v86FramebufferPort.js
-│     └─ v86PointerPort.js
+│     ├─ v86PointerPort.js
+│     ├─ v86ClockPort.js
+│     ├─ v86EntropyPort.js
+│     └─ v86WasmHostBridge.js
 ├─ fixtures/
 │  ├─ input/
 │  │  └─ ps2Set1Text.js
@@ -175,6 +180,7 @@ tests/attempts/webMachine/
    ├─ packetNetworkProbe.html
    ├─ displayInputProbe.html
    ├─ framebufferPointerProbe.html
+   ├─ clockEntropyProbe.html
    ├─ ownerSuccessorParticipant.html
    └─ ownerSuccessorProbe.html
 ```
@@ -214,8 +220,11 @@ boot / pause / resume / snapshot / restore / shutdown / inspect
 - console, display, input을 하나의 UI object로 합치지 않는다.
 - `text-cells`와 `rgba-frame`, `ps2-scan-code`와 `relative-pointer`를 mode flag로 섞지 않고 이름 있는 구현으로 분리한다.
 - RGBA display는 bounded dirty region을 working frame에 쓴 뒤 revision 단위로 원자 present한다.
+- clock은 wall과 monotonic 공급원을 생성자에서 받고 monotonic 역행, timer delay, pending 상한을 거부한다.
+- entropy는 주입된 CSPRNG에서 bounded bytes를 동기로 읽고 반환 bytes를 복제한다.
 - 권한 없는 device는 adapter `boot()` 전에 거부한다.
 - browser handle은 snapshot에 넣지 않는다. output은 paused restore에서 먼저 붙이고 interactive input은 resume 직전에 붙인다.
+- v86 clock/entropy는 공식 `wasm_fn` import와 engine 전용 CMOS bridge에서만 변환한다. browser device는 guest 이름을 모른다.
 
 ## 코드 규칙
 
@@ -277,6 +286,7 @@ pause adapters
 7. probe 밖 adapter 등록.
 8. Web Machine import graph cycle.
 9. default export와 확장자 없는 local ESM import.
+10. clock/entropy browser device의 ambient 시간원, scheduler, random source 직접 접근.
 
 browser gate는 모든 adapter에 같은 lifecycle suite를 적용하고, fault injection으로 permission, timeout,
 ownership loss, torn commit, cold restore를 검증한다.

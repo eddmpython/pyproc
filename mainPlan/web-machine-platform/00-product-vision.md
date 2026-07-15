@@ -77,6 +77,11 @@ working frame에 쓰고 revision 단위로 present하며, canvas frame source는
 `relative-pointer`도 keyboard와 다른 focus·queue를 가지며 v86 PS/2 mouse bus에 연결된다. output은 paused
 restore에서 먼저 redraw하고 pointer는 resume 직전에 붙인다는 방향별 생명주기도 유지한다.
 
+시간과 난수도 ambient browser 전역으로 두지 않는다. `wall-monotonic` clock은 wall time, 단조 tick, bounded
+timer를 하나의 명시적 capability로 제공하고, `cryptographic-random` entropy는 bounded random bytes만
+제공한다. v86 adapter는 공식 WASM import 경계와 CMOS RTC만 변환하며 Linux는 실제 CMOS port와 RDRAND
+instruction으로 이 값을 소비한다. snapshot은 clock/entropy handle을 저장하지 않고 새 process가 새 공급원을 붙인다.
+
 machine owner도 특정 탭 객체에 묶지 않는다. Web Lock은 같은 origin의 실행 owner를 하나로 제한하고,
 IndexedDB record는 machine별 owner identity와 단조 epoch를 durable하게 만든다. successor는 lock을 얻은 뒤
 epoch를 먼저 claim하고 완료 generation을 복구한다. 이전 owner의 늦은 결과는 owner identity 또는 epoch가

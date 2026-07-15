@@ -1,0 +1,412 @@
+<!doctype html>
+<!--
+초기 실측(2026-07-15, Edge headless): RED 2/3.
+v86 wasm_fn으로 monotonic tick 11,106회와 Linux RDRAND 56회는 주입됐지만 CMOS RTC는 Date.now()를 직접 읽었다.
+결과(2026-07-15, Edge headless, COOP+COEP): 3회 연속 GREEN 19/19.
+Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/335/342ms.
+판정: Linux CMOS port, CPU tick, RDRAND가 snapshot handle 없이 새 clock/entropy 공급원에 다시 연결됐다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Web Machine clock entropy probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "처리되지 않은 promise", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>Web Machine clock entropy probe</h1>
+<p>명시적 wall/monotonic clock과 cryptographic entropy가 실제 Linux RTC, timer, RDRAND를 구동하고 process cold restore에서 새 장치로 다시 연결되는지 검증한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { V86 } from "../fixtures/v86/assets/libv86.mjs";
+  import { WebMachineHostDraft } from "../host/webMachineHostDraft.js";
+  import { createV86GuestFactory } from "../adapters/v86GuestAdapter.js";
+  import { BrowserClockDevice } from "../browser/devices/browserClockDevice.js";
+  import { BrowserEntropyDevice } from "../browser/devices/browserEntropyDevice.js";
+  import { IndexedDbGenerationStore } from "../browser/persistence/indexedDbGenerationStore.js";
+  import { MachineCommitCoordinator } from "../browser/persistence/machineCommitCoordinator.js";
+  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../fixtures/v86/config.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const codeOf = async (operation) => {
+    try {
+      await (typeof operation === "function" ? operation() : operation);
+      return "";
+    } catch (error) {
+      return error?.code || String(error);
+    }
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+
+  function bytesToHex(bytes) {
+    return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+  }
+
+  function createElf(code) {
+    const codeBytes = new Uint8Array(code);
+    const codeOffset = 52 + 32;
+    const bytes = new Uint8Array(codeOffset + codeBytes.byteLength);
+    const view = new DataView(bytes.buffer);
+    bytes.set([0x7f, 0x45, 0x4c, 0x46, 1, 1, 1], 0);
+    view.setUint16(16, 2, true);
+    view.setUint16(18, 3, true);
+    view.setUint32(20, 1, true);
+    view.setUint32(24, 0x08048000 + codeOffset, true);
+    view.setUint32(28, 52, true);
+    view.setUint16(40, 52, true);
+    view.setUint16(42, 32, true);
+    view.setUint16(44, 1, true);
+    view.setUint32(52, 1, true);
+    view.setUint32(56, 0, true);
+    view.setUint32(60, 0x08048000, true);
+    view.setUint32(64, 0x08048000, true);
+    view.setUint32(68, bytes.byteLength, true);
+    view.setUint32(72, bytes.byteLength, true);
+    view.setUint32(76, 5, true);
+    view.setUint32(80, 0x1000, true);
+    bytes.set(codeBytes, codeOffset);
+    return bytes;
+  }
+
+  function createRdrandElf() {
+    return createElf([
+      0x0f, 0xc7, 0xf0,
+      0x73, 0xfb,
+      0x50,
+      0x89, 0xe1,
+      0xba, 0x04, 0x00, 0x00, 0x00,
+      0xbb, 0x01, 0x00, 0x00, 0x00,
+      0xb8, 0x04, 0x00, 0x00, 0x00,
+      0xcd, 0x80,
+      0xb8, 0x01, 0x00, 0x00, 0x00,
+      0x31, 0xdb,
+      0xcd, 0x80,
+    ]);
+  }
+
+  function createRtcElf() {
+    const code = [
+      0xb8, 0x65, 0x00, 0x00, 0x00,
+      0xbb, 0x70, 0x00, 0x00, 0x00,
+      0xb9, 0x02, 0x00, 0x00, 0x00,
+      0xba, 0x01, 0x00, 0x00, 0x00,
+      0xcd, 0x80,
+      0x83, 0xec, 0x08,
+      0x89, 0xe7,
+      0xba, 0x70, 0x00, 0x00, 0x00,
+    ];
+    for (const index of [0x00, 0x02, 0x04, 0x07, 0x08, 0x09, 0x32, 0x0b]) {
+      code.push(0xb0, index, 0xee, 0x42, 0xec, 0xaa, 0x4a);
+    }
+    code.push(
+      0x89, 0xe1,
+      0xba, 0x08, 0x00, 0x00, 0x00,
+      0xbb, 0x01, 0x00, 0x00, 0x00,
+      0xb8, 0x04, 0x00, 0x00, 0x00,
+      0xcd, 0x80,
+      0xb8, 0x01, 0x00, 0x00, 0x00,
+      0x31, 0xdb,
+      0xcd, 0x80,
+    );
+    return createElf(code);
+  }
+
+  function installBinaryCommand(path, bytes) {
+    const octal = [...bytes].map((value) => `\\${value.toString(8).padStart(3, "0")}`).join("");
+    return `printf '${octal}' > ${path}; chmod 700 ${path}`;
+  }
+
+  function decodeRtcHex(hex) {
+    if (!/^[0-9a-f]{16}$/i.test(hex)) return NaN;
+    const values = hex.match(/../g).map((value) => Number.parseInt(value, 16));
+    const binaryMode = (values[7] & 4) !== 0;
+    const decode = (value) => binaryMode ? value : (value >> 4) * 10 + (value & 15);
+    const second = decode(values[0]);
+    const minute = decode(values[1]);
+    const hour = decode(values[2] & 0x7f);
+    const day = decode(values[3]);
+    const month = decode(values[4]);
+    const year = decode(values[6]) * 100 + decode(values[5]);
+    return Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
+  }
+
+  function readMarker(text, name, pattern) {
+    return text.match(new RegExp(`${name}:(${pattern})`))?.[1] || "";
+  }
+
+  async function verifyClockContract() {
+    const scheduled = [];
+    let wallMs = 1000;
+    let monotonicMs = 10;
+    const clock = new BrowserClockDevice({
+      wallNow: () => wallMs,
+      monotonicNow: () => monotonicMs,
+      scheduleTimer: (callback, delayMs) => {
+        const handle = { callback, delayMs, cancelled: false };
+        scheduled.push(handle);
+        return handle;
+      },
+      cancelTimer: (handle) => { handle.cancelled = true; },
+      maxTimerDelayMs: 100,
+      maxPendingTimers: 1,
+    });
+    const first = clock.schedule({ delayMs: 5, callback: () => undefined });
+    const fullCode = await codeOf(() => clock.schedule({ delayMs: 5, callback: () => undefined }));
+    const cancelled = first.cancel();
+    let fired = null;
+    const second = clock.schedule({ delayMs: 20, callback: (event) => { fired = event; } });
+    monotonicMs = 30;
+    scheduled.at(-1).callback();
+    const delayCode = await codeOf(() => clock.schedule({ delayMs: 101, callback: () => undefined }));
+    const inspect = clock.inspect();
+    check("clock wall/monotonic과 bounded timer 계약", clock.readWallTimeMs() === wallMs && fired?.scheduledAtMs === 10 && fired?.firedAtMs === 30 && inspect.firedTimers === 1, JSON.stringify(inspect));
+    check("clock timer 포화·취소·delay 경계", fullCode === "WEB_MACHINE_CLOCK_TIMER_FULL" && cancelled && !first.cancel() && !second.cancel() && delayCode === "WEB_MACHINE_CLOCK_DELAY", `${fullCode}/${delayCode}`);
+
+    const sequence = [20, 19];
+    const regressing = new BrowserClockDevice({
+      wallNow: () => 1,
+      monotonicNow: () => sequence.shift(),
+      scheduleTimer: () => 1,
+      cancelTimer: () => undefined,
+    });
+    regressing.readMonotonicTimeMs();
+    const regressionCode = await codeOf(() => regressing.readMonotonicTimeMs());
+    check("monotonic clock 역행 거부", regressionCode === "WEB_MACHINE_CLOCK_REGRESSION", regressionCode);
+  }
+
+  async function verifyEntropyContract() {
+    let nextByte = 1;
+    const entropy = new BrowserEntropyDevice({
+      fillRandomValues: (bytes) => {
+        for (let index = 0; index < bytes.byteLength; index += 1) bytes[index] = nextByte++;
+      },
+      maxBytesPerRead: 4,
+    });
+    const first = entropy.read(4);
+    first[0] = 99;
+    const second = entropy.read(4);
+    const sizeCode = await codeOf(() => entropy.read(5));
+    const failing = new BrowserEntropyDevice({ fillRandomValues: () => { throw new Error("source down"); } });
+    const failureCode = await codeOf(() => failing.read(4));
+    const asyncSource = new BrowserEntropyDevice({ fillRandomValues: async () => undefined });
+    const asyncCode = await codeOf(() => asyncSource.read(4));
+    check("entropy bytes 요청 격리", bytesToHex(second) === "05060708" && entropy.inspect().bytes === 8, `${bytesToHex(second)}/${entropy.inspect().bytes}`);
+    check("entropy size와 동기 source failure 경계", sizeCode === "WEB_MACHINE_ENTROPY_SIZE" && failureCode === "WEB_MACHINE_ENTROPY_SOURCE_FAILURE" && asyncCode === "WEB_MACHINE_ENTROPY_SOURCE_FAILURE", `${sizeCode}/${failureCode}/${asyncCode}`);
+  }
+
+  async function verifyCapabilityBoundary() {
+    let engineConstructions = 0;
+    function CountingV86() { engineConstructions += 1; }
+    const consoleDevice = { kind: "console", write: () => undefined };
+    const clockGood = { kind: "clock", mode: "wall-monotonic" };
+    const clockWrong = { kind: "clock", mode: "calendar-only" };
+    const entropyGood = { kind: "entropy", mode: "cryptographic-random" };
+    const entropyWrong = { kind: "entropy", mode: "predictable" };
+    let sequence = 0;
+    const host = new WebMachineHostDraft({
+      idFactory: () => `boundary-${++sequence}`,
+      devices: { console: consoleDevice, clockGood, clockWrong, entropyGood, entropyWrong },
+    });
+    const adapter = (clockDeviceName, entropyDeviceName) => createV86GuestFactory({
+      V86: CountingV86,
+      clockDeviceName,
+      entropyDeviceName,
+      instantiateWasm: async () => ({}),
+    });
+    host.registerAdapter("clock-mismatch", adapter("clockWrong", "entropyGood"));
+    host.registerAdapter("entropy-mismatch", adapter("clockGood", "entropyWrong"));
+    host.registerAdapter("permission-denied", adapter("clockGood", "entropyGood"));
+    const clockMismatch = host.createMachine({
+      machineId: "clockMismatch",
+      adapterId: "clock-mismatch",
+      permissions: { devices: ["console", "clockWrong", "entropyGood"] },
+    });
+    const entropyMismatch = host.createMachine({
+      machineId: "entropyMismatch",
+      adapterId: "entropy-mismatch",
+      permissions: { devices: ["console", "clockGood", "entropyWrong"] },
+    });
+    const denied = host.createMachine({
+      machineId: "permissionDenied",
+      adapterId: "permission-denied",
+      permissions: { devices: ["console", "clockGood"] },
+    });
+    const clockCode = await codeOf(clockMismatch.boot());
+    const entropyCode = await codeOf(entropyMismatch.boot());
+    const deniedCode = await codeOf(denied.boot());
+    check("clock mode engine boot 전 거부", clockCode === "WEB_MACHINE_DEVICE_MODE_UNSUPPORTED", clockCode);
+    check("entropy mode engine boot 전 거부", entropyCode === "WEB_MACHINE_DEVICE_MODE_UNSUPPORTED", entropyCode);
+    check("clock/entropy permission default deny와 engine boot 0", deniedCode === "WEB_MACHINE_DEVICE_PERMISSION_DENIED" && engineConstructions === 0, `${deniedCode}/${engineConstructions}`);
+  }
+
+  const params = new URLSearchParams(location.search);
+  const restoring = params.get("restore") === "1";
+  const targetWallMs = restoring ? Date.UTC(2035, 5, 1, 12, 34, 56) : Date.UTC(2030, 0, 2, 3, 4, 5);
+  const targetSeconds = targetWallMs / 1000;
+  const monotonicAnchorMs = performance.now();
+  const entropyWords = [];
+  const clockDevice = new BrowserClockDevice({
+    wallNow: () => targetWallMs + performance.now() - monotonicAnchorMs,
+    monotonicNow: () => performance.now(),
+    scheduleTimer: (callback, delayMs) => setTimeout(callback, delayMs),
+    cancelTimer: (handle) => clearTimeout(handle),
+  });
+  const entropyDevice = new BrowserEntropyDevice({
+    fillRandomValues: (bytes) => {
+      crypto.getRandomValues(bytes);
+      if (bytes.byteLength === 4) entropyWords.push(bytesToHex(bytes));
+    },
+  });
+  const wasmBytes = await (await fetch("../fixtures/v86/assets/v86.wasm")).arrayBuffer();
+  const wasmModule = await WebAssembly.compile(wasmBytes);
+  const instantiateWasm = async (imports) => (await WebAssembly.instantiate(wasmModule, imports)).exports;
+  const consoleLines = [];
+  let instanceSequence = 0;
+  const host = new WebMachineHostDraft({
+    idFactory: () => `${restoring ? "restore" : "commit"}-${++instanceSequence}`,
+    devices: {
+      console: { kind: "console", write: (line) => consoleLines.push(String(line)) },
+      machineClock: clockDevice,
+      machineEntropy: entropyDevice,
+    },
+  });
+  host.registerAdapter("x86-linux", createV86GuestFactory({
+    V86,
+    adapterVersion: `${V86_ADAPTER_VERSION}-clock-entropy-v1`,
+    clockDeviceName: "machineClock",
+    entropyDeviceName: "machineEntropy",
+    instantiateWasm,
+  }));
+  const linux = host.createMachine({
+    machineId: "linuxOs",
+    adapterId: "x86-linux",
+    manifest: createV86ProbeManifest(),
+    permissions: { devices: ["console", "machineClock", "machineEntropy"] },
+  });
+  const store = new IndexedDbGenerationStore({ indexedDb: indexedDB, databaseName: "webMachineClockEntropyV1" });
+  const coordinator = new MachineCommitCoordinator({
+    store,
+    cryptoProvider: crypto,
+    idFactory: () => "clock-entropy-g1",
+    nowFactory: () => 1,
+  });
+  const groupId = "clockEntropy";
+
+  try {
+    if (!restoring) {
+      let startedAt = performance.now();
+      await linux.boot();
+      timings.initialBootMs = Math.round(performance.now() - startedAt);
+      await linux.request({ type: "serial", data: `${installBinaryCommand("/tmp/web_rdrand", createRdrandElf())}\n`, waitFor: "~% " });
+      await linux.request({ type: "serial", data: `${installBinaryCommand("/tmp/web_rtc", createRtcElf())}\n`, waitFor: "~% " });
+      const wordsBefore = entropyWords.length;
+      startedAt = performance.now();
+      const initial = await linux.request({
+        type: "serial",
+        data: "grep -m1 '^flags' /proc/cpuinfo; echo CLOCK_SECONDS:$(date +%s); echo UPTIME_SECONDS:$(cut -d' ' -f1 /proc/uptime); echo RTC_HEX:$(/tmp/web_rtc | od -An -tx1 | tr -d ' '); echo RDRAND_HEX:$(/tmp/web_rdrand | od -An -tx1 | tr -d ' ')\n",
+        waitFor: "~% ",
+      });
+      timings.initialGuestReadMs = Math.round(performance.now() - startedAt);
+      const initialSeconds = Number(readMarker(initial, "CLOCK_SECONDS", "[0-9]+"));
+      const initialUptime = Number(readMarker(initial, "UPTIME_SECONDS", "[0-9.]+"));
+      const initialRtcHex = readMarker(initial, "RTC_HEX", "[0-9a-fA-F]{16}").toLowerCase();
+      const initialRtcSeconds = decodeRtcHex(initialRtcHex);
+      const initialWord = readMarker(initial, "RDRAND_HEX", "[0-9a-fA-F]{8}").toLowerCase();
+      const newWords = entropyWords.slice(wordsBefore);
+      const initialInspect = await linux.inspect();
+      if (Math.abs(initialSeconds - targetSeconds) > 10 || Math.abs(initialRtcSeconds - targetSeconds) > 10) {
+        throw new Error(`초기 RTC 주입 실패: ${initialSeconds}/${initialRtcSeconds}/${targetSeconds}/${initial.trim().slice(-900)}`);
+      }
+      if (!/\brdrand\b/.test(initial) || !newWords.includes(initialWord)) throw new Error(`초기 RDRAND bridge 실패: ${initialWord}/${newWords.join(",")}`);
+      if (!(initialUptime > 0) || initialInspect.guest?.clock?.monotonicTicks < 100 || initialInspect.guest?.clock?.rtcTicks < 1) {
+        throw new Error(`초기 clock bridge 실패: ${initialUptime}/${JSON.stringify(initialInspect.guest?.clock)}`);
+      }
+      await linux.pause();
+      startedAt = performance.now();
+      await coordinator.commitPaused({ groupId, machines: [linux], expectedHead: null });
+      timings.commitMs = Math.round(performance.now() - startedAt);
+      await linux.shutdown();
+      store.close();
+      await fetch("/gateRestart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nextSearch: `?restore=1&initialSeconds=${initialSeconds}&initialUptime=${initialUptime}&initialWord=${initialWord}`,
+          timings,
+        }),
+      });
+      await new Promise(() => {});
+    } else {
+      await verifyClockContract();
+      await verifyEntropyContract();
+      await verifyCapabilityBoundary();
+      const phaseOne = {
+        initialSeconds: Number(params.get("initialSeconds")),
+        initialUptime: Number(params.get("initialUptime")),
+        initialWord: params.get("initialWord") || "",
+      };
+      check("최초 Linux가 2030 RTC와 host RDRAND 소비", Math.abs(phaseOne.initialSeconds - Date.UTC(2030, 0, 2, 3, 4, 5) / 1000) <= 10 && /^[0-9a-f]{8}$/.test(phaseOne.initialWord), JSON.stringify(phaseOne));
+
+      let startedAt = performance.now();
+      const restored = await coordinator.restoreLatest({ groupId, machines: { linuxOs: linux } });
+      timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
+      const pausedInspect = await linux.inspect();
+      check("새 process가 clock/entropy handle 없이 generation 복원", restored.generationId === "clock-entropy-g1" && restored.manifest.devices.length === 0, `${restored.generationId}/${restored.manifest.devices.length}`);
+      check("paused cold restore가 새 clock port 연결", linux.state === "paused" && pausedInspect.guest?.clock?.attached && pausedInspect.guest.clock.wallSynchronizations >= 2, JSON.stringify(pausedInspect.guest?.clock));
+      check("새 entropy는 snapshot payload가 아닌 WASM import", pausedInspect.guest?.entropy?.reads === 0 && entropyDevice.inspect().reads === 0, `${pausedInspect.guest?.entropy?.reads}/${entropyDevice.inspect().reads}`);
+
+      await linux.resume();
+      const wordsBefore = entropyWords.length;
+      startedAt = performance.now();
+      const reopened = await linux.request({
+        type: "serial",
+        data: "echo RTC_HEX:$(/tmp/web_rtc | od -An -tx1 | tr -d ' '); echo CLOCK_SECONDS:$(date +%s); echo UPTIME_SECONDS:$(cut -d' ' -f1 /proc/uptime); echo RDRAND_HEX:$(/tmp/web_rdrand | od -An -tx1 | tr -d ' ')\n",
+        waitFor: "~% ",
+      });
+      timings.reopenedGuestReadMs = Math.round(performance.now() - startedAt);
+      const reopenedSeconds = Number(readMarker(reopened, "CLOCK_SECONDS", "[0-9]+"));
+      const reopenedUptime = Number(readMarker(reopened, "UPTIME_SECONDS", "[0-9.]+"));
+      const reopenedRtcHex = readMarker(reopened, "RTC_HEX", "[0-9a-fA-F]{16}").toLowerCase();
+      const reopenedRtcSeconds = decodeRtcHex(reopenedRtcHex);
+      const reopenedWord = readMarker(reopened, "RDRAND_HEX", "[0-9a-fA-F]{8}").toLowerCase();
+      const newWords = entropyWords.slice(wordsBefore);
+      const reopenedInspect = await linux.inspect();
+      check("새 wall clock이 Linux CMOS port에 2035년 공급", Math.abs(reopenedRtcSeconds - targetSeconds) <= 10, `${reopenedRtcHex}/${reopenedRtcSeconds}/${targetSeconds}`);
+      check("restore가 guest system clock을 몰래 재작성하지 않음", reopenedSeconds < Date.UTC(2031, 0, 1) / 1000, `${reopenedSeconds}/${targetSeconds}`);
+      check("새 monotonic clock이 Linux uptime 진행", reopenedUptime > phaseOne.initialUptime && reopenedInspect.guest?.clock?.monotonicTicks > 100, `${phaseOne.initialUptime}/${reopenedUptime}/${reopenedInspect.guest?.clock?.monotonicTicks}`);
+      check("새 entropy bytes가 Linux RDRAND 결과와 정확히 일치", newWords.includes(reopenedWord), `${reopenedWord}/${newWords.join(",")}`);
+      check("v86 clock/entropy bridge 계수 일치", reopenedInspect.guest?.clock?.rtcTicks > 0 && reopenedInspect.guest?.entropy?.reads === entropyDevice.inspect().reads && reopenedInspect.guest.entropy.bytes === entropyDevice.inspect().bytes, `${JSON.stringify(reopenedInspect.guest?.clock)}/${JSON.stringify(reopenedInspect.guest?.entropy)}`);
+      check("새 host history는 boot 없이 restore", linux.history.some((entry) => entry.event === "restored") && !linux.history.some((entry) => entry.event === "booted"));
+      await linux.pause();
+      await linux.shutdown();
+      check("shutdown이 clock bridge 수명 종료", (await linux.inspect()).guest === null);
+      store.close();
+      await report();
+    }
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-1800));
+    try { if (["running", "paused", "failed"].includes(linux.state)) await linux.shutdown(); } catch (cleanupError) {}
+    store.close();
+    await report();
+  }
+</script>
+</body>
+</html>

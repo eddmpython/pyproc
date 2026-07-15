@@ -993,6 +993,8 @@ check("Web Machine attempts 레이어 구조 고정", () => {
     "memoryRgbaDisplayDevice.js",
     "canvasRgbaFrameSource.js",
     "memoryRelativePointerDevice.js",
+    "browserClockDevice.js",
+    "browserEntropyDevice.js",
   ];
   for (const file of requiredBrowserDevices) {
     if (!existsSync(join(webMachineRoot, "browser", "devices", file))) throw new Error(`browser device 계약 누락: ${file}`);
@@ -1009,6 +1011,9 @@ check("Web Machine attempts 레이어 구조 고정", () => {
     "v86InputPort.js",
     "v86FramebufferPort.js",
     "v86PointerPort.js",
+    "v86ClockPort.js",
+    "v86EntropyPort.js",
+    "v86WasmHostBridge.js",
   ];
   for (const file of requiredV86Bridges) {
     if (!existsSync(join(webMachineRoot, "adapters", "v86", file))) throw new Error(`v86 bridge 계약 누락: ${file}`);
@@ -1023,6 +1028,17 @@ check("Web Machine attempts 레이어 구조 고정", () => {
     }
   };
   walk(webMachineRoot);
+});
+check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
+  const deviceRoot = join(webMachineRoot, "browser", "devices");
+  const clockSource = readFileSync(join(deviceRoot, "browserClockDevice.js"), "utf8");
+  const entropySource = readFileSync(join(deviceRoot, "browserEntropyDevice.js"), "utf8");
+  if (/\b(?:Date|performance)\s*\.|\b(?:setTimeout|clearTimeout|setInterval|clearInterval)\s*\(/.test(clockSource)) {
+    throw new Error("browserClockDevice가 ambient 시간원 또는 scheduler에 직접 접근");
+  }
+  if (/\b(?:crypto|globalThis|window)\b/.test(entropySource)) {
+    throw new Error("browserEntropyDevice가 ambient entropy source에 직접 접근");
+  }
 });
 check("Web Machine host는 guest와 browser 구현을 모름", () => {
   const hostRoot = join(webMachineRoot, "host");

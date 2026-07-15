@@ -417,3 +417,62 @@ NEXT:
 1. clock과 entropy를 ambient browser 접근이 아닌 명시적 device port로 주입한다.
 2. `.webmachine` envelope의 schema, integrity, adapter capability 요구를 실제 export/import로 검증한다.
 3. v86, BIOS, Buildroot, KolibriOS 구성물의 정확한 license와 SBOM 배포 게이트를 닫는다.
+
+## 2026-07-15 - Linux CMOS clock과 RDRAND entropy cold reattach
+
+구현:
+
+1. browser 경계에 `BrowserClockDevice`를 추가했다. wall과 monotonic 공급원, timer scheduler를 생성자에서
+   주입받고 monotonic 역행, timer delay, pending 상한을 구조화 오류로 거부한다.
+2. `BrowserEntropyDevice`는 주입된 CSPRNG에서 한 번에 최대 65,536 bytes를 동기로 읽고 반환 bytes를 복제한다.
+   source failure와 read 크기 오류를 분리하며 random 전역을 직접 읽지 않는다.
+3. v86의 공식 `wasm_fn` import에서 `microtick`을 공통 clock으로, `get_rand_int`를 공통 entropy의 little-endian
+   int32로 바꿨다. engine WASM instantiation은 composition root가 주입한다.
+4. v86 0.5.424의 CMOS RTC는 `Date.now()`를 직접 읽으므로 engine 전용 `V86ClockPort`가 RTC timer를 명시적
+   wall clock으로 치환한다. CPU periodic/update/alarm interrupt 상태와 100ms scheduling 반환 계약은 유지한다.
+5. probe가 만든 최소 i686 ELF 두 개가 Linux root 안에서 실제 `RDRAND EAX`를 실행하고, `ioperm` 뒤 CMOS
+   0x70/0x71 port의 second/minute/hour/day/month/year/century/status B를 직접 읽는다.
+
+실패에서 고친 계약:
+
+- 첫 공개 옵션 실측은 RED 2/3이었다. monotonic tick 11,106회와 Linux RDRAND 56회는 `wasm_fn`으로
+  들어갔지만 CMOS RTC는 browser 현재시각을 읽었다. tick과 RTC를 같은 것으로 가장하지 않고 RTC bridge를
+  별도 engine 경계로 만들었다.
+- 첫 wall target 2040은 Linux i686의 32-bit `time_t`를 넘겨 `date +%s`가 `-2085881048`로 overflow했다.
+  host clock 결함과 guest ABI 한계를 분리하고 2030 boot, 2035 cold reattach로 검증했다.
+- cold restore 뒤 Buildroot에는 `/dev/rtc`가 없어 `hwclock`으로 system time을 갱신할 수 없었다. adapter가
+  guest 명령을 몰래 실행하지 않고, ioperm 기반 CMOS port reader로 새 hardware 값을 직접 검증했다. guest
+  system clock은 snapshot 정책대로 유지된다.
+
+실측:
+
+- `clockEntropyProbe` 수정본 3회 연속 GREEN 19/19.
+- Linux initial boot 3844/3913/3872ms, 최초 guest clock/RDRAND read 356/307/391ms, generation commit
+  337/301/491ms였다.
+- 기존 Edge process tree 종료 뒤 cold restore 308/335/342ms, 새 clock/entropy의 guest read
+  477/526/471ms였다.
+- 최초 Linux system clock과 CMOS는 2030-01-02 03:04:05 기준 10초 안에 일치했다. 새 process의 paused
+  restore 뒤 CMOS raw bytes `56 34 12 01 06 35 20 02`는 정확히 2035-06-01 12:34:56을 나타냈다.
+- cold restore 직후 entropy read는 0이었다. resume 뒤 Linux RDRAND 한 번이 새 CSPRNG의 4 bytes를 매회
+  byte-for-byte 소비했고 port/device read·byte 계수도 일치했다.
+- 새 host history에는 boot event가 0이고 generation의 device payload도 0이었다. clock과 entropy handle은
+  snapshot이 아니라 새 WASM import와 RTC bridge로 다시 붙었다.
+
+판정:
+
+1. browser clock을 읽어 guest 명령 인자로 넘긴 것이 아니라 x86 CPU tick, CMOS port, RDRAND instruction의
+   hardware 경계까지 연결했다.
+2. wall clock, monotonic tick, entropy bytes의 서로 다른 의미를 한 random/time callback으로 합치지 않았다.
+   공통 browser device와 v86 변환부는 guest 이름 없이 유지된다.
+3. restore가 guest system clock을 몰래 수정하지 않는다. 새 RTC hardware 값의 OS 재적용은 guest driver와
+   resume policy 책임이며, 현재 Buildroot image의 `/dev/rtc` 부재를 capability 한계로 남긴다.
+4. Phase 3 최소 공통 장치인 block, console, display, input, packet network, clock, entropy는 실제 guest
+   끝단을 모두 통과했다. 범용 Web Machine 전체는 이동 가능한 envelope와 배포 게이트 전까지 완료가 아니다.
+
+NEXT:
+
+1. `.webmachine` envelope schema, adapter identity/version, capability requirements와 전체 integrity를 실제
+   export/import byte format으로 고정한다.
+2. 다른 browser profile에서 pyproc과 Linux envelope를 import하고 adapter missing, version mismatch,
+   permission denied, corruption, untrusted signature를 선실행 거부한다.
+3. v86, BIOS, Buildroot, KolibriOS 구성물의 정확한 license와 SBOM 배포 게이트를 닫는다.

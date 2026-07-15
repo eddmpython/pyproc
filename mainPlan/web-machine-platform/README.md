@@ -13,7 +13,9 @@ Linux eth0를 bounded packet switch에 연결해 실제 ARP/ICMP와 process cold
 제거 뒤 successor 하나가 durable epoch를 올려 같은 generation을 boot나 command replay 없이 복구했다.
 이어 graphical x86 guest의 1024x768x32bpp VGA를 RGBA8888 dirty-region frame으로 내보내고, PS/2 pointer가
 실제 guest 화면을 바꾸며 새 browser process의 paused restore와 resume 재연결까지 통과했다.
-clock/entropy, 이동 가능한 `.webmachine` envelope와 배포 검토는 남아 있다.
+이어 browser가 공급한 wall/monotonic clock을 Linux CMOS와 CPU timer에, cryptographic entropy를 RDRAND에
+연결했다. 새 process의 CMOS 값과 RDRAND bytes를 guest 하드웨어 끝단에서 직접 검증했다. 이동 가능한
+`.webmachine` envelope와 배포 검토는 남아 있다.
 
 ## 한 문장
 
