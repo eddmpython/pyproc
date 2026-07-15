@@ -47,7 +47,7 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 
 | 비교 축 | pyproc | WebVM | JupyterLite | marimo web runtime | caveat |
 |---|---|---|---|---|---|
-| S0 python ready latency | 측정 필요 | 측정 필요 | 측정 필요 | 측정 필요 | 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지 |
+| S0 python ready latency | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | 측정 필요 | 측정 필요 | 측정 필요 | 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지 |
 | S1 numpy sharded matmul | Speed Lab 반복 봉투 | N/A 가능 | N/A 가능 | N/A 가능 | 병렬 worker 모델이 다르면 single-lane으로 재정의하지 않음 |
 | S1L single-kernel numpy latency | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | 측정 필요 | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-marimo-wasm-2026-07-15.json) | S1 대체가 아니라 별도 single-lane 보조 축 |
 | S2 process map | browser gate | 측정 필요 | 측정 필요 | 측정 필요 | 같은 순수 Python 또는 NumPy 작업 |

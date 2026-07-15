@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S0",
+  "candidate": "pyproc",
+  "name": "python ready latency",
+  "command": "npm run test:browser, boot() ready and run sum(range(100))",
+  "commit": "491c4ffe94e2651c16f58c6e40c64dd4eb031729",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T01:15:51.923Z",
+  "finishedAt": "2026-07-15T01:15:51.924Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 14668394496
+  },
+  "engine": {
+    "name": "Pyodide"
+  },
+  "source": "npm run test:browser",
+  "note": "derived from three browser gate runs; latencyMs is bootMs until Python boot ready",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 3642,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 3471,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 3450,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 3471,
+    "p95Ms": 3642,
+    "minMs": 3450,
+    "maxMs": 3642,
+    "maxErr": 0
+  }
+}

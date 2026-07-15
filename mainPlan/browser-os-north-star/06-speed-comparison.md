@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S1 기준 artifact 기록. WebVM, JupyterLite, marimo WASM은 같은 S1 계약을 N/A artifact로 봉인. S1L은 pyproc, JupyterLite, marimo WASM을 같은 브라우저에서 측정.
+상태: pyproc S0/S1 기준 artifact 기록. WebVM, JupyterLite, marimo WASM은 같은 S1 계약을 N/A artifact로 봉인. S1L은 pyproc, JupyterLite, marimo WASM을 같은 브라우저에서 측정.
 
 ## 목표
 
@@ -30,6 +30,7 @@
 
 | date | scenario | artifact | compare | result |
 |---|---|---|---|---|
+| 2026-07-15 | S0 pyproc | [s0-pyproc-2026-07-15.json](benchmarks/s0-pyproc-2026-07-15.json) | [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md) | GREEN, 3 samples, median 3471ms, p95 3642ms, maxErr 0 |
 | 2026-07-15 | S1 pyproc | [s1-pyproc-2026-07-15.json](benchmarks/s1-pyproc-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | GREEN, `size=1024`, 3 samples, median 3.95x, shard p95 2606ms, maxErr 0 |
 | 2026-07-15 | S1 external candidates | [webvm N/A](benchmarks/s1-webvm-na-2026-07-15.json), [jupyterlite N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json), [marimo-wasm N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | 같은 4-worker sharded NumPy matmul 계약 없음 |
 | 2026-07-15 | S1L pyproc | [s1l-pyproc-2026-07-15.json](benchmarks/s1l-pyproc-2026-07-15.json) | [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md) | GREEN, 3 samples, median 10067ms, p95 10073ms, maxErr 0 |
@@ -42,7 +43,7 @@
 
 | scenario | pyproc command | WebVM | JupyterLite | marimo web runtime | 판정 |
 |---|---|---|---|---|---|
-| S0 python ready latency | `npm run bench:artifact -- --scenario S0` | 미측정 | 미측정 | 미측정 | 보류 |
+| S0 python ready latency | [artifact](benchmarks/s0-pyproc-2026-07-15.json) | 미측정 | 미측정 | 미측정 | WebVM 측정 대기 |
 | S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | [N/A](benchmarks/s1-webvm-na-2026-07-15.json) | [N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | pyproc만 같은 S1 계약 충족 |
 | S1L single-kernel numpy latency | [artifact](benchmarks/s1l-pyproc-2026-07-15.json) | 미측정 | [artifact](benchmarks/s1l-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s1l-marimo-wasm-2026-07-15.json) | WebVM 제외 3자 측정 완료 |
 | S2 process map | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |

@@ -1798,3 +1798,37 @@ NEXT:
 1. pyproc S0 기준 artifact를 생성한다.
 2. WebVM에서 VM boot 뒤 `python3` 첫 출력까지 측정한다.
 3. `benchmarks/s0-compare-2026-07-15.md`를 만든다.
+
+## 2026-07-15 - pyproc S0 기준 artifact 고정
+
+완료:
+
+- `npm run test:browser`를 3회 실행해 pyproc S0 boot ready sample을 확보했다.
+- [s0-pyproc-2026-07-15.json](benchmarks/s0-pyproc-2026-07-15.json)을 생성했다.
+- [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md)를 pyproc 단독 기준표로 생성했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S0 상태를 갱신했다.
+
+실측:
+
+- Edge 150.0.4078.65, Windows, AMD Ryzen 7 8845HS.
+- `npm run test:browser` 3회 모두 GREEN 47/47.
+- pyproc S0 samples: 3642ms, 3471ms, 3450ms.
+- median 3471ms, p95 3642ms, min 3450ms, max 3642ms, maxErr 0.
+- artifact 생성 commit: `491c4ffe75a381d17dcaf94ab61b315cb0fb6aa7`, `worktreeDirty: false`.
+
+검증:
+
+- `npm run test:browser` PASS 3회.
+- `npm run bench:artifact -- --scenario S0 --candidate pyproc --browser-version 150.0.4078.65 --engine Pyodide --source "npm run test:browser" --command "npm run test:browser, boot() ready and run sum(range(100))" --note "derived from three browser gate runs; latencyMs is bootMs until Python boot ready" --sample 3642,0 --sample 3471,0 --sample 3450,0 --out mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md` PASS.
+
+판정:
+
+- S0 pyproc 기준점이 생겼다.
+- WebVM은 이제 같은 S0 표에 들어갈 수 있다. 단 WebVM의 latency는 Linux VM boot 뒤 `python3` 첫 출력까지로 분리한다.
+
+NEXT:
+
+1. WebVM에서 S0 `python3` 첫 출력까지 측정한다.
+2. [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md)에 WebVM 행을 합친다.
+3. WebVM S0가 불안정하면 N/A가 아니라 실패 artifact 또는 제한 근거를 남긴다.
