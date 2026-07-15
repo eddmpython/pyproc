@@ -572,9 +572,71 @@ check("소비 문서 역할 분리", () => {
   if (!contract.includes("## 공개 import 경계")) throw new Error("contract.md import 경계 절 누락");
   if (!contract.includes("## 실행 자산 배포 계약")) throw new Error("contract.md 실행 자산 배포 절 누락");
   if (!contract.includes("## 계약 검증")) throw new Error("contract.md 계약 검증 절 누락");
+  if (!contract.includes("### 설치 패키지 consumer gate coverage")) throw new Error("contract.md 설치 패키지 consumer gate coverage 절 누락");
   if (!contract.includes("[capabilityMatrix.md](capabilityMatrix.md): capability별 제품 가치")) throw new Error("contract.md가 capability matrix 역할을 위임하지 않음");
   if (contract.includes("| export | 무엇 |")) throw new Error("contract.md가 capability별 export 설명표로 회귀");
   if (!docsMap.includes("설치, 버전 핀, import 경계, 실행 자산 배포")) throw new Error("docs/README.md contract 역할 설명이 낡음");
+});
+check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", () => {
+  const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
+  const testing = readFileSync(join(ROOT, "docs", "operations", "testing.md"), "utf8");
+  const packageConsumer = readFileSync(join(ROOT, "tests", "packageConsumer.mjs"), "utf8");
+  const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
+  for (const term of [
+    "package consumer",
+    "product consumer - asset path",
+    "product consumer - runtime/server",
+    "product consumer - process OS",
+    "product consumer - product policy",
+    "product consumer - portable machine",
+    "`pyproc/assets`",
+    "`pyproc/runtime`",
+    "`pyproc-assets` bin",
+    "S3 timing source",
+    "S4 timing source",
+  ]) {
+    if (!contract.includes(term)) throw new Error(`contract.md consumer coverage 누락: ${term}`);
+  }
+  for (const name of [
+    "boot",
+    "bootSession",
+    "PyProc",
+    "VirtualOrigin",
+    "verifyPyProcAssetIntegrity",
+    "registerPyProcServiceWorker",
+    "openMachine",
+    "createMachineKeyPair",
+    "exportMachinePublicKey",
+    "fingerprintMachinePublicKey",
+    "MachineJail",
+    "getPyProcAssetManifest",
+  ]) {
+    if (!contract.includes("`" + name)) throw new Error(`contract.md consumer coverage export 누락: ${name}`);
+    if (!productConsumer.includes(name)) throw new Error(`productConsumer.mjs export 사용 누락: ${name}`);
+  }
+  for (const term of [
+    "pyproc/assets",
+    "pyproc/runtime",
+    "RuntimeFromSubpath",
+    "bootFromSubpath",
+    "pyproc-assets",
+    "--copy-to",
+  ]) {
+    if (!packageConsumer.includes(term)) throw new Error(`packageConsumer.mjs 설치 패키지 표면 검사 누락: ${term}`);
+  }
+  for (const term of [
+    "installed worker graph SRI verifies",
+    "installed package SW registers from manifest URL",
+    "VirtualOrigin fetch reaches Python server from installed package",
+    "MachineJail enforces installed product permission manifest",
+    "PyProc worker runs from installed package",
+    "installed product exports signed .pymachine with home",
+    "installed product opens trusted .pymachine and resumes resources",
+  ]) {
+    if (!productConsumer.includes(term)) throw new Error(`productConsumer.mjs coverage check 누락: ${term}`);
+  }
+  if (!testing.includes("설치 패키지 consumer gate coverage 표")) throw new Error("testing.md consumer coverage 표 포인터 누락");
+  if (contract.includes("왕복 3.4ms")) throw new Error("contract.md에 낡은 S3 3.4ms 수치 잔존");
 });
 check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   const matrixPath = join(ROOT, "docs", "consuming", "capabilityMatrix.md");

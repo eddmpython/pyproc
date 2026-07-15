@@ -63,7 +63,7 @@ await registerPyProcServiceWorker(assetIntegrity, {
   coreIntegrity: "/vendor/pyodide-integrity.json",
   scope: "/",
 });
-new VirtualOrigin(asgiServer).bind(); // 이후 fetch("/pyproc/api/...")가 커널로 간다 (왕복 3.4ms)
+new VirtualOrigin(asgiServer).bind(); // 이후 fetch("/pyproc/api/...")가 커널로 간다 (S3 artifact 기준 18ms median)
 
 // 헤더를 못 다는 호스팅(GitHub Pages 등)에서 SAB(프로세스 OS) 열기: 등록 + 1회 새로고침
 await registerPyProcServiceWorker(assetIntegrity, { coi: true, scope: "/" });
@@ -135,6 +135,19 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 - 같은 consumer gate가 `MachineJail` 권한 manifest, signed `.pymachine` export/open, trusted public key와 wrong key 거부, signer fingerprint, `/home/web/resume.py`의 SQLite connection 재개설까지 실행한다.
 - `pyproc/runtime`은 public Runtime wrapper다. 내부 `runtime.js` core는 엔진 래퍼와 `Runtime.fs`만 담당하고, `runtimeApi.js`는 `src/capabilities/runtimeBindings.js` registry를 설치해 `enableReactive` 같은 opt-in capability factory를 제공한다.
 - `restoreLive` 실행 경계는 기계 검증 대상이다. 경계를 지키면 즉시 복원(재해싱 0), 위반은 자동 감지되어 재해시 경로로 승격된다. 반환값 `rehashed`로 경로를 확인한다.
+
+### 설치 패키지 consumer gate coverage
+
+`npm run test:package`와 `npm run test:consumer`는 문서 링크나 repo 상대 import가 아니라 설치된 tarball의 public specifier만 본다. 이 표가 설치 패키지 기준으로 실제 검증되는 소비 표면이다.
+
+| 게이트 | 노출 specifier | 실제 public surface | 검증하는 계약 |
+| --- | --- | --- | --- |
+| package consumer | `pyproc`, `pyproc/assets`, `pyproc/runtime` | `Runtime`, `PyProc`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, runtime subpath `boot`/`Runtime`, `pyproc-assets` bin | package exports, stable subpath, `index.d.ts`, npm files, CLI graph copy와 SRI manifest |
+| product consumer - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | `/node_modules/pyproc/` 기준 asset manifest, worker graph SRI, 설치된 `pyprocSw.js` registration, bad worker SRI spawn 전 거부 |
+| product consumer - runtime/server | `pyproc` | `boot`, `VirtualOrigin`, Runtime `enableAsgiServer` | 설치 패키지 Runtime boot, Python ASGI app, `fetch("/pyproc/...")` virtual origin 왕복, S3 timing source |
+| product consumer - process OS | `pyproc` | `PyProc` | 설치 패키지 worker graph로 `boot`, `map`, `terminate` 실행, SRI와 ASGI Service Worker prefix 충돌 없음 |
+| product consumer - product policy | `pyproc` | `MachineJail` | 제품 permission manifest(`net=false`, `clipboard=false`, `home=true`, `workers=false`)와 Python choke point 집행 |
+| product consumer - portable machine | `pyproc` | `bootSession`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, Session `exportImage`, Runtime `enableInit` | signed `.pymachine` + `/home/web` export, signer fingerprint, untrusted/wrong key 거부, trusted open, `resume.py` SQLite resource 재개설, S4 timing source |
 
 ## 방향과 경계
 

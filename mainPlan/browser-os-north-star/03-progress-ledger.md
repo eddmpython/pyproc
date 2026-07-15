@@ -2503,3 +2503,33 @@ NEXT:
 1. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
 2. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
 3. 제품 소비 경로의 다음 구조 강화는 installed package consumer gate가 어떤 public exports를 실제로 쓰는지 문서와 연결하는 것이다.
+
+## 2026-07-15 - 설치 패키지 consumer gate coverage 고정
+
+완료:
+
+- [contract.md](../../docs/consuming/contract.md)에 `설치 패키지 consumer gate coverage` 표를 추가했다.
+- `test:package`와 `test:consumer`가 설치된 tarball 기준으로 실제로 노출하고 검증하는 public specifier와 export를 분리해 기록했다.
+- package consumer는 `pyproc`, `pyproc/assets`, `pyproc/runtime`, `pyproc-assets` bin, CLI graph copy/SRI manifest를 검증하는 표면으로 고정했다.
+- product consumer는 asset path, runtime/server, process OS, product policy, portable machine image로 나눠 `boot`, `PyProc`, `VirtualOrigin`, `MachineJail`, `bootSession`, `openMachine`, signing key API, resume path를 연결했다.
+- [testing.md](../../docs/operations/testing.md)에 상세 coverage 정본이 소비 계약 표라는 포인터를 추가했다.
+- `contract.md`의 Service Worker 예시에 남아 있던 낡은 S3 `3.4ms` 문구를 S3 artifact 기준 18ms median으로 정리했다.
+- `npm test`에 문서 표, 실제 `tests/packageConsumer.mjs`, `tests/browser/productConsumer.mjs`의 import/check 문자열이 어긋나면 실패하는 가드를 추가했다.
+
+판정:
+
+- 제품 소비 계약이 추상 규칙에서 설치 패키지 기준 실행 증거로 좁혀졌다.
+- 라이브러리 구조 관점에서 중요한 점은 "무엇을 export한다"가 아니라 "설치된 패키지에서 그 export가 어떤 제품 경로를 실제로 통과하는가"다.
+- 이번 변경은 runtime 동작 변경이 아니라 소비 계약과 구조 가드 강화라 Node 구조 게이트로 충분하다.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 656 passed, 0 failed.
+
+NEXT:
+
+1. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
+2. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
+3. 다음 구조 강화는 product consumer gate 자체가 coverage manifest를 산출해 문서와 테스트가 같은 데이터를 보게 만드는 방향이다.
