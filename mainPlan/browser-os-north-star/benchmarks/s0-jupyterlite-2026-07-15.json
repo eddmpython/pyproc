@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S0",
+  "candidate": "jupyterlite",
+  "name": "python ready latency",
+  "command": "page.goto JupyterLite REPL, fill first code cell with print(marker), Shift+Enter, wait marker output",
+  "commit": "88bd8c15d6e18d0ad1ec65cbe3c6c9095d09c32f",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T01:40:29.114Z",
+  "finishedAt": "2026-07-15T01:40:29.116Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.0.0"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 13609635840
+  },
+  "engine": {
+    "name": "JupyterLite Pyodide"
+  },
+  "source": "https://jupyterlite.github.io/demo/repl/index.html?kernel=python via playwright-cli",
+  "note": "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 17749,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 12352,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 9401,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 12352,
+    "p95Ms": 17749,
+    "minMs": 9401,
+    "maxMs": 17749,
+    "maxErr": 0
+  }
+}
