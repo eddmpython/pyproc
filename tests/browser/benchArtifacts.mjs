@@ -8,7 +8,8 @@ export const S1_SCENARIO = "S1";
 export const S1L_SCENARIO = "S1L";
 export const S2_SCENARIO = "S2";
 export const S3_SCENARIO = "S3";
-export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO]);
+export const S4_SCENARIO = "S4";
+export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO]);
 
 export function readBenchArtifact(file) {
   try {
@@ -34,6 +35,7 @@ export function normalizeBenchArtifact(artifact, file = "artifact") {
   if (!artifact.metrics || typeof artifact.metrics !== "object") throw new Error(`${file}: metrics 객체 누락`);
   if (artifact.scenario === S0_SCENARIO || artifact.scenario === S0C_SCENARIO || artifact.scenario === S3_SCENARIO) return normalizeReadyLatencyArtifact(artifact, file, candidate);
   if (artifact.scenario === S1_SCENARIO || artifact.scenario === S2_SCENARIO) return normalizePairedSpeedArtifact(artifact, file, candidate);
+  if (artifact.scenario === S4_SCENARIO) return normalizeMachineResumeArtifact(artifact, file, candidate);
   return normalizeS1LArtifact(artifact, file, candidate);
 }
 
@@ -108,6 +110,23 @@ function normalizeS1LArtifact(artifact, file, candidate) {
   });
 }
 
+function normalizeMachineResumeArtifact(artifact, file, candidate) {
+  const sampleCount = requireFiniteNumber(artifact.metrics, "sampleCount", file);
+  assertSamples(artifact, sampleCount, file);
+  return baseRow(artifact, file, candidate, {
+    samples: sampleCount,
+    exportMedianMs: requireFiniteNumber(artifact.metrics, "exportMedianMs", file),
+    exportP95Ms: requireFiniteNumber(artifact.metrics, "exportP95Ms", file),
+    openMedianMs: requireFiniteNumber(artifact.metrics, "openMedianMs", file),
+    openP95Ms: requireFiniteNumber(artifact.metrics, "openP95Ms", file),
+    machineMBMedian: requireFiniteNumber(artifact.metrics, "machineMBMedian", file),
+    machineMBMax: requireFiniteNumber(artifact.metrics, "machineMBMax", file),
+    resumeRowsMin: requireFiniteNumber(artifact.metrics, "resumeRowsMin", file),
+    resumeRowsMax: requireFiniteNumber(artifact.metrics, "resumeRowsMax", file),
+    maxErr: requireFiniteNumber(artifact.metrics, "maxErr", file),
+  });
+}
+
 export function normalizeBenchArtifactFile(file) {
   return normalizeBenchArtifact(readBenchArtifact(file), file);
 }
@@ -126,6 +145,7 @@ export function renderBenchCompareMarkdown(rows) {
   if (scenario === S1L_SCENARIO) return renderS1LMarkdown(rows);
   if (scenario === S2_SCENARIO) return renderS2Markdown(rows);
   if (scenario === S3_SCENARIO) return renderS3Markdown(rows);
+  if (scenario === S4_SCENARIO) return renderS4Markdown(rows);
   return renderS1Markdown(rows);
 }
 
@@ -139,6 +159,27 @@ function renderS2Markdown(rows) {
 
 function renderS3Markdown(rows) {
   return renderReadyLatencyMarkdown(rows, "roundtrip median ms", "roundtrip p95 ms");
+}
+
+function renderS4Markdown(rows) {
+  const sorted = rows.slice().sort((a, b) => {
+    const av = typeof a.openMedianMs === "number" ? a.openMedianMs : Number.POSITIVE_INFINITY;
+    const bv = typeof b.openMedianMs === "number" ? b.openMedianMs : Number.POSITIVE_INFINITY;
+    return av - bv;
+  });
+  const lines = [
+    "| candidate | ok | samples | export median ms | export p95 ms | open median ms | open p95 ms | image MB median | resume rows | maxErr | browser | commit | source |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|---|",
+  ];
+  for (const r of sorted) {
+    const ok = r.notApplicableReason ? "N/A" : (r.ok ? "GREEN" : "RED");
+    const source = r.notApplicableReason ? r.notApplicableReason : r.file;
+    const resumeRows = typeof r.resumeRowsMin === "number" && typeof r.resumeRowsMax === "number"
+      ? `${markdownCell(r.resumeRowsMin)}-${markdownCell(r.resumeRowsMax)}`
+      : "N/A";
+    lines.push(`| ${markdownCell(r.candidate)} | ${ok} | ${markdownCell(r.samples ?? "N/A")} | ${markdownCell(r.exportMedianMs ?? "N/A")} | ${markdownCell(r.exportP95Ms ?? "N/A")} | ${markdownCell(r.openMedianMs ?? "N/A")} | ${markdownCell(r.openP95Ms ?? "N/A")} | ${markdownCell(r.machineMBMedian ?? "N/A")} | ${resumeRows} | ${markdownCell(r.maxErr ?? "N/A")} | ${markdownCell(r.browser)} | ${markdownCell(r.commit + (r.dirty ? " dirty" : ""))} | ${markdownCell(source)} |`);
+  }
+  return lines.join("\n") + "\n";
 }
 
 function renderPairedSpeedMarkdown(rows, singleHeader, parallelHeader, parallelP95Header) {

@@ -38,7 +38,7 @@
 | S1L | single-kernel numpy latency | `bench:artifact --scenario S1L` | warmed latency median, p95, min/max, maxErr | 최소 3회 sample, `maxErr < 1e-9` |
 | S2 | process map | `bench:artifact --scenario S2` | serial median, process pool median, speedup, p95, maxErr | 결과 일치, speedup > 1 |
 | S3 | browser server | `bench:artifact --scenario S3` | roundtrip median, p95, min/max, maxErr | 최소 3회 sample, Python ASGI 응답 도달 |
-| S4 | machine resume | `npm run test:consumer`의 signed `.pymachine` | export MB/ms, open ms, resume rows | trusted key open, `resume.py` 재개설 |
+| S4 | machine resume | `bench:artifact --scenario S4` | export median/p95, open median/p95, image MB, resume rows | trusted key open, `resume.py` 재개설 |
 
 S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 worker pool 계약을 제공하지 못할 때 쓰는 single-lane 보조 축이다. S0는 기존 Python ready 관측 축이고, S0C는 cold profile/cache-clear 조건만 받는 엄격한 보조 축이다. S2, S3, S4는 "로컬처럼 쓰는 웹 OS"의 체감 속도 축이다.
 
@@ -54,7 +54,7 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 | S1L single-kernel numpy latency | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | 측정 필요 | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s1l-marimo-wasm-2026-07-15.json) | S1 대체가 아니라 별도 single-lane 보조 축 |
 | S2 process map | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s2-webvm-na-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s2-jupyterlite-na-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s2-marimo-wasm-na-2026-07-15.json) | `PyProc.map` process pool 계약. 같은 API 후보가 없으면 N/A |
 | S3 browser server | [측정됨](../../mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s3-webvm-na-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s3-jupyterlite-na-2026-07-15.json) | [N/A](../../mainPlan/browser-os-north-star/benchmarks/s3-marimo-wasm-na-2026-07-15.json) | pyproc `VirtualOrigin`/ASGI Service Worker URL contract. 같은 계약 후보가 없으면 N/A |
-| S4 machine resume | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | 파일 이미지, persistence, resume hook 동등성 |
+| S4 machine resume | `bench:artifact --scenario S4` | 측정 필요 | 측정 필요 | 측정 필요 | 파일 이미지, persistence, resume hook 동등성 |
 
 ## 공개 문구 게이트
 
@@ -71,5 +71,6 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 - S1L raw JSON은 `npm run bench:artifact -- --scenario S1L --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다.
 - S2 raw JSON은 `npm run bench:artifact -- --scenario S2 --candidate <name> --command "<command>" --sample serialMs,parallelMs,maxErr --sample ... --out <path>`로 남긴다. `serialMs`는 같은 작업을 같은 process pool에서 직렬로 돌린 wall time이고, `parallelMs`는 worker pool에 분산한 wall time이다.
 - S3 raw JSON은 `npm run bench:artifact -- --scenario S3 --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다. pyproc 기준 `latencyMs`는 `npm run test:consumer`의 `timings.virtualOriginMs`, 즉 설치 패키지의 `VirtualOrigin` POST가 Python ASGI 응답까지 왕복한 시간이다.
+- S4 raw JSON은 `npm run bench:artifact -- --scenario S4 --candidate <name> --command "<command>" --sample exportMs,openMs,machineMB,resumeRows,maxErr --sample ... --out <path>`로 남긴다. pyproc 기준 값은 `npm run test:consumer`의 `timings.machineExportMs`, `timings.machineOpenMs`, `timings.machineMB`, `timings.machineResumeRows`에서 가져온다.
 - `bench:compare`는 같은 scenario끼리만 표로 합친다. S1과 S1L을 한 표에 섞으면 실패해야 한다.
 - 새 benchmark helper나 runner를 추가하면 `npm test` 구조 가드에 연결한다.

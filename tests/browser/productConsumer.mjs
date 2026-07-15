@@ -270,10 +270,12 @@ const html = `<!DOCTYPE html>
       const trustedPublicKey = await exportMachinePublicKey(keyPair);
       const fpFromPair = await fingerprintMachinePublicKey(keyPair);
       const fpFromJwk = await fingerprintMachinePublicKey(trustedPublicKey);
+      timings.machineTrustMs = Math.round(performance.now() - t);
       check("installed product trust fingerprint is stable",
         fpFromPair === fpFromJwk && /^sha256:[0-9a-f]{64}$/.test(fpFromPair),
         fpFromPair.slice(0, 23));
 
+      t = performance.now();
       const imageBlob = await machine.exportImage({ includeHome: true, signingKey: keyPair });
       timings.machineExportMs = Math.round(performance.now() - t);
       timings.machineMB = +(imageBlob.size / 1048576).toFixed(1);
@@ -298,6 +300,7 @@ const html = `<!DOCTYPE html>
       timings.machineOpenMs = Math.round(performance.now() - t);
       const openedResume = openedMachine.rt.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("product.openMachine");
       const openedRows = openedMachine.rt.run("resumeConn.execute('select count(*) from event').fetchone()[0]");
+      timings.machineResumeRows = openedRows;
       check("installed product opens trusted .pymachine and resumes resources",
         openedResume.resume === true &&
         openedMachine.rt.fs.readFile("/home/web/product/state.txt", { encoding: "utf8" }) === "product-state=41" &&

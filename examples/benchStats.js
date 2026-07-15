@@ -63,3 +63,36 @@ export function isLatencyBenchGreen(bench, opts = {}) {
   const maxErr = opts.maxErr ?? 1e-9;
   return bench.sampleCount >= 3 && bench.maxErr < maxErr;
 }
+
+export function summarizeMachineResumeBench(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeMachineResumeBench: rows가 비었다");
+  const exportMs = rows.map((r) => r.exportMs);
+  const openMs = rows.map((r) => r.openMs);
+  const machineMB = rows.map((r) => r.machineMB);
+  const resumeRows = rows.map((r) => r.resumeRows);
+  return {
+    samples: rows,
+    sampleCount: rows.length,
+    exportMedianMs: median(exportMs),
+    exportP95Ms: percentile(exportMs, 95),
+    openMedianMs: median(openMs),
+    openP95Ms: percentile(openMs, 95),
+    machineMBMedian: median(machineMB),
+    machineMBMax: Math.max(...machineMB),
+    resumeRowsMin: Math.min(...resumeRows),
+    resumeRowsMax: Math.max(...resumeRows),
+    maxErr: Math.max(...rows.map((r) => r.maxErr ?? 0)),
+  };
+}
+
+export function isMachineResumeBenchGreen(bench, opts = {}) {
+  const maxErr = opts.maxErr ?? 1e-9;
+  const expectedResumeRows = opts.expectedResumeRows ?? 2;
+  return bench.sampleCount >= 3
+    && bench.maxErr < maxErr
+    && bench.machineMBMax > 0
+    && bench.exportMedianMs >= 0
+    && bench.openMedianMs >= 0
+    && bench.resumeRowsMin === expectedResumeRows
+    && bench.resumeRowsMax === expectedResumeRows;
+}
