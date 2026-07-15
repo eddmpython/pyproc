@@ -1,5 +1,11 @@
 // v86GuestAdapter.js - attempts 전용 외부 주입형 x86 guest adapter.
 // host와 pyproc 패키지는 v86에 의존하지 않고 integration probe만 생성자를 주입한다.
+import { V86BlockBuffer } from "./v86/v86BlockBuffer.js";
+import {
+  readV86FileSystemVolume,
+  serializeV86FileSystemState,
+  writeV86FileSystemVolume,
+} from "./v86/v86FileSystemVolume.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
@@ -9,24 +15,33 @@ function toArrayBuffer(bytes) {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-export function createV86GuestFactory({ V86, adapterVersion = "v86-linux-state-v1" }) {
+export function createV86GuestFactory({ V86, adapterVersion = "v86-linux-state-v1", blockDeviceName = null, blockMode = null }) {
   if (typeof V86 !== "function") throw new TypeError("V86 constructor가 필요하다");
-  return () => new V86GuestAdapterDraft({ V86, adapterVersion });
+  return () => new V86GuestAdapterDraft({ V86, adapterVersion, blockDeviceName, blockMode });
 }
 
 class V86GuestAdapterDraft {
-  constructor({ V86, adapterVersion }) {
+  constructor({ V86, adapterVersion, blockDeviceName, blockMode }) {
+    this._blockDeviceName = blockDeviceName ? String(blockDeviceName) : null;
+    this._blockMode = this._blockDeviceName ? String(blockMode || "ata") : null;
+    if (this._blockMode && !["ata", "filesystem"].includes(this._blockMode)) throw new TypeError(`v86 block mode 미지원: ${this._blockMode}`);
     this.capabilities = {
       adapterVersion,
       snapshotScope: "portable",
       pauseMode: "emulator-stop",
       shutdownMode: "terminate",
-      requiredDevices: [{ name: "console", kind: "console" }],
+      requiredDevices: [
+        { name: "console", kind: "console" },
+        ...(this._blockDeviceName ? [{ name: this._blockDeviceName, kind: "block" }] : []),
+      ],
     };
     this._V86 = V86;
     this._emulator = null;
     this._context = null;
     this._manifest = null;
+    this._blockBuffer = null;
+    this._emptyFileSystemState = null;
+    this._volumeStats = null;
     this._serial = "";
     this._line = "";
     this._waiters = new Set();
@@ -37,13 +52,26 @@ class V86GuestAdapterDraft {
     this._context = context;
     this._manifest = manifest;
     const readyPattern = String(manifest.v86?.readyPattern || "~% ");
-    await this._createEmulator({ autostart: true });
+    await this._createEmulator({ autostart: this._blockMode !== "filesystem" });
+    if (this._blockMode === "filesystem") {
+      this._volumeStats = await readV86FileSystemVolume({
+        device: this._blockDevice(),
+        fileSystem: this._fileSystem(),
+        emptyState: this._emptyFileSystemState,
+        allowEmpty: true,
+      });
+      await this._emulator.run();
+    }
     await this._waitFor(readyPattern, 0, Number(manifest.v86?.bootTimeoutMs || 120000));
     consoleWrite(context, `x86:boot:${context.machineId}`);
   }
 
   async pause() {
     await this._requireEmulator().stop();
+    await this._blockBuffer?.drain();
+    if (this._blockMode === "filesystem") {
+      this._volumeStats = await writeV86FileSystemVolume({ device: this._blockDevice(), fileSystem: this._fileSystem() });
+    }
     consoleWrite(this._context, "x86:pause");
   }
 
@@ -53,7 +81,16 @@ class V86GuestAdapterDraft {
   }
 
   async snapshot() {
-    return new Uint8Array(await this._requireEmulator().save_state());
+    await this._blockBuffer?.drain();
+    if (this._blockMode !== "filesystem") return new Uint8Array(await this._requireEmulator().save_state());
+    const fileSystem = this._fileSystem();
+    const liveState = serializeV86FileSystemState(fileSystem);
+    fileSystem.set_state(this._emptyFileSystemState);
+    try {
+      return new Uint8Array(await this._requireEmulator().save_state());
+    } finally {
+      fileSystem.set_state(liveState);
+    }
   }
 
   async restore(payload, context, manifest) {
@@ -61,12 +98,25 @@ class V86GuestAdapterDraft {
     this._manifest = manifest;
     if (!this._emulator) await this._createEmulator({ autostart: false });
     await this._emulator.restore_state(toArrayBuffer(payload));
+    if (this._blockMode === "filesystem") {
+      this._volumeStats = await readV86FileSystemVolume({
+        device: this._blockDevice(),
+        fileSystem: this._fileSystem(),
+        emptyState: this._emptyFileSystemState,
+      });
+    }
     consoleWrite(context, `x86:restore:${context.machineId}`);
   }
 
   async shutdown() {
     this._rejectWaiters(new Error("x86 adapter: shutdown"));
     if (this._emulator) {
+      await this._emulator.stop();
+      await this._blockBuffer?.drain();
+      if (this._blockMode === "filesystem" && this._emulator.fs9p) {
+        this._volumeStats = await writeV86FileSystemVolume({ device: this._blockDevice(), fileSystem: this._fileSystem() });
+      }
+      if (this._blockDeviceName) await this._blockDevice().flush();
       this._emulator.remove_listener("serial0-output-byte", this._onSerialByte);
       await this._emulator.destroy();
     }
@@ -94,12 +144,20 @@ class V86GuestAdapterDraft {
       serialChars: this._serial.length,
       snapshotScope: this.capabilities.snapshotScope,
       shutdownMode: this.capabilities.shutdownMode,
+      block: this._blockBuffer?.inspect() || (this._blockMode === "filesystem" ? { mode: "filesystem", ...this._volumeStats } : null),
     };
   }
 
   async _createEmulator({ autostart }) {
-    const options = this._manifest?.v86?.options;
-    if (!options || typeof options !== "object") throw new Error("x86 adapter: manifest.v86.options 없음");
+    const sourceOptions = this._manifest?.v86?.options;
+    if (!sourceOptions || typeof sourceOptions !== "object") throw new Error("x86 adapter: manifest.v86.options 없음");
+    const options = { ...sourceOptions };
+    if (this._blockMode === "ata") {
+      const device = this._context?.devices?.[this._blockDeviceName];
+      this._blockBuffer = new V86BlockBuffer(device);
+      options.hda = this._blockBuffer;
+      if (!options.boot_order) options.boot_order = 0x123;
+    }
     this._serial = "";
     this._line = "";
     const emulator = new this._V86({ ...options, autostart });
@@ -127,6 +185,9 @@ class V86GuestAdapterDraft {
       emulator.add_listener("emulator-ready", onReady);
       emulator.add_listener("download-error", onDownloadError);
     });
+    if (this._blockMode === "filesystem") {
+      this._emptyFileSystemState = serializeV86FileSystemState(this._fileSystem());
+    }
   }
 
   _acceptSerialByte(byte) {
@@ -176,5 +237,17 @@ class V86GuestAdapterDraft {
   _requireEmulator() {
     if (!this._emulator) throw new Error("x86 adapter: emulator 없음");
     return this._emulator;
+  }
+
+  _blockDevice() {
+    const device = this._context?.devices?.[this._blockDeviceName];
+    if (!device || device.kind !== "block") throw new Error(`x86 adapter: block device 없음 ${this._blockDeviceName}`);
+    return device;
+  }
+
+  _fileSystem() {
+    const fileSystem = this._requireEmulator().fs9p;
+    if (!fileSystem) throw new Error("x86 adapter: 9P filesystem 없음");
+    return fileSystem;
   }
 }

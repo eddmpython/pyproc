@@ -61,7 +61,7 @@
 1. [완료] x86 engine을 외부 주입하는 adapter를 만든다.
 2. [완료] Buildroot Linux 6.8.12 i686 image를 부팅한다.
 3. [완료] pyproc Python OS와 Linux guest를 같은 machine registry에서 동시에 열고 두 memory/file state를 함께 cold restore한다.
-4. [진행] console 다음으로 block, clock, entropy, packet network, display를 공통 장치 계약으로 연결한다.
+4. [진행] console 다음으로 block, clock, entropy, packet network, display를 공통 장치 계약으로 연결한다. block-backed guest file은 완료했다.
 
 게이트:
 
@@ -69,7 +69,8 @@
 - [통과] 두 guest가 파일 쓰기와 console round trip을 완료하고 destroy 뒤 같은 값으로 복원된다.
 - [통과] x86 engine은 외부 주입되며 pyproc 기본 dependency는 0이다.
 - [부분] engine과 image 출처, version, SHA-256, 미번들 정책을 기록했다. 제품 배포 전 BIOS/image license와 SBOM 검토가 남았다.
-- [대기] 공통 block/clock/entropy/packet/display device를 실제 x86 I/O에 연결한다.
+- [통과] pyproc `/home/web`과 Linux가 mount한 v86 9P file을 별도 block volume으로 연결하고 guest snapshot에서 file payload를 제거했다.
+- [대기] clock/entropy/packet/display device를 실제 x86 I/O에 연결한다.
 
 ## Phase 4 - 영속 머신과 탭 장애복구
 
@@ -81,7 +82,7 @@
 2. [완료] adapter snapshot과 flushed virtual block을 같은 content-addressed generation에 commit한다.
 3. [부분] 이전 ownership epoch 결과 거부와 outcome-unknown 의미론을 적용했다. 정확히 한 successor 선출은 남았다.
 4. [완료] pyproc과 Linux를 IndexedDB에 commit하고 Edge process tree 종료 뒤 새 process에서 cold reopen한다.
-5. [진행] 공통 block을 pyproc home과 v86 disk의 실제 backing device로 연결한다.
+5. [완료] 공통 block port를 pyproc home과 v86 9P guest file의 완료 generation backing volume으로 연결한다.
 
 게이트:
 
@@ -89,7 +90,7 @@
 - [통과] 완료 commit 경계의 두 guest opaque snapshot과 block image 복구.
 - [통과] 전송 뒤 끊긴 명령 자동 replay 0.
 - [부분] process recovery 2.5-3.0초를 공개했다. owner failover 시간은 남았다.
-- [대기] 복구한 공통 block이 두 guest 내부 파일시스템의 실제 상태를 제공한다.
+- [통과] 복구한 공통 block이 pyproc home과 Linux 9P mount의 실제 file state를 제공한다.
 
 ## Phase 5 - 이동 가능한 `.webmachine`
 

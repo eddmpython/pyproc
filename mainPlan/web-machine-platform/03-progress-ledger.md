@@ -185,3 +185,41 @@ NEXT:
 2. v86의 외부 disk I/O를 같은 block port에 연결하고 sector read/write/flush를 fault probe로 검증한다.
 3. 두 guest가 공통 block의 서로 분리된 volume을 실제 mount한 상태에서 process cold reopen을 다시 통과시킨다.
 4. 이후 packet network와 정확히 한 owner successor를 구현한다.
+
+## 2026-07-15 - 실제 guest file을 block generation으로 분리
+
+구현:
+
+1. pyproc adapter에 공개 `Runtime.fs`만 쓰는 `PYPROC_HOME_VOLUME_1` 형식을 추가했다. pause에서 `/home/web`을 block에 쓰고 guest snapshot은 `includeHome: false`로 만든다.
+2. restore는 host가 block을 먼저 복원한 뒤 heap-only `.pymachine`을 열고 home volume을 적용한다. heap snapshot header가 version 2이고 home metadata가 없음을 probe가 직접 검사한다.
+3. v86의 callback block buffer를 공통 async block port로 변환하는 ATA bridge를 분리했다.
+4. 고정 Buildroot 커널이 제공하는 virtio 9P를 위해 `V86_9P_VOLUME_1`을 추가했다. Linux가 이미 mount한 `/mnt`에 쓴 파일을 pause에서 block에 flush한다.
+5. v86 snapshot 직전 9P file tree를 빈 상태로 교체하고 save 뒤 live state를 되돌린다. restore에서는 block volume을 먼저 9P filesystem에 넣으므로 RAM state와 disk가 중복 원본이 되지 않는다.
+
+실패에서 고친 계약:
+
+- 첫 ATA 시도는 `/proc/partitions`가 비고 `/dev/sda`, `/dev/hda`도 없어 RED 0/1이었다. v86 PCI IDE는 존재하지만 현재 Buildroot 6.8.12 kernel에 ATA block driver가 없다. `dd of=/dev/sda`가 일반 파일을 생성한 거짓 양성도 block write 0회로 적발했다.
+- 커널에는 `9p`, `9pnet`, `virtio-pci`가 포함되어 있었고 `host9p`가 `/mnt`에 이미 mount돼 있었다. 다시 mount한 첫 9P 복구는 busy 오류가 났다.
+- v86 inode는 file도 빈 `direntries`를 가져 `read_dir()`만으로 구분할 수 없었다. `IsDirectory(inodeId)` 계약으로 바꿔 file을 directory로 복원하던 RED 8/11을 고쳤다.
+
+실측:
+
+- `deviceBackedDualBootProbe` 수정본 3회 연속 GREEN 12/12.
+- initial boot 5681/6091/6210ms, two-device commit 525/544/660ms, 새 browser process cold restore 2541/2316/2145ms였다.
+- Python heap snapshot에는 home payload가 없었고 `/home/web/device_value`는 pyproc block volume에서 `42`로 복원됐다.
+- v86 RAM snapshot에는 9P file tree를 넣지 않았고 Linux `/mnt/web/device_value`는 v86 9P block volume에서 `LINUX_BLOCK:42`로 복원됐다.
+- 더 큰 volume을 한 번 쓴 뒤 file을 삭제하고 다시 flush했을 때 두 block tail에서 삭제 바이트 잔존은 0이었다.
+- 두 adapter의 새 host history에는 boot event가 0이고 restore event만 있었다.
+
+판정:
+
+1. 공통 block은 더 이상 manifest에 같이 실린 독립 marker가 아니다. 두 guest가 실제 file I/O에 사용한 상태의 durable 원본이다.
+2. pyproc과 v86의 내부 filesystem 형식을 억지로 통일하지 않았다. 각 guest adapter가 자기 volume wire format을 소유하고 host는 byte range read/write/flush만 안다.
+3. 현재 Linux 경로는 sector ATA가 아니라 kernel에 내장된 virtio 9P mount다. disk-capable image를 채택하면 이미 분리한 ATA bridge를 추가 검증한다.
+4. block 승격 관문은 통과했지만 packet network, display/input, 정확히 한 owner successor와 배포 검토가 남았다.
+
+NEXT:
+
+1. request network와 packet network를 다른 device contract로 고정하고 v86 NIC를 packet port에 연결한다.
+2. framebuffer와 input을 console과 분리해 headless와 desktop 구성을 같은 core에서 조립한다.
+3. browser owner를 강제 종료해 정확히 한 successor와 이전 epoch command 거부를 실측한다.

@@ -134,8 +134,13 @@ tests/attempts/webMachine/
 ├─ adapters/                   # guest별 변환, 파일 하나당 adapter 하나
 │  ├─ fakeGuestAdapter.js
 │  ├─ pyprocGuestAdapter.js
+│  ├─ pyproc/
+│  │  └─ pyprocHomeVolume.js
 │  ├─ wasiGuestAdapter.js
-│  └─ v86GuestAdapter.js
+│  ├─ v86GuestAdapter.js
+│  └─ v86/
+│     ├─ v86BlockBuffer.js
+│     └─ v86FileSystemVolume.js
 ├─ fixtures/
 │  └─ v86/
 │     ├─ config.js
@@ -147,7 +152,8 @@ tests/attempts/webMachine/
    ├─ linuxGuestProbe.html
    ├─ dualBootProbe.html
    ├─ generationContractProbe.html
-   └─ persistentDualBootProbe.html
+   ├─ persistentDualBootProbe.html
+   └─ deviceBackedDualBootProbe.html
 ```
 
 ## 계약 규칙
@@ -171,6 +177,7 @@ boot / pause / resume / snapshot / restore / shutdown / inspect
 필수 method는 `boot`, `pause`, `resume`, `snapshot`, `restore`, `shutdown`, `request`, `inspect`다.
 
 - adapter는 자기 engine과 공통 계약 사이의 변환만 담당한다.
+- 같은 guest의 volume wire format과 engine callback bridge는 guest 이름의 하위 폴더에 둔다. 다른 guest는 import하지 않는다.
 - `snapshotScope`, `pauseMode`, `shutdownMode`, `requiredDevices`를 capability로 정직하게 공개한다.
 - 지원하지 않는 보장을 흉내 내지 않는다. `session` state를 `portable`이라고 부르지 않는다.
 - engine constructor와 대형 asset은 외부 주입한다.
@@ -238,7 +245,7 @@ pause adapters
 2. host에서 guest/engine 이름 사용.
 3. host에서 browser 전역과 storage/network API 직접 접근.
 4. host가 adapters, fixtures, probes를 import하는 역방향 의존.
-5. adapter 사이 import와 adapter의 pyproc deep import.
+5. guest adapter 사이 import와 adapter의 pyproc deep import. 같은 guest의 이름 있는 wire format/engine bridge만 내부 import 허용.
 6. browser의 guest 이름과 adapter/fixture/probe 역방향 import.
 7. probe 밖 adapter 등록.
 8. Web Machine import graph cycle.
@@ -252,7 +259,7 @@ ownership loss, torn commit, cold restore를 검증한다.
 다음이 모두 GREEN일 때만 독립 package 골격을 만든다.
 
 1. [통과] pyproc + Linux 공통 lifecycle과 full file state cold restore.
-2. [부분] 공통 block device의 write/flush/snapshot generation은 통과. guest 실제 backing device 연결은 대기.
+2. [통과] 공통 block device의 write/flush/snapshot generation과 pyproc home/v86 9P guest file backing volume.
 3. [대기] request/packet network 분리와 permission 선거부.
 4. [통과] 브라우저 프로세스 종료 뒤 IndexedDB HEAD/PREV cold reopen.
 5. [통과] architecture gate와 adapter contract suite.

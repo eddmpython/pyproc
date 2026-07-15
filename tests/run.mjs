@@ -1018,6 +1018,8 @@ check("Web Machine adapter 경계와 공개 surface", () => {
   const adapterRoot = join(webMachineRoot, "adapters");
   const problems = [];
   for (const file of collect(adapterRoot, [".js"], [])) {
+    const sourceRel = rel(file);
+    const sourceName = sourceRel.match(/\/adapters\/([^/]+?)(?:GuestAdapter\.js|\/)/)?.[1] || null;
     for (const ref of jsModuleRefs(file)) {
       const target = moduleTarget(file, ref.spec);
       if (!target) {
@@ -1025,7 +1027,10 @@ check("Web Machine adapter 경계와 공개 surface", () => {
         continue;
       }
       const targetRel = rel(target);
-      if (targetRel.startsWith("tests/attempts/webMachine/adapters/")) problems.push(`${rel(file)} -> ${targetRel}: adapter 사이 import`);
+      if (targetRel.startsWith("tests/attempts/webMachine/adapters/")) {
+        const targetName = targetRel.match(/\/adapters\/([^/]+?)(?:GuestAdapter\.js|\/)/)?.[1] || null;
+        if (!sourceName || sourceName !== targetName) problems.push(`${sourceRel} -> ${targetRel}: adapter 사이 import`);
+      }
       else if (targetRel !== "index.js") problems.push(`${rel(file)} -> ${targetRel}: 공개 root 이외 import`);
     }
     if (readFileSync(file, "utf8").includes("/src/")) problems.push(`${rel(file)}: src deep import`);
