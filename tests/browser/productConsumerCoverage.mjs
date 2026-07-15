@@ -67,7 +67,7 @@ export const PRODUCT_CONSUMER_COVERAGE = Object.freeze([
     gate: "product consumer - immortal python machine",
     specifiers: Object.freeze(["`pyproc`"]),
     publicSurface: Object.freeze(["`openPersistentMachine`", "`KernelElection`", "`MachineJournal`"]),
-    contract: "설치 패키지의 독립 browsing context 3개가 한 Python 상태와 prepared environment를 공유하고, leader 강제 제거 뒤 영속 epoch 승계와 OPFS의 힙 + `/home/web` 복구로 실행을 계속하며, 모든 context 종료 뒤에도 마지막 commit과 manifest 환경에서 다시 연다",
+    contract: "설치 패키지의 독립 browsing context 3개가 한 Python 상태와 prepared environment를 공유하고 participant request ID 무충돌과 late response 폐기를 확인하며, leader 강제 제거 뒤 영속 epoch 승계와 OPFS의 힙 + `/home/web` 복구로 실행을 계속하고 모든 context 종료 뒤에도 마지막 commit과 manifest 환경에서 다시 연다",
   }),
   Object.freeze({
     gate: "product consumer - product policy",

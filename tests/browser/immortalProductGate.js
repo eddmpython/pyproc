@@ -123,8 +123,14 @@ export async function runImmortalProductGate(opts = {}) {
       cmd: "run",
       code: "f'{productSharedValue + 1}|{open(\"/home/web/productImmortal/state.txt\").read()}|{productPrepared}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
     });
-    check("installed participants share Python memory, home and prepared environment",
-      shared.result === '42|installed-survives|7|{"lane": "prepared"}', shared.result);
+    const collisionPair = await Promise.all([
+      command(followers[0], { cmd: "run", code: "'installed-left'" }),
+      command(followers[1], { cmd: "run", code: "'installed-right'" }),
+    ]);
+    check("installed participants share memory, home, prepared environment and collision-free request IDs",
+      shared.result === '42|installed-survives|7|{"lane": "prepared"}' &&
+      collisionPair[0].result === "installed-left" && collisionPair[1].result === "installed-right",
+      `${shared.result} | ${collisionPair.map((entry) => entry.result).join("/")}`);
 
     const rpcSamples = [];
     for (let i = 0; i < 20; i++) {
@@ -134,6 +140,11 @@ export async function runImmortalProductGate(opts = {}) {
     }
     timings.immortalRpcP50Ms = percentile(rpcSamples, 0.5);
     timings.immortalRpcP90Ms = percentile(rpcSamples, 0.9);
+    const lateOutcome = await command(followers[0], {
+      cmd: "run", code: "import asyncio\nawait asyncio.sleep(0.2)\n'installed-late'", async: true, timeoutMs: 50,
+    }).then((result) => ({ ok: true, result }), (error) => ({ ok: false, error }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const afterLate = await command(followers[1], { cmd: "run", code: "6 * 7" });
 
     const commit = await command(followers[0], { cmd: "commit", timeoutMs: 12000 });
     check("installed follower commits heap and home through leader",
@@ -171,10 +182,11 @@ export async function runImmortalProductGate(opts = {}) {
     const uncertain = await uncertainRequest;
     const pendingAfter = await command(followers[0], { cmd: "status" });
     const uncertainValue = await command(survivors[1], { cmd: "run", code: "globals().get('productUncertain', 0)" });
-    check("installed failover RPC rejects unknown outcome without replay",
+    check("installed timeout/failover RPC rejects unknown outcome, ignores late response and never replays",
       uncertain.ok === false && uncertain.error.code === "PYPROC_RPC_OUTCOME_UNKNOWN" && uncertain.error.retryable === false &&
-      pendingAfter.status.pendingRequests === 0 && uncertainValue.result === 0,
-      uncertain.ok ? "unexpected success" : `${uncertain.error.code}, pending=${pendingAfter.status.pendingRequests}`);
+      pendingAfter.status.pendingRequests === 0 && uncertainValue.result === 0 && lateOutcome.ok === false &&
+      lateOutcome.error.code === "PYPROC_RPC_OUTCOME_UNKNOWN" && afterLate.result === 42,
+      uncertain.ok ? "unexpected success" : `${uncertain.error.code}, late=${lateOutcome.ok ? "unexpected" : lateOutcome.error.code}, pending=${pendingAfter.status.pendingRequests}`);
 
     await command(survivors[0], { cmd: "run", code: [
       "productColdValue = 99",

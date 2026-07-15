@@ -148,8 +148,14 @@ Immortal Python Machine 실측. iframe 3개가 실제 독립 browsing context로
       cmd: "run",
       code: "f'{sharedValue + 1}|{open(\"/home/web/immortal/state.txt\").read()}|{preparedValue}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
     });
-    check("followers share variables, /home files and prepared environment",
-      shared.result === '42|survives|7|{"lane": "prepared"}', shared.result);
+    const collisionPair = await Promise.all([
+      command(followers[0], { cmd: "run", code: "'participant-left'" }),
+      command(followers[1], { cmd: "run", code: "'participant-right'" }),
+    ]);
+    check("followers share variables, /home, prepared environment and collision-free request IDs",
+      shared.result === '42|survives|7|{"lane": "prepared"}' &&
+      collisionPair[0].result === "participant-left" && collisionPair[1].result === "participant-right",
+      `${shared.result} | ${collisionPair.map((entry) => entry.result).join("/")}`);
 
     const rpcSamples = [];
     for (let i = 0; i < 30; i++) {
@@ -159,7 +165,14 @@ Immortal Python Machine 실측. iframe 3개가 실제 독립 browsing context로
     }
     timings.rpcP50Ms = percentile(rpcSamples, 0.5);
     timings.rpcP90Ms = percentile(rpcSamples, 0.9);
-    check("participant RPC stays below 3ms p50", timings.rpcP50Ms < 3, `p50=${timings.rpcP50Ms}ms, p90=${timings.rpcP90Ms}ms`);
+    const lateOutcome = await command(followers[0], {
+      cmd: "run", code: "import asyncio\nawait asyncio.sleep(0.2)\n'late-response'", async: true, timeoutMs: 50,
+    }).then((result) => ({ ok: true, result }), (error) => ({ ok: false, error }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const afterLate = await command(followers[1], { cmd: "run", code: "40 + 3" });
+    check("participant RPC stays below 3ms p50 and ignores a late response after timeout",
+      timings.rpcP50Ms < 3 && lateOutcome.ok === false && lateOutcome.error.code === "PYPROC_RPC_OUTCOME_UNKNOWN" && afterLate.result === 43,
+      `p50=${timings.rpcP50Ms}ms, p90=${timings.rpcP90Ms}ms, late=${lateOutcome.ok ? "unexpected" : lateOutcome.error.code}`);
 
     const commit = await command(followers[0], { cmd: "commit", timeoutMs: 12000 });
     check("follower commit durably seals heap and /home", !!commit.commit?.committedAt && commit.commit?.home?.files === 1,

@@ -2763,6 +2763,7 @@ NEXT:
 - 설치 패키지 product consumer gate GREEN 28/28. initial ready 3012ms, RPC p50/p90 0.98/1.54ms, failover 2375ms, recovery 649ms, cold reopen 2129ms.
 - 깨끗한 commit S5 3회도 모두 GREEN 28/28. failover 3025ms, 2248ms, 2894ms이고 artifact median/p95는 2894/3025ms다. recovery median 575ms, cold reopen median 2681ms, RPC p50/p90 median 1.11/1.67ms다.
 - 최종 요구사항 감사에서 prepared environment 명시 검증을 추가했다. manifest setup의 `json` module과 준비 값이 초기 follower, 강제 failover, 모든 context 종료 뒤 cold reopen에서 모두 유지됐다. 강화 후 probe GREEN 12/12, 설치 패키지 gate GREEN 28/28, failover 1996ms, recovery 555ms, cold reopen 2109ms다.
+- D 시나리오 감사에서 두 follower의 같은 sequence 동시 요청이 서로 다른 결과로 돌아오는지와 timeout 뒤 늦게 도착한 응답이 다음 명령을 오염시키지 않는지까지 probe와 설치 패키지 gate에 넣었다. participant-scoped request ID, pending 제거, stale response 폐기가 실행 증거로 고정된다.
 
 검증:
 

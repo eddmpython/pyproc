@@ -175,7 +175,7 @@ console.log(machine.status());
 | product consumer - shell jobs | `pyproc` | `JobControl` | 설치 패키지 worker graph로 대화형 namespace를 만들고 `expr &`, `fg`, `kill`, `terminate` 잡 수명주기 실행 |
 | product consumer - machine container | `pyproc` | `MachineContainer` | 설치 패키지 Runtime과 machine worker graph로 컨테이너 `spawn`, `run`, `heapLen`, `kill`, killed call reject 실행 |
 | product consumer - crash resume | `pyproc` | `bootSession`, `MachineJournal`, Runtime `enableJournal` | 설치 패키지 Session reactive boundary를 `MachineJournal.commit()`으로 남기고 새 Session이 `recover()`로 제품 상태를 복구 |
-| product consumer - immortal python machine | `pyproc` | `openPersistentMachine`, `KernelElection`, `MachineJournal` | 설치 패키지의 독립 browsing context 3개가 한 Python 상태와 prepared environment를 공유하고, leader 강제 제거 뒤 영속 epoch 승계와 OPFS의 힙 + `/home/web` 복구로 실행을 계속하며, 모든 context 종료 뒤에도 마지막 commit과 manifest 환경에서 다시 연다 |
+| product consumer - immortal python machine | `pyproc` | `openPersistentMachine`, `KernelElection`, `MachineJournal` | 설치 패키지의 독립 browsing context 3개가 한 Python 상태와 prepared environment를 공유하고 participant request ID 무충돌과 late response 폐기를 확인하며, leader 강제 제거 뒤 영속 epoch 승계와 OPFS의 힙 + `/home/web` 복구로 실행을 계속하고 모든 context 종료 뒤에도 마지막 commit과 manifest 환경에서 다시 연다 |
 | product consumer - product policy | `pyproc` | `MachineJail` | 제품 permission manifest(`net=false`, `clipboard=false`, `home=true`, `workers=false`)와 Python choke point 집행 |
 | product consumer - portable machine | `pyproc` | `bootSession`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, Session `exportImage`, Runtime `enableInit` | signed `.pymachine` + `/home/web` export, signer fingerprint, untrusted/wrong key 거부, trusted open, `resume.py` SQLite resource 재개설, S4 timing source |
 
