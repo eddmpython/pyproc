@@ -1,0 +1,38 @@
+# 능력 매트릭스
+
+이 문서는 제품이 pyproc의 어떤 능력을 믿고 쓸 수 있는지 판단하기 위한 표다. 구현 지도는 아니며, 공개 표면을 제품 가치, 현재 상태, 필수 조건, 검증, 경계로 묶는다.
+
+정본 역할은 나뉜다.
+
+- 설치, 버전 핀, import 경계: [contract.md](contract.md)
+- 속도와 외부 비교 수치: [benchmarking.md](../operations/benchmarking.md)
+- `.pymachine` 신뢰와 권한 UI: [trustPermissions.md](trustPermissions.md)
+- 부활 뒤 제품 자원 재개설: [resumeCatalog.md](resumeCatalog.md)
+
+상태 라벨은 README의 Feature status와 맞춘다. Stable은 기본 제품 경로로 둘 수 있는 표면, Beta는 제품에 붙일 수 있으나 브라우저 조건과 fallback을 함께 둬야 하는 표면, Experimental은 명시적 제품 선택과 관측이 필요한 표면, Research preview는 엔진 가능성 검증 표면이다.
+
+| 능력 | 제품 가치 | 공개 표면 | 상태 | 필수 조건 | 검증 | 경계 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Python runtime | 브라우저 탭에서 CPython, 패키지 로드, stdout/stderr, 파일 IO를 실행한다 | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | Stable | 지원 브라우저, Pyodide 0.28.2 계열, 선택적 SRI, 제품이 내부 `raw.FS` 대신 공개 API를 소비 | `npm test`, `npm run test:browser`, `npm run test:consumer` | 모든 Python 패키지 보장이 아니다. 네이티브 C-extension은 Pyodide 빌드나 정적 빌드가 필요하다 |
+| Deployment asset integrity | Worker, SharedWorker, Service Worker 실행 자산을 same-origin에 복사하고 바이트를 검증한다 | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | Stable | 제품 배포가 manifest의 상대 경로 구조를 보존, `pyproc-assets` SRI manifest 제공, Service Worker scope와 header 설정 | `npm test`, `npm run test:package`, `npm run test:consumer` | CDN URL만으로 worker graph를 여는 것은 브라우저 same-origin 정책에 막힌다 |
+| Restore reactivity | 실행 경계에서 상태를 저장하고 live diff restore, time-travel, branch를 제공한다 | `ReactiveController` | Beta | 선언된 checkpoint 경계, 호환 runtime, 복원 가능한 heap delta | `npm run test:browser`, reactive probe | 임의 순간의 in-flight Promise, 네트워크 요청, 외부 핸들은 자동 캡처하지 않는다 |
+| Process OS | Python worker를 프로세스처럼 spawn하고 snapshot-fork, `map`, `mapArray`, sharded `matmul`, signal, IPC를 제공한다 | `PyProc`, `SIGNAL` | Beta | `crossOriginIsolated`, SharedArrayBuffer, JSPI, same-origin worker asset, 제품이 `checkEnvironment()` 결과를 처리 | S1, S2 benchmark artifacts, `npm run test:browser`, `npm run test:consumer` | POSIX `fork` 전체와 네이티브 shared-memory thread가 아니다. 브라우저 worker 기반 OS 모델이다 |
+| Browser server URL | Python ASGI app을 커널 안에서 돌리고 실제 browser URL로 fetch한다 | `AsgiServer`, `VirtualOrigin` | Beta | `pyprocSw.js` Service Worker 등록, same-origin scope, 제품 prefix 설계 | S3 benchmark artifact, `npm run test:consumer` | 실제 TCP listen이 아니다. 쿠키, streaming, WebSocket은 Service Worker와 virtual origin 경계에 맞춰 따로 검증해야 한다 |
+| Terminal and borrowed syscalls | 서버리스 Python terminal, blocking input, subprocess worker, sync bridge를 붙인다 | `Terminal`, `SyscallBridge` | Beta | JSPI 가능 브라우저, terminal UI 이벤트 배선, child worker asset | `npm run test:browser`, terminal/syscall probes | 빌린 system call 계층이다. 완전한 POSIX syscall table이 아니다 |
+| Environment lane | PEP 723 스크립트와 wheel/OPFS cache로 반복 실행 환경을 빠르게 띄운다 | `bootEnv`, `runScript`, `WheelCache` | Beta | Pyodide에서 설치 가능한 wheel, lock/manifest 정합, OPFS cache | env manager probes, package consumer gate | native wheel은 그대로 가져오지 못한다. engine, lock, cache가 어긋나면 재현성이 깨진다 |
+| Portable machine image | `.pymachine`으로 heap delta와 `/home/web`을 내보내고, signature와 trusted public key로 다시 연다 | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init` | Experimental | 같은 engine/manifest, `/home/web` 사용, 제품 trust key 또는 명시적 trust, `resume.py` hook 설계 | S4 benchmark artifact, `npm run test:consumer` | signature는 출처 신뢰다. 권한 허용이 아니며 fd, socket, DB connection은 `resume.py`가 다시 열어야 한다 |
+| Machine journal | idle commit과 WAL로 crashed tab을 마지막 commit으로 되살린다 | `MachineJournal` | Experimental | OPFS, idle commit 정책, pack/prune 운영, 같은 engine/manifest | journal probes, product consumer gate | 장기 blob store는 pack/prune 없이 커질 수 있다. 브라우저 저장소 quota의 영향을 받는다 |
+| Permission jail | Python code의 net, clipboard, home, worker 권한을 제품 manifest와 CSP로 제한한다 | `MachineJail` | Experimental | 제품 permission manifest, jail context CSP, host allowlist, 권한 UI | `npm run test:consumer`, jail probes | 같은 parent window에 있는 code의 모든 side channel을 제거하는 sandbox가 아니다. 강한 격리는 opaque origin 설계가 필요하다 |
+| Outbound sockets | Python `socket`, `urllib`, `http.client`이 외부 host:port로 나가게 한다 | `SocketBridge` | Experimental | WS-to-TCP relay, JSPI blocking recv, 제품 relay 운영 | socket bridge probes | inbound socket은 브라우저 보안 벽이다. HTTPS는 relay가 TLS를 처리한다 |
+| Device filesystem | 브라우저 기능을 Python file path로 노출한다 | `DeviceFs` | Experimental | 제품이 허용한 device injection, 브라우저 permission, 명확한 파일 경로 정책 | device FS probes | 브라우저와 제품 정책이 허용한 장치만 존재한다 |
+| GPU compute | WebGPU에 f32 array를 올려 GPU-resident linear algebra pipeline을 수행한다 | `GpuCompute`, `GpuArray`, `GpuBridge` | Experimental | WebGPU, windowed browser, 실제 GPU, f32 데이터 경로 | GPU probes on real hardware | WGSL은 f64가 없다. headless CI 숫자는 제품 성능 근거가 아니다 |
+| Shared kernel and tab survival | 여러 탭이 한 Python state를 공유하고 leader tab 죽음 뒤 follower가 journal에서 이어받는다 | `SharedKernel`, `KernelElection` | Experimental | SharedWorker, Web Locks, OPFS journal, same-origin asset | shared kernel probes, kernel election probes | multi-user server가 아니다. 브라우저 lifecycle과 leader/follower semantics를 제품 UX에 반영해야 한다 |
+| Machine container and jobs | 브라우저 worker 안에 별도 machine kernel을 띄우고 job control을 제공한다 | `MachineContainer`, `JobControl` | Experimental | `crossOriginIsolated`, worker graph, 제품의 process lifecycle 정책 | process OS probes | Linux container나 OS scheduler가 아니다. pyproc의 browser-kernel 격리 모델이다 |
+| Non-Pyodide engine seam | non-Pyodide CPython 3.14 WASI에서도 session/time-travel primitive가 동작함을 검증한다 | `bootWasi`, `WasiSession` | Research preview | 소비자 제공 `wasmURL`, WASI worker asset, JSON value bridge | WASI gate | production 기본 엔진이 아니다. value bridge는 JSON 중심이고 C extension은 정적 빌드가 필요하다 |
+
+## 제품 판단 규칙
+
+- README의 Public surface는 API 목록이다. 이 문서는 그 API를 제품 결정 단위로 묶는 표다.
+- 어떤 행이 Beta 이상이라도 `checkEnvironment()`와 제품 배포 preflight를 통과하지 않으면 기능을 켜지 않는다.
+- Experimental 행은 기본 기능이 아니라 명시적 제품 모드로 둔다.
+- 브라우저가 물리적으로 막는 영역, 특히 inbound socket과 arbitrary native binary는 pyproc만으로 약속하지 않는다. relay, agent, static build, 또는 platform 변화가 필요하다.

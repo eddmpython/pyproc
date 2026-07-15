@@ -473,6 +473,26 @@ for (const readme of ["README.md", "README.ko.md"]) {
     if (missing.length) throw new Error(`표면 누락: ${missing.join(", ")}`);
   });
 }
+check("능력 매트릭스가 제품 판단 표면을 고정", () => {
+  const matrixPath = join(ROOT, "docs", "consuming", "capabilityMatrix.md");
+  if (!existsSync(matrixPath)) throw new Error("capabilityMatrix.md 없음");
+  const matrix = readFileSync(matrixPath, "utf8");
+  const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");
+  const readmeEn = readFileSync(join(ROOT, "README.md"), "utf8");
+  const readmeKo = readFileSync(join(ROOT, "README.ko.md"), "utf8");
+  for (const text of [docsMap, readmeEn, readmeKo]) {
+    if (!text.includes("capabilityMatrix.md")) throw new Error("능력 매트릭스 링크 누락");
+  }
+  for (const term of ["제품 가치", "공개 표면", "상태", "필수 조건", "검증", "경계"]) {
+    if (!matrix.includes(term)) throw new Error(`능력 매트릭스 필드 누락: ${term}`);
+  }
+  for (const term of ["Stable", "Beta", "Experimental", "Research preview"]) {
+    if (!matrix.includes(term)) throw new Error(`능력 매트릭스 상태 누락: ${term}`);
+  }
+  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "MachineJail", "SocketBridge", "SharedKernel", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
+  const missing = required.filter((name) => !matrix.includes("`" + name));
+  if (missing.length) throw new Error(`능력 매트릭스 공개 표면 누락: ${missing.join(", ")}`);
+});
 
 // 5) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.
 //    worker.js는 pyProc.js와 같은 폴더 = new URL 상대경로(번들러 워커 emit) 계약.

@@ -2272,3 +2272,29 @@ NEXT:
 1. product-facing capability matrix를 만든다.
 2. matrix는 공개 표면 export, 제품 가치, gate, 성숙도, 브라우저/헤더 요구사항, N/A 벽을 한 표로 묶는다.
 3. README에는 matrix 전체를 복제하지 않고 docs의 정본 링크만 둔다.
+
+## 2026-07-15 - product-facing capability matrix 공개
+
+완료:
+
+- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)를 추가해 공개 export를 제품 가치, 상태, 필수 조건, 검증, 경계로 묶었다.
+- [docs/README.md](../../docs/README.md)에 능력 매트릭스를 소비 문서 지도와 빠른 라우팅에 연결했다.
+- [README.md](../../README.md)와 [README.ko.md](../../README.ko.md)에 matrix 포인터를 추가했다.
+- `npm test`에 능력 매트릭스 가드를 추가해 필수 필드, 상태 라벨, 핵심 공개 표면, README/docs 링크가 빠지면 실패하게 했다.
+
+판정:
+
+- README의 Public surface는 API 목록으로 유지하고, 제품 판단은 docs의 matrix로 분리했다.
+- Stable/Beta/Experimental/Research preview 상태가 제품 가치와 브라우저 조건, 검증, hard boundary까지 한 표에 묶였다.
+- 브라우저 OS 목표에서 중요한 점은 "무엇이 가능하다"보다 "제품이 무엇을 켤 수 있고 어디서 멈춰야 하는가"다. 이 표가 그 결정을 고정한다.
+
+검증:
+
+- `git diff --check` PASS.
+- `npm test` PASS, 651 passed, 0 failed.
+
+NEXT:
+
+1. capability matrix를 기준으로 README Public surface의 장황한 설명을 점진적으로 슬림화할 수 있다.
+2. 다음 구조 강화 후보는 benchmark artifact schema v2다.
+3. 제품 데모 관점에서는 matrix 행별로 최소 runnable example을 연결하는 것이 다음 품질 상승 지점이다.
