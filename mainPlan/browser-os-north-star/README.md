@@ -1,10 +1,12 @@
-# browser-os-north-star - 브라우저 OS 목표 고정과 성장 로드맵
+# browser-os-north-star - 첫 Python guest OS 성숙 트랙
 
-상태: 활성 (2026-07-14). 목표: pyproc의 최상위 목표를 "브라우저에 OS를 만든다"로 고정하고, 그 목표가 허풍이 아니라 실측 가능한 제품·커널 로드맵이 되도록 다음 증명 단계를 연다.
+상태: 활성 (2026-07-14, 2026-07-15 상위 정렬). 목표: pyproc Browser Python OS의 성능·호환성·제품 소비 증명을 닫아 [Web Machine Platform](../web-machine-platform/README.md)의 첫 guest OS를 단단하게 만든다.
 
 ## 한 문장
 
-**Chromium 탭을 하드웨어/보안 경계로 삼고, 파이썬을 커널·유저랜드로 삼는 Browser Python OS를 만든다.**
+**Chromium 탭을 하드웨어·보안 경계로 삼고, 파이썬을 커널·유저랜드로 삼는 첫 Web Machine guest OS를 만든다.**
+
+상위 North Star는 브라우저를 여러 guest OS가 올라가는 컴퓨터로 만드는 것이다. 이 이니셔티브의 기존 판정표와 실측은 폐기하지 않고 Python guest의 근거로 유지한다.
 
 ## 왜 지금
 

@@ -1,5 +1,9 @@
 # 01. 아키텍처 - OS 축별 현재 자산과 남은 증명
 
+## 상위 플랫폼 정렬
+
+이 문서는 pyproc Python guest 내부의 OS 아키텍처를 다룬다. 여러 guest engine의 공통 boot·device·image·recovery 계약은 [web-machine-platform](../web-machine-platform/01-architecture.md)이 소유한다. Python heap, Pyodide worker, 패키지 의미론을 범용 host로 끌어올리지 않는다.
+
 ## 레이어
 
 ```text

@@ -1,0 +1,118 @@
+# 02. 페이징과 배선
+
+## Phase 0 - North Star 정렬
+
+상태: 완료.
+
+목표:
+
+- 상위 North Star를 "브라우저에 Python OS를 만든다"에서 "브라우저를 여러 OS가 올라가는 컴퓨터로 만든다"로 확장한다.
+- pyproc의 현재 제품 범위와 미래 Web Machine Host 주장을 분리한다.
+- 기존 `browser-os-north-star`를 첫 Python guest OS 트랙으로 재배치한다.
+
+게이트:
+
+- `CLAUDE.md`, `docs/product/vision.md`, README 2종, `mainPlan/README.md`가 같은 계층을 말한다.
+- 현재형 공개 기능과 미래 목표가 섞이지 않는다.
+- `npm test` green.
+
+## Phase 1 - host contract 실험
+
+상태: 대기.
+
+위치: `tests/attempts/webMachine/`.
+
+작업:
+
+1. `GuestAdapter` lifecycle state machine을 명문화한다.
+2. fake guest 두 개로 boot/pause/resume/snapshot/restore/shutdown 전이를 검증한다.
+3. block, console, clock, entropy 최소 장치 계약을 검증한다.
+4. adapter 오류와 host 오류의 경계를 정한다.
+
+게이트:
+
+- host core에 guest 이름 분기가 없다.
+- 같은 contract test suite를 두 adapter가 그대로 통과한다.
+- snapshot payload는 opaque byte sequence로만 취급된다.
+
+## Phase 2 - pyproc + WASI 이중 엔진
+
+상태: 대기.
+
+작업:
+
+1. pyproc adapter는 공개 `openPersistentMachine`/Session 계열만 소비한다.
+2. WASI adapter는 공개 `bootWasi`/`WasiSession`만 소비한다.
+3. 두 엔진이 같은 lifecycle report와 image envelope를 낸다.
+4. 공통 console과 disk view를 제품 UI 없이 probe에서 검증한다.
+
+게이트:
+
+- 두 엔진 boot, snapshot, restore, shutdown GREEN.
+- deep import 0.
+- host가 Python heap 또는 WASI memory 형식을 해석하지 않는다.
+
+## Phase 3 - Dual-Boot Linux
+
+상태: 대기.
+
+작업:
+
+1. x86 engine을 외부 주입하는 adapter를 만든다.
+2. 최소 Linux image를 부팅한다.
+3. pyproc Python OS와 Linux guest를 같은 machine registry에서 동시에 연다.
+4. console, disk, clock, entropy를 공통 장치 계약으로 연결한다.
+
+게이트:
+
+- `boot("python.webmachine")`와 `boot("linux.webmachine")`가 같은 host API를 사용한다.
+- 두 guest가 파일 쓰기와 console round trip을 완료한다.
+- x86 engine은 pyproc 기본 dependency가 아니다.
+- image 출처와 배포권을 기록한다.
+
+## Phase 4 - 영속 머신과 탭 장애복구
+
+상태: 대기.
+
+작업:
+
+1. 공통 HEAD/PREV + CAS envelope를 만든다.
+2. adapter snapshot과 virtual disk를 같은 generation에 commit한다.
+3. leader fencing과 outcome-unknown 의미론을 host 명령에도 적용한다.
+4. 모든 탭 종료 뒤 cold reopen을 두 guest에서 검증한다.
+
+게이트:
+
+- leader 강제 제거 뒤 정확히 한 successor.
+- 완료 commit 경계의 두 guest와 disk 복구.
+- 전송 뒤 끊긴 명령 자동 replay 0.
+- failover와 recovery 시간 공개.
+
+## Phase 5 - 이동 가능한 `.webmachine`
+
+상태: 대기.
+
+작업:
+
+1. schema version, adapter identity, capability requirements를 봉투에 고정한다.
+2. snapshot, disk, permissions 전체를 integrity hash로 덮는다.
+3. signature와 trusted key 경계를 재사용한다.
+4. 다른 origin 또는 새 browser profile에서 import gate를 실행한다.
+
+게이트:
+
+- 같은 image envelope가 pyproc과 Linux guest를 구분해 올바른 adapter로 연다.
+- adapter 미설치, version 불일치, 권한 부족, blob 손상이 구분된 오류를 낸다.
+- 신뢰되지 않은 image는 실행 전에 거부된다.
+
+## 중단 또는 축소 조건
+
+다음 중 하나면 범용 host 주장을 축소한다.
+
+1. 두 번째 엔진을 받기 위해 host가 guest memory layout을 알아야 한다.
+2. 새 OS마다 core device contract가 깨진다.
+3. adapter보다 host의 OS별 분기가 더 커진다.
+4. 영속 snapshot 비용이 제품 사용 범위를 벗어나며 증분 전략도 성립하지 않는다.
+5. 기존 pyproc 안정성을 깨야만 플랫폼을 만들 수 있다.
+
+축소 시에도 pyproc Python OS는 독립 제품으로 유지된다.

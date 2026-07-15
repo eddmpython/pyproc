@@ -1,5 +1,7 @@
 # 02. 페이징과 배선
 
+> 2026-07-15 상위 정렬: 이 문서의 phase는 pyproc Python guest OS 성숙 트랙이다. 범용 Web Machine Host와 Dual-Boot phase는 [web-machine-platform](../web-machine-platform/02-phasing-and-wiring.md)이 소유한다.
+
 ## Phase 0 - 목표 고정
 
 상태: 완료.

@@ -19,6 +19,7 @@
 
 ## 활성 이니셔티브
 
-- [browser-os-north-star](browser-os-north-star/README.md) - 브라우저 OS 목표 고정과 성장 로드맵. 마지막 상태 기록은 [03-progress-ledger.md](browser-os-north-star/03-progress-ledger.md).
+- [web-machine-platform](web-machine-platform/README.md) - 브라우저를 여러 guest OS가 올라가는 컴퓨터로 만드는 상위 North Star. 마지막 상태 기록은 [03-progress-ledger.md](web-machine-platform/03-progress-ledger.md).
+- [browser-os-north-star](browser-os-north-star/README.md) - Web Machine의 첫 guest인 Browser Python OS 성숙 트랙. 마지막 상태 기록은 [03-progress-ledger.md](browser-os-north-star/03-progress-ledger.md).
 
 완결 이니셔티브 6개(web-python-runtime, local-parity, browser-os, engine-independence, numerical-acceleration, engine-agnostic-surface)는 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README다.

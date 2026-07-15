@@ -1,8 +1,8 @@
-# 00. 제품 비전 - 브라우저에 OS를 만든다
+# 00. 제품 비전 - 첫 Python guest OS를 완성한다
 
 ## 목표
 
-목표는 단순한 웹 파이썬 실행기가 아니다. 목표는 **브라우저 안 OS**다.
+이 이니셔티브의 목표는 단순한 웹 파이썬 실행기가 아니라 **브라우저 안 Python OS**를 실측으로 완성하는 것이다. 상위 North Star는 [Web Machine Platform](../web-machine-platform/README.md)이며, pyproc은 그 위에 처음 올라가는 guest OS다.
 
 정확한 정의:
 
@@ -15,7 +15,7 @@
 - Session, MachineJournal, KernelElection은 부팅·영속·크래시 생존 계층이다.
 - Terminal, JobControl, pipe, shm은 유저랜드와 셸 계층이다.
 
-그래서 pyproc의 제품 정체성은 "브라우저에서 파이썬 코드 실행"이 아니라, **파이썬으로 구성된 브라우저 OS 커널**이다.
+그래서 pyproc의 현재 제품 정체성은 "브라우저에서 파이썬 코드 실행"이 아니라, **파이썬으로 구성된 첫 Web Machine guest OS 커널**이다.
 
 ## OS라고 부를 수 있는 조건
 

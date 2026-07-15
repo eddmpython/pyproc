@@ -1,5 +1,7 @@
 # 04. OS 판정표 v2 - P2/P4/P6 이후 재판정
 
+> 이 점수는 pyproc Python guest OS의 현재 능력을 평가한다. 여러 guest를 받는 Web Machine Host의 완성도 점수가 아니다. 상위 플랫폼 게이트는 [web-machine-platform](../web-machine-platform/README.md)이 별도로 소유한다.
+
 작성: 2026-07-14. 갱신: 2026-07-15. 근거: `browser-os` 판정 이후 완료된 커널 선출(P2), 잡 컨트롤(P3), 파이프/shm(P4), 머신 컨테이너(P5), 권한 감옥(P6), 파일 세계 v2(P7), MachineJournal pack/prune/autoPack, `Init.resume`, `resume.py` 제품 자원 카탈로그와 Machine demo 적용, 공개키 fingerprint API와 trust/permission UI 계약, 대표 데모 3종의 src 승격, codaro의 `Runtime.fs`/`AsgiServer` 제품 소비, 설치 패키지 consumer gate의 `VirtualOrigin` + signed `.pymachine` + 권한/resume 제품 동선, VirtualOrigin 제품 경계 compatibility lab과 browser/example gate 실측.
 
 ## 한 줄 판정

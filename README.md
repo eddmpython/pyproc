@@ -171,14 +171,16 @@ Naming these up front is deliberate: a hidden limit reads as a bug later; a stat
 
 ## The honest scope: aim at infinity, claim what's proven
 
-**North Star: whatever runs locally should eventually run in the browser, with no server.** A *direction*, not a current-compatibility claim (snapshot-fork, time-travel, and portable machine images all came from aiming this high). Everything local sorts into four states, and pyproc's job is to push things up the list and to be the first structure that absorbs a wall the moment the platform reopens it:
+**Platform North Star: turn the browser into a computer that can boot multiple guest operating systems. pyproc is its first Python guest OS.** This is a direction, not a claim that the current package is a general-purpose hypervisor. The first decisive future gate is one host lifecycle booting both pyproc and a Linux guest, then restoring both after the owning tab disappears.
+
+Within that larger goal, pyproc's compatibility direction remains: whatever Python runs locally should eventually run in the browser, with no server. Everything local sorts into four states, and pyproc's job is to push things up the list and absorb a wall when the platform reopens it:
 
 - **Delivered** (measured today): pure-Python + Pyodide packages, multi-core processes, checkpoint / restore, in-kernel ASGI, terminal, persistent FS, portable images, outbound Python sockets.
 - **Virtualized** (the browser way): a TCP `listen()` becomes an ASGI app, `os.fork` becomes worker kernels, outbound sockets ride a thin relay.
 - **Upstream-pending** (walled now, reopenable): native C-extension wheels (Emscripten static builds / the WebAssembly component model), GPU (WebGPU), real threading.
 - **Permanent web-security wall**: inbound connections and arbitrary native binaries need an external relay or agent.
 
-The gap map lives in [local-parity](mainPlan/_done/local-parity/README.md).
+The Python gap map lives in [local-parity](mainPlan/_done/local-parity/README.md). The host architecture and Dual-Boot gates live in [web-machine-platform](mainPlan/web-machine-platform/README.md).
 
 ## Security model
 

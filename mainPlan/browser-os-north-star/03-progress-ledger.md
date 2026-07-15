@@ -2785,3 +2785,18 @@ NEXT:
 1. `failover p95 < 5000ms`를 설치 소비자 회귀 목표로 유지한다.
 2. 다음 제품 배선은 실제 소비자가 `openPersistentMachine`을 pin한 뒤 freshness evidence로 연결한다.
 3. 릴리즈 지시가 있을 때만 버전과 태그를 함께 올린다.
+
+## 2026-07-15 - Web Machine 상위 North Star로 재정렬
+
+결정:
+
+1. "브라우저에 Python OS를 만든다"는 목표를 폐기하지 않고 상위 Web Machine Platform의 첫 guest OS 트랙으로 내린다.
+2. 여러 guest의 공통 boot·device·image·recovery 계약은 새 [web-machine-platform](../web-machine-platform/README.md) 이니셔티브가 소유한다.
+3. 이 원장의 OS 판정표, 성능 봉투, 제품 소비, Immortal Python Machine 증거는 Python guest의 기반으로 유지한다.
+4. pyproc `src/`와 공개 API에는 두 엔진 실측 전 범용 host 추상화를 넣지 않는다.
+
+NEXT:
+
+1. Python guest의 `failover p95 < 5000ms` 회귀 목표를 유지한다.
+2. 상위 플랫폼은 `tests/attempts/webMachine/`에서 lifecycle contract부터 시작한다.
+3. Phase 4 호환성 실험실은 범용 host와 분리해 Python guest compatibility 근거로 계속 운영한다.

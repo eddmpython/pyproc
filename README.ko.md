@@ -171,14 +171,16 @@ console.log(rt.run("len(values)"));           // 3
 
 ## 정직한 스코프: 목표는 무한대로, 주장은 증명된 만큼
 
-**North Star: 로컬에서 되는 모든 파이썬을 언젠가 브라우저에서, 서버 없이.** 현재 호환성 주장이 아니라 *방향*이다(snapshot-fork, 시간여행, 이동 가능한 머신 이미지가 전부 그렇게 크게 잡아서 나왔다). 로컬에서 되는 것은 네 상태로 갈리고, pyproc의 일은 이것들을 위 칸으로 밀어 올리는 것과 플랫폼이 벽을 다시 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다:
+**상위 North Star: 브라우저를 여러 guest OS가 부팅되는 컴퓨터로 만든다. pyproc은 그 위에 올라가는 첫 Python guest OS다.** 이는 현재 패키지가 범용 하이퍼바이저라는 주장이 아니라 방향이다. 첫 결정적 미래 게이트는 같은 host lifecycle로 pyproc과 Linux guest를 부팅하고, 소유 탭이 사라진 뒤 두 머신을 모두 복구하는 것이다.
+
+그 큰 목표 안에서 pyproc의 호환성 방향은 계속 "로컬에서 되는 모든 파이썬을 언젠가 브라우저에서, 서버 없이"다. 로컬에서 되는 것은 네 상태로 갈리고, pyproc의 일은 이것들을 위 칸으로 밀어 올리는 것과 플랫폼이 벽을 다시 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다:
 
 - **현재 달성**(오늘 실측): 순수 파이썬 + Pyodide 패키지, 멀티코어 프로세스, 체크포인트 / 복원, 커널 내 ASGI, 터미널, 영속 FS, 이동 가능한 이미지, 아웃바운드 Python 소켓.
 - **우회 가능**(브라우저 방식): TCP `listen()`은 ASGI 앱으로, `os.fork`는 워커 커널로, 아웃바운드 소켓은 얇은 릴레이로.
 - **upstream 대기**(지금 막혔으나 다시 열림): 네이티브 C 확장 wheel(Emscripten 정적 빌드 / WebAssembly 컴포넌트 모델), GPU(WebGPU), 진짜 threading.
 - **웹 보안상 영구 벽**: 임의 인바운드 연결과 임의 네이티브 바이너리는 외부 릴레이나 에이전트가 필요하다.
 
-축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md)가 추적한다.
+Python 축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md)가 추적한다. host 아키텍처와 Dual-Boot 게이트는 [web-machine-platform](mainPlan/web-machine-platform/README.md)이 추적한다.
 
 ## 보안 모델
 
