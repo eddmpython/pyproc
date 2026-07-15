@@ -25,6 +25,8 @@ _site/
   examples/  src/  index.js  index.d.ts  LICENSE
 ```
 
+랜딩의 Build 섹션은 `docs/`를 상대 링크로 가리키지 않는다. GitHub Pages 산출물에 `docs/`를 복사하지 않기 때문에 capability matrix, 소비 계약, benchmark 계약은 GitHub blob URL로 연결한다.
+
 ## 예비: Cloudflare (연결하지 않음, 기록만)
 
 - 루트 [_headers](../../_headers)는 Cloudflare Pages/Netlify가 그대로 읽는 형식으로 유지한다.
@@ -34,7 +36,7 @@ _site/
 
 ## 확인 절차 (배포 후)
 
-- `https://eddmpython.github.io/pyproc/` 랜딩 -> examples 링크 7종.
+- `https://eddmpython.github.io/pyproc/` 랜딩 -> examples 링크 7종, Build 섹션의 GitHub 문서 링크.
 - machine.html: 새 컴퓨터 부팅 메시지 + 탭 닫았다 열기 resume + signed `.pymachine` cast.
 - serverDev.html: FastAPI/SQLite 서버 부팅 + iframe preview + app.py 수정 후 v2 반영.
 - speedLab.html: 단일 worker numpy matmul과 4-worker sharded matmul의 3회 warmed sample median/p95 비교 + 결과 일치 검증.

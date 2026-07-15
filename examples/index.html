@@ -21,6 +21,7 @@
       <nav>
         <a href="#demos">Demos</a>
         <a href="#features">Features</a>
+        <a href="#build">Build</a>
         <a href="#install">Install</a>
       </nav>
       <sns-links></sns-links>
@@ -108,6 +109,27 @@
     </div>
     <p class="dim" style="margin:.2rem 0 0">A worker that already booted its own Pyodide adopts pyproc with <code>new Runtime(py)</code>: no second interpreter, all the capabilities.</p>
 
+    <h2 id="build">Build with pyproc as a library</h2>
+    <p class="dim" style="margin:.2rem 0 0">Product code should consume root exports, stable subpaths, and documented execution assets, never engine internals. These are the decision surfaces before wiring pyproc into a product.</p>
+    <div class="cards">
+      <a class="card" href="https://github.com/eddmpython/pyproc#public-surface">
+        <h3>Public surface map</h3>
+        <p>Start from the task: which public exports to import, and which runnable proof backs that capability.</p>
+      </a>
+      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/capabilityMatrix.md">
+        <h3>Capability matrix</h3>
+        <p>Decide what to enable by product value, status, browser requirements, runnable surfaces, gates, and hard boundaries.</p>
+      </a>
+      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md">
+        <h3>Consumer contract</h3>
+        <p>Pin exact versions, keep import boundaries clean, deploy same-origin assets, and verify the product gate.</p>
+      </a>
+      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/operations/benchmarking.md">
+        <h3>Benchmark contract</h3>
+        <p>Reproduce S0-S4 artifacts before making speed claims. The headline is sharding and OS primitives, not blanket Python speed.</p>
+      </a>
+    </div>
+
     <h2 id="install">Install</h2>
     <div class="panel">
       <div class="term">npm install pyproc</div>
@@ -117,7 +139,7 @@ import { boot, PyProc, bootSession } from "pyproc";
 const os = new PyProc();
 await os.boot(4);                              <span class="dim">// fork 4 interpreters from one snapshot</span>
 await os.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</div>
-      <p class="dim" style="margin:.7rem 0 0">Pin a commit SHA for product use. Docs and contracts live in the <a href="https://github.com/eddmpython/pyproc">repository</a>.</p>
+      <p class="dim" style="margin:.7rem 0 0">Pin an exact npm version for product use. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md">consumer contract</a>.</p>
     </div>
 
     <footer class="site">

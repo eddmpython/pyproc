@@ -542,6 +542,29 @@ check("랜딩 벤치 메시지가 README 계약형 속도 주장과 정합", () 
     if (landing.includes(stale)) throw new Error(`examples/index.html 낡은 벤치 숫자 잔존: ${stale}`);
   }
 });
+check("랜딩이 라이브러리 소비 판단 경로를 직접 노출", () => {
+  for (const term of [
+    '<a href="#build">Build</a>',
+    '<h2 id="build">Build with pyproc as a library</h2>',
+    "Product code should consume root exports, stable subpaths, and documented execution assets, never engine internals.",
+    "Public surface map",
+    "Capability matrix",
+    "Consumer contract",
+    "Benchmark contract",
+    "Pin an exact npm version for product use.",
+  ]) {
+    if (!landing.includes(term)) throw new Error(`examples/index.html 라이브러리 소비 경로 누락: ${term}`);
+  }
+  for (const url of [
+    "https://github.com/eddmpython/pyproc#public-surface",
+    "https://github.com/eddmpython/pyproc/blob/main/docs/consuming/capabilityMatrix.md",
+    "https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md",
+    "https://github.com/eddmpython/pyproc/blob/main/docs/operations/benchmarking.md",
+  ]) {
+    if (!landing.includes(`href="${url}"`)) throw new Error(`examples/index.html GitHub 문서 링크 누락: ${url}`);
+  }
+  if (/href="docs\//.test(landing)) throw new Error("Pages 배포에서 깨질 로컬 docs 링크 사용");
+});
 check("소비 문서 역할 분리", () => {
   const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
   const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");

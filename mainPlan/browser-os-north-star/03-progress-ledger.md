@@ -2474,3 +2474,32 @@ NEXT:
 1. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
 2. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
 3. 다음 공개 표면 강화는 examples 랜딩에서 capability matrix로 이어지는 경로를 더 짧게 만드는 것이다.
+
+## 2026-07-15 - 랜딩 library adoption 경로 고정
+
+완료:
+
+- [examples/index.html](../../examples/index.html)에 `Build with pyproc as a library` 섹션을 추가했다.
+- 공개 첫 화면에서 Public surface map, Capability matrix, Consumer contract, Benchmark contract로 바로 이동하게 했다.
+- GitHub Pages 산출물에는 `docs/`가 복사되지 않으므로 랜딩 문서 링크는 GitHub blob URL로 고정했다.
+- install 문구를 "commit SHA pin" 중심에서 "정확 npm version pin + release-before-pinning 대안은 consumer contract"로 정렬했다.
+- [demoHosting.md](../../docs/operations/demoHosting.md)에 랜딩 Build 링크가 GitHub 문서로 가야 하는 배포 제약을 기록했다.
+- `npm test`에 랜딩 library adoption 경로와 GitHub 문서 URL, 로컬 `docs/` href 금지 가드를 추가했다.
+
+판정:
+
+- 랜딩은 이제 데모 모음이 아니라 제품 개발자가 라이브러리 구조를 판단하는 입구다.
+- 브라우저 OS 목표에서 중요한 구조는 capability, import boundary, execution asset, benchmark contract가 한 경로로 이어지는 것이다.
+- 이번 변경은 runtime 변경이 아니라 공개 소비 경로 강화라 Node 구조 게이트로 충분하다.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 655 passed, 0 failed.
+
+NEXT:
+
+1. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
+2. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
+3. 제품 소비 경로의 다음 구조 강화는 installed package consumer gate가 어떤 public exports를 실제로 쓰는지 문서와 연결하는 것이다.
