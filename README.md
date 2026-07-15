@@ -214,39 +214,19 @@ Reality check: pure-Python logic is at or above local speed; large single-kernel
 
 ## Public surface
 
-Capabilities are opt-in - turn on only what you need, and consume the capability contract rather than engine internals (`HEAPU8` and friends).
+Capabilities are opt-in. Turn on only what you need, and consume the capability contract rather than engine internals (`HEAPU8` and friends). This README names the public surface; the full product decision table lives in the [capability matrix](docs/consuming/capabilityMatrix.md).
 
-| Export | What |
-| --- | --- |
-| `getPyProcAssetManifest` / `verifyPyProcAssetIntegrity` / `registerPyProcServiceWorker` / `PYPROC_ASSET_MANIFEST_VERSION` | Deployment asset contract: lists the Worker/SharedWorker/Service Worker entrypoints that must be served from the consumer's same origin, emits stable roles for copy/SRI pipelines, verifies a `pyproc-assets` SRI manifest before worker spawn, and registers `pyprocSw.js` only after the matching service-worker asset is verified |
-| `checkEnvironment()` | Environment preflight: are `crossOriginIsolated` / SAB / JSPI ready, and if not, what to add (each gap comes with a copy-paste fix) |
-| `boot(opts)` | Boot a Pyodide runtime, returns `Runtime` (`lockFileURL` for lock reproduction, `coreCacheDir` for offline core, `engineScriptIntegrity` / `coreIntegrity` for boot asset SRI) |
-| `bootEnv(manifest, dirs)` | The uv lane: bare-snapshot + wheel-cache warm boot (second boot ~1229ms vs ~5109ms cold) |
-| `runScript(rt, src, opts)` | `uv run` in the browser: auto-install PEP 723 inline dependencies, then run |
-| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `loadPackagesFromImports` / `setStdout` / `setStderr` / `freeze` / `mountHome` / `fs` plus capability registration; adopt an existing Pyodide with `new Runtime(py)` |
-| `MemoryCapability` | Capability contract that encapsulates WASM heap access |
-| `FileSystem` (`Runtime.fs`) | Engine-agnostic general file IO so consumers never touch `rt.raw.FS`: `writeFile` / `readFile` (utf8 or binary) / `mkdir` / `mkdirTree` / `readdir` / `stat` / `exists` / `unlink` / `rmdir`. Persistence (OPFS) is `mountHome`; this is the file-op layer over the mounted FS |
-| `ReactiveController` | Restore-based reactivity: `checkpoint` / `restoreLive` / `timeTravel`, branch tree |
-| `SyscallBridge` | Borrowed syscalls: `input()` (sync / JSPI), `urllib` (sync XHR), `subprocess` (child worker) |
-| `SocketBridge` | Real outbound TCP for Python sockets (HTTP + HTTPS) via a thin WS->TCP relay: `socket` / `urllib` / `http.client` reach arbitrary host:port; the relay terminates TLS for `https` (blocking recv over JSPI, `runAsync`). Inbound is a physical wall |
-| `AsgiServer` | In-kernel ASGI server (FastAPI with zero sockets, ~3.4ms dispatch) |
-| `VirtualOrigin` | The Python server on a real URL, paired with the `pyprocSw.js` Service Worker asset |
-| `Terminal` | Serverless Python terminal (REPL, blocking input, `%pip` / `%undo`) |
-| `DeviceFs` | Everything is a file: browser capabilities as Python `open()` (`/dev/clipboard`, `/proc`) |
-| `Init` | OS init: `/home/web/boot.py` autorun, `cron.py` ticks, and `resume.py` hooks after `Session.load`, `MachineJournal.recover`, or `openMachine` to reopen fd/socket/DB connection state |
-| `MachineJournal` | Write-ahead log: the machine checkpoints itself while idle, so a crashed tab still boots back into its last commit; `pack()` / `prune()` compact long-running OPFS blob stores, and `autoPack` can pack after commits when loose blobs cross a configured threshold |
-| `MachineJail` | Permission jail: `permissions{net, clipboard, home, workers}` enforced in two tiers, a cooperative Python chokepoint plus the browser's own wall (a `connect-src` CSP on the jail context blocks disallowed hosts even if the jailed code tries `import js`) |
-| `GpuCompute` / `GpuArray` / `GpuBridge` | Offload large f32 linear algebra to WebGPU compute: a residency handle (upload once, chain `matmul` / `map` / `binary` / `transpose` / `reduce` on the GPU, download once) with a shared-memory tiled kernel. Full pipelines stay GPU-resident: `matmul -> relu -> sum` (loss) and `x.transpose() @ dy` / residual `(A@B) + C`. `Runtime.enableGpu()` wires it into Python (`pyprocGpu.matmul` on numpy arrays). Measured ~127x vs WASM numpy on a real GPU; f32 only (WGSL has no f64), needs a windowed browser with a GPU |
-| `bootSession` / `Session` / `openMachine` / `createMachineKeyPair` / `exportMachinePublicKey` / `fingerprintMachinePublicKey` | Session revival and portable `.pymachine` images: deterministic replay plus user delta, persisted to OPFS (`save` / `load`) or exported as one file (`exportImage` / `openMachine`). If `/home/web` exists, the image carries that file tree too. WebCrypto signatures let `openMachine` trust a verified public key instead of a raw `trust: true`, and `fingerprintMachinePublicKey` gives product trust UIs a stable signer fingerprint |
-| `WheelCache` | Wheel / OPFS cache for offline, zero-redownload package installs |
-| `PyProc` | Process OS kernel: snapshot-fork spawn, `map` / `mapArray` parallelism, sharded `matmul(a, b, { parts })` for compute-bound f64 NumPy speedups, lifecycle (`kill` / `signal` / respawn), `fork(2)` (clone a live process, its variables and arrays travel), and flow IPC (`pipe` / `lock` / `semaphore` / `shm`: SAB ring-buffer pipes with real blocking read and backpressure) |
-| `MachineContainer` | Machine inside a machine: boots a container kernel in a worker with its own package set, exposed to Python as a value (`m.run` / `m.spawn` / `m.kill`); nests (containers inside containers) |
-| `SIGNAL` | POSIX signal numbers for `PyProc.signal(pid, signum)`: real `SIGTERM` / `SIGUSR1` handlers fire inside Python |
-| `JobControl` | Shell job control: `expr &` forks the live interactive namespace onto another core (prompt returns immediately); `%jobs` / `%fg` / `%kill` drive the jobs |
-| `KernelElection` | The OS survives tab death: tabs elect a leader via Web Locks, only the leader boots a kernel, the rest are RPC views; when the leader tab dies a follower is promoted and resumes from the journal |
-| `SharedKernel` | A kernel that outlives the tab (SharedWorker): many tabs, one Python state |
-| `bootWasi` / `WasiSession` | A session on non-Pyodide CPython 3.14 (WASI), proving the primitives are engine-independent: async `run` / `get` / `set`, full time-travel, `installWheel(bytes)` (browser-side pip for pure-Python wheels). Value bridge is JSON-only; C extensions need a static build |
-| `PAGE_SIZE` | WASM page size constant (65536) |
+| Need | Public exports | Runnable proof |
+| --- | --- | --- |
+| Run Python in the tab | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
+| Prepare repeatable environments | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
+| Restore, branch, and time-travel state | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
+| Use browser workers as processes | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
+| Serve Python behind real browser URLs | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
+| Build terminal and borrowed syscall flows | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
+| Persist, cast, and revive a machine | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
+| Push beyond the default engine lane | `GpuCompute`, `GpuArray`, `GpuBridge`, `bootWasi`, `WasiSession` | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
+| Ship worker-backed capabilities from a product | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
 
 Subpath imports are also supported:
 
@@ -265,7 +245,7 @@ Deployment asset manifest:
 npx pyproc-assets --baseURL /vendor/pyproc/ --out public/vendor/pyproc-assets.json --copy-to public/vendor/pyproc
 ```
 
-The CLI follows the Worker / SharedWorker / Service Worker import graph, copies the required files when `--copy-to` is set, and emits `sha256-...` integrity for every file. Load that JSON and pass it as `assetIntegrity` to `boot`, `PyProc`, `SharedKernel`, `MachineContainer`, `JobControl`, or `bootWasi` to preflight the relevant worker graph before it is spawned. Register the service worker through `registerPyProcServiceWorker(assetIntegrity, { cache: true, coreIntegrity: "/pyodide-integrity.json" })` so the verified manifest URL is the one registered, and so `pyprocSw.js` can SRI-check script/module/wasm/zip requests that browser dynamic imports would otherwise fetch outside a JavaScript `fetch` wrapper. The same path contract is available at runtime through `getPyProcAssetManifest()`, and direct checks can call `verifyPyProcAssetIntegrity()`.
+The CLI follows the Worker / SharedWorker / Service Worker import graph, copies the required files when `--copy-to` is set, and emits `sha256-...` integrity for every file. Load that JSON as `assetIntegrity` before worker-backed capabilities spawn, and register `pyprocSw.js` through `registerPyProcServiceWorker(...)` so the Service Worker path is verified too.
 
 ## Setup
 

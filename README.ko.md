@@ -214,39 +214,19 @@ Pyodide  Workers
 
 ## 공개 표면
 
-능력은 opt-in이다 - 필요한 것만 켜고, 엔진 내부(`HEAPU8` 등)가 아니라 능력 계약을 소비한다.
+능력은 opt-in이다. 필요한 것만 켜고, 엔진 내부(`HEAPU8` 등)가 아니라 능력 계약을 소비한다. 이 README는 공개 표면의 지도이고, 제품 판단 정본은 [능력 매트릭스](docs/consuming/capabilityMatrix.md)에 있다.
 
-| Export | 무엇 |
-| --- | --- |
-| `getPyProcAssetManifest` / `verifyPyProcAssetIntegrity` / `registerPyProcServiceWorker` / `PYPROC_ASSET_MANIFEST_VERSION` | 배포 자산 계약: 소비자 same-origin에 둬야 하는 Worker/SharedWorker/Service Worker 엔트리포인트와 안정 role을 돌려준다. 복사/SRI 파이프라인의 정본이고, `pyproc-assets` SRI manifest를 worker spawn 전에 검증하며, 검증된 service-worker URL만 등록한다 |
-| `checkEnvironment()` | 환경 진단: `crossOriginIsolated` / SAB / JSPI가 준비됐는지, 부족하면 무엇을 어떻게 고칠지(복붙 조치 포함) |
-| `boot(opts)` | Pyodide 런타임 부팅, `Runtime` 반환(`lockFileURL` 락 재현, `coreCacheDir` 오프라인 코어, `engineScriptIntegrity` / `coreIntegrity` 부트 자산 SRI) |
-| `bootEnv(manifest, dirs)` | uv 레인: bare 스냅샷 + wheel 캐시 웜 부팅(2차 ~1229ms vs 콜드 ~5109ms) |
-| `runScript(rt, src, opts)` | 브라우저판 `uv run`: PEP 723 인라인 의존성 자동 설치 후 실행 |
-| `Runtime` | `run` / `runAsync` / `install` / `loadPackages` / `loadPackagesFromImports` / `setStdout` / `setStderr` / `freeze` / `mountHome` / `fs` + 능력 등록; 기존 Pyodide는 `new Runtime(py)`로 채택 |
-| `MemoryCapability` | WASM 힙 접근을 캡슐화하는 능력 계약 |
-| `FileSystem` (`Runtime.fs`) | 소비자가 `rt.raw.FS`를 안 만지는 엔진-무관 일반 파일 IO: `writeFile` / `readFile`(utf8/binary) / `mkdir` / `mkdirTree` / `readdir` / `stat` / `exists` / `unlink` / `rmdir`. 영속(OPFS)은 `mountHome`, 이건 마운트된 FS 위 파일-op 레이어 |
-| `ReactiveController` | 복원 기반 리액티비티: `checkpoint` / `restoreLive` / `timeTravel`, 분기 나무 |
-| `SyscallBridge` | 빌린 시스템콜: `input()`(동기 / JSPI), `urllib`(동기 XHR), `subprocess`(자식 워커) |
-| `SocketBridge` | 파이썬 소켓을 얇은 WS->TCP 릴레이로 진짜 아웃바운드 TCP에(HTTP + HTTPS): `socket` / `urllib` / `http.client`가 임의 host:port 도달, https는 릴레이가 TLS 종단(블로킹 recv = JSPI, `runAsync`). 인바운드는 물리 벽 |
-| `AsgiServer` | 커널 내 ASGI 서버(소켓 0 FastAPI, ~3.4ms 디스패치) |
-| `VirtualOrigin` | 파이썬 서버를 진짜 URL로(`pyprocSw.js` 서비스 워커 자산과 쌍) |
-| `Terminal` | 서버리스 파이썬 터미널(REPL, 블로킹 input, `%pip` / `%undo`) |
-| `DeviceFs` | 모든 것은 파일: 브라우저 능력이 파이썬 `open()`으로(`/dev/clipboard`, `/proc`) |
-| `Init` | OS init: `/home/web/boot.py` 오토런, `cron.py` 틱, `Session.load`/`MachineJournal.recover`/`openMachine` 뒤 `resume.py` hook으로 fd/socket/DB connection 상태 재개설 |
-| `MachineJournal` | WAL: 유휴에 스스로 체크포인트해, 강제종료된 탭도 마지막 커밋으로 부활. `pack()` / `prune()`으로 장수 OPFS blob 저장소를 압축·정리하고, `autoPack`은 loose blob이 임계값을 넘으면 커밋 직후 pack을 실행 |
-| `MachineJail` | 권한 감옥: `permissions{net, clipboard, home, workers}`를 2단 집행. 협조 파이썬 초크포인트 + 브라우저 벽(감옥 컨텍스트의 `connect-src` CSP가 비허용 host 차단, 감옥 코드가 `import js`로 우회해도 무력) |
-| `GpuCompute` / `GpuArray` / `GpuBridge` | f32 대규모 선형대수를 WebGPU 컴퓨트로 오프로드: 잔류 핸들(업로드 1회, GPU 위에서 `matmul` / `map` / `binary` / `transpose` / `reduce` 체이닝, 다운로드 1회, 공유메모리 타일드 커널). 전체 파이프라인이 GPU에 남는다: `matmul -> relu -> sum`(loss), `x.transpose() @ dy`, 잔차 `(A@B) + C`. `Runtime.enableGpu()`가 파이썬에 배선(`pyprocGpu.matmul`이 numpy 배열을). 실 GPU에서 WASM numpy 대비 ~127배 실측. f32 한정(WGSL은 f64 없음), 창 있는 브라우저 + GPU 필요 |
-| `bootSession` / `Session` / `openMachine` / `createMachineKeyPair` / `exportMachinePublicKey` / `fingerprintMachinePublicKey` | 세션 부활 + 이동 가능한 `.pymachine` 이미지: 결정적 리플레이 + 사용자 델타, OPFS 영속(`save` / `load`) 또는 한 파일 내보내기(`exportImage` / `openMachine`). `/home/web`이 있으면 그 파일 트리도 이미지에 함께 실린다. WebCrypto signature가 있으면 `trust: true` 대신 검증된 공개키로 열 수 있고, `fingerprintMachinePublicKey`는 제품 신뢰 UI에 안정 signer fingerprint를 준다 |
-| `WheelCache` | 오프라인 / 재다운로드 0 패키지 설치용 wheel / OPFS 캐시 |
-| `PyProc` | 프로세스 OS 커널: 스냅샷-fork 스폰, `map` / `mapArray` 병렬, compute-bound f64 NumPy 가속용 샤딩 `matmul(a, b, { parts })`, 수명주기(`kill` / `signal` / respawn), `fork(2)`(살아있는 프로세스 복제, 변수·배열이 실린다), 흐름 IPC(`pipe` / `lock` / `semaphore` / `shm`: SAB 링버퍼 파이프, 진짜 블로킹 read + backpressure) |
-| `MachineContainer` | 머신 안의 머신: 컨테이너 커널을 워커에 자기 패키지 세트로 띄우고 파이썬 값으로 노출(`m.run` / `m.spawn` / `m.kill`), 중첩 가능(컨테이너 속 컨테이너) |
-| `SIGNAL` | `PyProc.signal(pid, signum)`용 POSIX 시그널 번호: 진짜 `SIGTERM` / `SIGUSR1` 핸들러가 파이썬 안에서 발화 |
-| `JobControl` | 셸의 잡 컨트롤: `expr &`가 살아있는 대화형 네임스페이스를 딴 코어로 fork(프롬프트 즉시 복귀). `%jobs` / `%fg` / `%kill`로 조종 |
-| `KernelElection` | OS가 탭 죽음에서 산다: 탭들이 Web Locks로 리더를 뽑고 리더만 커널을 부팅, 나머지는 RPC 뷰. 리더 탭이 죽으면 팔로워가 승격 + 저널에서 resume |
-| `SharedKernel` | 탭보다 오래 사는 커널(SharedWorker): 여러 탭, 한 파이썬 상태 |
-| `bootWasi` / `WasiSession` | non-Pyodide CPython 3.14(WASI) 세션, 프리미티브가 엔진 무관임의 실증: async `run` / `get` / `set`, 완전 시간여행, `installWheel(bytes)`(순수 파이썬 wheel용 브라우저판 pip). 값 다리는 JSON 한정, C 확장은 정적 빌드 필요 |
-| `PAGE_SIZE` | WASM 페이지 크기 상수(65536) |
+| 필요한 것 | 공개 export | 실행 증거 |
+| --- | --- | --- |
+| 탭 안에서 Python 실행 | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
+| 반복 가능한 환경 준비 | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
+| 상태 복원, 분기, 시간여행 | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
+| 브라우저 worker를 프로세스로 사용 | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
+| Python을 실제 browser URL 뒤에 서빙 | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
+| 터미널과 빌린 syscall 흐름 구성 | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
+| 머신 저장, 전송, 부활 | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
+| 기본 엔진 밖의 가능성 확장 | `GpuCompute`, `GpuArray`, `GpuBridge`, `bootWasi`, `WasiSession` | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
+| worker 기반 능력을 제품에 배포 | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
 
 서브패스 import도 지원한다:
 
@@ -265,7 +245,7 @@ import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/asset
 npx pyproc-assets --baseURL /vendor/pyproc/ --out public/vendor/pyproc-assets.json --copy-to public/vendor/pyproc
 ```
 
-CLI는 Worker / SharedWorker / Service Worker import graph를 따라가고, `--copy-to`가 있으면 필요한 파일을 복사하며, 모든 파일에 `sha256-...` integrity를 붙인다. 이 JSON을 읽어 `assetIntegrity`로 `boot`, `PyProc`, `SharedKernel`, `MachineContainer`, `JobControl`, `bootWasi`에 넘기면 해당 worker graph를 spawn 전에 검증한다. Service Worker는 `registerPyProcServiceWorker(assetIntegrity, { cache: true, coreIntegrity: "/pyodide-integrity.json" })`로 등록한다. 그래야 검증한 manifest URL과 실제 등록 URL이 갈라지지 않고, 브라우저 동적 import가 JavaScript `fetch` wrapper 밖에서 가져가는 script/module/wasm/zip도 `pyprocSw.js`가 SRI로 검증한다. 같은 경로 정본은 런타임의 `getPyProcAssetManifest()`로도 얻고, 직접 검증은 `verifyPyProcAssetIntegrity()`로 수행한다.
+CLI는 Worker / SharedWorker / Service Worker import graph를 따라가고, `--copy-to`가 있으면 필요한 파일을 복사하며, 모든 파일에 `sha256-...` integrity를 붙인다. 이 JSON을 worker 기반 능력 spawn 전 `assetIntegrity`로 넘기고, Service Worker 경로도 `registerPyProcServiceWorker(...)`로 검증한다.
 
 ## 셋업
 

@@ -2394,3 +2394,29 @@ NEXT:
 1. README Public surface를 matrix와 중복되지 않게 줄이고, 예제 중심 진입로를 강화한다.
 2. capability matrix의 실행 표면 중 probe 전용인 행은 필요할 때 사람용 example로 승격한다.
 3. 제품 소비 배선은 codaro/dartlab/xlpod 중 실제 import 기준으로 별도 추적한다.
+
+## 2026-07-15 - README Public surface 지도화
+
+완료:
+
+- [README.md](../../README.md)와 [README.ko.md](../../README.ko.md)의 Public surface를 긴 export 설명표에서 작업별 API 지도로 줄였다.
+- 각 행은 필요한 일, 공개 export, 실행 증거를 함께 보여준다.
+- 상세 제품 판단은 [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)로 넘기고, README는 빠른 첫 판단과 설치 진입로 역할에 집중시켰다.
+- `npm test`에 README Public surface가 작업별 지도 형태를 유지하는 가드를 추가했다.
+
+판정:
+
+- 공개 첫인상이 더 뾰족해졌다. README가 모든 능력을 설명하려고 길어지는 대신, "무엇을 하려면 어떤 API와 어떤 실행 증거를 보면 되는가"만 남긴다.
+- 공개 export 이름은 그대로 유지해 소비자 검색성과 타입 계약 추적은 손상하지 않았다.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 652 passed, 0 failed.
+
+NEXT:
+
+1. docs/consuming/contract.md와 capability matrix 사이의 소비자 setup 중복을 줄인다.
+2. README benchmark 표와 examples 랜딩의 메시지 정합성을 점검한다.
+3. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.

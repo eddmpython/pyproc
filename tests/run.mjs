@@ -493,6 +493,14 @@ for (const readme of ["README.md", "README.ko.md"]) {
     if (missing.length) throw new Error(`표면 누락: ${missing.join(", ")}`);
   });
 }
+check("README 공개 표면은 작업별 지도 형태", () => {
+  const readmeEn = readFileSync(join(ROOT, "README.md"), "utf8");
+  const readmeKo = readFileSync(join(ROOT, "README.ko.md"), "utf8");
+  if (!readmeEn.includes("| Need | Public exports | Runnable proof |")) throw new Error("README.md 공개 표면 지도 헤더 누락");
+  if (!readmeKo.includes("| 필요한 것 | 공개 export | 실행 증거 |")) throw new Error("README.ko.md 공개 표면 지도 헤더 누락");
+  if (readmeEn.includes("| Export | What |")) throw new Error("README.md가 장황한 export 설명표로 회귀");
+  if (readmeKo.includes("| Export | 무엇 |")) throw new Error("README.ko.md가 장황한 export 설명표로 회귀");
+});
 check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   const matrixPath = join(ROOT, "docs", "consuming", "capabilityMatrix.md");
   if (!existsSync(matrixPath)) throw new Error("capabilityMatrix.md 없음");
