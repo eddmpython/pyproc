@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S2",
+  "candidate": "marimo-wasm",
+  "name": "process map",
+  "command": null,
+  "commit": "3fa6478c8bfbf128a5f8285c625f64765cbae6e9",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T02:35:31.800Z",
+  "finishedAt": "2026-07-15T02:35:31.808Z",
+  "browser": {
+    "path": null,
+    "version": null
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 5774340096
+  },
+  "engine": {
+    "name": "marimo WASM"
+  },
+  "source": "mainPlan/browser-os-north-star/06-speed-comparison.md",
+  "note": null,
+  "ok": false,
+  "metrics": null,
+  "notApplicableReason": "S2는 PyProc.map과 mapSerial로 같은 Python 함수를 같은 입력 묶음에 대해 process pool과 직렬 실행으로 비교하는 계약이다. marimo WASM은 이 pyproc process-pool API 계약을 제공하는 후보로 측정하지 않는다."
+}
