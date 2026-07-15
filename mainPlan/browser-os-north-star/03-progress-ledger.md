@@ -1994,3 +1994,40 @@ NEXT:
 1. WebVM S0C를 cache-clear 또는 fresh browser profile 조건으로 측정한다.
 2. JupyterLite와 marimo WASM S0C는 재현 가능한 cache-clear 절차가 잡히는 즉시 추가한다.
 3. S2 process map 비교 축을 외부 후보 N/A 또는 제한 artifact로 봉인한다.
+
+## 2026-07-15 - WebVM S0C cold 후보 합류
+
+완료:
+
+- WebVM을 fresh persistent browser profile 조건으로 3회 측정했다.
+- [s0c-webvm-2026-07-15.json](benchmarks/s0c-webvm-2026-07-15.json)을 생성했다.
+- [s0c-compare-2026-07-15.md](benchmarks/s0c-compare-2026-07-15.md)를 pyproc + WebVM 두 행으로 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
+
+실측:
+
+- WebVM URL: `https://webvm.io/`.
+- Browser: Headless Edge user agent `HeadlessChrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0`.
+- 측정 절차: 각 sample마다 새 persistent browser profile을 만들고 `about:blank`에서 시작, `page.goto("https://webvm.io/?s0c=<ts>")`, 터미널 prompt 대기, `python3 -c "print('<marker>')"` 입력, marker가 echo와 Python 출력으로 2회 등장할 때 성공 처리. sample 종료 후 browser close와 profile 삭제.
+- WebVM S0C samples: 46534ms, 47796ms, 45949ms.
+- median 46534ms, p95 47796ms, min 45949ms, max 47796ms, maxErr 0.
+- artifact 생성 commit: `667fd59ce0547dfb2b6aaed60effb14dc0c1a6ba`, `worktreeDirty: false`.
+
+검증:
+
+- WebVM marker script 3회 PASS, 각 run에서 marker occurrence 2회 확인.
+- `npm run bench:artifact -- --scenario S0C --candidate webvm --browser-version 150.0.0.0 --engine WebVM/CheerpX --source "https://webvm.io/ via playwright-cli" --command "fresh persistent browser profile, open about:blank, page.goto webvm.io, wait user prompt, run python3 -c print(marker), wait marker output" --note "Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto" --sample 46534,0 --sample 47796,0 --sample 45949,0 --out mainPlan/browser-os-north-star/benchmarks/s0c-webvm-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0c-webvm-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md` PASS.
+- `npm test` PASS.
+
+판정:
+
+- S0C cold profile/cache-clear 조건에서 pyproc median 3660ms, WebVM median 46534ms다.
+- WebVM은 warm S0에서는 pyproc과 사실상 동률이었지만, cold profile 조건에서는 Linux VM과 CheerpX 자산 준비 비용이 크게 드러난다.
+- 이 축은 "첫 방문 또는 새 사용자 프로필에서 Python을 얼마나 빨리 사용할 수 있는가"에 대한 pyproc의 강한 속도 근거다.
+
+NEXT:
+
+1. JupyterLite와 marimo WASM S0C를 같은 fresh profile 조건으로 측정한다.
+2. S2 process map 비교 축을 외부 후보 N/A 또는 제한 artifact로 봉인한다.
+3. S3 browser server를 WebVM/JupyterLite/marimo 대비 가능한 최단 경로로 비교한다.

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S0C",
+  "candidate": "webvm",
+  "name": "python cold ready latency",
+  "command": "fresh persistent browser profile, open about:blank, page.goto webvm.io, wait user prompt, run python3 -c print(marker), wait marker output",
+  "commit": "667fd59ce0547dfb2b6aaed60effb14dc0c1a6ba",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T02:00:08.245Z",
+  "finishedAt": "2026-07-15T02:00:08.248Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.0.0"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 13760888832
+  },
+  "engine": {
+    "name": "WebVM/CheerpX"
+  },
+  "source": "https://webvm.io/ via playwright-cli",
+  "note": "Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 46534,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 47796,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 45949,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 46534,
+    "p95Ms": 47796,
+    "minMs": 45949,
+    "maxMs": 47796,
+    "maxErr": 0
+  }
+}
