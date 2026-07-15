@@ -98,6 +98,8 @@ Speed Lab의 S1 raw JSON은 별도 러너로 남긴다:
 npm run bench:speed -- --out .tmp/speed-s1.json
 ```
 
+기본 S1 조건은 `workers=4`, `size=1024`, `samples=3`이다. 다른 조건은 `--workers`, `--size`, `--samples`로 명시하고 raw artifact의 `command` 필드에 남긴다.
+
 체크리스트:
 
 - 콘솔에 `crossOriginIsolated`가 true인지(`false`면 헤더 문제).

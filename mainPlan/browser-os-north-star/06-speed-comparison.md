@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: 계약 고정. 외부 런타임 실측은 아직 미기록.
+상태: pyproc S1 기준 artifact 기록. 외부 런타임 실측은 아직 미기록.
 
 ## 목표
 
@@ -24,6 +24,12 @@
 | S2 process map | `npm run test:browser` | 결과 일치와 worker pool speedup |
 | S3 browser server | `npm run test:consumer` | `VirtualOrigin` POST roundtrip |
 | S4 machine resume | `npm run test:consumer` | signed `.pymachine` export/open/resume |
+
+## 추적 evidence
+
+| date | scenario | artifact | compare | result |
+|---|---|---|---|---|
+| 2026-07-15 | S1 pyproc | [s1-pyproc-2026-07-15.json](benchmarks/s1-pyproc-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | GREEN, `size=1024`, 3 samples, median 3.95x, shard p95 2606ms, maxErr 0 |
 
 ## 외부 비교 matrix
 

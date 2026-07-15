@@ -1509,3 +1509,47 @@ NEXT:
 1. `bench:speed`로 pyproc S1 최신 artifact를 만들고, 외부 후보 하나를 `bench:artifact`로 측정하거나 N/A로 봉인한다.
 2. S1 후보별 실행 페이지나 절차를 `tests/attempts/` 아래에 최소 재현으로 만든다.
 3. README 속도 문구는 비교 artifact가 생긴 뒤에만 갱신한다.
+
+## 2026-07-15 - S1 canonical 1024 기준 artifact 고정
+
+문제:
+
+- `bench:speed`의 768 기본 조건은 사람용 Speed Lab UI에는 적합하지만, 현재 환경에서 S1 공개 기준으로는 compute-bound가 충분하지 않았다.
+- 768 clean trial은 single median 1221ms, shard median 688ms, median speedup 1.77x, shard p95 771ms, maxErr 0으로 RED였다.
+- 기준을 낮추지 않고 `medianSpeedup >= 2.0`과 `shard p95 < single median`을 유지하려면 S1 runner의 canonical 크기를 명시해야 했다.
+
+완료:
+
+- Speed Lab이 `?workers=`, `?size=`, `?samples=` query를 받아 같은 페이지에서 UI 기본값과 canonical runner 조건을 분리하게 했다.
+- `tests/browser/speedBench.mjs` 기본 조건을 `workers=4`, `size=1024`, `samples=3`으로 고정하고 artifact의 `runner`와 `command`에 조건을 남기게 했다.
+- `tests/run.mjs` 구조 가드가 Speed Lab query 계약과 `PYPROC_BENCH_SIZE`, `DEFAULT_SIZE = 1024`를 검사한다.
+- S1 기준 artifact를 [benchmarks/s1-pyproc-2026-07-15.json](benchmarks/s1-pyproc-2026-07-15.json)에 남기고, 비교표를 [benchmarks/s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md)에 남겼다.
+
+실측:
+
+- 대상 commit: `af1dbb1b041bddbea3894249e26d8968db70fcb7`, `worktreeDirty: false`.
+- Edge 150.0.4078.65, AMD Ryzen 7 8845HS, 16 logical CPUs, `size=1024`, `workers=4`, `samples=3`.
+- boot 5750ms, avg worker boot 2042ms, forked true.
+- single median 10067ms, shard median 2550ms, shard p95 2606ms, median speedup 3.95x, maxErr 0.
+
+검증:
+
+- `node --check tests/browser/speedBench.mjs` PASS.
+- `node --check tests/run.mjs` PASS.
+- `git diff --check` PASS.
+- `npm run bench:speed -- --size 1024 --out .tmp/s1-canonical-smoke.json` GREEN: median 3.22x, maxErr 0.
+- `npm run bench:speed -- --out mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json` GREEN: median 3.95x, maxErr 0.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md` PASS.
+- `npm test` GREEN 623/623.
+
+판정:
+
+- S1 pyproc 기준점은 이제 tracked raw JSON과 Markdown 비교표를 가진다.
+- 768은 사람용 UI 기본값으로 유지하고, 공개 speed evidence는 canonical 1024 runner로 고정한다.
+- 외부 후보 비교는 아직 없다. 다음 상승 조건은 WebVM, JupyterLite, marimo 중 하나를 같은 머신에서 실제 artifact 또는 N/A artifact로 남기는 것이다.
+
+NEXT:
+
+1. WebVM/JupyterLite/marimo 중 실행 가능한 후보 하나를 S1으로 측정하거나, 같은 시나리오가 불가능하면 `bench:artifact --na`로 봉인한다.
+2. 외부 후보 artifact를 기존 [benchmarks/s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md)에 합쳐 비교표를 갱신한다.
+3. README의 속도 문구는 pyproc 기준 수치만 갱신하고, 상대 성능 주장은 외부 후보 artifact가 생긴 뒤에만 한다.

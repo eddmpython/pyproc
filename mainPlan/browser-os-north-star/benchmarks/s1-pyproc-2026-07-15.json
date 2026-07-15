@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S1",
+  "candidate": "pyproc",
+  "name": "numpy sharded matmul",
+  "command": "node tests/browser/speedBench.mjs --workers 4 --size 1024 --samples 3 --out mainPlan\\browser-os-north-star\\benchmarks\\s1-pyproc-2026-07-15.json",
+  "commit": "af1dbb1b041bddbea3894249e26d8968db70fcb7",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T00:25:05.635Z",
+  "finishedAt": "2026-07-15T00:25:51.195Z",
+  "browser": {
+    "path": "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 13777125376
+  },
+  "engine": {
+    "indexURL": null,
+    "selfHosted": false
+  },
+  "runner": {
+    "workers": 4,
+    "size": 1024,
+    "samples": 3
+  },
+  "page": "http://127.0.0.1:64874/examples/speedLab.html?gate=1&workers=4&size=1024&samples=3",
+  "timeoutMs": 240000,
+  "ok": true,
+  "report": {
+    "ok": true,
+    "scenario": "S1",
+    "checks": [
+      {
+        "name": "Speed Lab - pyproc",
+        "pass": true,
+        "info": "ine...\nsample 3/3: 4-worker sharded run...\nsample 3: 3.95x (10073ms -> 2550ms), max error 0.00e+0\nmedian speedup: 3.95x (10067ms -> 2550ms)\np95 envelope: single 10073ms, shard 2606ms\ncorrectness: max sample error 0.00e+0"
+      }
+    ],
+    "config": {
+      "workers": 4,
+      "size": 1024,
+      "benchSamples": 3,
+      "indexURL": null
+    },
+    "timings": {
+      "bootMs": 5750
+    },
+    "boot": {
+      "workers": 4,
+      "avgBootMs": 2042,
+      "forked": true
+    },
+    "bench": {
+      "samples": [
+        {
+          "singleMs": 10067,
+          "parallelMs": 2453,
+          "speedup": 4.1,
+          "maxErr": 0
+        },
+        {
+          "singleMs": 9633,
+          "parallelMs": 2606,
+          "speedup": 3.7,
+          "maxErr": 0
+        },
+        {
+          "singleMs": 10073,
+          "parallelMs": 2550,
+          "speedup": 3.95,
+          "maxErr": 0
+        }
+      ],
+      "sampleCount": 3,
+      "singleMedian": 10067,
+      "singleP95": 10073,
+      "parallelMedian": 2550,
+      "parallelP95": 2606,
+      "medianSpeedup": 3.95,
+      "maxErr": 0
+    }
+  },
+  "metrics": {
+    "samples": [
+      {
+        "singleMs": 10067,
+        "parallelMs": 2453,
+        "speedup": 4.1,
+        "maxErr": 0
+      },
+      {
+        "singleMs": 9633,
+        "parallelMs": 2606,
+        "speedup": 3.7,
+        "maxErr": 0
+      },
+      {
+        "singleMs": 10073,
+        "parallelMs": 2550,
+        "speedup": 3.95,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "singleMedian": 10067,
+    "singleP95": 10073,
+    "parallelMedian": 2550,
+    "parallelP95": 2606,
+    "medianSpeedup": 3.95,
+    "maxErr": 0
+  }
+}
