@@ -501,6 +501,47 @@ check("README 공개 표면은 작업별 지도 형태", () => {
   if (readmeEn.includes("| Export | What |")) throw new Error("README.md가 장황한 export 설명표로 회귀");
   if (readmeKo.includes("| Export | 무엇 |")) throw new Error("README.ko.md가 장황한 export 설명표로 회귀");
 });
+check("랜딩 벤치 메시지가 README 계약형 속도 주장과 정합", () => {
+  const readmeEn = readFileSync(join(ROOT, "README.md"), "utf8");
+  const readmeKo = readFileSync(join(ROOT, "README.ko.md"), "utf8");
+  for (const term of [
+    'The headline is contract-specific, not "all Python is faster."',
+    "Single-kernel NumPy is still ordinary WebAssembly BLAS.",
+    "S1 headline: sharded NumPy",
+    "S3 browser server",
+    "S4 machine resume",
+  ]) {
+    if (!readmeEn.includes(term)) throw new Error(`README.md 벤치 메시지 누락: ${term}`);
+  }
+  for (const term of [
+    '속도 간판은 "모든 Python이 빠르다"가 아니라 계약별이다.',
+    "단일 커널 NumPy는 여전히 일반 WebAssembly BLAS다.",
+    "S1 간판: sharded NumPy",
+    "S3 browser server",
+    "S4 machine resume",
+  ]) {
+    if (!readmeKo.includes(term)) throw new Error(`README.ko.md 벤치 메시지 누락: ${term}`);
+  }
+  for (const term of [
+    'Speed is contract-specific, not a blanket "all Python is faster" claim.',
+    "Single-kernel NumPy remains ordinary WebAssembly BLAS.",
+    "S1 sharded NumPy matmul",
+    "S3 fetch() to Python ASGI",
+    "S4 signed .pymachine",
+    "S4 trusted machine open",
+    "portable machine image",
+    "3.95x",
+    "18ms",
+    "76ms",
+    "2.26s",
+    "10.8MB",
+  ]) {
+    if (!landing.includes(term)) throw new Error(`examples/index.html 벤치 메시지 누락: ${term}`);
+  }
+  for (const stale of ["5.28x", "numpy sort", "3.4ms", "13.7MB"]) {
+    if (landing.includes(stale)) throw new Error(`examples/index.html 낡은 벤치 숫자 잔존: ${stale}`);
+  }
+});
 check("소비 문서 역할 분리", () => {
   const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
   const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");

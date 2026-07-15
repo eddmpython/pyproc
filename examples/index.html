@@ -48,13 +48,15 @@
       <noscript><p class="dim">The console runs real CPython in your tab, so it needs JavaScript.</p></noscript>
     </section>
 
-    <section class="stats" aria-label="measured results">
-      <div class="stat"><b>4.2x</b><span>faster environment boot<br>(warm 1.2s vs cold 5.1s)</span></div>
-      <div class="stat"><b>5.28x</b><span>sharded numpy sort vs<br>one pass (4 workers)</span></div>
-      <div class="stat"><b>3.4ms</b><span>fetch() to in-browser<br>FastAPI (virtual origin)</span></div>
-      <div class="stat"><b>13.7MB</b><span>a running computer as<br>one .pymachine file</span></div>
+    <section class="stats" aria-label="measured contract results">
+      <div class="stat"><b>3.95x</b><span>S1 sharded NumPy matmul<br>4 workers vs one worker</span></div>
+      <div class="stat"><b>18ms</b><span>S3 fetch() to Python ASGI<br>through a virtual origin</span></div>
+      <div class="stat"><b>76ms</b><span>S4 signed .pymachine<br>export median</span></div>
+      <div class="stat"><b>2.26s</b><span>S4 trusted machine open<br>with /home resume</span></div>
+      <div class="stat"><b>10.8MB</b><span>a portable machine image<br>with disk and signature</span></div>
       <div class="stat"><b>0</b><span>CDN requests on second<br>boot (offline-ready)</span></div>
     </section>
+    <p class="dim" style="margin:.35rem 0 1rem">Speed is contract-specific, not a blanket "all Python is faster" claim. pyproc wins when a product can prepare state once, restore it, or shard work across browser processes. Single-kernel NumPy remains ordinary WebAssembly BLAS.</p>
 
     <h2 id="demos">The same demos, full page</h2>
     <p class="dim" style="margin:.2rem 0 0">Every demo above runs in the hero console. These pages are the same thing with room to poke at it.</p>
@@ -73,7 +75,7 @@
       </a>
       <a class="card" href="examples/speedLab.html">
         <h3>Speed Lab</h3>
-        <p>Run numpy matrix multiply once on one Python worker, then shard the same job across 4 workers through the public PyProc API.</p>
+        <p>Run NumPy matrix multiply once on one Python worker, then shard the same job across 4 workers through the public PyProc API. This is the S1 speed headline, separate from single-kernel BLAS.</p>
       </a>
       <a class="card" href="examples/terminal.html">
         <h3>Terminal</h3>
@@ -95,7 +97,7 @@
       <div class="card"><h3>Checkpoint and time-travel</h3><p>Full-hash heap checkpoints at execution boundaries. Restore in ~1ms, guarded against silent corruption by a mutation counter.</p></div>
       <div class="card"><h3>Portable machine images</h3><p>The whole running computer in one .pymachine file: SHA-256 integrity, explicit trust gate, and a determinism check before any delta is applied.</p></div>
       <div class="card"><h3>uv-grade environments</h3><p>bootEnv restores a bare-heap snapshot and installs wheels from an OPFS cache. runScript runs PEP 723 self-sufficient scripts. freeze() pins it all.</p></div>
-      <div class="card"><h3>A server on a real URL</h3><p>The bundled service worker maps fetch("/pyproc/...") to your in-kernel FastAPI app: 3.4ms round trips with zero sockets.</p></div>
+      <div class="card"><h3>A server on a real URL</h3><p>The bundled service worker maps fetch("/pyproc/...") to your in-kernel FastAPI app: S3 measures 18ms round trips with zero sockets.</p></div>
       <div class="card"><h3>Persistent disk and offline</h3><p>/home/web is a real OPFS-backed disk that survives kernels. Core assets cache so the second boot needs no network at all.</p></div>
     </div>
 

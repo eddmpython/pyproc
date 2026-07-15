@@ -2446,3 +2446,31 @@ NEXT:
 1. README benchmark 표와 examples 랜딩 메시지 정합성을 점검한다.
 2. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
 3. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
+
+## 2026-07-15 - 랜딩 benchmark 메시지 정합성 고정
+
+완료:
+
+- [examples/index.html](../../examples/index.html)의 상단 실측 숫자를 README benchmark 표의 최신 artifact 축과 맞췄다.
+- 오래된 `5.28x` sort, `3.4ms`, `13.7MB` 표기를 제거하고 S1 3.95x sharded NumPy matmul, S3 18ms browser server, S4 76ms export/2.26s trusted open/10.8MB image로 교체했다.
+- 랜딩에 "속도는 계약별 claim"임을 명시해 단일 커널 NumPy가 가장 빠르다는 오해를 막았다.
+- Speed Lab 카드는 S1 속도 간판과 single-kernel BLAS 보조 축을 분리해 설명하게 했다.
+- `npm test`에 README/README.ko benchmark 문구와 랜딩 숫자/문구가 어긋나면 실패하는 가드를 추가했다.
+
+판정:
+
+- 공개 첫 화면이 README benchmark의 현실 점검과 같은 메시지를 낸다.
+- 브라우저 OS 방향의 속도 주장은 "모든 파이썬 계산이 빠르다"가 아니라 prepared state, restore, process pool, in-tab server, portable machine image를 조합하는 구조적 속도다.
+- 이 변경은 runtime 동작 변경이 아니라 공개 표면 정합성 강화라 Node 구조 게이트로 충분하다.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 654 passed, 0 failed.
+
+NEXT:
+
+1. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
+2. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
+3. 다음 공개 표면 강화는 examples 랜딩에서 capability matrix로 이어지는 경로를 더 짧게 만드는 것이다.
