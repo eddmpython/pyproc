@@ -138,11 +138,11 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 
 ### 설치 패키지 consumer gate coverage
 
-`npm run test:package`와 `npm run test:consumer`는 문서 링크나 repo 상대 import가 아니라 설치된 tarball의 public specifier만 본다. 이 표가 설치 패키지 기준으로 실제 검증되는 소비 표면이다.
+`npm run test:package`와 `npm run test:consumer`는 문서 링크나 repo 상대 import가 아니라 설치된 tarball의 public specifier만 본다. 이 표가 설치 패키지 기준으로 실제 검증되는 소비 표면이다. 표 데이터 정본은 [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)다.
 
 | 게이트 | 노출 specifier | 실제 public surface | 검증하는 계약 |
 | --- | --- | --- | --- |
-| package consumer | `pyproc`, `pyproc/assets`, `pyproc/runtime` | `Runtime`, `PyProc`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, runtime subpath `boot`/`Runtime`, `pyproc-assets` bin | package exports, stable subpath, `index.d.ts`, npm files, CLI graph copy와 SRI manifest |
+| package consumer | `pyproc`, `pyproc/assets`, `pyproc/runtime` | `Runtime`, `PyProc`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, runtime subpath `boot`/`Runtime`, `pyproc-assets` bin | package exports, stable subpath, `index.d.ts`, npm files, CLI graph copy and SRI manifest |
 | product consumer - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | `/node_modules/pyproc/` 기준 asset manifest, worker graph SRI, 설치된 `pyprocSw.js` registration, bad worker SRI spawn 전 거부 |
 | product consumer - runtime/server | `pyproc` | `boot`, `VirtualOrigin`, Runtime `enableAsgiServer` | 설치 패키지 Runtime boot, Python ASGI app, `fetch("/pyproc/...")` virtual origin 왕복, S3 timing source |
 | product consumer - process OS | `pyproc` | `PyProc` | 설치 패키지 worker graph로 `boot`, `map`, `terminate` 실행, SRI와 ASGI Service Worker prefix 충돌 없음 |

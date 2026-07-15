@@ -8,8 +8,11 @@ import { tmpdir } from "node:os";
 import { extname, join, normalize, sep } from "node:path";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 import { findBrowser, headlessArgs } from "./harness.mjs";
+import { productConsumerCoverageManifest } from "./productConsumerCoverage.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
+const COVERAGE_MANIFEST = productConsumerCoverageManifest();
+const COVERAGE_MANIFEST_JSON = JSON.stringify(COVERAGE_MANIFEST);
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -104,6 +107,7 @@ const html = `<!DOCTYPE html>
     const out = document.getElementById("out");
     const checks = [];
     const timings = {};
+    const coverageManifest = ${COVERAGE_MANIFEST_JSON};
     const log = (msg) => { out.textContent += "\\n" + msg; };
     const indexParam = new URLSearchParams(location.search).get("indexURL");
     const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
@@ -117,7 +121,7 @@ const html = `<!DOCTYPE html>
         await fetch("/gateReport", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ok, checks, timings }),
+          body: JSON.stringify({ ok, checks, timings, coverageManifest }),
         });
       } catch (e) {}
     };
@@ -361,10 +365,15 @@ try {
     console.log(`FAIL 게이트 타임아웃(${TIMEOUT_MS / 1000}s)`);
     process.exit(1);
   }
+  const coverageOk = JSON.stringify(result.coverageManifest) === COVERAGE_MANIFEST_JSON;
   for (const c of result.checks) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.name}${c.info ? " (" + c.info + ")" : ""}`);
+  console.log(`  ${coverageOk ? "PASS" : "FAIL"} product consumer coverage manifest${coverageOk ? ` (${COVERAGE_MANIFEST.rows.length} rows)` : ""}`);
   if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
-  console.log(`\n결과: ${result.ok ? "GREEN" : "RED"} (${result.checks.filter((c) => c.pass).length}/${result.checks.length})`);
-  process.exit(result.ok ? 0 : 1);
+  const passCount = result.checks.filter((c) => c.pass).length + (coverageOk ? 1 : 0);
+  const totalCount = result.checks.length + 1;
+  const ok = result.ok && coverageOk;
+  console.log(`\n결과: ${ok ? "GREEN" : "RED"} (${passCount}/${totalCount})`);
+  process.exit(ok ? 0 : 1);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

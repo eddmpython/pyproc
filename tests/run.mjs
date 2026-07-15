@@ -72,6 +72,7 @@ console.log("pyproc 게이트\n");
 console.log("[표면]");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 const benchArtifactContract = await import(pathToFileURL(join(ROOT, "tests", "browser", "benchArtifacts.mjs")).href);
+const productConsumerCoverage = await import(pathToFileURL(join(ROOT, "tests", "browser", "productConsumerCoverage.mjs")).href);
 for (const [name, kind] of [
   ["getPyProcAssetManifest", "function"], ["verifyPyProcAssetIntegrity", "function"], ["PYPROC_ASSET_MANIFEST_VERSION", "number"],
   ["registerPyProcServiceWorker", "function"],
@@ -582,21 +583,11 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
   const testing = readFileSync(join(ROOT, "docs", "operations", "testing.md"), "utf8");
   const packageConsumer = readFileSync(join(ROOT, "tests", "packageConsumer.mjs"), "utf8");
   const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
-  for (const term of [
-    "package consumer",
-    "product consumer - asset path",
-    "product consumer - runtime/server",
-    "product consumer - process OS",
-    "product consumer - product policy",
-    "product consumer - portable machine",
-    "`pyproc/assets`",
-    "`pyproc/runtime`",
-    "`pyproc-assets` bin",
-    "S3 timing source",
-    "S4 timing source",
-  ]) {
-    if (!contract.includes(term)) throw new Error(`contract.md consumer coverage 누락: ${term}`);
-  }
+  const expectedTable = productConsumerCoverage.renderProductConsumerCoverageMarkdown();
+  if (!contract.includes(expectedTable)) throw new Error("contract.md consumer coverage 표가 productConsumerCoverage.mjs 렌더링과 불일치");
+  if (!productConsumer.includes("productConsumerCoverageManifest")) throw new Error("productConsumer.mjs가 coverage manifest SSOT를 import하지 않음");
+  if (!productConsumer.includes("coverageManifest")) throw new Error("productConsumer.mjs가 coverage manifest를 report하지 않음");
+  if (!productConsumer.includes("product consumer coverage manifest")) throw new Error("productConsumer.mjs가 coverage manifest report 검증을 출력하지 않음");
   for (const name of [
     "boot",
     "bootSession",

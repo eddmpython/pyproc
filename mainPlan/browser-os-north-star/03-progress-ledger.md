@@ -2533,3 +2533,34 @@ NEXT:
 1. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
 2. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
 3. 다음 구조 강화는 product consumer gate 자체가 coverage manifest를 산출해 문서와 테스트가 같은 데이터를 보게 만드는 방향이다.
+
+## 2026-07-15 - product consumer coverage manifest SSOT화
+
+완료:
+
+- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)를 추가해 설치 패키지 consumer gate coverage의 데이터 정본을 분리했다.
+- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 같은 coverage manifest를 브라우저 report에 싣고, Node runner가 report manifest drift를 검증하게 했다.
+- [contract.md](../../docs/consuming/contract.md)의 coverage 표가 `renderProductConsumerCoverageMarkdown()` 출력과 정확히 일치해야 `npm test`가 통과하게 했다.
+- [testing.md](../../docs/operations/testing.md)는 상세 coverage 정본 포인터만 유지하고, 표 복제는 피했다.
+- `npm test`의 coverage 검사를 문자열 나열 중심에서 manifest renderer + 실제 gate report 배선 검사로 올렸다.
+
+판정:
+
+- 소비 계약, 테스트, 실제 브라우저 consumer gate가 같은 coverage 데이터를 본다.
+- 라이브러리 구조 관점에서 public export의 가치는 문서 표가 아니라 설치된 패키지에서 통과하는 제품 경로로 증명된다.
+- 이번 변경은 제품 runtime이 아니라 gate/문서 구조 변경이다. 다만 `productConsumer.mjs` 실행 경로를 바꿨으므로 `test:consumer`로 manifest report까지 확인한다.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/browser/productConsumerCoverage.mjs` PASS.
+- `node --check tests/browser/productConsumer.mjs` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 659 passed, 0 failed.
+- `npm run test:consumer` GREEN 16/16: coverage manifest 6 rows, VirtualOrigin 19ms, signed `.pymachine` export 83ms, trusted open 2401ms.
+
+NEXT:
+
+1. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
+2. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
+3. coverage manifest를 장기적으로 benchmark artifact처럼 schema 검증 가능한 외부 산출물로 승격할지 판정한다.
