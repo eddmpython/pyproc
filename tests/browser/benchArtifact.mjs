@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, freemem, platform, release, totalmem } from "node:os";
 import { dirname, resolve } from "node:path";
 import { isLatencyBenchGreen, isShardedSpeedBenchGreen, summarizeLatencyBench, summarizePairedLatencyBench } from "../../examples/benchStats.js";
-import { BENCH_ARTIFACT_SCHEMA_VERSION, S0_SCENARIO, S1_SCENARIO, S1L_SCENARIO, normalizeBenchArtifact } from "./benchArtifacts.mjs";
+import { BENCH_ARTIFACT_SCHEMA_VERSION, S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, normalizeBenchArtifact } from "./benchArtifacts.mjs";
 
 function takeArg(name) {
   const idx = process.argv.indexOf(name);
@@ -88,7 +88,7 @@ const notApplicableReason = takeArg("--na") || takeArg("--not-applicable");
 const sampleTexts = takeArgs("--sample");
 
 if (!candidate) fail("--candidate 필요");
-if (![S0_SCENARIO, S1_SCENARIO, S1L_SCENARIO].includes(scenario)) fail("--scenario는 S0, S1 또는 S1L이어야 한다");
+if (![S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO].includes(scenario)) fail("--scenario는 S0, S0C, S1 또는 S1L이어야 한다");
 if (notApplicableReason && sampleTexts.length) fail("--na와 --sample은 같이 쓸 수 없다");
 if (!notApplicableReason && sampleTexts.length < 3) fail("측정 artifact는 --sample을 최소 3개 요구한다");
 if (!notApplicableReason && !command && !source) fail("측정 artifact는 --command 또는 --source가 필요하다");
@@ -111,7 +111,7 @@ const artifact = {
   schemaVersion: BENCH_ARTIFACT_SCHEMA_VERSION,
   scenario,
   candidate,
-  name: scenario === S0_SCENARIO ? "python ready latency" : (scenario === S1L_SCENARIO ? "single-kernel numpy matmul latency" : "numpy sharded matmul"),
+  name: scenario === S0_SCENARIO ? "python ready latency" : (scenario === S0C_SCENARIO ? "python cold ready latency" : (scenario === S1L_SCENARIO ? "single-kernel numpy matmul latency" : "numpy sharded matmul")),
   command,
   commit: gitCommit(),
   worktreeDirty: gitDirty(),

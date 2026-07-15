@@ -107,6 +107,13 @@ npm run bench:artifact -- --scenario S0 --candidate pyproc --command "<command>"
 npm run bench:compare -- .tmp/pyproc-s0.json --out .tmp/s0-compare.md
 ```
 
+S0C Python cold ready latency는 cold profile/cache-clear 조건만 받는다. warm S0와 한 표에 섞지 않는다:
+
+```bash
+npm run bench:artifact -- --scenario S0C --candidate pyproc --command "<command>" --sample 3600,0 --sample 3500,0 --sample 3700,0 --out .tmp/pyproc-s0c.json
+npm run bench:compare -- .tmp/pyproc-s0c.json --out .tmp/s0c-compare.md
+```
+
 S1L single-kernel NumPy latency는 S1을 대체하지 않는 별도 보조 축이다:
 
 ```bash

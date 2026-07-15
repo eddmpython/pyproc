@@ -3,9 +3,10 @@ import { readFileSync } from "node:fs";
 
 export const BENCH_ARTIFACT_SCHEMA_VERSION = 1;
 export const S0_SCENARIO = "S0";
+export const S0C_SCENARIO = "S0C";
 export const S1_SCENARIO = "S1";
 export const S1L_SCENARIO = "S1L";
-export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S1_SCENARIO, S1L_SCENARIO]);
+export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO]);
 
 export function readBenchArtifact(file) {
   try {
@@ -29,7 +30,7 @@ export function normalizeBenchArtifact(artifact, file = "artifact") {
     return baseRow(artifact, file, candidate, { ok: false, notApplicableReason });
   }
   if (!artifact.metrics || typeof artifact.metrics !== "object") throw new Error(`${file}: metrics 객체 누락`);
-  if (artifact.scenario === S0_SCENARIO) return normalizeS0Artifact(artifact, file, candidate);
+  if (artifact.scenario === S0_SCENARIO || artifact.scenario === S0C_SCENARIO) return normalizeReadyLatencyArtifact(artifact, file, candidate);
   if (artifact.scenario === S1_SCENARIO) return normalizeS1Artifact(artifact, file, candidate);
   return normalizeS1LArtifact(artifact, file, candidate);
 }
@@ -67,7 +68,7 @@ function normalizeS1Artifact(artifact, file, candidate) {
   });
 }
 
-function normalizeS0Artifact(artifact, file, candidate) {
+function normalizeReadyLatencyArtifact(artifact, file, candidate) {
   const sampleCount = requireFiniteNumber(artifact.metrics, "sampleCount", file);
   assertSamples(artifact, sampleCount, file);
   const medianMs = requireFiniteNumber(artifact.metrics, "medianMs", file);
@@ -75,7 +76,7 @@ function normalizeS0Artifact(artifact, file, candidate) {
   const minMs = requireFiniteNumber(artifact.metrics, "minMs", file);
   const maxMs = requireFiniteNumber(artifact.metrics, "maxMs", file);
   const maxErr = requireFiniteNumber(artifact.metrics, "maxErr", file);
-  if (minMs > medianMs || medianMs > p95Ms || p95Ms > maxMs) throw new Error(`${file}: S0 latency envelope 불일치`);
+  if (minMs > medianMs || medianMs > p95Ms || p95Ms > maxMs) throw new Error(`${file}: ${artifact.scenario} latency envelope 불일치`);
   return baseRow(artifact, file, candidate, {
     samples: sampleCount,
     medianMs,
@@ -119,6 +120,7 @@ export function renderBenchCompareMarkdown(rows) {
   const scenario = rows[0].scenario;
   if (rows.some((r) => r.scenario !== scenario)) throw new Error("서로 다른 scenario artifact는 한 표로 합칠 수 없다");
   if (scenario === S0_SCENARIO) return renderS0Markdown(rows);
+  if (scenario === S0C_SCENARIO) return renderS0CMarkdown(rows);
   if (scenario === S1L_SCENARIO) return renderS1LMarkdown(rows);
   return renderS1Markdown(rows);
 }
@@ -142,13 +144,21 @@ function renderS1Markdown(rows) {
 }
 
 function renderS0Markdown(rows) {
+  return renderReadyLatencyMarkdown(rows, "ready median ms", "ready p95 ms");
+}
+
+function renderS0CMarkdown(rows) {
+  return renderReadyLatencyMarkdown(rows, "cold ready median ms", "cold ready p95 ms");
+}
+
+function renderReadyLatencyMarkdown(rows, medianHeader, p95Header) {
   const sorted = rows.slice().sort((a, b) => {
     const av = typeof a.medianMs === "number" ? a.medianMs : Number.POSITIVE_INFINITY;
     const bv = typeof b.medianMs === "number" ? b.medianMs : Number.POSITIVE_INFINITY;
     return av - bv;
   });
   const lines = [
-    "| candidate | ok | samples | ready median ms | ready p95 ms | min ms | max ms | maxErr | browser | commit | source |",
+    `| candidate | ok | samples | ${medianHeader} | ${p95Header} | min ms | max ms | maxErr | browser | commit | source |`,
     "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|",
   ];
   for (const r of sorted) {

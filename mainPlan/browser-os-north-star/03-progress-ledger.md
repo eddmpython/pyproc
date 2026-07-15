@@ -1893,7 +1893,7 @@ NEXT:
 - marimo 절차: fresh `page.goto` query URL, iframe 내부 첫 code textbox에 `print(<marker>)` 입력, `Control+Enter`, iframe 본문에서 마커가 입력 echo와 Python 출력으로 2회 등장할 때 성공 처리.
 - marimo WASM S0 samples: 8385ms, 8276ms, 8702ms.
 - marimo WASM median 8385ms, p95 8702ms, min 8276ms, max 8702ms, maxErr 0.
-- caveat: 모두 warm browser profile/cache 조건이다. cold browser profile, cache clear, first network download까지 포함한 수치는 아직 아니다.
+- caveat: 외부 후보는 warm browser profile/cache 조건이다. pyproc S0는 기존 browser gate 원천이라 fresh temporary profile 조건에 가깝다. cold 조건의 정면 비교는 S0C로 분리한다.
 
 검증:
 
@@ -1915,3 +1915,46 @@ NEXT:
 1. S0 cold profile/cache-clear artifact를 warm S0와 분리해서 정의하고 측정한다.
 2. S2 process map을 외부 후보가 같은 일을 못 하는 경우 N/A 또는 제한 artifact로 봉인한다.
 3. S3 browser server를 WebVM/JupyterLite/marimo 대비 가능한 최단 경로로 비교한다.
+
+## 2026-07-15 - S0C cold ready benchmark schema 추가
+
+문제:
+
+- 기존 S0 표는 첫 Python 성공 시간을 보여주지만, 후보별 profile/cache 조건이 완전히 같지 않다.
+- 외부 후보는 재사용 브라우저 세션에서 warm profile/cache에 가까웠고, pyproc browser gate는 매 실행 fresh temporary profile을 쓴다.
+- warm 관측과 cold profile/cache-clear 수치를 같은 표에 계속 섞으면 속도 주장이 흐려진다.
+
+결정:
+
+1. 새 scenario ID는 `S0C`로 둔다.
+2. S0C의 이름은 `python cold ready latency`다.
+3. S0C는 cold profile/cache-clear 조건에서 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지를 잰다.
+4. S0C sample 형식은 S0, S1L과 같은 `latencyMs[,maxErr]`다.
+5. S0, S0C, S1, S1L artifact는 서로 섞지 않는다.
+
+완료:
+
+- `tests/browser/benchArtifacts.mjs`가 `S0C_SCENARIO`를 지원하고 S0C 전용 cold ready 비교표를 렌더링하게 했다.
+- `tests/browser/benchArtifact.mjs`가 `--scenario S0C`를 받아 latency artifact를 만들게 했다.
+- `tests/run.mjs` 구조 가드가 S0C 계약을 확인한다.
+- [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 S0C artifact 계약을 추가했다.
+
+검증:
+
+- `node --check tests/browser/benchArtifacts.mjs` PASS.
+- `node --check tests/browser/benchArtifact.mjs` PASS.
+- `node --check tests/browser/benchCompare.mjs` PASS.
+- `npm run bench:artifact -- --scenario S0C --candidate sample-s0c --command "fixture S0C" --sample 300,0 --sample 200,0 --sample 250,0 --out .tmp/sample-s0c.json` PASS.
+- `npm run bench:compare -- .tmp/sample-s0c.json --out .tmp/sample-s0c-compare.md` PASS.
+- `npm run bench:compare -- .tmp/sample-s0c.json mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json` FAIL expected: 서로 다른 scenario artifact는 한 표로 합칠 수 없다.
+
+판정:
+
+- cold profile/cache-clear 비교를 warm/observed S0 표에서 분리할 구조가 생겼다.
+- 다음 단계는 schema 변경을 clean commit으로 고정한 뒤 pyproc S0C artifact를 생성한다.
+
+NEXT:
+
+1. `npm run test:browser`를 fresh temporary profile 조건으로 3회 실행해 pyproc S0C 기준 artifact를 만든다.
+2. `benchmarks/s0c-compare-2026-07-15.md`를 만든다.
+3. 외부 후보 S0C는 cache-clear 재현성이 확보된 것부터 추가한다.
