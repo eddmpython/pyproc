@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S3",
+  "candidate": "webvm",
+  "name": "browser server roundtrip",
+  "command": null,
+  "commit": "0effa02129eefd6efd9bad6b498ca0c34a070b48",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T02:44:00.997Z",
+  "finishedAt": "2026-07-15T02:44:00.998Z",
+  "browser": {
+    "path": null,
+    "version": null
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 17259040768
+  },
+  "engine": {
+    "name": "WebVM"
+  },
+  "source": "mainPlan/browser-os-north-star/06-speed-comparison.md",
+  "note": null,
+  "ok": false,
+  "metrics": null,
+  "notApplicableReason": "S3는 pyproc VirtualOrigin이 Service Worker URL fetch를 같은 탭의 Python ASGI app으로 라우팅하는 계약이다. WebVM은 이 pyproc VirtualOrigin/ASGI service-worker URL contract를 제공하는 후보로 측정하지 않는다."
+}
