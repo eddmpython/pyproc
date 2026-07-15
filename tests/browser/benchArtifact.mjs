@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, freemem, platform, release, totalmem } from "node:os";
 import { basename, dirname, extname, relative, resolve } from "node:path";
-import { isLatencyBenchGreen, isMachineResumeBenchGreen, isProcessMapBenchGreen, isShardedSpeedBenchGreen, summarizeLatencyBench, summarizeMachineResumeBench, summarizePairedLatencyBench } from "../../examples/benchStats.js";
-import { BENCH_ARTIFACT_SCHEMA_VERSION, RAW_OUTPUT_EMBEDDED_REPORT, RAW_OUTPUT_FILE_PREFIX, S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
+import { isImmortalMachineBenchGreen, isLatencyBenchGreen, isMachineResumeBenchGreen, isProcessMapBenchGreen, isShardedSpeedBenchGreen, summarizeImmortalMachineBench, summarizeLatencyBench, summarizeMachineResumeBench, summarizePairedLatencyBench } from "../../examples/benchStats.js";
+import { BENCH_ARTIFACT_SCHEMA_VERSION, RAW_OUTPUT_EMBEDDED_REPORT, RAW_OUTPUT_FILE_PREFIX, S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO, S5_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
 
 function takeArg(name) {
   const idx = process.argv.indexOf(name);
@@ -139,6 +139,15 @@ function parseMachineResumeSample(text) {
   return { exportMs, openMs, machineMB, resumeRows, maxErr };
 }
 
+function parseImmortalMachineSample(text) {
+  const parts = text.split(",").map((v) => Number(v.trim()));
+  if (parts.length < 6 || parts.length > 7 || parts.some((v) => !Number.isFinite(v) || v < 0)) {
+    throw new Error(`sample 형식 오류: ${text} (initialReadyMs,rpcP50Ms,rpcP90Ms,failoverMs,recoveryMs,coldReopenMs[,maxErr])`);
+  }
+  const [initialReadyMs, rpcP50Ms, rpcP90Ms, failoverMs, recoveryMs, coldReopenMs, maxErr = 0] = parts;
+  return { initialReadyMs, rpcP50Ms, rpcP90Ms, failoverMs, recoveryMs, coldReopenMs, maxErr };
+}
+
 const outPath = takeArg("--out");
 const scenario = takeArg("--scenario") || S1_SCENARIO;
 const candidate = takeArg("--candidate");
@@ -158,7 +167,7 @@ const notApplicableReason = takeArg("--na") || takeArg("--not-applicable");
 const sampleTexts = takeArgs("--sample");
 
 if (!candidate) fail("--candidate 필요");
-if (![S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO].includes(scenario)) fail("--scenario는 S0, S0C, S1, S1L, S2, S3 또는 S4여야 한다");
+if (![S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO, S5_SCENARIO].includes(scenario)) fail("--scenario는 S0, S0C, S1, S1L, S2, S3, S4 또는 S5여야 한다");
 const scenarioDefinition = scenarioDefinitionFor(scenario);
 if (notApplicableReason && sampleTexts.length) fail("--na와 --sample은 같이 쓸 수 없다");
 if (!notApplicableReason && sampleTexts.length < 3) fail("측정 artifact는 --sample을 최소 3개 요구한다");
@@ -170,9 +179,11 @@ if (!notApplicableReason) {
   try {
     metrics = scenario === S4_SCENARIO
       ? summarizeMachineResumeBench(sampleTexts.map(parseMachineResumeSample))
+      : (scenario === S5_SCENARIO
+        ? summarizeImmortalMachineBench(sampleTexts.map(parseImmortalMachineSample))
       : (scenario === S1_SCENARIO || scenario === S2_SCENARIO
         ? summarizePairedLatencyBench(sampleTexts.map(parseSample))
-        : summarizeLatencyBench(sampleTexts.map(parseLatencySample)));
+        : summarizeLatencyBench(sampleTexts.map(parseLatencySample))));
   } catch (e) {
     fail(e.message);
   }
@@ -250,7 +261,7 @@ const artifact = {
   producer: { name: "benchArtifact.mjs", schemaVersion: BENCH_ARTIFACT_SCHEMA_VERSION },
   source,
   note,
-  ok: metrics ? (scenario === S1_SCENARIO ? isShardedSpeedBenchGreen(metrics) : (scenario === S2_SCENARIO ? isProcessMapBenchGreen(metrics) : (scenario === S4_SCENARIO ? isMachineResumeBenchGreen(metrics) : isLatencyBenchGreen(metrics)))) : false,
+  ok: metrics ? (scenario === S1_SCENARIO ? isShardedSpeedBenchGreen(metrics) : (scenario === S2_SCENARIO ? isProcessMapBenchGreen(metrics) : (scenario === S4_SCENARIO ? isMachineResumeBenchGreen(metrics) : (scenario === S5_SCENARIO ? isImmortalMachineBenchGreen(metrics) : isLatencyBenchGreen(metrics))))) : false,
   metrics,
 };
 if (notApplicableReason) artifact.notApplicableReason = notApplicableReason;

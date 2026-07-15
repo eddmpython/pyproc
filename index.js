@@ -47,6 +47,9 @@
 //                          딴 코어에서 돌린다(프롬프트 즉시 복귀). %jobs/%fg/%kill로 조종
 //   KernelElection       - 커널 선출: 여러 탭이 Web Locks로 리더 하나를 뽑고 리더만 커널을 부팅,
 //                          나머지는 RPC 뷰. 리더 탭이 죽으면 팔로워가 승격 + 저널에서 resume(탭 죽음 생존)
+//   openPersistentMachine
+//                        - OPFS 저널, 영속 epoch, leader fencing을 조립해 같은 이름의 여러 탭을
+//                          하나의 지속 Python 머신으로 여는 제품 권장 진입점
 //   SharedKernel         - 탭 밖에서 사는 공유 커널(SharedWorker, 여러 탭 = 한 파이썬 상태)
 //   bootWasi/WasiSession - Pyodide 아닌 CPython(WASI) 세션(엔진 무관 실증). async run/get/set +
 //                          완전 시간여행(checkpoint/timeTravel). 값 다리는 JSON 한정, wasmURL 소비자 제공
@@ -72,6 +75,6 @@ export { GpuCompute, GpuArray, GpuBridge } from "./src/capabilities/gpuCompute.j
 export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
 export { MachineContainer } from "./src/processOs/machineContainer.js";
 export { JobControl } from "./src/processOs/jobControl.js";
-export { KernelElection } from "./src/processOs/kernelElection.js";
+export { KernelElection, openPersistentMachine } from "./src/processOs/kernelElection.js";
 export { SharedKernel } from "./src/processOs/sharedKernel.js";
 export { bootWasi, WasiSession } from "./src/runtime/engines/wasi/wasiSession.js";

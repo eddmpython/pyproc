@@ -10,9 +10,10 @@ export const S1L_SCENARIO = "S1L";
 export const S2_SCENARIO = "S2";
 export const S3_SCENARIO = "S3";
 export const S4_SCENARIO = "S4";
+export const S5_SCENARIO = "S5";
 export const RAW_OUTPUT_EMBEDDED_REPORT = "embedded:report";
 export const RAW_OUTPUT_FILE_PREFIX = "file:";
-export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO]);
+export const SUPPORTED_SCENARIOS = new Set([S0_SCENARIO, S0C_SCENARIO, S1_SCENARIO, S1L_SCENARIO, S2_SCENARIO, S3_SCENARIO, S4_SCENARIO, S5_SCENARIO]);
 export const SCENARIO_DEFINITIONS = Object.freeze({
   [S0_SCENARIO]: Object.freeze({
     id: S0_SCENARIO,
@@ -70,6 +71,14 @@ export const SCENARIO_DEFINITIONS = Object.freeze({
     sampleSchema: Object.freeze(["exportMs", "openMs", "machineMB", "resumeRows", "maxErr"]),
     metricUnit: "ms",
   }),
+  [S5_SCENARIO]: Object.freeze({
+    id: S5_SCENARIO,
+    name: "immortal multi-tab machine",
+    profile: "gate",
+    primaryMetric: "failoverP95Ms",
+    sampleSchema: Object.freeze(["initialReadyMs", "rpcP50Ms", "rpcP90Ms", "failoverMs", "recoveryMs", "coldReopenMs", "maxErr"]),
+    metricUnit: "ms",
+  }),
 });
 
 export function scenarioDefinitionFor(scenario) {
@@ -112,6 +121,7 @@ export function normalizeBenchArtifact(artifact, file = "artifact") {
   if (artifact.scenario === S0_SCENARIO || artifact.scenario === S0C_SCENARIO || artifact.scenario === S3_SCENARIO) return normalizeReadyLatencyArtifact(artifact, file, candidate);
   if (artifact.scenario === S1_SCENARIO || artifact.scenario === S2_SCENARIO) return normalizePairedSpeedArtifact(artifact, file, candidate);
   if (artifact.scenario === S4_SCENARIO) return normalizeMachineResumeArtifact(artifact, file, candidate);
+  if (artifact.scenario === S5_SCENARIO) return normalizeImmortalMachineArtifact(artifact, file, candidate);
   return normalizeS1LArtifact(artifact, file, candidate);
 }
 
@@ -187,6 +197,10 @@ function assertSampleSchema(artifact, file) {
     if (artifact.scenario === S4_SCENARIO) {
       for (const key of ["exportMs", "openMs", "machineMB", "resumeRows", "maxErr"]) assertSampleField(sample, key, file);
       if (!Number.isInteger(sample.resumeRows)) throw new Error(`${file}: sample.resumeRows 정수 아님`);
+      continue;
+    }
+    if (artifact.scenario === S5_SCENARIO) {
+      for (const key of ["initialReadyMs", "rpcP50Ms", "rpcP90Ms", "failoverMs", "recoveryMs", "coldReopenMs", "maxErr"]) assertSampleField(sample, key, file);
       continue;
     }
     if (artifact.scenario === S1_SCENARIO || artifact.scenario === S2_SCENARIO) {
@@ -315,6 +329,21 @@ function normalizeMachineResumeArtifact(artifact, file, candidate) {
   });
 }
 
+function normalizeImmortalMachineArtifact(artifact, file, candidate) {
+  const sampleCount = requireFiniteNumber(artifact.metrics, "sampleCount", file);
+  assertSamples(artifact, sampleCount, file);
+  const keys = [
+    "initialReadyMedianMs", "initialReadyP95Ms",
+    "rpcP50MedianMs", "rpcP50P95Ms", "rpcP90MedianMs", "rpcP90P95Ms",
+    "failoverMedianMs", "failoverP95Ms", "recoveryMedianMs", "recoveryP95Ms",
+    "coldReopenMedianMs", "coldReopenP95Ms", "maxErr",
+  ];
+  return baseRow(artifact, file, candidate, {
+    samples: sampleCount,
+    ...Object.fromEntries(keys.map((key) => [key, requireFiniteNumber(artifact.metrics, key, file)])),
+  });
+}
+
 export function normalizeBenchArtifactFile(file) {
   return normalizeBenchArtifact(readBenchArtifact(file), file);
 }
@@ -334,6 +363,7 @@ export function renderBenchCompareMarkdown(rows) {
   if (scenario === S2_SCENARIO) return renderS2Markdown(rows);
   if (scenario === S3_SCENARIO) return renderS3Markdown(rows);
   if (scenario === S4_SCENARIO) return renderS4Markdown(rows);
+  if (scenario === S5_SCENARIO) return renderS5Markdown(rows);
   return renderS1Markdown(rows);
 }
 
@@ -366,6 +396,24 @@ function renderS4Markdown(rows) {
       ? `${markdownCell(r.resumeRowsMin)}-${markdownCell(r.resumeRowsMax)}`
       : "N/A";
     lines.push(`| ${markdownCell(r.candidate)} | ${ok} | ${markdownCell(r.samples ?? "N/A")} | ${markdownCell(r.exportMedianMs ?? "N/A")} | ${markdownCell(r.exportP95Ms ?? "N/A")} | ${markdownCell(r.openMedianMs ?? "N/A")} | ${markdownCell(r.openP95Ms ?? "N/A")} | ${markdownCell(r.machineMBMedian ?? "N/A")} | ${resumeRows} | ${markdownCell(r.maxErr ?? "N/A")} | ${markdownCell(r.browser)} | ${markdownCell(r.commit + (r.dirty ? " dirty" : ""))} | ${markdownCell(source)} |`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+function renderS5Markdown(rows) {
+  const sorted = rows.slice().sort((a, b) => {
+    const av = typeof a.failoverP95Ms === "number" ? a.failoverP95Ms : Number.POSITIVE_INFINITY;
+    const bv = typeof b.failoverP95Ms === "number" ? b.failoverP95Ms : Number.POSITIVE_INFINITY;
+    return av - bv;
+  });
+  const lines = [
+    "| candidate | ok | samples | initial ready median ms | RPC p50 median ms | RPC p90 median ms | failover median ms | failover p95 ms | recovery median ms | cold reopen median ms | maxErr | browser | commit | source |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|",
+  ];
+  for (const r of sorted) {
+    const ok = r.notApplicableReason ? "N/A" : (r.ok ? "GREEN" : "RED");
+    const source = r.notApplicableReason ? r.notApplicableReason : r.file;
+    lines.push(`| ${markdownCell(r.candidate)} | ${ok} | ${markdownCell(r.samples ?? "N/A")} | ${markdownCell(r.initialReadyMedianMs ?? "N/A")} | ${markdownCell(r.rpcP50MedianMs ?? "N/A")} | ${markdownCell(r.rpcP90MedianMs ?? "N/A")} | ${markdownCell(r.failoverMedianMs ?? "N/A")} | ${markdownCell(r.failoverP95Ms ?? "N/A")} | ${markdownCell(r.recoveryMedianMs ?? "N/A")} | ${markdownCell(r.coldReopenMedianMs ?? "N/A")} | ${markdownCell(r.maxErr ?? "N/A")} | ${markdownCell(r.browser)} | ${markdownCell(r.commit + (r.dirty ? " dirty" : ""))} | ${markdownCell(source)} |`);
   }
   return lines.join("\n") + "\n";
 }

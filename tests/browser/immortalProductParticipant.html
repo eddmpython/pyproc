@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>installed persistent machine participant</title>
+<script type="importmap">{"imports":{"pyproc":"/node_modules/pyproc/index.js"}}</script></head>
+<body><script type="module">
+  import { openPersistentMachine } from "pyproc";
+  const post = (message) => parent.postMessage({ from: "productMachineParticipant", ...message }, "*");
+  const indexParam = new URLSearchParams(location.search).get("indexURL");
+  const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+  let machine = null;
+  let unsubscribe = null;
+  addEventListener("message", async (event) => {
+    const message = event.data;
+    if (!message || message.to !== "productMachineParticipant") return;
+    try {
+      if (message.cmd === "join") {
+        const assetIntegrity = await fetch("/pyproc-assets.json", { cache: "no-store" }).then((response) => response.json());
+        machine = await openPersistentMachine({
+          name: message.name,
+          participantId: message.participantId,
+          manifest: { indexURL: INDEX },
+          assetIntegrity,
+          onStatus: (status) => post({ participantId: message.participantId, event: "status", status }),
+        });
+        unsubscribe = machine.subscribe((status) => post({ participantId: message.participantId, event: "status", status }));
+        post({ participantId: message.participantId, requestId: message.requestId, ok: true, status: machine.status() });
+      } else if (message.cmd === "run") {
+        const result = await machine.run(message.code, { async: !!message.async, timeoutMs: message.timeoutMs });
+        post({ participantId: message.participantId, requestId: message.requestId, ok: true, result, status: machine.status() });
+      } else if (message.cmd === "commit") {
+        const commit = await machine.commit({ timeoutMs: message.timeoutMs });
+        post({ participantId: message.participantId, requestId: message.requestId, ok: true, commit, status: machine.status() });
+      } else if (message.cmd === "status") {
+        post({ participantId: message.participantId, requestId: message.requestId, ok: true, status: machine.status() });
+      } else if (message.cmd === "leave") {
+        if (unsubscribe) unsubscribe();
+        machine.leave();
+        post({ participantId: message.participantId, requestId: message.requestId, ok: true, status: machine.status() });
+      }
+    } catch (error) {
+      post({
+        participantId: message.participantId,
+        requestId: message.requestId,
+        ok: false,
+        error: String(error.message || error).slice(-300),
+        code: error.code || null,
+        retryable: error.retryable === true,
+        status: machine ? machine.status() : null,
+      });
+    }
+  });
+  post({ event: "ready" });
+</script></body></html>

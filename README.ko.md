@@ -8,7 +8,7 @@
 
 <p align="center">
   AI 에이전트를 위한 상태 보존형 브라우저 Python 런타임: 실행 상태를 살려두고,<br>
-  격리된 분기로 나누고, 밀리초에 복원한다. 실행마다 새 컨테이너를 띄우지 않는다.
+  여러 탭에서 공유하고, 리더 탭 종료를 견디며, 분기하고 복원한다. 실행마다 새 컨테이너를 띄우지 않는다.
 </p>
 
 <p align="center">
@@ -64,6 +64,7 @@ console.log(rt.run("sum(values)"));   // 60
 
 - **사용자 브라우저에서 실행 - 운영하거나 비용 낼 서버 샌드박스가 없다.** Python이 탭 안, Chrome 렌더러 샌드박스 + WASM 격리(웹 전체에 단련된 경계) 안에서 돈다. 샌드박스 코드 실행을 인프라 밖으로 옮기고 사용자 데이터는 로컬에 둔다. (자원·네트워크 한도는 직접 설정한다. 브라우저는 탈출을 막지 자원 고갈을 막지 않는다 - [보안 모델](#보안-모델) 참조. 코드로부터 사용자를 지키지, 사용자로부터 회사 비밀을 지키는 건 아니다.)
 - **다시 만들지 않고 복원.** 패키지와 데이터를 이미 로드한 상태를 체크포인트로 저장하고 그 지점으로 되돌린다 - 재실행도, 재설치도 없이.
+- **탭을 닫아도 머신은 유지.** 여러 탭이 하나의 논리적 Python 상태를 공유한다. 리더가 닫히면 다른 탭이 OPFS의 마지막 commit에서 메모리와 `/home/web` 파일을 복구해 로컬에서 계속한다.
 - **한 상태에서 분기.** 에이전트가 같은 준비 상태에서 여러 코드 후보를 독립적으로 실행하고 결과를 비교한다.
 - **데이터는 로컬에.** CSV / Excel / 기업 데이터를 탭에서 처리하고 요약된 결과만 내보낸다.
 - **격리된 실행.** Python이 메인 UI 스레드와 분리돼, 관리하는 여러 워커에서 돈다.
@@ -81,6 +82,19 @@ const rt = await boot();
 await rt.loadPackages(["numpy"]);
 console.log(rt.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
 ```
+
+같은 origin의 여러 탭에서 하나의 지속 머신을 연다:
+
+```js
+import { openPersistentMachine } from "pyproc";
+
+const machine = await openPersistentMachine({ name: "workspace" });
+await machine.run("counter = globals().get('counter', 40) + 1");
+await machine.commit();
+console.log(await machine.run("counter")); // 리더 승계 뒤에도 41
+```
+
+[Immortal Python Machine 데모](examples/immortal.html)에서 상태 공유, leader identity, 영속 epoch, 강제 승계, 서버 없는 로컬 복구를 직접 시험할 수 있다.
 
 체크포인트와 복원. 리액티브는 `enableReactive`로 opt-in이고, 닫는 `checkpoint()`가 복원을 건전하게 만드는 실행 경계를 표시한다:
 
@@ -133,7 +147,7 @@ console.log(rt.run("len(values)"));           // 3
 | uv 레인 (`bootEnv` / `freeze` / `runScript`), wheel 캐시, 터미널, syscall 브리지 | Beta |
 | 세션 부활 + `.pymachine` 이미지, 머신 저널(WAL) | Experimental |
 | 라이브 프로세스 fork, 장치 FS, init / cron / resume hook, 가상 오리진 URL | Experimental |
-| 아웃바운드 Python 소켓 (`SocketBridge`), 공유 커널 | Experimental |
+| 여러 탭 지속 머신(`openPersistentMachine` / `KernelElection`), 공유 커널 | Experimental |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 
 ## 보장하는 것과 아직 아닌 것
@@ -148,6 +162,7 @@ console.log(rt.run("len(values)"));           // 3
 **아직 보장하지 않음:**
 
 - 임의 시점의 완전한 프로세스 복제 - 진행 중인 네트워크 요청과 Promise는 복원되지 않는다.
+- 중단된 명령의 조용한 재실행. leader가 RPC 전송 뒤 사라지면 `PYPROC_RPC_OUTCOME_UNKNOWN`을 반환하고 명령을 자동으로 다시 실행하지 않는다.
 - 모든 Python 패키지 - 네이티브 C 확장 wheel은 정적 빌드가 필요하다(순수 파이썬 + Pyodide 빌드 패키지는 된다).
 - Pyodide 버전 간 snapshot 호환. `.pymachine` 이동성은 같은 엔진/매니페스트와 명시적 신뢰 또는 검증된 서명자를 전제로 한다.
 - GPU / 네이티브 Linux 패키지, 완전한 POSIX `fork`, 임의 네이티브 바이너리.
@@ -221,6 +236,7 @@ Pyodide  Workers
 | 탭 안에서 Python 실행 | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
 | 반복 가능한 환경 준비 | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
 | 상태 복원, 분기, 시간여행 | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
+| 여러 탭에서 하나의 Python 머신 유지 | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs) |
 | 브라우저 worker를 프로세스로 사용 | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
 | Python을 실제 browser URL 뒤에 서빙 | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
 | 터미널과 빌린 syscall 흐름 구성 | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |

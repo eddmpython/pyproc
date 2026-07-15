@@ -14,6 +14,12 @@
 // 저장 형식: blob/<sha256> loose CAS + HEAD.json/PREV.json. pack() 후에는 PACKS.json + pack/*.bin도
 // 같은 CAS blob 저장소로 읽는다(loose와 pack 모두 recover 호환).
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
+import {
+  DEFAULT_MACHINE_HOME_PATH,
+  applyMachineHome,
+  collectMachineHome,
+  validateMachineHomeMeta,
+} from "./machineHome.js";
 
 const BLOB_DIR = "blob";
 const PACK_DIR = "pack";
@@ -21,6 +27,14 @@ const PACK_INDEX = "PACKS.json";
 const BLOB_KEY = /^[0-9a-f]{64}$/;
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
 const DEFAULT_AUTO_PACK_LOOSE_MB = 8;
+
+class JournalCorruptionError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "JournalCorruptionError";
+    this.code = "PYPROC_JOURNAL_CORRUPT";
+  }
+}
 
 async function sha256Hex(bytes) {
   const d = await crypto.subtle.digest("SHA-256", bytes);
@@ -52,6 +66,8 @@ export class MachineJournal {
   // cfg.dir: FileSystemDirectoryHandle (필수. 위치는 소비자가 준다)
   // cfg.reactive: ReactiveController (필수. cp0 = 리플레이 경계여야 부활이 성립한다)
   // cfg.idleMs: 유휴 판정(기본 2000). 이 시간 동안 상태 변이가 없으면 커밋한다.
+  // cfg.includeHome: 기본 true. /home/web 파일 트리를 힙 세대와 같은 HEAD에 묶는다.
+  // cfg.homePath: 파일 트리 루트(기본 /home/web).
   // cfg.autoPack: false 기본. true면 512MB 실측 봉투(131 loose keys/8.2MB -> pack 1.1s)에 맞춰
   //                loose 128개 또는 8MB 이상에서 커밋 직후 pack한다. 객체로 임계값을 바꿀 수 있다.
   constructor(rt, cfg = {}) {
@@ -59,6 +75,7 @@ export class MachineJournal {
     this._dir = cfg.dir;
     this._reactive = cfg.reactive;
     this._idleMs = cfg.idleMs || 2000;
+    this._homePath = cfg.includeHome === false ? null : (cfg.homePath || DEFAULT_MACHINE_HOME_PATH);
     this._autoPack = normalizeAutoPackPolicy(cfg.autoPack);
     this._timer = null;
     this._lastSeq = -1;
@@ -136,10 +153,37 @@ export class MachineJournal {
         knownKeys.add(key);
         wrote++;
       }
+      const home = this._homePath
+        ? collectMachineHome(this._rt.fs, this._homePath, { required: false, errorPrefix: "journal.commit" })
+        : null;
+      let homeHead = null;
+      let homeWrote = false;
+      if (home) {
+        let key = null;
+        if (home.bin.length) {
+          key = await sha256Hex(home.bin);
+          if (!knownKeys.has(key) && !(await this._hasBlob(blobDir, key, lookupCache))) {
+            const fh = await blobDir.getFileHandle(key, { create: true });
+            const hw = await fh.createWritable(); await hw.write(home.bin); await hw.close();
+            homeWrote = true;
+          }
+          knownKeys.add(key);
+        }
+        homeHead = { ...home.meta, key };
+      }
       // HEAD는 마지막에 쓴다(append-only 순서 = 크래시가 어디서 나든 이전 HEAD는 무결).
       // 세대 2개: 새 HEAD를 쓰기 전에 현 HEAD를 PREV로 남긴다. HEAD가 손상돼도(파일 파손,
       // 미완 커밋) 직전 세대로 부활한다. createWritable은 close 시 원자 교체라 부분 쓰기는 없다.
-      const head = { version: 2, h0: await this._boundaryKey(), pages: map, sp: this._reactive.stackSave() ?? this._sp, heapLen: mem.byteLength() };
+      const committedAt = new Date().toISOString();
+      const head = {
+        version: homeHead ? 3 : 2,
+        h0: await this._boundaryKey(),
+        pages: map,
+        sp: this._reactive.stackSave() ?? this._sp,
+        heapLen: mem.byteLength(),
+        committedAt,
+        ...(homeHead ? { home: homeHead } : {}),
+      };
       try {
         const cur = await (await (await this._dir.getFileHandle("HEAD.json")).getFile()).text();
         const pf = await this._dir.getFileHandle("PREV.json", { create: true });
@@ -148,7 +192,13 @@ export class MachineJournal {
       const hf = await this._dir.getFileHandle("HEAD.json", { create: true });
       const w = await hf.createWritable(); await w.write(JSON.stringify(head)); await w.close();
       this.commits++; this.pagesWritten += wrote;
-      const result = { pages: pages.length, wrote, mb: +(wrote * PAGE / 1048576).toFixed(1) };
+      const result = {
+        pages: pages.length,
+        wrote,
+        mb: +(wrote * PAGE / 1048576).toFixed(1),
+        committedAt,
+        ...(home ? { home: { files: home.meta.entries.filter((entry) => entry.type === "file").length, mb: +(home.bin.length / 1048576).toFixed(1), wrote: homeWrote } } : {}),
+      };
       const autoPack = await this._autoPackAfterCommit(result);
       if (autoPack) result.autoPack = autoPack;
       return result;
@@ -227,6 +277,7 @@ export class MachineJournal {
     const keys = new Set();
     for (const head of heads) {
       for (const key of Object.values(head.pages || {})) keys.add(key);
+      if (head.home && head.home.key) keys.add(head.home.key);
     }
     return keys;
   }
@@ -282,7 +333,7 @@ export class MachineJournal {
     if (loose) return loose;
     const packed = await this._readPackedBlob(key, cache);
     if (packed) return packed;
-    throw new Error(`journal.recover: blob 없음(${key.slice(0, 12)}..)`);
+    throw new JournalCorruptionError(`journal.recover: blob 없음(${key.slice(0, 12)}..)`);
   }
 
   async _removeLooseBlobs(predicate) {
@@ -442,16 +493,35 @@ export class MachineJournal {
       let bytes = blobCache.get(key);
       if (!bytes) {
         bytes = await this._readBlob(key, readCache);
-        if (await sha256Hex(bytes) !== key) throw new Error(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
+        if (await sha256Hex(bytes) !== key) throw new JournalCorruptionError(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
         blobCache.set(key, bytes);
       }
       buffered.push([+p, bytes]); // 전량 검증 후에 쓴다(부분 적용 상태 방지)
     }
+    let homePayload = null;
+    if (head.home) {
+      const { key, ...meta } = head.home;
+      try {
+        const bin = key ? await this._readBlob(key, readCache) : new Uint8Array(0);
+        if (key && await sha256Hex(bin) !== key) throw new JournalCorruptionError(`journal.recover: home blob 파손(${key.slice(0, 12)}..)`);
+        validateMachineHomeMeta(meta, bin.length);
+        homePayload = { meta, bin };
+      } catch (e) {
+        if (e && e.code === "PYPROC_JOURNAL_CORRUPT") throw e;
+        throw new JournalCorruptionError(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`);
+      }
+    }
     for (const [p, bytes] of buffered) mem.writePage(p, bytes);
     mem.stackRestore(head.sp);
+    const home = homePayload ? applyMachineHome(this._rt.fs, homePayload.meta, homePayload.bin) : null;
     this._reactive.checkpoint(); // 부활 상태를 새 경계로
     this._lastSeq = this._rt.execSeq;
-    return { pages: entries.length, mb: +(entries.length * PAGE / 1048576).toFixed(1) };
+    return {
+      pages: entries.length,
+      mb: +(entries.length * PAGE / 1048576).toFixed(1),
+      committedAt: head.committedAt || null,
+      ...(home ? { home } : {}),
+    };
   }
 
   // 저널 재생: HEAD 세대로 부활하고, HEAD가 파손이면 PREV 세대로 후퇴한다(잃는 것은 마지막
@@ -462,7 +532,7 @@ export class MachineJournal {
     if (cur.head) {
       try { return await this._applyGeneration(cur.head); }
       catch (e) {
-        if (!String(e.message).includes("blob 파손")) throw e; // 환경 불일치는 후퇴 대상이 아니다
+        if (!e || e.code !== "PYPROC_JOURNAL_CORRUPT") throw e; // 환경 불일치는 후퇴 대상이 아니다
         cur.corrupt = e.message;
       }
     }

@@ -2734,3 +2734,50 @@ NEXT:
 1. coverage manifest를 benchmark artifact처럼 schema 검증 가능한 외부 산출물로 승격할지 결정한다.
 2. 다음 승격 후보는 `SharedKernel`/`KernelElection` 계열 product consumer gate 또는 속도 산출물 개선 중 ROI가 큰 쪽으로 잡는다.
 3. 소비자별 배선 상태를 실제 제품 gate freshness evidence와 더 직접 연결한다.
+
+## 2026-07-15 - Immortal Python Machine 제품 축 완성
+
+문제:
+
+- 기존 `KernelElection`은 여러 탭이 한 heap을 보고 leader 제거 뒤 변수 하나를 복구하는 수준이었다. `/home/web`, participant/leader ID, 영속 epoch, request fencing, cold reopen, 설치 패키지 제품 경로가 하나의 계약으로 묶이지 않았다.
+- timeout 재시도는 이미 실행됐지만 응답만 잃은 명령을 중복 실행할 수 있었다. 탭이 죽어도 머신이 산다는 주장을 하려면 이 불확실성을 숨기지 않는 실패 의미론이 필요했다.
+- `MachineJournal`은 heap 페이지만 저장해 로컬 머신의 핵심인 파일 상태를 함께 부활시키지 못했다.
+
+완료:
+
+- [kernelElection.js](../../src/processOs/kernelElection.js)에 participant 고유 ID, 영속 OPFS epoch, leader/epoch fencing, presence, 상태 구독, follower commit, late-response 폐기, 무재생 outcome-unknown RPC 계약을 넣었다.
+- `openPersistentMachine({ name })`을 공개 진입점으로 추가했다. 같은 name은 OPFS의 같은 머신 디렉터리와 Web Locks/BroadcastChannel 선출에 연결된다.
+- [machineHome.js](../../src/capabilities/machineHome.js)를 Session과 MachineJournal이 공유하는 `/home` 스냅샷 계약으로 분리했다. MachineJournal HEAD/PREV 세대가 heap과 `/home/web` CAS blob을 함께 commit/recover/pack/prune한다.
+- [kernelElectionProbe.html](../../tests/attempts/pythonMachine/kernelElectionProbe.html)이 3개 독립 browsing context, follower 변수/파일 공유, follower commit, leader context 강제 제거, epoch 증가, 정확히 한 successor, heap + `/home/web` 복구, in-flight outcome unknown, 모든 context 제거 뒤 cold reopen을 검증한다.
+- [immortal.html](../../examples/immortal.html)에 machine, participant, role, leader, epoch, participant count, recovered, commit time, takeover time과 직접 실행/commit/새 탭/leader 닫기 흐름을 공개했다.
+- [immortalProductGate.js](../../tests/browser/immortalProductGate.js)가 임시 제품에 설치된 `node_modules/pyproc`의 root export만으로 같은 장애복구 흐름을 실행한다. product consumer coverage는 11행이 됐다.
+- benchmark schema에 S5 `immortal multi-tab machine`을 추가해 initial ready, RPC p50/p90, failover, recovery, cold reopen을 최소 3회 sample artifact로 봉인할 수 있게 했다.
+
+실측:
+
+- `kernelElectionProbe` 3회 연속 GREEN 12/12.
+- failover 3005ms, 3204ms, 2095ms. 세 실행 모두 5000ms 목표 안이다.
+- recovery 1016ms, 740ms, 533ms. cold reopen 2249ms, 3118ms, 2349ms.
+- RPC p50 1.00ms, 1.08ms, 1.05ms. 각 실행에서 변수 `41`, `/home/web` 파일, cold state `99`가 복구됐고 outcome-unknown 명령은 successor에서 0회 재생됐다.
+- 설치 패키지 product consumer gate GREEN 28/28. initial ready 3012ms, RPC p50/p90 0.98/1.54ms, failover 2375ms, recovery 649ms, cold reopen 2129ms.
+
+검증:
+
+- `npm test` PASS, 672 passed, 0 failed.
+- `npm run test:package` PASS, 설치 패키지 15개 파일 확인.
+- `npm run test:examples` PASS, 10/10 GREEN. Immortal demo는 실제 Python memory + file commit을 완료했다.
+- `npm run test:browser` PASS, 47/47 GREEN.
+- `npm run test:consumer` PASS, 28/28 GREEN.
+- `git diff --check` PASS.
+
+판정:
+
+- 강한 한 방은 "탭이 죽어도 Python 머신은 죽지 않는다"로 고정한다. SharedWorker의 COI/SAB 상실 경로가 아니라 document leader를 선출하므로 canonical 머신은 SAB, JSPI, process OS 확장성을 유지한다.
+- 보존 범위는 완료 commit의 Python heap, `/home/web`, 준비 manifest다. 임의 Python stack, Promise, socket, 외부 request는 보존하지 않는다.
+- 모든 participant가 사라져도 다음 context는 새 epoch의 leader로 올라오고 마지막 commit을 복구한다. 이는 setup replay가 아니라 저널 세대 복원이다.
+
+NEXT:
+
+1. 깨끗한 구현 commit에서 `npm run test:consumer`를 3회 독립 실행해 S5 tracked artifact와 raw output을 남긴다.
+2. S5 수치를 README와 속도 비교 표에 승격하고 전체 gate를 다시 통과시킨다.
+3. 릴리즈 지시가 있을 때만 버전과 태그를 함께 올린다.

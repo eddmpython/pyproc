@@ -18,6 +18,12 @@
 import { boot } from "../runtime/runtimeApi.js";
 import { PAGE_SIZE } from "../runtime/memoryLayout.js";
 import { WheelCache } from "./wheelCache.js";
+import {
+  DEFAULT_MACHINE_HOME_PATH,
+  applyMachineHome,
+  collectMachineHome,
+  validateMachineHomeMeta,
+} from "./machineHome.js";
 
 // 부팅 구간의 비결정 소스를 고정한다(복원 보장). 리플레이 결정성의 필요조건.
 function stubEntropy() {
@@ -43,7 +49,14 @@ export function bootSession(manifest = {}) {
     const restore = stubEntropy();
     let rt;
     try {
-      rt = await boot({ indexURL: manifest.indexURL, env: { PYTHONHASHSEED: "0", ...(manifest.env || {}) } });
+      rt = await boot({
+        indexURL: manifest.indexURL,
+        env: { PYTHONHASHSEED: "0", ...(manifest.env || {}) },
+        assetIntegrity: manifest.assetIntegrity,
+        engineScriptIntegrity: manifest.engineScriptIntegrity,
+        coreIntegrity: manifest.coreIntegrity,
+        coreCacheDir: manifest.coreCacheDir,
+      });
       if (manifest.packages && manifest.packages.length) {
         // wheelDir을 주면 패키지 바이트가 OPFS 캐시를 경유한다: 두 번째부터 다운로드 0.
         if (manifest.wheelDir) await new WheelCache(rt, { dir: manifest.wheelDir }).loadPackages(manifest.packages);
@@ -73,10 +86,6 @@ const MACHINE_MAGIC_V1 = "PYMACHINE1\n";
 const HEAD_MAX_BYTES = 1024 * 1024;        // 헤더 JSON 상한(비정상 파일의 메모리 폭식 차단)
 const SETUP_MAX_BYTES = 256 * 1024;        // manifest.setup 상한
 const HEAP_MAX_BYTES = 4 * 1024 * 1024 * 1024; // wasm32 주소공간 상한(출처: 선형 메모리 4GB)
-const HOME_MAX_BYTES = 512 * 1024 * 1024;  // .pymachine에 직접 싣는 /home 스냅샷 방어 상한
-const HOME_MAX_ENTRIES = 10000;
-const PATH_MAX_BYTES = 4096;
-const DEFAULT_HOME_PATH = "/home/web";
 const MACHINE_SIGN_ALG = { name: "ECDSA", namedCurve: "P-256" };
 const MACHINE_SIGN_PARAMS = { name: "ECDSA", hash: "SHA-256" };
 
@@ -228,47 +237,6 @@ function validateMeta(meta, binLen) {
   }
 }
 
-function normalizeFsRoot(path, label = "home path") {
-  if (typeof path !== "string" || !path.startsWith("/") || path.includes("\0")) throw new Error(`machine: ${label} 형식 위반`);
-  const trimmed = path.replace(/\/+$/, "") || "/";
-  if (trimmed === "/") throw new Error(`machine: ${label}는 루트일 수 없다`);
-  if (new TextEncoder().encode(trimmed).length > PATH_MAX_BYTES) throw new Error(`machine: ${label} 길이 초과`);
-  const parts = trimmed.split("/").filter(Boolean);
-  if (parts.some((p) => p === "." || p === ".." || p === "")) throw new Error(`machine: ${label} 경로 성분 위반`);
-  return trimmed;
-}
-
-function validateRelativeHomePath(path) {
-  if (typeof path !== "string" || path === "" || path.startsWith("/") || path.includes("\0") || path.includes("\\")) {
-    throw new Error("machine: home 엔트리 경로 형식 위반");
-  }
-  if (new TextEncoder().encode(path).length > PATH_MAX_BYTES) throw new Error("machine: home 엔트리 경로 길이 초과");
-  const parts = path.split("/");
-  if (parts.some((p) => p === "" || p === "." || p === "..")) throw new Error("machine: home 엔트리 경로 성분 위반");
-}
-
-function validateHomeMeta(home, binLen) {
-  if (typeof home !== "object" || home === null) throw new Error("machine: home 메타가 객체가 아니다");
-  if (home.version !== 1) throw new Error(`machine: 지원하지 않는 home 버전(${home.version})`);
-  normalizeFsRoot(home.path, "home path");
-  if (!Number.isInteger(home.bytes) || home.bytes < 0 || home.bytes > HOME_MAX_BYTES || home.bytes !== binLen) throw new Error("machine: home bytes 범위 위반");
-  if (!Array.isArray(home.entries) || home.entries.length > HOME_MAX_ENTRIES) throw new Error("machine: home entries 범위 위반");
-  const seen = new Set();
-  let nextOffset = 0;
-  for (const e of home.entries) {
-    if (typeof e !== "object" || e === null) throw new Error("machine: home 엔트리 형식 위반");
-    validateRelativeHomePath(e.path);
-    if (seen.has(e.path)) throw new Error(`machine: home 엔트리 중복(${e.path})`);
-    seen.add(e.path);
-    if (e.type === "dir") continue;
-    if (e.type !== "file") throw new Error(`machine: home 엔트리 타입 위반(${e.type})`);
-    if (!Number.isInteger(e.offset) || !Number.isInteger(e.size) || e.offset !== nextOffset || e.size < 0) throw new Error("machine: home 파일 오프셋 위반");
-    nextOffset += e.size;
-    if (nextOffset > binLen) throw new Error("machine: home 파일 범위 초과");
-  }
-  if (nextOffset !== binLen) throw new Error("machine: home pack 크기 불일치");
-}
-
 // 머신 헤더의 매니페스트 형식 검증(키 화이트리스트 + 타입 + 크기).
 // setup 실행 자체는 trust 게이트가 승인하는 위험이고, 여기서는 형식만 가른다.
 function validateManifest(m) {
@@ -286,22 +254,6 @@ function validateManifest(m) {
   }
   if (m.setup != null && (typeof m.setup !== "string" || m.setup.length > SETUP_MAX_BYTES)) throw new Error("openMachine: setup 형식 위반");
   return m;
-}
-
-function concatBytes(parts, total) {
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) { out.set(p, off); off += p.length; }
-  return out;
-}
-
-function joinFsPath(base, name) {
-  return `${base.replace(/\/+$/, "")}/${name}`;
-}
-
-function parentFsPath(path) {
-  const i = path.lastIndexOf("/");
-  return i <= 0 ? "/" : path.slice(0, i);
 }
 
 // .pymachine 파일로 같은 컴퓨터를 부팅한다(매니페스트가 파일 안에 있다).
@@ -330,7 +282,7 @@ export async function openMachine(blob, opts = {}) {
     bin = body.subarray(4 + hl);
   }
   validateMeta(meta, bin.length);
-  if (meta.home) validateHomeMeta(meta.home, homeBin ? homeBin.length : 0);
+  if (meta.home) validateMachineHomeMeta(meta.home, homeBin ? homeBin.length : 0);
   else if (homeBin && homeBin.length) throw new Error("openMachine: home 메타 없이 home payload가 있다");
   const manifest = validateManifest(JSON.parse(meta.manifest));
   const signature = await verifyMachineSignature(meta, bin, homeBin || new Uint8Array(0), opts);
@@ -371,45 +323,8 @@ export class Session {
     return { bin, meta };
   }
 
-  _collectHome(path = DEFAULT_HOME_PATH, required = false) {
-    const root = normalizeFsRoot(path, "home path");
-    const fs = this.rt.fs;
-    if (!fs.exists(root)) {
-      if (required) throw new Error(`session.exportImage: ${root} 경로가 없어 /home 스냅샷을 만들 수 없다`);
-      return null;
-    }
-    const rootStat = fs.stat(root);
-    if (!rootStat.isDir) throw new Error(`session.exportImage: ${root}는 디렉터리가 아니다`);
-    const entries = [];
-    const chunks = [];
-    let total = 0;
-    const visit = (dir, rel) => {
-      const names = fs.readdir(dir).slice().sort();
-      for (const name of names) {
-        validateRelativeHomePath(name);
-        const full = joinFsPath(dir, name);
-        const childRel = rel ? `${rel}/${name}` : name;
-        const st = fs.stat(full);
-        if (st.isDir) {
-          entries.push({ path: childRel, type: "dir" });
-          visit(full, childRel);
-        } else if (st.isFile) {
-          const data = fs.readFile(full);
-          if (!(data instanceof Uint8Array)) throw new Error(`session.exportImage: ${childRel} 읽기 형식 위반`);
-          if (total + data.length > HOME_MAX_BYTES) throw new Error("session.exportImage: home 스냅샷이 상한을 넘었다");
-          entries.push({ path: childRel, type: "file", offset: total, size: data.length });
-          chunks.push(data);
-          total += data.length;
-        } else {
-          throw new Error(`session.exportImage: ${childRel}는 파일/디렉터리가 아니다`);
-        }
-        if (entries.length > HOME_MAX_ENTRIES) throw new Error("session.exportImage: home 엔트리가 상한을 넘었다");
-      }
-    };
-    visit(root, "");
-    const home = { version: 1, path: root, entries, bytes: total };
-    validateHomeMeta(home, total);
-    return { meta: home, bin: concatBytes(chunks, total) };
+  _collectHome(path = DEFAULT_MACHINE_HOME_PATH, required = false) {
+    return collectMachineHome(this.rt.fs, path, { required, errorPrefix: "session.exportImage" });
   }
 
   // cp0(리플레이 경계) 해시 배열의 다이제스트. 델타는 "같은 cp0 힙" 위에서만 유효하므로,
@@ -437,7 +352,7 @@ export class Session {
     meta.h0 = await this._cp0Digest();
     meta.sha256 = await sha256Hex(bin); // 델타 자체 다이제스트(식별/디버깅용. 인증은 봉투해시)
     const includeHome = opts.includeHome !== false;
-    const home = includeHome ? this._collectHome(opts.homePath || DEFAULT_HOME_PATH, opts.includeHome === true) : null;
+    const home = includeHome ? this._collectHome(opts.homePath || DEFAULT_MACHINE_HOME_PATH, opts.includeHome === true) : null;
     if (home) {
       meta.version = 3;
       meta.deltaBytes = bin.length;
@@ -499,28 +414,7 @@ export class Session {
     return { pages: meta.pages.length, mb: +(bin.length / 1048576).toFixed(1) };
   }
 
-  _removeTree(path) {
-    const fs = this.rt.fs;
-    if (!fs.exists(path)) return;
-    const st = fs.stat(path);
-    if (st.isFile) { fs.unlink(path); return; }
-    for (const name of fs.readdir(path)) this._removeTree(joinFsPath(path, name));
-    fs.rmdir(path);
-  }
-
   _applyHome(home, bin) {
-    validateHomeMeta(home, bin.length);
-    const fs = this.rt.fs;
-    const root = normalizeFsRoot(home.path, "home path");
-    this._removeTree(root);
-    fs.mkdirTree(root);
-    const dirs = home.entries.filter((e) => e.type === "dir").sort((a, b) => a.path.localeCompare(b.path));
-    for (const e of dirs) fs.mkdirTree(joinFsPath(root, e.path));
-    const files = home.entries.filter((e) => e.type === "file");
-    for (const e of files) {
-      fs.mkdirTree(parentFsPath(joinFsPath(root, e.path)));
-      fs.writeFile(joinFsPath(root, e.path), bin.subarray(e.offset, e.offset + e.size));
-    }
-    return { files: files.length, dirs: dirs.length, mb: +(bin.length / 1048576).toFixed(1) };
+    return applyMachineHome(this.rt.fs, home, bin);
   }
 }

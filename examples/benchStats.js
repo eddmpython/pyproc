@@ -96,3 +96,42 @@ export function isMachineResumeBenchGreen(bench, opts = {}) {
     && bench.resumeRowsMin === expectedResumeRows
     && bench.resumeRowsMax === expectedResumeRows;
 }
+
+export function summarizeImmortalMachineBench(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeImmortalMachineBench: rows가 비었다");
+  const summarize = (key) => ({
+    median: median(rows.map((r) => r[key])),
+    p95: percentile(rows.map((r) => r[key]), 95),
+  });
+  const initialReady = summarize("initialReadyMs");
+  const rpcP50 = summarize("rpcP50Ms");
+  const rpcP90 = summarize("rpcP90Ms");
+  const failover = summarize("failoverMs");
+  const recovery = summarize("recoveryMs");
+  const coldReopen = summarize("coldReopenMs");
+  return {
+    samples: rows,
+    sampleCount: rows.length,
+    initialReadyMedianMs: initialReady.median,
+    initialReadyP95Ms: initialReady.p95,
+    rpcP50MedianMs: rpcP50.median,
+    rpcP50P95Ms: rpcP50.p95,
+    rpcP90MedianMs: rpcP90.median,
+    rpcP90P95Ms: rpcP90.p95,
+    failoverMedianMs: failover.median,
+    failoverP95Ms: failover.p95,
+    recoveryMedianMs: recovery.median,
+    recoveryP95Ms: recovery.p95,
+    coldReopenMedianMs: coldReopen.median,
+    coldReopenP95Ms: coldReopen.p95,
+    maxErr: Math.max(...rows.map((r) => r.maxErr ?? 0)),
+  };
+}
+
+export function isImmortalMachineBenchGreen(bench, opts = {}) {
+  const maxErr = opts.maxErr ?? 1e-9;
+  const maxFailoverP95Ms = opts.maxFailoverP95Ms ?? 5000;
+  return bench.sampleCount >= 3
+    && bench.maxErr < maxErr
+    && bench.failoverP95Ms < maxFailoverP95Ms;
+}

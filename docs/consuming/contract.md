@@ -124,6 +124,31 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 전제로 한다. Service Worker는 `registerPyProcServiceWorker()`로 `pyprocServiceWorker` graph를 먼저 검증하고,
 `pyprocSw.js?cache=1&coreIntegrity=<manifest>`가 script/module/wasm/zip fetch를 SW 계층에서 다시 검증한다.
 
+## 지속 머신 정본
+
+여러 탭에서 하나의 Python 머신을 쓰는 제품 경로는 `openPersistentMachine()`이 정본이다.
+
+```js
+import { openPersistentMachine } from "pyproc";
+
+const machine = await openPersistentMachine({
+  name: "workspace",
+  manifest: { packages: ["numpy"], setup: "import numpy" },
+  assetIntegrity,
+});
+
+await machine.run("counter = 41");
+await machine.commit();
+console.log(machine.status());
+```
+
+- `KernelElection`은 Web Locks leader 하나, BroadcastChannel RPC, participant 고유 ID, OPFS 영속 epoch를 제공하는 하위 계약이다. leader 커널이 자기 document에 살아 `crossOriginIsolated`와 SAB/JSPI 능력을 유지한다.
+- `MachineJournal`은 commit 하나에 WASM heap delta와 `/home/web` 스냅샷을 함께 넣는다. 새 leader와 모든 탭 종료 뒤의 새 participant는 마지막 완료 commit만 복구한다.
+- `SharedKernel`은 SharedWorker가 `crossOriginIsolated=false`인 현재 플랫폼에서 상태 공유와 async 실행만 제공하는 보조 경로다. SAB interrupt, snapshot-fork, 지속 epoch 복구의 제품 정본이 아니다.
+- leader가 사라지기 전에 보내지 않은 요청은 새 leader ready를 기다렸다 안전하게 보낼 수 있다. 이미 전송한 요청이 timeout되거나 leader가 바뀌면 실행 여부를 확정할 수 없으므로 `PYPROC_RPC_OUTCOME_UNKNOWN`을 반환하고 자동 재실행하지 않는다.
+- `status()`는 `participantId`, `leaderId`, `epoch`, `role`, `phase`, `recovered`, `lastCommitAt`, `participantCount`, `pendingRequests`를 제공한다. 같은 epoch에서 leader가 둘이면 `PYPROC_SPLIT_BRAIN`으로 실패한다.
+- `manifest.packages`와 `manifest.setup`은 새 leader가 같은 준비 환경을 결정적으로 재현하는 계약이다. 실행 중 임의 설치한 native package, 열린 socket, fd, DB connection, Promise, 임의 Python stack을 그대로 부활시킨다는 계약은 아니다. 외부 자원은 `resume.py`로 다시 연다.
+
 **가상 오리진 경계 (정직한 벽)**: SW 합성 응답이라 진짜 오리진과 다르다. `tests/attempts/runtimeParity/virtualOriginBoundaryProbe.html`이 이 경계를 브라우저에서 계속 실측한다. (1) `Set-Cookie`는 응답 header로 노출되지 않고 저장되지 않는다. 쿠키 세션에 의존하지 말고 `Authorization` header, bearer token, signed URL 같은 명시 토큰을 쓴다. (2) WebSocket upgrade는 Service Worker fetch 이벤트가 가로채지 않으므로 ASGI dispatch로 들어오지 않는다. 양방향 스트림은 별도 relay나 SocketBridge 계열로 설계한다. (3) 스트리밍/SSE는 `AsgiServer`가 `http.response.body` 조각을 축적한 뒤 일괄 `Response`로 돌려준다. 청크 단위 UI 갱신이 필요한 제품은 이 경로에 의존하지 않는다. (4) 엔드포인트는 `async def` 강제(동기 dispatch 없음).
 
 부활(저널/세션/openMachine) 후에는 파일 핸들·DB 커넥션 같은 프로세스 자원이 힙 델타만으로 보장되지 않는다: `.pymachine`은 파이썬 힙과 `/home/web` 파일 바이트를 복원하지만 열린 fd, 소켓, DB 커넥션은 다시 열어야 하므로, 소비자는 `Init.resume(reason)`으로 `/home/web/resume.py`를 실행해 그런 자원을 재개설한다. 제품별 정책은 [resumeCatalog.md](resumeCatalog.md)가 정본이다. signature는 출처 검증이지 sandbox 권한 허가가 아니므로, 제품은 공개키 배포와 권한 UI를 별도로 관리한다. 이 정책은 [trustPermissions.md](trustPermissions.md)가 정본이다.
@@ -132,7 +157,7 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 
 - `npm test`는 `package.json exports`가 승인된 stable specifier만 노출하는지, 공개 예제가 root API나 subpath export만 소비하는지, `index.d.ts`가 공개 타입 계약을 덮는지 검사한다.
 - `npm run test:consumer`는 repo 상대 import 없이 설치된 `node_modules/pyproc`만 노출한 브라우저 앱에서 설치 패키지 계약을 검증한다.
-- 같은 consumer gate가 `DeviceFs` 파일 장치, `JobControl` 잡 수명주기, `MachineContainer` 자식 머신 수명주기, `MachineJournal` commit/recover, `MachineJail` 권한 manifest, signed `.pymachine` export/open, trusted public key와 wrong key 거부, signer fingerprint, `/home/web/resume.py`의 SQLite connection 재개설까지 실행한다.
+- 같은 consumer gate가 `DeviceFs` 파일 장치, `JobControl` 잡 수명주기, `MachineContainer` 자식 머신 수명주기, `MachineJournal` commit/recover, 독립 browsing context 3개의 `openPersistentMachine` leader 강제 제거와 cold reopen, `MachineJail` 권한 manifest, signed `.pymachine` export/open, trusted public key와 wrong key 거부, signer fingerprint, `/home/web/resume.py`의 SQLite connection 재개설까지 실행한다.
 - `pyproc/runtime`은 public Runtime wrapper다. 내부 `runtime.js` core는 엔진 래퍼와 `Runtime.fs`만 담당하고, `runtimeApi.js`는 `src/capabilities/runtimeBindings.js` registry를 설치해 `enableReactive` 같은 opt-in capability factory를 제공한다.
 - `restoreLive` 실행 경계는 기계 검증 대상이다. 경계를 지키면 즉시 복원(재해싱 0), 위반은 자동 감지되어 재해시 경로로 승격된다. 반환값 `rehashed`로 경로를 확인한다.
 
@@ -150,6 +175,7 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 | product consumer - shell jobs | `pyproc` | `JobControl` | 설치 패키지 worker graph로 대화형 namespace를 만들고 `expr &`, `fg`, `kill`, `terminate` 잡 수명주기 실행 |
 | product consumer - machine container | `pyproc` | `MachineContainer` | 설치 패키지 Runtime과 machine worker graph로 컨테이너 `spawn`, `run`, `heapLen`, `kill`, killed call reject 실행 |
 | product consumer - crash resume | `pyproc` | `bootSession`, `MachineJournal`, Runtime `enableJournal` | 설치 패키지 Session reactive boundary를 `MachineJournal.commit()`으로 남기고 새 Session이 `recover()`로 제품 상태를 복구 |
+| product consumer - immortal python machine | `pyproc` | `openPersistentMachine`, `KernelElection`, `MachineJournal` | 설치 패키지의 독립 browsing context 3개가 한 Python 상태를 공유하고, leader 강제 제거 뒤 영속 epoch 승계와 OPFS의 힙 + `/home/web` 복구로 실행을 계속하며, 모든 context 종료 뒤에도 마지막 commit에서 다시 연다 |
 | product consumer - product policy | `pyproc` | `MachineJail` | 제품 permission manifest(`net=false`, `clipboard=false`, `home=true`, `workers=false`)와 Python choke point 집행 |
 | product consumer - portable machine | `pyproc` | `bootSession`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, Session `exportImage`, Runtime `enableInit` | signed `.pymachine` + `/home/web` export, signer fingerprint, untrusted/wrong key 거부, trusted open, `resume.py` SQLite resource 재개설, S4 timing source |
 

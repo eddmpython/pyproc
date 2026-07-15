@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인. raw JSON은 schema v2 봉투로 올려 scenarioDefinition, measurement, environment, evidence, rawOutput reference를 함께 검증한다.
+상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록, S5 반복 측정 계약 확정. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인. raw JSON은 schema v2 봉투로 올려 scenarioDefinition, measurement, environment, evidence, rawOutput reference를 함께 검증한다.
 
 ## 목표
 
@@ -28,6 +28,7 @@
 | S2 process map | `npm run bench:artifact -- --scenario S2` | serial vs process pool wall time, 결과 일치, worker pool speedup |
 | S3 browser server | `npm run bench:artifact -- --scenario S3` | 설치 패키지 `VirtualOrigin` POST roundtrip |
 | S4 machine resume | `npm run bench:artifact -- --scenario S4` | signed `.pymachine` export/open/resume rows |
+| S5 immortal multi-tab machine | `npm run test:consumer`, `npm run bench:artifact -- --scenario S5` | 설치 패키지 3-context 공유, leader 강제 제거, heap + `/home/web` 복구, cold reopen, `failover p95 < 5000ms` |
 
 ## 추적 evidence
 
@@ -123,6 +124,12 @@ npm run bench:artifact -- --scenario S4 --candidate webvm --na "S4 signed .pymac
 npm run bench:compare -- .tmp/pyproc-s4.json .tmp/webvm-s4-na.json --out .tmp/s4-compare.md
 ```
 
+S5 artifact는 `test:consumer`의 Immortal Python Machine gate를 반복 실행한 값만 받는다. 설치 패키지 public import, 독립 context 3개, 정확히 하나의 leader, follower RPC와 commit, 강제 leader context 제거, 영속 epoch 증가, heap + `/home/web` 복구, 모든 context 종료 뒤 cold reopen, outcome unknown 무재생 계약이 모두 GREEN이어야 한다.
+
+```bash
+npm run bench:artifact -- --scenario S5 --candidate pyproc --command "npm run test:consumer timings.immortal*" --sample 2800,2,12,3300,750,3000,0 --sample 2900,2,10,3200,700,3100,0 --sample 2750,1,8,3400,800,2950,0 --out .tmp/pyproc-s5.json
+```
+
 ## 첫 실측 합격 기준
 
 1. 같은 머신, 같은 브라우저, 같은 캐시 정책에서 pyproc과 외부 후보를 연속 측정한다.
@@ -134,5 +141,5 @@ npm run bench:compare -- .tmp/pyproc-s4.json .tmp/webvm-s4-na.json --out .tmp/s4
 ## 다음 작업
 
 1. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
-2. S0-S4와 S1L 비교 축을 제품 README에 올릴 경우 숫자보다 계약 차이를 먼저 설명한다.
+2. S0-S5와 S1L 비교 축을 제품 README에 올릴 경우 숫자보다 계약 차이를 먼저 설명한다.
 3. 다음 구조 강화는 matrix 행별 runnable example 연결 또는 artifact raw output 보관 위치 표준화 중 하나로 잡는다.

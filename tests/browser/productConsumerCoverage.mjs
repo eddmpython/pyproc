@@ -64,6 +64,12 @@ export const PRODUCT_CONSUMER_COVERAGE = Object.freeze([
     contract: "설치 패키지 Session reactive boundary를 `MachineJournal.commit()`으로 남기고 새 Session이 `recover()`로 제품 상태를 복구",
   }),
   Object.freeze({
+    gate: "product consumer - immortal python machine",
+    specifiers: Object.freeze(["`pyproc`"]),
+    publicSurface: Object.freeze(["`openPersistentMachine`", "`KernelElection`", "`MachineJournal`"]),
+    contract: "설치 패키지의 독립 browsing context 3개가 한 Python 상태를 공유하고, leader 강제 제거 뒤 영속 epoch 승계와 OPFS의 힙 + `/home/web` 복구로 실행을 계속하며, 모든 context 종료 뒤에도 마지막 commit에서 다시 연다",
+  }),
+  Object.freeze({
     gate: "product consumer - product policy",
     specifiers: Object.freeze(["`pyproc`"]),
     publicSurface: Object.freeze(["`MachineJail`"]),

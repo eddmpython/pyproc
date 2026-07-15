@@ -78,7 +78,7 @@ for (const [name, kind] of [
   ["registerPyProcServiceWorker", "function"],
   ["boot", "function"], ["checkEnvironment", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
   ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["FileSystem", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["createMachineKeyPair", "function"], ["exportMachinePublicKey", "function"], ["fingerprintMachinePublicKey", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
-  ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"],
+  ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"], ["openPersistentMachine", "function"],
   ["GpuCompute", "function"], ["GpuArray", "function"], ["GpuBridge", "function"],
   ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
 ]) {
@@ -221,7 +221,7 @@ check("MachineContainer 메서드", () => {
 });
 check("KernelElection 메서드", () => {
   const p = api.KernelElection.prototype;
-  for (const m of ["join", "run", "commit", "role", "leave"])
+  for (const m of ["join", "run", "commit", "ready", "status", "subscribe", "role", "leave"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("JobControl 메서드", () => {
@@ -305,7 +305,7 @@ check("Speed Lab 반복 벤치 통계 helper 공유", () => {
   const helper = readFileSync(join(ROOT, "examples", "benchStats.js"), "utf8");
   const speedLab = readFileSync(join(ROOT, "examples", "speedLab.html"), "utf8");
   const matmulProbe = readFileSync(join(ROOT, "tests", "attempts", "numericShard", "matmulSurfaceProbe.html"), "utf8");
-  for (const sym of ["percentile", "median", "summarizePairedLatencyBench", "isShardedSpeedBenchGreen", "isProcessMapBenchGreen", "summarizeLatencyBench", "isLatencyBenchGreen", "summarizeMachineResumeBench", "isMachineResumeBenchGreen"]) {
+  for (const sym of ["percentile", "median", "summarizePairedLatencyBench", "isShardedSpeedBenchGreen", "isProcessMapBenchGreen", "summarizeLatencyBench", "isLatencyBenchGreen", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "summarizeImmortalMachineBench", "isImmortalMachineBenchGreen"]) {
     if (!helper.includes(`export function ${sym}`)) throw new Error(`benchStats.${sym} 누락`);
   }
   if (!speedLab.includes('from "./benchStats.js"')) throw new Error("Speed Lab이 benchStats.js를 쓰지 않음");
@@ -322,7 +322,7 @@ check("속도 비교 벤치 계약 고정", () => {
   const benchArtifacts = readFileSync(join(ROOT, "tests", "browser", "benchArtifacts.mjs"), "utf8");
   const benchCompare = readFileSync(join(ROOT, "tests", "browser", "benchCompare.mjs"), "utf8");
   const pkgForBench = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  for (const term of ["S0", "S0C", "S1", "S1L", "S2", "S3", "S4", "median", "p95", "raw output", "WebVM", "JupyterLite", "marimo"]) {
+  for (const term of ["S0", "S0C", "S1", "S1L", "S2", "S3", "S4", "S5", "median", "p95", "raw output", "WebVM", "JupyterLite", "marimo"]) {
     if (!contract.includes(term)) throw new Error(`benchmarking.md 필수 항목 누락: ${term}`);
     if (!plan.includes(term)) throw new Error(`06-speed-comparison.md 필수 항목 누락: ${term}`);
   }
@@ -341,10 +341,10 @@ check("속도 비교 벤치 계약 고정", () => {
   for (const term of ["PYPROC_BENCH_OUT", "PYPROC_BENCH_SIZE", '"--size"', "DEFAULT_SIZE = 1024", "BENCH_ARTIFACT_SCHEMA_VERSION", "scenarioDefinition", "measurement", "environment", "evidence", "schemaVersion", 'scenario: S1_SCENARIO', 'candidate: "pyproc"', "metrics", "runner", "browserVersion", "normalizeBenchArtifact"]) {
     if (!speedBench.includes(term)) throw new Error(`speedBench.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "SCENARIO_DEFINITIONS", "scenarioDefinitionFor", "RAW_OUTPUT_EMBEDDED_REPORT", "RAW_OUTPUT_FILE_PREFIX", "rawOutputPathForArtifact", "assertV2Envelope", "sampleSchema", "measurement", "environment", "evidence", "rawOutput", "browser server roundtrip", "machine resume", "S0_SCENARIO", "S0C_SCENARIO", "S1L_SCENARIO", "S2_SCENARIO", "S3_SCENARIO", "S4_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs", "openMedianMs"]) {
+  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "SCENARIO_DEFINITIONS", "scenarioDefinitionFor", "RAW_OUTPUT_EMBEDDED_REPORT", "RAW_OUTPUT_FILE_PREFIX", "rawOutputPathForArtifact", "assertV2Envelope", "sampleSchema", "measurement", "environment", "evidence", "rawOutput", "browser server roundtrip", "machine resume", "immortal multi-tab machine", "S0_SCENARIO", "S0C_SCENARIO", "S1L_SCENARIO", "S2_SCENARIO", "S3_SCENARIO", "S4_SCENARIO", "S5_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs", "openMedianMs", "failoverP95Ms"]) {
     if (!benchArtifacts.includes(term)) throw new Error(`benchArtifacts.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--raw-output", "--raw-output-file", "--profile", "--warmup-count", "--browser-headless", "--na", "scenarioDefinition", "measurement", "environment", "evidence", "rawOutputSidecar", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "normalizeBenchArtifact"]) {
+  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--raw-output", "--raw-output-file", "--profile", "--warmup-count", "--browser-headless", "--na", "scenarioDefinition", "measurement", "environment", "evidence", "rawOutputSidecar", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "parseImmortalMachineSample", "summarizeImmortalMachineBench", "isImmortalMachineBenchGreen", "normalizeBenchArtifact"]) {
     if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
   }
   const artifactDir = join(ROOT, "mainPlan", "browser-os-north-star", "benchmarks");
@@ -367,8 +367,12 @@ check("속도 비교 벤치 계약 고정", () => {
     }
   }
   const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
+  const immortalProductGate = readFileSync(join(ROOT, "tests", "browser", "immortalProductGate.js"), "utf8");
   for (const term of ["machineExportMs", "machineOpenMs", "machineMB", "machineResumeRows"]) {
     if (!productConsumer.includes(term)) throw new Error(`productConsumer.mjs S4 timing 누락: ${term}`);
+  }
+  for (const term of ["immortalInitialReadyMs", "immortalRpcP50Ms", "immortalRpcP90Ms", "immortalFailoverMs", "immortalRecoveryMs", "immortalColdReopenMs"]) {
+    if (!immortalProductGate.includes(term)) throw new Error(`immortalProductGate.js S5 timing 누락: ${term}`);
   }
   for (const term of ["normalizeBenchArtifactFile", "renderBenchCompareMarkdown"]) {
     if (!benchCompare.includes(term)) throw new Error(`benchCompare.mjs 필수 항목 누락: ${term}`);
@@ -442,7 +446,7 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
-for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "fingerprintMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE"]) {
+for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "fingerprintMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "KernelElection", "openPersistentMachine", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
   });
@@ -583,6 +587,8 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
   const testing = readFileSync(join(ROOT, "docs", "operations", "testing.md"), "utf8");
   const packageConsumer = readFileSync(join(ROOT, "tests", "packageConsumer.mjs"), "utf8");
   const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
+  const immortalGate = readFileSync(join(ROOT, "tests", "browser", "immortalProductGate.js"), "utf8");
+  const immortalParticipant = readFileSync(join(ROOT, "tests", "browser", "immortalProductParticipant.html"), "utf8");
   const expectedTable = productConsumerCoverage.renderProductConsumerCoverageMarkdown();
   if (!contract.includes(expectedTable)) throw new Error("contract.md consumer coverage 표가 productConsumerCoverage.mjs 렌더링과 불일치");
   if (!productConsumer.includes("productConsumerCoverageManifest")) throw new Error("productConsumer.mjs가 coverage manifest SSOT를 import하지 않음");
@@ -634,6 +640,18 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
   ]) {
     if (!productConsumer.includes(term)) throw new Error(`productConsumer.mjs coverage check 누락: ${term}`);
   }
+  for (const term of [
+    "openPersistentMachine",
+    "installed machine elects exactly one leader across browsing contexts",
+    "installed machine survives forced leader context removal",
+    "installed failover RPC rejects unknown outcome without replay",
+    "installed machine cold-reopens committed heap and home after all participants close",
+    "PYPROC_RPC_OUTCOME_UNKNOWN",
+  ]) {
+    if (!immortalGate.includes(term) && !immortalParticipant.includes(term)) throw new Error(`immortal product consumer coverage 누락: ${term}`);
+  }
+  if (!productConsumer.includes("runImmortalProductGate")) throw new Error("productConsumer.mjs가 immortal product gate를 실행하지 않음");
+  if (!immortalParticipant.includes('from "pyproc"')) throw new Error("immortal participant가 설치 패키지 root export를 쓰지 않음");
   if (!testing.includes("설치 패키지 consumer gate coverage 표")) throw new Error("testing.md consumer coverage 표 포인터 누락");
   if (contract.includes("왕복 3.4ms")) throw new Error("contract.md에 낡은 S3 3.4ms 수치 잔존");
 });
@@ -653,7 +671,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   for (const term of ["Stable", "Beta", "Experimental", "Research preview"]) {
     if (!matrix.includes(term)) throw new Error(`능력 매트릭스 상태 누락: ${term}`);
   }
-  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "MachineJail", "SocketBridge", "SharedKernel", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
+  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "MachineJail", "SocketBridge", "openPersistentMachine", "KernelElection", "SharedKernel", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
   const missing = required.filter((name) => !matrix.includes("`" + name));
   if (missing.length) throw new Error(`능력 매트릭스 공개 표면 누락: ${missing.join(", ")}`);
   const runnableLinks = [
@@ -663,6 +681,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
     "../../examples/serverDev.html",
     "../../examples/terminal.html",
     "../../examples/machine.html",
+    "../../examples/immortal.html",
     "../../tests/browser/productConsumer.mjs",
     "../../mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
     "../../mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json",

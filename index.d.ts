@@ -494,8 +494,48 @@ export interface KernelElectionOptions {
   manifest?: SessionManifest;
   /** 저널 디렉터리(OPFS). 주면 failover 시 마지막 커밋에서 상태가 부활한다(없으면 상태 소실). */
   journalDir?: FileSystemDirectoryHandle;
-  /** 이 참여자가 리더가 됐을 때(초기 또는 failover) 콜백. recovered = 저널에서 부활했는지. */
-  onLeader?: (info: { recovered: boolean }) => void;
+  /** 테스트, 로그 상관, 제품 participant 표시용 ID. 생략하면 crypto 고유 ID. */
+  participantId?: string;
+  /** OPFS 내부 저장 키. status에 노출한다. */
+  storageKey?: string;
+  heartbeatMs?: number;
+  presenceTimeoutMs?: number;
+  rpcTimeoutMs?: number;
+  /** 이 참여자가 리더가 됐을 때 콜백. */
+  onLeader?: (info: KernelLeaderInfo) => void;
+  /** 역할, leader, epoch, recovery 상태가 바뀔 때 콜백. */
+  onStatus?: (status: KernelStatus) => void;
+}
+
+export interface KernelLeaderInfo {
+  recovered: boolean;
+  leaderId: string;
+  epoch: number;
+  bootMs: number;
+  recoveryMs: number;
+  totalMs: number;
+}
+
+export interface KernelStatus {
+  name: string;
+  storageKey: string | null;
+  participantId: string;
+  leaderId: string | null;
+  role: "idle" | "pending" | "leader" | "follower";
+  phase: "idle" | "joining" | "recovering" | "ready" | "failed" | "left";
+  epoch: number;
+  recovered: boolean;
+  lastCommitAt: string | null;
+  participantCount: number;
+  participants: readonly string[];
+  pendingRequests: number;
+  bootMs: number | null;
+  recoveryMs: number | null;
+  crossOriginIsolated: boolean;
+  jspi: boolean;
+  durable: boolean;
+  rpcSemantics: string;
+  error: string | null;
 }
 
 /**
@@ -505,18 +545,43 @@ export interface KernelElectionOptions {
  * SharedWorker(COI=false)와 달리 리더 커널은 자기 문서에 살아 SAB 전능력을 유지한다.
  */
 export class KernelElection {
+  readonly name: string;
+  readonly participantId: string;
   constructor(opts?: KernelElectionOptions);
   /** 선출 참여. 락을 얻으면 리더(커널 부팅), 못 얻으면 팔로워(RPC 뷰). */
   join(): KernelElection;
-  /** 코드 실행. 리더면 자기 커널, 팔로워면 리더에 RPC(failover 중이면 재선출 대기 후 재시도). */
+  /** 코드 실행. 전송 뒤 leader가 바뀌거나 timeout이면 중복 실행 대신 outcome unknown 오류를 낸다. */
   run(code: string, opts?: { async?: boolean; timeoutMs?: number }): Promise<unknown>;
-  /** 저널 커밋(상태를 디스크에 확정 = failover 생존 경계). 리더만 유효. */
-  commit(): Promise<{ pages: number; wrote: number; mb: number } | null>;
+  /** 힙과 /home/web을 같은 저널 세대로 확정한다. follower 호출은 leader에 전달한다. */
+  commit(opts?: { timeoutMs?: number }): Promise<JournalCommitResult | null>;
+  /** leader가 복구와 서빙 준비를 끝낼 때까지 기다린다. */
+  ready(opts?: { timeoutMs?: number }): Promise<KernelStatus>;
+  /** 현재 머신, participant, leader, epoch, recovery 상태. */
+  status(): KernelStatus;
+  /** 상태 변경 구독. 반환 함수를 호출하면 해제한다. */
+  subscribe(listener: (status: KernelStatus) => void): () => boolean;
   /** 현재 역할: idle | pending | leader | follower. */
   role(): string;
   /** 선출에서 나간다(탭 닫힘). 리더면 락을 놓아 failover를 튼다. */
   leave(): void;
 }
+
+export interface PersistentMachineOptions extends Omit<KernelElectionOptions, "journalDir" | "manifest" | "storageKey"> {
+  name?: string;
+  manifest?: SessionManifest;
+  /** 생략하면 OPFS의 pyprocMachines/<name hash>를 연다. */
+  journalDir?: FileSystemDirectoryHandle;
+  storageRoot?: FileSystemDirectoryHandle;
+  machineRoot?: string;
+  storageKey?: string;
+  /** manifest.assetIntegrity 단축 옵션. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
+  /** 첫 leader ready까지의 제한 시간. */
+  timeoutMs?: number;
+}
+
+/** 같은 name의 모든 탭을 마지막 commit에서 부활하는 하나의 지속 Python 머신으로 연다. */
+export function openPersistentMachine(opts?: PersistentMachineOptions): Promise<KernelElection>;
 
 export interface SharedKernelOptions {
   indexURL?: string;
@@ -666,6 +731,10 @@ export interface JournalConfig {
   reactive: ReactiveController;
   /** 유휴 판정 ms(기본 2000). 이 시간 동안 상태 변이가 없으면 커밋한다. */
   idleMs?: number;
+  /** 기본 true. 힙과 함께 /home/web 파일 트리를 같은 HEAD/PREV 세대에 넣는다. */
+  includeHome?: boolean;
+  /** 저장할 파일 트리 루트. 기본 /home/web. */
+  homePath?: string;
   /**
    * true면 커밋 직후 loose blob이 임계값을 넘을 때 pack한다. 기본은 false.
    * true의 기본 정책은 loose blob 128개 또는 8MB 이상이다.
@@ -684,6 +753,8 @@ export interface JournalCommitResult {
   pages: number;
   wrote: number;
   mb: number;
+  committedAt: string;
+  home?: { files: number; mb: number; wrote: boolean };
   /** autoPack 정책으로 같은 커밋 뒤 pack이 실행됐으면 그 결과가 들어온다. */
   autoPack?: JournalPackResult;
 }
@@ -703,6 +774,14 @@ export interface JournalPruneResult {
   liveKeys: number;
   looseRemoved: number;
   packsRemoved: number;
+}
+
+export interface JournalRecoverResult {
+  pages: number;
+  mb: number;
+  committedAt: string | null;
+  home?: { files: number; dirs: number; mb: number };
+  fallback?: boolean;
 }
 
 /**
@@ -727,7 +806,7 @@ export class MachineJournal {
   /** HEAD/PREV가 더 이상 참조하지 않는 loose blob과 stale pack 파일을 지운다. */
   prune(): Promise<JournalPruneResult>;
   /** 마지막 커밋으로 부활. 저널이 없으면 null(첫 부팅). */
-  recover(): Promise<{ pages: number; mb: number } | null>;
+  recover(): Promise<JournalRecoverResult | null>;
 }
 
 export interface JailPermissions {
@@ -919,6 +998,11 @@ export interface SessionManifest {
   packages?: string[];
   /** 리플레이 경계 직전에 실행할 파이썬(예: "import numpy"). */
   setup?: string;
+  /** 부팅 Runtime에 전달하는 실행 자산 SRI manifest. 리플레이 상태 자체에는 포함하지 않는다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
+  engineScriptIntegrity?: string;
+  coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy;
+  coreCacheDir?: FileSystemDirectoryHandle;
 }
 
 export interface SessionIo {

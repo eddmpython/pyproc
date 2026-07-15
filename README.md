@@ -8,7 +8,7 @@
 
 <p align="center">
   A stateful, browser-native Python runtime for AI agents: keep the runtime state alive,<br>
-  branch it into isolated paths, restore it in milliseconds. No fresh container per run.
+  share it across tabs, survive a closed leader, branch and restore it. No fresh container per run.
 </p>
 
 <p align="center">
@@ -64,6 +64,7 @@ The through-line: **an AI agent needs a Python environment it can prepare once, 
 
 - **Runs in the user's browser - no server sandbox to run or pay for.** Python executes in the tab, inside Chrome's renderer sandbox plus WASM isolation, a boundary hardened against the whole web. You move sandboxed code execution off your own infrastructure and the user's data stays local. (You still set resource and network limits yourself; the browser isolates escape, not resource exhaustion - see [Security model](#security-model). It protects the user from the code, not your secrets from the user.)
 - **Restore without rebuilding.** Checkpoint a state with packages and data already loaded, then roll back to it - no re-run, no re-install.
+- **Close the tab; keep the machine.** Tabs share one logical Python state. If the leader closes, another tab recovers the last committed memory and `/home/web` files from OPFS and continues locally.
 - **Branch from one state.** An agent runs several code candidates from the same prepared state, independently, and compares results.
 - **Data stays local.** Process CSV / Excel / enterprise data in the tab and send only the summarized result onward.
 - **Isolated execution.** Python runs off the main UI thread, across multiple workers you manage.
@@ -81,6 +82,19 @@ const rt = await boot();
 await rt.loadPackages(["numpy"]);
 console.log(rt.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
 ```
+
+Open one persistent machine from any number of same-origin tabs:
+
+```js
+import { openPersistentMachine } from "pyproc";
+
+const machine = await openPersistentMachine({ name: "workspace" });
+await machine.run("counter = globals().get('counter', 40) + 1");
+await machine.commit();
+console.log(await machine.run("counter")); // 41, including after leader takeover
+```
+
+Try the full lifecycle in the [Immortal Python Machine demo](examples/immortal.html): shared state, leader identity, durable epoch, forced takeover, and local recovery with no backend.
 
 Checkpoint and restore. Reactivity is opt-in via `enableReactive`; the closing `checkpoint()` marks the execution boundary that makes the restore sound:
 
@@ -133,7 +147,7 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 | uv lane (`bootEnv` / `freeze` / `runScript`), wheel cache, terminal, syscall bridge | Beta |
 | Session revival + `.pymachine` images, machine journal (WAL) | Experimental |
 | Live process fork, device FS, init / cron / resume hooks, virtual-origin URL | Experimental |
-| Outbound Python sockets (`SocketBridge`), shared kernel | Experimental |
+| Persistent multi-tab machine (`openPersistentMachine` / `KernelElection`), shared kernel | Experimental |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 
 ## What it guarantees, and what it doesn't
@@ -148,6 +162,7 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 **Not (yet) guaranteed:**
 
 - Full process capture at an arbitrary instant - in-flight network requests and Promises are not restored.
+- Silent replay of an interrupted command. If a leader disappears after an RPC was sent, the caller receives `PYPROC_RPC_OUTCOME_UNKNOWN`; the command is never automatically re-executed.
 - Every Python package - native C-extension wheels need a static build; pure-Python and Pyodide-built packages work.
 - Snapshot compatibility across Pyodide versions. `.pymachine` portability assumes the same engine/manifest and either an explicit trusted source or a verified signer.
 - GPU / native Linux packages, full POSIX `fork`, arbitrary native binaries.
@@ -221,6 +236,7 @@ Capabilities are opt-in. Turn on only what you need, and consume the capability 
 | Run Python in the tab | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
 | Prepare repeatable environments | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
 | Restore, branch, and time-travel state | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
+| Keep one Python machine alive across tabs | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs) |
 | Use browser workers as processes | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
 | Serve Python behind real browser URLs | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
 | Build terminal and borrowed syscall flows | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |

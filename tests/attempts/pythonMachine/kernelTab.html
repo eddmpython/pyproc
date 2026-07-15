@@ -1,48 +1,60 @@
 <!DOCTYPE html>
-<!-- kernelElectionProbe의 "탭" 하나. iframe으로 N개 띄우면 N개 탭이 된다. 부모 probe가
-     postMessage로 join/run/commit/leave를 지시하고, 리더 승격은 이 페이지가 부모로 알린다. -->
-<html lang="ko"><head><meta charset="utf-8"><title>kernel tab</title></head>
+<!-- kernelElectionProbe의 독립 browsing context. 각 iframe이 자기 Web Lock 요청, BroadcastChannel,
+     Python 커널 수명주기를 소유한다. 부모는 postMessage로만 명령한다. -->
+<html lang="ko"><head><meta charset="utf-8"><title>persistent machine participant</title></head>
 <body>
 <script type="module">
-  import { KernelElection } from "../../../index.js";
+  import { openPersistentMachine } from "../../../index.js";
   const parent = window.parent;
-  const post = (m) => parent.postMessage({ from: "kernelTab", ...m }, "*");
-  let el = null;
+  const post = (message) => parent.postMessage({ from: "kernelTab", ...message }, "*");
   const indexParam = new URLSearchParams(location.search).get("indexURL");
   const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+  let machine = null;
+  let unsubscribe = null;
 
-  window.addEventListener("message", async (e) => {
-    const msg = e.data;
-    if (!msg || msg.to !== "kernelTab") return;
+  window.addEventListener("message", async (event) => {
+    const message = event.data;
+    if (!message || message.to !== "kernelTab") return;
     try {
-      if (msg.cmd === "join") {
+      if (message.cmd === "join") {
         const root = await navigator.storage.getDirectory();
-        const journalDir = await root.getDirectoryHandle(msg.journalName, { create: true });
-        el = new KernelElection({
-          name: msg.name,
+        const journalDir = await root.getDirectoryHandle(message.journalName, { create: true });
+        const assetIntegrity = await fetch("/pyproc-assets.json", { cache: "no-store" }).then((response) => response.json());
+        machine = await openPersistentMachine({
+          name: message.name,
+          participantId: message.tabId,
           manifest: { indexURL: INDEX },
           journalDir,
-          onLeader: ({ recovered }) => post({ id: msg.tabId, event: "leader", recovered }),
+          assetIntegrity,
+          onStatus: (status) => post({ id: message.tabId, event: "status", status }),
         });
-        el.join();
-        post({ id: msg.tabId, reqId: msg.reqId, ok: true, role: el.role() });
-      } else if (msg.cmd === "run") {
-        const r = await el.run(msg.code, { async: !!msg.async });
-        post({ id: msg.tabId, reqId: msg.reqId, ok: true, result: r });
-      } else if (msg.cmd === "commit") {
-        const c = await el.commit();
-        post({ id: msg.tabId, reqId: msg.reqId, ok: true, commit: c });
-      } else if (msg.cmd === "role") {
-        post({ id: msg.tabId, reqId: msg.reqId, ok: true, role: el.role() });
-      } else if (msg.cmd === "leave") {
-        el.leave();
-        post({ id: msg.tabId, reqId: msg.reqId, ok: true });
+        unsubscribe = machine.subscribe((status) => post({ id: message.tabId, event: "status", status }));
+        post({ id: message.tabId, reqId: message.reqId, ok: true, status: machine.status() });
+      } else if (message.cmd === "run") {
+        const result = await machine.run(message.code, { async: !!message.async, timeoutMs: message.timeoutMs });
+        post({ id: message.tabId, reqId: message.reqId, ok: true, result, status: machine.status() });
+      } else if (message.cmd === "commit") {
+        const commit = await machine.commit({ timeoutMs: message.timeoutMs });
+        post({ id: message.tabId, reqId: message.reqId, ok: true, commit, status: machine.status() });
+      } else if (message.cmd === "status") {
+        post({ id: message.tabId, reqId: message.reqId, ok: true, status: machine.status() });
+      } else if (message.cmd === "leave") {
+        if (unsubscribe) unsubscribe();
+        machine.leave();
+        post({ id: message.tabId, reqId: message.reqId, ok: true, status: machine.status() });
       }
-    } catch (err) {
-      post({ id: msg.tabId, reqId: msg.reqId, ok: false, error: String(err).slice(-300) });
+    } catch (error) {
+      post({
+        id: message.tabId,
+        reqId: message.reqId,
+        ok: false,
+        error: String(error.message || error).slice(-300),
+        code: error.code || null,
+        retryable: error.retryable === true,
+        status: machine ? machine.status() : null,
+      });
     }
   });
   post({ event: "ready" });
 </script>
-</body>
-</html>
+</body></html>

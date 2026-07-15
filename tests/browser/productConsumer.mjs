@@ -89,6 +89,7 @@ const html = `<!DOCTYPE html>
 <body>
   <pre id="out">running</pre>
   <script type="module">
+    import { runImmortalProductGate } from "/immortalProductGate.js";
     import {
       boot,
       bootSession,
@@ -173,6 +174,10 @@ const html = `<!DOCTYPE html>
       try { await new PyProc({ indexURL: INDEX, assetIntegrity: badAssetIntegrity }).boot(1, false); }
       catch (e) { denied = String(e).includes("assetIntegrity"); }
       check("bad installed worker SRI denied before spawn", denied);
+
+      const immortal = await runImmortalProductGate({ indexURL: INDEX });
+      for (const result of immortal.checks) check(result.name, result.pass, result.info);
+      Object.assign(timings, immortal.timings);
 
       let t = performance.now();
       const rt = await boot({ indexURL: INDEX, assetIntegrity });
@@ -447,6 +452,8 @@ try {
   const publicDir = join(appDir, "public");
   await mkdir(publicDir, { recursive: true });
   await writeFile(join(publicDir, "productConsumer.html"), html);
+  await writeFile(join(publicDir, "immortalProductParticipant.html"), await readFile(join(ROOT, "tests", "browser", "immortalProductParticipant.html")));
+  await writeFile(join(publicDir, "immortalProductGate.js"), await readFile(join(ROOT, "tests", "browser", "immortalProductGate.js")));
 
   const cli = binPath(appDir, "pyproc-assets");
   if (!existsSync(cli)) throw new Error("installed pyproc-assets bin shim 없음");

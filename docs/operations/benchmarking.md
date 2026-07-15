@@ -43,8 +43,9 @@
 | S2 | process map | `bench:artifact --scenario S2` | serial median, process pool median, speedup, p95, maxErr | 결과 일치, speedup > 1 |
 | S3 | browser server | `bench:artifact --scenario S3` | roundtrip median, p95, min/max, maxErr | 최소 3회 sample, Python ASGI 응답 도달 |
 | S4 | machine resume | `bench:artifact --scenario S4` | export median/p95, open median/p95, image MB, resume rows | trusted key open, `resume.py` 재개설 |
+| S5 | immortal multi-tab machine | `npm run test:consumer`, `bench:artifact --scenario S5` | initial ready, RPC p50/p90, failover, recovery, cold reopen median/p95 | 설치 패키지 3-context 공유와 commit, leader 강제 제거, `failover p95 < 5000ms`, 모든 context 종료 뒤 cold reopen |
 
-S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 worker pool 계약을 제공하지 못할 때 쓰는 single-lane 보조 축이다. S0는 기존 Python ready 관측 축이고, S0C는 cold profile/cache-clear 조건만 받는 엄격한 보조 축이다. S2, S3, S4는 "로컬처럼 쓰는 웹 OS"의 체감 속도 축이다.
+S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 worker pool 계약을 제공하지 못할 때 쓰는 single-lane 보조 축이다. S0는 기존 Python ready 관측 축이고, S0C는 cold profile/cache-clear 조건만 받는 엄격한 보조 축이다. S2, S3, S4, S5는 "로컬처럼 쓰는 웹 OS"의 체감 속도 축이다.
 
 ## 외부 비교 표 규칙
 
@@ -77,6 +78,7 @@ S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 wo
 - S2 raw JSON은 `npm run bench:artifact -- --scenario S2 --candidate <name> --command "<command>" --sample serialMs,parallelMs,maxErr --sample ... --out <path>`로 남긴다. `serialMs`는 같은 작업을 같은 process pool에서 직렬로 돌린 wall time이고, `parallelMs`는 worker pool에 분산한 wall time이다.
 - S3 raw JSON은 `npm run bench:artifact -- --scenario S3 --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다. pyproc 기준 `latencyMs`는 `npm run test:consumer`의 `timings.virtualOriginMs`, 즉 설치 패키지의 `VirtualOrigin` POST가 Python ASGI 응답까지 왕복한 시간이다.
 - S4 raw JSON은 `npm run bench:artifact -- --scenario S4 --candidate <name> --command "<command>" --sample exportMs,openMs,machineMB,resumeRows,maxErr --sample ... --out <path>`로 남긴다. pyproc 기준 값은 `npm run test:consumer`의 `timings.machineExportMs`, `timings.machineOpenMs`, `timings.machineMB`, `timings.machineResumeRows`에서 가져온다.
+- S5 raw JSON은 `npm run bench:artifact -- --scenario S5 --candidate pyproc --command "npm run test:consumer" --sample initialReadyMs,rpcP50Ms,rpcP90Ms,failoverMs,recoveryMs,coldReopenMs,maxErr --sample ... --out <path>`로 남긴다. 값은 서로 독립된 `npm run test:consumer` GREEN 실행에서 가져오며, 각 실행은 실제 설치 패키지, 3개 browsing context, 강제 leader 제거, 모든 context 제거 뒤 cold reopen을 포함한다.
 - `bench:compare`는 같은 scenario끼리만 표로 합친다. S1과 S1L을 한 표에 섞으면 실패해야 한다.
 - 새 benchmark helper나 runner를 추가하면 `npm test` 구조 가드에 연결한다.
 - `npm test`는 tracked benchmark JSON 전부를 `normalizeBenchArtifactFile()`로 읽어 schema v2 봉투, sampleSchema, rawOutput reference, raw sidecar의 git 추적 상태를 검증한다.

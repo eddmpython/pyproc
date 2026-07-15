@@ -26,6 +26,7 @@
 | WASI 세션 값 다리 | JSON 직렬화 한정(FFI 없음). 함수/numpy/live 객체 못 넘김 | 별도 async 표면(bootWasi). 프로덕션 정본은 Pyodide([contract.md](../consuming/contract.md) 런타임 정합) |
 | machineJail 부모 격리 | CSP connect-src는 감옥 자신의 네트워크 egress를 막는다. same-origin 감옥은 window.parent 측면통로가 열림 | 완전 격리는 opaque origin(sandbox)이고 그 대가로 crossOriginIsolated 상실 = SAB(fork/interrupt) 포기 = 감옥 머신은 단일 Runtime |
 | 공유메모리 memcpy 1회 | SAB를 파이썬 힙에 제로카피로 비출 수 없다(단일 선형 메모리 벽) | `PyProc.shm`/`mapArray`는 "memcpy 1회"를 공개 계약으로 유지 |
+| Immortal Python Machine 복구 경계 | 임의 시점의 실행 스택과 외부 요청까지 되살리는 것이 아니라 마지막 완료 commit의 heap + `/home/web`에서 새 leader가 실행을 계속한다 | 전송 뒤 leader가 사라진 RPC는 `PYPROC_RPC_OUTCOME_UNKNOWN`, `retryable=false`로 끝내고 자동 replay하지 않는다. 제품은 명시적 idempotency 정책 없이 같은 명령을 재전송하지 않는다 |
 
 ## 프론티어 (정직한 벽 = WASM dlopen)
 
