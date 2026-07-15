@@ -1022,6 +1022,10 @@ check("Web Machine attempts 레이어 구조 고정", () => {
   for (const file of requiredV86Bridges) {
     if (!existsSync(join(webMachineRoot, "adapters", "v86", file))) throw new Error(`v86 bridge 계약 누락: ${file}`);
   }
+  const requiredV86FixtureFiles = ["assetCatalog.json", "assetProvenance.mjs", "config.js", "fixtureSbom.json", "prepareAssets.mjs"];
+  for (const file of requiredV86FixtureFiles) {
+    if (!existsSync(join(webMachineRoot, "fixtures", "v86", file))) throw new Error(`v86 fixture provenance 누락: ${file}`);
+  }
   const forbiddenFolderNames = new Set(["utils", "common", "shared", "helpers"]);
   const walk = (dir) => {
     for (const entry of readdirSync(dir)) {
@@ -1032,6 +1036,34 @@ check("Web Machine attempts 레이어 구조 고정", () => {
     }
   };
   walk(webMachineRoot);
+});
+check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () => {
+  const fixtureRoot = join(webMachineRoot, "fixtures", "v86");
+  const audit = spawnSync(process.execPath, [join(fixtureRoot, "assetProvenance.mjs"), "--check"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  if (audit.status !== 0) throw new Error(audit.stderr || audit.stdout || "fixture SBOM audit 실패");
+  const catalog = JSON.parse(readFileSync(join(fixtureRoot, "assetCatalog.json"), "utf8"));
+  if (catalog.packagePolicy?.thirdPartyBinaryBundling !== "forbidden") throw new Error("third-party binary bundling 금지 정책 없음");
+  if (catalog.assets.some((asset) => asset.distribution !== "local-test-only" || !asset.bundleBlockers?.length)) {
+    throw new Error("모든 fixture는 local-test-only이고 bundle blocker가 있어야 한다");
+  }
+  const opaqueGuestAssets = catalog.assets.filter((asset) => asset.role === "guest-image");
+  if (!opaqueGuestAssets.length || opaqueGuestAssets.some((asset) => asset.licenseConcluded !== "NOASSERTION")) {
+    throw new Error("opaque guest image license를 추정으로 확정하면 안 된다");
+  }
+  const prepareSource = readFileSync(join(fixtureRoot, "prepareAssets.mjs"), "utf8");
+  if (prepareSource.includes("https://") || /[0-9a-f]{64}/.test(prepareSource)) {
+    throw new Error("prepareAssets에 URL/hash 중복 금지, assetCatalog가 SSOT");
+  }
+  const trackedAssets = spawnSync("git", ["ls-files", "tests/attempts/webMachine/fixtures/v86/assets"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  if (trackedAssets.status !== 0 || trackedAssets.stdout.trim()) throw new Error("third-party fixture binary가 git에 포함됨");
 });
 check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
   const deviceRoot = join(webMachineRoot, "browser", "devices");

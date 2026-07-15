@@ -528,3 +528,41 @@ NEXT:
 1. v86, BIOS, Buildroot, KolibriOS 구성물의 license provenance와 재배포 조건을 파일 단위로 확정한다.
 2. Web Machine package가 배포할 engine/image SBOM과 외부 asset pin 계약을 만든다.
 3. 배포 게이트 통과 뒤 독립 `core`, `browser`, `guest-pyproc`, `guest-v86` package로 attempts를 승격한다.
+
+## 2026-07-15 - third-party binary 0개와 fixture SPDX SBOM
+
+감사:
+
+1. npm `v86@0.5.424`는 BSD-2-Clause를 선언하고 registry SHA-512 integrity를 제공하지만 package metadata에
+   source `gitHead`가 없다. JS module은 declared license를 기록하고 composite WASM file은 최종 license
+   inventory를 `NOASSERTION`으로 유지했다.
+2. v86 revision `2f1346b`의 BIOS script는 SeaBIOS `rel-1.16.2`를 checkout하고 고정 config로 `bios.bin`과
+   `vgabios.bin`을 만든다. 같은 directory의 `COPYING.LESSER`와 SeaBIOS 공식 문서가 LGPL-3.0을 확인한다.
+3. `buildroot-bzimage68.bin`은 v86 test URL과 hash만 있고 exact Buildroot revision, `.config`, package manifest,
+   `legal-info`가 없다. Linux kernel이라는 이름만으로 root filesystem 전체 license를 확정하지 않았다.
+4. `kolibri.img`도 v86 test URL과 hash만 있다. KolibriOS project의 GPLv2 선언은 확인했지만 exact image revision과
+   포함 application inventory가 없어 binary 결론은 `NOASSERTION`으로 유지했다.
+
+구현:
+
+1. `assetCatalog.json`을 fixture URL/hash/size, component provenance, license 결론, bundle blocker의 SSOT로 만들었다.
+2. `assetProvenance.mjs`가 catalog를 strict validation하고 SPDX 2.3 `fixtureSbom.json`을 결정적으로 생성·검증한다.
+3. `prepareAssets.mjs`의 URL/hash 중복을 제거했다. catalog와 SBOM이 다르면 download 전에 실패하고, cache와
+   download 모두 SHA-256뿐 아니라 byte length도 검증한다.
+4. Node 구조 게이트가 SBOM 동기화, 모든 fixture의 `local-test-only`, opaque guest image의 `NOASSERTION`,
+   bundle blocker 존재, git에 third-party fixture binary 0개를 강제한다.
+5. 자산 배포 정책을 별도 정본으로 만들었다. code package와 공식 machine image의 배포 조건을 분리했다.
+
+판정:
+
+1. code package는 engine constructor와 manifest만 외부 주입받고 third-party binary를 싣지 않으므로 승격 가능하다.
+2. test fixture hash 검증을 재배포 승인으로 오해하지 않는다. 기존 두 guest image는 local probe 외 사용을 차단한다.
+3. `.webmachine` signature는 publisher identity이지 license 증명이 아니다. 공식 image catalog는 SBOM digest를
+   signed manifest에 포함하는 다음 schema와 compliance material 전까지 만들지 않는다.
+4. Web Machine attempts의 기술·아키텍처·code package 배포 졸업 조건은 모두 통과했다.
+
+NEXT:
+
+1. attempts 모듈을 독립 `core`, `browser`, `guest-pyproc`, `guest-v86` package 경계로 승격한다.
+2. package public index와 type contract를 만들고 deep import·third-party binary 0개를 release gate로 고정한다.
+3. 별도 product-image 트랙에서 재현 가능한 Buildroot recipe와 signed SBOM attachment schema를 연구한다.

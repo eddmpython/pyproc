@@ -1,0 +1,245 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "web-machine-v86-fixtures-v1",
+  "documentNamespace": "https://github.com/eddmpython/pyproc/sbom/web-machine-v86-fixtures-v1",
+  "creationInfo": {
+    "created": "2026-07-15T00:00:00Z",
+    "creators": [
+      "Organization: pyproc contributors"
+    ],
+    "licenseListVersion": "3.28.0"
+  },
+  "documentComment": "이 문서는 로컬 Web Machine probe가 내려받는 미번들 fixture를 기술한다. package 배포 목록이 아니다.",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-v86-npm-0.5.424",
+      "name": "v86",
+      "versionInfo": "0.5.424",
+      "downloadLocation": "https://registry.npmjs.org/v86/-/v86-0.5.424.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BSD-2-Clause",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "sourceInfo": "source=https://github.com/copy/v86 revision=NOASSERTION provenance=registry-integrity-without-source-revision",
+      "packageComment": "evidence=https://www.npmjs.com/package/v86/v/0.5.424,https://github.com/copy/v86/blob/master/LICENSE"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-seabios-rel-1.16.2",
+      "name": "SeaBIOS",
+      "versionInfo": "rel-1.16.2",
+      "downloadLocation": "https://git.seabios.org/seabios.git",
+      "filesAnalyzed": false,
+      "licenseConcluded": "LGPL-3.0-only",
+      "licenseDeclared": "LGPL-3.0-only",
+      "copyrightText": "NOASSERTION",
+      "sourceInfo": "source=https://git.seabios.org/seabios.git revision=rel-1.16.2 provenance=upstream-source-recipe-not-reproduced",
+      "packageComment": "evidence=https://github.com/copy/v86/blob/2f1346b/bios/fetch-and-build-seabios.sh,https://github.com/copy/v86/blob/2f1346b/bios/COPYING.LESSER"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-buildroot-image-opaque",
+      "name": "Buildroot Linux guest image",
+      "versionInfo": "NOASSERTION",
+      "downloadLocation": "https://i.copy.sh/buildroot-bzimage68.bin",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "sourceInfo": "source=https://buildroot.org/ revision=NOASSERTION provenance=opaque-upstream-binary",
+      "packageComment": "evidence=https://github.com/copy/v86#testing,https://buildroot.org/downloads/manual/manual.html#legal-info"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-kolibri-image-opaque",
+      "name": "KolibriOS guest image",
+      "versionInfo": "NOASSERTION",
+      "downloadLocation": "https://i.copy.sh/kolibri.img",
+      "filesAnalyzed": false,
+      "licenseConcluded": "GPL-2.0-only",
+      "licenseDeclared": "GPL-2.0-only",
+      "copyrightText": "NOASSERTION",
+      "sourceInfo": "source=https://github.com/KolibriOS/kolibrios revision=NOASSERTION provenance=opaque-upstream-binary",
+      "packageComment": "evidence=https://github.com/copy/images#sources,https://kolibrios.org/en/download"
+    }
+  ],
+  "files": [
+    {
+      "SPDXID": "SPDXRef-File-libv86.mjs",
+      "fileName": "./assets/libv86.mjs",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "b58774370dcd62e534e05d2b6bb734f7057ef2166c3cc034e45847945d0910d1"
+        }
+      ],
+      "licenseConcluded": "BSD-2-Clause",
+      "licenseInfoInFiles": [
+        "BSD-2-Clause"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=local-test-only; role=engine-module; bundleBlockers=package-policy-external-engine"
+    },
+    {
+      "SPDXID": "SPDXRef-File-v86.wasm",
+      "fileName": "./assets/v86.wasm",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "aec2c16bb0a1618aa641bb44d9c0fe14681f8c1459fa08c32e3e0562020884e8"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": [
+        "NOASSERTION"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=local-test-only; role=engine-binary; bundleBlockers=composite-binary-license-inventory-not-verified,package-policy-external-engine"
+    },
+    {
+      "SPDXID": "SPDXRef-File-seabios.bin",
+      "fileName": "./assets/seabios.bin",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98"
+        }
+      ],
+      "licenseConcluded": "LGPL-3.0-only",
+      "licenseInfoInFiles": [
+        "LGPL-3.0-only"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=local-test-only; role=firmware; bundleBlockers=reproducible-build-not-verified,license-and-source-delivery-not-packaged"
+    },
+    {
+      "SPDXID": "SPDXRef-File-vgabios.bin",
+      "fileName": "./assets/vgabios.bin",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880"
+        }
+      ],
+      "licenseConcluded": "LGPL-3.0-only",
+      "licenseInfoInFiles": [
+        "LGPL-3.0-only"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=local-test-only; role=firmware; bundleBlockers=reproducible-build-not-verified,license-and-source-delivery-not-packaged"
+    },
+    {
+      "SPDXID": "SPDXRef-File-buildroot-bzimage68.bin",
+      "fileName": "./assets/buildroot-bzimage68.bin",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "507a759c70ab7a490a233be454d0b5b88bc667956a410b531cb4edc091e2eb1c"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": [
+        "NOASSERTION"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=local-test-only; role=guest-image; bundleBlockers=exact-source-revision-unknown,build-config-unknown,legal-info-missing"
+    },
+    {
+      "SPDXID": "SPDXRef-File-kolibri.img",
+      "fileName": "./assets/kolibri.img",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "f3ec74d5b70e5b7a8b0d053a1ada738a75159366b50af8a427845f87e0a91be5"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": [
+        "NOASSERTION"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=local-test-only; role=guest-image; bundleBlockers=exact-image-revision-unknown,image-content-inventory-missing,corresponding-source-mapping-missing"
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-v86-npm-0.5.424"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-seabios-rel-1.16.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-buildroot-image-opaque"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-kolibri-image-opaque"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-libv86.mjs"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-v86.wasm"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-seabios.bin"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-vgabios.bin"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-buildroot-bzimage68.bin"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-kolibri.img"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-libv86.mjs",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-v86-npm-0.5.424"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-v86.wasm",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-v86-npm-0.5.424"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-seabios.bin",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-seabios-rel-1.16.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-vgabios.bin",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-seabios-rel-1.16.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-buildroot-bzimage68.bin",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-buildroot-image-opaque"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-kolibri.img",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-kolibri-image-opaque"
+    }
+  ]
+}

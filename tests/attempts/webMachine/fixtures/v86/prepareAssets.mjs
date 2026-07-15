@@ -3,40 +3,11 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertV86FixtureSbom, readV86AssetCatalog } from "./assetProvenance.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "assets");
-const assets = [
-  {
-    name: "libv86.mjs",
-    url: "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
-    sha256: "b58774370dcd62e534e05d2b6bb734f7057ef2166c3cc034e45847945d0910d1",
-  },
-  {
-    name: "v86.wasm",
-    url: "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
-    sha256: "aec2c16bb0a1618aa641bb44d9c0fe14681f8c1459fa08c32e3e0562020884e8",
-  },
-  {
-    name: "seabios.bin",
-    url: "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
-    sha256: "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98",
-  },
-  {
-    name: "vgabios.bin",
-    url: "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
-    sha256: "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880",
-  },
-  {
-    name: "buildroot-bzimage68.bin",
-    url: "https://i.copy.sh/buildroot-bzimage68.bin",
-    sha256: "507a759c70ab7a490a233be454d0b5b88bc667956a410b531cb4edc091e2eb1c",
-  },
-  {
-    name: "kolibri.img",
-    url: "https://i.copy.sh/kolibri.img",
-    sha256: "f3ec74d5b70e5b7a8b0d053a1ada738a75159366b50af8a427845f87e0a91be5",
-  },
-];
+await assertV86FixtureSbom();
+const { assets } = await readV86AssetCatalog();
 
 function digest(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -48,6 +19,7 @@ for (const asset of assets) {
   let current = null;
   try { current = await readFile(path); } catch (error) {}
   if (current && digest(current) === asset.sha256) {
+    if (current.byteLength !== asset.byteLength) throw new Error(`${asset.name}: byteLength ${current.byteLength}`);
     console.log(`READY ${asset.name} ${current.byteLength} bytes`);
     continue;
   }
@@ -56,6 +28,7 @@ for (const asset of assets) {
   const bytes = Buffer.from(await response.arrayBuffer());
   const actual = digest(bytes);
   if (actual !== asset.sha256) throw new Error(`${asset.name}: sha256 ${actual}`);
+  if (bytes.byteLength !== asset.byteLength) throw new Error(`${asset.name}: byteLength ${bytes.byteLength}`);
   const temporary = `${path}.tmp`;
   try {
     await writeFile(temporary, bytes);

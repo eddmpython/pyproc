@@ -68,7 +68,7 @@
 - [통과] Python OS와 Linux가 같은 host API의 `boot/pause/snapshot/restore/resume/shutdown`을 사용한다.
 - [통과] 두 guest가 파일 쓰기와 console round trip을 완료하고 destroy 뒤 같은 값으로 복원된다.
 - [통과] x86 engine은 외부 주입되며 pyproc 기본 dependency는 0이다.
-- [부분] engine과 image 출처, version, SHA-256, 미번들 정책을 기록했다. 제품 배포 전 BIOS/image license와 SBOM 검토가 남았다.
+- [통과] engine/image catalog와 SPDX SBOM을 고정하고 code package의 third-party binary를 0개로 제한했다. opaque guest image의 공식 배포는 별도 compliance gate로 차단했다.
 - [통과] pyproc `/home/web`과 Linux가 mount한 v86 9P file을 별도 block volume으로 연결하고 guest snapshot에서 file payload를 제거했다.
 - [통과] request/packet mode와 permission을 engine boot 전에 구분하고 Linux eth0의 ARP/ICMP frame을 bounded packet switch에 연결했다.
 - [통과] browser process cold restore 뒤 snapshot MAC을 보존하고 새 packet port로 ping을 다시 왕복했다.

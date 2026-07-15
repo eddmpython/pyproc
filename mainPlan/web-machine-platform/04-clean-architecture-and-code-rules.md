@@ -175,7 +175,10 @@ tests/attempts/webMachine/
 │  ├─ network/
 │  │  └─ ipv4EchoPeer.js
 │  └─ v86/
+│     ├─ assetCatalog.json
+│     ├─ assetProvenance.mjs
 │     ├─ config.js
+│     ├─ fixtureSbom.json
 │     ├─ prepareAssets.mjs
 │     └─ assets/               # hash 검증 로컬 자산, git 미추적
 └─ probes/                     # 유일한 composition root
@@ -310,6 +313,6 @@ ownership loss, torn commit, cold restore를 검증한다.
 3. [통과] request/packet network 분리, permission 선거부, Linux NIC frame 왕복과 process cold reattach.
 4. [통과] 브라우저 프로세스 종료 뒤 IndexedDB HEAD/PREV cold reopen.
 5. [통과] architecture gate와 adapter contract suite.
-6. [대기] engine/image license와 SBOM 배포 검토.
+6. [통과] engine/image provenance와 SPDX SBOM 검토. code package는 third-party binary 0개, opaque guest image는 local-test-only.
 
 이전에는 attempts 코드가 아무리 안정적이어도 pyproc `src/`나 public export로 복사하지 않는다.

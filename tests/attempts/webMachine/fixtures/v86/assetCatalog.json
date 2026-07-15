@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "web-machine-v86-fixtures-v1",
+  "packagePolicy": {
+    "thirdPartyBinaryBundling": "forbidden",
+    "fixtureUse": "local-test-only",
+    "promotionRequires": [
+      "exact-source-revision",
+      "reproducible-build-recipe",
+      "license-material",
+      "component-inventory"
+    ]
+  },
+  "components": [
+    {
+      "componentId": "v86-npm-0.5.424",
+      "name": "v86",
+      "version": "0.5.424",
+      "downloadLocation": "https://registry.npmjs.org/v86/-/v86-0.5.424.tgz",
+      "sourceLocation": "https://github.com/copy/v86",
+      "sourceRevision": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "provenanceStatus": "registry-integrity-without-source-revision",
+      "evidence": [
+        "https://www.npmjs.com/package/v86/v/0.5.424",
+        "https://github.com/copy/v86/blob/master/LICENSE"
+      ]
+    },
+    {
+      "componentId": "seabios-rel-1.16.2",
+      "name": "SeaBIOS",
+      "version": "rel-1.16.2",
+      "downloadLocation": "https://git.seabios.org/seabios.git",
+      "sourceLocation": "https://git.seabios.org/seabios.git",
+      "sourceRevision": "rel-1.16.2",
+      "licenseDeclared": "LGPL-3.0-only",
+      "copyrightText": "NOASSERTION",
+      "provenanceStatus": "upstream-source-recipe-not-reproduced",
+      "evidence": [
+        "https://github.com/copy/v86/blob/2f1346b/bios/fetch-and-build-seabios.sh",
+        "https://github.com/copy/v86/blob/2f1346b/bios/COPYING.LESSER"
+      ]
+    },
+    {
+      "componentId": "buildroot-image-opaque",
+      "name": "Buildroot Linux guest image",
+      "version": "NOASSERTION",
+      "downloadLocation": "https://i.copy.sh/buildroot-bzimage68.bin",
+      "sourceLocation": "https://buildroot.org/",
+      "sourceRevision": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "provenanceStatus": "opaque-upstream-binary",
+      "evidence": [
+        "https://github.com/copy/v86#testing",
+        "https://buildroot.org/downloads/manual/manual.html#legal-info"
+      ]
+    },
+    {
+      "componentId": "kolibri-image-opaque",
+      "name": "KolibriOS guest image",
+      "version": "NOASSERTION",
+      "downloadLocation": "https://i.copy.sh/kolibri.img",
+      "sourceLocation": "https://github.com/KolibriOS/kolibrios",
+      "sourceRevision": "NOASSERTION",
+      "licenseDeclared": "GPL-2.0-only",
+      "copyrightText": "NOASSERTION",
+      "provenanceStatus": "opaque-upstream-binary",
+      "evidence": [
+        "https://github.com/copy/images#sources",
+        "https://kolibrios.org/en/download"
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "name": "libv86.mjs",
+      "role": "engine-module",
+      "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
+      "sha256": "b58774370dcd62e534e05d2b6bb734f7057ef2166c3cc034e45847945d0910d1",
+      "byteLength": 353724,
+      "componentId": "v86-npm-0.5.424",
+      "licenseConcluded": "BSD-2-Clause",
+      "distribution": "local-test-only",
+      "bundleBlockers": ["package-policy-external-engine"]
+    },
+    {
+      "name": "v86.wasm",
+      "role": "engine-binary",
+      "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
+      "sha256": "aec2c16bb0a1618aa641bb44d9c0fe14681f8c1459fa08c32e3e0562020884e8",
+      "byteLength": 2084417,
+      "componentId": "v86-npm-0.5.424",
+      "licenseConcluded": "NOASSERTION",
+      "distribution": "local-test-only",
+      "bundleBlockers": ["composite-binary-license-inventory-not-verified", "package-policy-external-engine"]
+    },
+    {
+      "name": "seabios.bin",
+      "role": "firmware",
+      "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
+      "sha256": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98",
+      "byteLength": 131072,
+      "componentId": "seabios-rel-1.16.2",
+      "licenseConcluded": "LGPL-3.0-only",
+      "distribution": "local-test-only",
+      "bundleBlockers": ["reproducible-build-not-verified", "license-and-source-delivery-not-packaged"]
+    },
+    {
+      "name": "vgabios.bin",
+      "role": "firmware",
+      "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
+      "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880",
+      "byteLength": 36352,
+      "componentId": "seabios-rel-1.16.2",
+      "licenseConcluded": "LGPL-3.0-only",
+      "distribution": "local-test-only",
+      "bundleBlockers": ["reproducible-build-not-verified", "license-and-source-delivery-not-packaged"]
+    },
+    {
+      "name": "buildroot-bzimage68.bin",
+      "role": "guest-image",
+      "url": "https://i.copy.sh/buildroot-bzimage68.bin",
+      "sha256": "507a759c70ab7a490a233be454d0b5b88bc667956a410b531cb4edc091e2eb1c",
+      "byteLength": 10068480,
+      "componentId": "buildroot-image-opaque",
+      "licenseConcluded": "NOASSERTION",
+      "distribution": "local-test-only",
+      "bundleBlockers": ["exact-source-revision-unknown", "build-config-unknown", "legal-info-missing"]
+    },
+    {
+      "name": "kolibri.img",
+      "role": "guest-image",
+      "url": "https://i.copy.sh/kolibri.img",
+      "sha256": "f3ec74d5b70e5b7a8b0d053a1ada738a75159366b50af8a427845f87e0a91be5",
+      "byteLength": 1474560,
+      "componentId": "kolibri-image-opaque",
+      "licenseConcluded": "NOASSERTION",
+      "distribution": "local-test-only",
+      "bundleBlockers": ["exact-image-revision-unknown", "image-content-inventory-missing", "corresponding-source-mapping-missing"]
+    }
+  ]
+}

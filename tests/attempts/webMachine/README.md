@@ -72,19 +72,23 @@ snapshot 보장은 숨기지 않는다.
 - `host/`: engine과 browser 구현을 모르는 state machine, adapter contract, snapshot envelope, machine manifest, 구조화 오류.
 - `browser/`: device, content-addressed generation, IndexedDB persistence, Web Lock owner coordination, signed image file과 import 조정 구현.
 - `adapters/`: 파일 하나당 guest adapter 하나. 같은 guest의 wire format/engine bridge만 이름 있는 하위 폴더에 두며 guest끼리는 import하지 않는다.
-- `fixtures/v86/`: hash 고정 자산 recipe와 manifest. binary는 미추적이다.
+- `fixtures/v86/`: hash·provenance·배포 blocker catalog, SPDX SBOM, 준비 recipe. binary는 미추적이다.
 - `probes/`: adapter와 device를 조립할 수 있는 유일한 composition root다.
 
 상세 package 경계와 강행 규칙은 [클린 아키텍처 정본](../../../mainPlan/web-machine-platform/04-clean-architecture-and-code-rules.md)을 따른다.
 
-v86 probe 자산은 레포에 넣지 않는다. 아래 명령이 [v86 0.5.424](https://www.npmjs.com/package/v86)의
-module/wasm, v86 revision `2f1346b`의 BIOS, [공식 예제](https://github.com/copy/v86/blob/2f1346b/examples/serial.html)의
-Buildroot bzImage와 [KolibriOS](https://wiki.kolibrios.org/index.php?title=Main_Page) floppy image를 내려받고
-SHA-256을 검증해 ignored `assets/`에 둔다. v86 package는 BSD-2-Clause, KolibriOS는 GPL 계열이지만 BIOS와
-guest image는 별도 구성물이므로 제품 번들 전 정확한 license와 SBOM 검토를 다시 통과해야 한다.
+v86 probe 자산은 레포와 package에 넣지 않는다. [assetCatalog.json](fixtures/v86/assetCatalog.json)이 URL,
+SHA-256, byte length, component, license 결론, bundle blocker의 SSOT다. [fixtureSbom.json](fixtures/v86/fixtureSbom.json)은
+그 catalog에서 생성한 SPDX 2.3 문서이고 `assetProvenance.mjs --check`가 둘의 일치를 검사한다.
+
+v86 npm module은 BSD-2-Clause, SeaBIOS/vgabios build는 LGPL-3.0으로 추적됐다. 기존 Buildroot와 Kolibri image는
+exact source revision·build config·component inventory가 없어 `NOASSERTION`, `local-test-only`다. code package는
+engine constructor와 asset manifest만 외부 주입받고 third-party binary를 0개로 유지한다. 상세 판정과 공식
+machine image 배포 조건은 [자산 배포 정책](../../../mainPlan/web-machine-platform/05-asset-distribution-policy.md)이 정본이다.
 
 ```bash
 node tests/attempts/webMachine/fixtures/v86/prepareAssets.mjs
+node tests/attempts/webMachine/fixtures/v86/assetProvenance.mjs --check
 node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 node tests/browser/run.mjs tests/attempts/webMachine/probes/ownerSuccessorProbe.html
 node tests/browser/run.mjs tests/attempts/webMachine/probes/framebufferPointerProbe.html
@@ -98,9 +102,9 @@ file은 guest snapshot에 중복되지 않고 별도 block volume이 완료 gene
 IndexedDB 단조 epoch도 정상 양도와 강제 context 제거에서 통과했다. RGBA framebuffer와 relative pointer도
 별도 capability로 graphical guest와 process cold restore에서 통과했다. wall/monotonic clock과 cryptographic
 entropy도 Linux CMOS, timer, RDRAND와 process cold restore에서 통과했다. signed `.webmachine`도 새 browser
-profile에서 pyproc과 Linux의 snapshot·block을 boot 없이 복원했다. license와 SBOM 배포 검토가 남았으므로
-`src/` 또는 `index.js`로 승격하지 않는다. 승격 위치는 독립 `core`, `browser`, `guest-pyproc`,
-`guest-v86` package로 확정했다.
+profile에서 pyproc과 Linux의 snapshot·block을 boot 없이 복원했다. code package의 미번들 provenance/SBOM
+게이트도 통과했으므로 attempts 졸업 조건은 충족했다. 승격 위치는 독립 `core`, `browser`, `guest-pyproc`,
+`guest-v86` package다. 공식 guest image 배포는 별도 compliance gate 전까지 금지한다.
 
 ## 덕지덕지 제거 기준
 
@@ -121,4 +125,5 @@ ICMP를 왕복하고 새 process에서 port를 다시 연결한다. VGA text fra
 재연결한다. owner context 제거 뒤에는 정확히 한 successor가 21-23ms에 같은 generation을 복구한다.
 1024x768 RGBA frame과 PS/2 pointer도 새 process에서 재연결한다. Linux CMOS와 RDRAND도 새 process의
 clock/entropy 공급원에 다시 연결한다. 이동 가능한 envelope도 storage identity 밖 새 profile에서 통과했다.
-배포 license 게이트가 남았으므로 공개 API라고 부르지 않는다.
+code package 승격 조건은 충족했지만 아직 attempts에 있으므로 공개 API라고 부르지 않는다. opaque guest image의
+공식 배포는 provenance와 compliance material이 완성될 때까지 계속 차단한다.
