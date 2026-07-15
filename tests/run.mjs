@@ -501,6 +501,17 @@ check("README 공개 표면은 작업별 지도 형태", () => {
   if (readmeEn.includes("| Export | What |")) throw new Error("README.md가 장황한 export 설명표로 회귀");
   if (readmeKo.includes("| Export | 무엇 |")) throw new Error("README.ko.md가 장황한 export 설명표로 회귀");
 });
+check("소비 문서 역할 분리", () => {
+  const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
+  const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");
+  if (!contract.includes("역할은 분리한다.")) throw new Error("contract.md 역할 분리 선언 누락");
+  if (!contract.includes("## 공개 import 경계")) throw new Error("contract.md import 경계 절 누락");
+  if (!contract.includes("## 실행 자산 배포 계약")) throw new Error("contract.md 실행 자산 배포 절 누락");
+  if (!contract.includes("## 계약 검증")) throw new Error("contract.md 계약 검증 절 누락");
+  if (!contract.includes("[capabilityMatrix.md](capabilityMatrix.md): capability별 제품 가치")) throw new Error("contract.md가 capability matrix 역할을 위임하지 않음");
+  if (contract.includes("| export | 무엇 |")) throw new Error("contract.md가 capability별 export 설명표로 회귀");
+  if (!docsMap.includes("설치, 버전 핀, import 경계, 실행 자산 배포")) throw new Error("docs/README.md contract 역할 설명이 낡음");
+});
 check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   const matrixPath = join(ROOT, "docs", "consuming", "capabilityMatrix.md");
   if (!existsSync(matrixPath)) throw new Error("capabilityMatrix.md 없음");

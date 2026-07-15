@@ -2420,3 +2420,29 @@ NEXT:
 1. docs/consuming/contract.md와 capability matrix 사이의 소비자 setup 중복을 줄인다.
 2. README benchmark 표와 examples 랜딩의 메시지 정합성을 점검한다.
 3. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
+
+## 2026-07-15 - 소비 계약과 능력 매트릭스 역할 분리
+
+완료:
+
+- [contract.md](../../docs/consuming/contract.md)의 큰 export 설명표를 제거하고, 공개 import 경계와 실행 자산 배포 계약 중심으로 재구성했다.
+- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)가 capability별 제품 가치, 상태, 실행 표면, 검증, 경계의 정본임을 명시했다.
+- [docs/README.md](../../docs/README.md)의 consuming 문서 지도를 새 역할 분리에 맞췄다.
+- `npm test`에 contract 역할 분리, import 경계, 실행 자산 배포, 계약 검증 절, matrix 위임, 장황한 export 설명표 회귀 차단 가드를 추가했다.
+
+판정:
+
+- 공개 문서 구조가 더 선명해졌다. README는 지도, capability matrix는 제품 판단표, contract는 소비 규칙으로 분리된다.
+- 라이브러리 구조 관점에서 중요한 점은 같은 계약을 두 문서가 각자 설명하지 않는 것이다. 이번 작업은 중복 설명을 줄이고 문서 역할을 기계 가드로 고정했다.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 653 passed, 0 failed.
+
+NEXT:
+
+1. README benchmark 표와 examples 랜딩 메시지 정합성을 점검한다.
+2. probe 전용 capability 중 제품 데모로 승격할 후보를 고른다.
+3. 소비자별 배선 상태는 실제 제품 gate freshness evidence와 연결해 더 줄인다.
