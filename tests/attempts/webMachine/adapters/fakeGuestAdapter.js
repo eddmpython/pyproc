@@ -29,6 +29,7 @@ class FakeGuestAdapter {
     this._value = 0;
     this._active = false;
     this._paused = false;
+    this._context = null;
   }
 
   async boot(context, manifest) {
@@ -36,6 +37,7 @@ class FakeGuestAdapter {
     this._value = Number(manifest.initialValue || 0);
     this._active = true;
     this._paused = false;
+    this._context = context;
     context.devices.console?.write?.(`boot:${context.machineId}`);
   }
 
@@ -51,10 +53,11 @@ class FakeGuestAdapter {
     return encoder.encode(JSON.stringify({ value: this._value }));
   }
 
-  async restore(payload) {
+  async restore(payload, context) {
     this._value = JSON.parse(decoder.decode(payload)).value;
     this._active = true;
     this._paused = true;
+    this._context = context;
     this._metrics.restores += 1;
   }
 
@@ -77,6 +80,17 @@ class FakeGuestAdapter {
       if (typeof message.started === "function") message.started();
       await message.wait;
       return this._value;
+    }
+    if (message.type === "blockWrite") {
+      const device = this._context?.devices?.[String(message.device || "block")];
+      if (!device || typeof device.write !== "function") throw new Error("fake guest block device 없음");
+      await device.write(Number(message.offset || 0), new Uint8Array(message.bytes || []));
+      return true;
+    }
+    if (message.type === "blockRead") {
+      const device = this._context?.devices?.[String(message.device || "block")];
+      if (!device || typeof device.read !== "function") throw new Error("fake guest block device 없음");
+      return [...await device.read(Number(message.offset || 0), Number(message.length || 0))];
     }
     throw new Error(`fake guest request 미지원: ${message.type}`);
   }

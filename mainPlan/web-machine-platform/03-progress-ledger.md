@@ -146,3 +146,42 @@ NEXT:
 1. `browser/src/devices/blockDevice`에 해당하는 attempts port를 먼저 계약으로 만든다.
 2. pyproc home과 v86 disk를 같은 block generation에 연결하기 전에 fake device로 write/flush/torn commit을 검증한다.
 3. HEAD/PREV + CAS persistence를 adapter와 분리된 browser 구현으로 만든다.
+
+## 2026-07-15 - Phase 4 durable generation과 브라우저 프로세스 cold reopen
+
+구현:
+
+1. browser 경계에 bounded block device와 write/flush 분리, SHA-256 content-addressed blob, immutable generation manifest를 구현했다.
+2. guest opaque snapshot과 flushed block snapshot을 한 manifest에 넣고 `HEAD(previous -> next)` CAS가 성공한 경우에만 durable로 공개한다.
+3. 메모리 store와 IndexedDB store를 같은 계약으로 만들고 HEAD/PREV, blob과 manifest 무결성 검증, 손상 HEAD의 PREV fallback을 구현했다.
+4. 브라우저 게이트에 process restart phase를 추가했다. 같은 profile을 유지하되 기존 Edge process tree를 종료하고 새 Edge process가 다음 phase를 연다.
+5. pyproc, v86 Linux, 공통 block을 한 IndexedDB generation에 저장하고 새 process에서 guest boot 없이 restore하는 probe를 만들었다.
+
+실패에서 고친 계약:
+
+- host가 등록 device를 object spread로 복제해 class prototype method를 잃었다. device identity를 보존하도록 바꿨다.
+- cold restore된 fake adapter가 새 host context를 다시 붙이지 않아 block device를 찾지 못했다. restore가 새 context를 받는 계약으로 고쳤다.
+- persistent probe가 browser 전역 이름을 잘못 전달해 restart 직전 대기했다. 전역 `indexedDB`를 명시적으로 주입하고 초기화 오류도 gate report로 드러내게 했다.
+
+실측:
+
+- `generationContractProbe` 3회 연속 GREEN 16/16. memory와 실제 IndexedDB CAS race 모두 정확히 한 commit만 성공했고 기존 generation 덮어쓰기를 거부했다.
+- first commit 1-2ms, second commit 0ms, 손상 HEAD의 PREV recovery 1ms였다.
+- torn commit은 HEAD를 바꾸지 않았고, HEAD와 PREV가 모두 손상되면 `WEB_MACHINE_RECOVERY_UNAVAILABLE`로 끝났다.
+- `persistentDualBootProbe` 3회 연속 GREEN 9/9.
+- Python OS + Linux initial boot 5986/6299/6214ms, IndexedDB commit 599/467/469ms, 새 browser process cold restore 2601/2376/2783ms였다.
+- 복원 뒤 pyproc과 Linux의 memory/file 값 `42:42`, 공통 block marker, generation hash가 모두 일치했고 두 guest boot history는 0이었다.
+
+판정:
+
+1. 탭의 메모리가 아니라 브라우저 저장소에 두 OS와 장치를 한 완료 경계로 남기는 durable machine 핵심이 성립했다.
+2. location reload가 아니라 기존 browser process tree를 종료한 뒤 새 process에서 복원했으므로 process 수명보다 긴 machine이라는 주장을 실측했다.
+3. 다만 공통 block image는 같은 generation에 속할 뿐, 아직 pyproc home과 v86 disk가 그 block을 실제 저장장치로 소비하지 않는다.
+4. 따라서 Phase 4 전체 완료나 브라우저 컴퓨터 완성을 선언하지 않는다. owner successor, packet/display, 실제 block I/O가 다음 관문이다.
+
+NEXT:
+
+1. pyproc 파일 저장 경계를 block port에 연결해 home 변경이 공통 block generation에 직접 반영되게 한다.
+2. v86의 외부 disk I/O를 같은 block port에 연결하고 sector read/write/flush를 fault probe로 검증한다.
+3. 두 guest가 공통 block의 서로 분리된 volume을 실제 mount한 상태에서 process cold reopen을 다시 통과시킨다.
+4. 이후 packet network와 정확히 한 owner successor를 구현한다.

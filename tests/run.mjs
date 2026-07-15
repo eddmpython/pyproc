@@ -974,7 +974,7 @@ check("mainPlan 이니셔티브마다 README", () => {
 
 const webMachineRoot = join(ROOT, "tests", "attempts", "webMachine");
 check("Web Machine attempts 레이어 구조 고정", () => {
-  const allowedRootEntries = new Set(["README.md", "host", "adapters", "fixtures", "probes"]);
+  const allowedRootEntries = new Set(["README.md", "host", "browser", "adapters", "fixtures", "probes"]);
   const rootEntries = readdirSync(webMachineRoot);
   const unexpected = rootEntries.filter((entry) => !allowedRootEntries.has(entry));
   if (unexpected.length) throw new Error(`root dump 금지: ${unexpected.join(", ")}`);
@@ -1029,6 +1029,27 @@ check("Web Machine adapter 경계와 공개 surface", () => {
       else if (targetRel !== "index.js") problems.push(`${rel(file)} -> ${targetRel}: 공개 root 이외 import`);
     }
     if (readFileSync(file, "utf8").includes("/src/")) problems.push(`${rel(file)}: src deep import`);
+  }
+  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+check("Web Machine browser는 host 방향으로만 의존", () => {
+  const browserRoot = join(webMachineRoot, "browser");
+  const guestTerms = /\b(?:pyproc|pyodide|wasi|v86|x86|linux|buildroot)\b/i;
+  const problems = [];
+  for (const file of collect(browserRoot, [".js", ".mjs"], [])) {
+    const source = readFileSync(file, "utf8");
+    if (guestTerms.test(source)) problems.push(`${rel(file)}: guest/engine 이름`);
+    for (const ref of jsModuleRefs(file)) {
+      const target = moduleTarget(file, ref.spec);
+      if (!target) {
+        problems.push(`${rel(file)} -> ${ref.spec}: 외부 import`);
+        continue;
+      }
+      const targetRel = rel(target);
+      if (!targetRel.startsWith("tests/attempts/webMachine/browser/") && !targetRel.startsWith("tests/attempts/webMachine/host/")) {
+        problems.push(`${rel(file)} -> ${targetRel}: browser 역방향 import`);
+      }
+    }
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });

@@ -28,6 +28,8 @@ snapshot 보장은 숨기지 않는다.
 8. 브라우저 probe를 최소 3회 반복해 모두 GREEN이고 결과와 시간을 기록한다.
 9. 실제 Linux가 같은 host API로 boot, console round trip, snapshot, live/cold restore를 통과한다.
 10. pyproc Python OS와 Linux를 한 registry에서 동시 boot하고, 두 adapter를 destroy한 뒤 memory와 file state를 함께 복원한다.
+11. guest snapshot과 flushed block image를 한 content-addressed generation으로 CAS commit하고 torn commit, 동시 CAS race, 손상 HEAD의 PREV 복구를 통과한다.
+12. pyproc, Linux, block generation을 IndexedDB에 저장한 뒤 브라우저 프로세스를 완전히 종료하고 새 프로세스에서 boot 없이 함께 복원한다.
 
 ## 결론 표
 
@@ -40,10 +42,13 @@ snapshot 보장은 숨기지 않는다.
 | 2026-07-15 | dualBootProbe file state 첫 시도 | Edge headless, COOP+COEP | **RED 4/5**. pyproc `/tmp` file은 `includeHome: false` image에서 제외 | machine image가 사용자 파일을 빼면 안 된다는 계약 결함을 발견. full home image로 변경 | 빈 home 경계 재검증 |
 | 2026-07-15 | dualEngineProbe full home 첫 시도 | Edge headless, COOP+COEP, 3회 | **3회 RED 2/3**. 빈 session에 `/home/web`이 없어 export 거부 | pyproc guest boot 계약이 `/home/web`을 항상 생성하도록 수정 | full home gate 재실행 |
 | 2026-07-15 | dualBootProbe | Edge headless, COOP+COEP, pyproc + v86 Linux, full file state, 3회 | **3회 연속 GREEN 8/8**. 동시 boot 5404/5422/5513ms, dual snapshot 141-190ms, Python image 8,782,882 bytes, Linux image 51,903,216-51,919,600 bytes, 두 adapter destroy 뒤 cold restore 1862-1928ms | 한 host registry가 Python OS와 Linux를 실제 이중 부팅. 두 OS의 memory 값과 file 값 42가 함께 생존 | 공통 block/network/display 장치 배선 |
+| 2026-07-15 | generationContractProbe | Edge headless, COOP+COEP, memory + IndexedDB, 3회 | **3회 연속 GREEN 16/16**. first commit 1-2ms, second commit 0ms, PREV recovery 1ms. torn publish 뒤 HEAD 불변, CAS race 승자 1, 기존 generation 덮어쓰기 거부, 손상 HEAD에서 PREV 복구 | guest snapshot과 flushed block을 한 content-addressed generation으로 publish하는 원자성 계약 성립. 실제 IndexedDB transaction도 동시 commit 하나만 허용 | 실제 두 guest를 포함한 프로세스 재시작 |
+| 2026-07-15 | persistentDualBootProbe | Edge headless, COOP+COEP, pyproc + v86 Linux + IndexedDB, 새 Edge process, 3회 | **3회 연속 GREEN 9/9**. boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2376/2783ms | Python OS, Linux, block을 같은 generation에 commit하고 Edge process tree 종료 뒤 새 process에서 boot 없이 복원 | 공통 block을 두 guest의 실제 backing device로 연결 |
 
 ## 모듈화 설계
 
 - `host/`: engine과 browser 구현을 모르는 state machine, adapter contract, snapshot envelope, 구조화 오류.
+- `browser/`: block device, content-addressed blob, CAS generation, IndexedDB persistence 구현.
 - `adapters/`: 파일 하나당 guest adapter 하나. 서로 import하지 않는다.
 - `fixtures/v86/`: hash 고정 자산 recipe와 manifest. binary는 미추적이다.
 - `probes/`: adapter와 device를 조립할 수 있는 유일한 composition root다.
@@ -60,9 +65,10 @@ node tests/attempts/webMachine/fixtures/v86/prepareAssets.mjs
 node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 ```
 
-두 실제 엔진과 Linux guest 통과 조건은 충족했다. 그러나 common block/network/display와 영속 commit
-경계가 남았으므로 이번 변경에서는 `src/` 또는 `index.js`로 승격하지 않는다. 승격 위치는 pyproc 내부가
-아니라 독립 `core`, `browser`, `guest-pyproc`, `guest-v86` package로 확정했다.
+두 실제 엔진, Linux guest, 원자 generation, 브라우저 프로세스 cold reopen 조건은 충족했다. 그러나
+공통 block이 아직 guest 내부 파일시스템의 실제 backing device는 아니고 packet network/display도 남았다.
+따라서 이번 변경에서는 `src/` 또는 `index.js`로 승격하지 않는다. 승격 위치는 pyproc 내부가 아니라
+독립 `core`, `browser`, `guest-pyproc`, `guest-v86` package로 확정했다.
 
 ## 덕지덕지 제거 기준
 
@@ -76,7 +82,8 @@ node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 
 ## 판정
 
-**Phase 1/2 졸업, Phase 3 Dual-Boot 핵심 GREEN, 캠페인 진행 중.** 한 host가 pyproc Python OS와
-Linux 6.8.12를 실제 이중 부팅하고 두 memory/file image를 함께 cold restore했다. 이것은 multi-OS
-host 가설의 첫 실증이다. 아직 공통 block/network/display 장치와 탭 종료 뒤 영속 commit은 증명하지
-않았으므로 완성된 브라우저 컴퓨터 또는 공개 API라고 부르지 않는다.
+**Phase 1/2 졸업, Phase 3 Dual-Boot 핵심 GREEN, Phase 4 durable generation과 프로세스 cold reopen
+핵심 GREEN, 캠페인 진행 중.** 한 host가 pyproc Python OS와 Linux 6.8.12를 이중 부팅하고, 두 opaque
+snapshot과 block image를 한 IndexedDB generation에 저장한 뒤 새 브라우저 프로세스에서 함께 복원했다.
+다만 block은 아직 두 guest의 실제 파일시스템 장치가 아니다. packet network, display, owner successor,
+배포 license 게이트도 남았으므로 완성된 브라우저 컴퓨터 또는 공개 API라고 부르지 않는다.

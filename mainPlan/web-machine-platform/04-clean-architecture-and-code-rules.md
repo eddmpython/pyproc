@@ -123,6 +123,14 @@ tests/attempts/webMachine/
 │  ├─ snapshotEnvelope.js
 │  ├─ webMachineError.js
 │  └─ webMachineHostDraft.js
+├─ browser/                    # device와 persistence의 browser 구현 초안
+│  ├─ devices/
+│  │  └─ memoryBlockDevice.js
+│  └─ persistence/
+│     ├─ generationIntegrity.js
+│     ├─ memoryGenerationStore.js
+│     ├─ indexedDbGenerationStore.js
+│     └─ machineCommitCoordinator.js
 ├─ adapters/                   # guest별 변환, 파일 하나당 adapter 하나
 │  ├─ fakeGuestAdapter.js
 │  ├─ pyprocGuestAdapter.js
@@ -137,7 +145,9 @@ tests/attempts/webMachine/
    ├─ hostContractProbe.html
    ├─ dualEngineProbe.html
    ├─ linuxGuestProbe.html
-   └─ dualBootProbe.html
+   ├─ dualBootProbe.html
+   ├─ generationContractProbe.html
+   └─ persistentDualBootProbe.html
 ```
 
 ## 계약 규칙
@@ -229,9 +239,10 @@ pause adapters
 3. host에서 browser 전역과 storage/network API 직접 접근.
 4. host가 adapters, fixtures, probes를 import하는 역방향 의존.
 5. adapter 사이 import와 adapter의 pyproc deep import.
-6. probe 밖 adapter 등록.
-7. Web Machine import graph cycle.
-8. default export와 확장자 없는 local ESM import.
+6. browser의 guest 이름과 adapter/fixture/probe 역방향 import.
+7. probe 밖 adapter 등록.
+8. Web Machine import graph cycle.
+9. default export와 확장자 없는 local ESM import.
 
 browser gate는 모든 adapter에 같은 lifecycle suite를 적용하고, fault injection으로 permission, timeout,
 ownership loss, torn commit, cold restore를 검증한다.
@@ -240,11 +251,11 @@ ownership loss, torn commit, cold restore를 검증한다.
 
 다음이 모두 GREEN일 때만 독립 package 골격을 만든다.
 
-1. pyproc + Linux 공통 lifecycle과 full file state cold restore.
-2. 공통 block device의 write/flush/snapshot generation.
-3. request/packet network 분리와 permission 선거부.
-4. 모든 탭 종료 뒤 HEAD/PREV cold reopen.
-5. architecture gate와 adapter contract suite.
-6. engine/image license와 SBOM 배포 검토.
+1. [통과] pyproc + Linux 공통 lifecycle과 full file state cold restore.
+2. [부분] 공통 block device의 write/flush/snapshot generation은 통과. guest 실제 backing device 연결은 대기.
+3. [대기] request/packet network 분리와 permission 선거부.
+4. [통과] 브라우저 프로세스 종료 뒤 IndexedDB HEAD/PREV cold reopen.
+5. [통과] architecture gate와 adapter contract suite.
+6. [대기] engine/image license와 SBOM 배포 검토.
 
 이전에는 attempts 코드가 아무리 안정적이어도 pyproc `src/`나 public export로 복사하지 않는다.

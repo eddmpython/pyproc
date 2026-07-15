@@ -31,7 +31,7 @@ export class WebMachineHostDraft {
     if (!device || typeof device !== "object" || typeof device.kind !== "string") {
       throw new TypeError(`device ${name}: kind가 필요하다`);
     }
-    this._devices.set(name, Object.freeze({ ...device }));
+    this._devices.set(name, device);
     return this;
   }
 
