@@ -68,6 +68,10 @@ pyproc 공개 API에 x86 또는 Linux 특수 로직을 바로 넣지 않는다. 
 ICMP frame을 왕복하고 browser process 종료 뒤 새 port에 재연결된다. 이는 인터넷 접속 정책을 core에 넣은
 것이 아니라, raw packet 장치와 외부 protocol peer를 분리한 결과다.
 
+VGA text display와 PS/2 keyboard도 console과 다른 capability로 분리했다. 화면은 cell frame을 원자 present하고
+입력은 focus된 endpoint 하나에 raw scan code만 전달한다. paused machine에는 input을 연결하지 않으며 cold
+restore가 VGA를 새 display에 redraw한 뒤 resume 직전에 keyboard를 다시 붙인다.
+
 ## 만들지 않는 것
 
 1. Windows, Linux, macOS 커널을 처음부터 다시 작성하지 않는다.

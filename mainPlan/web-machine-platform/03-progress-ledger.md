@@ -274,3 +274,51 @@ NEXT:
 1. framebuffer와 input을 console과 분리해 headless와 desktop 구성을 같은 core에서 조립한다.
 2. browser owner를 강제 종료해 정확히 한 successor와 이전 epoch command 거부를 실측한다.
 3. clock과 entropy를 ambient browser 접근이 아닌 명시적 device port로 주입한다.
+
+## 2026-07-15 - VGA text display와 PS/2 keyboard cold reattach
+
+구현:
+
+1. browser 경계에 `text-cells` display와 `ps2-scan-code` input을 별도 device로 추가했다. console과 UI
+   object를 재사용하지 않는다.
+2. display는 최대 크기, cell 범위, 단일 producer를 강제하고 working frame을 revision 단위로 복제 present한다.
+   subscriber가 받은 cells를 바꿔도 장치의 presented frame은 변하지 않는다.
+3. input은 focus endpoint 하나, batch byte 상한, bounded queue를 강제하며 전달 전후 bytes를 격리한다.
+4. v86 display bridge는 공개 VGA text event만, input bridge는 공개 keyboard scan code API만 쓴다. adapter는
+   각 장치를 별도 capability로 요구하며 mode/permission mismatch를 engine constructor 전에 거부한다.
+5. pause는 input queue를 drain하고 endpoint를 분리한 뒤 emulator를 멈춘다. cold restore 중에는 display만
+   연결해 VGA state를 redraw하고 resume 직전에 새 input endpoint를 연결한다.
+
+실패에서 고친 계약:
+
+- 첫 probe는 RED 0/1이었다. Buildroot image가 이미 VGA tty shell을 제공하는데 두 번째 shell을 `/dev/tty1`에
+  띄워 한 scan code batch가 서로 다른 input owner에 분산됐다.
+- 별도 shell 생성을 제거하고 기존 VGA prompt 하나만 keyboard focus owner로 사용했다. 장치 구현이나 scan
+  code를 우회하지 않았고, raw input이 원래 guest console을 직접 소비하게 했다.
+
+실측:
+
+- `displayInputProbe` 수정본 3회 연속 GREEN 18/18.
+- Linux initial boot 3832/3503/4003ms, 최초 PS/2 command와 VGA marker present 354/349/344ms,
+  generation commit 347/297/299ms였다.
+- 기존 Edge process tree 종료 뒤 cold restore 356/353/352ms, 새 display/input의 command와 frame present
+  437/426/458ms였다.
+- cold restore 직후 새 80x25 display는 revision 2로 이전 VGA frame을 redraw했고 input은 연결되지 않았다.
+  resume 뒤 keyboard batch 82 codes가 Linux에 전달되어 `/tmp/reopened`를 실제 생성했다.
+- display mode mismatch와 input permission 부족은 engine constructor 0회에서 차단됐다. duplicate/busy endpoint,
+  display range/size, frame clone, input queue/batch, paused input, shutdown detach fault가 모두 통과했다.
+
+판정:
+
+1. serial console text를 화면이라고 복사한 것이 아니라 VGA device event로 별도 frame을 만들었다.
+2. request API로 Linux command를 실행한 것이 아니라 PS/2 scan code가 guest keyboard controller와 tty를
+   거쳐 파일을 생성했다.
+3. display와 input handle은 generation에 넣지 않고 새 process에서 다시 연결했다. output은 paused restore에
+   필요하지만 input은 resume 전까지 차단한다는 방향별 lifecycle 차이도 숨기지 않았다.
+4. 이번 통과 범위는 VGA text cells와 keyboard다. RGBA framebuffer, pointer, clipboard를 완료로 부르지 않는다.
+
+NEXT:
+
+1. browser owner를 강제 종료해 정확히 한 successor와 이전 epoch command 거부를 실측한다.
+2. RGBA framebuffer와 pointer mode를 text/keyboard와 다른 capability로 추가한다.
+3. clock과 entropy를 ambient browser 접근이 아닌 명시적 device port로 주입한다.

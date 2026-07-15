@@ -126,7 +126,9 @@ tests/attempts/webMachine/
 ├─ browser/                    # device와 persistence의 browser 구현 초안
 │  ├─ devices/
 │  │  ├─ memoryBlockDevice.js
-│  │  └─ memoryEthernetSwitch.js
+│  │  ├─ memoryEthernetSwitch.js
+│  │  ├─ memoryTextDisplayDevice.js
+│  │  └─ memoryScanCodeInputDevice.js
 │  └─ persistence/
 │     ├─ generationIntegrity.js
 │     ├─ memoryGenerationStore.js
@@ -142,8 +144,12 @@ tests/attempts/webMachine/
 │  └─ v86/
 │     ├─ v86BlockBuffer.js
 │     ├─ v86FileSystemVolume.js
-│     └─ v86PacketPort.js
+│     ├─ v86PacketPort.js
+│     ├─ v86DisplayPort.js
+│     └─ v86InputPort.js
 ├─ fixtures/
+│  ├─ input/
+│  │  └─ ps2Set1Text.js
 │  ├─ network/
 │  │  └─ ipv4EchoPeer.js
 │  └─ v86/
@@ -158,7 +164,8 @@ tests/attempts/webMachine/
    ├─ generationContractProbe.html
    ├─ persistentDualBootProbe.html
    ├─ deviceBackedDualBootProbe.html
-   └─ packetNetworkProbe.html
+   ├─ packetNetworkProbe.html
+   └─ displayInputProbe.html
 ```
 
 ## 계약 규칙

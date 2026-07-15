@@ -32,6 +32,7 @@ snapshot 보장은 숨기지 않는다.
 12. pyproc, Linux, block generation을 IndexedDB에 저장한 뒤 브라우저 프로세스를 완전히 종료하고 새 프로세스에서 boot 없이 함께 복원한다.
 13. pyproc snapshot에서 `/home/web`을, v86 state에서 9P file tree를 제거하고 두 guest가 실제로 소비한 별도 block volume에서만 process cold restore한다.
 14. request와 packet network mode를 부팅 전에 구분하고, Linux NIC의 실제 ARP/ICMP frame을 새 browser process의 새 packet port에서도 왕복한다.
+15. console과 분리된 VGA text display와 PS/2 keyboard input으로 Linux command를 실행하고, paused input 차단과 새 browser process의 장치 재연결을 검증한다.
 
 ## 결론 표
 
@@ -51,6 +52,8 @@ snapshot 보장은 숨기지 않는다.
 | 2026-07-15 | deviceBackedDualBootProbe | Edge headless, COOP+COEP, pyproc home block + v86 9P block + IndexedDB, 새 Edge process, 3회 | **3회 연속 GREEN 12/12**. boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145ms. 삭제 file tail 잔존 0 | pyproc heap snapshot에서 home을, v86 RAM state에서 9P file을 제거했다. 두 OS가 실제 사용한 file state를 별도 block volume에서만 복원 | packet network, display/input, owner successor |
 | 2026-07-15 | packetNetworkProbe 첫 cold restore | Edge headless, COOP+COEP, v86 NE2K + 새 packet switch | **RED 13/14**. reply frame은 NIC에 도달했지만 ping 수신 0 | 새 process의 임의 NIC MAC과 snapshot 속 Linux MAC이 달라 NIC filter가 reply를 폐기했다 | portable packet restore가 snapshot MAC 보존 |
 | 2026-07-15 | packetNetworkProbe | Edge headless, COOP+COEP, v86 NE2K + bounded packet switch + 새 Edge process, 3회 | **3회 연속 GREEN 14/14**. 최초 ARP/ICMP 160/185/167ms, commit 412/329/332ms, process cold restore 452/380/357ms, 재연결 ping 137/117/129ms | request/packet mode와 permission을 engine boot 0회에서 선거부했다. Linux eth0가 실제 Ethernet frame을 보내고 새 process의 새 port에서도 왕복했으며 drop/error 0 | display/input, owner successor |
+| 2026-07-15 | displayInputProbe 추가 shell 첫 시도 | Edge headless, COOP+COEP, v86 VGA + PS/2 Set 1 | **RED 0/1**. 일부 scan code가 서로 다른 shell에 분산 | Buildroot가 이미 VGA tty shell을 제공하는데 probe가 두 번째 shell을 띄워 keyboard input owner를 경쟁시켰다 | 기존 VGA shell 한 곳만 사용 |
+| 2026-07-15 | displayInputProbe | Edge headless, COOP+COEP, v86 VGA text + PS/2 keyboard + 새 Edge process, 3회 | **3회 연속 GREEN 18/18**. 최초 display/input 354/349/344ms, commit 347/297/299ms, process cold restore 356/353/352ms, 재연결 I/O 437/426/458ms | 80x25 VGA cell frame과 raw scan code가 console 밖 별도 port를 사용했다. paused input은 분리되고 cold restore는 display redraw 후 resume 직전에 새 keyboard를 연결했다 | RGBA/pointer, owner successor |
 
 ## 모듈화 설계
 
@@ -73,8 +76,9 @@ node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 ```
 
 두 실제 엔진, Linux guest, 원자 generation, 브라우저 프로세스 cold reopen, 실제 guest file의 block
-분리와 Linux NIC packet network 조건은 충족했다. pyproc home과 v86 9P file은 guest snapshot에 중복되지 않고
-별도 block volume이 완료 generation의 원본이다. display/input, owner successor가 남았으므로 이번 변경에서는
+분리, Linux NIC packet network, VGA text display와 PS/2 keyboard 조건은 충족했다. pyproc home과 v86 9P
+file은 guest snapshot에 중복되지 않고 별도 block volume이 완료 generation의 원본이다. RGBA framebuffer,
+pointer, owner successor가 남았으므로 이번 변경에서는
 `src/` 또는 `index.js`로 승격하지 않는다. 승격 위치는 독립 `core`, `browser`, `guest-pyproc`,
 `guest-v86` package로 확정했다.
 
@@ -93,5 +97,6 @@ node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 **Phase 1/2 졸업, Phase 3 Dual-Boot·실제 block-backed file·packet network 핵심 GREEN, Phase 4 durable
 generation과 프로세스 cold reopen 핵심 GREEN, 캠페인 진행 중.** pyproc home과 Linux 9P file을 각 guest
 snapshot에서 제거하고 별도 block volume으로 복원했다. Linux NIC는 bounded packet switch에서 실제 ARP와
-ICMP를 왕복하고 새 process에서 port를 다시 연결한다. display/input, owner successor, 배포 license
+ICMP를 왕복하고 새 process에서 port를 다시 연결한다. VGA text frame과 PS/2 keyboard도 console과 분리해
+재연결한다. RGBA/pointer, owner successor, 배포 license
 게이트가 남았으므로 완성된 브라우저 컴퓨터 또는 공개 API라고 부르지 않는다.

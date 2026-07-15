@@ -174,6 +174,11 @@ Ethernet switch와 v86 계층의 NIC bus port를 분리했다. switch는 endpoin
 restore가 새 port를 연결한다. portable NIC state는 snapshot의 MAC을 보존해 guest RAM과 receive filter가
 같은 장치 identity를 보게 한다.
 
+[displayInputProbe](../../tests/attempts/webMachine/probes/displayInputProbe.html)는 `text-cells` display와
+`ps2-scan-code` input을 console과 서로에게서 분리했다. display는 단일 producer의 working cells를 revision
+단위로 present하고 subscriber에 복제 frame만 준다. input은 단일 focus, bounded batch queue이며 pause에서
+분리된다. v86 bridge는 공개 `screen-set-size`, `screen-put-char`, `keyboard_send_scancodes`만 소비한다.
+
 adapter는 host core의 필수 dependency가 아니다. consumer 또는 integration layer가 등록한다. 따라서 x86 엔진의 크기·라이선스·업데이트가 pyproc 기본 패키지에 전이되지 않는다.
 
 ## 코드 위치 결정 게이트
@@ -191,7 +196,8 @@ tests/attempts/webMachine/
 
 두 엔진과 한 Linux guest는 계약을 통과했다. 승격 위치는 pyproc `src/`가 아니라 독립 package 구조로
 확정했다. 폴더와 import 강행 규칙은 [04-clean-architecture-and-code-rules.md](04-clean-architecture-and-code-rules.md)가 정본이다.
-공통 block과 영속 commit은 실제 guest file까지 통과했고 packet network는 실제 Linux NIC까지 통과했다. display/input, owner successor,
+공통 block과 영속 commit은 실제 guest file까지, packet network는 실제 Linux NIC까지, text display/input은
+실제 VGA와 PS/2 keyboard까지 통과했다. RGBA/pointer, owner successor,
 배포 검토 전에는 pyproc 공개 export를 늘리지 않는다.
 
 ## 가장 큰 위험
