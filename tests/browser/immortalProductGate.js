@@ -120,9 +120,11 @@ export async function runImmortalProductGate(opts = {}) {
       "open('/home/web/productImmortal/state.txt', 'w').write('installed-survives')",
     ].join("\n") });
     const shared = await command(followers[1], {
-      cmd: "run", code: "f'{productSharedValue + 1}|{open(\"/home/web/productImmortal/state.txt\").read()}'",
+      cmd: "run",
+      code: "f'{productSharedValue + 1}|{open(\"/home/web/productImmortal/state.txt\").read()}|{productPrepared}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
     });
-    check("installed participants share Python memory and home", shared.result === "42|installed-survives", shared.result);
+    check("installed participants share Python memory, home and prepared environment",
+      shared.result === '42|installed-survives|7|{"lane": "prepared"}', shared.result);
 
     const rpcSamples = [];
     for (let i = 0; i < 20; i++) {
@@ -156,11 +158,14 @@ export async function runImmortalProductGate(opts = {}) {
     const survivors = followers.filter((participantId) => tabs.has(participantId));
     const survivorStatuses = await Promise.all(survivors.map((participantId) => command(participantId, { cmd: "status" })));
     const afterFailover = await command(survivors[0], {
-      cmd: "run", code: "f'{productSharedValue}|{open(\"/home/web/productImmortal/state.txt\").read()}'", timeoutMs: 9000,
+      cmd: "run",
+      code: "f'{productSharedValue}|{open(\"/home/web/productImmortal/state.txt\").read()}|{productPrepared}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
+      timeoutMs: 9000,
     });
     check("installed machine survives forced leader context removal",
       !!promoted && timings.immortalFailoverMs < 5000 && promoted.epoch === initialEpoch + 1 && promoted.recovered === true &&
-      survivorStatuses.filter((entry) => entry.status.role === "leader").length === 1 && afterFailover.result === "41|installed-survives",
+      survivorStatuses.filter((entry) => entry.status.role === "leader").length === 1 &&
+      afterFailover.result === '41|installed-survives|7|{"lane": "prepared"}',
       `leader=${promoted?.leaderId}, epoch=${promoted?.epoch}, failover=${timings.immortalFailoverMs}ms`);
 
     const uncertain = await uncertainRequest;
@@ -183,11 +188,13 @@ export async function runImmortalProductGate(opts = {}) {
     const reopened = await command("D", { cmd: "join", name: machineName });
     timings.immortalColdReopenMs = Math.round(performance.now() - reopenStarted);
     const reopenedValue = await command("D", {
-      cmd: "run", code: "f'{productSharedValue}|{productColdValue}|{open(\"/home/web/productImmortal/state.txt\").read()}'",
+      cmd: "run",
+      code: "f'{productSharedValue}|{productColdValue}|{open(\"/home/web/productImmortal/state.txt\").read()}|{productPrepared}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
     });
     check("installed machine cold-reopens committed heap and home after all participants close",
       reopened.status.role === "leader" && reopened.status.recovered === true && reopened.status.epoch === previousEpoch + 1 &&
-      reopened.status.lastCommitAt === coldCommit.commit.committedAt && reopenedValue.result === "41|99|installed-cold",
+      reopened.status.lastCommitAt === coldCommit.commit.committedAt &&
+      reopenedValue.result === '41|99|installed-cold|7|{"lane": "prepared"}',
       `epoch=${reopened.status.epoch}, value=${reopenedValue.result}, reopen=${timings.immortalColdReopenMs}ms`);
     await command("D", { cmd: "leave" });
     removeParticipant("D");

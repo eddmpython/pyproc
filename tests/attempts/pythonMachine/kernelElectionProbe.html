@@ -144,8 +144,12 @@ Immortal Python Machine 실측. iframe 3개가 실제 독립 browsing context로
       "sharedValue = 41",
       "open('/home/web/immortal/state.txt', 'w').write('survives')",
     ].join("\n") });
-    const shared = await command(followers[1], { cmd: "run", code: "f'{sharedValue + 1}|{open(\"/home/web/immortal/state.txt\").read()}'" });
-    check("followers share Python variables and /home files", shared.result === "42|survives", shared.result);
+    const shared = await command(followers[1], {
+      cmd: "run",
+      code: "f'{sharedValue + 1}|{open(\"/home/web/immortal/state.txt\").read()}|{preparedValue}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
+    });
+    check("followers share variables, /home files and prepared environment",
+      shared.result === '42|survives|7|{"lane": "prepared"}', shared.result);
 
     const rpcSamples = [];
     for (let i = 0; i < 30; i++) {
@@ -185,9 +189,12 @@ Immortal Python Machine 실측. iframe 3개가 실제 독립 browsing context로
     check("successor reports journal recovery", promotedStatus?.recovered === true, `recovery=${timings.recoveryMs}ms`);
 
     const afterFailover = await command(survivorIds[0], {
-      cmd: "run", code: "f'{sharedValue}|{open(\"/home/web/immortal/state.txt\").read()}'", timeoutMs: 9000,
+      cmd: "run",
+      code: "f'{sharedValue}|{open(\"/home/web/immortal/state.txt\").read()}|{preparedValue}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
+      timeoutMs: 9000,
     });
-    check("failover restores variable and /home, then keeps running", afterFailover.result === "41|survives", afterFailover.result);
+    check("failover restores variable, /home and prepared environment, then keeps running",
+      afterFailover.result === '41|survives|7|{"lane": "prepared"}', afterFailover.result);
 
     const uncertain = await uncertainRequest;
     const uncertainStatus = await command(followers[0], { cmd: "status" });
@@ -210,10 +217,11 @@ Immortal Python Machine 실측. iframe 3개가 실제 독립 browsing context로
     const reopened = await command("D", { cmd: "join", name: machineName, journalName, tabId: "D" });
     timings.coldReopenMs = Math.round(performance.now() - reopenStarted);
     const reopenedValue = await command("D", {
-      cmd: "run", code: "f'{sharedValue}|{coldValue}|{open(\"/home/web/immortal/state.txt\").read()}'",
+      cmd: "run",
+      code: "f'{sharedValue}|{coldValue}|{open(\"/home/web/immortal/state.txt\").read()}|{preparedValue}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
     });
     check("all participants gone, new context cold-reopens last commit", reopened.status.role === "leader" && reopened.status.recovered === true &&
-      reopened.status.epoch === coldEpoch + 1 && reopenedValue.result === "41|99|cold-survives",
+      reopened.status.epoch === coldEpoch + 1 && reopenedValue.result === '41|99|cold-survives|7|{"lane": "prepared"}',
       `epoch=${reopened.status.epoch}, value=${reopenedValue.result}, ${timings.coldReopenMs}ms`);
     check("durable epoch, leader identity and commit time are observable", reopened.status.leaderId === "D" &&
       reopened.status.participantId === "D" && reopened.status.lastCommitAt === coldCommit.commit.committedAt,

@@ -2748,7 +2748,7 @@ NEXT:
 - [kernelElection.js](../../src/processOs/kernelElection.js)에 participant 고유 ID, 영속 OPFS epoch, leader/epoch fencing, presence, 상태 구독, follower commit, late-response 폐기, 무재생 outcome-unknown RPC 계약을 넣었다.
 - `openPersistentMachine({ name })`을 공개 진입점으로 추가했다. 같은 name은 OPFS의 같은 머신 디렉터리와 Web Locks/BroadcastChannel 선출에 연결된다.
 - [machineHome.js](../../src/capabilities/machineHome.js)를 Session과 MachineJournal이 공유하는 `/home` 스냅샷 계약으로 분리했다. MachineJournal HEAD/PREV 세대가 heap과 `/home/web` CAS blob을 함께 commit/recover/pack/prune한다.
-- [kernelElectionProbe.html](../../tests/attempts/pythonMachine/kernelElectionProbe.html)이 3개 독립 browsing context, follower 변수/파일 공유, follower commit, leader context 강제 제거, epoch 증가, 정확히 한 successor, heap + `/home/web` 복구, in-flight outcome unknown, 모든 context 제거 뒤 cold reopen을 검증한다.
+- [kernelElectionProbe.html](../../tests/attempts/pythonMachine/kernelElectionProbe.html)이 3개 독립 browsing context, follower 변수/파일/prepared environment 공유, follower commit, leader context 강제 제거, epoch 증가, 정확히 한 successor, heap + `/home/web` + manifest 환경 복구, in-flight outcome unknown, 모든 context 제거 뒤 cold reopen을 검증한다.
 - [immortal.html](../../examples/immortal.html)에 machine, participant, role, leader, epoch, participant count, recovered, commit time, takeover time과 직접 실행/commit/새 탭/leader 닫기 흐름을 공개했다.
 - [immortalProductGate.js](../../tests/browser/immortalProductGate.js)가 임시 제품에 설치된 `node_modules/pyproc`의 root export만으로 같은 장애복구 흐름을 실행한다. product consumer coverage는 11행이 됐다.
 - benchmark schema에 S5 `immortal multi-tab machine`을 추가해 initial ready, RPC p50/p90, failover, recovery, cold reopen을 최소 3회 sample artifact로 봉인할 수 있게 했다.
@@ -2762,6 +2762,7 @@ NEXT:
 - RPC p50 1.00ms, 1.08ms, 1.05ms. 각 실행에서 변수 `41`, `/home/web` 파일, cold state `99`가 복구됐고 outcome-unknown 명령은 successor에서 0회 재생됐다.
 - 설치 패키지 product consumer gate GREEN 28/28. initial ready 3012ms, RPC p50/p90 0.98/1.54ms, failover 2375ms, recovery 649ms, cold reopen 2129ms.
 - 깨끗한 commit S5 3회도 모두 GREEN 28/28. failover 3025ms, 2248ms, 2894ms이고 artifact median/p95는 2894/3025ms다. recovery median 575ms, cold reopen median 2681ms, RPC p50/p90 median 1.11/1.67ms다.
+- 최종 요구사항 감사에서 prepared environment 명시 검증을 추가했다. manifest setup의 `json` module과 준비 값이 초기 follower, 강제 failover, 모든 context 종료 뒤 cold reopen에서 모두 유지됐다. 강화 후 probe GREEN 12/12, 설치 패키지 gate GREEN 28/28, failover 1996ms, recovery 555ms, cold reopen 2109ms다.
 
 검증:
 

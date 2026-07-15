@@ -651,6 +651,8 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
     "installed machine survives forced leader context removal",
     "installed failover RPC rejects unknown outcome without replay",
     "installed machine cold-reopens committed heap and home after all participants close",
+    "prepared environment",
+    "productPrepared",
     "PYPROC_RPC_OUTCOME_UNKNOWN",
   ]) {
     if (!immortalGate.includes(term) && !immortalParticipant.includes(term)) throw new Error(`immortal product consumer coverage 누락: ${term}`);

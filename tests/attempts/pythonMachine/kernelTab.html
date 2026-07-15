@@ -23,7 +23,10 @@
         machine = await openPersistentMachine({
           name: message.name,
           participantId: message.tabId,
-          manifest: { indexURL: INDEX },
+          manifest: {
+            indexURL: INDEX,
+            setup: "import json\npreparedValue = 7",
+          },
           journalDir,
           assetIntegrity,
           onStatus: (status) => post({ id: message.tabId, event: "status", status }),
