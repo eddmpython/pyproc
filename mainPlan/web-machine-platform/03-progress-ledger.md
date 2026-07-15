@@ -322,3 +322,45 @@ NEXT:
 1. browser owner를 강제 종료해 정확히 한 successor와 이전 epoch command 거부를 실측한다.
 2. RGBA framebuffer와 pointer mode를 text/keyboard와 다른 capability로 추가한다.
 3. clock과 entropy를 ambient browser 접근이 아닌 명시적 device port로 주입한다.
+
+## 2026-07-15 - 단일 owner와 durable epoch successor
+
+구현:
+
+1. browser coordination 경계에 `WebLockOwnerCoordinator`를 추가했다. 같은 machine lock을 exclusive로
+   획득하고 복구가 끝나기 전에는 owner 준비 완료를 공개하지 않는다.
+2. `IndexedDbOwnerEpochStore`가 lock 획득마다 machine별 owner identity와 epoch를 한 transaction에서 갱신한다.
+   release와 assert는 현재 token이 아니면 `WEB_MACHINE_OWNER_STALE`로 거부한다.
+3. machine handle에 `adoptOwnership({ ownerId, epoch })`를 추가했다. command는 전송 시점의 owner identity와
+   epoch를 함께 잡고 둘 중 하나라도 달라지면 결과를 `WEB_MACHINE_OUTCOME_UNKNOWN`으로 폐기한다.
+4. iframe 네 개를 독립 composition root로 만들었다. 각 context는 자체 host와 adapter를 만들되 Web Lock,
+   owner epoch record, 완료 generation만 같은 origin 자원으로 공유한다.
+5. 정상 양도는 machine을 먼저 invalidate하고 epoch를 release한 뒤 lock을 넘긴다. 강제 제거는 정리 callback에
+   의존하지 않으며 browser가 lock을 회수하면 successor가 새 epoch를 claim한다.
+
+실측:
+
+- `ownerSuccessorProbe` 3회 연속 GREEN 11/11.
+- 최초 owner 준비 196/173/189ms, 정상 successor 22/22/23ms, owner iframe 강제 제거 successor
+  21/22/23ms였다.
+- 네 context 경쟁 동안 해당 Web Lock은 held 1, pending 3이었다. 정상 양도 뒤 held 1, pending 2,
+  강제 제거 뒤 held 1, pending 1로 유지됐고 같은 epoch owner가 둘인 순간은 없었다.
+- successor는 epoch 2와 3을 claim하고 같은 `owner-generation-1`의 값 42를 복구했다. successor history의
+  boot event는 0이고 새 generation commit과 command replay도 0이었다.
+- 이전 owner의 slow command는 adapter에서 정확히 1회 실행됐지만 ownership loss 뒤 결과는 outcome unknown,
+  `retryable: false`였고 machine owner는 null이었다.
+- 강제 제거된 epoch 2 token은 durable store에서 stale로 거부됐고, 최종 정리 뒤 held/pending lock은 0이었다.
+
+판정:
+
+1. 단일 owner는 탭 사이 메시지 관례가 아니라 browser가 보장하는 exclusive lock으로 성립한다.
+2. Web Lock의 휘발성 수명과 IndexedDB의 durable epoch를 분리해 hard kill 뒤에도 stale owner를 식별한다.
+3. successor는 guest를 새로 boot하거나 미확정 command를 replay하지 않고 마지막 완료 generation만 복구한다.
+4. coordinator와 epoch store는 guest 이름을 모르며 host는 browser 전역을 모른다. coordination 추가 때문에
+   고정한 의존성 방향을 완화하지 않았다.
+
+NEXT:
+
+1. RGBA framebuffer와 pointer mode를 text/keyboard와 다른 capability로 추가한다.
+2. clock과 entropy를 ambient browser 접근이 아닌 명시적 device port로 주입한다.
+3. 이동 가능한 `.webmachine` envelope와 engine/image license, SBOM 배포 게이트를 닫는다.

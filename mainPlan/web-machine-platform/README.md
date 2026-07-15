@@ -9,7 +9,9 @@ Phase 4 durable generation 핵심은 통과했다. 이어 pyproc heap에서 `/ho
 Linux 9P file을 제거하고 별도 block volume에서만 복원했다. 실제 guest file의 block 배선도 통과했으며
 Linux eth0를 bounded packet switch에 연결해 실제 ARP/ICMP와 process cold restore 뒤 NIC 재연결까지 통과했다.
 이어 VGA text display와 PS/2 keyboard를 console과 분리하고 cold restore 뒤 새 장치 재연결까지 통과했다.
-RGBA framebuffer, pointer와 owner successor는 남아 있다.
+독립 browsing context 네 개의 Web Lock 경쟁에서는 owner가 항상 하나였고, 정상 양도와 owner context 강제
+제거 뒤 successor 하나가 durable epoch를 올려 같은 generation을 boot나 command replay 없이 복구했다.
+RGBA framebuffer, pointer, clock/entropy와 배포 검토는 남아 있다.
 
 ## 한 문장
 

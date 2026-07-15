@@ -1,0 +1,178 @@
+<!doctype html>
+<!--
+3회 연속 GREEN 11/11: initial owner 196/173/189ms, 정상 successor 22/22/23ms,
+owner context 강제 제거 successor 21/22/23ms.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Web Machine owner successor probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}iframe{width:1px;height:1px;border:0}</style>
+</head>
+<body>
+<h1>Web Machine owner successor probe</h1>
+<p>독립 browsing context 네 개가 한 machine lock을 경쟁하고, stale command와 강제 owner 제거를 durable epoch로 fence한다.</p>
+<pre id="out">실행 중...</pre>
+<div id="participants"></div>
+<script type="module">
+  import { IndexedDbOwnerEpochStore } from "../browser/coordination/indexedDbOwnerEpochStore.js";
+  import { webMachineOwnerLockName } from "../browser/coordination/webLockOwnerCoordinator.js";
+  import { IndexedDbGenerationStore } from "../browser/persistence/indexedDbGenerationStore.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+  const machineId = "ownerSuccessorMachine";
+  const groupId = "ownerSuccessorGroup";
+  const lockName = webMachineOwnerLockName(machineId);
+  const participants = new Map();
+  const ownerEvents = [];
+  const lostEvents = [];
+  const errors = [];
+  let requestSequence = 0;
+
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (!message || message.from !== "ownerParticipant") return;
+    const participant = participants.get(message.ownerId);
+    if (!participant || event.source !== participant.frame.contentWindow) return;
+    if (message.event === "owned") ownerEvents.push({ ...message, time: performance.now() });
+    else if (message.event === "lost") lostEvents.push({ ...message, time: performance.now() });
+    else if (message.event === "error") errors.push(message);
+    else if (message.event === "response") {
+      const pending = participant.pending.get(message.reqId);
+      if (!pending) return;
+      participant.pending.delete(message.reqId);
+      if (message.ok) pending.resolve(message);
+      else {
+        const error = new Error(message.error);
+        error.code = message.code;
+        error.retryable = message.retryable;
+        pending.reject(error);
+      }
+    }
+  });
+
+  function makeParticipant(ownerId) {
+    return new Promise((resolve) => {
+      const frame = document.createElement("iframe");
+      const participant = { frame, pending: new Map() };
+      participants.set(ownerId, participant);
+      const ready = (event) => {
+        if (event.data?.from !== "ownerParticipant" || event.data.event !== "ready" || event.data.ownerId !== ownerId || event.source !== frame.contentWindow) return;
+        window.removeEventListener("message", ready);
+        resolve();
+      };
+      window.addEventListener("message", ready);
+      frame.src = `ownerSuccessorParticipant.html?id=${encodeURIComponent(ownerId)}`;
+      document.getElementById("participants").appendChild(frame);
+    });
+  }
+
+  function command(ownerId, commandName) {
+    const participant = participants.get(ownerId);
+    if (!participant) return Promise.reject(new Error(`participant 없음: ${ownerId}`));
+    const reqId = `r${++requestSequence}`;
+    return new Promise((resolve, reject) => {
+      participant.pending.set(reqId, { resolve, reject });
+      participant.frame.contentWindow.postMessage({ to: "ownerParticipant", ownerId, reqId, command: commandName }, "*");
+    });
+  }
+
+  function removeParticipant(ownerId) {
+    const participant = participants.get(ownerId);
+    if (!participant) return;
+    participant.frame.remove();
+    participants.delete(ownerId);
+  }
+
+  async function waitFor(predicate, timeoutMs = 10000) {
+    const deadline = performance.now() + timeoutMs;
+    while (performance.now() < deadline) {
+      const value = predicate();
+      if (value) return value;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return null;
+  }
+
+  async function lockCounts() {
+    const snapshot = await navigator.locks.query();
+    return {
+      held: snapshot.held.filter((entry) => entry.name === lockName).length,
+      pending: snapshot.pending.filter((entry) => entry.name === lockName).length,
+    };
+  }
+
+  try {
+    const ids = ["A", "B", "C", "D"];
+    const startedAt = performance.now();
+    await Promise.all(ids.map(makeParticipant));
+    await Promise.all(ids.map((id) => command(id, "join")));
+    const first = await waitFor(() => ownerEvents.find((entry) => entry.token.epoch === 1));
+    timings.initialOwnerMs = Math.round(performance.now() - startedAt);
+    const firstLocks = await lockCounts();
+    check("4 browsing context에서 owner 정확히 하나", !!first && firstLocks.held === 1 && firstLocks.pending === 3 && ownerEvents.length === 1, `${first?.ownerId}/${firstLocks.held}/${firstLocks.pending}`);
+    check("첫 owner가 epoch 1로 generation 42 생성", first?.value === 42 && first.machineEpoch === 1 && first.machineOwnerId === first.ownerId && first.recovered === false, `${first?.machineOwnerId}/${first?.machineEpoch}/${first?.value}`);
+
+    await command(first.ownerId, "slowStart");
+    const yieldStartedAt = performance.now();
+    await command(first.ownerId, "yield");
+    const second = await waitFor(() => ownerEvents.find((entry) => entry.token.epoch === 2));
+    timings.gracefulSuccessorMs = Math.round(performance.now() - yieldStartedAt);
+    const slow = await command(first.ownerId, "releaseSlow");
+    const secondLocks = await lockCounts();
+    check("ownership loss가 in-flight 결과를 outcome unknown으로 fence", slow.result.ok === false && slow.result.code === "WEB_MACHINE_OUTCOME_UNKNOWN" && slow.result.retryable === false && slow.executions === 1 && slow.machineOwnerId === null, `${slow.result.code}/${slow.executions}/${slow.machineEpoch}`);
+    check("epoch 2 successor 하나가 durable generation 복구", !!second && second.value === 42 && second.recovered === true && second.machineEpoch === 2 && second.machineOwnerId === second.ownerId && secondLocks.held === 1 && secondLocks.pending === 2, `${second?.ownerId}/${second?.machineEpoch}/${secondLocks.held}/${secondLocks.pending}`);
+    check("graceful loss event가 lock release 전에 machine 무효화", lostEvents.some((entry) => entry.ownerId === first.ownerId && entry.machineOwnerId === null && entry.machineEpoch === 2), JSON.stringify(lostEvents.map((entry) => [entry.ownerId, entry.machineEpoch])));
+
+    const hardKillAt = performance.now();
+    removeParticipant(second.ownerId);
+    const third = await waitFor(() => ownerEvents.find((entry) => entry.token.epoch === 3));
+    timings.forcedSuccessorMs = Math.round(performance.now() - hardKillAt);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const thirdLocks = await lockCounts();
+    const epochThreeOwners = ownerEvents.filter((entry) => entry.token.epoch === 3);
+    check("owner context 강제 제거 뒤 경쟁자 중 successor 정확히 하나", !!third && epochThreeOwners.length === 1 && thirdLocks.held === 1 && thirdLocks.pending === 1, `${third?.ownerId}/${epochThreeOwners.length}/${thirdLocks.held}/${thirdLocks.pending}`);
+    check("강제 successor가 epoch 3과 generation 42를 복구", third?.value === 42 && third.recovered === true && third.machineEpoch === 3 && third.machineOwnerId === third.ownerId && !third.history.includes("booted"), `${third?.machineOwnerId}/${third?.machineEpoch}/${third?.value}`);
+
+    const epochStore = new IndexedDbOwnerEpochStore({ indexedDb: indexedDB, databaseName: "webMachineOwnerEpochV1" });
+    const staleCode = await epochStore.assertOwner({ machineId, ownerId: second.ownerId, epoch: 2 }).then(() => "", (error) => error.code || String(error));
+    const currentOwner = await epochStore.read(machineId);
+    check("durable epoch가 강제 종료된 stale owner 거부", staleCode === "WEB_MACHINE_OWNER_STALE" && currentOwner?.ownerId === third.ownerId && currentOwner.epoch === 3, `${staleCode}/${currentOwner?.ownerId}/${currentOwner?.epoch}`);
+    const generationStore = new IndexedDbGenerationStore({ indexedDb: indexedDB, databaseName: "webMachineOwnerGenerationV1" });
+    const head = await generationStore.readHead(groupId);
+    check("successor가 새 boot나 command replay 없이 같은 HEAD 사용", head?.head === "owner-generation-1" && ownerEvents.slice(1).every((entry) => entry.recovered && !entry.history.includes("booted")), `${head?.head}/${ownerEvents.length}`);
+    check("owner coordination 내부 오류 0", errors.length === 0, JSON.stringify(errors));
+
+    const remaining = [...participants.keys()];
+    const pendingId = remaining.find((id) => id !== first.ownerId && id !== third.ownerId);
+    if (pendingId) await command(pendingId, "leave");
+    await command(third.ownerId, "yield");
+    await command(first.ownerId, "leave");
+    await command(third.ownerId, "leave");
+    for (const id of [...participants.keys()]) removeParticipant(id);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const finalLocks = await lockCounts();
+    check("participant 종료 뒤 held/pending lock 0", finalLocks.held === 0 && finalLocks.pending === 0, `${finalLocks.held}/${finalLocks.pending}`);
+    epochStore.close();
+    generationStore.close();
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-1800));
+    for (const id of [...participants.keys()]) removeParticipant(id);
+  }
+
+  await report();
+</script>
+</body>
+</html>

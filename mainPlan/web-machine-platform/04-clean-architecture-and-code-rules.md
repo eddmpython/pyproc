@@ -45,8 +45,8 @@ packages/
 │     ├─ composition/
 │     │  └─ createBrowserHost.js
 │     ├─ coordination/
-│     │  ├─ ownerElection.js
-│     │  └─ ownershipFence.js
+│     │  ├─ indexedDbOwnerEpochStore.js
+│     │  └─ webLockOwnerCoordinator.js
 │     ├─ persistence/
 │     │  ├─ generationStore.js
 │     │  ├─ blobStore.js
@@ -124,6 +124,9 @@ tests/attempts/webMachine/
 │  ├─ webMachineError.js
 │  └─ webMachineHostDraft.js
 ├─ browser/                    # device와 persistence의 browser 구현 초안
+│  ├─ coordination/
+│  │  ├─ indexedDbOwnerEpochStore.js
+│  │  └─ webLockOwnerCoordinator.js
 │  ├─ devices/
 │  │  ├─ memoryBlockDevice.js
 │  │  ├─ memoryEthernetSwitch.js
@@ -165,7 +168,9 @@ tests/attempts/webMachine/
    ├─ persistentDualBootProbe.html
    ├─ deviceBackedDualBootProbe.html
    ├─ packetNetworkProbe.html
-   └─ displayInputProbe.html
+   ├─ displayInputProbe.html
+   ├─ ownerSuccessorParticipant.html
+   └─ ownerSuccessorProbe.html
 ```
 
 ## 계약 규칙
@@ -176,12 +181,14 @@ Host의 public verb는 아래로 제한한다.
 
 ```text
 registerAdapter / registerDevice / createMachine / getMachine
+adoptOwnership / invalidateOwnership
 boot / pause / resume / snapshot / restore / shutdown / inspect
 ```
 
 - machine별 command queue를 사용한다. 전역 mutex를 만들지 않는다.
 - 상태 전이는 Host만 바꾼다. adapter가 Host state를 직접 쓰지 않는다.
-- ownership epoch가 바뀐 in-flight command는 `WEB_MACHINE_OUTCOME_UNKNOWN`이며 자동 replay하지 않는다.
+- ownership identity 또는 epoch가 바뀐 in-flight command는 `WEB_MACHINE_OUTCOME_UNKNOWN`이며 자동 replay하지 않는다.
+- Web Lock 획득 뒤 durable epoch를 claim하고 machine handle이 token을 adopt한 다음에만 owner 준비 완료를 공개한다.
 - ID, clock, entropy, persistence는 생성자 또는 device port로 주입한다.
 
 ### GuestAdapter

@@ -77,22 +77,22 @@
 
 ## Phase 4 - 영속 머신과 탭 장애복구
 
-상태: durable generation, 브라우저 프로세스 cold reopen, 실제 guest block 배선 완료. owner successor 진행 전.
+상태: durable generation, 브라우저 프로세스 cold reopen, 실제 guest block 배선, 정확히 한 owner successor 완료.
 
 작업:
 
 1. [완료] 공통 HEAD/PREV + CAS generation을 만든다.
 2. [완료] adapter snapshot과 flushed virtual block을 같은 content-addressed generation에 commit한다.
-3. [부분] 이전 ownership epoch 결과 거부와 outcome-unknown 의미론을 적용했다. 정확히 한 successor 선출은 남았다.
+3. [완료] Web Lock 단일 owner, IndexedDB 단조 epoch, 이전 owner 결과 거부와 정확히 한 successor를 적용했다.
 4. [완료] pyproc과 Linux를 IndexedDB에 commit하고 Edge process tree 종료 뒤 새 process에서 cold reopen한다.
 5. [완료] 공통 block port를 pyproc home과 v86 9P guest file의 완료 generation backing volume으로 연결한다.
 
 게이트:
 
-- [대기] leader 강제 제거 뒤 정확히 한 successor.
+- [통과] 독립 browsing context 네 개의 leader 경쟁과 강제 제거 뒤 정확히 한 successor.
 - [통과] 완료 commit 경계의 두 guest opaque snapshot과 block image 복구.
 - [통과] 전송 뒤 끊긴 명령 자동 replay 0.
-- [부분] process recovery 2.5-3.0초를 공개했다. owner failover 시간은 남았다.
+- [통과] process recovery 2.5-3.0초와 owner failover 21-23ms를 공개했다.
 - [통과] 복구한 공통 block이 pyproc home과 Linux 9P mount의 실제 file state를 제공한다.
 
 ## Phase 5 - 이동 가능한 `.webmachine`

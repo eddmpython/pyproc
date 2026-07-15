@@ -994,6 +994,10 @@ check("Web Machine attempts 레이어 구조 고정", () => {
   for (const file of requiredBrowserDevices) {
     if (!existsSync(join(webMachineRoot, "browser", "devices", file))) throw new Error(`browser device 계약 누락: ${file}`);
   }
+  const requiredBrowserCoordination = ["indexedDbOwnerEpochStore.js", "webLockOwnerCoordinator.js"];
+  for (const file of requiredBrowserCoordination) {
+    if (!existsSync(join(webMachineRoot, "browser", "coordination", file))) throw new Error(`browser coordination 계약 누락: ${file}`);
+  }
   const requiredV86Bridges = [
     "v86BlockBuffer.js",
     "v86FileSystemVolume.js",

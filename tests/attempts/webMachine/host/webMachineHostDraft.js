@@ -101,6 +101,7 @@ class WebMachineDraft {
     this.permissions = { devices: [...(permissions?.devices || [])] };
     this.instanceId = instanceId;
     this.state = "created";
+    this.ownerId = null;
     this.epoch = 1;
     this._adapter = null;
     this._capabilities = null;
@@ -120,7 +121,24 @@ class WebMachineDraft {
       : null;
   }
 
+  adoptOwnership({ ownerId, epoch }) {
+    const nextOwnerId = String(ownerId || "");
+    if (!nextOwnerId) throw new TypeError("ownerId가 필요하다");
+    if (!Number.isSafeInteger(epoch) || epoch < 1) throw new TypeError("ownership epoch는 1 이상 정수여야 한다");
+    if (epoch < this.epoch) {
+      throw new WebMachineError("WEB_MACHINE_OWNERSHIP_STALE", `${this.machineId}: ownership epoch ${epoch} < ${this.epoch}`);
+    }
+    if (epoch === this.epoch && this.ownerId && this.ownerId !== nextOwnerId) {
+      throw new WebMachineError("WEB_MACHINE_OWNERSHIP_CONFLICT", `${this.machineId}: epoch ${epoch} owner ${this.ownerId} != ${nextOwnerId}`);
+    }
+    this.ownerId = nextOwnerId;
+    this.epoch = epoch;
+    this._history.push({ event: "ownershipAdopted", state: this.state, ownerId: this.ownerId, epoch: this.epoch });
+    return Object.freeze({ ownerId: this.ownerId, epoch: this.epoch });
+  }
+
   invalidateOwnership(reason = "owner lost") {
+    this.ownerId = null;
     this.epoch += 1;
     this._history.push({ event: "ownershipInvalidated", state: this.state, epoch: this.epoch, reason: String(reason) });
     return this.epoch;
@@ -244,6 +262,7 @@ class WebMachineDraft {
       machineId: this.machineId,
       adapterId: this.adapterId,
       instanceId: this.instanceId,
+      ownerId: this.ownerId,
       state: this.state,
       epoch: this.epoch,
       capabilities: this.capabilities,
@@ -270,6 +289,7 @@ class WebMachineDraft {
     const operationId = `${this.instanceId}/${++this._operationSeq}`;
     const task = this._tail.then(async () => {
       const sentEpoch = this.epoch;
+      const sentOwnerId = this.ownerId;
       let result;
       let failure = null;
       try {
@@ -277,11 +297,11 @@ class WebMachineDraft {
       } catch (error) {
         failure = error;
       }
-      if (fenced && sentEpoch !== this.epoch) {
+      if (fenced && (sentEpoch !== this.epoch || sentOwnerId !== this.ownerId)) {
         throw new WebMachineError(
           "WEB_MACHINE_OUTCOME_UNKNOWN",
           `${this.machineId}: ${label} 결과 불명, 자동 replay 금지`,
-          { operationId, sentEpoch, currentEpoch: this.epoch, retryable: false },
+          { operationId, sentOwnerId, currentOwnerId: this.ownerId, sentEpoch, currentEpoch: this.epoch, retryable: false },
         );
       }
       if (failure) throw failure;
