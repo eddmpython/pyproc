@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S1L",
+  "candidate": "webvm",
+  "name": "single-kernel numpy matmul latency",
+  "command": "WebVM terminal, Python perf_counter S1L 1024 f64 numpy matmul, 128 warmup, 3 samples",
+  "commit": "e8ecb78025d7e8e034ef5bf075f7d41647f2812d",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T03:07:45.194Z",
+  "finishedAt": "2026-07-15T03:07:45.195Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 17717940224
+  },
+  "engine": {
+    "name": "WebVM/CheerpX Python 3.7.3 NumPy"
+  },
+  "source": "https://webvm.io/ via playwright-cli",
+  "note": "warmed WebVM session; numpy import and matrix construction excluded from sample timings; checksum stayed 3.2149321267 across all samples",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 12825,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 11406,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 11349,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 11406,
+    "p95Ms": 12825,
+    "minMs": 11349,
+    "maxMs": 12825,
+    "maxErr": 0
+  }
+}

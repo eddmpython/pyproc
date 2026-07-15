@@ -2195,3 +2195,44 @@ NEXT:
 1. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
 2. README benchmark 섹션에 S0-S4를 모두 올릴 경우, 숫자보다 계약 차이를 먼저 설명한다.
 3. 다음 구조 강화는 benchmark artifact schema v2 또는 product-facing capability matrix 중 하나로 잡는다.
+
+## 2026-07-15 - WebVM S1L single-kernel benchmark 합류
+
+완료:
+
+- WebVM terminal에서 Python 3.7.3과 NumPy 사용 가능 여부를 확인했다.
+- WebVM을 S1L single-kernel NumPy latency 후보로 측정했다.
+- [s1l-webvm-2026-07-15.json](benchmarks/s1l-webvm-2026-07-15.json)을 생성했다.
+- [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)를 pyproc, WebVM, JupyterLite, marimo WASM 4자 표로 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [externalS1](../../tests/attempts/externalS1/README.md)의 S1L 상태를 갱신했다.
+
+실측:
+
+- Browser: Edge `150.0.4078.65`.
+- WebVM URL: `https://webvm.io/`.
+- WebVM runtime: Python `3.7.3`, NumPy import 가능.
+- 작업: WebVM terminal에서 1024x1024 f64 NumPy matmul을 `time.perf_counter()`로 측정. 128x128 warmup 뒤 3 samples. NumPy import와 matrix construction은 sample timing에서 제외했다.
+- 유효 sample: 12825ms, 11406ms, 11349ms.
+- checksum은 세 sample 모두 `3.2149321267`로 동일했다.
+- WebVM S1L median: 11406ms, p95 12825ms, min 11349ms, max 12825ms, maxErr 0.
+- artifact 생성 commit: `e8ecb78025d7e8e034ef5bf075f7d41647f2812d`, `worktreeDirty: false`.
+
+검증:
+
+- WebVM terminal probe: `PY_READY 3.7.3`, `NUMPY_SPEC True`.
+- WebVM S1L run: `PYPROC_S1L_SAMPLE` 3개와 `PYPROC_S1L_DONE` 확인.
+- `npm run bench:artifact -- --scenario S1L --candidate webvm --browser-version 150.0.4078.65 --engine "WebVM/CheerpX Python 3.7.3 NumPy" --source "https://webvm.io/ via playwright-cli" --command "WebVM terminal, Python perf_counter S1L 1024 f64 numpy matmul, 128 warmup, 3 samples" --note "warmed WebVM session; numpy import and matrix construction excluded from sample timings; checksum stayed 3.2149321267 across all samples" --sample 12825,0 --sample 11406,0 --sample 11349,0 --out mainPlan/browser-os-north-star/benchmarks/s1l-webvm-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1l-webvm-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1l-marimo-wasm-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md` PASS.
+
+판정:
+
+- WebVM S1L은 측정 가치가 있었다. 단, 이것은 WebVM이 S1을 충족한다는 뜻이 아니다.
+- S1은 여전히 pyproc의 4-worker sharded NumPy matmul 계약이고, WebVM/JupyterLite/marimo WASM은 S1에서는 N/A다.
+- S1L은 single-kernel 보조 축이다. 4자 S1L 결과는 marimo WASM 9355ms, pyproc 10067ms, JupyterLite 10149ms, WebVM 11406ms다.
+- 이로써 S0, S0C, S1L은 4자 실측 표가 닫혔고, S1/S2/S3/S4는 pyproc OS 계약 + 외부 N/A 봉인 구조가 닫혔다.
+
+NEXT:
+
+1. pyproc의 공개 속도 간판은 S1 병렬 worker pool로 유지한다.
+2. README benchmark 섹션에 S0-S4와 S1L을 올릴 경우 숫자보다 계약 차이를 먼저 설명한다.
+3. 다음 구조 강화는 benchmark artifact schema v2 또는 product-facing capability matrix 중 하나로 잡는다.

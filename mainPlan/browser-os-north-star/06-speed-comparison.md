@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록. S0와 S0C는 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인. S1L은 pyproc, JupyterLite, marimo WASM을 같은 브라우저에서 측정.
+상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인.
 
 ## 목표
 
@@ -42,6 +42,7 @@
 | 2026-07-15 | S1 pyproc | [s1-pyproc-2026-07-15.json](benchmarks/s1-pyproc-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | GREEN, `size=1024`, 3 samples, median 3.95x, shard p95 2606ms, maxErr 0 |
 | 2026-07-15 | S1 external candidates | [webvm N/A](benchmarks/s1-webvm-na-2026-07-15.json), [jupyterlite N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json), [marimo-wasm N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | 같은 4-worker sharded NumPy matmul 계약 없음 |
 | 2026-07-15 | S1L pyproc | [s1l-pyproc-2026-07-15.json](benchmarks/s1l-pyproc-2026-07-15.json) | [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md) | GREEN, 3 samples, median 10067ms, p95 10073ms, maxErr 0 |
+| 2026-07-15 | S1L WebVM | [s1l-webvm-2026-07-15.json](benchmarks/s1l-webvm-2026-07-15.json) | [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md) | GREEN, 3 samples, median 11406ms, p95 12825ms, maxErr 0 |
 | 2026-07-15 | S1L JupyterLite | [s1l-jupyterlite-2026-07-15.json](benchmarks/s1l-jupyterlite-2026-07-15.json) | [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md) | GREEN, 3 samples, median 10149ms, p95 10153ms, maxErr 0 |
 | 2026-07-15 | S1L marimo WASM | [s1l-marimo-wasm-2026-07-15.json](benchmarks/s1l-marimo-wasm-2026-07-15.json) | [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md) | GREEN, 3 samples, median 9355ms, p95 11424ms, maxErr 0 |
 | 2026-07-15 | S2 pyproc | [s2-pyproc-2026-07-15.json](benchmarks/s2-pyproc-2026-07-15.json) | [s2-compare-2026-07-15.md](benchmarks/s2-compare-2026-07-15.md) | GREEN, 3 samples, serial median 73ms, process pool median 43ms, speedup 1.61x, maxErr 0 |
@@ -60,7 +61,7 @@
 | S0 python ready latency | [artifact](benchmarks/s0-pyproc-2026-07-15.json) | [artifact](benchmarks/s0-webvm-2026-07-15.json) | [artifact](benchmarks/s0-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s0-marimo-wasm-2026-07-15.json) | pyproc 3471ms, WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms. 조건은 각 artifact note를 따른다 |
 | S0C python cold ready latency | [artifact](benchmarks/s0c-pyproc-2026-07-15.json) | [artifact](benchmarks/s0c-webvm-2026-07-15.json) | [artifact](benchmarks/s0c-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s0c-marimo-wasm-2026-07-15.json) | pyproc 3660ms, marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms. cold profile/cache-clear 전용. S0 warm/observed 표와 섞지 않음 |
 | S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | [N/A](benchmarks/s1-webvm-na-2026-07-15.json) | [N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | pyproc만 같은 S1 계약 충족 |
-| S1L single-kernel numpy latency | [artifact](benchmarks/s1l-pyproc-2026-07-15.json) | 미측정 | [artifact](benchmarks/s1l-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s1l-marimo-wasm-2026-07-15.json) | WebVM 제외 3자 측정 완료 |
+| S1L single-kernel numpy latency | [artifact](benchmarks/s1l-pyproc-2026-07-15.json) | [artifact](benchmarks/s1l-webvm-2026-07-15.json) | [artifact](benchmarks/s1l-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s1l-marimo-wasm-2026-07-15.json) | 4자 측정 완료. S1 대체가 아니라 single-lane 보조 축 |
 | S2 process map | [artifact](benchmarks/s2-pyproc-2026-07-15.json) | [N/A](benchmarks/s2-webvm-na-2026-07-15.json) | [N/A](benchmarks/s2-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s2-marimo-wasm-na-2026-07-15.json) | pyproc serial 73ms, process pool 43ms, median speedup 1.61x. 외부 후보는 같은 `PyProc.map` process pool API 계약 없음 |
 | S3 browser server | [artifact](benchmarks/s3-pyproc-2026-07-15.json) | [N/A](benchmarks/s3-webvm-na-2026-07-15.json) | [N/A](benchmarks/s3-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s3-marimo-wasm-na-2026-07-15.json) | pyproc `VirtualOrigin` POST roundtrip median 18ms, p95 18ms. 외부 후보는 같은 pyproc `VirtualOrigin`/ASGI Service Worker URL contract 없음 |
 | S4 machine resume | [artifact](benchmarks/s4-pyproc-2026-07-15.json) | [N/A](benchmarks/s4-webvm-na-2026-07-15.json) | [N/A](benchmarks/s4-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s4-marimo-wasm-na-2026-07-15.json) | pyproc export 76ms, open 2264ms, image 10.8MB, resume rows 2-2. 외부 후보는 같은 pyproc signed `.pymachine`/trusted open/`resume.py` resource reopen contract 없음 |
@@ -92,7 +93,8 @@ S1L artifact는 S1을 single-lane으로 바꿔치기하지 않기 위한 보조 
 ```bash
 npm run bench:artifact -- --scenario S1L --candidate jupyterlite --command "manual single-kernel S1L run" --sample 9844,0 --sample 10149,0 --sample 10153,0 --out .tmp/jupyterlite-s1l.json
 npm run bench:artifact -- --scenario S1L --candidate marimo-wasm --command "manual single-kernel S1L run" --sample 11424,0 --sample 9355,0 --sample 9239,0 --out .tmp/marimo-wasm-s1l.json
-npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/jupyterlite-s1l.json .tmp/marimo-wasm-s1l.json --out .tmp/s1l-compare.md
+npm run bench:artifact -- --scenario S1L --candidate webvm --command "WebVM terminal S1L run" --sample 12825,0 --sample 11406,0 --sample 11349,0 --out .tmp/webvm-s1l.json
+npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/webvm-s1l.json .tmp/jupyterlite-s1l.json .tmp/marimo-wasm-s1l.json --out .tmp/s1l-compare.md
 ```
 
 S2 artifact는 `test:browser`의 `PyProc.map` timing을 paired sample로 승격한다. 같은 process pool에서 같은 함수와 입력을 serial과 parallel로 돌린 wall time만 받는다.
@@ -129,6 +131,6 @@ npm run bench:compare -- .tmp/pyproc-s4.json .tmp/webvm-s4-na.json --out .tmp/s4
 
 ## 다음 작업
 
-1. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
-2. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
-3. S0-S4 비교 축을 제품 README에 올릴 경우 숫자보다 계약 차이를 먼저 설명한다.
+1. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
+2. S0-S4와 S1L 비교 축을 제품 README에 올릴 경우 숫자보다 계약 차이를 먼저 설명한다.
+3. 다음 구조 강화는 benchmark artifact schema v2 또는 product-facing capability matrix 중 하나로 잡는다.

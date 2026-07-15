@@ -139,7 +139,8 @@ S1L single-kernel NumPy latency는 S1을 대체하지 않는 별도 보조 축�
 
 ```bash
 npm run bench:artifact -- --scenario S1L --candidate pyproc --command "<command>" --sample 10067,0 --sample 9633,0 --sample 10073,0 --out .tmp/pyproc-s1l.json
-npm run bench:compare -- .tmp/pyproc-s1l.json --out .tmp/s1l-compare.md
+npm run bench:artifact -- --scenario S1L --candidate webvm --command "WebVM terminal S1L" --sample 12825,0 --sample 11406,0 --sample 11349,0 --out .tmp/webvm-s1l.json
+npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/webvm-s1l.json --out .tmp/s1l-compare.md
 ```
 
 체크리스트:
