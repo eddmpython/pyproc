@@ -2691,3 +2691,46 @@ NEXT:
 1. coverage manifest를 benchmark artifact처럼 schema 검증 가능한 산출물로 승격할지 결정한다.
 2. `MachineContainer`도 product consumer gate로 승격할지 판정한다. `JobControl`과 같은 행이지만 아직 제품 gate 직접 실행은 없다.
 3. 소비자별 배선 상태를 실제 제품 gate freshness evidence와 더 직접 연결한다.
+
+## 2026-07-15 - MachineContainer product consumer gate 승격
+
+문제:
+
+- `MachineContainer`는 "머신 안의 머신"을 만드는 OS 핵심 능력이지만, product consumer coverage에는 직접 행이 없었다.
+- 능력 매트릭스의 Machine container and jobs 행은 `JobControl`과 공유됐지만, 설치 패키지 기준 제품 게이트에서 `MachineContainer` 자체의 `spawn`, `run`, `heapLen`, `kill` 수명주기를 직접 실행하지 않았다.
+
+완료:
+
+- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - machine container` 행을 추가했다.
+- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `MachineContainer`를 import하고, `assetIntegrity`가 붙은 설치 패키지 worker graph로 자식 머신을 띄운다.
+- product consumer gate가 자식 머신 `spawn`, Python setup 상태 유지, `run`, `heapLen`, `kill`, kill 이후 호출 reject를 검증한다.
+- [contract.md](../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 `MachineContainer` 수명주기를 연결했다.
+- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)의 Machine container and jobs 행을 `JobControl`과 `MachineContainer`가 모두 product consumer gate에서 검증되는 상태로 갱신했다.
+- `npm test`가 `MachineContainer` coverage 행과 실제 product consumer check 문자열을 함께 감시하게 했다.
+
+실측:
+
+- `npm run test:consumer` GREEN 20/20.
+- MachineContainer spawn 1805ms, boot 111ms.
+- product consumer coverage manifest 10 rows.
+- 같은 run의 참고 수치: VirtualOrigin 17ms, JobControl prompt 61ms/kill 29ms, MachineJournal commit 1100ms/recover 2166ms, signed `.pymachine` export 138ms, trusted open 1611ms.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/browser/productConsumerCoverage.mjs` PASS.
+- `node --check tests/browser/productConsumer.mjs` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 659 passed, 0 failed.
+- `npm run test:consumer` PASS, GREEN 20/20.
+
+판정:
+
+- MachineContainer가 probe 전용 또는 공유 행 근거에서 설치 패키지 기준 제품 소비 증거로 올라갔다.
+- 브라우저 OS 목표의 핵심 주장인 "브라우저 안에서 독립 머신을 다시 띄운다"가 공개 패키지 import와 제품 게이트로 계속 검증된다.
+
+NEXT:
+
+1. coverage manifest를 benchmark artifact처럼 schema 검증 가능한 외부 산출물로 승격할지 결정한다.
+2. 다음 승격 후보는 `SharedKernel`/`KernelElection` 계열 product consumer gate 또는 속도 산출물 개선 중 ROI가 큰 쪽으로 잡는다.
+3. 소비자별 배선 상태를 실제 제품 gate freshness evidence와 더 직접 연결한다.

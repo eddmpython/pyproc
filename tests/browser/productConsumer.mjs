@@ -94,6 +94,7 @@ const html = `<!DOCTYPE html>
       bootSession,
       PyProc,
       JobControl,
+      MachineContainer,
       VirtualOrigin,
       DeviceFs,
       verifyPyProcAssetIntegrity,
@@ -145,6 +146,7 @@ const html = `<!DOCTYPE html>
     let sw = null;
     let origin = null;
     let jobs = null;
+    let containers = null;
     let opfsRoot = null;
     const cleanupEntries = [];
     try {
@@ -299,6 +301,26 @@ const html = `<!DOCTYPE html>
       jobs.terminate();
       jobs = null;
 
+      t = performance.now();
+      containers = new MachineContainer(rt, { indexURL: INDEX, assetIntegrity });
+      const childMachine = await containers.spawn({ setup: "containerValue = 41" });
+      timings.containerSpawnMs = Math.round(performance.now() - t);
+      const containerValue = await childMachine.run("containerValue + 1");
+      const containerHeapLen = await childMachine.heapLen();
+      const containerKilled = childMachine.kill();
+      const killedRejects = await childMachine.run("1").then(() => false, () => true);
+      check("MachineContainer runs installed product child machine",
+        containers instanceof MachineContainer &&
+        childMachine.cid &&
+        childMachine.bootMs > 0 &&
+        containerValue === 42 &&
+        containerHeapLen > 0 &&
+        containerKilled === true &&
+        killedRejects === true,
+        "spawn=" + timings.containerSpawnMs + "ms, boot=" + childMachine.bootMs + "ms");
+      containers.terminate();
+      containers = null;
+
       opfsRoot = await navigator.storage.getDirectory();
       const homeName = uniqueName("pyprocProductHome");
       cleanupEntries.push(homeName);
@@ -405,6 +427,7 @@ const html = `<!DOCTYPE html>
     } finally {
       if (origin) origin.unbind();
       if (jobs) jobs.terminate();
+      if (containers) containers.terminate();
       if (sw) await sw.registration.unregister();
       if (opfsRoot) {
         for (const name of cleanupEntries) {

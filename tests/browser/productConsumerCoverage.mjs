@@ -52,6 +52,12 @@ export const PRODUCT_CONSUMER_COVERAGE = Object.freeze([
     contract: "설치 패키지 worker graph로 대화형 namespace를 만들고 `expr &`, `fg`, `kill`, `terminate` 잡 수명주기 실행",
   }),
   Object.freeze({
+    gate: "product consumer - machine container",
+    specifiers: Object.freeze(["`pyproc`"]),
+    publicSurface: Object.freeze(["`MachineContainer`"]),
+    contract: "설치 패키지 Runtime과 machine worker graph로 컨테이너 `spawn`, `run`, `heapLen`, `kill`, killed call reject 실행",
+  }),
+  Object.freeze({
     gate: "product consumer - crash resume",
     specifiers: Object.freeze(["`pyproc`"]),
     publicSurface: Object.freeze(["`bootSession`", "`MachineJournal`", "Runtime `enableJournal`"]),
