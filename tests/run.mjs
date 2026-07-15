@@ -640,11 +640,25 @@ check("src ESM import graph cycle 없음", () => {
 });
 check("src layer edge 승인 목록", () => {
   const allowedCrossLayer = new Set([
-    "module:runtime->capabilities",
-    "module:capabilities->runtime",
     "module:processOs->runtime",
     "module:processOs->capabilities",
-    "newURL:capabilities->processOs",
+  ]);
+  const exactCrossLayer = new Map([
+    ["module:runtime->capabilities", new Set([
+      "src/runtime/runtimeApi.js -> src/capabilities/runtimeBindings.js",
+    ])],
+    ["module:capabilities->runtime", new Set([
+      "src/capabilities/envManager.js -> src/runtime/runtimeApi.js",
+      "src/capabilities/envManager.js -> src/runtime/engines/pyodideEngine.js",
+      "src/capabilities/machineJournal.js -> src/runtime/memoryLayout.js",
+      "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
+      "src/capabilities/session.js -> src/runtime/runtimeApi.js",
+      "src/capabilities/session.js -> src/runtime/memoryLayout.js",
+      "src/capabilities/syscallBridge.js -> src/runtime/assets.js",
+    ])],
+    ["newURL:capabilities->processOs", new Set([
+      "src/capabilities/syscallBridge.js -> src/processOs/worker.js",
+    ])],
   ]);
   const problems = [];
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
@@ -656,10 +670,9 @@ check("src layer edge 승인 목록", () => {
       const toLayer = srcLayerName(targetRel);
       if (!fromLayer || !toLayer || fromLayer === toLayer) continue;
       const key = `${ref.kind}:${fromLayer}->${toLayer}`;
-      if (key === "module:runtime->capabilities") {
-        if (rel(f) !== "src/runtime/runtimeApi.js" || targetRel !== "src/capabilities/runtimeBindings.js") {
-          problems.push(`${rel(f)} -> ${ref.spec} (${key}, runtimeApi.js -> runtimeBindings.js만 허용)`);
-        }
+      const pair = `${rel(f)} -> ${targetRel}`;
+      if (exactCrossLayer.has(key)) {
+        if (!exactCrossLayer.get(key).has(pair)) problems.push(`${pair} (${key}, 정확 승인 목록 밖)`);
         continue;
       }
       if (!allowedCrossLayer.has(key)) problems.push(`${rel(f)} -> ${ref.spec} (${key})`);

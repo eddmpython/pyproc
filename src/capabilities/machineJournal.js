@@ -13,7 +13,7 @@
 // 경계 일관성을 준다. 커밋 주기는 소비자가 정한다(하드코딩 없음).
 // 저장 형식: blob/<sha256> loose CAS + HEAD.json/PREV.json. pack() 후에는 PACKS.json + pack/*.bin도
 // 같은 CAS blob 저장소로 읽는다(loose와 pack 모두 recover 호환).
-import { PAGE_SIZE as PAGE } from "../runtime/memoryCapability.js";
+import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 
 const BLOB_DIR = "blob";
 const PACK_DIR = "pack";

@@ -15,7 +15,7 @@
 //   이 전제를 Runtime.execSeq(상태 변이 카운터)로 O(1) 감지한다. 경계가 깨져 있으면(실행·예외·
 //   setGlobal 등) 조용한 오염 대신 자동으로 재해시 경로로 승격해 복원한다. 반환값 rehashed로
 //   어느 경로였는지 알 수 있고, opts.rehash로 강제할 수도 있다.
-import { PAGE_SIZE as PAGE } from "../runtime/memoryCapability.js";
+import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 
 // Runtime.enableReactive()가 이 컨트롤러를 만든다. 소비자는 checkpoint/restore만 쓴다.
 export class ReactiveController {

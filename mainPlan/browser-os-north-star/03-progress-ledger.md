@@ -1434,3 +1434,39 @@ NEXT:
 1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
 2. 남은 `capabilities -> runtime` edge를 파일시스템, 메모리, 엔진 seam별로 분류해 줄일 수 있는지 본다.
 3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+
+## 2026-07-15 - Layer edge 정확 승인 목록화
+
+문제:
+
+- `runtime -> capabilities`는 registry 한 줄로 좁혔지만, 테스트 게이트는 아직 `capabilities -> runtime`을 레이어 단위로 넓게 허용했다.
+- `ReactiveController`, `MachineJournal`, `Session`은 `PAGE_SIZE` 하나 때문에 `memoryCapability.js` class 구현 파일을 import했다. 상수 계약과 class 구현이 묶이면 상위 능력의 의존이 불필요하게 두꺼워진다.
+- 새 capability나 runtime helper가 추가될 때 cross-layer import가 조용히 늘어날 수 있었다.
+
+완료:
+
+- `src/runtime/memoryLayout.js`를 추가했다. `PAGE_SIZE`는 이 작은 layout 계약에서 정의하고, `memoryCapability.js`는 기존 public export를 유지하도록 재수출한다.
+- `reactive.js`, `machineJournal.js`, `session.js`는 `memoryCapability.js` 대신 `memoryLayout.js`를 import한다.
+- `tests/run.mjs`의 layer edge 게이트를 강화했다. `runtime -> capabilities`, `capabilities -> runtime`, `newURL:capabilities -> processOs`는 정확한 파일 쌍 목록에 있을 때만 허용한다.
+- 테스트 운영 문서와 OS 아키텍처 표를 exact layer edge gate에 맞췄다.
+
+검증:
+
+- `node --check src/runtime/memoryLayout.js` PASS.
+- `node --check src/runtime/memoryCapability.js` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` GREEN 617/617.
+- `npm run test:browser` GREEN 47/47.
+- `npm run test:consumer` GREEN 15/15.
+
+판정:
+
+- `capabilities -> runtime` edge는 아직 존재하지만 이제 drift가 파일 쌍 단위로 봉인된다.
+- 메모리 page layout은 `MemoryCapability` class 구현에서 분리되어 상위 능력이 더 얇은 계약에 의존한다.
+- 다음 구조 개선은 `envManager`와 `session`의 부트 의존을 runtime facade로 더 좁힐지, 또는 속도 축으로 넘어가 외부 비교 벤치를 실제로 닫을지 결정하면 된다.
+
+NEXT:
+
+1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
+2. `envManager`와 `session`의 `runtimeApi.js` 의존을 부트 facade 또는 factory 주입으로 좁힐 수 있는지 본다.
+3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.

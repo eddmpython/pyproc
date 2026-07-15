@@ -16,7 +16,7 @@
 // 서명(2026-07-15): WebCrypto ECDSA P-256으로 unsigned body 해시를 서명한다. outer envelope는
 //   signature까지 포함한 최종 body를 다시 해시하므로 무결성과 출처 검증이 분리된다.
 import { boot } from "../runtime/runtimeApi.js";
-import { PAGE_SIZE } from "../runtime/memoryCapability.js";
+import { PAGE_SIZE } from "../runtime/memoryLayout.js";
 import { WheelCache } from "./wheelCache.js";
 
 // 부팅 구간의 비결정 소스를 고정한다(복원 보장). 리플레이 결정성의 필요조건.
