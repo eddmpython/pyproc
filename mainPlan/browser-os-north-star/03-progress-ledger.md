@@ -2236,3 +2236,39 @@ NEXT:
 1. pyproc의 공개 속도 간판은 S1 병렬 worker pool로 유지한다.
 2. README benchmark 섹션에 S0-S4와 S1L을 올릴 경우 숫자보다 계약 차이를 먼저 설명한다.
 3. 다음 구조 강화는 benchmark artifact schema v2 또는 product-facing capability matrix 중 하나로 잡는다.
+
+## 2026-07-15 - README benchmark 공개 표면 갱신
+
+완료:
+
+- [README.md](../../README.md) benchmark 섹션을 최신 artifact 기반 계약 표로 갱신했다.
+- [README.ko.md](../../README.ko.md) benchmark 섹션도 같은 구조로 갱신했다.
+- S1을 공개 속도 간판으로 유지하고, S1L은 single-kernel 보조 축으로 분리했다.
+- S0C, S0, S1, S1L, S2, S3, S4 각각을 "무엇을 증명하는 숫자인가"와 함께 공개 문구에 연결했다.
+
+반영한 공개 숫자:
+
+- S0C cold Python ready: pyproc median 3660ms, marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms.
+- S0 warm Python ready: pyproc median 3471ms, WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms.
+- S1 headline sharded NumPy: pyproc median speedup 3.95x, shard p95 2606ms, single-worker median 10067ms.
+- S1L single-kernel NumPy: marimo WASM 9355ms, pyproc 10067ms, JupyterLite 10149ms, WebVM 11406ms.
+- S2 process map: serial median 73ms, process-pool median 43ms, median speedup 1.61x.
+- S3 browser server: `VirtualOrigin` POST roundtrip median 18ms, p95 18ms.
+- S4 machine resume: signed `.pymachine` export median 76ms, trusted-open median 2264ms, image 10.8MB, resume rows 2-2.
+
+검증:
+
+- `git diff --check` PASS.
+- `npm test` PASS, 647 passed, 0 failed.
+
+판정:
+
+- README의 속도 문구가 내부 원장과 artifact 링크를 직접 가리키게 됐다.
+- "pyproc은 단일 NumPy가 제일 빠르다"는 잘못된 인상을 막고, 실제 간판인 process sharding과 OS형 affordance를 분리해 공개했다.
+- 다음 구조 강화는 product-facing capability matrix가 더 직접적이다. README는 속도 표면이 닫혔고, 다음은 능력 표면을 제품 소비자가 바로 판단할 수 있게 해야 한다.
+
+NEXT:
+
+1. product-facing capability matrix를 만든다.
+2. matrix는 공개 표면 export, 제품 가치, gate, 성숙도, 브라우저/헤더 요구사항, N/A 벽을 한 표로 묶는다.
+3. README에는 matrix 전체를 복제하지 않고 docs의 정본 링크만 둔다.

@@ -189,15 +189,28 @@ Four primitives make it sound: complete heap hashing at each execution boundary 
 
 ## Benchmarks
 
-The numbers below come from one machine and are meant to be **reproduced, not taken on faith** - run `npm run serve`, open `examples/`, and report with conditions (browser, OS, Pyodide version, warm / cold, heap size, sample count). Representative local measurements (Edge, Windows 11, Pyodide v314.0.2, warm cache):
+The headline is contract-specific, not "all Python is faster." pyproc is fast when the product can prepare state once, branch it, restore it, or shard work across independent browser processes. Single-kernel NumPy is still ordinary WebAssembly BLAS.
+
+The numbers below come from tracked artifacts and are meant to be **reproduced, not taken on faith**. Current comparison machine: Edge `150.0.4078.65`, Windows 11, AMD Ryzen 7 8845HS, 3 samples unless noted. The full measurement contract is in [benchmarking.md](docs/operations/benchmarking.md).
+
+| Axis | What it proves | pyproc result | External comparison |
+|---|---|---|---|
+| S0C cold Python ready | First Python command from a fresh browser profile | [3660ms median](mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms ([compare](mainPlan/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md)) |
+| S0 warm Python ready | First Python command with warm browser cache/profile | [3471ms median](mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms ([compare](mainPlan/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md)) |
+| S1 headline: sharded NumPy | 1024x1024 f64 matmul split over 4 Python workers vs one worker in the same run | [3.95x median speedup](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json), shard p95 2606ms below single-worker median 10067ms | WebVM, JupyterLite, and marimo WASM are [N/A for the same 4-worker shard contract](mainPlan/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md) |
+| S1L single-kernel NumPy | Same 1024x1024 f64 matmul in one Python kernel, kept separate from S1 | [10067ms median](mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | marimo WASM 9355ms, JupyterLite 10149ms, WebVM 11406ms ([compare](mainPlan/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md)) |
+| S2 process map | Same Python function run serially vs `PyProc.map` process pool | [73ms serial median, 43ms process-pool median](mainPlan/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json), 1.61x median speedup | Other candidates are N/A for the same `PyProc.map` API contract ([compare](mainPlan/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md)) |
+| S3 browser server | Installed-package `VirtualOrigin` POST roundtrip to a Python ASGI app | [18ms median, 18ms p95](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | Other candidates are N/A for the same Service Worker URL-to-ASGI contract ([compare](mainPlan/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md)) |
+| S4 machine resume | Signed `.pymachine` export/open plus `resume.py` SQLite resource reopen | [76ms export median, 2264ms trusted-open median](mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json), 10.8MB image, resume rows 2-2 | Other candidates are N/A for the same signed machine image + resume hook contract ([compare](mainPlan/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md)) |
+
+Primitive-level measurements remain useful context:
 
 - Snapshot-fork child boot ~184-300ms vs cold ~2.8s.
 - Restore-based reactivity: live-diff restore ~1-2.4ms (writes only changed pages, no re-run).
 - uv-lane warm environment boot ~1229ms vs ~5109ms cold (numpy).
-- Speed Lab sharded numpy matmul: median 3.95x on 4 workers for canonical 1024x1024 f64 across 3 warmed samples, with shard p95 2606ms below single-worker median 10067ms ([tracked S1 artifact](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json)).
 - non-Pyodide CPython 3.14 (WASI) boot ~70-120ms.
 
-Reality check: pure-Python logic is at or above local speed; large numpy arithmetic is ~86x slower (WASM single-thread, no-AVX BLAS). Logic / analysis / server workloads are runtime-grade; heavy numeric crunching is not the target.
+Reality check: pure-Python logic is at or above local speed; large single-kernel NumPy arithmetic is still limited by WASM single-thread and no-AVX BLAS. pyproc's numeric speed answer is horizontal sharding, while the broader browser-OS speed answer is prepared state, restore, process pools, in-tab servers, and portable machine images.
 
 ## Public surface
 
