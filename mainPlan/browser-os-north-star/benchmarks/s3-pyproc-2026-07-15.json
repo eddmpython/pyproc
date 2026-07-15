@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S3",
+  "candidate": "pyproc",
+  "name": "browser server roundtrip",
+  "command": "npm run test:consumer, collect timings.virtualOriginMs from installed package VirtualOrigin POST",
+  "commit": "7a2f699e6fb0db973c208ef2699900214a0f8ab2",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T02:43:22.434Z",
+  "finishedAt": "2026-07-15T02:43:22.435Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 17576919040
+  },
+  "engine": {
+    "name": "Pyodide + VirtualOrigin"
+  },
+  "source": "npm run test:consumer",
+  "note": "derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, verified SRI Service Worker asgi=/pyproc/, Runtime.enableAsgiServer, and VirtualOrigin POST /pyproc/product/api?value=41",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 18,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 17,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 18,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 18,
+    "p95Ms": 18,
+    "minMs": 17,
+    "maxMs": 18,
+    "maxErr": 0
+  }
+}
