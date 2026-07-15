@@ -7,7 +7,8 @@
 Edge process tree를 종료한 뒤 새 process에서 boot 없이 세 상태를 함께 복원했다. Phase 3 Dual-Boot와
 Phase 4 durable generation 핵심은 통과했다. 이어 pyproc heap에서 `/home/web`을, v86 RAM state에서
 Linux 9P file을 제거하고 별도 block volume에서만 복원했다. 실제 guest file의 block 배선도 통과했으며
-packet network, display/input과 owner successor는 남아 있다.
+Linux eth0를 bounded packet switch에 연결해 실제 ARP/ICMP와 process cold restore 뒤 NIC 재연결까지 통과했다.
+display/input과 owner successor는 남아 있다.
 
 ## 한 문장
 

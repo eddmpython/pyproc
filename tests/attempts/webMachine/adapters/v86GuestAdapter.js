@@ -6,6 +6,7 @@ import {
   serializeV86FileSystemState,
   writeV86FileSystemVolume,
 } from "./v86/v86FileSystemVolume.js";
+import { V86PacketPort } from "./v86/v86PacketPort.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
@@ -15,16 +16,23 @@ function toArrayBuffer(bytes) {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-export function createV86GuestFactory({ V86, adapterVersion = "v86-linux-state-v1", blockDeviceName = null, blockMode = null }) {
+export function createV86GuestFactory({
+  V86,
+  adapterVersion = "v86-linux-state-v1",
+  blockDeviceName = null,
+  blockMode = null,
+  packetDeviceName = null,
+}) {
   if (typeof V86 !== "function") throw new TypeError("V86 constructor가 필요하다");
-  return () => new V86GuestAdapterDraft({ V86, adapterVersion, blockDeviceName, blockMode });
+  return () => new V86GuestAdapterDraft({ V86, adapterVersion, blockDeviceName, blockMode, packetDeviceName });
 }
 
 class V86GuestAdapterDraft {
-  constructor({ V86, adapterVersion, blockDeviceName, blockMode }) {
+  constructor({ V86, adapterVersion, blockDeviceName, blockMode, packetDeviceName }) {
     this._blockDeviceName = blockDeviceName ? String(blockDeviceName) : null;
     this._blockMode = this._blockDeviceName ? String(blockMode || "ata") : null;
     if (this._blockMode && !["ata", "filesystem"].includes(this._blockMode)) throw new TypeError(`v86 block mode 미지원: ${this._blockMode}`);
+    this._packetDeviceName = packetDeviceName ? String(packetDeviceName) : null;
     this.capabilities = {
       adapterVersion,
       snapshotScope: "portable",
@@ -33,6 +41,7 @@ class V86GuestAdapterDraft {
       requiredDevices: [
         { name: "console", kind: "console" },
         ...(this._blockDeviceName ? [{ name: this._blockDeviceName, kind: "block" }] : []),
+        ...(this._packetDeviceName ? [{ name: this._packetDeviceName, kind: "network", mode: "packet" }] : []),
       ],
     };
     this._V86 = V86;
@@ -42,6 +51,7 @@ class V86GuestAdapterDraft {
     this._blockBuffer = null;
     this._emptyFileSystemState = null;
     this._volumeStats = null;
+    this._packetPort = null;
     this._serial = "";
     this._line = "";
     this._waiters = new Set();
@@ -69,6 +79,7 @@ class V86GuestAdapterDraft {
   async pause() {
     await this._requireEmulator().stop();
     await this._blockBuffer?.drain();
+    await this._packetPort?.drain();
     if (this._blockMode === "filesystem") {
       this._volumeStats = await writeV86FileSystemVolume({ device: this._blockDevice(), fileSystem: this._fileSystem() });
     }
@@ -82,6 +93,7 @@ class V86GuestAdapterDraft {
 
   async snapshot() {
     await this._blockBuffer?.drain();
+    await this._packetPort?.drain();
     if (this._blockMode !== "filesystem") return new Uint8Array(await this._requireEmulator().save_state());
     const fileSystem = this._fileSystem();
     const liveState = serializeV86FileSystemState(fileSystem);
@@ -113,14 +125,17 @@ class V86GuestAdapterDraft {
     if (this._emulator) {
       await this._emulator.stop();
       await this._blockBuffer?.drain();
+      await this._packetPort?.drain();
       if (this._blockMode === "filesystem" && this._emulator.fs9p) {
         this._volumeStats = await writeV86FileSystemVolume({ device: this._blockDevice(), fileSystem: this._fileSystem() });
       }
       if (this._blockDeviceName) await this._blockDevice().flush();
       this._emulator.remove_listener("serial0-output-byte", this._onSerialByte);
+      this._packetPort?.detach();
       await this._emulator.destroy();
     }
     this._emulator = null;
+    this._packetPort = null;
     consoleWrite(this._context, "x86:shutdown");
   }
 
@@ -145,6 +160,7 @@ class V86GuestAdapterDraft {
       snapshotScope: this.capabilities.snapshotScope,
       shutdownMode: this.capabilities.shutdownMode,
       block: this._blockBuffer?.inspect() || (this._blockMode === "filesystem" ? { mode: "filesystem", ...this._volumeStats } : null),
+      network: this._packetPort?.inspect() || null,
     };
   }
 
@@ -152,6 +168,10 @@ class V86GuestAdapterDraft {
     const sourceOptions = this._manifest?.v86?.options;
     if (!sourceOptions || typeof sourceOptions !== "object") throw new Error("x86 adapter: manifest.v86.options 없음");
     const options = { ...sourceOptions };
+    if (this._packetDeviceName && (options.network_relay_url || options.net_device?.relay_url)) {
+      throw new Error("x86 adapter: packet device와 relay 동시 사용 불가");
+    }
+    if (this._packetDeviceName) options.preserve_mac_from_state_image = true;
     if (this._blockMode === "ata") {
       const device = this._context?.devices?.[this._blockDeviceName];
       this._blockBuffer = new V86BlockBuffer(device);
@@ -163,6 +183,13 @@ class V86GuestAdapterDraft {
     const emulator = new this._V86({ ...options, autostart });
     this._emulator = emulator;
     emulator.add_listener("serial0-output-byte", this._onSerialByte);
+    if (this._packetDeviceName) {
+      this._packetPort = new V86PacketPort({
+        device: this._packetDevice(),
+        endpointId: this._context.machineId,
+      });
+      this._packetPort.attach(emulator);
+    }
     const timeoutMs = Number(this._manifest.v86?.engineTimeoutMs || 60000);
     await new Promise((resolve, reject) => {
       const onReady = () => {
@@ -242,6 +269,14 @@ class V86GuestAdapterDraft {
   _blockDevice() {
     const device = this._context?.devices?.[this._blockDeviceName];
     if (!device || device.kind !== "block") throw new Error(`x86 adapter: block device 없음 ${this._blockDeviceName}`);
+    return device;
+  }
+
+  _packetDevice() {
+    const device = this._context?.devices?.[this._packetDeviceName];
+    if (!device || device.kind !== "network" || device.mode !== "packet" || typeof device.connect !== "function") {
+      throw new Error(`x86 adapter: packet network device 없음 ${this._packetDeviceName}`);
+    }
     return device;
   }
 

@@ -31,6 +31,7 @@ snapshot 보장은 숨기지 않는다.
 11. guest snapshot과 flushed block image를 한 content-addressed generation으로 CAS commit하고 torn commit, 동시 CAS race, 손상 HEAD의 PREV 복구를 통과한다.
 12. pyproc, Linux, block generation을 IndexedDB에 저장한 뒤 브라우저 프로세스를 완전히 종료하고 새 프로세스에서 boot 없이 함께 복원한다.
 13. pyproc snapshot에서 `/home/web`을, v86 state에서 9P file tree를 제거하고 두 guest가 실제로 소비한 별도 block volume에서만 process cold restore한다.
+14. request와 packet network mode를 부팅 전에 구분하고, Linux NIC의 실제 ARP/ICMP frame을 새 browser process의 새 packet port에서도 왕복한다.
 
 ## 결론 표
 
@@ -48,6 +49,8 @@ snapshot 보장은 숨기지 않는다.
 | 2026-07-15 | deviceBackedDualBootProbe ATA 첫 시도 | Edge headless, COOP+COEP, v86 injected ATA buffer | **RED 0/1**. `/proc/partitions` 비어 있음, `/dev/sda`와 `/dev/hda` 없음, injected block write 0회 | v86 PCI IDE는 보였지만 고정 Buildroot 커널에 ATA block driver가 없었다. `/dev/sda` 대상 `dd`는 일반 파일을 만든 거짓 양성이었다 | 커널에 포함된 virtio 9P 경로 사용 |
 | 2026-07-15 | deviceBackedDualBootProbe 9P 첫 시도 | Edge headless, COOP+COEP, v86 host9p | **RED 8/11**. block generation과 Python은 통과, Linux file을 directory로 오분류 | v86 inode는 file도 빈 `direntries`를 가지며 Buildroot가 host9p를 `/mnt`에 이미 mount한다. inode `IsDirectory`와 기존 mount로 수정 | process cold reopen 반복 |
 | 2026-07-15 | deviceBackedDualBootProbe | Edge headless, COOP+COEP, pyproc home block + v86 9P block + IndexedDB, 새 Edge process, 3회 | **3회 연속 GREEN 12/12**. boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145ms. 삭제 file tail 잔존 0 | pyproc heap snapshot에서 home을, v86 RAM state에서 9P file을 제거했다. 두 OS가 실제 사용한 file state를 별도 block volume에서만 복원 | packet network, display/input, owner successor |
+| 2026-07-15 | packetNetworkProbe 첫 cold restore | Edge headless, COOP+COEP, v86 NE2K + 새 packet switch | **RED 13/14**. reply frame은 NIC에 도달했지만 ping 수신 0 | 새 process의 임의 NIC MAC과 snapshot 속 Linux MAC이 달라 NIC filter가 reply를 폐기했다 | portable packet restore가 snapshot MAC 보존 |
+| 2026-07-15 | packetNetworkProbe | Edge headless, COOP+COEP, v86 NE2K + bounded packet switch + 새 Edge process, 3회 | **3회 연속 GREEN 14/14**. 최초 ARP/ICMP 160/185/167ms, commit 412/329/332ms, process cold restore 452/380/357ms, 재연결 ping 137/117/129ms | request/packet mode와 permission을 engine boot 0회에서 선거부했다. Linux eth0가 실제 Ethernet frame을 보내고 새 process의 새 port에서도 왕복했으며 drop/error 0 | display/input, owner successor |
 
 ## 모듈화 설계
 
@@ -70,8 +73,8 @@ node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 ```
 
 두 실제 엔진, Linux guest, 원자 generation, 브라우저 프로세스 cold reopen, 실제 guest file의 block
-분리 조건은 충족했다. pyproc home과 v86 9P file은 guest snapshot에 중복되지 않고 별도 block volume이
-완료 generation의 원본이다. packet network, display/input, owner successor가 남았으므로 이번 변경에서는
+분리와 Linux NIC packet network 조건은 충족했다. pyproc home과 v86 9P file은 guest snapshot에 중복되지 않고
+별도 block volume이 완료 generation의 원본이다. display/input, owner successor가 남았으므로 이번 변경에서는
 `src/` 또는 `index.js`로 승격하지 않는다. 승격 위치는 독립 `core`, `browser`, `guest-pyproc`,
 `guest-v86` package로 확정했다.
 
@@ -87,8 +90,8 @@ node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 
 ## 판정
 
-**Phase 1/2 졸업, Phase 3 Dual-Boot와 실제 block-backed file 핵심 GREEN, Phase 4 durable generation과
-프로세스 cold reopen 핵심 GREEN, 캠페인 진행 중.** pyproc home과 Linux 9P file을 각 guest snapshot에서
-제거하고 별도 block volume으로 복원했다. 이제 block은 장식물이 아니라 완료 generation에서 두 OS가
-사용자 파일을 다시 얻는 저장 원본이다. packet network, display/input, owner successor, 배포 license
+**Phase 1/2 졸업, Phase 3 Dual-Boot·실제 block-backed file·packet network 핵심 GREEN, Phase 4 durable
+generation과 프로세스 cold reopen 핵심 GREEN, 캠페인 진행 중.** pyproc home과 Linux 9P file을 각 guest
+snapshot에서 제거하고 별도 block volume으로 복원했다. Linux NIC는 bounded packet switch에서 실제 ARP와
+ICMP를 왕복하고 새 process에서 port를 다시 연결한다. display/input, owner successor, 배포 license
 게이트가 남았으므로 완성된 브라우저 컴퓨터 또는 공개 API라고 부르지 않는다.

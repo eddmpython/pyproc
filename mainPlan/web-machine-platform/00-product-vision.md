@@ -64,6 +64,10 @@ Python OS        WASI guest        x86/Linux guest
 
 pyproc 공개 API에 x86 또는 Linux 특수 로직을 바로 넣지 않는다. [tests/attempts/webMachine](../../tests/attempts/webMachine/) 캠페인에서 공통 장치와 durable commit까지 검증하고, 졸업 시 [독립 package 구조](04-clean-architecture-and-code-rules.md)로 승격한다.
 
+현재 block-backed guest file과 bounded packet network는 이 경계에서 실증됐다. Linux NIC가 실제 ARP와
+ICMP frame을 왕복하고 browser process 종료 뒤 새 port에 재연결된다. 이는 인터넷 접속 정책을 core에 넣은
+것이 아니라, raw packet 장치와 외부 protocol peer를 분리한 결과다.
+
 ## 만들지 않는 것
 
 1. Windows, Linux, macOS 커널을 처음부터 다시 작성하지 않는다.

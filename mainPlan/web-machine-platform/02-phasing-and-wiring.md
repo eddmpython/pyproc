@@ -61,7 +61,7 @@
 1. [완료] x86 engine을 외부 주입하는 adapter를 만든다.
 2. [완료] Buildroot Linux 6.8.12 i686 image를 부팅한다.
 3. [완료] pyproc Python OS와 Linux guest를 같은 machine registry에서 동시에 열고 두 memory/file state를 함께 cold restore한다.
-4. [진행] console 다음으로 block, clock, entropy, packet network, display를 공통 장치 계약으로 연결한다. block-backed guest file은 완료했다.
+4. [진행] console 다음으로 block, clock, entropy, packet network, display를 공통 장치 계약으로 연결한다. block-backed guest file과 packet network는 완료했다.
 
 게이트:
 
@@ -70,11 +70,13 @@
 - [통과] x86 engine은 외부 주입되며 pyproc 기본 dependency는 0이다.
 - [부분] engine과 image 출처, version, SHA-256, 미번들 정책을 기록했다. 제품 배포 전 BIOS/image license와 SBOM 검토가 남았다.
 - [통과] pyproc `/home/web`과 Linux가 mount한 v86 9P file을 별도 block volume으로 연결하고 guest snapshot에서 file payload를 제거했다.
-- [대기] clock/entropy/packet/display device를 실제 x86 I/O에 연결한다.
+- [통과] request/packet mode와 permission을 engine boot 전에 구분하고 Linux eth0의 ARP/ICMP frame을 bounded packet switch에 연결했다.
+- [통과] browser process cold restore 뒤 snapshot MAC을 보존하고 새 packet port로 ping을 다시 왕복했다.
+- [대기] clock/entropy/display device를 실제 x86 I/O에 연결한다.
 
 ## Phase 4 - 영속 머신과 탭 장애복구
 
-상태: durable generation과 브라우저 프로세스 cold reopen 핵심 완료. owner successor와 실제 guest block 배선 진행 중.
+상태: durable generation, 브라우저 프로세스 cold reopen, 실제 guest block 배선 완료. owner successor 진행 전.
 
 작업:
 

@@ -125,7 +125,8 @@ tests/attempts/webMachine/
 │  └─ webMachineHostDraft.js
 ├─ browser/                    # device와 persistence의 browser 구현 초안
 │  ├─ devices/
-│  │  └─ memoryBlockDevice.js
+│  │  ├─ memoryBlockDevice.js
+│  │  └─ memoryEthernetSwitch.js
 │  └─ persistence/
 │     ├─ generationIntegrity.js
 │     ├─ memoryGenerationStore.js
@@ -140,8 +141,11 @@ tests/attempts/webMachine/
 │  ├─ v86GuestAdapter.js
 │  └─ v86/
 │     ├─ v86BlockBuffer.js
-│     └─ v86FileSystemVolume.js
+│     ├─ v86FileSystemVolume.js
+│     └─ v86PacketPort.js
 ├─ fixtures/
+│  ├─ network/
+│  │  └─ ipv4EchoPeer.js
 │  └─ v86/
 │     ├─ config.js
 │     ├─ prepareAssets.mjs
@@ -153,7 +157,8 @@ tests/attempts/webMachine/
    ├─ dualBootProbe.html
    ├─ generationContractProbe.html
    ├─ persistentDualBootProbe.html
-   └─ deviceBackedDualBootProbe.html
+   ├─ deviceBackedDualBootProbe.html
+   └─ packetNetworkProbe.html
 ```
 
 ## 계약 규칙
@@ -260,7 +265,7 @@ ownership loss, torn commit, cold restore를 검증한다.
 
 1. [통과] pyproc + Linux 공통 lifecycle과 full file state cold restore.
 2. [통과] 공통 block device의 write/flush/snapshot generation과 pyproc home/v86 9P guest file backing volume.
-3. [대기] request/packet network 분리와 permission 선거부.
+3. [통과] request/packet network 분리, permission 선거부, Linux NIC frame 왕복과 process cold reattach.
 4. [통과] 브라우저 프로세스 종료 뒤 IndexedDB HEAD/PREV cold reopen.
 5. [통과] architecture gate와 adapter contract suite.
 6. [대기] engine/image license와 SBOM 배포 검토.

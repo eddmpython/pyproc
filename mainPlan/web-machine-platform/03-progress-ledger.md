@@ -223,3 +223,54 @@ NEXT:
 1. request network와 packet network를 다른 device contract로 고정하고 v86 NIC를 packet port에 연결한다.
 2. framebuffer와 input을 console과 분리해 headless와 desktop 구성을 같은 core에서 조립한다.
 3. browser owner를 강제 종료해 정확히 한 successor와 이전 epoch command 거부를 실측한다.
+
+## 2026-07-15 - Linux NIC packet network와 process cold reattach
+
+구현:
+
+1. browser 경계에 `kind: network`, `mode: packet`인 bounded Ethernet switch를 추가했다. endpoint 중복,
+   frame 크기, queue 상한을 구조화 오류로 거부하고 frame bytes를 복제하며 source MAC만 학습한다.
+2. v86 전용 bridge는 공개 NIC bus의 `net0-send`와 `net0-receive`만 packet port에 연결한다. browser device는
+   guest와 engine 이름을 모르며 v86 adapter만 bridge를 import한다.
+3. ARP와 ICMP 정책은 core나 switch가 아니라 probe fixture에 두었다. Linux `eth0`가 10.77.0.1 peer에
+   실제 ARP request와 ICMP echo를 보낸다.
+4. packet port와 browser handle은 generation payload에 넣지 않는다. cold restore는 새 switch endpoint를
+   연결하고 opaque NIC state만 복원한다.
+5. 구조 게이트가 block과 packet device, v86의 block·filesystem·packet bridge 존재와 기존 의존성 방향을 고정한다.
+
+실패에서 고친 계약:
+
+- 첫 process cold restore는 RED 13/14였다. peer의 reply frame은 switch와 v86 NIC bus를 통과했지만 Linux
+  ping은 수신 0이었다.
+- 새 process의 v86 NIC가 임의 MAC을 생성한 반면 Linux RAM과 송신 frame은 snapshot의 이전 MAC을 사용했다.
+  reply destination과 NIC receive filter가 달라 올바른 frame을 폐기했다.
+- packet device를 쓰는 portable restore는 `preserve_mac_from_state_image`를 강제해 guest RAM, 송신 frame,
+  NIC filter가 같은 장치 identity를 보도록 고쳤다.
+
+실측:
+
+- `packetNetworkProbe` 수정본 3회 연속 GREEN 14/14.
+- 최초 Linux boot 3909/3251/3350ms, ARP와 ICMP round trip 160/185/167ms, generation commit
+  412/329/332ms였다.
+- 기존 Edge process tree 종료 뒤 cold restore 452/380/357ms, 새 packet port의 ping round trip
+  137/117/129ms였다.
+- request/packet mode mismatch와 permission 부족은 engine constructor 0회에서 거부됐다.
+- duplicate endpoint, 64-byte frame 상한, queue 포화, 닫힌 port, 송신 bytes 격리 fault가 모두 통과했다.
+- cold restore 뒤 switch는 source MAC 2개를 학습했고 frame drop 0, delivery error 0이었다. adapter shutdown과
+  peer 종료 뒤 endpoint도 0이 됐다.
+
+판정:
+
+1. request bridge를 packet network라고 이름만 바꾼 것이 아니라 실제 Linux NIC의 Ethernet frame이 공통
+   device port를 왕복했다.
+2. packet device는 OS나 protocol policy를 모르고, guest bridge는 browser persistence를 모른다. 네트워크
+   기능을 추가해도 고정한 package 의존성 방향을 완화하지 않았다.
+3. NIC handle을 snapshot에 직렬화하지 않고 새 process에서 재연결했으므로 외부 device reattach 계약이
+   block과 별도로 성립했다.
+4. 인터넷 relay, NAT, DNS는 이번 증명의 범위가 아니다. raw packet port 위에 조립할 별도 network policy다.
+
+NEXT:
+
+1. framebuffer와 input을 console과 분리해 headless와 desktop 구성을 같은 core에서 조립한다.
+2. browser owner를 강제 종료해 정확히 한 successor와 이전 epoch command 거부를 실측한다.
+3. clock과 entropy를 ambient browser 접근이 아닌 명시적 device port로 주입한다.

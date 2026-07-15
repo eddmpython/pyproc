@@ -985,6 +985,14 @@ check("Web Machine attempts 레이어 구조 고정", () => {
   for (const file of requiredHostFiles) {
     if (!existsSync(join(webMachineRoot, "host", file))) throw new Error(`host 계약 누락: ${file}`);
   }
+  const requiredBrowserDevices = ["memoryBlockDevice.js", "memoryEthernetSwitch.js"];
+  for (const file of requiredBrowserDevices) {
+    if (!existsSync(join(webMachineRoot, "browser", "devices", file))) throw new Error(`browser device 계약 누락: ${file}`);
+  }
+  const requiredV86Bridges = ["v86BlockBuffer.js", "v86FileSystemVolume.js", "v86PacketPort.js"];
+  for (const file of requiredV86Bridges) {
+    if (!existsSync(join(webMachineRoot, "adapters", "v86", file))) throw new Error(`v86 bridge 계약 누락: ${file}`);
+  }
   const forbiddenFolderNames = new Set(["utils", "common", "shared", "helpers"]);
   const walk = (dir) => {
     for (const entry of readdirSync(dir)) {
