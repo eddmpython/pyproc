@@ -20,7 +20,7 @@
 | scenario | 현재 증거 | 기준 |
 |---|---|---|
 | S0 basic boot | `npm run test:browser` | boot ms와 전체 gate GREEN |
-| S1 numpy sharded matmul | `examples/speedLab.html`, `tests/attempts/numericShard/matmulSurfaceProbe.html` | `medianSpeedup >= 2.0`, `shard p95 < single median`, `maxErr < 1e-9` |
+| S1 numpy sharded matmul | `examples/speedLab.html`, `npm run bench:speed` | `workers=4`, `size=1024`, `samples=3`, `medianSpeedup >= 2.0`, `shard p95 < single median`, `maxErr < 1e-9` |
 | S2 process map | `npm run test:browser` | 결과 일치와 worker pool speedup |
 | S3 browser server | `npm run test:consumer` | `VirtualOrigin` POST roundtrip |
 | S4 machine resume | `npm run test:consumer` | signed `.pymachine` export/open/resume |
@@ -36,6 +36,8 @@
 | S2 process map | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
 | S3 browser server | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 | S4 machine resume | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
+
+`bench:speed`의 기본 S1 조건은 `workers=4`, `size=1024`, `samples=3`이다. 사람용 Speed Lab UI는 반응성을 위해 768 기본값을 쓰지만, runner는 URL query로 canonical 크기를 명시한다.
 
 S1 artifact가 여러 개 생기면 아래 명령으로 표를 만든다.
 

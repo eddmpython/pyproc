@@ -42,7 +42,7 @@
         <div class="k">workers</div><div id="workers"></div>
         <div class="k">samples</div><div id="samples"></div>
         <div class="k">single worker median</div><div><div class="barWrap"><div class="bar" id="barSingle"></div></div><span id="singleMs"></span></div>
-        <div class="k">4-worker median</div><div><div class="barWrap"><div class="bar ok" id="barParallel"></div></div><span id="parallelMs"></span></div>
+        <div class="k">sharded median</div><div><div class="barWrap"><div class="bar ok" id="barParallel"></div></div><span id="parallelMs"></span></div>
         <div class="k">median speedup</div><div id="speedup"></div>
         <div class="k">p95 envelope</div><div id="p95"></div>
         <div class="k">correctness</div><div id="correctness"></div>
@@ -67,6 +67,15 @@ await os.matmul(a, b, { parts: 4 });</div>
     const gateMode = params.has("gate");
     const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
     const log = (m) => { out.textContent += "\n" + m; out.scrollTop = out.scrollHeight; };
+    const readIntParam = (name, fallback, { min, max }) => {
+      const raw = params.get(name);
+      if (raw === null || raw.trim() === "") return fallback;
+      const value = Number(raw);
+      if (!Number.isInteger(value) || value < min || value > max) {
+        throw new Error(`${name} must be an integer from ${min} to ${max}`);
+      }
+      return value;
+    };
     const gateReport = (ok, detail = {}) => {
       if (!gateMode) return;
       fetch("/gateReport", {
@@ -109,9 +118,10 @@ await os.matmul(a, b, { parts: 4 });</div>
     }
 
     try {
-      const workers = 4;
-      const size = 768;
-      const benchSamples = 3;
+      const workers = readIntParam("workers", 4, { min: 1, max: 8 });
+      const size = readIntParam("size", 768, { min: 128, max: 1536 });
+      const benchSamples = readIntParam("samples", 3, { min: 3, max: 9 });
+      st.textContent = `Booting ${workers} Python workers with numpy...`;
       const os = new PyProc({ indexURL: INDEX, packages: ["numpy"], setup: "import numpy" });
       const timings = {};
       let t = performance.now();
@@ -138,7 +148,7 @@ await os.matmul(a, b, { parts: 4 });</div>
         const single = await os.matmul(a, b, { parts: 1 });
         const singleMs = Math.round(performance.now() - t);
 
-        log(`sample ${i + 1}/${benchSamples}: 4-worker sharded run...`);
+        log(`sample ${i + 1}/${benchSamples}: ${workers}-worker sharded run...`);
         t = performance.now();
         const parallel = await os.matmul(a, b, { parts: workers });
         const parallelMs = Math.round(performance.now() - t);

@@ -333,7 +333,10 @@ check("속도 비교 벤치 계약 고정", () => {
   if (pkgForBench.scripts?.["bench:artifact"] !== "node tests/browser/benchArtifact.mjs") throw new Error("bench:artifact 스크립트 없음");
   if (pkgForBench.scripts?.["bench:compare"] !== "node tests/browser/benchCompare.mjs") throw new Error("bench:compare 스크립트 없음");
   if (!speedLab.includes('scenario: "S1"') || !speedLab.includes("bench,")) throw new Error("Speed Lab gate report가 S1 bench JSON을 싣지 않음");
-  for (const term of ["PYPROC_BENCH_OUT", "schemaVersion", 'scenario: "S1"', 'candidate: "pyproc"', "metrics", "browserVersion"]) {
+  for (const term of ['readIntParam("size"', 'readIntParam("workers"', 'readIntParam("samples"']) {
+    if (!speedLab.includes(term)) throw new Error(`Speed Lab query 계약 누락: ${term}`);
+  }
+  for (const term of ["PYPROC_BENCH_OUT", "PYPROC_BENCH_SIZE", '"--size"', "DEFAULT_SIZE = 1024", "schemaVersion", 'scenario: "S1"', 'candidate: "pyproc"', "metrics", "runner", "browserVersion"]) {
     if (!speedBench.includes(term)) throw new Error(`speedBench.mjs 필수 항목 누락: ${term}`);
   }
   for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup"]) {

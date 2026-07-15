@@ -9,12 +9,28 @@ import { createStaticServer } from "../../examples/serve.mjs";
 import { findBrowser, headlessArgs } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_BENCH_TIMEOUT || process.env.PYPROC_GATE_TIMEOUT || 240000);
+const DEFAULT_WORKERS = 4;
+const DEFAULT_SIZE = 1024;
+const DEFAULT_SAMPLES = 3;
 
 function argValue(name) {
   const idx = process.argv.indexOf(name);
   if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
   const prefixed = process.argv.find((a) => a.startsWith(name + "="));
   return prefixed ? prefixed.slice(name.length + 1) : null;
+}
+
+function intOption(argName, envName, fallback, { min, max }) {
+  const raw = argValue(argName) || process.env[envName] || String(fallback);
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`${argName} must be an integer from ${min} to ${max}`);
+  }
+  return value;
+}
+
+function commandArg(value) {
+  return /[\s"]/u.test(value) ? JSON.stringify(value) : value;
 }
 
 function browserVersion(browser) {
@@ -45,7 +61,9 @@ function gitDirty() {
 }
 
 const outPath = argValue("--out") || process.env.PYPROC_BENCH_OUT || null;
-const indexQuery = process.env.PYPROC_INDEX_URL ? `&indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
+const benchWorkers = intOption("--workers", "PYPROC_BENCH_WORKERS", DEFAULT_WORKERS, { min: 1, max: 8 });
+const benchSize = intOption("--size", "PYPROC_BENCH_SIZE", DEFAULT_SIZE, { min: 128, max: 1536 });
+const benchSamples = intOption("--samples", "PYPROC_BENCH_SAMPLES", DEFAULT_SAMPLES, { min: 3, max: 9 });
 const browser = findBrowser();
 const browserInfo = { path: browser, version: browserVersion(browser) };
 
@@ -63,7 +81,14 @@ const server = createStaticServer(async (req, res) => {
 await new Promise((res) => server.listen(0, "127.0.0.1", res));
 const port = server.address().port;
 const profile = mkdtempSync(join(tmpdir(), "pyprocSpeedBench-"));
-const url = `http://127.0.0.1:${port}/examples/speedLab.html?gate=1${indexQuery}`;
+const pageParams = new URLSearchParams({
+  gate: "1",
+  workers: String(benchWorkers),
+  size: String(benchSize),
+  samples: String(benchSamples),
+});
+if (process.env.PYPROC_INDEX_URL) pageParams.set("indexURL", process.env.PYPROC_INDEX_URL);
+const url = `http://127.0.0.1:${port}/examples/speedLab.html?${pageParams}`;
 const startedAt = new Date().toISOString();
 const proc = spawn(browser, [...headlessArgs(profile), url], { stdio: "ignore" });
 
@@ -80,12 +105,23 @@ server.close();
 try { rmSync(profile, { recursive: true, force: true }); } catch (e) {}
 
 const primaryCpu = cpus()[0] || {};
+const command = [
+  "node",
+  "tests/browser/speedBench.mjs",
+  "--workers",
+  String(benchWorkers),
+  "--size",
+  String(benchSize),
+  "--samples",
+  String(benchSamples),
+  ...(outPath ? ["--out", outPath] : []),
+].map(commandArg).join(" ");
 const artifact = {
   schemaVersion: 1,
   scenario: "S1",
   candidate: "pyproc",
   name: "numpy sharded matmul",
-  command: `node tests/browser/speedBench.mjs${outPath ? " --out " + outPath : ""}`,
+  command,
   commit: gitCommit(),
   worktreeDirty: gitDirty(),
   startedAt,
@@ -102,6 +138,11 @@ const artifact = {
   engine: {
     indexURL: process.env.PYPROC_INDEX_URL || null,
     selfHosted: !!process.env.PYPROC_INDEX_URL,
+  },
+  runner: {
+    workers: benchWorkers,
+    size: benchSize,
+    samples: benchSamples,
   },
   page: url,
   timeoutMs: TIMEOUT_MS,
