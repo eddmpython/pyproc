@@ -26,7 +26,7 @@
 | metrics | median, p95, min/max, error, speedup 계산식 |
 | raw output | 명령 출력 또는 gate report 위치 |
 
-S1 artifact는 추가로 `candidate`를 가진다. pyproc의 기준 artifact는 `candidate: "pyproc"`이다.
+외부 비교 artifact는 추가로 `candidate`를 가진다. pyproc의 기준 artifact는 `candidate: "pyproc"`이다.
 
 ## canonical scenario
 
@@ -34,11 +34,12 @@ S1 artifact는 추가로 `candidate`를 가진다. pyproc의 기준 artifact는 
 |---|---|---|---|---|
 | S0 | basic boot | `npm run test:browser`의 boot 실측 | boot ms | 실행 성공과 기록 |
 | S1 | numpy sharded matmul | `examples/speedLab.html`, `npm run bench:speed` | single median, shard median, speedup, shard p95 | `maxErr < 1e-9`, `medianSpeedup >= 2.0`, `shard p95 < single median` |
+| S1L | single-kernel numpy latency | `bench:artifact --scenario S1L` | warmed latency median, p95, min/max, maxErr | 최소 3회 sample, `maxErr < 1e-9` |
 | S2 | process map | `npm run test:browser`의 `PyProc.map` | serial vs worker pool wall time | 결과 일치, speedup > 1 |
 | S3 | browser server | `npm run test:consumer`의 `VirtualOrigin` | POST roundtrip ms | Python ASGI 응답 도달 |
 | S4 | machine resume | `npm run test:consumer`의 signed `.pymachine` | export MB/ms, open ms, resume rows | trusted key open, `resume.py` 재개설 |
 
-S1은 현재 공개 속도 간판이다. S0, S2, S3, S4는 "로컬처럼 쓰는 웹 OS"의 체감 속도 축이다.
+S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 worker pool 계약을 제공하지 못할 때 쓰는 single-lane 보조 축이다. S0, S2, S3, S4는 "로컬처럼 쓰는 웹 OS"의 체감 속도 축이다.
 
 ## 외부 비교 표 규칙
 
@@ -47,7 +48,8 @@ S1은 현재 공개 속도 간판이다. S0, S2, S3, S4는 "로컬처럼 쓰는 
 | 비교 축 | pyproc | WebVM | JupyterLite | marimo web runtime | caveat |
 |---|---|---|---|---|---|
 | S0 basic boot | 측정 필요 | 측정 필요 | 측정 필요 | 측정 필요 | 같은 브라우저와 캐시 상태 |
-| S1 numpy sharded matmul | Speed Lab 반복 봉투 | 측정 필요 | 측정 필요 | 측정 필요 | 병렬 worker 모델이 다르면 single-lane도 별도 표기 |
+| S1 numpy sharded matmul | Speed Lab 반복 봉투 | N/A 가능 | N/A 가능 | N/A 가능 | 병렬 worker 모델이 다르면 single-lane으로 재정의하지 않음 |
+| S1L single-kernel numpy latency | 측정 필요 | 측정 필요 | 측정 필요 | 측정 필요 | S1 대체가 아니라 별도 single-lane 보조 축 |
 | S2 process map | browser gate | 측정 필요 | 측정 필요 | 측정 필요 | 같은 순수 Python 또는 NumPy 작업 |
 | S3 browser server | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | URL fetch로 Python까지 가는지 구분 |
 | S4 machine resume | product consumer gate | 측정 필요 | 측정 필요 | 측정 필요 | 파일 이미지, persistence, resume hook 동등성 |
@@ -62,4 +64,6 @@ S1은 현재 공개 속도 간판이다. S0, S2, S3, S4는 "로컬처럼 쓰는 
 - 외부 S1 후보 raw JSON은 `npm run bench:artifact -- --candidate <name> --command "<command>" --sample singleMs,parallelMs,maxErr --sample ... --out <path>`로 남긴다. 최소 3개 sample이 필요하다.
 - 같은 S1을 수행하지 못한 외부 후보도 `npm run bench:artifact -- --candidate <name> --na "<reason>" --out <path>`로 N/A artifact를 남긴다.
 - 여러 S1 artifact는 `npm run bench:compare -- <artifact...> --out <path>`로 Markdown 표로 합친다.
+- S1L raw JSON은 `npm run bench:artifact -- --scenario S1L --candidate <name> --command "<command>" --sample latencyMs,maxErr --sample ... --out <path>`로 남긴다.
+- `bench:compare`는 같은 scenario끼리만 표로 합친다. S1과 S1L을 한 표에 섞으면 실패해야 한다.
 - 새 benchmark helper나 runner를 추가하면 `npm test` 구조 가드에 연결한다.

@@ -21,6 +21,7 @@
 |---|---|---|
 | S0 basic boot | `npm run test:browser` | boot ms와 전체 gate GREEN |
 | S1 numpy sharded matmul | `examples/speedLab.html`, `npm run bench:speed` | `workers=4`, `size=1024`, `samples=3`, `medianSpeedup >= 2.0`, `shard p95 < single median`, `maxErr < 1e-9` |
+| S1L single-kernel numpy latency | `npm run bench:artifact -- --scenario S1L` | warmed latency median, p95, min/max, maxErr |
 | S2 process map | `npm run test:browser` | 결과 일치와 worker pool speedup |
 | S3 browser server | `npm run test:consumer` | `VirtualOrigin` POST roundtrip |
 | S4 machine resume | `npm run test:consumer` | signed `.pymachine` export/open/resume |
@@ -40,6 +41,7 @@
 |---|---|---|---|---|---|
 | S0 basic boot | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
 | S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | [N/A](benchmarks/s1-webvm-na-2026-07-15.json) | [N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | pyproc만 같은 S1 계약 충족 |
+| S1L single-kernel numpy latency | `npm run bench:artifact -- --scenario S1L --candidate pyproc ...` | 미측정 | 미측정 | 미측정 | 별도 비교 축 |
 | S2 process map | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
 | S3 browser server | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 | S4 machine resume | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
@@ -54,16 +56,23 @@ npm run bench:artifact -- --candidate webvm --na "S1 sharded worker model 미측
 npm run bench:compare -- .tmp/pyproc-s1.json .tmp/jupyterlite-s1.json --out .tmp/s1-compare.md
 ```
 
+S1L artifact는 S1을 single-lane으로 바꿔치기하지 않기 위한 보조 축이다. 같은 행렬 크기와 같은 브라우저에서 단일 Python kernel 또는 단일 worker의 warmed NumPy matmul latency만 비교한다.
+
+```bash
+npm run bench:artifact -- --scenario S1L --candidate jupyterlite --command "manual single-kernel S1L run" --sample 10067,0 --sample 9633,0 --sample 10073,0 --out .tmp/jupyterlite-s1l.json
+npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/jupyterlite-s1l.json --out .tmp/s1l-compare.md
+```
+
 ## 첫 실측 합격 기준
 
 1. 같은 머신, 같은 브라우저, 같은 캐시 정책에서 pyproc과 외부 후보를 연속 측정한다.
 2. 각 scenario마다 명령, 브라우저 버전, Pyodide 또는 Python 런타임 버전, sample 수, raw output을 남긴다.
 3. S1은 median/p95와 max error를 모두 기록한다.
-4. 외부 후보가 병렬 worker 모델을 제공하지 않으면 single-lane 비교와 `N/A`를 분리한다.
+4. 외부 후보가 병렬 worker 모델을 제공하지 않으면 S1은 `N/A`로 두고, single-lane 비교는 S1L로 분리한다.
 5. 결과는 이 파일이 아니라 진행 원장에 append하고, 이 파일에는 최신 matrix만 반영한다.
 
 ## 다음 작업
 
-1. 외부 후보의 다음 비교 축은 S1을 single-lane으로 바꾸지 말고 S0 basic boot 또는 S2 single-kernel NumPy로 별도 scenario를 연다.
-2. WebVM은 Linux VM boot와 Python shell latency, JupyterLite와 marimo WASM은 Pyodide single-kernel NumPy latency로 분리한다.
+1. 외부 후보의 다음 비교 축은 S1을 single-lane으로 바꾸지 말고 S1L 또는 S0 basic boot로 진행한다.
+2. WebVM은 Linux VM boot와 Python shell latency, JupyterLite와 marimo WASM은 S1L Pyodide single-kernel NumPy latency로 분리한다.
 3. README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.

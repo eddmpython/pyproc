@@ -303,7 +303,7 @@ check("Speed Lab 반복 벤치 통계 helper 공유", () => {
   const helper = readFileSync(join(ROOT, "examples", "benchStats.js"), "utf8");
   const speedLab = readFileSync(join(ROOT, "examples", "speedLab.html"), "utf8");
   const matmulProbe = readFileSync(join(ROOT, "tests", "attempts", "numericShard", "matmulSurfaceProbe.html"), "utf8");
-  for (const sym of ["percentile", "median", "summarizePairedLatencyBench", "isShardedSpeedBenchGreen"]) {
+  for (const sym of ["percentile", "median", "summarizePairedLatencyBench", "isShardedSpeedBenchGreen", "summarizeLatencyBench", "isLatencyBenchGreen"]) {
     if (!helper.includes(`export function ${sym}`)) throw new Error(`benchStats.${sym} 누락`);
   }
   if (!speedLab.includes('from "./benchStats.js"')) throw new Error("Speed Lab이 benchStats.js를 쓰지 않음");
@@ -320,7 +320,7 @@ check("속도 비교 벤치 계약 고정", () => {
   const benchArtifacts = readFileSync(join(ROOT, "tests", "browser", "benchArtifacts.mjs"), "utf8");
   const benchCompare = readFileSync(join(ROOT, "tests", "browser", "benchCompare.mjs"), "utf8");
   const pkgForBench = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  for (const term of ["S0", "S1", "S2", "S3", "S4", "median", "p95", "raw output", "WebVM", "JupyterLite", "marimo"]) {
+  for (const term of ["S0", "S1", "S1L", "S2", "S3", "S4", "median", "p95", "raw output", "WebVM", "JupyterLite", "marimo"]) {
     if (!contract.includes(term)) throw new Error(`benchmarking.md 필수 항목 누락: ${term}`);
     if (!plan.includes(term)) throw new Error(`06-speed-comparison.md 필수 항목 누락: ${term}`);
   }
@@ -339,10 +339,10 @@ check("속도 비교 벤치 계약 고정", () => {
   for (const term of ["PYPROC_BENCH_OUT", "PYPROC_BENCH_SIZE", '"--size"', "DEFAULT_SIZE = 1024", "schemaVersion", 'scenario: "S1"', 'candidate: "pyproc"', "metrics", "runner", "browserVersion"]) {
     if (!speedBench.includes(term)) throw new Error(`speedBench.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup"]) {
+  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "S1L_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs"]) {
     if (!benchArtifacts.includes(term)) throw new Error(`benchArtifacts.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["--candidate", "--sample", "--command", "--source", "--na", "summarizePairedLatencyBench", "normalizeBenchArtifact"]) {
+  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--na", "summarizePairedLatencyBench", "summarizeLatencyBench", "parseLatencySample", "normalizeBenchArtifact"]) {
     if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
   }
   for (const term of ["normalizeBenchArtifactFile", "renderBenchCompareMarkdown"]) {

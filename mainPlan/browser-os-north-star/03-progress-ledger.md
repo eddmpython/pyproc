@@ -1588,10 +1588,58 @@ NEXT:
 
 - S1은 pyproc의 병렬 worker pool 속도 증거로 유지한다.
 - WebVM, JupyterLite, marimo WASM은 S1에서 직접 비교 대상이 아니다.
-- 외부 비교를 계속하려면 S0 boot, S2 single-kernel NumPy, S3 browser server처럼 후보가 실제로 수행하는 축을 따로 열어야 한다.
+- 외부 비교를 계속하려면 S0 boot, S1L single-kernel NumPy, S3 browser server처럼 후보가 실제로 수행하는 축을 따로 열어야 한다.
 
 NEXT:
 
-1. 외부 후보 비교의 다음 축을 S0 basic boot 또는 S2 single-kernel NumPy로 별도 정의한다.
+1. 외부 후보 비교의 다음 축을 S0 basic boot 또는 S1L single-kernel NumPy로 별도 정의한다.
 2. JupyterLite와 marimo WASM은 Pyodide single-kernel NumPy latency 측정으로, WebVM은 Linux VM boot와 Python shell latency로 분리한다.
 3. README에는 상대 우위 문구를 넣지 않고, pyproc S1 자체 수치만 유지한다.
+
+## 2026-07-15 - S1L single-kernel benchmark schema 추가
+
+문제:
+
+- S1은 병렬 worker pool matmul 계약이라 외부 후보 대부분이 N/A다.
+- 외부 후보가 수행 가능한 single-kernel NumPy latency를 비교하려면 S1을 변형하지 말고 별도 scenario가 필요하다.
+- 기존 `benchArtifacts.mjs`는 S1 schema만 지원해 다음 비교 축을 열기 어렵다.
+
+결정:
+
+1. 새 보조 scenario ID는 `S1L`로 둔다. S1의 single-lane latency 축이라는 의미다.
+2. 기존 `S2`는 process map으로 유지한다. single-kernel NumPy에 재사용하지 않는다.
+3. `bench:compare`는 같은 scenario끼리만 표를 만든다. S1과 S1L을 섞으면 실패해야 한다.
+
+완료:
+
+- `examples/benchStats.js`에 `summarizeLatencyBench()`와 `isLatencyBenchGreen()`을 추가했다.
+- `tests/browser/benchArtifacts.mjs`가 `S1`과 `S1L`을 모두 검증하고 scenario별 Markdown 표를 렌더링하게 했다.
+- `tests/browser/benchArtifact.mjs`에 `--scenario S1L`을 추가했다. S1L sample 형식은 `latencyMs[,maxErr]`다.
+- `bench:compare`가 mixed scenario 입력을 명시적으로 실패 처리한다.
+- 벤치마크 운영 문서, 테스트 운영 문서, 속도 비교 계약, externalS1 캠페인을 S1L 기준으로 갱신했다.
+- `tests/run.mjs` 구조 가드가 `S1L_SCENARIO`, `SUPPORTED_SCENARIOS`, `summarizeLatencyBench`, `parseLatencySample`을 확인한다.
+
+검증:
+
+- `node --check examples/benchStats.js` PASS.
+- `node --check tests/browser/benchArtifacts.mjs` PASS.
+- `node --check tests/browser/benchArtifact.mjs` PASS.
+- `node --check tests/browser/benchCompare.mjs` PASS.
+- `npm run bench:artifact -- --candidate sample-s1 --command "fixture S1" --sample 100,50,0 --sample 110,55,0 --sample 90,45,0 --out .tmp/sample-s1.json` PASS.
+- `npm run bench:artifact -- --scenario S1L --candidate sample-s1l --command "fixture S1L" --sample 100,0 --sample 110,0 --sample 90,0 --out .tmp/sample-s1l.json` PASS.
+- `npm run bench:compare -- .tmp/sample-s1.json --out .tmp/sample-s1-compare.md` PASS.
+- `npm run bench:compare -- .tmp/sample-s1l.json --out .tmp/sample-s1l-compare.md` PASS.
+- `npm run bench:compare -- .tmp/sample-s1.json .tmp/sample-s1l.json` FAIL expected: 서로 다른 scenario artifact는 한 표로 합칠 수 없다.
+- `git diff --check` PASS.
+- `npm test` GREEN 629/629.
+
+판정:
+
+- S1의 의미를 보존하면서 외부 후보가 실제로 수행할 수 있는 single-kernel NumPy latency 축을 열었다.
+- 다음 단계는 pyproc S1 artifact에서 single-worker samples를 S1L artifact로 파생해 pyproc S1L 기준점을 만들고, JupyterLite/marimo WASM 측정을 같은 schema로 받는 것이다.
+
+NEXT:
+
+1. pyproc S1 raw artifact의 single-worker samples로 S1L 기준 artifact를 만든다.
+2. S1L 비교표를 만들고 속도 비교 계약의 matrix에 연결한다.
+3. JupyterLite 또는 marimo WASM 중 하나를 실제 브라우저에서 S1L로 측정한다.

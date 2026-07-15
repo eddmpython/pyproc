@@ -1,10 +1,10 @@
-// benchArtifact.mjs - 외부 S1 후보 측정값을 표준 artifact JSON으로 만든다.
+// benchArtifact.mjs - 외부 benchmark 후보 측정값을 표준 artifact JSON으로 만든다.
 import { spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, freemem, platform, release, totalmem } from "node:os";
 import { dirname, resolve } from "node:path";
-import { isShardedSpeedBenchGreen, summarizePairedLatencyBench } from "../../examples/benchStats.js";
-import { BENCH_ARTIFACT_SCHEMA_VERSION, S1_SCENARIO, normalizeBenchArtifact } from "./benchArtifacts.mjs";
+import { isLatencyBenchGreen, isShardedSpeedBenchGreen, summarizeLatencyBench, summarizePairedLatencyBench } from "../../examples/benchStats.js";
+import { BENCH_ARTIFACT_SCHEMA_VERSION, S1_SCENARIO, S1L_SCENARIO, normalizeBenchArtifact } from "./benchArtifacts.mjs";
 
 function takeArg(name) {
   const idx = process.argv.indexOf(name);
@@ -66,7 +66,17 @@ function parseSample(text) {
   return { singleMs, parallelMs, speedup: +(singleMs / parallelMs).toFixed(2), maxErr };
 }
 
+function parseLatencySample(text) {
+  const parts = text.split(",").map((v) => Number(v.trim()));
+  if (parts.length < 1 || parts.length > 2 || parts.some((v) => !Number.isFinite(v) || v < 0)) {
+    throw new Error(`sample 형식 오류: ${text} (latencyMs[,maxErr])`);
+  }
+  const [latencyMs, maxErr = 0] = parts;
+  return { latencyMs, maxErr };
+}
+
 const outPath = takeArg("--out");
+const scenario = takeArg("--scenario") || S1_SCENARIO;
 const candidate = takeArg("--candidate");
 const browserVersion = takeArg("--browser-version");
 const browserPath = takeArg("--browser-path");
@@ -78,14 +88,17 @@ const notApplicableReason = takeArg("--na") || takeArg("--not-applicable");
 const sampleTexts = takeArgs("--sample");
 
 if (!candidate) fail("--candidate 필요");
+if (![S1_SCENARIO, S1L_SCENARIO].includes(scenario)) fail("--scenario는 S1 또는 S1L이어야 한다");
 if (notApplicableReason && sampleTexts.length) fail("--na와 --sample은 같이 쓸 수 없다");
-if (!notApplicableReason && sampleTexts.length < 3) fail("측정 artifact는 --sample singleMs,parallelMs[,maxErr]를 최소 3개 요구한다");
+if (!notApplicableReason && sampleTexts.length < 3) fail("측정 artifact는 --sample을 최소 3개 요구한다");
 if (!notApplicableReason && !command && !source) fail("측정 artifact는 --command 또는 --source가 필요하다");
 
 let metrics = null;
 if (!notApplicableReason) {
   try {
-    metrics = summarizePairedLatencyBench(sampleTexts.map(parseSample));
+    metrics = scenario === S1L_SCENARIO
+      ? summarizeLatencyBench(sampleTexts.map(parseLatencySample))
+      : summarizePairedLatencyBench(sampleTexts.map(parseSample));
   } catch (e) {
     fail(e.message);
   }
@@ -96,9 +109,9 @@ const startedAt = new Date().toISOString();
 const finishedAt = new Date().toISOString();
 const artifact = {
   schemaVersion: BENCH_ARTIFACT_SCHEMA_VERSION,
-  scenario: S1_SCENARIO,
+  scenario,
   candidate,
-  name: "numpy sharded matmul",
+  name: scenario === S1L_SCENARIO ? "single-kernel numpy matmul latency" : "numpy sharded matmul",
   command,
   commit: gitCommit(),
   worktreeDirty: gitDirty(),
@@ -116,7 +129,7 @@ const artifact = {
   engine: { name: engineName || null },
   source,
   note,
-  ok: metrics ? isShardedSpeedBenchGreen(metrics) : false,
+  ok: metrics ? (scenario === S1L_SCENARIO ? isLatencyBenchGreen(metrics) : isShardedSpeedBenchGreen(metrics)) : false,
   metrics,
 };
 if (notApplicableReason) artifact.notApplicableReason = notApplicableReason;

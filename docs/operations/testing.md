@@ -100,6 +100,13 @@ npm run bench:speed -- --out .tmp/speed-s1.json
 
 기본 S1 조건은 `workers=4`, `size=1024`, `samples=3`이다. 다른 조건은 `--workers`, `--size`, `--samples`로 명시하고 raw artifact의 `command` 필드에 남긴다.
 
+S1L single-kernel NumPy latency는 S1을 대체하지 않는 별도 보조 축이다:
+
+```bash
+npm run bench:artifact -- --scenario S1L --candidate pyproc --command "<command>" --sample 10067,0 --sample 9633,0 --sample 10073,0 --out .tmp/pyproc-s1l.json
+npm run bench:compare -- .tmp/pyproc-s1l.json --out .tmp/s1l-compare.md
+```
+
 체크리스트:
 
 - 콘솔에 `crossOriginIsolated`가 true인지(`false`면 헤더 문제).

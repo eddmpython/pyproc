@@ -30,12 +30,13 @@ const files = process.argv.slice(2).filter((a) => !a.startsWith("-"));
 if (!files.length) fail("입력 JSON artifact가 필요하다");
 
 let rows;
+let markdown;
 try {
   rows = files.map(normalizeBenchArtifactFile);
+  markdown = renderBenchCompareMarkdown(rows);
 } catch (e) {
   fail(e.message);
 }
-const markdown = renderBenchCompareMarkdown(rows);
 if (outPath) {
   await mkdir(dirname(resolve(outPath)), { recursive: true });
   await writeFile(resolve(outPath), markdown);

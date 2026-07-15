@@ -36,3 +36,22 @@ export function isShardedSpeedBenchGreen(bench, opts = {}) {
     && bench.medianSpeedup >= minMedianSpeedup
     && bench.parallelP95 < bench.singleMedian;
 }
+
+export function summarizeLatencyBench(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeLatencyBench: rows가 비었다");
+  const latencies = rows.map((r) => r.latencyMs);
+  return {
+    samples: rows,
+    sampleCount: rows.length,
+    medianMs: median(latencies),
+    p95Ms: percentile(latencies, 95),
+    minMs: Math.min(...latencies),
+    maxMs: Math.max(...latencies),
+    maxErr: Math.max(...rows.map((r) => r.maxErr ?? 0)),
+  };
+}
+
+export function isLatencyBenchGreen(bench, opts = {}) {
+  const maxErr = opts.maxErr ?? 1e-9;
+  return bench.sampleCount >= 3 && bench.maxErr < maxErr;
+}
