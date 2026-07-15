@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S1L",
+  "candidate": "pyproc",
+  "name": "single-kernel numpy matmul latency",
+  "command": null,
+  "commit": "5c867ee86f6f802896e73177b0acdb078b5acb8b",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T00:44:33.048Z",
+  "finishedAt": "2026-07-15T00:44:33.050Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 15378432000
+  },
+  "engine": {
+    "name": "Pyodide"
+  },
+  "source": "mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
+  "note": "derived from S1 raw artifact single-worker samples",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 10067,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 9633,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 10073,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 10067,
+    "p95Ms": 10073,
+    "minMs": 9633,
+    "maxMs": 10073,
+    "maxErr": 0
+  }
+}

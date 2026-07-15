@@ -1643,3 +1643,37 @@ NEXT:
 1. pyproc S1 raw artifact의 single-worker samples로 S1L 기준 artifact를 만든다.
 2. S1L 비교표를 만들고 속도 비교 계약의 matrix에 연결한다.
 3. JupyterLite 또는 marimo WASM 중 하나를 실제 브라우저에서 S1L로 측정한다.
+
+## 2026-07-15 - pyproc S1L 기준 artifact 고정
+
+완료:
+
+- 기존 [S1 pyproc raw artifact](benchmarks/s1-pyproc-2026-07-15.json)의 single-worker samples를 S1L로 파생했다.
+- [s1l-pyproc-2026-07-15.json](benchmarks/s1l-pyproc-2026-07-15.json)을 생성했다.
+- [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)를 생성했다.
+- [06-speed-comparison.md](06-speed-comparison.md)의 추적 evidence와 matrix에 S1L 기준점을 연결했다.
+
+실측:
+
+- source artifact: `mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json`.
+- source measurement commit: `af1dbb1b041bddbea3894249e26d8968db70fcb7`, `worktreeDirty: false`.
+- S1L artifact 생성 commit: `5c867ee86f6f802896e73177b0acdb078b5acb8b`, `worktreeDirty: false`.
+- Edge 150.0.4078.65, `size=1024`, single-worker samples 10067ms, 9633ms, 10073ms.
+- median 10067ms, p95 10073ms, min 9633ms, max 10073ms, maxErr 0.
+
+검증:
+
+- `npm run bench:artifact -- --scenario S1L --candidate pyproc --browser-version 150.0.4078.65 --engine Pyodide --source mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json --note "derived from S1 raw artifact single-worker samples" --sample 10067,0 --sample 9633,0 --sample 10073,0 --out mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md` PASS.
+- artifact 확인: `worktreeDirty: false`, `medianMs: 10067`, `p95Ms: 10073`.
+
+판정:
+
+- S1L pyproc 기준점이 생겼다.
+- 이제 외부 후보를 S1로 억지 비교하지 않고 JupyterLite 또는 marimo WASM의 single-kernel NumPy latency를 같은 S1L 표에 넣을 수 있다.
+
+NEXT:
+
+1. JupyterLite 또는 marimo WASM의 S1L 측정 절차를 만든다.
+2. 같은 브라우저와 행렬 크기에서 외부 후보 S1L artifact를 생성한다.
+3. [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)에 외부 후보를 합친다.
