@@ -2368,3 +2368,29 @@ NEXT:
 1. capability matrix 행별 runnable example 링크를 연결한다.
 2. README Public surface를 matrix와 중복되지 않게 줄이고, 예제 중심 진입로를 강화한다.
 3. 새 실측을 할 때는 raw sidecar에 실제 console/gate transcript를 우선 저장한다.
+
+## 2026-07-15 - capability matrix 실행 표면 연결
+
+완료:
+
+- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)에 `실행 표면` 열을 추가했다.
+- 각 능력 행을 사람이 여는 example, 브라우저 gate, probe, 또는 tracked benchmark artifact 중 하나 이상에 연결했다.
+- README 양쪽과 [docs/README.md](../../docs/README.md), [testing.md](../../docs/operations/testing.md)의 matrix 설명을 실행 표면 기준으로 갱신했다.
+- `npm test`의 능력 매트릭스 가드가 `실행 표면` 필드, 핵심 example/benchmark 링크, 행별 링크 존재를 검사하게 했다.
+
+판정:
+
+- 제품 판단 표면이 추상 API 목록에서 실행 가능한 증거 지도로 올라갔다.
+- "브라우저 OS" claim을 강화하려면 기능 설명만 늘리는 것보다, 각 capability가 어디서 실제로 도는지 바로 이어져야 한다. 이번 작업은 그 연결을 기계 가드로 고정했다.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 651 passed, 0 failed.
+
+NEXT:
+
+1. README Public surface를 matrix와 중복되지 않게 줄이고, 예제 중심 진입로를 강화한다.
+2. capability matrix의 실행 표면 중 probe 전용인 행은 필요할 때 사람용 example로 승격한다.
+3. 제품 소비 배선은 codaro/dartlab/xlpod 중 실제 import 기준으로 별도 추적한다.

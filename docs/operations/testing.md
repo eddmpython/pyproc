@@ -11,6 +11,7 @@ npm test          # = node tests/run.mjs, 의존성 0
 커밋 전 반드시 green. 검사 항목:
 
 - **공개 표면**: `index.js`가 계약한 export(이름·타입)를 전부 내는가.
+- **능력 매트릭스**: 공개 export가 제품 가치, 상태, 필수 조건, 실행 표면, 검증, 경계로 묶이고 각 행이 예제·probe·브라우저 게이트·벤치 산출물 중 하나를 가리키는가.
 - **능력 계약 형태**: `Runtime`/`PyProc`/`ReactiveController` 프로토타입 메서드 존재.
 - **타입 커버리지**: `index.d.ts`가 공개 표면을 전부 선언하고 `package.json`이 이를 배선하는가.
 - **공개 import 경계**: `package.json exports`가 승인된 안정 subpath만 노출하고, `examples/`는 `src/` 내부 파일을 모듈 import로 직접 소비하지 않는가.

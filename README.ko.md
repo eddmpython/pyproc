@@ -257,7 +257,7 @@ import { PyProc } from "pyproc/process-os";
 import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
 ```
 
-능력별 예제 중심 상세 문서는 [docs/](docs/README.md)에 있다. 이 README는 지도로 둔다. 제품에서 어떤 능력을 켤지 판단할 때는 [능력 매트릭스](docs/consuming/capabilityMatrix.md)를 본다. 각 공개 export를 제품 가치, 상태, 설정 조건, 게이트, 경계로 묶어 둔다.
+능력별 예제 중심 상세 문서는 [docs/](docs/README.md)에 있다. 이 README는 지도로 둔다. 제품에서 어떤 능력을 켤지 판단할 때는 [능력 매트릭스](docs/consuming/capabilityMatrix.md)를 본다. 각 공개 export를 제품 가치, 상태, 설정 조건, 실행 표면, 게이트, 경계로 묶어 둔다.
 
 배포 자산 manifest:
 

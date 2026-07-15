@@ -503,7 +503,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   for (const text of [docsMap, readmeEn, readmeKo]) {
     if (!text.includes("capabilityMatrix.md")) throw new Error("능력 매트릭스 링크 누락");
   }
-  for (const term of ["제품 가치", "공개 표면", "상태", "필수 조건", "검증", "경계"]) {
+  for (const term of ["제품 가치", "공개 표면", "상태", "필수 조건", "실행 표면", "검증", "경계"]) {
     if (!matrix.includes(term)) throw new Error(`능력 매트릭스 필드 누락: ${term}`);
   }
   for (const term of ["Stable", "Beta", "Experimental", "Research preview"]) {
@@ -512,6 +512,31 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "MachineJail", "SocketBridge", "SharedKernel", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
   const missing = required.filter((name) => !matrix.includes("`" + name));
   if (missing.length) throw new Error(`능력 매트릭스 공개 표면 누락: ${missing.join(", ")}`);
+  const runnableLinks = [
+    "../../examples/basic.html",
+    "../../examples/processOs.html",
+    "../../examples/speedLab.html",
+    "../../examples/serverDev.html",
+    "../../examples/terminal.html",
+    "../../examples/machine.html",
+    "../../tests/browser/productConsumer.mjs",
+    "../../mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
+    "../../mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json",
+    "../../mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json",
+  ];
+  for (const target of runnableLinks) {
+    if (!matrix.includes(`](${target})`)) throw new Error(`능력 매트릭스 실행 표면 링크 누락: ${target}`);
+  }
+  const statusLabels = new Set(["Stable", "Beta", "Experimental", "Research preview"]);
+  const rows = matrix.split("\n").filter((line) => line.startsWith("| ") && !line.startsWith("| ---") && !line.startsWith("| 능력"));
+  let checkedRows = 0;
+  for (const row of rows) {
+    const cols = row.split("|").slice(1, -1).map((s) => s.trim());
+    if (cols.length !== 8 || !statusLabels.has(cols[3])) continue;
+    checkedRows++;
+    if (!/\[[^\]]+\]\([^)]+\)/.test(cols[5])) throw new Error(`능력 매트릭스 실행 표면 링크 누락: ${cols[0]}`);
+  }
+  if (checkedRows < 10) throw new Error(`능력 매트릭스 행 파싱 실패: ${checkedRows}`);
 });
 
 // 5) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.

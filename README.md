@@ -257,7 +257,7 @@ import { PyProc } from "pyproc/process-os";
 import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
 ```
 
-Deep, example-driven docs for each capability live in [docs/](docs/README.md); this README stays the map. For product decisions by capability, use the [capability matrix](docs/consuming/capabilityMatrix.md): it maps each public export to value, status, setup, gates, and boundaries.
+Deep, example-driven docs for each capability live in [docs/](docs/README.md); this README stays the map. For product decisions by capability, use the [capability matrix](docs/consuming/capabilityMatrix.md): it maps each public export to value, status, setup, runnable surfaces, gates, and boundaries.
 
 Deployment asset manifest:
 
