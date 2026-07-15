@@ -217,6 +217,7 @@ Pyodide  Workers
 | S2 process map | 같은 Python 함수를 직렬 실행 vs `PyProc.map` process pool로 실행 | [serial median 73ms, process-pool median 43ms](mainPlan/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json), median speedup 1.61x | 외부 후보는 같은 `PyProc.map` API 계약에서 N/A ([compare](mainPlan/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md)) |
 | S3 browser server | 설치 패키지 `VirtualOrigin` POST가 Python ASGI app까지 왕복 | [median 18ms, p95 18ms](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | 외부 후보는 같은 Service Worker URL-to-ASGI 계약에서 N/A ([compare](mainPlan/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md)) |
 | S4 machine resume | signed `.pymachine` export/open + `resume.py` SQLite resource reopen | [export median 76ms, trusted-open median 2264ms](mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json), image 10.8MB, resume rows 2-2 | 외부 후보는 같은 signed machine image + resume hook 계약에서 N/A ([compare](mainPlan/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md)) |
+| S5 immortal machine | 설치 패키지 context들이 한 머신을 공유하고 leader 제거 뒤 memory + file을 복구하며 모든 context 종료 뒤 cold reopen | [failover median 2894ms, p95 3025ms](mainPlan/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json), recovery median 575ms, cold-reopen median 2681ms | 브라우저 Python 후보에는 같은 설치 패키지 leader fencing + journal recovery 계약이 없음 ([evidence](mainPlan/browser-os-north-star/benchmarks/s5-compare-2026-07-15.md)) |
 
 프리미티브 단위 실측도 맥락으로 남긴다:
 
@@ -236,7 +237,7 @@ Pyodide  Workers
 | 탭 안에서 Python 실행 | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
 | 반복 가능한 환경 준비 | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
 | 상태 복원, 분기, 시간여행 | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
-| 여러 탭에서 하나의 Python 머신 유지 | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs) |
+| 여러 탭에서 하나의 Python 머신 유지 | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
 | 브라우저 worker를 프로세스로 사용 | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
 | Python을 실제 browser URL 뒤에 서빙 | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
 | 터미널과 빌린 syscall 흐름 구성 | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |

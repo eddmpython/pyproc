@@ -1,10 +1,10 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S0/S1/S2/S3/S4 기준 artifact 기록, S5 반복 측정 계약 확정. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인. raw JSON은 schema v2 봉투로 올려 scenarioDefinition, measurement, environment, evidence, rawOutput reference를 함께 검증한다.
+상태: pyproc S0/S1/S2/S3/S4/S5 기준 artifact 기록. S0, S0C, S1L은 pyproc, WebVM, JupyterLite, marimo WASM을 같은 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1, S2, S3, S4 계약을 N/A artifact로 봉인. S5는 설치 패키지의 leader fencing + journal recovery 결합 계약이라 pyproc 실측만 둔다. raw JSON은 schema v2 봉투로 올려 scenarioDefinition, measurement, environment, evidence, rawOutput reference를 함께 검증한다.
 
 ## 목표
 
-웹파이썬의 속도 목표를 "느낌"이 아니라 비교 가능한 숫자로 만든다. pyproc의 간판은 현재 Speed Lab의 4-worker sharded NumPy matmul이지만, Browser Python OS 목표에는 부팅, 병렬 실행, 브라우저 안 서버, machine resume까지 포함된다.
+웹파이썬의 속도 목표를 "느낌"이 아니라 비교 가능한 숫자로 만든다. pyproc의 간판은 현재 Speed Lab의 4-worker sharded NumPy matmul이지만, Browser Python OS 목표에는 부팅, 병렬 실행, 브라우저 안 서버, machine resume, leader 장애복구까지 포함된다.
 
 ## 비교 원칙
 
@@ -54,6 +54,7 @@
 | 2026-07-15 | S3 external candidates | [webvm N/A](benchmarks/s3-webvm-na-2026-07-15.json), [jupyterlite N/A](benchmarks/s3-jupyterlite-na-2026-07-15.json), [marimo-wasm N/A](benchmarks/s3-marimo-wasm-na-2026-07-15.json) | [s3-compare-2026-07-15.md](benchmarks/s3-compare-2026-07-15.md) | 같은 pyproc `VirtualOrigin`/ASGI Service Worker URL contract 없음 |
 | 2026-07-15 | S4 pyproc | [s4-pyproc-2026-07-15.json](benchmarks/s4-pyproc-2026-07-15.json) | [s4-compare-2026-07-15.md](benchmarks/s4-compare-2026-07-15.md) | GREEN, 3 samples, signed `.pymachine` export median 76ms, open median 2264ms, image 10.8MB, resume rows 2-2 |
 | 2026-07-15 | S4 external candidates | [webvm N/A](benchmarks/s4-webvm-na-2026-07-15.json), [jupyterlite N/A](benchmarks/s4-jupyterlite-na-2026-07-15.json), [marimo-wasm N/A](benchmarks/s4-marimo-wasm-na-2026-07-15.json) | [s4-compare-2026-07-15.md](benchmarks/s4-compare-2026-07-15.md) | 같은 pyproc signed `.pymachine`/trusted open/`resume.py` resource reopen contract 없음 |
+| 2026-07-15 | S5 pyproc | [s5-pyproc-2026-07-15.json](benchmarks/s5-pyproc-2026-07-15.json) | [s5-compare-2026-07-15.md](benchmarks/s5-compare-2026-07-15.md) | GREEN, 3 independent installed-package runs, initial ready median 2818ms, RPC p50/p90 median 1.11/1.67ms, failover median 2894ms/p95 3025ms, recovery median 575ms, cold reopen median 2681ms |
 
 ## 외부 비교 matrix
 
@@ -68,6 +69,7 @@
 | S2 process map | [artifact](benchmarks/s2-pyproc-2026-07-15.json) | [N/A](benchmarks/s2-webvm-na-2026-07-15.json) | [N/A](benchmarks/s2-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s2-marimo-wasm-na-2026-07-15.json) | pyproc serial 73ms, process pool 43ms, median speedup 1.61x. 외부 후보는 같은 `PyProc.map` process pool API 계약 없음 |
 | S3 browser server | [artifact](benchmarks/s3-pyproc-2026-07-15.json) | [N/A](benchmarks/s3-webvm-na-2026-07-15.json) | [N/A](benchmarks/s3-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s3-marimo-wasm-na-2026-07-15.json) | pyproc `VirtualOrigin` POST roundtrip median 18ms, p95 18ms. 외부 후보는 같은 pyproc `VirtualOrigin`/ASGI Service Worker URL contract 없음 |
 | S4 machine resume | [artifact](benchmarks/s4-pyproc-2026-07-15.json) | [N/A](benchmarks/s4-webvm-na-2026-07-15.json) | [N/A](benchmarks/s4-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s4-marimo-wasm-na-2026-07-15.json) | pyproc export 76ms, open 2264ms, image 10.8MB, resume rows 2-2. 외부 후보는 같은 pyproc signed `.pymachine`/trusted open/`resume.py` resource reopen contract 없음 |
+| S5 immortal multi-tab machine | [artifact](benchmarks/s5-pyproc-2026-07-15.json) | N/A | N/A | N/A | pyproc failover median 2894ms/p95 3025ms, recovery median 575ms, cold reopen median 2681ms. 외부 후보에는 같은 설치 패키지 leader fencing + heap/`/home/web` journal recovery 계약이 없음 |
 
 `bench:speed`의 기본 S1 조건은 `workers=4`, `size=1024`, `samples=3`이다. 사람용 Speed Lab UI는 반응성을 위해 768 기본값을 쓰지만, runner는 URL query로 canonical 크기를 명시한다.
 
@@ -127,7 +129,7 @@ npm run bench:compare -- .tmp/pyproc-s4.json .tmp/webvm-s4-na.json --out .tmp/s4
 S5 artifact는 `test:consumer`의 Immortal Python Machine gate를 반복 실행한 값만 받는다. 설치 패키지 public import, 독립 context 3개, 정확히 하나의 leader, follower RPC와 commit, 강제 leader context 제거, 영속 epoch 증가, heap + `/home/web` 복구, 모든 context 종료 뒤 cold reopen, outcome unknown 무재생 계약이 모두 GREEN이어야 한다.
 
 ```bash
-npm run bench:artifact -- --scenario S5 --candidate pyproc --command "npm run test:consumer timings.immortal*" --sample 2800,2,12,3300,750,3000,0 --sample 2900,2,10,3200,700,3100,0 --sample 2750,1,8,3400,800,2950,0 --out .tmp/pyproc-s5.json
+npm run bench:artifact -- --scenario S5 --candidate pyproc --command "npm run test:consumer, three independent temporary installs and browser profiles" --sample 3140,0.75,2.08,3025,628,2143,0 --sample 2744,1.11,1.61,2248,575,3270,0 --sample 2818,1.14,1.67,2894,526,2681,0 --out mainPlan/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json
 ```
 
 ## 첫 실측 합격 기준
@@ -142,4 +144,4 @@ npm run bench:artifact -- --scenario S5 --candidate pyproc --command "npm run te
 
 1. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
 2. S0-S5와 S1L 비교 축을 제품 README에 올릴 경우 숫자보다 계약 차이를 먼저 설명한다.
-3. 다음 구조 강화는 matrix 행별 runnable example 연결 또는 artifact raw output 보관 위치 표준화 중 하나로 잡는다.
+3. S5의 `failover p95 < 5000ms`를 설치 소비자 회귀 목표로 유지하고, 수치는 tracked artifact가 바뀔 때만 갱신한다.

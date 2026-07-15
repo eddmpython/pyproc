@@ -1,0 +1,55 @@
+scenario: S5
+candidate: pyproc
+command: npm run test:consumer, three independent temporary installs and browser profiles
+source: N/A
+note: Installed root export; three browsing contexts; forced leader removal; heap and /home recovery; all contexts removed before cold reopen.
+samples:
+- 3140,0.75,2.08,3025,628,2143,0
+- 2744,1.11,1.61,2248,575,3270,0
+- 2818,1.14,1.67,2894,526,2681,0
+metrics:
+{
+  "samples": [
+    {
+      "initialReadyMs": 3140,
+      "rpcP50Ms": 0.75,
+      "rpcP90Ms": 2.08,
+      "failoverMs": 3025,
+      "recoveryMs": 628,
+      "coldReopenMs": 2143,
+      "maxErr": 0
+    },
+    {
+      "initialReadyMs": 2744,
+      "rpcP50Ms": 1.11,
+      "rpcP90Ms": 1.61,
+      "failoverMs": 2248,
+      "recoveryMs": 575,
+      "coldReopenMs": 3270,
+      "maxErr": 0
+    },
+    {
+      "initialReadyMs": 2818,
+      "rpcP50Ms": 1.14,
+      "rpcP90Ms": 1.67,
+      "failoverMs": 2894,
+      "recoveryMs": 526,
+      "coldReopenMs": 2681,
+      "maxErr": 0
+    }
+  ],
+  "sampleCount": 3,
+  "initialReadyMedianMs": 2818,
+  "initialReadyP95Ms": 3140,
+  "rpcP50MedianMs": 1.11,
+  "rpcP50P95Ms": 1.14,
+  "rpcP90MedianMs": 1.67,
+  "rpcP90P95Ms": 2.08,
+  "failoverMedianMs": 2894,
+  "failoverP95Ms": 3025,
+  "recoveryMedianMs": 575,
+  "recoveryP95Ms": 628,
+  "coldReopenMedianMs": 2681,
+  "coldReopenP95Ms": 3270,
+  "maxErr": 0
+}

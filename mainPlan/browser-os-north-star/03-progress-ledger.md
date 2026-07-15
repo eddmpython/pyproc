@@ -2752,6 +2752,7 @@ NEXT:
 - [immortal.html](../../examples/immortal.html)에 machine, participant, role, leader, epoch, participant count, recovered, commit time, takeover time과 직접 실행/commit/새 탭/leader 닫기 흐름을 공개했다.
 - [immortalProductGate.js](../../tests/browser/immortalProductGate.js)가 임시 제품에 설치된 `node_modules/pyproc`의 root export만으로 같은 장애복구 흐름을 실행한다. product consumer coverage는 11행이 됐다.
 - benchmark schema에 S5 `immortal multi-tab machine`을 추가해 initial ready, RPC p50/p90, failover, recovery, cold reopen을 최소 3회 sample artifact로 봉인할 수 있게 했다.
+- 깨끗한 구현 commit `11843ab`에서 설치 소비자 gate를 3회 독립 실행하고 [S5 artifact](benchmarks/s5-pyproc-2026-07-15.json), [비교 표](benchmarks/s5-compare-2026-07-15.md), raw sidecar를 추적 상태로 남겼다.
 
 실측:
 
@@ -2760,6 +2761,7 @@ NEXT:
 - recovery 1016ms, 740ms, 533ms. cold reopen 2249ms, 3118ms, 2349ms.
 - RPC p50 1.00ms, 1.08ms, 1.05ms. 각 실행에서 변수 `41`, `/home/web` 파일, cold state `99`가 복구됐고 outcome-unknown 명령은 successor에서 0회 재생됐다.
 - 설치 패키지 product consumer gate GREEN 28/28. initial ready 3012ms, RPC p50/p90 0.98/1.54ms, failover 2375ms, recovery 649ms, cold reopen 2129ms.
+- 깨끗한 commit S5 3회도 모두 GREEN 28/28. failover 3025ms, 2248ms, 2894ms이고 artifact median/p95는 2894/3025ms다. recovery median 575ms, cold reopen median 2681ms, RPC p50/p90 median 1.11/1.67ms다.
 
 검증:
 
@@ -2778,6 +2780,6 @@ NEXT:
 
 NEXT:
 
-1. 깨끗한 구현 commit에서 `npm run test:consumer`를 3회 독립 실행해 S5 tracked artifact와 raw output을 남긴다.
-2. S5 수치를 README와 속도 비교 표에 승격하고 전체 gate를 다시 통과시킨다.
+1. `failover p95 < 5000ms`를 설치 소비자 회귀 목표로 유지한다.
+2. 다음 제품 배선은 실제 소비자가 `openPersistentMachine`을 pin한 뒤 freshness evidence로 연결한다.
 3. 릴리즈 지시가 있을 때만 버전과 태그를 함께 올린다.

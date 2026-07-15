@@ -515,6 +515,7 @@ check("랜딩 벤치 메시지가 README 계약형 속도 주장과 정합", () 
     "S1 headline: sharded NumPy",
     "S3 browser server",
     "S4 machine resume",
+    "S5 immortal machine",
   ]) {
     if (!readmeEn.includes(term)) throw new Error(`README.md 벤치 메시지 누락: ${term}`);
   }
@@ -524,6 +525,7 @@ check("랜딩 벤치 메시지가 README 계약형 속도 주장과 정합", () 
     "S1 간판: sharded NumPy",
     "S3 browser server",
     "S4 machine resume",
+    "S5 immortal machine",
   ]) {
     if (!readmeKo.includes(term)) throw new Error(`README.ko.md 벤치 메시지 누락: ${term}`);
   }
@@ -534,12 +536,15 @@ check("랜딩 벤치 메시지가 README 계약형 속도 주장과 정합", () 
     "S3 fetch() to Python ASGI",
     "S4 signed .pymachine",
     "S4 trusted machine open",
+    "S5 leader failover",
     "portable machine image",
     "3.95x",
     "18ms",
     "76ms",
     "2.26s",
     "10.8MB",
+    "2.89s",
+    "3.03s",
   ]) {
     if (!landing.includes(term)) throw new Error(`examples/index.html 벤치 메시지 누락: ${term}`);
   }
