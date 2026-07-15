@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S4",
+  "candidate": "pyproc",
+  "name": "machine resume",
+  "command": "npm run test:consumer, collect timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows from installed package signed .pymachine gate",
+  "commit": "a50d997f65d32765cb2d8e8d078babb9e99b613e",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T02:53:13.233Z",
+  "finishedAt": "2026-07-15T02:53:13.234Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 16845234176
+  },
+  "engine": {
+    "name": "Pyodide + signed .pymachine"
+  },
+  "source": "npm run test:consumer",
+  "note": "derived from three installed package consumer gate runs; each run uses npm pack temp app, fresh headless Edge profile, signed exportImage includeHome, trusted public key openMachine, and resume.py SQLite resource reopen",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "exportMs": 76,
+        "openMs": 2264,
+        "machineMB": 10.8,
+        "resumeRows": 2,
+        "maxErr": 0
+      },
+      {
+        "exportMs": 75,
+        "openMs": 2346,
+        "machineMB": 10.8,
+        "resumeRows": 2,
+        "maxErr": 0
+      },
+      {
+        "exportMs": 80,
+        "openMs": 2136,
+        "machineMB": 10.8,
+        "resumeRows": 2,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "exportMedianMs": 76,
+    "exportP95Ms": 80,
+    "openMedianMs": 2264,
+    "openP95Ms": 2346,
+    "machineMBMedian": 10.8,
+    "machineMBMax": 10.8,
+    "resumeRowsMin": 2,
+    "resumeRowsMax": 2,
+    "maxErr": 0
+  }
+}
