@@ -2605,3 +2605,46 @@ NEXT:
 1. 소비자별 배선 상태를 실제 제품 gate freshness evidence와 더 직접 연결한다.
 2. probe 전용 capability 중 `DeviceFs` 또는 `JobControl`처럼 제품 UI로 보일 가치가 큰 행을 다음 승격 후보로 판정한다.
 3. coverage manifest를 benchmark artifact처럼 schema 검증 가능한 산출물로 승격할지 결정한다.
+
+## 2026-07-15 - DeviceFs product consumer gate 승격
+
+문제:
+
+- `DeviceFs`는 OS 목표에서 중요한 "브라우저 능력이 파이썬 파일 경로가 된다" 축인데, 제품 판단 표면은 probe 중심이었다.
+- 능력 매트릭스의 실행 표면에 product consumer gate가 없어 설치 패키지 소비자가 실제로 `Runtime.enableDeviceFs()`를 쓰는 증거가 약했다.
+
+완료:
+
+- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - device filesystem` 행을 추가했다.
+- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `DeviceFs`를 import하고, `Runtime.enableDeviceFs()`로 `/dev/productState` 사용자 장치와 내장 `/proc/meminfo`를 설치한다.
+- product consumer gate가 Python `open()`으로 `/dev/productState`를 읽고 쓰며, `os.path.exists()`와 `/proc/meminfo`의 실제 heap/execSeq를 확인한다.
+- [contract.md](../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 DeviceFs를 연결했다.
+- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)의 Device filesystem 행을 product consumer gate 실행 표면으로 갱신했다.
+- `npm test`가 `DeviceFs` coverage 행과 실제 product consumer check 문자열을 함께 감시하게 했다.
+
+실측:
+
+- `npm run test:consumer` GREEN 18/18.
+- DeviceFs installed devices: `/proc/meminfo`, `/dev/clipboard`, `/dev/random`, `/dev/productState`.
+- product consumer coverage manifest 8 rows.
+- 같은 run의 참고 수치: VirtualOrigin 19ms, MachineJournal commit 1471ms/recover 2834ms, signed `.pymachine` export 164ms, trusted open 2264ms.
+
+검증:
+
+- `git diff --check` PASS.
+- `node --check tests/browser/productConsumerCoverage.mjs` PASS.
+- `node --check tests/browser/productConsumer.mjs` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` PASS, 659 passed, 0 failed.
+- `npm run test:consumer` PASS, GREEN 18/18.
+
+판정:
+
+- DeviceFs가 probe 전용 근거에서 설치 패키지 기준 제품 소비 증거로 올라갔다.
+- 브라우저 OS 목표의 파일 네임스페이스 축이 더 뾰족해졌다. 제품은 `raw.FS`나 내부 Pyodide API가 아니라 공개 `DeviceFs`와 Python `open()` 계약으로 브라우저 장치를 붙인다.
+
+NEXT:
+
+1. 다음 probe 전용 승격 후보는 `JobControl`이다. 셸의 `&`, `%fg`, `%kill`이 제품 UI로 보일 때 OS성이 가장 직접적으로 전달된다.
+2. coverage manifest를 benchmark artifact처럼 schema 검증 가능한 산출물로 승격할지 결정한다.
+3. 소비자별 배선 상태를 실제 제품 gate freshness evidence와 더 직접 연결한다.

@@ -34,6 +34,12 @@ export const PRODUCT_CONSUMER_COVERAGE = Object.freeze([
     contract: "설치 패키지 Runtime boot, Python ASGI app, `fetch(\"/pyproc/...\")` virtual origin 왕복, S3 timing source",
   }),
   Object.freeze({
+    gate: "product consumer - device filesystem",
+    specifiers: Object.freeze(["`pyproc`"]),
+    publicSurface: Object.freeze(["`DeviceFs`", "Runtime `enableDeviceFs`"]),
+    contract: "설치 패키지 Runtime에서 `/dev/productState`와 `/proc/meminfo`를 Python `open()` 파일 계약으로 읽고 쓴다",
+  }),
+  Object.freeze({
     gate: "product consumer - process OS",
     specifiers: Object.freeze(["`pyproc`"]),
     publicSurface: Object.freeze(["`PyProc`"]),

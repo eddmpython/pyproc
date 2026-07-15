@@ -94,6 +94,7 @@ const html = `<!DOCTYPE html>
       bootSession,
       PyProc,
       VirtualOrigin,
+      DeviceFs,
       verifyPyProcAssetIntegrity,
       registerPyProcServiceWorker,
       openMachine,
@@ -173,6 +174,35 @@ const html = `<!DOCTYPE html>
       const rt = await boot({ indexURL: INDEX, assetIntegrity });
       timings.bootMs = Math.round(performance.now() - t);
       check("Runtime boots from installed package", rt.run("sum(range(20))") === 190, timings.bootMs + "ms");
+
+      const textDecoder = new TextDecoder();
+      const productDeviceWrites = [];
+      const deviceFs = rt.enableDeviceFs({
+        devices: {
+          "/dev/productState": {
+            read: () => JSON.stringify({ mode: "browserOs", value: 41, execSeq: rt.execSeq }),
+            write: (bytes) => productDeviceWrites.push(textDecoder.decode(bytes)),
+          },
+        },
+      });
+      const deviceInstall = deviceFs.install();
+      const deviceOk = rt.run([
+        "import json, os",
+        "deviceDoc = json.loads(open('/dev/productState').read())",
+        "open('/dev/productState', 'w').write('write-from-python')",
+        "procDoc = json.loads(open('/proc/meminfo').read())",
+        "deviceOk = deviceDoc['mode'] == 'browserOs' and deviceDoc['value'] == 41",
+        "deviceOk = deviceOk and os.path.exists('/dev/productState') and os.path.exists('/proc/meminfo')",
+        "deviceOk = deviceOk and procDoc['heapBytes'] > 0 and procDoc['execSeq'] >= 0",
+        "deviceOk",
+      ].join("\\n"));
+      check("DeviceFs exposes installed product devices as Python files",
+        deviceFs instanceof DeviceFs &&
+        deviceInstall.installed.includes("/dev/productState") &&
+        deviceInstall.installed.includes("/proc/meminfo") &&
+        deviceOk === true &&
+        productDeviceWrites.join("") === "write-from-python",
+        deviceInstall.installed.join(","));
 
       rt.run([
         "import json",
