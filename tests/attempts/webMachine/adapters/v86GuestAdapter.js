@@ -9,6 +9,8 @@ import {
 import { V86PacketPort } from "./v86/v86PacketPort.js";
 import { V86DisplayPort } from "./v86/v86DisplayPort.js";
 import { V86InputPort } from "./v86/v86InputPort.js";
+import { V86FramebufferPort } from "./v86/v86FramebufferPort.js";
+import { V86PointerPort } from "./v86/v86PointerPort.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
@@ -26,6 +28,9 @@ export function createV86GuestFactory({
   packetDeviceName = null,
   displayDeviceName = null,
   inputDeviceName = null,
+  framebufferDeviceName = null,
+  framebufferSource = null,
+  pointerDeviceName = null,
 }) {
   if (typeof V86 !== "function") throw new TypeError("V86 constructor가 필요하다");
   return () => new V86GuestAdapterDraft({
@@ -36,17 +41,38 @@ export function createV86GuestFactory({
     packetDeviceName,
     displayDeviceName,
     inputDeviceName,
+    framebufferDeviceName,
+    framebufferSource,
+    pointerDeviceName,
   });
 }
 
 class V86GuestAdapterDraft {
-  constructor({ V86, adapterVersion, blockDeviceName, blockMode, packetDeviceName, displayDeviceName, inputDeviceName }) {
+  constructor({
+    V86,
+    adapterVersion,
+    blockDeviceName,
+    blockMode,
+    packetDeviceName,
+    displayDeviceName,
+    inputDeviceName,
+    framebufferDeviceName,
+    framebufferSource,
+    pointerDeviceName,
+  }) {
     this._blockDeviceName = blockDeviceName ? String(blockDeviceName) : null;
     this._blockMode = this._blockDeviceName ? String(blockMode || "ata") : null;
     if (this._blockMode && !["ata", "filesystem"].includes(this._blockMode)) throw new TypeError(`v86 block mode 미지원: ${this._blockMode}`);
     this._packetDeviceName = packetDeviceName ? String(packetDeviceName) : null;
     this._displayDeviceName = displayDeviceName ? String(displayDeviceName) : null;
     this._inputDeviceName = inputDeviceName ? String(inputDeviceName) : null;
+    this._framebufferDeviceName = framebufferDeviceName ? String(framebufferDeviceName) : null;
+    this._framebufferSource = framebufferSource;
+    if (this._framebufferDeviceName && (!framebufferSource || typeof framebufferSource.subscribe !== "function")) {
+      throw new TypeError("framebuffer device에는 RGBA frame source가 필요하다");
+    }
+    if (!this._framebufferDeviceName && framebufferSource) throw new TypeError("framebuffer source에는 device name이 필요하다");
+    this._pointerDeviceName = pointerDeviceName ? String(pointerDeviceName) : null;
     this.capabilities = {
       adapterVersion,
       snapshotScope: "portable",
@@ -58,6 +84,8 @@ class V86GuestAdapterDraft {
         ...(this._packetDeviceName ? [{ name: this._packetDeviceName, kind: "network", mode: "packet" }] : []),
         ...(this._displayDeviceName ? [{ name: this._displayDeviceName, kind: "display", mode: "text-cells" }] : []),
         ...(this._inputDeviceName ? [{ name: this._inputDeviceName, kind: "input", mode: "ps2-scan-code" }] : []),
+        ...(this._framebufferDeviceName ? [{ name: this._framebufferDeviceName, kind: "display", mode: "rgba-frame" }] : []),
+        ...(this._pointerDeviceName ? [{ name: this._pointerDeviceName, kind: "input", mode: "relative-pointer" }] : []),
       ],
     };
     this._V86 = V86;
@@ -70,6 +98,8 @@ class V86GuestAdapterDraft {
     this._packetPort = null;
     this._displayPort = null;
     this._inputPort = null;
+    this._framebufferPort = null;
+    this._pointerPort = null;
     this._serial = "";
     this._line = "";
     this._waiters = new Set();
@@ -79,8 +109,7 @@ class V86GuestAdapterDraft {
   async boot(context, manifest) {
     this._context = context;
     this._manifest = manifest;
-    const readyPattern = String(manifest.v86?.readyPattern || "~% ");
-    await this._createEmulator({ autostart: this._blockMode !== "filesystem", attachInput: true });
+    await this._createEmulator({ autostart: this._blockMode !== "filesystem", attachInteractiveInputs: true });
     if (this._blockMode === "filesystem") {
       this._volumeStats = await readV86FileSystemVolume({
         device: this._blockDevice(),
@@ -90,23 +119,27 @@ class V86GuestAdapterDraft {
       });
       await this._emulator.run();
     }
-    await this._waitFor(readyPattern, 0, Number(manifest.v86?.bootTimeoutMs || 120000));
+    await this._awaitReadiness();
     consoleWrite(context, `x86:boot:${context.machineId}`);
   }
 
   async pause() {
     await this._inputPort?.drain();
+    await this._pointerPort?.drain();
     this._inputPort?.detach();
+    this._pointerPort?.detach();
     try {
       await this._requireEmulator().stop();
       await this._blockBuffer?.drain();
       await this._packetPort?.drain();
       await this._displayPort?.drain();
+      await this._framebufferPort?.drain();
       if (this._blockMode === "filesystem") {
         this._volumeStats = await writeV86FileSystemVolume({ device: this._blockDevice(), fileSystem: this._fileSystem() });
       }
     } catch (error) {
       this._inputPort?.attach(this._requireEmulator());
+      this._pointerPort?.attach(this._requireEmulator());
       throw error;
     }
     consoleWrite(this._context, "x86:pause");
@@ -114,10 +147,12 @@ class V86GuestAdapterDraft {
 
   async resume() {
     this._inputPort?.attach(this._requireEmulator());
+    this._pointerPort?.attach(this._requireEmulator());
     try {
       await this._requireEmulator().run();
     } catch (error) {
       this._inputPort?.detach();
+      this._pointerPort?.detach();
       throw error;
     }
     consoleWrite(this._context, "x86:resume");
@@ -127,6 +162,7 @@ class V86GuestAdapterDraft {
     await this._blockBuffer?.drain();
     await this._packetPort?.drain();
     await this._displayPort?.drain();
+    await this._framebufferPort?.drain();
     if (this._blockMode !== "filesystem") return new Uint8Array(await this._requireEmulator().save_state());
     const fileSystem = this._fileSystem();
     const liveState = serializeV86FileSystemState(fileSystem);
@@ -141,7 +177,7 @@ class V86GuestAdapterDraft {
   async restore(payload, context, manifest) {
     this._context = context;
     this._manifest = manifest;
-    if (!this._emulator) await this._createEmulator({ autostart: false, attachInput: false });
+    if (!this._emulator) await this._createEmulator({ autostart: false, attachInteractiveInputs: false });
     await this._emulator.restore_state(toArrayBuffer(payload));
     if (this._blockMode === "filesystem") {
       this._volumeStats = await readV86FileSystemVolume({
@@ -151,6 +187,7 @@ class V86GuestAdapterDraft {
       });
     }
     await this._displayPort?.drain();
+    await this._framebufferPort?.drain();
     consoleWrite(context, `x86:restore:${context.machineId}`);
   }
 
@@ -158,11 +195,14 @@ class V86GuestAdapterDraft {
     this._rejectWaiters(new Error("x86 adapter: shutdown"));
     if (this._emulator) {
       await this._inputPort?.drain();
+      await this._pointerPort?.drain();
       this._inputPort?.detach();
+      this._pointerPort?.detach();
       await this._emulator.stop();
       await this._blockBuffer?.drain();
       await this._packetPort?.drain();
       await this._displayPort?.drain();
+      await this._framebufferPort?.drain();
       if (this._blockMode === "filesystem" && this._emulator.fs9p) {
         this._volumeStats = await writeV86FileSystemVolume({ device: this._blockDevice(), fileSystem: this._fileSystem() });
       }
@@ -170,12 +210,15 @@ class V86GuestAdapterDraft {
       this._emulator.remove_listener("serial0-output-byte", this._onSerialByte);
       this._packetPort?.detach();
       this._displayPort?.detach();
+      this._framebufferPort?.detach();
       await this._emulator.destroy();
     }
     this._emulator = null;
     this._packetPort = null;
     this._displayPort = null;
     this._inputPort = null;
+    this._framebufferPort = null;
+    this._pointerPort = null;
     consoleWrite(this._context, "x86:shutdown");
   }
 
@@ -203,10 +246,12 @@ class V86GuestAdapterDraft {
       network: this._packetPort?.inspect() || null,
       display: this._displayPort?.inspect() || null,
       input: this._inputPort?.inspect() || null,
+      framebuffer: this._framebufferPort?.inspect() || null,
+      pointer: this._pointerPort?.inspect() || null,
     };
   }
 
-  async _createEmulator({ autostart, attachInput }) {
+  async _createEmulator({ autostart, attachInteractiveInputs }) {
     const sourceOptions = this._manifest?.v86?.options;
     if (!sourceOptions || typeof sourceOptions !== "object") throw new Error("x86 adapter: manifest.v86.options 없음");
     const options = { ...sourceOptions };
@@ -244,7 +289,22 @@ class V86GuestAdapterDraft {
         device: this._inputDevice(),
         endpointId: this._context.machineId,
       });
-      if (attachInput) this._inputPort.attach(emulator);
+      if (attachInteractiveInputs) this._inputPort.attach(emulator);
+    }
+    if (this._framebufferDeviceName) {
+      this._framebufferPort = new V86FramebufferPort({
+        device: this._framebufferDevice(),
+        source: this._framebufferSource,
+        endpointId: this._context.machineId,
+      });
+      this._framebufferPort.attach(emulator);
+    }
+    if (this._pointerDeviceName) {
+      this._pointerPort = new V86PointerPort({
+        device: this._pointerDevice(),
+        endpointId: this._context.machineId,
+      });
+      if (attachInteractiveInputs) this._pointerPort.attach(emulator);
     }
     const timeoutMs = Number(this._manifest.v86?.engineTimeoutMs || 60000);
     await new Promise((resolve, reject) => {
@@ -271,6 +331,27 @@ class V86GuestAdapterDraft {
     if (this._blockMode === "filesystem") {
       this._emptyFileSystemState = serializeV86FileSystemState(this._fileSystem());
     }
+  }
+
+  async _awaitReadiness() {
+    const readiness = this._manifest?.v86?.readiness;
+    if (!readiness) {
+      const pattern = String(this._manifest?.v86?.readyPattern || "~% ");
+      await this._waitFor(pattern, 0, Number(this._manifest?.v86?.bootTimeoutMs || 120000));
+      return;
+    }
+    if (readiness.kind === "serial-pattern") {
+      const pattern = String(readiness.pattern || "");
+      if (!pattern) throw new TypeError("serial-pattern readiness에는 pattern이 필요하다");
+      await this._waitFor(pattern, 0, Number(readiness.timeoutMs || 120000));
+      return;
+    }
+    if (readiness.kind === "framebuffer") {
+      if (!this._framebufferPort) throw new Error("framebuffer readiness에는 framebuffer device가 필요하다");
+      await this._framebufferPort.waitForFrame(Number(readiness.timeoutMs || 30000));
+      return;
+    }
+    throw new TypeError(`v86 readiness 미지원: ${readiness.kind}`);
   }
 
   _acceptSerialByte(byte) {
@@ -348,6 +429,22 @@ class V86GuestAdapterDraft {
     const device = this._context?.devices?.[this._inputDeviceName];
     if (!device || device.kind !== "input" || device.mode !== "ps2-scan-code" || typeof device.connect !== "function") {
       throw new Error(`x86 adapter: PS/2 input device 없음 ${this._inputDeviceName}`);
+    }
+    return device;
+  }
+
+  _framebufferDevice() {
+    const device = this._context?.devices?.[this._framebufferDeviceName];
+    if (!device || device.kind !== "display" || device.mode !== "rgba-frame" || typeof device.connect !== "function") {
+      throw new Error(`x86 adapter: RGBA framebuffer device 없음 ${this._framebufferDeviceName}`);
+    }
+    return device;
+  }
+
+  _pointerDevice() {
+    const device = this._context?.devices?.[this._pointerDeviceName];
+    if (!device || device.kind !== "input" || device.mode !== "relative-pointer" || typeof device.connect !== "function") {
+      throw new Error(`x86 adapter: relative pointer device 없음 ${this._pointerDeviceName}`);
     }
     return device;
   }

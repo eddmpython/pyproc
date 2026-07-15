@@ -14,6 +14,7 @@ snapshot 보장은 숨기지 않는다.
 - pyproc: `.pymachine` 바이트로 새 adapter에서도 여는 `portable` scope.
 - WASI: live `WasiSession.checkpoint/timeTravel`을 쓰는 `session` scope.
 - x86 Linux: 같은 v86 version과 engine manifest에서 새 adapter가 여는 `portable` state.
+- x86 graphical: 같은 v86 version과 hash 고정 KolibriOS manifest에서 새 adapter가 여는 `portable` state.
 - 공통 host: scope가 다른 snapshot의 cold restore를 부팅 전에 거부한다.
 
 ## 졸업 게이트
@@ -34,6 +35,7 @@ snapshot 보장은 숨기지 않는다.
 14. request와 packet network mode를 부팅 전에 구분하고, Linux NIC의 실제 ARP/ICMP frame을 새 browser process의 새 packet port에서도 왕복한다.
 15. console과 분리된 VGA text display와 PS/2 keyboard input으로 Linux command를 실행하고, paused input 차단과 새 browser process의 장치 재연결을 검증한다.
 16. 독립 browsing context 네 개가 같은 machine owner를 경쟁하고, 정상 양도와 owner 강제 제거 뒤 정확히 한 successor가 durable epoch와 같은 generation을 복구한다.
+17. `rgba-frame` display와 `relative-pointer` input을 실제 graphical x86 guest에 연결하고, paused input 차단과 새 browser process의 pixel redraw·pointer 재연결을 검증한다.
 
 ## 결론 표
 
@@ -56,6 +58,8 @@ snapshot 보장은 숨기지 않는다.
 | 2026-07-15 | displayInputProbe 추가 shell 첫 시도 | Edge headless, COOP+COEP, v86 VGA + PS/2 Set 1 | **RED 0/1**. 일부 scan code가 서로 다른 shell에 분산 | Buildroot가 이미 VGA tty shell을 제공하는데 probe가 두 번째 shell을 띄워 keyboard input owner를 경쟁시켰다 | 기존 VGA shell 한 곳만 사용 |
 | 2026-07-15 | displayInputProbe | Edge headless, COOP+COEP, v86 VGA text + PS/2 keyboard + 새 Edge process, 3회 | **3회 연속 GREEN 18/18**. 최초 display/input 354/349/344ms, commit 347/297/299ms, process cold restore 356/353/352ms, 재연결 I/O 437/426/458ms | 80x25 VGA cell frame과 raw scan code가 console 밖 별도 port를 사용했다. paused input은 분리되고 cold restore는 display redraw 후 resume 직전에 새 keyboard를 연결했다 | RGBA/pointer, owner successor |
 | 2026-07-15 | ownerSuccessorProbe | Edge headless, Web Locks + IndexedDB, 독립 iframe 4개, 3회 | **3회 연속 GREEN 11/11**. initial owner 196/173/189ms, 정상 successor 22/22/23ms, owner context 강제 제거 successor 21/22/23ms | held owner는 항상 1, contender는 pending. successor는 epoch 2/3을 단조 증가시키며 같은 `owner-generation-1`의 값 42를 boot/replay 없이 복구했다. 이전 owner의 in-flight command는 실행 1회 뒤 outcome unknown | RGBA/pointer, clock/entropy, 배포 검토 |
+| 2026-07-15 | framebufferPointerProbe Buildroot 첫 시도 | Edge headless, Buildroot Linux 6.8.12 i686 | **RED 1/2**. `/proc/fb`, `/dev/fb0`, `/dev/input/mice`가 모두 없음 | 고정 Linux kernel에 framebuffer와 mouse input driver가 없었다. text console을 pixel frame으로 꾸미거나 host pointer 수신만 세는 거짓 양성을 거부 | hash 고정 graphical guest fixture |
+| 2026-07-15 | framebufferPointerProbe | Edge headless, v86 0.5.424 + KolibriOS graphical guest + 새 Edge process, 3회 | **3회 연속 GREEN 18/18**. boot 5247/5309/5276ms, 최초 pointer frame 40/39/39ms, commit 141/132/134ms, process cold restore 200/200/180ms, 재연결 pointer frame 36/37/45ms | 1024x768x32bpp VGA dirty region을 RGBA8888 frame으로 원자 present했다. PS/2 move가 guest를 거쳐 138 pixels를 바꿨고 paused pointer는 차단됐으며 cold restore는 boot 없이 frame을 먼저 redraw | clock/entropy, 이동 가능한 envelope, 배포 검토 |
 
 ## 모듈화 설계
 
@@ -67,22 +71,24 @@ snapshot 보장은 숨기지 않는다.
 
 상세 package 경계와 강행 규칙은 [클린 아키텍처 정본](../../../mainPlan/web-machine-platform/04-clean-architecture-and-code-rules.md)을 따른다.
 
-Linux probe 자산은 레포에 넣지 않는다. 아래 명령이 [v86 0.5.424](https://www.npmjs.com/package/v86)의
+v86 probe 자산은 레포에 넣지 않는다. 아래 명령이 [v86 0.5.424](https://www.npmjs.com/package/v86)의
 module/wasm, v86 revision `2f1346b`의 BIOS, [공식 예제](https://github.com/copy/v86/blob/2f1346b/examples/serial.html)의
-Buildroot bzImage를 내려받고 SHA-256을 검증해 ignored `assets/`에 둔다. v86 package는 BSD-2-Clause지만
-BIOS와 guest image는 별도 구성물이므로 제품 번들 전 license/SBOM 검토를 다시 통과해야 한다.
+Buildroot bzImage와 [KolibriOS](https://wiki.kolibrios.org/index.php?title=Main_Page) floppy image를 내려받고
+SHA-256을 검증해 ignored `assets/`에 둔다. v86 package는 BSD-2-Clause, KolibriOS는 GPL 계열이지만 BIOS와
+guest image는 별도 구성물이므로 제품 번들 전 정확한 license와 SBOM 검토를 다시 통과해야 한다.
 
 ```bash
 node tests/attempts/webMachine/fixtures/v86/prepareAssets.mjs
 node tests/browser/run.mjs tests/attempts/webMachine/probes/linuxGuestProbe.html
 node tests/browser/run.mjs tests/attempts/webMachine/probes/ownerSuccessorProbe.html
+node tests/browser/run.mjs tests/attempts/webMachine/probes/framebufferPointerProbe.html
 ```
 
 두 실제 엔진, Linux guest, 원자 generation, 브라우저 프로세스 cold reopen, 실제 guest file의 block
 분리, Linux NIC packet network, VGA text display와 PS/2 keyboard 조건은 충족했다. pyproc home과 v86 9P
 file은 guest snapshot에 중복되지 않고 별도 block volume이 완료 generation의 원본이다. Web Lock 단일 owner와
-IndexedDB 단조 epoch도 정상 양도와 강제 context 제거에서 통과했다. RGBA framebuffer, pointer가 남았으므로
-이번 변경에서는
+IndexedDB 단조 epoch도 정상 양도와 강제 context 제거에서 통과했다. RGBA framebuffer와 relative pointer도
+별도 capability로 graphical guest와 process cold restore에서 통과했다. clock/entropy가 남았으므로 이번 변경에서는
 `src/` 또는 `index.js`로 승격하지 않는다. 승격 위치는 독립 `core`, `browser`, `guest-pyproc`,
 `guest-v86` package로 확정했다.
 
@@ -103,5 +109,5 @@ generation과 프로세스 cold reopen 핵심 GREEN, 캠페인 진행 중.** pyp
 snapshot에서 제거하고 별도 block volume으로 복원했다. Linux NIC는 bounded packet switch에서 실제 ARP와
 ICMP를 왕복하고 새 process에서 port를 다시 연결한다. VGA text frame과 PS/2 keyboard도 console과 분리해
 재연결한다. owner context 제거 뒤에는 정확히 한 successor가 21-23ms에 같은 generation을 복구한다.
-RGBA/pointer, clock/entropy, 배포 license
+1024x768 RGBA frame과 PS/2 pointer도 새 process에서 재연결한다. clock/entropy, 이동 가능한 envelope, 배포 license
 게이트가 남았으므로 완성된 브라우저 컴퓨터 또는 공개 API라고 부르지 않는다.

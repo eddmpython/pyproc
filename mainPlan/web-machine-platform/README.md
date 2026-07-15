@@ -11,7 +11,9 @@ Linux eth0를 bounded packet switch에 연결해 실제 ARP/ICMP와 process cold
 이어 VGA text display와 PS/2 keyboard를 console과 분리하고 cold restore 뒤 새 장치 재연결까지 통과했다.
 독립 browsing context 네 개의 Web Lock 경쟁에서는 owner가 항상 하나였고, 정상 양도와 owner context 강제
 제거 뒤 successor 하나가 durable epoch를 올려 같은 generation을 boot나 command replay 없이 복구했다.
-RGBA framebuffer, pointer, clock/entropy와 배포 검토는 남아 있다.
+이어 graphical x86 guest의 1024x768x32bpp VGA를 RGBA8888 dirty-region frame으로 내보내고, PS/2 pointer가
+실제 guest 화면을 바꾸며 새 browser process의 paused restore와 resume 재연결까지 통과했다.
+clock/entropy, 이동 가능한 `.webmachine` envelope와 배포 검토는 남아 있다.
 
 ## 한 문장
 

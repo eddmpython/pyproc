@@ -131,7 +131,10 @@ tests/attempts/webMachine/
 │  │  ├─ memoryBlockDevice.js
 │  │  ├─ memoryEthernetSwitch.js
 │  │  ├─ memoryTextDisplayDevice.js
-│  │  └─ memoryScanCodeInputDevice.js
+│  │  ├─ memoryScanCodeInputDevice.js
+│  │  ├─ memoryRgbaDisplayDevice.js
+│  │  ├─ canvasRgbaFrameSource.js
+│  │  └─ memoryRelativePointerDevice.js
 │  └─ persistence/
 │     ├─ generationIntegrity.js
 │     ├─ memoryGenerationStore.js
@@ -149,7 +152,9 @@ tests/attempts/webMachine/
 │     ├─ v86FileSystemVolume.js
 │     ├─ v86PacketPort.js
 │     ├─ v86DisplayPort.js
-│     └─ v86InputPort.js
+│     ├─ v86InputPort.js
+│     ├─ v86FramebufferPort.js
+│     └─ v86PointerPort.js
 ├─ fixtures/
 │  ├─ input/
 │  │  └─ ps2Set1Text.js
@@ -169,6 +174,7 @@ tests/attempts/webMachine/
    ├─ deviceBackedDualBootProbe.html
    ├─ packetNetworkProbe.html
    ├─ displayInputProbe.html
+   ├─ framebufferPointerProbe.html
    ├─ ownerSuccessorParticipant.html
    └─ ownerSuccessorProbe.html
 ```
@@ -206,8 +212,10 @@ boot / pause / resume / snapshot / restore / shutdown / inspect
 - `request` network와 `packet` network는 다른 contract다.
 - block write는 `write`와 `flush` 완료 경계를 분리한다.
 - console, display, input을 하나의 UI object로 합치지 않는다.
+- `text-cells`와 `rgba-frame`, `ps2-scan-code`와 `relative-pointer`를 mode flag로 섞지 않고 이름 있는 구현으로 분리한다.
+- RGBA display는 bounded dirty region을 working frame에 쓴 뒤 revision 단위로 원자 present한다.
 - 권한 없는 device는 adapter `boot()` 전에 거부한다.
-- browser handle은 snapshot에 넣지 않고 resume 전 다시 attach한다.
+- browser handle은 snapshot에 넣지 않는다. output은 paused restore에서 먼저 붙이고 interactive input은 resume 직전에 붙인다.
 
 ## 코드 규칙
 

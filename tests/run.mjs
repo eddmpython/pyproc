@@ -990,6 +990,9 @@ check("Web Machine attempts 레이어 구조 고정", () => {
     "memoryEthernetSwitch.js",
     "memoryTextDisplayDevice.js",
     "memoryScanCodeInputDevice.js",
+    "memoryRgbaDisplayDevice.js",
+    "canvasRgbaFrameSource.js",
+    "memoryRelativePointerDevice.js",
   ];
   for (const file of requiredBrowserDevices) {
     if (!existsSync(join(webMachineRoot, "browser", "devices", file))) throw new Error(`browser device 계약 누락: ${file}`);
@@ -1004,6 +1007,8 @@ check("Web Machine attempts 레이어 구조 고정", () => {
     "v86PacketPort.js",
     "v86DisplayPort.js",
     "v86InputPort.js",
+    "v86FramebufferPort.js",
+    "v86PointerPort.js",
   ];
   for (const file of requiredV86Bridges) {
     if (!existsSync(join(webMachineRoot, "adapters", "v86", file))) throw new Error(`v86 bridge 계약 누락: ${file}`);

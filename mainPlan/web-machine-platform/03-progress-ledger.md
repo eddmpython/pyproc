@@ -364,3 +364,56 @@ NEXT:
 1. RGBA framebuffer와 pointer mode를 text/keyboard와 다른 capability로 추가한다.
 2. clock과 entropy를 ambient browser 접근이 아닌 명시적 device port로 주입한다.
 3. 이동 가능한 `.webmachine` envelope와 engine/image license, SBOM 배포 게이트를 닫는다.
+
+## 2026-07-15 - RGBA framebuffer와 relative pointer cold reattach
+
+구현:
+
+1. browser 경계에 `MemoryRgbaDisplayDevice`를 추가했다. bounded RGBA8888 region을 working frame에 쓰고
+   revision 단위로 복제 present하며 단일 producer, frame 크기, stride, bytes 범위를 강제한다.
+2. `CanvasRgbaFrameSource`는 v86 canvas의 `putImageData` 완료 지점에서 실제 dirty region만 합쳐 RGBA bytes로
+   읽는다. guest와 engine을 모르며 listener마다 pixels를 복제한다.
+3. `MemoryRelativePointerDevice`는 keyboard와 다른 단일 focus와 bounded queue를 가진다. move, buttons, wheel을
+   이름 있는 event로 제한하고 delta 상한과 paused detach를 강제한다.
+4. v86 전용 framebuffer bridge는 `screen-set-size`로 graphical mode와 크기를 받고 canvas region을 공통
+   display에 쓴다. pointer bridge는 공통 y-down 좌표를 v86 PS/2 mouse bus 좌표로 변환한다.
+5. hash 고정 KolibriOS floppy image를 ignored fixture cache에 추가했다. graphical guest는 1024x768x32bpp
+   VGA와 PS/2 mouse를 실제 사용하며 binary는 레포와 package에 넣지 않는다.
+
+실패에서 고친 계약:
+
+- 첫 probe는 RED 1/2였다. 기존 Buildroot Linux 6.8.12 image에는 `/proc/fb`, `/dev/fb0`,
+  `/dev/input/mice`가 모두 없었다.
+- text console을 RGBA처럼 렌더링하거나 host에서 pointer event를 받은 사실만 세면 guest device I/O 증명이
+  아니다. 고정 Linux image를 억지로 우회하지 않고 실제 VGA graphical mode와 PS/2 mouse를 쓰는 hash 고정
+  guest fixture로 바꿨다.
+
+실측:
+
+- `framebufferPointerProbe` 수정본 3회 연속 GREEN 18/18.
+- graphical guest boot 5247/5309/5276ms, 최초 pointer 뒤 frame 변화 40/39/39ms, generation commit
+  141/132/134ms였다.
+- 기존 Edge process tree 종료 뒤 paused cold restore 200/200/180ms, resume 뒤 새 pointer가 frame을 바꾸기까지
+  36/37/45ms였다.
+- cold restore 직후 새 display는 1024x768 RGBA8888 frame을 revision 1로 redraw했고 32개 이상의 실제 색을
+  포함했다. pointer endpoint는 붙지 않았다.
+- resume 뒤 relative move 하나가 v86 PS/2 controller와 guest를 거쳐 일관되게 138 pixels를 바꿨다.
+- mode mismatch와 pointer permission 부족은 engine constructor 0회에서 차단됐다. display region/stride/bytes,
+  canvas clone, pointer queue/delta, paused input, shutdown detach fault가 모두 통과했다.
+
+판정:
+
+1. VGA text를 canvas에 다시 그린 것이 아니라 graphical guest가 만든 32bpp pixel output을 공통 frame으로
+   전달했다.
+2. DOM mouse listener를 guest 입력으로 가장하지 않고 공통 pointer queue가 v86 PS/2 bus로 들어가 guest frame을
+   바꾸는 끝단까지 검증했다.
+3. framebuffer와 pointer handle은 generation에 넣지 않았다. 새 process는 opaque guest state만 복구한 뒤
+   output을 먼저 redraw하고 resume 직전에 input을 붙였다.
+4. text/pixel display와 keyboard/pointer를 각각 별도 implementation으로 유지해 mode Boolean과 UI object
+   누적 없이 장치 능력을 확장했다.
+
+NEXT:
+
+1. clock과 entropy를 ambient browser 접근이 아닌 명시적 device port로 주입한다.
+2. `.webmachine` envelope의 schema, integrity, adapter capability 요구를 실제 export/import로 검증한다.
+3. v86, BIOS, Buildroot, KolibriOS 구성물의 정확한 license와 SBOM 배포 게이트를 닫는다.

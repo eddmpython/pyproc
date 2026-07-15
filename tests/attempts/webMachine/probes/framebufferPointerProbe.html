@@ -1,0 +1,309 @@
+<!doctype html>
+<!--
+결과(2026-07-15, Edge headless, v86 + KolibriOS): 3회 연속 GREEN 18/18.
+boot 5247/5309/5276ms, 최초 pointer frame 40/39/39ms, commit 141/132/134ms,
+process cold restore 200/200/180ms, 재연결 pointer frame 36/37/45ms.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Web Machine framebuffer pointer probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}#v86Screen{position:fixed;left:-3000px;top:0}#v86Screen canvas{width:640px;height:480px}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "처리되지 않은 promise", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>Web Machine framebuffer pointer probe</h1>
+<p>console과 분리된 RGBA framebuffer와 relative pointer를 그래픽 x86 guest에 연결하고 process cold restore 뒤 새 장치에 다시 붙인다.</p>
+<pre id="out">실행 중...</pre>
+<div id="v86Screen"><div></div><canvas></canvas></div>
+<script type="module">
+  import { V86 } from "../fixtures/v86/assets/libv86.mjs";
+  import { WebMachineHostDraft } from "../host/webMachineHostDraft.js";
+  import { createV86GuestFactory } from "../adapters/v86GuestAdapter.js";
+  import { MemoryRgbaDisplayDevice } from "../browser/devices/memoryRgbaDisplayDevice.js";
+  import { CanvasRgbaFrameSource } from "../browser/devices/canvasRgbaFrameSource.js";
+  import { MemoryRelativePointerDevice } from "../browser/devices/memoryRelativePointerDevice.js";
+  import { IndexedDbGenerationStore } from "../browser/persistence/indexedDbGenerationStore.js";
+  import { MachineCommitCoordinator } from "../browser/persistence/machineCommitCoordinator.js";
+  import { V86_GRAPHICAL_ADAPTER_VERSION, createV86GraphicalProbeManifest } from "../fixtures/v86/config.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const codeOf = async (operation) => {
+    try {
+      await (typeof operation === "function" ? operation() : operation);
+      return "";
+    } catch (error) {
+      return error?.code || String(error);
+    }
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+  const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+  async function waitFor(read, timeoutMs = 10000) {
+    const deadline = performance.now() + timeoutMs;
+    while (performance.now() < deadline) {
+      const value = await read();
+      if (value) return value;
+      await delay(30);
+    }
+    return null;
+  }
+
+  function frameFingerprint(frame) {
+    let hash = 2166136261;
+    for (let index = 0; index < frame.pixels.length; index += 1) {
+      hash ^= frame.pixels[index];
+      hash = Math.imul(hash, 16777619);
+    }
+    return `${frame.width}x${frame.height}:${(hash >>> 0).toString(16)}`;
+  }
+
+  function colorCount(frame, limit = 32) {
+    const colors = new Set();
+    for (let index = 0; index < frame.pixels.length; index += 4) {
+      colors.add(`${frame.pixels[index]},${frame.pixels[index + 1]},${frame.pixels[index + 2]},${frame.pixels[index + 3]}`);
+      if (colors.size >= limit) break;
+    }
+    return colors.size;
+  }
+
+  function changedPixels(before, after) {
+    if (before.width !== after.width || before.height !== after.height) return -1;
+    let changed = 0;
+    for (let index = 0; index < before.pixels.length; index += 4) {
+      if (before.pixels[index] !== after.pixels[index]
+        || before.pixels[index + 1] !== after.pixels[index + 1]
+        || before.pixels[index + 2] !== after.pixels[index + 2]
+        || before.pixels[index + 3] !== after.pixels[index + 3]) changed += 1;
+    }
+    return changed;
+  }
+
+  async function verifyDeviceContracts() {
+    const display = new MemoryRgbaDisplayDevice({ maxWidth: 2, maxHeight: 2, maxFrameBytes: 16 });
+    let presentedRed = 0;
+    display.subscribe((frame) => { presentedRed = frame.pixels[0]; });
+    const displayPort = display.connect({ endpointId: "frameOwner" });
+    const duplicateCode = await codeOf(() => display.connect({ endpointId: "frameOwner" }));
+    displayPort.configure({ width: 2, height: 2 });
+    displayPort.writeRegion({ x: 0, y: 0, width: 1, height: 1, pixels: Uint8ClampedArray.of(255, 1, 2, 255) });
+    const beforePresent = display.readFrame();
+    displayPort.present();
+    const exposed = display.readFrame();
+    exposed.pixels[0] = 0;
+    const rangeCode = await codeOf(() => displayPort.writeRegion({ x: 2, y: 0, width: 1, height: 1, pixels: new Uint8Array(4) }));
+    const strideCode = await codeOf(() => displayPort.writeRegion({ x: 0, y: 0, width: 2, height: 1, pixels: new Uint8Array(8), rowStride: 7 }));
+    const pixelCode = await codeOf(() => displayPort.writeRegion({ x: 0, y: 0, width: 2, height: 2, pixels: new Uint8Array(8) }));
+    displayPort.close();
+    const closedCode = await codeOf(() => displayPort.present());
+    check("RGBA display 단일 producer와 atomic clone", duplicateCode === "WEB_MACHINE_DISPLAY_ENDPOINT_DUPLICATE" && beforePresent.width === 0 && presentedRed === 255 && display.readFrame().pixels[0] === 255, `${duplicateCode}/${beforePresent.width}/${presentedRed}`);
+    check("RGBA region·stride·bytes·closed 경계", rangeCode === "WEB_MACHINE_DISPLAY_RANGE" && strideCode === "WEB_MACHINE_DISPLAY_STRIDE" && pixelCode === "WEB_MACHINE_DISPLAY_PIXELS" && closedCode === "WEB_MACHINE_DISPLAY_PORT_CLOSED", `${rangeCode}/${strideCode}/${pixelCode}/${closedCode}`);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 2;
+    canvas.height = 2;
+    const source = new CanvasRgbaFrameSource({ canvas });
+    let captured = null;
+    source.subscribe((region) => { captured = region; });
+    const context = canvas.getContext("2d", { alpha: false });
+    const image = context.createImageData(1, 1);
+    image.data.set([7, 8, 9, 255]);
+    context.putImageData(image, 1, 0);
+    await waitFor(() => captured);
+    check("canvas dirty region이 RGBA bytes로 격리", captured?.x === 1 && captured?.y === 0 && captured?.width === 1 && captured?.pixels[0] === 7 && source.inspect().captures === 1, `${captured?.x},${captured?.y}/${captured?.pixels?.[0]}`);
+    source.destroy();
+
+    const pointer = new MemoryRelativePointerDevice({ maxDelta: 100, maxQueuedEvents: 1 });
+    let release;
+    const blocked = new Promise((resolve) => { release = resolve; });
+    let received = null;
+    const pointerPort = pointer.connect({ endpointId: "pointerOwner", receive: async (event) => { received = event; await blocked; } });
+    const duplicatePointerCode = await codeOf(() => pointer.connect({ endpointId: "pointerOwner", receive: () => {} }));
+    const first = pointer.move({ deltaX: 10, deltaY: -5 });
+    const queueCode = await codeOf(pointer.wheel({ deltaX: 0, deltaY: 1 }));
+    const deltaCode = await codeOf(() => pointer.move({ deltaX: 101, deltaY: 0 }));
+    release();
+    await first;
+    pointerPort.close();
+    const unattachedCode = await codeOf(pointer.setButtons({ left: false, middle: false, right: false }));
+    check("pointer 단일 focus와 bounded queue", duplicatePointerCode === "WEB_MACHINE_INPUT_ENDPOINT_DUPLICATE" && queueCode === "WEB_MACHINE_INPUT_QUEUE_FULL", `${duplicatePointerCode}/${queueCode}`);
+    check("pointer event·delta·pause 분리 경계", received?.type === "move" && received.deltaX === 10 && deltaCode === "WEB_MACHINE_POINTER_DELTA" && unattachedCode === "WEB_MACHINE_INPUT_UNATTACHED", `${received?.type}/${deltaCode}/${unattachedCode}`);
+  }
+
+  async function verifyCapabilityBoundary() {
+    let engineConstructions = 0;
+    function CountingV86() { engineConstructions += 1; }
+    const source = { subscribe: () => () => {} };
+    const goodFramebuffer = new MemoryRgbaDisplayDevice();
+    const goodPointer = new MemoryRelativePointerDevice();
+    let sequence = 0;
+    const host = new WebMachineHostDraft({
+      idFactory: () => `boundary-${++sequence}`,
+      devices: {
+        console: { kind: "console", write: () => {} },
+        wrongFramebuffer: { kind: "display", mode: "text-cells" },
+        goodFramebuffer,
+        pointer: goodPointer,
+      },
+    });
+    host.registerAdapter("wrong-framebuffer", createV86GuestFactory({ V86: CountingV86, framebufferDeviceName: "wrongFramebuffer", framebufferSource: source }));
+    host.registerAdapter("denied-pointer", createV86GuestFactory({ V86: CountingV86, framebufferDeviceName: "goodFramebuffer", framebufferSource: source, pointerDeviceName: "pointer" }));
+    const mismatch = host.createMachine({ machineId: "framebufferMismatch", adapterId: "wrong-framebuffer", permissions: { devices: ["console", "wrongFramebuffer"] } });
+    const denied = host.createMachine({ machineId: "pointerDenied", adapterId: "denied-pointer", permissions: { devices: ["console", "goodFramebuffer"] } });
+    const modeCode = await codeOf(mismatch.boot());
+    const permissionCode = await codeOf(denied.boot());
+    check("RGBA mode mismatch engine boot 전 거부", modeCode === "WEB_MACHINE_DEVICE_MODE_UNSUPPORTED", modeCode);
+    check("pointer permission default deny와 engine boot 0", permissionCode === "WEB_MACHINE_DEVICE_PERMISSION_DENIED" && engineConstructions === 0, `${permissionCode}/${engineConstructions}`);
+  }
+
+  const params = new URLSearchParams(location.search);
+  const restoring = params.get("restore") === "1";
+  const screenContainer = document.getElementById("v86Screen");
+  const canvas = screenContainer.querySelector("canvas");
+  const frameSource = new CanvasRgbaFrameSource({ canvas });
+  const framebuffer = new MemoryRgbaDisplayDevice({ maxWidth: 1920, maxHeight: 1200, maxFrameBytes: 1920 * 1200 * 4 });
+  const pointer = new MemoryRelativePointerDevice({ maxDelta: 255, maxQueuedEvents: 64 });
+  let instanceSequence = 0;
+  const host = new WebMachineHostDraft({
+    idFactory: () => `${restoring ? "restore" : "commit"}-${++instanceSequence}`,
+    devices: {
+      console: { kind: "console", write: () => {} },
+      framebuffer,
+      pointer,
+    },
+  });
+  host.registerAdapter("x86-graphical", createV86GuestFactory({
+    V86,
+    adapterVersion: `${V86_GRAPHICAL_ADAPTER_VERSION}-framebuffer-pointer-v1`,
+    framebufferDeviceName: "framebuffer",
+    framebufferSource: frameSource,
+    pointerDeviceName: "pointer",
+  }));
+  const machine = host.createMachine({
+    machineId: "graphicalOs",
+    adapterId: "x86-graphical",
+    manifest: createV86GraphicalProbeManifest({ screenContainer }),
+    permissions: { devices: ["console", "framebuffer", "pointer"] },
+  });
+  const store = new IndexedDbGenerationStore({ indexedDb: indexedDB, databaseName: "webMachineFramebufferPointerV1" });
+  const coordinator = new MachineCommitCoordinator({
+    store,
+    cryptoProvider: crypto,
+    idFactory: () => "framebuffer-pointer-g1",
+    nowFactory: () => 1,
+  });
+  const groupId = "framebufferPointer";
+
+  try {
+    if (!restoring) {
+      let startedAt = performance.now();
+      await machine.boot();
+      timings.initialBootMs = Math.round(performance.now() - startedAt);
+      const ready = await waitFor(async () => {
+        const inspected = await machine.inspect();
+        return inspected.guest?.pointer?.guestEnabled && framebuffer.inspect().revision > 0 ? inspected : null;
+      }, 30000);
+      if (!ready) throw new Error(`graphical guest 준비 timeout: ${JSON.stringify({ framebuffer: framebuffer.inspect(), source: frameSource.inspect() })}`);
+      await delay(300);
+      const beforePointer = framebuffer.readFrame();
+      const beforeFingerprint = frameFingerprint(beforePointer);
+      startedAt = performance.now();
+      await pointer.move({ deltaX: 80, deltaY: 50 });
+      await pointer.setButtons({ left: false, middle: false, right: false });
+      await pointer.wheel({ deltaX: 0, deltaY: 1 });
+      const afterPointer = await waitFor(() => {
+        const frame = framebuffer.readFrame();
+        return frame.revision > beforePointer.revision && frameFingerprint(frame) !== beforeFingerprint ? frame : null;
+      }, 5000);
+      timings.initialPointerFrameMs = Math.round(performance.now() - startedAt);
+      if (!afterPointer) throw new Error(`pointer 뒤 framebuffer 변화 없음: ${beforeFingerprint}/${framebuffer.inspect().revision}`);
+      const pointerChanges = changedPixels(beforePointer, afterPointer);
+      if (pointerChanges <= 0) throw new Error(`pointer pixel 변화 없음: ${pointerChanges}`);
+      const inspected = await machine.inspect();
+      if (inspected.guest?.pointer?.receivedMoves !== 1
+        || inspected.guest?.pointer?.receivedButtons !== 1
+        || inspected.guest?.pointer?.receivedWheels !== 1
+        || inspected.guest?.framebuffer?.presentations < 1) {
+        throw new Error(`framebuffer/pointer bridge I/O 없음: ${JSON.stringify(inspected.guest)}`);
+      }
+      await machine.pause();
+      if (pointer.inspect().attached) throw new Error("paused pointer가 분리되지 않았다");
+      startedAt = performance.now();
+      await coordinator.commitPaused({ groupId, machines: [machine], expectedHead: null });
+      timings.commitMs = Math.round(performance.now() - startedAt);
+      await machine.shutdown();
+      if (framebuffer.inspect().attached || pointer.inspect().attached) throw new Error("shutdown 뒤 framebuffer/pointer endpoint 잔존");
+      store.close();
+      frameSource.destroy();
+      await fetch("/gateRestart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nextSearch: "?restore=1", timings }),
+      });
+      await new Promise(() => {});
+    } else {
+      await verifyDeviceContracts();
+      await verifyCapabilityBoundary();
+      let startedAt = performance.now();
+      const restored = await coordinator.restoreLatest({ groupId, machines: { graphicalOs: machine } });
+      timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
+      check("새 process가 framebuffer/pointer handle 없이 generation 복원", restored.generationId === "framebuffer-pointer-g1" && restored.manifest.devices.length === 0, `${restored.generationId}/${restored.manifest.devices.length}`);
+      check("paused cold restore는 framebuffer만 재연결", machine.state === "paused" && framebuffer.inspect().attached && !pointer.inspect().attached, `${machine.state}/${framebuffer.inspect().attached}/${pointer.inspect().attached}`);
+      const pausedPointerCode = await codeOf(pointer.move({ deltaX: 1, deltaY: 1 }));
+      check("paused machine pointer 차단", pausedPointerCode === "WEB_MACHINE_INPUT_UNATTACHED", pausedPointerCode);
+      const restoredFrame = await waitFor(() => framebuffer.readFrame().revision > 0 ? framebuffer.readFrame() : null, 5000);
+      check("paused restore가 RGBA frame을 새 display에 redraw", !!restoredFrame && restoredFrame.width > 0 && restoredFrame.height > 0 && colorCount(restoredFrame) >= 8, `${restoredFrame?.width}x${restoredFrame?.height} r${restoredFrame?.revision} c${restoredFrame ? colorCount(restoredFrame) : 0}`);
+      await machine.resume();
+      check("resume 직전 새 pointer endpoint 재연결", pointer.inspect().attached, pointer.inspect().endpointId);
+      await delay(200);
+      const beforePointer = framebuffer.readFrame();
+      const beforeFingerprint = frameFingerprint(beforePointer);
+      startedAt = performance.now();
+      await pointer.move({ deltaX: -70, deltaY: -40 });
+      const afterPointer = await waitFor(() => {
+        const frame = framebuffer.readFrame();
+        return frame.revision > beforePointer.revision && frameFingerprint(frame) !== beforeFingerprint ? frame : null;
+      }, 5000);
+      timings.reopenedPointerFrameMs = Math.round(performance.now() - startedAt);
+      const pixelChanges = afterPointer ? changedPixels(beforePointer, afterPointer) : 0;
+      check("PS/2 pointer가 guest를 거쳐 RGBA frame 변경", !!afterPointer && pixelChanges > 0, `${pixelChanges} pixels/${timings.reopenedPointerFrameMs}ms`);
+      const inspected = await machine.inspect();
+      check("VGA와 pointer가 console 밖 별도 port 사용", inspected.guest?.framebuffer?.regionWrites > 0 && inspected.guest?.framebuffer?.errors === 0 && inspected.guest?.pointer?.receivedMoves === 1 && pointer.inspect().deliveryErrors === 0, JSON.stringify({ framebuffer: inspected.guest?.framebuffer, pointer: inspected.guest?.pointer }));
+      check("canvas source가 dirty region만 RGBA capture", frameSource.inspect().captures > 0 && frameSource.inspect().captureErrors === 0 && frameSource.inspect().listeners === 1, JSON.stringify(frameSource.inspect()));
+      check("새 host history는 boot 없이 restore", machine.history.some((entry) => entry.event === "restored") && !machine.history.some((entry) => entry.event === "booted"));
+      await machine.pause();
+      check("pause가 pointer endpoint 즉시 분리", !pointer.inspect().attached, pointer.inspect().attached);
+      await machine.shutdown();
+      check("shutdown이 framebuffer endpoint 분리", !framebuffer.inspect().attached && !pointer.inspect().attached, `${framebuffer.inspect().attached}/${pointer.inspect().attached}`);
+      store.close();
+      frameSource.destroy();
+      await report();
+    }
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-1800));
+    try { if (["running", "paused", "failed"].includes(machine.state)) await machine.shutdown(); } catch (cleanupError) {}
+    store.close();
+    frameSource.destroy();
+    await report();
+  }
+</script>
+</body>
+</html>

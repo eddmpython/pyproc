@@ -1,4 +1,4 @@
-// prepareAssets.mjs - v86/Linux probe 자산을 해시 검증해 로컬 실험 캐시에 준비한다.
+// prepareAssets.mjs - v86 guest probe 자산을 해시 검증해 로컬 실험 캐시에 준비한다.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -30,6 +30,11 @@ const assets = [
     name: "buildroot-bzimage68.bin",
     url: "https://i.copy.sh/buildroot-bzimage68.bin",
     sha256: "507a759c70ab7a490a233be454d0b5b88bc667956a410b531cb4edc091e2eb1c",
+  },
+  {
+    name: "kolibri.img",
+    url: "https://i.copy.sh/kolibri.img",
+    sha256: "f3ec74d5b70e5b7a8b0d053a1ada738a75159366b50af8a427845f87e0a91be5",
   },
 ];
 
