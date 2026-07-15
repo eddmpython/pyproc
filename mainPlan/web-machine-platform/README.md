@@ -2,6 +2,10 @@
 
 상태: 활성 (2026-07-15). 목표: 브라우저를 하나의 런타임이 아니라 여러 게스트 OS가 올라가는 범용 컴퓨터로 정의하고, 그 목표를 실측 가능한 Web Machine 계약과 Dual-Boot 게이트로 좁힌다.
 
+현재 증명: 같은 host registry에서 pyproc Python OS와 Linux 6.8.12 i686을 실제 동시 부팅하고,
+두 adapter를 destroy한 뒤 memory와 file state를 함께 cold restore했다. Phase 3의 Dual-Boot 핵심은
+통과했으며 공통 block/network/display와 탭 종료 뒤 영속 commit은 아직 남아 있다.
+
 ## 한 문장
 
 **브라우저를 가상 하드웨어와 영속 생명주기를 가진 컴퓨터로 만들고, pyproc Python OS와 별도 Linux 게스트를 같은 Web Machine 계약으로 부팅한다.**

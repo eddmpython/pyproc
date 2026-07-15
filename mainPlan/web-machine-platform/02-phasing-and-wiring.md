@@ -18,7 +18,7 @@
 
 ## Phase 1 - host contract 실험
 
-상태: 대기.
+상태: 완료. [hostContractProbe](../../tests/attempts/webMachine/hostContractProbe.html) 3회 연속 GREEN 27/27.
 
 위치: `tests/attempts/webMachine/`.
 
@@ -37,7 +37,7 @@
 
 ## Phase 2 - pyproc + WASI 이중 엔진
 
-상태: 대기.
+상태: 완료. [dualEngineProbe](../../tests/attempts/webMachine/dualEngineProbe.html) 3회 연속 GREEN 13/13.
 
 작업:
 
@@ -54,21 +54,22 @@
 
 ## Phase 3 - Dual-Boot Linux
 
-상태: 대기.
+상태: 핵심 Dual-Boot 완료, 공통 장치 배선 진행 중. [linuxGuestProbe](../../tests/attempts/webMachine/linuxGuestProbe.html)와 [dualBootProbe](../../tests/attempts/webMachine/dualBootProbe.html) 각각 3회 연속 GREEN 8/8.
 
 작업:
 
-1. x86 engine을 외부 주입하는 adapter를 만든다.
-2. 최소 Linux image를 부팅한다.
-3. pyproc Python OS와 Linux guest를 같은 machine registry에서 동시에 연다.
-4. console, disk, clock, entropy를 공통 장치 계약으로 연결한다.
+1. [완료] x86 engine을 외부 주입하는 adapter를 만든다.
+2. [완료] Buildroot Linux 6.8.12 i686 image를 부팅한다.
+3. [완료] pyproc Python OS와 Linux guest를 같은 machine registry에서 동시에 열고 두 memory/file state를 함께 cold restore한다.
+4. [진행] console 다음으로 block, clock, entropy, packet network, display를 공통 장치 계약으로 연결한다.
 
 게이트:
 
-- `boot("python.webmachine")`와 `boot("linux.webmachine")`가 같은 host API를 사용한다.
-- 두 guest가 파일 쓰기와 console round trip을 완료한다.
-- x86 engine은 pyproc 기본 dependency가 아니다.
-- image 출처와 배포권을 기록한다.
+- [통과] Python OS와 Linux가 같은 host API의 `boot/pause/snapshot/restore/resume/shutdown`을 사용한다.
+- [통과] 두 guest가 파일 쓰기와 console round trip을 완료하고 destroy 뒤 같은 값으로 복원된다.
+- [통과] x86 engine은 외부 주입되며 pyproc 기본 dependency는 0이다.
+- [부분] engine과 image 출처, version, SHA-256, 미번들 정책을 기록했다. 제품 배포 전 BIOS/image license와 SBOM 검토가 남았다.
+- [대기] 공통 block/clock/entropy/packet/display device를 실제 x86 I/O에 연결한다.
 
 ## Phase 4 - 영속 머신과 탭 장애복구
 
