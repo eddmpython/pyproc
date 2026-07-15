@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S1",
+  "candidate": "jupyterlite",
+  "name": "numpy sharded matmul",
+  "command": null,
+  "commit": "9b697a4e80824daf8def1859eeebd6aecd94488b",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T00:34:29.229Z",
+  "finishedAt": "2026-07-15T00:34:29.231Z",
+  "browser": {
+    "path": null,
+    "version": null
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 14870007808
+  },
+  "engine": {
+    "name": "JupyterLite"
+  },
+  "source": "https://jupyterlite.readthedocs.io/en/latest/",
+  "note": null,
+  "ok": false,
+  "metrics": null,
+  "notApplicableReason": "JupyterLite는 브라우저 Jupyter와 Pyodide 커널 표면이며 pyproc S1의 단일 API로 4개 worker에 NumPy matmul shard를 분배하는 계약을 제공하지 않는다."
+}

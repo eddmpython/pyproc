@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S1 기준 artifact 기록. 외부 런타임 실측은 아직 미기록.
+상태: pyproc S1 기준 artifact 기록. WebVM, JupyterLite, marimo WASM은 같은 S1 계약을 N/A artifact로 봉인.
 
 ## 목표
 
@@ -30,6 +30,7 @@
 | date | scenario | artifact | compare | result |
 |---|---|---|---|---|
 | 2026-07-15 | S1 pyproc | [s1-pyproc-2026-07-15.json](benchmarks/s1-pyproc-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | GREEN, `size=1024`, 3 samples, median 3.95x, shard p95 2606ms, maxErr 0 |
+| 2026-07-15 | S1 external candidates | [webvm N/A](benchmarks/s1-webvm-na-2026-07-15.json), [jupyterlite N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json), [marimo-wasm N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | 같은 4-worker sharded NumPy matmul 계약 없음 |
 
 ## 외부 비교 matrix
 
@@ -38,7 +39,7 @@
 | scenario | pyproc command | WebVM | JupyterLite | marimo web runtime | 판정 |
 |---|---|---|---|---|---|
 | S0 basic boot | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
-| S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | 미측정 | 미측정 | 미측정 | 보류 |
+| S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | [N/A](benchmarks/s1-webvm-na-2026-07-15.json) | [N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | pyproc만 같은 S1 계약 충족 |
 | S2 process map | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
 | S3 browser server | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
 | S4 machine resume | `npm run test:consumer` | 미측정 | 미측정 | 미측정 | 보류 |
@@ -63,6 +64,6 @@ npm run bench:compare -- .tmp/pyproc-s1.json .tmp/jupyterlite-s1.json --out .tmp
 
 ## 다음 작업
 
-1. S1부터 외부 후보별 실행 가능한 최소 페이지나 절차를 `tests/attempts/`에 만든다.
-2. 외부 후보도 `bench:artifact`로 S1 raw JSON 또는 N/A JSON을 만들고 `bench:compare`로 표를 만든다.
+1. 외부 후보의 다음 비교 축은 S1을 single-lane으로 바꾸지 말고 S0 basic boot 또는 S2 single-kernel NumPy로 별도 scenario를 연다.
+2. WebVM은 Linux VM boot와 Python shell latency, JupyterLite와 marimo WASM은 Pyodide single-kernel NumPy latency로 분리한다.
 3. README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.

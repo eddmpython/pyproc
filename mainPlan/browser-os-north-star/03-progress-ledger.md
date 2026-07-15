@@ -1553,3 +1553,45 @@ NEXT:
 1. WebVM/JupyterLite/marimo 중 실행 가능한 후보 하나를 S1으로 측정하거나, 같은 시나리오가 불가능하면 `bench:artifact --na`로 봉인한다.
 2. 외부 후보 artifact를 기존 [benchmarks/s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md)에 합쳐 비교표를 갱신한다.
 3. README의 속도 문구는 pyproc 기준 수치만 갱신하고, 상대 성능 주장은 외부 후보 artifact가 생긴 뒤에만 한다.
+
+## 2026-07-15 - 외부 S1 후보 N/A artifact 봉인
+
+문제:
+
+- pyproc S1은 "브라우저에서 Python이 돈다" 일반론이 아니라 4개 브라우저 Python worker가 NumPy matmul을 shard하는 병렬 worker pool 계약이다.
+- WebVM, JupyterLite, marimo WASM을 억지로 single-lane NumPy 또는 boot latency로 바꾸면 S1 비교가 흐려진다.
+- 같은 일을 못 하는 후보는 0점이나 추정치가 아니라 N/A artifact로 남겨야 한다.
+
+근거:
+
+- WebVM 공식 README는 WebVM을 브라우저 안 Linux VM, Linux ABI-compatible 환경으로 설명한다. pyproc S1 같은 라이브러리 API의 4-worker NumPy shard 계약은 아니다.
+- JupyterLite 공식 문서는 Python kernels running in a Web Worker와 basic session/kernel management를 제공한다고 설명한다. 단일 API로 worker pool NumPy shard를 수행하는 계약은 아니다.
+- marimo WASM 공식 문서는 concurrency adapter가 Pyodide interpreter 안에서 동작하고 CPU-bound parallelism에는 regular marimo notebook을 쓰라고 설명한다.
+
+완료:
+
+- [tests/attempts/externalS1](../../tests/attempts/externalS1/README.md) 캠페인을 개설했다.
+- `bench:artifact --na`로 [WebVM N/A](benchmarks/s1-webvm-na-2026-07-15.json), [JupyterLite N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json), [marimo WASM N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) artifact를 생성했다.
+- artifact는 모두 commit `9b697a4e80824daf8def1859eeebd6aecd94488b`, `worktreeDirty: false`에서 생성했다.
+- [S1 비교표](benchmarks/s1-compare-2026-07-15.md)를 pyproc GREEN + 외부 후보 N/A 행으로 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md)의 matrix를 외부 후보별 N/A 링크로 갱신했다.
+
+검증:
+
+- `npm run bench:artifact -- --candidate webvm ... --na ...` PASS.
+- `npm run bench:artifact -- --candidate jupyterlite ... --na ...` PASS.
+- `npm run bench:artifact -- --candidate marimo-wasm ... --na ...` PASS.
+- `Select-String ... "worktreeDirty"` 확인: 세 N/A artifact 모두 false.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1-webvm-na-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1-jupyterlite-na-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s1-marimo-wasm-na-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md` PASS.
+
+판정:
+
+- S1은 pyproc의 병렬 worker pool 속도 증거로 유지한다.
+- WebVM, JupyterLite, marimo WASM은 S1에서 직접 비교 대상이 아니다.
+- 외부 비교를 계속하려면 S0 boot, S2 single-kernel NumPy, S3 browser server처럼 후보가 실제로 수행하는 축을 따로 열어야 한다.
+
+NEXT:
+
+1. 외부 후보 비교의 다음 축을 S0 basic boot 또는 S2 single-kernel NumPy로 별도 정의한다.
+2. JupyterLite와 marimo WASM은 Pyodide single-kernel NumPy latency 측정으로, WebVM은 Linux VM boot와 Python shell latency로 분리한다.
+3. README에는 상대 우위 문구를 넣지 않고, pyproc S1 자체 수치만 유지한다.

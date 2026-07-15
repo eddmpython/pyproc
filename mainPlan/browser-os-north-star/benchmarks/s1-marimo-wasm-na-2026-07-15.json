@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S1",
+  "candidate": "marimo-wasm",
+  "name": "numpy sharded matmul",
+  "command": null,
+  "commit": "9b697a4e80824daf8def1859eeebd6aecd94488b",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T00:34:29.359Z",
+  "finishedAt": "2026-07-15T00:34:29.361Z",
+  "browser": {
+    "path": null,
+    "version": null
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 15001886720
+  },
+  "engine": {
+    "name": "marimo WASM"
+  },
+  "source": "https://docs.marimo.io/guides/wasm/",
+  "note": null,
+  "ok": false,
+  "metrics": null,
+  "notApplicableReason": "marimo WASM concurrency는 Pyodide interpreter 안의 cooperative adapter이며 CPU-bound true parallelism은 regular marimo notebook 대상이라고 명시한다. S1 true parallel sharded matmul 대상이 아니다."
+}
