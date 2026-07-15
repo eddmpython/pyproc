@@ -121,6 +121,13 @@ npm run bench:artifact -- --scenario S2 --candidate pyproc --command "npm run te
 npm run bench:compare -- .tmp/pyproc-s2.json --out .tmp/s2-compare.md
 ```
 
+S3 browser server는 설치 패키지 consumer gate의 `VirtualOrigin` POST 왕복 시간을 latency sample로 남긴다:
+
+```bash
+npm run bench:artifact -- --scenario S3 --candidate pyproc --command "npm run test:consumer timings.virtualOriginMs" --sample 15,0 --sample 18,0 --sample 14,0 --out .tmp/pyproc-s3.json
+npm run bench:compare -- .tmp/pyproc-s3.json --out .tmp/s3-compare.md
+```
+
 S1L single-kernel NumPy latency는 S1을 대체하지 않는 별도 보조 축이다:
 
 ```bash

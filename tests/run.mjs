@@ -339,10 +339,10 @@ check("속도 비교 벤치 계약 고정", () => {
   for (const term of ["PYPROC_BENCH_OUT", "PYPROC_BENCH_SIZE", '"--size"', "DEFAULT_SIZE = 1024", "schemaVersion", 'scenario: "S1"', 'candidate: "pyproc"', "metrics", "runner", "browserVersion"]) {
     if (!speedBench.includes(term)) throw new Error(`speedBench.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "S0_SCENARIO", "S0C_SCENARIO", "S1L_SCENARIO", "S2_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs"]) {
+  for (const term of ["BENCH_ARTIFACT_SCHEMA_VERSION", "S0_SCENARIO", "S0C_SCENARIO", "S1L_SCENARIO", "S2_SCENARIO", "S3_SCENARIO", "SUPPORTED_SCENARIOS", "normalizeBenchArtifact", "renderBenchCompareMarkdown", "notApplicableReason", "medianSpeedup", "medianMs"]) {
     if (!benchArtifacts.includes(term)) throw new Error(`benchArtifacts.mjs 필수 항목 누락: ${term}`);
   }
-  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--na", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "normalizeBenchArtifact"]) {
+  for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--na", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "normalizeBenchArtifact", "browser server roundtrip"]) {
     if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
   }
   for (const term of ["normalizeBenchArtifactFile", "renderBenchCompareMarkdown"]) {
