@@ -2031,3 +2031,47 @@ NEXT:
 1. JupyterLite와 marimo WASM S0C를 같은 fresh profile 조건으로 측정한다.
 2. S2 process map 비교 축을 외부 후보 N/A 또는 제한 artifact로 봉인한다.
 3. S3 browser server를 WebVM/JupyterLite/marimo 대비 가능한 최단 경로로 비교한다.
+
+## 2026-07-15 - JupyterLite와 marimo WASM S0C cold 후보 합류
+
+완료:
+
+- JupyterLite와 marimo WASM을 fresh persistent browser profile 조건으로 각각 3회 측정했다.
+- [s0c-jupyterlite-2026-07-15.json](benchmarks/s0c-jupyterlite-2026-07-15.json)을 생성했다.
+- [s0c-marimo-wasm-2026-07-15.json](benchmarks/s0c-marimo-wasm-2026-07-15.json)을 생성했다.
+- [s0c-compare-2026-07-15.md](benchmarks/s0c-compare-2026-07-15.md)를 pyproc, marimo WASM, JupyterLite, WebVM 네 행으로 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
+
+실측:
+
+- JupyterLite URL: `https://jupyterlite.github.io/demo/repl/index.html?kernel=python`.
+- marimo URL: `https://marimo.app/`.
+- Browser: Headless Edge `150.0.4078.65`.
+- 측정 절차: 각 sample마다 새 persistent browser profile을 만들고 `about:blank`에서 시작, 대상 페이지로 이동, 첫 코드 셀에 `print("<marker>")` 입력, marker가 코드 echo와 Python 출력으로 2회 등장할 때 성공 처리. sample 종료 후 browser close와 profile 삭제.
+- JupyterLite S0C samples: 11987ms, 11432ms, 11796ms.
+- JupyterLite median 11796ms, p95 11987ms, min 11432ms, max 11987ms, maxErr 0.
+- JupyterLite artifact 생성 commit: `2f9f26782edf0a5033220a79ce0a7f2f9406f4fb`, `worktreeDirty: false`.
+- marimo WASM S0C samples: 11377ms, 9584ms, 10136ms.
+- marimo WASM median 10136ms, p95 11377ms, min 9584ms, max 11377ms, maxErr 0.
+- marimo WASM artifact 생성 commit: `db334965dd4105a2caaad08572095019004b3e8a`, `worktreeDirty: false`.
+
+검증:
+
+- JupyterLite marker script 3회 PASS, 각 run에서 marker occurrence 2회 확인.
+- marimo WASM marker script 3회 PASS, 각 run에서 marker occurrence 2회 확인.
+- `npm run bench:artifact -- --scenario S0C --candidate jupyterlite --browser-version 150.0.4078.65 --engine "JupyterLite Pyodide" --source "https://jupyterlite.github.io/demo/repl/index.html?kernel=python via playwright-cli" --command "fresh persistent browser profile, open about:blank, page.goto JupyterLite REPL, fill first code cell with print(marker), Shift+Enter, wait marker output" --note "Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto" --sample 11987,0 --sample 11432,0 --sample 11796,0 --out mainPlan/browser-os-north-star/benchmarks/s0c-jupyterlite-2026-07-15.json` PASS.
+- `npm run bench:artifact -- --scenario S0C --candidate marimo-wasm --browser-version 150.0.4078.65 --engine "marimo WASM Pyodide" --source "https://marimo.app/ via playwright-cli" --command "fresh persistent browser profile, open about:blank, page.goto marimo.app, fill first iframe code cell with print(marker), Control+Enter, wait iframe marker output" --note "Headless Edge via playwright-cli; fresh persistent browser profile per sample; profile closed and deleted after sample; each sample starts from about:blank then page.goto" --sample 11377,0 --sample 9584,0 --sample 10136,0 --out mainPlan/browser-os-north-star/benchmarks/s0c-marimo-wasm-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0c-webvm-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0c-jupyterlite-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0c-marimo-wasm-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md` PASS.
+- JupyterLite artifact 커밋 전 `npm test` PASS. 최종 문서와 marimo artifact 반영 후 `npm test` PASS.
+
+판정:
+
+- S0C cold profile/cache-clear 조건에서 pyproc median 3660ms, marimo WASM median 10136ms, JupyterLite median 11796ms, WebVM median 46534ms다.
+- S0C 네 후보 비교가 닫혔다. 첫 방문 또는 새 사용자 프로필 기준에서 pyproc은 notebook 계열 후보보다 약 2.8-3.2배 빠르고, WebVM보다 약 12.7배 빠르다.
+- 다음 비교는 부팅 시간이 아니라 OS 기능 축이다. S2 process map, S3 browser server가 pyproc의 구조적 차이를 더 잘 드러낸다.
+
+NEXT:
+
+1. S2 process map 비교 축을 외부 후보 N/A 또는 제한 artifact로 봉인한다.
+2. S3 browser server를 WebVM/JupyterLite/marimo 대비 가능한 최단 경로로 비교한다.
+3. WebVM의 S1L 또는 Python shell 단일 계산 latency를 분리할 가치가 있는지 판정한다.
