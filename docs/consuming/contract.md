@@ -127,7 +127,7 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 
 subpath export: `pyproc/assets`, `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `pyproc/process-os`, `pyproc/worker`. **src 내부 경로 deep import 금지** (내부 파일 배치는 릴리즈 간 바뀔 수 있다. 실제로 v0.0.3에서 레이어 폴더로 재배치됐고 subpath 이름은 불변이었다).
 `npm test`는 이 경계를 기계로 막는다. `package.json exports`는 위 안정 subpath만 노출할 수 있고, 공개 예제는 root API나 subpath export만 소비한다. Service Worker wrapper처럼 같은 오리진 정적 자산 경로가 필요한 경우만 좁은 예외로 둔다.
-`pyproc/runtime`은 public Runtime wrapper다. 내부 `runtime.js` core는 엔진 래퍼와 `Runtime.fs`만 소유하고, `enableReactive` 같은 opt-in capability factory는 `runtimeApi.js` binding에서 제공한다.
+`pyproc/runtime`은 public Runtime wrapper다. 내부 `runtime.js` core는 엔진 래퍼와 `Runtime.fs`만 담당하고, `runtimeApi.js`는 `src/capabilities/runtimeBindings.js` registry를 설치해 `enableReactive` 같은 opt-in capability factory를 제공한다.
 
 - 타입은 동봉된 `index.d.ts`가 계약이다.
 - 엔진 내부(`HEAPU8`, `Runtime.raw` 등)를 직접 만지지 않는다. `raw`는 탈출구이고 계약 밖이다.

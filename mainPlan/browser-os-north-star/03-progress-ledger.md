@@ -1398,3 +1398,39 @@ NEXT:
 1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
 2. `runtimeApi.js` binding edge를 capability registry 계약으로 더 좁힐 수 있는지 설계한다.
 3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.
+
+## 2026-07-15 - Runtime capability registry 분리
+
+문제:
+
+- 직전 작업으로 `runtime.js` core는 얇아졌지만, public `runtimeApi.js`가 여전히 `ReactiveController`, `SyscallBridge`, `AsgiServer`, `Terminal`, `GpuBridge` 등 capability class 목록을 직접 알고 있었다.
+- 이 상태는 `runtime -> capabilities` edge를 하나 허용하더라도 edge의 의미가 넓다. public wrapper가 목록까지 들고 있으면 새 capability가 추가될 때 runtime 레이어가 계속 변경된다.
+- 공개 계약은 `pyproc/runtime`과 `Runtime.prototype.enable*`를 유지해야 하므로 factory registry만 분리하는 비브레이킹 구조가 필요했다.
+
+완료:
+
+- `src/capabilities/runtimeBindings.js`를 추가했다. `enableReactive`, `enableSyscallBridge`, `enableSocketBridge`, `enableAsgiServer`, `enableTerminal`, `enableWheelCache`, `enableDeviceFs`, `enableInit`, `enableJournal`, `enableGpu` binding 목록은 capabilities 레이어가 담당한다.
+- `src/runtime/runtimeApi.js`는 `installRuntimeCapabilityBindings()` registry만 import한다. `installRuntimeCapabilities(RuntimeClass = Runtime)` public helper는 유지해 기존 호출 형태를 깨지 않는다.
+- 구조 게이트를 강화했다. `runtime.js`는 capability import 0을 유지하고, `runtimeApi.js`는 개별 capability class import가 없어야 하며, `runtimeApi.js -> runtimeBindings.js` 한 edge만 허용된다.
+- 소비 계약 문서, 테스트 운영 문서, OS 아키텍처 표를 registry 구조에 맞췄다.
+
+검증:
+
+- `node --check src/runtime/runtimeApi.js` PASS.
+- `node --check src/capabilities/runtimeBindings.js` PASS.
+- `node --check tests/run.mjs` PASS.
+- `npm test` GREEN 614/614.
+- `npm run test:browser` GREEN 47/47.
+- `npm run test:consumer` GREEN 15/15.
+
+판정:
+
+- Runtime public wrapper가 capability 목록을 직접 들지 않는다.
+- 남은 `runtime -> capabilities` edge는 registry 설치 edge 하나로 좁아졌다.
+- 새 opt-in capability를 추가할 때 runtime 레이어를 수정하지 않는 방향으로 구조가 정리됐다.
+
+NEXT:
+
+1. S1 NumPy sharded matmul부터 WebVM/JupyterLite/marimo 중 실행 가능한 후보를 실제 측정한다.
+2. 남은 `capabilities -> runtime` edge를 파일시스템, 메모리, 엔진 seam별로 분류해 줄일 수 있는지 본다.
+3. codaro 다음 소비 축을 signed `.pymachine` 세션 이미지 또는 `VirtualOrigin` UI 채택 중 하나로 고정한다.

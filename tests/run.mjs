@@ -609,12 +609,17 @@ check("src module 참조 실존", () => {
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
-check("Runtime core는 capability class를 직접 import하지 않음", () => {
+check("Runtime public wrapper는 capability registry만 import", () => {
   const src = readFileSync(join(ROOT, "src", "runtime", "runtime.js"), "utf8");
   if (src.includes("../capabilities/")) throw new Error("runtime.js가 capabilities를 직접 import함");
   const apiSrc = readFileSync(join(ROOT, "src", "runtime", "runtimeApi.js"), "utf8");
+  if (!apiSrc.includes("../capabilities/runtimeBindings.js")) throw new Error("runtimeApi.js가 runtimeBindings registry를 import하지 않음");
+  for (const spec of ["reactive", "syscallBridge", "socketBridge", "asgiServer", "wheelCache", "terminal", "deviceFs", "init", "machineJournal", "gpuCompute"]) {
+    if (apiSrc.includes(`../capabilities/${spec}.js`)) throw new Error(`runtimeApi.js가 capability class를 직접 import함: ${spec}`);
+  }
+  const registrySrc = readFileSync(join(ROOT, "src", "capabilities", "runtimeBindings.js"), "utf8");
   for (const term of ["installRuntimeCapabilities", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableGpu"]) {
-    if (!apiSrc.includes(term)) throw new Error(`runtimeApi.js binding 누락: ${term}`);
+    if (!apiSrc.includes(term) && !registrySrc.includes(term)) throw new Error(`runtime capability binding 누락: ${term}`);
   }
 });
 check("src ESM import graph cycle 없음", () => {
@@ -651,8 +656,10 @@ check("src layer edge 승인 목록", () => {
       const toLayer = srcLayerName(targetRel);
       if (!fromLayer || !toLayer || fromLayer === toLayer) continue;
       const key = `${ref.kind}:${fromLayer}->${toLayer}`;
-      if (key === "module:runtime->capabilities" && rel(f) !== "src/runtime/runtimeApi.js") {
-        problems.push(`${rel(f)} -> ${ref.spec} (${key}, runtimeApi.js만 허용)`);
+      if (key === "module:runtime->capabilities") {
+        if (rel(f) !== "src/runtime/runtimeApi.js" || targetRel !== "src/capabilities/runtimeBindings.js") {
+          problems.push(`${rel(f)} -> ${ref.spec} (${key}, runtimeApi.js -> runtimeBindings.js만 허용)`);
+        }
         continue;
       }
       if (!allowedCrossLayer.has(key)) problems.push(`${rel(f)} -> ${ref.spec} (${key})`);
