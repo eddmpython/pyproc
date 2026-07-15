@@ -1,6 +1,6 @@
 # 06. 속도 정면 비교 계약
 
-상태: pyproc S0/S1 기준 artifact 기록. WebVM, JupyterLite, marimo WASM은 같은 S1 계약을 N/A artifact로 봉인. S1L은 pyproc, JupyterLite, marimo WASM을 같은 브라우저에서 측정.
+상태: pyproc S0/S1 기준 artifact 기록. WebVM S0를 같은 S0 표에 합쳤다. WebVM, JupyterLite, marimo WASM은 같은 S1 계약을 N/A artifact로 봉인. S1L은 pyproc, JupyterLite, marimo WASM을 같은 브라우저에서 측정.
 
 ## 목표
 
@@ -31,6 +31,7 @@
 | date | scenario | artifact | compare | result |
 |---|---|---|---|---|
 | 2026-07-15 | S0 pyproc | [s0-pyproc-2026-07-15.json](benchmarks/s0-pyproc-2026-07-15.json) | [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md) | GREEN, 3 samples, median 3471ms, p95 3642ms, maxErr 0 |
+| 2026-07-15 | S0 WebVM | [s0-webvm-2026-07-15.json](benchmarks/s0-webvm-2026-07-15.json) | [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md) | GREEN, 3 samples, median 3472ms, p95 3613ms, maxErr 0, warm browser profile/cache |
 | 2026-07-15 | S1 pyproc | [s1-pyproc-2026-07-15.json](benchmarks/s1-pyproc-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | GREEN, `size=1024`, 3 samples, median 3.95x, shard p95 2606ms, maxErr 0 |
 | 2026-07-15 | S1 external candidates | [webvm N/A](benchmarks/s1-webvm-na-2026-07-15.json), [jupyterlite N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json), [marimo-wasm N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | [s1-compare-2026-07-15.md](benchmarks/s1-compare-2026-07-15.md) | 같은 4-worker sharded NumPy matmul 계약 없음 |
 | 2026-07-15 | S1L pyproc | [s1l-pyproc-2026-07-15.json](benchmarks/s1l-pyproc-2026-07-15.json) | [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md) | GREEN, 3 samples, median 10067ms, p95 10073ms, maxErr 0 |
@@ -43,7 +44,7 @@
 
 | scenario | pyproc command | WebVM | JupyterLite | marimo web runtime | 판정 |
 |---|---|---|---|---|---|
-| S0 python ready latency | [artifact](benchmarks/s0-pyproc-2026-07-15.json) | 미측정 | 미측정 | 미측정 | WebVM 측정 대기 |
+| S0 python ready latency | [artifact](benchmarks/s0-pyproc-2026-07-15.json) | [artifact](benchmarks/s0-webvm-2026-07-15.json) | 미측정 | 미측정 | pyproc 3471ms, WebVM 3472ms. WebVM은 warm browser profile/cache 조건 |
 | S1 numpy sharded matmul | `npm run bench:speed -- --out <path>` | [N/A](benchmarks/s1-webvm-na-2026-07-15.json) | [N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json) | [N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) | pyproc만 같은 S1 계약 충족 |
 | S1L single-kernel numpy latency | [artifact](benchmarks/s1l-pyproc-2026-07-15.json) | 미측정 | [artifact](benchmarks/s1l-jupyterlite-2026-07-15.json) | [artifact](benchmarks/s1l-marimo-wasm-2026-07-15.json) | WebVM 제외 3자 측정 완료 |
 | S2 process map | `npm run test:browser` | 미측정 | 미측정 | 미측정 | 보류 |
@@ -60,11 +61,11 @@ npm run bench:artifact -- --candidate webvm --na "S1 sharded worker model 미측
 npm run bench:compare -- .tmp/pyproc-s1.json .tmp/jupyterlite-s1.json --out .tmp/s1-compare.md
 ```
 
-S0 artifact는 후보별로 "첫 Python 명령이 성공한 시점"을 잰다. WebVM은 Linux VM boot 뒤 `python3` 명령 출력까지를 S0로 본다.
+S0 artifact는 후보별로 "첫 Python 명령이 성공한 시점"을 잰다. WebVM은 페이지 이동, 터미널 prompt 대기, `python3 -c` 출력 확인까지를 S0로 본다.
 
 ```bash
-npm run bench:artifact -- --scenario S0 --candidate webvm --command "manual WebVM python ready run" --sample 30000,0 --sample 31000,0 --sample 29500,0 --out .tmp/webvm-s0.json
-npm run bench:compare -- .tmp/pyproc-s0.json .tmp/webvm-s0.json --out .tmp/s0-compare.md
+npm run bench:artifact -- --scenario S0 --candidate webvm --browser-version 150.0.0.0 --engine WebVM/CheerpX --source "https://webvm.io/ via playwright-cli" --command "page.goto webvm.io, wait user prompt, run python3 -c print(marker), wait marker output" --sample 3613,0 --sample 3376,0 --sample 3472,0 --out mainPlan/browser-os-north-star/benchmarks/s0-webvm-2026-07-15.json
+npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0-webvm-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md
 ```
 
 S1L artifact는 S1을 single-lane으로 바꿔치기하지 않기 위한 보조 축이다. 같은 행렬 크기와 같은 브라우저에서 단일 Python kernel 또는 단일 worker의 warmed NumPy matmul latency만 비교한다.
@@ -85,6 +86,6 @@ npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/jupyterlite-s1l.json .tmp/mar
 
 ## 다음 작업
 
-1. WebVM은 Linux VM boot와 Python shell latency로 S0 계열을 분리한다.
-2. S1L 표는 단일 커널 비교로만 유지하고, pyproc의 속도 간판은 S1 병렬 worker pool로 유지한다.
-3. README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.
+1. JupyterLite와 marimo WASM도 S0 python ready latency로 같은 축에 합친다.
+2. WebVM은 warm cache S0와 cold profile S0를 분리해서 다시 잰다.
+3. pyproc의 속도 간판은 S1 병렬 worker pool로 유지하고, README 속도 문구는 이 비교 계약을 통과한 숫자만 갱신한다.

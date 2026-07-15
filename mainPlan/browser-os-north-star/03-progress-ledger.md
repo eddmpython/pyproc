@@ -1832,3 +1832,42 @@ NEXT:
 1. WebVM에서 S0 `python3` 첫 출력까지 측정한다.
 2. [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md)에 WebVM 행을 합친다.
 3. WebVM S0가 불안정하면 N/A가 아니라 실패 artifact 또는 제한 근거를 남긴다.
+
+## 2026-07-15 - WebVM S0 artifact 합류
+
+완료:
+
+- WebVM 페이지를 실제 브라우저에서 열고 터미널 prompt 뒤 `python3 -c` 출력 마커를 확인했다.
+- [s0-webvm-2026-07-15.json](benchmarks/s0-webvm-2026-07-15.json)을 생성했다.
+- [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md)에 pyproc과 WebVM을 같은 S0 표로 합쳤다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 외부 비교 상태를 갱신했다.
+
+실측:
+
+- WebVM URL: `https://webvm.io/`.
+- Browser: Headless Edge user agent `HeadlessChrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0`.
+- 측정 절차: fresh `page.goto` query URL, 터미널 `user@:~$` prompt 대기, `python3 -c "print('<marker>')"` 입력, 마커가 echo와 Python 출력으로 2회 등장할 때 성공 처리.
+- WebVM S0 samples: 3613ms, 3376ms, 3472ms.
+- median 3472ms, p95 3613ms, min 3376ms, max 3613ms, maxErr 0.
+- artifact 생성 commit: `96aeebbed213f8a02bf0def8a24fc68a068e67dc`, `worktreeDirty: false`.
+- caveat: warm browser profile/cache 조건이다. cold browser profile, cache clear, first network download까지 포함한 수치는 아직 아니다.
+
+검증:
+
+- WebVM probe `python3 -c "print(12345)"` PASS.
+- WebVM marker script 3회 PASS, 각 run에서 marker occurrence 2회 확인.
+- `npm run bench:artifact -- --scenario S0 --candidate webvm --browser-version 150.0.0.0 --engine WebVM/CheerpX --source "https://webvm.io/ via playwright-cli" --command "page.goto webvm.io, wait user prompt, run python3 -c print(marker), wait marker output" --note "Headless Edge via playwright-cli; warm browser profile/cache; each sample uses fresh page.goto URL with query param" --sample 3613,0 --sample 3376,0 --sample 3472,0 --out mainPlan/browser-os-north-star/benchmarks/s0-webvm-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json mainPlan/browser-os-north-star/benchmarks/s0-webvm-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md` PASS.
+- `npm test` PASS.
+
+판정:
+
+- warm profile/cache S0에서는 pyproc median 3471ms, WebVM median 3472ms로 사실상 동률이다.
+- 이 결과는 "웹에서 Python 첫 명령을 빠르게 준비한다"의 기준점이지, 브라우저 OS 우위의 증거는 아니다.
+- pyproc이 뾰족하게 이겨야 할 축은 S1 병렬 worker pool, S2 process map, S3 browser server, S4 machine resume처럼 OS affordance가 드러나는 곳이다.
+
+NEXT:
+
+1. JupyterLite와 marimo WASM도 S0 python ready latency로 같은 표에 합친다.
+2. WebVM cold profile/cache clear S0를 별도 artifact로 재측정한다.
+3. pyproc은 S2 process map과 S3 browser server를 외부 후보가 따라오기 어려운 OS 기능 축으로 강화한다.
