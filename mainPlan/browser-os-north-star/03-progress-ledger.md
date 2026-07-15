@@ -1958,3 +1958,39 @@ NEXT:
 1. `npm run test:browser`를 fresh temporary profile 조건으로 3회 실행해 pyproc S0C 기준 artifact를 만든다.
 2. `benchmarks/s0c-compare-2026-07-15.md`를 만든다.
 3. 외부 후보 S0C는 cache-clear 재현성이 확보된 것부터 추가한다.
+
+## 2026-07-15 - pyproc S0C cold 기준 artifact 고정
+
+완료:
+
+- `npm run test:browser`를 3회 실행해 fresh temporary browser profile 조건의 pyproc S0C sample을 확보했다.
+- [s0c-pyproc-2026-07-15.json](benchmarks/s0c-pyproc-2026-07-15.json)을 생성했다.
+- [s0c-compare-2026-07-15.md](benchmarks/s0c-compare-2026-07-15.md)를 pyproc 단독 기준표로 생성했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
+
+실측:
+
+- Edge 150.0.4078.65, Windows, AMD Ryzen 7 8845HS.
+- `npm run test:browser`는 각 run마다 `--user-data-dir`로 fresh temporary profile을 만들고 종료 후 삭제한다.
+- `npm run test:browser` 3회 모두 GREEN 47/47.
+- pyproc S0C samples: 3660ms, 2918ms, 3952ms.
+- median 3660ms, p95 3952ms, min 2918ms, max 3952ms, maxErr 0.
+- artifact 생성 commit: `5a8dedca988f3658a46c786775b5111116123a3e`, `worktreeDirty: false`.
+
+검증:
+
+- `npm run test:browser` PASS 3회.
+- `npm run bench:artifact -- --scenario S0C --candidate pyproc --browser-version 150.0.4078.65 --engine Pyodide --source "npm run test:browser" --command "npm run test:browser with fresh temporary browser profile, boot() ready and run sum(range(100))" --note "derived from three browser gate runs; each run uses a fresh temporary browser profile via --user-data-dir and removes it after completion; latencyMs is bootMs until Python boot ready" --sample 3660,0 --sample 2918,0 --sample 3952,0 --out mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json` PASS.
+- `npm run bench:compare -- mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json --out mainPlan/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md` PASS.
+- `npm test` PASS.
+
+판정:
+
+- pyproc의 cold profile/cache-clear 기준점은 median 3660ms, p95 3952ms다.
+- 기존 S0 warm/observed 표와 cold S0C 표가 분리됐으므로 앞으로 cold 외부 후보를 같은 표에 추가해도 조건이 흐려지지 않는다.
+
+NEXT:
+
+1. WebVM S0C를 cache-clear 또는 fresh browser profile 조건으로 측정한다.
+2. JupyterLite와 marimo WASM S0C는 재현 가능한 cache-clear 절차가 잡히는 즉시 추가한다.
+3. S2 process map 비교 축을 외부 후보 N/A 또는 제한 artifact로 봉인한다.

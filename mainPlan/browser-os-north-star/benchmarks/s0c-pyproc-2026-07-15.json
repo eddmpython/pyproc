@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scenario": "S0C",
+  "candidate": "pyproc",
+  "name": "python cold ready latency",
+  "command": "npm run test:browser with fresh temporary browser profile, boot() ready and run sum(range(100))",
+  "commit": "5a8dedca988f3658a46c786775b5111116123a3e",
+  "worktreeDirty": false,
+  "startedAt": "2026-07-15T01:51:38.648Z",
+  "finishedAt": "2026-07-15T01:51:38.649Z",
+  "browser": {
+    "path": null,
+    "version": "150.0.4078.65"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpuModel": "AMD Ryzen 7 8845HS w/ Radeon 780M Graphics     ",
+    "cpuCount": 16,
+    "totalMemBytes": 33557934080,
+    "freeMemBytes": 12799406080
+  },
+  "engine": {
+    "name": "Pyodide"
+  },
+  "source": "npm run test:browser",
+  "note": "derived from three browser gate runs; each run uses a fresh temporary browser profile via --user-data-dir and removes it after completion; latencyMs is bootMs until Python boot ready",
+  "ok": true,
+  "metrics": {
+    "samples": [
+      {
+        "latencyMs": 3660,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 2918,
+        "maxErr": 0
+      },
+      {
+        "latencyMs": 3952,
+        "maxErr": 0
+      }
+    ],
+    "sampleCount": 3,
+    "medianMs": 3660,
+    "p95Ms": 3952,
+    "minMs": 2918,
+    "maxMs": 3952,
+    "maxErr": 0
+  }
+}
