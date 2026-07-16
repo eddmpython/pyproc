@@ -111,7 +111,6 @@ export class ReactiveController {
     this._noteRestore();
     return { pagesWritten: written, mbWritten: +(wroteBytes / 1048576).toFixed(2), rehashed: rehash };
   }
-  timeTravel(j, savedSP, opts = {}) { return this.restoreLive(j, savedSP, opts); }
 
   // 두 체크포인트 사이의 사용자 상태를 { pages, bin }으로 수집한다(세션 저장/저널 커밋/이미지
   // 내보내기의 공용 프리미티브). 페이지 바이트는 현재 힙에서 읽으므로 toIdx는 live 노드여야

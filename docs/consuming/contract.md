@@ -74,7 +74,7 @@ await registerPyProcServiceWorker(assetIntegrity, { coi: true, scope: "/" });
 
 ### same-origin 실행 자산 manifest
 
-`PyProc`, `SharedKernel`, `MachineContainer`, `WasiSession`, `VirtualOrigin`은 브라우저가 직접 여는
+`PyProc`, `MachineContainer`, `WasiSession`, `VirtualOrigin`은 브라우저가 직접 여는
 Worker/SharedWorker/Service Worker 엔트리포인트를 갖는다. 이 파일들은 CDN cross-origin URL로만
 두면 실패하므로, 제품은 패키지의 `src/` 상대 import 구조를 보존해 같은 오리진에 배포한다.
 
@@ -118,7 +118,7 @@ await os.boot(4);
 ```
 
 `boot({ assetIntegrity })`는 Runtime에 manifest를 보관하고, 그 Runtime에서 만든 `SyscallBridge`와
-`MachineContainer`가 상속한다. Runtime 없이 쓰는 `PyProc`, `SharedKernel`, `JobControl`,
+`MachineContainer`가 상속한다. Runtime 없이 쓰는 `PyProc`, `JobControl`,
 `bootWasi`는 자기 옵션에 `assetIntegrity`를 직접 받는다. 브라우저는 module Worker의 하위 import에
 SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다. 같은 오리진의 불변 배포 자산을
 전제로 한다. Service Worker는 `registerPyProcServiceWorker()`로 `pyprocServiceWorker` graph를 먼저 검증하고,
@@ -144,7 +144,7 @@ console.log(machine.status());
 
 - `KernelElection`은 Web Locks leader 하나, BroadcastChannel RPC, participant 고유 ID, OPFS 영속 epoch를 제공하는 하위 계약이다. leader 커널이 자기 document에 살아 `crossOriginIsolated`와 SAB/JSPI 능력을 유지한다.
 - `MachineJournal`은 commit 하나에 WASM heap delta와 `/home/web` 스냅샷을 함께 넣는다. 새 leader와 모든 탭 종료 뒤의 새 participant는 마지막 완료 commit만 복구한다.
-- `SharedKernel`은 SharedWorker가 `crossOriginIsolated=false`인 현재 플랫폼에서 상태 공유와 async 실행만 제공하는 보조 경로다. SAB interrupt, snapshot-fork, 지속 epoch 복구의 제품 정본이 아니다.
+- SharedWorker 기반 보조 경로(`SharedKernel`)는 제거됐다. SharedWorker는 `crossOriginIsolated=false`라 SAB interrupt, snapshot-fork, 지속 epoch 복구를 제공할 수 없었고, 다중 탭 정본은 위의 `openPersistentMachine` 하나다.
 - leader가 사라지기 전에 보내지 않은 요청은 새 leader ready를 기다렸다 안전하게 보낼 수 있다. 이미 전송한 요청이 timeout되거나 leader가 바뀌면 실행 여부를 확정할 수 없으므로 `PYPROC_RPC_OUTCOME_UNKNOWN`을 반환하고 자동 재실행하지 않는다.
 - `status()`는 `participantId`, `leaderId`, `epoch`, `role`, `phase`, `recovered`, `lastCommitAt`, `participantCount`, `pendingRequests`를 제공한다. 같은 epoch에서 leader가 둘이면 `PYPROC_SPLIT_BRAIN`으로 실패한다.
 - `manifest.packages`와 `manifest.setup`은 새 leader가 같은 준비 환경을 결정적으로 재현하는 계약이다. 실행 중 임의 설치한 native package, 열린 socket, fd, DB connection, Promise, 임의 Python stack을 그대로 부활시킨다는 계약은 아니다. 외부 자원은 `resume.py`로 다시 연다.
@@ -201,7 +201,7 @@ console.log(machine.status());
   fetch + SHA-256으로 검증한다. `registerPyProcServiceWorker()`는 Service Worker 등록 파일을 같은 manifest로 묶고,
   `pyprocSw.js`의 `coreIntegrity` 모드는 브라우저 동적 import가 JavaScript `fetch` wrapper 밖에서 가져가는 Pyodide 내부 모듈까지 SW fetch 이벤트에서 검증한다. 실측: `runtimeIntegrityProbe.html` GREEN 6/6, Node gate의
   `asset integrity preflight`와 `assetManifest CLI` GREEN, 브라우저 게이트의 Service Worker 등록 경로와 SW `coreIntegrity` 검증 GREEN.
-- **WASI 세션(bootWasi/WasiSession)은 별도 async 표면이다.** Pyodide 기반 표면(boot/Runtime/PyProc/ReactiveController)과 무관하게 additive로 추가됐다(기존 소비자 무영향). 엔진 무관 실증용 opt-in이며, `wasmURL`은 소비자가 제공한다(COOP/COEP 하에선 셀프 호스팅). 제약: 값 다리는 JSON 직렬화 한정(FFI 없음), 네이티브 확장 불가(정적 링크), 크로스 엔진 .pymachine 불가. 프로덕션 상용 파이썬은 Pyodide 표면이 정본이다.
+- **WASI 세션(bootWasi/WasiSession)은 `pyproc/wasi` subpath의 별도 async 표면이다.** Pyodide 기반 표면(boot/Runtime/PyProc/ReactiveController)과 무관하게 additive로 추가됐다(기존 소비자 무영향). 엔진 무관 실증용 opt-in이며, `wasmURL`은 소비자가 제공한다(COOP/COEP 하에선 셀프 호스팅). 제약: 값 다리는 JSON 직렬화 한정(FFI 없음), 네이티브 확장 불가(정적 링크), 크로스 엔진 .pymachine 불가. 프로덕션 상용 파이썬은 Pyodide 표면이 정본이다.
 - 번들러 계약: `moduleResolution: "Bundler"` + `allowJs: false`에서 타입 해석, Vite가 `new Worker(new URL(...))`를 워커 청크로 emit(codaro에서 3단계 검증 완료).
 
 ## 소비자별 배선 상태

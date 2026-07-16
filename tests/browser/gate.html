@@ -267,10 +267,13 @@
       check("map: 결과 4개 전부 정확", par.length === 4 && par.every((v) => v === expected), timings.mapParallelMs + "ms");
 
       t = performance.now();
-      const ser = await os.mapSerial(fn, [N, N, N, N]);
+      // 직렬 기준선: 공개 표면(exec)으로 같은 태스크를 워커 1개에서 순차 실행(벤치 계약 S2의 산출 경로).
+      const serialPid = os.ps().find((p) => p.state === "ready").pid;
+      const ser = [];
+      for (const n of [N, N, N, N]) ser.push(await os.exec(serialPid, fn, n));
       timings.mapSerialMs = Math.round(performance.now() - t);
       timings.speedup = +(timings.mapSerialMs / timings.mapParallelMs).toFixed(2);
-      check("mapSerial: 병렬과 결과 일치", JSON.stringify(par) === JSON.stringify(ser),
+      check("직렬 exec 기준선: 병렬과 결과 일치", JSON.stringify(par) === JSON.stringify(ser),
         `직렬 ${timings.mapSerialMs}ms, speedup ${timings.speedup}x (참고치)`);
 
       // 수명주기: 행 태스크가 유한 시간에 {error}로 수렴 + 행 워커 자동 respawn
@@ -284,11 +287,11 @@
       // 협조적 취소: SIGINT로 busy 루프 회수 + 같은 워커 재사용(respawn 0)
       const lane0 = os.ps().find((p) => p.state === "ready").pid; // 태스크 0은 풀 첫 레인이 집는다
       const busyP = os.map("def _fn(n):\n    while True:\n        pass", [0]);
-      setTimeout(() => os.interrupt(lane0), 400);
+      setTimeout(() => os.signal(lane0, SIGNAL.INT), 400);
       const ir = await busyP;
       // 시그널 표(정본 실측: runtimeParity/signalTableProbe). SIGINT 외 번호가 파이썬 핸들러를 부른다.
       check("SIGNAL 표 노출", SIGNAL.TERM === 15 && SIGNAL.USR1 === 10);
-      check("interrupt(pid): SIGINT 수렴 + 워커 생존", ir[0] && ir[0].error && ir[0].error.includes("KeyboardInterrupt")
+      check("signal(pid, SIGINT): 수렴 + 워커 생존", ir[0] && ir[0].error && ir[0].error.includes("KeyboardInterrupt")
         && (await os.map(fn, [1000]))[0] === (1000 * 999 * 1999) / 6);
 
       const victim = os.ps().find((p) => p.state === "ready").pid;

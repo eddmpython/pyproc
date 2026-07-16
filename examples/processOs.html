@@ -82,7 +82,10 @@
 
       log("running the same 4 tasks on 1 worker (serial baseline)...");
       t = performance.now();
-      const ser = await os.mapSerial(fn, args);
+      // 직렬 기준선: 같은 태스크를 워커 1개에서 exec로 순차 실행(공개 표면만 사용).
+      const serialPid = os.ps().find((p) => p.state === "ready").pid;
+      const ser = [];
+      for (const a of args) ser.push(await os.exec(serialPid, fn, a));
       const serMs = Math.round(performance.now() - t);
 
       // 2^53을 넘는 파이썬 int는 BigInt로 온다(정밀도 보존이 올바른 동작).

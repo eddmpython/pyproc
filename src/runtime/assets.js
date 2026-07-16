@@ -19,14 +19,6 @@ const ASSETS = Object.freeze([
     reason: "프로세스 OS 워커와 subprocess 워커 엔트리포인트",
   }),
   Object.freeze({
-    role: "sharedKernelHost",
-    path: "src/processOs/sharedKernelHost.js",
-    kind: "shared-worker",
-    sameOrigin: true,
-    usedBy: ["SharedKernel"],
-    reason: "탭 밖 공유 커널 SharedWorker 엔트리포인트",
-  }),
-  Object.freeze({
     role: "machineWorker",
     path: "src/processOs/machineWorker.js",
     kind: "module-worker",

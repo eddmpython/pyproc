@@ -166,7 +166,7 @@ export const demos = [
       dim("# Web Worker = process. one snapshot forks into N interpreters."),
       `${PROMPT} os = PyProc(); await os.boot(4)   ${dim("# 4 GILs, 4 real cores")}`,
       `${PROMPT} await os.map(fn, [n, n, n, n])    ${dim("# parallel")}`,
-      `${PROMPT} await os.mapSerial(fn, [n]*4)     ${dim("# same work, one worker")}`,
+      `${PROMPT} [await os.exec(pid, fn, n) ...]   ${dim("# same work, one worker")}`,
     ],
     async run(ctx) {
       const { PyProc } = await import("../index.js");
@@ -195,7 +195,10 @@ export const demos = [
       const par = await os.map(fn, args);
       const parMs = performance.now() - t;
       t = performance.now();
-      const ser = await os.mapSerial(fn, args);
+      // 직렬 기준선: 같은 태스크를 워커 1개에서 exec로 순차 실행(공개 표면만 사용).
+      const serialPid = os.ps().find((p) => p.state === "ready").pid;
+      const ser = [];
+      for (const a of args) ser.push(await os.exec(serialPid, fn, a));
       const serMs = performance.now() - t;
       // 2^53을 넘는 파이썬 int는 BigInt로 온다(정밀도 보존이 올바른 동작).
       const same = par.length === ser.length && par.every((v, i) => v === ser[i]);

@@ -3,23 +3,46 @@
   "version": "0.0.9",
   "description": "브라우저 파이썬 프로세스 OS - 서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬(프로세스·병렬·복원 리액티브·머신 이미지). Real Python runtime in the browser tab: processes, parallelism, checkpoint/time-travel, portable .pymachine images.",
   "type": "module",
-  "workspaces": ["packages/*"],
-  "repository": { "type": "git", "url": "git+https://github.com/eddmpython/pyproc.git" },
+  "workspaces": [
+    "packages/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eddmpython/pyproc.git"
+  },
   "homepage": "https://github.com/eddmpython/pyproc#readme",
-  "bugs": { "url": "https://github.com/eddmpython/pyproc/issues" },
+  "bugs": {
+    "url": "https://github.com/eddmpython/pyproc/issues"
+  },
   "main": "index.js",
   "types": "./index.d.ts",
-  "bin": { "pyproc-assets": "./scripts/assetManifest.mjs" },
+  "bin": {
+    "pyproc-assets": "./scripts/assetManifest.mjs"
+  },
   "exports": {
-    ".": { "types": "./index.d.ts", "default": "./index.js" },
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
     "./assets": "./src/runtime/assets.js",
     "./runtime": "./src/runtime/runtimeApi.js",
     "./reactive": "./src/capabilities/reactive.js",
     "./syscall-bridge": "./src/capabilities/syscallBridge.js",
     "./process-os": "./src/processOs/pyProc.js",
-    "./worker": "./src/processOs/worker.js"
+    "./worker": "./src/processOs/worker.js",
+    "./gpu": "./src/capabilities/gpuCompute.js",
+    "./socket": "./src/capabilities/socketBridge.js",
+    "./wasi": "./src/runtime/engines/wasi/wasiSession.js"
   },
-  "files": ["index.js", "index.d.ts", "src", "scripts/assetManifest.mjs", "README.md", "README.ko.md", "LICENSE"],
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "src",
+    "scripts/assetManifest.mjs",
+    "README.md",
+    "README.ko.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node tests/run.mjs",
     "test:package": "node tests/packageConsumer.mjs",
@@ -35,6 +58,15 @@
     "serve": "node examples/serve.mjs",
     "fetch:engine": "node scripts/fetchEngine.mjs"
   },
-  "keywords": ["pyodide", "python", "browser", "wasm", "process", "parallel", "reactive", "runtime"],
+  "keywords": [
+    "pyodide",
+    "python",
+    "browser",
+    "wasm",
+    "process",
+    "parallel",
+    "reactive",
+    "runtime"
+  ],
   "license": "MPL-2.0"
 }

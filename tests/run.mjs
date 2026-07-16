@@ -79,9 +79,8 @@ for (const [name, kind] of [
   ["getPyProcAssetManifest", "function"], ["verifyPyProcAssetIntegrity", "function"], ["PYPROC_ASSET_MANIFEST_VERSION", "number"],
   ["registerPyProcServiceWorker", "function"],
   ["boot", "function"], ["checkEnvironment", "function"], ["bootEnv", "function"], ["runScript", "function"], ["Runtime", "function"], ["MemoryCapability", "function"],
-  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["SocketBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["FileSystem", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["createMachineKeyPair", "function"], ["exportMachinePublicKey", "function"], ["fingerprintMachinePublicKey", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"], ["SharedKernel", "function"],
-  ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"], ["openPersistentMachine", "function"],
-  ["GpuCompute", "function"], ["GpuArray", "function"], ["GpuBridge", "function"],
+  ["ReactiveController", "function"], ["SyscallBridge", "function"], ["AsgiServer", "function"], ["VirtualOrigin", "function"], ["Terminal", "function"], ["DeviceFs", "function"], ["FileSystem", "function"], ["Init", "function"], ["MachineJournal", "function"], ["bootSession", "function"], ["openMachine", "function"], ["createMachineKeyPair", "function"], ["exportMachinePublicKey", "function"], ["fingerprintMachinePublicKey", "function"], ["Session", "function"], ["WheelCache", "function"], ["PyProc", "function"],
+  ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"], ["openPersistentMachine", "function"],
   ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
   ["PyProcError", "function"], ["PYPROC_ERROR_CODES", "object"],
 ]) {
@@ -99,7 +98,7 @@ check("asset manifest 형태", () => {
   if (!relRoot.assets[0].url.startsWith("/vendor/pyproc/src/")) throw new Error("root-relative asset URL 계산 실패");
   if (!m.policy.sameOriginRequired || !m.policy.preserveRelativeImports || !m.policy.runtimePreflight) throw new Error("policy 불충분");
   const roles = new Set(m.assets.map((a) => a.role));
-  for (const role of ["processWorker", "sharedKernelHost", "machineWorker", "wasiWorker", "pyprocServiceWorker"])
+  for (const role of ["processWorker", "machineWorker", "wasiWorker", "pyprocServiceWorker"])
     if (!roles.has(role)) throw new Error(`role 누락: ${role}`);
   for (const a of m.assets) {
     if (!a.path.startsWith("src/")) throw new Error(`src 밖 자산: ${a.path}`);
@@ -183,7 +182,7 @@ check("자가 호스팅 핀 정합(fetchEngine == DEFAULT_INDEX)", () => {
 console.log("\n[계약]");
 check("Runtime 메서드", () => {
   const p = api.Runtime.prototype;
-  for (const m of ["run", "runAsync", "install", "loadPackages", "loadPackagesFromImports", "setStdout", "setStderr", "freeze", "mountHome", "enableReactive", "enableSyscallBridge", "enableSocketBridge", "enableAsgiServer", "enableTerminal", "enableWheelCache", "enableDeviceFs", "enableInit"])
+  for (const m of ["run", "runAsync", "install", "loadPackages", "loadPackagesFromImports", "setStdout", "setStderr", "freeze", "mountHome", "noteStateMutation", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableTerminal", "enableWheelCache", "enableDeviceFs", "enableInit", "enableJournal"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("FileSystem 메서드", () => {
@@ -202,11 +201,6 @@ check("MachineJail 메서드", () => {
   for (const m of ["allows", "connectSrc", "csp", "install"])
     if (typeof api.MachineJail.prototype[m] !== "function") throw new Error(`MachineJail.${m}`);
 });
-check("SharedKernel 메서드", () => {
-  const p = api.SharedKernel.prototype;
-  for (const m of ["connect", "run", "runAsync", "setGlobal", "status"])
-    if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
-});
 check("VirtualOrigin 메서드", () => {
   const p = api.VirtualOrigin.prototype;
   for (const m of ["bind", "unbind"])
@@ -214,7 +208,7 @@ check("VirtualOrigin 메서드", () => {
 });
 check("PyProc 메서드", () => {
   const p = api.PyProc.prototype;
-  for (const m of ["boot", "map", "mapArray", "matmul", "mapSerial", "ps", "kill", "signal", "interrupt", "fork", "exec", "pipe", "lock", "semaphore", "shm", "terminate"])
+  for (const m of ["boot", "map", "mapArray", "matmul", "ps", "kill", "signal", "respawn", "fork", "exec", "pipe", "lock", "semaphore", "shm", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("MachineContainer 메서드", () => {
@@ -232,13 +226,27 @@ check("JobControl 메서드", () => {
   for (const m of ["boot", "push", "jobs", "fg", "kill", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
-check("GpuCompute/GpuArray/GpuBridge 메서드", () => {
-  if (typeof api.GpuCompute.create !== "function") throw new Error("GpuCompute.create(static)");
-  for (const m of ["array", "destroy"]) if (typeof api.GpuCompute.prototype[m] !== "function") throw new Error(`GpuCompute.${m}`);
-  for (const m of ["matmul", "map", "binary", "transpose", "reduce", "toArray", "destroy"]) if (typeof api.GpuArray.prototype[m] !== "function") throw new Error(`GpuArray.${m}`);
-  for (const m of ["install", "destroy"]) if (typeof api.GpuBridge.prototype[m] !== "function") throw new Error(`GpuBridge.${m}`);
+// 강등 표면(pyproc/gpu, pyproc/socket, pyproc/wasi): 루트 밖이지만 subpath 계약은 유지된다.
+const gpuApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "gpuCompute.js")).href);
+const socketApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "socketBridge.js")).href);
+const wasiApi = await import(pathToFileURL(join(ROOT, "src", "runtime", "engines", "wasi", "wasiSession.js")).href);
+check("pyproc/gpu: GpuCompute/GpuArray/GpuBridge 메서드", () => {
+  if (typeof gpuApi.GpuCompute.create !== "function") throw new Error("GpuCompute.create(static)");
+  for (const m of ["array", "destroy"]) if (typeof gpuApi.GpuCompute.prototype[m] !== "function") throw new Error(`GpuCompute.${m}`);
+  for (const m of ["matmul", "map", "binary", "transpose", "reduce", "toArray", "destroy"]) if (typeof gpuApi.GpuArray.prototype[m] !== "function") throw new Error(`GpuArray.${m}`);
+  for (const m of ["install", "destroy"]) if (typeof gpuApi.GpuBridge.prototype[m] !== "function") throw new Error(`GpuBridge.${m}`);
 });
-check("Runtime.enableGpu", () => { if (typeof api.Runtime.prototype.enableGpu !== "function") throw new Error("Runtime.enableGpu"); });
+check("pyproc/socket: SocketBridge 메서드", () => {
+  if (typeof socketApi.SocketBridge.prototype.install !== "function") throw new Error("SocketBridge.install");
+});
+check("루트에서 강등 표면 제거(진짜 그래프 분리)", () => {
+  for (const name of ["SocketBridge", "GpuCompute", "GpuArray", "GpuBridge", "SharedKernel", "bootWasi", "WasiSession"]) {
+    if (name in api) throw new Error(`루트에 잔존: ${name}`);
+  }
+  for (const m of ["enableSocketBridge", "enableGpu"]) {
+    if (typeof api.Runtime.prototype[m] === "function") throw new Error(`Runtime.${m} 잔존(그래프 미분리)`);
+  }
+});
 check("PyProc.repl/exec 메서드", () => {
   const p = api.PyProc.prototype;
   for (const m of ["repl", "exec"]) if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
@@ -249,11 +257,12 @@ check("SIGNAL 표(POSIX 번호)", () => {
 });
 check("ReactiveController 메서드", () => {
   const p = api.ReactiveController.prototype;
-  for (const m of ["checkpoint", "restore", "restoreLive", "timeTravel", "tree", "storageMB", "saveBase", "loadBase"])
+  for (const m of ["checkpoint", "restore", "restoreLive", "collectDelta", "markDirty", "pruneTo", "dispose", "tree", "storageMB", "saveBase", "loadBase"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
-check("WasiSession 메서드", () => {
-  const p = api.WasiSession.prototype;
+check("pyproc/wasi: bootWasi/WasiSession 메서드", () => {
+  if (typeof wasiApi.bootWasi !== "function") throw new Error("bootWasi");
+  const p = wasiApi.WasiSession.prototype;
   for (const m of ["run", "get", "set", "checkpoint", "timeTravel", "installWheel", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
@@ -473,7 +482,7 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
-for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "fingerprintMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "KernelElection", "openPersistentMachine", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE", "PyProcError", "PYPROC_ERROR_CODES"]) {
+for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "fingerprintMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "KernelElection", "openPersistentMachine", "PAGE_SIZE", "PyProcError", "PYPROC_ERROR_CODES"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
   });
@@ -505,7 +514,7 @@ check("exports 경로 실존", () => {
   }
 });
 check("exports 안정 subpath 고정", () => {
-  const allowed = new Set([".", "./assets", "./runtime", "./reactive", "./syscall-bridge", "./process-os", "./worker"]);
+  const allowed = new Set([".", "./assets", "./runtime", "./reactive", "./syscall-bridge", "./process-os", "./worker", "./gpu", "./socket", "./wasi"]);
   const keys = Object.keys(pkg.exports);
   for (const key of keys) {
     if (!allowed.has(key)) throw new Error(`승인 안 된 export key: ${key}`);
@@ -706,7 +715,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   for (const term of ["Stable", "Beta", "Experimental", "Research preview"]) {
     if (!matrix.includes(term)) throw new Error(`능력 매트릭스 상태 누락: ${term}`);
   }
-  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "MachineJail", "SocketBridge", "openPersistentMachine", "KernelElection", "SharedKernel", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
+  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "MachineJail", "SocketBridge", "openPersistentMachine", "KernelElection", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
   const missing = required.filter((name) => !matrix.includes("`" + name));
   if (missing.length) throw new Error(`능력 매트릭스 공개 표면 누락: ${missing.join(", ")}`);
   const runnableLinks = [
@@ -749,10 +758,6 @@ check("pyProc.js가 같은 폴더 worker를 spawn", () => {
   const src = readFileSync(join(ROOT, "src", "processOs", "pyProc.js"), "utf8");
   if (!src.includes('new URL("./worker.js", import.meta.url)')) throw new Error("워커 상대경로 계약 위반");
 });
-check("sharedKernel.js가 같은 폴더 host를 연다", () => {
-  const src = readFileSync(join(ROOT, "src", "processOs", "sharedKernel.js"), "utf8");
-  if (!src.includes('new URL("./sharedKernelHost.js", import.meta.url)')) throw new Error("호스트 상대경로 계약 위반");
-});
 check("virtualOrigin.js와 pyprocSw.js가 같은 폴더(자산 경로 계약)", () => {
   if (!existsSync(join(ROOT, "src", "capabilities", "pyprocSw.js"))) throw new Error("pyprocSw.js 없음");
   if (!existsSync(join(ROOT, "src", "capabilities", "virtualOrigin.js"))) throw new Error("virtualOrigin.js 없음");
@@ -762,7 +767,6 @@ check("asset manifest가 실행 자산 경로와 동기화", () => {
   const byRole = Object.fromEntries(manifest.assets.map((a) => [a.role, a.path]));
   const expected = {
     processWorker: "src/processOs/worker.js",
-    sharedKernelHost: "src/processOs/sharedKernelHost.js",
     machineWorker: "src/processOs/machineWorker.js",
     wasiWorker: "src/runtime/engines/wasi/wasiWorker.js",
     pyprocServiceWorker: "src/capabilities/pyprocSw.js",
@@ -774,7 +778,6 @@ check("asset manifest가 실행 자산 경로와 동기화", () => {
   const checks = [
     ["src/processOs/pyProc.js", 'new URL("./worker.js", import.meta.url)', expected.processWorker],
     ["src/capabilities/syscallBridge.js", 'new URL("../processOs/worker.js", import.meta.url)', expected.processWorker],
-    ["src/processOs/sharedKernel.js", 'new URL("./sharedKernelHost.js", import.meta.url)', expected.sharedKernelHost],
     ["src/processOs/machineContainer.js", 'new URL("./machineWorker.js", import.meta.url)', expected.machineWorker],
     ["src/processOs/machineWorker.js", 'new URL("./machineWorker.js", import.meta.url)', expected.machineWorker],
     ["src/runtime/engines/wasi/wasiSession.js", 'new URL("./wasiWorker.js", import.meta.url)', expected.wasiWorker],
@@ -897,7 +900,7 @@ check("Runtime public wrapper는 capability registry만 import", () => {
     if (apiSrc.includes(`../capabilities/${spec}.js`)) throw new Error(`runtimeApi.js가 capability class를 직접 import함: ${spec}`);
   }
   const registrySrc = readFileSync(join(ROOT, "src", "capabilities", "runtimeBindings.js"), "utf8");
-  for (const term of ["installRuntimeCapabilities", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableGpu"]) {
+  for (const term of ["installRuntimeCapabilities", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableJournal"]) {
     if (!apiSrc.includes(term) && !registrySrc.includes(term)) throw new Error(`runtime capability binding 누락: ${term}`);
   }
 });

@@ -52,7 +52,7 @@ export class PyProcError extends Error {
 }
 
 export interface PyProcAssetEntry {
-  role: "processWorker" | "sharedKernelHost" | "machineWorker" | "wasiWorker" | "pyprocServiceWorker";
+  role: "processWorker" | "machineWorker" | "wasiWorker" | "pyprocServiceWorker";
   /** 패키지 루트 기준 상대 경로. */
   path: string;
   kind: "module-worker" | "shared-worker" | "service-worker";
@@ -392,7 +392,6 @@ export class ReactiveController {
    * 그런 변이 후에는 markDirty() 또는 opts.rehash 없이 즉시 경로를 신뢰하지 마라.
    */
   restoreLive(j: number, savedSP?: number | null, opts?: { rehash?: boolean }): RestoreInfo;
-  timeTravel(j: number, savedSP?: number | null, opts?: { rehash?: boolean }): RestoreInfo;
   /**
    * 두 체크포인트 사이의 사용자 상태를 { pages, bin }으로 수집한다(세션 저장/저널 커밋/이미지
    * 내보내기의 공용 프리미티브). toIdx는 live 노드여야 한다(checkpoint()로 경계를 닫은 직후 사용).
@@ -421,22 +420,6 @@ export class ReactiveController {
 /** 빌린 시스템콜 v1: input()(동기/JSPI), urllib(동기 XHR, proxyUrl 옵션), subprocess(자식 워커). */
 export class SyscallBridge {
   install(): Promise<SyscallInstallInfo>;
-}
-
-export interface SocketBridgeConfig {
-  /** WS->TCP 릴레이 URL(진짜 NIC를 만지는 외부 조각). 예: "ws://127.0.0.1:8791". 소비자 교체 가능. */
-  relayURL: string;
-}
-
-/**
- * 파이썬 socket을 진짜 아웃바운드 TCP에 배선한다(http + https). socket.socket()/create_connection을
- * 얇은 WS->TCP 릴레이 소켓으로 심해 Python connect/send/recv가 임의 host:port로 진짜 TCP를 연다.
- * urllib/http.client가 같은 socket API라 따라오고, https는 릴레이가 port 443에서 TLS 종단(ssl.wrap_socket
- * 패스스루). 블로킹 recv = JSPI(run_sync)라 rt.runAsync 경로에서 동작. https는 릴레이가 평문을 보므로
- * e2e가 아니다(신뢰하는 릴레이 필요). 인바운드(공개 서버)는 물리 벽(역터널 릴레이). Chromium/Edge 전용.
- */
-export class SocketBridge {
-  install(): { installed: string[]; relayURL: string; jspi: boolean; note: string };
 }
 
 export interface AsgiServerConfig {
@@ -668,89 +651,6 @@ export interface PersistentMachineOptions extends Omit<KernelElectionOptions, "j
 /** 같은 name의 모든 탭을 마지막 commit에서 부활하는 하나의 지속 Python 머신으로 연다. */
 export function openPersistentMachine(opts?: PersistentMachineOptions): Promise<KernelElection>;
 
-export interface SharedKernelOptions {
-  indexURL?: string;
-  /** 커널 식별자. 같은 name으로 연결한 모든 탭이 같은 커널을 공유한다. */
-  name?: string;
-  /** SharedWorker 생성 전에 sharedKernelHost graph를 SRI 검증한다. */
-  assetIntegrity?: PyProcAssetIntegrityManifest;
-}
-
-export interface SharedKernelStatus {
-  bootMs: number;
-  connections: number;
-  jspi: boolean;
-  /** SharedWorker는 현재 플랫폼 제약으로 false = SAB 불가(interrupt/fork는 이 커널에서 불가). */
-  crossOriginIsolated: boolean;
-}
-
-/**
- * 탭 밖에서 사는 공유 커널(SharedWorker): 여러 탭 = 한 파이썬 상태, 탭 하나가 닫혀도
- * 연결이 남아 있는 한 커널은 계속 돈다. 원격 커널이므로 모든 호출이 Promise.
- */
-export class SharedKernel {
-  constructor(opts?: SharedKernelOptions);
-  connect(): SharedKernel;
-  run(code: string): Promise<unknown>;
-  runAsync(code: string): Promise<unknown>;
-  setGlobal(name: string, value: unknown): Promise<unknown>;
-  status(): Promise<SharedKernelStatus>;
-}
-
-export interface WasiManifest {
-  /**
-   * python.wasm URL(소비자 셀프 호스팅). 미지정 시 기본 brettcannon CPython 3.14.6 릴리즈 zip을
-   * 받아 python.wasm + stdlib를 함께 푼다. COOP/COEP 하에선 CORP 때문에 셀프 호스팅 권장.
-   */
-  wasmURL?: string;
-  /**
-   * 외부 stdlib 빌드(brettcannon = python.wasm + 별도 lib)의 stdlib zip URL. wasmURL과 함께 준다.
-   * 생략하면 wasmURL을 self-contained 빌드(WLR = stdlib baked-in)로 본다.
-   */
-  stdlibURL?: string;
-  /** stdlib 마운트 디렉터리명(기본 "python3.14"). 릴리즈 zip 안 lib/<stdlibDir>/ 경로. */
-  stdlibDir?: string;
-  /** true면 엔트로피/시간을 고정해 결정적으로 부팅한다(리플레이/시간여행의 전제). */
-  deterministic?: boolean;
-  /**
-   * 부팅 직후 설치할 순수 파이썬 wheel(바이트) 목록. 소비자가 제공한다(pyproc은 PyPI를 fetch하지
-   * 않는다 - wasmURL과 같은 계약). 각 wheel은 installWheel로 /site에 풀려 import 가능해진다.
-   */
-  wheels?: (ArrayBuffer | Uint8Array)[];
-  /** WASI worker 생성 전에 wasiWorker graph를 SRI 검증한다. */
-  assetIntegrity?: PyProcAssetIntegrityManifest;
-}
-
-/**
- * Pyodide가 아닌 CPython(WASI)으로 도는 세션. Pyodide는 메인 스레드 동기지만 WASI는 워커 안
- * 비동기라, 동기 Runtime과 별개의 async 표면으로 둔다(소비자 무영향). 엔진 무관 실증:
- * 반복 실행 + 값 다리 + **완전 시간여행**(체크포인트/복원/재개/분기)이 Pyodide 내부 없이 성립.
- * 값 다리는 JSON 직렬화 한정(WASI엔 FFI가 없어 함수/numpy/live 객체는 못 넘긴다).
- * 네이티브 확장 불가(정적 링크). 코드 채널/신호 프로토콜은 내부 캡슐화(소비자는 모른다).
- */
-export class WasiSession {
-  /** 코드 실행(async). stdout 문자열 반환. 파이썬 예외는 던진다. */
-  run(code: string): Promise<string>;
-  /** 파이썬 전역 값 회수(JSON 역직렬화). */
-  get(name: string): Promise<unknown>;
-  /** JS 값을 파이썬 전역에 주입(JSON 직렬화). */
-  set(name: string, value: unknown): Promise<void>;
-  /** 지금 상태를 체크포인트(경계 힙 스냅샷). */
-  checkpoint(): Promise<{ idx: number; mb: number }>;
-  /** 시간여행: 체크포인트 idx로 복원한다. 복원 후 파이썬이 그 시점 상태로 재개(분기 가능). */
-  timeTravel(idx: number): Promise<void>;
-  /**
-   * 순수 파이썬 wheel(바이트)을 라이브 세션에 설치한다(= 브라우저판 pip install). 네이티브로 풀어
-   * /site에 파일을 쓰고 import 캐시를 무효화한다. 이후 그 패키지를 import할 수 있다. 순수 파이썬
-   * 한정: C 확장(.so)은 WASI 동적 링크 부재로 불가(PEP 783 대기). 반환: 쓴 파일 수 + 최상위 이름들.
-   */
-  installWheel(wheel: ArrayBuffer | Uint8Array): Promise<{ files: number; names: string[] }>;
-  terminate(): void;
-}
-
-/** non-Pyodide CPython(WASI) 세션을 부팅한다. Chromium/Edge 전용(SAB + crossOriginIsolated). */
-export function bootWasi(manifest?: WasiManifest): Promise<WasiSession>;
-
 export interface TerminalConfig {
   /** 완결 문장마다 자동 체크포인트를 닫고 "%undo"로 직전 상태에 시간여행한다. */
   timeTravel?: boolean;
@@ -936,53 +836,6 @@ export class MachineJail {
   install(rt: Runtime): { permissions: JailPermissions; connectSrc: string };
 }
 
-/**
- * GPU 잔류 배열 핸들(f32). matmul은 GPU에 남는 새 핸들을 돌려주므로 체이닝에 재업로드가 없다.
- * toArray로 CPU 회수(리드백 1복사). f64 없음(WGSL 한계) = f32만.
- */
-export class GpuArray {
-  readonly rows: number;
-  readonly cols: number;
-  /** 이 배열(M x K) @ other(K x N) = 새 잔류 핸들(M x N). 재업로드 0. */
-  matmul(other: GpuArray): GpuArray;
-  /** 원소별 변환(WGSL 표현식, x = 원소)을 적용한 새 잔류 핸들(같은 shape). 예: map("max(x, 0.0)"). matmul 뒤 활성화 체이닝. */
-  map(expr: string): GpuArray;
-  /** 이항 원소별(WGSL 표현식, a=이 원소/b=상대 원소): 같은 shape의 다른 잔류 배열과 합친 새 핸들. 예: binary(other, "a + b")(잔차), "a * b"(게이팅). */
-  binary(other: GpuArray, expr: string): GpuArray;
-  /** 전치: (rows x cols) -> (cols x rows) 새 잔류 핸들. A.T @ B 패턴(x.T @ dy, X.T @ X)을 리드백 없이. */
-  transpose(): GpuArray;
-  /** 전체 리덕션(sum|max|min): GPU에서 모든 원소를 스칼라로 줄인다(종단, 리드백 1). 잔류 체이닝의 종착(loss/norm). */
-  reduce(op: "sum" | "max" | "min"): Promise<number>;
-  /** GPU -> CPU 회수. 반환 { data: Float32Array, rows, cols }. */
-  toArray(): Promise<{ data: Float32Array; rows: number; cols: number }>;
-  destroy(): void;
-}
-
-/**
- * Python numpy -> GPU 직결. Runtime.enableGpu()로 얻고 install() 후 파이썬이 pyprocGpu.matmul(a, b)로
- * numpy 배열을 GPU에서 곱한다(블로킹 = JSPI, rt.runAsync 경로). 실 GPU + 창 모드 + numpy 필요.
- * f64는 f32로 강등(WGSL 한계, 정밀도 손실은 계약).
- */
-export class GpuBridge {
-  install(): Promise<{ installed: string; note: string }>;
-  destroy(): void;
-}
-
-/**
- * WebGPU 컴퓨트로 f32 대규모 선형대수 가속(수치 성능 도약 Phase 2). numpy 대체가 아니라 좁은
- * 고피크 레인: matmul 실측 ~127배 vs WASM numpy(실 GPU, 타일드 커널). 잔류 핸들(업로드1/체이닝/다운로드1)이
- * 설계의 핵심(arithmetic intensity가 손익분기: 큰 matmul 압승, 작은 배열/값싼 op는 전송비로 짐).
- * f64는 WGSL 근본 부재 = f32만(암묵 강등 금지). WebGPU는 헤드리스에서 어댑터가 안 뜬다 =
- * 창 있는 브라우저 + 하드웨어 GPU 필요(create()가 어댑터 부재 시 실행 가능한 에러).
- */
-export class GpuCompute {
-  /** WebGPU 디바이스 확보(async). 어댑터 없으면 실행 가능한 에러. */
-  static create(): Promise<GpuCompute>;
-  /** f32 배열을 GPU에 올린다(잔류 시작). data.length === rows*cols. */
-  array(data: Float32Array, rows: number, cols: number): GpuArray;
-  destroy(): void;
-}
-
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
 export class Terminal {
   install(): Promise<{ repl: string; timeTravel: boolean }>;
@@ -1065,7 +918,6 @@ export class Runtime {
    *  한쪽의 복원이 다른 쪽 경계 가드에 보이지 않아 조용한 오염이 되므로 구조로 막는다. */
   enableReactive(): ReactiveController;
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
-  enableSocketBridge(cfg: SocketBridgeConfig): SocketBridge;
   enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
   enableTerminal(cfg?: TerminalConfig): Terminal;
   enableWheelCache(cfg: WheelCacheConfig): WheelCache;
@@ -1073,7 +925,6 @@ export class Runtime {
   enableInit(cfg?: InitConfig): Init;
   enableJournal(cfg: JournalConfig): MachineJournal;
   /** Python numpy -> GPU 직결(install()로 pyprocGpu 배선). 실 GPU + 창 모드 + numpy 필요. */
-  enableGpu(cfg?: object): GpuBridge;
   /** 디렉터리 핸들(OPFS 등)을 파이썬 경로로 마운트(기본 /home/web). 반환된 sync()로 영속화. */
   mountHome(dirHandle: FileSystemDirectoryHandle, path?: string): Promise<{ path: string; sync: () => Promise<void> }>;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */
@@ -1260,4 +1111,135 @@ export class PyProc {
   /** 명명 공유메모리 생성(byteLength). bind(pid, name)로 배선. */
   shm(byteLength: number): Shm;
   terminate(): void;
+}
+
+// ---- 강등 subpath 표면 ----
+// 루트 표면은 CI 런타임 게이트가 커버하는 핵으로 유지하고, 게이트가 물리적으로 닿지 못하는
+// 표면(GPU = 헤드리스 어댑터 부재, Socket = 외부 릴레이 필수)과 research preview(WASI)는
+// 전용 subpath로 소비한다. 시그니처 상세와 경계는 docs/reference/api.md 참조.
+
+declare module "pyproc/gpu" {
+/**
+ * GPU 잔류 배열 핸들(f32). matmul은 GPU에 남는 새 핸들을 돌려주므로 체이닝에 재업로드가 없다.
+ * toArray로 CPU 회수(리드백 1복사). f64 없음(WGSL 한계) = f32만.
+ */
+export class GpuArray {
+  readonly rows: number;
+  readonly cols: number;
+  /** 이 배열(M x K) @ other(K x N) = 새 잔류 핸들(M x N). 재업로드 0. */
+  matmul(other: GpuArray): GpuArray;
+  /** 원소별 변환(WGSL 표현식, x = 원소)을 적용한 새 잔류 핸들(같은 shape). 예: map("max(x, 0.0)"). matmul 뒤 활성화 체이닝. */
+  map(expr: string): GpuArray;
+  /** 이항 원소별(WGSL 표현식, a=이 원소/b=상대 원소): 같은 shape의 다른 잔류 배열과 합친 새 핸들. 예: binary(other, "a + b")(잔차), "a * b"(게이팅). */
+  binary(other: GpuArray, expr: string): GpuArray;
+  /** 전치: (rows x cols) -> (cols x rows) 새 잔류 핸들. A.T @ B 패턴(x.T @ dy, X.T @ X)을 리드백 없이. */
+  transpose(): GpuArray;
+  /** 전체 리덕션(sum|max|min): GPU에서 모든 원소를 스칼라로 줄인다(종단, 리드백 1). 잔류 체이닝의 종착(loss/norm). */
+  reduce(op: "sum" | "max" | "min"): Promise<number>;
+  /** GPU -> CPU 회수. 반환 { data: Float32Array, rows, cols }. */
+  toArray(): Promise<{ data: Float32Array; rows: number; cols: number }>;
+  destroy(): void;
+}
+
+/**
+ * Python numpy -> GPU 직결. Runtime.enableGpu()로 얻고 install() 후 파이썬이 pyprocGpu.matmul(a, b)로
+ * numpy 배열을 GPU에서 곱한다(블로킹 = JSPI, rt.runAsync 경로). 실 GPU + 창 모드 + numpy 필요.
+ * f64는 f32로 강등(WGSL 한계, 정밀도 손실은 계약).
+ */
+export class GpuBridge {
+  install(): Promise<{ installed: string; note: string }>;
+  destroy(): void;
+}
+
+/**
+ * WebGPU 컴퓨트로 f32 대규모 선형대수 가속(수치 성능 도약 Phase 2). numpy 대체가 아니라 좁은
+ * 고피크 레인: matmul 실측 ~127배 vs WASM numpy(실 GPU, 타일드 커널). 잔류 핸들(업로드1/체이닝/다운로드1)이
+ * 설계의 핵심(arithmetic intensity가 손익분기: 큰 matmul 압승, 작은 배열/값싼 op는 전송비로 짐).
+ * f64는 WGSL 근본 부재 = f32만(암묵 강등 금지). WebGPU는 헤드리스에서 어댑터가 안 뜬다 =
+ * 창 있는 브라우저 + 하드웨어 GPU 필요(create()가 어댑터 부재 시 실행 가능한 에러).
+ */
+export class GpuCompute {
+  /** WebGPU 디바이스 확보(async). 어댑터 없으면 실행 가능한 에러. */
+  static create(): Promise<GpuCompute>;
+  /** f32 배열을 GPU에 올린다(잔류 시작). data.length === rows*cols. */
+  array(data: Float32Array, rows: number, cols: number): GpuArray;
+  destroy(): void;
+}
+}
+
+declare module "pyproc/socket" {
+  import type { Runtime } from "pyproc";
+export interface SocketBridgeConfig {
+  /** WS->TCP 릴레이 URL(진짜 NIC를 만지는 외부 조각). 예: "ws://127.0.0.1:8791". 소비자 교체 가능. */
+  relayURL: string;
+}
+
+/**
+ * 파이썬 socket을 진짜 아웃바운드 TCP에 배선한다(http + https). socket.socket()/create_connection을
+ * 얇은 WS->TCP 릴레이 소켓으로 심해 Python connect/send/recv가 임의 host:port로 진짜 TCP를 연다.
+ * urllib/http.client가 같은 socket API라 따라오고, https는 릴레이가 port 443에서 TLS 종단(ssl.wrap_socket
+ * 패스스루). 블로킹 recv = JSPI(run_sync)라 rt.runAsync 경로에서 동작. https는 릴레이가 평문을 보므로
+ * e2e가 아니다(신뢰하는 릴레이 필요). 인바운드(공개 서버)는 물리 벽(역터널 릴레이). Chromium/Edge 전용.
+ */
+export class SocketBridge {
+  install(): { installed: string[]; relayURL: string; jspi: boolean; note: string };
+}
+  // 소비: new SocketBridge(rt, cfg) 후 install(). Runtime.enableSocketBridge는 제거됐다(그래프 분리).
+}
+
+declare module "pyproc/wasi" {
+  import type { PyProcAssetIntegrityManifest } from "pyproc";
+export interface WasiManifest {
+  /**
+   * python.wasm URL(소비자 셀프 호스팅). 미지정 시 기본 brettcannon CPython 3.14.6 릴리즈 zip을
+   * 받아 python.wasm + stdlib를 함께 푼다. COOP/COEP 하에선 CORP 때문에 셀프 호스팅 권장.
+   */
+  wasmURL?: string;
+  /**
+   * 외부 stdlib 빌드(brettcannon = python.wasm + 별도 lib)의 stdlib zip URL. wasmURL과 함께 준다.
+   * 생략하면 wasmURL을 self-contained 빌드(WLR = stdlib baked-in)로 본다.
+   */
+  stdlibURL?: string;
+  /** stdlib 마운트 디렉터리명(기본 "python3.14"). 릴리즈 zip 안 lib/<stdlibDir>/ 경로. */
+  stdlibDir?: string;
+  /** true면 엔트로피/시간을 고정해 결정적으로 부팅한다(리플레이/시간여행의 전제). */
+  deterministic?: boolean;
+  /**
+   * 부팅 직후 설치할 순수 파이썬 wheel(바이트) 목록. 소비자가 제공한다(pyproc은 PyPI를 fetch하지
+   * 않는다 - wasmURL과 같은 계약). 각 wheel은 installWheel로 /site에 풀려 import 가능해진다.
+   */
+  wheels?: (ArrayBuffer | Uint8Array)[];
+  /** WASI worker 생성 전에 wasiWorker graph를 SRI 검증한다. */
+  assetIntegrity?: PyProcAssetIntegrityManifest;
+}
+
+/**
+ * Pyodide가 아닌 CPython(WASI)으로 도는 세션. Pyodide는 메인 스레드 동기지만 WASI는 워커 안
+ * 비동기라, 동기 Runtime과 별개의 async 표면으로 둔다(소비자 무영향). 엔진 무관 실증:
+ * 반복 실행 + 값 다리 + **완전 시간여행**(체크포인트/복원/재개/분기)이 Pyodide 내부 없이 성립.
+ * 값 다리는 JSON 직렬화 한정(WASI엔 FFI가 없어 함수/numpy/live 객체는 못 넘긴다).
+ * 네이티브 확장 불가(정적 링크). 코드 채널/신호 프로토콜은 내부 캡슐화(소비자는 모른다).
+ */
+export class WasiSession {
+  /** 코드 실행(async). stdout 문자열 반환. 파이썬 예외는 던진다. */
+  run(code: string): Promise<string>;
+  /** 파이썬 전역 값 회수(JSON 역직렬화). */
+  get(name: string): Promise<unknown>;
+  /** JS 값을 파이썬 전역에 주입(JSON 직렬화). */
+  set(name: string, value: unknown): Promise<void>;
+  /** 지금 상태를 체크포인트(경계 힙 스냅샷). */
+  checkpoint(): Promise<{ idx: number; mb: number }>;
+  /** 시간여행: 체크포인트 idx로 복원한다. 복원 후 파이썬이 그 시점 상태로 재개(분기 가능). */
+  timeTravel(idx: number): Promise<void>;
+  /**
+   * 순수 파이썬 wheel(바이트)을 라이브 세션에 설치한다(= 브라우저판 pip install). 네이티브로 풀어
+   * /site에 파일을 쓰고 import 캐시를 무효화한다. 이후 그 패키지를 import할 수 있다. 순수 파이썬
+   * 한정: C 확장(.so)은 WASI 동적 링크 부재로 불가(PEP 783 대기). 반환: 쓴 파일 수 + 최상위 이름들.
+   */
+  installWheel(wheel: ArrayBuffer | Uint8Array): Promise<{ files: number; names: string[] }>;
+  terminate(): void;
+}
+
+/** non-Pyodide CPython(WASI) 세션을 부팅한다. Chromium/Edge 전용(SAB + crossOriginIsolated). */
+export function bootWasi(manifest?: WasiManifest): Promise<WasiSession>;
 }

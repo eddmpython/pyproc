@@ -204,9 +204,6 @@ export class PyProc {
     entry.interrupt[0] = signum;
     return true;
   }
-  // SIGINT 별칭(기존 계약 유지).
-  interrupt(pid) { return this.signal(pid, SIGNAL.INT); }
-
   // N개 프로세스 spawn: 스냅샷으로 부팅(fast fork). useSnapshot=false면 콜드 대조.
   async boot(n, useSnapshot = true) {
     // 프로세스 OS는 SAB(crossOriginIsolated)를 요구한다. 헤더 누락 시 여기서 실행 가능한 에러를
@@ -352,16 +349,6 @@ export class PyProc {
     const bad = res.find((r) => r && r.error);
     if (bad) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "matmul: 워커 실패 " + bad.error);
     return { data: new Float64Array(outSab), rows: M, cols: N };
-  }
-
-  // 직렬 대조(벤치 baseline): 모든 태스크를 워커 1개에서 순차 실행.
-  async mapSerial(fnSrc, args) {
-    const entry = this._pool()[0];
-    const results = new Array(args.length);
-    for (let i = 0; i < args.length; i++) {
-      results[i] = await this._call(entry, { type: "task", fnSrc, arg: args[i] }).then((d) => d.result, (err) => ({ error: String(err.message || err) }));
-    }
-    return results;
   }
 
   // 프로세스 테이블 스냅샷(pid/state 조회).
