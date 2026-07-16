@@ -27,9 +27,8 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-export async function runMemoryMachineStoreContract() {
-  const store = new MemoryMachineStore();
-  const groupId = "contract";
+export async function runMachineStoreContract(store, { groupId = "contract" } = {}) {
+  if (!store || typeof store.commitGeneration !== "function") throw new TypeError("MachineStore가 필요하다");
   const owner1 = await store.claimOwner({ groupId, ownerId: "owner1" });
   assert(owner1.groupId === groupId && owner1.epoch === 1, "첫 owner token shape 불일치");
   const source = new Uint8Array([1]);
@@ -94,4 +93,8 @@ export async function runMemoryMachineStoreContract() {
   assert(storage.generations === 2 && storage.blobs === 3, "pruned storage count 불일치");
   await store.releaseOwner(owner2);
   assert(await errorCode(() => store.assertOwner(owner2)) === "WEB_MACHINE_OWNER_STALE", "released owner가 active");
+}
+
+export function runMemoryMachineStoreContract() {
+  return runMachineStoreContract(new MemoryMachineStore());
 }

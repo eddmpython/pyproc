@@ -81,8 +81,37 @@ async function importPhase(runtime) {
   ]);
   check(checks, "Python computer works in the fresh profile", python === "91:PYTHON_PRODUCT:91", python);
   check(checks, "Linux computer works in the fresh profile", linux.includes("IMPORTED:91:LINUX_PRODUCT:91"), linux.trim().slice(-180));
-  const committed = await runtime.save();
+  const committed = imported.committed;
   check(checks, "imported computer becomes a new local durable generation", !!committed.head?.head || !!committed.manifest.generationId, committed.manifest.generationId);
+
+  const durableHead = (await runtime.persistence.readHead(runtime.groupId))?.head;
+  const originalSave = runtime.persistence.save.bind(runtime.persistence);
+  runtime.persistence.save = async () => {
+    const error = new Error("Injected fenced save failure");
+    error.code = "WEB_MACHINE_HEAD_CONFLICT";
+    throw error;
+  };
+  const activeImportAt = performance.now();
+  let unsavedImportCode = "";
+  try {
+    await runtime.importImage(file, inspected.publicKey);
+  } catch (error) {
+    unsavedImportCode = error?.code || String(error);
+  } finally {
+    runtime.persistence.save = originalSave;
+  }
+  timings.activeImportUnsavedMs = Math.round(performance.now() - activeImportAt);
+  const afterUnsavedImport = runtime.inspect();
+  const headAfterUnsavedImport = (await runtime.persistence.readHead(runtime.groupId))?.head;
+  check(checks, "active-context import save failure is explicit and leaves HEAD unchanged", unsavedImportCode === "WEB_MACHINE_HEAD_CONFLICT" && afterUnsavedImport.persistence.durabilityState === "unsaved" && headAfterUnsavedImport === durableHead, `${unsavedImportCode}/${afterUnsavedImport.persistence.durabilityState}/${headAfterUnsavedImport}`);
+  check(checks, "unsaved imported context keeps both guests and device endpoints active", Object.values(afterUnsavedImport.machines).every((machine) => machine.state === "running") && afterUnsavedImport.devices.display.attached && afterUnsavedImport.devices.input.attached && afterUnsavedImport.devices.display.listenerErrors === 0, `${afterUnsavedImport.devices.display.attached}/${afterUnsavedImport.devices.input.attached}/${afterUnsavedImport.devices.display.listenerErrors}`);
+  const [unsavedPython, unsavedLinux] = await Promise.all([
+    runtime.runPython("from pathlib import Path\nf'{machineValue}:{Path(\"/home/web/product_value\").read_text()}'"),
+    runtime.runLinux("echo UNSAVED:$machine_value:$(cat /mnt/web/product_value)"),
+  ]);
+  check(checks, "unsaved imported context remains usable without replay", unsavedPython === "91:PYTHON_PRODUCT:91" && unsavedLinux.includes("UNSAVED:91:LINUX_PRODUCT:91"), `${unsavedPython}/${unsavedLinux.trim().slice(-100)}`);
+  const recoveredCommit = await runtime.save();
+  check(checks, "manual retry durably saves active imported context", runtime.inspect().persistence.durabilityState === "clean" && recoveredCommit.manifest.generationId !== durableHead, recoveredCommit.manifest.generationId);
   await post("/gateReport", { ok: checks.every((entry) => entry.pass), checks, timings });
 }
 

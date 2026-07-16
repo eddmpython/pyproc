@@ -85,12 +85,16 @@ export class IndexedDbMachineStore {
     const database = await this._open();
     const transaction = database.transaction(OWNERS, "readwrite");
     const done = transactionDone(transaction);
-    const owners = transaction.objectStore(OWNERS);
-    const current = await requestValue(owners.get(token?.groupId));
-    this._requireOwner(current, token, token?.groupId);
-    owners.put({ ...current, active: false }, token.groupId);
-    await done;
-    return true;
+    try {
+      const owners = transaction.objectStore(OWNERS);
+      const current = await requestValue(owners.get(token?.groupId));
+      this._requireOwner(current, token, token?.groupId);
+      owners.put({ ...current, active: false }, token.groupId);
+      await done;
+      return true;
+    } catch (error) {
+      return abortAndReject(transaction, done, error);
+    }
   }
 
   async assertOwner(token) {
@@ -294,13 +298,19 @@ export class IndexedDbMachineStore {
         if (!database.objectStoreNames.contains(HEADS)) database.createObjectStore(HEADS);
         if (!database.objectStoreNames.contains(OWNERS)) database.createObjectStore(OWNERS);
         if (request.transaction && database.objectStoreNames.contains(HEADS)) {
-          const cursorRequest = request.transaction.objectStore(HEADS).openCursor();
-          cursorRequest.onsuccess = () => {
-            const cursor = cursorRequest.result;
-            if (!cursor) return;
-            if (!Number.isSafeInteger(cursor.value?.ownerEpoch)) cursor.update({ ...cursor.value, ownerEpoch: 0 });
-            cursor.continue();
+          const heads = request.transaction.objectStore(HEADS);
+          const keysRequest = heads.getAllKeys();
+          const valuesRequest = heads.getAll();
+          let keys = null;
+          let values = null;
+          const migrateHeads = () => {
+            if (!keys || !values) return;
+            values.forEach((value, index) => {
+              if (!Number.isSafeInteger(value?.ownerEpoch)) heads.put({ ...value, ownerEpoch: 0 }, keys[index]);
+            });
           };
+          keysRequest.onsuccess = () => { keys = keysRequest.result; migrateHeads(); };
+          valuesRequest.onsuccess = () => { values = valuesRequest.result; migrateHeads(); };
         }
       };
       request.onsuccess = () => {

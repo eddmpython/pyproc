@@ -40,6 +40,8 @@ export class WebComputerRuntime {
     this.context = null;
     this.disposed = false;
     this.cleanupError = null;
+    this.durabilityState = "clean";
+    this.durabilityError = null;
     this._lifetime = new AbortController();
   }
 
@@ -65,32 +67,38 @@ export class WebComputerRuntime {
       await this._acquireOwnership(this._control("owner"));
       const context = this._createContext({ createMachines: !deferBoot, indexURL });
       context.adoptOwnership(this.ownerToken);
-      this._commitContext(context);
-      if (deferBoot) {
-        this.startupMode = "deferred";
-        this._emitState();
-        return this.inspect();
-      }
+      try {
+        if (deferBoot) {
+          this._commitContext(context);
+          this.startupMode = "deferred";
+          this._emitState();
+          return this.inspect();
+        }
 
-      const head = await this.persistence.readHead(this.groupId);
-      if (head?.head) {
-        this.onActivity("Restoring the last complete state");
-        await this.persistence.restoreLatest({
-          groupId: this.groupId,
-          context: this.context,
-          control: this._control("restore"),
-        });
-        this.startupMode = "restored";
-        await this.context.resumeAll(this._control("request"));
-        await this.persistence.pruneRecoveryWindow({
-          groupId: this.groupId,
-          ownerToken: this.ownerToken,
-          control: this._control("save"),
-        });
-      } else {
-        this.onActivity("Booting Python OS and Linux");
-        await this.context.bootAll(this._control("restore"));
-        this.startupMode = "booted";
+        const head = await this.persistence.readHead(this.groupId);
+        if (head?.head) {
+          this.onActivity("Restoring the last complete state");
+          await this.persistence.restoreLatest({
+            groupId: this.groupId,
+            context,
+            control: this._control("restore"),
+          });
+          await context.resumeAll(this._control("request"));
+          this.startupMode = "restored";
+          await this.persistence.pruneRecoveryWindow({
+            groupId: this.groupId,
+            ownerToken: this.ownerToken,
+            control: this._control("save"),
+          });
+        } else {
+          this.onActivity("Booting Python OS and Linux");
+          await context.bootAll(this._control("restore"));
+          this.startupMode = "booted";
+        }
+        this._commitContext(context);
+      } catch (error) {
+        await context.dispose().catch(() => undefined);
+        throw error;
       }
       this._emitState();
       return this.inspect();
@@ -151,14 +159,23 @@ export class WebComputerRuntime {
   }
 
   async save() {
-    const committed = await this.persistence.save({
-      groupId: this.groupId,
-      context: this._requireContext(),
-      ownerToken: this.ownerToken,
-      control: this._control("save"),
-    });
-    this._emitState();
-    return committed;
+    try {
+      const committed = await this.persistence.save({
+        groupId: this.groupId,
+        context: this._requireContext(),
+        ownerToken: this.ownerToken,
+        control: this._control("save"),
+      });
+      this.durabilityState = "clean";
+      this.durabilityError = null;
+      this._emitState();
+      return committed;
+    } catch (error) {
+      this.durabilityState = "unsaved";
+      this.durabilityError = error;
+      this._emitState();
+      throw error;
+    }
   }
 
   exportImage() {
@@ -205,8 +222,10 @@ export class WebComputerRuntime {
     });
     this.cleanupError = swapped.cleanupError;
     this.startupMode = "imported";
+    this.durabilityState = "unsaved";
     this._emitState();
-    return Object.freeze({ archive, cleanupError: this.cleanupError });
+    const committed = await this.save();
+    return Object.freeze({ archive, cleanupError: this.cleanupError, committed });
   }
 
   inspect() {
@@ -221,6 +240,8 @@ export class WebComputerRuntime {
         cleanupPending: this.persistence?.cleanupPending || false,
         lastPrune: this.persistence?.lastPrune || null,
         cleanupError: this.cleanupError ? String(this.cleanupError?.message || this.cleanupError) : null,
+        durabilityState: this.durabilityState,
+        durabilityError: this.durabilityError ? this.durabilityError?.code || String(this.durabilityError) : null,
       }),
     });
   }

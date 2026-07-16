@@ -65,6 +65,7 @@ function renderState(snapshot) {
   const owned = snapshot.owner?.state === "owned";
   ownerState.className = `ownerState ${owned ? "ready" : ""}`;
   ownerState.lastElementChild.textContent = owned ? "This tab owns the computer" : snapshot.owner?.state || "Connecting";
+  if (snapshot.persistence?.durabilityState === "unsaved") storageState.textContent = "Unsaved";
 }
 
 function renderDisplay({ frame, text }) {
@@ -86,6 +87,23 @@ function resultText(value) {
   try { return JSON.stringify(value, null, 2); } catch (error) { return String(value); }
 }
 
+function operationErrorMessage(error) {
+  if (error?.code === "WEB_MACHINE_OPERATION_TIMEOUT") return "The operation timed out before it could finish.";
+  if (error?.code === "WEB_MACHINE_OPERATION_ABORTED") return "The operation was canceled.";
+  if (error?.code === "WEB_MACHINE_OUTCOME_UNKNOWN") return "The operation stopped after it started. Its outcome is unknown and it was not retried.";
+  if (error?.code === "WEB_MACHINE_SCHEMA_UPGRADE_BLOCKED") return "Close other Web Computer tabs, then try again to finish the storage upgrade.";
+  if (error?.code === "WEB_MACHINE_OWNER_STALE") return "This tab no longer owns the computer. No changes were saved.";
+  if (error?.code === "WEB_MACHINE_HEAD_CONFLICT") return "The saved computer changed in another context. This operation was not committed.";
+  if (error?.code === "WEB_MACHINE_INVALID_STATE") return "That action is not available in the machine's current state.";
+  if (String(error?.code || "").startsWith("WEB_MACHINE_IMAGE_")) return `The portable image could not be accepted (${error.code}).`;
+  if (error?.code) return `The Web Computer operation failed (${error.code}).`;
+  return error?.message || String(error);
+}
+
+function observeReportedOperation(operation) {
+  operation.catch((error) => console.error("Web Computer UI operation failed", error));
+}
+
 async function runOperation(label, operation, { autosave = false } = {}) {
   if (busy) return undefined;
   setBusy(true);
@@ -102,7 +120,7 @@ async function runOperation(label, operation, { autosave = false } = {}) {
   } catch (error) {
     ownerState.classList.add("error");
     setActivity("Action failed");
-    notify(error?.message || String(error));
+    notify(operationErrorMessage(error));
     throw error;
   } finally {
     setBusy(false);
@@ -163,11 +181,9 @@ async function importComputer() {
   const { file, inspection } = pendingImport;
   pendingImport = null;
   trustDialog.close();
-  await runOperation("Importing the trusted computer", async () => {
-    await runtime.importImage(file, inspection.publicKey);
-    const committed = await runtime.save();
-    markSaved(committed.manifest.createdAt);
-  });
+  const imported = await runOperation("Importing the trusted computer", () => runtime.importImage(file, inspection.publicKey));
+  if (!imported) return;
+  markSaved(imported.committed.manifest.createdAt);
   notify(`Imported computer signed by ${shortFingerprint(inspection.fingerprint)}.`);
 }
 
@@ -186,9 +202,11 @@ for (const button of document.querySelectorAll("[data-machine-tab]")) {
   button.addEventListener("click", () => selectSystem(button.dataset.machineTab));
 }
 
-element("runPythonButton").addEventListener("click", async () => {
-  const result = await runOperation("Running code in Python OS", () => runtime.runPython(pythonCode.value), { autosave: true });
-  if (result !== undefined) pythonOutput.textContent = resultText(result);
+element("runPythonButton").addEventListener("click", () => {
+  observeReportedOperation((async () => {
+    const result = await runOperation("Running code in Python OS", () => runtime.runPython(pythonCode.value), { autosave: true });
+    if (result !== undefined) pythonOutput.textContent = resultText(result);
+  })());
 });
 
 pythonCode.addEventListener("keydown", (event) => {
@@ -198,11 +216,13 @@ pythonCode.addEventListener("keydown", (event) => {
   }
 });
 
-element("linuxForm").addEventListener("submit", async (event) => {
+element("linuxForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  const result = await runOperation("Running command in Linux", () => runtime.runLinux(linuxCommand.value), { autosave: true });
-  if (result !== undefined) linuxOutput.textContent = String(result).trim();
-  linuxCommand.select();
+  observeReportedOperation((async () => {
+    const result = await runOperation("Running command in Linux", () => runtime.runLinux(linuxCommand.value), { autosave: true });
+    if (result !== undefined) linuxOutput.textContent = String(result).trim();
+    linuxCommand.select();
+  })());
 });
 
 for (const type of ["keydown", "keyup"]) {
@@ -210,25 +230,25 @@ for (const type of ["keydown", "keyup"]) {
     const codes = encodePs2KeyboardEvent(event);
     if (!codes || event.repeat) return;
     event.preventDefault();
-    try { await runtime.sendLinuxScanCodes(codes); } catch (error) { notify(error?.message || String(error)); }
+    try { await runtime.sendLinuxScanCodes(codes); } catch (error) { notify(operationErrorMessage(error)); }
   });
 }
 
-element("pauseButton").addEventListener("click", () => runOperation("Pausing machine", () => runtime.pauseMachine(activeMachineId())));
-element("resumeButton").addEventListener("click", () => runOperation("Starting machine", () => runtime.resumeMachine(activeMachineId())));
-element("shutdownButton").addEventListener("click", () => runOperation("Shutting down machine", () => runtime.shutdownMachine(activeMachineId())));
-element("saveButton").addEventListener("click", saveComputer);
-element("exportButton").addEventListener("click", exportComputer);
+element("pauseButton").addEventListener("click", () => observeReportedOperation(runOperation("Pausing machine", () => runtime.pauseMachine(activeMachineId()))));
+element("resumeButton").addEventListener("click", () => observeReportedOperation(runOperation("Starting machine", () => runtime.resumeMachine(activeMachineId()))));
+element("shutdownButton").addEventListener("click", () => observeReportedOperation(runOperation("Shutting down machine", () => runtime.shutdownMachine(activeMachineId()))));
+element("saveButton").addEventListener("click", () => observeReportedOperation(saveComputer()));
+element("exportButton").addEventListener("click", () => observeReportedOperation(exportComputer()));
 element("importButton").addEventListener("click", () => element("importFile").click());
 element("importFile").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   event.target.value = "";
   if (!file) return;
-  try { await stageImport(file); } catch (error) { notify(error?.message || String(error)); }
+  try { await stageImport(file); } catch (error) { notify(operationErrorMessage(error)); }
 });
 element("trustImportButton").addEventListener("click", (event) => {
   event.preventDefault();
-  importComputer().catch(() => undefined);
+  observeReportedOperation(importComputer());
 });
 
 window.addEventListener("pagehide", () => { runtime.dispose().catch(() => undefined); }, { once: true });
@@ -245,7 +265,7 @@ try {
     await runProductGate({ runtime, phase: gatePhase, startupMs: Math.round(performance.now() - pageStartedAt) });
   }
 } catch (error) {
-  bootMessage.textContent = `Web Computer could not start: ${error?.message || error}`;
+  bootMessage.textContent = `Web Computer could not start: ${operationErrorMessage(error)}`;
   ownerState.classList.add("error");
   if (gatePhase) {
     fetch("/gateReport", {

@@ -95,3 +95,51 @@ NEXT:
 완료 조건 1-8 전부 충족. 폴더를 `mainPlan/_done/web-machine-hardening/`으로 이관한다.
 
 현재 구현 상태: 완료.
+
+## 2026-07-16 - 완료 이관 뒤 엄격 재감사와 보강 마감
+
+완료 조건 1-8을 현재 worktree와 실제 브라우저 결과에 다시 대조했다. 기존 완료 판정을
+뒤집는 구조 결함은 없었지만, 간접 증거로 남아 있던 실패 경계 네 곳을 직접 계약으로
+보강했다.
+
+보강 결과:
+
+1. startup boot/restore는 비활성 candidate context 안에서 끝내고, restore와 resume가
+   모두 성공한 뒤에만 active pointer와 output subscription을 연결한다. 실패한 candidate는
+   폐기하고 부분 초기화 context를 공개하지 않는다.
+2. import 뒤 첫 fenced save를 `WebComputerRuntime.importImage()`의 한 operation으로
+   묶었다. save 실패는 성공으로 반환하지 않으며 새 active context를 유지하고 durability를
+   `unsaved`로 노출한다. 수동 재시도 성공 뒤에만 `clean`으로 돌아간다.
+3. `MachineStore` behavior suite를 memory와 실제 IndexedDB 구현에 동일하게 적용했다.
+   schema v1 연결이 upgrade를 막는 경우, v1 HEAD/blob migration, pre-fence HEAD의
+   `ownerEpoch: 0`, legacy owner epoch 승계를 실제 IndexedDB에서 검증한다.
+4. `MachineEnvelopeCoordinator.importVerified()`의 owner/control type 위치와 preflight
+   반환 타입을 runtime에 맞췄다. stale owner release의 readwrite transaction은 오류 시
+   명시적으로 abort한다.
+5. 제품 UI는 timeout, abort, outcome unknown, schema blocked, stale owner, HEAD conflict,
+   image 오류를 제품 문장으로 구분한다. event boundary의 rejected operation도 한 곳에서
+   관찰해 조용히 삼키지 않는다.
+
+완료 조건별 최종 증거:
+
+1. 공개 계약 정합: shared memory/IndexedDB store suite, `npm test`의 public type/runtime
+   구조 gate, 설치 package consumer가 모두 통과했다.
+2. owner와 HEAD의 단일 transaction: generation probe 25/25가 owner-fenced commit,
+   CAS race, abort rollback과 schema migration을 통과했다.
+3. stale token 차단: 4-context owner successor probe 14/14가 publish와 prune 모두
+   `WEB_MACHINE_OWNER_STALE`임을 확인했다.
+4. context 원자성: context swap failure matrix와 Web Computer 제품 E2E 13/13이 candidate
+   rollback, active import 첫 save 실패의 HEAD 불변, 두 guest와 display/input 지속,
+   수동 durability 회복을 확인했다.
+5. retention: IndexedDB에 고유 generation 20개를 commit한 뒤 HEAD/PREV 두 개와 그
+   payload만 남고 old generation/orphan blob이 제거됨을 확인했다.
+6. 종료 결과: host 30/30, owner 14/14, image 20/20, generation 25/25 probe가 queue
+   abort, started-operation outcome unknown, lock timeout, image read timeout, transaction
+   abort와 listener/lock 정리를 확인했다.
+7. 책임 분리: runtime facade, context, context swap, persistence, machine config와
+   `V86SerialPort` 경계를 구조 gate와 import graph gate가 통과했다.
+8. 최종 회귀: Web Machine 실제 Edge probe 13종 208 checks, Web Computer 13/13,
+   기본 browser 63/63, 설치 소비자 28/28, 공개 example 10/10, package 18 files,
+   v86 provenance가 모두 GREEN이다.
+
+현재 구현 상태: 엄격 재감사와 보강까지 완료.

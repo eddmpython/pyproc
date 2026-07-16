@@ -343,8 +343,6 @@ export class MachineEnvelopeCoordinator {
     devices?: Record<string, BlockDevice>;
     approvedPermissions?: Record<string, MachinePermissions> | Map<string, MachinePermissions>;
     availableCapabilities?: Iterable<string>;
-    ownerToken?: OwnerToken;
-    control?: OperationControl;
   }): Readonly<{ groupId: string; machineIds: readonly string[]; deviceNames: readonly string[] }>;
   importVerified(options: {
     archive: WebMachineArchive;
@@ -352,7 +350,13 @@ export class MachineEnvelopeCoordinator {
     devices?: Record<string, BlockDevice>;
     approvedPermissions?: Record<string, MachinePermissions> | Map<string, MachinePermissions>;
     availableCapabilities?: Iterable<string>;
-  }): Promise<Readonly<{ archive: WebMachineArchive; machines: Map<string, MachineHandle>; preflight: unknown }>>;
+    ownerToken?: OwnerToken;
+    control?: OperationControl;
+  }): Promise<Readonly<{
+    archive: WebMachineArchive;
+    machines: Map<string, MachineHandle>;
+    preflight: Readonly<{ groupId: string; machineIds: readonly string[]; deviceNames: readonly string[] }>;
+  }>>;
 }
 
 export function createWebMachineKeyPair(cryptoProvider: Crypto): Promise<CryptoKeyPair>;

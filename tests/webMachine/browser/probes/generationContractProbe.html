@@ -28,6 +28,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     MemoryMachineStore,
   } from "../../../../packages/browser/index.js";
   import { createFakeGuestFactory } from "../../contracts/fakeGuestAdapter.js";
+  import { runMachineStoreContract } from "../../contracts/machineStoreContract.mjs";
 
   const out = document.getElementById("out");
   const checks = [];
@@ -200,6 +201,73 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     }));
     check("HEAD와 PREV 모두 손상되면 명시적 실패", unavailableCode === "WEB_MACHINE_RECOVERY_UNAVAILABLE", unavailableCode);
     check("content-addressed manifest가 payload bytes를 직접 포함하지 않음", !JSON.stringify(second.manifest).includes("1,2,3") && second.manifest.machines[0].payload.digest.startsWith("sha256:"));
+    const blockedDatabaseName = "webMachineSchemaBlockedV1";
+    const legacyConnection = await new Promise((resolve, reject) => {
+      const request = indexedDB.open(blockedDatabaseName, 1);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore("blobs").put(new Uint8Array([7]).buffer, "legacy-digest");
+        request.result.createObjectStore("generations").put({ manifest: {}, manifestHash: "sha256:legacy" }, "blockedGroup\u0000legacy-generation");
+        request.result.createObjectStore("heads").put({ head: "legacy-generation", prev: null }, "blockedGroup");
+      };
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    const legacyHead = await new Promise((resolve, reject) => {
+      const request = legacyConnection.transaction("heads", "readonly").objectStore("heads").get("blockedGroup");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const blockedStore = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: blockedDatabaseName });
+    const blockedCode = await codeOf(Promise.race([
+      blockedStore.readHead("blockedGroup"),
+      new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error("schema blocked timeout"), { code: "PROBE_TIMEOUT" })), 3000)),
+    ]));
+    check("v1 connection의 schema upgrade 차단은 기존 data를 보존", blockedCode === "WEB_MACHINE_SCHEMA_UPGRADE_BLOCKED" && legacyHead?.head === "legacy-generation", `${blockedCode}/${legacyHead?.head}`);
+    blockedStore.close();
+    legacyConnection.close();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const migratedStore = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: blockedDatabaseName });
+    const migratedHead = await Promise.race([
+      migratedStore.readHead("blockedGroup"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("schema migration reopen timeout")), 3000)),
+    ]);
+    const migratedOwner = await Promise.race([
+      migratedStore.claimOwner({ groupId: "blockedGroup", ownerId: "migrated-owner" }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("schema migration claim timeout")), 3000)),
+    ]);
+    check("v1 data migration은 HEAD를 보존하고 pre-fence epoch 0을 기록", migratedHead?.head === "legacy-generation" && migratedHead?.ownerEpoch === 0 && migratedOwner.epoch === 1 && (await migratedStore.getBlob("legacy-digest"))[0] === 7, `${migratedHead?.head}/${migratedHead?.ownerEpoch}/${migratedOwner.epoch}`);
+    migratedStore.close();
+
+    const legacyOwnerDatabaseName = "webMachineLegacyOwnerEpochV1";
+    const legacyOwnerDatabase = await new Promise((resolve, reject) => {
+      const request = indexedDB.open(legacyOwnerDatabaseName, 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("owners");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    await new Promise((resolve, reject) => {
+      const transaction = legacyOwnerDatabase.transaction("owners", "readwrite");
+      transaction.objectStore("owners").put({ ownerId: "legacy-owner", epoch: 7, active: false }, "legacyEpochGroup");
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    legacyOwnerDatabase.close();
+    const legacyEpochStore = new IndexedDbMachineStore({
+      indexedDb: indexedDB,
+      databaseName: "webMachineLegacyEpochMigrationV2",
+      legacyOwnerDatabaseName,
+    });
+    const migratedEpochOwner = await Promise.race([
+      legacyEpochStore.claimOwner({ groupId: "legacyEpochGroup", ownerId: "v2-owner" }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("legacy epoch claim timeout")), 3000)),
+    ]);
+    check("legacy epoch 7 뒤 첫 v2 claim은 epoch 8 이상", migratedEpochOwner.epoch >= 8, migratedEpochOwner.epoch);
+    legacyEpochStore.close();
+
+    const indexedContractStore = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineSharedContractV2" });
+    await runMachineStoreContract(indexedContractStore, { groupId: "indexedSharedContract" });
+    check("memory와 IndexedDB MachineStore가 같은 behavior suite 통과", true);
+    indexedContractStore.close();
 
     const indexedStore = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineGenerationContractV1" });
     const indexedOwner = await indexedStore.claimOwner({ groupId: "indexedRace", ownerId: "indexed-owner" });
