@@ -11,6 +11,32 @@
 
 상태 라벨은 README의 Feature status와 맞춘다. Stable은 기본 제품 경로로 둘 수 있는 표면, Beta는 제품에 붙일 수 있으나 브라우저 조건과 fallback을 함께 둬야 하는 표면, Experimental은 명시적 제품 선택과 관측이 필요한 표면, Research preview는 엔진 가능성 검증 표면이다.
 
+## 상태 라벨 승격 기준 (라벨은 인상이 아니라 기준으로 움직인다)
+
+| 라벨 | 승격 조건(전부 충족) |
+|---|---|
+| Stable | (a) CI 런타임 게이트가 실동작을 커버한다. (b) 마지막 브레이킹 변경 이후 릴리즈가 1개 이상 지났다(표면 동결 증거). (c) 소비 3사 중 1곳 이상의 실소비 증거 또는 30일 soak. (d) 경계(안 되는 것)가 이 표와 레퍼런스에 문서화되어 있다. |
+| Beta | (a)와 (d). 브라우저 조건/fallback 요구가 표에 명시된다. |
+| Experimental | 실행 표면과 검증 명령이 존재한다(수동 probe 허용). |
+| Research preview | 실증 장치로서의 정체와 프로덕션 정본이 무엇인지 명시된다. |
+
+강등은 즉시다: 게이트가 빠지거나 브레이킹이 들어오면 라벨을 내리는 데 조건이 없다.
+
+### 승격 원장
+
+Stable 라벨을 단 행과 그 근거를 여기 기록한다. 이 원장에 없는 Stable 행은 구조
+게이트가 차단한다(문서 근거 없는 라벨 상승 = 드리프트).
+
+| 표면 | Stable 판정일 | 근거 |
+|---|---|---|
+| Python runtime (`boot`/`run`/`loadPackages`) | 2026-07-15 이전 | (a) browser gate 상시, (b) 0.0.x 다수 릴리즈 표면 동결, (c) dartlab/codaro/xlpod 실소비, (d) 문서화 |
+| Deployment asset integrity | 2026-07-15 이전 | (a) browser/consumer gate, (b) 릴리즈 경과, (c) codaro 자산 파이프라인 실소비, (d) 문서화 |
+
+승격 대기 시계: reactive(체크포인트/복원), session(.pymachine), machineJournal은
+v0.0.10(브레이킹 묶음 릴리즈)이 (b)의 기준점이다. 다음 릴리즈 시점에 (a)(c)(d)와 함께
+재판정한다. 지금 올리지 않는 것이 정직이다: 방금 표면이 바뀐 레인을 Stable이라
+부르면 라벨의 의미가 죽는다.
+
 실행 표면은 사람이 여는 예제, 브라우저 게이트, probe, 또는 tracked benchmark artifact다. 제품 claim은 아래 표의 실행 표면 중 하나로 재현할 수 있어야 한다.
 
 | 능력 | 제품 가치 | 공개 표면 | 상태 | 필수 조건 | 실행 표면 | 검증 | 경계 |

@@ -337,6 +337,33 @@ check("api.md가 루트 export 전수를 다룬다", () => {
   const missing = Object.keys(api).filter((name) => !apiDoc.includes("`" + name));
   if (missing.length) throw new Error(`api.md 누락: ${missing.join(", ")}`);
 });
+check("Stable 라벨 = 승격 원장 정합(근거 없는 라벨 상승 차단)", () => {
+  const matrix = readFileSync(join(ROOT, "docs", "consuming", "capabilityMatrix.md"), "utf8");
+  if (!matrix.includes("## 상태 라벨 승격 기준")) throw new Error("승격 기준 절 없음");
+  const ledgerStart = matrix.indexOf("### 승격 원장");
+  if (ledgerStart < 0) throw new Error("승격 원장 절 없음");
+  const ledgerBlock = matrix.slice(ledgerStart, matrix.indexOf("승격 대기 시계", ledgerStart));
+  const ledgerRows = [...ledgerBlock.matchAll(/^\| [^|]+ \| 20\d\d-/gm)].length;
+  // 능력 표의 상태 셀만 센다(라인 중간의 "| Stable |"). 승격 기준 표의 라벨 열은
+  // 라인 시작이라 제외된다.
+  const stableRows = [...matrix.matchAll(/[^\n]\| Stable \|/g)].length;
+  if (stableRows !== ledgerRows) throw new Error(`Stable 라벨 ${stableRows}행 != 승격 원장 ${ledgerRows}행`);
+});
+check("영문 비교 페이지: 시나리오 전수 + 후보 전수 + README 링크", () => {
+  const cmp = readFileSync(join(ROOT, "docs", "reference", "comparison.md"), "utf8");
+  for (const id of ["S0", "S0C", "S1", "S1L", "S2", "S3", "S4", "S5"]) {
+    if (!new RegExp(`\\| ${id} `).test(cmp)) throw new Error(`시나리오 누락: ${id}`);
+  }
+  for (const name of ["WebVM", "JupyterLite", "marimo"]) {
+    if (!cmp.includes(name)) throw new Error(`후보 누락: ${name}`);
+  }
+  if (!cmp.includes("N/A")) throw new Error("N/A 정직성 규칙 서술 누락");
+  for (const readme of ["README.md", "README.ko.md"]) {
+    if (!readFileSync(join(ROOT, readme), "utf8").includes("docs/reference/comparison.md")) {
+      throw new Error(`${readme}가 comparison.md를 링크하지 않음`);
+    }
+  }
+});
 check("공개 문서 인프라 존재(CHANGELOG/SECURITY/glossary)", () => {
   for (const f of ["CHANGELOG.md", "SECURITY.md", join("docs", "product", "glossary.md")]) {
     if (!existsSync(join(ROOT, f))) throw new Error(`${f} 없음`);

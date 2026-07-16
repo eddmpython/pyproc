@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MCP sandbox machine - pyproc</title>
+  <link rel="icon" href="../assets/logo.svg">
+  <meta name="theme-color" content="#0a0f1c">
+  <script type="module" src="siteChrome.js"></script>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style>
+</head>
+<body>
+  <header class="site">
+    <a class="logo" href="../"><img class="logoMark" src="../assets/logo.svg" width="22" height="22" alt=""> <span><span class="py">py</span>proc</span></a>
+    <sns-links></sns-links>
+  </header>
+  <h1>pyproc MCP sandbox machine</h1>
+  <p>scripts/mcpSandboxServer.mjs가 headless로 여는 머신 페이지다. 결정적 리플레이로
+     부팅한 파이썬 머신을 잡고, 서버의 명령(long-poll)을 실행해 결과를 되돌린다.
+     사람이 직접 열어도 상태를 볼 수 있다.</p>
+  <pre id="out">부팅 중...</pre>
+  <script type="module">
+    import { bootSession } from "../index.js";
+
+    const out = document.getElementById("out");
+    const log = (m) => { out.textContent += "\n" + m; };
+
+    // 실행 하네스: 자유 문장(exec) + 마지막 식 값(repr) + stdout 캡처. 워커 repl과 같은 계약.
+    const RUN_HARNESS = [
+      "import io as _mcpIo, contextlib as _mcpCtx",
+      "_mcpBuf = _mcpIo.StringIO()",
+      "_mcpVal = None",
+      "with _mcpCtx.redirect_stdout(_mcpBuf), _mcpCtx.redirect_stderr(_mcpBuf):",
+      "    try:",
+      "        _mcpVal = eval(compile(_mcpSrc, '<mcp>', 'eval'), globals())",
+      "    except SyntaxError:",
+      "        exec(_mcpSrc, globals())",
+      "[_mcpBuf.getvalue(), None if _mcpVal is None else repr(_mcpVal)]",
+    ].join("\n");
+
+    const params = new URLSearchParams(location.search);
+    const session = await bootSession({ indexURL: params.get("indexURL") || undefined });
+    const rt = session.rt;
+    const reactive = session.reactive; // cp0 = 리플레이 경계(sandboxReset의 복귀점)
+    const saved = []; // checkpointSave가 쌓는 복원 핸들
+    log("머신 준비 완료 (cp0 = 리플레이 경계)");
+
+    const tools = {
+      pythonRun({ code }) {
+        rt.setGlobal("_mcpSrc", String(code ?? ""));
+        const r = rt.run(RUN_HARNESS);
+        const [stdout, value] = r && r.toJs ? r.toJs() : r;
+        if (r && r.destroy) r.destroy();
+        return { stdout, value };
+      },
+      checkpointSave() {
+        const cp = reactive.checkpoint();
+        saved.push(cp);
+        return { index: cp.index, changedPages: cp.changedPages, kind: cp.kind };
+      },
+      checkpointRestore({ index } = {}) {
+        const target = index === undefined || index === null
+          ? saved[saved.length - 1]
+          : saved.find((cp) => cp.index === index);
+        if (!target) throw new Error(`checkpointRestore: 저장된 체크포인트가 없다(index ${index ?? "latest"})`);
+        const info = target.restore();
+        return { index: target.index, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
+      },
+      sandboxReset() {
+        const info = reactive.restoreLive(0); // cp0 = 부팅 직후 준비 상태
+        saved.length = 0;
+        return { index: 0, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
+      },
+    };
+
+    await fetch("/mcpReady", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ready: true }) });
+    log("서버에 ready 통지. 명령 대기.");
+
+    // 명령 루프: long-poll로 받고, 실행하고, 결과를 되돌린다. 오류는 code까지 실어 나른다.
+    for (;;) {
+      let command;
+      try {
+        const resp = await fetch("/mcpCommand", { cache: "no-store" });
+        command = await resp.json();
+      } catch (e) { break; } // 서버 종료 = 루프 종료
+      if (!command || command.none) continue;
+      let body;
+      try {
+        const value = tools[command.tool]
+          ? tools[command.tool](command.args || {})
+          : (() => { throw new Error(`알 수 없는 도구: ${command.tool}`); })();
+        body = { id: command.id, ok: true, value };
+        log(`${command.tool} 완료`);
+      } catch (e) {
+        body = { id: command.id, ok: false, error: { code: e && e.code ? e.code : "PYPROC_INTERNAL", message: String((e && e.message) || e).slice(-400) } };
+        log(`${command.tool} 실패: ${body.error.code}`);
+      }
+      await fetch("/mcpResult", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+    }
+  </script>
+</body>
+</html>
