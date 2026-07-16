@@ -52,4 +52,46 @@ NEXT:
 2. `GenerationHead`, missing 오류, `restoreLatest` collection 타입을 정본 계약으로 맞춘다.
 3. Phase 0 gate가 GREEN이 된 뒤에만 `IndexedDbMachineStore` schema v2와 owner-fenced CAS를 시작한다.
 
-현재 구현 상태: 설계 완료, 코드 미착수.
+## 2026-07-16 - 전 phase 구현 완료와 최종 게이트 통과
+
+구현 결과(Phase 0-5 전부 반영):
+
+1. Phase 0/1: memory와 IndexedDB를 `MachineStore` 단일 계약으로 통합하고 owner 검증,
+   expected HEAD CAS, blob/generation add, HEAD update를 한 transaction으로 묶었다.
+   public type과 runtime store 의미 일치는 구조 게이트("Web Machine public type와
+   runtime store 의미 일치")와 `tests/webMachine/contracts/machineStoreContract.mjs`가
+   고정한다.
+2. Phase 2: 제품 import/startup restore를 candidate context + pointer swap으로 바꿨다.
+   실패 지점별 rollback은 `tests/webMachine/contracts/contextSwapContract.mjs`
+   (구조 게이트 "Web Computer context swap rollback matrix")가 검증한다.
+3. Phase 3: `generationRetention.js`의 HEAD/PREV reachability retention과 commit 뒤
+   prune, startup retry를 연결했다. 정리 상태는 제품 inspect(persistence.cleanupPending,
+   lastPrune)로 노출된다.
+4. Phase 4: `OperationControl`(signal + deadlineAt)을 lock/commit/restore/export/import
+   경로에 배선했다. 제품 timeout budget은 `apps/webComputer/machineConfig.js`
+   WEB_COMPUTER_TIMEOUTS 한 곳이다.
+5. Phase 5: `WebComputerRuntime`에서 context 생성(webComputerContext.js), 교체
+   (webComputerContextSwap.js), persistence(webComputerPersistence.js)를 분리했고
+   v86 serial 대기는 `packages/guest-v86/src/v86SerialPort.js`로 분리했다.
+
+마감 수리 2건(이관 직전 발견):
+
+1. `apps/webComputer/gate.js` import phase가 리팩토링 이전 표면
+   (runtime.commitCoordinator)을 참조해 TypeError로 죽는 문제를
+   `runtime.persistence.readHead`로 정정.
+2. 복원 후 정리 재시도가 runtime에서 persistence 내부 필드(lastPrune/cleanupPending)를
+   직접 mutate하며 save()의 prune 처리와 중복되던 것을
+   `WebComputerPersistence.pruneRecoveryWindow()` 한 곳으로 수렴.
+
+최종 게이트(2026-07-16 실행):
+
+- `npm test` 907/907 GREEN(이후 이니셔티브 문서 추가로 922/922).
+- `node tests/packageConsumer.mjs` GREEN.
+- 기본 browser gate GREEN, Web Machine browser probe 13종 GREEN
+  (deviceBackedDualBootProbe는 첫 실행 240s 타임아웃 플레이크였고 단독 재실행 12/12
+  GREEN, processColdRestoreMs 2849).
+- Web Computer 3-process 제품 E2E GREEN(초기 부팅/콜드 복원/새 프로필 import).
+
+완료 조건 1-8 전부 충족. 폴더를 `mainPlan/_done/web-machine-hardening/`으로 이관한다.
+
+현재 구현 상태: 완료.

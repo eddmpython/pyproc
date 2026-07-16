@@ -1,6 +1,10 @@
 # Web Machine Hardening
 
-상태: 활성.
+> ✅ 완료 (2026-07-16): 단일 owner-fenced MachineStore, 원자적 context 교체, HEAD/PREV
+> 보존 retention, OperationControl 취소 경계, 제품 runtime 책임 분리를 전부 구현하고
+> 구조/contract/probe/3-process 제품 E2E 게이트로 닫았다.
+
+상태: 완료.
 
 Web Machine의 좋은 package 경계는 유지하면서 공개 계약 정합성, durable owner fencing, 원자적 context 교체, generation retention, 장시간 작업 종료 경계를 운영급 불변식으로 닫는다.
 
