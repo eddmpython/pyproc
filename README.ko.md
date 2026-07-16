@@ -214,6 +214,8 @@ Python 축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md)가
 
 ## 보안 모델
 
+**공급망**: npm 릴리즈는 Trusted Publishing(OIDC) + provenance(손 게시 금지)로 나가고, `pyproc-assets` CLI가 worker/SW import graph의 SRI manifest를 만들며 `verifyPyProcAssetIntegrity`가 워커 spawn 전에 강제한다. 엔진 부팅은 fail-closed SRI(`engineScriptIntegrity`/`coreIntegrity`)와 재검증 OPFS 오프라인 캐시를 지원한다. 위협 모델: [SECURITY.md](SECURITY.md).
+
 pyproc은 브라우저의 WebAssembly 및 Web Worker 격리 경계 안에서 Python을 실행한다. 이것은 임의의 신뢰할 수 없는 코드에 대한 안전 보장이 아니다: 신뢰할 수 없는 코드를 실행하는 애플리케이션은 자신의 위협 모델에 맞는 네트워크, 저장소, 패키지, 메모리, 실행 시간 정책을 별도로 구성해야 한다. `.pymachine` 파일은 살아있는 상태라 실행 파일과 같은 위험을 진다 - `openMachine`은 SHA-256 봉투를 검증하고, 명시적 `{ trust: true }` 또는 `trustedPublicKeys`로 검증된 signature 없이는 열지 않는다.
 
 ## 어떻게 도나 (한 장)

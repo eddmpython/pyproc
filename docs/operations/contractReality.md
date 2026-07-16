@@ -23,6 +23,7 @@
 | 항목 | 트레이드오프 | 명시 조건 |
 |---|---|---|
 | 전역 스텁 3종 | entropy/시간(session 부팅), fetch(wheelCache install 구간) 스왑은 finally로 복원되지만 그 창 안의 동시 작업엔 보인다 | 동시 부팅 금지(bootSession의 runExclusive가 세션 부팅을 직렬화). 소비자 문서에 명시 |
+| ReactiveController.saveBase | base 백업/이동만 하고 RAM은 줄지 않는다(복원 경로가 base 상주 전제). 메모리 밸브는 pruneTo/dispose | 주석/타입을 백업/이동용으로 정정(2026-07-16). 진짜 오프로드(페이지 단위 파일 복원)는 동기 복원 계약과 충돌해 미착수 |
 | WASI 세션 값 다리 | JSON 직렬화 한정(FFI 없음). 함수/numpy/live 객체 못 넘김 | 별도 async 표면(bootWasi). 프로덕션 정본은 Pyodide([contract.md](../consuming/contract.md) 런타임 정합) |
 | machineJail 부모 격리 | CSP connect-src는 감옥 자신의 네트워크 egress를 막는다. same-origin 감옥은 window.parent 측면통로가 열림 | 완전 격리는 opaque origin(sandbox)이고 그 대가로 crossOriginIsolated 상실 = SAB(fork/interrupt) 포기 = 감옥 머신은 단일 Runtime |
 | 공유메모리 memcpy 1회 | SAB를 파이썬 힙에 제로카피로 비출 수 없다(단일 선형 메모리 벽) | `PyProc.shm`/`mapArray`는 "memcpy 1회"를 공개 계약으로 유지 |

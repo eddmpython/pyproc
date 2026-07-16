@@ -329,6 +329,22 @@ check("PyProcError 코드 카탈로그 = d.ts union (삼자 일치)", () => {
   for (const code of dtsCodes) if (!catalog.includes(code)) throw new Error(`카탈로그에 없음: ${code}`);
 });
 
+// 3.8) 영문 API 레퍼런스 동기화: 루트 export 전수가 docs/reference/api.md에 등장해야 한다.
+//      index.js 헤더 주석 목록의 표류(8개 어긋난 채 방치)를 반복하지 않는 기계 장치다.
+console.log("\n[API 레퍼런스]");
+check("api.md가 루트 export 전수를 다룬다", () => {
+  const apiDoc = readFileSync(join(ROOT, "docs", "reference", "api.md"), "utf8");
+  const missing = Object.keys(api).filter((name) => !apiDoc.includes("`" + name));
+  if (missing.length) throw new Error(`api.md 누락: ${missing.join(", ")}`);
+});
+check("공개 문서 인프라 존재(CHANGELOG/SECURITY/glossary)", () => {
+  for (const f of ["CHANGELOG.md", "SECURITY.md", join("docs", "product", "glossary.md")]) {
+    if (!existsSync(join(ROOT, f))) throw new Error(`${f} 없음`);
+  }
+  const changelog = readFileSync(join(ROOT, "CHANGELOG.md"), "utf8");
+  if (!changelog.includes("## Unreleased")) throw new Error("CHANGELOG에 Unreleased 절 없음");
+});
+
 // 3.6) 사이트 크롬: 채널(SNS) 행은 라우트마다 고정이고 정의처는 examples/siteChrome.js 하나다.
 //      라우트가 늘 때 채널을 빠뜨리거나 마크업을 다시 인라인으로 복제하는 드리프트를 차단한다.
 console.log("\n[사이트 크롬]");
@@ -935,6 +951,8 @@ check("src layer edge 승인 목록", () => {
       "src/capabilities/machineJournal.js -> src/runtime/memoryLayout.js",
       "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
       "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
+      "src/capabilities/session.js -> src/runtime/globalPatch.js",
+      "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",
       "src/capabilities/session.js -> src/runtime/runtimeApi.js",
       "src/capabilities/session.js -> src/runtime/memoryLayout.js",
       "src/capabilities/syscallBridge.js -> src/runtime/assets.js",
