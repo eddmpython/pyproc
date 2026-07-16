@@ -1,5 +1,6 @@
 // wasiGuestAdapter.js - 공개 WASI surface만 소비하는 guest adapter.
-import { bootWasi } from "../../../index.js";
+// pyproc/wasi subpath 표면(루트에서 강등됨). 검증 트리는 소스 경로로 같은 모듈을 연다.
+import { bootWasi } from "../../../src/runtime/engines/wasi/wasiSession.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

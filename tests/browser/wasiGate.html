@@ -11,7 +11,8 @@
 자산 재현: tests/attempts/enginePort/README.md 레시피(python-3.14.6.wasm + python314-stdlib.zip).</p>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { bootWasi } from "../../index.js";
+  // pyproc/wasi subpath 표면(루트에서 강등됨). 게이트는 소스 경로로 같은 모듈을 연다.
+  import { bootWasi } from "../../src/runtime/engines/wasi/wasiSession.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
