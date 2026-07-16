@@ -9,6 +9,8 @@
 // 겹쳐도 응답이 교차하지 않고, 워커가 죽으면(사고/kill) 그 워커의 대기 중 요청 전부가
 // 즉시 명시적으로 reject된다(영원히 매달리는 Promise 금지).
 import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
+import { PyProcError } from "../runtime/errors.js";
+import { createRpcPort } from "./rpcChannel.js";
 import { requireCoi } from "../runtime/preflight.js";
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
 import { createPipe, createLock, createSemaphore, createShm, pipeWriteAsync, pipeReadAsync, pipeClose } from "./ipc.js";
@@ -25,9 +27,9 @@ function _toSab(typed) {
 }
 
 function _resolveShardParts(rawParts, maxParts, label) {
-  if (!Number.isInteger(maxParts) || maxParts < 1) throw new Error(`${label}: 준비된 워커 없음(boot 먼저)`);
+  if (!Number.isInteger(maxParts) || maxParts < 1) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `${label}: 준비된 워커 없음(boot 먼저)`);
   if (rawParts === undefined || rawParts === null) return maxParts;
-  if (!Number.isInteger(rawParts) || rawParts < 1) throw new Error(`${label}: parts는 양의 정수여야 한다`);
+  if (!Number.isInteger(rawParts) || rawParts < 1) throw new PyProcError("PYPROC_INPUT_INVALID", `${label}: parts는 양의 정수여야 한다`);
   return Math.min(rawParts, maxParts);
 }
 
@@ -56,7 +58,7 @@ export class PyProc {
     // 리플레이 매니페스트({env, packages, setup}): 주면 워커들이 결정적 리플레이로 부팅해
     // 바이트 동일한 힙에 선다 = fork(살아있는 상태 복제)가 가능한 대칭 풀.
     this.replay = opts.replay || null;
-    this.table = []; this._seq = 0; this._reqSeq = 0; this._snapshot = null;
+    this.table = []; this._seq = 0; this._snapshot = null;
   }
 
   // 살아있는 프로세스 풀(스케줄 대상).
@@ -79,23 +81,24 @@ export class PyProc {
     return sab.byteLength;
   }
 
-  // 워커 사망 수렴: 대기 중인 요청 전부를 명시적으로 reject하고 테이블에서 dead로 남긴다.
+  // 워커 사망 수렴: 대기 중인 요청 전부가 rpcChannel에서 명시적으로 reject되고
+  // 테이블에는 dead로 남는다(영원히 매달리는 Promise 금지).
   _fail(entry, err) {
     if (entry.state === "dead") return;
     entry.state = "dead";
-    for (const p of entry.pending.values()) p.reject(err instanceof Error ? err : new Error(String(err)));
-    entry.pending.clear();
+    entry.port.fail(err);
   }
 
-  // 요청 1건 발신(reqId 발급 + pending 등록). 취소가 필요한 호출자는 reqId로 등록을 지운다.
+  // 요청 1건 발신(reqId 발급/상관은 rpcChannel 소유). 취소가 필요한 호출자는 cancel()을 쓴다.
   _request(entry, msg, transfer = []) {
-    const reqId = ++this._reqSeq;
-    const promise = new Promise((resolve, reject) => {
-      if (entry.state === "dead") return reject(new Error(`pid ${entry.pid}는 dead다`));
-      entry.pending.set(reqId, { resolve, reject });
-      entry.worker.postMessage({ ...msg, id: entry.pid, reqId }, transfer);
-    });
-    return { reqId, promise };
+    if (entry.state === "dead") {
+      return {
+        reqId: -1,
+        promise: Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `pid ${entry.pid}는 dead다`)),
+        cancel: () => {},
+      };
+    }
+    return entry.port.request({ ...msg, id: entry.pid }, transfer);
   }
 
   // 단발 왕복(harvest/applyDelta 등). 에러 응답은 reject로 귀결된다.
@@ -107,23 +110,16 @@ export class PyProc {
     const pid = ++this._seq;
     // SIGINT 채널: 커널이 이 SAB에 2를 쓰면 워커의 CPython eval 루프가 KeyboardInterrupt를 던진다.
     const interruptSab = new SharedArrayBuffer(1);
-    const entry = { pid, worker: w, state: "booting", parentPid: 0, interrupt: new Uint8Array(interruptSab), pending: new Map() };
+    const entry = { pid, worker: w, state: "booting", parentPid: 0, interrupt: new Uint8Array(interruptSab) };
+    // RPC 상관(reqId/pending)과 크래시 수렴은 rpcChannel이 소유한다. 사망은 테이블에 dead로 남는다.
+    entry.port = createRpcPort(w, { label: `워커 pid ${pid}`, onDead: () => { entry.state = "dead"; } });
     this.table.push(entry);
-    // 상시 라우터: 응답의 reqId로 pending을 찾는다. 모르는 응답(취소된 요청의 늦은 응답)은 버린다.
-    w.addEventListener("message", (e) => {
-      const p = entry.pending.get(e.data.reqId);
-      if (!p) return;
-      entry.pending.delete(e.data.reqId);
-      if (e.data.type === "error") p.reject(new Error(e.data.error)); else p.resolve(e.data);
-    });
-    w.addEventListener("error", (e) => this._fail(entry, new Error(`워커 pid ${pid} 크래시: ${e.message || "unknown"}`)));
-    w.addEventListener("messageerror", () => this._fail(entry, new Error(`워커 pid ${pid} 메시지 역직렬화 실패`)));
     const ready = this._call(entry, {
       type: "boot", indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null,
       interruptSab, packages: this.packages, setup: this.setup, replay: this.replay,
     }).then(
       (d) => { entry.state = "ready"; entry.interrupts = !!d.interrupts; return d.bootMs; },
-      (err) => { this._fail(entry, err); throw new Error(`워커 pid ${pid} 부팅 실패: ${err.message}`); },
+      (err) => { this._fail(entry, err); throw new PyProcError("PYPROC_BOOT_FAILED", `워커 pid ${pid} 부팅 실패: ${err.message}`, { retryable: true, cause: err }); },
     );
     return { entry, ready };
   }
@@ -133,10 +129,10 @@ export class PyProc {
   // 전제: 두 프로세스 모두 같은 replay 매니페스트로 부팅했을 것(바이트 동일한 경계 = 델타 유효).
   // 자식은 정확히 "경계 + 부모 델타"가 된다(더러운 dst 정화 + 힙 성장 동반, 게이트 상시 검증).
   async fork(srcPid, dstPid) {
-    if (!this.replay) throw new Error("fork: replay 매니페스트로 부팅한 풀에서만 가능하다(new PyProc({ replay }))");
+    if (!this.replay) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "fork: replay 매니페스트로 부팅한 풀에서만 가능하다(new PyProc({ replay }))");
     const src = this.table.find((t) => t.pid === srcPid), dst = this.table.find((t) => t.pid === dstPid);
-    if (!src || src.state !== "ready") throw new Error(`fork: src pid ${srcPid} 준비되지 않음`);
-    if (!dst || dst.state !== "ready") throw new Error(`fork: dst pid ${dstPid} 준비되지 않음`);
+    if (!src || src.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: src pid ${srcPid} 준비되지 않음`);
+    if (!dst || dst.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: dst pid ${dstPid} 준비되지 않음`);
     const h = await this._call(src, { type: "harvest" });
     const applied = await this._call(dst, { type: "applyDelta", bin: h.bin, pages: h.pages, sp: h.sp, heapLen: h.heapLen }, [h.bin]);
     dst.parentPid = srcPid; // 계보 기록: fork된 프로세스의 부모(ps()에 노출)
@@ -153,7 +149,7 @@ export class PyProc {
   // 소비자(IPC 생산자/소비자, 잡 컨트롤의 잡 본체)의 프리미티브다. 반환 = 태스크 결과 Promise.
   exec(pid, fnSrc, arg = null) {
     const entry = this.table.find((t) => t.pid === pid);
-    if (!entry || entry.state !== "ready") return Promise.reject(new Error(`exec: pid ${pid} 준비되지 않음`));
+    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `exec: pid ${pid} 준비되지 않음`));
     return this._call(entry, { type: "task", fnSrc, arg }).then((d) => d.result);
   }
 
@@ -161,7 +157,7 @@ export class PyProc {
   // 반환: { out, value }(value = 식의 repr 또는 null). exec와 달리 함수 래핑 없이 raw 실행.
   repl(pid, code) {
     const entry = this.table.find((t) => t.pid === pid);
-    if (!entry || entry.state !== "ready") return Promise.reject(new Error(`repl: pid ${pid} 준비되지 않음`));
+    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `repl: pid ${pid} 준비되지 않음`));
     return this._call(entry, { type: "repl", code }).then((d) => ({ out: d.out, value: d.value }));
   }
 
@@ -170,7 +166,7 @@ export class PyProc {
   // 커널(메인)측 엔드포인트는 read/write(Atomics.waitAsync) = 커널도 파이프의 한쪽이 될 수 있다.
   _bindIpc(pid, item) {
     const entry = this.table.find((t) => t.pid === pid);
-    if (!entry || entry.state !== "ready") return Promise.reject(new Error(`bindIpc: pid ${pid} 준비되지 않음`));
+    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `bindIpc: pid ${pid} 준비되지 않음`));
     return this._call(entry, {
       type: "bindIpc",
       items: [{ kind: item.kind, name: item.name, sab: item.sab, cap: item.cap || 0, mode: item.mode || null }],
@@ -230,14 +226,23 @@ export class PyProc {
     const entry = this.table.find((t) => t.pid === pid);
     if (!entry || entry.state === "dead") return false;
     entry.worker.terminate();
-    this._fail(entry, new Error(`pid ${pid} killed`));
+    this._fail(entry, new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `pid ${pid} killed`));
     return true;
+  }
+
+  // 프로세스 1개를 강제 종료하고 같은 부팅 방식(스냅샷/리플레이 = fork 대칭 유지)으로 새
+  // 프로세스를 채운다. 잡 컨트롤의 강제 회수(killHard)가 소비하는 공개 프리미티브.
+  async respawn(pid) {
+    const entry = this.table.find((t) => t.pid === pid);
+    if (!entry) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `respawn: pid ${pid} 없음`);
+    const replaced = await this._replace(entry);
+    return { oldPid: pid, pid: replaced.pid };
   }
 
   // 죽은/행 프로세스 자리를 스냅샷 respawn으로 채운다(풀 크기 유지).
   // 실측(attempts/processLifecycle): respawn 302ms, 행 감지는 이벤트가 없어 타임아웃만 가능.
   async _replace(entry) {
-    if (entry.state !== "dead") { entry.worker.terminate(); this._fail(entry, new Error(`pid ${entry.pid} 교체(행 수렴)`)); }
+    if (entry.state !== "dead") { entry.worker.terminate(); this._fail(entry, new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `pid ${entry.pid} 교체(행 수렴)`)); }
     const s = this._spawn(!!this._snapshot);
     await s.ready;
     return s.entry;
@@ -255,7 +260,7 @@ export class PyProc {
     const lane = async (entry) => {
       while (next < args.length) {
         const i = next++;
-        const { reqId, promise } = this._request(entry, { type: "task", fnSrc, arg: args[i] });
+        const { promise, cancel } = this._request(entry, { type: "task", fnSrc, arg: args[i] });
         let timer = null;
         const outcome = await Promise.race([
           promise.then((d) => ({ ok: d.result }), (err) => ({ err })),
@@ -263,7 +268,7 @@ export class PyProc {
         ]);
         if (timer) clearTimeout(timer);
         if (outcome.timeout) {
-          entry.pending.delete(reqId); // 늦은 응답은 라우터가 버린다
+          cancel(); // 늦은 응답은 라우터가 버린다
           results[i] = { error: `timeout: ${timeoutMs}ms 초과` };
           try { entry = await this._replace(entry); } catch (e) { return; } // respawn 실패 = 레인 종료
         } else if (outcome.err) {
@@ -277,6 +282,11 @@ export class PyProc {
       }
     };
     await Promise.all(this._pool().map(lane));
+    // 레인 전멸(전부 respawn 실패)로 실행되지 못한 태스크를 조용한 undefined 구멍으로 남기지
+    // 않는다: 부분 실패는 map의 {error} 계약과 동형인 값 오류로 정직하게 표현한다.
+    for (let i = 0; i < results.length; i++) {
+      if (results[i] === undefined) results[i] = { error: "pool exhausted: 모든 레인이 죽어 태스크가 실행되지 않았다" };
+    }
     return results;
   }
 
@@ -293,7 +303,7 @@ export class PyProc {
       Int16Array: "int16", Uint16Array: "uint16", Int8Array: "int8", Uint8Array: "uint8",
     };
     const dtype = dtypeMap[typed.constructor.name];
-    if (!dtype) throw new Error(`mapArray: 지원하지 않는 TypedArray(${typed.constructor.name})`);
+    if (!dtype) throw new PyProcError("PYPROC_INPUT_INVALID", `mapArray: 지원하지 않는 TypedArray(${typed.constructor.name})`);
     let sab = typed.buffer, base = typed.byteOffset;
     if (!(sab instanceof SharedArrayBuffer)) { // SAB가 아니면 1회 복사로 전 워커 공유화
       sab = new SharedArrayBuffer(typed.byteLength);
@@ -323,13 +333,13 @@ export class PyProc {
   // opts.parts: 샤딩할 워커 수 상한(기본 = 풀 전체). parts:1이면 단일워커 대조(같은 코드 경로 =
   // 공정한 배속 비교의 baseline). 그 외 소비자는 생략(전 코어 활용).
   async matmul(a, b, opts = {}) {
-    if (!a || !b || !a.data || !b.data) throw new Error("matmul: a/b는 { data: Float64Array, rows, cols }");
-    if (!(a.data instanceof Float64Array) || !(b.data instanceof Float64Array)) throw new Error("matmul: data는 Float64Array(f64 = numpy 기본)");
-    if (![a.rows, a.cols, b.rows, b.cols].every((n) => Number.isInteger(n) && n > 0)) throw new Error("matmul: rows/cols는 양의 정수여야 한다");
-    if (a.cols !== b.rows) throw new Error(`matmul: 차원 불일치 (${a.rows}x${a.cols}) @ (${b.rows}x${b.cols})`);
-    if (a.data.length !== a.rows * a.cols || b.data.length !== b.rows * b.cols) throw new Error("matmul: data 길이가 rows*cols와 불일치");
+    if (!a || !b || !a.data || !b.data) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: a/b는 { data: Float64Array, rows, cols }");
+    if (!(a.data instanceof Float64Array) || !(b.data instanceof Float64Array)) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: data는 Float64Array(f64 = numpy 기본)");
+    if (![a.rows, a.cols, b.rows, b.cols].every((n) => Number.isInteger(n) && n > 0)) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: rows/cols는 양의 정수여야 한다");
+    if (a.cols !== b.rows) throw new PyProcError("PYPROC_INPUT_INVALID", `matmul: 차원 불일치 (${a.rows}x${a.cols}) @ (${b.rows}x${b.cols})`);
+    if (a.data.length !== a.rows * a.cols || b.data.length !== b.rows * b.cols) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: data 길이가 rows*cols와 불일치");
     const pool = this._pool();
-    if (!pool.length) throw new Error("matmul: 준비된 워커 없음(boot 먼저)");
+    if (!pool.length) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "matmul: 준비된 워커 없음(boot 먼저)");
     const M = a.rows, K = a.cols, N = b.cols, P = _resolveShardParts(opts.parts, Math.min(pool.length, M), "matmul");
     // A, B, 출력 C를 SAB로(공유). A/B 입력은 memcpy 1회로 SAB화(계약: 제로카피 불가).
     const aSab = _toSab(a.data), bSab = _toSab(b.data), outSab = new SharedArrayBuffer(M * N * 8);
@@ -340,7 +350,7 @@ export class PyProc {
     }).filter((m) => m.mp > 0);
     const res = await this.map(MATMUL_FN, metas, opts);
     const bad = res.find((r) => r && r.error);
-    if (bad) throw new Error("matmul: 워커 실패 " + bad.error);
+    if (bad) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "matmul: 워커 실패 " + bad.error);
     return { data: new Float64Array(outSab), rows: M, cols: N };
   }
 
@@ -359,7 +369,7 @@ export class PyProc {
 
   terminate() {
     for (const t of this.table) {
-      if (t.state !== "dead") { t.worker.terminate(); this._fail(t, new Error("terminate")); }
+      if (t.state !== "dead") { t.worker.terminate(); this._fail(t, new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "terminate")); }
     }
     this.table = []; this._seq = 0;
   }

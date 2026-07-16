@@ -11,7 +11,7 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, Runtime, PyProc, SIGNAL, bootSession, runScript, checkEnvironment, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "../../index.js";
+    import { boot, Runtime, PyProc, SIGNAL, JobControl, MachineContainer, bootSession, openMachine, runScript, checkEnvironment, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "../../index.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -137,6 +137,53 @@
       check("saveBase/loadBase: OPFS 로드본으로 복원", rt.run("x") === 1);
       await opfsRoot.removeEntry("pyprocGate", { recursive: true });
 
+      // 리액티브 soundness 신계약 (core-surface-hardening 0a/0b/0c)
+      check("enableReactive: 런타임당 컨트롤러 1개(memoize)", rt.enableReactive() === reactive);
+      const cpH = reactive.checkpoint();
+      rt.run("es1 = 11");
+      reactive.checkpoint(); // 경계 닫기
+      const backInfo = cpH.restore();
+      check("cp.restore(): 인덱스/sp 운반 없는 한 호출 복원",
+        rt.run("'es1' in globals()") === false && typeof backInfo.pagesWritten === "number" && typeof cpH.sp === "number");
+      const seqBefore = rt.execSeq;
+      reactive.restoreLive(cpH.index);
+      check("복원 = 경계 이벤트(execSeq 기록, 외부 관찰자 가시성)", rt.execSeq > seqBefore);
+      rt.run("es2 = 5");
+      reactive.checkpoint();
+      reactive.markDirty();
+      const md = reactive.restoreLive(reactive.liveIdx);
+      check("markDirty: 다음 복원 자동 재해시 승격", md.rehashed === true);
+      const cpKeep = reactive.checkpoint();
+      rt.run("es3 = 1");
+      const cpDrop = reactive.checkpoint();
+      reactive.restoreLive(cpKeep.index);
+      rt.run("es4 = 2");
+      const cpLive = reactive.checkpoint();
+      const prunedInfo = reactive.pruneTo(cpLive.index);
+      let prunedCode = "";
+      try { reactive.restoreLive(cpDrop.index); } catch (e) { prunedCode = e.code; }
+      check("pruneTo: 경로 밖 노드 해제 + PYPROC_CHECKPOINT_PRUNED 거부",
+        prunedInfo.freedNodes >= 1 && prunedCode === "PYPROC_CHECKPOINT_PRUNED", `freed ${prunedInfo.freedNodes}`);
+      const delta = reactive.collectDelta(0);
+      check("collectDelta: 경계 델타 수집 프리미티브", Array.isArray(delta.pages) && delta.bin instanceof Uint8Array && delta.heapLen === rt.memory.byteLength());
+
+      // 저널: 복원도 경계 이벤트다 = 복원 직후 유휴 커밋이 복원 상태를 디스크에 남긴다
+      const jRootDir = await navigator.storage.getDirectory();
+      try { await jRootDir.removeEntry("pyprocGateJournal", { recursive: true }); } catch (e) {}
+      const jDir = await jRootDir.getDirectoryHandle("pyprocGateJournal", { create: true });
+      const gj = rt.enableJournal({ dir: jDir, reactive, idleMs: 150, includeHome: false });
+      gj.start();
+      rt.run("jrx = 1");
+      let commitsAfterRun = gj.commits;
+      for (let i = 0; i < 20 && commitsAfterRun < 1; i++) { await new Promise((res) => setTimeout(res, 150)); commitsAfterRun = gj.commits; }
+      reactive.restoreLive(reactive.liveIdx); // 복원(무변경이라도 경계 이벤트)
+      let commitsAfterRestore = gj.commits;
+      for (let i = 0; i < 20 && commitsAfterRestore <= commitsAfterRun; i++) { await new Promise((res) => setTimeout(res, 150)); commitsAfterRestore = gj.commits; }
+      gj.stop();
+      check("journal: 복원 후 유휴 커밋 발생(복원 상태의 durable 반영)",
+        commitsAfterRun >= 1 && commitsAfterRestore > commitsAfterRun, `run 후 ${commitsAfterRun}, 복원 후 ${commitsAfterRestore}`);
+      await jRootDir.removeEntry("pyprocGateJournal", { recursive: true });
+
       // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)
       const badInheritedRt = new Runtime(rt.raw, rt.indexURL, { assetIntegrity: badAssetIntegrity });
       await badInheritedRt.enableSyscallBridge({ input: () => "bad" }).install();
@@ -247,6 +294,17 @@
       const victim = os.ps().find((p) => p.state === "ready").pid;
       check("kill(pid): dead 전이", os.kill(victim) === true && os.ps().find((p) => p.pid === victim).state === "dead");
 
+      // 오류 계약: 워커 파이썬 예외의 code/pyExcType이 postMessage 경계를 건너온다
+      const alive = os.ps().find((p) => p.state === "ready").pid;
+      let taskErr = null;
+      try { await os.exec(alive, "def _fn(arg):\n    raise ValueError('boom')"); } catch (e) { taskErr = e; }
+      check("PyProcError: 워커 예외 코드 + pyExcType 경계 통과",
+        !!taskErr && taskErr.code === "PYPROC_WORKER_TASK_ERROR" && taskErr.context && taskErr.context.pyExcType === "ValueError",
+        taskErr ? `${taskErr.code}/${taskErr.context && taskErr.context.pyExcType}` : "no error");
+      let deadErr = null;
+      try { await os.exec(victim, "def _fn(arg):\n    return 1"); } catch (e) { deadErr = e; }
+      check("PyProcError: dead pid 거부 코드", !!deadErr && deadErr.code === "PYPROC_PROCESS_UNAVAILABLE", deadErr && deadErr.code);
+
       os.terminate();
       check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
 
@@ -287,6 +345,45 @@
       check("복제 고유성: 프로세스마다 random 재시드", rnd[0] !== rnd[1], JSON.stringify(rnd));
       cos.terminate();
 
+      // 잡 컨트롤 강제 회수: 협조 시그널이 통하지 않는 잡(KeyboardInterrupt를 삼키는 루프)을
+      // killHard가 워커 교체로 회수하고 레인이 재사용 가능해야 한다.
+      const jc = new JobControl({ workers: 2, indexURL: INDEX });
+      await jc.boot();
+      const spawned = await jc.push("__import__('time').sleep(999) &");
+      const hardKilled = await jc.killHard(spawned.job);
+      const jcState = jc.jobs().find((j) => j.jobId === spawned.job).state;
+      const afterKill = await jc.push("21 * 2 &"); // 교체된 레인이 잡 슬롯으로 재사용되는가
+      const afterResult = await jc.fg(afterKill.job);
+      check("jobControl.killHard: 행 잡 회수 + 레인 재부팅 재사용",
+        hardKilled === true && jcState === "killed" && afterResult && afterResult.value === "42",
+        `state ${jcState}, 재사용 결과 ${afterResult && afterResult.value}`);
+      jc.terminate();
+
+      // 컨테이너: 사망 즉시 거부(영원 pending 금지) + 중첩 깊이 2 경로 라우팅(run/heapLen/kill)
+      const mc = new MachineContainer(rt, { indexURL: INDEX });
+      const c1 = await mc.spawn({});
+      check("container: 부팅 + run", (await c1.run("11 * 3")) === 33, `boot ${c1.bootMs}ms`);
+      const spawnedChild = await mc._callPath(c1.cid, { type: "spawnChild", indexURL: mc._indexURL, manifest: {} });
+      const nestedCid = c1.cid + "/" + spawnedChild.childCid;
+      const nestedRun = await mc._callPath(nestedCid, { type: "run", code: "7 * 6" });
+      const nestedHeap = await mc._callPath(nestedCid, { type: "heap" });
+      check("container 중첩(깊이 2): run + heapLen 경로 라우팅",
+        nestedRun.result === 42 && nestedHeap.heapLen > 0, `${nestedCid}, heap ${nestedHeap.heapLen}`);
+      const nestedKilled = await mc.kill(nestedCid);
+      let nestedDeadCode = "";
+      try { await mc._callPath(nestedCid, { type: "run", code: "1" }); } catch (e) { nestedDeadCode = e.code; }
+      check("container 중첩 kill: 부모 층 라우팅 + 이후 호출 명시 거부",
+        nestedKilled === true && (nestedDeadCode === "PYPROC_PROCESS_UNAVAILABLE" || nestedDeadCode === "PYPROC_WORKER_TASK_ERROR"), nestedDeadCode);
+      const runPending = c1.run("1 + 1").catch((e) => e); // 사망 직전 발사 -> 크래시 수렴 검사
+      mc.kill(c1.cid);
+      const crashed = await runPending;
+      let topDeadCode = "";
+      try { await c1.run("2"); } catch (e) { topDeadCode = e.code; }
+      check("container 사망: 대기 요청 즉시 reject + 이후 호출 즉시 거부",
+        (crashed === 2 || (crashed && crashed.code === "PYPROC_PROCESS_UNAVAILABLE")) && topDeadCode === "PYPROC_PROCESS_UNAVAILABLE",
+        `pending ${crashed && (crashed.code || crashed)}, 이후 ${topDeadCode}`);
+      mc.terminate();
+
       // mapArray(numpy 샤딩)의 런타임 검증은 무게 때문에 전용 probe가 담당한다:
       // tests/attempts/runtimeParity/shardMapProbe.html (4워커 5.28배 실측)
 
@@ -326,6 +423,10 @@
       const s2 = await bootSession({ indexURL: INDEX });
       await s2.load(sDir, "gate");
       check("session: 델타로 크로스 커널 부활", s2.rt.run("k + 42") === 4142, `${sv.pages}p, ${sv.mb}MB`);
+      const untrustedImg = await s2.exportImage();
+      let trustCode = "";
+      try { await openMachine(untrustedImg); } catch (e) { trustCode = e.code; }
+      check("openMachine: trust 미승인이 코드로 거부", trustCode === "PYPROC_MACHINE_UNTRUSTED", trustCode);
       await (await navigator.storage.getDirectory()).removeEntry("pyprocGateSess", { recursive: true });
     } catch (e) {
       check("예외 없음", false, String(e).slice(0, 300));

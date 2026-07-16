@@ -2,7 +2,7 @@
 // 도커의 3요소가 브라우저에 완성된다: 이미지(.pymachine + SHA-256 + trust, session.js) +
 // 레지스트리(OPFS) + **실행(이 능력 = 컨테이너 커널을 워커에 띄운다)**. 각 컨테이너는 자기
 // 매니페스트(자기 패키지 세트)로 부팅한 독립 커널이고, 부모 파이썬에 값(m)으로 노출된다.
-// 중첩(깊이 2+): 컨테이너가 자기 자식 컨테이너를 spawn한다(machineWorker.js가 재귀적으로).
+// 중첩(깊이 임의): 컨테이너가 자기 자식 컨테이너를 spawn하고 경로 라우터(route)가 층을 내려간다.
 // 내부 kill은 그 워커만 죽인다 = 외부 무영향(주소공간 독립). machineWorker.js는 같은 폴더 고정.
 //
 // 파이썬 표면: pyprocMachine.spawn(manifest?) -> 컨테이너 객체(run/spawn/kill/heapLen).
@@ -10,6 +10,8 @@
 // 브리지는 pyodide 전역 객체(_pyprocMachineBridge)로 준다(socketBridge와 같은 패턴 = js 모듈이
 // 아니라 전역 이름으로 접근). 반환 프록시(Promise)는 run_sync가 서스펜드해 값으로 만든다.
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
+import { PyProcError } from "../runtime/errors.js";
+import { createRpcPort } from "./rpcChannel.js";
 
 const BOOTSTRAP = `
 import sys as _pyprocSys, types as _pyprocTypes, json as _pyprocJson
@@ -42,8 +44,8 @@ export class MachineContainer {
   constructor(rt, cfg = {}) {
     this._rt = rt;
     this._indexURL = cfg.indexURL || rt.indexURL;
-    this._containers = new Map(); // cid -> { worker, pending, parentCid|null }
-    this._seq = 0;
+    this._containers = new Map(); // cid -> { worker, port }
+    this._seq = 0; // cid 발급 전용(요청 상관은 rpcChannel의 자기 카운터가 소유)
     this._snapshot = null; // bare 스냅샷(1회 제조, 모든 컨테이너가 fast fork로 공유)
     this._assetIntegrity = cfg.assetIntegrity || rt.assetIntegrity || null;
     this._assetIntegrityCheck = null;
@@ -62,18 +64,10 @@ export class MachineContainer {
   _spawnWorker() {
     const cid = "m" + ++this._seq;
     const worker = new Worker(new URL("./machineWorker.js", import.meta.url), { type: "module" });
-    const pending = new Map();
-    worker.addEventListener("message", (e) => {
-      const p = pending.get(e.data.reqId);
-      if (!p) return;
-      pending.delete(e.data.reqId);
-      if (e.data.type === "error") p.reject(new Error(e.data.error)); else p.resolve(e.data);
-    });
-    worker.addEventListener("error", (e) => {
-      for (const p of pending.values()) p.reject(new Error(`컨테이너 ${cid} 크래시: ${e.message || "unknown"}`));
-      pending.clear();
-    });
-    this._containers.set(cid, { worker, pending });
+    // RPC 상관과 크래시 수렴은 rpcChannel이 소유한다. 크래시한 컨테이너로의 이후 호출은
+    // 영원히 매달리지 않고 즉시 reject된다(pyProc과 같은 계약).
+    const port = createRpcPort(worker, { label: `컨테이너 ${cid}` });
+    this._containers.set(cid, { worker, port });
     return cid;
   }
 
@@ -85,12 +79,16 @@ export class MachineContainer {
 
   _call(cid, msg) {
     const c = this._containers.get(cid);
-    if (!c) return Promise.reject(new Error(`machineContainer: ${cid} 없음(killed?)`));
-    const reqId = ++this._seq;
-    return new Promise((resolve, reject) => {
-      c.pending.set(reqId, { resolve, reject });
-      c.worker.postMessage({ ...msg, reqId });
-    });
+    if (!c) return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `machineContainer: ${cid} 없음(killed?)`));
+    return c.port.call(msg);
+  }
+
+  // 중첩 cid("m1/c2/c1")를 최상위 워커의 경로 라우터로 보낸다. 경로의 각 층이 다음 세그먼트의
+  // 자식에게 op를 재귀 전달하고 응답은 층을 거슬러 올라온다(깊이 임의).
+  _callPath(cid, op) {
+    const [top, ...path] = String(cid).split("/");
+    if (!path.length) return this._call(top, op);
+    return this._call(top, { type: "route", path, op });
   }
 
   // JS API: 컨테이너 부팅. manifest = { env, packages, setup }(컨테이너의 자기 패키지 세트).
@@ -102,37 +100,41 @@ export class MachineContainer {
     return {
       cid,
       bootMs: booted.bootMs,
-      run: (code) => this._call(cid, { type: "run", code }).then((r) => r.result),
-      heapLen: () => this._call(cid, { type: "heap" }).then((r) => r.heapLen),
+      run: (code) => this._callPath(cid, { type: "run", code }).then((r) => r.result),
+      heapLen: () => this._callPath(cid, { type: "heap" }).then((r) => r.heapLen),
       kill: () => this.kill(cid),
     };
   }
 
+  // 종료: 최상위는 커널이 직접 terminate + 대기 전건 즉시 reject. 중첩 cid는 대상의
+  // 부모 층으로 killChild를 라우팅한다(반환은 Promise<boolean>).
   kill(cid) {
-    const c = this._containers.get(cid);
-    if (!c) return false;
-    c.worker.terminate();
-    for (const p of c.pending.values()) p.reject(new Error(`컨테이너 ${cid} killed`));
-    this._containers.delete(cid);
-    return true;
+    const segments = String(cid).split("/");
+    if (segments.length === 1) {
+      const c = this._containers.get(cid);
+      if (!c) return false;
+      c.worker.terminate();
+      c.port.fail(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `컨테이너 ${cid} killed`));
+      this._containers.delete(cid);
+      return true;
+    }
+    const parentPath = segments.slice(1, -1);
+    const op = { type: "killChild", childCid: segments[segments.length - 1] };
+    return this._call(segments[0], parentPath.length ? { type: "route", path: parentPath, op } : op).then(() => true);
   }
 
   // 파이썬 표면 배선: pyprocMachine.spawn()이 파이썬 값을 돌려준다. 블로킹 = JSPI(rt.runAsync 경로).
-  // cid 규칙: 최상위는 "m3", 중첩 자식은 "m3/c1"(부모워커 소유). "/"면 부모 워커에 callChild로 라우팅.
+  // cid 규칙: 최상위는 "m3", 중첩은 "m3/c1/c2"(각 층이 자기 자식 소유). "/" 경로는 route로 재귀 라우팅(깊이 임의).
   install() {
     const bridge = {
       spawn: async (manifestJson) => (await this.spawn(JSON.parse(manifestJson))).cid,
-      run: (cid, code) => cid.includes("/")
-        ? this._call(cid.split("/")[0], { type: "callChild", childCid: cid.split("/")[1], code }).then((r) => r.result)
-        : this._call(cid, { type: "run", code }).then((r) => r.result),
+      run: (cid, code) => this._callPath(cid, { type: "run", code }).then((r) => r.result),
       spawnChild: async (parentCid, manifestJson) => {
-        const r = await this._call(parentCid, { type: "spawnChild", indexURL: this._indexURL, manifest: JSON.parse(manifestJson) });
+        const r = await this._callPath(parentCid, { type: "spawnChild", indexURL: this._indexURL, manifest: JSON.parse(manifestJson) });
         return parentCid + "/" + r.childCid;
       },
-      heap: (cid) => this._call(cid, { type: "heap" }).then((r) => r.heapLen),
-      kill: (cid) => cid.includes("/")
-        ? this._call(cid.split("/")[0], { type: "killChild", childCid: cid.split("/")[1] }).then(() => true)
-        : this.kill(cid),
+      heap: (cid) => this._callPath(cid, { type: "heap" }).then((r) => r.heapLen),
+      kill: (cid) => this.kill(cid),
     };
     // 단일 브리지 객체를 pyodide 전역에 둔다(socketBridge 패턴). 파이썬은 _pyprocMachineBridge로 만진다.
     this._rt.setGlobal("_pyprocMachineBridge", bridge);

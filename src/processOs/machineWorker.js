@@ -7,21 +7,20 @@
 // 설치가 아니라 복원(< 1.5s). 스냅샷이 없으면 콜드 부팅으로 폴백한다. Runtime으로 감싸
 // 두 번째 글루를 만들지 않는다. machineContainer.js가 같은 폴더의 이 파일을 spawn한다.
 import { Runtime } from "../runtime/runtime.js";
+import { PyProcError, toErrorPayload } from "../runtime/errors.js";
+import { createRpcPort } from "./rpcChannel.js";
 
 let rt = null;
 let ownSnapshot = null; // 이 컨테이너가 부팅한 스냅샷(중첩 자식에 물려준다 = fast fork 계승)
-const children = new Map(); // childCid -> { worker, pending: Map }
-let childSeq = 0;
+const children = new Map(); // childCid -> { worker, port }
+let childSeq = 0; // cid 발급 전용(요청 상관은 rpcChannel이 소유)
 
-// 자식(중첩 컨테이너) 워커에 RPC를 보내고 응답을 기다린다.
+// 자식(중첩 컨테이너) 워커에 RPC를 보내고 응답을 기다린다. 자식 크래시는 rpcChannel이
+// 대기 전건을 즉시 reject한다(층이 깊어도 영원히 매달리는 Promise 없음).
 function callChild(childCid, msg) {
   const child = children.get(childCid);
-  if (!child) return Promise.reject(new Error(`machineWorker: 자식 ${childCid} 없음`));
-  const reqId = ++childSeq;
-  return new Promise((resolve, reject) => {
-    child.pending.set(reqId, { resolve, reject });
-    child.worker.postMessage({ ...msg, reqId });
-  });
+  if (!child) return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `machineWorker: 자식 ${childCid} 없음`));
+  return child.port.call(msg);
 }
 
 onmessage = async (e) => {
@@ -55,19 +54,17 @@ onmessage = async (e) => {
       // 중첩: 이 컨테이너가 자기 자식 컨테이너를 만든다(깊이 +1).
       const childCid = "c" + ++childSeq;
       const worker = new Worker(new URL("./machineWorker.js", import.meta.url), { type: "module" });
-      const pending = new Map();
-      worker.addEventListener("message", (ev) => {
-        const p = pending.get(ev.data.reqId);
-        if (!p) return;
-        pending.delete(ev.data.reqId);
-        if (ev.data.type === "error") p.reject(new Error(ev.data.error)); else p.resolve(ev.data);
-      });
-      children.set(childCid, { worker, pending });
+      children.set(childCid, { worker, port: createRpcPort(worker, { label: `중첩 컨테이너 ${childCid}` }) });
       const booted = await callChild(childCid, { type: "boot", indexURL: msg.indexURL, snapshot: ownSnapshot, manifest: msg.manifest });
       postMessage({ type: "spawnedChild", reqId: msg.reqId, childCid, bootMs: booted.bootMs });
-    } else if (msg.type === "callChild") {
-      const ran = await callChild(msg.childCid, { type: "run", code: msg.code });
-      postMessage({ type: "ran", reqId: msg.reqId, result: ran.result });
+    } else if (msg.type === "route") {
+      // 경로 라우터: path의 첫 세그먼트 자식에게 op(또는 남은 경로)를 재귀 전달한다.
+      // 응답 payload는 층을 거슬러 그대로 올라오고 reqId만 이 층의 것으로 되돌린다.
+      // 오류는 각 층의 catch가 toErrorPayload로 중계하므로 code/pyExcType이 보존된다.
+      const hop = msg.path.length === 1
+        ? await callChild(msg.path[0], msg.op)
+        : await callChild(msg.path[0], { type: "route", path: msg.path.slice(1), op: msg.op });
+      postMessage({ ...hop, reqId: msg.reqId });
     } else if (msg.type === "killChild") {
       const child = children.get(msg.childCid);
       if (child) { child.worker.terminate(); children.delete(msg.childCid); }
@@ -77,6 +74,6 @@ onmessage = async (e) => {
       postMessage({ type: "heapLen", reqId: msg.reqId, heapLen: rt.memory.byteLength() });
     }
   } catch (err) {
-    postMessage({ type: "error", reqId: msg.reqId, error: String(err).slice(-300) });
+    postMessage({ type: "error", reqId: msg.reqId, ...toErrorPayload(err) });
   }
 };

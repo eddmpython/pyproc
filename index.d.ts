@@ -4,6 +4,53 @@
 export const PAGE_SIZE: number;
 export const PYPROC_ASSET_MANIFEST_VERSION: 1;
 
+/** src의 모든 오류가 사용하는 단일 오류 계약의 코드. 카탈로그는 src/runtime/errors.js와 일치한다. */
+export type PyProcErrorCode =
+  | "PYPROC_ENV_UNSUPPORTED"
+  | "PYPROC_INPUT_INVALID"
+  | "PYPROC_BOOT_FAILED"
+  | "PYPROC_ASSET_INTEGRITY"
+  | "PYPROC_MACHINE_FORMAT_INVALID"
+  | "PYPROC_MACHINE_INTEGRITY"
+  | "PYPROC_MACHINE_UNTRUSTED"
+  | "PYPROC_REPLAY_MISMATCH"
+  | "PYPROC_HEAP_GROW_FAILED"
+  | "PYPROC_CHECKPOINT_PRUNED"
+  | "PYPROC_PROCESS_UNAVAILABLE"
+  | "PYPROC_FORK_UNAVAILABLE"
+  | "PYPROC_WORKER_CRASHED"
+  | "PYPROC_WORKER_TASK_ERROR"
+  | "PYPROC_TASK_TIMEOUT"
+  | "PYPROC_POOL_EXHAUSTED"
+  | "PYPROC_JOURNAL_CORRUPT"
+  | "PYPROC_JOURNAL_IO"
+  | "PYPROC_RPC_OUTCOME_UNKNOWN"
+  | "PYPROC_LEADER_UNAVAILABLE"
+  | "PYPROC_SPLIT_BRAIN"
+  | "PYPROC_LEADER_LOCK_FAILED"
+  | "PYPROC_RPC_ACTION_INVALID"
+  | "PYPROC_PARTICIPANT_LEFT"
+  | "PYPROC_KERNEL_EXECUTION_ERROR"
+  | "PYPROC_GPU_UNAVAILABLE"
+  | "PYPROC_INTERNAL";
+
+export const PYPROC_ERROR_CODES: readonly PyProcErrorCode[];
+
+/**
+ * pyproc의 단일 오류 계약. 프로그램적 분기는 message가 아니라 code로 한다.
+ * retryable = 재시도 가능성. 전송 후 결과 불명(PYPROC_RPC_OUTCOME_UNKNOWN)은 항상
+ * retryable=false다(자동 재실행 금지 계약).
+ * 워커 안 파이썬 예외는 context.pyExcType에 예외 클래스명(KeyboardInterrupt 등)이 실려
+ * postMessage 경계를 건너온다.
+ */
+export class PyProcError extends Error {
+  constructor(code: PyProcErrorCode, message: string, opts?: { retryable?: boolean; context?: Record<string, unknown>; cause?: unknown });
+  readonly name: "PyProcError";
+  code: PyProcErrorCode;
+  retryable: boolean;
+  context?: Record<string, unknown>;
+}
+
 export interface PyProcAssetEntry {
   role: "processWorker" | "sharedKernelHost" | "machineWorker" | "wasiWorker" | "pyprocServiceWorker";
   /** 패키지 루트 기준 상대 경로. */
@@ -232,6 +279,10 @@ export interface CheckpointInfo {
   kind: "base" | "delta";
   /** 이 노드의 부모(= 만들 당시의 live 노드). 과거로 복원한 뒤 체크포인트하면 분기가 된다. */
   parent?: number;
+  /** 체크포인트 시점의 스택 포인터(노드에 저장됨). restore()가 자동으로 소비한다. */
+  sp: number | null;
+  /** 이 체크포인트로 복원한다(= restoreLive(index)). sp 운반이 필요 없는 복원의 정본. */
+  restore(opts?: { rehash?: boolean }): RestoreInfo;
 }
 
 export interface CheckpointNode {
@@ -327,14 +378,42 @@ export class MemoryCapability {
 export class ReactiveController {
   /** 체크포인트 나무: 각 노드의 부모/자식. */
   tree(): CheckpointNode[];
+  /**
+   * 현재 힙을 체크포인트로 저장하고 복원 핸들을 돌려준다. cp.restore() 한 호출이
+   * 복원의 정본이다(스택 포인터는 노드에 저장되어 있어 운반할 필요가 없다).
+   */
   checkpoint(): CheckpointInfo;
-  restore(j: number, savedSP: number | null): void;
-  /** 경계 위반(마지막 checkpoint/restore 이후 실행·변이)은 자동 감지되어 재해시 경로로 복원된다. opts.rehash는 강제 재해시. */
-  restoreLive(j: number, savedSP: number | null, opts?: { rehash?: boolean }): RestoreInfo;
-  timeTravel(j: number, savedSP: number | null, opts?: { rehash?: boolean }): RestoreInfo;
+  /** savedSP를 생략(null)하면 노드에 저장된 sp를 쓴다. prune된 노드는 PYPROC_CHECKPOINT_PRUNED. */
+  restore(j: number, savedSP?: number | null): void;
+  /**
+   * 경계 위반(마지막 checkpoint/restore 이후 실행·변이)은 자동 감지되어 재해시 경로로 복원된다.
+   * opts.rehash는 강제 재해시. savedSP 생략 시 노드 저장 sp 사용.
+   * 주의: getGlobal이 준 라이브 PyProxy로 파이썬을 호출한 변이는 감지되지 않는다.
+   * 그런 변이 후에는 markDirty() 또는 opts.rehash 없이 즉시 경로를 신뢰하지 마라.
+   */
+  restoreLive(j: number, savedSP?: number | null, opts?: { rehash?: boolean }): RestoreInfo;
+  timeTravel(j: number, savedSP?: number | null, opts?: { rehash?: boolean }): RestoreInfo;
+  /**
+   * 두 체크포인트 사이의 사용자 상태를 { pages, bin }으로 수집한다(세션 저장/저널 커밋/이미지
+   * 내보내기의 공용 프리미티브). toIdx는 live 노드여야 한다(checkpoint()로 경계를 닫은 직후 사용).
+   * opts.pack이 false면 bin은 null(페이지 목록만 필요한 소비자의 재할당 회피).
+   */
+  collectDelta(fromIdx?: number, toIdx?: number, opts?: { pack?: boolean }): { pages: number[]; bin: Uint8Array | null; sp: number | null; heapLen: number };
+  /** 외부 변이 신고: 라이브 PyProxy 호출처럼 계측되지 않는 힙 변이 후 호출하면 다음 restoreLive가 재해시 경로로 승격된다. */
+  markDirty(): void;
+  /**
+   * 루트->j 부모 체인 밖 노드의 델타/해시를 해제한다(체크포인트 나무의 RAM 배출 밸브).
+   * 해제된 노드의 복원은 PYPROC_CHECKPOINT_PRUNED로 거부된다. liveIdx는 경로 위에 있어야 한다.
+   */
+  pruneTo(j: number): { freedNodes: number; freedMB: number; keptNodes: number };
+  /** 나무 전체 해제. 기존 노드 복원은 거부되고, 다음 checkpoint()가 새 나무를 시작한다. */
+  dispose(): void;
   stackSave(): number | null;
   storageMB(): number;
-  /** base(기준 힙)를 파일 핸들로 내보내 RAM 부담을 옮긴다. 핸들은 소비자가 준다. */
+  /**
+   * base(기준 힙)를 파일 핸들로 백업/이동한다. RAM은 줄지 않는다(복원 경로가 base 상주를
+   * 전제한다). 메모리 배출 밸브는 pruneTo/dispose가 정본이다. 핸들은 소비자가 준다.
+   */
   saveBase(dir: FileSystemDirectoryHandle, name: string): Promise<{ bytes: number }>;
   loadBase(dir: FileSystemDirectoryHandle, name: string): Promise<{ bytes: number }>;
 }
@@ -484,6 +563,12 @@ export class JobControl {
   fg(jobId: number): Promise<ReplOutcome | { error: string }>;
   /** 잡에 시그널(기본 SIGINT = 하드 인터럽트). 워커는 생존·재사용. */
   kill(jobId: number, signum?: number): boolean;
+  /**
+   * 협조 시그널이 통하지 않는 잡(인터럽트 미지원 워커, KeyboardInterrupt를 삼키는 루프)의
+   * 최후 수단: 워커를 강제 종료하고 같은 replay 매니페스트로 레인을 재부팅해 회수한다.
+   * 잡 상태는 "killed"로 종결. running이 아닌 잡이면 false.
+   */
+  killHard(jobId: number): Promise<boolean>;
   terminate(): void;
 }
 
@@ -740,6 +825,18 @@ export interface JournalConfig {
    * true의 기본 정책은 loose blob 128개 또는 8MB 이상이다.
    */
   autoPack?: boolean | JournalAutoPackPolicy;
+  /**
+   * 유휴 커밋의 성공/실패 관측 채널. durable 주장의 실패는 조용히 삼켜지지 않는다:
+   * 실패는 { kind: "commitError", error }(error.code = PYPROC_JOURNAL_IO 계열)로 온다.
+   * 콜백이 없으면 실패는 console.warn으로 남는다(기존 동작).
+   */
+  onStatus?: (event: { kind: "commit"; result: JournalCommitResult } | { kind: "commitError"; error: PyProcError }) => void;
+  /**
+   * 기본 false. true면 커밋 직후 reactive.pruneTo(liveIdx)로 체크포인트 나무를 라이브
+   * 경로만 남긴다(장수 머신의 RAM 배출 밸브). 같은 컨트롤러를 다른 소비자(Terminal %undo
+   * 마크 등)와 공유하면 그쪽 노드도 잘리므로 소비자가 결정한다.
+   */
+  pruneAfterCommit?: boolean;
 }
 
 export interface JournalAutoPackPolicy {
@@ -757,6 +854,8 @@ export interface JournalCommitResult {
   home?: { files: number; mb: number; wrote: boolean };
   /** autoPack 정책으로 같은 커밋 뒤 pack이 실행됐으면 그 결과가 들어온다. */
   autoPack?: JournalPackResult;
+  /** pruneAfterCommit이 켜져 있으면 커밋 직후 나무 prune 결과가 들어온다. */
+  pruned?: { freedNodes: number; freedMB: number; keptNodes: number };
 }
 
 export interface JournalPackResult {
@@ -934,6 +1033,10 @@ export class Runtime {
   readonly memory: MemoryCapability;
   /** 엔진-무관 일반 파일 IO(상시 능력, memory와 동급). 미지원 엔진이면 호출 시 에러. */
   readonly fs: FileSystem;
+  /** 상태 변이 카운터. 리액티브가 실행 경계 위반을 O(1)로 감지하는 근거(읽기 전용으로 취급). */
+  readonly execSeq: number;
+  /** 실행 API 밖의 상태 변이를 경계 카운터에 기록한다(복원, markDirty가 소비). */
+  noteStateMutation(): void;
   /** 이 커널이 부팅된 엔진 배포 지점. 자식 워커(subprocess)가 같은 지점을 쓴다. */
   readonly indexURL: string;
   /** pyproc-assets CLI 산출물. Runtime에서 만든 worker 능력이 spawn 전 graph를 검증할 때 쓴다. */
@@ -958,6 +1061,8 @@ export class Runtime {
   envBoot?: EnvBootStats;
   /** boot({ coreCacheDir/coreIntegrity })로 부팅한 경우의 코어 자산 캐시/검증 통계. */
   coreCache?: CoreAssetStats;
+  /** 런타임당 컨트롤러 1개(memoize): 몇 번을 불러도 같은 인스턴스다. 컨트롤러가 둘이면
+   *  한쪽의 복원이 다른 쪽 경계 가드에 보이지 않아 조용한 오염이 되므로 구조로 막는다. */
   enableReactive(): ReactiveController;
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
   enableSocketBridge(cfg: SocketBridgeConfig): SocketBridge;
@@ -1124,6 +1229,12 @@ export class PyProc {
   ps(): PyProcEntry[];
   /** 프로세스 강제 종료(SIGKILL 등가). 성공 시 true, 테이블에는 dead로 남는다. */
   kill(pid: number): boolean;
+  /**
+   * 프로세스 1개를 강제 종료하고 같은 부팅 방식(스냅샷/리플레이 = fork 대칭 유지)으로
+   * 새 프로세스를 채운다. 잡 컨트롤의 강제 회수(killHard)가 소비하는 공개 프리미티브.
+   * pid가 없으면 PYPROC_PROCESS_UNAVAILABLE.
+   */
+  respawn(pid: number): Promise<{ oldPid: number; pid: number }>;
   /**
    * 시그널 전달(유닉스 시그널 표). 실행 중 파이썬의 signal 핸들러가 발화한다.
    * SIGINT(2)=KeyboardInterrupt 기본, SIGTERM(15)/SIGUSR1(10) 등은 파이썬이 signal.signal로 건 핸들러가 받는다.
