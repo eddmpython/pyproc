@@ -176,7 +176,11 @@ await os.matmul(a, b, { parts: 4 });</div>
       log(`p95 envelope: single ${bench.singleP95}ms, shard ${bench.parallelP95}ms`);
       log(`correctness: max sample error ${bench.maxErr.toExponential(2)}`);
       os.terminate();
-      gateReport(isShardedSpeedBenchGreen(bench), {
+      // 게이트 문턱: 완주 게이트는 ?minSpeedup=로 조정 가능하다(기본 2.0). 속도 주장 인증은
+      // 이 페이지가 아니라 tracked artifact 계약(bench:speed, S1 green 기준 2.0)의 몫이고,
+      // 공유 CI 러너(4 vCPU)는 물리 코어가 부족해 2.0을 신뢰성 있게 넘지 못한다.
+      const minSpeedup = Number(new URLSearchParams(location.search).get("minSpeedup") || 2.0);
+      gateReport(isShardedSpeedBenchGreen(bench, { minMedianSpeedup: minSpeedup }), {
         config: { workers, size, benchSamples, indexURL: INDEX || null },
         timings,
         boot,

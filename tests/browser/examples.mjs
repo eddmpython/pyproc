@@ -39,7 +39,11 @@ console.log(`pyproc 예제 게이트\n  browser: ${browser}\n`);
 let failed = 0;
 for (const page of PAGES) {
   const profile = mkdtempSync(join(tmpdir(), "pyprocExample-"));
-  const proc = spawn(browser, [...headlessArgs(profile), `http://127.0.0.1:${port}/${page}?gate=1${indexQuery}`], { stdio: "ignore" });
+  // speedLab의 speedup 문턱만 환경으로 조정 가능(공유 러너의 물리 코어 한계).
+  // 속도 주장 자체의 인증은 artifact 계약이 담당한다(docs/operations/benchmarking.md S1).
+  const minSpeedup = page === "examples/speedLab.html" && process.env.PYPROC_EXAMPLES_MIN_SPEEDUP
+    ? `&minSpeedup=${process.env.PYPROC_EXAMPLES_MIN_SPEEDUP}` : "";
+  const proc = spawn(browser, [...headlessArgs(profile), `http://127.0.0.1:${port}/${page}?gate=1${indexQuery}${minSpeedup}`], { stdio: "ignore" });
   const result = await new Promise((res) => {
     resolveReport = res;
     setTimeout(() => { if (resolveReport === res) { resolveReport = null; res({ ok: false, timedOut: true }); } }, TIMEOUT_MS);
