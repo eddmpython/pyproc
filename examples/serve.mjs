@@ -36,7 +36,7 @@ export function createStaticServer(onRequest = null, opts = {}) {
     if (onRequest && (await onRequest(req, res))) return;
     const urlPath = decodeURIComponent(new URL(req.url, "http://x").pathname);
     // "/"는 랜딩을 서빙한다(URL은 루트 유지: 랜딩의 상대 경로가 배포 루트 기준이라서).
-    const rel = urlPath === "/" ? "/examples/index.html" : urlPath;
+    const rel = urlPath === "/" ? "/examples/index.html" : urlPath.endsWith("/") ? `${urlPath}index.html` : urlPath;
     const file = normalize(join(ROOT, rel));
     if (!file.startsWith(ROOT + sep)) { res.writeHead(403); return res.end("forbidden"); }
     try {
@@ -64,5 +64,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   createStaticServer().listen(PORT, () => {
     console.log(`pyproc 실측 서버 (COOP/COEP)  http://localhost:${PORT}/examples/basic.html`);
     console.log(`                              http://localhost:${PORT}/examples/processOs.html`);
+    console.log(`                              http://localhost:${PORT}/apps/webComputer/`);
   });
 }

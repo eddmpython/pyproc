@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="Two operating systems, one durable browser computer.">
+  <title>Web Computer</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+    {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  </script>
+</head>
+<body>
+  <div class="bootCurtain" id="bootCurtain" role="status" aria-live="polite">
+    <div class="bootMark" aria-hidden="true"><i></i><i></i><i></i></div>
+    <p id="bootMessage">Preparing your computer</p>
+  </div>
+
+  <div class="appShell" id="appShell" hidden>
+    <header class="topbar">
+      <a class="brand" href="/apps/webComputer/" aria-label="Web Computer home">
+        <span class="brandMark" aria-hidden="true"><i></i><i></i></span>
+        <span><b>WEB</b> COMPUTER</span>
+      </a>
+      <div class="ownerState" id="ownerState"><span class="stateDot"></span><span>Connecting</span></div>
+      <div class="topActions">
+        <button class="button subtle" id="saveButton" type="button">Save state</button>
+        <button class="button subtle" id="exportButton" type="button">Export</button>
+        <button class="button primary" id="importButton" type="button">Import machine</button>
+        <input id="importFile" type="file" accept=".webmachine,application/x-webmachine" hidden>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="machineRail" aria-label="Machines">
+        <div class="railIntro">
+          <span class="eyebrow">LOCAL WORKSPACE</span>
+          <h1>Two systems.<br>One computer.</h1>
+          <p>Compute, files and memory stay on this device.</p>
+        </div>
+
+        <button class="machineCard active" data-machine-tab="python" type="button">
+          <span class="machineGlyph pythonGlyph">Py</span>
+          <span class="machineCopy"><b>Python OS</b><small>CPython 3.14 · WebAssembly</small></span>
+          <span class="machineState" id="pythonState">offline</span>
+        </button>
+        <button class="machineCard" data-machine-tab="linux" type="button">
+          <span class="machineGlyph linuxGlyph">$</span>
+          <span class="machineCopy"><b>Linux</b><small>6.8.12 i686 · x86 guest</small></span>
+          <span class="machineState" id="linuxState">offline</span>
+        </button>
+
+        <div class="railMeta">
+          <div><span>Storage</span><b id="storageState">Not saved</b></div>
+          <div><span>Image channel</span><b>Development</b></div>
+          <p>The Linux image is hash-pinned and locally verified. Public redistribution remains disabled until its complete source inventory is available.</p>
+        </div>
+      </aside>
+
+      <section class="computerSurface">
+        <div class="surfaceHeader">
+          <div>
+            <span class="eyebrow" id="surfaceEyebrow">PYTHON OS</span>
+            <h2 id="surfaceTitle">A persistent Python computer</h2>
+          </div>
+          <div class="lifecycleActions">
+            <button class="iconButton" id="pauseButton" type="button" aria-label="Pause active machine">Ⅱ</button>
+            <button class="iconButton" id="resumeButton" type="button" aria-label="Resume active machine">▶</button>
+            <button class="iconButton danger" id="shutdownButton" type="button" aria-label="Shut down active machine">○</button>
+          </div>
+        </div>
+
+        <section class="systemPanel active" id="pythonPanel" data-system-panel="python">
+          <div class="panelToolbar">
+            <span>workspace.py</span>
+            <span class="runtimeMetric" id="pythonMetric">Waiting for runtime</span>
+          </div>
+          <textarea class="codeEditor" id="pythonCode" spellcheck="false" aria-label="Python code">from pathlib import Path
+
+visits = globals().get("visits", 0) + 1
+Path("/home/web/hello.txt").write_text(f"visit {visits}")
+print(f"Hello from persistent Python, visit {visits}")
+visits</textarea>
+          <div class="executeBar">
+            <span>State and <code>/home/web</code> are saved together.</span>
+            <button class="button primary" id="runPythonButton" type="button">Run Python <kbd>Ctrl ↵</kbd></button>
+          </div>
+          <pre class="output" id="pythonOutput" aria-live="polite">Python output will appear here.</pre>
+        </section>
+
+        <section class="systemPanel" id="linuxPanel" data-system-panel="linux" hidden>
+          <div class="screenFrame">
+            <div class="screenHeader"><span>VGA TEXT DISPLAY</span><span id="displayMetric">80 × 25</span></div>
+            <pre class="linuxDisplay" id="linuxDisplay" tabindex="0" aria-label="Linux VGA text display">Linux display is starting…</pre>
+          </div>
+          <form class="terminal" id="linuxForm">
+            <label for="linuxCommand">root@webcomputer</label>
+            <div class="terminalInput"><span>~%</span><input id="linuxCommand" autocomplete="off" spellcheck="false" value="uname -a" aria-label="Linux command"><button type="submit">Run</button></div>
+          </form>
+          <pre class="output terminalOutput" id="linuxOutput" aria-live="polite">Linux command output will appear here.</pre>
+        </section>
+
+        <footer class="activityBar">
+          <span id="activityMessage">Ready</span>
+          <span id="lastSaved">Unsaved session</span>
+        </footer>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="trustDialog" class="trustDialog">
+    <form method="dialog">
+      <span class="eyebrow">SIGNED MACHINE IMAGE</span>
+      <h2>Trust this computer?</h2>
+      <p>The image will not be read or started until you approve its signer and requested devices.</p>
+      <dl>
+        <div><dt>Signer</dt><dd id="trustSigner">-</dd></div>
+        <div><dt>Machines</dt><dd id="trustMachines">-</dd></div>
+        <div><dt>Devices</dt><dd id="trustDevices">-</dd></div>
+        <div><dt>File size</dt><dd id="trustSize">-</dd></div>
+      </dl>
+      <div class="dialogActions">
+        <button class="button subtle" value="cancel">Cancel</button>
+        <button class="button primary" id="trustImportButton" value="default">Trust and import</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

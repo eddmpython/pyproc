@@ -127,7 +127,7 @@ function stop(processHandle) {
 }
 
 let phase = 1;
-let proc = launch(pageUrl(), phase);
+let proc = launch(pageUrl(process.env.PYPROC_GATE_INITIAL_SEARCH || ""), phase);
 const restartTimings = {};
 
 const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);

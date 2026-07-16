@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "catalogId": "web-computer-development-assets-v1",
+  "channel": "development",
+  "redistribution": "disabled",
+  "promotionRequires": [
+    "exact-source-revision",
+    "reproducible-build-recipe",
+    "license-material",
+    "component-inventory"
+  ],
+  "assets": [
+    {
+      "name": "libv86.mjs",
+      "role": "engine-module",
+      "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
+      "sha256": "b58774370dcd62e534e05d2b6bb734f7057ef2166c3cc034e45847945d0910d1",
+      "byteLength": 353724,
+      "licenseConcluded": "BSD-2-Clause",
+      "provenanceStatus": "registry-integrity-without-source-revision"
+    },
+    {
+      "name": "v86.wasm",
+      "role": "engine-binary",
+      "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
+      "sha256": "aec2c16bb0a1618aa641bb44d9c0fe14681f8c1459fa08c32e3e0562020884e8",
+      "byteLength": 2084417,
+      "licenseConcluded": "NOASSERTION",
+      "provenanceStatus": "composite-binary-inventory-incomplete"
+    },
+    {
+      "name": "seabios.bin",
+      "role": "firmware",
+      "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
+      "sha256": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98",
+      "byteLength": 131072,
+      "licenseConcluded": "LGPL-3.0-only",
+      "provenanceStatus": "upstream-recipe-not-reproduced"
+    },
+    {
+      "name": "vgabios.bin",
+      "role": "firmware",
+      "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
+      "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880",
+      "byteLength": 36352,
+      "licenseConcluded": "LGPL-3.0-only",
+      "provenanceStatus": "upstream-recipe-not-reproduced"
+    },
+    {
+      "name": "buildroot-bzimage68.bin",
+      "role": "guest-image",
+      "url": "https://i.copy.sh/buildroot-bzimage68.bin",
+      "sha256": "507a759c70ab7a490a233be454d0b5b88bc667956a410b531cb4edc091e2eb1c",
+      "byteLength": 10068480,
+      "licenseConcluded": "NOASSERTION",
+      "provenanceStatus": "opaque-upstream-binary"
+    }
+  ]
+}
