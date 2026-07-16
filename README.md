@@ -36,15 +36,26 @@ The usual answer is a server container or a fresh Python environment per attempt
 
 ## In one example
 
+The retry loop is the product. Prepare once, checkpoint, let the agent try, restore in
+milliseconds when it fails:
+
 ```js
 import { boot } from "pyproc";
 
 const rt = await boot();
-rt.run("values = [10, 20, 30]");
-console.log(rt.run("sum(values)"));   // 60
+await rt.loadPackages(["numpy"]);            // prepare once (packages, data)
+const cp = rt.enableReactive().checkpoint(); // save the prepared state
+
+try {
+  rt.run(codeFromTheAgent);                  // attempt N
+} catch (err) {
+  cp.restore();                              // prepared state is back - no re-boot, no re-install
+  rt.run(fixedCode);                         // attempt N+1 from clean
+}
 ```
 
-Real CPython (via [Pyodide](https://pyodide.org) / WebAssembly), running in the tab, returning real values.
+Real CPython (via [Pyodide](https://pyodide.org) / WebAssembly), running in the tab, returning
+real values - with a state you can save, branch, and get back.
 
 ## Where a browser Python sandbox helps
 
@@ -100,29 +111,36 @@ Checkpoint and restore. Reactivity is opt-in via `enableReactive`; the closing `
 
 ```js
 const reactive = rt.enableReactive();
-const sp = reactive.stackSave();
 rt.run("values = [10, 20, 30]");
-const cp = reactive.checkpoint();            // save this state
+const cp = reactive.checkpoint();             // save this state
 rt.run("values.append(999)");
-reactive.checkpoint();                        // close the execution boundary (the contract)
-reactive.restoreLive(cp.index, sp);           // back to the checkpoint - writes only changed pages
+reactive.checkpoint();                        // close the execution boundary -> instant restore path
+cp.restore();                                 // back to the checkpoint - writes only changed pages
 console.log(rt.run("len(values)"));           // 3
 ```
 
+If the boundary was not closed (an exception mid-run, a stray mutation), `cp.restore()` detects
+it and falls back to a full rehash automatically - slower, never silently corrupt. After calling
+Python through a live proxy handle, report it with `reactive.markDirty()`.
+
 > The basics above need only a Chromium browser. `PyProc` (process OS) and sockets also need `crossOriginIsolated` (`COOP: same-origin`, `COEP: require-corp`) and same-origin workers - see [Setup](#setup). Run `checkEnvironment()` to check.
 
-## Run the Web Computer
+## Choosing your entry point
 
-The Web Computer product boots Python OS and Linux in one browser workspace. Both guests have real memory and block-backed files, save into one durable IndexedDB generation, recover after the browser process closes, and move together in a signed `.webmachine` file.
+One question at a time, one obvious door:
 
-```sh
-npm run assets:web-computer
-npm run serve
-```
+| You need | Entry point | You get |
+|---|---|---|
+| Run Python in this tab, no revival | `boot()` | `Runtime` (run/install/fs) |
+| Adopt a Pyodide you already booted | `new Runtime(py)` | same `Runtime`, no second interpreter |
+| A state that saves and revives | `bootSession(manifest)` | `Session` (save/load/exportImage) |
+| Open a portable machine file | `openMachine(blob, { trustedPublicKeys })` | `Session`, after integrity + trust checks |
+| One living machine across tabs | `openPersistentMachine({ name })` | `KernelElection` handle (run/commit/status) |
+| Real parallelism / live fork | `new PyProc({ replay })` | worker process pool (`map`/`fork`/`signal`) |
 
-Open `http://localhost:8788/apps/webComputer/` in Edge or Chromium. The product includes Python execution, a Linux VGA display and terminal, pause/resume/shutdown controls, automatic durable saves after commands, manual save, signed export, and an explicit signer trust screen for import.
-
-The current Linux execution catalog is a hash-pinned development channel. Its engine and image binaries are prepared locally and excluded from git and npm packages; public redistribution remains disabled until the complete source and license inventory is reproducible.
+Deterministic replay is the shared foundation: `bootSession` fixes the boot entropy so the same
+manifest reproduces byte-identical memory, which is what makes delta save, journal revival, and
+worker-to-worker `fork` sound.
 
 ## Using it from an AI agent
 
@@ -160,7 +178,7 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 | uv lane (`bootEnv` / `freeze` / `runScript`), wheel cache, terminal, syscall bridge | Beta |
 | Session revival + `.pymachine` images, machine journal (WAL) | Experimental |
 | Live process fork, device FS, init / cron / resume hooks, virtual-origin URL | Experimental |
-| Persistent multi-tab machine (`openPersistentMachine` / `KernelElection`), shared kernel | Experimental |
+| Persistent multi-tab machine (`openPersistentMachine` / `KernelElection`) | Experimental |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 
 ## What it guarantees, and what it doesn't
@@ -243,6 +261,19 @@ Primitive-level measurements remain useful context:
 
 Reality check: pure-Python logic is at or above local speed; large single-kernel NumPy arithmetic is still limited by WASM single-thread and no-AVX BLAS. pyproc's numeric speed answer is horizontal sharding, while the broader browser-OS speed answer is prepared state, restore, process pools, in-tab servers, and portable machine images.
 
+## Run the Web Computer
+
+The Web Computer product boots Python OS and Linux in one browser workspace. Both guests have real memory and block-backed files, save into one durable IndexedDB generation, recover after the browser process closes, and move together in a signed `.webmachine` file.
+
+```sh
+npm run assets:web-computer
+npm run serve
+```
+
+Open `http://localhost:8788/apps/webComputer/` in Edge or Chromium. The product includes Python execution, a Linux VGA display and terminal, pause/resume/shutdown controls, automatic durable saves after commands, manual save, signed export, and an explicit signer trust screen for import.
+
+The current Linux execution catalog is a hash-pinned development channel. Its engine and image binaries are prepared locally and excluded from git and npm packages; public redistribution remains disabled until the complete source and license inventory is reproducible.
+
 ## Public surface
 
 Capabilities are opt-in. Turn on only what you need, and consume the capability contract rather than engine internals (`HEAPU8` and friends). This README names the public surface; the full product decision table lives in the [capability matrix](docs/consuming/capabilityMatrix.md).
@@ -253,11 +284,11 @@ Capabilities are opt-in. Turn on only what you need, and consume the capability 
 | Prepare repeatable environments | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
 | Restore, branch, and time-travel state | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
 | Keep one Python machine alive across tabs | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
-| Use browser workers as processes | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
+| Use browser workers as processes | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
 | Serve Python behind real browser URLs | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
-| Build terminal and borrowed syscall flows | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
+| Build terminal and borrowed syscall flows | `Terminal`, `SyscallBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
 | Persist, cast, and revive a machine | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
-| Push beyond the default engine lane | `GpuCompute`, `GpuArray`, `GpuBridge`, `bootWasi`, `WasiSession` | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
+| Push beyond the default engine lane (subpaths) | `pyproc/gpu` (`GpuCompute`, `GpuArray`, `GpuBridge`), `pyproc/socket` (`SocketBridge`), `pyproc/wasi` (`bootWasi`, `WasiSession`) | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
 | Ship worker-backed capabilities from a product | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
 | Branch on failures programmatically | `PyProcError`, `PYPROC_ERROR_CODES` | [structure gate](tests/run.mjs), [browser gate](tests/browser/gate.html) |
 
@@ -268,6 +299,10 @@ import { boot } from "pyproc/runtime";
 import { ReactiveController } from "pyproc/reactive";
 import { PyProc } from "pyproc/process-os";
 import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
+// Demoted (no headless CI gate, or research preview) - deliberately off the root surface:
+import { GpuCompute } from "pyproc/gpu";
+import { SocketBridge } from "pyproc/socket";
+import { bootWasi } from "pyproc/wasi";
 ```
 
 Deep, example-driven docs for each capability live in [docs/](docs/README.md); this README stays the map. For product decisions by capability, use the [capability matrix](docs/consuming/capabilityMatrix.md): it maps each public export to value, status, setup, runnable surfaces, gates, and boundaries.

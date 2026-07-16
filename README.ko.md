@@ -36,15 +36,26 @@ AI 에이전트는 Python을 한 번만 실행하지 않는다. 코드를 생성
 
 ## 한 예제로
 
+재시도 루프가 곧 제품이다. 한 번 준비하고, 체크포인트하고, 에이전트가 실패하면
+밀리초에 복원한다:
+
 ```js
 import { boot } from "pyproc";
 
 const rt = await boot();
-rt.run("values = [10, 20, 30]");
-console.log(rt.run("sum(values)"));   // 60
+await rt.loadPackages(["numpy"]);            // 한 번 준비(패키지, 데이터)
+const cp = rt.enableReactive().checkpoint(); // 준비된 상태 저장
+
+try {
+  rt.run(codeFromTheAgent);                  // 시도 N
+} catch (err) {
+  cp.restore();                              // 준비 상태 복귀 - 재부팅 0, 재설치 0
+  rt.run(fixedCode);                         // 깨끗한 상태에서 시도 N+1
+}
 ```
 
 진짜 CPython([Pyodide](https://pyodide.org) / WebAssembly)이 탭 안에서 돌며 진짜 값을 돌려준다.
+그리고 그 상태를 저장하고, 분기하고, 되찾을 수 있다.
 
 ## 브라우저 Python 샌드박스가 쓸모 있는 곳
 
@@ -100,29 +111,35 @@ console.log(await machine.run("counter")); // 리더 승계 뒤에도 41
 
 ```js
 const reactive = rt.enableReactive();
-const sp = reactive.stackSave();
 rt.run("values = [10, 20, 30]");
-const cp = reactive.checkpoint();            // 이 상태 저장
+const cp = reactive.checkpoint();             // 이 상태 저장
 rt.run("values.append(999)");
-reactive.checkpoint();                        // 실행 경계 닫기(계약)
-reactive.restoreLive(cp.index, sp);           // 체크포인트로 복귀 - 바뀐 페이지만 되쓴다
+reactive.checkpoint();                        // 실행 경계 닫기 -> 즉시 복원 경로
+cp.restore();                                 // 체크포인트로 복귀 - 바뀐 페이지만 되쓴다
 console.log(rt.run("len(values)"));           // 3
 ```
 
+경계를 닫지 못했다면(실행 중 예외, 흘러간 변이) `cp.restore()`가 이를 감지해 자동으로
+전체 재해시 경로로 복원한다 - 느려질 뿐 조용히 오염되지 않는다. 라이브 프록시 핸들로
+파이썬을 호출했다면 `reactive.markDirty()`로 신고한다.
+
 > 위 기본은 Chromium 브라우저만 있으면 된다. `PyProc`(프로세스 OS)와 소켓은 `crossOriginIsolated`(`COOP: same-origin`, `COEP: require-corp`)와 same-origin 워커도 필요하다 - [셋업](#셋업) 참조. `checkEnvironment()`로 확인하라.
 
-## Web Computer 실행
+## 진입점 고르기
 
-Web Computer 제품은 한 브라우저 workspace에서 Python OS와 Linux를 부팅한다. 두 guest의 실제 memory와 block-backed file을 하나의 IndexedDB generation으로 저장하고, 브라우저 프로세스를 닫았다 열어도 복구하며, 서명된 `.webmachine` 파일 하나로 함께 옮긴다.
+한 번에 한 질문, 명백한 문 하나:
 
-```sh
-npm run assets:web-computer
-npm run serve
-```
+| 필요한 것 | 진입점 | 얻는 것 |
+|---|---|---|
+| 이 탭에서 파이썬 실행(부활 불요) | `boot()` | `Runtime` (run/install/fs) |
+| 이미 부팅한 Pyodide 채택 | `new Runtime(py)` | 같은 `Runtime`, 두 번째 인터프리터 없음 |
+| 저장하고 부활하는 상태 | `bootSession(manifest)` | `Session` (save/load/exportImage) |
+| 이동 가능한 머신 파일 열기 | `openMachine(blob, { trustedPublicKeys })` | 무결성/신뢰 검증 뒤 `Session` |
+| 여러 탭이 한 살아있는 머신 | `openPersistentMachine({ name })` | `KernelElection` 핸들 (run/commit/status) |
+| 진짜 병렬 / 라이브 fork | `new PyProc({ replay })` | 워커 프로세스 풀 (`map`/`fork`/`signal`) |
 
-Edge 또는 Chromium에서 `http://localhost:8788/apps/webComputer/`를 연다. Python 실행, Linux VGA 화면과 terminal, pause/resume/shutdown, 명령 뒤 자동 영속 저장, 수동 Save, 서명 Export, signer를 명시적으로 승인하는 Import 화면을 제공한다.
-
-현재 Linux 실행 catalog는 hash가 고정된 development channel이다. engine과 image binary는 로컬에 준비되고 git과 npm package에서 제외된다. 전체 source와 license inventory를 재현하기 전에는 공개 재배포하지 않는다.
+공통 기반은 결정적 리플레이다: `bootSession`이 부팅 엔트로피를 고정해 같은 매니페스트가
+바이트 동일한 메모리를 재현하고, 그것이 델타 저장/저널 부활/워커 간 `fork`를 건전하게 만든다.
 
 ## AI 에이전트에서 쓰기
 
@@ -160,7 +177,7 @@ Edge 또는 Chromium에서 `http://localhost:8788/apps/webComputer/`를 연다. 
 | uv 레인 (`bootEnv` / `freeze` / `runScript`), wheel 캐시, 터미널, syscall 브리지 | Beta |
 | 세션 부활 + `.pymachine` 이미지, 머신 저널(WAL) | Experimental |
 | 라이브 프로세스 fork, 장치 FS, init / cron / resume hook, 가상 오리진 URL | Experimental |
-| 여러 탭 지속 머신(`openPersistentMachine` / `KernelElection`), 공유 커널 | Experimental |
+| 여러 탭 지속 머신(`openPersistentMachine` / `KernelElection`) | Experimental |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 
 ## 보장하는 것과 아직 아닌 것
@@ -243,6 +260,19 @@ Pyodide  Workers
 
 현실 점검: 순수 파이썬 로직은 로컬 급 이상이고, 대형 단일 커널 NumPy 산술은 WASM 단일 스레드와 no-AVX BLAS의 제한을 받는다. pyproc의 수치 속도 답은 horizontal sharding이고, 더 넓은 브라우저 OS 속도 답은 준비된 상태, 복원, process pool, 탭 안 서버, 이동 가능한 machine image다.
 
+## Web Computer 실행
+
+Web Computer 제품은 한 브라우저 workspace에서 Python OS와 Linux를 부팅한다. 두 guest의 실제 memory와 block-backed file을 하나의 IndexedDB generation으로 저장하고, 브라우저 프로세스를 닫았다 열어도 복구하며, 서명된 `.webmachine` 파일 하나로 함께 옮긴다.
+
+```sh
+npm run assets:web-computer
+npm run serve
+```
+
+Edge 또는 Chromium에서 `http://localhost:8788/apps/webComputer/`를 연다. Python 실행, Linux VGA 화면과 terminal, pause/resume/shutdown, 명령 뒤 자동 영속 저장, 수동 Save, 서명 Export, signer를 명시적으로 승인하는 Import 화면을 제공한다.
+
+현재 Linux 실행 catalog는 hash가 고정된 development channel이다. engine과 image binary는 로컬에 준비되고 git과 npm package에서 제외된다. 전체 source와 license inventory를 재현하기 전에는 공개 재배포하지 않는다.
+
 ## 공개 표면
 
 능력은 opt-in이다. 필요한 것만 켜고, 엔진 내부(`HEAPU8` 등)가 아니라 능력 계약을 소비한다. 이 README는 공개 표면의 지도이고, 제품 판단 정본은 [능력 매트릭스](docs/consuming/capabilityMatrix.md)에 있다.
@@ -253,11 +283,11 @@ Pyodide  Workers
 | 반복 가능한 환경 준비 | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
 | 상태 복원, 분기, 시간여행 | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
 | 여러 탭에서 하나의 Python 머신 유지 | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
-| 브라우저 worker를 프로세스로 사용 | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
+| 브라우저 worker를 프로세스로 사용 | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
 | Python을 실제 browser URL 뒤에 서빙 | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
-| 터미널과 빌린 syscall 흐름 구성 | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
+| 터미널과 빌린 syscall 흐름 구성 | `Terminal`, `SyscallBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
 | 머신 저장, 전송, 부활 | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
-| 기본 엔진 밖의 가능성 확장 | `GpuCompute`, `GpuArray`, `GpuBridge`, `bootWasi`, `WasiSession` | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
+| 기본 엔진 밖의 가능성 확장(서브패스) | `pyproc/gpu` (`GpuCompute`, `GpuArray`, `GpuBridge`), `pyproc/socket` (`SocketBridge`), `pyproc/wasi` (`bootWasi`, `WasiSession`) | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
 | worker 기반 능력을 제품에 배포 | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
 | 실패를 프로그램적으로 분기 | `PyProcError`, `PYPROC_ERROR_CODES` | [structure gate](tests/run.mjs), [browser gate](tests/browser/gate.html) |
 
@@ -268,6 +298,10 @@ import { boot } from "pyproc/runtime";
 import { ReactiveController } from "pyproc/reactive";
 import { PyProc } from "pyproc/process-os";
 import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
+// 강등 표면(headless CI 게이트 불가 또는 research preview) - 의도적으로 루트 밖:
+import { GpuCompute } from "pyproc/gpu";
+import { SocketBridge } from "pyproc/socket";
+import { bootWasi } from "pyproc/wasi";
 ```
 
 능력별 예제 중심 상세 문서는 [docs/](docs/README.md)에 있다. 이 README는 지도로 둔다. 제품에서 어떤 능력을 켤지 판단할 때는 [능력 매트릭스](docs/consuming/capabilityMatrix.md)를 본다. 각 공개 export를 제품 가치, 상태, 설정 조건, 실행 표면, 게이트, 경계로 묶어 둔다.
