@@ -30,3 +30,33 @@ NEXT:
 2. 관문 3/4 구현(승격 체계, comparison.md, MCP 레시피 + 게이트).
 3. 릴리즈 v0.0.10 -> publish 관찰 -> npm 확인 -> 소비 3사 재핀.
 4. 완결 이관.
+
+## 2026-07-16 - 관문 3/4 구현 완료, 릴리즈는 명시 지시 대기
+
+구현 완료:
+
+1. 관문 3: capabilityMatrix에 승격 기준(Stable/Beta/Experimental/Research preview 조건)과
+   승격 원장을 명문화. 구조 게이트가 원장 밖 Stable 라벨을 차단한다. 간판 레인의 (b)
+   기준점은 v0.0.10.
+2. 관문 4a: docs/reference/comparison.md(영문) 신설. 셀 값 = artifact 링크, N/A = 사유
+   동반, 재현 명령 + 정직한 캐비앗. 시나리오 8종/후보 3종/README 링크를 게이트로 고정.
+3. 관문 4b: MCP 레시피(서버/머신 페이지/게이트) 구현. 로컬 test:mcp 7/7 GREEN(부팅 포함
+   첫 호출 4.5s, 복원이 오염 소거, 도구 실패는 isError). CI browser job에 배선.
+   README 양 언어에 에이전트 장착 절.
+
+CI 실검증이 잡아낸 회귀 2건(수리 완료):
+
+1. wasiGate/wasiGuestAdapter가 강등된 루트 export(bootWasi)를 import한 채 남아 무보고
+   타임아웃 - 소스 경로 import로 수리, wasiGate 10/10(부팅 746ms). 이전 전수 grep이
+   tests의 html을 빼먹은 것이 원인이라 재검 범위를 넓혀 잔존 0 확인.
+2. speedLab 완주 게이트가 공유 러너(4 vCPU)의 물리 한계(1.90-1.98x < 2.0)에 걸림 -
+   완주 게이트 문턱만 ?minSpeedup= 파라미터화(CI 1.3), 속도 인증 기준(S1 2.0)은 불변.
+
+릴리즈 차단 기록:
+
+- v0.0.10 릴리즈 절차(버전+태그+노트) 착수가 권한 계층에서 거부됐다: CLAUDE.md의
+  "0.0.x 라인에서 명시 지시가 있을 때만 릴리즈" 규칙상 "끝까지 구현하자"는 릴리즈
+  명시 지시로 인정되지 않는다는 판정. 우회하지 않는다. 릴리즈와 그에 종속된 소비
+  3사 재핀은 사용자의 명시 지시("v0.0.10 릴리즈해라" 등) 이후 재개한다.
+- 릴리즈 준비물은 전부 완료 상태다: CHANGELOG Unreleased(브레이킹 전수 + 마이그레이션),
+  release.md 절차, publish.yml(OIDC) 게이트, 로컬 전 게이트 GREEN.
