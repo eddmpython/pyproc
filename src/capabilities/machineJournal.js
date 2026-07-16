@@ -14,6 +14,7 @@
 // 저장 형식: blob/<sha256> loose CAS + HEAD.json/PREV.json. pack() 후에는 PACKS.json + pack/*.bin도
 // 같은 CAS blob 저장소로 읽는다(loose와 pack 모두 recover 호환).
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
+import { PyProcError } from "../runtime/errors.js";
 import {
   DEFAULT_MACHINE_HOME_PATH,
   applyMachineHome,
@@ -28,12 +29,8 @@ const BLOB_KEY = /^[0-9a-f]{64}$/;
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
 const DEFAULT_AUTO_PACK_LOOSE_MB = 8;
 
-class JournalCorruptionError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "JournalCorruptionError";
-    this.code = "PYPROC_JOURNAL_CORRUPT";
-  }
+function journalCorrupt(message) {
+  return new PyProcError("PYPROC_JOURNAL_CORRUPT", message);
 }
 
 async function sha256Hex(bytes) {
@@ -53,12 +50,12 @@ function newPackFileName() {
 
 function normalizeAutoPackPolicy(policy) {
   if (!policy) return null;
-  if (policy !== true && (typeof policy !== "object" || Array.isArray(policy))) throw new Error("journal.autoPack: true 또는 정책 객체가 필요하다");
+  if (policy !== true && (typeof policy !== "object" || Array.isArray(policy))) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: true 또는 정책 객체가 필요하다");
   const cfg = policy === true ? {} : policy;
   const looseBlobs = cfg.looseBlobs ?? DEFAULT_AUTO_PACK_LOOSE_BLOBS;
   const looseMB = cfg.looseMB ?? DEFAULT_AUTO_PACK_LOOSE_MB;
-  if (!(Number.isFinite(looseBlobs) && looseBlobs >= 1)) throw new Error("journal.autoPack: looseBlobs는 1 이상이어야 한다");
-  if (!(Number.isFinite(looseMB) && looseMB > 0)) throw new Error("journal.autoPack: looseMB는 0보다 커야 한다");
+  if (!(Number.isFinite(looseBlobs) && looseBlobs >= 1)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: looseBlobs는 1 이상이어야 한다");
+  if (!(Number.isFinite(looseMB) && looseMB > 0)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: looseMB는 0보다 커야 한다");
   return { looseBlobs, looseBytes: looseMB * 1048576 };
 }
 
@@ -70,6 +67,12 @@ export class MachineJournal {
   // cfg.homePath: 파일 트리 루트(기본 /home/web).
   // cfg.autoPack: false 기본. true면 512MB 실측 봉투(131 loose keys/8.2MB -> pack 1.1s)에 맞춰
   //                loose 128개 또는 8MB 이상에서 커밋 직후 pack한다. 객체로 임계값을 바꿀 수 있다.
+  // cfg.onStatus: 선택 콜백. 유휴 커밋의 성공/실패를 관측한다({ kind: "commit" | "commitError", ... }).
+  //               durable을 주장하는 능력의 실패는 조용히 삼켜지면 안 된다: onStatus가 없으면
+  //               console.warn으로라도 남긴다(기존 동작 보존).
+  // cfg.pruneAfterCommit: 기본 false. true면 커밋 직후 reactive.pruneTo(liveIdx)로 체크포인트
+  //               나무를 라이브 경로만 남긴다(장수 머신의 RAM 배출 밸브). 같은 컨트롤러를
+  //               다른 소비자(Terminal %undo 마크 등)와 공유하면 그쪽 노드도 잘리므로 소비자 결정.
   constructor(rt, cfg = {}) {
     this._rt = rt;
     this._dir = cfg.dir;
@@ -77,6 +80,8 @@ export class MachineJournal {
     this._idleMs = cfg.idleMs || 2000;
     this._homePath = cfg.includeHome === false ? null : (cfg.homePath || DEFAULT_MACHINE_HOME_PATH);
     this._autoPack = normalizeAutoPackPolicy(cfg.autoPack);
+    this._onStatus = typeof cfg.onStatus === "function" ? cfg.onStatus : null;
+    this._pruneAfterCommit = cfg.pruneAfterCommit === true;
     this._timer = null;
     this._lastSeq = -1;
     this._sp = null;
@@ -100,8 +105,8 @@ export class MachineJournal {
 
   // 유휴 감시 시작. execSeq가 멈춘 채 idleMs가 지나면 커밋한다(실행 중에는 끼어들지 않는다).
   start() {
-    if (!this._dir) throw new Error("journal: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
-    if (!this._reactive) throw new Error("journal: cfg.reactive(ReactiveController)가 필요하다");
+    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
+    if (!this._reactive) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.reactive(ReactiveController)가 필요하다");
     if (this._timer) return this;
     // 저널 디스크(OPFS)가 브라우저 압박 시 지워지는 best-effort 캐시로 남지 않게 지속 스토리지를
     // 요청한다. 거부돼도 동작은 계속된다(내구성 능력의 계약상 요청은 이 능력의 몫이다).
@@ -115,7 +120,15 @@ export class MachineJournal {
       if (idleSince === null) return;                 // 변이가 아직 없었다(커밋할 게 없다)
       if (Date.now() - idleSince < this._idleMs) return;
       idleSince = null;
-      this.commit().catch((e) => console.warn("pyproc journal:", e)); // 커밋 실패가 머신을 죽이지 않는다
+      // 커밋 실패가 머신을 죽이지는 않지만, durable 주장의 실패는 관측 가능해야 한다.
+      this.commit().then(
+        (result) => { if (result && this._onStatus) this._onStatus({ kind: "commit", result }); },
+        (e) => {
+          const error = e instanceof PyProcError ? e : new PyProcError("PYPROC_JOURNAL_IO", `journal.commit: ${String((e && e.message) || e).slice(-200)}`, { retryable: true, cause: e });
+          if (this._onStatus) this._onStatus({ kind: "commitError", error });
+          else console.warn("pyproc journal:", error);
+        },
+      );
     }, Math.max(200, Math.floor(this._idleMs / 4)));
     return this;
   }
@@ -129,11 +142,7 @@ export class MachineJournal {
     try {
       const r = this._reactive, mem = this._rt.memory;
       r.checkpoint(); // 경계 닫기(cp0 대비 차이가 곧 사용자 상태)
-      const h0 = r.hashes[0], hl = r.hashes[r.liveIdx];
-      const n = Math.min(h0.length, hl.length) / 2;
-      const pages = [];
-      for (let p = 0; p < n; p++) if (hl[2 * p] !== h0[2 * p] || hl[2 * p + 1] !== h0[2 * p + 1]) pages.push(p);
-      for (let p = h0.length / 2; p < hl.length / 2; p++) pages.push(p); // 성장분
+      const { pages } = r.collectDelta(0, r.liveIdx, { pack: false }); // 델타 수집의 정본(세션 저장과 같은 프리미티브)
       const blobDir = await this._dir.getDirectoryHandle(BLOB_DIR, { create: true });
       const map = {};
       const knownKeys = new Set();
@@ -201,6 +210,7 @@ export class MachineJournal {
       };
       const autoPack = await this._autoPackAfterCommit(result);
       if (autoPack) result.autoPack = autoPack;
+      if (this._pruneAfterCommit) result.pruned = r.pruneTo(r.liveIdx);
       return result;
     } finally { this._busy = false; }
   }
@@ -251,7 +261,7 @@ export class MachineJournal {
     }
     const index = JSON.parse(text);
     if (index.version !== 1 || !Array.isArray(index.packs)) {
-      throw new Error("journal.pack: PACKS.json 형식이 맞지 않는다");
+      throw journalCorrupt("journal.pack: PACKS.json 형식이 맞지 않는다");
     }
     return index;
   }
@@ -268,7 +278,7 @@ export class MachineJournal {
     for (const name of ["HEAD.json", "PREV.json"]) {
       const generation = await this._readGeneration(name);
       if (generation.head) heads.push(generation.head);
-      else if (generation.corrupt) throw new Error(`journal.pack: ${generation.corrupt}`);
+      else if (generation.corrupt) throw journalCorrupt(`journal.pack: ${generation.corrupt}`);
     }
     return heads;
   }
@@ -321,7 +331,7 @@ export class MachineJournal {
       const offset = Number(entry.offset);
       const length = Number(entry.length);
       if (!Number.isFinite(offset) || !Number.isFinite(length) || offset < 0 || length <= 0) {
-        throw new Error(`journal.pack: pack index entry 파손(${key.slice(0, 12)}..)`);
+        throw journalCorrupt(`journal.pack: pack index entry 파손(${key.slice(0, 12)}..)`);
       }
       return new Uint8Array(await file.slice(offset, offset + length).arrayBuffer());
     }
@@ -333,7 +343,7 @@ export class MachineJournal {
     if (loose) return loose;
     const packed = await this._readPackedBlob(key, cache);
     if (packed) return packed;
-    throw new JournalCorruptionError(`journal.recover: blob 없음(${key.slice(0, 12)}..)`);
+    throw journalCorrupt(`journal.recover: blob 없음(${key.slice(0, 12)}..)`);
   }
 
   async _removeLooseBlobs(predicate) {
@@ -398,7 +408,7 @@ export class MachineJournal {
     try {
       for (const key of liveKeys) {
         const bytes = await this._readBlob(key, readCache);
-        if (await sha256Hex(bytes) !== key) throw new Error(`journal.pack: blob 파손(${key.slice(0, 12)}..)`);
+        if (await sha256Hex(bytes) !== key) throw journalCorrupt(`journal.pack: blob 파손(${key.slice(0, 12)}..)`);
         await w.write(bytes);
         blobs[key] = { offset, length: bytes.byteLength };
         offset += bytes.byteLength;
@@ -465,7 +475,7 @@ export class MachineJournal {
   async _applyGeneration(head) {
     const mem = this._rt.memory;
     if (head.h0 && head.h0 !== await this._boundaryKey()) {
-      throw new Error("journal.recover: 리플레이 경계 지문(h0) 불일치. 다른 엔진/매니페스트의 저널이다(조용한 힙 오염 방지).");
+      throw new PyProcError("PYPROC_REPLAY_MISMATCH", "journal.recover: 리플레이 경계 지문(h0) 불일치. 다른 엔진/매니페스트의 저널이다(조용한 힙 오염 방지).");
     }
     if (head.heapLen > mem.byteLength()) {
       this._rt.setGlobal("_pyprocJournalTargetLen", head.heapLen);
@@ -480,7 +490,7 @@ export class MachineJournal {
         "del _pyprocJournalGc"
       );
       if (head.heapLen > mem.byteLength()) {
-        throw new Error(`journal.recover: 힙 성장 실패(저널 ${head.heapLen} > 현재 ${mem.byteLength()})`);
+        throw new PyProcError("PYPROC_HEAP_GROW_FAILED", `journal.recover: 힙 성장 실패(저널 ${head.heapLen} > 현재 ${mem.byteLength()})`);
       }
     }
     // 성장 루프와 부팅 뒤 드리프트를 cp0으로 지운 위에 저널 페이지를 적용한다.
@@ -493,7 +503,7 @@ export class MachineJournal {
       let bytes = blobCache.get(key);
       if (!bytes) {
         bytes = await this._readBlob(key, readCache);
-        if (await sha256Hex(bytes) !== key) throw new JournalCorruptionError(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
+        if (await sha256Hex(bytes) !== key) throw journalCorrupt(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
         blobCache.set(key, bytes);
       }
       buffered.push([+p, bytes]); // 전량 검증 후에 쓴다(부분 적용 상태 방지)
@@ -503,12 +513,12 @@ export class MachineJournal {
       const { key, ...meta } = head.home;
       try {
         const bin = key ? await this._readBlob(key, readCache) : new Uint8Array(0);
-        if (key && await sha256Hex(bin) !== key) throw new JournalCorruptionError(`journal.recover: home blob 파손(${key.slice(0, 12)}..)`);
+        if (key && await sha256Hex(bin) !== key) throw journalCorrupt(`journal.recover: home blob 파손(${key.slice(0, 12)}..)`);
         validateMachineHomeMeta(meta, bin.length);
         homePayload = { meta, bin };
       } catch (e) {
         if (e && e.code === "PYPROC_JOURNAL_CORRUPT") throw e;
-        throw new JournalCorruptionError(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`);
+        throw journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`);
       }
     }
     for (const [p, bytes] of buffered) mem.writePage(p, bytes);
@@ -543,6 +553,6 @@ export class MachineJournal {
       return r;
     }
     if (cur.missing && prev.missing) return null; // 저널 없음 = 첫 부팅
-    throw new Error(`journal.recover: 저널 파손(${cur.corrupt || "HEAD 없음"} / ${prev.corrupt || "PREV 없음"}). 첫 부팅으로 위장하지 않는다.`);
+    throw journalCorrupt(`journal.recover: 저널 파손(${cur.corrupt || "HEAD 없음"} / ${prev.corrupt || "PREV 없음"}). 첫 부팅으로 위장하지 않는다.`);
   }
 }

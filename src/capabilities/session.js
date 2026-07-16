@@ -15,6 +15,7 @@
 //   /home/web 파일 트리를 한 .pymachine 안에서 함께 이동한다.
 // 서명(2026-07-15): WebCrypto ECDSA P-256으로 unsigned body 해시를 서명한다. outer envelope는
 //   signature까지 포함한 최종 body를 다시 해시하므로 무결성과 출처 검증이 분리된다.
+import { PyProcError } from "../runtime/errors.js";
 import { boot } from "../runtime/runtimeApi.js";
 import { PAGE_SIZE } from "../runtime/memoryLayout.js";
 import { WheelCache } from "./wheelCache.js";
@@ -101,7 +102,7 @@ function bytesToBase64Url(bytes) {
 }
 
 function base64UrlToBytes(s) {
-  if (typeof s !== "string" || !/^[A-Za-z0-9_-]+$/.test(s)) throw new Error("machine: signature base64url 형식 위반");
+  if (typeof s !== "string" || !/^[A-Za-z0-9_-]+$/.test(s)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: signature base64url 형식 위반");
   const padded = s.replaceAll("-", "+").replaceAll("_", "/") + "=".repeat((4 - (s.length % 4)) % 4);
   const raw = atob(padded);
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
@@ -138,14 +139,14 @@ export async function createMachineKeyPair() {
 export async function exportMachinePublicKey(key) {
   const publicKey = key && key.publicKey ? key.publicKey : key;
   if (publicKey && typeof publicKey === "object" && publicKey.kty) return publicKey;
-  if (!isCryptoKey(publicKey)) throw new Error("machine: publicKey CryptoKey가 필요하다");
+  if (!isCryptoKey(publicKey)) throw new PyProcError("PYPROC_INPUT_INVALID", "machine: publicKey CryptoKey가 필요하다");
   return crypto.subtle.exportKey("jwk", publicKey);
 }
 
 function canonicalMachinePublicKey(jwk) {
-  if (typeof jwk !== "object" || jwk === null) throw new Error("machine: publicKey JWK 형식 위반");
+  if (typeof jwk !== "object" || jwk === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: publicKey JWK 형식 위반");
   if (jwk.kty !== "EC" || jwk.crv !== "P-256" || typeof jwk.x !== "string" || typeof jwk.y !== "string") {
-    throw new Error("machine: P-256 공개키 JWK가 필요하다");
+    throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: P-256 공개키 JWK가 필요하다");
   }
   return { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y };
 }
@@ -158,7 +159,7 @@ export async function fingerprintMachinePublicKey(key) {
 
 async function importMachinePublicKey(key) {
   if (isCryptoKey(key)) return key;
-  if (typeof key !== "object" || key === null) throw new Error("machine: publicKey 형식 위반");
+  if (typeof key !== "object" || key === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: publicKey 형식 위반");
   return crypto.subtle.importKey("jwk", key, MACHINE_SIGN_ALG, true, ["verify"]);
 }
 
@@ -167,8 +168,8 @@ async function signingMaterial(opts) {
   if (!signingKey) return null;
   const privateKey = signingKey.privateKey || signingKey;
   const publicKey = opts.publicKey || signingKey.publicKey;
-  if (!isCryptoKey(privateKey)) throw new Error("session.exportImage: signingKey private CryptoKey가 필요하다");
-  if (!publicKey) throw new Error("session.exportImage: publicKey 또는 CryptoKeyPair가 필요하다");
+  if (!isCryptoKey(privateKey)) throw new PyProcError("PYPROC_INPUT_INVALID", "session.exportImage: signingKey private CryptoKey가 필요하다");
+  if (!publicKey) throw new PyProcError("PYPROC_INPUT_INVALID", "session.exportImage: publicKey 또는 CryptoKeyPair가 필요하다");
   return { privateKey, publicKey: await exportMachinePublicKey(publicKey) };
 }
 
@@ -190,10 +191,10 @@ async function signMachineMeta(meta, bin, homeBin, opts) {
 function readMachineSignature(meta) {
   const sig = meta.signature;
   if (sig == null) return null;
-  if (typeof sig !== "object" || sig.version !== 1) throw new Error("openMachine: signature 형식 위반");
-  if (sig.algorithm !== "ECDSA-P256-SHA256") throw new Error(`openMachine: 지원하지 않는 signature 알고리즘(${sig.algorithm})`);
-  if (typeof sig.envelope !== "string" || !/^[0-9a-f]{64}$/.test(sig.envelope)) throw new Error("openMachine: signature envelope 형식 위반");
-  if (typeof sig.publicKey !== "object" || sig.publicKey === null) throw new Error("openMachine: signature publicKey 형식 위반");
+  if (typeof sig !== "object" || sig.version !== 1) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: signature 형식 위반");
+  if (sig.algorithm !== "ECDSA-P256-SHA256") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `openMachine: 지원하지 않는 signature 알고리즘(${sig.algorithm})`);
+  if (typeof sig.envelope !== "string" || !/^[0-9a-f]{64}$/.test(sig.envelope)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: signature envelope 형식 위반");
+  if (typeof sig.publicKey !== "object" || sig.publicKey === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: signature publicKey 형식 위반");
   return sig;
 }
 
@@ -201,12 +202,12 @@ async function verifyMachineSignature(meta, bin, homeBin, opts) {
   const sig = readMachineSignature(meta);
   if (!sig) return { present: false, trusted: false };
   const actual = await unsignedEnvelope(meta, bin, homeBin);
-  if (actual !== sig.envelope) throw new Error("openMachine: 서명 대상 불일치(파일 내용과 signature envelope가 맞지 않는다)");
+  if (actual !== sig.envelope) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: 서명 대상 불일치(파일 내용과 signature envelope가 맞지 않는다)");
   const signature = base64UrlToBytes(sig.signature);
   const data = new TextEncoder().encode(sig.envelope);
   const embeddedKey = await importMachinePublicKey(sig.publicKey);
   const validEmbedded = await crypto.subtle.verify(MACHINE_SIGN_PARAMS, embeddedKey, signature, data);
-  if (!validEmbedded) throw new Error("openMachine: signature 검증 실패");
+  if (!validEmbedded) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: signature 검증 실패");
   const trusted = [];
   if (opts.trustedPublicKey) trusted.push(opts.trustedPublicKey);
   if (Array.isArray(opts.trustedPublicKeys)) trusted.push(...opts.trustedPublicKeys);
@@ -220,19 +221,19 @@ async function verifyMachineSignature(meta, bin, homeBin, opts) {
 // 저장 메타(헤더/세션 파일 공용)의 형식 검증: 손상·변조 파일이 예외가 아니라
 // 과대 할당·부분 복원으로 새는 것을 막는다. 위반은 전부 명시적 예외.
 function validateMeta(meta, binLen) {
-  if (typeof meta !== "object" || meta === null) throw new Error("machine: 메타가 객체가 아니다");
-  if (meta.version !== 1 && meta.version !== 2 && meta.version !== 3) throw new Error(`machine: 지원하지 않는 메타 버전(${meta.version})`);
-  if (typeof meta.manifest !== "string" || meta.manifest.length > HEAD_MAX_BYTES) throw new Error("machine: manifest 형식 위반");
-  if (!Number.isInteger(meta.heapLen) || meta.heapLen <= 0 || meta.heapLen > HEAP_MAX_BYTES) throw new Error(`machine: heapLen 범위 위반(${meta.heapLen})`);
-  if (meta.sp !== null && (!Number.isInteger(meta.sp) || meta.sp < 0 || meta.sp > meta.heapLen)) throw new Error(`machine: sp 범위 위반(${meta.sp})`);
-  if (!Array.isArray(meta.pages)) throw new Error("machine: pages가 배열이 아니다");
-  if (meta.pages.length * PAGE_SIZE !== binLen) throw new Error(`machine: 페이지 수(${meta.pages.length})와 델타 크기(${binLen})가 불일치`);
-  if (meta.version === 3 && meta.deltaBytes !== binLen) throw new Error("machine: deltaBytes와 델타 크기가 불일치");
+  if (typeof meta !== "object" || meta === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: 메타가 객체가 아니다");
+  if (meta.version !== 1 && meta.version !== 2 && meta.version !== 3) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: 지원하지 않는 메타 버전(${meta.version})`);
+  if (typeof meta.manifest !== "string" || meta.manifest.length > HEAD_MAX_BYTES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: manifest 형식 위반");
+  if (!Number.isInteger(meta.heapLen) || meta.heapLen <= 0 || meta.heapLen > HEAP_MAX_BYTES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: heapLen 범위 위반(${meta.heapLen})`);
+  if (meta.sp !== null && (!Number.isInteger(meta.sp) || meta.sp < 0 || meta.sp > meta.heapLen)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: sp 범위 위반(${meta.sp})`);
+  if (!Array.isArray(meta.pages)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: pages가 배열이 아니다");
+  if (meta.pages.length * PAGE_SIZE !== binLen) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: 페이지 수(${meta.pages.length})와 델타 크기(${binLen})가 불일치`);
+  if (meta.version === 3 && meta.deltaBytes !== binLen) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: deltaBytes와 델타 크기가 불일치");
   const maxPage = Math.ceil(meta.heapLen / PAGE_SIZE);
   const seen = new Set();
   for (const p of meta.pages) {
-    if (!Number.isInteger(p) || p < 0 || p >= maxPage) throw new Error(`machine: 페이지 번호 범위 위반(${p})`);
-    if (seen.has(p)) throw new Error(`machine: 페이지 번호 중복(${p})`);
+    if (!Number.isInteger(p) || p < 0 || p >= maxPage) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: 페이지 번호 범위 위반(${p})`);
+    if (seen.has(p)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: 페이지 번호 중복(${p})`);
     seen.add(p);
   }
 }
@@ -240,19 +241,19 @@ function validateMeta(meta, binLen) {
 // 머신 헤더의 매니페스트 형식 검증(키 화이트리스트 + 타입 + 크기).
 // setup 실행 자체는 trust 게이트가 승인하는 위험이고, 여기서는 형식만 가른다.
 function validateManifest(m) {
-  if (typeof m !== "object" || m === null || Array.isArray(m)) throw new Error("openMachine: 매니페스트가 객체가 아니다");
+  if (typeof m !== "object" || m === null || Array.isArray(m)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: 매니페스트가 객체가 아니다");
   const allowed = new Set(["indexURL", "env", "packages", "setup"]);
-  for (const k of Object.keys(m)) if (!allowed.has(k)) throw new Error(`openMachine: 매니페스트에 허용되지 않은 키(${k})`);
-  if (m.indexURL != null && typeof m.indexURL !== "string") throw new Error("openMachine: indexURL 형식 위반");
+  for (const k of Object.keys(m)) if (!allowed.has(k)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `openMachine: 매니페스트에 허용되지 않은 키(${k})`);
+  if (m.indexURL != null && typeof m.indexURL !== "string") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: indexURL 형식 위반");
   if (m.env != null) {
-    if (typeof m.env !== "object" || Array.isArray(m.env)) throw new Error("openMachine: env 형식 위반");
-    for (const [k, v] of Object.entries(m.env)) if (typeof k !== "string" || typeof v !== "string") throw new Error("openMachine: env 값 형식 위반");
+    if (typeof m.env !== "object" || Array.isArray(m.env)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: env 형식 위반");
+    for (const [k, v] of Object.entries(m.env)) if (typeof k !== "string" || typeof v !== "string") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: env 값 형식 위반");
   }
   if (m.packages != null) {
-    if (!Array.isArray(m.packages) || m.packages.length > 256) throw new Error("openMachine: packages 형식 위반");
-    for (const p of m.packages) if (typeof p !== "string" || p.length > 200) throw new Error("openMachine: 패키지명 형식 위반");
+    if (!Array.isArray(m.packages) || m.packages.length > 256) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: packages 형식 위반");
+    for (const p of m.packages) if (typeof p !== "string" || p.length > 200) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: 패키지명 형식 위반");
   }
-  if (m.setup != null && (typeof m.setup !== "string" || m.setup.length > SETUP_MAX_BYTES)) throw new Error("openMachine: setup 형식 위반");
+  if (m.setup != null && (typeof m.setup !== "string" || m.setup.length > SETUP_MAX_BYTES)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: setup 형식 위반");
   return m;
 }
 
@@ -261,21 +262,21 @@ export async function openMachine(blob, opts = {}) {
   const buf = new Uint8Array(await blob.arrayBuffer());
   const magic = new TextDecoder().decode(buf.subarray(0, MACHINE_MAGIC.length));
   if (magic === MACHINE_MAGIC_V1) {
-    throw new Error("openMachine: 포맷 v1은 헤더(manifest/setup)가 무인증이라 지원을 종료했다. 원본 머신에서 다시 내보내라(v2).");
+    throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: 포맷 v1은 헤더(manifest/setup)가 무인증이라 지원을 종료했다. 원본 머신에서 다시 내보내라(v2).");
   }
-  if (magic !== MACHINE_MAGIC) throw new Error("openMachine: .pymachine 파일이 아니다(매직 불일치)");
+  if (magic !== MACHINE_MAGIC) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: .pymachine 파일이 아니다(매직 불일치)");
   const hashStart = MACHINE_MAGIC.length;
   const envelope = new TextDecoder().decode(buf.subarray(hashStart, hashStart + 64));
   const body = buf.subarray(hashStart + 64); // u32 + 헤더 + 델타 = 인증 대상 전체
   const actual = await sha256Hex(body);
-  if (actual !== envelope) throw new Error("openMachine: 봉투 무결성 검증 실패(파일 손상 또는 변조)");
-  if (body.length < 4) throw new Error("openMachine: 파일이 너무 짧다");
+  if (actual !== envelope) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: 봉투 무결성 검증 실패(파일 손상 또는 변조)");
+  if (body.length < 4) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: 파일이 너무 짧다");
   const hl = new DataView(body.buffer, body.byteOffset, 4).getUint32(0);
-  if (hl > HEAD_MAX_BYTES || 4 + hl > body.length) throw new Error("openMachine: 헤더 길이 위반");
+  if (hl > HEAD_MAX_BYTES || 4 + hl > body.length) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: 헤더 길이 위반");
   const meta = JSON.parse(new TextDecoder().decode(body.subarray(4, 4 + hl)));
   let bin, homeBin = null;
   if (meta.version === 3) {
-    if (!Number.isInteger(meta.deltaBytes) || meta.deltaBytes < 0 || 4 + hl + meta.deltaBytes > body.length) throw new Error("openMachine: deltaBytes 범위 위반");
+    if (!Number.isInteger(meta.deltaBytes) || meta.deltaBytes < 0 || 4 + hl + meta.deltaBytes > body.length) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: deltaBytes 범위 위반");
     bin = body.subarray(4 + hl, 4 + hl + meta.deltaBytes);
     homeBin = body.subarray(4 + hl + meta.deltaBytes);
   } else {
@@ -283,15 +284,15 @@ export async function openMachine(blob, opts = {}) {
   }
   validateMeta(meta, bin.length);
   if (meta.home) validateMachineHomeMeta(meta.home, homeBin ? homeBin.length : 0);
-  else if (homeBin && homeBin.length) throw new Error("openMachine: home 메타 없이 home payload가 있다");
+  else if (homeBin && homeBin.length) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: home 메타 없이 home payload가 있다");
   const manifest = validateManifest(JSON.parse(meta.manifest));
   const signature = await verifyMachineSignature(meta, bin, homeBin || new Uint8Array(0), opts);
   if (opts.requireSignature === true && !signature.trusted) {
-    throw new Error("openMachine: 신뢰된 공개키의 signature가 필요하다");
+    throw new PyProcError("PYPROC_MACHINE_UNTRUSTED", "openMachine: 신뢰된 공개키의 signature가 필요하다");
   }
   if (opts.trust !== true && !signature.trusted) {
     const hint = signature.present ? "신뢰된 공개키가 없거나 일치하지 않는다" : "서명이 없다";
-    throw new Error(`openMachine: 머신 파일은 임의 코드 실행과 동급 위험이다. ${hint}. 출처를 신뢰하면 { trust: true }, 서명 출처를 신뢰하면 { trustedPublicKeys: [...] }로 여시라. sha256=${envelope.slice(0, 16)}...`);
+    throw new PyProcError("PYPROC_MACHINE_UNTRUSTED", `openMachine: 머신 파일은 임의 코드 실행과 동급 위험이다. ${hint}. 출처를 신뢰하면 { trust: true }, 서명 출처를 신뢰하면 { trustedPublicKeys: [...] }로 여시라. sha256=${envelope.slice(0, 16)}...`);
   }
   const session = await bootSession(manifest);
   await session._applyMeta(meta, bin);
@@ -309,17 +310,12 @@ export class Session {
   }
 
   // 사용자 상태(리플레이 경계와 다른 페이지) 수집. save/exportImage 공용.
+  // 델타 수집의 정본은 ReactiveController.collectDelta다(저널 커밋과 같은 프리미티브).
   _collectDelta() {
-    const r = this.reactive, mem = this.rt.memory;
+    const r = this.reactive;
     r.checkpoint(); // 경계 닫기(사용자 상태 확정)
-    const h0 = r.hashes[0], hl = r.hashes[r.liveIdx];
-    const n = Math.min(h0.length, hl.length) / 2;
-    const pages = [];
-    for (let p = 0; p < n; p++) if (hl[2 * p] !== h0[2 * p] || hl[2 * p + 1] !== h0[2 * p + 1]) pages.push(p);
-    for (let p = h0.length / 2; p < hl.length / 2; p++) pages.push(p); // 성장분
-    const bin = new Uint8Array(pages.length * PAGE_SIZE);
-    pages.forEach((p, i) => bin.set(mem.slicePage(p), i * PAGE_SIZE));
-    const meta = { version: 2, manifest: this._manifest, pages, sp: r.stackSave(), heapLen: mem.byteLength() };
+    const { pages, bin, sp, heapLen } = r.collectDelta(0);
+    const meta = { version: 2, manifest: this._manifest, pages, sp, heapLen };
     return { bin, meta };
   }
 
@@ -369,7 +365,7 @@ export class Session {
   async load(dir, name) {
     const meta = JSON.parse(await (await (await dir.getFileHandle(name + ".json")).getFile()).text());
     if (meta.manifest !== this._manifest) {
-      throw new Error("session.load: 매니페스트 불일치. 저장 당시와 같은 packages/setup/env로 bootSession해야 부활이 성립한다.");
+      throw new PyProcError("PYPROC_REPLAY_MISMATCH", "session.load: 매니페스트 불일치. 저장 당시와 같은 packages/setup/env로 bootSession해야 부활이 성립한다.");
     }
     const bin = new Uint8Array(await (await (await dir.getFileHandle(name + ".bin")).getFile()).arrayBuffer());
     validateMeta(meta, bin.length);
@@ -383,7 +379,7 @@ export class Session {
     if (meta.h0) {
       const cur = await this._cp0Digest();
       if (cur !== meta.h0) {
-        throw new Error(`session.load: 리플레이 결정성 불일치(cp0 ${cur.slice(0, 12)}.. != 저장 당시 ${meta.h0.slice(0, 12)}..). 엔진 버전이나 매니페스트가 저장 당시와 다르다.`);
+        throw new PyProcError("PYPROC_REPLAY_MISMATCH", `session.load: 리플레이 결정성 불일치(cp0 ${cur.slice(0, 12)}.. != 저장 당시 ${meta.h0.slice(0, 12)}..). 엔진 버전이나 매니페스트가 저장 당시와 다르다.`);
       }
     }
     const mem = this.rt.memory;
@@ -402,7 +398,7 @@ export class Session {
         "_pyprocGc.collect()"
       );
       if (meta.heapLen > mem.byteLength()) {
-        throw new Error(`session.load: 힙 성장 실패(목표 ${meta.heapLen}, 현재 ${mem.byteLength()})`);
+        throw new PyProcError("PYPROC_HEAP_GROW_FAILED", `session.load: 힙 성장 실패(목표 ${meta.heapLen}, 현재 ${mem.byteLength()})`);
       }
     }
     // 경계 되감기(무조건): 부팅 이후의 모든 드리프트(재시드, 성장 루프, 소비자 실행 흔적)를

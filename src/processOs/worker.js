@@ -11,8 +11,9 @@
 //   워커 대 워커는 **바이트 동일**하다. 그래서 fork는 워커끼리만 성립하고, PyProc은 조율자다.
 //   델타 10.3MB 수확 43.6ms, 부모 상태(변수·배열·계산) 전부 생존, 주소공간 독립.
 import { installIpc } from "./ipc.js";
-
-const PAGE = 65536;
+import { PyProcError, toErrorPayload } from "../runtime/errors.js";
+import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
+import { byteDiffPages, packPages, samePage } from "../runtime/heapDelta.js";
 let py = null;
 let interruptView = null;
 let cp0 = null; // 리플레이 경계의 힙 사본(fork 델타의 기준). replay 부팅에서만 채워진다.
@@ -107,21 +108,12 @@ onmessage = async (e) => {
       postMessage({ type: "bound", id: msg.id, reqId: msg.reqId });
     } else if (msg.type === "harvest") {
       // fork의 부모측: cp0(리플레이 경계) 대비 바뀐 페이지 = 지금 이 커널의 사용자 상태.
-      if (!cp0) throw new Error("harvest: 리플레이 부팅한 프로세스에서만 가능하다");
+      if (!cp0) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "harvest: 리플레이 부팅한 프로세스에서만 가능하다");
       const t0 = performance.now();
       const h = heap();
-      const pages = [];
-      const nCommon = Math.min(h.length, cp0.length) / PAGE;
-      for (let p = 0; p < nCommon; p++) {
-        const a = h.subarray(p * PAGE, (p + 1) * PAGE), b = cp0.subarray(p * PAGE, (p + 1) * PAGE);
-        let same = true;
-        for (let i = 0; i < PAGE; i += 8) { if (a[i] !== b[i]) { same = false; break; } } // 성긴 비교(빠른 기각)
-        if (same) { for (let i = 0; i < PAGE; i++) { if (a[i] !== b[i]) { same = false; break; } } } // 확정 비교
-        if (!same) pages.push(p);
-      }
-      for (let p = cp0.length / PAGE; p < h.length / PAGE; p++) pages.push(p); // 성장분 전량
-      const bin = new Uint8Array(pages.length * PAGE);
-      pages.forEach((p, i) => bin.set(h.subarray(p * PAGE, (p + 1) * PAGE), i * PAGE));
+      // 바이트 비교 전략의 정본은 heapDelta.byteDiffPages다(성긴 기각 + 확정 비교 + 성장분 전량).
+      const pages = byteDiffPages(h, cp0, PAGE);
+      const bin = packPages((p) => h.subarray(p * PAGE, (p + 1) * PAGE), pages, PAGE);
       const sp = py._module._emscripten_stack_get_current ? py._module._emscripten_stack_get_current() : null;
       postMessage({ type: "harvested", id: msg.id, reqId: msg.reqId, pages, bin: bin.buffer, sp, heapLen: h.length, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
     } else if (msg.type === "applyDelta") {
@@ -129,7 +121,7 @@ onmessage = async (e) => {
       // 델타만 덮으면 안 된다: dst가 경계 이후 실행으로 더럽힌 페이지 중 델타 밖의 것이 남아
       // 부모+자식 혼합 상태가 조용히 생긴다(2026-07-12 심판 발견). 그래서 먼저 델타 밖의
       // 드리프트를 cp0으로 되돌리고 그 위에 델타를 덮는다. 비용 = 힙 1회 스캔(수확과 동급).
-      if (!cp0) throw new Error("applyDelta: 리플레이 부팅한 프로세스에서만 가능하다");
+      if (!cp0) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "applyDelta: 리플레이 부팅한 프로세스에서만 가능하다");
       const t0 = performance.now();
       const bin = new Uint8Array(msg.bin);
       // 부모 힙이 더 크면(성장 세션) 자식도 같은 길이까지 성장시킨다. JS에서 Memory.grow를
@@ -139,22 +131,20 @@ onmessage = async (e) => {
         py.runPython("_pyprocHold = []");
         while (heap().length < msg.heapLen) py.runPython("_pyprocHold.append(bytearray(8 * 1024 * 1024))");
         py.runPython("del _pyprocHold");
-        if (heap().length < msg.heapLen) throw new Error(`applyDelta: 힙 성장 실패(목표 ${msg.heapLen}, 현재 ${heap().length})`);
+        if (heap().length < msg.heapLen) throw new PyProcError("PYPROC_HEAP_GROW_FAILED", `applyDelta: 힙 성장 실패(목표 ${msg.heapLen}, 현재 ${heap().length})`);
       }
       const h = heap();
       let maxEnd = 0;
       for (const p of msg.pages) if ((p + 1) * PAGE > maxEnd) maxEnd = (p + 1) * PAGE;
-      if (maxEnd > h.length) throw new Error(`applyDelta: 델타가 힙 밖(${maxEnd} > ${h.length})`);
+      if (maxEnd > h.length) throw new PyProcError("PYPROC_INPUT_INVALID", `applyDelta: 델타가 힙 밖(${maxEnd} > ${h.length})`);
       const incoming = new Set(msg.pages);
       let reverted = 0;
       const nCommon = Math.min(h.length, cp0.length) / PAGE;
       for (let p = 0; p < nCommon; p++) {
         if (incoming.has(p)) continue;
-        const a = h.subarray(p * PAGE, (p + 1) * PAGE), b = cp0.subarray(p * PAGE, (p + 1) * PAGE);
-        let same = true;
-        for (let i = 0; i < PAGE; i += 8) { if (a[i] !== b[i]) { same = false; break; } } // 성긴 비교(빠른 기각)
-        if (same) { for (let i = 0; i < PAGE; i++) { if (a[i] !== b[i]) { same = false; break; } } } // 확정 비교
-        if (!same) { a.set(b); reverted++; }
+        if (samePage(h, cp0, p, PAGE)) continue; // 판정 정본 = heapDelta.samePage(수확과 동일 기준)
+        h.subarray(p * PAGE, (p + 1) * PAGE).set(cp0.subarray(p * PAGE, (p + 1) * PAGE));
+        reverted++;
       }
       // cp0 길이 밖(성장분)의 dst 잔재는 델타가 성장 범위를 전량 포함하므로 부모 길이까지
       // 전부 덮이고, 그 너머는 복원된 상태가 참조하지 않는다.
@@ -164,7 +154,7 @@ onmessage = async (e) => {
     }
   } catch (err) {
     if (interruptView) interruptView[0] = 0; // 시그널 소진 후 채널 리셋(다음 태스크 오염 방지)
-    // traceback은 예외 타입이 끝에 온다. 자를 거면 꼬리를 남겨야 원인이 살아남는다.
-    postMessage({ type: "error", id: msg.id, reqId: msg.reqId, error: String(err).slice(-300) });
+    // 오류는 code/retryable/pyExcType까지 실어 나른다(경계에서 계약이 납작해지지 않게).
+    postMessage({ type: "error", id: msg.id, reqId: msg.reqId, ...toErrorPayload(err) });
   }
 };

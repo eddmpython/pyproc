@@ -5,6 +5,7 @@
 import { MemoryCapability } from "./memoryCapability.js";
 import { PyodideEngine } from "./engines/pyodideEngine.js";
 import { FileSystem } from "./fileSystem.js";
+import { PyProcError } from "./errors.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
@@ -48,14 +49,14 @@ function expectedCoreIntegrity(policy, url, name) {
 
 async function verifyIntegrity(data, expected, label) {
   const entries = String(expected || "").trim().split(/\s+/).filter((v) => v.startsWith("sha256-"));
-  if (!entries.length) throw new Error(`integrity: ${label}의 sha256 SRI 값이 없다`);
+  if (!entries.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${label}의 sha256 SRI 값이 없다`);
   const actual = await sha256Sri(data);
-  if (!entries.includes(actual)) throw new Error(`integrity: ${label} 해시 불일치(expected ${entries[0].slice(0, 19)}..., actual ${actual.slice(0, 19)}...)`);
+  if (!entries.includes(actual)) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${label} 해시 불일치(expected ${entries[0].slice(0, 19)}..., actual ${actual.slice(0, 19)}...)`);
   return actual;
 }
 
 function failIntegrity(cache, err) {
-  const e = err instanceof Error ? err : new Error(String(err));
+  const e = err instanceof Error ? err : new PyProcError("PYPROC_ASSET_INTEGRITY", String(err));
   if (cache.rejectIntegrity) cache.rejectIntegrity(e);
   throw e;
 }
@@ -70,7 +71,7 @@ export function ensureEngineScript(indexURL, opts = {}) {
   const integrity = opts.integrity || null;
   if (globalThis.loadPyodide) {
     if (integrity && engineScriptState?.integrity !== integrity) {
-      return Promise.reject(new Error("pyodide.js는 이미 다른 integrity 상태로 로드됐다. engineScriptIntegrity 검증은 첫 부팅 전에만 강제할 수 있다."));
+      return Promise.reject(new PyProcError("PYPROC_ASSET_INTEGRITY", "pyodide.js는 이미 다른 integrity 상태로 로드됐다. engineScriptIntegrity 검증은 첫 부팅 전에만 강제할 수 있다."));
     }
     return Promise.resolve();
   }
@@ -84,11 +85,11 @@ export function ensureEngineScript(indexURL, opts = {}) {
         s.crossOrigin = opts.crossOrigin || "anonymous";
       }
       s.onload = () => { engineScriptState = engineScriptPending; engineScriptPending = null; res(); };
-      s.onerror = () => { engineScriptLoad = null; engineScriptPending = null; rej(new Error("pyodide.js 로드 실패: " + indexURL)); };
+      s.onerror = () => { engineScriptLoad = null; engineScriptPending = null; rej(new PyProcError("PYPROC_BOOT_FAILED", "pyodide.js 로드 실패: " + indexURL, { retryable: true })); };
       document.head.appendChild(s);
     });
   } else if (integrity && engineScriptPending?.integrity !== integrity) {
-    return Promise.reject(new Error("pyodide.js 로드가 이미 다른 integrity 상태로 진행 중이다."));
+    return Promise.reject(new PyProcError("PYPROC_ASSET_INTEGRITY", "pyodide.js 로드가 이미 다른 integrity 상태로 진행 중이다."));
   }
   return engineScriptLoad;
 }
@@ -115,7 +116,7 @@ export async function boot(opts = {}) {
     const expected = expectedCoreIntegrity(cache.integrity, url, name);
     if (cache.integrity?.required && !expected) {
       cache.integrityMissing++;
-      failIntegrity(cache, new Error(`integrity: ${name}의 coreIntegrity 항목이 없다`));
+      failIntegrity(cache, new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${name}의 coreIntegrity 항목이 없다`));
     }
     if (cache.dir) {
       try {
@@ -158,7 +159,7 @@ export async function boot(opts = {}) {
   const doLoad = opts.loadPyodide
     ? () => opts.loadPyodide(cfg)
     : async () => { await ensureEngineScript(indexURL, { integrity: opts.engineScriptIntegrity }); return loadPyodide(cfg); };
-  if (opts.loadPyodide && opts.engineScriptIntegrity) throw new Error("engineScriptIntegrity는 pyproc이 pyodide.js를 로드하는 경로에서만 검증할 수 있다.");
+  if (opts.loadPyodide && opts.engineScriptIntegrity) throw new PyProcError("PYPROC_INPUT_INVALID", "engineScriptIntegrity는 pyproc이 pyodide.js를 로드하는 경로에서만 검증할 수 있다.");
   let py;
   if (cache) {
     const fetchOrig = globalThis.fetch;
@@ -200,6 +201,10 @@ export class Runtime {
     this.fs = new FileSystem(this); // 엔진-무관 일반 파일 IO(상시 능력, memory와 동급). 미지원 엔진이면 호출 시 에러.
     this.execSeq = 0; // 상태 변이 카운터. 리액티브가 실행 경계 위반을 O(1)로 감지하는 근거.
   }
+  // 실행 API 밖의 상태 변이를 경계 카운터에 기록한다. 소비자: 리액티브의 복원(restore도
+  // 힙 변이다 = 저널 유휴 감시 같은 외부 관찰자에게 보여야 한다)과 markDirty(라이브 PyProxy
+  // 호출처럼 계측 불가능한 변이의 신고 채널).
+  noteStateMutation() { this.execSeq++; }
   run(code) { this.execSeq++; return this._engine.runSync(code); }
   runAsync(code) { this.execSeq++; return this._engine.runAsync(code); }
   setGlobal(name, value) { this.execSeq++; this._engine.setGlobal(name, value); }

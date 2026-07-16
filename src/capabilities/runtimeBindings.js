@@ -12,13 +12,16 @@ import { MachineJournal } from "./machineJournal.js";
 import { GpuBridge } from "./gpuCompute.js";
 
 const RUNTIME_CAPABILITY_BINDINGS = Symbol.for("pyproc.runtimeCapabilityBindings");
+const REACTIVE_CONTROLLER = Symbol.for("pyproc.reactiveController");
 
 export function installRuntimeCapabilityBindings(RuntimeClass) {
   const proto = RuntimeClass.prototype;
   if (proto[RUNTIME_CAPABILITY_BINDINGS]) return RuntimeClass;
   Object.defineProperties(proto, {
     [RUNTIME_CAPABILITY_BINDINGS]: { value: true },
-    enableReactive: { value() { return new ReactiveController(this); } },
+    // 런타임당 컨트롤러 1개(memoize). 컨트롤러가 둘이면 한쪽의 복원이 다른 쪽 경계 가드에
+    // 보이지 않아 낡은 해시로 힙을 조용히 오염시킨다(soundness 수리, 2026-07-16).
+    enableReactive: { value() { return (this[REACTIVE_CONTROLLER] ||= new ReactiveController(this)); } },
     enableSyscallBridge: { value(cfg = {}) { return new SyscallBridge(this, { ...cfg, assetIntegrity: cfg.assetIntegrity || this.assetIntegrity }); } },
     enableSocketBridge: { value(cfg = {}) { return new SocketBridge(this, cfg); } },
     enableAsgiServer: { value(cfg = {}) { return new AsgiServer(this, cfg); } },
