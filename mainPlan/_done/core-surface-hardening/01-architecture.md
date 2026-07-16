@@ -32,6 +32,7 @@ export function fromErrorPayload(payload, fallbackCode) { ... } // 경계 수신
 | PYPROC_BOOT_FAILED | 엔진/워커 부팅 실패 | true |
 | PYPROC_ASSET_INTEGRITY | 자산 SRI/manifest 검증 실패 | false |
 | PYPROC_MACHINE_FORMAT_INVALID | .pymachine/저장 메타 형식 위반 | false |
+| PYPROC_MACHINE_INTEGRITY | .pymachine 봉투 해시/서명 검증 실패(손상 또는 변조) | false |
 | PYPROC_MACHINE_UNTRUSTED | trust 게이트 미승인 | false |
 | PYPROC_REPLAY_MISMATCH | cp0/h0 리플레이 결정성 불일치 | false |
 | PYPROC_HEAP_GROW_FAILED | 파이썬 할당 경로 힙 성장 실패 | false |

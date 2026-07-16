@@ -9,6 +9,7 @@
 
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
+| [core-surface-hardening/](core-surface-hardening/) | ✅ 완료 (2026-07-16) | 핵(결정적 리플레이 + 페이지 델타)의 soundness 수리, PyProcError 단일 오류 계약, heapDelta 단일 보관소, processOs 수리, 표면 압축(강등/삭제/절삭 + README 얼굴), 영문 api.md/CHANGELOG/SECURITY와 성능 예산·CI 실검증까지 완결. |
 | [web-machine-hardening/](web-machine-hardening/) | ✅ 완료 (2026-07-16) | 단일 owner-fenced MachineStore, 원자적 context 교체, HEAD/PREV 보존 retention, OperationControl 취소 경계, 제품 runtime 책임 분리를 구조/contract/probe/제품 E2E 게이트로 완결. |
 | [web-computer-product/](web-computer-product/) | ✅ 완료 (2026-07-16) | Python OS와 Linux의 제품 UI, 단일 owner, durable dual-guest Save, signed `.webmachine` export와 fresh-profile import를 실제 제품 E2E로 완결. |
 | [web-machine-platform/](web-machine-platform/) | ✅ 완료 (2026-07-16) | pyproc과 Linux 공통 lifecycle·장치·durable generation·단일 owner·signed `.webmachine`을 실증하고 네 독립 private package와 정식 검증 트리로 승격. |

@@ -143,7 +143,9 @@
 - `npm test` GREEN(표면/타입/README 게이트 갱신 포함).
 - `npm run test:browser`, `npm run test:examples`, `npm run test:consumer`,
   `npm run test:package` GREEN.
-- 루트 export 수가 30개 이하로 떨어진다(구조 게이트로 상한 고정).
+- 루트 = 게이트된 표면 등식을 구조 게이트가 직접 강제한다(강등 7종의 루트 잔존 금지 +
+  Runtime 팩토리 잔존 금지). 수치 상한(당초 30 목표)은 근거 없는 숫자라 기각: 실측
+  결과 36이며 잔여는 전부 CI 게이트가 커버한다(원장 2026-07-16 Phase 1 조정 기록).
 - 레포 전역에서 SharedKernel/mapSerial/timeTravel/interrupt(별칭 의미) 참조 0
   (mainPlan/_done과 CHANGELOG 제외).
 

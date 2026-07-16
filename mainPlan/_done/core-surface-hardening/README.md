@@ -1,6 +1,12 @@
 # core-surface-hardening - 핵 메커니즘의 soundness와 표면 압축
 
-상태: 활성 (2026-07-16 개설)
+> ✅ 완료 (2026-07-16): PyProcError 단일 오류 계약(워커 경계 코드 보존), 리액티브
+> soundness(memoize/경계 기록/cp.restore/pruneTo), heapDelta 단일 보관소, processOs
+> 수리(rpcChannel/중첩 라우팅/killHard), 표면 압축(강등 3계열 + SharedKernel 삭제 +
+> 별칭 절삭 + README 얼굴 교체), 영문 api.md/CHANGELOG/SECURITY/용어집과 성능 예산·
+> CI 실검증 배선까지 전 phase 구현하고 전 게이트 GREEN으로 닫았다.
+
+상태: 완료.
 
 pyproc의 핵을 "결정적 리플레이 경계(cp0) + 페이지 해시 델타" 하나로 규명하고,
 그 핵의 soundness 구멍을 수리한 뒤, 공개 표면을 핵 중심으로 압축한다.

@@ -19,6 +19,6 @@
 
 ## 활성 이니셔티브
 
-- [core-surface-hardening/](core-surface-hardening/) - pyproc의 핵(결정적 리플레이 경계 + 페이지 해시 델타)의 soundness를 수리하고, 오류 계약을 PyProcError 하나로 수렴시키고, 공개 표면을 핵 중심으로 압축하고, 영문 API 레퍼런스/CHANGELOG/SECURITY 인프라를 세운다.
+활성 이니셔티브 없음(2026-07-16). 새 작업은 새 이니셔티브 개설부터.
 
-완결 이니셔티브 10개는 [_done/](_done/README.md)으로 이관됐다. 최신 완료 기록은 Web Machine Hardening이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.
+완결 이니셔티브 11개는 [_done/](_done/README.md)으로 이관됐다. 최신 완료 기록은 core-surface-hardening이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.
