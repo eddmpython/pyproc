@@ -1,0 +1,11 @@
+{
+  "comment": "핵 경로의 자릿수 회귀 차단 상한. 로컬 실측(bootMs 2471, restoreLiveMs 1.11, forkBootMs 1499, avgWorkerBootMs 199, mapParallelMs 29, timeoutConvergeMs 1680, 2026-07-16)의 5-10배 여유로 고정한다: 목적은 미세 튜닝 감시가 아니라 O(heap) 재해시 상시화 같은 구조 회귀를 커밋 시점에 잡는 것이다. CI 콜드 CDN 분산을 감안한다.",
+  "budgets": {
+    "bootMs": 30000,
+    "restoreLiveMs": 60,
+    "forkBootMs": 15000,
+    "avgWorkerBootMs": 3000,
+    "mapParallelMs": 2000,
+    "timeoutConvergeMs": 6000
+  }
+}

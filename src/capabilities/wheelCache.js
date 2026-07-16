@@ -3,6 +3,7 @@
 // 캐시에서 서빙한다(재다운로드 0, 오프라인 재설치). 전역 fetch를 상시 오염시키지 않고
 // install/loadPackages 호출 구간에서만 감싼다(명시적 스코프). 디렉터리 핸들은 소비자 제공.
 import { PyProcError } from "../runtime/errors.js";
+import { runWithGlobalPatch } from "../runtime/globalPatch.js";
 
 export class WheelCache {
   constructor(rt, cfg = {}) {
@@ -18,6 +19,13 @@ export class WheelCache {
 
   async _withCache(fn) {
     if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "wheelCache: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
+    // fetch 스왑은 전역 패치 창이다: 단독 사용은 공용 체인으로 직렬화하고,
+    // 이미 열린 창 안(예: bootSession)에서는 그 창이 넘겨준 patchScope로 중첩한다.
+    const scope = this._patchScope || runWithGlobalPatch;
+    return scope(() => this._withCacheInWindow(fn));
+  }
+
+  async _withCacheInWindow(fn) {
     const orig = globalThis.fetch;
     globalThis.fetch = async (input, init) => {
       // input은 string | URL | Request 셋 다 온다(micropip은 URL 객체를 준다).

@@ -17,6 +17,7 @@
 //   signature까지 포함한 최종 body를 다시 해시하므로 무결성과 출처 검증이 분리된다.
 import { PyProcError } from "../runtime/errors.js";
 import { boot } from "../runtime/runtimeApi.js";
+import { runWithGlobalPatch } from "../runtime/globalPatch.js";
 import { PAGE_SIZE } from "../runtime/memoryLayout.js";
 import { WheelCache } from "./wheelCache.js";
 import {
@@ -35,18 +36,13 @@ function stubEntropy() {
   return () => { crypto.getRandomValues = o.grv; Date.now = o.dn; performance.now = o.pn; };
 }
 
-// 결정적 부팅 구간은 전역(엔트로피/시간)을 패치하므로 한 번에 하나만 진입한다.
-// 두 bootSession이 겹치면 먼저 끝난 쪽이 다른 쪽의 패치를 복원해 결정성이 조용히 깨진다.
-let bootChain = Promise.resolve();
-function runExclusive(fn) {
-  const run = bootChain.then(fn, fn);
-  bootChain = run.then(() => undefined, () => undefined);
-  return run;
-}
+// 결정적 부팅 구간은 전역(엔트로피/시간)을 패치하므로 전역 패치 체인에서 하나만 진입한다.
+// 두 bootSession(또는 boot 코어 캐시/wheel 캐시의 fetch 스왑)이 겹치면 먼저 끝난 쪽이
+// 다른 쪽의 패치를 복원해 전역이 꼬인다. 내부 패처에는 reenter 스코프를 넘긴다(중첩 안전).
 
 // 결정적 리플레이 부팅: 매니페스트(indexURL/env/packages/setup)가 곧 환경 선언이다.
 export function bootSession(manifest = {}) {
-  return runExclusive(async () => {
+  return runWithGlobalPatch(async (reenterPatch) => {
     const restore = stubEntropy();
     let rt;
     try {
@@ -57,10 +53,11 @@ export function bootSession(manifest = {}) {
         engineScriptIntegrity: manifest.engineScriptIntegrity,
         coreIntegrity: manifest.coreIntegrity,
         coreCacheDir: manifest.coreCacheDir,
+        patchScope: reenterPatch,
       });
       if (manifest.packages && manifest.packages.length) {
         // wheelDir을 주면 패키지 바이트가 OPFS 캐시를 경유한다: 두 번째부터 다운로드 0.
-        if (manifest.wheelDir) await new WheelCache(rt, { dir: manifest.wheelDir }).loadPackages(manifest.packages);
+        if (manifest.wheelDir) await new WheelCache(rt, { dir: manifest.wheelDir, patchScope: reenterPatch }).loadPackages(manifest.packages);
         else await rt.loadPackages(manifest.packages);
       }
       if (manifest.setup) rt.run(manifest.setup);

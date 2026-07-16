@@ -6,6 +6,7 @@ import { MemoryCapability } from "./memoryCapability.js";
 import { PyodideEngine } from "./engines/pyodideEngine.js";
 import { FileSystem } from "./fileSystem.js";
 import { PyProcError } from "./errors.js";
+import { runWithGlobalPatch } from "./globalPatch.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
@@ -162,6 +163,10 @@ export async function boot(opts = {}) {
   if (opts.loadPyodide && opts.engineScriptIntegrity) throw new PyProcError("PYPROC_INPUT_INVALID", "engineScriptIntegrity는 pyproc이 pyodide.js를 로드하는 경로에서만 검증할 수 있다.");
   let py;
   if (cache) {
+    // 코어 캐시의 fetch 랩은 전역 패치 창이다: 단독 boot는 공용 체인으로 직렬화하고,
+    // 이미 열린 창(bootSession의 엔트로피 스텁) 안에서는 그 창이 넘겨준 patchScope로 중첩한다.
+    const patchScope = opts.patchScope || runWithGlobalPatch;
+    py = await patchScope(async () => {
     const fetchOrig = globalThis.fetch;
     cache.orig = fetchOrig;
     const integrityFailure = new Promise((_, reject) => { cache.rejectIntegrity = reject; });
@@ -175,8 +180,9 @@ export async function boot(opts = {}) {
       return u.startsWith(indexURL) ? cachedFetch(u) : fetchOrig(input, init);
     };
     try {
-      py = await Promise.race([loadAll(), integrityFailure]);
+      return await Promise.race([loadAll(), integrityFailure]);
     } finally { globalThis.fetch = fetchOrig; }
+    });
   } else {
     py = await doLoad();
     if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
