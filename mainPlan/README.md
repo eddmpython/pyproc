@@ -19,6 +19,6 @@
 
 ## 활성 이니셔티브
 
-활성 이니셔티브 없음(2026-07-16). 새 작업은 새 이니셔티브 개설부터.
+- [product-adoption/](product-adoption/) - 제품 선언의 관문 4개: CI 실검증 확립, 릴리즈 v0.0.10과 소비 3사 재핀, Stable 승격 체계, 채택 표면 2개(영문 비교 페이지 + MCP 에이전트 레시피).
 
 완결 이니셔티브 11개는 [_done/](_done/README.md)으로 이관됐다. 최신 완료 기록은 core-surface-hardening이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.

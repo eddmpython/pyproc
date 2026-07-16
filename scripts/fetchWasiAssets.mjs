@@ -20,9 +20,31 @@ const WASM_OUT = join(TARGET, `python-${WASI_PYTHON_VERSION}.wasm`);
 const STDLIB_OUT = join(TARGET, "python314-stdlib.zip");
 const WORK = join(TARGET, ".wasiFetch");
 
-function run(cmd, args, cwd) {
-  const r = spawnSync(cmd, args, { cwd, encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")} 실패: ${r.stderr || r.stdout}`);
+// zip 추출/생성은 OS별 내장 도구가 다르다: Windows tar = bsdtar(zip 내장),
+// 리눅스 tar = GNU tar(zip 불가, 대신 unzip/zip이 러너에 내장). 순서대로 폴백한다.
+function extractZip(zipName, cwd) {
+  const attempts = [["tar", ["-xf", zipName]], ["unzip", ["-o", "-q", zipName]]];
+  const failures = [];
+  for (const [cmd, args] of attempts) {
+    const r = spawnSync(cmd, args, { cwd, encoding: "utf8" });
+    if (r.status === 0) return;
+    failures.push(`${cmd}: ${(r.stderr || r.stdout || String(r.error || "")).slice(0, 160)}`);
+  }
+  throw new Error(`zip 추출 실패(${zipName}): ${failures.join(" | ")}`);
+}
+
+function createZip(outPath, contentDir) {
+  const attempts = [
+    ["tar", ["-a", "-cf", outPath, "-C", contentDir, "."], undefined],
+    ["zip", ["-q", "-r", outPath, "."], contentDir],
+  ];
+  const failures = [];
+  for (const [cmd, args, cwd] of attempts) {
+    const r = spawnSync(cmd, args, { cwd, encoding: "utf8" });
+    if (r.status === 0) return;
+    failures.push(`${cmd}: ${(r.stderr || r.stdout || String(r.error || "")).slice(0, 160)}`);
+  }
+  throw new Error(`zip 생성 실패(${outPath}): ${failures.join(" | ")}`);
 }
 
 async function main() {
@@ -37,12 +59,12 @@ async function main() {
   const resp = await fetch(RELEASE_URL, { redirect: "follow" });
   if (!resp.ok) throw new Error(`릴리즈 다운로드 실패: ${resp.status}`);
   await pipeline(Readable.fromWeb(resp.body), createWriteStream(zipPath));
-  run("tar", ["-xf", "cpy.zip"], WORK);
+  extractZip("cpy.zip", WORK);
   if (!existsSync(join(WORK, "python.wasm"))) throw new Error("릴리즈 zip에 python.wasm이 없다");
   const stdlibDir = join(WORK, "lib", `python3.14`);
   if (!existsSync(stdlibDir)) throw new Error("릴리즈 zip에 lib/python3.14가 없다");
-  // 모듈이 zip 루트에 오도록 stdlib 디렉터리 안에서 묶는다(-a = 확장자로 zip 포맷 추론).
-  run("tar", ["-a", "-cf", join(WORK, "stdlib.zip"), "-C", stdlibDir, "."]);
+  // 모듈이 zip 루트에 오도록 stdlib 디렉터리 내용을 묶는다(도구 폴백은 createZip 참조).
+  createZip(join(WORK, "stdlib.zip"), stdlibDir);
   renameSync(join(WORK, "python.wasm"), WASM_OUT);
   renameSync(join(WORK, "stdlib.zip"), STDLIB_OUT);
   rmSync(WORK, { recursive: true, force: true });

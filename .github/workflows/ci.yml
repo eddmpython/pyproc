@@ -14,6 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # 의존성 0이지만 workspaces(packages/*) 심볼릭 링크는 필요하다: 구조 게이트가
+      # Web Machine contract suite를 workspace 이름(@web-machine/*)으로 import한다.
+      - run: npm ci
       - run: npm test
 
   browser:
