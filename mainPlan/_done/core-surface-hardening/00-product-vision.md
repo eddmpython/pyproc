@@ -64,9 +64,9 @@ pyproc의 핵은 개별 기능이 아니라 단일 메커니즘이다:
 1. 컨트롤러 memoize 또는 restore의 execSeq 기록이 기존 게이트(저널 유휴 커밋, %undo,
    forkLive)와 화해 불가능한 동작 변화를 낳는 경우.
 2. heapDelta 통합이 fork 실측(10.3MB 수확 43.6ms급)을 유의미하게 열화시키는 경우.
-3. 표면 강등이 소비 3사(codaro/dartlab/xlpod)의 실소비 표면을 깨는 경우
-   (docs/consuming/contract.md:211-213 기준 실소비는 boot/Runtime 계열 + 자산 파이프라인 +
-   AsgiServer + setInterruptBuffer라 겹치지 않음을 확인했다).
+3. 표면 강등이 계약 문서(docs/consuming/contract.md)에 기록된 라이브 사용 표면을 깨는
+   경우(기록 기준 라이브 표면은 boot/Runtime 계열 + 자산 파이프라인 + AsgiServer +
+   setInterruptBuffer라 겹치지 않음을 확인했다).
 
 ## 기각된 대안 (반박 검증에서 죽은 것)
 

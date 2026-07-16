@@ -14,7 +14,7 @@
 - 게이트: 수리 push 뒤 ci.yml 전 job GREEN.
 - 롤백: 워크플로/스크립트 한정, 커밋 revert.
 
-## 관문 2 - 릴리즈 v0.0.10 + 소비 3사 재핀
+## 관문 2 - 릴리즈 v0.0.10 (명시 지시 이벤트, 이 이니셔티브의 완료 조건 아님)
 
 - 절차 정본은 docs/operations/release.md. 실행: 전 게이트 green 재확인 -> package.json
   0.0.10 + 릴리즈 커밋(한국어) -> `git tag v0.0.10` 같은 커밋 -> main과 태그 push ->
@@ -23,11 +23,8 @@
 - 노트 내용은 CHANGELOG Unreleased를 0.0.10 절로 승격한 것과 동일 요지: 브레이킹
   (SharedKernel 삭제, GPU/Socket/WASI subpath 강등, 별칭 3종 절삭) + 추가(PyProcError,
   체크포인트 핸들, soundness 수리, 문서 인프라).
-- 재핀: 형제 레포(../codaro, ../dartlab, ../xlpod)의 `"pyproc"` 정확 버전을 0.0.10으로
-  올리고 락파일 갱신 + 최소 해석 검증(npm install 성공 + 그 레포의 빠른 게이트가 있으면
-  실행). 각 레포의 커밋 규칙을 따르되 그 레포 작업 트리가 더러우면 pin 변경만 커밋한다.
-- 게이트: npm 게시 확인 + 3사 핀 == 0.0.10.
-- 롤백: 소비자는 이전 버전 되핀으로 즉시 복귀(핀 정책의 존재 이유).
+- 게이트: `npm view pyproc version` == 0.0.10 + GitHub Release 발행 확인.
+- 롤백: 게시는 되돌릴 수 없다(버전 번호 재사용 불가). 문제는 다음 버전의 forward patch다.
 
 ## 관문 3 - Stable 승격 체계
 
@@ -35,8 +32,7 @@
 
 - capabilityMatrix에 "상태 라벨 승격 기준" 절을 신설한다:
   Stable = (a) CI 런타임 게이트가 실동작을 커버하고, (b) 마지막 브레이킹 이후 릴리즈
-  1개 이상이 지났고(표면 동결 증거), (c) 실소비 증거(소비 3사 중 1곳 이상) 또는 30일
-  soak, (d) 경계 문서화. Beta = (a) + 경계 문서화. Experimental = 실행 표면과 검증
+  1개 이상이 지났고(표면 동결 증거), (c) 30일 soak(게이트 연속 GREEN), (d) 경계 문서화. Beta = (a) + 경계 문서화. Experimental = 실행 표면과 검증
   명령 존재. Research preview = 실증 장치.
 - 간판 레인의 승격 시계를 기록한다: reactive/session/journal은 0.0.10 릴리즈가
   "마지막 브레이킹" 기준점이며, 다음 릴리즈에서 (b)가 충족된다.
@@ -80,10 +76,10 @@
 - zero-dep 유지: 프로토콜은 손 구현(newline JSON-RPC), 브라우저 구동은 기존 하네스.
 - npm scripts: `mcp:sandbox` = `node scripts/mcpSandboxServer.mjs`,
   `test:mcp` = `node tests/browser/mcpSandbox.mjs`.
-- 소비 문서: README "Plug pyproc into an AI agent (MCP)" 절 - Claude Code 등록 예시
+- 공개 문서: README "Plug pyproc into an AI agent (MCP)" 절 - MCP 클라이언트(claude CLI) 등록 예시
   (`claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs`) 포함.
 
 ## 완료 절차
 
-1. 전 게이트 GREEN(구조/브라우저/예제/패키지/소비자/웹컴퓨터/MCP) + CI GREEN.
+1. 전 게이트 GREEN(구조/브라우저/예제/패키지/설치 tarball/웹컴퓨터/MCP) + CI GREEN.
 2. 원장 최종 기록 -> 폴더째 `_done/product-adoption/` 이관 + 인덱스 갱신.

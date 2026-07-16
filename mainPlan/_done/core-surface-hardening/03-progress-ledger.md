@@ -140,7 +140,6 @@ NEXT:
 1. push 후 CI 확인: wasiGate 실 GREEN 전환과 web-computer job이 러너에서 도는지
    (자산 다운로드/캐시 경로). 실패 시 forward patch.
 2. 릴리즈는 명시 지시 대기(CHANGELOG Unreleased가 브레이킹 전수와 마이그레이션 보유).
-   소비 3사 재핀 시 마이그레이션 항목이 그 문서다.
 3. WASI 체크포인트 내부의 heapDelta 합류(research preview 승격 논의 시).
 
 현재 구현 상태: 완료. 폴더를 mainPlan/_done/core-surface-hardening/으로 이관한다.

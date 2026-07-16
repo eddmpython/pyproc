@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>branchFleet - 투기적 분기 함대 실측</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style>
+</head>
+<body>
+  <h1>투기적 분기 함대: 델타 방송 팬아웃</h1>
+  <p>준비된 상태 하나에서 N 후보를 물리 병렬로 탐색하고 승자를 본선으로 승계한다.
+     핵심 질문: 부모 델타를 한 번만 수확해 방송하면 팬아웃이 O(N x heap)에서
+     O(heap + N x delta)로 떨어지는가.</p>
+  <pre id="out">실행 중...</pre>
+  <script type="module">
+    import { PyProc } from "../../../index.js";
+
+    const out = document.getElementById("out");
+    const checks = [];
+    const timings = {};
+    const log = (m) => { out.textContent += "\n" + m; };
+    const check = (name, pass, info = "") => {
+      checks.push({ name, pass: !!pass, info: String(info) });
+      log(`${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`);
+    };
+    async function report() {
+      const ok = checks.length > 0 && checks.every((c) => c.pass);
+      out.textContent = (ok ? "GREEN\n" : "RED\n") + out.textContent;
+      try {
+        await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ok, checks, timings }) });
+      } catch (e) {}
+    }
+
+    const INDEX = new URLSearchParams(location.search).get("indexURL") || undefined;
+    const CANDIDATES = 4; // 후보 레인 수(본선 1 + 후보 4 = 워커 5)
+
+    // 후보 코드: 같은 준비 상태에서 서로 다른 접근을 시도한다(compute-bound, 결과 상이).
+    const candidateCode = (k) => [
+      `mine = ${k}`,
+      `total = sum(x % (${k} + 2) for x in prepared)`,
+      `result = (mine, total)`,
+      `result`,
+    ].join("\n");
+
+    try {
+      const os = new PyProc({ replay: {}, indexURL: INDEX });
+      let t = performance.now();
+      await os.boot(1 + CANDIDATES, false); // 리플레이 부팅 = 바이트 동일 경계(fork 대칭)
+      timings.poolBootMs = Math.round(performance.now() - t);
+      const pids = os.ps().map((p) => p.pid);
+      const main = pids[0], lanes = pids.slice(1);
+      const entry = (pid) => os.table.find((x) => x.pid === pid);
+      log(`풀 준비: 본선 pid ${main}, 후보 레인 ${lanes.join(",")} (${timings.poolBootMs}ms)`);
+
+      // 1) 본선에 "준비된 상태"를 만든다(에이전트가 한 번 준비하는 그 상태).
+      t = performance.now();
+      await os.repl(main, "prepared = [i * i for i in range(400000)]\nbase = sum(prepared)\nmine = None");
+      timings.prepareMs = Math.round(performance.now() - t);
+      const baseValue = (await os.repl(main, "base")).value;
+      log(`본선 준비 완료: base=${baseValue} (${timings.prepareMs}ms)`);
+
+      // 2) 순차 fork 팬아웃(오늘의 표면): fork(main, dst)를 N번 = 부모 힙 수확 N회.
+      t = performance.now();
+      const seqForks = [];
+      for (const pid of lanes) seqForks.push(await os.fork(main, pid));
+      timings.sequentialFanOutMs = Math.round(performance.now() - t);
+      const harvestTotal = seqForks.reduce((a, f) => a + f.harvestMs, 0);
+      timings.sequentialHarvestMs = Math.round(harvestTotal);
+      check("순차 fork 팬아웃: N 레인이 부모 상태를 받음", seqForks.every((f) => f.pages > 0),
+        `${CANDIDATES}회, ${timings.sequentialFanOutMs}ms (수확 합 ${timings.sequentialHarvestMs}ms, ${seqForks[0].mb}MB/회)`);
+
+      // 3) 방송 팬아웃(새 가설): 수확 1회 -> SAB -> N 레인 병렬 적용.
+      t = performance.now();
+      const h = await os._call(entry(main), { type: "harvest" });
+      const harvestOnceMs = performance.now() - t;
+      const sab = new SharedArrayBuffer(h.bin.byteLength);
+      new Uint8Array(sab).set(new Uint8Array(h.bin)); // 공유 버퍼로 1회 복사(N 워커가 함께 읽는다)
+      const applied = await Promise.all(lanes.map((pid) => os._call(entry(pid), {
+        type: "applyDelta", bin: sab, pages: h.pages, sp: h.sp, heapLen: h.heapLen,
+      })));
+      timings.broadcastFanOutMs = Math.round(performance.now() - t);
+      timings.broadcastHarvestMs = Math.round(harvestOnceMs);
+      timings.deltaMB = +(h.bin.byteLength / 1048576).toFixed(1);
+      timings.fanOutSpeedup = +(timings.sequentialFanOutMs / timings.broadcastFanOutMs).toFixed(2);
+      check("방송 팬아웃이 순차 fork보다 싸다(수확 1회)",
+        timings.broadcastFanOutMs < timings.sequentialFanOutMs && applied.every((a) => a.pages === h.pages.length),
+        `방송 ${timings.broadcastFanOutMs}ms(수확 ${timings.broadcastHarvestMs}ms 1회) vs 순차 ${timings.sequentialFanOutMs}ms(수확 ${timings.sequentialHarvestMs}ms ${CANDIDATES}회) = ${timings.fanOutSpeedup}x, 델타 ${timings.deltaMB}MB`);
+
+      // 4) 격리: 각 레인이 자기 후보만 보유하고 본선은 불변인가.
+      t = performance.now();
+      const results = await Promise.all(lanes.map((pid, k) => os.repl(pid, candidateCode(k))));
+      timings.parallelExploreMs = Math.round(performance.now() - t);
+      const values = results.map((r) => r.value);
+      const mines = await Promise.all(lanes.map((pid) => os.repl(pid, "mine")));
+      const mineList = mines.map((r) => r.value).join(",");
+      check("후보 격리: 레인마다 자기 마커만 보유", mineList === lanes.map((_, k) => String(k)).join(","), mineList);
+      const mainMine = (await os.repl(main, "mine")).value;
+      const mainBase = (await os.repl(main, "base")).value;
+      // 파이썬 None은 pyodide toJs에서 undefined로 온다(repl 값 채널의 계약): 느슨한 null 검사가 정본.
+      check("본선 불변: 후보 실행이 본선을 오염시키지 않음", mainMine == null && mainBase === baseValue, `mine=${mainMine}, base=${mainBase}`);
+
+      // 5) 직렬 재시도 대조: 같은 후보 집합을 레인 하나에서 순차로(fork로 되돌리며) 실행.
+      const serialLane = lanes[0];
+      t = performance.now();
+      const serialValues = [];
+      for (let k = 0; k < CANDIDATES; k++) {
+        await os.fork(main, serialLane);            // 준비 상태로 되돌리기(= 재시도 루프의 복원)
+        serialValues.push((await os.repl(serialLane, candidateCode(k))).value);
+      }
+      timings.serialExploreMs = Math.round(performance.now() - t);
+      timings.exploreSpeedup = +(timings.serialExploreMs / timings.parallelExploreMs).toFixed(2);
+      check("N-후보 탐색: 병렬이 직렬 재시도보다 빠르고 결과가 같다",
+        JSON.stringify(serialValues) === JSON.stringify(values) && timings.parallelExploreMs < timings.serialExploreMs,
+        `병렬 ${timings.parallelExploreMs}ms vs 직렬 ${timings.serialExploreMs}ms = ${timings.exploreSpeedup}x`);
+
+      // 6) 승계: 이긴 후보(여기선 마지막 레인)를 본선으로. 반대 방향 fork 한 번.
+      const winnerLane = lanes[CANDIDATES - 1], winnerK = CANDIDATES - 1;
+      const winnerValue = (await os.repl(winnerLane, "result")).value;
+      t = performance.now();
+      const adopted = await os.fork(winnerLane, main);
+      timings.adoptMs = Math.round(performance.now() - t);
+      const mainAfter = (await os.repl(main, "result")).value;
+      const mainMineAfter = (await os.repl(main, "mine")).value;
+      check("승계: 본선이 승자 상태와 정확히 일치",
+        mainAfter === winnerValue && mainMineAfter === String(winnerK),
+        `본선 result=${mainAfter}, mine=${mainMineAfter}, ${timings.adoptMs}ms (정화 ${adopted.reverted}p)`);
+
+      // 7) 승계 뒤에도 함대가 재사용 가능한가(다음 라운드 = 새 준비 상태 방송).
+      await os.repl(main, "round2 = mine * 10");
+      const h2 = await os._call(entry(main), { type: "harvest" });
+      const sab2 = new SharedArrayBuffer(h2.bin.byteLength);
+      new Uint8Array(sab2).set(new Uint8Array(h2.bin));
+      await Promise.all(lanes.map((pid) => os._call(entry(pid), {
+        type: "applyDelta", bin: sab2, pages: h2.pages, sp: h2.sp, heapLen: h2.heapLen,
+      })));
+      const round2 = await Promise.all(lanes.map((pid) => os.repl(pid, "round2")));
+      check("다음 라운드: 승계된 본선을 다시 방송(함대 재사용)",
+        round2.every((r) => r.value === String(winnerK * 10)), round2.map((r) => r.value).join(","));
+
+      os.terminate();
+    } catch (e) {
+      check("예외 없음", false, String(e && e.stack || e).slice(-300));
+    }
+    log(`\n실측: ${JSON.stringify(timings)}`);
+    await report();
+  </script>
+</body>
+</html>

@@ -9,6 +9,8 @@
 
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
+| [speculative-fleet/](speculative-fleet/) | ✅ 완료 (2026-07-17) | 투기적 탐색 프리미티브 `forkMany` 승격: 부모 델타를 한 번만 수확해 N 레인에 SAB 방송(4.05배), 그 위 4-후보 병렬 탐색 5.2배. fork는 1:1 위임. |
+| [product-gates/](product-gates/) | ✅ 완료 (2026-07-17) | CI 실검증 확립(wasiGate 실자산 전환, 회귀 4건 수리), Stable 승격 체계와 게이트, 영문 비교 페이지, MCP 에이전트 레시피. v0.0.10 릴리즈는 명시 지시 이벤트로 원장에 재개 지점 기록. |
 | [core-surface-hardening/](core-surface-hardening/) | ✅ 완료 (2026-07-16) | 핵(결정적 리플레이 + 페이지 델타)의 soundness 수리, PyProcError 단일 오류 계약, heapDelta 단일 보관소, processOs 수리, 표면 압축(강등/삭제/절삭 + README 얼굴), 영문 api.md/CHANGELOG/SECURITY와 성능 예산·CI 실검증까지 완결. |
 | [web-machine-hardening/](web-machine-hardening/) | ✅ 완료 (2026-07-16) | 단일 owner-fenced MachineStore, 원자적 context 교체, HEAD/PREV 보존 retention, OperationControl 취소 경계, 제품 runtime 책임 분리를 구조/contract/probe/제품 E2E 게이트로 완결. |
 | [web-computer-product/](web-computer-product/) | ✅ 완료 (2026-07-16) | Python OS와 Linux의 제품 UI, 단일 owner, durable dual-guest Save, signed `.webmachine` export와 fresh-profile import를 실제 제품 E2E로 완결. |

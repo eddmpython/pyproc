@@ -248,8 +248,7 @@ d.ts는 루트 선언에서 제거하고 `declare module "pyproc/gpu"` 블록으
 
 ### 유지 (검증에서 확정)
 
-- boot / new Runtime(py): 실소비자 3사의 라이브 레인. 저수준 Runtime 레인으로 문서상
-  위치만 명확화.
+- boot / new Runtime(py): 라이브 사용 레인. 저수준 Runtime 레인으로 문서상 위치만 명확화.
 - bootSession / openMachine / openPersistentMachine: 머신 레인 3문. 진입점 결정 트리
   문서(1페이지)로 선택 기준을 고정한다. 통합은 기각(00 문서 참조).
 - bootEnv/runScript: 루트 유지. gate.html에 최소 실동작 게이트를 추가한다
