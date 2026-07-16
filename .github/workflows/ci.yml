@@ -60,7 +60,7 @@ jobs:
           path: |
             tests/attempts/enginePort/python-3.14.6.wasm
             tests/attempts/enginePort/python314-stdlib.zip
-          key: wasi-python-3.14.6-wasi_sdk-24
+          key: wasi-python-3.14.6-wasi_sdk-24-v2 # v2: 가짜 zip(GNU tar 산출물) 캐시 무효화
       - run: node scripts/fetchWasiAssets.mjs
       - run: node tests/browser/run.mjs tests/browser/wasiGate.html
         env:

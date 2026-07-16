@@ -4,7 +4,7 @@
 // 레시피의 정본: tests/attempts/enginePort/README.md 자산 절. CI가 이 스크립트 +
 // actions/cache로 wasiGate를 SKIP이 아니라 실제 GREEN으로 돌린다.
 // 압축은 OS 기본 bsdtar(zip 읽기/쓰기 내장, Windows 10+/리눅스/맥)를 쓴다. npm 의존성 0 유지.
-import { createWriteStream, existsSync, mkdirSync, rmSync, renameSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, openSync, readSync, closeSync, rmSync, renameSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -33,6 +33,17 @@ function extractZip(zipName, cwd) {
   throw new Error(`zip 추출 실패(${zipName}): ${failures.join(" | ")}`);
 }
 
+// zip 파일 판별: 도구가 exit 0으로 엉뚱한 포맷을 만드는 경우(GNU tar -a가 zip 접미사에
+// plain tar를 만든 CI 실사고)를 잡는다. 판별 없는 성공은 성공이 아니다.
+function isZipFile(path) {
+  if (!existsSync(path)) return false;
+  const fd = openSync(path, "r");
+  const head = Buffer.alloc(2);
+  readSync(fd, head, 0, 2, 0);
+  closeSync(fd);
+  return head[0] === 0x50 && head[1] === 0x4b; // "PK"
+}
+
 function createZip(outPath, contentDir) {
   const attempts = [
     ["tar", ["-a", "-cf", outPath, "-C", contentDir, "."], undefined],
@@ -40,18 +51,20 @@ function createZip(outPath, contentDir) {
   ];
   const failures = [];
   for (const [cmd, args, cwd] of attempts) {
+    rmSync(outPath, { force: true });
     const r = spawnSync(cmd, args, { cwd, encoding: "utf8" });
-    if (r.status === 0) return;
-    failures.push(`${cmd}: ${(r.stderr || r.stdout || String(r.error || "")).slice(0, 160)}`);
+    if (r.status === 0 && isZipFile(outPath)) return;
+    failures.push(`${cmd}: ${r.status !== 0 ? (r.stderr || r.stdout || String(r.error || "")).slice(0, 160) : "exit 0이지만 zip 시그니처(PK) 아님"}`);
   }
   throw new Error(`zip 생성 실패(${outPath}): ${failures.join(" | ")}`);
 }
 
 async function main() {
-  if (existsSync(WASM_OUT) && existsSync(STDLIB_OUT)) {
+  if (existsSync(WASM_OUT) && isZipFile(STDLIB_OUT)) {
     console.log(`이미 준비됨: ${WASM_OUT} + stdlib zip. 다시 받으려면 두 파일을 지우고 재실행.`);
     return;
   }
+  rmSync(STDLIB_OUT, { force: true }); // 파손 캐시(가짜 zip)는 재제조 대상이다
   rmSync(WORK, { recursive: true, force: true });
   mkdirSync(WORK, { recursive: true });
   const zipPath = join(WORK, "cpy.zip");
