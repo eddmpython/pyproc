@@ -46,6 +46,10 @@ jobs:
       - run: npm run test:examples
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # MCP 레시피 게이트: 에이전트 통합 표면(stdio JSON-RPC + 샌드박스 도구 4종)의 실왕복.
+      - run: npm run test:mcp
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       # WASI 세션 게이트: pyproc/wasi subpath(bootWasi/WasiSession)의 실배선.
       # 30MB 자산은 릴리즈 zip에서 준비하고 버전 키로 캐시해 SKIP이 아니라 실제 GREEN으로 돈다.
       - uses: actions/cache@v4

@@ -164,6 +164,25 @@ console.log(rt.run("len(values)"));           // 3
 사용자 파일  ->  브라우저 Python  ->  요약만  ->  AI 모델
 ```
 
+## AI 에이전트에 꽂기 (MCP)
+
+레포에 zero-dependency MCP 서버가 들어 있다. 지속 pyproc 머신을 에이전트 도구 4개
+(`pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`)로 노출한다.
+COOP/COEP 서버 뒤에 headless Chromium 머신 페이지를 띄우고 stdio로 MCP를 말하므로,
+위의 재시도 루프가 그대로 도구 호출이 된다:
+
+```sh
+git clone https://github.com/eddmpython/pyproc && cd pyproc
+# Claude Code:
+claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
+# 또는 직접 실행해 stdio로 newline-delimited JSON-RPC를 말한다:
+npm run mcp:sandbox
+```
+
+에이전트는 상태를 한 번 준비하고(`pythonRun`), 핸들을 저장하고(`checkpointSave`),
+위험한 시도를 돌린 뒤 밀리초에 되돌린다(`checkpointRestore`). 환경 재구축이 없다.
+`npm run test:mcp`가 전체 왕복을 CI에서 검증한다.
+
 ## 기능 상태
 
 브라우저 게이트 커버리지 기준의 정직한 성숙도. 아래는 전부 런타임 게이트가 있고, 라벨은 오늘 얼마나 걸 수 있는지다.
@@ -240,7 +259,7 @@ Pyodide  Workers
 
 속도 간판은 "모든 Python이 빠르다"가 아니라 계약별이다. pyproc은 제품이 상태를 한 번 준비하고, 분기하고, 복원하고, 독립 브라우저 프로세스로 일을 쪼갤 수 있을 때 빠르다. 단일 커널 NumPy는 여전히 일반 WebAssembly BLAS다.
 
-아래 수치는 추적 artifact에서 온 것이고 **믿으라는 게 아니라 재현하라는** 것이다. 현재 비교 머신: Edge `150.0.4078.65`, Windows 11, AMD Ryzen 7 8845HS, 별도 표기 없으면 3 samples. 전체 측정 계약은 [benchmarking.md](docs/operations/benchmarking.md)에 있다.
+아래 수치는 추적 artifact에서 온 것이고 **믿으라는 게 아니라 재현하라는** 것이다. 현재 비교 머신: Edge `150.0.4078.65`, Windows 11, AMD Ryzen 7 8845HS, 별도 표기 없으면 3 samples. 전체 측정 계약은 [benchmarking.md](docs/operations/benchmarking.md), WebVM/JupyterLite/marimo 대비 시나리오 전수 비교(정직한 N/A 포함)는 [comparison.md](docs/reference/comparison.md)에 있다.
 
 | 축 | 증명하는 것 | pyproc 결과 | 외부 비교 |
 |---|---|---|---|

@@ -48,6 +48,7 @@
     "test:package": "node tests/packageConsumer.mjs",
     "test:consumer": "node tests/browser/productConsumer.mjs",
     "test:web-computer": "node scripts/prepareWebComputerAssets.mjs && node tests/browser/webComputerProduct.mjs",
+    "test:mcp": "node tests/browser/mcpSandbox.mjs",
     "test:browser": "node tests/browser/run.mjs",
     "test:examples": "node tests/browser/examples.mjs",
     "bench:speed": "node tests/browser/speedBench.mjs",
@@ -56,7 +57,8 @@
     "assets:manifest": "node scripts/assetManifest.mjs --pretty",
     "assets:web-computer": "node scripts/prepareWebComputerAssets.mjs",
     "serve": "node examples/serve.mjs",
-    "fetch:engine": "node scripts/fetchEngine.mjs"
+    "fetch:engine": "node scripts/fetchEngine.mjs",
+    "mcp:sandbox": "node scripts/mcpSandboxServer.mjs"
   },
   "keywords": [
     "pyodide",

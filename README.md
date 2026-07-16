@@ -165,6 +165,25 @@ load data + packages
 user file  ->  browser Python  ->  summary only  ->  AI model
 ```
 
+## Plug it into an AI agent (MCP)
+
+The repo ships a zero-dependency MCP server that exposes a persistent pyproc machine as
+four agent tools: `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`.
+It boots a headless Chromium machine page behind a COOP/COEP server and speaks MCP over
+stdio, so the retry loop above becomes tool calls:
+
+```sh
+git clone https://github.com/eddmpython/pyproc && cd pyproc
+# Claude Code:
+claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
+# or run it directly and speak newline-delimited JSON-RPC on stdio:
+npm run mcp:sandbox
+```
+
+The agent prepares state once (`pythonRun`), saves a handle (`checkpointSave`), lets a
+risky attempt run, and rolls back in milliseconds (`checkpointRestore`) instead of
+rebuilding the environment. `npm run test:mcp` verifies the full round trip in CI.
+
 ## Feature status
 
 Honest maturity by browser-gate coverage. Everything below has a runtime gate; the label is how much to stake on it today.
@@ -241,7 +260,7 @@ Four primitives make it sound: complete heap hashing at each execution boundary 
 
 The headline is contract-specific, not "all Python is faster." pyproc is fast when the product can prepare state once, branch it, restore it, or shard work across independent browser processes. Single-kernel NumPy is still ordinary WebAssembly BLAS.
 
-The numbers below come from tracked artifacts and are meant to be **reproduced, not taken on faith**. Current comparison machine: Edge `150.0.4078.65`, Windows 11, AMD Ryzen 7 8845HS, 3 samples unless noted. The full measurement contract is in [benchmarking.md](docs/operations/benchmarking.md).
+The numbers below come from tracked artifacts and are meant to be **reproduced, not taken on faith**. Current comparison machine: Edge `150.0.4078.65`, Windows 11, AMD Ryzen 7 8845HS, 3 samples unless noted. The full measurement contract is in [benchmarking.md](docs/operations/benchmarking.md), and the full scenario-by-scenario comparison against WebVM / JupyterLite / marimo (including where they are honestly N/A) is in [comparison.md](docs/reference/comparison.md).
 
 | Axis | What it proves | pyproc result | External comparison |
 |---|---|---|---|
