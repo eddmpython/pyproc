@@ -4,6 +4,7 @@
 // 호출이 Promise다(동기 run 없음). sharedKernelHost.js는 같은 폴더 고정(경로 계약).
 import { DEFAULT_INDEX } from "../runtime/runtime.js";
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
+import { fromErrorPayload } from "../runtime/errors.js";
 
 export class SharedKernel {
   constructor(opts = {}) {
@@ -33,7 +34,7 @@ export class SharedKernel {
       if (!p) return;
       this._pending.delete(e.data.id);
       if (e.data.ok) p.resolve(e.data.result);
-      else p.reject(new Error(e.data.error));
+      else p.reject(fromErrorPayload(e.data));
     };
     this._port.start();
     return this;

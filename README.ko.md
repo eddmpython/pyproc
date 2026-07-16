@@ -259,6 +259,7 @@ Pyodide  Workers
 | 머신 저장, 전송, 부활 | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
 | 기본 엔진 밖의 가능성 확장 | `GpuCompute`, `GpuArray`, `GpuBridge`, `bootWasi`, `WasiSession` | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
 | worker 기반 능력을 제품에 배포 | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
+| 실패를 프로그램적으로 분기 | `PyProcError`, `PYPROC_ERROR_CODES` | [structure gate](tests/run.mjs), [browser gate](tests/browser/gate.html) |
 
 서브패스 import도 지원한다:
 

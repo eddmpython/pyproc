@@ -5,12 +5,14 @@
 // 벽: SharedWorker는 crossOriginIsolated=false(플랫폼 제약) = SAB 불가
 //     -> interrupt/스냅샷-fork는 이 커널에서 불가. 실행/상태 공유 프리미티브가 v1 스코프.
 // indexURL은 클라이언트가 쿼리로 반드시 싣는다(이 파일에 기본값 없음: 정의처는 runtime.js).
+import { PyProcError, toErrorPayload } from "../runtime/errors.js";
+
 const INDEX = new URL(self.location.href).searchParams.get("index");
 
 let bootP = null;
 let connections = 0;
 const ensure = () => bootP || (bootP = (async () => {
-  if (!INDEX) throw new Error("sharedKernelHost: index 쿼리 누락(클라이언트 계약 위반)");
+  if (!INDEX) throw new PyProcError("PYPROC_INPUT_INVALID", "sharedKernelHost: index 쿼리 누락(클라이언트 계약 위반)");
   const t0 = performance.now();
   const mod = await import(INDEX + "pyodide.mjs");
   const py = await mod.loadPyodide({ indexURL: INDEX });
@@ -43,7 +45,7 @@ self.onconnect = (e) => {
         port.postMessage({ id, ok: false, error: `알 수 없는 메시지 type: ${type}` });
       }
     } catch (err) {
-      port.postMessage({ id, ok: false, error: String(err).slice(-300) });
+      port.postMessage({ id, ok: false, ...toErrorPayload(err) });
     }
   };
 };

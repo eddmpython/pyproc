@@ -10,6 +10,8 @@
 // 파이썬 식별자 camelCase 규칙: RelaySocket/_pyprocSocket 등. socket 모듈 인터페이스를 구현하는
 // 메서드명(recv/sendall/makefile/settimeout/create_connection)은 외부 API라 원어 유지(그 이름이라야
 // http.client/urllib이 찾는다). _RelayRaw는 io.RawIOBase(readinto/readable)를 구현한다.
+import { PyProcError } from "../runtime/errors.js";
+
 const BOOTSTRAP = `
 import socket, io
 from pyodide.ffi import run_sync
@@ -86,7 +88,7 @@ export class SocketBridge {
 
   install() {
     const relayURL = this._cfg.relayURL;
-    if (!relayURL) throw new Error("enableSocketBridge: relayURL 필요(WS->TCP 릴레이)");
+    if (!relayURL) throw new PyProcError("PYPROC_INPUT_INVALID", "enableSocketBridge: relayURL 필요(WS->TCP 릴레이)");
     const socks = this._socks;
     // 파이썬이 부를 브리지(JSPI가 서스펜드하는 async 메서드). 소켓당 WS 하나(릴레이가 host:port 다이얼).
     const bridge = {
@@ -99,11 +101,11 @@ export class SocketBridge {
           if (typeof ev.data === "string") {
             const m = JSON.parse(ev.data);
             if (m.type === "connected") resolve(true);
-            else if (m.type === "error") { st.closed = true; reject(new Error("소켓 릴레이: " + m.msg)); }
+            else if (m.type === "error") { st.closed = true; reject(new PyProcError("PYPROC_ENV_UNSUPPORTED", "소켓 릴레이: " + m.msg, { retryable: true })); }
             else if (m.type === "closed") { st.closed = true; this._deliver(st, new Uint8Array(0)); }
           } else this._deliver(st, new Uint8Array(ev.data));
         };
-        ws.onerror = () => reject(new Error("소켓 릴레이 WS 에러(릴레이 미기동?)"));
+        ws.onerror = () => reject(new PyProcError("PYPROC_ENV_UNSUPPORTED", "소켓 릴레이 WS 에러(릴레이 미기동?)", { retryable: true }));
         ws.onclose = () => { if (!st.closed) { st.closed = true; this._deliver(st, new Uint8Array(0)); } };
       }),
       send: (id, bytes) => { const st = socks.get(id); if (st && st.ws) st.ws.send(bytes && bytes.toJs ? bytes.toJs() : bytes); },

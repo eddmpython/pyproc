@@ -4,6 +4,7 @@
 // commit 경계에서 힙과 /home/web을 함께 복구한다. SharedWorker와 달리 문서의 COI/SAB를 유지한다.
 import { bootSession } from "../capabilities/session.js";
 import { MachineJournal } from "../capabilities/machineJournal.js";
+import { PyProcError } from "../runtime/errors.js";
 
 const PROTOCOL_VERSION = 2;
 const EPOCH_FILE = "EPOCH.json";
@@ -21,11 +22,9 @@ function makeId() {
   return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+// 기존 code/retryable 계약을 PyProcError로 승계한다(코드 문자열 불변 = 게이트 호환).
 function kernelError(message, code, retryable = false) {
-  const error = new Error(message);
-  error.code = code;
-  error.retryable = retryable;
-  return error;
+  return new PyProcError(code, message, { retryable });
 }
 
 function errorPayload(error) {
@@ -94,8 +93,8 @@ export class KernelElection {
 
   join() {
     if (this._joined) return this;
-    if (!globalThis.navigator?.locks?.request) throw new Error("KernelElection: Web Locks API가 필요하다");
-    if (typeof BroadcastChannel !== "function") throw new Error("KernelElection: BroadcastChannel API가 필요하다");
+    if (!globalThis.navigator?.locks?.request) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "KernelElection: Web Locks API가 필요하다");
+    if (typeof BroadcastChannel !== "function") throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "KernelElection: BroadcastChannel API가 필요하다");
     this._joined = true;
     this._left = false;
     this._chan = new BroadcastChannel(this._chanName);
@@ -122,10 +121,10 @@ export class KernelElection {
     try {
       const file = await (await this._journalDir.getFileHandle(EPOCH_FILE)).getFile();
       const doc = JSON.parse(await file.text());
-      if (!Number.isSafeInteger(doc.epoch) || doc.epoch < 0) throw new Error("epoch 범위 위반");
+      if (!Number.isSafeInteger(doc.epoch) || doc.epoch < 0) throw new PyProcError("PYPROC_INTERNAL", "epoch 범위 위반");
       current = doc.epoch;
     } catch (error) {
-      if (error.name !== "NotFoundError") throw new Error(`KernelElection: EPOCH.json 파손(${String(error.message || error).slice(-160)})`);
+      if (error.name !== "NotFoundError") throw new PyProcError("PYPROC_JOURNAL_CORRUPT", `KernelElection: EPOCH.json 파손(${String(error.message || error).slice(-160)})`);
     }
     const epoch = current + 1;
     const file = await this._journalDir.getFileHandle(EPOCH_FILE, { create: true });
@@ -418,7 +417,7 @@ export class KernelElection {
   }
 
   _fail(error) {
-    this._error = error instanceof Error ? error : new Error(String(error));
+    this._error = error instanceof Error ? error : new PyProcError("PYPROC_INTERNAL", String(error));
     this._phase = "failed";
     for (const waiter of this._readyWaiters) {
       clearTimeout(waiter.timer);
@@ -466,7 +465,7 @@ export class KernelElection {
   }
 
   subscribe(listener) {
-    if (typeof listener !== "function") throw new Error("KernelElection.subscribe: 함수가 필요하다");
+    if (typeof listener !== "function") throw new PyProcError("PYPROC_INPUT_INVALID", "KernelElection.subscribe: 함수가 필요하다");
     this._listeners.add(listener);
     listener(this.status());
     return () => this._listeners.delete(listener);
@@ -512,7 +511,7 @@ export async function openPersistentMachine(opts = {}) {
   let journalDir = opts.journalDir || null;
   let storageKey = opts.storageKey || null;
   if (!journalDir) {
-    if (!globalThis.navigator?.storage?.getDirectory) throw new Error("openPersistentMachine: OPFS가 필요하다");
+    if (!globalThis.navigator?.storage?.getDirectory) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "openPersistentMachine: OPFS가 필요하다");
     const root = opts.storageRoot || await navigator.storage.getDirectory();
     const machines = await root.getDirectoryHandle(opts.machineRoot || MACHINE_ROOT, { create: true });
     storageKey ||= await sha256Name(name);

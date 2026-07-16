@@ -7,6 +7,7 @@
 import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory, Directory, wasi } from "./browserWasiShim.js";
 import { DRIVER_SOURCE } from "./wasiReplDriver.js";
 import { SIGNAL_META, EOT, CMD_PATH, DRIVER_PATH, SITE_PATH, FILETYPE_CHARACTER_DEVICE } from "./wasiProtocol.js";
+import { PyProcError, toErrorPayload } from "../../errors.js";
 
 // 결정적 부팅: WASI는 엔트로피/시간이 import 2개로 수렴한다(Pyodide 3소스 스텁보다 깨끗).
 function makeDeterministic(wasiInst, getInst) {
@@ -129,6 +130,6 @@ onmessage = async (e) => {
     try { wasiInst.start(inst); } catch (err) { postMessage({ type: "out", stream: "stderr", line: String(err) }); }
     postMessage({ type: "exited" });
   } catch (err) {
-    postMessage({ type: "bootError", error: String(err).slice(-300) });
+    postMessage({ type: "bootError", ...toErrorPayload(new PyProcError("PYPROC_BOOT_FAILED", String(err).slice(-300), { retryable: true, cause: err })) });
   }
 };

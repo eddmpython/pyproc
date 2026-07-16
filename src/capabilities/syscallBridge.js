@@ -5,6 +5,7 @@
 //   subprocess   -> 자식 워커의 독립 인터프리터(콜드 부팅). JSPI 필요, ["python","-c",code]만 (v1)
 // 실측 근거: tests/attempts/syscallBridge. 저수준 socket 자체의 배선은 프론티어(로드맵) 몫이다.
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
+import { fromErrorPayload } from "../runtime/errors.js";
 
 const BOOTSTRAP = `
 import builtins, sys, io, subprocess, urllib.request
@@ -101,7 +102,7 @@ export class SyscallBridge {
       await new Promise((resolve, reject) => {
         w.addEventListener("message", function onMsg(e) {
           if (e.data.type === "ready") { w.removeEventListener("message", onMsg); resolve(); }
-          else if (e.data.type === "error") { w.removeEventListener("message", onMsg); reject(new Error(e.data.error)); }
+          else if (e.data.type === "error") { w.removeEventListener("message", onMsg); reject(fromErrorPayload(e.data)); }
         });
         // 부모 커널과 같은 배포 지점으로 부팅한다(자가호스팅/오프라인에서 자식만 CDN으로 새지 않게).
         w.postMessage({ type: "boot", id: 1, snapshot: null, indexURL: this._rt.indexURL });
@@ -109,7 +110,7 @@ export class SyscallBridge {
       return await new Promise((resolve, reject) => {
         w.addEventListener("message", (e) => {
           if (e.data.type === "result") resolve(e.data.result);
-          else if (e.data.type === "error") reject(new Error(e.data.error));
+          else if (e.data.type === "error") reject(fromErrorPayload(e.data));
         });
         w.postMessage({ type: "task", taskId: 0, fnSrc: SUBPROC_FN, arg: code });
       });

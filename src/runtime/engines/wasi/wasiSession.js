@@ -10,6 +10,7 @@
 import { SIGNAL_META, EOT, CTL_WORDS, DATA_SAB_BYTES, SITE_PATH } from "./wasiProtocol.js";
 import { unzipWheel } from "./wheelUnzip.js";
 import { verifyPyProcAssetIntegrity } from "../../assets.js";
+import { PyProcError, fromErrorPayload } from "../../errors.js";
 
 // 바이트를 base64로(파이썬에 코드로 실어 /site에 쓰기 위함). 큰 배열은 청크로 스택 초과 방지.
 function base64FromBytes(bytes) {
@@ -32,7 +33,7 @@ const WASI_ENGINE_PIN = {
 
 async function fetchBytes(url, what) {
   const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`bootWasi: ${what} 로드 실패(${resp.status}) ${url}`);
+  if (!resp.ok) throw new PyProcError("PYPROC_BOOT_FAILED", `bootWasi: ${what} 로드 실패(${resp.status}) ${url}`, { retryable: true });
   return resp.arrayBuffer();
 }
 
@@ -49,7 +50,7 @@ export async function bootWasi(manifest = {}) {
     // 기본: 릴리즈 zip 하나를 풀어 python.wasm + lib/<dir>/*을 얻는다(네이티브 DecompressionStream).
     const entries = await unzipWheel(await fetchBytes(WASI_ENGINE_PIN.releaseURL, "release zip"));
     const wasmEntry = entries.find(([p]) => p === "python.wasm" || p.endsWith("/python.wasm"));
-    if (!wasmEntry) throw new Error("bootWasi: 릴리즈 zip에 python.wasm 없음");
+    if (!wasmEntry) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "bootWasi: 릴리즈 zip에 python.wasm 없음");
     wasmBytes = wasmEntry[1];
     const prefix = "lib/" + stdlibDir + "/";
     stdlibFiles = entries.filter(([p]) => p.startsWith(prefix)).map(([p, b]) => [p.slice(prefix.length), b]);
@@ -80,7 +81,7 @@ export class WasiSession {
     await new Promise((resolve, reject) => {
       const onReady = (e) => {
         if (e.data.type === "ready") { this._worker.removeEventListener("message", onReady); resolve(); }
-        else if (e.data.type === "bootError") { this._worker.removeEventListener("message", onReady); reject(new Error(e.data.error)); }
+        else if (e.data.type === "bootError") { this._worker.removeEventListener("message", onReady); reject(fromErrorPayload(e.data, "PYPROC_BOOT_FAILED")); }
       };
       this._worker.addEventListener("message", onReady);
       this._worker.postMessage({ type: "boot", deterministic: this._deterministic, wasmBytes: this._wasmBytes, stdlibFiles: this._stdlibFiles, stdlibDir: this._stdlibDir, ctlSab: this._ctl.buffer, dataSab: this._data.buffer });
@@ -101,7 +102,7 @@ export class WasiSession {
 
   _send(payload) {
     return new Promise((resolve, reject) => {
-      if (!this._worker) return reject(new Error("WasiSession: 종료됨"));
+      if (!this._worker) return reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "WasiSession: 종료됨"));
       this._queue.push({ payload, resolve });
       this._pump();
     });
@@ -123,7 +124,7 @@ export class WasiSession {
     const b = new TextEncoder().encode(code);
     const payload = new Uint8Array(1 + b.length); payload[0] = 1; payload.set(b, 1); // SIGNAL_EXEC
     const { out, err } = await this._send(payload);
-    if (err) throw new Error("WASI 실행 예외: " + err.trim());
+    if (err) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "WASI 실행 예외: " + err.trim());
     return out;
   }
 

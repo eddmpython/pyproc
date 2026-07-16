@@ -6,6 +6,8 @@
 // "캐시 + refresh(비동기)"가 정직한 계약이다: open()은 마지막으로 알려진 값을 준다.
 // write 장치는 close 시 flush 훅을 받는다(fb0가 축적된 프레임을 화면에 blit하는 자리).
 // 엔진 FS 접근은 이 능력 뒤에 격리한다(소비자는 파이썬 open()만 쓴다).
+import { PyProcError } from "../runtime/errors.js";
+
 export class DeviceFs {
   constructor(rt, cfg = {}) {
     this._rt = rt;
@@ -97,7 +99,7 @@ export class DeviceFs {
   // cfg.signal(pid, signum)이 있어야 한다(보통 PyProc.signal 배선). 반환: 등록된 ctl 경로.
   // ctl 어휘: "kill"/"term"->SIGTERM, "int"->SIGINT, "usr1"/"usr2", 또는 숫자.
   track(pid) {
-    if (!this._cfg.signal) throw new Error("track: cfg.signal(pid, signum) 필요");
+    if (!this._cfg.signal) throw new PyProcError("PYPROC_INPUT_INVALID", "track: cfg.signal(pid, signum) 필요");
     const dec = new TextDecoder();
     const map = { int: 2, usr1: 10, usr2: 12, term: 15, kill: 15 };
     this._mk(`/proc/${pid}/status`, { read: () => JSON.stringify({ pid, ts: this._cfg.ps ? this._cfg.ps() : null }) });

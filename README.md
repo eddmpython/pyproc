@@ -259,6 +259,7 @@ Capabilities are opt-in. Turn on only what you need, and consume the capability 
 | Persist, cast, and revive a machine | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
 | Push beyond the default engine lane | `GpuCompute`, `GpuArray`, `GpuBridge`, `bootWasi`, `WasiSession` | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
 | Ship worker-backed capabilities from a product | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
+| Branch on failures programmatically | `PyProcError`, `PYPROC_ERROR_CODES` | [structure gate](tests/run.mjs), [browser gate](tests/browser/gate.html) |
 
 Subpath imports are also supported:
 

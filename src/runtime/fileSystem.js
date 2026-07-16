@@ -6,12 +6,14 @@
 // 위임: this._rt._engine.fs(중립 파사드) -> 엔진 네이티브(Pyodide _py.FS). 변이(write/mkdir/
 // unlink/rmdir)는 실행 경계라 execSeq를 올린다(리액티브 가드 근거, deviceFs와 같은 규약).
 // 읽기(read/readdir/stat/exists)는 execSeq 불변. 미지원 엔진(FS 파사드 부재)이면 실행 가능한 에러.
+import { PyProcError } from "./errors.js";
+
 export class FileSystem {
   constructor(rt) { this._rt = rt; }
 
   _facade() {
     const fs = this._rt._engine.fs;
-    if (!fs) throw new Error("Runtime.fs: 이 엔진은 파일 IO 미지원(엔진 fs 파사드 부재). Pyodide 엔진이 필요하다.");
+    if (!fs) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "Runtime.fs: 이 엔진은 파일 IO 미지원(엔진 fs 파사드 부재). Pyodide 엔진이 필요하다.");
     return fs;
   }
 

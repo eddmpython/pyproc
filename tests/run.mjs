@@ -83,6 +83,7 @@ for (const [name, kind] of [
   ["bootWasi", "function"], ["WasiSession", "function"], ["MachineContainer", "function"], ["JobControl", "function"], ["KernelElection", "function"], ["openPersistentMachine", "function"],
   ["GpuCompute", "function"], ["GpuArray", "function"], ["GpuBridge", "function"],
   ["PAGE_SIZE", "number"], ["SIGNAL", "object"],
+  ["PyProcError", "function"], ["PYPROC_ERROR_CODES", "object"],
 ]) {
   check(`export ${name}:${kind}`, () => {
     if (typeof api[name] !== kind) throw new Error(`got ${typeof api[name]}`);
@@ -295,6 +296,30 @@ for (const scope of ["src", "examples", "tests"]) {
   }
 }
 
+// 3.7) 오류 계약 가드: src의 모든 오류 생성은 PyProcError다(코드 없는 Error 금지).
+//      계약의 축은 message가 아니라 code이므로, 코드 없는 오류가 하나라도 생기면 소비자의
+//      프로그램적 분기가 다시 문자열 매칭으로 퇴행한다. 예외: pyprocSw.js는 SW 자기충족
+//      파일(모듈 import 금지 계약)이라 로컬 swError 헬퍼의 new Error 1곳만 허용한다.
+console.log("\n[오류 계약]");
+for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+  check(`PyProcError only: ${rel(f)}`, () => {
+    const src = readFileSync(f, "utf8");
+    const hits = [...src.matchAll(/new (Error|TypeError|RangeError|SyntaxError)\(/g)];
+    const allowed = rel(f) === "src/capabilities/pyprocSw.js" ? 1 : 0;
+    if (hits.length > allowed) throw new Error(`코드 없는 오류 생성 ${hits.length}건(허용 ${allowed})`);
+  });
+}
+check("PyProcError 코드 카탈로그 = d.ts union (삼자 일치)", () => {
+  const catalog = api.PYPROC_ERROR_CODES;
+  if (!Array.isArray(catalog) || !catalog.length) throw new Error("PYPROC_ERROR_CODES export 없음");
+  const dtsSrc = readFileSync(join(ROOT, "index.d.ts"), "utf8");
+  const unionBlock = /export type PyProcErrorCode =([\s\S]*?);/.exec(dtsSrc);
+  if (!unionBlock) throw new Error("index.d.ts에 PyProcErrorCode union 없음");
+  const dtsCodes = new Set([...unionBlock[1].matchAll(/"(PYPROC_[A-Z_]+)"/g)].map((m) => m[1]));
+  for (const code of catalog) if (!dtsCodes.has(code)) throw new Error(`d.ts union에 없음: ${code}`);
+  for (const code of dtsCodes) if (!catalog.includes(code)) throw new Error(`카탈로그에 없음: ${code}`);
+});
+
 // 3.6) 사이트 크롬: 채널(SNS) 행은 라우트마다 고정이고 정의처는 examples/siteChrome.js 하나다.
 //      라우트가 늘 때 채널을 빠뜨리거나 마크업을 다시 인라인으로 복제하는 드리프트를 차단한다.
 console.log("\n[사이트 크롬]");
@@ -448,7 +473,7 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
 // 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
 console.log("\n[타입]");
 const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
-for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "fingerprintMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "KernelElection", "openPersistentMachine", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE"]) {
+for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "fingerprintMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "KernelElection", "openPersistentMachine", "SharedKernel", "bootWasi", "WasiSession", "PAGE_SIZE", "PyProcError", "PYPROC_ERROR_CODES"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
   });
@@ -906,6 +931,7 @@ check("src layer edge 승인 목록", () => {
       "src/capabilities/envManager.js -> src/runtime/engines/pyodideEngine.js",
       "src/capabilities/machineJournal.js -> src/runtime/memoryLayout.js",
       "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
+      "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
       "src/capabilities/session.js -> src/runtime/runtimeApi.js",
       "src/capabilities/session.js -> src/runtime/memoryLayout.js",
       "src/capabilities/syscallBridge.js -> src/runtime/assets.js",
@@ -923,6 +949,9 @@ check("src layer edge 승인 목록", () => {
       const targetRel = rel(target);
       const toLayer = srcLayerName(targetRel);
       if (!fromLayer || !toLayer || fromLayer === toLayer) continue;
+      // 오류 계약(errors.js)은 전 레이어 공용 Layer 0 계약이라 파일 열거가 무의미하다.
+      // 상위 -> Layer 0 방향만 성립하므로 방향 위반은 애초에 생길 수 없다.
+      if (targetRel === "src/runtime/errors.js" && ref.kind === "module") continue;
       const key = `${ref.kind}:${fromLayer}->${toLayer}`;
       const pair = `${rel(f)} -> ${targetRel}`;
       if (exactCrossLayer.has(key)) {

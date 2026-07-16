@@ -6,6 +6,8 @@
 // 헤더에 0으로 오고 데이터 뒤에 오는) wheel에서 크기를 몰라 깨진다. 중앙 디렉터리는 항상 정확한
 // 크기/오프셋을 담으므로 pip/build가 만든 어떤 wheel도 정확히 푼다.
 
+import { PyProcError } from "../../errors.js";
+
 async function inflateRaw(bytes) {
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
@@ -19,12 +21,12 @@ export async function unzipWheel(input) {
   let eocd = -1;
   const floor = Math.max(0, u8.length - 22 - 65535);
   for (let i = u8.length - 22; i >= floor; i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
-  if (eocd < 0) throw new Error("unzipWheel: EOCD 없음(zip 아님)");
+  if (eocd < 0) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "unzipWheel: EOCD 없음(zip 아님)");
   const count = dv.getUint16(eocd + 10, true);
   let p = dv.getUint32(eocd + 16, true); // 중앙 디렉터리 시작 오프셋
   const files = [];
   for (let n = 0; n < count; n++) {
-    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error("unzipWheel: 중앙 디렉터리 헤더 손상");
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "unzipWheel: 중앙 디렉터리 헤더 손상");
     const method = dv.getUint16(p + 10, true);
     const compSize = dv.getUint32(p + 20, true);
     const nameLen = dv.getUint16(p + 28, true);
@@ -40,7 +42,7 @@ export async function unzipWheel(input) {
     let content;
     if (method === 0) content = comp.slice();               // stored
     else if (method === 8) content = await inflateRaw(comp); // deflate
-    else throw new Error("unzipWheel: 미지원 압축 방식 " + method + " (" + name + ")");
+    else throw new PyProcError("PYPROC_ASSET_INTEGRITY", "unzipWheel: 미지원 압축 방식 " + method + " (" + name + ")");
     if (!name.endsWith("/")) files.push([name, content]);
     p += 46 + nameLen + extraLen + commentLen;
   }

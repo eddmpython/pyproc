@@ -2,6 +2,8 @@
 // micropip/loadPackage가 받는 .whl 바이트를 OPFS에 저장하고, 다음부터는 네트워크 대신
 // 캐시에서 서빙한다(재다운로드 0, 오프라인 재설치). 전역 fetch를 상시 오염시키지 않고
 // install/loadPackages 호출 구간에서만 감싼다(명시적 스코프). 디렉터리 핸들은 소비자 제공.
+import { PyProcError } from "../runtime/errors.js";
+
 export class WheelCache {
   constructor(rt, cfg = {}) {
     this._rt = rt;
@@ -15,7 +17,7 @@ export class WheelCache {
   }
 
   async _withCache(fn) {
-    if (!this._dir) throw new Error("wheelCache: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
+    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "wheelCache: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
     const orig = globalThis.fetch;
     globalThis.fetch = async (input, init) => {
       // input은 string | URL | Request 셋 다 온다(micropip은 URL 객체를 준다).

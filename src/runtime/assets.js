@@ -5,6 +5,8 @@
 // 경로/역할/스코프를 고정한다. pyproc-assets CLI가 만든 SRI manifest를 주면 런타임은 Worker를
 // 만들기 전에 해당 graph의 실제 바이트를 SHA-256으로 검증할 수 있다.
 
+import { PyProcError } from "./errors.js";
+
 export const PYPROC_ASSET_MANIFEST_VERSION = 1;
 
 const ASSETS = Object.freeze([
@@ -74,13 +76,13 @@ function base64FromBytes(bytes) {
     return btoa(s);
   }
   if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
-  throw new Error("assetIntegrity: base64 인코더가 없다");
+  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "assetIntegrity: base64 인코더가 없다");
 }
 
 async function sha256Sri(data) {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   const subtle = globalThis.crypto && globalThis.crypto.subtle;
-  if (!subtle) throw new Error("assetIntegrity: crypto.subtle이 필요하다");
+  if (!subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "assetIntegrity: crypto.subtle이 필요하다");
   return "sha256-" + base64FromBytes(new Uint8Array(await subtle.digest("SHA-256", bytes)));
 }
 
@@ -98,7 +100,7 @@ function matchesSelection(file, roleSet, pathSet) {
 function serviceWorkerFile(manifest) {
   const files = Array.isArray(manifest?.files) ? manifest.files : [];
   const selected = files.filter((file) => Array.isArray(file.roles) && file.roles.includes("pyprocServiceWorker"));
-  if (!selected.length) throw new Error("assetIntegrity: pyprocServiceWorker 파일이 없다");
+  if (!selected.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "assetIntegrity: pyprocServiceWorker 파일이 없다");
   const exact = selected.find((file) => file.path === "src/capabilities/pyprocSw.js");
   return exact || selected[0];
 }
@@ -159,31 +161,31 @@ export function getPyProcAssetManifest(opts = {}) {
 export async function verifyPyProcAssetIntegrity(manifest, opts = {}) {
   if (!manifest) return null;
   const files = Array.isArray(manifest.files) ? manifest.files : [];
-  if (!files.length) throw new Error("assetIntegrity: pyproc-assets manifest의 files 배열이 필요하다");
+  if (!files.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "assetIntegrity: pyproc-assets manifest의 files 배열이 필요하다");
   const roleSet = opts.roles ? new Set(opts.roles) : null;
   const pathSet = opts.paths ? new Set(opts.paths) : null;
   const selected = files.filter((file) => matchesSelection(file, roleSet, pathSet));
   if (!selected.length) {
     const label = opts.roles ? `roles=${[...roleSet].join(",")}` : `paths=${[...pathSet].join(",")}`;
     if (opts.required === false) return { verified: 0, bytes: 0, files: [] };
-    throw new Error(`assetIntegrity: 검증 대상 없음(${label})`);
+    throw new PyProcError("PYPROC_ASSET_INTEGRITY", `assetIntegrity: 검증 대상 없음(${label})`);
   }
   const fetchFn = opts.fetch || globalThis.fetch;
-  if (typeof fetchFn !== "function") throw new Error("assetIntegrity: fetch가 필요하다");
+  if (typeof fetchFn !== "function") throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "assetIntegrity: fetch가 필요하다");
   let total = 0;
   const verified = [];
   for (const file of selected) {
-    if (!file || !file.path || !file.url) throw new Error("assetIntegrity: file.path/url 누락");
+    if (!file || !file.path || !file.url) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "assetIntegrity: file.path/url 누락");
     const expected = parseSri(file.integrity);
-    if (!expected.length) throw new Error(`assetIntegrity: ${file.path}의 sha256 SRI 값이 없다`);
+    if (!expected.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `assetIntegrity: ${file.path}의 sha256 SRI 값이 없다`);
     const resp = await fetchFn(file.url, {
       cache: opts.cache || "no-store",
       credentials: opts.credentials || "same-origin",
     });
-    if (!resp || !resp.ok) throw new Error(`assetIntegrity: ${file.path} 로드 실패(${resp ? resp.status : "no response"})`);
+    if (!resp || !resp.ok) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `assetIntegrity: ${file.path} 로드 실패(${resp ? resp.status : "no response"})`);
     const data = await resp.arrayBuffer();
     const actual = await sha256Sri(data);
-    if (!expected.includes(actual)) throw new Error(`assetIntegrity: ${file.path} 해시 불일치(expected ${expected[0].slice(0, 19)}..., actual ${actual.slice(0, 19)}...)`);
+    if (!expected.includes(actual)) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `assetIntegrity: ${file.path} 해시 불일치(expected ${expected[0].slice(0, 19)}..., actual ${actual.slice(0, 19)}...)`);
     total += data.byteLength;
     verified.push(file.path);
   }
@@ -199,7 +201,7 @@ export async function verifyPyProcAssetIntegrity(manifest, opts = {}) {
  */
 export async function registerPyProcServiceWorker(manifest, opts = {}) {
   const nav = opts.navigator || globalThis.navigator;
-  if (!nav?.serviceWorker?.register) throw new Error("pyprocServiceWorker: navigator.serviceWorker.register가 필요하다");
+  if (!nav?.serviceWorker?.register) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "pyprocServiceWorker: navigator.serviceWorker.register가 필요하다");
   const file = serviceWorkerFile(manifest);
   const integrity = await verifyPyProcAssetIntegrity(manifest, {
     roles: ["pyprocServiceWorker"],

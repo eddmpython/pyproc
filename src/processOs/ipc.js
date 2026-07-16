@@ -7,6 +7,8 @@
 // 공유메모리는 "memcpy 1회" 계약이다: WASM 단일 선형 메모리 벽 때문에 SAB를 파이썬 힙에
 // 제로카피로 비출 수 없다(browser-os 안티 추천 4). read/write(offset, len)가 정직한 표면이다.
 // 실측: tests/attempts/pythonMachine/pipeShmProbe.html.
+import { PyProcError } from "../runtime/errors.js";
+
 const HEADER_BYTES = 64; // Int32 16개(캐시라인 여유). [0]=head [1]=tail [2]=closed
 const HEAD = 0, TAIL = 1, CLOSED = 2;
 const WAIT_SLICE_MS = 50;
@@ -101,7 +103,7 @@ export async function pipeWriteAsync(item, bytes) {
   let off = 0;
   while (off < bytes.byteLength) {
     const sent = ringWriteOnce(item, bytes.subarray(off), false);
-    if (sent < 0) throw new Error("pipe: 닫힌 파이프에 쓰기");
+    if (sent < 0) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "pipe: 닫힌 파이프에 쓰기");
     off += sent;
     if (sent === 0) {
       const head = Atomics.load(i32, HEAD);

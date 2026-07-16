@@ -11,6 +11,8 @@
 // 실측 환경: WebGPU는 헤드리스에서 어댑터가 안 뜬다(gpuCapProbe). 창 있는 브라우저 + 하드웨어
 // GPU에서만(소켓 릴레이와 같은 계급). create()가 어댑터 부재 시 실행 가능한 에러를 던진다.
 
+import { PyProcError } from "../runtime/errors.js";
+
 // 공유메모리 타일드 WGSL matmul(16x16 블록). 각 워크그룹이 A/B의 16x16 타일을 공유메모리에
 // 실어 전역 읽기를 재사용한다. C[row,col] = sum_k A[row,k]*B[k,col]. 경계는 0 패딩(배리어를
 // 균일 제어 흐름에 두려고 early-return 대신 패딩). 실측(gpuTiledProbe): naive 대비 1.32-1.34배,
@@ -120,12 +122,12 @@ export class GpuCompute {
   // WebGPU 디바이스를 확보한다(async). 어댑터가 없으면(헤드리스) 실행 가능한 에러.
   static async create() {
     if (!(typeof navigator !== "undefined" && "gpu" in navigator)) {
-      throw new Error("GpuCompute: WebGPU 미지원(navigator.gpu 없음). Chromium/Edge가 필요하다.");
+      throw new PyProcError("PYPROC_GPU_UNAVAILABLE", "GpuCompute: WebGPU 미지원(navigator.gpu 없음). Chromium/Edge가 필요하다.");
     }
     let adapter = await navigator.gpu.requestAdapter();
     if (!adapter) adapter = await navigator.gpu.requestAdapter({ forceFallbackAdapter: true });
     if (!adapter) {
-      throw new Error("GpuCompute: WebGPU 어댑터가 없다. 헤드리스 브라우저엔 GPU 어댑터가 안 뜬다 - 창 있는 브라우저 + 하드웨어 GPU가 필요하다(실측: 창 모드에서 확보).");
+      throw new PyProcError("PYPROC_GPU_UNAVAILABLE", "GpuCompute: WebGPU 어댑터가 없다. 헤드리스 브라우저엔 GPU 어댑터가 안 뜬다 - 창 있는 브라우저 + 하드웨어 GPU가 필요하다(실측: 창 모드에서 확보).");
     }
     const device = await adapter.requestDevice();
     return new GpuCompute(device);
@@ -185,8 +187,8 @@ export class GpuCompute {
 
   // f32 배열을 GPU에 올린다(잔류 시작). data = Float32Array(길이 rows*cols). 반환 = 잔류 핸들.
   array(data, rows, cols) {
-    if (!(data instanceof Float32Array)) throw new Error("gpuArray: data는 Float32Array다(WGSL은 f64 없음 = f32만).");
-    if (data.length !== rows * cols) throw new Error(`gpuArray: data 길이(${data.length})가 rows*cols(${rows * cols})와 불일치`);
+    if (!(data instanceof Float32Array)) throw new PyProcError("PYPROC_INPUT_INVALID", "gpuArray: data는 Float32Array다(WGSL은 f64 없음 = f32만).");
+    if (data.length !== rows * cols) throw new PyProcError("PYPROC_INPUT_INVALID", `gpuArray: data 길이(${data.length})가 rows*cols(${rows * cols})와 불일치`);
     const buf = this._device.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, mappedAtCreation: true });
     new Float32Array(buf.getMappedRange()).set(data);
     buf.unmap();
@@ -202,8 +204,8 @@ export class GpuArray {
 
   // 이 배열(M x K) @ other(K x N) = 새 잔류 핸들(M x N). 둘 다 GPU에 있으므로 재업로드 없음.
   matmul(other) {
-    if (!(other instanceof GpuArray)) throw new Error("GpuArray.matmul: 인자는 GpuArray다");
-    if (this.cols !== other.rows) throw new Error(`GpuArray.matmul: 차원 불일치 (${this.rows}x${this.cols}) @ (${other.rows}x${other.cols})`);
+    if (!(other instanceof GpuArray)) throw new PyProcError("PYPROC_INPUT_INVALID", "GpuArray.matmul: 인자는 GpuArray다");
+    if (this.cols !== other.rows) throw new PyProcError("PYPROC_INPUT_INVALID", `GpuArray.matmul: 차원 불일치 (${this.rows}x${this.cols}) @ (${other.rows}x${other.cols})`);
     const device = this._gc._device, M = this.rows, K = this.cols, N = other.cols;
     const cBuf = device.createBuffer({ size: M * N * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
     const dBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true });
@@ -224,7 +226,7 @@ export class GpuArray {
   // 원소별 변환: 각 원소 x에 WGSL 표현식 expr를 적용한 새 잔류 핸들(같은 shape). 재업로드 0.
   // 잔류 체이닝의 핵심: m.matmul(w).map("max(x, 0.0)")처럼 matmul 뒤 활성화를 리드백 없이 잇는다.
   map(expr) {
-    if (typeof expr !== "string" || !expr.length) throw new Error("GpuArray.map: expr는 WGSL 표현식 문자열(x = 원소). 예: \"max(x, 0.0)\"");
+    if (typeof expr !== "string" || !expr.length) throw new PyProcError("PYPROC_INPUT_INVALID", "GpuArray.map: expr는 WGSL 표현식 문자열(x = 원소). 예: \"max(x, 0.0)\"");
     const device = this._gc._device, len = this.rows * this.cols;
     const cBuf = device.createBuffer({ size: len * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
     const nBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true });
@@ -244,9 +246,9 @@ export class GpuArray {
   // 이항 원소별: 같은 shape의 다른 잔류 배열과 원소별로 WGSL 표현식 expr(a=이 원소, b=상대 원소)를
   // 적용한 새 잔류 핸들(같은 shape). map(단항)이 못 잇던 잔차 a+b, 게이팅 a*b를 리드백 없이 잇는다.
   binary(other, expr) {
-    if (!(other instanceof GpuArray)) throw new Error("GpuArray.binary: 인자는 GpuArray다");
-    if (this.rows !== other.rows || this.cols !== other.cols) throw new Error(`GpuArray.binary: shape 불일치 (${this.rows}x${this.cols}) vs (${other.rows}x${other.cols})`);
-    if (typeof expr !== "string" || !expr.length) throw new Error("GpuArray.binary: expr는 WGSL 표현식 문자열(a/b = 두 원소). 예: \"a + b\"");
+    if (!(other instanceof GpuArray)) throw new PyProcError("PYPROC_INPUT_INVALID", "GpuArray.binary: 인자는 GpuArray다");
+    if (this.rows !== other.rows || this.cols !== other.cols) throw new PyProcError("PYPROC_INPUT_INVALID", `GpuArray.binary: shape 불일치 (${this.rows}x${this.cols}) vs (${other.rows}x${other.cols})`);
+    if (typeof expr !== "string" || !expr.length) throw new PyProcError("PYPROC_INPUT_INVALID", "GpuArray.binary: expr는 WGSL 표현식 문자열(a/b = 두 원소). 예: \"a + b\"");
     const device = this._gc._device, len = this.rows * this.cols;
     const cBuf = device.createBuffer({ size: len * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
     const nBuf = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM, mappedAtCreation: true });
@@ -287,7 +289,7 @@ export class GpuArray {
   // 잔류 체이닝의 종착: g.matmul(w).map("max(x,0.0)").reduce("sum") 같은 loss/norm 패턴이 GPU에 남는다.
   // 다단계(워크그룹당 부분 -> 1개가 될 때까지) = 큰 배열도 정확. 입력 핸들은 보존한다(자기 임시 버퍼).
   async reduce(op) {
-    if (!REDUCE_OPS[op]) throw new Error(`GpuArray.reduce: op는 sum|max|min (받음: ${op})`);
+    if (!REDUCE_OPS[op]) throw new PyProcError("PYPROC_INPUT_INVALID", `GpuArray.reduce: op는 sum|max|min (받음: ${op})`);
     const device = this._gc._device, pipeline = this._gc._reducePipeline(op);
     let n = this.rows * this.cols, inBuf = this.buffer;
     const temps = [];

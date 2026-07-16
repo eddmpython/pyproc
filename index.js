@@ -56,6 +56,7 @@
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
 export { boot, Runtime, MemoryCapability, PAGE_SIZE, checkEnvironment } from "./src/runtime/runtimeApi.js";
+export { PyProcError, PYPROC_ERROR_CODES } from "./src/runtime/errors.js";
 export { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker, PYPROC_ASSET_MANIFEST_VERSION } from "./src/runtime/assets.js";
 export { ReactiveController } from "./src/capabilities/reactive.js";
 export { SyscallBridge } from "./src/capabilities/syscallBridge.js";

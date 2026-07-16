@@ -7,6 +7,8 @@
 // 정확히 무엇을 어떻게 고치는지 구조화해 돌려준다. 준비 안 된 능력을 실제로 쓰면 requireCoi가
 // 암호 같은 실패(SharedArrayBuffer is not defined) 대신 실행 가능한 에러를 던진다.
 
+import { PyProcError } from "./errors.js";
+
 const HEADER_SNIPPET =
   "Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Embedder-Policy: require-corp";
 const SETUP_URL = "https://github.com/eddmpython/pyproc#setup";
@@ -56,7 +58,8 @@ export function checkEnvironment() {
 // feature = 안내에 쓸 능력 이름(예: "PyProc(프로세스 OS)").
 export function requireCoi(feature) {
   if (hasCrossOriginIsolation() && hasSharedArrayBuffer()) return;
-  throw new Error(
+  throw new PyProcError(
+    "PYPROC_ENV_UNSUPPORTED",
     `${feature}는 SharedArrayBuffer(crossOriginIsolated)가 필요하다. 지금 페이지는 crossOriginIsolated=${hasCrossOriginIsolation()}다.\n` +
     "페이지 응답에 다음 헤더를 달아라:\n  " + HEADER_SNIPPET + "\n" +
     "헤더를 못 다는 호스팅이면 pyprocSw.js를 ?coi=1로 등록(가상 COI). 기본 표면(boot/run/enableReactive)은 헤더 없이도 된다. 상세: " + SETUP_URL,

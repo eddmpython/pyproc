@@ -4,6 +4,8 @@
 // resume.py는 Session.load/MachineJournal.recover/openMachine 뒤에 소비자가 명시 호출하는 hook이다.
 // 힙 델타는 열린 fd/socket/DB connection 같은 프로세스 자원을 보장하지 않으므로 이 hook에서 재개설한다.
 // 전제: 실행 전에 디스크가 마운트되어 있어야 한다(Runtime.mountHome 등).
+import { PyProcError } from "../runtime/errors.js";
+
 export class Init {
   constructor(rt, cfg = {}) {
     this._rt = rt;
@@ -39,7 +41,7 @@ export class Init {
   // 부활 직후 열린 fd/socket/DB connection 같은 프로세스 자원을 다시 연다. 파일 없으면 no-op.
   // reason은 resume.py가 분기할 수 있도록 전역 pyprocResumeReason으로 주입한다.
   resume(reason = "resume") {
-    if (typeof reason !== "string" || reason.length === 0) throw new Error("init.resume: reason은 비어 있지 않은 문자열이어야 한다");
+    if (typeof reason !== "string" || reason.length === 0) throw new PyProcError("PYPROC_INPUT_INVALID", "init.resume: reason은 비어 있지 않은 문자열이어야 한다");
     const ran = { resume: false, reason };
     if (!this._exists(this._resumePath)) return ran;
     this._rt.setGlobal("pyprocResumeReason", reason);

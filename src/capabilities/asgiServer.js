@@ -9,6 +9,8 @@
 //   이미지 같은 바이너리 응답은 bodyBytes가 정본이다.
 // 제약(dartlab 실측): 엔드포인트는 async def 강제(sync def는 스레드풀 -> WASM 불가).
 // lifespan 이벤트는 발화하지 않는다(dispatch 단위 계약).
+import { PyProcError } from "../runtime/errors.js";
+
 const HELPER = (appVar) => `
 import json as _pyprocJson
 import base64 as _pyprocB64
@@ -69,7 +71,7 @@ export class AsgiServer {
   // 각자의 지역이라 인터리빙에 안전하다. null/undefined 정규화는 JS 경계에서 한다
   // (null 전달은 Python None이 아니라 JsNull 프록시가 되는 실측 함정).
   async serve(method, path, body = null, query = "", headers = null) {
-    if (!this._fn) throw new Error("asgi.serve: install() 이후에 호출하라");
+    if (!this._fn) throw new PyProcError("PYPROC_INPUT_INVALID", "asgi.serve: install() 이후에 호출하라");
     this._rt.execSeq++; // 전역 무변이라 수동 증가: 저널 유휴 판정이 요청 처리를 실행으로 본다
     const raw = await this._fn(method, path, body == null ? "" : body, query, headers == null ? [] : headers);
     const r = JSON.parse(raw);

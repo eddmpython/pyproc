@@ -10,6 +10,10 @@
 //   조합 가능(예: ?cache=1&coi=1). cdn=<접두URL>로 캐시 대상 교체.
 // 실측: runtimeParity/swOriginProbe(왕복 3.4ms = dispatch와 동일, SW 오버헤드 0),
 //       pythonMachine/swOfflineProbe(2차 부팅 CDN miss 0), pythonMachine/swCoiProbe(COI 주입).
+
+// SW는 모듈 import가 없는 자기충족 파일이라 오류 계약(PyProcError)을 로컬로 재현한다.
+const swError = (code, message) => Object.assign(new Error(message), { name: "PyProcError", code, retryable: false });
+
 const params = new URL(self.location.href).searchParams;
 const CACHE_ON = params.get("cache") === "1";
 const ASGI_PREFIX = params.get("asgi"); // 예: "/pyproc/". 없으면 위임 꺼짐. pathname/scope prefix로만 매칭한다.
@@ -133,7 +137,7 @@ async function coreIntegrityMap() {
   if (!coreIntegrityLoad) {
     coreIntegrityLoad = fetch(new URL(CORE_INTEGRITY_URL, self.location.href).href, { cache: "no-store", credentials: "same-origin" })
       .then((resp) => {
-        if (!resp.ok) throw new Error(`coreIntegrity manifest 로드 실패(${resp.status})`);
+        if (!resp.ok) throw swError("PYPROC_ASSET_INTEGRITY", `coreIntegrity manifest 로드 실패(${resp.status})`);
         return resp.json();
       })
       .then(normalizeIntegrityMap);
@@ -147,15 +151,15 @@ async function verifyCoreResponse(requestUrl, resp) {
   const u = new URL(requestUrl);
   const expected = map.get(u.href) || map.get(u.pathname) || map.get(u.pathname.replace(/^\/+/, ""));
   if (!expected) {
-    if (CORE_REQUIRED) throw new Error(`coreIntegrity: ${u.pathname} 항목이 없다`);
+    if (CORE_REQUIRED) throw swError("PYPROC_ASSET_INTEGRITY", `coreIntegrity: ${u.pathname} 항목이 없다`);
     return resp;
   }
   if (resp.type === "opaque" || resp.type === "opaqueredirect" || resp.status === 0) {
-    throw new Error(`coreIntegrity: ${u.pathname} opaque 응답은 검증할 수 없다`);
+    throw swError("PYPROC_ASSET_INTEGRITY", `coreIntegrity: ${u.pathname} opaque 응답은 검증할 수 없다`);
   }
   const data = await resp.clone().arrayBuffer();
   const actual = await sha256Sri(data);
-  if (!parseSri(expected).includes(actual)) throw new Error(`coreIntegrity: ${u.pathname} 해시 불일치`);
+  if (!parseSri(expected).includes(actual)) throw swError("PYPROC_ASSET_INTEGRITY", `coreIntegrity: ${u.pathname} 해시 불일치`);
   return resp;
 }
 
