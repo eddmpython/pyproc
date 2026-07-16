@@ -18,9 +18,9 @@ pyproc과 v86은 guest plugin으로 연결한다.** pyproc은 첫 guest OS이며
 7. OS별 분기, mode flag, optional method 누적으로 새 guest를 붙이지 않는다.
 8. durable이라고 부르는 상태는 snapshot과 disk가 한 generation으로 commit된 뒤의 상태뿐이다.
 
-## 최종 패키지 구조
+## 승격된 패키지 구조
 
-패키지를 세부 기능마다 늘리지 않는다. 처음에는 책임과 release 축이 다른 네 package만 둔다.
+패키지를 세부 기능마다 늘리지 않는다. 책임과 release 축이 다른 네 private package만 두고, 공개 릴리즈는 별도 지시 전까지 하지 않는다.
 
 ```text
 packages/
@@ -30,7 +30,6 @@ packages/
 │  └─ src/
 │     ├─ contracts/
 │     │  ├─ adapterContract.js
-│     │  ├─ deviceContract.js
 │     │  └─ webMachineError.js
 │     ├─ host/
 │     │  ├─ webMachineHost.js
@@ -48,37 +47,48 @@ packages/
 │     │  ├─ indexedDbOwnerEpochStore.js
 │     │  └─ webLockOwnerCoordinator.js
 │     ├─ persistence/
-│     │  ├─ generationStore.js
-│     │  ├─ blobStore.js
-│     │  └─ recovery.js
+│     │  ├─ generationIntegrity.js
+│     │  ├─ memoryGenerationStore.js
+│     │  ├─ indexedDbGenerationStore.js
+│     │  └─ machineCommitCoordinator.js
 │     ├─ image/
 │     │  ├─ webMachineFile.js
 │     │  ├─ webMachineTrust.js
 │     │  └─ machineEnvelopeCoordinator.js
 │     └─ devices/
-│        ├─ consoleDevice.js
-│        ├─ blockDevice.js
-│        ├─ requestNetworkDevice.js
-│        ├─ packetNetworkDevice.js
-│        ├─ displayDevice.js
-│        ├─ inputDevice.js
-│        ├─ clockDevice.js
-│        └─ entropyDevice.js
+│        ├─ memoryBlockDevice.js
+│        ├─ memoryEthernetSwitch.js
+│        ├─ memoryTextDisplayDevice.js
+│        ├─ memoryScanCodeInputDevice.js
+│        ├─ memoryRgbaDisplayDevice.js
+│        ├─ canvasRgbaFrameSource.js
+│        ├─ memoryRelativePointerDevice.js
+│        ├─ browserClockDevice.js
+│        └─ browserEntropyDevice.js
 ├─ guest-pyproc/               # @web-machine/guest-pyproc
 │  ├─ index.js
-│  └─ src/pyprocGuestAdapter.js
+│  └─ src/
+│     ├─ pyprocGuestAdapter.js
+│     └─ pyprocHomeVolume.js
 └─ guest-v86/                  # @web-machine/guest-v86
    ├─ index.js
-   └─ src/v86GuestAdapter.js
+   └─ src/
+      ├─ v86GuestAdapter.js
+      ├─ v86BlockBuffer.js
+      ├─ v86FileSystemVolume.js
+      ├─ v86PacketPort.js
+      ├─ v86DisplayPort.js
+      ├─ v86InputPort.js
+      ├─ v86FramebufferPort.js
+      ├─ v86PointerPort.js
+      ├─ v86ClockPort.js
+      ├─ v86EntropyPort.js
+      └─ v86WasmHostBridge.js
 
-apps/
-└─ lab/                        # 조립과 관찰만 하는 개발 표면
-
-tests/
-├─ contracts/                  # 모든 adapter가 그대로 소비하는 공통 suite
-├─ architecture/               # 금지 import, 금지 이름, cycle gate
-├─ browser/                    # 실제 browser lifecycle/failure gate
-└─ fixtures/                   # hash 고정 image recipe, binary는 미추적
+tests/webMachine/
+├─ contracts/                  # fake/WASI 공통 adapter 검증 구현
+├─ fixtures/                   # hash 고정 image recipe, binary는 미추적
+└─ browser/probes/             # 실제 browser 조립과 lifecycle/failure gate
 ```
 
 WASI adapter는 제품 지원 범위가 확정될 때 `guest-wasi/`로 추가한다. device도 독립 release와 제3자 소비가
@@ -115,88 +125,9 @@ WASI adapter는 제품 지원 범위가 확정될 때 `guest-wasi/`로 추가한
 - `guest-a -> guest-b`
 - package 사이 deep import
 
-## 현재 attempts 구조
+## attempts 졸업 결과
 
-본진 승격 전에도 최종 경계를 흉내 낸다.
-
-```text
-tests/attempts/webMachine/
-├─ README.md
-├─ host/                       # engine/browser 중립 계약 초안
-│  ├─ adapterContract.js
-│  ├─ machineManifest.js
-│  ├─ snapshotEnvelope.js
-│  ├─ webMachineError.js
-│  └─ webMachineHostDraft.js
-├─ browser/                    # device와 persistence의 browser 구현 초안
-│  ├─ coordination/
-│  │  ├─ indexedDbOwnerEpochStore.js
-│  │  └─ webLockOwnerCoordinator.js
-│  ├─ devices/
-│  │  ├─ memoryBlockDevice.js
-│  │  ├─ memoryEthernetSwitch.js
-│  │  ├─ memoryTextDisplayDevice.js
-│  │  ├─ memoryScanCodeInputDevice.js
-│  │  ├─ memoryRgbaDisplayDevice.js
-│  │  ├─ canvasRgbaFrameSource.js
-│  │  ├─ memoryRelativePointerDevice.js
-│  │  ├─ browserClockDevice.js
-│  │  └─ browserEntropyDevice.js
-│  ├─ persistence/
-│  │  ├─ generationIntegrity.js
-│  │  ├─ memoryGenerationStore.js
-│  │  ├─ indexedDbGenerationStore.js
-│  │  └─ machineCommitCoordinator.js
-│  └─ image/
-│     ├─ webMachineFile.js
-│     ├─ webMachineTrust.js
-│     └─ machineEnvelopeCoordinator.js
-├─ adapters/                   # guest별 변환, 파일 하나당 adapter 하나
-│  ├─ fakeGuestAdapter.js
-│  ├─ pyprocGuestAdapter.js
-│  ├─ pyproc/
-│  │  └─ pyprocHomeVolume.js
-│  ├─ wasiGuestAdapter.js
-│  ├─ v86GuestAdapter.js
-│  └─ v86/
-│     ├─ v86BlockBuffer.js
-│     ├─ v86FileSystemVolume.js
-│     ├─ v86PacketPort.js
-│     ├─ v86DisplayPort.js
-│     ├─ v86InputPort.js
-│     ├─ v86FramebufferPort.js
-│     ├─ v86PointerPort.js
-│     ├─ v86ClockPort.js
-│     ├─ v86EntropyPort.js
-│     └─ v86WasmHostBridge.js
-├─ fixtures/
-│  ├─ input/
-│  │  └─ ps2Set1Text.js
-│  ├─ network/
-│  │  └─ ipv4EchoPeer.js
-│  └─ v86/
-│     ├─ assetCatalog.json
-│     ├─ assetProvenance.mjs
-│     ├─ config.js
-│     ├─ fixtureSbom.json
-│     ├─ prepareAssets.mjs
-│     └─ assets/               # hash 검증 로컬 자산, git 미추적
-└─ probes/                     # 유일한 composition root
-   ├─ hostContractProbe.html
-   ├─ dualEngineProbe.html
-   ├─ linuxGuestProbe.html
-   ├─ dualBootProbe.html
-   ├─ generationContractProbe.html
-   ├─ persistentDualBootProbe.html
-   ├─ deviceBackedDualBootProbe.html
-   ├─ packetNetworkProbe.html
-   ├─ displayInputProbe.html
-   ├─ framebufferPointerProbe.html
-   ├─ clockEntropyProbe.html
-   ├─ machineEnvelopeProbe.html
-   ├─ ownerSuccessorParticipant.html
-   └─ ownerSuccessorProbe.html
-```
+`tests/attempts/webMachine/`은 2026-07-16에 졸업 조건을 모두 통과해 제거했다. 제품 코드는 `packages/*`, 지속 검증은 [tests/webMachine](../../../tests/webMachine/README.md)에 둔다. 실패에서 고친 계약과 실측 이력은 [진행 원장](03-progress-ledger.md)에 보존한다.
 
 ## 계약 규칙
 

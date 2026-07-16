@@ -19,7 +19,6 @@
 
 ## 활성 이니셔티브
 
-- [web-machine-platform](web-machine-platform/README.md) - 브라우저를 여러 guest OS가 올라가는 컴퓨터로 만드는 상위 North Star. 마지막 상태 기록은 [03-progress-ledger.md](web-machine-platform/03-progress-ledger.md).
-- [browser-os-north-star](browser-os-north-star/README.md) - Web Machine의 첫 guest인 Browser Python OS 성숙 트랙. 마지막 상태 기록은 [03-progress-ledger.md](browser-os-north-star/03-progress-ledger.md).
+- [web-machine-hardening/](web-machine-hardening/) - 공개 계약과 런타임을 일치시키고, owner epoch가 최종 CAS까지 fence하는 저장소, 실패 시 기존 컴퓨터를 보존하는 context 교체, HEAD/PREV 보존형 generation 정리, 장시간 작업 취소 경계를 완결한다.
 
-완결 이니셔티브 6개(web-python-runtime, local-parity, browser-os, engine-independence, numerical-acceleration, engine-agnostic-surface)는 [_done/](_done/README.md)으로 이관됐다. 세션 간 마지막 상태 기록은 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README다.
+완결 이니셔티브 9개는 [_done/](_done/README.md)으로 이관됐다. 최신 완료 기록은 Web Computer Product이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.

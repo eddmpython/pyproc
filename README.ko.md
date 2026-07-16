@@ -111,6 +111,19 @@ console.log(rt.run("len(values)"));           // 3
 
 > 위 기본은 Chromium 브라우저만 있으면 된다. `PyProc`(프로세스 OS)와 소켓은 `crossOriginIsolated`(`COOP: same-origin`, `COEP: require-corp`)와 same-origin 워커도 필요하다 - [셋업](#셋업) 참조. `checkEnvironment()`로 확인하라.
 
+## Web Computer 실행
+
+Web Computer 제품은 한 브라우저 workspace에서 Python OS와 Linux를 부팅한다. 두 guest의 실제 memory와 block-backed file을 하나의 IndexedDB generation으로 저장하고, 브라우저 프로세스를 닫았다 열어도 복구하며, 서명된 `.webmachine` 파일 하나로 함께 옮긴다.
+
+```sh
+npm run assets:web-computer
+npm run serve
+```
+
+Edge 또는 Chromium에서 `http://localhost:8788/apps/webComputer/`를 연다. Python 실행, Linux VGA 화면과 terminal, pause/resume/shutdown, 명령 뒤 자동 영속 저장, 수동 Save, 서명 Export, signer를 명시적으로 승인하는 Import 화면을 제공한다.
+
+현재 Linux 실행 catalog는 hash가 고정된 development channel이다. engine과 image binary는 로컬에 준비되고 git과 npm package에서 제외된다. 전체 source와 license inventory를 재현하기 전에는 공개 재배포하지 않는다.
+
 ## AI 에이전트에서 쓰기
 
 **패턴 1 - 실패하면 복원.** 환경을 준비하고, 체크포인트하고, AI가 생성한 코드를 실행한다. 예외가 나거나 인터프리터를 오염시키면 경계로 복원하고 수정본을 실행한다. 되돌아갈 수 없는 상태를 AI가 망칠 수 없다.
@@ -171,7 +184,7 @@ console.log(rt.run("len(values)"));           // 3
 
 ## 정직한 스코프: 목표는 무한대로, 주장은 증명된 만큼
 
-**상위 North Star: 브라우저를 여러 guest OS가 부팅되는 컴퓨터로 만든다. pyproc은 그 위에 올라가는 첫 Python guest OS다.** 이는 현재 패키지가 범용 하이퍼바이저라는 주장이 아니라 방향이다. 첫 결정적 미래 게이트는 같은 host lifecycle로 pyproc과 Linux guest를 부팅하고, 소유 탭이 사라진 뒤 두 머신을 모두 복구하는 것이다.
+**상위 North Star: 브라우저를 여러 guest OS가 부팅되는 컴퓨터로 만든다. pyproc은 그 위에 올라가는 첫 Python guest OS다.** 독립 private Web Machine package와 로컬 Web Computer 제품은 이제 한 lifecycle로 pyproc과 Linux를 부팅하고, 두 memory와 disk를 함께 저장하며, browser process 재시작 뒤 복구하고, 새 browser profile에서 signed image를 가져온다. 이것은 공개 `pyproc` package가 범용 hypervisor가 됐다는 뜻도, development Linux image를 재배포할 수 있다는 뜻도 아니다.
 
 그 큰 목표 안에서 pyproc의 호환성 방향은 계속 "로컬에서 되는 모든 파이썬을 언젠가 브라우저에서, 서버 없이"다. 로컬에서 되는 것은 네 상태로 갈리고, pyproc의 일은 이것들을 위 칸으로 밀어 올리는 것과 플랫폼이 벽을 다시 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다:
 
@@ -180,7 +193,7 @@ console.log(rt.run("len(values)"));           // 3
 - **upstream 대기**(지금 막혔으나 다시 열림): 네이티브 C 확장 wheel(Emscripten 정적 빌드 / WebAssembly 컴포넌트 모델), GPU(WebGPU), 진짜 threading.
 - **웹 보안상 영구 벽**: 임의 인바운드 연결과 임의 네이티브 바이너리는 외부 릴레이나 에이전트가 필요하다.
 
-Python 축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md)가 추적한다. host 아키텍처와 Dual-Boot 게이트는 [web-machine-platform](mainPlan/web-machine-platform/README.md)이 추적한다.
+Python 축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md)가 추적한다. 완료된 host 아키텍처와 Dual-Boot 기록은 [web-machine-platform](mainPlan/_done/web-machine-platform/README.md)에 있다.
 
 ## 보안 모델
 
@@ -212,14 +225,14 @@ Pyodide  Workers
 
 | 축 | 증명하는 것 | pyproc 결과 | 외부 비교 |
 |---|---|---|---|
-| S0C cold Python ready | 새 브라우저 프로필에서 첫 Python 명령까지 | [median 3660ms](mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms ([compare](mainPlan/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md)) |
-| S0 warm Python ready | 웜 브라우저 캐시/프로필에서 첫 Python 명령까지 | [median 3471ms](mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms ([compare](mainPlan/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md)) |
-| S1 간판: sharded NumPy | 1024x1024 f64 matmul을 4 Python workers로 분할, 같은 run의 단일 worker와 비교 | [median speedup 3.95x](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json), shard p95 2606ms < single-worker median 10067ms | WebVM, JupyterLite, marimo WASM은 [같은 4-worker shard 계약에서 N/A](mainPlan/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md) |
-| S1L single-kernel NumPy | 같은 1024x1024 f64 matmul을 한 Python kernel에서 측정, S1과 분리 | [median 10067ms](mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | marimo WASM 9355ms, JupyterLite 10149ms, WebVM 11406ms ([compare](mainPlan/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md)) |
-| S2 process map | 같은 Python 함수를 직렬 실행 vs `PyProc.map` process pool로 실행 | [serial median 73ms, process-pool median 43ms](mainPlan/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json), median speedup 1.61x | 외부 후보는 같은 `PyProc.map` API 계약에서 N/A ([compare](mainPlan/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md)) |
-| S3 browser server | 설치 패키지 `VirtualOrigin` POST가 Python ASGI app까지 왕복 | [median 18ms, p95 18ms](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | 외부 후보는 같은 Service Worker URL-to-ASGI 계약에서 N/A ([compare](mainPlan/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md)) |
-| S4 machine resume | signed `.pymachine` export/open + `resume.py` SQLite resource reopen | [export median 76ms, trusted-open median 2264ms](mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json), image 10.8MB, resume rows 2-2 | 외부 후보는 같은 signed machine image + resume hook 계약에서 N/A ([compare](mainPlan/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md)) |
-| S5 immortal machine | 설치 패키지 context들이 한 머신을 공유하고 leader 제거 뒤 memory + file을 복구하며 모든 context 종료 뒤 cold reopen | [failover median 2894ms, p95 3025ms](mainPlan/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json), recovery median 575ms, cold-reopen median 2681ms | 브라우저 Python 후보에는 같은 설치 패키지 leader fencing + journal recovery 계약이 없음 ([evidence](mainPlan/browser-os-north-star/benchmarks/s5-compare-2026-07-15.md)) |
+| S0C cold Python ready | 새 브라우저 프로필에서 첫 Python 명령까지 | [median 3660ms](mainPlan/_done/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md)) |
+| S0 warm Python ready | 웜 브라우저 캐시/프로필에서 첫 Python 명령까지 | [median 3471ms](mainPlan/_done/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md)) |
+| S1 간판: sharded NumPy | 1024x1024 f64 matmul을 4 Python workers로 분할, 같은 run의 단일 worker와 비교 | [median speedup 3.95x](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json), shard p95 2606ms < single-worker median 10067ms | WebVM, JupyterLite, marimo WASM은 [같은 4-worker shard 계약에서 N/A](mainPlan/_done/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md) |
+| S1L single-kernel NumPy | 같은 1024x1024 f64 matmul을 한 Python kernel에서 측정, S1과 분리 | [median 10067ms](mainPlan/_done/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | marimo WASM 9355ms, JupyterLite 10149ms, WebVM 11406ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md)) |
+| S2 process map | 같은 Python 함수를 직렬 실행 vs `PyProc.map` process pool로 실행 | [serial median 73ms, process-pool median 43ms](mainPlan/_done/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json), median speedup 1.61x | 외부 후보는 같은 `PyProc.map` API 계약에서 N/A ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md)) |
+| S3 browser server | 설치 패키지 `VirtualOrigin` POST가 Python ASGI app까지 왕복 | [median 18ms, p95 18ms](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | 외부 후보는 같은 Service Worker URL-to-ASGI 계약에서 N/A ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md)) |
+| S4 machine resume | signed `.pymachine` export/open + `resume.py` SQLite resource reopen | [export median 76ms, trusted-open median 2264ms](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json), image 10.8MB, resume rows 2-2 | 외부 후보는 같은 signed machine image + resume hook 계약에서 N/A ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md)) |
+| S5 immortal machine | 설치 패키지 context들이 한 머신을 공유하고 leader 제거 뒤 memory + file을 복구하며 모든 context 종료 뒤 cold reopen | [failover median 2894ms, p95 3025ms](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json), recovery median 575ms, cold-reopen median 2681ms | 브라우저 Python 후보에는 같은 설치 패키지 leader fencing + journal recovery 계약이 없음 ([evidence](mainPlan/_done/browser-os-north-star/benchmarks/s5-compare-2026-07-15.md)) |
 
 프리미티브 단위 실측도 맥락으로 남긴다:
 
@@ -239,11 +252,11 @@ Pyodide  Workers
 | 탭 안에서 Python 실행 | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
 | 반복 가능한 환경 준비 | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
 | 상태 복원, 분기, 시간여행 | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
-| 여러 탭에서 하나의 Python 머신 유지 | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
-| 브라우저 worker를 프로세스로 사용 | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
-| Python을 실제 browser URL 뒤에 서빙 | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
+| 여러 탭에서 하나의 Python 머신 유지 | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
+| 브라우저 worker를 프로세스로 사용 | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
+| Python을 실제 browser URL 뒤에 서빙 | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
 | 터미널과 빌린 syscall 흐름 구성 | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
-| 머신 저장, 전송, 부활 | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
+| 머신 저장, 전송, 부활 | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
 | 기본 엔진 밖의 가능성 확장 | `GpuCompute`, `GpuArray`, `GpuBridge`, `bootWasi`, `WasiSession` | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
 | worker 기반 능력을 제품에 배포 | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
 

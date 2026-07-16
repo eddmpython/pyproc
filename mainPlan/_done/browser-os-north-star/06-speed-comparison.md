@@ -8,7 +8,7 @@
 
 ## 비교 원칙
 
-정본 규칙은 [벤치마크 운영 계약](../../docs/operations/benchmarking.md)이다.
+정본 규칙은 [벤치마크 운영 계약](../../../docs/operations/benchmarking.md)이다.
 
 - cold boot와 warmed compute를 분리한다.
 - 단발 결과가 아니라 최소 3회 warmed sample의 median/p95를 쓴다.

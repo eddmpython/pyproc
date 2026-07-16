@@ -1,6 +1,6 @@
 # 05. 대형 힙 성능 봉투 - 512MB 실측과 journal 최적화
 
-작성: 2026-07-14. 갱신: 2026-07-15. 정본 probe: [largeHeapEnvelope](../../tests/attempts/largeHeapEnvelope/README.md), [journalPackProbe](../../tests/attempts/pythonMachine/journalPackProbe.html).
+작성: 2026-07-14. 갱신: 2026-07-15. 정본 probe: [largeHeapEnvelope](../../../tests/attempts/largeHeapEnvelope/README.md), [journalPackProbe](../../../tests/attempts/pythonMachine/journalPackProbe.html).
 
 ## 한 줄 판정
 

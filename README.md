@@ -111,6 +111,19 @@ console.log(rt.run("len(values)"));           // 3
 
 > The basics above need only a Chromium browser. `PyProc` (process OS) and sockets also need `crossOriginIsolated` (`COOP: same-origin`, `COEP: require-corp`) and same-origin workers - see [Setup](#setup). Run `checkEnvironment()` to check.
 
+## Run the Web Computer
+
+The Web Computer product boots Python OS and Linux in one browser workspace. Both guests have real memory and block-backed files, save into one durable IndexedDB generation, recover after the browser process closes, and move together in a signed `.webmachine` file.
+
+```sh
+npm run assets:web-computer
+npm run serve
+```
+
+Open `http://localhost:8788/apps/webComputer/` in Edge or Chromium. The product includes Python execution, a Linux VGA display and terminal, pause/resume/shutdown controls, automatic durable saves after commands, manual save, signed export, and an explicit signer trust screen for import.
+
+The current Linux execution catalog is a hash-pinned development channel. Its engine and image binaries are prepared locally and excluded from git and npm packages; public redistribution remains disabled until the complete source and license inventory is reproducible.
+
 ## Using it from an AI agent
 
 **Pattern 1 - restore on failure.** Prepare the environment, checkpoint, run AI-generated code; if it throws or dirties the interpreter, restore the boundary and run the fix. The AI can't corrupt state you can't get back to.
@@ -171,7 +184,7 @@ Naming these up front is deliberate: a hidden limit reads as a bug later; a stat
 
 ## The honest scope: aim at infinity, claim what's proven
 
-**Platform North Star: turn the browser into a computer that can boot multiple guest operating systems. pyproc is its first Python guest OS.** This is a direction, not a claim that the current package is a general-purpose hypervisor. The first decisive future gate is one host lifecycle booting both pyproc and a Linux guest, then restoring both after the owning tab disappears.
+**Platform North Star: turn the browser into a computer that can boot multiple guest operating systems. pyproc is its first Python guest OS.** The private Web Machine packages and the local Web Computer product now boot pyproc and Linux through one lifecycle, save their memory and disks together, recover them after a browser-process restart, and import a signed image in a fresh browser profile. This does not turn the public `pyproc` package into a general-purpose hypervisor, and it does not make the development Linux image redistributable.
 
 Within that larger goal, pyproc's compatibility direction remains: whatever Python runs locally should eventually run in the browser, with no server. Everything local sorts into four states, and pyproc's job is to push things up the list and absorb a wall when the platform reopens it:
 
@@ -180,7 +193,7 @@ Within that larger goal, pyproc's compatibility direction remains: whatever Pyth
 - **Upstream-pending** (walled now, reopenable): native C-extension wheels (Emscripten static builds / the WebAssembly component model), GPU (WebGPU), real threading.
 - **Permanent web-security wall**: inbound connections and arbitrary native binaries need an external relay or agent.
 
-The Python gap map lives in [local-parity](mainPlan/_done/local-parity/README.md). The host architecture and Dual-Boot gates live in [web-machine-platform](mainPlan/web-machine-platform/README.md).
+The Python gap map lives in [local-parity](mainPlan/_done/local-parity/README.md). The completed host architecture and Dual-Boot record lives in [web-machine-platform](mainPlan/_done/web-machine-platform/README.md).
 
 ## Security model
 
@@ -212,14 +225,14 @@ The numbers below come from tracked artifacts and are meant to be **reproduced, 
 
 | Axis | What it proves | pyproc result | External comparison |
 |---|---|---|---|
-| S0C cold Python ready | First Python command from a fresh browser profile | [3660ms median](mainPlan/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms ([compare](mainPlan/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md)) |
-| S0 warm Python ready | First Python command with warm browser cache/profile | [3471ms median](mainPlan/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms ([compare](mainPlan/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md)) |
-| S1 headline: sharded NumPy | 1024x1024 f64 matmul split over 4 Python workers vs one worker in the same run | [3.95x median speedup](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json), shard p95 2606ms below single-worker median 10067ms | WebVM, JupyterLite, and marimo WASM are [N/A for the same 4-worker shard contract](mainPlan/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md) |
-| S1L single-kernel NumPy | Same 1024x1024 f64 matmul in one Python kernel, kept separate from S1 | [10067ms median](mainPlan/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | marimo WASM 9355ms, JupyterLite 10149ms, WebVM 11406ms ([compare](mainPlan/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md)) |
-| S2 process map | Same Python function run serially vs `PyProc.map` process pool | [73ms serial median, 43ms process-pool median](mainPlan/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json), 1.61x median speedup | Other candidates are N/A for the same `PyProc.map` API contract ([compare](mainPlan/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md)) |
-| S3 browser server | Installed-package `VirtualOrigin` POST roundtrip to a Python ASGI app | [18ms median, 18ms p95](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | Other candidates are N/A for the same Service Worker URL-to-ASGI contract ([compare](mainPlan/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md)) |
-| S4 machine resume | Signed `.pymachine` export/open plus `resume.py` SQLite resource reopen | [76ms export median, 2264ms trusted-open median](mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json), 10.8MB image, resume rows 2-2 | Other candidates are N/A for the same signed machine image + resume hook contract ([compare](mainPlan/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md)) |
-| S5 immortal machine | Installed-package contexts share one machine, lose the leader, recover memory + files, then cold-reopen after every context closes | [2894ms failover median, 3025ms p95](mainPlan/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json), 575ms recovery median, 2681ms cold-reopen median | Browser Python peers do not expose the same installed-package leader fencing + journal recovery contract ([evidence](mainPlan/browser-os-north-star/benchmarks/s5-compare-2026-07-15.md)) |
+| S0C cold Python ready | First Python command from a fresh browser profile | [3660ms median](mainPlan/_done/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md)) |
+| S0 warm Python ready | First Python command with warm browser cache/profile | [3471ms median](mainPlan/_done/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md)) |
+| S1 headline: sharded NumPy | 1024x1024 f64 matmul split over 4 Python workers vs one worker in the same run | [3.95x median speedup](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json), shard p95 2606ms below single-worker median 10067ms | WebVM, JupyterLite, and marimo WASM are [N/A for the same 4-worker shard contract](mainPlan/_done/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md) |
+| S1L single-kernel NumPy | Same 1024x1024 f64 matmul in one Python kernel, kept separate from S1 | [10067ms median](mainPlan/_done/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | marimo WASM 9355ms, JupyterLite 10149ms, WebVM 11406ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md)) |
+| S2 process map | Same Python function run serially vs `PyProc.map` process pool | [73ms serial median, 43ms process-pool median](mainPlan/_done/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json), 1.61x median speedup | Other candidates are N/A for the same `PyProc.map` API contract ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md)) |
+| S3 browser server | Installed-package `VirtualOrigin` POST roundtrip to a Python ASGI app | [18ms median, 18ms p95](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | Other candidates are N/A for the same Service Worker URL-to-ASGI contract ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md)) |
+| S4 machine resume | Signed `.pymachine` export/open plus `resume.py` SQLite resource reopen | [76ms export median, 2264ms trusted-open median](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json), 10.8MB image, resume rows 2-2 | Other candidates are N/A for the same signed machine image + resume hook contract ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md)) |
+| S5 immortal machine | Installed-package contexts share one machine, lose the leader, recover memory + files, then cold-reopen after every context closes | [2894ms failover median, 3025ms p95](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json), 575ms recovery median, 2681ms cold-reopen median | Browser Python peers do not expose the same installed-package leader fencing + journal recovery contract ([evidence](mainPlan/_done/browser-os-north-star/benchmarks/s5-compare-2026-07-15.md)) |
 
 Primitive-level measurements remain useful context:
 
@@ -239,11 +252,11 @@ Capabilities are opt-in. Turn on only what you need, and consume the capability 
 | Run Python in the tab | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
 | Prepare repeatable environments | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
 | Restore, branch, and time-travel state | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
-| Keep one Python machine alive across tabs | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
-| Use browser workers as processes | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
-| Serve Python behind real browser URLs | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
+| Keep one Python machine alive across tabs | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
+| Use browser workers as processes | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection`, `SharedKernel` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
+| Serve Python behind real browser URLs | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
 | Build terminal and borrowed syscall flows | `Terminal`, `SyscallBridge`, `SocketBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
-| Persist, cast, and revive a machine | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
+| Persist, cast, and revive a machine | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
 | Push beyond the default engine lane | `GpuCompute`, `GpuArray`, `GpuBridge`, `bootWasi`, `WasiSession` | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
 | Ship worker-backed capabilities from a product | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
 

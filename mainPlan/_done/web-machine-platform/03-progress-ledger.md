@@ -566,3 +566,31 @@ NEXT:
 1. attempts 모듈을 독립 `core`, `browser`, `guest-pyproc`, `guest-v86` package 경계로 승격한다.
 2. package public index와 type contract를 만들고 deep import·third-party binary 0개를 release gate로 고정한다.
 3. 별도 product-image 트랙에서 재현 가능한 Buildroot recipe와 signed SBOM attachment schema를 연구한다.
+
+## 2026-07-16 - 독립 package 승격과 이니셔티브 완료
+
+구현:
+
+1. engine·browser 중립 상태 머신을 `@web-machine/core`로 승격하고 `WebMachineHost`, `MachineHandle`, `CommandQueue`, adapter·snapshot·manifest 계약을 분리했다.
+2. browser device, IndexedDB generation, Web Lock owner, trust, `.webmachine` 조정을 `@web-machine/browser`로 승격했다.
+3. pyproc과 v86 변환부를 각각 `@web-machine/guest-pyproc`, `@web-machine/guest-v86`로 승격했다. engine constructor와 실행 자산은 계속 composition root에서 외부 주입한다.
+4. 네 package에 root `index.js`, `index.d.ts`, private `0.0.0` manifest를 두고 root workspace를 연결했다. 릴리즈 지시가 없으므로 공개 버전과 태그는 바꾸지 않았다.
+5. attempts 캠페인을 제거하고 공통 contract, fixture provenance, browser probe를 `tests/webMachine/` 정식 검증 트리로 옮겼다.
+6. 구조 게이트를 `browser -> core`, `guest-* -> core`, guest 간 import 0, package deep import 0, composition root 단일성, third-party binary 0개 기준으로 갱신했다.
+
+검증:
+
+- `npm test` PASS, 834 passed, 0 failed.
+- `hostContractProbe` GREEN 27/27.
+- `generationContractProbe` GREEN 16/16.
+- `dualEngineProbe` GREEN 13/13.
+- `machineEnvelopeProbe` GREEN 19/19. 64,608,289-byte signed image가 원본 storage가 없는 새 browser profile에서 두 OS를 복원했다.
+- package import smoke PASS: core 13 exports, browser 23 exports, guest package 각 1 export.
+- package dry-run PASS: core 10, browser 22, guest-pyproc 5, guest-v86 14 files. fixture, wasm, image, firmware 포함 0개.
+
+판정:
+
+1. README 완료 조건 5개와 본진 승격 조건 6개를 모두 충족했다.
+2. pyproc `src/`는 Python guest OS 경계로 유지되고 범용 host는 독립 package에 머문다.
+3. provenance가 불완전한 guest image는 계속 `local-test-only`이며, 공식 product image는 별도 이니셔티브와 compliance gate 없이는 배포하지 않는다.
+4. Web Machine Platform 이니셔티브를 완료하고 `_done`으로 이관한다.

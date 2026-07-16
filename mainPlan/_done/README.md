@@ -9,6 +9,9 @@
 
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
+| [web-computer-product/](web-computer-product/) | ✅ 완료 (2026-07-16) | Python OS와 Linux의 제품 UI, 단일 owner, durable dual-guest Save, signed `.webmachine` export와 fresh-profile import를 실제 제품 E2E로 완결. |
+| [web-machine-platform/](web-machine-platform/) | ✅ 완료 (2026-07-16) | pyproc과 Linux 공통 lifecycle·장치·durable generation·단일 owner·signed `.webmachine`을 실증하고 네 독립 private package와 정식 검증 트리로 승격. |
+| [browser-os-north-star/](browser-os-north-star/) | ✅ 완료 (2026-07-16) | 512MB 성능 봉투, signed machine image, 대표 데모 3종, 호환성 지도, 제품 소비, Immortal Python Machine으로 첫 Python guest OS 성숙 트랙 완결. |
 | [web-python-runtime/](web-python-runtime/) | ✅ 완료 (2026-07-13) | 코어 런타임 + 운영 체계 + 소비 성립. 진행 원장이 세션 간 마지막 상태 기록. 계약 실태 표는 docs로 승격. |
 | [local-parity/](local-parity/) | ✅ 완료 (2026-07-13) | 실행·프로세스·시스템콜·세션·터미널·라이브러리 축 v1 도달 + 네 가지 상태 지도. 지속 프레임은 docs/product/vision.md로 승격. |
 | [browser-os/](browser-os/) | ✅ 완료 (2026-07-13) | 파이썬 머신 5기둥 + 근본 프리미티브 P1~P7 실증·승격 + 객관 판정. 안티 추천은 vision.md, 가상 오리진 벽은 contract.md로 승격. |

@@ -83,6 +83,8 @@
 
 ## Phase 4 - 호환성 실험실
 
+상태: 완료. product-facing capability matrix와 VirtualOrigin boundary lab이 지원·가상화·영구 벽을 실행 증거에 연결한다.
+
 목표: "로컬처럼"을 패키지·워크로드 단위로 쪼개 공개한다.
 
 작업:
@@ -97,6 +99,8 @@
 - 지원 표면은 README와 `docs/product/vision.md`의 네 상태와 일치해야 한다.
 
 ## Phase 5 - 소비 배선
+
+상태: 완료. codaro가 공개 `Runtime.fs`와 `AsgiServer`를 실제 제품 gate에서 소비하고, 설치 패키지 consumer gate가 OS 프리미티브를 지속 검증한다.
 
 목표: OS 커널이 실제 제품 표면 아래에서 쓰이게 한다.
 

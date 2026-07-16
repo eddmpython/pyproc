@@ -14,8 +14,8 @@ hash는 무결성을 증명하지만 재배포 권리를 증명하지 않는다.
 
 ## 현재 자산 판정
 
-SSOT는 [assetCatalog.json](../../tests/attempts/webMachine/fixtures/v86/assetCatalog.json), 파생 표준 산출물은
-[fixtureSbom.json](../../tests/attempts/webMachine/fixtures/v86/fixtureSbom.json)이다. `assetProvenance.mjs --check`가
+SSOT는 [assetCatalog.json](../../../tests/webMachine/fixtures/v86/assetCatalog.json), 파생 표준 산출물은
+[fixtureSbom.json](../../../tests/webMachine/fixtures/v86/fixtureSbom.json)이다. `assetProvenance.mjs --check`가
 두 파일의 일치를 검사하고 `npm test`가 package 미번들과 opaque guest image의 `NOASSERTION`을 강제한다.
 
 | 자산 | 확인된 provenance | license 정보 | 현재 배포 판정 |

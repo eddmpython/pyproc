@@ -1,6 +1,8 @@
 # browser-os-north-star - 첫 Python guest OS 성숙 트랙
 
-상태: 활성 (2026-07-14, 2026-07-15 상위 정렬). 목표: pyproc Browser Python OS의 성능·호환성·제품 소비 증명을 닫아 [Web Machine Platform](../web-machine-platform/README.md)의 첫 guest OS를 단단하게 만든다.
+> ✅ 완료 (2026-07-16): 대형 힙, signed machine image, 대표 데모, 호환성 지도, 제품 소비, 탭 장애복구 증거를 닫아 첫 Python guest OS 성숙 트랙을 완결했다.
+
+상태: 완료. pyproc Browser Python OS의 성능·호환성·제품 소비 증명을 닫아 [Web Machine Platform](../web-machine-platform/README.md)의 첫 guest OS를 단단하게 만들었다.
 
 ## 한 문장
 

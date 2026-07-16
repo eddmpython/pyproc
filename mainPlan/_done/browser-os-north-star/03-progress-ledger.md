@@ -44,7 +44,7 @@ NEXT:
 
 완료:
 
-- [tests/attempts/largeHeapEnvelope](../../tests/attempts/largeHeapEnvelope/README.md) 캠페인 개설.
+- [tests/attempts/largeHeapEnvelope](../../../tests/attempts/largeHeapEnvelope/README.md) 캠페인 개설.
 - `largeHeapProbe.html` 작성: target MB query로 checkpoint, restoreLive, Session.save/load를 실측.
 - 64MB smoke GREEN 7/7: heap 88.8MB, checkpoint 82ms, restoreLive 40ms, Session.save 806ms, Session.load 2320ms.
 
@@ -1570,7 +1570,7 @@ NEXT:
 
 완료:
 
-- [tests/attempts/externalS1](../../tests/attempts/externalS1/README.md) 캠페인을 개설했다.
+- [tests/attempts/externalS1](../../../tests/attempts/externalS1/README.md) 캠페인을 개설했다.
 - `bench:artifact --na`로 [WebVM N/A](benchmarks/s1-webvm-na-2026-07-15.json), [JupyterLite N/A](benchmarks/s1-jupyterlite-na-2026-07-15.json), [marimo WASM N/A](benchmarks/s1-marimo-wasm-na-2026-07-15.json) artifact를 생성했다.
 - artifact는 모두 commit `9b697a4e80824daf8def1859eeebd6aecd94488b`, `worktreeDirty: false`에서 생성했다.
 - [S1 비교표](benchmarks/s1-compare-2026-07-15.md)를 pyproc GREEN + 외부 후보 N/A 행으로 갱신했다.
@@ -1685,7 +1685,7 @@ NEXT:
 - 공식 JupyterLite demo REPL을 Edge에서 열고, Pyodide Python kernel에서 S1L 1024 NumPy matmul을 실행했다.
 - [s1l-jupyterlite-2026-07-15.json](benchmarks/s1l-jupyterlite-2026-07-15.json)을 생성했다.
 - [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)를 pyproc + JupyterLite 두 행으로 갱신했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [externalS1](../../tests/attempts/externalS1/README.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S1L 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [externalS1](../../../tests/attempts/externalS1/README.md), [benchmarking.md](../../../docs/operations/benchmarking.md)의 S1L 상태를 갱신했다.
 
 근거:
 
@@ -1724,7 +1724,7 @@ NEXT:
 - 공식 marimo playground를 Edge에서 열고, WASM Pyodide Python kernel에서 S1L 1024 NumPy matmul을 실행했다.
 - [s1l-marimo-wasm-2026-07-15.json](benchmarks/s1l-marimo-wasm-2026-07-15.json)을 생성했다.
 - [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)를 pyproc + JupyterLite + marimo WASM 세 행으로 갱신했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [externalS1](../../tests/attempts/externalS1/README.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S1L 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [externalS1](../../../tests/attempts/externalS1/README.md), [benchmarking.md](../../../docs/operations/benchmarking.md)의 S1L 상태를 갱신했다.
 
 근거:
 
@@ -1777,7 +1777,7 @@ NEXT:
 - `tests/browser/benchArtifacts.mjs`가 `S0_SCENARIO`를 지원하고 S0 전용 비교표를 렌더링하게 했다.
 - `tests/browser/benchArtifact.mjs`가 `--scenario S0`를 받아 latency artifact를 만들게 했다.
 - `tests/run.mjs` 구조 가드가 `S0_SCENARIO`를 확인한다.
-- [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 S0 artifact 계약을 추가했다.
+- [benchmarking.md](../../../docs/operations/benchmarking.md), [testing.md](../../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 S0 artifact 계약을 추가했다.
 
 검증:
 
@@ -1806,7 +1806,7 @@ NEXT:
 - `npm run test:browser`를 3회 실행해 pyproc S0 boot ready sample을 확보했다.
 - [s0-pyproc-2026-07-15.json](benchmarks/s0-pyproc-2026-07-15.json)을 생성했다.
 - [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md)를 pyproc 단독 기준표로 생성했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S0 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md)의 S0 상태를 갱신했다.
 
 실측:
 
@@ -1840,7 +1840,7 @@ NEXT:
 - WebVM 페이지를 실제 브라우저에서 열고 터미널 prompt 뒤 `python3 -c` 출력 마커를 확인했다.
 - [s0-webvm-2026-07-15.json](benchmarks/s0-webvm-2026-07-15.json)을 생성했다.
 - [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md)에 pyproc과 WebVM을 같은 S0 표로 합쳤다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 외부 비교 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md)의 외부 비교 상태를 갱신했다.
 
 실측:
 
@@ -1880,7 +1880,7 @@ NEXT:
 - marimo WASM playground에서 첫 Python 출력까지의 S0를 실제 브라우저로 측정했다.
 - [s0-jupyterlite-2026-07-15.json](benchmarks/s0-jupyterlite-2026-07-15.json), [s0-marimo-wasm-2026-07-15.json](benchmarks/s0-marimo-wasm-2026-07-15.json)을 생성했다.
 - [s0-compare-2026-07-15.md](benchmarks/s0-compare-2026-07-15.md)를 pyproc, WebVM, marimo WASM, JupyterLite 4자 표로 갱신했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 외부 비교 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md)의 외부 비교 상태를 갱신했다.
 
 실측:
 
@@ -1937,7 +1937,7 @@ NEXT:
 - `tests/browser/benchArtifacts.mjs`가 `S0C_SCENARIO`를 지원하고 S0C 전용 cold ready 비교표를 렌더링하게 했다.
 - `tests/browser/benchArtifact.mjs`가 `--scenario S0C`를 받아 latency artifact를 만들게 했다.
 - `tests/run.mjs` 구조 가드가 S0C 계약을 확인한다.
-- [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 S0C artifact 계약을 추가했다.
+- [benchmarking.md](../../../docs/operations/benchmarking.md), [testing.md](../../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 S0C artifact 계약을 추가했다.
 
 검증:
 
@@ -1966,7 +1966,7 @@ NEXT:
 - `npm run test:browser`를 3회 실행해 fresh temporary browser profile 조건의 pyproc S0C sample을 확보했다.
 - [s0c-pyproc-2026-07-15.json](benchmarks/s0c-pyproc-2026-07-15.json)을 생성했다.
 - [s0c-compare-2026-07-15.md](benchmarks/s0c-compare-2026-07-15.md)를 pyproc 단독 기준표로 생성했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
 
 실측:
 
@@ -2002,7 +2002,7 @@ NEXT:
 - WebVM을 fresh persistent browser profile 조건으로 3회 측정했다.
 - [s0c-webvm-2026-07-15.json](benchmarks/s0c-webvm-2026-07-15.json)을 생성했다.
 - [s0c-compare-2026-07-15.md](benchmarks/s0c-compare-2026-07-15.md)를 pyproc + WebVM 두 행으로 갱신했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
 
 실측:
 
@@ -2040,7 +2040,7 @@ NEXT:
 - [s0c-jupyterlite-2026-07-15.json](benchmarks/s0c-jupyterlite-2026-07-15.json)을 생성했다.
 - [s0c-marimo-wasm-2026-07-15.json](benchmarks/s0c-marimo-wasm-2026-07-15.json)을 생성했다.
 - [s0c-compare-2026-07-15.md](benchmarks/s0c-compare-2026-07-15.md)를 pyproc, marimo WASM, JupyterLite, WebVM 네 행으로 갱신했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md)의 S0C 상태를 갱신했다.
 
 실측:
 
@@ -2084,7 +2084,7 @@ NEXT:
 - [s2-pyproc-2026-07-15.json](benchmarks/s2-pyproc-2026-07-15.json)을 생성했다.
 - [s2-webvm-na-2026-07-15.json](benchmarks/s2-webvm-na-2026-07-15.json), [s2-jupyterlite-na-2026-07-15.json](benchmarks/s2-jupyterlite-na-2026-07-15.json), [s2-marimo-wasm-na-2026-07-15.json](benchmarks/s2-marimo-wasm-na-2026-07-15.json)을 생성했다.
 - [s2-compare-2026-07-15.md](benchmarks/s2-compare-2026-07-15.md)를 생성했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md)의 S2 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md), [testing.md](../../../docs/operations/testing.md)의 S2 상태를 갱신했다.
 
 실측:
 
@@ -2123,7 +2123,7 @@ NEXT:
 - [s3-pyproc-2026-07-15.json](benchmarks/s3-pyproc-2026-07-15.json)을 생성했다.
 - [s3-webvm-na-2026-07-15.json](benchmarks/s3-webvm-na-2026-07-15.json), [s3-jupyterlite-na-2026-07-15.json](benchmarks/s3-jupyterlite-na-2026-07-15.json), [s3-marimo-wasm-na-2026-07-15.json](benchmarks/s3-marimo-wasm-na-2026-07-15.json)을 생성했다.
 - [s3-compare-2026-07-15.md](benchmarks/s3-compare-2026-07-15.md)를 생성했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md)의 S3 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md), [testing.md](../../../docs/operations/testing.md)의 S3 상태를 갱신했다.
 
 실측:
 
@@ -2164,7 +2164,7 @@ NEXT:
 - [s4-pyproc-2026-07-15.json](benchmarks/s4-pyproc-2026-07-15.json)을 생성했다.
 - [s4-webvm-na-2026-07-15.json](benchmarks/s4-webvm-na-2026-07-15.json), [s4-jupyterlite-na-2026-07-15.json](benchmarks/s4-jupyterlite-na-2026-07-15.json), [s4-marimo-wasm-na-2026-07-15.json](benchmarks/s4-marimo-wasm-na-2026-07-15.json)을 생성했다.
 - [s4-compare-2026-07-15.md](benchmarks/s4-compare-2026-07-15.md)를 생성했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md)의 S4 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md), [testing.md](../../../docs/operations/testing.md)의 S4 상태를 갱신했다.
 
 실측:
 
@@ -2204,7 +2204,7 @@ NEXT:
 - WebVM을 S1L single-kernel NumPy latency 후보로 측정했다.
 - [s1l-webvm-2026-07-15.json](benchmarks/s1l-webvm-2026-07-15.json)을 생성했다.
 - [s1l-compare-2026-07-15.md](benchmarks/s1l-compare-2026-07-15.md)를 pyproc, WebVM, JupyterLite, marimo WASM 4자 표로 갱신했다.
-- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [externalS1](../../tests/attempts/externalS1/README.md)의 S1L 상태를 갱신했다.
+- [06-speed-comparison.md](06-speed-comparison.md), [benchmarking.md](../../../docs/operations/benchmarking.md), [testing.md](../../../docs/operations/testing.md), [externalS1](../../../tests/attempts/externalS1/README.md)의 S1L 상태를 갱신했다.
 
 실측:
 
@@ -2241,8 +2241,8 @@ NEXT:
 
 완료:
 
-- [README.md](../../README.md) benchmark 섹션을 최신 artifact 기반 계약 표로 갱신했다.
-- [README.ko.md](../../README.ko.md) benchmark 섹션도 같은 구조로 갱신했다.
+- [README.md](../../../README.md) benchmark 섹션을 최신 artifact 기반 계약 표로 갱신했다.
+- [README.ko.md](../../../README.ko.md) benchmark 섹션도 같은 구조로 갱신했다.
 - S1을 공개 속도 간판으로 유지하고, S1L은 single-kernel 보조 축으로 분리했다.
 - S0C, S0, S1, S1L, S2, S3, S4 각각을 "무엇을 증명하는 숫자인가"와 함께 공개 문구에 연결했다.
 
@@ -2277,9 +2277,9 @@ NEXT:
 
 완료:
 
-- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)를 추가해 공개 export를 제품 가치, 상태, 필수 조건, 검증, 경계로 묶었다.
-- [docs/README.md](../../docs/README.md)에 능력 매트릭스를 소비 문서 지도와 빠른 라우팅에 연결했다.
-- [README.md](../../README.md)와 [README.ko.md](../../README.ko.md)에 matrix 포인터를 추가했다.
+- [capabilityMatrix.md](../../../docs/consuming/capabilityMatrix.md)를 추가해 공개 export를 제품 가치, 상태, 필수 조건, 검증, 경계로 묶었다.
+- [docs/README.md](../../../docs/README.md)에 능력 매트릭스를 소비 문서 지도와 빠른 라우팅에 연결했다.
+- [README.md](../../../README.md)와 [README.ko.md](../../../README.ko.md)에 matrix 포인터를 추가했다.
 - `npm test`에 능력 매트릭스 가드를 추가해 필수 필드, 상태 라벨, 핵심 공개 표면, README/docs 링크가 빠지면 실패하게 했다.
 
 판정:
@@ -2303,15 +2303,15 @@ NEXT:
 
 완료:
 
-- [benchArtifacts.mjs](../../tests/browser/benchArtifacts.mjs)의 `BENCH_ARTIFACT_SCHEMA_VERSION`을 2로 올렸다.
+- [benchArtifacts.mjs](../../../tests/browser/benchArtifacts.mjs)의 `BENCH_ARTIFACT_SCHEMA_VERSION`을 2로 올렸다.
 - `SCENARIO_DEFINITIONS`를 추가해 S0, S0C, S1, S1L, S2, S3, S4의 이름, 기본 profile, primary metric, sampleSchema를 한 곳에 고정했다.
 - v2 봉투를 `scenarioDefinition`, `measurement`, `environment`, `evidence`로 분리했다.
 - sampleSchema 검증을 추가해 latency, paired speed, machine resume sample 필드와 speedup 계산이 어긋나면 실패하게 했다.
-- [benchArtifact.mjs](../../tests/browser/benchArtifact.mjs)에 `--raw-output`, `--profile`, `--warmup-count`, `--browser-name`, `--browser-headless` 입력을 추가했다.
-- [speedBench.mjs](../../tests/browser/speedBench.mjs)가 S1 artifact를 v2로 만들고, 생성 직전에 `normalizeBenchArtifact()`로 자기 검증하게 했다.
+- [benchArtifact.mjs](../../../tests/browser/benchArtifact.mjs)에 `--raw-output`, `--profile`, `--warmup-count`, `--browser-name`, `--browser-headless` 입력을 추가했다.
+- [speedBench.mjs](../../../tests/browser/speedBench.mjs)가 S1 artifact를 v2로 만들고, 생성 직전에 `normalizeBenchArtifact()`로 자기 검증하게 했다.
 - [benchmarks](benchmarks/) 아래 tracked JSON artifact 28개를 schema v2로 승격했다. 측정 sample과 metrics는 바꾸지 않고 evidence 봉투만 보강했다.
 - `npm test`가 tracked benchmark JSON 전부를 `normalizeBenchArtifactFile()`로 읽어 schema v2를 검증하게 했다.
-- [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 v2 계약을 반영했다.
+- [benchmarking.md](../../../docs/operations/benchmarking.md), [testing.md](../../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 v2 계약을 반영했다.
 
 판정:
 
@@ -2341,13 +2341,13 @@ NEXT:
 완료:
 
 - `evidence.rawOutput`을 자유 문자열에서 `embedded:report` 또는 `file:raw/<artifact-name>.txt`로 제한했다.
-- [benchArtifacts.mjs](../../tests/browser/benchArtifacts.mjs)에 `RAW_OUTPUT_EMBEDDED_REPORT`, `RAW_OUTPUT_FILE_PREFIX`, `rawOutputPathForArtifact()`를 추가했다.
+- [benchArtifacts.mjs](../../../tests/browser/benchArtifacts.mjs)에 `RAW_OUTPUT_EMBEDDED_REPORT`, `RAW_OUTPUT_FILE_PREFIX`, `rawOutputPathForArtifact()`를 추가했다.
 - normalizer가 rawOutput reference 형식, 상대경로 안전성, 파일 존재 여부를 검증하게 했다.
 - `npm test`가 tracked benchmark JSON의 raw sidecar가 git 추적 대상인지 확인하게 했다.
-- [benchArtifact.mjs](../../tests/browser/benchArtifact.mjs)가 `--raw-output` text를 `raw/<artifact-name>.txt` sidecar로 저장하고, `--raw-output-file`로 기존 raw file을 연결할 수 있게 했다.
-- [speedBench.mjs](../../tests/browser/speedBench.mjs)의 S1 artifact는 gate report가 JSON에 들어 있으므로 `embedded:report`를 쓰게 했다.
+- [benchArtifact.mjs](../../../tests/browser/benchArtifact.mjs)가 `--raw-output` text를 `raw/<artifact-name>.txt` sidecar로 저장하고, `--raw-output-file`로 기존 raw file을 연결할 수 있게 했다.
+- [speedBench.mjs](../../../tests/browser/speedBench.mjs)의 S1 artifact는 gate report가 JSON에 들어 있으므로 `embedded:report`를 쓰게 했다.
 - 기존 benchmark JSON 28개 중 embedded report가 있는 S1 pyproc을 제외한 27개에 [raw sidecar](benchmarks/raw/)를 추가했다.
-- [benchmarking.md](../../docs/operations/benchmarking.md), [testing.md](../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 rawOutput reference 계약을 반영했다.
+- [benchmarking.md](../../../docs/operations/benchmarking.md), [testing.md](../../../docs/operations/testing.md), [06-speed-comparison.md](06-speed-comparison.md)에 rawOutput reference 계약을 반영했다.
 
 판정:
 
@@ -2373,9 +2373,9 @@ NEXT:
 
 완료:
 
-- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)에 `실행 표면` 열을 추가했다.
+- [capabilityMatrix.md](../../../docs/consuming/capabilityMatrix.md)에 `실행 표면` 열을 추가했다.
 - 각 능력 행을 사람이 여는 example, 브라우저 gate, probe, 또는 tracked benchmark artifact 중 하나 이상에 연결했다.
-- README 양쪽과 [docs/README.md](../../docs/README.md), [testing.md](../../docs/operations/testing.md)의 matrix 설명을 실행 표면 기준으로 갱신했다.
+- README 양쪽과 [docs/README.md](../../../docs/README.md), [testing.md](../../../docs/operations/testing.md)의 matrix 설명을 실행 표면 기준으로 갱신했다.
 - `npm test`의 능력 매트릭스 가드가 `실행 표면` 필드, 핵심 example/benchmark 링크, 행별 링크 존재를 검사하게 했다.
 
 판정:
@@ -2399,9 +2399,9 @@ NEXT:
 
 완료:
 
-- [README.md](../../README.md)와 [README.ko.md](../../README.ko.md)의 Public surface를 긴 export 설명표에서 작업별 API 지도로 줄였다.
+- [README.md](../../../README.md)와 [README.ko.md](../../../README.ko.md)의 Public surface를 긴 export 설명표에서 작업별 API 지도로 줄였다.
 - 각 행은 필요한 일, 공개 export, 실행 증거를 함께 보여준다.
-- 상세 제품 판단은 [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)로 넘기고, README는 빠른 첫 판단과 설치 진입로 역할에 집중시켰다.
+- 상세 제품 판단은 [capabilityMatrix.md](../../../docs/consuming/capabilityMatrix.md)로 넘기고, README는 빠른 첫 판단과 설치 진입로 역할에 집중시켰다.
 - `npm test`에 README Public surface가 작업별 지도 형태를 유지하는 가드를 추가했다.
 
 판정:
@@ -2425,9 +2425,9 @@ NEXT:
 
 완료:
 
-- [contract.md](../../docs/consuming/contract.md)의 큰 export 설명표를 제거하고, 공개 import 경계와 실행 자산 배포 계약 중심으로 재구성했다.
-- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)가 capability별 제품 가치, 상태, 실행 표면, 검증, 경계의 정본임을 명시했다.
-- [docs/README.md](../../docs/README.md)의 consuming 문서 지도를 새 역할 분리에 맞췄다.
+- [contract.md](../../../docs/consuming/contract.md)의 큰 export 설명표를 제거하고, 공개 import 경계와 실행 자산 배포 계약 중심으로 재구성했다.
+- [capabilityMatrix.md](../../../docs/consuming/capabilityMatrix.md)가 capability별 제품 가치, 상태, 실행 표면, 검증, 경계의 정본임을 명시했다.
+- [docs/README.md](../../../docs/README.md)의 consuming 문서 지도를 새 역할 분리에 맞췄다.
 - `npm test`에 contract 역할 분리, import 경계, 실행 자산 배포, 계약 검증 절, matrix 위임, 장황한 export 설명표 회귀 차단 가드를 추가했다.
 
 판정:
@@ -2451,7 +2451,7 @@ NEXT:
 
 완료:
 
-- [examples/index.html](../../examples/index.html)의 상단 실측 숫자를 README benchmark 표의 최신 artifact 축과 맞췄다.
+- [examples/index.html](../../../examples/index.html)의 상단 실측 숫자를 README benchmark 표의 최신 artifact 축과 맞췄다.
 - 오래된 `5.28x` sort, `3.4ms`, `13.7MB` 표기를 제거하고 S1 3.95x sharded NumPy matmul, S3 18ms browser server, S4 76ms export/2.26s trusted open/10.8MB image로 교체했다.
 - 랜딩에 "속도는 계약별 claim"임을 명시해 단일 커널 NumPy가 가장 빠르다는 오해를 막았다.
 - Speed Lab 카드는 S1 속도 간판과 single-kernel BLAS 보조 축을 분리해 설명하게 했다.
@@ -2479,11 +2479,11 @@ NEXT:
 
 완료:
 
-- [examples/index.html](../../examples/index.html)에 `Build with pyproc as a library` 섹션을 추가했다.
+- [examples/index.html](../../../examples/index.html)에 `Build with pyproc as a library` 섹션을 추가했다.
 - 공개 첫 화면에서 Public surface map, Capability matrix, Consumer contract, Benchmark contract로 바로 이동하게 했다.
 - GitHub Pages 산출물에는 `docs/`가 복사되지 않으므로 랜딩 문서 링크는 GitHub blob URL로 고정했다.
 - install 문구를 "commit SHA pin" 중심에서 "정확 npm version pin + release-before-pinning 대안은 consumer contract"로 정렬했다.
-- [demoHosting.md](../../docs/operations/demoHosting.md)에 랜딩 Build 링크가 GitHub 문서로 가야 하는 배포 제약을 기록했다.
+- [demoHosting.md](../../../docs/operations/demoHosting.md)에 랜딩 Build 링크가 GitHub 문서로 가야 하는 배포 제약을 기록했다.
 - `npm test`에 랜딩 library adoption 경로와 GitHub 문서 URL, 로컬 `docs/` href 금지 가드를 추가했다.
 
 판정:
@@ -2508,11 +2508,11 @@ NEXT:
 
 완료:
 
-- [contract.md](../../docs/consuming/contract.md)에 `설치 패키지 consumer gate coverage` 표를 추가했다.
+- [contract.md](../../../docs/consuming/contract.md)에 `설치 패키지 consumer gate coverage` 표를 추가했다.
 - `test:package`와 `test:consumer`가 설치된 tarball 기준으로 실제로 노출하고 검증하는 public specifier와 export를 분리해 기록했다.
 - package consumer는 `pyproc`, `pyproc/assets`, `pyproc/runtime`, `pyproc-assets` bin, CLI graph copy/SRI manifest를 검증하는 표면으로 고정했다.
 - product consumer는 asset path, runtime/server, process OS, product policy, portable machine image로 나눠 `boot`, `PyProc`, `VirtualOrigin`, `MachineJail`, `bootSession`, `openMachine`, signing key API, resume path를 연결했다.
-- [testing.md](../../docs/operations/testing.md)에 상세 coverage 정본이 소비 계약 표라는 포인터를 추가했다.
+- [testing.md](../../../docs/operations/testing.md)에 상세 coverage 정본이 소비 계약 표라는 포인터를 추가했다.
 - `contract.md`의 Service Worker 예시에 남아 있던 낡은 S3 `3.4ms` 문구를 S3 artifact 기준 18ms median으로 정리했다.
 - `npm test`에 문서 표, 실제 `tests/packageConsumer.mjs`, `tests/browser/productConsumer.mjs`의 import/check 문자열이 어긋나면 실패하는 가드를 추가했다.
 
@@ -2538,10 +2538,10 @@ NEXT:
 
 완료:
 
-- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)를 추가해 설치 패키지 consumer gate coverage의 데이터 정본을 분리했다.
-- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 같은 coverage manifest를 브라우저 report에 싣고, Node runner가 report manifest drift를 검증하게 했다.
-- [contract.md](../../docs/consuming/contract.md)의 coverage 표가 `renderProductConsumerCoverageMarkdown()` 출력과 정확히 일치해야 `npm test`가 통과하게 했다.
-- [testing.md](../../docs/operations/testing.md)는 상세 coverage 정본 포인터만 유지하고, 표 복제는 피했다.
+- [productConsumerCoverage.mjs](../../../tests/browser/productConsumerCoverage.mjs)를 추가해 설치 패키지 consumer gate coverage의 데이터 정본을 분리했다.
+- [productConsumer.mjs](../../../tests/browser/productConsumer.mjs)가 같은 coverage manifest를 브라우저 report에 싣고, Node runner가 report manifest drift를 검증하게 했다.
+- [contract.md](../../../docs/consuming/contract.md)의 coverage 표가 `renderProductConsumerCoverageMarkdown()` 출력과 정확히 일치해야 `npm test`가 통과하게 했다.
+- [testing.md](../../../docs/operations/testing.md)는 상세 coverage 정본 포인터만 유지하고, 표 복제는 피했다.
 - `npm test`의 coverage 검사를 문자열 나열 중심에서 manifest renderer + 실제 gate report 배선 검사로 올렸다.
 
 판정:
@@ -2574,9 +2574,9 @@ NEXT:
 
 완료:
 
-- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - crash resume` 행을 추가했다.
-- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `MachineJournal`을 import하고, `bootSession`으로 만든 제품 세션 상태를 `MachineJournal.commit()`으로 남긴 뒤 새 `bootSession`이 `recover()`로 되살리는 경로를 실행한다.
-- [contract.md](../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명을 같은 행으로 갱신했다.
+- [productConsumerCoverage.mjs](../../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - crash resume` 행을 추가했다.
+- [productConsumer.mjs](../../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `MachineJournal`을 import하고, `bootSession`으로 만든 제품 세션 상태를 `MachineJournal.commit()`으로 남긴 뒤 새 `bootSession`이 `recover()`로 되살리는 경로를 실행한다.
+- [contract.md](../../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명을 같은 행으로 갱신했다.
 - `npm test`가 `MachineJournal` coverage 행과 실제 product consumer check 문자열을 함께 감시하게 했다.
 
 실측:
@@ -2615,11 +2615,11 @@ NEXT:
 
 완료:
 
-- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - device filesystem` 행을 추가했다.
-- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `DeviceFs`를 import하고, `Runtime.enableDeviceFs()`로 `/dev/productState` 사용자 장치와 내장 `/proc/meminfo`를 설치한다.
+- [productConsumerCoverage.mjs](../../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - device filesystem` 행을 추가했다.
+- [productConsumer.mjs](../../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `DeviceFs`를 import하고, `Runtime.enableDeviceFs()`로 `/dev/productState` 사용자 장치와 내장 `/proc/meminfo`를 설치한다.
 - product consumer gate가 Python `open()`으로 `/dev/productState`를 읽고 쓰며, `os.path.exists()`와 `/proc/meminfo`의 실제 heap/execSeq를 확인한다.
-- [contract.md](../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 DeviceFs를 연결했다.
-- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)의 Device filesystem 행을 product consumer gate 실행 표면으로 갱신했다.
+- [contract.md](../../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 DeviceFs를 연결했다.
+- [capabilityMatrix.md](../../../docs/consuming/capabilityMatrix.md)의 Device filesystem 행을 product consumer gate 실행 표면으로 갱신했다.
 - `npm test`가 `DeviceFs` coverage 행과 실제 product consumer check 문자열을 함께 감시하게 했다.
 
 실측:
@@ -2658,11 +2658,11 @@ NEXT:
 
 완료:
 
-- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - shell jobs` 행을 추가했다.
-- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `JobControl`을 import하고, `JobControl({ assetIntegrity })`로 설치 패키지 worker graph를 검증한 뒤 잡 수명주기를 실행한다.
+- [productConsumerCoverage.mjs](../../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - shell jobs` 행을 추가했다.
+- [productConsumer.mjs](../../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `JobControl`을 import하고, `JobControl({ assetIntegrity })`로 설치 패키지 worker graph를 검증한 뒤 잡 수명주기를 실행한다.
 - product consumer gate가 `boot`, 대화형 namespace 상태 누적, `expr &`, `fg`, 무한 루프 job `kill`, `terminate`를 검증한다.
-- [contract.md](../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 `JobControl`을 연결했다.
-- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)의 Machine container and jobs 행을 product consumer gate 실행 표면으로 갱신했다.
+- [contract.md](../../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 `JobControl`을 연결했다.
+- [capabilityMatrix.md](../../../docs/consuming/capabilityMatrix.md)의 Machine container and jobs 행을 product consumer gate 실행 표면으로 갱신했다.
 - `npm test`가 `JobControl` coverage 행과 실제 product consumer check 문자열을 함께 감시하게 했다.
 
 실측:
@@ -2701,11 +2701,11 @@ NEXT:
 
 완료:
 
-- [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - machine container` 행을 추가했다.
-- [productConsumer.mjs](../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `MachineContainer`를 import하고, `assetIntegrity`가 붙은 설치 패키지 worker graph로 자식 머신을 띄운다.
+- [productConsumerCoverage.mjs](../../../tests/browser/productConsumerCoverage.mjs)에 `product consumer - machine container` 행을 추가했다.
+- [productConsumer.mjs](../../../tests/browser/productConsumer.mjs)가 설치된 `pyproc`에서 `MachineContainer`를 import하고, `assetIntegrity`가 붙은 설치 패키지 worker graph로 자식 머신을 띄운다.
 - product consumer gate가 자식 머신 `spawn`, Python setup 상태 유지, `run`, `heapLen`, `kill`, kill 이후 호출 reject를 검증한다.
-- [contract.md](../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 `MachineContainer` 수명주기를 연결했다.
-- [capabilityMatrix.md](../../docs/consuming/capabilityMatrix.md)의 Machine container and jobs 행을 `JobControl`과 `MachineContainer`가 모두 product consumer gate에서 검증되는 상태로 갱신했다.
+- [contract.md](../../../docs/consuming/contract.md)의 설치 패키지 consumer gate coverage 표와 계약 검증 설명에 `MachineContainer` 수명주기를 연결했다.
+- [capabilityMatrix.md](../../../docs/consuming/capabilityMatrix.md)의 Machine container and jobs 행을 `JobControl`과 `MachineContainer`가 모두 product consumer gate에서 검증되는 상태로 갱신했다.
 - `npm test`가 `MachineContainer` coverage 행과 실제 product consumer check 문자열을 함께 감시하게 했다.
 
 실측:
@@ -2745,12 +2745,12 @@ NEXT:
 
 완료:
 
-- [kernelElection.js](../../src/processOs/kernelElection.js)에 participant 고유 ID, 영속 OPFS epoch, leader/epoch fencing, presence, 상태 구독, follower commit, late-response 폐기, 무재생 outcome-unknown RPC 계약을 넣었다.
+- [kernelElection.js](../../../src/processOs/kernelElection.js)에 participant 고유 ID, 영속 OPFS epoch, leader/epoch fencing, presence, 상태 구독, follower commit, late-response 폐기, 무재생 outcome-unknown RPC 계약을 넣었다.
 - `openPersistentMachine({ name })`을 공개 진입점으로 추가했다. 같은 name은 OPFS의 같은 머신 디렉터리와 Web Locks/BroadcastChannel 선출에 연결된다.
-- [machineHome.js](../../src/capabilities/machineHome.js)를 Session과 MachineJournal이 공유하는 `/home` 스냅샷 계약으로 분리했다. MachineJournal HEAD/PREV 세대가 heap과 `/home/web` CAS blob을 함께 commit/recover/pack/prune한다.
-- [kernelElectionProbe.html](../../tests/attempts/pythonMachine/kernelElectionProbe.html)이 3개 독립 browsing context, follower 변수/파일/prepared environment 공유, follower commit, leader context 강제 제거, epoch 증가, 정확히 한 successor, heap + `/home/web` + manifest 환경 복구, in-flight outcome unknown, 모든 context 제거 뒤 cold reopen을 검증한다.
-- [immortal.html](../../examples/immortal.html)에 machine, participant, role, leader, epoch, participant count, recovered, commit time, takeover time과 직접 실행/commit/새 탭/leader 닫기 흐름을 공개했다.
-- [immortalProductGate.js](../../tests/browser/immortalProductGate.js)가 임시 제품에 설치된 `node_modules/pyproc`의 root export만으로 같은 장애복구 흐름을 실행한다. product consumer coverage는 11행이 됐다.
+- [machineHome.js](../../../src/capabilities/machineHome.js)를 Session과 MachineJournal이 공유하는 `/home` 스냅샷 계약으로 분리했다. MachineJournal HEAD/PREV 세대가 heap과 `/home/web` CAS blob을 함께 commit/recover/pack/prune한다.
+- [kernelElectionProbe.html](../../../tests/attempts/pythonMachine/kernelElectionProbe.html)이 3개 독립 browsing context, follower 변수/파일/prepared environment 공유, follower commit, leader context 강제 제거, epoch 증가, 정확히 한 successor, heap + `/home/web` + manifest 환경 복구, in-flight outcome unknown, 모든 context 제거 뒤 cold reopen을 검증한다.
+- [immortal.html](../../../examples/immortal.html)에 machine, participant, role, leader, epoch, participant count, recovered, commit time, takeover time과 직접 실행/commit/새 탭/leader 닫기 흐름을 공개했다.
+- [immortalProductGate.js](../../../tests/browser/immortalProductGate.js)가 임시 제품에 설치된 `node_modules/pyproc`의 root export만으로 같은 장애복구 흐름을 실행한다. product consumer coverage는 11행이 됐다.
 - benchmark schema에 S5 `immortal multi-tab machine`을 추가해 initial ready, RPC p50/p90, failover, recovery, cold reopen을 최소 3회 sample artifact로 봉인할 수 있게 했다.
 - 깨끗한 구현 commit `11843ab`에서 설치 소비자 gate를 3회 독립 실행하고 [S5 artifact](benchmarks/s5-pyproc-2026-07-15.json), [비교 표](benchmarks/s5-compare-2026-07-15.md), raw sidecar를 추적 상태로 남겼다.
 
@@ -2800,3 +2800,25 @@ NEXT:
 1. Python guest의 `failover p95 < 5000ms` 회귀 목표를 유지한다.
 2. 상위 플랫폼은 `tests/attempts/webMachine/`에서 lifecycle contract부터 시작한다.
 3. Phase 4 호환성 실험실은 범용 host와 분리해 Python guest compatibility 근거로 계속 운영한다.
+
+## 2026-07-16 - 첫 Python guest OS 성숙 트랙 완료
+
+완료 판정:
+
+1. OS 판정표 v2는 P2/P4/P6 이후 공개 src와 실측을 반영했다.
+2. 512MB checkpoint, restore, session, fork, journal 봉투와 반복 blob IO 최적화를 실측했다.
+3. signed session cast, Server Dev, Speed Lab 대표 데모 3종을 사람용 표면과 자동 gate에 배선했다.
+4. capability matrix와 VirtualOrigin boundary lab이 지원, 가상화, 영구 벽을 제품 판단 표면에 고정했다.
+5. codaro와 설치 패키지 consumer gate가 파일, 서버, 프로세스, 복원 능력을 공개 표면만으로 소비한다.
+6. Immortal Python Machine은 탭 장애와 모든 context 종료 뒤에도 완료 commit의 heap, `/home/web`, 준비 manifest를 복구하며 failover p95 5000ms 목표를 통과했다.
+
+검증:
+
+- `npm test` PASS, 834 passed, 0 failed.
+- S5 설치 소비자 artifact에서 failover p95 3025ms, recovery median 575ms, cold reopen median 2681ms.
+- 범용 host·device·image 계약은 상위 Web Machine Platform의 독립 package로 승격했다.
+
+판정:
+
+- README의 완료 조건 5개를 모두 충족했다.
+- 이후 Python guest 변경은 공개 계약과 회귀 gate 유지보수이며, 새로운 제품 목표는 별도 이니셔티브에서 시작한다.

@@ -1,6 +1,8 @@
 # web-machine-platform - 브라우저를 컴퓨터로 만드는 상위 North Star
 
-상태: 활성 (2026-07-15). 목표: 브라우저를 하나의 런타임이 아니라 여러 게스트 OS가 올라가는 범용 컴퓨터로 정의하고, 그 목표를 실측 가능한 Web Machine 계약과 Dual-Boot 게이트로 좁힌다.
+> ✅ 완료 (2026-07-16): 두 guest OS의 공통 lifecycle, 장치, durable generation, 단일 owner, signed 이동 이미지와 독립 package 경계를 실증·승격했다.
+
+상태: 완료. 브라우저를 하나의 런타임이 아니라 여러 게스트 OS가 올라가는 범용 컴퓨터로 정의하고, 그 목표를 실측 가능한 Web Machine 계약과 Dual-Boot 게이트로 닫았다.
 
 현재 증명: 같은 host registry에서 pyproc Python OS와 Linux 6.8.12 i686을 실제 동시 부팅하고,
 두 opaque snapshot과 flushed block image를 한 content-addressed IndexedDB generation에 CAS commit했다.
