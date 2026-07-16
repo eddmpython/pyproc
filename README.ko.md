@@ -173,7 +173,7 @@ COOP/COEP 서버 뒤에 headless Chromium 머신 페이지를 띄우고 stdio로
 
 ```sh
 git clone https://github.com/eddmpython/pyproc && cd pyproc
-# Claude Code:
+# MCP 클라이언트 등록(claude CLI 예시):
 claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
 # 또는 직접 실행해 stdio로 newline-delimited JSON-RPC를 말한다:
 npm run mcp:sandbox

@@ -174,7 +174,7 @@ stdio, so the retry loop above becomes tool calls:
 
 ```sh
 git clone https://github.com/eddmpython/pyproc && cd pyproc
-# Claude Code:
+# register with your MCP client (claude CLI shown):
 claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
 # or run it directly and speak newline-delimited JSON-RPC on stdio:
 npm run mcp:sandbox
