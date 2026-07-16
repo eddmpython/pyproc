@@ -1,7 +1,7 @@
 # Changelog
 
-All notable changes to the public surface are documented here. pyproc consumers pin exact
-versions, so breaking changes only reach a consumer when it deliberately re-pins. Releases
+All notable changes to the public surface are documented here. Exact version pins are the
+install contract, so a breaking change only lands where a pin is deliberately moved. Releases
 happen only on an explicit maintainer decision; the Unreleased section accumulates until then.
 
 한국어 요약은 각 절 하단에 둔다.
@@ -32,6 +32,14 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Added
 
+- **`PyProc.forkMany(srcPid, dstPids)`**: the speculative-exploration primitive. A parent's
+  delta is one value, so a fan-out harvests it **once** and broadcasts over a
+  SharedArrayBuffer instead of re-harvesting per lane: `O(heap + N x delta)` rather than
+  `O(N x heap)`. Measured (21.4MB delta, 4 lanes): sequential forks 316ms -> broadcast 78ms
+  (4.05x); on top of it, 4 candidates explore in parallel 5.2x faster than a serial retry
+  loop (90ms vs 468ms), with byte-identical results and lane isolation. `fork` is now a 1:1
+  delegation (name and return shape unchanged). An agent loop is three calls: fan out,
+  run candidates, `fork(winner, main)` to adopt.
 - `PyProcError` and `PYPROC_ERROR_CODES`: one error contract for the whole surface.
   Every error thrown by pyproc now carries `code` (programmatic branching axis),
   `retryable`, and optional `context` (worker Python exceptions arrive with
@@ -59,6 +67,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### 한국어 요약
 
+- **forkMany**: 부모 델타를 한 번만 수확해 N 레인에 방송(4.05배). 그 위 4-후보 병렬
+  탐색이 직렬 재시도 대비 5.2배. fork는 1:1 위임으로 이름과 반환 계약 불변.
 - SharedKernel 삭제(정본은 openPersistentMachine), GPU/Socket/WASI는 subpath로 강등,
   별칭 3종(timeTravel/interrupt/mapSerial) 절삭.
 - PyProcError 단일 오류 계약(코드/재시도 가능성/파이썬 예외 타입이 워커 경계를 건너온다).

@@ -208,7 +208,7 @@ check("VirtualOrigin 메서드", () => {
 });
 check("PyProc 메서드", () => {
   const p = api.PyProc.prototype;
-  for (const m of ["boot", "map", "mapArray", "matmul", "ps", "kill", "signal", "respawn", "fork", "exec", "pipe", "lock", "semaphore", "shm", "terminate"])
+  for (const m of ["boot", "map", "mapArray", "matmul", "ps", "kill", "signal", "respawn", "fork", "forkMany", "exec", "pipe", "lock", "semaphore", "shm", "terminate"])
     if (typeof p[m] !== "function") throw new Error(`missing ${m}`);
 });
 check("MachineContainer 메서드", () => {

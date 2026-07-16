@@ -1087,6 +1087,18 @@ export class PyProc {
    */
   respawn(pid: number): Promise<{ oldPid: number; pid: number }>;
   /**
+   * fork(2) 팬아웃: 살아있는 src의 상태를 N개 dst에 한 번에 복제한다(투기적 탐색의 프리미티브).
+   * 부모 델타를 한 번만 수확해 SharedArrayBuffer로 방송하므로 비용이 O(N x heap)이 아니라
+   * O(heap + N x delta)다. 실측(21.4MB 델타, 4레인): 순차 fork 316ms -> 방송 78ms(4.05배).
+   * 전제는 fork와 같다(같은 replay 매니페스트의 대칭 풀). harvestMs는 레인 수와 무관한 1회 비용.
+   */
+  forkMany(srcPid: number, dstPids: number[]): Promise<{
+    pages: number;
+    mb: number;
+    harvestMs: number;
+    lanes: { pid: number; reverted: number; applyMs: number }[];
+  }>;
+  /**
    * 시그널 전달(유닉스 시그널 표). 실행 중 파이썬의 signal 핸들러가 발화한다.
    * SIGINT(2)=KeyboardInterrupt 기본, SIGTERM(15)/SIGUSR1(10) 등은 파이썬이 signal.signal로 건 핸들러가 받는다.
    * 워커는 살아남아 재사용된다(협조적 종료 실측 264ms). 미지원 워커면 false.

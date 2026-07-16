@@ -166,7 +166,14 @@ Worker process kernel: `boot(n)` (snapshot fast-fork spawn), `map` / `mapArray` 
 `terminate`. With `new PyProc({ replay })` the pool boots deterministically and
 `fork(srcPid, dstPid)` clones a *live* interpreter (dirty-page harvest + drift cleanse) -
 workers only; the main-thread kernel replays to different bytes, so this is a worker-pool
-capability by physics, not by policy. `map` never leaves silent holes: when every lane
+capability by physics, not by policy.
+`forkMany(srcPid, dstPids)` is the speculative-exploration primitive: it harvests the
+parent delta **once** and broadcasts it to N lanes over a SharedArrayBuffer, so a fan-out
+costs `O(heap + N x delta)` instead of `O(N x heap)` (measured: 316ms -> 78ms for a 21.4MB
+delta across 4 lanes; 4 candidates then explore in parallel 5.2x faster than a serial retry
+loop). `fork` is a 1:1 delegation to it. The returned `harvestMs` is the once-per-fan-out
+cost; per-lane cost and drift-cleanse evidence are in `lanes[]`. An agent loop is three
+calls: `forkMany` to fan out, run candidates in parallel, `fork(winner, main)` to adopt. `map` never leaves silent holes: when every lane
 dies, unrun tasks resolve to `{ error: "pool exhausted: ..." }` values.
 Errors: `PYPROC_PROCESS_UNAVAILABLE`, `PYPROC_WORKER_CRASHED` (retryable),
 `PYPROC_WORKER_TASK_ERROR` (with `context.pyExcType`), `PYPROC_FORK_UNAVAILABLE`,

@@ -129,19 +129,47 @@ export class PyProc {
   // 전제: 두 프로세스 모두 같은 replay 매니페스트로 부팅했을 것(바이트 동일한 경계 = 델타 유효).
   // 자식은 정확히 "경계 + 부모 델타"가 된다(더러운 dst 정화 + 힙 성장 동반, 게이트 상시 검증).
   async fork(srcPid, dstPid) {
+    const f = await this.forkMany(srcPid, [dstPid]);
+    const lane = f.lanes[0];
+    return { pages: f.pages, mb: f.mb, reverted: lane.reverted, harvestMs: f.harvestMs, applyMs: lane.applyMs };
+  }
+
+  // fork(2) 팬아웃: 살아있는 src의 상태를 N개 dst에 한 번에 복제한다(투기적 탐색의 프리미티브).
+  // 부모 델타는 값이 하나인데 fork를 N번 부르면 부모 힙을 N번 수확한다(O(N x heap)).
+  // 여기서는 **한 번 수확해 SAB로 방송**한다(O(heap + N x delta)): 레인 수가 늘어도 수확은 1회고
+  // 델타 바이트는 워커들이 같은 공유 버퍼에서 함께 읽는다(레인당 복사 0).
+  // 실측(attempts/branchFleet/fleetFanOutProbe 7/7, 21.4MB 델타 4레인): 방송 78ms vs 순차 fork
+  // 316ms = 4.05배. 그 위에서 4-후보 병렬 탐색이 직렬 재시도 대비 5.2배(90ms vs 468ms)다.
+  // 전제는 fork와 같다: 같은 replay 매니페스트로 부팅한 대칭 풀(워커끼리만 바이트 동일).
+  async forkMany(srcPid, dstPids) {
     if (!this.replay) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "fork: replay 매니페스트로 부팅한 풀에서만 가능하다(new PyProc({ replay }))");
-    const src = this.table.find((t) => t.pid === srcPid), dst = this.table.find((t) => t.pid === dstPid);
+    if (!Array.isArray(dstPids) || !dstPids.length) throw new PyProcError("PYPROC_INPUT_INVALID", "forkMany: dstPids는 비어 있지 않은 pid 배열이어야 한다");
+    if (new Set(dstPids).size !== dstPids.length) throw new PyProcError("PYPROC_INPUT_INVALID", "forkMany: dstPids에 중복 pid가 있다");
+    if (dstPids.includes(srcPid)) throw new PyProcError("PYPROC_INPUT_INVALID", `forkMany: src pid ${srcPid}를 dst로 줄 수 없다`);
+    const src = this.table.find((t) => t.pid === srcPid);
     if (!src || src.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: src pid ${srcPid} 준비되지 않음`);
-    if (!dst || dst.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: dst pid ${dstPid} 준비되지 않음`);
+    const dsts = dstPids.map((pid) => {
+      const dst = this.table.find((t) => t.pid === pid);
+      if (!dst || dst.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: dst pid ${pid} 준비되지 않음`);
+      return dst;
+    });
     const h = await this._call(src, { type: "harvest" });
-    const applied = await this._call(dst, { type: "applyDelta", bin: h.bin, pages: h.pages, sp: h.sp, heapLen: h.heapLen }, [h.bin]);
-    dst.parentPid = srcPid; // 계보 기록: fork된 프로세스의 부모(ps()에 노출)
+    // 공유 버퍼로 1회 복사: 이후 N 워커가 같은 바이트를 읽는다(postMessage는 SAB를 transfer하지 않는다).
+    const shared = new SharedArrayBuffer(h.bin.byteLength);
+    new Uint8Array(shared).set(new Uint8Array(h.bin));
+    const applied = await Promise.all(dsts.map((dst) => this._call(dst, {
+      type: "applyDelta", bin: shared, pages: h.pages, sp: h.sp, heapLen: h.heapLen,
+    })));
+    for (const dst of dsts) dst.parentPid = srcPid; // 계보 기록: fork된 프로세스의 부모(ps()에 노출)
     return {
       pages: h.pages.length,
       mb: +(h.pages.length * 65536 / 1048576).toFixed(1),
-      reverted: applied.reverted, // dst의 델타 밖 드리프트를 cp0으로 되돌린 페이지 수(정화 증거)
-      harvestMs: h.ms,
-      applyMs: applied.ms,
+      harvestMs: h.ms, // 레인 수와 무관한 1회 비용
+      lanes: dsts.map((dst, i) => ({
+        pid: dst.pid,
+        reverted: applied[i].reverted, // dst의 델타 밖 드리프트를 cp0으로 되돌린 페이지 수(정화 증거)
+        applyMs: applied[i].ms,
+      })),
     };
   }
 
