@@ -43,8 +43,33 @@ jobs:
       - run: npm run test:examples
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
-      # WASI 세션 게이트: 승격된 bootWasi/WasiSession의 실배선. CI엔 30MB wasm 자산이 없어
-      # SKIP green(자산 있는 로컬/환경에서만 완전 검증). import/워커 배선은 여기서도 확인된다.
+      # WASI 세션 게이트: pyproc/wasi subpath(bootWasi/WasiSession)의 실배선.
+      # 30MB 자산은 릴리즈 zip에서 준비하고 버전 키로 캐시해 SKIP이 아니라 실제 GREEN으로 돈다.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            tests/attempts/enginePort/python-3.14.6.wasm
+            tests/attempts/enginePort/python314-stdlib.zip
+          key: wasi-python-3.14.6-wasi_sdk-24
+      - run: node scripts/fetchWasiAssets.mjs
       - run: node tests/browser/run.mjs tests/browser/wasiGate.html
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
+
+  web-computer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # 실행 자산(v86 engine/firmware/guest image)은 hash 고정 development channel이며
+      # 미추적이다: 준비 스크립트가 받아오고 catalog 버전 키로 캐시한다.
+      - uses: actions/cache@v4
+        with:
+          path: apps/webComputer/assets
+          key: web-computer-assets-${{ hashFiles('apps/webComputer/assetCatalog.json') }}
+      # 3-process 제품 E2E: 초기 부팅 -> 브라우저 프로세스 재시작 콜드 복원 -> 새 프로필 import.
+      - run: npm run test:web-computer
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome

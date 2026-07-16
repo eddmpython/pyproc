@@ -11,7 +11,7 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, Runtime, PyProc, SIGNAL, JobControl, MachineContainer, bootSession, openMachine, runScript, checkEnvironment, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "../../index.js";
+    import { boot, bootEnv, Runtime, PyProc, SIGNAL, JobControl, MachineContainer, bootSession, openMachine, runScript, checkEnvironment, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "../../index.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -403,6 +403,11 @@
       // 셸 %pip (wheelCache 채움 뒤에 실행: 캐시 채움 전제를 건드리지 않는 위치가 계약)
       const pipOut = await tt.push("%pip install six");
       check("terminal %pip: 머신 안 설치", pipOut.more === false && pipOut.out.startsWith("installed:"), pipOut.out.trim());
+
+      // uv 레인 표면 상주 조건(capabilityMatrix Beta): bootEnv 콜드 레인의 최소 실동작을
+      // CI 게이트에 둔다. 스냅샷 웜 부팅 실측은 여전히 bootEnvApiProbe 담당(무게).
+      const envRt = await bootEnv({ indexURL: INDEX });
+      check("bootEnv: 콜드 레인 부팅 + 실행", envRt.run("7 * 3") === 21 && envRt.envBoot.lane === "cold", `lane ${envRt.envBoot.lane}, ${envRt.envBoot.totalMs}ms`);
 
       // uv 레인: PEP 723 스크립트 자급(runScript) + freeze 락 (실측 정본: envManager 캠페인.
       // bootEnv의 스냅샷 웜 부팅은 무게 때문에 bootEnvApiProbe가 담당한다)
