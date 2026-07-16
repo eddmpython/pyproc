@@ -73,6 +73,8 @@ console.log("[표면]");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 const benchArtifactContract = await import(pathToFileURL(join(ROOT, "tests", "browser", "benchArtifacts.mjs")).href);
 const productConsumerCoverage = await import(pathToFileURL(join(ROOT, "tests", "browser", "productConsumerCoverage.mjs")).href);
+const { runMemoryMachineStoreContract } = await import(pathToFileURL(join(ROOT, "tests", "webMachine", "contracts", "machineStoreContract.mjs")).href);
+const { runContextSwapContract } = await import(pathToFileURL(join(ROOT, "tests", "webMachine", "contracts", "contextSwapContract.mjs")).href);
 for (const [name, kind] of [
   ["getPyProcAssetManifest", "function"], ["verifyPyProcAssetIntegrity", "function"], ["PYPROC_ASSET_MANIFEST_VERSION", "number"],
   ["registerPyProcServiceWorker", "function"],
@@ -313,9 +315,9 @@ check("Speed Lab 반복 벤치 통계 helper 공유", () => {
 });
 check("속도 비교 벤치 계약 고정", () => {
   const contract = readFileSync(join(ROOT, "docs", "operations", "benchmarking.md"), "utf8");
-  const plan = readFileSync(join(ROOT, "mainPlan", "browser-os-north-star", "06-speed-comparison.md"), "utf8");
+  const plan = readFileSync(join(ROOT, "mainPlan", "_done", "browser-os-north-star", "06-speed-comparison.md"), "utf8");
   const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");
-  const initiativeMap = readFileSync(join(ROOT, "mainPlan", "browser-os-north-star", "README.md"), "utf8");
+  const initiativeMap = readFileSync(join(ROOT, "mainPlan", "_done", "browser-os-north-star", "README.md"), "utf8");
   const speedLab = readFileSync(join(ROOT, "examples", "speedLab.html"), "utf8");
   const speedBench = readFileSync(join(ROOT, "tests", "browser", "speedBench.mjs"), "utf8");
   const benchArtifact = readFileSync(join(ROOT, "tests", "browser", "benchArtifact.mjs"), "utf8");
@@ -347,7 +349,7 @@ check("속도 비교 벤치 계약 고정", () => {
   for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--raw-output", "--raw-output-file", "--profile", "--warmup-count", "--browser-headless", "--na", "scenarioDefinition", "measurement", "environment", "evidence", "rawOutputSidecar", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "parseImmortalMachineSample", "summarizeImmortalMachineBench", "isImmortalMachineBenchGreen", "normalizeBenchArtifact"]) {
     if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
   }
-  const artifactDir = join(ROOT, "mainPlan", "browser-os-north-star", "benchmarks");
+  const artifactDir = join(ROOT, "mainPlan", "_done", "browser-os-north-star", "benchmarks");
   const artifactFiles = readdirSync(artifactDir).filter((name) => name.endsWith(".json")).sort();
   if (!artifactFiles.length) throw new Error("benchmark JSON artifact 없음");
   for (const name of artifactFiles) {
@@ -691,9 +693,9 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
     "../../examples/machine.html",
     "../../examples/immortal.html",
     "../../tests/browser/productConsumer.mjs",
-    "../../mainPlan/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
-    "../../mainPlan/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json",
-    "../../mainPlan/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json",
+    "../../mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
+    "../../mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json",
+    "../../mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json",
   ];
   for (const target of runnableLinks) {
     if (!matrix.includes(`](${target})`)) throw new Error(`능력 매트릭스 실행 표면 링크 누락: ${target}`);
@@ -972,60 +974,71 @@ check("mainPlan 이니셔티브마다 README", () => {
   walk(dir); if (existsSync(join(dir, "_done"))) walk(join(dir, "_done"));
 });
 
-const webMachineRoot = join(ROOT, "tests", "attempts", "webMachine");
-check("Web Machine attempts 레이어 구조 고정", () => {
-  const allowedRootEntries = new Set(["README.md", "host", "browser", "adapters", "fixtures", "probes"]);
-  const rootEntries = readdirSync(webMachineRoot);
-  const unexpected = rootEntries.filter((entry) => !allowedRootEntries.has(entry));
-  if (unexpected.length) throw new Error(`root dump 금지: ${unexpected.join(", ")}`);
-  for (const entry of allowedRootEntries) {
-    if (!rootEntries.includes(entry)) throw new Error(`필수 경계 없음: ${entry}`);
+const webMachinePackagesRoot = join(ROOT, "packages");
+const webMachineTestRoot = join(ROOT, "tests", "webMachine");
+const webMachinePackageNames = new Map([
+  ["core", "@web-machine/core"],
+  ["browser", "@web-machine/browser"],
+  ["guest-pyproc", "@web-machine/guest-pyproc"],
+  ["guest-v86", "@web-machine/guest-v86"],
+]);
+const webMachinePackageRoots = new Map(
+  [...webMachinePackageNames].map(([folder, name]) => [name, join(webMachinePackagesRoot, folder)]),
+);
+const webMachineSourceRoots = [
+  ...[...webMachinePackageNames.keys()].map((folder) => join(webMachinePackagesRoot, folder)),
+  webMachineTestRoot,
+];
+
+check("Web Machine 정식 package와 검증 트리 구조 고정", () => {
+  const actualPackages = readdirSync(webMachinePackagesRoot).filter((entry) => statSync(join(webMachinePackagesRoot, entry)).isDirectory());
+  const expectedPackages = [...webMachinePackageNames.keys()];
+  if (actualPackages.sort().join("\n") !== expectedPackages.sort().join("\n")) {
+    throw new Error(`package 경계 불일치: ${actualPackages.join(", ")}`);
   }
-  const requiredHostFiles = ["adapterContract.js", "machineManifest.js", "snapshotEnvelope.js", "webMachineError.js", "webMachineHostDraft.js"];
-  for (const file of requiredHostFiles) {
-    if (!existsSync(join(webMachineRoot, "host", file))) throw new Error(`host 계약 누락: ${file}`);
+  for (const folder of expectedPackages) {
+    const packageRoot = join(webMachinePackagesRoot, folder);
+    const entries = readdirSync(packageRoot).sort();
+    const expectedEntries = ["index.d.ts", "index.js", "package.json", "src"];
+    if (entries.join("\n") !== expectedEntries.join("\n")) throw new Error(`${folder}: package root dump ${entries.join(", ")}`);
   }
-  const requiredBrowserDevices = [
-    "memoryBlockDevice.js",
-    "memoryEthernetSwitch.js",
-    "memoryTextDisplayDevice.js",
-    "memoryScanCodeInputDevice.js",
-    "memoryRgbaDisplayDevice.js",
-    "canvasRgbaFrameSource.js",
-    "memoryRelativePointerDevice.js",
-    "browserClockDevice.js",
-    "browserEntropyDevice.js",
+  const testEntries = readdirSync(webMachineTestRoot).sort();
+  const expectedTestEntries = ["README.md", "browser", "contracts", "fixtures"];
+  if (testEntries.join("\n") !== expectedTestEntries.join("\n")) throw new Error(`검증 경계 불일치: ${testEntries.join(", ")}`);
+  if (readdirSync(join(webMachineTestRoot, "browser")).join("\n") !== "probes") {
+    throw new Error("tests/webMachine/browser에는 probes만 둔다");
+  }
+
+  const requiredFiles = [
+    "packages/core/src/contracts/adapterContract.js",
+    "packages/core/src/contracts/operationControl.js",
+    "packages/core/src/contracts/webMachineError.js",
+    "packages/core/src/host/commandQueue.js",
+    "packages/core/src/host/machineHandle.js",
+    "packages/core/src/host/webMachineHost.js",
+    "packages/core/src/image/machineManifest.js",
+    "packages/core/src/image/snapshotEnvelope.js",
+    "packages/browser/src/composition/createBrowserHost.js",
+    "packages/browser/src/coordination/webLockOwnerCoordinator.js",
+    "packages/browser/src/devices/browserClockDevice.js",
+    "packages/browser/src/devices/browserEntropyDevice.js",
+    "packages/browser/src/image/machineEnvelopeCoordinator.js",
+    "packages/browser/src/image/webMachineFile.js",
+    "packages/browser/src/image/webMachineTrust.js",
+    "packages/browser/src/persistence/generationRetention.js",
+    "packages/browser/src/persistence/indexedDbMachineStore.js",
+    "packages/browser/src/persistence/memoryMachineStore.js",
+    "packages/guest-pyproc/src/pyprocGuestAdapter.js",
+    "packages/guest-v86/src/v86GuestAdapter.js",
+    "packages/guest-v86/src/v86SerialPort.js",
+    "tests/webMachine/fixtures/v86/assetCatalog.json",
+    "tests/webMachine/fixtures/v86/assetProvenance.mjs",
+    "tests/webMachine/fixtures/v86/fixtureSbom.json",
+    "tests/webMachine/fixtures/v86/prepareAssets.mjs",
   ];
-  for (const file of requiredBrowserDevices) {
-    if (!existsSync(join(webMachineRoot, "browser", "devices", file))) throw new Error(`browser device 계약 누락: ${file}`);
-  }
-  const requiredBrowserCoordination = ["indexedDbOwnerEpochStore.js", "webLockOwnerCoordinator.js"];
-  for (const file of requiredBrowserCoordination) {
-    if (!existsSync(join(webMachineRoot, "browser", "coordination", file))) throw new Error(`browser coordination 계약 누락: ${file}`);
-  }
-  const requiredBrowserImage = ["machineEnvelopeCoordinator.js", "webMachineFile.js", "webMachineTrust.js"];
-  for (const file of requiredBrowserImage) {
-    if (!existsSync(join(webMachineRoot, "browser", "image", file))) throw new Error(`browser image 계약 누락: ${file}`);
-  }
-  const requiredV86Bridges = [
-    "v86BlockBuffer.js",
-    "v86FileSystemVolume.js",
-    "v86PacketPort.js",
-    "v86DisplayPort.js",
-    "v86InputPort.js",
-    "v86FramebufferPort.js",
-    "v86PointerPort.js",
-    "v86ClockPort.js",
-    "v86EntropyPort.js",
-    "v86WasmHostBridge.js",
-  ];
-  for (const file of requiredV86Bridges) {
-    if (!existsSync(join(webMachineRoot, "adapters", "v86", file))) throw new Error(`v86 bridge 계약 누락: ${file}`);
-  }
-  const requiredV86FixtureFiles = ["assetCatalog.json", "assetProvenance.mjs", "config.js", "fixtureSbom.json", "prepareAssets.mjs"];
-  for (const file of requiredV86FixtureFiles) {
-    if (!existsSync(join(webMachineRoot, "fixtures", "v86", file))) throw new Error(`v86 fixture provenance 누락: ${file}`);
-  }
+  const missing = requiredFiles.filter((file) => !existsSync(join(ROOT, file)));
+  if (missing.length) throw new Error(`필수 경계 누락: ${missing.join(", ")}`);
+
   const forbiddenFolderNames = new Set(["utils", "common", "shared", "helpers"]);
   const walk = (dir) => {
     for (const entry of readdirSync(dir)) {
@@ -1035,10 +1048,73 @@ check("Web Machine attempts 레이어 구조 고정", () => {
       walk(full);
     }
   };
-  walk(webMachineRoot);
+  for (const root of webMachineSourceRoots) walk(root);
 });
+
+check("Web Machine package manifest와 public surface 고정", () => {
+  const rootPackage = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  if (JSON.stringify(rootPackage.workspaces) !== JSON.stringify(["packages/*"])) throw new Error("root workspaces는 packages/* 한 곳이어야 한다");
+  for (const [folder, name] of webMachinePackageNames) {
+    const packageRoot = join(webMachinePackagesRoot, folder);
+    const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+    if (manifest.name !== name || manifest.version !== "0.0.0" || manifest.private !== true) {
+      throw new Error(`${folder}: private 0.0.0 package identity 불일치`);
+    }
+    if (manifest.type !== "module" || manifest.main !== "./index.js" || manifest.types !== "./index.d.ts") {
+      throw new Error(`${folder}: native ESM/type 진입점 불일치`);
+    }
+    if (manifest.exports?.["."]?.default !== "./index.js" || manifest.exports?.["."]?.types !== "./index.d.ts") {
+      throw new Error(`${folder}: root export만 허용`);
+    }
+    if (JSON.stringify(manifest.files) !== JSON.stringify(["index.js", "index.d.ts", "src"])) {
+      throw new Error(`${folder}: package files allowlist 불일치`);
+    }
+    if (manifest.sideEffects !== false) throw new Error(`${folder}: sideEffects false 누락`);
+    const dependencyNames = Object.keys(manifest.dependencies || {});
+    const peerNames = Object.keys(manifest.peerDependencies || {});
+    if (folder === "core" && (dependencyNames.length || peerNames.length)) throw new Error("core dependency는 0이어야 한다");
+    if (folder === "browser" && JSON.stringify(manifest.dependencies) !== JSON.stringify({ "@web-machine/core": "0.0.0" })) {
+      throw new Error("browser는 core 하나만 의존해야 한다");
+    }
+    if (folder.startsWith("guest-") && JSON.stringify(manifest.peerDependencies) !== JSON.stringify({ "@web-machine/core": "0.0.0" })) {
+      throw new Error(`${folder}: core peer dependency만 허용`);
+    }
+    const indexSource = readFileSync(join(packageRoot, "index.js"), "utf8");
+    const typesSource = readFileSync(join(packageRoot, "index.d.ts"), "utf8");
+    if (!indexSource.trim() || !typesSource.trim()) throw new Error(`${folder}: public JS/type surface 비어 있음`);
+    for (const ref of jsModuleRefs(join(packageRoot, "index.js"))) {
+      if (!ref.spec.startsWith("./src/") || !ref.spec.endsWith(".js")) throw new Error(`${folder}: index는 자기 src만 export해야 한다`);
+    }
+  }
+});
+await checkAsync("Web Machine memory MachineStore contract", runMemoryMachineStoreContract);
+await checkAsync("Web Computer context swap rollback matrix", runContextSwapContract);
+check("Web Machine public type와 runtime store 의미 일치", () => {
+  const source = readFileSync(join(webMachinePackagesRoot, "browser", "index.d.ts"), "utf8");
+  for (const required of [
+    "interface GenerationHead",
+    "prev: string | null",
+    "ownerEpoch: number",
+    "class MemoryMachineStore",
+    "class IndexedDbMachineStore",
+    "Promise<Uint8Array>",
+    "WEB_MACHINE_OWNER_STALE",
+  ]) {
+    if (!source.includes(required) && required !== "WEB_MACHINE_OWNER_STALE") throw new Error(`type contract 누락: ${required}`);
+  }
+  if (/\bprevious\s*:/.test(source)) throw new Error("GenerationHead previous key 재등장");
+  for (const removed of ["MemoryGenerationStore", "IndexedDbGenerationStore", "IndexedDbOwnerEpochStore"]) {
+    if (source.includes(removed)) throw new Error(`흡수된 public type 잔존: ${removed}`);
+  }
+  const memorySource = readFileSync(join(webMachinePackagesRoot, "browser", "src", "persistence", "memoryMachineStore.js"), "utf8");
+  const indexedSource = readFileSync(join(webMachinePackagesRoot, "browser", "src", "persistence", "indexedDbMachineStore.js"), "utf8");
+  if (!memorySource.includes("WEB_MACHINE_OWNER_STALE") || !indexedSource.includes("WEB_MACHINE_OWNER_STALE")) {
+    throw new Error("MachineStore stale owner runtime contract 누락");
+  }
+});
+
 check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () => {
-  const fixtureRoot = join(webMachineRoot, "fixtures", "v86");
+  const fixtureRoot = join(webMachineTestRoot, "fixtures", "v86");
   const audit = spawnSync(process.execPath, [join(fixtureRoot, "assetProvenance.mjs"), "--check"], {
     cwd: ROOT,
     encoding: "utf8",
@@ -1058,7 +1134,7 @@ check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () 
   if (prepareSource.includes("https://") || /[0-9a-f]{64}/.test(prepareSource)) {
     throw new Error("prepareAssets에 URL/hash 중복 금지, assetCatalog가 SSOT");
   }
-  const trackedAssets = spawnSync("git", ["ls-files", "tests/attempts/webMachine/fixtures/v86/assets"], {
+  const trackedAssets = spawnSync("git", ["ls-files", "tests/webMachine/fixtures/v86/assets"], {
     cwd: ROOT,
     encoding: "utf8",
     timeout: 5000,
@@ -1066,7 +1142,7 @@ check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () 
   if (trackedAssets.status !== 0 || trackedAssets.stdout.trim()) throw new Error("third-party fixture binary가 git에 포함됨");
 });
 check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
-  const deviceRoot = join(webMachineRoot, "browser", "devices");
+  const deviceRoot = join(webMachinePackagesRoot, "browser", "src", "devices");
   const clockSource = readFileSync(join(deviceRoot, "browserClockDevice.js"), "utf8");
   const entropySource = readFileSync(join(deviceRoot, "browserEntropyDevice.js"), "utf8");
   if (/\b(?:Date|performance)\s*\.|\b(?:setTimeout|clearTimeout|setInterval|clearInterval)\s*\(/.test(clockSource)) {
@@ -1077,48 +1153,40 @@ check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
   }
 });
 check("Web Machine host는 guest와 browser 구현을 모름", () => {
-  const hostRoot = join(webMachineRoot, "host");
+  const coreRoot = join(webMachinePackagesRoot, "core");
   const guestTerms = /\b(?:pyproc|pyodide|wasi|v86|x86|linux|buildroot)\b/i;
   const browserTerms = /\b(?:window|document|navigator|location|indexedDB|localStorage|sessionStorage|caches|fetch|XMLHttpRequest|WebSocket|BroadcastChannel|Worker|SharedWorker|MessageChannel|crypto|performance|Date|setTimeout|setInterval)\b/;
   const problems = [];
-  for (const file of collect(hostRoot, [".js"], [])) {
+  for (const file of collect(coreRoot, [".js"], [])) {
     const source = readFileSync(file, "utf8");
     if (guestTerms.test(source)) problems.push(`${rel(file)}: guest/engine 이름`);
     if (browserTerms.test(source)) problems.push(`${rel(file)}: browser 구현 직접 접근`);
     for (const ref of jsModuleRefs(file)) {
       const target = moduleTarget(file, ref.spec);
-      if (!target || !rel(target).startsWith("tests/attempts/webMachine/host/")) {
-        problems.push(`${rel(file)} -> ${ref.spec}: host 밖 import`);
+      if (!target || !rel(target).startsWith("packages/core/")) {
+        problems.push(`${rel(file)} -> ${ref.spec}: core 밖 import`);
       }
     }
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
-check("Web Machine adapter 경계와 공개 surface", () => {
-  const adapterRoot = join(webMachineRoot, "adapters");
+check("Web Machine guest adapter 경계와 public surface", () => {
   const problems = [];
-  for (const file of collect(adapterRoot, [".js"], [])) {
-    const sourceRel = rel(file);
-    const sourceName = sourceRel.match(/\/adapters\/([^/]+?)(?:GuestAdapter\.js|\/)/)?.[1] || null;
-    for (const ref of jsModuleRefs(file)) {
-      const target = moduleTarget(file, ref.spec);
-      if (!target) {
-        problems.push(`${rel(file)} -> ${ref.spec}: engine은 외부 주입 필요`);
-        continue;
+  for (const folder of ["guest-pyproc", "guest-v86"]) {
+    const guestRoot = join(webMachinePackagesRoot, folder);
+    for (const file of collect(guestRoot, [".js"], [])) {
+      for (const ref of jsModuleRefs(file)) {
+        const target = moduleTarget(file, ref.spec);
+        if (target && !rel(target).startsWith(`packages/${folder}/`)) problems.push(`${rel(file)} -> ${ref.spec}: guest 밖 relative import`);
+        if (!target && ref.spec !== "@web-machine/core") problems.push(`${rel(file)} -> ${ref.spec}: engine 또는 다른 guest 직접 import`);
+        if (ref.spec.startsWith("@web-machine/core/")) problems.push(`${rel(file)} -> ${ref.spec}: core deep import`);
       }
-      const targetRel = rel(target);
-      if (targetRel.startsWith("tests/attempts/webMachine/adapters/")) {
-        const targetName = targetRel.match(/\/adapters\/([^/]+?)(?:GuestAdapter\.js|\/)/)?.[1] || null;
-        if (!sourceName || sourceName !== targetName) problems.push(`${sourceRel} -> ${targetRel}: adapter 사이 import`);
-      }
-      else if (targetRel !== "index.js") problems.push(`${rel(file)} -> ${targetRel}: 공개 root 이외 import`);
     }
-    if (readFileSync(file, "utf8").includes("/src/")) problems.push(`${rel(file)}: src deep import`);
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
 check("Web Machine browser는 host 방향으로만 의존", () => {
-  const browserRoot = join(webMachineRoot, "browser");
+  const browserRoot = join(webMachinePackagesRoot, "browser");
   const guestTerms = /\b(?:pyproc|pyodide|wasi|v86|x86|linux|buildroot)\b/i;
   const problems = [];
   for (const file of collect(browserRoot, [".js", ".mjs"], [])) {
@@ -1127,11 +1195,11 @@ check("Web Machine browser는 host 방향으로만 의존", () => {
     for (const ref of jsModuleRefs(file)) {
       const target = moduleTarget(file, ref.spec);
       if (!target) {
-        problems.push(`${rel(file)} -> ${ref.spec}: 외부 import`);
+        if (ref.spec !== "@web-machine/core") problems.push(`${rel(file)} -> ${ref.spec}: core 이외 package import`);
         continue;
       }
       const targetRel = rel(target);
-      if (!targetRel.startsWith("tests/attempts/webMachine/browser/") && !targetRel.startsWith("tests/attempts/webMachine/host/")) {
+      if (!targetRel.startsWith("packages/browser/")) {
         problems.push(`${rel(file)} -> ${targetRel}: browser 역방향 import`);
       }
     }
@@ -1140,10 +1208,10 @@ check("Web Machine browser는 host 방향으로만 의존", () => {
 });
 check("Web Machine 조립은 probes에만 존재", () => {
   const problems = [];
-  for (const file of collect(webMachineRoot, [".js", ".mjs", ".html"], [])) {
+  for (const root of webMachineSourceRoots) for (const file of collect(root, [".js", ".mjs", ".html"], [])) {
     if (rel(file).includes("/fixtures/v86/assets/")) continue;
     const source = readFileSync(file, "utf8");
-    if (source.includes(".registerAdapter(") && !rel(file).startsWith("tests/attempts/webMachine/probes/")) {
+    if (source.includes(".registerAdapter(") && !rel(file).startsWith("tests/webMachine/browser/probes/")) {
       problems.push(rel(file));
     }
   }
@@ -1151,7 +1219,7 @@ check("Web Machine 조립은 probes에만 존재", () => {
 });
 check("Web Machine source는 named ESM과 명시 확장자", () => {
   const problems = [];
-  for (const file of collect(webMachineRoot, [".js", ".mjs", ".html"], [])) {
+  for (const root of webMachineSourceRoots) for (const file of collect(root, [".js", ".mjs", ".html"], [])) {
     if (rel(file).includes("/fixtures/v86/assets/")) continue;
     const source = readFileSync(file, "utf8");
     if (/\bexport\s+default\b/.test(source)) problems.push(`${rel(file)}: default export`);
@@ -1163,14 +1231,29 @@ check("Web Machine source는 named ESM과 명시 확장자", () => {
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
+check("Web Machine 검증은 package root만 소비", () => {
+  const problems = [];
+  for (const file of collect(webMachineTestRoot, [".js", ".mjs", ".html"], [])) {
+    if (rel(file).includes("/fixtures/v86/assets/")) continue;
+    for (const ref of jsModuleRefs(file)) {
+      const target = moduleTarget(file, ref.spec);
+      if (!target) continue;
+      const targetRel = rel(target);
+      if (targetRel.startsWith("packages/") && !/^packages\/(?:core|browser|guest-pyproc|guest-v86)\/index\.js$/.test(targetRel)) {
+        problems.push(`${rel(file)} -> ${targetRel}: package deep import`);
+      }
+    }
+  }
+  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
 check("Web Machine import graph cycle 없음", () => {
-  const files = collect(webMachineRoot, [".js", ".mjs", ".html"], [])
+  const files = webMachineSourceRoots.flatMap((root) => collect(root, [".js", ".mjs", ".html"], []))
     .filter((file) => !rel(file).includes("/fixtures/v86/assets/"));
   const byRel = new Set(files.map(rel));
   const graph = new Map(files.map((file) => [rel(file), []]));
   for (const file of files) {
     for (const ref of jsModuleRefs(file)) {
-      const target = moduleTarget(file, ref.spec);
+      const target = moduleTarget(file, ref.spec) || (webMachinePackageRoots.has(ref.spec) ? join(webMachinePackageRoots.get(ref.spec), "index.js") : null);
       if (!target) continue;
       const targetRel = rel(target);
       if (byRel.has(targetRel)) graph.get(rel(file)).push(targetRel);
@@ -1178,6 +1261,80 @@ check("Web Machine import graph cycle 없음", () => {
   }
   const cycles = findCycles(graph);
   if (cycles.length) throw new Error(cycles.slice(0, 4).map((cycle) => cycle.join(" -> ")).join("; "));
+});
+
+const webComputerRoot = join(ROOT, "apps", "webComputer");
+check("Web Computer 제품 composition root 고정", () => {
+  const requiredFiles = [
+    "index.html",
+    "styles.css",
+    "app.js",
+    "webComputerRuntime.js",
+    "webComputerContext.js",
+    "webComputerContextSwap.js",
+    "webComputerPersistence.js",
+    "machineConfig.js",
+    "identityStore.js",
+    "imageTrust.js",
+    "ps2Keyboard.js",
+    "gate.js",
+    "assetCatalog.json",
+  ];
+  const missing = requiredFiles.filter((file) => !existsSync(join(webComputerRoot, file)));
+  if (missing.length) throw new Error(`제품 파일 누락: ${missing.join(", ")}`);
+  const html = readFileSync(join(webComputerRoot, "index.html"), "utf8");
+  for (const id of ["saveButton", "exportButton", "importButton", "pythonCode", "linuxCommand", "linuxDisplay", "trustDialog"]) {
+    if (!html.includes(`id="${id}"`)) throw new Error(`제품 UI 누락: ${id}`);
+  }
+  if (!html.includes('"@web-machine/core":"/packages/core/index.js"')) throw new Error("제품 import map에 core root가 없음");
+});
+
+check("Web Computer 제품은 공개 package root만 소비", () => {
+  const allowedTargets = new Set([
+    "index.js",
+    "packages/core/index.js",
+    "packages/browser/index.js",
+    "packages/guest-pyproc/index.js",
+    "packages/guest-v86/index.js",
+  ]);
+  const files = collect(webComputerRoot, [".js"], []).filter((file) => !rel(file).includes("/assets/"));
+  const problems = [];
+  for (const file of files) {
+    for (const ref of jsModuleRefs(file)) {
+      const target = moduleTarget(file, ref.spec);
+      if (!target) {
+        if (ref.spec !== "@web-machine/core") problems.push(`${rel(file)} -> ${ref.spec}: 승인되지 않은 bare import`);
+        continue;
+      }
+      const targetRel = rel(target);
+      if (targetRel.startsWith("apps/webComputer/")) continue;
+      if (!allowedTargets.has(targetRel)) problems.push(`${rel(file)} -> ${targetRel}: 제품 경계 밖 또는 deep import`);
+    }
+    const source = readFileSync(file, "utf8");
+    if (/\btests[\\/]/.test(source)) problems.push(`${rel(file)}: tests 경로 소비`);
+  }
+  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+
+check("Web Computer 실행 자산은 검증된 development channel", () => {
+  const catalog = JSON.parse(readFileSync(join(webComputerRoot, "assetCatalog.json"), "utf8"));
+  if (catalog.schemaVersion !== 1 || catalog.channel !== "development" || catalog.redistribution !== "disabled") {
+    throw new Error("제품 asset channel 또는 재배포 정책 불일치");
+  }
+  const requiredRoles = new Set(["engine-module", "engine-binary", "firmware", "guest-image"]);
+  for (const asset of catalog.assets || []) {
+    requiredRoles.delete(asset.role);
+    if (!/^[0-9a-f]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.byteLength) || asset.byteLength < 1) {
+      throw new Error(`${asset.name}: hash 또는 byteLength 불일치`);
+    }
+    if (!asset.licenseConcluded || !asset.provenanceStatus) throw new Error(`${asset.name}: compliance 필드 누락`);
+  }
+  if (requiredRoles.size) throw new Error(`asset role 누락: ${[...requiredRoles].join(", ")}`);
+  const trackedAssets = spawnSync("git", ["ls-files", "apps/webComputer/assets"], { cwd: ROOT, encoding: "utf8", timeout: 5000 });
+  if (trackedAssets.status !== 0 || trackedAssets.stdout.trim()) throw new Error("Web Computer binary가 git에 포함됨");
+  const packageManifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  if (!packageManifest.scripts?.["assets:web-computer"]?.includes("prepareWebComputerAssets.mjs")) throw new Error("제품 asset 준비 script 누락");
+  if (!packageManifest.scripts?.["test:web-computer"]?.includes("webComputerProduct.mjs")) throw new Error("제품 browser E2E script 누락");
 });
 
 console.log(`\n결과: ${passed} passed, ${failed} failed`);

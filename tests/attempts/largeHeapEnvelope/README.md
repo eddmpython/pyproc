@@ -11,7 +11,7 @@ Browser Python OS 간판의 가장 약한 지점은 기능 부재가 아니라 O
 1. 64MB smoke가 GREEN이고, 측정 항목이 정상 수집된다.
 2. 500MB 이상에서 checkpoint, restoreLive, session save, session load가 수치로 기록된다.
 3. journal commit/recover는 별도 옵션으로 최소 128MB 이상 수치 또는 명시적 실패 원인이 기록된다.
-4. 결과가 [mainPlan/browser-os-north-star/04-os-verdict-v2.md](../../../mainPlan/browser-os-north-star/04-os-verdict-v2.md)의 OS 판정 보류 사유를 갱신한다.
+4. 결과가 [완료된 Browser OS 판정표](../../../mainPlan/_done/browser-os-north-star/04-os-verdict-v2.md)의 OS 판정 보류 사유를 갱신한다.
 
 ## 실행
 

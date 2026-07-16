@@ -1,0 +1,149 @@
+<!doctype html>
+<!--
+결과(2026-07-15, Edge headless, COOP+COEP, full home image): 3회 연속 GREEN 13/13.
+pyproc boot 2647/2763/2936ms, portable snapshot 54-60ms·8,192,958 bytes,
+cold restore 1828/1837/1721ms. WASI boot 458/488/466ms, session snapshot 14-21ms,
+restore 2-3ms. 같은 host lifecycle이 Pyodide와 non-Pyodide 엔진에서 성립했다.
+판정: Phase 2 성립. snapshot scope 차이는 유지하고 Phase 3 Linux guest로 진행.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Web Machine dual engine probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+</head>
+<body>
+<h1>Web Machine dual engine probe</h1>
+<p>같은 Web Machine Host API로 pyproc Session과 non-Pyodide WasiSession을 부팅하고 각 scope에 맞는 snapshot/restore를 검증한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="importmap">
+  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+</script>
+<script type="module">
+  import { bootSession, openMachine } from "../../../../index.js";
+  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { createPyprocGuestFactory } from "../../../../packages/guest-pyproc/index.js";
+  import { createWasiGuestFactory } from "../../contracts/wasiGuestAdapter.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+  const lifecycleComplete = (history) => ["booted", "paused", "snapshotted", "restored", "resumed", "shutdown"].every((event) => history.some((entry) => entry.event === event));
+
+  const consoleLines = [];
+  let instanceSequence = 0;
+  const host = new WebMachineHost({
+    idFactory: () => `dual-engine-${++instanceSequence}`,
+    devices: { console: { kind: "console", write: (line) => consoleLines.push(String(line)) } },
+  });
+  host.registerAdapter("pyproc", createPyprocGuestFactory({ bootSession, openMachine }));
+  host.registerAdapter("wasi", createWasiGuestFactory());
+
+  const params = new URLSearchParams(location.search);
+  const indexURL = params.get("indexURL") || undefined;
+  const wasiWasmURL = "../../../attempts/enginePort/python-3.14.6.wasm";
+  const wasiStdlibURL = "../../../attempts/enginePort/python314-stdlib.zip";
+  let pyprocMachine;
+  let wasiMachine;
+
+  try {
+    const [wasmHead, stdlibHead] = await Promise.all([
+      fetch(wasiWasmURL, { method: "HEAD" }),
+      fetch(wasiStdlibURL, { method: "HEAD" }),
+    ]);
+    check("WASI 실엔진 자산 존재", wasmHead.ok && stdlibHead.ok, `${wasmHead.status}/${stdlibHead.status}`);
+
+    pyprocMachine = host.createMachine({
+      machineId: "pythonOs",
+      adapterId: "pyproc",
+      manifest: { session: { ...(indexURL ? { indexURL } : {}), setup: "machineValue = 40" } },
+      permissions: { devices: ["console"] },
+    });
+    let startedAt = performance.now();
+    await pyprocMachine.boot();
+    timings.pyprocBootMs = Math.round(performance.now() - startedAt);
+    const pyprocValue = await pyprocMachine.request({ type: "run", code: "machineValue += 2\nmachineValue" });
+    check("pyproc guest boot + request", pyprocValue === 42, `${pyprocValue}, ${timings.pyprocBootMs}ms`);
+    await pyprocMachine.pause();
+    startedAt = performance.now();
+    const pyprocSnapshot = await pyprocMachine.snapshot();
+    timings.pyprocSnapshotMs = Math.round(performance.now() - startedAt);
+    check("pyproc snapshot scope portable", pyprocSnapshot.snapshotScope === "portable" && pyprocSnapshot.payload.byteLength > 0, `${pyprocSnapshot.payload.byteLength} bytes`);
+    await pyprocMachine.resume();
+    await pyprocMachine.request({ type: "run", code: "machineValue = 99" });
+    await pyprocMachine.pause();
+    startedAt = performance.now();
+    await pyprocMachine.restore(pyprocSnapshot);
+    timings.pyprocLiveRestoreMs = Math.round(performance.now() - startedAt);
+    await pyprocMachine.resume();
+    const pyprocRestored = await pyprocMachine.request({ type: "run", code: "machineValue" });
+    check("pyproc live restore", pyprocRestored === 42, `${pyprocRestored}, ${timings.pyprocLiveRestoreMs}ms`);
+    await pyprocMachine.pause();
+    await pyprocMachine.shutdown();
+    startedAt = performance.now();
+    await pyprocMachine.restore(pyprocSnapshot);
+    timings.pyprocColdRestoreMs = Math.round(performance.now() - startedAt);
+    check("pyproc adapter shutdown 뒤 cold restore -> paused", pyprocMachine.state === "paused", `${timings.pyprocColdRestoreMs}ms`);
+    await pyprocMachine.resume();
+    const pyprocCold = await pyprocMachine.request({ type: "run", code: "machineValue" });
+    check("pyproc portable snapshot 값 생존", pyprocCold === 42, pyprocCold);
+    await pyprocMachine.pause();
+    await pyprocMachine.shutdown();
+
+    wasiMachine = host.createMachine({
+      machineId: "wasiOs",
+      adapterId: "wasi",
+      manifest: { wasi: { wasmURL: wasiWasmURL, stdlibURL: wasiStdlibURL } },
+      permissions: { devices: ["console"] },
+    });
+    startedAt = performance.now();
+    await wasiMachine.boot();
+    timings.wasiBootMs = Math.round(performance.now() - startedAt);
+    await wasiMachine.request({ type: "run", code: "machineValue = 40" });
+    const wasiValue = await wasiMachine.request({ type: "run", code: "machineValue += 2\nprint(machineValue)" });
+    check("WASI guest boot + request", wasiValue.trim() === "42", `"${wasiValue.trim()}", ${timings.wasiBootMs}ms`);
+    await wasiMachine.pause();
+    startedAt = performance.now();
+    const wasiSnapshot = await wasiMachine.snapshot();
+    timings.wasiSnapshotMs = Math.round(performance.now() - startedAt);
+    check("WASI snapshot scope session", wasiSnapshot.snapshotScope === "session" && wasiSnapshot.payload.byteLength > 0, `${wasiSnapshot.payload.byteLength} bytes`);
+    await wasiMachine.resume();
+    await wasiMachine.request({ type: "run", code: "machineValue = 99" });
+    await wasiMachine.pause();
+    startedAt = performance.now();
+    await wasiMachine.restore(wasiSnapshot);
+    timings.wasiRestoreMs = Math.round(performance.now() - startedAt);
+    await wasiMachine.resume();
+    const wasiRestored = await wasiMachine.request({ type: "run", code: "print(machineValue)" });
+    check("WASI same-session restore", wasiRestored.trim() === "42", `"${wasiRestored.trim()}", ${timings.wasiRestoreMs}ms`);
+    await wasiMachine.pause();
+    await wasiMachine.shutdown();
+    let coldScopeCode = "";
+    try { await wasiMachine.restore(wasiSnapshot); } catch (error) { coldScopeCode = error?.code || String(error); }
+    check("WASI session snapshot cold restore 선거부", coldScopeCode === "WEB_MACHINE_SNAPSHOT_SCOPE", coldScopeCode);
+
+    const pyprocReport = await pyprocMachine.inspect();
+    const wasiReport = await wasiMachine.inspect();
+    check("두 엔진이 같은 lifecycle event 계약", lifecycleComplete(pyprocReport.history) && lifecycleComplete(wasiReport.history), `${pyprocReport.history.length}/${wasiReport.history.length} events`);
+    check("host가 snapshot 보장 차이를 노출", pyprocSnapshot.snapshotScope === "portable" && wasiSnapshot.snapshotScope === "session");
+    check("공통 console device에 두 guest 연결", consoleLines.some((line) => line.startsWith("pyproc:")) && consoleLines.some((line) => line.startsWith("wasi:")), `${consoleLines.length} lines`);
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-800));
+    try { if (pyprocMachine && ["running", "paused", "failed"].includes(pyprocMachine.state)) await pyprocMachine.shutdown(); } catch (cleanupError) {}
+    try { if (wasiMachine && ["running", "paused", "failed"].includes(wasiMachine.state)) await wasiMachine.shutdown(); } catch (cleanupError) {}
+  }
+
+  await report();
+</script>
+</body>
+</html>

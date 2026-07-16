@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>Web Machine owner participant</title></head>
+<body>
+<script type="importmap">
+  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+</script>
+<script type="module">
+  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import {
+    IndexedDbMachineStore,
+    MachineCommitCoordinator,
+    WebLockOwnerCoordinator,
+  } from "../../../../packages/browser/index.js";
+  import { createFakeGuestFactory } from "../../contracts/fakeGuestAdapter.js";
+
+  const ownerId = new URLSearchParams(location.search).get("id");
+  const machineId = "ownerSuccessorMachine";
+  const groupId = "ownerSuccessorGroup";
+  const metrics = {};
+  const host = new WebMachineHost({
+    idFactory: () => `${ownerId}-instance`,
+    devices: { console: { kind: "console", write: () => {} } },
+  });
+  host.registerAdapter("fake", createFakeGuestFactory({ adapterVersion: "owner-fake-v1", metrics }));
+  const machine = host.createMachine({
+    machineId,
+    adapterId: "fake",
+    manifest: { initialValue: 0 },
+    permissions: { devices: ["console"] },
+  });
+  const machineStore = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineOwnerStoreV2" });
+  const generationCoordinator = new MachineCommitCoordinator({
+    store: machineStore,
+    cryptoProvider: crypto,
+    idFactory: () => "owner-generation-1",
+    nowFactory: () => 1,
+  });
+  let coordinator = null;
+  let slowRelease = null;
+  let slowPromise = null;
+  let slowExecutionsBefore = 0;
+  let activeToken = null;
+  let staleCommitRelease = null;
+  let staleCommitPromise = null;
+
+  const post = (event, payload = {}) => parent.postMessage({ from: "ownerParticipant", ownerId, event, ...payload }, "*");
+  const errorPayload = (error) => ({
+    error: String(error?.message || error).slice(-500),
+    code: error?.code || "WEB_MACHINE_PARTICIPANT_ERROR",
+    retryable: error?.retryable === true,
+  });
+
+  async function acquire(token) {
+    activeToken = token;
+    machine.adoptOwnership(token);
+    const head = await generationCoordinator.readHead(groupId);
+    let recovered = false;
+    if (!head?.head) {
+      await machine.boot();
+      await machine.request({ type: "increment", by: 42 });
+      await machine.pause();
+      await generationCoordinator.commitPaused({ groupId, machines: [machine], expectedHead: null, ownerToken: token });
+      await machine.resume();
+    } else {
+      await generationCoordinator.restoreLatest({ groupId, machines: { [machineId]: machine } });
+      recovered = true;
+      await machine.resume();
+    }
+    const value = await machine.request({ type: "get" });
+    post("owned", {
+      token,
+      value,
+      recovered,
+      machineOwnerId: machine.ownerId,
+      machineEpoch: machine.epoch,
+      history: machine.history.map((entry) => entry.event),
+    });
+  }
+
+  async function lose(token, reason) {
+    machine.invalidateOwnership(reason);
+    post("lost", { token, reason, machineOwnerId: machine.ownerId, machineEpoch: machine.epoch });
+  }
+
+  function reply(reqId, payload = {}) {
+    post("response", { reqId, ok: true, ...payload });
+  }
+
+  function replyError(reqId, error) {
+    post("response", { reqId, ok: false, ...errorPayload(error) });
+  }
+
+  window.addEventListener("message", async (event) => {
+    const message = event.data;
+    if (!message || message.to !== "ownerParticipant" || message.ownerId !== ownerId) return;
+    try {
+      if (message.command === "join") {
+        if (coordinator) throw new Error("participant 이미 join됨");
+        coordinator = new WebLockOwnerCoordinator({
+          lockManager: navigator.locks,
+          ownerStore: machineStore,
+          groupId,
+          ownerId,
+          onAcquired: acquire,
+          onLost: lose,
+        });
+        coordinator.start().catch((error) => {
+          if (error?.code !== "WEB_MACHINE_OWNER_STOPPED") post("error", errorPayload(error));
+        });
+        reply(message.reqId, { state: coordinator.inspect().state });
+        return;
+      }
+      if (message.command === "slowStart") {
+        if (coordinator?.inspect().state !== "owned") throw new Error("owner만 slow request 가능");
+        let markStarted;
+        const started = new Promise((resolve) => { markStarted = resolve; });
+        const wait = new Promise((resolve) => { slowRelease = resolve; });
+        slowExecutionsBefore = metrics.executions || 0;
+        slowPromise = machine.request({ type: "slowIncrement", by: 1, wait, started: markStarted })
+          .then((value) => ({ ok: true, value }), (error) => ({ ok: false, ...errorPayload(error) }));
+        await started;
+        reply(message.reqId, { started: true, machineEpoch: machine.epoch, machineOwnerId: machine.ownerId });
+        return;
+      }
+      if (message.command === "yield") {
+        await coordinator.stop("probe ownership yield");
+        reply(message.reqId, { coordinator: coordinator.inspect() });
+        return;
+      }
+      if (message.command === "staleCommitStart") {
+        if (coordinator?.inspect().state !== "owned") throw new Error("owner만 delayed commit 가능");
+        await machine.pause();
+        const expectedHead = (await generationCoordinator.readHead(groupId))?.head || null;
+        let markStarted;
+        const started = new Promise((resolve) => { markStarted = resolve; });
+        const wait = new Promise((resolve) => { staleCommitRelease = resolve; });
+        const delayedStore = {
+          getBlob: (digest) => machineStore.getBlob(digest),
+          readHead: (id) => machineStore.readHead(id),
+          readGeneration: (id, generationId) => machineStore.readGeneration(id, generationId),
+          commitGeneration: async (args) => {
+            markStarted();
+            await wait;
+            return machineStore.commitGeneration(args);
+          },
+          pruneRecoveryWindow: (args) => machineStore.pruneRecoveryWindow(args),
+          dryRunRecoveryWindow: (args) => machineStore.dryRunRecoveryWindow(args),
+          inspectStorage: () => machineStore.inspectStorage(),
+        };
+        const delayedCoordinator = new MachineCommitCoordinator({
+          store: delayedStore,
+          cryptoProvider: crypto,
+          idFactory: () => `${ownerId}-stale-generation`,
+          nowFactory: () => 2,
+        });
+        staleCommitPromise = delayedCoordinator.commitPaused({
+          groupId,
+          machines: [machine],
+          expectedHead,
+          ownerToken: activeToken,
+        }).then((value) => ({ ok: true, value }), (error) => ({ ok: false, ...errorPayload(error) }));
+        await started;
+        reply(message.reqId, { prepared: true, ownerToken: activeToken, expectedHead });
+        return;
+      }
+      if (message.command === "staleCommitRelease") {
+        if (!staleCommitRelease || !staleCommitPromise) throw new Error("delayed commit 없음");
+        staleCommitRelease();
+        const result = await staleCommitPromise;
+        reply(message.reqId, { result, machineEpoch: machine.epoch, machineOwnerId: machine.ownerId });
+        return;
+      }
+      if (message.command === "releaseSlow") {
+        if (!slowRelease || !slowPromise) throw new Error("slow request 없음");
+        slowRelease();
+        const result = await slowPromise;
+        reply(message.reqId, { result, executions: (metrics.executions || 0) - slowExecutionsBefore, machineEpoch: machine.epoch, machineOwnerId: machine.ownerId });
+        return;
+      }
+      if (message.command === "leave") {
+        await coordinator?.stop("participant leave");
+        machineStore.close();
+        reply(message.reqId, { state: coordinator?.inspect().state || "idle" });
+        return;
+      }
+      if (message.command === "inspect") {
+        reply(message.reqId, { coordinator: coordinator?.inspect() || null, machine: machine.inspectNow() });
+        return;
+      }
+      throw new Error(`participant command 미지원: ${message.command}`);
+    } catch (error) {
+      replyError(message.reqId, error);
+    }
+  });
+
+  post("ready");
+</script>
+</body>
+</html>

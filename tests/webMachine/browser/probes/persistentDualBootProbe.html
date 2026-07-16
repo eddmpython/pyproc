@@ -1,0 +1,163 @@
+<!doctype html>
+<!--
+결과 (2026-07-15, Edge headless, COOP+COEP, 3회): GREEN 9/9.
+pyproc Python OS, Linux 6.8.12 i686, 공통 block image를 한 IndexedDB generation에 commit한 뒤
+Edge process tree를 종료하고 새 process로 열어 boot 없이 모두 cold restore했다.
+initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2376/2783ms.
+다음: 공통 block을 두 guest 내부 파일시스템의 실제 backing device로 연결한다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Web Machine persistent dual boot probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "처리되지 않은 promise", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>Web Machine persistent dual boot probe</h1>
+<p>두 OS와 block image를 IndexedDB generation에 commit하고 browser process 종료 뒤 같은 profile에서 cold restore한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="importmap">
+  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+</script>
+<script type="module">
+  import { bootSession, openMachine } from "../../../../index.js";
+  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryBlockDevice } from "../../../../packages/browser/index.js";
+  import { createPyprocGuestFactory } from "../../../../packages/guest-pyproc/index.js";
+  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
+  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+
+  const params = new URLSearchParams(location.search);
+  const restoring = params.get("restore") === "1";
+  const indexURL = params.get("indexURL") || undefined;
+  const consoleLines = [];
+  const block = new MemoryBlockDevice({ byteLength: 4096 });
+  let instanceSequence = 0;
+  const host = new WebMachineHost({
+    idFactory: () => `${restoring ? "restore" : "commit"}-${++instanceSequence}`,
+    devices: {
+      console: { kind: "console", write: (line) => consoleLines.push(String(line)) },
+      block,
+    },
+  });
+  host.registerAdapter("pyproc", createPyprocGuestFactory({ bootSession, openMachine }));
+  host.registerAdapter("x86-linux", createV86GuestFactory({ V86, adapterVersion: V86_ADAPTER_VERSION }));
+  const python = host.createMachine({
+    machineId: "pythonOs",
+    adapterId: "pyproc",
+    manifest: { session: { ...(indexURL ? { indexURL } : {}) } },
+    permissions: { devices: ["console"] },
+  });
+  const linux = host.createMachine({
+    machineId: "linuxOs",
+    adapterId: "x86-linux",
+    manifest: createV86ProbeManifest(),
+    permissions: { devices: ["console"] },
+  });
+  const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachinePersistentDualBootV1" });
+  const coordinator = new MachineCommitCoordinator({
+    store,
+    cryptoProvider: crypto,
+    idFactory: () => "durable-g1",
+    nowFactory: () => 1,
+  });
+  const groupId = "persistentDualBoot";
+  const ownerToken = await store.claimOwner({ groupId, ownerId: restoring ? "restore" : "initial" });
+  python.adoptOwnership(ownerToken);
+  linux.adoptOwnership(ownerToken);
+  const blockMarker = encoder.encode("WEB_MACHINE_BLOCK:42");
+
+  try {
+    if (!restoring) {
+      let startedAt = performance.now();
+      await Promise.all([python.boot(), linux.boot()]);
+      timings.initialBootMs = Math.round(performance.now() - startedAt);
+      await Promise.all([
+        python.request({ type: "run", code: "from pathlib import Path\nmachineValue = 42\nPath('/home/web').mkdir(parents=True, exist_ok=True)\nPath('/home/web/durable_value').write_text(str(machineValue))" }),
+        linux.request({ type: "serial", data: "machine_value=42; printf 42 > /tmp/durable_value\n", waitFor: "~% " }),
+      ]);
+      await block.write(0, blockMarker);
+      await Promise.all([python.pause(), linux.pause()]);
+      startedAt = performance.now();
+      const committed = await coordinator.commitPaused({
+        groupId,
+        machines: [python, linux],
+        devices: { sharedBlock: block },
+        expectedHead: null,
+        ownerToken,
+      });
+      timings.commitMs = Math.round(performance.now() - startedAt);
+      const head = await coordinator.readHead(groupId);
+      if (head?.head !== committed.manifest.generationId) throw new Error("durable HEAD publish 실패");
+      store.close();
+      await fetch("/gateRestart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nextSearch: "?restore=1", timings }),
+      });
+      await new Promise(() => {});
+    } else {
+      let startedAt = performance.now();
+      const restored = await coordinator.restoreLatest({
+        groupId,
+        machines: { pythonOs: python, linuxOs: linux },
+        devices: { sharedBlock: block },
+      });
+      timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
+      check("새 browser process가 durable HEAD를 읽음", restored.generationId === "durable-g1" && restored.recoveredFrom === null, restored.generationId);
+      check("한 generation에 두 OS와 block 포함", restored.manifest.machines.length === 2 && restored.manifest.devices.length === 1, `${restored.manifest.machines.length}/${restored.manifest.devices.length}`);
+      check("복원 직후 두 OS가 paused", python.state === "paused" && linux.state === "paused", `${python.state}/${linux.state}`);
+      const restoredBlock = await block.read(0, blockMarker.byteLength);
+      check("공통 block image cold restore", decoder.decode(restoredBlock) === "WEB_MACHINE_BLOCK:42", decoder.decode(restoredBlock));
+
+      await Promise.all([python.resume(), linux.resume()]);
+      const [pythonValue, linuxValue] = await Promise.all([
+        python.request({ type: "run", code: "from pathlib import Path\nf\"{machineValue}:{Path('/home/web/durable_value').read_text()}\"" }),
+        linux.request({ type: "serial", data: "echo DURABLE:$machine_value:$(cat /tmp/durable_value)\n", waitFor: "~% " }),
+      ]);
+      check("Python OS memory와 file 복원", pythonValue === "42:42", pythonValue);
+      check("Linux memory와 file 복원", linuxValue.includes("DURABLE:42:42"), linuxValue.trim().slice(-180));
+      const head = await coordinator.readHead(groupId);
+      check("HEAD pointer가 process 경계를 넘어 생존", head?.head === "durable-g1" && head.prev === null, `${head?.head}/${head?.prev}`);
+      check("두 adapter payload가 content-addressed", restored.manifest.machines.every((entry) => entry.payload.digest.startsWith("sha256:")));
+      check("새 host history가 boot 없이 cold restore", [python, linux].every((machine) => machine.history.some((entry) => entry.event === "restored") && !machine.history.some((entry) => entry.event === "booted")));
+      await Promise.all([python.pause(), linux.pause()]);
+      await Promise.all([python.shutdown(), linux.shutdown()]);
+      store.close();
+      await report();
+    }
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-1400));
+    try { if (["running", "paused", "failed"].includes(python.state)) await python.shutdown(); } catch (cleanupError) {}
+    try { if (["running", "paused", "failed"].includes(linux.state)) await linux.shutdown(); } catch (cleanupError) {}
+    store.close();
+    await report();
+  }
+</script>
+</body>
+</html>

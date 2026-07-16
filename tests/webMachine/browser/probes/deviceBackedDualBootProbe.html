@@ -1,0 +1,206 @@
+<!doctype html>
+<!--
+결과 (2026-07-15, Edge headless, COOP+COEP, 3회): GREEN 12/12.
+Python heap snapshot에서 home을 제거하고 /home/web을 전용 block volume에 저장했다.
+Linux는 이미 mount된 host9p에 파일을 썼고 v86 RAM state에서 9P 파일을 제거해 별도 block volume에 저장했다.
+Edge process tree 종료 뒤 새 process에서 두 OS의 memory와 block-backed file을 boot 없이 복원했다.
+두 volume을 다시 쓸 때 삭제한 file bytes가 block tail에 남지 않음도 검증했다.
+boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145ms.
+다음: packet network, display/input, 정확히 한 owner successor를 연결한다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Web Machine device-backed dual boot probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "처리되지 않은 promise", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>Web Machine device-backed dual boot probe</h1>
+<p>Python home volume과 Linux ATA disk를 공통 block port에 연결하고 새 browser process에서 복원한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="importmap">
+  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+</script>
+<script type="module">
+  import { bootSession, openMachine } from "../../../../index.js";
+  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryBlockDevice } from "../../../../packages/browser/index.js";
+  import { createPyprocGuestFactory } from "../../../../packages/guest-pyproc/index.js";
+  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
+  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+  const parsePyprocMeta = (bytes) => {
+    const magicLength = encoder.encode("PYMACHINE2\n").byteLength;
+    const bodyOffset = magicLength + 64;
+    const headLength = new DataView(bytes.buffer, bytes.byteOffset + bodyOffset, 4).getUint32(0);
+    return JSON.parse(decoder.decode(bytes.subarray(bodyOffset + 4, bodyOffset + 4 + headLength)));
+  };
+
+  const params = new URLSearchParams(location.search);
+  const restoring = params.get("restore") === "1";
+  const indexURL = params.get("indexURL") || undefined;
+  const consoleLines = [];
+  const pythonDisk = new MemoryBlockDevice({ byteLength: 2 * 1024 * 1024 });
+  const linuxDisk = new MemoryBlockDevice({ byteLength: 2 * 1024 * 1024 });
+  let instanceSequence = 0;
+  const host = new WebMachineHost({
+    idFactory: () => `${restoring ? "restore" : "commit"}-${++instanceSequence}`,
+    devices: {
+      console: { kind: "console", write: (line) => consoleLines.push(String(line)) },
+      pythonDisk,
+      linuxDisk,
+    },
+  });
+  host.registerAdapter("pyproc-block", createPyprocGuestFactory({ bootSession, openMachine, blockDeviceName: "pythonDisk" }));
+  host.registerAdapter("x86-linux-block", createV86GuestFactory({
+    V86,
+    adapterVersion: `${V86_ADAPTER_VERSION}-block-v1`,
+    blockDeviceName: "linuxDisk",
+    blockMode: "filesystem",
+  }));
+  const python = host.createMachine({
+    machineId: "pythonOs",
+    adapterId: "pyproc-block",
+    manifest: { session: { ...(indexURL ? { indexURL } : {}) } },
+    permissions: { devices: ["console", "pythonDisk"] },
+  });
+  const linux = host.createMachine({
+    machineId: "linuxOs",
+    adapterId: "x86-linux-block",
+    manifest: createV86ProbeManifest(),
+    permissions: { devices: ["console", "linuxDisk"] },
+  });
+  const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineDeviceBackedDualBootV1" });
+  const coordinator = new MachineCommitCoordinator({
+    store,
+    cryptoProvider: crypto,
+    idFactory: () => "device-backed-g1",
+    nowFactory: () => 1,
+  });
+  const groupId = "deviceBackedDualBoot";
+  const ownerToken = await store.claimOwner({ groupId, ownerId: restoring ? "restore" : "initial" });
+  python.adoptOwnership(ownerToken);
+  linux.adoptOwnership(ownerToken);
+  const linuxMarker = "LINUX_BLOCK:42";
+
+  try {
+    if (!restoring) {
+      let startedAt = performance.now();
+      await Promise.all([python.boot(), linux.boot()]);
+      timings.initialBootMs = Math.round(performance.now() - startedAt);
+      await python.request({
+        type: "run",
+        code: "from pathlib import Path\nmachineValue = 42\nPath('/home/web/device_value').write_text(str(machineValue))\nPath('/home/web/deleted_secret').write_text('DELETED_SECRET')",
+      });
+      const linuxWrite = await linux.request({
+        type: "serial",
+        data: `mkdir -p /mnt/web; machine_value=42; printf 42 > /tmp/device_value; printf '${linuxMarker}' > /mnt/web/device_value; printf DELETED_SECRET > /mnt/web/deleted_secret; sync; cat /mnt/web/device_value\n`,
+        waitFor: "~% ",
+      });
+      if (!linuxWrite.includes(`${linuxMarker}~% `)) throw new Error(`Linux 9P round trip 실패: ${linuxWrite.slice(-1000)}`);
+      await Promise.all([python.pause(), linux.pause()]);
+      await Promise.all([python.resume(), linux.resume()]);
+      await Promise.all([
+        python.request({ type: "run", code: "from pathlib import Path\nPath('/home/web/deleted_secret').unlink()" }),
+        linux.request({ type: "serial", data: "rm /mnt/web/deleted_secret; sync\n", waitFor: "~% " }),
+      ]);
+      await Promise.all([python.pause(), linux.pause()]);
+      if (!pythonDisk.inspect().dirty || !linuxDisk.inspect().dirty) {
+        throw new Error(`guest write가 block dirty state를 만들지 못했다: python=${JSON.stringify(pythonDisk.inspect())} linux=${JSON.stringify(linuxDisk.inspect())} serial=${linuxWrite.slice(-1000)}`);
+      }
+      startedAt = performance.now();
+      const committed = await coordinator.commitPaused({
+        groupId,
+        machines: [python, linux],
+        devices: { pythonDisk, linuxDisk },
+        expectedHead: null,
+        ownerToken,
+      });
+      timings.commitMs = Math.round(performance.now() - startedAt);
+      if (committed.manifest.devices.length !== 2) throw new Error("두 block device generation commit 실패");
+      store.close();
+      await fetch("/gateRestart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nextSearch: "?restore=1", timings }),
+      });
+      await new Promise(() => {});
+    } else {
+      let startedAt = performance.now();
+      const restored = await coordinator.restoreLatest({
+        groupId,
+        machines: { pythonOs: python, linuxOs: linux },
+        devices: { pythonDisk, linuxDisk },
+      });
+      timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
+      check("새 browser process가 device-backed HEAD를 읽음", restored.generationId === "device-backed-g1", restored.generationId);
+      check("한 generation에 두 OS와 두 실제 disk 포함", restored.manifest.machines.length === 2 && restored.manifest.devices.length === 2, `${restored.manifest.machines.length}/${restored.manifest.devices.length}`);
+      check("복원 직후 두 OS가 paused", python.state === "paused" && linux.state === "paused", `${python.state}/${linux.state}`);
+
+      const pythonEntry = restored.manifest.machines.find((entry) => entry.machineId === "pythonOs");
+      const pythonSnapshot = await store.getBlob(pythonEntry.payload.digest);
+      const pythonMeta = parsePyprocMeta(pythonSnapshot);
+      check("Python heap snapshot에서 home payload 분리", pythonMeta.version === 2 && !pythonMeta.home, `version=${pythonMeta.version}`);
+      const pythonMagic = decoder.decode(await pythonDisk.read(0, encoder.encode("PYPROC_HOME_VOLUME_1\n").byteLength));
+      check("Python home이 실제 block volume에 존재", pythonMagic === "PYPROC_HOME_VOLUME_1\n", pythonMagic.trim());
+      const linuxVolumeBytes = await linuxDisk.read(0, linuxDisk.byteLength);
+      const linuxVolumeText = decoder.decode(linuxVolumeBytes);
+      check("Linux 9P write가 공통 block volume에 존재", linuxVolumeText.includes("V86_9P_VOLUME_1") && linuxVolumeText.includes(linuxMarker), linuxVolumeText.slice(0, 80));
+      const pythonVolumeText = decoder.decode(await pythonDisk.read(0, pythonDisk.byteLength));
+      check("삭제한 file bytes가 durable volume tail에 남지 않음", !pythonVolumeText.includes("DELETED_SECRET") && !linuxVolumeText.includes("DELETED_SECRET"));
+
+      await Promise.all([python.resume(), linux.resume()]);
+      const [pythonValue, linuxValue] = await Promise.all([
+        python.request({ type: "run", code: "from pathlib import Path\nf'{machineValue}:{Path(\"/home/web/device_value\").read_text()}'" }),
+        linux.request({
+          type: "serial",
+          data: "echo DEVICE:$machine_value:$(cat /tmp/device_value):$(cat /mnt/web/device_value)\n",
+          waitFor: "~% ",
+        }),
+      ]);
+      check("Python memory와 block-backed home 복원", pythonValue === "42:42", pythonValue);
+      check("Linux memory와 block-backed 9P file 복원", linuxValue.includes(`DEVICE:42:42:${linuxMarker}`), linuxValue.trim().slice(-240));
+      const linuxInspect = await linux.inspect();
+      check("Linux guest I/O가 9P block volume을 통과", linuxInspect.guest?.block?.mode === "filesystem" && linuxInspect.guest.block.files === 1, JSON.stringify(linuxInspect.guest?.block));
+      check("두 adapter가 boot 없이 device에서 cold restore", [python, linux].every((machine) => machine.history.some((entry) => entry.event === "restored") && !machine.history.some((entry) => entry.event === "booted")));
+      check("machine과 disk payload가 모두 content-addressed", [...restored.manifest.machines, ...restored.manifest.devices].every((entry) => entry.payload.digest.startsWith("sha256:")));
+
+      await Promise.all([python.pause(), linux.pause()]);
+      await Promise.all([python.shutdown(), linux.shutdown()]);
+      store.close();
+      await report();
+    }
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-1800));
+    try { if (["running", "paused", "failed"].includes(python.state)) await python.shutdown(); } catch (cleanupError) {}
+    try { if (["running", "paused", "failed"].includes(linux.state)) await linux.shutdown(); } catch (cleanupError) {}
+    store.close();
+    await report();
+  }
+</script>
+</body>
+</html>

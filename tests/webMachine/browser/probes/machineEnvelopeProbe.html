@@ -1,0 +1,337 @@
+<!doctype html>
+<!--
+Phase 5 이동 가능한 .webmachine 실증.
+pyproc과 Linux의 portable snapshot, block volume, permissions, capability requirements를 한 서명 파일로 export한다.
+runner가 원본 profile과 분리한 새 browser profile을 연 뒤 파일을 다시 전달하고, 신뢰·무결성·사전검증 후 boot 없이 복원한다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Web Machine portable envelope probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:64rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "처리되지 않은 promise", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>Web Machine portable envelope probe</h1>
+<p>하나의 signed image를 새 browser profile에서 검증하고 Python OS와 Linux guest로 복원한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="importmap">
+  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+</script>
+<script type="module">
+  import { bootSession, openMachine } from "../../../../index.js";
+  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import {
+    createWebMachineKeyPair,
+    exportWebMachinePublicKey,
+    MachineEnvelopeCoordinator,
+    MemoryBlockDevice,
+  } from "../../../../packages/browser/index.js";
+  import { createPyprocGuestFactory } from "../../../../packages/guest-pyproc/index.js";
+  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
+  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const decoder = new TextDecoder();
+  const linuxAdapterVersion = `${V86_ADAPTER_VERSION}-block-v1`;
+  const groupId = "portableDualBoot";
+  const pythonMarker = "PYTHON_IMAGE:73";
+  const linuxMarker = "LINUX_IMAGE:73";
+  const permissions = Object.freeze({
+    linuxOs: { devices: ["console", "linuxDisk"] },
+    pythonOs: { devices: ["console", "pythonDisk"] },
+  });
+  const availableCapabilities = [
+    "wasm",
+    ...(crossOriginIsolated ? ["crossOriginIsolated"] : []),
+    ...(typeof SharedArrayBuffer === "function" ? ["sharedArrayBuffer"] : []),
+    ...(typeof WebAssembly.Suspending === "function" ? ["jspi"] : []),
+  ];
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+  const errorCode = async (operation) => {
+    try {
+      await operation();
+      return null;
+    } catch (error) {
+      return error?.code || error?.name || String(error);
+    }
+  };
+  const createSourceDatabase = () => new Promise((resolve, reject) => {
+    const request = indexedDB.open("webMachineEnvelopeSourceOnly", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("marker");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      request.result.close();
+      resolve();
+    };
+  });
+  const createDevices = () => ({
+    pythonDisk: new MemoryBlockDevice({ byteLength: 2 * 1024 * 1024 }),
+    linuxDisk: new MemoryBlockDevice({ byteLength: 2 * 1024 * 1024 }),
+  });
+
+  let instanceSequence = 0;
+  let engineConstructions = 0;
+  function CountingV86(options) {
+    engineConstructions += 1;
+    return new V86(options);
+  }
+  const createHost = ({ includeLinux = true, linuxVersion = linuxAdapterVersion, countEngines = false } = {}) => {
+    const devices = createDevices();
+    const host = new WebMachineHost({
+      idFactory: () => `image-${++instanceSequence}`,
+      devices: {
+        console: { kind: "console", write: () => {} },
+        ...devices,
+      },
+    });
+    host.registerAdapter("pyproc-block", createPyprocGuestFactory({ bootSession, openMachine, blockDeviceName: "pythonDisk" }));
+    if (includeLinux) {
+      host.registerAdapter("x86-linux-block", createV86GuestFactory({
+        V86: countEngines ? CountingV86 : V86,
+        adapterVersion: linuxVersion,
+        blockDeviceName: "linuxDisk",
+        blockMode: "filesystem",
+      }));
+    }
+    return { host, devices };
+  };
+  const coordinator = new MachineEnvelopeCoordinator({ cryptoProvider: crypto, nowFactory: () => 1 });
+  const params = new URLSearchParams(location.search);
+  const importing = params.get("import") === "1";
+  const indexURL = params.get("indexURL") || undefined;
+  let liveMachines = [];
+
+  try {
+    if (!importing) {
+      localStorage.setItem("webMachineEnvelopeSourceMarker", "source-profile");
+      await createSourceDatabase();
+      const { host, devices } = createHost();
+      const python = host.createMachine({
+        machineId: "pythonOs",
+        adapterId: "pyproc-block",
+        manifest: { session: { ...(indexURL ? { indexURL } : {}) } },
+        permissions: permissions.pythonOs,
+      });
+      const linux = host.createMachine({
+        machineId: "linuxOs",
+        adapterId: "x86-linux-block",
+        manifest: createV86ProbeManifest(),
+        permissions: permissions.linuxOs,
+      });
+      liveMachines = [python, linux];
+      let startedAt = performance.now();
+      await Promise.all([python.boot(), linux.boot()]);
+      timings.initialBootMs = Math.round(performance.now() - startedAt);
+      await python.request({
+        type: "run",
+        code: `from pathlib import Path\nmachineValue = 73\nPath('/home/web/image_value').write_text('${pythonMarker}')`,
+      });
+      const linuxWrite = await linux.request({
+        type: "serial",
+        data: `mkdir -p /mnt/web; machine_value=73; printf 73 > /tmp/image_value; printf '${linuxMarker}' > /mnt/web/image_value; sync; cat /mnt/web/image_value\n`,
+        waitFor: "~% ",
+      });
+      if (!linuxWrite.includes(`${linuxMarker}~% `)) throw new Error(`Linux file round trip 실패: ${linuxWrite.slice(-500)}`);
+      await Promise.all([python.pause(), linux.pause()]);
+      const signingKeyPair = await createWebMachineKeyPair(crypto);
+      const trustedKey = await exportWebMachinePublicKey(crypto, signingKeyPair.publicKey);
+      startedAt = performance.now();
+      const exported = await coordinator.exportPaused({
+        groupId,
+        machines: [python, linux],
+        devices,
+        requiredCapabilities: {
+          pythonOs: ["crossOriginIsolated", "jspi", "sharedArrayBuffer"],
+          linuxOs: ["wasm"],
+        },
+        signingKeyPair,
+      });
+      timings.exportMs = Math.round(performance.now() - startedAt);
+      timings.imageBytes = exported.file.size;
+      const upload = await fetch("/gateArtifact", { method: "POST", body: exported.file });
+      if (!upload.ok) throw new Error(`.webmachine 전달 실패: ${upload.status}`);
+      await Promise.all([python.shutdown(), linux.shutdown()]);
+      const nextParams = new URLSearchParams({
+        import: "1",
+        trustedKey: JSON.stringify(trustedKey),
+        expectedBytes: String(exported.file.size),
+      });
+      await fetch("/gateRestart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ freshProfile: true, nextSearch: `?${nextParams}`, timings }),
+      });
+      await new Promise(() => {});
+    }
+
+    check("새 browser profile은 source localStorage가 없음", localStorage.getItem("webMachineEnvelopeSourceMarker") === null);
+    const databases = typeof indexedDB.databases === "function" ? await indexedDB.databases() : [];
+    check("새 browser profile은 source IndexedDB가 없음", !databases.some((entry) => entry.name === "webMachineEnvelopeSourceOnly"), databases.map((entry) => entry.name).join(","));
+    const response = await fetch("/gateArtifact", { cache: "no-store" });
+    if (!response.ok) throw new Error(`.webmachine 읽기 실패: ${response.status}`);
+    const file = await response.blob();
+    check("profile 밖 .webmachine 파일 byte 보존", file.size === Number(params.get("expectedBytes")), file.size);
+    const trustedKey = JSON.parse(params.get("trustedKey"));
+
+    const stalledFile = {
+      size: file.size,
+      slice(start, end) {
+        const part = file.slice(start, end);
+        return {
+          arrayBuffer: () => new Promise((resolve, reject) => {
+            setTimeout(() => part.arrayBuffer().then(resolve, reject), 1000);
+          }),
+        };
+      },
+    };
+    const imageAbortAt = performance.now();
+    const imageAbortCode = await errorCode(() => coordinator.read({
+      file: stalledFile,
+      trustedPublicKeys: [trustedKey],
+      control: { signal: AbortSignal.timeout(50) },
+    }));
+    const imageAbortMs = performance.now() - imageAbortAt;
+    check(".webmachine read timeout은 지연 file read를 즉시 탈출", imageAbortCode === "WEB_MACHINE_OPERATION_TIMEOUT" && imageAbortMs < 250, `${imageAbortCode}/${Math.round(imageAbortMs)}ms`);
+
+    const untrustedPair = await createWebMachineKeyPair(crypto);
+    const untrustedKey = await exportWebMachinePublicKey(crypto, untrustedPair.publicKey);
+    const trustSlices = [];
+    const trackedFile = {
+      size: file.size,
+      slice(start, end) {
+        trustSlices.push({ start, end });
+        return file.slice(start, end);
+      },
+    };
+    const untrustedCode = await errorCode(() => coordinator.read({ file: trackedFile, trustedPublicKeys: [untrustedKey] }));
+    check("untrusted signer는 payload 읽기 전에 거부", untrustedCode === "WEB_MACHINE_IMAGE_UNTRUSTED" && trustSlices.length === 2, `${untrustedCode}/${trustSlices.length}`);
+
+    const lastByte = new Uint8Array(await file.slice(file.size - 1).arrayBuffer());
+    lastByte[0] ^= 0xff;
+    const corruptedFile = new Blob([file.slice(0, file.size - 1), lastByte], { type: "application/x-webmachine" });
+    const corruptCode = await errorCode(() => coordinator.read({ file: corruptedFile, trustedPublicKeys: [trustedKey] }));
+    check("blob 한 byte 손상은 별도 오류", corruptCode === "WEB_MACHINE_IMAGE_BLOB_CORRUPT", corruptCode);
+
+    let startedAt = performance.now();
+    const archive = await coordinator.read({ file, trustedPublicKeys: [trustedKey] });
+    timings.verifyMs = Math.round(performance.now() - startedAt);
+    check("한 envelope가 두 adapter identity를 고정", archive.manifest.machines.map((entry) => entry.adapterId).join(",") === "x86-linux-block,pyproc-block", archive.manifest.machines.map((entry) => entry.adapterId).join(","));
+    check("snapshot·disk·permissions·capability가 signed manifest에 포함", archive.manifest.blobs.length === 4 && archive.manifest.devices.length === 2 && archive.manifest.machines.every((entry) => entry.permissions.devices.length === 2 && entry.requiredCapabilities.length > 0));
+
+    const forgedTarget = createHost();
+    const forgedCode = await errorCode(() => coordinator.preflightImport({
+      archive: { manifest: archive.manifest, readBlob: (blobId) => archive.readBlob(blobId) },
+      host: forgedTarget.host,
+      devices: forgedTarget.devices,
+      approvedPermissions: permissions,
+      availableCapabilities,
+    }));
+    check("검증 archive 모양만 복제한 우회는 거부", forgedCode === "TypeError", forgedCode);
+
+    const missingTarget = createHost({ includeLinux: false });
+    const missingCode = await errorCode(() => coordinator.preflightImport({
+      archive,
+      host: missingTarget.host,
+      devices: missingTarget.devices,
+      approvedPermissions: permissions,
+      availableCapabilities,
+    }));
+    check("adapter 미설치는 실행 전 별도 오류", missingCode === "WEB_MACHINE_ADAPTER_UNAVAILABLE", missingCode);
+
+    const mismatchTarget = createHost({ linuxVersion: `${linuxAdapterVersion}-mismatch` });
+    const mismatchCode = await errorCode(() => coordinator.preflightImport({
+      archive,
+      host: mismatchTarget.host,
+      devices: mismatchTarget.devices,
+      approvedPermissions: permissions,
+      availableCapabilities,
+    }));
+    check("adapter version 불일치는 실행 전 별도 오류", mismatchCode === "WEB_MACHINE_IMAGE_ADAPTER_VERSION", mismatchCode);
+
+    const deniedTarget = createHost();
+    const deniedCode = await errorCode(() => coordinator.preflightImport({
+      archive,
+      host: deniedTarget.host,
+      devices: deniedTarget.devices,
+      approvedPermissions: { ...permissions, linuxOs: { devices: ["console"] } },
+      availableCapabilities,
+    }));
+    check("권한 부족은 실행 전 별도 오류", deniedCode === "WEB_MACHINE_IMAGE_PERMISSION_DENIED", deniedCode);
+
+    const capabilityTarget = createHost();
+    const capabilityCode = await errorCode(() => coordinator.preflightImport({
+      archive,
+      host: capabilityTarget.host,
+      devices: capabilityTarget.devices,
+      approvedPermissions: permissions,
+      availableCapabilities: availableCapabilities.filter((entry) => entry !== "wasm"),
+    }));
+    check("환경 capability 부족은 실행 전 별도 오류", capabilityCode === "WEB_MACHINE_IMAGE_CAPABILITY_MISSING", capabilityCode);
+    check("모든 fault preflight에서 engine constructor 0", engineConstructions === 0, engineConstructions);
+
+    const target = createHost({ countEngines: true });
+    startedAt = performance.now();
+    const imported = await coordinator.importVerified({
+      archive,
+      host: target.host,
+      devices: target.devices,
+      approvedPermissions: permissions,
+      availableCapabilities,
+    });
+    timings.freshProfileImportMs = Math.round(performance.now() - startedAt);
+    const python = imported.machines.get("pythonOs");
+    const linux = imported.machines.get("linuxOs");
+    liveMachines = [python, linux];
+    check("두 OS는 새 profile에서 paused cold restore", python.state === "paused" && linux.state === "paused", `${python.state}/${linux.state}`);
+    check("두 adapter 모두 boot event 없이 restore", [python, linux].every((machine) => machine.history.some((entry) => entry.event === "restored") && !machine.history.some((entry) => entry.event === "booted")));
+    const pythonVolume = decoder.decode(await target.devices.pythonDisk.read(0, target.devices.pythonDisk.byteLength));
+    const linuxVolume = decoder.decode(await target.devices.linuxDisk.read(0, target.devices.linuxDisk.byteLength));
+    check("두 실제 block volume이 envelope에서 복원", pythonVolume.includes(pythonMarker) && linuxVolume.includes(linuxMarker));
+
+    await Promise.all([python.resume(), linux.resume()]);
+    const [pythonValue, linuxValue] = await Promise.all([
+      python.request({ type: "run", code: "from pathlib import Path\nf'{machineValue}:{Path(\"/home/web/image_value\").read_text()}'" }),
+      linux.request({
+        type: "serial",
+        data: "echo IMAGE:$machine_value:$(cat /tmp/image_value):$(cat /mnt/web/image_value)\n",
+        waitFor: "~% ",
+      }),
+    ]);
+    check("Python memory와 home file이 새 profile에서 실행", pythonValue === `73:${pythonMarker}`, pythonValue);
+    check("Linux memory와 9P file이 새 profile에서 실행", linuxValue.includes(`IMAGE:73:73:${linuxMarker}`), linuxValue.trim().slice(-220));
+    check("검증 성공 뒤에만 engine이 생성", engineConstructions === 1, engineConstructions);
+    await Promise.all([python.pause(), linux.pause()]);
+    await Promise.all([python.shutdown(), linux.shutdown()]);
+    await report();
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-2200));
+    for (const machine of liveMachines) {
+      try {
+        if (["running", "paused", "failed"].includes(machine.state)) await machine.shutdown();
+      } catch (cleanupError) {}
+    }
+    await report();
+  }
+</script>
+</body>
+</html>

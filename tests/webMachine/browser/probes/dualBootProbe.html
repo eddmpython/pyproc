@@ -1,0 +1,123 @@
+<!doctype html>
+<!--
+결과(2026-07-15, Edge headless, COOP+COEP, full file state): 3회 연속 GREEN 8/8.
+Python OS + Linux 동시 boot 5404/5422/5513ms, dual snapshot 141-190ms,
+두 adapter destroy 뒤 cold restore 1862-1928ms. 두 OS의 memory와 file 값 42가 생존했다.
+판정: 한 Web Machine Host가 Python OS와 Linux를 실제 이중 부팅하고 함께 복원했다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Web Machine dual boot probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+</head>
+<body>
+<h1>Web Machine dual boot probe</h1>
+<p>pyproc Python OS와 x86 Linux를 같은 host registry에서 동시에 부팅하고 두 portable image를 복원한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="importmap">
+  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+</script>
+<script type="module">
+  import { bootSession, openMachine } from "../../../../index.js";
+  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { createPyprocGuestFactory } from "../../../../packages/guest-pyproc/index.js";
+  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
+  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+  const complete = (history) => ["booted", "paused", "snapshotted", "restored", "resumed", "shutdown"].every((event) => history.some((entry) => entry.event === event));
+
+  const consoleLines = [];
+  let instanceSequence = 0;
+  const host = new WebMachineHost({
+    idFactory: () => `dual-boot-${++instanceSequence}`,
+    devices: { console: { kind: "console", write: (line) => consoleLines.push(String(line)) } },
+  });
+  host.registerAdapter("pyproc", createPyprocGuestFactory({ bootSession, openMachine }));
+  host.registerAdapter("x86-linux", createV86GuestFactory({ V86, adapterVersion: V86_ADAPTER_VERSION }));
+
+  const params = new URLSearchParams(location.search);
+  const indexURL = params.get("indexURL") || undefined;
+  const python = host.createMachine({
+    machineId: "pythonOs",
+    adapterId: "pyproc",
+    manifest: { session: { ...(indexURL ? { indexURL } : {}), setup: "machineValue = 40" } },
+    permissions: { devices: ["console"] },
+  });
+  const linux = host.createMachine({
+    machineId: "linuxOs",
+    adapterId: "x86-linux",
+    manifest: createV86ProbeManifest(),
+    permissions: { devices: ["console"] },
+  });
+
+  try {
+    let startedAt = performance.now();
+    await Promise.all([python.boot(), linux.boot()]);
+    timings.dualBootMs = Math.round(performance.now() - startedAt);
+    check("한 host registry에서 Python OS + Linux 동시 boot", python.state === "running" && linux.state === "running" && host.getMachine("pythonOs") === python && host.getMachine("linuxOs") === linux, `${timings.dualBootMs}ms`);
+
+    const [pythonValue, linuxValue] = await Promise.all([
+      python.request({ type: "run", code: "from pathlib import Path\nmachineValue += 2\nPath('/home/web').mkdir(parents=True, exist_ok=True)\nPath('/home/web/web_machine_value').write_text(str(machineValue))\nPath('/home/web/web_machine_value').read_text()" }),
+      linux.request({ type: "serial", data: "machine_value=42; printf 42 > /tmp/web_machine_value; echo DUAL_VALUE:$machine_value:$(cat /tmp/web_machine_value)\n", waitFor: "~% " }),
+    ]);
+    check("서로 다른 OS 명령과 파일 쓰기 경로", pythonValue === "42" && linuxValue.includes("DUAL_VALUE:42:42"), `python=${pythonValue}, linux=${linuxValue.includes("DUAL_VALUE:42:42")}`);
+
+    await Promise.all([python.pause(), linux.pause()]);
+    startedAt = performance.now();
+    const [pythonImage, linuxImage] = await Promise.all([python.snapshot(), linux.snapshot()]);
+    timings.dualSnapshotMs = Math.round(performance.now() - startedAt);
+    timings.pythonImageBytes = pythonImage.payload.byteLength;
+    timings.linuxImageBytes = linuxImage.payload.byteLength;
+    check("두 OS image가 portable envelope", pythonImage.snapshotScope === "portable" && linuxImage.snapshotScope === "portable" && pythonImage.adapterId !== linuxImage.adapterId, `${pythonImage.payload.byteLength}/${linuxImage.payload.byteLength} bytes`);
+
+    await Promise.all([python.resume(), linux.resume()]);
+    await Promise.all([
+      python.request({ type: "run", code: "machineValue = 99\nPath('/home/web/web_machine_value').write_text(str(machineValue))" }),
+      linux.request({ type: "serial", data: "machine_value=99; printf 99 > /tmp/web_machine_value\n", waitFor: "~% " }),
+    ]);
+    await Promise.all([python.pause(), linux.pause()]);
+    await Promise.all([python.shutdown(), linux.shutdown()]);
+
+    startedAt = performance.now();
+    await Promise.all([python.restore(pythonImage), linux.restore(linuxImage)]);
+    timings.dualColdRestoreMs = Math.round(performance.now() - startedAt);
+    check("두 adapter destroy 뒤 동시 cold restore", python.state === "paused" && linux.state === "paused", `${timings.dualColdRestoreMs}ms`);
+    await Promise.all([python.resume(), linux.resume()]);
+    const [pythonRestored, linuxRestored] = await Promise.all([
+      python.request({ type: "run", code: "f\"{machineValue}:{Path('/home/web/web_machine_value').read_text()}\"" }),
+      linux.request({ type: "serial", data: "echo DUAL_COLD:$machine_value:$(cat /tmp/web_machine_value)\n", waitFor: "~% " }),
+    ]);
+    check("두 OS의 메모리와 파일 상태가 함께 생존", pythonRestored === "42:42" && linuxRestored.includes("DUAL_COLD:42:42"), `python=${pythonRestored}, linux=${linuxRestored.includes("DUAL_COLD:42:42")}`);
+
+    const [pythonReport, linuxReport] = await Promise.all([python.inspect(), linux.inspect()]);
+    check("같은 lifecycle contract", complete(pythonReport.history) && complete(linuxReport.history), `${pythonReport.history.length}/${linuxReport.history.length} events`);
+    check("공통 console device", consoleLines.some((line) => line.startsWith("pyproc:")) && consoleLines.some((line) => line.startsWith("x86:")), `${consoleLines.length} lines`);
+    check("host core engine 이름 분기 불필요", pythonReport.adapterId === "pyproc" && linuxReport.adapterId === "x86-linux");
+
+    await Promise.all([python.pause(), linux.pause()]);
+    await Promise.all([python.shutdown(), linux.shutdown()]);
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-1000));
+    try { if (["running", "paused", "failed"].includes(python.state)) await python.shutdown(); } catch (cleanupError) {}
+    try { if (["running", "paused", "failed"].includes(linux.state)) await linux.shutdown(); } catch (cleanupError) {}
+  }
+
+  await report();
+</script>
+</body>
+</html>
