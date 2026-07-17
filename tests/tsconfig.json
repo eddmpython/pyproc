@@ -1,0 +1,19 @@
+{
+  "//": "타입 계약 게이트(npm run test:types). 손으로 유지하는 1,200줄 d.ts에 컴파일러를 붙인다. skipLibCheck는 절대 켜지 않는다: 그 플래그가 바로 .d.ts 검사를 건너뛰므로 게이트가 조용히 통과한다(음성 시험으로 확인함).",
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": false,
+    "allowJs": false
+  },
+  "files": [
+    "../index.d.ts",
+    "../src/capabilities/gpuCompute.d.ts",
+    "../src/capabilities/socketBridge.d.ts",
+    "../src/runtime/engines/wasi/wasiSession.d.ts"
+  ]
+}

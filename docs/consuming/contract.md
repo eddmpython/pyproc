@@ -84,7 +84,6 @@ import { getPyProcAssetManifest } from "pyproc";
 const manifest = getPyProcAssetManifest({ baseURL: "/vendor/pyproc/" });
 // manifest.assets:
 // - processWorker        src/processOs/worker.js
-// - sharedKernelHost     src/processOs/sharedKernelHost.js
 // - machineWorker        src/processOs/machineWorker.js
 // - wasiWorker           src/runtime/engines/wasi/wasiWorker.js
 // - pyprocServiceWorker  src/capabilities/pyprocSw.js

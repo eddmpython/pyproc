@@ -548,9 +548,17 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
   if (missing.length) throw new Error("선언 없는 변수 참조: " + missing.join(", "));
 });
 
-// 4) 타입 선언: 소비자(TypeScript)용 index.d.ts가 공개 표면을 전부 덮는가.
+// 4) 타입 선언: 게시되는 타입 표면이 공개 표면을 전부 덮는가.
+//    루트 index.d.ts + 강등 subpath의 형제 d.ts를 함께 본다. 강등 표면은 루트에서 export되지
+//    않으므로(그래서 강등이다) 자기 .js 옆의 d.ts가 유일한 타입 출처다.
 console.log("\n[타입]");
-const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
+const SUBPATH_DTS = [
+  "src/capabilities/gpuCompute.d.ts",
+  "src/capabilities/socketBridge.d.ts",
+  "src/runtime/engines/wasi/wasiSession.d.ts",
+];
+const dts = [join(ROOT, "index.d.ts"), ...SUBPATH_DTS.map((p) => join(ROOT, p))]
+  .map((f) => readFileSync(f, "utf8")).join("\n");
 for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION", "boot", "bootEnv", "runScript", "Runtime", "MemoryCapability", "FileSystem", "ReactiveController", "SyscallBridge", "SocketBridge", "AsgiServer", "VirtualOrigin", "Terminal", "DeviceFs", "Init", "MachineJournal", "Session", "createMachineKeyPair", "exportMachinePublicKey", "fingerprintMachinePublicKey", "WheelCache", "PyProc", "SIGNAL", "KernelElection", "openPersistentMachine", "PAGE_SIZE", "PyProcError", "PYPROC_ERROR_CODES"]) {
   check(`d.ts가 ${sym} 선언`, () => {
     if (!new RegExp(`(export (class|function|const) ${sym}\\b)`).test(dts)) throw new Error("선언 없음");
@@ -561,6 +569,32 @@ check("package.json types -> index.d.ts", () => {
   if (pkg.types !== "./index.d.ts") throw new Error(String(pkg.types));
   if (pkg.exports["."].types !== "./index.d.ts") throw new Error("exports['.'].types 누락");
   if (!pkg.files.includes("index.d.ts")) throw new Error("files에 index.d.ts 누락");
+});
+// 강등 subpath의 타입은 자기 .js 옆의 d.ts로만 성립한다. index.d.ts 안의
+// `declare module "pyproc/gpu"` 블록은 이 자리를 대신하지 못했다: 모듈이 untyped .js로
+// 해석되면 TypeScript가 증강을 거부한다(TS2665). 타입체크 게이트가 붙고서야 드러난 사실이라
+// 위치를 계약으로 고정한다.
+check("강등 subpath 타입은 자기 .js 옆에", () => {
+  for (const rel of SUBPATH_DTS) {
+    if (!existsSync(join(ROOT, rel))) throw new Error(`${rel} 없음`);
+    const js = rel.replace(/\.d\.ts$/, ".js");
+    if (!existsSync(join(ROOT, js))) throw new Error(`${js} 없음(d.ts가 짝 없이 떠 있다)`);
+    const target = Object.values(pkg.exports).find((t) => typeof t === "string" && t === "./" + js);
+    if (!target) throw new Error(`${js}가 exports subpath가 아니다`);
+  }
+  if (readFileSync(join(ROOT, "index.d.ts"), "utf8").includes('declare module "pyproc/')) {
+    throw new Error("index.d.ts의 declare module 블록: 형제 d.ts로 옮겨야 한다(TS2665)");
+  }
+});
+check("타입 계약 게이트 배선", () => {
+  if (pkg.scripts?.["test:types"] !== "npx -y -p typescript@5 tsc -p tests/tsconfig.json") throw new Error("test:types 누락");
+  const cfg = JSON.parse(readFileSync(join(ROOT, "tests", "tsconfig.json"), "utf8"));
+  // skipLibCheck는 .d.ts 검사 자체를 건너뛴다. 켜지면 게이트가 조용히 통과한다.
+  if (cfg.compilerOptions?.skipLibCheck !== false) throw new Error("skipLibCheck가 false가 아니다(게이트가 조용히 통과한다)");
+  if (cfg.compilerOptions?.strict !== true) throw new Error("strict 필요");
+  for (const rel of ["../index.d.ts", ...SUBPATH_DTS.map((p) => "../" + p)]) {
+    if (!cfg.files.includes(rel)) throw new Error(`tsconfig files에 ${rel} 누락`);
+  }
 });
 check("package.json bin -> assetManifest CLI", () => {
   if (pkg.bin?.["pyproc-assets"] !== "./scripts/assetManifest.mjs") throw new Error("pyproc-assets bin 누락");
@@ -814,6 +848,18 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
     if (!/\[[^\]]+\]\([^)]+\)/.test(cols[5])) throw new Error(`능력 매트릭스 실행 표면 링크 누락: ${cols[0]}`);
   }
   if (checkedRows < 10) throw new Error(`능력 매트릭스 행 파싱 실패: ${checkedRows}`);
+});
+// 소비 계약 문서가 게시하는 자산 경로 목록이 실제 매니페스트와 같은가.
+// 링크 게이트는 마크다운 링크만 보고 코드블록 산문은 아무도 안 봤다. 그 사이 이 목록은
+// 이미 표류해서, 삭제된 파일(sharedKernelHost)을 소비자에게 계약으로 게시하고 있었다.
+check("소비 계약 문서의 자산 목록 = 실제 매니페스트", () => {
+  const doc = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
+  const block = doc.slice(doc.indexOf("// manifest.assets:"));
+  const listed = [...block.matchAll(/^\/\/ - (\w+)\s+(\S+)$/gm)].map((m) => ({ role: m[1], path: m[2] }));
+  if (!listed.length) throw new Error("문서에서 자산 목록 블록을 못 찾음");
+  const actual = api.getPyProcAssetManifest({ baseURL: "/x/" }).assets.map((a) => ({ role: a.role, path: a.path }));
+  const fmt = (xs) => xs.map((x) => `${x.role}=${x.path}`).sort().join(", ");
+  if (fmt(listed) !== fmt(actual)) throw new Error(`문서 [${fmt(listed)}] != 실제 [${fmt(actual)}]`);
 });
 
 // 5) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.

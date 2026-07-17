@@ -26,6 +26,17 @@ npm test          # = node tests/run.mjs, 의존성 0
 
 새 규칙을 만들면 가능한 한 여기(또는 `.githooks`)에 기계 가드를 짝지어 추가한다.
 
+### 타입 계약 게이트 (`npm run test:types`)
+
+```bash
+npm run test:types    # = tsc -p tests/tsconfig.json (typescript는 CI 도구, package 의존성 아님)
+```
+
+손으로 유지하는 1,200줄 `index.d.ts`와 강등 subpath의 형제 d.ts에 컴파일러를 붙인다. `npm test`의 [타입] 절이 "선언이 있는가"를 문자열로 보는 반면 이 게이트는 "타입이 성립하는가"를 본다. 구조 게이트는 미정의 식별자도 못 보므로 둘은 겹치지 않는다.
+
+- `skipLibCheck`는 절대 켜지 않는다. 그 플래그가 바로 `.d.ts` 검사를 건너뛰므로 게이트가 조용히 통과한다(음성 시험으로 확인함).
+- 강등 표면(`pyproc/gpu`, `pyproc/socket`, `pyproc/wasi`)의 타입은 자기 `.js` 옆의 d.ts로만 성립한다. `index.d.ts` 안의 `declare module "pyproc/gpu"` 블록은 그 자리를 대신하지 못한다: 모듈이 untyped `.js`로 해석되면 TypeScript가 증강을 거부한다(TS2665). 구조 게이트가 이 위치를 계약으로 고정한다.
+
 ## 2. 브라우저 런타임 게이트 (`npm run test:browser`)
 
 ```bash

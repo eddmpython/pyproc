@@ -18,6 +18,9 @@ jobs:
       # Web Machine contract suite를 workspace 이름(@web-machine/*)으로 import한다.
       - run: npm ci
       - run: npm test
+      # 타입 계약 게이트: 손으로 유지하는 d.ts에 컴파일러를 붙인다. typescript는 CI 도구로만
+      # 쓰고 package 의존성으로 넣지 않는다(설치 의존성 0 유지).
+      - run: npm run test:types
 
   browser:
     runs-on: ubuntu-latest
