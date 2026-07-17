@@ -567,7 +567,8 @@ check("exports 안정 subpath 고정", () => {
     if (key.startsWith("./src/")) throw new Error(`src deep export 금지: ${key}`);
   }
   for (const key of allowed) if (!keys.includes(key)) throw new Error(`export key 누락: ${key}`);
-  if (pkg.exports["./runtime"] !== "./src/runtime/runtimeApi.js") throw new Error("pyproc/runtime은 runtimeApi.js를 가리켜야 함");
+  // public Runtime 표면은 합성 루트가 낸다(core runtime.js가 아니라). subpath 이름은 계약이라 불변.
+  if (pkg.exports["./runtime"] !== "./src/composition/runtimeApi.js") throw new Error("pyproc/runtime은 합성 루트 runtimeApi.js를 가리켜야 함");
 });
 
 // 4.5) README 표면 동기화: index.js의 모든 export가 양쪽 README에 등장해야 한다.
@@ -915,11 +916,21 @@ for (const f of collect(ROOT, [".md"], [])) {
 
 // 7) 구조 불변식: attempts 카테고리와 mainPlan 이니셔티브의 README 의무.
 console.log("\n[구조]");
+// 레이어 = 폴더. 순위가 작을수록 바닥이고, import는 아래로만 흐른다(큰 쪽 -> 작은 쪽).
+// 같은 순위끼리의 교차도 금지다(같은 층은 서로를 몰라야 한다).
+// 이 규칙이 성립하면 폴더 순환은 수학적으로 불가능하다: 순환은 출발 폴더로 돌아와야 하는데
+// 모든 edge가 순위를 엄격히 낮추므로 돌아올 길이 없다. 그래서 방향 목록을 열거하지 않는다.
+const LAYER_RANK = new Map([
+  ["runtime", 0],       // 엔진 core + 교차 관심사. 다른 레이어를 모르는 바닥
+  ["capabilities", 1],  // (rt, cfg)를 받아 런타임에 얹히는 능력
+  ["composition", 2],   // 조립: core에 능력 registry를 설치하고 public 표면을 낸다
+  ["session", 3],       // 조립된 런타임을 부팅해 머신 하나의 수명주기와 단독 소유권을 만든다
+  ["processOs", 3],     // 워커 = 프로세스, 스냅샷 = 프로세스 이미지
+]);
 check("src 레이어 폴더 고정", () => {
-  const allowedLayers = new Set(["runtime", "capabilities", "processOs"]);
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
     const layer = srcLayerName(rel(f));
-    if (!allowedLayers.has(layer)) throw new Error(`승인 안 된 src 레이어: ${rel(f)}`);
+    if (!LAYER_RANK.has(layer)) throw new Error(`승인 안 된 src 레이어: ${rel(f)}`);
   }
 });
 check("src module 참조 실존", () => {
@@ -937,17 +948,32 @@ check("src module 참조 실존", () => {
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
-check("Runtime public wrapper는 capability registry만 import", () => {
+check("합성 루트만 core와 능력을 함께 안다", () => {
+  // core Runtime(L0)은 자기 레이어 밖을 모른다. 위 rank 규칙과 겹치지만 오류 문장이 구체적이라 남긴다.
   const src = readFileSync(join(ROOT, "src", "runtime", "runtime.js"), "utf8");
+  for (const ref of jsModuleRefs(join(ROOT, "src", "runtime", "runtime.js"))) {
+    if (ref.spec.startsWith("../")) throw new Error(`runtime.js가 자기 레이어 밖을 import함: ${ref.spec}`);
+  }
   if (src.includes("../capabilities/")) throw new Error("runtime.js가 capabilities를 직접 import함");
-  const apiSrc = readFileSync(join(ROOT, "src", "runtime", "runtimeApi.js"), "utf8");
-  if (!apiSrc.includes("../capabilities/runtimeBindings.js")) throw new Error("runtimeApi.js가 runtimeBindings registry를 import하지 않음");
+  // runtimeApi(합성 루트)는 registry 하나만 알고, 능력 class 목록은 registry가 안다.
+  const apiSrc = readFileSync(join(ROOT, "src", "composition", "runtimeApi.js"), "utf8");
+  if (!apiSrc.includes("./runtimeBindings.js")) throw new Error("runtimeApi.js가 runtimeBindings registry를 import하지 않음");
   for (const spec of ["reactive", "syscallBridge", "socketBridge", "asgiServer", "wheelCache", "terminal", "deviceFs", "init", "machineJournal", "gpuCompute"]) {
     if (apiSrc.includes(`../capabilities/${spec}.js`)) throw new Error(`runtimeApi.js가 capability class를 직접 import함: ${spec}`);
   }
-  const registrySrc = readFileSync(join(ROOT, "src", "capabilities", "runtimeBindings.js"), "utf8");
+  const registrySrc = readFileSync(join(ROOT, "src", "composition", "runtimeBindings.js"), "utf8");
   for (const term of ["installRuntimeCapabilities", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableJournal"]) {
     if (!apiSrc.includes(term) && !registrySrc.includes(term)) throw new Error(`runtime capability binding 누락: ${term}`);
+  }
+  // 합성 루트는 아무도 import하지 않는 꼭대기여야 한다. 아래층이 이걸 부르면 폴더 순환이 된다.
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    if (srcLayerName(rel(f)) === "composition") continue;
+    for (const ref of jsModuleRefs(f)) {
+      const target = moduleTarget(f, ref.spec);
+      if (target && rel(target) === "src/composition/runtimeApi.js" && LAYER_RANK.get(srcLayerName(rel(f))) < 2) {
+        throw new Error(`${rel(f)}가 합성 루트를 import함(아래층 -> 조립 = 순환)`);
+      }
+    }
   }
 });
 check("src ESM import graph cycle 없음", () => {
@@ -966,30 +992,24 @@ check("src ESM import graph cycle 없음", () => {
   const cycles = findCycles(graph);
   if (cycles.length) throw new Error(cycles.slice(0, 4).map((c) => c.join(" -> ")).join("; "));
 });
-check("src layer edge 승인 목록", () => {
-  const allowedCrossLayer = new Set([
-    "module:processOs->runtime",
-    "module:processOs->capabilities",
+check("src layer edge는 아래로만", () => {
+  // 위로 향하는 유일한 edge. ESM import가 아니라 Worker 자산 URL이라 모듈 그래프에 없다
+  // (위 cycle 검사도 kind로 배제한다). 워커를 스폰하는 쪽이 워커 파일 위치를 알아야 성립하고,
+  // 자산 매니페스트(assets.js)가 이 경로를 공개 계약으로 게시한다.
+  const assetUpward = new Set([
+    "newURL src/capabilities/syscallBridge.js -> src/processOs/worker.js",
   ]);
-  const exactCrossLayer = new Map([
-    ["module:runtime->capabilities", new Set([
-      "src/runtime/runtimeApi.js -> src/capabilities/runtimeBindings.js",
-    ])],
-    ["module:capabilities->runtime", new Set([
-      "src/capabilities/envManager.js -> src/runtime/runtimeApi.js",
-      "src/capabilities/envManager.js -> src/runtime/engines/pyodideEngine.js",
-      "src/capabilities/machineJournal.js -> src/runtime/memoryLayout.js",
-      "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
-      "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
-      "src/capabilities/session.js -> src/runtime/globalPatch.js",
-      "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",
-      "src/capabilities/session.js -> src/runtime/runtimeApi.js",
-      "src/capabilities/session.js -> src/runtime/memoryLayout.js",
-      "src/capabilities/syscallBridge.js -> src/runtime/assets.js",
-    ])],
-    ["newURL:capabilities->processOs", new Set([
-      "src/capabilities/syscallBridge.js -> src/processOs/worker.js",
-    ])],
+  // coupling budget. 방향(L1 -> L0)은 합법이지만, 능력이 런타임 내부에 새로 손대는 것은
+  // 매번 심사에 건다. 예외 목록이 아니라 예산이다: 늘리려면 이 줄을 고치는 것이 곧 리뷰 지점.
+  // errors.js는 전 레이어 공용 오류 계약이라 예산 밖이다(파일 열거가 무의미).
+  const capabilityToRuntimeBudget = new Set([
+    "src/capabilities/envManager.js -> src/runtime/runtime.js",
+    "src/capabilities/envManager.js -> src/runtime/engines/pyodideEngine.js",
+    "src/capabilities/machineJournal.js -> src/runtime/memoryLayout.js",
+    "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
+    "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
+    "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",
+    "src/capabilities/syscallBridge.js -> src/runtime/assets.js",
   ]);
   const problems = [];
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
@@ -1000,16 +1020,15 @@ check("src layer edge 승인 목록", () => {
       const targetRel = rel(target);
       const toLayer = srcLayerName(targetRel);
       if (!fromLayer || !toLayer || fromLayer === toLayer) continue;
-      // 오류 계약(errors.js)은 전 레이어 공용 Layer 0 계약이라 파일 열거가 무의미하다.
-      // 상위 -> Layer 0 방향만 성립하므로 방향 위반은 애초에 생길 수 없다.
-      if (targetRel === "src/runtime/errors.js" && ref.kind === "module") continue;
-      const key = `${ref.kind}:${fromLayer}->${toLayer}`;
       const pair = `${rel(f)} -> ${targetRel}`;
-      if (exactCrossLayer.has(key)) {
-        if (!exactCrossLayer.get(key).has(pair)) problems.push(`${pair} (${key}, 정확 승인 목록 밖)`);
+      if (ref.kind === "newURL") {
+        if (!assetUpward.has(`newURL ${pair}`)) problems.push(`${pair} (자산 URL 승인 목록 밖)`);
         continue;
       }
-      if (!allowedCrossLayer.has(key)) problems.push(`${rel(f)} -> ${ref.spec} (${key})`);
+      const fromRank = LAYER_RANK.get(fromLayer), toRank = LAYER_RANK.get(toLayer);
+      if (!(fromRank > toRank)) problems.push(`${pair} (${fromLayer}(${fromRank}) -> ${toLayer}(${toRank}): import는 아래로만)`);
+      else if (fromLayer === "capabilities" && toLayer === "runtime" && targetRel !== "src/runtime/errors.js"
+        && !capabilityToRuntimeBudget.has(pair)) problems.push(`${pair} (능력 -> 런타임 coupling budget 밖)`);
     }
   }
   if (problems.length) throw new Error([...new Set(problems)].slice(0, 8).join("; "));

@@ -7,7 +7,7 @@
 // 실물과 표류한다(2026-07-16 실측: 8개 어긋난 채 방치).
 //
 // 지원: Chromium/Edge (JSPI + SharedArrayBuffer + crossOriginIsolated). Firefox/Safari 미지원.
-export { boot, Runtime, MemoryCapability, PAGE_SIZE, checkEnvironment } from "./src/runtime/runtimeApi.js";
+export { boot, Runtime, MemoryCapability, PAGE_SIZE, checkEnvironment } from "./src/composition/runtimeApi.js";
 export { PyProcError, PYPROC_ERROR_CODES } from "./src/runtime/errors.js";
 export { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker, PYPROC_ASSET_MANIFEST_VERSION } from "./src/runtime/assets.js";
 export { ReactiveController } from "./src/capabilities/reactive.js";
@@ -20,10 +20,10 @@ export { FileSystem } from "./src/runtime/fileSystem.js";
 export { Init } from "./src/capabilities/init.js";
 export { MachineJournal } from "./src/capabilities/machineJournal.js";
 export { MachineJail } from "./src/capabilities/machineJail.js";
-export { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey, Session } from "./src/capabilities/session.js";
+export { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey, Session } from "./src/session/session.js";
 export { WheelCache } from "./src/capabilities/wheelCache.js";
 export { bootEnv, runScript } from "./src/capabilities/envManager.js";
 export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
 export { MachineContainer } from "./src/processOs/machineContainer.js";
 export { JobControl } from "./src/processOs/jobControl.js";
-export { KernelElection, openPersistentMachine } from "./src/processOs/kernelElection.js";
+export { KernelElection, openPersistentMachine } from "./src/session/kernelElection.js";

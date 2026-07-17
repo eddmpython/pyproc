@@ -1,13 +1,14 @@
-// runtimeBindings.js - Runtime public capability factory registry.
-// capability 목록은 capabilities 레이어가 담당하고, runtimeApi.js는 이 registry만 설치한다.
-import { ReactiveController } from "./reactive.js";
-import { SyscallBridge } from "./syscallBridge.js";
-import { AsgiServer } from "./asgiServer.js";
-import { WheelCache } from "./wheelCache.js";
-import { Terminal } from "./terminal.js";
-import { DeviceFs } from "./deviceFs.js";
-import { Init } from "./init.js";
-import { MachineJournal } from "./machineJournal.js";
+// runtimeBindings.js - Layer 2 조립: Runtime public capability factory registry.
+// 능력 8개를 아는 유일한 파일이다. core Runtime(Layer 0)도 능력들(Layer 1)도 서로를 모르고,
+// 둘을 엮는 지식은 여기에만 산다. runtimeApi.js가 이 registry를 설치한다.
+import { ReactiveController } from "../capabilities/reactive.js";
+import { SyscallBridge } from "../capabilities/syscallBridge.js";
+import { AsgiServer } from "../capabilities/asgiServer.js";
+import { WheelCache } from "../capabilities/wheelCache.js";
+import { Terminal } from "../capabilities/terminal.js";
+import { DeviceFs } from "../capabilities/deviceFs.js";
+import { Init } from "../capabilities/init.js";
+import { MachineJournal } from "../capabilities/machineJournal.js";
 
 const RUNTIME_CAPABILITY_BINDINGS = Symbol.for("pyproc.runtimeCapabilityBindings");
 const REACTIVE_CONTROLLER = Symbol.for("pyproc.reactiveController");

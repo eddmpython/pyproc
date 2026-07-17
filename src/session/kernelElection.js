@@ -1,8 +1,9 @@
-// kernelElection.js - Layer 2: 같은 origin의 여러 탭을 하나의 지속 Python 머신으로 묶는다.
+// kernelElection.js - Layer 3: 같은 origin의 여러 탭을 하나의 지속 Python 머신으로 묶는다.
+// "누가 그 Session을 소유하는가"가 전부라 session.js와 같은 층이다(bootSession 소비).
 // Web Locks가 리더를 하나로 제한하고, 영속 epoch가 이전 리더의 늦은 응답을 fence한다.
 // 리더 탭이 사라지면 다음 참여자가 같은 매니페스트로 부팅하고 MachineJournal의 마지막
 // commit 경계에서 힙과 /home/web을 함께 복구한다. SharedWorker와 달리 문서의 COI/SAB를 유지한다.
-import { bootSession } from "../capabilities/session.js";
+import { bootSession } from "./session.js";
 import { MachineJournal } from "../capabilities/machineJournal.js";
 import { PyProcError } from "../runtime/errors.js";
 

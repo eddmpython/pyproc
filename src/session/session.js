@@ -1,4 +1,6 @@
-// session.js - Layer 1 능력: 세션 부활(불멸 커널) = 결정적 리플레이 + 사용자 델타.
+// session.js - Layer 3: 세션 부활(불멸 커널) = 결정적 리플레이 + 사용자 델타.
+// 조립된 런타임을 부팅해서 쓴다(boot + rt.enableReactive). 즉 registry 설치 뒤에만 성립하므로
+// 능력(Layer 1)이 아니라 합성 루트 위에 산다.
 // 원리(실측: bootDeterminismProbe, replayForkProbe 2026-07-11):
 //   부팅 비결정의 주범은 엔트로피(해시 시드·getentropy·시간)다. PYTHONHASHSEED=0 +
 //   부팅 구간 엔트로피/시간 고정이면 같은 매니페스트(packages/setup/env)의 부팅이
@@ -16,16 +18,16 @@
 // 서명(2026-07-15): WebCrypto ECDSA P-256으로 unsigned body 해시를 서명한다. outer envelope는
 //   signature까지 포함한 최종 body를 다시 해시하므로 무결성과 출처 검증이 분리된다.
 import { PyProcError } from "../runtime/errors.js";
-import { boot } from "../runtime/runtimeApi.js";
+import { boot } from "../composition/runtimeApi.js";
 import { runWithGlobalPatch } from "../runtime/globalPatch.js";
 import { PAGE_SIZE } from "../runtime/memoryLayout.js";
-import { WheelCache } from "./wheelCache.js";
+import { WheelCache } from "../capabilities/wheelCache.js";
 import {
   DEFAULT_MACHINE_HOME_PATH,
   applyMachineHome,
   collectMachineHome,
   validateMachineHomeMeta,
-} from "./machineHome.js";
+} from "../capabilities/machineHome.js";
 
 // 부팅 구간의 비결정 소스를 고정한다(복원 보장). 리플레이 결정성의 필요조건.
 function stubEntropy() {

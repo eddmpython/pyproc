@@ -25,7 +25,7 @@
       "default": "./index.js"
     },
     "./assets": "./src/runtime/assets.js",
-    "./runtime": "./src/runtime/runtimeApi.js",
+    "./runtime": "./src/composition/runtimeApi.js",
     "./reactive": "./src/capabilities/reactive.js",
     "./syscall-bridge": "./src/capabilities/syscallBridge.js",
     "./process-os": "./src/processOs/pyProc.js",

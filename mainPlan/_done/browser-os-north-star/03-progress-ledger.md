@@ -2745,7 +2745,7 @@ NEXT:
 
 완료:
 
-- [kernelElection.js](../../../src/processOs/kernelElection.js)에 participant 고유 ID, 영속 OPFS epoch, leader/epoch fencing, presence, 상태 구독, follower commit, late-response 폐기, 무재생 outcome-unknown RPC 계약을 넣었다.
+- [kernelElection.js](../../../src/session/kernelElection.js)에 participant 고유 ID, 영속 OPFS epoch, leader/epoch fencing, presence, 상태 구독, follower commit, late-response 폐기, 무재생 outcome-unknown RPC 계약을 넣었다.
 - `openPersistentMachine({ name })`을 공개 진입점으로 추가했다. 같은 name은 OPFS의 같은 머신 디렉터리와 Web Locks/BroadcastChannel 선출에 연결된다.
 - [machineHome.js](../../../src/capabilities/machineHome.js)를 Session과 MachineJournal이 공유하는 `/home` 스냅샷 계약으로 분리했다. MachineJournal HEAD/PREV 세대가 heap과 `/home/web` CAS blob을 함께 commit/recover/pack/prune한다.
 - [kernelElectionProbe.html](../../../tests/attempts/pythonMachine/kernelElectionProbe.html)이 3개 독립 browsing context, follower 변수/파일/prepared environment 공유, follower commit, leader context 강제 제거, epoch 증가, 정확히 한 successor, heap + `/home/web` + manifest 환경 복구, in-flight outcome unknown, 모든 context 제거 뒤 cold reopen을 검증한다.
