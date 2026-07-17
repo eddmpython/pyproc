@@ -19,6 +19,6 @@
 
 ## 활성 이니셔티브
 
-활성 이니셔티브 없음(2026-07-17). structure-evolution을 완료 이관했다.
+- [asset-provenance](asset-provenance/README.md) - 증거 없음이 통과로 새지 않게 한다. 제품 쪽 봉인이 장식이고(거짓 license로도 게이트 통과) 봉인이 걸린 쪽은 CI가 안 도는 fixture다. 재개 지점은 [01-progress-ledger.md](asset-provenance/01-progress-ledger.md) 마지막 줄.
 
 완결 이니셔티브 14개는 [_done/](_done/README.md)으로 이관됐다. 최신 완료 기록은 speculative-fleet이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.
