@@ -19,6 +19,6 @@
 
 ## 활성 이니셔티브
 
-활성 이니셔티브 없음(2026-07-17). 다음 작업은 [branchFleet 캠페인](../tests/attempts/branchFleet/README.md)의 미착수 질문(SAB 직접 수확, 레인 스케일 곡선) 실측부터다.
+- [structure-evolution](structure-evolution/README.md) - 의존 방향을 트리에 새긴다. 합성 루트를 제자리에 놓아 폴더 순환을 0으로 만들고, 구조가 낳은 중복과 결함을 단일 정본으로 수렴한다. 재개 지점은 [01-progress-ledger.md](structure-evolution/01-progress-ledger.md) 마지막 줄.
 
 완결 이니셔티브 13개는 [_done/](_done/README.md)으로 이관됐다. 최신 완료 기록은 speculative-fleet이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.
