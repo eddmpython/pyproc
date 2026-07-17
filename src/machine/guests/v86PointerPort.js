@@ -1,4 +1,5 @@
 // v86PointerPort.js - 공통 relative pointer event를 v86 PS/2 mouse bus에 주입한다.
+import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86PointerPort {
   constructor({ device, endpointId }) {
     if (!device || device.kind !== "input" || device.mode !== "relative-pointer" || typeof device.connect !== "function" || typeof device.drain !== "function") {
@@ -62,7 +63,7 @@ export class V86PointerPort {
   }
 
   _receive(event) {
-    if (!this._emulator) throw new Error(`v86 pointer port 분리됨: ${this._endpointId}`);
+    if (!this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 pointer port 분리됨: ${this._endpointId}`);
     if (event.type === "move") {
       this._emulator.bus.send("mouse-delta", [event.deltaX, -event.deltaY]);
       this._receivedMoves += 1;

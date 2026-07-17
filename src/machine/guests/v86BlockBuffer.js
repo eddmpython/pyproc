@@ -1,4 +1,5 @@
 // v86BlockBuffer.js - callback block buffer를 공통 async block device로 변환한다.
+import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86BlockBuffer {
   constructor(device) {
     if (!device || device.kind !== "block" || typeof device.read !== "function" || typeof device.write !== "function") {
@@ -44,7 +45,7 @@ export class V86BlockBuffer {
   }
 
   set_state(state) {
-    if (!Array.isArray(state) || state[0] !== 1) throw new Error("v86 block buffer: state version 불일치");
+    if (!Array.isArray(state) || state[0] !== 1) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "v86 block buffer: state version 불일치");
   }
 
   async drain() {

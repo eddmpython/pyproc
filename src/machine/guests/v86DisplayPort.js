@@ -1,4 +1,5 @@
 // v86DisplayPort.js - v86 VGA text bus를 공통 text-cells display port로 변환한다.
+import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86DisplayPort {
   constructor({ device, endpointId }) {
     if (!device || device.kind !== "display" || device.mode !== "text-cells" || typeof device.connect !== "function") {
@@ -23,7 +24,7 @@ export class V86DisplayPort {
     if (!emulator || typeof emulator.add_listener !== "function" || typeof emulator.remove_listener !== "function") {
       throw new TypeError("v86 emulator display bus가 필요하다");
     }
-    if (this._emulator) throw new Error(`v86 display port 이미 연결됨: ${this._endpointId}`);
+    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 display port 이미 연결됨: ${this._endpointId}`);
     const port = this._device.connect({ endpointId: this._endpointId });
     try {
       this._emulator = emulator;

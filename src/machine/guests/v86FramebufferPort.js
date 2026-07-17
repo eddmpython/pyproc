@@ -1,4 +1,5 @@
 // v86FramebufferPort.js - v86 canvas dirty region을 공통 RGBA display port로 변환한다.
+import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86FramebufferPort {
   constructor({ device, source, endpointId }) {
     if (!device || device.kind !== "display" || device.mode !== "rgba-frame" || typeof device.connect !== "function") {
@@ -31,7 +32,7 @@ export class V86FramebufferPort {
     if (!emulator || typeof emulator.add_listener !== "function" || typeof emulator.remove_listener !== "function") {
       throw new TypeError("v86 emulator display bus가 필요하다");
     }
-    if (this._emulator) throw new Error(`v86 framebuffer port 이미 연결됨: ${this._endpointId}`);
+    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 framebuffer port 이미 연결됨: ${this._endpointId}`);
     const port = this._device.connect({ endpointId: this._endpointId });
     try {
       this._emulator = emulator;
@@ -65,7 +66,7 @@ export class V86FramebufferPort {
         },
         timer: null,
       };
-      waiter.timer = setTimeout(() => waiter.reject(new Error(`v86 framebuffer timeout: ${timeoutMs}ms`)), timeoutMs);
+      waiter.timer = setTimeout(() => waiter.reject(new WebMachineError("WEB_MACHINE_GUEST_TIMEOUT", `v86 framebuffer timeout: ${timeoutMs}ms`)), timeoutMs);
       this._frameWaiters.add(waiter);
     });
   }
@@ -83,7 +84,7 @@ export class V86FramebufferPort {
     this._port = null;
     this._emulator = null;
     this._active = false;
-    const error = new Error(`v86 framebuffer port 분리됨: ${this._endpointId}`);
+    const error = new WebMachineError("WEB_MACHINE_GUEST_ABORTED", `v86 framebuffer port 분리됨: ${this._endpointId}`);
     for (const waiter of [...this._frameWaiters]) waiter.reject(error);
   }
 

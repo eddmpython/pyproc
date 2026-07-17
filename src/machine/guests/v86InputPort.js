@@ -1,4 +1,5 @@
 // v86InputPort.js - 공통 PS/2 scan code batch를 v86 keyboard bus에 주입한다.
+import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86InputPort {
   constructor({ device, endpointId, codeDelayMs = 1 }) {
     if (!device || device.kind !== "input" || device.mode !== "ps2-scan-code" || typeof device.connect !== "function" || typeof device.drain !== "function") {
@@ -45,7 +46,7 @@ export class V86InputPort {
   }
 
   async _receive(codes) {
-    if (!this._emulator) throw new Error(`v86 input port 분리됨: ${this._endpointId}`);
+    if (!this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 input port 분리됨: ${this._endpointId}`);
     this._receivedBatches += 1;
     this._receivedCodes += codes.byteLength;
     await this._emulator.keyboard_send_scancodes(codes, this._codeDelayMs);

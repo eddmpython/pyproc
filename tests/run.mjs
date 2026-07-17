@@ -370,34 +370,16 @@ check("파일과 폴더 이름 camelCase", () => {
 console.log("\n[오류 계약]");
 // machine 층은 자기 오류 계약을 갖는다(web-machine 클린 아키텍처 기록): 상태 오류 =
 // WebMachineError(코드), 인자 계약 위반 = TypeError. 그래서 machine에선 TypeError를 세지 않는다.
-// 아래 예산은 packages/ 시절 게이트 밖에 쌓인 무코드 new Error 빚이다. coupling budget과
-// 같은 규율: 예외 목록이 아니라 감소 전용 예산. 새 파일 예산은 0이고 늘면 즉시 RED다.
-const machineBareErrorBudget = new Map([
-  ["src/machine/coordination/webLockOwnerCoordinator.js", 2],
-  ["src/machine/devices/canvasRgbaFrameSource.js", 1],
-  ["src/machine/guests/pyprocGuestAdapter.js", 3],
-  ["src/machine/guests/pyprocHomeVolume.js", 18],
-  ["src/machine/guests/v86BlockBuffer.js", 1],
-  ["src/machine/guests/v86ClockPort.js", 2],
-  ["src/machine/guests/v86DisplayPort.js", 1],
-  ["src/machine/guests/v86FileSystemVolume.js", 21],
-  ["src/machine/guests/v86FramebufferPort.js", 3],
-  ["src/machine/guests/v86GuestAdapter.js", 18],
-  ["src/machine/guests/v86InputPort.js", 1],
-  ["src/machine/guests/v86PacketPort.js", 1],
-  ["src/machine/guests/v86PointerPort.js", 1],
-  ["src/machine/guests/v86SerialPort.js", 2],
-  ["src/machine/persistence/indexedDbMachineStore.js", 5],
-]);
+// packages/ 시절 게이트 밖에 쌓였던 무코드 new Error 80건은 전부 코드를 얻었다(감소 전용
+// 예산 80 -> 0). 무코드 오류는 이제 어느 층에서도 0이다.
 for (const f of collect(join(ROOT, "src"), [".js"], [])) {
   check(`PyProcError only: ${rel(f)}`, () => {
     const src = readFileSync(f, "utf8");
     const relPath = rel(f);
     if (relPath.startsWith("src/machine/")) {
       const hits = [...src.matchAll(/new (Error|RangeError|SyntaxError)\(/g)];
-      const allowed = machineBareErrorBudget.get(relPath) ?? 0;
-      if (hits.length > allowed) {
-        throw new Error(`machine 오류 계약 위반: 무코드 오류 ${hits.length}건(예산 ${allowed}). WebMachineError(code) 또는 TypeError(인자 계약)만`);
+      if (hits.length > 0) {
+        throw new Error(`machine 오류 계약 위반: 무코드 오류 ${hits.length}건. WebMachineError(code) 또는 TypeError(인자 계약)만`);
       }
       return;
     }

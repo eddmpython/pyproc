@@ -1,4 +1,5 @@
 // pyprocGuestAdapter.js - 주입된 공개 pyproc surface를 공통 guest 계약으로 변환한다.
+import { WebMachineError } from "../contracts/webMachineError.js";
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { readPyprocHomeVolume, writePyprocHomeVolume } from "./pyprocHomeVolume.js";
 
@@ -88,8 +89,8 @@ class PyprocGuestAdapter {
 
   async request(message, control) {
     throwIfOperationAborted(control, "pyproc request");
-    if (!this._session) throw new Error("pyproc adapter: session 없음");
-    if (message.type !== "run") throw new Error(`pyproc adapter request 미지원: ${message.type}`);
+    if (!this._session) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "pyproc adapter: session 없음");
+    if (message.type !== "run") throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `pyproc adapter request 미지원: ${message.type}`);
     return this._session.rt.run(String(message.code || ""));
   }
 
@@ -109,7 +110,7 @@ class PyprocGuestAdapter {
 
   _blockDevice() {
     const device = this._context?.devices?.[this._blockDeviceName];
-    if (!device || device.kind !== "block") throw new Error(`pyproc adapter: block device 없음 ${this._blockDeviceName}`);
+    if (!device || device.kind !== "block") throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `pyproc adapter: block device 없음 ${this._blockDeviceName}`);
     return device;
   }
 }

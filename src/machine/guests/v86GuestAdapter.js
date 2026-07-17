@@ -1,4 +1,5 @@
 // v86GuestAdapter.js - 주입된 v86 engine과 이름 있는 virtual device port를 guest 계약으로 변환한다.
+import { WebMachineError } from "../contracts/webMachineError.js";
 import { operationAbortError, throwIfOperationAborted } from "../contracts/operationControl.js";
 import { V86BlockBuffer } from "./v86BlockBuffer.js";
 import {
@@ -228,7 +229,7 @@ class V86GuestAdapter {
 
   async shutdown(control) {
     throwIfOperationAborted(control, "v86 shutdown");
-    this._serialPort.rejectAll(new Error("x86 adapter: shutdown"));
+    this._serialPort.rejectAll(new WebMachineError("WEB_MACHINE_GUEST_ABORTED", "x86 adapter: shutdown"));
     if (this._emulator) {
       await this._inputPort?.drain();
       await this._pointerPort?.drain();
@@ -264,7 +265,7 @@ class V86GuestAdapter {
   async request(message, control) {
     throwIfOperationAborted(control, "v86 request");
     const emulator = this._requireEmulator();
-    if (message.type !== "serial") throw new Error(`x86 adapter request 미지원: ${message.type}`);
+    if (message.type !== "serial") throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `x86 adapter request 미지원: ${message.type}`);
     const data = String(message.data || "");
     const waitFor = String(message.waitFor || this._manifest.v86?.readyPattern || "~% ");
     const from = this._serialPort.length;
@@ -297,16 +298,16 @@ class V86GuestAdapter {
   async _createEmulator({ autostart, attachInteractiveInputs, control }) {
     throwIfOperationAborted(control, "v86 engine create");
     const sourceOptions = this._manifest?.v86?.options;
-    if (!sourceOptions || typeof sourceOptions !== "object") throw new Error("x86 adapter: manifest.v86.options 없음");
+    if (!sourceOptions || typeof sourceOptions !== "object") throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "x86 adapter: manifest.v86.options 없음");
     const options = { ...sourceOptions };
     if (this._packetDeviceName && (options.network_relay_url || options.net_device?.relay_url)) {
-      throw new Error("x86 adapter: packet device와 relay 동시 사용 불가");
+      throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "x86 adapter: packet device와 relay 동시 사용 불가");
     }
     if (this._packetDeviceName) options.preserve_mac_from_state_image = true;
     if (this._clockDeviceName) this._clockPort = new V86ClockPort({ device: this._clockDevice() });
     if (this._entropyDeviceName) this._entropyPort = new V86EntropyPort({ device: this._entropyDevice() });
     if (this._clockPort || this._entropyPort) {
-      if (options.wasm_fn) throw new Error("x86 adapter: manifest wasm_fn과 clock/entropy bridge 동시 사용 불가");
+      if (options.wasm_fn) throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "x86 adapter: manifest wasm_fn과 clock/entropy bridge 동시 사용 불가");
       options.wasm_fn = createV86WasmHostFunction({
         instantiateWasm: this._instantiateWasm,
         clockPort: this._clockPort,
@@ -375,10 +376,10 @@ class V86GuestAdapter {
         finish(resolve);
       };
       const onDownloadError = (event) => {
-        finish(reject, new Error(`x86 adapter asset download 실패: ${event?.file_name || "unknown"}`));
+        finish(reject, new WebMachineError("WEB_MACHINE_GUEST_BOOT", `x86 adapter asset download 실패: ${event?.file_name || "unknown"}`));
       };
       const onAbort = () => finish(reject, operationAbortError(control, "v86 engine create", { outcomeUnknown: true }));
-      const timer = setTimeout(() => finish(reject, new Error(`x86 adapter engine ready timeout: ${timeoutMs}ms`)), timeoutMs);
+      const timer = setTimeout(() => finish(reject, new WebMachineError("WEB_MACHINE_GUEST_TIMEOUT", `x86 adapter engine ready timeout: ${timeoutMs}ms`)), timeoutMs);
       emulator.add_listener("emulator-ready", onReady);
       emulator.add_listener("download-error", onDownloadError);
       control?.signal?.addEventListener("abort", onAbort, { once: true });
@@ -407,7 +408,7 @@ class V86GuestAdapter {
       return;
     }
     if (readiness.kind === "framebuffer") {
-      if (!this._framebufferPort) throw new Error("framebuffer readiness에는 framebuffer device가 필요하다");
+      if (!this._framebufferPort) throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "framebuffer readiness에는 framebuffer device가 필요하다");
       await this._framebufferPort.waitForFrame(Number(readiness.timeoutMs || 30000));
       return;
     }
@@ -415,20 +416,20 @@ class V86GuestAdapter {
   }
 
   _requireEmulator() {
-    if (!this._emulator) throw new Error("x86 adapter: emulator 없음");
+    if (!this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "x86 adapter: emulator 없음");
     return this._emulator;
   }
 
   _blockDevice() {
     const device = this._context?.devices?.[this._blockDeviceName];
-    if (!device || device.kind !== "block") throw new Error(`x86 adapter: block device 없음 ${this._blockDeviceName}`);
+    if (!device || device.kind !== "block") throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: block device 없음 ${this._blockDeviceName}`);
     return device;
   }
 
   _packetDevice() {
     const device = this._context?.devices?.[this._packetDeviceName];
     if (!device || device.kind !== "network" || device.mode !== "packet" || typeof device.connect !== "function") {
-      throw new Error(`x86 adapter: packet network device 없음 ${this._packetDeviceName}`);
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: packet network device 없음 ${this._packetDeviceName}`);
     }
     return device;
   }
@@ -436,7 +437,7 @@ class V86GuestAdapter {
   _displayDevice() {
     const device = this._context?.devices?.[this._displayDeviceName];
     if (!device || device.kind !== "display" || device.mode !== "text-cells" || typeof device.connect !== "function") {
-      throw new Error(`x86 adapter: text display device 없음 ${this._displayDeviceName}`);
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: text display device 없음 ${this._displayDeviceName}`);
     }
     return device;
   }
@@ -444,7 +445,7 @@ class V86GuestAdapter {
   _inputDevice() {
     const device = this._context?.devices?.[this._inputDeviceName];
     if (!device || device.kind !== "input" || device.mode !== "ps2-scan-code" || typeof device.connect !== "function") {
-      throw new Error(`x86 adapter: PS/2 input device 없음 ${this._inputDeviceName}`);
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: PS/2 input device 없음 ${this._inputDeviceName}`);
     }
     return device;
   }
@@ -452,7 +453,7 @@ class V86GuestAdapter {
   _framebufferDevice() {
     const device = this._context?.devices?.[this._framebufferDeviceName];
     if (!device || device.kind !== "display" || device.mode !== "rgba-frame" || typeof device.connect !== "function") {
-      throw new Error(`x86 adapter: RGBA framebuffer device 없음 ${this._framebufferDeviceName}`);
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: RGBA framebuffer device 없음 ${this._framebufferDeviceName}`);
     }
     return device;
   }
@@ -460,7 +461,7 @@ class V86GuestAdapter {
   _pointerDevice() {
     const device = this._context?.devices?.[this._pointerDeviceName];
     if (!device || device.kind !== "input" || device.mode !== "relative-pointer" || typeof device.connect !== "function") {
-      throw new Error(`x86 adapter: relative pointer device 없음 ${this._pointerDeviceName}`);
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: relative pointer device 없음 ${this._pointerDeviceName}`);
     }
     return device;
   }
@@ -469,7 +470,7 @@ class V86GuestAdapter {
     const device = this._context?.devices?.[this._clockDeviceName];
     if (!device || device.kind !== "clock" || device.mode !== "wall-monotonic"
       || typeof device.readWallTimeMs !== "function" || typeof device.readMonotonicTimeMs !== "function") {
-      throw new Error(`x86 adapter: wall-monotonic clock device 없음 ${this._clockDeviceName}`);
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: wall-monotonic clock device 없음 ${this._clockDeviceName}`);
     }
     return device;
   }
@@ -477,14 +478,14 @@ class V86GuestAdapter {
   _entropyDevice() {
     const device = this._context?.devices?.[this._entropyDeviceName];
     if (!device || device.kind !== "entropy" || device.mode !== "cryptographic-random" || typeof device.read !== "function") {
-      throw new Error(`x86 adapter: cryptographic entropy device 없음 ${this._entropyDeviceName}`);
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: cryptographic entropy device 없음 ${this._entropyDeviceName}`);
     }
     return device;
   }
 
   _fileSystem() {
     const fileSystem = this._requireEmulator().fs9p;
-    if (!fileSystem) throw new Error("x86 adapter: 9P filesystem 없음");
+    if (!fileSystem) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "x86 adapter: 9P filesystem 없음");
     return fileSystem;
   }
 }

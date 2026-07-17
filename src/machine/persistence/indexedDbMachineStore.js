@@ -14,15 +14,15 @@ const ALL_STORES = Object.freeze([BLOBS, GENERATIONS, HEADS, OWNERS]);
 function requestValue(request) {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("IndexedDB request 실패"));
+    request.onerror = () => reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB request 실패"));
   });
 }
 
 function transactionDone(transaction) {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB transaction abort"));
-    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB transaction 실패"));
+    transaction.onabort = () => reject(transaction.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB transaction abort"));
+    transaction.onerror = () => reject(transaction.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB transaction 실패"));
   });
 }
 
@@ -327,7 +327,7 @@ export class IndexedDbMachineStore {
       request.onerror = () => {
         if (settled) return;
         settled = true;
-        reject(request.error || new Error("IndexedDB open 실패"));
+        reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB open 실패"));
       };
       request.onblocked = () => {
         if (settled) return;
@@ -362,7 +362,7 @@ export class IndexedDbMachineStore {
           reject(error);
         }
       };
-      request.onerror = () => reject(request.error || new Error("legacy owner database open 실패"));
+      request.onerror = () => reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "legacy owner database open 실패"));
     });
     this._legacyEpochs.set(groupId, pending);
     return pending;

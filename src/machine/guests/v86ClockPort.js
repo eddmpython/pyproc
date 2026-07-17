@@ -1,6 +1,7 @@
 // v86ClockPort.js - 공통 clock을 v86 CPU tick과 CMOS RTC에 연결한다.
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86ClockPort {
   constructor({ device }) {
     if (!device || device.kind !== "clock" || device.mode !== "wall-monotonic"
@@ -24,7 +25,7 @@ export class V86ClockPort {
     if (!rtc || typeof rtc.timer !== "function" || !rtc.cpu || typeof rtc.cpu.device_raise_irq !== "function") {
       throw new TypeError("v86 CMOS RTC가 필요하다");
     }
-    if (this._emulator) throw new Error("v86 clock port 이미 연결됨");
+    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "v86 clock port 이미 연결됨");
     this._emulator = emulator;
     this._rtc = rtc;
     this._originalRtcTimer = rtc.timer;
@@ -34,7 +35,7 @@ export class V86ClockPort {
   }
 
   synchronizeWallClock() {
-    if (!this._rtc) throw new Error("v86 clock port가 연결되지 않았다");
+    if (!this._rtc) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "v86 clock port가 연결되지 않았다");
     const now = this._device.readWallTimeMs();
     this._rtc.rtc_time = now;
     this._rtc.last_update = now;

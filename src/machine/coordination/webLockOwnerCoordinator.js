@@ -44,7 +44,7 @@ export class WebLockOwnerCoordinator {
   }
 
   start(control) {
-    if (this._state !== "idle") throw new Error(`owner coordinator start 불가: ${this._state}`);
+    if (this._state !== "idle") throw new WebMachineError("WEB_MACHINE_OWNER_STATE", `owner coordinator start 불가: ${this._state}`);
     throwIfOperationAborted(control, `${this.groupId}: owner wait`);
     this._acquireControl = control;
     this._state = "waiting";
@@ -107,7 +107,7 @@ export class WebLockOwnerCoordinator {
       if (this._error) throw this._error;
       return;
     }
-    if (this._state !== "owned") throw this._error || new Error(`owner coordinator stop 불가: ${this._state}`);
+    if (this._state !== "owned") throw this._error || new WebMachineError("WEB_MACHINE_OWNER_STATE", `owner coordinator stop 불가: ${this._state}`);
     this._state = "stopping";
     let failure = null;
     try {

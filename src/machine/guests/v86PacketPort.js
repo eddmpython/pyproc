@@ -1,4 +1,5 @@
 // v86PacketPort.js - v86 NIC bus와 공통 packet network port 사이의 유일한 변환 경계.
+import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86PacketPort {
   constructor({ device, endpointId, interfaceId = 0 }) {
     if (!device || device.kind !== "network" || device.mode !== "packet" || typeof device.connect !== "function") {
@@ -24,7 +25,7 @@ export class V86PacketPort {
     if (!emulator?.bus || typeof emulator.add_listener !== "function" || typeof emulator.remove_listener !== "function") {
       throw new TypeError("v86 emulator packet bus가 필요하다");
     }
-    if (this._emulator) throw new Error(`v86 packet port 이미 연결됨: ${this._endpointId}`);
+    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 packet port 이미 연결됨: ${this._endpointId}`);
     const port = this._device.connect({ endpointId: this._endpointId, receive: this._onReceive });
     try {
       this._emulator = emulator;

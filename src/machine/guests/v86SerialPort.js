@@ -1,4 +1,5 @@
 // v86SerialPort.js - serial output buffer, line projection, pattern waiter와 종료 경계.
+import { WebMachineError } from "../contracts/webMachineError.js";
 import { operationAbortError } from "../contracts/operationControl.js";
 
 export class V86SerialPort {
@@ -15,7 +16,7 @@ export class V86SerialPort {
   }
 
   reset() {
-    this.rejectAll(new Error("v86 serial reset"));
+    this.rejectAll(new WebMachineError("WEB_MACHINE_GUEST_ABORTED", "v86 serial reset"));
     this._serial = "";
     this._line = "";
   }
@@ -62,7 +63,7 @@ export class V86SerialPort {
         abort: () => waiter.reject(operationAbortError(control, `v86 serial wait: ${pattern}`, { outcomeUnknown: true })),
         timer: null,
       };
-      waiter.timer = setTimeout(() => waiter.reject(new Error(`x86 serial wait timeout: ${pattern}`)), timeoutMs);
+      waiter.timer = setTimeout(() => waiter.reject(new WebMachineError("WEB_MACHINE_GUEST_TIMEOUT", `x86 serial wait timeout: ${pattern}`)), timeoutMs);
       this._waiters.add(waiter);
       control?.signal?.addEventListener("abort", waiter.abort, { once: true });
       if (control?.signal?.aborted) waiter.abort();
