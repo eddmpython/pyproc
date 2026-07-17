@@ -20,6 +20,7 @@
       "sourceLocation": "https://github.com/copy/v86",
       "sourceRevision": "NOASSERTION",
       "licenseDeclared": "BSD-2-Clause",
+      "licenseConcluded": "NOASSERTION",
       "copyrightText": "NOASSERTION",
       "provenanceStatus": "registry-integrity-without-source-revision",
       "evidence": [
@@ -35,6 +36,7 @@
       "sourceLocation": "https://git.seabios.org/seabios.git",
       "sourceRevision": "rel-1.16.2",
       "licenseDeclared": "LGPL-3.0-only",
+      "licenseConcluded": "LGPL-3.0-only",
       "copyrightText": "NOASSERTION",
       "provenanceStatus": "upstream-source-recipe-not-reproduced",
       "evidence": [
@@ -50,6 +52,7 @@
       "sourceLocation": "https://buildroot.org/",
       "sourceRevision": "NOASSERTION",
       "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
       "copyrightText": "NOASSERTION",
       "provenanceStatus": "opaque-upstream-binary",
       "evidence": [
@@ -65,6 +68,7 @@
       "sourceLocation": "https://github.com/KolibriOS/kolibrios",
       "sourceRevision": "NOASSERTION",
       "licenseDeclared": "GPL-2.0-only",
+      "licenseConcluded": "NOASSERTION",
       "copyrightText": "NOASSERTION",
       "provenanceStatus": "opaque-upstream-binary",
       "evidence": [
@@ -83,7 +87,9 @@
       "componentId": "v86-npm-0.5.424",
       "licenseConcluded": "BSD-2-Clause",
       "distribution": "local-test-only",
-      "bundleBlockers": ["package-policy-external-engine"]
+      "bundleBlockers": [
+        "package-policy-external-engine"
+      ]
     },
     {
       "name": "v86.wasm",
@@ -94,7 +100,10 @@
       "componentId": "v86-npm-0.5.424",
       "licenseConcluded": "NOASSERTION",
       "distribution": "local-test-only",
-      "bundleBlockers": ["composite-binary-license-inventory-not-verified", "package-policy-external-engine"]
+      "bundleBlockers": [
+        "composite-binary-license-inventory-not-verified",
+        "package-policy-external-engine"
+      ]
     },
     {
       "name": "seabios.bin",
@@ -105,7 +114,10 @@
       "componentId": "seabios-rel-1.16.2",
       "licenseConcluded": "LGPL-3.0-only",
       "distribution": "local-test-only",
-      "bundleBlockers": ["reproducible-build-not-verified", "license-and-source-delivery-not-packaged"]
+      "bundleBlockers": [
+        "reproducible-build-not-verified",
+        "license-and-source-delivery-not-packaged"
+      ]
     },
     {
       "name": "vgabios.bin",
@@ -116,7 +128,10 @@
       "componentId": "seabios-rel-1.16.2",
       "licenseConcluded": "LGPL-3.0-only",
       "distribution": "local-test-only",
-      "bundleBlockers": ["reproducible-build-not-verified", "license-and-source-delivery-not-packaged"]
+      "bundleBlockers": [
+        "reproducible-build-not-verified",
+        "license-and-source-delivery-not-packaged"
+      ]
     },
     {
       "name": "buildroot-bzimage68.bin",
@@ -127,7 +142,11 @@
       "componentId": "buildroot-image-opaque",
       "licenseConcluded": "NOASSERTION",
       "distribution": "local-test-only",
-      "bundleBlockers": ["exact-source-revision-unknown", "build-config-unknown", "legal-info-missing"]
+      "bundleBlockers": [
+        "exact-source-revision-unknown",
+        "build-config-unknown",
+        "legal-info-missing"
+      ]
     },
     {
       "name": "kolibri.img",
@@ -138,7 +157,11 @@
       "componentId": "kolibri-image-opaque",
       "licenseConcluded": "NOASSERTION",
       "distribution": "local-test-only",
-      "bundleBlockers": ["exact-image-revision-unknown", "image-content-inventory-missing", "corresponding-source-mapping-missing"]
+      "bundleBlockers": [
+        "exact-image-revision-unknown",
+        "image-content-inventory-missing",
+        "corresponding-source-mapping-missing"
+      ]
     }
   ]
 }
