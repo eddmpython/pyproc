@@ -69,12 +69,18 @@ function matchesSelection(file, roleSet, pathSet) {
   return roles.some((r) => roleSet.has(r));
 }
 
+// 계약의 축은 role이지 경로가 아니다(경로는 ASSETS 한 곳에서만 정한다).
+// 예전엔 여기서 경로를 한 번 더 하드코딩하고 안 맞으면 selected[0]으로 폴백했는데,
+// 그 role을 가진 파일이 원래 하나뿐이라 폴백이 늘 같은 답을 냈다: 경로가 바뀌어도
+// 아무 일도 안 일어나고 의도만 조용히 사라진다. 둘 이상이면 매니페스트가 틀린 것이므로 던진다.
 function serviceWorkerFile(manifest) {
   const files = Array.isArray(manifest?.files) ? manifest.files : [];
   const selected = files.filter((file) => Array.isArray(file.roles) && file.roles.includes("pyprocServiceWorker"));
   if (!selected.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "assetIntegrity: pyprocServiceWorker 파일이 없다");
-  const exact = selected.find((file) => file.path === "src/capabilities/pyprocSw.js");
-  return exact || selected[0];
+  if (selected.length > 1) {
+    throw new PyProcError("PYPROC_ASSET_INTEGRITY", `assetIntegrity: pyprocServiceWorker 파일이 ${selected.length}개다(${selected.map((f) => f.path).join(", ")}). role은 파일 하나를 가리켜야 한다.`);
+  }
+  return selected[0];
 }
 
 function applyServiceWorkerQuery(url, opts) {
