@@ -1,4 +1,4 @@
-import { fingerprintWebMachinePublicKey } from "/packages/browser/index.js";
+import { fingerprintWebMachinePublicKey } from "/src/machine/index.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });

@@ -27,3 +27,5 @@ export { PyProc, SIGNAL } from "./src/processOs/pyProc.js";
 export { MachineContainer } from "./src/processOs/machineContainer.js";
 export { JobControl } from "./src/processOs/jobControl.js";
 export { KernelElection, openPersistentMachine } from "./src/session/kernelElection.js";
+
+export { createWebComputer } from "./src/machine/index.js";

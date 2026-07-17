@@ -90,7 +90,7 @@ distribution이 된다.
 | 위험 | 실태 |
 |---|---|
 | `i.copy.sh` 단일 출처 | 10MB `buildroot-bzimage68.bin`의 유일한 출처가 1인 호스팅 mutable URL이다. 미러도 불변성 보증도 없고 404가 나면 `npm run test:web-computer`가 죽는다. 미러를 저장소에 두는 것은 위 결정 1이 금지하므로, 진짜 해는 자체 빌드다(커널이 식별됐으므로 막혀 있지 않다) |
-| 배포 기제 부재 | `redistribution: "disabled"`는 정책이 아니라 사실의 기술이다. `pages.yml`은 `examples src assets`만 복사하고 npm `files`에 `apps`/`packages`가 없으며 `packages/*`는 전부 private `0.0.0`이다. **채널을 product로 바꿔도 바뀌는 바이트가 0이다.** 벽은 둘이고 provenance는 두 번째다 |
+| 배포 기제 | Web Machine 플랫폼은 `src/machine`으로 편입돼 npm `files`의 `src`에 실린다(코드 배포는 열림). 단 guest 실행 자산은 여전히 안 나간다: `redistribution: "disabled"`는 사실의 기술이고, 이 표의 provenance 조건이 채워지기 전까지 공식 image 배포는 금지다 |
 | pyproc 게스트 자산 미기술 | 제품이 부팅하는 9.6MB `pyodide.asm.wasm`을 어떤 catalog도 기술하지 않는다. `pyodide-lock.json`의 354개는 선택적 wheel 카탈로그이지 부팅 적재 집합이 아니라서 그 합성 바이너리를 0% 덮는다. 같은 잣대로 `v86.wasm`과 동일 판정을 받아야 한다. 지금은 부재를 명시로 싣는 것까지만 닫혔다 |
 
 설계 근거와 완료 기록은

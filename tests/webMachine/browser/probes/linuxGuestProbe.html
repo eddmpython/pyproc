@@ -16,11 +16,11 @@ snapshot 57-71ms, live restore 54-83ms, v86 destroy 뒤 cold restore 163-175ms.
 <p>외부 주입한 x86 엔진으로 Linux를 부팅하고 같은 host lifecycle에서 RAM state를 복원한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../packages/core/index.js";
-  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { createV86GuestFactory } from "../../../../src/machine/index.js";
   import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
   import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
 

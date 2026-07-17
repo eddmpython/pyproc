@@ -1,13 +1,5 @@
-import { bootSession, openMachine } from "/index.js";
+import { createWebComputer } from "/index.js";
 import { UNDESCRIBED_ASSET_PROVENANCE } from "./assetProvenance.js";
-import {
-  createBrowserHost,
-  MemoryBlockDevice,
-  MemoryScanCodeInputDevice,
-  MemoryTextDisplayDevice,
-} from "/packages/browser/index.js";
-import { createPyprocGuestFactory } from "/packages/guest-pyproc/index.js";
-import { createV86GuestFactory } from "/packages/guest-v86/index.js";
 import {
   LINUX_DISK_BYTES,
   PYTHON_DISK_BYTES,
@@ -38,41 +30,37 @@ export class WebComputerContext {
     this._disposed = false;
     this._lastConsole = null;
     this._lastDisplay = null;
-    const pythonDisk = new MemoryBlockDevice({ byteLength: PYTHON_DISK_BYTES });
-    const linuxDisk = new MemoryBlockDevice({ byteLength: LINUX_DISK_BYTES });
-    const display = new MemoryTextDisplayDevice();
-    const input = new MemoryScanCodeInputDevice({ maxBatchBytes: 512, maxQueuedBatches: 32 });
-    this.devices = {
-      console: {
-        kind: "console",
-        write: (line) => {
-          this._lastConsole = String(line);
-          if (this._active) this._onConsole(this._lastConsole);
+    // 조립은 공개 표면의 createWebComputer가 한다. 제품이 더하는 것은 자기 값뿐이다:
+    // provenance 명시(부재를 명시로 싣는다), Linux 부팅 매니페스트, 디스크 크기, adapter 버전.
+    const computer = createWebComputer({
+      createMachines,
+      python: {
+        diskBytes: PYTHON_DISK_BYTES,
+        manifest: {
+          session: { ...(indexURL ? { indexURL } : {}) },
+          provenance: UNDESCRIBED_ASSET_PROVENANCE,
         },
       },
-      pythonDisk,
-      linuxDisk,
-      display,
-      input,
-    };
-    this.blockDevices = Object.freeze({ pythonDisk, linuxDisk });
-    this.host = createBrowserHost({ devices: this.devices, cryptoProvider: crypto });
-    this.host.registerAdapter("pyproc-block", createPyprocGuestFactory({
-      bootSession,
-      openMachine,
-      blockDeviceName: "pythonDisk",
-    }));
-    this.host.registerAdapter("x86-linux-product", createV86GuestFactory({
-      V86,
-      adapterVersion: WEB_COMPUTER_ADAPTER_VERSION,
-      blockDeviceName: "linuxDisk",
-      blockMode: "filesystem",
-      displayDeviceName: "display",
-      inputDeviceName: "input",
-    }));
-    this.machines = new Map();
-    if (createMachines) this._createDefaultMachines(indexURL);
-    this._unsubscribeDisplay = display.subscribe((frame) => {
+      linux: {
+        V86,
+        diskBytes: LINUX_DISK_BYTES,
+        adapterVersion: WEB_COMPUTER_ADAPTER_VERSION,
+        manifest: createLinuxMachineManifest(),
+      },
+      onConsole: (line) => {
+        this._lastConsole = line;
+        if (this._active) this._onConsole(line);
+      },
+    });
+    this.computer = computer;
+    this.devices = computer.devices;
+    this.blockDevices = Object.freeze({
+      pythonDisk: computer.devices.pythonDisk,
+      linuxDisk: computer.devices.linuxDisk,
+    });
+    this.host = computer.host;
+    this.machines = computer.machines;
+    this._unsubscribeDisplay = this.devices.display.subscribe((frame) => {
       this._lastDisplay = { frame, text: displayText(frame) };
       if (this._active) this._onDisplay(this._lastDisplay);
     });
@@ -192,23 +180,4 @@ export class WebComputerContext {
     if (failure) throw failure;
   }
 
-  _createDefaultMachines(indexURL) {
-    this.machines.set("pythonOs", this.host.createMachine({
-      machineId: "pythonOs",
-      adapterId: "pyproc-block",
-      // provenance: pyproc 게스트의 실행 자산은 아직 어떤 asset catalog도 기술하지 않는다.
-      // 침묵하면 증거 없음이 문제 없음으로 읽히므로 부재를 명시로 싣는다.
-      manifest: {
-        session: { ...(indexURL ? { indexURL } : {}) },
-        provenance: UNDESCRIBED_ASSET_PROVENANCE,
-      },
-      permissions: { devices: ["console", "pythonDisk"] },
-    }));
-    this.machines.set("linuxOs", this.host.createMachine({
-      machineId: "linuxOs",
-      adapterId: "x86-linux-product",
-      manifest: createLinuxMachineManifest(),
-      permissions: { devices: ["console", "linuxDisk", "display", "input"] },
-    }));
-  }
 }

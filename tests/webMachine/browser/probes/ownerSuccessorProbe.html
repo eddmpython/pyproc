@@ -15,10 +15,10 @@ owner context 강제 제거 successor 21/22/23ms.
 <pre id="out">실행 중...</pre>
 <div id="participants"></div>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { IndexedDbMachineStore, WebLockOwnerCoordinator, webMachineOwnerLockName } from "../../../../packages/browser/index.js";
+  import { IndexedDbMachineStore, WebLockOwnerCoordinator, webMachineOwnerLockName } from "../../../../src/machine/index.js";
 
   const out = document.getElementById("out");
   const checks = [];

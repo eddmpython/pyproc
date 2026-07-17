@@ -1,4 +1,4 @@
-import { MachineCommitCoordinator, MachineEnvelopeCoordinator } from "/packages/browser/index.js";
+import { MachineCommitCoordinator, MachineEnvelopeCoordinator } from "/src/machine/index.js";
 import { getOrCreateSigningIdentity } from "./identityStore.js";
 
 async function withPausedContext(context, control, operation) {

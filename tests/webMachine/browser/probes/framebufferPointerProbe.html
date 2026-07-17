@@ -24,18 +24,18 @@ process cold restore 200/200/180ms, 재연결 pointer frame 36/37/45ms.
 <pre id="out">실행 중...</pre>
 <div id="v86Screen"><div></div><canvas></canvas></div>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
   import {
     CanvasRgbaFrameSource,
     IndexedDbMachineStore,
     MachineCommitCoordinator,
     MemoryRelativePointerDevice,
     MemoryRgbaDisplayDevice,
-  } from "../../../../packages/browser/index.js";
-  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  } from "../../../../src/machine/index.js";
+  import { createV86GuestFactory } from "../../../../src/machine/index.js";
   import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
   import { V86_GRAPHICAL_ADAPTER_VERSION, createV86GraphicalProbeManifest } from "../../fixtures/v86/config.js";
 

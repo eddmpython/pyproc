@@ -368,11 +368,41 @@ check("파일과 폴더 이름 camelCase", () => {
 //      프로그램적 분기가 다시 문자열 매칭으로 퇴행한다. 예외: pyprocSw.js는 SW 자기충족
 //      파일(모듈 import 금지 계약)이라 로컬 swError 헬퍼의 new Error 1곳만 허용한다.
 console.log("\n[오류 계약]");
+// machine 층은 자기 오류 계약을 갖는다(web-machine 클린 아키텍처 기록): 상태 오류 =
+// WebMachineError(코드), 인자 계약 위반 = TypeError. 그래서 machine에선 TypeError를 세지 않는다.
+// 아래 예산은 packages/ 시절 게이트 밖에 쌓인 무코드 new Error 빚이다. coupling budget과
+// 같은 규율: 예외 목록이 아니라 감소 전용 예산. 새 파일 예산은 0이고 늘면 즉시 RED다.
+const machineBareErrorBudget = new Map([
+  ["src/machine/coordination/webLockOwnerCoordinator.js", 2],
+  ["src/machine/devices/canvasRgbaFrameSource.js", 1],
+  ["src/machine/guests/pyprocGuestAdapter.js", 3],
+  ["src/machine/guests/pyprocHomeVolume.js", 18],
+  ["src/machine/guests/v86BlockBuffer.js", 1],
+  ["src/machine/guests/v86ClockPort.js", 2],
+  ["src/machine/guests/v86DisplayPort.js", 1],
+  ["src/machine/guests/v86FileSystemVolume.js", 21],
+  ["src/machine/guests/v86FramebufferPort.js", 3],
+  ["src/machine/guests/v86GuestAdapter.js", 18],
+  ["src/machine/guests/v86InputPort.js", 1],
+  ["src/machine/guests/v86PacketPort.js", 1],
+  ["src/machine/guests/v86PointerPort.js", 1],
+  ["src/machine/guests/v86SerialPort.js", 2],
+  ["src/machine/persistence/indexedDbMachineStore.js", 5],
+]);
 for (const f of collect(join(ROOT, "src"), [".js"], [])) {
   check(`PyProcError only: ${rel(f)}`, () => {
     const src = readFileSync(f, "utf8");
+    const relPath = rel(f);
+    if (relPath.startsWith("src/machine/")) {
+      const hits = [...src.matchAll(/new (Error|RangeError|SyntaxError)\(/g)];
+      const allowed = machineBareErrorBudget.get(relPath) ?? 0;
+      if (hits.length > allowed) {
+        throw new Error(`machine 오류 계약 위반: 무코드 오류 ${hits.length}건(예산 ${allowed}). WebMachineError(code) 또는 TypeError(인자 계약)만`);
+      }
+      return;
+    }
     const hits = [...src.matchAll(/new (Error|TypeError|RangeError|SyntaxError)\(/g)];
-    const allowed = rel(f) === "src/capabilities/pyprocSw.js" ? 1 : 0;
+    const allowed = relPath === "src/capabilities/pyprocSw.js" ? 1 : 0;
     if (hits.length > allowed) throw new Error(`코드 없는 오류 생성 ${hits.length}건(허용 ${allowed})`);
   });
 }
@@ -641,7 +671,7 @@ check("exports 경로 실존", () => {
   }
 });
 check("exports 안정 subpath 고정", () => {
-  const allowed = new Set([".", "./assets", "./runtime", "./reactive", "./syscall-bridge", "./process-os", "./worker", "./gpu", "./socket", "./wasi"]);
+  const allowed = new Set([".", "./assets", "./runtime", "./reactive", "./syscall-bridge", "./process-os", "./worker", "./gpu", "./socket", "./wasi", "./machine"]);
   const keys = Object.keys(pkg.exports);
   for (const key of keys) {
     if (!allowed.has(key)) throw new Error(`승인 안 된 export key: ${key}`);
@@ -976,6 +1006,7 @@ const LAYER_RANK = new Map([
   ["composition", 2],   // 조립: core에 능력 registry를 설치하고 public 표면을 낸다
   ["session", 3],       // 조립된 런타임을 부팅해 머신 하나의 수명주기와 단독 소유권을 만든다
   ["processOs", 3],     // 워커 = 프로세스, 스냅샷 = 프로세스 이미지
+  ["machine", 4],       // 브라우저를 여러 guest OS가 올라가는 컴퓨터로. pyproc의 최상층
 ]);
 check("src 레이어 폴더 고정", () => {
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
@@ -1128,63 +1159,44 @@ check("mainPlan 이니셔티브마다 README", () => {
   walk(dir); if (existsSync(join(dir, "_done"))) walk(join(dir, "_done"));
 });
 
-const webMachinePackagesRoot = join(ROOT, "packages");
+const machineRoot = join(ROOT, "src", "machine");
 const webMachineTestRoot = join(ROOT, "tests", "webMachine");
-const webMachinePackageNames = new Map([
-  ["core", "@web-machine/core"],
-  ["browser", "@web-machine/browser"],
-  ["guest-pyproc", "@web-machine/guest-pyproc"],
-  ["guest-v86", "@web-machine/guest-v86"],
+const webMachineSourceRoots = [machineRoot, webMachineTestRoot];
+// 엔진·브라우저를 모르는 순수 집합. 옛 @web-machine/core의 경계가 파일 불변식으로 남는다
+// (폴더가 아니라 파일인 이유: snapshotEnvelope/machineManifest는 image/에 살지만 계약 층이다.
+//  contracts와 host가 이 둘을 import하는 것이 실측 edge라 폴더 단위 rank는 성립하지 않는다).
+const machinePureFiles = new Set([
+  "src/machine/contracts/adapterContract.js",
+  "src/machine/contracts/operationControl.js",
+  "src/machine/contracts/webMachineError.js",
+  "src/machine/host/commandQueue.js",
+  "src/machine/host/machineHandle.js",
+  "src/machine/host/webMachineHost.js",
+  "src/machine/image/machineManifest.js",
+  "src/machine/image/snapshotEnvelope.js",
 ]);
-const webMachinePackageRoots = new Map(
-  [...webMachinePackageNames].map(([folder, name]) => [name, join(webMachinePackagesRoot, folder)]),
-);
-const webMachineSourceRoots = [
-  ...[...webMachinePackageNames.keys()].map((folder) => join(webMachinePackagesRoot, folder)),
-  webMachineTestRoot,
-];
+// 층위 = 옛 package 소속. pure(0: 옛 core) <- platform(1: 옛 browser) <- guests(2) <- composition(3).
+const machineFileRank = (relPath) => {
+  if (machinePureFiles.has(relPath)) return 0;
+  const folder = relPath.split("/")[2];
+  if (folder === "guests") return 2;
+  if (folder === "composition") return 3;
+  return 1;
+};
 
-check("Web Machine 정식 package와 검증 트리 구조 고정", () => {
-  const actualPackages = readdirSync(webMachinePackagesRoot).filter((entry) => statSync(join(webMachinePackagesRoot, entry)).isDirectory());
-  const expectedPackages = [...webMachinePackageNames.keys()];
-  if (actualPackages.sort().join("\n") !== expectedPackages.sort().join("\n")) {
-    throw new Error(`package 경계 불일치: ${actualPackages.join(", ")}`);
-  }
-  for (const folder of expectedPackages) {
-    const packageRoot = join(webMachinePackagesRoot, folder);
-    const entries = readdirSync(packageRoot).sort();
-    const expectedEntries = ["index.d.ts", "index.js", "package.json", "src"];
-    if (entries.join("\n") !== expectedEntries.join("\n")) throw new Error(`${folder}: package root dump ${entries.join(", ")}`);
-  }
+check("Web Machine 층과 검증 트리 구조 고정", () => {
+  // packages/ 감옥은 철거됐다. 플랫폼은 pyproc의 machine 층이다.
+  if (existsSync(join(ROOT, "packages"))) throw new Error("packages/ 잔존: Web Machine은 src/machine 층이다");
+  const entries = readdirSync(machineRoot).sort();
+  const expected = ["composition", "contracts", "coordination", "devices", "guests", "host", "image", "index.d.ts", "index.js", "persistence"];
+  if (entries.join("\n") !== expected.join("\n")) throw new Error(`machine 층 경계 불일치: ${entries.join(", ")}`);
   const testEntries = readdirSync(webMachineTestRoot).sort();
   const expectedTestEntries = ["README.md", "browser", "contracts", "fixtures"];
   if (testEntries.join("\n") !== expectedTestEntries.join("\n")) throw new Error(`검증 경계 불일치: ${testEntries.join(", ")}`);
   if (readdirSync(join(webMachineTestRoot, "browser")).join("\n") !== "probes") {
     throw new Error("tests/webMachine/browser에는 probes만 둔다");
   }
-
   const requiredFiles = [
-    "packages/core/src/contracts/adapterContract.js",
-    "packages/core/src/contracts/operationControl.js",
-    "packages/core/src/contracts/webMachineError.js",
-    "packages/core/src/host/commandQueue.js",
-    "packages/core/src/host/machineHandle.js",
-    "packages/core/src/host/webMachineHost.js",
-    "packages/core/src/image/machineManifest.js",
-    "packages/core/src/image/snapshotEnvelope.js",
-    "packages/browser/src/composition/createBrowserHost.js",
-    "packages/browser/src/coordination/webLockOwnerCoordinator.js",
-    "packages/browser/src/devices/browserClockDevice.js",
-    "packages/browser/src/devices/browserEntropyDevice.js",
-    "packages/browser/src/image/machineEnvelopeCoordinator.js",
-    "packages/browser/src/image/webMachineFile.js",
-    "packages/browser/src/image/webMachineTrust.js",
-    "packages/browser/src/persistence/generationRetention.js",
-    "packages/browser/src/persistence/indexedDbMachineStore.js",
-    "packages/browser/src/persistence/memoryMachineStore.js",
-    "packages/guest-pyproc/src/pyprocGuestAdapter.js",
-    "packages/guest-v86/src/v86GuestAdapter.js",
-    "packages/guest-v86/src/v86SerialPort.js",
     "tests/webMachine/fixtures/v86/prepareAssets.mjs",
   ];
   const missing = requiredFiles.filter((file) => !existsSync(join(ROOT, file)));
@@ -1202,46 +1214,30 @@ check("Web Machine 정식 package와 검증 트리 구조 고정", () => {
   for (const root of webMachineSourceRoots) walk(root);
 });
 
-check("Web Machine package manifest와 public surface 고정", () => {
+check("Web Machine public 표면은 machine 배럴 하나", () => {
   const rootPackage = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  if (JSON.stringify(rootPackage.workspaces) !== JSON.stringify(["packages/*"])) throw new Error("root workspaces는 packages/* 한 곳이어야 한다");
-  for (const [folder, name] of webMachinePackageNames) {
-    const packageRoot = join(webMachinePackagesRoot, folder);
-    const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
-    if (manifest.name !== name || manifest.version !== "0.0.0" || manifest.private !== true) {
-      throw new Error(`${folder}: private 0.0.0 package identity 불일치`);
-    }
-    if (manifest.type !== "module" || manifest.main !== "./index.js" || manifest.types !== "./index.d.ts") {
-      throw new Error(`${folder}: native ESM/type 진입점 불일치`);
-    }
-    if (manifest.exports?.["."]?.default !== "./index.js" || manifest.exports?.["."]?.types !== "./index.d.ts") {
-      throw new Error(`${folder}: root export만 허용`);
-    }
-    if (JSON.stringify(manifest.files) !== JSON.stringify(["index.js", "index.d.ts", "src"])) {
-      throw new Error(`${folder}: package files allowlist 불일치`);
-    }
-    if (manifest.sideEffects !== false) throw new Error(`${folder}: sideEffects false 누락`);
-    const dependencyNames = Object.keys(manifest.dependencies || {});
-    const peerNames = Object.keys(manifest.peerDependencies || {});
-    if (folder === "core" && (dependencyNames.length || peerNames.length)) throw new Error("core dependency는 0이어야 한다");
-    if (folder === "browser" && JSON.stringify(manifest.dependencies) !== JSON.stringify({ "@web-machine/core": "0.0.0" })) {
-      throw new Error("browser는 core 하나만 의존해야 한다");
-    }
-    if (folder.startsWith("guest-") && JSON.stringify(manifest.peerDependencies) !== JSON.stringify({ "@web-machine/core": "0.0.0" })) {
-      throw new Error(`${folder}: core peer dependency만 허용`);
-    }
-    const indexSource = readFileSync(join(packageRoot, "index.js"), "utf8");
-    const typesSource = readFileSync(join(packageRoot, "index.d.ts"), "utf8");
-    if (!indexSource.trim() || !typesSource.trim()) throw new Error(`${folder}: public JS/type surface 비어 있음`);
-    for (const ref of jsModuleRefs(join(packageRoot, "index.js"))) {
-      if (!ref.spec.startsWith("./src/") || !ref.spec.endsWith(".js")) throw new Error(`${folder}: index는 자기 src만 export해야 한다`);
-    }
+  if (rootPackage.workspaces) throw new Error("workspaces 잔존: pyproc은 단일 package다");
+  if (rootPackage.exports?.["./machine"] !== "./src/machine/index.js") {
+    throw new Error("pyproc/machine subpath가 machine 배럴을 가리켜야 한다");
   }
+  const barrelPath = join(machineRoot, "index.js");
+  const barrelSource = readFileSync(barrelPath, "utf8");
+  if (!barrelSource.trim()) throw new Error("machine 배럴이 비어 있음");
+  for (const ref of jsModuleRefs(barrelPath)) {
+    if (!ref.spec.startsWith("./") || !ref.spec.endsWith(".js")) throw new Error(`machine 배럴은 자기 층만 export해야 한다: ${ref.spec}`);
+    const target = moduleTarget(barrelPath, ref.spec);
+    if (!target || !existsSync(target)) throw new Error(`machine 배럴 export 대상 없음: ${ref.spec}`);
+  }
+  const typesSource = readFileSync(join(machineRoot, "index.d.ts"), "utf8");
+  if (!typesSource.trim()) throw new Error("machine type 표면이 비어 있음");
+  // 루트 표면: 컴퓨터 진입점 하나를 게시한다
+  const rootIndex = readFileSync(join(ROOT, "index.js"), "utf8");
+  if (!rootIndex.includes("createWebComputer")) throw new Error("루트 표면에 createWebComputer가 없음");
 });
 await checkAsync("Web Machine memory MachineStore contract", runMemoryMachineStoreContract);
 await checkAsync("Web Computer context swap rollback matrix", runContextSwapContract);
 check("Web Machine public type와 runtime store 의미 일치", () => {
-  const source = readFileSync(join(webMachinePackagesRoot, "browser", "index.d.ts"), "utf8");
+  const source = readFileSync(join(machineRoot, "index.d.ts"), "utf8");
   for (const required of [
     "interface GenerationHead",
     "prev: string | null",
@@ -1257,8 +1253,8 @@ check("Web Machine public type와 runtime store 의미 일치", () => {
   for (const removed of ["MemoryGenerationStore", "IndexedDbGenerationStore", "IndexedDbOwnerEpochStore"]) {
     if (source.includes(removed)) throw new Error(`흡수된 public type 잔존: ${removed}`);
   }
-  const memorySource = readFileSync(join(webMachinePackagesRoot, "browser", "src", "persistence", "memoryMachineStore.js"), "utf8");
-  const indexedSource = readFileSync(join(webMachinePackagesRoot, "browser", "src", "persistence", "indexedDbMachineStore.js"), "utf8");
+  const memorySource = readFileSync(join(machineRoot, "persistence", "memoryMachineStore.js"), "utf8");
+  const indexedSource = readFileSync(join(machineRoot, "persistence", "indexedDbMachineStore.js"), "utf8");
   if (!memorySource.includes("WEB_MACHINE_OWNER_STALE") || !indexedSource.includes("WEB_MACHINE_OWNER_STALE")) {
     throw new Error("MachineStore stale owner runtime contract 누락");
   }
@@ -1293,7 +1289,7 @@ check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () 
   if (trackedAssets.status !== 0 || trackedAssets.stdout.trim()) throw new Error("third-party fixture binary가 git에 포함됨");
 });
 check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
-  const deviceRoot = join(webMachinePackagesRoot, "browser", "src", "devices");
+  const deviceRoot = join(machineRoot, "devices");
   const clockSource = readFileSync(join(deviceRoot, "browserClockDevice.js"), "utf8");
   const entropySource = readFileSync(join(deviceRoot, "browserEntropyDevice.js"), "utf8");
   if (/\b(?:Date|performance)\s*\.|\b(?:setTimeout|clearTimeout|setInterval|clearInterval)\s*\(/.test(clockSource)) {
@@ -1304,66 +1300,72 @@ check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
   }
 });
 check("Web Machine host는 guest와 browser 구현을 모름", () => {
-  const coreRoot = join(webMachinePackagesRoot, "core");
+  // 옛 @web-machine/core의 경계. 순수 집합(contracts/host + 순수 image 2파일)은
+  // 엔진 이름도 브라우저 전역도 모르고, 자기들끼리만 import한다.
   const guestTerms = /\b(?:pyproc|pyodide|wasi|v86|x86|linux|buildroot)\b/i;
   const browserTerms = /\b(?:window|document|navigator|location|indexedDB|localStorage|sessionStorage|caches|fetch|XMLHttpRequest|WebSocket|BroadcastChannel|Worker|SharedWorker|MessageChannel|crypto|performance|Date|setTimeout|setInterval)\b/;
   const problems = [];
-  for (const file of collect(coreRoot, [".js"], [])) {
+  for (const relPath of machinePureFiles) {
+    const file = join(ROOT, relPath);
     const source = readFileSync(file, "utf8");
-    if (guestTerms.test(source)) problems.push(`${rel(file)}: guest/engine 이름`);
-    if (browserTerms.test(source)) problems.push(`${rel(file)}: browser 구현 직접 접근`);
+    if (guestTerms.test(source)) problems.push(`${relPath}: guest/engine 이름`);
+    if (browserTerms.test(source)) problems.push(`${relPath}: browser 구현 직접 접근`);
     for (const ref of jsModuleRefs(file)) {
       const target = moduleTarget(file, ref.spec);
-      if (!target || !rel(target).startsWith("packages/core/")) {
-        problems.push(`${rel(file)} -> ${ref.spec}: core 밖 import`);
+      if (!target || !machinePureFiles.has(rel(target))) {
+        problems.push(`${relPath} -> ${ref.spec}: 순수 집합 밖 import`);
       }
     }
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
-check("Web Machine guest adapter 경계와 public surface", () => {
+check("Web Machine 층 내부 import는 아래로만", () => {
+  // 옛 3개 package 경계가 파일 rank로 남는다: pure(0) <- platform(1) <- guests(2) <- composition(3).
+  // 두 강화 조항이 옛 감옥의 실제 규칙이다:
+  //  - guests는 pure만 소비한다(옛 guest package는 core barrel만 알았다). platform 직접 접근 금지.
+  //  - machine 밖(src/session 등)으로 나가는 것은 조립 지점 composition만 허용된다.
   const problems = [];
-  for (const folder of ["guest-pyproc", "guest-v86"]) {
-    const guestRoot = join(webMachinePackagesRoot, folder);
-    for (const file of collect(guestRoot, [".js"], [])) {
-      for (const ref of jsModuleRefs(file)) {
-        const target = moduleTarget(file, ref.spec);
-        if (target && !rel(target).startsWith(`packages/${folder}/`)) problems.push(`${rel(file)} -> ${ref.spec}: guest 밖 relative import`);
-        if (!target && ref.spec !== "@web-machine/core") problems.push(`${rel(file)} -> ${ref.spec}: engine 또는 다른 guest 직접 import`);
-        if (ref.spec.startsWith("@web-machine/core/")) problems.push(`${rel(file)} -> ${ref.spec}: core deep import`);
-      }
-    }
-  }
-  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
-});
-check("Web Machine browser는 host 방향으로만 의존", () => {
-  const browserRoot = join(webMachinePackagesRoot, "browser");
-  const guestTerms = /\b(?:pyproc|pyodide|wasi|v86|x86|linux|buildroot)\b/i;
-  const problems = [];
-  for (const file of collect(browserRoot, [".js", ".mjs"], [])) {
-    const source = readFileSync(file, "utf8");
-    if (guestTerms.test(source)) problems.push(`${rel(file)}: guest/engine 이름`);
+  for (const file of collect(machineRoot, [".js"], [])) {
+    const fromRel = rel(file);
+    if (fromRel === "src/machine/index.js") continue; // 배럴은 표면 게이트가 본다
+    const fromRank = machineFileRank(fromRel);
     for (const ref of jsModuleRefs(file)) {
       const target = moduleTarget(file, ref.spec);
-      if (!target) {
-        if (ref.spec !== "@web-machine/core") problems.push(`${rel(file)} -> ${ref.spec}: core 이외 package import`);
+      if (!target) { problems.push(`${fromRel} -> ${ref.spec}: bare import 금지`); continue; }
+      const targetRel = rel(target);
+      if (!targetRel.startsWith("src/machine/")) {
+        if (fromRank !== 3) problems.push(`${fromRel} -> ${targetRel}: machine 밖 import는 composition만`);
         continue;
       }
-      const targetRel = rel(target);
-      if (!targetRel.startsWith("packages/browser/")) {
-        problems.push(`${rel(file)} -> ${targetRel}: browser 역방향 import`);
-      }
+      const toRank = machineFileRank(targetRel);
+      if (toRank > fromRank) problems.push(`${fromRel} -> ${targetRel}: rank ${fromRank} -> ${toRank} 위로 향함`);
+      else if (fromRank === 2 && toRank === 1) problems.push(`${fromRel} -> ${targetRel}: guest가 platform 직접 소비(pure 계약만 허용)`);
     }
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
-check("Web Machine 조립은 probes에만 존재", () => {
+check("Web Machine 장치·지속층은 guest를 모름", () => {
+  // 옛 @web-machine/browser의 경계: 장치/지속성/조율은 어떤 게스트 이름도 모른다.
+  const guestTerms = /\b(?:pyodide|wasi|v86|x86|buildroot)\b/i;
+  const problems = [];
+  for (const folder of ["devices", "persistence", "coordination"]) {
+    for (const file of collect(join(machineRoot, folder), [".js"], [])) {
+      if (guestTerms.test(readFileSync(file, "utf8"))) problems.push(`${rel(file)}: guest/engine 이름`);
+    }
+  }
+  if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+check("Web Machine 조립은 composition과 probes에만 존재", () => {
   const problems = [];
   for (const root of webMachineSourceRoots) for (const file of collect(root, [".js", ".mjs", ".html"], [])) {
     if (rel(file).includes("/fixtures/v86/assets/")) continue;
     const source = readFileSync(file, "utf8");
-    if (source.includes(".registerAdapter(") && !rel(file).startsWith("tests/webMachine/browser/probes/")) {
-      problems.push(rel(file));
+    const fileRel = rel(file);
+    if (source.includes(".registerAdapter(")
+      && !fileRel.startsWith("tests/webMachine/browser/probes/")
+      && !fileRel.startsWith("src/machine/composition/")
+      && fileRel !== "src/machine/host/webMachineHost.js") {
+      problems.push(fileRel);
     }
   }
   if (problems.length) throw new Error(`composition root 밖 adapter 등록: ${problems.join(", ")}`);
@@ -1382,7 +1384,7 @@ check("Web Machine source는 named ESM과 명시 확장자", () => {
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
 });
-check("Web Machine 검증은 package root만 소비", () => {
+check("Web Machine 검증은 machine 배럴만 소비", () => {
   const problems = [];
   for (const file of collect(webMachineTestRoot, [".js", ".mjs", ".html"], [])) {
     if (rel(file).includes("/fixtures/v86/assets/")) continue;
@@ -1390,8 +1392,8 @@ check("Web Machine 검증은 package root만 소비", () => {
       const target = moduleTarget(file, ref.spec);
       if (!target) continue;
       const targetRel = rel(target);
-      if (targetRel.startsWith("packages/") && !/^packages\/(?:core|browser|guest-pyproc|guest-v86)\/index\.js$/.test(targetRel)) {
-        problems.push(`${rel(file)} -> ${targetRel}: package deep import`);
+      if (targetRel.startsWith("src/machine/") && targetRel !== "src/machine/index.js") {
+        problems.push(`${rel(file)} -> ${targetRel}: machine 배럴 밖 deep import`);
       }
     }
   }
@@ -1404,7 +1406,7 @@ check("Web Machine import graph cycle 없음", () => {
   const graph = new Map(files.map((file) => [rel(file), []]));
   for (const file of files) {
     for (const ref of jsModuleRefs(file)) {
-      const target = moduleTarget(file, ref.spec) || (webMachinePackageRoots.has(ref.spec) ? join(webMachinePackageRoots.get(ref.spec), "index.js") : null);
+      const target = moduleTarget(file, ref.spec);
       if (!target) continue;
       const targetRel = rel(target);
       if (byRel.has(targetRel)) graph.get(rel(file)).push(targetRel);
@@ -1437,16 +1439,13 @@ check("Web Computer 제품 composition root 고정", () => {
   for (const id of ["saveButton", "exportButton", "importButton", "pythonCode", "linuxCommand", "linuxDisplay", "trustDialog"]) {
     if (!html.includes(`id="${id}"`)) throw new Error(`제품 UI 누락: ${id}`);
   }
-  if (!html.includes('"@web-machine/core":"/packages/core/index.js"')) throw new Error("제품 import map에 core root가 없음");
+  if (html.includes("importmap") || html.includes("@web-machine")) throw new Error("제품에 죽은 import map 잔존: 공개 표면은 /index.js 하나다");
 });
 
 check("Web Computer 제품은 공개 package root만 소비", () => {
   const allowedTargets = new Set([
     "index.js",
-    "packages/core/index.js",
-    "packages/browser/index.js",
-    "packages/guest-pyproc/index.js",
-    "packages/guest-v86/index.js",
+    "src/machine/index.js",
   ]);
   const files = collect(webComputerRoot, [".js"], []).filter((file) => !rel(file).includes("/assets/"));
   const problems = [];
@@ -1454,7 +1453,7 @@ check("Web Computer 제품은 공개 package root만 소비", () => {
     for (const ref of jsModuleRefs(file)) {
       const target = moduleTarget(file, ref.spec);
       if (!target) {
-        if (ref.spec !== "@web-machine/core") problems.push(`${rel(file)} -> ${ref.spec}: 승인되지 않은 bare import`);
+        problems.push(`${rel(file)} -> ${ref.spec}: 승인되지 않은 bare import`);
         continue;
       }
       const targetRel = rel(target);
@@ -1498,7 +1497,7 @@ check("봉투는 출처를 나르고 채널 판정은 나르지 않는다", () =
     throw new Error("linuxOs가 자산 출처를 밝히지 않는다");
   }
   // provenance가 서명 대상 안에 있다는 구조 사실: content가 machines를 통째로 싣는다.
-  const manifestSrc = readFileSync(join(webMachinePackagesRoot, "core", "src", "image", "machineManifest.js"), "utf8");
+  const manifestSrc = readFileSync(join(machineRoot, "image", "machineManifest.js"), "utf8");
   if (!/machines:\s*normalized\.machines/.test(manifestSrc)) {
     throw new Error("machineManifest: content가 machines를 싣지 않는다(guestManifest.provenance가 서명 밖으로 샌다)");
   }

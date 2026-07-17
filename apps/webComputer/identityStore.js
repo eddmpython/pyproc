@@ -1,4 +1,4 @@
-import { createWebMachineKeyPair } from "/packages/browser/index.js";
+import { createWebMachineKeyPair } from "/src/machine/index.js";
 
 const databaseName = "webComputerIdentityV1";
 const storeName = "identity";

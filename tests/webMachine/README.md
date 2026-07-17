@@ -14,7 +14,7 @@ tests/webMachine/
 └─ browser/probes/     # package를 조립하는 유일한 composition root
 ```
 
-probe는 `packages/*/index.js`만 import한다. package 내부 deep path와 guest 사이 import는 구조 게이트가 차단한다.
+probe는 `src/machine/index.js` 배럴만 import한다. machine 내부 deep path와 guest 사이 import는 구조 게이트가 차단한다.
 v86 constructor와 모든 engine/image binary는 composition root에서 외부 주입하며 package와 git에는 포함하지 않는다.
 
 ## 실행

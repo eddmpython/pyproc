@@ -16,10 +16,10 @@ ownership 상실 request 실행 1회·자동 replay 0회·late response 오염 0
 <p>두 fake guest에 같은 lifecycle suite를 적용하고 paused snapshot, device permission/mode, portable/session scope, ownership fencing을 검증한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
   import { createFakeGuestFactory } from "../../contracts/fakeGuestAdapter.js";
 
   const out = document.getElementById("out");

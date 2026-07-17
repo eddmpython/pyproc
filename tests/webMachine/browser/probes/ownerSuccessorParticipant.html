@@ -3,15 +3,15 @@
 <head><meta charset="utf-8"><title>Web Machine owner participant</title></head>
 <body>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
   import {
     IndexedDbMachineStore,
     MachineCommitCoordinator,
     WebLockOwnerCoordinator,
-  } from "../../../../packages/browser/index.js";
+  } from "../../../../src/machine/index.js";
   import { createFakeGuestFactory } from "../../contracts/fakeGuestAdapter.js";
 
   const ownerId = new URLSearchParams(location.search).get("id");

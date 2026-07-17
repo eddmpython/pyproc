@@ -24,12 +24,12 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
 <p>실제 Linux NIC를 bounded packet switch에 연결하고 ARP와 ICMP frame을 process cold restore 전후에 왕복한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../packages/core/index.js";
-  import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryEthernetSwitch } from "../../../../packages/browser/index.js";
-  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryEthernetSwitch } from "../../../../src/machine/index.js";
+  import { createV86GuestFactory } from "../../../../src/machine/index.js";
   import { createIpv4EchoPeer } from "../../fixtures/network/ipv4EchoPeer.js";
   import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
   import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";

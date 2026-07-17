@@ -3,9 +3,6 @@
   "version": "0.0.9",
   "description": "브라우저 파이썬 프로세스 OS - 서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬(프로세스·병렬·복원 리액티브·머신 이미지). Real Python runtime in the browser tab: processes, parallelism, checkpoint/time-travel, portable .pymachine images.",
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/eddmpython/pyproc.git"
@@ -32,7 +29,8 @@
     "./worker": "./src/processOs/worker.js",
     "./gpu": "./src/capabilities/gpuCompute.js",
     "./socket": "./src/capabilities/socketBridge.js",
-    "./wasi": "./src/runtime/engines/wasi/wasiSession.js"
+    "./wasi": "./src/runtime/engines/wasi/wasiSession.js",
+    "./machine": "./src/machine/index.js"
   },
   "files": [
     "index.js",

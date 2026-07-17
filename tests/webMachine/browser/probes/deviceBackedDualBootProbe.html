@@ -27,14 +27,14 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
 <p>Python home volume과 Linux ATA disk를 공통 block port에 연결하고 새 browser process에서 복원한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
   import { bootSession, openMachine } from "../../../../index.js";
-  import { WebMachineHost } from "../../../../packages/core/index.js";
-  import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryBlockDevice } from "../../../../packages/browser/index.js";
-  import { createPyprocGuestFactory } from "../../../../packages/guest-pyproc/index.js";
-  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryBlockDevice } from "../../../../src/machine/index.js";
+  import { createPyprocGuestFactory } from "../../../../src/machine/index.js";
+  import { createV86GuestFactory } from "../../../../src/machine/index.js";
   import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
   import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
 

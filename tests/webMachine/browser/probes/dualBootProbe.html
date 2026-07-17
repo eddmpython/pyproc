@@ -16,13 +16,13 @@ Python OS + Linux 동시 boot 5404/5422/5513ms, dual snapshot 141-190ms,
 <p>pyproc Python OS와 x86 Linux를 같은 host registry에서 동시에 부팅하고 두 portable image를 복원한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
   import { bootSession, openMachine } from "../../../../index.js";
-  import { WebMachineHost } from "../../../../packages/core/index.js";
-  import { createPyprocGuestFactory } from "../../../../packages/guest-pyproc/index.js";
-  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { createPyprocGuestFactory } from "../../../../src/machine/index.js";
+  import { createV86GuestFactory } from "../../../../src/machine/index.js";
   import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
   import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
 

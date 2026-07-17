@@ -21,15 +21,15 @@ pyproc에서 "Machine"은 단독 클래스명이 아니라 능력 접두(Machine
 MachineContainer)와 파일 포맷(.pymachine)에만 쓴다. Session을 Machine으로 개명하지
 않는 이유: 아래 플랫폼 계층이 Machine 어휘를 선점했다.
 
-## Web Machine 플랫폼 (packages/, 비공개)
+## Web Machine 플랫폼 (src/machine, pyproc의 최상층)
 
 | 용어 | 뜻 | 소유 |
 |---|---|---|
-| Web Machine | 여러 guest OS를 부팅하는 브라우저 컴퓨터 계약 | `packages/core` |
-| MachineHandle / WebMachineHost | 호스트 생명주기(boot/pause/snapshot/restore) | `packages/core/src/host` |
-| Guest | host 계약을 구현한 OS 어댑터(pyproc, v86 Linux) | `packages/guest-*` |
-| Generation | owner-fenced 저장소의 HEAD/PREV 커밋 단위 | `packages/browser` persistence |
-| `.webmachine` | 두 OS 스냅샷과 디스크를 함께 서명 운반하는 봉투 | `packages/browser` image |
+| Web Machine | 여러 guest OS를 부팅하는 브라우저 컴퓨터 계약 | `src/machine/contracts`+`host` |
+| MachineHandle / WebMachineHost | 호스트 생명주기(boot/pause/snapshot/restore) | `src/machine/host` |
+| Guest | host 계약을 구현한 OS 어댑터(pyproc, v86 Linux) | `src/machine/guests` |
+| Generation | owner-fenced 저장소의 HEAD/PREV 커밋 단위 | `src/machine/persistence` |
+| `.webmachine` | 두 OS 스냅샷과 디스크를 함께 서명 운반하는 봉투 | `src/machine/image` |
 | Web Computer | 두 OS를 한 화면에서 조립한 제품 | `apps/webComputer` |
 
 경계 선언: pyproc 공개 표면은 이 플랫폼 어휘를 쓰지 않고, 플랫폼 core는 guest 이름

@@ -25,17 +25,17 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
 <p>명시적 wall/monotonic clock과 cryptographic entropy가 실제 Linux RTC, timer, RDRAND를 구동하고 process cold restore에서 새 장치로 다시 연결되는지 검증한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
   import {
     BrowserClockDevice,
     BrowserEntropyDevice,
     IndexedDbMachineStore,
     MachineCommitCoordinator,
-  } from "../../../../packages/browser/index.js";
-  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  } from "../../../../src/machine/index.js";
+  import { createV86GuestFactory } from "../../../../src/machine/index.js";
   import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
   import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
 

@@ -1,5 +1,5 @@
 // machineStoreContract.mjs - public MachineStore 반환, 오류, fencing, retention의 Node 기준 suite.
-import { MemoryMachineStore } from "../../../packages/browser/index.js";
+import { MemoryMachineStore } from "../../../src/machine/index.js";
 
 function generationRecord(groupId, generationId, machineDigest, deviceDigest = null) {
   return {

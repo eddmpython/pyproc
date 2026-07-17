@@ -1,4 +1,4 @@
-import { IndexedDbMachineStore, WebLockOwnerCoordinator } from "/packages/browser/index.js";
+import { IndexedDbMachineStore, WebLockOwnerCoordinator } from "/src/machine/index.js";
 import {
   WEB_COMPUTER_CAPABILITIES,
   WEB_COMPUTER_DATABASE,

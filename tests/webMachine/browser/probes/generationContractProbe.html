@@ -17,16 +17,16 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
 <p>guest snapshot과 flushed block image를 한 CAS generation으로 commit하고 손상된 HEAD에서 PREV로 복구한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../packages/core/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
   import {
     IndexedDbMachineStore,
     MachineCommitCoordinator,
     MemoryBlockDevice,
     MemoryMachineStore,
-  } from "../../../../packages/browser/index.js";
+  } from "../../../../src/machine/index.js";
   import { createFakeGuestFactory } from "../../contracts/fakeGuestAdapter.js";
   import { runMachineStoreContract } from "../../contracts/machineStoreContract.mjs";
 

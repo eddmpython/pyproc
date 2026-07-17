@@ -25,14 +25,14 @@ initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2
 <p>두 OS와 block image를 IndexedDB generation에 commit하고 browser process 종료 뒤 같은 profile에서 cold restore한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="importmap">
-  {"imports":{"@web-machine/core":"/packages/core/index.js"}}
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
   import { bootSession, openMachine } from "../../../../index.js";
-  import { WebMachineHost } from "../../../../packages/core/index.js";
-  import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryBlockDevice } from "../../../../packages/browser/index.js";
-  import { createPyprocGuestFactory } from "../../../../packages/guest-pyproc/index.js";
-  import { createV86GuestFactory } from "../../../../packages/guest-v86/index.js";
+  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryBlockDevice } from "../../../../src/machine/index.js";
+  import { createPyprocGuestFactory } from "../../../../src/machine/index.js";
+  import { createV86GuestFactory } from "../../../../src/machine/index.js";
   import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
   import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
 

@@ -13,6 +13,7 @@
   "files": [
     "../index.d.ts",
     "../src/capabilities/gpuCompute.d.ts",
+    "../src/machine/index.d.ts",
     "../src/capabilities/socketBridge.d.ts",
     "../src/runtime/engines/wasi/wasiSession.d.ts"
   ]

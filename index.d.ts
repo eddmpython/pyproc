@@ -1199,3 +1199,5 @@ export class PyProc {
 
 
 
+
+export { createWebComputer, type WebComputer } from "./src/machine/index.js";

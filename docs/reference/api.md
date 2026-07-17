@@ -216,6 +216,18 @@ The underlying election/RPC contract (`join` / `run` / `commit` / `ready` / `sta
 `PYPROC_SPLIT_BRAIN`, `PYPROC_LEADER_LOCK_FAILED`, `PYPROC_PARTICIPANT_LEFT`,
 `PYPROC_KERNEL_EXECUTION_ERROR`.
 
+## Browser computer
+
+### `createWebComputer(options?)`
+
+Assembles one browser computer: host, devices (console, block disks, text display,
+scan-code input), a Python guest wired to `bootSession`/`openMachine`, and an optional
+x86 Linux guest when a `V86` constructor is injected (`options.linux`). Returns the host,
+devices, machine handles, and lifecycle controls (`bootAll`, `pauseRunning`, `resumeAll`,
+`shutdownAll`, ownership fan-out). `createMachines: false` assembles hardware only, for
+restore paths where a signed `.webmachine` image creates the machines. The full machine
+surface (devices, stores, image envelope, trust) lives under the `pyproc/machine` subpath.
+
 ## Supporting surfaces
 
 ### `SyscallBridge`
