@@ -1,12 +1,11 @@
 // speedBench.mjs - Speed Lab(S1) 반복 벤치를 headless 브라우저에서 실행하고 JSON 증거를 남긴다.
 // 비교 벤치의 raw output은 docs/operations/benchmarking.md 계약을 따른다.
-import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { cpus, freemem, platform, release, tmpdir, totalmem } from "node:os";
+import { cpus, freemem, platform, release, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
-import { findBrowser, headlessArgs } from "./harness.mjs";
+import { findBrowser, launchBrowser } from "./harness.mjs";
 import { BENCH_ARTIFACT_SCHEMA_VERSION, RAW_OUTPUT_EMBEDDED_REPORT, S1_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_BENCH_TIMEOUT || process.env.PYPROC_GATE_TIMEOUT || 240000);
@@ -89,7 +88,6 @@ const server = createStaticServer(async (req, res) => {
 
 await new Promise((res) => server.listen(0, "127.0.0.1", res));
 const port = server.address().port;
-const profile = mkdtempSync(join(tmpdir(), "pyprocSpeedBench-"));
 const pageParams = new URLSearchParams({
   gate: "1",
   workers: String(benchWorkers),
@@ -99,7 +97,7 @@ const pageParams = new URLSearchParams({
 if (process.env.PYPROC_INDEX_URL) pageParams.set("indexURL", process.env.PYPROC_INDEX_URL);
 const url = `http://127.0.0.1:${port}/examples/speedLab.html?${pageParams}`;
 const startedAt = new Date().toISOString();
-const proc = spawn(browser, [...headlessArgs(profile), url], { stdio: "ignore" });
+const session = launchBrowser(url, { browser, prefix: "pyprocSpeedBench-" });
 
 const result = await new Promise((res) => {
   resolveReport = res;
@@ -108,10 +106,8 @@ const result = await new Promise((res) => {
   }, TIMEOUT_MS);
 });
 
-if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
-else proc.kill("SIGKILL");
+session.close();
 server.close();
-try { rmSync(profile, { recursive: true, force: true }); } catch (e) {}
 
 const primaryCpu = cpus()[0] || {};
 const command = [

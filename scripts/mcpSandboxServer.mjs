@@ -8,13 +8,9 @@
 // 위에 examples/mcpSandbox.html 머신 페이지를 띄우고, long-poll 훅으로 명령을 왕복한다.
 // MCP 전송은 stdio의 newline-delimited JSON-RPC 2.0이다(스펙의 stdio transport).
 // 등록 예시: claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
-import { mkdtempSync, rmSync } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { createStaticServer } from "../examples/serve.mjs";
-import { findBrowser, headlessArgs } from "../tests/browser/harness.mjs";
+import { launchBrowser } from "../tests/browser/harness.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18"; // 지원 MCP 스펙 리비전(클라이언트 제안을 에코 우선)
 const COMMAND_TIMEOUT_MS = Number(process.env.PYPROC_MCP_TIMEOUT || 180000); // 첫 호출은 엔진 부팅 포함
@@ -107,18 +103,12 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${server.address().port}/examples/mcpSandbox.html`
   + (process.env.PYPROC_INDEX_URL ? `?indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "");
 
-const profile = mkdtempSync(join(tmpdir(), "pyprocMcp-"));
-const browser = findBrowser();
-const browserProc = spawn(browser, [...headlessArgs(profile), pageUrl], { stdio: "ignore" });
-process.stderr.write(`pyproc MCP sandbox: ${browser} -> ${pageUrl}\n`);
+const browserSession = launchBrowser(pageUrl, { prefix: "pyprocMcp-" });
+process.stderr.write(`pyproc MCP sandbox: ${browserSession.browser} -> ${pageUrl}\n`);
 
 function shutdown(code = 0) {
-  try {
-    if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(browserProc.pid), "/T", "/F"], { stdio: "ignore" });
-    else browserProc.kill("SIGKILL");
-  } catch (e) {}
+  try { browserSession.close(); } catch (e) {}
   try { server.close(); } catch (e) {}
-  try { rmSync(profile, { recursive: true, force: true }); } catch (e) {}
   process.exit(code);
 }
 process.on("SIGINT", () => shutdown(0));

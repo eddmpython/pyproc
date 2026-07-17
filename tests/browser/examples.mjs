@@ -3,12 +3,8 @@
 // 라이브 데모까지 나갔다. 공개 표면 게이트(gate.html)는 라이브러리를 검증하지 예제를
 // 실행하지 않는다. 예제는 데모(진열장)이므로 이 게이트가 매 CI에서 실제로 연다.
 // 각 예제는 ?gate 쿼리에서만 /gateReport로 완주 여부를 보고한다(사람이 열면 no-op).
-import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
-import { findBrowser, headlessArgs } from "./harness.mjs";
+import { findBrowser, launchBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 // brandGate: 예제가 쓰는 브랜드 자산(마크 SVG + demo.css 팔레트)이 실제로 그려지는지 먼저 본다.
@@ -38,19 +34,16 @@ console.log(`pyproc 예제 게이트\n  browser: ${browser}\n`);
 
 let failed = 0;
 for (const page of PAGES) {
-  const profile = mkdtempSync(join(tmpdir(), "pyprocExample-"));
   // speedLab의 speedup 문턱만 환경으로 조정 가능(공유 러너의 물리 코어 한계).
   // 속도 주장 자체의 인증은 artifact 계약이 담당한다(docs/operations/benchmarking.md S1).
   const minSpeedup = page === "examples/speedLab.html" && process.env.PYPROC_EXAMPLES_MIN_SPEEDUP
     ? `&minSpeedup=${process.env.PYPROC_EXAMPLES_MIN_SPEEDUP}` : "";
-  const proc = spawn(browser, [...headlessArgs(profile), `http://127.0.0.1:${port}/${page}?gate=1${indexQuery}${minSpeedup}`], { stdio: "ignore" });
+  const session = launchBrowser(`http://127.0.0.1:${port}/${page}?gate=1${indexQuery}${minSpeedup}`, { browser, prefix: "pyprocExample-" });
   const result = await new Promise((res) => {
     resolveReport = res;
     setTimeout(() => { if (resolveReport === res) { resolveReport = null; res({ ok: false, timedOut: true }); } }, TIMEOUT_MS);
   });
-  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
-  else proc.kill("SIGKILL");
-  try { rmSync(profile, { recursive: true, force: true }); } catch (e) {}
+  session.close();
   const info = ((result.checks && result.checks[0] && result.checks[0].info) || "").replaceAll("\n", " | ").slice(-150);
   if (result.ok !== true) failed++;
   console.log(`  ${result.ok === true ? "PASS" : "FAIL"} ${label(page)}${result.timedOut ? " (타임아웃)" : ""}${info ? "\n        " + info : ""}`);

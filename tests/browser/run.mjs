@@ -13,7 +13,7 @@ import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStaticServer } from "../../examples/serve.mjs";
-import { findBrowser, headlessArgs } from "./harness.mjs";
+import { findBrowser, headlessArgs, killBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000); // 콜드 CDN 감안. 무거운 probe는 env로 연장
 const MAX_ARTIFACT_BYTES = Number(process.env.PYPROC_GATE_ARTIFACT_MAX || 512 * 1024 * 1024);
@@ -121,10 +121,9 @@ function launch(url, phase) {
   console.log(`${phase === 1 ? "pyproc 브라우저 게이트" : `\n브라우저 재시작 phase ${phase}`}\n  browser: ${browser}\n  url:     ${url}\n`);
   return spawn(browser, [...headlessArgs(currentProfile), url], { stdio: "ignore" });
 }
-function stop(processHandle) {
-  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(processHandle.pid), "/T", "/F"], { stdio: "ignore" });
-  else processHandle.kill("SIGKILL");
-}
+// 프로필 수명주기는 이 게이트 고유다(재시작 phase가 같은 프로필을 다시 물어야 SW/OPFS
+// 지속성을 검증할 수 있다). 그래서 launchBrowser 대신 종료 지식만 하네스와 공유한다.
+const stop = killBrowser;
 
 let phase = 1;
 let proc = launch(pageUrl(process.env.PYPROC_GATE_INITIAL_SEARCH || ""), phase);

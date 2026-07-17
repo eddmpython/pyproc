@@ -1,13 +1,11 @@
 // tests/browser/productConsumer.mjs - 설치된 npm 패키지를 실제 브라우저 앱처럼 소비하는 게이트.
 // repo 상대 import가 아니라 npm pack으로 설치된 node_modules/pyproc만 브라우저에 노출한다.
-import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, rmSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { extname, join, normalize, sep } from "node:path";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
-import { findBrowser, headlessArgs } from "./harness.mjs";
+import { launchBrowser } from "./harness.mjs";
 import { productConsumerCoverageManifest } from "./productConsumerCoverage.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
@@ -466,19 +464,15 @@ try {
 
   const indexQuery = process.env.PYPROC_INDEX_URL ? `?indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
   const url = `http://127.0.0.1:${server.address().port}/${indexQuery}`;
-  const browser = findBrowser();
-  const profile = join(tmpdir(), `pyprocProductProfile-${process.pid}`);
-  const proc = spawn(browser, [...headlessArgs(profile), url], { stdio: "ignore" });
+  const session = launchBrowser(url, { prefix: "pyprocProduct-" });
 
-  console.log(`pyproc 제품 소비자 게이트\n  browser: ${browser}\n  url:     ${url}\n`);
+  console.log(`pyproc 제품 소비자 게이트\n  browser: ${session.browser}\n  url:     ${url}\n`);
   const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);
   const result = await reportPromise;
   clearTimeout(timeout);
 
-  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
-  else proc.kill("SIGKILL");
+  session.close();
   server.close();
-  try { rmSync(profile, { recursive: true, force: true }); } catch (e) {}
 
   if (result.timedOut) {
     console.log(`FAIL 게이트 타임아웃(${TIMEOUT_MS / 1000}s)`);

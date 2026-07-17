@@ -1,6 +1,13 @@
-// harness.mjs - 브라우저 게이트 공용 조각. run.mjs(공개 표면 게이트)와
-// examples.mjs(예제 실행 게이트)가 같은 브라우저 탐색을 쓴다(드리프트 방지).
-import { existsSync } from "node:fs";
+// harness.mjs - 브라우저 게이트 공용 조각. 브라우저를 띄우는 모든 게이트(run/examples/
+// productConsumer/speedBench/mcpSandboxServer)가 같은 탐색과 같은 수명주기를 쓴다.
+//
+// 왜 수명주기까지 여기인가: spawn -> 대기 -> 종료 -> 프로필 삭제가 다섯 벌로 복제돼 있었고
+// 이미 갈라져 있었다(프로필을 mkdtemp로 만드는 곳과 pid 고정 경로로 만드는 곳, 종료를
+// taskkill /T로 하는 곳과 SIGKILL만 하는 곳). 특히 브라우저 종료의 플랫폼 분기는 한 곳에
+// 있어야 하는 지식이다: win32에서 proc.kill()은 런처만 죽이고 렌더러 자식이 살아남는다.
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 export function findBrowser() {
@@ -42,4 +49,30 @@ export function headlessArgs(profileDir) {
   else args.push("--disable-gpu");
   if (process.env.CI) args.push("--no-sandbox");
   return args;
+}
+
+// 브라우저 프로세스 트리를 확실히 죽인다. win32의 proc.kill()은 런처만 죽이고 렌더러
+// 자식이 살아남아 프로필 디렉터리를 물고 있으므로 taskkill /T로 트리째 끊는다.
+export function killBrowser(proc) {
+  if (!proc || proc.exitCode !== null) return;
+  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
+  else proc.kill("SIGKILL");
+}
+
+// url을 헤드리스로 연다. 프로필은 매번 새로 만든다(같은 프로필을 두 인스턴스가 물면
+// 두 번째가 조용히 첫 번째에 탭만 넘기고 즉시 종료한다 = 게이트가 영영 리포트를 못 받는다).
+// 반환: { proc, profile, browser, close() }. close()는 트리 종료 + 프로필 정리까지 한다.
+export function launchBrowser(url, opts = {}) {
+  const browser = opts.browser || findBrowser();
+  const profile = mkdtempSync(join(opts.profileRoot || tmpdir(), opts.prefix || "pyprocGate-"));
+  const proc = spawn(browser, [...headlessArgs(profile), url], { stdio: "ignore" });
+  return {
+    browser,
+    profile,
+    proc,
+    close() {
+      killBrowser(proc);
+      try { rmSync(profile, { recursive: true, force: true }); } catch (e) { /* 잠긴 프로필은 OS 임시 청소에 맡긴다 */ }
+    },
+  };
 }
