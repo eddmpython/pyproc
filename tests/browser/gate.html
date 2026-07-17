@@ -189,6 +189,28 @@
       gj.stop();
       check("journal: 복원 후 유휴 커밋 발생(복원 상태의 durable 반영)",
         commitsAfterRun >= 1 && commitsAfterRestore > commitsAfterRun, `run 후 ${commitsAfterRun}, 복원 후 ${commitsAfterRestore}`);
+
+      // pack/prune: loose CAS를 pack 파일 1개로 묶고도 recover가 성립하는가. 이 경로는 그동안
+      // 자동 게이트가 없었고 수동 probe(journalPackProbe)로만 검증됐다. pack은 blob을 옮기는
+      // 작업이라 조용히 틀리면 "복구는 되는데 내용이 다르다"가 된다.
+      const packed = await gj.pack();
+      const prunedAfterPack = await gj.prune();
+      const packDir = await jDir.getDirectoryHandle("pack");
+      let packFiles = 0;
+      for await (const name of packDir.keys()) packFiles++;
+      const packIndex = JSON.parse(await (await (await jDir.getFileHandle("PACKS.json")).getFile()).text());
+      check("journal pack: live blob을 pack 1개로 묶고 loose를 비운다",
+        packed && packed.packed > 0 && packed.looseRemoved > 0 && packFiles === 1
+        && packIndex.packs.length === 1 && Object.keys(packIndex.packs[0].blobs).length === packed.packed,
+        `live ${packed && packed.liveKeys}p, ${packed && packed.mb}MB, loose 정리 ${packed && packed.looseRemoved}, pack 파일 ${packFiles}, prune 후 loose ${prunedAfterPack.looseRemoved}`);
+
+      // pack만 남은 저널에서 복구되는가. loose는 위에서 전부 지워졌으므로 성공하면 pack
+      // 경로로만 읽은 것이다. 상태를 먼저 어긋내야 "복구가 실제로 되돌렸다"가 증명된다.
+      // 경계 지문(h0)이 맞아야 하므로 같은 커널에서 복구한다(다른 경계는 저널이 거부하는 것이 정답).
+      rt.run("jrx = 999");
+      const packRecovered = await rt.enableJournal({ dir: jDir, reactive, includeHome: false }).recover();
+      check("journal pack: pack만 남은 저널에서 복구(loose 0)", !!packRecovered && rt.run("jrx") === 1,
+        `recovered=${!!packRecovered}, 999로 어긋낸 뒤 jrx=${rt.run("jrx")}`);
       await jRootDir.removeEntry("pyprocGateJournal", { recursive: true });
 
       // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)
