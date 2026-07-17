@@ -72,7 +72,8 @@ const html = `<!DOCTYPE html>
       exportMachinePublicKey,
       fingerprintMachinePublicKey,
       MachineJournal,
-      MachineJail
+      MachineJail,
+      createWebComputer
     } from "pyproc";
     import { getPyProcAssetManifest } from "pyproc/assets";
 
@@ -380,6 +381,27 @@ const html = `<!DOCTYPE html>
       try { await openMachine(imageBlob, { trustedPublicKeys: [wrongPublicKey], requireSignature: true }); }
       catch (e) { wrongKeyDenied = String(e).includes("signature") || String(e).includes("공개키"); }
       check("installed product refuses wrong signer key", wrongKeyDenied);
+
+      // 설치본에서 컴퓨터 한 대: 간판 진입점 createWebComputer가 npm 표면만으로 조립되고
+      // python guest가 부팅해 코드를 실행하는지. 레포 내부 E2E(웹 컴퓨터 앱)와 별개 증명이다:
+      // 여기는 node_modules/pyproc만 노출된 서버라 "받은 물건에서 컴퓨터가 선다"를 실행으로 판다.
+      t = performance.now();
+      const computerConsole = [];
+      const computer = createWebComputer({
+        python: { session: { indexURL: INDEX } },
+        onConsole: (line) => computerConsole.push(line),
+      });
+      await computer.bootAll();
+      const computerRun = await computer.machine("pythonOs").request({ type: "run", code: "sum(range(30))" });
+      timings.computerBootMs = Math.round(performance.now() - t);
+      check("installed package assembles the web computer and runs the python guest",
+        computer.runningMachineIds().includes("pythonOs") &&
+        computerRun === 435 &&
+        computerConsole.some((line) => line.includes("pythonOs")),
+        timings.computerBootMs + "ms, run=" + computerRun);
+      await computer.shutdownAll();
+      check("installed web computer shuts down clean",
+        computer.machine("pythonOs").state === "stopped");
 
       t = performance.now();
       const openedMachine = await openMachine(imageBlob, { trustedPublicKeys: [trustedPublicKey], requireSignature: true });
