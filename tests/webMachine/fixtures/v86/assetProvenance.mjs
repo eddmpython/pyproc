@@ -11,9 +11,13 @@ import { fileURLToPath } from "node:url";
 const root = dirname(fileURLToPath(import.meta.url));
 const catalogPath = resolve(root, "assetCatalog.json");
 const sbomPath = resolve(root, "fixtureSbom.json");
+// 제품 catalog는 이 SSOT의 파생물이라 여기서 함께 쓰고 검사한다.
+const webComputerCatalogPath = resolve(root, "..", "..", "..", "..", "apps", "webComputer", "assetCatalog.json");
 const sha1Pattern = /^[0-9a-f]{40}$/;
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const allowedDistributions = new Set(["local-test-only"]);
+// 이 자산들을 적재하는 곳. v86Probe는 수동 probe 6개, webComputer는 제품 5개(kolibri 제외).
+const knownConsumers = new Set(["v86Probe", "webComputer"]);
 // 출처: SPDX License List 3.28.0(이 문서가 쓰는 라이선스 식별자의 발행 버전).
 const SPDX_LICENSE_LIST_VERSION = "3.28.0";
 
@@ -45,6 +49,16 @@ export function validateV86AssetCatalog(value) {
   if (value.packagePolicy?.thirdPartyBinaryBundling !== "forbidden") {
     throw new TypeError("third-party binary package bundling은 forbidden이어야 한다");
   }
+  // webComputer: 파생 제품 catalog의 정책 블록. 자산 기술은 아래 assets가 정본이고
+  // 여기는 제품 고유의 채널 정책만 담는다.
+  const product = value.webComputer;
+  if (!product || product.channel !== "development" || product.redistribution !== "disabled") {
+    throw new TypeError("webComputer: development/disabled 정책 필요");
+  }
+  assertString(product.catalogId, "webComputer.catalogId");
+  if (!Array.isArray(product.promotionRequires) || !product.promotionRequires.length) {
+    throw new TypeError("webComputer.promotionRequires 필요");
+  }
   if (!Array.isArray(value.components) || !value.components.length) throw new TypeError("components가 필요하다");
   if (!Array.isArray(value.assets) || !value.assets.length) throw new TypeError("assets가 필요하다");
   const componentIds = value.components.map((component, index) => {
@@ -75,6 +89,10 @@ export function validateV86AssetCatalog(value) {
     assertString(asset.role, `${label}.role`);
     assertString(asset.licenseConcluded, `${label}.licenseConcluded`);
     if (!Array.isArray(asset.bundleBlockers) || !asset.bundleBlockers.length) throw new TypeError(`${label}.bundleBlockers 필요`);
+    // consumers: 이 자산을 실제로 적재하는 곳. 파생 catalog의 선택 기준이라 명시 필드다.
+    if (!Array.isArray(asset.consumers) || !asset.consumers.length || asset.consumers.some((c) => !knownConsumers.has(c))) {
+      throw new TypeError(`${label}.consumers: ${[...knownConsumers].join("|")} 중 하나 이상 필요`);
+    }
     return name;
   });
   unique(assetNames, "asset name");
@@ -113,6 +131,45 @@ function assertConcludedLicenseNotStrongerThanFiles(catalog) {
 
 export async function readV86AssetCatalog() {
   return validateV86AssetCatalog(JSON.parse(await readFile(catalogPath, "utf8")));
+}
+
+// 제품 catalog는 이 SSOT의 파생물이다(fixtureSbom.json과 같은 규율: 파생 + 커밋 + 바이트 비교).
+//
+// 왜 파생인가: 예전엔 같은 자산 5개가 두 파일에 두 어휘로 손수 중복 기술돼 있었고, 그래서
+// 제품 쪽 봉인이 장식이었다. 제품 catalog에서 Linux image의 license를 거짓 MIT로 바꿔도
+// 게이트가 통과했다. 어느 쪽도 상대를 몰랐기 때문이다.
+//
+// 어휘는 SSOT의 것으로 통일한다. 제품 쪽 asset.provenanceStatus는 SSOT의 bundleBlockers를
+// 라벨 하나로 압축한 뒤 표류한 것이었다(v86.wasm의 composite-binary-inventory-incomplete는
+// blocker composite-binary-license-inventory-not-verified와 같은 사실이고, firmware의
+// upstream-recipe-not-reproduced는 upstream-source-recipe-not-reproduced와 같은 뜻이다).
+// 압축을 버리고 목록을 그대로 나른다. provenanceStatus는 출처에 대한 판정이라 component 층위다.
+export function createWebComputerCatalog(catalogValue) {
+  const catalog = validateV86AssetCatalog(catalogValue);
+  const componentOf = new Map(catalog.components.map((component) => [component.componentId, component]));
+  const assets = catalog.assets
+    .filter((asset) => asset.consumers.includes("webComputer"))
+    .map((asset) => ({
+      name: asset.name,
+      role: asset.role,
+      url: asset.url,
+      sha1: asset.sha1,
+      sha256: asset.sha256,
+      byteLength: asset.byteLength,
+      licenseConcluded: asset.licenseConcluded,
+      provenanceStatus: componentOf.get(asset.componentId).provenanceStatus,
+      bundleBlockers: asset.bundleBlockers,
+    }));
+  return {
+    schemaVersion: 1,
+    catalogId: catalog.webComputer.catalogId,
+    createdAt: catalog.createdAt,
+    channel: catalog.webComputer.channel,
+    redistribution: catalog.webComputer.redistribution,
+    promotionRequires: catalog.webComputer.promotionRequires,
+    sourceCatalogId: catalog.catalogId,
+    assets,
+  };
 }
 
 export function createV86FixtureSbom(catalogValue) {
@@ -181,23 +238,35 @@ function serialize(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+// 파생물 전부. 하나라도 손으로 고치면 --check가 잡는다.
+async function derivedArtifacts() {
+  const catalog = await readV86AssetCatalog();
+  return [
+    { path: sbomPath, label: "fixtureSbom.json", text: serialize(createV86FixtureSbom(catalog)) },
+    { path: webComputerCatalogPath, label: "apps/webComputer/assetCatalog.json", text: serialize(createWebComputerCatalog(catalog)) },
+  ];
+}
+
 export async function assertV86FixtureSbom() {
-  const expected = serialize(createV86FixtureSbom(await readV86AssetCatalog()));
-  const actual = await readFile(sbomPath, "utf8");
-  if (actual !== expected) throw new Error("fixtureSbom.json이 assetCatalog.json과 불일치한다");
+  for (const artifact of await derivedArtifacts()) {
+    const actual = await readFile(artifact.path, "utf8");
+    if (actual !== artifact.text) throw new Error(`${artifact.label}이 assetCatalog.json과 불일치한다(파생물을 손으로 고쳤거나 SSOT가 바뀌었다)`);
+  }
   return true;
 }
 
 async function runCommand() {
   const mode = process.argv[2] || "--check";
   if (mode === "--write") {
-    await writeFile(sbomPath, serialize(createV86FixtureSbom(await readV86AssetCatalog())));
-    console.log("WRITE fixtureSbom.json");
+    for (const artifact of await derivedArtifacts()) {
+      await writeFile(artifact.path, artifact.text);
+      console.log(`WRITE ${artifact.label}`);
+    }
     return;
   }
   if (mode === "--check") {
     await assertV86FixtureSbom();
-    console.log("PASS v86 fixture provenance/SBOM");
+    console.log("PASS v86 provenance: SBOM과 제품 catalog가 SSOT의 파생물");
     return;
   }
   throw new TypeError(`지원하지 않는 mode: ${mode}`);
