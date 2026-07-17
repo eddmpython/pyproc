@@ -1,4 +1,9 @@
 // assetProvenance.mjs - fixture catalog 검증과 SPDX 2.3 SBOM의 단일 생성 경계.
+//
+// 이 생성기는 결정적이어야 한다: --check가 재생성물과 커밋된 fixtureSbom.json을 바이트로
+// 비교하고, sbomDigest가 봉투에 실린다. 그래서 시각·난수·환경 같은 비결정 입력을 쓰지 않고,
+// 시간이 필요한 자리는 catalog가 값을 준다(하드코딩 금지 원칙: 값은 계약에서 온다).
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,8 +11,16 @@ import { fileURLToPath } from "node:url";
 const root = dirname(fileURLToPath(import.meta.url));
 const catalogPath = resolve(root, "assetCatalog.json");
 const sbomPath = resolve(root, "fixtureSbom.json");
+const sha1Pattern = /^[0-9a-f]{40}$/;
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const allowedDistributions = new Set(["local-test-only"]);
+// 출처: SPDX License List 3.28.0(이 문서가 쓰는 라이선스 식별자의 발행 버전).
+const SPDX_LICENSE_LIST_VERSION = "3.28.0";
+
+// catalog 내용의 내용 주소. documentNamespace의 유일성 축이라 catalog가 바뀌면 같이 바뀐다.
+function catalogDigest(catalog) {
+  return createHash("sha256").update(JSON.stringify(catalog)).digest("hex").slice(0, 16);
+}
 
 function assertString(value, label) {
   if (typeof value !== "string" || !value) throw new TypeError(`${label}: 문자열 필요`);
@@ -24,6 +37,11 @@ function spdxId(prefix, value) {
 
 export function validateV86AssetCatalog(value) {
   if (!value || value.schemaVersion !== 1) throw new TypeError("asset catalog schemaVersion 불일치");
+  // createdAt: SPDX creationInfo.created의 값. 생성기가 시각을 읽으면 재생성이 비결정이 되고
+  // --check의 바이트 비교가 매 실행 깨진다. 그래서 시각도 catalog가 주는 계약값이다.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value.createdAt || "")) {
+    throw new TypeError("asset catalog createdAt: ISO8601 Z 형식 필요");
+  }
   if (value.packagePolicy?.thirdPartyBinaryBundling !== "forbidden") {
     throw new TypeError("third-party binary package bundling은 forbidden이어야 한다");
   }
@@ -49,6 +67,7 @@ export function validateV86AssetCatalog(value) {
     const label = `assets[${index}]`;
     const name = assertString(asset.name, `${label}.name`);
     if (!String(asset.url).startsWith("https://")) throw new TypeError(`${label}.url: HTTPS 필요`);
+    if (!sha1Pattern.test(asset.sha1)) throw new TypeError(`${label}.sha1 형식 불일치`);
     if (!sha256Pattern.test(asset.sha256)) throw new TypeError(`${label}.sha256 형식 불일치`);
     if (!Number.isSafeInteger(asset.byteLength) || asset.byteLength <= 0) throw new TypeError(`${label}.byteLength 불일치`);
     if (!componentSet.has(asset.componentId)) throw new TypeError(`${label}.componentId 없음: ${asset.componentId}`);
@@ -115,7 +134,12 @@ export function createV86FixtureSbom(catalogValue) {
   const files = catalog.assets.map((asset) => ({
     SPDXID: spdxId("File", asset.name),
     fileName: `./assets/${asset.name}`,
-    checksums: [{ algorithm: "SHA256", checksumValue: asset.sha256 }],
+    // SPDX 2.3 §8.4: 파일 checksum은 SHA1이 1..1(필수), 나머지 알고리즘이 0..*.
+    // 외부 검증기가 이 문서를 읽을 수 있어야 SBOM 요구가 의미를 갖는다.
+    checksums: [
+      { algorithm: "SHA1", checksumValue: asset.sha1 },
+      { algorithm: "SHA256", checksumValue: asset.sha256 },
+    ],
     licenseConcluded: asset.licenseConcluded,
     licenseInfoInFiles: [asset.licenseConcluded],
     copyrightText: "NOASSERTION",
@@ -136,11 +160,15 @@ export function createV86FixtureSbom(catalogValue) {
     dataLicense: "CC0-1.0",
     SPDXID: "SPDXRef-DOCUMENT",
     name: catalog.catalogId,
-    documentNamespace: `https://github.com/eddmpython/pyproc/sbom/${catalog.catalogId}`,
+    // SPDX는 문서 인스턴스마다 유일한 네임스페이스를 요구하는데, 우리는 sbomDigest를 봉투에
+    // 실어야 하므로 재생성이 결정적이어야 한다(--check가 바이트 비교를 한다). catalog 내용의
+    // digest를 넣으면 둘을 동시에 만족한다: 내용이 다르면 유일하고, 내용이 같으면 결정적이다.
+    // UUID는 유일성만 주고 결정성을 깨므로 쓸 수 없다.
+    documentNamespace: `https://github.com/eddmpython/pyproc/sbom/${catalog.catalogId}/${catalogDigest(catalog)}`,
     creationInfo: {
-      created: "2026-07-15T00:00:00Z",
+      created: catalog.createdAt,
       creators: ["Organization: pyproc contributors"],
-      licenseListVersion: "3.28.0",
+      licenseListVersion: SPDX_LICENSE_LIST_VERSION,
     },
     documentComment: "이 문서는 로컬 Web Machine probe가 내려받는 미번들 fixture를 기술한다. package 배포 목록이 아니다.",
     packages,
