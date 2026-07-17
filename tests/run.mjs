@@ -279,7 +279,7 @@ for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
   });
 }
 
-// 3.4) 문서 주체 가드: 문서·주석의 주체는 나다(1인칭/주어 생략). 나를 3인칭 호칭으로
+// 3.1) 문서 주체 가드: 문서·주석의 주체는 나다(1인칭/주어 생략). 나를 3인칭 호칭으로
 //      지칭하는 표현을 차단한다(커밋 메시지 주체 중립 규칙의 문서판, 2026-07-12 확정).
 //      금칙어는 리터럴로 쓰면 이 게이트가 자기 자신에 걸리므로 조립한다.
 console.log("\n[문서 주체]");
@@ -290,7 +290,7 @@ for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
   });
 }
 
-// 3.5) 네이밍 가드: camelCase는 언어 불문이다(JS 문자열 안의 파이썬 포함).
+// 3.2) 네이밍 가드: camelCase는 언어 불문이다(JS 문자열 안의 파이썬 포함).
 //      우리 접두(_pyproc*) 스네이크와, 우리가 정의하는 파이썬 함수명의 스네이크를 차단한다.
 //      외부 기술 명칭(ASGI 키 문자열, pyodide.ffi.run_sync, API kwarg 등)은 정의가 아니라 안 걸린다.
 console.log("\n[네이밍]");
@@ -331,7 +331,7 @@ check("파일과 폴더 이름 camelCase", () => {
   if (bad.length) throw new Error("camelCase 아님: " + bad.slice(0, 8).join(", "));
 });
 
-// 3.7) 오류 계약 가드: src의 모든 오류 생성은 PyProcError다(코드 없는 Error 금지).
+// 3.3) 오류 계약 가드: src의 모든 오류 생성은 PyProcError다(코드 없는 Error 금지).
 //      계약의 축은 message가 아니라 code이므로, 코드 없는 오류가 하나라도 생기면 소비자의
 //      프로그램적 분기가 다시 문자열 매칭으로 퇴행한다. 예외: pyprocSw.js는 SW 자기충족
 //      파일(모듈 import 금지 계약)이라 로컬 swError 헬퍼의 new Error 1곳만 허용한다.
@@ -355,7 +355,7 @@ check("PyProcError 코드 카탈로그 = d.ts union (삼자 일치)", () => {
   for (const code of dtsCodes) if (!catalog.includes(code)) throw new Error(`카탈로그에 없음: ${code}`);
 });
 
-// 3.8) 영문 API 레퍼런스 동기화: 루트 export 전수가 docs/reference/api.md에 등장해야 한다.
+// 3.4) 영문 API 레퍼런스 동기화: 루트 export 전수가 docs/reference/api.md에 등장해야 한다.
 //      index.js 헤더 주석 목록의 표류(8개 어긋난 채 방치)를 반복하지 않는 기계 장치다.
 console.log("\n[API 레퍼런스]");
 check("api.md가 루트 export 전수를 다룬다", () => {
@@ -398,7 +398,7 @@ check("공개 문서 인프라 존재(CHANGELOG/SECURITY/glossary)", () => {
   if (!changelog.includes("## Unreleased")) throw new Error("CHANGELOG에 Unreleased 절 없음");
 });
 
-// 3.6) 사이트 크롬: 채널(SNS) 행은 라우트마다 고정이고 정의처는 examples/siteChrome.js 하나다.
+// 3.5) 사이트 크롬: 채널(SNS) 행은 라우트마다 고정이고 정의처는 examples/siteChrome.js 하나다.
 //      라우트가 늘 때 채널을 빠뜨리거나 마크업을 다시 인라인으로 복제하는 드리프트를 차단한다.
 console.log("\n[사이트 크롬]");
 const chromeSrc = readFileSync(join(ROOT, "examples", "siteChrome.js"), "utf8");
@@ -493,7 +493,7 @@ for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
   });
 }
 
-// 3.7) 브랜드: 마크 정본은 assets/logo.svg 하나다. 파비콘·헤더 로고·색이 여기서만 나온다.
+// 3.6) 브랜드: 마크 정본은 assets/logo.svg 하나다. 파비콘·헤더 로고·색이 여기서만 나온다.
 //      마크를 인라인으로 복제하거나(6쪽이 갈라진다), 마크와 CSS 색이 어긋나는 드리프트를 차단한다.
 console.log("\n[브랜드]");
 const logoSvg = readFileSync(join(ROOT, "assets", "logo.svg"), "utf8");
