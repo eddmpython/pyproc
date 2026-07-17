@@ -22,7 +22,7 @@ Also welcome besides code: bug reports, browser measurements (please include Chr
 
 1. **New capabilities start in `tests/attempts/<category>/`**, never directly in `src/`. A category is one question with a hypothesis and an explicit graduation gate, proven by browser measurements. See [tests/attempts/README.md](tests/attempts/README.md).
 2. **Graduated learnings become a plan** in `mainPlan/<initiative>/` (numbered docs + progress ledger). Finished initiatives move to `mainPlan/_done/`.
-3. **Only then does code land in `src/`**, which is layered by folder: `src/runtime/`, `src/capabilities/`, `src/processOs/`. Imports flow one way (toward Layer 0), and engine internals stay behind capability contracts.
+3. **Only then does code land in `src/`**, where folder = layer and imports only ever point downward: `runtime/` (engine core) <- `capabilities/` (things that attach to a runtime) <- `composition/` (installs the capability registry, exposes the public surface) <- `session/` and `processOs/`. Every edge lowers the rank, so a cycle is impossible. Engine internals stay behind capability contracts.
 
 Operating details live in [docs/](docs/README.md).
 

@@ -307,6 +307,29 @@ for (const scope of ["src", "examples", "tests"]) {
     });
   }
 }
+// 파일/폴더 이름도 camelCase다. 위 검사는 파일 "내용"의 식별자만 봐서 이름 규칙은 기계 검사가
+// 0이었다. mainPlan은 kebab-case 번호 문서라 예외(dartlab 관례), 검증 데이터/픽스처도 제외.
+check("파일과 폴더 이름 camelCase", () => {
+  const CAMEL = /^[a-z][A-Za-z0-9]*$/;
+  const exempt = new Set(["_done", "web-machine", "guest-pyproc", "guest-v86"]);
+  const bad = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      if (entry.startsWith(".") || entry === "node_modules") continue;
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) {
+        if (!exempt.has(entry) && !CAMEL.test(entry)) bad.push(`${rel(full)}/ (폴더)`);
+        walk(full);
+        continue;
+      }
+      const stem = entry.replace(/\.(js|mjs|html|css|json|d\.ts)$/, "");
+      if (stem === entry) continue; // 검사 대상 확장자가 아니다
+      if (!CAMEL.test(stem) && !exempt.has(stem)) bad.push(rel(full));
+    }
+  };
+  for (const scope of ["src", "scripts"]) walk(join(ROOT, scope));
+  if (bad.length) throw new Error("camelCase 아님: " + bad.slice(0, 8).join(", "));
+});
 
 // 3.7) 오류 계약 가드: src의 모든 오류 생성은 PyProcError다(코드 없는 Error 금지).
 //      계약의 축은 message가 아니라 code이므로, 코드 없는 오류가 하나라도 생기면 소비자의

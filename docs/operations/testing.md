@@ -15,7 +15,7 @@ npm test          # = node tests/run.mjs, 의존성 0
 - **능력 계약 형태**: `Runtime`/`PyProc`/`ReactiveController` 프로토타입 메서드 존재.
 - **타입 커버리지**: `index.d.ts`가 공개 표면을 전부 선언하고 `package.json`이 이를 배선하는가.
 - **공개 import 경계**: `package.json exports`가 승인된 안정 subpath만 노출하고, `examples/`는 `src/` 내부 파일을 모듈 import로 직접 소비하지 않는가.
-- **src graph 구조**: `src/` 파일이 승인된 레이어 폴더에 있고, 내부 상대 module 참조가 `.js` 확장자를 가진 실제 `src/` 파일을 가리키며, ESM import graph에 cycle이 없고, cross-layer edge가 승인 목록 안에 있는가. `runtime.js` core는 capability class를 직접 import하지 않고, public `pyproc/runtime`은 `runtimeApi.js -> runtimeBindings.js` registry를 통해 `enable*` 메서드를 제공한다. `runtime <-> capabilities`와 `capabilities -> processOs` edge는 정확한 파일 쌍 단위로만 승인한다.
+- **src graph 구조**: `src/` 파일이 승인된 레이어 폴더에 있고, 내부 상대 module 참조가 `.js` 확장자를 가진 실제 `src/` 파일을 가리키며, ESM import graph에 cycle이 없고, cross-layer edge가 전부 아래로 향하는가. 레이어 순위는 `runtime`(0) < `capabilities`(1) < `composition`(2) < `session`/`processOs`(3)이고 같은 순위끼리도 교차 금지다. `runtime.js` core는 자기 레이어 밖을 import하지 않고, 합성 루트 `runtimeApi.js`는 개별 capability class를 모르며(registry만 안다) 아래층이 합성 루트를 import하지 않는다. `capabilities -> runtime` edge는 coupling budget이라 파일 쌍 단위로 심사하고, `syscallBridge -newURL-> worker.js`는 Worker 자산 URL이라 별도 승인이다.
 - **문서 위생**: 전체 `*.md`/`*.js`에 em dash(U+2014) 0.
 - **상대 링크**: 모든 `*.md`의 상대 링크가 실존 파일을 가리키는가(죽은 링크 차단).
 - **attempts 구조**: `tests/attempts/` 각 카테고리에 README(+ 졸업 게이트 절)가 있는가.

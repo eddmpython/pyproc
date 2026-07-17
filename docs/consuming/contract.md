@@ -158,7 +158,7 @@ console.log(machine.status());
 - `npm test`는 `package.json exports`가 승인된 stable specifier만 노출하는지, 공개 예제가 root API나 subpath export만 소비하는지, `index.d.ts`가 공개 타입 계약을 덮는지 검사한다.
 - `npm run test:consumer`는 repo 상대 import 없이 설치된 `node_modules/pyproc`만 노출한 브라우저 앱에서 설치 패키지 계약을 검증한다.
 - 같은 consumer gate가 `DeviceFs` 파일 장치, `JobControl` 잡 수명주기, `MachineContainer` 자식 머신 수명주기, `MachineJournal` commit/recover, 독립 browsing context 3개의 `openPersistentMachine` leader 강제 제거와 heap + `/home/web` + prepared environment cold reopen, `MachineJail` 권한 manifest, signed `.pymachine` export/open, trusted public key와 wrong key 거부, signer fingerprint, `/home/web/resume.py`의 SQLite connection 재개설까지 실행한다.
-- `pyproc/runtime`은 public Runtime wrapper다. 내부 `runtime.js` core는 엔진 래퍼와 `Runtime.fs`만 담당하고, `runtimeApi.js`는 `src/capabilities/runtimeBindings.js` registry를 설치해 `enableReactive` 같은 opt-in capability factory를 제공한다.
+- `pyproc/runtime`은 public Runtime wrapper다. 내부 `runtime.js` core는 엔진 래퍼와 `Runtime.fs`만 담당하고, 합성 루트 `src/composition/runtimeApi.js`가 `runtimeBindings.js` registry를 설치해 `enableReactive` 같은 opt-in capability factory를 제공한다.
 - `restoreLive` 실행 경계는 기계 검증 대상이다. 경계를 지키면 즉시 복원(재해싱 0), 위반은 자동 감지되어 재해시 경로로 승격된다. 반환값 `rehashed`로 경로를 확인한다.
 
 ### 설치 패키지 consumer gate coverage

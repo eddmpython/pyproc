@@ -25,7 +25,7 @@ dartlab의 운영 체계를 pyproc 크기에 맞게 차용한 것이다(2026-07-
 - **신규 능력은 src 직행 금지.** 반드시 `tests/attempts/<카테고리>/`에서 시작한다. 규칙: [tests/attempts/README.md](../../tests/attempts/README.md).
 - **카테고리는 막무가내로 만들지 않는다.** 진짜 질문(가설 + 성공 기준)이 생겼을 때만 개설하고, 개설했으면 그 안에서 파일로 결과를 쌓아 졸업 게이트가 판정날 때까지 운영한다(졸업 또는 명시적 폐기).
 - **mainPlan은 착수 전 문서다.** attempts에서 얻은 실측을 모아 자기충족적 PRD로 만들고, 착수 전 정합성·ROI를 재검한다. 완료·폐기는 `mainPlan/_done/<name>/`으로 폴더째 이관. 규칙: [mainPlan/README.md](../../mainPlan/README.md).
-- **src는 승격된 코드만.** 레이어 = 폴더(`runtime/`, `capabilities/`, `processOs/`), import는 단방향, 교차 관심사는 능력 계약 뒤에.
+- **src는 승격된 코드만.** 레이어 = 폴더(`runtime/` <- `capabilities/` <- `composition/` <- `session/`·`processOs/`), import는 아래로만, 교차 관심사는 능력 계약 뒤에.
 
 ## 3. 메모리 운영 (dartlab 차용)
 
