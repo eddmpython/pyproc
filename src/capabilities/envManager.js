@@ -9,12 +9,8 @@
 // 되므로 원산인 runtime.js에서 직접 받는다.
 import { DEFAULT_INDEX, ensureEngineScript, Runtime } from "../runtime/runtime.js";
 import { PyodideEngine } from "../runtime/engines/pyodideEngine.js";
+import { sha256HexShort } from "../runtime/contentDigest.js";
 import { WheelCache } from "./wheelCache.js";
-
-async function hashHex(s) {
-  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return [...new Uint8Array(d)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 // 환경 선언(manifest: indexURL/env/lockFileURL/packages/setup)으로 부팅한다.
 // dirs(소비자 제공 디렉터리 핸들)가 캐시를 결정한다:
@@ -33,7 +29,7 @@ export async function bootEnv(manifest = {}, dirs = {}) {
   const t0 = performance.now();
   let py = null, lane = "cold", cacheError = null;
   if (dirs.snapshots) {
-    const name = "bare-" + (await hashHex(indexURL)) + ".bin";
+    const name = "bare-" + (await sha256HexShort(indexURL)) + ".bin";
     try {
       const f = await (await dirs.snapshots.getFileHandle(name)).getFile();
       py = await loadPyodide({ ...cfg, _loadSnapshot: new Uint8Array(await f.arrayBuffer()) });

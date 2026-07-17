@@ -48,3 +48,11 @@ export function packPages(readPage, pages, pageSize) {
   pages.forEach((p, i) => bin.set(readPage(p), i * pageSize));
   return bin;
 }
+
+// packPages의 역연산. pack과 unpack이 붙어 있어야 "i번째 슬롯 = pages[i]번 페이지"라는
+// 배치 규약이 한 곳에서 읽힌다. 쓰기 방식은 소비자마다 다르므로(워커는 힙 직접 set,
+// 메인은 MemoryCapability.writePage) writePage를 받는다.
+export function unpackPages(writePage, bin, pages, pageSize) {
+  pages.forEach((p, i) => writePage(p, bin.subarray(i * pageSize, (i + 1) * pageSize)));
+  return pages.length;
+}

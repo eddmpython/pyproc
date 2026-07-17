@@ -1028,6 +1028,9 @@ check("src layer edge는 아래로만", () => {
   const capabilityToRuntimeBudget = new Set([
     "src/capabilities/envManager.js -> src/runtime/runtime.js",
     "src/capabilities/envManager.js -> src/runtime/engines/pyodideEngine.js",
+    "src/capabilities/envManager.js -> src/runtime/contentDigest.js",
+    "src/capabilities/machineJournal.js -> src/runtime/contentDigest.js",
+    "src/capabilities/machineJournal.js -> src/runtime/heapGrow.js",
     "src/capabilities/machineJournal.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/heapDelta.js",

@@ -6,6 +6,7 @@
 // 만들기 전에 해당 graph의 실제 바이트를 SHA-256으로 검증할 수 있다.
 
 import { PyProcError } from "./errors.js";
+import { parseSri, sha256Sri } from "./contentDigest.js";
 
 export const PYPROC_ASSET_MANIFEST_VERSION = 1;
 
@@ -59,27 +60,6 @@ function normalizeRoot(baseURL) {
 function joinAssetURL(root, path) {
   if (root.startsWith("/") || root.startsWith("./") || root.startsWith("../")) return root + path;
   return new URL(path, root).href;
-}
-
-function base64FromBytes(bytes) {
-  if (typeof btoa === "function") {
-    let s = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return btoa(s);
-  }
-  if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
-  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "assetIntegrity: base64 인코더가 없다");
-}
-
-async function sha256Sri(data) {
-  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-  const subtle = globalThis.crypto && globalThis.crypto.subtle;
-  if (!subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "assetIntegrity: crypto.subtle이 필요하다");
-  return "sha256-" + base64FromBytes(new Uint8Array(await subtle.digest("SHA-256", bytes)));
-}
-
-function parseSri(value) {
-  return String(value || "").trim().split(/\s+/).filter((v) => v.startsWith("sha256-"));
 }
 
 function matchesSelection(file, roleSet, pathSet) {

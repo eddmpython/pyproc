@@ -467,6 +467,23 @@
       const s2 = await bootSession({ indexURL: INDEX });
       await s2.load(sDir, "gate");
       check("session: 델타로 크로스 커널 부활", s2.rt.run("k + 42") === 4142, `${sv.pages}p, ${sv.mb}MB`);
+
+      // 힙 성장 부활: 저장 커널이 자란 뒤의 상태는, 부활 커널이 먼저 같은 길이까지 힙을
+      // 늘려야(heapGrow) 델타가 들어갈 자리가 생긴다. 이 경로는 그동안 자동 게이트가 없었고
+      // 수동 probe(largeHeapEnvelope)로만 검증됐다.
+      const grow = await bootSession({ indexURL: INDEX });
+      const baseLen = grow.rt.memory.byteLength();
+      grow.rt.run("big = bytearray(48 * 1024 * 1024)\nbig[0] = 7\ngrown = 909");
+      const grownLen = grow.rt.memory.byteLength();
+      const gv = await grow.save(sDir, "grown");
+      const revive = await bootSession({ indexURL: INDEX });
+      const reviveBefore = revive.rt.memory.byteLength();
+      await revive.load(sDir, "grown");
+      check("session: 자란 힙의 부활(성장 -> 델타 적용)",
+        grownLen > baseLen && revive.rt.memory.byteLength() >= grownLen
+        && revive.rt.run("grown + len(big) // (1024 * 1024)") === 909 + 48 && revive.rt.run("big[0]") === 7,
+        `저장 ${Math.round(baseLen / 1048576)}->${Math.round(grownLen / 1048576)}MB, 부활 ${Math.round(reviveBefore / 1048576)}->${Math.round(revive.rt.memory.byteLength() / 1048576)}MB, 델타 ${gv.mb}MB`);
+
       const untrustedImg = await s2.exportImage();
       let trustCode = "";
       try { await openMachine(untrustedImg); } catch (e) { trustCode = e.code; }

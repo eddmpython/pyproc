@@ -7,6 +7,7 @@ import { PyodideEngine } from "./engines/pyodideEngine.js";
 import { FileSystem } from "./fileSystem.js";
 import { PyProcError } from "./errors.js";
 import { runWithGlobalPatch } from "./globalPatch.js";
+import { verifySri } from "./contentDigest.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
@@ -14,17 +15,6 @@ export { checkEnvironment } from "./preflight.js";
 // 기본 엔진 배포 지점(출처: docs/consuming/contract.md의 Pyodide 버전 계약). 이 상수의
 // 유일한 정의처다: boot/bootEnv/PyProc이 여기서 가져간다. 버전 변경 = 릴리즈 사유.
 export const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
-
-function base64FromBytes(bytes) {
-  let s = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-
-async function sha256Sri(data) {
-  const buf = data instanceof ArrayBuffer ? data : data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-  return "sha256-" + base64FromBytes(new Uint8Array(await crypto.subtle.digest("SHA-256", buf)));
-}
 
 function normalizeCoreIntegrity(policy) {
   if (!policy) return null;
@@ -46,14 +36,6 @@ function expectedCoreIntegrity(policy, url, name) {
     || (relative ? policy.files[relative] : null)
     || policy.files[name]
     || null;
-}
-
-async function verifyIntegrity(data, expected, label) {
-  const entries = String(expected || "").trim().split(/\s+/).filter((v) => v.startsWith("sha256-"));
-  if (!entries.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${label}의 sha256 SRI 값이 없다`);
-  const actual = await sha256Sri(data);
-  if (!entries.includes(actual)) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${label} 해시 불일치(expected ${entries[0].slice(0, 19)}..., actual ${actual.slice(0, 19)}...)`);
-  return actual;
 }
 
 function failIntegrity(cache, err) {
@@ -124,7 +106,7 @@ export async function boot(opts = {}) {
         const f = await (await cache.dir.getFileHandle(name)).getFile();
         const data = await f.arrayBuffer();
         if (expected) {
-          try { await verifyIntegrity(data, expected, name); cache.verified++; }
+          try { await verifySri(data, expected, name); cache.verified++; }
           catch (e) { failIntegrity(cache, e); }
         }
         cache.hits++;
@@ -138,7 +120,7 @@ export async function boot(opts = {}) {
     if (!resp.ok) return resp;
     const data = await resp.arrayBuffer();
     if (expected) {
-      try { await verifyIntegrity(data, expected, name); cache.verified++; }
+      try { await verifySri(data, expected, name); cache.verified++; }
       catch (e) { failIntegrity(cache, e); }
     }
     if (cache.dir) {

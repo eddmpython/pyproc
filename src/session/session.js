@@ -21,6 +21,9 @@ import { PyProcError } from "../runtime/errors.js";
 import { boot } from "../composition/runtimeApi.js";
 import { runWithGlobalPatch } from "../runtime/globalPatch.js";
 import { PAGE_SIZE } from "../runtime/memoryLayout.js";
+import { unpackPages } from "../runtime/heapDelta.js";
+import { growHeapTo } from "../runtime/heapGrow.js";
+import { sha256Hex } from "../runtime/contentDigest.js";
 import { WheelCache } from "../capabilities/wheelCache.js";
 import {
   DEFAULT_MACHINE_HOME_PATH,
@@ -88,11 +91,6 @@ const SETUP_MAX_BYTES = 256 * 1024;        // manifest.setup 상한
 const HEAP_MAX_BYTES = 4 * 1024 * 1024 * 1024; // wasm32 주소공간 상한(출처: 선형 메모리 4GB)
 const MACHINE_SIGN_ALG = { name: "ECDSA", namedCurve: "P-256" };
 const MACHINE_SIGN_PARAMS = { name: "ECDSA", hash: "SHA-256" };
-
-async function sha256Hex(bytes) {
-  const d = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 function bytesToBase64Url(bytes) {
   let s = "";
@@ -385,25 +383,11 @@ export class Session {
     // 성장 세션: JS에서 Memory.grow를 직접 하면 Emscripten 글루의 클로저 뷰가 안 갱신되어
     // 런타임이 깨진다(실측). 파이썬 할당으로 정상 성장 경로를 태운다. 초과 성장은 무해하다:
     // 델타가 복원하는 저장 시점의 할당자 상태가 힙 끝을 결정하고, 잉여 페이지는 미사용으로 남는다.
-    if (meta.heapLen > mem.byteLength()) {
-      this.rt.setGlobal("_pyprocTargetLen", meta.heapLen);
-      this.rt.setGlobal("_pyprocHeapLen", () => mem.byteLength());
-      this.rt.run(
-        "import gc as _pyprocGc\n" +
-        "_pyprocHold = []\n" +
-        "while _pyprocHeapLen() < _pyprocTargetLen:\n" +
-        "    _pyprocHold.append(bytearray(8 * 1024 * 1024))\n" +
-        "del _pyprocHold, _pyprocTargetLen, _pyprocHeapLen\n" +
-        "_pyprocGc.collect()"
-      );
-      if (meta.heapLen > mem.byteLength()) {
-        throw new PyProcError("PYPROC_HEAP_GROW_FAILED", `session.load: 힙 성장 실패(목표 ${meta.heapLen}, 현재 ${mem.byteLength()})`);
-      }
-    }
+    growHeapTo((code) => this.rt.run(code), () => mem.byteLength(), meta.heapLen, "session.load");
     // 경계 되감기(무조건): 부팅 이후의 모든 드리프트(재시드, 성장 루프, 소비자 실행 흔적)를
     // cp0으로 지운 위에 델타를 덮는다 -> 결과는 정확히 저장 시점 상태(fork의 정화와 같은 원리).
     this.reactive.restore(0, meta.sp);
-    meta.pages.forEach((p, i) => mem.writePage(p, bin.subarray(i * PAGE_SIZE, (i + 1) * PAGE_SIZE)));
+    unpackPages((p, page) => mem.writePage(p, page), bin, meta.pages, PAGE_SIZE);
     mem.stackRestore(meta.sp);
     this.reactive.checkpoint(); // 부활 상태를 새 경계로
     return { pages: meta.pages.length, mb: +(bin.length / 1048576).toFixed(1) };

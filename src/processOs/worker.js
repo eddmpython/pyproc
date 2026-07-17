@@ -13,7 +13,8 @@
 import { installIpc } from "./ipc.js";
 import { PyProcError, toErrorPayload } from "../runtime/errors.js";
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
-import { byteDiffPages, packPages, samePage } from "../runtime/heapDelta.js";
+import { byteDiffPages, packPages, samePage, unpackPages } from "../runtime/heapDelta.js";
+import { growHeapTo } from "../runtime/heapGrow.js";
 let py = null;
 let interruptView = null;
 let cp0 = null; // 리플레이 경계의 힙 사본(fork 델타의 기준). replay 부팅에서만 채워진다.
@@ -127,12 +128,7 @@ onmessage = async (e) => {
       // 부모 힙이 더 크면(성장 세션) 자식도 같은 길이까지 성장시킨다. JS에서 Memory.grow를
       // 직접 하면 Emscripten 글루가 깨지므로(session.js 실측) 파이썬 할당으로 정상 경로를 탄다.
       // 성장 루프의 흔적은 아래 드리프트 복원(cp0 범위)과 델타(성장 범위 전량 포함)가 지운다.
-      if (msg.heapLen && msg.heapLen > heap().length) {
-        py.runPython("_pyprocHold = []");
-        while (heap().length < msg.heapLen) py.runPython("_pyprocHold.append(bytearray(8 * 1024 * 1024))");
-        py.runPython("del _pyprocHold");
-        if (heap().length < msg.heapLen) throw new PyProcError("PYPROC_HEAP_GROW_FAILED", `applyDelta: 힙 성장 실패(목표 ${msg.heapLen}, 현재 ${heap().length})`);
-      }
+      growHeapTo((code) => py.runPython(code), () => heap().length, msg.heapLen, "applyDelta");
       const h = heap();
       let maxEnd = 0;
       for (const p of msg.pages) if ((p + 1) * PAGE > maxEnd) maxEnd = (p + 1) * PAGE;
@@ -148,7 +144,7 @@ onmessage = async (e) => {
       }
       // cp0 길이 밖(성장분)의 dst 잔재는 델타가 성장 범위를 전량 포함하므로 부모 길이까지
       // 전부 덮이고, 그 너머는 복원된 상태가 참조하지 않는다.
-      msg.pages.forEach((p, i) => h.set(bin.subarray(i * PAGE, (i + 1) * PAGE), p * PAGE));
+      unpackPages((p, page) => h.set(page, p * PAGE), bin, msg.pages, PAGE);
       if (msg.sp !== null && py._module._emscripten_stack_restore) py._module._emscripten_stack_restore(msg.sp);
       postMessage({ type: "applied", id: msg.id, reqId: msg.reqId, pages: msg.pages.length, reverted, ms: Math.round((performance.now() - t0) * 10) / 10 });
     }

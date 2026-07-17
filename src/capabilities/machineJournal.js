@@ -15,6 +15,8 @@
 // 같은 CAS blob 저장소로 읽는다(loose와 pack 모두 recover 호환).
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 import { PyProcError } from "../runtime/errors.js";
+import { sha256Hex } from "../runtime/contentDigest.js";
+import { growHeapTo } from "../runtime/heapGrow.js";
 import {
   DEFAULT_MACHINE_HOME_PATH,
   applyMachineHome,
@@ -31,11 +33,6 @@ const DEFAULT_AUTO_PACK_LOOSE_MB = 8;
 
 function journalCorrupt(message) {
   return new PyProcError("PYPROC_JOURNAL_CORRUPT", message);
-}
-
-async function sha256Hex(bytes) {
-  const d = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function notFound(e) {
@@ -477,22 +474,7 @@ export class MachineJournal {
     if (head.h0 && head.h0 !== await this._boundaryKey()) {
       throw new PyProcError("PYPROC_REPLAY_MISMATCH", "journal.recover: 리플레이 경계 지문(h0) 불일치. 다른 엔진/매니페스트의 저널이다(조용한 힙 오염 방지).");
     }
-    if (head.heapLen > mem.byteLength()) {
-      this._rt.setGlobal("_pyprocJournalTargetLen", head.heapLen);
-      this._rt.setGlobal("_pyprocJournalHeapLen", () => mem.byteLength());
-      this._rt.run(
-        "import gc as _pyprocJournalGc\n" +
-        "_pyprocJournalHold = []\n" +
-        "while _pyprocJournalHeapLen() < _pyprocJournalTargetLen:\n" +
-        "    _pyprocJournalHold.append(bytearray(8 * 1024 * 1024))\n" +
-        "del _pyprocJournalHold, _pyprocJournalTargetLen, _pyprocJournalHeapLen\n" +
-        "_pyprocJournalGc.collect()\n" +
-        "del _pyprocJournalGc"
-      );
-      if (head.heapLen > mem.byteLength()) {
-        throw new PyProcError("PYPROC_HEAP_GROW_FAILED", `journal.recover: 힙 성장 실패(저널 ${head.heapLen} > 현재 ${mem.byteLength()})`);
-      }
-    }
+    growHeapTo((code) => this._rt.run(code), () => mem.byteLength(), head.heapLen, "journal.recover");
     // 성장 루프와 부팅 뒤 드리프트를 cp0으로 지운 위에 저널 페이지를 적용한다.
     this._reactive.restore(0, head.sp);
     const entries = Object.entries(head.pages);

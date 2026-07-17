@@ -6,6 +6,7 @@
 import { bootSession } from "./session.js";
 import { MachineJournal } from "../capabilities/machineJournal.js";
 import { PyProcError } from "../runtime/errors.js";
+import { sha256Hex } from "../runtime/contentDigest.js";
 
 const PROTOCOL_VERSION = 2;
 const EPOCH_FILE = "EPOCH.json";
@@ -43,8 +44,7 @@ function normalizeResult(result) {
 }
 
 async function sha256Name(value) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(value);
 }
 
 function now() {
