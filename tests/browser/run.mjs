@@ -1,5 +1,5 @@
 // tests/browser/run.mjs - 브라우저 런타임 게이트/probe 하네스. Node 전용, 의존성 0.
-// COOP/COEP 서버(examples/serve.mjs 재사용)를 임시 포트로 띄우고, 로컬 Chromium 계열
+// COOP/COEP 서버(scripts/staticServer.mjs 재사용)를 임시 포트로 띄우고, 로컬 Chromium 계열
 // 브라우저를 headless로 실행해 페이지의 실측 결과를 POST /gateReport로 회수한다.
 // POST /gateRestart는 현재 브라우저 프로세스 트리를 종료하고 같은 profile 또는 요청한 새 profile로 연다.
 // /gateArtifact는 profile 밖 임시 파일로 큰 probe 산출물을 스트리밍해 process 사이에 전달한다.
@@ -12,7 +12,7 @@ import { createReadStream, createWriteStream, existsSync, mkdtempSync, readFileS
 import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStaticServer } from "../../examples/serve.mjs";
+import { createStaticServer } from "../../scripts/staticServer.mjs";
 import { findBrowser, headlessArgs, killBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000); // 콜드 CDN 감안. 무거운 probe는 env로 연장

@@ -3,7 +3,8 @@
 import { createServer } from "node:http";
 import { existsSync, rmSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { extname, join, normalize, sep } from "node:path";
+import { join } from "node:path";
+import { safeJoin, sendFile } from "../../scripts/staticServer.mjs";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 import { launchBrowser } from "./harness.mjs";
 import { productConsumerCoverageManifest } from "./productConsumerCoverage.mjs";
@@ -12,41 +13,9 @@ const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 const COVERAGE_MANIFEST = productConsumerCoverageManifest();
 const COVERAGE_MANIFEST_JSON = JSON.stringify(COVERAGE_MANIFEST);
 
-const MIME = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".wasm": "application/wasm",
-  ".data": "application/octet-stream",
-  ".whl": "application/octet-stream",
-};
-
-function safeJoin(root, urlPath) {
-  const rootNorm = normalize(root);
-  const rel = decodeURIComponent(urlPath).replace(/^\/+/, "");
-  const file = normalize(join(rootNorm, rel));
-  if (file !== rootNorm && !file.startsWith(rootNorm + sep)) return null;
-  return file;
-}
-
-async function sendFile(res, file) {
-  try {
-    const body = await readFile(file);
-    res.writeHead(200, {
-      "Content-Type": MIME[extname(file)] || "application/octet-stream",
-      "Cache-Control": "no-store",
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
-      "Service-Worker-Allowed": "/",
-    });
-    res.end(body);
-  } catch (e) {
-    res.writeHead(e.code === "ENOENT" ? 404 : 500);
-    res.end(e.code === "ENOENT" ? `not found: ${file}` : `error: ${e.code}`);
-  }
-}
-
+// 라우팅만 이 게이트 고유다: 저장소 루트를 서빙하면 안 된다(설치된 node_modules/pyproc만
+// 브라우저에 노출하는 것이 이 게이트의 존재 이유다). 그래서 createStaticServer를 쓰지 않고
+// MIME/COI 헤더/경로 탈출 방어/404만 staticServer에서 가져와 조립한다.
 function createProductServer(appDir, publicDir, onReport) {
   return createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");

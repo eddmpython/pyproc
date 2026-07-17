@@ -56,7 +56,7 @@
     "bench:compare": "node tests/browser/benchCompare.mjs",
     "assets:manifest": "node scripts/assetManifest.mjs --pretty",
     "assets:web-computer": "node scripts/prepareWebComputerAssets.mjs",
-    "serve": "node examples/serve.mjs",
+    "serve": "node scripts/staticServer.mjs",
     "fetch:engine": "node scripts/fetchEngine.mjs",
     "mcp:sandbox": "node scripts/mcpSandboxServer.mjs"
   },

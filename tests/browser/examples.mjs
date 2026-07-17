@@ -3,7 +3,7 @@
 // 라이브 데모까지 나갔다. 공개 표면 게이트(gate.html)는 라이브러리를 검증하지 예제를
 // 실행하지 않는다. 예제는 데모(진열장)이므로 이 게이트가 매 CI에서 실제로 연다.
 // 각 예제는 ?gate 쿼리에서만 /gateReport로 완주 여부를 보고한다(사람이 열면 no-op).
-import { createStaticServer } from "../../examples/serve.mjs";
+import { createStaticServer } from "../../scripts/staticServer.mjs";
 import { findBrowser, launchBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
@@ -12,7 +12,7 @@ const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 // 안 띄우므로 몇 초면 끝난다: 예제 5쪽을 다 돌리기 전에 진열장이 깨졌는지부터 알려준다.
 // 빈 문자열 = 랜딩("/"). 랜딩 히어로가 진짜로 CPython을 부팅해 체크포인트/복원을 돌리므로 예제와
 // 같은 급의 실행 표면이다. 랜딩은 배포 루트 기준 상대 경로를 쓰니 반드시 "/"로 열어야 한다
-// (examples/index.html 경로로 열면 assets/와 index.js가 어긋난다. serve.mjs가 "/"를 랜딩에 매핑한다).
+// (examples/index.html 경로로 열면 assets/와 index.js가 어긋난다. staticServer가 "/"를 랜딩에 매핑한다).
 const PAGES = ["tests/browser/brandGate.html", "", "examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/immortal.html", "examples/serverDev.html", "examples/speedLab.html", "examples/processOs.html"];
 const label = (page) => page || "/ (랜딩 히어로 라이브 데모)";
 const indexQuery = process.env.PYPROC_INDEX_URL ? `&indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";

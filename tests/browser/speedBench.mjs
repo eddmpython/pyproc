@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, freemem, platform, release, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createStaticServer } from "../../examples/serve.mjs";
+import { createStaticServer } from "../../scripts/staticServer.mjs";
 import { findBrowser, launchBrowser } from "./harness.mjs";
 import { BENCH_ARTIFACT_SCHEMA_VERSION, RAW_OUTPUT_EMBEDDED_REPORT, S1_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
 
