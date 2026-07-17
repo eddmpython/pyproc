@@ -39,7 +39,9 @@
 | 스냅샷 트리 + 부모-자식 델타 | **SEUSS(EuroSys 2020)**: "snapshot image를 tree lineage로 유지하고 parent-child 사이 델타만 보관". VM snapshot tree는 20년 |
 | 경계 + 델타(메모리) | SEUSS(2020), **Medes(EuroSys 2022)**: 64B 청크 전역 해시 테이블 + base page + "patch and a pointer", BuildBuddy(2026) |
 | live fork -> N 레인 | **SnowFlock(EuroSys 2009)**: "VM fork", 부모 상태를 **multicast로 N 자식에 병렬 전파**, 목적이 parallel computing. 우리 `forkMany`(수확 1회 + SAB 방송)와 같은 추상 |
-| **경계 = 공공재** | **JVM CDS(JDK 12, 2019)가 지구상 모든 Java 사용자에게 배송 중.** 벤더가 경계를 세상에서 한 번 만들어 JDK에 넣고, mmap으로 모든 프로세스가 공유하고, 앱은 Dynamic CDS "top layer"(= 델타)만 얹는다. Cloudflare workerd도 baseline 스냅샷에 **SHA 접두사 파일명(`baseline-61eedf943.bin`)을 붙여 R2로 배포**한다. 이미 출시, 오픈소스 |
+| **경계 = 공공재** | **JVM CDS(JDK 12, 2019)가 지구상 모든 Java 사용자에게 배송 중.** 벤더가 경계를 세상에서 한 번 만들어 JDK에 넣고, mmap으로 모든 프로세스가 공유하고, 앱은 Dynamic CDS "top layer"(= 델타)만 얹는다. **이게 진짜 "경계는 공공재"이고 이미 출시돼 있다** |
+| **경계 + 델타(메모리, 언어 런타임)** | **SEUSS(EuroSys 2020)가 우리 문장을 그대로 썼다**: "**JavaScript 인터프리터의 무거운 Snapshot 하나를 base Snapshot으로 쓰고, 이후 Snapshot들은 함수별 메모리 상태만 담는다.**" Snapshot Stack = 각 항목이 앞 항목의 페이지 단위 diff |
+| 내용주소 청크 + 공유 base 델타 + 무결성 + **메모리 스냅샷** | **AWS(ATC 2023 Best Paper).** 512KiB 청크를 ciphertext 해시로 명명, convergent encryption, manifest MAC 검증. 논문이 직접 말한다: "**이 같은 시스템이 메모리 스냅샷으로 cold start를 줄이는 Lambda SnapStart에서 스냅샷 내용을 저장·적재하는 데 쓰인다.**" 신규 업로드의 **80%가 고유 청크 0개**, 나머지 평균 4.3% |
 | 결정적 메모리 이미지 방법론 | **Node/V8이 2024년에 startup snapshot을 바이트 재현 가능하게 만들었다**(`--random_seed=42 --predictable`, 두 번 생성 후 바이트 비교). Wizer 문서(2021)가 해시 시드를 **바로 그 예시로 경고**한다 |
 | "엔트로피 고정" | **Reproducible Builds 표준 플레이북 그대로**(time -> SOURCE_DATE_EPOCH 2015, hash seed -> PYTHONHASHSEED, getentropy -> randomness). RB 정의 문장과 우리 주장은 같은 문장이다. Debian은 2026-05-10에 이걸 **의무화**했다 |
 | "레시피가 아니라 물건" | **허수아비.** Nix substituter = "빌드하는 대신 가져오는 store", `cache.nixos.org`가 기본값·기본 신뢰·425TiB. Docker도 Dockerfile이 아니라 내용주소 blob을 배포한다 |

@@ -41,14 +41,17 @@
 
 ### 1단계: 측정 장치 (게이트 아님)
 
-`tests/attempts/bootDeterminism/`(신설 캠페인) 안에서:
+`tests/attempts/boundaryRadius/`(신설 캠페인) 안에서:
 
-- **`challengeManifest`**: 무엇을 부팅했는지의 정본. Pyodide 버전, index URL, 자산 SRI,
-  패키지 목록, 엔트로피 고정 항목. **이것이 "같은 매니페스트"의 정의다.** 지금은 그 정의가
-  코드 어디에도 없다.
-- **`heapHashVector`**: 부팅 -> 경계 -> 페이지별 sha256. 힙 길이와 페이지 크기도 싣는다.
-  길이가 다르면 페이지 비교는 무의미하므로 먼저 길이를 본다.
-- **`challengeCompare`**: 벡터 둘 -> `{ samePages, diffPages, diffIndices }`.
+`boundaryChallenge.js` 하나가 넷을 한다(파일 셋으로 쪼갤 만큼 책임이 갈리지 않는다).
+
+- **매니페스트**: 무엇을 부팅했는지의 정본. 엔진, index URL, 패키지, 임포트, env, 엔트로피
+  고정 항목. **이것이 "같은 매니페스트"의 정의다.** 지금은 그 정의가 코드 어디에도 없고,
+  그래서 "같은 매니페스트"라는 말이 검증 불가능했다.
+- **벡터**: 부팅 -> 경계 -> `MemoryCapability.pageHashes()`(페이지당 64비트). 힙 길이와 페이지
+  크기도 싣는다. 길이가 다르면 페이지 비교가 무의미하므로 먼저 길이를 본다.
+- **content address**: 매니페스트 + 벡터의 sha256. **참가자는 hex 하나만 주고받는다.**
+- **대조**: 벡터 둘 -> `{ lengthMatch, diffPages, diffIndices, identical }`.
 
 **측정하는 축(싼 것부터):**
 
@@ -118,8 +121,12 @@ CPython엔 rehash 설비가 없다. 그러니 지금 할 수 있는 것은 **트
 
 ## 완료 조건이 아닌 것
 
-- **"경계는 공공재다"를 주장하지 않는다.** JVM CDS가 2019년부터 하고 있고 Cloudflare workerd가
-  `baseline` + `dedicated` stacked snapshot으로 **출시했다**. 우리 반경은 아직 워커 하나다.
+- **"경계는 공공재다"를 주장하지 않는다.** JVM CDS가 2019년부터 배송 중이고, **언어 런타임
+  base + 델타는 SEUSS(EuroSys 2020)가 문장까지 같으며**, **내용주소 청크 + 공유 base 델타 +
+  무결성을 메모리 스냅샷에 대해 AWS가 출시했다**(ATC 2023). 우리 반경은 아직 워커 하나다.
+- **"우리가 트레이드오프를 풀었다"고 하지 않는다.** Vizier(CIDR 2020)가 "REPL 상태는 완전하게
+  체크포인트하거나 효율적으로 하거나 둘 중 하나"라고 출판했고, WASM 선형 메모리가 균일
+  주소공간이라 우리 기질에선 그 전제가 거짓이다. **영리해서가 아니라 기질이 달라서다.**
 - **`forkMany`가 새롭다고 하지 않는다.** SnowFlock이 2009년에 "한 번 수확해서 N에 방송"을
   측정하고 **열등하다고 기각**했다(157.29s vs 자기 설계 70.63s). 우리는 그들이 버린 baseline에
   서 있다. 이건 결함이 아니다(브라우저엔 IP 멀티캐스트도 CoW도 없다). 다만 **자랑이 아니다.**
@@ -132,11 +139,9 @@ CPython엔 rehash 설비가 없다. 그러니 지금 할 수 있는 것은 **트
 
 | 파일 | 무엇 |
 |---|---|
-| `tests/attempts/bootDeterminism/README.md` | 캠페인 가설·게이트 (attempts 규칙: README 기계 검사) |
-| `tests/attempts/bootDeterminism/challengeManifest.js` | "같은 매니페스트"의 정의 |
-| `tests/attempts/bootDeterminism/heapHashVector.js` | 부팅 -> 페이지 해시 벡터 |
-| `tests/attempts/bootDeterminism/challengeCompare.js` | 벡터 둘 -> 상이 페이지 |
-| `tests/attempts/bootDeterminism/*Probe.html` | 축별 브라우저 실측 |
+| `tests/attempts/boundaryRadius/README.md` | 캠페인 가설·게이트 (attempts 규칙: README 기계 검사) |
+| `tests/attempts/boundaryRadius/boundaryChallenge.js` | 매니페스트 정의 + 벡터 + content address + 대조 |
+| `tests/attempts/boundaryRadius/radiusProbe.html` | 탭 대 탭 + 기기 대 기기(기록 산출) |
 | `docs/operations/contractReality.md` | `PYTHONHASHSEED=0`, 미측정 반경 |
 | `docs/consuming/capabilityMatrix.md` | 반경 한정(3단계) |
 
