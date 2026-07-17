@@ -103,7 +103,7 @@ L0 `runtime` <- L1 `capabilities` <- L2 `composition` <- L3 `session`/`processOs
 - **순환 1 -> 9.** 합성 루트를 `runtime/`에 둔 채 아래를 6폴더로 쪼개면, composition이 아래로
   뻗는 edge 전부가 순환을 닫는다(`runtime -> composition -> machine -> runtime` 등 9개).
   고치려던 병을 9배로 늘린다.
-- **`machine/`은 어휘 규칙이 막는다.** [glossary](../../docs/product/glossary.md)가
+- **`machine/`은 어휘 규칙이 막는다.** [glossary](../../../docs/product/glossary.md)가
   "Session을 Machine으로 개명하지 않는다. 아래 플랫폼 계층이 Machine 어휘를 선점했다"고
   명시한다. `machine/`에 session.js를 넣는 것이 정확히 그 개명이다.
 - **핵은 폴더가 될 수 없다.** `reactive.js`는 registry가 **생성**하므로 합성 루트 아래고
@@ -116,7 +116,7 @@ L0 `runtime` <- L1 `capabilities` <- L2 `composition` <- L3 `session`/`processOs
 
 ### 3.2 wasi를 `src/wasi/`로 승격
 
-- [클린 아키텍처](../_done/web-machine-platform/04-clean-architecture-and-code-rules.md)가
+- [클린 아키텍처](../web-machine-platform/04-clean-architecture-and-code-rules.md)가
   "WASI adapter는 제품 지원 범위가 확정될 때 추가한다"고 적었다. capabilityMatrix는 wasi를
   Research preview로 판정했다 = 미확정. 선례가 그대로 적용된다.
 - `engines/`는 사고가 아니라 목적지다. 등재된 승격 경로는 "EngineContract에 WasiEngine +
