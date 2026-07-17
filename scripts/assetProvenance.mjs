@@ -1,6 +1,10 @@
-// assetProvenance.mjs - fixture catalog 검증과 SPDX 2.3 SBOM의 단일 생성 경계.
+// assetProvenance.mjs - 실행 자산 catalog 검증과 SPDX 2.3 SBOM의 단일 생성 경계.
 //
-// 이 생성기는 결정적이어야 한다: --check가 재생성물과 커밋된 fixtureSbom.json을 바이트로
+// 왜 scripts/인가: 이 도구는 제품(apps/webComputer)의 compliance 산출물을 만든다. 예전엔
+// tests/webMachine/fixtures/v86/에 살았는데, 그러면 제품이 test 경로에 의존하게 된다
+// (구조 게이트가 그 사실을 잡았다). prepareWebComputerAssets.mjs와 같은 층이 제자리다.
+//
+// 이 생성기는 결정적이어야 한다: --check가 재생성물과 커밋된 산출물을 바이트로
 // 비교하고, sbomDigest가 봉투에 실린다. 그래서 시각·난수·환경 같은 비결정 입력을 쓰지 않고,
 // 시간이 필요한 자리는 catalog가 값을 준다(하드코딩 금지 원칙: 값은 계약에서 온다).
 import { createHash } from "node:crypto";
@@ -10,9 +14,10 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const catalogPath = resolve(root, "assetCatalog.json");
-const sbomPath = resolve(root, "fixtureSbom.json");
+const sbomPath = resolve(root, "assetSbom.json");
 // 제품 catalog는 이 SSOT의 파생물이라 여기서 함께 쓰고 검사한다.
-const webComputerCatalogPath = resolve(root, "..", "..", "..", "..", "apps", "webComputer", "assetCatalog.json");
+const webComputerCatalogPath = resolve(root, "..", "apps", "webComputer", "assetCatalog.json");
+const webComputerProvenancePath = resolve(root, "..", "apps", "webComputer", "assetProvenance.js");
 const sha1Pattern = /^[0-9a-f]{40}$/;
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const allowedDistributions = new Set(["local-test-only"]);
@@ -56,6 +61,8 @@ export function validateV86AssetCatalog(value) {
     throw new TypeError("webComputer: development/disabled 정책 필요");
   }
   assertString(product.catalogId, "webComputer.catalogId");
+  // policyVersion: 봉투가 나르는 값. docs/operations/assetProvenance.md의 버전과 같아야 한다.
+  if (!Number.isSafeInteger(product.policyVersion) || product.policyVersion < 1) throw new TypeError("webComputer.policyVersion: 양의 정수 필요");
   if (!Array.isArray(product.promotionRequires) || !product.promotionRequires.length) {
     throw new TypeError("webComputer.promotionRequires 필요");
   }
@@ -133,7 +140,7 @@ export async function readV86AssetCatalog() {
   return validateV86AssetCatalog(JSON.parse(await readFile(catalogPath, "utf8")));
 }
 
-// 제품 catalog는 이 SSOT의 파생물이다(fixtureSbom.json과 같은 규율: 파생 + 커밋 + 바이트 비교).
+// 제품 catalog는 이 SSOT의 파생물이다(SBOM과 같은 규율: 파생 + 커밋 + 바이트 비교).
 //
 // 왜 파생인가: 예전엔 같은 자산 5개가 두 파일에 두 어휘로 손수 중복 기술돼 있었고, 그래서
 // 제품 쪽 봉인이 장식이었다. 제품 catalog에서 Linux image의 license를 거짓 MIT로 바꿔도
@@ -238,16 +245,56 @@ function serialize(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+// 봉투가 나르는 출처. 제품이 브라우저에서 import하므로 JSON이 아니라 모듈로 낸다.
+//
+// channel은 싣지 않는다. 수신자는 catalog도 자산도 없어서 재계산할 수 없고, 재계산 불가능한
+// 판정은 계산이 아니라 선언이다. 게다가 imageTrust가 서명 검증 "전에" manifest를 파싱해
+// 신뢰 화면에 쓰므로, 봉투의 channel을 띄우면 공격자 제어 문자열을 제품 판정으로 표시하게
+// 된다. 정책 본문이 같은 말을 한다: trusted signature는 출처 identity를 증명할 뿐
+// license compliance를 대신하지 않는다.
+//
+// 그래서 봉투는 판정이 아니라 "어떤 catalog와 SBOM으로 만들어졌는가"만 나른다.
+export function createWebComputerProvenanceModule(catalogValue) {
+  const catalog = validateV86AssetCatalog(catalogValue);
+  const sbomDigest = createHash("sha256").update(serialize(createV86FixtureSbom(catalog))).digest("hex");
+  return [
+    "// 생성물이다. npm run assets:provenance -- --write가 쓰고 --check가 바이트로 대조한다.",
+    "// 손으로 고치지 마라. SSOT는 scripts/assetCatalog.json이다.",
+    "//",
+    "// 서명된 봉투가 이 값을 나른다. 판정(channel)은 없다: 수신자가 재계산할 수 없는 판정은",
+    "// 선언이고, imageTrust가 서명 검증 전에 manifest를 읽으므로 공격자 제어 문자열이 된다.",
+    "export const WEB_COMPUTER_ASSET_PROVENANCE = Object.freeze({",
+    `  policyVersion: ${catalog.webComputer.policyVersion},`,
+    `  catalogId: ${JSON.stringify(catalog.webComputer.catalogId)},`,
+    `  sourceCatalogId: ${JSON.stringify(catalog.catalogId)},`,
+    `  sbomDigest: ${JSON.stringify(`sha256:${sbomDigest}`)},`,
+    "});",
+    "",
+    "// 어떤 asset catalog도 기술하지 않는 게스트가 쓴다. 침묵하면 증거 없음이 문제 없음으로",
+    "// 읽히므로 부재를 명시로 적는다. pyproc 게스트의 실행 자산(pyodide 배포판의 9.6MB",
+    "// pyodide.asm.wasm 등)이 지금 그 상태다: pyodide-lock.json은 선택적 wheel 카탈로그이지",
+    "// 부팅 적재 집합이 아니라서 그 합성 바이너리를 0% 덮는다.",
+    "export const UNDESCRIBED_ASSET_PROVENANCE = Object.freeze({",
+    `  policyVersion: ${catalog.webComputer.policyVersion},`,
+    "  catalogId: null,",
+    "  sbomDigest: null,",
+    "  assetsDescribed: false,",
+    "});",
+    "",
+  ].join("\n");
+}
+
 // 파생물 전부. 하나라도 손으로 고치면 --check가 잡는다.
 async function derivedArtifacts() {
   const catalog = await readV86AssetCatalog();
   return [
-    { path: sbomPath, label: "fixtureSbom.json", text: serialize(createV86FixtureSbom(catalog)) },
+    { path: sbomPath, label: "scripts/assetSbom.json", text: serialize(createV86FixtureSbom(catalog)) },
     { path: webComputerCatalogPath, label: "apps/webComputer/assetCatalog.json", text: serialize(createWebComputerCatalog(catalog)) },
+    { path: webComputerProvenancePath, label: "apps/webComputer/assetProvenance.js", text: createWebComputerProvenanceModule(catalog) },
   ];
 }
 
-export async function assertV86FixtureSbom() {
+export async function assertAssetProvenanceArtifacts() {
   for (const artifact of await derivedArtifacts()) {
     const actual = await readFile(artifact.path, "utf8");
     if (actual !== artifact.text) throw new Error(`${artifact.label}이 assetCatalog.json과 불일치한다(파생물을 손으로 고쳤거나 SSOT가 바뀌었다)`);
@@ -265,8 +312,8 @@ async function runCommand() {
     return;
   }
   if (mode === "--check") {
-    await assertV86FixtureSbom();
-    console.log("PASS v86 provenance: SBOM과 제품 catalog가 SSOT의 파생물");
+    await assertAssetProvenanceArtifacts();
+    console.log("PASS 실행 자산 provenance: SBOM과 제품 산출물이 SSOT의 파생물");
     return;
   }
   throw new TypeError(`지원하지 않는 mode: ${mode}`);

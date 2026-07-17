@@ -1204,9 +1204,6 @@ check("Web Machine 정식 package와 검증 트리 구조 고정", () => {
     "packages/guest-pyproc/src/pyprocGuestAdapter.js",
     "packages/guest-v86/src/v86GuestAdapter.js",
     "packages/guest-v86/src/v86SerialPort.js",
-    "tests/webMachine/fixtures/v86/assetCatalog.json",
-    "tests/webMachine/fixtures/v86/assetProvenance.mjs",
-    "tests/webMachine/fixtures/v86/fixtureSbom.json",
     "tests/webMachine/fixtures/v86/prepareAssets.mjs",
   ];
   const missing = requiredFiles.filter((file) => !existsSync(join(ROOT, file)));
@@ -1288,13 +1285,13 @@ check("Web Machine public type와 runtime store 의미 일치", () => {
 
 check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () => {
   const fixtureRoot = join(webMachineTestRoot, "fixtures", "v86");
-  const audit = spawnSync(process.execPath, [join(fixtureRoot, "assetProvenance.mjs"), "--check"], {
+  const audit = spawnSync(process.execPath, [join(ROOT, "scripts", "assetProvenance.mjs"), "--check"], {
     cwd: ROOT,
     encoding: "utf8",
     timeout: 10000,
   });
   if (audit.status !== 0) throw new Error(audit.stderr || audit.stdout || "fixture SBOM audit 실패");
-  const catalog = JSON.parse(readFileSync(join(fixtureRoot, "assetCatalog.json"), "utf8"));
+  const catalog = JSON.parse(readFileSync(join(ROOT, "scripts", "assetCatalog.json"), "utf8"));
   if (catalog.packagePolicy?.thirdPartyBinaryBundling !== "forbidden") throw new Error("third-party binary bundling 금지 정책 없음");
   if (catalog.assets.some((asset) => asset.distribution !== "local-test-only" || !asset.bundleBlockers?.length)) {
     throw new Error("모든 fixture는 local-test-only이고 bundle blocker가 있어야 한다");
@@ -1487,6 +1484,43 @@ check("Web Computer 제품은 공개 package root만 소비", () => {
     if (/\btests[\\/]/.test(source)) problems.push(`${rel(file)}: tests 경로 소비`);
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+
+// 봉투는 판정이 아니라 출처를 나른다.
+//
+// guestManifest는 열린 JSON 서브트리라 재귀 정규화 + canonical JSON + contentDigest + 서명을
+// 받는다(getWebMachineManifestContent가 machines를 통째로 싣는다). 그래서 provenance는 서명
+// 대상이고 변조하면 digest가 어긋난다.
+//
+// channel은 싣지 않는다. 수신자는 catalog도 자산도 없어서 재계산할 수 없고, 재계산 불가능한
+// 판정은 계산이 아니라 선언이다. 게다가 imageTrust가 서명 검증 "전에" manifest를 파싱해
+// 신뢰 화면에 쓰므로(gate.js가 소비), 봉투의 channel을 띄우면 공격자 제어 문자열을 제품
+// 판정으로 표시하게 된다. 정책: trusted signature는 출처 identity를 증명할 뿐 license
+// compliance를 대신하지 않는다.
+check("봉투는 출처를 나르고 채널 판정은 나르지 않는다", () => {
+  const provenance = readFileSync(join(webComputerRoot, "assetProvenance.js"), "utf8");
+  for (const field of ["policyVersion", "catalogId", "sbomDigest"]) {
+    if (!provenance.includes(`${field}:`)) throw new Error(`assetProvenance.js: ${field} 누락`);
+  }
+  if (/\bchannel\s*:/.test(provenance)) throw new Error("assetProvenance.js가 channel 판정을 싣는다(재계산 불가능한 선언 금지)");
+  // 게스트 manifest를 만드는 곳들이 채널을 주장하지 않는가. 예전엔 machineConfig가
+  // product.channel = "development"를 서명 봉투에 실었고 아무도 안 잡았다.
+  for (const file of ["machineConfig.js", "webComputerContext.js"]) {
+    const src = readFileSync(join(webComputerRoot, file), "utf8");
+    if (/\bchannel\s*:\s*"/.test(src)) throw new Error(`${file}: 게스트 manifest에 channel 주장이 재등장했다`);
+  }
+  // 두 게스트가 모두 출처를 밝히는가. 침묵하면 증거 없음이 문제 없음으로 읽힌다:
+  // pyproc 게스트의 자산은 아직 어떤 catalog도 기술하지 않으므로 부재를 명시로 싣는다.
+  const context = readFileSync(join(webComputerRoot, "webComputerContext.js"), "utf8");
+  if (!context.includes("UNDESCRIBED_ASSET_PROVENANCE")) throw new Error("pythonOs가 자산 출처를 밝히지 않는다(증거 부재의 침묵 금지)");
+  if (!readFileSync(join(webComputerRoot, "machineConfig.js"), "utf8").includes("WEB_COMPUTER_ASSET_PROVENANCE")) {
+    throw new Error("linuxOs가 자산 출처를 밝히지 않는다");
+  }
+  // provenance가 서명 대상 안에 있다는 구조 사실: content가 machines를 통째로 싣는다.
+  const manifestSrc = readFileSync(join(webMachinePackagesRoot, "core", "src", "image", "machineManifest.js"), "utf8");
+  if (!/machines:\s*normalized\.machines/.test(manifestSrc)) {
+    throw new Error("machineManifest: content가 machines를 싣지 않는다(guestManifest.provenance가 서명 밖으로 샌다)");
+  }
 });
 
 check("Web Computer 실행 자산은 검증된 development channel", () => {

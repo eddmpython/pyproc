@@ -46,6 +46,7 @@
   "scripts": {
     "test": "node tests/run.mjs",
     "test:types": "npx -y -p typescript@5 tsc -p tests/tsconfig.json",
+    "assets:provenance": "node scripts/assetProvenance.mjs",
     "test:package": "node tests/packageConsumer.mjs",
     "test:consumer": "node tests/browser/productConsumer.mjs",
     "test:web-computer": "node scripts/prepareWebComputerAssets.mjs && node tests/browser/webComputerProduct.mjs",

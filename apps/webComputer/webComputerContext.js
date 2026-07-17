@@ -1,4 +1,5 @@
 import { bootSession, openMachine } from "/index.js";
+import { UNDESCRIBED_ASSET_PROVENANCE } from "./assetProvenance.js";
 import {
   createBrowserHost,
   MemoryBlockDevice,
@@ -195,7 +196,12 @@ export class WebComputerContext {
     this.machines.set("pythonOs", this.host.createMachine({
       machineId: "pythonOs",
       adapterId: "pyproc-block",
-      manifest: { session: { ...(indexURL ? { indexURL } : {}) } },
+      // provenance: pyproc 게스트의 실행 자산은 아직 어떤 asset catalog도 기술하지 않는다.
+      // 침묵하면 증거 없음이 문제 없음으로 읽히므로 부재를 명시로 싣는다.
+      manifest: {
+        session: { ...(indexURL ? { indexURL } : {}) },
+        provenance: UNDESCRIBED_ASSET_PROVENANCE,
+      },
       permissions: { devices: ["console", "pythonDisk"] },
     }));
     this.machines.set("linuxOs", this.host.createMachine({

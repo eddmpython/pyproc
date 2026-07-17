@@ -1,3 +1,5 @@
+import { WEB_COMPUTER_ASSET_PROVENANCE } from "./assetProvenance.js";
+
 export const WEB_COMPUTER_ADAPTER_VERSION = "v86-0.5.424-buildroot68-product-v1";
 export const WEB_COMPUTER_CAPABILITIES = Object.freeze(["pyproc", "x86-linux"]);
 export const WEB_COMPUTER_GROUP_ID = "webComputerDefault";
@@ -22,9 +24,16 @@ export async function loadV86Constructor() {
   return module.V86;
 }
 
+// 봉투가 나르는 것은 판정이 아니라 출처다.
+//
+// 예전엔 여기에 product.channel = "development"가 있었다. 그건 (a) assetCatalog의 채널과
+// 손으로 맞춘 중복이었고 (b) 어긋나도 아무도 안 잡았으며 (c) imageTrust가 서명 검증 "전에"
+// manifest를 파싱해 신뢰 화면에 쓰므로 공격자 제어 문자열이 제품 판정으로 표시될 자리였다.
+// 판정은 저장소 게이트가 하고, 봉투는 "어떤 catalog와 SBOM으로 만들어졌는가"만 나른다.
 export function createLinuxMachineManifest() {
   return {
-    product: { channel: "development", image: "buildroot-linux-6.8.12-i686" },
+    product: { image: "buildroot-linux-6.8.12-i686" },
+    provenance: WEB_COMPUTER_ASSET_PROVENANCE,
     v86: {
       readyPattern: "~% ",
       bootTimeoutMs: 120000,

@@ -14,6 +14,7 @@
   },
   "webComputer": {
     "catalogId": "web-computer-development-assets-v1",
+    "policyVersion": 1,
     "channel": "development",
     "redistribution": "disabled",
     "promotionRequires": [

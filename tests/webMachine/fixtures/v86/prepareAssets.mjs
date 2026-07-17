@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertV86FixtureSbom, readV86AssetCatalog } from "./assetProvenance.mjs";
+import { assertAssetProvenanceArtifacts, readV86AssetCatalog } from "../../../../scripts/assetProvenance.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "assets");
-await assertV86FixtureSbom();
+await assertAssetProvenanceArtifacts();
 const { assets } = await readV86AssetCatalog();
 
 function digest(bytes) {
