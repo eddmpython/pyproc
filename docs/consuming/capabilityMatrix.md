@@ -5,7 +5,7 @@
 정본 역할은 나뉜다.
 
 - 설치, 버전 핀, import 경계: [contract.md](contract.md)
-- 속도와 외부 비교 수치: [benchmarking.md](../operations/benchmarking.md)
+- 속도 실측 계약: [benchmarking.md](../operations/benchmarking.md) (측정치는 원장과 artifact에만 산다. 속도는 Speed Lab으로 각자 재는 것이지 여기 걸린 숫자를 믿는 것이 아니다)
 - `.pymachine` 신뢰와 권한 UI: [trustPermissions.md](trustPermissions.md)
 - 부활 뒤 제품 자원 재개설: [resumeCatalog.md](resumeCatalog.md)
 

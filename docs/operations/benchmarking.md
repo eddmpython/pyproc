@@ -1,18 +1,19 @@
 # 벤치마크 운영 계약
 
-속도는 pyproc의 중간 목표다. 그러나 속도 주장은 데모 문구가 아니라 재현 가능한 측정 계약이어야 한다. 이 문서는 Speed Lab, browser gate, 제품 gate, 외부 비교 표가 따라야 할 공통 규칙이다.
+속도는 pyproc의 중간 목표다. 그러나 속도는 내가 재는 것이지 거는 것이 아니다. 이 문서는 Speed Lab, browser gate, 제품 gate가 따라야 할 공통 측정 규칙이다.
 
 ## 원칙
 
-- 실측 없는 속도 문구를 쓰지 않는다. "빠르다", "N배" 같은 표현은 명령, 환경, 샘플, 원시 출력, 기록 위치가 있을 때만 쓴다.
+- **측정치는 공개 표면에 걸지 않는다.** 숫자를 간판으로 걸면 영원히 방어할 의무가 생기고 그 의무가 제품 방향을 벤치에 종속시킨다(CLAUDE.md 숫자 자랑 금지, `tests/run.mjs` 성능 주장 가드가 기계 차단). 실측은 계속하되 결과는 진행 원장과 benchmark artifact에만 남긴다. 사용자에게는 Speed Lab을 줘서 자기 기계에서 직접 재게 한다.
+- 실측 없는 속도 문구를 쓰지 않는다. "빠르다", "N배" 같은 표현은 명령, 환경, 샘플, 원시 출력, 기록 위치가 있을 때만 쓰고, 그 자리는 원장이지 공개 표면이 아니다.
 - cold start와 steady state를 섞지 않는다. cold boot, package load, worker pool warmup, warmed compute는 다른 항목이다.
 - 단발 wall time으로 판정하지 않는다. steady state는 최소 3회 warmed sample, median, p95, max error를 같이 기록한다.
 - 비교 대상이 같은 일을 하지 못하면 0점 처리하지 않는다. `N/A`와 사유를 적고, 가능한 가장 가까운 시나리오를 따로 둔다.
-- 외부 제품 또는 외부 런타임과 비교할 때는 같은 브라우저, 같은 머신, 같은 네트워크 조건, 같은 데이터 크기, 같은 Python/NumPy 계열을 우선한다. 맞출 수 없는 조건은 표의 caveat에 남긴다.
+- 외부 제품 또는 외부 런타임과 비교할 때는 같은 브라우저, 같은 머신, 같은 네트워크 조건, 같은 데이터 크기, 같은 Python/NumPy 계열을 우선한다. 맞출 수 없는 조건은 artifact의 caveat에 남긴다. 이 비교는 내가 방향을 잡으려고 하는 것이지 게시하려고 하는 것이 아니다.
 
 ## 실측 봉투 필수 필드
 
-벤치 결과를 원장이나 README에 올리려면 schema v2 artifact를 남긴다. v2는 예전의 flat 필드를 호환 목적으로 유지하되, 아래 네 묶음을 필수 봉투로 둔다.
+벤치 결과를 원장에 올리려면 schema v2 artifact를 남긴다. v2는 예전의 flat 필드를 호환 목적으로 유지하되, 아래 네 묶음을 필수 봉투로 둔다.
 
 | 필드 | 내용 |
 |---|---|
@@ -45,27 +46,12 @@
 | S4 | machine resume | `bench:artifact --scenario S4` | export median/p95, open median/p95, image MB, resume rows | trusted key open, `resume.py` 재개설 |
 | S5 | immortal multi-tab machine | `npm run test:consumer`, `bench:artifact --scenario S5` | initial ready, RPC p50/p90, failover, recovery, cold reopen median/p95 | 설치 패키지 3-context 공유와 commit, leader 강제 제거, `failover p95 < 5000ms`, 모든 context 종료 뒤 cold reopen |
 
-S1은 현재 공개 속도 간판이다. S1L은 외부 후보가 S1의 병렬 worker pool 계약을 제공하지 못할 때 쓰는 single-lane 보조 축이다. S0는 기존 Python ready 관측 축이고, S0C는 cold profile/cache-clear 조건만 받는 엄격한 보조 축이다. S2, S3, S4, S5는 "로컬처럼 쓰는 웹 OS"의 체감 속도 축이다.
+S1은 현재 속도 실측의 정본 축이다(간판이 아니라 내부 기준선이다). S1L은 외부 후보가 S1의 병렬 worker pool 계약을 제공하지 못할 때 쓰는 single-lane 보조 축이다. S0는 기존 Python ready 관측 축이고, S0C는 cold profile/cache-clear 조건만 받는 엄격한 보조 축이다. S2, S3, S4, S5는 "로컬처럼 쓰는 웹 OS"의 체감 속도 축이다.
 
-## 외부 비교 표 규칙
+## 기록 게이트
 
-첫 비교 후보는 WebVM, JupyterLite, marimo web runtime이다. 이 문서는 측정된 artifact가 있는 항목만 숫자로 채운다.
-
-| 비교 축 | pyproc | WebVM | JupyterLite | marimo web runtime | caveat |
-|---|---|---|---|---|---|
-| S0 python ready latency | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s0-webvm-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s0-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s0-marimo-wasm-2026-07-15.json) | 페이지 또는 런타임 시작부터 첫 Python 명령 성공까지. 조건은 각 artifact note를 따른다 |
-| S0C python cold ready latency | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s0c-webvm-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s0c-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s0c-marimo-wasm-2026-07-15.json) | cold profile/cache-clear 조건. warm S0와 한 표에 섞지 않음 |
-| S1 numpy sharded matmul | Speed Lab 반복 봉투 | N/A 가능 | N/A 가능 | N/A 가능 | 병렬 worker 모델이 다르면 single-lane으로 재정의하지 않음 |
-| S1L single-kernel numpy latency | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s1l-webvm-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s1l-jupyterlite-2026-07-15.json) | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s1l-marimo-wasm-2026-07-15.json) | S1 대체가 아니라 별도 single-lane 보조 축 |
-| S2 process map | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s2-webvm-na-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s2-jupyterlite-na-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s2-marimo-wasm-na-2026-07-15.json) | `PyProc.map` process pool 계약. 같은 API 후보가 없으면 N/A |
-| S3 browser server | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s3-webvm-na-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s3-jupyterlite-na-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s3-marimo-wasm-na-2026-07-15.json) | pyproc `VirtualOrigin`/ASGI Service Worker URL contract. 같은 계약 후보가 없으면 N/A |
-| S4 machine resume | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s4-webvm-na-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s4-jupyterlite-na-2026-07-15.json) | [N/A](../../mainPlan/_done/browser-os-north-star/benchmarks/s4-marimo-wasm-na-2026-07-15.json) | signed `.pymachine`, trusted open, `resume.py` resource reopen. 같은 계약 후보가 없으면 N/A |
-| S5 immortal multi-tab machine | [측정됨](../../mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) | N/A | N/A | N/A | 설치 패키지 leader fencing, heap + `/home/web` journal recovery, cold reopen의 결합 계약. 외부 후보에 같은 공개 계약이 없음 |
-
-## 공개 문구 게이트
-
-- README의 속도 숫자는 진행 원장 또는 gate output에서 온 값만 쓴다.
-- 외부 비교 표는 [완료된 속도 비교 계약](../../mainPlan/_done/browser-os-north-star/06-speed-comparison.md)에 보존한다.
+- 측정치는 진행 원장과 benchmark artifact에만 기록한다. 공개 표면에는 걸지 않는다(숫자 자랑 금지).
+- 지난 외부 비교는 [완료된 속도 비교 계약](../../mainPlan/_done/browser-os-north-star/06-speed-comparison.md)에 기록으로 보존한다. 되살려 게시하지 않는다.
 - S1 canonical raw JSON은 `npm run bench:speed -- --out <path>` 또는 `PYPROC_BENCH_OUT=<path> npm run bench:speed`로 남긴다. 기본 조건은 `workers=4`, `size=1024`, `samples=3`이다.
 - Speed Lab 사람용 UI의 기본 행렬 크기는 반응성을 위해 768이고, canonical runner는 `?workers=4&size=1024&samples=3`를 URL에 명시한다.
 - S1 조건을 바꿀 때는 `--workers`, `--size`, `--samples` 또는 `PYPROC_BENCH_WORKERS`, `PYPROC_BENCH_SIZE`, `PYPROC_BENCH_SAMPLES`를 쓰고, command 필드에 남긴다.

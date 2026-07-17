@@ -35,9 +35,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - **`PyProc.forkMany(srcPid, dstPids)`**: the speculative-exploration primitive. A parent's
   delta is one value, so a fan-out harvests it **once** and broadcasts over a
   SharedArrayBuffer instead of re-harvesting per lane: `O(heap + N x delta)` rather than
-  `O(N x heap)`. Measured (21.4MB delta, 4 lanes): sequential forks 316ms -> broadcast 78ms
-  (4.05x); on top of it, 4 candidates explore in parallel 5.2x faster than a serial retry
-  loop (90ms vs 468ms), with byte-identical results and lane isolation. `fork` is now a 1:1
+  `O(N x heap)`. Lanes stay isolated and candidate results are byte-identical to a serial
+  run. `fork` is now a 1:1
   delegation (name and return shape unchanged). An agent loop is three calls: fan out,
   run candidates, `fork(winner, main)` to adopt.
 - `PyProcError` and `PYPROC_ERROR_CODES`: one error contract for the whole surface.

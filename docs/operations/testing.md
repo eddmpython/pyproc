@@ -178,7 +178,7 @@ npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/webvm-s1l.json --out .tmp/s1l
 
 - 콘솔에 `crossOriginIsolated`가 true인지(`false`면 헤더 문제).
 - 공개 표면·런타임 동작을 바꾼 커밋은 실측 결과(수치)를 활성 이니셔티브의 진행 원장에 남긴다(활성 0이면 다음 이니셔티브에서). README의 실측 수치는 그 원장에서만 가져온다. 과거 수치의 출처: [mainPlan/_done/web-python-runtime/03-progress-ledger.md](../../mainPlan/_done/web-python-runtime/03-progress-ledger.md).
-- 속도 주장과 외부 비교 표는 [benchmarking.md](benchmarking.md)의 canonical scenario, sample, raw output 규칙을 따른다.
+- 속도 실측은 [benchmarking.md](benchmarking.md)의 canonical scenario, sample, raw output 규칙을 따르고, 결과는 진행 원장과 artifact에만 남긴다(공개 표면 게시 금지).
 
 ## 6. 개념증명 실측 (tests/attempts/)
 

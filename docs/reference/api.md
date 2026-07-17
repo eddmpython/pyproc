@@ -169,9 +169,10 @@ workers only; the main-thread kernel replays to different bytes, so this is a wo
 capability by physics, not by policy.
 `forkMany(srcPid, dstPids)` is the speculative-exploration primitive: it harvests the
 parent delta **once** and broadcasts it to N lanes over a SharedArrayBuffer, so a fan-out
-costs `O(heap + N x delta)` instead of `O(N x heap)` (measured: 316ms -> 78ms for a 21.4MB
-delta across 4 lanes; 4 candidates then explore in parallel 5.2x faster than a serial retry
-loop). `fork` is a 1:1 delegation to it. The returned `harvestMs` is the once-per-fan-out
+costs `O(heap + N x delta)` instead of `O(N x heap)`, and lanes stay isolated while candidate
+results remain byte-identical to a serial run. `fork` is a 1:1 delegation to it. Measure the
+envelope on your own machine with Speed Lab; this page does not carry benchmark headlines.
+The returned `harvestMs` is the once-per-fan-out
 cost; per-lane cost and drift-cleanse evidence are in `lanes[]`. An agent loop is three
 calls: `forkMany` to fan out, run candidates in parallel, `fork(winner, main)` to adopt. `map` never leaves silent holes: when every lane
 dies, unrun tasks resolve to `{ error: "pool exhausted: ..." }` values.
@@ -225,7 +226,7 @@ Borrowed syscalls v1: synchronous `input()` (JSPI), `urllib` (sync XHR), `subpro
 ### `AsgiServer` / `VirtualOrigin`
 
 In-kernel ASGI dispatch (FastAPI/Starlette with zero sockets), and real URLs for it via
-the bundled service worker (`fetch()` to Python in ~3.4ms). Honest walls: no `Set-Cookie`
+the bundled service worker (`fetch()` reaches Python without leaving the tab). Honest walls: no `Set-Cookie`
 persistence, no WebSocket upgrade, SSE is buffered, endpoints must be `async def`.
 
 ### `Terminal`

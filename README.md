@@ -256,31 +256,18 @@ Pyodide  Workers
 
 Four primitives make it sound: complete heap hashing at each execution boundary (sampling would miss changes and corrupt a restore); deterministic boot (a byte-identical base, so only your delta has to travel); snapshot-fork; and an engine seam (the same primitives also run on non-Pyodide CPython 3.14, proving they don't depend on Pyodide internals). Deep design lives in [mainPlan](mainPlan/README.md); the axis-by-axis gap map in [local-parity](mainPlan/_done/local-parity/README.md).
 
-## Benchmarks
+## Where the shape pays off
 
-The headline is contract-specific, not "all Python is faster." pyproc is fast when the product can prepare state once, branch it, restore it, or shard work across independent browser processes. Single-kernel NumPy is still ordinary WebAssembly BLAS.
+pyproc is not "Python, but faster." It is Python with a process model, and the wins come from
+the contract rather than from arithmetic: prepare state once and branch it, restore instead of
+re-running, shard work across independent interpreters (N interpreters = N GILs = real
+parallelism), serve from inside the tab, and move a live machine as a signed image.
+Single-kernel NumPy is ordinary WebAssembly BLAS, and pyproc does not pretend otherwise.
 
-The numbers below come from tracked artifacts and are meant to be **reproduced, not taken on faith**. Current comparison machine: Edge `150.0.4078.65`, Windows 11, AMD Ryzen 7 8845HS, 3 samples unless noted. The full measurement contract is in [benchmarking.md](docs/operations/benchmarking.md), and the full scenario-by-scenario comparison against WebVM / JupyterLite / marimo (including where they are honestly N/A) is in [comparison.md](docs/reference/comparison.md).
-
-| Axis | What it proves | pyproc result | External comparison |
-|---|---|---|---|
-| S0C cold Python ready | First Python command from a fresh browser profile | [3660ms median](mainPlan/_done/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md)) |
-| S0 warm Python ready | First Python command with warm browser cache/profile | [3471ms median](mainPlan/_done/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md)) |
-| S1 headline: sharded NumPy | 1024x1024 f64 matmul split over 4 Python workers vs one worker in the same run | [3.95x median speedup](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json), shard p95 2606ms below single-worker median 10067ms | WebVM, JupyterLite, and marimo WASM are [N/A for the same 4-worker shard contract](mainPlan/_done/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md) |
-| S1L single-kernel NumPy | Same 1024x1024 f64 matmul in one Python kernel, kept separate from S1 | [10067ms median](mainPlan/_done/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | marimo WASM 9355ms, JupyterLite 10149ms, WebVM 11406ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md)) |
-| S2 process map | Same Python function run serially vs `PyProc.map` process pool | [73ms serial median, 43ms process-pool median](mainPlan/_done/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json), 1.61x median speedup | Other candidates are N/A for the same `PyProc.map` API contract ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md)) |
-| S3 browser server | Installed-package `VirtualOrigin` POST roundtrip to a Python ASGI app | [18ms median, 18ms p95](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | Other candidates are N/A for the same Service Worker URL-to-ASGI contract ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md)) |
-| S4 machine resume | Signed `.pymachine` export/open plus `resume.py` SQLite resource reopen | [76ms export median, 2264ms trusted-open median](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json), 10.8MB image, resume rows 2-2 | Other candidates are N/A for the same signed machine image + resume hook contract ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md)) |
-| S5 immortal machine | Installed-package contexts share one machine, lose the leader, recover memory + files, then cold-reopen after every context closes | [2894ms failover median, 3025ms p95](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json), 575ms recovery median, 2681ms cold-reopen median | Browser Python peers do not expose the same installed-package leader fencing + journal recovery contract ([evidence](mainPlan/_done/browser-os-north-star/benchmarks/s5-compare-2026-07-15.md)) |
-
-Primitive-level measurements remain useful context:
-
-- Snapshot-fork child boot ~184-300ms vs cold ~2.8s.
-- Restore-based reactivity: live-diff restore ~1-2.4ms (writes only changed pages, no re-run).
-- uv-lane warm environment boot ~1229ms vs ~5109ms cold (numpy).
-- non-Pyodide CPython 3.14 (WASI) boot ~70-120ms.
-
-Reality check: pure-Python logic is at or above local speed; large single-kernel NumPy arithmetic is still limited by WASM single-thread and no-AVX BLAS. pyproc's numeric speed answer is horizontal sharding, while the broader browser-OS speed answer is prepared state, restore, process pools, in-tab servers, and portable machine images.
+Speed is measured, not advertised. This project does not publish benchmark headlines: a number
+on a landing page becomes a number you owe forever, and that debt steers the product. Run
+[Speed Lab](examples/speedLab.html) with `npm run serve` and measure it on your own machine.
+The measurement contract is in [benchmarking.md](docs/operations/benchmarking.md).
 
 ## Run the Web Computer
 

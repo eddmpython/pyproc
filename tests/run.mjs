@@ -307,6 +307,38 @@ for (const scope of ["src", "examples", "tests"]) {
     });
   }
 }
+
+// 3.3) 성능 주장 가드: 공개 표면에 숫자 간판을 걸지 않는다(2026-07-17 확정).
+//      숫자를 간판으로 걸면 그 숫자를 영원히 방어할 의무가 생기고, 그 의무가 제품 방향을
+//      벤치에 종속시킨다. 실측은 계속하되(개발 원칙 4) 측정치는 mainPlan/tests 기록과
+//      benchmark artifact에만 산다. 스코프 밖 둘: docs/operations의 게이트 임계값은 자랑이
+//      아니라 계약이고, examples/의 Speed Lab은 사용자가 자기 기계에서 직접 재는 도구다.
+console.log("\n[성능 주장]");
+const BRAG = [
+  [/\d+(?:\.\d+)?\s*(?:x|×)\s*(?:faster|speedup)/i, "속도 배수 자랑"],
+  [/\d+(?:\.\d+)?\s*(?:x|×)\s+median\s+speedup/i, "속도 배수 자랑"],
+  [/\d+(?:\.\d+)?\s*배\s*(?:빠|더\s*빠)/, "속도 배수 자랑"],
+  [/\d+(?:\.\d+)?\s*ms\b/, "측정치 게시"],
+  [/\bfastest\b|blazing|가장\s*빠른|초고속/i, "최상급 속도 주장"],
+  // 숫자를 artifact 링크 뒤에 숨겨도 경쟁 비교 게시는 게시다.
+  [/(?:WebVM|JupyterLite|marimo)[^\n]*(?:artifact|측정됨|N\/A)/i, "경쟁 비교 게시"],
+];
+const BRAG_SURFACE = [
+  join(ROOT, "README.md"), join(ROOT, "README.ko.md"), join(ROOT, "CHANGELOG.md"),
+  // 랜딩은 자랑 표면의 한복판이다. examples/의 나머지(Speed Lab 등)는 실측 도구라 스코프 밖.
+  join(ROOT, "examples", "index.html"),
+  ...collect(join(ROOT, "docs", "product"), [".md"]),
+  ...collect(join(ROOT, "docs", "reference"), [".md"]),
+];
+for (const f of BRAG_SURFACE) {
+  check(`숫자 자랑 0: ${rel(f)}`, () => {
+    const hits = [];
+    readFileSync(f, "utf8").split("\n").forEach((line, i) => {
+      for (const [re, why] of BRAG) if (re.test(line)) hits.push(`L${i + 1} ${why}`);
+    });
+    if (hits.length) throw new Error(hits.slice(0, 5).join("; "));
+  });
+}
 // 파일/폴더 이름도 camelCase다. 위 검사는 파일 "내용"의 식별자만 봐서 이름 규칙은 기계 검사가
 // 0이었다. mainPlan은 kebab-case 번호 문서라 예외(dartlab 관례), 검증 데이터/픽스처도 제외.
 check("파일과 폴더 이름 camelCase", () => {
@@ -375,21 +407,8 @@ check("Stable 라벨 = 승격 원장 정합(근거 없는 라벨 상승 차단)"
   const stableRows = [...matrix.matchAll(/[^\n]\| Stable \|/g)].length;
   if (stableRows !== ledgerRows) throw new Error(`Stable 라벨 ${stableRows}행 != 승격 원장 ${ledgerRows}행`);
 });
-check("영문 비교 페이지: 시나리오 전수 + 후보 전수 + README 링크", () => {
-  const cmp = readFileSync(join(ROOT, "docs", "reference", "comparison.md"), "utf8");
-  for (const id of ["S0", "S0C", "S1", "S1L", "S2", "S3", "S4", "S5"]) {
-    if (!new RegExp(`\\| ${id} `).test(cmp)) throw new Error(`시나리오 누락: ${id}`);
-  }
-  for (const name of ["WebVM", "JupyterLite", "marimo"]) {
-    if (!cmp.includes(name)) throw new Error(`후보 누락: ${name}`);
-  }
-  if (!cmp.includes("N/A")) throw new Error("N/A 정직성 규칙 서술 누락");
-  for (const readme of ["README.md", "README.ko.md"]) {
-    if (!readFileSync(join(ROOT, readme), "utf8").includes("docs/reference/comparison.md")) {
-      throw new Error(`${readme}가 comparison.md를 링크하지 않음`);
-    }
-  }
-});
+// 영문 비교 페이지 게이트는 제거했다(2026-07-17). 그 게이트는 경쟁 비교 게시를 강제해
+// 숫자 자랑 금지 규칙과 정면으로 충돌했다. 지난 비교는 mainPlan/_done 원장에 기록으로 남는다.
 check("공개 문서 인프라 존재(CHANGELOG/SECURITY/glossary)", () => {
   for (const f of ["CHANGELOG.md", "SECURITY.md", join("docs", "product", "glossary.md")]) {
     if (!existsSync(join(ROOT, f))) throw new Error(`${f} 없음`);
@@ -427,9 +446,14 @@ check("속도 비교 벤치 계약 고정", () => {
   const benchArtifacts = readFileSync(join(ROOT, "tests", "browser", "benchArtifacts.mjs"), "utf8");
   const benchCompare = readFileSync(join(ROOT, "tests", "browser", "benchCompare.mjs"), "utf8");
   const pkgForBench = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  for (const term of ["S0", "S0C", "S1", "S1L", "S2", "S3", "S4", "S5", "median", "p95", "raw output", "WebVM", "JupyterLite", "marimo"]) {
+  // 후보 이름(WebVM/JupyterLite/marimo)은 더 이상 benchmarking.md의 필수 항목이 아니다.
+  // 경쟁 비교는 게시물이 아니라 원장 기록이므로 mainPlan/_done 계약에서만 요구한다.
+  for (const term of ["S0", "S0C", "S1", "S1L", "S2", "S3", "S4", "S5", "median", "p95", "raw output"]) {
     if (!contract.includes(term)) throw new Error(`benchmarking.md 필수 항목 누락: ${term}`);
     if (!plan.includes(term)) throw new Error(`06-speed-comparison.md 필수 항목 누락: ${term}`);
+  }
+  for (const name of ["WebVM", "JupyterLite", "marimo"]) {
+    if (!plan.includes(name)) throw new Error(`06-speed-comparison.md 후보 누락: ${name}`);
   }
   for (const term of ["schema v2", "schemaVersion", "scenarioDefinition", "measurement", "environment", "evidence", "commit", "command", "browser", "engine", "samples", "metrics"]) {
     if (!contract.includes(term)) throw new Error(`실측 봉투 필드 누락: ${term}`);
@@ -646,52 +670,9 @@ check("README 공개 표면은 작업별 지도 형태", () => {
   if (readmeEn.includes("| Export | What |")) throw new Error("README.md가 장황한 export 설명표로 회귀");
   if (readmeKo.includes("| Export | 무엇 |")) throw new Error("README.ko.md가 장황한 export 설명표로 회귀");
 });
-check("랜딩 벤치 메시지가 README 계약형 속도 주장과 정합", () => {
-  const readmeEn = readFileSync(join(ROOT, "README.md"), "utf8");
-  const readmeKo = readFileSync(join(ROOT, "README.ko.md"), "utf8");
-  for (const term of [
-    'The headline is contract-specific, not "all Python is faster."',
-    "Single-kernel NumPy is still ordinary WebAssembly BLAS.",
-    "S1 headline: sharded NumPy",
-    "S3 browser server",
-    "S4 machine resume",
-    "S5 immortal machine",
-  ]) {
-    if (!readmeEn.includes(term)) throw new Error(`README.md 벤치 메시지 누락: ${term}`);
-  }
-  for (const term of [
-    '속도 간판은 "모든 Python이 빠르다"가 아니라 계약별이다.',
-    "단일 커널 NumPy는 여전히 일반 WebAssembly BLAS다.",
-    "S1 간판: sharded NumPy",
-    "S3 browser server",
-    "S4 machine resume",
-    "S5 immortal machine",
-  ]) {
-    if (!readmeKo.includes(term)) throw new Error(`README.ko.md 벤치 메시지 누락: ${term}`);
-  }
-  for (const term of [
-    'Speed is contract-specific, not a blanket "all Python is faster" claim.',
-    "Single-kernel NumPy remains ordinary WebAssembly BLAS.",
-    "S1 sharded NumPy matmul",
-    "S3 fetch() to Python ASGI",
-    "S4 signed .pymachine",
-    "S4 trusted machine open",
-    "S5 leader failover",
-    "portable machine image",
-    "3.95x",
-    "18ms",
-    "76ms",
-    "2.26s",
-    "10.8MB",
-    "2.89s",
-    "3.03s",
-  ]) {
-    if (!landing.includes(term)) throw new Error(`examples/index.html 벤치 메시지 누락: ${term}`);
-  }
-  for (const stale of ["5.28x", "numpy sort", "3.4ms", "13.7MB"]) {
-    if (landing.includes(stale)) throw new Error(`examples/index.html 낡은 벤치 숫자 잔존: ${stale}`);
-  }
-});
+// 랜딩 벤치 메시지 게이트는 제거했다(2026-07-17). 이 게이트는 랜딩에 박힌 측정치(3.95x, 18ms,
+// 76ms, 10.8MB ...)를 필수로 강제하고 '낡은 벤치 숫자' 목록까지 따로 관리했다. 숫자를 간판으로
+// 걸면 그 숫자를 영원히 방어해야 한다는 규칙의 근거가 바로 이 게이트였다. 성능 주장 가드가 대신한다.
 check("랜딩이 라이브러리 소비 판단 경로를 직접 노출", () => {
   for (const term of [
     '<a href="#build">Build</a>',

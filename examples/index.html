@@ -49,16 +49,14 @@
       <noscript><p class="dim">The console runs real CPython in your tab, so it needs JavaScript.</p></noscript>
     </section>
 
-    <section class="stats" aria-label="measured contract results">
-      <div class="stat"><b>3.95x</b><span>S1 sharded NumPy matmul<br>4 workers vs one worker</span></div>
-      <div class="stat"><b>18ms</b><span>S3 fetch() to Python ASGI<br>through a virtual origin</span></div>
-      <div class="stat"><b>76ms</b><span>S4 signed .pymachine<br>export median</span></div>
-      <div class="stat"><b>2.26s</b><span>S4 trusted machine open<br>with /home resume</span></div>
-      <div class="stat"><b>2.89s</b><span>S5 leader failover median<br>3.03s p95, memory + files</span></div>
-      <div class="stat"><b>10.8MB</b><span>a portable machine image<br>with disk and signature</span></div>
+    <section class="stats" aria-label="what the contract gives you">
+      <div class="stat"><b>N</b><span>independent interpreters<br>N GILs, real parallelism</span></div>
+      <div class="stat"><b>fork</b><span>a live interpreter<br>snapshot in, process out</span></div>
+      <div class="stat"><b>URL</b><span>fetch() into Python ASGI<br>no sockets, no backend</span></div>
+      <div class="stat"><b>1 file</b><span>a portable machine image<br>with disk and signature</span></div>
       <div class="stat"><b>0</b><span>CDN requests on second<br>boot (offline-ready)</span></div>
     </section>
-    <p class="dim" style="margin:.35rem 0 1rem">Speed is contract-specific, not a blanket "all Python is faster" claim. pyproc wins when a product can prepare state once, restore it, or shard work across browser processes. Single-kernel NumPy remains ordinary WebAssembly BLAS.</p>
+    <p class="dim" style="margin:.35rem 0 1rem">This page prints no benchmark headlines. A number on a landing page is a number you owe forever, and that debt steers the product. pyproc pays off when a product can prepare state once, restore it, or shard work across browser processes; single-kernel NumPy remains ordinary WebAssembly BLAS. Measure it on your own machine in Speed Lab.</p>
 
     <h2 id="demos">The same demos, full page</h2>
     <p class="dim" style="margin:.2rem 0 0">Every demo above runs in the hero console. These pages are the same thing with room to poke at it.</p>
@@ -81,7 +79,7 @@
       </a>
       <a class="card" href="examples/speedLab.html">
         <h3>Speed Lab</h3>
-        <p>Run NumPy matrix multiply once on one Python worker, then shard the same job across 4 workers through the public PyProc API. This is the S1 speed headline, separate from single-kernel BLAS.</p>
+        <p>Run NumPy matrix multiply once on one Python worker, then shard the same job across 4 workers through the public PyProc API. Measure it on your own machine; single-kernel BLAS is a separate axis.</p>
       </a>
       <a class="card" href="examples/terminal.html">
         <h3>Terminal</h3>
@@ -100,10 +98,10 @@
     <h2 id="features">The OS primitives underneath</h2>
     <div class="cards features">
       <div class="card"><h3>Processes and fork</h3><p>Web Worker = process. Boot once, snapshot the heap, fork N interpreters: N GILs, N cores, kill/interrupt/respawn lifecycle.</p></div>
-      <div class="card"><h3>Checkpoint and time-travel</h3><p>Full-hash heap checkpoints at execution boundaries. Restore in ~1ms, guarded against silent corruption by a mutation counter.</p></div>
+      <div class="card"><h3>Checkpoint and time-travel</h3><p>Full-hash heap checkpoints at execution boundaries. Restore writes only the changed pages instead of re-running, guarded against silent corruption by a mutation counter.</p></div>
       <div class="card"><h3>Portable machine images</h3><p>The whole running computer in one .pymachine file: SHA-256 integrity, explicit trust gate, and a determinism check before any delta is applied.</p></div>
       <div class="card"><h3>uv-grade environments</h3><p>bootEnv restores a bare-heap snapshot and installs wheels from an OPFS cache. runScript runs PEP 723 self-sufficient scripts. freeze() pins it all.</p></div>
-      <div class="card"><h3>A server on a real URL</h3><p>The bundled service worker maps fetch("/pyproc/...") to your in-kernel FastAPI app: S3 measures 18ms round trips with zero sockets.</p></div>
+      <div class="card"><h3>A server on a real URL</h3><p>The bundled service worker maps fetch("/pyproc/...") to your in-kernel FastAPI app: real URLs, zero sockets, no backend.</p></div>
       <div class="card"><h3>Persistent disk and offline</h3><p>/home/web is a real OPFS-backed disk that survives kernels. Core assets cache so the second boot needs no network at all.</p></div>
     </div>
 

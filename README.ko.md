@@ -255,31 +255,17 @@ Pyodide  Workers
 
 네 프리미티브가 건전성을 만든다: 실행 경계마다 완전 힙 해시(샘플링은 변화를 놓쳐 복원을 오염시킨다), 결정적 부팅(바이트 동일 base라 델타만 이동하면 된다), 스냅샷-fork, 엔진 seam(같은 프리미티브가 non-Pyodide CPython 3.14에서도 돌아 Pyodide 내부에 안 묶임을 증명). 상세 설계는 [mainPlan](mainPlan/README.md), 축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md).
 
-## 벤치마크
+## 형태가 값을 하는 자리
 
-속도 간판은 "모든 Python이 빠르다"가 아니라 계약별이다. pyproc은 제품이 상태를 한 번 준비하고, 분기하고, 복원하고, 독립 브라우저 프로세스로 일을 쪼갤 수 있을 때 빠르다. 단일 커널 NumPy는 여전히 일반 WebAssembly BLAS다.
+pyproc은 "그냥 더 빠른 파이썬"이 아니다. 프로세스 모델을 가진 파이썬이고, 이득은 산술이 아니라
+계약에서 온다: 상태를 한 번 준비해 분기하고, 재실행 대신 복원하고, 독립 인터프리터로 일을 쪼개고
+(인터프리터 N개 = GIL N개 = 진짜 병렬), 탭 안에서 서빙하고, 살아있는 머신을 서명된 이미지로 옮긴다.
+단일 커널 NumPy는 일반 WebAssembly BLAS이며 그렇지 않은 척하지 않는다.
 
-아래 수치는 추적 artifact에서 온 것이고 **믿으라는 게 아니라 재현하라는** 것이다. 현재 비교 머신: Edge `150.0.4078.65`, Windows 11, AMD Ryzen 7 8845HS, 별도 표기 없으면 3 samples. 전체 측정 계약은 [benchmarking.md](docs/operations/benchmarking.md), WebVM/JupyterLite/marimo 대비 시나리오 전수 비교(정직한 N/A 포함)는 [comparison.md](docs/reference/comparison.md)에 있다.
-
-| 축 | 증명하는 것 | pyproc 결과 | 외부 비교 |
-|---|---|---|---|
-| S0C cold Python ready | 새 브라우저 프로필에서 첫 Python 명령까지 | [median 3660ms](mainPlan/_done/browser-os-north-star/benchmarks/s0c-pyproc-2026-07-15.json) | marimo WASM 10136ms, JupyterLite 11796ms, WebVM 46534ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s0c-compare-2026-07-15.md)) |
-| S0 warm Python ready | 웜 브라우저 캐시/프로필에서 첫 Python 명령까지 | [median 3471ms](mainPlan/_done/browser-os-north-star/benchmarks/s0-pyproc-2026-07-15.json) | WebVM 3472ms, marimo WASM 8385ms, JupyterLite 12352ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s0-compare-2026-07-15.md)) |
-| S1 간판: sharded NumPy | 1024x1024 f64 matmul을 4 Python workers로 분할, 같은 run의 단일 worker와 비교 | [median speedup 3.95x](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json), shard p95 2606ms < single-worker median 10067ms | WebVM, JupyterLite, marimo WASM은 [같은 4-worker shard 계약에서 N/A](mainPlan/_done/browser-os-north-star/benchmarks/s1-compare-2026-07-15.md) |
-| S1L single-kernel NumPy | 같은 1024x1024 f64 matmul을 한 Python kernel에서 측정, S1과 분리 | [median 10067ms](mainPlan/_done/browser-os-north-star/benchmarks/s1l-pyproc-2026-07-15.json) | marimo WASM 9355ms, JupyterLite 10149ms, WebVM 11406ms ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s1l-compare-2026-07-15.md)) |
-| S2 process map | 같은 Python 함수를 직렬 실행 vs `PyProc.map` process pool로 실행 | [serial median 73ms, process-pool median 43ms](mainPlan/_done/browser-os-north-star/benchmarks/s2-pyproc-2026-07-15.json), median speedup 1.61x | 외부 후보는 같은 `PyProc.map` API 계약에서 N/A ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s2-compare-2026-07-15.md)) |
-| S3 browser server | 설치 패키지 `VirtualOrigin` POST가 Python ASGI app까지 왕복 | [median 18ms, p95 18ms](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) | 외부 후보는 같은 Service Worker URL-to-ASGI 계약에서 N/A ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s3-compare-2026-07-15.md)) |
-| S4 machine resume | signed `.pymachine` export/open + `resume.py` SQLite resource reopen | [export median 76ms, trusted-open median 2264ms](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json), image 10.8MB, resume rows 2-2 | 외부 후보는 같은 signed machine image + resume hook 계약에서 N/A ([compare](mainPlan/_done/browser-os-north-star/benchmarks/s4-compare-2026-07-15.md)) |
-| S5 immortal machine | 설치 패키지 context들이 한 머신을 공유하고 leader 제거 뒤 memory + file을 복구하며 모든 context 종료 뒤 cold reopen | [failover median 2894ms, p95 3025ms](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json), recovery median 575ms, cold-reopen median 2681ms | 브라우저 Python 후보에는 같은 설치 패키지 leader fencing + journal recovery 계약이 없음 ([evidence](mainPlan/_done/browser-os-north-star/benchmarks/s5-compare-2026-07-15.md)) |
-
-프리미티브 단위 실측도 맥락으로 남긴다:
-
-- 스냅샷-fork 자식 부팅 ~184-300ms vs 콜드 ~2.8s.
-- 복원 기반 리액티비티: 라이브-델타 복원 ~1-2.4ms(바뀐 페이지만 되쓰기, 재실행 없음).
-- uv 레인 웜 환경 부팅 ~1229ms vs 콜드 ~5109ms(numpy).
-- non-Pyodide CPython 3.14(WASI) 부팅 ~70-120ms.
-
-현실 점검: 순수 파이썬 로직은 로컬 급 이상이고, 대형 단일 커널 NumPy 산술은 WASM 단일 스레드와 no-AVX BLAS의 제한을 받는다. pyproc의 수치 속도 답은 horizontal sharding이고, 더 넓은 브라우저 OS 속도 답은 준비된 상태, 복원, process pool, 탭 안 서버, 이동 가능한 machine image다.
+속도는 광고하지 않고 측정한다. 이 프로젝트는 벤치 간판을 걸지 않는다: 랜딩에 걸린 숫자는 영원히
+갚아야 할 빚이 되고, 그 빚이 제품 방향을 끌고 간다. `npm run serve`로
+[Speed Lab](examples/speedLab.html)을 띄워 각자의 기계에서 직접 재라. 측정 계약은
+[benchmarking.md](docs/operations/benchmarking.md)에 있다.
 
 ## Web Computer 실행
 
