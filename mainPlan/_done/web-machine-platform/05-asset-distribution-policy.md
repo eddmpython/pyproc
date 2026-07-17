@@ -1,4 +1,9 @@
-# 05. 자산 provenance와 배포 정책
+# 05. 자산 provenance와 배포 정책 (설계 근거)
+
+> 📍 **운영 정본은 [docs/operations/assetProvenance.md](../../../docs/operations/assetProvenance.md)로 승격했다**(2026-07-17).
+> 지속 정책은 `_done` 아카이브에 살 수 없다(정보 구조 규칙). 이 문서는 당시의 결정 근거로 남는다.
+> 승격본은 이후 실측을 반영했다: 제품 catalog의 존재, SSOT 지명의 정정, 커널 6.8.12 식별,
+> 막힌 것이 `.config` 1항목이라는 것.
 
 ## 결정
 

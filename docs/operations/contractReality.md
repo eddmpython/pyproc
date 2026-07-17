@@ -9,6 +9,8 @@
 | 항목 | 계약 | 실제 | 다음 조치 |
 |---|---|---|---|
 | 암묵 FFI/fetch 가정 | 엔진 교체·업데이트에 견딤 | `toJs` 덕타이핑 3개소(terminal/worker/sharedKernelHost), latin1 바이트 밀수(syscallBridge), "엔진이 .whl/코어를 전역 fetch로 받는다" 가정(wheelCache/coreCache)은 변환 기본값·fetch 전략 변경 시 예외가 아니라 틀린 데이터/무증상 캐시 무력화로 나타난다 | EngineContract seam이 `toJs`를 계약 메서드로 승격 + dist 서술자로 이동(engine-independence P1에서 착수, 잔여 정리) |
+| Web Computer 실행 자산의 단일 출처 | 실행 자산은 재현 가능한 경로에서 온다 | 10MB `buildroot-bzimage68.bin`의 유일한 출처가 `i.copy.sh`(1인 호스팅, mutable URL, 미러 0, 불변성 보증 0)다. 404가 나면 `npm run test:web-computer`가 죽는다. 미러를 저장소에 두는 것은 배포 정책(third-party binary 0)이 금지한다 | 자체 빌드가 진짜 해다. 커널 6.8.12는 bzImage setup header에서 이미 식별되므로 막혀 있지 않다. 상세: [assetProvenance.md](assetProvenance.md) |
+| pyproc 게스트 자산 미기술 | 실행 자산은 catalog가 기술한다 | 제품이 부팅하는 9.6MB `pyodide.asm.wasm`을 어떤 asset catalog도 기술하지 않는다. `pyodide-lock.json`의 354개는 선택적 wheel 카탈로그이지 부팅 적재 집합이 아니라서 그 합성 바이너리를 0% 덮는다. 같은 잣대면 `v86.wasm`과 동일 판정(`NOASSERTION`/inventory 미검증)이어야 한다 | 부재를 명시로 싣는 것까지만 닫혔다(`UNDESCRIBED_ASSET_PROVENANCE`). 인벤토리 취득은 wheel `dist-info/METADATA` 추출 경로가 있다(의존성 0, bsdtar 선례) |
 | 리액티브/%undo 메모리 | 장시간 사용에도 안전 | base(힙 전체 사본)가 RAM 상주 + 체크포인트 델타가 무한 누적(%undo는 문장마다). 장수 REPL에서 실메모리 성장 | 델타 rebase/prune 설계. `saveBase`(OPFS로 base 이동)가 1차 완화 |
 
 ## 상시 재검증 (버전 올릴 때 최우선)

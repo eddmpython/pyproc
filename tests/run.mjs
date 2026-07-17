@@ -1523,6 +1523,22 @@ check("봉투는 출처를 나르고 채널 판정은 나르지 않는다", () =
   }
 });
 
+// 지속 정책은 _done 아카이브가 아니라 docs/에 산다(정보 구조 규칙). 그리고 봉투가 나르는
+// policyVersion은 그 문서의 버전이어야 한다: 값이 어긋나면 봉투가 없는 정책을 가리킨다.
+check("정책 문서의 policyVersion과 봉투가 나르는 값이 같다", () => {
+  const policy = readFileSync(join(ROOT, "docs", "operations", "assetProvenance.md"), "utf8");
+  const declared = /\*\*policyVersion:\s*(\d+)\.\*\*/.exec(policy);
+  if (!declared) throw new Error("docs/operations/assetProvenance.md: policyVersion 선언 없음");
+  const catalog = JSON.parse(readFileSync(join(ROOT, "scripts", "assetCatalog.json"), "utf8"));
+  if (catalog.webComputer.policyVersion !== Number(declared[1])) {
+    throw new Error(`policyVersion 불일치: 문서 ${declared[1]} vs catalog ${catalog.webComputer.policyVersion}`);
+  }
+  const carried = /policyVersion:\s*(\d+)/.exec(readFileSync(join(webComputerRoot, "assetProvenance.js"), "utf8"));
+  if (!carried || Number(carried[1]) !== Number(declared[1])) {
+    throw new Error(`봉투가 나르는 policyVersion 불일치: 문서 ${declared[1]} vs 봉투 ${carried && carried[1]}`);
+  }
+});
+
 check("Web Computer 실행 자산은 검증된 development channel", () => {
   const catalog = JSON.parse(readFileSync(join(webComputerRoot, "assetCatalog.json"), "utf8"));
   if (catalog.schemaVersion !== 1 || catalog.channel !== "development" || catalog.redistribution !== "disabled") {
