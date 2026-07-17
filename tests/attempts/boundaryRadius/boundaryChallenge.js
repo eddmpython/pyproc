@@ -152,7 +152,7 @@ export const compareVectors = (left, right, maxIndices = 32) => {
   });
 };
 
-/** 커밋 가능한 챌린지 기록. CI가 이걸 읽어 재계산하고 대조한다. */
+/** 커밋 가능한 챌린지 기록. 다른 기기가 이걸 읽어 재계산하고 대조한다. */
 export const toChallengeRecord = async (capture) => ({
   manifest: capture.manifest,
   pageSize: capture.pageSize,
@@ -161,3 +161,33 @@ export const toChallengeRecord = async (capture) => ({
   digest: await boundaryDigest(capture),
   vector: encodeVector(capture.vector),
 });
+
+/**
+ * 기록이 자기 자신과 맞는지 **재계산해서** 확인한다. `digest` 필드를 믿지 않는다.
+ *
+ * 이게 없으면 content address가 계산이 아니라 **선언**이다. 음성 시험(2026-07-17)이 그걸
+ * 실증했다: 기록의 `vector`에 1비트를 주입했더니 벡터 대조는 `1p, idx [3]`으로 물었는데
+ * 다이제스트 대조는 "일치"라고 했다. `digest` 필드를 안 건드렸기 때문이다. 즉 벡터와
+ * 다이제스트가 서로 모순인 기록이 통과하고 있었다.
+ *
+ * 이 저장소의 정책이 이미 같은 말을 적어놨다(docs/operations/assetProvenance.md):
+ * "재계산 불가능한 판정은 계산이 아니라 선언이다."
+ */
+export const verifyRecord = async (record) => {
+  const vector = decodeVector(record.vector);
+  const selfConsistent = vector.length === record.pageCount * 2;
+  const recomputed = await boundaryDigest({
+    manifest: record.manifest,
+    pageSize: record.pageSize,
+    heapBytes: record.heapBytes,
+    pageCount: record.pageCount,
+    vector,
+  });
+  return Object.freeze({
+    vector,
+    recomputed,
+    // 기록이 나르는 digest가 기록 자신의 내용에서 실제로 나오는가.
+    intact: selfConsistent && recomputed === record.digest,
+    declared: record.digest,
+  });
+};

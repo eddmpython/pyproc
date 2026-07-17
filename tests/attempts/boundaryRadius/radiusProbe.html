@@ -10,7 +10,7 @@
 <pre id="out">실행 중...</pre>
 <script type="module">
   import { boot } from "../../../index.js";
-  import { captureVector, boundaryDigest, compareVectors, decodeVector, toChallengeRecord, defaultManifest } from "./boundaryChallenge.js";
+  import { captureVector, boundaryDigest, compareVectors, toChallengeRecord, verifyRecord, defaultManifest, canonicalJson } from "./boundaryChallenge.js";
 
   const out = document.getElementById("out");
   const checks = []; const timings = {};
@@ -42,19 +42,57 @@
       check("탭 대 탭: 1차 기록 남김", true, "이 페이지를 새 탭에서 다시 열면 대조한다");
     } else {
       const prior = JSON.parse(priorRaw);
+      const priorRecord = await verifyRecord(prior); // localStorage 기록도 재계산해서 믿는다
+      check("탭 대 탭: 기록이 자기 자신과 맞음", priorRecord.intact, priorRecord.intact ? "재계산 일치" : "기록 파손");
       const lengthSame = prior.heapBytes === first.heapBytes && prior.pageCount === first.pageCount;
       check("탭 대 탭: 힙 길이", lengthSame, `앞 ${prior.heapBytes}B/${prior.pageCount}p, 지금 ${first.heapBytes}B/${first.pageCount}p`);
-      const crossTab = compareVectors(decodeVector(prior.vector), first.vector);
+      const crossTab = compareVectors(priorRecord.vector, first.vector);
       timings.crossTab = `${crossTab.diffPages}p / ${crossTab.comparedPages}p`;
       // 판정이 아니라 보고다: 0이 나올지 모르는 것을 게이트로 만들지 않는다(규칙).
       check("탭 대 탭: 상이 페이지 보고", true, `${timings.crossTab}, idx ${JSON.stringify(crossTab.diffIndices.slice(0, 8))}`);
-      check("탭 대 탭: 다이제스트 일치", true, prior.digest === digest ? "일치 = 경계 동일" : `불일치\n  앞: ${prior.digest}\n  지금: ${digest}`);
-      timings.crossTabIdentical = String(crossTab.identical && prior.digest === digest);
+      check("탭 대 탭: 다이제스트 일치", true, priorRecord.intact && priorRecord.recomputed === digest
+        ? "일치 = 경계 동일"
+        : `불일치\n  앞(재계산): ${priorRecord.recomputed}\n  지금: ${digest}`);
+      timings.crossTabIdentical = String(crossTab.identical && priorRecord.intact && priorRecord.recomputed === digest);
     }
 
-    // 기기 대 기기: 기록을 하네스에 넘긴다. 커밋하면 CI 러너가 재계산해 대조한다(= 두 번째 기기).
+    // 기기 대 기기: 커밋된 기록을 만난다. 이 파일은 다른 기기가 남긴 것이다.
+    // CI 러너(ubuntu + Google Chrome)와 개발 기기(Windows + Edge)는 OS도 브라우저 빌드도 CPU도
+    // 다르다. 그래서 이 대조가 기기 대 기기 반경이고, 두 번째 기기를 살 필요가 없다.
+    let committed = null;
+    try {
+      const response = await fetch("./challengeRecord.json", { cache: "no-store" });
+      if (response.ok) committed = await response.json();
+    } catch (error) { /* 기록이 아직 없으면 아래에서 산출만 한다(최초 실행). */ }
+
+    if (!committed) {
+      check("기기 대 기기: 기록 없음", true, "산출만 한다. 커밋하면 다음 기기가 대조한다");
+    } else {
+      // 기록의 digest 필드를 믿지 않는다. 기록 자신의 내용으로 재계산해서 맞는지 본다.
+      // 이게 없으면 벡터와 다이제스트가 서로 모순인 기록이 조용히 통과한다(음성 시험이 실증).
+      const record = await verifyRecord(committed);
+      check("기기 대 기기: 기록이 자기 자신과 맞음", record.intact,
+        record.intact ? "재계산 일치" : `기록 파손\n  적힌 값: ${record.declared}\n  재계산: ${record.recomputed}`);
+
+      // 매니페스트가 다르면 경계 비교 자체가 무의미하다.
+      const manifestSame = canonicalJson(committed.manifest) === canonicalJson(manifest);
+      check("기기 대 기기: 매니페스트 동일", manifestSame, manifestSame ? "같은 조건" : "조건이 달라 비교 불가");
+      const lengthSame = committed.heapBytes === first.heapBytes && committed.pageCount === first.pageCount;
+      check("기기 대 기기: 힙 길이", lengthSame, `기록 ${committed.heapBytes}B/${committed.pageCount}p, 지금 ${first.heapBytes}B/${first.pageCount}p`);
+      const crossDevice = compareVectors(record.vector, first.vector);
+      timings.crossDevice = `${crossDevice.diffPages}p / ${crossDevice.comparedPages}p`;
+      timings.crossDeviceIdentical = String(crossDevice.identical && record.intact && record.recomputed === digest);
+      timings.crossDeviceDiffIndices = JSON.stringify(crossDevice.diffIndices);
+      // 판정이 아니라 보고다. 결과를 모르는 것을 게이트로 만들지 않는다(규칙 SSOT).
+      // 0이면 반경이 기기를 넘고, 0이 아니면 그 인덱스가 2단계(발산 출처 특정)의 입력이다.
+      check("기기 대 기기: 상이 페이지 보고", true, `${timings.crossDevice}, idx ${JSON.stringify(crossDevice.diffIndices.slice(0, 8))}`);
+      // 적힌 값이 아니라 **재계산한 값**과 비교한다. 기록이 파손이면 여기서도 그 사실이 보인다.
+      check("기기 대 기기: 다이제스트 대조", true, record.intact && record.recomputed === digest
+        ? "일치 = 경계가 기기를 넘는다"
+        : `불일치\n  기록(재계산): ${record.recomputed}\n  지금: ${digest}${record.intact ? "" : "\n  기록이 파손이라 비교 자체가 무의미하다"}`);
+    }
+
     timings.record = JSON.stringify(await toChallengeRecord(first));
-    check("기기 대 기기: 기록 산출", true, "하네스로 전달 완료(커밋 후 CI가 재계산)");
   } catch (error) {
     check("probe 실행", false, error && error.stack ? error.stack : String(error));
   }
