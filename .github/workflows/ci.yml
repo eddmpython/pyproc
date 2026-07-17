@@ -69,31 +69,6 @@ jobs:
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
 
-  # 경계 반경: 이 러너가 두 번째 기기다. 커밋된 challengeRecord.json은 개발 기기(Windows/Edge)가
-  # 남긴 것이고 여기는 ubuntu/Google Chrome이다. OS도 브라우저 빌드도 CPU도 다르므로 이 대조가
-  # 기기 대 기기 반경이고, 두 번째 기기를 살 필요가 없다.
-  # 판정이 아니라 측정이다: 상이 페이지가 0일지 모르는 상태이므로 job 실패로 걸지 않는다
-  # (규칙 SSOT: 결과를 모르는 것을 게이트로 만들지 않는다). 0이 실측되면 그때 게이트가 된다.
-  # 설계 정본: mainPlan/boundary-radius
-  boundary-radius:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: node tests/browser/run.mjs tests/attempts/boundaryRadius/radiusProbe.html
-        env:
-          PYPROC_BROWSER: /usr/bin/google-chrome
-          PYPROC_GATE_OUT: boundaryRadius.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: boundary-radius
-          path: boundaryRadius.json
-          if-no-files-found: ignore
-
   web-computer:
     runs-on: ubuntu-latest
     steps:

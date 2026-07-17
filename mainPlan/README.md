@@ -19,7 +19,6 @@
 
 ## 활성 이니셔티브
 
-- [boundary-radius](boundary-radius/README.md) - 경계의 동일성 반경을 측정하고, 그 반경이 닿는 데까지만 주장한다. 논지가 "상태 = 다시부팅 + 델타"인데 뺄셈이 성립하는 반경이 워커 하나로만 실측돼 있다. 재개 지점은 [01-progress-ledger.md](boundary-radius/01-progress-ledger.md) 마지막 줄.
 - [asset-provenance](asset-provenance/README.md) - 증거 없음이 통과로 새지 않게 한다. 제품 쪽 봉인이 장식이고(거짓 license로도 게이트 통과) 봉인이 걸린 쪽은 CI가 안 도는 fixture다. 재개 지점은 [01-progress-ledger.md](asset-provenance/01-progress-ledger.md) 마지막 줄.
 
-완결 이니셔티브 14개는 [_done/](_done/README.md)으로 이관됐다. 최신 완료 기록은 speculative-fleet이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.
+완결·폐기 이니셔티브 15개는 [_done/](_done/README.md)으로 이관됐다(최신 이관 = boundary-radius, 폐기). 최신 완료 기록은 speculative-fleet이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.
