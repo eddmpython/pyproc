@@ -59,3 +59,48 @@ North Star의 주력 증명(dual-boot)을 포기하는 결론을 정당화하고
 전체를 끌고 간다.
 
 재개 지점: 1단계(Package 층위 모순 수리) 착수.
+
+## 2026-07-17 1~6단계 완료
+
+6개 커밋. 신설 게이트는 전부 음성 시험으로 이빨을 확인했다(규칙 SSOT의 게이트 규율).
+
+### 완료 조건 대조
+
+| # | 조건 | 판정 |
+|---|---|---|
+| 1 | catalog가 하나다 | 충족. SSOT는 `scripts/assetCatalog.json` 하나이고 제품 catalog/SBOM/provenance 모듈이 전부 파생물이다(`--check`가 바이트 대조) |
+| 2 | 제품 봉인이 fixture와 같은 강도 | 충족. **P1의 변이(거짓 MIT)가 이제 RED다**(전에는 1055 passed) |
+| 3 | Package가 File 정책을 지킨다 | 충족. 불변식이 값을 도출한다(kolibri GPL-2.0-only -> NOASSERTION, v86 BSD-2-Clause -> NOASSERTION) |
+| 4 | SPDX 2.3 적합 | 충족. SHA1 1..1, namespace가 결정적이면서 유일, created가 계약값 |
+| 5 | 봉투가 출처를 나른다 | 충족. `policyVersion`/`catalogId`/`sourceCatalogId`/`sbomDigest`. channel은 싣지 않는다 |
+| 6 | 정책에 주소와 버전 | 충족. `docs/operations/assetProvenance.md` policyVersion 1, 봉투와 일치를 게이트가 강제 |
+| 7 | 알려진 위험 기록 | 충족. 계약 실태 표에 2건 |
+
+측정: 구조 게이트 1064 -> 1070, 신설 게이트 3종(Package 불변식, 봉투 출처, policyVersion 일치).
+`test:web-computer` 13/13 GREEN 유지(두 OS 부팅과 65MB 이동 불변).
+
+### 예상 못 한 것
+
+**게이트가 아키텍처를 지목했다.** 제품에 provenance 모듈을 배선하자 구조 게이트가 "제품이
+tests 경로를 소비"를 잡았다. 제품 compliance 산출물을 만드는 도구가 test fixture 폴더에
+살고 있었다는 뜻이다. 도구와 SSOT를 `scripts/`로 옮겼다(`prepareWebComputerAssets.mjs`와
+같은 층). 기획 단계에서 "남은 판단 하나"로 적어둔 것을 게이트가 강제했다.
+
+**구조 게이트는 미정의 식별자를 못 본다는 것을 또 확인했다.** `UNDESCRIBED_ASSET_PROVENANCE`
+import를 빠뜨렸는데 `npm test` 1065가 통과했고 `test:web-computer`가 ReferenceError로 잡았다.
+structure-evolution에서 같은 일이 있었다(session 분해 중 sha256Hex import 유실). 이 사실은
+이미 규칙과 testing.md에 적혀 있고, 이번이 두 번째 실증이다.
+
+### 남은 것
+
+**pyproc 게스트 자산 인벤토리.** 제품이 부팅하는 9.6MB `pyodide.asm.wasm`을 어떤 catalog도
+기술하지 않는다. 지금은 부재를 명시로 싣는 것까지만 닫혔다(`UNDESCRIBED_ASSET_PROVENANCE`).
+같은 잣대면 `v86.wasm`과 동일 판정(`NOASSERTION`/inventory 미검증)이어야 한다. 인벤토리
+취득 경로는 있다(wheel `dist-info/METADATA` 추출, 의존성 0, `fetchEngine.mjs`의 bsdtar 선례).
+계약 실태 표에 등재했다.
+
+**Linux 자산 교체.** 커널 6.8.12는 식별됐고 막힌 것은 `.config` 1항목이다. 문서화된 config로
+같은 버전을 빌드하면 `promotionRequires` 1~3번과 5번이 함께 열리고 `i.copy.sh` 단일 출처
+위험도 사라진다. 하나로 둘을 푼다. 이건 provenance 배관이 아니라 자산 취득 트랙이다.
+
+재개 지점: pyodide 인벤토리 취득 또는 Linux 자산 자체 빌드 트랙 개설.
