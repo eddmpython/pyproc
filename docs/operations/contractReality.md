@@ -24,6 +24,7 @@
 
 | 항목 | 트레이드오프 | 명시 조건 |
 |---|---|---|
+| `PYTHONHASHSEED=0` 상시 고정 | `bootSession`이 하드코딩하고 CPython은 인터프리터 초기화 때 한 번 읽으므로 **세션 내내 hash randomization이 꺼진다**(CVE-2012-1150의 hash flooding 대응 무력화). V8은 같은 문제를 "빌드 때 고정 + 역직렬화 때 새 시드로 rehash"로 푸는데 CPython엔 rehash 설비가 없어 결정성과 시드 신선함을 동시에 못 가진다 | 위협 모델상 피해는 자기 탭의 자기 세션에 국한(외부 입력을 dict 키로 대량 적재하는 워크로드만 해당). 리플레이 결정성이 이 라이브러리의 핵이라 트레이드오프를 안고 명시한다 |
 | 전역 스텁 3종 | entropy/시간(session 부팅), fetch(wheelCache install 구간) 스왑은 finally로 복원되지만 그 창 안의 동시 작업엔 보인다 | 동시 부팅 금지(bootSession의 runExclusive가 세션 부팅을 직렬화). 소비자 문서에 명시 |
 | ReactiveController.saveBase | base 백업/이동만 하고 RAM은 줄지 않는다(복원 경로가 base 상주 전제). 메모리 밸브는 pruneTo/dispose | 주석/타입을 백업/이동용으로 정정(2026-07-16). 진짜 오프로드(페이지 단위 파일 복원)는 동기 복원 계약과 충돌해 미착수 |
 | WASI 세션 값 다리 | JSON 직렬화 한정(FFI 없음). 함수/numpy/live 객체 못 넘김 | 별도 async 표면(bootWasi). 프로덕션 정본은 Pyodide([contract.md](../consuming/contract.md) 런타임 정합) |
