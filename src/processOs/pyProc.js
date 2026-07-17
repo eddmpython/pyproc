@@ -14,39 +14,11 @@ import { createRpcPort } from "../runtime/rpcChannel.js";
 import { requireCoi } from "../runtime/preflight.js";
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
 import { createPipe, createLock, createSemaphore, createShm, pipeWriteAsync, pipeReadAsync, pipeClose } from "./ipc.js";
+import { shardMapArray, shardMatmul } from "./shardCompute.js";
 
 // 시그널 번호(POSIX 관례. 외부 기술 명칭이라 번호는 원어 규격 그대로).
 // 워커의 SAB 채널에 쓰면 CPython eval 루프가 해당 핸들러를 부른다(signalTableProbe 실측).
 export const SIGNAL = { INT: 2, USR1: 10, USR2: 12, TERM: 15 };
-
-// TypedArray를 SharedArrayBuffer로 1회 복사(제로카피 불가 = memcpy 1회 계약). matmul 입력 공유용.
-function _toSab(typed) {
-  const sab = new SharedArrayBuffer(typed.byteLength);
-  new Uint8Array(sab).set(new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength));
-  return sab;
-}
-
-function _resolveShardParts(rawParts, maxParts, label) {
-  if (!Number.isInteger(maxParts) || maxParts < 1) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `${label}: 준비된 워커 없음(boot 먼저)`);
-  if (rawParts === undefined || rawParts === null) return maxParts;
-  if (!Number.isInteger(rawParts) || rawParts < 1) throw new PyProcError("PYPROC_INPUT_INVALID", `${label}: parts는 양의 정수여야 한다`);
-  return Math.min(rawParts, maxParts);
-}
-
-// matmul 워커 파이썬: arg의 SAB에서 A블록(mp x k)과 전체 B(k x n)를 numpy로 재구성해 C_p = A_p @ B를
-// 계산하고, 공유 출력 SAB의 자기 행블록 위치(outOff)에 바이트로 쓴다. SAB는 to_py/frombuffer가
-// 직접 못 쓰므로 입력은 .slice()로 워커 로컬 복사, 출력은 pyodide TypedArray.assign(파이썬 버퍼)로
-// 공유 뷰에 직접 복사(assign은 파이썬 bytes/memoryview를 버퍼 프로토콜로 받는다).
-const MATMUL_FN = [
-  "def _fn(arg):",
-  "    import js, numpy",
-  "    mp = arg.mp; k = arg.k; n = arg.n",
-  "    a = numpy.frombuffer(js.Uint8Array.new(arg.aSab, arg.aOff, mp * k * 8).slice().to_py(), dtype='float64').reshape(mp, k)",
-  "    b = numpy.frombuffer(js.Uint8Array.new(arg.bSab, 0, k * n * 8).slice().to_py(), dtype='float64').reshape(k, n)",
-  "    c = numpy.ascontiguousarray(a @ b)",
-  "    js.Uint8Array.new(arg.outSab, arg.outOff, mp * n * 8).assign(c.view(numpy.uint8).reshape(-1))",
-  "    return 1",
-].join("\n");
 
 export class PyProc {
   constructor(opts = {}) {
@@ -321,62 +293,13 @@ export class PyProc {
   // 데이터는 SAB로 공유되고 각 워커 안에서 1회 복사로 numpy화된다(memcpy 1회는 불가피).
   // fnSrc: "def _fn(a): ..." (a = 해당 조각의 numpy 1차원 배열). 워커에 numpy가 필요하므로
   // new PyProc({ packages: ["numpy"], setup: "import numpy" })로 부팅하라.
-  async mapArray(fnSrc, typed, opts = {}) {
-    const parts = _resolveShardParts(opts.parts, this._pool().length, "mapArray");
-    const dtypeMap = {
-      Float64Array: "float64", Float32Array: "float32", Int32Array: "int32", Uint32Array: "uint32",
-      Int16Array: "int16", Uint16Array: "uint16", Int8Array: "int8", Uint8Array: "uint8",
-    };
-    const dtype = dtypeMap[typed.constructor.name];
-    if (!dtype) throw new PyProcError("PYPROC_INPUT_INVALID", `mapArray: 지원하지 않는 TypedArray(${typed.constructor.name})`);
-    let sab = typed.buffer, base = typed.byteOffset;
-    if (!(sab instanceof SharedArrayBuffer)) { // SAB가 아니면 1회 복사로 전 워커 공유화
-      sab = new SharedArrayBuffer(typed.byteLength);
-      new Uint8Array(sab).set(new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength));
-      base = 0;
-    }
-    const bpe = typed.BYTES_PER_ELEMENT, per = Math.floor(typed.length / parts);
-    const metas = Array.from({ length: parts }, (_, i) => {
-      const start = i * per, count = i === parts - 1 ? typed.length - start : per;
-      return { sab, off: base + start * bpe, len: count * bpe, dtype };
-    });
-    const harness = fnSrc.replace("def _fn(", "def _pyprocUser(") + "\n"
-      + "def _fn(meta):\n"
-      + "    import js, numpy\n"
-      + "    _u8 = js.Uint8Array.new(meta.sab, meta.off, meta.len).slice()\n"
-      + "    return _pyprocUser(numpy.frombuffer(_u8.to_py(), dtype=meta.dtype))\n";
-    return this.map(harness, metas, opts);
+  // 배열 샤딩 레인은 shardCompute가 소유한다(여기는 프로세스 스케줄링만).
+  mapArray(fnSrc, typed, opts = {}) {
+    return shardMapArray((f, a, o) => this.map(f, a, o), this._pool().length, fnSrc, typed, opts);
   }
 
-  // 샤딩 matmul: C = A@B를 A의 행블록으로 P(워커수)분할, 워커 p가 C_p = A_p @ B를 계산해
-  // 공유 출력 SAB에 자기 행블록으로 쓴다(B는 워커당 memcpy 1회 복제). compute-bound(N^3)이라
-  // near-linear 배속: 실측(numericShard/shardMatmulProbe) 4워커 3.67배(92% 효율), 전송 오버헤드
-  // 무시 가능(14ms). numpy 필요: new PyProc({ packages: ["numpy"], setup: "import numpy" }).
-  // a/b = { data: Float64Array, rows, cols }. 반환 { data: Float64Array, rows: a.rows, cols: b.cols }.
-  // 정직: 이 배속은 compute-bound 커널의 것이다. memory-bound op(리덕션/값싼 원소별)는 mapArray로
-  // 돌리되 배속은 modest하고(전송 O(n)=연산 O(n)), 작은 배열은 전송비로 진다(shardOpsProbe 실측).
-  // opts.parts: 샤딩할 워커 수 상한(기본 = 풀 전체). parts:1이면 단일워커 대조(같은 코드 경로 =
-  // 공정한 배속 비교의 baseline). 그 외 소비자는 생략(전 코어 활용).
-  async matmul(a, b, opts = {}) {
-    if (!a || !b || !a.data || !b.data) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: a/b는 { data: Float64Array, rows, cols }");
-    if (!(a.data instanceof Float64Array) || !(b.data instanceof Float64Array)) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: data는 Float64Array(f64 = numpy 기본)");
-    if (![a.rows, a.cols, b.rows, b.cols].every((n) => Number.isInteger(n) && n > 0)) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: rows/cols는 양의 정수여야 한다");
-    if (a.cols !== b.rows) throw new PyProcError("PYPROC_INPUT_INVALID", `matmul: 차원 불일치 (${a.rows}x${a.cols}) @ (${b.rows}x${b.cols})`);
-    if (a.data.length !== a.rows * a.cols || b.data.length !== b.rows * b.cols) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: data 길이가 rows*cols와 불일치");
-    const pool = this._pool();
-    if (!pool.length) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "matmul: 준비된 워커 없음(boot 먼저)");
-    const M = a.rows, K = a.cols, N = b.cols, P = _resolveShardParts(opts.parts, Math.min(pool.length, M), "matmul");
-    // A, B, 출력 C를 SAB로(공유). A/B 입력은 memcpy 1회로 SAB화(계약: 제로카피 불가).
-    const aSab = _toSab(a.data), bSab = _toSab(b.data), outSab = new SharedArrayBuffer(M * N * 8);
-    const per = Math.floor(M / P);
-    const metas = Array.from({ length: P }, (_, i) => {
-      const startRow = i * per, rows = i === P - 1 ? M - startRow : per;
-      return { aSab, aOff: startRow * K * 8, mp: rows, k: K, n: N, bSab, outSab, outOff: startRow * N * 8 };
-    }).filter((m) => m.mp > 0);
-    const res = await this.map(MATMUL_FN, metas, opts);
-    const bad = res.find((r) => r && r.error);
-    if (bad) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "matmul: 워커 실패 " + bad.error);
-    return { data: new Float64Array(outSab), rows: M, cols: N };
+  matmul(a, b, opts = {}) {
+    return shardMatmul((f, args, o) => this.map(f, args, o), this._pool().length, a, b, opts);
   }
 
   // 프로세스 테이블 스냅샷(pid/state 조회).
