@@ -27,11 +27,14 @@ function collect(dir, exts, acc = []) {
   return acc;
 }
 const rel = (f) => f.slice(ROOT.length + 1).replaceAll("\\", "/");
+// import 절은 여러 줄에 걸칠 수 있다. 개행을 배제하면 `{ a,\n b } from "x"` 형태가 통째로
+// 안 보여서 구조 게이트(참조 실존/순환/레이어) 전부가 부분맹이 된다. scripts/assetManifest.mjs의
+// 같은 목적 정규식과 같은 규칙(개행 허용)으로 맞춘다.
 function jsModuleRefs(file) {
   const src = readFileSync(file, "utf8");
   const refs = [];
   const add = (kind, match) => refs.push({ kind, spec: match[1] });
-  for (const m of src.matchAll(/^\s*(?:import|export)\s+(?:[^'"\n]*?\s+from\s+)?["']([^"']+)["']/gm)) add("module", m);
+  for (const m of src.matchAll(/^\s*(?:import|export)\s+(?:[^'"]*?\s+from\s+)?["']([^"']+)["']/gm)) add("module", m);
   for (const m of src.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g)) add("dynamic", m);
   for (const m of src.matchAll(/\bimportScripts\s*\(\s*["']([^"']+)["']\s*\)/g)) add("importScripts", m);
   for (const m of src.matchAll(/new\s+URL\s*\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g)) add("newURL", m);
