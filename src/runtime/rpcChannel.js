@@ -1,8 +1,9 @@
-// rpcChannel.js - Layer 2: Worker RPC 상관의 단일 보관소.
+// rpcChannel.js - Layer 0: Worker RPC 상관의 단일 보관소(순수 배관, 의존은 errors.js뿐).
 // reqId 발급 + pending 맵 + 사망 시 전건 명시 reject(영원히 매달리는 Promise 금지)를
-// 한 곳에 둔다. pyProc(태스크 워커), machineContainer/machineWorker(컨테이너 커널)가
-// 같은 계약을 소비한다. kernelElection(BroadcastChannel + outcome unknown 의미론)과는
-// 계약이 달라 대상이 아니다.
+// 한 곳에 둔다. pyProc(태스크 워커), machineContainer/machineWorker(컨테이너 커널),
+// syscallBridge(subprocess 레인)가 같은 계약을 소비한다. 두 레이어의 소비자가 만나는
+// 지점이라 Layer 0이다(heapDelta와 같은 근거). kernelElection(BroadcastChannel +
+// outcome unknown 의미론)과는 계약이 달라 대상이 아니다.
 //
 // 의미론(pyProc 2026-07-12 수리 계약의 승계):
 //   - 응답은 reqId로 상관시킨다(pid/cid가 아니라). 같은 워커에 요청이 겹쳐도 교차 수신 0.
@@ -10,7 +11,7 @@
 //   - fail(err) 시 pending 전건이 그 오류로 즉시 reject되고, 이후 request는
 //     PYPROC_PROCESS_UNAVAILABLE로 즉시 reject된다.
 //   - { type: "error" } 응답은 fromErrorPayload로 복원해 code/retryable/pyExcType을 보존한다.
-import { PyProcError, fromErrorPayload } from "../runtime/errors.js";
+import { PyProcError, fromErrorPayload } from "./errors.js";
 
 export function createRpcPort(worker, opts = {}) {
   const label = opts.label || "rpc";

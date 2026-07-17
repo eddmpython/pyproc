@@ -1033,6 +1033,7 @@ check("src layer edge는 아래로만", () => {
     "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
     "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",
     "src/capabilities/syscallBridge.js -> src/runtime/assets.js",
+    "src/capabilities/syscallBridge.js -> src/runtime/rpcChannel.js",
   ]);
   const problems = [];
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {

@@ -8,7 +8,7 @@
 // 두 번째 글루를 만들지 않는다. machineContainer.js가 같은 폴더의 이 파일을 spawn한다.
 import { Runtime } from "../runtime/runtime.js";
 import { PyProcError, toErrorPayload } from "../runtime/errors.js";
-import { createRpcPort } from "./rpcChannel.js";
+import { createRpcPort } from "../runtime/rpcChannel.js";
 
 let rt = null;
 let ownSnapshot = null; // 이 컨테이너가 부팅한 스냅샷(중첩 자식에 물려준다 = fast fork 계승)

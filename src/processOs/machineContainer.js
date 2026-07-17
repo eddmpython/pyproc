@@ -11,7 +11,7 @@
 // 아니라 전역 이름으로 접근). 반환 프록시(Promise)는 run_sync가 서스펜드해 값으로 만든다.
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
 import { PyProcError } from "../runtime/errors.js";
-import { createRpcPort } from "./rpcChannel.js";
+import { createRpcPort } from "../runtime/rpcChannel.js";
 
 const BOOTSTRAP = `
 import sys as _pyprocSys, types as _pyprocTypes, json as _pyprocJson

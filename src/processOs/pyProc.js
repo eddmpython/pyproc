@@ -10,7 +10,7 @@
 // 즉시 명시적으로 reject된다(영원히 매달리는 Promise 금지).
 import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
 import { PyProcError } from "../runtime/errors.js";
-import { createRpcPort } from "./rpcChannel.js";
+import { createRpcPort } from "../runtime/rpcChannel.js";
 import { requireCoi } from "../runtime/preflight.js";
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
 import { createPipe, createLock, createSemaphore, createShm, pipeWriteAsync, pipeReadAsync, pipeClose } from "./ipc.js";

@@ -5,7 +5,7 @@
 //   subprocess   -> 자식 워커의 독립 인터프리터(콜드 부팅). JSPI 필요, ["python","-c",code]만 (v1)
 // 실측 근거: tests/attempts/syscallBridge. 저수준 socket 자체의 배선은 프론티어(로드맵) 몫이다.
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
-import { fromErrorPayload } from "../runtime/errors.js";
+import { createRpcPort } from "../runtime/rpcChannel.js";
 
 const BOOTSTRAP = `
 import builtins, sys, io, subprocess, urllib.request
@@ -98,22 +98,14 @@ export class SyscallBridge {
       await this._assetIntegrityCheck;
     }
     const w = new Worker(new URL("../processOs/worker.js", import.meta.url), { type: "module" });
+    // 상관(reqId)과 크래시 수렴은 rpcChannel이 소유한다. 손수 구현하던 시절 이 레인은
+    // error/messageerror 리스너가 없어서 워커 로드 실패 시 promise가 영영 매달렸다.
+    const port = createRpcPort(w, { label: "subprocess" });
     try {
-      await new Promise((resolve, reject) => {
-        w.addEventListener("message", function onMsg(e) {
-          if (e.data.type === "ready") { w.removeEventListener("message", onMsg); resolve(); }
-          else if (e.data.type === "error") { w.removeEventListener("message", onMsg); reject(fromErrorPayload(e.data)); }
-        });
-        // 부모 커널과 같은 배포 지점으로 부팅한다(자가호스팅/오프라인에서 자식만 CDN으로 새지 않게).
-        w.postMessage({ type: "boot", id: 1, snapshot: null, indexURL: this._rt.indexURL });
-      });
-      return await new Promise((resolve, reject) => {
-        w.addEventListener("message", (e) => {
-          if (e.data.type === "result") resolve(e.data.result);
-          else if (e.data.type === "error") reject(fromErrorPayload(e.data));
-        });
-        w.postMessage({ type: "task", taskId: 0, fnSrc: SUBPROC_FN, arg: code });
-      });
+      // 부모 커널과 같은 배포 지점으로 부팅한다(자가호스팅/오프라인에서 자식만 CDN으로 새지 않게).
+      await port.call({ type: "boot", snapshot: null, indexURL: this._rt.indexURL });
+      const res = await port.call({ type: "task", fnSrc: SUBPROC_FN, arg: code });
+      return res.result;
     } finally {
       w.terminate();
     }
