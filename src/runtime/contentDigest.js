@@ -26,6 +26,49 @@ function subtleOrThrow() {
   return subtle;
 }
 
+// ---- 순수 코어(cryptoProvider 매개변수화, 브라우저 전역 접근 0) ----
+// 상태 커널(state-kernel)의 digest 법이 여기 산다. 아래 편의 함수들은 전부 이 코어의
+// 브라우저 전역 바인딩이다. machine 층의 generationIntegrity는 경계상 이 파일을 import하지
+// 못해 같은 법의 주입식 사본을 유지하며, coordinator가 커널에 저장을 위임하는 단계에서
+// 소멸 예정이다(mainPlan/state-kernel 02 문서 5단계).
+
+function requireProvider(cryptoProvider) {
+  if (!cryptoProvider?.subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: cryptoProvider.subtle이 필요하다");
+  return cryptoProvider.subtle;
+}
+
+export async function sha256HexWith(cryptoProvider, data) {
+  const digest = new Uint8Array(await requireProvider(cryptoProvider).digest("SHA-256", asBytes(data)));
+  return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// 정본 주소 형식은 "sha256:<hex>" 하나다(알고리즘 자기 기술형). bare hex는 살아있는 저장
+// 포맷(저널 blob 키, .pymachine 봉투 필드)의 인코딩 세부로만 남고, 판정은 코덱이 흡수한다.
+export const SHA256_ADDRESS_RE = /^sha256:[0-9a-f]{64}$/;
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+export async function sha256AddressWith(cryptoProvider, data) {
+  return "sha256:" + await sha256HexWith(cryptoProvider, data);
+}
+
+// 주소/키 -> hex. "sha256:<hex>"와 bare hex(구 포맷 인코딩)를 모두 받는 유일한 지점이다.
+// 두 인코딩을 아는 곳이 여기 하나여야 형식 표류가 멈춘다. 그 외 값은 null(판정은 호출자 몫).
+export function parseSha256Address(value) {
+  const s = String(value || "");
+  if (SHA256_ADDRESS_RE.test(s)) return s.slice("sha256:".length);
+  if (SHA256_HEX_RE.test(s)) return s;
+  return null;
+}
+
+// verify-on-read의 단일 판정: 바이트를 다시 해시해 기대값과 대조한다. 던지지 않고
+// { ok, actual, expectedHex }를 돌려준다(층마다 자기 오류 계약으로 감싼다:
+// 저널은 PYPROC_JOURNAL_CORRUPT, machine은 WebMachineError, 자산은 PYPROC_ASSET_INTEGRITY).
+export async function verifySha256With(cryptoProvider, bytes, expected) {
+  const expectedHex = parseSha256Address(expected);
+  const actual = await sha256HexWith(cryptoProvider, bytes);
+  return { ok: expectedHex !== null && actual === expectedHex, actual, expectedHex };
+}
+
 // 청크로 끊어 넣는다: 큰 배열을 String.fromCharCode에 한 번에 펼치면 인자 수 한계로 터진다.
 export function base64FromBytes(data) {
   const bytes = asBytes(data);
@@ -44,7 +87,17 @@ export async function sha256Bytes(data) {
 
 // 16진 다이제스트. bytes를 그대로 받고, 문자열이면 UTF-8로 인코딩한다.
 export async function sha256Hex(data) {
-  return [...await sha256Bytes(data)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return sha256HexWith({ subtle: subtleOrThrow() }, data);
+}
+
+// "sha256:<hex>" 정본 주소(브라우저 전역 바인딩).
+export async function sha256Address(data) {
+  return sha256AddressWith({ subtle: subtleOrThrow() }, data);
+}
+
+// verify-on-read 단일 판정(브라우저 전역 바인딩).
+export async function verifySha256(bytes, expected) {
+  return verifySha256With({ subtle: subtleOrThrow() }, bytes, expected);
 }
 
 // 앞 n바이트만 쓰는 짧은 키(캐시 파일명 등). 내용 주소가 아니라 이름이라 충돌 비용이 낮다.

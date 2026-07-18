@@ -15,7 +15,7 @@
 // 같은 CAS blob 저장소로 읽는다(loose와 pack 모두 recover 호환).
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 import { PyProcError } from "../runtime/errors.js";
-import { sha256Hex } from "../runtime/contentDigest.js";
+import { sha256Hex, verifySha256 } from "../runtime/contentDigest.js";
 import { growHeapTo } from "../runtime/heapGrow.js";
 import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
 import {
@@ -292,7 +292,7 @@ export class MachineJournal {
       let bytes = blobCache.get(key);
       if (!bytes) {
         bytes = await this._blobs.read(key, readCache);
-        if (await sha256Hex(bytes) !== key) throw journalCorrupt(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
+        if (!(await verifySha256(bytes, key)).ok) throw journalCorrupt(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
         blobCache.set(key, bytes);
       }
       buffered.push([+p, bytes]); // 전량 검증 후에 쓴다(부분 적용 상태 방지)
@@ -302,7 +302,7 @@ export class MachineJournal {
       const { key, ...meta } = head.home;
       try {
         const bin = key ? await this._blobs.read(key, readCache) : new Uint8Array(0);
-        if (key && await sha256Hex(bin) !== key) throw journalCorrupt(`journal.recover: home blob 파손(${key.slice(0, 12)}..)`);
+        if (key && !(await verifySha256(bin, key)).ok) throw journalCorrupt(`journal.recover: home blob 파손(${key.slice(0, 12)}..)`);
         validateMachineHomeMeta(meta, bin.length);
         homePayload = { meta, bin };
       } catch (e) {

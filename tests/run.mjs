@@ -339,6 +339,33 @@ for (const f of BRAG_SURFACE) {
     if (hits.length) throw new Error(hits.slice(0, 5).join("; "));
   });
 }
+// 3.4) digest 법 가드(state-kernel 1단계): sha256 계산과 주소 형식 조립의 소스를 좁힌다.
+//      raw subtle.digest는 코어 2곳(contentDigest = 정본, generationIntegrity = machine 경계의
+//      주입식 사본으로 coordinator 커널 위임 시 소멸 예정)과 pyprocSw(import 0 계약 의도 중복)만.
+//      "sha256:" 주소 문자열 조립도 같은 두 코어만. 나머지 파일에서 발견 = 판정/형식의 새 사본.
+console.log("\n[digest 법]");
+{
+  const DIGEST_CORE = new Set([
+    "src/runtime/contentDigest.js",
+    "src/machine/persistence/generationIntegrity.js",
+    "src/capabilities/pyprocSw.js",
+  ]);
+  const ADDRESS_CORE = new Set([
+    "src/runtime/contentDigest.js",
+    "src/machine/persistence/generationIntegrity.js",
+  ]);
+  const rawDigest = /\.digest\(\s*["']SHA-256["']/;
+  const addressBuild = /["'`]sha256:(?![0-9a-f]{64})/; // 리터럴 상수 표기(테스트 기대값)는 스코프 밖
+  for (const f of collect(join(ROOT, "src"), [".js"])) {
+    const relPath = rel(f);
+    const text = readFileSync(f, "utf8");
+    check(`digest 법: ${relPath}`, () => {
+      if (rawDigest.test(text) && !DIGEST_CORE.has(relPath)) throw new Error("raw subtle.digest는 digest 코어에만 산다(contentDigest 경유)");
+      if (addressBuild.test(text) && !ADDRESS_CORE.has(relPath)) throw new Error('"sha256:" 주소 조립은 코어에만 산다(sha256Address/parseSha256Address 경유)');
+    });
+  }
+}
+
 // 파일/폴더 이름도 camelCase다. 위 검사는 파일 "내용"의 식별자만 봐서 이름 규칙은 기계 검사가
 // 0이었다. mainPlan은 kebab-case 번호 문서라 예외(dartlab 관례), 검증 데이터/픽스처도 제외.
 check("파일과 폴더 이름 camelCase", () => {

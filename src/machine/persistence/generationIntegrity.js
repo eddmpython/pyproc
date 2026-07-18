@@ -1,4 +1,8 @@
 // generationIntegrity.js - blob과 generation manifest의 canonical SHA-256 경계.
+// digest 법의 정본은 runtime/contentDigest.js다. machine은 경계상(밖으로의 import는
+// composition 한 점) 그 파일을 import하지 못해 이 주입식 사본을 유지하며, coordinator가
+// 커널에 저장을 위임하는 단계(mainPlan/state-kernel 02 문서 5단계)에서 이 파일은 소멸한다.
+// tests/run.mjs [digest 법] 가드가 세 번째 사본의 출현을 차단한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 const encoder = new TextEncoder();

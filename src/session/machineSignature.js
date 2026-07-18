@@ -7,7 +7,7 @@
 // 왜 session.js에서 나왔나: 키 생성/내보내기/지문/서명/검증 10함수가 결정적 부팅과 한 파일에
 // 있었다. 서명은 신뢰 경계의 코드라 독립적으로 읽히고 감사받아야 한다.
 import { PyProcError } from "../runtime/errors.js";
-import { sha256Hex } from "../runtime/contentDigest.js";
+import { sha256Address } from "../runtime/contentDigest.js";
 import { unsignedEnvelope } from "./machineImage.js";
 
 const MACHINE_SIGN_ALG = { name: "ECDSA", namedCurve: "P-256" };
@@ -53,7 +53,7 @@ function canonicalMachinePublicKey(jwk) {
 export async function fingerprintMachinePublicKey(key) {
   const jwk = canonicalMachinePublicKey(await exportMachinePublicKey(key));
   const bytes = new TextEncoder().encode(JSON.stringify(jwk));
-  return `sha256:${await sha256Hex(bytes)}`;
+  return sha256Address(bytes);
 }
 
 async function importMachinePublicKey(key) {

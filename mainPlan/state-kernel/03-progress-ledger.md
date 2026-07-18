@@ -28,4 +28,12 @@
 - probe 3(ref CAS 음성 시험): GREEN 7/7. 크래시 6지점 구 HEAD 무결, HEAD-first/PREV 미보존/stale fence/env 불일치/변조 blob 전부 적발.
 - 판정: 이중 구역 경계와 오브젝트 모델이 실측으로 성립. 1단계 착수 자격 확보.
 
-NEXT: 1단계 법 추출 - digest 코어 cryptoProvider 매개변수화(contentDigest + generationIntegrity 통합), verify-on-read 단일화, 주소 형식 `sha256:<hex>` 통일. machine 배달은 주입. 게이트 = npm test + test:browser green + 기존 저널·봉투 그대로 열림 + 주소 형식 위반 주입 RED.
+## 2026-07-18 - 1단계 완료: digest 법 추출
+
+- [contentDigest.js](../../src/runtime/contentDigest.js)에 순수 코어 신설: `sha256HexWith`/`sha256AddressWith`(cryptoProvider 매개변수화, 전역 접근 0), `SHA256_ADDRESS_RE`, `parseSha256Address`(sha256: 주소와 bare hex 두 인코딩을 아는 유일 지점), `verifySha256With`(verify-on-read 단일 판정, 비던짐 반환이라 층별 오류 계약과 양립). 기존 함수들은 전역 바인딩 래퍼로 강등.
+- verify-on-read 3벌 -> 1판정: 저널 recover blob/home 2곳 + blobStore pack 재대조 1곳이 전부 `verifySha256` 경유. machineSignature 지문의 `sha256:` 조립도 `sha256Address` 경유로.
+- machine의 generationIntegrity는 경계상(밖 import는 composition 한 점) 코어를 import하지 못하므로 주입식 사본으로 유지하고 5단계(coordinator 커널 위임)에서 소멸 예정을 파일 헤더에 명시.
+- 신설 게이트 `[digest 법]`: raw `subtle.digest("SHA-256")`은 코어 2곳 + pyprocSw(의도 중복)만, `"sha256:"` 주소 조립은 코어 2곳만. **음성 시험 2종으로 이빨 증명**(raw digest 주입 RED, 주소 조립 주입 RED, 원복 후 GREEN).
+- 게이트: npm test 1279 green, test:types green, test:browser 70/70 green(기존 저널 commit/pack/recover·세션 save/load·openMachine 전부 그대로 동작 = 저장 포맷 의미 불변).
+
+NEXT: 2단계 - `src/state/` 오브젝트 모델(blob/tree/commit/signedTag) + fence 선택형 ref CAS 신설. 순수 집합 게이트(전역 접근 0) + 음성 시험(fence·순서·corruption/mismatch 판정) + 레이어 게이트 개정을 같은 커밋에. attempts 시안(stateKernelDraft)을 원형으로 승격 형태를 설계한다.

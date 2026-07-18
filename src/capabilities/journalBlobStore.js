@@ -9,7 +9,7 @@
 // 커밋 주기 정책을 고치는 사람과 pack 포맷을 고치는 사람이 같은 파일을 만진다.
 // 이 저장소는 힙도 런타임도 모른다: 디렉터리 핸들 하나가 전부다.
 import { PyProcError } from "../runtime/errors.js";
-import { sha256Hex } from "../runtime/contentDigest.js";
+import { verifySha256 } from "../runtime/contentDigest.js";
 
 const BLOB_DIR = "blob";
 const PACK_DIR = "pack";
@@ -206,7 +206,7 @@ export class JournalBlobStore {
       for (const key of liveKeys) {
         const bytes = await this.read(key, readCache);
         // 내용 주소를 재대조한다: 저장 후 파손을 pack이 그대로 옮기면 안 된다.
-        if (await sha256Hex(bytes) !== key) throw journalCorrupt(`journal.pack: blob 파손(${key.slice(0, 12)}..)`);
+        if (!(await verifySha256(bytes, key)).ok) throw journalCorrupt(`journal.pack: blob 파손(${key.slice(0, 12)}..)`);
         await w.write(bytes);
         blobs[key] = { offset, length: bytes.byteLength };
         offset += bytes.byteLength;
