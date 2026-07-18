@@ -90,6 +90,24 @@ class PyprocGuestAdapter {
   async request(message, control) {
     throwIfOperationAborted(control, "pyproc request");
     if (!this._session) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "pyproc adapter: session 없음");
+    // history: 통합 상태 커널의 휘발 구역(체크포인트 나무)을 guest 요청으로 연다. 제품이
+    // "실행 전 체크포인트, 실패하면 undo"를 서버 없이 쓴다. run/checkpoint/undo/historyDepth.
+    const reactive = this._session.reactive;
+    if (message.type === "checkpoint") {
+      const info = reactive.checkpoint();
+      return { index: info.index, changedPages: info.changedPages };
+    }
+    if (message.type === "undo") {
+      // 지정 체크포인트(또는 직전)로 시간여행. 경계 위반은 restoreLive가 자동 재해시로 흡수한다.
+      const target = Number.isInteger(message.index) ? message.index : reactive.tree().filter((node) => node.index < reactive.liveIdx).map((node) => node.index).pop();
+      if (!Number.isInteger(target)) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "pyproc adapter: undo 대상 체크포인트가 없다");
+      reactive.checkpoint(); // 현재 경계를 닫아 즉시 복원 경로를 연다
+      const restored = reactive.restoreLive(target);
+      return { index: target, pagesWritten: restored.pagesWritten, rehashed: restored.rehashed };
+    }
+    if (message.type === "historyDepth") {
+      return { depth: reactive.tree().length, live: reactive.liveIdx };
+    }
     if (message.type !== "run") throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `pyproc adapter request 미지원: ${message.type}`);
     return this._session.rt.run(String(message.code || ""));
   }

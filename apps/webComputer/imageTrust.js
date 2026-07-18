@@ -1,33 +1,28 @@
 import { createMachineCryptoProvider, fingerprintWebMachinePublicKey } from "/src/machine/index.js";
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder("utf-8", { fatal: true });
-const magic = encoder.encode("WEBMACHINE1\n");
-const prefixByteLength = magic.byteLength + 4;
-const maximumManifestBytes = 16 * 1024 * 1024;
-
-function sameBytes(left, right) {
-  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
-}
-
+// 신뢰 화면(import 전 사용자에게 보여주는 것)은 .webmachine의 헤더만 읽는다: 통합 bundle
+// 포맷(PYBUNDLE1)의 접두 판독기가 payload를 한 조각도 만지지 않으므로, 검증 전 대용량
+// guest 스냅샷을 읽는 일이 없다(조기 거부 계약). 헤더 서명이 meta(권한/장치/키)까지 봉인한다.
 export async function inspectUntrustedWebMachine(file) {
-  if (!file || typeof file.slice !== "function" || file.size < prefixByteLength) throw new TypeError("A .webmachine file is required");
-  const prefix = new Uint8Array(await file.slice(0, prefixByteLength).arrayBuffer());
-  if (!sameBytes(prefix.subarray(0, magic.byteLength), magic)) throw new TypeError("This is not a Web Computer image");
-  const headerBytes = new DataView(prefix.buffer, prefix.byteOffset + magic.byteLength, 4).getUint32(0, false);
-  if (!headerBytes || headerBytes > maximumManifestBytes || prefixByteLength + headerBytes > file.size) {
-    throw new TypeError("The machine image header is invalid");
+  if (!file || typeof file.slice !== "function") throw new TypeError("A .webmachine file is required");
+  const provider = createMachineCryptoProvider(crypto);
+  let header;
+  try {
+    header = await provider.state.readBundleHeader(file);
+  } catch (error) {
+    throw new TypeError("This is not a Web Computer image");
   }
-  const manifest = JSON.parse(decoder.decode(new Uint8Array(await file.slice(prefixByteLength, prefixByteLength + headerBytes).arrayBuffer())));
-  const publicKey = manifest?.signature?.publicKey;
-  const fingerprint = await fingerprintWebMachinePublicKey(createMachineCryptoProvider(crypto), publicKey);
+  const meta = header.meta || {};
+  const publicKey = header.tag?.publicKey;
+  if (!publicKey) throw new TypeError("This machine image is unsigned");
+  const fingerprint = await fingerprintWebMachinePublicKey(provider, publicKey);
   return Object.freeze({
     publicKey,
     fingerprint,
-    groupId: String(manifest.groupId || ""),
-    machines: Object.freeze((manifest.machines || []).map((entry) => String(entry.machineId || ""))),
-    devices: Object.freeze((manifest.devices || []).map((entry) => String(entry.name || ""))),
-    permissions: Object.freeze(Object.fromEntries((manifest.machines || []).map((entry) => [entry.machineId, { devices: [...(entry.permissions?.devices || [])] }]))),
+    groupId: String(meta.groupId || ""),
+    machines: Object.freeze((meta.machines || []).map((entry) => String(entry.machineId || ""))),
+    devices: Object.freeze((meta.devices || []).map((entry) => String(entry.name || ""))),
+    permissions: Object.freeze(Object.fromEntries((meta.machines || []).map((entry) => [entry.machineId, { devices: [...(entry.permissions?.devices || [])] }]))),
     byteLength: file.size,
   });
 }

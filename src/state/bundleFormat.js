@@ -34,7 +34,9 @@ function formatError(message) {
 
 // 헤더 직렬화의 유일 지점: encode/decode/서명 대상 계산이 전부 이 리터럴 키 순서를 공유해야
 // "서명한 것"과 "실린 것"이 바이트 단위로 같다(JSON.parse는 원문 키 순서를 보존한다).
-function serializeHeader({ commit, meta, index, tag }) {
+// commit은 선택형(null 가능): 세션 bundle은 커널 commit 주소를 싣고 machine envelope는 안 싣는다.
+// 두 소비자가 같은 wire 포맷(헤더 서명 + 조기 거부 + verify-on-read)을 공유하고 meta로만 갈린다.
+function serializeHeader({ commit = null, meta, index, tag }) {
   return textEncoder.encode(JSON.stringify({ version: STATE_BUNDLE_VERSION, commit, meta, objects: index, tag }));
 }
 
@@ -65,8 +67,9 @@ function toIndex(objects) {
 }
 
 // objects: Map(address -> bytes) 또는 [address, bytes] 배열. 배치 순서는 입력 순서를 따른다.
-export async function encodeStateBundle(cryptoProvider, { commit, meta = null, objects, tag = null }) {
-  if (!SHA256_ADDRESS_RE.test(commit)) throw new PyProcError("PYPROC_INPUT_INVALID", `bundle: commit 주소 형식 위반(${commit})`);
+// commit: 세션 bundle이 커널 commit 주소를 싣는다(null이면 machine envelope 등 non-commit bundle).
+export async function encodeStateBundle(cryptoProvider, { commit = null, meta = null, objects, tag = null }) {
+  if (commit !== null && !SHA256_ADDRESS_RE.test(commit)) throw new PyProcError("PYPROC_INPUT_INVALID", `bundle: commit 주소 형식 위반(${commit})`);
   const { index, chunks, totalObjectBytes, hasBytes } = toIndex(objects);
   if (!hasBytes) throw new PyProcError("PYPROC_INPUT_INVALID", "bundle: encode에는 오브젝트 바이트가 필요하다");
   const body = encodeBody(serializeHeader({ commit, meta, index, tag }), chunks, totalObjectBytes);
@@ -83,7 +86,7 @@ export async function encodeStateBundle(cryptoProvider, { commit, meta = null, o
 // 접두 판독만으로 끝난다(headerTagProbe 실측: 미신뢰 거부 slice 2회, payload 접촉 0.
 // 치환은 verify-on-read가, 색인 조작은 서명 대상 불일치가, tag 변조는 검증 실패가 잡는다).
 // objects는 바이트 없이 색인([address, length])만으로도 계산할 수 있다.
-export async function stateBundleHeaderDigest(cryptoProvider, { commit, meta = null, objects }) {
+export async function stateBundleHeaderDigest(cryptoProvider, { commit = null, meta = null, objects }) {
   const { index } = toIndex(objects);
   return sha256AddressWith(cryptoProvider, serializeHeader({ commit, meta, index, tag: null }));
 }
@@ -107,7 +110,8 @@ export async function decodeStateBundle(cryptoProvider, buf) {
   try { header = JSON.parse(textDecoder.decode(body.subarray(4, 4 + headLen))); }
   catch (e) { throw formatError("bundle: 헤더 JSON 파손"); }
   if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: 지원하지 않는 버전(${header.version})`);
-  if (!SHA256_ADDRESS_RE.test(header.commit)) throw formatError("bundle: commit 주소 형식 위반");
+  const _commit = header.commit ?? null;
+  if (_commit !== null && !SHA256_ADDRESS_RE.test(_commit)) throw formatError("bundle: commit 주소 형식 위반");
   if (!Array.isArray(header.objects)) throw formatError("bundle: objects 색인 형식 위반");
   const objects = new Map();
   let offset = 4 + headLen;
@@ -124,9 +128,9 @@ export async function decodeStateBundle(cryptoProvider, buf) {
     offset += length;
   }
   if (offset !== body.length) throw formatError("bundle: 색인 밖 잉여 바이트");
-  if (!objects.has(header.commit)) throw formatError("bundle: commit 오브젝트가 색인에 없다");
-  const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: header.commit, meta: header.meta ?? null, index: header.objects, tag: null }));
-  return { commit: header.commit, meta: header.meta ?? null, objects, tag: header.tag ?? null, envelope, headerDigest };
+  if (_commit !== null && !objects.has(_commit)) throw formatError("bundle: commit 오브젝트가 색인에 없다");
+  const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta ?? null, index: header.objects, tag: null }));
+  return { commit: _commit, meta: header.meta ?? null, objects, tag: header.tag ?? null, envelope, headerDigest };
 }
 
 // 접두만 읽는 헤더 판독(신뢰 preflight의 프리미티브). source는 Uint8Array, Blob,
@@ -156,19 +160,20 @@ export async function readStateBundleHeader(cryptoProvider, source) {
   try { header = JSON.parse(textDecoder.decode(headBytes)); }
   catch (e) { throw formatError("bundle: 헤더 JSON 파손"); }
   if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: 지원하지 않는 버전(${header.version})`);
-  if (!SHA256_ADDRESS_RE.test(header.commit)) throw formatError("bundle: commit 주소 형식 위반");
+  const _commit = header.commit ?? null;
+  if (_commit !== null && !SHA256_ADDRESS_RE.test(_commit)) throw formatError("bundle: commit 주소 형식 위반");
   if (!Array.isArray(header.objects)) throw formatError("bundle: objects 색인 형식 위반");
   for (const entry of header.objects) {
     if (!Array.isArray(entry) || entry.length !== 2 || !SHA256_ADDRESS_RE.test(entry[0]) || !Number.isInteger(entry[1]) || entry[1] < 0) {
       throw formatError("bundle: objects 색인 엔트리 위반");
     }
   }
-  const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: header.commit, meta: header.meta ?? null, index: header.objects, tag: null }));
+  const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta ?? null, index: header.objects, tag: null }));
   if (header.tag && header.tag.target !== headerDigest) {
     throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "bundle: 서명 대상 불일치(헤더가 tag와 다르다)");
   }
   return {
-    commit: header.commit,
+    commit: _commit,
     meta: header.meta ?? null,
     objects: header.objects,
     tag: header.tag ?? null,

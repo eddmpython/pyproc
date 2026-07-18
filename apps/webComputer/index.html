@@ -80,8 +80,12 @@ Path("/home/web/hello.txt").write_text(f"visit {visits}")
 print(f"Hello from persistent Python, visit {visits}")
 visits</textarea>
           <div class="executeBar">
-            <span>State and <code>/home/web</code> are saved together.</span>
-            <button class="button primary" id="runPythonButton" type="button">Run Python <kbd>Ctrl ↵</kbd></button>
+            <span>State and <code>/home/web</code> are saved together. <span id="pythonHistory">history 0</span></span>
+            <span class="historyControls">
+              <button class="button subtle" id="checkpointButton" type="button">Checkpoint</button>
+              <button class="button subtle" id="undoButton" type="button">Undo</button>
+              <button class="button primary" id="runPythonButton" type="button">Run Python <kbd>Ctrl ↵</kbd></button>
+            </span>
           </div>
           <pre class="output" id="pythonOutput" aria-live="polite">Python output will appear here.</pre>
         </section>

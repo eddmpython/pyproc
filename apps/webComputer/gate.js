@@ -48,6 +48,17 @@ async function restorePhase(runtime) {
   ]);
   check(checks, "Python memory and block file survived browser restart", python === "91:PYTHON_PRODUCT:91", python);
   check(checks, "Linux memory and block file survived browser restart", linux.includes("RESTORED:91:LINUX_PRODUCT:91"), linux.trim().slice(-180));
+
+  // 통합 상태 커널의 시간여행이 제품 표면에서 실동작하는가: checkpoint -> 변이 -> undo -> 복귀.
+  const depthBefore = await runtime.pythonHistoryDepth();
+  const checkpoint = await runtime.checkpointPython();
+  await runtime.runPython("machineValue = 777");
+  const afterMutation = await runtime.runPython("machineValue");
+  const undone = await runtime.undoPython(checkpoint.index);
+  const afterUndo = await runtime.runPython("machineValue");
+  const depthAfter = await runtime.pythonHistoryDepth();
+  check(checks, "product checkpoint returns a tree index", Number.isInteger(checkpoint.index) && depthAfter.depth > depthBefore.depth, `#${checkpoint.index}, depth ${depthBefore.depth}->${depthAfter.depth}`);
+  check(checks, "Python time-travel undo restores pre-mutation state (server-free)", afterMutation === 777 && undone.index === checkpoint.index && afterUndo === 91, `${afterMutation}->${afterUndo}`);
   if (!checks.every((entry) => entry.pass)) throw new Error(JSON.stringify(checks));
   const exported = await runtime.exportImage();
   const artifactResponse = await fetch("/gateArtifact", { method: "POST", body: exported.file });

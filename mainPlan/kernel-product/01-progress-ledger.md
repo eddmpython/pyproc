@@ -53,3 +53,33 @@
 
 NEXT: P3 수합(게이트 검증) -> P5 통합 제품 Web Computer v2(porcelain python 패널 + 단일 bundle
 저장·이동 + VirtualOrigin 공개 경로 + 전 게이트).
+
+## 2026-07-18 - P5 진행: 통합 제품에 시간여행 표면 추가
+
+- pyproc guest 어댑터 request 프로토콜에 history 3종(checkpoint/undo/historyDepth) 추가:
+  통합 상태 커널의 휘발 구역(체크포인트 나무)을 guest 요청으로 연다. 제품이 서버 0으로
+  "실행 전 체크포인트, 실패하면 undo"를 쓴다.
+- webComputerRuntime에 checkpointPython/undoPython/pythonHistoryDepth, 제품 UI(index.html)에
+  Checkpoint/Undo 버튼 + history 뱃지, app.js 배선.
+- 제품 게이트(gate.js restorePhase)에 시간여행 E2E: checkpoint -> machineValue=777 변이 ->
+  undo(checkpoint.index) -> machineValue=91 복귀. checkpoint 트리 index 반환과 depth 증가 검증.
+- npm test 1321 green. 브라우저 제품 게이트는 P3(.webmachine) 수합과 함께 실행.
+
+(P3, P5 종결 기록은 아래 최종 절)
+
+## 2026-07-18 - P3, P5 완료 및 이니셔티브 종결
+
+- P3(.webmachine = 단일 bundle): bundleFormat의 commit을 선택형으로 일반화해 세션 bundle과
+  machine envelope가 같은 wire 포맷(PYBUNDLE1) + 같은 서명 방식 + 같은 접두 신뢰 판독을
+  공유하고 meta로만 갈린다. machineCryptoProvider.state에 bundle 코덱 6종 주입, webMachineFile을
+  bundle 위에 재기초(합성 manifest로 기존 소비 계약 유지, 구 WEBMACHINE1 감지형 reader).
+  제품 신뢰 화면(imageTrust)도 접두 판독기로 전환. 조기 거부 실증: 64MB 이미지에서 미신뢰
+  signer를 slice 2회(byte 2436까지)만 읽고 거부, payload 미접촉.
+- P5(통합 제품): pyproc guest에 history request 3종, 제품 UI Checkpoint/Undo + 게이트 시간여행
+  E2E(checkpoint -> 변이 -> undo -> 복귀). 제품은 전 산물을 소비한다: Python OS + Linux
+  dual-guest, 커널 스키마 durable commit, 단일 bundle signed export/import, 멀티탭 owner, 시간여행.
+- 게이트 전판 직접 재실행 GREEN: 구조 1321, 타입 0error, machineEnvelope 21/21, browser 84/84,
+  web-computer 13/13(시간여행 + bundle import 포함), consumer 30/30, examples 10/10, mcp 7/7,
+  package 20 files.
+- 미해결 4건 전부 해소: (1) bundle header-target 서명(조기 거부) (2) machine generation 커널
+  스키마 (3) .webmachine 단일 bundle (4) VirtualOrigin 재노출. 통합 제품 실증까지 완료.

@@ -196,6 +196,14 @@ export interface WebMachineSignature {
   value: string;
 }
 
+/** 상태 커널의 header-target 서명 tag(bundle 봉투가 나르는 출처). */
+export interface MachineStateTag {
+  alg: "ECDSA-P256-SHA256";
+  target: string;
+  publicKey: { kty: "EC"; crv: "P-256"; x: string; y: string };
+  signature: string;
+}
+
 export interface WebMachineManifest extends WebMachineManifestContent {
   integrity: { algorithm: "SHA-256"; contentDigest: string };
   signature: WebMachineSignature;
@@ -241,7 +249,10 @@ export interface MachineCryptoProvider {
   verifyDigest(publicKeyOrJwk: JsonWebKey | CryptoKey, target: string, signatureBytes: Uint8Array): Promise<boolean>;
   generateSigningKeyPair(): Promise<CryptoKeyPair>;
   exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey>;
-  /** 상태 커널 문법의 함수 조각(coordinator가 generation을 커널 오브젝트로 저장하는 데 쓴다). */
+  /**
+   * 상태 커널 문법의 함수 조각(coordinator가 generation을 커널 오브젝트로 저장하고,
+   * image가 .webmachine 봉투를 단일 bundle wire 포맷으로 인코딩하는 데 쓴다).
+   */
   state: {
     encodeObject(value: unknown): Uint8Array;
     decodeObject(bytes: Uint8Array): unknown;
@@ -249,6 +260,14 @@ export interface MachineCryptoProvider {
     makeStateCommit(input: Record<string, unknown>): Record<string, unknown>;
     validateStateCommit(commit: unknown): Record<string, unknown> & { tree: string; parents: string[] };
     validateStateTree(tree: unknown): Record<string, unknown> & { kind: string; entries?: GenerationEntry[] };
+    /** 이동 봉투 코덱(bundleFormat 정본 주입). objects = Map(주소 -> 바이트) 또는 [주소, 바이트] 배열. */
+    encodeBundle(input: { commit?: string | null; meta?: unknown; objects: Map<string, Uint8Array> | Array<[string, Uint8Array]>; tag?: unknown }): Promise<Uint8Array>;
+    decodeBundle(buffer: Uint8Array): Promise<{ commit: string | null; meta: unknown; objects: Map<string, Uint8Array>; tag: unknown; envelope: string; headerDigest: string }>;
+    readBundleHeader(source: Uint8Array | Blob | { read(start: number, end: number): Promise<Uint8Array> | Uint8Array }): Promise<{ commit: string | null; meta: unknown; objects: Array<[string, number]>; tag: MachineStateTag | null; envelope: string; headerDigest: string; objectsOffset: number }>;
+    bundleHeaderDigest(input: { commit?: string | null; meta?: unknown; objects: Map<string, Uint8Array> | Array<[string, unknown]> }): Promise<string>;
+    /** header-target 서명(출처). tag.target = 헤더 다이제스트. */
+    makeTag(privateKey: CryptoKey, publicKeyJwk: JsonWebKey, target: string): Promise<MachineStateTag>;
+    verifyTag(tag: unknown, expectedTarget: string | null, opts?: { trustedPublicKeys?: Array<JsonWebKey | string> }): Promise<{ valid: boolean; trusted: boolean; signerFingerprint: string | null }>;
   };
 }
 export function createMachineCryptoProvider(cryptoProvider?: Crypto): MachineCryptoProvider;

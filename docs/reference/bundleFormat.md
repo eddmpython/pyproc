@@ -58,5 +58,13 @@ Header JSON fields:
   whose signer is not in the caller's trust list is valid-but-untrusted;
   opening it still requires `{ trust: true }`.
 
+`commit` is optional. A session bundle carries the kernel commit address (and
+materializes into the kernel on open); a machine envelope (`.webmachine`) omits
+it and puts the machine/device records in `meta` instead. Both share this one
+wire format, this one signature scheme, and this one prefix-only trust read;
+they differ only in what `meta` holds. The legacy `WEBMACHINE1` container is
+still read through a format-detecting reader and sunsets at the next breaking
+release.
+
 The implementation of record is `src/state/bundleFormat.js`; the browser gate
 re-parses an exported bundle byte-by-byte against this table.

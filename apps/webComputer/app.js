@@ -202,10 +202,38 @@ for (const button of document.querySelectorAll("[data-machine-tab]")) {
   button.addEventListener("click", () => selectSystem(button.dataset.machineTab));
 }
 
+const pythonHistory = element("pythonHistory");
+
+async function refreshPythonHistory() {
+  try {
+    const info = await runtime.pythonHistoryDepth();
+    pythonHistory.textContent = `history ${info.depth} (live ${info.live})`;
+  } catch (error) {
+    pythonHistory.textContent = "history 0";
+  }
+}
+
 element("runPythonButton").addEventListener("click", () => {
   observeReportedOperation((async () => {
     const result = await runOperation("Running code in Python OS", () => runtime.runPython(pythonCode.value), { autosave: true });
     if (result !== undefined) pythonOutput.textContent = resultText(result);
+    await refreshPythonHistory();
+  })());
+});
+
+element("checkpointButton").addEventListener("click", () => {
+  observeReportedOperation((async () => {
+    const info = await runOperation("Checkpointing Python state", () => runtime.checkpointPython());
+    pythonOutput.textContent = `Checkpoint #${info.index} saved (${info.changedPages} changed pages).`;
+    await refreshPythonHistory();
+  })());
+});
+
+element("undoButton").addEventListener("click", () => {
+  observeReportedOperation((async () => {
+    const info = await runOperation("Time-traveling to last checkpoint", () => runtime.undoPython(), { autosave: true });
+    pythonOutput.textContent = `Restored checkpoint #${info.index} (${info.pagesWritten} pages written).`;
+    await refreshPythonHistory();
   })());
 });
 

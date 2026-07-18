@@ -114,6 +114,24 @@ export class WebComputerRuntime {
     return result;
   }
 
+  // history: 통합 상태 커널의 시간여행을 제품 표면으로 연다(체크포인트/undo). 서버 0.
+  async checkpointPython() {
+    const info = await this._machine("pythonOs").request({ type: "checkpoint" }, this._control("request"));
+    this._emitState();
+    return info;
+  }
+
+  async undoPython(index) {
+    const message = Number.isInteger(index) ? { type: "undo", index } : { type: "undo" };
+    const info = await this._machine("pythonOs").request(message, this._control("request"));
+    this._emitState();
+    return info;
+  }
+
+  async pythonHistoryDepth() {
+    return this._machine("pythonOs").request({ type: "historyDepth" }, this._control("request"));
+  }
+
   async runLinux(command) {
     const data = `${String(command || "").replace(/\n+$/, "")}\n`;
     const result = await this._machine("linuxOs").request(

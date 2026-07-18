@@ -10,9 +10,17 @@ import { sha256AddressWith } from "../../runtime/contentDigest.js";
 import {
   createStateKeyPair,
   exportStatePublicKey,
+  makeStateTag,
   signStateDigest,
   verifyStateDigest,
+  verifyStateTag,
 } from "../../state/signedTag.js";
+import {
+  decodeStateBundle,
+  encodeStateBundle,
+  readStateBundleHeader,
+  stateBundleHeaderDigest,
+} from "../../state/bundleFormat.js";
 import {
   decodeStateObject,
   encodeStateObject,
@@ -36,8 +44,9 @@ export function createMachineCryptoProvider(cryptoProvider = globalThis.crypto) 
     },
     generateSigningKeyPair: () => createStateKeyPair(cryptoProvider),
     exportPublicJwk: (publicKey) => exportStatePublicKey(cryptoProvider, publicKey),
-    // 커널 문법의 함수 조각: machine generation이 커널 오브젝트(blob/tree/commit)로 저장되도록
-    // coordinator가 소비한다. machine은 커널을 import하지 못하므로 문법도 여기로 배달된다.
+    // 커널 문법의 함수 조각: machine generation이 커널 오브젝트(blob/tree/commit)로 저장되도록,
+    // .webmachine 봉투가 단일 bundle wire 포맷(PYBUNDLE1)으로 인코딩되도록 coordinator/image가
+    // 소비한다. machine은 커널을 import하지 못하므로(경계) 문법과 코덱을 여기로 배달한다.
     state: Object.freeze({
       encodeObject: encodeStateObject,
       decodeObject: decodeStateObject,
@@ -45,6 +54,14 @@ export function createMachineCryptoProvider(cryptoProvider = globalThis.crypto) 
       makeStateCommit,
       validateStateCommit,
       validateStateTree,
+      // 이동 봉투(.webmachine) 코덱: bundleFormat 정본을 그대로 배달한다(machine 자기 포맷 소멸).
+      encodeBundle: (input) => encodeStateBundle(cryptoProvider, input),
+      decodeBundle: (buf) => decodeStateBundle(cryptoProvider, buf),
+      readBundleHeader: (source) => readStateBundleHeader(cryptoProvider, source),
+      bundleHeaderDigest: (input) => stateBundleHeaderDigest(cryptoProvider, input),
+      // header-target 서명(출처): tag.target = 헤더 다이제스트. 조기 거부의 근거.
+      makeTag: (privateKey, publicKeyJwk, target) => makeStateTag(cryptoProvider, privateKey, publicKeyJwk, target),
+      verifyTag: (tag, expectedTarget, opts) => verifyStateTag(cryptoProvider, tag, expectedTarget, opts),
     }),
   });
 }
