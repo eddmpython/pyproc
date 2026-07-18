@@ -1,6 +1,12 @@
-// machineJournal.js - Layer 1 능력: WAL(write-ahead log) = 강제종료 내성.
+// machineJournal.js - Layer 2 능력: WAL(write-ahead log) = 강제종료 내성.
 // 머신이 자기 상태를 유휴마다 디스크에 남긴다. 탭이 크래시하거나 전원이 나가도
 // 다음 부팅이 마지막 커밋으로 부활한다(hibernate는 pagehide 훅이 성공해야 살지만 이건 아니다).
+//
+// 재기초(state-kernel 3단계): 저장·무결성·세대 프로토콜은 상태 커널(state/refProtocol)로
+// 내려갔고, 여기 남는 것은 정책이다 - 언제 커밋하는가(유휴 감시), 무엇을 묶는가(/home pack),
+// 무엇이 살아있는가(pack/prune의 live 판정). 새 저장 형식 = blob/<hex> 공유 CAS(loose+pack)
+// + state/HEAD.json·PREV.json(커널 ref). 구 형식(루트 HEAD.json v2/v3)은 읽기만 지원하고
+// (감지형 legacy reader), 첫 커널 커밋이 성공하면 구 ref를 지운다(writer 즉시 단일화).
 //
 // 설계 근거(실측 2종, 2026-07-12):
 //   journalProbe 5/5 - clean save 없이 커널을 버려도 리플레이 + 저널 재생으로 상태 재구성.
@@ -11,13 +17,14 @@
 //
 // 계약(정직하게): 크래시 시 잃는 것은 "마지막 커밋 이후"다. 문장 단위 내구성이 아니라
 // 경계 일관성을 준다. 커밋 주기는 소비자가 정한다(하드코딩 없음).
-// 저장 형식: blob/<sha256> loose CAS + HEAD.json/PREV.json. pack() 후에는 PACKS.json + pack/*.bin도
-// 같은 CAS blob 저장소로 읽는다(loose와 pack 모두 recover 호환).
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 import { PyProcError } from "../runtime/errors.js";
-import { sha256Hex, verifySha256 } from "../runtime/contentDigest.js";
+import { parseSha256Address, sha256Hex, verifySha256 } from "../runtime/contentDigest.js";
 import { growHeapTo } from "../runtime/heapGrow.js";
+import { commitState, openState } from "../state/refProtocol.js";
+import { decodeStateObject, validateStateCommit, validateStateTree } from "../state/objectModel.js";
 import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
+import { JournalKernelStore } from "./journalKernelStore.js";
 import {
   DEFAULT_MACHINE_HOME_PATH,
   applyMachineHome,
@@ -28,8 +35,8 @@ import {
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
 const DEFAULT_AUTO_PACK_LOOSE_MB = 8;
 
-function journalCorrupt(message) {
-  return new PyProcError("PYPROC_JOURNAL_CORRUPT", message);
+function journalCorrupt(message, cause) {
+  return new PyProcError("PYPROC_JOURNAL_CORRUPT", message, cause !== undefined ? { cause } : undefined);
 }
 
 function normalizeAutoPackPolicy(policy) {
@@ -60,9 +67,10 @@ export class MachineJournal {
   constructor(rt, cfg = {}) {
     this._rt = rt;
     this._dir = cfg.dir;
-    // 바이트를 어디에 어떻게 두는가는 blob store가 안다. 여기는 언제 커밋하고 무엇이
-    // 살아있는지만 정한다. dir이 없으면 start()가 명시로 거부하므로 여기서는 만들기만 한다.
+    // 바이트를 어디에 어떻게 두는가는 blob store가, 세대 프로토콜은 상태 커널이 안다.
+    // 여기는 언제 커밋하고 무엇이 살아있는지만 정한다. dir이 없으면 start()가 명시로 거부한다.
     this._blobs = new JournalBlobStore(cfg.dir);
+    this._kernel = new JournalKernelStore(cfg.dir, this._blobs);
     this._reactive = cfg.reactive;
     this._idleMs = cfg.idleMs || 2000;
     this._homePath = cfg.includeHome === false ? null : (cfg.homePath || DEFAULT_MACHINE_HOME_PATH);
@@ -74,6 +82,7 @@ export class MachineJournal {
     this._sp = null;
     this._busy = false;
     this._h0Key = null; // 리플레이 경계(cp0) 지문 캐시. 커밋/부활의 결정성 대조 축.
+    this._legacyCleaned = false;
     this.commits = 0;
     this.pagesWritten = 0; // 실제 디스크에 쓴 페이지(dedupe로 걸러진 것은 제외)
     this.packs = 0;
@@ -81,7 +90,7 @@ export class MachineJournal {
   }
 
   // 리플레이 경계(cp0)의 지문: 경계 해시 배열 전체의 SHA-256. 같은 엔진 + 같은 매니페스트라야 같다.
-  // 커밋마다 HEAD에 싣고, recover가 대조한다(엔진이 바뀐 채 부활하면 조용한 힙 오염이므로).
+  // 커밋마다 commit.env.h0에 싣고, recover가 대조한다(엔진이 바뀐 채 부활하면 조용한 힙 오염이므로).
   async _boundaryKey() {
     if (!this._h0Key) {
       const h0 = this._reactive.hashes[0];
@@ -123,6 +132,8 @@ export class MachineJournal {
   stop() { if (this._timer) { clearInterval(this._timer); this._timer = null; } }
 
   // 지금 상태를 커밋한다(수동 호출도 계약: 중요한 경계에서 명시적으로 남길 수 있다).
+  // 저장은 커널 커밋 한 호출이다: sha256 승격은 정확히 이 지점에서만 일어난다(collectDelta는
+  // 페이지 목록만 주고, 페이지 바이트의 주소화·dedupe·쓰기 순서 법은 커널이 소유한다).
   async commit() {
     if (this._busy) return null;
     this._busy = true;
@@ -130,73 +141,47 @@ export class MachineJournal {
       const r = this._reactive, mem = this._rt.memory;
       r.checkpoint(); // 경계 닫기(cp0 대비 차이가 곧 사용자 상태)
       const { pages } = r.collectDelta(0, r.liveIdx, { pack: false }); // 델타 수집의 정본(세션 저장과 같은 프리미티브)
-      const map = {};
-      const knownKeys = new Set();
-      const lookupCache = {};
-      let wrote = 0;
-      for (const p of pages) {
-        const bytes = mem.slicePage(p);
-        const key = await sha256Hex(bytes);
-        map[p] = key;
-        if (knownKeys.has(key)) continue; // 같은 커밋 안의 반복 페이지는 OPFS 조회도 중복하지 않는다.
-        if (await this._blobs.has(key, lookupCache)) {
-          knownKeys.add(key);
-          continue; // loose 또는 pack에 이미 있으면 dedupe(내용 주소)
-        }
-        await this._blobs.write(key, bytes);
-        knownKeys.add(key);
-        wrote++;
-      }
       const home = this._homePath
         ? collectMachineHome(this._rt.fs, this._homePath, { required: false, errorPrefix: "journal.commit" })
         : null;
-      let homeHead = null;
-      let homeWrote = false;
-      if (home) {
-        let key = null;
-        if (home.bin.length) {
-          key = await sha256Hex(home.bin);
-          if (!knownKeys.has(key) && !(await this._blobs.has(key, lookupCache))) {
-            await this._blobs.write(key, home.bin);
-            homeWrote = true;
-          }
-          knownKeys.add(key);
-        }
-        homeHead = { ...home.meta, key };
-      }
-      // HEAD는 마지막에 쓴다(append-only 순서 = 크래시가 어디서 나든 이전 HEAD는 무결).
-      // 세대 2개: 새 HEAD를 쓰기 전에 현 HEAD를 PREV로 남긴다. HEAD가 손상돼도(파일 파손,
-      // 미완 커밋) 직전 세대로 부활한다. createWritable은 close 시 원자 교체라 부분 쓰기는 없다.
+      const files = home && home.bin.length ? [{ id: "home", bytes: home.bin, meta: home.meta }] : [];
       const committedAt = new Date().toISOString();
-      const head = {
-        version: homeHead ? 3 : 2,
-        h0: await this._boundaryKey(),
-        pages: map,
-        sp: this._reactive.stackSave() ?? this._sp,
+      this._kernel.resetCache();
+      const committed = await commitState(globalThis.crypto, this._kernel, {
+        pages: pages.map((p) => [p, mem.slicePage(p)]),
+        pageSize: PAGE,
         heapLen: mem.byteLength(),
-        committedAt,
-        ...(homeHead ? { home: homeHead } : {}),
-      };
-      try {
-        const cur = await (await (await this._dir.getFileHandle("HEAD.json")).getFile()).text();
-        const pf = await this._dir.getFileHandle("PREV.json", { create: true });
-        const pw = await pf.createWritable(); await pw.write(cur); await pw.close();
-      } catch (e) { if (e.name !== "NotFoundError") throw e; } // 첫 커밋은 PREV 없음
-      const hf = await this._dir.getFileHandle("HEAD.json", { create: true });
-      const w = await hf.createWritable(); await w.write(JSON.stringify(head)); await w.close();
-      this.commits++; this.pagesWritten += wrote;
+        sp: this._reactive.stackSave() ?? this._sp,
+        files,
+        env: { h0: await this._boundaryKey() },
+        createdAt: committedAt,
+      });
+      await this._cleanupLegacyRefs();
+      this.commits++; this.pagesWritten += committed.pagesWrote;
       const result = {
         pages: pages.length,
-        wrote,
-        mb: +(wrote * PAGE / 1048576).toFixed(1),
+        wrote: committed.pagesWrote,
+        mb: +(committed.pagesWrote * PAGE / 1048576).toFixed(1),
         committedAt,
-        ...(home ? { home: { files: home.meta.entries.filter((entry) => entry.type === "file").length, mb: +(home.bin.length / 1048576).toFixed(1), wrote: homeWrote } } : {}),
+        ...(home ? { home: { files: home.meta.entries.filter((entry) => entry.type === "file").length, mb: +(home.bin.length / 1048576).toFixed(1), wrote: committed.filesWrote > 0 } } : {}),
       };
       const autoPack = await this._autoPackAfterCommit(result);
       if (autoPack) result.autoPack = autoPack;
       if (this._pruneAfterCommit) result.pruned = r.pruneTo(r.liveIdx);
       return result;
     } finally { this._busy = false; }
+  }
+
+  // 이관 완료 청소: 커널 refs가 섰으니 루트의 구 세대 파일(HEAD.json/PREV.json)은 죽은
+  // 무게이고, 살아남으면 "커널 refs가 전부 유실된 미래"에 더 오래된 상태로 조용히 되감기는
+  // 위험만 남긴다. blob/은 공유 CAS라 남긴다(live 판정은 pack/prune 몫). best-effort:
+  // 삭제 실패는 커밋 성공을 물릴 사유가 아니고, 커널 refs 우선순위가 구 세대를 가린다.
+  async _cleanupLegacyRefs() {
+    if (this._legacyCleaned) return;
+    for (const name of ["HEAD.json", "PREV.json"]) {
+      try { await this._dir.removeEntry(name); } catch (e) {}
+    }
+    this._legacyCleaned = true;
   }
 
   async _autoPackAfterCommit(result) {
@@ -206,6 +191,33 @@ export class MachineJournal {
     const packed = await this._packNow();
     packed.trigger = { looseBlobs: stats.count, looseMB: stats.mb };
     return packed;
+  }
+
+  // ---- live 판정: 무엇이 살아있는가는 세대를 아는 저널이 정하고, 어떻게 묶는가는 store가 안다 ----
+
+  // 커널 세대의 live 키(hex): commit/tree 오브젝트 자체도 live다(pack만으로 recover가 성립해야
+  // 하므로). HEAD와 PREV 두 세대를 모두 지킨다(PREV 깊이 2 고정).
+  async _kernelLiveKeys(keys) {
+    for (const name of ["HEAD", "PREV"]) {
+      const r = await this._kernel.readRef(name);
+      if (r.corrupt) throw journalCorrupt(`journal.pack: state ${r.corrupt}`);
+      if (!r.ref) continue;
+      keys.add(parseSha256Address(r.ref.commit));
+      const commitBytes = await this._kernel.readObject(r.ref.commit);
+      if (!commitBytes) throw journalCorrupt(`journal.pack: commit 오브젝트 없음(${r.ref.commit.slice(0, 20)}..)`);
+      const commit = validateStateCommit(decodeStateObject(commitBytes));
+      keys.add(parseSha256Address(commit.tree));
+      const treeBytes = await this._kernel.readObject(commit.tree);
+      if (!treeBytes) throw journalCorrupt(`journal.pack: tree 오브젝트 없음(${commit.tree.slice(0, 20)}..)`);
+      const tree = validateStateTree(decodeStateObject(treeBytes));
+      if (tree.kind === "pageTable") {
+        for (const [, address] of tree.pages) keys.add(parseSha256Address(address));
+        for (const e of tree.files || []) keys.add(parseSha256Address(e.address));
+      } else {
+        for (const e of tree.entries) keys.add(parseSha256Address(e.address));
+      }
+    }
+    return keys;
   }
 
   async _readLiveHeads() {
@@ -218,8 +230,7 @@ export class MachineJournal {
     return heads;
   }
 
-  _liveKeys(heads) {
-    const keys = new Set();
+  _legacyLiveKeys(heads, keys) {
     for (const head of heads) {
       for (const key of Object.values(head.pages || {})) keys.add(key);
       if (head.home && head.home.key) keys.add(head.home.key);
@@ -227,8 +238,16 @@ export class MachineJournal {
     return keys;
   }
 
-  // 현재 HEAD/PREV가 참조하는 live blob만 새 pack 파일 1개에 묶는다. recover는 loose와 pack을
-  // 모두 읽으므로 기존 저널과 호환된다. PACKS.json은 pack 데이터 파일을 쓴 뒤 마지막에 교체한다.
+  async _liveKeys() {
+    const keys = new Set();
+    await this._kernelLiveKeys(keys);
+    this._legacyLiveKeys(await this._readLiveHeads(), keys); // 이관 전이면 구 세대도 live다
+    keys.delete(null);
+    return keys;
+  }
+
+  // 현재 세대들이 참조하는 live blob만 새 pack 파일 1개에 묶는다. recover는 loose와 pack을
+  // 모두 읽으므로 기존 저널과 호환된다.
   async pack() {
     if (this._busy) return null;
     this._busy = true;
@@ -237,26 +256,27 @@ export class MachineJournal {
     } finally { this._busy = false; }
   }
 
-  // 무엇이 live인가는 세대를 아는 저널이 정하고, 어떻게 묶는가는 blob store가 안다.
   async _packNow() {
-    const heads = await this._readLiveHeads();
-    const liveKeys = [...this._liveKeys(heads)].filter((key) => BLOB_KEY.test(key)).sort();
+    this._kernel.resetCache();
+    const liveKeys = [...await this._liveKeys()].filter((key) => BLOB_KEY.test(key)).sort();
     const result = await this._blobs.packLive(liveKeys);
     if (result.bytes) { this.packs++; this.packBytes += result.bytes; }
     return result;
   }
 
-  // HEAD/PREV가 더 이상 참조하지 않는 loose blob과 PACKS.json에 없는 stale pack 파일을 지운다.
+  // 세대들이 더 이상 참조하지 않는 loose blob과 PACKS.json에 없는 stale pack 파일을 지운다.
   // pack을 새로 만들지는 않으므로, 긴 실행 중간의 가벼운 청소에 쓴다.
   async prune() {
-    const heads = await this._readLiveHeads();
-    const liveKeys = this._liveKeys(heads);
+    this._kernel.resetCache();
+    const liveKeys = await this._liveKeys();
     const looseRemoved = await this._blobs.removeLooseBlobs((key) => !liveKeys.has(key));
     const index = await this._blobs.readPackIndex();
     const indexedPacks = new Set(index.packs.map((pack) => pack.file));
     const packsRemoved = await this._blobs.removePackFilesExcept(indexedPacks);
     return { liveKeys: liveKeys.size, looseRemoved, packsRemoved };
   }
+
+  // ---- legacy reader: 구 포맷(루트 HEAD.json v2/v3)은 읽기만 지원한다 ----
 
   // 세대 파일 1개 판독: { head } | { missing: true } | { corrupt: 사유 }.
   // "파일 없음"(첫 부팅)과 "파일 파손"(손상)을 구분한다: 손상을 첫 부팅으로 위장하면
@@ -272,10 +292,8 @@ export class MachineJournal {
     catch (e) { return { corrupt: `${name} JSON 파손` }; }
   }
 
-  // 세대 1개를 힙에 적용한다. blob은 내용 주소(파일명 = SHA-256)와 실제 바이트를 재대조해
-  // 저장 후 파손을 잡는다. h0 불일치는 손상이 아니라 환경 불일치라 즉시 던진다.
-  // heapLen이 현재 커널보다 크면 Session.load와 같은 원리로 파이썬 할당 경로를 태워 성장시킨다.
-  // JS에서 Memory.grow를 직접 부르면 Emscripten 글루의 클로저 뷰가 안 갱신되어 런타임이 깨진다.
+  // 구 세대 1개를 힙에 적용한다. blob은 내용 주소와 실제 바이트를 재대조해 저장 후 파손을
+  // 잡는다. h0 불일치는 손상이 아니라 환경 불일치라 즉시 던진다.
   async _applyGeneration(head) {
     const mem = this._rt.memory;
     if (head.h0 && head.h0 !== await this._boundaryKey()) {
@@ -323,10 +341,56 @@ export class MachineJournal {
     };
   }
 
-  // 저널 재생: HEAD 세대로 부활하고, HEAD가 파손이면 PREV 세대로 후퇴한다(잃는 것은 마지막
-  // 커밋 하나). 둘 다 없으면 null(첫 부팅), 둘 다 파손이면 명시적 예외.
-  // 힙 크기/경계 지문 불일치는 손상이 아니므로 후퇴 없이 즉시 예외(다른 엔진/매니페스트).
+  // 커널 세대 1개를 힙에 적용한다. 검증(verify-on-read, h0 대조, HEAD->PREV 후퇴)은 openState가
+  // 끝냈고, 여기는 힙 성장 + 경계 되감기 + 페이지/홈 적용만 한다.
+  _applyKernelGeneration(opened) {
+    const mem = this._rt.memory;
+    const { tree, pages, files, commit } = opened;
+    growHeapTo((code) => this._rt.run(code), () => mem.byteLength(), tree.heapLen, "journal.recover");
+    this._reactive.restore(0, tree.sp);
+    for (const [p, bytes] of pages) mem.writePage(p, bytes);
+    mem.stackRestore(tree.sp);
+    let home = null;
+    const homeEntry = files ? files.get("home") : null;
+    if (homeEntry) {
+      try { validateMachineHomeMeta(homeEntry.meta, homeEntry.bytes.length); }
+      catch (e) { throw journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`, e); }
+      home = applyMachineHome(this._rt.fs, homeEntry.meta, homeEntry.bytes);
+    }
+    this._reactive.checkpoint(); // 부활 상태를 새 경계로
+    this._lastSeq = this._rt.execSeq;
+    return {
+      pages: pages.size,
+      mb: +(pages.size * PAGE / 1048576).toFixed(1),
+      committedAt: commit.createdAt || null,
+      ...(opened.fallback ? { fallback: true } : {}),
+      ...(home ? { home } : {}),
+    };
+  }
+
+  // 저널 재생: 커널 refs(state/)가 있으면 그쪽이 정본이다(HEAD -> corruption 한정 PREV 후퇴는
+  // openState가 소유). 커널 refs가 전무할 때만 구 포맷(루트 HEAD.json)을 읽는다 - 이관 후
+  // 남은 구 세대로 되감기는 것을 구조로 차단한다. 힙 크기/경계 지문 불일치는 손상이 아니므로
+  // 후퇴 없이 즉시 예외(다른 엔진/매니페스트).
   async recover() {
+    this._kernel.resetCache();
+    const head = await this._kernel.readRef("HEAD");
+    const prev = await this._kernel.readRef("PREV");
+    if (!(head.missing && prev.missing)) {
+      let opened;
+      try {
+        opened = await openState(globalThis.crypto, this._kernel, { expectH0: await this._boundaryKey() });
+      } catch (e) {
+        if (e instanceof PyProcError && e.code === "PYPROC_STATE_CORRUPT") {
+          throw journalCorrupt(`journal.recover: ${e.message}`, e); // 공개 계약은 저널 코드다
+        }
+        throw e; // PYPROC_REPLAY_MISMATCH 등은 그대로(같은 계약)
+      }
+      if (!opened) return null;
+      return this._applyKernelGeneration(opened); // fallback 여부는 result.fallback이 나른다(기존 계약)
+    }
+    // legacy: HEAD 세대로 부활하고, HEAD가 파손이면 PREV 세대로 후퇴한다(잃는 것은 마지막
+    // 커밋 하나). 둘 다 없으면 null(첫 부팅), 둘 다 파손이면 명시적 예외.
     const cur = await this._readGeneration("HEAD.json");
     if (cur.head) {
       try { return await this._applyGeneration(cur.head); }
@@ -335,13 +399,13 @@ export class MachineJournal {
         cur.corrupt = e.message;
       }
     }
-    const prev = await this._readGeneration("PREV.json");
-    if (prev.head) {
-      const r = await this._applyGeneration(prev.head);
+    const legacyPrev = await this._readGeneration("PREV.json");
+    if (legacyPrev.head) {
+      const r = await this._applyGeneration(legacyPrev.head);
       r.fallback = true; // 직전 세대로 부활했음을 알린다(마지막 커밋 1개 유실)
       return r;
     }
-    if (cur.missing && prev.missing) return null; // 저널 없음 = 첫 부팅
-    throw journalCorrupt(`journal.recover: 저널 파손(${cur.corrupt || "HEAD 없음"} / ${prev.corrupt || "PREV 없음"}). 첫 부팅으로 위장하지 않는다.`);
+    if (cur.missing && legacyPrev.missing) return null; // 저널 없음 = 첫 부팅
+    throw journalCorrupt(`journal.recover: 저널 파손(${cur.corrupt || "HEAD 없음"} / ${legacyPrev.corrupt || "PREV 없음"}). 첫 부팅으로 위장하지 않는다.`);
   }
 }

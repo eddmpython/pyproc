@@ -213,6 +213,79 @@
         `recovered=${!!packRecovered}, 999로 어긋낸 뒤 jrx=${rt.run("jrx")}`);
       await jRootDir.removeEntry("pyprocGateJournal", { recursive: true });
 
+      // state-kernel 3단계(저널 재기초) 게이트 3종.
+      {
+        const { PAGE_SIZE } = await import("../../index.js");
+        const hexOf = async (bytes) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
+        // (1) 동일 상태 재커밋은 wrote 0: 커밋 빈도-쓰기량 법칙(churnProbe)이 커널 경로에서 보존된다.
+        try { await jRootDir.removeEntry("pyprocGateJournal3", { recursive: true }); } catch (e) {}
+        const j3Dir = await jRootDir.getDirectoryHandle("pyprocGateJournal3", { create: true });
+        const j3 = rt.enableJournal({ dir: j3Dir, reactive, includeHome: false });
+        rt.run("j3x = 41");
+        const c1 = await j3.commit();
+        const c2 = await j3.commit(); // 사이에 실행 0 = 페이지 전량 dedupe
+        check("journal 재기초: 동일 상태 재커밋 wrote 0(내용주소 dedupe, 비용 법칙 보존)",
+          c1.wrote > 0 && c2.wrote === 0 && c2.pages === c1.pages, `c1 ${c1.pages}p/${c1.wrote}w -> c2 ${c2.pages}p/${c2.wrote}w`);
+        await jRootDir.removeEntry("pyprocGateJournal3", { recursive: true });
+
+        // (2) 구 포맷(루트 HEAD.json v2 + blob CAS) recover 호환 + 첫 커밋의 커널 포맷 이관.
+        // 재기초 후 구 writer는 없으므로 fixture를 직접 쓴다(포맷 문면은 이관 전 커밋 e5783a3 시점의 실물).
+        try { await jRootDir.removeEntry("pyprocGateJournalLegacy", { recursive: true }); } catch (e) {}
+        const legacyDir = await jRootDir.getDirectoryHandle("pyprocGateJournalLegacy", { create: true });
+        rt.run("jlx = 7");
+        reactive.checkpoint();
+        const ld = reactive.collectDelta(0, reactive.liveIdx, { pack: false });
+        const legacyBlobDir = await legacyDir.getDirectoryHandle("blob", { create: true });
+        const legacyPages = {};
+        for (const p of ld.pages) {
+          const bytes = rt.memory.slicePage(p);
+          const key = await hexOf(bytes);
+          if (!(p in legacyPages)) {
+            const bf = await legacyBlobDir.getFileHandle(key, { create: true });
+            const bw = await bf.createWritable(); await bw.write(bytes); await bw.close();
+          }
+          legacyPages[p] = key;
+        }
+        const h0Arr = reactive.hashes[0];
+        const legacyHead = {
+          version: 2,
+          h0: await hexOf(new Uint8Array(h0Arr.buffer, h0Arr.byteOffset, h0Arr.byteLength)),
+          pages: legacyPages, sp: ld.sp, heapLen: ld.heapLen, committedAt: "legacy-fixture",
+        };
+        const lhf = await legacyDir.getFileHandle("HEAD.json", { create: true });
+        const lhw = await lhf.createWritable(); await lhw.write(JSON.stringify(legacyHead)); await lhw.close();
+        rt.run("jlx = 999"); // 어긋내야 "복구가 실제로 되돌렸다"가 증명된다
+        const lj = rt.enableJournal({ dir: legacyDir, reactive, includeHome: false });
+        const lr = await lj.recover();
+        check("journal 재기초: 구 포맷(루트 HEAD.json v2) recover 호환", !!lr && rt.run("jlx") === 7, `${lr && lr.pages}p, committedAt=${lr && lr.committedAt}`);
+        const mig = await lj.commit();
+        let kernelRefExists = false;
+        try { await (await legacyDir.getDirectoryHandle("state")).getFileHandle("HEAD.json"); kernelRefExists = true; } catch (e) {}
+        let legacyRefGone = true;
+        try { await legacyDir.getFileHandle("HEAD.json"); legacyRefGone = false; } catch (e) {}
+        rt.run("jlx = 555");
+        const rr = await rt.enableJournal({ dir: legacyDir, reactive, includeHome: false }).recover();
+        check("journal 재기초: 첫 커밋의 커널 이관(구 ref 소멸, 공유 CAS dedupe) + 재복구",
+          kernelRefExists && legacyRefGone && !!rr && rt.run("jlx") === 7, `이관 커밋 wrote ${mig.wrote}(공유 CAS), 재복구 ${rr && rr.pages}p`);
+        await jRootDir.removeEntry("pyprocGateJournalLegacy", { recursive: true });
+
+        // (3) 커널 포맷의 h0 불일치 = PREV 후퇴 없이 즉시 PYPROC_REPLAY_MISMATCH.
+        try { await jRootDir.removeEntry("pyprocGateJournalH0", { recursive: true }); } catch (e) {}
+        const h0Dir = await jRootDir.getDirectoryHandle("pyprocGateJournalH0", { create: true });
+        const { JournalKernelStore } = await import("../../src/capabilities/journalKernelStore.js");
+        const { JournalBlobStore } = await import("../../src/capabilities/journalBlobStore.js");
+        const { commitState } = await import("../../src/state/refProtocol.js");
+        const wrongStore = new JournalKernelStore(h0Dir, new JournalBlobStore(h0Dir));
+        await commitState(crypto, wrongStore, {
+          pages: [[0, rt.memory.slicePage(0)]], pageSize: PAGE_SIZE,
+          heapLen: rt.memory.byteLength(), sp: 0, env: { h0: "deadbeef" },
+        });
+        let h0Code = "";
+        try { await rt.enableJournal({ dir: h0Dir, reactive, includeHome: false }).recover(); } catch (e) { h0Code = e.code; }
+        check("journal 재기초: 커널 포맷 h0 불일치 즉시 예외", h0Code === "PYPROC_REPLAY_MISMATCH", h0Code);
+        await jRootDir.removeEntry("pyprocGateJournalH0", { recursive: true });
+      }
+
       // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)
       const badInheritedRt = new Runtime(rt.raw, rt.indexURL, { assetIntegrity: badAssetIntegrity });
       await badInheritedRt.enableSyscallBridge({ input: () => "bad" }).install();

@@ -45,4 +45,13 @@
 - **이빨 증명 3건**: 순수 집합 게이트가 개발 중 주석의 영단어를 물었고, [digest 법] 게이트가 드라이버의 sha256: 슬라이스 중복을 물어 parseSha256Address 경유로 교정시켰고, 커널에 쓰기 순서 위반(HEAD를 PREV 보존 전에 교체)을 고의 주입해 프로토콜 게이트 RED("지점 5: 구 HEAD 오염")를 확인 후 원복했다.
 - 브라우저 게이트에 OPFS 드라이버 절 편입(커밋 왕복 + 변조 blob 적발 + PREV 후퇴): test:browser 72/72 GREEN. npm test 1314, test:types green.
 
-NEXT: 3단계 - 저널 재기초. machineJournal을 커널(refProtocol + OpfsStateStore) 위의 유휴 커밋 정책으로 강등. 구 HEAD.json 저널 recover 호환(포맷 감지 reader) + 힙 바이트 대조 100% + churnProbe 비용 법칙 보존 게이트.
+## 2026-07-18 - 3단계 완료: 저널 재기초
+
+- 핵심 결정: 새 포맷의 바이트는 기존 `blob/<hex>` CAS를 그대로 공유한다(내용주소는 포맷 무관 - 구 저널 blob이 새 세대의 dedupe 대상이 되고 pack 기계를 재사용). 커널 ref는 `state/HEAD.json·PREV.json` 하위 디렉터리에 둬 구 루트 HEAD.json과 파일 충돌 없이 이관한다(어느 시점에 죽어도 두 세대 체계 중 하나는 완전). 커널 refs 존재 시 무조건 우선(구 세대로의 조용한 되감기 차단).
+- [journalKernelStore.js](../../src/capabilities/journalKernelStore.js) 신설: JournalBlobStore(loose+pack 바이트) + OpfsStateStore(ref 위임)를 커널 store 계약으로 묶는 드라이버.
+- [machineJournal.js](../../src/capabilities/machineJournal.js) 강등: 커밋 = `commitState` 한 호출(승격·dedupe·쓰기 순서 법은 커널 소유), recover = `openState`(verify-on-read·h0 대조·PREV 후퇴는 커널 소유) + 힙 적용만. /home pack은 pageTable tree의 file 엔트리. 남은 것 = 유휴 정책, live 판정(pack/prune: 커널 세대는 commit/tree 오브젝트까지 live), legacy reader(읽기 전용), 첫 커널 커밋 후 구 ref 삭제(writer 즉시 단일화). 공개 API·결과 형태·오류 코드(JOURNAL_CORRUPT 래핑, REPLAY_MISMATCH 통과) 전부 보존.
+- 커널 확장: pageTable tree에 file 엔트리(id/address/byteLength/meta), commitState 쓰기 분해 카운터(pagesWrote/filesWrote/metaWrote).
+- 게이트: 기존 저널 게이트(유휴 커밋·pack·pack-only 복구) 무수정 통과 + 신설 4종 - 동일 상태 재커밋 wrote 0(비용 법칙 보존), 구 포맷 v2 fixture recover 호환, 첫 커밋의 커널 이관(구 ref 소멸 + 공유 CAS dedupe + 재복구), 커널 포맷 h0 불일치 즉시 예외. **이빨 증명**: legacy 경로 우회 주입 -> RED("nullp") -> 원복 GREEN.
+- npm test 1319, test:types, test:browser 76/76 전부 green.
+
+NEXT: 4단계 - 봉투·신뢰 통합. machineSignature와 webMachineTrust를 signedTag 코어 한 벌의 두 호출부로. bundle writer 즉시 단일화 + 구 .pymachine v2/v3 이중 reader + 변조 3종 음성 시험.

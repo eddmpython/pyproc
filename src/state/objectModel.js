@@ -46,7 +46,7 @@ export async function stateAddressOf(cryptoProvider, bytes) {
 // tree: 타입 있는 엔트리. 한 오브젝트 모델이지만 한 모양이 아니다:
 //   pageTable = 힙 커밋 전용(균일 페이지 + heapLen/sp), payload = 불투명 바이트(machine
 //   generation, guest 스냅샷). machine 층이 collectDelta를 소비하지 않는다는 실측이 근거다.
-export function makePageTableTree({ pageSize, heapLen, sp, pages }) {
+export function makePageTableTree({ pageSize, heapLen, sp, pages, files = [] }) {
   if (!Number.isInteger(pageSize) || pageSize <= 0) throw inputError(`pageTable: pageSize 위반(${pageSize})`);
   if (!Number.isInteger(heapLen) || heapLen <= 0) throw inputError(`pageTable: heapLen 위반(${heapLen})`);
   if (sp !== null && (!Number.isInteger(sp) || sp < 0)) throw inputError(`pageTable: sp 위반(${sp})`);
@@ -60,7 +60,21 @@ export function makePageTableTree({ pageSize, heapLen, sp, pages }) {
     seen.add(p);
     if (!SHA256_ADDRESS_RE.test(address)) throw inputError(`pageTable: 주소 형식 위반(${address})`);
   }
-  return { kind: "pageTable", pageSize, heapLen, sp, pages };
+  // file 엔트리: 힙 세대에 함께 묶이는 파일 페이로드(/home pack 등). meta는 소비자 소유의
+  // 불투명 객체다(형식 판정은 적용하는 쪽 몫: applyMachineHome의 validateMachineHomeMeta 등).
+  if (!Array.isArray(files)) throw inputError("pageTable: files 배열이 필요하다");
+  const fileIds = new Set();
+  for (const e of files) {
+    if (typeof e?.id !== "string" || !e.id) throw inputError("pageTable: file.id 위반");
+    if (fileIds.has(e.id)) throw inputError(`pageTable: file.id 중복(${e.id})`);
+    fileIds.add(e.id);
+    if (!SHA256_ADDRESS_RE.test(e.address)) throw inputError(`pageTable: file 주소 형식 위반(${e.address})`);
+    if (!Number.isInteger(e.byteLength) || e.byteLength < 0) throw inputError(`pageTable: file.byteLength 위반(${e.id})`);
+    if (e.meta !== null && (typeof e.meta !== "object" || Array.isArray(e.meta))) throw inputError(`pageTable: file.meta 위반(${e.id})`);
+  }
+  const tree = { kind: "pageTable", pageSize, heapLen, sp, pages };
+  if (files.length) tree.files = files.map((e) => ({ id: e.id, address: e.address, byteLength: e.byteLength, meta: e.meta ?? null }));
+  return tree;
 }
 
 export function makePayloadTree({ entries }) {

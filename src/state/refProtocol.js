@@ -34,11 +34,12 @@ function corrupt(message) {
   return new PyProcError("PYPROC_STATE_CORRUPT", message);
 }
 
-async function putObject(cryptoProvider, store, bytes, counters) {
+async function putObject(cryptoProvider, store, bytes, counters, bucket) {
   const address = await stateAddressOf(cryptoProvider, bytes);
   if (await store.hasObject(address)) { counters.deduped++; return address; }
   await store.writeObject(address, bytes);
   counters.wrote++;
+  counters[bucket]++;
   return address;
 }
 
@@ -46,18 +47,22 @@ async function putObject(cryptoProvider, store, bytes, counters) {
 // { env, fence, parents, createdAt }. fence가 있으면 HEAD 교체 직전에 현 owner와 대조한다
 // (stale이면 PYPROC_STATE_FENCE_STALE, HEAD 불변).
 export async function commitState(cryptoProvider, store, input = {}) {
-  const { pages = null, payloads = null, env = {}, fence = null, parents = [], createdAt = null } = input;
-  const counters = { wrote: 0, deduped: 0 };
+  const { pages = null, payloads = null, files = [], env = {}, fence = null, parents = [], createdAt = null } = input;
+  const counters = { wrote: 0, deduped: 0, pagesWrote: 0, filesWrote: 0, metaWrote: 0 };
   // (1) payload 먼저
   let tree;
   if (pages) {
     const table = [];
-    for (const [p, bytes] of pages) table.push([p, await putObject(cryptoProvider, store, bytes, counters)]);
-    tree = makePageTableTree({ pageSize: input.pageSize, heapLen: input.heapLen, sp: input.sp ?? null, pages: table });
+    for (const [p, bytes] of pages) table.push([p, await putObject(cryptoProvider, store, bytes, counters, "pagesWrote")]);
+    const fileEntries = [];
+    for (const { id, bytes, meta = null } of files) {
+      fileEntries.push({ id, address: await putObject(cryptoProvider, store, bytes, counters, "filesWrote"), byteLength: bytes.length, meta });
+    }
+    tree = makePageTableTree({ pageSize: input.pageSize, heapLen: input.heapLen, sp: input.sp ?? null, pages: table, files: fileEntries });
   } else if (payloads) {
     const entries = [];
     for (const { id, bytes } of payloads) {
-      entries.push({ id, address: await putObject(cryptoProvider, store, bytes, counters), byteLength: bytes.length });
+      entries.push({ id, address: await putObject(cryptoProvider, store, bytes, counters, "filesWrote"), byteLength: bytes.length });
     }
     tree = makePayloadTree({ entries });
   } else {
@@ -65,10 +70,10 @@ export async function commitState(cryptoProvider, store, input = {}) {
   }
   // (2) tree (3) commit
   const treeBytes = encodeStateObject(tree);
-  const treeAddress = await putObject(cryptoProvider, store, treeBytes, counters);
+  const treeAddress = await putObject(cryptoProvider, store, treeBytes, counters, "metaWrote");
   const commit = makeStateCommit({ parents, tree: treeAddress, env, fence, createdAt });
   const commitBytes = encodeStateObject(commit);
-  const commitAddress = await putObject(cryptoProvider, store, commitBytes, counters);
+  const commitAddress = await putObject(cryptoProvider, store, commitBytes, counters, "metaWrote");
   // fence 전제조건: HEAD 교체 직전 대조. stale이면 여기서 끝난다(HEAD 불변).
   if (fence) {
     const owner = await store.readOwner();
@@ -83,7 +88,11 @@ export async function commitState(cryptoProvider, store, input = {}) {
   if (head.corrupt) throw corrupt(`commitState: HEAD 파손 위에 커밋하지 않는다(${head.corrupt})`);
   if (head.ref) await store.writeRef("PREV", head.ref);
   await store.writeRef("HEAD", { commit: commitAddress });
-  return { commitAddress, treeAddress, wrote: counters.wrote, deduped: counters.deduped };
+  return {
+    commitAddress, treeAddress,
+    wrote: counters.wrote, deduped: counters.deduped,
+    pagesWrote: counters.pagesWrote, filesWrote: counters.filesWrote, metaWrote: counters.metaWrote,
+  };
 }
 
 async function verifiedRead(cryptoProvider, store, address) {
@@ -105,7 +114,13 @@ async function materialize(cryptoProvider, store, ref, expectH0) {
   if (tree.kind === "pageTable") {
     const pages = new Map();
     for (const [p, address] of tree.pages) pages.set(p, await verifiedRead(cryptoProvider, store, address));
-    return { commit, commitAddress: ref.commit, tree, pages };
+    const files = new Map();
+    for (const e of tree.files || []) {
+      const bytes = await verifiedRead(cryptoProvider, store, e.address);
+      if (bytes.length !== e.byteLength) throw corrupt(`state: file 길이 불일치(${e.id})`);
+      files.set(e.id, { bytes, meta: e.meta ?? null });
+    }
+    return { commit, commitAddress: ref.commit, tree, pages, files };
   }
   const entries = new Map();
   for (const e of tree.entries) {

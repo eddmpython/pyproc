@@ -1204,6 +1204,7 @@ check("src layer edge는 아래로만", () => {
     "src/capabilities/envManager.js -> src/runtime/engines/pyodideEngine.js",
     "src/capabilities/envManager.js -> src/runtime/contentDigest.js",
     "src/capabilities/journalBlobStore.js -> src/runtime/contentDigest.js",
+    "src/capabilities/journalKernelStore.js -> src/runtime/contentDigest.js",
     "src/capabilities/machineJournal.js -> src/runtime/contentDigest.js",
     "src/capabilities/machineJournal.js -> src/runtime/heapGrow.js",
     "src/capabilities/machineJournal.js -> src/runtime/memoryLayout.js",
