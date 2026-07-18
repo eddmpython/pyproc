@@ -168,11 +168,15 @@ export function encodeStateBundle(
   cryptoProvider: StateCryptoProvider,
   input: { commit: string; meta?: unknown; objects: Map<string, Uint8Array> | Array<[string, Uint8Array]>; tag?: StateTag | null },
 ): Promise<Uint8Array>;
-export function unsignedStateBundleDigest(
+export function stateBundleHeaderDigest(
   cryptoProvider: StateCryptoProvider,
-  input: { commit: string; meta?: unknown; objects: Map<string, Uint8Array> | Array<[string, Uint8Array]> },
+  input: { commit: string; meta?: unknown; objects: Map<string, Uint8Array> | Array<[string, Uint8Array]> | Array<[string, number]> },
 ): Promise<string>;
+export function readStateBundleHeader(
+  cryptoProvider: StateCryptoProvider,
+  source: Uint8Array | Blob | { read(start: number, end: number): Promise<Uint8Array> },
+): Promise<{ commit: string; meta: unknown; objects: Array<[string, number]>; tag: StateTag | null; envelope: string; headerDigest: string; objectsOffset: number }>;
 export function decodeStateBundle(
   cryptoProvider: StateCryptoProvider,
   buf: Uint8Array,
-): Promise<{ commit: string; meta: unknown; objects: Map<string, Uint8Array>; tag: StateTag | null; envelope: string; unsignedDigest: string }>;
+): Promise<{ commit: string; meta: unknown; objects: Map<string, Uint8Array>; tag: StateTag | null; envelope: string; headerDigest: string }>;

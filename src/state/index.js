@@ -36,7 +36,8 @@ export {
   decodeStateBundle,
   encodeStateBundle,
   isStateBundle,
-  unsignedStateBundleDigest,
+  readStateBundleHeader,
+  stateBundleHeaderDigest,
 } from "./bundleFormat.js";
 export { MemoryStateStore } from "./memoryStateStore.js";
 export { OpfsStateStore } from "./opfsStateStore.js";

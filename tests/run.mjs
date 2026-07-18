@@ -533,14 +533,14 @@ console.log("\n[state 커널]");
     const objects = store2.entries();
     const meta2 = { manifest: "{}" };
     const keyPair = await tags.createStateKeyPair(provider);
-    const unsigned = await bundle.unsignedStateBundleDigest(provider, { commit: committed.commitAddress, meta: meta2, objects });
+    const unsigned = await bundle.stateBundleHeaderDigest(provider, { commit: committed.commitAddress, meta: meta2, objects });
     const tag = await tags.signStateTag(provider, keyPair, unsigned);
     const bytes = await bundle.encodeStateBundle(provider, { commit: committed.commitAddress, meta: meta2, objects, tag });
     const decoded = await bundle.decodeStateBundle(provider, bytes);
     if (decoded.commit !== committed.commitAddress || decoded.objects.size !== objects.length) throw new Error("왕복 불일치");
-    if (decoded.unsignedDigest !== unsigned || decoded.tag.target !== unsigned) throw new Error("unsigned 다이제스트 불일치");
+    if (decoded.headerDigest !== unsigned || decoded.tag.target !== unsigned) throw new Error("unsigned 다이제스트 불일치");
     const jwk = await tags.exportStatePublicKey(provider, keyPair.publicKey);
-    const good = await tags.verifyStateTag(provider, decoded.tag, decoded.unsignedDigest, { trustedPublicKeys: [jwk] });
+    const good = await tags.verifyStateTag(provider, decoded.tag, decoded.headerDigest, { trustedPublicKeys: [jwk] });
     if (!good.valid || !good.trusted) throw new Error("서명 신뢰 경로 실패");
     // 변조 1: 바이트 뒤집기 -> 봉투 무결성 거부
     const flipped = bytes.slice(); flipped[flipped.length - 1] ^= 0xff;

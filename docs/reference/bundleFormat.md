@@ -46,10 +46,16 @@ Header JSON fields:
   asset digest, deterministic-boot flag) that `openMachine` compares against
   the freshly replayed kernel. A fingerprint mismatch is an explicit error,
   never a silent apply.
-- `tag` may be `null` (unsigned bundle). The signing target is the *unsigned
-  envelope digest*: `sha256` of the same body re-encoded with `tag: null`, so
-  the signature covers everything except itself. A bundle whose bytes verify
-  but whose signer is not in the caller's trust list is valid-but-untrusted;
+- `tag` may be `null` (unsigned bundle). The signing target is the *header
+  digest*: `sha256:<hex>` of the canonical header JSON re-serialized with
+  `tag: null`. Because the header pins every object's content address and
+  length, signing the header seals the whole bundle (a git-tag-shaped design):
+  swapped object bytes fail per-object verify-on-read, and a forged index
+  breaks the signature target. This also makes the trust decision a
+  prefix-only read - `readStateBundleHeader` parses magic, envelope digest,
+  and header without touching a single payload byte, so an untrusted bundle
+  is rejected before any object is read. A bundle whose bytes verify but
+  whose signer is not in the caller's trust list is valid-but-untrusted;
   opening it still requires `{ trust: true }`.
 
 The implementation of record is `src/state/bundleFormat.js`; the browser gate

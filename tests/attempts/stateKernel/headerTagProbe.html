@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<!--
+probe 5: bundle 헤더 서명(header-target tag)으로 payload 접촉 전 신뢰 거부가 성립하는가.
+가설: 내용주소가 오브젝트를 개별 봉인하므로 tag는 canonical 헤더(오브젝트 주소·길이 색인
+포함, tag=null)의 다이제스트에만 서명하면 충분하다(git tag 동형). 이러면 신뢰 판정은 접두
+슬라이스만 읽고 끝나고, 오브젝트 치환·길이 조작은 각각 verify-on-read와 서명 파손이 잡는다.
+기각 기준: 헤더 서명이 오브젝트 치환을 못 잡는 시나리오가 하나라도 실증되면 전신 서명 유지.
+실행: node tests/browser/run.mjs tests/attempts/stateKernel/headerTagProbe.html
+결과(2026-07-18, Edge headless / 로컬 COOP+COEP): GREEN 5/5.
+198KB 번들에서 미신뢰 거부가 접두 슬라이스 2회([0,78],[78,976])로 끝나고 payload 접촉 0.
+오브젝트 치환은 헤더 서명이 유효한 채 verify-on-read 주소 불일치로, 색인 길이 조작은
+서명 대상 불일치로, tag 서명 바이트 변조는 검증 실패로 전부 거부됐다.
+결론: 헤더 서명 충분성 채택. 본진 전환 완료(bundleFormat stateBundleHeaderDigest +
+readStateBundleHeader, 세션·게이트·문서 동시 개정).
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: stateKernel header tag</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: stateKernel - 헤더 서명 조기 거부</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { MemoryStateStore, commitState } from "../../../src/state/index.js";
+  import { createStateKeyPair, exportStatePublicKey, makeStateTag, verifyStateTag } from "../../../src/state/index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const textEncoder = new TextEncoder();
+  const textDecoder = new TextDecoder();
+  const hexOf = async (bytes) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const MAGIC = "PYBUNDLE1\n";
+
+  // ---- 시안: header-target 인코딩(색인 = [주소, 길이] 배치 순서 고정, tag는 헤더 안) ----
+  function headerJson({ commit, meta, index, tag }) {
+    return JSON.stringify({ version: 1, commit, meta, objects: index, tag });
+  }
+  async function headerDigestOf(cryptoLike, { commit, meta, index }) {
+    return "sha256:" + await hexOf(textEncoder.encode(headerJson({ commit, meta, index, tag: null })));
+  }
+  async function encodeDraft({ commit, meta, objects, tag }) {
+    const index = objects.map(([address, bytes]) => [address, bytes.length]);
+    const headBytes = textEncoder.encode(headerJson({ commit, meta, index, tag }));
+    const total = objects.reduce((sum, [, b]) => sum + b.length, 0);
+    const body = new Uint8Array(4 + headBytes.length + total);
+    new DataView(body.buffer).setUint32(0, headBytes.length);
+    body.set(headBytes, 4);
+    let offset = 4 + headBytes.length;
+    for (const [, b] of objects) { body.set(b, offset); offset += b.length; }
+    const envelope = await hexOf(body);
+    const outBytes = new Uint8Array(MAGIC.length + 64 + body.length);
+    outBytes.set(textEncoder.encode(MAGIC), 0);
+    outBytes.set(textEncoder.encode(envelope), MAGIC.length);
+    outBytes.set(body, MAGIC.length + 64);
+    return outBytes;
+  }
+  // Blob 슬라이스 계수 래퍼: 신뢰 판정이 payload 바이트를 실제로 안 읽는지 잰다.
+  function countingBlob(bytes) {
+    const blob = new Blob([bytes]);
+    const slices = [];
+    return {
+      size: blob.size,
+      slices,
+      async read(start, end) {
+        slices.push([start, end]);
+        return new Uint8Array(await blob.slice(start, end).arrayBuffer());
+      },
+    };
+  }
+  // 접두만 읽는 헤더 판독 + 신뢰 판정(시안 reader).
+  async function readHeaderAndVerifyTrust(source, trustedJwks) {
+    const prefix = await source.read(0, MAGIC.length + 64 + 4);
+    if (textDecoder.decode(prefix.subarray(0, MAGIC.length)) !== MAGIC) throw new Error("매직 불일치");
+    const headLen = new DataView(prefix.buffer, prefix.byteOffset + MAGIC.length + 64, 4).getUint32(0);
+    const headBytes = await source.read(MAGIC.length + 64 + 4, MAGIC.length + 64 + 4 + headLen);
+    const header = JSON.parse(textDecoder.decode(headBytes));
+    const expected = await headerDigestOf(crypto, { commit: header.commit, meta: header.meta, index: header.objects });
+    if (!header.tag) return { header, trusted: false, present: false, prefixBytes: MAGIC.length + 64 + 4 + headLen };
+    if (header.tag.target !== expected) throw new Error("서명 대상 불일치(헤더가 tag와 다르다)");
+    const verdict = await verifyStateTag(crypto, header.tag, expected, { trustedPublicKeys: trustedJwks });
+    if (!verdict.valid) throw new Error("서명 검증 실패");
+    return { header, trusted: verdict.trusted, present: true, prefixBytes: MAGIC.length + 64 + 4 + headLen };
+  }
+
+  try {
+    // 재료: 커널 커밋으로 오브젝트 집합 구성(실물 프로토콜과 동일 경로).
+    const store = new MemoryStateStore();
+    const page = (n) => new Uint8Array(65536).fill(n);
+    const committed = await commitState(crypto, store, {
+      pages: [[0, page(1)], [1, page(2)], [2, page(3)]],
+      pageSize: 65536, heapLen: 65536 * 3, sp: 0, env: { h0: "probe5" },
+    });
+    const objects = store.entries();
+    const meta = { manifest: "{}" };
+    const index = objects.map(([address, bytes]) => [address, bytes.length]);
+    const keyPair = await createStateKeyPair(crypto);
+    const jwk = await exportStatePublicKey(crypto, keyPair.publicKey);
+    const otherPair = await createStateKeyPair(crypto);
+    const otherJwk = await exportStatePublicKey(crypto, otherPair.publicKey);
+    const headerDigest = await headerDigestOf(crypto, { commit: committed.commitAddress, meta, index });
+    const tag = await makeStateTag(crypto, keyPair.privateKey, jwk, headerDigest);
+    const bytes = await encodeDraft({ commit: committed.commitAddress, meta, objects, tag });
+    timings.bundleBytes = bytes.length;
+
+    // 1. 조기 거부: 신뢰 목록 불일치가 접두 슬라이스 2회로 판정되고 payload는 한 바이트도 안 읽는다.
+    const rejecting = countingBlob(bytes);
+    let untrustedOk = false;
+    const r1 = await readHeaderAndVerifyTrust(rejecting, [otherJwk]);
+    untrustedOk = r1.present && r1.trusted === false;
+    const payloadStart = MAGIC.length + 64 + r1.prefixBytes - (MAGIC.length + 64); // body 내 오브젝트 시작
+    const touchedPayload = rejecting.slices.some(([s, e]) => e > r1.prefixBytes);
+    timings.trustSlices = rejecting.slices.length;
+    check("조기 거부: 접두 슬라이스만으로 미신뢰 판정(payload 접촉 0)",
+      untrustedOk && rejecting.slices.length === 2 && !touchedPayload,
+      `slices ${JSON.stringify(rejecting.slices)} / bundle ${bytes.length}B`);
+
+    // 2. 신뢰 경로: 같은 접두 읽기로 trusted 판정.
+    const trusting = countingBlob(bytes);
+    const r2 = await readHeaderAndVerifyTrust(trusting, [jwk]);
+    check("신뢰 판정: 헤더 서명으로 trusted", r2.trusted === true && trusting.slices.length === 2);
+
+    // 3. 오브젝트 치환 공격: payload 바이트를 바꿔도 헤더 서명은 유효하다. 그러나 색인이
+    //    주소를 박제하므로 추출 시 verify-on-read가 잡는다(헤더 서명 충분성의 핵심).
+    const tampered = bytes.slice();
+    const objectOffset = MAGIC.length + 64 + r2.prefixBytes - (MAGIC.length + 64) + (MAGIC.length + 64);
+    tampered[tampered.length - 1] ^= 0xff; // 마지막 오브젝트의 마지막 바이트
+    const tamperedSource = countingBlob(tampered);
+    const r3 = await readHeaderAndVerifyTrust(tamperedSource, [jwk]);
+    const lastEntry = r3.header.objects[r3.header.objects.length - 1];
+    const bodyBase = MAGIC.length + 64 + 4 + textEncoder.encode(headerJson({ commit: r3.header.commit, meta: r3.header.meta, index: r3.header.objects, tag: r3.header.tag })).length;
+    let lastStart = bodyBase;
+    for (const [, len] of r3.header.objects.slice(0, -1)) lastStart += len;
+    const lastBytes = await tamperedSource.read(lastStart, lastStart + lastEntry[1]);
+    const actualAddress = "sha256:" + await hexOf(lastBytes);
+    check("오브젝트 치환: 헤더 서명은 통과하지만 verify-on-read가 주소 불일치로 거부",
+      r3.trusted === true && actualAddress !== lastEntry[0],
+      `pinned ${lastEntry[0].slice(0, 20)}.. vs actual ${actualAddress.slice(0, 20)}..`);
+
+    // 4. 색인 조작 공격: 길이/주소를 바꾸면 헤더 바이트가 달라져 서명 대상 불일치로 즉시 거부.
+    const forgedIndex = index.map(([a, l], i) => (i === 0 ? [a, l - 1] : [a, l]));
+    const forgedTagKeep = tag; // 옛 tag를 그대로 실은 위조 헤더
+    const forgedBytes = await encodeDraft({ commit: committed.commitAddress, meta, objects: objects.map(([a, b], i) => (i === 0 ? [a, b.subarray(0, b.length - 1)] : [a, b])), tag: forgedTagKeep });
+    let forgedRejected = false;
+    try { await readHeaderAndVerifyTrust(countingBlob(forgedBytes), [jwk]); }
+    catch (e) { forgedRejected = String(e.message).includes("서명 대상 불일치"); }
+    check("색인 조작: 길이 변조는 서명 대상 불일치로 즉시 거부", forgedRejected);
+
+    // 5. tag 서명 바이트 변조: valid=false.
+    const brokenTag = { ...tag, signature: tag.signature.slice(0, -4) + "AAAA" };
+    const brokenBytes = await encodeDraft({ commit: committed.commitAddress, meta, objects, tag: brokenTag });
+    let brokenRejected = false;
+    try { await readHeaderAndVerifyTrust(countingBlob(brokenBytes), [jwk]); }
+    catch (e) { brokenRejected = String(e.message).includes("서명 검증 실패"); }
+    check("tag 변조: 서명 검증 실패로 거부", brokenRejected);
+  } catch (e) {
+    check("예외 없음", false, String(e && e.stack || e));
+  }
+  await report();
+</script>
+</body>
+</html>

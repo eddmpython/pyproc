@@ -31,6 +31,8 @@ fence 전제조건은 고의 위반 주입을 전부 잡아낸다.
 | 2026-07-18 | legacyReconstructProbe | Edge headless, COOP/COEP | GREEN 6/6. 423p/26.4MB 델타를 세션 save·저널 HEAD+blob(raw OPFS 판독)·.pymachine(독자 파서)·machine generation(IndexedDB) 4포맷 전부 신 모델 재구성 바이트 대조 100%. 신 모델 -> legacy 재합성 -> 새 커널 부활까지 성립 | 구 포맷 4종 무손실 표현 가능. 이관 착수 자격 확보 | 3~5단계 recover 게이트의 원형 |
 | 2026-07-18 | refCasProbe | Edge headless, COOP/COEP | GREEN 7/7. 쓰기 순서 법 크래시 6지점 전부 구 HEAD 무결, HEAD-first 위반 corruption 감지 + PREV 후퇴, PREV 미보존 + HEAD 파손 = 명시 예외, stale fence 거부 + HEAD 불변, env(h0) 불일치 즉시 예외(후퇴 금지), 변조 blob verify-on-read 적발 | ref CAS 프로토콜 시안이 전 위반을 문다. 2단계 음성 시험의 원형 | 2단계 src/state 신설 |
 
+| 2026-07-18 | headerTagProbe | Edge headless, COOP/COEP | GREEN 5/5. 미신뢰 거부 접두 슬라이스 2회(198KB 번들, payload 접촉 0). 치환 = verify-on-read 거부, 색인 조작 = 서명 대상 불일치, tag 변조 = 검증 실패 | 헤더 서명 충분성 채택(git tag 동형). 본진 전환 완료 | .webmachine bundle 통합의 전제 확보 |
+
 ## 판정
 
 진행 중 (0단계 probe 3종 전부 통과. 시안 채택, 1단계 법 추출 착수 자격 확보)

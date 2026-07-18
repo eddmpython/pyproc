@@ -33,7 +33,7 @@ import { machineSigningMaterial, verifyMachineSignature } from "./machineSignatu
 import { MemoryStateStore } from "../state/memoryStateStore.js";
 import { commitState, openState } from "../state/refProtocol.js";
 import { STATE_TAG_ALG, makeStateTag, verifyStateTag } from "../state/signedTag.js";
-import { decodeStateBundle, encodeStateBundle, isStateBundle, unsignedStateBundleDigest } from "../state/bundleFormat.js";
+import { decodeStateBundle, encodeStateBundle, isStateBundle, stateBundleHeaderDigest } from "../state/bundleFormat.js";
 
 // 서명 API는 이 모듈의 공개 표면이다(index.js가 여기서 가져간다). 구현은 machineSignature가 소유한다.
 export { createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey } from "./machineSignature.js";
@@ -109,13 +109,13 @@ async function openBundleMachine(buf, opts) {
   const decoded = await decodeStateBundle(globalThis.crypto, buf);
   let signature = { present: false, trusted: false };
   if (decoded.tag) {
-    if (decoded.tag.alg !== STATE_TAG_ALG || decoded.tag.target !== decoded.unsignedDigest) {
+    if (decoded.tag.alg !== STATE_TAG_ALG || decoded.tag.target !== decoded.headerDigest) {
       throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: 서명 대상 불일치(파일 내용과 tag target이 맞지 않는다)");
     }
     const trustedKeys = [];
     if (opts.trustedPublicKey) trustedKeys.push(opts.trustedPublicKey);
     if (Array.isArray(opts.trustedPublicKeys)) trustedKeys.push(...opts.trustedPublicKeys);
-    const verdict = await verifyStateTag(globalThis.crypto, decoded.tag, decoded.unsignedDigest, { trustedPublicKeys: trustedKeys });
+    const verdict = await verifyStateTag(globalThis.crypto, decoded.tag, decoded.headerDigest, { trustedPublicKeys: trustedKeys });
     if (!verdict.valid) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: signature 검증 실패");
     signature = { present: true, trusted: verdict.trusted };
   }
@@ -214,7 +214,7 @@ export class Session {
     let tag = null;
     const keys = await machineSigningMaterial(opts);
     if (keys) {
-      const unsigned = await unsignedStateBundleDigest(globalThis.crypto, { commit: committed.commitAddress, meta, objects });
+      const unsigned = await stateBundleHeaderDigest(globalThis.crypto, { commit: committed.commitAddress, meta, objects });
       tag = await makeStateTag(globalThis.crypto, keys.privateKey, keys.publicKey, unsigned);
     }
     const bytes = await encodeStateBundle(globalThis.crypto, { commit: committed.commitAddress, meta, objects, tag });
