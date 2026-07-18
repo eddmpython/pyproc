@@ -511,6 +511,30 @@
       try { await openMachine(untrustedImg); } catch (e) { trustCode = e.code; }
       check("openMachine: trust 미승인이 코드로 거부", trustCode === "PYPROC_MACHINE_UNTRUSTED", trustCode);
       await (await navigator.storage.getDirectory()).removeEntry("pyprocGateSess", { recursive: true });
+
+      // state 커널 OPFS 드라이버: 커밋 왕복 + verify-on-read 적발 + PREV 후퇴가 실제 OPFS에서
+      // 성립하는지(프로토콜 자체의 음성 시험 전체는 tests/run.mjs [state 커널]이 매 커밋 문다).
+      {
+        const stateRoot = await navigator.storage.getDirectory();
+        try { await stateRoot.removeEntry("pyprocGateState", { recursive: true }); } catch (e) {}
+        const stateDir = await stateRoot.getDirectoryHandle("pyprocGateState", { create: true });
+        const { OpfsStateStore } = await import("../../src/state/opfsStateStore.js");
+        const { commitState, openState } = await import("../../src/state/refProtocol.js");
+        const stateStore = new OpfsStateStore(stateDir);
+        const kb = (fill) => new Uint8Array(1024).fill(fill);
+        await commitState(crypto, stateStore, { pages: [[0, kb(11)], [1, kb(12)]], pageSize: 1024, heapLen: 2048, sp: 0, env: { h0: "gate-h0" } });
+        const second = await commitState(crypto, stateStore, { pages: [[0, kb(21)], [1, kb(22)]], pageSize: 1024, heapLen: 2048, sp: 0, env: { h0: "gate-h0" } });
+        const openedHead = await openState(crypto, stateStore, { expectH0: "gate-h0" });
+        check("state 커널: OPFS 드라이버 커밋 왕복", openedHead.generation === "head" && openedHead.pages.get(0)[0] === 21);
+        // HEAD tree의 페이지 blob 파일을 변조 -> verify-on-read 적발 -> PREV 세대로 후퇴.
+        const objectsDir = await stateDir.getDirectoryHandle("objects");
+        const tamperName = (await openState(crypto, stateStore, {})).tree.pages[0][1].slice(7);
+        const tf = await objectsDir.getFileHandle(tamperName);
+        const tw = await tf.createWritable(); await tw.write(kb(99)); await tw.close();
+        const fell = await openState(crypto, stateStore, { expectH0: "gate-h0" });
+        check("state 커널: OPFS 변조 blob 적발 + PREV 후퇴", fell.fallback === true && fell.pages.get(0)[0] === 11, String(fell.headFailure || "").slice(0, 60));
+        await stateRoot.removeEntry("pyprocGateState", { recursive: true });
+      }
     } catch (e) {
       check("예외 없음", false, String(e).slice(0, 300));
     }

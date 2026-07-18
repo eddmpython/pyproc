@@ -366,6 +366,112 @@ console.log("\n[digest 법]");
   }
 }
 
+// 3.5) state 커널 게이트(state-kernel 2단계): 순수 집합 + ref CAS 프로토콜 음성 시험.
+//      실측 원형은 tests/attempts/stateKernel(0단계 probe GREEN). 여기서는 src 실물이
+//      같은 위반들을 무는지 매 커밋 확인한다(안 무는 게이트는 없는 게이트보다 나쁘다).
+console.log("\n[state 커널]");
+{
+  // 순수 집합: 커널은 브라우저 저장·전역 관심사를 모른다. backend(OPFS/IndexedDB)와 정책은
+  // 전부 위에서 주입된다. 이 불변식이 무너지면 통합이 결합으로 역전된다(god layer).
+  const PURE_STATE = ["objectModel.js", "refProtocol.js", "signedTag.js", "memoryStateStore.js"];
+  const BROWSER_GLOBAL = /\b(navigator|window|document|indexedDB|localStorage|sessionStorage|crossOriginIsolated)\b|globalThis\.crypto|\bfetch\s*\(/;
+  for (const name of PURE_STATE) {
+    check(`state 순수 집합: ${name} 브라우저 전역 0`, () => {
+      const text = readFileSync(join(ROOT, "src", "state", name), "utf8");
+      const hit = text.split("\n").findIndex((line) => BROWSER_GLOBAL.test(line));
+      if (hit >= 0) throw new Error(`L${hit + 1}: 브라우저 전역/저장 접근`);
+    });
+  }
+  const state = await import(pathToFileURL(join(ROOT, "src", "state", "refProtocol.js")).href);
+  const { MemoryStateStore } = await import(pathToFileURL(join(ROOT, "src", "state", "memoryStateStore.js")).href);
+  const model = await import(pathToFileURL(join(ROOT, "src", "state", "objectModel.js")).href);
+  const tags = await import(pathToFileURL(join(ROOT, "src", "state", "signedTag.js")).href);
+  const provider = globalThis.crypto;
+  const statePage = (fill) => new Uint8Array(1024).fill(fill);
+  const stateInput = (n, extra = {}) => ({
+    pages: [[0, statePage(n)], [1, statePage(n + 1)]],
+    pageSize: 1024, heapLen: 2048, sp: 64, env: { h0: "h0-real" }, ...extra,
+  });
+  await checkAsync("state 프로토콜: 정상 왕복 + dedupe", async () => {
+    const store = new MemoryStateStore();
+    await state.commitState(provider, store, stateInput(10));
+    const second = await state.commitState(provider, store, stateInput(10, { env: { h0: "h0-real" } }));
+    if (second.wrote !== 0 || second.deduped < 2) throw new Error(`같은 상태 재커밋이 dedupe되지 않음(wrote ${second.wrote})`);
+    const opened = await state.openState(provider, store, { expectH0: "h0-real" });
+    if (opened.generation !== "head" || opened.pages.get(0)[0] !== 10) throw new Error("HEAD 세대 부활 실패");
+  });
+  await checkAsync("state 프로토콜: 쓰기 순서 법(지점별 크래시에 구 HEAD 무결)", async () => {
+    const store = new MemoryStateStore();
+    await state.commitState(provider, store, stateInput(10));
+    const base = await state.commitState(provider, store, stateInput(20));
+    // 반복마다 고유 페이지라 dedupe 없이 쓰기 순서 고정: blob 2 + tree + commit + PREV + HEAD = 6지점.
+    for (let crashAfter = 0; crashAfter < 6; crashAfter++) {
+      let left = crashAfter;
+      const crashing = Object.create(store);
+      crashing.writeObject = async (a, b) => { if (--left < 0) throw new Error("CRASH"); return store.writeObject(a, b); };
+      crashing.writeRef = async (n, r) => { if (--left < 0) throw new Error("CRASH"); return store.writeRef(n, r); };
+      let crashed = false;
+      try { await state.commitState(provider, crashing, stateInput(100 + crashAfter * 2)); }
+      catch (e) { crashed = e.message === "CRASH"; }
+      if (!crashed) throw new Error(`지점 ${crashAfter}: 6지점 안에서 커밋 성공(쓰기 순서 가정 파손)`);
+      const r = await state.openState(provider, store, { expectH0: "h0-real" });
+      if (!r || r.pages.get(0)[0] !== 20) throw new Error(`지점 ${crashAfter}: 구 HEAD 오염`);
+    }
+    const headRef = await store.readRef("HEAD");
+    if (headRef.ref.commit !== base.commitAddress) throw new Error("HEAD가 크래시 잔해로 이동함");
+  });
+  await checkAsync("state 프로토콜: corruption은 PREV 후퇴, 둘 다 파손은 명시 예외", async () => {
+    const store = new MemoryStateStore();
+    await state.commitState(provider, store, stateInput(30));
+    const last = await state.commitState(provider, store, stateInput(40));
+    // HEAD 세대의 tree가 가리키는 첫 페이지 blob을 변조 -> verify-on-read 적발 -> PREV 후퇴.
+    const treeBytes = await store.readObject(last.treeAddress);
+    const tampered = model.decodeStateObject(treeBytes).pages[0][1];
+    store.tamperObject(tampered, statePage(99));
+    const fb = await state.openState(provider, store, { expectH0: "h0-real" });
+    if (fb.generation !== "prev" || fb.fallback !== true || fb.pages.get(0)[0] !== 30) throw new Error("PREV 후퇴 실패");
+    // PREV까지 지우고 HEAD를 파손시키면 첫 부팅 위장 없이 명시 예외.
+    store.deleteRef("PREV");
+    store.corruptRef("HEAD");
+    let code = null;
+    try { await state.openState(provider, store, {}); } catch (e) { code = e.code; }
+    if (code !== "PYPROC_STATE_CORRUPT") throw new Error(`명시 예외 아님(${code})`);
+  });
+  await checkAsync("state 프로토콜: env(h0) 불일치는 PREV 후퇴 없이 즉시 예외", async () => {
+    const store = new MemoryStateStore();
+    await state.commitState(provider, store, stateInput(50));
+    await state.commitState(provider, store, stateInput(60));
+    let code = null;
+    try { await state.openState(provider, store, { expectH0: "h0-other" }); } catch (e) { code = e.code; }
+    if (code !== "PYPROC_REPLAY_MISMATCH") throw new Error(`즉시 예외 아님(${code})`);
+  });
+  await checkAsync("state 프로토콜: stale fence 거부 + HEAD 불변", async () => {
+    const store = new MemoryStateStore();
+    const tokenA = await store.claimOwner("tabA");
+    await state.commitState(provider, store, stateInput(70, { fence: tokenA }));
+    const before = (await store.readRef("HEAD")).ref.commit;
+    await store.claimOwner("tabB");
+    let code = null;
+    try { await state.commitState(provider, store, stateInput(80, { fence: tokenA })); } catch (e) { code = e.code; }
+    if (code !== "PYPROC_STATE_FENCE_STALE") throw new Error(`fence 거부 아님(${code})`);
+    if ((await store.readRef("HEAD")).ref.commit !== before) throw new Error("stale fence가 HEAD를 움직임");
+  });
+  await checkAsync("state 서명: signedTag 서명·검증·변조 적발", async () => {
+    const keyPair = await tags.createStateKeyPair(provider);
+    const tag = await tags.signStateTag(provider, keyPair, "sha256:" + "ab".repeat(32));
+    const jwk = await tags.exportStatePublicKey(provider, keyPair.publicKey);
+    const good = await tags.verifyStateTag(provider, tag, tag.target, { trustedPublicKeys: [jwk] });
+    if (!good.valid || !good.trusted) throw new Error("정상 tag 검증 실패");
+    const stranger = await tags.verifyStateTag(provider, tag, tag.target, { trustedPublicKeys: [] });
+    if (!stranger.valid || stranger.trusted) throw new Error("신뢰 목록 밖 키가 trusted로 통과");
+    const forged = { ...tag, target: "sha256:" + "cd".repeat(32) };
+    const bad = await tags.verifyStateTag(provider, forged, forged.target, { trustedPublicKeys: [jwk] });
+    if (bad.valid) throw new Error("target 바꿔치기가 검증을 통과");
+    const wrongTarget = await tags.verifyStateTag(provider, tag, "sha256:" + "ef".repeat(32), { trustedPublicKeys: [jwk] });
+    if (wrongTarget.valid) throw new Error("기대 target 불일치가 통과");
+  });
+}
+
 // 파일/폴더 이름도 camelCase다. 위 검사는 파일 "내용"의 식별자만 봐서 이름 규칙은 기계 검사가
 // 0이었다. mainPlan은 kebab-case 번호 문서라 예외(dartlab 관례), 검증 데이터/픽스처도 제외.
 check("파일과 폴더 이름 camelCase", () => {
@@ -1011,11 +1117,12 @@ console.log("\n[구조]");
 // 모든 edge가 순위를 엄격히 낮추므로 돌아올 길이 없다. 그래서 방향 목록을 열거하지 않는다.
 const LAYER_RANK = new Map([
   ["runtime", 0],       // 엔진 core + 교차 관심사. 다른 레이어를 모르는 바닥
-  ["capabilities", 1],  // (rt, cfg)를 받아 런타임에 얹히는 능력
-  ["composition", 2],   // 조립: core에 능력 registry를 설치하고 public 표면을 낸다
-  ["session", 3],       // 조립된 런타임을 부팅해 머신 하나의 수명주기와 단독 소유권을 만든다
-  ["processOs", 3],     // 워커 = 프로세스, 스냅샷 = 프로세스 이미지
-  ["machine", 4],       // 브라우저를 여러 guest OS가 올라가는 컴퓨터로. pyproc의 최상층
+  ["state", 1],         // 이중 구역 상태 커널의 내구 구역(오브젝트 모델 + ref 프로토콜 + 서명 코어)
+  ["capabilities", 2],  // (rt, cfg)를 받아 런타임에 얹히는 능력
+  ["composition", 3],   // 조립: core에 능력 registry를 설치하고 public 표면을 낸다
+  ["session", 4],       // 조립된 런타임을 부팅해 머신 하나의 수명주기와 단독 소유권을 만든다
+  ["processOs", 4],     // 워커 = 프로세스, 스냅샷 = 프로세스 이미지
+  ["machine", 5],       // 브라우저를 여러 guest OS가 올라가는 컴퓨터로. pyproc의 최상층
 ]);
 check("src 레이어 폴더 고정", () => {
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
@@ -1060,7 +1167,7 @@ check("합성 루트만 core와 능력을 함께 안다", () => {
     if (srcLayerName(rel(f)) === "composition") continue;
     for (const ref of jsModuleRefs(f)) {
       const target = moduleTarget(f, ref.spec);
-      if (target && rel(target) === "src/composition/runtimeApi.js" && LAYER_RANK.get(srcLayerName(rel(f))) < 2) {
+      if (target && rel(target) === "src/composition/runtimeApi.js" && LAYER_RANK.get(srcLayerName(rel(f))) < LAYER_RANK.get("composition")) {
         throw new Error(`${rel(f)}가 합성 루트를 import함(아래층 -> 조립 = 순환)`);
       }
     }

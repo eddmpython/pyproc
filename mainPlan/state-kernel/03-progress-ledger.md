@@ -36,4 +36,13 @@
 - 신설 게이트 `[digest 법]`: raw `subtle.digest("SHA-256")`은 코어 2곳 + pyprocSw(의도 중복)만, `"sha256:"` 주소 조립은 코어 2곳만. **음성 시험 2종으로 이빨 증명**(raw digest 주입 RED, 주소 조립 주입 RED, 원복 후 GREEN).
 - 게이트: npm test 1279 green, test:types green, test:browser 70/70 green(기존 저널 commit/pack/recover·세션 save/load·openMachine 전부 그대로 동작 = 저장 포맷 의미 불변).
 
-NEXT: 2단계 - `src/state/` 오브젝트 모델(blob/tree/commit/signedTag) + fence 선택형 ref CAS 신설. 순수 집합 게이트(전역 접근 0) + 음성 시험(fence·순서·corruption/mismatch 판정) + 레이어 게이트 개정을 같은 커밋에. attempts 시안(stateKernelDraft)을 원형으로 승격 형태를 설계한다.
+## 2026-07-18 - 2단계 완료: src/state/ 커널 신설
+
+- 신설 5파일: [objectModel.js](../../src/state/objectModel.js)(canonical JSON, blob 주소, pageTable|payload 타입 tree, 환경 지문 commit), [refProtocol.js](../../src/state/refProtocol.js)(store 계약 + 쓰기 순서 법 + fence 선택형 ref CAS + 복구 의미론 2축), [signedTag.js](../../src/state/signedTag.js)(ECDSA P-256 서명 코어 한 벌, 4단계에서 두 호출부가 여기 붙는다), [memoryStateStore.js](../../src/state/memoryStateStore.js)(계약 인메모리 구현 + 파손 주입 채널), [opfsStateStore.js](../../src/state/opfsStateStore.js)(OPFS 드라이버, 파일명 hex는 드라이버 세부).
+- 오류 코드 2개 추가(PYPROC_STATE_CORRUPT, PYPROC_STATE_FENCE_STALE) - errors.js 카탈로그 + d.ts union 삼자 일치 유지. env 불일치는 기존 PYPROC_REPLAY_MISMATCH 재사용(같은 의미 축).
+- 레이어 게이트 개정 동일 커밋: LAYER_RANK에 state(1) 삽입, 이하 각 +1, composition 순위 리터럴을 참조로 교체. CLAUDE.md 레이어 문면 갱신.
+- 신설 게이트 `[state 커널]`(매 커밋 Node 실행): 순수 집합(브라우저 전역 0) 4파일 + 프로토콜 음성 시험 6종(정상 왕복·dedupe, 쓰기 순서 크래시 6지점, corruption PREV 후퇴 + 이중 파손 명시 예외, mismatch 즉시 예외, stale fence + HEAD 불변, signedTag 위조 적발).
+- **이빨 증명 3건**: 순수 집합 게이트가 개발 중 주석의 영단어를 물었고, [digest 법] 게이트가 드라이버의 sha256: 슬라이스 중복을 물어 parseSha256Address 경유로 교정시켰고, 커널에 쓰기 순서 위반(HEAD를 PREV 보존 전에 교체)을 고의 주입해 프로토콜 게이트 RED("지점 5: 구 HEAD 오염")를 확인 후 원복했다.
+- 브라우저 게이트에 OPFS 드라이버 절 편입(커밋 왕복 + 변조 blob 적발 + PREV 후퇴): test:browser 72/72 GREEN. npm test 1314, test:types green.
+
+NEXT: 3단계 - 저널 재기초. machineJournal을 커널(refProtocol + OpfsStateStore) 위의 유휴 커밋 정책으로 강등. 구 HEAD.json 저널 recover 호환(포맷 감지 reader) + 힙 바이트 대조 100% + churnProbe 비용 법칙 보존 게이트.
