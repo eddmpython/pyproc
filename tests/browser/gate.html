@@ -11,7 +11,17 @@
      tests/browser/run.mjs가 headless로 띄우고 결과를 POST /gateReport로 회수한다. 사람이 직접 열어도 된다.</p>
   <pre id="out">실행 중...</pre>
   <script type="module">
-    import { boot, bootEnv, Runtime, PyProc, SIGNAL, JobControl, MachineContainer, bootSession, openMachine, runScript, checkEnvironment, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "../../index.js";
+    // 루트 표면은 porcelain 6개(boot/open/createWebComputer/checkEnvironment/PyProcError/
+    // PYPROC_ERROR_CODES)로 개편됐다. 이 게이트는 런타임 계약의 실동작을 검증하므로,
+    // 루트에서 내린 내부 표면은 src 경로로 직접 가져온다(테스트 파일의 심층 import 허용).
+    import { boot, checkEnvironment } from "../../index.js";
+    import { bootEnv, runScript } from "../../src/capabilities/envManager.js";
+    import { Runtime } from "../../src/composition/runtimeApi.js";
+    import { PyProc, SIGNAL } from "../../src/processOs/pyProc.js";
+    import { JobControl } from "../../src/processOs/jobControl.js";
+    import { MachineContainer } from "../../src/processOs/machineContainer.js";
+    import { bootSession, openMachine } from "../../src/session/session.js";
+    import { verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "../../src/runtime/assets.js";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -82,13 +92,25 @@
       catch (e) { badAssetDenied = String(e).includes("assetIntegrity"); }
       check("assetIntegrity: 잘못된 worker SRI가 spawn 전 거부", badAssetDenied);
 
-      // 1) Layer 0: 부팅 + 실행
+      // 1) Layer 0: 부팅 + 실행. 루트 boot는 이제 PyprocMachine 핸들을 돌려주고,
+      //    능력 상세는 runtime 탈출구로 연다(이하 게이트는 그 탈출구 Runtime으로 동작 불변 검증).
       let t = performance.now();
-      const rt = await boot({ indexURL: INDEX, assetIntegrity });
+      const pm = await boot({ indexURL: INDEX, assetIntegrity });
+      const rt = pm.runtime;
       timings.bootMs = Math.round(performance.now() - t);
       check("boot()", true, timings.bootMs + "ms" + (INDEX ? " @" + INDEX : ""));
       check("run: sum(range(100)) === 4950", rt.run("sum(range(100))") === 4950);
       check("Runtime.assetIntegrity 보관", rt.assetIntegrity === assetIntegrity);
+
+      // porcelain 스모크: 핸들이 모델의 어휘(run/history/deterministic)를 실제로 말하는가.
+      check("porcelain: pm.run 실행", pm.run("1 + 1") === 2);
+      pm.run("porcelainX = 1");
+      const porcelainCp = pm.history.checkpoint();
+      pm.run("porcelainX = 999");
+      pm.history.checkpoint(); // 경계 닫기(리액티브 계약)
+      pm.history.restore(porcelainCp);
+      check("porcelain: history.checkpoint/restore 왕복", pm.run("porcelainX") === 1);
+      check("porcelain: 일반 부팅은 deterministic === false", pm.deterministic === false);
 
       // 2) Layer 1: 복원 리액티브의 실행 경계 계약
       const reactive = rt.enableReactive();
@@ -215,7 +237,7 @@
 
       // state-kernel 3단계(저널 재기초) 게이트 3종.
       {
-        const { PAGE_SIZE } = await import("../../index.js");
+        const { PAGE_SIZE } = await import("../../src/state/index.js"); // pyproc/history subpath 실물
         const hexOf = async (bytes) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
         // (1) 동일 상태 재커밋은 wrote 0: 커밋 빈도-쓰기량 법칙(churnProbe)이 커널 경로에서 보존된다.
         try { await jRootDir.removeEntry("pyprocGateJournal3", { recursive: true }); } catch (e) {}
@@ -524,7 +546,8 @@
       // wheel OPFS 캐시: 두 번째 커널이 네트워크 0으로 설치(재다운로드 0)
       const wDir = await (await navigator.storage.getDirectory()).getDirectoryHandle("pyprocGateWheels", { create: true });
       await rt.enableWheelCache({ dir: wDir }).install("six");
-      const rtW = await boot({ indexURL: INDEX });
+      const pmW = await boot({ indexURL: INDEX });
+      const rtW = pmW.runtime;
       const wc2 = rtW.enableWheelCache({ dir: wDir });
       await wc2.install("six");
       // rt에는 micropip이 이미 있어 six만 캐시됨. 새 커널은 micropip.whl을 miss로 받고
@@ -587,7 +610,7 @@
       // state-kernel 4단계(봉투·신뢰 통합) 게이트: bundle 단일 writer + 서명 신뢰 경로 +
       // 변조 거부 + 문서화된 레이아웃 독립 재파싱 + 구 봉투 reader 호환.
       {
-        const { createMachineKeyPair, exportMachinePublicKey } = await import("../../index.js");
+        const { createMachineKeyPair, exportMachinePublicKey } = await import("../../src/session/session.js");
         const keyPair = await createMachineKeyPair();
         const signedImg = await s2.exportImage({ signingKey: keyPair });
         const trusted = await openMachine(signedImg, { trustedPublicKeys: [await exportMachinePublicKey(keyPair)] });

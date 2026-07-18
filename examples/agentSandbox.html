@@ -46,42 +46,40 @@
 
     try {
       let t = performance.now();
-      const rt = await boot({ indexURL: INDEX });
-      const reactive = rt.enableReactive();
-      await rt.loadPackages(["numpy"]);
-      rt.run("import numpy as np");
+      const machine = await boot({ indexURL: INDEX });
+      await machine.runtime.loadPackages(["numpy"]);
+      machine.run("import numpy as np");
       st.textContent = `Ready in ${Math.round(performance.now() - t)}ms`;
 
       // 1) The agent prepares a dataset (packages + data loaded = the expensive part, done once).
-      rt.run("data = np.arange(1, 101)");
-      const baseline = rt.run("int(data.sum())");
+      machine.run("data = np.arange(1, 101)");
+      const baseline = machine.run("int(data.sum())");
       log("1. prepared dataset (1..100):  data.sum() = " + baseline);
 
       // 2) Checkpoint the prepared state. This is the point we can always return to.
-      const sp = reactive.stackSave();
-      const cp0 = reactive.checkpoint();
+      const cp0 = machine.history.checkpoint();
       log("2. checkpoint saved  <- the prepared state, restorable in ~ms");
       log();
 
       // 3) Agent writes buggy code that corrupts the interpreter state.
-      rt.run("data = data * 0   # oops: the agent zeroed the dataset");
-      const broken = rt.run("int(data.sum())");
+      machine.run("data = data * 0   # oops: the agent zeroed the dataset");
+      const broken = machine.run("int(data.sum())");
       log("3. agent attempt #1 (buggy):   data.sum() = " + broken + "   <- state corrupted");
 
       // 4) Restore to the checkpoint. No re-boot, no re-install, no re-run: just write back changed pages.
-      reactive.checkpoint();                    // close the execution boundary (the contract)
+      machine.history.checkpoint();             // close the execution boundary (the contract)
       let tr = performance.now();
-      reactive.restoreLive(cp0.index, sp);
-      const restored = rt.run("int(data.sum())");
+      machine.history.restore(cp0);
+      const restored = machine.run("int(data.sum())");
       log("4. restore to checkpoint:      data.sum() = " + restored + "   <- clean again in " + Math.round(performance.now() - tr) + "ms, no re-run");
       log();
 
       // 5) Branch: run two different approaches from the SAME prepared state, independently.
-      const meanA = rt.run("round(float(data.mean()), 2)");
+      const meanA = machine.run("round(float(data.mean()), 2)");
       log("5. branch A (mean):            data.mean() = " + meanA);
-      reactive.checkpoint();
-      reactive.restoreLive(cp0.index, sp);       // back to the prepared state for branch B
-      const sumB = rt.run("int(data[data > 50].sum())");
+      machine.history.checkpoint();
+      machine.history.restore(cp0);              // back to the prepared state for branch B
+      const sumB = machine.run("int(data[data > 50].sum())");
       log("   branch B (filtered sum):    data[data>50].sum() = " + sumB);
       log();
       log("The prepared state was reused for a failed attempt, a restore, and two branches -");

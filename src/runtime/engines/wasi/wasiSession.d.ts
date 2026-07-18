@@ -1,6 +1,6 @@
 // wasiSession.d.ts - pyproc/wasi subpath의 타입 계약(위치 근거는 gpuCompute.d.ts와 같다).
 
-  import type { PyProcAssetIntegrityManifest } from "../../../../index.js";
+  import type { PyProcAssetIntegrityManifest } from "../../assets.js";
 export interface WasiManifest {
   /**
    * python.wasm URL(소비자 셀프 호스팅). 미지정 시 기본 brettcannon CPython 3.14.6 릴리즈 zip을

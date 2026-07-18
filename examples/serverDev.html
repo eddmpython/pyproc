@@ -63,7 +63,7 @@
   </div>
 
   <script type="module">
-    import { boot, VirtualOrigin } from "../index.js";
+    import { boot } from "../index.js";
 
     const st = document.getElementById("st"), out = document.getElementById("out"), preview = document.getElementById("preview");
     const el = (id) => document.getElementById(id);
@@ -152,18 +152,40 @@
       }
     }
 
-    let rt, asgi, origin, home;
+    let machine, asgi, home;
 
     async function writeApp(version) {
-      rt.setGlobal("appSrc", appSource(version));
-      rt.run("import os\nos.makedirs('/home/web/server', exist_ok=True)\nopen('/home/web/server/app.py', 'w').write(appSrc)");
+      machine.runtime.setGlobal("appSrc", appSource(version));
+      machine.run("import os\nos.makedirs('/home/web/server', exist_ok=True)\nopen('/home/web/server/app.py', 'w').write(appSrc)");
       await home.sync();
     }
 
     async function importApp(reload = false) {
-      rt.run(reload
+      machine.run(reload
         ? "import importlib, app as appModule\nappModule = importlib.reload(appModule)\napp = appModule.app"
         : "import sys\nsys.path.insert(0, '/home/web/server')\nimport app as appModule\napp = appModule.app");
+    }
+
+    // 가상 오리진의 페이지측 배선. serverDevSw.js(번들 pyprocSw.js 자산의 ?asgi= 계약)가
+    // 가로챈 "/pyproc/..." fetch를 pyprocAsgi 메시지로 위임하면, 이 문서가 공개 asgi.serve
+    // 계약으로 응답한다. hello(pyprocKernelHello)로 자신을 커널 클라이언트로 등록해야
+    // 서빙된 iframe이 낸 fetch도 이 커널로 라우팅된다(SW 재시작 = 등록 증발이라 재전송).
+    function bindKernelOrigin() {
+      navigator.serviceWorker.addEventListener("message", async (e) => {
+        const req = e.data && e.data.pyprocAsgi;
+        if (!req) return;
+        try {
+          const r = await asgi.serve(req.method, req.path, req.body, req.query, req.headers);
+          e.ports[0].postMessage({ status: r.status, headers: r.headers, body: r.bodyBytes });
+        } catch (err) {
+          e.ports[0].postMessage({ error: String(err).slice(-300) });
+        }
+      });
+      const hello = () => {
+        if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ pyprocKernelHello: true });
+      };
+      hello();
+      navigator.serviceWorker.addEventListener("controllerchange", hello);
     }
 
     async function registerVirtualOrigin() {
@@ -172,7 +194,7 @@
       if (!navigator.serviceWorker.controller) {
         await new Promise((res) => navigator.serviceWorker.addEventListener("controllerchange", res, { once: true }));
       }
-      origin = new VirtualOrigin(asgi).bind();
+      bindKernelOrigin();
       return reg;
     }
 
@@ -205,21 +227,21 @@
       const homeDir = await root.getDirectoryHandle(gateMode ? "pyprocServerDevGateHome" : "pyprocServerDevHome", { create: true });
       if (gateMode) await clearDirectory(homeDir);
       let t = performance.now();
-      rt = await boot({ indexURL: INDEX });
-      home = await rt.mountHome(homeDir);
+      machine = await boot({ indexURL: INDEX });
+      home = await machine.runtime.mountHome(homeDir);
       const bootMs = Math.round(performance.now() - t);
       el("bootMs").textContent = `${bootMs}ms`;
       log(`boot: ${bootMs}ms`);
 
       t = performance.now();
-      await rt.install("fastapi");
+      await machine.runtime.install("fastapi");
       const installMs = Math.round(performance.now() - t);
       el("installMs").textContent = `${installMs}ms`;
       log(`fastapi install: ${installMs}ms`);
 
       await writeApp("v1");
       await importApp(false);
-      asgi = rt.enableAsgiServer();
+      asgi = machine.runtime.enableAsgiServer();
       await asgi.install();
       await registerVirtualOrigin();
 

@@ -21,16 +21,13 @@
       "types": "./index.d.ts",
       "default": "./index.js"
     },
-    "./assets": "./src/runtime/assets.js",
-    "./runtime": "./src/composition/runtimeApi.js",
-    "./reactive": "./src/capabilities/reactive.js",
-    "./syscall-bridge": "./src/capabilities/syscallBridge.js",
-    "./process-os": "./src/processOs/pyProc.js",
+    "./history": "./src/state/index.js",
+    "./machine": "./src/machine/index.js",
     "./worker": "./src/processOs/worker.js",
+    "./assets": "./src/runtime/assets.js",
     "./gpu": "./src/capabilities/gpuCompute.js",
     "./socket": "./src/capabilities/socketBridge.js",
-    "./wasi": "./src/runtime/engines/wasi/wasiSession.js",
-    "./machine": "./src/machine/index.js"
+    "./wasi": "./src/runtime/engines/wasi/wasiSession.js"
   },
   "files": [
     "index.js",

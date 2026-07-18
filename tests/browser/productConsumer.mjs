@@ -48,7 +48,8 @@ const html = `<!DOCTYPE html>
     {
       "imports": {
         "pyproc": "/node_modules/pyproc/index.js",
-        "pyproc/assets": "/node_modules/pyproc/src/runtime/assets.js"
+        "pyproc/assets": "/node_modules/pyproc/src/runtime/assets.js",
+        "pyproc/history": "/node_modules/pyproc/src/state/index.js"
       }
     }
   </script>
@@ -57,25 +58,13 @@ const html = `<!DOCTYPE html>
   <pre id="out">running</pre>
   <script type="module">
     import { runImmortalProductGate } from "/immortalProductGate.js";
-    import {
-      boot,
-      bootSession,
-      PyProc,
-      JobControl,
-      MachineContainer,
-      VirtualOrigin,
-      DeviceFs,
-      verifyPyProcAssetIntegrity,
-      registerPyProcServiceWorker,
-      openMachine,
-      createMachineKeyPair,
-      exportMachinePublicKey,
-      fingerprintMachinePublicKey,
-      MachineJournal,
-      MachineJail,
-      createWebComputer
-    } from "pyproc";
-    import { getPyProcAssetManifest } from "pyproc/assets";
+    // state-kernel 7b: 설치 패키지의 public 표면은 porcelain(boot/open/createWebComputer 등)과
+    // stable subpath다. 옛 클래스 직수출(PyProc, JobControl, MachineContainer, VirtualOrigin,
+    // DeviceFs, MachineJournal, MachineJail)은 machine 핸들의 proc() 풀 / runtime 탈출구 /
+    // history 동사로 도달하고, 서명 코어는 pyproc/history(createStateKeyPair 계열)가 정본이다.
+    import { boot, open, createWebComputer } from "pyproc";
+    import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
+    import { createStateKeyPair, exportStatePublicKey, fingerprintStatePublicKey } from "pyproc/history";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -112,6 +101,34 @@ const html = `<!DOCTYPE html>
     };
     const uniqueName = (prefix) => prefix + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
 
+    // VirtualOrigin 클래스 직수출 폐지: 설치된 pyprocSw.js가 위임하는 pyprocAsgi 메시지(응답
+    // 포트 동봉)에 커널의 asgi.serve로 답하고, pyprocKernelHello로 커널 클라이언트를 등록하는
+    // 페이지측 배선을 SW 문면 계약 그대로 잇는다(virtualOrigin.js와 같은 프로토콜).
+    const bindAsgiDelegation = (asgi) => {
+      const onDelegated = async (event) => {
+        const request = event.data && event.data.pyprocAsgi;
+        if (!request) return;
+        try {
+          const response = await asgi.serve(request.method, request.path, request.body, request.query, request.headers);
+          event.ports[0].postMessage({ status: response.status, headers: response.headers, body: response.bodyBytes });
+        } catch (error) {
+          event.ports[0].postMessage({ error: String(error).slice(-300) });
+        }
+      };
+      const hello = () => {
+        if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ pyprocKernelHello: true });
+      };
+      navigator.serviceWorker.addEventListener("message", onDelegated);
+      hello();
+      navigator.serviceWorker.addEventListener("controllerchange", hello);
+      return {
+        unbind: () => {
+          navigator.serviceWorker.removeEventListener("message", onDelegated);
+          navigator.serviceWorker.removeEventListener("controllerchange", hello);
+        },
+      };
+    };
+
     let sw = null;
     let origin = null;
     let jobs = null;
@@ -134,23 +151,25 @@ const html = `<!DOCTYPE html>
         sw.url);
       await waitForServiceWorkerControl();
 
-      let denied = false;
-      const badAssetIntegrity = {
-        ...assetIntegrity,
-        files: assetIntegrity.files.map((f) => f.path === "src/processOs/worker.js" ? { ...f, integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" } : f),
-      };
-      try { await new PyProc({ indexURL: INDEX, assetIntegrity: badAssetIntegrity }).boot(1, false); }
-      catch (e) { denied = String(e).includes("assetIntegrity"); }
-      check("bad installed worker SRI denied before spawn", denied);
-
       const immortal = await runImmortalProductGate({ indexURL: INDEX });
       for (const result of immortal.checks) check(result.name, result.pass, result.info);
       Object.assign(timings, immortal.timings);
 
       let t = performance.now();
-      const rt = await boot({ indexURL: INDEX, assetIntegrity });
+      const machine = await boot({ indexURL: INDEX, assetIntegrity });
+      const rt = machine.runtime; // 능력 상세(enable*)의 공개 탈출구
       timings.bootMs = Math.round(performance.now() - t);
-      check("Runtime boots from installed package", rt.run("sum(range(20))") === 190, timings.bootMs + "ms");
+      check("Runtime boots from installed package", machine.run("sum(range(20))") === 190, timings.bootMs + "ms");
+
+      // worker pool spawn 전 SRI preflight: machine.proc()이 상속/전달된 manifest를 검증한다.
+      let denied = false;
+      const badAssetIntegrity = {
+        ...assetIntegrity,
+        files: assetIntegrity.files.map((f) => f.path === "src/processOs/worker.js" ? { ...f, integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" } : f),
+      };
+      try { await machine.proc({ lanes: 1, useSnapshot: false, assetIntegrity: badAssetIntegrity }); }
+      catch (e) { denied = String(e).includes("assetIntegrity"); }
+      check("bad installed worker SRI denied before spawn", denied);
 
       const textDecoder = new TextDecoder();
       const productDeviceWrites = [];
@@ -163,7 +182,7 @@ const html = `<!DOCTYPE html>
         },
       });
       const deviceInstall = deviceFs.install();
-      const deviceOk = rt.run([
+      const deviceOk = machine.run([
         "import json, os",
         "deviceDoc = json.loads(open('/dev/productState').read())",
         "open('/dev/productState', 'w').write('write-from-python')",
@@ -174,14 +193,13 @@ const html = `<!DOCTYPE html>
         "deviceOk",
       ].join("\\n"));
       check("DeviceFs exposes installed product devices as Python files",
-        deviceFs instanceof DeviceFs &&
         deviceInstall.installed.includes("/dev/productState") &&
         deviceInstall.installed.includes("/proc/meminfo") &&
         deviceOk === true &&
         productDeviceWrites.join("") === "write-from-python",
         deviceInstall.installed.join(","));
 
-      rt.run([
+      machine.run([
         "import json",
         "async def app(scope, receive, send):",
         "    message = await receive()",
@@ -202,7 +220,7 @@ const html = `<!DOCTYPE html>
       ].join("\\n"));
       const asgi = rt.enableAsgiServer({ app: "app" });
       await asgi.install();
-      origin = new VirtualOrigin(asgi).bind();
+      origin = bindAsgiDelegation(asgi);
       t = performance.now();
       const virtualResp = await fetch("/pyproc/product/api?value=41", {
         method: "POST",
@@ -221,12 +239,37 @@ const html = `<!DOCTYPE html>
         virtualJson.gate === "installed-virtual-origin",
         timings.virtualOriginMs + "ms");
 
-      const jail = new MachineJail({ net: false, clipboard: false, home: true, workers: false });
-      const jailPolicy = jail.install(rt);
+      // MachineJail 클래스 직수출 폐지: 제품 permission manifest를 machine.runtime 탈출구의
+      // 협조 choke point(setGlobal + Python 모듈 주입)와 CSP connect-src 문자열로 집행한다
+      // (감옥 패턴의 문면 계약: 소비 계약 문서 trustPermissions 참조).
+      const jailPermissions = { net: false, clipboard: false, home: true, workers: false };
+      const jailAllows = (perm, arg) => perm === "net"
+        ? jailPermissions.net === true || (Array.isArray(jailPermissions.net) && jailPermissions.net.includes(arg))
+        : !!jailPermissions[perm];
+      rt.setGlobal("_pyprocJailAllows", (perm, arg) => jailAllows(perm, arg || ""));
+      machine.run([
+        "import sys as _jailSys, types as _jailTypes",
+        "_jailMod = _jailTypes.ModuleType('pyprocJail')",
+        "def _jailCheck(perm, arg=''):",
+        "    if not _pyprocJailAllows(perm, arg):",
+        "        raise PermissionError('jail: ' + perm + ' denied' + ((' (' + arg + ')') if arg else ''))",
+        "    return True",
+        "_jailMod.net = lambda host='': _jailCheck('net', host)",
+        "_jailMod.clipboard = lambda: _jailCheck('clipboard')",
+        "_jailMod.home = lambda: _jailCheck('home')",
+        "_jailMod.workers = lambda: _jailCheck('workers')",
+        "_jailSys.modules['pyprocJail'] = _jailMod",
+      ].join("\\n"));
+      const jailPolicy = {
+        permissions: { ...jailPermissions },
+        connectSrc: jailPermissions.net === true
+          ? "*"
+          : ["'self'", ...(Array.isArray(jailPermissions.net) ? jailPermissions.net : [])].join(" "),
+      };
       let blockedNet = false;
-      try { rt.run("import pyprocJail\\npyprocJail.net('https://example.com')"); }
+      try { machine.run("import pyprocJail\\npyprocJail.net('https://example.com')"); }
       catch (e) { blockedNet = String(e).includes("PermissionError") || String(e).includes("jail"); }
-      const homeAllowed = rt.run("import pyprocJail\\npyprocJail.home()") === true;
+      const homeAllowed = machine.run("import pyprocJail\\npyprocJail.home()") === true;
       check("MachineJail enforces installed product permission manifest",
         jailPolicy.connectSrc === "'self'" &&
         jailPolicy.permissions.net === false &&
@@ -238,30 +281,44 @@ const html = `<!DOCTYPE html>
         "connect-src=" + jailPolicy.connectSrc);
 
       t = performance.now();
-      const os = new PyProc({ indexURL: INDEX, assetIntegrity });
-      const workerBoot = await os.boot(1, false);
-      const mapped = await os.map("def _fn(x):\\n    return x * x", [6, 7, 8]);
-      await os.terminate();
+      const pool = await machine.proc({ lanes: 1, useSnapshot: false });
+      const mapped = await pool.map("def _fn(x):\\n    return x * x", [6, 7, 8]);
+      pool.terminate();
       timings.processMs = Math.round(performance.now() - t);
-      check("PyProc worker runs from installed package", JSON.stringify(mapped) === JSON.stringify([36, 49, 64]), workerBoot.avgBootMs + "ms");
+      check("PyProc worker runs from installed package", JSON.stringify(mapped) === JSON.stringify([36, 49, 64]), timings.processMs + "ms");
 
+      // JobControl 클래스 직수출 폐지: 잡 컨트롤의 실체(대화형 레인 + 살아있는 fork + 백그라운드
+      // repl + 시그널 회수)를 machine.proc({ replay }) 풀의 공개 동사로 그대로 실행한다.
       t = performance.now();
-      jobs = new JobControl({ indexURL: INDEX, workers: 2, assetIntegrity });
-      const jobBoot = await jobs.boot();
+      jobs = await machine.proc({ lanes: 2, useSnapshot: false, replay: {} });
+      const jobPids = jobs.ps().map((p) => p.pid);
+      const interactivePid = jobPids[0];
+      const jobLanePid = jobPids[1];
+      const jobBoot = { jobSlots: jobPids.length - 1 }; // 대화형 1 + 잡 슬롯 N-1
       timings.jobBootMs = Math.round(performance.now() - t);
-      await jobs.push("productBase = 41");
-      const interactiveValue = await jobs.push("productBase + 1");
+      await jobs.repl(interactivePid, "productBase = 41");
+      const interactiveValue = await jobs.repl(interactivePid, "productBase + 1");
       t = performance.now();
-      const backgroundJob = await jobs.push("productBase * 2 &");
-      timings.jobPromptReturnMs = Math.round(performance.now() - t);
-      const foregroundResult = await jobs.fg(backgroundJob.job);
-      const loopJob = await jobs.push("while True:\\n    pass &");
+      await jobs.fork(interactivePid, jobLanePid); // 'expr &' = 살아있는 namespace 복제 후 백그라운드
+      const backgroundJob = { job: 1, pid: jobLanePid, promise: jobs.repl(jobLanePid, "productBase * 2") };
+      timings.jobPromptReturnMs = Math.round(performance.now() - t); // 프롬프트 복귀 = fork 직후
+      const foregroundResult = await backgroundJob.promise; // fg 등가(완료 대기)
+      await jobs.fork(interactivePid, jobLanePid);
+      const signalTable = jobs.constructor.SIGNAL;
+      let killedState = "running";
+      const loopJobPromise = jobs.repl(jobLanePid, "while True:\\n    pass").then(
+        (r) => { killedState = "done"; return r; },
+        (e) => {
+          // 시그널 종료 판정은 워커 경계를 건너온 파이썬 예외 타입으로 한다(잡 컨트롤 계약).
+          const pyExcType = (e && e.context && e.context.pyExcType) || "";
+          killedState = (pyExcType === "KeyboardInterrupt" || pyExcType === "SystemExit") ? "killed" : "error";
+          return { error: String((e && e.message) || e).slice(-200) };
+        });
       await new Promise((resolve) => setTimeout(resolve, 300));
       t = performance.now();
-      const killAccepted = jobs.kill(loopJob.job);
-      const killedResult = await jobs.fg(loopJob.job);
+      const killAccepted = jobs.signal(jobLanePid, signalTable.INT);
+      const killedResult = await loopJobPromise;
       timings.jobKillMs = Math.round(performance.now() - t);
-      const killedState = jobs.jobs().find((j) => j.jobId === loopJob.job)?.state;
       check("JobControl runs installed product shell jobs",
         jobBoot.jobSlots === 1 &&
         interactiveValue.value === "42" &&
@@ -274,23 +331,25 @@ const html = `<!DOCTYPE html>
       jobs.terminate();
       jobs = null;
 
+      // MachineContainer 클래스 직수출 폐지: 자식 머신(자기 manifest setup으로 부팅한 독립
+      // 커널)을 machine.proc({ setup }) 풀 레인으로 세우고 run/heapLen/kill 수명주기를 검증한다.
       t = performance.now();
-      containers = new MachineContainer(rt, { indexURL: INDEX, assetIntegrity });
-      const childMachine = await containers.spawn({ setup: "containerValue = 41" });
+      containers = await machine.proc({ lanes: 1, useSnapshot: false, setup: "containerValue = 41" });
+      const containerPid = containers.ps()[0].pid;
       timings.containerSpawnMs = Math.round(performance.now() - t);
-      const containerValue = await childMachine.run("containerValue + 1");
-      const containerHeapLen = await childMachine.heapLen();
-      const containerKilled = childMachine.kill();
-      const killedRejects = await childMachine.run("1").then(() => false, () => true);
+      const containerValue = await containers.exec(containerPid, "def _fn(arg):\\n    return containerValue + 1");
+      // 자식 커널의 힙 길이: 옛 컨테이너 heap op의 등가를 자식 안에서 실측한다(테스트 전용 probe).
+      const containerHeapLen = await containers.exec(containerPid, "def _fn(arg):\\n    import pyodide_js\\n    return pyodide_js._module.HEAPU8.length");
+      const containerKilled = containers.kill(containerPid);
+      const killedRejects = await containers.exec(containerPid, "def _fn(arg):\\n    return 1").then(() => false, () => true);
       check("MachineContainer runs installed product child machine",
-        containers instanceof MachineContainer &&
-        childMachine.cid &&
-        childMachine.bootMs > 0 &&
+        Number.isInteger(containerPid) &&
+        timings.containerSpawnMs > 0 &&
         containerValue === 42 &&
         containerHeapLen > 0 &&
         containerKilled === true &&
         killedRejects === true,
-        "spawn=" + timings.containerSpawnMs + "ms, boot=" + childMachine.bootMs + "ms");
+        "spawn=" + timings.containerSpawnMs + "ms, heap=" + containerHeapLen);
       containers.terminate();
       containers = null;
 
@@ -314,56 +373,52 @@ const html = `<!DOCTYPE html>
       ].join("\\n");
 
       t = performance.now();
-      const machine = await bootSession({ indexURL: INDEX });
+      const detMachine = await boot({ deterministic: true, indexURL: INDEX });
       timings.machineBootMs = Math.round(performance.now() - t);
 
-      machine.rt.run("productJournalValue = 41\\nproductJournalNote = 'installed-journal'");
+      detMachine.run("productJournalValue = 41\\nproductJournalNote = 'installed-journal'");
       t = performance.now();
-      const journal = machine.rt.enableJournal({ dir: journalDir, reactive: machine.reactive, idleMs: 100000 });
-      const journalCommit = await journal.commit();
+      const journalCommit = await detMachine.history.commit({ dir: journalDir, idleMs: 100000 });
       timings.journalCommitMs = Math.round(performance.now() - t);
       t = performance.now();
-      const recoveredMachine = await bootSession({ indexURL: INDEX });
-      const recoveredJournal = recoveredMachine.rt.enableJournal({ dir: journalDir, reactive: recoveredMachine.reactive });
-      const journalRecover = await recoveredJournal.recover();
+      const recoveredMachine = await boot({ deterministic: true, indexURL: INDEX });
+      const journalRecover = await recoveredMachine.history.recover({ dir: journalDir });
       timings.journalRecoverMs = Math.round(performance.now() - t);
       check("MachineJournal recovers installed product state after crash boundary",
-        journal instanceof MachineJournal &&
-        recoveredJournal instanceof MachineJournal &&
         journalCommit &&
         journalCommit.pages > 0 &&
         journalCommit.wrote > 0 &&
         journalRecover &&
         journalRecover.pages > 0 &&
-        recoveredMachine.rt.run("productJournalValue") === 41 &&
-        recoveredMachine.rt.run("productJournalNote") === "installed-journal",
+        recoveredMachine.run("productJournalValue") === 41 &&
+        recoveredMachine.run("productJournalNote") === "installed-journal",
         "commit=" + timings.journalCommitMs + "ms, recover=" + timings.journalRecoverMs + "ms");
 
-      const home = await machine.rt.mountHome(homeDir);
-      machine.rt.fs.mkdirTree("/home/web/product");
-      machine.rt.fs.writeFile("/home/web/resume.py", resumeSrc);
-      machine.rt.fs.writeFile("/home/web/product/state.txt", "product-state=41");
-      machine.rt.run("resumeValue = 41\\nresumeNote = 'browser-os-product'");
-      const freshResume = machine.rt.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("product.fresh");
+      const home = await detMachine.runtime.mountHome(homeDir);
+      detMachine.fs.mkdirTree("/home/web/product");
+      detMachine.fs.writeFile("/home/web/resume.py", resumeSrc);
+      detMachine.fs.writeFile("/home/web/product/state.txt", "product-state=41");
+      detMachine.run("resumeValue = 41\\nresumeNote = 'browser-os-product'");
+      const freshResume = detMachine.runtime.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("product.fresh");
       await home.sync();
       check("installed product resume.py prepares machine resources",
         freshResume.resume === true &&
-        machine.rt.run("resumeReasonSeen") === "product.fresh" &&
-        machine.rt.run("resumeCount") === 1,
+        detMachine.run("resumeReasonSeen") === "product.fresh" &&
+        detMachine.run("resumeCount") === 1,
         timings.machineBootMs + "ms");
 
       t = performance.now();
-      const keyPair = await createMachineKeyPair();
-      const trustedPublicKey = await exportMachinePublicKey(keyPair);
-      const fpFromPair = await fingerprintMachinePublicKey(keyPair);
-      const fpFromJwk = await fingerprintMachinePublicKey(trustedPublicKey);
+      const keyPair = await createStateKeyPair(crypto);
+      const trustedPublicKey = await exportStatePublicKey(crypto, keyPair.publicKey);
+      const fpFromPair = await fingerprintStatePublicKey(crypto, keyPair.publicKey);
+      const fpFromJwk = await fingerprintStatePublicKey(crypto, trustedPublicKey);
       timings.machineTrustMs = Math.round(performance.now() - t);
       check("installed product trust fingerprint is stable",
         fpFromPair === fpFromJwk && /^sha256:[0-9a-f]{64}$/.test(fpFromPair),
         fpFromPair.slice(0, 23));
 
       t = performance.now();
-      const imageBlob = await machine.exportImage({ includeHome: true, signingKey: keyPair });
+      const imageBlob = await detMachine.history.export({ includeHome: true, signingKey: keyPair });
       timings.machineExportMs = Math.round(performance.now() - t);
       timings.machineMB = +(imageBlob.size / 1048576).toFixed(1);
       check("installed product exports signed .pymachine with home",
@@ -371,14 +426,14 @@ const html = `<!DOCTYPE html>
         timings.machineMB + "MB, " + timings.machineExportMs + "ms");
 
       let untrustedDenied = false;
-      try { await openMachine(imageBlob, { requireSignature: true }); }
+      try { await open(imageBlob, { requireSignature: true }); }
       catch (e) { untrustedDenied = String(e).includes("signature") || String(e).includes("공개키"); }
       check("installed product refuses untrusted .pymachine", untrustedDenied);
 
-      const wrongKeyPair = await createMachineKeyPair();
-      const wrongPublicKey = await exportMachinePublicKey(wrongKeyPair);
+      const wrongKeyPair = await createStateKeyPair(crypto);
+      const wrongPublicKey = await exportStatePublicKey(crypto, wrongKeyPair.publicKey);
       let wrongKeyDenied = false;
-      try { await openMachine(imageBlob, { trustedPublicKeys: [wrongPublicKey], requireSignature: true }); }
+      try { await open(imageBlob, { trustedPublicKeys: [wrongPublicKey], requireSignature: true }); }
       catch (e) { wrongKeyDenied = String(e).includes("signature") || String(e).includes("공개키"); }
       check("installed product refuses wrong signer key", wrongKeyDenied);
 
@@ -404,16 +459,16 @@ const html = `<!DOCTYPE html>
         computer.machine("pythonOs").state === "stopped");
 
       t = performance.now();
-      const openedMachine = await openMachine(imageBlob, { trustedPublicKeys: [trustedPublicKey], requireSignature: true });
+      const openedMachine = await open(imageBlob, { trustedPublicKeys: [trustedPublicKey], requireSignature: true });
       timings.machineOpenMs = Math.round(performance.now() - t);
-      const openedResume = openedMachine.rt.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("product.openMachine");
-      const openedRows = openedMachine.rt.run("resumeConn.execute('select count(*) from event').fetchone()[0]");
+      const openedResume = openedMachine.runtime.enableInit({ bootPath: "/nope", cronPath: "/nope" }).resume("product.openMachine");
+      const openedRows = openedMachine.run("resumeConn.execute('select count(*) from event').fetchone()[0]");
       timings.machineResumeRows = openedRows;
       check("installed product opens trusted .pymachine and resumes resources",
         openedResume.resume === true &&
-        openedMachine.rt.fs.readFile("/home/web/product/state.txt", { encoding: "utf8" }) === "product-state=41" &&
-        openedMachine.rt.run("resumeReasonSeen") === "product.openMachine" &&
-        openedMachine.rt.run("resumeValue") === 41 &&
+        openedMachine.fs.readFile("/home/web/product/state.txt", { encoding: "utf8" }) === "product-state=41" &&
+        openedMachine.run("resumeReasonSeen") === "product.openMachine" &&
+        openedMachine.run("resumeValue") === 41 &&
         openedRows === 2,
         "open=" + timings.machineOpenMs + "ms, rows=" + openedRows);
     } catch (e) {

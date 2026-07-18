@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { getPyProcAssetManifest } from "../index.js";
+import { getPyProcAssetManifest } from "../src/runtime/assets.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_BASE_URL = "/vendor/pyproc/";

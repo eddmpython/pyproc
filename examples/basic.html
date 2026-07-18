@@ -46,18 +46,18 @@
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: out.textContent.slice(-180) }] }) }).catch(() => {}); };
     try {
       let t = performance.now();
-      const rt = await boot({ indexURL: INDEX });
+      const machine = await boot({ indexURL: INDEX });
       st.textContent = `Ready in ${Math.round(performance.now() - t)}ms`;
       log(">>> sum(range(100))");
-      const s = rt.run("sum(range(100))");
+      const s = machine.run("sum(range(100))");
       log(String(s));
       log("");
       log("# pip-grade packages work too:");
       t = performance.now();
-      await rt.loadPackages(["numpy"]);
+      await machine.runtime.loadPackages(["numpy"]);
       log(`# numpy loaded in ${Math.round(performance.now() - t)}ms`);
       log(">>> import numpy as np; int(np.arange(10).sum())");
-      const n = rt.run("import numpy as np; int(np.arange(10).sum())");
+      const n = machine.run("import numpy as np; int(np.arange(10).sum())");
       log(String(n));
       gateReport(s === 4950 && n === 45);
     } catch (e) {

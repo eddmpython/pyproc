@@ -79,7 +79,7 @@
       </a>
       <a class="card" href="examples/speedLab.html">
         <h3>Speed Lab</h3>
-        <p>Run NumPy matrix multiply once on one Python worker, then shard the same job across 4 workers through the public PyProc API. Measure it on your own machine; single-kernel BLAS is a separate axis.</p>
+        <p>Run NumPy matrix multiply once on one Python worker, then shard the same job across 4 workers through the public machine.proc() pool. Measure it on your own machine; single-kernel BLAS is a separate axis.</p>
       </a>
       <a class="card" href="examples/terminal.html">
         <h3>Terminal</h3>
@@ -100,7 +100,7 @@
       <div class="card"><h3>Processes and fork</h3><p>Web Worker = process. Boot once, snapshot the heap, fork N interpreters: N GILs, N cores, kill/interrupt/respawn lifecycle.</p></div>
       <div class="card"><h3>Checkpoint and time-travel</h3><p>Full-hash heap checkpoints at execution boundaries. Restore writes only the changed pages instead of re-running, guarded against silent corruption by a mutation counter.</p></div>
       <div class="card"><h3>Portable machine images</h3><p>The whole running computer in one .pymachine file: SHA-256 integrity, explicit trust gate, and a determinism check before any delta is applied.</p></div>
-      <div class="card"><h3>uv-grade environments</h3><p>bootEnv restores a bare-heap snapshot and installs wheels from an OPFS cache. runScript runs PEP 723 self-sufficient scripts. freeze() pins it all.</p></div>
+      <div class="card"><h3>uv-grade environments</h3><p>boot({ deterministic: true }) replays a declared environment: bare-heap snapshot restore, wheels served from an OPFS cache, and freeze() pins the lockfile.</p></div>
       <div class="card"><h3>A server on a real URL</h3><p>The bundled service worker maps fetch("/pyproc/...") to your in-kernel FastAPI app: real URLs, zero sockets, no backend.</p></div>
       <div class="card"><h3>Persistent disk and offline</h3><p>/home/web is a real OPFS-backed disk that survives kernels. Core assets cache so the second boot needs no network at all.</p></div>
     </div>
@@ -110,7 +110,7 @@
       <div class="card"><h3>dartlab</h3><p>Financial-disclosure notebooks over DART and SEC filings. pyproc's in-kernel ASGI server is the live browser-as-server backend: a Python FastAPI app answers <code>fetch("/pyapi/...")</code> with no socket, in production today.</p></div>
       <div class="card"><h3>xlpod</h3><p>A browser spreadsheet that runs real Python inside cell formulas (<code>=PYUDF(...)</code>). Adopting pyproc's Runtime for the interpreter, interrupt-driven cancellation of runaway UDFs, and the value bridge.</p></div>
     </div>
-    <p class="dim" style="margin:.2rem 0 0">A worker that already booted its own Pyodide adopts pyproc with <code>new Runtime(py)</code>: no second interpreter, all the capabilities.</p>
+    <p class="dim" style="margin:.2rem 0 0">Capability detail (ASGI server, syscall bridge, interrupts, journal) stays one hop away: <code>machine.runtime</code> is the documented escape hatch on every machine handle.</p>
 
     <h2 id="build">Build with pyproc as a library</h2>
     <p class="dim" style="margin:.2rem 0 0">Product code should consume root exports, stable subpaths, and documented execution assets, never engine internals. These are the decision surfaces before wiring pyproc into a product.</p>
@@ -136,12 +136,12 @@
     <h2 id="install">Install</h2>
     <div class="panel">
       <div class="term">npm install pyproc</div>
-      <div class="term" style="margin-top:.6rem"><span class="dim">// boot, compute in parallel, keep the state</span>
-import { boot, PyProc, bootSession } from "pyproc";
+      <div class="term" style="margin-top:.6rem"><span class="dim">// boot a machine, compute in parallel, keep the state</span>
+import { boot } from "pyproc";
 
-const os = new PyProc();
-await os.boot(4);                              <span class="dim">// fork 4 interpreters from one snapshot</span>
-await os.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</div>
+const machine = await boot();                  <span class="dim">// real CPython in this tab</span>
+const pool = await machine.proc({ lanes: 4 }); <span class="dim">// fork 4 interpreters from one snapshot</span>
+await pool.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</div>
       <p class="dim" style="margin:.7rem 0 0">Pin an exact npm version for product use. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md">consumer contract</a>.</p>
     </div>
 

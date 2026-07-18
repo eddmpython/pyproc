@@ -42,15 +42,15 @@ milliseconds when it fails:
 ```js
 import { boot } from "pyproc";
 
-const rt = await boot();
-await rt.loadPackages(["numpy"]);            // prepare once (packages, data)
-const cp = rt.enableReactive().checkpoint(); // save the prepared state
+const machine = await boot();
+await machine.runtime.loadPackages(["numpy"]); // prepare once (packages, data)
+const cp = machine.history.checkpoint();       // save the prepared state
 
 try {
-  rt.run(codeFromTheAgent);                  // attempt N
+  machine.run(codeFromTheAgent);               // attempt N
 } catch (err) {
-  cp.restore();                              // prepared state is back - no re-boot, no re-install
-  rt.run(fixedCode);                         // attempt N+1 from clean
+  machine.history.restore(cp);                 // prepared state is back - no re-boot, no re-install
+  machine.run(fixedCode);                      // attempt N+1 from clean
 }
 ```
 
@@ -89,17 +89,17 @@ npm install pyproc
 ```js
 import { boot } from "pyproc";
 
-const rt = await boot();
-await rt.loadPackages(["numpy"]);
-console.log(rt.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
+const machine = await boot();
+await machine.runtime.loadPackages(["numpy"]);
+console.log(machine.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
 ```
 
 Open one persistent machine from any number of same-origin tabs:
 
 ```js
-import { openPersistentMachine } from "pyproc";
+import { open } from "pyproc";
 
-const machine = await openPersistentMachine({ name: "workspace" });
+const machine = await open({ persistent: { name: "workspace" } });
 await machine.run("counter = globals().get('counter', 40) + 1");
 await machine.commit();
 console.log(await machine.run("counter")); // 41, including after leader takeover
@@ -107,21 +107,20 @@ console.log(await machine.run("counter")); // 41, including after leader takeove
 
 Try the full lifecycle in the [Immortal Python Machine demo](examples/immortal.html): shared state, leader identity, durable epoch, forced takeover, and local recovery with no backend.
 
-Checkpoint and restore. Reactivity is opt-in via `enableReactive`; the closing `checkpoint()` marks the execution boundary that makes the restore sound:
+Checkpoint and restore. The handle's `history` speaks both zones: the closing `checkpoint()` marks the execution boundary that makes the restore sound:
 
 ```js
-const reactive = rt.enableReactive();
-rt.run("values = [10, 20, 30]");
-const cp = reactive.checkpoint();             // save this state
-rt.run("values.append(999)");
-reactive.checkpoint();                        // close the execution boundary -> instant restore path
-cp.restore();                                 // back to the checkpoint - writes only changed pages
-console.log(rt.run("len(values)"));           // 3
+machine.run("values = [10, 20, 30]");
+const cp = machine.history.checkpoint();      // save this state
+machine.run("values.append(999)");
+machine.history.checkpoint();                 // close the execution boundary -> instant restore path
+machine.history.restore(cp);                  // back to the checkpoint - writes only changed pages
+console.log(machine.run("len(values)"));      // 3
 ```
 
 If the boundary was not closed (an exception mid-run, a stray mutation), `cp.restore()` detects
 it and falls back to a full rehash automatically - slower, never silently corrupt. After calling
-Python through a live proxy handle, report it with `reactive.markDirty()`.
+Python through a live proxy handle, report it with `machine.runtime.enableReactive().markDirty()`.
 
 > The basics above need only a Chromium browser. `PyProc` (process OS) and sockets also need `crossOriginIsolated` (`COOP: same-origin`, `COEP: require-corp`) and same-origin workers - see [Setup](#setup). Run `checkEnvironment()` to check.
 
@@ -131,16 +130,18 @@ One question at a time, one obvious door:
 
 | You need | Entry point | You get |
 |---|---|---|
-| Run Python in this tab, no revival | `boot()` | `Runtime` (run/install/fs) |
-| Adopt a Pyodide you already booted | `new Runtime(py)` | same `Runtime`, no second interpreter |
-| A state that saves and revives | `bootSession(manifest)` | `Session` (save/load/exportImage) |
-| Open a portable machine file | `openMachine(blob, { trustedPublicKeys })` | `Session`, after integrity + trust checks |
-| One living machine across tabs | `openPersistentMachine({ name })` | `KernelElection` handle (run/commit/status) |
-| Real parallelism / live fork | `new PyProc({ replay })` | worker process pool (`map`/`fork`/`signal`) |
+| Run Python in this tab, no revival | `boot()` | machine handle (`run`/`fs`/`history`/`proc`, `runtime` escape hatch) |
+| A state that saves, exports, and revives | `boot({ deterministic: true, ...manifest })` | same handle; `history.export`/`history.save` become legal |
+| Open a portable machine file | `open(blob, { trustedPublicKeys })` | machine handle, after integrity + trust checks |
+| Revive a saved session | `open({ dir, name })` | machine handle (same-manifest replay + delta) |
+| One living machine across tabs | `open({ persistent: { name } })` | multi-tab election handle (run/commit/status) |
+| Real parallelism / live fork | `await machine.proc({ lanes, replay })` | worker process pool (`map`/`fork`/`signal`) |
 
-Deterministic replay is the shared foundation: `bootSession` fixes the boot entropy so the same
-manifest reproduces byte-identical memory, which is what makes delta save, journal revival, and
-worker-to-worker `fork` sound.
+Deterministic replay is the shared foundation: `boot({ deterministic: true })` fixes the boot
+entropy so the same manifest reproduces byte-identical memory, which is what makes delta save,
+journal revival, and worker-to-worker `fork` sound. That choice is recorded in every durable
+commit's environment fingerprint - a non-deterministic machine refuses `history.export` instead
+of silently losing the replay guarantee.
 
 ## Using it from an AI agent
 
@@ -286,28 +287,27 @@ The current Linux execution catalog is a hash-pinned development channel. Its en
 
 Capabilities are opt-in. Turn on only what you need, and consume the capability contract rather than engine internals (`HEAPU8` and friends). This README names the public surface; the full product decision table lives in the [capability matrix](docs/consuming/capabilityMatrix.md).
 
+The root surface is one noun and its verbs: a **machine with history**. Two entry verbs return a machine handle, one verb revives machines from anywhere, and everything else is vocabulary on the handle.
+
 | Need | Public exports | Runnable proof |
 | --- | --- | --- |
-| Run Python in the tab | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
-| Prepare repeatable environments | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
-| Restore, branch, and time-travel state | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
-| Keep one Python machine alive across tabs | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
-| Use browser workers as processes | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
-| Serve Python behind real browser URLs | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
-| Build terminal and borrowed syscall flows | `Terminal`, `SyscallBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
-| Persist, cast, and revive a machine | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
+| Boot a Python machine and run code | `boot` (returns a machine handle: `machine.run`, `machine.runAsync`, `machine.fs`, `machine.term`, `machine.runtime` escape hatch) | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
+| Time-travel, branch, and durably commit state | `boot` handle's `machine.history` (`checkpoint`/`restore`/`tree` are volatile; `commit`/`recover`/`watch`/`export`/`save` are durable, content-addressed) | [browser gate](tests/browser/gate.html), [machine demo](examples/machine.html) |
+| Use browser workers as processes (independent GILs) | `boot` handle's `machine.proc` (pool verbs: `map`, `fork`, `forkMany`, `mapArray`, `matmul`; signal table on the pool class) | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html) |
+| Revive a machine from a file, saved session, or other tabs | `open` (signed bundle blob, `{ dir, name }` session, `{ persistent }` multi-tab machine) | [immortal demo](examples/immortal.html), [machine demo](examples/machine.html) |
 | Assemble the browser computer (multi-guest OS host) | `createWebComputer` | [web computer app](apps/webComputer/index.html), [web computer gate](tests/browser/webComputerProduct.mjs) |
-| Push beyond the default engine lane (subpaths) | `pyproc/gpu` (`GpuCompute`, `GpuArray`, `GpuBridge`), `pyproc/socket` (`SocketBridge`), `pyproc/wasi` (`bootWasi`, `WasiSession`) | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
-| Ship worker-backed capabilities from a product | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
+| Check platform readiness before booting | `checkEnvironment` | [browser gate](tests/browser/gate.html) |
 | Branch on failures programmatically | `PyProcError`, `PYPROC_ERROR_CODES` | [structure gate](tests/run.mjs), [browser gate](tests/browser/gate.html) |
 
-Subpath imports are also supported:
+Plumbing subpaths carry the contracts underneath the handle:
 
 ```js
-import { boot } from "pyproc/runtime";
-import { ReactiveController } from "pyproc/reactive";
-import { PyProc } from "pyproc/process-os";
-import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
+// The durable-state kernel: object model, commit/open protocol, stores, signed bundles.
+import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
+// The browser-computer internals (hosts, devices, guest adapters, machine stores).
+import { createMachineCryptoProvider, MachineCommitCoordinator } from "pyproc/machine";
+// Deployment assets: manifest, SRI verification, Service Worker registration.
+import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
 // Demoted (no headless CI gate, or research preview) - deliberately off the root surface:
 import { GpuCompute } from "pyproc/gpu";
 import { SocketBridge } from "pyproc/socket";

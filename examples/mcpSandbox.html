@@ -20,7 +20,7 @@
      사람이 직접 열어도 상태를 볼 수 있다.</p>
   <pre id="out">부팅 중...</pre>
   <script type="module">
-    import { bootSession } from "../index.js";
+    import { boot } from "../index.js";
 
     const out = document.getElementById("out");
     const log = (m) => { out.textContent += "\n" + m; };
@@ -39,22 +39,21 @@
     ].join("\n");
 
     const params = new URLSearchParams(location.search);
-    const session = await bootSession({ indexURL: params.get("indexURL") || undefined });
-    const rt = session.rt;
-    const reactive = session.reactive; // cp0 = 리플레이 경계(sandboxReset의 복귀점)
+    // 결정적 리플레이 부팅: cp0 = 리플레이 경계(sandboxReset의 복귀점).
+    const machine = await boot({ deterministic: true, indexURL: params.get("indexURL") || undefined });
     const saved = []; // checkpointSave가 쌓는 복원 핸들
     log("머신 준비 완료 (cp0 = 리플레이 경계)");
 
     const tools = {
       pythonRun({ code }) {
-        rt.setGlobal("_mcpSrc", String(code ?? ""));
-        const r = rt.run(RUN_HARNESS);
+        machine.runtime.setGlobal("_mcpSrc", String(code ?? ""));
+        const r = machine.run(RUN_HARNESS);
         const [stdout, value] = r && r.toJs ? r.toJs() : r;
         if (r && r.destroy) r.destroy();
         return { stdout, value };
       },
       checkpointSave() {
-        const cp = reactive.checkpoint();
+        const cp = machine.history.checkpoint();
         saved.push(cp);
         return { index: cp.index, changedPages: cp.changedPages, kind: cp.kind };
       },
@@ -67,7 +66,7 @@
         return { index: target.index, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
       },
       sandboxReset() {
-        const info = reactive.restoreLive(0); // cp0 = 부팅 직후 준비 상태
+        const info = machine.history.restore(0); // cp0 = 부팅 직후 준비 상태
         saved.length = 0;
         return { index: 0, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
       },

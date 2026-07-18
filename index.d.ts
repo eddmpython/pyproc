@@ -1,8 +1,7 @@
 // pyproc 공개 표면 타입 선언. 소스는 순수 ESM .js이고 이 파일이 소비자(TypeScript)에게
 // 계약을 제공한다. 빌드 단계 없이 손으로 유지한다(소스와 함께 갱신).
 
-export const PAGE_SIZE: number;
-export const PYPROC_ASSET_MANIFEST_VERSION: 1;
+import type { PyProcAssetIntegrityManifest } from "./src/runtime/assets.js";
 
 /** src의 모든 오류가 사용하는 단일 오류 계약의 코드. 카탈로그는 src/runtime/errors.js와 일치한다. */
 export type PyProcErrorCode =
@@ -52,120 +51,6 @@ export class PyProcError extends Error {
   retryable: boolean;
   context?: Record<string, unknown>;
 }
-
-export interface PyProcAssetEntry {
-  role: "processWorker" | "machineWorker" | "wasiWorker" | "pyprocServiceWorker";
-  /** 패키지 루트 기준 상대 경로. */
-  path: string;
-  kind: "module-worker" | "shared-worker" | "service-worker";
-  sameOrigin: true;
-  usedBy: string[];
-  reason: string;
-  /** baseURL 기준 절대 URL. */
-  url: string;
-}
-
-export interface PyProcAssetManifest {
-  version: 1;
-  /** 이 manifest가 URL을 계산한 패키지 루트. */
-  packageRoot: string;
-  policy: {
-    sameOriginRequired: true;
-    preserveRelativeImports: true;
-    runtimePreflight?: true;
-    note: string;
-  };
-  assets: PyProcAssetEntry[];
-}
-
-export function getPyProcAssetManifest(opts?: { baseURL?: string | URL }): PyProcAssetManifest;
-
-export interface PyProcAssetIntegrityFile {
-  /** 패키지 루트 기준 상대 경로. */
-  path: string;
-  /** 배포된 실제 URL. root-relative URL 가능. */
-  url: string;
-  bytes: number;
-  /** 표준 SRI 문자열(sha256-...). */
-  integrity: string;
-  /** 이 파일을 쓰는 entrypoint role 목록. */
-  roles: PyProcAssetEntry["role"][];
-}
-
-export interface PyProcAssetEntrypoint extends PyProcAssetEntry {
-  /** entrypoint에서 상대 import/importScripts로 닿는 로컬 파일 graph. */
-  graph: string[];
-  bytes: number;
-  integrity: string;
-}
-
-export interface PyProcAssetIntegrityManifest extends Omit<PyProcAssetManifest, "assets"> {
-  entrypoints: PyProcAssetEntrypoint[];
-  files: PyProcAssetIntegrityFile[];
-}
-
-export interface PyProcAssetIntegrityVerifyOptions {
-  /** 검증할 실행 자산 role. 생략하면 files 전체를 검증한다. */
-  roles?: PyProcAssetEntry["role"][];
-  /** role 대신 특정 상대 경로만 검증한다. */
-  paths?: string[];
-  /** 테스트나 특수 배포 환경용 fetch 대체. */
-  fetch?: typeof fetch;
-  cache?: RequestCache;
-  credentials?: RequestCredentials;
-  /** false면 선택 대상 없음이 예외가 아니라 verified 0이 된다. */
-  required?: boolean;
-}
-
-export interface PyProcAssetIntegrityResult {
-  verified: number;
-  bytes: number;
-  files: string[];
-}
-
-export function verifyPyProcAssetIntegrity(manifest: PyProcAssetIntegrityManifest, opts?: PyProcAssetIntegrityVerifyOptions): Promise<PyProcAssetIntegrityResult | null>;
-
-export interface PyProcServiceWorkerRegisterOptions {
-  /** 테스트나 특수 실행 환경용 navigator 대체. 생략하면 globalThis.navigator를 쓴다. */
-  navigator?: Navigator;
-  /** SRI preflight용 fetch 대체. */
-  fetch?: typeof fetch;
-  /** SRI preflight fetch cache 옵션. */
-  verifyCache?: RequestCache;
-  credentials?: RequestCredentials;
-  /** pyprocSw.js ?cache=1. script/module/wasm/zip 캐시와 coreIntegrity 검증 경로를 켠다. */
-  cache?: boolean;
-  /** pyprocSw.js ?asgi=/prefix/. VirtualOrigin fetch 위임 접두 경로. */
-  asgi?: string;
-  /** pyprocSw.js ?coi=1. 헤더를 못 다는 호스팅에서 COOP/COEP를 주입한다. */
-  coi?: boolean;
-  /** pyprocSw.js ?cdn=<prefix>. cache/coreIntegrity 대상으로 볼 URL 접두. */
-  cdn?: string;
-  /** pyprocSw.js ?coreIntegrity=<url>. SW가 캐시 대상 바이트를 SRI로 검증할 manifest URL. */
-  coreIntegrity?: string;
-  /** false면 SW coreIntegrity manifest 누락을 통과시킨다. 기본은 strict. */
-  coreRequired?: boolean;
-  asgiTimeout?: number;
-  /** 추가 pyprocSw.js query. true는 "1"로 직렬화한다. */
-  query?: URLSearchParams | Record<string, string | number | boolean | null | undefined>;
-  /** ServiceWorkerRegistrationOptions.scope. */
-  scope?: string;
-  updateViaCache?: ServiceWorkerUpdateViaCache;
-}
-
-export interface PyProcServiceWorkerRegisterResult {
-  registration: ServiceWorkerRegistration;
-  integrity: PyProcAssetIntegrityResult | null;
-  /** 실제 register에 넘긴 URL. */
-  url: string;
-  /** 검증한 manifest 파일 경로. */
-  file: string;
-}
-
-export function registerPyProcServiceWorker(
-  manifest: PyProcAssetIntegrityManifest,
-  opts?: PyProcServiceWorkerRegisterOptions,
-): Promise<PyProcServiceWorkerRegisterResult>;
 
 export interface EnvIssue {
   /** 기계 판별용 코드: "no-cross-origin-isolation" | "no-jspi". */
@@ -336,7 +221,7 @@ export interface PyProcOptions {
 }
 
 /** 시그널 번호(POSIX). SAB 채널로 워커의 CPython eval 루프에 전달된다. */
-export const SIGNAL: { INT: 2; USR1: 10; USR2: 12; TERM: 15 };
+declare const SIGNAL: { INT: 2; USR1: 10; USR2: 12; TERM: 15 };
 
 export interface ForkInfo {
   pages: number;
@@ -360,7 +245,7 @@ export interface PyProcEntry {
 }
 
 /** WASM 힙 접근을 캡슐화한 능력 계약. 소비자는 HEAPU8를 직접 만지지 않는다. */
-export class MemoryCapability {
+declare class MemoryCapability {
   heap(): Uint8Array;
   byteLength(): number;
   stackSave(): number | null;
@@ -377,7 +262,7 @@ export class MemoryCapability {
  * 과거 노드로 복원한 뒤 checkpoint()하면 그 노드를 부모로 하는 분기가 생긴다(머신의 git).
  * 델타 해석은 부모 체인을 따르므로 형제 분기의 페이지가 새지 않는다.
  */
-export class ReactiveController {
+declare class ReactiveController {
   /** 체크포인트 나무: 각 노드의 부모/자식. */
   tree(): CheckpointNode[];
   /**
@@ -420,7 +305,7 @@ export class ReactiveController {
 }
 
 /** 빌린 시스템콜 v1: input()(동기/JSPI), urllib(동기 XHR, proxyUrl 옵션), subprocess(자식 워커). */
-export class SyscallBridge {
+declare class SyscallBridge {
   install(): Promise<SyscallInstallInfo>;
 }
 
@@ -443,7 +328,7 @@ export interface AsgiResponse {
  * body는 텍스트 또는 바이트 버퍼, headers는 [k, v] 배열(content-type 미지정 시 json 기본).
  * 헬퍼가 매 요청 앱 전역을 다시 읽으므로 전역 재대입 = 핫스왑(dev loop). lifespan은 발화하지 않는다.
  */
-export class AsgiServer {
+declare class AsgiServer {
   install(): Promise<{ app: string; transport: string }>;
   serve(method: string, path: string, body?: string | Uint8Array | null, query?: string, headers?: [string, string][] | null): Promise<AsgiResponse>;
 }
@@ -456,7 +341,7 @@ export class AsgiServer {
  * fetch도 커널로 라우팅된다. 커널 무응답은 SW가 504로 끊는다(?asgiTimeout= 조정).
  * 벽: SW 합성 응답의 Set-Cookie는 스트립됨(쿠키 세션 불가, 토큰 방식 사용), WebSocket 미가로채기.
  */
-export class VirtualOrigin {
+declare class VirtualOrigin {
   constructor(asgi: AsgiServer);
   bind(): VirtualOrigin;
   unbind(): void;
@@ -495,7 +380,7 @@ export interface ContainerHandle {
  * 중첩(깊이 2+)이 가능하다(컨테이너 속 컨테이너). 내부 kill은 그 워커만 죽인다(외부 무영향).
  * install() 후 파이썬은 pyprocMachine.spawn()으로 컨테이너를 값으로 만든다(블로킹 = JSPI, runAsync 경로).
  */
-export class MachineContainer {
+declare class MachineContainer {
   constructor(rt: Runtime, opts?: MachineContainerOptions);
   /** 컨테이너 부팅(JS API). manifest = 자기 패키지 세트. */
   spawn(manifest?: ContainerManifest): Promise<ContainerHandle>;
@@ -537,7 +422,7 @@ export interface ReplOutcome {
  * 돌린다(프롬프트 즉시 복귀). fork는 워커끼리만 대칭이므로 대화형 REPL도 워커 레인에서 돈다
  * (PyProc replay 풀 위: 레인 0 = 대화형, 나머지 = 잡 슬롯). %jobs/%fg/%kill로 조종한다.
  */
-export class JobControl {
+declare class JobControl {
   constructor(opts?: JobControlOptions);
   boot(): Promise<{ workers: number; interactivePid: number; jobSlots: number }>;
   /** 한 줄 입력. `&`로 끝나면 잡({ job, pid }), 아니면 대화형 실행(ReplOutcome). */
@@ -614,7 +499,7 @@ export interface KernelStatus {
  * 리더 탭이 죽으면 락이 자동 해제되고 팔로워가 승격 + 저널에서 resume한다(탭 죽음 생존).
  * SharedWorker(COI=false)와 달리 리더 커널은 자기 문서에 살아 SAB 전능력을 유지한다.
  */
-export class KernelElection {
+declare class KernelElection {
   readonly name: string;
   readonly participantId: string;
   constructor(opts?: KernelElectionOptions);
@@ -651,7 +536,6 @@ export interface PersistentMachineOptions extends Omit<KernelElectionOptions, "j
 }
 
 /** 같은 name의 모든 탭을 마지막 commit에서 부활하는 하나의 지속 Python 머신으로 연다. */
-export function openPersistentMachine(opts?: PersistentMachineOptions): Promise<KernelElection>;
 
 export interface TerminalConfig {
   /** 완결 문장마다 자동 체크포인트를 닫고 "%undo"로 직전 상태에 시간여행한다. */
@@ -684,7 +568,7 @@ export interface DeviceFsConfig {
  * /dev/random(열 때마다 신선한 난수). fsWorld v2: /dev/fb0(framebuffer), /proc/<pid>/ctl(track).
  * 장치 read는 동기 계약이다(비동기 소스는 캐시가 정직한 계약).
  */
-export class DeviceFs {
+declare class DeviceFs {
   install(): { installed: string[] };
   /** fsWorld v2: /proc/<pid>/ctl + /proc/<pid>/status 등록(Plan 9). ctl에 시그널명("term"/"int"/숫자)을 쓰면 시그널 발화. cfg.signal 필수. */
   track(pid: number): string;
@@ -704,7 +588,7 @@ export interface InitConfig {
 }
 
 /** OS의 init(rc.local + cron + resume): 마운트된 디스크의 파일이 머신을 스스로 움직이게 한다. */
-export class Init {
+declare class Init {
   install(): { boot: boolean; resume: false; cron: boolean };
   /** Session.load/MachineJournal.recover/openMachine 뒤 resume.py를 실행해 fd/socket/DB connection을 재개설한다. */
   resume(reason?: string): { resume: boolean; reason: string };
@@ -792,7 +676,7 @@ export interface JournalRecoverResult {
  * (CPython eval/GC의 고정 scratch) 문장마다 쓰면 쓰기량이 폭증한다. 유휴 배치가 88% 절감.
  * 계약: 크래시 시 잃는 것은 "마지막 커밋 이후"다(경계 일관성이지 문장 단위 내구성이 아니다).
  */
-export class MachineJournal {
+declare class MachineJournal {
   readonly commits: number;
   readonly pagesWritten: number;
   readonly packs: number;
@@ -826,7 +710,7 @@ export interface JailPermissions {
  * 엔진을 전제한다(P0과 짝). 정직: same-origin 감옥은 자기 egress를 막지만 window.parent
  * 측면통로가 열린다 - 완전 격리는 opaque origin(sandbox)이고 그 대가로 SAB(fork/interrupt)를 잃는다.
  */
-export class MachineJail {
+declare class MachineJail {
   constructor(permissions?: JailPermissions);
   /** 협조 티어 판정(우회 가능). perm: net|clipboard|home|workers. */
   allows(perm: string, arg?: string): boolean;
@@ -839,7 +723,7 @@ export class MachineJail {
 }
 
 /** 서버리스 파이썬 터미널: code.InteractiveConsole 기반 REPL. input() 블로킹은 syscallBridge와 조합. */
-export class Terminal {
+declare class Terminal {
   install(): Promise<{ repl: string; timeTravel: boolean }>;
   /** 한 줄 입력. more=연속행 대기(... 프롬프트), out=stdout+stderr. timeTravel이면 "%undo" 지원. */
   push(line: string): Promise<{ more: boolean; out: string }>;
@@ -851,7 +735,7 @@ export interface WheelCacheConfig {
 }
 
 /** wheel OPFS 캐시: install/loadPackages 구간에서 .whl을 캐시에 저장/서빙(재다운로드 0). */
-export class WheelCache {
+declare class WheelCache {
   hits: number;
   misses: number;
   install(pkg: string): Promise<void>;
@@ -863,7 +747,7 @@ export class WheelCache {
  * 엔진-무관 일반 파일 IO(Runtime.fs). 소비자가 rt.raw.FS를 안 만지고 파일을 읽고 쓴다.
  * 영속(OPFS)은 mountHome이 마운트하고 이건 그 위 파일-op 레이어(새 VFS 아님). 변이는 execSeq를 올린다(리액티브 가드).
  */
-export class FileSystem {
+declare class FileSystem {
   /** data가 문자열이면 utf8, Uint8Array면 binary(opts.encoding으로 명시 가능). */
   writeFile(path: string, data: string | Uint8Array, opts?: { encoding?: "utf8" | "binary" }): void;
   /** 기본 binary(Uint8Array). { encoding: "utf8" }면 문자열. */
@@ -923,7 +807,7 @@ export interface EngineContract {
 }
 
 /** EngineContract의 Pyodide 구현(기본 어댑터). */
-export class PyodideEngine implements EngineContract {
+declare class PyodideEngine implements EngineContract {
   constructor(py: unknown);
   runSync(code: string): unknown;
   runAsync(code: string): Promise<unknown>;
@@ -945,7 +829,7 @@ export class PyodideEngine implements EngineContract {
   raw(): unknown;
 }
 
-export class Runtime {
+declare class Runtime {
   /**
    * EngineContract 또는 **로드된 Pyodide 인스턴스**를 받는다. 후자를 주면 감싸므로, 워커에서
    * 자체 부팅한 Pyodide를 `new Runtime(py)`로 채택할 수 있다(dartlab 라이브 소비 패턴).
@@ -1001,20 +885,17 @@ export class Runtime {
 }
 
 /** Pyodide 런타임을 부팅한다. Chromium/Edge 전용. */
-export function boot(opts?: BootOptions): Promise<Runtime>;
 
 /**
  * uv 레인 부팅: 환경 선언(manifest) + 캐시 디렉터리(dirs)로 웜 부팅한다.
  * bare 스냅샷(_loadSnapshot) + OPFS 휠 조합, 실측 콜드 5465ms -> 웜 1515ms(3.61배).
  * 패키지가 실린 힙 스냅샷은 Pyodide hiwire 벽으로 불가(envManager.js 주석의 실측 좌표).
  */
-export function bootEnv(manifest?: EnvManifest, dirs?: EnvDirs): Promise<Runtime>;
 
 /**
  * 브라우저판 uv run: PEP 723 인라인 메타데이터(# /// script)의 dependencies를
  * 자동 설치한 뒤 스크립트를 실행한다. opts.wheelDir로 휠 캐시 경유.
  */
-export function runScript(rt: Runtime, src: string, opts?: { wheelDir?: FileSystemDirectoryHandle }): Promise<RunScriptOutcome>;
 
 export interface SessionManifest {
   indexURL?: string;
@@ -1054,21 +935,16 @@ export interface SessionImageOptions {
  * 같은 매니페스트로 bootSession한 커널은 바이트 동일 힙을 재현하므로,
  * save()가 남긴 델타(수 MB)를 load()로 적용하면 이전 세션의 파이썬 상태가 부활한다.
  */
-export function bootSession(manifest?: SessionManifest): Promise<Session>;
 
 /** .pymachine 서명용 WebCrypto ECDSA P-256 키쌍을 만든다. */
-export function createMachineKeyPair(): Promise<CryptoKeyPair>;
 
 /** .pymachine 검증용 공개키를 JWK로 내보낸다. */
-export function exportMachinePublicKey(key: CryptoKey | CryptoKeyPair | JsonWebKey): Promise<JsonWebKey>;
 
 /** 제품 신뢰 UI와 공개키 배포 manifest에 표시할 안정 fingerprint. 반환 형식: sha256:<hex>. */
-export function fingerprintMachinePublicKey(key: CryptoKey | CryptoKeyPair | JsonWebKey): Promise<string>;
 
 /** .pymachine 파일로 같은 컴퓨터를 부팅한다. trust:true 또는 trustedPublicKeys 중 하나가 필요하다. */
-export function openMachine(file: Blob, opts?: { trust?: boolean; trustedPublicKey?: CryptoKey | JsonWebKey; trustedPublicKeys?: (CryptoKey | JsonWebKey)[]; requireSignature?: boolean }): Promise<Session>;
 
-export class Session {
+declare class Session {
   readonly rt: Runtime;
   readonly reactive: ReactiveController;
   /** 이 컴퓨터 전체를 .pymachine 단일 파일(무결성 해시 포함)로 내보낸다. /home/web이 있으면 함께 포함한다. */
@@ -1132,7 +1008,9 @@ export interface Shm {
 }
 
 /** 브라우저 파이썬 프로세스 OS 커널: 스냅샷-fork spawn + map 병렬 + 수명주기(kill/respawn). */
-export class PyProc {
+declare class PyProc {
+  /** 시그널 번호표(POSIX). pool.SIGNAL.INT 등으로 소비한다. */
+  static SIGNAL: typeof SIGNAL;
   constructor(opts?: PyProcOptions);
   boot(n: number, useSnapshot?: boolean): Promise<PyProcBootInfo>;
   map(fnSrc: string, args: unknown[], opts?: PyProcMapOptions): Promise<unknown[]>;
@@ -1203,3 +1081,78 @@ export class PyProc {
 
 
 export { createWebComputer, type WebComputer } from "./src/machine/index.js";
+
+// ---- porcelain 표면: 진입 동사 2 + 부활 동사 1, 나머지는 머신 핸들의 어휘다 ----
+
+export interface BootMachineOptions extends BootOptions {
+  /**
+   * 결정적 리플레이 부팅 opt-in. PYTHONHASHSEED=0 + 엔트로피 스텁은 게스트 가시 의미론을
+   * 바꾸므로 기본이 아니다. 이 선택은 내구 커밋의 환경 지문(deterministic)에 기록되고,
+   * history.export(이동 bundle)와 history.save(세션 저장)는 이 모드에서만 성립한다.
+   */
+  deterministic?: boolean;
+  /** deterministic 매니페스트: 부팅 직후 실행할 파이썬(환경 선언의 일부). */
+  setup?: string;
+  /** deterministic 매니페스트: .whl OPFS 캐시(두 번째 부팅부터 다운로드 0). */
+  wheelDir?: FileSystemDirectoryHandle;
+}
+
+export interface OpenTrustOptions {
+  /** 서명 없는/미신뢰 bundle을 여는 명시적 승인(머신 파일 = 임의 코드 실행 동급 위험). */
+  trust?: boolean;
+  trustedPublicKey?: CryptoKey | JsonWebKey;
+  trustedPublicKeys?: (CryptoKey | JsonWebKey)[];
+  requireSignature?: boolean;
+}
+
+/** 두 구역 역사의 동사들. checkpoint/restore는 휘발(RAM, 시간여행), commit/export는 내구(sha256 승격). */
+declare class PyprocHistory {
+  checkpoint(): CheckpointInfo;
+  restore(target: number | CheckpointInfo, opts?: { rehash?: boolean }): RestoreInfo;
+  tree(): CheckpointNode[];
+  prune(target: number | CheckpointInfo): { freedNodes: number; freedMB: number; keptNodes: number };
+  /** 커널 커밋(WAL 저널). 같은 dir는 저널 인스턴스를 공유한다. */
+  commit(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalCommitResult | null>;
+  recover(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalRecoverResult | null>;
+  /** 유휴 감시 시작(WAL). durable 실패는 onStatus로 관측한다. */
+  watch(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): MachineJournal;
+  pack(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalPackResult | null>;
+  /** 이동 가능한 서명 bundle(결정 부팅 전용 - 비결정 상태에는 리플레이 보증이 없다). */
+  export(opts?: SessionImageOptions): Promise<Blob>;
+  /** 세션 저장(결정 부팅 전용): 부활 = 같은 매니페스트 리플레이 + 델타. */
+  save(dir: FileSystemDirectoryHandle, name: string): Promise<{ pages: number; mb: number }>;
+}
+
+/** 역사를 가진 파이썬 머신 핸들. 능력 상세는 runtime 탈출구로 연다. */
+declare class PyprocMachine {
+  readonly runtime: Runtime;
+  readonly deterministic: boolean;
+  readonly history: PyprocHistory;
+  readonly fs: FileSystem;
+  run(code: string): unknown;
+  runAsync(code: string): Promise<unknown>;
+  term(cfg?: TerminalConfig): Terminal;
+  /** 프로세스 풀(워커 = 프로세스, 독립 GIL). fork/forkMany/map/mapArray/matmul은 풀의 동사다. */
+  proc(opts?: PyProcOptions & { lanes?: number; useSnapshot?: boolean }): Promise<PyProc>;
+}
+
+/** 첫 guest 고속 경로: 파이썬 머신을 부팅해 핸들을 돌려준다. */
+export function boot(options?: BootMachineOptions): Promise<PyprocMachine>;
+
+/**
+ * 부활 통합 동사. 소스 종별로 신뢰 계약이 갈라진다(의미론 평탄화 금지):
+ * 외부 bundle은 힙 접촉 전 무결성+서명 검증, 자기 OPFS 세션 저장은 리플레이+h0 대조,
+ * persistent는 멀티탭 선출 + 저널 부활(KernelElection 핸들).
+ */
+export function open(source: Blob | Uint8Array | ArrayBuffer, opts?: OpenTrustOptions): Promise<PyprocMachine>;
+export function open(source: { dir: FileSystemDirectoryHandle; name: string }, opts?: { manifest?: SessionManifest }): Promise<PyprocMachine>;
+export function open(source: { persistent: PersistentMachineOptions | true }, opts?: PersistentMachineOptions): Promise<KernelElection>;
+
+
+// 값-export가 아닌 타입 표면(핸들과 탈출구가 돌려주는 것들의 계약).
+export type {
+  PyprocMachine, PyprocHistory,
+  Runtime, MemoryCapability, FileSystem, ReactiveController, Terminal, MachineJournal, MachineJail,
+  SyscallBridge, AsgiServer, VirtualOrigin, DeviceFs, Init, WheelCache,
+  Session, KernelElection, PyProc, MachineContainer, JobControl, PyodideEngine,
+};

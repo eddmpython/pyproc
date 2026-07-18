@@ -26,9 +26,9 @@
     </header>
 
     <h1>Web Python speed, measured in the tab</h1>
-    <p class="lead">This page uses the public <code>PyProc</code> API only: boot a worker pool,
-    run a single-worker numpy matrix multiply, then run the same matrix multiply sharded across
-    4 Python workers. Three warmed samples are summarized as median speedup and p95 latency
+    <p class="lead">This page uses the public surface only: boot a machine, open its worker pool
+    with <code>machine.proc()</code>, run a single-worker numpy matrix multiply, then run the same
+    matrix multiply sharded across 4 Python workers. Three warmed samples are summarized as median speedup and p95 latency
     before the speed number is accepted.</p>
 
     <div class="panel">
@@ -48,17 +48,17 @@
         <div class="k">correctness</div><div id="correctness"></div>
       </div>
       <div class="term" id="out" style="margin-top:.7rem">The API under test:
-const os = new PyProc({ packages: ["numpy"], setup: "import numpy" });
-await os.boot(4);
-await os.matmul(a, b, { parts: 1 });
-await os.matmul(a, b, { parts: 4 });</div>
+const machine = await boot();
+const pool = await machine.proc({ lanes: 4, packages: ["numpy"], setup: "import numpy" });
+await pool.matmul(a, b, { parts: 1 });
+await pool.matmul(a, b, { parts: 4 });</div>
     </div>
 
     <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> 쨌 <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
   </div>
 
   <script type="module">
-    import { PyProc } from "../index.js";
+    import { boot } from "../index.js";
     import { isShardedSpeedBenchGreen, summarizePairedLatencyBench } from "./benchStats.js";
 
     const st = document.getElementById("st"), out = document.getElementById("out");
@@ -122,14 +122,15 @@ await os.matmul(a, b, { parts: 4 });</div>
       const size = readIntParam("size", 768, { min: 128, max: 1536 });
       const benchSamples = readIntParam("samples", 3, { min: 3, max: 9 });
       st.textContent = `Booting ${workers} Python workers with numpy...`;
-      const os = new PyProc({ indexURL: INDEX, packages: ["numpy"], setup: "import numpy" });
+      const machine = await boot({ indexURL: INDEX });
       const timings = {};
       let t = performance.now();
-      const boot = await os.boot(workers);
+      const pool = await machine.proc({ lanes: workers, packages: ["numpy"], setup: "import numpy" });
       const bootMs = Math.round(performance.now() - t);
       timings.bootMs = bootMs;
-      st.textContent = `Ready: ${boot.workers} workers forked from one snapshot.`;
-      log(`boot: ${bootMs}ms, avg worker boot ${boot.avgBootMs}ms`);
+      const readyWorkers = pool.ps().length;
+      st.textContent = `Ready: ${readyWorkers} workers forked from one snapshot.`;
+      log(`pool: ${readyWorkers} workers forked from one snapshot in ${bootMs}ms`);
 
       const a = makeMatrix(size, size, 7, 17);
       const b = makeMatrix(size, size, 5, 13);
@@ -138,19 +139,19 @@ await os.matmul(a, b, { parts: 4 });</div>
       log("warming single and sharded lanes...");
       const warmA = makeMatrix(128, 128, 7, 17);
       const warmB = makeMatrix(128, 128, 5, 13);
-      await os.matmul(warmA, warmB, { parts: 1 });
-      await os.matmul(warmA, warmB, { parts: workers });
+      await pool.matmul(warmA, warmB, { parts: 1 });
+      await pool.matmul(warmA, warmB, { parts: workers });
 
       const rows = [];
       for (let i = 0; i < benchSamples; i++) {
         log(`sample ${i + 1}/${benchSamples}: single worker baseline...`);
         t = performance.now();
-        const single = await os.matmul(a, b, { parts: 1 });
+        const single = await pool.matmul(a, b, { parts: 1 });
         const singleMs = Math.round(performance.now() - t);
 
         log(`sample ${i + 1}/${benchSamples}: ${workers}-worker sharded run...`);
         t = performance.now();
-        const parallel = await os.matmul(a, b, { parts: workers });
+        const parallel = await pool.matmul(a, b, { parts: workers });
         const parallelMs = Math.round(performance.now() - t);
 
         const maxErr = sampleMaxErr(single.data, parallel.data);
@@ -162,7 +163,7 @@ await os.matmul(a, b, { parts: 4 });</div>
       const bench = summarizePairedLatencyBench(rows);
       const width = Math.max(8, Math.min(100, Math.round((bench.parallelMedian / bench.singleMedian) * 100)));
       el("stats").style.display = "grid";
-      el("workers").textContent = `${boot.workers} (forked=${boot.forked})`;
+      el("workers").textContent = `${readyWorkers} (forked from one snapshot)`;
       el("samples").textContent = `${bench.sampleCount} warmed samples`;
       el("singleMs").textContent = ` ${bench.singleMedian}ms (p95 ${bench.singleP95}ms)`;
       el("parallelMs").textContent = ` ${bench.parallelMedian}ms (p95 ${bench.parallelP95}ms)`;
@@ -175,7 +176,7 @@ await os.matmul(a, b, { parts: 4 });</div>
       log(`median speedup: ${bench.medianSpeedup.toFixed(2)}x (${bench.singleMedian}ms -> ${bench.parallelMedian}ms)`);
       log(`p95 envelope: single ${bench.singleP95}ms, shard ${bench.parallelP95}ms`);
       log(`correctness: max sample error ${bench.maxErr.toExponential(2)}`);
-      os.terminate();
+      pool.terminate();
       // 게이트 문턱: 완주 게이트는 ?minSpeedup=로 조정 가능하다(기본 2.0). 속도 주장 인증은
       // 이 페이지가 아니라 tracked artifact 계약(bench:speed, S1 green 기준 2.0)의 몫이고,
       // 공유 CI 러너(4 vCPU)는 물리 코어가 부족해 2.0을 신뢰성 있게 넘지 못한다.
@@ -183,7 +184,7 @@ await os.matmul(a, b, { parts: 4 });</div>
       gateReport(isShardedSpeedBenchGreen(bench, { minMedianSpeedup: minSpeedup }), {
         config: { workers, size, benchSamples, indexURL: INDEX || null },
         timings,
-        boot,
+        pool: { workers: readyWorkers },
         bench,
       });
     } catch (e) {

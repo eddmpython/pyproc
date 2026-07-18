@@ -46,7 +46,7 @@
     <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> · <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
   </div>
   <script type="module">
-    import { PyProc } from "../index.js";
+    import { boot } from "../index.js";
     const out = document.getElementById("out"), st = document.getElementById("st");
     const el = (id) => document.getElementById(id);
     const log = (m) => { out.textContent += "\n" + m; };
@@ -68,9 +68,12 @@
       } catch (e) { /* 사본 없는 환경(로컬 직접 서빙 등) -> 그대로 진행 */ }
     }
     try {
-      const os = new PyProc({ indexURL: INDEX });
-      const b = await os.boot(4);
-      st.textContent = `4 workers forked from one snapshot (avg boot ${b.avgBootMs}ms)`;
+      // 머신 핸들에서 프로세스 풀을 연다: proc({ lanes }) = 스냅샷 fork로 N개 독립 인터프리터.
+      const machine = await boot({ indexURL: INDEX });
+      let t0 = performance.now();
+      const os = await machine.proc({ lanes: 4 });
+      const workers = os.ps().length;
+      st.textContent = `${workers} workers forked from one snapshot in ${Math.round(performance.now() - t0)}ms`;
 
       const fn = "def _fn(n):\n    return sum(i*i for i in range(n))";
       const args = [2000000, 2000000, 2000000, 2000000];
@@ -93,7 +96,7 @@
       const same = par.length === ser.length && par.every((v, i) => v === ser[i]);
 
       el("stats").style.display = "grid";
-      el("kWorkers").textContent = `${b.workers} (forked=${b.forked})`;
+      el("kWorkers").textContent = `${workers} (forked from one snapshot)`;
       el("kPar").textContent = ` ${parMs}ms`;
       el("kSer").textContent = ` ${serMs}ms`;
       el("barPar").style.width = `${Math.round((parMs / serMs) * 100)}%`;
@@ -104,7 +107,7 @@
       st.textContent = "Done. Same result, real cores.";
       log(`process table: ${JSON.stringify(os.ps())}`);
       os.terminate();
-      gateReport(same && b.workers === 4);
+      gateReport(same && workers === 4);
     } catch (e) {
       st.textContent = "Failed";
       log("Error: " + e);

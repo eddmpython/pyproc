@@ -8,18 +8,29 @@ const { tmp, appDir } = await installPackedPyProc("pyprocConsumer-");
 
 try {
   const smoke = `
-    import { Runtime, PyProc, getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc";
-    import { getPyProcAssetManifest as fromAssets } from "pyproc/assets";
-    import { Runtime as RuntimeFromSubpath, boot as bootFromSubpath } from "pyproc/runtime";
+    import { boot, open, createWebComputer, checkEnvironment, PyProcError, PYPROC_ERROR_CODES } from "pyproc";
+    import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
+    import { commitState, openState, MemoryStateStore, decodeStateBundle, PAGE_SIZE } from "pyproc/history";
+    import { createWebComputer as fromMachine, createMachineCryptoProvider } from "pyproc/machine";
 
+    for (const [name, fn] of [["boot", boot], ["open", open], ["createWebComputer", createWebComputer], ["checkEnvironment", checkEnvironment]]) {
+      if (typeof fn !== "function") throw new Error(name + " export missing");
+    }
+    if (fromMachine !== createWebComputer) throw new Error("machine subpath createWebComputer drift");
+    if (!Array.isArray(PYPROC_ERROR_CODES) || typeof PyProcError !== "function") throw new Error("error contract missing");
+    if (PAGE_SIZE !== 65536) throw new Error("history PAGE_SIZE drift");
+    for (const fn of [commitState, openState, decodeStateBundle, createMachineCryptoProvider]) {
+      if (typeof fn !== "function") throw new Error("kernel surface missing");
+    }
+    // 커널 프로토콜이 설치본에서도 실동작하는가(Node webcrypto로 커밋 왕복).
+    const store = new MemoryStateStore();
+    const committed = await commitState(globalThis.crypto, store, {
+      pages: [[0, new Uint8Array(64).fill(7)]], pageSize: 64, heapLen: 64, sp: 0, env: { h0: "pkg" },
+    });
+    const opened = await openState(globalThis.crypto, store, { expectH0: "pkg" });
+    if (opened.commitAddress !== committed.commitAddress || opened.pages.get(0)[0] !== 7) throw new Error("kernel roundtrip failed");
     const manifest = getPyProcAssetManifest({ baseURL: "/vendor/pyproc/" });
-    const subpathManifest = fromAssets({ baseURL: "/vendor/pyproc/" });
     if (manifest.packageRoot !== "/vendor/pyproc/") throw new Error("baseURL normalization failed");
-    if (subpathManifest.assets.length !== manifest.assets.length) throw new Error("assets subpath drift");
-    if (typeof PyProc !== "function") throw new Error("PyProc export missing");
-    if (RuntimeFromSubpath !== Runtime) throw new Error("runtime subpath Runtime drift");
-    if (typeof bootFromSubpath !== "function") throw new Error("runtime subpath boot missing");
-    if (typeof Runtime.prototype.enableReactive !== "function") throw new Error("Runtime capability binding missing");
     if (typeof verifyPyProcAssetIntegrity !== "function") throw new Error("verify export missing");
     if (typeof registerPyProcServiceWorker !== "function") throw new Error("service worker register export missing");
     if (!manifest.assets.some((a) => a.role === "processWorker")) throw new Error("processWorker role missing");

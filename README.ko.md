@@ -42,15 +42,15 @@ AI 에이전트는 Python을 한 번만 실행하지 않는다. 코드를 생성
 ```js
 import { boot } from "pyproc";
 
-const rt = await boot();
-await rt.loadPackages(["numpy"]);            // 한 번 준비(패키지, 데이터)
-const cp = rt.enableReactive().checkpoint(); // 준비된 상태 저장
+const machine = await boot();
+await machine.runtime.loadPackages(["numpy"]); // 한 번 준비(패키지, 데이터)
+const cp = machine.history.checkpoint();       // 준비된 상태 저장
 
 try {
-  rt.run(codeFromTheAgent);                  // 시도 N
+  machine.run(codeFromTheAgent);               // 시도 N
 } catch (err) {
-  cp.restore();                              // 준비 상태 복귀 - 재부팅 0, 재설치 0
-  rt.run(fixedCode);                         // 깨끗한 상태에서 시도 N+1
+  machine.history.restore(cp);                 // 준비 상태 복귀 - 재부팅 0, 재설치 0
+  machine.run(fixedCode);                      // 깨끗한 상태에서 시도 N+1
 }
 ```
 
@@ -89,17 +89,17 @@ npm install pyproc
 ```js
 import { boot } from "pyproc";
 
-const rt = await boot();
-await rt.loadPackages(["numpy"]);
-console.log(rt.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
+const machine = await boot();
+await machine.runtime.loadPackages(["numpy"]);
+console.log(machine.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
 ```
 
 같은 origin의 여러 탭에서 하나의 지속 머신을 연다:
 
 ```js
-import { openPersistentMachine } from "pyproc";
+import { open } from "pyproc";
 
-const machine = await openPersistentMachine({ name: "workspace" });
+const machine = await open({ persistent: { name: "workspace" } });
 await machine.run("counter = globals().get('counter', 40) + 1");
 await machine.commit();
 console.log(await machine.run("counter")); // 리더 승계 뒤에도 41
@@ -107,21 +107,20 @@ console.log(await machine.run("counter")); // 리더 승계 뒤에도 41
 
 [Immortal Python Machine 데모](examples/immortal.html)에서 상태 공유, leader identity, 영속 epoch, 강제 승계, 서버 없는 로컬 복구를 직접 시험할 수 있다.
 
-체크포인트와 복원. 리액티브는 `enableReactive`로 opt-in이고, 닫는 `checkpoint()`가 복원을 건전하게 만드는 실행 경계를 표시한다:
+체크포인트와 복원. 핸들의 `history`가 두 구역을 어휘로 가른다. 닫는 `checkpoint()`가 복원을 건전하게 만드는 실행 경계를 표시한다:
 
 ```js
-const reactive = rt.enableReactive();
-rt.run("values = [10, 20, 30]");
-const cp = reactive.checkpoint();             // 이 상태 저장
-rt.run("values.append(999)");
-reactive.checkpoint();                        // 실행 경계 닫기 -> 즉시 복원 경로
-cp.restore();                                 // 체크포인트로 복귀 - 바뀐 페이지만 되쓴다
-console.log(rt.run("len(values)"));           // 3
+machine.run("values = [10, 20, 30]");
+const cp = machine.history.checkpoint();      // 이 상태 저장
+machine.run("values.append(999)");
+machine.history.checkpoint();                 // 실행 경계 닫기 -> 즉시 복원 경로
+machine.history.restore(cp);                  // 체크포인트로 복귀 - 바뀐 페이지만 되쓴다
+console.log(machine.run("len(values)"));      // 3
 ```
 
 경계를 닫지 못했다면(실행 중 예외, 흘러간 변이) `cp.restore()`가 이를 감지해 자동으로
 전체 재해시 경로로 복원한다 - 느려질 뿐 조용히 오염되지 않는다. 라이브 프록시 핸들로
-파이썬을 호출했다면 `reactive.markDirty()`로 신고한다.
+파이썬을 호출했다면 `machine.runtime.enableReactive().markDirty()`로 신고한다.
 
 > 위 기본은 Chromium 브라우저만 있으면 된다. `PyProc`(프로세스 OS)와 소켓은 `crossOriginIsolated`(`COOP: same-origin`, `COEP: require-corp`)와 same-origin 워커도 필요하다 - [셋업](#셋업) 참조. `checkEnvironment()`로 확인하라.
 
@@ -131,15 +130,17 @@ console.log(rt.run("len(values)"));           // 3
 
 | 필요한 것 | 진입점 | 얻는 것 |
 |---|---|---|
-| 이 탭에서 파이썬 실행(부활 불요) | `boot()` | `Runtime` (run/install/fs) |
-| 이미 부팅한 Pyodide 채택 | `new Runtime(py)` | 같은 `Runtime`, 두 번째 인터프리터 없음 |
-| 저장하고 부활하는 상태 | `bootSession(manifest)` | `Session` (save/load/exportImage) |
-| 이동 가능한 머신 파일 열기 | `openMachine(blob, { trustedPublicKeys })` | 무결성/신뢰 검증 뒤 `Session` |
-| 여러 탭이 한 살아있는 머신 | `openPersistentMachine({ name })` | `KernelElection` 핸들 (run/commit/status) |
-| 진짜 병렬 / 라이브 fork | `new PyProc({ replay })` | 워커 프로세스 풀 (`map`/`fork`/`signal`) |
+| 이 탭에서 파이썬 실행(부활 불요) | `boot()` | 머신 핸들 (`run`/`fs`/`history`/`proc`, `runtime` 탈출구) |
+| 저장·내보내기·부활하는 상태 | `boot({ deterministic: true, ...manifest })` | 같은 핸들. `history.export`/`history.save`가 성립 |
+| 이동 가능한 머신 파일 열기 | `open(blob, { trustedPublicKeys })` | 무결성/신뢰 검증 뒤 머신 핸들 |
+| 저장한 세션의 부활 | `open({ dir, name })` | 머신 핸들(같은 매니페스트 리플레이 + 델타) |
+| 여러 탭이 한 살아있는 머신 | `open({ persistent: { name } })` | 멀티탭 선출 핸들 (run/commit/status) |
+| 진짜 병렬 / 라이브 fork | `await machine.proc({ lanes, replay })` | 워커 프로세스 풀 (`map`/`fork`/`signal`) |
 
-공통 기반은 결정적 리플레이다: `bootSession`이 부팅 엔트로피를 고정해 같은 매니페스트가
-바이트 동일한 메모리를 재현하고, 그것이 델타 저장/저널 부활/워커 간 `fork`를 건전하게 만든다.
+공통 기반은 결정적 리플레이다: `boot({ deterministic: true })`가 부팅 엔트로피를 고정해 같은
+매니페스트가 바이트 동일한 메모리를 재현하고, 그것이 델타 저장/저널 부활/워커 간 `fork`를
+건전하게 만든다. 이 선택은 모든 내구 커밋의 환경 지문에 기록되며, 비결정 머신은
+`history.export`를 명시적으로 거부한다(리플레이 보증의 조용한 소실 금지).
 
 ## AI 에이전트에서 쓰기
 
@@ -284,28 +285,27 @@ Edge 또는 Chromium에서 `http://localhost:8788/apps/webComputer/`를 연다. 
 
 능력은 opt-in이다. 필요한 것만 켜고, 엔진 내부(`HEAPU8` 등)가 아니라 능력 계약을 소비한다. 이 README는 공개 표면의 지도이고, 제품 판단 정본은 [능력 매트릭스](docs/consuming/capabilityMatrix.md)에 있다.
 
+루트 표면은 명사 하나와 그 동사들이다: **역사를 가진 머신**. 진입 동사 둘이 머신 핸들을 돌려주고, 부활 동사 하나가 어디서 왔든 머신을 되살리며, 나머지는 전부 핸들의 어휘다.
+
 | 필요한 것 | 공개 export | 실행 증거 |
 | --- | --- | --- |
-| 탭 안에서 Python 실행 | `boot`, `Runtime`, `FileSystem`, `MemoryCapability`, `PAGE_SIZE`, `checkEnvironment` | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
-| 반복 가능한 환경 준비 | `bootEnv`, `runScript`, `WheelCache` | [env manager probes](tests/attempts/envManager/README.md) |
-| 상태 복원, 분기, 시간여행 | `ReactiveController` | [browser gate](tests/browser/gate.html), [reactive probes](tests/attempts/runtimeParity/README.md) |
-| 여러 탭에서 하나의 Python 머신 유지 | `openPersistentMachine`, `KernelElection`, `MachineJournal` | [immortal demo](examples/immortal.html), [product consumer gate](tests/browser/productConsumer.mjs), [S5 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s5-pyproc-2026-07-15.json) |
-| 브라우저 worker를 프로세스로 사용 | `PyProc`, `SIGNAL`, `MachineContainer`, `JobControl`, `KernelElection` | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html), [S1 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json) |
-| Python을 실제 browser URL 뒤에 서빙 | `AsgiServer`, `VirtualOrigin` | [server dev demo](examples/serverDev.html), [S3 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json) |
-| 터미널과 빌린 syscall 흐름 구성 | `Terminal`, `SyscallBridge`, `DeviceFs` | [terminal demo](examples/terminal.html), [syscall/socket/device probes](tests/attempts/runtimeParity/README.md) |
-| 머신 저장, 전송, 부활 | `bootSession`, `Session`, `openMachine`, `createMachineKeyPair`, `exportMachinePublicKey`, `fingerprintMachinePublicKey`, `Init`, `MachineJournal`, `MachineJail` | [machine demo](examples/machine.html), [S4 artifact](mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json) |
+| Python 머신 부팅과 실행 | `boot` (머신 핸들 반환: `machine.run`, `machine.runAsync`, `machine.fs`, `machine.term`, 탈출구 `machine.runtime`) | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
+| 시간여행·분기·내구 커밋 | `boot` 핸들의 `machine.history` (`checkpoint`/`restore`/`tree`는 휘발, `commit`/`recover`/`watch`/`export`/`save`는 내구·내용주소) | [browser gate](tests/browser/gate.html), [machine demo](examples/machine.html) |
+| 브라우저 worker를 프로세스로(독립 GIL) | `boot` 핸들의 `machine.proc` (풀 동사: `map`, `fork`, `forkMany`, `mapArray`, `matmul`) | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html) |
+| 파일·저장 세션·다른 탭에서 머신 부활 | `open` (서명 bundle blob, `{ dir, name }` 세션, `{ persistent }` 멀티탭 머신) | [immortal demo](examples/immortal.html), [machine demo](examples/machine.html) |
 | 브라우저 컴퓨터 조립(다중 guest OS host) | `createWebComputer` | [웹 컴퓨터 앱](apps/webComputer/index.html), [웹 컴퓨터 게이트](tests/browser/webComputerProduct.mjs) |
-| 기본 엔진 밖의 가능성 확장(서브패스) | `pyproc/gpu` (`GpuCompute`, `GpuArray`, `GpuBridge`), `pyproc/socket` (`SocketBridge`), `pyproc/wasi` (`bootWasi`, `WasiSession`) | [GPU probes](tests/attempts/gpuCompute/README.md), [WASI gate](tests/browser/wasiGate.html) |
-| worker 기반 능력을 제품에 배포 | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PYPROC_ASSET_MANIFEST_VERSION` | [product consumer gate](tests/browser/productConsumer.mjs), [asset CLI](scripts/assetManifest.mjs) |
+| 부팅 전 플랫폼 준비 확인 | `checkEnvironment` | [browser gate](tests/browser/gate.html) |
 | 실패를 프로그램적으로 분기 | `PyProcError`, `PYPROC_ERROR_CODES` | [structure gate](tests/run.mjs), [browser gate](tests/browser/gate.html) |
 
-서브패스 import도 지원한다:
+핸들 아래의 계약은 plumbing 서브패스가 나른다:
 
 ```js
-import { boot } from "pyproc/runtime";
-import { ReactiveController } from "pyproc/reactive";
-import { PyProc } from "pyproc/process-os";
-import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
+// 내구 상태 커널: 오브젝트 모델, commit/open 프로토콜, store, 서명 bundle.
+import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
+// 브라우저 컴퓨터 내부(호스트, 장치, guest 어댑터, 머신 store).
+import { createMachineCryptoProvider, MachineCommitCoordinator } from "pyproc/machine";
+// 배포 자산: manifest, SRI 검증, Service Worker 등록.
+import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
 // 강등 표면(headless CI 게이트 불가 또는 research preview) - 의도적으로 루트 밖:
 import { GpuCompute } from "pyproc/gpu";
 import { SocketBridge } from "pyproc/socket";

@@ -19,21 +19,22 @@ const pageIndexURL = () => {
   return indexParam ? new URL(indexParam, location.href).href : undefined;
 };
 
-// 공유 런타임. 세션으로 부팅한다: 머신 탭(최면/부활/이미지 내보내기)이 같은 런타임을 쓴다.
-let sessionPromise = null;
-async function sharedSession(ctx) {
-  if (sessionPromise) return sessionPromise;
-  sessionPromise = (async () => {
+// 공유 머신. 결정적 리플레이로 부팅한다: 머신 탭(최면/부활/이미지 내보내기 = history.save/export)이
+// 결정 부팅을 전제하므로, 모든 탭이 같은 머신 핸들 하나를 쓴다.
+let machinePromise = null;
+async function sharedMachine(ctx) {
+  if (machinePromise) return machinePromise;
+  machinePromise = (async () => {
     ctx.status("Downloading CPython (WebAssembly)...");
     const t0 = performance.now();
-    const { bootSession } = await import("../index.js");
-    const session = await bootSession({ indexURL: pageIndexURL() });
+    const { boot } = await import("../index.js");
+    const machine = await boot({ deterministic: true, indexURL: pageIndexURL() });
     const bootMs = performance.now() - t0;
-    const version = session.rt.run("import sys; sys.version.split()[0]");
+    const version = machine.run("import sys; sys.version.split()[0]");
     ctx.status(`CPython <b class="ok">${version}</b> booted in this tab in <b class="ok">${Math.round(bootMs)}ms</b>. Every tab below now shares it.`);
-    return { session, bootMs, version };
+    return { machine, bootMs, version };
   })();
-  return sessionPromise;
+  return machinePromise;
 }
 
 export const demos = [
@@ -50,25 +51,22 @@ export const demos = [
       `${PROMPT} len(data)                       ${dim("# whole again, no re-run")}`,
     ],
     async run(ctx) {
-      const { session } = await sharedSession(ctx);
-      const rt = session.rt;
-      const reactive = rt.enableReactive();
-      rt.run("data = list(range(1_000_000))");
-      const sp = reactive.stackSave();
-      const cp = reactive.checkpoint();
-      const prepared = rt.run("len(data)");
+      const { machine } = await sharedMachine(ctx);
+      machine.run("data = list(range(1_000_000))");
+      const cp = machine.history.checkpoint();
+      const prepared = machine.run("len(data)");
       ctx.print("");
       ctx.print(`${PROMPT} len(data)  ${ok(prepared.toLocaleString())}  ${dim("# prepared, checkpoint saved")}`);
 
-      rt.run("data.clear()");
-      const wrecked = rt.run("len(data)");
+      machine.run("data.clear()");
+      const wrecked = machine.run("len(data)");
       ctx.print(`${PROMPT} len(data)  ${err(wrecked)}        ${dim("# the agent wrecked it")}`);
 
-      reactive.checkpoint();                   // 실행 경계를 닫는다(복원을 건전하게 만드는 계약)
+      machine.history.checkpoint();            // 실행 경계를 닫는다(복원을 건전하게 만드는 계약)
       const t = performance.now();
-      reactive.restoreLive(cp.index, sp);
+      machine.history.restore(cp);
       const restoreMs = performance.now() - t;
-      const restored = rt.run("len(data)");
+      const restored = machine.run("len(data)");
       ctx.print(`${PROMPT} len(data)  ${ok(restored.toLocaleString())}  ${dim(`# restored in ${ms(restoreMs)}, no re-run`)}`);
       ctx.status(`Heap time-travel in <b class="ok">${ms(restoreMs)}</b>. No re-boot, no re-run.`);
       return prepared === 1000000 && wrecked === 0 && restored === 1000000;
@@ -85,9 +83,8 @@ export const demos = [
       `${PROMPT} %undo                   ${dim("# time-travel the heap, not the text")}`,
     ],
     async run(ctx) {
-      const { session } = await sharedSession(ctx);
-      const rt = session.rt;
-      const term = await ctx.terminal(rt);
+      const { machine } = await sharedMachine(ctx);
+      const term = await ctx.terminal(machine);
       ctx.print("");
       ctx.print(dim(`# type below. try: x = 41  then  %undo  then  x`));
       if (ctx.gateMode) {
@@ -120,38 +117,35 @@ export const demos = [
       `${PROMPT} restore(cp); branch(A); restore(cp); branch(B)`,
     ],
     async run(ctx) {
-      const { session } = await sharedSession(ctx);
-      const rt = session.rt;
-      const reactive = rt.enableReactive();
+      const { machine } = await sharedMachine(ctx);
       ctx.status("Loading numpy into the running interpreter...");
       const tn = performance.now();
-      await rt.loadPackages(["numpy"]);
-      rt.run("import numpy as np");
+      await machine.runtime.loadPackages(["numpy"]);
+      machine.run("import numpy as np");
       const numpyMs = performance.now() - tn;
       ctx.print("");
       ctx.print(dim(`# numpy loaded in ${Math.round(numpyMs)}ms, into the interpreter that is already running`));
 
-      rt.run("data = np.arange(1, 101)");
-      const baseline = rt.run("int(data.sum())");
-      const sp = reactive.stackSave();
-      const cp = reactive.checkpoint();
+      machine.run("data = np.arange(1, 101)");
+      const baseline = machine.run("int(data.sum())");
+      const cp = machine.history.checkpoint();
       ctx.print(`${PROMPT} data.sum()  ${ok(baseline)}  ${dim("# prepared, checkpoint saved")}`);
 
-      rt.run("data = data * 0   # the agent zeroed the dataset");
-      const broken = rt.run("int(data.sum())");
+      machine.run("data = data * 0   # the agent zeroed the dataset");
+      const broken = machine.run("int(data.sum())");
       ctx.print(`${PROMPT} data.sum()  ${err(broken)}     ${dim("# attempt #1 corrupted the state")}`);
 
-      reactive.checkpoint();
+      machine.history.checkpoint();
       const t = performance.now();
-      reactive.restoreLive(cp.index, sp);
+      machine.history.restore(cp);
       const restoreMs = performance.now() - t;
-      const restored = rt.run("int(data.sum())");
+      const restored = machine.run("int(data.sum())");
       ctx.print(`${PROMPT} data.sum()  ${ok(restored)}  ${dim(`# restored in ${ms(restoreMs)}, no re-install, no re-run`)}`);
 
-      const meanA = rt.run("round(float(data.mean()), 2)");
-      reactive.checkpoint();
-      reactive.restoreLive(cp.index, sp);
-      const sumB = rt.run("int(data[data > 50].sum())");
+      const meanA = machine.run("round(float(data.mean()), 2)");
+      machine.history.checkpoint();
+      machine.history.restore(cp);
+      const sumB = machine.run("int(data[data > 50].sum())");
       ctx.print(`${PROMPT} branch A: data.mean()  ${ok(meanA)}     ${dim("# both branches start from")}`);
       ctx.print(`${PROMPT} branch B: data[data>50].sum()  ${ok(sumB)}  ${dim("# the same prepared state")}`);
       ctx.status(`One prepared state served a failed attempt, a restore, and two branches. Restore: <b class="ok">${ms(restoreMs)}</b>.`);
@@ -164,12 +158,11 @@ export const demos = [
     action: "Fork 4 workers",
     code: [
       dim("# Web Worker = process. one snapshot forks into N interpreters."),
-      `${PROMPT} os = PyProc(); await os.boot(4)   ${dim("# 4 GILs, 4 real cores")}`,
-      `${PROMPT} await os.map(fn, [n, n, n, n])    ${dim("# parallel")}`,
-      `${PROMPT} [await os.exec(pid, fn, n) ...]   ${dim("# same work, one worker")}`,
+      `${PROMPT} pool = await machine.proc({lanes: 4})  ${dim("# 4 GILs, 4 real cores")}`,
+      `${PROMPT} await pool.map(fn, [n, n, n, n])       ${dim("# parallel")}`,
+      `${PROMPT} [await pool.exec(pid, fn, n) ...]      ${dim("# same work, one worker")}`,
     ],
     async run(ctx) {
-      const { PyProc } = await import("../index.js");
       if (!crossOriginIsolated) {
         // SharedArrayBuffer는 crossOriginIsolated에서만 열린다. GitHub Pages는 헤더를 못 달므로
         // 번들 서비스워커가 헤더를 주입하고 한 번 새로고침한다(실측: swCoiProbe). 돌아오면 이 탭을 다시 연다.
@@ -183,30 +176,32 @@ export const demos = [
         location.reload();
         await new Promise(() => {}); // 새 문서로 넘어갈 때까지 정지
       }
+      const { machine } = await sharedMachine(ctx);
       ctx.status("Forking 4 interpreters from one memory snapshot...");
-      const os = new PyProc({ indexURL: pageIndexURL() });
-      const boot = await os.boot(4);
+      const tp = performance.now();
+      const pool = await machine.proc({ lanes: 4 });
+      const workers = pool.ps().length;
       ctx.print("");
-      ctx.print(dim(`# ${boot.workers} workers, ${boot.forked} forked from one snapshot (avg ${boot.avgBootMs}ms each)`));
+      ctx.print(dim(`# ${workers} workers forked from one snapshot in ${Math.round(performance.now() - tp)}ms`));
 
       const fn = "def _fn(n):\n    return sum(i*i for i in range(n))";
       const args = [2000000, 2000000, 2000000, 2000000];
       let t = performance.now();
-      const par = await os.map(fn, args);
+      const par = await pool.map(fn, args);
       const parMs = performance.now() - t;
       t = performance.now();
       // 직렬 기준선: 같은 태스크를 워커 1개에서 exec로 순차 실행(공개 표면만 사용).
-      const serialPid = os.ps().find((p) => p.state === "ready").pid;
+      const serialPid = pool.ps().find((p) => p.state === "ready").pid;
       const ser = [];
-      for (const a of args) ser.push(await os.exec(serialPid, fn, a));
+      for (const a of args) ser.push(await pool.exec(serialPid, fn, a));
       const serMs = performance.now() - t;
       // 2^53을 넘는 파이썬 int는 BigInt로 온다(정밀도 보존이 올바른 동작).
       const same = par.length === ser.length && par.every((v, i) => v === ser[i]);
       ctx.print(`${PROMPT} parallel (4 workers)  ${ok(Math.round(parMs) + "ms")}`);
       ctx.print(`${PROMPT} serial   (1 worker)   ${ok(Math.round(serMs) + "ms")}   ${dim(`# same results: ${same}`)}`);
-      os.terminate();
-      ctx.status(`<b class="ok">${(serMs / parMs).toFixed(2)}x</b> on real cores. Same values, ${boot.workers} independent GILs.`);
-      return same && boot.workers === 4;
+      pool.terminate();
+      ctx.status(`<b class="ok">${(serMs / parMs).toFixed(2)}x</b> on real cores. Same values, ${workers} independent GILs.`);
+      return same && workers === 4;
     },
   },
   {
@@ -217,26 +212,26 @@ export const demos = [
       dim("# the whole computer is a file. close the tab: it hibernates."),
       `${PROMPT} n = globals().get('n', 0) + 1   ${dim("# state that outlives the tab")}`,
       `${PROMPT} open('/home/web/visits.txt', 'a').write(...)`,
-      `${PROMPT} await session.save(opfs)        ${dim("# heap delta -> disk")}`,
-      `${PROMPT} await session.exportImage()     ${dim("# one .pymachine file")}`,
+      `${PROMPT} await machine.history.save(opfs)   ${dim("# heap delta -> disk")}`,
+      `${PROMPT} await machine.history.export()     ${dim("# one .pymachine file")}`,
     ],
     async run(ctx) {
-      const { session } = await sharedSession(ctx);
-      const machine = await ctx.machine(session);
-      const n = session.rt.run(
+      const { machine } = await sharedMachine(ctx);
+      const persisted = await ctx.machine(machine);
+      const n = machine.run(
         "n = globals().get('n', 0) + 1\n" +
         "open('/home/web/visits.txt', 'a').write(f'visit {n}\\n')\n" +
         "n",
       );
-      const lines = session.rt.run("len(open('/home/web/visits.txt').readlines())");
+      const lines = machine.run("len(open('/home/web/visits.txt').readlines())");
       ctx.print("");
       ctx.print(`${PROMPT} counter  ${ok(n)}   ${dim(`# visits.txt now has ${lines} line(s) on a real disk (OPFS)`)}`);
 
-      const saved = await machine.hibernate();
-      ctx.print(`${PROMPT} session.save()  ${ok(`${saved.pages} pages / ${saved.mb}MB`)}  ${dim("# hibernated")}`);
+      const saved = await persisted.hibernate();
+      ctx.print(`${PROMPT} machine.history.save()  ${ok(`${saved.pages} pages / ${saved.mb}MB`)}  ${dim("# hibernated")}`);
       ctx.print(dim("# close this tab and come back: the counter keeps counting."));
       ctx.status(`Hibernated to disk. This tab now wakes up where it left off. Export it and the file <b class="ok">is</b> the computer.`);
-      ctx.showExport(machine);
+      ctx.showExport(persisted);
       return n >= 1 && saved.pages > 0;
     },
   },
@@ -270,30 +265,30 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
     print: (html) => { out.insertAdjacentHTML("beforeend", (out.innerHTML ? "\n" : "") + html); out.scrollTop = out.scrollHeight; },
     status: (html) => { statusEl.innerHTML = html; },
     // 터미널: 입력줄을 그대로 파이썬의 입력 소스로 빌려준다(input()이 진짜로 멈춘다).
-    terminal: async (rt) => {
+    // syscall bridge는 machine.runtime 탈출구, REPL은 machine.term이 정본이다.
+    terminal: async (machine) => {
       if (terminalCache) return terminalCache;
-      await rt.enableSyscallBridge({
+      await machine.runtime.enableSyscallBridge({
         inputAsync: (prompt) => new Promise((resolve) => {
           root.querySelector(".ps").textContent = prompt || "input";
           pendingInput = resolve;
         }),
       }).install();
-      const term = rt.enableTerminal({ timeTravel: true });
+      const term = machine.term({ timeTravel: true });
       await term.install();
       terminalCache = term;
       return term;
     },
-    // 머신: OPFS에 최면/부활하고 .pymachine으로 내보낸다.
-    machine: async (session) => {
+    // 머신: OPFS에 최면(history.save)하고 .pymachine(history.export)으로 내보낸다.
+    machine: async (machine) => {
       if (machineCache) return machineCache;
       const opfs = await navigator.storage.getDirectory();
       const stateDir = await opfs.getDirectoryHandle("pyprocHeroState", { create: true });
       const homeDir = await opfs.getDirectoryHandle("pyprocHeroHome", { create: true });
-      const home = await session.rt.mountHome(homeDir);
+      const home = await machine.runtime.mountHome(homeDir);
       machineCache = {
-        session,
-        hibernate: async () => { const r = await session.save(stateDir, "heroMachine"); await home.sync(); return r; },
-        revive: () => session.load(stateDir, "heroMachine"),
+        machine,
+        hibernate: async () => { const r = await machine.history.save(stateDir, "heroMachine"); await home.sync(); return r; },
       };
       // 탭이 사라질 때 자동 최면(머신 탭을 실제로 쓴 다음부터만 건다).
       addEventListener("pagehide", () => { machineCache.hibernate(); });
@@ -320,13 +315,13 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
         lineInput.focus();
       };
     },
-    showExport: (machine) => {
+    showExport: (persisted) => {
       if (root.querySelector(".heroExport")) return;
       const btn = document.createElement("button");
       btn.className = "ghost heroExport";
       btn.textContent = "Export .pymachine";
       btn.onclick = async () => {
-        const blob = await machine.session.exportImage();
+        const blob = await persisted.machine.history.export();
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = "computer.pymachine";

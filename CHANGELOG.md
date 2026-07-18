@@ -10,6 +10,46 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Breaking
 
+- **Root surface reshaped to a porcelain machine handle (37 exports -> 6).** The root now
+  exports exactly `boot`, `open`, `createWebComputer`, `checkEnvironment`, `PyProcError`,
+  and `PYPROC_ERROR_CODES`. `boot` resolves to a `PyprocMachine` handle whose namespaces
+  are the model's vocabulary: `run` / `runAsync` (execute), `fs` (files), `term`
+  (terminal), `proc` (worker process pool), `history` (checkpoint/restore volatile,
+  commit/recover/export durable), plus the `runtime` escape hatch for capability detail
+  (`enableSyscallBridge`, `enableAsgiServer`, `enableDeviceFs`, ...). Root class exports
+  are gone; the classes remain as typed contracts reached through the handle.
+- **`open` is the one revival verb.** Its trust contract follows the source instead of
+  flattening semantics: `open(bundleBlob, trustOpts)` verifies envelope integrity and
+  signature before touching the heap (replaces `openMachine`), `open({ dir, name })`
+  revives an OPFS session save by manifest replay plus delta (replaces
+  `bootSession().load(...)`), and `open({ persistent })` opens the multi-tab persistent
+  machine and returns a `KernelElection` handle (replaces `openPersistentMachine`).
+- **Deterministic boot is an explicit opt-in.** `boot({ deterministic: true, ...manifest })`
+  replaces `bootSession(manifest)`. `PYTHONHASHSEED=0` and the entropy stub change
+  guest-visible semantics, so they are never the default; the choice is recorded in the
+  environment fingerprint of every durable commit, and `history.export` / `history.save`
+  exist only in this mode (a non-deterministic state has no replay guarantee).
+- **Subpaths reshaped.** New: `pyproc/history`, the state kernel's contract surface
+  (sha256 address law, object model, `StateStore` contract, `commitState` / `openState`
+  protocol, signed tags, `PYBUNDLE1` bundle codec, `PAGE_SIZE`). Removed:
+  `pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, `pyproc/process-os`
+  (their capabilities moved onto the handle, see the migration map). Remaining:
+  `pyproc/machine`, `pyproc/worker`, `pyproc/assets`, and the demoted `pyproc/gpu` /
+  `pyproc/socket` / `pyproc/wasi`.
+- **One bundle format (`PYBUNDLE1`).** `machine.history.export()` writes a single signed,
+  content-addressed envelope; `open` reads it. The layout is authoritative in
+  `docs/reference/bundleFormat.md`. The legacy `.pymachine` envelopes (meta v2/v3) are
+  still readable through a format-detecting reader, and that legacy reader sunsets at the
+  next breaking release: re-export machines you intend to keep.
+- **State kernel (`src/state`) refounds the journal.** Durable commits are now
+  content-addressed objects with HEAD/PREV generations, verify-on-read
+  (`PYPROC_STATE_CORRUPT`, with PREV fallback) and owner fencing
+  (`PYPROC_STATE_FENCE_STALE` protects HEAD from a superseded writer). Existing journals
+  are migrated automatically on first recover; no consumer action is needed.
+- **Machine crypto injection.** `pyproc/machine` persistence and image constructors now
+  require a provider from `createMachineCryptoProvider(crypto?)` instead of a bare
+  `Crypto` object, so digest/signature law lives in one place (the state kernel).
+
 - Removed `SharedKernel` (and its SharedWorker host asset). It was documented as a
   non-canonical auxiliary path; `KernelElection` / `openPersistentMachine` is the canonical
   multi-tab lane and keeps document-level `crossOriginIsolated` (SharedWorker cannot).
@@ -29,6 +69,25 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   `PyProc.interrupt(pid)` (use `signal(pid, SIGNAL.INT)`),
   `PyProc.mapSerial(fnSrc, args)` (a benchmark baseline, not a product surface; run tasks
   through `exec(pid, ...)` sequentially if you need a serial reference).
+
+### Migration map (old import -> new path)
+
+| Before | After |
+|---|---|
+| `boot()` -> `Runtime` | `boot()` -> `PyprocMachine`; the runtime is `machine.runtime` |
+| `bootSession(manifest)` | `boot({ deterministic: true, ...manifest })` |
+| `openMachine(blob, trustOpts)` | `open(blob, trustOpts)` |
+| `session.exportImage(opts)` | `machine.history.export(opts)` |
+| `session.save(dir, name)` / `session.load(dir, name)` | `machine.history.save(dir, name)` / `open({ dir, name })` |
+| `openPersistentMachine(opts)` | `open({ persistent: opts })` |
+| `rt.enableReactive()` checkpoint/restore | `machine.history.checkpoint()` / `restore()` / `tree()` / `prune()` (raw controller stays at `machine.runtime.enableReactive()`) |
+| `rt.enableJournal(cfg)` commit/recover/pack | `machine.history.commit` / `recover` / `watch` / `pack` with `{ dir, ... }` |
+| `new PyProc(opts)` + `pool.boot(n)` | `await machine.proc({ lanes: n, ...opts })` |
+| `rt.enableTerminal(cfg)` | `machine.term(cfg)` |
+| `createMachineKeyPair` / `exportMachinePublicKey` / `fingerprintMachinePublicKey` | `createStateKeyPair` / `exportStatePublicKey` / `fingerprintStatePublicKey` from `pyproc/history` |
+| `bootEnv(manifest, dirs)` / `runScript(rt, src)` | `boot` manifest options (`packages`, `env`, `setup`, `wheelDir`) |
+| `import { Runtime } from "pyproc/runtime"` | root `boot()` + `machine.runtime` (types via `index.d.ts`) |
+| bare `Crypto` into machine persistence/image constructors | `createMachineCryptoProvider(crypto)` from `pyproc/machine` |
 
 ### Added
 
@@ -66,6 +125,24 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### 한국어 요약
 
+- **루트 37개 -> 6개(porcelain 머신 핸들)**: `boot`/`open`/`createWebComputer`/
+  `checkEnvironment`/`PyProcError`/`PYPROC_ERROR_CODES`만 남는다. `boot`가 돌려주는
+  머신 핸들의 어휘(`run`/`fs`/`term`/`proc`/`history`)가 표면이고, 능력 상세는
+  `machine.runtime` 탈출구로 연다.
+- **open 통합**: 외부 bundle(무결성+서명 선검증), `{ dir, name }` 세션 저장(리플레이+델타),
+  `{ persistent }` 멀티탭(`KernelElection` 반환, 구 `openPersistentMachine`)을 부활 동사
+  하나로 통합. 결정적 부팅은 `boot({ deterministic: true })` opt-in이고
+  `history.export`/`save`는 그 모드 전용.
+- **subpath 재편**: `pyproc/history` 신설(상태 커널 계약: 주소 법, 오브젝트 모델, store,
+  서명 tag, bundle 코덱). `pyproc/runtime`/`reactive`/`syscall-bridge`/`process-os` 소멸
+  (핸들 동사로 이동, 위 마이그레이션 표 참조).
+- **단일 bundle 포맷 `PYBUNDLE1`**: 구 `.pymachine` v2/v3 reader는 다음 브레이킹
+  릴리즈에 일몰 예고(보관할 머신은 재내보내기).
+- **상태 커널(`src/state`) 신설과 저널 재기초**: content-addressed HEAD/PREV 세대,
+  verify-on-read(`PYPROC_STATE_CORRUPT`), fence(`PYPROC_STATE_FENCE_STALE`). 구 저널은
+  첫 recover에서 자동 이관.
+- **machine 암호 주입**: persistence/image 생성자는 맨 `Crypto`가 아니라
+  `createMachineCryptoProvider`가 만든 provider를 요구한다.
 - **forkMany**: 부모 델타를 한 번만 수확해 N 레인에 방송(4.05배). 그 위 4-후보 병렬
   탐색이 직렬 재시도 대비 5.2배. fork는 1:1 위임으로 이름과 반환 계약 불변.
 - SharedKernel 삭제(정본은 openPersistentMachine), GPU/Socket/WASI는 subpath로 강등,

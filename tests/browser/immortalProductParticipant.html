@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><title>installed persistent machine participant</title>
 <script type="importmap">{"imports":{"pyproc":"/node_modules/pyproc/index.js"}}</script></head>
 <body><script type="module">
-  import { openPersistentMachine } from "pyproc";
+  import { open } from "pyproc"; // open({ persistent }) = 옛 openPersistentMachine의 설치 표면
   const post = (message) => parent.postMessage({ from: "productMachineParticipant", ...message }, "*");
   const indexParam = new URLSearchParams(location.search).get("indexURL");
   const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
@@ -14,15 +14,17 @@
     try {
       if (message.cmd === "join") {
         const assetIntegrity = await fetch("/pyproc-assets.json", { cache: "no-store" }).then((response) => response.json());
-        machine = await openPersistentMachine({
-          name: message.name,
-          participantId: message.participantId,
-          manifest: {
-            indexURL: INDEX,
-            setup: "import json\nproductPrepared = 7",
+        machine = await open({
+          persistent: {
+            name: message.name,
+            participantId: message.participantId,
+            manifest: {
+              indexURL: INDEX,
+              setup: "import json\nproductPrepared = 7",
+            },
+            assetIntegrity,
+            onStatus: (status) => post({ participantId: message.participantId, event: "status", status }),
           },
-          assetIntegrity,
-          onStatus: (status) => post({ participantId: message.participantId, event: "status", status }),
         });
         unsubscribe = machine.subscribe((status) => post({ participantId: message.participantId, event: "status", status }));
         post({ participantId: message.participantId, requestId: message.requestId, ok: true, status: machine.status() });

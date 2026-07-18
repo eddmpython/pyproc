@@ -81,4 +81,27 @@
 - 게이트: 신설 음성 시험(맨 Crypto 거부 + 주입 digest 형식) + npm test 1335, test:types, generationContract 25/25, machineEnvelope 20/20, webComputer 제품 13/13 전부 green.
 - 잔여 기록(정면 봉착): .webmachine의 bundle 통합은 설계 긴장이 실재한다 - 현 .webmachine은 content(manifest) 서명이라 **payload 접촉 전 신뢰 거부**(probe가 slice 2회로 증명)가 성립하는데, 현 bundle tag는 전신 다이제스트 서명이라 거부 전에 전체 판독이 필요하다. 올바른 해소는 bundle tag의 header-target 서명(내용주소가 오브젝트를 개별 봉인하므로 헤더 서명으로 충분 - git tag 동형)이며, 이는 세션측 bundle과 문서·게이트의 공동 개정이 필요해 별도 probe(campaign probe 5)로 실측 후 진행한다.
 
-NEXT: 7b 표면 원자 개편 - porcelain 머신 핸들(`boot`/`createWebComputer` -> 핸들, machine.run/history/proc/fs/term), 루트 export 37 -> 한 자릿수, subpath = history/machine/worker/assets, d.ts·표면 게이트 재작성 동일 커밋. 이후 7c 문서 동시 개정, 마지막으로 bundle header-target 서명 probe.
+## 2026-07-18 - 7b 진행 중(작업 트리, 미커밋): 표면 일격의 코어 완료
+
+- porcelain 신설: [pyprocMachine.js](../../src/machine/composition/pyprocMachine.js) - `boot`(deterministic opt-in = 옛 bootSession 흡수) / `open`(bundle | {dir,name} | {persistent} 통합) / PyprocMachine(run/runAsync/fs/term/proc/runtime 탈출구) / PyprocHistory(휘발 checkpoint·restore·tree·prune + 내구 commit·recover·watch·pack·export·save, export는 결정 부팅 전용 명시 거부).
+- 루트 [index.js](../../index.js) = 정확히 6 export. [package.json](../../package.json) exports = . / history(신설, [src/state/index.js](../../src/state/index.js) 배럴 + index.d.ts) / machine / worker / assets / 강등 gpu·socket·wasi. 소멸: runtime·reactive·syscall-bridge·process-os. **PRD와 의도적 편차**: 강등 3종 subpath는 유지한다(제거하면 Runtime enable* 바인딩이 없는 gpu/socket/wasi 능력이 도달 불가 = 기능 상실. 강등의 정의는 원래 "루트 부재"였다).
+- 루트 [index.d.ts](../../index.d.ts) 수술: 자산 계약 -> [src/runtime/assets.d.ts](../../src/runtime/assets.d.ts)(subpath 형제 d.ts), 값-export가 사라진 클래스 19종은 declare + export type(핸들·탈출구가 돌려주는 타입), porcelain 선언(BootMachineOptions/OpenTrustOptions/PyprocMachine/PyprocHistory/boot/open) 추가. SIGNAL은 `PyProc.SIGNAL` 정적 상수로 이사.
+- run.mjs 게이트 재작성: 표면(6개 정확 일치 + **d.ts 값-선언 1:1 패리티 신설**), 계약(소스를 내부 모듈로 전환 + porcelain 어휘 계약 + pyproc/history 계약), 타입(declare 타입 검사 + subpath d.ts 확장), exports 고정 목록 갱신, tsconfig에 신규 d.ts 3종. packageConsumer smoke를 새 표면(+ 설치본 커널 왕복 실검증)으로 재작성.
+- README 양본: 새 표면 지도(porcelain 서사) + 진입점 표 + 코드 샘플 전면 갱신.
+- 병렬 진행 중(에이전트 3): (A) 소비자 게이트 이행 - gate.html import·porcelain 스모크, productConsumer/immortal/coverage manifest/contract.md 표, run.mjs coverage 목록, mcp. (B) examples 15종 + 랜딩 이행. (C) api.md 재구성 + capabilityMatrix 도달 경로 + CHANGELOG Unreleased 브레이킹·마이그레이션 표.
+- 전부 GREEN 후 한 커밋으로 봉인 예정(내부는 단계, 표면은 일격). 남은 후속: 패리티 게이트 음성 시험, 전 브라우저 게이트 재실행, .webmachine bundle 통합 probe(원장 7a-1 잔여 기록 참조).
+
+## 2026-07-18 - 7b·7c 완료: 표면 일격과 문서 동시 개정
+
+- 병렬 이행 3축 수합: (A) 소비자 게이트 - gate.html(심층 import 전환 + porcelain 스모크 3종), productConsumer/immortal(설치 표면만 소비, coverage manifest 12행 schemaVersion 2, 검사명 문자열 전부 보존), contract.md coverage 표 재생성. 도달 불가가 된 표면의 게이트는 의미 보존 재배선: VirtualOrigin -> 설치 SW 위임 프로토콜 직접 배선, JobControl/MachineContainer -> `machine.proc` 공개 동사로 동일 수명주기, MachineJail -> runtime 탈출구 집행. (B) examples 15종 + 랜딩 전면 이행(10/10 GREEN), 판단 기록: VirtualOrigin 재노출 검토 권고, `machine.proc()`의 boot info 미반환 개선 여지. (C) api.md 전면 재구성(루트 6 + 핸들 어휘 + 비용 영수증 + 오류 전 표), capabilityMatrix 도달 경로 갱신(구 이름 병기), CHANGELOG Unreleased 브레이킹 7항 + 마이그레이션 표 14행.
+- 최종 검증(전부 직접 재실행): npm test 1310/0, test:types 0 error, test:browser 84/84, test:examples 10/10, test:mcp 7/7, test:consumer 30/30, test:web-computer 13/13, test:package ok. **패리티 게이트 이빨 증명**: d.ts에 유령 값-선언 주입 -> RED("실물에 없는 값-선언: ghostExport") -> 원복 GREEN.
+- 릴리즈(버전 +1 + 태그)는 명시 지시 대기(0.0.x 남발 금지 규칙). CHANGELOG Unreleased가 노트 정본.
+
+## 잔여 후속(별도 작업 단위)
+
+1. bundle header-target 서명 probe(campaign probe 5): .webmachine bundle 통합의 전제. payload 접촉 전 신뢰 거부 보존이 쟁점(7a-1 잔여 기록 참조).
+2. VirtualOrigin의 표면 재노출 검토(예제·게이트가 SW 내부 프로토콜을 인라인 배선 중 - 드리프트 위험).
+3. `machine.proc()`이 PyProcBootInfo(workers/avgBootMs/forked)를 핸들에 실어주는 개선.
+4. attempts/stateKernel 캠페인 종결 판정은 위 1 해소 후(캠페인 폴더 삭제 + 기록은 원장·계약 실태 표로).
+
+NEXT: 7단계 일격 커밋으로 봉인(이 항목이 마지막 기록). 이후 이니셔티브는 잔여 후속 1~4를 남기고 실질 완료 상태다.

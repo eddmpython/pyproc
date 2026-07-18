@@ -21,6 +21,8 @@ import { shardMapArray, shardMatmul } from "./shardCompute.js";
 export const SIGNAL = { INT: 2, USR1: 10, USR2: 12, TERM: 15 };
 
 export class PyProc {
+  // 시그널 번호표는 프로세스 네임스페이스의 소유다(루트 상수 아님): pool.SIGNAL.INT 등으로 소비.
+  static SIGNAL = SIGNAL;
   constructor(opts = {}) {
     this.indexURL = opts.indexURL || DEFAULT_INDEX;
     this.packages = opts.packages || []; // 각 프로세스가 부팅 시 로드할 패키지(numpy 등)

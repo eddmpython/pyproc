@@ -88,7 +88,7 @@ f'counter={counter}, file={open("/home/web/immortal/counter.txt").read()}'</text
   </div>
 
   <script type="module">
-    import { openPersistentMachine } from "../index.js";
+    import { open } from "../index.js";
 
     const elements = Object.fromEntries([
       "headline", "machineName", "participantId", "role", "leaderId", "epoch", "participantCount",
@@ -141,10 +141,13 @@ f'counter={counter}, file={open("/home/web/immortal/counter.txt").read()}'</text
     };
 
     try {
-      machine = await openPersistentMachine({
-        name: machineName,
-        manifest: { indexURL: INDEX },
-        onStatus: render,
+      // open({ persistent }) = 멀티탭 영속 머신: Web Locks 선출 + 저널 부활(KernelElection 핸들).
+      machine = await open({
+        persistent: {
+          name: machineName,
+          manifest: { indexURL: INDEX },
+          onStatus: render,
+        },
       });
       render(machine.status());
       elements.out.textContent = machine.status().recovered

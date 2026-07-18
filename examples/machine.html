@@ -65,7 +65,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     <footer class="site">Chromium/Edge. Source: <a href="https://github.com/eddmpython/pyproc">github.com/eddmpython/pyproc</a> · <a href="https://www.npmjs.com/package/pyproc">npm install pyproc</a></footer>
   </div>
   <script type="module">
-    import { bootSession, openMachine, createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey, MachineJail } from "../index.js";
+    import { boot, open } from "../index.js";
     const st = document.getElementById("st"), out = document.getElementById("out"), keyFp = document.getElementById("keyFp");
     const print = (t) => { out.textContent += t + "\n"; };
     // 예제 실행 게이트(?gate): 부팅+실행 완주를 보고. 사람이 열면 no-op.
@@ -90,6 +90,20 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     const homeDir = await opfs.getDirectoryHandle("pyMachineHome", { create: true });
     const keyStoreName = "pyprocMachineDemo";
 
+    // .pymachine 서명 키: WebCrypto ECDSA P-256. history.export({ signingKey })와
+    // open(blob, { trustedPublicKeys })가 소비하는 표준 형태(CryptoKeyPair / 공개 JWK)다.
+    // 지문은 정규화 JWK(kty, crv, x, y 순서)의 sha256 주소로, 라이브러리 신뢰 지문 규약과 같다.
+    const KEY_ALG = { name: "ECDSA", namedCurve: "P-256" };
+    const createSigningKeys = () => crypto.subtle.generateKey(KEY_ALG, true, ["sign", "verify"]);
+    async function exportPublicJwk(keys) {
+      const jwk = await crypto.subtle.exportKey("jwk", keys.publicKey);
+      return { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y };
+    }
+    async function fingerprintPublicJwk(jwk) {
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(jwk))));
+      return "sha256:" + [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
     const reqAsPromise = (req) => new Promise((resolve, reject) => {
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -108,7 +122,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
         db.close();
         if (stored && stored.privateKey && stored.publicKey) return stored;
       } catch (e) {}
-      const keys = await createMachineKeyPair();
+      const keys = await createSigningKeys();
       try {
         const db = await openKeyDb();
         const tx = db.transaction("keys", "readwrite");
@@ -118,12 +132,11 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       } catch (e) {}
       return keys;
     }
-    const machineJail = new MachineJail({ net: false, clipboard: false, home: true, workers: false });
     const machineKeys = await loadMachineKeys();
-    const trustedPublicKey = await exportMachinePublicKey(machineKeys);
-    const trustedKeyFp = await fingerprintMachinePublicKey(trustedPublicKey);
+    const trustedPublicKey = await exportPublicJwk(machineKeys);
+    const trustedKeyFp = await fingerprintPublicJwk(trustedPublicKey);
     const trustedKeyShort = trustedKeyFp.slice("sha256:".length, "sha256:".length + 16);
-    keyFp.textContent = `trusted signer: ${trustedKeyShort}. permissions: home=yes, net=no, clipboard=no, workers=no. connect-src ${machineJail.connectSrc()}. Unsigned or unknown-signer files are rejected.`;
+    keyFp.textContent = `trusted signer: ${trustedKeyShort}. Unsigned or unknown-signer machine files are rejected before any state touches the heap.`;
 
     async function clearDirectory(dir) {
       for await (const [name, handle] of dir.entries()) {
@@ -131,17 +144,17 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       }
     }
 
-    async function copyHomeToOpfs(rt, srcPath, dstDir) {
+    async function copyHomeToOpfs(m, srcPath, dstDir) {
       await clearDirectory(dstDir);
       const copyDir = async (path, dir) => {
-        for (const name of rt.fs.readdir(path)) {
+        for (const name of m.fs.readdir(path)) {
           const full = `${path.replace(/\/+$/, "")}/${name}`;
-          const stat = rt.fs.stat(full);
+          const stat = m.fs.stat(full);
           if (stat.isDir) {
             const child = await dir.getDirectoryHandle(name, { create: true });
             await copyDir(full, child);
           } else if (stat.isFile) {
-            const data = rt.fs.readFile(full);
+            const data = m.fs.readFile(full);
             const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
             await w.write(data);
             await w.close();
@@ -151,56 +164,73 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       await copyDir(srcPath, dstDir);
     }
 
-    function clearRuntimeDir(rt, path) {
-      for (const name of rt.fs.readdir(path)) {
+    function clearMachineDir(m, path) {
+      for (const name of m.fs.readdir(path)) {
         const full = `${path.replace(/\/+$/, "")}/${name}`;
-        const stat = rt.fs.stat(full);
+        const stat = m.fs.stat(full);
         if (stat.isDir) {
-          clearRuntimeDir(rt, full);
-          rt.fs.rmdir(full);
+          clearMachineDir(m, full);
+          m.fs.rmdir(full);
         } else if (stat.isFile) {
-          rt.fs.unlink(full);
+          m.fs.unlink(full);
         }
       }
     }
 
-    let session = await bootSession({ indexURL: INDEX });
-    let home = await session.rt.mountHome(homeDir);
+    // resume: 이전 hibernate 저장이 있으면 open({ dir, name })이 같은 매니페스트 리플레이 +
+    // 델타 적용으로 그 자리에서 깨어난다. 없으면(첫 방문) 결정적 리플레이 부팅으로 시작한다
+    // (history.save/export는 결정 부팅에서만 성립한다). 저장 유무는 이 데모가 hibernate 성공
+    // 직후 남기는 마커 파일로 판단한다: 저장 포맷 내부(파일 이름)에 결합하지 않고, 첫 방문에
+    // 실패할 open 부팅(버려질 커널 하나)을 만들지 않기 위해서다.
+    const SAVE_MARKER = "machine.saved";
+    const hasSave = await stateDir.getFileHandle(SAVE_MARKER).then(() => true, () => false);
+    const markSaved = async () => {
+      const w = await (await stateDir.getFileHandle(SAVE_MARKER, { create: true })).createWritable();
+      await w.write("1");
+      await w.close();
+    };
+    let machine = null;
+    let resumeReason = "fresh.boot";
+    if (hasSave) {
+      try {
+        machine = await open({ dir: stateDir, name: "machine" }, { manifest: { indexURL: INDEX } });
+        st.textContent = "Awake: previous session revived from its heap delta. This computer never turned off.";
+        resumeReason = "session.load";
+      } catch (e) {
+        machine = null; // 저장이 깨졌거나 매니페스트가 어긋나면 새로 시작한다(아래 fresh boot)
+      }
+    }
+    if (!machine) {
+      machine = await boot({ deterministic: true, indexURL: INDEX });
+      st.textContent = "Fresh boot (first visit). Make some state, then close the tab and come back.";
+    }
+    let home = await machine.runtime.mountHome(homeDir);
     async function ensureResumeHook() {
-      session.rt.setGlobal("_pmResumeSrc", resumeSrc);
-      session.rt.run([
+      machine.runtime.setGlobal("_pmResumeSrc", resumeSrc);
+      machine.run([
         "import os",
         "os.makedirs('/home/web', exist_ok=True)",
         "if not os.path.exists('/home/web/resume.py'):",
         "    open('/home/web/resume.py', 'w').write(_pmResumeSrc)",
       ].join("\n"));
     }
-    function resumeMachine(reason, init = session.rt.enableInit()) {
+    function resumeMachine(reason, init = machine.runtime.enableInit()) {
       const r = init.resume(reason);
-      if (r.resume) print(`resume.py: reopened appDb (${reason}, events=${session.rt.run("resumeEvents")}).`);
+      if (r.resume) print(`resume.py: reopened appDb (${reason}, events=${machine.run("resumeEvents")}).`);
       return r;
-    }
-    // resume: 이전 hibernate가 있으면 그 자리에서 깨어난다
-    let resumeReason = "fresh.boot";
-    try {
-      const r = await session.load(stateDir, "machine");
-      st.textContent = `Awake: previous session revived (${r.pages} pages, ${r.mb}MB). This computer never turned off.`;
-      resumeReason = "session.load";
-    } catch (e) {
-      st.textContent = "Fresh boot (first visit). Make some state, then close the tab and come back.";
     }
     await ensureResumeHook();
 
     // OS의 init: /home/web/boot.py가 있으면 부팅마다 저절로 돈다(rc.local). cron.py는 60초 틱.
-    const init = session.rt.enableInit();
+    const init = machine.runtime.enableInit();
     const ran = init.install();
     if (ran.boot) print("init: ran /home/web/boot.py");
     resumeMachine(resumeReason, init);
 
     const runCode = async () => {
       const code = document.getElementById("code").value;
-      session.rt.setGlobal("_pmSrc", code);
-      const r = await session.rt.runAsync(
+      machine.runtime.setGlobal("_pmSrc", code);
+      const r = await machine.runAsync(
         "import io, contextlib\n_buf = io.StringIO()\n" +
         "with contextlib.redirect_stdout(_buf), contextlib.redirect_stderr(_buf):\n" +
         "    exec(_pmSrc, globals())\n_buf.getvalue()"
@@ -209,20 +239,21 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     };
 
     const hibernate = async () => {
-      const r = await session.save(stateDir, "machine");
+      const r = await machine.history.save(stateDir, "machine");
       await home.sync();
+      await markSaved();
       return r;
     };
     const exportSignedImage = async () => {
       await home.sync();
-      return session.exportImage({ signingKey: machineKeys, includeHome: true });
+      return machine.history.export({ signingKey: machineKeys, includeHome: true });
     };
     const switchToSignedImage = async (blob) => {
-      const next = await openMachine(blob, { trustedPublicKeys: [trustedPublicKey], requireSignature: true });
-      await copyHomeToOpfs(next.rt, "/home/web", homeDir);
-      clearRuntimeDir(next.rt, "/home/web");
-      session = next;
-      home = await session.rt.mountHome(homeDir);
+      const next = await open(blob, { trustedPublicKeys: [trustedPublicKey], requireSignature: true });
+      await copyHomeToOpfs(next, "/home/web", homeDir);
+      clearMachineDir(next, "/home/web");
+      machine = next;
+      home = await machine.runtime.mountHome(homeDir);
       await ensureResumeHook();
       resumeMachine("openMachine");
       st.textContent = `Switched to a signed machine verified by key ${trustedKeyShort}.`;
@@ -239,10 +270,10 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
         const r = await runCode();
         print(r);
         const blob = await castSigned();
-        const stateOk = session.rt.run("n >= 1") === true;
-        const fileOk = String(session.rt.run("open('/home/web/visits.txt').read()")).includes("visit");
-        const resumeOk = session.rt.run("resumeReasonSeen == 'openMachine' and appDb.execute('select count(*) from resumeEvent').fetchone()[0] >= 3") === true;
-        const trustUiOk = keyFp.textContent.includes("trusted signer:") && keyFp.textContent.includes("home=yes") && keyFp.textContent.includes("net=no") && keyFp.textContent.includes("connect-src 'self'");
+        const stateOk = machine.run("n >= 1") === true;
+        const fileOk = String(machine.run("open('/home/web/visits.txt').read()")).includes("visit");
+        const resumeOk = machine.run("resumeReasonSeen == 'openMachine' and appDb.execute('select count(*) from resumeEvent').fetchone()[0] >= 3") === true;
+        const trustUiOk = keyFp.textContent.includes("trusted signer:") && keyFp.textContent.includes("rejected");
         gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && resumeOk && trustUiOk && st.textContent.includes("verified"));
       } catch (e) { print(String(e).slice(-160)); gateReport(false); }
     }
@@ -276,7 +307,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       st.textContent = "Booting the imported computer...";
       try {
         await switchToSignedImage(f);
-        print("openMachine done: signature verified, the sender's exact state is alive here.");
+        print("open() done: signature verified, the sender's exact state is alive here.");
       } catch (err) {
         st.textContent = "Import rejected.";
         print(`Rejected machine file: ${String(err).slice(-220)}`);

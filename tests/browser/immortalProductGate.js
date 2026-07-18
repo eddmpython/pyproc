@@ -1,4 +1,5 @@
-import { openPersistentMachine } from "pyproc";
+// 부활 통합 동사 open({ persistent })가 옛 openPersistentMachine의 설치 표면이다(state-kernel 7b).
+import { open } from "pyproc";
 
 const waitFor = async (predicate, timeoutMs, stepMs = 50) => {
   const deadline = performance.now() + timeoutMs;
@@ -91,7 +92,8 @@ export async function runImmortalProductGate(opts = {}) {
   };
 
   try {
-    check("openPersistentMachine is installed public surface", typeof openPersistentMachine === "function");
+    // 검사 의미: 멀티탭 영속 머신 진입점이 설치 패키지의 public 표면인가(지금은 open({ persistent })).
+    check("openPersistentMachine is installed public surface", typeof open === "function");
     const initialStarted = performance.now();
     await Promise.all([makeParticipant("A"), makeParticipant("B"), makeParticipant("C")]);
     const joined = await Promise.all(["A", "B", "C"].map((participantId) => command(participantId, {
