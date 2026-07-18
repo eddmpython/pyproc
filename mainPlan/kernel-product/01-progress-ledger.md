@@ -35,5 +35,21 @@
   주소를 재시작 쿼리로 운반). guest snapshot이 exportImage bundle이 되어 파서도 전환.
   제품 게이트 13/13, npm test 1321, test:types green.
 
-NEXT: P3 - .webmachine = 단일 bundle. webMachineFile writer를 bundle 인코딩(주입 코덱)으로
-교체, reader는 헤더 선행 검증으로 payload 접촉 전 신뢰 거부 보존, 구 WEBMACHINE1 감지형 reader.
+## 2026-07-18 - P4 완료: VirtualOrigin 공개 표면 재노출
+
+- runtimeBindings에 enableVirtualOrigin 추가: machine.runtime.enableVirtualOrigin(asgi?, cfg?)로
+  공개 도달 경로 복원(asgi 생략 시 enableAsgiServer로 생성). Runtime 계약 게이트 목록과
+  index.d.ts에 편입. 예제·소비자 게이트의 SW 내부 프로토콜 인라인을 공개 경로로 되돌리는
+  것과 브라우저 실동작 검증은 P5 통합 제품에서 함께.
+- npm test 1321, test:types green.
+
+## (병행) P3 진행 중: .webmachine = 단일 bundle
+
+- bundleFormat의 commit을 선택형으로 일반화(세션 bundle은 commit 실음, machine envelope는 안 실음 -
+  두 소비자가 같은 wire 포맷 공유, meta로만 갈림). 헤더 서명(header-target)이 payload 접촉 전
+  신뢰 거부를 이미 보장하므로 .webmachine의 조기 거부 계약이 그대로 성립한다.
+- webMachineFile을 bundle 위에 재기초(주입 코덱 + 조기 거부 reader + 구 WEBMACHINE1 감지형 reader),
+  coordinator preflight·machineEnvelopeProbe 이행은 병행 작업 단위로 진행.
+
+NEXT: P3 수합(게이트 검증) -> P5 통합 제품 Web Computer v2(porcelain python 패널 + 단일 bundle
+저장·이동 + VirtualOrigin 공개 경로 + 전 게이트).

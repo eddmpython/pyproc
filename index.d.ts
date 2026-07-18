@@ -872,6 +872,8 @@ declare class Runtime {
   enableReactive(): ReactiveController;
   enableSyscallBridge(cfg?: SyscallBridgeConfig): SyscallBridge;
   enableAsgiServer(cfg?: AsgiServerConfig): AsgiServer;
+  /** 파이썬 서버를 진짜 URL로: SW 위임에 응답한다. asgi를 생략하면 enableAsgiServer(cfg)로 만든다. */
+  enableVirtualOrigin(asgi?: AsgiServer, cfg?: AsgiServerConfig): VirtualOrigin;
   enableTerminal(cfg?: TerminalConfig): Terminal;
   enableWheelCache(cfg: WheelCacheConfig): WheelCache;
   enableDeviceFs(cfg?: DeviceFsConfig): DeviceFs;

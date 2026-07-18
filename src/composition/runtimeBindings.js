@@ -4,6 +4,7 @@
 import { ReactiveController } from "../capabilities/reactive.js";
 import { SyscallBridge } from "../capabilities/syscallBridge.js";
 import { AsgiServer } from "../capabilities/asgiServer.js";
+import { VirtualOrigin } from "../capabilities/virtualOrigin.js";
 import { WheelCache } from "../capabilities/wheelCache.js";
 import { Terminal } from "../capabilities/terminal.js";
 import { DeviceFs } from "../capabilities/deviceFs.js";
@@ -23,6 +24,9 @@ export function installRuntimeCapabilityBindings(RuntimeClass) {
     enableReactive: { value() { return (this[REACTIVE_CONTROLLER] ||= new ReactiveController(this)); } },
     enableSyscallBridge: { value(cfg = {}) { return new SyscallBridge(this, { ...cfg, assetIntegrity: cfg.assetIntegrity || this.assetIntegrity }); } },
     enableAsgiServer: { value(cfg = {}) { return new AsgiServer(this, cfg); } },
+    // 파이썬 서버를 진짜 URL로: 설치 완료된 AsgiServer를 받아 SW 위임에 응답한다.
+    // asgi 인자를 생략하면 여기서 enableAsgiServer(cfg)로 만든다(install은 소비자 몫).
+    enableVirtualOrigin: { value(asgi, cfg = {}) { return new VirtualOrigin(asgi || this.enableAsgiServer(cfg)); } },
     enableTerminal: { value(cfg = {}) { return new Terminal(this, cfg); } },
     enableWheelCache: { value(cfg = {}) { return new WheelCache(this, cfg); } },
     enableDeviceFs: { value(cfg = {}) { return new DeviceFs(this, cfg); } },

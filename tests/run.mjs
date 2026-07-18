@@ -234,7 +234,7 @@ check("porcelain 계약: PyprocMachine 어휘", () => {
 });
 check("Runtime 메서드", () => {
   const p = coreApi.Runtime.prototype;
-  for (const m of ["run", "runAsync", "install", "loadPackages", "loadPackagesFromImports", "setStdout", "setStderr", "freeze", "mountHome", "noteStateMutation", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableTerminal", "enableWheelCache", "enableDeviceFs", "enableInit", "enableJournal"])
+  for (const m of ["run", "runAsync", "install", "loadPackages", "loadPackagesFromImports", "setStdout", "setStderr", "freeze", "mountHome", "noteStateMutation", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableVirtualOrigin", "enableTerminal", "enableWheelCache", "enableDeviceFs", "enableInit", "enableJournal"])
     if (typeof p[m] !== "function") throw new Error("missing " + m);
 });
 check("FileSystem 메서드", () => {
