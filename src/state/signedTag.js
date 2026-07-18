@@ -31,12 +31,14 @@ function bytesFromBase64(value) {
 }
 
 // 지문/서명은 정규화된 JWK에 대해서만 계산한다: 키 순서나 부가 필드가 달라도 같은 키면 같다.
+// 필드 순서(kty, crv, x, y)는 기존 .pymachine 지문 규약과 동일해야 한다: 지문은 소비자가
+// 신뢰 목록에 박아두는 공개 값이라 순서 변경 = 전 소비자의 지문 무효화다.
 export function canonicalStateJwk(jwk) {
   if (typeof jwk !== "object" || jwk === null || jwk.kty !== "EC" || jwk.crv !== "P-256"
     || typeof jwk.x !== "string" || typeof jwk.y !== "string") {
     throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "signedTag: P-256 공개키 JWK가 필요하다");
   }
-  return { crv: "P-256", kty: "EC", x: jwk.x, y: jwk.y };
+  return { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y };
 }
 
 export async function createStateKeyPair(cryptoProvider) {
@@ -52,18 +54,42 @@ export async function fingerprintStatePublicKey(cryptoProvider, publicKeyOrJwk) 
   return sha256AddressWith(cryptoProvider, textEncoder.encode(JSON.stringify(jwk)));
 }
 
-// target(내용주소/봉투 다이제스트 문자열)에 서명해 tag를 만든다. 개인키는 tag에 실리지 않는다.
-export async function signStateTag(cryptoProvider, keyPair, target) {
+// JWK 또는 CryptoKey를 검증용 공개키로 들인다(두 호출부의 공용 관용구).
+export async function importStatePublicKey(cryptoProvider, key) {
+  const subtle = requireProvider(cryptoProvider);
+  if (key && typeof key === "object" && key.kty) return subtle.importKey("jwk", canonicalStateJwk(key), KEY_ALG, true, ["verify"]);
+  if (typeof CryptoKey !== "undefined" && key instanceof CryptoKey) return key;
+  throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "signedTag: publicKey 형식 위반");
+}
+
+// 저수준 서명/검증: target 다이제스트 문자열에 대한 ECDSA 원바이트. 상위 포맷(tag,
+// 구 .pymachine signature v1)이 각자의 봉투에 싣더라도 암호 연산은 이 두 함수 한 벌이다.
+export async function signStateDigest(cryptoProvider, privateKey, target) {
   const subtle = requireProvider(cryptoProvider);
   if (typeof target !== "string" || !target) throw new PyProcError("PYPROC_INPUT_INVALID", "signedTag: target 다이제스트 문자열이 필요하다");
+  return new Uint8Array(await subtle.sign(SIGN_ALG, privateKey, textEncoder.encode(target)));
+}
+
+export async function verifyStateDigest(cryptoProvider, publicKeyOrJwk, target, signatureBytes) {
+  const subtle = requireProvider(cryptoProvider);
+  const publicKey = await importStatePublicKey(cryptoProvider, publicKeyOrJwk);
+  try {
+    return await subtle.verify(SIGN_ALG, publicKey, signatureBytes, textEncoder.encode(target));
+  } catch (e) {
+    return false; // 손상된 서명 바이트는 "검증 실패"다(예외 아님: 적대 입력의 정상 결말)
+  }
+}
+
+// tag 조립: 개인키 + 공개키 JWK로 target에 서명한다. 개인키는 tag에 실리지 않는다.
+export async function makeStateTag(cryptoProvider, privateKey, publicKeyJwk, target) {
+  const signature = await signStateDigest(cryptoProvider, privateKey, target);
+  return { alg: STATE_TAG_ALG, target, publicKey: canonicalStateJwk(publicKeyJwk), signature: base64FromBytes(signature) };
+}
+
+// target(내용주소/봉투 다이제스트 문자열)에 서명해 tag를 만든다(CryptoKeyPair 편의형).
+export async function signStateTag(cryptoProvider, keyPair, target) {
   if (!keyPair?.privateKey || !keyPair?.publicKey) throw new PyProcError("PYPROC_INPUT_INVALID", "signedTag: keyPair가 필요하다");
-  const signature = new Uint8Array(await subtle.sign(SIGN_ALG, keyPair.privateKey, textEncoder.encode(target)));
-  return {
-    alg: STATE_TAG_ALG,
-    target,
-    publicKey: await exportStatePublicKey(cryptoProvider, keyPair.publicKey),
-    signature: base64FromBytes(signature),
-  };
+  return makeStateTag(cryptoProvider, keyPair.privateKey, await exportStatePublicKey(cryptoProvider, keyPair.publicKey), target);
 }
 
 // tag 검증: { valid, trusted, signerFingerprint }.
@@ -80,13 +106,7 @@ export async function verifyStateTag(cryptoProvider, tag, expectedTarget, opts =
     return { valid: false, trusted: false, signerFingerprint: null };
   }
   const jwk = canonicalStateJwk(tag.publicKey);
-  const publicKey = await subtle.importKey("jwk", jwk, KEY_ALG, true, ["verify"]);
-  let valid = false;
-  try {
-    valid = await subtle.verify(SIGN_ALG, publicKey, bytesFromBase64(tag.signature), textEncoder.encode(tag.target));
-  } catch (e) {
-    valid = false; // 손상된 서명 바이트는 "검증 실패"다(예외 아님: 적대 입력의 정상 결말)
-  }
+  const valid = await verifyStateDigest(cryptoProvider, jwk, tag.target, bytesFromBase64(tag.signature));
   const signerFingerprint = await fingerprintStatePublicKey(cryptoProvider, jwk);
   if (!valid) return { valid: false, trusted: false, signerFingerprint };
   let trusted = false;

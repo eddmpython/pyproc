@@ -54,4 +54,12 @@
 - 게이트: 기존 저널 게이트(유휴 커밋·pack·pack-only 복구) 무수정 통과 + 신설 4종 - 동일 상태 재커밋 wrote 0(비용 법칙 보존), 구 포맷 v2 fixture recover 호환, 첫 커밋의 커널 이관(구 ref 소멸 + 공유 CAS dedupe + 재복구), 커널 포맷 h0 불일치 즉시 예외. **이빨 증명**: legacy 경로 우회 주입 -> RED("nullp") -> 원복 GREEN.
 - npm test 1319, test:types, test:browser 76/76 전부 green.
 
-NEXT: 4단계 - 봉투·신뢰 통합. machineSignature와 webMachineTrust를 signedTag 코어 한 벌의 두 호출부로. bundle writer 즉시 단일화 + 구 .pymachine v2/v3 이중 reader + 변조 3종 음성 시험.
+## 2026-07-18 - 4단계(세션측) 완료: bundle 단일 writer + 서명 코어 호출부화
+
+- [bundleFormat.js](../../src/state/bundleFormat.js) 신설: 단일 봉투 포맷 PYBUNDLE1(MAGIC + 봉투 다이제스트 hex64 + u32 헤더 + 오브젝트 연속). 무결성(봉투 다이제스트)과 출처(tag, unsigned 다이제스트 서명)가 분리되고, decode는 상한 검증 + 전 오브젝트 verify-on-read 후에만 바이트를 내준다. 레이아웃은 [docs/reference/bundleFormat.md](../../docs/reference/bundleFormat.md)가 버전 있는 공개 계약으로 문서화(문서-코드 상수 동기 게이트 포함).
+- `Session.exportImage` = bundle 단일 writer(구 v2/v3 writer 폐지). 내부 표현 = 커널 커밋(페이지 blob + /home file 엔트리 + 환경 지문 h0/deterministic). `openMachine` = 감지형 이중 reader(PYBUNDLE1 커널 경로 + PYMACHINE2 legacy 경로, 신뢰 게이트는 한 함수 공유). legacy reader는 다음 브레이킹 릴리즈에 일몰(문서 명시).
+- 서명 코어 한 벌(세션측): [machineSignature.js](../../src/session/machineSignature.js)는 v1 형식 reader + 서명자 자료 정규화만 남기고 키 생성·내보내기·지문·서명·검증 전부 [signedTag.js](../../src/state/signedTag.js) 코어에 위임. `signMachineMeta`(구 writer) 삭제. 지문 규약(kty,crv,x,y 순서)은 기존과 동일 보존 - 지문은 소비자가 박아두는 공개 값이라 순서 변경 = 전 소비자 지문 무효화이므로 코어 canonical 순서를 세션 규약에 맞췄다.
+- 게이트: run.mjs에 bundle 왕복 + 레이아웃 문서 동기 + 변조 음성 3종(바이트 변조 무결성 거부, tag 제거, 잘못된 키 valid-but-untrusted). 브라우저 게이트 5종 신설: 서명+신뢰 부활, 잘못된 키 거부, 변조 즉시 거부, **문서화 레이아웃 독립 재파싱 대조**(디코더 미경유), 구 봉투 v2 fixture reader 호환. npm test 1329, test:browser 81/81, test:mcp 7/7, test:types 전부 green.
+- 잔여(4단계 machine측): webMachineTrust의 코어 호출부화와 .webmachine의 bundle 통합은 machine 경계(밖 import는 composition 한 점) 때문에 주입 배선이 필요해 5단계(coordinator 커널 위임)의 composition 개정과 같은 지점에서 처리한다.
+
+NEXT: 5단계 - coordinator 저장 위임. machineCommitCoordinator가 저장·무결성을 커널에 위임(IndexedDB store = 커널 backend, fence 발급 = ref 전제조건 훅)하고, 그 주입 배선으로 4단계 잔여(webMachineTrust 코어 호출부화, .webmachine bundle 통합)를 함께 닫는다.

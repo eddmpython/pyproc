@@ -456,6 +456,40 @@ console.log("\n[state 커널]");
     if (code !== "PYPROC_STATE_FENCE_STALE") throw new Error(`fence 거부 아님(${code})`);
     if ((await store.readRef("HEAD")).ref.commit !== before) throw new Error("stale fence가 HEAD를 움직임");
   });
+  await checkAsync("state bundle: 왕복 + 레이아웃 문서 동기 + 변조 음성 3종", async () => {
+    const bundle = await import(pathToFileURL(join(ROOT, "src", "state", "bundleFormat.js")).href);
+    const doc = readFileSync(join(ROOT, "docs", "reference", "bundleFormat.md"), "utf8");
+    // 문서와 코드 상수의 동기: 매직/버전/헤더 상한이 표류하면 레이아웃 계약이 거짓이 된다.
+    if (!doc.includes("PYBUNDLE1")) throw new Error("문서에 매직 누락");
+    if (!doc.includes(`"version": ${bundle.STATE_BUNDLE_VERSION}`)) throw new Error("문서 버전 표류");
+    if (!doc.includes("1 MiB") || bundle.STATE_BUNDLE_HEAD_MAX_BYTES !== 1024 * 1024) throw new Error("헤더 상한 표류");
+    const store2 = new MemoryStateStore();
+    const committed = await state.commitState(provider, store2, stateInput(90));
+    const objects = store2.entries();
+    const meta2 = { manifest: "{}" };
+    const keyPair = await tags.createStateKeyPair(provider);
+    const unsigned = await bundle.unsignedStateBundleDigest(provider, { commit: committed.commitAddress, meta: meta2, objects });
+    const tag = await tags.signStateTag(provider, keyPair, unsigned);
+    const bytes = await bundle.encodeStateBundle(provider, { commit: committed.commitAddress, meta: meta2, objects, tag });
+    const decoded = await bundle.decodeStateBundle(provider, bytes);
+    if (decoded.commit !== committed.commitAddress || decoded.objects.size !== objects.length) throw new Error("왕복 불일치");
+    if (decoded.unsignedDigest !== unsigned || decoded.tag.target !== unsigned) throw new Error("unsigned 다이제스트 불일치");
+    const jwk = await tags.exportStatePublicKey(provider, keyPair.publicKey);
+    const good = await tags.verifyStateTag(provider, decoded.tag, decoded.unsignedDigest, { trustedPublicKeys: [jwk] });
+    if (!good.valid || !good.trusted) throw new Error("서명 신뢰 경로 실패");
+    // 변조 1: 바이트 뒤집기 -> 봉투 무결성 거부
+    const flipped = bytes.slice(); flipped[flipped.length - 1] ^= 0xff;
+    let flipCode = null;
+    try { await bundle.decodeStateBundle(provider, flipped); } catch (e) { flipCode = e.code; }
+    if (flipCode !== "PYPROC_MACHINE_INTEGRITY") throw new Error(`바이트 변조 미적발(${flipCode})`);
+    // 변조 2: 서명 제거 재봉투 -> 무결성은 통과하되 tag 부재(신뢰 게이트가 거부할 상태)
+    const stripped = await bundle.decodeStateBundle(provider, await bundle.encodeStateBundle(provider, { commit: committed.commitAddress, meta: meta2, objects, tag: null }));
+    if (stripped.tag !== null) throw new Error("tag 제거 실패");
+    // 변조 3: 다른 키 서명 -> valid하되 trusted 아님
+    const otherTag = await tags.signStateTag(provider, await tags.createStateKeyPair(provider), unsigned);
+    const other = await tags.verifyStateTag(provider, otherTag, unsigned, { trustedPublicKeys: [jwk] });
+    if (!other.valid || other.trusted) throw new Error("잘못된 키가 trusted로 통과");
+  });
   await checkAsync("state 서명: signedTag 서명·검증·변조 적발", async () => {
     const keyPair = await tags.createStateKeyPair(provider);
     const tag = await tags.signStateTag(provider, keyPair, "sha256:" + "ab".repeat(32));

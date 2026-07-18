@@ -37,4 +37,6 @@ export class MemoryStateStore {
   deleteRef(name) { this._refs.delete(name); this._corruptRefs.delete(name); }
   tamperObject(address, bytes) { this._objects.set(address, new Uint8Array(bytes)); }
   objectCount() { return this._objects.size; }
+  // 삽입 순서의 [address, bytes] 목록. bundle 인코딩(배치 순서 = 삽입 순서)이 소비한다.
+  entries() { return [...this._objects.entries()]; }
 }

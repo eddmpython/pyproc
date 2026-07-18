@@ -583,6 +583,48 @@
       let trustCode = "";
       try { await openMachine(untrustedImg); } catch (e) { trustCode = e.code; }
       check("openMachine: trust 미승인이 코드로 거부", trustCode === "PYPROC_MACHINE_UNTRUSTED", trustCode);
+
+      // state-kernel 4단계(봉투·신뢰 통합) 게이트: bundle 단일 writer + 서명 신뢰 경로 +
+      // 변조 거부 + 문서화된 레이아웃 독립 재파싱 + 구 봉투 reader 호환.
+      {
+        const { createMachineKeyPair, exportMachinePublicKey } = await import("../../index.js");
+        const keyPair = await createMachineKeyPair();
+        const signedImg = await s2.exportImage({ signingKey: keyPair });
+        const trusted = await openMachine(signedImg, { trustedPublicKeys: [await exportMachinePublicKey(keyPair)] });
+        check("bundle: 서명 + 신뢰 공개키로 부활", trusted.rt.run("k + 1") === 4101);
+        const otherPair = await createMachineKeyPair();
+        let wrongKeyCode = "";
+        try { await openMachine(signedImg, { trustedPublicKeys: [await exportMachinePublicKey(otherPair)] }); } catch (e) { wrongKeyCode = e.code; }
+        check("bundle: 잘못된 신뢰 키 거부(valid 서명이어도 출처 미승인)", wrongKeyCode === "PYPROC_MACHINE_UNTRUSTED", wrongKeyCode);
+        const raw = new Uint8Array(await signedImg.arrayBuffer());
+        const tamperedBundle = raw.slice(); tamperedBundle[tamperedBundle.length - 1] ^= 0xff;
+        let tamperCode = "";
+        try { await openMachine(new Blob([tamperedBundle]), { trust: true }); } catch (e) { tamperCode = e.code; }
+        check("bundle: 바이트 변조 즉시 무결성 거부", tamperCode === "PYPROC_MACHINE_INTEGRITY", tamperCode);
+        // 문서(docs/reference/bundleFormat.md) 레이아웃대로 디코더 없이 독립 재파싱해 실물과 대조.
+        const td = new TextDecoder();
+        const BUNDLE_MAGIC = "PYBUNDLE1\n";
+        const magicOk = td.decode(raw.subarray(0, BUNDLE_MAGIC.length)) === BUNDLE_MAGIC;
+        const envHex = td.decode(raw.subarray(BUNDLE_MAGIC.length, BUNDLE_MAGIC.length + 64));
+        const bundleBody = raw.subarray(BUNDLE_MAGIC.length + 64);
+        const bodyHex = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bundleBody))].map((b) => b.toString(16).padStart(2, "0")).join("");
+        const bhl = new DataView(bundleBody.buffer, bundleBody.byteOffset, 4).getUint32(0);
+        const bundleHeader = JSON.parse(td.decode(bundleBody.subarray(4, 4 + bhl)));
+        const objTotal = bundleHeader.objects.reduce((sum, [, len]) => sum + len, 0);
+        check("bundle: 문서화 레이아웃 독립 재파싱 일치",
+          magicOk && bodyHex === envHex && bundleHeader.version === 1 && typeof bundleHeader.commit === "string"
+          && 4 + bhl + objTotal === bundleBody.length && bundleHeader.tag && bundleHeader.tag.alg === "ECDSA-P256-SHA256",
+          `objects ${bundleHeader.objects.length}, body ${bundleBody.length}B`);
+        // 구 봉투(PYMACHINE2 v2) reader 호환: writer가 폐지됐으므로 fixture를 손으로 만든다.
+        const { MACHINE_MAGIC, toBytesWithHead } = await import("../../src/session/machineImage.js");
+        s2.reactive.checkpoint();
+        const legacyDelta = s2.reactive.collectDelta(0);
+        const legacyMeta = { version: 2, manifest: s2._manifest, pages: legacyDelta.pages, sp: legacyDelta.sp, heapLen: legacyDelta.heapLen, h0: await s2._cp0Digest() };
+        const legacyBody = toBytesWithHead(legacyMeta, legacyDelta.bin, new Uint8Array(0));
+        const legacyEnvelope = [...new Uint8Array(await crypto.subtle.digest("SHA-256", legacyBody))].map((b) => b.toString(16).padStart(2, "0")).join("");
+        const legacyOpened = await openMachine(new Blob([MACHINE_MAGIC, legacyEnvelope, legacyBody]), { trust: true });
+        check("bundle: 구 봉투(PYMACHINE2 v2) reader 호환", legacyOpened.rt.run("k") === 4100, `${legacyMeta.pages.length}p`);
+      }
       await (await navigator.storage.getDirectory()).removeEntry("pyprocGateSess", { recursive: true });
 
       // state 커널 OPFS 드라이버: 커밋 왕복 + verify-on-read 적발 + PREV 후퇴가 실제 OPFS에서

@@ -25,13 +25,15 @@ import { unpackPages } from "../runtime/heapDelta.js";
 import { growHeapTo } from "../runtime/heapGrow.js";
 import { sha256Hex } from "../runtime/contentDigest.js";
 import {
-  MACHINE_MAGIC,
   decodeMachineEnvelope,
-  toBytesWithHead,
   validateManifest,
   validateMeta,
 } from "./machineImage.js";
-import { signMachineMeta, verifyMachineSignature } from "./machineSignature.js";
+import { machineSigningMaterial, verifyMachineSignature } from "./machineSignature.js";
+import { MemoryStateStore } from "../state/memoryStateStore.js";
+import { commitState, openState } from "../state/refProtocol.js";
+import { STATE_TAG_ALG, makeStateTag, verifyStateTag } from "../state/signedTag.js";
+import { decodeStateBundle, encodeStateBundle, isStateBundle, unsignedStateBundleDigest } from "../state/bundleFormat.js";
 
 // 서명 API는 이 모듈의 공개 표면이다(index.js가 여기서 가져간다). 구현은 machineSignature가 소유한다.
 export { createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey } from "./machineSignature.js";
@@ -88,17 +90,10 @@ export function bootSession(manifest = {}) {
   });
 }
 
-// .pymachine 파일로 같은 컴퓨터를 부팅한다(매니페스트가 파일 안에 있다).
-// 봉투 인증과 형식 검증은 machineImage가, 출처 인증은 machineSignature가 소유한다.
-// 여기 남는 것은 신뢰 판정과 부팅이다: 머신 파일은 "살아있는 상태"라서 실행 파일과 동급
-// 위험이고, { trust: true } 또는 신뢰 공개키 없이는 열지 않는다(해시는 무결성이지 출처가 아니다).
-export async function openMachine(blob, opts = {}) {
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  const { envelope, meta, bin, homeBin } = await decodeMachineEnvelope(buf);
-  if (meta.home) validateMachineHomeMeta(meta.home, homeBin ? homeBin.length : 0);
-  else if (homeBin && homeBin.length) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: home 메타 없이 home payload가 있다");
-  const manifest = validateManifest(JSON.parse(meta.manifest));
-  const signature = await verifyMachineSignature(meta, bin, homeBin || new Uint8Array(0), opts);
+// 머신 파일은 "살아있는 상태"라서 실행 파일과 동급 위험이다: { trust: true } 또는 신뢰
+// 공개키 없이는 열지 않는다(해시는 무결성이지 출처가 아니다). 이 게이트는 포맷과 무관한
+// 신뢰 정책이라 한 곳에 산다.
+function requireTrust(signature, envelope, opts) {
   if (opts.requireSignature === true && !signature.trusted) {
     throw new PyProcError("PYPROC_MACHINE_UNTRUSTED", "openMachine: 신뢰된 공개키의 signature가 필요하다");
   }
@@ -106,6 +101,48 @@ export async function openMachine(blob, opts = {}) {
     const hint = signature.present ? "신뢰된 공개키가 없거나 일치하지 않는다" : "서명이 없다";
     throw new PyProcError("PYPROC_MACHINE_UNTRUSTED", `openMachine: 머신 파일은 임의 코드 실행과 동급 위험이다. ${hint}. 출처를 신뢰하면 { trust: true }, 서명 출처를 신뢰하면 { trustedPublicKeys: [...] }로 여시라. sha256=${envelope.slice(0, 16)}...`);
   }
+}
+
+// 신 봉투(state bundle) 경로: 디코드가 전량 verify-on-read를 끝낸 오브젝트를 커널 store에
+// 실어 openState로 물질화한다. 리플레이 결정성 대조(h0)는 커널 계약 그대로다.
+async function openBundleMachine(buf, opts) {
+  const decoded = await decodeStateBundle(globalThis.crypto, buf);
+  let signature = { present: false, trusted: false };
+  if (decoded.tag) {
+    if (decoded.tag.alg !== STATE_TAG_ALG || decoded.tag.target !== decoded.unsignedDigest) {
+      throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: 서명 대상 불일치(파일 내용과 tag target이 맞지 않는다)");
+    }
+    const trustedKeys = [];
+    if (opts.trustedPublicKey) trustedKeys.push(opts.trustedPublicKey);
+    if (Array.isArray(opts.trustedPublicKeys)) trustedKeys.push(...opts.trustedPublicKeys);
+    const verdict = await verifyStateTag(globalThis.crypto, decoded.tag, decoded.unsignedDigest, { trustedPublicKeys: trustedKeys });
+    if (!verdict.valid) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: signature 검증 실패");
+    signature = { present: true, trusted: verdict.trusted };
+  }
+  requireTrust(signature, decoded.envelope, opts);
+  if (typeof decoded.meta?.manifest !== "string") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: bundle meta에 manifest가 없다");
+  const manifest = validateManifest(JSON.parse(decoded.meta.manifest));
+  const session = await bootSession(manifest);
+  const store = new MemoryStateStore();
+  for (const [address, bytes] of decoded.objects) await store.writeObject(address, bytes);
+  await store.writeRef("HEAD", { commit: decoded.commit });
+  const opened = await openState(globalThis.crypto, store, { expectH0: await session._cp0Digest() });
+  session._applyKernelState(opened);
+  return session;
+}
+
+// .pymachine/bundle 파일로 같은 컴퓨터를 부팅한다(매니페스트가 파일 안에 있다).
+// writer는 bundle 하나다(exportImage). 구 봉투(PYMACHINE2 v2/v3)는 감지형 reader로 읽기만
+// 지원하며 다음 브레이킹 릴리즈에 일몰한다. 신뢰 게이트는 두 경로가 같은 함수를 쓴다.
+export async function openMachine(blob, opts = {}) {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  if (isStateBundle(buf)) return openBundleMachine(buf, opts);
+  const { envelope, meta, bin, homeBin } = await decodeMachineEnvelope(buf);
+  if (meta.home) validateMachineHomeMeta(meta.home, homeBin ? homeBin.length : 0);
+  else if (homeBin && homeBin.length) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: home 메타 없이 home payload가 있다");
+  const manifest = validateManifest(JSON.parse(meta.manifest));
+  const signature = await verifyMachineSignature(meta, bin, homeBin || new Uint8Array(0), opts);
+  requireTrust(signature, envelope, opts);
   const session = await bootSession(manifest);
   await session._applyMeta(meta, bin);
   if (meta.home) session._applyHome(meta.home, homeBin);
@@ -154,23 +191,34 @@ export class Session {
     return { pages: meta.pages.length, mb: +(bin.length / 1048576).toFixed(1) };
   }
 
-  // 이 컴퓨터 전체를 .pymachine 파일 하나로 내보낸다(봉투 전체 무결성 해시 포함).
+  // 이 컴퓨터 전체를 서명 가능한 bundle 파일 하나로 내보낸다(단일 writer).
+  // 내부 표현 = base commit(h0 루트) 위의 커널 커밋: 페이지 blob + /home file 엔트리 +
+  // 환경 지문 commit이 내용주소 오브젝트로 실리고, 봉투 무결성(다이제스트)과 출처(tag)가
+  // 분리된다. 구 .pymachine v2/v3 writer는 폐지됐다(reader만 잔존).
   async exportImage(opts = {}) {
-    const { bin, meta } = this._collectDelta();
-    meta.h0 = await this._cp0Digest();
-    meta.sha256 = await sha256Hex(bin); // 델타 자체 다이제스트(식별/디버깅용. 인증은 봉투해시)
+    const r = this.reactive;
+    r.checkpoint(); // 경계 닫기(사용자 상태 확정)
+    const { pages, sp, heapLen } = r.collectDelta(0, r.liveIdx, { pack: false });
+    const mem = this.rt.memory;
     const includeHome = opts.includeHome !== false;
     const home = includeHome ? this._collectHome(opts.homePath || DEFAULT_MACHINE_HOME_PATH, opts.includeHome === true) : null;
-    if (home) {
-      meta.version = 3;
-      meta.deltaBytes = bin.length;
-      meta.home = home.meta;
+    const files = home && home.bin.length ? [{ id: "home", bytes: home.bin, meta: home.meta }] : [];
+    const store = new MemoryStateStore();
+    const committed = await commitState(globalThis.crypto, store, {
+      pages: pages.map((p) => [p, mem.slicePage(p)]),
+      pageSize: PAGE_SIZE, heapLen, sp, files,
+      env: { h0: await this._cp0Digest(), deterministic: true },
+    });
+    const meta = { manifest: this._manifest };
+    const objects = store.entries();
+    let tag = null;
+    const keys = await machineSigningMaterial(opts);
+    if (keys) {
+      const unsigned = await unsignedStateBundleDigest(globalThis.crypto, { commit: committed.commitAddress, meta, objects });
+      tag = await makeStateTag(globalThis.crypto, keys.privateKey, keys.publicKey, unsigned);
     }
-    const homeBin = home ? home.bin : new Uint8Array(0);
-    await signMachineMeta(meta, bin, homeBin, opts);
-    const body = toBytesWithHead(meta, bin, homeBin);
-    const envelope = await sha256Hex(body); // u32 || 헤더 || payload 전체를 인증
-    return new Blob([MACHINE_MAGIC, envelope, body], { type: "application/x-pymachine" });
+    const bytes = await encodeStateBundle(globalThis.crypto, { commit: committed.commitAddress, meta, objects, tag });
+    return new Blob([bytes], { type: "application/x-pymachine" });
   }
 
   // 같은 매니페스트로 리플레이된 커널에서 저장분을 적용해 세션을 부활시킨다.
@@ -210,6 +258,25 @@ export class Session {
 
   _applyHome(home, bin) {
     return applyMachineHome(this.rt.fs, home, bin);
+  }
+
+  // 커널 세대(openState 결과) 적용: 검증(verify-on-read, h0 대조)은 커널이 끝냈고, 여기는
+  // 힙 성장 + 경계 되감기 + 페이지/홈 적용만 한다(_applyMeta의 커널 물질화판).
+  _applyKernelState(opened) {
+    const mem = this.rt.memory;
+    const { tree, pages, files } = opened;
+    growHeapTo((code) => this.rt.run(code), () => mem.byteLength(), tree.heapLen, "openMachine");
+    this.reactive.restore(0, tree.sp);
+    for (const [p, bytes] of pages) mem.writePage(p, bytes);
+    mem.stackRestore(tree.sp);
+    const home = files ? files.get("home") : null;
+    if (home) {
+      try { validateMachineHomeMeta(home.meta, home.bytes.length); }
+      catch (e) { throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `openMachine: home 메타 파손(${String(e.message || e).slice(-160)})`, { cause: e }); }
+      applyMachineHome(this.rt.fs, home.meta, home.bytes);
+    }
+    this.reactive.checkpoint(); // 부활 상태를 새 경계로
+    return { pages: pages.size, mb: +(pages.size * PAGE_SIZE / 1048576).toFixed(1) };
   }
 }
 
