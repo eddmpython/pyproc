@@ -86,8 +86,12 @@ export function makePayloadTree({ entries }) {
     seen.add(e.id);
     if (!SHA256_ADDRESS_RE.test(e.address)) throw inputError(`payload: 주소 형식 위반(${e.address})`);
     if (!Number.isInteger(e.byteLength) || e.byteLength < 0) throw inputError(`payload: byteLength 위반(${e.id})`);
+    // meta는 소비자 소유의 불투명 도메인 기술이다(machine generation의 adapterId/장치 크기 등).
+    if (e.meta !== undefined && e.meta !== null && (typeof e.meta !== "object" || Array.isArray(e.meta))) {
+      throw inputError(`payload: meta 위반(${e.id})`);
+    }
   }
-  return { kind: "payload", entries: entries.map((e) => ({ id: e.id, address: e.address, byteLength: e.byteLength })) };
+  return { kind: "payload", entries: entries.map((e) => ({ id: e.id, address: e.address, byteLength: e.byteLength, meta: e.meta ?? null })) };
 }
 
 // 저장소에서 읽은(신뢰 불가) tree의 형식 판정. 위반은 손상이다(입력 오류가 아니라).

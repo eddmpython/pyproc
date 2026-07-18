@@ -27,7 +27,7 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { WebMachineHost, createMachineCryptoProvider } from "../../../../src/machine/index.js";
   import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryEthernetSwitch } from "../../../../src/machine/index.js";
   import { createV86GuestFactory } from "../../../../src/machine/index.js";
   import { createIpv4EchoPeer } from "../../fixtures/network/ipv4EchoPeer.js";
@@ -149,7 +149,7 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
   const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachinePacketNetworkV1" });
   const coordinator = new MachineCommitCoordinator({
     store,
-    cryptoProvider: crypto,
+    cryptoProvider: createMachineCryptoProvider(crypto),
     idFactory: () => "packet-g1",
     nowFactory: () => 1,
   });
@@ -178,7 +178,7 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
       timings.initialEchoRequests = peerBeforeCommit.echoRequests;
       await linux.pause();
       startedAt = performance.now();
-      await coordinator.commitPaused({ groupId, machines: [linux], expectedHead: null, ownerToken });
+      const committed = await coordinator.commitPaused({ groupId, machines: [linux], expectedHead: null, ownerToken });
       timings.commitMs = Math.round(performance.now() - startedAt);
       await linux.shutdown();
       peer.close();
@@ -186,7 +186,7 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
       await fetch("/gateRestart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextSearch: "?restore=1", timings }),
+        body: JSON.stringify({ nextSearch: `?restore=1&commit=${committed.commitAddress}`, timings }),
       });
       await new Promise(() => {});
     } else {
@@ -195,7 +195,7 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
       let startedAt = performance.now();
       const restored = await coordinator.restoreLatest({ groupId, machines: { linuxOs: linux } });
       timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
-      check("새 process가 NIC handle 없이 machine generation 복원", restored.generationId === "packet-g1" && restored.manifest.devices.length === 0, `${restored.generationId}/${restored.manifest.devices.length}`);
+      check("새 process가 NIC handle 없이 machine generation 복원", restored.generationId === new URLSearchParams(location.search).get("commit") && restored.devices.length === 0, `${restored.generationId.slice(0, 18)}../${restored.devices.length}`);
       check("cold restore가 새 packet port 연결", network.inspect().endpoints === 2 && linux.state === "paused", `${network.inspect().endpoints}/${linux.state}`);
       await linux.resume();
       startedAt = performance.now();

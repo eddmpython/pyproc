@@ -30,8 +30,8 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { bootSession, openMachine } from "../../../../index.js";
-  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { bootSession, openMachine } from "../../../../src/session/session.js";
+  import { WebMachineHost, createMachineCryptoProvider } from "../../../../src/machine/index.js";
   import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryBlockDevice } from "../../../../src/machine/index.js";
   import { createPyprocGuestFactory } from "../../../../src/machine/index.js";
   import { createV86GuestFactory } from "../../../../src/machine/index.js";
@@ -53,8 +53,9 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
       await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
     } catch (error) {}
   };
-  const parsePyprocMeta = (bytes) => {
-    const magicLength = encoder.encode("PYMACHINE2\n").byteLength;
+  // guest snapshot = exportImage bundle(PYBUNDLE1). 접두만 읽어 헤더를 뜯는다.
+  const parsePyprocBundleHeader = (bytes) => {
+    const magicLength = encoder.encode("PYBUNDLE1\n").byteLength;
     const bodyOffset = magicLength + 64;
     const headLength = new DataView(bytes.buffer, bytes.byteOffset + bodyOffset, 4).getUint32(0);
     return JSON.parse(decoder.decode(bytes.subarray(bodyOffset + 4, bodyOffset + 4 + headLength)));
@@ -97,7 +98,7 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
   const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineDeviceBackedDualBootV1" });
   const coordinator = new MachineCommitCoordinator({
     store,
-    cryptoProvider: crypto,
+    cryptoProvider: createMachineCryptoProvider(crypto),
     idFactory: () => "device-backed-g1",
     nowFactory: () => 1,
   });
@@ -141,12 +142,12 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
         ownerToken,
       });
       timings.commitMs = Math.round(performance.now() - startedAt);
-      if (committed.manifest.devices.length !== 2) throw new Error("두 block device generation commit 실패");
+      if (committed.entries.filter((entry) => entry.id.startsWith("device/")).length !== 2) throw new Error("두 block device generation commit 실패");
       store.close();
       await fetch("/gateRestart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextSearch: "?restore=1", timings }),
+        body: JSON.stringify({ nextSearch: `?restore=1&commit=${committed.commitAddress}`, timings }),
       });
       await new Promise(() => {});
     } else {
@@ -157,14 +158,20 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
         devices: { pythonDisk, linuxDisk },
       });
       timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
-      check("새 browser process가 device-backed HEAD를 읽음", restored.generationId === "device-backed-g1", restored.generationId);
-      check("한 generation에 두 OS와 두 실제 disk 포함", restored.manifest.machines.length === 2 && restored.manifest.devices.length === 2, `${restored.manifest.machines.length}/${restored.manifest.devices.length}`);
+      check("새 browser process가 device-backed HEAD를 읽음", restored.generationId === new URLSearchParams(location.search).get("commit"), restored.generationId.slice(0, 18) + "..");
+      check("한 generation에 두 OS와 두 실제 disk 포함", restored.machines.length === 2 && restored.devices.length === 2, `${restored.machines.length}/${restored.devices.length}`);
       check("복원 직후 두 OS가 paused", python.state === "paused" && linux.state === "paused", `${python.state}/${linux.state}`);
 
-      const pythonEntry = restored.manifest.machines.find((entry) => entry.machineId === "pythonOs");
-      const pythonSnapshot = await store.getBlob(pythonEntry.payload.digest);
-      const pythonMeta = parsePyprocMeta(pythonSnapshot);
-      check("Python heap snapshot에서 home payload 분리", pythonMeta.version === 2 && !pythonMeta.home, `version=${pythonMeta.version}`);
+      // 커널 스키마: commit -> tree를 걸어 python payload blob 주소를 얻는다(색인 아닌 정본 경로).
+      const restoredRecord = await store.readGeneration(groupId, restored.generationId);
+      const restoredCommit = JSON.parse(decoder.decode(await store.getBlob(restoredRecord.commitAddress)));
+      const restoredTree = JSON.parse(decoder.decode(await store.getBlob(restoredCommit.tree)));
+      const pythonEntry = restoredTree.entries.find((entry) => entry.id === "machine/pythonOs");
+      const pythonSnapshot = await store.getBlob(pythonEntry.address);
+      const pythonHeader = parsePyprocBundleHeader(pythonSnapshot);
+      // block-backed guest는 home을 disk로 빼므로 bundle에 home file 엔트리가 없다(도메인 meta만).
+      const hasHomeEntry = decoder.decode(pythonSnapshot).includes("\"id\":\"home\"");
+      check("Python heap snapshot에서 home payload 분리", pythonHeader.version === 1 && !hasHomeEntry, `version=${pythonHeader.version}, home=${hasHomeEntry}`);
       const pythonMagic = decoder.decode(await pythonDisk.read(0, encoder.encode("PYPROC_HOME_VOLUME_1\n").byteLength));
       check("Python home이 실제 block volume에 존재", pythonMagic === "PYPROC_HOME_VOLUME_1\n", pythonMagic.trim());
       const linuxVolumeBytes = await linuxDisk.read(0, linuxDisk.byteLength);
@@ -187,7 +194,7 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
       const linuxInspect = await linux.inspect();
       check("Linux guest I/O가 9P block volume을 통과", linuxInspect.guest?.block?.mode === "filesystem" && linuxInspect.guest.block.files === 1, JSON.stringify(linuxInspect.guest?.block));
       check("두 adapter가 boot 없이 device에서 cold restore", [python, linux].every((machine) => machine.history.some((entry) => entry.event === "restored") && !machine.history.some((entry) => entry.event === "booted")));
-      check("machine과 disk payload가 모두 content-addressed", [...restored.manifest.machines, ...restored.manifest.devices].every((entry) => entry.payload.digest.startsWith("sha256:")));
+      check("machine과 disk payload가 모두 content-addressed", restoredTree.entries.every((entry) => entry.address.startsWith("sha256:")));
 
       await Promise.all([python.pause(), linux.pause()]);
       await Promise.all([python.shutdown(), linux.shutdown()]);

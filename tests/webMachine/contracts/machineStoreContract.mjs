@@ -1,16 +1,14 @@
 // machineStoreContract.mjs - public MachineStore 반환, 오류, fencing, retention의 Node 기준 suite.
 import { MemoryMachineStore } from "../../../src/machine/index.js";
 
-function generationRecord(groupId, generationId, machineDigest, deviceDigest = null) {
+// P2(kernel-product) 이후 record = 커널 commit 주소 + gc 색인(blobDigests)이다.
+// store 계약은 record를 불투명하게 저장하고 retention만 색인을 읽는다.
+const fakeAddress = (seed) => "sha256:" + seed.repeat(64).slice(0, 64);
+function generationRecord(generationId, machineDigest, deviceDigest = null) {
   return {
-    manifest: {
-      schemaVersion: 1,
-      groupId,
-      generationId,
-      machines: [{ machineId: "machine", payload: { digest: machineDigest, byteLength: 1 } }],
-      devices: deviceDigest ? [{ name: "disk", payload: { digest: deviceDigest, byteLength: 1 } }] : [],
-    },
-    manifestHash: `sha256:${generationId}`,
+    schemaVersion: 2,
+    commitAddress: fakeAddress(generationId.charCodeAt(1).toString(16)),
+    blobDigests: deviceDigest ? [machineDigest, deviceDigest] : [machineDigest],
   };
 }
 
@@ -37,16 +35,16 @@ export async function runMachineStoreContract(store, { groupId = "contract" } = 
     generationId: "g1",
     expectedHead: null,
     ownerToken: owner1,
-    blobs: [{ digest: "digest-a", bytes: source }],
-    record: generationRecord(groupId, "g1", "digest-a"),
+    blobs: [{ digest: fakeAddress("a"), bytes: source }],
+    record: generationRecord("g1", fakeAddress("a")),
   });
   source[0] = 9;
   assert(JSON.stringify(Object.keys(head1)) === JSON.stringify(["head", "prev", "ownerEpoch"]), "GenerationHead key drift");
   assert(head1.head === "g1" && head1.prev === null && head1.ownerEpoch === 1, "첫 HEAD 값 불일치");
-  const firstRead = await store.getBlob("digest-a");
+  const firstRead = await store.getBlob(fakeAddress("a"));
   assert(firstRead[0] === 1, "입력 bytes 격리 실패");
   firstRead[0] = 7;
-  assert((await store.getBlob("digest-a"))[0] === 1, "반환 bytes 격리 실패");
+  assert((await store.getBlob(fakeAddress("a")))[0] === 1, "반환 bytes 격리 실패");
   assert(await errorCode(() => store.getBlob("missing")) === "WEB_MACHINE_BLOB_MISSING", "missing blob 오류 drift");
   assert(await errorCode(() => store.readGeneration(groupId, "missing")) === "WEB_MACHINE_GENERATION_MISSING", "missing generation 오류 drift");
 
@@ -57,17 +55,17 @@ export async function runMachineStoreContract(store, { groupId = "contract" } = 
     generationId: "stale",
     expectedHead: "g1",
     ownerToken: owner1,
-    blobs: [{ digest: "digest-stale", bytes: new Uint8Array([2]) }],
-    record: generationRecord(groupId, "stale", "digest-stale"),
+    blobs: [{ digest: fakeAddress("f"), bytes: new Uint8Array([2]) }],
+    record: generationRecord("stale", fakeAddress("f")),
   }));
   assert(staleCommit === "WEB_MACHINE_OWNER_STALE", "stale commit 허용");
   assert(await errorCode(() => store.pruneRecoveryWindow({ groupId, ownerToken: owner1 })) === "WEB_MACHINE_OWNER_STALE", "stale prune 허용");
-  assert(await errorCode(() => store.getBlob("digest-stale")) === "WEB_MACHINE_BLOB_MISSING", "stale blob publish됨");
+  assert(await errorCode(() => store.getBlob(fakeAddress("f"))) === "WEB_MACHINE_BLOB_MISSING", "stale blob publish됨");
 
   for (const [generationId, machineDigest, deviceDigest] of [
-    ["g2", "digest-b", "digest-shared"],
-    ["g3", "digest-c", "digest-shared"],
-    ["g4", "digest-d", "digest-shared"],
+    ["g2", fakeAddress("b"), fakeAddress("e")],
+    ["g3", fakeAddress("c"), fakeAddress("e")],
+    ["g4", fakeAddress("d"), fakeAddress("e")],
   ]) {
     const expectedHead = (await store.readHead(groupId)).head;
     await store.commitGeneration({
@@ -79,16 +77,16 @@ export async function runMachineStoreContract(store, { groupId = "contract" } = 
         { digest: machineDigest, bytes: new Uint8Array([generationId.charCodeAt(1)]) },
         { digest: deviceDigest, bytes: new Uint8Array([42]) },
       ],
-      record: generationRecord(groupId, generationId, machineDigest, deviceDigest),
+      record: generationRecord(generationId, machineDigest, deviceDigest),
     });
   }
   const dryRun = await store.dryRunRecoveryWindow({ groupId, ownerToken: owner2 });
   assert(dryRun.deletedGenerations === 2 && dryRun.deletedBlobs === 2, "retention dry-run 불일치");
-  assert((await store.readGeneration(groupId, "g1")).manifest.generationId === "g1", "dry-run이 generation 삭제");
+  assert((await store.readGeneration(groupId, "g1")).schemaVersion === 2, "dry-run이 generation 삭제");
   const pruned = await store.pruneRecoveryWindow({ groupId, ownerToken: owner2 });
   assert(pruned.deletedGenerations === 2 && pruned.retainedGenerations === 2, "retention generation window 불일치");
   assert(await errorCode(() => store.readGeneration(groupId, "g2")) === "WEB_MACHINE_GENERATION_MISSING", "old generation 보존됨");
-  assert((await store.getBlob("digest-shared"))[0] === 42, "shared retained blob 삭제");
+  assert((await store.getBlob(fakeAddress("e")))[0] === 42, "shared retained blob 삭제");
   const storage = await store.inspectStorage();
   assert(storage.generations === 2 && storage.blobs === 3, "pruned storage count 불일치");
   await store.releaseOwner(owner2);

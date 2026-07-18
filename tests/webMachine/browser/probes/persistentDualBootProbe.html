@@ -28,8 +28,8 @@ initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { bootSession, openMachine } from "../../../../index.js";
-  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { bootSession, openMachine } from "../../../../src/session/session.js";
+  import { WebMachineHost, createMachineCryptoProvider } from "../../../../src/machine/index.js";
   import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryBlockDevice } from "../../../../src/machine/index.js";
   import { createPyprocGuestFactory } from "../../../../src/machine/index.js";
   import { createV86GuestFactory } from "../../../../src/machine/index.js";
@@ -82,7 +82,7 @@ initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2
   const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachinePersistentDualBootV1" });
   const coordinator = new MachineCommitCoordinator({
     store,
-    cryptoProvider: crypto,
+    cryptoProvider: createMachineCryptoProvider(crypto),
     idFactory: () => "durable-g1",
     nowFactory: () => 1,
   });
@@ -113,12 +113,12 @@ initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2
       });
       timings.commitMs = Math.round(performance.now() - startedAt);
       const head = await coordinator.readHead(groupId);
-      if (head?.head !== committed.manifest.generationId) throw new Error("durable HEAD publish 실패");
+      if (head?.head !== committed.commitAddress) throw new Error("durable HEAD publish 실패");
       store.close();
       await fetch("/gateRestart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextSearch: "?restore=1", timings }),
+        body: JSON.stringify({ nextSearch: `?restore=1&commit=${committed.commitAddress}`, timings }),
       });
       await new Promise(() => {});
     } else {
@@ -129,8 +129,8 @@ initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2
         devices: { sharedBlock: block },
       });
       timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
-      check("새 browser process가 durable HEAD를 읽음", restored.generationId === "durable-g1" && restored.recoveredFrom === null, restored.generationId);
-      check("한 generation에 두 OS와 block 포함", restored.manifest.machines.length === 2 && restored.manifest.devices.length === 1, `${restored.manifest.machines.length}/${restored.manifest.devices.length}`);
+      check("새 browser process가 durable HEAD를 읽음", restored.generationId === new URLSearchParams(location.search).get("commit") && restored.recoveredFrom === null, restored.generationId.slice(0, 18) + "..");
+      check("한 generation에 두 OS와 block 포함", restored.machines.length === 2 && restored.devices.length === 1, `${restored.machines.length}/${restored.devices.length}`);
       check("복원 직후 두 OS가 paused", python.state === "paused" && linux.state === "paused", `${python.state}/${linux.state}`);
       const restoredBlock = await block.read(0, blockMarker.byteLength);
       check("공통 block image cold restore", decoder.decode(restoredBlock) === "WEB_MACHINE_BLOCK:42", decoder.decode(restoredBlock));
@@ -143,8 +143,8 @@ initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2
       check("Python OS memory와 file 복원", pythonValue === "42:42", pythonValue);
       check("Linux memory와 file 복원", linuxValue.includes("DURABLE:42:42"), linuxValue.trim().slice(-180));
       const head = await coordinator.readHead(groupId);
-      check("HEAD pointer가 process 경계를 넘어 생존", head?.head === "durable-g1" && head.prev === null, `${head?.head}/${head?.prev}`);
-      check("두 adapter payload가 content-addressed", restored.manifest.machines.every((entry) => entry.payload.digest.startsWith("sha256:")));
+      check("HEAD pointer가 process 경계를 넘어 생존", head?.head === new URLSearchParams(location.search).get("commit") && head.prev === null, `${String(head?.head).slice(0, 18)}../${head?.prev}`);
+      check("두 adapter payload가 content-addressed", (await store.readGeneration(groupId, head.head)).blobDigests.every((digest) => digest.startsWith("sha256:")));
       check("새 host history가 boot 없이 cold restore", [python, linux].every((machine) => machine.history.some((entry) => entry.event === "restored") && !machine.history.some((entry) => entry.event === "booted")));
       await Promise.all([python.pause(), linux.pause()]);
       await Promise.all([python.shutdown(), linux.shutdown()]);

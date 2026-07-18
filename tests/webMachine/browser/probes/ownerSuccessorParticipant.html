@@ -6,7 +6,7 @@
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { WebMachineHost, createMachineCryptoProvider } from "../../../../src/machine/index.js";
   import {
     IndexedDbMachineStore,
     MachineCommitCoordinator,
@@ -32,7 +32,7 @@
   const machineStore = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineOwnerStoreV2" });
   const generationCoordinator = new MachineCommitCoordinator({
     store: machineStore,
-    cryptoProvider: crypto,
+    cryptoProvider: createMachineCryptoProvider(crypto),
     idFactory: () => "owner-generation-1",
     nowFactory: () => 1,
   });
@@ -150,7 +150,7 @@
         };
         const delayedCoordinator = new MachineCommitCoordinator({
           store: delayedStore,
-          cryptoProvider: crypto,
+          cryptoProvider: createMachineCryptoProvider(crypto),
           idFactory: () => `${ownerId}-stale-generation`,
           nowFactory: () => 2,
         });

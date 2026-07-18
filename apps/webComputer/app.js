@@ -113,7 +113,7 @@ async function runOperation(label, operation, { autosave = false } = {}) {
     if (autosave) {
       setActivity("Saving both operating systems");
       const committed = await runtime.save();
-      markSaved(committed.manifest.createdAt);
+      markSaved(Number(committed.commit.createdAt));
     }
     setActivity("Ready");
     return result;
@@ -149,7 +149,7 @@ function selectSystem(system) {
 async function saveComputer() {
   const committed = await runOperation("Saving both operating systems", () => runtime.save());
   if (committed) {
-    markSaved(committed.manifest.createdAt);
+    markSaved(Number(committed.commit.createdAt));
     notify("The complete computer is saved locally.");
   }
 }
@@ -183,7 +183,7 @@ async function importComputer() {
   trustDialog.close();
   const imported = await runOperation("Importing the trusted computer", () => runtime.importImage(file, inspection.publicKey));
   if (!imported) return;
-  markSaved(imported.committed.manifest.createdAt);
+  markSaved(Number(imported.committed.commit.createdAt));
   notify(`Imported computer signed by ${shortFingerprint(inspection.fingerprint)}.`);
 }
 

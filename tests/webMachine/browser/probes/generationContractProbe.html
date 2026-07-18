@@ -106,17 +106,17 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     let startedAt = performance.now();
     const first = await coordinator.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: null, ownerToken });
     timings.firstCommitMs = Math.round(performance.now() - startedAt);
-    check("첫 generation이 HEAD로 원자적 publish", first.head.head === "g1" && first.head.prev === null && first.head.ownerEpoch === ownerToken.epoch, `${first.head.head}/${first.head.prev}/${first.head.ownerEpoch}`);
-    check("block flush 뒤 snapshot이 같은 manifest", first.manifest.devices.length === 1 && block.inspect().dirty === false && block.inspect().flushes === 1);
+    check("첫 generation이 HEAD로 원자적 publish", first.head.head === first.commitAddress && first.head.prev === null && first.head.ownerEpoch === ownerToken.epoch, `${first.head.head.slice(0, 18)}../${first.head.prev}/${first.head.ownerEpoch}`);
+    check("block flush 뒤 snapshot이 같은 generation", first.entries.filter((entry) => entry.id.startsWith("device/")).length === 1 && block.inspect().dirty === false && block.inspect().flushes === 1);
 
     await machine.resume();
     await machine.request({ type: "increment", by: 100 });
     await machine.request({ type: "blockWrite", bytes: [9, 9, 9] });
     await machine.pause();
     startedAt = performance.now();
-    const second = await coordinator.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: "g1", ownerToken });
+    const second = await coordinator.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: first.commitAddress, ownerToken });
     timings.secondCommitMs = Math.round(performance.now() - startedAt);
-    check("두 번째 generation이 PREV를 보존", second.head.head === "g2" && second.head.prev === "g1", `${second.head.head}/${second.head.prev}`);
+    check("두 번째 generation이 PREV를 보존(parents = 직전 commit)", second.head.head === second.commitAddress && second.head.prev === first.commitAddress && second.commit.parents[0] === first.commitAddress, `${second.head.head.slice(0, 18)}../${String(second.head.prev).slice(0, 18)}..`);
 
     const tornStore = delegateStore(store, {
       commitGeneration: async () => { throw new Error("injected commit interruption"); },
@@ -127,21 +127,21 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
       idFactory: () => "torn",
       nowFactory: () => 3,
     });
-    const tornCode = await codeOf(tornCoordinator.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: "g2", ownerToken }));
+    const tornCode = await codeOf(tornCoordinator.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: second.commitAddress, ownerToken }));
     const headAfterTorn = await coordinator.readHead(groupId);
-    check("torn commit은 HEAD를 바꾸지 않음", !!tornCode && headAfterTorn.head === "g2" && headAfterTorn.prev === "g1", `${headAfterTorn.head}/${headAfterTorn.prev}`);
+    check("torn commit은 HEAD를 바꾸지 않음", !!tornCode && headAfterTorn.head === second.commitAddress && headAfterTorn.prev === first.commitAddress, `${headAfterTorn.head.slice(0, 18)}..`);
 
     const raceA = new MachineCommitCoordinator({ store, cryptoProvider: machineCrypto, idFactory: () => "raceA", nowFactory: () => 4 });
     const raceB = new MachineCommitCoordinator({ store, cryptoProvider: machineCrypto, idFactory: () => "raceB", nowFactory: () => 4 });
     const race = await Promise.allSettled([
-      raceA.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: "g2", ownerToken }),
-      raceB.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: "g2", ownerToken }),
+      raceA.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: second.commitAddress, ownerToken }),
+      raceB.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: second.commitAddress, ownerToken }),
     ]);
     const won = race.filter((entry) => entry.status === "fulfilled").length;
     const conflict = race.find((entry) => entry.status === "rejected")?.reason?.code;
     const raceHead = await coordinator.readHead(groupId);
     check("CAS race는 정확히 한 commit만 승리", won === 1 && conflict === "WEB_MACHINE_HEAD_CONFLICT", `won=${won}, conflict=${conflict}`);
-    check("CAS 승리 generation의 PREV는 이전 HEAD", raceHead.prev === "g2", `${raceHead.head}/${raceHead.prev}`);
+    check("CAS 승리 generation의 PREV는 이전 HEAD", raceHead.prev === second.commitAddress, `${raceHead.head.slice(0, 18)}..`);
     const raceRecord = await store.readGeneration(groupId, raceHead.head);
     const duplicateCode = await codeOf(store.commitGeneration({
       groupId,
@@ -152,13 +152,13 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
       record: raceRecord,
     }));
     const headAfterDuplicate = await coordinator.readHead(groupId);
-    check("기존 memory generation은 immutable", duplicateCode === "WEB_MACHINE_GENERATION_EXISTS" && headAfterDuplicate.head === raceHead.head && headAfterDuplicate.prev === "g2", duplicateCode);
+    check("기존 memory generation은 immutable", duplicateCode === "WEB_MACHINE_GENERATION_EXISTS" && headAfterDuplicate.head === raceHead.head && headAfterDuplicate.prev === second.commitAddress, duplicateCode);
     check("duplicate transaction은 blob도 publish하지 않음", await codeOf(store.getBlob("duplicate-orphan")) === "WEB_MACHINE_BLOB_MISSING");
 
     const corruptHeadStore = delegateStore(store, {
       readGeneration: async (requestedGroup, generationId) => {
         const record = await store.readGeneration(requestedGroup, generationId);
-        return generationId === raceHead.head ? { ...record, manifestHash: "sha256:corrupt" } : record;
+        return generationId === raceHead.head ? { ...record, commitAddress: record.commitAddress.slice(0, -4) + "beef" } : record;
       },
     });
     const recoveryCoordinator = new MachineCommitCoordinator({
@@ -177,7 +177,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
       devices: { block },
     });
     timings.prevRecoveryMs = Math.round(performance.now() - startedAt);
-    check("손상 HEAD에서 PREV generation 복구", recovered.generationId === "g2" && recovered.recoveredFrom === raceHead.head, `${recovered.recoveredFrom}->${recovered.generationId}`);
+    check("손상 HEAD에서 PREV generation 복구", recovered.generationId === second.commitAddress && recovered.recoveredFrom === raceHead.head, `${String(recovered.recoveredFrom).slice(0, 14)}..->${recovered.generationId.slice(0, 14)}..`);
     await machine.resume();
     const restoredValue = await machine.request({ type: "get" });
     const restoredBlock = await machine.request({ type: "blockRead", length: 3 });
@@ -187,7 +187,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     const corruptBothStore = delegateStore(store, {
       readGeneration: async (requestedGroup, generationId) => {
         const record = await store.readGeneration(requestedGroup, generationId);
-        return { ...record, manifestHash: "sha256:corrupt" };
+        return { ...record, commitAddress: record.commitAddress.slice(0, -4) + "beef" };
       },
     });
     const unavailableCoordinator = new MachineCommitCoordinator({
@@ -202,7 +202,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
       devices: { block },
     }));
     check("HEAD와 PREV 모두 손상되면 명시적 실패", unavailableCode === "WEB_MACHINE_RECOVERY_UNAVAILABLE", unavailableCode);
-    check("content-addressed manifest가 payload bytes를 직접 포함하지 않음", !JSON.stringify(second.manifest).includes("1,2,3") && second.manifest.machines[0].payload.digest.startsWith("sha256:"));
+    check("content-addressed generation이 payload bytes를 직접 포함하지 않음", !JSON.stringify([second.record, second.commit, second.entries]).includes("9,9,9") && second.entries.every((entry) => entry.address.startsWith("sha256:")));
     const blockedDatabaseName = "webMachineSchemaBlockedV1";
     const legacyConnection = await new Promise((resolve, reject) => {
       const request = indexedDB.open(blockedDatabaseName, 1);
@@ -314,16 +314,11 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     let retentionHead = null;
     for (let index = 1; index <= 20; index += 1) {
       const generationId = `r${index}`;
-      const digest = `digest-${index}`;
+      const digest = "sha256:" + (10 + index).toString(16).padStart(2, "0").repeat(32);
       const record = {
-        manifest: {
-          schemaVersion: 1,
-          groupId: retentionGroup,
-          generationId,
-          machines: [{ machineId: "retained", payload: { digest, byteLength: 1 } }],
-          devices: [],
-        },
-        manifestHash: `sha256:${index}`,
+        schemaVersion: 2,
+        commitAddress: "sha256:" + String(index).padStart(2, "0").repeat(32),
+        blobDigests: [digest],
       };
       const published = await retentionStore.commitGeneration({
         groupId: retentionGroup,
@@ -339,8 +334,8 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     const retentionInspect = await retentionStore.inspectStorage();
     const retainedHead = await retentionStore.readHead(retentionGroup);
     check("IndexedDB 20 generation은 HEAD/PREV 두 개로 정리", retentionReport.deletedGenerations === 18 && retentionReport.deletedBlobs === 18 && retentionInspect.generations === 2 && retentionInspect.blobs === 2, JSON.stringify(retentionInspect));
-    check("retention 뒤 HEAD/PREV payload 보존", retainedHead.head === "r20" && retainedHead.prev === "r19" && (await retentionStore.getBlob("digest-20"))[0] === 20 && (await retentionStore.getBlob("digest-19"))[0] === 19, `${retainedHead.head}/${retainedHead.prev}`);
-    check("retention이 old generation과 blob 제거", await codeOf(retentionStore.readGeneration(retentionGroup, "r1")) === "WEB_MACHINE_GENERATION_MISSING" && await codeOf(retentionStore.getBlob("digest-1")) === "WEB_MACHINE_BLOB_MISSING");
+    check("retention 뒤 HEAD/PREV payload 보존", retainedHead.head === "r20" && retainedHead.prev === "r19" && (await retentionStore.getBlob("sha256:" + (30).toString(16).padStart(2, "0").repeat(32)))[0] === 20 && (await retentionStore.getBlob("sha256:" + (29).toString(16).padStart(2, "0").repeat(32)))[0] === 19, `${retainedHead.head}/${retainedHead.prev}`);
+    check("retention이 old generation과 blob 제거", await codeOf(retentionStore.readGeneration(retentionGroup, "r1")) === "WEB_MACHINE_GENERATION_MISSING" && await codeOf(retentionStore.getBlob("sha256:" + (11).toString(16).padStart(2, "0").repeat(32))) === "WEB_MACHINE_BLOB_MISSING");
     retentionStore.close();
     await machine.shutdown();
   } catch (error) {

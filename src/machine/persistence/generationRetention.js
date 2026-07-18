@@ -9,20 +9,19 @@ export function generationStorageKey(groupId, generationId) {
   return `${groupId}\n${generationId}`;
 }
 
-function payloadDigest(entry) {
-  const digest = entry?.payload?.digest;
-  return typeof digest === "string" && digest ? digest : null;
-}
-
+// record.blobDigests = 커밋이 도달하는 blob 전수(commit·tree 오브젝트 포함)의 저장소 지역
+// 색인이다. 정본은 commit 체인이고 복원은 색인을 신뢰하지 않는다(coordinator가 걷는다) -
+// 색인이 거짓이어도 오염 반경은 gc뿐이다. 구 manifest 스키마는 미지원(P2 브레이킹, 원장 기록).
 export function generationBlobDigests(record) {
-  const manifest = record?.manifest;
-  if (!manifest || typeof manifest !== "object") {
-    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", "retention: generation manifest 없음");
+  if (record?.schemaVersion !== 2 || !Array.isArray(record.blobDigests)) {
+    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `retention: 지원하지 않는 generation record(schemaVersion ${record?.schemaVersion})`);
   }
   const digests = new Set();
-  for (const entry of [...(manifest.machines || []), ...(manifest.devices || [])]) {
-    const digest = payloadDigest(entry);
-    if (!digest) throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", "retention: payload digest 없음");
+  const addressForm = /^sha256:[0-9a-f]{64}$/;
+  for (const digest of record.blobDigests) {
+    if (typeof digest !== "string" || !addressForm.test(digest)) {
+      throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", "retention: blob digest 형식 위반");
+    }
     digests.add(digest);
   }
   return digests;
@@ -44,8 +43,10 @@ export function planGenerationRetention({ targetGroupId, heads, generations, blo
 
   const deletedGenerationKeys = [];
   const remainingRecords = [];
+  const groupPrefix = `${groupId}\n`;
   for (const [key, record] of generations) {
-    if (record?.manifest?.groupId === groupId && !retainedGenerationKeys.has(key)) deletedGenerationKeys.push(key);
+    // 어느 그룹의 세대인가는 저장 키가 안다(record는 그룹을 모른다 - 커널 오브젝트는 위치 무관).
+    if (String(key).startsWith(groupPrefix) && !retainedGenerationKeys.has(key)) deletedGenerationKeys.push(key);
     else remainingRecords.push(record);
   }
 

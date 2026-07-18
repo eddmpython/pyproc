@@ -28,7 +28,7 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { WebMachineHost, createMachineCryptoProvider } from "../../../../src/machine/index.js";
   import {
     BrowserClockDevice,
     BrowserEntropyDevice,
@@ -309,7 +309,7 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
   const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineClockEntropyV1" });
   const coordinator = new MachineCommitCoordinator({
     store,
-    cryptoProvider: crypto,
+    cryptoProvider: createMachineCryptoProvider(crypto),
     idFactory: () => "clock-entropy-g1",
     nowFactory: () => 1,
   });
@@ -348,7 +348,7 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
       }
       await linux.pause();
       startedAt = performance.now();
-      await coordinator.commitPaused({ groupId, machines: [linux], expectedHead: null, ownerToken });
+      const committed = await coordinator.commitPaused({ groupId, machines: [linux], expectedHead: null, ownerToken });
       timings.commitMs = Math.round(performance.now() - startedAt);
       await linux.shutdown();
       store.close();
@@ -356,7 +356,7 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nextSearch: `?restore=1&initialSeconds=${initialSeconds}&initialUptime=${initialUptime}&initialWord=${initialWord}`,
+          nextSearch: `?restore=1&commit=${committed.commitAddress}&initialSeconds=${initialSeconds}&initialUptime=${initialUptime}&initialWord=${initialWord}`,
           timings,
         }),
       });
@@ -376,7 +376,7 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
       const restored = await coordinator.restoreLatest({ groupId, machines: { linuxOs: linux } });
       timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
       const pausedInspect = await linux.inspect();
-      check("새 process가 clock/entropy handle 없이 generation 복원", restored.generationId === "clock-entropy-g1" && restored.manifest.devices.length === 0, `${restored.generationId}/${restored.manifest.devices.length}`);
+      check("새 process가 clock/entropy handle 없이 generation 복원", restored.generationId === new URLSearchParams(location.search).get("commit") && restored.devices.length === 0, `${restored.generationId.slice(0, 18)}../${restored.devices.length}`);
       check("paused cold restore가 새 clock port 연결", linux.state === "paused" && pausedInspect.guest?.clock?.attached && pausedInspect.guest.clock.wallSynchronizations >= 2, JSON.stringify(pausedInspect.guest?.clock));
       check("새 entropy는 snapshot payload가 아닌 WASM import", pausedInspect.guest?.entropy?.reads === 0 && entropyDevice.inspect().reads === 0, `${pausedInspect.guest?.entropy?.reads}/${entropyDevice.inspect().reads}`);
 

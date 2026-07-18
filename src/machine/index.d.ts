@@ -241,6 +241,15 @@ export interface MachineCryptoProvider {
   verifyDigest(publicKeyOrJwk: JsonWebKey | CryptoKey, target: string, signatureBytes: Uint8Array): Promise<boolean>;
   generateSigningKeyPair(): Promise<CryptoKeyPair>;
   exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey>;
+  /** 상태 커널 문법의 함수 조각(coordinator가 generation을 커널 오브젝트로 저장하는 데 쓴다). */
+  state: {
+    encodeObject(value: unknown): Uint8Array;
+    decodeObject(bytes: Uint8Array): unknown;
+    makePayloadTree(input: { entries: Array<{ id: string; address: string; byteLength: number; meta?: Record<string, unknown> | null }> }): Record<string, unknown>;
+    makeStateCommit(input: Record<string, unknown>): Record<string, unknown>;
+    validateStateCommit(commit: unknown): Record<string, unknown> & { tree: string; parents: string[] };
+    validateStateTree(tree: unknown): Record<string, unknown> & { kind: string; entries?: GenerationEntry[] };
+  };
 }
 export function createMachineCryptoProvider(cryptoProvider?: Crypto): MachineCryptoProvider;
 
@@ -418,9 +427,30 @@ export interface GenerationHead {
   ownerEpoch: number;
 }
 
+/**
+ * generation record = 커널 commit 주소 + gc 도달 색인. 정본은 commit 체인이고
+ * 복원은 색인을 신뢰하지 않는다(coordinator가 commit -> tree를 걷는다).
+ */
 export interface GenerationRecord {
-  manifest: Record<string, unknown>;
-  manifestHash: string;
+  schemaVersion: 2;
+  commitAddress: string;
+  blobDigests: string[];
+}
+
+export interface GenerationEntry {
+  id: string;
+  address: string;
+  byteLength: number;
+  meta: Record<string, unknown> | null;
+}
+
+export interface GenerationCommitResult {
+  schemaVersion: 2;
+  commitAddress: string;
+  commit: Record<string, unknown>;
+  entries: GenerationEntry[];
+  record: GenerationRecord;
+  head: GenerationHead;
 }
 
 export interface OwnerToken {
@@ -515,13 +545,13 @@ export class MachineCommitCoordinator {
     expectedHead: string | null;
     ownerToken: OwnerToken;
     control?: OperationControl;
-  }): Promise<GenerationRecord & { head: GenerationHead }>;
+  }): Promise<GenerationCommitResult>;
   restoreLatest(options: {
     groupId: string;
     machines: ReadonlyMap<string, MachineHandle> | Record<string, MachineHandle>;
     devices?: Record<string, BlockDevice>;
     control?: OperationControl;
-  }): Promise<Record<string, unknown>>;
+  }): Promise<{ generationId: string; recoveredFrom: string | null; failures: Array<{ generationId: string; code: string }>; commit: Record<string, unknown>; machines: Array<Record<string, unknown>>; devices: Array<Record<string, unknown>> }>;
   dryRunRecoveryWindow(options: { groupId: string; ownerToken: OwnerToken }): Promise<PruneReport>;
   pruneRecoveryWindow(options: { groupId: string; ownerToken: OwnerToken; control?: OperationControl }): Promise<PruneReport>;
   inspectStorage(): Promise<Readonly<{ blobs: number; blobBytes: number; generations: number; groups: number }>>;

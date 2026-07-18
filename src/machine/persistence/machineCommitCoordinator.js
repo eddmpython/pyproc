@@ -1,12 +1,17 @@
 // machineCommitCoordinator.js - paused guest snapshot과 flushed device를 한 CAS generation으로 commit한다.
+//
+// 재기초(kernel-product P2): generation은 이제 machine의 자기 manifest가 아니라 상태 커널의
+// 오브젝트다. 스냅샷 payload = blob, 머신·장치의 도메인 기술 = payloadTree 엔트리 meta,
+// generation 정체 = commit(parents = 직전 generation, fence = owner epoch). generationId는
+// commit 주소 자신이라 정체성 대조가 주소 대조로 환원된다. store의 단일 트랜잭션
+// CAS(owner + expectedHead)는 backend 원자성으로 그대로 남고(원자성은 backend 책임),
+// 저장·무결성 판정은 커널 문법(주입: cryptoProvider.state)이 한다. record에는 gc 색인
+// (blobDigests)만 남는다 - 복원은 색인을 신뢰하지 않고 commit 체인을 걷는다.
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
-import {
-  copyGenerationBytes,
-  digestGenerationBytes,
-  digestGenerationManifest,
-  verifyGenerationBlob,
-} from "./generationIntegrity.js";
+import { copyGenerationBytes } from "./generationIntegrity.js";
+
+export const GENERATION_SCHEMA_VERSION = 2;
 
 const RECOVERABLE_CODES = new Set([
   "WEB_MACHINE_BLOB_MISSING",
@@ -26,16 +31,21 @@ function sortedDevices(devices) {
   return Object.entries(devices).sort(([left], [right]) => left.localeCompare(right));
 }
 
+function generationCorrupt(groupId, detail) {
+  return new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `${groupId}: ${detail}`);
+}
+
 export class MachineCommitCoordinator {
   constructor({ store, cryptoProvider, idFactory, nowFactory }) {
     if (!store) throw new TypeError("store가 필요하다");
-    // digest 법은 커널 한 벌이다: 조립은 createMachineCryptoProvider가 배달한다(맨 Crypto 거부).
+    // digest·커널 문법은 코어 한 벌이다: 조립은 createMachineCryptoProvider가 배달한다(맨 Crypto 거부).
     if (typeof cryptoProvider?.digestBytes !== "function") throw new TypeError("cryptoProvider.digestBytes가 필요하다(createMachineCryptoProvider로 감싸라)");
+    if (typeof cryptoProvider?.state?.makeStateCommit !== "function") throw new TypeError("cryptoProvider.state(커널 문법)가 필요하다(createMachineCryptoProvider로 감싸라)");
     if (typeof idFactory !== "function") throw new TypeError("idFactory가 필요하다");
     if (typeof nowFactory !== "function") throw new TypeError("nowFactory가 필요하다");
     this._store = store;
     this._cryptoProvider = cryptoProvider;
-    this._idFactory = idFactory;
+    this._idFactory = idFactory; // generation 정체는 commit 주소가 대체했지만, 시그니처 계약은 유지한다
     this._nowFactory = nowFactory;
   }
 
@@ -66,49 +76,62 @@ export class MachineCommitCoordinator {
     ]);
     throwIfOperationAborted(control, `${groupId}: paused commit`);
 
+    const grammar = this._cryptoProvider.state;
     const blobs = new Map();
-    const machineRecords = await Promise.all(machineSnapshots.map(async (snapshot) => ({
-      machineId: snapshot.machineId,
-      adapterId: snapshot.adapterId,
-      adapterVersion: snapshot.adapterVersion,
-      snapshotScope: snapshot.snapshotScope,
-      originInstanceId: snapshot.originInstanceId,
-      payload: await this._preparePayload(snapshot.payload, blobs),
-    })));
-    const deviceRecords = await Promise.all(deviceSnapshots.map(async ({ name, device, payload }) => ({
-      name,
-      kind: device.kind,
-      byteLength: device.byteLength,
-      payload: await this._preparePayload(payload, blobs),
-    })));
+    const putBlob = async (bytes) => {
+      const address = await this._cryptoProvider.digestBytes(bytes);
+      if (!blobs.has(address)) blobs.set(address, bytes);
+      return address;
+    };
+    const entries = [];
+    for (const snapshot of machineSnapshots) {
+      const bytes = copyGenerationBytes(snapshot.payload);
+      entries.push({
+        id: `machine/${snapshot.machineId}`,
+        address: await putBlob(bytes),
+        byteLength: bytes.byteLength,
+        meta: {
+          machineId: snapshot.machineId,
+          adapterId: snapshot.adapterId,
+          adapterVersion: snapshot.adapterVersion,
+          snapshotScope: snapshot.snapshotScope,
+          originInstanceId: snapshot.originInstanceId,
+        },
+      });
+    }
+    for (const { name, device, payload } of deviceSnapshots) {
+      const bytes = copyGenerationBytes(payload);
+      entries.push({
+        id: `device/${name}`,
+        address: await putBlob(bytes),
+        byteLength: bytes.byteLength,
+        meta: { name, kind: device.kind, byteLength: device.byteLength },
+      });
+    }
     throwIfOperationAborted(control, `${groupId}: paused commit`);
 
-    const generationId = String(this._idFactory() || "");
-    if (!generationId) throw new TypeError("idFactory는 generation ID를 반환해야 한다");
-    const manifest = {
-      schemaVersion: 1,
-      groupId: String(groupId),
-      generationId,
-      previousGeneration: expectedHead,
-      commitFence: { ownerId: ownerToken.ownerId, epoch: ownerToken.epoch },
-      createdAt: Number(this._nowFactory()),
-      machines: machineRecords,
-      devices: deviceRecords,
-    };
-    const record = {
-      manifest,
-      manifestHash: await digestGenerationManifest(this._cryptoProvider, manifest),
-    };
+    const tree = grammar.makePayloadTree({ entries });
+    const treeAddress = await putBlob(grammar.encodeObject(tree));
+    const commit = grammar.makeStateCommit({
+      parents: expectedHead ? [expectedHead] : [],
+      tree: treeAddress,
+      env: {},
+      fence: { ownerId: ownerToken.ownerId, epoch: ownerToken.epoch },
+      createdAt: String(Number(this._nowFactory())),
+    });
+    const commitAddress = await putBlob(grammar.encodeObject(commit));
+    // record = 저장소 지역 색인(gc의 도달 집합). 정본은 commit 체인이고 복원은 색인을 안 믿는다.
+    const record = { schemaVersion: GENERATION_SCHEMA_VERSION, commitAddress, blobDigests: [...blobs.keys()].sort() };
     const head = await this._store.commitGeneration({
       groupId,
-      generationId,
+      generationId: commitAddress,
       expectedHead,
       ownerToken,
       blobs: [...blobs].map(([digest, bytes]) => ({ digest, bytes })),
       record,
       control,
     });
-    return { ...record, head };
+    return { schemaVersion: GENERATION_SCHEMA_VERSION, commitAddress, commit, entries: tree.entries, record, head };
   }
 
   async restoreLatest({ groupId, machines, devices = {}, control }) {
@@ -125,12 +148,15 @@ export class MachineCommitCoordinator {
         failures.push({ generationId, code: error.code });
         continue;
       }
-      await this._applyGeneration(verified, machines, devices, control);
+      await this._applyGeneration(groupId, verified, machines, devices, control);
       return {
         generationId,
         recoveredFrom: generationId === head.head ? null : head.head,
         failures,
-        manifest: verified.manifest,
+        commit: verified.commit,
+        // 도메인 요약(payload 바이트 제외): 관측·게이트용. 정본은 commit 체인이다.
+        machines: verified.machines.map(({ payload, ...meta }) => meta),
+        devices: verified.devices.map(({ payload, ...meta }) => meta),
       };
     }
     throw new WebMachineError("WEB_MACHINE_RECOVERY_UNAVAILABLE", `${groupId}: HEAD/PREV 복구 실패`, { failures });
@@ -151,52 +177,70 @@ export class MachineCommitCoordinator {
     return this._store.inspectStorage();
   }
 
-  async _preparePayload(value, blobs) {
-    const bytes = copyGenerationBytes(value);
-    const digest = await digestGenerationBytes(this._cryptoProvider, bytes);
-    if (!blobs.has(digest)) blobs.set(digest, bytes);
-    return { digest, byteLength: bytes.byteLength };
+  // blob을 읽어 내용주소를 재대조한다(verify-on-read). 없음(BLOB_MISSING)은 store가 던진다.
+  async _verifiedBlob(groupId, address, label) {
+    const bytes = await this._store.getBlob(address);
+    if (await this._cryptoProvider.digestBytes(bytes) !== address) {
+      throw generationCorrupt(groupId, `${label} digest 불일치(${address.slice(0, 20)}..)`);
+    }
+    return bytes;
+  }
+
+  // 커널 문법의 형식 오류(PyProcError 계열)는 machine 계약으로 감싼다: 저장소에서 온
+  // 파손은 이 층에서 GENERATION_CORRUPT다.
+  _decodeAs(groupId, validate, bytes, label) {
+    const grammar = this._cryptoProvider.state;
+    try { return validate(grammar.decodeObject(bytes)); }
+    catch (error) {
+      throw generationCorrupt(groupId, `${label} 형식 파손(${String(error?.message || error).slice(-160)})`);
+    }
   }
 
   async _readVerifiedGeneration(groupId, generationId, control) {
     throwIfOperationAborted(control, `${groupId}: verify generation`);
+    const grammar = this._cryptoProvider.state;
     const record = await this._store.readGeneration(groupId, generationId);
-    const actualManifestHash = await digestGenerationManifest(this._cryptoProvider, record.manifest);
-    if (record.manifestHash !== actualManifestHash) {
-      throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `${groupId}: manifest hash 불일치 ${generationId}`);
+    if (record?.schemaVersion !== GENERATION_SCHEMA_VERSION || record?.commitAddress !== generationId) {
+      throw generationCorrupt(groupId, `generation 정체 불일치 ${generationId}(schemaVersion ${record?.schemaVersion})`);
     }
-    const manifest = record.manifest;
-    if (manifest.schemaVersion !== 1 || manifest.groupId !== groupId || manifest.generationId !== generationId) {
-      throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `${groupId}: manifest identity 불일치 ${generationId}`);
-    }
-    const machinePayloads = new Map();
-    const devicePayloads = new Map();
-    for (const entry of manifest.machines) {
+    const commit = this._decodeAs(groupId, grammar.validateStateCommit,
+      await this._verifiedBlob(groupId, generationId, "commit"), "commit");
+    const tree = this._decodeAs(groupId, grammar.validateStateTree,
+      await this._verifiedBlob(groupId, commit.tree, "tree"), "tree");
+    if (tree.kind !== "payload") throw generationCorrupt(groupId, `payload tree가 아니다(${tree.kind})`);
+    const machineEntries = [];
+    const deviceEntries = [];
+    for (const entry of tree.entries) {
       throwIfOperationAborted(control, `${groupId}: verify generation`);
-      const payload = await this._store.getBlob(entry.payload.digest);
-      machinePayloads.set(entry.machineId, await verifyGenerationBlob(this._cryptoProvider, entry.payload, payload));
+      const bytes = await this._verifiedBlob(groupId, entry.address, entry.id);
+      if (bytes.byteLength !== entry.byteLength) throw generationCorrupt(groupId, `${entry.id} 길이 불일치`);
+      if (entry.id.startsWith("machine/")) {
+        if (typeof entry.meta?.machineId !== "string") throw generationCorrupt(groupId, `${entry.id} meta 파손`);
+        machineEntries.push({ ...entry.meta, payload: bytes });
+      } else if (entry.id.startsWith("device/")) {
+        if (typeof entry.meta?.name !== "string") throw generationCorrupt(groupId, `${entry.id} meta 파손`);
+        deviceEntries.push({ ...entry.meta, payload: bytes });
+      } else {
+        throw generationCorrupt(groupId, `알 수 없는 엔트리(${entry.id})`);
+      }
     }
-    for (const entry of manifest.devices) {
-      throwIfOperationAborted(control, `${groupId}: verify generation`);
-      const payload = await this._store.getBlob(entry.payload.digest);
-      devicePayloads.set(entry.name, await verifyGenerationBlob(this._cryptoProvider, entry.payload, payload));
-    }
-    return { manifest, machinePayloads, devicePayloads };
+    if (!machineEntries.length) throw generationCorrupt(groupId, "machine 엔트리가 없다");
+    return { commit, machines: machineEntries, devices: deviceEntries };
   }
 
-  async _applyGeneration(verified, machines, devices, control) {
-    for (const entry of verified.manifest.devices) {
-      throwIfOperationAborted(control, `${verified.manifest.groupId}: restore generation`);
+  async _applyGeneration(groupId, verified, machines, devices, control) {
+    for (const entry of verified.devices) {
+      throwIfOperationAborted(control, `${groupId}: restore generation`);
       const device = lookup(devices, entry.name);
       if (!device) throw new WebMachineError("WEB_MACHINE_RESTORE_TARGET_MISSING", `device target 없음: ${entry.name}`);
       this._assertBlockDevice(entry.name, device);
       if (device.byteLength !== entry.byteLength) {
         throw new WebMachineError("WEB_MACHINE_BLOCK_SIZE", `${entry.name}: block 크기 불일치`);
       }
-      await device.restore(verified.devicePayloads.get(entry.name));
+      await device.restore(entry.payload);
     }
-    for (const entry of verified.manifest.machines) {
-      throwIfOperationAborted(control, `${verified.manifest.groupId}: restore generation`);
+    for (const entry of verified.machines) {
+      throwIfOperationAborted(control, `${groupId}: restore generation`);
       const machine = lookup(machines, entry.machineId);
       if (!machine) throw new WebMachineError("WEB_MACHINE_RESTORE_TARGET_MISSING", `machine target 없음: ${entry.machineId}`);
       await machine.restore({
@@ -206,7 +250,7 @@ export class MachineCommitCoordinator {
         adapterVersion: entry.adapterVersion,
         snapshotScope: entry.snapshotScope,
         originInstanceId: entry.originInstanceId,
-        payload: verified.machinePayloads.get(entry.machineId),
+        payload: entry.payload,
       }, control);
     }
   }

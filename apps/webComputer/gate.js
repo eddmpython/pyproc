@@ -31,7 +31,7 @@ async function initialPhase(runtime, startupMs) {
   const committed = await runtime.save();
   timings.initialBootMs = startupMs;
   timings.firstUseAndCommitMs = Math.round(performance.now() - startedAt);
-  timings.initialCommitBytes = committed.manifest.machines.reduce((total, entry) => total + entry.payload.byteLength, 0);
+  timings.initialCommitBytes = committed.entries.filter((entry) => entry.id.startsWith("machine/")).reduce((total, entry) => total + entry.byteLength, 0);
   await post("/gateRestart", { nextSearch: "?gate=restore", timings });
   await new Promise(() => undefined);
 }
@@ -82,7 +82,7 @@ async function importPhase(runtime) {
   check(checks, "Python computer works in the fresh profile", python === "91:PYTHON_PRODUCT:91", python);
   check(checks, "Linux computer works in the fresh profile", linux.includes("IMPORTED:91:LINUX_PRODUCT:91"), linux.trim().slice(-180));
   const committed = imported.committed;
-  check(checks, "imported computer becomes a new local durable generation", !!committed.head?.head || !!committed.manifest.generationId, committed.manifest.generationId);
+  check(checks, "imported computer becomes a new local durable generation", !!committed.head?.head || !!committed.commitAddress, committed.commitAddress);
 
   const durableHead = (await runtime.persistence.readHead(runtime.groupId))?.head;
   const originalSave = runtime.persistence.save.bind(runtime.persistence);
@@ -111,7 +111,7 @@ async function importPhase(runtime) {
   ]);
   check(checks, "unsaved imported context remains usable without replay", unsavedPython === "91:PYTHON_PRODUCT:91" && unsavedLinux.includes("UNSAVED:91:LINUX_PRODUCT:91"), `${unsavedPython}/${unsavedLinux.trim().slice(-100)}`);
   const recoveredCommit = await runtime.save();
-  check(checks, "manual retry durably saves active imported context", runtime.inspect().persistence.durabilityState === "clean" && recoveredCommit.manifest.generationId !== durableHead, recoveredCommit.manifest.generationId);
+  check(checks, "manual retry durably saves active imported context", runtime.inspect().persistence.durabilityState === "clean" && recoveredCommit.commitAddress !== durableHead, recoveredCommit.commitAddress);
   await post("/gateReport", { ok: checks.every((entry) => entry.pass), checks, timings });
 }
 

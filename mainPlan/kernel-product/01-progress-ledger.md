@@ -18,6 +18,22 @@
   세션 서명·검증, 배럴·d.ts, run.mjs bundle 시험, 레이아웃 문서 동시 개정.
 - 게이트: npm test 1321, test:browser 84/84(서명 신뢰 부활·변조 거부·독립 재파싱·구 봉투 호환) 전부 green.
 
-NEXT: P2 - machine generation = 커널 commit 스키마 통일. payloadTree 엔트리 meta 확장 ->
-coordinator가 커널 오브젝트(blob/tree/commit)로 저장하고 store 단일 트랜잭션 CAS는 backend
-원자성으로 유지. retention은 commit->tree 걷기로.
+## 2026-07-18 - P2 완료: machine generation = 커널 commit 스키마
+
+- generation이 machine 자기 manifest에서 커널 오브젝트로 전환됐다: 스냅샷 payload = blob,
+  머신·장치 도메인 메타 = payloadTree 엔트리 meta(objectModel에 meta 필드 추가), generation
+  정체 = commit(parents = 직전 generation, fence = owner epoch). generationId = commit 주소라
+  정체성 대조가 주소 대조로 환원된다. 커널 문법은 machineCryptoProvider.state로 주입.
+- record = { schemaVersion: 2, commitAddress, blobDigests } (gc 색인). 복원은 색인을 신뢰하지
+  않고 commit -> tree를 걷는다 - 색인이 거짓이어도 오염 반경은 gc뿐이다. retention은 commit
+  체인 도달 blob으로 삭제 집합 계산, 그룹 판정은 저장 키가 한다(record는 그룹 무관).
+- store 트랜잭션 CAS(owner + expectedHead)는 backend 원자성으로 불변. 구 manifest 스키마는
+  미지원(브레이킹, IndexedDB generation은 미게시 제품 로컬 상태).
+- 게이트: 커널 verify-on-read(commit·tree·blob 3단 재대조) + corruption/mismatch 의미론 보존.
+  machineStoreContract·generationContract·machineEnvelope + dual-boot/device/clock/display/
+  framebuffer/packet/persistent 8기 probe 전부 GREEN(검사 의미 보존, 프로세스 경계는 commit
+  주소를 재시작 쿼리로 운반). guest snapshot이 exportImage bundle이 되어 파서도 전환.
+  제품 게이트 13/13, npm test 1321, test:types green.
+
+NEXT: P3 - .webmachine = 단일 bundle. webMachineFile writer를 bundle 인코딩(주입 코덱)으로
+교체, reader는 헤더 선행 검증으로 payload 접촉 전 신뢰 거부 보존, 구 WEBMACHINE1 감지형 reader.

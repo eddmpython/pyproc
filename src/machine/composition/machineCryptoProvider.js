@@ -13,6 +13,14 @@ import {
   signStateDigest,
   verifyStateDigest,
 } from "../../state/signedTag.js";
+import {
+  decodeStateObject,
+  encodeStateObject,
+  makePayloadTree,
+  makeStateCommit,
+  validateStateCommit,
+  validateStateTree,
+} from "../../state/objectModel.js";
 
 export function createMachineCryptoProvider(cryptoProvider = globalThis.crypto) {
   if (!cryptoProvider?.subtle) throw new TypeError("createMachineCryptoProvider: cryptoProvider.subtle이 필요하다");
@@ -28,5 +36,15 @@ export function createMachineCryptoProvider(cryptoProvider = globalThis.crypto) 
     },
     generateSigningKeyPair: () => createStateKeyPair(cryptoProvider),
     exportPublicJwk: (publicKey) => exportStatePublicKey(cryptoProvider, publicKey),
+    // 커널 문법의 함수 조각: machine generation이 커널 오브젝트(blob/tree/commit)로 저장되도록
+    // coordinator가 소비한다. machine은 커널을 import하지 못하므로 문법도 여기로 배달된다.
+    state: Object.freeze({
+      encodeObject: encodeStateObject,
+      decodeObject: decodeStateObject,
+      makePayloadTree,
+      makeStateCommit,
+      validateStateCommit,
+      validateStateTree,
+    }),
   });
 }

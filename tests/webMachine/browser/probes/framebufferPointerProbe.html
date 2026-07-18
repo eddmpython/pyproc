@@ -27,7 +27,7 @@ process cold restore 200/200/180ms, 재연결 pointer frame 36/37/45ms.
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { WebMachineHost, createMachineCryptoProvider } from "../../../../src/machine/index.js";
   import {
     CanvasRgbaFrameSource,
     IndexedDbMachineStore,
@@ -211,7 +211,7 @@ process cold restore 200/200/180ms, 재연결 pointer frame 36/37/45ms.
   const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineFramebufferPointerV1" });
   const coordinator = new MachineCommitCoordinator({
     store,
-    cryptoProvider: crypto,
+    cryptoProvider: createMachineCryptoProvider(crypto),
     idFactory: () => "framebuffer-pointer-g1",
     nowFactory: () => 1,
   });
@@ -254,7 +254,7 @@ process cold restore 200/200/180ms, 재연결 pointer frame 36/37/45ms.
       await machine.pause();
       if (pointer.inspect().attached) throw new Error("paused pointer가 분리되지 않았다");
       startedAt = performance.now();
-      await coordinator.commitPaused({ groupId, machines: [machine], expectedHead: null, ownerToken });
+      const committed = await coordinator.commitPaused({ groupId, machines: [machine], expectedHead: null, ownerToken });
       timings.commitMs = Math.round(performance.now() - startedAt);
       await machine.shutdown();
       if (framebuffer.inspect().attached || pointer.inspect().attached) throw new Error("shutdown 뒤 framebuffer/pointer endpoint 잔존");
@@ -263,7 +263,7 @@ process cold restore 200/200/180ms, 재연결 pointer frame 36/37/45ms.
       await fetch("/gateRestart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextSearch: "?restore=1", timings }),
+        body: JSON.stringify({ nextSearch: `?restore=1&commit=${committed.commitAddress}`, timings }),
       });
       await new Promise(() => {});
     } else {
@@ -272,7 +272,7 @@ process cold restore 200/200/180ms, 재연결 pointer frame 36/37/45ms.
       let startedAt = performance.now();
       const restored = await coordinator.restoreLatest({ groupId, machines: { graphicalOs: machine } });
       timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
-      check("새 process가 framebuffer/pointer handle 없이 generation 복원", restored.generationId === "framebuffer-pointer-g1" && restored.manifest.devices.length === 0, `${restored.generationId}/${restored.manifest.devices.length}`);
+      check("새 process가 framebuffer/pointer handle 없이 generation 복원", restored.generationId === new URLSearchParams(location.search).get("commit") && restored.devices.length === 0, `${restored.generationId.slice(0, 18)}../${restored.devices.length}`);
       check("paused cold restore는 framebuffer만 재연결", machine.state === "paused" && framebuffer.inspect().attached && !pointer.inspect().attached, `${machine.state}/${framebuffer.inspect().attached}/${pointer.inspect().attached}`);
       const pausedPointerCode = await codeOf(pointer.move({ deltaX: 1, deltaY: 1 }));
       check("paused machine pointer 차단", pausedPointerCode === "WEB_MACHINE_INPUT_UNATTACHED", pausedPointerCode);

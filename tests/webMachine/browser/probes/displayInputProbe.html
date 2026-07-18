@@ -27,7 +27,7 @@ Linux VGA/PS2 최초 I/O 354/349/344ms, generation commit 347/297/299ms,
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { WebMachineHost, createMachineCryptoProvider } from "../../../../src/machine/index.js";
   import {
     IndexedDbMachineStore,
     MachineCommitCoordinator,
@@ -175,7 +175,7 @@ Linux VGA/PS2 최초 I/O 354/349/344ms, generation commit 347/297/299ms,
   const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachineDisplayInputV1" });
   const coordinator = new MachineCommitCoordinator({
     store,
-    cryptoProvider: crypto,
+    cryptoProvider: createMachineCryptoProvider(crypto),
     idFactory: () => "display-input-g1",
     nowFactory: () => 1,
   });
@@ -200,7 +200,7 @@ Linux VGA/PS2 최초 I/O 354/349/344ms, generation commit 347/297/299ms,
       await linux.pause();
       if (input.inspect().attached) throw new Error("paused input이 분리되지 않았다");
       startedAt = performance.now();
-      await coordinator.commitPaused({ groupId, machines: [linux], expectedHead: null, ownerToken });
+      const committed = await coordinator.commitPaused({ groupId, machines: [linux], expectedHead: null, ownerToken });
       timings.commitMs = Math.round(performance.now() - startedAt);
       await linux.shutdown();
       if (display.inspect().attached || input.inspect().attached) throw new Error("shutdown 뒤 display/input endpoint 잔존");
@@ -208,7 +208,7 @@ Linux VGA/PS2 최초 I/O 354/349/344ms, generation commit 347/297/299ms,
       await fetch("/gateRestart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextSearch: "?restore=1", timings }),
+        body: JSON.stringify({ nextSearch: `?restore=1&commit=${committed.commitAddress}`, timings }),
       });
       await new Promise(() => {});
     } else {
@@ -217,7 +217,7 @@ Linux VGA/PS2 최초 I/O 354/349/344ms, generation commit 347/297/299ms,
       let startedAt = performance.now();
       const restored = await coordinator.restoreLatest({ groupId, machines: { linuxOs: linux } });
       timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
-      check("새 process가 display/input handle 없이 machine 복원", restored.generationId === "display-input-g1" && restored.manifest.devices.length === 0, `${restored.generationId}/${restored.manifest.devices.length}`);
+      check("새 process가 display/input handle 없이 machine 복원", restored.generationId === new URLSearchParams(location.search).get("commit") && restored.devices.length === 0, `${restored.generationId.slice(0, 18)}../${restored.devices.length}`);
       check("paused cold restore는 display만 재연결", linux.state === "paused" && display.inspect().attached && !input.inspect().attached, `${linux.state}/${display.inspect().attached}/${input.inspect().attached}`);
       const pausedInputCode = await codeOf(input.sendScanCodes(encodePs2Set1Text("echo paused\n")));
       check("paused machine input 차단", pausedInputCode === "WEB_MACHINE_INPUT_UNATTACHED", pausedInputCode);
