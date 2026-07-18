@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!--
+probe 3: ref CAS 프로토콜 음성 시험.
+쓰기 순서 법(payload -> tree -> commit -> PREV -> HEAD), HEAD-first 위반, PREV 미보존,
+stale fence, env(h0) 불일치, 변조 blob을 전부 주입해 시안이 잡는지 확인한다.
+실행: node tests/browser/run.mjs tests/attempts/stateKernel/refCasProbe.html
+결과(2026-07-18, Edge headless / 로컬 COOP+COEP): GREEN 7/7.
+쓰기 순서(blob 2 + tree + commit + PREV + HEAD) 크래시 6지점 전부 구 HEAD 무결 부활.
+HEAD-first 위반 = corruption 감지 + PREV 후퇴. PREV 미보존 + HEAD 파손 = 첫 부팅 위장 없는
+명시 예외. stale fence = 거부 + HEAD 불변. env(h0) 불일치 = 유효한 PREV가 있어도 후퇴 없이
+즉시 예외. 변조 blob = verify-on-read 적발 + PREV 후퇴.
+결론: fence 선택형 ref CAS + 쓰기 순서 법 + 복구 의미론 2축이 전 위반을 문다. 시안 채택.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: stateKernel ref CAS</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: stateKernel - ref CAS 프로토콜 음성 시험</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { OpfsDraftStore, commitDraft, openDraft, addressOf } from "./stateKernelDraft.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  async function clean(root, name) {
+    try { await root.removeEntry(name, { recursive: true }); } catch (e) {}
+    return root.getDirectoryHandle(name, { create: true });
+  }
+  const page = (fill) => new Uint8Array(4096).fill(fill);
+  const state = (n) => ({ pages: [[0, page(n)], [1, page(n + 1)]], heapLen: 8192, sp: 128, pageSize: 4096, env: { h0: "h0-real" } });
+
+  // 크래시 주입 store: writes번째 쓰기 작업에서 던진다(쓰기 순서 법의 지점별 검증).
+  class CrashStore extends OpfsDraftStore {
+    constructor(dir, crashAfter) { super(dir); this._left = crashAfter; }
+    async _tick(label) { if (--this._left < 0) throw new Error(`CRASH:${label}`); }
+    async writeObject(a, b) { await this._tick("object"); return super.writeObject(a, b); }
+    async writeRef(n, r) { await this._tick("ref:" + n); return super.writeRef(n, r); }
+  }
+
+  try {
+    const root = await navigator.storage.getDirectory();
+    const crypto = globalThis.crypto;
+
+    // 1. 정상 왕복: c1 -> c2, open은 c2를 준다.
+    const dir1 = await clean(root, "skRefCas1");
+    const s1 = new OpfsDraftStore(dir1);
+    await commitDraft(crypto, s1, state(10));
+    const c2 = await commitDraft(crypto, s1, state(20));
+    const opened = await openDraft(crypto, s1, { expectH0: "h0-real" });
+    check("정상 왕복: HEAD 세대", opened.generation === "head" && opened.pages.get(0)[0] === 20, `commit=${c2.commitAddress.slice(0, 20)}..`);
+
+    // 2. 쓰기 순서 법: 새 커밋을 지점별로 크래시시켜도 열면 항상 c2(구 HEAD)가 온전하다.
+    // 반복마다 고유 페이지 내용을 써서 dedupe 없이 쓰기 순서가 고정되게 한다:
+    // blob 2 + tree + commit + PREV + HEAD = 6지점 전부 크래시가 나야 하고, 어느 지점에서도
+    // HEAD는 마지막 쓰기라 구 세대가 산다.
+    let orderOk = true; let points = 0;
+    for (let crashAfter = 0; crashAfter < 6; crashAfter++) {
+      const cs = new CrashStore(dir1, crashAfter);
+      let crashed = false;
+      try { await commitDraft(crypto, cs, state(100 + crashAfter * 2)); } catch (e) { crashed = String(e.message).startsWith("CRASH:"); }
+      if (!crashed) { orderOk = false; break; } // 6지점 안에서 커밋이 성공하면 쓰기 순서 가정이 틀린 것
+      points++;
+      const r = await openDraft(crypto, s1, { expectH0: "h0-real" });
+      if (!(r && r.pages.get(0)[0] === 20)) { orderOk = false; break; }
+    }
+    check("쓰기 순서 법: 지점별 크래시에도 구 HEAD 무결", orderOk && points === 6, `크래시 지점 ${points}/6 전부 c2 부활`);
+
+    // 3. HEAD-first 위반: 오브젝트 없는 커밋 주소를 HEAD에 먼저 쓰면 corruption 감지 + PREV 후퇴.
+    const fake = await addressOf(crypto, new Uint8Array([1, 2, 3]));
+    await s1.writeRef("PREV", (await s1.readRef("HEAD")).ref); // 직전 세대 보존(위반 전 상태)
+    await s1.writeRef("HEAD", { commit: fake });
+    const fb = await openDraft(crypto, s1, { expectH0: "h0-real" });
+    check("HEAD-first 위반: corruption 감지 + PREV 후퇴", fb.fallback === true && fb.pages.get(0)[0] === 20, fb.headFailure || "");
+
+    // 4. PREV 미보존 위반: PREV 삭제 + HEAD 파손 -> 첫 부팅 위장 없이 명시 예외.
+    const dir2 = await clean(root, "skRefCas2");
+    const s2 = new OpfsDraftStore(dir2);
+    await commitDraft(crypto, s2, state(40));
+    await s2.deleteRef("PREV");
+    const hf = await dir2.getFileHandle("HEAD.json", { create: true });
+    const hw = await hf.createWritable(); await hw.write("{broken"); await hw.close();
+    let explicitCorrupt = false;
+    try { await openDraft(crypto, s2, {}); } catch (e) { explicitCorrupt = e.kind === "corrupt"; }
+    check("PREV 미보존 + HEAD 파손: 명시 예외(첫 부팅 위장 금지)", explicitCorrupt);
+
+    // 5. stale fence: epoch가 승계된 뒤 옛 토큰의 커밋은 HEAD 불변으로 거부된다.
+    const dir3 = await clean(root, "skRefCas3");
+    const s3 = new OpfsDraftStore(dir3);
+    const tokenA = await s3.claimOwner("tabA");
+    await commitDraft(crypto, s3, { ...state(50), fence: tokenA });
+    const headBefore = (await s3.readRef("HEAD")).ref.commit;
+    await s3.claimOwner("tabB"); // 승계: epoch+1
+    let staleRejected = false;
+    try { await commitDraft(crypto, s3, { ...state(60), fence: tokenA }); } catch (e) { staleRejected = e.kind === "staleFence"; }
+    const headAfter = (await s3.readRef("HEAD")).ref.commit;
+    check("stale fence: 거부 + HEAD 불변", staleRejected && headBefore === headAfter);
+
+    // 6. env(h0) 불일치: 즉시 예외. 유효한 PREV가 있어도 후퇴하지 않는다.
+    await s1.writeRef("HEAD", { commit: c2.commitAddress }); // 3번 위반 잔해 정리(HEAD를 c2로 복구)
+    let envThrown = false; let envFellBack = false;
+    try {
+      const r = await openDraft(crypto, s1, { expectH0: "h0-other" });
+      envFellBack = !!r; // 여기 도달하면 후퇴가 일어난 것(위반)
+    } catch (e) { envThrown = e.kind === "envMismatch"; }
+    check("env 불일치: PREV 후퇴 없이 즉시 예외", envThrown && !envFellBack);
+
+    // 7. verify-on-read: 페이지 blob 변조는 열 때 적발된다(PREV 후퇴).
+    const dir4 = await clean(root, "skRefCas4");
+    const s4 = new OpfsDraftStore(dir4);
+    await commitDraft(crypto, s4, state(70));
+    const last = await commitDraft(crypto, s4, state(80));
+    const objects = await dir4.getDirectoryHandle("objects");
+    const treeBytes = await s4.readObject(last.treeAddress);
+    const tampered = JSON.parse(new TextDecoder().decode(treeBytes)).pages[0][1];
+    const tf = await objects.getFileHandle(tampered.slice("sha256:".length));
+    const tw = await tf.createWritable(); await tw.write(page(99)); await tw.close();
+    const tr = await openDraft(crypto, s4, { expectH0: "h0-real" });
+    check("변조 blob: verify-on-read 적발 + PREV 후퇴", tr.fallback === true && tr.pages.get(0)[0] === 70, tr.headFailure || "");
+  } catch (e) {
+    check("예외 없음", false, String(e && e.stack || e));
+  }
+  await report();
+</script>
+</body>
+</html>

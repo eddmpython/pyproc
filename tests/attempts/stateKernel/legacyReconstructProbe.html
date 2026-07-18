@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<!--
+probe 2: 구 포맷 재구성 리허설.
+세션 save 파일, 저널 HEAD.json + blob CAS, .pymachine 봉투, machine generation(IndexedDB)을
+신 오브젝트 모델(blob/tree/commit)로 읽어 바이트 대조 100%를 확인하고, 재구성물에서 legacy
+파일을 재합성해 새 커널을 실제로 부활시킨다(의미 봉인).
+실행: node tests/browser/run.mjs tests/attempts/stateKernel/legacyReconstructProbe.html
+결과(2026-07-18, Edge headless / 로컬 COOP+COEP): GREEN 6/6.
+423p/26.4MB 델타. 세션 save(json+bin), 저널 HEAD.json+blob CAS(raw OPFS 판독),
+.pymachine 봉투(독자 파서 + 봉투해시 검증), machine generation(IndexedDB 4 store) 전부
+신 오브젝트 모델 재구성 페이지/페이로드 바이트 대조 100%. 저널 재구성 dedupe 290.
+신 모델 -> legacy 재합성 -> bootSession 새 커널 load -> 파이썬 상태(payload/marker) 부활 확인.
+결론: 구 포맷 4종이 blob/tree/commit으로 무손실 표현된다. 이관 착수 자격 확보.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: stateKernel legacy reconstruct</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: stateKernel - 구 포맷 재구성</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession, PAGE_SIZE } from "../../../index.js";
+  import { IndexedDbMachineStore } from "../../../src/machine/index.js";
+  import { OpfsDraftStore, commitDraft, openDraft, addressOf } from "./stateKernelDraft.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  async function clean(root, name) {
+    try { await root.removeEntry(name, { recursive: true }); } catch (e) {}
+    return root.getDirectoryHandle(name, { create: true });
+  }
+  const readFile = async (dir, name) => new Uint8Array(await (await (await dir.getFileHandle(name)).getFile()).arrayBuffer());
+  const readText = async (dir, name) => (await (await (await dir.getFileHandle(name)).getFile()).text());
+  const sameBytes = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const hexOf = async (bytes) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const sameSet = (a, b) => a.length === b.length && [...a].sort((x, y) => x - y).every((v, i) => v === [...b].sort((x, y) => x - y)[i]);
+
+  // 재구성물이 라이브 힙과 100% 일치하는지: 페이지 집합 + 페이지별 전 바이트.
+  function comparePages(opened, refPages, mem) {
+    if (!sameSet([...opened.pages.keys()], refPages)) return "페이지 집합 불일치";
+    for (const [p, bytes] of opened.pages) {
+      if (!sameBytes(bytes, mem.slicePage(p))) return `페이지 ${p} 바이트 불일치`;
+    }
+    return null;
+  }
+
+  try {
+    const root = await navigator.storage.getDirectory();
+    const legacyDir = await clean(root, "skLegacySession");
+    const journalDir = await clean(root, "skLegacyJournal");
+    const draftDir = await clean(root, "skDraftStore");
+
+    // 원본 머신 A: 결정 패턴 payload + 마커.
+    const a = await bootSession({});
+    const { rt, reactive } = a;
+    const mem = rt.memory;
+    rt.run("payload = bytearray(bytes(range(256)) * 32768)\npayload[0] = 7\npayload[len(payload) - 1] = 9\nmarker = 12345");
+    reactive.checkpoint();
+    const cd = reactive.collectDelta(0);
+    timings.deltaPages = cd.pages.length;
+    timings.deltaMB = +(cd.bin.length / 1048576).toFixed(1);
+    check("원본 머신 준비", cd.pages.length > 0, `${cd.pages.length}p/${timings.deltaMB}MB`);
+
+    // (a) 세션 save 파일 -> 신 모델.
+    await a.save(legacyDir, "legacy");
+    const meta = JSON.parse(await readText(legacyDir, "legacy.json"));
+    const bin = await readFile(legacyDir, "legacy.bin");
+    const storeA = new OpfsDraftStore(draftDir);
+    await commitDraft(crypto, storeA, {
+      pages: meta.pages.map((p, i) => [p, bin.subarray(i * PAGE_SIZE, (i + 1) * PAGE_SIZE)]),
+      heapLen: meta.heapLen, sp: meta.sp, pageSize: PAGE_SIZE,
+      env: { h0: meta.h0 },
+    });
+    const openedA = await openDraft(crypto, storeA, {});
+    const failA = comparePages(openedA, meta.pages, mem);
+    check("세션 save -> 신 모델 바이트 대조 100%", failA === null
+      && openedA.tree.heapLen === meta.heapLen && openedA.tree.sp === meta.sp && openedA.commit.env.h0 === meta.h0,
+      failA || `${meta.pages.length}p`);
+
+    // (b) 저널 HEAD.json + blob CAS -> 신 모델 (raw OPFS 판독: 구 코드 경유 없는 재구성).
+    const journal = rt.enableJournal({ dir: journalDir, reactive });
+    await journal.commit();
+    const head = JSON.parse(await readText(journalDir, "HEAD.json"));
+    const blobDir = await journalDir.getDirectoryHandle("blob");
+    const journalPages = [];
+    const blobCache = new Map();
+    for (const [p, key] of Object.entries(head.pages)) {
+      let bytes = blobCache.get(key);
+      if (!bytes) {
+        bytes = await readFile(blobDir, key);
+        if (await hexOf(bytes) !== key) throw new Error(`저널 blob 파손(${key.slice(0, 12)}..)`);
+        blobCache.set(key, bytes);
+      }
+      journalPages.push([+p, bytes]);
+    }
+    const journalStoreDir = await clean(root, "skDraftStoreJournal");
+    const storeB = new OpfsDraftStore(journalStoreDir);
+    await commitDraft(crypto, storeB, {
+      pages: journalPages, heapLen: head.heapLen, sp: head.sp, pageSize: PAGE_SIZE,
+      env: { h0: head.h0 },
+    });
+    const openedB = await openDraft(crypto, storeB, {});
+    const failB = comparePages(openedB, journalPages.map(([p]) => p), mem);
+    check("저널 HEAD+blob -> 신 모델 바이트 대조 100%", failB === null && openedB.commit.env.h0 === head.h0,
+      failB || `${journalPages.length}p, dedupe ${journalPages.length - blobCache.size}`);
+
+    // (c) .pymachine 봉투 -> 신 모델 (봉투 파서는 신 모델의 독자 구현).
+    const imageBlob = await a.exportImage({ includeHome: false });
+    const buf = new Uint8Array(await imageBlob.arrayBuffer());
+    const MAGIC = "PYMACHINE2\n";
+    const magic = new TextDecoder().decode(buf.subarray(0, MAGIC.length));
+    const envelope = new TextDecoder().decode(buf.subarray(MAGIC.length, MAGIC.length + 64));
+    const body = buf.subarray(MAGIC.length + 64);
+    const envelopeOk = magic === MAGIC && await hexOf(body) === envelope;
+    const hl = new DataView(body.buffer, body.byteOffset, 4).getUint32(0);
+    const imageMeta = JSON.parse(new TextDecoder().decode(body.subarray(4, 4 + hl)));
+    const imageBin = body.subarray(4 + hl);
+    const imageStoreDir = await clean(root, "skDraftStoreImage");
+    const storeC = new OpfsDraftStore(imageStoreDir);
+    await commitDraft(crypto, storeC, {
+      pages: imageMeta.pages.map((p, i) => [p, imageBin.subarray(i * PAGE_SIZE, (i + 1) * PAGE_SIZE)]),
+      heapLen: imageMeta.heapLen, sp: imageMeta.sp, pageSize: PAGE_SIZE,
+      env: { h0: imageMeta.h0 },
+    });
+    const openedC = await openDraft(crypto, storeC, {});
+    const failC = comparePages(openedC, imageMeta.pages, mem);
+    check(".pymachine -> 신 모델 바이트 대조 100%", envelopeOk && failC === null,
+      failC || (envelopeOk ? `${imageMeta.pages.length}p` : "봉투 해시 불일치"));
+
+    // (d) machine generation(IndexedDB) -> 신 모델 payload tree 재구성.
+    await new Promise((resolve) => { const rq = indexedDB.deleteDatabase("skProbeMachineDb"); rq.onsuccess = rq.onerror = rq.onblocked = () => resolve(); });
+    const machineStore = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "skProbeMachineDb" });
+    const token = await machineStore.claimOwner({ groupId: "skGroup", ownerId: "probe" });
+    const payloadOne = new Uint8Array(1536).map((v, i) => i % 251);
+    const payloadTwo = new Uint8Array(4096).map((v, i) => (i * 13) % 256);
+    const digestOne = "sha256:" + await hexOf(payloadOne);
+    const digestTwo = "sha256:" + await hexOf(payloadTwo);
+    await machineStore.commitGeneration({
+      groupId: "skGroup", generationId: "gen1", expectedHead: null, ownerToken: token,
+      blobs: [{ digest: digestOne, bytes: payloadOne }, { digest: digestTwo, bytes: payloadTwo }],
+      record: { entries: [{ id: "guestState", digest: digestOne, byteLength: payloadOne.length }, { id: "deviceState", digest: digestTwo, byteLength: payloadTwo.length }] },
+    });
+    const idbHead = await machineStore.readHead("skGroup");
+    const generation = await machineStore.readGeneration("skGroup", idbHead.head);
+    const payloadStoreDir = await clean(root, "skDraftStorePayload");
+    const storeD = new OpfsDraftStore(payloadStoreDir);
+    const payloads = [];
+    for (const entry of generation.entries) {
+      const bytes = await machineStore.getBlob(entry.digest);
+      if ("sha256:" + await hexOf(bytes) !== entry.digest) throw new Error(`generation blob 파손(${entry.id})`);
+      payloads.push({ id: entry.id, bytes });
+    }
+    await commitDraft(crypto, storeD, { payloads, env: { h0: null }, fence: null });
+    const openedD = await openDraft(crypto, storeD, {});
+    const dOk = sameBytes(openedD.entries.get("guestState"), payloadOne) && sameBytes(openedD.entries.get("deviceState"), payloadTwo)
+      && idbHead.prev === null && idbHead.ownerEpoch === token.epoch;
+    machineStore.close();
+    check("machine generation -> 신 모델 바이트 대조 100%", dOk, `${generation.entries.length} entries`);
+
+    // 의미 봉인: 신 모델에서 legacy 파일을 재합성해 새 커널 B를 실제로 부활시킨다.
+    const orderedPages = openedA.tree.pages.map(([p]) => p);
+    const rebuiltBin = new Uint8Array(orderedPages.length * PAGE_SIZE);
+    openedA.tree.pages.forEach(([p], i) => rebuiltBin.set(openedA.pages.get(p), i * PAGE_SIZE));
+    const rebuiltMeta = { version: 2, manifest: meta.manifest, pages: orderedPages, sp: openedA.tree.sp, heapLen: openedA.tree.heapLen, h0: openedA.commit.env.h0 };
+    const mf = await legacyDir.getFileHandle("rebuilt.json", { create: true });
+    let w = await mf.createWritable(); await w.write(JSON.stringify(rebuiltMeta)); await w.close();
+    const bf = await legacyDir.getFileHandle("rebuilt.bin", { create: true });
+    w = await bf.createWritable(); await w.write(rebuiltBin); await w.close();
+    const b = await bootSession({});
+    await b.load(legacyDir, "rebuilt");
+    check("신 모델 -> 재합성 -> 새 커널 부활(의미 봉인)",
+      b.rt.run("len(payload)") === 256 * 32768 && b.rt.run("payload[0]") === 7
+      && b.rt.run("payload[len(payload) - 1]") === 9 && b.rt.run("marker") === 12345);
+  } catch (e) {
+    check("예외 없음", false, String(e && e.stack || e));
+  }
+  await report();
+</script>
+</body>
+</html>

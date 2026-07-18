@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<!--
+probe 1: 승격 비용 곡선.
+sha256 승격(collectDelta 이후 blob 쓰기)이 커밋 시점에만 발생하고, 커널 시안 사용 전후
+checkpoint() 경계 비용 중앙값 비율 <= 1.05인지 잰다. 힙 곡선은 ?target=128|256|512.
+실행: node tests/browser/run.mjs tests/attempts/stateKernel/promotionCostProbe.html
+대형: PYPROC_GATE_TIMEOUT=900000 node tests/browser/run.mjs "tests/attempts/stateKernel/promotionCostProbe.html?target=512"
+결과(2026-07-18, Edge headless / 로컬 COOP+COEP): 64/128/256/512MB 전부 GREEN 6/6.
+checkpoint 중앙값 pre->post 비율 0.965/0.901/1.008/0.902(기각선 1.05 미달성 없음).
+checkpoint 루프 중 store 오브젝트 증가 0(승격은 커밋 시점에만).
+collectDelta 0.2~3.6ms(페이지 목록만), 순수 해시 82/256/407/808ms(페이지 수 선형),
+승격 커밋(해시+OPFS 쓰기+ref) 2852/5632/7925/14137ms.
+dedupe 940/1964/4012/8108, wrote는 전 구간 136(bytearray 동일 패턴 페이지가 내용주소로 접힘).
+결론: 이중 구역 경계(sha256은 승격 시점만)가 실측으로 성립. 시안 채택.
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: stateKernel promotion cost</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: stateKernel - 승격 비용 곡선</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession, PAGE_SIZE } from "../../../index.js";
+  import { OpfsDraftStore, commitDraft, addressOf } from "./stateKernelDraft.js";
+  const out = document.getElementById("out");
+  const params = new URL(location.href).searchParams;
+  const targetMB = Math.max(1, Number(params.get("target") || 64));
+  const checks = []; const timings = { targetMB };
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  const now = () => performance.now();
+  const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  async function clean(root, name) {
+    try { await root.removeEntry(name, { recursive: true }); } catch (e) {}
+    return root.getDirectoryHandle(name, { create: true });
+  }
+  // 경계 비용 표본: 1바이트 변이 후 checkpoint(). 해시는 힙 전체를 훑으므로 이것이 경계 비용이다.
+  function checkpointSamples(rt, reactive, n) {
+    const samples = [];
+    for (let i = 0; i < n; i++) {
+      rt.setGlobal("_probeI", i);
+      rt.run("payload[_probeI] = (_probeI * 7) % 256");
+      const t = now();
+      reactive.checkpoint();
+      samples.push(now() - t);
+    }
+    return samples;
+  }
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await clean(root, "skPromotion");
+    const store = new OpfsDraftStore(dir);
+
+    let t = now();
+    const session = await bootSession({});
+    timings.bootMs = Math.round(now() - t);
+    const { rt, reactive } = session;
+    const mem = rt.memory;
+    check("bootSession 부팅", !!rt && !!reactive, `${timings.bootMs}ms`);
+
+    rt.setGlobal("_targetBytes", targetMB * 1024 * 1024);
+    rt.run("payload = bytearray(_targetBytes)\npayload[0] = 7\npayload[len(payload) - 1] = 9\ndel _targetBytes");
+    timings.heapMB = +(mem.byteLength() / 1048576).toFixed(1);
+    check("대형 payload 할당", rt.run("len(payload)") === targetMB * 1024 * 1024, `heap ${timings.heapMB}MB`);
+
+    // 워밍업 2회 후 기준 중앙값 9회.
+    checkpointSamples(rt, reactive, 2);
+    const objectsBefore = await store.countObjects();
+    const pre = checkpointSamples(rt, reactive, 9);
+    const objectsAfterLoop = await store.countObjects();
+    timings.checkpointMsPre = +median(pre).toFixed(1);
+    check("checkpoint 루프 중 store 오브젝트 증가 0(승격은 커밋 시점에만)", objectsBefore === objectsAfterLoop, `${objectsBefore} -> ${objectsAfterLoop}`);
+
+    // 승격: 경계 닫기 -> collectDelta(페이지 목록) -> sha256 주소화 -> blob/tree/commit/ref.
+    reactive.checkpoint();
+    t = now();
+    const cd = reactive.collectDelta(0, reactive.liveIdx, { pack: false });
+    timings.collectMs = +(now() - t).toFixed(1);
+    timings.deltaPages = cd.pages.length;
+    timings.deltaMB = +(cd.pages.length * PAGE_SIZE / 1048576).toFixed(1);
+    check("collectDelta 페이지 목록", cd.pages.length > 0, `${cd.pages.length}p/${timings.deltaMB}MB, ${timings.collectMs}ms`);
+
+    // 순수 해시 비용(주소화만)과 전체 승격 비용을 따로 잰다.
+    t = now();
+    for (const p of cd.pages) await addressOf(crypto, mem.slicePage(p));
+    timings.hashOnlyMs = Math.round(now() - t);
+
+    const h0 = reactive.hashes[0];
+    const h0Address = await addressOf(crypto, new Uint8Array(h0.buffer, h0.byteOffset, h0.byteLength));
+    t = now();
+    const committed = await commitDraft(crypto, store, {
+      pages: cd.pages.map((p) => [p, mem.slicePage(p)]),
+      heapLen: cd.heapLen, sp: cd.sp, pageSize: PAGE_SIZE,
+      env: { h0: h0Address },
+    });
+    timings.promoteMs = Math.round(now() - t);
+    timings.wrote = committed.wrote;
+    timings.deduped = committed.deduped;
+    check("승격 커밋", committed.wrote > 0, `wrote ${committed.wrote}, dedupe ${committed.deduped}, hash ${timings.hashOnlyMs}ms, promote ${timings.promoteMs}ms`);
+
+    // 시안 사용 후 경계 비용 재측정: 중앙값 비율 <= 1.05가 기각선이다.
+    const post = checkpointSamples(rt, reactive, 9);
+    timings.checkpointMsPost = +median(post).toFixed(1);
+    timings.ratio = +(median(post) / median(pre)).toFixed(3);
+    check("checkpoint 경계 비용 회귀 없음(중앙값 비율 <= 1.05)", timings.ratio <= 1.05,
+      `pre ${timings.checkpointMsPre}ms -> post ${timings.checkpointMsPost}ms, ratio ${timings.ratio}`);
+  } catch (e) {
+    check("예외 없음", false, String(e && e.stack || e));
+  }
+  await report();
+</script>
+</body>
+</html>
