@@ -62,4 +62,13 @@
 - 게이트: run.mjs에 bundle 왕복 + 레이아웃 문서 동기 + 변조 음성 3종(바이트 변조 무결성 거부, tag 제거, 잘못된 키 valid-but-untrusted). 브라우저 게이트 5종 신설: 서명+신뢰 부활, 잘못된 키 거부, 변조 즉시 거부, **문서화 레이아웃 독립 재파싱 대조**(디코더 미경유), 구 봉투 v2 fixture reader 호환. npm test 1329, test:browser 81/81, test:mcp 7/7, test:types 전부 green.
 - 잔여(4단계 machine측): webMachineTrust의 코어 호출부화와 .webmachine의 bundle 통합은 machine 경계(밖 import는 composition 한 점) 때문에 주입 배선이 필요해 5단계(coordinator 커널 위임)의 composition 개정과 같은 지점에서 처리한다.
 
-NEXT: 5단계 - coordinator 저장 위임. machineCommitCoordinator가 저장·무결성을 커널에 위임(IndexedDB store = 커널 backend, fence 발급 = ref 전제조건 훅)하고, 그 주입 배선으로 4단계 잔여(webMachineTrust 코어 호출부화, .webmachine bundle 통합)를 함께 닫는다.
+## 2026-07-18 - 계획 수정: 5·6단계(machine측)를 7단계 일격에 병합
+
+- 근거([machineCommitCoordinator.js](../../src/machine/persistence/machineCommitCoordinator.js) 정독): coordinator 생성자 옵션·결과 형태·store 계약은 `pyproc/machine` subpath의 공개 표면이다(machine/index.d.ts). 커널 위임을 지금 하면 (a) 주입 필드를 필수로 만들어 7단계 전에 machine 표면을 깨거나 (b) 기본값 폴백을 두는 이중 경로(덕지덕지 + 이중 표면)가 된다. 둘 다 PRD 자신의 기각 12번("옛/새 표면 장기 공존 금지")에 걸린다.
+- 수정: 5단계(coordinator 커널 위임, fence = ref 훅, generationIntegrity·webMachineTrust 소멸, .webmachine bundle 통합)와 6단계(machine retention의 gc 정책 흡수)를 **7단계 브레이킹 일격에 병합**한다. 저널측 gc(ref 도달 가능성 live 판정 + 크래시 안전 pack)는 3단계에서 이미 커널 위에 섰다.
+- 7단계 실행 분해:
+  - **7a machine 재기초**: machine/composition에 커널 글루(state import는 composition 한 점 규칙 유지) - coordinator가 저장·무결성을 커널 위임, IndexedDB store = 커널 backend(fence·expectedHead CAS는 backend 트랜잭션 원자성으로), webMachineTrust = signedTag 코어 호출부(주입), .webmachine writer = bundle 단일화 + 구 reader, generationIntegrity 소멸, retention = gc 정책. machine 게이트·probe·d.ts 동시 개정.
+  - **7b 표면 원자 개편**: porcelain 머신 핸들(machine/composition, `boot`/`createWebComputer` 반환) - `machine.run/history/proc/fs/term`, history = checkpoint/restore(휘발) + commit/checkout/open/push/export(내구), `open(source)` 통합, 비용 영수증(additive-only), 결정 부팅 opt-in + 커밋 헤더 기록. 루트 export 37 -> 한 자릿수, subpath = history/machine/worker/assets, 강등 gpu·socket·wasi는 계약 실태 표로. d.ts 재작성 + 표면 게이트(패리티 표류 주입 RED 포함) 재작성 동일 커밋.
+  - **7c 문서 동시 개정**: api.md, capabilityMatrix, resumeCatalog, README 양본, 소비 계약, CHANGELOG Unreleased(브레이킹 명시). 버전 +1·태그는 릴리즈 명시 지시 대기(일상 커밋 불변 규칙).
+
+NEXT: 7a machine 재기초 착수. machine 경계 게이트(밖 import 허용 목록)와 store 계약 시험(machineStoreContract, generationContract probe)을 먼저 정독하고 같은 커밋에 개정한다.
