@@ -345,14 +345,14 @@ for (const f of BRAG_SURFACE) {
 //      "sha256:" 주소 문자열 조립도 같은 두 코어만. 나머지 파일에서 발견 = 판정/형식의 새 사본.
 console.log("\n[digest 법]");
 {
+  // 7a에서 machine의 주입식 사본(generationIntegrity의 자체 subtle/hex)이 소멸했다:
+  // 이제 raw digest는 정본 코어와 pyprocSw(import 0 계약의 의도 중복)에만 산다.
   const DIGEST_CORE = new Set([
     "src/runtime/contentDigest.js",
-    "src/machine/persistence/generationIntegrity.js",
     "src/capabilities/pyprocSw.js",
   ]);
   const ADDRESS_CORE = new Set([
     "src/runtime/contentDigest.js",
-    "src/machine/persistence/generationIntegrity.js",
   ]);
   const rawDigest = /\.digest\(\s*["']SHA-256["']/;
   const addressBuild = /["'`]sha256:(?![0-9a-f]{64})/; // 리터럴 상수 표기(테스트 기대값)는 스코프 밖
@@ -455,6 +455,21 @@ console.log("\n[state 커널]");
     try { await state.commitState(provider, store, stateInput(80, { fence: tokenA })); } catch (e) { code = e.code; }
     if (code !== "PYPROC_STATE_FENCE_STALE") throw new Error(`fence 거부 아님(${code})`);
     if ((await store.readRef("HEAD")).ref.commit !== before) throw new Error("stale fence가 HEAD를 움직임");
+  });
+  await checkAsync("machine 암호 주입: 맨 Crypto는 생성자에서 거부(코어 한 벌 강제)", async () => {
+    const machineBarrel = await import(pathToFileURL(join(ROOT, "src", "machine", "index.js")).href);
+    let commitCode = null;
+    try { new machineBarrel.MachineCommitCoordinator({ store: {}, cryptoProvider: globalThis.crypto, idFactory: () => "x", nowFactory: () => 1 }); }
+    catch (e) { commitCode = e.constructor.name; }
+    if (commitCode !== "TypeError") throw new Error(`commit coordinator가 맨 Crypto를 받음(${commitCode})`);
+    let envelopeCode = null;
+    try { new machineBarrel.MachineEnvelopeCoordinator({ cryptoProvider: globalThis.crypto, nowFactory: () => 1 }); }
+    catch (e) { envelopeCode = e.constructor.name; }
+    if (envelopeCode !== "TypeError") throw new Error(`envelope coordinator가 맨 Crypto를 받음(${envelopeCode})`);
+    // 주입 provider는 통과 + digest가 코어 주소 형식을 낸다.
+    const wrapped = machineBarrel.createMachineCryptoProvider(globalThis.crypto);
+    const digest = await wrapped.digestBytes(new Uint8Array([1, 2, 3]));
+    if (!/^sha256:[0-9a-f]{64}$/.test(digest)) throw new Error(`주입 digest 형식 위반(${digest})`);
   });
   await checkAsync("state bundle: 왕복 + 레이아웃 문서 동기 + 변조 음성 3종", async () => {
     const bundle = await import(pathToFileURL(join(ROOT, "src", "state", "bundleFormat.js")).href);

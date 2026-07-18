@@ -71,4 +71,14 @@
   - **7b 표면 원자 개편**: porcelain 머신 핸들(machine/composition, `boot`/`createWebComputer` 반환) - `machine.run/history/proc/fs/term`, history = checkpoint/restore(휘발) + commit/checkout/open/push/export(내구), `open(source)` 통합, 비용 영수증(additive-only), 결정 부팅 opt-in + 커밋 헤더 기록. 루트 export 37 -> 한 자릿수, subpath = history/machine/worker/assets, 강등 gpu·socket·wasi는 계약 실태 표로. d.ts 재작성 + 표면 게이트(패리티 표류 주입 RED 포함) 재작성 동일 커밋.
   - **7c 문서 동시 개정**: api.md, capabilityMatrix, resumeCatalog, README 양본, 소비 계약, CHANGELOG Unreleased(브레이킹 명시). 버전 +1·태그는 릴리즈 명시 지시 대기(일상 커밋 불변 규칙).
 
-NEXT: 7a machine 재기초 착수. machine 경계 게이트(밖 import 허용 목록)와 store 계약 시험(machineStoreContract, generationContract probe)을 먼저 정독하고 같은 커밋에 개정한다.
+## 2026-07-18 - 7a-1 완료: machine 암호 법의 커널 위임(주입 필수화)
+
+- [machineCryptoProvider.js](../../src/machine/composition/machineCryptoProvider.js) 신설(composition = machine의 유일한 밖 import 지점): 커널의 digest(sha256AddressWith)·ECDSA(signStateDigest/verifyStateDigest/createStateKeyPair/exportStatePublicKey)를 함수 조각 provider로 묶어 machine 생성자에 배달. 배럴 export + d.ts에 MachineCryptoProvider 타입.
+- [generationIntegrity.js](../../src/machine/persistence/generationIntegrity.js): 자체 subtle/hex 암호 구현 소멸. 남은 것 = machine 도메인 형식 법(canonical manifest 직렬화 + byteLength·digest 재대조 판정). [digest 법] 게이트에서 machine 사본 허용을 제거(raw digest는 코어 + pyprocSw만, 주소 조립은 코어만)해 게이트가 더 조여졌다.
+- [webMachineTrust.js](../../src/machine/image/webMachineTrust.js): ECDSA 상수·subtle 호출 소멸, signDigest/verifyDigest 위임. 남은 것 = signature v1 스키마(hex), JWK 정규화, 지문 직렬화 규약(기존 보존 - 신뢰 목록 무효화 방지), 신뢰 판정 순서. 임포트 불가 키는 provider가 false로 수렴(적대 입력의 정상 결말).
+- 생성자 계약: MachineCommitCoordinator/MachineEnvelopeCoordinator가 맨 Crypto를 TypeError로 거부(폴백 없음 = 이중 경로 금지). 구성 지점 전수 갱신: probes 2종, 제품 앱 3파일(persistence/identityStore/imageTrust).
+- retention = gc 명문화: [generationRetention.js](../../src/machine/persistence/generationRetention.js)가 "ref 도달 가능성 = liveness"의 machine측 구현임을 계약 주석으로 봉인(저널측과 같은 법, backend만 다름 - 6단계의 실체).
+- 게이트: 신설 음성 시험(맨 Crypto 거부 + 주입 digest 형식) + npm test 1335, test:types, generationContract 25/25, machineEnvelope 20/20, webComputer 제품 13/13 전부 green.
+- 잔여 기록(정면 봉착): .webmachine의 bundle 통합은 설계 긴장이 실재한다 - 현 .webmachine은 content(manifest) 서명이라 **payload 접촉 전 신뢰 거부**(probe가 slice 2회로 증명)가 성립하는데, 현 bundle tag는 전신 다이제스트 서명이라 거부 전에 전체 판독이 필요하다. 올바른 해소는 bundle tag의 header-target 서명(내용주소가 오브젝트를 개별 봉인하므로 헤더 서명으로 충분 - git tag 동형)이며, 이는 세션측 bundle과 문서·게이트의 공동 개정이 필요해 별도 probe(campaign probe 5)로 실측 후 진행한다.
+
+NEXT: 7b 표면 원자 개편 - porcelain 머신 핸들(`boot`/`createWebComputer` -> 핸들, machine.run/history/proc/fs/term), 루트 export 37 -> 한 자릿수, subpath = history/machine/worker/assets, d.ts·표면 게이트 재작성 동일 커밋. 이후 7c 문서 동시 개정, 마지막으로 bundle header-target 서명 probe.

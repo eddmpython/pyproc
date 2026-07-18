@@ -1,8 +1,8 @@
-// generationIntegrity.js - blob과 generation manifest의 canonical SHA-256 경계.
-// digest 법의 정본은 runtime/contentDigest.js다. machine은 경계상(밖으로의 import는
-// composition 한 점) 그 파일을 import하지 못해 이 주입식 사본을 유지하며, coordinator가
-// 커널에 저장을 위임하는 단계(mainPlan/state-kernel 02 문서 5단계)에서 이 파일은 소멸한다.
-// tests/run.mjs [digest 법] 가드가 세 번째 사본의 출현을 차단한다.
+// generationIntegrity.js - blob과 generation manifest의 무결성 경계(machine측 호출부).
+// 암호 연산(sha256 내용주소)의 정본은 상태 커널이고, composition이
+// createMachineCryptoProvider로 digestBytes 함수를 주입한다(machine은 커널을 모른다).
+// 여기 남는 것은 machine 도메인의 형식 법이다: canonical manifest 직렬화와
+// byteLength+digest 재대조 판정. tests/run.mjs [digest 법] 가드가 자체 구현 재발을 차단한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 const encoder = new TextEncoder();
@@ -28,11 +28,15 @@ export function canonicalJson(value) {
   throw new WebMachineError("WEB_MACHINE_GENERATION_INVALID", `manifest value 미지원: ${typeof value}`);
 }
 
+function requireDigestProvider(cryptoProvider) {
+  if (typeof cryptoProvider?.digestBytes !== "function") {
+    throw new TypeError("cryptoProvider.digestBytes가 필요하다(createMachineCryptoProvider로 감싸라)");
+  }
+  return cryptoProvider;
+}
+
 export async function digestGenerationBytes(cryptoProvider, value) {
-  if (!cryptoProvider?.subtle) throw new TypeError("cryptoProvider.subtle이 필요하다");
-  const bytes = copyGenerationBytes(value);
-  const digest = new Uint8Array(await cryptoProvider.subtle.digest("SHA-256", bytes));
-  return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  return requireDigestProvider(cryptoProvider).digestBytes(copyGenerationBytes(value));
 }
 
 export async function digestGenerationManifest(cryptoProvider, manifest) {

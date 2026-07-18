@@ -31,7 +31,10 @@ function copyJson(value) {
 
 export class MachineEnvelopeCoordinator {
   constructor({ cryptoProvider, nowFactory }) {
-    if (!cryptoProvider?.subtle) throw new TypeError("cryptoProvider.subtle이 필요하다");
+    // digest·서명 법은 커널 한 벌이다: 조립은 createMachineCryptoProvider가 배달한다(맨 Crypto 거부).
+    if (typeof cryptoProvider?.digestBytes !== "function" || typeof cryptoProvider?.signDigest !== "function") {
+      throw new TypeError("cryptoProvider.digestBytes/signDigest가 필요하다(createMachineCryptoProvider로 감싸라)");
+    }
     if (typeof nowFactory !== "function") throw new TypeError("nowFactory가 필요하다");
     this._cryptoProvider = cryptoProvider;
     this._nowFactory = nowFactory;

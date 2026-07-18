@@ -225,8 +225,24 @@ export function getWebMachineManifestContent(manifest: WebMachineManifest): Read
 // ─── 옛 @web-machine/browser ───
 export function createBrowserHost(options: {
   devices?: Record<string, VirtualDevice>;
-  cryptoProvider: Crypto;
+  cryptoProvider: MachineCryptoProvider;
 }): WebMachineHost;
+
+/**
+ * 상태 커널의 암호 법(digest·ECDSA)을 machine 층에 배달하는 주입 provider.
+ * persistence/image 생성자는 맨 Crypto가 아니라 이 provider를 요구한다:
+ * machine은 커널을 import하지 못하므로(경계), 조립이 함수 조각을 꽂는다.
+ */
+export interface MachineCryptoProvider {
+  readonly subtle: SubtleCrypto;
+  randomUUID?(): string;
+  digestBytes(bytes: Uint8Array): Promise<string>;
+  signDigest(privateKey: CryptoKey, target: string): Promise<Uint8Array>;
+  verifyDigest(publicKeyOrJwk: JsonWebKey | CryptoKey, target: string, signatureBytes: Uint8Array): Promise<boolean>;
+  generateSigningKeyPair(): Promise<CryptoKeyPair>;
+  exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey>;
+}
+export function createMachineCryptoProvider(cryptoProvider?: Crypto): MachineCryptoProvider;
 
 export interface BlockDevice {
   readonly kind: "block";
@@ -487,7 +503,7 @@ export class IndexedDbMachineStore implements MachineStore {
 export class MachineCommitCoordinator {
   constructor(options: {
     store: MachineStore;
-    cryptoProvider: Crypto;
+    cryptoProvider: MachineCryptoProvider;
     idFactory: () => string;
     nowFactory: () => number;
   });
@@ -541,7 +557,7 @@ export interface WebMachineFile {
 }
 
 export class MachineEnvelopeCoordinator {
-  constructor(options: { cryptoProvider: Crypto; nowFactory: () => number });
+  constructor(options: { cryptoProvider: MachineCryptoProvider; nowFactory: () => number });
   exportPaused(options: {
     groupId: string;
     machines: Iterable<MachineHandle>;
@@ -573,11 +589,11 @@ export class MachineEnvelopeCoordinator {
   }>>;
 }
 
-export function createWebMachineKeyPair(cryptoProvider: Crypto): Promise<CryptoKeyPair>;
-export function exportWebMachinePublicKey(cryptoProvider: Crypto, publicKey: CryptoKey): Promise<JsonWebKey>;
-export function fingerprintWebMachinePublicKey(cryptoProvider: Crypto, publicKey: CryptoKey): Promise<string>;
+export function createWebMachineKeyPair(cryptoProvider: MachineCryptoProvider): Promise<CryptoKeyPair>;
+export function exportWebMachinePublicKey(cryptoProvider: MachineCryptoProvider, publicKey: CryptoKey): Promise<JsonWebKey>;
+export function fingerprintWebMachinePublicKey(cryptoProvider: MachineCryptoProvider, publicKey: CryptoKey): Promise<string>;
 export function createWebMachineFile(options: {
-  cryptoProvider: Crypto;
+  cryptoProvider: MachineCryptoProvider;
   groupId: string;
   createdAt: number;
   machines: Array<Record<string, unknown>>;
@@ -587,7 +603,7 @@ export function createWebMachineFile(options: {
 }): Promise<WebMachineFile>;
 export function readWebMachineFile(options: {
   file: Blob;
-  cryptoProvider: Crypto;
+  cryptoProvider: MachineCryptoProvider;
   trustedPublicKeys: JsonWebKey[];
   control?: OperationControl;
 }): Promise<WebMachineArchive>;

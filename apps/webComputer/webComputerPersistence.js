@@ -1,4 +1,4 @@
-import { MachineCommitCoordinator, MachineEnvelopeCoordinator } from "/src/machine/index.js";
+import { MachineCommitCoordinator, MachineEnvelopeCoordinator, createMachineCryptoProvider } from "/src/machine/index.js";
 import { getOrCreateSigningIdentity } from "./identityStore.js";
 
 async function withPausedContext(context, control, operation) {
@@ -25,8 +25,9 @@ async function withPausedContext(context, control, operation) {
 export class WebComputerPersistence {
   constructor({ store, cryptoProvider, idFactory, nowFactory }) {
     this.store = store;
-    this.commitCoordinator = new MachineCommitCoordinator({ store, cryptoProvider, idFactory, nowFactory });
-    this.envelopeCoordinator = new MachineEnvelopeCoordinator({ cryptoProvider, nowFactory });
+    const machineCrypto = createMachineCryptoProvider(cryptoProvider);
+    this.commitCoordinator = new MachineCommitCoordinator({ store, cryptoProvider: machineCrypto, idFactory, nowFactory });
+    this.envelopeCoordinator = new MachineEnvelopeCoordinator({ cryptoProvider: machineCrypto, nowFactory });
     this.cleanupPending = false;
     this.lastPrune = null;
   }

@@ -1,4 +1,4 @@
-import { createWebMachineKeyPair } from "/src/machine/index.js";
+import { createMachineCryptoProvider, createWebMachineKeyPair } from "/src/machine/index.js";
 
 const databaseName = "webComputerIdentityV1";
 const storeName = "identity";
@@ -44,7 +44,7 @@ export async function getOrCreateSigningIdentity() {
     const imported = await importPair(existing);
     if (imported) return imported;
 
-    const pair = await createWebMachineKeyPair(crypto);
+    const pair = await createWebMachineKeyPair(createMachineCryptoProvider(crypto));
     const [publicKey, privateKey] = await Promise.all([
       crypto.subtle.exportKey("jwk", pair.publicKey),
       crypto.subtle.exportKey("jwk", pair.privateKey),

@@ -1,6 +1,10 @@
 // generationRetention.js - 모든 group의 HEAD/PREV를 root로 하는 generation과 blob reachability 계산.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
+// 이 파일이 곧 machine측 gc다: "ref(전 그룹 HEAD/PREV) 도달 가능성 = liveness"라는 단일
+// 법으로 세대·blob의 삭제 집합을 계산한다. 저널측 gc(machineJournal의 live 판정 + blobStore
+// packLive의 크래시 안전 순서)와 같은 법의 두 구현이며, backend(IndexedDB vs OPFS)가 다를
+// 뿐이다(state-kernel 6단계의 통일 실체).
 export function generationStorageKey(groupId, generationId) {
   return `${groupId}\n${generationId}`;
 }

@@ -29,6 +29,7 @@ runner가 원본 profile과 분리한 새 browser profile을 연 뒤 파일을 �
   import { bootSession, openMachine } from "../../../../index.js";
   import { WebMachineHost } from "../../../../src/machine/index.js";
   import {
+    createMachineCryptoProvider,
     createWebMachineKeyPair,
     exportWebMachinePublicKey,
     MachineEnvelopeCoordinator,
@@ -40,6 +41,7 @@ runner가 원본 profile과 분리한 새 browser profile을 연 뒤 파일을 �
   import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
 
   const out = document.getElementById("out");
+  const machineCrypto = createMachineCryptoProvider(crypto);
   const checks = [];
   const timings = {};
   const decoder = new TextDecoder();
@@ -115,7 +117,7 @@ runner가 원본 profile과 분리한 새 browser profile을 연 뒤 파일을 �
     }
     return { host, devices };
   };
-  const coordinator = new MachineEnvelopeCoordinator({ cryptoProvider: crypto, nowFactory: () => 1 });
+  const coordinator = new MachineEnvelopeCoordinator({ cryptoProvider: machineCrypto, nowFactory: () => 1 });
   const params = new URLSearchParams(location.search);
   const importing = params.get("import") === "1";
   const indexURL = params.get("indexURL") || undefined;
@@ -153,8 +155,8 @@ runner가 원본 profile과 분리한 새 browser profile을 연 뒤 파일을 �
       });
       if (!linuxWrite.includes(`${linuxMarker}~% `)) throw new Error(`Linux file round trip 실패: ${linuxWrite.slice(-500)}`);
       await Promise.all([python.pause(), linux.pause()]);
-      const signingKeyPair = await createWebMachineKeyPair(crypto);
-      const trustedKey = await exportWebMachinePublicKey(crypto, signingKeyPair.publicKey);
+      const signingKeyPair = await createWebMachineKeyPair(machineCrypto);
+      const trustedKey = await exportWebMachinePublicKey(machineCrypto, signingKeyPair.publicKey);
       startedAt = performance.now();
       const exported = await coordinator.exportPaused({
         groupId,
@@ -213,8 +215,8 @@ runner가 원본 profile과 분리한 새 browser profile을 연 뒤 파일을 �
     const imageAbortMs = performance.now() - imageAbortAt;
     check(".webmachine read timeout은 지연 file read를 즉시 탈출", imageAbortCode === "WEB_MACHINE_OPERATION_TIMEOUT" && imageAbortMs < 250, `${imageAbortCode}/${Math.round(imageAbortMs)}ms`);
 
-    const untrustedPair = await createWebMachineKeyPair(crypto);
-    const untrustedKey = await exportWebMachinePublicKey(crypto, untrustedPair.publicKey);
+    const untrustedPair = await createWebMachineKeyPair(machineCrypto);
+    const untrustedKey = await exportWebMachinePublicKey(machineCrypto, untrustedPair.publicKey);
     const trustSlices = [];
     const trackedFile = {
       size: file.size,

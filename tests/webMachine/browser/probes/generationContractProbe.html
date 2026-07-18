@@ -24,6 +24,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
   import {
     IndexedDbMachineStore,
     MachineCommitCoordinator,
+    createMachineCryptoProvider,
     MemoryBlockDevice,
     MemoryMachineStore,
   } from "../../../../src/machine/index.js";
@@ -31,6 +32,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
   import { runMachineStoreContract } from "../../contracts/machineStoreContract.mjs";
 
   const out = document.getElementById("out");
+  const machineCrypto = createMachineCryptoProvider(crypto);
   const checks = [];
   const timings = {};
   const check = (name, pass, info = "") => {
@@ -82,7 +84,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
   let generationSequence = 0;
   const coordinator = new MachineCommitCoordinator({
     store,
-    cryptoProvider: crypto,
+    cryptoProvider: machineCrypto,
     idFactory: () => `g${++generationSequence}`,
     nowFactory: () => generationSequence,
   });
@@ -121,7 +123,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     });
     const tornCoordinator = new MachineCommitCoordinator({
       store: tornStore,
-      cryptoProvider: crypto,
+      cryptoProvider: machineCrypto,
       idFactory: () => "torn",
       nowFactory: () => 3,
     });
@@ -129,8 +131,8 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     const headAfterTorn = await coordinator.readHead(groupId);
     check("torn commit은 HEAD를 바꾸지 않음", !!tornCode && headAfterTorn.head === "g2" && headAfterTorn.prev === "g1", `${headAfterTorn.head}/${headAfterTorn.prev}`);
 
-    const raceA = new MachineCommitCoordinator({ store, cryptoProvider: crypto, idFactory: () => "raceA", nowFactory: () => 4 });
-    const raceB = new MachineCommitCoordinator({ store, cryptoProvider: crypto, idFactory: () => "raceB", nowFactory: () => 4 });
+    const raceA = new MachineCommitCoordinator({ store, cryptoProvider: machineCrypto, idFactory: () => "raceA", nowFactory: () => 4 });
+    const raceB = new MachineCommitCoordinator({ store, cryptoProvider: machineCrypto, idFactory: () => "raceB", nowFactory: () => 4 });
     const race = await Promise.allSettled([
       raceA.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: "g2", ownerToken }),
       raceB.commitPaused({ groupId, machines: [machine], devices: { block }, expectedHead: "g2", ownerToken }),
@@ -161,7 +163,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     });
     const recoveryCoordinator = new MachineCommitCoordinator({
       store: corruptHeadStore,
-      cryptoProvider: crypto,
+      cryptoProvider: machineCrypto,
       idFactory: () => "unused",
       nowFactory: () => 5,
     });
@@ -190,7 +192,7 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     });
     const unavailableCoordinator = new MachineCommitCoordinator({
       store: corruptBothStore,
-      cryptoProvider: crypto,
+      cryptoProvider: machineCrypto,
       idFactory: () => "unused",
       nowFactory: () => 6,
     });

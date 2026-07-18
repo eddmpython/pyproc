@@ -1,4 +1,4 @@
-import { fingerprintWebMachinePublicKey } from "/src/machine/index.js";
+import { createMachineCryptoProvider, fingerprintWebMachinePublicKey } from "/src/machine/index.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -20,7 +20,7 @@ export async function inspectUntrustedWebMachine(file) {
   }
   const manifest = JSON.parse(decoder.decode(new Uint8Array(await file.slice(prefixByteLength, prefixByteLength + headerBytes).arrayBuffer())));
   const publicKey = manifest?.signature?.publicKey;
-  const fingerprint = await fingerprintWebMachinePublicKey(crypto, publicKey);
+  const fingerprint = await fingerprintWebMachinePublicKey(createMachineCryptoProvider(crypto), publicKey);
   return Object.freeze({
     publicKey,
     fingerprint,

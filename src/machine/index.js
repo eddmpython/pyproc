@@ -55,4 +55,5 @@ export { WebLockOwnerCoordinator, webMachineOwnerLockName } from "./coordination
 export { createPyprocGuestFactory } from "./guests/pyprocGuestAdapter.js";
 export { createV86GuestFactory } from "./guests/v86GuestAdapter.js";
 export { createBrowserHost } from "./composition/createBrowserHost.js";
+export { createMachineCryptoProvider } from "./composition/machineCryptoProvider.js";
 export { createWebComputer, WEB_COMPUTER_MACHINE_IDS } from "./composition/createWebComputer.js";

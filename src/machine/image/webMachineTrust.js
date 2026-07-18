@@ -1,13 +1,21 @@
-// webMachineTrust.js - 이미지 서명 검증과 외부 trusted key 경계.
+// webMachineTrust.js - 이미지 서명 검증과 외부 trusted key 경계(machine측 호출부).
+// ECDSA P-256 연산(키 생성·서명·검증)의 정본은 상태 커널의 signedTag 코어이고, composition이
+// createMachineCryptoProvider로 함수 조각(signDigest/verifyDigest/generateSigningKeyPair/
+// exportPublicJwk)을 주입한다. 여기 남는 것은 machine 도메인의 형식 법이다: signature v1
+// 스키마(hex 표기), JWK 정규화, 지문 직렬화 규약(canonical 정렬 - 소비자가 박아둔 공개 값이라
+// 규약 변경 = 신뢰 목록 무효화), 그리고 신뢰 판정 순서(임베디드 검증 -> 지문 대조 -> 재검증).
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { canonicalJson, digestGenerationBytes } from "../persistence/generationIntegrity.js";
 
 const encoder = new TextEncoder();
-const keyAlgorithm = Object.freeze({ name: "ECDSA", namedCurve: "P-256" });
-const signatureAlgorithm = Object.freeze({ name: "ECDSA", hash: "SHA-256" });
 
 function requireProvider(cryptoProvider) {
-  if (!cryptoProvider?.subtle) throw new TypeError("cryptoProvider.subtle이 필요하다");
+  for (const method of ["signDigest", "verifyDigest", "generateSigningKeyPair", "exportPublicJwk"]) {
+    if (typeof cryptoProvider?.[method] !== "function") {
+      throw new TypeError(`cryptoProvider.${method}가 필요하다(createMachineCryptoProvider로 감싸라)`);
+    }
+  }
+  return cryptoProvider;
 }
 
 function bytesToHex(value) {
@@ -34,23 +42,14 @@ async function publicJwk(cryptoProvider, value) {
   requireProvider(cryptoProvider);
   if (value?.kty) return normalizePublicJwk(value);
   try {
-    return normalizePublicJwk(await cryptoProvider.subtle.exportKey("jwk", value));
+    return normalizePublicJwk(await cryptoProvider.exportPublicJwk(value));
   } catch (cause) {
     throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "public key export 실패", { cause: String(cause) });
   }
 }
 
-async function importPublicKey(cryptoProvider, value) {
-  try {
-    return await cryptoProvider.subtle.importKey("jwk", normalizePublicJwk(value), keyAlgorithm, true, ["verify"]);
-  } catch (cause) {
-    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "public key import 실패", { cause: String(cause) });
-  }
-}
-
 export async function createWebMachineKeyPair(cryptoProvider) {
-  requireProvider(cryptoProvider);
-  return cryptoProvider.subtle.generateKey(keyAlgorithm, true, ["sign", "verify"]);
+  return requireProvider(cryptoProvider).generateSigningKeyPair();
 }
 
 export async function exportWebMachinePublicKey(cryptoProvider, publicKey) {
@@ -68,7 +67,7 @@ export async function signWebMachineContent(cryptoProvider, contentDigest, signi
   const publicKey = await publicJwk(cryptoProvider, signingKeyPair.publicKey);
   let value;
   try {
-    value = new Uint8Array(await cryptoProvider.subtle.sign(signatureAlgorithm, signingKeyPair.privateKey, encoder.encode(contentDigest)));
+    value = await cryptoProvider.signDigest(signingKeyPair.privateKey, contentDigest);
   } catch (cause) {
     throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "image 서명 실패", { cause: String(cause) });
   }
@@ -84,13 +83,8 @@ export async function verifyWebMachineTrust(cryptoProvider, contentDigest, signa
   requireProvider(cryptoProvider);
   if (!signature) throw new WebMachineError("WEB_MACHINE_IMAGE_UNTRUSTED", "서명 없는 image 실행 거부");
   const signatureBytes = hexToBytes(signature.value);
-  const embeddedKey = await importPublicKey(cryptoProvider, signature.publicKey);
-  let signatureValid = false;
-  try {
-    signatureValid = await cryptoProvider.subtle.verify(signatureAlgorithm, embeddedKey, signatureBytes, encoder.encode(contentDigest));
-  } catch (cause) {
-    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "image 서명 검증 실패", { cause: String(cause) });
-  }
+  const embeddedJwk = normalizePublicJwk(signature.publicKey);
+  const signatureValid = await cryptoProvider.verifyDigest(embeddedJwk, contentDigest, signatureBytes);
   if (!signatureValid) throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "image 서명 불일치");
 
   const signerFingerprint = await fingerprintWebMachinePublicKey(cryptoProvider, signature.publicKey);
@@ -103,8 +97,8 @@ export async function verifyWebMachineTrust(cryptoProvider, contentDigest, signa
       throw error;
     }
     if (trustedFingerprint !== signerFingerprint) continue;
-    const verifier = trustedKey?.kty ? await importPublicKey(cryptoProvider, trustedKey) : trustedKey;
-    const trustedValid = await cryptoProvider.subtle.verify(signatureAlgorithm, verifier, signatureBytes, encoder.encode(contentDigest));
+    const trustedVerifier = trustedKey?.kty ? normalizePublicJwk(trustedKey) : trustedKey;
+    const trustedValid = await cryptoProvider.verifyDigest(trustedVerifier, contentDigest, signatureBytes);
     if (trustedValid) return Object.freeze({ signerFingerprint });
   }
   throw new WebMachineError("WEB_MACHINE_IMAGE_UNTRUSTED", `trusted key에 없는 signer: ${signerFingerprint}`);

@@ -29,7 +29,8 @@ function sortedDevices(devices) {
 export class MachineCommitCoordinator {
   constructor({ store, cryptoProvider, idFactory, nowFactory }) {
     if (!store) throw new TypeError("store가 필요하다");
-    if (!cryptoProvider?.subtle) throw new TypeError("cryptoProvider.subtle이 필요하다");
+    // digest 법은 커널 한 벌이다: 조립은 createMachineCryptoProvider가 배달한다(맨 Crypto 거부).
+    if (typeof cryptoProvider?.digestBytes !== "function") throw new TypeError("cryptoProvider.digestBytes가 필요하다(createMachineCryptoProvider로 감싸라)");
     if (typeof idFactory !== "function") throw new TypeError("idFactory가 필요하다");
     if (typeof nowFactory !== "function") throw new TypeError("nowFactory가 필요하다");
     this._store = store;
