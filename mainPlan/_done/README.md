@@ -9,6 +9,7 @@
 
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
+| [kernel-product/](kernel-product/) | ✅ 완료 (2026-07-18) | state-kernel 잔여 4건 해소(header-target 서명 조기 거부, machine generation 커널 commit 스키마, .webmachine 단일 bundle, VirtualOrigin 재노출)와 전 산물의 단일 제품(Web Computer) 통합 실증. 세션 bundle과 machine envelope가 한 wire 포맷 공유, 제품에 서버 없는 시간여행. 게이트 전판 GREEN. |
 | [state-kernel/](state-kernel/) | ✅ 완료 (2026-07-18) | 이중 구역 상태 커널(src/state: 휘발 index + 내구 CAS 리포, 승격 관문 collectDelta 한 점)로 저널·세션 봉투·서명을 재기초하고, 공개 표면을 porcelain 머신 핸들(루트 37 -> 6, open 통합, pyproc/history 신설)로 일격 재편. 게이트 전판 GREEN + 음성 시험 7건. 잔여 후속 4건은 원장 말미. |
 | [boundary-radius/](boundary-radius/) | 🚫 폐기 (2026-07-17) | 경계 동일성 반경 측정 장치. 답을 저장소가 이미 갖고 있었다(worker.js: 메인과 워커는 바이트가 다르다). 기기 축 재확인(184p/480p 상이, 내용은 같고 주소가 다름)만 남기고 폐기. 선행조사 대조 표는 재발 방지 장치로 존속. |
 | [structure-evolution/](structure-evolution/) | ✅ 완료 (2026-07-17) | 의존 방향을 트리에 새긴다: 합성 루트를 제자리로 옮겨 폴더 순환 1 -> 0, 규칙과 집행을 레이어 순위 한 문장으로, 중복 12벌과 worker 프로토콜 결함 1건 수렴. 공개 계약 무변경. |
