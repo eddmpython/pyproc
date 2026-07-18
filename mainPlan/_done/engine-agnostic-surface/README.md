@@ -1,6 +1,6 @@
 # engine-agnostic-surface - 소비자가 raw를 버리게 하는 엔진-무관 능력 3건
 
-> **완결(2026-07-13, v0.0.9 릴리즈).** pyproc 측 3능력(`Runtime.fs`, `loadPackagesFromImports`, `setStdout/setStderr`)을 승격 + 실 브라우저 검증(fs 10/10, output 5/5, imports 3/3) + 릴리즈했다. 남은 P4(dartlab 워커의 raw 3접점 교체)는 소비자 측 작업이라 pyproc 밖. 소비는 npm 버전 핀(`"pyproc": "0.0.9"`).
+> ✅ **완결 (2026-07-13, v0.0.9 릴리즈).** pyproc 측 3능력(`Runtime.fs`, `loadPackagesFromImports`, `setStdout/setStderr`)을 승격 + 실 브라우저 검증(fs 10/10, output 5/5, imports 3/3) + 릴리즈했다. 남은 P4(dartlab 워커의 raw 3접점 교체)는 소비자 측 작업이라 pyproc 밖. 소비는 npm 버전 핀(`"pyproc": "0.0.9"`).
 
 > 이니셔티브 인덱스. 상세는 번호 문서. 최종 상태는 [03-progress-ledger.md](03-progress-ledger.md).
 
