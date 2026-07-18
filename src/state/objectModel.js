@@ -1,5 +1,5 @@
 // objectModel.js - Layer 1(state): 내구 구역 오브젝트 모델의 정본.
-// 머신의 상태는 두 구역을 가진 단일 역사 저장소에 산다(mainPlan/state-kernel). 여기는 그중
+// 머신의 상태는 두 구역을 가진 단일 역사 저장소에 산다(mainPlan/_done/state-kernel). 여기는 그중
 // 내구 구역의 문법이다: blob(내용주소 바이트) / tree(타입 있는 엔트리) / commit(부모 + 환경
 // 지문 + fence). 휘발 구역(reactive 체크포인트 나무)은 이 모델을 모르고, 유일한 승격 관문은
 // ReactiveController.collectDelta다(실행 경계에 암호 해시 금지, tests/run.mjs [digest 법] 가드).

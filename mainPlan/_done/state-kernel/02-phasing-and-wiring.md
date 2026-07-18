@@ -20,8 +20,8 @@
 
 ## 1단계: 법 추출 (결합 최소, 의미 불변)
 
-digest 코어 cryptoProvider 매개변수화([contentDigest.js](../../src/runtime/contentDigest.js) +
-[generationIntegrity.js](../../src/machine/persistence/generationIntegrity.js) 통합),
+digest 코어 cryptoProvider 매개변수화([contentDigest.js](../../../src/runtime/contentDigest.js) +
+[generationIntegrity.js](../../../src/machine/persistence/generationIntegrity.js) 통합),
 verify-on-read 3벌 단일화, 주소 형식 `sha256:<hex>` 통일. machine 배달은 주입.
 
 게이트: `npm test` + `npm run test:browser` green, 기존 저널·봉투가 그대로 열리는 브라우저
@@ -38,7 +38,7 @@ blob / tree(타입 엔트리) / commit(환경 지문 포함) / signedTag + fence
 
 ## 3단계: 저널 재기초
 
-[machineJournal.js](../../src/capabilities/machineJournal.js)을 OPFS store 드라이버 + 유휴
+[machineJournal.js](../../../src/capabilities/machineJournal.js)을 OPFS store 드라이버 + 유휴
 정책으로 강등.
 
 게이트: 구 HEAD.json 저널 -> 신 경로 recover -> 힙 바이트 대조 100%, churnProbe 재실행으로
@@ -55,9 +55,9 @@ headless 게이트에 결정성 검증 상시 편입.
 
 ## 5단계: coordinator 저장 위임
 
-[machineCommitCoordinator.js](../../src/machine/persistence/machineCommitCoordinator.js)가
+[machineCommitCoordinator.js](../../../src/machine/persistence/machineCommitCoordinator.js)가
 저장·무결성을 커널에 위임하고 오케스트레이션(pause -> device flush -> snapshot) + fence
-발급만 보유. [indexedDbMachineStore.js](../../src/machine/persistence/indexedDbMachineStore.js)가
+발급만 보유. [indexedDbMachineStore.js](../../../src/machine/persistence/indexedDbMachineStore.js)가
 커널 backend가 된다.
 
 게이트: 멀티탭 경합 시뮬레이션(Web Locks epoch), stale owner 쓰기 거부 음성 시험,
@@ -101,7 +101,7 @@ ref 도달 가능성 gc + 크래시 안전 순서의 커널 불변식화.
   드라이버 실물, 신뢰(signedTag). 소비 제품이 자기 저장소를 꽂는 지점.
 - `pyproc/machine`: 장치 + guest 어댑터.
 - `pyproc/worker`: 워커 자산 URL 계약(번들러 계약상 별도 유지).
-- 강등 gpu/socket은 exports 지도에서 내리고 [계약 실태 표](../../docs/operations/contractReality.md)로.
+- 강등 gpu/socket은 exports 지도에서 내리고 [계약 실태 표](../../../docs/operations/contractReality.md)로.
   `./reactive`, `./syscall-bridge`, `./wasi` 등 레이어 폴더 누설 subpath는 소멸.
 
 ### 표면 게이트
@@ -128,19 +128,19 @@ commit -> export -> open -> fork -> map) green, index.d.ts·api.md·capabilityMa
 ## 영향 파일 (전수)
 
 커널 신설: `src/state/`(신규). 강등·재기초:
-[reactive.js](../../src/capabilities/reactive.js),
-[machineJournal.js](../../src/capabilities/machineJournal.js),
-[journalBlobStore.js](../../src/capabilities/journalBlobStore.js),
-[session.js](../../src/session/session.js),
-[machineImage.js](../../src/session/machineImage.js),
-[machineSignature.js](../../src/session/machineSignature.js),
-[contentDigest.js](../../src/runtime/contentDigest.js),
-[machineCommitCoordinator.js](../../src/machine/persistence/machineCommitCoordinator.js),
-[generationIntegrity.js](../../src/machine/persistence/generationIntegrity.js),
-[generationRetention.js](../../src/machine/persistence/generationRetention.js),
-[indexedDbMachineStore.js](../../src/machine/persistence/indexedDbMachineStore.js),
-[webMachineTrust.js](../../src/machine/image/webMachineTrust.js),
-[webMachineFile.js](../../src/machine/image/webMachineFile.js).
-표면: [index.js](../../index.js), [index.d.ts](../../index.d.ts), `package.json` exports.
+[reactive.js](../../../src/capabilities/reactive.js),
+[machineJournal.js](../../../src/capabilities/machineJournal.js),
+[journalBlobStore.js](../../../src/capabilities/journalBlobStore.js),
+[session.js](../../../src/session/session.js),
+[machineImage.js](../../../src/session/machineImage.js),
+[machineSignature.js](../../../src/session/machineSignature.js),
+[contentDigest.js](../../../src/runtime/contentDigest.js),
+[machineCommitCoordinator.js](../../../src/machine/persistence/machineCommitCoordinator.js),
+[generationIntegrity.js](../../../src/machine/persistence/generationIntegrity.js),
+[generationRetention.js](../../../src/machine/persistence/generationRetention.js),
+[indexedDbMachineStore.js](../../../src/machine/persistence/indexedDbMachineStore.js),
+[webMachineTrust.js](../../../src/machine/image/webMachineTrust.js),
+[webMachineFile.js](../../../src/machine/image/webMachineFile.js).
+표면: [index.js](../../../index.js), [index.d.ts](../../../index.d.ts), `package.json` exports.
 게이트: `tests/run.mjs`(레이어·표면·오류·해시 가드), `tests/browser/gate.html`(시나리오),
 `tests/webMachine/`(store 계약).

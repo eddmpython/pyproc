@@ -1,6 +1,6 @@
 # stateKernel - 내구 상태 3벌을 이중 구역 커널 하나로 통합할 수 있는가
 
-[mainPlan/state-kernel](../../../mainPlan/state-kernel/README.md)의 0단계 실측 캠페인.
+[mainPlan/_done/state-kernel](../../../mainPlan/_done/state-kernel/README.md)의 0단계 실측 캠페인.
 
 ## 가설
 

@@ -20,6 +20,5 @@
 ## 활성 이니셔티브
 
 - [asset-provenance](asset-provenance/README.md) - 증거 없음이 통과로 새지 않게 한다. 제품 쪽 봉인이 장식이고(거짓 license로도 게이트 통과) 봉인이 걸린 쪽은 CI가 안 도는 fixture다. 재개 지점은 [01-progress-ledger.md](asset-provenance/01-progress-ledger.md) 마지막 줄.
-- [state-kernel](state-kernel/README.md) - 이중 구역 상태 커널(휘발 index + 내구 CAS 리포, 승격 관문 collectDelta 한 점)로 저장·복원·이동·신뢰의 중복 9항을 통합하고 표면을 머신 핸들 porcelain으로 일격 재편한다. 재개 지점은 [03-progress-ledger.md](state-kernel/03-progress-ledger.md) 마지막 줄.
 
-완결·폐기 이니셔티브 15개는 [_done/](_done/README.md)으로 이관됐다(최신 이관 = boundary-radius, 폐기). 최신 완료 기록은 speculative-fleet이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.
+완결·폐기 이니셔티브 16개는 [_done/](_done/README.md)으로 이관됐다(최신 이관 = state-kernel, 완료). 최신 완료 기록은 speculative-fleet이며, 세션 간 마지막 상태는 각 `_done/<이니셔티브>/03-progress-ledger.md` 또는 README에서 확인한다.
