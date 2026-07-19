@@ -697,6 +697,48 @@
         const fell = await openState(crypto, stateStore, { expectH0: "gate-h0" });
         check("state 커널: OPFS 변조 blob 적발 + PREV 후퇴", fell.fallback === true && fell.pages.get(0)[0] === 11, String(fell.headFailure || "").slice(0, 60));
         await stateRoot.removeEntry("pyprocGateState", { recursive: true });
+
+        // 쓰기 순서 법이 실 OPFS backend에서도 성립하는가(리뷰의 "OPFS write 중 탭 crash").
+        // Node는 MemoryStore(부분 쓰기 물리적으로 불가)로 이 법을 문다 - 실 backend의 부분
+        // 파일/HEAD-swap 크래시는 검증되지 않았다. 여기서 각 쓰기 지점(blob->tree->commit->
+        // PREV->HEAD)에서 크래시시켜 구 HEAD가 무결·복구됨을 실 OPFS에서 확인한다. writeRef까지
+        // 감싸 HEAD 교체 순간의 크래시(가장 중요한 지점)를 문다.
+        try { await stateRoot.removeEntry("pyprocGateCrash", { recursive: true }); } catch (e) {}
+        const crashDir = await stateRoot.getDirectoryHandle("pyprocGateCrash", { create: true });
+        const kbc = (f) => new Uint8Array(1024).fill(f);
+        const crashBase = new OpfsStateStore(crashDir);
+        await commitState(crypto, crashBase, { pages: [[0, kbc(10)], [1, kbc(11)]], pageSize: 1024, heapLen: 2048, sp: 0, env: { h0: "crash-h0" } });
+        await commitState(crypto, crashBase, { pages: [[0, kbc(20)], [1, kbc(21)]], pageSize: 1024, heapLen: 2048, sp: 0, env: { h0: "crash-h0" } });
+        let crashOk = true, crashInfo = "";
+        for (let crashAfter = 0; crashAfter < 6 && crashOk; crashAfter++) {
+          const store = new OpfsStateStore(crashDir);
+          let left = crashAfter;
+          const oWO = store.writeObject.bind(store), oWR = store.writeRef.bind(store);
+          store.writeObject = async (a, b) => { if (--left < 0) throw new Error("CRASH"); return oWO(a, b); };
+          store.writeRef = async (n, r) => { if (--left < 0) throw new Error("CRASH"); return oWR(n, r); };
+          try { await commitState(crypto, store, { pages: [[0, kbc(30 + crashAfter)], [1, kbc(40 + crashAfter)]], pageSize: 1024, heapLen: 2048, sp: 0, env: { h0: "crash-h0" } }); } catch (e) {}
+          const opened = await openState(crypto, new OpfsStateStore(crashDir), { expectH0: "crash-h0" });
+          if (opened.pages.get(0)[0] !== 20 || opened.pages.get(1)[0] !== 21) { crashOk = false; crashInfo = `crashAfter ${crashAfter}: HEAD ${opened.pages.get(0)[0]}/${opened.pages.get(1)[0]}(구 HEAD 20/21 아님)`; }
+        }
+        check("state 커널: OPFS 쓰기 순서 법(지점별 크래시에 구 HEAD 무결)", crashOk, crashInfo || "6지점 크래시 후 구 HEAD(20/21) 복구");
+
+        await stateRoot.removeEntry("pyprocGateCrash", { recursive: true });
+
+        // ref 파일 파손: HEAD.json에 쓰레기를 써도 판독기가 손상을 첫 부팅으로 위장하지 않는다
+        // (저널 있는데 빈 머신 부팅 = 데이터 유실). PREV != HEAD인 깨끗한 상태에서: HEAD(60) 파손
+        // -> PREV(50) 후퇴로 구분된다(파손을 gen50으로 정확히 후퇴, 첫 부팅 위장 아님).
+        try { await stateRoot.removeEntry("pyprocGateRef", { recursive: true }); } catch (e) {}
+        const refDir = await stateRoot.getDirectoryHandle("pyprocGateRef", { create: true });
+        const refStore = new OpfsStateStore(refDir);
+        await commitState(crypto, refStore, { pages: [[0, kbc(50)]], pageSize: 1024, heapLen: 1024, sp: 0, env: { h0: "ref-h0" } });
+        await commitState(crypto, refStore, { pages: [[0, kbc(60)]], pageSize: 1024, heapLen: 1024, sp: 0, env: { h0: "ref-h0" } }); // HEAD=60, PREV=50
+        const headFh = await refDir.getFileHandle("HEAD.json");
+        const hw = await headFh.createWritable(); await hw.write("{not valid json"); await hw.close();
+        let refState = "none";
+        try { const r = await openState(crypto, new OpfsStateStore(refDir), { expectH0: "ref-h0" }); refState = r.fallback && r.pages.get(0)[0] === 50 ? "prev-fallback" : `head-${r.pages.get(0)[0]}`; }
+        catch (e) { refState = e.code; }
+        check("state 커널: OPFS HEAD.json 파손은 첫 부팅 위장 없이 PREV 후퇴", refState === "prev-fallback", refState);
+        await stateRoot.removeEntry("pyprocGateRef", { recursive: true });
       }
     } catch (e) {
       check("예외 없음", false, String(e).slice(0, 300));
