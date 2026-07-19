@@ -33,6 +33,7 @@ export class PyProc {
     // 바이트 동일한 힙에 선다 = fork(살아있는 상태 복제)가 가능한 대칭 풀.
     this.replay = opts.replay || null;
     this.table = []; this._seq = 0; this._snapshot = null;
+    this.bootInfo = null; // 마지막 boot()의 결과({workers, avgBootMs, forked}). porcelain proc()이 반환을 소비하지 않아도 남는 관측 지점.
   }
 
   // 살아있는 프로세스 풀(스케줄 대상).
@@ -216,7 +217,8 @@ export class PyProc {
     const spawns = [];
     for (let i = 0; i < n; i++) spawns.push(this._spawn(useSnapshot).ready);
     const bootMsArr = await Promise.all(spawns);
-    return { workers: n, avgBootMs: Math.round(bootMsArr.reduce((a, b) => a + b, 0) / n), forked: useSnapshot };
+    this.bootInfo = Object.freeze({ workers: n, avgBootMs: Math.round(bootMsArr.reduce((a, b) => a + b, 0) / n), forked: useSnapshot });
+    return this.bootInfo;
   }
 
   // 프로세스 강제 종료(커널 주도, SIGKILL 등가). 테이블에는 dead로 남긴다(이력 조회용).

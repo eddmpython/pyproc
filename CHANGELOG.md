@@ -122,6 +122,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   resolve to `{ error: "pool exhausted: ..." }`.
 - Nested machine containers now route `run`/`heapLen`/`kill`/`spawn` through an explicit
   path router at any depth, and a dead container rejects immediately instead of hanging.
+- `PyProc.bootInfo`: the last `boot()` result (`{ workers, avgBootMs, forked }`) is kept on
+  the pool, so paths that do not consume the return value directly (such as
+  `machine.proc()`) still have an observation point.
 
 ### 한국어 요약
 
@@ -151,3 +154,5 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - 체크포인트 핸들(cp.restore() 한 호출), collectDelta/markDirty/pruneTo/dispose,
   복원의 경계 기록, 컨트롤러 memoize, 저널 onStatus/pruneAfterCommit,
   respawn/killHard, map 부분 실패 정직화, 컨테이너 중첩 라우팅과 사망 즉시 거부.
+- `PyProc.bootInfo`: 마지막 boot() 결과를 풀에 보관(반환을 직접 받지 않는
+  `machine.proc()` 경로의 관측 지점).

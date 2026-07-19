@@ -1014,6 +1014,8 @@ declare class PyProc {
   /** 시그널 번호표(POSIX). pool.SIGNAL.INT 등으로 소비한다. */
   static SIGNAL: typeof SIGNAL;
   constructor(opts?: PyProcOptions);
+  /** 마지막 boot()의 결과. machine.proc()처럼 boot 반환을 직접 받지 않는 경로의 관측 지점(부팅 전 null). */
+  readonly bootInfo: PyProcBootInfo | null;
   boot(n: number, useSnapshot?: boolean): Promise<PyProcBootInfo>;
   map(fnSrc: string, args: unknown[], opts?: PyProcMapOptions): Promise<unknown[]>;
   /** TypedArray를 조각내 워커들에 numpy 배열로 병렬 적용(샤딩). fnSrc: def _fn(a). 실측 4워커 5.28배. */
