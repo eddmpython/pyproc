@@ -326,7 +326,7 @@ The CLI follows the Worker / SharedWorker / Service Worker import graph, copies 
 
 ## Setup
 
-**Chromium / Edge only.** pyproc needs JSPI (JavaScript Promise Integration, default since Chrome 137), SharedArrayBuffer, and `crossOriginIsolated`. Lack of Firefox / Safari support is a deliberate scope choice, not a defect.
+**Chromium / Edge only.** pyproc needs JSPI (JavaScript Promise Integration, default since Chrome 137), SharedArrayBuffer, and `crossOriginIsolated`. Lack of Firefox / Safari support is a deliberate scope choice, not a defect. Full environment matrix (per-capability requirements, engine version, resource characteristics): [docs/consuming/compatibility.md](docs/consuming/compatibility.md).
 
 There are two tiers of setup, so "just install and import" is true for the basics but not for everything:
 

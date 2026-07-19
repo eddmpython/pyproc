@@ -11,6 +11,7 @@
 | 암묵 FFI/fetch 가정 | 엔진 교체·업데이트에 견딤 | `toJs` 덕타이핑 3개소(terminal/worker/sharedKernelHost), latin1 바이트 밀수(syscallBridge), "엔진이 .whl/코어를 전역 fetch로 받는다" 가정(wheelCache/coreCache)은 변환 기본값·fetch 전략 변경 시 예외가 아니라 틀린 데이터/무증상 캐시 무력화로 나타난다 | EngineContract seam이 `toJs`를 계약 메서드로 승격 + dist 서술자로 이동(engine-independence P1에서 착수, 잔여 정리) |
 | Web Computer 실행 자산의 단일 출처 | 실행 자산은 재현 가능한 경로에서 온다 | 10MB `buildroot-bzimage68.bin`의 유일한 출처가 `i.copy.sh`(1인 호스팅, mutable URL, 미러 0, 불변성 보증 0)다. 404가 나면 `npm run test:web-computer`가 죽는다. 미러를 저장소에 두는 것은 배포 정책(third-party binary 0)이 금지한다 | 자체 빌드가 진짜 해다. 커널 6.8.12는 bzImage setup header에서 이미 식별되므로 막혀 있지 않다. 상세: [assetProvenance.md](assetProvenance.md) |
 | 리액티브/%undo 메모리 | 장시간 사용에도 안전 | base(힙 전체 사본)가 RAM 상주 + 체크포인트 델타가 무한 누적(%undo는 문장마다). 장수 REPL에서 실메모리 성장 | 델타 rebase/prune 설계. `saveBase`(OPFS로 base 이동)가 1차 완화 |
+| 체크포인트 경계 해시 비용 | 경계 비용이 워크로드에 견딤 | WASM은 mprotect/dirty-page가 없어 경계마다 힙 전 페이지를 완전 해시한다(그 완전성이 복원 soundness의 조건 - `pageHashes` false-negative 0을 [해시 soundness] fuzz가 문다). 즉 경계 하나의 해시 비용이 O(heap)이고, 이를 지배하는 것은 힙 크기가 아니라 **커밋 빈도**다(churnProbe 법칙). 큰 힙 + 문장마다 커밋 = 매 문장 전 힙 훑기 | 근본 한계(dirty-page 부재의 회피 불가한 대가). 완화는 커밋 빈도 제어(제품이 경계를 성기게)와 힙 규모 설계. 소비자 계약은 [compatibility.md](../consuming/compatibility.md) 자원 특성에 명시. 근본 해는 upstream dirty-page 설비이지 라이브러리 우회가 아니다 |
 
 ## 상시 재검증 (버전 올릴 때 최우선)
 
