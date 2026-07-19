@@ -8,6 +8,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.0.10 - 2026-07-19
+
 ### Breaking
 
 - **Root surface reshaped to a porcelain machine handle (37 exports -> 6).** The root now
