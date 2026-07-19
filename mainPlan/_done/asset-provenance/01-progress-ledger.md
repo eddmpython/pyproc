@@ -104,3 +104,53 @@ structure-evolution에서 같은 일이 있었다(session 분해 중 sha256Hex i
 위험도 사라진다. 하나로 둘을 푼다. 이건 provenance 배관이 아니라 자산 취득 트랙이다.
 
 재개 지점: pyodide 인벤토리 취득 또는 Linux 자산 자체 빌드 트랙 개설.
+
+## 2026-07-19 엔진 부팅 집합 기술로 미기술 게스트 소멸, 이니셔티브 종결
+
+마지막 남은 구멍(pyproc 게스트 자산 미기술)을 닫았다. 증거 없음이 통과로 새는 자리는
+이제 없다.
+
+### 실측
+
+- **부팅 적재 집합 확정**: 메인 스레드 `pyodide.js`(script 태그), 워커 `pyodide.mjs`
+  (dynamic import x3 파일), 엔진이 받는 `pyodide.asm.mjs`/`pyodide.asm.wasm`(9.6MB)/
+  `python_stdlib.zip`/`pyodide-lock.json`. 총 6파일.
+- **두 유통 경로 교차 검증**: GitHub release tarball(vendor/pyodide, fetchEngine 산물)과
+  jsdelivr CDN(`DEFAULT_INDEX`)의 6파일 sha256이 전부 동일. catalog가 기술하는 바이트가
+  제품이 실제 적재하는 바이트다.
+
+### 결정
+
+- **catalog 기술**: component `pyodide-release-314.0.2`(exact tag, 공개 빌드 recipe,
+  provenanceStatus는 SeaBIOS와 같은 `upstream-source-recipe-not-reproduced` 재사용, 어휘
+  증식 0). `pyodide.asm.wasm`은 v86.wasm과 같은 잣대(`NOASSERTION`/합성 바이너리 inventory
+  미검증). loader 2파일과 lock은 프로젝트 자기 산물이라 MPL-2.0 결론(libv86.mjs 선례).
+  component 결론은 불변식이 NOASSERTION으로 도출.
+- **배포 판정 두 어휘 완성**: `upstream-cdn-runtime-reference` 신설(policyVersion 2).
+  상류 자신의 배포 지점을 런타임에 참조하는 것은 재배포가 아니다(결정 3의 정밀화).
+  최상위 catalogId를 `web-machine-execution-assets-v1`로 개명(v86 fixture만이 아니게 됐다).
+- **부재 명시 장치 은퇴**: 미기술 게스트가 소멸했으므로 `UNDESCRIBED_ASSET_PROVENANCE`를
+  제거하고 pythonOs도 `WEB_COMPUTER_ASSET_PROVENANCE`를 싣는다. 재등장은 게이트가 잡는다.
+- **SBOM localPath**: 자산의 로컬 위치를 명시 필드로(SPDX fileName의 출처).
+
+### 게이트 (전부 음성 시험으로 이빨 확인)
+
+| 게이트 | 음성 시험 -> RED |
+|---|---|
+| 핀 결합(fetchEngine == DEFAULT_INDEX == catalog url) | catalog url을 v999로 변조 -> "catalog url이 DEFAULT_INDEX 밖" |
+| 제품 이중 엔진 기술(v86.wasm + pyodide.asm.wasm) | 제품 catalog에서 pyodide.asm.wasm 삭제 -> "제품 catalog에 미기술" |
+| 게스트 provenance 명시 + 은퇴 장치 재등장 금지 | pythonOs를 UNDESCRIBED로 되돌림 -> "기술된 자산 출처를 싣지 않는다" |
+| 두 어휘 배포 판정(component별 기대값) | pyodide.js를 local-test-only로 위조 + 파생물 재생성 -> "upstream-cdn-runtime-reference여야 한다" |
+
+구조 게이트 1064 -> 1321 전판 GREEN, 타입 게이트 GREEN, 브라우저 84/84 GREEN,
+제품 E2E 13/13 GREEN(prepare가 제품 catalog 파생으로 엔진 자산까지 SRI 검증 적재, 11개).
+
+### 남은 것 (이 이니셔티브 범위 밖, 자산 취득 트랙)
+
+- **합성 바이너리 인벤토리 검증**: `pyodide.asm.wasm`/`v86.wasm`의 component inventory가
+  검증되면 NOASSERTION이 실제 결론으로 승격된다. `promotionRequires`가 계약으로 고정.
+- **Linux 자산 자체 빌드**: 커널 6.8.12 식별 완료, 막힌 것은 `.config` 1항목.
+  `i.copy.sh` 단일 출처 위험과 함께 풀린다(계약 실태 표에 존속).
+
+완료 조건 7항 전부 충족(2026-07-17 대조표) + 미기술 구멍 소멸. 종결 절차로 폴더를
+`_done`으로 이관한다.

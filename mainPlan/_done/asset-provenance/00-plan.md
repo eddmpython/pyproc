@@ -109,7 +109,7 @@ compliance를 대신하지 않는다."
 
 ## 6단계: 알려진 위험
 
-[계약 실태 표](../../docs/operations/contractReality.md)에 기록한다.
+[계약 실태 표](../../../docs/operations/contractReality.md)에 기록한다.
 
 1. **`i.copy.sh` 단일 출처**(P9). 10MB Linux image의 유일한 출처가 1인 호스팅 mutable URL이다.
    404가 나면 `test:web-computer`가 죽는다. 미러를 저장소에 두는 것은 정책이 금지한다

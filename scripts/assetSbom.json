@@ -2,17 +2,29 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "web-machine-v86-fixtures-v1",
-  "documentNamespace": "https://github.com/eddmpython/pyproc/sbom/web-machine-v86-fixtures-v1/ceb3f37c009125d4",
+  "name": "web-machine-execution-assets-v1",
+  "documentNamespace": "https://github.com/eddmpython/pyproc/sbom/web-machine-execution-assets-v1/4ac886f00d13818c",
   "creationInfo": {
-    "created": "2026-07-15T00:00:00Z",
+    "created": "2026-07-19T00:00:00Z",
     "creators": [
       "Organization: pyproc contributors"
     ],
     "licenseListVersion": "3.28.0"
   },
-  "documentComment": "이 문서는 로컬 Web Machine probe가 내려받는 미번들 fixture를 기술한다. package 배포 목록이 아니다.",
+  "documentComment": "이 문서는 pyproc이 실행 시 적재하는 미번들 자산 전부를 기술한다(엔진 부팅 집합 + Web Machine fixture). package 배포 목록이 아니다.",
   "packages": [
+    {
+      "SPDXID": "SPDXRef-Package-pyodide-release-314.0.2",
+      "name": "Pyodide",
+      "versionInfo": "314.0.2",
+      "downloadLocation": "https://github.com/pyodide/pyodide/releases/download/314.0.2/pyodide-314.0.2.tar.bz2",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MPL-2.0",
+      "copyrightText": "NOASSERTION",
+      "sourceInfo": "source=https://github.com/pyodide/pyodide revision=314.0.2 provenance=upstream-source-recipe-not-reproduced",
+      "packageComment": "evidence=https://github.com/pyodide/pyodide/releases/tag/314.0.2,https://github.com/pyodide/pyodide/blob/main/LICENSE"
+    },
     {
       "SPDXID": "SPDXRef-Package-v86-npm-0.5.424",
       "name": "v86",
@@ -63,6 +75,126 @@
     }
   ],
   "files": [
+    {
+      "SPDXID": "SPDXRef-File-pyodide.js",
+      "fileName": "./vendor/pyodide/pyodide.js",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "e7eeeca4abc1918fffaabe5f5756b26b50f20240"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "95fc4de60f515e3f5c4a9acd86849068f8e5cc0818652c0963e43de08b9b2f30"
+        }
+      ],
+      "licenseConcluded": "MPL-2.0",
+      "licenseInfoInFiles": [
+        "MPL-2.0"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=upstream-cdn-runtime-reference; role=engine-module; bundleBlockers=package-policy-external-engine"
+    },
+    {
+      "SPDXID": "SPDXRef-File-pyodide.mjs",
+      "fileName": "./vendor/pyodide/pyodide.mjs",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "6d90a02f02a1720573e96202bf47b4ee06c89df2"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "955d2088bbb7fc79a73c4802aca2370c1d95bfdfaffa4121e0faebda2b0ea3f9"
+        }
+      ],
+      "licenseConcluded": "MPL-2.0",
+      "licenseInfoInFiles": [
+        "MPL-2.0"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=upstream-cdn-runtime-reference; role=engine-module; bundleBlockers=package-policy-external-engine"
+    },
+    {
+      "SPDXID": "SPDXRef-File-pyodide.asm.mjs",
+      "fileName": "./vendor/pyodide/pyodide.asm.mjs",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "38591407de48d8832de965d821e5a54aea333fe1"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "c7eccdfeb7a8419d61f910f0685b45cd5610b7ff5bbe844c3c1050ee6623b641"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": [
+        "NOASSERTION"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=upstream-cdn-runtime-reference; role=engine-module; bundleBlockers=composite-glue-license-inventory-not-verified,package-policy-external-engine"
+    },
+    {
+      "SPDXID": "SPDXRef-File-pyodide.asm.wasm",
+      "fileName": "./vendor/pyodide/pyodide.asm.wasm",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "312ce1635ef289cc897b245b76b5909be40c3704"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "f7a8a169e513791e18fa0790fb69d6f2656b779e9012ba57e03e973f0df0b39f"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": [
+        "NOASSERTION"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=upstream-cdn-runtime-reference; role=engine-binary; bundleBlockers=composite-binary-license-inventory-not-verified,package-policy-external-engine"
+    },
+    {
+      "SPDXID": "SPDXRef-File-python-stdlib.zip",
+      "fileName": "./vendor/pyodide/python_stdlib.zip",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "08a336ee1625b3dcc235a2ff94d3ff819aafafd6"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "101a9c94ca6304c1478c89b7b595136b9a51b4289bdc5b467d86db553efee9b3"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": [
+        "NOASSERTION"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=upstream-cdn-runtime-reference; role=stdlib-archive; bundleBlockers=archive-content-inventory-not-verified,package-policy-external-engine"
+    },
+    {
+      "SPDXID": "SPDXRef-File-pyodide-lock.json",
+      "fileName": "./vendor/pyodide/pyodide-lock.json",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "d7d8def8c9e99bc9df66c3226b274efde9c70496"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "c963d22858f6bcb8f41586a2142f03905ab370c88ea22a86a2736e95fac2a8f3"
+        }
+      ],
+      "licenseConcluded": "MPL-2.0",
+      "licenseInfoInFiles": [
+        "MPL-2.0"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=upstream-cdn-runtime-reference; role=package-lock; bundleBlockers=package-policy-external-engine"
+    },
     {
       "SPDXID": "SPDXRef-File-libv86.mjs",
       "fileName": "./assets/libv86.mjs",
@@ -188,6 +320,11 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-pyodide-release-314.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-v86-npm-0.5.424"
     },
     {
@@ -204,6 +341,36 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-kolibri-image-opaque"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-pyodide.js"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-pyodide.mjs"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-pyodide.asm.mjs"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-pyodide.asm.wasm"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-python-stdlib.zip"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-pyodide-lock.json"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -234,6 +401,36 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-File-kolibri.img"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-pyodide.js",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-pyodide-release-314.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-pyodide.mjs",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-pyodide-release-314.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-pyodide.asm.mjs",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-pyodide-release-314.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-pyodide.asm.wasm",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-pyodide-release-314.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-python-stdlib.zip",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-pyodide-release-314.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-pyodide-lock.json",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-pyodide-release-314.0.2"
     },
     {
       "spdxElementId": "SPDXRef-File-libv86.mjs",

@@ -1,8 +1,13 @@
 # asset-provenance - 증거 없음이 통과로 새지 않게 한다
 
-상태: 진행 중. 재개 지점은 [01-progress-ledger.md](01-progress-ledger.md) 마지막 줄.
+> ✅ **완료 (2026-07-19).** 배포 판정을 두 어휘 한 벌(`local-test-only` /
+> `upstream-cdn-runtime-reference`)로 모으고 증거 없음이 통과로 새는 구멍을 전부 봉합했다.
+> catalog 하나가 두 guest의 실행 자산 전부(엔진 부팅 집합 6파일 포함)를 기술하고, 파생물은
+> 바이트 대조, 봉인은 제품 쪽에서도 물며(P1 변이 RED), 신설 게이트 전부 음성 시험으로 이빨
+> 확인. 남은 것은 자산 취득 트랙(합성 바이너리 인벤토리 검증, Linux 자체 빌드)이며 계약
+> 실태 표와 `promotionRequires`가 고정한다. 최종 기록은 [진행 원장](01-progress-ledger.md).
 
-Web Machine의 기술 North Star는 닫혔다([web-machine-platform](../_done/web-machine-platform/README.md)).
+Web Machine의 기술 North Star는 닫혔다([web-machine-platform](../web-machine-platform/README.md)).
 두 guest OS가 같은 host 계약으로 부팅하고, durable generation으로 복원되고, 65MB signed
 `.webmachine`이 원본 storage 없는 새 프로필에서 3.5초에 두 OS를 되살린다.
 

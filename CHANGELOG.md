@@ -125,6 +125,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - `PyProc.bootInfo`: the last `boot()` result (`{ workers, avgBootMs, forked }`) is kept on
   the pool, so paths that do not consume the return value directly (such as
   `machine.proc()`) still have an observation point.
+- Asset provenance policy v2: the engine boot set (`pyodide.js` / `pyodide.mjs` /
+  `pyodide.asm.mjs` / `pyodide.asm.wasm` / `python_stdlib.zip` / `pyodide-lock.json`,
+  bytes cross-verified between the GitHub release and the jsdelivr CDN) is now described
+  in the single asset catalog with a second distribution vocabulary,
+  `upstream-cdn-runtime-reference` (referencing upstream's own distribution point at
+  runtime is not redistribution). Both Web Computer guests now carry the same described
+  provenance in signed envelopes; the "undescribed guest" marker is retired.
 
 ### 한국어 요약
 
@@ -156,3 +163,7 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   respawn/killHard, map 부분 실패 정직화, 컨테이너 중첩 라우팅과 사망 즉시 거부.
 - `PyProc.bootInfo`: 마지막 boot() 결과를 풀에 보관(반환을 직접 받지 않는
   `machine.proc()` 경로의 관측 지점).
+- 자산 provenance 정책 v2: 엔진 부팅 집합 6파일을 단일 catalog가 기술(두 유통 경로
+  바이트 교차 검증), 배포 어휘 `upstream-cdn-runtime-reference` 신설(상류 배포 지점
+  런타임 참조는 재배포가 아니다). 두 guest가 같은 기술된 출처를 봉투에 나르고
+  미기술 게스트 표식은 은퇴.

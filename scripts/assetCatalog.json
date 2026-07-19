@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogId": "web-machine-v86-fixtures-v1",
-  "createdAt": "2026-07-15T00:00:00Z",
+  "catalogId": "web-machine-execution-assets-v1",
+  "createdAt": "2026-07-19T00:00:00Z",
   "packagePolicy": {
     "thirdPartyBinaryBundling": "forbidden",
     "fixtureUse": "local-test-only",
@@ -14,7 +14,7 @@
   },
   "webComputer": {
     "catalogId": "web-computer-development-assets-v1",
-    "policyVersion": 1,
+    "policyVersion": 2,
     "channel": "development",
     "redistribution": "disabled",
     "promotionRequires": [
@@ -25,6 +25,22 @@
     ]
   },
   "components": [
+    {
+      "componentId": "pyodide-release-314.0.2",
+      "name": "Pyodide",
+      "version": "314.0.2",
+      "downloadLocation": "https://github.com/pyodide/pyodide/releases/download/314.0.2/pyodide-314.0.2.tar.bz2",
+      "sourceLocation": "https://github.com/pyodide/pyodide",
+      "sourceRevision": "314.0.2",
+      "licenseDeclared": "MPL-2.0",
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "provenanceStatus": "upstream-source-recipe-not-reproduced",
+      "evidence": [
+        "https://github.com/pyodide/pyodide/releases/tag/314.0.2",
+        "https://github.com/pyodide/pyodide/blob/main/LICENSE"
+      ]
+    },
     {
       "componentId": "v86-npm-0.5.424",
       "name": "v86",
@@ -92,6 +108,123 @@
   ],
   "assets": [
     {
+      "name": "pyodide.js",
+      "role": "engine-module",
+      "consumers": [
+        "pyproc",
+        "webComputer"
+      ],
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.js",
+      "sha1": "e7eeeca4abc1918fffaabe5f5756b26b50f20240",
+      "sha256": "95fc4de60f515e3f5c4a9acd86849068f8e5cc0818652c0963e43de08b9b2f30",
+      "byteLength": 18861,
+      "componentId": "pyodide-release-314.0.2",
+      "licenseConcluded": "MPL-2.0",
+      "distribution": "upstream-cdn-runtime-reference",
+      "localPath": "./vendor/pyodide/pyodide.js",
+      "bundleBlockers": [
+        "package-policy-external-engine"
+      ]
+    },
+    {
+      "name": "pyodide.mjs",
+      "role": "engine-module",
+      "consumers": [
+        "pyproc",
+        "webComputer"
+      ],
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.mjs",
+      "sha1": "6d90a02f02a1720573e96202bf47b4ee06c89df2",
+      "sha256": "955d2088bbb7fc79a73c4802aca2370c1d95bfdfaffa4121e0faebda2b0ea3f9",
+      "byteLength": 17880,
+      "componentId": "pyodide-release-314.0.2",
+      "licenseConcluded": "MPL-2.0",
+      "distribution": "upstream-cdn-runtime-reference",
+      "localPath": "./vendor/pyodide/pyodide.mjs",
+      "bundleBlockers": [
+        "package-policy-external-engine"
+      ]
+    },
+    {
+      "name": "pyodide.asm.mjs",
+      "role": "engine-module",
+      "consumers": [
+        "pyproc",
+        "webComputer"
+      ],
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.asm.mjs",
+      "sha1": "38591407de48d8832de965d821e5a54aea333fe1",
+      "sha256": "c7eccdfeb7a8419d61f910f0685b45cd5610b7ff5bbe844c3c1050ee6623b641",
+      "byteLength": 1250259,
+      "componentId": "pyodide-release-314.0.2",
+      "licenseConcluded": "NOASSERTION",
+      "distribution": "upstream-cdn-runtime-reference",
+      "localPath": "./vendor/pyodide/pyodide.asm.mjs",
+      "bundleBlockers": [
+        "composite-glue-license-inventory-not-verified",
+        "package-policy-external-engine"
+      ]
+    },
+    {
+      "name": "pyodide.asm.wasm",
+      "role": "engine-binary",
+      "consumers": [
+        "pyproc",
+        "webComputer"
+      ],
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.asm.wasm",
+      "sha1": "312ce1635ef289cc897b245b76b5909be40c3704",
+      "sha256": "f7a8a169e513791e18fa0790fb69d6f2656b779e9012ba57e03e973f0df0b39f",
+      "byteLength": 9609998,
+      "componentId": "pyodide-release-314.0.2",
+      "licenseConcluded": "NOASSERTION",
+      "distribution": "upstream-cdn-runtime-reference",
+      "localPath": "./vendor/pyodide/pyodide.asm.wasm",
+      "bundleBlockers": [
+        "composite-binary-license-inventory-not-verified",
+        "package-policy-external-engine"
+      ]
+    },
+    {
+      "name": "python_stdlib.zip",
+      "role": "stdlib-archive",
+      "consumers": [
+        "pyproc",
+        "webComputer"
+      ],
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/python_stdlib.zip",
+      "sha1": "08a336ee1625b3dcc235a2ff94d3ff819aafafd6",
+      "sha256": "101a9c94ca6304c1478c89b7b595136b9a51b4289bdc5b467d86db553efee9b3",
+      "byteLength": 2552456,
+      "componentId": "pyodide-release-314.0.2",
+      "licenseConcluded": "NOASSERTION",
+      "distribution": "upstream-cdn-runtime-reference",
+      "localPath": "./vendor/pyodide/python_stdlib.zip",
+      "bundleBlockers": [
+        "archive-content-inventory-not-verified",
+        "package-policy-external-engine"
+      ]
+    },
+    {
+      "name": "pyodide-lock.json",
+      "role": "package-lock",
+      "consumers": [
+        "pyproc",
+        "webComputer"
+      ],
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide-lock.json",
+      "sha1": "d7d8def8c9e99bc9df66c3226b274efde9c70496",
+      "sha256": "c963d22858f6bcb8f41586a2142f03905ab370c88ea22a86a2736e95fac2a8f3",
+      "byteLength": 113804,
+      "componentId": "pyodide-release-314.0.2",
+      "licenseConcluded": "MPL-2.0",
+      "distribution": "upstream-cdn-runtime-reference",
+      "localPath": "./vendor/pyodide/pyodide-lock.json",
+      "bundleBlockers": [
+        "package-policy-external-engine"
+      ]
+    },
+    {
       "name": "libv86.mjs",
       "role": "engine-module",
       "consumers": [
@@ -105,6 +238,7 @@
       "componentId": "v86-npm-0.5.424",
       "licenseConcluded": "BSD-2-Clause",
       "distribution": "local-test-only",
+      "localPath": "./assets/libv86.mjs",
       "bundleBlockers": [
         "package-policy-external-engine"
       ]
@@ -123,6 +257,7 @@
       "componentId": "v86-npm-0.5.424",
       "licenseConcluded": "NOASSERTION",
       "distribution": "local-test-only",
+      "localPath": "./assets/v86.wasm",
       "bundleBlockers": [
         "composite-binary-license-inventory-not-verified",
         "package-policy-external-engine"
@@ -142,6 +277,7 @@
       "componentId": "seabios-rel-1.16.2",
       "licenseConcluded": "LGPL-3.0-only",
       "distribution": "local-test-only",
+      "localPath": "./assets/seabios.bin",
       "bundleBlockers": [
         "reproducible-build-not-verified",
         "license-and-source-delivery-not-packaged"
@@ -161,6 +297,7 @@
       "componentId": "seabios-rel-1.16.2",
       "licenseConcluded": "LGPL-3.0-only",
       "distribution": "local-test-only",
+      "localPath": "./assets/vgabios.bin",
       "bundleBlockers": [
         "reproducible-build-not-verified",
         "license-and-source-delivery-not-packaged"
@@ -180,6 +317,7 @@
       "componentId": "buildroot-image-opaque",
       "licenseConcluded": "NOASSERTION",
       "distribution": "local-test-only",
+      "localPath": "./assets/buildroot-bzimage68.bin",
       "bundleBlockers": [
         "exact-source-revision-unknown",
         "build-config-unknown",
@@ -199,6 +337,7 @@
       "componentId": "kolibri-image-opaque",
       "licenseConcluded": "NOASSERTION",
       "distribution": "local-test-only",
+      "localPath": "./assets/kolibri.img",
       "bundleBlockers": [
         "exact-image-revision-unknown",
         "image-content-inventory-missing",

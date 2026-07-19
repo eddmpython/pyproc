@@ -20,9 +20,14 @@ const webComputerCatalogPath = resolve(root, "..", "apps", "webComputer", "asset
 const webComputerProvenancePath = resolve(root, "..", "apps", "webComputer", "assetProvenance.js");
 const sha1Pattern = /^[0-9a-f]{40}$/;
 const sha256Pattern = /^[0-9a-f]{64}$/;
-const allowedDistributions = new Set(["local-test-only"]);
-// 이 자산들을 적재하는 곳. v86Probe는 수동 probe 6개, webComputer는 제품 5개(kolibri 제외).
-const knownConsumers = new Set(["v86Probe", "webComputer"]);
+// 배포 판정 두 값. 둘 다 "우리는 바이트를 재배포하지 않는다"이고 사용처가 다르다:
+// local-test-only는 로컬 시험에서만 내려받아 쓰는 fixture, upstream-cdn-runtime-reference는
+// 라이브러리가 런타임에 상류 자신의 배포 지점(CDN)을 참조하는 자산이다. 참조는 재배포가
+// 아니다(정책 문서 결정 3의 정밀화, policyVersion 2).
+const allowedDistributions = new Set(["local-test-only", "upstream-cdn-runtime-reference"]);
+// 이 자산들을 적재하는 곳. pyproc은 라이브러리 런타임 자신(엔진 부팅 집합),
+// v86Probe는 수동 probe 6개, webComputer는 제품(두 guest OS의 실행 자산 전부).
+const knownConsumers = new Set(["pyproc", "v86Probe", "webComputer"]);
 // 출처: SPDX License List 3.28.0(이 문서가 쓰는 라이선스 식별자의 발행 버전).
 const SPDX_LICENSE_LIST_VERSION = "3.28.0";
 
@@ -93,6 +98,8 @@ export function validateV86AssetCatalog(value) {
     if (!Number.isSafeInteger(asset.byteLength) || asset.byteLength <= 0) throw new TypeError(`${label}.byteLength 불일치`);
     if (!componentSet.has(asset.componentId)) throw new TypeError(`${label}.componentId 없음: ${asset.componentId}`);
     if (!allowedDistributions.has(asset.distribution)) throw new TypeError(`${label}.distribution 미지원: ${asset.distribution}`);
+    // localPath: 바이트가 로컬에 존재할 때의 저장소 상대 위치(SBOM fileName의 출처).
+    if (!String(asset.localPath).startsWith("./")) throw new TypeError(`${label}.localPath: "./" 상대 경로 필요`);
     assertString(asset.role, `${label}.role`);
     assertString(asset.licenseConcluded, `${label}.licenseConcluded`);
     if (!Array.isArray(asset.bundleBlockers) || !asset.bundleBlockers.length) throw new TypeError(`${label}.bundleBlockers 필요`);
@@ -164,6 +171,7 @@ export function createWebComputerCatalog(catalogValue) {
       sha256: asset.sha256,
       byteLength: asset.byteLength,
       licenseConcluded: asset.licenseConcluded,
+      distribution: asset.distribution,
       provenanceStatus: componentOf.get(asset.componentId).provenanceStatus,
       bundleBlockers: asset.bundleBlockers,
     }));
@@ -197,7 +205,7 @@ export function createV86FixtureSbom(catalogValue) {
   }));
   const files = catalog.assets.map((asset) => ({
     SPDXID: spdxId("File", asset.name),
-    fileName: `./assets/${asset.name}`,
+    fileName: asset.localPath,
     // SPDX 2.3 §8.4: 파일 checksum은 SHA1이 1..1(필수), 나머지 알고리즘이 0..*.
     // 외부 검증기가 이 문서를 읽을 수 있어야 SBOM 요구가 의미를 갖는다.
     checksums: [
@@ -234,7 +242,7 @@ export function createV86FixtureSbom(catalogValue) {
       creators: ["Organization: pyproc contributors"],
       licenseListVersion: SPDX_LICENSE_LIST_VERSION,
     },
-    documentComment: "이 문서는 로컬 Web Machine probe가 내려받는 미번들 fixture를 기술한다. package 배포 목록이 아니다.",
+    documentComment: "이 문서는 pyproc이 실행 시 적재하는 미번들 자산 전부를 기술한다(엔진 부팅 집합 + Web Machine fixture). package 배포 목록이 아니다.",
     packages,
     files,
     relationships: [...described, ...generatedFrom],
@@ -268,17 +276,6 @@ export function createWebComputerProvenanceModule(catalogValue) {
     `  catalogId: ${JSON.stringify(catalog.webComputer.catalogId)},`,
     `  sourceCatalogId: ${JSON.stringify(catalog.catalogId)},`,
     `  sbomDigest: ${JSON.stringify(`sha256:${sbomDigest}`)},`,
-    "});",
-    "",
-    "// 어떤 asset catalog도 기술하지 않는 게스트가 쓴다. 침묵하면 증거 없음이 문제 없음으로",
-    "// 읽히므로 부재를 명시로 적는다. pyproc 게스트의 실행 자산(pyodide 배포판의 9.6MB",
-    "// pyodide.asm.wasm 등)이 지금 그 상태다: pyodide-lock.json은 선택적 wheel 카탈로그이지",
-    "// 부팅 적재 집합이 아니라서 그 합성 바이너리를 0% 덮는다.",
-    "export const UNDESCRIBED_ASSET_PROVENANCE = Object.freeze({",
-    `  policyVersion: ${catalog.webComputer.policyVersion},`,
-    "  catalogId: null,",
-    "  sbomDigest: null,",
-    "  assetsDescribed: false,",
     "});",
     "",
   ].join("\n");

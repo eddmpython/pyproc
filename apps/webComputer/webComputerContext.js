@@ -1,5 +1,5 @@
 import { createWebComputer } from "/index.js";
-import { UNDESCRIBED_ASSET_PROVENANCE } from "./assetProvenance.js";
+import { WEB_COMPUTER_ASSET_PROVENANCE } from "./assetProvenance.js";
 import {
   LINUX_DISK_BYTES,
   PYTHON_DISK_BYTES,
@@ -31,14 +31,15 @@ export class WebComputerContext {
     this._lastConsole = null;
     this._lastDisplay = null;
     // 조립은 공개 표면의 createWebComputer가 한다. 제품이 더하는 것은 자기 값뿐이다:
-    // provenance 명시(부재를 명시로 싣는다), Linux 부팅 매니페스트, 디스크 크기, adapter 버전.
+    // provenance 명시(두 guest의 실행 자산 전부를 같은 catalog가 기술한다), Linux 부팅
+    // 매니페스트, 디스크 크기, adapter 버전.
     const computer = createWebComputer({
       createMachines,
       python: {
         diskBytes: PYTHON_DISK_BYTES,
         manifest: {
           session: { ...(indexURL ? { indexURL } : {}) },
-          provenance: UNDESCRIBED_ASSET_PROVENANCE,
+          provenance: WEB_COMPUTER_ASSET_PROVENANCE,
         },
       },
       linux: {

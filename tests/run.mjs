@@ -213,12 +213,24 @@ check("checkEnvironment() 진단 형태", () => {
 });
 // 자가 호스팅(engine-independence P0)의 핀 정합: fetchEngine이 받는 배포판 버전과
 // DEFAULT_INDEX(배포 지점의 유일 정의처)가 같은 값이어야 한다. 버전 변경 = 릴리즈 사유.
-check("자가 호스팅 핀 정합(fetchEngine == DEFAULT_INDEX)", () => {
+check("자가 호스팅 핀 정합(fetchEngine == DEFAULT_INDEX == assetCatalog)", () => {
   const fe = readFileSync(join(ROOT, "scripts", "fetchEngine.mjs"), "utf8");
   const m = fe.match(/ENGINE_VERSION = "([^"]+)"/);
   if (!m) throw new Error("scripts/fetchEngine.mjs에서 ENGINE_VERSION을 못 찾음");
   const rt = readFileSync(join(ROOT, "src", "runtime", "runtime.js"), "utf8");
-  if (!rt.includes("/v" + m[1] + "/")) throw new Error("DEFAULT_INDEX에 v" + m[1] + " 없음(핀 불일치)");
+  const idx = rt.match(/DEFAULT_INDEX = "([^"]+)"/);
+  if (!idx || !idx[1].includes("/v" + m[1] + "/")) throw new Error("DEFAULT_INDEX에 v" + m[1] + " 없음(핀 불일치)");
+  // 엔진 부팅 집합의 provenance 결합: catalog의 pyodide 자산은 정확히 DEFAULT_INDEX 밑에
+  // 살아야 한다. 엔진 버전을 올리면서 catalog를 안 옮기면 여기서 RED가 난다(고아 기술 금지).
+  const catalog = JSON.parse(readFileSync(join(ROOT, "scripts", "assetCatalog.json"), "utf8"));
+  const engineAssets = catalog.assets.filter((asset) => asset.componentId.startsWith("pyodide-release-"));
+  if (!engineAssets.length) throw new Error("assetCatalog가 엔진 부팅 집합을 기술하지 않는다");
+  for (const asset of engineAssets) {
+    if (asset.url !== idx[1] + asset.name) throw new Error(`${asset.name}: catalog url이 DEFAULT_INDEX 밖이다(${asset.url})`);
+  }
+  for (const name of ["pyodide.js", "pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]) {
+    if (!engineAssets.some((asset) => asset.name === name)) throw new Error(`엔진 부팅 자산 미기술: ${name}`);
+  }
 });
 
 // 2) 능력 계약이 런타임 없이도 형태를 갖추는가(메서드 존재). 소스는 내부 모듈이다:
@@ -1545,8 +1557,12 @@ check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () 
   if (audit.status !== 0) throw new Error(audit.stderr || audit.stdout || "fixture SBOM audit 실패");
   const catalog = JSON.parse(readFileSync(join(ROOT, "scripts", "assetCatalog.json"), "utf8"));
   if (catalog.packagePolicy?.thirdPartyBinaryBundling !== "forbidden") throw new Error("third-party binary bundling 금지 정책 없음");
-  if (catalog.assets.some((asset) => asset.distribution !== "local-test-only" || !asset.bundleBlockers?.length)) {
-    throw new Error("모든 fixture는 local-test-only이고 bundle blocker가 있어야 한다");
+  // 배포 판정 두 어휘: 우리는 어느 쪽도 재배포하지 않는다. 엔진 부팅 집합만 상류 CDN을
+  // 런타임 참조하고(참조는 재배포가 아니다, policyVersion 2), 나머지는 로컬 시험 전용이다.
+  for (const asset of catalog.assets) {
+    if (!asset.bundleBlockers?.length) throw new Error(`${asset.name}: bundle blocker가 없다`);
+    const expected = asset.componentId.startsWith("pyodide-release-") ? "upstream-cdn-runtime-reference" : "local-test-only";
+    if (asset.distribution !== expected) throw new Error(`${asset.name}: distribution은 ${expected}여야 한다(현재 ${asset.distribution})`);
   }
   const opaqueGuestAssets = catalog.assets.filter((asset) => asset.role === "guest-image");
   if (!opaqueGuestAssets.length || opaqueGuestAssets.some((asset) => asset.licenseConcluded !== "NOASSERTION")) {
@@ -1764,10 +1780,13 @@ check("봉투는 출처를 나르고 채널 판정은 나르지 않는다", () =
     const src = readFileSync(join(webComputerRoot, file), "utf8");
     if (/\bchannel\s*:\s*"/.test(src)) throw new Error(`${file}: 게스트 manifest에 channel 주장이 재등장했다`);
   }
-  // 두 게스트가 모두 출처를 밝히는가. 침묵하면 증거 없음이 문제 없음으로 읽힌다:
-  // pyproc 게스트의 자산은 아직 어떤 catalog도 기술하지 않으므로 부재를 명시로 싣는다.
+  // 두 게스트가 모두 출처를 밝히는가. 침묵하면 증거 없음이 문제 없음으로 읽힌다.
+  // 두 guest의 실행 자산 전부를 같은 catalog가 기술하므로(엔진 부팅 집합 포함) 둘 다
+  // 생성물 모듈의 기술된 provenance를 싣는다. 부재 명시 장치(UNDESCRIBED)는 미기술 게스트가
+  // 소멸하면서 함께 은퇴했다: 재등장 = 어떤 게스트의 자산이 catalog 밖으로 샜다는 뜻이다.
   const context = readFileSync(join(webComputerRoot, "webComputerContext.js"), "utf8");
-  if (!context.includes("UNDESCRIBED_ASSET_PROVENANCE")) throw new Error("pythonOs가 자산 출처를 밝히지 않는다(증거 부재의 침묵 금지)");
+  if (!context.includes("provenance: WEB_COMPUTER_ASSET_PROVENANCE")) throw new Error("pythonOs가 기술된 자산 출처를 싣지 않는다");
+  if (context.includes("UNDESCRIBED")) throw new Error("은퇴한 부재 명시 장치가 재등장했다(자산은 catalog가 기술한다)");
   if (!readFileSync(join(webComputerRoot, "machineConfig.js"), "utf8").includes("WEB_COMPUTER_ASSET_PROVENANCE")) {
     throw new Error("linuxOs가 자산 출처를 밝히지 않는다");
   }
@@ -1799,7 +1818,7 @@ check("Web Computer 실행 자산은 검증된 development channel", () => {
   if (catalog.schemaVersion !== 1 || catalog.channel !== "development" || catalog.redistribution !== "disabled") {
     throw new Error("제품 asset channel 또는 재배포 정책 불일치");
   }
-  const requiredRoles = new Set(["engine-module", "engine-binary", "firmware", "guest-image"]);
+  const requiredRoles = new Set(["engine-module", "engine-binary", "firmware", "guest-image", "stdlib-archive"]);
   for (const asset of catalog.assets || []) {
     requiredRoles.delete(asset.role);
     if (!/^[0-9a-f]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.byteLength) || asset.byteLength < 1) {
@@ -1808,6 +1827,11 @@ check("Web Computer 실행 자산은 검증된 development channel", () => {
     if (!asset.licenseConcluded || !asset.provenanceStatus) throw new Error(`${asset.name}: compliance 필드 누락`);
   }
   if (requiredRoles.size) throw new Error(`asset role 누락: ${[...requiredRoles].join(", ")}`);
+  // 제품이 실제로 부팅하는 두 엔진 바이너리가 모두 기술돼야 한다: v86.wasm(Linux 면)과
+  // pyodide.asm.wasm(Python 면). 한쪽만 기술하는 catalog는 P1의 재발이다(증거 없음의 통과).
+  for (const name of ["v86.wasm", "pyodide.asm.wasm"]) {
+    if (!(catalog.assets || []).some((asset) => asset.name === name)) throw new Error(`제품 catalog에 ${name} 미기술`);
+  }
   const trackedAssets = spawnSync("git", ["ls-files", "apps/webComputer/assets"], { cwd: ROOT, encoding: "utf8", timeout: 5000 });
   if (trackedAssets.status !== 0 || trackedAssets.stdout.trim()) throw new Error("Web Computer binary가 git에 포함됨");
   const packageManifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
