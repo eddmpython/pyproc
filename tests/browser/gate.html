@@ -148,6 +148,31 @@
       reactive.restoreLive(bMain, sp0);
       check("나무: 본선 복귀 정확", rt.run("bytes(br[:4]).decode()") === "MAIN");
 
+      // 전 힙 바이트 동일성(RG1, 실측 발견): Node fuzz는 합성 버퍼로 pageHashes 파이프라인을
+      // 두드리지만, 실 WASM 힙에서 임의 변이 후 복원이 "전 바이트" 동일한지는 어떤 게이트도
+      // 검사하지 않았다(전부 Python 스칼라/4바이트 마커). 스칼라는 살아남아도 비live 바이트
+      // (해제 arena·정렬 패딩·interned 꼬리)가 조용히 갈라질 수 있다 - 나중에 크래시로만 드러나는
+      // 손상 부류다. 힙을 미리 키워(이후 길이 불변) 제자리 변이만 하므로 sliceAll 전량 대조가 성립한다.
+      rt.run("import random as _rng\n_pool = bytearray(24 * 1024 * 1024)"); // 미리 성장(이후 길이 고정)
+      let fullHeapOk = true, fullHeapInfo = "";
+      const baseLenFH = rt.memory.byteLength();
+      for (let it = 0; it < 4 && fullHeapOk; it++) {
+        rt.run(`_rng.seed(${9001 + it})\nfor _ in range(3000):\n    _pool[_rng.randrange(len(_pool))] = _rng.randrange(256)`);
+        const cpFH = reactive.checkpoint();          // 경계 닫기
+        const snap = rt.memory.sliceAll();            // 독립 오라클: 이 순간의 전 힙
+        rt.run("for _ in range(3000):\n    _pool[_rng.randrange(len(_pool))] = _rng.randrange(256)");
+        reactive.checkpoint();                         // 경계 닫기
+        reactive.restore(cpFH.index, sp0);             // 전체 복원(base + 경로 델타)
+        const back = rt.memory.sliceAll();
+        if (back.length !== snap.length) { fullHeapOk = false; fullHeapInfo = `it${it} 길이 ${back.length}!=${snap.length}(성장 발생)`; break; }
+        for (let i = 0; i < snap.length; i++) {
+          if (back[i] !== snap[i]) { fullHeapOk = false; fullHeapInfo = `it${it} byte ${i} 불일치`; break; }
+        }
+      }
+      check("full-heap 왕복: 실 힙 전 바이트 동일(임의 변이 24MB x4, RG1)", fullHeapOk,
+        fullHeapInfo || `${Math.round(baseLenFH / 1048576)}MB 고정, 4회 왕복 전 바이트 동일`);
+      rt.run("del _pool"); // 다음 게이트에 힙 잔재 안 남김
+
       // base의 OPFS 영속: 내보내고 되읽은 base로도 복원이 성립해야 한다
       const opfsRoot = await navigator.storage.getDirectory();
       const opfsDir = await opfsRoot.getDirectoryHandle("pyprocGate", { create: true });
