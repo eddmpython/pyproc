@@ -53,10 +53,28 @@ export function headlessArgs(profileDir) {
 
 // 브라우저 프로세스 트리를 확실히 죽인다. win32의 proc.kill()은 런처만 죽이고 렌더러
 // 자식이 살아남아 프로필 디렉터리를 물고 있으므로 taskkill /T로 트리째 끊는다.
-export function killBrowser(proc) {
-  if (!proc || proc.exitCode !== null) return;
-  if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
-  else proc.kill("SIGKILL");
+//
+// pid 트리 종료만으로는 부족하다(실측 2026-07-19): Edge가 스폰된 런처를 실제 브라우저에
+// 위임시키고 먼저 종료시켜서(런처 exitCode 0, 트리 17프로세스 생존) pid 기준 종료가 아무것도
+// 못 죽인다. 그러면 다음 launch가 같은 프로필의 생존 인스턴스에 탭만 넘기고 죽어 재시작
+// phase가 영영 리포트를 못 받는다. 프로필 경로는 런당 mkdtemp로 유일하므로, 그 경로를
+// 명령행에 문 프로세스를 소유 기준으로 쓸어낸다(다른 프로필 = 사용자 브라우저는 불가침).
+export function killBrowser(proc, profileDir = null) {
+  if (proc && proc.exitCode === null) {
+    if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
+    else proc.kill("SIGKILL");
+  }
+  if (process.platform === "win32" && profileDir) {
+    const needle = profileDir.replace(/'/g, "''").replace(/\\/g, "*"); // -like 패턴: 구분자 차이(\ vs /)를 와일드카드로 흡수
+    // 죽음 확인까지 기다린다: 죽어가는 프로세스가 프로필 singleton을 쥔 채로 다음 launch가
+    // 오면 새 인스턴스가 그 시체에 탭을 위임하다 유실된다(재시작 phase 행의 두 번째 원인,
+    // 실측 2026-07-19: sweep 직후 즉시 재실행은 행, 2초 대기 후 재실행은 완주).
+    spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+      `$deadline = (Get-Date).AddSeconds(10); while ((Get-Date) -lt $deadline) { ` +
+      `$p = Get-CimInstance Win32_Process -Filter "Name='msedge.exe' or Name='chrome.exe'" | Where-Object { $_.CommandLine -like '*${needle}*' }; ` +
+      `if (-not $p) { break }; $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 200 }`,
+    ], { stdio: "ignore", timeout: 20000 });
+  }
 }
 
 // url을 헤드리스로 연다. 프로필은 매번 새로 만든다(같은 프로필을 두 인스턴스가 물면
@@ -71,7 +89,7 @@ export function launchBrowser(url, opts = {}) {
     profile,
     proc,
     close() {
-      killBrowser(proc);
+      killBrowser(proc, profile);
       try { rmSync(profile, { recursive: true, force: true }); } catch (e) { /* 잠긴 프로필은 OS 임시 청소에 맡긴다 */ }
     },
   };

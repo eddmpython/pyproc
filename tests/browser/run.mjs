@@ -144,7 +144,7 @@ while (!result) {
     result = { ok: false, checks: [], restartLimit: true };
     break;
   }
-  stop(proc);
+  stop(proc, currentProfile);
   Object.assign(restartTimings, event.value.timings);
   if (event.value.freshProfile) currentProfile = mkdtempSync(join(runRoot, "profile-"));
   resetRestartPromise();
@@ -155,7 +155,7 @@ clearTimeout(timeout);
 result.timings = { ...restartTimings, ...(result.timings || {}) };
 
 // headless 브라우저는 자식 프로세스를 거느리므로 트리째 정리한다.
-stop(proc);
+stop(proc, currentProfile);
 server.close();
 try { rmSync(runRoot, { recursive: true, force: true }); } catch (e) {}
 
