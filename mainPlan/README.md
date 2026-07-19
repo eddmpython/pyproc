@@ -19,6 +19,6 @@
 
 ## 활성 이니셔티브
 
-- [soundness-hardening](soundness-hardening/README.md) - 차별점(체크포인트·분기·복원·부활의 정확성)을 고정 시나리오가 아니라 적대적 변이 하에서 증명한다. 강한 증거가 삭제 예정 non-CI probe에 살고 핵심 주장 여럿이 CI 커버리지 0인 것을 3표면 감사가 확정. 재개 지점은 [01-progress-ledger.md](soundness-hardening/01-progress-ledger.md) 마지막 줄.
+없음.
 
-완결·폐기 이니셔티브 18개는 [_done/](_done/README.md)으로 이관됐다(최신 이관 = asset-provenance, 완료). 세션 간 마지막 상태는 각 `_done/<이니셔티브>/` 진행 원장 또는 README에서 확인한다.
+완결·폐기 이니셔티브 19개는 [_done/](_done/README.md)으로 이관됐다(최신 이관 = soundness-hardening, 완료). 세션 간 마지막 상태는 각 `_done/<이니셔티브>/` 진행 원장 또는 README에서 확인한다.

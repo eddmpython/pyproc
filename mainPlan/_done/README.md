@@ -9,6 +9,7 @@
 
 | 폴더 | 상태 | 한 줄 |
 |---|---|---|
+| [soundness-hardening/](soundness-hardening/) | ✅ 완료 (2026-07-19) | 차별점(체크포인트·분기·복원·부활의 정확성)을 고정 시나리오에서 property/fuzz로. 3표면 전문 에이전트 감사가 진짜 공백(핵심 주장 CI 0, 강한 증거가 삭제 예정 probe에 상주) 확정 후: delta false-negative fuzz·bundle index-forgery·reactive 나무 참조 무결성·KernelElection 정합·full-heap 왕복·OPFS 쓰기 순서 법을 전부 음성 시험 통과 게이트로 고정. 완료 조건 6/6. 구조 1273->1357, 브라우저 84->87. |
 | [asset-provenance/](asset-provenance/) | ✅ 완료 (2026-07-19) | 배포 판정을 두 어휘 한 벌로 모으고 증거 없음이 통과로 새는 구멍 봉합. catalog 하나(SSOT + 파생물 바이트 대조)가 두 guest 실행 자산 전부(엔진 부팅 집합 6파일 포함)를 기술, 제품 봉인이 실제로 물고(P1 변이 RED) Package/File 불변식·SPDX 2.3·봉투 출처 운반까지. 신설 게이트 전부 음성 시험 확인. 잔여는 자산 취득 트랙(인벤토리 검증, Linux 자체 빌드). |
 | [kernel-product/](kernel-product/) | ✅ 완료 (2026-07-18) | state-kernel 잔여 4건 해소(header-target 서명 조기 거부, machine generation 커널 commit 스키마, .webmachine 단일 bundle, VirtualOrigin 재노출)와 전 산물의 단일 제품(Web Computer) 통합 실증. 세션 bundle과 machine envelope가 한 wire 포맷 공유, 제품에 서버 없는 시간여행. 게이트 전판 GREEN. |
 | [state-kernel/](state-kernel/) | ✅ 완료 (2026-07-18) | 이중 구역 상태 커널(src/state: 휘발 index + 내구 CAS 리포, 승격 관문 collectDelta 한 점)로 저널·세션 봉투·서명을 재기초하고, 공개 표면을 porcelain 머신 핸들(루트 37 -> 6, open 통합, pyproc/history 신설)로 일격 재편. 게이트 전판 GREEN + 음성 시험 7건. 잔여 후속 4건은 원장 말미. |
