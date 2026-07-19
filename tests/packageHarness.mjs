@@ -44,7 +44,12 @@ export function binPath(appDir, name) {
 export async function installPackedPyProc(prefix = "pyprocConsumer-") {
   const tmp = mkdtempSync(join(tmpdir(), prefix));
   const pack = run("npm", ["pack", "--json", "--pack-destination", tmp], { cwd: ROOT });
-  const [packed] = JSON.parse(pack.stdout.trim());
+  // pack --json의 형상은 npm 메이저에 따라 다르다(실측 2026-07-19): npm 10은 배열
+  // [{filename,...}], npm 12는 패키지명 키의 객체 {"pyproc": {filename,...}}. 러너는
+  // trusted publishing 요건으로 npm@latest를 쓰므로 두 형상을 모두 수용한다.
+  const parsed = JSON.parse(pack.stdout.trim());
+  const packed = Array.isArray(parsed) ? parsed[0]
+    : (parsed?.filename ? parsed : Object.values(parsed ?? {})[0]);
   if (!packed?.filename) throw new Error("npm pack JSON에 filename이 없음");
 
   const appDir = join(tmp, "app");
