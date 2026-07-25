@@ -1,0 +1,35 @@
+name: buildroot-guest
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches: [main]
+    paths:
+      - scripts/buildroot/**
+      - scripts/assetCatalog.json
+      - .github/workflows/buildroot-guest.yml
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build pinned Buildroot guest and legal material
+        run: npm run assets:buildroot
+      - name: Upload reproducible guest bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyproc-buildroot-guest
+          path: .cache/buildrootGuest/output/
+          if-no-files-found: error
+          retention-days: 30

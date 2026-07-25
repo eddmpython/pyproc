@@ -7,16 +7,12 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
-import { assertPublicSurface } from "./contracts/publicSurface.mjs";
-import { assertRuntimeContracts } from "./contracts/runtimeContract.mjs";
-import { assertRuntimeCapabilityClusters } from "./contracts/runtimeCapabilityClusters.mjs";
+import { runContractSuites } from "./contracts/run.mjs";
+import { createGateCounter } from "./support/gateCounter.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-let passed = 0, failed = 0;
-const ok = (name) => { passed++; console.log(`  PASS ${name}`); };
-const bad = (name, msg) => { failed++; console.log(`  FAIL ${name}: ${msg}`); };
-function check(name, fn) { try { fn(); ok(name); } catch (e) { bad(name, e.message); } }
-async function checkAsync(name, fn) { try { await fn(); ok(name); } catch (e) { bad(name, e.message); } }
+const gate = createGateCounter();
+const { check, checkAsync } = gate;
 
 // 재귀로 지정 확장자 파일 수집(node_modules 제외).
 function collect(dir, exts, acc = []) {
@@ -132,9 +128,7 @@ check("루트 d.ts 값-선언 1:1 패리티", () => {
   for (const name of real) if (!declared.has(name)) throw new Error("d.ts에 값-선언 없음: " + name);
   for (const name of declared) if (!real.has(name)) throw new Error("실물에 없는 값-선언: " + name);
 });
-await checkAsync("실행 가능한 공개 계약(package/docs/types)", async () => { await assertPublicSurface(); });
-check("EngineContract + 최소 RuntimeContract", async () => { await assertRuntimeContracts(); });
-check("Runtime capability cluster registry", () => { assertRuntimeCapabilityClusters(); });
+await checkAsync("자동 발견 contract suites", async () => { await runContractSuites(); });
 check("PAGE_SIZE === 65536 (pyproc/history 표면)", () => {
   if (coreApi.PAGE_SIZE !== 65536) throw new Error(String(coreApi.PAGE_SIZE));
 });
@@ -1666,10 +1660,15 @@ check("assetManifest CLI가 graph SRI manifest 생성", () => {
 });
 check("브라우저 게이트가 CLI asset manifest를 소비", () => {
   const runSrc = readFileSync(join(ROOT, "tests", "browser", "run.mjs"), "utf8");
-  const gateSrc = readFileSync(join(ROOT, "tests", "browser", "gate.html"), "utf8");
+  const gateHtml = readFileSync(join(ROOT, "tests", "browser", "gate.html"), "utf8");
+  const gateModule = readFileSync(join(ROOT, "tests", "browser", "gate.js"), "utf8");
+  const gateSrc = gateHtml + "\n" + gateModule;
   const ciSrc = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
   if (!runSrc.includes('"scripts/assetManifest.mjs", "--baseURL", "/"')) throw new Error("run.mjs가 pyproc-assets CLI를 실행하지 않음");
   if (!runSrc.includes('"/pyproc-assets.json"')) throw new Error("run.mjs가 asset manifest endpoint를 제공하지 않음");
+  if (!gateHtml.includes('src="./gate.js"') || /<script type="module">\s*\S/.test(gateHtml)) {
+    throw new Error("gate.html 실행 코드가 gate.js 모듈로 분리되지 않음");
+  }
   if (!gateSrc.includes('fetch("/pyproc-assets.json"')) throw new Error("gate.html이 CLI 산출 manifest를 fetch하지 않음");
   if (!gateSrc.includes('assetOk.verified > 1') || !gateSrc.includes('"src/processOs/ipc.js"')) throw new Error("gate.html이 graph 단위 preflight를 검증하지 않음");
   if (!gateSrc.includes("registerPyProcServiceWorker") || !gateSrc.includes("coreIntegrity=/pyproc-assets.json"))
@@ -2325,5 +2324,4 @@ check("Web Computer 실행 자산은 검증된 development channel", () => {
   if (!packageManifest.scripts?.["test:web-computer"]?.includes("webComputerProduct.mjs")) throw new Error("제품 browser E2E script 누락");
 });
 
-console.log(`\n결과: ${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+gate.exit();

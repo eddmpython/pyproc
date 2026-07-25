@@ -6,6 +6,7 @@ WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다. �
 
 ```bash
 npm test          # = node tests/run.mjs, 의존성 0
+npm run test:contracts  # tests/contracts/ suite 자동 발견
 ```
 
 커밋 전 반드시 green. 검사 항목:
@@ -25,6 +26,11 @@ npm test          # = node tests/run.mjs, 의존성 0
 - **패키지 소비자 계약**: `npm pack` tarball을 임시 앱에 설치한 뒤 `pyproc`, `pyproc/assets`, 설치된 `pyproc-assets` bin만으로 public import, graph SRI manifest, `--copy-to` 복사가 성립하는가(`npm run test:package`로 단독 실행 가능).
 
 새 규칙을 만들면 가능한 한 여기(또는 `.githooks`)에 기계 가드를 짝지어 추가한다.
+
+계약 suite는 `tests/contracts/` 아래에서 `assert*` 함수를 정확히 하나 export한다.
+`tests/contracts/run.mjs`가 파일을 자동 발견하므로 중앙 목록에 suite import를 추가하지 않는다.
+공통 카운터는 `tests/support/gateCounter.mjs`가 소유하며 동기 `check`에 Promise가 반환되면
+실패한다. 비동기 계약은 반드시 `checkAsync`로 등록한다.
 
 ### 게이트를 신설할 때 (음성 시험 의무)
 
@@ -59,7 +65,7 @@ npm run test:types    # = tsc -p tests/tsconfig.json (typescript는 CI 도구, p
 npm run test:browser    # = node tests/browser/run.mjs, 의존성 0
 ```
 
-COOP/COEP 서버를 임시 포트로 띄우고, 로컬 Chromium 계열 브라우저(Edge/Chrome 자동 탐색, `PYPROC_BROWSER=<경로>`로 지정 가능)를 headless로 실행해 `tests/browser/gate.html`의 실측 결과를 POST 백채널로 회수한다. 공개 표면이 진짜 브라우저에서 도는지를 커밋 단위로 검증하는 게이트다:
+COOP/COEP 서버를 임시 포트로 띄우고, 로컬 Chromium 계열 브라우저(Edge/Chrome 자동 탐색, `PYPROC_BROWSER=<경로>`로 지정 가능)를 headless로 실행해 `tests/browser/gate.html`이 로드한 `tests/browser/gate.js`의 실측 결과를 POST 백채널로 회수한다. HTML은 문서 shell, JavaScript는 실행 계약을 소유한다. 공개 표면이 진짜 브라우저에서 도는지를 커밋 단위로 검증하는 게이트다:
 
 - crossOriginIsolated 전제, `boot()` + 파이썬 실행.
 - `pyproc-assets` CLI 산출 manifest를 같은 오리진에서 fetch하고, `assetIntegrity`로 `PyProc` worker graph와 `Runtime -> SyscallBridge` child worker 상속 경로를 spawn 전 검증.

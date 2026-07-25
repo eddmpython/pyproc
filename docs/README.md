@@ -19,6 +19,7 @@ pyproc의 공개 지속 문서. "무엇을 지향하는가"(product)와 "어떻�
 | | [assetProvenance.md](operations/assetProvenance.md) | 실행 자산의 provenance와 배포 정책: 증거 없음은 통과가 아니다, SSOT와 파생물, 공식 image 배포 게이트 7항목, 알려진 위험 |
 | | [testing.md](operations/testing.md) | 테스트 게이트(`npm test`)와 브라우저 실측 절차(COOP/COEP 서버) |
 | | [experimentalFreeze.md](operations/experimentalFreeze.md) | 새 Experimental 공개 표면 동결과 해제 조건 |
+| | [moduleBoundaries.md](operations/moduleBoundaries.md) | Runtime capability cluster, 정책 모듈, 계약 suite와 실행 자산의 소유권 경계 |
 | | [benchmarking.md](operations/benchmarking.md) | 내부 실측의 측정 계약, canonical scenario, raw evidence 규칙(공개 표면 게시는 금지: 숫자 자랑 금지 규칙) |
 | | [release.md](operations/release.md) | 버전·태그·릴리즈 절차(`0.0.x` 라인, SHA 핀 소비) |
 | | [demoHosting.md](operations/demoHosting.md) | 라이브 데모 배포 절차(COOP/COEP 정적 호스팅, 루트 `_headers`) |

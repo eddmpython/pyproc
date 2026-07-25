@@ -6,6 +6,7 @@ import {
 } from "../../src/runtime/engineContract.js";
 import { assertRuntimeContract } from "../../src/runtime/runtimeContract.js";
 import { WasiSession } from "../../src/runtime/engines/wasi/wasiSession.js";
+import { assertEngineConformance } from "./engineConformance.mjs";
 
 function fakeEngine() {
   const heap = new Uint8Array(65536);
@@ -30,7 +31,18 @@ function fakeEngine() {
 }
 
 export async function assertRuntimeContracts() {
-  const engine = assertEngineContract(fakeEngine());
+  const engine = await assertEngineConformance(fakeEngine(), {
+    sync(candidate) {
+      if (candidate.runSync("sync-contract") !== "sync-contract") {
+        throw new Error("EngineContract sync 실행 의미 불일치");
+      }
+    },
+    async async(candidate) {
+      if (await candidate.runAsync("async-contract") !== "async-contract") {
+        throw new Error("EngineContract async 실행 의미 불일치");
+      }
+    },
+  });
   const runtime = new Runtime(engine);
   assertRuntimeContract(runtime);
   assertRuntimeContract(Object.create(WasiSession.prototype));

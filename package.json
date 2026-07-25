@@ -63,7 +63,7 @@
   "scripts": {
     "test": "node tests/run.mjs",
     "test:types": "npx -y -p typescript@5 tsc -p tests/tsconfig.json",
-    "test:contracts": "node tests/contracts/publicSurface.mjs",
+    "test:contracts": "node tests/contracts/run.mjs",
     "assets:provenance": "node scripts/assetProvenance.mjs",
     "test:package": "node tests/packageConsumer.mjs",
     "test:consumer": "node tests/browser/productConsumer.mjs",

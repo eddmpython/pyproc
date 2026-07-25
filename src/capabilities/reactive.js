@@ -18,6 +18,7 @@
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 import { PyProcError } from "../runtime/errors.js";
 import { hashDiffPages, packPages } from "../runtime/heapDelta.js";
+import { normalizeRetentionPolicy, retentionExceeded } from "./reactive/retentionPolicy.js";
 
 // Runtime.enableReactive()가 이 컨트롤러를 만든다(런타임당 1개 memoize = 다중 컨트롤러의
 // 상호 비가시 복원이 낳는 조용한 오염을 구조적으로 제거). 소비자는 checkpoint/restore만 쓴다.
@@ -223,25 +224,7 @@ export class ReactiveController {
       this._lastPressure = null;
       return null;
     }
-    if (typeof policy !== "object" || Array.isArray(policy)) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", "retention policy 객체 또는 null이 필요하다");
-    }
-    const normalized = {
-      maxNodes: policy.maxNodes ?? null,
-      maxDeltaBytes: policy.maxDeltaBytes ?? null,
-      maxTotalBytes: policy.maxTotalBytes ?? null,
-      pruneBranches: policy.pruneBranches === true,
-      onPressure: typeof policy.onPressure === "function" ? policy.onPressure : null,
-    };
-    for (const key of ["maxNodes", "maxDeltaBytes", "maxTotalBytes"]) {
-      const value = normalized[key];
-      if (value !== null && (!Number.isSafeInteger(value) || value < 1)) {
-        throw new PyProcError("PYPROC_INPUT_INVALID", `retention.${key}: 1 이상의 정수가 필요하다`);
-      }
-    }
-    if (normalized.maxNodes === null && normalized.maxDeltaBytes === null && normalized.maxTotalBytes === null) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", "retention: maxNodes/maxDeltaBytes/maxTotalBytes 중 하나가 필요하다");
-    }
+    const normalized = normalizeRetentionPolicy(policy);
     this._retentionPolicy = normalized;
     this._applyRetention("policy");
     return Object.freeze({ ...normalized });
@@ -250,10 +233,7 @@ export class ReactiveController {
   _applyRetention(trigger) {
     if (!this._retentionPolicy || this.base === null) return null;
     const before = this.stats();
-    const exceeded = [];
-    if (this._retentionPolicy.maxNodes !== null && before.activeNodes > this._retentionPolicy.maxNodes) exceeded.push("maxNodes");
-    if (this._retentionPolicy.maxDeltaBytes !== null && before.deltaBytes > this._retentionPolicy.maxDeltaBytes) exceeded.push("maxDeltaBytes");
-    if (this._retentionPolicy.maxTotalBytes !== null && before.totalBytes > this._retentionPolicy.maxTotalBytes) exceeded.push("maxTotalBytes");
+    const exceeded = retentionExceeded(this._retentionPolicy, before);
     if (!exceeded.length) {
       this._lastPressure = null;
       return null;
