@@ -38,7 +38,7 @@ blob / tree(타입 엔트리) / commit(환경 지문 포함) / signedTag + fence
 
 ## 3단계: 저널 재기초
 
-[machineJournal.js](../../../src/capabilities/machineJournal.js)을 OPFS store 드라이버 + 유휴
+[machineJournal.js](../../../src/capabilities/journal/machineJournal.js)을 OPFS store 드라이버 + 유휴
 정책으로 강등.
 
 게이트: 구 HEAD.json 저널 -> 신 경로 recover -> 힙 바이트 대조 100%, churnProbe 재실행으로
@@ -129,8 +129,8 @@ commit -> export -> open -> fork -> map) green, index.d.ts·api.md·capabilityMa
 
 커널 신설: `src/state/`(신규). 강등·재기초:
 [reactive.js](../../../src/capabilities/reactive.js),
-[machineJournal.js](../../../src/capabilities/machineJournal.js),
-[journalBlobStore.js](../../../src/capabilities/journalBlobStore.js),
+[machineJournal.js](../../../src/capabilities/journal/machineJournal.js),
+[journalBlobStore.js](../../../src/capabilities/journal/journalBlobStore.js),
 [session.js](../../../src/session/session.js),
 [machineImage.js](../../../src/session/machineImage.js),
 [machineSignature.js](../../../src/session/machineSignature.js),

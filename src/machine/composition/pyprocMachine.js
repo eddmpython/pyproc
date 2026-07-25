@@ -32,9 +32,11 @@ class PyprocHistory {
   }
   tree() { return this._reactive.tree(); }
   prune(target) {
-    const index = typeof target === "number" ? target : target?.index;
+    const index = target == null ? this._reactive.liveIdx : (typeof target === "number" ? target : target?.index);
     return this._reactive.pruneTo(index);
   }
+  stats() { return this._reactive.stats(); }
+  setRetentionPolicy(policy) { return this._reactive.setRetentionPolicy(policy); }
 
   // ---- 내구 구역: 커널 커밋(저널)과 이동 bundle. sha256 승격은 여기서만 일어난다 ----
   _journal(opts = {}) {

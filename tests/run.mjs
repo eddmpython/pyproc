@@ -7,6 +7,8 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
+import { assertPublicSurface } from "./contracts/publicSurface.mjs";
+import { assertRuntimeContracts } from "./contracts/runtimeContract.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 let passed = 0, failed = 0;
@@ -89,7 +91,7 @@ const procApi = await import(pathToFileURL(join(ROOT, "src", "processOs", "pyPro
 const containerApi = await import(pathToFileURL(join(ROOT, "src", "processOs", "machineContainer.js")).href);
 const jobApi = await import(pathToFileURL(join(ROOT, "src", "processOs", "jobControl.js")).href);
 const reactiveApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "reactive.js")).href);
-const journalApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "machineJournal.js")).href);
+const journalApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "journal", "machineJournal.js")).href);
 const jailApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "machineJail.js")).href);
 const deviceFsApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "deviceFs.js")).href);
 const initApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "init.js")).href);
@@ -129,6 +131,8 @@ check("루트 d.ts 값-선언 1:1 패리티", () => {
   for (const name of real) if (!declared.has(name)) throw new Error("d.ts에 값-선언 없음: " + name);
   for (const name of declared) if (!real.has(name)) throw new Error("실물에 없는 값-선언: " + name);
 });
+await checkAsync("실행 가능한 공개 계약(package/docs/types)", async () => { await assertPublicSurface(); });
+check("EngineContract + 최소 RuntimeContract", async () => { await assertRuntimeContracts(); });
 check("PAGE_SIZE === 65536 (pyproc/history 표면)", () => {
   if (coreApi.PAGE_SIZE !== 65536) throw new Error(String(coreApi.PAGE_SIZE));
 });
@@ -1300,6 +1304,7 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
 //    않으므로(그래서 강등이다) 자기 .js 옆의 d.ts가 유일한 타입 출처다.
 console.log("\n[타입]");
 const SUBPATH_DTS = [
+  "src/runtime/index.d.ts",
   "src/state/index.d.ts",
   "src/machine/index.d.ts",
   "src/runtime/assets.d.ts",
@@ -1349,7 +1354,10 @@ check("강등 subpath 타입은 자기 .js 옆에", () => {
     if (!existsSync(join(ROOT, rel))) throw new Error(`${rel} 없음`);
     const js = rel.replace(/\.d\.ts$/, ".js");
     if (!existsSync(join(ROOT, js))) throw new Error(`${js} 없음(d.ts가 짝 없이 떠 있다)`);
-    const target = Object.values(pkg.exports).find((t) => typeof t === "string" && t === "./" + js);
+    const target = Object.values(pkg.exports).find((t) => {
+      const resolved = typeof t === "string" ? t : t?.default;
+      return resolved === "./" + js;
+    });
     if (!target) throw new Error(`${js}가 exports subpath가 아니다`);
   }
   if (readFileSync(join(ROOT, "index.d.ts"), "utf8").includes('declare module "pyproc/')) {
@@ -1387,14 +1395,14 @@ check("exports 경로 실존", () => {
   }
 });
 check("exports 안정 subpath 고정", () => {
-  const allowed = new Set([".", "./history", "./machine", "./worker", "./assets", "./gpu", "./socket", "./wasi"]);
+  const allowed = new Set([".", "./runtime", "./history", "./machine", "./worker", "./assets", "./gpu", "./socket", "./wasi"]);
   const keys = Object.keys(pkg.exports);
   for (const key of keys) {
     if (!allowed.has(key)) throw new Error(`승인 안 된 export key: ${key}`);
     if (key.startsWith("./src/")) throw new Error(`src deep export 금지: ${key}`);
   }
   for (const key of allowed) if (!keys.includes(key)) throw new Error(`export key 누락: ${key}`);
-  if (pkg.exports["./history"] !== "./src/state/index.js") throw new Error("pyproc/history는 state 배럴을 가리켜야 함");
+  if (pkg.exports["./history"]?.default !== "./src/state/index.js") throw new Error("pyproc/history는 state 배럴을 가리켜야 함");
 });
 
 // 4.5) README 표면 동기화: index.js의 모든 export가 양쪽 README에 등장해야 한다.
@@ -1803,11 +1811,11 @@ check("src layer edge는 아래로만", () => {
     "src/capabilities/envManager.js -> src/runtime/runtime.js",
     "src/capabilities/envManager.js -> src/runtime/engines/pyodideEngine.js",
     "src/capabilities/envManager.js -> src/runtime/contentDigest.js",
-    "src/capabilities/journalBlobStore.js -> src/runtime/contentDigest.js",
-    "src/capabilities/journalKernelStore.js -> src/runtime/contentDigest.js",
-    "src/capabilities/machineJournal.js -> src/runtime/contentDigest.js",
-    "src/capabilities/machineJournal.js -> src/runtime/heapGrow.js",
-    "src/capabilities/machineJournal.js -> src/runtime/memoryLayout.js",
+    "src/capabilities/journal/journalBlobStore.js -> src/runtime/contentDigest.js",
+    "src/capabilities/journal/journalKernelStore.js -> src/runtime/contentDigest.js",
+    "src/capabilities/journal/machineJournal.js -> src/runtime/contentDigest.js",
+    "src/capabilities/journal/machineJournal.js -> src/runtime/heapGrow.js",
+    "src/capabilities/journal/machineJournal.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
     "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",
@@ -1971,7 +1979,8 @@ check("Web Machine 층과 검증 트리 구조 고정", () => {
 check("Web Machine public 표면은 machine 배럴 하나", () => {
   const rootPackage = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   if (rootPackage.workspaces) throw new Error("workspaces 잔존: pyproc은 단일 package다");
-  if (rootPackage.exports?.["./machine"] !== "./src/machine/index.js") {
+  const machineExport = rootPackage.exports?.["./machine"];
+  if ((typeof machineExport === "string" ? machineExport : machineExport?.default) !== "./src/machine/index.js") {
     throw new Error("pyproc/machine subpath가 machine 배럴을 가리켜야 한다");
   }
   const barrelPath = join(machineRoot, "index.js");

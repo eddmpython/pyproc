@@ -15,11 +15,15 @@ import { PyProcError, toErrorPayload } from "../runtime/errors.js";
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 import { byteDiffPages, packPages, samePage, unpackPages } from "../runtime/heapDelta.js";
 import { growHeapTo } from "../runtime/heapGrow.js";
+import { Runtime } from "../runtime/runtime.js";
 let py = null;
+let rt = null;
 let interruptView = null;
 let cp0 = null; // 리플레이 경계의 힙 사본(fork 델타의 기준). replay 부팅에서만 채워진다.
 
 const heap = () => py._module.HEAPU8;
+function toHostValue(value, options = {}) { return rt ? rt.toHostValue(value, options) : value; }
+function destroyHostValue(value) { if (rt) rt.destroyHostValue(value); }
 
 // 부팅 구간의 비결정 소스를 고정한다(session.js stubEntropy와 같은 3개 소스).
 function stubEntropy() {
@@ -59,6 +63,7 @@ onmessage = async (e) => {
       const restore = replay ? stubEntropy() : null;
       try {
         py = await mod.loadPyodide(opts);
+        rt = new Runtime(py, indexURL);
         const packages = (replay && replay.packages) || msg.packages;
         if (packages && packages.length) await py.loadPackage(packages); // 프로세스별 패키지
         const setup = (replay && replay.setup) || msg.setup;
@@ -79,10 +84,10 @@ onmessage = async (e) => {
         r = py.runPython(msg.fnSrc + "\n_result = _fn(_arg)\n_result");
         // create_pyproxies:false = 결과는 직렬화 가능해야 한다는 계약을 기계로 강제한다
         // (숨은 PyProxy가 새지 않게). 변환 불가면 여기서 명시적 예외.
-        const result = r === undefined ? null : (typeof r === "object" && r && r.toJs ? r.toJs({ create_pyproxies: false }) : r);
+        const result = toHostValue(r, { proxyMode: "copy", fallback: null });
         postMessage({ type: "result", id: msg.id, reqId: msg.reqId, result });
       } finally {
-        if (r && typeof r === "object" && r.destroy) r.destroy(); // WASM측 참조 해제(누적 방지)
+        destroyHostValue(r); // WASM측 참조 해제(누적 방지)
       }
     } else if (msg.type === "repl") {
       // 자유 문장 실행 + stdout 캡처 + 마지막 식 값(REPL/잡 컨트롤 본체). 전역 상태는 누적된다
@@ -99,8 +104,8 @@ onmessage = async (e) => {
         "        exec(_pyprocReplSrc, globals())\n" +
         "[_pyprocBuf.getvalue(), None if _pyprocVal is None else repr(_pyprocVal)]",
       );
-      const [out, value] = r.toJs ? r.toJs() : r;
-      if (r && r.destroy) r.destroy();
+      const [out, value] = toHostValue(r, { proxyMode: "copy", fallback: [null, null] });
+      destroyHostValue(r);
       postMessage({ type: "replResult", id: msg.id, reqId: msg.reqId, out, value });
     } else if (msg.type === "bindIpc") {
       // IPC 배선: SAB 항목들을 이 프로세스의 레지스트리에 등록하고(참조 공유), 파이썬

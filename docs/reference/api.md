@@ -131,6 +131,11 @@ Volatile verbs:
 - `tree()` returns the checkpoint tree (each node's parent/children).
 - `prune(target)` frees deltas and hashes outside the root-to-target chain (the RAM
   valve). Restoring a pruned node throws `PYPROC_CHECKPOINT_PRUNED`.
+- `stats()` reports exact controller-owned base/delta/hash bytes, node/branch counts,
+  live depth, and the last pressure event.
+- `setRetentionPolicy(policy)` sets observable budgets (`maxNodes`, `maxDeltaBytes`,
+  `maxTotalBytes`). `pruneBranches: true` may remove only off-live-path branches;
+  the live path is never silently dropped or rebased.
 
 Durable verbs (all take `{ dir }`, a `FileSystemDirectoryHandle`; the same `dir` shares
 one journal instance):

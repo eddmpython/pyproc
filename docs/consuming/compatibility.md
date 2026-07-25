@@ -50,4 +50,60 @@ SharedArrayBuffer + `crossOriginIsolated`를 셋 다 요구하는 능력이 있�
   각자 기계에서 [Speed Lab](../../examples/speedLab.html)으로 잰다. 개발 실측은
   [benchmarking.md](../operations/benchmarking.md)와 원장·artifact에 산다.
 
+### 리액티브 메모리 압박 완화 가이드 (워크로드별)
+
+이 가이드는 현재의 운영 제약을 가정한다. 메모리 스파이크의 핵심은 `checkpoint()` 비용보다도
+**커밋 빈도**다. 체크포인트는 힙 전체 해시(O(heap))이므로 문장마다를 목표로 하면 커밋/실행 모두
+스파이크한다.
+
+#### 1) 공통 규칙
+
+1. `history.commit()`는 문장 단위가 아니라 의미 있는 구간 단위로 띄워서 호출한다(또는 idle 감시로 `cfg.idleMs` 조절).
+2. rollback 후보 관리(`history.prune()`)는 1순위 밸브다. 인자를 생략하면 live 경로밖 노드를 정리한다.
+3. OPFS 객체 스팸 제어는 `MachineJournal`의 `pack()` 또는 `cfg.autoPack`이다. pack는 RAM을 즉시 줄이진 않지만 오브젝트 수를 줄인다.
+4. 반응형 컨트롤러의 `saveBase()`는 base heap 복제본을 OPFS로 이동해 복원 연속성/휴대성에 쓰는 장치다. RAM 경감 장치는 아니다.
+5. `dispose()`는 경로 정리를 강하게 하고 싶을 때 마지막 수단으로만 쓴다(동일 반응 컨트롤러 공유 구간에서 다른 소비자 영향 확인).
+
+#### 2) 인터랙티브 REPL / 교육형 데모
+
+1. 사용자 체감이 중요해 rollback 문맥을 많이 남겨야 한다. 먼저 `history.setRetentionPolicy({ maxNodes, onPressure })`로 압박을 관측하고 필요할 때 `history.prune()`한다.
+2. 저널은 기본값으로 시작하고, `cfg.autoPack`/`cfg.pruneAfterCommit`은 꺼 둔다. 필요하면 장기 사용 시에만 `prune`을 더 자주 걸어 RAM 상주 힙 폭주를 막는다.
+3. `pack()`은 `save`/`export` 전후 정리 목적에 한정해 주기적으로 수행한다.
+
+#### 3) 장문 계산 / 배치 워크로드
+
+1. 첫 번째 조정은 커밋 빈도다. 유휴 시간창(`cfg.idleMs`)을 넓히거나 직접 `history.commit()` 호출 주기를 늦춰서 같은 시간당 커밋 횟수를 낮춘다.
+2. 커밋이 잦을 수밖에 없다면 `cfg.pruneAfterCommit = true`로 checkpoint tree를 live 경로만 유지해 재해시 지출을 막는다.
+3. 이어서 `cfg.autoPack`을 켜서 객체 폭주를 제어한다. 시작값은 `true`(loose:128개, 8MB) 또는 `{ looseBlobs: 128, looseMB: 16 }`로 둔다.
+4. `pack()`은 장애복구 연습/배포 전 보조 검증 단계에서 수행하고, 결과의 `looseRemoved/packsRemoved`를 보며 임계를 튜닝한다.
+
+#### 4) 장시간 상시 세션 / 리플레이 파이프라인
+
+1. 장기 상시 운영에서는 retention budget으로 rollback 후보를 관측하고, `history.prune()`과 `history.watch({ pruneAfterCommit: true })`로 경로를 정리한다.
+2. 반응형 컨트롤러의 `saveBase()`는 절차적 하드 전환/휴면 전환 직전에만 1회씩 쓰고, 루프마다 호출하지 않는다.
+3. 재시작 직후 대량 복원이나 재배치가 잦으면 `dispose()`로 경로 오염을 제거한 뒤 `restore` 흐름을 다시 정렬한다.
+
+#### 권장 샘플(참고)
+
+```js
+machine.history.setRetentionPolicy({
+  maxNodes: 256,
+  maxDeltaBytes: 128 * 1024 * 1024,
+  pruneBranches: true,
+  onPressure: (event) => { /* UI 경고와 telemetry */ },
+});
+
+const journal = machine.history.watch({
+  dir: opfsDir,
+  idleMs: 5000,               // 문장이 아닌 유휴 구간 기반
+  pruneAfterCommit: true,      // commit 직후 rollback 경로를 live path로 축소
+  autoPack: { looseBlobs: 128, looseMB: 16 },
+  onStatus: (evt) => { /* commit/io 실패 알림 */ },
+});
+
+console.log(machine.history.stats());
+```
+
+운영 규칙은 고정: `commit 빈도 제어` → `history.prune()`/`cfg.pruneAfterCommit` → `autoPack`/`pack()` → 반응형 컨트롤러 `saveBase()`.
+
 관련 부채·트레이드오프의 상시 추적은 [contractReality.md](../operations/contractReality.md)다.

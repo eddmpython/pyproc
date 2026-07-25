@@ -27,6 +27,8 @@ export class ReactiveController {
     this.base = null; this.deltas = []; this.hashes = []; this.parents = []; this.liveIdx = -1; this.prevHashes = null;
     this.sps = []; // 노드별 스택 포인터(체크포인트 시점의 stackSave). cp.restore()가 소비한다.
     this._seqAt = -1; // 마지막 checkpoint/restore 시점의 Runtime.execSeq (경계 위반 감지)
+    this._retentionPolicy = null;
+    this._lastPressure = null;
   }
   _requireNode(j, op) {
     if (!Number.isInteger(j) || j < 0 || j >= this.deltas.length) {
@@ -48,7 +50,9 @@ export class ReactiveController {
       this.hashes.push(hashes); this.prevHashes = hashes; this.liveIdx = 0;
       this.sps.push(mem.stackSave());
       this._seqAt = this._rt.execSeq; // 경계 닫힘
-      return handle(0, { changedPages: 0, deltaBytes: this.base.length, kind: "base" });
+      const result = handle(0, { changedPages: 0, deltaBytes: this.base.length, kind: "base" });
+      this._applyRetention("checkpoint");
+      return result;
     }
     const parent = this.liveIdx; // 델타의 기준이자 나무의 부모
     // 해시 배열은 페이지당 2워드 interleave(실효 64비트). 두 워드 모두 같아야 "안 바뀜".
@@ -59,7 +63,9 @@ export class ReactiveController {
     this.liveIdx = this.deltas.length - 1;
     this._seqAt = this._rt.execSeq; // 경계 닫힘
     let bytes = 0; for (const b of delta.values()) bytes += b.length;
-    return handle(this.deltas.length - 1, { changedPages: delta.size, deltaBytes: bytes, kind: "delta", parent });
+    const result = handle(this.deltas.length - 1, { changedPages: delta.size, deltaBytes: bytes, kind: "delta", parent });
+    this._applyRetention("checkpoint");
+    return result;
   }
   // 노드 j의 페이지 p 내용 = 부모 체인을 거슬러 처음 만나는 델타(없으면 base).
   // 선형(k-1) walk는 버려진 형제 분기를 참조해 오염된다(branchProbe로 재현된 결함).
@@ -160,6 +166,7 @@ export class ReactiveController {
   dispose() {
     this.base = null; this.deltas = []; this.hashes = []; this.parents = []; this.sps = [];
     this.prevHashes = null; this.liveIdx = -1; this._seqAt = -1;
+    this._lastPressure = null;
   }
 
   // 나무 조회(머신의 git): 노드마다 부모와 자식. 분기 UI와 원장이 읽는다.
@@ -168,6 +175,100 @@ export class ReactiveController {
       index, parent,
       children: this.parents.reduce((acc, p, i) => { if (p === index) acc.push(i); return acc; }, []),
     }));
+  }
+
+  // 현재 메모리 비용을 exact byte로 관측한다. base/delta뿐 아니라 저장된 hash 배열도 포함한다.
+  // 브라우저/엔진 내부 overhead는 알 수 없으므로 이 값은 컨트롤러 소유 바이트의 하한이다.
+  stats() {
+    const active = [];
+    let deltaBytes = 0, hashBytes = 0, prunedNodes = 0;
+    for (let i = 0; i < this.deltas.length; i++) {
+      const delta = this.deltas[i];
+      if (delta === null) { prunedNodes++; continue; }
+      active.push(i);
+      if (i > 0) for (const bytes of delta.values()) deltaBytes += bytes.length;
+      const hashes = this.hashes[i];
+      if (hashes) hashBytes += hashes.byteLength;
+    }
+    const children = new Map(active.map((index) => [index, 0]));
+    for (const index of active) {
+      const parent = this.parents[index];
+      if (children.has(parent)) children.set(parent, children.get(parent) + 1);
+    }
+    let liveDepth = 0;
+    for (let cursor = this.liveIdx; cursor >= 0 && this.deltas[cursor] !== null; cursor = this.parents[cursor]) liveDepth++;
+    const baseBytes = this.base?.byteLength || 0;
+    const totalBytes = baseBytes + deltaBytes + hashBytes;
+    return Object.freeze({
+      baseBytes,
+      deltaBytes,
+      hashBytes,
+      totalBytes,
+      totalMB: +(totalBytes / 1048576).toFixed(2),
+      nodeSlots: this.deltas.length,
+      activeNodes: active.length,
+      prunedNodes,
+      branches: [...children.values()].filter((count) => count > 1).length,
+      liveIdx: this.liveIdx,
+      liveDepth,
+      pressure: this._lastPressure,
+    });
+  }
+
+  // budget은 soundness를 바꾸지 않는다. 초과 시 기본 동작은 관측이고, pruneBranches=true일 때만
+  // live 경로 밖 분기를 해제한다. live 경로 자체를 자동 삭제하거나 rebase하지 않는다.
+  setRetentionPolicy(policy = null) {
+    if (policy === null) {
+      this._retentionPolicy = null;
+      this._lastPressure = null;
+      return null;
+    }
+    if (typeof policy !== "object" || Array.isArray(policy)) {
+      throw new PyProcError("PYPROC_INPUT_INVALID", "retention policy 객체 또는 null이 필요하다");
+    }
+    const normalized = {
+      maxNodes: policy.maxNodes ?? null,
+      maxDeltaBytes: policy.maxDeltaBytes ?? null,
+      maxTotalBytes: policy.maxTotalBytes ?? null,
+      pruneBranches: policy.pruneBranches === true,
+      onPressure: typeof policy.onPressure === "function" ? policy.onPressure : null,
+    };
+    for (const key of ["maxNodes", "maxDeltaBytes", "maxTotalBytes"]) {
+      const value = normalized[key];
+      if (value !== null && (!Number.isSafeInteger(value) || value < 1)) {
+        throw new PyProcError("PYPROC_INPUT_INVALID", `retention.${key}: 1 이상의 정수가 필요하다`);
+      }
+    }
+    if (normalized.maxNodes === null && normalized.maxDeltaBytes === null && normalized.maxTotalBytes === null) {
+      throw new PyProcError("PYPROC_INPUT_INVALID", "retention: maxNodes/maxDeltaBytes/maxTotalBytes 중 하나가 필요하다");
+    }
+    this._retentionPolicy = normalized;
+    this._applyRetention("policy");
+    return Object.freeze({ ...normalized });
+  }
+
+  _applyRetention(trigger) {
+    if (!this._retentionPolicy || this.base === null) return null;
+    const before = this.stats();
+    const exceeded = [];
+    if (this._retentionPolicy.maxNodes !== null && before.activeNodes > this._retentionPolicy.maxNodes) exceeded.push("maxNodes");
+    if (this._retentionPolicy.maxDeltaBytes !== null && before.deltaBytes > this._retentionPolicy.maxDeltaBytes) exceeded.push("maxDeltaBytes");
+    if (this._retentionPolicy.maxTotalBytes !== null && before.totalBytes > this._retentionPolicy.maxTotalBytes) exceeded.push("maxTotalBytes");
+    if (!exceeded.length) {
+      this._lastPressure = null;
+      return null;
+    }
+    let pruned = null;
+    if (this._retentionPolicy.pruneBranches && before.branches > 0 && this.liveIdx >= 0) {
+      pruned = this.pruneTo(this.liveIdx);
+    }
+    const event = Object.freeze({ trigger, exceeded: Object.freeze(exceeded), before, after: this.stats(), pruned });
+    this._lastPressure = event;
+    if (this._retentionPolicy.onPressure) {
+      try { this._retentionPolicy.onPressure(event); }
+      catch (error) { queueMicrotask(() => { throw error; }); }
+    }
+    return event;
   }
 
   // base(기준 힙 사본)를 OPFS 등 파일 핸들로 백업/이동한다. RAM은 줄지 않는다(복원 경로가
@@ -191,5 +292,5 @@ export class ReactiveController {
     return { bytes: loaded.length };
   }
   stackSave() { return this._mem.stackSave(); }
-  storageMB() { let b = this.base ? this.base.length : 0; for (let k = 1; k < this.deltas.length; k++) for (const x of this.deltas[k].values()) b += x.length; return Math.round(b / 1048576); }
+  storageMB() { return Math.round(this.stats().totalBytes / 1048576); }
 }

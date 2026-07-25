@@ -52,13 +52,13 @@
 - **environment mismatch**: h0/엔진 지문 불일치. `PYPROC_REPLAY_MISMATCH`, 후퇴 금지 즉시 예외.
 
 이 구분을 한 오류 축으로 뭉개면 다른 엔진의 저널로 부활하는 힙 오염이 복구로 위장된다.
-[machineJournal.js](../../../src/capabilities/machineJournal.js)에 이미 실재하는 이 구분을
+[machineJournal.js](../../../src/capabilities/journal/machineJournal.js)에 이미 실재하는 이 구분을
 커널 계약으로 승격한다.
 
 ## gc
 
 "ref 도달 가능성 = liveness" 단일 gc.
-[journalBlobStore.js](../../../src/capabilities/journalBlobStore.js) `packLive`의 크래시 안전
+[journalBlobStore.js](../../../src/capabilities/journal/journalBlobStore.js) `packLive`의 크래시 안전
 순서(데이터 먼저, 인덱스 교체, loose 삭제 마지막)를 커널 불변식으로 승격하고,
 [generationRetention.js](../../../src/machine/persistence/generationRetention.js)을 같은 gc의
 정책 파라미터로 흡수한다.

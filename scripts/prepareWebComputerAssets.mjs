@@ -8,6 +8,66 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const catalogPath = join(root, "apps", "webComputer", "assetCatalog.json");
 const targetDirectory = join(root, "apps", "webComputer", "assets");
 const reusableDirectory = join(root, "tests", "webMachine", "fixtures", "v86", "assets");
+const mutableSourceHosts = new Set(["i.copy.sh"]);
+
+function normalizeSources(asset) {
+  const list = [];
+  const seen = new Set();
+  const candidates = [...(Array.isArray(asset.sources) ? asset.sources : []), asset.url];
+  for (const source of candidates) {
+    if (typeof source !== "string" || !source.trim()) continue;
+    if (!source.startsWith("https://")) continue;
+    if (seen.has(source)) continue;
+    seen.add(source);
+    list.push(source);
+  }
+  if (!list.length) throw new Error(`${asset.name}: HTTPS source가 없음`);
+  return list;
+}
+
+function isMutableSingleSource(asset) {
+  const sources = normalizeSources(asset);
+  if (sources.length !== 1) return false;
+  return mutableSourceHosts.has(new URL(sources[0]).hostname);
+}
+
+async function downloadFromSources(asset, target, bytesExpected) {
+  const sources = normalizeSources(asset);
+  const attempts = [];
+  const temporary = `${target}.part`;
+  for (const source of sources) {
+    attempts.push(source);
+    let response;
+    try {
+      response = await fetch(source, { redirect: "follow" });
+    } catch (error) {
+      console.warn(`${asset.name}: 후보 source fetch 실패 (${source})`);
+      continue;
+    }
+    if (!response.ok) continue;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.byteLength !== bytesExpected) {
+      console.warn(`${asset.name}: candidate source byteLength 불일치 (${source})`);
+      continue;
+    }
+    const actual = digest(bytes);
+    if (actual !== asset.sha256) {
+      console.warn(`${asset.name}: candidate source SHA-256 불일치 (${source})`);
+      continue;
+    }
+    try {
+      await writeFile(temporary, bytes);
+      await rename(temporary, target);
+      return;
+    } finally {
+      await rm(temporary, { force: true });
+    }
+  }
+  if (isMutableSingleSource(asset)) {
+    console.warn(`주의: ${asset.name}는 단일 mutable 출처(i.copy.sh)이다. sources를 2개 이상 추가해 fail-over를 확보할 것`);
+  }
+  throw new Error(`${asset.name}: download 실패 [${attempts.join(", ")}]`);
+}
 
 function digest(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -25,14 +85,7 @@ async function validFile(path, asset) {
 }
 
 async function download(asset, target) {
-  const response = await fetch(asset.url, { redirect: "follow" });
-  if (!response.ok) throw new Error(`${asset.name}: download ${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.byteLength !== asset.byteLength) throw new Error(`${asset.name}: byteLength ${bytes.byteLength} != ${asset.byteLength}`);
-  if (digest(bytes) !== asset.sha256) throw new Error(`${asset.name}: SHA-256 mismatch`);
-  const temporary = `${target}.part`;
-  await writeFile(temporary, bytes);
-  await rename(temporary, target);
+  await downloadFromSources(asset, target, asset.byteLength);
 }
 
 const catalog = JSON.parse(await readFile(catalogPath, "utf8"));

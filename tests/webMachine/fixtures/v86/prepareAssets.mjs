@@ -13,6 +13,67 @@ function digest(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function normalizeSources(asset) {
+  const list = [];
+  const seen = new Set();
+  const candidates = [...(Array.isArray(asset.sources) ? asset.sources : []), asset.url];
+  for (const source of candidates) {
+    if (typeof source !== "string" || !source.trim()) continue;
+    let parsed;
+    try { parsed = new URL(source); } catch (error) { continue; }
+    if (parsed.protocol !== "https:") continue;
+    if (seen.has(source)) continue;
+    seen.add(source);
+    list.push(source);
+  }
+  if (!list.length) throw new Error(`${asset.name}: HTTPS source가 없음`);
+  return list;
+}
+
+async function download(asset, path) {
+  const sources = normalizeSources(asset);
+  const temporary = `${path}.tmp`;
+  let attempted = false;
+  for (const source of sources) {
+    attempted = true;
+    let response;
+    try {
+      response = await fetch(source, { redirect: "follow" });
+    } catch (error) {
+      console.warn(`${asset.name}: 후보 source fetch 실패 (${source})`);
+      continue;
+    }
+    if (!response.ok) continue;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.byteLength !== asset.byteLength) {
+      console.warn(`${asset.name}: 후보 source byteLength 불일치 (${source})`);
+      continue;
+    }
+    const actual = digest(bytes);
+    if (actual !== asset.sha256) {
+      console.warn(`${asset.name}: 후보 source SHA-256 불일치 (${source})`);
+      continue;
+    }
+    try {
+      await writeFile(temporary, bytes);
+      await rename(temporary, path);
+      return;
+    } finally {
+      await rm(temporary, { force: true });
+    }
+  }
+  if (sources.length === 1 && /^https?:\/\//.test(sources[0])) {
+    try {
+      const host = new URL(sources[0]).hostname;
+      if (host === "i.copy.sh") {
+        console.warn(`주의: ${asset.name}는 단일 mutable 출처(i.copy.sh)이다. sources를 2개 이상 추가해 fail-over를 확보할 것`);
+      }
+    } catch (error) {}
+  }
+  if (!attempted) throw new Error(`${asset.name}: source URL 없음`);
+  throw new Error(`${asset.name}: download 실패 [${sources.join(", ")}]`);
+}
+
 await mkdir(root, { recursive: true });
 for (const asset of assets) {
   const path = join(root, asset.name);
@@ -23,18 +84,6 @@ for (const asset of assets) {
     console.log(`READY ${asset.name} ${current.byteLength} bytes`);
     continue;
   }
-  const response = await fetch(asset.url);
-  if (!response.ok) throw new Error(`${asset.name}: download ${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
-  const actual = digest(bytes);
-  if (actual !== asset.sha256) throw new Error(`${asset.name}: sha256 ${actual}`);
-  if (bytes.byteLength !== asset.byteLength) throw new Error(`${asset.name}: byteLength ${bytes.byteLength}`);
-  const temporary = `${path}.tmp`;
-  try {
-    await writeFile(temporary, bytes);
-    await rename(temporary, path);
-  } finally {
-    await rm(temporary, { force: true });
-  }
-  console.log(`FETCH ${asset.name} ${bytes.byteLength} bytes`);
+  await download(asset, path);
+  console.log(`FETCH ${asset.name} ${asset.byteLength} bytes`);
 }

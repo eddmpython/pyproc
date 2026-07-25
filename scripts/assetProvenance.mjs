@@ -28,6 +28,7 @@ const allowedDistributions = new Set(["local-test-only", "upstream-cdn-runtime-r
 // 이 자산들을 적재하는 곳. pyproc은 라이브러리 런타임 자신(엔진 부팅 집합),
 // v86Probe는 수동 probe 6개, webComputer는 제품(두 guest OS의 실행 자산 전부).
 const knownConsumers = new Set(["pyproc", "v86Probe", "webComputer"]);
+const mutableSourceHosts = new Set(["i.copy.sh"]);
 // 출처: SPDX License List 3.28.0(이 문서가 쓰는 라이선스 식별자의 발행 버전).
 const SPDX_LICENSE_LIST_VERSION = "3.28.0";
 
@@ -47,6 +48,29 @@ function unique(values, label) {
 
 function spdxId(prefix, value) {
   return `SPDXRef-${prefix}-${value.replace(/[^A-Za-z0-9.-]+/g, "-")}`;
+}
+
+function normalizeAssetSources(asset, label) {
+  const sources = [];
+  const seen = new Set();
+  const candidates = [...(Array.isArray(asset.sources) ? asset.sources : []), asset.url];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string" || !candidate.trim()) continue;
+    if (!candidate.startsWith("https://")) throw new TypeError(`${label}.sources/source: HTTPS URL만 허용`);
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    sources.push(candidate);
+  }
+  if (!sources.length) throw new TypeError(`${label}: URL 소스가 없음`);
+  return sources;
+}
+
+function riskMutableSingleSource(asset, label) {
+  const sources = asset.sources || [];
+  if (sources.length !== 1) return null;
+  const host = new URL(sources[0]).hostname;
+  if (!mutableSourceHosts.has(host)) return null;
+  return `mutable-단일출처(${host})`;
 }
 
 export function validateV86AssetCatalog(value) {
@@ -73,6 +97,16 @@ export function validateV86AssetCatalog(value) {
   }
   if (!Array.isArray(value.components) || !value.components.length) throw new TypeError("components가 필요하다");
   if (!Array.isArray(value.assets) || !value.assets.length) throw new TypeError("assets가 필요하다");
+  if (!Array.isArray(value.guestRecipes) || !value.guestRecipes.length) throw new TypeError("guestRecipes가 필요하다");
+  for (const [index, recipe] of value.guestRecipes.entries()) {
+    const label = `guestRecipes[${index}]`;
+    for (const field of ["recipeId", "replacesAsset", "sourceLocation", "sourceRevision", "version", "configPath", "buildScript", "expectedOutput"]) {
+      assertString(recipe[field], `${label}.${field}`);
+    }
+    if (!Array.isArray(recipe.promotionRequires) || recipe.promotionRequires.length < 4) {
+      throw new TypeError(`${label}.promotionRequires: 재현/법무/SBOM/browser gate가 필요하다`);
+    }
+  }
   const componentIds = value.components.map((component, index) => {
     const label = `components[${index}]`;
     const componentId = assertString(component.componentId, `${label}.componentId`);
@@ -92,6 +126,7 @@ export function validateV86AssetCatalog(value) {
   const assetNames = value.assets.map((asset, index) => {
     const label = `assets[${index}]`;
     const name = assertString(asset.name, `${label}.name`);
+    asset.sources = normalizeAssetSources(asset, label);
     if (!String(asset.url).startsWith("https://")) throw new TypeError(`${label}.url: HTTPS 필요`);
     if (!sha1Pattern.test(asset.sha1)) throw new TypeError(`${label}.sha1 형식 불일치`);
     if (!sha256Pattern.test(asset.sha256)) throw new TypeError(`${label}.sha256 형식 불일치`);
@@ -107,9 +142,14 @@ export function validateV86AssetCatalog(value) {
     if (!Array.isArray(asset.consumers) || !asset.consumers.length || asset.consumers.some((c) => !knownConsumers.has(c))) {
       throw new TypeError(`${label}.consumers: ${[...knownConsumers].join("|")} 중 하나 이상 필요`);
     }
+    const sourceRisk = riskMutableSingleSource(asset, label);
+    if (sourceRisk) asset._sourceRisk = sourceRisk;
     return name;
   });
   unique(assetNames, "asset name");
+  for (const recipe of value.guestRecipes) {
+    if (!assetNames.includes(recipe.replacesAsset)) throw new TypeError(`${recipe.recipeId}: replacesAsset 없음`);
+  }
   assertConcludedLicenseNotStrongerThanFiles(value);
   return value;
 }
@@ -165,6 +205,7 @@ export function createWebComputerCatalog(catalogValue) {
     .filter((asset) => asset.consumers.includes("webComputer"))
     .map((asset) => ({
       name: asset.name,
+      sources: asset.sources,
       role: asset.role,
       url: asset.url,
       sha1: asset.sha1,

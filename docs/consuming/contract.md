@@ -28,13 +28,13 @@ pyproc은 "참조"가 아니라 **실제 import**로만 SSOT가 된다. 이 문�
 
 | specifier | 용도 |
 | --- | --- |
-| `pyproc` | 기본 공개 표면. `boot`, `Runtime`, `PyProc`, `ReactiveController`, `AsgiServer`, `VirtualOrigin`, `bootSession`, `openMachine` 등 root export를 여기서 가져온다 |
+| `pyproc` | root 6개 값: `boot`, `open`, `createWebComputer`, `checkEnvironment`, `PyProcError`, `PYPROC_ERROR_CODES` |
+| `pyproc/runtime` | 자체 부팅 Pyodide 채택용 `Runtime` 값, `boot`, `MemoryCapability`, `FileSystem`, EngineContract/RuntimeContract 검사 |
 | `pyproc/assets` | 실행 자산 manifest와 SRI preflight. `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` |
-| `pyproc/runtime` | 런타임 최소 표면. `boot`, `Runtime`, `MemoryCapability`, `FileSystem`, `PAGE_SIZE`, `checkEnvironment` |
-| `pyproc/reactive` | `ReactiveController` |
-| `pyproc/syscall-bridge` | `SyscallBridge` |
-| `pyproc/process-os` | `PyProc`, `SIGNAL` |
+| `pyproc/history` | 상태 커널과 store/bundle/signature 계약 |
+| `pyproc/machine` | Web Machine host/device/store/guest 조립 상세 |
 | `pyproc/worker` | 번들러나 제품 빌드가 worker entrypoint를 명시적으로 참조해야 할 때만 사용 |
+| `pyproc/gpu`, `pyproc/socket`, `pyproc/wasi` | 강등된 Experimental/Research 표면. 신규 Experimental subpath는 동결 |
 
 금지 경계:
 
@@ -52,7 +52,7 @@ pyproc은 "참조"가 아니라 **실제 import**로만 SSOT가 된다. 이 문�
 자기 배포 경로에 두고 등록하며, 기능은 쿼리로 켠다(조합 가능):
 
 ```js
-import { registerPyProcServiceWorker } from "pyproc";
+import { registerPyProcServiceWorker } from "pyproc/assets";
 
 const assetIntegrity = await fetch("/vendor/pyproc-assets.json").then((r) => r.json());
 
@@ -79,7 +79,7 @@ Worker/SharedWorker/Service Worker 엔트리포인트를 갖는다. 이 파일�
 두면 실패하므로, 제품은 패키지의 `src/` 상대 import 구조를 보존해 같은 오리진에 배포한다.
 
 ```js
-import { getPyProcAssetManifest } from "pyproc";
+import { getPyProcAssetManifest } from "pyproc/assets";
 
 const manifest = getPyProcAssetManifest({ baseURL: "/vendor/pyproc/" });
 // manifest.assets:
@@ -106,14 +106,15 @@ npx pyproc-assets --baseURL /vendor/pyproc/ --out public/vendor/pyproc-assets.js
 런타임에서는 이 JSON을 그대로 넘겨 worker 생성 전에 해당 role의 graph를 fetch + SHA-256으로 검증한다.
 
 ```js
-import { boot, PyProc, verifyPyProcAssetIntegrity } from "pyproc";
+import { boot } from "pyproc";
+import { verifyPyProcAssetIntegrity } from "pyproc/assets";
 
 const assetIntegrity = await fetch("/vendor/pyproc-assets.json").then((r) => r.json());
 await verifyPyProcAssetIntegrity(assetIntegrity, { roles: ["processWorker"] }); // 직접 preflight
 
 const rt = await boot({ assetIntegrity });
-const os = new PyProc({ assetIntegrity });
-await os.boot(4);
+const machine = await boot({ assetIntegrity });
+const os = await machine.proc({ lanes: 4 });
 ```
 
 `boot({ assetIntegrity })`는 Runtime에 manifest를 보관하고, 그 Runtime에서 만든 `SyscallBridge`와
@@ -128,13 +129,12 @@ SRI 속성을 직접 걸 수 없으므로, 이 검증은 spawn 전 preflight다.
 여러 탭에서 하나의 Python 머신을 쓰는 제품 경로는 `openPersistentMachine()`이 정본이다.
 
 ```js
-import { openPersistentMachine } from "pyproc";
+import { open } from "pyproc";
 
-const machine = await openPersistentMachine({
+const machine = await open({ persistent: {
   name: "workspace",
-  manifest: { packages: ["numpy"], setup: "import numpy" },
-  assetIntegrity,
-});
+  manifest: { packages: ["numpy"], setup: "import numpy", assetIntegrity },
+} });
 
 await machine.run("counter = 41");
 await machine.commit();
@@ -220,15 +220,22 @@ console.log(machine.status());
 // 워커: 자체 부팅한 Pyodide(예: dartlab의 노트북 워커)
 const py = await loadPyodide({ indexURL });
 // pyproc 능력을 그 위에 얹는다(두 번째 인터프리터를 만들지 않는다)
+import { Runtime } from "pyproc/runtime";
+
 const rt = new Runtime(py);              // Runtime(py)는 Pyodide 인스턴스를 감싼다(하위 호환)
 const asgi = rt.enableAsgiServer({ app: "app" });   // 커널 안 서버
 rt.setInterruptBuffer(interruptSab);     // 동기 UDF 무한 실행 취소(SIGINT)
-const fn = rt.getGlobal("myUdf");        // PyProxy: call/toJs/destroy 재사용(셀마다 재조회 0)
+const raw = rt.getGlobal("myUdf");
+const fn = rt.toHostValue(raw, { proxyMode: "copy", fallback: null }); // host 함수로 정규화
+const out = fn(1, 2);
+rt.destroyHostValue(raw);
 ```
 
-- `new Runtime(py)`는 EngineContract가 아니라 로드된 Pyodide를 주면 감싼다(구분: `runSync` 유무). `boot()`을 못 쓰는 워커 소비자의 채택 경로다.
+- `new Runtime(py)`는 로드된 Pyodide를 어댑터로 감싼다. custom engine은 `engineContractVersion`, `engineKind`, `capabilities()`와 필수 메서드를 명시해야 한다.
 - `setInterruptBuffer(sab)`: 이 SAB의 `[0]`에 시그널 번호(2=SIGINT)를 쓰면 실행 중 파이썬이 취소된다. 엔진 `raw` 없이 계약으로 도달한다.
-- `getGlobal(name)`은 엔진 프록시(PyProxy)를 그대로 반환한다. `call`/`toJs`/`destroy`가 계약상 지원된다(재사용 캐시 패턴).
+- `getGlobal(name)`은 엔진 프록시를 그대로 반환한다. 반환값은 `toHostValue(raw, options)`로 host 값으로 정규화하고, 사용이 끝나면 `destroyHostValue(raw)`로 파기한다.
+- `toHostValue(value, { proxyMode, fallback })`는 엔진 중립 값 다리다. `proxyMode`는 `copy` 또는 `preserve`이고 어댑터가 엔진별 옵션으로 번역한다. `fallback` 미지정 시 변환 실패는 throw로 전파한다.
+- Pyodide `Runtime`과 `WasiSession`은 `runtimeContractVersion=1`, `runtimeKind`, `capabilities()`, `runAsync`, global/value bridge를 공유하는 최소 RuntimeContract를 구현한다. sync execution과 heap은 capability 차이다.
 - WASI 세션(`bootWasi`)은 별도 async 표면이며 값 다리 JSON 한정이라, C 확장(polars/pyarrow)에 의존하는 dartlab/xlpod의 정본 경로는 Pyodide다.
 
 배선 로드맵 상세: [mainPlan/_done/web-python-runtime/02-phasing-and-wiring.md](../../mainPlan/_done/web-python-runtime/02-phasing-and-wiring.md)

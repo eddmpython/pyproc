@@ -121,6 +121,24 @@ export interface BootOptions {
   loadPyodide?: (cfg: unknown) => Promise<unknown>;
 }
 
+export interface EngineHostValueOptions {
+  /** copy(기본)는 host 값으로 복사, preserve는 엔진 프록시 보존. 어댑터가 엔진별 옵션으로 번역한다. */
+  proxyMode?: "copy" | "preserve";
+  /** 값이 undefined이거나 host 변환에 실패했을 때 반환할 폴백. 미지정이면 실패를 throw로 전파한다. */
+  fallback?: unknown;
+}
+
+export interface RuntimeContract {
+  readonly runtimeContractVersion: 1;
+  readonly runtimeKind: string;
+  capabilities(): readonly string[] | Set<string>;
+  runAsync(code: string): Promise<unknown>;
+  getGlobal(name: string): unknown | Promise<unknown>;
+  setGlobal(name: string, value: unknown): void | Promise<void>;
+  toHostValue(value: unknown, options?: EngineHostValueOptions): unknown;
+  destroyHostValue(value: unknown): void;
+}
+
 export interface EnvManifest {
   indexURL?: string;
   env?: Record<string, string>;
@@ -292,6 +310,8 @@ declare class ReactiveController {
    * 해제된 노드의 복원은 PYPROC_CHECKPOINT_PRUNED로 거부된다. liveIdx는 경로 위에 있어야 한다.
    */
   pruneTo(j: number): { freedNodes: number; freedMB: number; keptNodes: number };
+  stats(): ReactiveStats;
+  setRetentionPolicy(policy: ReactiveRetentionPolicy | null): Readonly<ReactiveRetentionPolicy> | null;
   /** 나무 전체 해제. 기존 노드 복원은 거부되고, 다음 checkpoint()가 새 나무를 시작한다. */
   dispose(): void;
   stackSave(): number | null;
@@ -302,6 +322,38 @@ declare class ReactiveController {
    */
   saveBase(dir: FileSystemDirectoryHandle, name: string): Promise<{ bytes: number }>;
   loadBase(dir: FileSystemDirectoryHandle, name: string): Promise<{ bytes: number }>;
+}
+
+export interface ReactiveStats {
+  baseBytes: number;
+  deltaBytes: number;
+  hashBytes: number;
+  totalBytes: number;
+  totalMB: number;
+  nodeSlots: number;
+  activeNodes: number;
+  prunedNodes: number;
+  branches: number;
+  liveIdx: number;
+  liveDepth: number;
+  pressure: ReactivePressureEvent | null;
+}
+
+export interface ReactiveRetentionPolicy {
+  maxNodes?: number;
+  maxDeltaBytes?: number;
+  maxTotalBytes?: number;
+  /** true면 budget 초과 시 live 경로 밖 분기만 자동 prune한다. live 경로는 보존한다. */
+  pruneBranches?: boolean;
+  onPressure?: (event: ReactivePressureEvent) => void;
+}
+
+export interface ReactivePressureEvent {
+  trigger: "checkpoint" | "policy";
+  exceeded: readonly ("maxNodes" | "maxDeltaBytes" | "maxTotalBytes")[];
+  before: ReactiveStats;
+  after: ReactiveStats;
+  pruned: { freedNodes: number; freedMB: number; keptNodes: number } | null;
 }
 
 /** 빌린 시스템콜 v1: input()(동기/JSPI), urllib(동기 XHR, proxyUrl 옵션), subprocess(자식 워커). */
@@ -774,6 +826,9 @@ declare class FileSystem {
  * `tests/attempts/engineContract/contractProbe` 8/8(reactive 시간여행이 이 표면만으로 성립).
  */
 export interface EngineContract {
+  readonly engineContractVersion: 1;
+  readonly engineKind: string;
+  capabilities(): readonly string[] | Set<string>;
   /** 동기 실행. 마지막 식의 값을 돌려준다. */
   runSync(code: string): unknown;
   /** 비동기 실행(await 가능. JSPI 경로). */
@@ -798,6 +853,8 @@ export interface EngineContract {
   setStderr(handler: ((text: string) => void) | null): void;
   /** 엔진-무관 파일 IO. */
   readonly fs: FileSystem;
+  toHostValue(value: unknown, options?: EngineHostValueOptions): unknown;
+  destroyHostValue(value: unknown): void;
   /** 호스트 디렉터리 마운트(선택). */
   mountDir(path: string, handle: unknown): Promise<{ path: string; sync: () => unknown }>;
   /** bare 힙 스냅샷(선택). 패키지가 실린 힙은 hiwire 벽으로 불가하다. */
@@ -809,10 +866,15 @@ export interface EngineContract {
 /** EngineContract의 Pyodide 구현(기본 어댑터). */
 declare class PyodideEngine implements EngineContract {
   constructor(py: unknown);
+  readonly engineContractVersion: 1;
+  readonly engineKind: "pyodide";
+  capabilities(): readonly string[];
   runSync(code: string): unknown;
   runAsync(code: string): Promise<unknown>;
   setGlobal(name: string, value: unknown): void;
   getGlobal(name: string): unknown;
+  toHostValue(value: unknown, options?: EngineHostValueOptions): unknown;
+  destroyHostValue(value: unknown): void;
   heapU8(): Uint8Array;
   stackSave(): number | null;
   stackRestore(sp: number | null): void;
@@ -836,6 +898,9 @@ declare class Runtime {
    * 구분은 `runSync`의 유무다(로드된 Pyodide에는 없다).
    */
   constructor(engineOrPyodide: EngineContract | unknown, indexURL?: string, opts?: { assetIntegrity?: PyProcAssetIntegrityManifest });
+  readonly runtimeContractVersion: 1;
+  readonly runtimeKind: string;
+  capabilities(): readonly string[];
   readonly memory: MemoryCapability;
   /** 엔진-무관 일반 파일 IO(상시 능력, memory와 동급). 미지원 엔진이면 호출 시 에러. */
   readonly fs: FileSystem;
@@ -850,8 +915,10 @@ declare class Runtime {
   run(code: string): unknown;
   runAsync(code: string): Promise<unknown>;
   setGlobal(name: string, value: unknown): void;
-  /** 엔진 프록시(Pyodide면 PyProxy)를 그대로 반환한다. call/toJs로 값 회수, destroy로 파기(재사용 캐시). */
+  /** 엔진 프록시(예: Pyodide면 PyProxy)를 그대로 반환한다. 실제 host 값 회수/파기는 `toHostValue`/`destroyHostValue`로 한다. */
   getGlobal(name: string): unknown;
+  toHostValue(value: unknown, options?: EngineHostValueOptions): unknown;
+  destroyHostValue(value: unknown): void;
   /** 인터럽트 SAB: [0]에 시그널 번호(2=SIGINT)를 쓰면 실행 중 파이썬이 반응한다. 미지원 엔진은 false. */
   setInterruptBuffer(sab: SharedArrayBuffer): boolean;
   install(pkg: string): Promise<void>;
@@ -1114,7 +1181,9 @@ declare class PyprocHistory {
   checkpoint(): CheckpointInfo;
   restore(target: number | CheckpointInfo, opts?: { rehash?: boolean }): RestoreInfo;
   tree(): CheckpointNode[];
-  prune(target: number | CheckpointInfo): { freedNodes: number; freedMB: number; keptNodes: number };
+  prune(target?: number | CheckpointInfo): { freedNodes: number; freedMB: number; keptNodes: number };
+  stats(): ReactiveStats;
+  setRetentionPolicy(policy: ReactiveRetentionPolicy | null): Readonly<ReactiveRetentionPolicy> | null;
   /** 커널 커밋(WAL 저널). 같은 dir는 저널 인스턴스를 공유한다. */
   commit(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalCommitResult | null>;
   recover(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalRecoverResult | null>;

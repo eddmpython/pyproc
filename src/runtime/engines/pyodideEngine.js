@@ -9,8 +9,16 @@
 // Pyodide 어휘로 굳지 않게 한다. FFI(프록시)에 기대는 값 다리는 계약상 "직렬화 가능 값"이
 // 기본이고, 프록시는 Pyodide 어댑터의 편의다. 매핑 표: engineContract/README.md.
 
+import { ENGINE_CAPABILITIES, ENGINE_CONTRACT_VERSION } from "../engineContract.js";
+import { PyProcError } from "../errors.js";
+
+const PYODIDE_CAPABILITIES = Object.freeze(Object.values(ENGINE_CAPABILITIES));
+
 export class PyodideEngine {
   constructor(py) { this._py = py; this._micropip = null; this._fs = null; }
+  get engineContractVersion() { return ENGINE_CONTRACT_VERSION; }
+  get engineKind() { return "pyodide"; }
+  capabilities() { return PYODIDE_CAPABILITIES; }
 
   // --- 실행 --- (WASI: stdin 프레임 드라이버로 exec 후 stdout 프로토콜 회수)
   runSync(code) { return this._py.runPython(code); }
@@ -19,6 +27,26 @@ export class PyodideEngine {
   // --- 값 다리 --- (Pyodide: FFI 프록시. WASI: JSON 직렬화 = 값 프로토콜, FFI 없음)
   setGlobal(name, value) { this._py.globals.set(name, value); }
   getGlobal(name) { return this._py.globals.get(name); }
+  toHostValue(value, options = {}) {
+    const proxyMode = options.proxyMode || "copy";
+    if (proxyMode !== "copy" && proxyMode !== "preserve") {
+      throw new PyProcError("PYPROC_INPUT_INVALID", `toHostValue.proxyMode 미지원: ${proxyMode}`);
+    }
+    const hasFallback = Object.prototype.hasOwnProperty.call(options, "fallback");
+    if (value === undefined) return hasFallback ? options.fallback : undefined;
+    if (value && typeof value === "object" && typeof value.toJs === "function") {
+      try {
+        return value.toJs({ create_pyproxies: proxyMode === "preserve" });
+      } catch (error) {
+        if (hasFallback) return options.fallback;
+        throw error;
+      }
+    }
+    return value;
+  }
+  destroyHostValue(value) {
+    if (value && typeof value === "object" && typeof value.destroy === "function") value.destroy();
+  }
 
   // --- 선형 메모리 --- (체크포인트/델타/fork의 전제. exports.memory는 wasm ABI가 강제)
   heapU8() { return this._py._module.HEAPU8; }

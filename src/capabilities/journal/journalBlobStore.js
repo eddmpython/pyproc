@@ -8,8 +8,8 @@
 // (세대/복원)를 결정하고, 여기는 "바이트를 어디에 어떻게 두는가"만 안다. 한 파일에 있으면
 // 커밋 주기 정책을 고치는 사람과 pack 포맷을 고치는 사람이 같은 파일을 만진다.
 // 이 저장소는 힙도 런타임도 모른다: 디렉터리 핸들 하나가 전부다.
-import { PyProcError } from "../runtime/errors.js";
-import { verifySha256 } from "../runtime/contentDigest.js";
+import { PyProcError } from "../../runtime/errors.js";
+import { verifySha256 } from "../../runtime/contentDigest.js";
 
 const BLOB_DIR = "blob";
 const PACK_DIR = "pack";

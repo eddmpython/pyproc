@@ -24,6 +24,24 @@
       "component-inventory"
     ]
   },
+  "guestRecipes": [
+    {
+      "recipeId": "pyproc-buildroot-i686-v1",
+      "replacesAsset": "buildroot-bzimage68.bin",
+      "sourceLocation": "https://gitlab.com/buildroot.org/buildroot.git",
+      "sourceRevision": "2d05bb10d08410c59856ff4022ba8b762f77441a",
+      "version": "2025.02.16",
+      "configPath": "scripts/buildroot/buildroot.config",
+      "buildScript": "scripts/buildroot/buildGuest.mjs",
+      "expectedOutput": "buildroot-pyproc-i686.bin",
+      "promotionRequires": [
+        "two-independent-builds-byte-identical",
+        "legal-info-warnings-zero",
+        "cyclonedx-sbom",
+        "web-computer-browser-gate"
+      ]
+    }
+  ],
   "components": [
     {
       "componentId": "pyodide-release-314.0.2",
@@ -124,6 +142,11 @@
       "localPath": "./vendor/pyodide/pyodide.js",
       "bundleBlockers": [
         "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.js",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide.js",
+        "https://unpkg.com/pyodide@314.0.2/pyodide.js"
       ]
     },
     {
@@ -143,6 +166,11 @@
       "localPath": "./vendor/pyodide/pyodide.mjs",
       "bundleBlockers": [
         "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.mjs",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide.mjs",
+        "https://unpkg.com/pyodide@314.0.2/pyodide.mjs"
       ]
     },
     {
@@ -163,6 +191,11 @@
       "bundleBlockers": [
         "composite-glue-license-inventory-not-verified",
         "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.asm.mjs",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide.asm.mjs",
+        "https://unpkg.com/pyodide@314.0.2/pyodide.asm.mjs"
       ]
     },
     {
@@ -183,6 +216,11 @@
       "bundleBlockers": [
         "composite-binary-license-inventory-not-verified",
         "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.asm.wasm",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide.asm.wasm",
+        "https://unpkg.com/pyodide@314.0.2/pyodide.asm.wasm"
       ]
     },
     {
@@ -203,6 +241,11 @@
       "bundleBlockers": [
         "archive-content-inventory-not-verified",
         "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/python_stdlib.zip",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/python_stdlib.zip",
+        "https://unpkg.com/pyodide@314.0.2/python_stdlib.zip"
       ]
     },
     {
@@ -222,6 +265,11 @@
       "localPath": "./vendor/pyodide/pyodide-lock.json",
       "bundleBlockers": [
         "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide-lock.json",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide-lock.json",
+        "https://unpkg.com/pyodide@314.0.2/pyodide-lock.json"
       ]
     },
     {
@@ -241,6 +289,10 @@
       "localPath": "./assets/libv86.mjs",
       "bundleBlockers": [
         "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
+        "https://unpkg.com/v86@0.5.424/build/libv86.mjs"
       ]
     },
     {
@@ -261,6 +313,10 @@
       "bundleBlockers": [
         "composite-binary-license-inventory-not-verified",
         "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
+        "https://unpkg.com/v86@0.5.424/build/v86.wasm"
       ]
     },
     {
@@ -281,6 +337,10 @@
       "bundleBlockers": [
         "reproducible-build-not-verified",
         "license-and-source-delivery-not-packaged"
+      ],
+      "sources": [
+        "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
+        "https://cdn.jsdelivr.net/gh/copy/v86@2f1346b/bios/seabios.bin"
       ]
     },
     {
@@ -301,6 +361,10 @@
       "bundleBlockers": [
         "reproducible-build-not-verified",
         "license-and-source-delivery-not-packaged"
+      ],
+      "sources": [
+        "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
+        "https://cdn.jsdelivr.net/gh/copy/v86@2f1346b/bios/vgabios.bin"
       ]
     },
     {
@@ -322,6 +386,9 @@
         "exact-source-revision-unknown",
         "build-config-unknown",
         "legal-info-missing"
+      ],
+      "sources": [
+        "https://i.copy.sh/buildroot-bzimage68.bin"
       ]
     },
     {
@@ -342,6 +409,10 @@
         "exact-image-revision-unknown",
         "image-content-inventory-missing",
         "corresponding-source-mapping-missing"
+      ],
+      "sources": [
+        "https://i.copy.sh/kolibri.img",
+        "https://cdn.jsdelivr.net/gh/copy/images@master/kolibri.img"
       ]
     }
   ]

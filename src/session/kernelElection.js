@@ -4,7 +4,7 @@
 // 리더 탭이 사라지면 다음 참여자가 같은 매니페스트로 부팅하고 MachineJournal의 마지막
 // commit 경계에서 힙과 /home/web을 함께 복구한다. SharedWorker와 달리 문서의 COI/SAB를 유지한다.
 import { bootSession } from "./session.js";
-import { MachineJournal } from "../capabilities/machineJournal.js";
+import { MachineJournal } from "../capabilities/journal/machineJournal.js";
 import { PyProcError } from "../runtime/errors.js";
 import { sha256Hex } from "../runtime/contentDigest.js";
 
@@ -37,9 +37,9 @@ function errorPayload(error) {
   };
 }
 
-function normalizeResult(result) {
-  const value = result && result.toJs ? result.toJs() : (result === undefined ? null : result);
-  if (result && result.destroy) result.destroy();
+function normalizeResult(runtime, result) {
+  const value = runtime?.toHostValue ? runtime.toHostValue(result, { fallback: null }) : (result === undefined ? null : result);
+  if (runtime?.destroyHostValue) runtime.destroyHostValue(result);
   return value;
 }
 
@@ -288,7 +288,7 @@ export class KernelElection {
         const raw = message.async
           ? await this._session.rt.runAsync(message.code)
           : this._session.rt.run(message.code);
-        result = normalizeResult(raw);
+        result = normalizeResult(this._session.rt, raw);
       } else if (message.action === "commit") {
         result = this._journal ? await this._journal.commit() : null;
         this._lastCommitAt = result?.committedAt || this._lastCommitAt;
@@ -347,7 +347,7 @@ export class KernelElection {
         const raw = payload.async
           ? await this._session.rt.runAsync(payload.code)
           : this._session.rt.run(payload.code);
-        return normalizeResult(raw);
+        return normalizeResult(this._session.rt, raw);
       }
       if (action === "commit") {
         const result = this._journal ? await this._journal.commit() : null;

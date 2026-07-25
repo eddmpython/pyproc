@@ -18,7 +18,7 @@ ref의 원자 갱신, 서명된 출처)을 가져오되, git이 풀지 않은 �
 **프로토콜·스키마·신뢰 계약 수준**에 있다:
 
 1. verify-on-read 3벌
-2. HEAD/PREV 2세대 프로토콜 2벌: [machineJournal.js](../../../src/capabilities/machineJournal.js)의 HEAD.json/PREV.json vs [machineCommitCoordinator.js](../../../src/machine/persistence/machineCommitCoordinator.js)의 head/prev + expectedHead CAS + fence
+2. HEAD/PREV 2세대 프로토콜 2벌: [machineJournal.js](../../../src/capabilities/journal/machineJournal.js)의 HEAD.json/PREV.json vs [machineCommitCoordinator.js](../../../src/machine/persistence/machineCommitCoordinator.js)의 head/prev + expectedHead CAS + fence
 3. 오류 code 공간 2벌 (PyProcError vs WebMachineError)
 4. ECDSA P-256 서명·신뢰 스택 2벌: [machineSignature.js](../../../src/session/machineSignature.js) vs [webMachineTrust.js](../../../src/machine/image/webMachineTrust.js) - 동일 알고리즘 리터럴의 완전 독립 재구현(실물 확인)
 5. digest 구현 2벌 + 주소 형식 2벌: [contentDigest.js](../../../src/runtime/contentDigest.js)(bare hex, 전역 crypto) vs [generationIntegrity.js](../../../src/machine/persistence/generationIntegrity.js)(`sha256:` 접두, cryptoProvider 주입)

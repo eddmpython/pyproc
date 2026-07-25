@@ -14,6 +14,11 @@
   "assets": [
     {
       "name": "pyodide.js",
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.js",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide.js",
+        "https://unpkg.com/pyodide@314.0.2/pyodide.js"
+      ],
       "role": "engine-module",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.js",
       "sha1": "e7eeeca4abc1918fffaabe5f5756b26b50f20240",
@@ -28,6 +33,11 @@
     },
     {
       "name": "pyodide.mjs",
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.mjs",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide.mjs",
+        "https://unpkg.com/pyodide@314.0.2/pyodide.mjs"
+      ],
       "role": "engine-module",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.mjs",
       "sha1": "6d90a02f02a1720573e96202bf47b4ee06c89df2",
@@ -42,6 +52,11 @@
     },
     {
       "name": "pyodide.asm.mjs",
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.asm.mjs",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide.asm.mjs",
+        "https://unpkg.com/pyodide@314.0.2/pyodide.asm.mjs"
+      ],
       "role": "engine-module",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.asm.mjs",
       "sha1": "38591407de48d8832de965d821e5a54aea333fe1",
@@ -57,6 +72,11 @@
     },
     {
       "name": "pyodide.asm.wasm",
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.asm.wasm",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide.asm.wasm",
+        "https://unpkg.com/pyodide@314.0.2/pyodide.asm.wasm"
+      ],
       "role": "engine-binary",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.asm.wasm",
       "sha1": "312ce1635ef289cc897b245b76b5909be40c3704",
@@ -72,6 +92,11 @@
     },
     {
       "name": "python_stdlib.zip",
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/python_stdlib.zip",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/python_stdlib.zip",
+        "https://unpkg.com/pyodide@314.0.2/python_stdlib.zip"
+      ],
       "role": "stdlib-archive",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/python_stdlib.zip",
       "sha1": "08a336ee1625b3dcc235a2ff94d3ff819aafafd6",
@@ -87,6 +112,11 @@
     },
     {
       "name": "pyodide-lock.json",
+      "sources": [
+        "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide-lock.json",
+        "https://cdn.jsdelivr.net/npm/pyodide@314.0.2/pyodide-lock.json",
+        "https://unpkg.com/pyodide@314.0.2/pyodide-lock.json"
+      ],
       "role": "package-lock",
       "url": "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide-lock.json",
       "sha1": "d7d8def8c9e99bc9df66c3226b274efde9c70496",
@@ -101,6 +131,10 @@
     },
     {
       "name": "libv86.mjs",
+      "sources": [
+        "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
+        "https://unpkg.com/v86@0.5.424/build/libv86.mjs"
+      ],
       "role": "engine-module",
       "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
       "sha1": "b73519e406e5c91e34b99bd59f5b4a336a434629",
@@ -115,6 +149,10 @@
     },
     {
       "name": "v86.wasm",
+      "sources": [
+        "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
+        "https://unpkg.com/v86@0.5.424/build/v86.wasm"
+      ],
       "role": "engine-binary",
       "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
       "sha1": "0eba04d11fa23dd27eb7e75c4154ccddccc3cd93",
@@ -130,6 +168,10 @@
     },
     {
       "name": "seabios.bin",
+      "sources": [
+        "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
+        "https://cdn.jsdelivr.net/gh/copy/v86@2f1346b/bios/seabios.bin"
+      ],
       "role": "firmware",
       "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
       "sha1": "f10fa015b059186dcfe961fae3acbe3fe7f83e7f",
@@ -145,6 +187,10 @@
     },
     {
       "name": "vgabios.bin",
+      "sources": [
+        "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
+        "https://cdn.jsdelivr.net/gh/copy/v86@2f1346b/bios/vgabios.bin"
+      ],
       "role": "firmware",
       "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
       "sha1": "97df04d5423bccc5b986da0ecde01839997d966d",
@@ -160,6 +206,9 @@
     },
     {
       "name": "buildroot-bzimage68.bin",
+      "sources": [
+        "https://i.copy.sh/buildroot-bzimage68.bin"
+      ],
       "role": "guest-image",
       "url": "https://i.copy.sh/buildroot-bzimage68.bin",
       "sha1": "9c75f5833a7533b341effb8c7bc54f306b51bb42",

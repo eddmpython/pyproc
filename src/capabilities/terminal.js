@@ -81,8 +81,12 @@ export class Terminal {
     }
     this._rt.setGlobal("_pyprocTermLine", line);
     const r = await this._rt.runAsync("_pyprocTermPush(_pyprocTermLine)");
-    const [more, out] = r.toJs ? r.toJs() : r;
-    if (this._tt && !more) this._marks.push(this._reactive.checkpoint().index); // 완결 문장 = 경계
-    return { more, out };
+    try {
+      const [more, out] = this._rt.toHostValue(r, { proxyMode: "copy", fallback: [false, ""] });
+      if (this._tt && !more) this._marks.push(this._reactive.checkpoint().index); // 완결 문장 = 경계
+      return { more, out };
+    } finally {
+      this._rt.destroyHostValue(r);
+    }
   }
 }

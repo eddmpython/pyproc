@@ -11,6 +11,18 @@ import { SIGNAL_META, EOT, CTL_WORDS, DATA_SAB_BYTES, SITE_PATH } from "./wasiPr
 import { unzipWheel } from "./wheelUnzip.js";
 import { verifyPyProcAssetIntegrity } from "../../assets.js";
 import { PyProcError, fromErrorPayload } from "../../errors.js";
+import {
+  RUNTIME_CAPABILITIES,
+  RUNTIME_CONTRACT_VERSION,
+} from "../../runtimeContract.js";
+
+const WASI_RUNTIME_CAPABILITIES = Object.freeze([
+  RUNTIME_CAPABILITIES.asyncExecution,
+  RUNTIME_CAPABILITIES.globals,
+  RUNTIME_CAPABILITIES.hostValues,
+  RUNTIME_CAPABILITIES.checkpoint,
+  RUNTIME_CAPABILITIES.packages,
+]);
 
 // 바이트를 base64로(파이썬에 코드로 실어 /site에 쓰기 위함). 큰 배열은 청크로 스택 초과 방지.
 function base64FromBytes(bytes) {
@@ -73,6 +85,9 @@ export class WasiSession {
     this._data = new Uint8Array(new SharedArrayBuffer(DATA_SAB_BYTES));
     this._queue = []; this._idle = false; this._cur = null; this._lines = { stdout: [], stderr: [] };
   }
+  get runtimeContractVersion() { return RUNTIME_CONTRACT_VERSION; }
+  get runtimeKind() { return "wasi"; }
+  capabilities() { return WASI_RUNTIME_CAPABILITIES; }
 
   async _boot() {
     if (this._assetIntegrity) await verifyPyProcAssetIntegrity(this._assetIntegrity, { roles: ["wasiWorker"] });
@@ -127,10 +142,18 @@ export class WasiSession {
     if (err) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "WASI 실행 예외: " + err.trim());
     return out;
   }
+  runAsync(code) { return this.run(code); }
 
   // 값 다리(JSON 직렬화 한정): 파이썬 전역 값을 회수/주입한다.
   async get(name) { return JSON.parse((await this.run(`import json as pyprocJson\nprint(pyprocJson.dumps(${name}))`)).trim()); }
   async set(name, value) { await this.run(`import json as pyprocJson\n${name} = pyprocJson.loads(${JSON.stringify(JSON.stringify(value))})`); }
+  getGlobal(name) { return this.get(name); }
+  setGlobal(name, value) { return this.set(name, value); }
+  toHostValue(value, options = {}) {
+    if (value === undefined && Object.prototype.hasOwnProperty.call(options, "fallback")) return options.fallback;
+    return value;
+  }
+  destroyHostValue() {}
 
   // 순수 파이썬 wheel을 이 라이브 세션에 설치한다(= 브라우저판 pip install). wheel(ArrayBuffer/
   // Uint8Array)을 네이티브로 풀어 /site에 파일을 쓰고 import 캐시를 무효화한다. 이후 그 패키지를

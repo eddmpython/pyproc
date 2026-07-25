@@ -33,12 +33,20 @@ export interface WasiManifest {
  * 네이티브 확장 불가(정적 링크). 코드 채널/신호 프로토콜은 내부 캡슐화(소비자는 모른다).
  */
 export class WasiSession {
+  readonly runtimeContractVersion: 1;
+  readonly runtimeKind: "wasi";
+  capabilities(): readonly string[];
   /** 코드 실행(async). stdout 문자열 반환. 파이썬 예외는 던진다. */
   run(code: string): Promise<string>;
+  runAsync(code: string): Promise<string>;
   /** 파이썬 전역 값 회수(JSON 역직렬화). */
   get(name: string): Promise<unknown>;
+  getGlobal(name: string): Promise<unknown>;
   /** JS 값을 파이썬 전역에 주입(JSON 직렬화). */
   set(name: string, value: unknown): Promise<void>;
+  setGlobal(name: string, value: unknown): Promise<void>;
+  toHostValue(value: unknown, options?: { proxyMode?: "copy" | "preserve"; fallback?: unknown }): unknown;
+  destroyHostValue(value: unknown): void;
   /** 지금 상태를 체크포인트(경계 힙 스냅샷). */
   checkpoint(): Promise<{ idx: number; mb: number }>;
   /** 시간여행: 체크포인트 idx로 복원한다. 복원 후 파이썬이 그 시점 상태로 재개(분기 가능). */

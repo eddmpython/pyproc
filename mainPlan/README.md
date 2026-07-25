@@ -19,6 +19,8 @@
 
 ## 활성 이니셔티브
 
-없음.
+| 이니셔티브 | 상태 | 재개 지점 |
+|---|---|---|
+| [stability-convergence](stability-convergence/README.md) | 진행 중 | [03-progress-ledger.md](stability-convergence/03-progress-ledger.md) |
 
 완결·폐기 이니셔티브 19개는 [_done/](_done/README.md)으로 이관됐다(최신 이관 = soundness-hardening, 완료). 세션 간 마지막 상태는 각 `_done/<이니셔티브>/` 진행 원장 또는 README에서 확인한다.

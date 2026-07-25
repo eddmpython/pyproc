@@ -9,7 +9,7 @@ import { WheelCache } from "../capabilities/wheelCache.js";
 import { Terminal } from "../capabilities/terminal.js";
 import { DeviceFs } from "../capabilities/deviceFs.js";
 import { Init } from "../capabilities/init.js";
-import { MachineJournal } from "../capabilities/machineJournal.js";
+import { MachineJournal } from "../capabilities/journal/machineJournal.js";
 
 const RUNTIME_CAPABILITY_BINDINGS = Symbol.for("pyproc.runtimeCapabilityBindings");
 const REACTIVE_CONTROLLER = Symbol.for("pyproc.reactiveController");

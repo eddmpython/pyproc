@@ -8,6 +8,12 @@ import { FileSystem } from "./fileSystem.js";
 import { PyProcError } from "./errors.js";
 import { runWithGlobalPatch } from "./globalPatch.js";
 import { verifySri } from "./contentDigest.js";
+import {
+  ENGINE_CAPABILITIES,
+  assertEngineContract,
+  requireEngineCapability,
+} from "./engineContract.js";
+import { RUNTIME_CAPABILITIES, RUNTIME_CONTRACT_VERSION } from "./runtimeContract.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
@@ -180,7 +186,10 @@ export class Runtime {
   // Pyodide를 `new Runtime(py)`로 채택하는 라이브 소비자를 지원한다. EngineContract seam(계약
   // 격리) 도입 시 `Runtime(py)` 채택 경로가 깨질 뻔한 회귀를 이 판별로 복원한다(runSync 유무로 구분).
   constructor(engineOrPy, indexURL, opts = {}) {
-    this._engine = engineOrPy && typeof engineOrPy.runSync === "function" ? engineOrPy : new PyodideEngine(engineOrPy);
+    const engine = engineOrPy?.engineContractVersion === 1 ? engineOrPy : new PyodideEngine(engineOrPy);
+    this._engine = assertEngineContract(engine);
+    this.runtimeContractVersion = RUNTIME_CONTRACT_VERSION;
+    this.runtimeKind = this._engine.engineKind;
     // 이 커널이 어느 배포 지점에서 부팅됐는지. 자식 워커(subprocess 등)가 같은 지점을
     // 쓰게 하는 근거다(자가호스팅/오프라인 배포에서 자식만 CDN으로 새는 결함 방지).
     this.indexURL = indexURL || DEFAULT_INDEX;
@@ -193,34 +202,76 @@ export class Runtime {
   // 힙 변이다 = 저널 유휴 감시 같은 외부 관찰자에게 보여야 한다)과 markDirty(라이브 PyProxy
   // 호출처럼 계측 불가능한 변이의 신고 채널).
   noteStateMutation() { this.execSeq++; }
+  capabilities() {
+    const engine = new Set(this._engine.capabilities());
+    const runtime = [
+      RUNTIME_CAPABILITIES.asyncExecution,
+      RUNTIME_CAPABILITIES.syncExecution,
+      RUNTIME_CAPABILITIES.globals,
+      RUNTIME_CAPABILITIES.hostValues,
+      RUNTIME_CAPABILITIES.memory,
+    ];
+    if (engine.has(ENGINE_CAPABILITIES.fileSystem)) runtime.push(RUNTIME_CAPABILITIES.fileSystem);
+    if (engine.has(ENGINE_CAPABILITIES.packages)) runtime.push(RUNTIME_CAPABILITIES.packages);
+    return Object.freeze(runtime);
+  }
   run(code) { this.execSeq++; return this._engine.runSync(code); }
   runAsync(code) { this.execSeq++; return this._engine.runAsync(code); }
   setGlobal(name, value) { this.execSeq++; this._engine.setGlobal(name, value); }
-  // getGlobal은 엔진 프록시(Pyodide면 PyProxy)를 그대로 반환한다. 소비자는 call/toJs로 값을
-  // 회수하고 destroy로 파기할 수 있다(재사용 프록시 캐시 패턴). 이 프록시는 계약이 축복한다.
+  // getGlobal은 엔진 프록시(Pyodide면 PyProxy)를 그대로 반환한다. 소비자는 `toHostValue`로
+  // host 값으로 정규화하고 `destroyHostValue`로 파기한다(재사용 프록시 캐시 패턴).
   getGlobal(name) { return this._engine.getGlobal(name); }
+  // 엔진별 값 브리지를 계약 메서드로 통일: Pyodide 값을 host 타입으로 정규화하고, 필요 시
+  // pyodide 해제 경로를 한 곳에 모은다. (WASI는 pass-through + no-op destroy).
+  toHostValue(value, options = {}) { return this._engine.toHostValue(value, options); }
+  destroyHostValue(value) { if (this._engine.destroyHostValue) this._engine.destroyHostValue(value); }
   // 인터럽트 SAB 배선: 이 버퍼의 [0]에 시그널 번호를 쓰면 실행 중 파이썬이 반응한다
   // (2=SIGINT=KeyboardInterrupt). 워커에서 파이썬을 돌리는 소비자(예: 동기 UDF의 무한 실행
   // 취소)의 계약. 미지원 엔진이면 false. 엔진 내부(setInterruptBuffer)를 raw로 만지지 않게 한다.
-  setInterruptBuffer(sab) { return this._engine.setInterruptBuffer(sab); }
-  async install(pkg) { this.execSeq++; return this._engine.install(pkg); }
-  async loadPackages(pkgs) { this.execSeq++; return this._engine.loadPackages(pkgs); }
+  setInterruptBuffer(sab) {
+    if (!new Set(this._engine.capabilities()).has(ENGINE_CAPABILITIES.interrupts)) return false;
+    return this._engine.setInterruptBuffer(sab);
+  }
+  async install(pkg) {
+    requireEngineCapability(this._engine, ENGINE_CAPABILITIES.install, "Runtime.install");
+    this.execSeq++; return this._engine.install(pkg);
+  }
+  async loadPackages(pkgs) {
+    requireEngineCapability(this._engine, ENGINE_CAPABILITIES.packages, "Runtime.loadPackages");
+    this.execSeq++; return this._engine.loadPackages(pkgs);
+  }
   // 셀 코드의 import 문을 스캔해 필요한 패키지를 자동 로드. 미지원 엔진(WASI)은 no-op(명시 loadPackages 폴백).
-  async loadPackagesFromImports(code) { this.execSeq++; return this._engine.loadPackagesFromImports(code); }
+  async loadPackagesFromImports(code) {
+    requireEngineCapability(this._engine, ENGINE_CAPABILITIES.importDiscovery, "Runtime.loadPackagesFromImports");
+    this.execSeq++; return this._engine.loadPackagesFromImports(code);
+  }
   // 실행 출력 캡처(셀별 가변 싱크). handler는 문자열 청크 수신, null = 기본 복원. 엔진 setStdout를 raw로 안 만지게.
-  setStdout(handler) { return this._engine.setStdout(handler); }
-  setStderr(handler) { return this._engine.setStderr(handler); }
+  setStdout(handler) {
+    requireEngineCapability(this._engine, ENGINE_CAPABILITIES.output, "Runtime.setStdout");
+    return this._engine.setStdout(handler);
+  }
+  setStderr(handler) {
+    requireEngineCapability(this._engine, ENGINE_CAPABILITIES.output, "Runtime.setStderr");
+    return this._engine.setStderr(handler);
+  }
 
   // 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정한다(uv lock 등가).
   // boot({ lockFileURL })에 되먹이면 같은 버전이 해석 0으로 재현된다. 실측: freezeLockProbe.
-  async freeze() { this.execSeq++; return this._engine.freeze(); }
+  async freeze() {
+    requireEngineCapability(this._engine, ENGINE_CAPABILITIES.freeze, "Runtime.freeze");
+    this.execSeq++; return this._engine.freeze();
+  }
 
   // 영속 디스크: OPFS 등 디렉터리 핸들을 파이썬 파일시스템 경로로 마운트한다.
   // 파이썬 open()이 진짜 지속 파일을 읽고 쓴다. 변경 반영은 반환된 sync() 호출(핸들은 소비자 제공).
   async mountHome(dirHandle, path = "/home/web") {
+    requireEngineCapability(this._engine, ENGINE_CAPABILITIES.mount, "Runtime.mountHome");
     this.execSeq++;
     return this._engine.mountDir(path, dirHandle);
   }
 
-  get raw() { return this._engine.raw(); }  // 탈출구(권장 안 함). 미이관 접점(deviceFs의 FS 등)용
+  get raw() {
+    requireEngineCapability(this._engine, ENGINE_CAPABILITIES.raw, "Runtime.raw");
+    return this._engine.raw();
+  }
 }

@@ -47,8 +47,8 @@ onmessage = async (e) => {
     } else if (msg.type === "run") {
       // 컨테이너 안 코드 실행. runAsync = JSPI 경로(중첩 RPC의 run_sync가 여기서 산다).
       const r = await rt.runAsync(msg.code);
-      const result = r && r.toJs ? r.toJs() : (r === undefined ? null : r);
-      if (r && r.destroy) r.destroy();
+      const result = rt.toHostValue(r, { proxyMode: "copy", fallback: null });
+      rt.destroyHostValue(r);
       postMessage({ type: "ran", reqId: msg.reqId, result });
     } else if (msg.type === "spawnChild") {
       // 중첩: 이 컨테이너가 자기 자식 컨테이너를 만든다(깊이 +1).

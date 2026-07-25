@@ -108,7 +108,16 @@ export class SocketBridge {
         ws.onerror = () => reject(new PyProcError("PYPROC_ENV_UNSUPPORTED", "소켓 릴레이 WS 에러(릴레이 미기동?)", { retryable: true }));
         ws.onclose = () => { if (!st.closed) { st.closed = true; this._deliver(st, new Uint8Array(0)); } };
       }),
-      send: (id, bytes) => { const st = socks.get(id); if (st && st.ws) st.ws.send(bytes && bytes.toJs ? bytes.toJs() : bytes); },
+      send: (id, bytes) => {
+        const st = socks.get(id);
+        if (!st || !st.ws) return;
+        const payload = this._rt.toHostValue(bytes, { proxyMode: "copy", fallback: new Uint8Array(0) });
+        try {
+          st.ws.send(payload);
+        } finally {
+          this._rt.destroyHostValue(bytes);
+        }
+      },
       recv: (id) => new Promise((resolve) => {
         const st = socks.get(id);
         if (!st) return resolve(new Uint8Array(0));       // 닫힌/없는 소켓 = EOF(크래시 대신)

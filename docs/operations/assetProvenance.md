@@ -78,7 +78,7 @@ Web Machine fixture(v86 계열):
 | `seabios.bin` | v86 `2f1346b` build script가 SeaBIOS `rel-1.16.2`와 고정 config 사용. **exact version + 공개 config가 있어 재현 경로가 열려 있다** | 재현 build·license 전달물 전 local test만 |
 | `vgabios.bin` | 위 SeaBIOS build의 `out/vgabios.bin` | 위와 같음 |
 | `buildroot-bzimage68.bin` | **커널 6.8.12**(bzImage setup header에서 직접 판독), 툴체인 gcc 13.2.0 / binutils 2.42, Buildroot 트리 `2021.11-11272-ge2962af`. `.config` 미탑재(CONFIG_IKCONFIG 비활성), 그 트리는 mainline에 없음 | 번들·공식 image 배포 금지 |
-| `kolibri.img` | v86 test URL과 SHA-256만. exact image revision 없음 | 번들·공식 image 배포 금지 |
+| `kolibri.img` | `i.copy.sh/kolibri.img`와 `cdn.jsdelivr.net/gh/copy/images@master/kolibri.img` 두 출처. SHA-256는 일치. exact image revision 없음 | 번들·공식 image 배포 금지 |
 
 component 결론은 전부 위 불변식이 도출한다. `Pyodide`는 `pyodide.asm.wasm`(inventory 미검증)을
 덮으므로 `NOASSERTION`이고(선언 MPL-2.0은 `licenseDeclared`로 남는다), `v86`은
@@ -103,6 +103,11 @@ binary라 `NOASSERTION`이다.
 6.8.12는 이미 식별됐으므로 문서화된 `.config`로 같은 버전을 빌드하면 1~3번과 5번이 함께
 열린다. 그들의 빌드를 재현할 필요가 없다.
 
+교체 recipe는 `scripts/buildroot/`에 있다. 현재 지원 중인 Buildroot `2025.02.16` exact commit과
+i686 config를 고정하고, initramfs 포함 bzImage, `legal-info`, CycloneDX, build manifest를
+만든다. 첫 빌드 결과를 곧바로 catalog에 넣지 않는다. 독립 builder 두 곳의 SHA-256 동일성과
+Web Computer browser gate가 모두 확인된 뒤 opaque 자산을 교체한다.
+
 `.webmachine` schema는 engine과 boot image를 파일에 복사하지 않는다. 다만 guest RAM snapshot과
 block state는 원래 OS의 executable·filesystem material을 포함할 수 있다. 사용자가 자기
 환경에서 export한 file은 package가 아니며, 그것을 제3자에게 배포하는 순간 별도 software
@@ -112,8 +117,14 @@ distribution이 된다.
 
 | 위험 | 실태 |
 |---|---|
-| `i.copy.sh` 단일 출처 | 10MB `buildroot-bzimage68.bin`의 유일한 출처가 1인 호스팅 mutable URL이다. 미러도 불변성 보증도 없고 404가 나면 `npm run test:web-computer`가 죽는다. 미러를 저장소에 두는 것은 위 결정 1이 금지하므로, 진짜 해는 자체 빌드다(커널이 식별됐으므로 막혀 있지 않다) |
+| `i.copy.sh` 단일 출처 | `buildroot-bzimage68.bin`은 여전히 단일 출처다. `kolibri.img`는 `copy/images` CDN 백업이 추가돼 다중화되었다. 현재 준비기(`scripts/prepareWebComputerAssets.mjs`, `tests/webMachine/fixtures/v86/prepareAssets.mjs`)는 catalog의 `sources` 순서를 따라 실패 시 다른 출처를 순차 시도하고, `i.copy.sh`가 단일 소스일 때 경고를 남겨 운영에서 대체 소스 준비를 강제한다. |
 | 배포 기제 | Web Machine 플랫폼은 `src/machine`으로 편입돼 npm `files`의 `src`에 실린다(코드 배포는 열림). 단 guest 실행 자산은 여전히 안 나간다: `redistribution: "disabled"`는 사실의 기술이고, 이 표의 provenance 조건이 채워지기 전까지 공식 image 배포는 금지다 |
+
+운영 규칙:
+
+- `scripts/assetProvenance.mjs`는 `assets[].sources`를 검증하고, 각 자산의 후보 소스를 정리한다.
+- `scripts/prepareWebComputerAssets.mjs`와 `tests/webMachine/fixtures/v86/prepareAssets.mjs`는 `sources` 순서로 우회 다운로드한다.
+- `i.copy.sh`가 단일 소스인 자산은 허용되나, `sources`가 하나뿐일 때 실행 로그는 `주의:` 경고를 남겨 `N+1` 출처 준비를 촉발한다. 현재 해당은 `buildroot-bzimage68.bin`뿐이다.
 
 설계 근거와 완료 기록은
 [web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md), 이 정책을 실제로

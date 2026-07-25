@@ -6,9 +6,9 @@
 // 루트 HEAD.json과 파일이 겹치지 않아 이관에 크래시 창이 없다(어느 시점에 죽어도 커널 refs
 // 또는 구 refs 중 하나는 완전하다). 커널 refs가 존재하면 항상 그쪽이 우선이다(오래된 구
 // 세대로 조용히 되감기는 것을 차단).
-import { PyProcError } from "../runtime/errors.js";
-import { parseSha256Address } from "../runtime/contentDigest.js";
-import { OpfsStateStore } from "../state/opfsStateStore.js";
+import { PyProcError } from "../../runtime/errors.js";
+import { parseSha256Address } from "../../runtime/contentDigest.js";
+import { OpfsStateStore } from "../../state/opfsStateStore.js";
 
 const STATE_DIR = "state";
 

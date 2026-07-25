@@ -16,7 +16,7 @@
 
 ## 2026-07-18 - 착수 전 정합성·ROI 재검 통과
 
-- PRD 하중 가정 전수를 실물 코드로 대조했다: `collectDelta`가 세션 저장([session.js](../../../src/session/session.js) `_collectDelta`)과 저널 커밋([machineJournal.js](../../../src/capabilities/machineJournal.js) `commit`)의 공용 프리미티브인 것, sha256이 승격 시점(커밋의 페이지별 `sha256Hex`)에만 발생하는 것, h0 불일치가 PREV 후퇴 없는 즉시 예외인 것, HEAD/PREV·digest·서명·봉투 각 2벌인 것 전부 실물과 일치.
+- PRD 하중 가정 전수를 실물 코드로 대조했다: `collectDelta`가 세션 저장([session.js](../../../src/session/session.js) `_collectDelta`)과 저널 커밋([machineJournal.js](../../../src/capabilities/journal/machineJournal.js) `commit`)의 공용 프리미티브인 것, sha256이 승격 시점(커밋의 페이지별 `sha256Hex`)에만 발생하는 것, h0 불일치가 PREV 후퇴 없는 즉시 예외인 것, HEAD/PREV·digest·서명·봉투 각 2벌인 것 전부 실물과 일치.
 - 저장 포맷 실물 확인: 세션 = `<name>.json`(meta v2: manifest/pages/sp/heapLen/h0) + `<name>.bin`(packPages 연속 슬롯), 저널 = `HEAD.json`/`PREV.json` + `blob/<hex64>` loose + `PACKS.json`/`pack/*.bin`, `.pymachine` = MAGIC "PYMACHINE2\n" + hex64 봉투해시 + u32 헤더길이 + 헤더 + 델타(+homePack), machine generation = IndexedDB 4 store(blobs/generations/heads/owners) + `sha256:` 접두 digest.
 - ROI 성립: 중복이 프로토콜·스키마·신뢰 계약 수준에 실재하고, 단계 게이트(구 포맷 바이트 동등성 100%)가 유실 위험을 담보한다. 착수 확정.
 
@@ -48,8 +48,8 @@
 ## 2026-07-18 - 3단계 완료: 저널 재기초
 
 - 핵심 결정: 새 포맷의 바이트는 기존 `blob/<hex>` CAS를 그대로 공유한다(내용주소는 포맷 무관 - 구 저널 blob이 새 세대의 dedupe 대상이 되고 pack 기계를 재사용). 커널 ref는 `state/HEAD.json·PREV.json` 하위 디렉터리에 둬 구 루트 HEAD.json과 파일 충돌 없이 이관한다(어느 시점에 죽어도 두 세대 체계 중 하나는 완전). 커널 refs 존재 시 무조건 우선(구 세대로의 조용한 되감기 차단).
-- [journalKernelStore.js](../../../src/capabilities/journalKernelStore.js) 신설: JournalBlobStore(loose+pack 바이트) + OpfsStateStore(ref 위임)를 커널 store 계약으로 묶는 드라이버.
-- [machineJournal.js](../../../src/capabilities/machineJournal.js) 강등: 커밋 = `commitState` 한 호출(승격·dedupe·쓰기 순서 법은 커널 소유), recover = `openState`(verify-on-read·h0 대조·PREV 후퇴는 커널 소유) + 힙 적용만. /home pack은 pageTable tree의 file 엔트리. 남은 것 = 유휴 정책, live 판정(pack/prune: 커널 세대는 commit/tree 오브젝트까지 live), legacy reader(읽기 전용), 첫 커널 커밋 후 구 ref 삭제(writer 즉시 단일화). 공개 API·결과 형태·오류 코드(JOURNAL_CORRUPT 래핑, REPLAY_MISMATCH 통과) 전부 보존.
+- [journalKernelStore.js](../../../src/capabilities/journal/journalKernelStore.js) 신설: JournalBlobStore(loose+pack 바이트) + OpfsStateStore(ref 위임)를 커널 store 계약으로 묶는 드라이버.
+- [machineJournal.js](../../../src/capabilities/journal/machineJournal.js) 강등: 커밋 = `commitState` 한 호출(승격·dedupe·쓰기 순서 법은 커널 소유), recover = `openState`(verify-on-read·h0 대조·PREV 후퇴는 커널 소유) + 힙 적용만. /home pack은 pageTable tree의 file 엔트리. 남은 것 = 유휴 정책, live 판정(pack/prune: 커널 세대는 commit/tree 오브젝트까지 live), legacy reader(읽기 전용), 첫 커널 커밋 후 구 ref 삭제(writer 즉시 단일화). 공개 API·결과 형태·오류 코드(JOURNAL_CORRUPT 래핑, REPLAY_MISMATCH 통과) 전부 보존.
 - 커널 확장: pageTable tree에 file 엔트리(id/address/byteLength/meta), commitState 쓰기 분해 카운터(pagesWrote/filesWrote/metaWrote).
 - 게이트: 기존 저널 게이트(유휴 커밋·pack·pack-only 복구) 무수정 통과 + 신설 4종 - 동일 상태 재커밋 wrote 0(비용 법칙 보존), 구 포맷 v2 fixture recover 호환, 첫 커밋의 커널 이관(구 ref 소멸 + 공유 CAS dedupe + 재복구), 커널 포맷 h0 불일치 즉시 예외. **이빨 증명**: legacy 경로 우회 주입 -> RED("nullp") -> 원복 GREEN.
 - npm test 1319, test:types, test:browser 76/76 전부 green.

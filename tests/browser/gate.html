@@ -319,8 +319,8 @@
         // (3) 커널 포맷의 h0 불일치 = PREV 후퇴 없이 즉시 PYPROC_REPLAY_MISMATCH.
         try { await jRootDir.removeEntry("pyprocGateJournalH0", { recursive: true }); } catch (e) {}
         const h0Dir = await jRootDir.getDirectoryHandle("pyprocGateJournalH0", { create: true });
-        const { JournalKernelStore } = await import("../../src/capabilities/journalKernelStore.js");
-        const { JournalBlobStore } = await import("../../src/capabilities/journalBlobStore.js");
+        const { JournalKernelStore } = await import("../../src/capabilities/journal/journalKernelStore.js");
+        const { JournalBlobStore } = await import("../../src/capabilities/journal/journalBlobStore.js");
         const { commitState } = await import("../../src/state/refProtocol.js");
         const wrongStore = new JournalKernelStore(h0Dir, new JournalBlobStore(h0Dir));
         await commitState(crypto, wrongStore, {

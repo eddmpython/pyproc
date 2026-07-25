@@ -29,3 +29,5 @@ apps/webComputer/assets/
 tests/attempts/wasiPackages/*.whl
 # 자가 호스팅 엔진 배포판(scripts/fetchEngine.mjs가 준비, 약 509MB). 레포 자산 0.
 vendor/
+# Buildroot 자체 guest 빌드 작업공간과 산출물. recipe/config/manifest 계약만 추적한다.
+.cache/buildrootGuest/

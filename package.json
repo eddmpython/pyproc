@@ -21,13 +21,35 @@
       "types": "./index.d.ts",
       "default": "./index.js"
     },
-    "./history": "./src/state/index.js",
-    "./machine": "./src/machine/index.js",
+    "./runtime": {
+      "types": "./src/runtime/index.d.ts",
+      "default": "./src/runtime/index.js"
+    },
+    "./history": {
+      "types": "./src/state/index.d.ts",
+      "default": "./src/state/index.js"
+    },
+    "./machine": {
+      "types": "./src/machine/index.d.ts",
+      "default": "./src/machine/index.js"
+    },
     "./worker": "./src/processOs/worker.js",
-    "./assets": "./src/runtime/assets.js",
-    "./gpu": "./src/capabilities/gpuCompute.js",
-    "./socket": "./src/capabilities/socketBridge.js",
-    "./wasi": "./src/runtime/engines/wasi/wasiSession.js"
+    "./assets": {
+      "types": "./src/runtime/assets.d.ts",
+      "default": "./src/runtime/assets.js"
+    },
+    "./gpu": {
+      "types": "./src/capabilities/gpuCompute.d.ts",
+      "default": "./src/capabilities/gpuCompute.js"
+    },
+    "./socket": {
+      "types": "./src/capabilities/socketBridge.d.ts",
+      "default": "./src/capabilities/socketBridge.js"
+    },
+    "./wasi": {
+      "types": "./src/runtime/engines/wasi/wasiSession.d.ts",
+      "default": "./src/runtime/engines/wasi/wasiSession.js"
+    }
   },
   "files": [
     "index.js",
@@ -41,6 +63,7 @@
   "scripts": {
     "test": "node tests/run.mjs",
     "test:types": "npx -y -p typescript@5 tsc -p tests/tsconfig.json",
+    "test:contracts": "node tests/contracts/publicSurface.mjs",
     "assets:provenance": "node scripts/assetProvenance.mjs",
     "test:package": "node tests/packageConsumer.mjs",
     "test:consumer": "node tests/browser/productConsumer.mjs",
@@ -53,6 +76,7 @@
     "bench:compare": "node tests/browser/benchCompare.mjs",
     "assets:manifest": "node scripts/assetManifest.mjs --pretty",
     "assets:web-computer": "node scripts/prepareWebComputerAssets.mjs",
+    "assets:buildroot": "node scripts/buildroot/buildGuest.mjs",
     "serve": "node scripts/staticServer.mjs",
     "fetch:engine": "node scripts/fetchEngine.mjs",
     "mcp:sandbox": "node scripts/mcpSandboxServer.mjs"
