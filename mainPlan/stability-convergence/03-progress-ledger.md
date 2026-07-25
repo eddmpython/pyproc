@@ -11,4 +11,6 @@
 - Buildroot Linux 재현 workflow와 artifact 보존 경로를 추가.
 - contract 5 suites, Node 구조, 타입, package, 브라우저 core, 제품 consumer, Web Computer gate green.
 - Web Computer는 제품 consumer와 로컬 병렬 실행 시 owner wait timeout이 1회 발생했고 단독 재실행은 green. CI는 별도 job 격리를 유지한다.
-- NEXT: Buildroot Linux workflow artifact의 hash/provenance를 development catalog에 승격.
+- 첫 Buildroot workflow는 partial Git checkout 뒤 barebox package macro 평가에서 실패.
+- 입력을 공식 release tarball SHA-256 고정으로 교체하고 clean source/output 재현 및 최소 artifact 보존으로 수리.
+- NEXT: 수리 workflow artifact의 hash/provenance를 development catalog에 승격.

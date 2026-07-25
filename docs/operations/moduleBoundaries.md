@@ -42,6 +42,7 @@ prune 실행, pressure event 전달만 담당한다.
 
 ## 실행 자산
 
-Buildroot guest는 `scripts/buildroot/`의 revision, config, legal-info, SBOM 계약으로 재현한다.
+Buildroot guest는 `scripts/buildroot/`의 공식 release archive SHA-256, 대응 revision, config,
+legal-info, SBOM 계약으로 재현한다.
 `.github/workflows/buildroot-guest.yml`은 Linux 빌드와 artifact 보존을 담당한다. 생성 artifact를
 development catalog에 승격하는 행위는 해시와 provenance 대조 후 별도 리뷰로 수행한다.

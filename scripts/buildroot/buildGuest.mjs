@@ -1,7 +1,7 @@
 // Buildroot i686 guest를 exact source/config에서 만들고 provenance 영수증을 남긴다.
 // Linux/WSL build host에서 실행한다. 대형 build/output은 .cache 아래에만 둔다.
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,11 +13,16 @@ const workspace = resolve(process.env.PYPROC_BUILDROOT_WORKSPACE || join(root, "
 const sourceDir = join(workspace, "source");
 const outputDir = join(workspace, "output");
 const distDir = join(workspace, "dist");
+const archivePath = join(workspace, "buildroot-2025.02.16.tar.xz");
 const configPath = join(scriptDir, "buildroot.config");
 const BUILDROOT = Object.freeze({
   version: "2025.02.16",
   revision: "2d05bb10d08410c59856ff4022ba8b762f77441a",
+  commit: "135af563b945b8c3d18f8fd370370075b9edb140",
   repository: "https://gitlab.com/buildroot.org/buildroot.git",
+  sourceUrl: "https://buildroot.org/downloads/buildroot-2025.02.16.tar.xz",
+  sourceSha256: "15305e3d366eeaf4a5ecaf2ed42f685fd6af7fe5dbf1f62e1de5f46ee83225e2",
+  sourceDateEpoch: 1784143163,
 });
 
 function run(command, args, options = {}) {
@@ -36,22 +41,38 @@ async function sha256(path) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
 }
 
+async function prepareSource() {
+  let validArchive = false;
+  if (existsSync(archivePath)) validArchive = await sha256(archivePath) === BUILDROOT.sourceSha256;
+  if (!validArchive) {
+    const response = await fetch(BUILDROOT.sourceUrl, { redirect: "follow" });
+    if (!response.ok) throw new Error(`Buildroot source download 실패(${response.status})`);
+    const temporary = `${archivePath}.tmp`;
+    await writeFile(temporary, Buffer.from(await response.arrayBuffer()));
+    if (await sha256(temporary) !== BUILDROOT.sourceSha256) {
+      await rm(temporary, { force: true });
+      throw new Error("Buildroot source SHA-256 불일치");
+    }
+    await rename(temporary, archivePath);
+  }
+  await rm(sourceDir, { recursive: true, force: true });
+  const extracted = join(workspace, `buildroot-${BUILDROOT.version}`);
+  await rm(extracted, { recursive: true, force: true });
+  run("tar", ["-xJf", archivePath, "-C", workspace]);
+  await rename(extracted, sourceDir);
+}
+
 if (process.platform === "win32") {
   throw new Error("assets:buildroot는 Linux 또는 WSL에서 실행한다(Buildroot host toolchain 계약)");
 }
 await mkdir(workspace, { recursive: true });
-await mkdir(distDir, { recursive: true });
-if (!existsSync(join(sourceDir, ".git"))) {
-  run("git", ["clone", "--filter=blob:none", "--no-checkout", BUILDROOT.repository, sourceDir]);
-}
-run("git", ["fetch", "--depth=1", "origin", BUILDROOT.revision], { cwd: sourceDir });
-run("git", ["checkout", "--detach", BUILDROOT.revision], { cwd: sourceDir });
+await prepareSource();
+await rm(outputDir, { recursive: true, force: true });
+await rm(distDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
+await mkdir(distDir, { recursive: true });
 await copyFile(configPath, join(outputDir, ".config"));
-const sourceDateEpoch = run("git", ["show", "-s", "--format=%ct", BUILDROOT.revision], {
-  cwd: sourceDir,
-  capture: true,
-}).stdout.trim();
+const sourceDateEpoch = String(BUILDROOT.sourceDateEpoch);
 const env = { ...process.env, SOURCE_DATE_EPOCH: sourceDateEpoch, TZ: "UTC", LC_ALL: "C" };
 run("make", [`O=${outputDir}`, "olddefconfig"], { cwd: sourceDir, env });
 run("make", [`O=${outputDir}`], { cwd: sourceDir, env });

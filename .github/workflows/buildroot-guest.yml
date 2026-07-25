@@ -30,6 +30,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pyproc-buildroot-guest
-          path: .cache/buildrootGuest/output/
+          path: |
+            .cache/buildrootGuest/dist/
+            .cache/buildrootGuest/output/legal-info/
           if-no-files-found: error
           retention-days: 30

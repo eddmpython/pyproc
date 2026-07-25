@@ -35,5 +35,9 @@ export function assertModuleBoundaries() {
   if (!buildrootWorkflow.includes("npm run assets:buildroot") || !buildrootWorkflow.includes("upload-artifact@v4")) {
     throw new Error("Buildroot Linux 재현 또는 artifact 보존 배선 누락");
   }
+  const buildrootRecipe = readFileSync(join(ROOT, "scripts", "buildroot", "buildGuest.mjs"), "utf8");
+  if (!buildrootRecipe.includes("sourceSha256") || buildrootRecipe.includes('git", ["clone"')) {
+    throw new Error("Buildroot source가 검증된 release archive 계약이 아니다");
+  }
   return true;
 }
