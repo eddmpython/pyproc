@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { assertPublicSurface } from "./contracts/publicSurface.mjs";
 import { assertRuntimeContracts } from "./contracts/runtimeContract.mjs";
+import { assertRuntimeCapabilityClusters } from "./contracts/runtimeCapabilityClusters.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 let passed = 0, failed = 0;
@@ -133,6 +134,7 @@ check("루트 d.ts 값-선언 1:1 패리티", () => {
 });
 await checkAsync("실행 가능한 공개 계약(package/docs/types)", async () => { await assertPublicSurface(); });
 check("EngineContract + 최소 RuntimeContract", async () => { await assertRuntimeContracts(); });
+check("Runtime capability cluster registry", () => { assertRuntimeCapabilityClusters(); });
 check("PAGE_SIZE === 65536 (pyproc/history 표면)", () => {
   if (coreApi.PAGE_SIZE !== 65536) throw new Error(String(coreApi.PAGE_SIZE));
 });
@@ -1767,8 +1769,16 @@ check("합성 루트만 core와 능력을 함께 안다", () => {
     if (apiSrc.includes(`../capabilities/${spec}.js`)) throw new Error(`runtimeApi.js가 capability class를 직접 import함: ${spec}`);
   }
   const registrySrc = readFileSync(join(ROOT, "src", "composition", "runtimeBindings.js"), "utf8");
+  if (registrySrc.includes("../capabilities/")) {
+    throw new Error("runtimeBindings.js가 capability class를 직접 import함");
+  }
+  const clusterSrc = collect(join(ROOT, "src", "composition", "runtimeBindings"), [".js"], [])
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
   for (const term of ["installRuntimeCapabilities", "enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableJournal"]) {
-    if (!apiSrc.includes(term) && !registrySrc.includes(term)) throw new Error(`runtime capability binding 누락: ${term}`);
+    if (!apiSrc.includes(term) && !registrySrc.includes(term) && !clusterSrc.includes(term)) {
+      throw new Error(`runtime capability binding 누락: ${term}`);
+    }
   }
   // 합성 루트는 아무도 import하지 않는 꼭대기여야 한다. 아래층이 이걸 부르면 폴더 순환이 된다.
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
