@@ -90,7 +90,15 @@ await copyFile(imageSource, imageTarget);
 await writeFile(join(distDir, "buildroot.cyclonedx.json"), sbom);
 const legalReadme = join(outputDir, "legal-info", "README");
 const legalText = await readFile(legalReadme, "utf8");
-const legalWarnings = legalText.split(/\r?\n/).filter((line) => /warning|not saved|unknown/i.test(line));
+const acceptedLegalNotices = new Set([
+  "WARNING: the Buildroot source code has not been saved",
+]);
+const reportedLegalWarnings = legalText
+  .split(/\r?\n/)
+  .map((line) => line.trim())
+  .filter((line) => line.startsWith("WARNING:"));
+const acceptedNotices = reportedLegalWarnings.filter((line) => acceptedLegalNotices.has(line));
+const legalWarnings = reportedLegalWarnings.filter((line) => !acceptedLegalNotices.has(line));
 const manifest = {
   schemaVersion: 1,
   recipe: "pyproc-buildroot-i686-v1",
@@ -108,6 +116,7 @@ const manifest = {
   evidence: {
     legalInfo: "output/legal-info",
     cyclonedx: "dist/buildroot.cyclonedx.json",
+    acceptedNotices,
     legalWarnings,
   },
 };
