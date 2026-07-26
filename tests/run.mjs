@@ -3050,7 +3050,7 @@ section("진입 표면 언어");
     return [...found].sort();
   };
   // 남은 한국어 줄 수. 0에 닿으면 하드 0으로 잠근다(예산이 남으면 "조금은 되돌려도 된다"가 된다).
-  const ADOPTION_DOC_BUDGET = 275;
+  const ADOPTION_DOC_BUDGET = 178;
   check("채택 판단 문서의 한국어 예산은 단조 감소한다", () => {
     const docs = adoptionDocs();
     if (docs.length < 4) throw new Error(`채택 문서를 ${docs.length}개만 찾았다(링크 추출이 죽었다)`);

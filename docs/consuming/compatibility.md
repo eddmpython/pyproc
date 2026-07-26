@@ -1,109 +1,92 @@
-# 환경 호환성 - 한 장
+# Environment compatibility - one page
 
-소비 제품이 "우리 대상 환경에서 pyproc의 어느 표면을 켤 수 있는가"를 한 번에 읽는 표다.
-런타임 판정은 `checkEnvironment()`가 돌려주고(아래 코드와 1:1), 여기 값은 그 판정의 근거다.
-능력별 상세(제품 가치·상태·경계)는 [capabilityMatrix.md](capabilityMatrix.md)가 정본이다.
+The table a consuming product reads to answer "which pyproc surfaces can we turn on in our target environment" in one pass. The runtime verdict comes from `checkEnvironment()` (mapping one to one onto the code below); the values here are the basis for that verdict. Per-capability detail (product value, status, boundaries) is canonical in [capabilityMatrix.md](capabilityMatrix.md).
 
-## 지원 브라우저
+## Supported browsers
 
-**Chromium / Edge 전용.** Firefox / Safari 미지원은 결함이 아니라 스코프 선택이다(JSPI +
-SharedArrayBuffer + `crossOriginIsolated`를 셋 다 요구하는 능력이 있고, 그 조합이 Chromium
-계열에서만 성립한다).
+**Chromium / Edge only.** No Firefox or Safari support is a scope choice, not a defect: some capabilities require JSPI, SharedArrayBuffer, and `crossOriginIsolated` all three, and that combination holds only on Chromium-family browsers.
 
-| 항목 | 요건 | 없으면 |
+| Item | Requirement | Without it |
 |---|---|---|
-| 기본 실행(`boot`/`run`/`loadPackages`/`checkEnvironment`/reactive) | Chromium 계열 브라우저. 헤더 불필요 | Firefox/Safari에서 미지원 |
-| JSPI (`WebAssembly.Suspending`) | Chrome/Edge 137+ (137부터 기본 활성) | terminal blocking input, subprocess, syscall bridge, ASGI 동기 경로가 안 뜬다 (`checkEnvironment().jspi === false`, 코드 `no-jspi`) |
-| SharedArrayBuffer + `crossOriginIsolated` | 페이지에 `COOP: same-origin` + `COEP: require-corp` 헤더 | 프로세스 OS(`machine.proc`), fork/map, 소켓, 인터럽트가 안 뜬다 (`checkEnvironment().sharedArrayBuffer === false`, 코드 `no-cross-origin-isolation`) |
-| same-origin worker 자산 | worker graph를 same-origin에 두고 SRI 검증(`pyproc/assets`) | CDN URL만으로 worker를 여는 것은 브라우저 same-origin 정책이 막는다 |
+| Base execution (`boot`/`run`/`loadPackages`/`checkEnvironment`/reactive) | A Chromium-family browser. No headers needed | Unsupported on Firefox/Safari |
+| JSPI (`WebAssembly.Suspending`) | Chrome/Edge 137+ (enabled by default from 137) | Terminal blocking input, subprocess, the syscall bridge, and the synchronous ASGI path do not come up (`checkEnvironment().jspi === false`, code `no-jspi`) |
+| SharedArrayBuffer + `crossOriginIsolated` | `COOP: same-origin` and `COEP: require-corp` headers on the page | The process OS (`machine.proc`), fork/map, sockets, and interrupts do not come up (`checkEnvironment().sharedArrayBuffer === false`, code `no-cross-origin-isolation`) |
+| Same-origin worker assets | Keep the worker graph on your own origin and verify it with SRI (`pyproc/assets`) | Opening a worker from CDN URLs alone is blocked by the browser's same-origin policy |
 
-`checkEnvironment()` 반환: `{ ok, crossOriginIsolated, sharedArrayBuffer, jspi, issues }`.
-`issues[]`의 각 항목은 `{ code, need, why, fix }`다. 제품은 능력을 켜기 전에 이 결과를 처리한다.
+`checkEnvironment()` returns `{ ok, crossOriginIsolated, sharedArrayBuffer, jspi, issues }`. Each entry in `issues[]` is `{ code, need, why, fix }`. Handle this result before turning a capability on.
 
-## 능력별 필수 조건 요약
+## Prerequisites by capability group
 
-| 능력 묶음 | Chromium | JSPI | COOP/COEP (SAB) | 비고 |
+| Capability group | Chromium | JSPI | COOP/COEP (SAB) | Note |
 |---|:---:|:---:|:---:|---|
-| Python 실행, 패키지, 파일 IO, 체크포인트/복원/시간여행 | 필요 | - | - | 헤더 없이 `npm install`만으로 동작 |
-| 터미널, 빌린 syscall, subprocess, 커널 내 ASGI 서버 | 필요 | 필요 | - | 동기 blocking 경로가 JSPI에 의존 |
-| 프로세스 OS(fork/forkMany/map/mapArray/matmul), 소켓, 인터럽트, 멀티탭 영속(SAB 능력) | 필요 | 필요 | 필요 | `crossOriginIsolated` 하에서만 |
+| Python execution, packages, file IO, checkpoint/restore/time travel | required | - | - | Works from `npm install` alone, no headers |
+| Terminal, borrowed syscalls, subprocess, in-kernel ASGI server | required | required | - | The synchronous blocking paths depend on JSPI |
+| Process OS (fork/forkMany/map/mapArray/matmul), sockets, interrupts, multi-tab persistence using SAB capabilities | required | required | required | Only under `crossOriginIsolated` |
 
-## 엔진
+## Engine
 
-- **Pyodide v314.0.2 (CPython 3.14).** 기본 CDN 로드, 셀프 호스팅 가능(`indexURL`).
-  버전 변경은 릴리즈 사유이며 소비 제품과 동시 이동한다(상세: [contract.md](contract.md) 런타임 정합).
-- WASI 엔진(`pyproc/wasi`)은 엔진 무관 실증용 별도 async 표면이다(프로덕션 정본은 Pyodide).
+- **Pyodide v314.0.2 (CPython 3.14).** Loaded from a CDN by default, self-hostable through `indexURL`. Changing the version is a release-worthy event and moves together with consuming products (detail: the runtime-consistency section of [contract.md](contract.md)).
+- The WASI engine (`pyproc/wasi`) is a separate async surface for proving engine independence. Pyodide is the production canon.
 
-## 자원 특성 (제품이 힙 규모를 정할 때)
+## Resource characteristics (for sizing your heap)
 
-- **체크포인트 경계 비용은 O(heap)이다.** WASM은 mprotect/dirty-page가 없어 실행 경계마다
-  힙 전 페이지를 완전 해시해 델타를 재구성한다(그 완전성이 복원 soundness의 조건이다).
-  즉 경계 하나의 해시 비용은 힙 크기에 비례한다. 이 비용을 지배하는 것은 힙 크기 자체가
-  아니라 **커밋 빈도**다(churnProbe 법칙): 문장마다 커밋하면 힙 전체를 매번 훑는다.
-- **peak memory는 base 상주 + 델타 누적이다.** 복원 리액티브의 base(힙 전체 사본)가 RAM에
-  상주하고 체크포인트 델타가 누적된다. 배출 밸브는 `history.prune`(`pruneTo`)와 `dispose`,
-  base 오프로드는 `saveBase`(OPFS로 이동, RAM은 복원 경로 전제상 안 줄어든다).
-- **프로세스 OS는 워커마다 독립 인터프리터 = 독립 힙이다.** N 워커 = N개의 독립 파이썬 힙이
-  실메모리를 쓴다(그 대가로 N개 독립 GIL = 물리 병렬). 스냅샷-fork는 초기 상태를 SAB로
-  공유해 워커당 전체 복사를 피하지만, 워커가 갈라진 뒤의 상태는 각자 소유한다.
-- 큰 힙(수백 MB 이상)과 저사양/모바일 실측치는 공개 표면에 걸지 않는다(숫자 자랑 금지).
-  각자 기계에서 [Speed Lab](../../examples/speedLab.html)으로 잰다. 개발 실측은
-  [benchmarking.md](../operations/benchmarking.md)와 원장·artifact에 산다.
+- **A checkpoint boundary costs O(heap).** WASM has no mprotect and no dirty-page tracking, so at every execution boundary the full heap is hashed page by page to reconstruct the delta - and that completeness is the condition for restore soundness. So one boundary's hashing cost is proportional to heap size. What dominates this cost is not heap size itself but **commit frequency** (the churnProbe law): commit per statement and you walk the whole heap every time.
+- **Peak memory is the resident base plus accumulated deltas.** Restore-based reactivity keeps a base - a full copy of the heap - resident in RAM, and checkpoint deltas accumulate on top. The relief valves are `history.prune` (`pruneTo`) and `dispose`; `saveBase` offloads the base to OPFS but does not reduce RAM, because the restore path assumes the base stays resident.
+- **In the process OS each worker is an independent interpreter with an independent heap.** N workers means N independent Python heaps consuming real memory - and in exchange, N independent GILs, which is physical parallelism. Snapshot-fork shares the initial state through a SAB to avoid a full copy per worker, but once workers diverge each owns its own state.
+- Measurements for large heaps (hundreds of MB and up) and for low-end or mobile devices are not posted on public surfaces. Measure them on your own machine with the [Speed Lab](../../examples/speedLab.html). Development measurements live in [benchmarking.md](../operations/benchmarking.md), the ledgers, and the artifacts.
 
-### 리액티브 메모리 압박 완화 가이드 (워크로드별)
+### Easing reactive memory pressure (by workload)
 
-이 가이드는 현재의 운영 제약을 가정한다. 메모리 스파이크의 핵심은 `checkpoint()` 비용보다도
-**커밋 빈도**다. 체크포인트는 힙 전체 해시(O(heap))이므로 문장마다를 목표로 하면 커밋/실행 모두
-스파이크한다.
+This guide assumes the current operating constraints. The core of a memory spike is not the cost of `checkpoint()` so much as **commit frequency**. A checkpoint hashes the whole heap (O(heap)), so aiming for one per statement spikes both committing and execution.
 
-#### 1) 공통 규칙
+#### 1) Shared rules
 
-1. `history.commit()`는 문장 단위가 아니라 의미 있는 구간 단위로 띄워서 호출한다(또는 idle 감시로 `cfg.idleMs` 조절).
-2. rollback 후보 관리(`history.prune()`)는 1순위 밸브다. 인자를 생략하면 live 경로밖 노드를 정리한다.
-3. OPFS 객체 스팸 제어는 `MachineJournal`의 `pack()` 또는 `cfg.autoPack`이다. pack는 RAM을 즉시 줄이진 않지만 오브젝트 수를 줄인다.
-4. 반응형 컨트롤러의 `saveBase()`는 base heap 복제본을 OPFS로 이동해 복원 연속성/휴대성에 쓰는 장치다. RAM 경감 장치는 아니다.
-5. `dispose()`는 경로 정리를 강하게 하고 싶을 때 마지막 수단으로만 쓴다(동일 반응 컨트롤러 공유 구간에서 다른 소비자 영향 확인).
+1. Call `history.commit()` on meaningful intervals rather than per statement (or tune `cfg.idleMs` on the idle watcher).
+2. Managing rollback candidates with `history.prune()` is the first valve. Called with no argument it clears nodes off the live path.
+3. Control OPFS object spam with `MachineJournal`'s `pack()` or `cfg.autoPack`. Packing does not reduce RAM immediately, but it reduces the object count.
+4. The reactive controller's `saveBase()` moves the base-heap copy to OPFS for restore continuity and portability. It is not a RAM-relief device.
+5. Use `dispose()` only as a last resort when you want a hard path cleanup - and check the effect on other consumers if you share the same reactive controller.
 
-#### 2) 인터랙티브 REPL / 교육형 데모
+#### 2) Interactive REPL and teaching demos
 
-1. 사용자 체감이 중요해 rollback 문맥을 많이 남겨야 한다. 먼저 `history.setRetentionPolicy({ maxNodes, onPressure })`로 압박을 관측하고 필요할 때 `history.prune()`한다.
-2. 저널은 기본값으로 시작하고, `cfg.autoPack`/`cfg.pruneAfterCommit`은 꺼 둔다. 필요하면 장기 사용 시에만 `prune`을 더 자주 걸어 RAM 상주 힙 폭주를 막는다.
-3. `pack()`은 `save`/`export` 전후 정리 목적에 한정해 주기적으로 수행한다.
+1. Perceived responsiveness matters here, so you need to keep plenty of rollback context. Observe the pressure first with `history.setRetentionPolicy({ maxNodes, onPressure })` and call `history.prune()` when it fires.
+2. Start the journal on its defaults and leave `cfg.autoPack` and `cfg.pruneAfterCommit` off. If a session runs long, prune more often to keep the resident heap from running away.
+3. Run `pack()` periodically, but only as cleanup around `save` and `export`.
 
-#### 3) 장문 계산 / 배치 워크로드
+#### 3) Long computations and batch workloads
 
-1. 첫 번째 조정은 커밋 빈도다. 유휴 시간창(`cfg.idleMs`)을 넓히거나 직접 `history.commit()` 호출 주기를 늦춰서 같은 시간당 커밋 횟수를 낮춘다.
-2. 커밋이 잦을 수밖에 없다면 `cfg.pruneAfterCommit = true`로 checkpoint tree를 live 경로만 유지해 재해시 지출을 막는다.
-3. 이어서 `cfg.autoPack`을 켜서 객체 폭주를 제어한다. 시작값은 `true`(loose:128개, 8MB) 또는 `{ looseBlobs: 128, looseMB: 16 }`로 둔다.
-4. `pack()`은 장애복구 연습/배포 전 보조 검증 단계에서 수행하고, 결과의 `looseRemoved/packsRemoved`를 보며 임계를 튜닝한다.
+1. The first knob is commit frequency. Widen the idle window (`cfg.idleMs`) or slow down your own `history.commit()` cadence to lower commits per unit time.
+2. If frequent commits are unavoidable, set `cfg.pruneAfterCommit = true` to keep the checkpoint tree to the live path and avoid paying for rehashes.
+3. Then turn on `cfg.autoPack` to control object growth. Start at `true` (128 loose blobs, 8MB) or `{ looseBlobs: 128, looseMB: 16 }`.
+4. Run `pack()` as part of recovery drills and pre-deployment verification, and tune the thresholds by watching `looseRemoved` and `packsRemoved` in the result.
 
-#### 4) 장시간 상시 세션 / 리플레이 파이프라인
+#### 4) Long-lived always-on sessions and replay pipelines
 
-1. 장기 상시 운영에서는 retention budget으로 rollback 후보를 관측하고, `history.prune()`과 `history.watch({ pruneAfterCommit: true })`로 경로를 정리한다.
-2. 반응형 컨트롤러의 `saveBase()`는 절차적 하드 전환/휴면 전환 직전에만 1회씩 쓰고, 루프마다 호출하지 않는다.
-3. 재시작 직후 대량 복원이나 재배치가 잦으면 `dispose()`로 경로 오염을 제거한 뒤 `restore` 흐름을 다시 정렬한다.
+1. In long-lived operation, observe rollback candidates through the retention budget and clean the path with `history.prune()` and `history.watch({ pruneAfterCommit: true })`.
+2. Use the reactive controller's `saveBase()` once, just before a deliberate hard transition or a hibernation, not on every loop.
+3. If restarts bring frequent bulk restores or relocations, clear path contamination with `dispose()` and then re-establish the `restore` flow.
 
-#### 권장 샘플(참고)
+#### Suggested sample (for reference)
 
 ```js
 machine.history.setRetentionPolicy({
   maxNodes: 256,
   maxDeltaBytes: 128 * 1024 * 1024,
   pruneBranches: true,
-  onPressure: (event) => { /* UI 경고와 telemetry */ },
+  onPressure: (event) => { /* UI warning and telemetry */ },
 });
 
 const journal = machine.history.watch({
   dir: opfsDir,
-  idleMs: 5000,               // 문장이 아닌 유휴 구간 기반
-  pruneAfterCommit: true,      // commit 직후 rollback 경로를 live path로 축소
+  idleMs: 5000,               // driven by idle intervals, not statements
+  pruneAfterCommit: true,      // shrink the rollback path to the live path right after a commit
   autoPack: { looseBlobs: 128, looseMB: 16 },
-  onStatus: (evt) => { /* commit/io 실패 알림 */ },
+  onStatus: (evt) => { /* commit and IO failure notifications */ },
 });
 
 console.log(machine.history.stats());
 ```
 
-운영 규칙은 고정: `commit 빈도 제어` → `history.prune()`/`cfg.pruneAfterCommit` → `autoPack`/`pack()` → 반응형 컨트롤러 `saveBase()`.
+The operating order is fixed: control commit frequency, then `history.prune()` / `cfg.pruneAfterCommit`, then `autoPack` / `pack()`, then the reactive controller's `saveBase()`.
 
-관련 부채·트레이드오프의 상시 추적은 [contractReality.md](../operations/contractReality.md)다.
+Related debts and tradeoffs are tracked continuously in [contractReality.md](../operations/contractReality.md).
