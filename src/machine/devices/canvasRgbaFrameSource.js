@@ -2,10 +2,10 @@
 import { WebMachineError } from "../contracts/webMachineError.js";
 export class CanvasRgbaFrameSource {
   constructor({ canvas }) {
-    if (!canvas || typeof canvas.getContext !== "function") throw new TypeError("canvas가 필요하다");
+    if (!canvas || typeof canvas.getContext !== "function") throw new TypeError("a canvas is required");
     const context = canvas.getContext("2d", { alpha: false });
     if (!context || typeof context.putImageData !== "function" || typeof context.getImageData !== "function") {
-      throw new TypeError("2D canvas context가 필요하다");
+      throw new TypeError("a 2D canvas context is required");
     }
     this._canvas = canvas;
     this._context = context;
@@ -26,8 +26,8 @@ export class CanvasRgbaFrameSource {
   }
 
   subscribe(listener) {
-    if (typeof listener !== "function") throw new TypeError("frame source listener는 함수여야 한다");
-    if (this._destroyed) throw new WebMachineError("WEB_MACHINE_DISPLAY_PORT_CLOSED", "frame source가 종료됐다");
+    if (typeof listener !== "function") throw new TypeError("the frame source listener must be a function");
+    if (this._destroyed) throw new WebMachineError("WEB_MACHINE_DISPLAY_PORT_CLOSED", "the frame source is closed");
     this._listeners.add(listener);
     return () => this._listeners.delete(listener);
   }

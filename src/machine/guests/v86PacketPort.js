@@ -3,10 +3,10 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86PacketPort {
   constructor({ device, endpointId, interfaceId = 0 }) {
     if (!device || device.kind !== "network" || device.mode !== "packet" || typeof device.connect !== "function") {
-      throw new TypeError("packet network device가 필요하다");
+      throw new TypeError("a packet network device is required");
     }
-    if (!endpointId) throw new TypeError("endpointId가 필요하다");
-    if (!Number.isInteger(interfaceId) || interfaceId < 0) throw new TypeError("interfaceId는 0 이상 정수여야 한다");
+    if (!endpointId) throw new TypeError("an endpointId is required");
+    if (!Number.isInteger(interfaceId) || interfaceId < 0) throw new TypeError("interfaceId must be an integer >= 0");
     this._device = device;
     this._endpointId = String(endpointId);
     this._interfaceId = interfaceId;
@@ -23,9 +23,9 @@ export class V86PacketPort {
 
   attach(emulator) {
     if (!emulator?.bus || typeof emulator.add_listener !== "function" || typeof emulator.remove_listener !== "function") {
-      throw new TypeError("v86 emulator packet bus가 필요하다");
+      throw new TypeError("a v86 emulator packet bus is required");
     }
-    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 packet port 이미 연결됨: ${this._endpointId}`);
+    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `the v86 packet port is already attached: ${this._endpointId}`);
     const port = this._device.connect({ endpointId: this._endpointId, receive: this._onReceive });
     try {
       this._emulator = emulator;

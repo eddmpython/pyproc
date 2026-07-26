@@ -2,7 +2,7 @@
 export class V86EntropyPort {
   constructor({ device }) {
     if (!device || device.kind !== "entropy" || device.mode !== "cryptographic-random" || typeof device.read !== "function") {
-      throw new TypeError("cryptographic-random entropy device가 필요하다");
+      throw new TypeError("a cryptographic-random entropy device is required");
     }
     this._device = device;
     this._reads = 0;
@@ -21,7 +21,7 @@ export class V86EntropyPort {
   _readInt32() {
     const bytes = this._device.read(4);
     if (!(bytes instanceof Uint8Array) || bytes.byteLength !== 4) {
-      throw new TypeError(`entropy device는 4 bytes를 반환해야 한다: ${bytes?.byteLength}`);
+      throw new TypeError(`the entropy device must return 4 bytes: ${bytes?.byteLength}`);
     }
     this._reads += 1;
     this._bytes += bytes.byteLength;

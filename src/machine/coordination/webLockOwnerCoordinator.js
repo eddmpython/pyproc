@@ -4,22 +4,22 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 
 export function webMachineOwnerLockName(groupId) {
   const id = String(groupId || "");
-  if (!id) throw new TypeError("groupId가 필요하다");
+  if (!id) throw new TypeError("a groupId is required");
   return `webMachineOwner/${id}`;
 }
 
 export class WebLockOwnerCoordinator {
   constructor({ lockManager, ownerStore, groupId, ownerId, onAcquired, onLost }) {
-    if (!lockManager || typeof lockManager.request !== "function") throw new TypeError("Web Lock manager가 필요하다");
+    if (!lockManager || typeof lockManager.request !== "function") throw new TypeError("a Web Lock manager is required");
     if (!ownerStore || typeof ownerStore.claimOwner !== "function" || typeof ownerStore.releaseOwner !== "function") {
-      throw new TypeError("owner store가 필요하다");
+      throw new TypeError("an owner store is required");
     }
-    if (typeof onAcquired !== "function") throw new TypeError("onAcquired 함수가 필요하다");
-    if (typeof onLost !== "function") throw new TypeError("onLost 함수가 필요하다");
+    if (typeof onAcquired !== "function") throw new TypeError("an onAcquired function is required");
+    if (typeof onLost !== "function") throw new TypeError("an onLost function is required");
     this.groupId = String(groupId || "");
     this.ownerId = String(ownerId || "");
-    if (!this.groupId) throw new TypeError("groupId가 필요하다");
-    if (!this.ownerId) throw new TypeError("ownerId가 필요하다");
+    if (!this.groupId) throw new TypeError("a groupId is required");
+    if (!this.ownerId) throw new TypeError("an ownerId is required");
     this._lockManager = lockManager;
     this._ownerStore = ownerStore;
     this._onAcquired = onAcquired;
@@ -44,7 +44,7 @@ export class WebLockOwnerCoordinator {
   }
 
   start(control) {
-    if (this._state !== "idle") throw new WebMachineError("WEB_MACHINE_OWNER_STATE", `owner coordinator start 불가: ${this._state}`);
+    if (this._state !== "idle") throw new WebMachineError("WEB_MACHINE_OWNER_STATE", `the owner coordinator cannot start while ${this._state}`);
     throwIfOperationAborted(control, `${this.groupId}: owner wait`);
     this._acquireControl = control;
     this._state = "waiting";
@@ -93,7 +93,7 @@ export class WebLockOwnerCoordinator {
     this._stopReason = String(reason);
     if (this._state === "waiting") {
       this._state = "stopping";
-      this._rejectAcquired?.(new WebMachineError("WEB_MACHINE_OWNER_STOPPED", `${this.groupId}: owner 대기 중단`));
+      this._rejectAcquired?.(new WebMachineError("WEB_MACHINE_OWNER_STOPPED", `${this.groupId}: waiting for ownership was aborted`));
       this._abort?.abort();
       await this._requestPromise?.catch(() => undefined);
       this._state = "stopped";
@@ -101,13 +101,13 @@ export class WebLockOwnerCoordinator {
     }
     if (this._state === "acquiring") {
       this._state = "stopping";
-      this._rejectAcquired?.(new WebMachineError("WEB_MACHINE_OWNER_STOPPED", `${this.groupId}: owner 획득 중단`));
+      this._rejectAcquired?.(new WebMachineError("WEB_MACHINE_OWNER_STOPPED", `${this.groupId}: acquiring ownership was aborted`));
       await this._requestPromise?.catch(() => undefined);
       this._state = this._error ? "failed" : "stopped";
       if (this._error) throw this._error;
       return;
     }
-    if (this._state !== "owned") throw this._error || new WebMachineError("WEB_MACHINE_OWNER_STATE", `owner coordinator stop 불가: ${this._state}`);
+    if (this._state !== "owned") throw this._error || new WebMachineError("WEB_MACHINE_OWNER_STATE", `the owner coordinator cannot stop while ${this._state}`);
     this._state = "stopping";
     let failure = null;
     try {

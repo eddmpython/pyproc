@@ -88,10 +88,10 @@ export class MemoryRelativePointerDevice {
   _send(event) {
     const endpoint = this._endpoint;
     if (!endpoint || endpoint.closed) {
-      return Promise.reject(new WebMachineError("WEB_MACHINE_INPUT_UNATTACHED", "pointer endpoint가 연결되지 않았다"));
+      return Promise.reject(new WebMachineError("WEB_MACHINE_INPUT_UNATTACHED", "no pointer endpoint is attached"));
     }
     if (endpoint.queue.length + Number(endpoint.active) >= this.maxQueuedEvents) {
-      return Promise.reject(new WebMachineError("WEB_MACHINE_INPUT_QUEUE_FULL", `pointer queue 포화: ${endpoint.id}`));
+      return Promise.reject(new WebMachineError("WEB_MACHINE_INPUT_QUEUE_FULL", `the pointer queue is full: ${endpoint.id}`));
     }
     return new Promise((resolve, reject) => {
       endpoint.queue.push({ event, resolve, reject });
@@ -130,7 +130,7 @@ export class MemoryRelativePointerDevice {
     if (endpoint.closed) return;
     endpoint.closed = true;
     if (this._endpoint === endpoint) this._endpoint = null;
-    const error = new WebMachineError("WEB_MACHINE_INPUT_UNATTACHED", `pointer endpoint 분리: ${endpoint.id}`);
+    const error = new WebMachineError("WEB_MACHINE_INPUT_UNATTACHED", `the pointer endpoint was detached: ${endpoint.id}`);
     for (const delivery of endpoint.queue.splice(0)) delivery.reject(error);
     if (!endpoint.active) this._resolveDrainWaiters();
   }

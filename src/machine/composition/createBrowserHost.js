@@ -3,7 +3,7 @@ import { WebMachineHost } from "../host/webMachineHost.js";
 
 export function createBrowserHost({ devices = {}, cryptoProvider } = {}) {
   if (!cryptoProvider || typeof cryptoProvider.randomUUID !== "function") {
-    throw new TypeError("cryptoProvider.randomUUID가 필요하다");
+    throw new TypeError("cryptoProvider.randomUUID is required");
   }
   return new WebMachineHost({
     devices,

@@ -57,7 +57,7 @@ function requireBundleGrammar(cryptoProvider) {
   const state = cryptoProvider?.state;
   for (const method of ["encodeBundle", "decodeBundle", "readBundleHeader", "bundleHeaderDigest", "makeTag", "verifyTag"]) {
     if (typeof state?.[method] !== "function") {
-      throw new TypeError(`cryptoProvider.state.${method}가 필요하다(createMachineCryptoProvider로 감싸라)`);
+      throw new TypeError(`cryptoProvider.state.${method} is required (wrap with createMachineCryptoProvider)`);
     }
   }
   return state;
@@ -87,9 +87,9 @@ function wrapPayloadError(error) {
   if (error instanceof WebMachineError) return error;
   const code = error?.code;
   if (code === "PYPROC_MACHINE_INTEGRITY") {
-    return new WebMachineError("WEB_MACHINE_IMAGE_BLOB_CORRUPT", "image 무결성 검증 실패", { cause: String(error?.message || error) });
+    return new WebMachineError("WEB_MACHINE_IMAGE_BLOB_CORRUPT", "the image integrity check failed", { cause: String(error?.message || error) });
   }
-  return new WebMachineError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "image 포맷 위반", { cause: String(error?.message || error) });
+  return new WebMachineError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "the image format is invalid", { cause: String(error?.message || error) });
 }
 
 // 헤더 판독의 오류 감싸기. 헤더 tag.target 불일치(색인/서명 대상 변조) = 서명 거부이고,
@@ -98,9 +98,9 @@ function wrapHeaderError(error) {
   if (error instanceof WebMachineError) return error;
   const code = error?.code;
   if (code === "PYPROC_MACHINE_INTEGRITY") {
-    return new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "image 서명 대상 불일치", { cause: String(error?.message || error) });
+    return new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "the image signature covers a different target", { cause: String(error?.message || error) });
   }
-  return new WebMachineError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "image 포맷 위반", { cause: String(error?.message || error) });
+  return new WebMachineError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "the image format is invalid", { cause: String(error?.message || error) });
 }
 
 // base64 서명(tag) -> hex(WebMachineSignature v1 표기). 표기 법은 machine 도메인이 정하고
@@ -186,7 +186,7 @@ class WebMachineArchive {
 }
 
 export function assertWebMachineArchive(value) {
-  if (!verifiedArchives.has(value)) throw new TypeError("검증된 WebMachineArchive가 필요하다");
+  if (!verifiedArchives.has(value)) throw new TypeError("a verified WebMachineArchive is required");
   return value;
 }
 
@@ -200,7 +200,7 @@ export async function createWebMachineFile({
   control,
 }) {
   throwIfOperationAborted(control, "webmachine export");
-  if (!signingKeyPair?.privateKey || !signingKeyPair?.publicKey) throw new TypeError("signingKeyPair가 필요하다(서명 필수)");
+  if (!signingKeyPair?.privateKey || !signingKeyPair?.publicKey) throw new TypeError("a signingKeyPair is required (a signature is mandatory)");
   const grammar = requireBundleGrammar(cryptoProvider);
   const sortedMachines = [...(machines || [])].sort((left, right) => compareNames(left.machineId, right.machineId));
   const sortedDevices = [...devices].sort((left, right) => compareNames(left.name, right.name));

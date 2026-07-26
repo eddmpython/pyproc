@@ -3,10 +3,10 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86InputPort {
   constructor({ device, endpointId, codeDelayMs = 1 }) {
     if (!device || device.kind !== "input" || device.mode !== "ps2-scan-code" || typeof device.connect !== "function" || typeof device.drain !== "function") {
-      throw new TypeError("ps2-scan-code input device가 필요하다");
+      throw new TypeError("a ps2-scan-code input device is required");
     }
-    if (!endpointId) throw new TypeError("endpointId가 필요하다");
-    if (!Number.isFinite(codeDelayMs) || codeDelayMs < 0) throw new TypeError("codeDelayMs는 0 이상이어야 한다");
+    if (!endpointId) throw new TypeError("an endpointId is required");
+    if (!Number.isFinite(codeDelayMs) || codeDelayMs < 0) throw new TypeError("codeDelayMs must be >= 0");
     this._device = device;
     this._endpointId = String(endpointId);
     this._codeDelayMs = codeDelayMs;
@@ -18,7 +18,7 @@ export class V86InputPort {
   }
 
   attach(emulator) {
-    if (!emulator || typeof emulator.keyboard_send_scancodes !== "function") throw new TypeError("v86 keyboard API가 필요하다");
+    if (!emulator || typeof emulator.keyboard_send_scancodes !== "function") throw new TypeError("a v86 keyboard API is required");
     if (this._emulator) return;
     const port = this._device.connect({ endpointId: this._endpointId, receive: this._onScanCodes });
     this._emulator = emulator;
@@ -46,7 +46,7 @@ export class V86InputPort {
   }
 
   async _receive(codes) {
-    if (!this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 input port 분리됨: ${this._endpointId}`);
+    if (!this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `the v86 input port was detached: ${this._endpointId}`);
     this._receivedBatches += 1;
     this._receivedCodes += codes.byteLength;
     await this._emulator.keyboard_send_scancodes(codes, this._codeDelayMs);

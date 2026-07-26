@@ -11,7 +11,7 @@ export function copyGenerationBytes(value, label = "generation payload") {
   if (value instanceof Uint8Array) return value.slice();
   if (value instanceof ArrayBuffer) return new Uint8Array(value.slice(0));
   if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
-  throw new WebMachineError("WEB_MACHINE_GENERATION_INVALID", `${label}: bytes 필요`);
+  throw new WebMachineError("WEB_MACHINE_GENERATION_INVALID", `${label}: bytes are required`);
 }
 
 // 직렬화 규약은 커널 조각으로 온다(composition이 배달). machine이 자기 사본을 갖고 있으면
@@ -26,7 +26,7 @@ export function machineCanonicalJson(cryptoProvider, value) {
 
 function requireDigestProvider(cryptoProvider) {
   if (typeof cryptoProvider?.digestBytes !== "function") {
-    throw new TypeError("cryptoProvider.digestBytes가 필요하다(createMachineCryptoProvider로 감싸라)");
+    throw new TypeError("cryptoProvider.digestBytes is required (wrap with createMachineCryptoProvider)");
   }
   return cryptoProvider;
 }
@@ -42,11 +42,11 @@ export async function digestGenerationManifest(cryptoProvider, manifest) {
 export async function verifyGenerationBlob(cryptoProvider, reference, value) {
   const bytes = copyGenerationBytes(value);
   if (!reference || reference.byteLength !== bytes.byteLength) {
-    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", "blob byteLength 불일치");
+    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", "blob byteLength mismatch");
   }
   const actual = await digestGenerationBytes(cryptoProvider, bytes);
   if (actual !== reference.digest) {
-    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `blob digest 불일치: ${reference.digest}`);
+    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `blob digest mismatch: ${reference.digest}`);
   }
   return bytes;
 }

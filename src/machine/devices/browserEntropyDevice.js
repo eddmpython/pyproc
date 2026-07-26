@@ -3,9 +3,9 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 
 export class BrowserEntropyDevice {
   constructor({ fillRandomValues, maxBytesPerRead = 65536 } = {}) {
-    if (typeof fillRandomValues !== "function") throw new TypeError("fillRandomValues 함수가 필요하다");
+    if (typeof fillRandomValues !== "function") throw new TypeError("a fillRandomValues function is required");
     if (!Number.isInteger(maxBytesPerRead) || maxBytesPerRead <= 0 || maxBytesPerRead > 65536) {
-      throw new TypeError("maxBytesPerRead는 1..65536 정수여야 한다");
+      throw new TypeError("maxBytesPerRead must be an integer in 1..65536");
     }
     this.kind = "entropy";
     this.mode = "cryptographic-random";
@@ -19,16 +19,16 @@ export class BrowserEntropyDevice {
 
   read(length) {
     if (!Number.isInteger(length) || length <= 0 || length > this.maxBytesPerRead) {
-      throw new WebMachineError("WEB_MACHINE_ENTROPY_SIZE", `entropy read 범위 초과: ${length}/${this.maxBytesPerRead}`);
+      throw new WebMachineError("WEB_MACHINE_ENTROPY_SIZE", `entropy read is out of range: ${length}/${this.maxBytesPerRead}`);
     }
     const output = new Uint8Array(length);
     try {
       const result = this._fillRandomValues(output);
-      if (result && typeof result.then === "function") throw new TypeError("entropy source는 동기 함수여야 한다");
+      if (result && typeof result.then === "function") throw new TypeError("the entropy source must be a synchronous function");
     } catch (error) {
       this._failures += 1;
       this._lastError = String(error?.message || error);
-      throw new WebMachineError("WEB_MACHINE_ENTROPY_SOURCE_FAILURE", `entropy source 실패: ${this._lastError}`);
+      throw new WebMachineError("WEB_MACHINE_ENTROPY_SOURCE_FAILURE", `the entropy source failed: ${this._lastError}`);
     }
     this._reads += 1;
     this._bytes += output.byteLength;

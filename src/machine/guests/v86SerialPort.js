@@ -4,7 +4,7 @@ import { operationAbortError } from "../contracts/operationControl.js";
 
 export class V86SerialPort {
   constructor({ writeLine = () => {} } = {}) {
-    if (typeof writeLine !== "function") throw new TypeError("writeLine 함수가 필요하다");
+    if (typeof writeLine !== "function") throw new TypeError("a writeLine function is required");
     this._writeLine = writeLine;
     this._serial = "";
     this._line = "";

@@ -3,10 +3,10 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86FramebufferPort {
   constructor({ device, source, endpointId }) {
     if (!device || device.kind !== "display" || device.mode !== "rgba-frame" || typeof device.connect !== "function") {
-      throw new TypeError("rgba-frame display device가 필요하다");
+      throw new TypeError("an rgba-frame display device is required");
     }
-    if (!source || typeof source.subscribe !== "function") throw new TypeError("RGBA frame source가 필요하다");
-    if (!endpointId) throw new TypeError("endpointId가 필요하다");
+    if (!source || typeof source.subscribe !== "function") throw new TypeError("an RGBA frame source is required");
+    if (!endpointId) throw new TypeError("an endpointId is required");
     this._device = device;
     this._source = source;
     this._endpointId = String(endpointId);
@@ -30,9 +30,9 @@ export class V86FramebufferPort {
 
   attach(emulator) {
     if (!emulator || typeof emulator.add_listener !== "function" || typeof emulator.remove_listener !== "function") {
-      throw new TypeError("v86 emulator display bus가 필요하다");
+      throw new TypeError("a v86 emulator display bus is required");
     }
-    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 framebuffer port 이미 연결됨: ${this._endpointId}`);
+    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `the v86 framebuffer port is already attached: ${this._endpointId}`);
     const port = this._device.connect({ endpointId: this._endpointId });
     try {
       this._emulator = emulator;
@@ -51,7 +51,7 @@ export class V86FramebufferPort {
 
   waitForFrame(timeoutMs) {
     if (this._presentations > 0) return Promise.resolve(this._presentations);
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new TypeError("frame timeout은 양수여야 한다");
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new TypeError("the frame timeout must be positive");
     return new Promise((resolve, reject) => {
       const waiter = {
         resolve: (value) => {
@@ -84,7 +84,7 @@ export class V86FramebufferPort {
     this._port = null;
     this._emulator = null;
     this._active = false;
-    const error = new WebMachineError("WEB_MACHINE_GUEST_ABORTED", `v86 framebuffer port 분리됨: ${this._endpointId}`);
+    const error = new WebMachineError("WEB_MACHINE_GUEST_ABORTED", `the v86 framebuffer port was detached: ${this._endpointId}`);
     for (const waiter of [...this._frameWaiters]) waiter.reject(error);
   }
 

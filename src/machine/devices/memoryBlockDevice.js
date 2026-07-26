@@ -5,12 +5,12 @@ function copyBytes(value, label) {
   if (value instanceof Uint8Array) return value.slice();
   if (value instanceof ArrayBuffer) return new Uint8Array(value.slice(0));
   if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
-  throw new WebMachineError("WEB_MACHINE_BLOCK_INVALID", `${label}: bytes 필요`);
+  throw new WebMachineError("WEB_MACHINE_BLOCK_INVALID", `${label}: bytes are required`);
 }
 
 export class MemoryBlockDevice {
   constructor({ byteLength }) {
-    if (!Number.isInteger(byteLength) || byteLength <= 0) throw new TypeError("byteLength는 양의 정수여야 한다");
+    if (!Number.isInteger(byteLength) || byteLength <= 0) throw new TypeError("byteLength must be a positive integer");
     this.kind = "block";
     this.byteLength = byteLength;
     this._working = new Uint8Array(byteLength);
@@ -40,14 +40,14 @@ export class MemoryBlockDevice {
   }
 
   async snapshot() {
-    if (this._dirty) throw new WebMachineError("WEB_MACHINE_BLOCK_UNFLUSHED", "block snapshot 전 flush 필요");
+    if (this._dirty) throw new WebMachineError("WEB_MACHINE_BLOCK_UNFLUSHED", "flush before taking a block snapshot");
     return this._durable.slice();
   }
 
   async restore(value) {
     const bytes = copyBytes(value, "block restore");
     if (bytes.byteLength !== this.byteLength) {
-      throw new WebMachineError("WEB_MACHINE_BLOCK_SIZE", `block 크기 불일치: ${bytes.byteLength} != ${this.byteLength}`);
+      throw new WebMachineError("WEB_MACHINE_BLOCK_SIZE", `block size mismatch: ${bytes.byteLength} != ${this.byteLength}`);
     }
     this._working.set(bytes);
     this._durable.set(bytes);
@@ -71,7 +71,7 @@ export class MemoryBlockDevice {
 
   _assertRange(offset, length) {
     if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length < 0 || offset + length > this.byteLength) {
-      throw new WebMachineError("WEB_MACHINE_BLOCK_RANGE", `block range 불일치: ${offset}+${length}/${this.byteLength}`);
+      throw new WebMachineError("WEB_MACHINE_BLOCK_RANGE", `block range is invalid: ${offset}+${length}/${this.byteLength}`);
     }
   }
 }

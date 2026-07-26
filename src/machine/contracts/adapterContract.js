@@ -12,16 +12,16 @@ function copyRequirement(value) {
 export function instantiateAdapter(adapterId, factory) {
   const adapter = factory();
   if (!adapter || typeof adapter !== "object") {
-    throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: adapter object가 아니다`);
+    throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: not an adapter object`);
   }
   for (const method of requiredMethods) {
     if (typeof adapter[method] !== "function") {
-      throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: ${method}() 없음`);
+      throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: ${method}() is missing`);
     }
   }
   const snapshotScope = String(adapter.capabilities?.snapshotScope || "none");
   if (!isSnapshotScope(snapshotScope)) {
-    throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: snapshotScope ${snapshotScope} 미지원`);
+    throw new WebMachineError("WEB_MACHINE_ADAPTER_INVALID", `${adapterId}: unsupported snapshotScope ${snapshotScope}`);
   }
   const requiredDevices = Object.freeze(
     (Array.isArray(adapter.capabilities?.requiredDevices) ? adapter.capabilities.requiredDevices : []).map((entry) => Object.freeze(copyRequirement(entry))),

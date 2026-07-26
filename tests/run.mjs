@@ -3143,8 +3143,10 @@ section("진입 표면 언어");
     }
     if (korean) throw new Error(`d.ts 주석에 한국어가 남았다: ${byFile.join(", ")}`);
   });
-  const MESSAGE_LANGUAGE_BUDGET = 141;
-  check("사용자 대면 메시지의 한국어 예산은 단조 감소한다", () => {
+  // 예산 단계는 끝났다(309 -> 233 -> 141 -> 0). machine 층을 뒤로 미룬 근거는 "라이브러리 API
+  // 표면에 거의 안 나온다"였는데 그것이 틀렸다: `createWebComputer`가 루트 export이므로 그 층의
+  // 첫 오류가 곧 소비자가 보는 첫 문장이다(외부 감사 지적). 0에 닿았으므로 하드 0으로 잠근다.
+  check("사용자 대면 메시지는 전부 영문이다", () => {
     let korean = 0;
     const byFile = new Map();
     for (const f of collect(join(ROOT, "src"), [".js"], [])) {
@@ -3161,8 +3163,8 @@ section("진입 표면 언어");
     if (outside.length) {
       throw new Error(`machine 층 밖에 한국어 메시지가 남았다: ${outside.map(([p, n]) => `${p}(${n})`).join(", ")}`);
     }
-    if (korean > MESSAGE_LANGUAGE_BUDGET) {
-      throw new Error(`한국어 메시지 ${korean} > 예산 ${MESSAGE_LANGUAGE_BUDGET}(예산은 줄이는 방향으로만 고친다)`);
+    if (korean) {
+      throw new Error(`사용자 대면 메시지에 한국어가 남았다: ${[...byFile].map(([path, n]) => `${path}(${n})`).join(", ")}`);
     }
   });
   check("가드에 넘기는 feature 이름도 영문", () => {

@@ -3,9 +3,9 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86PointerPort {
   constructor({ device, endpointId }) {
     if (!device || device.kind !== "input" || device.mode !== "relative-pointer" || typeof device.connect !== "function" || typeof device.drain !== "function") {
-      throw new TypeError("relative-pointer input device가 필요하다");
+      throw new TypeError("a relative-pointer input device is required");
     }
-    if (!endpointId) throw new TypeError("endpointId가 필요하다");
+    if (!endpointId) throw new TypeError("an endpointId is required");
     this._device = device;
     this._endpointId = String(endpointId);
     this._emulator = null;
@@ -21,7 +21,7 @@ export class V86PointerPort {
 
   attach(emulator) {
     if (!emulator?.bus || typeof emulator.add_listener !== "function" || typeof emulator.remove_listener !== "function") {
-      throw new TypeError("v86 mouse bus가 필요하다");
+      throw new TypeError("a v86 mouse bus is required");
     }
     if (this._emulator) return;
     const port = this._device.connect({ endpointId: this._endpointId, receive: this._onPointer });
@@ -63,7 +63,7 @@ export class V86PointerPort {
   }
 
   _receive(event) {
-    if (!this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `v86 pointer port 분리됨: ${this._endpointId}`);
+    if (!this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `the v86 pointer port was detached: ${this._endpointId}`);
     if (event.type === "move") {
       this._emulator.bus.send("mouse-delta", [event.deltaX, -event.deltaY]);
       this._receivedMoves += 1;
@@ -74,7 +74,7 @@ export class V86PointerPort {
       this._emulator.bus.send("mouse-wheel", [-event.deltaY, -event.deltaX]);
       this._receivedWheels += 1;
     } else {
-      throw new TypeError(`pointer event 미지원: ${event.type}`);
+      throw new TypeError(`unsupported pointer event: ${event.type}`);
     }
     this._receivedEvents += 1;
   }

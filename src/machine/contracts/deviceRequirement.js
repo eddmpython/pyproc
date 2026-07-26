@@ -11,7 +11,7 @@ import { WebMachineError } from "./webMachineError.js";
 // 실패는 전부 WEB_MACHINE_DEVICE_MISSING이다(guest가 못 도는 이유는 하나로 읽힌다).
 export function resolveRequiredDevice(devices, requirement, label = "guest") {
   if (!requirement || typeof requirement !== "object" || !requirement.name) {
-    throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `${label}: 요구 선언 없는 장치 해석`);
+    throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `${label}: resolving a device with no declared requirement`);
   }
   const device = devices?.[requirement.name];
   const missing = (why) => {

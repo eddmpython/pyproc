@@ -13,7 +13,7 @@ const encoder = new TextEncoder();
 function requireProvider(cryptoProvider) {
   for (const method of ["signDigest", "verifyDigest", "generateSigningKeyPair", "exportPublicJwk"]) {
     if (typeof cryptoProvider?.[method] !== "function") {
-      throw new TypeError(`cryptoProvider.${method}가 필요하다(createMachineCryptoProvider로 감싸라)`);
+      throw new TypeError(`cryptoProvider.${method} is required (wrap with createMachineCryptoProvider)`);
     }
   }
   return cryptoProvider;
@@ -21,7 +21,7 @@ function requireProvider(cryptoProvider) {
 
 function normalizePublicJwk(value) {
   if (!value || value.kty !== "EC" || value.crv !== "P-256" || typeof value.x !== "string" || typeof value.y !== "string") {
-    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "P-256 public key 형식 불일치");
+    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "the P-256 public key has the wrong shape");
   }
   return Object.freeze({ kty: "EC", crv: "P-256", x: value.x, y: value.y });
 }
@@ -32,7 +32,7 @@ async function publicJwk(cryptoProvider, value) {
   try {
     return normalizePublicJwk(await cryptoProvider.exportPublicJwk(value));
   } catch (cause) {
-    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "public key export 실패", { cause: String(cause) });
+    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "exporting the public key failed", { cause: String(cause) });
   }
 }
 
@@ -51,13 +51,13 @@ export async function fingerprintWebMachinePublicKey(cryptoProvider, publicKey) 
 
 export async function signWebMachineContent(cryptoProvider, contentDigest, signingKeyPair) {
   requireProvider(cryptoProvider);
-  if (!signingKeyPair?.privateKey || !signingKeyPair?.publicKey) throw new TypeError("signingKeyPair가 필요하다");
+  if (!signingKeyPair?.privateKey || !signingKeyPair?.publicKey) throw new TypeError("a signingKeyPair is required");
   const publicKey = await publicJwk(cryptoProvider, signingKeyPair.publicKey);
   let value;
   try {
     value = await cryptoProvider.signDigest(signingKeyPair.privateKey, contentDigest);
   } catch (cause) {
-    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "image 서명 실패", { cause: String(cause) });
+    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "signing the image failed", { cause: String(cause) });
   }
   return Object.freeze({
     version: 1,
@@ -69,11 +69,11 @@ export async function signWebMachineContent(cryptoProvider, contentDigest, signi
 
 export async function verifyWebMachineTrust(cryptoProvider, contentDigest, signature, trustedPublicKeys) {
   requireProvider(cryptoProvider);
-  if (!signature) throw new WebMachineError("WEB_MACHINE_IMAGE_UNTRUSTED", "서명 없는 image 실행 거부");
+  if (!signature) throw new WebMachineError("WEB_MACHINE_IMAGE_UNTRUSTED", "refusing to run an unsigned image");
   const signatureBytes = bytesFromHex(signature.value);
   const embeddedJwk = normalizePublicJwk(signature.publicKey);
   const signatureValid = await cryptoProvider.verifyDigest(embeddedJwk, contentDigest, signatureBytes);
-  if (!signatureValid) throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "image 서명 불일치");
+  if (!signatureValid) throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "the image signature does not verify");
 
   const signerFingerprint = await fingerprintWebMachinePublicKey(cryptoProvider, signature.publicKey);
   for (const trustedKey of trustedPublicKeys || []) {
@@ -89,5 +89,5 @@ export async function verifyWebMachineTrust(cryptoProvider, contentDigest, signa
     const trustedValid = await cryptoProvider.verifyDigest(trustedVerifier, contentDigest, signatureBytes);
     if (trustedValid) return Object.freeze({ signerFingerprint });
   }
-  throw new WebMachineError("WEB_MACHINE_IMAGE_UNTRUSTED", `trusted key에 없는 signer: ${signerFingerprint}`);
+  throw new WebMachineError("WEB_MACHINE_IMAGE_UNTRUSTED", `signer is not in the trusted keys: ${signerFingerprint}`);
 }

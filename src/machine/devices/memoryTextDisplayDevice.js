@@ -2,7 +2,7 @@
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 function positiveInteger(value, label) {
-  if (!Number.isInteger(value) || value <= 0) throw new TypeError(`${label}는 양의 정수여야 한다`);
+  if (!Number.isInteger(value) || value <= 0) throw new TypeError(`${label} must be a positive integer`);
   return value;
 }
 
@@ -29,7 +29,7 @@ export class MemoryTextDisplayDevice {
 
   connect({ endpointId }) {
     const id = String(endpointId || "");
-    if (!id) throw new TypeError("endpointId가 필요하다");
+    if (!id) throw new TypeError("an endpointId is required");
     if (this._endpoint) {
       const code = this._endpoint.id === id ? "WEB_MACHINE_DISPLAY_ENDPOINT_DUPLICATE" : "WEB_MACHINE_DISPLAY_BUSY";
       throw new WebMachineError(code, `display 연결 중: ${this._endpoint.id}`);
@@ -46,7 +46,7 @@ export class MemoryTextDisplayDevice {
   }
 
   subscribe(listener) {
-    if (typeof listener !== "function") throw new TypeError("display listener는 함수여야 한다");
+    if (typeof listener !== "function") throw new TypeError("the display listener must be a function");
     this._listeners.add(listener);
     return () => this._listeners.delete(listener);
   }
@@ -82,7 +82,7 @@ export class MemoryTextDisplayDevice {
     positiveInteger(columns, "display columns");
     positiveInteger(rows, "display rows");
     if (columns > this.maxColumns || rows > this.maxRows) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_SIZE", `display 크기 초과: ${columns}x${rows}/${this.maxColumns}x${this.maxRows}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_SIZE", `display size exceeded: ${columns}x${rows}/${this.maxColumns}x${this.maxRows}`);
     }
     if (columns === this._workingColumns && rows === this._workingRows) return;
     this._workingColumns = columns;
@@ -94,10 +94,10 @@ export class MemoryTextDisplayDevice {
   _writeCell(endpoint, { row, column, glyph } = {}) {
     this._assertEndpoint(endpoint);
     if (!Number.isInteger(row) || !Number.isInteger(column) || row < 0 || column < 0 || row >= this._workingRows || column >= this._workingColumns) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_RANGE", `display cell 범위 불일치: ${row},${column}/${this._workingRows},${this._workingColumns}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_RANGE", `display cell is out of range: ${row},${column}/${this._workingRows},${this._workingColumns}`);
     }
     if (!Number.isInteger(glyph) || glyph < 0 || glyph > 0x10ffff) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_GLYPH", `display glyph 불일치: ${glyph}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_GLYPH", `invalid display glyph: ${glyph}`);
     }
     this._workingCells[row * this._workingColumns + column] = glyph;
     this._writes += 1;
@@ -131,7 +131,7 @@ export class MemoryTextDisplayDevice {
 
   _assertEndpoint(endpoint) {
     if (endpoint.closed || this._endpoint !== endpoint) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_PORT_CLOSED", `display port 닫힘: ${endpoint.id}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_PORT_CLOSED", `the display port is closed: ${endpoint.id}`);
     }
   }
 }

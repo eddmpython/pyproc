@@ -14,13 +14,13 @@ export function generationStorageKey(groupId, generationId) {
 // 색인이 거짓이어도 오염 반경은 gc뿐이다. 구 manifest 스키마는 미지원(P2 브레이킹, 원장 기록).
 export function generationBlobDigests(record) {
   if (record?.schemaVersion !== 2 || !Array.isArray(record.blobDigests)) {
-    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `retention: 지원하지 않는 generation record(schemaVersion ${record?.schemaVersion})`);
+    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `retention: unsupported generation record (schemaVersion ${record?.schemaVersion})`);
   }
   const digests = new Set();
   const addressForm = /^sha256:[0-9a-f]{64}$/;
   for (const digest of record.blobDigests) {
     if (typeof digest !== "string" || !addressForm.test(digest)) {
-      throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", "retention: blob digest 형식 위반");
+      throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", "retention: malformed blob digest");
     }
     digests.add(digest);
   }
@@ -29,13 +29,13 @@ export function generationBlobDigests(record) {
 
 export function planGenerationRetention({ targetGroupId, heads, generations, blobDigests }) {
   const groupId = String(targetGroupId || "");
-  if (!groupId) throw new TypeError("targetGroupId가 필요하다");
+  if (!groupId) throw new TypeError("a targetGroupId is required");
   const retainedGenerationKeys = new Set();
   for (const [headGroupId, head] of heads) {
     for (const generationId of [head?.head, head?.prev].filter(Boolean)) {
       const key = generationStorageKey(headGroupId, generationId);
       if (!generations.has(key)) {
-        throw new WebMachineError("WEB_MACHINE_GENERATION_MISSING", `${headGroupId}: retention root 없음 ${generationId}`);
+        throw new WebMachineError("WEB_MACHINE_GENERATION_MISSING", `${headGroupId}: no retention root for ${generationId}`);
       }
       retainedGenerationKeys.add(key);
     }

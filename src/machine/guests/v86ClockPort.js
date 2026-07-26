@@ -6,7 +6,7 @@ export class V86ClockPort {
   constructor({ device }) {
     if (!device || device.kind !== "clock" || device.mode !== "wall-monotonic"
       || typeof device.readWallTimeMs !== "function" || typeof device.readMonotonicTimeMs !== "function") {
-      throw new TypeError("wall-monotonic clock device가 필요하다");
+      throw new TypeError("a wall-monotonic clock device is required");
     }
     this._device = device;
     this._emulator = null;
@@ -23,9 +23,9 @@ export class V86ClockPort {
   attach(emulator) {
     const rtc = emulator?.v86?.cpu?.devices?.rtc;
     if (!rtc || typeof rtc.timer !== "function" || !rtc.cpu || typeof rtc.cpu.device_raise_irq !== "function") {
-      throw new TypeError("v86 CMOS RTC가 필요하다");
+      throw new TypeError("a v86 CMOS RTC is required");
     }
-    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "v86 clock port 이미 연결됨");
+    if (this._emulator) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "the v86 clock port is already attached");
     this._emulator = emulator;
     this._rtc = rtc;
     this._originalRtcTimer = rtc.timer;
@@ -35,7 +35,7 @@ export class V86ClockPort {
   }
 
   synchronizeWallClock() {
-    if (!this._rtc) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "v86 clock port가 연결되지 않았다");
+    if (!this._rtc) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "the v86 clock port is not attached");
     const now = this._device.readWallTimeMs();
     this._rtc.rtc_time = now;
     this._rtc.last_update = now;

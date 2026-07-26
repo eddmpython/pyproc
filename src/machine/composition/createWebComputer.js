@@ -69,7 +69,7 @@ export function createWebComputer({
     ...(builtInDevices.network ? { packetDeviceName: "network" } : {}),
   }));
   if (linux) {
-    if (typeof linux.V86 !== "function") throw new TypeError("linux.V86 constructor가 필요하다");
+    if (typeof linux.V86 !== "function") throw new TypeError("a linux.V86 constructor is required");
     host.registerAdapter("x86-linux", createV86GuestFactory({
       V86: linux.V86,
       ...(linux.adapterVersion ? { adapterVersion: linux.adapterVersion } : {}),
@@ -90,7 +90,7 @@ export function createWebComputer({
     permissions: { devices: ["console", "pythonDisk", ...(builtInDevices.network ? ["network"] : [])] },
   }));
   if (createMachines && linux) {
-    if (!linux.manifest) throw new TypeError("linux.manifest가 필요하다(부팅 자산은 소비자가 provenance와 함께 가져온다)");
+    if (!linux.manifest) throw new TypeError("linux.manifest is required (the consumer brings the boot assets along with their provenance)");
     machines.set("linuxOs", host.createMachine({
       machineId: "linuxOs",
       adapterId: "x86-linux",

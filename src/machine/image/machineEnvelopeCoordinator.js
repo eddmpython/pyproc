@@ -30,9 +30,9 @@ export class MachineEnvelopeCoordinator {
   constructor({ cryptoProvider, nowFactory }) {
     // digest·서명 법은 커널 한 벌이다: 조립은 createMachineCryptoProvider가 배달한다(맨 Crypto 거부).
     if (typeof cryptoProvider?.digestBytes !== "function" || typeof cryptoProvider?.signDigest !== "function") {
-      throw new TypeError("cryptoProvider.digestBytes/signDigest가 필요하다(createMachineCryptoProvider로 감싸라)");
+      throw new TypeError("cryptoProvider.digestBytes and signDigest are required (wrap with createMachineCryptoProvider)");
     }
-    if (typeof nowFactory !== "function") throw new TypeError("nowFactory가 필요하다");
+    if (typeof nowFactory !== "function") throw new TypeError("a nowFactory is required");
     this._cryptoProvider = cryptoProvider;
     this._nowFactory = nowFactory;
   }
@@ -40,10 +40,10 @@ export class MachineEnvelopeCoordinator {
   async exportPaused({ groupId, machines, devices = {}, requiredCapabilities = {}, signingKeyPair, control }) {
     throwIfOperationAborted(control, `${groupId}: image export`);
     const machineList = sortedMachines(machines);
-    if (!machineList.length) throw new TypeError("machines가 필요하다");
+    if (!machineList.length) throw new TypeError("machines are required");
     for (const machine of machineList) {
       if (machine.state !== "paused") {
-        throw new WebMachineError("WEB_MACHINE_IMAGE_EXPORT_STATE", `${machine.machineId}: paused export만 허용`);
+        throw new WebMachineError("WEB_MACHINE_IMAGE_EXPORT_STATE", `${machine.machineId}: only a paused machine can be exported`);
       }
     }
     const deviceEntries = sortedDevices(devices);
@@ -62,7 +62,7 @@ export class MachineEnvelopeCoordinator {
     const machineById = new Map(machineList.map((machine) => [machine.machineId, machine]));
     const machineRecords = machineSnapshots.map((snapshot) => {
       if (snapshot.snapshotScope !== "portable") {
-        throw new WebMachineError("WEB_MACHINE_IMAGE_SNAPSHOT_SCOPE", `${snapshot.machineId}: portable snapshot 필요`);
+        throw new WebMachineError("WEB_MACHINE_IMAGE_SNAPSHOT_SCOPE", `${snapshot.machineId}: a portable snapshot is required`);
       }
       const machine = machineById.get(snapshot.machineId);
       return {
@@ -93,11 +93,11 @@ export class MachineEnvelopeCoordinator {
 
   preflightImport({ archive, host, devices = {}, approvedPermissions = {}, availableCapabilities = [] }) {
     assertWebMachineArchive(archive);
-    if (!host || typeof host.preflightMachine !== "function") throw new TypeError("preflightMachine host가 필요하다");
+    if (!host || typeof host.preflightMachine !== "function") throw new TypeError("a host with preflightMachine is required");
     const capabilities = asStringSet(availableCapabilities);
     for (const record of archive.manifest.devices) {
       const device = lookup(devices, record.name);
-      if (!device) throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_MISSING", `device target 없음: ${record.name}`);
+      if (!device) throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_MISSING", `no target device: ${record.name}`);
       this._assertBlockDevice(record.name, device);
       if (device.byteLength !== record.byteLength) {
         throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_SIZE", `${record.name}: ${device.byteLength} != ${record.byteLength}`);
@@ -109,7 +109,7 @@ export class MachineEnvelopeCoordinator {
       if (deniedDevices.length) {
         throw new WebMachineError(
           "WEB_MACHINE_IMAGE_PERMISSION_DENIED",
-          `${record.machineId}: 승인되지 않은 device ${deniedDevices.join(", ")}`,
+          `${record.machineId}: devices not approved: ${deniedDevices.join(", ")}`,
           { deniedDevices },
         );
       }
@@ -117,7 +117,7 @@ export class MachineEnvelopeCoordinator {
       if (missingCapabilities.length) {
         throw new WebMachineError(
           "WEB_MACHINE_IMAGE_CAPABILITY_MISSING",
-          `${record.machineId}: capability 없음 ${missingCapabilities.join(", ")}`,
+          `${record.machineId}: missing capabilities: ${missingCapabilities.join(", ")}`,
           { missingCapabilities },
         );
       }
@@ -187,11 +187,11 @@ export class MachineEnvelopeCoordinator {
 
   _assertBlockDevice(name, device) {
     if (!device || device.kind !== "block") {
-      throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_KIND", `${name}: block device 필요`);
+      throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_KIND", `${name}: a block device is required`);
     }
     for (const method of ["flush", "snapshot", "restore"]) {
       if (typeof device[method] !== "function") {
-        throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_INVALID", `${name}: ${method}() 없음`);
+        throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_INVALID", `${name}: ${method}() is missing`);
       }
     }
   }

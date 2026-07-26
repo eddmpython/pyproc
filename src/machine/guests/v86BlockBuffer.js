@@ -3,10 +3,10 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86BlockBuffer {
   constructor(device) {
     if (!device || device.kind !== "block" || typeof device.read !== "function" || typeof device.write !== "function") {
-      throw new TypeError("v86 block buffer: block device 필요");
+      throw new TypeError("v86 block buffer: a block device is required");
     }
     if (!Number.isInteger(device.byteLength) || device.byteLength <= 0 || device.byteLength % 512 !== 0) {
-      throw new TypeError("v86 block buffer: byteLength는 512 배수여야 한다");
+      throw new TypeError("v86 block buffer: byteLength must be a multiple of 512");
     }
     this.byteLength = device.byteLength;
     this.onload = null;
@@ -45,7 +45,7 @@ export class V86BlockBuffer {
   }
 
   set_state(state) {
-    if (!Array.isArray(state) || state[0] !== 1) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "v86 block buffer: state version 불일치");
+    if (!Array.isArray(state) || state[0] !== 1) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "v86 block buffer: state version mismatch");
   }
 
   async drain() {

@@ -34,7 +34,7 @@ import {
 } from "../../state/objectModel.js";
 
 export function createMachineCryptoProvider(cryptoProvider = globalThis.crypto) {
-  if (!cryptoProvider?.subtle) throw new TypeError("createMachineCryptoProvider: cryptoProvider.subtle이 필요하다");
+  if (!cryptoProvider?.subtle) throw new TypeError("createMachineCryptoProvider: cryptoProvider.subtle is required");
   const randomUUID = typeof cryptoProvider.randomUUID === "function" ? cryptoProvider.randomUUID.bind(cryptoProvider) : undefined;
   return Object.freeze({
     subtle: cryptoProvider.subtle,

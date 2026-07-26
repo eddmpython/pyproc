@@ -10,7 +10,7 @@ export function operationAbortError(control, label, { outcomeUnknown = false, de
   if (outcomeUnknown) {
     return new WebMachineError(
       "WEB_MACHINE_OUTCOME_UNKNOWN",
-      `${label}: 실행 시작 뒤 중단되어 결과 불명, 자동 replay 금지`,
+      `${label}: aborted after execution began, so the outcome is unknown; never replay it automatically`,
       { ...details, retryable: false, cause: isTimeoutReason(reason) ? "timeout" : "aborted" },
     );
   }
