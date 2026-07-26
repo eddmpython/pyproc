@@ -2017,13 +2017,13 @@ check("랜딩이 라이브러리 소비 판단 경로를 직접 노출", () => {
 check("소비 문서 역할 분리", () => {
   const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
   const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");
-  if (!contract.includes("역할은 분리한다.")) throw new Error("contract.md 역할 분리 선언 누락");
-  if (!contract.includes("## 공개 import 경계")) throw new Error("contract.md import 경계 절 누락");
-  if (!contract.includes("## 실행 자산 배포 계약")) throw new Error("contract.md 실행 자산 배포 절 누락");
-  if (!contract.includes("## 계약 검증")) throw new Error("contract.md 계약 검증 절 누락");
-  if (!contract.includes("### 설치 패키지 consumer gate coverage")) throw new Error("contract.md 설치 패키지 consumer gate coverage 절 누락");
-  if (!contract.includes("[capabilityMatrix.md](capabilityMatrix.md): capability별 제품 가치")) throw new Error("contract.md가 capability matrix 역할을 위임하지 않음");
-  if (contract.includes("| export | 무엇 |")) throw new Error("contract.md가 capability별 export 설명표로 회귀");
+  if (!contract.includes("The roles are split.")) throw new Error("contract.md 역할 분리 선언 누락");
+  if (!contract.includes("## Public import boundary")) throw new Error("contract.md import 경계 절 누락");
+  if (!contract.includes("## Runtime-asset deployment contract")) throw new Error("contract.md 실행 자산 배포 절 누락");
+  if (!contract.includes("## Contract verification")) throw new Error("contract.md 계약 검증 절 누락");
+  if (!contract.includes("### Installed-package consumer gate coverage")) throw new Error("contract.md 설치 패키지 consumer gate coverage 절 누락");
+  if (!contract.includes("[capabilityMatrix.md](capabilityMatrix.md): per-capability product value")) throw new Error("contract.md가 capability matrix 역할을 위임하지 않음");
+  if (contract.includes("| export | what |")) throw new Error("contract.md가 capability별 export 설명표로 회귀");
   if (!docsMap.includes("설치, 버전 핀, import 경계, 실행 자산 배포")) throw new Error("docs/README.md contract 역할 설명이 낡음");
 });
 check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", () => {
@@ -3050,7 +3050,7 @@ section("진입 표면 언어");
     return [...found].sort();
   };
   // 남은 한국어 줄 수. 0에 닿으면 하드 0으로 잠근다(예산이 남으면 "조금은 되돌려도 된다"가 된다).
-  const ADOPTION_DOC_BUDGET = 178;
+  const ADOPTION_DOC_BUDGET = 51;
   check("채택 판단 문서의 한국어 예산은 단조 감소한다", () => {
     const docs = adoptionDocs();
     if (docs.length < 4) throw new Error(`채택 문서를 ${docs.length}개만 찾았다(링크 추출이 죽었다)`);
