@@ -3049,9 +3049,9 @@ section("진입 표면 언어");
     found.delete("docs/reference/api.md");
     return [...found].sort();
   };
-  // 남은 한국어 줄 수. 0에 닿으면 하드 0으로 잠근다(예산이 남으면 "조금은 되돌려도 된다"가 된다).
-  const ADOPTION_DOC_BUDGET = 51;
-  check("채택 판단 문서의 한국어 예산은 단조 감소한다", () => {
+  // 예산 단계는 끝났다(343 -> 275 -> 178 -> 51 -> 0). 0에 닿은 표면은 0으로 잠근다: 예산이
+  // 남아 있으면 "조금은 되돌려도 된다"가 되고, 그 여유가 벽이 다시 서는 자리다.
+  check("채택 판단 문서는 전부 영문이다", () => {
     const docs = adoptionDocs();
     if (docs.length < 4) throw new Error(`채택 문서를 ${docs.length}개만 찾았다(링크 추출이 죽었다)`);
     const byFile = [];
@@ -3062,9 +3062,7 @@ section("진입 표면 언어");
       if (count) byFile.push(`${relative}(${count})`);
       korean += count;
     }
-    if (korean > ADOPTION_DOC_BUDGET) {
-      throw new Error(`채택 문서 한국어 ${korean} > 예산 ${ADOPTION_DOC_BUDGET}: ${byFile.join(", ")}`);
-    }
+    if (korean) throw new Error(`채택 판단 문서에 한국어가 남았다: ${byFile.join(", ")}`);
   });
   check("d.ts 주석은 전부 영문이다", () => {
     const byFile = [];
