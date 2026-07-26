@@ -1,4 +1,4 @@
-// environmentBindings.js - 패키지, 장치 파일, 부팅 환경 조립.
+// environmentBindings.js - Layer 3: 패키지, 장치 파일, 부팅 환경 조립.
 import { DeviceFs } from "../../capabilities/deviceFs.js";
 import { Init } from "../../capabilities/init.js";
 import { WheelCache } from "../../capabilities/wheelCache.js";

@@ -1,4 +1,4 @@
-// deterministicOrder.js - 결정적 정렬 비교. 순수 함수, import 0.
+// deterministicOrder.js - Layer 5/pure: 결정적 정렬 비교. 순수 함수, import 0.
 //
 // 왜 별 파일인가: 내용주소와 서명 대상의 엔트리 순서가 로케일/ICU 판본에 따라 달라지면 같은
 // 상태가 다른 주소를 낳는다("같은 상태 = 같은 주소"라는 상태 커널의 전제가 깨진다). 그래서

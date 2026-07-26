@@ -1,4 +1,4 @@
-// memoryLayout.js - WASM 선형 메모리 layout 상수와 단위 변환.
+// memoryLayout.js - Layer 0: WASM 선형 메모리 layout 상수와 단위 변환.
 // MemoryCapability 구현과 상위 능력이 공유하는 작은 계약이다.
 export const PAGE_SIZE = 65536;
 const BYTES_PER_MB = 1048576;

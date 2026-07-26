@@ -1,4 +1,4 @@
-// webMachineHost.js - engine과 browser 구현을 모르는 machine registry와 device gate.
+// webMachineHost.js - Layer 5/pure: engine과 browser 구현을 모르는 machine registry와 device gate.
 import { instantiateAdapter } from "../contracts/adapterContract.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { MachineHandle } from "./machineHandle.js";

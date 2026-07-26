@@ -1,4 +1,4 @@
-// machine - 브라우저를 여러 guest OS가 올라가는 컴퓨터로 만드는 층. pyproc의 최상층이다.
+// machine - Layer 5/composition: 브라우저를 여러 guest OS가 올라가는 컴퓨터로 만드는 층. pyproc의 최상층이다.
 //
 // 옛 @web-machine/{core,browser,guest-pyproc,guest-v86} 4개 private package를 한 폴더로 들였다.
 // 벽(패키지 경계)은 없어지고 불변식은 남는다: contracts/host는 엔진·브라우저를 모르고,

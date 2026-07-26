@@ -1,4 +1,4 @@
-// worker.js - PyProc의 "프로세스" (Web Worker 안 Pyodide 인터프리터).
+// worker.js - Layer 4: PyProc의 "프로세스" (Web Worker 안 Pyodide 인터프리터).
 // 부팅 3경로: 스냅샷(fast fork) / 콜드 / **리플레이**(결정적 부팅 = forkLive의 전제).
 // pyProc.js가 같은 폴더의 이 파일을 new URL 상대경로로 spawn한다(위치 = 계약).
 //

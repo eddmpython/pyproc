@@ -1,4 +1,4 @@
-// machineCryptoProvider.js - machine 층에 상태 커널의 암호 법을 배달하는 조립 지점.
+// machineCryptoProvider.js - Layer 5/composition: machine 층에 상태 커널의 암호 법을 배달하는 조립 지점.
 //
 // machine 내부(persistence/image)는 경계상 커널을 import하지 못한다(밖 import는 composition
 // 한 점). 그래서 커널이 machine을 아는 게 아니라, composition이 커널의 함수 조각(digest,

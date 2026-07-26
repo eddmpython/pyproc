@@ -1,4 +1,4 @@
-// canvasRgbaFrameSource.js - canvas에 실제 반영된 dirty region을 RGBA8888 bytes로 내보낸다.
+// canvasRgbaFrameSource.js - Layer 5/platform: canvas에 실제 반영된 dirty region을 RGBA8888 bytes로 내보낸다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 export class CanvasRgbaFrameSource {
   constructor({ canvas }) {

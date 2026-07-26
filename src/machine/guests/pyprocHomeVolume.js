@@ -1,4 +1,4 @@
-// pyprocHomeVolume.js - 공개 Runtime.fs와 block device 사이의 /home volume 형식.
+// pyprocHomeVolume.js - Layer 5/guests: 공개 Runtime.fs와 block device 사이의 /home volume 형식.
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const magic = encoder.encode("PYPROC_HOME_VOLUME_1\n");

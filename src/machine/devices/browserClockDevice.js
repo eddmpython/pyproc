@@ -1,4 +1,4 @@
-// browserClockDevice.js - 주입된 browser 시간원과 scheduler를 bounded clock 계약으로 좁힌다.
+// browserClockDevice.js - Layer 5/platform: 주입된 browser 시간원과 scheduler를 bounded clock 계약으로 좁힌다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 function finiteTime(value, label) {

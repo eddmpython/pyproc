@@ -1,4 +1,4 @@
-// deviceRequirement.js - guest가 요구하는 장치의 해석 법. 순수 함수, 의존은 오류 계약뿐.
+// deviceRequirement.js - Layer 5/pure: guest가 요구하는 장치의 해석 법. 순수 함수, 의존은 오류 계약뿐.
 //
 // 왜 한 곳인가: 예전에는 같은 요구가 두 형태로 살았다. adapter는 `capabilities.requiredDevices`로
 // 선언하고(host가 그걸 읽어 allowlist를 검사한다), 그 다음 같은 요구를 어댑터 안에서 명령형으로

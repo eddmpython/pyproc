@@ -1,4 +1,4 @@
-// stateBindings.js - 실행 상태의 체크포인트와 durable journal 조립.
+// stateBindings.js - Layer 3: 실행 상태의 체크포인트와 durable journal 조립.
 import { MachineJournal } from "../../capabilities/journal/machineJournal.js";
 import { ReactiveController } from "../../capabilities/reactive.js";
 

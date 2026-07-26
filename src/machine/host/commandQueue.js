@@ -1,4 +1,4 @@
-// commandQueue.js - machine별 직렬 실행과 ownership 결과 fencing.
+// commandQueue.js - Layer 5/pure: machine별 직렬 실행과 ownership 결과 fencing.
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { operationAbortError, throwIfOperationAborted } from "../contracts/operationControl.js";
 

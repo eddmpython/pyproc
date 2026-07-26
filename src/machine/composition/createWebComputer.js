@@ -1,4 +1,4 @@
-// createWebComputer.js - 컴퓨터 한 대의 배선. pyproc의 최상단 조립 지점이다.
+// createWebComputer.js - Layer 5/composition: 컴퓨터 한 대의 배선. pyproc의 최상단 조립 지점이다.
 //
 // 여기 오기 전까지 이 조립은 제품 앱(apps/webComputer) 안에 살았고, npm으로 받은 소비자는
 // 재현할 방법이 없었다. 이제 조립이 공개 표면이고 앱은 이 함수의 소비자다.

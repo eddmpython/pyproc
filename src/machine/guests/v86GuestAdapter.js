@@ -1,4 +1,4 @@
-// v86GuestAdapter.js - 주입된 v86 engine과 이름 있는 virtual device port를 guest 계약으로 변환한다.
+// v86GuestAdapter.js - Layer 5/guests: 주입된 v86 engine과 이름 있는 virtual device port를 guest 계약으로 변환한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { operationAbortError, throwIfOperationAborted } from "../contracts/operationControl.js";
 import { V86BlockBuffer } from "./v86BlockBuffer.js";

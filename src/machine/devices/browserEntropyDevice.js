@@ -1,4 +1,4 @@
-// browserEntropyDevice.js - 주입된 CSPRNG를 bounded random byte 계약으로 좁힌다.
+// browserEntropyDevice.js - Layer 5/platform: 주입된 CSPRNG를 bounded random byte 계약으로 좁힌다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 export class BrowserEntropyDevice {

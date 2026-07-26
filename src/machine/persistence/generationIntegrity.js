@@ -1,4 +1,4 @@
-// generationIntegrity.js - blob과 generation manifest의 무결성 경계(machine측 호출부).
+// generationIntegrity.js - Layer 5/platform: blob과 generation manifest의 무결성 경계(machine측 호출부).
 // 암호 연산(sha256 내용주소)의 정본은 상태 커널이고, composition이
 // createMachineCryptoProvider로 digestBytes 함수를 주입한다(machine은 커널을 모른다).
 // 여기 남는 것은 machine 도메인의 형식 법이다: canonical manifest 직렬화와

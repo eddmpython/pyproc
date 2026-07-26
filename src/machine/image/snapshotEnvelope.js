@@ -1,4 +1,4 @@
-// snapshotEnvelope.js - engine payload를 해석하지 않는 image envelope 경계.
+// snapshotEnvelope.js - Layer 5/pure: engine payload를 해석하지 않는 image envelope 경계.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 const snapshotScopes = new Set(["portable", "session", "none"]);

@@ -1,4 +1,4 @@
-// state/index.js - pyproc/history subpath의 배럴(plumbing 표면).
+// state/index.js - Layer 1: pyproc/history subpath의 배럴(plumbing 표면).
 //
 // porcelain(루트 boot/open의 머신 핸들)이 "역사를 가진 브라우저 컴퓨터"라는 모델을 동사로
 // 말한다면, 여기는 그 모델의 계약 자체다: 오브젝트 문법(blob/tree/commit), 커밋·부활

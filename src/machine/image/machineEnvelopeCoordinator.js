@@ -1,4 +1,4 @@
-// machineEnvelopeCoordinator.js - paused machine과 block을 한 이동 이미지로 조정한다.
+// machineEnvelopeCoordinator.js - Layer 5/platform: paused machine과 block을 한 이동 이미지로 조정한다.
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { assertWebMachineArchive, createWebMachineFile, readWebMachineFile } from "./webMachineFile.js";

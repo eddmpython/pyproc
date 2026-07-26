@@ -1,4 +1,4 @@
-// machineHandle.js - machine 하나의 lifecycle, snapshot, ownership 상태 머신.
+// machineHandle.js - Layer 5/pure: machine 하나의 lifecycle, snapshot, ownership 상태 머신.
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { createSnapshotEnvelope, validateSnapshotEnvelope } from "../image/snapshotEnvelope.js";
 import { CommandQueue } from "./commandQueue.js";

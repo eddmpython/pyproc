@@ -1,4 +1,4 @@
-// indexedDbMachineStore.js - owner, blob, generation, HEAD를 한 IndexedDB transaction으로 fence한다.
+// indexedDbMachineStore.js - Layer 5/platform: owner, blob, generation, HEAD를 한 IndexedDB transaction으로 fence한다.
 import { operationAbortError, throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { copyGenerationBytes } from "./generationIntegrity.js";

@@ -1,4 +1,4 @@
-// v86DisplayPort.js - v86 VGA text bus를 공통 text-cells display port로 변환한다.
+// v86DisplayPort.js - Layer 5/guests: v86 VGA text bus를 공통 text-cells display port로 변환한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86DisplayPort {
   constructor({ device, endpointId }) {

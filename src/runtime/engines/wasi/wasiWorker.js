@@ -1,4 +1,4 @@
-// wasiWorker.js - WASI "프로세스": non-Pyodide CPython(WASI)을 vendored shim으로 워커에서
+// wasiWorker.js - Layer 0: WASI "프로세스": non-Pyodide CPython(WASI)을 vendored shim으로 워커에서
 // 부팅하고, pyproc이 소유한 드라이버(wasiReplDriver)를 세워 코드 조각을 반복 실행한다.
 // wasiSession.js가 이 파일을 new URL 상대경로로 spawn한다(위치 = 번들러 워커 emit 계약).
 // 값 채널 무상태화(완전 시간여행): 코드는 preopen 파일 /cmd(힙 밖), stdin은 신호 1바이트.

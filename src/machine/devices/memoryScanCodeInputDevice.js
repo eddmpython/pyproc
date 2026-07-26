@@ -1,4 +1,4 @@
-// memoryScanCodeInputDevice.js - focus된 한 endpoint에 bounded scan code batch를 전달한다.
+// memoryScanCodeInputDevice.js - Layer 5/platform: focus된 한 endpoint에 bounded scan code batch를 전달한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 function copyScanCodes(value) {

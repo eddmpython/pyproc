@@ -1,4 +1,4 @@
-// webMachineTrust.js - 이미지 서명 검증과 외부 trusted key 경계(machine측 호출부).
+// webMachineTrust.js - Layer 5/platform: 이미지 서명 검증과 외부 trusted key 경계(machine측 호출부).
 // ECDSA P-256 연산(키 생성·서명·검증)의 정본은 상태 커널의 signedTag 코어이고, composition이
 // createMachineCryptoProvider로 함수 조각(signDigest/verifyDigest/generateSigningKeyPair/
 // exportPublicJwk)을 주입한다. 여기 남는 것은 machine 도메인의 형식 법이다: signature v1

@@ -1,4 +1,4 @@
-// v86FileSystemVolume.js - v86 9P 파일 트리를 공통 block device에 저장하는 volume 형식.
+// v86FileSystemVolume.js - Layer 5/guests: v86 9P 파일 트리를 공통 block device에 저장하는 volume 형식.
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const magic = encoder.encode("V86_9P_VOLUME_1\n");

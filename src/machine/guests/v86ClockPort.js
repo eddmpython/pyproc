@@ -1,4 +1,4 @@
-// v86ClockPort.js - 공통 clock을 v86 CPU tick과 CMOS RTC에 연결한다.
+// v86ClockPort.js - Layer 5/guests: 공통 clock을 v86 CPU tick과 CMOS RTC에 연결한다.
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 import { WebMachineError } from "../contracts/webMachineError.js";

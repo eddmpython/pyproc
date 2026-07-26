@@ -1,4 +1,4 @@
-// pyprocMachine.js - porcelain 머신 핸들: 표면이 내부 구조가 아니라 모델을 말한다.
+// pyprocMachine.js - Layer 5/composition: porcelain 머신 핸들: 표면이 내부 구조가 아니라 모델을 말한다.
 //
 // pyproc의 한 명사는 "역사를 가진 브라우저 컴퓨터"다. 진입 동사는 둘뿐이고(boot = 첫 guest
 // 고속 경로, createWebComputer = 컴퓨터), 둘 다 핸들을 돌려준다. 핸들의 네임스페이스가 모델을

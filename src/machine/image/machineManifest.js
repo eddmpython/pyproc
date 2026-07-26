@@ -1,4 +1,4 @@
-// machineManifest.js - 이동 가능한 머신 이미지의 순수 구조와 불변식.
+// machineManifest.js - Layer 5/pure: 이동 가능한 머신 이미지의 순수 구조와 불변식.
 import { isSnapshotScope } from "./snapshotEnvelope.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 

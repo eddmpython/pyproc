@@ -1,4 +1,4 @@
-// machineWorker.js - P5 machineContainers: 머신 안의 머신(컨테이너 커널).
+// machineWorker.js - Layer 4: P5 machineContainers: 머신 안의 머신(컨테이너 커널).
 // 이 워커는 자기 매니페스트(자기 패키지 세트)로 부팅한 독립 커널이고, 부모(커널 또는 상위
 // 컨테이너)의 RPC로 run/kill/exportState를 수행한다. **중첩**: 이 워커가 다시 machineWorker를
 // spawn하면 깊이 2의 머신이 된다(도커의 컨테이너-속-컨테이너). 각 층은 단순 postMessage RPC고

@@ -1,4 +1,4 @@
-// pyprocGuestAdapter.js - 주입된 공개 pyproc surface를 공통 guest 계약으로 변환한다.
+// pyprocGuestAdapter.js - Layer 5/guests: 주입된 공개 pyproc surface를 공통 guest 계약으로 변환한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { readPyprocHomeVolume, writePyprocHomeVolume } from "./pyprocHomeVolume.js";

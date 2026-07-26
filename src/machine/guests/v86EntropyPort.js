@@ -1,4 +1,4 @@
-// v86EntropyPort.js - 공통 entropy bytes를 x86 RDRAND의 signed int32로 변환한다.
+// v86EntropyPort.js - Layer 5/guests: 공통 entropy bytes를 x86 RDRAND의 signed int32로 변환한다.
 export class V86EntropyPort {
   constructor({ device }) {
     if (!device || device.kind !== "entropy" || device.mode !== "cryptographic-random" || typeof device.read !== "function") {

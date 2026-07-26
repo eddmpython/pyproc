@@ -1,4 +1,4 @@
-// v86BlockBuffer.js - callback block buffer를 공통 async block device로 변환한다.
+// v86BlockBuffer.js - Layer 5/guests: callback block buffer를 공통 async block device로 변환한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86BlockBuffer {
   constructor(device) {

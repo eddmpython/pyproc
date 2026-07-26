@@ -1,4 +1,4 @@
-// engineContract.js - Runtime이 받는 엔진 어댑터의 실행 가능한 계약.
+// engineContract.js - Layer 0: Runtime이 받는 엔진 어댑터의 실행 가능한 계약.
 //
 // `runSync` 존재 여부로 엔진을 추측하지 않는다. 어댑터는 version/kind/capabilities를
 // 명시하고, Runtime은 생성 시 필수 표면을 전수 검증한다. 선택 기능은 capability로

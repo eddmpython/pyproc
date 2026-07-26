@@ -1,4 +1,4 @@
-// pyprocSw.js - pyproc의 Service Worker 계층(소비자가 자기 오리진에서 등록하는 자산).
+// pyprocSw.js - Layer 2: pyproc의 Service Worker 계층(소비자가 자기 오리진에서 등록하는 자산).
 // virtualOrigin.js와 같은 폴더 고정(자산 경로 계약). 이 파일은 SW 컨텍스트에서 돌므로
 // 모듈 import 없이 자기충족이다. 기능은 등록 URL 쿼리로 켠다:
 //   pyprocSw.js?cache=1                 - Pyodide CDN 자산 캐시-우선(2차 부팅 네트워크 0).

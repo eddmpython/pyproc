@@ -1,4 +1,4 @@
-// serviceBindings.js - Runtime 위에 요청, 서버, URL, 터미널 서비스를 조립한다.
+// serviceBindings.js - Layer 3: Runtime 위에 요청, 서버, URL, 터미널 서비스를 조립한다.
 import { AsgiServer } from "../../capabilities/asgiServer.js";
 import { MachineJail } from "../../capabilities/machineJail.js";
 import { SyscallBridge } from "../../capabilities/syscallBridge.js";

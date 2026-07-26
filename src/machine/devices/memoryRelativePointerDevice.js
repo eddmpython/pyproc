@@ -1,4 +1,4 @@
-// memoryRelativePointerDevice.js - focus된 endpoint에 bounded relative pointer event를 전달한다.
+// memoryRelativePointerDevice.js - Layer 5/platform: focus된 endpoint에 bounded relative pointer event를 전달한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 function finiteDelta(value, maxDelta, label) {

@@ -1,4 +1,4 @@
-// wheelUnzip.js - 순수 파이썬 wheel(= zip)을 브라우저 네이티브 DecompressionStream으로 푼다.
+// wheelUnzip.js - Layer 0: 순수 파이썬 wheel(= zip)을 브라우저 네이티브 DecompressionStream으로 푼다.
 // 의존성 0(외부 zip 라이브러리 금지): 압축 해제는 플랫폼의 deflate-raw를 쓴다. WasiSession의
 // installWheel이 이걸로 wheel을 풀어 파일 목록을 얻고, 파이썬이 /site에 써서 import 가능하게 한다.
 //

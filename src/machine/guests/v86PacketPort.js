@@ -1,4 +1,4 @@
-// v86PacketPort.js - v86 NIC bus와 공통 packet network port 사이의 유일한 변환 경계.
+// v86PacketPort.js - Layer 5/guests: v86 NIC bus와 공통 packet network port 사이의 유일한 변환 경계.
 import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86PacketPort {
   constructor({ device, endpointId, interfaceId = 0 }) {

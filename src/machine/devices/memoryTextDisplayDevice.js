@@ -1,4 +1,4 @@
-// memoryTextDisplayDevice.js - 단일 producer의 text cell frame을 원자적으로 present한다.
+// memoryTextDisplayDevice.js - Layer 5/platform: 단일 producer의 text cell frame을 원자적으로 present한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 function positiveInteger(value, label) {

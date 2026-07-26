@@ -1,4 +1,4 @@
-// webMachineFile.js - .webmachine 파일을 상태 커널의 단일 bundle 포맷(PYBUNDLE1) 위에 세운다.
+// webMachineFile.js - Layer 5/platform: .webmachine 파일을 상태 커널의 단일 bundle 포맷(PYBUNDLE1) 위에 세운다.
 //
 // 봉투는 하나다: 세션 bundle과 machine envelope가 같은 wire 포맷(bundleFormat.js)을 공유하고
 // meta로만 갈린다(적대 입력 파서 2벌 = 취약면 2배). machine 층은 커널을 import하지 못하므로

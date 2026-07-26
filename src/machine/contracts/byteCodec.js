@@ -1,4 +1,4 @@
-// byteCodec.js - machine 층의 순수 바이트 코덱. 의존 0, browser 전역 접근은 폴백 감지뿐.
+// byteCodec.js - Layer 5/platform: machine 층의 순수 바이트 코덱. 의존 0, browser 전역 접근은 폴백 감지뿐.
 //
 // 왜 machine 안에 또 있는가: machine의 바깥 import는 composition 한 점만이라는 구조 계약이
 // 있어서(순수 집합은 guest/engine/browser를 모른다) runtime/contentDigest를 직접 쓸 수 없다.

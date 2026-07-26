@@ -1,3 +1,4 @@
+// retentionPolicy.js - Layer 2: 체크포인트 보존 한도의 해석과 정규화(리액티브 능력의 정책 조각).
 import { PyProcError } from "../../runtime/errors.js";
 
 const LIMIT_KEYS = Object.freeze(["maxNodes", "maxDeltaBytes", "maxTotalBytes"]);

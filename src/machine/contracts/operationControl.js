@@ -1,4 +1,4 @@
-// operationControl.js - 장시간 operation의 취소, timeout, 결과 불명 오류 의미를 고정한다.
+// operationControl.js - Layer 5/pure: 장시간 operation의 취소, timeout, 결과 불명 오류 의미를 고정한다.
 import { WebMachineError } from "./webMachineError.js";
 
 function isTimeoutReason(reason) {

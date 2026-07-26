@@ -1,4 +1,4 @@
-// v86PointerPort.js - 공통 relative pointer event를 v86 PS/2 mouse bus에 주입한다.
+// v86PointerPort.js - Layer 5/guests: 공통 relative pointer event를 v86 PS/2 mouse bus에 주입한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 export class V86PointerPort {
   constructor({ device, endpointId }) {

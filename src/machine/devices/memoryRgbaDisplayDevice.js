@@ -1,4 +1,4 @@
-// memoryRgbaDisplayDevice.js - RGBA8888 region을 working frame에 쓰고 revision 단위로 원자 present한다.
+// memoryRgbaDisplayDevice.js - Layer 5/platform: RGBA8888 region을 working frame에 쓰고 revision 단위로 원자 present한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 const BYTES_PER_PIXEL = 4;

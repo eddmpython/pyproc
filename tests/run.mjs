@@ -2050,28 +2050,76 @@ const LAYER_RANK = new Map([
   ["processOs", 4],     // 워커 = 프로세스, 스냅샷 = 프로세스 이미지
   ["machine", 5],       // 브라우저를 여러 guest OS가 올라가는 컴퓨터로. pyproc의 최상층
 ]);
-// 파일 헤더의 `Layer N` 라벨은 rank 맵과 같은 값이어야 한다. 24벌이 2세대 전 값에 멈춰
-// 있었고(capabilities가 1, processOs가 2), 같은 폴더 안에서도 갈렸다. 라벨이 게이트와 다른
-// 값을 말하면 사람이 읽는 구조와 기계가 지키는 구조가 갈라진다.
-check("src 파일 헤더의 Layer 라벨 = rank 맵", () => {
+const machinePureFiles = new Set([
+  "src/machine/contracts/adapterContract.js",
+  // 장치 요구 해석 법. 순수하다: 오류 계약만 import하고 browser 전역도 guest 이름도 없다.
+  // 그래서 guest가 직접 소비할 수 있고, 그것이 이 파일이 존재하는 이유다(선언 = 유일 진실).
+  // byteCodec은 여기 없다: atob/Buffer 전역을 만지므로 platform(1)이 정직한 층위다.
+  "src/machine/contracts/deterministicOrder.js",
+  "src/machine/contracts/deviceRequirement.js",
+  "src/machine/contracts/operationControl.js",
+  "src/machine/contracts/webMachineError.js",
+  "src/machine/host/commandQueue.js",
+  "src/machine/host/machineHandle.js",
+  "src/machine/host/webMachineHost.js",
+  "src/machine/image/machineManifest.js",
+  "src/machine/image/snapshotEnvelope.js",
+]);
+// 층위 = 옛 package 소속. pure(0: 옛 core) <- platform(1: 옛 browser) <- guests(2) <- composition(3).
+const machineFileRank = (relPath) => {
+  if (machinePureFiles.has(relPath)) return 0;
+  const folder = relPath.split("/")[2];
+  if (folder === "guests") return 2;
+  // 층 배럴은 조립 지점이다: guests와 composition을 재수출하므로 platform으로 부르면
+  // 그 재수출이 전부 위로 향하는 edge가 된다(그래서 edge 검사가 배럴을 건너뛰어 왔다).
+  if (folder === "composition" || relPath === "src/machine/index.js") return 3;
+  return 1;
+};
+// 파일 헤더의 `Layer N` 라벨은 rank 맵과 같은 값이어야 하고, 이제 전 파일에 있어야 한다.
+// 예전 판정은 "라벨이 있으면 값이 맞는가"였다: 라벨 없는 파일 67개가 자연 통과했고(2026-07-27
+// 실측, 113개 중), 그래서 machine 층 46개 파일은 자기 층위를 한 줄도 말하지 않았다. 층이
+// 폴더로만 살면 읽는 사람은 매번 게이트 소스를 열어야 한다. machine 층은 내부 파일 rank까지
+// 라벨이 말한다(`Layer 5/guests`): 그 rank가 import 방향과 순수성 판정의 실제 기준이다.
+const MACHINE_RANK_NAME = ["pure", "platform", "guests", "composition"];
+// 벤더 번들은 업스트림 diff를 보존해야 갱신이 가능하므로 헤더를 고치지 않는다.
+const LAYER_LABEL_EXEMPT = new Set(["src/runtime/engines/wasi/browserWasiShim.js"]);
+check("src 전 파일이 헤더에 Layer 라벨을 갖고 rank 맵과 일치한다", () => {
   const problems = [];
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
-    const layer = srcLayerName(rel(f));
+    const relPath = rel(f);
+    if (LAYER_LABEL_EXEMPT.has(relPath)) continue;
+    const layer = srcLayerName(relPath);
     if (!layer || !LAYER_RANK.has(layer)) continue;
-    for (const m of readFileSync(f, "utf8").matchAll(/\bLayer (\d)\b/g)) {
-      if (Number(m[1]) !== LAYER_RANK.get(layer)) problems.push(`${rel(f)}: Layer ${m[1]} != ${LAYER_RANK.get(layer)}`);
+    const rank = LAYER_RANK.get(layer);
+    const expected = layer === "machine"
+      ? `Layer 5/${MACHINE_RANK_NAME[machineFileRank(relPath)]}`
+      : `Layer ${rank}`;
+    const text = readFileSync(f, "utf8");
+    const found = [...text.matchAll(/\bLayer (\d)(?:\/([a-z]+))?/g)];
+    if (!found.length) { problems.push(`${relPath}: Layer 라벨 없음(기대 ${expected})`); continue; }
+    for (const m of found) {
+      const actual = m[2] ? `Layer ${m[1]}/${m[2]}` : `Layer ${m[1]}`;
+      if (actual !== expected) problems.push(`${relPath}: ${actual} != ${expected}`);
     }
   }
-  if (problems.length) throw new Error(problems.slice(0, 6).join("; "));
+  if (problems.length) throw new Error(`${problems.length}건: ${problems.slice(0, 6).join("; ")}`);
 });
 // 규칙 문서와 게이트가 같은 순위를 말하는가. CLAUDE.md는 로컬 전용이라 CI에 없으므로
 // 추적되는 기여자 문서를 대조 대상으로 둔다(규칙 문장의 공개 정본).
 check("CONTRIBUTING의 레이어 순위 = rank 맵", () => {
   const doc = readFileSync(join(ROOT, "CONTRIBUTING.md"), "utf8");
+  // 존재만 보면 모순을 못 잡는다: 같은 층을 두 순위로 적어도 맞는 쪽 하나가 통과시킨다.
+  // 그래서 그 층의 순위 표기 전부를 걷어 유일성까지 본다.
   for (const [layer, rank] of LAYER_RANK) {
-    if (!new RegExp("`" + layer + "/`\\s*\\(" + rank).test(doc)) {
-      throw new Error(`CONTRIBUTING에 ${layer}(${rank}) 순위 표기 없음`);
+    const stated = [...doc.matchAll(new RegExp("`" + layer + "/`\\s*\\((\\d)", "g"))].map((m) => Number(m[1]));
+    if (!stated.length) throw new Error(`CONTRIBUTING에 ${layer}(${rank}) 순위 표기 없음`);
+    if (stated.some((value) => value !== rank)) {
+      throw new Error(`CONTRIBUTING의 ${layer} 순위 표기 모순: ${stated.join(",")} (rank ${rank})`);
     }
+  }
+  // 파일 헤더 라벨 규칙도 여기 살아야 한다(게이트가 강제하는 것을 기여자 문서가 말한다).
+  for (const marker of ["Layer 2:", "Layer 5/guests", "`pure`", "`composition`"]) {
+    if (!doc.includes(marker)) throw new Error(`CONTRIBUTING에 라벨 규칙 표기 없음: ${marker}`);
   }
 });
 check("src 레이어 폴더 고정", () => {
@@ -2289,29 +2337,6 @@ const webMachineSourceRoots = [machineRoot, webMachineTestRoot];
 // 엔진·브라우저를 모르는 순수 집합. 옛 @web-machine/core의 경계가 파일 불변식으로 남는다
 // (폴더가 아니라 파일인 이유: snapshotEnvelope/machineManifest는 image/에 살지만 계약 층이다.
 //  contracts와 host가 이 둘을 import하는 것이 실측 edge라 폴더 단위 rank는 성립하지 않는다).
-const machinePureFiles = new Set([
-  "src/machine/contracts/adapterContract.js",
-  // 장치 요구 해석 법. 순수하다: 오류 계약만 import하고 browser 전역도 guest 이름도 없다.
-  // 그래서 guest가 직접 소비할 수 있고, 그것이 이 파일이 존재하는 이유다(선언 = 유일 진실).
-  // byteCodec은 여기 없다: atob/Buffer 전역을 만지므로 platform(1)이 정직한 층위다.
-  "src/machine/contracts/deterministicOrder.js",
-  "src/machine/contracts/deviceRequirement.js",
-  "src/machine/contracts/operationControl.js",
-  "src/machine/contracts/webMachineError.js",
-  "src/machine/host/commandQueue.js",
-  "src/machine/host/machineHandle.js",
-  "src/machine/host/webMachineHost.js",
-  "src/machine/image/machineManifest.js",
-  "src/machine/image/snapshotEnvelope.js",
-]);
-// 층위 = 옛 package 소속. pure(0: 옛 core) <- platform(1: 옛 browser) <- guests(2) <- composition(3).
-const machineFileRank = (relPath) => {
-  if (machinePureFiles.has(relPath)) return 0;
-  const folder = relPath.split("/")[2];
-  if (folder === "guests") return 2;
-  if (folder === "composition") return 3;
-  return 1;
-};
 
 check("Web Machine 층과 검증 트리 구조 고정", () => {
   // packages/ 감옥은 철거됐다. 플랫폼은 pyproc의 machine 층이다.
@@ -2481,7 +2506,6 @@ check("Web Machine 층 내부 import는 아래로만", () => {
   const problems = [];
   for (const file of collect(machineRoot, [".js"], [])) {
     const fromRel = rel(file);
-    if (fromRel === "src/machine/index.js") continue; // 배럴은 표면 게이트가 본다
     const fromRank = machineFileRank(fromRel);
     for (const ref of jsModuleRefs(file)) {
       const target = moduleTarget(file, ref.spec);

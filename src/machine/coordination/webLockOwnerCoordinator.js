@@ -1,4 +1,4 @@
-// webLockOwnerCoordinator.js - Web Lock 단일 owner와 durable epoch claim의 수명주기를 묶는다.
+// webLockOwnerCoordinator.js - Layer 5/platform: Web Lock 단일 owner와 durable epoch claim의 수명주기를 묶는다.
 import { operationAbortError, throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 

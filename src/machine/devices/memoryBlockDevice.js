@@ -1,4 +1,4 @@
-// memoryBlockDevice.js - write와 flush 완료 경계를 분리하는 block device 기준 구현.
+// memoryBlockDevice.js - Layer 5/platform: write와 flush 완료 경계를 분리하는 block device 기준 구현.
 import { WebMachineError } from "../contracts/webMachineError.js";
 
 function copyBytes(value, label) {

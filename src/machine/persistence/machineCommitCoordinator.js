@@ -1,4 +1,4 @@
-// machineCommitCoordinator.js - paused guest snapshot과 flushed device를 한 CAS generation으로 commit한다.
+// machineCommitCoordinator.js - Layer 5/platform: paused guest snapshot과 flushed device를 한 CAS generation으로 commit한다.
 //
 // 재기초(kernel-product P2): generation은 이제 machine의 자기 manifest가 아니라 상태 커널의
 // 오브젝트다. 스냅샷 payload = blob, 머신·장치의 도메인 기술 = payloadTree 엔트리 meta,

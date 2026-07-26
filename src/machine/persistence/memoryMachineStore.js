@@ -1,4 +1,4 @@
-// memoryMachineStore.js - owner fencing, atomic generation publish, retention의 deterministic 기준 구현.
+// memoryMachineStore.js - Layer 5/platform: owner fencing, atomic generation publish, retention의 deterministic 기준 구현.
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { copyGenerationBytes } from "./generationIntegrity.js";
