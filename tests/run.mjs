@@ -379,6 +379,30 @@ for (const f of collect(ROOT, TEXT_SURFACE_EXTS, [])) {
   });
 }
 
+// 3.0.1) 원시 제어문자 0. 이 게이트의 근거는 자기 사고다(2026-07-27): 코덱 법과 결정성 스텁
+//        법의 정규식에 `\b`를 쓰려던 자리에 원시 U+0008(백스페이스)이 들어가 두 법의 절반이
+//        조용히 죽었다. `/\batob/`는 `atob(`를 잡지만 `/<0x08>atob/`는 아무것도 잡지 않고,
+//        게이트는 초록이었다. 육안으로 구분되지 않으므로 기계가 봐야 한다.
+//        허용: TAB(9), LF(10), CR(13). 나머지 C0 제어문자와 U+007F는 텍스트 표면에 없다.
+section("제어문자");
+{
+  const ALLOWED_CONTROL = new Set([9, 10, 13]);
+  for (const f of collect(ROOT, TEXT_SURFACE_EXTS, [])) {
+    check(`제어문자 0: ${rel(f)}`, () => {
+      const text = readFileSync(f, "utf8");
+      const hits = [];
+      for (let at = 0; at < text.length; at++) {
+        const code = text.charCodeAt(at);
+        if ((code < 32 && !ALLOWED_CONTROL.has(code)) || code === 127) {
+          const line = text.slice(0, at).split("\n").length;
+          hits.push(`L${line} U+${code.toString(16).padStart(4, "0")}`);
+        }
+      }
+      if (hits.length) throw new Error(hits.slice(0, 5).join(", "));
+    });
+  }
+}
+
 // 3.1) 문서 주체 가드: 문서·주석의 주체는 나다(1인칭/주어 생략). 나를 3인칭 호칭으로
 //      지칭하는 표현을 차단한다(커밋 메시지 주체 중립 규칙의 문서판, 2026-07-12 확정).
 //      금칙어는 리터럴로 쓰면 이 게이트가 자기 자신에 걸리므로 조립한다.
@@ -417,7 +441,11 @@ section("성능 주장");
 const BRAG = [
   [/\d+(?:\.\d+)?\s*(?:x|×)\s*(?:faster|speedup)/i, "속도 배수 자랑"],
   [/\d+(?:\.\d+)?\s*(?:x|×)\s+median\s+speedup/i, "속도 배수 자랑"],
-  [/\d+(?:\.\d+)?\s*배\s*(?:빠|더\s*빠)/, "속도 배수 자랑"],
+  // 방향을 묻지 않는다. 예전 패턴은 "배" 뒤에 "빠"를 요구해서 `340배 실측`, `86배 느림`,
+  // `4.05배)`, `2-10배 감속`이 전부 통과했다(2026-07-27 실측: 금지 표면에 6건 생존).
+  // 배수 게시 자체가 금지다: 느리다는 숫자도 방어해야 하는 숫자가 된다. 단위 명사(배열/배포)는
+  // 뒤 문자로 배제하고, 게이트 임계값이 사는 docs/operations는 스코프 자체가 밖이다.
+  [/\d+(?:\.\d+)?\s*배(?![열포치])/, "속도 배수 게시"],
   [/\d+(?:\.\d+)?\s*ms\b/, "측정치 게시"],
   [/\bfastest\b|blazing|가장\s*빠른|초고속/i, "최상급 속도 주장"],
   // 숫자를 artifact 링크 뒤에 숨겨도 경쟁 비교 게시는 게시다.
@@ -476,7 +504,7 @@ section("digest 법");
     "src/capabilities/pyprocSw.js",
     "src/runtime/engines/wasi/browserWasiShim.js", // 벤더 번들(서드파티 스코프)
   ]);
-  const CODEC_PATTERN = /atob\s*\(|btoa\s*\(|toString\(16\)/;
+  const CODEC_PATTERN = /\batob\s*\(|\bbtoa\s*\(|toString\(16\)/;
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
     const relPath = rel(f);
     if (CODEC_CORE.has(relPath)) continue;
@@ -497,7 +525,7 @@ section("digest 법");
       if (/crypto\.getRandomValues\s*=|Date\.now\s*=|performance\.now\s*=/.test(code)) holders.push(relPath);
       // `_pyprocR`는 재시드 소스의 이름이다. 접두가 겹치는 다른 이름(_pyprocRe, _pyprocRunSync)을
       // 잡지 않게 경계를 준다.
-      if (/_pyprocR/.test(code)) holders.push(relPath);
+      if (/_pyprocR\b/.test(code)) holders.push(relPath);
     }
     if (holders.length) throw new Error(`결정성 스텁 사본: ${[...new Set(holders)].join(", ")}`);
   });

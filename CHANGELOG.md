@@ -200,8 +200,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   첫 recover에서 자동 이관.
 - **machine 암호 주입**: persistence/image 생성자는 맨 `Crypto`가 아니라
   `createMachineCryptoProvider`가 만든 provider를 요구한다.
-- **forkMany**: 부모 델타를 한 번만 수확해 N 레인에 방송(4.05배). 그 위 4-후보 병렬
-  탐색이 직렬 재시도 대비 5.2배. fork는 1:1 위임으로 이름과 반환 계약 불변.
+- **forkMany**: 부모 델타를 한 번만 수확해 N 레인에 방송하므로 팬아웃 비용이
+  `O(heap + N x delta)`다(`O(N x heap)` 아님). fork는 1:1 위임으로 이름과 반환 계약 불변.
 - SharedKernel 삭제(정본은 openPersistentMachine), GPU/Socket/WASI는 subpath로 강등,
   별칭 3종(timeTravel/interrupt/mapSerial) 절삭.
 - PyProcError 단일 오류 계약(코드/재시도 가능성/파이썬 예외 타입이 워커 경계를 건너온다).

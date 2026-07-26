@@ -81,7 +81,7 @@ onmessage = async (e) => {
     } else if (msg.type === "replBoot") {
       // 반복 실행 모드. 드라이버 소스(wasiReplDriver.py)는 메인이 -c로 넘긴다(정본은 그 파일).
       // stdout 콜백이 즉시 postMessage로 결과를 흘려보낸다(워커가 start 안에 갇혀도 워커->메인
-      // postMessage는 전달된다). 메인은 EOT() 줄까지 모아 한 왕복으로 본다.
+      // postMessage는 전달된다). 메인은 EOT(\x04) 줄까지 모아 한 왕복으로 본다.
       const { driverSource, deterministic, wasmBytes, ctlSab, dataSab } = msg;
       const emit = (stream) => (line) => postMessage({ type: "out", stream, line });
       // 드라이버는 -c argv가 아니라 preopen FS의 파일로 실행한다: argv에 UTF-8 멀티바이트(한글
