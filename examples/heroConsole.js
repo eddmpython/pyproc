@@ -1,13 +1,13 @@
-// heroConsole.js - 랜딩 히어로의 라이브 콘솔(데모 실행 표면의 정본).
-// 랜딩에서 데모를 "보여주지" 않고 "돌린다". 탭을 넘나들어도 런타임은 하나다:
-// 첫 탭에서 CPython을 한 번 부팅하고, 나머지 탭은 그 상태 위에서 곧바로 돈다.
-// 그게 이 제품의 주장 자체이므로(한 번 준비하고 계속 재사용), 화면이 그 주장을 증명한다.
+// heroConsole.js - the live console of the landing hero (canonical for the demo's runnable surface).
+// The landing does not "show" the demo, it runs it. Move between tabs and there is still one runtime:
+// the first tab boots CPython once, and every other tab runs straight on top of that state.
+// That is the product's claim itself - prepare once, reuse forever - so the screen proves the claim.
 //
-// 엔진은 누르기 전에 내려받지 않는다: pyproc import 자체를 첫 실행 시점으로 미룬다(동적 import).
-// 랜딩 첫 로드에는 파이썬이 없다.
+// The engine is not downloaded before you press anything: even importing pyproc is deferred to the
+// first run (a dynamic import). The landing's first load carries no Python.
 //
-// 숫자는 전부 그 자리에서 잰다(하드코딩 0). 데모가 실패하면 그대로 보여준다: 데모의 값은
-// "진짜로 돈다"는 증거뿐이라, 실패를 숨기면 남는 게 없다.
+// Every number is measured on the spot (zero hardcoded). When the demo fails it shows the failure:
+// the only value a demo has is being evidence that this really runs, so hiding a failure leaves nothing.
 
 const PROMPT = '<span class="ok">&gt;&gt;&gt;</span>';
 const dim = (t) => `<span class="dim">${t}</span>`;
@@ -19,8 +19,9 @@ const pageIndexURL = () => {
   return indexParam ? new URL(indexParam, location.href).href : undefined;
 };
 
-// 공유 머신. 결정적 리플레이로 부팅한다: 머신 탭(최면/부활/이미지 내보내기 = history.save/export)이
-// 결정 부팅을 전제하므로, 모든 탭이 같은 머신 핸들 하나를 쓴다.
+// The shared machine, booted through deterministic replay: the machine tab (hibernate, revive, and
+// image export - history.save and history.export) requires a deterministic boot, so every tab uses
+// this one machine handle.
 let machinePromise = null;
 async function sharedMachine(ctx) {
   if (machinePromise) return machinePromise;
@@ -62,7 +63,7 @@ export const demos = [
       const wrecked = machine.run("len(data)");
       ctx.print(`${PROMPT} len(data)  ${err(wrecked)}        ${dim("# the agent wrecked it")}`);
 
-      machine.history.checkpoint();            // 실행 경계를 닫는다(복원을 건전하게 만드는 계약)
+      machine.history.checkpoint();            // close the execution boundary - the contract that makes restore sound
       const t = performance.now();
       machine.history.restore(cp);
       const restoreMs = performance.now() - t;
@@ -164,8 +165,9 @@ export const demos = [
     ],
     async run(ctx) {
       if (!crossOriginIsolated) {
-        // SharedArrayBuffer는 crossOriginIsolated에서만 열린다. GitHub Pages는 헤더를 못 달므로
-        // 번들 서비스워커가 헤더를 주입하고 한 번 새로고침한다(실측: swCoiProbe). 돌아오면 이 탭을 다시 연다.
+        // SharedArrayBuffer only opens under crossOriginIsolated. GitHub Pages cannot set headers, so
+        // the bundled service worker injects them and we reload once (measured: swCoiProbe). On the way
+        // back we reopen this tab.
         ctx.print("");
         ctx.print(dim("# SharedArrayBuffer is locked on this host. Unlocking with the bundled"));
         ctx.print(dim("# service worker, then reloading once (this is what a product ships)."));
@@ -174,7 +176,7 @@ export const demos = [
         await navigator.serviceWorker.register(new URL("../pyprocSw.js?coi=1", import.meta.url));
         await navigator.serviceWorker.ready;
         location.reload();
-        await new Promise(() => {}); // 새 문서로 넘어갈 때까지 정지
+        await new Promise(() => {}); // park until the new document takes over
       }
       const { machine } = await sharedMachine(ctx);
       ctx.status("Forking 4 interpreters from one memory snapshot...");
@@ -190,12 +192,13 @@ export const demos = [
       const par = await pool.map(fn, args);
       const parMs = performance.now() - t;
       t = performance.now();
-      // 직렬 기준선: 같은 태스크를 워커 1개에서 exec로 순차 실행(공개 표면만 사용).
+      // The serial baseline: the same tasks run one after another on a single worker through exec,
+      // using nothing but the public surface.
       const serialPid = pool.ps().find((p) => p.state === "ready").pid;
       const ser = [];
       for (const a of args) ser.push(await pool.exec(serialPid, fn, a));
       const serMs = performance.now() - t;
-      // 2^53을 넘는 파이썬 int는 BigInt로 온다(정밀도 보존이 올바른 동작).
+      // A Python int beyond 2^53 arrives as a BigInt - preserving precision is the correct behavior.
       const same = par.length === ser.length && par.every((v, i) => v === ser[i]);
       ctx.print(`${PROMPT} parallel (4 workers)  ${ok(Math.round(parMs) + "ms")}`);
       ctx.print(`${PROMPT} serial   (1 worker)   ${ok(Math.round(serMs) + "ms")}   ${dim(`# same results: ${same}`)}`);
@@ -239,7 +242,7 @@ export const demos = [
 
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
-// 콘솔을 그린다(탭 + 터미널 + 실행 줄). 마크업 정의처는 여기 하나다.
+// Renders the console (tabs, terminal, and the run line). This is the one place the markup is defined.
 export function mountHeroConsole(root, { gateMode = false } = {}) {
   root.innerHTML = `
     <div class="heroTabs" role="tablist"></div>
@@ -264,8 +267,8 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
     gateMode,
     print: (html) => { out.insertAdjacentHTML("beforeend", (out.innerHTML ? "\n" : "") + html); out.scrollTop = out.scrollHeight; },
     status: (html) => { statusEl.innerHTML = html; },
-    // 터미널: 입력줄을 그대로 파이썬의 입력 소스로 빌려준다(input()이 진짜로 멈춘다).
-    // syscall bridge는 machine.runtime 탈출구, REPL은 machine.term이 정본이다.
+    // Terminal: the input line is lent to Python as its input source, so input() genuinely blocks.
+    // The syscall bridge comes from the machine.runtime escape hatch; machine.term is canonical for the REPL.
     terminal: async (machine) => {
       if (terminalCache) return terminalCache;
       await machine.runtime.enableSyscallBridge({
@@ -279,7 +282,7 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
       terminalCache = term;
       return term;
     },
-    // 머신: OPFS에 최면(history.save)하고 .pymachine(history.export)으로 내보낸다.
+    // Machine: hibernate into OPFS with history.save, and export a .pymachine with history.export.
     machine: async (machine) => {
       if (machineCache) return machineCache;
       const opfs = await navigator.storage.getDirectory();
@@ -290,7 +293,7 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
         machine,
         hibernate: async () => { const r = await machine.history.save(stateDir, "heroMachine"); await home.sync(); return r; },
       };
-      // 탭이 사라질 때 자동 최면(머신 탭을 실제로 쓴 다음부터만 건다).
+      // Hibernate automatically when the tab goes away - armed only once the machine tab has been used.
       addEventListener("pagehide", () => { machineCache.hibernate(); });
       return machineCache;
     },
@@ -301,7 +304,7 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
         if (e.key !== "Enter") return;
         const line = lineInput.value;
         lineInput.value = "";
-        if (pendingInput) { // 파이썬이 input()으로 멈춰 있다: 이 줄이 그 반환값이다
+        if (pendingInput) { // Python is parked in input(): this line is its return value
           const resolve = pendingInput;
           pendingInput = null;
           root.querySelector(".ps").textContent = ">>>";
@@ -368,7 +371,7 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
   goBtn.onclick = run;
   showTab(demos[0]);
 
-  // SAB 잠금 해제 새로고침에서 돌아왔으면 그 탭을 다시 연다(사용자는 흐름이 끊긴 걸 못 느낀다).
+  // If we came back from the SAB-unlock reload, reopen that tab so the user never feels the break.
   const resumed = sessionStorage.getItem("pyprocHeroTab");
   if (resumed) {
     sessionStorage.removeItem("pyprocHeroTab");

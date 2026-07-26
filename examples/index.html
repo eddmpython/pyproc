@@ -8,7 +8,7 @@
   <link rel="icon" href="assets/logo.svg">
   <meta name="theme-color" content="#0a0f1c">
   <link rel="stylesheet" href="examples/demo.css">
-  <!-- 이 파일은 배포 루트(index.html)로 복사되어 서빙된다(pages.yml). 상대 경로는 루트 기준. -->
+  <!-- This file is copied to the deploy root as index.html and served from there (pages.yml), so relative paths are root-relative. -->
   <script type="module" src="examples/siteChrome.js"></script>
 </head>
 <body>
@@ -27,8 +27,9 @@
       <sns-links></sns-links>
     </header>
 
-    <!-- 히어로는 마크가 주인공이다: 마크 -> 슬로건 -> CTA를 가운데 세우고, 실행 예시는 그 아래에서
-         왼쪽 정렬로 읽힌다(코드는 가운데 정렬하면 안 읽힌다). 마크는 헤더와 같은 정본 파일이다. -->
+    <!-- The mark leads the hero: mark, then slogan, then CTA, all centered, with the runnable example
+         below it left-aligned - centered code does not read. The mark comes from the same canonical
+         file as the header. -->
     <section class="hero">
       <img class="heroMark" src="assets/logo.svg" width="112" height="112" alt="pyproc" fetchpriority="high">
       <h1>Real Python in your browser tab.<br><span class="accent">No server.</span></h1>
@@ -41,8 +42,9 @@
         <code class="chip" id="installChip" title="click to copy">npm install pyproc</code>
       </div>
 
-      <!-- 히어로 콘솔: 데모를 보여주는 게 아니라 여기서 전부 돌린다(examples/heroConsole.js가 정본).
-           탭을 넘나들어도 런타임은 하나다. 엔진은 누르기 전에 내려받지 않는다(동적 import). -->
+      <!-- The hero console: it does not show the demo, it runs all of it here (examples/heroConsole.js
+           is canonical). Move between tabs and there is still one runtime, and the engine is not
+           downloaded before you press anything (a dynamic import). -->
       <div class="panel heroDemo" id="heroConsole">
         <div class="term">Loading the console...</div>
       </div>
@@ -151,18 +153,20 @@ await pool.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</
     </footer>
   </div>
   <script type="module">
-    // 설치 칩 클릭 = 클립보드 복사(실패해도 무해).
+    // Clicking the install chip copies to the clipboard; failing is harmless.
     document.getElementById("installChip").addEventListener("click", async (e) => {
       try { await navigator.clipboard.writeText("npm install pyproc"); e.target.textContent = "copied!"; setTimeout(() => { e.target.textContent = "npm install pyproc"; }, 1200); } catch (err) {}
     });
 
-    // 히어로 콘솔을 붙인다. 데모 정의·실행·마크업의 정본은 examples/heroConsole.js 하나다.
-    // 이 페이지는 배포 루트로 승격되므로 경로가 examples/ 기준이다(로컬 serve.mjs도 "/"를 여기로 맵).
+    // Attach the hero console. examples/heroConsole.js is canonical for the demo's definition,
+    // execution, and markup. This page is promoted to the deploy root, so the path is relative to
+    // examples/ (the local serve.mjs also maps "/" here).
     const { mountHeroConsole, demos } = await import("./examples/heroConsole.js");
     const gateMode = new URLSearchParams(location.search).has("gate");
     const hero = mountHeroConsole(document.getElementById("heroConsole"), { gateMode });
 
-    // 예제 게이트(?gate=1)는 사람이 탭을 하나씩 눌러본 것과 같은 경로로 데모를 전부 완주시킨다.
+    // The example gate (?gate=1) drives every demo to completion through the same path a person
+    // takes when clicking the tabs one by one.
     // 랜딩이 실행 표면이 된 이상, 랜딩이 깨졌는지는 랜딩을 실제로 돌려봐야만 안다.
     if (gateMode) {
       const checks = [];

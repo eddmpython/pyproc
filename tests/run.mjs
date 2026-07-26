@@ -3146,6 +3146,24 @@ section("진입 표면 언어");
   // 예산 단계는 끝났다(309 -> 233 -> 141 -> 0). machine 층을 뒤로 미룬 근거는 "라이브러리 API
   // 표면에 거의 안 나온다"였는데 그것이 틀렸다: `createWebComputer`가 루트 export이므로 그 층의
   // 첫 오류가 곧 소비자가 보는 첫 문장이다(외부 감사 지적). 0에 닿았으므로 하드 0으로 잠근다.
+  // 데모 소스의 주석 언어. 렌더되는 문장은 이미 전부 영문이지만(랜딩·데모 UI는 공개 표면 규칙의
+  // 대상이었다) 그 **이유**를 적은 주석이 한국어였다. examples는 개발자가 패턴을 베껴가는 곳이라
+  // 왜 그렇게 했는지가 읽히지 않으면 베낀 코드가 근거 없이 퍼진다(외부 감사 지적, 하위 등급).
+  // 예산은 줄이는 방향으로만 고친다.
+  const EXAMPLE_COMMENT_BUDGET = 59;
+  check("데모 소스 주석의 한국어 예산은 단조 감소한다", () => {
+    const byFile = [];
+    let korean = 0;
+    for (const f of collect(join(ROOT, "examples"), [".js", ".html"], [])) {
+      const lines = readFileSync(f, "utf8").split(NEWLINE);
+      const count = lines.filter((line) => /[가-힣]/.test(line)).length;
+      if (count) byFile.push(`${rel(f)}(${count})`);
+      korean += count;
+    }
+    if (korean > EXAMPLE_COMMENT_BUDGET) {
+      throw new Error(`데모 주석 한국어 ${korean} > 예산 ${EXAMPLE_COMMENT_BUDGET}: ${byFile.join(", ")}`);
+    }
+  });
   check("사용자 대면 메시지는 전부 영문이다", () => {
     let korean = 0;
     const byFile = new Map();

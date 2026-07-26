@@ -1,16 +1,18 @@
-// examples/siteChrome.js - 사이트 크롬(채널 행)의 SSOT.
-// 라이브 데모는 라우트가 여러 개고, 채널(SNS)은 라우트마다 고정이다. 마크업을 페이지마다
-// 복제하면 링크 하나 바뀔 때 5곳이 갈라진다. 빌드 단계가 없으므로(네이티브 ESM) 커스텀
-// 엘리먼트로 배포한다. 어느 페이지든 두 줄이면 헤더에 같은 채널 행이 붙는다:
-//   <script type="module" src="siteChrome.js"></script>   (랜딩은 배포 루트라 examples/siteChrome.js)
+// examples/siteChrome.js - SSOT for the site chrome (the channel row).
+// The live demo has several routes, and the channel row is identical on every one. Duplicating the
+// markup per page means one link change diverges across five files. There is no build step (native
+// ESM), so it ships as a custom element: two lines on any page attach the same channel row:
+//   <script type="module" src="siteChrome.js"></script>   (the landing is the deploy root, so examples/siteChrome.js)
 //   <sns-links></sns-links>
-// 랜딩(배포 루트로 승격되는 examples/index.html)과 examples/*.html이 같은 파일을 쓰므로
-// 링크·아이콘·순서의 정본은 여기 하나다. tests/run.mjs의 [사이트 크롬] 게이트가 기계 검사한다.
+// The landing (examples/index.html, promoted to the deploy root) and examples/*.html use the same
+// file, so links, icons, and order are canonical here alone. The site-chrome gate in tests/run.mjs
+// checks it mechanically.
 //
-// 엘리먼트 이름의 하이픈은 HTML 표준이 커스텀 엘리먼트에 요구하는 형식이다(외부 기술 명칭
-// 취급). 우리 식별자(파일·클래스·필드)는 camelCase 그대로다.
+// The hyphen in the element name is the form the HTML standard requires of a custom element, so it
+// is treated as an external technical name. Our own identifiers - files, classes, fields - stay camelCase.
 
-// 채널 정본. 순서 = 표시 순서. 아이콘은 인라인 SVG(외부 요청 0, 오프라인에서도 그려진다).
+// The canonical channel list. Order here is display order. Icons are inline SVG: zero external
+// requests, and they still render offline.
 export const channels = [
   {
     name: "GitHub",
@@ -22,7 +24,7 @@ export const channels = [
     title: "Support and contribute",
     href: "https://buymeacoffee.com/eddmpython",
     modifier: "snsHeart",
-    // 하트 채움은 demo.css의 --red(#ff6b7c)와 같은 색을 알파로 깐다(테두리는 currentColor).
+    // The heart fill lays down the same color as --red (#ff6b7c) in demo.css with alpha; the stroke stays currentColor.
     icon: `<svg viewBox="0 0 24 24" width="15" height="15" fill="rgba(255,107,124,.32)" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`,
   },
   {
@@ -42,11 +44,11 @@ export const channels = [
   },
 ];
 
-// 라이트 DOM에 그린다: demo.css의 .sns/.snsBtn이 그대로 적용되고(시각 정체성 단일),
-// 스타일 정의가 컴포넌트와 시트로 쪼개지지 않는다.
+// Rendered into the light DOM so .sns and .snsBtn from demo.css apply directly - one visual identity,
+// and the style definition is not split between a component and a stylesheet.
 class SnsLinks extends HTMLElement {
   connectedCallback() {
-    if (this.firstElementChild) return; // 재부착(이동) 시 중복 렌더 방지
+    if (this.firstElementChild) return; // avoid a double render when the element is reattached (moved)
     const nav = document.createElement("nav");
     nav.className = "sns";
     nav.setAttribute("aria-label", "channels");
@@ -58,7 +60,7 @@ class SnsLinks extends HTMLElement {
       link.rel = "noopener";
       link.title = channel.title || channel.name;
       link.setAttribute("aria-label", channel.name);
-      link.innerHTML = channel.icon; // 아이콘은 이 파일의 리터럴이다(외부 입력 없음)
+      link.innerHTML = channel.icon; // the icon is a literal in this file, never external input
       nav.append(link);
     }
     this.append(nav);
