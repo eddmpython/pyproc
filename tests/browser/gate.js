@@ -107,6 +107,20 @@ try {
     !!optionErr && optionErr.code === "PYPROC_INPUT_INVALID" && optionErr.message.includes("determinstic")
     && optionErr.message.includes("deterministic"),
     optionErr ? optionErr.message.slice(0, 80) : "no error");
+  // 아는 키인데 그 모드가 읽지 않는 옵션도 거부한다. setup/wheelDir은 결정적 리플레이
+  // 매니페스트의 항목이라 그 경로만 읽고, 기본 경로는 이름조차 참조하지 않는다. 허용 목록만
+  // 있을 때 `boot({ packages, setup })`은 성공하고 setup을 조용히 버렸다: 침묵하는 무시는
+  // 오타보다 나쁘다(오타는 결국 드러나지만 이쪽은 아무 흔적이 없다). 코드 수리에 게이트가
+  // 없어 한 번의 되돌림으로 사라질 수 있던 자리다(5차 재심사 지적).
+  const modeErrors = [];
+  for (const key of ["setup", "wheelDir"]) {
+    let modeErr = null;
+    try { await boot({ [key]: key === "setup" ? "x = 1" : "wheels" }); } catch (e) { modeErr = e; }
+    modeErrors.push({ key, code: modeErr?.code, mentions: !!modeErr?.message?.includes(key) });
+  }
+  check("boot: 모드가 읽지 않는 옵션은 거부한다(침묵 무시 없음)",
+    modeErrors.every((entry) => entry.code === "PYPROC_INPUT_INVALID" && entry.mentions),
+    JSON.stringify(modeErrors));
 
   // 비결정 머신의 export 거부(api.md 계약). 증거가 0이던 자리다: 이 거부가 사라지면
   // 리플레이 보증 없는 상태가 이동 가능한 이미지로 조용히 나간다.

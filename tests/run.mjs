@@ -565,6 +565,22 @@ section("탐지기 자기 시험");
   bites("주체 중립", (text) => text.includes(OWNER_WORD), `이 문서의 ${OWNER_WORD}는`, "이 문서의 주체는");
   bites("숫자 자랑", (text) => BRAG.some(([re]) => re.test(text)), "측정 결과 4.05배", "독립 인터프리터 N개 = 독립 GIL N개");
   bites("숫자 자랑(ms 게시)", (text) => BRAG.some(([re]) => re.test(text)), "왕복 3.4ms", "왕복은 커널이 만든다");
+  // 언어 탐지기. `가-힣` 범위를 이웃으로 한 글자만 옮기면 d.ts 하드 0과 메시지 예산이 영구히
+  // 통과한다. 두 감사가 독립적으로 지목한 자리다: 그 음성 증명이 커밋 메시지에만 있었고, 그것은
+  // 이 절이 세 줄 위에서 조건하는 바로 그 안티패턴이다("한 번의 사건이지 게이트가 아니다").
+  bites("한국어 탐지", (text) => /[가-힣]/.test(text), "설명 한 줄", "one line of English");
+  // 도달성 판정. 전역 이름 폴백이 있으면 "엉뚱한 클래스에 붙은 실존 이름"이 통과한다.
+  // 판정을 fixture로 재현해 수신자별 판단이 살아 있는지 매 실행마다 본다.
+  check("탐지기가 문다: 도달성 판정은 수신자별이다", () => {
+    const own = new Set(["heap", "byteLength"]);
+    const approved = new Set(["envBoot"]);
+    const verdict = (member) => own.has(member) || approved.has(member);
+    if (!verdict("heap")) throw new Error("자기 본문 멤버를 놓쳤다");
+    if (!verdict("envBoot")) throw new Error("승인된 외부 부착 멤버를 놓쳤다");
+    // `spawn`은 저장소 어딘가(MachineContainer)에 있지만 이 수신자에는 없다. 전역 폴백이
+    // 살아 있으면 이 단정이 뒤집힌다.
+    if (verdict("spawn")) throw new Error("다른 클래스의 이름을 이 수신자의 구현으로 셌다");
+  });
   // 스캐너 자체도 탐지기다: 문자열 안의 `//`를 주석으로 오인하면 그 줄 뒤가 모든 법에서 사라진다.
   check("탐지기가 문다: stripComments가 문자열 안의 //를 주석으로 보지 않는다", () => {
     const line = `const u = "https://cdn.example/x"; atob(payload);`;
@@ -1745,8 +1761,20 @@ for (const sym of ["Runtime", "MemoryCapability", "FileSystem", "ReactiveControl
 // d.ts 멤버 -> src 구현 도달성. 타입체크는 선언끼리의 정합만 보므로 "구현이 없는 선언"을
 // 통과시킨다(실측 2026-07-27: PyProc.mapSerial, PyProc.interrupt가 그렇게 살아 있었다).
 // 소비자는 d.ts를 계약으로 읽고 자동완성으로 호출하므로, 없는 멤버 선언은 런타임
-// TypeError를 타입 통과로 위장시킨다. 판정은 보수적이다: src 어디에도 그 이름의 멤버
-// 정의/할당이 없을 때만 위반이다(레지스트리 배선과 밖에서 붙는 멤버를 구현으로 인정한다).
+// TypeError를 타입 통과로 위장시킨다.
+//
+// 판정은 수신자별이다. 첫 판본은 클래스별 집합을 만들고도 저장소 전역 이름 집합(1151개)과
+// OR했다: 그래서 "없는 이름"은 잡았지만 "엉뚱한 클래스에 붙은 이름"은 통과했다. 외부 감사가
+// 지적한 대로 그것은 `usesDevice`가 틀린 인터페이스에 있던 결함과 같은 종류이므로, 그 게이트는
+// 자기 커밋이 고친 세 번째 항목을 잡을 수 없었다. 전역 폴백을 없애고, 클래스 밖에서 붙는 멤버는
+// 이름과 근거로 승인한다(승인 목록의 diff가 심사 지점이다).
+const EXTERNALLY_ATTACHED_MEMBERS = Object.freeze({
+  // installRuntimeCapabilities가 Runtime.prototype에 심는 능력 배선(레지스트리가 유일 진실).
+  Runtime: ["enableReactive", "enableSyscallBridge", "enableAsgiServer", "enableVirtualOrigin",
+    "enableTerminal", "enableJail", "enableWheelCache", "enableDeviceFs", "enableInit", "enableJournal",
+    // 부팅 경로가 인스턴스에 붙이는 통계(envManager / runtime.boot).
+    "envBoot", "coreCache"],
+});
 check("d.ts declare class 멤버는 src에 구현이 있다", () => {
   const blockAfter = (text, openIndex) => {
     let depth = 1;
@@ -1800,10 +1828,12 @@ check("d.ts declare class 멤버는 src에 구현이 있다", () => {
       }
       for (const m of implBody.matchAll(/this\.([A-Za-z_$][\w$]*)\s*=/g)) own.add(m[1]);
     }
+    const approved = new Set(EXTERNALLY_ATTACHED_MEMBERS[name] || []);
     for (const line of body.split(NEWLINE)) {
       const m = MEMBER_DECL.exec(line);
       if (!m || m[1] === "constructor") continue;
-      if (!own.has(m[1]) && !implemented.has(m[1])) dead.push(`${name}.${m[1]}`);
+      // 같은 이름의 클래스 본문에 있거나, 이 클래스에 밖에서 붙는다고 승인된 것만 구현이다.
+      if (!own.has(m[1]) && !approved.has(m[1])) dead.push(`${name}.${m[1]}`);
     }
   }
   if (dead.length) throw new Error(`구현 없는 d.ts 멤버 선언: ${dead.join(", ")}`);
