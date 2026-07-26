@@ -32,12 +32,22 @@ export function assertModuleBoundaries() {
   }
 
   const buildrootWorkflow = readFileSync(join(ROOT, ".github", "workflows", "buildroot-guest.yml"), "utf8");
-  if (!buildrootWorkflow.includes("npm run assets:buildroot") || !buildrootWorkflow.includes("upload-artifact@v4")) {
-    throw new Error("Buildroot Linux 재현 또는 artifact 보존 배선 누락");
+  if (!buildrootWorkflow.includes("npm run assets:buildroot")) {
+    throw new Error("Buildroot Linux 재현 배선 누락");
+  }
+  // action major는 갱신되는 값이라 계약이 아니다. 계약은 "artifact 보존 배선이 존재한다"다.
+  if (!/uses:\s*actions\/upload-artifact@v\d+/.test(buildrootWorkflow)) {
+    throw new Error("Buildroot artifact 보존 배선 누락");
   }
   const buildrootRecipe = readFileSync(join(ROOT, "scripts", "buildroot", "buildGuest.mjs"), "utf8");
   if (!buildrootRecipe.includes("sourceSha256") || buildrootRecipe.includes('git", ["clone"')) {
     throw new Error("Buildroot source가 검증된 release archive 계약이 아니다");
+  }
+  // 이미지 파일명은 recipe가 정본이다. workflow가 다른 이름을 대조하면 재현 증거가 빈다.
+  const imageName = buildrootRecipe.match(/name:\s*"(buildroot-[\w.-]+\.bin)"/)?.[1];
+  if (!imageName) throw new Error("Buildroot recipe가 출력 이미지 이름을 manifest에 담지 않는다");
+  if (!new RegExp(`cmp[^\\n]*${imageName.replace(/\./g, "\\.")}`).test(buildrootWorkflow)) {
+    throw new Error("Buildroot 독립 빌드의 바이트 동일성 대조가 recipe 출력 이름과 어긋난다");
   }
   return true;
 }
