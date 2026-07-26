@@ -3221,6 +3221,9 @@ section("커밋 규칙");
 // 9) 게이트 층 하한: 섹션별 체크 수가 tests/gateFloor.json 아래로 내려가면 RED. 이 검사가
 //    없으면 앞의 모든 절을 지워도 결과는 GREEN이다(2026-07-26 실측: [election 프로토콜] 절
 //    전체 삭제 후에도 통과). 하한을 내리는 diff가 곧 "검증을 줄인다"는 심사 지점이다.
-gate.assertFloors(JSON.parse(readFileSync(join(ROOT, "tests", "gateFloor.json"), "utf8")).sections);
+{
+  const floors = JSON.parse(readFileSync(join(ROOT, "tests", "gateFloor.json"), "utf8"));
+  gate.assertFloors(floors.sections, floors.laws);
+}
 
 gate.exit();

@@ -170,6 +170,15 @@ if (result.timedOut) {
   process.exit(1);
 }
 for (const c of result.checks) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.name}${c.info ? " (" + c.info + ")" : ""}`);
+// 판정은 러너가 한다. `result.ok`는 시험 대상인 페이지가 계산해 보내온 값이라 그것만 믿으면
+// 검증 대상이 자기 합격을 선언한다. 15개 페이지가 각자 `checks.every(pass)`를 사본으로 갖고
+// 있었고 어느 게이트도 그 공식을 강제하지 않았다: 한 페이지가 `some(...)`으로 표류하거나
+// `ok: true`를 박으면 FAIL 줄을 인쇄하면서 exit 0이었다. 체크 0개도 합격이 아니다.
+if (!result.checks.length) {
+  console.log("\nFAIL 체크 0개: 페이지가 아무것도 단정하지 않았다(GREEN (0/0)은 합격이 아니다)");
+  result.ok = false;
+}
+if (result.checks.some((c) => !c.pass)) result.ok = false;
 if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
 if (phase > 1) console.log(`브라우저 프로세스 phase: ${phase}`);
 // 성능 예산: 기본 게이트의 핵 경로 측정치가 상한(자릿수 회귀 차단용, perfBudget.json)을 넘으면 RED.
@@ -182,6 +191,17 @@ if (result.timings) {
   if (over.length) {
     console.log(`\nFAIL 성능 예산 초과: ${over.join(", ")}`);
     result.ok = false;
+  }
+  // 키가 없으면 그 예산은 조용히 무효가 된다(위 filter가 걸러낸다). 기본 게이트 페이지는
+  // 예산 키 전부를 내놓아야 한다: 측정 이름을 바꾸면 예산이 영구히 죽는 자리였다.
+  // probe 지정 실행은 다른 측정 집합이라 하한이 등재된 페이지에만 요구한다.
+  const floors = JSON.parse(readFileSync(new URL("./gateFloor.json", import.meta.url), "utf8")).floors;
+  if (page in floors && page.endsWith("gate.html")) {
+    const absent = Object.keys(budget).filter((key) => !Number.isFinite(result.timings[key]));
+    if (absent.length) {
+      console.log(`\nFAIL 성능 예산 키가 측정에 없다: ${absent.join(", ")}(이름을 바꾸면 예산이 죽는다)`);
+      result.ok = false;
+    }
   }
 }
 // 체크 수 하한: 'ok && 전부 pass'만 보면 체크를 지운 게이트가 더 적은 수로 GREEN이 된다.
