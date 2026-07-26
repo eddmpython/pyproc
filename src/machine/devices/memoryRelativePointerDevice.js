@@ -3,15 +3,15 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 
 function finiteDelta(value, maxDelta, label) {
   if (!Number.isFinite(value) || Math.abs(value) > maxDelta) {
-    throw new WebMachineError("WEB_MACHINE_POINTER_DELTA", `${label} 범위 초과: ${value}/${maxDelta}`);
+    throw new WebMachineError("WEB_MACHINE_POINTER_DELTA", `${label} is out of range: ${value}/${maxDelta}`);
   }
   return value;
 }
 
 export class MemoryRelativePointerDevice {
   constructor({ maxDelta = 32767, maxQueuedEvents = 128 } = {}) {
-    if (!Number.isFinite(maxDelta) || maxDelta <= 0) throw new TypeError("maxDelta는 양수여야 한다");
-    if (!Number.isInteger(maxQueuedEvents) || maxQueuedEvents <= 0) throw new TypeError("maxQueuedEvents는 양의 정수여야 한다");
+    if (!Number.isFinite(maxDelta) || maxDelta <= 0) throw new TypeError("maxDelta must be positive");
+    if (!Number.isInteger(maxQueuedEvents) || maxQueuedEvents <= 0) throw new TypeError("maxQueuedEvents must be a positive integer");
     this.kind = "input";
     this.mode = "relative-pointer";
     this.maxDelta = maxDelta;
@@ -27,8 +27,8 @@ export class MemoryRelativePointerDevice {
 
   connect({ endpointId, receive }) {
     const id = String(endpointId || "");
-    if (!id) throw new TypeError("endpointId가 필요하다");
-    if (typeof receive !== "function") throw new TypeError("receive 함수가 필요하다");
+    if (!id) throw new TypeError("an endpointId is required");
+    if (typeof receive !== "function") throw new TypeError("a receive function is required");
     if (this._endpoint) {
       const code = this._endpoint.id === id ? "WEB_MACHINE_INPUT_ENDPOINT_DUPLICATE" : "WEB_MACHINE_INPUT_BUSY";
       throw new WebMachineError(code, `pointer 연결 중: ${this._endpoint.id}`);
@@ -49,7 +49,7 @@ export class MemoryRelativePointerDevice {
 
   setButtons({ left, middle, right } = {}) {
     if (![left, middle, right].every((value) => typeof value === "boolean")) {
-      return Promise.reject(new WebMachineError("WEB_MACHINE_POINTER_BUTTONS", "pointer button은 boolean이어야 한다"));
+      return Promise.reject(new WebMachineError("WEB_MACHINE_POINTER_BUTTONS", "a pointer button must be a boolean"));
     }
     return this._send(Object.freeze({ type: "buttons", left, middle, right }));
   }

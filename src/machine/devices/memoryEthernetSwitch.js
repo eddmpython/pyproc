@@ -8,7 +8,7 @@ function copyFrame(value) {
   if (value instanceof Uint8Array) return value.slice();
   if (value instanceof ArrayBuffer) return new Uint8Array(value.slice(0));
   if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
-  throw new WebMachineError("WEB_MACHINE_PACKET_INVALID", "packet frame은 bytes여야 한다");
+  throw new WebMachineError("WEB_MACHINE_PACKET_INVALID", "a packet frame must be bytes");
 }
 
 const MAC_BYTE_LENGTH = 6; // IEEE 802 MAC 주소 길이
@@ -29,9 +29,9 @@ function isZeroAddress(frame, offset) {
 export class MemoryEthernetSwitch {
   constructor({ maxFrameBytes = 1518, maxQueuedFrames = 64 } = {}) {
     if (!Number.isInteger(maxFrameBytes) || maxFrameBytes < ETHERNET_HEADER_BYTES) {
-      throw new TypeError(`maxFrameBytes는 ${ETHERNET_HEADER_BYTES} 이상 정수여야 한다`);
+      throw new TypeError(`maxFrameBytes must be an integer >= ${ETHERNET_HEADER_BYTES}`);
     }
-    if (!Number.isInteger(maxQueuedFrames) || maxQueuedFrames <= 0) throw new TypeError("maxQueuedFrames는 양의 정수여야 한다");
+    if (!Number.isInteger(maxQueuedFrames) || maxQueuedFrames <= 0) throw new TypeError("maxQueuedFrames must be a positive integer");
     this.kind = "network";
     this.mode = "packet";
     this.maxFrameBytes = maxFrameBytes;
@@ -50,10 +50,10 @@ export class MemoryEthernetSwitch {
 
   connect({ endpointId, receive }) {
     const id = String(endpointId || "");
-    if (!id) throw new TypeError("endpointId가 필요하다");
-    if (typeof receive !== "function") throw new TypeError("receive 함수가 필요하다");
+    if (!id) throw new TypeError("an endpointId is required");
+    if (typeof receive !== "function") throw new TypeError("a receive function is required");
     if (this._endpoints.has(id)) {
-      throw new WebMachineError("WEB_MACHINE_NETWORK_ENDPOINT_DUPLICATE", `network endpoint 중복: ${id}`);
+      throw new WebMachineError("WEB_MACHINE_NETWORK_ENDPOINT_DUPLICATE", `duplicate network endpoint: ${id}`);
     }
     const endpoint = {
       id,
@@ -70,7 +70,7 @@ export class MemoryEthernetSwitch {
     return Object.freeze({
       endpointId: id,
       send: (frame) => {
-        if (closed) return Promise.reject(new WebMachineError("WEB_MACHINE_NETWORK_PORT_CLOSED", `network port 닫힘: ${id}`));
+        if (closed) return Promise.reject(new WebMachineError("WEB_MACHINE_NETWORK_PORT_CLOSED", `the network port is closed: ${id}`));
         return this._send(endpoint, frame);
       },
       close: () => {
@@ -101,14 +101,14 @@ export class MemoryEthernetSwitch {
 
   _send(source, value) {
     if (source.closed || this._endpoints.get(source.id) !== source) {
-      return Promise.reject(new WebMachineError("WEB_MACHINE_NETWORK_PORT_CLOSED", `network port 닫힘: ${source.id}`));
+      return Promise.reject(new WebMachineError("WEB_MACHINE_NETWORK_PORT_CLOSED", `the network port is closed: ${source.id}`));
     }
     const frame = copyFrame(value);
     if (frame.byteLength < ETHERNET_HEADER_BYTES) {
-      return Promise.reject(new WebMachineError("WEB_MACHINE_PACKET_INVALID", `Ethernet frame이 너무 짧다: ${frame.byteLength}`));
+      return Promise.reject(new WebMachineError("WEB_MACHINE_PACKET_INVALID", `the Ethernet frame is too short: ${frame.byteLength}`));
     }
     if (frame.byteLength > this.maxFrameBytes) {
-      return Promise.reject(new WebMachineError("WEB_MACHINE_PACKET_TOO_LARGE", `Ethernet frame 크기 초과: ${frame.byteLength}/${this.maxFrameBytes}`));
+      return Promise.reject(new WebMachineError("WEB_MACHINE_PACKET_TOO_LARGE", `the Ethernet frame is too large: ${frame.byteLength}/${this.maxFrameBytes}`));
     }
 
     const sourceAddress = macKey(frame, 6);
@@ -120,7 +120,7 @@ export class MemoryEthernetSwitch {
 
     if (recipients.some((endpoint) => endpoint.queue.length + Number(endpoint.active) >= this.maxQueuedFrames)) {
       this._droppedFrames += 1;
-      return Promise.reject(new WebMachineError("WEB_MACHINE_PACKET_QUEUE_FULL", `packet queue 포화: ${source.id}`));
+      return Promise.reject(new WebMachineError("WEB_MACHINE_PACKET_QUEUE_FULL", `the packet queue is full: ${source.id}`));
     }
 
     this._transmittedFrames += 1;
@@ -167,7 +167,7 @@ export class MemoryEthernetSwitch {
     for (const [address, endpointId] of this._learnedEndpoints) {
       if (endpointId === endpoint.id) this._learnedEndpoints.delete(address);
     }
-    const error = new WebMachineError("WEB_MACHINE_NETWORK_PORT_CLOSED", `network port 닫힘: ${endpoint.id}`);
+    const error = new WebMachineError("WEB_MACHINE_NETWORK_PORT_CLOSED", `the network port is closed: ${endpoint.id}`);
     for (const delivery of endpoint.queue.splice(0)) delivery.reject(error);
   }
 }

@@ -4,7 +4,7 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 const BYTES_PER_PIXEL = 4;
 
 function positiveInteger(value, label) {
-  if (!Number.isInteger(value) || value <= 0) throw new TypeError(`${label}는 양의 정수여야 한다`);
+  if (!Number.isInteger(value) || value <= 0) throw new TypeError(`${label} must be a positive integer`);
   return value;
 }
 
@@ -14,7 +14,7 @@ function copyPixels(value) {
   if (ArrayBuffer.isView(value)) {
     return new Uint8ClampedArray(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
   }
-  throw new WebMachineError("WEB_MACHINE_DISPLAY_PIXELS", "RGBA frame은 bytes여야 한다");
+  throw new WebMachineError("WEB_MACHINE_DISPLAY_PIXELS", "an RGBA frame must be bytes");
 }
 
 export class MemoryRgbaDisplayDevice {
@@ -43,7 +43,7 @@ export class MemoryRgbaDisplayDevice {
 
   connect({ endpointId }) {
     const id = String(endpointId || "");
-    if (!id) throw new TypeError("endpointId가 필요하다");
+    if (!id) throw new TypeError("an endpointId is required");
     if (this._endpoint) {
       const code = this._endpoint.id === id ? "WEB_MACHINE_DISPLAY_ENDPOINT_DUPLICATE" : "WEB_MACHINE_DISPLAY_BUSY";
       throw new WebMachineError(code, `display 연결 중: ${this._endpoint.id}`);
@@ -60,7 +60,7 @@ export class MemoryRgbaDisplayDevice {
   }
 
   subscribe(listener) {
-    if (typeof listener !== "function") throw new TypeError("display listener는 함수여야 한다");
+    if (typeof listener !== "function") throw new TypeError("the display listener must be a function");
     this._listeners.add(listener);
     return () => this._listeners.delete(listener);
   }
@@ -100,7 +100,7 @@ export class MemoryRgbaDisplayDevice {
     positiveInteger(height, "display height");
     const frameBytes = width * height * BYTES_PER_PIXEL;
     if (!Number.isSafeInteger(frameBytes) || width > this.maxWidth || height > this.maxHeight || frameBytes > this.maxFrameBytes) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_SIZE", `display 크기 초과: ${width}x${height}/${this.maxWidth}x${this.maxHeight}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_SIZE", `display size exceeded: ${width}x${height}/${this.maxWidth}x${this.maxHeight}`);
     }
     if (width === this._workingWidth && height === this._workingHeight) return;
     this._workingWidth = width;
@@ -112,17 +112,17 @@ export class MemoryRgbaDisplayDevice {
   _writeRegion(endpoint, { x, y, width, height, pixels, rowStride = width * BYTES_PER_PIXEL } = {}) {
     this._assertEndpoint(endpoint);
     if (![x, y, width, height, rowStride].every(Number.isInteger) || x < 0 || y < 0 || width <= 0 || height <= 0) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_REGION", `display region 불일치: ${x},${y}/${width}x${height}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_REGION", `display region mismatch: ${x},${y}/${width}x${height}`);
     }
     if (x + width > this._workingWidth || y + height > this._workingHeight) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_RANGE", `display region 범위 초과: ${x},${y}/${width}x${height}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_RANGE", `display region is out of range: ${x},${y}/${width}x${height}`);
     }
     const rowBytes = width * BYTES_PER_PIXEL;
-    if (rowStride < rowBytes) throw new WebMachineError("WEB_MACHINE_DISPLAY_STRIDE", `display row stride 부족: ${rowStride}/${rowBytes}`);
+    if (rowStride < rowBytes) throw new WebMachineError("WEB_MACHINE_DISPLAY_STRIDE", `display row stride is too small: ${rowStride}/${rowBytes}`);
     const source = copyPixels(pixels);
     const requiredBytes = (height - 1) * rowStride + rowBytes;
     if (source.byteLength < requiredBytes) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_PIXELS", `display pixel bytes 부족: ${source.byteLength}/${requiredBytes}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_PIXELS", `too few display pixel bytes: ${source.byteLength}/${requiredBytes}`);
     }
     const destinationStride = this._workingWidth * BYTES_PER_PIXEL;
     for (let row = 0; row < height; row += 1) {
@@ -162,7 +162,7 @@ export class MemoryRgbaDisplayDevice {
 
   _assertEndpoint(endpoint) {
     if (endpoint.closed || this._endpoint !== endpoint) {
-      throw new WebMachineError("WEB_MACHINE_DISPLAY_PORT_CLOSED", `display port 닫힘: ${endpoint.id}`);
+      throw new WebMachineError("WEB_MACHINE_DISPLAY_PORT_CLOSED", `the display port is closed: ${endpoint.id}`);
     }
   }
 }

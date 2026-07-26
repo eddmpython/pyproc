@@ -3,7 +3,7 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 
 function finiteTime(value, label) {
   if (!Number.isFinite(value) || value < 0) {
-    throw new WebMachineError("WEB_MACHINE_CLOCK_VALUE", `${label}은 0 이상 유한값이어야 한다: ${value}`);
+    throw new WebMachineError("WEB_MACHINE_CLOCK_VALUE", `${label} must be a finite value >= 0: ${value}`);
   }
   return value;
 }
@@ -17,12 +17,12 @@ export class BrowserClockDevice {
     maxTimerDelayMs = 24 * 60 * 60 * 1000,
     maxPendingTimers = 1024,
   } = {}) {
-    if (typeof wallNow !== "function") throw new TypeError("wallNow 함수가 필요하다");
-    if (typeof monotonicNow !== "function") throw new TypeError("monotonicNow 함수가 필요하다");
-    if (typeof scheduleTimer !== "function") throw new TypeError("scheduleTimer 함수가 필요하다");
-    if (typeof cancelTimer !== "function") throw new TypeError("cancelTimer 함수가 필요하다");
-    if (!Number.isFinite(maxTimerDelayMs) || maxTimerDelayMs <= 0) throw new TypeError("maxTimerDelayMs는 양수여야 한다");
-    if (!Number.isInteger(maxPendingTimers) || maxPendingTimers <= 0) throw new TypeError("maxPendingTimers는 양의 정수여야 한다");
+    if (typeof wallNow !== "function") throw new TypeError("a wallNow function is required");
+    if (typeof monotonicNow !== "function") throw new TypeError("a monotonicNow function is required");
+    if (typeof scheduleTimer !== "function") throw new TypeError("a scheduleTimer function is required");
+    if (typeof cancelTimer !== "function") throw new TypeError("a cancelTimer function is required");
+    if (!Number.isFinite(maxTimerDelayMs) || maxTimerDelayMs <= 0) throw new TypeError("maxTimerDelayMs must be positive");
+    if (!Number.isInteger(maxPendingTimers) || maxPendingTimers <= 0) throw new TypeError("maxPendingTimers must be a positive integer");
     this.kind = "clock";
     this.mode = "wall-monotonic";
     this.maxTimerDelayMs = maxTimerDelayMs;
@@ -54,7 +54,7 @@ export class BrowserClockDevice {
     if (this._lastMonotonicMs !== null && value < this._lastMonotonicMs) {
       throw new WebMachineError(
         "WEB_MACHINE_CLOCK_REGRESSION",
-        `monotonic clock 역행: ${value} < ${this._lastMonotonicMs}`,
+        `the monotonic clock went backwards: ${value} < ${this._lastMonotonicMs}`,
       );
     }
     this._lastMonotonicMs = value;
@@ -64,11 +64,11 @@ export class BrowserClockDevice {
 
   schedule({ delayMs, callback } = {}) {
     if (!Number.isFinite(delayMs) || delayMs < 0 || delayMs > this.maxTimerDelayMs) {
-      throw new WebMachineError("WEB_MACHINE_CLOCK_DELAY", `timer delay 범위 초과: ${delayMs}/${this.maxTimerDelayMs}`);
+      throw new WebMachineError("WEB_MACHINE_CLOCK_DELAY", `timer delay is out of range: ${delayMs}/${this.maxTimerDelayMs}`);
     }
-    if (typeof callback !== "function") throw new TypeError("timer callback이 필요하다");
+    if (typeof callback !== "function") throw new TypeError("a timer callback is required");
     if (this._pendingTimers.size >= this.maxPendingTimers) {
-      throw new WebMachineError("WEB_MACHINE_CLOCK_TIMER_FULL", `clock timer 포화: ${this.maxPendingTimers}`);
+      throw new WebMachineError("WEB_MACHINE_CLOCK_TIMER_FULL", `the clock timer queue is full: ${this.maxPendingTimers}`);
     }
     const id = ++this._nextTimerId;
     const scheduledAtMs = this.readMonotonicTimeMs();

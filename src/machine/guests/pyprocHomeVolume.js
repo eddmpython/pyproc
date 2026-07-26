@@ -12,11 +12,11 @@ function joinPath(base, name) {
 
 function assertRelativePath(path) {
   if (typeof path !== "string" || !path || path.startsWith("/") || path.includes("\\") || path.includes("\0")) {
-    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: 상대 경로 형식 위반");
+    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: malformed relative path");
   }
   const parts = path.split("/");
   if (parts.some((part) => !part || part === "." || part === "..")) {
-    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: 경로 성분 위반 ${path}`);
+    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: invalid path component ${path}`);
   }
 }
 
@@ -35,14 +35,14 @@ function collectHome(fs, root) {
         visit(path, entryPath);
       } else if (stat.isFile) {
         const bytes = fs.readFile(path);
-        if (!(bytes instanceof Uint8Array)) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: binary read 실패 ${entryPath}`);
+        if (!(bytes instanceof Uint8Array)) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: binary read failed ${entryPath}`);
         entries.push({ path: entryPath, type: "file", offset: payloadBytes, size: bytes.byteLength });
         chunks.push(bytes);
         payloadBytes += bytes.byteLength;
       } else {
-        throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: file/dir 이외 엔트리 ${entryPath}`);
+        throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: entry is neither a file nor a directory ${entryPath}`);
       }
-      if (entries.length > maxEntries) throw new WebMachineError("WEB_MACHINE_VOLUME_CAPACITY", "pyproc home volume: 엔트리 상한 초과");
+      if (entries.length > maxEntries) throw new WebMachineError("WEB_MACHINE_VOLUME_CAPACITY", "pyproc home volume: entry limit exceeded");
     }
   };
   visit(root, "");
@@ -68,33 +68,33 @@ function removeTree(fs, path) {
 
 function validateMeta(meta, payloadBytes, root) {
   if (!meta || meta.version !== 1 || meta.root !== root || meta.payloadBytes !== payloadBytes) {
-    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: meta 불일치");
+    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: metadata mismatch");
   }
   if (!Array.isArray(meta.entries) || meta.entries.length > maxEntries) {
-    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: entries 범위 위반");
+    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: entries range is invalid");
   }
   const seen = new Set();
   let nextOffset = 0;
   for (const entry of meta.entries) {
     assertRelativePath(entry?.path);
-    if (seen.has(entry.path)) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: 중복 경로 ${entry.path}`);
+    if (seen.has(entry.path)) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: duplicate path ${entry.path}`);
     seen.add(entry.path);
     if (entry.type === "dir") continue;
     if (entry.type !== "file" || !Number.isInteger(entry.offset) || !Number.isInteger(entry.size) || entry.offset !== nextOffset || entry.size < 0) {
-      throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: file 범위 위반 ${entry.path}`);
+      throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `pyproc home volume: file range is invalid ${entry.path}`);
     }
     nextOffset += entry.size;
-    if (nextOffset > payloadBytes) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: payload 범위 초과");
+    if (nextOffset > payloadBytes) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: payload is out of range");
   }
-  if (nextOffset !== payloadBytes) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: payload 크기 불일치");
+  if (nextOffset !== payloadBytes) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: payload size mismatch");
 }
 
 function assertDevice(device) {
   if (!device || device.kind !== "block" || typeof device.read !== "function" || typeof device.write !== "function") {
-    throw new TypeError("pyproc home volume: block device 필요");
+    throw new TypeError("pyproc home volume: a block device is required");
   }
   if (!Number.isInteger(device.byteLength) || device.byteLength <= magic.byteLength + 4) {
-    throw new WebMachineError("WEB_MACHINE_VOLUME_CAPACITY", "pyproc home volume: block 크기 부족");
+    throw new WebMachineError("WEB_MACHINE_VOLUME_CAPACITY", "pyproc home volume: the block is too small");
   }
 }
 
@@ -115,7 +115,7 @@ export async function writePyprocHomeVolume({ device, fs, root = "/home/web" }) 
   const head = encoder.encode(JSON.stringify(meta));
   const frameLength = magic.byteLength + 4 + head.byteLength + payload.byteLength;
   if (frameLength > device.byteLength) {
-    throw new WebMachineError("WEB_MACHINE_VOLUME_CAPACITY", `pyproc home volume: 용량 초과 ${frameLength}/${device.byteLength}`);
+    throw new WebMachineError("WEB_MACHINE_VOLUME_CAPACITY", `pyproc home volume: capacity exceeded ${frameLength}/${device.byteLength}`);
   }
   const frame = new Uint8Array(frameLength);
   frame.set(magic, 0);
@@ -132,17 +132,17 @@ export async function readPyprocHomeVolume({ device, fs, root = "/home/web", all
   const prefix = await device.read(0, magic.byteLength + 4);
   if (prefix.every((byte) => byte === 0)) {
     if (allowEmpty) return null;
-    throw new WebMachineError("WEB_MACHINE_VOLUME_EMPTY", "pyproc home volume: 초기화되지 않은 block");
+    throw new WebMachineError("WEB_MACHINE_VOLUME_EMPTY", "pyproc home volume: the block is uninitialized");
   }
-  if (!magic.every((byte, index) => prefix[index] === byte)) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: magic 불일치");
+  if (!magic.every((byte, index) => prefix[index] === byte)) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: magic mismatch");
   const headLength = new DataView(prefix.buffer, prefix.byteOffset + magic.byteLength, 4).getUint32(0);
   const headOffset = magic.byteLength + 4;
-  if (headLength <= 0 || headOffset + headLength > device.byteLength) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: head 범위 위반");
+  if (headLength <= 0 || headOffset + headLength > device.byteLength) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: head range is invalid");
   const head = await device.read(headOffset, headLength);
   const meta = JSON.parse(decoder.decode(head));
   const payloadOffset = headOffset + headLength;
   if (!Number.isInteger(meta?.payloadBytes) || meta.payloadBytes < 0 || payloadOffset + meta.payloadBytes > device.byteLength) {
-    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: payload 길이 위반");
+    throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", "pyproc home volume: payload length is invalid");
   }
   const payload = await device.read(payloadOffset, meta.payloadBytes);
   validateMeta(meta, payload.byteLength, root);

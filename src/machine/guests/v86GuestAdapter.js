@@ -41,9 +41,9 @@ export function createV86GuestFactory({
   entropyDeviceName = null,
   instantiateWasm = null,
 }) {
-  if (typeof V86 !== "function") throw new TypeError("V86 constructor가 필요하다");
+  if (typeof V86 !== "function") throw new TypeError("a V86 constructor is required");
   if ((clockDeviceName || entropyDeviceName) && typeof instantiateWasm !== "function") {
-    throw new TypeError("v86 clock/entropy device에는 instantiateWasm 함수가 필요하다");
+    throw new TypeError("a v86 clock or entropy device requires an instantiateWasm function");
   }
   return () => new V86GuestAdapter({
     V86,
@@ -80,14 +80,14 @@ class V86GuestAdapter {
   }) {
     this._blockDeviceName = blockDeviceName ? String(blockDeviceName) : null;
     this._blockMode = this._blockDeviceName ? String(blockMode || "ata") : null;
-    if (this._blockMode && !["ata", "filesystem"].includes(this._blockMode)) throw new TypeError(`v86 block mode 미지원: ${this._blockMode}`);
+    if (this._blockMode && !["ata", "filesystem"].includes(this._blockMode)) throw new TypeError(`unsupported v86 block mode: ${this._blockMode}`);
     this._packetDeviceName = packetDeviceName ? String(packetDeviceName) : null;
     this._displayDeviceName = displayDeviceName ? String(displayDeviceName) : null;
     this._inputDeviceName = inputDeviceName ? String(inputDeviceName) : null;
     this._framebufferDeviceName = framebufferDeviceName ? String(framebufferDeviceName) : null;
     this._framebufferSource = framebufferSource;
     if (this._framebufferDeviceName && (!framebufferSource || typeof framebufferSource.subscribe !== "function")) {
-      throw new TypeError("framebuffer device에는 RGBA frame source가 필요하다");
+      throw new TypeError("a framebuffer device requires an RGBA frame source");
     }
     if (!this._framebufferDeviceName && framebufferSource) throw new TypeError("framebuffer source에는 device name이 필요하다");
     this._pointerDeviceName = pointerDeviceName ? String(pointerDeviceName) : null;
