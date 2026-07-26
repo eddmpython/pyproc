@@ -1546,6 +1546,72 @@ for (const sym of ["Runtime", "MemoryCapability", "FileSystem", "ReactiveControl
     if (!new RegExp(`declare class ${sym}\\b`).test(dts)) throw new Error("declare 없음");
   });
 }
+// d.ts 멤버 -> src 구현 도달성. 타입체크는 선언끼리의 정합만 보므로 "구현이 없는 선언"을
+// 통과시킨다(실측 2026-07-27: PyProc.mapSerial, PyProc.interrupt가 그렇게 살아 있었다).
+// 소비자는 d.ts를 계약으로 읽고 자동완성으로 호출하므로, 없는 멤버 선언은 런타임
+// TypeError를 타입 통과로 위장시킨다. 판정은 보수적이다: src 어디에도 그 이름의 멤버
+// 정의/할당이 없을 때만 위반이다(레지스트리 배선과 밖에서 붙는 멤버를 구현으로 인정한다).
+check("d.ts declare class 멤버는 src에 구현이 있다", () => {
+  const blockAfter = (text, openIndex) => {
+    let depth = 1;
+    let i = openIndex + 1;
+    while (depth > 0 && i < text.length) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") depth--;
+      i++;
+    }
+    return text.slice(openIndex + 1, i - 1);
+  };
+  // `class Name` 위치는 문자 스캔으로 찾는다. new RegExp + 템플릿 리터럴은 \b를 U+0008로
+  // 만들어 검사를 조용히 죽인다(이 저장소에서 세 번 난 사고다. [제어문자] 절이 그 짝이다).
+  const classBody = (text, name) => {
+    const needle = "class " + name;
+    let from = 0;
+    for (;;) {
+      const at = text.indexOf(needle, from);
+      if (at < 0) return null;
+      const after = text[at + needle.length];
+      if (after === undefined || !/[\w$]/.test(after)) {
+        const open = text.indexOf("{", at);
+        if (open >= 0) return blockAfter(text, open);
+      }
+      from = at + needle.length;
+    }
+  };
+  const MEMBER_DECL = /^ {2}(?:readonly\s+|static\s+)*([A-Za-z_$][\w$]*)\s*[(<?:]/;
+  const MEMBER_IMPL = /^ {2}(?:async\s+|static\s+|get\s+|set\s+|\*)*([A-Za-z_$][\w$]*)\s*[(=]/;
+  const rootDts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
+  const srcText = collect(join(ROOT, "src"), [".js"], []).map((f) => readFileSync(f, "utf8"));
+  const implemented = new Set();
+  for (const text of srcText) {
+    // 레지스트리 배선(`enableX: { value(...) }`), 객체 리터럴 메서드, 밖에서 붙는 멤버.
+    for (const m of text.matchAll(/^ {2,6}([A-Za-z_$][\w$]*):\s*\{?\s*$/gm)) implemented.add(m[1]);
+    for (const m of text.matchAll(/^ {2,6}(?:async\s+)?([A-Za-z_$][\w$]*)\s*\(/gm)) implemented.add(m[1]);
+    for (const m of text.matchAll(/^ {2,6}(?:get\s+)?([A-Za-z_$][\w$]*):\s*(?:\(|function|async|[a-zA-Z_$])/gm)) implemented.add(m[1]);
+    for (const m of text.matchAll(/\.([A-Za-z_$][\w$]*)\s*=[^=]/g)) implemented.add(m[1]);
+  }
+  const dead = [];
+  for (const declaration of rootDts.matchAll(/declare class (\w+)[^{]*\{/g)) {
+    const name = declaration[1];
+    const body = blockAfter(rootDts, declaration.index + declaration[0].length - 1);
+    const own = new Set();
+    for (const text of srcText) {
+      const implBody = classBody(text, name);
+      if (!implBody) continue;
+      for (const line of implBody.split(NEWLINE)) {
+        const m = MEMBER_IMPL.exec(line);
+        if (m) own.add(m[1]);
+      }
+      for (const m of implBody.matchAll(/this\.([A-Za-z_$][\w$]*)\s*=/g)) own.add(m[1]);
+    }
+    for (const line of body.split(NEWLINE)) {
+      const m = MEMBER_DECL.exec(line);
+      if (!m || m[1] === "constructor") continue;
+      if (!own.has(m[1]) && !implemented.has(m[1])) dead.push(`${name}.${m[1]}`);
+    }
+  }
+  if (dead.length) throw new Error(`구현 없는 d.ts 멤버 선언: ${dead.join(", ")}`);
+});
 check("d.ts subpath 값 선언(assets/history)", () => {
   const assetsDts = readFileSync(join(ROOT, "src", "runtime", "assets.d.ts"), "utf8");
   for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION"]) {

@@ -1062,7 +1062,6 @@ declare class PyProc {
    * 배속은 modest하고 작은 배열은 전송비로 진다(shardOpsProbe 실측).
    */
   matmul(a: Matrix, b: Matrix, opts?: PyProcMatmulOptions): Promise<Matrix>;
-  mapSerial(fnSrc: string, args: unknown[]): Promise<unknown[]>;
   ps(): PyProcEntry[];
   /** 프로세스 강제 종료(SIGKILL 등가). 성공 시 true, 테이블에는 dead로 남는다. */
   kill(pid: number): boolean;
@@ -1090,8 +1089,6 @@ declare class PyProc {
    * 워커는 살아남아 재사용된다(협조적 종료 실측 264ms). 미지원 워커면 false.
    */
   signal(pid: number, signum?: number): boolean;
-  /** SIGINT 별칭(기존 계약). */
-  interrupt(pid: number): boolean;
   /**
    * fork(2) 등가: 살아있는 프로세스 src의 현재 상태(변수·배열·계산 결과)를 dst에 복제한다.
    * replay 매니페스트로 부팅한 풀에서만 가능(바이트 동일한 경계가 델타의 전제).

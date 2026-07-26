@@ -69,8 +69,6 @@ export interface SnapshotEnvelope {
 export interface MachineHistoryEntry {
   event: string;
   state: MachineState;
-  /** 이 머신이 그 장치를 권한으로 요구하는가. host.detachDevice가 사용 중 판정에 쓴다. */
-  usesDevice(name: string): boolean;
   epoch: number;
   [key: string]: unknown;
 }
@@ -116,6 +114,8 @@ export class MachineHandle {
   shutdown(control?: OperationControl): Promise<MachineInspection>;
   inspect(): Promise<MachineInspection>;
   inspectNow(): MachineInspection;
+  /** 이 머신이 그 장치를 권한으로 요구하는가. host.detachDevice가 사용 중 판정에 쓴다. */
+  usesDevice(name: string): boolean;
 }
 
 export class WebMachineHost {
