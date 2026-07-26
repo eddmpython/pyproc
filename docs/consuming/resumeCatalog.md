@@ -1,44 +1,44 @@
-# resume.py 자원 정책 카탈로그
+# resume.py resource policy catalog
 
-`open({ dir, name })`, `machine.history.recover()`, `open(blob, trustOpts)`는 파이썬 힙과 `/home/web` 파일 바이트를 되살린다. 그러나 열린 파일 핸들, SQLite connection, WebSocket/relay connection, 브라우저 장치 권한, DOM callback 같은 프로세스 바깥 자원은 힙 델타만으로 보장하지 않는다. 이 문서는 제품이 `/home/web/resume.py`에 무엇을 넣어야 하는지의 카탈로그다.
+`open({ dir, name })`, `machine.history.recover()`, and `open(blob, trustOpts)` revive the Python heap and the `/home/web` file bytes. What they do not guarantee is anything living outside the process: open file handles, SQLite connections, WebSocket or relay connections, browser device permissions, DOM callbacks. A heap delta cannot restore those. This document catalogs what a product should put in `/home/web/resume.py`.
 
-## 공통 계약
+## Shared contract
 
-- 기본 위치는 `/home/web/resume.py`다. 다른 경로가 필요하면 `rt.enableInit({ resumePath })`로 명시한다.
-- 부활 뒤 소비자가 `rt.enableInit().resume(reason)`을 호출한다. `reason`은 `resume.py` 안에서 전역 `pyprocResumeReason`으로 읽는다.
-- 같은 파일은 여러 번 실행될 수 있으므로 idempotent여야 한다. 테이블 생성, 디렉터리 생성, 캐시 재구성은 `if not exists`와 재시도 가능 구조로 쓴다.
-- 다시 열 대상은 "힙에 객체가 남아 보여도 플랫폼 상태가 사라질 수 있는 것"이다: SQLite connection, 열린 파일 핸들, SocketBridge/relay 세션, ASGI 앱 전역 DB connection, 브라우저 장치 handle, 외부 권한 토큰의 메모리 캐시.
-- `/home/web`에 영속된 파일과 명시 설정을 정본으로 삼고, stale Python object는 신뢰하지 않는다.
-- 권한 요청은 제품 UI가 소유한다. `resume.py`가 카메라, 네트워크 relay, clipboard 같은 권한을 조용히 다시 열면 안 된다.
-- 장시간 package install이나 네트워크 fetch를 `resume.py`에 넣지 않는다. 부활 경로는 빠르게 수렴해야 한다.
+- The default location is `/home/web/resume.py`. Use `rt.enableInit({ resumePath })` to name a different one.
+- After a revival the consumer calls `rt.enableInit().resume(reason)`. Inside `resume.py`, `reason` is readable as the global `pyprocResumeReason`.
+- The same file may run more than once, so it must be idempotent. Write table creation, directory creation, and cache rebuilds with `if not exists` and a retryable shape.
+- What to reopen is "anything whose platform state can be gone even though the object still looks present in the heap": SQLite connections, open file handles, SocketBridge/relay sessions, an ASGI app's global DB connection, browser device handles, in-memory caches of external permission tokens.
+- Treat the files persisted under `/home/web` and your explicit configuration as canonical. Do not trust a stale Python object.
+- Permission prompts belong to the product UI. `resume.py` must not silently reopen camera, network relay, or clipboard access.
+- Do not put long package installs or network fetches in `resume.py`. The revival path has to converge quickly.
 
-권장 reason 값:
+Recommended reason values:
 
-| reason | 언제 |
+| reason | When |
 |---|---|
-| `fresh.boot` | 제품이 첫 부팅에서도 같은 hook으로 자원을 여는 경우 |
-| `session.load` | `open({ dir, name })` 뒤 |
-| `journal.recover` | `machine.history.recover()` 뒤 |
-| `image.open` | `open(blob, trustOptions)` 뒤 |
-| `kernel.failover` | 탭 리더 교체 뒤 follower가 저널에서 되살아난 경우 |
+| `fresh.boot` | The product opens resources through the same hook even on a first boot |
+| `session.load` | After `open({ dir, name })` |
+| `journal.recover` | After `machine.history.recover()` |
+| `image.open` | After `open(blob, trustOptions)` |
+| `kernel.failover` | A follower took over after a tab leader change and revived from the journal |
 
-## 현재 고정된 표면
+## Currently pinned surfaces
 
-| 표면 | 상태 | resume.py 정책 | 검증 |
+| Surface | Status | resume.py policy | Verification |
 |---|---|---|---|
-| `tests/attempts/pythonMachine/resumeHookProbe.html` | 계약 probe | sqlite connection을 `resumeConn`으로 다시 열고 reason/value를 기록한다. 세 부활 경로(`open({ dir, name })`, `machine.history.recover()`, `open(blob, trustOpts)`)와 파일 없음 no-op을 검증한다 | `node tests/browser/run.mjs tests/attempts/pythonMachine/resumeHookProbe.html` |
-| `examples/machine.html` | 실제 데모 표면 | 첫 부팅 또는 부활 뒤 `/home/web/resume.py`가 `appDb` SQLite connection을 열고 `resumeEvent`에 reason을 남긴다. signed `.pymachine` cast 후 `open(blob, trustOpts)`에서도 같은 hook을 실행한다 | `npm run test:examples`, 또는 `node tests/browser/run.mjs examples/machine.html?gate=1` |
+| `tests/attempts/pythonMachine/resumeHookProbe.html` | Contract probe | Reopens a sqlite connection as `resumeConn` and records reason and value. Covers all three revival paths (`open({ dir, name })`, `machine.history.recover()`, `open(blob, trustOpts)`) plus the no-op when the file is absent | `node tests/browser/run.mjs tests/attempts/pythonMachine/resumeHookProbe.html` |
+| `examples/machine.html` | Live demo surface | On a first boot or after a revival, `/home/web/resume.py` opens the `appDb` SQLite connection and records the reason in `resumeEvent`. The same hook runs after casting a signed `.pymachine` through `open(blob, trustOpts)` | `npm run test:examples`, or `node tests/browser/run.mjs examples/machine.html?gate=1` |
 
-## 제품별 적용 정책
+## Per-product policy
 
-| 제품 | 재개설 대상 | resume.py에 둬야 할 것 | pyproc 쪽 판정 |
+| Product | What needs reopening | What belongs in resume.py | Status on the pyproc side |
 |---|---|---|---|
-| codaro | 셀 실행 기록, `/home/web/codaro` 산출물 index, ASGI 개발 서버가 잡는 DB/file connection | `/home/web/codaro` 파일 트리를 정본으로 삼고, SQLite/index connection과 ASGI app 전역 connection을 다시 연다. 셀별 PyProxy, DOM handle, editor callback은 저장하지 않는다 | 다음 제품 소비 축에서 `.pymachine` 또는 `VirtualOrigin` 채택 시 gate로 고정 |
-| dartlab | notebook worker의 ASGI `/pyapi`, sqlite/파일 connection, 패키지 캐시 index | 자체 부팅 Pyodide를 `Runtime`으로 채택한 뒤, DB connection과 app state adapter를 `/home/web` 기준으로 다시 연결한다. FastAPI route 함수 자체보다 외부 connection 재개설이 핵심이다 | pyproc 계약은 준비됨. dartlab 채택 시 제품 gate 필요 |
-| xlpod | 스프레드시트 UDF 캐시, formula bridge callback, 취소 SAB, workbook별 산출물 | workbook 식별자와 `/home/web/xlpod` 산출물을 정본으로 삼고, callback/SAB/worksheet bridge는 힙에서 재사용하지 않고 호스트에서 다시 주입한다 | UDF 동기 브리지 채택 시 별도 gate 필요 |
-| 일반 외부 제품 | 사용자 파일, 로컬 DB, relay/session token, device permission | `/home/web/<app>` 아래 manifest를 두고 resume.py는 그 manifest만 읽어 connection을 다시 만든다. 권한이 필요한 자원은 먼저 UI 승인 상태를 확인한다 | 소비 계약으로 공개. 제품별 증거는 각 제품 gate에서 요구 |
+| codaro | Cell execution records, the `/home/web/codaro` artifact index, DB and file connections held by the ASGI dev server | Treat the `/home/web/codaro` file tree as canonical and reopen the SQLite/index connection and the ASGI app's global connection. Do not persist per-cell PyProxies, DOM handles, or editor callbacks | Pinned by a gate when the next product-consumption axis adopts `.pymachine` or `VirtualOrigin` |
+| dartlab | The notebook worker's ASGI `/pyapi`, sqlite and file connections, the package cache index | After adopting its self-booted Pyodide through `Runtime`, reconnect DB connections and the app-state adapter against `/home/web`. Reopening external connections matters more than the FastAPI route functions themselves | The pyproc contract is ready; adoption needs a product gate |
+| xlpod | Spreadsheet UDF caches, the formula bridge callback, the cancellation SAB, per-workbook artifacts | Treat the workbook identifier and `/home/web/xlpod` artifacts as canonical. Do not reuse callbacks, SABs, or worksheet bridges from the heap - have the host inject them again | Needs its own gate when the synchronous UDF bridge is adopted |
+| Any external product | User files, a local DB, relay or session tokens, device permissions | Keep a manifest under `/home/web/<app>` and have resume.py read only that manifest to rebuild connections. For anything permission-gated, check the UI approval state first | Published as a consumption contract; per-product evidence is required by that product's own gate |
 
-## 최소 템플릿
+## Minimal template
 
 ```python
 import os, sqlite3
@@ -52,4 +52,4 @@ appDb.execute("insert into resumeEvent(reason) values (?)", (resumeReasonSeen,))
 appDb.commit()
 ```
 
-제품은 이 템플릿을 그대로 복사하지 말고, 자기 자원 목록을 기준으로 얇게 유지한다. 핵심은 "힙에 남은 객체를 믿지 않고 `/home/web`의 파일과 명시 권한으로 다시 연다"는 점이다.
+Do not copy this template verbatim. Keep your own version thin and driven by your actual resource list. The point is the principle: do not believe the objects left in the heap - reopen from the files under `/home/web` and from explicit permissions.

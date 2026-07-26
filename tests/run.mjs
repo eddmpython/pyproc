@@ -1562,11 +1562,11 @@ check("api.md가 루트 export 전수를 다룬다", () => {
 });
 check("Stable 라벨 = 승격 원장 정합(근거 없는 라벨 상승 차단)", () => {
   const matrix = readFileSync(join(ROOT, "docs", "consuming", "capabilityMatrix.md"), "utf8");
-  if (!matrix.includes("## 상태 라벨 승격 기준")) throw new Error("승격 기준 절 없음");
-  const ledgerStart = matrix.indexOf("### 승격 원장");
+  if (!matrix.includes("## Promotion criteria")) throw new Error("승격 기준 절 없음");
+  const ledgerStart = matrix.indexOf("### Promotion ledger");
   if (ledgerStart < 0) throw new Error("승격 원장 절 없음");
-  const ledgerBlock = matrix.slice(ledgerStart, matrix.indexOf("승격 대기 시계", ledgerStart));
-  const ledgerRows = [...ledgerBlock.matchAll(/^\| [^|]+ \| 20\d\d-/gm)].length;
+  const ledgerBlock = matrix.slice(ledgerStart, matrix.indexOf("Promotion waiting clock", ledgerStart));
+  const ledgerRows = [...ledgerBlock.matchAll(/^\| [^|]+ \| [^|]*20\d\d-/gm)].length;
   // 능력 표의 상태 셀만 센다(라인 중간의 "| Stable |"). 승격 기준 표의 라벨 열은
   // 라인 시작이라 제외된다.
   const stableRows = [...matrix.matchAll(/[^\n]\| Stable \|/g)].length;
@@ -2111,13 +2111,17 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   for (const text of [docsMap, readmeEn, readmeKo]) {
     if (!text.includes("capabilityMatrix.md")) throw new Error("능력 매트릭스 링크 누락");
   }
-  for (const term of ["제품 가치", "공개 표면", "상태", "필수 조건", "실행 표면", "검증", "경계"]) {
-    if (!matrix.includes(term)) throw new Error(`능력 매트릭스 필드 누락: ${term}`);
+  // 필드는 능력 표의 헤더 행에서 확인한다. 문서 아무 곳의 문자열 존재로 보면 산문 한 줄이
+  // 표를 대신할 수 있다(문자열 존재 검사 계열의 약점).
+  const capabilityHeader = matrix.split(NEWLINE).find((line) => line.startsWith("| Capability |"));
+  if (!capabilityHeader) throw new Error("능력 표 헤더 행 없음");
+  for (const term of ["Product value", "Public surface", "Status", "Prerequisites", "Runnable surface", "Verification", "Boundaries"]) {
+    if (!capabilityHeader.includes(term)) throw new Error(`능력 매트릭스 필드 누락: ${term}`);
   }
   for (const term of ["Stable", "Beta", "Experimental", "Research preview"]) {
     if (!matrix.includes(term)) throw new Error(`능력 매트릭스 상태 누락: ${term}`);
   }
-  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "MachineJail", "SocketBridge", "openPersistentMachine", "KernelElection", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
+  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "enableJail", "SocketBridge", "openPersistentMachine", "KernelElection", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
   const missing = required.filter((name) => !mentionsSymbol(matrix, name));
   if (missing.length) throw new Error(`능력 매트릭스 공개 표면 누락: ${missing.join(", ")}`);
   const runnableLinks = [
@@ -3026,6 +3030,42 @@ section("진입 표면 언어");
   // 띄우고, npm 패키지에 함께 나가고, api.md가 서명의 정본으로 이 파일을 지정한다.
   // 예산 단계는 끝났다(339 -> 291 -> 0): 루트와 강등 subpath 8파일 전부 하드 0이다. 예산이
   // 남아 있으면 "조금은 되돌려도 된다"가 되므로, 0에 닿은 표면은 0으로 잠근다.
+  // 채택 판단 문서의 언어. 스코프를 손으로 열거하면 벽이 옮겨간다: d.ts를 영문화한 뒤에도
+  // README가 핀 정책·능력 매트릭스·호환 표·계약 실태로 보내는 문서가 전부 한국어였다(외부 감사,
+  // 2026-07-27). 그래서 목록을 박지 않고 **소비자 진입점에서 링크로 닿는 문서**를 스코프로 계산한다.
+  // README(영/한)와 api.md가 가리키는 곳이 곧 채택 판단이 일어나는 곳이다.
+  // 한국어판 README는 그 자체가 한국어 표면이라 스코프 밖이고, 내부 운영 문서는 링크되지 않는 한
+  // 한국어로 남는다(규칙: 공개 표면 영문 우선, 내부 문서 한국어).
+  const ADOPTION_ENTRY_POINTS = ["README.md", "docs/reference/api.md"];
+  const adoptionDocs = () => {
+    const found = new Set();
+    for (const entry of ADOPTION_ENTRY_POINTS) {
+      const text = readFileSync(join(ROOT, entry), "utf8");
+      for (const m of text.matchAll(/\]\((docs\/[A-Za-z0-9/_-]+\.md)\)/g)) found.add(m[1]);
+    }
+    // 배럴 문서(docs/README.md)는 라우팅 표라 그 자체가 판단 문서가 아니다. 그것이 가리키는
+    // 곳까지 따라가면 내부 운영 문서 전체가 스코프에 들어온다.
+    found.delete("docs/README.md");
+    found.delete("docs/reference/api.md");
+    return [...found].sort();
+  };
+  // 남은 한국어 줄 수. 0에 닿으면 하드 0으로 잠근다(예산이 남으면 "조금은 되돌려도 된다"가 된다).
+  const ADOPTION_DOC_BUDGET = 275;
+  check("채택 판단 문서의 한국어 예산은 단조 감소한다", () => {
+    const docs = adoptionDocs();
+    if (docs.length < 4) throw new Error(`채택 문서를 ${docs.length}개만 찾았다(링크 추출이 죽었다)`);
+    const byFile = [];
+    let korean = 0;
+    for (const relative of docs) {
+      const lines = readFileSync(join(ROOT, relative), "utf8").split(NEWLINE);
+      const count = lines.filter((line) => /[가-힣]/.test(line)).length;
+      if (count) byFile.push(`${relative}(${count})`);
+      korean += count;
+    }
+    if (korean > ADOPTION_DOC_BUDGET) {
+      throw new Error(`채택 문서 한국어 ${korean} > 예산 ${ADOPTION_DOC_BUDGET}: ${byFile.join(", ")}`);
+    }
+  });
   check("d.ts 주석은 전부 영문이다", () => {
     const byFile = [];
     let korean = 0;
