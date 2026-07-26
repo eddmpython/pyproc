@@ -167,7 +167,8 @@ await pool.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</
 
     // The example gate (?gate=1) drives every demo to completion through the same path a person
     // takes when clicking the tabs one by one.
-    // 랜딩이 실행 표면이 된 이상, 랜딩이 깨졌는지는 랜딩을 실제로 돌려봐야만 안다.
+    // As long as the demos are the runnable surface, the demos succeeding has to be part of
+    // what makes the gate green.
     if (gateMode) {
       const checks = [];
       for (const demo of demos) {

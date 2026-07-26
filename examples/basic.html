@@ -39,7 +39,7 @@
     import { boot } from "../index.js";
     const out = document.getElementById("out"), st = document.getElementById("st");
     const log = (m) => { out.textContent += m + "\n"; };
-    // 예제 실행 게이트(?gate): 완주 여부를 하네스에 보고. 사람이 열면 no-op.
+    // The example gate (?gate): reports completion to the harness. A no-op when a person opens the page.
     const params = new URLSearchParams(location.search);
     const gateMode = params.has("gate");
     const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;

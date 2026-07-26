@@ -50,13 +50,14 @@
     const out = document.getElementById("out"), st = document.getElementById("st");
     const el = (id) => document.getElementById(id);
     const log = (m) => { out.textContent += "\n" + m; };
-    // 예제 실행 게이트(?gate): 완주 여부를 하네스에 보고. 사람이 열면 no-op.
+    // The example gate (?gate): reports completion to the harness. A no-op when a person opens the page.
     const params = new URLSearchParams(location.search);
     const gateMode = params.has("gate");
     const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: (st.textContent + " | " + out.textContent).slice(-180) }] }) }).catch(() => {}); };
-    // GitHub Pages처럼 헤더를 못 다는 호스팅에서 SAB를 여는 부트스트랩(실측: swCoiProbe).
-    // 배포 루트에 pyprocSw.js 사본이 있는 전제(pages 워크플로가 조립). COOP/COEP 서버에선 no-op.
+    // The bootstrap that opens SAB on hosting that cannot set headers, such as GitHub Pages
+    // (measured: swCoiProbe). It assumes a copy of pyprocSw.js at the deploy root, which the pages
+    // workflow assembles. On a COOP/COEP server this is a no-op.
     if (!crossOriginIsolated && "serviceWorker" in navigator && !sessionStorage.getItem("pyprocCoiTried")) {
       try {
         sessionStorage.setItem("pyprocCoiTried", "1");
@@ -64,11 +65,11 @@
         await navigator.serviceWorker.register("../pyprocSw.js?coi=1");
         await navigator.serviceWorker.ready;
         location.reload();
-        await new Promise(() => {}); // 새 문서로 넘어갈 때까지 정지
-      } catch (e) { /* 사본 없는 환경(로컬 직접 서빙 등) -> 그대로 진행 */ }
+        await new Promise(() => {}); // park until the new document takes over
+      } catch (e) { /* no copy present (serving locally, for instance) - carry on */ }
     }
     try {
-      // 머신 핸들에서 프로세스 풀을 연다: proc({ lanes }) = 스냅샷 fork로 N개 독립 인터프리터.
+      // Open the process pool from the machine handle: proc({ lanes }) snapshot-forks N independent interpreters.
       const machine = await boot({ indexURL: INDEX });
       let t0 = performance.now();
       const os = await machine.proc({ lanes: 4 });
@@ -85,14 +86,16 @@
 
       log("running the same 4 tasks on 1 worker (serial baseline)...");
       t = performance.now();
-      // 직렬 기준선: 같은 태스크를 워커 1개에서 exec로 순차 실행(공개 표면만 사용).
+      // The serial baseline: the same tasks run one after another on a single worker through exec,
+      // using nothing but the public surface.
       const serialPid = os.ps().find((p) => p.state === "ready").pid;
       const ser = [];
       for (const a of args) ser.push(await os.exec(serialPid, fn, a));
       const serMs = Math.round(performance.now() - t);
 
-      // 2^53을 넘는 파이썬 int는 BigInt로 온다(정밀도 보존이 올바른 동작).
-      // JSON.stringify는 BigInt에서 던지므로 비교/표시에 쓰지 않는다(2026-07-12 라이브 실결함).
+      // A Python int beyond 2^53 arrives as a BigInt - preserving precision is the correct behavior.
+      // JSON.stringify throws on a BigInt, so it is not used for comparison or display (a real defect
+      // hit live on 2026-07-12).
       const same = par.length === ser.length && par.every((v, i) => v === ser[i]);
 
       el("stats").style.display = "grid";

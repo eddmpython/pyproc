@@ -1,3 +1,4 @@
-// serverDevSw.js - examples/serverDev.html 전용 루트: 같은 구현(pyprocSw.js)을 /examples/ 스코프에 건다.
-// 쿼리는 이 wrapper URL의 것이 읽힌다. 예: serverDevSw.js?asgi=/examples/pyproc/
+// serverDevSw.js - a route just for examples/serverDev.html: it registers the same implementation
+// (pyprocSw.js) under the /examples/ scope. The query read is the one on this wrapper URL, e.g.
+// serverDevSw.js?asgi=/examples/pyproc/
 importScripts("../src/capabilities/pyprocSw.js");

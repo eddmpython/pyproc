@@ -141,7 +141,8 @@ f'counter={counter}, file={open("/home/web/immortal/counter.txt").read()}'</text
     };
 
     try {
-      // open({ persistent }) = 멀티탭 영속 머신: Web Locks 선출 + 저널 부활(KernelElection 핸들).
+      // open({ persistent }) is the multi-tab persistent machine: Web Locks election plus journal revival,
+    // returning a KernelElection handle.
       machine = await open({
         persistent: {
           name: machineName,

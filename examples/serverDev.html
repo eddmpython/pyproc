@@ -166,10 +166,11 @@
         : "import sys\nsys.path.insert(0, '/home/web/server')\nimport app as appModule\napp = appModule.app");
     }
 
-    // 가상 오리진의 페이지측 배선. serverDevSw.js(번들 pyprocSw.js 자산의 ?asgi= 계약)가
-    // 가로챈 "/pyproc/..." fetch를 pyprocAsgi 메시지로 위임하면, 이 문서가 공개 asgi.serve
-    // 계약으로 응답한다. hello(pyprocKernelHello)로 자신을 커널 클라이언트로 등록해야
-    // 서빙된 iframe이 낸 fetch도 이 커널로 라우팅된다(SW 재시작 = 등록 증발이라 재전송).
+    // The page-side wiring of the virtual origin. serverDevSw.js (the ?asgi= contract of the bundled
+    // pyprocSw.js asset) intercepts "/pyproc/..." fetches and delegates them as pyprocAsgi messages,
+    // and this document answers through the public asgi.serve contract. It must register itself as a
+    // kernel client with hello (pyprocKernelHello) for fetches from a served iframe to route here too -
+    // and a SW restart drops that registration, so it is re-sent.
     function bindKernelOrigin() {
       navigator.serviceWorker.addEventListener("message", async (e) => {
         const req = e.data && e.data.pyprocAsgi;

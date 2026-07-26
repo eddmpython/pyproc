@@ -15,17 +15,18 @@
     <sns-links></sns-links>
   </header>
   <h1>pyproc MCP sandbox machine</h1>
-  <p>scripts/mcpSandboxServer.mjs가 headless로 여는 머신 페이지다. 결정적 리플레이로
-     부팅한 파이썬 머신을 잡고, 서버의 명령(long-poll)을 실행해 결과를 되돌린다.
-     사람이 직접 열어도 상태를 볼 수 있다.</p>
-  <pre id="out">부팅 중...</pre>
+  <p>The machine page scripts/mcpSandboxServer.mjs opens headless. It holds a Python machine booted
+     through deterministic replay, runs the server's commands (long-poll), and returns the results.
+     Open it yourself and you can watch the state.</p>
+  <pre id="out">booting...</pre>
   <script type="module">
     import { boot } from "../index.js";
 
     const out = document.getElementById("out");
     const log = (m) => { out.textContent += "\n" + m; };
 
-    // 실행 하네스: 자유 문장(exec) + 마지막 식 값(repr) + stdout 캡처. 워커 repl과 같은 계약.
+    // The execution harness: free-form statements (exec), the last expression's value (repr), and
+    // captured stdout - the same contract as the worker repl.
     const RUN_HARNESS = [
       "import io as _mcpIo, contextlib as _mcpCtx",
       "_mcpBuf = _mcpIo.StringIO()",
@@ -39,10 +40,10 @@
     ].join("\n");
 
     const params = new URLSearchParams(location.search);
-    // 결정적 리플레이 부팅: cp0 = 리플레이 경계(sandboxReset의 복귀점).
+    // A deterministic replay boot, where cp0 is the replay boundary that sandboxReset returns to.
     const machine = await boot({ deterministic: true, indexURL: params.get("indexURL") || undefined });
-    const saved = []; // checkpointSave가 쌓는 복원 핸들
-    log("머신 준비 완료 (cp0 = 리플레이 경계)");
+    const saved = []; // restore handles that checkpointSave accumulates
+    log("machine ready (cp0 is the replay boundary)");
 
     const tools = {
       pythonRun({ code }) {
@@ -61,38 +62,38 @@
         const target = index === undefined || index === null
           ? saved[saved.length - 1]
           : saved.find((cp) => cp.index === index);
-        if (!target) throw new Error(`checkpointRestore: 저장된 체크포인트가 없다(index ${index ?? "latest"})`);
+        if (!target) throw new Error(`checkpointRestore: no saved checkpoint (index ${index ?? "latest"})`);
         const info = target.restore();
         return { index: target.index, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
       },
       sandboxReset() {
-        const info = machine.history.restore(0); // cp0 = 부팅 직후 준비 상태
+        const info = machine.history.restore(0); // cp0 is the prepared state right after boot
         saved.length = 0;
         return { index: 0, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
       },
     };
 
     await fetch("/mcpReady", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ready: true }) });
-    log("서버에 ready 통지. 명령 대기.");
+    log("told the server we are ready; waiting for commands.");
 
-    // 명령 루프: long-poll로 받고, 실행하고, 결과를 되돌린다. 오류는 code까지 실어 나른다.
+    // The command loop: receive by long-poll, run, and return the result. Errors carry their code too.
     for (;;) {
       let command;
       try {
         const resp = await fetch("/mcpCommand", { cache: "no-store" });
         command = await resp.json();
-      } catch (e) { break; } // 서버 종료 = 루프 종료
+      } catch (e) { break; } // the server going away ends the loop
       if (!command || command.none) continue;
       let body;
       try {
         const value = tools[command.tool]
           ? tools[command.tool](command.args || {})
-          : (() => { throw new Error(`알 수 없는 도구: ${command.tool}`); })();
+          : (() => { throw new Error(`unknown tool: ${command.tool}`); })();
         body = { id: command.id, ok: true, value };
-        log(`${command.tool} 완료`);
+        log(`${command.tool} done`);
       } catch (e) {
         body = { id: command.id, ok: false, error: { code: e && e.code ? e.code : "PYPROC_INTERNAL", message: String((e && e.message) || e).slice(-400) } };
-        log(`${command.tool} 실패: ${body.error.code}`);
+        log(`${command.tool} failed: ${body.error.code}`);
       }
       await fetch("/mcpResult", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
     }

@@ -68,7 +68,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     import { boot, open } from "../index.js";
     const st = document.getElementById("st"), out = document.getElementById("out"), keyFp = document.getElementById("keyFp");
     const print = (t) => { out.textContent += t + "\n"; };
-    // 예제 실행 게이트(?gate): 부팅+실행 완주를 보고. 사람이 열면 no-op.
+    // The example gate (?gate): reports that boot and execution ran to completion. A no-op when a person opens the page.
     const params = new URLSearchParams(location.search);
     const gateMode = params.has("gate");
     const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
@@ -90,9 +90,10 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     const homeDir = await opfs.getDirectoryHandle("pyMachineHome", { create: true });
     const keyStoreName = "pyprocMachineDemo";
 
-    // .pymachine 서명 키: WebCrypto ECDSA P-256. history.export({ signingKey })와
-    // open(blob, { trustedPublicKeys })가 소비하는 표준 형태(CryptoKeyPair / 공개 JWK)다.
-    // 지문은 정규화 JWK(kty, crv, x, y 순서)의 sha256 주소로, 라이브러리 신뢰 지문 규약과 같다.
+    // The .pymachine signing key: WebCrypto ECDSA P-256, in the standard shapes that
+    // history.export({ signingKey }) and open(blob, { trustedPublicKeys }) consume (a CryptoKeyPair
+    // and a public JWK). The fingerprint is the sha256 address of the normalized JWK (kty, crv, x, y
+    // order), the same convention the library uses for trust fingerprints.
     const KEY_ALG = { name: "ECDSA", namedCurve: "P-256" };
     const createSigningKeys = () => crypto.subtle.generateKey(KEY_ALG, true, ["sign", "verify"]);
     async function exportPublicJwk(keys) {
@@ -177,11 +178,12 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       }
     }
 
-    // resume: 이전 hibernate 저장이 있으면 open({ dir, name })이 같은 매니페스트 리플레이 +
-    // 델타 적용으로 그 자리에서 깨어난다. 없으면(첫 방문) 결정적 리플레이 부팅으로 시작한다
-    // (history.save/export는 결정 부팅에서만 성립한다). 저장 유무는 이 데모가 hibernate 성공
-    // 직후 남기는 마커 파일로 판단한다: 저장 포맷 내부(파일 이름)에 결합하지 않고, 첫 방문에
-    // 실패할 open 부팅(버려질 커널 하나)을 만들지 않기 위해서다.
+    // resume: when a previous hibernate save exists, open({ dir, name }) wakes up in place by
+    // replaying the same manifest and applying the delta. Without one (a first visit) it starts from
+    // a deterministic replay boot, since history.save and history.export only hold on a deterministic
+    // boot. Whether a save exists is decided from a marker file this demo writes right after a
+    // successful hibernate: that avoids coupling to the save format's internals (its file names) and
+    // avoids an open boot that would fail on a first visit, wasting a kernel.
     const SAVE_MARKER = "machine.saved";
     const hasSave = await stateDir.getFileHandle(SAVE_MARKER).then(() => true, () => false);
     const markSaved = async () => {
@@ -197,7 +199,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
         st.textContent = "Awake: previous session revived from its heap delta. This computer never turned off.";
         resumeReason = "session.load";
       } catch (e) {
-        machine = null; // 저장이 깨졌거나 매니페스트가 어긋나면 새로 시작한다(아래 fresh boot)
+        machine = null; // a corrupt save or a manifest mismatch starts over (the fresh boot below)
       }
     }
     if (!machine) {
@@ -221,7 +223,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     }
     await ensureResumeHook();
 
-    // OS의 init: /home/web/boot.py가 있으면 부팅마다 저절로 돈다(rc.local). cron.py는 60초 틱.
+    // The OS init role: /home/web/boot.py runs itself on every boot (rc.local), and cron.py ticks every 60s.
     const init = machine.runtime.enableInit();
     const ran = init.install();
     if (ran.boot) print("init: ran /home/web/boot.py");
@@ -277,7 +279,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
         gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && resumeOk && trustUiOk && st.textContent.includes("verified"));
       } catch (e) { print(String(e).slice(-160)); gateReport(false); }
     }
-    // 수명주기: 탭이 사라질 때 자동 hibernate
+    // Lifecycle: hibernate automatically when the tab goes away
     addEventListener("pagehide", () => { hibernate(); });
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") hibernate(); });
 

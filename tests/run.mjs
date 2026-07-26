@@ -3149,9 +3149,8 @@ section("진입 표면 언어");
   // 데모 소스의 주석 언어. 렌더되는 문장은 이미 전부 영문이지만(랜딩·데모 UI는 공개 표면 규칙의
   // 대상이었다) 그 **이유**를 적은 주석이 한국어였다. examples는 개발자가 패턴을 베껴가는 곳이라
   // 왜 그렇게 했는지가 읽히지 않으면 베낀 코드가 근거 없이 퍼진다(외부 감사 지적, 하위 등급).
-  // 예산은 줄이는 방향으로만 고친다.
-  const EXAMPLE_COMMENT_BUDGET = 59;
-  check("데모 소스 주석의 한국어 예산은 단조 감소한다", () => {
+  // 예산 단계는 끝났다(106 -> 59 -> 0). 0에 닿았으므로 하드 0으로 잠근다.
+  check("데모 소스 주석은 전부 영문이다", () => {
     const byFile = [];
     let korean = 0;
     for (const f of collect(join(ROOT, "examples"), [".js", ".html"], [])) {
@@ -3160,9 +3159,7 @@ section("진입 표면 언어");
       if (count) byFile.push(`${rel(f)}(${count})`);
       korean += count;
     }
-    if (korean > EXAMPLE_COMMENT_BUDGET) {
-      throw new Error(`데모 주석 한국어 ${korean} > 예산 ${EXAMPLE_COMMENT_BUDGET}: ${byFile.join(", ")}`);
-    }
+    if (korean) throw new Error(`데모 소스에 한국어가 남았다: ${byFile.join(", ")}`);
   });
   check("사용자 대면 메시지는 전부 영문이다", () => {
     let korean = 0;

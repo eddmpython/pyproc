@@ -1,8 +1,9 @@
-// benchStats.js - 데모와 browser probe가 공유하는 작은 벤치 통계 계약.
-// 런타임 공개 API가 아니라 측정 표면의 드리프트를 막는 examples 전용 helper다.
+// benchStats.js - the small benchmark statistics contract shared by the demos and the browser probes.
+// Not part of the runtime's public API: an examples-only helper that keeps the measurement surface
+// from drifting.
 
 export function percentile(values, pct) {
-  if (!Array.isArray(values) || values.length === 0) throw new Error("percentile: values가 비었다");
+  if (!Array.isArray(values) || values.length === 0) throw new Error("percentile: values is empty");
   const sorted = values.slice().sort((a, b) => a - b);
   const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * pct / 100) - 1));
   return sorted[index];
@@ -13,7 +14,7 @@ export function median(values) {
 }
 
 export function summarizePairedLatencyBench(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizePairedLatencyBench: rows가 비었다");
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizePairedLatencyBench: rows is empty");
   const single = rows.map((r) => r.singleMs);
   const parallel = rows.map((r) => r.parallelMs);
   const speedups = rows.map((r) => r.speedup ?? +(r.singleMs / r.parallelMs).toFixed(2));
@@ -46,7 +47,7 @@ export function isProcessMapBenchGreen(bench, opts = {}) {
 }
 
 export function summarizeLatencyBench(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeLatencyBench: rows가 비었다");
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeLatencyBench: rows is empty");
   const latencies = rows.map((r) => r.latencyMs);
   return {
     samples: rows,
@@ -65,7 +66,7 @@ export function isLatencyBenchGreen(bench, opts = {}) {
 }
 
 export function summarizeMachineResumeBench(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeMachineResumeBench: rows가 비었다");
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeMachineResumeBench: rows is empty");
   const exportMs = rows.map((r) => r.exportMs);
   const openMs = rows.map((r) => r.openMs);
   const machineMB = rows.map((r) => r.machineMB);
@@ -98,7 +99,7 @@ export function isMachineResumeBenchGreen(bench, opts = {}) {
 }
 
 export function summarizeImmortalMachineBench(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeImmortalMachineBench: rows가 비었다");
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("summarizeImmortalMachineBench: rows is empty");
   const summarize = (key) => ({
     median: median(rows.map((r) => r[key])),
     p95: percentile(rows.map((r) => r[key]), 95),
