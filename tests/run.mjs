@@ -1942,6 +1942,30 @@ const LAYER_RANK = new Map([
   ["processOs", 4],     // 워커 = 프로세스, 스냅샷 = 프로세스 이미지
   ["machine", 5],       // 브라우저를 여러 guest OS가 올라가는 컴퓨터로. pyproc의 최상층
 ]);
+// 파일 헤더의 `Layer N` 라벨은 rank 맵과 같은 값이어야 한다. 24벌이 2세대 전 값에 멈춰
+// 있었고(capabilities가 1, processOs가 2), 같은 폴더 안에서도 갈렸다. 라벨이 게이트와 다른
+// 값을 말하면 사람이 읽는 구조와 기계가 지키는 구조가 갈라진다.
+check("src 파일 헤더의 Layer 라벨 = rank 맵", () => {
+  const problems = [];
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    const layer = srcLayerName(rel(f));
+    if (!layer || !LAYER_RANK.has(layer)) continue;
+    for (const m of readFileSync(f, "utf8").matchAll(/\bLayer (\d)\b/g)) {
+      if (Number(m[1]) !== LAYER_RANK.get(layer)) problems.push(`${rel(f)}: Layer ${m[1]} != ${LAYER_RANK.get(layer)}`);
+    }
+  }
+  if (problems.length) throw new Error(problems.slice(0, 6).join("; "));
+});
+// 규칙 문서와 게이트가 같은 순위를 말하는가. CLAUDE.md는 로컬 전용이라 CI에 없으므로
+// 추적되는 기여자 문서를 대조 대상으로 둔다(규칙 문장의 공개 정본).
+check("CONTRIBUTING의 레이어 순위 = rank 맵", () => {
+  const doc = readFileSync(join(ROOT, "CONTRIBUTING.md"), "utf8");
+  for (const [layer, rank] of LAYER_RANK) {
+    if (!new RegExp("`" + layer + "/`\\s*\\(" + rank).test(doc)) {
+      throw new Error(`CONTRIBUTING에 ${layer}(${rank}) 순위 표기 없음`);
+    }
+  }
+});
 check("src 레이어 폴더 고정", () => {
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
     const layer = srcLayerName(rel(f));

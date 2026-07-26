@@ -1,4 +1,4 @@
-// envManager.js - Layer 1 능력: uv 레인 = 환경의 선언 -> 즉시 부팅 -> 스크립트 자급.
+// envManager.js - Layer 2 능력: uv 레인 = 환경의 선언 -> 즉시 부팅 -> 스크립트 자급.
 // 실측(tests/attempts/envManager, 2026-07-12):
 //   - 패키지가 실린 힙 스냅샷은 hiwire 벽(#5195, "Unexpected hiwire entry at index 6").
 //     postImport / loadPyodide({packages}) / makeMemorySnapshot({serializer}) 3레인 전부 거부.

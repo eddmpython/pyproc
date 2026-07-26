@@ -1,4 +1,4 @@
-// socketBridge.js - Layer 1 능력: 파이썬 socket을 진짜 TCP에 배선한다(아웃바운드, http + https).
+// socketBridge.js - Layer 2 능력: 파이썬 socket을 진짜 TCP에 배선한다(아웃바운드, http + https).
 // 브라우저 탭은 raw 소켓을 못 열지만 밖으로 다이얼하는 WebSocket은 연다. 얇은 WS->TCP 릴레이가
 // 진짜 NIC를 만지고(host:port 다이얼 + 바이트 펌프), 이 능력이 파이썬 socket.socket()을 그 릴레이
 // 소켓으로 심한다. 블로킹 recv는 JSPI(run_sync)로 파이썬을 서스펜드해 WS 데이터를 기다린다(메인

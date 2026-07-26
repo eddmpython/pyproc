@@ -10,9 +10,9 @@ pyproc의 전체 방향과 제품 정책의 정본이다. 지속 문서라 docs�
 
 ## pyproc의 현재 자리
 
-pyproc은 Web Machine Platform의 첫 Python guest OS다. 공개 npm package는 서버 없이 브라우저에서 Python 실행·프로세스·파일·권한·네트워크 가상화·복원 리액티브를 제공하는 재사용 커널로 유지한다. 독립 private Web Machine package와 `apps/webComputer/` 제품은 pyproc과 Linux를 같은 lifecycle·device·signed image 계약으로 조립한다. codaro/dartlab/xlpod는 pyproc 공개 표면을 소비하고, Web Computer 제품은 별도 composition root에서 상위 플랫폼을 소비한다.
+pyproc은 Web Machine Platform의 첫 Python guest OS다. 공개 npm package는 서버 없이 브라우저에서 Python 실행·프로세스·파일·권한·네트워크 가상화·복원 리액티브를 제공하는 재사용 커널로 유지한다. `src/machine/` 층과 `apps/webComputer/` 제품은 pyproc과 Linux를 같은 lifecycle·device·signed image 계약으로 조립한다. codaro/dartlab/xlpod는 pyproc 공개 표면을 소비하고, Web Computer 제품은 별도 composition root에서 상위 플랫폼을 소비한다.
 
-상위 목표가 커져도 현재형 주장은 넓히지 않는다. 범용 host, 공통 `.webmachine` 이미지, Linux Dual-Boot는 [완료된 web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md)에서 독립 private package로 실증했으며 pyproc 공개 API가 아니다.
+상위 목표가 커져도 현재형 주장은 넓히지 않는다. 범용 host, 공통 `.webmachine` 이미지, Linux Dual-Boot는 [완료된 web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md)에서 실증했고, host는 `src/machine/` 층으로 pyproc 안에 살며 `createWebComputer` 한 점과 `pyproc/machine` subpath로 함께 나간다. 출하하지 않는 것은 재배포 가능한 Linux image와 x86 emulator 엔진이다.
 
 ## 근본 설계 원칙
 
@@ -37,7 +37,7 @@ pyproc은 이 계층을 **한 번 제대로 만들어 버전 고정으로 공유
 
 **pyproc이 아니다:**
 - 일반 목적 리눅스 복제품. 브라우저가 막는 네이티브 바이너리·인바운드 포트·로컬 드라이버 직접 접근은 외부 조각 없이는 만들지 않는다.
-- 공개 npm으로 배포되는 범용 Web Machine host 또는 x86 emulator. private package와 로컬 제품은 실측됐지만 engine/image compliance와 공개 package release는 별도 경계다.
+- 범용 x86 emulator 엔진 또는 재배포 가능한 Linux image. host 계약은 npm으로 함께 나가지만 게스트 엔진과 image는 소비자가 주입한다(engine/image compliance는 별도 경계다).
 - 제품 UI/도메인 로직(커리큘럼·자동화·시트 편집). 그건 소비 제품이 위에 얹는다.
 - 실행 위치 배정 정책(어느 티어에서 돌릴지 판정). 그건 제품별로 달라 제품이 소유한다.
 - 로컬 엔진/GitHub Actions 엔진. pyproc은 브라우저 티어의 프리미티브만 제공한다.

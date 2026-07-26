@@ -1,4 +1,4 @@
-// wheelCache.js - Layer 1 능력: wheel OPFS 캐시 ("웹의 uv" 3층 중 저장층).
+// wheelCache.js - Layer 2 능력: wheel OPFS 캐시 ("웹의 uv" 3층 중 저장층).
 // micropip/loadPackage가 받는 .whl 바이트를 OPFS에 저장하고, 다음부터는 네트워크 대신
 // 캐시에서 서빙한다(재다운로드 0, 오프라인 재설치). 전역 fetch를 상시 오염시키지 않고
 // install/loadPackages 호출 구간에서만 감싼다(명시적 스코프). 디렉터리 핸들은 소비자 제공.

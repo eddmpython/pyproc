@@ -1,4 +1,4 @@
-// reactive.js - Layer 1 능력: 복원 기반 리액티브.
+// reactive.js - Layer 2 능력: 복원 기반 리액티브.
 // page-diff 체크포인트 **나무** + 라이브-차분 복원 + 시간여행/분기(머신의 git).
 // WASM은 mprotect/dirty-page가 없어 실행 경계마다 완전 해시로 델타를 재구성한다.
 // 완전 해시(Uint32 워드)가 sound의 열쇠 - 샘플링은 불완전 델타 -> 복원 크래시.

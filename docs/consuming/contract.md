@@ -29,7 +29,7 @@ pyproc은 "참조"가 아니라 **실제 import**로만 SSOT가 된다. 이 문�
 | specifier | 용도 |
 | --- | --- |
 | `pyproc` | root 6개 값: `boot`, `open`, `createWebComputer`, `checkEnvironment`, `PyProcError`, `PYPROC_ERROR_CODES` |
-| `pyproc/runtime` | 자체 부팅 Pyodide 채택용 `Runtime` 값, `boot`, `MemoryCapability`, `FileSystem`, EngineContract/RuntimeContract 검사 |
+| `pyproc/runtime` | 자체 부팅 Pyodide 채택용 `Runtime` 값, `bootRuntime`(머신이 아니라 `Runtime`을 준다), `MemoryCapability`, `FileSystem`, EngineContract/RuntimeContract 검사 |
 | `pyproc/assets` | 실행 자산 manifest와 SRI preflight. `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` |
 | `pyproc/history` | 상태 커널과 store/bundle/signature 계약 |
 | `pyproc/machine` | Web Machine host/device/store/guest 조립 상세 |

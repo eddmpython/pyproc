@@ -22,7 +22,7 @@ pyproc은 [Mozilla Public License 2.0](LICENSE)이다(엔진 Pyodide와 같은 �
 
 1. **신규 능력은 `tests/attempts/<카테고리>/`에서 시작한다.** `src/` 직행 금지. 카테고리는 가설과 명시적 졸업 게이트를 가진 질문 하나이고, 브라우저 실측으로 입증한다. [tests/attempts/README.md](tests/attempts/README.md) 참조.
 2. **졸업한 학습은 `mainPlan/<이니셔티브>/`에서 계획이 된다**(번호 문서 + 진행 원장). 완료된 이니셔티브는 `mainPlan/_done/`으로 이관.
-3. **그 다음에야 코드가 `src/`에 들어간다.** src는 폴더 = 레이어이고 import는 아래로만 흐른다: `runtime/`(0: 엔진 core) <- `state/`(1: 내구 상태 커널) <- `capabilities/`(2: 런타임에 얹히는 것들) <- `composition/`(3: 능력 registry 설치 + public 표면) <- `session/`·`processOs/`(4) <- `machine/`(5: 브라우저 컴퓨터 host와 guest). 모든 edge가 순위를 낮추므로 순환은 불가능하다. 엔진 내부는 능력 계약 뒤에 머문다.
+3. **그 다음에야 코드가 `src/`에 들어간다.** src는 폴더 = 레이어이고 import는 아래로만 흐른다: `runtime/`(0: 엔진 core) <- `state/`(1: 내구 상태 커널) <- `capabilities/`(2: 런타임에 얹히는 것들) <- `composition/`(3: 능력 registry 설치 + public 표면) <- `session/`(4)·`processOs/`(4) <- `machine/`(5: 브라우저 컴퓨터 host와 guest). 모든 edge가 순위를 낮추므로 순환은 불가능하다. 엔진 내부는 능력 계약 뒤에 머문다.
 
 운영 상세는 [docs/](docs/README.md).
 

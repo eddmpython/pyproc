@@ -1,4 +1,4 @@
-// asgiServer.js - Layer 1 능력: 커널 안 ASGI 서버 (browserAsServer 흡수, 2026-07-11).
+// asgiServer.js - Layer 2 능력: 커널 안 ASGI 서버 (browserAsServer 흡수, 2026-07-11).
 // "로컬 서버 = TCP 소켓이 아니라 ASGI 인터페이스". FastAPI/Starlette 앱을 소켓 0으로
 // 브라우저 커널 안에서 dispatch한다(실측 3.4ms/요청). Service Worker로 페이지 fetch를
 // 여기에 잇는 배선은 virtualOrigin.js가 소유한다.

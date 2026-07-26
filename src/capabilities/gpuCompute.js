@@ -1,4 +1,4 @@
-// gpuCompute.js - Layer 1 능력: WebGPU 컴퓨트로 f32 대규모 선형대수 가속(수치 성능 도약 Phase 2).
+// gpuCompute.js - Layer 2 능력: WebGPU 컴퓨트로 f32 대규모 선형대수 가속(수치 성능 도약 Phase 2).
 // numpy 대체가 아니라 좁은 고피크 레인: f32 matmul을 GPU 컴퓨트 셰이더로 오프로드해 WASM numpy
 // 대비 10-100배+(실측 gpuMatmulProbe: 공유메모리 타일드 커널로 1024 f32 matmul 126.7배, maxErr 3.58e-7).
 //

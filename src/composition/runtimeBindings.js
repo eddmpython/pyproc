@@ -1,4 +1,4 @@
-// runtimeBindings.js - Layer 2 조립: capability cluster registry 설치기.
+// runtimeBindings.js - Layer 3 조립: capability cluster registry 설치기.
 // 중앙 파일은 capability class를 직접 알지 않는다. 각 cluster가 생성 규칙을 소유하고,
 // 이 파일은 cluster 병합, 이름 충돌 차단, Runtime prototype 설치만 담당한다.
 import { PyProcError } from "../runtime/errors.js";

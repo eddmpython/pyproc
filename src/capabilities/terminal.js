@@ -1,4 +1,4 @@
-// terminal.js - Layer 1 능력: 서버리스 파이썬 터미널 (탭 = REPL).
+// terminal.js - Layer 2 능력: 서버리스 파이썬 터미널 (탭 = REPL).
 // CPython 정식 REPL 기계(code.InteractiveConsole)를 커널 안에 세운다. 셸이 별도 발명이
 // 아니라 파이썬 그 자체가 셸이다. 실측: tests/attempts/runtimeParity/terminalProbe.html
 // (식 평가/다중행/상태 유지, REPL 안 input() 블로킹 재개 24ms).

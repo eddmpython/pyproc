@@ -1,4 +1,4 @@
-// syscallBridge.js - Layer 1 능력: 빌린 시스템콜 브리지 (v1 실배선).
+// syscallBridge.js - Layer 2 능력: 빌린 시스템콜 브리지 (v1 실배선).
 // 브라우저에는 blocking input / socket / subprocess가 없다. 이 능력이 그 부재를 빌려온다:
 //   input()      -> JS 핸들러(동기) 또는 JSPI callSyncifying(비동기 핸들러, runAsync 경로)
 //   urllib(HTTP) -> 동기 XHR(fetch의 동기 형태). proxyUrl을 주면 소비 제품의 프록시 경유

@@ -1,4 +1,4 @@
-// ipc.js - Layer 2: 프로세스 간 IPC 프리미티브(파이프/공유메모리/락/세마포어).
+// ipc.js - Layer 4: 프로세스 간 IPC 프리미티브(파이프/공유메모리/락/세마포어).
 // map은 배치고 파이프는 흐름이다: SAB 링버퍼 + Atomics로 진짜 블로킹 read와 backpressure를
 // 만든다. 워커(프로세스)는 Atomics.wait로 블로킹하되 **유한 슬라이스**(WAIT_SLICE_MS)로 끊어
 // 파이썬 eval 루프에 주기적으로 복귀시킨다: 블로킹 read 중에도 시그널(SIGTERM 등)이

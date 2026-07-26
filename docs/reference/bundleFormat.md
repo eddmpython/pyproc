@@ -1,6 +1,6 @@
 # State bundle format (`PYBUNDLE1`)
 
-The portable machine image format written by `Session.exportImage()` and read by
+The portable machine image format written by `machine.history.export()` and read by
 `open()`. One writer, one parser: the legacy `.pymachine` envelopes
 (`PYMACHINE2`, meta v2/v3) are still readable through a format-detecting reader,
 and that legacy reader sunsets at the next breaking release.
@@ -41,7 +41,7 @@ Header JSON fields:
 - `objects` is an index: array order equals byte placement order, offsets are
   derived cumulatively. Every address is re-hashed on read; a mismatch rejects
   the whole file before any state is applied.
-- `commit` must be present in `objects`. The commit object carries the parent
+- If `commit` is set, that address must be present in `objects`. The commit object carries the parent
   addresses, the tree address, and the environment fingerprint (`h0`, engine
   asset digest, deterministic-boot flag) that `open` compares against
   the freshly replayed kernel. A fingerprint mismatch is an explicit error,

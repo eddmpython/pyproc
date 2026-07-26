@@ -1,4 +1,4 @@
-// gpuKernels.js - Layer 1: WGSL 커널 소스의 단일 보관소.
+// gpuKernels.js - Layer 2: WGSL 커널 소스의 단일 보관소.
 //
 // 왜 gpuCompute에서 나왔나: 셰이더는 GPU에서 도는 다른 언어의 프로그램이고, gpuCompute는
 // 그걸 컴파일해 파이프라인으로 캐시하는 JS다. 커널 수식을 고치는 일과 파이프라인 수명주기를

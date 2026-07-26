@@ -1,4 +1,4 @@
-// init.js - Layer 1 능력: OS의 init(rc.local + cron + resume). 전부 파일 주도라 배선 코드가 0이다.
+// init.js - Layer 2 능력: OS의 init(rc.local + cron + resume). 전부 파일 주도라 배선 코드가 0이다.
 // 실측(pythonMachine/initProbe 5/5): 부팅 시 /home/web/boot.py 1회 실행(4ms),
 // /home/web/cron.py 주기 틱, 상태는 /home(OPFS)으로 다음 부팅에 계승, 파일 없으면 no-op.
 // resume.py는 Session.load/MachineJournal.recover/openMachine 뒤에 소비자가 명시 호출하는 hook이다.

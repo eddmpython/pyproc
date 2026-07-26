@@ -1,4 +1,4 @@
-// virtualOrigin.js - Layer 1 능력: 파이썬 서버를 진짜 URL로 만드는 페이지측 배선.
+// virtualOrigin.js - Layer 2 능력: 파이썬 서버를 진짜 URL로 만드는 페이지측 배선.
 // pyprocSw.js(같은 폴더, 자산 경로 계약)가 가로챈 fetch를 pyprocAsgi 메시지로 넘기면,
 // 이 배선이 커널의 AsgiServer.serve로 응답한다. 결과: fetch("/pyproc/api/x") -> FastAPI.
 // 실측(runtimeParity/swOriginProbe): 평균 왕복 3.4ms(직접 dispatch와 동일, SW 오버헤드 0).

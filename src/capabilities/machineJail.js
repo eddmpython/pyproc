@@ -1,4 +1,4 @@
-// machineJail.js - Layer 1 능력: 권한 감옥(P6). trust:true 이진 게이트가 스코프 승인으로 진화한다.
+// machineJail.js - Layer 2 능력: 권한 감옥(P6). trust:true 이진 게이트가 스코프 승인으로 진화한다.
 // 제품 권한 manifest의 permissions{net, clipboard, home, workers}를 두 단으로 집행한다:
 //   1. 협조 티어(이 파일의 파이썬 초크포인트): pyprocJail.net(host) 등이 권한을 검사한다.
 //      정직: 파이썬 레벨 검사는 `import js`로 우회 가능하다. 그래서 2단이 최종 방어다.

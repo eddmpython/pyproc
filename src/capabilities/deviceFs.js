@@ -1,4 +1,4 @@
-// deviceFs.js - Layer 1 능력: 모든 것은 파일(Plan 9). 브라우저 능력이 파이썬 파일이 된다.
+// deviceFs.js - Layer 2 능력: 모든 것은 파일(Plan 9). 브라우저 능력이 파이썬 파일이 된다.
 // 실측(pythonMachine/deviceFsProbe 8/8 + fsWorldProbe): open() 쌍방 브리지, 열 때마다 신선한
 // 동적 읽기, /proc 커널 상태, 부분 읽기/with문/os.path.exists, 그리고 fsWorld v2(장치 성장 +
 // /proc/<pid>/ctl 쓰기=시그널 + /dev/fb0 프레임버퍼).

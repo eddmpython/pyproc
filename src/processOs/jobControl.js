@@ -1,4 +1,4 @@
-// jobControl.js - Layer 2: 셸의 잡 컨트롤(P3). 브라우저 파이썬에 job control이 존재한 적 없다.
+// jobControl.js - Layer 4: 셸의 잡 컨트롤(P3). 브라우저 파이썬에 job control이 존재한 적 없다.
 // `expr &`는 지금 대화형 네임스페이스를 **살아있는 채로 fork(2)**해 딴 코어에서 돌린다(forkLive).
 // 프롬프트는 즉시 돌아오고(< 100ms), 잡은 백그라운드 레인에서 완주한다. %jobs/%fg/%kill이 잡을
 // 조종한다(%kill = SIGTERM). fork(2)는 워커끼리만 대칭이므로(메인 vs 워커 리플레이는 바이트가

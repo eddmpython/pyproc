@@ -1,4 +1,4 @@
-// machineImage.js - Layer 3: .pymachine 봉투 포맷과 그 입력 검증.
+// machineImage.js - Layer 4: .pymachine 봉투 포맷과 그 입력 검증.
 //
 // 포맷 v2: MAGIC + 봉투해시(hex 64B) + u32(헤더 길이) + 헤더 JSON + payload.
 // payload는 메타 v2에서 델타뿐이고, 메타 v3에서 델타 + homePack이다. 봉투해시 =

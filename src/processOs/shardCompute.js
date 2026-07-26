@@ -1,4 +1,4 @@
-// shardCompute.js - Layer 3: 배열 연산을 프로세스 풀에 샤딩한다.
+// shardCompute.js - Layer 4: 배열 연산을 프로세스 풀에 샤딩한다.
 //
 // pyProc의 map(프로세스 스케줄링) 위에 얹힌 수치 레인이다. 프로세스 테이블도 RPC도 fork도
 // 만지지 않고 map과 풀 크기만 쓴다. pyProc이 이걸 품고 있으면 "프로세스 수명주기"와

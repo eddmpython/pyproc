@@ -1,4 +1,4 @@
-// journalBlobStore.js - Layer 1: 저널의 내용 주소 blob 저장소(loose + pack).
+// journalBlobStore.js - Layer 2: 저널의 내용 주소 blob 저장소(loose + pack).
 //
 // 저장 형식: blob/<sha256> loose CAS. pack() 후에는 PACKS.json + pack/*.bin도 같은 CAS로 읽는다
 // (loose와 pack 모두 recover 호환). 키가 곧 내용의 SHA-256이라 같은 페이지는 몇 번 커밋해도

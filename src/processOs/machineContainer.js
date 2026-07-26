@@ -1,4 +1,4 @@
-// machineContainer.js - Layer 2 능력: 머신 안의 머신(P5 machineContainers).
+// machineContainer.js - Layer 4 능력: 머신 안의 머신(P5 machineContainers).
 // 도커의 3요소가 브라우저에 완성된다: 이미지(.pymachine + SHA-256 + trust, session.js) +
 // 레지스트리(OPFS) + **실행(이 능력 = 컨테이너 커널을 워커에 띄운다)**. 각 컨테이너는 자기
 // 매니페스트(자기 패키지 세트)로 부팅한 독립 커널이고, 부모 파이썬에 값(m)으로 노출된다.
