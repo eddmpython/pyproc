@@ -2385,6 +2385,80 @@ check("Web Computer 실행 자산은 검증된 development channel", () => {
   if (!packageManifest.scripts?.["test:web-computer"]?.includes("webComputerProduct.mjs")) throw new Error("제품 browser E2E script 누락");
 });
 
+// 7.5) CI 배관: 게이트 정의는 tests/가 정본이지만, "그 게이트가 실제로 돈다"는 배관에 산다.
+//      배관이 조용히 갈라진 사례가 셋 있었다: 게시 경로가 ci 게이트의 부분집합이었고,
+//      workflow_dispatch가 태그 검증 step만 건너뛰고 게시까지 갔고, 액션 major가 워크플로마다
+//      달랐다(재현 빌드만 다른 툴체인 위에 서 있었다).
+section("CI 배관");
+{
+  const workflowRoot = join(ROOT, ".github", "workflows");
+  const workflows = new Map(
+    readdirSync(workflowRoot).filter((f) => f.endsWith(".yml"))
+      .map((f) => [f, readFileSync(join(workflowRoot, f), "utf8")]),
+  );
+  check("액션 major는 저장소 전체에서 하나", () => {
+    const refs = new Map();
+    for (const [name, source] of workflows) {
+      for (const m of source.matchAll(/uses:\s*(actions\/[\w-]+)@(v\d+)/g)) {
+        if (!refs.has(m[1])) refs.set(m[1], new Map());
+        refs.get(m[1]).set(m[2], name);
+      }
+    }
+    const split = [...refs].filter(([, byRef]) => byRef.size > 1)
+      .map(([action, byRef]) => `${action}: ${[...byRef].map(([ref, file]) => `${ref}(${file})`).join(" vs ")}`);
+    if (split.length) throw new Error(split.join(" / "));
+  });
+  check("게시 경로는 ci 게이트 집합을 재사용한다", () => {
+    const publish = workflows.get("publish.yml");
+    if (!publish) throw new Error("publish.yml 없음");
+    if (!/uses:\s*\.\/\.github\/workflows\/ci\.yml/.test(publish)) {
+      throw new Error("publish가 ci workflow_call을 호출하지 않는다(게이트 목록 복사본 = 표류)");
+    }
+    if (!/needs:\s*gates/.test(publish)) throw new Error("publish job이 게이트 job을 needs로 받지 않는다");
+    if (!workflows.get("ci.yml").includes("workflow_call:")) throw new Error("ci.yml에 workflow_call 트리거 없음");
+  });
+  check("게시 검증 step에 조건 우회가 없다", () => {
+    const publish = workflows.get("publish.yml");
+    const verifyBlock = /- name: 태그와 package\.json 버전 일치 검증([\s\S]*?)\n      - /.exec(publish);
+    if (!verifyBlock) throw new Error("버전 일치 검증 step 없음");
+    if (/^\s+if:/m.test(verifyBlock[1])) {
+      throw new Error("검증 step에 if 조건이 있다(dispatch 경로가 검증을 건너뛴다)");
+    }
+    if (!verifyBlock[1].includes("git tag --points-at HEAD")) {
+      throw new Error("dispatch 경로의 태그 확인이 없다");
+    }
+  });
+  check("증거 업로드는 파일 부재를 삼키지 않는다", () => {
+    for (const [name, source] of workflows) {
+      if (source.includes("if-no-files-found: ignore")) throw new Error(`${name}: 증거 유실을 무시한다`);
+    }
+  });
+  check("공개 데모 배포 앞에 구조 게이트가 있다", () => {
+    const pages = workflows.get("pages.yml");
+    if (!pages.includes("npm test")) throw new Error("pages 배포가 게이트 없이 돈다");
+  });
+  check("죽은 워치를 초록으로 만들지 않는다", () => {
+    const watch = workflows.get("engine-watch.yml");
+    if (/\|\|\s*true/.test(watch)) throw new Error("engine-watch가 조회 실패를 삼킨다");
+    if (!/워치가 감지력을 잃었다/.test(watch)) throw new Error("조회 실패의 명시 실패 경로 없음");
+  });
+  check("워크플로가 실존 npm script만 호출한다", () => {
+    const scripts = new Set(Object.keys(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {}));
+    const missing = new Set();
+    for (const source of workflows.values()) {
+      for (const m of source.matchAll(/npm run ([\w:-]+)/g)) if (!scripts.has(m[1])) missing.add(m[1]);
+    }
+    if (missing.size) throw new Error(`package.json에 없는 script: ${[...missing].join(", ")}`);
+  });
+  check("죽은 workspaces 전제가 주석에 남아 있지 않다", () => {
+    // packages/는 machine 층 흡수로 사라졌고 구조 게이트가 그 부활을 막는다. 그런데 CI 주석은
+    // 여전히 "workspaces 심볼릭 링크가 필요하다"고 근거를 위조했다.
+    for (const [name, source] of workflows) {
+      if (/workspaces\(packages\/\*\)|@web-machine\//.test(source)) throw new Error(`${name}: 죽은 workspaces 전제`);
+    }
+  });
+}
+
 // 8) 커밋 메시지 규칙: 판정 정본(scripts/commitMessage.mjs)이 배선돼 있고, 무는지까지 본다.
 //    git 이력은 되감을 수 없으므로 커밋 시점에 막는 훅이 유일한 집행 지점이다. 그래서 훅이
 //    정본을 실제로 호출하는지(배선)와 정본이 위반마다 RED인지(이빨)를 매 게이트 실행마다

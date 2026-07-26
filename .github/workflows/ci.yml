@@ -5,17 +5,18 @@ on:
   push:
     branches: [main]
   pull_request:
+  # 게시 경로가 같은 게이트 집합을 재사용한다(목록 이중 관리 = 표류의 씨앗).
+  workflow_call:
 
 jobs:
   structure:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-      # 의존성 0이지만 workspaces(packages/*) 심볼릭 링크는 필요하다: 구조 게이트가
-      # Web Machine contract suite를 workspace 이름(@web-machine/*)으로 import한다.
+      # 의존성 0이지만 lockfile 정합(extraneous 잔재 감지)을 위해 npm ci를 먼저 돈다.
       - run: npm ci
       - run: npm run test:contracts
       - run: npm test
@@ -26,8 +27,8 @@ jobs:
   browser:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # ubuntu 러너에 Google Chrome이 프리인스톨되어 있다. CI=true라 --no-sandbox가 자동 적용된다.
@@ -40,12 +41,14 @@ jobs:
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
       # 러너 실측 수치를 보존한다: 원장/리드미의 로컬 수치와 비교 가능한 근거.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: gate-measurements
           path: gateMeasurements.json
-          if-no-files-found: ignore
+          # 증거가 없으면 조용히 넘기지 않는다: PYPROC_GATE_OUT 배선이 죽으면 실측이 사라지고
+          # "측정했다"는 기록만 남는다. 러너는 RED에서도 이 파일을 쓴다.
+          if-no-files-found: error
       # 예제 실행 게이트: 데모 페이지가 사람이 여는 그대로 완주하는지(진열장 회귀 방지).
       - run: npm run test:examples
         env:
@@ -73,8 +76,8 @@ jobs:
   web-computer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # 실행 자산(v86 engine/firmware/guest image)은 hash 고정 development channel이며

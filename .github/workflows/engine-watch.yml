@@ -18,7 +18,7 @@ jobs:
   watch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: 핀 vs 최신 릴리즈 비교, 새 버전이면 후보 Issue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -27,10 +27,13 @@ jobs:
           # 현재 WASI 엔진 핀(WASI_ENGINE_PIN.version)을 소스에서 읽는다(SSOT 한 곳).
           pin=$(grep -oP 'version:\s*"\K[0-9][0-9.]*' src/runtime/engines/wasi/wasiSession.js | head -1)
           # 살아있는 소스의 최신 안정 릴리즈(prerelease/beta 제외 = releases/latest).
-          tag=$(curl -sf https://api.github.com/repos/brettcannon/cpython-wasi-build/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' || true)
+          # 조회 실패를 "변화 없음"으로 삼키지 않는다: 그러면 워치가 몇 주 죽어도 항상 초록이다.
+          tag=$(curl -sf https://api.github.com/repos/brettcannon/cpython-wasi-build/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+')
           latest=${tag#v}
           echo "핀=$pin 최신=$latest"
-          if [ -z "$latest" ] || [ "$latest" = "$pin" ]; then echo "변화 없음(또는 조회 실패)"; exit 0; fi
+          if [ -z "$pin" ]; then echo "핀 파싱 실패: WASI_ENGINE_PIN 형식이 바뀌었다" >&2; exit 1; fi
+          if [ -z "$latest" ]; then echo "릴리즈 조회 실패: 워치가 감지력을 잃었다" >&2; exit 1; fi
+          if [ "$latest" = "$pin" ]; then echo "변화 없음"; exit 0; fi
           title="engine-watch: CPython WASI $latest 사용 가능 (현재 핀 $pin)"
           if gh issue list --state open --search "in:title $latest" | grep -q "engine-watch"; then echo "이미 후보 Issue 있음"; exit 0; fi
           gh issue create --title "$title" --body "brettcannon/cpython-wasi-build 최신 릴리즈 \`$tag\`가 현재 WASI 엔진 핀 \`v$pin\`과 다르다.

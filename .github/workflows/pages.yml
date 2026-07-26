@@ -25,7 +25,14 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # RED 커밋이 공개 진열장으로 나가지 않게 한다. 배포는 사람이 보는 표면이고, 구조 게이트는
+      # 의존성 0이라 여기서 도는 비용이 거의 없다(브라우저 게이트는 ci job이 본다).
+      - run: npm ci
+      - run: npm test
       - name: 데모 사이트 조립 (예제 + 라이브러리 + 브랜드 자산 + SW 루트 사본 + 랜딩 루트 승격)
         run: |
           mkdir -p _site
