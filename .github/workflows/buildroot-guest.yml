@@ -24,27 +24,32 @@ jobs:
     env:
       PYPROC_BUILDROOT_WORKSPACE: ${{ github.workspace }}/../pyproc-buildroot-${{ matrix.slot }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - name: Build pinned Buildroot guest and legal material
         run: npm run assets:buildroot
+      - name: Normalize evidence paths
+        id: evidence
+        run: |
+          echo "dist=$(realpath "$PYPROC_BUILDROOT_WORKSPACE/dist")" >> "$GITHUB_OUTPUT"
+          echo "legal=$(realpath "$PYPROC_BUILDROOT_WORKSPACE/output/legal-info")" >> "$GITHUB_OUTPUT"
       - name: Upload independent build evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pyproc-buildroot-guest-${{ matrix.slot }}
-          path: ${{ env.PYPROC_BUILDROOT_WORKSPACE }}/dist/
+          path: ${{ steps.evidence.outputs.dist }}/
           if-no-files-found: error
           retention-days: 30
       - name: Upload complete legal material
         if: matrix.slot == 'a'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pyproc-buildroot-legal-info
-          path: ${{ env.PYPROC_BUILDROOT_WORKSPACE }}/output/legal-info/
+          path: ${{ steps.evidence.outputs.legal }}/
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
@@ -55,11 +60,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pyproc-buildroot-guest-a
           path: .cache/repro/a
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pyproc-buildroot-guest-b
           path: .cache/repro/b
@@ -93,7 +98,7 @@ jobs:
           await writeFile(`${base}/reproducibility-manifest.json`, `${JSON.stringify(receipt, null, 2)}\n`);
           NODE
       - name: Upload verified reproducible guest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pyproc-buildroot-guest-verified
           path: .cache/repro/verified/
