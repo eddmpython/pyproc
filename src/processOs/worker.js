@@ -21,7 +21,10 @@ let rt = null;
 let interruptView = null;
 let cp0 = null; // 리플레이 경계의 힙 사본(fork 델타의 기준). replay 부팅에서만 채워진다.
 
-const heap = () => py._module.HEAPU8;
+// 힙·스택 접근은 전부 rt.memory(MemoryCapability)를 지난다. 예전에는 이 파일이 계약을 손에
+// 들고도 엔진 내부를 세 곳에서 직접 만졌고, 그래서 pyodideEngine의 stackRestore가 가진
+// try/catch 방어가 여기엔 없어 동작이 이미 갈라져 있었다.
+const mem = () => rt.memory;
 function toHostValue(value, options = {}) { return rt ? rt.toHostValue(value, options) : value; }
 function destroyHostValue(value) { if (rt) rt.destroyHostValue(value); }
 
@@ -69,7 +72,7 @@ onmessage = async (e) => {
         const setup = (replay && replay.setup) || msg.setup;
         if (setup) py.runPython(setup); // 부팅 시 예열(임포트 초기화를 태스크 밖으로)
       } finally { if (restore) restore(); }
-      if (replay) { const h = heap(); cp0 = h.slice(0, h.length); } // 경계 사본 = 델타의 기준
+      if (replay) cp0 = mem().sliceAll(); // 경계 사본 = 델타의 기준
       reseedRandom(); // cp0 확정 뒤에 실행: 경계 결정성은 지키고 프로세스는 갈라놓는다
       if (msg.interruptSab && py.setInterruptBuffer) {
         interruptView = new Uint8Array(msg.interruptSab); // 커널의 시그널 채널(SAB)
@@ -116,11 +119,11 @@ onmessage = async (e) => {
       // fork의 부모측: cp0(리플레이 경계) 대비 바뀐 페이지 = 지금 이 커널의 사용자 상태.
       if (!cp0) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "harvest: 리플레이 부팅한 프로세스에서만 가능하다");
       const t0 = performance.now();
-      const h = heap();
+      const h = mem().heap();
       // 바이트 비교 전략의 정본은 heapDelta.byteDiffPages다(성긴 기각 + 확정 비교 + 성장분 전량).
       const pages = byteDiffPages(h, cp0, PAGE);
       const bin = packPages((p) => h.subarray(p * PAGE, (p + 1) * PAGE), pages, PAGE);
-      const sp = py._module._emscripten_stack_get_current ? py._module._emscripten_stack_get_current() : null;
+      const sp = mem().stackSave();
       postMessage({ type: "harvested", id: msg.id, reqId: msg.reqId, pages, bin: bin.buffer, sp, heapLen: h.length, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
     } else if (msg.type === "applyDelta") {
       // fork의 자식측: 이 워커를 정확히 "cp0 + 부모 델타" 상태로 만든다(주소공간은 독립).
@@ -133,8 +136,8 @@ onmessage = async (e) => {
       // 부모 힙이 더 크면(성장 세션) 자식도 같은 길이까지 성장시킨다. JS에서 Memory.grow를
       // 직접 하면 Emscripten 글루가 깨지므로(session.js 실측) 파이썬 할당으로 정상 경로를 탄다.
       // 성장 루프의 흔적은 아래 드리프트 복원(cp0 범위)과 델타(성장 범위 전량 포함)가 지운다.
-      growHeapTo((code) => py.runPython(code), () => heap().length, msg.heapLen, "applyDelta");
-      const h = heap();
+      growHeapTo((code) => py.runPython(code), () => mem().byteLength(), msg.heapLen, "applyDelta");
+      const h = mem().heap();
       let maxEnd = 0;
       for (const p of msg.pages) if ((p + 1) * PAGE > maxEnd) maxEnd = (p + 1) * PAGE;
       if (maxEnd > h.length) throw new PyProcError("PYPROC_INPUT_INVALID", `applyDelta: 델타가 힙 밖(${maxEnd} > ${h.length})`);
@@ -150,7 +153,7 @@ onmessage = async (e) => {
       // cp0 길이 밖(성장분)의 dst 잔재는 델타가 성장 범위를 전량 포함하므로 부모 길이까지
       // 전부 덮이고, 그 너머는 복원된 상태가 참조하지 않는다.
       unpackPages((p, page) => h.set(page, p * PAGE), bin, msg.pages, PAGE);
-      if (msg.sp !== null && py._module._emscripten_stack_restore) py._module._emscripten_stack_restore(msg.sp);
+      mem().stackRestore(msg.sp); // 계약이 null과 미지원 엔진을 함께 흡수한다
       postMessage({ type: "applied", id: msg.id, reqId: msg.reqId, pages: msg.pages.length, reverted, ms: Math.round((performance.now() - t0) * 10) / 10 });
     }
   } catch (err) {

@@ -461,6 +461,20 @@ section("digest 법");
       if (addressBuild.test(text) && !ADDRESS_CORE.has(relPath)) throw new Error('"sha256:" 주소 조립은 코어에만 산다(sha256Address/parseSha256Address 경유)');
     });
   }
+  // 엔진 내부 접근 법: `_module.*`, `HEAPU8`, `_emscripten_stack_*`는 엔진 어댑터에만 산다.
+  // 상위는 MemoryCapability를 지난다. 이 법이 없을 때 worker.js가 계약을 손에 들고도 세 곳에서
+  // 엔진 내부를 직접 만졌고, 그래서 어댑터의 stackRestore 방어가 워커에는 없어 동작이 갈렸다.
+  const ENGINE_INTERNAL = /_module\s*\.|\bHEAPU8\b|_emscripten_stack_/;
+  const ENGINE_ADAPTER_DIR = "src/runtime/engines/";
+  for (const f of collect(join(ROOT, "src"), [".js"])) {
+    const relPath = rel(f);
+    if (relPath.startsWith(ENGINE_ADAPTER_DIR)) continue;
+    // 주석은 스코프 밖이다: 이 법의 근거를 주석에 쓰는 것 자체가 위반이 되면 안 된다.
+    const code = readFileSync(f, "utf8").split("\n").map((line) => line.split("//")[0]).join("\n");
+    check(`엔진 내부 접근 법: ${relPath}`, () => {
+      if (ENGINE_INTERNAL.test(code)) throw new Error("엔진 내부 직접 접근(MemoryCapability 경유해야 한다)");
+    });
+  }
 }
 
 // 3.5) state 커널 게이트(state-kernel 2단계): 순수 집합 + ref CAS 프로토콜 음성 시험.
