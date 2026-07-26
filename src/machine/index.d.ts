@@ -12,6 +12,15 @@ export interface OperationControl {
   deadlineAt?: number;
 }
 
+// ─── Frame law (pure): Ethernet/ARP/IPv4/ICMP parsing and assembly ───
+// Exported so a consumer writing their own guest port consumes the same contract the built-in
+// ports do. Two copies of this law would let two guests speak differently on one wire.
+export function toAddressBytes(value: number[] | Uint8Array, length: number, label: string): Uint8Array;
+export function internetChecksum(bytes: Uint8Array, offset: number, length: number): number;
+export function buildArpReply(frame: Uint8Array, macAddress: Uint8Array, ipv4Address: Uint8Array): Uint8Array | null;
+export function buildIcmpEchoReply(frame: Uint8Array, macAddress: Uint8Array, ipv4Address: Uint8Array): Uint8Array | null;
+export function describeFrame(frame: Uint8Array): { kind: string; byteLength: number; [key: string]: unknown };
+
 export interface DeviceRequirement {
   name: string;
   kind?: string;

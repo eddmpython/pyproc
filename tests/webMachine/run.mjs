@@ -22,6 +22,10 @@ const ASSET_FREE = [
   "tests/webMachine/browser/probes/dualEngineProbe.html",
   "tests/webMachine/browser/probes/ownerSuccessorProbe.html",
   "tests/webMachine/browser/probes/guestNetworkProbe.html",
+  // 내구 커밋의 핵(찢어진 커밋·CAS 경쟁·세대 불변성·retention gc)을 보는 probe다. x86 자산이
+  // 필요 없는데(fake guest adapter + store 계약 스위트) V86_BACKED에 잘못 등재돼 있어서 CI에서
+  // 한 번도 돌지 않았다(외부 감사, 2026-07-27). 크래시 안전성의 25검사가 그렇게 좌초해 있었다.
+  "tests/webMachine/browser/probes/generationContractProbe.html",
 ];
 // x86 자산이 필요한 probe. ownerSuccessorParticipant는 probe가 iframe으로 여는 참가자 페이지다.
 const V86_BACKED = [
@@ -32,7 +36,6 @@ const V86_BACKED = [
   "tests/webMachine/browser/probes/clockEntropyProbe.html",
   "tests/webMachine/browser/probes/displayInputProbe.html",
   "tests/webMachine/browser/probes/framebufferPointerProbe.html",
-  "tests/webMachine/browser/probes/generationContractProbe.html",
   "tests/webMachine/browser/probes/machineEnvelopeProbe.html",
   "tests/webMachine/browser/probes/packetNetworkProbe.html",
 ];

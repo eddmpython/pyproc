@@ -1079,7 +1079,7 @@ section("봉투·이미지 경계");
   const provider = globalThis.crypto;
   const bundle = await import(pathToFileURL(join(ROOT, "src", "state", "bundleFormat.js")).href);
   const tags = await import(pathToFileURL(join(ROOT, "src", "state", "signedTag.js")).href);
-  const { sha256AddressWith } = await import(pathToFileURL(join(ROOT, "src", "runtime", "contentDigest.js")).href);
+  const { sha256AddressWith, sha256HexWith } = await import(pathToFileURL(join(ROOT, "src", "runtime", "contentDigest.js")).href);
   const image = await import(pathToFileURL(join(ROOT, "src", "session", "machineImage.js")).href);
   const { PAGE_SIZE: IMG_PAGE } = await import(pathToFileURL(join(ROOT, "src", "runtime", "memoryLayout.js")).href);
   const enc = new TextEncoder();
@@ -1110,6 +1110,45 @@ section("봉투·이미지 경계");
     if (decoded.objects.get(addrA)[0] !== 1) throw new Error("decode 오브젝트 불일치");
   });
 
+  // 접두 판독(신뢰 게이트)과 전량 디코드가 같은 헤더 판정을 쓴다. 예전에는 판정이 두 벌이었고
+  // 접두 판독 쪽이 더 약했다(오브젝트 주소 형식과 길이를 한 덩어리로 봤다). 그 방향의 비대칭은
+  // 조기 거부의 존재 이유를 무너뜨린다: 약한 쪽이 통과시킨 것을 나중 디코드가 잡으면 그때는
+  // 이미 payload를 만진 뒤다. 두 경로에 같은 위조 헤더를 넣어 판정이 같은지 대조한다.
+  await checkAsync("봉투: 접두 판독과 전량 디코드의 헤더 판정이 같다", async () => {
+    const enc2 = new TextEncoder();
+    // 헤더 JSON을 직접 조립해 봉투를 만든다(정상 경로로는 만들 수 없는 위조 색인을 넣는다).
+    const forge = async (headerObject) => {
+      const head = enc2.encode(JSON.stringify(headerObject));
+      const body = new Uint8Array(4 + head.length);
+      new DataView(body.buffer).setUint32(0, head.length);
+      body.set(head, 4);
+      const envelopeHex = await sha256HexWith(provider, body);
+      const magic = enc2.encode(bundle.STATE_BUNDLE_MAGIC); // 상수를 직접 쓰면 오타가 magic 거부로 위장된다
+      const out = new Uint8Array(magic.length + 64 + body.length);
+      out.set(magic, 0);
+      out.set(enc2.encode(envelopeHex), magic.length);
+      out.set(body, magic.length + 64);
+      return out;
+    };
+    const codeOf = async (fn) => {
+      try { await fn(); return "예외 없음"; } catch (e) { return e.code || String(e.message || e); }
+    };
+    const forgeries = [
+      { label: "주소 형식 위반", objects: [["not-an-address", 1]] },
+      { label: "길이 음수", objects: [[`sha256:${"a".repeat(64)}`, -1]] },
+      { label: "엔트리 형태 위반", objects: [[`sha256:${"a".repeat(64)}`]] },
+      { label: "색인이 배열 아님", objects: {} },
+    ];
+    const problems = [];
+    for (const forgery of forgeries) {
+      const bytes = await forge({ version: 1, commit: null, meta: null, objects: forgery.objects, tag: null });
+      const headCode = await codeOf(() => bundle.readStateBundleHeader(provider, bytes));
+      const fullCode = await codeOf(() => bundle.decodeStateBundle(provider, bytes));
+      if (headCode === "예외 없음") problems.push(`${forgery.label}: 접두 판독이 통과시켰다`);
+      if (headCode !== fullCode) problems.push(`${forgery.label}: 접두 ${headCode} != 디코드 ${fullCode}`);
+    }
+    if (problems.length) throw new Error(problems.join(" / "));
+  });
   // index-forgery: 헤더의 objects 색인 안 오브젝트 주소 hex 한 자를 뒤집는다(길이·형식 불변,
   // 여전히 sha256:64hex). 서명은 못 다시 하므로 tag는 그대로. readStateBundleHeader가 헤더를
   // 재직렬화해 다이제스트를 다시 계산하면 tag.target과 어긋난다 -> payload 접촉 전 INTEGRITY 거부.

@@ -95,6 +95,27 @@ export function isStateBundle(buf) {
   return textDecoder.decode(buf.subarray(0, STATE_BUNDLE_MAGIC.length)) === STATE_BUNDLE_MAGIC;
 }
 
+// 헤더 JSON의 구조 판정 한 벌. 전량 디코드와 접두 판독(신뢰 게이트)이 같은 판정을 쓴다.
+// 사본이 둘일 때의 위험은 방향이 있었다: 접두 판독이 더 약하면 조기 거부가 통과시킨 것을 나중
+// 디코드가 잡는데, 그때는 이미 payload를 만진 뒤다. 조기 거부의 존재 이유가 무너지는 지점이라
+// 판정을 한 함수로 모은다(검증을 조이면 양쪽에 함께 조여진다).
+function parseBundleHeader(headBytes) {
+  let header;
+  try { header = JSON.parse(textDecoder.decode(headBytes)); }
+  catch (e) { throw formatError("bundle: header JSON is corrupt"); }
+  if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: unsupported version (${header.version})`);
+  const commit = header.commit ?? null;
+  if (commit !== null && !SHA256_ADDRESS_RE.test(commit)) throw formatError("bundle: malformed commit address");
+  if (!Array.isArray(header.objects)) throw formatError("bundle: objects index has the wrong shape");
+  for (const entry of header.objects) {
+    if (!Array.isArray(entry) || entry.length !== 2) throw formatError("bundle: objects index entry is invalid");
+    const [address, length] = entry;
+    if (!SHA256_ADDRESS_RE.test(address)) throw formatError(`bundle: malformed object address (${address})`);
+    if (!Number.isInteger(length) || length < 0) throw formatError(`bundle: object length is invalid (${address})`);
+  }
+  return { commit, meta: header.meta ?? null, index: header.objects, tag: header.tag ?? null };
+}
+
 // 디코드 + 전량 검증. 반환 { commit, meta, objects: Map, tag, envelope, headerDigest }.
 export async function decodeStateBundle(cryptoProvider, buf) {
   if (!isStateBundle(buf)) throw formatError("bundle: magic mismatch");
@@ -106,20 +127,14 @@ export async function decodeStateBundle(cryptoProvider, buf) {
   if (body.length < 4) throw formatError("bundle: file is too short");
   const headLen = new DataView(body.buffer, body.byteOffset, 4).getUint32(0);
   if (headLen > STATE_BUNDLE_HEAD_MAX_BYTES || 4 + headLen > body.length) throw formatError("bundle: header length is invalid");
-  let header;
-  try { header = JSON.parse(textDecoder.decode(body.subarray(4, 4 + headLen))); }
-  catch (e) { throw formatError("bundle: header JSON is corrupt"); }
-  if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: unsupported version (${header.version})`);
-  const _commit = header.commit ?? null;
-  if (_commit !== null && !SHA256_ADDRESS_RE.test(_commit)) throw formatError("bundle: malformed commit address");
-  if (!Array.isArray(header.objects)) throw formatError("bundle: objects index has the wrong shape");
+  const header = parseBundleHeader(body.subarray(4, 4 + headLen));
+  const _commit = header.commit;
   const objects = new Map();
   let offset = 4 + headLen;
-  for (const entry of header.objects) {
-    if (!Array.isArray(entry) || entry.length !== 2) throw formatError("bundle: objects index entry is invalid");
+  for (const entry of header.index) {
     const [address, length] = entry;
-    if (!SHA256_ADDRESS_RE.test(address)) throw formatError(`bundle: malformed object address (${address})`);
-    if (!Number.isInteger(length) || length < 0 || offset + length > body.length) throw formatError(`bundle: object length is invalid (${address})`);
+    // 오프셋 의존 판정만 여기 남는다(공용 파서는 바이트 배치를 모른다).
+    if (offset + length > body.length) throw formatError(`bundle: object length is invalid (${address})`);
     if (objects.has(address)) throw formatError(`bundle: duplicate object address (${address})`);
     const bytes = body.subarray(offset, offset + length);
     const verdict = await verifySha256With(cryptoProvider, bytes, address);
@@ -129,8 +144,8 @@ export async function decodeStateBundle(cryptoProvider, buf) {
   }
   if (offset !== body.length) throw formatError("bundle: trailing bytes outside the index");
   if (_commit !== null && !objects.has(_commit)) throw formatError("bundle: the commit object is not in the index");
-  const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta ?? null, index: header.objects, tag: null }));
-  return { commit: _commit, meta: header.meta ?? null, objects, tag: header.tag ?? null, envelope, headerDigest };
+  const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta, index: header.index, tag: null }));
+  return { commit: _commit, meta: header.meta, objects, tag: header.tag, envelope, headerDigest };
 }
 
 // 접두만 읽는 헤더 판독(신뢰 preflight의 프리미티브). source는 Uint8Array, Blob,
@@ -156,27 +171,17 @@ export async function readStateBundleHeader(cryptoProvider, source) {
   if (headLen > STATE_BUNDLE_HEAD_MAX_BYTES) throw formatError("bundle: header length is invalid");
   const headBytes = await read(prefixLength, prefixLength + headLen);
   if (headBytes.length !== headLen) throw formatError("bundle: header is truncated");
-  let header;
-  try { header = JSON.parse(textDecoder.decode(headBytes)); }
-  catch (e) { throw formatError("bundle: header JSON is corrupt"); }
-  if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: unsupported version (${header.version})`);
-  const _commit = header.commit ?? null;
-  if (_commit !== null && !SHA256_ADDRESS_RE.test(_commit)) throw formatError("bundle: malformed commit address");
-  if (!Array.isArray(header.objects)) throw formatError("bundle: objects index has the wrong shape");
-  for (const entry of header.objects) {
-    if (!Array.isArray(entry) || entry.length !== 2 || !SHA256_ADDRESS_RE.test(entry[0]) || !Number.isInteger(entry[1]) || entry[1] < 0) {
-      throw formatError("bundle: objects index entry is invalid");
-    }
-  }
-  const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta ?? null, index: header.objects, tag: null }));
+  const header = parseBundleHeader(headBytes);
+  const _commit = header.commit;
+  const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta, index: header.index, tag: null }));
   if (header.tag && header.tag.target !== headerDigest) {
     throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "bundle: header digest mismatch (the signed tag covers a different header)");
   }
   return {
     commit: _commit,
-    meta: header.meta ?? null,
-    objects: header.objects,
-    tag: header.tag ?? null,
+    meta: header.meta,
+    objects: header.index,
+    tag: header.tag,
     envelope,
     headerDigest,
     objectsOffset: prefixLength + headLen,

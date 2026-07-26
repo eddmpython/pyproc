@@ -8,6 +8,9 @@
 // 계약과 호스트 (엔진·브라우저 모름)
 export { WebMachineError } from "./contracts/webMachineError.js";
 export { operationAbortError, throwIfOperationAborted } from "./contracts/operationControl.js";
+// 프레임 법. 자기 guest port를 쓰는 소비자와 시험 fixture가 같은 계약을 소비해야 프레임 해석이
+// 한 벌로 남는다(사본이 갈리면 두 guest가 같은 와이어에서 다른 말을 한다).
+export { buildArpReply, buildIcmpEchoReply, describeFrame, internetChecksum, toAddressBytes } from "./contracts/ipv4Frames.js";
 export { WebMachineHost } from "./host/webMachineHost.js";
 export { MachineHandle } from "./host/machineHandle.js";
 

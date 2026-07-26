@@ -164,9 +164,24 @@ pyprocNet.send(_buildArp(${JSON.stringify(senderMac)}, ${JSON.stringify(senderIp
     check("guest shutdown이 스위치 endpoint를 회수한다",
       afterShutdown.endpoints === switchState.endpoints - 1,
       `${switchState.endpoints} -> ${afterShutdown.endpoints}`);
-    const alphaSendAfter = await alpha.request({ type: "run", code:
-      `import pyprocNet\npyprocNet.send(bytes(60))\n` });
-    check("떠난 endpoint로 보내도 남은 guest는 살아 있다", alphaSendAfter === 60, `보낸 바이트=${alphaSendAfter}`);
+    // 떠난 상대에게 보내는 것은 오류가 아니라 유실이다(L2의 계약). 확인할 것은 "보낸 바이트 수"가
+    // 아니라 두 사실이다: 남은 guest가 계속 실행되고, 스위치가 그 프레임을 배달하지 못한 것으로
+    // 센다. 예전 판정은 `send() === 60`이었는데 send는 항상 길이를 돌려주므로 상수 대조였다
+    // (외부 감사가 "고칠 수 없는 체크"로 지목, 2026-07-27).
+    const deliveredBefore = network.inspect().deliveredFrames;
+    await alpha.request({ type: "run", code:
+      `import pyprocNet\n`
+      + `frame = bytearray(60)\n`
+      + `frame[0:6] = bytes(${JSON.stringify(betaNet.macAddress)})\n`
+      + `frame[6:12] = bytes(${JSON.stringify(alphaNet.macAddress)})\n`
+      + `pyprocNet.send(bytes(frame))\n` });
+    await settle();
+    const afterSend = network.inspect();
+    check("떠난 endpoint로 보낸 프레임은 배달되지 않는다(유실이 계약)",
+      afterSend.deliveredFrames === deliveredBefore,
+      `delivered ${deliveredBefore} -> ${afterSend.deliveredFrames}`);
+    const survivorValue = await alpha.request({ type: "run", code: "survivor = 6 * 9\nsurvivor" });
+    check("상대가 떠난 뒤에도 남은 guest는 계속 실행된다", survivorValue === 54, `값=${survivorValue}`);
   } catch (error) {
     check("예외 없음", false, String(error?.message || error).slice(-400));
   } finally {
