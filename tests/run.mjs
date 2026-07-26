@@ -1634,6 +1634,23 @@ for (const readme of ["README.md", "README.ko.md"]) {
     if (missing.length) throw new Error(`표면 누락: ${missing.join(", ")}`);
   });
 }
+// 목차는 제목과 함께 움직여야 한다. 손으로 유지하는 목차는 절을 추가·개명할 때 조용히
+// 표류하고, 표류한 목차는 없는 목차보다 나쁘다(독자를 없는 앵커로 보낸다).
+for (const readme of ["README.md", "README.ko.md"]) {
+  check(`${readme} 목차 = 제목 집합`, () => {
+    const text = readFileSync(join(ROOT, readme), "utf8");
+    const block = /<summary><b>(?:Contents|목차)<\/b><\/summary>([\s\S]*?)<\/details>/.exec(text);
+    if (!block) throw new Error("목차 블록 없음");
+    // GitHub 앵커 규칙: 유니코드 문자·숫자를 보존한다(ASCII \w로 깎으면 한국어 제목이 빈다).
+    const slug = (title) => title.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").trim().replace(/\s+/g, "-");
+    const titles = [...text.matchAll(/^## (.+)$/gm)].map((m) => slug(m[1]));
+    const anchors = [...block[1].matchAll(/\]\(#([^)]+)\)/g)].map((m) => m[1]);
+    const missing = titles.filter((title) => !anchors.includes(title));
+    const stale = anchors.filter((anchorId) => !titles.includes(anchorId));
+    if (missing.length) throw new Error(`목차 누락: ${missing.slice(0, 4).join(", ")}`);
+    if (stale.length) throw new Error(`죽은 목차 앵커: ${stale.slice(0, 4).join(", ")}`);
+  });
+}
 check("README 공개 표면은 작업별 지도 형태", () => {
   const readmeEn = readFileSync(join(ROOT, "README.md"), "utf8");
   const readmeKo = readFileSync(join(ROOT, "README.ko.md"), "utf8");

@@ -13,6 +13,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=5b8cff&labelColor=0a0f1c" alt="npm"></a>
+  <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=0a0f1c" alt="ci"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-7c4dff?labelColor=0a0f1c" alt="license MPL-2.0"></a>
   <img src="https://img.shields.io/badge/dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero dependencies">
   <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-5b8cff?labelColor=0a0f1c" alt="CPython 3.14 on WebAssembly">
@@ -27,6 +28,33 @@
 </p>
 
 ---
+
+<details>
+<summary><b>Contents</b></summary>
+
+- [The problem it solves](#the-problem-it-solves)
+- [In one example](#in-one-example)
+- [Where a browser Python sandbox helps](#where-a-browser-python-sandbox-helps)
+- [What you get (results, not internals)](#what-you-get-results-not-internals)
+- [Quick start](#quick-start)
+- [Choosing your entry point](#choosing-your-entry-point)
+- [Using it from an AI agent](#using-it-from-an-ai-agent)
+- [Plug it into an AI agent (MCP)](#plug-it-into-an-ai-agent-mcp)
+- [Feature status](#feature-status)
+- [What it guarantees, and what it doesn't](#what-it-guarantees-and-what-it-doesnt)
+- [Scope and platform direction](#scope-and-platform-direction)
+- [Security model](#security-model)
+- [How it works (one page)](#how-it-works-one-page)
+- [Where the shape pays off](#where-the-shape-pays-off)
+- [Run the Web Computer](#run-the-web-computer)
+- [Public surface](#public-surface)
+- [Setup](#setup)
+- [Install and pinning](#install-and-pinning)
+- [Who uses it](#who-uses-it)
+- [Development](#development)
+- [License](#license)
+
+</details>
 
 ## The problem it solves
 

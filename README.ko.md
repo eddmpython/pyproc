@@ -13,6 +13,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=5b8cff&labelColor=0a0f1c" alt="npm"></a>
+  <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=0a0f1c" alt="ci"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-7c4dff?labelColor=0a0f1c" alt="license MPL-2.0"></a>
   <img src="https://img.shields.io/badge/dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero dependencies">
   <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-5b8cff?labelColor=0a0f1c" alt="CPython 3.14 on WebAssembly">
@@ -27,6 +28,33 @@
 </p>
 
 ---
+
+<details>
+<summary><b>목차</b></summary>
+
+- [무엇을 해결하나](#무엇을-해결하나)
+- [한 예제로](#한-예제로)
+- [브라우저 Python 샌드박스가 쓸모 있는 곳](#브라우저-python-샌드박스가-쓸모-있는-곳)
+- [얻는 것 (내부 원리가 아니라 결과로)](#얻는-것-내부-원리가-아니라-결과로)
+- [빠른 시작](#빠른-시작)
+- [진입점 고르기](#진입점-고르기)
+- [AI 에이전트에서 쓰기](#ai-에이전트에서-쓰기)
+- [AI 에이전트에 꽂기 (MCP)](#ai-에이전트에-꽂기-mcp)
+- [기능 상태](#기능-상태)
+- [보장하는 것과 아직 아닌 것](#보장하는-것과-아직-아닌-것)
+- [스코프와 플랫폼 방향](#스코프와-플랫폼-방향)
+- [보안 모델](#보안-모델)
+- [어떻게 도나 (한 장)](#어떻게-도나-한-장)
+- [형태가 값을 하는 자리](#형태가-값을-하는-자리)
+- [Web Computer 실행](#web-computer-실행)
+- [공개 표면](#공개-표면)
+- [셋업](#셋업)
+- [설치와 핀](#설치와-핀)
+- [누가 쓰나](#누가-쓰나)
+- [개발](#개발)
+- [라이선스](#라이선스)
+
+</details>
 
 ## 무엇을 해결하나
 
