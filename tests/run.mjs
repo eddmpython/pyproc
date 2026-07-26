@@ -453,6 +453,16 @@ for (const scope of ["src", "examples", "tests", "apps", "scripts"]) {
 //      벤치에 종속시킨다. 실측은 계속하되(개발 원칙 4) 측정치는 mainPlan/tests 기록과
 //      benchmark artifact에만 산다. 스코프 밖 둘: docs/operations의 게이트 임계값은 자랑이
 //      아니라 계약이고, examples/의 Speed Lab은 사용자가 자기 기계에서 직접 재는 도구다.
+// 강등 subpath의 타입 선언 목록. [성능 주장]과 [타입] 두 절이 함께 소비한다.
+const SUBPATH_DTS = [
+  "src/runtime/index.d.ts",
+  "src/state/index.d.ts",
+  "src/machine/index.d.ts",
+  "src/runtime/assets.d.ts",
+  "src/capabilities/gpuCompute.d.ts",
+  "src/capabilities/socketBridge.d.ts",
+  "src/runtime/engines/wasi/wasiSession.d.ts",
+];
 section("성능 주장");
 const BRAG = [
   [/\d+(?:\.\d+)?\s*(?:x|×)\s*(?:faster|speedup)/i, "속도 배수 자랑"],
@@ -476,6 +486,11 @@ const BRAG_SURFACE = [
   // 소비 문서는 제품이 채택 판단에 읽는 공개 계약이다. 규칙 문구의 문자적 스코프 밖이었지만
   // 실제로 측정치가 여기 살아 있었다(2026-07-26: contract.md의 median, 매트릭스의 p95).
   ...collect(join(ROOT, "docs", "consuming"), [".md"]),
+  // 타입 선언은 소비자가 가장 많이 읽는 공개 표면이다(에디터 자동완성이 JSDoc을 그대로 띄운다).
+  // 규칙 문구가 문서 파일만 열거해 스코프 밖이었지만 실제로 측정치 4개가 여기 살아 있었다
+  // (2026-07-27: matmul 3.67배, forkMany 316ms->78ms/4.05배, signal 264ms).
+  join(ROOT, "index.d.ts"),
+  ...SUBPATH_DTS.map((path) => join(ROOT, path)),
 ];
 for (const f of BRAG_SURFACE) {
   check(`숫자 자랑 0: ${rel(f)}`, () => {
@@ -1520,15 +1535,6 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
 //    루트 index.d.ts + 강등 subpath의 형제 d.ts를 함께 본다. 강등 표면은 루트에서 export되지
 //    않으므로(그래서 강등이다) 자기 .js 옆의 d.ts가 유일한 타입 출처다.
 section("타입");
-const SUBPATH_DTS = [
-  "src/runtime/index.d.ts",
-  "src/state/index.d.ts",
-  "src/machine/index.d.ts",
-  "src/runtime/assets.d.ts",
-  "src/capabilities/gpuCompute.d.ts",
-  "src/capabilities/socketBridge.d.ts",
-  "src/runtime/engines/wasi/wasiSession.d.ts",
-];
 const dts = [join(ROOT, "index.d.ts"), ...SUBPATH_DTS.map((p) => join(ROOT, p))]
   .map((f) => readFileSync(f, "utf8")).join("\n");
 for (const sym of ["boot", "open", "checkEnvironment"]) {

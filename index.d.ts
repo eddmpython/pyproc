@@ -372,7 +372,7 @@ declare class AsgiServer {
 /**
  * 파이썬 서버를 진짜 URL로: pyprocSw.js(같은 폴더 자산)를 소비자 오리진에 등록하면
  * (navigator.serviceWorker.register(".../pyprocSw.js?asgi=/pyproc/")), 그 접두 fetch가
- * 이 배선을 거쳐 AsgiServer로 응답된다. 실측 왕복 3.4ms(SW 오버헤드 0).
+ * 이 배선을 거쳐 AsgiServer로 응답된다. SW는 라우팅만 하고 응답 본문은 커널이 만든다.
  * bind()는 SW에 커널을 등록(hello)하므로 가상 오리진에서 서빙된 문서(iframe/딴 탭)의
  * fetch도 커널로 라우팅된다. 커널 무응답은 SW가 504로 끊는다(?asgiTimeout= 조정).
  * 벽: SW 합성 응답의 Set-Cookie는 스트립됨(쿠키 세션 불가, 토큰 방식 사용), WebSocket 미가로채기.
@@ -1056,10 +1056,10 @@ declare class PyProc {
    */
   mapArray(fnSrc: string, typed: ArrayBufferView, opts?: PyProcShardOptions): Promise<unknown[]>;
   /**
-   * 샤딩 matmul: C = A@B를 A의 행블록으로 워커수만큼 분할해 병렬 계산(compute-bound = near-linear,
-   * 실측 4워커 3.67배). numpy 필요(packages:["numpy"]). f64(numpy 기본). 반환 = 결과 행렬.
-   * 정직: 이 배속은 compute-bound 커널의 것. memory-bound op(리덕션/값싼 원소별)는 mapArray로,
-   * 배속은 modest하고 작은 배열은 전송비로 진다(shardOpsProbe 실측).
+   * 샤딩 matmul: C = A@B를 A의 행블록으로 워커수만큼 분할해 병렬 계산한다(독립 인터프리터
+   * N개 = 독립 GIL N개). numpy 필요(packages:["numpy"]). f64(numpy 기본). 반환 = 결과 행렬.
+   * 정직: 이 이득은 compute-bound 커널의 것이다. memory-bound op(리덕션/값싼 원소별)는
+   * mapArray로 가고, 작은 배열은 전송비가 계산비를 넘는다(근거: shardOpsProbe).
    */
   matmul(a: Matrix, b: Matrix, opts?: PyProcMatmulOptions): Promise<Matrix>;
   ps(): PyProcEntry[];
@@ -1074,8 +1074,8 @@ declare class PyProc {
   /**
    * fork(2) 팬아웃: 살아있는 src의 상태를 N개 dst에 한 번에 복제한다(투기적 탐색의 프리미티브).
    * 부모 델타를 한 번만 수확해 SharedArrayBuffer로 방송하므로 비용이 O(N x heap)이 아니라
-   * O(heap + N x delta)다. 실측(21.4MB 델타, 4레인): 순차 fork 316ms -> 방송 78ms(4.05배).
-   * 전제는 fork와 같다(같은 replay 매니페스트의 대칭 풀). harvestMs는 레인 수와 무관한 1회 비용.
+   * O(heap + N x delta)다. 전제는 fork와 같다(같은 replay 매니페스트의 대칭 풀).
+   * harvestMs는 레인 수와 무관한 1회 비용이다(근거: forkManyProbe).
    */
   forkMany(srcPid: number, dstPids: number[]): Promise<{
     pages: number;
@@ -1086,7 +1086,7 @@ declare class PyProc {
   /**
    * 시그널 전달(유닉스 시그널 표). 실행 중 파이썬의 signal 핸들러가 발화한다.
    * SIGINT(2)=KeyboardInterrupt 기본, SIGTERM(15)/SIGUSR1(10) 등은 파이썬이 signal.signal로 건 핸들러가 받는다.
-   * 워커는 살아남아 재사용된다(협조적 종료 실측 264ms). 미지원 워커면 false.
+   * 협조적 종료이므로 워커는 살아남아 재사용된다(강제 회수는 kill/respawn). 미지원 워커면 false.
    */
   signal(pid: number, signum?: number): boolean;
   /**
