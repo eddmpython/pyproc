@@ -12,6 +12,7 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 import { createBrowserHost } from "./createBrowserHost.js";
 import { createPyprocGuestFactory } from "../guests/pyprocGuestAdapter.js";
 import { createV86GuestFactory } from "../guests/v86GuestAdapter.js";
+import { MemoryEthernetSwitch } from "../devices/memoryEthernetSwitch.js";
 import { MemoryBlockDevice } from "../devices/memoryBlockDevice.js";
 import { MemoryScanCodeInputDevice } from "../devices/memoryScanCodeInputDevice.js";
 import { MemoryTextDisplayDevice } from "../devices/memoryTextDisplayDevice.js";
@@ -34,9 +35,15 @@ export function createWebComputer({
   // 세 호출부가 후자를 쓴다: 신뢰 화면 preflight, import 후보 조립, deferBoot 복원.
   // host.destroyMachine으로 대체하지 않는 이유: 어댑터를 만들어 곧 버리는 낭비가 된다.
   createMachines = true,
+  // 내장 L2 스위치. false면 끄고, 객체면 그 옵션으로 만든다(maxFrameBytes/maxQueuedFrames).
+  network = true,
 } = {}) {
   const pythonDisk = new MemoryBlockDevice({ byteLength: python.diskBytes ?? DEFAULT_DISK_BYTES });
   const builtInDevices = { pythonDisk };
+  // L2 스위치를 컴퓨터의 내장 장치로 둔다. guest가 둘 이상이면 이것이 그들 사이의 유일한
+  // 바이트 경로다(같은 host에 등록됐다는 사실만 공유하는 상태를 끝낸다). 학습·flood·큐 상한은
+  // 장치가 소유하고, TCP/IP는 guest 몫이다(프레임 계약만 준다).
+  if (network !== false) builtInDevices.network = new MemoryEthernetSwitch(network === true ? {} : network || {});
   if (linux) {
     builtInDevices.linuxDisk = new MemoryBlockDevice({ byteLength: linux.diskBytes ?? DEFAULT_DISK_BYTES });
     builtInDevices.display = new MemoryTextDisplayDevice();
@@ -66,6 +73,7 @@ export function createWebComputer({
       blockMode: "filesystem",
       displayDeviceName: "display",
       inputDeviceName: "input",
+      ...(builtInDevices.network ? { packetDeviceName: "network" } : {}),
       ...(linux.adapterOptions || {}),
     }));
   }
@@ -75,7 +83,7 @@ export function createWebComputer({
     machineId: "pythonOs",
     adapterId: "pyproc-block",
     manifest: python.manifest ?? { session: { ...(python.session || {}) } },
-    permissions: { devices: ["console", "pythonDisk"] },
+    permissions: { devices: ["console", "pythonDisk", ...(builtInDevices.network ? ["network"] : [])] },
   }));
   if (createMachines && linux) {
     if (!linux.manifest) throw new TypeError("linux.manifest가 필요하다(부팅 자산은 소비자가 provenance와 함께 가져온다)");
@@ -83,7 +91,7 @@ export function createWebComputer({
       machineId: "linuxOs",
       adapterId: "x86-linux",
       manifest: linux.manifest,
-      permissions: { devices: ["console", "linuxDisk", "display", "input"] },
+      permissions: { devices: ["console", "linuxDisk", "display", "input", ...(builtInDevices.network ? ["network"] : [])] },
     }));
   }
 

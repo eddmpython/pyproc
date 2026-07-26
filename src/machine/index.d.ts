@@ -855,4 +855,15 @@ export function createWebComputer(options?: {
   devices?: Record<string, unknown>;
   onConsole?: ((line: string) => void) | null;
   cryptoProvider?: { randomUUID(): string };
+  /**
+   * 내장 L2 이더넷 스위치. 기본으로 켜져 있고 `network` 장치로 등록된다: guest가 둘 이상일 때
+   * 그들 사이의 유일한 바이트 경로다. `false`면 끄고, 객체를 주면 그 옵션으로 만든다.
+   * TCP/IP는 guest 몫이고 이 장치는 프레임 계약(학습·flood·큐 상한)만 소유한다.
+   */
+  network?: boolean | { maxFrameBytes?: number; maxQueuedFrames?: number };
+  /**
+   * 기본 머신 2대를 여기서 만들 것인가. `false`면 하드웨어만 조립하고 머신은 image manifest가
+   * 만든다(신뢰 화면 preflight, import 후보 조립, 지연 부팅 복원이 그 모드를 쓴다).
+   */
+  createMachines?: boolean;
 }): WebComputer;
