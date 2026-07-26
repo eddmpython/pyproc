@@ -11,8 +11,8 @@ function cloneRecord(value) {
 function identity(groupId, ownerId) {
   const group = String(groupId || "");
   const owner = String(ownerId || "");
-  if (!group) throw new TypeError("groupId가 필요하다");
-  if (!owner) throw new TypeError("ownerId가 필요하다");
+  if (!group) throw new TypeError("a groupId is required");
+  if (!owner) throw new TypeError("an ownerId is required");
   return { groupId: group, ownerId: owner };
 }
 
@@ -31,7 +31,7 @@ export class MemoryMachineStore {
 
   claimOwner({ groupId, ownerId, minimumEpoch = 1 }) {
     const key = identity(groupId, ownerId);
-    if (!Number.isSafeInteger(minimumEpoch) || minimumEpoch < 1) throw new TypeError("minimumEpoch는 1 이상 정수여야 한다");
+    if (!Number.isSafeInteger(minimumEpoch) || minimumEpoch < 1) throw new TypeError("minimumEpoch must be an integer >= 1");
     return this._write(() => {
       const current = this._owners.get(key.groupId);
       const epoch = Math.max((current?.epoch || 0) + 1, minimumEpoch);
@@ -55,22 +55,22 @@ export class MemoryMachineStore {
 
   async readOwner(groupId) {
     const key = String(groupId || "");
-    if (!key) throw new TypeError("groupId가 필요하다");
+    if (!key) throw new TypeError("a groupId is required");
     const value = this._owners.get(key);
     return value ? Object.freeze({ ...value }) : null;
   }
 
   async getBlob(digest) {
     const bytes = this._blobs.get(digest);
-    if (!bytes) throw new WebMachineError("WEB_MACHINE_BLOB_MISSING", `blob 없음: ${digest}`);
+    if (!bytes) throw new WebMachineError("WEB_MACHINE_BLOB_MISSING", `no such blob: ${digest}`);
     return bytes.slice();
   }
 
   commitGeneration({ groupId, generationId, expectedHead, ownerToken, blobs = [], record, control }) {
     const group = String(groupId || "");
     const generation = String(generationId || "");
-    if (!group) throw new TypeError("groupId가 필요하다");
-    if (!generation) throw new TypeError("generationId가 필요하다");
+    if (!group) throw new TypeError("a groupId is required");
+    if (!generation) throw new TypeError("a generationId is required");
     const payloads = blobs.map(({ digest, bytes }) => ({ digest: String(digest || ""), bytes: copyGenerationBytes(bytes) }));
     const storedRecord = cloneRecord(record);
     return this._write(() => {
@@ -85,10 +85,10 @@ export class MemoryMachineStore {
       }
       const key = generationStorageKey(group, generation);
       if (this._generations.has(key)) {
-        throw new WebMachineError("WEB_MACHINE_GENERATION_EXISTS", `${group}: generation 이미 존재 ${generation}`);
+        throw new WebMachineError("WEB_MACHINE_GENERATION_EXISTS", `${group}: generation already exists: ${generation}`);
       }
       for (const payload of payloads) {
-        if (!payload.digest) throw new TypeError("blob digest가 필요하다");
+        if (!payload.digest) throw new TypeError("a blob digest is required");
         if (!this._blobs.has(payload.digest)) this._blobs.set(payload.digest, payload.bytes);
       }
       this._generations.set(key, storedRecord);
@@ -105,7 +105,7 @@ export class MemoryMachineStore {
 
   async readGeneration(groupId, generationId) {
     const value = this._generations.get(generationStorageKey(groupId, generationId));
-    if (!value) throw new WebMachineError("WEB_MACHINE_GENERATION_MISSING", `${groupId}: generation 없음 ${generationId}`);
+    if (!value) throw new WebMachineError("WEB_MACHINE_GENERATION_MISSING", `${groupId}: no such generation: ${generationId}`);
     return cloneRecord(value);
   }
 

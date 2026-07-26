@@ -63,7 +63,7 @@ export class CommandQueue {
       if (fenced && (sentFence.epoch !== currentFence.epoch || sentFence.ownerId !== currentFence.ownerId)) {
         settleCaller(rejectCaller, new WebMachineError(
           "WEB_MACHINE_OUTCOME_UNKNOWN",
-          `${this._machineId}: ${label} 결과 불명, 자동 replay 금지`,
+          `${this._machineId}: ${label} outcome is unknown; never replay it automatically`,
           {
             operationId,
             sentOwnerId: sentFence.ownerId,

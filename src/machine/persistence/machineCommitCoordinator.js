@@ -38,11 +38,11 @@ function generationCorrupt(groupId, detail) {
 
 export class MachineCommitCoordinator {
   constructor({ store, cryptoProvider, nowFactory }) {
-    if (!store) throw new TypeError("store가 필요하다");
+    if (!store) throw new TypeError("a store is required");
     // digest·커널 문법은 코어 한 벌이다: 조립은 createMachineCryptoProvider가 배달한다(맨 Crypto 거부).
-    if (typeof cryptoProvider?.digestBytes !== "function") throw new TypeError("cryptoProvider.digestBytes가 필요하다(createMachineCryptoProvider로 감싸라)");
-    if (typeof cryptoProvider?.state?.makeStateCommit !== "function") throw new TypeError("cryptoProvider.state(커널 문법)가 필요하다(createMachineCryptoProvider로 감싸라)");
-    if (typeof nowFactory !== "function") throw new TypeError("nowFactory가 필요하다");
+    if (typeof cryptoProvider?.digestBytes !== "function") throw new TypeError("cryptoProvider.digestBytes is required (wrap with createMachineCryptoProvider)");
+    if (typeof cryptoProvider?.state?.makeStateCommit !== "function") throw new TypeError("cryptoProvider.state (the kernel grammar) is required (wrap with createMachineCryptoProvider)");
+    if (typeof nowFactory !== "function") throw new TypeError("a nowFactory is required");
     this._store = store;
     this._cryptoProvider = cryptoProvider;
     this._nowFactory = nowFactory;
@@ -53,15 +53,15 @@ export class MachineCommitCoordinator {
   }
 
   async commitPaused({ groupId, machines, devices = {}, expectedHead, ownerToken, control }) {
-    if (!groupId) throw new TypeError("groupId가 필요하다");
-    if (expectedHead === undefined) throw new TypeError("expectedHead가 필요하다");
-    if (!ownerToken) throw new TypeError("ownerToken이 필요하다");
+    if (!groupId) throw new TypeError("a groupId is required");
+    if (expectedHead === undefined) throw new TypeError("an expectedHead is required");
+    if (!ownerToken) throw new TypeError("an ownerToken is required");
     throwIfOperationAborted(control, `${groupId}: paused commit`);
     const machineList = sortedMachines(machines || []);
-    if (!machineList.length) throw new TypeError("machines가 필요하다");
+    if (!machineList.length) throw new TypeError("machines are required");
     for (const machine of machineList) {
       if (machine.state !== "paused") {
-        throw new WebMachineError("WEB_MACHINE_COMMIT_STATE", `${machine.machineId}: paused commit만 허용`);
+        throw new WebMachineError("WEB_MACHINE_COMMIT_STATE", `${machine.machineId}: only a paused machine can be committed`);
       }
     }
     const deviceEntries = sortedDevices(devices);
@@ -136,7 +136,7 @@ export class MachineCommitCoordinator {
   async restoreLatest({ groupId, machines, devices = {}, control }) {
     throwIfOperationAborted(control, `${groupId}: restore latest`);
     const head = await this._store.readHead(groupId);
-    if (!head?.head) throw new WebMachineError("WEB_MACHINE_RECOVERY_EMPTY", `${groupId}: HEAD 없음`);
+    if (!head?.head) throw new WebMachineError("WEB_MACHINE_RECOVERY_EMPTY", `${groupId}: no HEAD`);
     const failures = [];
     for (const generationId of [head.head, head.prev].filter(Boolean)) {
       let verified;
@@ -158,21 +158,21 @@ export class MachineCommitCoordinator {
         devices: verified.devices.map(({ payload, ...meta }) => meta),
       };
     }
-    throw new WebMachineError("WEB_MACHINE_RECOVERY_UNAVAILABLE", `${groupId}: HEAD/PREV 복구 실패`, { failures });
+    throw new WebMachineError("WEB_MACHINE_RECOVERY_UNAVAILABLE", `${groupId}: recovery failed from both HEAD and PREV`, { failures });
   }
 
   async pruneRecoveryWindow({ groupId, ownerToken, control }) {
-    if (typeof this._store.pruneRecoveryWindow !== "function") throw new TypeError("store.pruneRecoveryWindow()이 필요하다");
+    if (typeof this._store.pruneRecoveryWindow !== "function") throw new TypeError("store.pruneRecoveryWindow() is required");
     return this._store.pruneRecoveryWindow({ groupId, ownerToken, control });
   }
 
   async dryRunRecoveryWindow({ groupId, ownerToken }) {
-    if (typeof this._store.dryRunRecoveryWindow !== "function") throw new TypeError("store.dryRunRecoveryWindow()이 필요하다");
+    if (typeof this._store.dryRunRecoveryWindow !== "function") throw new TypeError("store.dryRunRecoveryWindow() is required");
     return this._store.dryRunRecoveryWindow({ groupId, ownerToken });
   }
 
   async inspectStorage() {
-    if (typeof this._store.inspectStorage !== "function") throw new TypeError("store.inspectStorage()이 필요하다");
+    if (typeof this._store.inspectStorage !== "function") throw new TypeError("store.inspectStorage() is required");
     return this._store.inspectStorage();
   }
 
@@ -231,17 +231,17 @@ export class MachineCommitCoordinator {
     for (const entry of verified.devices) {
       throwIfOperationAborted(control, `${groupId}: restore generation`);
       const device = lookup(devices, entry.name);
-      if (!device) throw new WebMachineError("WEB_MACHINE_RESTORE_TARGET_MISSING", `device target 없음: ${entry.name}`);
+      if (!device) throw new WebMachineError("WEB_MACHINE_RESTORE_TARGET_MISSING", `no target device: ${entry.name}`);
       this._assertBlockDevice(entry.name, device);
       if (device.byteLength !== entry.byteLength) {
-        throw new WebMachineError("WEB_MACHINE_BLOCK_SIZE", `${entry.name}: block 크기 불일치`);
+        throw new WebMachineError("WEB_MACHINE_BLOCK_SIZE", `${entry.name}: block size mismatch`);
       }
       await device.restore(entry.payload);
     }
     for (const entry of verified.machines) {
       throwIfOperationAborted(control, `${groupId}: restore generation`);
       const machine = lookup(machines, entry.machineId);
-      if (!machine) throw new WebMachineError("WEB_MACHINE_RESTORE_TARGET_MISSING", `machine target 없음: ${entry.machineId}`);
+      if (!machine) throw new WebMachineError("WEB_MACHINE_RESTORE_TARGET_MISSING", `no target machine: ${entry.machineId}`);
       await machine.restore({
         schemaVersion: 1,
         machineId: entry.machineId,
@@ -255,9 +255,9 @@ export class MachineCommitCoordinator {
   }
 
   _assertBlockDevice(name, device) {
-    if (!device || device.kind !== "block") throw new WebMachineError("WEB_MACHINE_DEVICE_KIND_UNSUPPORTED", `${name}: block device 필요`);
+    if (!device || device.kind !== "block") throw new WebMachineError("WEB_MACHINE_DEVICE_KIND_UNSUPPORTED", `${name}: a block device is required`);
     for (const method of ["flush", "snapshot", "restore"]) {
-      if (typeof device[method] !== "function") throw new WebMachineError("WEB_MACHINE_DEVICE_INVALID", `${name}: ${method}() 없음`);
+      if (typeof device[method] !== "function") throw new WebMachineError("WEB_MACHINE_DEVICE_INVALID", `${name}: ${method}() is missing`);
     }
   }
 }

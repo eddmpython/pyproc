@@ -14,7 +14,7 @@ const ALL_STORES = Object.freeze([BLOBS, GENERATIONS, HEADS, OWNERS]);
 function requestValue(request) {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB request 실패"));
+    request.onerror = () => reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "the IndexedDB request failed"));
   });
 }
 
@@ -22,7 +22,7 @@ function transactionDone(transaction) {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();
     transaction.onabort = () => reject(transaction.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB transaction abort"));
-    transaction.onerror = () => reject(transaction.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB transaction 실패"));
+    transaction.onerror = () => reject(transaction.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "the IndexedDB transaction failed"));
   });
 }
 
@@ -37,8 +37,8 @@ function copyToken(value) {
 function validateIdentity(groupId, ownerId) {
   const group = String(groupId || "");
   const owner = String(ownerId || "");
-  if (!group) throw new TypeError("groupId가 필요하다");
-  if (!owner) throw new TypeError("ownerId가 필요하다");
+  if (!group) throw new TypeError("a groupId is required");
+  if (!owner) throw new TypeError("an ownerId is required");
   return { groupId: group, ownerId: owner };
 }
 
@@ -50,8 +50,8 @@ async function abortAndReject(transaction, done, error) {
 
 export class IndexedDbMachineStore {
   constructor({ indexedDb, databaseName, legacyOwnerDatabaseName = null }) {
-    if (!indexedDb || typeof indexedDb.open !== "function") throw new TypeError("indexedDb가 필요하다");
-    if (!databaseName) throw new TypeError("databaseName이 필요하다");
+    if (!indexedDb || typeof indexedDb.open !== "function") throw new TypeError("an indexedDb is required");
+    if (!databaseName) throw new TypeError("a databaseName is required");
     this._indexedDb = indexedDb;
     this._databaseName = String(databaseName);
     this._legacyOwnerDatabaseName = legacyOwnerDatabaseName ? String(legacyOwnerDatabaseName) : null;
@@ -61,7 +61,7 @@ export class IndexedDbMachineStore {
 
   async claimOwner({ groupId, ownerId, minimumEpoch = 1 }) {
     const identity = validateIdentity(groupId, ownerId);
-    if (!Number.isSafeInteger(minimumEpoch) || minimumEpoch < 1) throw new TypeError("minimumEpoch는 1 이상 정수여야 한다");
+    if (!Number.isSafeInteger(minimumEpoch) || minimumEpoch < 1) throw new TypeError("minimumEpoch must be an integer >= 1");
     const legacyEpoch = await this._readLegacyEpoch(identity.groupId);
     const database = await this._open();
     const transaction = database.transaction(OWNERS, "readwrite");
@@ -70,7 +70,7 @@ export class IndexedDbMachineStore {
     const current = await requestValue(owners.get(identity.groupId));
     const currentEpoch = current?.epoch || 0;
     if (!Number.isSafeInteger(currentEpoch) || currentEpoch < 0) {
-      return abortAndReject(transaction, done, new WebMachineError("WEB_MACHINE_OWNER_EPOCH_CORRUPT", `${identity.groupId}: owner epoch 파손`));
+      return abortAndReject(transaction, done, new WebMachineError("WEB_MACHINE_OWNER_EPOCH_CORRUPT", `${identity.groupId}: the owner epoch is corrupt`));
     }
     const record = {
       ...identity,
@@ -106,7 +106,7 @@ export class IndexedDbMachineStore {
 
   async readOwner(groupId) {
     const group = String(groupId || "");
-    if (!group) throw new TypeError("groupId가 필요하다");
+    if (!group) throw new TypeError("a groupId is required");
     const database = await this._open();
     const transaction = database.transaction(OWNERS, "readonly");
     const done = transactionDone(transaction);
@@ -121,15 +121,15 @@ export class IndexedDbMachineStore {
     const done = transactionDone(transaction);
     const value = await requestValue(transaction.objectStore(BLOBS).get(digest));
     await done;
-    if (!value) throw new WebMachineError("WEB_MACHINE_BLOB_MISSING", `blob 없음: ${digest}`);
+    if (!value) throw new WebMachineError("WEB_MACHINE_BLOB_MISSING", `no such blob: ${digest}`);
     return copyGenerationBytes(value);
   }
 
   async commitGeneration({ groupId, generationId, expectedHead, ownerToken, blobs = [], record, control }) {
     const group = String(groupId || "");
     const generation = String(generationId || "");
-    if (!group) throw new TypeError("groupId가 필요하다");
-    if (!generation) throw new TypeError("generationId가 필요하다");
+    if (!group) throw new TypeError("a groupId is required");
+    if (!generation) throw new TypeError("a generationId is required");
     throwIfOperationAborted(control, `${group}: generation commit`);
     const payloads = blobs.map(({ digest, bytes }) => ({ digest: String(digest || ""), bytes: copyGenerationBytes(bytes) }));
     const storedRecord = cloneRecord(record);
@@ -153,10 +153,10 @@ export class IndexedDbMachineStore {
       }
       const generationKey = generationStorageKey(group, generation);
       const existingGeneration = await requestValue(transaction.objectStore(GENERATIONS).get(generationKey));
-      if (existingGeneration) throw new WebMachineError("WEB_MACHINE_GENERATION_EXISTS", `${group}: generation 이미 존재 ${generation}`);
+      if (existingGeneration) throw new WebMachineError("WEB_MACHINE_GENERATION_EXISTS", `${group}: generation already exists: ${generation}`);
       const blobStore = transaction.objectStore(BLOBS);
       for (const payload of payloads) {
-        if (!payload.digest) throw new TypeError("blob digest가 필요하다");
+        if (!payload.digest) throw new TypeError("a blob digest is required");
         const existing = await requestValue(blobStore.get(payload.digest));
         if (!existing) blobStore.add(payload.bytes.buffer, payload.digest);
       }
@@ -190,7 +190,7 @@ export class IndexedDbMachineStore {
     const done = transactionDone(transaction);
     const value = await requestValue(transaction.objectStore(GENERATIONS).get(generationStorageKey(groupId, generationId)));
     await done;
-    if (!value) throw new WebMachineError("WEB_MACHINE_GENERATION_MISSING", `${groupId}: generation 없음 ${generationId}`);
+    if (!value) throw new WebMachineError("WEB_MACHINE_GENERATION_MISSING", `${groupId}: no such generation: ${generationId}`);
     return cloneRecord(value);
   }
 
@@ -228,7 +228,7 @@ export class IndexedDbMachineStore {
 
   async _planRecoveryWindow({ groupId, ownerToken, mutate, control }) {
     const group = String(groupId || "");
-    if (!group) throw new TypeError("groupId가 필요하다");
+    if (!group) throw new TypeError("a groupId is required");
     throwIfOperationAborted(control, `${group}: generation prune`);
     const database = await this._open();
     const transaction = database.transaction(ALL_STORES, mutate ? "readwrite" : "readonly");
@@ -327,7 +327,7 @@ export class IndexedDbMachineStore {
       request.onerror = () => {
         if (settled) return;
         settled = true;
-        reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB open 실패"));
+        reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "opening IndexedDB failed"));
       };
       request.onblocked = () => {
         if (settled) return;
@@ -362,7 +362,7 @@ export class IndexedDbMachineStore {
           reject(error);
         }
       };
-      request.onerror = () => reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "legacy owner database open 실패"));
+      request.onerror = () => reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "opening the legacy owner database failed"));
     });
     this._legacyEpochs.set(groupId, pending);
     return pending;

@@ -10,7 +10,7 @@ function copyRecord(value) {
 
 export class WebMachineHost {
   constructor({ devices = {}, idFactory } = {}) {
-    if (typeof idFactory !== "function") throw new TypeError("idFactory가 필요하다");
+    if (typeof idFactory !== "function") throw new TypeError("an idFactory is required");
     this._idFactory = idFactory;
     this._adapterFactories = new Map();
     this._devices = new Map();
@@ -19,31 +19,31 @@ export class WebMachineHost {
   }
 
   registerAdapter(adapterId, factory) {
-    if (!adapterId || typeof adapterId !== "string") throw new TypeError("adapterId가 필요하다");
-    if (typeof factory !== "function") throw new TypeError("adapter factory는 함수여야 한다");
+    if (!adapterId || typeof adapterId !== "string") throw new TypeError("an adapterId is required");
+    if (typeof factory !== "function") throw new TypeError("the adapter factory must be a function");
     if (this._adapterFactories.has(adapterId)) {
-      throw new WebMachineError("WEB_MACHINE_ADAPTER_DUPLICATE", `adapter 중복: ${adapterId}`);
+      throw new WebMachineError("WEB_MACHINE_ADAPTER_DUPLICATE", `duplicate adapter: ${adapterId}`);
     }
     this._adapterFactories.set(adapterId, factory);
     return this;
   }
 
   registerDevice(name, device) {
-    if (!name || typeof name !== "string") throw new TypeError("device name이 필요하다");
+    if (!name || typeof name !== "string") throw new TypeError("a device name is required");
     if (!device || typeof device !== "object" || typeof device.kind !== "string") {
-      throw new TypeError(`device ${name}: kind가 필요하다`);
+      throw new TypeError(`device ${name}: a kind is required`);
     }
     this._devices.set(name, device);
     return this;
   }
 
   createMachine({ machineId, adapterId, manifest = {}, permissions = { devices: [] } }) {
-    if (!machineId || typeof machineId !== "string") throw new TypeError("machineId가 필요하다");
+    if (!machineId || typeof machineId !== "string") throw new TypeError("a machineId is required");
     if (this._machines.has(machineId)) {
-      throw new WebMachineError("WEB_MACHINE_DUPLICATE", `machine 중복: ${machineId}`);
+      throw new WebMachineError("WEB_MACHINE_DUPLICATE", `duplicate machine: ${machineId}`);
     }
     if (!this._adapterFactories.has(adapterId)) {
-      throw new WebMachineError("WEB_MACHINE_ADAPTER_UNAVAILABLE", `adapter 없음: ${adapterId}`);
+      throw new WebMachineError("WEB_MACHINE_ADAPTER_UNAVAILABLE", `no such adapter: ${adapterId}`);
     }
     const machine = new MachineHandle(this, {
       machineId,
@@ -74,12 +74,12 @@ export class WebMachineHost {
   // 들고 있어서, 떼도 guest는 옛 참조를 계속 쓴다 = 조용한 불일치).
   detachDevice(name) {
     if (!this._devices.has(name)) {
-      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `device 없음: ${name}`);
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `no such device: ${name}`);
     }
     const users = [...this._machines.values()].filter((machine) => machine.usesDevice(name));
     if (users.length) {
       throw new WebMachineError("WEB_MACHINE_DEVICE_IN_USE",
-        `device 사용 중: ${name} (${users.map((machine) => machine.machineId).join(", ")})`);
+        `device is in use: ${name} (${users.map((machine) => machine.machineId).join(", ")})`);
     }
     this._devices.delete(name);
     return this;
@@ -91,20 +91,20 @@ export class WebMachineHost {
   destroyMachine(machineId) {
     const machine = this._machines.get(machineId);
     if (!machine) {
-      throw new WebMachineError("WEB_MACHINE_UNAVAILABLE", `machine 없음: ${machineId}`);
+      throw new WebMachineError("WEB_MACHINE_UNAVAILABLE", `no such machine: ${machineId}`);
     }
     if (machine.state !== "created" && machine.state !== "stopped") {
       throw new WebMachineError("WEB_MACHINE_MACHINE_IN_USE",
-        `machine 제거는 정지 상태에서만 가능하다: ${machineId} (${machine.state})`);
+        `a machine can only be removed while stopped: ${machineId} (${machine.state})`);
     }
     this._machines.delete(machineId);
     return this;
   }
 
   preflightMachine({ machineId, adapterId, adapterVersion, snapshotScope, permissions = { devices: [] } }) {
-    if (!machineId || typeof machineId !== "string") throw new TypeError("machineId가 필요하다");
+    if (!machineId || typeof machineId !== "string") throw new TypeError("a machineId is required");
     if (this._machines.has(machineId)) {
-      throw new WebMachineError("WEB_MACHINE_DUPLICATE", `machine 중복: ${machineId}`);
+      throw new WebMachineError("WEB_MACHINE_DUPLICATE", `duplicate machine: ${machineId}`);
     }
     const created = this._createAdapter(adapterId);
     if (created.capabilities.adapterVersion !== adapterVersion) {
@@ -128,13 +128,13 @@ export class WebMachineHost {
 
   _nextInstanceId() {
     const instanceId = String(this._idFactory() || "");
-    if (!instanceId) throw new TypeError("idFactory는 비어 있지 않은 ID를 반환해야 한다");
+    if (!instanceId) throw new TypeError("idFactory must return a non-empty ID");
     return instanceId;
   }
 
   _createAdapter(adapterId) {
     const factory = this._adapterFactories.get(adapterId);
-    if (!factory) throw new WebMachineError("WEB_MACHINE_ADAPTER_UNAVAILABLE", `adapter 없음: ${adapterId}`);
+    if (!factory) throw new WebMachineError("WEB_MACHINE_ADAPTER_UNAVAILABLE", `no such adapter: ${adapterId}`);
     return instantiateAdapter(adapterId, factory);
   }
 
@@ -144,10 +144,10 @@ export class WebMachineHost {
     for (const requirement of capabilities.requiredDevices) {
       const name = String(requirement.name || "");
       if (!allowed.has(name)) {
-        throw new WebMachineError("WEB_MACHINE_DEVICE_PERMISSION_DENIED", `${machine.machineId}: device 권한 없음 ${name}`);
+        throw new WebMachineError("WEB_MACHINE_DEVICE_PERMISSION_DENIED", `${machine.machineId}: no permission for device ${name}`);
       }
       const device = this._devices.get(name);
-      if (!device) throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `${machine.machineId}: device 없음 ${name}`);
+      if (!device) throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `${machine.machineId}: no such device ${name}`);
       if (requirement.kind && device.kind !== requirement.kind) {
         throw new WebMachineError("WEB_MACHINE_DEVICE_KIND_UNSUPPORTED", `${machine.machineId}: ${name} kind ${device.kind} != ${requirement.kind}`);
       }

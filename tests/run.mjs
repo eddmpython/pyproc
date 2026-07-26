@@ -3143,7 +3143,7 @@ section("진입 표면 언어");
     }
     if (korean) throw new Error(`d.ts 주석에 한국어가 남았다: ${byFile.join(", ")}`);
   });
-  const MESSAGE_LANGUAGE_BUDGET = 309;
+  const MESSAGE_LANGUAGE_BUDGET = 233;
   check("사용자 대면 메시지의 한국어 예산은 단조 감소한다", () => {
     let korean = 0;
     const byFile = new Map();

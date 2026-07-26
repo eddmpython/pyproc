@@ -42,8 +42,8 @@ export class MachineHandle {
 
   adoptOwnership({ ownerId, epoch }) {
     const nextOwnerId = String(ownerId || "");
-    if (!nextOwnerId) throw new TypeError("ownerId가 필요하다");
-    if (!Number.isSafeInteger(epoch) || epoch < 1) throw new TypeError("ownership epoch는 1 이상 정수여야 한다");
+    if (!nextOwnerId) throw new TypeError("an ownerId is required");
+    if (!Number.isSafeInteger(epoch) || epoch < 1) throw new TypeError("the ownership epoch must be an integer >= 1");
     if (epoch < this.epoch) {
       throw new WebMachineError("WEB_MACHINE_OWNERSHIP_STALE", `${this.machineId}: ownership epoch ${epoch} < ${this.epoch}`);
     }
@@ -114,7 +114,7 @@ export class MachineHandle {
     return this._enqueue("snapshot", async () => {
       this._expect(["paused"], "snapshot");
       if (!this._capabilities || this._capabilities.snapshotScope === "none") {
-        throw new WebMachineError("WEB_MACHINE_SNAPSHOT_UNSUPPORTED", `${this.machineId}: snapshot 미지원`);
+        throw new WebMachineError("WEB_MACHINE_SNAPSHOT_UNSUPPORTED", `${this.machineId}: snapshots are not supported`);
       }
       const envelope = createSnapshotEnvelope({
         machineId: this.machineId,
@@ -144,19 +144,19 @@ export class MachineHandle {
       });
       const cold = this.state === "created" || this.state === "stopped";
       if (cold && envelope.snapshotScope !== "portable") {
-        throw new WebMachineError("WEB_MACHINE_SNAPSHOT_SCOPE", `${this.machineId}: ${envelope.snapshotScope} snapshot은 cold restore 불가`);
+        throw new WebMachineError("WEB_MACHINE_SNAPSHOT_SCOPE", `${this.machineId}: a ${envelope.snapshotScope} snapshot cannot be cold-restored`);
       }
       if (cold) {
         const created = this._host._createAdapter(this.adapterId);
         const context = this._host._openContext(this, created.capabilities);
         if (created.capabilities.adapterVersion !== envelope.adapterVersion || created.capabilities.snapshotScope !== envelope.snapshotScope) {
-          throw new WebMachineError("WEB_MACHINE_SNAPSHOT_INCOMPATIBLE", `${this.machineId}: adapter capability 불일치`);
+          throw new WebMachineError("WEB_MACHINE_SNAPSHOT_INCOMPATIBLE", `${this.machineId}: adapter capability mismatch`);
         }
         this._adapter = created.adapter;
         this._capabilities = created.capabilities;
         this._context = context;
       } else if (envelope.snapshotScope === "session" && envelope.originInstanceId !== this.instanceId) {
-        throw new WebMachineError("WEB_MACHINE_SNAPSHOT_SCOPE", `${this.machineId}: 다른 session snapshot`);
+        throw new WebMachineError("WEB_MACHINE_SNAPSHOT_SCOPE", `${this.machineId}: snapshot belongs to a different session`);
       }
       await this._adapter.restore(payload, this._context, this.manifest, control);
       this._setState("paused", "restored");
@@ -200,7 +200,7 @@ export class MachineHandle {
 
   _expect(states, operation) {
     if (!states.includes(this.state)) {
-      throw new WebMachineError("WEB_MACHINE_INVALID_STATE", `${this.machineId}: ${operation}은 ${this.state}에서 불가`, {
+      throw new WebMachineError("WEB_MACHINE_INVALID_STATE", `${this.machineId}: ${operation} is not allowed while ${this.state}`, {
         expected: states,
         actual: this.state,
       });
