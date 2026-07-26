@@ -327,10 +327,27 @@ CLI는 Worker / SharedWorker / Service Worker import graph를 따라가고, `--c
 
 셋업은 두 티어다. "그냥 설치하고 import"는 기본에서 참이지만 전부에서는 아니다:
 
-| 하고 싶은 것 | 필요한 것 |
-|---|---|
-| `boot` / `run` / `loadPackages`, `enableReactive`(체크포인트·시간여행) | `npm install` + Chromium 브라우저. 헤더 불필요. |
-| `PyProc`(fork·`map`·interrupt), IPC, 블로킹 소켓 | 아래 두 헤더 + **same-origin 워커 파일**(= npm 설치/벤더링, CDN 직접 import 불가) |
+| 하고 싶은 것 | 필요한 것 | 엔진 자산 |
+|---|---|---|
+| `boot` / `run` / 패키지, `machine.history`(체크포인트·시간여행) | `npm install` + Chromium 브라우저. 헤더 불필요. | 런타임에 `cdn.jsdelivr.net/pyodide/v314.0.2/full/`에서 받는다(`indexURL`로 대체 가능) |
+| `machine.proc()`(fork·`map`·interrupt), IPC, 블로킹 소켓 | 아래 두 헤더 + **same-origin 워커 파일**(= npm 설치/벤더링, CDN 직접 import 불가) | 같고, 워커 파일도 same-origin이어야 한다 |
+
+
+**엔진 자산은 이 패키지에 없다.** 기본 `indexURL`이 jsDelivr를 가리키므로 첫 부팅이 Pyodide
+배포판(wasm + stdlib + lock)을 내려받는다. 통제 수단 셋:
+
+```js
+// 1. 자체 호스팅: Pyodide 릴리즈를 정적 자산으로 복사하고 그 경로를 준다.
+await boot({ indexURL: "/vendor/pyodide/" });
+// 2. 코어를 OPFS에 캐시해 두 번째 부팅부터 fetch 계층 네트워크 0.
+await boot({ coreCacheDir: await navigator.storage.getDirectory() });
+// 3. 받은 것을 검증한다(엔진 graph의 fail-closed SRI).
+await boot({ engineScriptIntegrity: "sha256-...", coreIntegrity: { /* 파일별 SRI */ } });
+```
+
+(1)은 이 저장소에서 `npm run fetch:engine`으로 받지만 그 스크립트는 게시 패키지에 없다.
+제품에서는 `node_modules/pyodide`나 릴리즈 tarball을 서빙 경로로 복사한다. 핀 버전은 소비
+계약이다: [docs/consuming/contract.md](docs/consuming/contract.md).
 
 pyproc을 띄우는 페이지를 다음 헤더로 서빙한다:
 

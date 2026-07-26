@@ -388,6 +388,14 @@ the provider that persistence and image constructors now require - they no longe
 a bare `Crypto` object. Errors here are `WebMachineError` (with `code`) or `TypeError`
 (argument contract).
 
+### Engine assets
+
+`boot()` does not carry the Pyodide distribution; it fetches it from `indexURL` (default
+`https://cdn.jsdelivr.net/pyodide/v314.0.2/full/`). Control it with `indexURL` (self-hosted path),
+`coreCacheDir` (an OPFS directory: later boots read the cached core instead of the network), and
+`engineScriptIntegrity` / `coreIntegrity` (fail-closed SRI over the engine graph). A boot that
+cannot reach the distribution fails with `PYPROC_BOOT_FAILED` naming the URL it tried.
+
 ### `pyproc/assets`
 
 Deployment asset integrity, typed in `src/runtime/assets.d.ts`:

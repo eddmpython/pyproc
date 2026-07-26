@@ -329,10 +329,27 @@ The CLI follows the Worker / SharedWorker / Service Worker import graph, copies 
 
 There are two tiers of setup, so "just install and import" is true for the basics but not for everything:
 
-| You want | You need |
-|---|---|
-| `boot` / `run` / `loadPackages`, `enableReactive` (checkpoint, time-travel) | Just `npm install` plus a Chromium browser. No headers. |
-| `PyProc` (fork, `map`, interrupt), IPC, blocking sockets | The two headers below, plus **same-origin worker files** (so npm install / vendoring, not CDN import) |
+| You want | You need | Engine assets |
+|---|---|---|
+| `boot` / `run` / packages, `machine.history` (checkpoint, time-travel) | `npm install` plus a Chromium browser. No headers. | Fetched at runtime from `cdn.jsdelivr.net/pyodide/v314.0.2/full/` unless you pass `indexURL` |
+| `machine.proc()` (fork, `map`, interrupt), IPC, blocking sockets | The two headers below, plus **same-origin worker files** (so npm install / vendoring, not CDN import) | Same, and the worker file must be same-origin |
+
+**Engine assets are not in this package.** The default `indexURL` points at jsDelivr, so the first
+boot downloads the Pyodide distribution (wasm + stdlib + lock). Three ways to control that:
+
+```js
+// 1. Self-host: copy a Pyodide release into your static assets and point at it.
+await boot({ indexURL: "/vendor/pyodide/" });
+// 2. Cache the core in OPFS so later boots do no network at the fetch layer.
+await boot({ coreCacheDir: await navigator.storage.getDirectory() });
+// 3. Verify what you fetch (fail-closed SRI over the engine graph).
+await boot({ engineScriptIntegrity: "sha256-...", coreIntegrity: { /* per-file SRI */ } });
+```
+
+For (1) this repository vendors a release with `npm run fetch:engine` (a development script, not
+part of the published package); in your own product, copy `node_modules/pyodide` or a release
+tarball into the path you serve. The pinned version is the consuming contract:
+[docs/consuming/contract.md](docs/consuming/contract.md).
 
 Serve the page that hosts pyproc with:
 
