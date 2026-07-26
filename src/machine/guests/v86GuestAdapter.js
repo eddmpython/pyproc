@@ -16,6 +16,7 @@ import { V86ClockPort } from "./v86ClockPort.js";
 import { V86EntropyPort } from "./v86EntropyPort.js";
 import { createV86WasmHostFunction } from "./v86WasmHostBridge.js";
 import { V86SerialPort } from "./v86SerialPort.js";
+import { indexRequirements, resolveRequiredDevice } from "../contracts/deviceRequirement.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
@@ -101,13 +102,15 @@ class V86GuestAdapter {
       requiredDevices: [
         { name: "console", kind: "console" },
         ...(this._blockDeviceName ? [{ name: this._blockDeviceName, kind: "block" }] : []),
-        ...(this._packetDeviceName ? [{ name: this._packetDeviceName, kind: "network", mode: "packet" }] : []),
-        ...(this._displayDeviceName ? [{ name: this._displayDeviceName, kind: "display", mode: "text-cells" }] : []),
-        ...(this._inputDeviceName ? [{ name: this._inputDeviceName, kind: "input", mode: "ps2-scan-code" }] : []),
-        ...(this._framebufferDeviceName ? [{ name: this._framebufferDeviceName, kind: "display", mode: "rgba-frame" }] : []),
-        ...(this._pointerDeviceName ? [{ name: this._pointerDeviceName, kind: "input", mode: "relative-pointer" }] : []),
-        ...(this._clockDeviceName ? [{ name: this._clockDeviceName, kind: "clock", mode: "wall-monotonic" }] : []),
-        ...(this._entropyDeviceName ? [{ name: this._entropyDeviceName, kind: "entropy", mode: "cryptographic-random" }] : []),
+        // methods까지 선언에 싣는다: host가 읽는 요구와 어댑터가 실제로 필요한 것이 같아야 한다.
+        // 예전에는 여기 선언과 아래 명령형 검사가 갈려서 host가 아는 요구가 실제보다 약했다.
+        ...(this._packetDeviceName ? [{ name: this._packetDeviceName, kind: "network", mode: "packet", methods: ["connect"] }] : []),
+        ...(this._displayDeviceName ? [{ name: this._displayDeviceName, kind: "display", mode: "text-cells", methods: ["connect"] }] : []),
+        ...(this._inputDeviceName ? [{ name: this._inputDeviceName, kind: "input", mode: "ps2-scan-code", methods: ["connect"] }] : []),
+        ...(this._framebufferDeviceName ? [{ name: this._framebufferDeviceName, kind: "display", mode: "rgba-frame", methods: ["connect"] }] : []),
+        ...(this._pointerDeviceName ? [{ name: this._pointerDeviceName, kind: "input", mode: "relative-pointer", methods: ["connect"] }] : []),
+        ...(this._clockDeviceName ? [{ name: this._clockDeviceName, kind: "clock", mode: "wall-monotonic", methods: ["readWallTimeMs", "readMonotonicTimeMs"] }] : []),
+        ...(this._entropyDeviceName ? [{ name: this._entropyDeviceName, kind: "entropy", mode: "cryptographic-random", methods: ["read"] }] : []),
       ],
     };
     this._V86 = V86;
@@ -135,7 +138,7 @@ class V86GuestAdapter {
     await this._createEmulator({ autostart: this._blockMode !== "filesystem", attachInteractiveInputs: true, control });
     if (this._blockMode === "filesystem") {
       this._volumeStats = await readV86FileSystemVolume({
-        device: this._blockDevice(),
+        device: this._device(this._blockDeviceName),
         fileSystem: this._fileSystem(),
         emptyState: this._emptyFileSystemState,
         allowEmpty: true,
@@ -159,7 +162,7 @@ class V86GuestAdapter {
       await this._displayPort?.drain();
       await this._framebufferPort?.drain();
       if (this._blockMode === "filesystem") {
-        this._volumeStats = await writeV86FileSystemVolume({ device: this._blockDevice(), fileSystem: this._fileSystem() });
+        this._volumeStats = await writeV86FileSystemVolume({ device: this._device(this._blockDeviceName), fileSystem: this._fileSystem() });
       }
     } catch (error) {
       this._inputPort?.attach(this._requireEmulator());
@@ -217,7 +220,7 @@ class V86GuestAdapter {
     this._clockPort?.synchronizeWallClock();
     if (this._blockMode === "filesystem") {
       this._volumeStats = await readV86FileSystemVolume({
-        device: this._blockDevice(),
+        device: this._device(this._blockDeviceName),
         fileSystem: this._fileSystem(),
         emptyState: this._emptyFileSystemState,
       });
@@ -241,9 +244,9 @@ class V86GuestAdapter {
       await this._displayPort?.drain();
       await this._framebufferPort?.drain();
       if (this._blockMode === "filesystem" && this._emulator.fs9p) {
-        this._volumeStats = await writeV86FileSystemVolume({ device: this._blockDevice(), fileSystem: this._fileSystem() });
+        this._volumeStats = await writeV86FileSystemVolume({ device: this._device(this._blockDeviceName), fileSystem: this._fileSystem() });
       }
-      if (this._blockDeviceName) await this._blockDevice().flush();
+      if (this._blockDeviceName) await this._device(this._blockDeviceName).flush();
       this._emulator.remove_listener("serial0-output-byte", this._onSerialByte);
       this._packetPort?.detach();
       this._displayPort?.detach();
@@ -304,8 +307,8 @@ class V86GuestAdapter {
       throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "x86 adapter: packet device와 relay 동시 사용 불가");
     }
     if (this._packetDeviceName) options.preserve_mac_from_state_image = true;
-    if (this._clockDeviceName) this._clockPort = new V86ClockPort({ device: this._clockDevice() });
-    if (this._entropyDeviceName) this._entropyPort = new V86EntropyPort({ device: this._entropyDevice() });
+    if (this._clockDeviceName) this._clockPort = new V86ClockPort({ device: this._device(this._clockDeviceName) });
+    if (this._entropyDeviceName) this._entropyPort = new V86EntropyPort({ device: this._device(this._entropyDeviceName) });
     if (this._clockPort || this._entropyPort) {
       if (options.wasm_fn) throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "x86 adapter: manifest wasm_fn과 clock/entropy bridge 동시 사용 불가");
       options.wasm_fn = createV86WasmHostFunction({
@@ -315,8 +318,7 @@ class V86GuestAdapter {
       });
     }
     if (this._blockMode === "ata") {
-      const device = this._context?.devices?.[this._blockDeviceName];
-      this._blockBuffer = new V86BlockBuffer(device);
+      this._blockBuffer = new V86BlockBuffer(this._device(this._blockDeviceName));
       options.hda = this._blockBuffer;
       if (!options.boot_order) options.boot_order = 0x123;
     }
@@ -326,28 +328,28 @@ class V86GuestAdapter {
     emulator.add_listener("serial0-output-byte", this._onSerialByte);
     if (this._packetDeviceName) {
       this._packetPort = new V86PacketPort({
-        device: this._packetDevice(),
+        device: this._device(this._packetDeviceName),
         endpointId: this._context.machineId,
       });
       this._packetPort.attach(emulator);
     }
     if (this._displayDeviceName) {
       this._displayPort = new V86DisplayPort({
-        device: this._displayDevice(),
+        device: this._device(this._displayDeviceName),
         endpointId: this._context.machineId,
       });
       this._displayPort.attach(emulator);
     }
     if (this._inputDeviceName) {
       this._inputPort = new V86InputPort({
-        device: this._inputDevice(),
+        device: this._device(this._inputDeviceName),
         endpointId: this._context.machineId,
       });
       if (attachInteractiveInputs) this._inputPort.attach(emulator);
     }
     if (this._framebufferDeviceName) {
       this._framebufferPort = new V86FramebufferPort({
-        device: this._framebufferDevice(),
+        device: this._device(this._framebufferDeviceName),
         source: this._framebufferSource,
         endpointId: this._context.machineId,
       });
@@ -355,7 +357,7 @@ class V86GuestAdapter {
     }
     if (this._pointerDeviceName) {
       this._pointerPort = new V86PointerPort({
-        device: this._pointerDevice(),
+        device: this._device(this._pointerDeviceName),
         endpointId: this._context.machineId,
       });
       if (attachInteractiveInputs) this._pointerPort.attach(emulator);
@@ -420,67 +422,11 @@ class V86GuestAdapter {
     return this._emulator;
   }
 
-  _blockDevice() {
-    const device = this._context?.devices?.[this._blockDeviceName];
-    if (!device || device.kind !== "block") throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: block device 없음 ${this._blockDeviceName}`);
-    return device;
-  }
-
-  _packetDevice() {
-    const device = this._context?.devices?.[this._packetDeviceName];
-    if (!device || device.kind !== "network" || device.mode !== "packet" || typeof device.connect !== "function") {
-      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: packet network device 없음 ${this._packetDeviceName}`);
-    }
-    return device;
-  }
-
-  _displayDevice() {
-    const device = this._context?.devices?.[this._displayDeviceName];
-    if (!device || device.kind !== "display" || device.mode !== "text-cells" || typeof device.connect !== "function") {
-      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: text display device 없음 ${this._displayDeviceName}`);
-    }
-    return device;
-  }
-
-  _inputDevice() {
-    const device = this._context?.devices?.[this._inputDeviceName];
-    if (!device || device.kind !== "input" || device.mode !== "ps2-scan-code" || typeof device.connect !== "function") {
-      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: PS/2 input device 없음 ${this._inputDeviceName}`);
-    }
-    return device;
-  }
-
-  _framebufferDevice() {
-    const device = this._context?.devices?.[this._framebufferDeviceName];
-    if (!device || device.kind !== "display" || device.mode !== "rgba-frame" || typeof device.connect !== "function") {
-      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: RGBA framebuffer device 없음 ${this._framebufferDeviceName}`);
-    }
-    return device;
-  }
-
-  _pointerDevice() {
-    const device = this._context?.devices?.[this._pointerDeviceName];
-    if (!device || device.kind !== "input" || device.mode !== "relative-pointer" || typeof device.connect !== "function") {
-      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: relative pointer device 없음 ${this._pointerDeviceName}`);
-    }
-    return device;
-  }
-
-  _clockDevice() {
-    const device = this._context?.devices?.[this._clockDeviceName];
-    if (!device || device.kind !== "clock" || device.mode !== "wall-monotonic"
-      || typeof device.readWallTimeMs !== "function" || typeof device.readMonotonicTimeMs !== "function") {
-      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: wall-monotonic clock device 없음 ${this._clockDeviceName}`);
-    }
-    return device;
-  }
-
-  _entropyDevice() {
-    const device = this._context?.devices?.[this._entropyDeviceName];
-    if (!device || device.kind !== "entropy" || device.mode !== "cryptographic-random" || typeof device.read !== "function") {
-      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `x86 adapter: cryptographic entropy device 없음 ${this._entropyDeviceName}`);
-    }
-    return device;
+  // 선언(capabilities.requiredDevices)이 유일 진실이다. 이름으로 요구를 찾아 해석하며,
+  // kind/mode/methods 판정은 contracts/deviceRequirement.js 한 곳에 있다.
+  _device(name) {
+    if (!this._requirementByName) this._requirementByName = indexRequirements(this.capabilities.requiredDevices);
+    return resolveRequiredDevice(this._context?.devices, this._requirementByName.get(name), "x86 adapter");
   }
 
   _fileSystem() {

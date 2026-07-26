@@ -2,6 +2,7 @@
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { readPyprocHomeVolume, writePyprocHomeVolume } from "./pyprocHomeVolume.js";
+import { indexRequirements, resolveRequiredDevice } from "../contracts/deviceRequirement.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
@@ -38,7 +39,7 @@ class PyprocGuestAdapter {
     this._session = await this._bootSession(manifest.session || {});
     this._ensureHome();
     if (this._blockDeviceName) {
-      await readPyprocHomeVolume({ device: this._blockDevice(), fs: this._session.rt.fs, allowEmpty: true });
+      await readPyprocHomeVolume({ device: this._device(this._blockDeviceName), fs: this._session.rt.fs, allowEmpty: true });
     }
     throwIfOperationAborted(control, `${context.machineId}: pyproc boot`, { outcomeUnknown: true });
     consoleWrite(context, `pyproc:boot:${context.machineId}`);
@@ -47,7 +48,7 @@ class PyprocGuestAdapter {
   async pause(control) {
     throwIfOperationAborted(control, "pyproc pause");
     if (this._blockDeviceName) {
-      await writePyprocHomeVolume({ device: this._blockDevice(), fs: this._session.rt.fs });
+      await writePyprocHomeVolume({ device: this._device(this._blockDeviceName), fs: this._session.rt.fs });
     }
     consoleWrite(this._context, "pyproc:pause");
   }
@@ -70,7 +71,7 @@ class PyprocGuestAdapter {
     this._session = await this._openMachine(new Blob([payload], { type: "application/x-pymachine" }), { trust: true });
     this._ensureHome();
     if (this._blockDeviceName) {
-      await readPyprocHomeVolume({ device: this._blockDevice(), fs: this._session.rt.fs });
+      await readPyprocHomeVolume({ device: this._device(this._blockDeviceName), fs: this._session.rt.fs });
     }
     throwIfOperationAborted(control, `${context.machineId}: pyproc restore`, { outcomeUnknown: true });
     consoleWrite(context, `pyproc:restore:${context.machineId}`);
@@ -79,7 +80,7 @@ class PyprocGuestAdapter {
   async shutdown(control) {
     throwIfOperationAborted(control, "pyproc shutdown");
     if (this._session && this._blockDeviceName) {
-      const device = this._blockDevice();
+      const device = this._device(this._blockDeviceName);
       await writePyprocHomeVolume({ device, fs: this._session.rt.fs });
       await device.flush();
     }
@@ -126,9 +127,9 @@ class PyprocGuestAdapter {
     this._session.rt.run("from pathlib import Path\nPath('/home/web').mkdir(parents=True, exist_ok=True)");
   }
 
-  _blockDevice() {
-    const device = this._context?.devices?.[this._blockDeviceName];
-    if (!device || device.kind !== "block") throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `pyproc adapter: block device 없음 ${this._blockDeviceName}`);
-    return device;
+  // 선언(capabilities.requiredDevices)이 유일 진실이다. 판정은 contracts/deviceRequirement.js.
+  _device(name) {
+    if (!this._requirementByName) this._requirementByName = indexRequirements(this.capabilities.requiredDevices);
+    return resolveRequiredDevice(this._context?.devices, this._requirementByName.get(name), "pyproc adapter");
   }
 }

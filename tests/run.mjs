@@ -2131,6 +2131,10 @@ const webMachineSourceRoots = [machineRoot, webMachineTestRoot];
 //  contracts와 host가 이 둘을 import하는 것이 실측 edge라 폴더 단위 rank는 성립하지 않는다).
 const machinePureFiles = new Set([
   "src/machine/contracts/adapterContract.js",
+  // 장치 요구 해석 법. 순수하다: 오류 계약만 import하고 browser 전역도 guest 이름도 없다.
+  // 그래서 guest가 직접 소비할 수 있고, 그것이 이 파일이 존재하는 이유다(선언 = 유일 진실).
+  // byteCodec은 여기 없다: atob/Buffer 전역을 만지므로 platform(1)이 정직한 층위다.
+  "src/machine/contracts/deviceRequirement.js",
   "src/machine/contracts/operationControl.js",
   "src/machine/contracts/webMachineError.js",
   "src/machine/host/commandQueue.js",
@@ -2332,6 +2336,20 @@ check("Web Machine 층 내부 import는 아래로만", () => {
     }
   }
   if (problems.length) throw new Error(problems.slice(0, 8).join("; "));
+});
+// guest는 자기 선언 밖의 장치를 해석하지 않는다. 예전에는 선언과 명령형 검사가 갈려서
+// host가 아는 요구가 실제보다 약했다(선언에 없던 메서드 요구를 어댑터만 알았다).
+check("guest는 선언(requiredDevices)으로만 장치를 해석한다", () => {
+  const problems = [];
+  for (const file of collect(join(machineRoot, "guests"), [".js"], [])) {
+    const code = stripComments(readFileSync(file, "utf8"));
+    if (!/_context\??\.devices/.test(code)) continue;
+    // 허용되는 유일한 형태: 해석 함수에 devices 맵을 넘기는 것. 직접 색인은 선언 우회다.
+    const direct = [...code.matchAll(/_context\??\.devices\s*\??\.?\s*\[/g)];
+    if (direct.length) problems.push(`${rel(file)}: devices 직접 색인 ${direct.length}곳`);
+    if (!/resolveRequiredDevice\(/.test(code)) problems.push(`${rel(file)}: 선언 기반 해석 미사용`);
+  }
+  if (problems.length) throw new Error(problems.join("; "));
 });
 check("Web Machine 장치·지속층은 guest를 모름", () => {
   // 옛 @web-machine/browser의 경계: 장치/지속성/조율은 어떤 게스트 이름도 모른다.
