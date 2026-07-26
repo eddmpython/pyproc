@@ -1,25 +1,41 @@
 #!/bin/sh
-# Block em dash (U+2014) in staged docs and source.
+# Block em dash (U+2014) and stray C0 control characters in staged text-surface files.
 # Rule SSOT: CLAUDE.md "문서와 소스에 em dash 문자(U+2014) 금지".
-# Scope must match the Node gate's TEXT_SURFACE_EXTS in tests/run.mjs. When it was narrower
-# (*.md, *.js only), a violation landed in scripts/*.mjs and only npm test caught it.
+# Scope must match the Node gate's TEXT_SURFACE_EXTS + TEXT_SURFACE_FILES in tests/run.mjs.
+# When it was narrower (*.md, *.js only), a violation landed in scripts/*.mjs and only npm
+# test caught it. Control characters are here for the same reason as the gate: a raw U+0008
+# written into a regex (\b intended) silently kills the check that contains it, and finding
+# that at CI time means the dead check already shipped in a commit.
 
 emdash="$(printf '\342\200\224')"
+# The class is built with printf so grep receives real control characters. Writing
+# '[\000-\010...]' inline does NOT work: POSIX grep treats the backslashes literally inside a
+# bracket expression, so the pattern matches every backslash and digit instead (it flagged
+# every staged file the first time). NUL cannot live in a shell string; git already treats a
+# file containing NUL as binary, so it never reaches this text-surface scope.
+control="$(printf '[\001-\010\013\014\016-\037\177]')"
 blocked=0
 
 for file in $(git diff --cached --name-only --diff-filter=ACM); do
   case "$file" in
     *.md|*.js|*.mjs|*.ts|*.html|*.css|*.yml|*.json) ;;
+    _headers|.githooks/*) ;;
     *) continue ;;
   esac
   if git show ":$file" | grep -q "$emdash"; then
     echo "blocked: em dash(U+2014) found in staged file: $file" >&2
     blocked=1
   fi
+  # TAB(011), LF, CR are legitimate; every other C0 char and DEL(177) is not.
+  if git show ":$file" | LC_ALL=C grep -q "$control"; then
+    echo "blocked: control character found in staged file: $file" >&2
+    blocked=1
+  fi
 done
 
 if [ "$blocked" -ne 0 ]; then
   echo "blocked: replace em dash with '-' or rewrite the sentence (CLAUDE.md rule)" >&2
+  echo "blocked: a control character usually means an escape was written raw (\\b, \\n)" >&2
   exit 1
 fi
 

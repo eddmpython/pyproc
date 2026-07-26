@@ -376,9 +376,17 @@ check("pyproc/history: 커널 계약 표면", () => {
 //    좁혔던 스코프(.md/.js/.mjs)의 틈에서 실제로 위반이 났다(2026-07-26, scripts/*.mjs).
 section("em dash");
 const TEXT_SURFACE_EXTS = [".md", ".js", ".mjs", ".ts", ".html", ".css", ".yml", ".json"];
+// 확장자가 없어서 스코프 밖이던 텍스트 표면. `_headers`는 COOP/COEP 배포 계약이고 훅은
+// 규칙 집행 코드다: 둘 다 em dash와 원시 제어문자가 들어가면 안 되는 자리인데, 판정이
+// 확장자로만 돌아 아무도 보지 않았다(2026-07-27).
+const TEXT_SURFACE_FILES = ["_headers", ".githooks/commit-msg", ".githooks/pre-commit", ".githooks/pre-push", ".githooks/reference-transaction"];
+const textSurfaceFiles = () => [
+  ...collect(ROOT, TEXT_SURFACE_EXTS, []),
+  ...TEXT_SURFACE_FILES.map((name) => join(ROOT, name)).filter((f) => existsSync(f)),
+];
 // 훅과 이 게이트의 스코프가 갈라지면 커밋 시점 차단과 CI 차단이 다른 것을 본다. 실제로
 // 갈라져 있었다(훅은 .md/.js, 게이트는 .md/.js/.mjs). 두 스코프를 기계로 묶는다.
-check("pre-commit 훅의 em dash 스코프 = 게이트 스코프", () => {
+check("pre-commit 훅의 텍스트 표면 스코프 = 게이트 스코프", () => {
   const hook = readFileSync(join(ROOT, ".githooks", "pre-commit"), "utf8");
   const patterns = /^\s*(\*\.[a-z|.*]+)\)\s*;;/m.exec(hook);
   if (!patterns) throw new Error("훅의 확장자 case 목록을 찾지 못했다");
@@ -387,9 +395,15 @@ check("pre-commit 훅의 em dash 스코프 = 게이트 스코프", () => {
   if (hookExts.join(",") !== gateExts.join(",")) {
     throw new Error(`스코프 불일치: 훅 ${hookExts.join(",")} vs 게이트 ${gateExts.join(",")}`);
   }
+  // 확장자 없는 표면도 훅이 함께 봐야 한다(`_headers|.githooks/*` case).
+  for (const glob of ["_headers", ".githooks/*"]) {
+    if (!hook.includes(glob)) throw new Error(`훅 스코프에 ${glob} 없음`);
+  }
+  // 제어문자 차단도 훅에 있어야 한다: CI에서만 잡으면 죽은 검사가 이미 커밋된 뒤다.
+  if (!/control character found/.test(hook)) throw new Error("훅에 제어문자 차단 없음");
 });
 const EMDASH = String.fromCharCode(0x2014); // 리터럴로 쓰면 이 게이트가 자기 자신에 걸린다
-for (const f of collect(ROOT, TEXT_SURFACE_EXTS, [])) {
+for (const f of textSurfaceFiles()) {
   check(`no em dash: ${rel(f)}`, () => {
     if (readFileSync(f, "utf8").includes(EMDASH)) throw new Error("U+2014 발견");
   });
@@ -403,7 +417,7 @@ for (const f of collect(ROOT, TEXT_SURFACE_EXTS, [])) {
 section("제어문자");
 {
   const ALLOWED_CONTROL = new Set([9, 10, 13]);
-  for (const f of collect(ROOT, TEXT_SURFACE_EXTS, [])) {
+  for (const f of textSurfaceFiles()) {
     check(`제어문자 0: ${rel(f)}`, () => {
       const text = readFileSync(f, "utf8");
       const hits = [];
@@ -535,14 +549,22 @@ section("digest 법");
     "src/capabilities/pyprocSw.js",
     "src/runtime/engines/wasi/browserWasiShim.js", // 벤더 번들(서드파티 스코프)
   ]);
-  // localeCompare도 이 법에 넣는다: 내용주소와 서명 대상의 엔트리 순서가 로케일/ICU 판본에
-  // 따라 달라지면 같은 상태가 다른 커밋 주소를 낳는다(실측: durable commit 주소 계산 2곳,
-  // 볼륨 엔트리 정렬 3곳). 라이브러리에 사용자 대면 정렬은 없으므로 src 전면 금지가 옳다.
-  const CODEC_PATTERN = /\batob\s*\(|\bbtoa\s*\(|toString\(16\)|localeCompare/;
+  // 코덱 코어 면제는 "변환을 여기서 한다"는 뜻이지 "여기서는 무엇이든 된다"가 아니다.
+  // localeCompare는 코어 안에서 더 위험하다: contentDigest.js가 내용주소의 정본이라, 거기
+  // 엔트리 순서가 로케일/ICU 판본에 따라 달라지면 같은 상태가 다른 커밋 주소를 낳는다.
+  // 그래서 로케일 비교자는 코어 면제 없이 src 전면 금지다(벤더 번들만 스코프 밖).
+  const CODEC_PATTERN = /\batob\s*\(|\bbtoa\s*\(|toString\(16\)/;
+  const LOCALE_PATTERN = /localeCompare/;
+  const VENDOR_BUNDLE = "src/runtime/engines/wasi/browserWasiShim.js";
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
     const relPath = rel(f);
-    if (CODEC_CORE.has(relPath)) continue;
     const code = stripComments(readFileSync(f, "utf8"));
+    if (relPath !== VENDOR_BUNDLE) {
+      check(`로케일 비교자 0: ${relPath}`, () => {
+        if (LOCALE_PATTERN.test(code)) throw new Error("localeCompare는 내용주소를 로케일에 종속시킨다(deterministicOrder 경유)");
+      });
+    }
+    if (CODEC_CORE.has(relPath)) continue;
     check(`코덱 법: ${relPath}`, () => {
       if (CODEC_PATTERN.test(code)) throw new Error("base64/hex 변환 사본(코덱 코어 경유해야 한다)");
     });
