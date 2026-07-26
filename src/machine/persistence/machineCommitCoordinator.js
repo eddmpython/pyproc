@@ -10,6 +10,7 @@
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { copyGenerationBytes } from "./generationIntegrity.js";
+import { compareNames } from "../contracts/byteCodec.js";
 
 export const GENERATION_SCHEMA_VERSION = 2;
 
@@ -24,11 +25,11 @@ function lookup(collection, key) {
 }
 
 function sortedMachines(machines) {
-  return [...machines].sort((left, right) => left.machineId.localeCompare(right.machineId));
+  return [...machines].sort((left, right) => compareNames(left.machineId, right.machineId));
 }
 
 function sortedDevices(devices) {
-  return Object.entries(devices).sort(([left], [right]) => left.localeCompare(right));
+  return Object.entries(devices).sort(([left], [right]) => compareNames(left, right));
 }
 
 function generationCorrupt(groupId, detail) {

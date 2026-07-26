@@ -5,6 +5,7 @@ const magic = encoder.encode("PYPROC_HOME_VOLUME_1\n");
 const maxEntries = 10000;
 
 import { WebMachineError } from "../contracts/webMachineError.js";
+import { compareNames } from "../contracts/deterministicOrder.js";
 function joinPath(base, name) {
   return `${base.replace(/\/+$/, "")}/${name}`;
 }
@@ -148,7 +149,7 @@ export async function readPyprocHomeVolume({ device, fs, root = "/home/web", all
   removeTree(fs, root);
   fs.mkdirTree(root);
   const directories = meta.entries.filter((entry) => entry.type === "dir")
-    .sort((left, right) => left.path.split("/").length - right.path.split("/").length || left.path.localeCompare(right.path));
+    .sort((left, right) => left.path.split("/").length - right.path.split("/").length || compareNames(left.path, right.path));
   for (const entry of directories) fs.mkdirTree(joinPath(root, entry.path));
   const files = meta.entries.filter((entry) => entry.type === "file");
   for (const entry of files) {

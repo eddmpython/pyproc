@@ -5,6 +5,7 @@ const magic = encoder.encode("V86_9P_VOLUME_1\n");
 const maxEntries = 10000;
 
 import { WebMachineError } from "../contracts/webMachineError.js";
+import { compareNames } from "../contracts/deterministicOrder.js";
 function joinPath(base, name) {
   return base === "/" ? `/${name}` : `${base}/${name}`;
 }
@@ -150,7 +151,7 @@ export async function readV86FileSystemVolume({ device, fileSystem, emptyState, 
   validateMeta(meta, payload.byteLength);
   fileSystem.set_state(emptyState);
   const directories = meta.entries.filter((entry) => entry.type === "dir")
-    .sort((left, right) => left.path.split("/").length - right.path.split("/").length || left.path.localeCompare(right.path));
+    .sort((left, right) => left.path.split("/").length - right.path.split("/").length || compareNames(left.path, right.path));
   for (const entry of directories) {
     const parentId = fileSystem.SearchPath(parentPath(entry.path)).id;
     if (parentId < 0) throw new WebMachineError("WEB_MACHINE_VOLUME_INVALID", `v86 9P volume: parent 없음 ${entry.path}`);

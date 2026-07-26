@@ -8,6 +8,8 @@
 // 오류 어휘: 이 층은 WebMachineError(code)로 말한다. 코드는 호출자가 주입한다(형식 위반이
 // 서명 문제인지 이미지 문제인지는 machine 도메인 맥락이 정한다).
 import { WebMachineError } from "./webMachineError.js";
+// 정렬 비교는 순수 계약이 소유한다(guest도 직접 소비해야 하므로 platform에 둘 수 없다).
+export { compareNames } from "./deterministicOrder.js";
 
 export function hexFromBytes(value) {
   return [...value].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -39,9 +41,4 @@ export function bytesFromBase64(value, code = "WEB_MACHINE_IMAGE_SIGNATURE_INVAL
 
 export function sameBytes(left, right) {
   return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
-}
-
-// 결정적 정렬 비교. manifest 엔트리 순서가 서명 대상이라 정렬 기준이 갈리면 서명이 갈린다.
-export function compareNames(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
 }

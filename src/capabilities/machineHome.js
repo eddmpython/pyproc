@@ -2,7 +2,7 @@
 // Pyodide의 MEMFS 디렉터리와 파일 메타는 WASM 선형 메모리 밖에도 있으므로 힙 페이지만
 // 저장해서는 머신의 파일 상태가 부활하지 않는다. 두 영속 경로가 같은 검증과 적용을 쓴다.
 import { PyProcError } from "../runtime/errors.js";
-import { bytesToMb } from "../runtime/memoryLayout.js";
+import { bytesToMb, compareNames } from "../runtime/memoryLayout.js";
 
 export const DEFAULT_MACHINE_HOME_PATH = "/home/web";
 
@@ -119,7 +119,7 @@ export function applyMachineHome(fs, home, bin) {
   const root = normalizeMachineHomeRoot(home.path, "home path");
   removeTree(fs, root);
   fs.mkdirTree(root);
-  const dirs = home.entries.filter((entry) => entry.type === "dir").sort((a, b) => a.path.localeCompare(b.path));
+  const dirs = home.entries.filter((entry) => entry.type === "dir").sort((a, b) => compareNames(a.path, b.path));
   for (const entry of dirs) fs.mkdirTree(joinPath(root, entry.path));
   const files = home.entries.filter((entry) => entry.type === "file");
   for (const entry of files) {

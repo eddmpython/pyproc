@@ -504,7 +504,10 @@ section("digest 법");
     "src/capabilities/pyprocSw.js",
     "src/runtime/engines/wasi/browserWasiShim.js", // 벤더 번들(서드파티 스코프)
   ]);
-  const CODEC_PATTERN = /\batob\s*\(|\bbtoa\s*\(|toString\(16\)/;
+  // localeCompare도 이 법에 넣는다: 내용주소와 서명 대상의 엔트리 순서가 로케일/ICU 판본에
+  // 따라 달라지면 같은 상태가 다른 커밋 주소를 낳는다(실측: durable commit 주소 계산 2곳,
+  // 볼륨 엔트리 정렬 3곳). 라이브러리에 사용자 대면 정렬은 없으므로 src 전면 금지가 옳다.
+  const CODEC_PATTERN = /\batob\s*\(|\bbtoa\s*\(|toString\(16\)|localeCompare/;
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
     const relPath = rel(f);
     if (CODEC_CORE.has(relPath)) continue;
@@ -2186,6 +2189,7 @@ const machinePureFiles = new Set([
   // 장치 요구 해석 법. 순수하다: 오류 계약만 import하고 browser 전역도 guest 이름도 없다.
   // 그래서 guest가 직접 소비할 수 있고, 그것이 이 파일이 존재하는 이유다(선언 = 유일 진실).
   // byteCodec은 여기 없다: atob/Buffer 전역을 만지므로 platform(1)이 정직한 층위다.
+  "src/machine/contracts/deterministicOrder.js",
   "src/machine/contracts/deviceRequirement.js",
   "src/machine/contracts/operationControl.js",
   "src/machine/contracts/webMachineError.js",

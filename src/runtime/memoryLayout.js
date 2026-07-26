@@ -8,3 +8,7 @@ const BYTES_PER_MB = 1048576;
 // (docs/reference/api.md의 mbWritten/freedMB), 그 차이는 정밀도 계약이지 사본이 아니다.
 export function bytesToMb(bytes, digits = 1) { return +(bytes / BYTES_PER_MB).toFixed(digits); }
 export function mbToBytes(mb) { return mb * BYTES_PER_MB; }
+
+// 결정적 정렬 비교. 내용주소·서명 대상의 엔트리 순서가 로케일/ICU에 따라 달라지면 같은 상태가
+// 다른 주소를 낳는다(localeCompare 금지의 근거). machine 층은 자기 코덱에 같은 함수를 둔다.
+export function compareNames(left, right) { return left < right ? -1 : left > right ? 1 : 0; }
