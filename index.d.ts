@@ -1,9 +1,10 @@
-// pyproc 공개 표면 타입 선언. 소스는 순수 ESM .js이고 이 파일이 소비자(TypeScript)에게
-// 계약을 제공한다. 빌드 단계 없이 손으로 유지한다(소스와 함께 갱신).
+// Type declarations for the pyproc public surface. The source is plain ESM .js; this file is
+// what gives TypeScript consumers the contract. There is no build step, so it is maintained by
+// hand and updated together with the source.
 
 import type { PyProcAssetIntegrityManifest } from "./src/runtime/assets.js";
 
-/** src의 모든 오류가 사용하는 단일 오류 계약의 코드. 카탈로그는 src/runtime/errors.js와 일치한다. */
+/** Codes of the one error contract every error in src uses. The catalog matches src/runtime/errors.js. */
 export type PyProcErrorCode =
   | "PYPROC_ENV_UNSUPPORTED"
   | "PYPROC_INPUT_INVALID"
@@ -38,11 +39,11 @@ export type PyProcErrorCode =
 export const PYPROC_ERROR_CODES: readonly PyProcErrorCode[];
 
 /**
- * pyproc의 단일 오류 계약. 프로그램적 분기는 message가 아니라 code로 한다.
- * retryable = 재시도 가능성. 전송 후 결과 불명(PYPROC_RPC_OUTCOME_UNKNOWN)은 항상
- * retryable=false다(자동 재실행 금지 계약).
- * 워커 안 파이썬 예외는 context.pyExcType에 예외 클래스명(KeyboardInterrupt 등)이 실려
- * postMessage 경계를 건너온다.
+ * pyproc's single error contract. Branch on `code`, never on `message`.
+ * `retryable` says whether a retry is safe. An outcome that is unknown after the request was
+ * sent (PYPROC_RPC_OUTCOME_UNKNOWN) is always retryable=false: never re-run it automatically.
+ * A Python exception raised inside a worker crosses the postMessage boundary with its class name
+ * (KeyboardInterrupt and so on) in context.pyExcType.
  */
 export class PyProcError extends Error {
   constructor(code: PyProcErrorCode, message: string, opts?: { retryable?: boolean; context?: Record<string, unknown>; cause?: unknown });
@@ -53,71 +54,72 @@ export class PyProcError extends Error {
 }
 
 export interface EnvIssue {
-  /** 기계 판별용 코드: "no-cross-origin-isolation" | "no-jspi". */
+  /** Machine-readable code: "no-cross-origin-isolation" | "no-jspi". */
   code: string;
-  /** 빠진 플랫폼 능력. */
+  /** The platform capability that is missing. */
   need: string;
-  /** 왜 필요한가(어느 기능이 막히는가). */
+  /** Why it matters: which features are blocked without it. */
   why: string;
-  /** 어떻게 고치는가(복붙 가능한 조치). */
+  /** How to fix it, as a step you can copy and paste. */
   fix: string;
 }
 
 export interface EnvReport {
-  /** true면 프로세스 OS 포함 모든 능력 가능. false여도 기본 표면(boot/run/enableReactive)은 된다. */
+  /** True when every capability including the process OS is available. Even when false the base surface (boot/run/enableReactive) still works. */
   ok: boolean;
   crossOriginIsolated: boolean;
   sharedArrayBuffer: boolean;
   jspi: boolean;
-  /** 준비 안 된 능력과 조치. 기본 표면만 쓸 거면 무시해도 된다. */
+  /** Capabilities that are not ready, with the fix for each. Ignorable if you only use the base surface. */
   issues: EnvIssue[];
 }
 
 export type CoreIntegrityMap = Record<string, string>;
 
 export interface CoreIntegrityPolicy {
-  /** indexURL 상대 경로, URL pathname, 절대 URL, 파일명 중 하나를 키로 쓰고 값은 표준 SRI 문자열(sha256-...)이다. */
+  /** Keyed by an indexURL-relative path, a URL pathname, an absolute URL, or a file name; the value is a standard SRI string (sha256-...). */
   files: CoreIntegrityMap;
-  /** true(기본)면 fetch되는 indexURL 자산이 manifest에 없을 때 실패한다. */
+  /** When true (the default), a fetched indexURL asset that is absent from the manifest fails the boot. */
   required?: boolean;
 }
 
 export interface CoreAssetStats {
   hits: number;
   misses: number;
-  /** coreIntegrity로 SHA-256 검증을 통과한 자산 수. */
+  /** Assets that passed SHA-256 verification against coreIntegrity. */
   verified: number;
-  /** required manifest에서 누락되어 거부된 자산 수. */
+  /** Assets rejected because the required manifest did not list them. */
   integrityMissing: number;
 }
 
 /**
- * 환경 진단. "그냥 import하면 되나?"의 정직한 답: 기본 표면(boot/run/enableReactive)은 준비 없이
- * Chromium에서 돌지만, PyProc(프로세스 OS)/IPC/소켓 블로킹은 crossOriginIsolated(COOP/COEP 헤더)와
- * JSPI를 요구한다. 이 함수가 무엇이 준비됐는지, 안 됐으면 무엇을 어떻게 고치는지 돌려준다.
+ * Environment diagnostics: the honest answer to "can I just import this?". The base surface
+ * (boot/run/enableReactive) runs in Chromium with no setup, but PyProc (the process OS), IPC,
+ * and blocking sockets require crossOriginIsolated (COOP/COEP headers) plus JSPI. This function
+ * reports what is ready and, for whatever is not, what to change and how.
  */
 export function checkEnvironment(): EnvReport;
 
 export interface BootOptions {
-  /** Pyodide 배포 URL. 기본 jsdelivr v314.0.2. */
+  /** Pyodide distribution URL. Defaults to jsdelivr v314.0.2. */
   indexURL?: string;
   stdout?: (line: string) => void;
   stderr?: (line: string) => void;
-  /** 부팅 시 미리 로드할 패키지. */
+  /** Packages to preload during boot. */
   packages?: string[];
-  /** CPython 초기화 전에 반영되는 환경변수(예: { PYTHONHASHSEED: "0" } = 결정적 부팅). */
+  /** Environment variables applied before CPython initializes, e.g. { PYTHONHASHSEED: "0" } for a deterministic boot. */
   env?: Record<string, string>;
-  /** 코어 자산(wasm/stdlib/lock)을 이 디렉터리에 캐시해 재부팅 시 fetch 계층 네트워크 0. */
+  /** Caches the core assets (wasm/stdlib/lock) in this directory so a later boot touches the network zero times. */
   coreCacheDir?: FileSystemDirectoryHandle;
-  /** pyproc이 삽입하는 pyodide.js script 태그의 브라우저 SRI 값(sha256-...). 첫 부팅 전에만 강제 가능. */
+  /** Browser SRI value (sha256-...) for the pyodide.js script tag pyproc injects. Can only be enforced before the first boot. */
   engineScriptIntegrity?: string;
-  /** fetch 경로의 indexURL 자산(wasm/stdlib/lock/휠 등)을 SRI로 검증한다. */
+  /** SRI-verifies the indexURL assets on the fetch path (wasm, stdlib, lock, wheels). */
   coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy;
-  /** pyproc-assets CLI 산출물. Runtime에서 만든 worker 능력이 spawn 전 graph를 SRI 검증한다. */
+  /** Output of the pyproc-assets CLI. Worker capabilities created from a Runtime SRI-verify the graph before spawning. */
   assetIntegrity?: PyProcAssetIntegrityManifest;
-  /** 락 파일 교체(Runtime.freeze() 산출물 등): 같은 버전이 해석 0으로 재현된다. */
+  /** Replacement lock file, e.g. the output of Runtime.freeze(): the same versions reproduce with zero resolution. */
   lockFileURL?: string;
-  /** 워커 소비자(document 없음)가 자체 import한 loadPyodide. 주면 script 로드를 건너뛴다(globalThis 무오염). */
+  /** loadPyodide imported by a worker consumer, where there is no document. Passing it skips the script load and leaves globalThis untouched. */
   loadPyodide?: (cfg: unknown) => Promise<unknown>;
 }
 
@@ -1151,19 +1153,19 @@ declare class PyprocHistory {
   prune(target?: number | CheckpointInfo): { freedNodes: number; freedMB: number; keptNodes: number };
   stats(): ReactiveStats;
   setRetentionPolicy(policy: ReactiveRetentionPolicy | null): Readonly<ReactiveRetentionPolicy> | null;
-  /** 커널 커밋(WAL 저널). 같은 dir는 저널 인스턴스를 공유한다. */
+  /** Kernel commit through the WAL journal. The same dir shares one journal instance. */
   commit(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalCommitResult | null>;
   recover(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalRecoverResult | null>;
-  /** 유휴 감시 시작(WAL). durable 실패는 onStatus로 관측한다. */
+  /** Starts the idle watcher (WAL). Durable failures surface through onStatus. */
   watch(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): MachineJournal;
   pack(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalPackResult | null>;
-  /** 이동 가능한 서명 bundle(결정 부팅 전용 - 비결정 상태에는 리플레이 보증이 없다). */
+  /** A portable signed bundle. Deterministic boots only: a non-deterministic state has no replay guarantee. */
   export(opts?: SessionImageOptions): Promise<Blob>;
-  /** 세션 저장(결정 부팅 전용): 부활 = 같은 매니페스트 리플레이 + 델타. */
+  /** Saves the session (deterministic boots only). Revival replays the same manifest and applies the delta. */
   save(dir: FileSystemDirectoryHandle, name: string): Promise<{ pages: number; mb: number }>;
 }
 
-/** 역사를 가진 파이썬 머신 핸들. 능력 상세는 runtime 탈출구로 연다. */
+/** Handle to a Python machine that has a history. Capability detail is reached through the runtime escape hatch. */
 declare class PyprocMachine {
   readonly runtime: Runtime;
   readonly deterministic: boolean;
@@ -1173,37 +1175,39 @@ declare class PyprocMachine {
   runAsync(code: string): Promise<unknown>;
   term(cfg?: TerminalConfig): Terminal;
   /**
-   * 프로세스 풀(워커 = 프로세스, 독립 GIL). fork/forkMany/map/mapArray/matmul은 풀의 동사다.
-   * 옵션별로 memoize된다: 같은 옵션이면 같은 풀을 돌려주므로 재마운트가 워커를 쌓지 않고,
-   * 다른 옵션(예: 일반 풀과 fork용 replay 풀)은 각자 풀을 갖는다. lanes 기본값은 2다.
+   * Process pool, where a worker is a process with its own GIL. fork/forkMany/map/mapArray/matmul
+   * are verbs of the pool. Memoized per option set: the same options return the same pool, so a
+   * remount does not pile up workers, while different options (a plain pool versus a replay pool
+   * for fork) each get their own. lanes defaults to 2.
    */
   proc(opts?: PyProcOptions & { lanes?: number; useSnapshot?: boolean }): Promise<PyProc>;
   /**
-   * 셸의 잡 컨트롤: `expr &`가 대화형 네임스페이스를 살아있는 채로 fork해 딴 코어에서 돌린다.
-   * 자기 워커 풀(대화형 레인 1 + 잡 슬롯 N-1)을 세우므로 proc()의 풀과 별개다. 머신당 하나로
-   * memoize되고 dispose()가 회수한다.
+   * Shell job control: `expr &` forks the live interactive namespace and runs it on another core.
+   * It stands up its own worker pool (one interactive lane plus N-1 job slots), so it is separate
+   * from the pool proc() returns. Memoized one per machine and reclaimed by dispose().
    */
   jobs(opts?: { workers?: number; replay?: Record<string, unknown> }): Promise<JobControl>;
-  /** 머신 안의 머신: 파이썬이 `pyprocMachine.spawn()`으로 자식 커널을 띄운다(중첩 컨테이너). */
+  /** A machine inside the machine: Python starts a child kernel with `pyprocMachine.spawn()` (nested containers). */
   containers(cfg?: MachineContainerOptions): Promise<MachineContainer>;
-  /** 회수: 풀 워커(proc/jobs/containers 전부)를 종료하고 리액티브 보관분을 해제한다. */
+  /** Reclaim: terminates the pool workers (proc, jobs, and containers alike) and releases the reactive retention. */
   dispose(): Promise<void>;
 }
 
-/** 첫 guest 고속 경로: 파이썬 머신을 부팅해 핸들을 돌려준다. */
+/** Fast path for the first guest: boots a Python machine and returns its handle. */
 export function boot(options?: BootMachineOptions): Promise<PyprocMachine>;
 
 /**
- * 부활 통합 동사. 소스 종별로 신뢰 계약이 갈라진다(의미론 평탄화 금지):
- * 외부 bundle은 힙 접촉 전 무결성+서명 검증, 자기 OPFS 세션 저장은 리플레이+h0 대조,
- * persistent는 멀티탭 선출 + 저널 부활(KernelElection 핸들).
+ * One verb for revival, with a trust contract that differs by source - the semantics are not
+ * flattened. An external bundle is integrity- and signature-verified before any heap is touched;
+ * your own OPFS session save is replayed and checked against h0; `persistent` runs multi-tab
+ * election and revives from the journal, returning a KernelElection handle.
  */
 export function open(source: Blob | Uint8Array | ArrayBuffer, opts?: OpenTrustOptions): Promise<PyprocMachine>;
 export function open(source: { dir: FileSystemDirectoryHandle; name: string }, opts?: { manifest?: SessionManifest }): Promise<PyprocMachine>;
 export function open(source: { persistent: PersistentMachineOptions | true }, opts?: PersistentMachineOptions): Promise<KernelElection>;
 
 
-// 값-export가 아닌 타입 표면(핸들과 탈출구가 돌려주는 것들의 계약).
+ // Type-only surface: the contract of what handles and escape hatches return, with no value export.
 export type {
   PyprocMachine, PyprocHistory,
   Runtime, MemoryCapability, FileSystem, ReactiveController, Terminal, MachineJournal, MachineJail,

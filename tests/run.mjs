@@ -2942,7 +2942,7 @@ section("진입 표면 언어");
   // 띄우고, npm 패키지에 함께 나가고, api.md가 서명의 정본으로 이 파일을 지정한다. 강등 subpath
   // 7개는 전부 영문으로 옮겼고(이 커밋), 루트 index.d.ts의 나머지는 예산으로 방향을 고정한다.
   // 예산은 줄이는 방향으로만 고친다: 늘리려면 이 숫자를 올려야 하고 그 diff가 심사 지점이다.
-  const DTS_LANGUAGE_BUDGET = 339;
+  const DTS_LANGUAGE_BUDGET = 291;
   check("d.ts 주석의 한국어 예산은 단조 감소한다", () => {
     const byFile = [];
     let korean = 0;
