@@ -15,7 +15,7 @@
 //   이 전제를 Runtime.execSeq(상태 변이 카운터)로 O(1) 감지한다. 경계가 깨져 있으면(실행·예외·
 //   setGlobal 등) 조용한 오염 대신 자동으로 재해시 경로로 승격해 복원한다. 반환값 rehashed로
 //   어느 경로였는지 알 수 있고, opts.rehash로 강제할 수도 있다.
-import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
+import { PAGE_SIZE as PAGE, bytesToMb } from "../runtime/memoryLayout.js";
 import { PyProcError } from "../runtime/errors.js";
 import { hashDiffPages, packPages } from "../runtime/heapDelta.js";
 import { normalizeRetentionPolicy, retentionExceeded } from "./reactive/retentionPolicy.js";
@@ -116,7 +116,7 @@ export class ReactiveController {
     mem.stackRestore(savedSP ?? this.sps[j]);
     this.liveIdx = j; this.prevHashes = this.hashes[j];
     this._noteRestore();
-    return { pagesWritten: written, mbWritten: +(wroteBytes / 1048576).toFixed(2), rehashed: rehash };
+    return { pagesWritten: written, mbWritten: bytesToMb(wroteBytes, 2), rehashed: rehash };
   }
 
   // 두 체크포인트 사이의 사용자 상태를 { pages, bin }으로 수집한다(세션 저장/저널 커밋/이미지
@@ -159,7 +159,7 @@ export class ReactiveController {
       this.deltas[k] = null; this.hashes[k] = null; this.sps[k] = null;
       freedNodes++;
     }
-    return { freedNodes, freedMB: +(freedBytes / 1048576).toFixed(2), keptNodes: keep.size };
+    return { freedNodes, freedMB: bytesToMb(freedBytes, 2), keptNodes: keep.size };
   }
 
   // 나무 전체 해제: base/델타/해시를 놓는다. 기존 노드로의 복원은 전부 거부되고(범위 밖),
@@ -205,7 +205,7 @@ export class ReactiveController {
       deltaBytes,
       hashBytes,
       totalBytes,
-      totalMB: +(totalBytes / 1048576).toFixed(2),
+      totalMB: bytesToMb(totalBytes, 2),
       nodeSlots: this.deltas.length,
       activeNodes: active.length,
       prunedNodes,
@@ -272,5 +272,5 @@ export class ReactiveController {
     return { bytes: loaded.length };
   }
   stackSave() { return this._mem.stackSave(); }
-  storageMB() { return Math.round(this.stats().totalBytes / 1048576); }
+  storageMB() { return Math.round(bytesToMb(this.stats().totalBytes, 2)); }
 }

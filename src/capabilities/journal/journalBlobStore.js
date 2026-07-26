@@ -10,6 +10,7 @@
 // 이 저장소는 힙도 런타임도 모른다: 디렉터리 핸들 하나가 전부다.
 import { PyProcError } from "../../runtime/errors.js";
 import { verifySha256 } from "../../runtime/contentDigest.js";
+import { bytesToMb } from "../../runtime/memoryLayout.js";
 
 const BLOB_DIR = "blob";
 const PACK_DIR = "pack";
@@ -129,7 +130,7 @@ export class JournalBlobStore {
       count++;
       bytes += (await (await blobDir.getFileHandle(name)).getFile()).size;
     }
-    return { count, bytes, mb: +(bytes / 1048576).toFixed(1) };
+    return { count, bytes, mb: bytesToMb(bytes) };
   }
 
   async readPackIndex() {
@@ -226,7 +227,7 @@ export class JournalBlobStore {
       liveKeys: liveKeys.length,
       packed: liveKeys.length,
       bytes: offset,
-      mb: +(offset / 1048576).toFixed(1),
+      mb: bytesToMb(offset),
       looseRemoved,
       packsRemoved,
     };

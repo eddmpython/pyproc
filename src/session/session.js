@@ -20,9 +20,8 @@
 import { PyProcError } from "../runtime/errors.js";
 import { boot } from "../composition/runtimeApi.js";
 import { runWithGlobalPatch } from "../runtime/globalPatch.js";
-import { PAGE_SIZE } from "../runtime/memoryLayout.js";
+import { PAGE_SIZE, bytesToMb } from "../runtime/memoryLayout.js";
 import { unpackPages } from "../runtime/heapDelta.js";
-import { growHeapTo } from "../runtime/heapGrow.js";
 import { sha256Hex } from "../runtime/contentDigest.js";
 import {
   decodeMachineEnvelope,
@@ -38,6 +37,7 @@ import { decodeStateBundle, encodeStateBundle, isStateBundle, stateBundleHeaderD
 // 서명 API는 이 모듈의 공개 표면이다(index.js가 여기서 가져간다). 구현은 machineSignature가 소유한다.
 export { createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey } from "./machineSignature.js";
 import { WheelCache } from "../capabilities/wheelCache.js";
+import { materializeHeapGeneration } from "../capabilities/heapMaterialize.js";
 import {
   DEFAULT_MACHINE_HOME_PATH,
   applyMachineHome,
@@ -188,7 +188,7 @@ export class Session {
     let w = await mf.createWritable(); await w.write(JSON.stringify(meta)); await w.close();
     const bf = await dir.getFileHandle(name + ".bin", { create: true });
     w = await bf.createWritable(); await w.write(bin); await w.close();
-    return { pages: meta.pages.length, mb: +(bin.length / 1048576).toFixed(1) };
+    return { pages: meta.pages.length, mb: bytesToMb(bin.length) };
   }
 
   // 이 컴퓨터 전체를 서명 가능한 bundle 파일 하나로 내보낸다(단일 writer).
@@ -242,18 +242,14 @@ export class Session {
         throw new PyProcError("PYPROC_REPLAY_MISMATCH", `session.load: 리플레이 결정성 불일치(cp0 ${cur.slice(0, 12)}.. != 저장 당시 ${meta.h0.slice(0, 12)}..). 엔진 버전이나 매니페스트가 저장 당시와 다르다.`);
       }
     }
-    const mem = this.rt.memory;
-    // 성장 세션: JS에서 Memory.grow를 직접 하면 Emscripten 글루의 클로저 뷰가 안 갱신되어
-    // 런타임이 깨진다(실측). 파이썬 할당으로 정상 성장 경로를 태운다. 초과 성장은 무해하다:
-    // 델타가 복원하는 저장 시점의 할당자 상태가 힙 끝을 결정하고, 잉여 페이지는 미사용으로 남는다.
-    growHeapTo((code) => this.rt.run(code), () => mem.byteLength(), meta.heapLen, "session.load");
-    // 경계 되감기(무조건): 부팅 이후의 모든 드리프트(재시드, 성장 루프, 소비자 실행 흔적)를
-    // cp0으로 지운 위에 델타를 덮는다 -> 결과는 정확히 저장 시점 상태(fork의 정화와 같은 원리).
-    this.reactive.restore(0, meta.sp);
-    unpackPages((p, page) => mem.writePage(p, page), bin, meta.pages, PAGE_SIZE);
-    mem.stackRestore(meta.sp);
-    this.reactive.checkpoint(); // 부활 상태를 새 경계로
-    return { pages: meta.pages.length, mb: +(bin.length / 1048576).toFixed(1) };
+    // 물질화 순서(성장 -> 경계 되감기 -> 페이지 -> 스택 -> 새 경계)는 heapMaterialize가 정본이다.
+    const staged = [];
+    unpackPages((p, page) => staged.push([p, page]), bin, meta.pages, PAGE_SIZE);
+    const applied = materializeHeapGeneration({
+      rt: this.rt, reactive: this.reactive, label: "session.load",
+      heapLen: meta.heapLen, sp: meta.sp, pages: staged,
+    });
+    return { pages: applied.pages, mb: applied.mb };
   }
 
   _applyHome(home, bin) {
@@ -263,20 +259,15 @@ export class Session {
   // 커널 세대(openState 결과) 적용: 검증(verify-on-read, h0 대조)은 커널이 끝냈고, 여기는
   // 힙 성장 + 경계 되감기 + 페이지/홈 적용만 한다(_applyMeta의 커널 물질화판).
   _applyKernelState(opened) {
-    const mem = this.rt.memory;
     const { tree, pages, files } = opened;
-    growHeapTo((code) => this.rt.run(code), () => mem.byteLength(), tree.heapLen, "openMachine");
-    this.reactive.restore(0, tree.sp);
-    for (const [p, bytes] of pages) mem.writePage(p, bytes);
-    mem.stackRestore(tree.sp);
-    const home = files ? files.get("home") : null;
-    if (home) {
-      try { validateMachineHomeMeta(home.meta, home.bytes.length); }
-      catch (e) { throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `openMachine: home 메타 파손(${String(e.message || e).slice(-160)})`, { cause: e }); }
-      applyMachineHome(this.rt.fs, home.meta, home.bytes);
-    }
-    this.reactive.checkpoint(); // 부활 상태를 새 경계로
-    return { pages: pages.size, mb: +(pages.size * PAGE_SIZE / 1048576).toFixed(1) };
+    const applied = materializeHeapGeneration({
+      rt: this.rt, reactive: this.reactive, label: "openMachine",
+      heapLen: tree.heapLen, sp: tree.sp, pages,
+      home: (files && files.get("home")) || null,
+      // 층마다 오류 어휘가 다르다: 세션 부활의 파손은 머신 포맷 계약 위반으로 말한다.
+      wrapHomeError: (e) => new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `openMachine: home 메타 파손(${String(e.message || e).slice(-160)})`, { cause: e }),
+    });
+    return { pages: applied.pages, mb: applied.mb };
   }
 }
 

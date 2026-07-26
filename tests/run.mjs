@@ -461,6 +461,89 @@ section("digest 법");
       if (addressBuild.test(text) && !ADDRESS_CORE.has(relPath)) throw new Error('"sha256:" 주소 조립은 코어에만 산다(sha256Address/parseSha256Address 경유)');
     });
   }
+  // 힙 물질화 법: "성장 -> 경계 되감기 -> 페이지 쓰기 -> 스택 복원 -> 새 경계"는 부활 정확성
+  // 그 자체다. 예전에는 이 순서가 네 곳에 각자 구현돼 독립 표류가 가능했다(session.load /
+  // openMachine / journal.recover 구포맷 / 커널). 소스를 한 파일로 좁혀 고정한다.
+  const MATERIALIZE_CORE = "src/capabilities/heapMaterialize.js";
+  check("힙 물질화 법의 소스는 한 곳", () => {
+    const holders = [];
+    for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+      const relPath = rel(f);
+      if (relPath === MATERIALIZE_CORE) continue;
+      // 워커는 fork 경로라 다른 법을 쓴다(cp0 드리프트 정화 + 델타). 여기 스코프는 부활 경로다.
+      if (relPath === "src/processOs/worker.js") continue;
+      if (relPath === "src/runtime/heapGrow.js") continue; // growHeapTo의 정의처
+      const code = readFileSync(f, "utf8").split("\n").map((line) => line.split("//")[0]).join("\n");
+      if (/\brestore\(\s*0\s*,/.test(code) || /growHeapTo\s*\(/.test(code)) holders.push(relPath);
+    }
+    if (holders.length) throw new Error(`부활 물질화 사본: ${holders.join(", ")}`);
+  });
+  // 바이트 -> MB 반올림의 소스는 memoryLayout(rank 0 단위 계약) 하나다. 사본이 8곳에 흩어져
+  // 있었고 정밀도까지 갈렸다(1자리 6곳, 2자리 3곳). 벤더 shim은 서드파티라 스코프 밖이다.
+  const UNIT_CORE = "src/runtime/memoryLayout.js";
+  const VENDORED_SHIM = "src/runtime/engines/wasi/browserWasiShim.js";
+  check("바이트 -> MB 단위 변환의 소스는 한 곳", () => {
+    const holders = [];
+    for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+      const relPath = rel(f);
+      if (relPath === UNIT_CORE || relPath === VENDORED_SHIM) continue;
+      const code = readFileSync(f, "utf8").split("\n").map((line) => line.split("//")[0]).join("\n");
+      if (/1048576/.test(code)) holders.push(relPath);
+    }
+    if (holders.length) throw new Error(`MB 단위 사본: ${holders.join(", ")}`);
+  });
+
+  // 공유 헬퍼는 쓰는 파일이 import한다. 이 게이트는 원래 미정의 식별자를 못 본다(텍스트 검사다)
+  // -> 그 구멍의 실제 대가를 치렀다: bytesToMb를 machineJournal에서 쓰면서 import를 빠뜨려
+  // 브라우저 게이트가 ReferenceError로 잡았다(2026-07-27). 파서 없이 좁히는 방법은 스코프를
+  // "src가 export하는 이름"으로 한정하는 것이다: 그 이름을 호출하면서 import도 선언도 없으면 RED.
+  {
+    const declaredBy = new Map(); // 이름 -> 정의 파일
+    const srcFiles = collect(join(ROOT, "src"), [".js"], []);
+    for (const f of srcFiles) {
+      for (const m of readFileSync(f, "utf8").matchAll(/^export (?:async )?function (\w+)/gm)) {
+        declaredBy.set(m[1], rel(f));
+      }
+    }
+    for (const f of srcFiles) {
+      const relPath = rel(f);
+      if (relPath === VENDORED_SHIM) continue; // 서드파티 번들(자체 스코프)
+      const source = readFileSync(f, "utf8");
+      // 주석과 문자열 리터럴을 걷어낸 JS 위치만 본다. 이 파일들은 파이썬 소스를 문자열로
+      // 심으므로(`exec(open(path).read())`) 문자열을 남기면 파이썬 호출이 JS 호출로 오인된다.
+      // 템플릿 리터럴은 여러 줄에 걸치므로 줄 단위로는 못 지운다. 통째로 먼저 비운다.
+      const code = source.replace(/`[^`]*`/g, '""').split("\n")
+        .map((line) => line.split("//")[0].replace(/"[^"]*"|'[^']*'/g, '""'))
+        .join("\n");
+      // 파일이 "쓸 수 있는 이름" 집합: import 절(여러 줄 포함) + 선언 + 구조분해 + 인자.
+      // 이름이 이 집합 안에 있으면 판정하지 않는다(오탐 0 우선: 노이즈 게이트는 무시를 학습시킨다).
+      const available = new Set();
+      for (const m of source.matchAll(/import\s+([\s\S]*?)\s+from\s*["'][^"']+["']/g)) {
+        for (const id of m[1].matchAll(/[A-Za-z_$][\w$]*/g)) available.add(id[0]);
+      }
+      for (const m of code.matchAll(/(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) available.add(m[1]);
+      // 메서드/축약 함수 정의도 그 이름의 선언이다(`async boot(n) {`).
+      for (const m of code.matchAll(/^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/gm)) available.add(m[1]);
+      // 구조분해와 인자 목록: 괄호/중괄호 안의 식별자를 통째로 받아들인다(관대한 방향).
+      for (const m of code.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
+        for (const id of m[1].matchAll(/[A-Za-z_$][\w$]*/g)) available.add(id[0]);
+      }
+      for (const m of code.matchAll(/(?:function\s*\w*|=>|\b[A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*(?:\{|=>)/g)) {
+        for (const id of m[1].matchAll(/[A-Za-z_$][\w$]*/g)) available.add(id[0]);
+      }
+      check(`공유 헬퍼 import 실존: ${relPath}`, () => {
+        const missing = new Set();
+        for (const [name, owner] of declaredBy) {
+          if (owner === relPath || available.has(name)) continue;
+          // 호출 형태만 본다. 앞에 `.`이 붙으면 메서드 호출이라 이 이름과 무관하다.
+          if (!new RegExp(`(^|[^.\\w$])${name}\\s*\\(`, "m").test(code)) continue;
+          missing.add(`${name}(${owner})`);
+        }
+        if (missing.size) throw new Error(`import 없이 호출: ${[...missing].slice(0, 5).join(", ")}`);
+      });
+    }
+  }
+
   // 엔진 내부 접근 법: `_module.*`, `HEAPU8`, `_emscripten_stack_*`는 엔진 어댑터에만 산다.
   // 상위는 MemoryCapability를 지난다. 이 법이 없을 때 worker.js가 계약을 손에 들고도 세 곳에서
   // 엔진 내부를 직접 만졌고, 그래서 어댑터의 stackRestore 방어가 워커에는 없어 동작이 갈렸다.
@@ -1880,9 +1963,18 @@ check("src layer edge는 아래로만", () => {
     "src/capabilities/journal/journalBlobStore.js -> src/runtime/contentDigest.js",
     "src/capabilities/journal/journalKernelStore.js -> src/runtime/contentDigest.js",
     "src/capabilities/journal/machineJournal.js -> src/runtime/contentDigest.js",
-    "src/capabilities/journal/machineJournal.js -> src/runtime/heapGrow.js",
+    // machineJournal은 heapGrow를 직접 쓰지 않게 됐지만 memoryLayout(PAGE)은 남는다.
     "src/capabilities/journal/machineJournal.js -> src/runtime/memoryLayout.js",
+    // 힙 물질화 법의 유일한 보관소. 성장은 파이썬 할당 경로여야 하고(heapGrow) 페이지 단위는
+    // 엔진 ABI가 정한다(memoryLayout). 그래서 이 두 edge는 이 파일 하나로 모았다: 예전에는
+    // 같은 두 edge가 session/journal 네 사본에 흩어져 있었다.
+    "src/capabilities/heapMaterialize.js -> src/runtime/heapGrow.js",
+    "src/capabilities/heapMaterialize.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
+    // 단위 계약(PAGE_SIZE, bytesToMb)은 rank 0에 있고 비용 영수증을 내는 능력이 그것을 쓴다.
+    // 각자 1048576을 다시 쓰는 것보다 이 edge가 싸다(정밀도까지 갈리던 사본 8곳을 수렴).
+    "src/capabilities/journal/journalBlobStore.js -> src/runtime/memoryLayout.js",
+    "src/capabilities/machineHome.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
     "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",
     "src/capabilities/syscallBridge.js -> src/runtime/assets.js",

@@ -17,12 +17,12 @@
 //
 // 계약(정직하게): 크래시 시 잃는 것은 "마지막 커밋 이후"다. 문장 단위 내구성이 아니라
 // 경계 일관성을 준다. 커밋 주기는 소비자가 정한다(하드코딩 없음).
-import { PAGE_SIZE as PAGE } from "../../runtime/memoryLayout.js";
+import { PAGE_SIZE as PAGE, bytesToMb, mbToBytes } from "../../runtime/memoryLayout.js";
 import { PyProcError } from "../../runtime/errors.js";
 import { parseSha256Address, sha256Hex, verifySha256 } from "../../runtime/contentDigest.js";
-import { growHeapTo } from "../../runtime/heapGrow.js";
 import { commitState, openState } from "../../state/refProtocol.js";
 import { decodeStateObject, validateStateCommit, validateStateTree } from "../../state/objectModel.js";
+import { materializeHeapGeneration } from "../heapMaterialize.js";
 import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
 import { JournalKernelStore } from "./journalKernelStore.js";
 import {
@@ -47,7 +47,7 @@ function normalizeAutoPackPolicy(policy) {
   const looseMB = cfg.looseMB ?? DEFAULT_AUTO_PACK_LOOSE_MB;
   if (!(Number.isFinite(looseBlobs) && looseBlobs >= 1)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: looseBlobs는 1 이상이어야 한다");
   if (!(Number.isFinite(looseMB) && looseMB > 0)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: looseMB는 0보다 커야 한다");
-  return { looseBlobs, looseBytes: looseMB * 1048576 };
+  return { looseBlobs, looseBytes: mbToBytes(looseMB) };
 }
 
 export class MachineJournal {
@@ -161,9 +161,9 @@ export class MachineJournal {
       const result = {
         pages: pages.length,
         wrote: committed.pagesWrote,
-        mb: +(committed.pagesWrote * PAGE / 1048576).toFixed(1),
+        mb: bytesToMb(committed.pagesWrote * PAGE),
         committedAt,
-        ...(home ? { home: { files: home.meta.entries.filter((entry) => entry.type === "file").length, mb: +(home.bin.length / 1048576).toFixed(1), wrote: committed.filesWrote > 0 } } : {}),
+        ...(home ? { home: { files: home.meta.entries.filter((entry) => entry.type === "file").length, mb: bytesToMb(home.bin.length), wrote: committed.filesWrote > 0 } } : {}),
       };
       const autoPack = await this._autoPackAfterCommit(result);
       if (autoPack) result.autoPack = autoPack;
@@ -299,9 +299,6 @@ export class MachineJournal {
     if (head.h0 && head.h0 !== await this._boundaryKey()) {
       throw new PyProcError("PYPROC_REPLAY_MISMATCH", "journal.recover: 리플레이 경계 지문(h0) 불일치. 다른 엔진/매니페스트의 저널이다(조용한 힙 오염 방지).");
     }
-    growHeapTo((code) => this._rt.run(code), () => mem.byteLength(), head.heapLen, "journal.recover");
-    // 성장 루프와 부팅 뒤 드리프트를 cp0으로 지운 위에 저널 페이지를 적용한다.
-    this._reactive.restore(0, head.sp);
     const entries = Object.entries(head.pages);
     const buffered = [];
     const blobCache = new Map();
@@ -328,43 +325,39 @@ export class MachineJournal {
         throw journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`);
       }
     }
-    for (const [p, bytes] of buffered) mem.writePage(p, bytes);
-    mem.stackRestore(head.sp);
-    const home = homePayload ? applyMachineHome(this._rt.fs, homePayload.meta, homePayload.bin) : null;
-    this._reactive.checkpoint(); // 부활 상태를 새 경계로
+    // 물질화 순서는 heapMaterialize가 정본이다(검증은 위에서 전량 끝냈다 = 부분 적용 없음).
+    const applied = materializeHeapGeneration({
+      rt: this._rt, reactive: this._reactive, label: "journal.recover",
+      heapLen: head.heapLen, sp: head.sp, pages: buffered,
+      home: homePayload ? { meta: homePayload.meta, bytes: homePayload.bin } : null,
+      wrapHomeError: (e) => journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`, e),
+    });
     this._lastSeq = this._rt.execSeq;
     return {
-      pages: entries.length,
-      mb: +(entries.length * PAGE / 1048576).toFixed(1),
+      pages: applied.pages,
+      mb: applied.mb,
       committedAt: head.committedAt || null,
-      ...(home ? { home } : {}),
+      ...(applied.home ? { home: applied.home } : {}),
     };
   }
 
   // 커널 세대 1개를 힙에 적용한다. 검증(verify-on-read, h0 대조, HEAD->PREV 후퇴)은 openState가
   // 끝냈고, 여기는 힙 성장 + 경계 되감기 + 페이지/홈 적용만 한다.
   _applyKernelGeneration(opened) {
-    const mem = this._rt.memory;
     const { tree, pages, files, commit } = opened;
-    growHeapTo((code) => this._rt.run(code), () => mem.byteLength(), tree.heapLen, "journal.recover");
-    this._reactive.restore(0, tree.sp);
-    for (const [p, bytes] of pages) mem.writePage(p, bytes);
-    mem.stackRestore(tree.sp);
-    let home = null;
-    const homeEntry = files ? files.get("home") : null;
-    if (homeEntry) {
-      try { validateMachineHomeMeta(homeEntry.meta, homeEntry.bytes.length); }
-      catch (e) { throw journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`, e); }
-      home = applyMachineHome(this._rt.fs, homeEntry.meta, homeEntry.bytes);
-    }
-    this._reactive.checkpoint(); // 부활 상태를 새 경계로
+    const applied = materializeHeapGeneration({
+      rt: this._rt, reactive: this._reactive, label: "journal.recover",
+      heapLen: tree.heapLen, sp: tree.sp, pages,
+      home: (files && files.get("home")) || null,
+      wrapHomeError: (e) => journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`, e),
+    });
     this._lastSeq = this._rt.execSeq;
     return {
-      pages: pages.size,
-      mb: +(pages.size * PAGE / 1048576).toFixed(1),
+      pages: applied.pages,
+      mb: applied.mb,
       committedAt: commit.createdAt || null,
       ...(opened.fallback ? { fallback: true } : {}),
-      ...(home ? { home } : {}),
+      ...(applied.home ? { home: applied.home } : {}),
     };
   }
 

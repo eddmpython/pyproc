@@ -15,6 +15,7 @@ import { requireCoi } from "../runtime/preflight.js";
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
 import { createPipe, createLock, createSemaphore, createShm, pipeWriteAsync, pipeReadAsync, pipeClose } from "./ipc.js";
 import { shardMapArray, shardMatmul } from "./shardCompute.js";
+import { PAGE_SIZE, bytesToMb } from "../runtime/memoryLayout.js";
 
 // 시그널 번호(POSIX 관례. 외부 기술 명칭이라 번호는 원어 규격 그대로).
 // 워커의 SAB 채널에 쓰면 CPython eval 루프가 해당 핸들러를 부른다(signalTableProbe 실측).
@@ -138,7 +139,7 @@ export class PyProc {
     for (const dst of dsts) dst.parentPid = srcPid; // 계보 기록: fork된 프로세스의 부모(ps()에 노출)
     return {
       pages: h.pages.length,
-      mb: +(h.pages.length * 65536 / 1048576).toFixed(1),
+      mb: bytesToMb(h.pages.length * PAGE_SIZE),
       harvestMs: h.ms, // 레인 수와 무관한 1회 비용
       lanes: dsts.map((dst, i) => ({
         pid: dst.pid,
