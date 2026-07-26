@@ -1,19 +1,19 @@
-# 공개키 배포와 권한 UI 계약
+# Public key distribution and the permission UI contract
 
-`.pymachine`은 살아있는 컴퓨터 파일이다. 서명은 출처를 검증하고, 권한 UI는 실행 범위를 승인한다. 둘은 같은 것이 아니다. 제품은 이 둘을 한 화면에서 보여주되, 내부적으로는 분리된 계약으로 다룬다.
+A `.pymachine` is a living computer file. A signature verifies provenance; the permission UI approves execution scope. They are not the same thing. A product shows both on one screen but treats them internally as separate contracts.
 
-## 신뢰 체인
+## Trust chain
 
-제품은 다음 원칙을 지킨다.
+A product holds to these principles.
 
-- 서명된 머신만 자동으로 연다. 기본 import 경로는 `open(file, { trustedPublicKeys, requireSignature: true })`다.
-- `{ trust: true }`는 개발자 도구나 로컬 디버그에 한정한다. 일반 사용자 파일 열기 UI에서는 쓰지 않는다.
-- 공개키는 `exportStatePublicKey()`로 JWK를 배포하고, 표시용 fingerprint는 `fingerprintStatePublicKey()`의 `sha256:<hex>` 값을 쓴다. 둘 다 `pyproc/history`에 살고 첫 인자로 crypto provider를 받는다.
-- 사용자에게는 최소 16 hex 이상의 짧은 fingerprint를 표시하고, 상세 보기에는 전체 fingerprint와 JWK 출처를 둔다.
-- 키 회전은 "현재 키 + 다음 키 + 이전 키" 목록으로 운영한다. 이전 키 제거는 해당 키로 서명된 `.pymachine` 파일의 import 정책 변경이다.
-- signature는 sandbox 허가가 아니다. 신뢰된 키로 서명된 파일도 권한 UI를 통과해야 실행 범위가 열린다.
+- Only signed machines open automatically. The default import path is `open(file, { trustedPublicKeys, requireSignature: true })`.
+- `{ trust: true }` is limited to developer tools and local debugging. Never use it in a general user-facing file-open UI.
+- Distribute the public key as a JWK through `exportStatePublicKey()`, and use the `sha256:<hex>` value from `fingerprintStatePublicKey()` as the fingerprint you display. Both live in `pyproc/history` and take a crypto provider as their first argument.
+- Show the user a short fingerprint of at least 16 hex characters, and put the full fingerprint and the JWK's origin in a detail view.
+- Operate key rotation as a list: current key, next key, previous key. Removing a previous key is a change to the import policy for every `.pymachine` signed with it.
+- A signature is not a sandbox grant. Even a file signed by a trusted key must pass the permission UI before its execution scope opens.
 
-최소 흐름:
+Minimal flow:
 
 ```js
 import { open } from "pyproc";
@@ -29,48 +29,48 @@ const machine = await open(file, {
 });
 ```
 
-## 권한 UI
+## The permission UI
 
-권한 UI는 제품이 실행 전에 사용자에게 보여주는 능력 범위다. pyproc의 기본 권한 단위는 `machine.runtime.enableJail(permissions)`가 설치하는 `permissions{net, clipboard, home, workers}`다.
+The permission UI is the capability scope a product shows the user before execution. pyproc's base permission unit is the `permissions{net, clipboard, home, workers}` that `machine.runtime.enableJail(permissions)` installs.
 
-| 권한 | 사용자에게 보여줄 의미 | 기본 |
+| Permission | What to show the user | Default |
 |---|---|---|
-| `net` | 외부 네트워크 대상. `false`, `true`, 또는 host allowlist | `false` |
-| `clipboard` | 시스템 클립보드 읽기/쓰기 | `false` |
-| `home` | `/home/web` 영속 디스크 접근 | 제품 목적에 따라 명시 |
-| `workers` | 추가 Worker/프로세스 생성 | `false` |
+| `net` | External network targets: `false`, `true`, or a host allowlist | `false` |
+| `clipboard` | System clipboard read and write | `false` |
+| `home` | Access to the `/home/web` persistent disk | State it according to the product's purpose |
+| `workers` | Creating additional Workers and processes | `false` |
 
-제품 UI는 다음을 표시한다.
+The product UI displays:
 
-- signer fingerprint
-- `.pymachine` 파일 크기와 출처
-- permission manifest
-- `enableJail(...)`이 돌려준 `connectSrc` 또는 해당 제품의 네트워크 allowlist
-- `resume.py`가 다시 열 자원 목록(DB, relay, device handle 등)
+- the signer fingerprint
+- the `.pymachine` file's size and origin
+- the permission manifest
+- the `connectSrc` that `enableJail(...)` returned, or the product's own network allowlist
+- the list of resources `resume.py` will reopen (DB, relay, device handles, and so on)
 
-`enableJail(permissions)`의 협조 티어는 실수 방지와 코드 레벨 명시성이다. 강한 네트워크 차단은 감옥 핸들의 `csp()`를 적용한 컨텍스트에서 브라우저 CSP가 집행한다. same-origin 감옥은 `window.parent` 측면통로가 남고, opaque origin 감옥은 부모를 막는 대신 SAB 기반 프로세스 기능을 잃는다. 제품은 이 tradeoff를 UI/모드로 분리한다.
+The cooperative tier of `enableJail(permissions)` provides mistake prevention and code-level explicitness. Hard network blocking is enforced by the browser's CSP in a context where the jail handle's `csp()` has been applied. A same-origin jail leaves a `window.parent` side channel open, while an opaque-origin jail blocks the parent at the cost of losing the SAB-based process capabilities. A product separates that tradeoff into distinct UI modes.
 
-## 현재 고정 표면
+## Currently pinned surfaces
 
-| 표면 | 계약 |
+| Surface | Contract |
 |---|---|
-| `fingerprintStatePublicKey()` | CryptoKeyPair 또는 JWK에서 같은 `sha256:<hex>` fingerprint를 만든다(`pyproc/history`) |
-| `machineImageProbe.html` | WebCrypto signature, trusted public key import, 다른 공개키 거부, fingerprint 안정성을 브라우저에서 검증한다 |
-| `examples/machine.html` | signer fingerprint와 `home=yes, net=no, clipboard=no, workers=no` 권한 정책을 데모 UI에 표시하고, signed `.pymachine`만 연다 |
-| `machine.runtime.enableJail(permissions)` | 협조 초크포인트를 심고 `{ jail, permissions, connectSrc }`를 돌려준다 |
+| `fingerprintStatePublicKey()` | Produces the same `sha256:<hex>` fingerprint from either a CryptoKeyPair or a JWK (`pyproc/history`) |
+| `machineImageProbe.html` | Verifies WebCrypto signatures, trusted public key import, rejection of a different public key, and fingerprint stability, in a browser |
+| `examples/machine.html` | Shows the signer fingerprint and the `home=yes, net=no, clipboard=no, workers=no` permission policy in the demo UI, and opens only signed `.pymachine` files |
+| `machine.runtime.enableJail(permissions)` | Plants the cooperative chokepoints and returns `{ jail, permissions, connectSrc }` |
 
-## 제품별 적용
+## Per-product application
 
-| 제품 | 공개키 배포 | 권한 UI |
+| Product | Public key distribution | Permission UI |
 |---|---|---|
-| codaro | editor build와 함께 trusted key JWK 또는 keyset manifest를 배포하고, build hash와 fingerprint를 quality report에 남긴다 | 프로젝트별 `/home/web/codaro`, ASGI endpoint, 네트워크 allowlist, worker 사용 여부를 실행 전 표시 |
-| dartlab | notebook runtime 배포와 keyset을 묶고, shared notebook import 시 fingerprint를 표시한다 | `/pyapi`, 파일/DB connection, package cache, 외부 fetch/relay를 notebook 권한으로 분리 |
-| xlpod | workbook별 UDF runtime keyset을 배포한다 | workbook 파일 접근, formula callback bridge, 취소 SAB, 외부 네트워크를 명시 |
-| 외부 제품 | 제품 release asset 또는 서버 endpoint로 JWK를 배포한다 | 감옥 권한 manifest와 제품 고유 권한을 같은 승인 화면에 둔다 |
+| codaro | Ships a trusted key JWK or a keyset manifest with the editor build, and records the build hash and fingerprint in the quality report | Shows the per-project `/home/web/codaro`, the ASGI endpoint, the network allowlist, and whether workers are used, before execution |
+| dartlab | Bundles the keyset with the notebook runtime distribution and shows the fingerprint when importing a shared notebook | Separates `/pyapi`, file and DB connections, the package cache, and external fetch/relay as notebook permissions |
+| xlpod | Distributes a per-workbook UDF runtime keyset | States workbook file access, the formula callback bridge, the cancellation SAB, and external network explicitly |
+| External products | Distribute the JWK through a product release asset or a server endpoint | Put the jail permission manifest and the product's own permissions on the same approval screen |
 
-## 금지
+## Forbidden
 
-- 서명 없거나 알 수 없는 키의 `.pymachine`을 자동으로 열지 않는다.
-- signature 통과를 권한 승인으로 해석하지 않는다.
-- `trust: true`를 일반 사용자 import UI의 기본값으로 쓰지 않는다.
-- 권한 화면에 "safe" 같은 추상 문구만 두지 않는다. host, disk, clipboard, worker, resume 대상 자원을 구체적으로 보여준다.
+- Never open an unsigned `.pymachine`, or one signed by an unknown key, automatically.
+- Never interpret a passing signature as permission approval.
+- Never make `trust: true` the default in a general user-facing import UI.
+- Never leave only abstract wording like "safe" on the permission screen. Show the concrete hosts, disk, clipboard, workers, and resume targets.

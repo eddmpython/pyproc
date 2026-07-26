@@ -3047,6 +3047,33 @@ section("진입 표면 언어");
     // 곳까지 따라가면 내부 운영 문서 전체가 스코프에 들어온다.
     found.delete("docs/README.md");
     found.delete("docs/reference/api.md");
+    // 한 홉 더 따라간다. 진입점이 직접 가리키지 않아도 채택 문서가 가리키는 곳은 여전히 채택
+    // 경로다(trustPermissions는 contract.md에서 한 홉이라 첫 판정에서 빠졌다). 두 홉까지는
+    // 가지 않는다: 그러면 mainPlan 원장과 내부 운영 문서가 전부 들어온다.
+    const consuming = [...found];
+    for (const doc of consuming) {
+      const text = readFileSync(join(ROOT, doc), "utf8");
+      const dir = doc.slice(0, doc.lastIndexOf("/"));
+      for (const m of text.matchAll(/\]\((?!https?:)([A-Za-z0-9/_.-]+\.md)\)/g)) {
+        // 상대 경로를 저장소 기준으로 정규화한다(`../operations/x.md` 형태를 담는다).
+        const parts = `${dir}/${m[1]}`.split("/");
+        const stack = [];
+        for (const part of parts) {
+          if (part === "." || part === "") continue;
+          if (part === "..") stack.pop();
+          else stack.push(part);
+        }
+        const resolved = stack.join("/");
+        // 한 홉 확장은 소비자 대면 트리에만 적용한다. `docs/operations/`는 내부 절차(릴리즈
+        // 수순, 게이트 임계값)라 진입점이 직접 가리킬 때만 스코프다: 규칙이 공개 표면과 내부
+        // 문서를 가르는 지점이 여기다. `docs/product/`는 제품 방향이라 공개 표면이다
+        // (숫자 자랑 게이트도 그 트리를 공개로 본다).
+        const consumerFacing = resolved.startsWith("docs/consuming/") || resolved.startsWith("docs/product/");
+        if (consumerFacing && existsSync(join(ROOT, resolved))) found.add(resolved);
+      }
+    }
+    found.delete("docs/README.md");
+    found.delete("docs/reference/api.md");
     return [...found].sort();
   };
   // 예산 단계는 끝났다(343 -> 275 -> 178 -> 51 -> 0). 0에 닿은 표면은 0으로 잠근다: 예산이

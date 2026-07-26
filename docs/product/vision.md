@@ -1,91 +1,91 @@
-# pyproc 제품 방향 - 무엇을, 누구를 위해, 왜
+# pyproc product direction - what, for whom, and why
 
-pyproc의 전체 방향과 제품 정책의 정본이다. 지속 문서라 docs에 산다(개발 계획·진행 상태는 [mainPlan/](../../mainPlan/README.md)이 담당하고, 완료되면 `_done`으로 빠진다).
+The canonical statement of pyproc's overall direction and product policy. It lives in docs because it is a persistent document; development plans and progress belong to [mainPlan/](../../mainPlan/README.md) and move to `_done` when they finish.
 
-## 상위 North Star
+## The higher North Star
 
-**브라우저를 컴퓨터로 만든다. 정확히는 Chromium을 하드웨어·보안 경계로 삼고, 가상 CPU·메모리·디스크·화면·네트워크·장치·권한·부팅·복구를 하나의 Web Machine 계약으로 묶어 서로 다른 guest OS가 올라가게 한다.**
+**Make the browser into a computer.** Precisely: take Chromium as the hardware and security boundary, and bind virtual CPU, memory, disk, display, network, devices, permissions, boot, and recovery into one Web Machine contract so that different guest OSes can run on it.
 
-목표는 브라우저에 Windows 또는 macOS 모양 UI를 그리는 것이 아니다. 운영체제가 아래에 컴퓨터가 있다고 믿을 수 있는 얇은 host 계약을 만들고, pyproc Python OS와 별도 Linux guest가 같은 boot, device, snapshot, restore 생명주기를 소비하게 만드는 것이다.
+The goal is not to draw a Windows- or macOS-shaped UI in the browser. It is to build a thin host contract an operating system can believe there is a computer beneath, and to make the pyproc Python OS and a separate Linux guest consume the same boot, device, snapshot, and restore lifecycle.
 
-## pyproc의 현재 자리
+## Where pyproc sits today
 
-pyproc은 Web Machine Platform의 첫 Python guest OS다. 공개 npm package는 서버 없이 브라우저에서 Python 실행·프로세스·파일·권한·네트워크 가상화·복원 리액티브를 제공하는 재사용 커널로 유지한다. `src/machine/` 층과 `apps/webComputer/` 제품은 pyproc과 Linux를 같은 lifecycle·device·signed image 계약으로 조립한다. codaro/dartlab/xlpod는 pyproc 공개 표면을 소비하고, Web Computer 제품은 별도 composition root에서 상위 플랫폼을 소비한다.
+pyproc is the first Python guest OS of the Web Machine platform. The public npm package stays a reusable kernel that provides Python execution, processes, files, permissions, network virtualization, and restore-based reactivity in the browser with no server. The `src/machine/` layer and the `apps/webComputer/` product assemble pyproc and Linux under the same lifecycle, device, and signed-image contracts. codaro, dartlab, and xlpod consume the pyproc public surface, while the Web Computer product consumes the higher platform from a separate composition root.
 
-상위 목표가 커져도 현재형 주장은 넓히지 않는다. 범용 host, 공통 `.webmachine` 이미지, Linux Dual-Boot는 [완료된 web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md)에서 실증했고, host는 `src/machine/` 층으로 pyproc 안에 살며 `createWebComputer` 한 점과 `pyproc/machine` subpath로 함께 나간다. 출하하지 않는 것은 재배포 가능한 Linux image와 x86 emulator 엔진이다.
+Even as the higher goal grows, present-tense claims do not widen with it. A general host, a shared `.webmachine` image, and Linux dual-boot were proven in [the completed web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md); the host lives inside pyproc as the `src/machine/` layer and ships alongside it through the single `createWebComputer` entry point and the `pyproc/machine` subpath. What is not shipped is a redistributable Linux image and an x86 emulator engine.
 
-## 근본 설계 원칙
+## The founding design principle
 
-모든 OS의 syscall과 내부 상태를 통일하지 않는다. Web Machine이 공통화하는 것은 boot, pause, resume, shutdown, virtual device, resource permission, snapshot envelope, failure recovery뿐이다. 엔진별 상태는 opaque payload로 두고 adapter가 번역한다. 새 guest가 추가될 때 host core에 OS 이름 분기가 늘어나면 설계 실패다.
+Do not unify the syscalls and internal state of every OS. What the Web Machine makes common is only boot, pause, resume, shutdown, virtual devices, resource permissions, the snapshot envelope, and failure recovery. Engine-specific state stays an opaque payload that an adapter translates. If adding a new guest grows an OS-name branch in the host core, the design has failed.
 
-## 문제
+## The problem
 
-브라우저에서 진짜 파이썬을 돌리는 조각(Pyodide, JSPI, File System Access, SharedArrayBuffer)은 이미 있다. 그러나 이들을 "실제 로컬 런타임처럼" 엮는 계층은 각 제품이 매번 새로 짠다. 그 결과:
+The pieces for running real Python in a browser already exist: Pyodide, JSPI, File System Access, SharedArrayBuffer. What does not exist is the layer that binds them into something behaving like a real local runtime - so every product writes that layer again. The result:
 
-- codaro·dartlab·xlpod가 같은 브라우저 파이썬 런타임을 필요로 하는데 각자 복붙하면 3벌로 갈라진다. 한 곳에서 버그를 고쳐도 나머지는 안 고쳐진다.
-- Pyodide는 단일 인터프리터 한 개다. 병렬·프로세스·상태 복원 같은 "런타임의 물성"은 기본 제공되지 않아 매번 재발명된다.
-- 브라우저의 부재 능력(socket/subprocess/blocking input)을 메우는 방식이 제품마다 제각각이라 재사용이 안 된다.
+- codaro, dartlab, and xlpod all need the same browser Python runtime, and copy-pasting it gives three divergent copies. Fixing a bug in one leaves the others broken.
+- Pyodide is one single interpreter. The physical properties of a runtime - parallelism, processes, state restore - are not provided, so they get reinvented every time.
+- Each product fills the browser's missing capabilities (sockets, subprocess, blocking input) its own way, so none of it is reusable.
 
-pyproc은 이 계층을 **한 번 제대로 만들어 버전 고정으로 공유**한다. 개선이 한 곳에 모이고, 제품들이 실제로 import하면 자동으로 SSOT가 된다. 오픈소스이므로 외부 사용자에게도 같은 계약으로 열려 있다.
+pyproc builds that layer **once, properly, and shares it under a version pin**. Improvements collect in one place, and because products actually import it, it becomes an SSOT automatically. Being open source, it is open to external users under the same contract.
 
-## 무엇인가 / 무엇이 아닌가
+## What it is and what it is not
 
-**pyproc이다:**
-- 프레임워크 무관 ESM 라이브러리. 빌드 단계 없음(네이티브 `.js` + 손으로 유지하는 `.d.ts`).
-- 브라우저 티어의 OS 커널 프리미티브: 런타임 부팅, 복원 리액티브, 프로세스 OS, 파일 세계, 권한 감옥, 네트워크 가상화, 능력 계약.
-- 교차 관심사(WASM 힙 접근·스택 포인터·몽키패치)를 능력 계약 뒤에 캡슐화한 깨끗한 소비 표면.
+**pyproc is:**
+- A framework-agnostic ESM library. No build step (native `.js` plus a hand-maintained `.d.ts`).
+- OS kernel primitives at the browser tier: runtime boot, restore-based reactivity, the process OS, the file world, the permission jail, network virtualization, capability contracts.
+- A clean consumption surface that encapsulates the cross-cutting concerns - WASM heap access, stack pointers, monkeypatching - behind capability contracts.
 
-**pyproc이 아니다:**
-- 일반 목적 리눅스 복제품. 브라우저가 막는 네이티브 바이너리·인바운드 포트·로컬 드라이버 직접 접근은 외부 조각 없이는 만들지 않는다.
-- 범용 x86 emulator 엔진 또는 재배포 가능한 Linux image. host 계약은 npm으로 함께 나가지만 게스트 엔진과 image는 소비자가 주입한다(engine/image compliance는 별도 경계다).
-- 제품 UI/도메인 로직(커리큘럼·자동화·시트 편집). 그건 소비 제품이 위에 얹는다.
-- 실행 위치 배정 정책(어느 티어에서 돌릴지 판정). 그건 제품별로 달라 제품이 소유한다.
-- 로컬 엔진/GitHub Actions 엔진. pyproc은 브라우저 티어의 프리미티브만 제공한다.
-- Firefox/Safari 대응. 스코프 밖(아래 "지원 경계").
+**pyproc is not:**
+- A general-purpose Linux clone. Native binaries, inbound ports, and direct local driver access are things the browser blocks, and it does not build them without an external piece.
+- A general x86 emulator engine or a redistributable Linux image. The host contract ships over npm, but the guest engine and image are injected by the consumer (engine and image compliance is a separate boundary).
+- Product UI or domain logic (curriculum, automation, sheet editing). Consuming products layer that on top.
+- Placement policy (deciding which tier a workload runs on). That differs per product, so the product owns it.
+- A local engine or a GitHub Actions engine. pyproc provides browser-tier primitives only.
+- Firefox/Safari support. Out of scope (see "Support boundary" below).
 
-### 안 만드는 것 (검토 후 기각, 근거 보존)
+### What it deliberately will not build (rejected after review, with the reasoning preserved)
 
-끌리지만 우리에게 틀린 것들. 각 항목은 검토 끝에 기각했고, 근거를 보존한다(상세 논증은 [mainPlan/_done/browser-os/01-os-primitives.md](../../mainPlan/_done/browser-os/01-os-primitives.md) 안티 추천 절).
+Tempting things that are wrong for us. Each was rejected after review, and the reasoning is preserved (the detailed argument is in the anti-recommendation section of [mainPlan/_done/browser-os/01-os-primitives.md](../../mainPlan/_done/browser-os/01-os-primitives.md)).
 
-1. **SharedWorker를 커널로 승격.** COI=false는 플랫폼 벽이고 그 안의 커널은 SAB/interrupt/fork/shm을 전부 잃는다. 대신 Web Locks + BroadcastChannel 선출(`KernelElection`)로 SAB를 지키며 탭 죽음을 넘는다.
-2. **메인 커널의 선점 시분할**(settrace 바이트코드 예산). settrace 감속은 크다. 선점 단위는 프로세스(워커)이고 메인 커널은 대화형 전용이다.
-3. **사용자/계정 시스템.** 브라우저 프로필이 이미 사용자다. 필요한 건 신원이 아니라 머신별 능력(`MachineJail`).
-4. **SAB 위 numpy 제로카피 약속.** 단일 선형 메모리 벽으로 불가능. "memcpy 1회"를 공개 계약으로 유지한다.
-5. **VT100/xterm.js 에뮬레이션 + 셸 파이프 미니 언어(`|`, `>`).** 1978년의 제약을 역수입하고 파이썬 위에 두 번째 문법을 얹는 덕지덕지다. 셸 언어는 파이썬 그 자체이고, 파이프의 본질(lazy 조합)은 제너레이터에 이미 있다.
-6. **split pane / 창 관리자.** 제품 UI는 소비 제품 몫. "한 머신을 여러 화면에서"의 답은 `KernelElection`이다.
-7. **커스텀 Pyodide 빌드(pthread/nogil)를 상시 유지.** 엔진 커스텀 빌드는 조건부 보험(발동 조건에서만)이다: [mainPlan/_done/engine-independence/README.md](../../mainPlan/_done/engine-independence/README.md) P4.
-8. **WebRTC 분산 머신.** 시그널링 서버 의존 = zero-dep 위반. 기기 간 이동은 `.pymachine` 파일이 담당한다.
+1. **Promoting a SharedWorker to be the kernel.** `COI=false` is a platform wall, and a kernel inside it loses SAB, interrupts, fork, and shm entirely. Instead, Web Locks plus BroadcastChannel election (`KernelElection`) keeps SAB while surviving a tab death.
+2. **Preemptive time slicing in the main kernel** (a settrace bytecode budget). The settrace slowdown is large. The unit of preemption is a process (a worker), and the main kernel is for interaction only.
+3. **A user or account system.** The browser profile is already the user. What is needed is not identity but per-machine capability (the permission jail).
+4. **Promising zero-copy numpy over a SAB.** Impossible against the single-linear-memory wall. "One memcpy" stays the public contract.
+5. **VT100/xterm.js emulation plus a shell pipe mini-language (`|`, `>`).** That re-imports the constraints of 1978 and stacks a second syntax on top of Python. The shell language is Python itself, and the essence of a pipe - lazy composition - is already in generators.
+6. **Split panes and a window manager.** Product UI belongs to the consuming product. The answer to "one machine on several screens" is `KernelElection`.
+7. **Maintaining a custom Pyodide build (pthread/nogil) permanently.** A custom engine build is conditional insurance, taken only when its trigger fires: [mainPlan/_done/engine-independence/README.md](../../mainPlan/_done/engine-independence/README.md) P4.
+8. **A WebRTC distributed machine.** Depending on a signaling server violates zero-dep. Moving between devices is the job of the `.pymachine` file.
 
-## 성공 / 실패 기준
+## Success and failure criteria
 
-- **현재 제품 성공**: 소비 제품들이 pyproc을 실제 import해서 각자 표면을 얹고, 브라우저 Python OS 개선이 pyproc 한 곳에 모인다. 소비자는 능력 계약만으로 복원 리액티브·프로세스 병렬·파일 세계·권한·가상 오리진을 쓰고 엔진 내부를 만지지 않는다.
-- **상위 플랫폼 성공**: 같은 Web Machine Host가 pyproc과 Linux guest를 공통 lifecycle·device·image 계약으로 부팅하고, 두 머신이 탭 장애와 cold reopen 뒤 복구된다.
-- **실패**: 제품들이 런타임을 복붙해 갈라지거나, pyproc이 제품 UI와 x86 특수 로직을 흡수하거나, guest가 추가될 때마다 host core의 OS별 분기가 늘어난다.
+- **Present-product success**: consuming products actually import pyproc and layer their own surfaces on it, and improvements to the browser Python OS collect in pyproc alone. Consumers use restore-based reactivity, process parallelism, the file world, permissions, and virtual origins through capability contracts without touching engine internals.
+- **Higher-platform success**: the same Web Machine host boots pyproc and a Linux guest under common lifecycle, device, and image contracts, and both machines recover after a tab failure and a cold reopen.
+- **Failure**: products copy-paste the runtime and diverge; pyproc absorbs product UI and x86-specific logic; or the host core grows per-OS branches every time a guest is added.
 
-## Python guest 능력의 네 가지 상태 (목표는 무한대, 현재형 주장은 증명된 만큼)
+## The four states of a Python guest capability (the goal is unbounded; present-tense claims go only as far as the proof)
 
-Web Machine 상위 North Star 아래에서 pyproc guest의 호환성 방향은 "로컬에서 되는 모든 파이썬을 브라우저에서"다. 각 능력은 아래 네 상태 중 하나에 있고, pyproc의 일은 위 칸으로 밀어 올리는 것과 upstream이 벽을 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다. "불가능"은 현재 조건 판정이지 포기가 아니다. 축별 실측 좌표의 정본은 관련 이니셔티브의 실측 원장이다.
+Under the higher Web Machine North Star, the compatibility direction for the pyproc guest is "everything that works in local Python, in the browser". Each capability sits in one of the four states below, and pyproc's job is to push capabilities up a row and to be the structure that absorbs a wall the moment upstream opens it. "Impossible" is a verdict about current conditions, not surrender. The canonical coordinates for each axis live in the measurement ledger of the relevant initiative.
 
-1. **현재 달성 (오늘 브라우저 실측)**: 순수 파이썬 + **네이티브 C확장 패키지**(numpy/pandas/scipy/scikit-learn/matplotlib 등 - Pyodide 배포판의 pyemscripten(PEP 783) 휠 158개를 dlopen으로 로드 = 이미 실동), 멀티코어 프로세스/스냅샷-fork/map, 체크포인트/시간여행, 세션 영속·부활, 터미널, 커널 내 ASGI, 영속 FS(OPFS), input/HTTP/subprocess, 프로세스 OS 전반(파이프/shm/락, 잡 컨트롤, 커널 선출, 머신 컨테이너, 권한 감옥, fsWorld), non-Pyodide WASI CPython 3.14.6 부팅 + 순수 파이썬 wheel 설치. **Pyodide는 동적 C확장 .so를 dlopen한다** - "동적 C확장 불가"는 WASI 레인 한정이었다(Pyodide 레인은 됨).
-2. **우회 가능 (브라우저 방식으로 가상화, 실측)**: 아웃바운드 소켓(`SocketBridge`), 서버(`AsgiServer`/`VirtualOrigin`), 프로세스(워커 커널). **GPU 수치 가속**(WebGPU 컴퓨트 - 워커 접근 + JSPI 동기 구동, 선행자 WgPy가 Pyodide 위 matmul 가속을 실증했다. f32 대규모 선형대수라는 좁은 계급에서 오늘 됨. numpy 투명 가속은 아니고 별도 배열 API). numpy를 WASI 정적 fat 바이너리로 빌드하는 경로도 있으나(빌드 확정) **속도 이득 없음, 오히려 느림**(참조 BLAS + no-SIMD, WASI 값 다리 JSON 한정) = 커버리지 실험이지 속도 경로 아님.
-3. **upstream 대기 (지금 막혔으나 플랫폼 발전으로 다시 열림)**: **임의 C확장 즉시 설치**(Pyodide dlopen은 되나 그 패키지의 pyemscripten 휠이 발행돼야 = PEP 783 생태계 채택 ~28개, ABI 락스텝. 대다수 긴 꼬리는 미발행), WASI 동적 링킹(cpython#142234), **numpy SIMD 빌드**(Pyodide가 아직 SIMD로 안 빌드 = 이득 대기), 진짜 threading/nogil(WASM threads + 공유 메모리, PR #6285 draft).
-4. **웹 보안상 영구 벽 (외부 조각 없이는 불가)**: 인바운드 서버, 임의 네이티브 바이너리 실행, 로컬 드라이버 직접(CUDA), 데스크톱 자동화. 이 몫은 소비 제품의 로컬/Actions 티어가 진다.
+1. **Achieved today (measured in a browser today)**: pure Python plus **native C-extension packages** (numpy, pandas, scipy, scikit-learn, matplotlib and more - the Pyodide distribution's 158 pyemscripten (PEP 783) wheels load through dlopen and already work); multi-core processes, snapshot-fork, and map; checkpoint and time travel; session persistence and revival; the terminal; the in-kernel ASGI server; a persistent FS (OPFS); input, HTTP, and subprocess; the process OS broadly (pipes, shm, locks, job control, kernel election, machine containers, the permission jail, fsWorld); and booting non-Pyodide WASI CPython 3.14.6 with pure-Python wheel installation. **Pyodide does dlopen dynamic C-extension `.so` files** - "no dynamic C extensions" was only ever true of the WASI lane.
+2. **Available through a workaround (virtualized the browser way, measured)**: outbound sockets (`SocketBridge`), servers (`AsgiServer`/`VirtualOrigin`), processes (worker kernels). **GPU numerical acceleration** (WebGPU compute, reached from a worker and driven synchronously through JSPI; the precursor WgPy demonstrated matmul acceleration on Pyodide). It works today in the narrow class of large f32 linear algebra - not transparent numpy acceleration but a separate array API. Building numpy as a WASI static fat binary is also a settled path, but it brings **no speed gain and is in fact slower** (reference BLAS, no SIMD, and a JSON-only WASI value bridge), so it is a coverage experiment rather than a speed path.
+3. **Waiting on upstream (blocked now, reopened by platform progress)**: **installing an arbitrary C extension on demand** (Pyodide's dlopen works, but that package's pyemscripten wheel has to be published - PEP 783 ecosystem adoption is around 28 packages, in ABI lockstep, and most of the long tail is unpublished); WASI dynamic linking (cpython#142234); a **SIMD numpy build** (Pyodide does not build with SIMD yet, so the gain is pending); and real threading with nogil (WASM threads plus shared memory, PR #6285 draft).
+4. **A permanent wall for web security reasons (impossible without an external piece)**: inbound servers, executing arbitrary native binaries, direct local drivers (CUDA), and desktop automation. That share is carried by the consuming product's local or Actions tier.
 
-정정(정직, 2026-07-13 연구 종합): (1) 네이티브 수치 패키지 **가용성은 이미 해결**(numpy 등 158 휠 dlopen). (2) "동적 C확장 불가"는 WASI 한정 - Pyodide는 dlopen을 한다. (3) 진짜 남은 벽은 **속도**(numpy 대규모 산술의 격차가 다음 도약. 좌표는 아래 원장에만 둔다. 경로: [mainPlan numerical-acceleration](../../mainPlan/_done/numerical-acceleration/README.md) = horizontal 샤딩 + GPU 잔류 레인)와 **임의 패키지 커버리지**(pyemscripten 휠 생태계 채택). (4) GPU는 상태2로 정정(오늘 라이브러리로 됨, 이전 판의 상태3은 stale).
+Corrections (honest, from the 2026-07-13 research synthesis): (1) **availability** of native numerical packages is already solved (numpy and others load through dlopen from 158 wheels). (2) "No dynamic C extensions" was WASI-only; Pyodide does dlopen. (3) The wall that actually remains is **speed** - the gap in large numpy arithmetic is the next leap, and its coordinates live only in the ledger. The path is [mainPlan numerical-acceleration](../../mainPlan/_done/numerical-acceleration/README.md): horizontal sharding plus a GPU-resident lane. And **arbitrary package coverage** (pyemscripten wheel ecosystem adoption). (4) GPU is corrected to state 2 (it works as a library today; the previous edition's state 3 was stale).
 
-## 지원 경계 (Chromium/Edge 전용)
+## Support boundary (Chromium/Edge only)
 
-JSPI(JavaScript Promise Integration), SharedArrayBuffer, `crossOriginIsolated`가 필요하다. Firefox/Safari 미지원은 결함이 아니라 스코프다. SharedArrayBuffer는 페이지가 아래 헤더로 crossOriginIsolated 상태여야 한다.
+JSPI (JavaScript Promise Integration), SharedArrayBuffer, and `crossOriginIsolated` are required. No Firefox or Safari support is a scope choice, not a defect. SharedArrayBuffer needs the page to be in a crossOriginIsolated state through these headers:
 
 ```
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-## 관련 문서
+## Related documents
 
-- 상위 Web Machine 비전과 Dual-Boot 완료 기록: [mainPlan/_done/web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md)
-- 첫 Python guest OS 성숙 완료 기록: [mainPlan/_done/browser-os-north-star](../../mainPlan/_done/browser-os-north-star/README.md)
-- 소비 계약(설치·공개 표면·버전 정합): [docs/consuming/contract.md](../consuming/contract.md)
-- 운영 모델(수명주기·개발 원칙): [docs/operations/operatingModel.md](../operations/operatingModel.md)
-- 현재 개발 계획과 결정 기록: [mainPlan/](../../mainPlan/README.md) (이니셔티브는 완료 시 `_done`으로 이관)
+- The higher Web Machine vision and the dual-boot completion record: [mainPlan/_done/web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md)
+- The completion record for the first Python guest OS reaching maturity: [mainPlan/_done/browser-os-north-star](../../mainPlan/_done/browser-os-north-star/README.md)
+- The consumption contract (install, public surface, version consistency): [docs/consuming/contract.md](../consuming/contract.md)
+- The operating model (lifecycle, development principles): [docs/operations/operatingModel.md](../operations/operatingModel.md)
+- Current development plans and decision records: [mainPlan/](../../mainPlan/README.md) (initiatives move to `_done` when they complete)
