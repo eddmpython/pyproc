@@ -1,4 +1,4 @@
-// pyproc/runtime subpath의 값/타입 계약.
+// Value and type contract of the pyproc/runtime subpath.
 import type {
   BootOptions,
   EngineContract,

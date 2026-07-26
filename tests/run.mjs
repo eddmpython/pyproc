@@ -2938,6 +2938,27 @@ section("진입 표면 언어");
   ];
   // machine 층 322개는 아직 한국어다. 이 층의 문장은 Web Computer 제품 화면에 뜨고 라이브러리
   // API 표면에는 거의 안 나오므로 우선순위가 뒤였다. 옮길 때 게이트 단정과 같은 커밋으로.
+  // 타입 선언의 주석 언어. 소비자가 가장 많이 읽는 표면이다: 에디터 자동완성이 JSDoc을 그대로
+  // 띄우고, npm 패키지에 함께 나가고, api.md가 서명의 정본으로 이 파일을 지정한다. 강등 subpath
+  // 7개는 전부 영문으로 옮겼고(이 커밋), 루트 index.d.ts의 나머지는 예산으로 방향을 고정한다.
+  // 예산은 줄이는 방향으로만 고친다: 늘리려면 이 숫자를 올려야 하고 그 diff가 심사 지점이다.
+  const DTS_LANGUAGE_BUDGET = 339;
+  check("d.ts 주석의 한국어 예산은 단조 감소한다", () => {
+    const byFile = [];
+    let korean = 0;
+    for (const relative of ["index.d.ts", ...SUBPATH_DTS]) {
+      const lines = readFileSync(join(ROOT, relative), "utf8").split(NEWLINE);
+      const count = lines.filter((line) => /[가-힣]/.test(line)).length;
+      if (count) byFile.push(`${relative}(${count})`);
+      korean += count;
+    }
+    // 강등 subpath는 전부 옮겼으므로 하드 0이다. 루트만 예산 안에 산다.
+    const subpathLeft = byFile.filter((entry) => !entry.startsWith("index.d.ts("));
+    if (subpathLeft.length) throw new Error(`강등 subpath d.ts에 한국어가 남았다: ${subpathLeft.join(", ")}`);
+    if (korean > DTS_LANGUAGE_BUDGET) {
+      throw new Error(`d.ts 한국어 주석 ${korean} > 예산 ${DTS_LANGUAGE_BUDGET}(예산은 줄이는 방향으로만 고친다)`);
+    }
+  });
   const MESSAGE_LANGUAGE_BUDGET = 309;
   check("사용자 대면 메시지의 한국어 예산은 단조 감소한다", () => {
     let korean = 0;

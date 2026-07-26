@@ -1,64 +1,71 @@
-// wasiSession.d.ts - pyproc/wasi subpath의 타입 계약(위치 근거는 gpuCompute.d.ts와 같다).
+// wasiSession.d.ts - type contract of the pyproc/wasi subpath (same placement rationale as gpuCompute.d.ts).
 
   import type { PyProcAssetIntegrityManifest } from "../../assets.js";
 export interface WasiManifest {
   /**
-   * python.wasm URL(소비자 셀프 호스팅). 미지정 시 기본 brettcannon CPython 3.14.6 릴리즈 zip을
-   * 받아 python.wasm + stdlib를 함께 푼다. COOP/COEP 하에선 CORP 때문에 셀프 호스팅 권장.
+   * URL of python.wasm, self-hosted by the consumer. When omitted, the default brettcannon
+   * CPython 3.14.6 release zip is fetched and both python.wasm and the stdlib are unpacked from
+   * it. Under COOP/COEP, self-hosting is recommended because of CORP.
    */
   wasmURL?: string;
   /**
-   * 외부 stdlib 빌드(brettcannon = python.wasm + 별도 lib)의 stdlib zip URL. wasmURL과 함께 준다.
-   * 생략하면 wasmURL을 self-contained 빌드(WLR = stdlib baked-in)로 본다.
+   * stdlib zip URL for builds that ship the stdlib separately (brettcannon = python.wasm plus a
+   * separate lib). Pass it together with wasmURL. When omitted, wasmURL is treated as a
+   * self-contained build (WLR, stdlib baked in).
    */
   stdlibURL?: string;
-  /** stdlib 마운트 디렉터리명(기본 "python3.14"). 릴리즈 zip 안 lib/<stdlibDir>/ 경로. */
+  /** Directory name the stdlib mounts under (default "python3.14"), i.e. lib/<stdlibDir>/ inside the release zip. */
   stdlibDir?: string;
-  /** true면 엔트로피/시간을 고정해 결정적으로 부팅한다(리플레이/시간여행의 전제). */
+  /** When true, entropy and time are pinned so the boot is deterministic - the precondition for replay and time travel. */
   deterministic?: boolean;
   /**
-   * 부팅 직후 설치할 순수 파이썬 wheel(바이트) 목록. 소비자가 제공한다(pyproc은 PyPI를 fetch하지
-   * 않는다 - wasmURL과 같은 계약). 각 wheel은 installWheel로 /site에 풀려 import 가능해진다.
+   * Pure-Python wheels (as bytes) to install right after boot. The consumer supplies them:
+   * pyproc does not fetch from PyPI, the same contract as wasmURL. Each wheel is unpacked into
+   * /site by installWheel and becomes importable.
    */
   wheels?: (ArrayBuffer | Uint8Array)[];
-  /** WASI worker 생성 전에 wasiWorker graph를 SRI 검증한다. */
+  /** SRI-verifies the wasiWorker graph before the WASI worker is created. */
   assetIntegrity?: PyProcAssetIntegrityManifest;
 }
 
 /**
- * Pyodide가 아닌 CPython(WASI)으로 도는 세션. Pyodide는 메인 스레드 동기지만 WASI는 워커 안
- * 비동기라, 동기 Runtime과 별개의 async 표면으로 둔다(소비자 무영향). 엔진 무관 실증:
- * 반복 실행 + 값 다리 + **완전 시간여행**(체크포인트/복원/재개/분기)이 Pyodide 내부 없이 성립.
- * 값 다리는 JSON 직렬화 한정(WASI엔 FFI가 없어 함수/numpy/live 객체는 못 넘긴다).
- * 네이티브 확장 불가(정적 링크). 코드 채널/신호 프로토콜은 내부 캡슐화(소비자는 모른다).
+ * A session running on CPython (WASI) rather than Pyodide. Pyodide is synchronous on the main
+ * thread while WASI is asynchronous inside a worker, so this is a separate async surface from
+ * the synchronous Runtime - consumers of either are unaffected. It is the engine-independence
+ * proof: repeated execution, a value bridge, and full time travel (checkpoint, restore, resume,
+ * branch) all hold without any Pyodide internals. The value bridge is JSON-serializable only,
+ * because WASI has no FFI, so functions, numpy arrays, and live objects cannot cross. Native
+ * extensions are impossible (static linking). The code channel and signal protocol are
+ * encapsulated internally; consumers never see them.
  */
 export class WasiSession {
   readonly runtimeContractVersion: 1;
   readonly runtimeKind: "wasi";
   capabilities(): readonly string[];
-  /** 코드 실행(async). stdout 문자열 반환. 파이썬 예외는 던진다. */
+  /** Runs code (async) and returns captured stdout. Python exceptions are thrown. */
   run(code: string): Promise<string>;
   runAsync(code: string): Promise<string>;
-  /** 파이썬 전역 값 회수(JSON 역직렬화). */
+  /** Reads a Python global back (JSON deserialization). */
   get(name: string): Promise<unknown>;
   getGlobal(name: string): Promise<unknown>;
-  /** JS 값을 파이썬 전역에 주입(JSON 직렬화). */
+  /** Injects a JS value into a Python global (JSON serialization). */
   set(name: string, value: unknown): Promise<void>;
   setGlobal(name: string, value: unknown): Promise<void>;
   toHostValue(value: unknown, options?: { proxyMode?: "copy" | "preserve"; fallback?: unknown }): unknown;
   destroyHostValue(value: unknown): void;
-  /** 지금 상태를 체크포인트(경계 힙 스냅샷). */
+  /** Checkpoints the current state (a heap snapshot at the boundary). */
   checkpoint(): Promise<{ idx: number; mb: number }>;
-  /** 시간여행: 체크포인트 idx로 복원한다. 복원 후 파이썬이 그 시점 상태로 재개(분기 가능). */
+  /** Time travel: restores checkpoint idx. Python resumes from that state afterwards, and may branch. */
   timeTravel(idx: number): Promise<void>;
   /**
-   * 순수 파이썬 wheel(바이트)을 라이브 세션에 설치한다(= 브라우저판 pip install). 네이티브로 풀어
-   * /site에 파일을 쓰고 import 캐시를 무효화한다. 이후 그 패키지를 import할 수 있다. 순수 파이썬
-   * 한정: C 확장(.so)은 WASI 동적 링크 부재로 불가(PEP 783 대기). 반환: 쓴 파일 수 + 최상위 이름들.
+   * Installs a pure-Python wheel (as bytes) into the live session - pip install for the browser.
+   * It unpacks natively, writes files into /site, and invalidates the import cache, after which
+   * the package is importable. Pure Python only: C extensions (.so) are impossible because WASI
+   * has no dynamic linking (waiting on PEP 783). Returns the file count and the top-level names.
    */
   installWheel(wheel: ArrayBuffer | Uint8Array): Promise<{ files: number; names: string[] }>;
   terminate(): void;
 }
 
-/** non-Pyodide CPython(WASI) 세션을 부팅한다. Chromium/Edge 전용(SAB + crossOriginIsolated). */
+/** Boots a non-Pyodide CPython (WASI) session. Chromium/Edge only (SAB + crossOriginIsolated). */
 export function bootWasi(manifest?: WasiManifest): Promise<WasiSession>;

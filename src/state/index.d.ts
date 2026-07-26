@@ -1,13 +1,14 @@
-// state/index.d.ts - pyproc/history subpath 타입 계약.
-// 모델: 상태는 두 구역의 단일 역사 저장소에 산다. 휘발 구역(체크포인트 나무)은 런타임
-// 핸들의 history 동사가 다루고, 이 표면은 내구 구역의 계약이다: 오브젝트 문법, 커밋·부활
-// 프로토콜, store 계약, 서명 tag, 이동 bundle.
+// state/index.d.ts - type contract of the pyproc/history subpath.
+// Model: state lives in one history store with two regions. The volatile region (the
+// checkpoint tree) is driven by the history verbs on a runtime handle; this surface is the
+// contract of the durable region: object grammar, commit/revive protocol, the store
+// contract, signed tags, and the portable bundle.
 
 export interface StateCryptoProvider {
   subtle: SubtleCrypto;
 }
 
-// ---- 주소/다이제스트 (정본 형식은 "sha256:<hex>" 하나) ----
+// ---- Addresses and digests (one canonical form: "sha256:<hex>") ----
 export const SHA256_ADDRESS_RE: RegExp;
 export function parseSha256Address(value: unknown): string | null;
 export function sha256Address(data: Uint8Array | ArrayBuffer | string): Promise<string>;
@@ -17,7 +18,7 @@ export function verifySha256(bytes: Uint8Array, expected: string): Promise<{ ok:
 export function verifySha256With(cryptoProvider: StateCryptoProvider, bytes: Uint8Array, expected: string): Promise<{ ok: boolean; actual: string; expectedHex: string | null }>;
 export const PAGE_SIZE: number;
 
-// ---- 오브젝트 모델 ----
+// ---- Object model ----
 export interface StatePageTableTree {
   kind: "pageTable";
   pageSize: number;
@@ -53,7 +54,7 @@ export function validateStateTree(tree: unknown): StateTree;
 export function makeStateCommit(input: Partial<StateCommit> & { tree: string }): StateCommit;
 export function validateStateCommit(commit: unknown): StateCommit;
 
-// ---- store 계약 (backend 주입, 원자성은 backend 책임) ----
+// ---- Store contract (the backend is injected; atomicity is the backend's duty) ----
 export interface StateRefReading {
   ref?: { commit: string };
   missing?: true;
@@ -92,7 +93,7 @@ export class OpfsStateStore implements StateStore {
   countObjects(): Promise<number>;
 }
 
-// ---- 커밋·부활 프로토콜 ----
+// ---- Commit and revive protocol ----
 export interface CommitStateResult {
   commitAddress: string;
   treeAddress: string;
@@ -135,7 +136,7 @@ export function openState(
   opts?: { expectH0?: string | null },
 ): Promise<OpenStateResult | null>;
 
-// ---- 서명 tag (출처) ----
+// ---- Signed tags (provenance) ----
 export const STATE_TAG_ALG: "ECDSA-P256-SHA256";
 export interface StateTag {
   alg: "ECDSA-P256-SHA256";
@@ -159,7 +160,7 @@ export function verifyStateTag(
   opts?: { trustedPublicKeys?: Array<JsonWebKey | CryptoKey | string> },
 ): Promise<{ valid: boolean; trusted: boolean; signerFingerprint: string | null }>;
 
-// ---- 이동 bundle (단일 봉투 포맷, docs/reference/bundleFormat.md가 레이아웃 정본) ----
+// ---- Portable bundle (one envelope format; docs/reference/bundleFormat.md is the layout canon) ----
 export const STATE_BUNDLE_MAGIC: "PYBUNDLE1\n";
 export const STATE_BUNDLE_VERSION: 1;
 export const STATE_BUNDLE_HEAD_MAX_BYTES: number;

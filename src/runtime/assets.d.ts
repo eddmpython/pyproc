@@ -1,23 +1,24 @@
-// assets.d.ts - pyproc/assets subpath 타입 계약(자기 .js 옆 배치 규칙).
-// 소비 제품이 같은 오리진에 배포할 실행 자산의 manifest/SRI/Service Worker 계약.
+// assets.d.ts - type contract of the pyproc/assets subpath (placed next to its own .js).
+// The manifest, SRI, and Service Worker contract for the runtime assets a consuming product
+// deploys on its own origin.
 
 export const PYPROC_ASSET_MANIFEST_VERSION: 1;
 
 export interface PyProcAssetEntry {
   role: "processWorker" | "machineWorker" | "wasiWorker" | "pyprocServiceWorker";
-  /** 패키지 루트 기준 상대 경로. */
+  /** Path relative to the package root. */
   path: string;
   kind: "module-worker" | "shared-worker" | "service-worker";
   sameOrigin: true;
   usedBy: string[];
   reason: string;
-  /** baseURL 기준 절대 URL. */
+  /** Absolute URL resolved against baseURL. */
   url: string;
 }
 
 export interface PyProcAssetManifest {
   version: 1;
-  /** 이 manifest가 URL을 계산한 패키지 루트. */
+  /** The package root this manifest resolved URLs against. */
   packageRoot: string;
   policy: {
     sameOriginRequired: true;
@@ -31,19 +32,19 @@ export interface PyProcAssetManifest {
 export function getPyProcAssetManifest(opts?: { baseURL?: string | URL }): PyProcAssetManifest;
 
 export interface PyProcAssetIntegrityFile {
-  /** 패키지 루트 기준 상대 경로. */
+  /** Path relative to the package root. */
   path: string;
-  /** 배포된 실제 URL. root-relative URL 가능. */
+  /** The URL it is actually deployed at; a root-relative URL is allowed. */
   url: string;
   bytes: number;
-  /** 표준 SRI 문자열(sha256-...). */
+  /** Standard SRI string (sha256-...). */
   integrity: string;
-  /** 이 파일을 쓰는 entrypoint role 목록. */
+  /** Entrypoint roles that use this file. */
   roles: PyProcAssetEntry["role"][];
 }
 
 export interface PyProcAssetEntrypoint extends PyProcAssetEntry {
-  /** entrypoint에서 상대 import/importScripts로 닿는 로컬 파일 graph. */
+  /** Graph of local files reachable from an entrypoint by relative import/importScripts. */
   graph: string[];
   bytes: number;
   integrity: string;
@@ -55,15 +56,15 @@ export interface PyProcAssetIntegrityManifest extends Omit<PyProcAssetManifest, 
 }
 
 export interface PyProcAssetIntegrityVerifyOptions {
-  /** 검증할 실행 자산 role. 생략하면 files 전체를 검증한다. */
+  /** Asset roles to verify. Omit to verify every file. */
   roles?: PyProcAssetEntry["role"][];
-  /** role 대신 특정 상대 경로만 검증한다. */
+  /** Verify only these relative paths instead of whole roles. */
   paths?: string[];
-  /** 테스트나 특수 배포 환경용 fetch 대체. */
+  /** fetch replacement for tests or unusual deployments. */
   fetch?: typeof fetch;
   cache?: RequestCache;
   credentials?: RequestCredentials;
-  /** false면 선택 대상 없음이 예외가 아니라 verified 0이 된다. */
+  /** When false, selecting nothing yields verified 0 instead of throwing. */
   required?: boolean;
 }
 
@@ -76,27 +77,27 @@ export interface PyProcAssetIntegrityResult {
 export function verifyPyProcAssetIntegrity(manifest: PyProcAssetIntegrityManifest, opts?: PyProcAssetIntegrityVerifyOptions): Promise<PyProcAssetIntegrityResult | null>;
 
 export interface PyProcServiceWorkerRegisterOptions {
-  /** 테스트나 특수 실행 환경용 navigator 대체. 생략하면 globalThis.navigator를 쓴다. */
+  /** navigator replacement for tests or unusual hosts. Defaults to globalThis.navigator. */
   navigator?: Navigator;
-  /** SRI preflight용 fetch 대체. */
+  /** fetch replacement for the SRI preflight. */
   fetch?: typeof fetch;
-  /** SRI preflight fetch cache 옵션. */
+  /** cache option for the SRI preflight fetch. */
   verifyCache?: RequestCache;
   credentials?: RequestCredentials;
-  /** pyprocSw.js ?cache=1. script/module/wasm/zip 캐시와 coreIntegrity 검증 경로를 켠다. */
+  /** pyprocSw.js ?cache=1. Turns on the script/module/wasm/zip cache and the coreIntegrity verification path. */
   cache?: boolean;
-  /** pyprocSw.js ?asgi=/prefix/. VirtualOrigin fetch 위임 접두 경로. */
+  /** pyprocSw.js ?asgi=/prefix/. Prefix whose fetches are delegated to VirtualOrigin. */
   asgi?: string;
-  /** pyprocSw.js ?coi=1. 헤더를 못 다는 호스팅에서 COOP/COEP를 주입한다. */
+  /** pyprocSw.js ?coi=1. Injects COOP/COEP on hosting that cannot set headers. */
   coi?: boolean;
-  /** pyprocSw.js ?cdn=<prefix>. cache/coreIntegrity 대상으로 볼 URL 접두. */
+  /** pyprocSw.js ?cdn=<prefix>. URL prefix treated as cache/coreIntegrity scope. */
   cdn?: string;
-  /** pyprocSw.js ?coreIntegrity=<url>. SW가 캐시 대상 바이트를 SRI로 검증할 manifest URL. */
+  /** pyprocSw.js ?coreIntegrity=<url>. Manifest URL the SW uses to SRI-verify cached bytes. */
   coreIntegrity?: string;
-  /** false면 SW coreIntegrity manifest 누락을 통과시킨다. 기본은 strict. */
+  /** When false, a missing SW coreIntegrity manifest is tolerated. Strict by default. */
   coreRequired?: boolean;
   asgiTimeout?: number;
-  /** 추가 pyprocSw.js query. true는 "1"로 직렬화한다. */
+  /** Extra pyprocSw.js query parameters; true serializes as "1". */
   query?: URLSearchParams | Record<string, string | number | boolean | null | undefined>;
   /** ServiceWorkerRegistrationOptions.scope. */
   scope?: string;
@@ -106,9 +107,9 @@ export interface PyProcServiceWorkerRegisterOptions {
 export interface PyProcServiceWorkerRegisterResult {
   registration: ServiceWorkerRegistration;
   integrity: PyProcAssetIntegrityResult | null;
-  /** 실제 register에 넘긴 URL. */
+  /** The URL actually passed to register. */
   url: string;
-  /** 검증한 manifest 파일 경로. */
+  /** Path of the manifest file that was verified. */
   file: string;
 }
 

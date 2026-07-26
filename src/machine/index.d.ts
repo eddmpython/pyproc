@@ -1,8 +1,9 @@
-// machine/index.d.ts - pyproc/machine subpath 타입 계약.
-// 옛 @web-machine/{core,browser,guest-pyproc,guest-v86} 네 index.d.ts를 한 모듈로 합쳤다.
-// 계약 의미는 그대로다: 게이트가 GenerationHead/MachineStore 의미 일치를 검사한다.
+// machine/index.d.ts - type contract of the pyproc/machine subpath.
+// The four index.d.ts files of the former @web-machine/{core,browser,guest-pyproc,guest-v86}
+// are merged into one module. The contract meanings are unchanged: the gate checks that
+// GenerationHead and MachineStore still mean the same thing.
 
-// ─── 옛 @web-machine/core ───
+// ─── formerly @web-machine/core ───
 export type SnapshotScope = "portable" | "session" | "none";
 export type MachineState = "created" | "running" | "paused" | "stopped" | "failed";
 
@@ -114,7 +115,7 @@ export class MachineHandle {
   shutdown(control?: OperationControl): Promise<MachineInspection>;
   inspect(): Promise<MachineInspection>;
   inspectNow(): MachineInspection;
-  /** 이 머신이 그 장치를 권한으로 요구하는가. host.detachDevice가 사용 중 판정에 쓴다. */
+  /** Whether this machine requires that device by permission. host.detachDevice asks this to decide whether it is in use. */
   usesDevice(name: string): boolean;
 }
 
@@ -124,11 +125,11 @@ export class WebMachineHost {
   registerDevice(name: string, device: VirtualDevice): this;
   createMachine(options: CreateMachineOptions): MachineHandle;
   getMachine(machineId: string): MachineHandle | null;
-  /** 꽂혀 있는 장치 요약(name/kind/mode). device 객체 자체는 넘기지 않는다(권한 gate 우회 방지). */
+  /** Summary of attached devices (name/kind/mode). The device objects themselves are not handed out, so the permission gate cannot be bypassed. */
   listDevices(): ReadonlyArray<Readonly<{ name: string; kind: string; mode: string | null }>>;
-  /** 장치 분리. 어떤 머신이 그 이름을 권한으로 들고 있으면 `WEB_MACHINE_DEVICE_IN_USE`. */
+  /** Detaches a device. Refuses with `WEB_MACHINE_DEVICE_IN_USE` while any machine still holds that name as a permission. */
   detachDevice(name: string): this;
-  /** 머신 제거. `created`/`stopped`에서만 가능하고 그 외에는 `WEB_MACHINE_MACHINE_IN_USE`. */
+  /** Removes a machine. Allowed only from `created`/`stopped`; otherwise `WEB_MACHINE_MACHINE_IN_USE`. */
   destroyMachine(machineId: string): this;
   preflightMachine(options: {
     machineId: string;
@@ -139,9 +140,10 @@ export class WebMachineHost {
   }): Readonly<AdapterCapabilities>;
 }
 
-// machine 층이 던지는 오류 코드 전수. 계약의 축은 message가 아니라 code이므로, 소비자가
-// 프로그램으로 분기할 수 있어야 이 층이 계약을 가진 것이다. 이 union과 src/machine이 실제로
-// 던지는 코드 집합은 tests/run.mjs 구조 게이트가 양방향으로 대조한다(한쪽만 늘면 RED).
+// Every error code this layer throws. The axis of the contract is `code`, not `message`: the
+// layer only has a contract if a consumer can branch on it programmatically. The structure gate
+// in tests/run.mjs compares this union against the codes src/machine actually throws, in both
+// directions, so growing only one side turns it RED.
 export type WebMachineErrorCode =
   | "WEB_MACHINE_ADAPTER_DUPLICATE"
   | "WEB_MACHINE_ADAPTER_INVALID"
@@ -303,7 +305,7 @@ export interface WebMachineSignature {
   value: string;
 }
 
-/** 상태 커널의 header-target 서명 tag(bundle 봉투가 나르는 출처). */
+/** The state kernel's header-target signed tag: the provenance a bundle envelope carries. */
 export interface MachineStateTag {
   alg: "ECDSA-P256-SHA256";
   target: string;
@@ -337,16 +339,17 @@ export function createWebMachineManifest(
 export function validateWebMachineManifest(value: unknown): Readonly<WebMachineManifest>;
 export function getWebMachineManifestContent(manifest: WebMachineManifest): Readonly<WebMachineManifestContent>;
 
-// ─── 옛 @web-machine/browser ───
+// ─── formerly @web-machine/browser ───
 export function createBrowserHost(options: {
   devices?: Record<string, VirtualDevice>;
   cryptoProvider: MachineCryptoProvider;
 }): WebMachineHost;
 
 /**
- * 상태 커널의 암호 법(digest·ECDSA)을 machine 층에 배달하는 주입 provider.
- * persistence/image 생성자는 맨 Crypto가 아니라 이 provider를 요구한다:
- * machine은 커널을 import하지 못하므로(경계), 조립이 함수 조각을 꽂는다.
+ * Injected provider that delivers the state kernel's crypto law (digest, ECDSA) into the
+ * machine layer. The persistence and image constructors require this provider rather than a
+ * bare Crypto: the machine layer may not import the kernel across the boundary, so composition
+ * plugs the function pieces in.
  */
 export interface MachineCryptoProvider {
   readonly subtle: SubtleCrypto;
@@ -357,8 +360,9 @@ export interface MachineCryptoProvider {
   generateSigningKeyPair(): Promise<CryptoKeyPair>;
   exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey>;
   /**
-   * 상태 커널 문법의 함수 조각(coordinator가 generation을 커널 오브젝트로 저장하고,
-   * image가 .webmachine 봉투를 단일 bundle wire 포맷으로 인코딩하는 데 쓴다).
+   * Function pieces of the state kernel grammar: the coordinator stores a generation as kernel
+   * objects with them, and the image encoder uses them to write the .webmachine envelope in the
+   * single bundle wire format.
    */
   state: {
     encodeObject(value: unknown): Uint8Array;
@@ -367,12 +371,12 @@ export interface MachineCryptoProvider {
     makeStateCommit(input: Record<string, unknown>): Record<string, unknown>;
     validateStateCommit(commit: unknown): Record<string, unknown> & { tree: string; parents: string[] };
     validateStateTree(tree: unknown): Record<string, unknown> & { kind: string; entries?: GenerationEntry[] };
-    /** 이동 봉투 코덱(bundleFormat 정본 주입). objects = Map(주소 -> 바이트) 또는 [주소, 바이트] 배열. */
+    /** Portable envelope codec (the bundleFormat canon, injected). objects is a Map of address to bytes, or an array of [address, bytes]. */
     encodeBundle(input: { commit?: string | null; meta?: unknown; objects: Map<string, Uint8Array> | Array<[string, Uint8Array]>; tag?: unknown }): Promise<Uint8Array>;
     decodeBundle(buffer: Uint8Array): Promise<{ commit: string | null; meta: unknown; objects: Map<string, Uint8Array>; tag: unknown; envelope: string; headerDigest: string }>;
     readBundleHeader(source: Uint8Array | Blob | { read(start: number, end: number): Promise<Uint8Array> | Uint8Array }): Promise<{ commit: string | null; meta: unknown; objects: Array<[string, number]>; tag: MachineStateTag | null; envelope: string; headerDigest: string; objectsOffset: number }>;
     bundleHeaderDigest(input: { commit?: string | null; meta?: unknown; objects: Map<string, Uint8Array> | Array<[string, unknown]> }): Promise<string>;
-    /** header-target 서명(출처). tag.target = 헤더 다이제스트. */
+    /** header-target signature (provenance). tag.target is the header digest. */
     makeTag(privateKey: CryptoKey, publicKeyJwk: JsonWebKey, target: string): Promise<MachineStateTag>;
     verifyTag(tag: unknown, expectedTarget: string | null, opts?: { trustedPublicKeys?: Array<JsonWebKey | string> }): Promise<{ valid: boolean; trusted: boolean; signerFingerprint: string | null }>;
   };
@@ -554,8 +558,8 @@ export interface GenerationHead {
 }
 
 /**
- * generation record = 커널 commit 주소 + gc 도달 색인. 정본은 commit 체인이고
- * 복원은 색인을 신뢰하지 않는다(coordinator가 commit -> tree를 걷는다).
+ * A generation record is a kernel commit address plus a gc reachability index. The commit chain
+ * is the canon and restore does not trust the index: the coordinator walks commit to tree.
  */
 export interface GenerationRecord {
   schemaVersion: 2;
@@ -765,7 +769,7 @@ export function readWebMachineFile(options: {
 export function assertWebMachineArchive(value: unknown): asserts value is WebMachineArchive;
 
 
-// ─── 옛 @web-machine/guest-pyproc ───
+// ─── formerly @web-machine/guest-pyproc ───
 export interface PyprocFileSystem {
   exists(path: string): boolean;
   mkdirTree(path: string): void;
@@ -791,15 +795,16 @@ export function createPyprocGuestFactory(options: {
   openMachine: (image: Blob, options: { trust: true }) => Promise<PyprocGuestSession>;
   blockDeviceName?: string | null;
   /**
-   * 이 이름의 `network`/`packet` 장치에 파이썬 guest를 붙인다. 붙으면 guest 안에서
-   * `pyprocNet.send(frame)` / `recv()` / `pending()` / `address()`가 살고, ARP 요청과
-   * ICMP echo는 port가 자동으로 답한다(상대 guest는 파이썬 코드 없이도 주소를 찾는다).
+   * Attaches the Python guest to the `network`/`packet` device of this name. Once attached,
+   * `pyprocNet.send(frame)` / `recv()` / `pending()` / `address()` live inside the guest, and the
+   * port answers ARP requests and ICMP echo itself, so a peer guest resolves this address even
+   * with no Python code running.
    */
   packetDeviceName?: string | null;
 }): GuestAdapterFactory;
 
 
-// ─── 옛 @web-machine/guest-v86 ───
+// ─── formerly @web-machine/guest-v86 ───
 export interface V86Constructor {
   new(options: Record<string, unknown>): unknown;
 }
@@ -822,7 +827,7 @@ export interface V86GuestFactoryOptions {
 
 export function createV86GuestFactory(options: V86GuestFactoryOptions): GuestAdapterFactory;
 
-// ─── 조립: 컴퓨터 한 대 ───
+// ─── Composition: one computer ───
 export interface WebComputerPythonOptions {
   manifest?: Record<string, unknown>;
   session?: Record<string, unknown>;
@@ -863,14 +868,16 @@ export function createWebComputer(options?: {
   onConsole?: ((line: string) => void) | null;
   cryptoProvider?: { randomUUID(): string };
   /**
-   * 내장 L2 이더넷 스위치. 기본으로 켜져 있고 `network` 장치로 등록된다: guest가 둘 이상일 때
-   * 그들 사이의 유일한 바이트 경로다. `false`면 끄고, 객체를 주면 그 옵션으로 만든다.
-   * TCP/IP는 guest 몫이고 이 장치는 프레임 계약(학습·flood·큐 상한)만 소유한다.
+   * Built-in L2 Ethernet switch, on by default and registered as the `network` device. With more
+   * than one guest it is the only byte path between them. Pass `false` to disable it, or an
+   * object to construct it with those options. TCP/IP is the guest's business; this device owns
+   * only the frame contract (learning, flooding, queue bounds).
    */
   network?: boolean | { maxFrameBytes?: number; maxQueuedFrames?: number };
   /**
-   * 기본 머신 2대를 여기서 만들 것인가. `false`면 하드웨어만 조립하고 머신은 image manifest가
-   * 만든다(신뢰 화면 preflight, import 후보 조립, 지연 부팅 복원이 그 모드를 쓴다).
+   * Whether to create the two default machines here. With `false` only the hardware is
+   * assembled and the machines come from an image manifest instead; three call sites use that
+   * mode (trust-screen preflight, assembling an import candidate, deferred-boot restore).
    */
   createMachines?: boolean;
 }): WebComputer;
