@@ -195,10 +195,10 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 | Process OS: snapshot-fork spawn, `map` parallelism (`PyProc`) | Beta |
 | Restore-based reactivity (`enableReactive`: checkpoint / time-travel) | Beta |
 | In-kernel ASGI (`AsgiServer` - in dartlab production today) | Beta |
-| uv lane (`bootEnv` / `freeze` / `runScript`), wheel cache, terminal, syscall bridge | Beta |
+| Declared-environment lane (`boot` manifest: `packages` / `env` / `setup` / `wheelDir`), wheel cache, terminal, syscall bridge | Beta |
 | Session revival + `.pymachine` images, machine journal (WAL) | Experimental |
 | Live process fork, device FS, init / cron / resume hooks, virtual-origin URL | Experimental |
-| Persistent multi-tab machine (`openPersistentMachine` / `KernelElection`) | Experimental |
+| Persistent multi-tab machine (`open({ persistent })` -> `KernelElection`) | Experimental |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 
 ## What it guarantees, and what it doesn't
@@ -235,7 +235,7 @@ The Python gap map lives in [local-parity](mainPlan/_done/local-parity/README.md
 
 ## Security model
 
-pyproc runs Python inside the browser's WebAssembly and Web Worker isolation boundaries. That is not a claim of safety for arbitrary untrusted code: an application running untrusted code is still responsible for its own network, storage, package, memory, and execution-time policies appropriate to its threat model. A `.pymachine` file is live state and carries the same risk as an executable - `openMachine` verifies a SHA-256 envelope and refuses to open without either explicit `{ trust: true }` or a signature verified by `trustedPublicKeys`.
+pyproc runs Python inside the browser's WebAssembly and Web Worker isolation boundaries. That is not a claim of safety for arbitrary untrusted code: an application running untrusted code is still responsible for its own network, storage, package, memory, and execution-time policies appropriate to its threat model. A `.pymachine` file is live state and carries the same risk as an executable - `open(blob, trustOpts)` verifies a SHA-256 envelope and refuses to open without either explicit `{ trust: true }` or a signature verified by `trustedPublicKeys`.
 
 **Supply chain**: npm releases use Trusted Publishing (OIDC) with provenance (manual publishes disabled); the `pyproc-assets` CLI emits an SRI manifest over the worker/service-worker import graph and `verifyPyProcAssetIntegrity` enforces it before any worker spawns; engine boot supports fail-closed SRI (`engineScriptIntegrity` / `coreIntegrity`) with a re-verifying OPFS offline cache. Threat model details: [SECURITY.md](SECURITY.md).
 

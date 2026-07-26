@@ -15,11 +15,11 @@ memory, and network budgets.
 ### Machine files are executables
 
 A `.pymachine` is live interpreter state plus a boot manifest whose `setup` runs on open.
-Treat it exactly like an executable download. `openMachine` refuses untrusted files:
+Treat it exactly like an executable download. `open(blob, trustOpts)` refuses untrusted files:
 either the file carries a signature verifiable by a key you pass in `trustedPublicKeys`,
 or you explicitly accept the risk with `trust: true`. Integrity is a full-envelope SHA-256
 (header and payload both authenticated; the v1 format that authenticated only the delta is
-rejected). Signing is WebCrypto ECDSA P-256; `fingerprintMachinePublicKey` gives the
+rejected). Signing is WebCrypto ECDSA P-256; `fingerprintStatePublicKey` (from `pyproc/history`) gives the
 stable `sha256:<hex>` shown in approval UIs. Signature verifies **origin**, not safety:
 key distribution and permission UI belong to the product
 (see [trustPermissions](docs/consuming/trustPermissions.md), Korean).
@@ -36,8 +36,8 @@ key distribution and permission UI belong to the product
 
 ### Deterministic boot window
 
-`bootSession` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now` for the
-duration of the boot so replays are byte-identical; the stub is tab-global while it lasts.
+`boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`
+for the duration of the boot so replays are byte-identical; the stub is tab-global while it lasts.
 Product code running concurrently in the same tab during that window would read the stub
 entropy. pyproc serializes all of its own global-patching windows behind one internal
 mutex, and reseeds Python's `random` immediately after the boundary (cp0) is captured.

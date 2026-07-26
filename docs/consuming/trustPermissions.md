@@ -6,9 +6,9 @@
 
 제품은 다음 원칙을 지킨다.
 
-- 서명된 머신만 자동으로 연다. 기본 import 경로는 `openMachine(file, { trustedPublicKeys, requireSignature: true })`다.
+- 서명된 머신만 자동으로 연다. 기본 import 경로는 `open(file, { trustedPublicKeys, requireSignature: true })`다.
 - `{ trust: true }`는 개발자 도구나 로컬 디버그에 한정한다. 일반 사용자 파일 열기 UI에서는 쓰지 않는다.
-- 공개키는 `exportMachinePublicKey()`로 JWK를 배포하고, 표시용 fingerprint는 `fingerprintMachinePublicKey()`의 `sha256:<hex>` 값을 쓴다.
+- 공개키는 `exportStatePublicKey()`로 JWK를 배포하고, 표시용 fingerprint는 `fingerprintStatePublicKey()`의 `sha256:<hex>` 값을 쓴다. 둘 다 `pyproc/history`에 살고 첫 인자로 crypto provider를 받는다.
 - 사용자에게는 최소 16 hex 이상의 짧은 fingerprint를 표시하고, 상세 보기에는 전체 fingerprint와 JWK 출처를 둔다.
 - 키 회전은 "현재 키 + 다음 키 + 이전 키" 목록으로 운영한다. 이전 키 제거는 해당 키로 서명된 `.pymachine` 파일의 import 정책 변경이다.
 - signature는 sandbox 허가가 아니다. 신뢰된 키로 서명된 파일도 권한 UI를 통과해야 실행 범위가 열린다.
@@ -16,17 +16,14 @@
 최소 흐름:
 
 ```js
-import {
-  openMachine,
-  exportMachinePublicKey,
-  fingerprintMachinePublicKey,
-} from "pyproc";
+import { open } from "pyproc";
+import { fingerprintStatePublicKey } from "pyproc/history";
 
 const trustedPublicKey = await fetch("/pyproc-trusted-key.json").then((r) => r.json());
-const fingerprint = await fingerprintMachinePublicKey(trustedPublicKey);
+const fingerprint = await fingerprintStatePublicKey(crypto, trustedPublicKey);
 showTrustBanner({ fingerprint, source: "/pyproc-trusted-key.json" });
 
-const session = await openMachine(file, {
+const machine = await open(file, {
   trustedPublicKeys: [trustedPublicKey],
   requireSignature: true,
 });
@@ -57,7 +54,7 @@ const session = await openMachine(file, {
 
 | 표면 | 계약 |
 |---|---|
-| `fingerprintMachinePublicKey()` | CryptoKeyPair 또는 JWK에서 같은 `sha256:<hex>` fingerprint를 만든다 |
+| `fingerprintStatePublicKey()` | CryptoKeyPair 또는 JWK에서 같은 `sha256:<hex>` fingerprint를 만든다(`pyproc/history`) |
 | `machineImageProbe.html` | WebCrypto signature, trusted public key import, 다른 공개키 거부, fingerprint 안정성을 브라우저에서 검증한다 |
 | `examples/machine.html` | signer fingerprint와 `home=yes, net=no, clipboard=no, workers=no` 권한 정책을 데모 UI에 표시하고, signed `.pymachine`만 연다 |
 | `MachineJail` | 협조 초크포인트와 CSP `connect-src` 문자열을 제공한다 |

@@ -7,13 +7,13 @@
 
 | 용어 | 뜻 | 소유 |
 |---|---|---|
-| Runtime | 한 탭 안 Pyodide 커널의 핸들(run/install/fs) | `boot()`, `new Runtime(py)` |
-| Session | 부활 가능한 파이썬 머신의 핸들(결정적 리플레이 + 델타) | `bootSession`, `openMachine` |
+| Runtime | 한 탭 안 Pyodide 커널의 핸들(run/install/fs) | `machine.runtime`, `new Runtime(py)`(`pyproc/runtime`) |
+| Session | 부활 가능한 파이썬 머신의 핸들(결정적 리플레이 + 델타) | `boot({ deterministic: true })`, `open(blob, trustOpts)` |
 | cp0 / 리플레이 경계 | 같은 매니페스트가 재현하는 바이트 동일 힙의 기준점 | ReactiveController의 노드 0 |
 | Checkpoint | cp0 위 페이지 해시 나무의 노드(복원 핸들) | `reactive.checkpoint()` |
 | Journal | 유휴마다 HEAD/PREV 세대로 커밋되는 WAL | `MachineJournal` |
-| Machine image | 서명된 이동 가능 상태 파일 `.pymachine` | `Session.exportImage`, `openMachine` |
-| Kernel (선출) | 여러 탭 중 실제 파이썬을 소유한 리더 | `KernelElection`, `openPersistentMachine` |
+| Machine image | 서명된 이동 가능 상태 파일 `.pymachine` | `machine.history.export`, `open(blob, trustOpts)` |
+| Kernel (선출) | 여러 탭 중 실제 파이썬을 소유한 리더 | `KernelElection`, `open({ persistent })` |
 | Process | PyProc 풀의 워커 인터프리터(독립 GIL) | `PyProc` |
 | Container | 머신 안 머신(자기 매니페스트로 부팅한 커널) | `MachineContainer`, `pyprocMachine` |
 

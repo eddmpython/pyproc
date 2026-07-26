@@ -1,6 +1,6 @@
 # resume.py 자원 정책 카탈로그
 
-`Session.load`, `MachineJournal.recover`, `openMachine`은 파이썬 힙과 `/home/web` 파일 바이트를 되살린다. 그러나 열린 파일 핸들, SQLite connection, WebSocket/relay connection, 브라우저 장치 권한, DOM callback 같은 프로세스 바깥 자원은 힙 델타만으로 보장하지 않는다. 이 문서는 제품이 `/home/web/resume.py`에 무엇을 넣어야 하는지의 카탈로그다.
+`open({ dir, name })`, `machine.history.recover()`, `open(blob, trustOpts)`는 파이썬 힙과 `/home/web` 파일 바이트를 되살린다. 그러나 열린 파일 핸들, SQLite connection, WebSocket/relay connection, 브라우저 장치 권한, DOM callback 같은 프로세스 바깥 자원은 힙 델타만으로 보장하지 않는다. 이 문서는 제품이 `/home/web/resume.py`에 무엇을 넣어야 하는지의 카탈로그다.
 
 ## 공통 계약
 
@@ -17,17 +17,17 @@
 | reason | 언제 |
 |---|---|
 | `fresh.boot` | 제품이 첫 부팅에서도 같은 hook으로 자원을 여는 경우 |
-| `session.load` | `Session.load(dir, name)` 뒤 |
-| `journal.recover` | `MachineJournal.recover()` 뒤 |
-| `openMachine` | `openMachine(blob, trustOptions)` 뒤 |
+| `session.load` | `open({ dir, name })` 뒤 |
+| `journal.recover` | `machine.history.recover()` 뒤 |
+| `image.open` | `open(blob, trustOptions)` 뒤 |
 | `kernel.failover` | 탭 리더 교체 뒤 follower가 저널에서 되살아난 경우 |
 
 ## 현재 고정된 표면
 
 | 표면 | 상태 | resume.py 정책 | 검증 |
 |---|---|---|---|
-| `tests/attempts/pythonMachine/resumeHookProbe.html` | 계약 probe | sqlite connection을 `resumeConn`으로 다시 열고 reason/value를 기록한다. `Session.load`, `MachineJournal.recover`, `openMachine` 세 경로와 파일 없음 no-op을 검증한다 | `node tests/browser/run.mjs tests/attempts/pythonMachine/resumeHookProbe.html` |
-| `examples/machine.html` | 실제 데모 표면 | 첫 부팅 또는 부활 뒤 `/home/web/resume.py`가 `appDb` SQLite connection을 열고 `resumeEvent`에 reason을 남긴다. signed `.pymachine` cast 후 `openMachine`에서도 같은 hook을 실행한다 | `npm run test:examples`, 또는 `node tests/browser/run.mjs examples/machine.html?gate=1` |
+| `tests/attempts/pythonMachine/resumeHookProbe.html` | 계약 probe | sqlite connection을 `resumeConn`으로 다시 열고 reason/value를 기록한다. 세 부활 경로(`open({ dir, name })`, `machine.history.recover()`, `open(blob, trustOpts)`)와 파일 없음 no-op을 검증한다 | `node tests/browser/run.mjs tests/attempts/pythonMachine/resumeHookProbe.html` |
+| `examples/machine.html` | 실제 데모 표면 | 첫 부팅 또는 부활 뒤 `/home/web/resume.py`가 `appDb` SQLite connection을 열고 `resumeEvent`에 reason을 남긴다. signed `.pymachine` cast 후 `open(blob, trustOpts)`에서도 같은 hook을 실행한다 | `npm run test:examples`, 또는 `node tests/browser/run.mjs examples/machine.html?gate=1` |
 
 ## 제품별 적용 정책
 
