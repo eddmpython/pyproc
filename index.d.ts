@@ -1084,8 +1084,18 @@ declare class PyProc {
   /** 마지막 boot()의 결과. machine.proc()처럼 boot 반환을 직접 받지 않는 경로의 관측 지점(부팅 전 null). */
   readonly bootInfo: PyProcBootInfo | null;
   boot(n: number, useSnapshot?: boolean): Promise<PyProcBootInfo>;
+  /**
+   * 워커들에 인자 목록을 흩어 병렬 실행한다. `fnSrc`는 **반드시 `_fn`이라는 이름의 함수 정의**여야
+   * 한다(워커가 `_fn(arg)`로 부른다): `"def _fn(n):
+    return n * n"`. 결과는 인자 순서를 지킨다.
+   * 태스크가 실패하면 그 원소만 `{ error }`가 되고, 전 레인이 죽으면 모든 원소가 그렇게 된다.
+   */
   map(fnSrc: string, args: unknown[], opts?: PyProcMapOptions): Promise<unknown[]>;
-  /** TypedArray를 조각내 워커들에 numpy 배열로 병렬 적용(샤딩). fnSrc: def _fn(a). 실측 4워커 5.28배. */
+  /**
+   * TypedArray를 조각내 워커들에 numpy 배열로 병렬 적용(샤딩). `fnSrc`는 `_fn` 정의여야 한다:
+   * `"def _fn(a):
+    return float(a.sum())"`. 조각 결과가 인자 순서대로 돌아온다.
+   */
   mapArray(fnSrc: string, typed: ArrayBufferView, opts?: PyProcShardOptions): Promise<unknown[]>;
   /**
    * 샤딩 matmul: C = A@B를 A의 행블록으로 워커수만큼 분할해 병렬 계산(compute-bound = near-linear,
@@ -1131,7 +1141,10 @@ declare class PyProc {
    */
   fork(srcPid: number, dstPid: number): Promise<ForkInfo>;
   /** 특정 프로세스에서 태스크를 실행한다(map은 풀 스케줄, exec는 지정 프로세스). 반환: 태스크 결과. */
+  /** 지정 프로세스에서 한 번 실행한다. `fnSrc`는 `map`과 같은 `_fn` 정의 계약이다. */
   exec(pid: number, fnSrc: string, arg?: unknown): Promise<unknown>;
+  /** 대화형 레인: 자유 문장 실행 + stdout 캡처 + 마지막 식 값(전역 상태가 누적된다). */
+  repl(pid: number, code: string): Promise<{ out: string; value: string | null }>;
   /** 파이프 생성(SAB 링버퍼, 기본 1MB). bindReader/bindWriter로 프로세스에 배선. */
   pipe(capacity?: number): Pipe;
   /** 락 생성(상호배제). bind(pid, name)로 프로세스에 배선. */

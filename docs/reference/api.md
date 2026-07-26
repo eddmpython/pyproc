@@ -272,6 +272,18 @@ Permission jail (cooperative Python chokepoints installed with the runtime, plus
 
 ## Process OS (`machine.proc`)
 
+**The `_fn` contract.** `map`, `exec`, and `mapArray` take Python *source* that defines a
+function named `_fn`; the worker calls `_fn(arg)`. Any other name raises `NameError` inside the
+worker and surfaces as `PYPROC_WORKER_TASK_ERROR`:
+
+```js
+const pool = await machine.proc({ lanes: 4 });
+const fn = "def _fn(n):
+    return sum(i * i for i in range(n))";
+const results = await pool.map(fn, [10000, 20000, 30000, 40000]); // order preserved
+```
+
+
 ### `PyProc`
 
 Worker process kernel, obtained via `machine.proc(opts?)`: `boot(n)` (snapshot fast-fork

@@ -2642,6 +2642,20 @@ section("진입 표면 언어");
     }
     if (korean.length) throw new Error(korean.join(", "));
   });
+  // 워커가 소비하는 매직 이름은 소비자 계약이다. 그 이름이 타입과 레퍼런스에 없으면 출하 문서만
+  // 보고 map을 쓸 수 없다(다른 이름을 쓰면 워커에서 NameError가 나고 원인이 문서에 없다).
+  check("워커의 매직 함수 이름이 타입과 레퍼런스에 있다", () => {
+    const worker = stripComments(readFileSync(join(ROOT, "src", "processOs", "worker.js"), "utf8"));
+    const magic = /(_[a-zA-Z]\w*)\s*\(_arg\)/.exec(worker);
+    if (!magic) throw new Error("worker.js에서 태스크 진입 함수 이름을 찾지 못했다");
+    const name = magic[1];
+    const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
+    const api = readFileSync(join(ROOT, "docs", "reference", "api.md"), "utf8");
+    if (!dts.includes("`" + name + "`")) throw new Error(`index.d.ts에 ${name} 계약 없음`);
+    if (!api.includes("`" + name + "`")) throw new Error(`api.md에 ${name} 계약 없음`);
+    // 예시가 실제로 그 이름으로 정의하는지도 본다(이름만 언급하고 예시가 다른 이름이면 무의미).
+    if (!new RegExp(`def ${name}\\(`).test(api)) throw new Error(`api.md 예시가 def ${name}(...)를 쓰지 않는다`);
+  });
   // 옵션 화이트리스트는 타입 선언과 같은 집합이어야 한다. 한쪽만 늘면 새 옵션이 입구에서
   // 거부되거나(타입만 추가) 오타 방어가 비어버린다(목록만 추가).
   check("boot 옵션 화이트리스트 = BootMachineOptions 선언", () => {
