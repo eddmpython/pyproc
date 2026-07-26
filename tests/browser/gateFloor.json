@@ -1,11 +1,21 @@
 {
-  "comment": "페이지별 통과 체크 수 하한. 브라우저 게이트는 'ok && 전부 pass'만 보므로, 체크를 지우면 더 적은 수로 GREEN이 된다(2026-07-26 실측: 87개 중 80개를 지워도 7/7 GREEN). 값은 신설 당시 실측 카운트이고, 내리려면 같은 커밋에서 이 숫자를 고쳐야 한다. 여기 없는 페이지(attempts probe 등)는 자연 통과한다: 하한은 정규 게이트 페이지의 계약이다.",
+  "comment": "페이지별 통과 체크 수 하한. 브라우저 게이트는 'ok && 전부 pass'만 보므로, 체크를 지우면 더 적은 수로 GREEN이 된다(2026-07-26 실측: 87개 중 80개를 지워도 7/7 GREEN). 값은 신설 당시 실측 카운트이고, 내리려면 같은 커밋에서 이 숫자를 고쳐야 한다. 여기 없는 페이지(attempts probe 등)는 자연 통과한다: 하한은 정규 게이트 페이지의 계약이다. x86 자산이 필요한 probe 10개도 등재했다(2026-07-27 실측): 그 레인은 CI에서 못 돌지만(자산이 gitignore) 하한이 없으면 로컬 실행에서 체크가 줄어든 것을 아무도 모른다. 러너가 체크 0개를 RED로 보므로 최악의 경우는 이미 막혀 있고, 하한은 그 위에서 '조용히 줄어드는' 경우를 막는다.",
   "floors": {
     "tests/browser/gate.html": 99,
     "tests/browser/preflightNoCoi.html": 5,
     "tests/browser/wasiGate.html": 13,
     "tests/webMachine/browser/probes/hostContractProbe.html": 36,
     "tests/webMachine/browser/probes/dualEngineProbe.html": 13,
-    "tests/webMachine/browser/probes/ownerSuccessorProbe.html": 14
+    "tests/webMachine/browser/probes/ownerSuccessorProbe.html": 14,
+    "tests/webMachine/browser/probes/dualBootProbe.html": 8,
+    "tests/webMachine/browser/probes/deviceBackedDualBootProbe.html": 12,
+    "tests/webMachine/browser/probes/persistentDualBootProbe.html": 9,
+    "tests/webMachine/browser/probes/linuxGuestProbe.html": 8,
+    "tests/webMachine/browser/probes/clockEntropyProbe.html": 19,
+    "tests/webMachine/browser/probes/displayInputProbe.html": 18,
+    "tests/webMachine/browser/probes/framebufferPointerProbe.html": 18,
+    "tests/webMachine/browser/probes/generationContractProbe.html": 25,
+    "tests/webMachine/browser/probes/machineEnvelopeProbe.html": 21,
+    "tests/webMachine/browser/probes/packetNetworkProbe.html": 14
   }
 }

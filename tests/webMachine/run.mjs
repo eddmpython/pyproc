@@ -37,7 +37,9 @@ const V86_BACKED = [
 ];
 const V86_ASSET_DIR = join(ROOT, "tests", "webMachine", "fixtures", "v86", "assets");
 
-const pages = wantV86 ? V86_BACKED : ASSET_FREE;
+// --v86은 레인을 더한다(바꾸지 않는다). 치환이면 x86 레인을 돌 때 자산 없이 도는 계약
+// 3개가 빠져, 두 레인을 함께 돈 적이 한 번도 없게 된다(외부 감사 지적, 2026-07-27).
+const pages = wantV86 ? [...ASSET_FREE, ...V86_BACKED] : ASSET_FREE;
 if (wantV86 && !existsSync(join(V86_ASSET_DIR, "libv86.mjs"))) {
   console.error(`FAIL v86 자산 없음: ${V86_ASSET_DIR}. npm run test:web-machine:v86가 prepareAssets를 먼저 돈다.`);
   process.exit(1);
