@@ -7,3 +7,4 @@
 - [01-architecture.md](01-architecture.md)
 - [02-phasing-and-wiring.md](02-phasing-and-wiring.md)
 - [03-progress-ledger.md](03-progress-ledger.md)
+- [04-audit-and-hardening.md](04-audit-and-hardening.md)
