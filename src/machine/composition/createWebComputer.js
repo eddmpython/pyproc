@@ -63,6 +63,10 @@ export function createWebComputer({
     bootSession: python.bootSession ?? bootSession,
     openMachine: python.openMachine ?? openMachine,
     blockDeviceName: "pythonDisk",
+    // 파이썬 머신도 와이어에 붙는다. 이 배선이 없던 동안 파이썬 머신은 아래 permissions에서
+    // `network`를 받고도 그것을 쓸 코드가 없었다: 권한만 있고 port가 없으면 두 guest는
+    // 같은 스위치에 있어도 바이트를 교환할 수 없다(공존이지 통신이 아니다).
+    ...(builtInDevices.network ? { packetDeviceName: "network" } : {}),
   }));
   if (linux) {
     if (typeof linux.V86 !== "function") throw new TypeError("linux.V86 constructor가 필요하다");

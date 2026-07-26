@@ -790,7 +790,14 @@ export function createPyprocGuestFactory(options: {
   bootSession: (options: Record<string, unknown>) => Promise<PyprocGuestSession>;
   openMachine: (image: Blob, options: { trust: true }) => Promise<PyprocGuestSession>;
   blockDeviceName?: string | null;
+  /**
+   * 이 이름의 `network`/`packet` 장치에 파이썬 guest를 붙인다. 붙으면 guest 안에서
+   * `pyprocNet.send(frame)` / `recv()` / `pending()` / `address()`가 살고, ARP 요청과
+   * ICMP echo는 port가 자동으로 답한다(상대 guest는 파이썬 코드 없이도 주소를 찾는다).
+   */
+  packetDeviceName?: string | null;
 }): GuestAdapterFactory;
+
 
 // ─── 옛 @web-machine/guest-v86 ───
 export interface V86Constructor {

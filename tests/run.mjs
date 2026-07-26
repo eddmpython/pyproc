@@ -2225,6 +2225,9 @@ const LAYER_RANK = new Map([
 ]);
 const machinePureFiles = new Set([
   "src/machine/contracts/adapterContract.js",
+  // 프레임 해석은 순수하다: import 0, browser 전역 0, guest 이름 0. 파이썬 port와 v86 port가
+  // 같은 계약을 소비해야 하므로(그래야 두 guest가 한 와이어에서 말이 통한다) 순수 집합에 산다.
+  "src/machine/contracts/ipv4Frames.js",
   // 장치 요구 해석 법. 순수하다: 오류 계약만 import하고 browser 전역도 guest 이름도 없다.
   // 그래서 guest가 직접 소비할 수 있고, 그것이 이 파일이 존재하는 이유다(선언 = 유일 진실).
   // byteCodec은 여기 없다: atob/Buffer 전역을 만지므로 platform(1)이 정직한 층위다.

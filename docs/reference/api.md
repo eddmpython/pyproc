@@ -387,6 +387,24 @@ the provider that persistence and image constructors now require - they no longe
 a bare `Crypto` object. Errors here are `WebMachineError` (with `code`) or `TypeError`
 (argument contract).
 
+**Guests on one wire.** `createWebComputer` attaches a built-in L2 switch (`network`, on by
+default; pass `network: false` to disable) and binds a packet port to *both* guests, so two
+guests on one computer can exchange actual Ethernet frames rather than merely coexisting.
+Inside the Python guest the port installs a `pyprocNet` module:
+
+| Call | Contract |
+|---|---|
+| `pyprocNet.send(frame)` | Puts one Ethernet frame on the wire; returns the byte count |
+| `pyprocNet.recv()` | Next queued frame as `bytes`, or `None` when the queue is empty |
+| `pyprocNet.pending()` | Frames waiting to be read |
+| `pyprocNet.address()` | `{ mac, ipv4, endpointId }` for this guest |
+
+The port answers ARP requests and ICMP echo for its own address, so a peer guest reaches it
+without any Python code running. Anything above the frame boundary (TCP, UDP, DNS) is the
+guest's own business - the library hands over frames, not a stack. The port's Python surface
+is removed around `snapshot()` and reinstalled afterwards, because an image that carries live
+JS proxies cannot be revived in another process.
+
 **Device and machine lifecycle.** A computer that can only add hardware is not a computer,
 so the host exposes the removal side too:
 

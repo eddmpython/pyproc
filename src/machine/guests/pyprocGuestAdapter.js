@@ -3,34 +3,43 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { readPyprocHomeVolume, writePyprocHomeVolume } from "./pyprocHomeVolume.js";
 import { indexRequirements, resolveRequiredDevice } from "../contracts/deviceRequirement.js";
+import { PyprocPacketPort } from "./pyprocPacketPort.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
 }
 
-export function createPyprocGuestFactory({ bootSession, openMachine, blockDeviceName = null } = {}) {
+export function createPyprocGuestFactory({ bootSession, openMachine, blockDeviceName = null, packetDeviceName = null } = {}) {
   if (typeof bootSession !== "function") throw new TypeError("bootSession 함수가 필요하다");
   if (typeof openMachine !== "function") throw new TypeError("openMachine 함수가 필요하다");
-  return () => new PyprocGuestAdapter({ bootSession, openMachine, blockDeviceName });
+  return () => new PyprocGuestAdapter({ bootSession, openMachine, blockDeviceName, packetDeviceName });
 }
 
 class PyprocGuestAdapter {
-  constructor({ bootSession, openMachine, blockDeviceName }) {
+  constructor({ bootSession, openMachine, blockDeviceName, packetDeviceName }) {
     this._bootSession = bootSession;
     this._openMachine = openMachine;
     this._blockDeviceName = blockDeviceName ? String(blockDeviceName) : null;
+    this._packetDeviceName = packetDeviceName ? String(packetDeviceName) : null;
+    // adapterVersion은 능력 조합을 말한다. 조합이 늘 때 이름을 조립하는 이유는 스냅샷 봉투가
+    // 이 값으로 "복원 대상이 같은 능력의 어댑터인가"를 판정하기 때문이다.
+    const suffix = [this._blockDeviceName ? "block" : null, this._packetDeviceName ? "net" : null].filter(Boolean).join("-");
     this.capabilities = {
-      adapterVersion: this._blockDeviceName ? "pyproc-session-block-v1" : "pyproc-session-v1",
+      adapterVersion: suffix ? `pyproc-session-${suffix}-v1` : "pyproc-session-v1",
       snapshotScope: "portable",
       pauseMode: "cooperative",
       shutdownMode: "release",
       requiredDevices: [
         { name: "console", kind: "console" },
         ...(this._blockDeviceName ? [{ name: this._blockDeviceName, kind: "block" }] : []),
+        ...(this._packetDeviceName
+          ? [{ name: this._packetDeviceName, kind: "network", mode: "packet", methods: ["connect"] }]
+          : []),
       ],
     };
     this._session = null;
     this._context = null;
+    this._packetPort = null;
   }
 
   async boot(context, manifest, control) {
@@ -41,6 +50,7 @@ class PyprocGuestAdapter {
     if (this._blockDeviceName) {
       await readPyprocHomeVolume({ device: this._device(this._blockDeviceName), fs: this._session.rt.fs, allowEmpty: true });
     }
+    this._attachPacketPort(context);
     throwIfOperationAborted(control, `${context.machineId}: pyproc boot`, { outcomeUnknown: true });
     consoleWrite(context, `pyproc:boot:${context.machineId}`);
   }
@@ -60,9 +70,16 @@ class PyprocGuestAdapter {
 
   async snapshot(control) {
     throwIfOperationAborted(control, "pyproc snapshot");
-    const image = await this._session.exportImage({ includeHome: !this._blockDeviceName });
-    throwIfOperationAborted(control, "pyproc snapshot", { outcomeUnknown: true });
-    return new Uint8Array(await image.arrayBuffer());
+    // 이동 가능한 이미지는 살아있는 JS 프록시를 담을 수 없다. packet port의 파이썬 표면을
+    // 걷어낸 뒤 뜨고 곧 다시 심는다(걷지 않으면 복원한 힙이 죽은 함수 테이블을 가리킨다).
+    if (this._packetPort) this._packetPort.removePythonSurface();
+    try {
+      const image = await this._session.exportImage({ includeHome: !this._blockDeviceName });
+      throwIfOperationAborted(control, "pyproc snapshot", { outcomeUnknown: true });
+      return new Uint8Array(await image.arrayBuffer());
+    } finally {
+      if (this._packetPort) this._packetPort.installPythonSurface();
+    }
   }
 
   async restore(payload, context, _manifest, control) {
@@ -73,6 +90,7 @@ class PyprocGuestAdapter {
     if (this._blockDeviceName) {
       await readPyprocHomeVolume({ device: this._device(this._blockDeviceName), fs: this._session.rt.fs });
     }
+    this._attachPacketPort(context);
     throwIfOperationAborted(control, `${context.machineId}: pyproc restore`, { outcomeUnknown: true });
     consoleWrite(context, `pyproc:restore:${context.machineId}`);
   }
@@ -83,6 +101,11 @@ class PyprocGuestAdapter {
       const device = this._device(this._blockDeviceName);
       await writePyprocHomeVolume({ device, fs: this._session.rt.fs });
       await device.flush();
+    }
+    if (this._packetPort) {
+      await this._packetPort.drain(); // 보낸 프레임이 스위치를 떠나기 전에 끊으면 유실이다
+      this._packetPort.detach();
+      this._packetPort = null;
     }
     consoleWrite(this._context, "pyproc:shutdown");
     this._session = null;
@@ -120,7 +143,31 @@ class PyprocGuestAdapter {
       heapBytes: this._session ? this._session.rt.memory.byteLength() : 0,
       snapshotScope: this.capabilities.snapshotScope,
       shutdownMode: this.capabilities.shutdownMode,
+      ...(this._packetPort ? { network: this._packetPort.inspect() } : {}),
     };
+  }
+
+  // 파이썬 guest를 스위치에 붙인다. 주소는 endpoint별로 갈라야 같은 스위치의 두 guest가
+  // 서로를 구분한다(machineId를 씨앗으로 마지막 옥텟을 나눈다).
+  _attachPacketPort(context) {
+    if (!this._packetDeviceName) return;
+    const device = this._device(this._packetDeviceName);
+    const seed = this._machineOctet(context.machineId);
+    this._packetPort = new PyprocPacketPort({
+      device,
+      endpointId: `pyproc:${context.machineId}`,
+      macAddress: [0x02, 0, 0, 0, 0, seed],
+      ipv4Address: [10, 77, 0, seed],
+    });
+    this._packetPort.attach(this._session.rt);
+  }
+
+  // 결정적 옥텟(2~254). 같은 machineId면 재부팅해도 같은 주소를 갖는다: 상대 guest의 ARP
+  // 캐시가 복원 후에도 유효해야 한다.
+  _machineOctet(machineId) {
+    let hash = 0;
+    for (const ch of String(machineId)) hash = (hash * 31 + ch.charCodeAt(0)) % 253;
+    return 2 + hash;
   }
 
   _ensureHome() {

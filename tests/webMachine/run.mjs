@@ -21,6 +21,7 @@ const ASSET_FREE = [
   "tests/webMachine/browser/probes/hostContractProbe.html",
   "tests/webMachine/browser/probes/dualEngineProbe.html",
   "tests/webMachine/browser/probes/ownerSuccessorProbe.html",
+  "tests/webMachine/browser/probes/guestNetworkProbe.html",
 ];
 // x86 자산이 필요한 probe. ownerSuccessorParticipant는 probe가 iframe으로 여는 참가자 페이지다.
 const V86_BACKED = [
