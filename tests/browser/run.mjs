@@ -178,6 +178,17 @@ if (result.timings) {
     result.ok = false;
   }
 }
+// 체크 수 하한: 'ok && 전부 pass'만 보면 체크를 지운 게이트가 더 적은 수로 GREEN이 된다.
+// 하한 근거와 유지 규칙은 gateFloor.json에 있다. 등재 없는 페이지(probe)는 자연 통과.
+{
+  const floors = JSON.parse(readFileSync(new URL("./gateFloor.json", import.meta.url), "utf8")).floors;
+  const minimum = floors[page];
+  const passedChecks = result.checks.filter((c) => c.pass).length;
+  if (Number.isFinite(minimum) && passedChecks < minimum) {
+    console.log(`\nFAIL 게이트 층 하한: ${page} 통과 체크 ${passedChecks} < 하한 ${minimum}`);
+    result.ok = false;
+  }
+}
 // 실측 수치 아카이브(CI 아티팩트용): 러너 숫자와 로컬 숫자를 비교 가능하게 보존한다.
 if (process.env.PYPROC_GATE_OUT) writeFileSync(process.env.PYPROC_GATE_OUT, JSON.stringify({ page, browser, ...result }, null, 2));
 console.log(`\n결과: ${result.ok ? "GREEN" : "RED"} (${result.checks.filter((c) => c.pass).length}/${result.checks.length})`);

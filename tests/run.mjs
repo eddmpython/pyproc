@@ -12,7 +12,7 @@ import { createGateCounter } from "./support/gateCounter.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const gate = createGateCounter();
-const { check, checkAsync } = gate;
+const { check, checkAsync, section } = gate;
 
 // 재귀로 지정 확장자 파일 수집(node_modules 제외).
 function collect(dir, exts, acc = []) {
@@ -20,12 +20,29 @@ function collect(dir, exts, acc = []) {
     // vendor/는 fetchEngine이 받은 서드파티 배포판(gitignore) = 우리 린트 표면이 아니다.
     if (entry === "node_modules" || entry === "vendor" || entry.startsWith(".git")) continue;
     const full = join(dir, entry);
+    // assets/ 디렉터리는 엔진 배포판과 바이너리 fixture가 사는 곳(전부 gitignore)이다.
+    // vendor/와 같은 이유로 린트 표면 밖이다. 파일 assets.js는 이 규칙에 걸리지 않는다.
+    if (statSync(full).isDirectory() && entry === "assets") continue;
     if (statSync(full).isDirectory()) collect(full, exts, acc);
     else if (exts.some((e) => entry.endsWith(e))) acc.push(full);
   }
   return acc;
 }
 const rel = (f) => f.slice(ROOT.length + 1).replaceAll("\\", "/");
+// 문서가 어떤 공개 심볼을 "언급했는가"의 판정. 접두 substring(`text.includes("`" + name)`)으로
+// 보면 `openMachine`이 `open`을, `bootSession`이 `boot`를 만족시켜서, 루트 동사가 문서에서
+// 완전히 사라져도 게이트가 통과한다(2026-07-26 실측). 백틱 뒤 이름이 식별자 문자로 이어지지
+// 않을 때만 언급으로 센다: `open`, `open()`, `open({ ... })`는 통과, `openMachine`은 아니다.
+function mentionsSymbol(text, name) {
+  // 정규식 조립 대신 스캔이다: 이름에 든 특수문자 이스케이프와 문자 클래스의 이중 이스케이프가
+  // 정확히 이 게이트가 잡으려는 종류의 조용한 무력화를 만든다(실제로 한 번 만들었다).
+  const needle = "`" + name;
+  for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + 1)) {
+    const next = text[at + needle.length];
+    if (next === undefined || !/[\w$]/.test(next)) return true;
+  }
+  return false;
+}
 // import 절은 여러 줄에 걸칠 수 있다. 개행을 배제하면 `{ a,\n b } from "x"` 형태가 통째로
 // 안 보여서 구조 게이트(참조 실존/순환/레이어) 전부가 부분맹이 된다. scripts/assetManifest.mjs의
 // 같은 목적 정규식과 같은 규칙(개행 허용)으로 맞춘다.
@@ -71,7 +88,7 @@ function findCycles(graph) {
 console.log("pyproc 게이트\n");
 
 // 1) 공개 표면: index.js가 기대 export를 내는가.
-console.log("[표면]");
+section("표면");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
 const benchArtifactContract = await import(pathToFileURL(join(ROOT, "tests", "browser", "benchArtifacts.mjs")).href);
 const productConsumerCoverage = await import(pathToFileURL(join(ROOT, "tests", "browser", "productConsumerCoverage.mjs")).href);
@@ -235,7 +252,7 @@ check("자가 호스팅 핀 정합(fetchEngine == DEFAULT_INDEX == assetCatalog)
 
 // 2) 능력 계약이 런타임 없이도 형태를 갖추는가(메서드 존재). 소스는 내부 모듈이다:
 // 계약의 목적은 "메서드가 사라지는 회귀"의 조기 발견이고, 도달 경로(핸들/탈출구)는 브라우저 게이트가 문다.
-console.log("\n[계약]");
+section("계약");
 check("porcelain 계약: PyprocMachine 어휘", () => {
   const p = porcelainApi.PyprocMachine.prototype;
   for (const m of ["run", "runAsync", "term", "proc"]) if (typeof p[m] !== "function") throw new Error("missing " + m);
@@ -332,10 +349,25 @@ check("pyproc/history: 커널 계약 표면", () => {
   if (stateBarrel.PAGE_SIZE !== 65536) throw new Error("history.PAGE_SIZE");
 });
 
-// 3) em dash(U+2014) 0 - 훅과 같은 스코프(*.md, *.js).
-console.log("\n[em dash]");
+// 3) em dash(U+2014) 0 - 훅과 같은 스코프. 텍스트로 나가는 확장자 전부를 본다: .d.ts는
+//    npm으로 배포되고 .html/.css는 공개 데모 진열장이며 .yml/.json은 운영 계약이다.
+//    좁혔던 스코프(.md/.js/.mjs)의 틈에서 실제로 위반이 났다(2026-07-26, scripts/*.mjs).
+section("em dash");
+const TEXT_SURFACE_EXTS = [".md", ".js", ".mjs", ".ts", ".html", ".css", ".yml", ".json"];
+// 훅과 이 게이트의 스코프가 갈라지면 커밋 시점 차단과 CI 차단이 다른 것을 본다. 실제로
+// 갈라져 있었다(훅은 .md/.js, 게이트는 .md/.js/.mjs). 두 스코프를 기계로 묶는다.
+check("pre-commit 훅의 em dash 스코프 = 게이트 스코프", () => {
+  const hook = readFileSync(join(ROOT, ".githooks", "pre-commit"), "utf8");
+  const patterns = /^\s*(\*\.[a-z|.*]+)\)\s*;;/m.exec(hook);
+  if (!patterns) throw new Error("훅의 확장자 case 목록을 찾지 못했다");
+  const hookExts = patterns[1].split("|").map((glob) => glob.replace("*", "")).sort();
+  const gateExts = [...TEXT_SURFACE_EXTS].sort();
+  if (hookExts.join(",") !== gateExts.join(",")) {
+    throw new Error(`스코프 불일치: 훅 ${hookExts.join(",")} vs 게이트 ${gateExts.join(",")}`);
+  }
+});
 const EMDASH = String.fromCharCode(0x2014); // 리터럴로 쓰면 이 게이트가 자기 자신에 걸린다
-for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
+for (const f of collect(ROOT, TEXT_SURFACE_EXTS, [])) {
   check(`no em dash: ${rel(f)}`, () => {
     if (readFileSync(f, "utf8").includes(EMDASH)) throw new Error("U+2014 발견");
   });
@@ -344,9 +376,9 @@ for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
 // 3.1) 문서 주체 가드: 문서·주석의 주체는 나다(1인칭/주어 생략). 나를 3인칭 호칭으로
 //      지칭하는 표현을 차단한다(커밋 메시지 주체 중립 규칙의 문서판, 2026-07-12 확정).
 //      금칙어는 리터럴로 쓰면 이 게이트가 자기 자신에 걸리므로 조립한다.
-console.log("\n[문서 주체]");
+section("문서 주체");
 const OWNER_WORD = ["소유", "자"].join(""); // "소유" + "자"
-for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
+for (const f of collect(ROOT, TEXT_SURFACE_EXTS, [])) {
   check(`주체 중립: ${rel(f)}`, () => {
     if (readFileSync(f, "utf8").includes(OWNER_WORD)) throw new Error("3인칭 호칭 발견");
   });
@@ -355,8 +387,8 @@ for (const f of collect(ROOT, [".md", ".js", ".mjs"], [])) {
 // 3.2) 네이밍 가드: camelCase는 언어 불문이다(JS 문자열 안의 파이썬 포함).
 //      우리 접두(_pyproc*) 스네이크와, 우리가 정의하는 파이썬 함수명의 스네이크를 차단한다.
 //      외부 기술 명칭(ASGI 키 문자열, pyodide.ffi.run_sync, API kwarg 등)은 정의가 아니라 안 걸린다.
-console.log("\n[네이밍]");
-for (const scope of ["src", "examples", "tests"]) {
+section("네이밍");
+for (const scope of ["src", "examples", "tests", "apps", "scripts"]) {
   for (const f of collect(join(ROOT, scope), [".js", ".mjs", ".html"], [])) {
     check(`camelCase: ${rel(f)}`, () => {
       const src = readFileSync(f, "utf8");
@@ -375,7 +407,7 @@ for (const scope of ["src", "examples", "tests"]) {
 //      벤치에 종속시킨다. 실측은 계속하되(개발 원칙 4) 측정치는 mainPlan/tests 기록과
 //      benchmark artifact에만 산다. 스코프 밖 둘: docs/operations의 게이트 임계값은 자랑이
 //      아니라 계약이고, examples/의 Speed Lab은 사용자가 자기 기계에서 직접 재는 도구다.
-console.log("\n[성능 주장]");
+section("성능 주장");
 const BRAG = [
   [/\d+(?:\.\d+)?\s*(?:x|×)\s*(?:faster|speedup)/i, "속도 배수 자랑"],
   [/\d+(?:\.\d+)?\s*(?:x|×)\s+median\s+speedup/i, "속도 배수 자랑"],
@@ -391,6 +423,9 @@ const BRAG_SURFACE = [
   join(ROOT, "examples", "index.html"),
   ...collect(join(ROOT, "docs", "product"), [".md"]),
   ...collect(join(ROOT, "docs", "reference"), [".md"]),
+  // 소비 문서는 제품이 채택 판단에 읽는 공개 계약이다. 규칙 문구의 문자적 스코프 밖이었지만
+  // 실제로 측정치가 여기 살아 있었다(2026-07-26: contract.md의 median, 매트릭스의 p95).
+  ...collect(join(ROOT, "docs", "consuming"), [".md"]),
 ];
 for (const f of BRAG_SURFACE) {
   check(`숫자 자랑 0: ${rel(f)}`, () => {
@@ -405,7 +440,7 @@ for (const f of BRAG_SURFACE) {
 //      raw subtle.digest는 코어 2곳(contentDigest = 정본, generationIntegrity = machine 경계의
 //      주입식 사본으로 coordinator 커널 위임 시 소멸 예정)과 pyprocSw(import 0 계약 의도 중복)만.
 //      "sha256:" 주소 문자열 조립도 같은 두 코어만. 나머지 파일에서 발견 = 판정/형식의 새 사본.
-console.log("\n[digest 법]");
+section("digest 법");
 {
   // 7a에서 machine의 주입식 사본(generationIntegrity의 자체 subtle/hex)이 소멸했다:
   // 이제 raw digest는 정본 코어와 pyprocSw(import 0 계약의 의도 중복)에만 산다.
@@ -431,7 +466,7 @@ console.log("\n[digest 법]");
 // 3.5) state 커널 게이트(state-kernel 2단계): 순수 집합 + ref CAS 프로토콜 음성 시험.
 //      실측 원형은 tests/attempts/stateKernel(0단계 probe GREEN). 여기서는 src 실물이
 //      같은 위반들을 무는지 매 커밋 확인한다(안 무는 게이트는 없는 게이트보다 나쁘다).
-console.log("\n[state 커널]");
+section("state 커널");
 {
   // 순수 집합: 커널은 브라우저 저장·전역 관심사를 모른다. backend(OPFS/IndexedDB)와 정책은
   // 전부 위에서 주입된다. 이 불변식이 무너지면 통합이 결합으로 역전된다(god layer).
@@ -587,7 +622,7 @@ console.log("\n[state 커널]");
 // (gate.html의 x=1/999, ROOT/MAIN 마커)로만 검증됐다. 고정 시나리오는 "이 경우엔 된다"를
 // 증명하지 "임의의 힙 변이에도 불변식이 성립한다"를 증명하지 않는다. 순수 함수(pageHashes는
 // fake engine으로, heapDelta는 그대로)라 WASM 없이 Node에서 항상 돈다.
-console.log("\n[해시 soundness]");
+section("해시 soundness");
 {
   const { MemoryCapability, PAGE_SIZE } = await import(pathToFileURL(join(ROOT, "src", "runtime", "memoryCapability.js")).href);
   const heapDelta = await import(pathToFileURL(join(ROOT, "src", "runtime", "heapDelta.js")).href);
@@ -688,7 +723,7 @@ console.log("\n[해시 soundness]");
 // 사라졌다 - 이번 header-target 서명의 핵심 증명이 무방비였다. (2) readStateBundleHeader
 // (접두 조기-거부 프리미티브)에 Node 게이트가 전무. (3) machineImage.js(적대적 입력 파서)의
 // v1 거부·validateMeta/validateManifest 경계에 라이브 게이트 0. 전부 순수 함수 = WASM 0.
-console.log("\n[봉투·이미지 경계]");
+section("봉투·이미지 경계");
 {
   const provider = globalThis.crypto;
   const bundle = await import(pathToFileURL(join(ROOT, "src", "state", "bundleFormat.js")).href);
@@ -831,7 +866,7 @@ console.log("\n[봉투·이미지 경계]");
 // walk가 버려진 형제 분기를 참조)를 임의 트리 property로 CI에 고정한다. 컨트롤러는 fake mem
 // (실 MemoryCapability + JS 힙)에 대해 WASM 없이 돈다. 모델 스냅샷을 restore 정확성과 독립으로
 // 잡으려고 빌드 시 힙을 모델값으로 강제하고 포인터만 세팅한다(오라클이 독립 대조가 되도록).
-console.log("\n[reactive 나무]");
+section("reactive 나무");
 {
   const { MemoryCapability, PAGE_SIZE: RPAGE } = await import(pathToFileURL(join(ROOT, "src", "runtime", "memoryCapability.js")).href);
   const { ReactiveController } = await import(pathToFileURL(join(ROOT, "src", "capabilities", "reactive.js")).href);
@@ -959,7 +994,7 @@ console.log("\n[reactive 나무]");
 // 여러 분기가 삭제 예정 non-CI probe에만 있거나 어디에도 없다. 메시지·락 의존은 주입 가능하므로
 // 내부 메서드를 fake로 직접 구동한다(WASM 0). 한계 명시(감사 규율): Web Locks는 구조적으로 두
 // 리더를 금지하므로 "자연 발생 split-brain"은 재현 불가 - 여기서는 감지 분기를 메시지 주입으로 문다.
-console.log("\n[election 프로토콜]");
+section("election 프로토콜");
 {
   const { KernelElection } = await import(pathToFileURL(join(ROOT, "src", "session", "kernelElection.js")).href);
   const makeCtrl = () => new KernelElection({ name: "gateElect", manifest: {} });
@@ -1062,7 +1097,8 @@ check("파일과 폴더 이름 camelCase", () => {
       const full = join(dir, entry);
       if (statSync(full).isDirectory()) {
         if (!exempt.has(entry) && !CAMEL.test(entry)) bad.push(`${rel(full)}/ (폴더)`);
-        walk(full);
+        // assets/는 엔진 배포판·바이너리 fixture(전부 gitignore)라 이름 규칙 밖이다.
+        if (entry !== "assets") walk(full);
         continue;
       }
       const stem = entry.replace(/\.(js|mjs|html|css|json|d\.ts)$/, "");
@@ -1070,7 +1106,7 @@ check("파일과 폴더 이름 camelCase", () => {
       if (!CAMEL.test(stem) && !exempt.has(stem)) bad.push(rel(full));
     }
   };
-  for (const scope of ["src", "scripts"]) walk(join(ROOT, scope));
+  for (const scope of ["src", "scripts", "tests", "examples", "apps"]) walk(join(ROOT, scope));
   if (bad.length) throw new Error("camelCase 아님: " + bad.slice(0, 8).join(", "));
 });
 
@@ -1078,7 +1114,7 @@ check("파일과 폴더 이름 camelCase", () => {
 //      계약의 축은 message가 아니라 code이므로, 코드 없는 오류가 하나라도 생기면 소비자의
 //      프로그램적 분기가 다시 문자열 매칭으로 퇴행한다. 예외: pyprocSw.js는 SW 자기충족
 //      파일(모듈 import 금지 계약)이라 로컬 swError 헬퍼의 new Error 1곳만 허용한다.
-console.log("\n[오류 계약]");
+section("오류 계약");
 // machine 층은 자기 오류 계약을 갖는다(web-machine 클린 아키텍처 기록): 상태 오류 =
 // WebMachineError(코드), 인자 계약 위반 = TypeError. 그래서 machine에선 TypeError를 세지 않는다.
 // packages/ 시절 게이트 밖에 쌓였던 무코드 new Error 80건은 전부 코드를 얻었다(감소 전용
@@ -1112,10 +1148,10 @@ check("PyProcError 코드 카탈로그 = d.ts union (삼자 일치)", () => {
 
 // 3.4) 영문 API 레퍼런스 동기화: 루트 export 전수가 docs/reference/api.md에 등장해야 한다.
 //      index.js 헤더 주석 목록의 표류(8개 어긋난 채 방치)를 반복하지 않는 기계 장치다.
-console.log("\n[API 레퍼런스]");
+section("API 레퍼런스");
 check("api.md가 루트 export 전수를 다룬다", () => {
   const apiDoc = readFileSync(join(ROOT, "docs", "reference", "api.md"), "utf8");
-  const missing = Object.keys(api).filter((name) => !apiDoc.includes("`" + name));
+  const missing = Object.keys(api).filter((name) => !mentionsSymbol(apiDoc, name));
   if (missing.length) throw new Error(`api.md 누락: ${missing.join(", ")}`);
 });
 check("Stable 라벨 = 승격 원장 정합(근거 없는 라벨 상승 차단)", () => {
@@ -1142,7 +1178,7 @@ check("공개 문서 인프라 존재(CHANGELOG/SECURITY/glossary)", () => {
 
 // 3.5) 사이트 크롬: 채널(SNS) 행은 라우트마다 고정이고 정의처는 examples/siteChrome.js 하나다.
 //      라우트가 늘 때 채널을 빠뜨리거나 마크업을 다시 인라인으로 복제하는 드리프트를 차단한다.
-console.log("\n[사이트 크롬]");
+section("사이트 크롬");
 const chromeSrc = readFileSync(join(ROOT, "examples", "siteChrome.js"), "utf8");
 check("siteChrome.js가 sns-links를 정의", () => {
   if (!chromeSrc.includes('customElements.define("sns-links"')) throw new Error("정의 없음");
@@ -1242,7 +1278,7 @@ for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
 
 // 3.6) 브랜드: 마크 정본은 assets/logo.svg 하나다. 파비콘·헤더 로고·색이 여기서만 나온다.
 //      마크를 인라인으로 복제하거나(6쪽이 갈라진다), 마크와 CSS 색이 어긋나는 드리프트를 차단한다.
-console.log("\n[브랜드]");
+section("브랜드");
 const logoSvg = readFileSync(join(ROOT, "assets", "logo.svg"), "utf8");
 const cssSrc = readFileSync(join(ROOT, "examples", "demo.css"), "utf8");
 const markColors = {
@@ -1298,7 +1334,7 @@ check("demo.css의 var(--x) 참조가 전부 선언과 짝", () => {
 // 4) 타입 선언: 게시되는 타입 표면이 공개 표면을 전부 덮는가.
 //    루트 index.d.ts + 강등 subpath의 형제 d.ts를 함께 본다. 강등 표면은 루트에서 export되지
 //    않으므로(그래서 강등이다) 자기 .js 옆의 d.ts가 유일한 타입 출처다.
-console.log("\n[타입]");
+section("타입");
 const SUBPATH_DTS = [
   "src/runtime/index.d.ts",
   "src/state/index.d.ts",
@@ -1328,11 +1364,13 @@ for (const sym of ["Runtime", "MemoryCapability", "FileSystem", "ReactiveControl
 check("d.ts subpath 값 선언(assets/history)", () => {
   const assetsDts = readFileSync(join(ROOT, "src", "runtime", "assets.d.ts"), "utf8");
   for (const sym of ["getPyProcAssetManifest", "verifyPyProcAssetIntegrity", "registerPyProcServiceWorker", "PYPROC_ASSET_MANIFEST_VERSION"]) {
-    if (!new RegExp(`export (function|const) ${sym}\\b`).test(assetsDts)) throw new Error(`assets.d.ts: ${sym}`);
+    if (!new RegExp(`^export (?:function|const) ${sym}\\b`, "m").test(assetsDts)) throw new Error(`assets.d.ts: ${sym}`);
   }
   const stateDts = readFileSync(join(ROOT, "src", "state", "index.d.ts"), "utf8");
+  // 폴백(`|| includes(sym)`)과 깨진 이스케이프가 있던 자리다: 실효 검사가 "이름이 파일
+  // 어딘가에 문자열로 있는가"로 축소돼, 선언을 지우고 주석에만 남겨도 통과했다.
   for (const sym of ["commitState", "openState", "encodeStateBundle", "decodeStateBundle", "PAGE_SIZE"]) {
-    if (!new RegExp(`export (function|const|declare)?\s*(function|const)? ?${sym}\\b`).test(stateDts) && !stateDts.includes(sym)) throw new Error(`state/index.d.ts: ${sym}`);
+    if (!new RegExp(`^export (?:function|const) ${sym}\\b`, "m").test(stateDts)) throw new Error(`state/index.d.ts: ${sym}`);
   }
 });
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
@@ -1403,11 +1441,11 @@ check("exports 안정 subpath 고정", () => {
 
 // 4.5) README 표면 동기화: index.js의 모든 export가 양쪽 README에 등장해야 한다.
 //      승격이 문서를 앞지르는 드리프트를 차단한다(계약 실태 표의 부채 해소, 2026-07-12).
-console.log("\n[README 표면]");
+section("README 표면");
 for (const readme of ["README.md", "README.ko.md"]) {
   check(`${readme}가 공개 표면 전부 언급`, () => {
     const text = readFileSync(join(ROOT, readme), "utf8");
-    const missing = Object.keys(api).filter((name) => !text.includes("`" + name));
+    const missing = Object.keys(api).filter((name) => !mentionsSymbol(text, name));
     if (missing.length) throw new Error(`표면 누락: ${missing.join(", ")}`);
   });
 }
@@ -1487,7 +1525,7 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
     "history",
     "proc",
   ]) {
-    if (!contract.includes("`" + name)) throw new Error(`contract.md consumer coverage export 누락: ${name}`);
+    if (!mentionsSymbol(contract, name)) throw new Error(`contract.md consumer coverage export 누락: ${name}`);
     if (!productConsumer.includes(name)) throw new Error(`productConsumer.mjs export 사용 누락: ${name}`);
   }
   for (const term of [
@@ -1531,7 +1569,6 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
   if (!productConsumer.includes("runImmortalProductGate")) throw new Error("productConsumer.mjs가 immortal product gate를 실행하지 않음");
   if (!immortalParticipant.includes('from "pyproc"')) throw new Error("immortal participant가 설치 패키지 root export를 쓰지 않음");
   if (!testing.includes("설치 패키지 consumer gate coverage 표")) throw new Error("testing.md consumer coverage 표 포인터 누락");
-  if (contract.includes("왕복 3.4ms")) throw new Error("contract.md에 낡은 S3 3.4ms 수치 잔존");
 });
 check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   const matrixPath = join(ROOT, "docs", "consuming", "capabilityMatrix.md");
@@ -1550,7 +1587,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
     if (!matrix.includes(term)) throw new Error(`능력 매트릭스 상태 누락: ${term}`);
   }
   const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "MachineJail", "SocketBridge", "openPersistentMachine", "KernelElection", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
-  const missing = required.filter((name) => !matrix.includes("`" + name));
+  const missing = required.filter((name) => !mentionsSymbol(matrix, name));
   if (missing.length) throw new Error(`능력 매트릭스 공개 표면 누락: ${missing.join(", ")}`);
   const runnableLinks = [
     "../../examples/basic.html",
@@ -1594,7 +1631,7 @@ check("소비 계약 문서의 자산 목록 = 실제 매니페스트", () => {
 
 // 5) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.
 //    worker.js는 pyProc.js와 같은 폴더 = new URL 상대경로(번들러 워커 emit) 계약.
-console.log("\n[worker]");
+section("worker");
 check("worker.js가 boot/task 처리", () => {
   const src = readFileSync(join(ROOT, "src", "processOs", "worker.js"), "utf8");
   if (!src.includes("onmessage")) throw new Error("onmessage 핸들러 없음");
@@ -1688,10 +1725,16 @@ check("패키지 소비자가 공개 표면과 설치된 pyproc-assets를 사용
 //    로컬은 green인데 CI 러너는 red가 된다(2026-07-12 실제 사고: CI 전 이력 적색의 원인).
 //    추적 집합이 기준이면 로컬 게이트 = CI 게이트다. 대소문자 불일치(Windows 관용)도 잡힌다.
 //    코드 펜스 안은 예제라 제외. http(s)/mailto/앵커 전용 링크 제외.
-console.log("\n[링크]");
+section("링크");
+// git 실패는 닫는 방향으로 다룬다. 예전에는 실패 시 추적 집합이 빈 Set이 되어 "CI에서 죽는
+// 링크" 검사가 통째로 꺼진 채 existsSync만 남았다(fail-open). 같은 파일의 다른 git 호출은
+// 전부 status를 보고 던지는데 여기만 반대 방향이었다.
+const trackedList = spawnSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8", timeout: 20000 });
+if (trackedList.status !== 0 || !trackedList.stdout.trim()) {
+  throw new Error(`링크 게이트: git ls-files 실패(추적 집합 없이 검사하면 fail-open이다): ${trackedList.stderr || trackedList.status}`);
+}
 const trackedFiles = new Set(
-  spawnSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8" })
-    .stdout.split("\n").map((p) => p.trim()).filter(Boolean)
+  trackedList.stdout.split("\n").map((p) => p.trim()).filter(Boolean)
 );
 const isTracked = (absPath) => {
   const relPath = absPath.slice(ROOT.length + 1).replaceAll("\\", "/");
@@ -1719,7 +1762,7 @@ for (const f of collect(ROOT, [".md"], [])) {
 }
 
 // 7) 구조 불변식: attempts 카테고리와 mainPlan 이니셔티브의 README 의무.
-console.log("\n[구조]");
+section("구조");
 // 레이어 = 폴더. 순위가 작을수록 바닥이고, import는 아래로만 흐른다(큰 쪽 -> 작은 쪽).
 // 같은 순위끼리의 교차도 금지다(같은 층은 서로를 몰라야 한다).
 // 이 규칙이 성립하면 폴더 순환은 수학적으로 불가능하다: 순환은 출발 폴더로 돌아와야 하는데
@@ -2017,9 +2060,8 @@ check("Web Machine public type와 runtime store 의미 일치", () => {
     "class MemoryMachineStore",
     "class IndexedDbMachineStore",
     "Promise<Uint8Array>",
-    "WEB_MACHINE_OWNER_STALE",
   ]) {
-    if (!source.includes(required) && required !== "WEB_MACHINE_OWNER_STALE") throw new Error(`type contract 누락: ${required}`);
+    if (!source.includes(required)) throw new Error(`type contract 누락: ${required}`);
   }
   if (/\bprevious\s*:/.test(source)) throw new Error("GenerationHead previous key 재등장");
   for (const removed of ["MemoryGenerationStore", "IndexedDbGenerationStore", "IndexedDbOwnerEpochStore"]) {
@@ -2030,6 +2072,25 @@ check("Web Machine public type와 runtime store 의미 일치", () => {
   if (!memorySource.includes("WEB_MACHINE_OWNER_STALE") || !indexedSource.includes("WEB_MACHINE_OWNER_STALE")) {
     throw new Error("MachineStore stale owner runtime contract 누락");
   }
+});
+
+// machine 오류 코드 union이 실제 throw 집합과 정확히 같은가. 전임 검사는 `WEB_MACHINE_OWNER_STALE`을
+// 순회에 넣고 조건에서 스스로 제외해 영원히 통과했고, 그 뒤에 진짜 공백이 있었다: d.ts의 code가
+// string이라 소비자가 코드로 분기할 수 없었다. 양방향으로 대조해야 한쪽만 늘어나는 표류가 잡힌다.
+check("Web Machine 오류 코드 union = 실제 throw 집합", () => {
+  const dts = readFileSync(join(machineRoot, "index.d.ts"), "utf8");
+  const unionBlock = /export type WebMachineErrorCode =([\s\S]*?);\n/.exec(dts);
+  if (!unionBlock) throw new Error("WebMachineErrorCode union 선언 없음");
+  const declared = new Set([...unionBlock[1].matchAll(/"(WEB_MACHINE_[A-Z_]+)"/g)].map((m) => m[1]));
+  const thrown = new Set();
+  for (const file of collect(machineRoot, [".js"], [])) {
+    for (const m of readFileSync(file, "utf8").matchAll(/"(WEB_MACHINE_[A-Z_]+)"/g)) thrown.add(m[1]);
+  }
+  const missing = [...thrown].filter((code) => !declared.has(code)).sort();
+  const extra = [...declared].filter((code) => !thrown.has(code)).sort();
+  if (missing.length) throw new Error(`union에 없는 throw 코드: ${missing.slice(0, 6).join(", ")}`);
+  if (extra.length) throw new Error(`throw되지 않는 union 코드: ${extra.slice(0, 6).join(", ")}`);
+  if (!/readonly code: WebMachineErrorCode/.test(dts)) throw new Error("WebMachineError.code가 union 타입이 아니다");
 });
 
 check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () => {
@@ -2328,7 +2389,7 @@ check("Web Computer 실행 자산은 검증된 development channel", () => {
 //    git 이력은 되감을 수 없으므로 커밋 시점에 막는 훅이 유일한 집행 지점이다. 그래서 훅이
 //    정본을 실제로 호출하는지(배선)와 정본이 위반마다 RED인지(이빨)를 매 게이트 실행마다
 //    양성/음성 fixture로 확인한다. 규칙 문장의 SSOT는 CLAUDE.md "Git 규칙"이다.
-console.log("\n[커밋 규칙]");
+section("커밋 규칙");
 {
   const { checkCommitMessage, COMMIT_MESSAGE_LIMITS } = await import(
     pathToFileURL(join(ROOT, "scripts", "commitMessage.mjs")).href
@@ -2402,5 +2463,10 @@ console.log("\n[커밋 규칙]");
     if (merged.length) throw new Error(merged.map((v) => v.code).join(","));
   });
 }
+
+// 9) 게이트 층 하한: 섹션별 체크 수가 tests/gateFloor.json 아래로 내려가면 RED. 이 검사가
+//    없으면 앞의 모든 절을 지워도 결과는 GREEN이다(2026-07-26 실측: [election 프로토콜] 절
+//    전체 삭제 후에도 통과). 하한을 내리는 diff가 곧 "검증을 줄인다"는 심사 지점이다.
+gate.assertFloors(JSON.parse(readFileSync(join(ROOT, "tests", "gateFloor.json"), "utf8")).sections);
 
 gate.exit();

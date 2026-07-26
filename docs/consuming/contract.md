@@ -63,7 +63,7 @@ await registerPyProcServiceWorker(assetIntegrity, {
   coreIntegrity: "/vendor/pyodide-integrity.json",
   scope: "/",
 });
-new VirtualOrigin(asgiServer).bind(); // 이후 fetch("/pyproc/api/...")가 커널로 간다 (S3 artifact 기준 18ms median)
+new VirtualOrigin(asgiServer).bind(); // 이후 fetch("/pyproc/api/...")가 커널로 간다
 
 // 헤더를 못 다는 호스팅(GitHub Pages 등)에서 SAB(프로세스 OS) 열기: 등록 + 1회 새로고침
 await registerPyProcServiceWorker(assetIntegrity, { coi: true, scope: "/" });
