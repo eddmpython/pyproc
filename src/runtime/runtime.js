@@ -60,7 +60,7 @@ export function ensureEngineScript(indexURL, opts = {}) {
   const integrity = opts.integrity || null;
   if (globalThis.loadPyodide) {
     if (integrity && engineScriptState?.integrity !== integrity) {
-      return Promise.reject(new PyProcError("PYPROC_ASSET_INTEGRITY", "pyodide.js는 이미 다른 integrity 상태로 로드됐다. engineScriptIntegrity 검증은 첫 부팅 전에만 강제할 수 있다."));
+      return Promise.reject(new PyProcError("PYPROC_ASSET_INTEGRITY", "pyodide.js is already loaded with a different integrity value. engineScriptIntegrity can only be enforced before the first boot."));
     }
     return Promise.resolve();
   }
@@ -74,11 +74,11 @@ export function ensureEngineScript(indexURL, opts = {}) {
         s.crossOrigin = opts.crossOrigin || "anonymous";
       }
       s.onload = () => { engineScriptState = engineScriptPending; engineScriptPending = null; res(); };
-      s.onerror = () => { engineScriptLoad = null; engineScriptPending = null; rej(new PyProcError("PYPROC_BOOT_FAILED", "pyodide.js 로드 실패: " + indexURL, { retryable: true })); };
+      s.onerror = () => { engineScriptLoad = null; engineScriptPending = null; rej(new PyProcError("PYPROC_BOOT_FAILED", "failed to load pyodide.js from " + indexURL, { retryable: true })); };
       document.head.appendChild(s);
     });
   } else if (integrity && engineScriptPending?.integrity !== integrity) {
-    return Promise.reject(new PyProcError("PYPROC_ASSET_INTEGRITY", "pyodide.js 로드가 이미 다른 integrity 상태로 진행 중이다."));
+    return Promise.reject(new PyProcError("PYPROC_ASSET_INTEGRITY", "a pyodide.js load with a different integrity value is already in flight."));
   }
   return engineScriptLoad;
 }
@@ -148,7 +148,7 @@ export async function boot(opts = {}) {
   const doLoad = opts.loadPyodide
     ? () => opts.loadPyodide(cfg)
     : async () => { await ensureEngineScript(indexURL, { integrity: opts.engineScriptIntegrity }); return loadPyodide(cfg); };
-  if (opts.loadPyodide && opts.engineScriptIntegrity) throw new PyProcError("PYPROC_INPUT_INVALID", "engineScriptIntegrity는 pyproc이 pyodide.js를 로드하는 경로에서만 검증할 수 있다.");
+  if (opts.loadPyodide && opts.engineScriptIntegrity) throw new PyProcError("PYPROC_INPUT_INVALID", "engineScriptIntegrity applies only when pyproc loads pyodide.js itself.");
   let py;
   if (cache) {
     // 코어 캐시의 fetch 랩은 전역 패치 창이다: 단독 boot는 공용 체인으로 직렬화하고,

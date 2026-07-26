@@ -13,7 +13,7 @@ export class FileSystem {
 
   _facade() {
     const fs = this._rt._engine.fs;
-    if (!fs) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "Runtime.fs: 이 엔진은 파일 IO 미지원(엔진 fs 파사드 부재). Pyodide 엔진이 필요하다.");
+    if (!fs) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "Runtime.fs: this engine exposes no file IO (no engine fs facade). A Pyodide engine is required.");
     return fs;
   }
 

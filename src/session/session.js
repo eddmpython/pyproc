@@ -1,6 +1,6 @@
-// session.js - Layer 3: 세션 부활(불멸 커널) = 결정적 리플레이 + 사용자 델타.
+// session.js - Layer 4: 세션 부활(불멸 커널) = 결정적 리플레이 + 사용자 델타.
 // 조립된 런타임을 부팅해서 쓴다(boot + rt.enableReactive). 즉 registry 설치 뒤에만 성립하므로
-// 능력(Layer 1)이 아니라 합성 루트 위에 산다.
+// 능력(Layer 4)이 아니라 합성 루트 위에 산다.
 // 원리(실측: bootDeterminismProbe, replayForkProbe 2026-07-11):
 //   부팅 비결정의 주범은 엔트로피(해시 시드·getentropy·시간)다. PYTHONHASHSEED=0 +
 //   부팅 구간 엔트로피/시간 고정이면 같은 매니페스트(packages/setup/env)의 부팅이
@@ -86,11 +86,11 @@ export function bootSession(manifest = {}) {
 // 신뢰 정책이라 한 곳에 산다.
 function requireTrust(signature, envelope, opts) {
   if (opts.requireSignature === true && !signature.trusted) {
-    throw new PyProcError("PYPROC_MACHINE_UNTRUSTED", "openMachine: 신뢰된 공개키의 signature가 필요하다");
+    throw new PyProcError("PYPROC_MACHINE_UNTRUSTED", "open: a signature verifiable by a trusted public key is required");
   }
   if (opts.trust !== true && !signature.trusted) {
     const hint = signature.present ? "신뢰된 공개키가 없거나 일치하지 않는다" : "서명이 없다";
-    throw new PyProcError("PYPROC_MACHINE_UNTRUSTED", `openMachine: 머신 파일은 임의 코드 실행과 동급 위험이다. ${hint}. 출처를 신뢰하면 { trust: true }, 서명 출처를 신뢰하면 { trustedPublicKeys: [...] }로 여시라. sha256=${envelope.slice(0, 16)}...`);
+    throw new PyProcError("PYPROC_MACHINE_UNTRUSTED", `open: a machine file carries the same risk as running arbitrary code. ${hint}. Accept the publisher with { trust: true }, or verify it with { trustedPublicKeys: [...] }. sha256=${envelope.slice(0, 16)}...`);
   }
 }
 
@@ -107,11 +107,11 @@ async function openBundleMachine(buf, opts) {
     if (opts.trustedPublicKey) trustedKeys.push(opts.trustedPublicKey);
     if (Array.isArray(opts.trustedPublicKeys)) trustedKeys.push(...opts.trustedPublicKeys);
     const verdict = await verifyStateTag(globalThis.crypto, decoded.tag, decoded.headerDigest, { trustedPublicKeys: trustedKeys });
-    if (!verdict.valid) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: signature 검증 실패");
+    if (!verdict.valid) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "open: signature verification failed");
     signature = { present: true, trusted: verdict.trusted };
   }
   requireTrust(signature, decoded.envelope, opts);
-  if (typeof decoded.meta?.manifest !== "string") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: bundle meta에 manifest가 없다");
+  if (typeof decoded.meta?.manifest !== "string") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: bundle meta has no manifest. A .webmachine file is not a session bundle; open it through the Web Computer surface");
   const manifest = validateManifest(JSON.parse(decoded.meta.manifest));
   const session = await bootSession(manifest);
   const store = new MemoryStateStore();
@@ -130,7 +130,7 @@ export async function openMachine(blob, opts = {}) {
   if (isStateBundle(buf)) return openBundleMachine(buf, opts);
   const { envelope, meta, bin, homeBin } = await decodeMachineEnvelope(buf);
   if (meta.home) validateMachineHomeMeta(meta.home, homeBin ? homeBin.length : 0);
-  else if (homeBin && homeBin.length) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: home 메타 없이 home payload가 있다");
+  else if (homeBin && homeBin.length) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: home payload present without home meta");
   const manifest = validateManifest(JSON.parse(meta.manifest));
   const signature = await verifyMachineSignature(meta, bin, homeBin || new Uint8Array(0), opts);
   requireTrust(signature, envelope, opts);
@@ -216,7 +216,7 @@ export class Session {
   async load(dir, name) {
     const meta = JSON.parse(await (await (await dir.getFileHandle(name + ".json")).getFile()).text());
     if (meta.manifest !== this._manifest) {
-      throw new PyProcError("PYPROC_REPLAY_MISMATCH", "session.load: 매니페스트 불일치. 저장 당시와 같은 packages/setup/env로 bootSession해야 부활이 성립한다.");
+      throw new PyProcError("PYPROC_REPLAY_MISMATCH", "open({ dir, name }): manifest mismatch. Revival needs the same packages/setup/env that saved it, passed as { manifest }");
     }
     const bin = new Uint8Array(await (await (await dir.getFileHandle(name + ".bin")).getFile()).arrayBuffer());
     validateMeta(meta, bin.length);
@@ -230,7 +230,7 @@ export class Session {
     if (meta.h0) {
       const cur = await this._cp0Digest();
       if (cur !== meta.h0) {
-        throw new PyProcError("PYPROC_REPLAY_MISMATCH", `session.load: 리플레이 결정성 불일치(cp0 ${cur.slice(0, 12)}.. != 저장 당시 ${meta.h0.slice(0, 12)}..). 엔진 버전이나 매니페스트가 저장 당시와 다르다.`);
+        throw new PyProcError("PYPROC_REPLAY_MISMATCH", `open({ dir, name }): replay determinism mismatch (cp0 ${cur.slice(0, 12)}.. != saved ${meta.h0.slice(0, 12)}..). The engine version or the manifest differs from the one that saved this state.`);
       }
     }
     // 물질화 순서(성장 -> 경계 되감기 -> 페이지 -> 스택 -> 새 경계)는 heapMaterialize가 정본이다.
@@ -256,7 +256,7 @@ export class Session {
       heapLen: tree.heapLen, sp: tree.sp, pages,
       home: (files && files.get("home")) || null,
       // 층마다 오류 어휘가 다르다: 세션 부활의 파손은 머신 포맷 계약 위반으로 말한다.
-      wrapHomeError: (e) => new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `openMachine: home 메타 파손(${String(e.message || e).slice(-160)})`, { cause: e }),
+      wrapHomeError: (e) => new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `open: home meta is corrupt (${String(e.message || e).slice(-160)})`, { cause: e }),
     });
     return { pages: applied.pages, mb: applied.mb };
   }
