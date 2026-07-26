@@ -1,7 +1,7 @@
 {
   "comment": "페이지별 통과 체크 수 하한. 브라우저 게이트는 'ok && 전부 pass'만 보므로, 체크를 지우면 더 적은 수로 GREEN이 된다(2026-07-26 실측: 87개 중 80개를 지워도 7/7 GREEN). 값은 신설 당시 실측 카운트이고, 내리려면 같은 커밋에서 이 숫자를 고쳐야 한다. 여기 없는 페이지(attempts probe 등)는 자연 통과한다: 하한은 정규 게이트 페이지의 계약이다.",
   "floors": {
-    "tests/browser/gate.html": 94,
+    "tests/browser/gate.html": 96,
     "tests/browser/preflightNoCoi.html": 5,
     "tests/browser/wasiGate.html": 13,
     "tests/webMachine/browser/probes/hostContractProbe.html": 36,

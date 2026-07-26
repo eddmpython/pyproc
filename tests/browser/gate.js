@@ -421,6 +421,23 @@ try {
   const mg = await tt.push("%pwd");
   check("terminal 매직: %pwd", mg.out.includes("/") && mg.more === false);
 
+  // 권한 감옥의 협조 티어: 배선(enableJail)이 실제로 초크포인트를 심고 CSP 값을 준다.
+  // 배선이 없던 동안 소비 문서는 도달 불가한 클래스를 지시했고 게이트는 그것을 못 봤다.
+  const jailed = rt.enableJail({ net: ["api.allowed.test"], clipboard: true });
+  check("enableJail: connectSrc는 self + 허용 host",
+    jailed.connectSrc === "'self' api.allowed.test" && jailed.permissions.clipboard === true,
+    jailed.connectSrc);
+  check("enableJail: 파이썬 초크포인트가 허용/차단을 가른다",
+    rt.run("import pyprocJail\npyprocJail.net('api.allowed.test')") === true
+    && (() => {
+      try { rt.run("import pyprocJail\npyprocJail.net('evil.test')"); return false; }
+      catch (error) { return /no net permission/.test(String(error)); }
+    })()
+    && (() => {
+      try { rt.run("import pyprocJail\npyprocJail.workers()"); return false; }
+      catch (error) { return /no workers permission/.test(String(error)); }
+    })());
+
   // 모든 것은 파일(deviceFs): 장치 쌍방 브리지 + /proc 커널 상태 (정본 실측: deviceFsProbe)
   let devSink = null;
   const dfs = rt.enableDeviceFs({ devices: { "/dev/gateEcho": { read: () => "pong", write: (b) => { devSink = new TextDecoder().decode(b); } } } });

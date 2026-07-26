@@ -923,6 +923,12 @@ declare class Runtime {
   /** 파이썬 서버를 진짜 URL로: SW 위임에 응답한다. asgi를 생략하면 enableAsgiServer(cfg)로 만든다. */
   enableVirtualOrigin(asgi?: AsgiServer, cfg?: AsgiServerConfig): VirtualOrigin;
   enableTerminal(cfg?: TerminalConfig): Terminal;
+  /**
+   * 권한 감옥을 설치한다. 협조 초크포인트(파이썬 `pyprocJail` 모듈)를 심고 감옥 컨텍스트의
+   * CSP `connect-src` 값을 함께 돌려준다. 강한 차단은 브라우저 CSP가 집행하고 이 티어는
+   * 실수 방지와 명시 계약이다(정직: `import js` 우회는 CSP가 잡는다).
+   */
+  enableJail(permissions?: JailPermissions): { jail: MachineJail; permissions: JailPermissions; connectSrc: string };
   enableWheelCache(cfg: WheelCacheConfig): WheelCache;
   enableDeviceFs(cfg?: DeviceFsConfig): DeviceFs;
   enableInit(cfg?: InitConfig): Init;

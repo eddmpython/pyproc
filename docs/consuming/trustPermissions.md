@@ -31,7 +31,7 @@ const machine = await open(file, {
 
 ## 권한 UI
 
-권한 UI는 제품이 실행 전에 사용자에게 보여주는 능력 범위다. pyproc의 기본 권한 단위는 `MachineJail`의 `permissions{net, clipboard, home, workers}`다.
+권한 UI는 제품이 실행 전에 사용자에게 보여주는 능력 범위다. pyproc의 기본 권한 단위는 `machine.runtime.enableJail(permissions)`가 설치하는 `permissions{net, clipboard, home, workers}`다.
 
 | 권한 | 사용자에게 보여줄 의미 | 기본 |
 |---|---|---|
@@ -45,10 +45,10 @@ const machine = await open(file, {
 - signer fingerprint
 - `.pymachine` 파일 크기와 출처
 - permission manifest
-- `MachineJail.connectSrc()` 또는 해당 제품의 네트워크 allowlist
+- `enableJail(...)`이 돌려준 `connectSrc` 또는 해당 제품의 네트워크 allowlist
 - `resume.py`가 다시 열 자원 목록(DB, relay, device handle 등)
 
-`MachineJail.install(rt)`의 협조 티어는 실수 방지와 코드 레벨 명시성이다. 강한 네트워크 차단은 `MachineJail.csp()`를 적용한 감옥 컨텍스트에서 브라우저 CSP가 집행한다. same-origin 감옥은 `window.parent` 측면통로가 남고, opaque origin 감옥은 부모를 막는 대신 SAB 기반 프로세스 기능을 잃는다. 제품은 이 tradeoff를 UI/모드로 분리한다.
+`enableJail(permissions)`의 협조 티어는 실수 방지와 코드 레벨 명시성이다. 강한 네트워크 차단은 감옥 핸들의 `csp()`를 적용한 컨텍스트에서 브라우저 CSP가 집행한다. same-origin 감옥은 `window.parent` 측면통로가 남고, opaque origin 감옥은 부모를 막는 대신 SAB 기반 프로세스 기능을 잃는다. 제품은 이 tradeoff를 UI/모드로 분리한다.
 
 ## 현재 고정 표면
 
@@ -57,7 +57,7 @@ const machine = await open(file, {
 | `fingerprintStatePublicKey()` | CryptoKeyPair 또는 JWK에서 같은 `sha256:<hex>` fingerprint를 만든다(`pyproc/history`) |
 | `machineImageProbe.html` | WebCrypto signature, trusted public key import, 다른 공개키 거부, fingerprint 안정성을 브라우저에서 검증한다 |
 | `examples/machine.html` | signer fingerprint와 `home=yes, net=no, clipboard=no, workers=no` 권한 정책을 데모 UI에 표시하고, signed `.pymachine`만 연다 |
-| `MachineJail` | 협조 초크포인트와 CSP `connect-src` 문자열을 제공한다 |
+| `machine.runtime.enableJail(permissions)` | 협조 초크포인트를 심고 `{ jail, permissions, connectSrc }`를 돌려준다 |
 
 ## 제품별 적용
 
@@ -66,7 +66,7 @@ const machine = await open(file, {
 | codaro | editor build와 함께 trusted key JWK 또는 keyset manifest를 배포하고, build hash와 fingerprint를 quality report에 남긴다 | 프로젝트별 `/home/web/codaro`, ASGI endpoint, 네트워크 allowlist, worker 사용 여부를 실행 전 표시 |
 | dartlab | notebook runtime 배포와 keyset을 묶고, shared notebook import 시 fingerprint를 표시한다 | `/pyapi`, 파일/DB connection, package cache, 외부 fetch/relay를 notebook 권한으로 분리 |
 | xlpod | workbook별 UDF runtime keyset을 배포한다 | workbook 파일 접근, formula callback bridge, 취소 SAB, 외부 네트워크를 명시 |
-| 외부 제품 | 제품 release asset 또는 서버 endpoint로 JWK를 배포한다 | `MachineJail` manifest와 제품 고유 권한을 같은 승인 화면에 둔다 |
+| 외부 제품 | 제품 release asset 또는 서버 endpoint로 JWK를 배포한다 | 감옥 권한 manifest와 제품 고유 권한을 같은 승인 화면에 둔다 |
 
 ## 금지
 
