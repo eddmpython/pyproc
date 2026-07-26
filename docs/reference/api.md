@@ -387,6 +387,19 @@ the provider that persistence and image constructors now require - they no longe
 a bare `Crypto` object. Errors here are `WebMachineError` (with `code`) or `TypeError`
 (argument contract).
 
+**Device and machine lifecycle.** A computer that can only add hardware is not a computer,
+so the host exposes the removal side too:
+
+| Verb | Contract |
+|---|---|
+| `host.listDevices()` | Names of every attached virtual device, in deterministic order |
+| `host.detachDevice(name)` | Removes a device. Refuses with `WEB_MACHINE_DEVICE_IN_USE` while any machine's permissions still require it |
+| `host.destroyMachine(machineId)` | Drops a machine from the registry. Refuses with `WEB_MACHINE_MACHINE_IN_USE` unless it is stopped or failed |
+| `machineHandle.usesDevice(name)` | Whether this machine requires that device; this is what `detachDevice` asks each machine |
+
+Detach and destroy are the same shape on purpose: removal is refused while something still
+depends on the thing being removed, rather than succeeding and leaving a dangling reference.
+
 ### Engine assets
 
 `boot()` does not carry the Pyodide distribution; it fetches it from `indexURL` (default

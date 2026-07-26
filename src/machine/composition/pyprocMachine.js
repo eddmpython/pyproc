@@ -47,6 +47,20 @@ function assertKnownOptions(options, allowed, verb) {
     `${verb}: unknown option(s): ${hints.join(", ")}. Known options: ${allowed.join(", ")}.`);
 }
 
+// 모드가 읽지 않는 옵션은 받지 않는다. `setup`과 `wheelDir`은 결정적 리플레이 매니페스트의
+// 항목이라 그 경로(session)만 읽고, 기본 경로(runtime.boot)는 두 이름을 아예 참조하지 않는다.
+// 허용 목록만 있을 때 `boot({ packages, setup })`은 부팅에 성공하고 setup을 조용히 버렸다:
+// 침묵하는 무시는 오타보다 나쁘다(오타는 결국 NameError로 드러나지만 이쪽은 아무 흔적이 없다).
+const DETERMINISTIC_ONLY_OPTION_KEYS = Object.freeze(["setup", "wheelDir"]);
+function assertModeOptions(options) {
+  if (!options || options.deterministic) return;
+  const dropped = DETERMINISTIC_ONLY_OPTION_KEYS.filter((key) => options[key] !== undefined);
+  if (!dropped.length) return;
+  throw new PyProcError("PYPROC_INPUT_INVALID",
+    `boot: ${dropped.join(", ")} ${dropped.length > 1 ? "are" : "is"} only read on the deterministic replay path. `
+    + "Pass deterministic: true, or drop the option.");
+}
+
 class PyprocHistory {
   constructor(machine) {
     this._machine = machine;
@@ -140,7 +154,37 @@ export class PyprocMachine {
     this._procPools.set(key, pending);
     try { return await pending; } catch (error) { this._procPools.delete(key); throw error; }
   }
+  // 셸의 잡 컨트롤. `expr &`가 대화형 네임스페이스를 살아있는 채로 fork해 딴 코어에서 돌린다.
+  // 자기 워커 풀(대화형 레인 1 + 잡 슬롯 N-1)을 세우므로 proc()의 풀과 별개다.
+  // 도달 경로가 없던 자리다: 구현과 문서가 있는데 소비자가 만들 방법이 없었다(0.0.10 개명에서
+  // 값-export를 잃고 배선을 못 받았다). 이 층에서만 배선할 수 있다: JobControl은 rank 4라
+  // composition(3)의 바인딩 레지스트리가 import하면 위로 향하는 edge다.
+  async jobs(opts = {}) {
+    if (this._jobControl) return this._jobControl;
+    const pending = (async () => {
+      const { JobControl } = await import("../../processOs/jobControl.js");
+      const shell = new JobControl({
+        indexURL: this._rt.indexURL,
+        assetIntegrity: this._rt.assetIntegrity,
+        ...opts,
+      });
+      await shell.boot();
+      return shell;
+    })();
+    this._jobControl = pending;
+    try { return await pending; } catch (error) { this._jobControl = null; throw error; }
+  }
+  // 머신 안의 머신: 파이썬이 `pyprocMachine.spawn()`으로 자식 커널을 띄운다(중첩 컨테이너).
+  // 런타임을 받으므로 이 머신의 엔진 위에 선다.
+  containers(cfg = {}) {
+    if (!this._containers) {
+      this._containers = import("../../processOs/machineContainer.js")
+        .then(({ MachineContainer }) => new MachineContainer(this._rt, cfg));
+    }
+    return this._containers;
+  }
   // 회수 동사. 풀 핸들을 잃으면 워커를 되돌릴 방법이 없어서 머신 자신이 회수구를 갖는다.
+  // proc 풀, 잡 컨트롤 풀, 컨테이너를 전부 회수한다: 하나라도 빠지면 워커가 남는다.
   async dispose() {
     const pools = [...(this._procPools?.values() || [])];
     this._procPools = new Map();
@@ -148,6 +192,12 @@ export class PyprocMachine {
       const pool = await pending.catch(() => null);
       if (pool) pool.terminate();
     }
+    const shell = await (this._jobControl || Promise.resolve(null)).catch(() => null);
+    this._jobControl = null;
+    if (shell) shell.terminate();
+    const containers = await (this._containers || Promise.resolve(null)).catch(() => null);
+    this._containers = null;
+    if (containers) containers.terminate();
     this._reactive.dispose();
   }
 }
@@ -157,6 +207,7 @@ export class PyprocMachine {
 // 그 선택은 이후 모든 내구 커밋의 환경 지문(deterministic 플래그)에 기록된다.
 export async function boot(options = {}) {
   assertKnownOptions(options, BOOT_MACHINE_OPTION_KEYS, "boot");
+  assertModeOptions(options);
   const { deterministic = false, ...rest } = options;
   if (deterministic) {
     const session = await bootSession(rest);

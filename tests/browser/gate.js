@@ -421,6 +421,20 @@ try {
   const mg = await tt.push("%pwd");
   check("terminal 매직: %pwd", mg.out.includes("/") && mg.more === false);
 
+  // 도달 경로가 없던 두 능력: 구현과 문서가 있는데 소비자가 만들 방법이 없었다. 배선을 받은
+  // 지금 실제로 도는지 본다(타입 선언만으로는 TypeError를 타입 통과로 위장시킨다).
+  const shell = await pm.jobs({ workers: 2 });
+  // 실제 실행으로 증명한다: 대화형 레인에 상태가 누적되고 그 값이 돌아오는가.
+  await shell.push("jobLane = 6 * 7");
+  const shellOut = await shell.push("print(jobLane)");
+  check("machine.jobs: 잡 컨트롤이 도달 가능하고 대화형 레인에 상태가 누적된다",
+    shellOut.out.trim() === "42", JSON.stringify(shellOut.out));
+  check("machine.jobs: 머신당 하나로 memoize(재마운트가 워커를 쌓지 않는다)",
+    (await pm.jobs()) === shell);
+  const containers = await pm.containers();
+  check("machine.containers: 컨테이너 커널이 도달 가능",
+    !!containers && typeof containers.spawn === "function" && (await pm.containers()) === containers);
+
   // 권한 감옥의 협조 티어: 배선(enableJail)이 실제로 초크포인트를 심고 CSP 값을 준다.
   // 배선이 없던 동안 소비 문서는 도달 불가한 클래스를 지시했고 게이트는 그것을 못 봤다.
   const jailed = rt.enableJail({ net: ["api.allowed.test"], clipboard: true });

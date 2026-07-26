@@ -572,6 +572,28 @@ section("digest 법");
 
   // 결정성 스텁 법: 부팅 구간의 비결정 소스 고정과 재시드 소스는 globalPatch에만 산다.
   // 메인 커널과 워커 커널이 같은 값을 써야 cp0 바이트가 같고, 그래야 fork가 성립한다.
+  // 결정적 정렬 비교자의 정의 지점 법. 이 함수는 내용주소와 서명 대상의 엔트리 순서를 정하므로
+  // 판본이 갈리면 같은 상태가 다른 주소를 낳는다. 정의가 둘인 것은 층 경계 때문이다:
+  // machine의 순수 집합은 "import 0"이 불변식이라 runtime을 import할 수 없고, runtime(rank 0)은
+  // machine(rank 5)을 import할 수 없다. 그래서 경계 양쪽에 하나씩만 허용하고 셋째는 금지한다.
+  // 실측(2026-07-27): machineManifest.js가 손으로 베낀 셋째 사본을 갖고 있었고, 그 파일과
+  // deterministicOrder.js가 모두 순수 집합이라 순수-순수 import가 합법이므로 이유가 없었다.
+  const COMPARATOR_HOMES = new Set([
+    "src/runtime/memoryLayout.js",            // rank 0 쪽. machine을 import할 수 없다
+    "src/machine/contracts/deterministicOrder.js", // 순수 집합 쪽. import 0이 불변식이다
+  ]);
+  check("결정적 비교자의 정의는 경계 양쪽 각 한 곳", () => {
+    const definers = [];
+    for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+      const code = stripComments(readFileSync(f, "utf8"));
+      // 정의만 센다(재수출과 import는 사본이 아니다).
+      if (/(?:export\s+)?function compareNames\s*\(/.test(code)) definers.push(rel(f));
+    }
+    const extra = definers.filter((path) => !COMPARATOR_HOMES.has(path));
+    if (extra.length) throw new Error(`비교자 사본: ${extra.join(", ")}(경계 이유가 있으면 목록에 근거와 함께 등재한다)`);
+    const missing = [...COMPARATOR_HOMES].filter((path) => !definers.includes(path));
+    if (missing.length) throw new Error(`비교자 정의가 사라졌다: ${missing.join(", ")}`);
+  });
   check("결정성 스텁의 소스는 한 곳", () => {
     const holders = [];
     for (const f of collect(join(ROOT, "src"), [".js"], [])) {
@@ -1639,6 +1661,43 @@ check("d.ts declare class 멤버는 src에 구현이 있다", () => {
     }
   }
   if (dead.length) throw new Error(`구현 없는 d.ts 멤버 선언: ${dead.join(", ")}`);
+});
+// 멤버 도달성만 보면 "클래스 자체에 닿을 방법이 없는" 경우를 놓친다. 실측(2026-07-27):
+// MachineContainer와 JobControl은 api.md와 capabilityMatrix가 공개 능력으로 설명하고
+// index.d.ts가 public constructor까지 선언했는데, package exports에도 없고 어떤 핸들의 동사도
+// 아니어서 소비자가 만들 방법이 없었다(0.0.10 개명에서 값-export를 잃고 배선을 못 받은 자리).
+// 도달 경로 셋 중 하나는 있어야 한다: (1) 값-export, (2) enable* 바인딩, (3) 핸들의 동사 반환형.
+// 타입으로만 사는 것이 정직한 선언. 각 항목은 판단 기록이다: 왜 소비자가 만들 필요가 없는지가
+// 여기 남아야 목록이 "설명 못 하는 것을 담는 자리"로 썩지 않는다.
+const TYPE_ONLY_CLASSES = Object.freeze({
+  Session: "내부 세션 클래스. 소비자는 machine.history로 말하고 boot({deterministic})이 만든다",
+  PyodideEngine: "Runtime이 로드된 Pyodide를 직접 받으므로(new Runtime(py)) 소비자가 어댑터를 만들 일이 없다",
+});
+check("d.ts declare class는 소비자가 닿을 경로가 있다", () => {
+  const rootDts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
+  const declared = [...rootDts.matchAll(/declare class (\w+)/g)].map((m) => m[1]);
+  // 반환형/속성형으로 등장하면 어떤 핸들을 통해 얻는다는 뜻이다(예: proc(): Promise<PyProc>).
+  const referencedAsType = new Set();
+  for (const m of rootDts.matchAll(/:\s*(?:Promise<)?([A-Z]\w*)/g)) referencedAsType.add(m[1]);
+  const bindings = new Set();
+  for (const f of collect(join(ROOT, "src", "composition"), [".js"], [])) {
+    for (const m of readFileSync(f, "utf8").matchAll(/^ {2}(enable[A-Za-z]*):/gm)) bindings.add(m[1]);
+  }
+  const exported = new Set(Object.keys(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).exports || {}));
+  const unreachable = [];
+  for (const name of declared) {
+    if (name in TYPE_ONLY_CLASSES) continue;
+    // 값-export로 나가는가(루트 또는 강등 subpath의 export 선언).
+    if (new RegExp(`export (?:declare )?(?:class|const|function) ${name}\\b`).test(rootDts)) continue;
+    if (bindings.has(`enable${name}`)) continue;
+    // 핸들 동사의 반환형으로 나가는가. `declare class X`의 선언 자리 자체는 세지 않는다.
+    if (referencedAsType.has(name)) continue;
+    unreachable.push(name);
+    void exported;
+  }
+  if (unreachable.length) {
+    throw new Error(`소비자가 만들 수 없는 공개 클래스: ${unreachable.join(", ")}(값-export, enable* 바인딩, 핸들 동사 중 하나가 필요하다)`);
+  }
 });
 check("d.ts subpath 값 선언(assets/history)", () => {
   const assetsDts = readFileSync(join(ROOT, "src", "runtime", "assets.d.ts"), "utf8");

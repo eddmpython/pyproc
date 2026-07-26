@@ -911,7 +911,7 @@ declare class Runtime {
   setStderr(handler: ((chunk: string) => void) | null): void;
   /** 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정(uv lock 등가). boot({ lockFileURL })에 되먹인다. */
   freeze(): Promise<string>;
-  /** 선언 환경 레인(`machine.runtime.enableEnvManager()`)으로 부팅된 경우의 부팅 통계. */
+  /** 선언 환경 레인(`boot({ deterministic: true, packages, setup, wheelDir })`)으로 부팅한 경우의 부팅 통계. */
   envBoot?: EnvBootStats;
   /** boot({ coreCacheDir/coreIntegrity })로 부팅한 경우의 코어 자산 캐시/검증 통계. */
   coreCache?: CoreAssetStats;
@@ -1178,7 +1178,15 @@ declare class PyprocMachine {
    * 다른 옵션(예: 일반 풀과 fork용 replay 풀)은 각자 풀을 갖는다. lanes 기본값은 2다.
    */
   proc(opts?: PyProcOptions & { lanes?: number; useSnapshot?: boolean }): Promise<PyProc>;
-  /** 회수: 풀 워커를 종료하고 리액티브 보관분을 해제한다. 머신을 버리기 전에 부른다. */
+  /**
+   * 셸의 잡 컨트롤: `expr &`가 대화형 네임스페이스를 살아있는 채로 fork해 딴 코어에서 돌린다.
+   * 자기 워커 풀(대화형 레인 1 + 잡 슬롯 N-1)을 세우므로 proc()의 풀과 별개다. 머신당 하나로
+   * memoize되고 dispose()가 회수한다.
+   */
+  jobs(opts?: { workers?: number; replay?: Record<string, unknown> }): Promise<JobControl>;
+  /** 머신 안의 머신: 파이썬이 `pyprocMachine.spawn()`으로 자식 커널을 띄운다(중첩 컨테이너). */
+  containers(cfg?: MachineContainerOptions): Promise<MachineContainer>;
+  /** 회수: 풀 워커(proc/jobs/containers 전부)를 종료하고 리액티브 보관분을 해제한다. */
   dispose(): Promise<void>;
 }
 
