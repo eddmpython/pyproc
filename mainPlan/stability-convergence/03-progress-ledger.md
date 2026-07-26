@@ -83,12 +83,60 @@
 - 전 게이트 상태: npm test 2176, 브라우저 94/94, preflight 5/5, web-machine probe 3/3(30+13+14),
   타입 green.
 
+## 2026-07-27 (3): 2차 재심사와 경화 5파
+
+2차 5표면 재심사(같은 기준, HEAD 실물): DX 58(직전 55), 아키텍처 63, 검증 66(직전 71에서 하락),
+문서 64(직전 61), 웹컴퓨터 63(직전 58). 아키텍처와 검증의 하락은 회귀가 아니라 스코프 확대다:
+1차가 열지 않은 표면(apps/, tests/run.mjs 내부, export 생존성, 비교자 결정성, CI 실행 순서)이
+2차에서 열렸다. 점수와 남은 목록은 [04-audit-and-hardening.md](04-audit-and-hardening.md)에 산다.
+
+- **내 게이트 2건이 죽어 있었다**(2차 감사의 최대 발견). 코덱 법과 결정성 스텁 법의 정규식에
+  `\b` 대신 원시 U+0008이 들어가 절반이 아무것도 잡지 못했다. 그 법을 낸 커밋의 음성 시험이
+  살아 있는 절반만 건드렸다. 바이트 단위로 수리하고 [제어문자] 절을 신설했다(텍스트 표면에
+  TAB/LF/CR 외 제어문자 0). 음성 시험 3방향으로 이빨을 확인했다.
+- **숫자 자랑 가드에 방향 편향**이 있었다("배" 뒤에 "빠"를 요구). 금지 표면에 배수 6건이 살아
+  있었고(감속·실측·괄호형) 전부 능력·비용 문장으로 바꿨다. 배수 게시 자체가 금지다.
+- **CI에서 가장 값비싼 증거가 구조적으로 RED**였다. test:web-machine이 WASI 자산 준비보다 앞에
+  있어 실엔진 2종 교차 probe가 자산 없이 돌 상태였다. 순서를 고치고 "자산 요구 게이트는 준비
+  step 뒤"를 게이트로 세웠다. 브라우저 하한에 CI 실행 페이지를 전수 등재했다.
+- **내용주소 계산의 로케일 의존 비교자를 제거**했다. durable commit 주소가 localeCompare 정렬에
+  의존해, 같은 상태가 환경에 따라 다른 주소를 낳을 수 있었다("같은 상태 = 같은 주소" 전제 위반).
+  순수 계약(deterministicOrder)으로 옮기고 코덱 법에 localeCompare를 넣었다.
+- **장치 열거·분리와 머신 제거 동사**를 host에 세웠다(listDevices/detachDevice/destroyMachine +
+  usesDevice). machineId 영구 점유가 끝났고 hostContractProbe가 6검사로 문다(GREEN 36/36).
+  createMachines 플래그는 제거를 거부했다: 세 호출부가 "머신은 image manifest에서 온다"는 모드를
+  표현하고, destroyMachine으로 대체하면 어댑터를 만들어 버리는 낭비가 된다(근거를 주석에 남겼다).
+- **문서 사실 오류**를 고쳤다. vision.md가 북극성 표면(createWebComputer)의 존재를 부정하고
+  있었고, 레이어 모델이 세 문서에서 2세대 전 값(state·machine 없는 4층)이었고, bundleFormat이
+  commit 필드를 "must be present"와 "is optional"로 동시에 규정했다. src 파일 헤더의 Layer 라벨
+  24벌도 rank 맵으로 정렬하고 두 대조를 게이트로 세웠다.
+- **병렬 동사의 _fn 계약**을 타입과 레퍼런스에 박았다(출하 문서만 보고 map을 쓸 수 없었다).
+  게이트는 이름을 하드코딩하지 않고 worker.js에서 추출해 문서와 대조한다.
+- **게이트 사각 2건**: contract suite가 개수만 세서 4개를 지워도 통과했고, 실행 경로 판정이
+  주석도 실행으로 셌다. 목록 고정 + 실행 줄 한정으로 좁히고, "모든 test:* 레인은 CI에서 돌거나
+  로컬 전용으로 근거와 함께 승인"을 신설했다.
+- 진입 표면 메시지 영문화를 시작했다(preflight, porcelain, session 부활 거부, runtime 부팅 실패,
+  fileSystem). 남은 약 500개는 NEXT에 있다: 게이트를 전수 기본 RED + 단조 감소 예산으로 역전하는
+  것이 2차 감사의 권고이고 그 방향이 옳다.
+
 ## NEXT
 
-1. guest device 요구를 `requiredDevices` 선언 단일 진실로(해석기 8벌 제거).
-2. 웹컴퓨터 네트워크 배선: 스위치는 이미 구현돼 있고 컴퓨터에 꽂히지 않았다(발명이 아니라 배선).
-3. 장치 열거·핫플러그·머신 해제 동사(동사 부재를 `createMachines: false` 플래그가 메우고 있다).
-4. 대형 파일 축 단위 분해(kernelElection, v86GuestAdapter, indexedDbMachineStore, legacy reader).
-5. machine 층 오류 메시지의 언어 정책 결정(진입 표면은 영문으로 옮겼고 machine 층 약 300개는
-   한국어다. 게이트가 substring을 단정하는 곳이 있어 조정된 이동이 필요하다).
-6. 2차 5표면 재심사 결과 반영.
+ROI 순이고, 각 항목의 근거는 2차 재심사 목록이다.
+
+1. **오류 메시지 언어 정책 전수 기계화**(DX 최대 항목). 게이트를 `src/**` 기본 RED + 단조 감소
+   예산으로 역전하고, 공개 문서가 영문으로 지시하는 경로부터 비운다(session/processOs/runtime/
+   state 208개 -> machine 322개). 게이트가 substring을 단정하는 곳은 같은 커밋에서 함께 옮긴다.
+2. **웹컴퓨터 네트워크 배선**: 스위치는 완성돼 있고 컴퓨터에 꽂히지 않았다. pyproc guest에
+   packet port를 주면 guest 간 IPC도 같은 계약으로 닫힌다(발명이 아니라 배선).
+3. **없는 증거 3건**: fork/forkMany 성장 비대칭과 저널 성장 커밋, 가상 origin 경계 3계약
+   (cookie/WS upgrade/SSE), GPU 셰이더 바이트 동일성(또는 비출하 결정).
+4. **소비자 앱의 수명주기 10벌 제거**: `createWebComputer`에 `adoptMachines` 동사를 주고
+   webComputerContext를 위임으로 축소한다(오류 타입이 이미 갈렸다: new Error vs WebMachineError).
+5. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
+   `[구조]` 641줄을 4분할. 법 게이트 스코프를 tests/apps/scripts로 확장(자기 위반 3곳 해소).
+6. **죽은 export 정리와 도달성 게이트**: 완전 죽음 3(requireJspi 포함), 파일 내부 전용 export 11,
+   배럴 죽은 re-export 39. `./worker` subpath의 검증 0 지위 결정.
+7. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
+8. **픽셀 출력 경로**: rgba 프레임을 화면에 그리는 소비 방향 렌더러가 저장소에 없다(캡처 방향만).
+9. **워커에 사는 guest**: machine 층에 `new Worker`가 0건이라 두 guest가 한 스레드를 나눈다.
+   2차 웹컴퓨터 감사가 "가장 ROI 높은 한 수"로 지목했고, 2·8을 그 뒤에 두면 재작업이 줄어든다.
