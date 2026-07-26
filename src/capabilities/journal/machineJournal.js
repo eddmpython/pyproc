@@ -41,12 +41,12 @@ function journalCorrupt(message, cause) {
 
 function normalizeAutoPackPolicy(policy) {
   if (!policy) return null;
-  if (policy !== true && (typeof policy !== "object" || Array.isArray(policy))) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: true 또는 정책 객체가 필요하다");
+  if (policy !== true && (typeof policy !== "object" || Array.isArray(policy))) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: needs true or a policy object");
   const cfg = policy === true ? {} : policy;
   const looseBlobs = cfg.looseBlobs ?? DEFAULT_AUTO_PACK_LOOSE_BLOBS;
   const looseMB = cfg.looseMB ?? DEFAULT_AUTO_PACK_LOOSE_MB;
-  if (!(Number.isFinite(looseBlobs) && looseBlobs >= 1)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: looseBlobs는 1 이상이어야 한다");
-  if (!(Number.isFinite(looseMB) && looseMB > 0)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: looseMB는 0보다 커야 한다");
+  if (!(Number.isFinite(looseBlobs) && looseBlobs >= 1)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: looseBlobs must be at least 1");
+  if (!(Number.isFinite(looseMB) && looseMB > 0)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.autoPack: looseMB must be greater than 0");
   return { looseBlobs, looseBytes: mbToBytes(looseMB) };
 }
 
@@ -101,8 +101,8 @@ export class MachineJournal {
 
   // 유휴 감시 시작. execSeq가 멈춘 채 idleMs가 지나면 커밋한다(실행 중에는 끼어들지 않는다).
   start() {
-    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
-    if (!this._reactive) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.reactive(ReactiveController)가 필요하다");
+    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.dir (a FileSystemDirectoryHandle) is required. Get one with navigator.storage.getDirectory()");
+    if (!this._reactive) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.reactive (a ReactiveController) is required");
     if (this._timer) return this;
     // 저널 디스크(OPFS)가 브라우저 압박 시 지워지는 best-effort 캐시로 남지 않게 지속 스토리지를
     // 요청한다. 거부돼도 동작은 계속된다(내구성 능력의 계약상 요청은 이 능력의 몫이다).
@@ -297,7 +297,7 @@ export class MachineJournal {
   async _applyGeneration(head) {
     const mem = this._rt.memory;
     if (head.h0 && head.h0 !== await this._boundaryKey()) {
-      throw new PyProcError("PYPROC_REPLAY_MISMATCH", "journal.recover: 리플레이 경계 지문(h0) 불일치. 다른 엔진/매니페스트의 저널이다(조용한 힙 오염 방지).");
+      throw new PyProcError("PYPROC_REPLAY_MISMATCH", "journal.recover: replay-boundary fingerprint (h0) mismatch. This journal belongs to a different engine or manifest; refusing rather than silently corrupting the heap.");
     }
     const entries = Object.entries(head.pages);
     const buffered = [];

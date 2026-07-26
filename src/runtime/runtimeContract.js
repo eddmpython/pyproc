@@ -29,14 +29,14 @@ const REQUIRED_METHODS = Object.freeze([
 export function assertRuntimeContract(runtime) {
   if (!runtime || runtime.runtimeContractVersion !== RUNTIME_CONTRACT_VERSION) {
     throw new PyProcError("PYPROC_INPUT_INVALID",
-      `RuntimeContract: runtimeContractVersion=${RUNTIME_CONTRACT_VERSION} 명시가 필요하다`);
+      `RuntimeContract: runtimeContractVersion=${RUNTIME_CONTRACT_VERSION} must be declared`);
   }
   if (typeof runtime.runtimeKind !== "string" || !runtime.runtimeKind) {
-    throw new PyProcError("PYPROC_INPUT_INVALID", "RuntimeContract.runtimeKind 문자열이 필요하다");
+    throw new PyProcError("PYPROC_INPUT_INVALID", "RuntimeContract.runtimeKind must be a string");
   }
   for (const method of REQUIRED_METHODS) {
     if (typeof runtime[method] !== "function") {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `RuntimeContract.${method}()가 필요하다`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `RuntimeContract.${method}() is required`);
     }
   }
   const values = runtime.capabilities();
@@ -47,7 +47,7 @@ export function assertRuntimeContract(runtime) {
     RUNTIME_CAPABILITIES.hostValues,
   ]) {
     if (!capabilities.has(required)) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `RuntimeContract 필수 capability 누락: ${required}`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `RuntimeContract is missing a required capability: ${required}`);
     }
   }
   return runtime;

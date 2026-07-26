@@ -66,7 +66,7 @@ export async function commitState(cryptoProvider, store, input = {}) {
     }
     tree = makePayloadTree({ entries });
   } else {
-    throw new PyProcError("PYPROC_INPUT_INVALID", "commitState: pages 또는 payloads가 필요하다");
+    throw new PyProcError("PYPROC_INPUT_INVALID", "commitState: pages or payloads are required");
   }
   // (2) tree (3) commit
   const treeBytes = encodeStateObject(tree);
@@ -108,7 +108,7 @@ async function materialize(cryptoProvider, store, ref, expectH0) {
   // env 불일치는 손상이 아니다: PREV 후퇴 없이 즉시 예외.
   if (expectH0 != null && commit.env.h0 !== expectH0) {
     throw new PyProcError("PYPROC_REPLAY_MISMATCH",
-      `openState: 리플레이 경계 지문(h0) 불일치(${String(commit.env.h0).slice(0, 16)}.. != ${String(expectH0).slice(0, 16)}..). 다른 엔진/매니페스트의 세대다.`);
+      `openState: replay-boundary fingerprint (h0) mismatch (${String(commit.env.h0).slice(0, 16)}.. != ${String(expectH0).slice(0, 16)}..). This generation belongs to a different engine or manifest.`);
   }
   const tree = validateStateTree(decodeStateObject(await verifiedRead(cryptoProvider, store, commit.tree)));
   if (tree.kind === "pageTable") {

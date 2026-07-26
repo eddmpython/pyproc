@@ -94,8 +94,8 @@ export class KernelElection {
 
   join() {
     if (this._joined) return this;
-    if (!globalThis.navigator?.locks?.request) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "KernelElection: Web Locks API가 필요하다");
-    if (typeof BroadcastChannel !== "function") throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "KernelElection: BroadcastChannel API가 필요하다");
+    if (!globalThis.navigator?.locks?.request) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "KernelElection: the Web Locks API is required");
+    if (typeof BroadcastChannel !== "function") throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "KernelElection: the BroadcastChannel API is required");
     this._joined = true;
     this._left = false;
     this._chan = new BroadcastChannel(this._chanName);
@@ -122,10 +122,10 @@ export class KernelElection {
     try {
       const file = await (await this._journalDir.getFileHandle(EPOCH_FILE)).getFile();
       const doc = JSON.parse(await file.text());
-      if (!Number.isSafeInteger(doc.epoch) || doc.epoch < 0) throw new PyProcError("PYPROC_INTERNAL", "epoch 범위 위반");
+      if (!Number.isSafeInteger(doc.epoch) || doc.epoch < 0) throw new PyProcError("PYPROC_INTERNAL", "epoch out of range");
       current = doc.epoch;
     } catch (error) {
-      if (error.name !== "NotFoundError") throw new PyProcError("PYPROC_JOURNAL_CORRUPT", `KernelElection: EPOCH.json 파손(${String(error.message || error).slice(-160)})`);
+      if (error.name !== "NotFoundError") throw new PyProcError("PYPROC_JOURNAL_CORRUPT", `KernelElection: EPOCH.json is corrupt (${String(error.message || error).slice(-160)})`);
     }
     const epoch = current + 1;
     const file = await this._journalDir.getFileHandle(EPOCH_FILE, { create: true });
@@ -466,7 +466,7 @@ export class KernelElection {
   }
 
   subscribe(listener) {
-    if (typeof listener !== "function") throw new PyProcError("PYPROC_INPUT_INVALID", "KernelElection.subscribe: 함수가 필요하다");
+    if (typeof listener !== "function") throw new PyProcError("PYPROC_INPUT_INVALID", "KernelElection.subscribe: a function is required");
     this._listeners.add(listener);
     listener(this.status());
     return () => this._listeners.delete(listener);
@@ -512,7 +512,7 @@ export async function openPersistentMachine(opts = {}) {
   let journalDir = opts.journalDir || null;
   let storageKey = opts.storageKey || null;
   if (!journalDir) {
-    if (!globalThis.navigator?.storage?.getDirectory) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "openPersistentMachine: OPFS가 필요하다");
+    if (!globalThis.navigator?.storage?.getDirectory) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "open({ persistent }): OPFS is required");
     const root = opts.storageRoot || await navigator.storage.getDirectory();
     const machines = await root.getDirectoryHandle(opts.machineRoot || MACHINE_ROOT, { create: true });
     storageKey ||= await sha256Name(name);

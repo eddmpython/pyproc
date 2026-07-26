@@ -11,44 +11,44 @@ const HOME_MAX_ENTRIES = 10000;
 const PATH_MAX_BYTES = 4096;
 
 export function normalizeMachineHomeRoot(path, label = "home path") {
-  if (typeof path !== "string" || !path.startsWith("/") || path.includes("\0")) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: ${label} 형식 위반`);
+  if (typeof path !== "string" || !path.startsWith("/") || path.includes("\0")) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: malformed ${label}`);
   const trimmed = path.replace(/\/+$/, "") || "/";
-  if (trimmed === "/") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: ${label}는 루트일 수 없다`);
-  if (new TextEncoder().encode(trimmed).length > PATH_MAX_BYTES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: ${label} 길이 초과`);
+  if (trimmed === "/") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: ${label} cannot be the root`);
+  if (new TextEncoder().encode(trimmed).length > PATH_MAX_BYTES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: ${label} is too long`);
   const parts = trimmed.split("/").filter(Boolean);
-  if (parts.some((p) => p === "." || p === ".." || p === "")) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: ${label} 경로 성분 위반`);
+  if (parts.some((p) => p === "." || p === ".." || p === "")) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: ${label} has an invalid path segment`);
   return trimmed;
 }
 
 function validateRelativePath(path) {
   if (typeof path !== "string" || path === "" || path.startsWith("/") || path.includes("\0") || path.includes("\\")) {
-    throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home 엔트리 경로 형식 위반");
+    throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: malformed home entry path");
   }
-  if (new TextEncoder().encode(path).length > PATH_MAX_BYTES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home 엔트리 경로 길이 초과");
+  if (new TextEncoder().encode(path).length > PATH_MAX_BYTES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home entry path is too long");
   const parts = path.split("/");
-  if (parts.some((p) => p === "" || p === "." || p === "..")) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home 엔트리 경로 성분 위반");
+  if (parts.some((p) => p === "" || p === "." || p === "..")) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home entry path has an invalid segment");
 }
 
 export function validateMachineHomeMeta(home, binLen) {
-  if (typeof home !== "object" || home === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home 메타가 객체가 아니다");
-  if (home.version !== 1) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: 지원하지 않는 home 버전(${home.version})`);
+  if (typeof home !== "object" || home === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home meta is not an object");
+  if (home.version !== 1) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: unsupported home version (${home.version})`);
   normalizeMachineHomeRoot(home.path, "home path");
-  if (!Number.isInteger(home.bytes) || home.bytes < 0 || home.bytes > HOME_MAX_BYTES || home.bytes !== binLen) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home bytes 범위 위반");
-  if (!Array.isArray(home.entries) || home.entries.length > HOME_MAX_ENTRIES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home entries 범위 위반");
+  if (!Number.isInteger(home.bytes) || home.bytes < 0 || home.bytes > HOME_MAX_BYTES || home.bytes !== binLen) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home bytes out of range");
+  if (!Array.isArray(home.entries) || home.entries.length > HOME_MAX_ENTRIES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home entries out of range");
   const seen = new Set();
   let nextOffset = 0;
   for (const entry of home.entries) {
-    if (typeof entry !== "object" || entry === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home 엔트리 형식 위반");
+    if (typeof entry !== "object" || entry === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: malformed home entry");
     validateRelativePath(entry.path);
-    if (seen.has(entry.path)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: home 엔트리 중복(${entry.path})`);
+    if (seen.has(entry.path)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: duplicate home entry (${entry.path})`);
     seen.add(entry.path);
     if (entry.type === "dir") continue;
-    if (entry.type !== "file") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: home 엔트리 타입 위반(${entry.type})`);
-    if (!Number.isInteger(entry.offset) || !Number.isInteger(entry.size) || entry.offset !== nextOffset || entry.size < 0) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home 파일 오프셋 위반");
+    if (entry.type !== "file") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: invalid home entry type (${entry.type})`);
+    if (!Number.isInteger(entry.offset) || !Number.isInteger(entry.size) || entry.offset !== nextOffset || entry.size < 0) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: invalid home file offset");
     nextOffset += entry.size;
-    if (nextOffset > binLen) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home 파일 범위 초과");
+    if (nextOffset > binLen) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home file range exceeded");
   }
-  if (nextOffset !== binLen) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home pack 크기 불일치");
+  if (nextOffset !== binLen) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: home pack size mismatch");
 }
 
 function joinPath(base, name) {
@@ -70,11 +70,11 @@ function concatBytes(parts, total) {
 export function collectMachineHome(fs, path = DEFAULT_MACHINE_HOME_PATH, opts = {}) {
   const root = normalizeMachineHomeRoot(path, "home path");
   if (!fs.exists(root)) {
-    if (opts.required) throw new PyProcError("PYPROC_INPUT_INVALID", `${opts.errorPrefix || "machineHome"}: ${root} 경로가 없어 /home 스냅샷을 만들 수 없다`);
+    if (opts.required) throw new PyProcError("PYPROC_INPUT_INVALID", `${opts.errorPrefix || "machineHome"}: ${root} does not exist, so no /home snapshot can be taken`);
     return null;
   }
   const rootStat = fs.stat(root);
-  if (!rootStat.isDir) throw new PyProcError("PYPROC_INPUT_INVALID", `${opts.errorPrefix || "machineHome"}: ${root}는 디렉터리가 아니다`);
+  if (!rootStat.isDir) throw new PyProcError("PYPROC_INPUT_INVALID", `${opts.errorPrefix || "machineHome"}: ${root} is not a directory`);
   const entries = [];
   const chunks = [];
   let total = 0;
@@ -89,15 +89,15 @@ export function collectMachineHome(fs, path = DEFAULT_MACHINE_HOME_PATH, opts = 
         visit(full, childRel);
       } else if (st.isFile) {
         const data = fs.readFile(full);
-        if (!(data instanceof Uint8Array)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `${opts.errorPrefix || "machineHome"}: ${childRel} 읽기 형식 위반`);
-        if (total + data.length > HOME_MAX_BYTES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `${opts.errorPrefix || "machineHome"}: home 스냅샷이 상한을 넘었다`);
+        if (!(data instanceof Uint8Array)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `${opts.errorPrefix || "machineHome"}: ${childRel} read returned an unexpected type`);
+        if (total + data.length > HOME_MAX_BYTES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `${opts.errorPrefix || "machineHome"}: the home snapshot exceeded its size limit`);
         entries.push({ path: childRel, type: "file", offset: total, size: data.length });
         chunks.push(data);
         total += data.length;
       } else {
-        throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `${opts.errorPrefix || "machineHome"}: ${childRel}는 파일/디렉터리가 아니다`);
+        throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `${opts.errorPrefix || "machineHome"}: ${childRel} is neither a file nor a directory`);
       }
-      if (entries.length > HOME_MAX_ENTRIES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `${opts.errorPrefix || "machineHome"}: home 엔트리가 상한을 넘었다`);
+      if (entries.length > HOME_MAX_ENTRIES) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `${opts.errorPrefix || "machineHome"}: the home entry count exceeded its limit`);
     }
   };
   visit(root, "");

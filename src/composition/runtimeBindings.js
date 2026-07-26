@@ -21,7 +21,7 @@ function collectBindingDescriptors(clusters) {
       if (Object.prototype.hasOwnProperty.call(descriptors, name)) {
         throw new PyProcError(
           "PYPROC_INPUT_INVALID",
-          `Runtime capability binding 중복: ${name} (${cluster.id})`,
+          `duplicate Runtime capability binding: ${name} (${cluster.id})`,
         );
       }
       descriptors[name] = descriptor;

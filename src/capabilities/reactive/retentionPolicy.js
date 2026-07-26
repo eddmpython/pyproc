@@ -4,7 +4,7 @@ const LIMIT_KEYS = Object.freeze(["maxNodes", "maxDeltaBytes", "maxTotalBytes"])
 
 export function normalizeRetentionPolicy(policy) {
   if (typeof policy !== "object" || policy === null || Array.isArray(policy)) {
-    throw new PyProcError("PYPROC_INPUT_INVALID", "retention policy 객체가 필요하다");
+    throw new PyProcError("PYPROC_INPUT_INVALID", "a retention policy object is required");
   }
   const normalized = {
     maxNodes: policy.maxNodes ?? null,
@@ -16,13 +16,13 @@ export function normalizeRetentionPolicy(policy) {
   for (const key of LIMIT_KEYS) {
     const value = normalized[key];
     if (value !== null && (!Number.isSafeInteger(value) || value < 1)) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `retention.${key}: 1 이상의 정수가 필요하다`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `retention.${key}: an integer of at least 1 is required`);
     }
   }
   if (LIMIT_KEYS.every((key) => normalized[key] === null)) {
     throw new PyProcError(
       "PYPROC_INPUT_INVALID",
-      "retention: maxNodes/maxDeltaBytes/maxTotalBytes 중 하나가 필요하다",
+      "retention: one of maxNodes, maxDeltaBytes, or maxTotalBytes is required",
     );
   }
   return Object.freeze(normalized);

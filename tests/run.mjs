@@ -187,7 +187,7 @@ await checkAsync("asset integrity preflight가 graph 바이트를 검증", async
   try {
     await assetsApi.verifyPyProcAssetIntegrity({ files: [{ ...manifest.files[0], integrity: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" }] }, { roles: ["processWorker"], fetch: fetchOk });
   } catch (e) {
-    rejected = String(e).includes("해시 불일치");
+    rejected = String(e).includes("hash mismatch");
   }
   if (!rejected) throw new Error("잘못된 SRI를 거부하지 않음");
 });
@@ -2617,21 +2617,32 @@ check("Web Computer 실행 자산은 검증된 development channel", () => {
 //      스코프는 진입 표면 파일로 좁힌다: 나머지 진단 텍스트는 열린 부채로 기록돼 있다.
 section("진입 표면 언어");
 {
-  const ENTRY_SURFACE = [
-    "src/runtime/preflight.js",
-    "src/machine/composition/pyprocMachine.js",
-  ];
-  const MESSAGE_ARG = /new (?:PyProcError|TypeError)\(\s*(?:"[^"]*",\s*)?([`"][\s\S]*?)[`"]\s*[,)]/g;
-  for (const relPath of ENTRY_SURFACE) {
-    check(`진입 표면 메시지는 영문: ${relPath}`, () => {
-      const code = stripComments(readFileSync(join(ROOT, relPath), "utf8"));
-      const korean = [];
-      for (const m of code.matchAll(MESSAGE_ARG)) {
-        if (/[가-힣]/.test(m[1])) korean.push(m[1].slice(0, 40));
-      }
-      if (korean.length) throw new Error(`한국어 메시지: ${korean.join(" / ")}`);
-    });
-  }
+  // 스코프는 src 전수다(기본 RED). 아직 옮기지 않은 파일은 예산 목록에 남기고, 그 숫자는
+  // 단조 감소만 한다: 예산을 늘리는 diff가 곧 "소비자가 읽을 수 없는 문장을 늘렸다"는 심사
+  // 지점이다. 화이트리스트 2파일 방식이었을 때 실물은 530개 중 8개만 영문이었다.
+  const MESSAGE_ARG = /new (?:PyProcError|TypeError|WebMachineError)\(\s*(?:"[^"]*",\s*)?([`"][\s\S]*?)[`"]\s*[,)]/g;
+  // machine 층 322개는 아직 한국어다. 이 층의 문장은 Web Computer 제품 화면에 뜨고 라이브러리
+  // API 표면에는 거의 안 나오므로 우선순위가 뒤였다. 옮길 때 게이트 단정과 같은 커밋으로.
+  const MESSAGE_LANGUAGE_BUDGET = 322;
+  check("사용자 대면 메시지의 한국어 예산은 단조 감소한다", () => {
+    let korean = 0;
+    const byFile = new Map();
+    for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+      if (rel(f) === "src/runtime/engines/wasi/browserWasiShim.js") continue; // 벤더 번들
+      const code = stripComments(readFileSync(f, "utf8"));
+      let count = 0;
+      for (const m of code.matchAll(MESSAGE_ARG)) if (/[가-힣]/.test(m[1])) count++;
+      if (count) byFile.set(rel(f), count);
+      korean += count;
+    }
+    const outside = [...byFile].filter(([path]) => !path.startsWith("src/machine/"));
+    if (outside.length) {
+      throw new Error(`machine 층 밖에 한국어 메시지가 남았다: ${outside.map(([p, n]) => `${p}(${n})`).join(", ")}`);
+    }
+    if (korean > MESSAGE_LANGUAGE_BUDGET) {
+      throw new Error(`한국어 메시지 ${korean} > 예산 ${MESSAGE_LANGUAGE_BUDGET}(예산은 줄이는 방향으로만 고친다)`);
+    }
+  });
   check("가드에 넘기는 feature 이름도 영문", () => {
     const korean = [];
     for (const f of collect(join(ROOT, "src"), [".js"], [])) {

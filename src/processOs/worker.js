@@ -109,7 +109,7 @@ onmessage = async (e) => {
       postMessage({ type: "bound", id: msg.id, reqId: msg.reqId });
     } else if (msg.type === "harvest") {
       // fork의 부모측: cp0(리플레이 경계) 대비 바뀐 페이지 = 지금 이 커널의 사용자 상태.
-      if (!cp0) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "harvest: 리플레이 부팅한 프로세스에서만 가능하다");
+      if (!cp0) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "harvest: only a replay-booted process can harvest");
       const t0 = performance.now();
       const h = mem().heap();
       // 바이트 비교 전략의 정본은 heapDelta.byteDiffPages다(성긴 기각 + 확정 비교 + 성장분 전량).
@@ -122,7 +122,7 @@ onmessage = async (e) => {
       // 델타만 덮으면 안 된다: dst가 경계 이후 실행으로 더럽힌 페이지 중 델타 밖의 것이 남아
       // 부모+자식 혼합 상태가 조용히 생긴다(2026-07-12 심판 발견). 그래서 먼저 델타 밖의
       // 드리프트를 cp0으로 되돌리고 그 위에 델타를 덮는다. 비용 = 힙 1회 스캔(수확과 동급).
-      if (!cp0) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "applyDelta: 리플레이 부팅한 프로세스에서만 가능하다");
+      if (!cp0) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "applyDelta: only a replay-booted process can apply a delta");
       const t0 = performance.now();
       const bin = new Uint8Array(msg.bin);
       // 부모 힙이 더 크면(성장 세션) 자식도 같은 길이까지 성장시킨다. JS에서 Memory.grow를
@@ -132,7 +132,7 @@ onmessage = async (e) => {
       const h = mem().heap();
       let maxEnd = 0;
       for (const p of msg.pages) if ((p + 1) * PAGE > maxEnd) maxEnd = (p + 1) * PAGE;
-      if (maxEnd > h.length) throw new PyProcError("PYPROC_INPUT_INVALID", `applyDelta: 델타가 힙 밖(${maxEnd} > ${h.length})`);
+      if (maxEnd > h.length) throw new PyProcError("PYPROC_INPUT_INVALID", `applyDelta: delta is outside the heap (${maxEnd} > ${h.length})`);
       const incoming = new Set(msg.pages);
       let reverted = 0;
       const nCommon = Math.min(h.length, cp0.length) / PAGE;

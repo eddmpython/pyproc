@@ -56,10 +56,10 @@ function toIndex(objects) {
   const chunks = [];
   let totalObjectBytes = 0;
   for (const [address, payload] of entries) {
-    if (!SHA256_ADDRESS_RE.test(address)) throw new PyProcError("PYPROC_INPUT_INVALID", `bundle: 오브젝트 주소 형식 위반(${address})`);
+    if (!SHA256_ADDRESS_RE.test(address)) throw new PyProcError("PYPROC_INPUT_INVALID", `bundle: object address has the wrong form (${address})`);
     const isBytes = payload instanceof Uint8Array;
     const length = isBytes ? payload.length : payload;
-    if (!Number.isInteger(length) || length < 0) throw new PyProcError("PYPROC_INPUT_INVALID", `bundle: 오브젝트 길이 위반(${address})`);
+    if (!Number.isInteger(length) || length < 0) throw new PyProcError("PYPROC_INPUT_INVALID", `bundle: object has the wrong type (${address})`);
     index.push([address, length]);
     if (isBytes) { chunks.push(payload); totalObjectBytes += length; }
   }
@@ -69,9 +69,9 @@ function toIndex(objects) {
 // objects: Map(address -> bytes) 또는 [address, bytes] 배열. 배치 순서는 입력 순서를 따른다.
 // commit: 세션 bundle이 커널 commit 주소를 싣는다(null이면 machine envelope 등 non-commit bundle).
 export async function encodeStateBundle(cryptoProvider, { commit = null, meta = null, objects, tag = null }) {
-  if (commit !== null && !SHA256_ADDRESS_RE.test(commit)) throw new PyProcError("PYPROC_INPUT_INVALID", `bundle: commit 주소 형식 위반(${commit})`);
+  if (commit !== null && !SHA256_ADDRESS_RE.test(commit)) throw new PyProcError("PYPROC_INPUT_INVALID", `bundle: commit address has the wrong form (${commit})`);
   const { index, chunks, totalObjectBytes, hasBytes } = toIndex(objects);
-  if (!hasBytes) throw new PyProcError("PYPROC_INPUT_INVALID", "bundle: encode에는 오브젝트 바이트가 필요하다");
+  if (!hasBytes) throw new PyProcError("PYPROC_INPUT_INVALID", "bundle: encode needs an object list");
   const body = encodeBody(serializeHeader({ commit, meta, index, tag }), chunks, totalObjectBytes);
   const envelope = await sha256HexWith(cryptoProvider, body);
   const out = new Uint8Array(STATE_BUNDLE_MAGIC.length + 64 + body.length);
@@ -102,7 +102,7 @@ export async function decodeStateBundle(cryptoProvider, buf) {
   const envelope = textDecoder.decode(buf.subarray(hashStart, hashStart + 64));
   const body = buf.subarray(hashStart + 64);
   const actual = await sha256HexWith(cryptoProvider, body);
-  if (actual !== envelope) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "bundle: 봉투 무결성 검증 실패(파일 손상 또는 변조)");
+  if (actual !== envelope) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "bundle: header integrity check failed (corrupted after write, or tampered)");
   if (body.length < 4) throw formatError("bundle: 파일이 너무 짧다");
   const headLen = new DataView(body.buffer, body.byteOffset, 4).getUint32(0);
   if (headLen > STATE_BUNDLE_HEAD_MAX_BYTES || 4 + headLen > body.length) throw formatError("bundle: 헤더 길이 위반");
@@ -123,7 +123,7 @@ export async function decodeStateBundle(cryptoProvider, buf) {
     if (objects.has(address)) throw formatError(`bundle: 오브젝트 주소 중복(${address})`);
     const bytes = body.subarray(offset, offset + length);
     const verdict = await verifySha256With(cryptoProvider, bytes, address);
-    if (!verdict.ok) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", `bundle: 오브젝트 verify-on-read 불일치(${address.slice(0, 20)}..)`);
+    if (!verdict.ok) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", `bundle: object failed verify-on-read (${address.slice(0, 20)}..)`);
     objects.set(address, bytes);
     offset += length;
   }
@@ -146,7 +146,7 @@ export async function readStateBundleHeader(cryptoProvider, source) {
       : typeof source?.slice === "function"
         ? async (start, end) => new Uint8Array(await source.slice(start, end).arrayBuffer())
         : null;
-  if (!read) throw new PyProcError("PYPROC_INPUT_INVALID", "readStateBundleHeader: Uint8Array/Blob/{read} 소스가 필요하다");
+  if (!read) throw new PyProcError("PYPROC_INPUT_INVALID", "readStateBundleHeader: needs a Uint8Array, Blob, or { read } source");
   const prefixLength = STATE_BUNDLE_MAGIC.length + 64 + 4;
   const prefix = await read(0, prefixLength);
   if (prefix.length < prefixLength) throw formatError("bundle: 파일이 너무 짧다");
@@ -170,7 +170,7 @@ export async function readStateBundleHeader(cryptoProvider, source) {
   }
   const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta ?? null, index: header.objects, tag: null }));
   if (header.tag && header.tag.target !== headerDigest) {
-    throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "bundle: 서명 대상 불일치(헤더가 tag와 다르다)");
+    throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "bundle: header digest mismatch (the signed tag covers a different header)");
   }
   return {
     commit: _commit,

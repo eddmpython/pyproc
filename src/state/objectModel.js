@@ -36,7 +36,7 @@ export function encodeStateObject(value) { return textEncoder.encode(canonicalSt
 
 export function decodeStateObject(bytes) {
   try { return JSON.parse(textDecoder.decode(bytes)); }
-  catch (e) { throw new PyProcError("PYPROC_STATE_CORRUPT", "state: 오브젝트 JSON 파손", { cause: e }); }
+  catch (e) { throw new PyProcError("PYPROC_STATE_CORRUPT", "state: object JSON is corrupt", { cause: e }); }
 }
 
 export async function stateAddressOf(cryptoProvider, bytes) {
@@ -100,9 +100,9 @@ export function validateStateTree(tree) {
     if (tree?.kind === "pageTable") return makePageTableTree(tree);
     if (tree?.kind === "payload") return makePayloadTree(tree);
   } catch (e) {
-    throw new PyProcError("PYPROC_STATE_CORRUPT", `state: tree 형식 파손(${String(e.message || e).slice(-160)})`, { cause: e });
+    throw new PyProcError("PYPROC_STATE_CORRUPT", `state: tree shape is corrupt (${String(e.message || e).slice(-160)})`, { cause: e });
   }
-  throw new PyProcError("PYPROC_STATE_CORRUPT", `state: 알 수 없는 tree kind(${tree?.kind})`);
+  throw new PyProcError("PYPROC_STATE_CORRUPT", `state: unknown tree kind (${tree?.kind})`);
 }
 
 // commit: { parents[], tree, env, fence, createdAt }.
@@ -132,6 +132,6 @@ export function makeStateCommit({ parents = [], tree, env = {}, fence = null, cr
 export function validateStateCommit(commit) {
   try { return makeStateCommit(commit ?? {}); }
   catch (e) {
-    throw new PyProcError("PYPROC_STATE_CORRUPT", `state: commit 형식 파손(${String(e.message || e).slice(-160)})`, { cause: e });
+    throw new PyProcError("PYPROC_STATE_CORRUPT", `state: commit shape is corrupt (${String(e.message || e).slice(-160)})`, { cause: e });
   }
 }

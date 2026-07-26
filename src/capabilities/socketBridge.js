@@ -88,7 +88,7 @@ export class SocketBridge {
 
   install() {
     const relayURL = this._cfg.relayURL;
-    if (!relayURL) throw new PyProcError("PYPROC_INPUT_INVALID", "enableSocketBridge: relayURL 필요(WS->TCP 릴레이)");
+    if (!relayURL) throw new PyProcError("PYPROC_INPUT_INVALID", "enableSocketBridge: relayURL is required (the WS-to-TCP relay)");
     const socks = this._socks;
     // 파이썬이 부를 브리지(JSPI가 서스펜드하는 async 메서드). 소켓당 WS 하나(릴레이가 host:port 다이얼).
     const bridge = {
@@ -101,11 +101,11 @@ export class SocketBridge {
           if (typeof ev.data === "string") {
             const m = JSON.parse(ev.data);
             if (m.type === "connected") resolve(true);
-            else if (m.type === "error") { st.closed = true; reject(new PyProcError("PYPROC_ENV_UNSUPPORTED", "소켓 릴레이: " + m.msg, { retryable: true })); }
+            else if (m.type === "error") { st.closed = true; reject(new PyProcError("PYPROC_ENV_UNSUPPORTED", "socket relay: " + m.msg, { retryable: true })); }
             else if (m.type === "closed") { st.closed = true; this._deliver(st, new Uint8Array(0)); }
           } else this._deliver(st, new Uint8Array(ev.data));
         };
-        ws.onerror = () => reject(new PyProcError("PYPROC_ENV_UNSUPPORTED", "소켓 릴레이 WS 에러(릴레이 미기동?)", { retryable: true }));
+        ws.onerror = () => reject(new PyProcError("PYPROC_ENV_UNSUPPORTED", "socket relay WebSocket error (is the relay running?)", { retryable: true }));
         ws.onclose = () => { if (!st.closed) { st.closed = true; this._deliver(st, new Uint8Array(0)); } };
       }),
       send: (id, bytes) => {

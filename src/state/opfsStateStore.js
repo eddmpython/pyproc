@@ -12,13 +12,13 @@ const HEX_RE = /^[0-9a-f]{64}$/;
 export class OpfsStateStore {
   constructor(dir) {
     if (!dir || typeof dir.getFileHandle !== "function") {
-      throw new PyProcError("PYPROC_INPUT_INVALID", "OpfsStateStore: FileSystemDirectoryHandle이 필요하다");
+      throw new PyProcError("PYPROC_INPUT_INVALID", "OpfsStateStore: a FileSystemDirectoryHandle is required");
     }
     this._dir = dir;
     this._objectDir = null;
   }
   _fileName(address) {
-    if (!SHA256_ADDRESS_RE.test(address)) throw new PyProcError("PYPROC_INPUT_INVALID", `OpfsStateStore: 주소 형식 위반(${address})`);
+    if (!SHA256_ADDRESS_RE.test(address)) throw new PyProcError("PYPROC_INPUT_INVALID", `OpfsStateStore: malformed address (${address})`);
     return parseSha256Address(address); // 파일명 = hex(드라이버 인코딩 세부). 코덱은 코어만 안다
   }
   async _objects(create) {
@@ -68,7 +68,7 @@ export class OpfsStateStore {
     }
   }
   async writeRef(name, ref) {
-    if (typeof ref?.commit !== "string") throw new PyProcError("PYPROC_INPUT_INVALID", "OpfsStateStore: ref.commit이 필요하다");
+    if (typeof ref?.commit !== "string") throw new PyProcError("PYPROC_INPUT_INVALID", "OpfsStateStore: ref.commit is required");
     const fh = await this._dir.getFileHandle(name + ".json", { create: true });
     const w = await fh.createWritable();
     await w.write(JSON.stringify({ commit: ref.commit }));

@@ -23,6 +23,6 @@ export function growHeapTo(runPython, readHeapLen, targetLen, label) {
   // 길이는 유지되고, 성장 루프가 남긴 파이썬 객체 흔적만 사라진다.
   runPython("import gc as _pyprocGrowGc\ndel _pyprocGrowHold\n_pyprocGrowGc.collect()\ndel _pyprocGrowGc");
   const len = readHeapLen();
-  if (len < targetLen) throw new PyProcError("PYPROC_HEAP_GROW_FAILED", `${label}: 힙 성장 실패(목표 ${targetLen}, 현재 ${len})`);
+  if (len < targetLen) throw new PyProcError("PYPROC_HEAP_GROW_FAILED", `${label}: heap growth failed (target ${targetLen}, current ${len})`);
   return len;
 }

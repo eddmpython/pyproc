@@ -39,7 +39,7 @@ const WASI_ENGINE_PIN = {
 
 async function fetchBytes(url, what) {
   const resp = await fetch(url);
-  if (!resp.ok) throw new PyProcError("PYPROC_BOOT_FAILED", `bootWasi: ${what} 로드 실패(${resp.status}) ${url}`, { retryable: true });
+  if (!resp.ok) throw new PyProcError("PYPROC_BOOT_FAILED", `bootWasi: ${what} failed to load (${resp.status}) ${url}`, { retryable: true });
   return resp.arrayBuffer();
 }
 
@@ -56,7 +56,7 @@ export async function bootWasi(manifest = {}) {
     // 기본: 릴리즈 zip 하나를 풀어 python.wasm + lib/<dir>/*을 얻는다(네이티브 DecompressionStream).
     const entries = await unzipWheel(await fetchBytes(WASI_ENGINE_PIN.releaseURL, "release zip"));
     const wasmEntry = entries.find(([p]) => p === "python.wasm" || p.endsWith("/python.wasm"));
-    if (!wasmEntry) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "bootWasi: 릴리즈 zip에 python.wasm 없음");
+    if (!wasmEntry) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "bootWasi: the release zip has no python.wasm");
     wasmBytes = wasmEntry[1];
     const prefix = "lib/" + stdlibDir + "/";
     stdlibFiles = entries.filter(([p]) => p.startsWith(prefix)).map(([p, b]) => [p.slice(prefix.length), b]);
@@ -114,7 +114,7 @@ export class WasiSession {
 
   _send(payload) {
     return new Promise((resolve, reject) => {
-      if (!this._worker) return reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "WasiSession: 종료됨"));
+      if (!this._worker) return reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "WasiSession: terminated"));
       this._queue.push({ payload, resolve });
       this._pump();
     });
@@ -136,7 +136,7 @@ export class WasiSession {
     const b = new TextEncoder().encode(code);
     const payload = new Uint8Array(1 + b.length); payload[0] = 1; payload.set(b, 1); // SIGNAL_EXEC
     const { out, err } = await this._send(payload);
-    if (err) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "WASI 실행 예외: " + err.trim());
+    if (err) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "WASI execution error: " + err.trim());
     return out;
   }
   runAsync(code) { return this.run(code); }

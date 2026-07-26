@@ -17,9 +17,9 @@ function toSab(typed) {
 }
 
 function resolveShardParts(rawParts, maxParts, label) {
-  if (!Number.isInteger(maxParts) || maxParts < 1) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `${label}: 준비된 워커 없음(boot 먼저)`);
+  if (!Number.isInteger(maxParts) || maxParts < 1) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `${label}: no ready worker (boot the pool first)`);
   if (rawParts === undefined || rawParts === null) return maxParts;
-  if (!Number.isInteger(rawParts) || rawParts < 1) throw new PyProcError("PYPROC_INPUT_INVALID", `${label}: parts는 양의 정수여야 한다`);
+  if (!Number.isInteger(rawParts) || rawParts < 1) throw new PyProcError("PYPROC_INPUT_INVALID", `${label}: parts must be a positive integer`);
   return Math.min(rawParts, maxParts);
 }
 
@@ -48,7 +48,7 @@ const MATMUL_FN = [
 export function shardMapArray(map, poolSize, fnSrc, typed, opts = {}) {
   const parts = resolveShardParts(opts.parts, poolSize, "mapArray");
   const dtype = DTYPE_OF[typed.constructor.name];
-  if (!dtype) throw new PyProcError("PYPROC_INPUT_INVALID", `mapArray: 지원하지 않는 TypedArray(${typed.constructor.name})`);
+  if (!dtype) throw new PyProcError("PYPROC_INPUT_INVALID", `mapArray: unsupported TypedArray (${typed.constructor.name})`);
   let sab = typed.buffer, base = typed.byteOffset;
   if (!(sab instanceof SharedArrayBuffer)) { // SAB가 아니면 1회 복사로 전 워커 공유화
     sab = toSab(typed);
@@ -75,12 +75,12 @@ export function shardMapArray(map, poolSize, fnSrc, typed, opts = {}) {
 // opts.parts: 샤딩할 워커 수 상한(기본 = 풀 전체). parts:1이면 단일워커 대조(같은 코드 경로 =
 // 공정한 배속 비교의 baseline). 그 외 소비자는 생략(전 코어 활용).
 export async function shardMatmul(map, poolSize, a, b, opts = {}) {
-  if (!a || !b || !a.data || !b.data) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: a/b는 { data: Float64Array, rows, cols }");
-  if (!(a.data instanceof Float64Array) || !(b.data instanceof Float64Array)) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: data는 Float64Array(f64 = numpy 기본)");
-  if (![a.rows, a.cols, b.rows, b.cols].every((n) => Number.isInteger(n) && n > 0)) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: rows/cols는 양의 정수여야 한다");
-  if (a.cols !== b.rows) throw new PyProcError("PYPROC_INPUT_INVALID", `matmul: 차원 불일치 (${a.rows}x${a.cols}) @ (${b.rows}x${b.cols})`);
-  if (a.data.length !== a.rows * a.cols || b.data.length !== b.rows * b.cols) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: data 길이가 rows*cols와 불일치");
-  if (!poolSize) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "matmul: 준비된 워커 없음(boot 먼저)");
+  if (!a || !b || !a.data || !b.data) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: a and b must be { data: Float64Array, rows, cols }");
+  if (!(a.data instanceof Float64Array) || !(b.data instanceof Float64Array)) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: data must be a Float64Array (f64 is the numpy default)");
+  if (![a.rows, a.cols, b.rows, b.cols].every((n) => Number.isInteger(n) && n > 0)) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: rows and cols must be positive integers");
+  if (a.cols !== b.rows) throw new PyProcError("PYPROC_INPUT_INVALID", `matmul: shape mismatch (${a.rows}x${a.cols}) @ (${b.rows}x${b.cols})`);
+  if (a.data.length !== a.rows * a.cols || b.data.length !== b.rows * b.cols) throw new PyProcError("PYPROC_INPUT_INVALID", "matmul: data length does not match rows*cols");
+  if (!poolSize) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "matmul: no ready worker (boot the pool first)");
   const M = a.rows, K = a.cols, N = b.cols;
   const P = resolveShardParts(opts.parts, Math.min(poolSize, M), "matmul");
   // A, B, 출력 C를 SAB로(공유). A/B 입력은 memcpy 1회로 SAB화(계약: 제로카피 불가).
@@ -92,6 +92,6 @@ export async function shardMatmul(map, poolSize, a, b, opts = {}) {
   }).filter((m) => m.mp > 0);
   const res = await map(MATMUL_FN, metas, opts);
   const bad = res.find((r) => r && r.error);
-  if (bad) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "matmul: 워커 실패 " + bad.error);
+  if (bad) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "matmul: worker failed " + bad.error);
   return { data: new Float64Array(outSab), rows: M, cols: N };
 }

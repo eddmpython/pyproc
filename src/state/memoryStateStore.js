@@ -22,7 +22,7 @@ export class MemoryStateStore {
     return ref ? { ref: { ...ref } } : { missing: true };
   }
   async writeRef(name, ref) {
-    if (typeof ref?.commit !== "string") throw new PyProcError("PYPROC_INPUT_INVALID", "memoryStateStore: ref.commit이 필요하다");
+    if (typeof ref?.commit !== "string") throw new PyProcError("PYPROC_INPUT_INVALID", "memoryStateStore: ref.commit is required");
     this._corruptRefs.delete(name);
     this._refs.set(name, { commit: ref.commit });
   }

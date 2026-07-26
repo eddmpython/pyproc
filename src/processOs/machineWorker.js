@@ -19,7 +19,7 @@ let childSeq = 0; // cid 발급 전용(요청 상관은 rpcChannel이 소유)
 // 대기 전건을 즉시 reject한다(층이 깊어도 영원히 매달리는 Promise 없음).
 function callChild(childCid, msg) {
   const child = children.get(childCid);
-  if (!child) return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `machineWorker: 자식 ${childCid} 없음`));
+  if (!child) return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `machineWorker: no child ${childCid}`));
   return child.port.call(msg);
 }
 

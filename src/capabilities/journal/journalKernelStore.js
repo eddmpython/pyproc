@@ -23,7 +23,7 @@ export class JournalKernelStore {
   resetCache() { this._cache = {}; }
   _hex(address) {
     const hex = parseSha256Address(address);
-    if (!hex) throw new PyProcError("PYPROC_INPUT_INVALID", `journal store: 주소 형식 위반(${address})`);
+    if (!hex) throw new PyProcError("PYPROC_INPUT_INVALID", `journal store: malformed address (${address})`);
     return hex;
   }
   async _refs(create) {

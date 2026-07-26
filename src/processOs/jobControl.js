@@ -37,7 +37,7 @@ export class JobControl {
   // 잡 생성: 대화형 레인을 자유 잡 레인에 fork(살아있는 네임스페이스 복제) 후 그 레인에서 실행.
   // 프롬프트는 즉시 돌아온다(잡 promise는 백그라운드). 자유 레인이 없으면 명시적 예외.
   async _spawnJob(code) {
-    if (!this._free.length) throw new PyProcError("PYPROC_POOL_EXHAUSTED", "jobControl: 자유 잡 레인 없음(모든 슬롯 사용 중)", { retryable: true });
+    if (!this._free.length) throw new PyProcError("PYPROC_POOL_EXHAUSTED", "jobControl: no free job lane (every slot is busy)", { retryable: true });
     const pid = this._free.shift();
     const jobId = ++this._jobSeq;
     await this._os.fork(this._interactivePid, pid); // 대화형 상태를 잡 레인으로 복제(43ms급)
@@ -66,7 +66,7 @@ export class JobControl {
   // 잡을 포그라운드로: 완료를 기다려 결과({ out, value } 또는 { error })를 반환한다.
   async fg(jobId) {
     const job = this._jobs.get(jobId);
-    if (!job) throw new PyProcError("PYPROC_INPUT_INVALID", `fg: 잡 ${jobId} 없음`);
+    if (!job) throw new PyProcError("PYPROC_INPUT_INVALID", `fg: no job ${jobId}`);
     return job.promise;
   }
 

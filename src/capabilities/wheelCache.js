@@ -18,7 +18,7 @@ export class WheelCache {
   }
 
   async _withCache(fn) {
-    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "wheelCache: cfg.dir(FileSystemDirectoryHandle)이 필요하다");
+    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "wheelCache: cfg.dir (a FileSystemDirectoryHandle) is required");
     // fetch 스왑은 전역 패치 창이다: 단독 사용은 공용 체인으로 직렬화하고,
     // 이미 열린 창 안(예: bootSession)에서는 그 창이 넘겨준 patchScope로 중첩한다.
     const scope = this._patchScope || runWithGlobalPatch;

@@ -16,7 +16,7 @@ const SIGN_ALG = { name: "ECDSA", hash: "SHA-256" };
 const textEncoder = new TextEncoder();
 
 function requireProvider(cryptoProvider) {
-  if (!cryptoProvider?.subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "signedTag: cryptoProvider.subtle이 필요하다");
+  if (!cryptoProvider?.subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "signedTag: cryptoProvider.subtle is required");
   return cryptoProvider.subtle;
 }
 
@@ -26,7 +26,7 @@ function requireProvider(cryptoProvider) {
 export function canonicalStateJwk(jwk) {
   if (typeof jwk !== "object" || jwk === null || jwk.kty !== "EC" || jwk.crv !== "P-256"
     || typeof jwk.x !== "string" || typeof jwk.y !== "string") {
-    throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "signedTag: P-256 공개키 JWK가 필요하다");
+    throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "signedTag: a P-256 public key JWK is required");
   }
   return { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y };
 }
@@ -49,14 +49,14 @@ export async function importStatePublicKey(cryptoProvider, key) {
   const subtle = requireProvider(cryptoProvider);
   if (key && typeof key === "object" && key.kty) return subtle.importKey("jwk", canonicalStateJwk(key), KEY_ALG, true, ["verify"]);
   if (typeof CryptoKey !== "undefined" && key instanceof CryptoKey) return key;
-  throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "signedTag: publicKey 형식 위반");
+  throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "signedTag: publicKey has the wrong type");
 }
 
 // 저수준 서명/검증: target 다이제스트 문자열에 대한 ECDSA 원바이트. 상위 포맷(tag,
 // 구 .pymachine signature v1)이 각자의 봉투에 싣더라도 암호 연산은 이 두 함수 한 벌이다.
 export async function signStateDigest(cryptoProvider, privateKey, target) {
   const subtle = requireProvider(cryptoProvider);
-  if (typeof target !== "string" || !target) throw new PyProcError("PYPROC_INPUT_INVALID", "signedTag: target 다이제스트 문자열이 필요하다");
+  if (typeof target !== "string" || !target) throw new PyProcError("PYPROC_INPUT_INVALID", "signedTag: target must be a digest string");
   return new Uint8Array(await subtle.sign(SIGN_ALG, privateKey, textEncoder.encode(target)));
 }
 
@@ -78,7 +78,7 @@ export async function makeStateTag(cryptoProvider, privateKey, publicKeyJwk, tar
 
 // target(내용주소/봉투 다이제스트 문자열)에 서명해 tag를 만든다(CryptoKeyPair 편의형).
 export async function signStateTag(cryptoProvider, keyPair, target) {
-  if (!keyPair?.privateKey || !keyPair?.publicKey) throw new PyProcError("PYPROC_INPUT_INVALID", "signedTag: keyPair가 필요하다");
+  if (!keyPair?.privateKey || !keyPair?.publicKey) throw new PyProcError("PYPROC_INPUT_INVALID", "signedTag: keyPair is required");
   return makeStateTag(cryptoProvider, keyPair.privateKey, await exportStatePublicKey(cryptoProvider, keyPair.publicKey), target);
 }
 
@@ -90,7 +90,7 @@ export async function verifyStateTag(cryptoProvider, tag, expectedTarget, opts =
   const subtle = requireProvider(cryptoProvider);
   if (typeof tag !== "object" || tag === null || tag.alg !== STATE_TAG_ALG
     || typeof tag.target !== "string" || typeof tag.signature !== "string") {
-    throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "signedTag: tag 형식 위반");
+    throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "signedTag: tag has the wrong type");
   }
   if (expectedTarget != null && tag.target !== expectedTarget) {
     return { valid: false, trusted: false, signerFingerprint: null };

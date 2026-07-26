@@ -101,7 +101,7 @@ async function openBundleMachine(buf, opts) {
   let signature = { present: false, trusted: false };
   if (decoded.tag) {
     if (decoded.tag.alg !== STATE_TAG_ALG || decoded.tag.target !== decoded.headerDigest) {
-      throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: 서명 대상 불일치(파일 내용과 tag target이 맞지 않는다)");
+      throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "open: signature target mismatch (the file content does not match the signed tag target)");
     }
     const trustedKeys = [];
     if (opts.trustedPublicKey) trustedKeys.push(opts.trustedPublicKey);

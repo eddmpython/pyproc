@@ -26,10 +26,10 @@ export function createRpcPort(worker, opts = {}) {
     if (e.data.type === "error") p.reject(fromErrorPayload(e.data)); else p.resolve(e.data);
   });
   worker.addEventListener("error", (e) => {
-    fail(new PyProcError("PYPROC_WORKER_CRASHED", `${label} 크래시: ${e.message || "unknown"}`, { retryable: true }));
+    fail(new PyProcError("PYPROC_WORKER_CRASHED", `${label} crashed: ${e.message || "unknown"}`, { retryable: true }));
   });
   worker.addEventListener("messageerror", () => {
-    fail(new PyProcError("PYPROC_WORKER_CRASHED", `${label} 메시지 역직렬화 실패`, { retryable: true }));
+    fail(new PyProcError("PYPROC_WORKER_CRASHED", `${label} failed to deserialize a message`, { retryable: true }));
   });
 
   function fail(err) {
@@ -46,7 +46,7 @@ export function createRpcPort(worker, opts = {}) {
   function request(msg, transfer = []) {
     const reqId = ++reqSeq;
     const promise = new Promise((resolve, reject) => {
-      if (deadError) return reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `${label}는 dead다`, { cause: deadError }));
+      if (deadError) return reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `${label} is dead`, { cause: deadError }));
       pending.set(reqId, { resolve, reject });
       worker.postMessage({ ...msg, reqId }, transfer);
     });

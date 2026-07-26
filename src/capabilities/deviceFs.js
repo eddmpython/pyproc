@@ -99,7 +99,7 @@ export class DeviceFs {
   // cfg.signal(pid, signum)이 있어야 한다(보통 PyProc.signal 배선). 반환: 등록된 ctl 경로.
   // ctl 어휘: "kill"/"term"->SIGTERM, "int"->SIGINT, "usr1"/"usr2", 또는 숫자.
   track(pid) {
-    if (!this._cfg.signal) throw new PyProcError("PYPROC_INPUT_INVALID", "track: cfg.signal(pid, signum) 필요");
+    if (!this._cfg.signal) throw new PyProcError("PYPROC_INPUT_INVALID", "track: cfg.signal(pid, signum) is required");
     const dec = new TextDecoder();
     const map = { int: 2, usr1: 10, usr2: 12, term: 15, kill: 15 };
     this._mk(`/proc/${pid}/status`, { read: () => JSON.stringify({ pid, ts: this._cfg.ps ? this._cfg.ps() : null }) });

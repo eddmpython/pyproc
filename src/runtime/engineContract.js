@@ -46,7 +46,7 @@ export function engineCapabilities(engine) {
   const raw = engine.capabilities();
   const values = raw instanceof Set ? [...raw] : raw;
   if (!Array.isArray(values) || values.some((value) => typeof value !== "string")) {
-    throw new PyProcError("PYPROC_INPUT_INVALID", "EngineContract.capabilities(): 문자열 배열 또는 Set이 필요하다");
+    throw new PyProcError("PYPROC_INPUT_INVALID", "EngineContract.capabilities(): a string array or Set is required");
   }
   return new Set(values);
 }
@@ -54,20 +54,20 @@ export function engineCapabilities(engine) {
 export function assertEngineContract(engine) {
   if (!engine || engine.engineContractVersion !== ENGINE_CONTRACT_VERSION) {
     throw new PyProcError("PYPROC_INPUT_INVALID",
-      `EngineContract: engineContractVersion=${ENGINE_CONTRACT_VERSION} 명시가 필요하다`);
+      `EngineContract: engineContractVersion=${ENGINE_CONTRACT_VERSION} must be declared`);
   }
   if (typeof engine.engineKind !== "string" || !engine.engineKind) {
-    throw new PyProcError("PYPROC_INPUT_INVALID", "EngineContract.engineKind 문자열이 필요하다");
+    throw new PyProcError("PYPROC_INPUT_INVALID", "EngineContract.engineKind must be a string");
   }
   for (const method of REQUIRED_METHODS) {
     if (typeof engine[method] !== "function") {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `EngineContract.${method}()가 필요하다`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `EngineContract.${method}() is required`);
     }
   }
   const capabilities = engineCapabilities(engine);
   for (const capability of REQUIRED_CAPABILITIES) {
     if (!capabilities.has(capability)) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `EngineContract 필수 capability 누락: ${capability}`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `EngineContract is missing a required capability: ${capability}`);
     }
   }
   return engine;
@@ -80,6 +80,6 @@ export function hasEngineCapability(engine, capability) {
 export function requireEngineCapability(engine, capability, operation) {
   if (!hasEngineCapability(engine, capability)) {
     throw new PyProcError("PYPROC_ENV_UNSUPPORTED",
-      `${operation}: ${engine.engineKind} 엔진은 ${capability} capability를 지원하지 않는다`);
+      `${operation}: the ${engine.engineKind} engine does not support the ${capability} capability`);
   }
 }

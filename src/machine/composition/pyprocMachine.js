@@ -26,6 +26,16 @@ const BOOT_MACHINE_OPTION_KEYS = Object.freeze([
   "engineScriptIntegrity", "coreIntegrity", "assetIntegrity", "lockFileURL", "loadPyodide",
 ]);
 
+// 풀 캐시 키의 값 부분. 객체/함수는 동일성으로, 원시값은 값으로 구분한다(JSON으로 직렬화되지
+// 않는 옵션이 섞여도 키가 폭발하지 않게). 같은 옵션 = 같은 풀이 이 함수의 계약이다.
+let optionIdentitySeq = 0;
+const optionIdentities = new WeakMap();
+function describeOption(value) {
+  if (value === null || typeof value !== "object" && typeof value !== "function") return value;
+  if (!optionIdentities.has(value)) optionIdentities.set(value, `ref${++optionIdentitySeq}`);
+  return optionIdentities.get(value);
+}
+
 // 오타를 침묵으로 만들지 않는다. 받은 키 이름을 그대로 돌려주고 가까운 후보를 제시한다.
 function assertKnownOptions(options, allowed, verb) {
   if (!options || typeof options !== "object") return;
@@ -107,27 +117,37 @@ export class PyprocMachine {
   get fs() { return this._rt.fs; }
   term(cfg) { return this._rt.enableTerminal(cfg); }
   // 프로세스 풀(워커 = 프로세스, 독립 GIL): fork/forkMany/map/mapArray/matmul은 풀의 동사다.
-  // 같은 머신에 풀은 하나로 유지한다. 호출마다 새 풀을 만들면 컴포넌트 재마운트가 워커를
-  // 쌓아 올리고(레인마다 독립 인터프리터 = 수백 MB), 원인이 pyproc이라는 단서가 남지 않는다.
-  // enableReactive가 memoize되는 것을 본 소비자는 proc도 그럴 것이라 합리적으로 기대한다.
+  //
+  // 같은 옵션이면 같은 풀을 돌려준다(옵션별 memoize). 두 성질을 함께 지켜야 한다:
+  //  - 재마운트가 워커를 쌓지 않는다. 호출마다 새 풀이면 컴포넌트가 다시 마운트될 때마다 레인마다
+  //    독립 인터프리터가 붙고(수백 MB) 원인이 pyproc이라는 단서가 남지 않는다.
+  //  - 성질이 다른 풀은 함께 존재할 수 있다. 일반 map 풀과 replay 대칭 풀(fork 전제)은 서로 다른
+  //    풀이어야 한다. 머신당 하나로 강제하면 두 번째 호출의 옵션이 조용히 버려진다(실측: 제품
+  //    소비자 게이트의 잡 컨트롤 경로가 그렇게 깨졌다).
+  // dispose()가 이 캐시의 모든 풀을 회수한다.
   async proc(opts = {}) {
-    if (this._procPending) return this._procPending;
-    this._procPending = (async () => {
+    const key = JSON.stringify(Object.keys(opts).sort().map((name) => [name, describeOption(opts[name])]));
+    if (!this._procPools) this._procPools = new Map();
+    const cached = this._procPools.get(key);
+    if (cached) return cached;
+    const pending = (async () => {
       const { PyProc } = await import("../../processOs/pyProc.js");
       const { lanes = DEFAULT_PROC_LANES, useSnapshot = true, ...procOpts } = opts;
       const pool = new PyProc({ indexURL: this._rt.indexURL, assetIntegrity: this._rt.assetIntegrity, ...procOpts });
       await pool.boot(lanes, useSnapshot);
-      this._proc = pool;
       return pool;
     })();
-    try { return await this._procPending; } catch (error) { this._procPending = null; throw error; }
+    this._procPools.set(key, pending);
+    try { return await pending; } catch (error) { this._procPools.delete(key); throw error; }
   }
   // 회수 동사. 풀 핸들을 잃으면 워커를 되돌릴 방법이 없어서 머신 자신이 회수구를 갖는다.
   async dispose() {
-    const pool = this._proc;
-    this._proc = null;
-    this._procPending = null;
-    if (pool) await pool.terminate();
+    const pools = [...(this._procPools?.values() || [])];
+    this._procPools = new Map();
+    for (const pending of pools) {
+      const pool = await pending.catch(() => null);
+      if (pool) pool.terminate();
+    }
     this._reactive.dispose();
   }
 }

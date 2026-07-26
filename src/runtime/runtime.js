@@ -105,7 +105,7 @@ export async function boot(opts = {}) {
     const expected = expectedCoreIntegrity(cache.integrity, url, name);
     if (cache.integrity?.required && !expected) {
       cache.integrityMissing++;
-      failIntegrity(cache, new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${name}의 coreIntegrity 항목이 없다`));
+      failIntegrity(cache, new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${name} is not listed in coreIntegrity`));
     }
     if (cache.dir) {
       try {

@@ -17,12 +17,12 @@ function asBytes(data) {
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   if (typeof data === "string") return new TextEncoder().encode(data);
-  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: bytes/ArrayBuffer/string만 받는다");
+  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: only bytes, ArrayBuffer, or string are accepted");
 }
 
 function subtleOrThrow() {
   const subtle = globalThis.crypto && globalThis.crypto.subtle;
-  if (!subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: crypto.subtle이 필요하다");
+  if (!subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: crypto.subtle is required");
   return subtle;
 }
 
@@ -33,7 +33,7 @@ function subtleOrThrow() {
 // 소멸 예정이다(mainPlan/_done/state-kernel 02 문서 5단계).
 
 function requireProvider(cryptoProvider) {
-  if (!cryptoProvider?.subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: cryptoProvider.subtle이 필요하다");
+  if (!cryptoProvider?.subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: cryptoProvider.subtle is required");
   return cryptoProvider.subtle;
 }
 
@@ -78,7 +78,7 @@ export function base64FromBytes(data) {
     return btoa(s);
   }
   if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString("base64");
-  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: base64 인코더가 없다");
+  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: no base64 encoder available");
 }
 
 // base64 디코더. 인코더와 같은 규율로 둔다: 폴백이 한쪽만 있던 사본이 "같은 입력에 다르게
@@ -96,7 +96,7 @@ export function bytesFromBase64(value, { urlSafe = false } = {}) {
     return bytes;
   }
   if (typeof Buffer !== "undefined") return new Uint8Array(Buffer.from(normalized, "base64"));
-  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: base64 디코더가 없다");
+  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: no base64 decoder available");
 }
 
 // bytes -> 소문자 hex. 내용 주소·서명 표기가 같은 인코딩을 쓰게 하는 한 곳이다.
@@ -141,10 +141,10 @@ export function parseSri(value) {
 // 기대 SRI 중 하나와 맞는지 확인하고 실제 값을 돌려준다. label은 오류 문장의 주어다.
 export async function verifySri(data, expected, label) {
   const entries = parseSri(expected);
-  if (!entries.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${label}의 sha256 SRI 값이 없다`);
+  if (!entries.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: no sha256 SRI value for ${label}`);
   const actual = await sha256Sri(data);
   if (!entries.includes(actual)) {
-    throw new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${label} 해시 불일치(expected ${entries[0].slice(0, 19)}..., actual ${actual.slice(0, 19)}...)`);
+    throw new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${label} hash mismatch (expected ${entries[0].slice(0, 19)}..., actual ${actual.slice(0, 19)}...)`);
   }
   return actual;
 }

@@ -108,7 +108,7 @@ export async function pipeWriteAsync(item, bytes) {
   let off = 0;
   while (off < bytes.byteLength) {
     const sent = ringWriteOnce(item, bytes.subarray(off), false);
-    if (sent < 0) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "pipe: 닫힌 파이프에 쓰기");
+    if (sent < 0) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "pipe: write to a closed pipe");
     off += sent;
     if (sent === 0) {
       const head = Atomics.load(i32, HEAD);

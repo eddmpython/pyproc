@@ -17,7 +17,7 @@ import { bytesFromBase64 } from "../runtime/contentDigest.js";
 
 // 형식 판정은 이 층의 오류 어휘로 하고, 바이트 변환은 코덱 코어가 한다(폴백 포함).
 function base64UrlToBytes(s) {
-  if (typeof s !== "string" || !/^[A-Za-z0-9_-]+$/.test(s)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: signature base64url 형식 위반");
+  if (typeof s !== "string" || !/^[A-Za-z0-9_-]+$/.test(s)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: signature is not valid base64url");
   return bytesFromBase64(s, { urlSafe: true });
 }
 
@@ -32,7 +32,7 @@ export async function createMachineKeyPair() {
 export async function exportMachinePublicKey(key) {
   const publicKey = key && key.publicKey ? key.publicKey : key;
   if (publicKey && typeof publicKey === "object" && publicKey.kty) return publicKey;
-  if (!isCryptoKey(publicKey)) throw new PyProcError("PYPROC_INPUT_INVALID", "machine: publicKey CryptoKey가 필요하다");
+  if (!isCryptoKey(publicKey)) throw new PyProcError("PYPROC_INPUT_INVALID", "machine: publicKey must be a CryptoKey");
   return exportStatePublicKey(globalThis.crypto, publicKey);
 }
 
@@ -48,8 +48,8 @@ export async function machineSigningMaterial(opts) {
   if (!signingKey) return null;
   const privateKey = signingKey.privateKey || signingKey;
   const publicKey = opts.publicKey || signingKey.publicKey;
-  if (!isCryptoKey(privateKey)) throw new PyProcError("PYPROC_INPUT_INVALID", "session.exportImage: signingKey private CryptoKey가 필요하다");
-  if (!publicKey) throw new PyProcError("PYPROC_INPUT_INVALID", "session.exportImage: publicKey 또는 CryptoKeyPair가 필요하다");
+  if (!isCryptoKey(privateKey)) throw new PyProcError("PYPROC_INPUT_INVALID", "history.export: signingKey must be a private CryptoKey");
+  if (!publicKey) throw new PyProcError("PYPROC_INPUT_INVALID", "history.export: publicKey or a CryptoKeyPair is required");
   return { privateKey, publicKey: await exportMachinePublicKey(publicKey) };
 }
 
@@ -58,10 +58,10 @@ export async function machineSigningMaterial(opts) {
 function readMachineSignature(meta) {
   const sig = meta.signature;
   if (sig == null) return null;
-  if (typeof sig !== "object" || sig.version !== 1) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: signature 형식 위반");
-  if (sig.algorithm !== "ECDSA-P256-SHA256") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `openMachine: 지원하지 않는 signature 알고리즘(${sig.algorithm})`);
-  if (typeof sig.envelope !== "string" || !/^[0-9a-f]{64}$/.test(sig.envelope)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: signature envelope 형식 위반");
-  if (typeof sig.publicKey !== "object" || sig.publicKey === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "openMachine: signature publicKey 형식 위반");
+  if (typeof sig !== "object" || sig.version !== 1) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: signature has the wrong type");
+  if (sig.algorithm !== "ECDSA-P256-SHA256") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `open: unsupported signature algorithm (${sig.algorithm})`);
+  if (typeof sig.envelope !== "string" || !/^[0-9a-f]{64}$/.test(sig.envelope)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: signature envelope has the wrong type");
+  if (typeof sig.publicKey !== "object" || sig.publicKey === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: signature publicKey has the wrong type");
   return sig;
 }
 
@@ -72,10 +72,10 @@ export async function verifyMachineSignature(meta, bin, homeBin, opts) {
   const sig = readMachineSignature(meta);
   if (!sig) return { present: false, trusted: false };
   const actual = await unsignedEnvelope(meta, bin, homeBin);
-  if (actual !== sig.envelope) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: 서명 대상 불일치(파일 내용과 signature envelope가 맞지 않는다)");
+  if (actual !== sig.envelope) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "open: envelope digest mismatch (this file is not what the signature envelope covers)");
   const signature = base64UrlToBytes(sig.signature);
   const validEmbedded = await verifyStateDigest(globalThis.crypto, sig.publicKey, sig.envelope, signature);
-  if (!validEmbedded) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "openMachine: signature 검증 실패");
+  if (!validEmbedded) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "open: signature verification failed");
   const trusted = [];
   if (opts.trustedPublicKey) trusted.push(opts.trustedPublicKey);
   if (Array.isArray(opts.trustedPublicKeys)) trusted.push(...opts.trustedPublicKeys);

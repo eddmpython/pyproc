@@ -105,8 +105,10 @@ namespaces are the model's vocabulary:
   is statement-level time travel over the machine's history.
 - `machine.proc(opts?)` - boots a worker process pool and resolves to `PyProc`
   (see [Process OS](#process-os-machineproc)). `lanes` sets the pool size (default 2),
-  `replay` makes the pool fork-symmetric. **Memoized per machine**: a second call resolves to
-  the first pool, so a remount does not stack workers. The first call's options win.
+  `replay` makes the pool fork-symmetric. **Memoized per option set**: calling it again with the
+  same options resolves to the same pool, so a remount does not stack workers; different options
+  (for example a plain pool and a `replay` pool for `fork`) get their own pool. `machine.dispose()`
+  terminates every pool the machine created.
 - `machine.dispose()` - terminates the pool's workers and releases the reactive retention.
   Call it before dropping a machine; a lost pool handle cannot be reclaimed otherwise.
 - `machine.deterministic` - whether this machine was booted under the deterministic

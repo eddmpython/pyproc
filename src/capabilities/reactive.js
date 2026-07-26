@@ -33,9 +33,9 @@ export class ReactiveController {
   }
   _requireNode(j, op) {
     if (!Number.isInteger(j) || j < 0 || j >= this.deltas.length) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `${op}: 체크포인트 인덱스 범위 위반(${j})`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `${op}: checkpoint index out of range (${j})`);
     }
-    if (this.deltas[j] === null) throw new PyProcError("PYPROC_CHECKPOINT_PRUNED", `${op}: prune된 체크포인트(${j})다`);
+    if (this.deltas[j] === null) throw new PyProcError("PYPROC_CHECKPOINT_PRUNED", `${op}: checkpoint ${j} was pruned`);
   }
   // 현재 힙 상태를 체크포인트로 저장. 첫 호출=base 통째, 이후=바뀐 페이지 델타.
   // 새 노드의 부모 = 지금의 live 노드(과거로 여행한 뒤라면 그 도착점 = 분기).
@@ -126,7 +126,7 @@ export class ReactiveController {
     this._requireNode(fromIdx, "collectDelta");
     this._requireNode(toIdx, "collectDelta");
     if (toIdx !== this.liveIdx) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `collectDelta: toIdx(${toIdx})는 live 노드(${this.liveIdx})여야 한다(페이지 바이트는 현재 힙에서 읽는다)`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `collectDelta: toIdx (${toIdx}) must be the live node (${this.liveIdx}); page bytes are read from the current heap`);
     }
     const mem = this._mem;
     const pages = hashDiffPages(this.hashes[fromIdx], this.hashes[toIdx]);
@@ -150,7 +150,7 @@ export class ReactiveController {
     const keep = new Set([0]);
     for (let k = j; k >= 1; k = this.parents[k]) keep.add(k);
     if (!keep.has(this.liveIdx)) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `pruneTo: liveIdx(${this.liveIdx})가 루트->${j} 경로 밖이다. 먼저 경로 위 노드로 복원하라.`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `pruneTo: liveIdx (${this.liveIdx}) is off the root->${j} path. Restore to a node on that path first.`);
     }
     let freedNodes = 0, freedBytes = 0;
     for (let k = 1; k < this.deltas.length; k++) {
@@ -256,7 +256,7 @@ export class ReactiveController {
   // 실측(attempts/runtimeParity/opfsCheckpointProbe): 30MB 쓰기 256ms, 읽기 46ms, 로드본 복원 정확.
   // 핸들은 소비자가 준다(위치·이름 하드코딩 없음). dir는 FileSystemDirectoryHandle.
   async saveBase(dir, name) {
-    if (this.base === null) throw new PyProcError("PYPROC_INPUT_INVALID", "saveBase: base가 없다(checkpoint() 먼저)");
+    if (this.base === null) throw new PyProcError("PYPROC_INPUT_INVALID", "saveBase: no base yet (call checkpoint() first)");
     const fh = await dir.getFileHandle(name, { create: true });
     const w = await fh.createWritable();
     await w.write(this.base); await w.close();
@@ -266,7 +266,7 @@ export class ReactiveController {
     const file = await (await dir.getFileHandle(name)).getFile();
     const loaded = new Uint8Array(await file.arrayBuffer());
     if (this.base !== null && loaded.length !== this.base.length) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `loadBase: 크기 불일치 (파일 ${loaded.length} vs base ${this.base.length})`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `loadBase: size mismatch (file ${loaded.length} vs base ${this.base.length})`);
     }
     this.base = loaded;
     return { bytes: loaded.length };

@@ -79,7 +79,7 @@ export class MachineContainer {
 
   _call(cid, msg) {
     const c = this._containers.get(cid);
-    if (!c) return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `machineContainer: ${cid} 없음(killed?)`));
+    if (!c) return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `machineContainer: no ${cid} (killed?)`));
     return c.port.call(msg);
   }
 
@@ -114,7 +114,7 @@ export class MachineContainer {
       const c = this._containers.get(cid);
       if (!c) return false;
       c.worker.terminate();
-      c.port.fail(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `컨테이너 ${cid} killed`));
+      c.port.fail(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `container ${cid} killed`));
       this._containers.delete(cid);
       return true;
     }

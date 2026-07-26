@@ -70,7 +70,7 @@ export class PyProc {
     if (entry.state === "dead") {
       return {
         reqId: -1,
-        promise: Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `pid ${entry.pid}는 dead다`)),
+        promise: Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `pid ${entry.pid} is dead`)),
         cancel: () => {},
       };
     }
@@ -88,14 +88,14 @@ export class PyProc {
     const interruptSab = new SharedArrayBuffer(1);
     const entry = { pid, worker: w, state: "booting", parentPid: 0, interrupt: new Uint8Array(interruptSab) };
     // RPC 상관(reqId/pending)과 크래시 수렴은 rpcChannel이 소유한다. 사망은 테이블에 dead로 남는다.
-    entry.port = createRpcPort(w, { label: `워커 pid ${pid}`, onDead: () => { entry.state = "dead"; } });
+    entry.port = createRpcPort(w, { label: `worker pid ${pid}`, onDead: () => { entry.state = "dead"; } });
     this.table.push(entry);
     const ready = this._call(entry, {
       type: "boot", indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null,
       interruptSab, packages: this.packages, setup: this.setup, replay: this.replay,
     }).then(
       (d) => { entry.state = "ready"; entry.interrupts = !!d.interrupts; return d.bootMs; },
-      (err) => { this._fail(entry, err); throw new PyProcError("PYPROC_BOOT_FAILED", `워커 pid ${pid} 부팅 실패: ${err.message}`, { retryable: true, cause: err }); },
+      (err) => { this._fail(entry, err); throw new PyProcError("PYPROC_BOOT_FAILED", `worker pid ${pid} failed to boot: ${err.message}`, { retryable: true, cause: err }); },
     );
     return { entry, ready };
   }
@@ -118,15 +118,15 @@ export class PyProc {
   // 316ms = 4.05배. 그 위에서 4-후보 병렬 탐색이 직렬 재시도 대비 5.2배(90ms vs 468ms)다.
   // 전제는 fork와 같다: 같은 replay 매니페스트로 부팅한 대칭 풀(워커끼리만 바이트 동일).
   async forkMany(srcPid, dstPids) {
-    if (!this.replay) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "fork: replay 매니페스트로 부팅한 풀에서만 가능하다(new PyProc({ replay }))");
-    if (!Array.isArray(dstPids) || !dstPids.length) throw new PyProcError("PYPROC_INPUT_INVALID", "forkMany: dstPids는 비어 있지 않은 pid 배열이어야 한다");
-    if (new Set(dstPids).size !== dstPids.length) throw new PyProcError("PYPROC_INPUT_INVALID", "forkMany: dstPids에 중복 pid가 있다");
-    if (dstPids.includes(srcPid)) throw new PyProcError("PYPROC_INPUT_INVALID", `forkMany: src pid ${srcPid}를 dst로 줄 수 없다`);
+    if (!this.replay) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "fork: only a replay-booted pool can fork. Boot it with machine.proc({ replay: {...} })");
+    if (!Array.isArray(dstPids) || !dstPids.length) throw new PyProcError("PYPROC_INPUT_INVALID", "forkMany: dstPids must be a non-empty array of pids");
+    if (new Set(dstPids).size !== dstPids.length) throw new PyProcError("PYPROC_INPUT_INVALID", "forkMany: dstPids contains duplicate pids");
+    if (dstPids.includes(srcPid)) throw new PyProcError("PYPROC_INPUT_INVALID", `forkMany: src pid ${srcPid} cannot also be a dst`);
     const src = this.table.find((t) => t.pid === srcPid);
-    if (!src || src.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: src pid ${srcPid} 준비되지 않음`);
+    if (!src || src.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: src pid ${srcPid} is not ready`);
     const dsts = dstPids.map((pid) => {
       const dst = this.table.find((t) => t.pid === pid);
-      if (!dst || dst.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: dst pid ${pid} 준비되지 않음`);
+      if (!dst || dst.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: dst pid ${pid} is not ready`);
       return dst;
     });
     const h = await this._call(src, { type: "harvest" });
@@ -153,7 +153,7 @@ export class PyProc {
   // 소비자(IPC 생산자/소비자, 잡 컨트롤의 잡 본체)의 프리미티브다. 반환 = 태스크 결과 Promise.
   exec(pid, fnSrc, arg = null) {
     const entry = this.table.find((t) => t.pid === pid);
-    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `exec: pid ${pid} 준비되지 않음`));
+    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `exec: pid ${pid} is not ready`));
     return this._call(entry, { type: "task", fnSrc, arg }).then((d) => d.result);
   }
 
@@ -161,7 +161,7 @@ export class PyProc {
   // 반환: { out, value }(value = 식의 repr 또는 null). exec와 달리 함수 래핑 없이 raw 실행.
   repl(pid, code) {
     const entry = this.table.find((t) => t.pid === pid);
-    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `repl: pid ${pid} 준비되지 않음`));
+    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `repl: pid ${pid} is not ready`));
     return this._call(entry, { type: "repl", code }).then((d) => ({ out: d.out, value: d.value }));
   }
 
@@ -170,7 +170,7 @@ export class PyProc {
   // 커널(메인)측 엔드포인트는 read/write(Atomics.waitAsync) = 커널도 파이프의 한쪽이 될 수 있다.
   _bindIpc(pid, item) {
     const entry = this.table.find((t) => t.pid === pid);
-    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `bindIpc: pid ${pid} 준비되지 않음`));
+    if (!entry || entry.state !== "ready") return Promise.reject(new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `bindIpc: pid ${pid} is not ready`));
     return this._call(entry, {
       type: "bindIpc",
       items: [{ kind: item.kind, name: item.name, sab: item.sab, cap: item.cap || 0, mode: item.mode || null }],
@@ -236,7 +236,7 @@ export class PyProc {
   // 프로세스를 채운다. 잡 컨트롤의 강제 회수(killHard)가 소비하는 공개 프리미티브.
   async respawn(pid) {
     const entry = this.table.find((t) => t.pid === pid);
-    if (!entry) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `respawn: pid ${pid} 없음`);
+    if (!entry) throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `respawn: pid ${pid} is unknown`);
     const replaced = await this._replace(entry);
     return { oldPid: pid, pid: replaced.pid };
   }
@@ -244,7 +244,7 @@ export class PyProc {
   // 죽은/행 프로세스 자리를 스냅샷 respawn으로 채운다(풀 크기 유지).
   // 실측(attempts/processLifecycle): respawn 302ms, 행 감지는 이벤트가 없어 타임아웃만 가능.
   async _replace(entry) {
-    if (entry.state !== "dead") { entry.worker.terminate(); this._fail(entry, new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `pid ${entry.pid} 교체(행 수렴)`)); }
+    if (entry.state !== "dead") { entry.worker.terminate(); this._fail(entry, new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `pid ${entry.pid} replaced (hang converged)`)); }
     const s = this._spawn(!!this._snapshot);
     await s.ready;
     return s.entry;

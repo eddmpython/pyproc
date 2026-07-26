@@ -427,14 +427,14 @@ const html = `<!DOCTYPE html>
 
       let untrustedDenied = false;
       try { await open(imageBlob, { requireSignature: true }); }
-      catch (e) { untrustedDenied = String(e).includes("signature") || String(e).includes("공개키"); }
+      catch (e) { untrustedDenied = String(e).includes("signature") || String(e).includes("trusted public key"); }
       check("installed product refuses untrusted .pymachine", untrustedDenied);
 
       const wrongKeyPair = await createStateKeyPair(crypto);
       const wrongPublicKey = await exportStatePublicKey(crypto, wrongKeyPair.publicKey);
       let wrongKeyDenied = false;
       try { await open(imageBlob, { trustedPublicKeys: [wrongPublicKey], requireSignature: true }); }
-      catch (e) { wrongKeyDenied = String(e).includes("signature") || String(e).includes("공개키"); }
+      catch (e) { wrongKeyDenied = String(e).includes("signature") || String(e).includes("trusted public key"); }
       check("installed product refuses wrong signer key", wrongKeyDenied);
 
       // 설치본에서 컴퓨터 한 대: 간판 진입점 createWebComputer가 npm 표면만으로 조립되고

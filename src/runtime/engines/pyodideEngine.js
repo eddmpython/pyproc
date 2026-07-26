@@ -30,7 +30,7 @@ export class PyodideEngine {
   toHostValue(value, options = {}) {
     const proxyMode = options.proxyMode || "copy";
     if (proxyMode !== "copy" && proxyMode !== "preserve") {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `toHostValue.proxyMode 미지원: ${proxyMode}`);
+      throw new PyProcError("PYPROC_INPUT_INVALID", `toHostValue.proxyMode is unsupported: ${proxyMode}`);
     }
     const hasFallback = Object.prototype.hasOwnProperty.call(options, "fallback");
     if (value === undefined) return hasFallback ? options.fallback : undefined;
