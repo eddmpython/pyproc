@@ -5,7 +5,7 @@
 // 스키마(hex 표기), JWK 정규화, 지문 직렬화 규약(canonical 정렬 - 소비자가 박아둔 공개 값이라
 // 규약 변경 = 신뢰 목록 무효화), 그리고 신뢰 판정 순서(임베디드 검증 -> 지문 대조 -> 재검증).
 import { WebMachineError } from "../contracts/webMachineError.js";
-import { canonicalJson, digestGenerationBytes } from "../persistence/generationIntegrity.js";
+import { digestGenerationBytes, machineCanonicalJson } from "../persistence/generationIntegrity.js";
 import { bytesFromHex, hexFromBytes } from "../contracts/byteCodec.js";
 
 const encoder = new TextEncoder();
@@ -46,7 +46,7 @@ export async function exportWebMachinePublicKey(cryptoProvider, publicKey) {
 
 export async function fingerprintWebMachinePublicKey(cryptoProvider, publicKey) {
   const jwk = await publicJwk(cryptoProvider, publicKey);
-  return digestGenerationBytes(cryptoProvider, encoder.encode(canonicalJson(jwk)));
+  return digestGenerationBytes(cryptoProvider, encoder.encode(machineCanonicalJson(cryptoProvider, jwk)));
 }
 
 export async function signWebMachineContent(cryptoProvider, contentDigest, signingKeyPair) {

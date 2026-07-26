@@ -16,7 +16,7 @@ import { operationAbortError, throwIfOperationAborted } from "../contracts/opera
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { createWebMachineManifest, getWebMachineManifestContent, validateWebMachineManifest, WEB_MACHINE_FORMAT, WEB_MACHINE_SCHEMA_VERSION } from "./machineManifest.js";
 import {
-  canonicalJson,
+  machineCanonicalJson,
   copyGenerationBytes,
   digestGenerationBytes,
   digestGenerationManifest,
@@ -354,7 +354,7 @@ async function readLegacyWebMachineFile({ file, cryptoProvider, trustedPublicKey
     imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "manifest JSON 해석 실패", { cause: String(cause) });
   }
   const manifest = validateWebMachineManifest(parsed);
-  if (manifestText !== canonicalJson(manifest)) imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "manifest canonical encoding 불일치");
+  if (manifestText !== machineCanonicalJson(cryptoProvider, manifest)) imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "manifest canonical encoding 불일치");
   const contentDigest = await abortable(
     digestGenerationManifest(cryptoProvider, getWebMachineManifestContent(manifest)),
     control,

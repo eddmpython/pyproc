@@ -674,6 +674,21 @@ section("digest 법");
     "src/runtime/memoryLayout.js",            // rank 0 쪽. machine을 import할 수 없다
     "src/machine/contracts/deterministicOrder.js", // 순수 집합 쪽. import 0이 불변식이다
   ]);
+  // canonical JSON 정의 지점 법. 이 직렬화가 공개 지문(소비자가 신뢰 목록에 박는 값)과
+  // manifest 다이제스트를 정하므로, 판본이 둘이면 같은 키가 다른 지문을 낳는다. machine 층에
+  // 같은 알고리즘의 사본이 있었고(2026-07-27 제거) composition이 커널 조각으로 배달한다.
+  // 차등 대조 435건으로 두 구현의 바이트 동일성을 먼저 확인한 뒤 지웠으므로 지문 값은 불변이다.
+  check("canonical JSON 정의는 커널 한 곳", () => {
+    const definers = [];
+    for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+      const code = stripComments(readFileSync(f, "utf8"));
+      // 키 정렬 + finite 판정을 함께 하는 재귀 직렬화기를 정의하는 파일을 찾는다.
+      if (/function canonical[A-Za-z]*Json\s*\(/.test(code)) definers.push(rel(f));
+    }
+    if (definers.join(",") !== "src/state/objectModel.js") {
+      throw new Error(`canonical JSON 정의가 커널 밖에 있다: ${definers.join(", ")}`);
+    }
+  });
   check("결정적 비교자의 정의는 경계 양쪽 각 한 곳", () => {
     const definers = [];
     for (const f of collect(join(ROOT, "src"), [".js"], [])) {

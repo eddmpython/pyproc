@@ -4,8 +4,10 @@
 // 한 점). 그래서 커널이 machine을 아는 게 아니라, composition이 커널의 함수 조각(digest,
 // ECDSA 서명·검증, 키 생성)을 provider로 묶어 machine 생성자에 꽂는다. 이로써
 // generationIntegrity와 webMachineTrust의 자체 암호 구현이 소멸하고 법은 코어 한 벌이 된다.
-// 직렬화 규약(canonical manifest, machine 지문의 JWK 정렬)은 machine 도메인의 형식 법이라
-// machine에 남는다: 지문은 소비자가 박아두는 공개 값이라 규약 변경 = 신뢰 목록 무효화다.
+// 직렬화 규약(canonical manifest, machine 지문의 JWK 정렬)도 여기로 왔다. 한때 "machine 도메인의
+// 형식 법"이라며 machine에 사본을 뒀는데, 그 사본이 정한 값이 바로 소비자가 신뢰 목록에 박는
+// 공개 지문이었다: 판본이 둘이면 같은 키가 다른 지문을 낳는다. 2026-07-27에 사본을 지웠고,
+// 차등 대조 435건으로 두 구현의 바이트 동일성을 먼저 확인했으므로 지문 값은 바뀌지 않았다.
 import { sha256AddressWith } from "../../runtime/contentDigest.js";
 import {
   createStateKeyPair,
@@ -22,6 +24,7 @@ import {
   stateBundleHeaderDigest,
 } from "../../state/bundleFormat.js";
 import {
+  canonicalStateJson,
   decodeStateObject,
   encodeStateObject,
   makePayloadTree,
@@ -50,6 +53,8 @@ export function createMachineCryptoProvider(cryptoProvider = globalThis.crypto) 
     state: Object.freeze({
       encodeObject: encodeStateObject,
       decodeObject: decodeStateObject,
+      // 직렬화 규약의 텍스트 형태. manifest canonical 대조와 JWK 지문이 이것을 쓴다.
+      canonicalJson: canonicalStateJson,
       makePayloadTree,
       makeStateCommit,
       validateStateCommit,

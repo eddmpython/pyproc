@@ -14,18 +14,14 @@ export function copyGenerationBytes(value, label = "generation payload") {
   throw new WebMachineError("WEB_MACHINE_GENERATION_INVALID", `${label}: bytes 필요`);
 }
 
-export function canonicalJson(value) {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new WebMachineError("WEB_MACHINE_GENERATION_INVALID", "manifest number는 finite여야 한다");
-    return JSON.stringify(value);
+// 직렬화 규약은 커널 조각으로 온다(composition이 배달). machine이 자기 사본을 갖고 있으면
+// 공개 지문과 manifest 다이제스트가 두 판본에 걸린다.
+export function machineCanonicalJson(cryptoProvider, value) {
+  const encode = cryptoProvider?.state?.canonicalJson;
+  if (typeof encode !== "function") {
+    throw new TypeError("cryptoProvider.state.canonicalJson is required (wrap with createMachineCryptoProvider)");
   }
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
-    return `{${entries.join(",")}}`;
-  }
-  throw new WebMachineError("WEB_MACHINE_GENERATION_INVALID", `manifest value 미지원: ${typeof value}`);
+  return encode(value);
 }
 
 function requireDigestProvider(cryptoProvider) {
@@ -40,7 +36,7 @@ export async function digestGenerationBytes(cryptoProvider, value) {
 }
 
 export async function digestGenerationManifest(cryptoProvider, manifest) {
-  return digestGenerationBytes(cryptoProvider, encoder.encode(canonicalJson(manifest)));
+  return digestGenerationBytes(cryptoProvider, encoder.encode(machineCanonicalJson(cryptoProvider, manifest)));
 }
 
 export async function verifyGenerationBlob(cryptoProvider, reference, value) {
