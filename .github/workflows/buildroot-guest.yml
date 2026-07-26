@@ -22,7 +22,7 @@ jobs:
       matrix:
         slot: [a, b]
     env:
-      PYPROC_BUILDROOT_WORKSPACE: ${{ runner.temp }}/pyproc-buildroot-${{ matrix.slot }}
+      PYPROC_BUILDROOT_WORKSPACE: ${{ github.workspace }}/../pyproc-buildroot-${{ matrix.slot }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
