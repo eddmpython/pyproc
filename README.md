@@ -71,7 +71,7 @@ milliseconds when it fails:
 import { boot } from "pyproc";
 
 const machine = await boot();
-await machine.runtime.loadPackages(["numpy"]); // prepare once (packages, data)
+await machine.loadPackages(["numpy"]); // prepare once (packages, data)
 const cp = machine.history.checkpoint();       // save the prepared state
 
 try {
@@ -118,7 +118,7 @@ npm install pyproc
 import { boot } from "pyproc";
 
 const machine = await boot();
-await machine.runtime.loadPackages(["numpy"]);
+await machine.loadPackages(["numpy"]);
 console.log(machine.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
 ```
 
@@ -148,7 +148,7 @@ console.log(machine.run("len(values)"));      // 3
 
 If the boundary was not closed (an exception mid-run, a stray mutation), `cp.restore()` detects
 it and falls back to a full rehash automatically - slower, never silently corrupt. After calling
-Python through a live proxy handle, report it with `machine.runtime.enableReactive().markDirty()`.
+Python through a live proxy handle, report it with `machine.markDirty()`.
 
 > The basics above need only a Chromium browser. `PyProc` (process OS) and sockets also need `crossOriginIsolated` (`COOP: same-origin`, `COEP: require-corp`) and same-origin workers - see [Setup](#setup). Run `checkEnvironment()` to check.
 
@@ -342,7 +342,7 @@ import { SocketBridge } from "pyproc/socket";
 import { bootWasi } from "pyproc/wasi";
 ```
 
-The function-level reference is [docs/reference/api.md](docs/reference/api.md) (English); this README stays the map. The rest of [docs/](docs/README.md) is the operating and consuming tree, written in Korean. For product decisions by capability, use the [capability matrix](docs/consuming/capabilityMatrix.md): it maps each public export to value, status, setup, runnable surfaces, gates, and boundaries.
+The function-level reference is [docs/reference/api.md](docs/reference/api.md) (English); this README stays the map. [docs/consuming/](docs/consuming/contract.md), [docs/reference/](docs/reference/api.md), and [docs/product/](docs/product/vision.md) are English; `docs/operations/` is the internal operating tree and stays Korean. For product decisions by capability, use the [capability matrix](docs/consuming/capabilityMatrix.md): it maps each public export to value, status, setup, runnable surfaces, gates, and boundaries.
 
 Deployment asset manifest:
 

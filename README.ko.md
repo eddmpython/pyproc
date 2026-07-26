@@ -71,7 +71,7 @@ AI 에이전트는 Python을 한 번만 실행하지 않는다. 코드를 생성
 import { boot } from "pyproc";
 
 const machine = await boot();
-await machine.runtime.loadPackages(["numpy"]); // 한 번 준비(패키지, 데이터)
+await machine.loadPackages(["numpy"]); // 한 번 준비(패키지, 데이터)
 const cp = machine.history.checkpoint();       // 준비된 상태 저장
 
 try {
@@ -118,7 +118,7 @@ npm install pyproc
 import { boot } from "pyproc";
 
 const machine = await boot();
-await machine.runtime.loadPackages(["numpy"]);
+await machine.loadPackages(["numpy"]);
 console.log(machine.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
 ```
 
@@ -148,7 +148,7 @@ console.log(machine.run("len(values)"));      // 3
 
 경계를 닫지 못했다면(실행 중 예외, 흘러간 변이) `cp.restore()`가 이를 감지해 자동으로
 전체 재해시 경로로 복원한다 - 느려질 뿐 조용히 오염되지 않는다. 라이브 프록시 핸들로
-파이썬을 호출했다면 `machine.runtime.enableReactive().markDirty()`로 신고한다.
+파이썬을 호출했다면 `machine.markDirty()`로 신고한다.
 
 > 위 기본은 Chromium 브라우저만 있으면 된다. `PyProc`(프로세스 OS)와 소켓은 `crossOriginIsolated`(`COOP: same-origin`, `COEP: require-corp`)와 same-origin 워커도 필요하다 - [셋업](#셋업) 참조. `checkEnvironment()`로 확인하라.
 

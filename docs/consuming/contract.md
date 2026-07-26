@@ -29,7 +29,7 @@ Consumers use only the public package entry and the stable subpaths. The per-cap
 | Specifier | Purpose |
 | --- | --- |
 | `pyproc` | The six root values: `boot`, `open`, `createWebComputer`, `checkEnvironment`, `PyProcError`, `PYPROC_ERROR_CODES` |
-| `pyproc/runtime` | For adopting a self-booted Pyodide: the `Runtime` value, `bootRuntime` (which gives a `Runtime`, not a machine), `MemoryCapability`, `FileSystem`, and the EngineContract/RuntimeContract checks |
+| `pyproc/runtime` | For adopting a self-booted Pyodide: the `Runtime` value, `bootRuntime` (which gives a `Runtime`, not a machine), `MemoryCapability`, `FileSystem`, and the EngineContract/RuntimeContract checks. **Unreleased**: this subpath is not in 0.0.10, so until the next release it needs a SHA pin |
 | `pyproc/assets` | Runtime-asset manifest and SRI preflight: `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` |
 | `pyproc/history` | The state kernel plus the store, bundle, and signature contracts |
 | `pyproc/machine` | Web Machine host, device, store, and guest assembly detail |
@@ -148,7 +148,7 @@ After a revival - journal, session, or image open - process resources such as fi
 - `npm test` checks that `package.json` exports expose only approved stable specifiers, that the public examples consume only the root API or subpath exports, and that `index.d.ts` covers the public type contract.
 - `npm run test:consumer` verifies the installed-package contract from a browser app that has no repo-relative imports and exposes only the installed `node_modules/pyproc`.
 - That same consumer gate exercises `DeviceFs` file devices, the `JobControl` job lifecycle, the `MachineContainer` child-machine lifecycle, `MachineJournal` commit and recover, a force-removed `open({ persistent })` leader across three independent browsing contexts with a cold reopen of heap plus `/home/web` plus prepared environment, the permission-jail manifest, signed `.pymachine` export and open, trusted public key and wrong-key rejection, signer fingerprints, and reopening a SQLite connection from `/home/web/resume.py`.
-- `pyproc/runtime` is the public Runtime wrapper. The internal `runtime.js` core handles only the engine wrapper and `Runtime.fs`; the composition root `src/composition/runtimeApi.js` installs the `runtimeBindings.js` registry to provide opt-in capability factories such as `enableReactive`.
+- `pyproc/runtime` is the public Runtime wrapper (**unreleased**: absent from 0.0.10; use a SHA pin until the next release). The internal `runtime.js` core handles only the engine wrapper and `Runtime.fs`; the composition root `src/composition/runtimeApi.js` installs the `runtimeBindings.js` registry to provide opt-in capability factories such as `enableReactive`.
 - The `restoreLive` execution boundary is machine-verified. Respect the boundary and restore is immediate with zero rehashing; violate it and the violation is detected automatically and promoted to the rehash path. Check which path ran through the returned `rehashed`.
 
 ### Installed-package consumer gate coverage
@@ -195,6 +195,9 @@ After a revival - journal, session, or image open - process resources such as fi
 ## Adopting a self-booted Pyodide (the dartlab and xlpod pattern)
 
 If a worker already has a self-booted Pyodide, adopt that instance rather than calling pyproc's `boot()` a second time:
+
+This pattern imports `pyproc/runtime`, which is **unreleased**: it is not in 0.0.10, so pin a SHA
+until the next release ships it.
 
 ```js
 // In a worker: a self-booted Pyodide, e.g. dartlab's notebook worker

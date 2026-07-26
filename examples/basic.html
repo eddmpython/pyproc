@@ -54,7 +54,7 @@
       log("");
       log("# pip-grade packages work too:");
       t = performance.now();
-      await machine.runtime.loadPackages(["numpy"]);
+      await machine.loadPackages(["numpy"]);
       log(`# numpy loaded in ${Math.round(performance.now() - t)}ms`);
       log(">>> import numpy as np; int(np.arange(10).sum())");
       const n = machine.run("import numpy as np; int(np.arange(10).sum())");

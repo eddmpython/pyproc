@@ -1,47 +1,51 @@
-# docs - 운영 문서 트리
+# docs - the documentation tree
 
-pyproc의 공개 지속 문서. "무엇을 지향하는가"(product)와 "어떻게 운영하는가"(operations/consuming)의 SSOT다. 그때그때의 개발 계획·결정 기록은 [mainPlan/](../mainPlan/)이 담당하고(완료 시 `_done` 이관), 강행규칙 요약은 저장소 루트의 `CLAUDE.md`(로컬 규칙 문서, git 미추적)에 있다.
+pyproc's public persistent documentation: the SSOT for "what it aims at" (product) and "how it is operated" (operations, consuming). Day-to-day development plans and decision records belong to [mainPlan/](../mainPlan/) and move to `_done` when they finish; the summary of hard rules lives in `CLAUDE.md` at the repository root (a local rules document, untracked by git).
 
-## 카테고리 규칙
+Language: `consuming/`, `reference/`, and `product/` are English, because that is where an adopter makes decisions. `operations/` is the internal operating tree and stays Korean.
 
-- 카테고리 폴더는 **실제 문서가 생길 때만** 만든다. 빈 폴더나 "나중을 위한" 카테고리 금지.
-- 문서 파일명은 저장소 규칙대로 `camelCase.md`.
-- 문서가 코드·규칙과 어긋나면 같은 변경에서 문서를 갱신한다.
+## Category rules
 
-## 지도
+- Create a category folder **only when a real document exists**. No empty folders and no "for later" categories.
+- Document filenames follow the repository convention: `camelCase.md`.
+- When a document contradicts the code or the rules, update the document in the same change.
 
-| 카테고리 | 문서 | 무엇 |
+## Map
+
+| Category | Document | What |
 |---|---|---|
-| [product/](product/) | [vision.md](product/vision.md) | 제품 방향: North Star, 무엇인가/아닌가, 성공·실패 기준, 지원 경계 |
-| | [glossary.md](product/glossary.md) | 용어집: pyproc 커널과 Web Machine 층(`src/machine`, npm 동봉) 사이 이름 경계 |
-| [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | 운영 모델: 3층 정보 구조, 아이디어 수명주기(attempts -> mainPlan -> src -> _done), 메모리 운영, 개발 원칙 |
-| | [contractReality.md](operations/contractReality.md) | 계약 실태: 계약 vs 실제 간극의 상시 추적(발견 즉시 기록, 해소 시 삭제). 열린 부채·상시 재검증·트레이드오프·프론티어 |
-| | [assetProvenance.md](operations/assetProvenance.md) | 실행 자산의 provenance와 배포 정책: 증거 없음은 통과가 아니다, SSOT와 파생물, 공식 image 배포 게이트 7항목, 알려진 위험 |
-| | [testing.md](operations/testing.md) | 테스트 게이트(`npm test`)와 브라우저 실측 절차(COOP/COEP 서버) |
-| | [experimentalFreeze.md](operations/experimentalFreeze.md) | 새 Experimental 공개 표면 동결과 해제 조건 |
-| | [moduleBoundaries.md](operations/moduleBoundaries.md) | Runtime capability cluster, 정책 모듈, 계약 suite와 실행 자산의 소유권 경계 |
-| | [benchmarking.md](operations/benchmarking.md) | 내부 실측의 측정 계약, canonical scenario, raw evidence 규칙(공개 표면 게시는 금지: 숫자 자랑 금지 규칙) |
-| | [release.md](operations/release.md) | 버전·태그·릴리즈 절차(`0.0.x` 라인, SHA 핀 소비) |
-| | [demoHosting.md](operations/demoHosting.md) | 라이브 데모 배포 절차(COOP/COEP 정적 호스팅, 루트 `_headers`) |
-| [consuming/](consuming/) | [contract.md](consuming/contract.md) | 소비 계약: 설치, 버전 핀, import 경계, 실행 자산 배포, 소비자별 배선 상태, Pyodide 버전 정합 |
-| | [capabilityMatrix.md](consuming/capabilityMatrix.md) | 능력 매트릭스: 공개 표면별 제품 가치, 상태, 필수 조건, 실행 표면, 검증, 경계 |
-| | [resumeCatalog.md](consuming/resumeCatalog.md) | 부활 후 `resume.py`가 제품별로 다시 열어야 하는 fd/socket/DB connection 정책 |
-| | [trustPermissions.md](consuming/trustPermissions.md) | `.pymachine` 공개키 배포, signer fingerprint, 권한 UI 계약 |
-| [reference/](reference/) | [api.md](reference/api.md) | 영문 API 레퍼런스: 루트 export 6개와 머신 핸들 어휘, 탈출구/subpath, 오류 코드 전 표(기계 게이트로 루트 전수 앵커 강제) |
-| | [bundleFormat.md](reference/bundleFormat.md) | 이동 bundle(`PYBUNDLE1`) 봉투 레이아웃 정본: 바이트 배치, 헤더 필드, 무결성/서명 분리 |
+| [product/](product/) | [vision.md](product/vision.md) | Product direction: the North Star, what it is and is not, success and failure criteria, the support boundary |
+| | [glossary.md](product/glossary.md) | Glossary: the naming boundary between the pyproc kernel and the Web Machine layer (`src/machine`, bundled in npm) |
+| [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: the three-layer information structure, the idea lifecycle (attempts to mainPlan to src to _done), memory operations, development principles |
+| | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
+| | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
+| | [testing.md](operations/testing.md) | The test gates (`npm test`) and the browser measurement procedure (a COOP/COEP server) |
+| | [experimentalFreeze.md](operations/experimentalFreeze.md) | The freeze on new Experimental public surfaces and the conditions for lifting it |
+| | [moduleBoundaries.md](operations/moduleBoundaries.md) | Ownership boundaries between Runtime capability clusters, policy modules, contract suites, and runtime assets |
+| | [benchmarking.md](operations/benchmarking.md) | The measurement contract for internal benchmarks, canonical scenarios, and raw-evidence rules (posting on a public surface is forbidden: the no-bragging-with-numbers rule) |
+| | [release.md](operations/release.md) | The version, tag, and release procedure (the `0.0.x` line, SHA-pin consumption) |
+| | [demoHosting.md](operations/demoHosting.md) | The live demo deployment procedure (COOP/COEP static hosting, the root `_headers`) |
+| [consuming/](consuming/) | [contract.md](consuming/contract.md) | The consumption contract: install, version pinning, import boundaries, runtime-asset deployment, per-consumer wiring status, Pyodide version consistency |
+| | [capabilityMatrix.md](consuming/capabilityMatrix.md) | The capability matrix: per-surface product value, status, prerequisites, runnable surface, verification, boundaries |
+| | [compatibility.md](consuming/compatibility.md) | Environment compatibility on one page: browsers, JSPI, COOP/COEP, engine pin, resource characteristics, memory-pressure guidance |
+| | [resumeCatalog.md](consuming/resumeCatalog.md) | The per-product policy for which file descriptors, sockets, and DB connections `resume.py` must reopen after a revival |
+| | [trustPermissions.md](consuming/trustPermissions.md) | `.pymachine` public key distribution, signer fingerprints, and the permission UI contract |
+| [reference/](reference/) | [api.md](reference/api.md) | The function-level API reference: the six root exports and the machine handle vocabulary, escape hatches and subpaths, the full error code table (a machine gate forces every root export to be anchored) |
+| | [bundleFormat.md](reference/bundleFormat.md) | The canonical layout of the portable bundle (`PYBUNDLE1`) envelope: byte placement, header fields, the separation of integrity from signature |
 
-## 빠른 라우팅 (영역 -> 문서)
+## Quick routing (area to document)
 
-- 처음 써본다 -> 루트 [README.md](../README.md) Quick start -> [reference/api.md](reference/api.md)
-- 함수 시그니처와 오류 코드를 찾는다 -> [reference/api.md](reference/api.md)
-- pyproc이 무엇이고 어디로 가나 -> [product/vision.md](product/vision.md)
-- 새 아이디어를 어디서 시작하나 -> [tests/attempts/README.md](../tests/attempts/README.md)
-- 설계·로드맵·결정 기록 -> [mainPlan/](../mainPlan/README.md) (완결 이니셔티브는 [_done/](../mainPlan/_done/README.md), 활성 0이면 새 이니셔티브 개설부터)
-- 커밋 전 무엇이 green이어야 하나 -> [operations/testing.md](operations/testing.md)
-- 속도를 어떻게 실측하고 어디에 기록하나(공개 표면에는 안 건다) -> [operations/benchmarking.md](operations/benchmarking.md)
-- 버전을 언제 어떻게 올리나 -> [operations/release.md](operations/release.md)
-- 제품에서 pyproc을 가져다 쓰는 법 -> [consuming/contract.md](consuming/contract.md)
-- 제품에서 어떤 능력을 믿고 쓸 수 있나 -> [consuming/capabilityMatrix.md](consuming/capabilityMatrix.md)
-- 부활 후 제품 자원 재개설 정책 -> [consuming/resumeCatalog.md](consuming/resumeCatalog.md)
-- 공개키 배포와 권한 UI 정책 -> [consuming/trustPermissions.md](consuming/trustPermissions.md)
-- 외부 기여 -> [CONTRIBUTING.md](../CONTRIBUTING.md)
+- First time using it: the root [README.md](../README.md) Quick start, then [reference/api.md](reference/api.md)
+- Looking up a function signature or an error code: [reference/api.md](reference/api.md)
+- What pyproc is and where it is going: [product/vision.md](product/vision.md)
+- Where a new idea starts: [tests/attempts/README.md](../tests/attempts/README.md)
+- Design, roadmap, and decision records: [mainPlan/](../mainPlan/README.md) (finished initiatives are in [_done/](../mainPlan/_done/README.md); with zero active, start by opening a new initiative)
+- What must be green before a commit: [operations/testing.md](operations/testing.md)
+- How speed is measured and where it is recorded (never on a public surface): [operations/benchmarking.md](operations/benchmarking.md)
+- When and how the version moves: [operations/release.md](operations/release.md)
+- How a product takes pyproc as a dependency: [consuming/contract.md](consuming/contract.md)
+- Which capabilities a product can rely on: [consuming/capabilityMatrix.md](consuming/capabilityMatrix.md)
+- Whether a target environment can run it: [consuming/compatibility.md](consuming/compatibility.md)
+- The policy for reopening product resources after a revival: [consuming/resumeCatalog.md](consuming/resumeCatalog.md)
+- Public key distribution and permission UI policy: [consuming/trustPermissions.md](consuming/trustPermissions.md)
+- Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

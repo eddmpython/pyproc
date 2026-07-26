@@ -109,6 +109,10 @@ namespaces are the model's vocabulary:
   same options resolves to the same pool, so a remount does not stack workers; different options
   (for example a plain pool and a `replay` pool for `fork`) get their own pool. `machine.dispose()`
   terminates every pool the machine created.
+- `machine.loadPackages(packages)` - loads packages into this machine, so installing numpy is part
+  of the handle's own vocabulary rather than a reason to reach for the escape hatch.
+- `machine.markDirty()` - declares a heap mutation the run APIs did not see (a call through a live
+  proxy handle, for instance), so the next restore takes the rehash path instead of the fast one.
 - `machine.jobs(opts?)` - shell job control (`JobControl`). `expr &` forks the live interactive
   namespace and runs it on another core, so the prompt returns immediately, and `%jobs` / `%fg` /
   `%kill` drive the jobs. It stands up its own worker pool (one interactive lane plus N-1 job

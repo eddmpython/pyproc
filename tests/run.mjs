@@ -1560,6 +1560,38 @@ check("api.md가 루트 export 전수를 다룬다", () => {
   const missing = Object.keys(api).filter((name) => !mentionsSymbol(apiDoc, name));
   if (missing.length) throw new Error(`api.md 누락: ${missing.join(", ")}`);
 });
+// 머신 핸들의 멤버는 api.md의 핸들 절에 등재된다. 루트 export만 대조하던 판정은 핸들 동사를
+// 못 봤다: `machine.loadPackages`와 `machine.markDirty`를 만든 커밋이 "api.md를 현재 동사에
+// 맞춤"이라고 적으면서 정작 그 두 동사를 빠뜨렸고, 어떤 게이트도 그것을 보지 않았다
+// (외부 감사 실측, 2026-07-27). 소비자가 읽는 문서에 없는 동사는 자동완성만 얻고 끝난다.
+check("머신 핸들 멤버는 api.md 핸들 절에 등재된다", () => {
+  const rootDts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
+  const apiDoc = readFileSync(join(ROOT, "docs", "reference", "api.md"), "utf8");
+  const open = rootDts.indexOf("declare class PyprocMachine {");
+  if (open < 0) throw new Error("PyprocMachine 선언을 찾지 못했다");
+  let depth = 1;
+  let at = rootDts.indexOf("{", open) + 1;
+  while (depth > 0 && at < rootDts.length) {
+    if (rootDts[at] === "{") depth++;
+    else if (rootDts[at] === "}") depth--;
+    at++;
+  }
+  const body = rootDts.slice(open, at);
+  const members = new Set();
+  for (const line of body.split(NEWLINE)) {
+    const m = /^ {2}(?:readonly\s+)?([A-Za-z_$][\w$]*)\s*[(<?:]/.exec(line);
+    if (m && m[1] !== "constructor") members.add(m[1]);
+  }
+  if (members.size < 8) throw new Error(`핸들 멤버를 ${members.size}개만 찾았다(추출이 죽었다)`);
+  // api.md의 핸들 절만 본다. 문서 아무 곳의 언급으로 보면 Runtime 탈출구 절의 설명이
+  // 핸들 등재를 대신할 수 있다(그것이 정확히 이번에 놓친 형태다).
+  const sectionStart = apiDoc.indexOf("## The machine handle");
+  const sectionEnd = apiDoc.indexOf("\n## ", sectionStart + 1);
+  if (sectionStart < 0 || sectionEnd < 0) throw new Error("api.md의 머신 핸들 절을 찾지 못했다");
+  const section = apiDoc.slice(sectionStart, sectionEnd);
+  const missing = [...members].filter((name) => !section.includes(`machine.${name}`)).sort();
+  if (missing.length) throw new Error(`api.md 핸들 절에 없는 동사: ${missing.join(", ")}`);
+});
 check("Stable 라벨 = 승격 원장 정합(근거 없는 라벨 상승 차단)", () => {
   const matrix = readFileSync(join(ROOT, "docs", "consuming", "capabilityMatrix.md"), "utf8");
   if (!matrix.includes("## Promotion criteria")) throw new Error("승격 기준 절 없음");
@@ -2024,7 +2056,7 @@ check("소비 문서 역할 분리", () => {
   if (!contract.includes("### Installed-package consumer gate coverage")) throw new Error("contract.md 설치 패키지 consumer gate coverage 절 누락");
   if (!contract.includes("[capabilityMatrix.md](capabilityMatrix.md): per-capability product value")) throw new Error("contract.md가 capability matrix 역할을 위임하지 않음");
   if (contract.includes("| export | what |")) throw new Error("contract.md가 capability별 export 설명표로 회귀");
-  if (!docsMap.includes("설치, 버전 핀, import 경계, 실행 자산 배포")) throw new Error("docs/README.md contract 역할 설명이 낡음");
+  if (!docsMap.includes("install, version pinning, import boundaries, runtime-asset deployment")) throw new Error("docs/README.md contract 역할 설명이 낡음");
 });
 check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", () => {
   const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
@@ -3037,11 +3069,33 @@ section("진입 표면 언어");
   // 한국어판 README는 그 자체가 한국어 표면이라 스코프 밖이고, 내부 운영 문서는 링크되지 않는 한
   // 한국어로 남는다(규칙: 공개 표면 영문 우선, 내부 문서 한국어).
   const ADOPTION_ENTRY_POINTS = ["README.md", "docs/reference/api.md"];
+  // 링크를 담은 파일 기준으로 상대 경로를 저장소 기준으로 정규화한다. 첫 판본은 href가
+  // 문자 그대로 `docs/`로 시작하는 것만 잡았는데, api.md의 링크는 전부 `../consuming/...`
+  // 형태라 두 진입점 중 하나가 스코프에 0개를 기여했다(외부 감사 실측). 진입점을 둘 적어두고
+  // 하나가 죽어 있으면 그 목록은 의도를 말할 뿐 집행하지 않는다.
+  const resolveDocHref = (fromFile, href) => {
+    const dir = fromFile.includes("/") ? fromFile.slice(0, fromFile.lastIndexOf("/")) : "";
+    const stack = [];
+    for (const part of `${dir}/${href}`.split("/")) {
+      if (part === "." || part === "") continue;
+      if (part === "..") stack.pop();
+      else stack.push(part);
+    }
+    return stack.join("/");
+  };
+  const docLinksOf = (fromFile) => {
+    const text = readFileSync(join(ROOT, fromFile), "utf8");
+    const out = [];
+    for (const m of text.matchAll(/\]\((?!https?:)([A-Za-z0-9/_.-]+\.md)\)/g)) {
+      const resolved = resolveDocHref(fromFile, m[1]);
+      if (resolved.startsWith("docs/") && existsSync(join(ROOT, resolved))) out.push(resolved);
+    }
+    return out;
+  };
   const adoptionDocs = () => {
     const found = new Set();
     for (const entry of ADOPTION_ENTRY_POINTS) {
-      const text = readFileSync(join(ROOT, entry), "utf8");
-      for (const m of text.matchAll(/\]\((docs\/[A-Za-z0-9/_-]+\.md)\)/g)) found.add(m[1]);
+      for (const doc of docLinksOf(entry)) found.add(doc);
     }
     // 배럴 문서(docs/README.md)는 라우팅 표라 그 자체가 판단 문서가 아니다. 그것이 가리키는
     // 곳까지 따라가면 내부 운영 문서 전체가 스코프에 들어온다.
@@ -3050,26 +3104,13 @@ section("진입 표면 언어");
     // 한 홉 더 따라간다. 진입점이 직접 가리키지 않아도 채택 문서가 가리키는 곳은 여전히 채택
     // 경로다(trustPermissions는 contract.md에서 한 홉이라 첫 판정에서 빠졌다). 두 홉까지는
     // 가지 않는다: 그러면 mainPlan 원장과 내부 운영 문서가 전부 들어온다.
-    const consuming = [...found];
-    for (const doc of consuming) {
-      const text = readFileSync(join(ROOT, doc), "utf8");
-      const dir = doc.slice(0, doc.lastIndexOf("/"));
-      for (const m of text.matchAll(/\]\((?!https?:)([A-Za-z0-9/_.-]+\.md)\)/g)) {
-        // 상대 경로를 저장소 기준으로 정규화한다(`../operations/x.md` 형태를 담는다).
-        const parts = `${dir}/${m[1]}`.split("/");
-        const stack = [];
-        for (const part of parts) {
-          if (part === "." || part === "") continue;
-          if (part === "..") stack.pop();
-          else stack.push(part);
-        }
-        const resolved = stack.join("/");
-        // 한 홉 확장은 소비자 대면 트리에만 적용한다. `docs/operations/`는 내부 절차(릴리즈
-        // 수순, 게이트 임계값)라 진입점이 직접 가리킬 때만 스코프다: 규칙이 공개 표면과 내부
-        // 문서를 가르는 지점이 여기다. `docs/product/`는 제품 방향이라 공개 표면이다
-        // (숫자 자랑 게이트도 그 트리를 공개로 본다).
-        const consumerFacing = resolved.startsWith("docs/consuming/") || resolved.startsWith("docs/product/");
-        if (consumerFacing && existsSync(join(ROOT, resolved))) found.add(resolved);
+    // 한 홉 확장은 소비자 대면 트리에만 적용한다. `docs/operations/`는 내부 절차(릴리즈 수순,
+    // 게이트 임계값)라 진입점이 직접 가리킬 때만 스코프다: 규칙이 공개 표면과 내부 문서를
+    // 가르는 지점이 여기다. `docs/product/`는 제품 방향이라 공개 표면이다(숫자 자랑 게이트도
+    // 그 트리를 공개로 본다).
+    for (const doc of [...found]) {
+      for (const linked of docLinksOf(doc)) {
+        if (linked.startsWith("docs/consuming/") || linked.startsWith("docs/product/")) found.add(linked);
       }
     }
     found.delete("docs/README.md");

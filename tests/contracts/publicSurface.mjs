@@ -178,7 +178,31 @@ export async function assertPublicSurface() {
   const declared = /<!-- unreleased-subpaths:([^>]*)-->/.exec(changelog)?.[1] || "";
   const unreleasedSubpaths = declared.split(",").map((name) => name.trim()).filter(Boolean);
   const MARKERS = ["unreleased", "미출하", "SHA pin", "SHA 핀"];
-  for (const file of ["README.md", "README.ko.md", "docs/reference/api.md"]) {
+  // 스코프는 손으로 적지 않는다. 3파일 고정 목록이던 판정은 소비자 진입점이 가리키는 다른
+  // 문서를 못 봤다: `docs/consuming/contract.md`가 정확한 버전 핀을 지시하면서 그 버전에 없는
+  // subpath의 import 예제를 표식 없이 담고 있었다(외부 감사 실측 - 소비자가 그대로 따르면
+  // ERR_PACKAGE_PATH_NOT_EXPORTED다). 언어 게이트와 같은 링크 유도 스코프를 쓴다.
+  const resolveHref = (fromFile, href) => {
+    const dir = fromFile.includes("/") ? fromFile.slice(0, fromFile.lastIndexOf("/")) : "";
+    const stack = [];
+    for (const part of `${dir}/${href}`.split("/")) {
+      if (part === "." || part === "") continue;
+      if (part === "..") stack.pop();
+      else stack.push(part);
+    }
+    return stack.join("/");
+  };
+  const markerScope = new Set(["README.md", "README.ko.md", "docs/reference/api.md"]);
+  for (const entry of [...markerScope]) {
+    const text = readFileSync(join(ROOT, entry), "utf8");
+    for (const m of text.matchAll(/\]\((?!https?:)([A-Za-z0-9/_.-]+\.md)\)/g)) {
+      const resolved = resolveHref(entry, m[1]);
+      // 소비자 대면 트리만. 내부 운영 문서는 핀 지시를 하지 않는다.
+      if (!resolved.startsWith("docs/consuming/") && !resolved.startsWith("docs/reference/")) continue;
+      if (existsSync(join(ROOT, resolved))) markerScope.add(resolved);
+    }
+  }
+  for (const file of markerScope) {
     const markdown = readFileSync(join(ROOT, file), "utf8");
     for (const subpath of new Set(unreleasedSubpaths)) {
       if (!markdown.includes(subpath)) continue;
