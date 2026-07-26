@@ -73,7 +73,7 @@ def _pyprocPep723(src):
     pat = r'(?m)^# /// (?P<type>[a-zA-Z0-9-]+)$\\s(?P<content>(^#(| .*)$\\s)+)^# ///$'
     found = [m for m in _pyprocRe.finditer(pat, src) if m.group('type') == 'script']
     if len(found) > 1:
-        raise ValueError('script 블록 중복')
+        raise ValueError('script block is duplicated')
     if not found:
         return None
     content = ''.join(line[2:] if line.startswith('# ') else line[1:] for line in found[0].group('content').splitlines(keepends=True))

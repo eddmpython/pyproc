@@ -22,14 +22,14 @@ function inputError(message) {
 export function canonicalStateJson(value) {
   if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw inputError("canonicalStateJson: finite 수만 담는다");
+    if (!Number.isFinite(value)) throw inputError("canonicalStateJson: only finite numbers are allowed");
     return JSON.stringify(value);
   }
   if (Array.isArray(value)) return `[${value.map(canonicalStateJson).join(",")}]`;
   if (value && typeof value === "object") {
     return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonicalStateJson(value[k])}`).join(",")}}`;
   }
-  throw inputError(`canonicalStateJson: 미지원 타입(${typeof value})`);
+  throw inputError(`canonicalStateJson: unsupported type (${typeof value})`);
 }
 
 export function encodeStateObject(value) { return textEncoder.encode(canonicalStateJson(value)); }
@@ -47,30 +47,30 @@ export async function stateAddressOf(cryptoProvider, bytes) {
 //   pageTable = 힙 커밋 전용(균일 페이지 + heapLen/sp), payload = 불투명 바이트(machine
 //   generation, guest 스냅샷). machine 층이 collectDelta를 소비하지 않는다는 실측이 근거다.
 export function makePageTableTree({ pageSize, heapLen, sp, pages, files = [] }) {
-  if (!Number.isInteger(pageSize) || pageSize <= 0) throw inputError(`pageTable: pageSize 위반(${pageSize})`);
-  if (!Number.isInteger(heapLen) || heapLen <= 0) throw inputError(`pageTable: heapLen 위반(${heapLen})`);
-  if (sp !== null && (!Number.isInteger(sp) || sp < 0)) throw inputError(`pageTable: sp 위반(${sp})`);
-  if (!Array.isArray(pages)) throw inputError("pageTable: pages 배열이 필요하다");
+  if (!Number.isInteger(pageSize) || pageSize <= 0) throw inputError(`pageTable: invalid pageSize (${pageSize})`);
+  if (!Number.isInteger(heapLen) || heapLen <= 0) throw inputError(`pageTable: invalid heapLen (${heapLen})`);
+  if (sp !== null && (!Number.isInteger(sp) || sp < 0)) throw inputError(`pageTable: invalid sp (${sp})`);
+  if (!Array.isArray(pages)) throw inputError("pageTable: a pages array is required");
   const seen = new Set();
   for (const entry of pages) {
-    if (!Array.isArray(entry) || entry.length !== 2) throw inputError("pageTable: [page, address] 엔트리가 필요하다");
+    if (!Array.isArray(entry) || entry.length !== 2) throw inputError("pageTable: a [page, address] entry is required");
     const [p, address] = entry;
-    if (!Number.isInteger(p) || p < 0) throw inputError(`pageTable: 페이지 번호 위반(${p})`);
-    if (seen.has(p)) throw inputError(`pageTable: 페이지 번호 중복(${p})`);
+    if (!Number.isInteger(p) || p < 0) throw inputError(`pageTable: invalid page number (${p})`);
+    if (seen.has(p)) throw inputError(`pageTable: duplicate page number (${p})`);
     seen.add(p);
-    if (!SHA256_ADDRESS_RE.test(address)) throw inputError(`pageTable: 주소 형식 위반(${address})`);
+    if (!SHA256_ADDRESS_RE.test(address)) throw inputError(`pageTable: malformed address (${address})`);
   }
   // file 엔트리: 힙 세대에 함께 묶이는 파일 페이로드(/home pack 등). meta는 소비자 소유의
   // 불투명 객체다(형식 판정은 적용하는 쪽 몫: applyMachineHome의 validateMachineHomeMeta 등).
-  if (!Array.isArray(files)) throw inputError("pageTable: files 배열이 필요하다");
+  if (!Array.isArray(files)) throw inputError("pageTable: a files array is required");
   const fileIds = new Set();
   for (const e of files) {
-    if (typeof e?.id !== "string" || !e.id) throw inputError("pageTable: file.id 위반");
-    if (fileIds.has(e.id)) throw inputError(`pageTable: file.id 중복(${e.id})`);
+    if (typeof e?.id !== "string" || !e.id) throw inputError("pageTable: invalid file.id");
+    if (fileIds.has(e.id)) throw inputError(`pageTable: duplicate file.id (${e.id})`);
     fileIds.add(e.id);
-    if (!SHA256_ADDRESS_RE.test(e.address)) throw inputError(`pageTable: file 주소 형식 위반(${e.address})`);
-    if (!Number.isInteger(e.byteLength) || e.byteLength < 0) throw inputError(`pageTable: file.byteLength 위반(${e.id})`);
-    if (e.meta !== null && (typeof e.meta !== "object" || Array.isArray(e.meta))) throw inputError(`pageTable: file.meta 위반(${e.id})`);
+    if (!SHA256_ADDRESS_RE.test(e.address)) throw inputError(`pageTable: malformed file address (${e.address})`);
+    if (!Number.isInteger(e.byteLength) || e.byteLength < 0) throw inputError(`pageTable: invalid file.byteLength (${e.id})`);
+    if (e.meta !== null && (typeof e.meta !== "object" || Array.isArray(e.meta))) throw inputError(`pageTable: invalid file.meta (${e.id})`);
   }
   const tree = { kind: "pageTable", pageSize, heapLen, sp, pages };
   if (files.length) tree.files = files.map((e) => ({ id: e.id, address: e.address, byteLength: e.byteLength, meta: e.meta ?? null }));
@@ -78,17 +78,17 @@ export function makePageTableTree({ pageSize, heapLen, sp, pages, files = [] }) 
 }
 
 export function makePayloadTree({ entries }) {
-  if (!Array.isArray(entries)) throw inputError("payload: entries 배열이 필요하다");
+  if (!Array.isArray(entries)) throw inputError("payload: an entries array is required");
   const seen = new Set();
   for (const e of entries) {
-    if (typeof e?.id !== "string" || !e.id) throw inputError("payload: entry.id 위반");
-    if (seen.has(e.id)) throw inputError(`payload: entry.id 중복(${e.id})`);
+    if (typeof e?.id !== "string" || !e.id) throw inputError("payload: invalid entry.id");
+    if (seen.has(e.id)) throw inputError(`payload: duplicate entry.id (${e.id})`);
     seen.add(e.id);
-    if (!SHA256_ADDRESS_RE.test(e.address)) throw inputError(`payload: 주소 형식 위반(${e.address})`);
-    if (!Number.isInteger(e.byteLength) || e.byteLength < 0) throw inputError(`payload: byteLength 위반(${e.id})`);
+    if (!SHA256_ADDRESS_RE.test(e.address)) throw inputError(`payload: malformed address (${e.address})`);
+    if (!Number.isInteger(e.byteLength) || e.byteLength < 0) throw inputError(`payload: invalid byteLength (${e.id})`);
     // meta는 소비자 소유의 불투명 도메인 기술이다(machine generation의 adapterId/장치 크기 등).
     if (e.meta !== undefined && e.meta !== null && (typeof e.meta !== "object" || Array.isArray(e.meta))) {
-      throw inputError(`payload: meta 위반(${e.id})`);
+      throw inputError(`payload: invalid meta (${e.id})`);
     }
   }
   return { kind: "payload", entries: entries.map((e) => ({ id: e.id, address: e.address, byteLength: e.byteLength, meta: e.meta ?? null })) };
@@ -110,10 +110,10 @@ export function validateStateTree(tree) {
 // "헤더에 핀되고 열 때 대조되는 계약"으로 바꾼다(해결이 아니라 감지다). 스키마는 변경 페이지
 // 집합만 가정하고 해시 배열의 존재를 가정하지 않는다(감지기는 MemoryCapability 뒤에서 교체 가능).
 export function makeStateCommit({ parents = [], tree, env = {}, fence = null, createdAt = null }) {
-  if (!Array.isArray(parents)) throw inputError("commit: parents 배열이 필요하다");
-  for (const p of parents) if (!SHA256_ADDRESS_RE.test(p)) throw inputError(`commit: 부모 주소 형식 위반(${p})`);
-  if (!SHA256_ADDRESS_RE.test(tree)) throw inputError(`commit: tree 주소 형식 위반(${tree})`);
-  if (typeof env !== "object" || env === null || Array.isArray(env)) throw inputError("commit: env 객체가 필요하다");
+  if (!Array.isArray(parents)) throw inputError("commit: a parents array is required");
+  for (const p of parents) if (!SHA256_ADDRESS_RE.test(p)) throw inputError(`commit: malformed parent address (${p})`);
+  if (!SHA256_ADDRESS_RE.test(tree)) throw inputError(`commit: malformed tree address (${tree})`);
+  if (typeof env !== "object" || env === null || Array.isArray(env)) throw inputError("commit: an env object is required");
   const environment = {
     h0: env.h0 == null ? null : String(env.h0),
     engineAssetDigest: env.engineAssetDigest == null ? null : String(env.engineAssetDigest),
@@ -121,11 +121,11 @@ export function makeStateCommit({ parents = [], tree, env = {}, fence = null, cr
   };
   let commitFence = null;
   if (fence !== null) {
-    if (typeof fence?.ownerId !== "string" || !fence.ownerId) throw inputError("commit: fence.ownerId 위반");
-    if (!Number.isSafeInteger(fence.epoch) || fence.epoch < 1) throw inputError("commit: fence.epoch 위반");
+    if (typeof fence?.ownerId !== "string" || !fence.ownerId) throw inputError("commit: invalid fence.ownerId");
+    if (!Number.isSafeInteger(fence.epoch) || fence.epoch < 1) throw inputError("commit: invalid fence.epoch");
     commitFence = { ownerId: fence.ownerId, epoch: fence.epoch };
   }
-  if (createdAt !== null && typeof createdAt !== "string") throw inputError("commit: createdAt 문자열이 필요하다");
+  if (createdAt !== null && typeof createdAt !== "string") throw inputError("commit: createdAt must be a string");
   return { parents: [...parents], tree, env: environment, fence: commitFence, createdAt };
 }
 

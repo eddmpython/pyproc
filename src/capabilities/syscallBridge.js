@@ -33,7 +33,7 @@ def _pyprocInput(prompt=""):
     else:
         r = _pyprocSyscall.inputSync(str(prompt))
     if r is None:
-        raise EOFError("pyproc input: 입력 소스가 없다 (install({ input }) 또는 prompt 가능 환경 필요)")
+        raise EOFError("pyproc input: no input source (needs install({ input }) or a prompt-capable context)")
     return str(r)
 builtins.input = _pyprocInput
 
@@ -53,16 +53,16 @@ def _pyprocUrlopen(url, data=None, timeout=None, *a, **k):
     body = None if data is None else bytes(data).decode("latin1")
     r = _pyprocSyscall.httpSync(urlStr, "GET" if data is None else "POST", body)
     if r.status == 0:
-        raise OSError(f"pyproc http: 요청 실패 (CORS/네트워크): {urlStr}")
+        raise OSError(f"pyproc http: request failed (CORS/network): {urlStr}")
     raw = _pyprocDecodeUserDefined(r.body)
     return _PyprocResponse(urlStr, r.status, raw)
 urllib.request.urlopen = _pyprocUrlopen
 
 def _pyprocSubprocessRun(args, capture_output=False, text=None, **k):
     if not (isinstance(args, (list, tuple)) and len(args) >= 3 and str(args[1]) == "-c"):
-        raise NotImplementedError("pyproc subprocess(v1): ['python', '-c', code] 형태만 지원")
+        raise NotImplementedError("pyproc subprocess(v1): only the ['python', '-c', code] form is supported")
     if not can_run_sync():
-        raise NotImplementedError("pyproc subprocess: runAsync(JSPI) 경로에서만 가능")
+        raise NotImplementedError("pyproc subprocess: only available on the runAsync(JSPI) path")
     out = run_sync(_pyprocSyscall.subprocessRun(str(args[2])))
     return subprocess.CompletedProcess(list(args), 0, stdout=str(out), stderr="")
 subprocess.run = _pyprocSubprocessRun

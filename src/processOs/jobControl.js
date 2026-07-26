@@ -85,7 +85,7 @@ export class JobControl {
     const job = this._jobs.get(jobId);
     if (!job || job.state !== "running") return false;
     job.state = "killed";
-    job.result = { error: "killHard: 워커 강제 종료 후 레인 재부팅" };
+    job.result = { error: "killHard: the worker was force-terminated and the lane rebooted" };
     job.laneReplaced = true; // finally의 구 pid 회수를 봉인(죽은 pid가 자유 큐에 남지 않게)
     const { pid } = await this._os.respawn(job.pid);
     this._free.push(pid);

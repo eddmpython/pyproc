@@ -41,7 +41,7 @@ function serializeHeader({ commit = null, meta, index, tag }) {
 }
 
 function encodeBody(headBytes, objectChunks, totalObjectBytes) {
-  if (headBytes.length > STATE_BUNDLE_HEAD_MAX_BYTES) throw formatError("bundle: 헤더 상한 초과");
+  if (headBytes.length > STATE_BUNDLE_HEAD_MAX_BYTES) throw formatError("bundle: header exceeds its size limit");
   const body = new Uint8Array(4 + headBytes.length + totalObjectBytes);
   new DataView(body.buffer).setUint32(0, headBytes.length);
   body.set(headBytes, 4);
@@ -97,38 +97,38 @@ export function isStateBundle(buf) {
 
 // 디코드 + 전량 검증. 반환 { commit, meta, objects: Map, tag, envelope, headerDigest }.
 export async function decodeStateBundle(cryptoProvider, buf) {
-  if (!isStateBundle(buf)) throw formatError("bundle: 매직 불일치");
+  if (!isStateBundle(buf)) throw formatError("bundle: magic mismatch");
   const hashStart = STATE_BUNDLE_MAGIC.length;
   const envelope = textDecoder.decode(buf.subarray(hashStart, hashStart + 64));
   const body = buf.subarray(hashStart + 64);
   const actual = await sha256HexWith(cryptoProvider, body);
   if (actual !== envelope) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "bundle: header integrity check failed (corrupted after write, or tampered)");
-  if (body.length < 4) throw formatError("bundle: 파일이 너무 짧다");
+  if (body.length < 4) throw formatError("bundle: file is too short");
   const headLen = new DataView(body.buffer, body.byteOffset, 4).getUint32(0);
-  if (headLen > STATE_BUNDLE_HEAD_MAX_BYTES || 4 + headLen > body.length) throw formatError("bundle: 헤더 길이 위반");
+  if (headLen > STATE_BUNDLE_HEAD_MAX_BYTES || 4 + headLen > body.length) throw formatError("bundle: header length is invalid");
   let header;
   try { header = JSON.parse(textDecoder.decode(body.subarray(4, 4 + headLen))); }
-  catch (e) { throw formatError("bundle: 헤더 JSON 파손"); }
-  if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: 지원하지 않는 버전(${header.version})`);
+  catch (e) { throw formatError("bundle: header JSON is corrupt"); }
+  if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: unsupported version (${header.version})`);
   const _commit = header.commit ?? null;
-  if (_commit !== null && !SHA256_ADDRESS_RE.test(_commit)) throw formatError("bundle: commit 주소 형식 위반");
-  if (!Array.isArray(header.objects)) throw formatError("bundle: objects 색인 형식 위반");
+  if (_commit !== null && !SHA256_ADDRESS_RE.test(_commit)) throw formatError("bundle: malformed commit address");
+  if (!Array.isArray(header.objects)) throw formatError("bundle: objects index has the wrong shape");
   const objects = new Map();
   let offset = 4 + headLen;
   for (const entry of header.objects) {
-    if (!Array.isArray(entry) || entry.length !== 2) throw formatError("bundle: objects 색인 엔트리 위반");
+    if (!Array.isArray(entry) || entry.length !== 2) throw formatError("bundle: objects index entry is invalid");
     const [address, length] = entry;
-    if (!SHA256_ADDRESS_RE.test(address)) throw formatError(`bundle: 오브젝트 주소 형식 위반(${address})`);
-    if (!Number.isInteger(length) || length < 0 || offset + length > body.length) throw formatError(`bundle: 오브젝트 길이 위반(${address})`);
-    if (objects.has(address)) throw formatError(`bundle: 오브젝트 주소 중복(${address})`);
+    if (!SHA256_ADDRESS_RE.test(address)) throw formatError(`bundle: malformed object address (${address})`);
+    if (!Number.isInteger(length) || length < 0 || offset + length > body.length) throw formatError(`bundle: object length is invalid (${address})`);
+    if (objects.has(address)) throw formatError(`bundle: duplicate object address (${address})`);
     const bytes = body.subarray(offset, offset + length);
     const verdict = await verifySha256With(cryptoProvider, bytes, address);
     if (!verdict.ok) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", `bundle: object failed verify-on-read (${address.slice(0, 20)}..)`);
     objects.set(address, bytes);
     offset += length;
   }
-  if (offset !== body.length) throw formatError("bundle: 색인 밖 잉여 바이트");
-  if (_commit !== null && !objects.has(_commit)) throw formatError("bundle: commit 오브젝트가 색인에 없다");
+  if (offset !== body.length) throw formatError("bundle: trailing bytes outside the index");
+  if (_commit !== null && !objects.has(_commit)) throw formatError("bundle: the commit object is not in the index");
   const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta ?? null, index: header.objects, tag: null }));
   return { commit: _commit, meta: header.meta ?? null, objects, tag: header.tag ?? null, envelope, headerDigest };
 }
@@ -149,23 +149,23 @@ export async function readStateBundleHeader(cryptoProvider, source) {
   if (!read) throw new PyProcError("PYPROC_INPUT_INVALID", "readStateBundleHeader: needs a Uint8Array, Blob, or { read } source");
   const prefixLength = STATE_BUNDLE_MAGIC.length + 64 + 4;
   const prefix = await read(0, prefixLength);
-  if (prefix.length < prefixLength) throw formatError("bundle: 파일이 너무 짧다");
-  if (textDecoder.decode(prefix.subarray(0, STATE_BUNDLE_MAGIC.length)) !== STATE_BUNDLE_MAGIC) throw formatError("bundle: 매직 불일치");
+  if (prefix.length < prefixLength) throw formatError("bundle: file is too short");
+  if (textDecoder.decode(prefix.subarray(0, STATE_BUNDLE_MAGIC.length)) !== STATE_BUNDLE_MAGIC) throw formatError("bundle: magic mismatch");
   const envelope = textDecoder.decode(prefix.subarray(STATE_BUNDLE_MAGIC.length, STATE_BUNDLE_MAGIC.length + 64));
   const headLen = new DataView(prefix.buffer, prefix.byteOffset + STATE_BUNDLE_MAGIC.length + 64, 4).getUint32(0);
-  if (headLen > STATE_BUNDLE_HEAD_MAX_BYTES) throw formatError("bundle: 헤더 길이 위반");
+  if (headLen > STATE_BUNDLE_HEAD_MAX_BYTES) throw formatError("bundle: header length is invalid");
   const headBytes = await read(prefixLength, prefixLength + headLen);
-  if (headBytes.length !== headLen) throw formatError("bundle: 헤더 절단");
+  if (headBytes.length !== headLen) throw formatError("bundle: header is truncated");
   let header;
   try { header = JSON.parse(textDecoder.decode(headBytes)); }
-  catch (e) { throw formatError("bundle: 헤더 JSON 파손"); }
-  if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: 지원하지 않는 버전(${header.version})`);
+  catch (e) { throw formatError("bundle: header JSON is corrupt"); }
+  if (header.version !== STATE_BUNDLE_VERSION) throw formatError(`bundle: unsupported version (${header.version})`);
   const _commit = header.commit ?? null;
-  if (_commit !== null && !SHA256_ADDRESS_RE.test(_commit)) throw formatError("bundle: commit 주소 형식 위반");
-  if (!Array.isArray(header.objects)) throw formatError("bundle: objects 색인 형식 위반");
+  if (_commit !== null && !SHA256_ADDRESS_RE.test(_commit)) throw formatError("bundle: malformed commit address");
+  if (!Array.isArray(header.objects)) throw formatError("bundle: objects index has the wrong shape");
   for (const entry of header.objects) {
     if (!Array.isArray(entry) || entry.length !== 2 || !SHA256_ADDRESS_RE.test(entry[0]) || !Number.isInteger(entry[1]) || entry[1] < 0) {
-      throw formatError("bundle: objects 색인 엔트리 위반");
+      throw formatError("bundle: objects index entry is invalid");
     }
   }
   const headerDigest = await sha256AddressWith(cryptoProvider, serializeHeader({ commit: _commit, meta: header.meta ?? null, index: header.objects, tag: null }));

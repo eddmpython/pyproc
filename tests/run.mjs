@@ -2653,10 +2653,20 @@ section("진입 표면 언어");
   // 스코프는 src 전수다(기본 RED). 아직 옮기지 않은 파일은 예산 목록에 남기고, 그 숫자는
   // 단조 감소만 한다: 예산을 늘리는 diff가 곧 "소비자가 읽을 수 없는 문장을 늘렸다"는 심사
   // 지점이다. 화이트리스트 2파일 방식이었을 때 실물은 530개 중 8개만 영문이었다.
-  const MESSAGE_ARG = /new (?:PyProcError|TypeError|WebMachineError)\(\s*(?:"[^"]*",\s*)?([`"][\s\S]*?)[`"]\s*[,)]/g;
+  // 소비자에게 나가는 문장 전부를 본다. 생성자 리터럴만 보던 판정은 두 형태에 눈이 멀었다:
+  //  - 한 줄 팩토리(inputError/formatError/journalCorrupt/kernelError/imageError/swError)
+  //  - 오류 객체가 아니라 값으로 나가는 결과 문자열({ error: "..." }: map의 원소 결과가 그렇다)
+  // 실측(2026-07-27): 그 사각에 74줄이 살아 있었고 게이트는 "0건"으로 GREEN이었다.
+  const MESSAGE_SOURCES = [
+    /new (?:PyProcError|TypeError|WebMachineError)\(\s*(?:"[^"]*",\s*)?([`"][\s\S]*?)[`"]\s*[,)]/g,
+    /\b(?:journalCorrupt|imageError|kernelError|formatError|inputError|swError)\s*\(\s*(`[^`]*`|"[^"]*")/g,
+    /error:\s*(`[^`]*`|"[^"]*")/g,
+    // JS 문자열에 심은 파이썬이 던지는 문장. 소비자가 traceback에서 그대로 읽는다.
+    /(?:raise\s+\w+\(|print\()([^\r\n]*)/g,
+  ];
   // machine 층 322개는 아직 한국어다. 이 층의 문장은 Web Computer 제품 화면에 뜨고 라이브러리
   // API 표면에는 거의 안 나오므로 우선순위가 뒤였다. 옮길 때 게이트 단정과 같은 커밋으로.
-  const MESSAGE_LANGUAGE_BUDGET = 322;
+  const MESSAGE_LANGUAGE_BUDGET = 309;
   check("사용자 대면 메시지의 한국어 예산은 단조 감소한다", () => {
     let korean = 0;
     const byFile = new Map();
@@ -2664,7 +2674,9 @@ section("진입 표면 언어");
       if (rel(f) === "src/runtime/engines/wasi/browserWasiShim.js") continue; // 벤더 번들
       const code = stripComments(readFileSync(f, "utf8"));
       let count = 0;
-      for (const m of code.matchAll(MESSAGE_ARG)) if (/[가-힣]/.test(m[1])) count++;
+      for (const pattern of MESSAGE_SOURCES) {
+        for (const m of code.matchAll(pattern)) if (/[가-힣]/.test(m[1])) count++;
+      }
       if (count) byFile.set(rel(f), count);
       korean += count;
     }

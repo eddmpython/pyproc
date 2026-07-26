@@ -20,7 +20,7 @@ _pyprocJailMod = _pyprocTypes.ModuleType('pyprocJail')
 
 def _pyprocJailCheck(perm, arg=''):
     if not _pyprocJailAllows(perm, arg):
-        raise PermissionError('jail: ' + perm + ' 권한 없음' + ((' (' + arg + ')') if arg else ''))
+        raise PermissionError('jail: no ' + perm + ' permission' + ((' (' + arg + ')') if arg else ''))
     return True
 
 _pyprocJailMod.net = lambda host='': _pyprocJailCheck('net', host)

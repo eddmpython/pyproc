@@ -101,7 +101,7 @@ export class JournalBlobStore {
       const offset = Number(entry.offset);
       const length = Number(entry.length);
       if (!Number.isFinite(offset) || !Number.isFinite(length) || offset < 0 || length <= 0) {
-        throw journalCorrupt(`journal.pack: pack index entry 파손(${key.slice(0, 12)}..)`);
+        throw journalCorrupt(`journal.pack: pack index entry is corrupt (${key.slice(0, 12)}..)`);
       }
       return new Uint8Array(await file.slice(offset, offset + length).arrayBuffer());
     }
@@ -113,7 +113,7 @@ export class JournalBlobStore {
     if (loose) return loose;
     const packed = await this.readPacked(key, cache);
     if (packed) return packed;
-    throw journalCorrupt(`journal.recover: blob 없음(${key.slice(0, 12)}..)`);
+    throw journalCorrupt(`journal.recover: blob is missing (${key.slice(0, 12)}..)`);
   }
 
   async looseStats() {
@@ -142,7 +142,7 @@ export class JournalBlobStore {
     }
     const index = JSON.parse(text);
     if (index.version !== 1 || !Array.isArray(index.packs)) {
-      throw journalCorrupt("journal.pack: PACKS.json 형식이 맞지 않는다");
+      throw journalCorrupt("journal.pack: PACKS.json has the wrong shape");
     }
     return index;
   }
@@ -207,7 +207,7 @@ export class JournalBlobStore {
       for (const key of liveKeys) {
         const bytes = await this.read(key, readCache);
         // 내용 주소를 재대조한다: 저장 후 파손을 pack이 그대로 옮기면 안 된다.
-        if (!(await verifySha256(bytes, key)).ok) throw journalCorrupt(`journal.pack: blob 파손(${key.slice(0, 12)}..)`);
+        if (!(await verifySha256(bytes, key)).ok) throw journalCorrupt(`journal.pack: blob is corrupt (${key.slice(0, 12)}..)`);
         await w.write(bytes);
         blobs[key] = { offset, length: bytes.byteLength };
         offset += bytes.byteLength;

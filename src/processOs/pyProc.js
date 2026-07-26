@@ -271,7 +271,7 @@ export class PyProc {
         if (timer) clearTimeout(timer);
         if (outcome.timeout) {
           cancel(); // 늦은 응답은 라우터가 버린다
-          results[i] = { error: `timeout: ${timeoutMs}ms 초과` };
+          results[i] = { error: `timeout: exceeded ${timeoutMs}ms` };
           try { entry = await this._replace(entry); } catch (e) { return; } // respawn 실패 = 레인 종료
         } else if (outcome.err) {
           results[i] = { error: String(outcome.err.message || outcome.err) };
@@ -287,7 +287,7 @@ export class PyProc {
     // 레인 전멸(전부 respawn 실패)로 실행되지 못한 태스크를 조용한 undefined 구멍으로 남기지
     // 않는다: 부분 실패는 map의 {error} 계약과 동형인 값 오류로 정직하게 표현한다.
     for (let i = 0; i < results.length; i++) {
-      if (results[i] === undefined) results[i] = { error: "pool exhausted: 모든 레인이 죽어 태스크가 실행되지 않았다" };
+      if (results[i] === undefined) results[i] = { error: "pool exhausted: every lane died, so the task never ran" };
     }
     return results;
   }

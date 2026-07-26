@@ -111,7 +111,7 @@ export class KernelElection {
       await new Promise((resolve) => { this._releaseLeader = resolve; });
     }).catch((error) => {
       if (this._left) return;
-      this._fail(kernelError(`KernelElection: leader lock 실패(${String(error).slice(-180)})`, "PYPROC_LEADER_LOCK_FAILED", true));
+      this._fail(kernelError(`KernelElection: leader lock failed (${String(error).slice(-180)})`, "PYPROC_LEADER_LOCK_FAILED", true));
     });
     return this;
   }
@@ -257,7 +257,7 @@ export class KernelElection {
     if (!Number.isSafeInteger(message.epoch) || message.epoch < 1 || !message.leaderId) return;
     if (message.epoch < this._epoch) return;
     if (message.epoch === this._epoch && this._leaderId && this._leaderId !== message.leaderId) {
-      this._fail(kernelError(`KernelElection: 같은 epoch ${message.epoch}에 leader가 둘이다`, "PYPROC_SPLIT_BRAIN"));
+      this._fail(kernelError(`KernelElection: two leaders claim the same epoch ${message.epoch}`, "PYPROC_SPLIT_BRAIN"));
       return;
     }
     const changed = this._leaderId && (message.epoch > this._epoch || message.leaderId !== this._leaderId);
@@ -294,7 +294,7 @@ export class KernelElection {
         this._lastCommitAt = result?.committedAt || this._lastCommitAt;
         this._announceLeader(true);
       } else {
-        throw kernelError(`KernelElection: 알 수 없는 RPC action(${message.action})`, "PYPROC_RPC_ACTION_INVALID");
+        throw kernelError(`KernelElection: unknown RPC action (${message.action})`, "PYPROC_RPC_ACTION_INVALID");
       }
       response = {
         type: "rpcRes",
@@ -335,7 +335,7 @@ export class KernelElection {
   _rejectPendingOutcomeUnknown(reason) {
     for (const pending of this._pending.values()) {
       clearTimeout(pending.timer);
-      pending.reject(kernelError(`KernelElection: ${reason}. 요청 결과는 알 수 없으므로 자동 재실행하지 않는다`, "PYPROC_RPC_OUTCOME_UNKNOWN", false));
+      pending.reject(kernelError(`KernelElection: ${reason}. The outcome of the request is unknown, so it is not re-executed automatically`, "PYPROC_RPC_OUTCOME_UNKNOWN", false));
     }
     this._pending.clear();
   }
@@ -358,7 +358,7 @@ export class KernelElection {
       }
     }
     if (!this._leaderId || this._phase !== "ready") {
-      throw kernelError("KernelElection: 실행 가능한 leader가 없다", "PYPROC_LEADER_UNAVAILABLE", true);
+      throw kernelError("KernelElection: no leader is available to run this", "PYPROC_LEADER_UNAVAILABLE", true);
     }
     const leaderId = this._leaderId;
     const epoch = this._epoch;
@@ -368,7 +368,7 @@ export class KernelElection {
       const timer = setTimeout(() => {
         this._pending.delete(requestId);
         this._notify();
-        reject(kernelError("KernelElection: 전송한 RPC가 timeout됐다. 실행 여부를 알 수 없어 자동 재실행하지 않는다", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
+        reject(kernelError("KernelElection: the sent RPC timed out. Whether it ran is unknown, so it is not re-executed automatically", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
       }, timeoutMs);
       this._pending.set(requestId, { resolve, reject, timer, leaderId, epoch });
       this._post({
@@ -494,7 +494,7 @@ export class KernelElection {
     this._rejectPendingOutcomeUnknown("participant가 떠났다");
     for (const waiter of this._readyWaiters) {
       clearTimeout(waiter.timer);
-      waiter.reject(kernelError("KernelElection: participant가 떠났다", "PYPROC_PARTICIPANT_LEFT"));
+      waiter.reject(kernelError("KernelElection: the participant left", "PYPROC_PARTICIPANT_LEFT"));
     }
     this._readyWaiters.clear();
     if (this._releaseLeader) { this._releaseLeader(); this._releaseLeader = null; }

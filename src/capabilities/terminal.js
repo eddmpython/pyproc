@@ -25,7 +25,7 @@ def _pyprocMagic(s):
     elif cmd == "cat":
         print(open(arg).read(), end="")
     else:
-        print(f"알 수 없는 매직: %{cmd} (지원: %ls %cd %pwd %cat %undo)")
+        print(f"unknown magic: %{cmd} (supported: %ls %cd %pwd %cat %undo)")
 
 def _pyprocTermPush(line):
     buf = _pyprocIo.StringIO()

@@ -204,11 +204,11 @@ export class MachineJournal {
       if (!r.ref) continue;
       keys.add(parseSha256Address(r.ref.commit));
       const commitBytes = await this._kernel.readObject(r.ref.commit);
-      if (!commitBytes) throw journalCorrupt(`journal.pack: commit 오브젝트 없음(${r.ref.commit.slice(0, 20)}..)`);
+      if (!commitBytes) throw journalCorrupt(`journal.pack: commit object is missing (${r.ref.commit.slice(0, 20)}..)`);
       const commit = validateStateCommit(decodeStateObject(commitBytes));
       keys.add(parseSha256Address(commit.tree));
       const treeBytes = await this._kernel.readObject(commit.tree);
-      if (!treeBytes) throw journalCorrupt(`journal.pack: tree 오브젝트 없음(${commit.tree.slice(0, 20)}..)`);
+      if (!treeBytes) throw journalCorrupt(`journal.pack: tree object is missing (${commit.tree.slice(0, 20)}..)`);
       const tree = validateStateTree(decodeStateObject(treeBytes));
       if (tree.kind === "pageTable") {
         for (const [, address] of tree.pages) keys.add(parseSha256Address(address));
@@ -307,7 +307,7 @@ export class MachineJournal {
       let bytes = blobCache.get(key);
       if (!bytes) {
         bytes = await this._blobs.read(key, readCache);
-        if (!(await verifySha256(bytes, key)).ok) throw journalCorrupt(`journal.recover: blob 파손(${key.slice(0, 12)}..)`);
+        if (!(await verifySha256(bytes, key)).ok) throw journalCorrupt(`journal.recover: blob is corrupt (${key.slice(0, 12)}..)`);
         blobCache.set(key, bytes);
       }
       buffered.push([+p, bytes]); // 전량 검증 후에 쓴다(부분 적용 상태 방지)
@@ -317,12 +317,12 @@ export class MachineJournal {
       const { key, ...meta } = head.home;
       try {
         const bin = key ? await this._blobs.read(key, readCache) : new Uint8Array(0);
-        if (key && !(await verifySha256(bin, key)).ok) throw journalCorrupt(`journal.recover: home blob 파손(${key.slice(0, 12)}..)`);
+        if (key && !(await verifySha256(bin, key)).ok) throw journalCorrupt(`journal.recover: home blob is corrupt (${key.slice(0, 12)}..)`);
         validateMachineHomeMeta(meta, bin.length);
         homePayload = { meta, bin };
       } catch (e) {
         if (e && e.code === "PYPROC_JOURNAL_CORRUPT") throw e;
-        throw journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`);
+        throw journalCorrupt(`journal.recover: home generation is corrupt (${String(e.message || e).slice(-180)})`);
       }
     }
     // 물질화 순서는 heapMaterialize가 정본이다(검증은 위에서 전량 끝냈다 = 부분 적용 없음).
@@ -330,7 +330,7 @@ export class MachineJournal {
       rt: this._rt, reactive: this._reactive, label: "journal.recover",
       heapLen: head.heapLen, sp: head.sp, pages: buffered,
       home: homePayload ? { meta: homePayload.meta, bytes: homePayload.bin } : null,
-      wrapHomeError: (e) => journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`, e),
+      wrapHomeError: (e) => journalCorrupt(`journal.recover: home generation is corrupt (${String(e.message || e).slice(-180)})`, e),
     });
     this._lastSeq = this._rt.execSeq;
     return {
@@ -349,7 +349,7 @@ export class MachineJournal {
       rt: this._rt, reactive: this._reactive, label: "journal.recover",
       heapLen: tree.heapLen, sp: tree.sp, pages,
       home: (files && files.get("home")) || null,
-      wrapHomeError: (e) => journalCorrupt(`journal.recover: home 세대 파손(${String(e.message || e).slice(-180)})`, e),
+      wrapHomeError: (e) => journalCorrupt(`journal.recover: home generation is corrupt (${String(e.message || e).slice(-180)})`, e),
     });
     this._lastSeq = this._rt.execSeq;
     return {
@@ -399,6 +399,6 @@ export class MachineJournal {
       return r;
     }
     if (cur.missing && legacyPrev.missing) return null; // 저널 없음 = 첫 부팅
-    throw journalCorrupt(`journal.recover: 저널 파손(${cur.corrupt || "HEAD 없음"} / ${legacyPrev.corrupt || "PREV 없음"}). 첫 부팅으로 위장하지 않는다.`);
+    throw journalCorrupt(`journal.recover: journal is corrupt (${cur.corrupt || "no HEAD"} / ${legacyPrev.corrupt || "no PREV"}). Refusing to masquerade as a first boot.`);
   }
 }
