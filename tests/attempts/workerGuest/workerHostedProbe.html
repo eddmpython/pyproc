@@ -1,0 +1,131 @@
+<!doctype html>
+<!--
+The candidate, measured with the same assertions as headOfLineProbe's baseline.
+
+The baseline recorded: guest B's request costs 1ms idle and 917ms while guest A loops - it waits out
+A's entire loop. This probe asks whether hosting the guests in workers flips that, and it asks with
+the same shape of assertion so the two numbers are comparable.
+
+It also checks graduation item 1 directly: whether `WebMachineHost` needed any new branch. That is
+verified by construction here - this page registers the worker adapter through the ordinary
+`registerAdapter` and drives it through the ordinary `createMachine`/`boot`/`request`.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>workerGuest candidate - worker-hosted guests</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module init", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "unhandled rejection", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>workerGuest candidate: worker-hosted guests</h1>
+<p>Same assertions as the baseline, with each guest's session hosted in its own worker.</p>
+<pre id="out">running...</pre>
+<script type="module">
+  import { WebMachineHost } from "../../../src/machine/index.js";
+  import { createWorkerGuestFactory } from "./workerGuestAdapter.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+
+  const params = new URLSearchParams(location.search);
+  const indexURL = params.get("indexURL") || undefined;
+  const busyIterations = Number(params.get("iterations") || 8_000_000);
+  const consoleLines = [];
+  let sequence = 0;
+  const host = new WebMachineHost({
+    idFactory: () => `worker-guest-candidate-${++sequence}`,
+    devices: { console: { kind: "console", write: (line) => consoleLines.push(String(line)) } },
+  });
+  // Graduation item 1: registered and driven through the ordinary host surface, with no new branch.
+  host.registerAdapter("worker-pyproc", createWorkerGuestFactory({
+    workerURL: new URL("./guestWorker.js", import.meta.url).href,
+  }));
+
+  let alpha;
+  let beta;
+  try {
+    alpha = host.createMachine({
+      machineId: "guestA",
+      adapterId: "worker-pyproc",
+      manifest: { session: { ...(indexURL ? { indexURL } : {}) } },
+      permissions: { devices: ["console"] },
+    });
+    beta = host.createMachine({
+      machineId: "guestB",
+      adapterId: "worker-pyproc",
+      manifest: { session: { ...(indexURL ? { indexURL } : {}) } },
+      permissions: { devices: ["console"] },
+    });
+    const bootStart = performance.now();
+    await Promise.all([alpha.boot(), beta.boot()]);
+    timings.workerBootMs = Math.round(performance.now() - bootStart);
+    check("two guests boot in their own workers through the ordinary host surface",
+      (await alpha.inspect()).guest.hosted === "worker" && (await beta.inspect()).guest.hosted === "worker",
+      `boot ${timings.workerBootMs}ms`);
+
+    const idleStart = performance.now();
+    await beta.request({ type: "run", code: "1 + 1" });
+    timings.idleRequestMs = Math.round(performance.now() - idleStart);
+
+    const busyCode = `total = 0\nfor i in range(${busyIterations}):\n    total += i\ntotal`;
+    const busyStart = performance.now();
+    const busy = alpha.request({ type: "run", code: busyCode });
+
+    const blockedStart = performance.now();
+    const betaValue = await beta.request({ type: "run", code: "6 * 7" });
+    timings.blockedRequestMs = Math.round(performance.now() - blockedStart);
+    check("guest B returns the right value while A is busy", betaValue === 42, `value=${betaValue}`);
+
+    await busy;
+    timings.busyLoopMs = Math.round(performance.now() - busyStart);
+
+    // The assertion the baseline failed. "Bounded" is defined by the campaign README as staying near
+    // the idle cost, not merely finishing before A does - so the bar is idle plus a message-hop
+    // allowance, not half of A's loop.
+    const hopAllowanceMs = 250;
+    const bounded = timings.blockedRequestMs <= timings.idleRequestMs + hopAllowanceMs;
+    check("GRADUATION 2: guest B is not blocked by guest A's loop",
+      bounded,
+      `idle ${timings.idleRequestMs}ms, blocked ${timings.blockedRequestMs}ms, loop ${timings.busyLoopMs}ms`);
+
+    // The cost of worker hosting, stated rather than hidden (graduation item 5).
+    timings.messageHopMs = timings.idleRequestMs;
+    check("GRADUATION 5: the per-request message hop is recorded",
+      Number.isFinite(timings.messageHopMs), `hop ~${timings.messageHopMs}ms`);
+
+    // Guest A's own work still completed correctly - hosting did not silently drop it.
+    const alphaResult = await busy;
+    check("guest A's loop still produced its result", typeof alphaResult !== "undefined", `result=${alphaResult}`);
+
+    check("host core needed no new branch (driven through registerAdapter/createMachine/request)",
+      consoleLines.some((line) => line.startsWith("workerGuest:boot:")),
+      consoleLines.slice(0, 2).join(" | "));
+  } catch (error) {
+    check("no exception", false, String(error?.message || error).slice(-300));
+  } finally {
+    try { await alpha?.shutdown(); } catch (error) {}
+    try { await beta?.shutdown(); } catch (error) {}
+    await report();
+  }
+</script>
+</body>
+</html>

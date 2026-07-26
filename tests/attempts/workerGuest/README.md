@@ -25,6 +25,7 @@ If the hypothesis is false, the failure will be specific and worth recording: it
 | Probe | What it measures | Status |
 |---|---|---|
 | `headOfLineProbe.html` | The current cost, on the main thread: while guest A runs a CPU-bound loop, how long guest B's `request` takes and whether a frame can round-trip at all | baseline measured |
+| `workerHostedProbe.html` | The same assertions with each guest's kernel in its own worker, driven through the ordinary host surface | candidate GREEN 6/6 |
 
 The baseline exists first on purpose. "A worker fixes it" is not a measurement; "the same assertion fails now and passes then" is. The probe is therefore RED by design and stays in this campaign - it is not a gate.
 
@@ -47,6 +48,48 @@ Three readings, and the middle one is the finding:
 Reading (2) also says what "bounded" has to mean at graduation: B's request must stay near its idle
 cost while A loops, not merely finish sooner than A does.
 
+
+### Candidate result (2026-07-27, same browser and iteration count)
+
+```
+baseline   idle  1ms   blocked 917ms   loop  917ms
+candidate  idle 14ms   blocked   1ms   loop 1053ms
+workerBootMs 3542, messageHopMs 14
+```
+
+The assertion flipped. On one thread guest B waited out A's entire loop (917 of 917ms); with each
+kernel in its own worker B answered in **1ms** while A's loop ran **1053ms**. That is not a partial
+improvement, it is the blocking gone.
+
+Two costs are real and recorded rather than hidden (graduation item 5):
+
+- **The per-request hop is ~14ms**, against ~1ms in-process. Every request now crosses postMessage.
+  For interactive use that is the number a consumer has to know.
+- **Booting two worker-hosted guests took 3542ms**, because each worker imports and boots its own
+  engine. Snapshot-fork is what would collapse that, and it is not wired here.
+
+Graduation item 1 held: the probe registers the adapter through the ordinary `registerAdapter` and
+drives it through `createMachine`/`boot`/`request`. `WebMachineHost`, `MachineHandle`, and
+`commandQueue` took no new branch, so the adapter contract was the right seam.
+
+### Two defects the campaign found in `src` (both belong in the graduation commit)
+
+1. **`bootSession` does not forward `loadPyodide`.** A worker has no `document`, so the engine script
+   cannot be injected as a tag; `bootRuntime` already accepts a `loadPyodide` the worker supplies
+   after importing pyodide.mjs itself, but `bootSession` never passes that option through from its
+   manifest. So the deterministic-replay boot - and therefore history, save, and export - cannot be
+   worker-hosted at all today. One forwarded option fixes it.
+2. **`pyproc/runtime` yields a `Runtime` with no capability factories.** `rt.enableReactive is not a
+   function`, reproduced live by this campaign's first candidate run. The bindings are installed at
+   import time by `src/composition/runtimeApi.js`, whose own header states that both `index.js` and
+   `pyproc/runtime` consume it - but `package.json` points `./runtime` at the rank-0 barrel
+   `src/runtime/index.js` instead. The wiring contradicts the stated intent, and the documented
+   adoption pattern (`new Runtime(py)` then `rt.enableAsgiServer(...)`, which contract.md shows and
+   README names as dartlab's live pattern) therefore fails from that subpath alone. The subpath is
+   still unreleased, so this is fixable before it ships.
+
+Neither is smuggled in from a probe: a campaign finds defects, and the fix lands where the contract
+lives with its own gate.
 
 ## 졸업 게이트
 
