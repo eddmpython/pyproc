@@ -179,6 +179,44 @@ ownership 상실 request 실행 1회·자동 replay 0회·late response 오염 0
     check("취소된 queue 작업은 실행되지 않고 queue가 정상 drain", afterCancelValue === 1 && cancelMetrics.executions === 1, `${afterCancelValue}/${cancelMetrics.executions}`);
     await cancelMachine.shutdown();
 
+    // 장치·머신 수명주기 동사(2026-07-27 신설). 컴퓨터는 무엇이 꽂혀 있는지 묻고, 떼고,
+    // 머신을 제거할 수 있어야 한다. 그 부재가 machineId 영구 점유를 만들었다.
+    const deviceList = host.listDevices();
+    check("listDevices: name/kind/mode 요약 반환",
+      deviceList.length >= 2
+      && deviceList.some((entry) => entry.name === "console" && entry.kind === "console" && entry.mode === null)
+      && deviceList.some((entry) => entry.name === "network" && entry.mode === "request")
+      && deviceList.every((entry) => !("write" in entry)),
+      JSON.stringify(deviceList));
+
+    const busyMachine = host.createMachine({
+      machineId: "deviceHolder", adapterId: "fakeAlpha", manifest: { initialValue: 1 },
+      permissions: { devices: ["console"] },
+    });
+    let detachCode = "";
+    try { host.detachDevice("console"); } catch (error) { detachCode = error?.code || String(error); }
+    check("detachDevice: 사용 중 장치는 거부", detachCode === "WEB_MACHINE_DEVICE_IN_USE", detachCode);
+
+    await busyMachine.boot();
+    let destroyRunningCode = "";
+    try { host.destroyMachine("deviceHolder"); } catch (error) { destroyRunningCode = error?.code || String(error); }
+    check("destroyMachine: 실행 중 머신은 거부", destroyRunningCode === "WEB_MACHINE_MACHINE_IN_USE", destroyRunningCode);
+
+    await busyMachine.shutdown();
+    host.destroyMachine("deviceHolder");
+    const reused = host.getMachine("deviceHolder") === null
+      && !!host.createMachine({ machineId: "deviceHolder", adapterId: "fakeAlpha", manifest: {}, permissions: { devices: [] } });
+    check("destroyMachine: 정지 후 제거되고 같은 machineId 재사용 가능", reused);
+    host.destroyMachine("deviceHolder");
+
+    // 분리 대상은 이 검사 전용으로 새로 꽂는다: 앞선 머신들이 console/network를 권한으로 쥐고
+    // 있으므로(그 사실 자체가 위 사용 중 거부의 근거다) 미사용 장치를 따로 만들어야 한다.
+    host.registerDevice("scratchDevice", { kind: "console", write: () => {} });
+    check("registerDevice: 열거에 즉시 반영", host.listDevices().some((entry) => entry.name === "scratchDevice"));
+    host.detachDevice("scratchDevice");
+    check("detachDevice: 미사용 장치는 분리되고 열거에서 사라진다",
+      host.listDevices().every((entry) => entry.name !== "scratchDevice"));
+
     check("console device capability 연결", consoleLines.some((line) => line.includes("alphaMachine")) && consoleLines.some((line) => line.includes("betaMachine")), `${consoleLines.length} lines`);
   } catch (error) {
     check("예외 없음", false, String(error?.stack || error).slice(-600));

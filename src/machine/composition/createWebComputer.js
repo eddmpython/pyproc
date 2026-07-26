@@ -29,8 +29,10 @@ export function createWebComputer({
   devices: extraDevices = {},
   onConsole = null,
   cryptoProvider = globalThis.crypto,
-  // false면 하드웨어(장치+host+어댑터)만 조립한다. .webmachine import 같은 복원 경로는
-  // 머신을 image manifest가 만들므로 기본 머신을 미리 만들면 machineId가 충돌한다.
+  // 머신의 출처를 정하는 모드다(동사 부재의 우회가 아니다): true면 기본 머신 2대를 여기서
+  // 만들고, false면 하드웨어(장치+host+어댑터)만 조립해 머신은 image manifest가 만든다.
+  // 세 호출부가 후자를 쓴다: 신뢰 화면 preflight, import 후보 조립, deferBoot 복원.
+  // host.destroyMachine으로 대체하지 않는 이유: 어댑터를 만들어 곧 버리는 낭비가 된다.
   createMachines = true,
 } = {}) {
   const pythonDisk = new MemoryBlockDevice({ byteLength: python.diskBytes ?? DEFAULT_DISK_BYTES });

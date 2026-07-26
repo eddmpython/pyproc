@@ -60,6 +60,47 @@ export class WebMachineHost {
     return this._machines.get(machineId) || null;
   }
 
+  // 장치 열거. 컴퓨터라면 무엇이 꽂혀 있는지 물을 수 있어야 한다. 반환은 요약이다:
+  // device 객체 자체를 넘기면 권한 gate를 우회하는 경로가 열린다.
+  listDevices() {
+    return [...this._devices.entries()].map(([name, device]) => Object.freeze({
+      name,
+      kind: device.kind,
+      mode: typeof device.mode === "string" ? device.mode : null,
+    }));
+  }
+
+  // 핫플러그: 부팅된 머신이 그 이름을 요구하고 있으면 거부한다(frozen context가 이미 그 장치를
+  // 들고 있어서, 떼도 guest는 옛 참조를 계속 쓴다 = 조용한 불일치).
+  detachDevice(name) {
+    if (!this._devices.has(name)) {
+      throw new WebMachineError("WEB_MACHINE_DEVICE_MISSING", `device 없음: ${name}`);
+    }
+    const users = [...this._machines.values()].filter((machine) => machine.usesDevice(name));
+    if (users.length) {
+      throw new WebMachineError("WEB_MACHINE_DEVICE_IN_USE",
+        `device 사용 중: ${name} (${users.map((machine) => machine.machineId).join(", ")})`);
+    }
+    this._devices.delete(name);
+    return this;
+  }
+
+  // 머신 제거. 이 동사가 없어서 machineId가 한 번 쓰면 영구 점유였고, 그 결핍을
+  // createWebComputer의 createMachines 플래그가 메우고 있었다(동사 부재를 플래그로 메우면
+  // 정상 동선이 우회로를 탄다). 실행 중 제거는 거부한다: 정지가 먼저다.
+  destroyMachine(machineId) {
+    const machine = this._machines.get(machineId);
+    if (!machine) {
+      throw new WebMachineError("WEB_MACHINE_UNAVAILABLE", `machine 없음: ${machineId}`);
+    }
+    if (machine.state !== "created" && machine.state !== "stopped") {
+      throw new WebMachineError("WEB_MACHINE_MACHINE_IN_USE",
+        `machine 제거는 정지 상태에서만 가능하다: ${machineId} (${machine.state})`);
+    }
+    this._machines.delete(machineId);
+    return this;
+  }
+
   preflightMachine({ machineId, adapterId, adapterVersion, snapshotScope, permissions = { devices: [] } }) {
     if (!machineId || typeof machineId !== "string") throw new TypeError("machineId가 필요하다");
     if (this._machines.has(machineId)) {

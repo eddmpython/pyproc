@@ -69,6 +69,8 @@ export interface SnapshotEnvelope {
 export interface MachineHistoryEntry {
   event: string;
   state: MachineState;
+  /** 이 머신이 그 장치를 권한으로 요구하는가. host.detachDevice가 사용 중 판정에 쓴다. */
+  usesDevice(name: string): boolean;
   epoch: number;
   [key: string]: unknown;
 }
@@ -122,6 +124,12 @@ export class WebMachineHost {
   registerDevice(name: string, device: VirtualDevice): this;
   createMachine(options: CreateMachineOptions): MachineHandle;
   getMachine(machineId: string): MachineHandle | null;
+  /** 꽂혀 있는 장치 요약(name/kind/mode). device 객체 자체는 넘기지 않는다(권한 gate 우회 방지). */
+  listDevices(): ReadonlyArray<Readonly<{ name: string; kind: string; mode: string | null }>>;
+  /** 장치 분리. 어떤 머신이 그 이름을 권한으로 들고 있으면 `WEB_MACHINE_DEVICE_IN_USE`. */
+  detachDevice(name: string): this;
+  /** 머신 제거. `created`/`stopped`에서만 가능하고 그 외에는 `WEB_MACHINE_MACHINE_IN_USE`. */
+  destroyMachine(machineId: string): this;
   preflightMachine(options: {
     machineId: string;
     adapterId: string;
@@ -148,6 +156,7 @@ export type WebMachineErrorCode =
   | "WEB_MACHINE_CLOCK_TIMER_FULL"
   | "WEB_MACHINE_CLOCK_VALUE"
   | "WEB_MACHINE_COMMIT_STATE"
+  | "WEB_MACHINE_DEVICE_IN_USE"
   | "WEB_MACHINE_DEVICE_INVALID"
   | "WEB_MACHINE_DEVICE_KIND_UNSUPPORTED"
   | "WEB_MACHINE_DEVICE_MISSING"
@@ -197,6 +206,7 @@ export type WebMachineErrorCode =
   | "WEB_MACHINE_INPUT_INVALID"
   | "WEB_MACHINE_INPUT_QUEUE_FULL"
   | "WEB_MACHINE_INPUT_UNATTACHED"
+  | "WEB_MACHINE_MACHINE_IN_USE"
   | "WEB_MACHINE_INVALID_STATE"
   | "WEB_MACHINE_NETWORK_ENDPOINT_DUPLICATE"
   | "WEB_MACHINE_NETWORK_PORT_CLOSED"

@@ -4,7 +4,7 @@
     "tests/browser/gate.html": 94,
     "tests/browser/preflightNoCoi.html": 5,
     "tests/browser/wasiGate.html": 13,
-    "tests/webMachine/browser/probes/hostContractProbe.html": 30,
+    "tests/webMachine/browser/probes/hostContractProbe.html": 36,
     "tests/webMachine/browser/probes/dualEngineProbe.html": 13,
     "tests/webMachine/browser/probes/ownerSuccessorProbe.html": 14
   }

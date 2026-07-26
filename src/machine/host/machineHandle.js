@@ -175,6 +175,11 @@ export class MachineHandle {
     }, { fenced: false, control });
   }
 
+  // 이 머신이 그 장치를 요구하는가. detachDevice가 사용 중 판정에 쓴다.
+  usesDevice(name) {
+    return (this.permissions?.devices || []).includes(name);
+  }
+
   async inspect() {
     return this._enqueue("inspect", async () => this.inspectNow(), { fenced: false });
   }
