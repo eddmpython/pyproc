@@ -63,12 +63,32 @@
   실제 대가였으므로, src가 export하는 이름을 호출하면서 import/선언이 없으면 RED가 되는
   검사를 신설했다(주석·문자열·템플릿 리터럴 제거 후 판정, 오탐 0 확인).
 
+## 2026-07-27 (2): 경화 4파(소비자 진입 표면 + 없던 증거 + 방치 게이트 페이지)
+
+- **진입 표면 수리**: boot의 미지 옵션 키 거부(오타 -> 무증상 비결정 부팅 경로 차단),
+  machine.proc 머신당 memoize + machine.dispose() 신설(재마운트가 워커를 쌓던 누수),
+  checkEnvironment·requireCoi·porcelain 문장 영문화, requireJspi 신설, IPC 4개 생성 지점과
+  bootWasi에 COI 가드. README가 "암호 같은 SharedArrayBuffer 실패 대신 실행 가능한 에러"를
+  약속하면서 그 경로들만 약속 밖이었다.
+- **없던 증거 6개**를 브라우저 게이트에 세웠다: 옵션 오타 거부, 비결정 export 거부, 결정적 부팅의
+  cp0 경계 동일성, 경계 이후 live 힙 분기, 풀 소진 수렴, mid-flight 워커 사망 수렴.
+  cp0 경계로 측정한 근거는 실측이다: 같은 매니페스트 두 부팅의 live 힙 digest는 다르고(재시드가
+  cp0 뒤에 도는 설계) 길이는 같았다(31457280B). README 2판의 주장도 경계 표현으로 좁혔다.
+- **방치 게이트 페이지 15개**를 실행 경로에 올렸다(test:preflight, test:web-machine + CI 배선,
+  x86 자산 레인은 test:web-machine:v86으로 로컬). 그 즉시 두 부패가 드러났다: preflightNoCoi는
+  0.0.10 개명 이후 사라진 PyProc을 import해 아예 실행되지 않았고, ownerSuccessorProbe는 generation
+  정체가 commit 주소로 바뀐 뒤에도 주입 리터럴을 기대했다. 후자가 죽은 필수 파라미터까지
+  드러냈다: MachineCommitCoordinator의 idFactory는 저장만 되고 읽히지 않으면서 필수였다(제거).
+- 구조 게이트에 "실행 경로 없는 게이트 페이지 0"을 신설해 이 부류의 재발을 차단했다.
+- 전 게이트 상태: npm test 2176, 브라우저 94/94, preflight 5/5, web-machine probe 3/3(30+13+14),
+  타입 green.
+
 ## NEXT
 
-1. 바이트 코덱 사본(base64 디코더 3벌 + hex 4벌)과 결정성 스텁 2벌 수렴.
-2. guest device 요구를 `requiredDevices` 선언 단일 진실로(해석기 8벌 제거).
-3. 없는 증거 신설: 결정적 부팅 바이트 동일성, 풀 소진 계약, mid-flight 워커 사망.
-4. 실행되지 않는 게이트 페이지 15개의 지위 확정(CI 편입 또는 정직한 강등) + 재발 방지 가드.
-5. DX: 사용자 대면 메시지 영문화, 옵션 오타 음성 방지, COI/JSPI 가드 위치, 풀 회수 동사.
-6. 웹컴퓨터: 네트워크 배선, 장치 열거·해제 동사.
-7. 대형 파일 축 단위 분해(kernelElection, v86GuestAdapter, indexedDbMachineStore, legacy reader).
+1. guest device 요구를 `requiredDevices` 선언 단일 진실로(해석기 8벌 제거).
+2. 웹컴퓨터 네트워크 배선: 스위치는 이미 구현돼 있고 컴퓨터에 꽂히지 않았다(발명이 아니라 배선).
+3. 장치 열거·핫플러그·머신 해제 동사(동사 부재를 `createMachines: false` 플래그가 메우고 있다).
+4. 대형 파일 축 단위 분해(kernelElection, v86GuestAdapter, indexedDbMachineStore, legacy reader).
+5. machine 층 오류 메시지의 언어 정책 결정(진입 표면은 영문으로 옮겼고 machine 층 약 300개는
+   한국어다. 게이트가 substring을 단정하는 곳이 있어 조정된 이동이 필요하다).
+6. 2차 5표면 재심사 결과 반영.
