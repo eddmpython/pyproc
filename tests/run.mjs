@@ -2324,4 +2324,83 @@ check("Web Computer 실행 자산은 검증된 development channel", () => {
   if (!packageManifest.scripts?.["test:web-computer"]?.includes("webComputerProduct.mjs")) throw new Error("제품 browser E2E script 누락");
 });
 
+// 8) 커밋 메시지 규칙: 판정 정본(scripts/commitMessage.mjs)이 배선돼 있고, 무는지까지 본다.
+//    git 이력은 되감을 수 없으므로 커밋 시점에 막는 훅이 유일한 집행 지점이다. 그래서 훅이
+//    정본을 실제로 호출하는지(배선)와 정본이 위반마다 RED인지(이빨)를 매 게이트 실행마다
+//    양성/음성 fixture로 확인한다. 규칙 문장의 SSOT는 CLAUDE.md "Git 규칙"이다.
+console.log("\n[커밋 규칙]");
+{
+  const { checkCommitMessage, COMMIT_MESSAGE_LIMITS } = await import(
+    pathToFileURL(join(ROOT, "scripts", "commitMessage.mjs")).href
+  );
+  const hook = readFileSync(join(ROOT, ".githooks", "commit-msg"), "utf8");
+  check("commit-msg 훅이 판정 정본을 호출한다", () => {
+    if (!hook.includes("scripts/commitMessage.mjs")) throw new Error("훅이 정본을 호출하지 않는다");
+    if (!/command -v node/.test(hook) || !/exit 1/.test(hook)) throw new Error("node 부재 시 fail-closed 아님");
+  });
+  check("훅에 판정 로직 사본이 없다", () => {
+    // sh grep으로 같은 판정을 또 하면 두 판정이 표류한다. 정본은 한 곳이다.
+    if (/grep\s+-\w*[Ee]\w*\s+'\(/.test(hook)) throw new Error("훅에 정규식 판정 사본이 남아 있다");
+  });
+  // 규칙 문장은 추적되는 문서에 있어야 한다. CLAUDE.md는 로컬 전용(.gitignore)이라 clone에
+  // 없으므로 여기서 읽으면 CI에서만 RED가 된다. 기여자 문서 2판이 규칙의 공개 정본이다.
+  for (const doc of ["CONTRIBUTING.md", "CONTRIBUTING.ko.md"]) {
+    check(`${doc}가 커밋 메시지 규칙을 문장으로 갖는다`, () => {
+      const rules = readFileSync(join(ROOT, doc), "utf8");
+      for (const token of ["분류:", "scripts/commitMessage.mjs", "72", "100"]) {
+        if (!rules.includes(token)) throw new Error(`규칙 요소 누락: ${token}`);
+      }
+      const limits = [
+        [COMMIT_MESSAGE_LIMITS.subjectMaxChars, "제목 길이"],
+        [COMMIT_MESSAGE_LIMITS.bodyLineMaxChars, "본문 줄 길이"],
+      ];
+      // 문서가 말하는 숫자와 판정 정본의 상수가 어긋나면 둘 중 하나는 거짓말이다.
+      for (const [value, what] of limits) {
+        if (!rules.includes(String(value))) throw new Error(`${what} 상수(${value})가 문서에 없다`);
+      }
+    });
+  }
+
+  const GOOD = [
+    "게이트: 커밋 메시지 규칙을 판정 정본과 훅으로 집행",
+    "",
+    "scripts/commitMessage.mjs를 신설해 제목 형식·본문 최소량·검증 줄을 술어로 옮겼다.",
+    "제목 한 줄만 남는 커밋이 반복돼 이력이 라벨 모음으로 퇴화하던 문제를 막는다.",
+    "검증: 구조 게이트 green, 양성/음성 fixture 12건이 위반마다 RED.",
+  ].join("\n");
+  check("양성: 규칙을 지킨 메시지는 통과", () => {
+    const violations = checkCommitMessage(GOOD);
+    if (violations.length) throw new Error(violations.map((v) => v.code).join(","));
+  });
+  const swapSubject = (subject) => [subject, ...GOOD.split("\n").slice(1)].join("\n");
+  // 음성 fixture: 위반 하나씩 주입해 그 코드가 잡히는지 본다(위반마다 RED = 게이트의 이빨).
+  const NEGATIVE = [
+    ["empty", "   \n\n#주석만\n"],
+    ["traceTerm", swapSubject("게이트: Codex 흔적이 들어간 제목")],
+    ["emDash", swapSubject(`게이트: em dash${String.fromCharCode(0x2014)}주입`)],
+    ["subjectTooLong", swapSubject(`게이트: ${"가".repeat(COMMIT_MESSAGE_LIMITS.subjectMaxChars)}`)],
+    ["subjectPunctuation", swapSubject("게이트: 마침표로 끝나는 제목.")],
+    ["subjectNotKorean", swapSubject("gate: english only subject line")],
+    ["subjectForm", swapSubject("분류 없이 쓴 제목 한 줄")],
+    ["categoryTooLong", swapSubject(`${"분".repeat(COMMIT_MESSAGE_LIMITS.categoryMaxChars + 1)}: 요약을 적는다`)],
+    ["summaryTooThin", swapSubject("게이트: 짧음")],
+    ["bodyMissing", "게이트: 본문 없는 제목 한 줄만 남긴 커밋"],
+    ["blankLineMissing", "게이트: 빈 줄이 없는 커밋\n본문이 바로 붙었다. 검증: 구조 게이트 green.\n두 번째 줄도 채운다."],
+    ["bodyTooShort", "게이트: 본문이 한 줄뿐인 커밋\n\n한 줄만 있고 검증도 여기 뭉쳐 있다. 게이트 green 주장만 남는다."],
+    ["bodyTooThin", "게이트: 본문이 얇은 커밋\n\n수리했다.\n게이트 green."],
+    ["bodyLineTooLong", `게이트: 본문 줄이 너무 긴 커밋\n\n${"가".repeat(COMMIT_MESSAGE_LIMITS.bodyLineMaxChars + 1)}\n두 번째 줄. 검증: 구조 게이트 green.`],
+    ["verificationMissing", "게이트: 검증 사실이 없는 커밋\n\n무엇을 바꿨는지는 적었고 왜 필요한지도 적었다.\n그런데 무엇으로 확인했는지가 어디에도 없다."],
+  ];
+  for (const [code, message] of NEGATIVE) {
+    check(`음성: ${code} 위반은 RED`, () => {
+      const codes = checkCommitMessage(message).map((v) => v.code);
+      if (!codes.includes(code)) throw new Error(`잡지 못함(실제: ${codes.join(",") || "없음"})`);
+    });
+  }
+  check("git이 만드는 제목(merge/revert)은 형식 검사 밖", () => {
+    const merged = checkCommitMessage("Revert \"게이트: 이전 변경\"\n\nThis reverts commit 0123456789.");
+    if (merged.length) throw new Error(merged.map((v) => v.code).join(","));
+  });
+}
+
 gate.exit();

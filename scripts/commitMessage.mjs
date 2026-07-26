@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+// 커밋 메시지 규칙의 기계 정본. 규칙 문장의 SSOT는 CLAUDE.md "Git 규칙"이고, 이 파일은 그
+// 문장을 판정 가능한 술어로 옮긴 것이다. `.githooks/commit-msg`가 집행하고 tests/run.mjs가
+// 양성/음성 fixture로 이빨을 증명한다(안 무는 게이트는 없는 게이트보다 나쁘다).
+//
+// 왜 sh가 아니라 Node인가: 제목 길이는 문자 수 계약이다. POSIX sh/awk는 UTF-8 문자 수를
+// 바이트 수로 세서 한국어 제목에 3배 왜곡이 생긴다. 저장소의 모든 게이트가 이미 Node이므로
+// (커밋 전 `npm test` green이 강행규칙) Node 의존은 새 전제가 아니다.
+import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+
+// 한 곳에 모은 상수 + 출처. 값은 git 관례와 터미널 가독폭에서 온다.
+export const COMMIT_MESSAGE_LIMITS = {
+  subjectMaxChars: 72, // git 관례 50~72. `git log --oneline`이 접히지 않는 상한.
+  categoryMaxChars: 16, // `릴리즈 v0.0.10:`까지 담는 분류 폭.
+  summaryMinChars: 6, // `수리` 같은 한 단어 제목이 요약을 대신하는 것을 막는 하한.
+  bodyMinLines: 2, // 본문 최소 2줄: 무엇을 바꿨는지 + 왜/검증. 1줄은 제목 반복으로 퇴화한다.
+  bodyMinChars: 80, // 2줄이 "수리함." 식으로 비는 것을 막는 하한.
+  bodyLineMaxChars: 100, // 본문 줄 폭. 이보다 길면 diff 뷰에서 접힌다.
+};
+
+const EM_DASH = String.fromCharCode(0x2014); // 리터럴로 쓰면 em dash 게이트가 이 파일에 걸린다
+// 절대 게이트: 도구·생성 흔적. `ai`는 단어 경계로만 잡는다(`fail`, `chain`이 걸리면 안 된다).
+const TRACE_WORD_AI = /(^|[^0-9a-z_])ai([^0-9a-z_]|$)/i;
+const TRACE_TERMS = /(gpt|chatgpt|openai|codex|claude|anthropic|generated\s+by|co-authored-by|assisted-by)/i;
+// 커밋로그 수준의 최소 조건: 본문이 검증 사실을 나른다. 검증 없는 변경은 기록이 아니라 주장이다.
+const VERIFICATION_HINT = /(게이트|검증|음성 시험|재현|npm test|npm run|green|GREEN|PASS|red|RED)/;
+const HANGUL = /[가-힣]/;
+// git이 스스로 만드는 제목(merge/revert/fixup)은 형식 검사 대상이 아니다. 흔적 검사는 남는다.
+const GENERATED_SUBJECT = /^(Merge\s|Revert\s|fixup!|squash!|amend!)/;
+// `git commit --verbose`가 붙이는 diff 절단선. 이 아래는 메시지가 아니다.
+const SCISSORS = /^-{2,}\s*>8\s*-{2,}/;
+
+// 커밋 메시지 본문만 남긴다: 주석 줄, scissors 이하, 후행 공백 제거.
+export function normalizeCommitMessage(raw) {
+  const lines = [];
+  for (const line of String(raw).replaceAll("\r\n", "\n").split("\n")) {
+    if (SCISSORS.test(line)) break;
+    if (line.startsWith("#")) continue;
+    lines.push(line.replace(/\s+$/, ""));
+  }
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+
+// 위반을 코드로 돌려준다. 텍스트가 아니라 코드로 단정해야 음성 시험이 문구 표류에 안 흔들린다.
+export function checkCommitMessage(raw) {
+  const lines = normalizeCommitMessage(raw);
+  const violations = [];
+  const fail = (code, message) => violations.push({ code, message });
+  const text = lines.join("\n");
+
+  if (!text.trim()) {
+    fail("empty", "커밋 메시지가 비어 있다");
+    return violations;
+  }
+  if (TRACE_WORD_AI.test(text) || TRACE_TERMS.test(text)) {
+    fail("traceTerm", "도구·생성·기여자 흔적 용어가 들어 있다(절대 게이트)");
+  }
+  if (text.includes(EM_DASH)) {
+    fail("emDash", "em dash(U+2014)가 들어 있다. 하이픈이나 문장 재구성으로 바꾼다");
+  }
+
+  const [subject, ...rest] = lines;
+  if (GENERATED_SUBJECT.test(subject)) return violations;
+
+  if ([...subject].length > COMMIT_MESSAGE_LIMITS.subjectMaxChars) {
+    fail("subjectTooLong", `제목이 ${COMMIT_MESSAGE_LIMITS.subjectMaxChars}자를 넘는다`);
+  }
+  if (/[.。]$/.test(subject)) fail("subjectPunctuation", "제목은 마침표로 끝내지 않는다");
+  if (!HANGUL.test(subject)) fail("subjectNotKorean", "제목은 한국어다");
+  const form = subject.match(/^([^:\n]+):\s(\S.*)$/);
+  if (!form) {
+    fail("subjectForm", "제목은 `분류: 요약` 형식이다(예: `리팩터: 커널 선출을 상태기계로 분리`)");
+  } else {
+    const [, category, summary] = form;
+    if ([...category].length > COMMIT_MESSAGE_LIMITS.categoryMaxChars) {
+      fail("categoryTooLong", `분류가 ${COMMIT_MESSAGE_LIMITS.categoryMaxChars}자를 넘는다`);
+    }
+    if (!HANGUL.test(category)) fail("categoryNotKorean", "분류는 한국어다");
+    if ([...summary].length < COMMIT_MESSAGE_LIMITS.summaryMinChars) {
+      fail("summaryTooThin", `요약이 ${COMMIT_MESSAGE_LIMITS.summaryMinChars}자보다 짧다`);
+    }
+  }
+
+  if (!rest.length) {
+    fail("bodyMissing", "본문이 없다. 제목 한 줄은 기록이 아니라 라벨이다");
+    return violations;
+  }
+  if (rest[0] !== "") fail("blankLineMissing", "제목과 본문 사이에 빈 줄이 필요하다");
+
+  const body = rest.slice(1);
+  const contentLines = body.filter((line) => line !== "");
+  if (contentLines.length < COMMIT_MESSAGE_LIMITS.bodyMinLines) {
+    fail("bodyTooShort", `본문은 최소 ${COMMIT_MESSAGE_LIMITS.bodyMinLines}줄이다(무엇을 바꿨는지 + 왜/검증)`);
+  }
+  if (contentLines.join("").length < COMMIT_MESSAGE_LIMITS.bodyMinChars) {
+    fail("bodyTooThin", `본문이 ${COMMIT_MESSAGE_LIMITS.bodyMinChars}자보다 얇다`);
+  }
+  const overlong = body.find((line) => [...line].length > COMMIT_MESSAGE_LIMITS.bodyLineMaxChars);
+  if (overlong) fail("bodyLineTooLong", `본문 줄이 ${COMMIT_MESSAGE_LIMITS.bodyLineMaxChars}자를 넘는다`);
+  if (!HANGUL.test(contentLines.join("\n"))) fail("bodyNotKorean", "본문은 한국어다");
+  if (!contentLines.some((line) => VERIFICATION_HINT.test(line))) {
+    fail("verificationMissing", "본문에 검증 사실이 없다(어느 게이트가 green인지, 신설 게이트면 음성 시험 결과)");
+  }
+  return violations;
+}
+
+// CLI: 훅이 넘긴 메시지 파일을 판정한다. 위반 목록과 규칙 위치를 stderr로 알린다.
+const invokedAsCli = process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (invokedAsCli) {
+  const path = process.argv[2];
+  if (!path) {
+    console.error("blocked: commit message file argument is missing");
+    process.exit(1);
+  }
+  const violations = checkCommitMessage(readFileSync(path, "utf8"));
+  if (violations.length) {
+    console.error("blocked: 커밋 메시지가 규칙(CLAUDE.md \"Git 규칙\")을 어긴다");
+    for (const { code, message } of violations) console.error(`  - [${code}] ${message}`);
+    console.error("");
+    console.error("형식:");
+    console.error("  분류: 무엇을 했는지 한 줄 요약");
+    console.error("");
+    console.error("  무엇을 어떻게 바꿨는지(파일·심볼 수준).");
+    console.error("  왜 필요했는지(문제·근거).");
+    console.error("  검증: 어느 게이트가 green인지, 신설 게이트면 음성 시험 결과.");
+    process.exit(1);
+  }
+  process.exit(0);
+}

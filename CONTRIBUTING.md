@@ -42,11 +42,28 @@ Browser validation: open `http://localhost:8788/examples/basic.html` and `proces
 - `npm test` must be green before every commit.
 - **main only.** No local branches in this repository; hooks block non-main refs. External contributions come from forks targeting `main`.
 - **No em dash (U+2014)** in any `*.md` or `*.js`. Use a hyphen, a comma, or rewrite the sentence. The pre-commit hook blocks it.
-- **Commit message rules** (partially machine-enforced by hooks):
-  - State the nature of the change plus what actually changed. Korean is the repository convention; clear English is accepted for external contributions.
+- **Commit messages are records, not labels** (machine-enforced). A commit message is the primary
+  record that release notes, incident analysis, and regression hunts all depend on. The decision
+  logic lives in one place, [scripts/commitMessage.mjs](scripts/commitMessage.mjs); `.githooks/commit-msg`
+  calls it and `tests/run.mjs` proves its teeth with positive and negative fixtures on every run.
+
+  ```
+  분류: one-line summary of what was done
+
+  What changed, at the file and symbol level.
+  Why it was needed, so whoever reverts it can judge.
+  Verification: which gate is green. For a new gate, the negative-test result too.
+  ```
+
+  - **Subject**: `분류: summary` form, 72 characters or fewer, no trailing period, Korean.
+  - **Body required**: separated by a blank line, at least 2 lines, 100 characters or fewer per line.
+  - **A verification line is required.** A change with no record of what confirmed it is a claim, not a record.
   - Write **subject-neutral** messages (no first-person self-reference).
   - If one piece of work mixes intents (new feature plus signature change plus cleanup), **split it into one commit per intent**.
-  - **No tool or generation traces**: no model names, tool names, generation markers, or co-author trailers in commit messages, comments, or docs. The commit-msg hook blocks them.
+  - **No tool or generation traces**: no model names, tool names, generation markers, or co-author trailers in commit messages, comments, or docs. The same rule source blocks them.
+  - Subjects git writes itself (`Merge`, `Revert`, `fixup!`) skip the form check; the trace check stays.
+  - Korean is the enforced convention here. Fork contributions may arrive in clear English and are
+    rewritten to the convention when merged.
 - Version stays on the `0.0.x` line; only releases bump it, and the tag must match `package.json`. See [docs/operations/release.md](docs/operations/release.md).
 
 ## Pull request checklist
