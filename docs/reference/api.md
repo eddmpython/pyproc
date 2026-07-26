@@ -104,8 +104,11 @@ namespaces are the model's vocabulary:
 - `machine.term(cfg?)` - serverless REPL (`Terminal`); with `timeTravel: true`, `%undo`
   is statement-level time travel over the machine's history.
 - `machine.proc(opts?)` - boots a worker process pool and resolves to `PyProc`
-  (see [Process OS](#process-os-machineproc)). `lanes` sets the pool size,
-  `replay` makes the pool fork-symmetric.
+  (see [Process OS](#process-os-machineproc)). `lanes` sets the pool size (default 2),
+  `replay` makes the pool fork-symmetric. **Memoized per machine**: a second call resolves to
+  the first pool, so a remount does not stack workers. The first call's options win.
+- `machine.dispose()` - terminates the pool's workers and releases the reactive retention.
+  Call it before dropping a machine; a lost pool handle cannot be reclaimed otherwise.
 - `machine.deterministic` - whether this machine was booted under the deterministic
   replay contract.
 - `machine.history` - the two-region history (below).

@@ -79,7 +79,10 @@
     "assets:buildroot": "node scripts/buildroot/buildGuest.mjs",
     "serve": "node scripts/staticServer.mjs",
     "fetch:engine": "node scripts/fetchEngine.mjs",
-    "mcp:sandbox": "node scripts/mcpSandboxServer.mjs"
+    "mcp:sandbox": "node scripts/mcpSandboxServer.mjs",
+    "test:preflight": "node tests/browser/run.mjs tests/browser/preflightNoCoi.html",
+    "test:web-machine": "node tests/webMachine/run.mjs",
+    "test:web-machine:v86": "node tests/webMachine/fixtures/v86/prepareAssets.mjs && node tests/webMachine/run.mjs --v86"
   },
   "keywords": [
     "pyodide",

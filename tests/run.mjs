@@ -694,7 +694,7 @@ section("state 커널");
   await checkAsync("machine 암호 주입: 맨 Crypto는 생성자에서 거부(코어 한 벌 강제)", async () => {
     const machineBarrel = await import(pathToFileURL(join(ROOT, "src", "machine", "index.js")).href);
     let commitCode = null;
-    try { new machineBarrel.MachineCommitCoordinator({ store: {}, cryptoProvider: globalThis.crypto, idFactory: () => "x", nowFactory: () => 1 }); }
+    try { new machineBarrel.MachineCommitCoordinator({ store: {}, cryptoProvider: globalThis.crypto, nowFactory: () => 1 }); }
     catch (e) { commitCode = e.constructor.name; }
     if (commitCode !== "TypeError") throw new Error(`commit coordinator가 맨 Crypto를 받음(${commitCode})`);
     let envelopeCode = null;
@@ -2155,7 +2155,9 @@ check("Web Machine 층과 검증 트리 구조 고정", () => {
   const expected = ["composition", "contracts", "coordination", "devices", "guests", "host", "image", "index.d.ts", "index.js", "persistence"];
   if (entries.join("\n") !== expected.join("\n")) throw new Error(`machine 층 경계 불일치: ${entries.join(", ")}`);
   const testEntries = readdirSync(webMachineTestRoot).sort();
-  const expectedTestEntries = ["README.md", "browser", "contracts", "fixtures"];
+  // run.mjs = probe 러너. probe가 게이트 폴더에 있으면서 아무도 안 돌리던 상태를 끝낸 자리다
+  // (2026-07-27). browser/ 아래에는 probes만 둔다는 불변식이 있어 러너는 이 층에 산다.
+  const expectedTestEntries = ["README.md", "browser", "contracts", "fixtures", "run.mjs"];
   if (testEntries.join("\n") !== expectedTestEntries.join("\n")) throw new Error(`검증 경계 불일치: ${testEntries.join(", ")}`);
   if (readdirSync(join(webMachineTestRoot, "browser")).join("\n") !== "probes") {
     throw new Error("tests/webMachine/browser에는 probes만 둔다");
@@ -2535,6 +2537,77 @@ check("Web Computer 실행 자산은 검증된 development channel", () => {
   if (!packageManifest.scripts?.["test:web-computer"]?.includes("webComputerProduct.mjs")) throw new Error("제품 browser E2E script 누락");
 });
 
+// 7.4) 소비자 진입 표면: 사용자가 실제로 읽는 진단·거부 문장은 영문이다. README와 api.md가
+//      영문인데 이 문장들이 한국어면, 채택 결정자가 checkEnvironment()를 부른 첫 순간
+//      읽을 수 없는 진단을 받는다(유일한 온보딩 장치가 무력화된다). 내부 주석은 한국어 유지다.
+//      스코프는 진입 표면 파일로 좁힌다: 나머지 진단 텍스트는 열린 부채로 기록돼 있다.
+section("진입 표면 언어");
+{
+  const ENTRY_SURFACE = [
+    "src/runtime/preflight.js",
+    "src/machine/composition/pyprocMachine.js",
+  ];
+  const MESSAGE_ARG = /new (?:PyProcError|TypeError)\(\s*(?:"[^"]*",\s*)?([`"][\s\S]*?)[`"]\s*[,)]/g;
+  for (const relPath of ENTRY_SURFACE) {
+    check(`진입 표면 메시지는 영문: ${relPath}`, () => {
+      const code = stripComments(readFileSync(join(ROOT, relPath), "utf8"));
+      const korean = [];
+      for (const m of code.matchAll(MESSAGE_ARG)) {
+        if (/[가-힣]/.test(m[1])) korean.push(m[1].slice(0, 40));
+      }
+      if (korean.length) throw new Error(`한국어 메시지: ${korean.join(" / ")}`);
+    });
+  }
+  check("가드에 넘기는 feature 이름도 영문", () => {
+    const korean = [];
+    for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+      const code = stripComments(readFileSync(f, "utf8"));
+      for (const m of code.matchAll(/require(?:Coi|Jspi)\(\s*"([^"]*)"/g)) {
+        if (/[가-힣]/.test(m[1])) korean.push(`${rel(f)}: ${m[1]}`);
+      }
+    }
+    if (korean.length) throw new Error(korean.join(", "));
+  });
+  // 옵션 화이트리스트는 타입 선언과 같은 집합이어야 한다. 한쪽만 늘면 새 옵션이 입구에서
+  // 거부되거나(타입만 추가) 오타 방어가 비어버린다(목록만 추가).
+  check("boot 옵션 화이트리스트 = BootMachineOptions 선언", () => {
+    const source = readFileSync(join(ROOT, "src", "machine", "composition", "pyprocMachine.js"), "utf8");
+    const listed = new Set([...(/BOOT_MACHINE_OPTION_KEYS = Object\.freeze\(\[([\s\S]*?)\]\)/.exec(source)?.[1] || "")
+      .matchAll(/"(\w+)"/g)].map((m) => m[1]));
+    if (!listed.size) throw new Error("화이트리스트 선언을 찾지 못했다");
+    const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
+    const declaredKeys = (block) => new Set([...block.matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]));
+    const bootOptions = /export interface BootOptions \{([\s\S]*?)\n\}/.exec(dts);
+    const machineOptions = /export interface BootMachineOptions extends BootOptions \{([\s\S]*?)\n\}/.exec(dts);
+    if (!bootOptions || !machineOptions) throw new Error("index.d.ts 옵션 선언을 찾지 못했다");
+    const declared = new Set([...declaredKeys(bootOptions[1]), ...declaredKeys(machineOptions[1])]);
+    const missing = [...declared].filter((key) => !listed.has(key));
+    const extra = [...listed].filter((key) => !declared.has(key));
+    if (missing.length) throw new Error(`화이트리스트 누락: ${missing.join(", ")}`);
+    if (extra.length) throw new Error(`선언에 없는 키: ${extra.join(", ")}`);
+  });
+  // SAB 생성 지점은 전부 가드를 지난다. README가 "암호 같은 SharedArrayBuffer is not defined
+  // 대신 실행 가능한 에러"를 약속하는데 IPC 경로만 그 약속 밖이었다.
+  check("SharedArrayBuffer 생성 지점은 COI 가드를 지난다", () => {
+    const offenders = [];
+    for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+      const code = stripComments(readFileSync(f, "utf8"));
+      if (!/new SharedArrayBuffer\(/.test(code)) continue;
+      if (/requireCoi\(/.test(code)) continue;
+      // 전이 가드 예산: 이 파일들의 SAB는 이미 가드를 지난 진입 뒤에만 만들어진다. 예외 목록이
+      // 아니라 예산이다(늘리려면 이 줄을 고치는 것이 곧 심사 지점).
+      const TRANSITIVE_COI_BUDGET = new Map([
+        ["src/processOs/pyProc.js", "풀 부팅(boot)이 requireCoi를 지난 뒤에만 스냅샷 SAB를 만든다"],
+        ["src/processOs/machineContainer.js", "자식 머신은 부모 풀의 부팅 뒤에만 생긴다"],
+        ["src/processOs/shardCompute.js", "mapArray/matmul은 부팅된 풀의 동사다(풀 없이 도달 불가)"],
+      ]);
+      if (TRANSITIVE_COI_BUDGET.has(rel(f))) continue;
+      offenders.push(rel(f));
+    }
+    if (offenders.length) throw new Error(`가드 없는 SAB 생성: ${offenders.join(", ")}`);
+  });
+}
+
 // 7.5) CI 배관: 게이트 정의는 tests/가 정본이지만, "그 게이트가 실제로 돈다"는 배관에 산다.
 //      배관이 조용히 갈라진 사례가 셋 있었다: 게시 경로가 ci 게이트의 부분집합이었고,
 //      workflow_dispatch가 태그 검증 step만 건너뛰고 게시까지 갔고, 액션 major가 워크플로마다
@@ -2591,6 +2664,25 @@ section("CI 배관");
     const watch = workflows.get("engine-watch.yml");
     if (/\|\|\s*true/.test(watch)) throw new Error("engine-watch가 조회 실패를 삼킨다");
     if (!/워치가 감지력을 잃었다/.test(watch)) throw new Error("조회 실패의 명시 실패 경로 없음");
+  });
+  // 게이트 폴더의 모든 페이지는 어떤 실행 경로(npm script 또는 CI 명령줄)에 등장한다.
+  // 이 검사가 없을 때 probe 15개가 게이트 폴더에 있으면서 아무도 돌리지 않았다: 구조 게이트가
+  // 존재를 고정하고 문서가 과거 수치를 인용하는데 실행은 0이었다(깨져도 아무도 모르고, 지우면
+  // 구조 게이트가 RED가 되는 최악의 조합). attempts는 실험 레인이라 스코프 밖이다.
+  check("게이트 폴더에 실행되지 않는 페이지가 없다", () => {
+    const scripts = Object.values(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {}).join("\n");
+    // 실행 경로 = npm script + CI 명령줄 + 러너 파일이 나열한 페이지 목록(기본 페이지 포함).
+    const runnerSources = collect(join(ROOT, "tests"), [".mjs"], [])
+      .map((f) => readFileSync(f, "utf8"));
+    const runners = [scripts, ...workflows.values(), ...runnerSources].join("\n");
+    const pages = [
+      ...collect(join(ROOT, "tests", "browser"), [".html"], []),
+      ...collect(join(ROOT, "tests", "webMachine", "browser"), [".html"], []),
+    ].map((f) => rel(f));
+    const orphans = pages.filter((page) => !runners.includes(page));
+    // participant 페이지는 probe가 iframe으로 여는 종속 자산이라 러너가 직접 열지 않는다.
+    const dependent = orphans.filter((page) => !/Participant\.html$/.test(page));
+    if (dependent.length) throw new Error(`실행 경로 없는 게이트 페이지: ${dependent.join(", ")}`);
   });
   check("워크플로가 실존 npm script만 호출한다", () => {
     const scripts = new Set(Object.keys(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {}));

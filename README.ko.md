@@ -138,7 +138,7 @@ console.log(machine.run("len(values)"));      // 3
 | 진짜 병렬 / 라이브 fork | `await machine.proc({ lanes, replay })` | 워커 프로세스 풀 (`map`/`fork`/`signal`) |
 
 공통 기반은 결정적 리플레이다: `boot({ deterministic: true })`가 부팅 엔트로피를 고정해 같은
-매니페스트가 바이트 동일한 메모리를 재현하고, 그것이 델타 저장/저널 부활/워커 간 `fork`를
+매니페스트가 리플레이 경계(cp0)에서 바이트 동일한 메모리를 재현하고, 그것이 델타 저장/저널 부활/워커 간 `fork`를
 건전하게 만든다. 이 선택은 모든 내구 커밋의 환경 지문에 기록되며, 비결정 머신은
 `history.export`를 명시적으로 거부한다(리플레이 보증의 조용한 소실 금지).
 

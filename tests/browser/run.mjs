@@ -29,6 +29,12 @@ function resetRestartPromise() {
 }
 resetRestartPromise();
 
+const page = (process.argv[2] || "tests/browser/gate.html").replaceAll("\\", "/").replace(/^\/+/, "");
+// 헤더 없는 호스팅(GitHub Pages 등가)을 요구하는 페이지는 이름으로 그 조건을 선언한다.
+// npm script는 의존성 0 계약 때문에 크로스플랫폼 env 설정 수단이 없으므로(cross-env 금지),
+// 조건을 페이지 이름에서 유도해 `npm run test:preflight`가 어느 OS에서도 같게 돈다.
+const noCoi = !!process.env.PYPROC_NO_COI || /NoCoi\.html$/.test(page);
+
 // 제품 배포 파이프라인 등가: pyproc-assets CLI가 만든 graph/SRI manifest를 테스트 서버가
 // 같은 오리진에서 제공하고, 브라우저 게이트가 그 JSON을 assetIntegrity로 소비한다.
 const assetManifest = spawnSync(process.execPath, ["scripts/assetManifest.mjs", "--baseURL", "/"], { encoding: "utf8" });
@@ -101,10 +107,10 @@ const server = createStaticServer(async (req, res) => {
   res.writeHead(204); res.end();
   try { reportResolve(JSON.parse(body)); } catch (e) { reportResolve({ ok: false, checks: [], parseError: String(e) }); }
   return true;
-}, { coi: !process.env.PYPROC_NO_COI });
+}, { coi: !noCoi });
 
 await new Promise((res) => server.listen(0, "127.0.0.1", res));
-const page = (process.argv[2] || "tests/browser/gate.html").replaceAll("\\", "/").replace(/^\/+/, "");
+
 // PYPROC_INDEX_URL: 게이트/probe를 다른 배포 지점으로 전 검사한다(자가 호스팅 P0 게이트:
 // PYPROC_INDEX_URL=/vendor/pyodide/ 가 CDN 0으로 같은 검사를 돌린다). 페이지는 ?indexURL=로 받는다.
 const baseUrl = `http://127.0.0.1:${server.address().port}/${page}`;

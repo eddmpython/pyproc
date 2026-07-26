@@ -61,7 +61,6 @@ export class WebComputerRuntime {
       this.persistence = new WebComputerPersistence({
         store: this.store,
         cryptoProvider: crypto,
-        idFactory: () => crypto.randomUUID(),
         nowFactory: () => Date.now(),
       });
       await this._acquireOwnership(this._control("owner"));

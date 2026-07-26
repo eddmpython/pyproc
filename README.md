@@ -138,7 +138,7 @@ One question at a time, one obvious door:
 | Real parallelism / live fork | `await machine.proc({ lanes, replay })` | worker process pool (`map`/`fork`/`signal`) |
 
 Deterministic replay is the shared foundation: `boot({ deterministic: true })` fixes the boot
-entropy so the same manifest reproduces byte-identical memory, which is what makes delta save,
+entropy so the same manifest reproduces byte-identical memory at the replay boundary (cp0), which is what makes delta save,
 journal revival, and worker-to-worker `fork` sound. That choice is recorded in every durable
 commit's environment fingerprint - a non-deterministic machine refuses `history.export` instead
 of silently losing the replay guarantee.

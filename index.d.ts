@@ -1205,8 +1205,14 @@ declare class PyprocMachine {
   run(code: string): unknown;
   runAsync(code: string): Promise<unknown>;
   term(cfg?: TerminalConfig): Terminal;
-  /** 프로세스 풀(워커 = 프로세스, 독립 GIL). fork/forkMany/map/mapArray/matmul은 풀의 동사다. */
+  /**
+   * 프로세스 풀(워커 = 프로세스, 독립 GIL). fork/forkMany/map/mapArray/matmul은 풀의 동사다.
+   * 머신당 하나로 memoize된다: 두 번째 호출은 첫 풀을 돌려주므로 재마운트가 워커를 쌓지 않는다.
+   * lanes 기본값은 2이고 첫 호출의 옵션이 그 머신의 풀을 결정한다.
+   */
   proc(opts?: PyProcOptions & { lanes?: number; useSnapshot?: boolean }): Promise<PyProc>;
+  /** 회수: 풀 워커를 종료하고 리액티브 보관분을 해제한다. 머신을 버리기 전에 부른다. */
+  dispose(): Promise<void>;
 }
 
 /** 첫 guest 고속 경로: 파이썬 머신을 부팅해 핸들을 돌려준다. */

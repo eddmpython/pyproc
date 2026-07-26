@@ -8,6 +8,7 @@
 // 제로카피로 비출 수 없다(browser-os 안티 추천 4). read/write(offset, len)가 정직한 표면이다.
 // 실측: tests/attempts/pythonMachine/pipeShmProbe.html.
 import { PyProcError } from "../runtime/errors.js";
+import { requireCoi } from "../runtime/preflight.js";
 
 const HEADER_BYTES = 64; // Int32 16개(캐시라인 여유). [0]=head [1]=tail [2]=closed
 const HEAD = 0, TAIL = 1, CLOSED = 2;
@@ -18,20 +19,24 @@ const WAIT_SLICE_MS = 50;
 const wrap = (v, cap) => (((v % cap) + cap) % cap);
 
 export function createPipe(capacity = 1 << 20) {
+  requireCoi("IPC pipe");
   const sab = new SharedArrayBuffer(HEADER_BYTES + capacity);
   return { kind: "pipe", sab, cap: capacity };
 }
 export function createLock() {
+  requireCoi("IPC lock");
   const sab = new SharedArrayBuffer(4);
   new Int32Array(sab)[0] = 1; // 락 = 세마포어(1): [0]=잔여 획득 가능 수(1 = 사용 가능)
   return { kind: "lock", sab };
 }
 export function createSemaphore(count = 1) {
+  requireCoi("IPC semaphore");
   const sab = new SharedArrayBuffer(4);
   new Int32Array(sab)[0] = count;
   return { kind: "semaphore", sab };
 }
 export function createShm(byteLength) {
+  requireCoi("IPC shared memory");
   return { kind: "shm", sab: new SharedArrayBuffer(byteLength) };
 }
 

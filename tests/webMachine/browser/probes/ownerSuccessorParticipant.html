@@ -33,7 +33,6 @@
   const generationCoordinator = new MachineCommitCoordinator({
     store: machineStore,
     cryptoProvider: createMachineCryptoProvider(crypto),
-    idFactory: () => "owner-generation-1",
     nowFactory: () => 1,
   });
   let coordinator = null;

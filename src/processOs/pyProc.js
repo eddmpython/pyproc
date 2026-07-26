@@ -212,7 +212,7 @@ export class PyProc {
   async boot(n, useSnapshot = true) {
     // 프로세스 OS는 SAB(crossOriginIsolated)를 요구한다. 헤더 누락 시 여기서 실행 가능한 에러를
     // 던진다(워커 안에서 SharedArrayBuffer is not defined로 죽는 암호 실패를 대신한다).
-    requireCoi("PyProc(프로세스 OS)");
+    requireCoi("PyProc (process OS)");
     await this._verifyWorkerAssets();
     if (useSnapshot && !this._snapshot) await this._makeSnapshot();
     const spawns = [];

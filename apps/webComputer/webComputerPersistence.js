@@ -23,10 +23,10 @@ async function withPausedContext(context, control, operation) {
 }
 
 export class WebComputerPersistence {
-  constructor({ store, cryptoProvider, idFactory, nowFactory }) {
+  constructor({ store, cryptoProvider, nowFactory }) {
     this.store = store;
     const machineCrypto = createMachineCryptoProvider(cryptoProvider);
-    this.commitCoordinator = new MachineCommitCoordinator({ store, cryptoProvider: machineCrypto, idFactory, nowFactory });
+    this.commitCoordinator = new MachineCommitCoordinator({ store, cryptoProvider: machineCrypto, nowFactory });
     this.envelopeCoordinator = new MachineEnvelopeCoordinator({ cryptoProvider: machineCrypto, nowFactory });
     this.cleanupPending = false;
     this.lastPrune = null;

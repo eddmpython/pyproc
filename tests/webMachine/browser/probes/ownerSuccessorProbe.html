@@ -165,7 +165,13 @@ owner context 강제 제거 successor 21/22/23ms.
     const currentOwner = await machineStore.readOwner(groupId);
     check("durable epoch가 stale owner publish·prune 거부", staleCode === "WEB_MACHINE_OWNER_STALE" && stalePruneCode === "WEB_MACHINE_OWNER_STALE" && currentOwner?.ownerId === fourth.ownerId && currentOwner.epoch === 4, `${staleCode}/${stalePruneCode}/${currentOwner?.ownerId}/${currentOwner?.epoch}`);
     const head = await machineStore.readHead(groupId);
-    check("successor가 새 boot나 command replay 없이 같은 HEAD 사용", head?.head === "owner-generation-1" && ownerEvents.slice(1).every((entry) => entry.recovered && !entry.history.includes("booted")), `${head?.head}/${ownerEvents.length}`);
+    // generation 정체는 commit 주소다(kernel-product 이후). 낡은 단정은 주입 idFactory가
+    // 만들던 리터럴("owner-generation-1")을 기대했는데, 그 주입은 더 이상 정체를 정하지 않는다.
+    // 계약의 알맹이는 그대로다: successor가 같은 HEAD를 이어받고 새 boot도 replay도 없다.
+    check("successor가 새 boot나 command replay 없이 같은 HEAD 사용",
+      /^sha256:[0-9a-f]{64}$/.test(String(head?.head || ""))
+      && ownerEvents.slice(1).every((entry) => entry.recovered && !entry.history.includes("booted")),
+      `${head?.head}/${ownerEvents.length}`);
     check("owner coordination 내부 오류 0", errors.length === 0, JSON.stringify(errors));
 
     const waitingOwner = new WebLockOwnerCoordinator({

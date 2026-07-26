@@ -650,7 +650,6 @@ export class MachineCommitCoordinator {
   constructor(options: {
     store: MachineStore;
     cryptoProvider: MachineCryptoProvider;
-    idFactory: () => string;
     nowFactory: () => number;
   });
   readHead(groupId: string): Promise<GenerationHead | null>;

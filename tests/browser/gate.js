@@ -99,6 +99,50 @@ try {
   check("porcelain: history.checkpoint/restore 왕복", pm.run("porcelainX") === 1);
   check("porcelain: 일반 부팅은 deterministic === false", pm.deterministic === false);
 
+  // 오타를 침묵으로 만들지 않는다: 미지의 옵션 키는 입구에서 거부된다(전에는 조용히 버려져
+  // `determinstic` 오타가 무증상 비결정 부팅이 됐고 실패는 history.export에서 나타났다).
+  let optionErr = null;
+  try { await boot({ determinstic: true }); } catch (e) { optionErr = e; }
+  check("boot: 미지의 옵션 키 거부 + 후보 제시",
+    !!optionErr && optionErr.code === "PYPROC_INPUT_INVALID" && optionErr.message.includes("determinstic")
+    && optionErr.message.includes("deterministic"),
+    optionErr ? optionErr.message.slice(0, 80) : "no error");
+
+  // 비결정 머신의 export 거부(api.md 계약). 증거가 0이던 자리다: 이 거부가 사라지면
+  // 리플레이 보증 없는 상태가 이동 가능한 이미지로 조용히 나간다.
+  let exportErr = null;
+  try { await pm.history.export(); } catch (e) { exportErr = e; }
+  check("history.export: 비결정 머신 거부", !!exportErr && exportErr.code === "PYPROC_INPUT_INVALID",
+    exportErr ? exportErr.code : "no error");
+
+  // 결정적 부팅의 경계 바이트 동일성: 세션 부활(h0 대조)과 저널 recover와 fork가 전부 이
+  // 전제 위에 선다. 직접 증거가 없어 fork 게이트가 함수적으로 전제할 뿐이었다(감사 지적).
+  //
+  // 측정 대상은 **cp0 경계**다. 부팅 직후의 live 힙은 두 부팅에서 다르다: 복제 고유성을 위해
+  // 재시드(실제 엔트로피)가 cp0 확정 뒤에 돌기 때문이다(설계). 계약도 그렇게 적혀 있다
+  // (api.md: "byte-identical memory at the replay boundary (cp0)"). 실측 확인: 같은 매니페스트
+  // 두 부팅의 live 힙 digest는 다르고 길이는 같았다(31457280B) -> cp0 해시 배열로 대조한다.
+  {
+    const [d1, d2] = [await boot({ deterministic: true, indexURL: INDEX }), await boot({ deterministic: true, indexURL: INDEX })];
+    const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const boundaryDigest = async (machine) => {
+      const hashes = machine.runtime.enableReactive().hashes[0];
+      return hex(await crypto.subtle.digest("SHA-256", new Uint8Array(hashes.buffer, hashes.byteOffset, hashes.byteLength)));
+    };
+    const [h1, h2] = [await boundaryDigest(d1), await boundaryDigest(d2)];
+    check("결정적 부팅: 같은 매니페스트 두 부팅의 cp0 경계 동일(h0)",
+      h1 === h2 && d1.runtime.memory.byteLength() === d2.runtime.memory.byteLength(),
+      `${h1.slice(0, 12)}.. == ${h2.slice(0, 12)}.. (${d1.runtime.memory.byteLength()}B)`);
+    // 경계 이후는 갈라져야 한다: 재시드가 프로세스를 갈라놓는 것이 복제 고유성 계약이다.
+    const liveDigest = async (machine) => hex(await crypto.subtle.digest("SHA-256", machine.runtime.memory.sliceAll()));
+    const [l1, l2] = [await liveDigest(d1), await liveDigest(d2)];
+    check("결정적 부팅: 경계 이후 live 힙은 갈라진다(재시드 = 복제 고유성)", l1 !== l2,
+      `${l1.slice(0, 8)}.. != ${l2.slice(0, 8)}..`);
+    check("결정적 부팅: deterministic === true", d1.deterministic === true && d2.deterministic === true);
+    await d1.dispose();
+    await d2.dispose();
+  }
+
   // 2) Layer 1: 복원 리액티브의 실행 경계 계약
   const reactive = rt.enableReactive();
   const sp0 = reactive.stackSave();
@@ -446,6 +490,38 @@ try {
 
   os.terminate();
   check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
+
+  // 풀 소진 계약(api.md: 전 레인 사망 시 {error}로 resolve, silent undefined 없음). 구현은
+  // 있었지만 증거가 0이었다: 이 계약이 깨지면 소비자에게 undefined가 새고 원인이 안 보인다.
+  {
+    const dos = new PyProc({ indexURL: INDEX });
+    await dos.boot(2, false);
+    for (const p of dos.ps()) dos.kill(p.pid);
+    const drained = await dos.map(fn, [1000, 2000]);
+    check("풀 소진: 전 레인 사망 후 map은 {error}로 수렴(undefined 0)",
+      drained.length === 2 && drained.every((r) => r && typeof r === "object" && typeof r.error === "string")
+      && drained.every((r) => r.error.includes("pool exhausted")),
+      JSON.stringify(drained).slice(0, 110));
+    dos.terminate();
+  }
+
+  // mid-flight 워커 사망: 발사된 태스크가 유한 시간에 {error}로 수렴하고 hang하지 않는다.
+  // 컨테이너에는 이 계약이 있었지만 풀에는 없었다(감사 지적: 실패 모드 공백).
+  {
+    const mos = new PyProc({ indexURL: INDEX });
+    await mos.boot(2, false);
+    const victimPid = mos.ps()[0].pid;
+    const inflight = mos.map("def _fn(n):\n    while True:\n        pass", [0]);
+    setTimeout(() => mos.kill(victimPid), 300);
+    const settled = await Promise.race([
+      inflight,
+      new Promise((resolve) => setTimeout(() => resolve("timeout"), 15000)),
+    ]);
+    check("mid-flight 워커 사망: hang 없이 {error} 수렴",
+      settled !== "timeout" && Array.isArray(settled) && settled[0] && typeof settled[0].error === "string",
+      settled === "timeout" ? "15s 내 미수렴" : JSON.stringify(settled).slice(0, 90));
+    mos.terminate();
+  }
 
   // fork(2): 살아있는 프로세스의 상태 복제. 리플레이 풀(대칭 커널)에서만 성립 = 계약.
   // 두 워커에 서로 다른 상태를 만든 뒤(더러운 dst) fork하므로, 자식이 정확히

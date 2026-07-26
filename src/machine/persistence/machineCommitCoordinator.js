@@ -36,16 +36,14 @@ function generationCorrupt(groupId, detail) {
 }
 
 export class MachineCommitCoordinator {
-  constructor({ store, cryptoProvider, idFactory, nowFactory }) {
+  constructor({ store, cryptoProvider, nowFactory }) {
     if (!store) throw new TypeError("store가 필요하다");
     // digest·커널 문법은 코어 한 벌이다: 조립은 createMachineCryptoProvider가 배달한다(맨 Crypto 거부).
     if (typeof cryptoProvider?.digestBytes !== "function") throw new TypeError("cryptoProvider.digestBytes가 필요하다(createMachineCryptoProvider로 감싸라)");
     if (typeof cryptoProvider?.state?.makeStateCommit !== "function") throw new TypeError("cryptoProvider.state(커널 문법)가 필요하다(createMachineCryptoProvider로 감싸라)");
-    if (typeof idFactory !== "function") throw new TypeError("idFactory가 필요하다");
     if (typeof nowFactory !== "function") throw new TypeError("nowFactory가 필요하다");
     this._store = store;
     this._cryptoProvider = cryptoProvider;
-    this._idFactory = idFactory; // generation 정체는 commit 주소가 대체했지만, 시그니처 계약은 유지한다
     this._nowFactory = nowFactory;
   }
 

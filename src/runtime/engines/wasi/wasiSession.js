@@ -12,6 +12,7 @@ import { unzipWheel } from "./wheelUnzip.js";
 import { verifyPyProcAssetIntegrity } from "../../assets.js";
 import { PyProcError, fromErrorPayload } from "../../errors.js";
 import { base64FromBytes } from "../../contentDigest.js";
+import { requireCoi } from "../../preflight.js";
 import {
   RUNTIME_CAPABILITIES,
   RUNTIME_CONTRACT_VERSION,
@@ -74,6 +75,9 @@ export class WasiSession {
     this._stdlibDir = stdlibDir || null;     // /lib/<stdlibDir> 마운트 지점
     this._worker = null;
     this._assetIntegrity = assetIntegrity;
+    // 이 세션은 제어/데이터 채널이 SAB다. 가드 없이 만들면 헤더 없는 페이지에서
+    // "SharedArrayBuffer is not defined"가 그대로 새어나간다(README가 없다고 약속한 문장).
+    requireCoi("bootWasi (WASI CPython session)");
     this._ctl = new Int32Array(new SharedArrayBuffer(CTL_WORDS * 4));
     this._data = new Uint8Array(new SharedArrayBuffer(DATA_SAB_BYTES));
     this._queue = []; this._idle = false; this._cur = null; this._lines = { stdout: [], stderr: [] };

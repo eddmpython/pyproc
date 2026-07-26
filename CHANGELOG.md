@@ -19,6 +19,28 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - Every subpath in `exports` now carries a `types` entry, so `pyproc/history`,
   `pyproc/machine`, and `pyproc/assets` type-resolve without `paths` mapping.
 
+### Breaking
+
+- **`MachineCommitCoordinator` no longer takes `idFactory`** (`pyproc/machine`). Generation
+  identity has been the commit address itself since the state-kernel refactor, so the parameter
+  was stored and never read while still being required - a signature that misled callers into
+  believing they controlled generation ids. Drop the argument; nothing else changes.
+
+### Added
+
+- **`machine.dispose()`** terminates the process pool and releases reactive retention.
+  `machine.proc()` is now memoized per machine, so a remount reuses the pool instead of
+  stacking workers (each lane is an independent interpreter).
+- **`boot()` rejects unknown option keys** with the received name and the nearest known key.
+  A typo like `determinstic: true` used to boot non-deterministically in silence and fail much
+  later at `history.export`.
+- Consumer-facing diagnostics on the entry surface (`checkEnvironment` issues, `requireCoi`,
+  the new `requireJspi`, and the porcelain input/refusal errors) are in English, matching the
+  README and API reference. Internal comments stay Korean.
+- IPC pipe / lock / semaphore / shared-memory creation and `bootWasi` now pass the
+  cross-origin-isolation guard, so a missing header reports the actionable error instead of a
+  bare `SharedArrayBuffer is not defined`.
+
 ### Fixed
 
 - Consumer docs that still named the pre-0.0.10 root verbs now name the shipped surface

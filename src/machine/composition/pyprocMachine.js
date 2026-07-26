@@ -16,6 +16,27 @@ import { boot as bootRuntime } from "../../composition/runtimeApi.js";
 import { bootSession, openMachine } from "../../session/session.js";
 import { openPersistentMachine } from "../../session/kernelElection.js";
 
+const DEFAULT_PROC_LANES = 2; // 워커 2개 = 대부분의 기기에서 안전한 기본값(코어 수와 무관하게 시작)
+// boot가 받는 키 전수. 미지의 키를 조용히 버리면 오타 하나(`determinstic`)가 무증상 비결정
+// 부팅이 되고, 실패는 훨씬 뒤 history.export에서 나타난다(30분 잃는 경로). 그래서 입구에서 막는다.
+// 목록의 정본은 index.d.ts의 BootMachineOptions이고 tests/run.mjs가 둘의 일치를 대조한다.
+const BOOT_MACHINE_OPTION_KEYS = Object.freeze([
+  "deterministic", "setup", "wheelDir",
+  "indexURL", "stdout", "stderr", "packages", "env", "coreCacheDir",
+  "engineScriptIntegrity", "coreIntegrity", "assetIntegrity", "lockFileURL", "loadPyodide",
+]);
+
+// 오타를 침묵으로 만들지 않는다. 받은 키 이름을 그대로 돌려주고 가까운 후보를 제시한다.
+function assertKnownOptions(options, allowed, verb) {
+  if (!options || typeof options !== "object") return;
+  const unknown = Object.keys(options).filter((key) => !allowed.includes(key));
+  if (!unknown.length) return;
+  const near = (key) => allowed.find((candidate) => candidate.toLowerCase().startsWith(key.slice(0, 4).toLowerCase()));
+  const hints = unknown.map((key) => (near(key) ? `${key} (did you mean ${near(key)}?)` : key));
+  throw new PyProcError("PYPROC_INPUT_INVALID",
+    `${verb}: unknown option(s): ${hints.join(", ")}. Known options: ${allowed.join(", ")}.`);
+}
+
 class PyprocHistory {
   constructor(machine) {
     this._machine = machine;
@@ -27,7 +48,7 @@ class PyprocHistory {
   checkpoint() { return this._reactive.checkpoint(); }
   restore(target, opts = {}) {
     const index = typeof target === "number" ? target : target?.index;
-    if (!Number.isInteger(index)) throw new PyProcError("PYPROC_INPUT_INVALID", "history.restore: 체크포인트 핸들 또는 인덱스가 필요하다");
+    if (!Number.isInteger(index)) throw new PyProcError("PYPROC_INPUT_INVALID", "history.restore: needs a checkpoint handle or an integer index");
     return this._reactive.restoreLive(index, null, opts);
   }
   tree() { return this._reactive.tree(); }
@@ -40,7 +61,7 @@ class PyprocHistory {
 
   // ---- 내구 구역: 커널 커밋(저널)과 이동 bundle. sha256 승격은 여기서만 일어난다 ----
   _journal(opts = {}) {
-    if (!opts.dir) throw new PyProcError("PYPROC_INPUT_INVALID", "history: { dir }(FileSystemDirectoryHandle)가 필요하다");
+    if (!opts.dir) throw new PyProcError("PYPROC_INPUT_INVALID", "history: needs { dir } (a FileSystemDirectoryHandle). Get one with navigator.storage.getDirectory()");
     let journal = this._journals.get(opts.dir);
     if (!journal) {
       journal = this._machine._rt.enableJournal({ reactive: this._reactive, ...opts });
@@ -59,13 +80,13 @@ class PyprocHistory {
     const session = this._machine._session;
     if (!session) {
       throw new PyProcError("PYPROC_INPUT_INVALID",
-        "history.export: 결정적 리플레이 부팅(boot({ deterministic: true }))에서만 내보낼 수 있다. 비결정 출신 상태에는 리플레이 보증이 없다(조용한 보증 소실 금지).");
+        "history.export: only a deterministic-replay machine can be exported. Boot with boot({ deterministic: true }); state from a non-deterministic boot carries no replay guarantee, and this refuses rather than lose that guarantee silently.");
     }
     return session.exportImage(opts);
   }
   save(dir, name) {
     const session = this._machine._session;
-    if (!session) throw new PyProcError("PYPROC_INPUT_INVALID", "history.save: 결정적 리플레이 부팅에서만 저장할 수 있다(부활 = 리플레이 + 델타).");
+    if (!session) throw new PyProcError("PYPROC_INPUT_INVALID", "history.save: only a deterministic-replay machine can be saved. Revival is replay plus delta, so boot with boot({ deterministic: true }).");
     return session.save(dir, name);
   }
 }
@@ -86,12 +107,28 @@ export class PyprocMachine {
   get fs() { return this._rt.fs; }
   term(cfg) { return this._rt.enableTerminal(cfg); }
   // 프로세스 풀(워커 = 프로세스, 독립 GIL): fork/forkMany/map/mapArray/matmul은 풀의 동사다.
+  // 같은 머신에 풀은 하나로 유지한다. 호출마다 새 풀을 만들면 컴포넌트 재마운트가 워커를
+  // 쌓아 올리고(레인마다 독립 인터프리터 = 수백 MB), 원인이 pyproc이라는 단서가 남지 않는다.
+  // enableReactive가 memoize되는 것을 본 소비자는 proc도 그럴 것이라 합리적으로 기대한다.
   async proc(opts = {}) {
-    const { PyProc } = await import("../../processOs/pyProc.js");
-    const { lanes = 2, useSnapshot = true, ...procOpts } = opts;
-    const pool = new PyProc({ indexURL: this._rt.indexURL, assetIntegrity: this._rt.assetIntegrity, ...procOpts });
-    await pool.boot(lanes, useSnapshot);
-    return pool;
+    if (this._procPending) return this._procPending;
+    this._procPending = (async () => {
+      const { PyProc } = await import("../../processOs/pyProc.js");
+      const { lanes = DEFAULT_PROC_LANES, useSnapshot = true, ...procOpts } = opts;
+      const pool = new PyProc({ indexURL: this._rt.indexURL, assetIntegrity: this._rt.assetIntegrity, ...procOpts });
+      await pool.boot(lanes, useSnapshot);
+      this._proc = pool;
+      return pool;
+    })();
+    try { return await this._procPending; } catch (error) { this._procPending = null; throw error; }
+  }
+  // 회수 동사. 풀 핸들을 잃으면 워커를 되돌릴 방법이 없어서 머신 자신이 회수구를 갖는다.
+  async dispose() {
+    const pool = this._proc;
+    this._proc = null;
+    this._procPending = null;
+    if (pool) await pool.terminate();
+    this._reactive.dispose();
   }
 }
 
@@ -99,6 +136,7 @@ export class PyprocMachine {
 // deterministic: true면 결정적 리플레이 부팅(manifest = env/packages/setup/wheelDir...)이고,
 // 그 선택은 이후 모든 내구 커밋의 환경 지문(deterministic 플래그)에 기록된다.
 export async function boot(options = {}) {
+  assertKnownOptions(options, BOOT_MACHINE_OPTION_KEYS, "boot");
   const { deterministic = false, ...rest } = options;
   if (deterministic) {
     const session = await bootSession(rest);
@@ -128,5 +166,5 @@ export async function open(source, opts = {}) {
     await session.load(source.dir, source.name);
     return new PyprocMachine({ rt: session.rt, reactive: session.reactive, session });
   }
-  throw new PyProcError("PYPROC_INPUT_INVALID", "open: Blob/bytes(bundle), { dir, name }(세션 저장), { persistent }(멀티탭 영속) 중 하나가 필요하다");
+  throw new PyProcError("PYPROC_INPUT_INVALID", "open: needs one of a Blob/bytes bundle, { dir, name } (a saved session), or { persistent } (the multi-tab machine)");
 }
