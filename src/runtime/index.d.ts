@@ -34,7 +34,7 @@ export const FileSystem: {
   readonly prototype: FileSystemShape;
 };
 
-export function boot(options?: BootOptions): Promise<RuntimeShape>;
+export function bootRuntime(options?: BootOptions): Promise<RuntimeShape>;
 export function checkEnvironment(): EnvReport;
 export function ensureEngineScript(indexURL: string, opts?: { integrity?: string; crossOrigin?: string }): Promise<void>;
 export function assertEngineContract(engine: unknown): EngineContract;

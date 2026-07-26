@@ -300,6 +300,8 @@ Edge 또는 Chromium에서 `http://localhost:8788/apps/webComputer/`를 연다. 
 핸들 아래의 계약은 plumbing 서브패스가 나른다:
 
 ```js
+// 자체 부팅한 Pyodide 인스턴스를 pyproc에 넘기는 채택 이음새.
+import { Runtime, bootRuntime, checkEnvironment } from "pyproc/runtime";
 // 내구 상태 커널: 오브젝트 모델, commit/open 프로토콜, store, 서명 bundle.
 import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
 // 브라우저 컴퓨터 내부(호스트, 장치, guest 어댑터, 머신 store).

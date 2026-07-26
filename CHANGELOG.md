@@ -8,7 +8,28 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
-Nothing yet.
+### Added
+
+- **`pyproc/runtime` is a declared plumbing subpath again**: `Runtime`, `bootRuntime`,
+  `MemoryCapability`, `FileSystem`, `checkEnvironment`, and the engine/runtime contract
+  assertions. 0.0.10 removed it, but the adoption seam for consumers that boot Pyodide
+  themselves (`new Runtime(py)`) has no root-surface equivalent, so it returns. Its boot verb
+  is named `bootRuntime`, not `boot`: two public `boot` functions that differ only in return
+  type make adoption depend on which docs the editor happens to show.
+- Every subpath in `exports` now carries a `types` entry, so `pyproc/history`,
+  `pyproc/machine`, and `pyproc/assets` type-resolve without `paths` mapping.
+
+### Fixed
+
+- Consumer docs that still named the pre-0.0.10 root verbs now name the shipped surface
+  (`docs/consuming/trustPermissions.md`, `resumeCatalog.md`, `contract.md`,
+  `docs/product/glossary.md`, `docs/reference/bundleFormat.md`, `SECURITY.md`, both READMEs).
+  The signature helpers in particular are `createStateKeyPair` / `exportStatePublicKey` /
+  `fingerprintStatePublicKey` from `pyproc/history`, and they take a crypto provider first.
+
+한국어 요약: `pyproc/runtime`을 안정 plumbing subpath로 되돌리고 boot 동사를 `bootRuntime`으로
+분리했다(공개 `boot` 두 개의 이름 충돌 제거). 모든 subpath에 `types` 항목을 붙였다. 0.0.10
+개명 뒤에도 옛 루트 이름을 지시문으로 쓰던 소비자 문서를 현재 표면으로 고쳤다.
 
 ## 0.0.10 - 2026-07-19
 

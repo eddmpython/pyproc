@@ -302,6 +302,8 @@ The root surface is one noun and its verbs: a **machine with history**. Two entr
 Plumbing subpaths carry the contracts underneath the handle:
 
 ```js
+// The adoption seam when you boot Pyodide yourself and hand the instance to pyproc.
+import { Runtime, bootRuntime, checkEnvironment } from "pyproc/runtime";
 // The durable-state kernel: object model, commit/open protocol, stores, signed bundles.
 import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
 // The browser-computer internals (hosts, devices, guest adapters, machine stores).

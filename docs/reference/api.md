@@ -398,9 +398,18 @@ headless CI cannot see a GPU adapter; `PYPROC_GPU_UNAVAILABLE`), `pyproc/socket`
 `WasiSession` - research preview proving the engine-independent core; the production
 lane is Pyodide).
 
+### `pyproc/runtime`
+
+The adoption seam for a Pyodide instance you booted yourself: `new Runtime(py)`,
+`bootRuntime(opts)` (resolves to a `Runtime`, not a machine), `MemoryCapability`,
+`FileSystem`, `checkEnvironment`, and the Engine/Runtime contract assertions
+(`assertEngineContract`, `requireEngineCapability`, `assertRuntimeContract`). Reach for it
+only when pyproc must not own the engine boot; otherwise `boot()` plus `machine.runtime` is
+the same object with the machine verbs attached.
+
 ### Retired subpaths
 
-`pyproc/runtime`, `pyproc/reactive`, `pyproc/syscall-bridge`, and `pyproc/process-os` no
+`pyproc/reactive`, `pyproc/syscall-bridge`, and `pyproc/process-os` no
 longer exist. Their capabilities did not disappear; they moved onto the handle:
 `boot` returns the machine, `machine.history` carries the reactive verbs,
 `machine.runtime.enableSyscallBridge()` carries the syscalls, and `machine.proc()`
