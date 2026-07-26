@@ -2913,11 +2913,6 @@ section("CI 배관");
       throw new Error("dispatch 경로의 태그 확인이 없다");
     }
   });
-  check("증거 업로드는 파일 부재를 삼키지 않는다", () => {
-    for (const [name, source] of workflows) {
-      if (source.includes("if-no-files-found: ignore")) throw new Error(`${name}: 증거 유실을 무시한다`);
-    }
-  });
   check("공개 데모 배포 앞에 구조 게이트가 있다", () => {
     const pages = workflows.get("pages.yml");
     if (!pages.includes("npm test")) throw new Error("pages 배포가 게이트 없이 돈다");
@@ -2970,17 +2965,96 @@ section("CI 배관");
     }
     if (missing.length) throw new Error(`CI에 없고 로컬 전용 승인도 없는 레인: ${missing.join(", ")}`);
   });
-  // 자산을 요구하는 probe는 그 자산을 만드는 step 뒤에 있어야 한다. 순서가 뒤면 그 증거는
-  // CI에서 구조적으로 RED다(2026-07-27 발견: 실엔진 2종 교차 probe가 자산 준비보다 앞에 있었다).
-  check("자산 요구 게이트는 자산 준비 step 뒤에 온다", () => {
-    const ci = workflows.get("ci.yml");
-    const at = (needle) => ci.indexOf(needle);
-    const prepare = at("node scripts/fetchWasiAssets.mjs");
-    if (prepare < 0) throw new Error("WASI 자산 준비 step 없음");
-    for (const consumer of ["node tests/browser/run.mjs tests/browser/wasiGate.html", "npm run test:web-machine"]) {
-      const use = at(consumer);
-      if (use < 0) throw new Error(`소비 step 없음: ${consumer}`);
-      if (use < prepare) throw new Error(`${consumer}가 자산 준비보다 앞에 있다`);
+  // 워크플로를 job 단위로 자른다. 순서 판정은 job 안에서만 뜻이 있다: 서로 다른 job은
+  // 병렬로 돌므로 파일 안의 줄 순서가 실행 순서가 아니다.
+  const jobsOf = (source) => {
+    const lines = source.split(NEWLINE);
+    const start = lines.findIndex((line) => /^jobs:\s*$/.test(line));
+    const jobs = new Map();
+    if (start < 0) return jobs;
+    let current = null;
+    for (let at = start + 1; at < lines.length; at++) {
+      const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(lines[at]);
+      if (header) { current = header[1]; jobs.set(current, []); continue; }
+      if (current) jobs.get(current).push(lines[at]);
+    }
+    return jobs;
+  };
+  // job이 실제로 실행하는 명령만 순서대로 뽑는다(주석과 값 문자열은 실행이 아니다).
+  const runCommandsOf = (jobLines) => {
+    const commands = [];
+    let inRun = false;
+    for (const line of jobLines) {
+      if (/^\s*#/.test(line)) continue;
+      const inline = /^\s*-?\s*run:\s*(\S.*)$/.exec(line);
+      if (inline) { commands.push(inline[1]); inRun = false; continue; }
+      if (/^\s*-?\s*run:\s*[|>]/.test(line)) { inRun = true; continue; }
+      if (inRun) {
+        if (/^\s*-\s|^\s*\w[\w-]*:\s/.test(line)) { inRun = false; continue; }
+        if (line.trim()) commands.push(line.trim());
+      }
+    }
+    return commands;
+  };
+  // 자산을 요구하는 probe는 그 자산을 만드는 step 뒤에, 그리고 같은 job 안에 있어야 한다.
+  // 예전 판정은 파일 전문에 indexOf를 걸었다: 다른 job에 있어도 줄이 뒤면 통과하고(병렬이라
+  // 순서 보장이 없다), 주석에 적힌 명령도 실행으로 셌다(2026-07-27 발견한 두 사각).
+  check("자산 요구 게이트는 같은 job 안에서 자산 준비 step 뒤에 온다", () => {
+    const PREPARE = "node scripts/fetchWasiAssets.mjs";
+    const CONSUMERS = ["node tests/browser/run.mjs tests/browser/wasiGate.html", "npm run test:web-machine"];
+    const jobs = jobsOf(workflows.get("ci.yml"));
+    if (!jobs.size) throw new Error("ci.yml에서 job을 찾지 못했다");
+    let hostJob = null;
+    let commands = null;
+    for (const [name, lines] of jobs) {
+      const runs = runCommandsOf(lines);
+      if (runs.some((command) => command.includes(PREPARE))) { hostJob = name; commands = runs; break; }
+    }
+    if (!hostJob) throw new Error("WASI 자산 준비를 실행 라인에서 찾지 못했다(주석뿐이면 실행이 아니다)");
+    const prepareAt = commands.findIndex((command) => command.includes(PREPARE));
+    for (const consumer of CONSUMERS) {
+      const useAt = commands.findIndex((command) => command.includes(consumer));
+      if (useAt < 0) throw new Error(`${consumer}가 자산 준비 job(${hostJob}) 안에 없다(다른 job은 병렬이라 순서 보장이 없다)`);
+      if (useAt < prepareAt) throw new Error(`${consumer}가 자산 준비보다 앞에 있다(job ${hostJob})`);
+    }
+  });
+  // 업로드 실패를 삼키는 방법은 둘이다: `ignore`로 적기, 그리고 키를 아예 안 적기.
+  // upload-artifact의 기본값은 `warn`이라 파일이 없어도 job이 초록이다. 증거 업로드가
+  // 조용히 비면 "게이트가 돌았다"는 기록만 남고 증거는 없다.
+  check("증거 업로드는 파일 부재를 삼키지 않는다", () => {
+    const problems = [];
+    for (const [name, source] of workflows) {
+      const lines = source.split(NEWLINE);
+      for (let at = 0; at < lines.length; at++) {
+        if (!/uses:\s*actions\/upload-artifact@/.test(lines[at])) continue;
+        // 이 step의 with 블록에서 키를 찾는다(다음 step 시작 전까지).
+        let found = null;
+        for (let scan = at + 1; scan < lines.length; scan++) {
+          if (/^\s*-\s/.test(lines[scan])) break;
+          const key = /^\s*if-no-files-found:\s*(\S+)/.exec(lines[scan]);
+          if (key) { found = key[1]; break; }
+        }
+        if (found === null) problems.push(`${name}:${at + 1} if-no-files-found 키 없음(기본값 warn = 삼킴)`);
+        else if (found !== "error") problems.push(`${name}:${at + 1} if-no-files-found: ${found}`);
+      }
+    }
+    if (problems.length) throw new Error(problems.join(" / "));
+  });
+  // upload v4 이상이 쓴 artifact는 download v4 이상만 읽는다(GitHub의 호환 경계). 두 액션의
+  // 버전 라인은 독립이므로 major 동일을 요구하는 것은 틀리고, 이 경계만이 실제 계약이다.
+  check("artifact 업로드와 다운로드 세대가 호환된다", () => {
+    const majors = { upload: [], download: [] };
+    for (const [name, source] of workflows) {
+      for (const m of source.matchAll(/uses:\s*actions\/(upload|download)-artifact@v(\d+)/g)) {
+        majors[m[1]].push({ version: Number(m[2]), file: name });
+      }
+    }
+    if (!majors.upload.length || !majors.download.length) return; // 한쪽만 쓰면 경계가 없다
+    const newestUpload = Math.max(...majors.upload.map((entry) => entry.version));
+    if (newestUpload < 4) return;
+    const stale = majors.download.filter((entry) => entry.version < 4);
+    if (stale.length) {
+      throw new Error(`upload v${newestUpload} artifact를 못 읽는 download: ${stale.map((e) => `${e.file}(v${e.version})`).join(", ")}`);
     }
   });
   check("워크플로가 실존 npm script만 호출한다", () => {
