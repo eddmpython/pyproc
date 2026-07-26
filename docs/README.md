@@ -13,7 +13,7 @@ pyproc의 공개 지속 문서. "무엇을 지향하는가"(product)와 "어떻�
 | 카테고리 | 문서 | 무엇 |
 |---|---|---|
 | [product/](product/) | [vision.md](product/vision.md) | 제품 방향: North Star, 무엇인가/아닌가, 성공·실패 기준, 지원 경계 |
-| | [glossary.md](product/glossary.md) | 용어집: pyproc(공개 커널)과 Web Machine 플랫폼(비공개) 사이 이름 소유권 경계 |
+| | [glossary.md](product/glossary.md) | 용어집: pyproc 커널과 Web Machine 층(`src/machine`, npm 동봉) 사이 이름 경계 |
 | [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | 운영 모델: 3층 정보 구조, 아이디어 수명주기(attempts -> mainPlan -> src -> _done), 메모리 운영, 개발 원칙 |
 | | [contractReality.md](operations/contractReality.md) | 계약 실태: 계약 vs 실제 간극의 상시 추적(발견 즉시 기록, 해소 시 삭제). 열린 부채·상시 재검증·트레이드오프·프론티어 |
 | | [assetProvenance.md](operations/assetProvenance.md) | 실행 자산의 provenance와 배포 정책: 증거 없음은 통과가 아니다, SSOT와 파생물, 공식 image 배포 게이트 7항목, 알려진 위험 |
@@ -32,6 +32,8 @@ pyproc의 공개 지속 문서. "무엇을 지향하는가"(product)와 "어떻�
 
 ## 빠른 라우팅 (영역 -> 문서)
 
+- 처음 써본다 -> 루트 [README.md](../README.md) Quick start -> [reference/api.md](reference/api.md)
+- 함수 시그니처와 오류 코드를 찾는다 -> [reference/api.md](reference/api.md)
 - pyproc이 무엇이고 어디로 가나 -> [product/vision.md](product/vision.md)
 - 새 아이디어를 어디서 시작하나 -> [tests/attempts/README.md](../tests/attempts/README.md)
 - 설계·로드맵·결정 기록 -> [mainPlan/](../mainPlan/README.md) (완결 이니셔티브는 [_done/](../mainPlan/_done/README.md), 활성 0이면 새 이니셔티브 개설부터)

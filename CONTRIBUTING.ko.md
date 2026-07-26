@@ -22,7 +22,7 @@ pyproc은 [Mozilla Public License 2.0](LICENSE)이다(엔진 Pyodide와 같은 �
 
 1. **신규 능력은 `tests/attempts/<카테고리>/`에서 시작한다.** `src/` 직행 금지. 카테고리는 가설과 명시적 졸업 게이트를 가진 질문 하나이고, 브라우저 실측으로 입증한다. [tests/attempts/README.md](tests/attempts/README.md) 참조.
 2. **졸업한 학습은 `mainPlan/<이니셔티브>/`에서 계획이 된다**(번호 문서 + 진행 원장). 완료된 이니셔티브는 `mainPlan/_done/`으로 이관.
-3. **그 다음에야 코드가 `src/`에 들어간다.** src는 폴더 = 레이어이고 import는 아래로만 흐른다: `runtime/`(엔진 core) <- `capabilities/`(런타임에 얹히는 것들) <- `composition/`(능력 registry 설치 + public 표면) <- `session/`·`processOs/`. 모든 edge가 순위를 낮추므로 순환은 불가능하다. 엔진 내부는 능력 계약 뒤에 머문다.
+3. **그 다음에야 코드가 `src/`에 들어간다.** src는 폴더 = 레이어이고 import는 아래로만 흐른다: `runtime/`(0: 엔진 core) <- `state/`(1: 내구 상태 커널) <- `capabilities/`(2: 런타임에 얹히는 것들) <- `composition/`(3: 능력 registry 설치 + public 표면) <- `session/`·`processOs/`(4) <- `machine/`(5: 브라우저 컴퓨터 host와 guest). 모든 edge가 순위를 낮추므로 순환은 불가능하다. 엔진 내부는 능력 계약 뒤에 머문다.
 
 운영 상세는 [docs/](docs/README.md).
 
@@ -41,7 +41,7 @@ npm run serve                         # 브라우저 실측용 COOP/COEP 정적 
 
 - 모든 커밋 전 `npm test` green.
 - **main 전용.** 이 저장소에서 로컬 브랜치 금지(훅이 non-main ref 차단). 외부 기여는 포크에서 `main`을 향해 온다.
-- 모든 `*.md`/`*.js`에 **em dash(U+2014) 금지.** 하이픈, 쉼표, 문장 재구성으로 대체. pre-commit 훅이 차단한다.
+- 텍스트로 나가는 파일 전부(`*.md`, `*.js`, `*.mjs`, `*.ts`, `*.html`, `*.css`, `*.yml`, `*.json`)에 **em dash(U+2014) 금지.** 하이픈, 쉼표, 문장 재구성으로 대체. pre-commit 훅이 차단한다.
 - **커밋 메시지는 라벨이 아니라 기록이다**(기계 강제). 릴리즈 노트, 사고 조사, 회귀 추적이 전부
   이 1차 기록에 의존한다. 판정 로직은 한 곳([scripts/commitMessage.mjs](scripts/commitMessage.mjs))에
   살고, `.githooks/commit-msg`가 그것을 호출하며 `tests/run.mjs`가 양성/음성 fixture로 매 실행마다

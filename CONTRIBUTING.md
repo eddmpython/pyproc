@@ -22,7 +22,7 @@ Also welcome besides code: bug reports, browser measurements (please include Chr
 
 1. **New capabilities start in `tests/attempts/<category>/`**, never directly in `src/`. A category is one question with a hypothesis and an explicit graduation gate, proven by browser measurements. See [tests/attempts/README.md](tests/attempts/README.md).
 2. **Graduated learnings become a plan** in `mainPlan/<initiative>/` (numbered docs + progress ledger). Finished initiatives move to `mainPlan/_done/`.
-3. **Only then does code land in `src/`**, where folder = layer and imports only ever point downward: `runtime/` (engine core) <- `capabilities/` (things that attach to a runtime) <- `composition/` (installs the capability registry, exposes the public surface) <- `session/` and `processOs/`. Every edge lowers the rank, so a cycle is impossible. Engine internals stay behind capability contracts.
+3. **Only then does code land in `src/`**, where folder = layer and imports only ever point downward: `runtime/` (0: engine core) <- `state/` (1: the durable state kernel) <- `capabilities/` (2: things that attach to a runtime) <- `composition/` (3: installs the capability registry, exposes the public surface) <- `session/` and `processOs/` (4) <- `machine/` (5: the browser-computer host and its guests). Every edge lowers the rank, so a cycle is impossible. Engine internals stay behind capability contracts.
 
 Operating details live in [docs/](docs/README.md).
 
@@ -41,7 +41,7 @@ Browser validation: open `http://localhost:8788/examples/basic.html` and `proces
 
 - `npm test` must be green before every commit.
 - **main only.** No local branches in this repository; hooks block non-main refs. External contributions come from forks targeting `main`.
-- **No em dash (U+2014)** in any `*.md` or `*.js`. Use a hyphen, a comma, or rewrite the sentence. The pre-commit hook blocks it.
+- **No em dash (U+2014)** in any text-surface file (`*.md`, `*.js`, `*.mjs`, `*.ts`, `*.html`, `*.css`, `*.yml`, `*.json`). Use a hyphen, a comma, or rewrite the sentence. The pre-commit hook blocks it.
 - **Commit messages are records, not labels** (machine-enforced). A commit message is the primary
   record that release notes, incident analysis, and regression hunts all depend on. The decision
   logic lives in one place, [scripts/commitMessage.mjs](scripts/commitMessage.mjs); `.githooks/commit-msg`

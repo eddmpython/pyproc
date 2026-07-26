@@ -75,8 +75,8 @@ The through-line: **an AI agent needs a Python environment it can prepare once, 
 
 - **Runs in the user's browser - no server sandbox to run or pay for.** Python executes in the tab, inside Chrome's renderer sandbox plus WASM isolation, a boundary hardened against the whole web. You move sandboxed code execution off your own infrastructure and the user's data stays local. (You still set resource and network limits yourself; the browser isolates escape, not resource exhaustion - see [Security model](#security-model). It protects the user from the code, not your secrets from the user.)
 - **Restore without rebuilding.** Checkpoint a state with packages and data already loaded, then roll back to it - no re-run, no re-install.
-- **Close the tab; keep the machine.** Tabs share one logical Python state. If the leader closes, another tab recovers the last committed memory and `/home/web` files from OPFS and continues locally.
-- **Branch from one state.** An agent runs several code candidates from the same prepared state, independently, and compares results.
+- **Close the tab; keep the machine** (Experimental - `open({ persistent })`). Tabs share one logical Python state. If the leader closes, another tab recovers the last committed memory and `/home/web` files from OPFS and continues locally.
+- **Branch from one state** (Beta - `machine.history` + `machine.proc()`). An agent runs several code candidates from the same prepared state, independently, and compares results.
 - **Data stays local.** Process CSV / Excel / enterprise data in the tab and send only the summarized result onward.
 - **Isolated execution.** Python runs off the main UI thread, across multiple workers you manage.
 
@@ -218,17 +218,16 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 - Snapshot compatibility across Pyodide versions. `.pymachine` portability assumes the same engine/manifest and either an explicit trusted source or a verified signer.
 - GPU / native Linux packages, full POSIX `fork`, arbitrary native binaries.
 
-Naming these up front is deliberate: a hidden limit reads as a bug later; a stated one reads as a managed boundary.
+## Scope and platform direction
 
-## The honest scope: aim at infinity, claim what's proven
-
-**Platform North Star: turn the browser into a computer that can boot multiple guest operating systems. pyproc is its first Python guest OS.** The private Web Machine packages and the local Web Computer product now boot pyproc and Linux through one lifecycle, save their memory and disks together, recover them after a browser-process restart, and import a signed image in a fresh browser profile. This does not turn the public `pyproc` package into a general-purpose hypervisor, and it does not make the development Linux image redistributable.
+**Platform North Star: turn the browser into a computer that can boot multiple guest operating systems. pyproc is its first Python guest OS.** The Web Machine host ships inside this package (`src/machine`, entered through `createWebComputer`), and it plus the local Web Computer product boot pyproc and Linux through one lifecycle, save their memory and disks together, recover them after a browser-process restart, and import a signed image in a fresh browser profile. This does not turn the public `pyproc` package into a general-purpose hypervisor, and it does not make the development Linux image redistributable.
 
 Within that larger goal, pyproc's compatibility direction remains: whatever Python runs locally should eventually run in the browser, with no server. Everything local sorts into four states, and pyproc's job is to push things up the list and absorb a wall when the platform reopens it:
 
-- **Delivered** (measured today): pure-Python + Pyodide packages, multi-core processes, checkpoint / restore, in-kernel ASGI, terminal, persistent FS, portable images, outbound Python sockets.
+- **Delivered** (browser-gated in CI today): pure-Python + Pyodide packages, multi-core processes, checkpoint / restore, in-kernel ASGI, terminal, persistent FS, portable `.pymachine` and `.webmachine` images.
+- **Shipped without a headless CI gate**: `pyproc/socket` (outbound Python sockets need a WS-to-TCP relay this package does not ship) and `pyproc/gpu` (needs a real WebGPU adapter, which headless CI does not have). Both are opt-in subpaths you must verify inside your own product; the standing gap is tracked in [contract reality](docs/operations/contractReality.md).
 - **Virtualized** (the browser way): a TCP `listen()` becomes an ASGI app, `os.fork` becomes worker kernels, outbound sockets ride a thin relay.
-- **Upstream-pending** (walled now, reopenable): native C-extension wheels (Emscripten static builds / the WebAssembly component model), GPU (WebGPU), real threading.
+- **Upstream-pending** (walled now, reopenable): native C-extension wheels (Emscripten static builds / the WebAssembly component model), real threading.
 - **Permanent web-security wall**: inbound connections and arbitrary native binaries need an external relay or agent.
 
 The Python gap map lives in [local-parity](mainPlan/_done/local-parity/README.md). The completed host architecture and Dual-Boot record lives in [web-machine-platform](mainPlan/_done/web-machine-platform/README.md).
@@ -265,10 +264,8 @@ re-running, shard work across independent interpreters (N interpreters = N GILs 
 parallelism), serve from inside the tab, and move a live machine as a signed image.
 Single-kernel NumPy is ordinary WebAssembly BLAS, and pyproc does not pretend otherwise.
 
-Speed is measured, not advertised. This project does not publish benchmark headlines: a number
-on a landing page becomes a number you owe forever, and that debt steers the product. Run
-[Speed Lab](examples/speedLab.html) with `npm run serve` and measure it on your own machine.
-The measurement contract is in [benchmarking.md](docs/operations/benchmarking.md).
+Measure the envelope on your own hardware: run [Speed Lab](examples/speedLab.html) with
+`npm run serve`. The measurement contract is in [benchmarking.md](docs/operations/benchmarking.md).
 
 ## Run the Web Computer
 
@@ -316,7 +313,7 @@ import { SocketBridge } from "pyproc/socket";
 import { bootWasi } from "pyproc/wasi";
 ```
 
-Deep, example-driven docs for each capability live in [docs/](docs/README.md); this README stays the map. For product decisions by capability, use the [capability matrix](docs/consuming/capabilityMatrix.md): it maps each public export to value, status, setup, runnable surfaces, gates, and boundaries.
+The function-level reference is [docs/reference/api.md](docs/reference/api.md) (English); this README stays the map. The rest of [docs/](docs/README.md) is the operating and consuming tree, written in Korean. For product decisions by capability, use the [capability matrix](docs/consuming/capabilityMatrix.md): it maps each public export to value, status, setup, runnable surfaces, gates, and boundaries.
 
 Deployment asset manifest:
 
@@ -378,18 +375,20 @@ Can't set headers at all (e.g. GitHub Pages)? Register `pyprocSw.js?coi=1` and r
 
 ## Install and pinning
 
-From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc`. There is no build step (native ESM). Products consuming pyproc as their runtime SSOT pin a commit SHA (floating on the default branch is not allowed):
+From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc`. There is no build step (native ESM). Pin the exact version - floating ranges (`^`, `~`, `latest`) are not supported, because a state kernel's replay guarantee is version-bound:
 
 ```jsonc
 // package.json
-"dependencies": { "pyproc": "github:eddmpython/pyproc#<commit-sha>" }
+"dependencies": { "pyproc": "0.0.10" }
 ```
+
+To consume a commit before it is released, a SHA pin (`github:eddmpython/pyproc#<commit-sha>`) is the documented fallback. Full policy: [docs/consuming/contract.md](docs/consuming/contract.md).
 
 You can also import straight from a CDN with no install (single-runtime path only; the process OS needs its worker file same-origin with your page):
 
 ```html
 <script type="module">
-  import { boot } from "https://cdn.jsdelivr.net/gh/eddmpython/pyproc@<commit-sha>/index.js";
+  import { boot } from "https://cdn.jsdelivr.net/npm/pyproc@0.0.10/index.js";
 </script>
 ```
 

@@ -75,8 +75,8 @@ try {
 
 - **사용자 브라우저에서 실행 - 운영하거나 비용 낼 서버 샌드박스가 없다.** Python이 탭 안, Chrome 렌더러 샌드박스 + WASM 격리(웹 전체에 단련된 경계) 안에서 돈다. 샌드박스 코드 실행을 인프라 밖으로 옮기고 사용자 데이터는 로컬에 둔다. (자원·네트워크 한도는 직접 설정한다. 브라우저는 탈출을 막지 자원 고갈을 막지 않는다 - [보안 모델](#보안-모델) 참조. 코드로부터 사용자를 지키지, 사용자로부터 회사 비밀을 지키는 건 아니다.)
 - **다시 만들지 않고 복원.** 패키지와 데이터를 이미 로드한 상태를 체크포인트로 저장하고 그 지점으로 되돌린다 - 재실행도, 재설치도 없이.
-- **탭을 닫아도 머신은 유지.** 여러 탭이 하나의 논리적 Python 상태를 공유한다. 리더가 닫히면 다른 탭이 OPFS의 마지막 commit에서 메모리와 `/home/web` 파일을 복구해 로컬에서 계속한다.
-- **한 상태에서 분기.** 에이전트가 같은 준비 상태에서 여러 코드 후보를 독립적으로 실행하고 결과를 비교한다.
+- **탭을 닫아도 머신은 유지**(Experimental - `open({ persistent })`). 여러 탭이 하나의 논리적 Python 상태를 공유한다. 리더가 닫히면 다른 탭이 OPFS의 마지막 commit에서 메모리와 `/home/web` 파일을 복구해 로컬에서 계속한다.
+- **한 상태에서 분기**(Beta - `machine.history` + `machine.proc()`). 에이전트가 같은 준비 상태에서 여러 코드 후보를 독립적으로 실행하고 결과를 비교한다.
 - **데이터는 로컬에.** CSV / Excel / 기업 데이터를 탭에서 처리하고 요약된 결과만 내보낸다.
 - **격리된 실행.** Python이 메인 UI 스레드와 분리돼, 관리하는 여러 워커에서 돈다.
 
@@ -217,17 +217,16 @@ npm run mcp:sandbox
 - Pyodide 버전 간 snapshot 호환. `.pymachine` 이동성은 같은 엔진/매니페스트와 명시적 신뢰 또는 검증된 서명자를 전제로 한다.
 - GPU / 네이티브 Linux 패키지, 완전한 POSIX `fork`, 임의 네이티브 바이너리.
 
-이 제한을 미리 밝히는 건 의도적이다: 숨긴 한계는 나중에 버그로 읽히고, 밝힌 한계는 관리된 경계로 읽힌다.
+## 스코프와 플랫폼 방향
 
-## 정직한 스코프: 목표는 무한대로, 주장은 증명된 만큼
-
-**상위 North Star: 브라우저를 여러 guest OS가 부팅되는 컴퓨터로 만든다. pyproc은 그 위에 올라가는 첫 Python guest OS다.** 독립 private Web Machine package와 로컬 Web Computer 제품은 이제 한 lifecycle로 pyproc과 Linux를 부팅하고, 두 memory와 disk를 함께 저장하며, browser process 재시작 뒤 복구하고, 새 browser profile에서 signed image를 가져온다. 이것은 공개 `pyproc` package가 범용 hypervisor가 됐다는 뜻도, development Linux image를 재배포할 수 있다는 뜻도 아니다.
+**상위 North Star: 브라우저를 여러 guest OS가 부팅되는 컴퓨터로 만든다. pyproc은 그 위에 올라가는 첫 Python guest OS다.** Web Machine host는 이 패키지 안에서 나가고(`src/machine`, 진입은 `createWebComputer`), 그것과 로컬 Web Computer 제품이 한 lifecycle로 pyproc과 Linux를 부팅하고, 두 memory와 disk를 함께 저장하며, browser process 재시작 뒤 복구하고, 새 browser profile에서 signed image를 가져온다. 이것은 공개 `pyproc` package가 범용 hypervisor가 됐다는 뜻도, development Linux image를 재배포할 수 있다는 뜻도 아니다.
 
 그 큰 목표 안에서 pyproc의 호환성 방향은 계속 "로컬에서 되는 모든 파이썬을 언젠가 브라우저에서, 서버 없이"다. 로컬에서 되는 것은 네 상태로 갈리고, pyproc의 일은 이것들을 위 칸으로 밀어 올리는 것과 플랫폼이 벽을 다시 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다:
 
-- **현재 달성**(오늘 실측): 순수 파이썬 + Pyodide 패키지, 멀티코어 프로세스, 체크포인트 / 복원, 커널 내 ASGI, 터미널, 영속 FS, 이동 가능한 이미지, 아웃바운드 Python 소켓.
+- **현재 달성**(CI 브라우저 게이트가 도는 것): 순수 파이썬 + Pyodide 패키지, 멀티코어 프로세스, 체크포인트 / 복원, 커널 내 ASGI, 터미널, 영속 FS, 이동 가능한 `.pymachine`·`.webmachine` 이미지.
+- **출하되나 headless CI 게이트 없음**: `pyproc/socket`(아웃바운드 소켓은 이 패키지가 배송하지 않는 WS-TCP 릴레이가 필요하다), `pyproc/gpu`(headless에 WebGPU 어댑터가 없다). 둘 다 제품 안에서 직접 검증해야 하는 opt-in subpath이고, 이 공백은 [계약 실태](docs/operations/contractReality.md)가 기록한다.
 - **우회 가능**(브라우저 방식): TCP `listen()`은 ASGI 앱으로, `os.fork`는 워커 커널로, 아웃바운드 소켓은 얇은 릴레이로.
-- **upstream 대기**(지금 막혔으나 다시 열림): 네이티브 C 확장 wheel(Emscripten 정적 빌드 / WebAssembly 컴포넌트 모델), GPU(WebGPU), 진짜 threading.
+- **upstream 대기**(지금 막혔으나 다시 열림): 네이티브 C 확장 wheel(Emscripten 정적 빌드 / WebAssembly 컴포넌트 모델), 진짜 threading.
 - **웹 보안상 영구 벽**: 임의 인바운드 연결과 임의 네이티브 바이너리는 외부 릴레이나 에이전트가 필요하다.
 
 Python 축별 격차는 [local-parity](mainPlan/_done/local-parity/README.md)가 추적한다. 완료된 host 아키텍처와 Dual-Boot 기록은 [web-machine-platform](mainPlan/_done/web-machine-platform/README.md)에 있다.
@@ -263,10 +262,8 @@ pyproc은 "그냥 더 빠른 파이썬"이 아니다. 프로세스 모델을 가
 (인터프리터 N개 = GIL N개 = 진짜 병렬), 탭 안에서 서빙하고, 살아있는 머신을 서명된 이미지로 옮긴다.
 단일 커널 NumPy는 일반 WebAssembly BLAS이며 그렇지 않은 척하지 않는다.
 
-속도는 광고하지 않고 측정한다. 이 프로젝트는 벤치 간판을 걸지 않는다: 랜딩에 걸린 숫자는 영원히
-갚아야 할 빚이 되고, 그 빚이 제품 방향을 끌고 간다. `npm run serve`로
-[Speed Lab](examples/speedLab.html)을 띄워 각자의 기계에서 직접 재라. 측정 계약은
-[benchmarking.md](docs/operations/benchmarking.md)에 있다.
+`npm run serve`로 [Speed Lab](examples/speedLab.html)을 띄워 각자의 기계에서 직접 재라.
+측정 계약은 [benchmarking.md](docs/operations/benchmarking.md)에 있다.
 
 ## Web Computer 실행
 
@@ -376,18 +373,20 @@ export default { server: { headers: {
 
 ## 설치와 핀
 
-npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc`. 빌드 단계 없음(네이티브 ESM). pyproc을 런타임 SSOT로 소비하는 제품은 커밋 SHA로 핀한다(기본 브랜치 플로팅 금지):
+npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc`. 빌드 단계 없음(네이티브 ESM). 정확한 버전으로 핀한다 - 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 리플레이 보장은 버전에 묶여 있다:
 
 ```jsonc
 // package.json
-"dependencies": { "pyproc": "github:eddmpython/pyproc#<commit-sha>" }
+"dependencies": { "pyproc": "0.0.10" }
 ```
+
+릴리즈 전 커밋을 당겨 쓰려면 SHA 핀(`github:eddmpython/pyproc#<commit-sha>`)이 문서화된 대안이다. 전체 정책: [docs/consuming/contract.md](docs/consuming/contract.md).
 
 설치 없이 CDN에서 바로 import도 된다(단일 런타임 경로만; 프로세스 OS는 워커 파일이 페이지와 same-origin이라야 한다):
 
 ```html
 <script type="module">
-  import { boot } from "https://cdn.jsdelivr.net/gh/eddmpython/pyproc@<commit-sha>/index.js";
+  import { boot } from "https://cdn.jsdelivr.net/npm/pyproc@0.0.10/index.js";
 </script>
 ```
 
