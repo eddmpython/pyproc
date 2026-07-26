@@ -62,15 +62,6 @@ jobs:
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
           PYPROC_NO_COI: "1"
-      # Web Machine probe(자산 없이 도는 레인): host 계약, 3-guest 계약, owner 승계 경쟁.
-      # x86 자산이 필요한 레인은 npm run test:web-machine:v86으로 로컬에서 돈다.
-      - run: npm run test:web-machine
-        env:
-          PYPROC_BROWSER: /usr/bin/google-chrome
-      # MCP 레시피 게이트: 에이전트 통합 표면(stdio JSON-RPC + 샌드박스 도구 4종)의 실왕복.
-      - run: npm run test:mcp
-        env:
-          PYPROC_BROWSER: /usr/bin/google-chrome
       # WASI 세션 게이트: pyproc/wasi subpath(bootWasi/WasiSession)의 실배선.
       # 30MB 자산은 릴리즈 zip에서 준비하고 버전 키로 캐시해 SKIP이 아니라 실제 GREEN으로 돈다.
       - uses: actions/cache@v4
@@ -81,6 +72,15 @@ jobs:
           key: wasi-python-3.14.6-wasi_sdk-24-v2 # v2: 가짜 zip(GNU tar 산출물) 캐시 무효화
       - run: node scripts/fetchWasiAssets.mjs
       - run: node tests/browser/run.mjs tests/browser/wasiGate.html
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
+      # Web Machine probe: host 계약, 3-guest 계약(WASI 어댑터 포함 = 위 자산 필요),
+      # owner 승계 경쟁. x86 자산이 필요한 레인은 npm run test:web-machine:v86으로 로컬에서 돈다.
+      - run: npm run test:web-machine
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
+      # MCP 레시피 게이트: 에이전트 통합 표면(stdio JSON-RPC + 샌드박스 도구 4종)의 실왕복.
+      - run: npm run test:mcp
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
 

@@ -2730,6 +2730,19 @@ section("CI 배관");
     const dependent = orphans.filter((page) => !/Participant\.html$/.test(page));
     if (dependent.length) throw new Error(`실행 경로 없는 게이트 페이지: ${dependent.join(", ")}`);
   });
+  // 자산을 요구하는 probe는 그 자산을 만드는 step 뒤에 있어야 한다. 순서가 뒤면 그 증거는
+  // CI에서 구조적으로 RED다(2026-07-27 발견: 실엔진 2종 교차 probe가 자산 준비보다 앞에 있었다).
+  check("자산 요구 게이트는 자산 준비 step 뒤에 온다", () => {
+    const ci = workflows.get("ci.yml");
+    const at = (needle) => ci.indexOf(needle);
+    const prepare = at("node scripts/fetchWasiAssets.mjs");
+    if (prepare < 0) throw new Error("WASI 자산 준비 step 없음");
+    for (const consumer of ["node tests/browser/run.mjs tests/browser/wasiGate.html", "npm run test:web-machine"]) {
+      const use = at(consumer);
+      if (use < 0) throw new Error(`소비 step 없음: ${consumer}`);
+      if (use < prepare) throw new Error(`${consumer}가 자산 준비보다 앞에 있다`);
+    }
+  });
   check("워크플로가 실존 npm script만 호출한다", () => {
     const scripts = new Set(Object.keys(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {}));
     const missing = new Set();
