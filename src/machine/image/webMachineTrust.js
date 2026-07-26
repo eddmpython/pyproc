@@ -6,6 +6,7 @@
 // 규약 변경 = 신뢰 목록 무효화), 그리고 신뢰 판정 순서(임베디드 검증 -> 지문 대조 -> 재검증).
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { canonicalJson, digestGenerationBytes } from "../persistence/generationIntegrity.js";
+import { bytesFromHex, hexFromBytes } from "../contracts/byteCodec.js";
 
 const encoder = new TextEncoder();
 
@@ -16,19 +17,6 @@ function requireProvider(cryptoProvider) {
     }
   }
   return cryptoProvider;
-}
-
-function bytesToHex(value) {
-  return [...value].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function hexToBytes(value) {
-  if (typeof value !== "string" || !value.length || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) {
-    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "signature bytes 형식 불일치");
-  }
-  const bytes = new Uint8Array(value.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-  return bytes;
 }
 
 function normalizePublicJwk(value) {
@@ -75,14 +63,14 @@ export async function signWebMachineContent(cryptoProvider, contentDigest, signi
     version: 1,
     algorithm: "ECDSA-P256-SHA256",
     publicKey,
-    value: bytesToHex(value),
+    value: hexFromBytes(value),
   });
 }
 
 export async function verifyWebMachineTrust(cryptoProvider, contentDigest, signature, trustedPublicKeys) {
   requireProvider(cryptoProvider);
   if (!signature) throw new WebMachineError("WEB_MACHINE_IMAGE_UNTRUSTED", "서명 없는 image 실행 거부");
-  const signatureBytes = hexToBytes(signature.value);
+  const signatureBytes = bytesFromHex(signature.value);
   const embeddedJwk = normalizePublicJwk(signature.publicKey);
   const signatureValid = await cryptoProvider.verifyDigest(embeddedJwk, contentDigest, signatureBytes);
   if (!signatureValid) throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "image 서명 불일치");

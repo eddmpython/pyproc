@@ -1,5 +1,6 @@
 // memoryEthernetSwitch.js - guest를 모르는 bounded packet network 기준 구현.
 import { WebMachineError } from "../contracts/webMachineError.js";
+import { hexFromBytes } from "../contracts/byteCodec.js";
 
 const ETHERNET_HEADER_BYTES = 14;
 
@@ -10,10 +11,10 @@ function copyFrame(value) {
   throw new WebMachineError("WEB_MACHINE_PACKET_INVALID", "packet frame은 bytes여야 한다");
 }
 
+const MAC_BYTE_LENGTH = 6; // IEEE 802 MAC 주소 길이
+
 function macKey(frame, offset) {
-  let key = "";
-  for (let index = 0; index < 6; index += 1) key += frame[offset + index].toString(16).padStart(2, "0");
-  return key;
+  return hexFromBytes(frame.subarray(offset, offset + MAC_BYTE_LENGTH));
 }
 
 function isGroupAddress(frame, offset) {

@@ -8,6 +8,7 @@
 // 주소에 얹힌다. 무결성(주소 재계산)과 출처(서명 검증)가 분리되는 지점이 정확히 여기다.
 import { PyProcError } from "../runtime/errors.js";
 import { base64FromBytes, sha256AddressWith } from "../runtime/contentDigest.js";
+import { bytesFromBase64 } from "../runtime/contentDigest.js";
 
 export const STATE_TAG_ALG = "ECDSA-P256-SHA256";
 const KEY_ALG = { name: "ECDSA", namedCurve: "P-256" };
@@ -17,17 +18,6 @@ const textEncoder = new TextEncoder();
 function requireProvider(cryptoProvider) {
   if (!cryptoProvider?.subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "signedTag: cryptoProvider.subtle이 필요하다");
   return cryptoProvider.subtle;
-}
-
-function bytesFromBase64(value) {
-  if (typeof atob === "function") {
-    const s = atob(value);
-    const bytes = new Uint8Array(s.length);
-    for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
-    return bytes;
-  }
-  if (typeof Buffer !== "undefined") return new Uint8Array(Buffer.from(value, "base64"));
-  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "signedTag: base64 디코더가 없다");
 }
 
 // 지문/서명은 정규화된 JWK에 대해서만 계산한다: 키 순서나 부가 필드가 달라도 같은 키면 같다.

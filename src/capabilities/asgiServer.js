@@ -10,6 +10,7 @@
 // 제약(dartlab 실측): 엔드포인트는 async def 강제(sync def는 스레드풀 -> WASM 불가).
 // lifespan 이벤트는 발화하지 않는다(dispatch 단위 계약).
 import { PyProcError } from "../runtime/errors.js";
+import { bytesFromBase64 } from "../runtime/contentDigest.js";
 
 const HELPER = (appVar) => `
 import json as _pyprocJson
@@ -75,7 +76,7 @@ export class AsgiServer {
     this._rt.execSeq++; // 전역 무변이라 수동 증가: 저널 유휴 판정이 요청 처리를 실행으로 본다
     const raw = await this._fn(method, path, body == null ? "" : body, query, headers == null ? [] : headers);
     const r = JSON.parse(raw);
-    const bodyBytes = Uint8Array.from(atob(r.bodyB64), (c) => c.charCodeAt(0));
+    const bodyBytes = bytesFromBase64(r.bodyB64);
     return { status: r.status, headers: r.headers, body: new TextDecoder().decode(bodyBytes), bodyBytes };
   }
 }

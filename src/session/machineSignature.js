@@ -13,12 +13,12 @@ import {
   verifyStateDigest,
 } from "../state/signedTag.js";
 import { unsignedEnvelope } from "./machineImage.js";
+import { bytesFromBase64 } from "../runtime/contentDigest.js";
 
+// 형식 판정은 이 층의 오류 어휘로 하고, 바이트 변환은 코덱 코어가 한다(폴백 포함).
 function base64UrlToBytes(s) {
   if (typeof s !== "string" || !/^[A-Za-z0-9_-]+$/.test(s)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: signature base64url 형식 위반");
-  const padded = s.replaceAll("-", "+").replaceAll("_", "/") + "=".repeat((4 - (s.length % 4)) % 4);
-  const raw = atob(padded);
-  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  return bytesFromBase64(s, { urlSafe: true });
 }
 
 function isCryptoKey(k) {

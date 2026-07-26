@@ -33,6 +33,12 @@ const rel = (f) => f.slice(ROOT.length + 1).replaceAll("\\", "/");
 // 보면 `openMachine`이 `open`을, `bootSession`이 `boot`를 만족시켜서, 루트 동사가 문서에서
 // 완전히 사라져도 게이트가 통과한다(2026-07-26 실측). 백틱 뒤 이름이 식별자 문자로 이어지지
 // 않을 때만 언급으로 센다: `open`, `open()`, `open({ ... })`는 통과, `openMachine`은 아니다.
+// 법 검사들의 공용 전처리: 줄 주석 제거. 법의 근거를 주석에 쓰는 것 자체가 위반이 되면
+// 안 되므로 모든 "소스를 좁히는" 검사가 이 함수를 지난다.
+const NEWLINE = String.fromCharCode(10);
+function stripComments(source) {
+  return source.split(NEWLINE).map((line) => line.split("//")[0]).join(NEWLINE);
+}
 function mentionsSymbol(text, name) {
   // 정규식 조립 대신 스캔이다: 이름에 든 특수문자 이스케이프와 문자 클래스의 이중 이스케이프가
   // 정확히 이 게이트가 잡으려는 종류의 조용한 무력화를 만든다(실제로 한 번 만들었다).
@@ -461,6 +467,41 @@ section("digest 법");
       if (addressBuild.test(text) && !ADDRESS_CORE.has(relPath)) throw new Error('"sha256:" 주소 조립은 코어에만 산다(sha256Address/parseSha256Address 경유)');
     });
   }
+  // 코덱 법: base64/hex 바이트 변환은 코어 두 곳에만 산다. runtime/contentDigest(전 층 공용)와
+  // machine/contracts/byteCodec(machine은 바깥 import가 composition 한 점이라 자체 한 벌).
+  // pyprocSw는 import 0 자기충족 자산이라 의도된 중복이고 자산 매니페스트가 그 사실을 게시한다.
+  const CODEC_CORE = new Set([
+    "src/runtime/contentDigest.js",
+    "src/machine/contracts/byteCodec.js",
+    "src/capabilities/pyprocSw.js",
+    "src/runtime/engines/wasi/browserWasiShim.js", // 벤더 번들(서드파티 스코프)
+  ]);
+  const CODEC_PATTERN = /atob\s*\(|btoa\s*\(|toString\(16\)/;
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    const relPath = rel(f);
+    if (CODEC_CORE.has(relPath)) continue;
+    const code = stripComments(readFileSync(f, "utf8"));
+    check(`코덱 법: ${relPath}`, () => {
+      if (CODEC_PATTERN.test(code)) throw new Error("base64/hex 변환 사본(코덱 코어 경유해야 한다)");
+    });
+  }
+
+  // 결정성 스텁 법: 부팅 구간의 비결정 소스 고정과 재시드 소스는 globalPatch에만 산다.
+  // 메인 커널과 워커 커널이 같은 값을 써야 cp0 바이트가 같고, 그래야 fork가 성립한다.
+  check("결정성 스텁의 소스는 한 곳", () => {
+    const holders = [];
+    for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+      const relPath = rel(f);
+      if (relPath === "src/runtime/globalPatch.js") continue;
+      const code = stripComments(readFileSync(f, "utf8"));
+      if (/crypto\.getRandomValues\s*=|Date\.now\s*=|performance\.now\s*=/.test(code)) holders.push(relPath);
+      // `_pyprocR`는 재시드 소스의 이름이다. 접두가 겹치는 다른 이름(_pyprocRe, _pyprocRunSync)을
+      // 잡지 않게 경계를 준다.
+      if (/_pyprocR/.test(code)) holders.push(relPath);
+    }
+    if (holders.length) throw new Error(`결정성 스텁 사본: ${[...new Set(holders)].join(", ")}`);
+  });
+
   // 힙 물질화 법: "성장 -> 경계 되감기 -> 페이지 쓰기 -> 스택 복원 -> 새 경계"는 부활 정확성
   // 그 자체다. 예전에는 이 순서가 네 곳에 각자 구현돼 독립 표류가 가능했다(session.load /
   // openMachine / journal.recover 구포맷 / 커널). 소스를 한 파일로 좁혀 고정한다.
@@ -1974,6 +2015,9 @@ check("src layer edge는 아래로만", () => {
     // 단위 계약(PAGE_SIZE, bytesToMb)은 rank 0에 있고 비용 영수증을 내는 능력이 그것을 쓴다.
     // 각자 1048576을 다시 쓰는 것보다 이 edge가 싸다(정밀도까지 갈리던 사본 8곳을 수렴).
     "src/capabilities/journal/journalBlobStore.js -> src/runtime/memoryLayout.js",
+    // ASGI 응답 body는 base64로 건너온다. 디코더를 또 쓰는 것보다 코덱 코어를 지나는 것이
+    // 옳다(폴백 한쪽만 갖춘 사본이 "같은 입력에 다르게 실패"를 만든 전례가 이 코어의 근거다).
+    "src/capabilities/asgiServer.js -> src/runtime/contentDigest.js",
     "src/capabilities/machineHome.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
     "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",

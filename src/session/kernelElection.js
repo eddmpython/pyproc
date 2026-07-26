@@ -6,7 +6,7 @@
 import { bootSession } from "./session.js";
 import { MachineJournal } from "../capabilities/journal/machineJournal.js";
 import { PyProcError } from "../runtime/errors.js";
-import { sha256Hex } from "../runtime/contentDigest.js";
+import { hexFromBytes, sha256Hex } from "../runtime/contentDigest.js";
 
 const PROTOCOL_VERSION = 2;
 const EPOCH_FILE = "EPOCH.json";
@@ -21,7 +21,7 @@ function makeId() {
   if (crypto.randomUUID) return crypto.randomUUID();
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+  return hexFromBytes(bytes);
 }
 
 // 기존 code/retryable 계약을 PyProcError로 승계한다(코드 문자열 불변 = 게이트 호환).

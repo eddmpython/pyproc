@@ -19,7 +19,7 @@
 //   signature까지 포함한 최종 body를 다시 해시하므로 무결성과 출처 검증이 분리된다.
 import { PyProcError } from "../runtime/errors.js";
 import { boot } from "../composition/runtimeApi.js";
-import { runWithGlobalPatch } from "../runtime/globalPatch.js";
+import { DETERMINISTIC_RESEED_SOURCE, runWithGlobalPatch, stubDeterministicBootSources } from "../runtime/globalPatch.js";
 import { PAGE_SIZE, bytesToMb } from "../runtime/memoryLayout.js";
 import { unpackPages } from "../runtime/heapDelta.js";
 import { sha256Hex } from "../runtime/contentDigest.js";
@@ -45,15 +45,6 @@ import {
   validateMachineHomeMeta,
 } from "../capabilities/machineHome.js";
 
-// 부팅 구간의 비결정 소스를 고정한다(복원 보장). 리플레이 결정성의 필요조건.
-function stubEntropy() {
-  const o = { grv: crypto.getRandomValues.bind(crypto), dn: Date.now, pn: performance.now.bind(performance) };
-  crypto.getRandomValues = (a) => { new Uint8Array(a.buffer, a.byteOffset, a.byteLength).fill(0x42); return a; };
-  Date.now = () => 1750000000000;
-  performance.now = () => 12345;
-  return () => { crypto.getRandomValues = o.grv; Date.now = o.dn; performance.now = o.pn; };
-}
-
 // 결정적 부팅 구간은 전역(엔트로피/시간)을 패치하므로 전역 패치 체인에서 하나만 진입한다.
 // 두 bootSession(또는 boot 코어 캐시/wheel 캐시의 fetch 스왑)이 겹치면 먼저 끝난 쪽이
 // 다른 쪽의 패치를 복원해 전역이 꼬인다. 내부 패처에는 reenter 스코프를 넘긴다(중첩 안전).
@@ -61,7 +52,7 @@ function stubEntropy() {
 // 결정적 리플레이 부팅: 매니페스트(indexURL/env/packages/setup)가 곧 환경 선언이다.
 export function bootSession(manifest = {}) {
   return runWithGlobalPatch(async (reenterPatch) => {
-    const restore = stubEntropy();
+    const restore = stubDeterministicBootSources();
     let rt;
     try {
       rt = await boot({
@@ -85,7 +76,7 @@ export function bootSession(manifest = {}) {
     // 복제 고유성: 리플레이 커널들은 random 모듈 상태까지 같게 태어난다(스텁 엔트로피로 시드).
     // cp0 확정 뒤 실제 엔트로피로 재시드해 새 머신들을 갈라놓는다. 부활(load/openMachine)은
     // _applyMeta가 경계로 되감고 저장된 상태(그 머신의 random 포함)를 덮으므로 충실성이 유지된다.
-    rt.run("import random as _pyprocR\n_pyprocR.seed()\ndel _pyprocR");
+    rt.run(DETERMINISTIC_RESEED_SOURCE);
     return new Session(rt, reactive, manifest);
   });
 }

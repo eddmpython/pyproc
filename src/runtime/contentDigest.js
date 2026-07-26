@@ -39,7 +39,7 @@ function requireProvider(cryptoProvider) {
 
 export async function sha256HexWith(cryptoProvider, data) {
   const digest = new Uint8Array(await requireProvider(cryptoProvider).digest("SHA-256", asBytes(data)));
-  return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hexFromBytes(digest);
 }
 
 // 정본 주소 형식은 "sha256:<hex>" 하나다(알고리즘 자기 기술형). bare hex는 살아있는 저장
@@ -81,6 +81,29 @@ export function base64FromBytes(data) {
   throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: base64 인코더가 없다");
 }
 
+// base64 디코더. 인코더와 같은 규율로 둔다: 폴백이 한쪽만 있던 사본이 "같은 입력에 다르게
+// 실패"를 만든 것이 이 파일 헤더의 사고 기록이고, 디코더에서 그것이 재발했다(2026-07-27:
+// machineSignature의 디코더는 atob만 갖춰 Node에서 ReferenceError였다).
+// urlSafe는 JWS/JWK 계열 표기(base64url)를 받는다.
+export function bytesFromBase64(value, { urlSafe = false } = {}) {
+  const normalized = urlSafe
+    ? String(value).replaceAll("-", "+").replaceAll("_", "/") + "=".repeat((4 - (String(value).length % 4)) % 4)
+    : String(value);
+  if (typeof atob === "function") {
+    const raw = atob(normalized);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return bytes;
+  }
+  if (typeof Buffer !== "undefined") return new Uint8Array(Buffer.from(normalized, "base64"));
+  throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: base64 디코더가 없다");
+}
+
+// bytes -> 소문자 hex. 내용 주소·서명 표기가 같은 인코딩을 쓰게 하는 한 곳이다.
+export function hexFromBytes(bytes) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function sha256Bytes(data) {
   return new Uint8Array(await subtleOrThrow().digest("SHA-256", asBytes(data)));
 }
@@ -102,7 +125,7 @@ export async function verifySha256(bytes, expected) {
 
 // 앞 n바이트만 쓰는 짧은 키(캐시 파일명 등). 내용 주소가 아니라 이름이라 충돌 비용이 낮다.
 export async function sha256HexShort(data, bytes = 8) {
-  return [...await sha256Bytes(data)].slice(0, bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hexFromBytes((await sha256Bytes(data)).slice(0, bytes));
 }
 
 // SRI 문자열("sha256-<base64>"). 자산 무결성 계약의 표기법.

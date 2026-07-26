@@ -11,6 +11,7 @@ import { SIGNAL_META, EOT, CTL_WORDS, DATA_SAB_BYTES, SITE_PATH } from "./wasiPr
 import { unzipWheel } from "./wheelUnzip.js";
 import { verifyPyProcAssetIntegrity } from "../../assets.js";
 import { PyProcError, fromErrorPayload } from "../../errors.js";
+import { base64FromBytes } from "../../contentDigest.js";
 import {
   RUNTIME_CAPABILITIES,
   RUNTIME_CONTRACT_VERSION,
@@ -23,14 +24,6 @@ const WASI_RUNTIME_CAPABILITIES = Object.freeze([
   RUNTIME_CAPABILITIES.checkpoint,
   RUNTIME_CAPABILITIES.packages,
 ]);
-
-// 바이트를 base64로(파이썬에 코드로 실어 /site에 쓰기 위함). 큰 배열은 청크로 스택 초과 방지.
-function base64FromBytes(bytes) {
-  let s = "";
-  const step = 0x8000;
-  for (let i = 0; i < bytes.length; i += step) s += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
-  return btoa(s);
-}
 
 // 기본 엔진 핀 = brettcannon CPython 3.14.6(살아있는 소스, 업스트림 당일 추적). WLR 3.12는 죽어서
 // (2023-12 마지막) 3.14로 이전했다. brettcannon은 python.wasm + 외부 stdlib를 한 릴리즈 zip으로

@@ -16,6 +16,7 @@ import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 import { byteDiffPages, packPages, samePage, unpackPages } from "../runtime/heapDelta.js";
 import { growHeapTo } from "../runtime/heapGrow.js";
 import { Runtime } from "../runtime/runtime.js";
+import { DETERMINISTIC_RESEED_SOURCE, stubDeterministicBootSources } from "../runtime/globalPatch.js";
 let py = null;
 let rt = null;
 let interruptView = null;
@@ -28,20 +29,11 @@ const mem = () => rt.memory;
 function toHostValue(value, options = {}) { return rt ? rt.toHostValue(value, options) : value; }
 function destroyHostValue(value) { if (rt) rt.destroyHostValue(value); }
 
-// 부팅 구간의 비결정 소스를 고정한다(session.js stubEntropy와 같은 3개 소스).
-function stubEntropy() {
-  const o = { grv: crypto.getRandomValues.bind(crypto), dn: Date.now, pn: performance.now.bind(performance) };
-  crypto.getRandomValues = (a) => { new Uint8Array(a.buffer, a.byteOffset, a.byteLength).fill(0x42); return a; };
-  Date.now = () => 1750000000000;
-  performance.now = () => 12345;
-  return () => { crypto.getRandomValues = o.grv; Date.now = o.dn; performance.now = o.pn; };
-}
-
-// 복제 고유성: 스냅샷/리플레이로 태어난 프로세스들은 random 모듈 상태(메르센)까지 같다.
-// 부팅 직후(리플레이는 cp0 확정 뒤) 실제 엔트로피로 재시드해 프로세스들을 갈라놓는다.
-// fork는 예외로 부모 상태를 그대로 물려받는다(fork(2) 의미론. 델타가 이 재시드를 덮는다).
+// 결정성 스텁과 재시드 소스의 정본은 runtime/globalPatch.js다. 메인 커널과 워커 커널이 같은
+// 3개 소스를 같은 값으로 고정해야 cp0 바이트가 같아지고 fork가 성립한다: 사본이 갈리면
+// 워커 리플레이와 메인 리플레이의 바이트 동일성이 깨져 fork가 조용히 무효가 된다.
 function reseedRandom() {
-  py.runPython("import random as _pyprocR\n_pyprocR.seed()\ndel _pyprocR");
+  py.runPython(DETERMINISTIC_RESEED_SOURCE);
 }
 
 onmessage = async (e) => {
@@ -63,7 +55,7 @@ onmessage = async (e) => {
       // 리플레이 부팅: 같은 매니페스트의 워커들이 바이트 동일한 힙에 선다 = fork 가능한 풀.
       const replay = msg.replay || null;
       if (replay) opts.env = { PYTHONHASHSEED: "0", ...(replay.env || {}) };
-      const restore = replay ? stubEntropy() : null;
+      const restore = replay ? stubDeterministicBootSources() : null;
       try {
         py = await mod.loadPyodide(opts);
         rt = new Runtime(py, indexURL);

@@ -22,6 +22,7 @@ import {
   digestGenerationManifest,
 } from "../persistence/generationIntegrity.js";
 import { fingerprintWebMachinePublicKey, verifyWebMachineTrust } from "./webMachineTrust.js";
+import { bytesFromBase64, compareNames, hexFromBytes, sameBytes } from "../contracts/byteCodec.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -32,16 +33,8 @@ const legacyPrefixByteLength = legacyMagic.byteLength + legacyHeaderLengthBytes;
 const legacyMaximumManifestBytes = 16 * 1024 * 1024;
 const verifiedArchives = new WeakSet();
 
-function compareNames(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function imageError(code, message, details) {
   throw new WebMachineError(code, message, details);
-}
-
-function sameBytes(left, right) {
-  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
 function assertFile(value) {
@@ -110,20 +103,10 @@ function wrapHeaderError(error) {
   return new WebMachineError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "image 포맷 위반", { cause: String(error?.message || error) });
 }
 
-// base64 서명(tag) -> hex(WebMachineSignature v1 표기). machine 도메인의 형식 법(서명 v1은
-// hex 표기)이라 여기 산다. 합성 manifest의 signature.value가 기존 형태와 바이트 동일하다.
+// base64 서명(tag) -> hex(WebMachineSignature v1 표기). 표기 법은 machine 도메인이 정하고
+// 바이트 변환은 층 코덱이 한다. 합성 manifest의 signature.value가 기존 형태와 바이트 동일하다.
 function hexFromBase64(value) {
-  let bytes;
-  if (typeof atob === "function") {
-    const raw = atob(value);
-    bytes = new Uint8Array(raw.length);
-    for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
-  } else if (typeof Buffer !== "undefined") {
-    bytes = new Uint8Array(Buffer.from(value, "base64"));
-  } else {
-    imageError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "base64 디코더가 없다");
-  }
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return hexFromBytes(bytesFromBase64(value));
 }
 
 // tag(header-target 서명) -> 기존 WebMachineSignature 형태로 매핑(하위호환).
