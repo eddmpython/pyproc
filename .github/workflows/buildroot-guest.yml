@@ -6,32 +6,96 @@ on:
   push:
     branches: [main]
     paths:
-      - scripts/buildroot/**
-      - scripts/assetCatalog.json
-      - .github/workflows/buildroot-guest.yml
+      - "scripts/buildroot/**"
+      - ".github/workflows/buildroot-guest.yml"
 
 permissions:
   contents: read
 
 jobs:
   reproduce:
+    name: reproduce-${{ matrix.slot }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [a, b]
+    env:
+      PYPROC_BUILDROOT_WORKSPACE: ${{ runner.temp }}/pyproc-buildroot-${{ matrix.slot }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - name: Build pinned Buildroot guest and legal material
         run: npm run assets:buildroot
-      - name: Upload reproducible guest bundle
+      - name: Upload independent build evidence
         uses: actions/upload-artifact@v4
         with:
-          name: pyproc-buildroot-guest
-          path: |
-            .cache/buildrootGuest/dist/
-            .cache/buildrootGuest/output/legal-info/
+          name: pyproc-buildroot-guest-${{ matrix.slot }}
+          path: ${{ env.PYPROC_BUILDROOT_WORKSPACE }}/dist/
           if-no-files-found: error
           retention-days: 30
+      - name: Upload complete legal material
+        if: matrix.slot == 'a'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyproc-buildroot-legal-info
+          path: ${{ env.PYPROC_BUILDROOT_WORKSPACE }}/output/legal-info/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  verify:
+    name: verify-byte-identical-builds
+    needs: reproduce
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pyproc-buildroot-guest-a
+          path: .cache/repro/a
+      - uses: actions/download-artifact@v4
+        with:
+          name: pyproc-buildroot-guest-b
+          path: .cache/repro/b
+      - name: Verify image, manifest, SBOM, and legal gate
+        run: |
+          set -euo pipefail
+          cmp .cache/repro/a/buildroot-pyproc-i686.bin .cache/repro/b/buildroot-pyproc-i686.bin
+          cmp .cache/repro/a/build-manifest.json .cache/repro/b/build-manifest.json
+          cmp .cache/repro/a/buildroot.cyclonedx.json .cache/repro/b/buildroot.cyclonedx.json
+          mkdir -p .cache/repro/verified
+          cp .cache/repro/a/* .cache/repro/verified/
+          node --input-type=module <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readFile, writeFile } from "node:fs/promises";
+          const base = ".cache/repro/verified";
+          const manifest = JSON.parse(await readFile(`${base}/build-manifest.json`, "utf8"));
+          const image = await readFile(`${base}/buildroot-pyproc-i686.bin`);
+          const actualSha256 = createHash("sha256").update(image).digest("hex");
+          if (actualSha256 !== manifest.output.sha256) throw new Error("verified image SHA-256 mismatch");
+          if (image.byteLength !== manifest.output.byteLength) throw new Error("verified image byteLength mismatch");
+          if (manifest.evidence.legalWarnings.length) throw new Error("verified legal-info warnings are not empty");
+          const receipt = {
+            schemaVersion: 1,
+            recipe: manifest.recipe,
+            githubRunId: process.env.GITHUB_RUN_ID,
+            headSha: process.env.GITHUB_SHA,
+            independentBuilds: ["a", "b"],
+            byteIdentical: true,
+            output: manifest.output,
+          };
+          await writeFile(`${base}/reproducibility-manifest.json`, `${JSON.stringify(receipt, null, 2)}\n`);
+          NODE
+      - name: Upload verified reproducible guest
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyproc-buildroot-guest-verified
+          path: .cache/repro/verified/
+          if-no-files-found: error
+          retention-days: 90

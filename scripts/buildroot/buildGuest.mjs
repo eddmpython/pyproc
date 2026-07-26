@@ -73,7 +73,15 @@ await mkdir(outputDir, { recursive: true });
 await mkdir(distDir, { recursive: true });
 await copyFile(configPath, join(outputDir, ".config"));
 const sourceDateEpoch = String(BUILDROOT.sourceDateEpoch);
-const env = { ...process.env, SOURCE_DATE_EPOCH: sourceDateEpoch, TZ: "UTC", LC_ALL: "C" };
+const env = {
+  ...process.env,
+  SOURCE_DATE_EPOCH: sourceDateEpoch,
+  TZ: "UTC",
+  LC_ALL: "C",
+  // sourceDir가 저장소 안의 .cache에 있더라도 상위 pyproc Git SHA가
+  // Buildroot BR2_VERSION_FULL과 guest 바이트에 유입되지 않게 한다.
+  GIT_CEILING_DIRECTORIES: root,
+};
 run("make", [`O=${outputDir}`, "olddefconfig"], { cwd: sourceDir, env });
 run("make", [`O=${outputDir}`], { cwd: sourceDir, env });
 run("make", [`O=${outputDir}`, "legal-info"], { cwd: sourceDir, env });
