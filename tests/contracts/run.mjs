@@ -4,6 +4,15 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HELPERS = new Set(["engineConformance.mjs", "run.mjs"]);
+// suite 이름을 고정한다. 자동 발견은 새 suite를 공짜로 태우지만, 개수만 세면 suite를 지운
+// 커밋이 조용히 통과한다(4개를 지워도 "1 suite" PASS였다). 목록을 고치는 diff가 심사 지점이다.
+export const EXPECTED_SUITES = Object.freeze([
+  "moduleBoundaries.mjs",
+  "publicSurface.mjs",
+  "retentionPolicy.mjs",
+  "runtimeCapabilityClusters.mjs",
+  "runtimeContract.mjs",
+]);
 
 export async function runContractSuites() {
   const files = (await readdir(HERE))
@@ -20,7 +29,9 @@ export async function runContractSuites() {
     await runners[0][1]();
     suites++;
   }
-  if (!suites) throw new Error("contract suite가 없다");
+  if (files.join(",") !== EXPECTED_SUITES.join(",")) {
+    throw new Error(`contract suite 목록 불일치: 실물 ${files.join(",") || "없음"} vs 기대 ${EXPECTED_SUITES.join(",")}`);
+  }
   return Object.freeze({ suites, files: Object.freeze(files) });
 }
 

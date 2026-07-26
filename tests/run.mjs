@@ -2759,18 +2759,42 @@ section("CI 배관");
   // 구조 게이트가 RED가 되는 최악의 조합). attempts는 실험 레인이라 스코프 밖이다.
   check("게이트 폴더에 실행되지 않는 페이지가 없다", () => {
     const scripts = Object.values(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {}).join("\n");
-    // 실행 경로 = npm script + CI 명령줄 + 러너 파일이 나열한 페이지 목록(기본 페이지 포함).
+    // 실행 경로는 "주석이 아닌 실행 라인"에서만 센다. 예전 판정은 corpus를 파일 전문으로 잡아
+    // 주석과 미사용 배열도 실행으로 셌다: CI 주석 한 줄에 적힌 script 이름이 그 레인 전체를
+    // 초록으로 만들 수 있었다. 워크플로는 실행 줄만, 러너는 주석 제거 후 본문만 본다.
+    const workflowRunLines = [...workflows.values()].flatMap((source) => source.split("\n"))
+      .filter((line) => /^\s*-?\s*run:/.test(line) || /^\s+(npm|node)\s/.test(line))
+      .filter((line) => !/^\s*#/.test(line));
     const runnerSources = collect(join(ROOT, "tests"), [".mjs"], [])
-      .map((f) => readFileSync(f, "utf8"));
-    const runners = [scripts, ...workflows.values(), ...runnerSources].join("\n");
+      .map((f) => stripComments(readFileSync(f, "utf8")));
+    const executable = [scripts, ...workflowRunLines, ...runnerSources].join("\n");
     const pages = [
       ...collect(join(ROOT, "tests", "browser"), [".html"], []),
       ...collect(join(ROOT, "tests", "webMachine", "browser"), [".html"], []),
     ].map((f) => rel(f));
-    const orphans = pages.filter((page) => !runners.includes(page));
     // participant 페이지는 probe가 iframe으로 여는 종속 자산이라 러너가 직접 열지 않는다.
-    const dependent = orphans.filter((page) => !/Participant\.html$/.test(page));
-    if (dependent.length) throw new Error(`실행 경로 없는 게이트 페이지: ${dependent.join(", ")}`);
+    const orphans = pages.filter((page) => !executable.includes(page) && !/Participant\.html$/.test(page));
+    if (orphans.length) throw new Error(`실행 경로 없는 게이트 페이지: ${orphans.join(", ")}`);
+  });
+  // 게이트 레인은 CI에서 돈다. 예외는 이름으로 승인한다: "로컬에서만 도는 레인"이 목록에
+  // 없으면 그 레인의 증거는 사람 기억에만 산다(v86 자산은 gitignore라 CI에서 만들 수 없다).
+  check("test:* 레인은 CI에서 돌거나 로컬 전용으로 승인돼 있다", () => {
+    const scripts = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {};
+    const LOCAL_ONLY = new Map([
+      ["test:web-machine:v86", "x86 자산(engine/firmware/guest image)이 gitignore라 CI에서 만들 수 없다"],
+      ["test:contracts", "npm test가 같은 aggregator를 부른다(CI 이중 실행 회피)"],
+      ["test:package", "npm test가 spawn으로 부른다"],
+    ]);
+    const ci = workflows.get("ci.yml");
+    const publish = workflows.get("publish.yml");
+    const missing = [];
+    for (const name of Object.keys(scripts)) {
+      if (!name.startsWith("test:")) continue;
+      if (LOCAL_ONLY.has(name)) continue;
+      const runLine = new RegExp(`run:\\s*npm run ${name.replace(/:/g, ":")}(\\s|$)`);
+      if (!runLine.test(ci) && !runLine.test(publish)) missing.push(name);
+    }
+    if (missing.length) throw new Error(`CI에 없고 로컬 전용 승인도 없는 레인: ${missing.join(", ")}`);
   });
   // 자산을 요구하는 probe는 그 자산을 만드는 step 뒤에 있어야 한다. 순서가 뒤면 그 증거는
   // CI에서 구조적으로 RED다(2026-07-27 발견: 실엔진 2종 교차 probe가 자산 준비보다 앞에 있었다).
