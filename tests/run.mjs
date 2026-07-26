@@ -2458,6 +2458,12 @@ section("커밋 규칙");
       if (!codes.includes(code)) throw new Error(`잡지 못함(실제: ${codes.join(",") || "없음"})`);
     });
   }
+  check("양성: 기술 명칭 분류(CI)는 통과", () => {
+    // 분류에 원어 기술 명칭을 허용한다. 한글 요건은 제목 전체 단위다(2026-07-27 규칙 정밀화:
+    // 분류까지 한글로 강제하면 저장소 관례인 `CI:` 분류가 규칙에 걸렸다).
+    const violations = checkCommitMessage(swapSubject("CI: 게시 경로 게이트를 대칭으로 만들었다"));
+    if (violations.length) throw new Error(violations.map((v) => v.code).join(","));
+  });
   check("git이 만드는 제목(merge/revert)은 형식 검사 밖", () => {
     const merged = checkCommitMessage("Revert \"게이트: 이전 변경\"\n\nThis reverts commit 0123456789.");
     if (merged.length) throw new Error(merged.map((v) => v.code).join(","));

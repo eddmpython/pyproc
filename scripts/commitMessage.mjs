@@ -68,7 +68,9 @@ export function checkCommitMessage(raw) {
     fail("subjectTooLong", `제목이 ${COMMIT_MESSAGE_LIMITS.subjectMaxChars}자를 넘는다`);
   }
   if (/[.。]$/.test(subject)) fail("subjectPunctuation", "제목은 마침표로 끝내지 않는다");
-  if (!HANGUL.test(subject)) fail("subjectNotKorean", "제목은 한국어다");
+  // 제목 전체에 한글이 있으면 된다. 분류에는 기술 명칭이 올 수 있다(CI, npm, WASI...):
+  // "기술 명칭은 원어 유지" 규칙과 충돌하지 않게 요건을 제목 단위로 둔다.
+  if (!HANGUL.test(subject)) fail("subjectNotKorean", "제목은 한국어다(분류의 기술 명칭은 원어 유지)");
   const form = subject.match(/^([^:\n]+):\s(\S.*)$/);
   if (!form) {
     fail("subjectForm", "제목은 `분류: 요약` 형식이다(예: `리팩터: 커널 선출을 상태기계로 분리`)");
@@ -77,7 +79,6 @@ export function checkCommitMessage(raw) {
     if ([...category].length > COMMIT_MESSAGE_LIMITS.categoryMaxChars) {
       fail("categoryTooLong", `분류가 ${COMMIT_MESSAGE_LIMITS.categoryMaxChars}자를 넘는다`);
     }
-    if (!HANGUL.test(category)) fail("categoryNotKorean", "분류는 한국어다");
     if ([...summary].length < COMMIT_MESSAGE_LIMITS.summaryMinChars) {
       fail("summaryTooThin", `요약이 ${COMMIT_MESSAGE_LIMITS.summaryMinChars}자보다 짧다`);
     }
