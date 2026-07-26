@@ -121,3 +121,37 @@
 6. contract suite의 자기 fake 문제(`engineConformance`가 같은 파일의 fake를 검사한다),
    `d.ts` 멤버 도달성의 1135이름 폴백, cluster `existsSync` 검사 강화.
 7. `{ durability: "strict" }` + OPFS 블록 장치(디스크 커밋이 델타가 된다), 복원 깊이 2 해소.
+
+### 4차 지적 반영 (계속)
+
+감사자가 지목한 1~3순위를 착수했다.
+
+**2순위 완료(웹컴퓨터 1순위): 두 guest가 바이트를 교환한다.** `contracts/ipv4Frames.js`(순수
+집합)로 프레임 해석을 라이브러리에 들이고 `guests/pyprocPacketPort.js`로 파이썬 guest를
+스위치에 붙였다. 그전까지 프레임 해석은 probe fixture에만 있었고, 파이썬 머신은
+createWebComputer가 준 `network` 권한을 갖고도 쓸 코드가 없었다. 증거는
+`guestNetworkProbe.html`(자산 불필요 = CI 레인, 9검사): 파이썬 guest A가 보낸 프레임이 guest B의
+파이썬에 바이트 동일하게 도착하고, ARP 자동 응답이 요청자 파이썬까지 왕복한다.
+
+이 과정에서 계약 충돌 하나를 발견해 함께 고쳤다. 어댑터가 선언한 snapshotScope "portable"과
+"파이썬 힙에 JS 프록시를 심는 것"은 공존할 수 없다. 배선 직후 web-computer 게이트가
+`table index is out of bounds`로 죽었고, 배선 1줄만 되돌려 원인을 확정한 뒤 스냅샷 전후로
+표면을 걷고 다시 심는 것으로 해결했다. 능력을 추가하면 기존 계약이 어디서 깨지는지는
+게이트만이 알려준다는 사례다.
+
+**3순위 진행(DX 1순위): 타입 선언 영문화.** 강등 subpath d.ts 7개(124줄)를 전부 옮기고 루트
+index.d.ts의 입구 서술(오류 계약·환경 진단·부팅 옵션 전수·porcelain 핸들)을 옮겼다(339 -> 291).
+게이트는 강등 subpath 하드 0 + 루트 예산 단조 감소다. 남은 291줄(능력 상세)이 다음 트란시.
+
+**검증 축 심각 지적 2건 완료.** 브라우저 판정을 러너로 회수(페이지가 `ok:true`를 위조하면
+예전엔 `GREEN (99/100)` + exit 0이었다), 하한을 법 단위로 내림([digest 법] 여유 112 =
+그 안의 네 법 중 어느 하나를 통째로 삭제해도 GREEN이었다). 그 외 탐지기 자기 시험 절 신설,
+흔적 금지를 문서·소스 전수로 확장, 주석 제거기의 문자열 오인 수리, x86 probe 13개 하한 등재.
+
+**1순위 미착수: 내구 상태 스택 통합.** `machine/persistence`가 `state/refProtocol`의 계약을
+재구현하는 문제(약 350줄)는 durable commit 경로 전체를 건드리므로 별도 이니셔티브로 남긴다.
+이 흐름에서 착수하지 않은 이유는 범위다: 그 리팩터는 브라우저 실증 전판을 다시 받아야 하고,
+같은 흐름에 넣으면 어느 변경이 무엇을 깨뜨렸는지 분리할 수 없다.
+
+전판 게이트: 구조 3349, 브라우저 99/99, 소비자 30/30, web-machine 4/4(신규 probe 9/9),
+web-computer 13/13, mcp 7/7, preflight 5/5, examples 10/10, 타입 0 오류.
