@@ -490,7 +490,7 @@ for (const scope of ["src", "examples", "tests", "apps", "scripts"]) {
 //      아니라 계약이고, examples/의 Speed Lab은 사용자가 자기 기계에서 직접 재는 도구다.
 // 강등 subpath의 타입 선언 목록. [성능 주장]과 [타입] 두 절이 함께 소비한다.
 const SUBPATH_DTS = [
-  "src/runtime/index.d.ts",
+  "src/composition/runtimeSubpath.d.ts",
   "src/state/index.d.ts",
   "src/machine/index.d.ts",
   "src/runtime/assets.d.ts",
@@ -1929,6 +1929,31 @@ check("package.json types -> index.d.ts", () => {
 // `declare module "pyproc/gpu"` 블록은 이 자리를 대신하지 못했다: 모듈이 untyped .js로
 // 해석되면 TypeScript가 증강을 거부한다(TS2665). 타입체크 게이트가 붙고서야 드러난 사실이라
 // 위치를 계약으로 고정한다.
+  // `pyproc/runtime`을 단독으로 import한 소비자가 완전한 Runtime을 받는가. 능력 팩토리는
+  // runtimeApi가 import 시점에 prototype에 설치하므로, subpath가 rank 0 배럴을 직접 가리키면
+  // 그것만 import한 소비자는 팩토리 없는 Runtime을 받는다: 문서가 지시하는 채택 패턴
+  // (`new Runtime(py)` 후 `enableAsgiServer`)이 TypeError로 죽는다. 2026-07-27 workerGuest
+  // 캠페인이 라이브로 재현했고, 그때까지 어떤 게이트도 이것을 보지 않았다.
+  // 격리 import로 판정한다: 같은 프로세스에서 루트를 먼저 import하면 prototype이 이미 오염돼
+  // 있어서 어떤 타깃이든 통과한다(첫 진단이 그렇게 틀렸다).
+  await checkAsync("pyproc/runtime 단독 import가 완전한 Runtime을 준다", async () => {
+    const pkgJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+    const target = pkgJson.exports["./runtime"]?.default;
+    if (!target) throw new Error("./runtime default 타깃 없음");
+    const result = spawnSync(process.execPath, ["-e", `
+      import(${JSON.stringify(pathToFileURL(join(ROOT, target)).href)}).then((m) => {
+        const missing = ["enableReactive", "enableAsgiServer", "enableTerminal", "enableJail"]
+          .filter((name) => typeof m.Runtime?.prototype?.[name] !== "function");
+        const verbs = ["bootRuntime", "Runtime", "checkEnvironment"]
+          .filter((name) => typeof m[name] === "undefined");
+        process.stdout.write(JSON.stringify({ missing, verbs }));
+      }).catch((e) => { process.stdout.write(JSON.stringify({ error: String(e.message || e) })); });
+    `], { encoding: "utf8" });
+    const out = JSON.parse((result.stdout || "{}").trim() || "{}");
+    if (out.error) throw new Error(`격리 import 실패: ${out.error}`);
+    if (out.missing?.length) throw new Error(`능력 팩토리 없음: ${out.missing.join(", ")}(subpath가 조립 지점을 안 지난다)`);
+    if (out.verbs?.length) throw new Error(`값-export 없음: ${out.verbs.join(", ")}`);
+  });
 check("강등 subpath 타입은 자기 .js 옆에", () => {
   for (const rel of SUBPATH_DTS) {
     if (!existsSync(join(ROOT, rel))) throw new Error(`${rel} 없음`);

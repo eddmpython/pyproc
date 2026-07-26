@@ -22,8 +22,8 @@
       "default": "./index.js"
     },
     "./runtime": {
-      "types": "./src/runtime/index.d.ts",
-      "default": "./src/runtime/index.js"
+      "types": "./src/composition/runtimeSubpath.d.ts",
+      "default": "./src/composition/runtimeSubpath.js"
     },
     "./history": {
       "types": "./src/state/index.d.ts",
