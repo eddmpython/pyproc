@@ -280,8 +280,7 @@ worker and surfaces as `PYPROC_WORKER_TASK_ERROR`:
 
 ```js
 const pool = await machine.proc({ lanes: 4 });
-const fn = "def _fn(n):
-    return sum(i * i for i in range(n))";
+const fn = "def _fn(n):\n    return sum(i * i for i in range(n))";
 const results = await pool.map(fn, [10000, 20000, 30000, 40000]); // order preserved
 ```
 

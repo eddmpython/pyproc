@@ -1039,15 +1039,14 @@ declare class PyProc {
   boot(n: number, useSnapshot?: boolean): Promise<PyProcBootInfo>;
   /**
    * 워커들에 인자 목록을 흩어 병렬 실행한다. `fnSrc`는 **반드시 `_fn`이라는 이름의 함수 정의**여야
-   * 한다(워커가 `_fn(arg)`로 부른다): `"def _fn(n):
-    return n * n"`. 결과는 인자 순서를 지킨다.
+   * 한다(워커가 `_fn(arg)`로 부른다): `"def _fn(n):\n    return n * n"`. 결과는 인자 순서를 지킨다.
    * 태스크가 실패하면 그 원소만 `{ error }`가 되고, 전 레인이 죽으면 모든 원소가 그렇게 된다.
    */
   map(fnSrc: string, args: unknown[], opts?: PyProcMapOptions): Promise<unknown[]>;
   /**
    * TypedArray를 조각내 워커들에 numpy 배열로 병렬 적용(샤딩). `fnSrc`는 `_fn` 정의여야 한다:
-   * `"def _fn(a):
-    return float(a.sum())"`. 조각 결과가 인자 순서대로 돌아온다.
+   * `"def _fn(a):\n    return float(a.sum())"`. 조각 결과가 인자 순서대로 돌아온다.
+   * 주의: 워커가 `fnSrc`를 텍스트로 치환하므로 `def _fn(` 형태를 정확히 써야 한다(괄호 앞 공백 불가).
    */
   mapArray(fnSrc: string, typed: ArrayBufferView, opts?: PyProcShardOptions): Promise<unknown[]>;
   /**
