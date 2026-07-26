@@ -1216,6 +1216,13 @@ declare class PyprocMachine {
   run(code: string): unknown;
   runAsync(code: string): Promise<unknown>;
   term(cfg?: TerminalConfig): Terminal;
+  /** Loads packages into this machine, so installing numpy does not require the escape hatch. */
+  loadPackages(packages: string[]): Promise<unknown>;
+  /**
+   * Declares a heap mutation the run APIs did not see (a call through a live PyProxy, for
+   * instance). The next restore is promoted to the rehash path rather than trusting the fast one.
+   */
+  markDirty(): unknown;
   /**
    * Process pool, where a worker is a process with its own GIL. fork/forkMany/map/mapArray/matmul
    * are verbs of the pool. Memoized per option set: the same options return the same pool, so a

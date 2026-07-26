@@ -109,8 +109,17 @@ namespaces are the model's vocabulary:
   same options resolves to the same pool, so a remount does not stack workers; different options
   (for example a plain pool and a `replay` pool for `fork`) get their own pool. `machine.dispose()`
   terminates every pool the machine created.
-- `machine.dispose()` - terminates the pool's workers and releases the reactive retention.
-  Call it before dropping a machine; a lost pool handle cannot be reclaimed otherwise.
+- `machine.jobs(opts?)` - shell job control (`JobControl`). `expr &` forks the live interactive
+  namespace and runs it on another core, so the prompt returns immediately, and `%jobs` / `%fg` /
+  `%kill` drive the jobs. It stands up its own worker pool (one interactive lane plus N-1 job
+  slots, `workers` defaults to 3), so it is separate from the pool `proc()` returns. Memoized one
+  per machine.
+- `machine.containers(cfg?)` - a machine inside the machine (`MachineContainer`). Python calls
+  `pyprocMachine.spawn()` to start a child kernel with its own package set, and nesting works.
+  Memoized one per machine.
+- `machine.dispose()` - terminates the workers of every pool this machine created (`proc`, `jobs`,
+  and `containers` alike) and releases the reactive retention. Call it before dropping a machine;
+  a lost pool handle cannot be reclaimed otherwise.
 - `machine.deterministic` - whether this machine was booted under the deterministic
   replay contract.
 - `machine.history` - the two-region history (below).
@@ -193,8 +202,9 @@ behind `machine.runtime`. Consumers use capability contracts, never engine inter
 `setStdout` / `setStderr` / `freeze` (lock the environment as a pyodide-lock JSON, feed
 back via `boot({ lockFileURL })`) / `mountHome` (mount an OPFS directory at `/home/web`),
 always-on `memory` (`MemoryCapability`) and `fs` (`FileSystem`), and capability factories
-(`enableReactive`, `enableSyscallBridge`, `enableAsgiServer`, `enableTerminal`,
-`enableWheelCache`, `enableDeviceFs`, `enableInit`, `enableJournal`). `new Runtime(py)`
+(`enableReactive`, `enableSyscallBridge`, `enableAsgiServer`, `enableVirtualOrigin`,
+`enableTerminal`, `enableJail`, `enableWheelCache`, `enableDeviceFs`, `enableInit`,
+`enableJournal` - that list is the complete registry). `new Runtime(py)`
 adopts a Pyodide instance you booted yourself (no second interpreter).
 `noteStateMutation()` records a heap mutation that happened outside the run APIs;
 `execSeq` is the mutation counter the reactive boundary guard reads.
@@ -264,13 +274,23 @@ The WAL engine under `machine.history`'s durable verbs, constructed via
 success/failure (`PYPROC_JOURNAL_IO`); `cfg.autoPack` packs past a loose-blob threshold;
 `cfg.pruneAfterCommit` trims the checkpoint tree each commit.
 
-### `MachineJail`
+### `enableJail(permissions?)` and `MachineJail`
 
-Permission jail (cooperative Python chokepoints installed with the runtime, plus a CSP
-`connect-src` browser wall the consumer applies): `allows(perm, arg?)`, `connectSrc()`,
-`csp()`, `install(rt)`. Honest boundary: the Python tier alone is bypassable via
-`import js`; the browser wall requires a jailed context (CSP iframe), and full isolation
-(opaque origin) costs SharedArrayBuffer capabilities.
+`machine.runtime.enableJail(permissions)` installs the permission jail and returns
+`{ jail, permissions, connectSrc }`. That is the reachable entry point: the `MachineJail` class
+itself is not exported, so reach it through the returned `jail` handle when you need
+`allows(perm, arg?)`, `connectSrc()`, or `csp()`.
+
+Two tiers of enforcement. The cooperative tier plants Python chokepoints (the `pyprocJail`
+module), and the browser tier is the CSP `connect-src` of the jailed context, which the consumer
+applies. Honest boundary: the Python tier alone is bypassable via `import js`, which is exactly
+why the browser wall exists; that wall requires a jailed context (a CSP iframe), and full
+isolation (an opaque origin) costs the SharedArrayBuffer capabilities.
+
+```js
+const { jail, connectSrc } = machine.runtime.enableJail({ net: ["api.example.com"], home: true });
+// connectSrc === "'self' api.example.com" - put jail.csp() on the jailed iframe
+```
 
 ## Process OS (`machine.proc`)
 

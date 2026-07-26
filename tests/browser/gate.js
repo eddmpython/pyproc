@@ -435,6 +435,17 @@ try {
   const mg = await tt.push("%pwd");
   check("terminal 매직: %pwd", mg.out.includes("/") && mg.more === false);
 
+  // porcelain이 두 번째로 하는 일을 자기 어휘로 말하는가. 이것이 핸들에 없어서 두 헤드라인
+  // 예제가 모두 2번째 줄에서 탈출구로 나갔다(5차 감사: "요약이 numpy 설치를 말할 수 없으면
+  // 미완성 요약이다"). 위임이 실제로 도는지 본다: 설치 후 그 패키지를 import할 수 있어야 한다.
+  await pm.loadPackages(["numpy"]);
+  check("machine.loadPackages: 핸들 어휘로 패키지가 설치된다",
+    pm.run("import numpy\nint(numpy.arange(5).sum())") === 10);
+  const dirtyBefore = pm.runtime.execSeq;
+  pm.markDirty();
+  check("machine.markDirty: 계측 밖 변이 신고가 경계 카운터를 올린다",
+    pm.runtime.execSeq > dirtyBefore, `execSeq ${dirtyBefore} -> ${pm.runtime.execSeq}`);
+
   // 도달 경로가 없던 두 능력: 구현과 문서가 있는데 소비자가 만들 방법이 없었다. 배선을 받은
   // 지금 실제로 도는지 본다(타입 선언만으로는 TypeError를 타입 통과로 위장시킨다).
   const shell = await pm.jobs({ workers: 2 });

@@ -130,6 +130,13 @@ export class PyprocMachine {
   runAsync(code) { return this._rt.runAsync(code); }
   get fs() { return this._rt.fs; }
   term(cfg) { return this._rt.enableTerminal(cfg); }
+  // 패키지 설치는 두 번째로 하는 일이다. 이것이 핸들에 없어서 두 헤드라인 예제가 모두 2번째
+  // 줄에서 탈출구로 나갔다(`machine.runtime.loadPackages`). 요약이 "numpy를 깔아라"를 말할 수
+  // 없으면 그것은 의도적으로 좁은 요약이 아니라 미완성 요약이다(5차 감사 지적).
+  loadPackages(packages) { return this._rt.loadPackages(packages); }
+  // 계측되지 않는 힙 변이를 신고한다(라이브 PyProxy 호출 등). 리액티브 컨트롤러의 동사이지만
+  // README가 이 완화를 지시하므로 핸들에서 도달해야 한다.
+  markDirty() { return this._reactive.markDirty(); }
   // 프로세스 풀(워커 = 프로세스, 독립 GIL): fork/forkMany/map/mapArray/matmul은 풀의 동사다.
   //
   // 같은 옵션이면 같은 풀을 돌려준다(옵션별 memoize). 두 성질을 함께 지켜야 한다:
