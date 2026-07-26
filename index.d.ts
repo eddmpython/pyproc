@@ -150,13 +150,6 @@ export interface EnvManifest {
   setup?: string;
 }
 
-export interface EnvDirs {
-  /** bare 힙 스냅샷 캐시(엔진 버전당 1개). 2차 부팅이 설치 아닌 복원이 된다(부팅 197ms 실측). */
-  snapshots?: FileSystemDirectoryHandle;
-  /** .whl 캐시. 패키지 재다운로드 0. */
-  wheels?: FileSystemDirectoryHandle;
-}
-
 export interface EnvBootStats {
   /** snapshot(웜) | coldFill(콜드 + 캐시 채움) | cold(캐시 미사용). */
   lane: "snapshot" | "coldFill" | "cold";
@@ -166,15 +159,6 @@ export interface EnvBootStats {
   totalMs: number;
   /** 스냅샷 캐시 채움 실패 시 사유(부팅은 계속된다). */
   cacheError?: string;
-}
-
-export interface RunScriptOutcome {
-  /** 스크립트 마지막 표현식의 값(pyodide 변환 규칙). */
-  result: unknown;
-  /** PEP 723 블록에서 읽어 설치한 의존성. 블록이 없으면 []. */
-  dependencies: string[];
-  /** PEP 723 requires-python(참고용 반환, 강제하지 않음). */
-  requiresPython: string | null;
 }
 
 export interface CheckpointInfo {
@@ -587,8 +571,6 @@ export interface PersistentMachineOptions extends Omit<KernelElectionOptions, "j
   timeoutMs?: number;
 }
 
-/** 같은 name의 모든 탭을 마지막 commit에서 부활하는 하나의 지속 Python 머신으로 연다. */
-
 export interface TerminalConfig {
   /** 완결 문장마다 자동 체크포인트를 닫고 "%undo"로 직전 상태에 시간여행한다. */
   timeTravel?: boolean;
@@ -794,7 +776,6 @@ declare class WheelCache {
   loadPackages(pkgs: string | string[]): Promise<void>;
 }
 
-/** Pyodide 런타임 래퍼. run/install + 능력 등록(enableReactive/enableSyscallBridge/enableAsgiServer/enableTerminal/enableWheelCache). */
 /**
  * 엔진-무관 일반 파일 IO(Runtime.fs). 소비자가 rt.raw.FS를 안 만지고 파일을 읽고 쓴다.
  * 영속(OPFS)은 mountHome이 마운트하고 이건 그 위 파일-op 레이어(새 VFS 아님). 변이는 execSeq를 올린다(리액티브 가드).
@@ -930,7 +911,7 @@ declare class Runtime {
   setStderr(handler: ((chunk: string) => void) | null): void;
   /** 현재 환경을 pyodide-lock 형식 락(JSON 문자열)으로 고정(uv lock 등가). boot({ lockFileURL })에 되먹인다. */
   freeze(): Promise<string>;
-  /** bootEnv()로 부팅된 경우의 부팅 통계. */
+  /** 선언 환경 레인(`machine.runtime.enableEnvManager()`)으로 부팅된 경우의 부팅 통계. */
   envBoot?: EnvBootStats;
   /** boot({ coreCacheDir/coreIntegrity })로 부팅한 경우의 코어 자산 캐시/검증 통계. */
   coreCache?: CoreAssetStats;
@@ -946,25 +927,11 @@ declare class Runtime {
   enableDeviceFs(cfg?: DeviceFsConfig): DeviceFs;
   enableInit(cfg?: InitConfig): Init;
   enableJournal(cfg: JournalConfig): MachineJournal;
-  /** Python numpy -> GPU 직결(install()로 pyprocGpu 배선). 실 GPU + 창 모드 + numpy 필요. */
   /** 디렉터리 핸들(OPFS 등)을 파이썬 경로로 마운트(기본 /home/web). 반환된 sync()로 영속화. */
   mountHome(dirHandle: FileSystemDirectoryHandle, path?: string): Promise<{ path: string; sync: () => Promise<void> }>;
   /** 탈출구(권장 안 함): 내부 Pyodide 인스턴스. */
   readonly raw: unknown;
 }
-
-/** Pyodide 런타임을 부팅한다. Chromium/Edge 전용. */
-
-/**
- * uv 레인 부팅: 환경 선언(manifest) + 캐시 디렉터리(dirs)로 웜 부팅한다.
- * bare 스냅샷(_loadSnapshot) + OPFS 휠 조합, 실측 콜드 5465ms -> 웜 1515ms(3.61배).
- * 패키지가 실린 힙 스냅샷은 Pyodide hiwire 벽으로 불가(envManager.js 주석의 실측 좌표).
- */
-
-/**
- * 브라우저판 uv run: PEP 723 인라인 메타데이터(# /// script)의 dependencies를
- * 자동 설치한 뒤 스크립트를 실행한다. opts.wheelDir로 휠 캐시 경유.
- */
 
 export interface SessionManifest {
   indexURL?: string;
@@ -998,20 +965,6 @@ export interface SessionImageOptions {
   /** signingKey가 개인키 단독일 때 함께 넣을 공개키. CryptoKeyPair를 주면 생략 가능. */
   publicKey?: CryptoKey | JsonWebKey;
 }
-
-/**
- * 세션 부활(불멸 커널): 결정적 리플레이 부팅 + 사용자 델타의 OPFS 영속.
- * 같은 매니페스트로 bootSession한 커널은 바이트 동일 힙을 재현하므로,
- * save()가 남긴 델타(수 MB)를 load()로 적용하면 이전 세션의 파이썬 상태가 부활한다.
- */
-
-/** .pymachine 서명용 WebCrypto ECDSA P-256 키쌍을 만든다. */
-
-/** .pymachine 검증용 공개키를 JWK로 내보낸다. */
-
-/** 제품 신뢰 UI와 공개키 배포 manifest에 표시할 안정 fingerprint. 반환 형식: sha256:<hex>. */
-
-/** .pymachine 파일로 같은 컴퓨터를 부팅한다. trust:true 또는 trustedPublicKeys 중 하나가 필요하다. */
 
 declare class Session {
   readonly rt: Runtime;
@@ -1140,7 +1093,6 @@ declare class PyProc {
    * 자식은 독립 주소공간이다(자식의 변이는 부모에 새지 않는다).
    */
   fork(srcPid: number, dstPid: number): Promise<ForkInfo>;
-  /** 특정 프로세스에서 태스크를 실행한다(map은 풀 스케줄, exec는 지정 프로세스). 반환: 태스크 결과. */
   /** 지정 프로세스에서 한 번 실행한다. `fnSrc`는 `map`과 같은 `_fn` 정의 계약이다. */
   exec(pid: number, fnSrc: string, arg?: unknown): Promise<unknown>;
   /** 대화형 레인: 자유 문장 실행 + stdout 캡처 + 마지막 식 값(전역 상태가 누적된다). */

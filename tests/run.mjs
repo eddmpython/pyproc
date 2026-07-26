@@ -134,6 +134,22 @@ check("루트 표면은 정확히 한 자릿수(표류 즉시 RED)", () => {
   if (names.join(",") !== expected.join(",")) throw new Error("실물: " + names.join(","));
 });
 // d.ts 1:1 패리티: 실물 값-export와 d.ts 값-선언이 정확히 같아야 한다(표류 전과 8건의 재발 방지).
+// 선언이 뒤따르지 않는 독스트링 블록은 아무것도 설명하지 않는다. IDE는 그 문장을 엉뚱한
+// 심볼에 붙여 보여주므로(실측: TerminalConfig에 멀티탭 머신 설명이 붙었다) 손유지 d.ts에서
+// 이 잔해는 오해를 만든다. 0.0.10 개명 뒤 12개가 남아 있었다.
+check("index.d.ts에 고아 독스트링 0", () => {
+  const lines = readFileSync(join(ROOT, "index.d.ts"), "utf8").split(NEWLINE);
+  const orphans = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].trim().startsWith("/**")) continue;
+    let j = i;
+    while (j < lines.length && !lines[j].includes("*/")) j++;
+    const next = (lines[j + 1] || "").trim();
+    if (!next || next.startsWith("/**") || next.startsWith("}")) orphans.push(i + 1);
+    i = j;
+  }
+  if (orphans.length) throw new Error(`선언 없는 독스트링: L${orphans.slice(0, 6).join(", L")}`);
+});
 check("루트 d.ts 값-선언 1:1 패리티", () => {
   const dts = readFileSync(join(ROOT, "index.d.ts"), "utf8");
   const declared = new Set();
