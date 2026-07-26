@@ -298,6 +298,7 @@ Edge 또는 Chromium에서 `http://localhost:8788/apps/webComputer/`를 연다. 
 
 ```js
 // 자체 부팅한 Pyodide 인스턴스를 pyproc에 넘기는 채택 이음새.
+// 미출하: 다음 릴리즈에 돌아온다. 그때까지는 SHA 핀이 필요하다.
 import { Runtime, bootRuntime, checkEnvironment } from "pyproc/runtime";
 // 내구 상태 커널: 오브젝트 모델, commit/open 프로토콜, store, 서명 bundle.
 import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
@@ -397,7 +398,7 @@ npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm inst
 "dependencies": { "pyproc": "0.0.10" }
 ```
 
-릴리즈 전 커밋을 당겨 쓰려면 SHA 핀(`github:eddmpython/pyproc#<commit-sha>`)이 문서화된 대안이다. 전체 정책: [docs/consuming/contract.md](docs/consuming/contract.md).
+아래에서 **미출하**로 표기한 표면(현재 `pyproc/runtime`과 subpath별 `types` 항목)은 0.0.10에 없다. 다음 릴리즈까지는 SHA 핀(`github:eddmpython/pyproc#<commit-sha>`)이 필요하고, 그것이 릴리즈 전 커밋을 당겨 쓰는 문서화된 대안이기도 하다. 전체 정책: [docs/consuming/contract.md](docs/consuming/contract.md).
 
 설치 없이 CDN에서 바로 import도 된다(단일 런타임 경로만; 프로세스 OS는 워커 파일이 페이지와 same-origin이라야 한다):
 

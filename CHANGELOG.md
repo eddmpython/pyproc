@@ -8,6 +8,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+<!-- unreleased-subpaths: pyproc/runtime -->
+소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
+예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
+
 ### Added
 
 - **`pyproc/runtime` is a declared plumbing subpath again**: `Runtime`, `bootRuntime`,

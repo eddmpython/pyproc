@@ -300,6 +300,7 @@ Plumbing subpaths carry the contracts underneath the handle:
 
 ```js
 // The adoption seam when you boot Pyodide yourself and hand the instance to pyproc.
+// Unreleased: this subpath returns in the next release; until then it needs a SHA pin.
 import { Runtime, bootRuntime, checkEnvironment } from "pyproc/runtime";
 // The durable-state kernel: object model, commit/open protocol, stores, signed bundles.
 import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
@@ -399,7 +400,7 @@ From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `np
 "dependencies": { "pyproc": "0.0.10" }
 ```
 
-To consume a commit before it is released, a SHA pin (`github:eddmpython/pyproc#<commit-sha>`) is the documented fallback. Full policy: [docs/consuming/contract.md](docs/consuming/contract.md).
+Surfaces marked **unreleased** below (currently `pyproc/runtime` and the per-subpath `types` entries) are not in 0.0.10; until the next release they need a SHA pin (`github:eddmpython/pyproc#<commit-sha>`), which is also the documented fallback for consuming any commit before it ships. Full policy: [docs/consuming/contract.md](docs/consuming/contract.md).
 
 You can also import straight from a CDN with no install (single-runtime path only; the process OS needs its worker file same-origin with your page):
 

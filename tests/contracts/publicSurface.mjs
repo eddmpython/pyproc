@@ -169,6 +169,25 @@ export async function assertPublicSurface() {
       }
     }
   }
+  // 미출하 표면 표식. README가 정확한 버전 핀을 지시하는데 그 버전에 없는 subpath를 예시로 쓰면
+  // 소비자가 ERR_PACKAGE_PATH_NOT_EXPORTED를 받는다(2026-07-27: pyproc/runtime이 그 상태였다).
+  // 판정 근거는 CHANGELOG의 Unreleased 절이다(git 태그 접근 없이 성립한다).
+  const changelog = readFileSync(join(ROOT, "CHANGELOG.md"), "utf8");
+  // 선언은 CHANGELOG의 기계 판독 주석이다. Unreleased 절의 산문에서 긁으면 Fixed 절이 언급한
+  // 이미 출하된 subpath까지 잡힌다(실측: pyproc/history가 그렇게 잡혔다).
+  const declared = /<!-- unreleased-subpaths:([^>]*)-->/.exec(changelog)?.[1] || "";
+  const unreleasedSubpaths = declared.split(",").map((name) => name.trim()).filter(Boolean);
+  const MARKERS = ["unreleased", "미출하", "SHA pin", "SHA 핀"];
+  for (const file of ["README.md", "README.ko.md", "docs/reference/api.md"]) {
+    const markdown = readFileSync(join(ROOT, file), "utf8");
+    for (const subpath of new Set(unreleasedSubpaths)) {
+      if (!markdown.includes(subpath)) continue;
+      const paragraphs = paragraphsOf(markdown).filter((block) => block.includes(subpath));
+      const marked = paragraphs.some((block) => MARKERS.some((marker) => block.includes(marker)));
+      if (!marked) throw new Error(`${file}: 미출하 subpath ${subpath}에 표식이 없다(소비자가 핀한 버전에는 없다)`);
+    }
+  }
+
   const freeze = readFileSync(join(ROOT, "docs", "operations", "experimentalFreeze.md"), "utf8");
   for (const subpath of EXPERIMENTAL_SUBPATHS) {
     if (!freeze.includes("`pyproc/" + subpath.slice(2) + "`")) throw new Error(`동결 문서에 ${subpath} 누락`);

@@ -423,8 +423,9 @@ headless CI cannot see a GPU adapter; `PYPROC_GPU_UNAVAILABLE`), `pyproc/socket`
 `WasiSession` - research preview proving the engine-independent core; the production
 lane is Pyodide).
 
-### `pyproc/runtime`
+### `pyproc/runtime` (unreleased)
 
+Not in 0.0.10; it returns in the next release and needs a SHA pin until then.
 The adoption seam for a Pyodide instance you booted yourself: `new Runtime(py)`,
 `bootRuntime(opts)` (resolves to a `Runtime`, not a machine), `MemoryCapability`,
 `FileSystem`, `checkEnvironment`, and the Engine/Runtime contract assertions
