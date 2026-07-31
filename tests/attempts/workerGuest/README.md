@@ -25,7 +25,8 @@ If the hypothesis is false, the failure will be specific and worth recording: it
 | Probe | What it measures | Status |
 |---|---|---|
 | `headOfLineProbe.html` | The current cost, on the main thread: while guest A runs a CPU-bound loop, how long guest B's `request` takes and whether a frame can round-trip at all | baseline measured |
-| `workerHostedProbe.html` | The same assertions with each guest's kernel in its own worker, driven through the ordinary host surface | candidate GREEN 6/6 |
+| `engineEntryCp0Probe.html` | Whether the engine entry file or the host context decides cp0 | measured: the context decides |
+| `workerHostedProbe.html` | The same assertions with each guest's kernel in its own worker, plus the bridged device, the portable image, and the in-process controls that tell a worker limitation apart from a shipped defect | 14/17, and all three failures are one defect that is not worker-specific |
 
 The baseline exists first on purpose. "A worker fixes it" is not a measurement; "the same assertion fails now and passes then" is. The probe is therefore RED by design and stays in this campaign - it is not a gate.
 
@@ -72,7 +73,54 @@ Graduation item 1 held: the probe registers the adapter through the ordinary `re
 drives it through `createMachine`/`boot`/`request`. `WebMachineHost`, `MachineHandle`, and
 `commandQueue` took no new branch, so the adapter contract was the right seam.
 
-### Two defects the campaign found in `src` (both belong in the graduation commit)
+### Second candidate result (2026-07-31): devices and images crossed, and a shipped defect surfaced
+
+Both defects below were fixed in `src` with their own gates, which unblocked the two graduation items
+the first candidate had honestly withheld. The adapter now hosts a deterministic-replay session (not
+a bare runtime), bridges its packet device to the switch that cannot leave the host thread, and
+declares `snapshotScope: "portable"` because it now delivers one.
+
+```
+GRADUATION 2  idle 9ms   blocked 1ms   loop 1596ms          (baseline: idle 1ms, blocked 917ms)
+GRADUATION 3  frame round-trip 7ms, *while guest A is still inside its loop*
+GRADUATION 4  portable image 10,184,007 bytes, snapshot 103ms, cold revive in a fresh worker 2548ms
+GRADUATION 5  per-request hop ~9ms, worker boot 2840ms for two guests
+```
+
+Graduation 3 is the reading the campaign was opened for. The baseline recorded frames seen mid-turn
+**0**; here a frame leaves Python, crosses the bridge, is answered by a peer on the switch, and comes
+back into Python **7ms** later while the other guest is still burning its 1596ms loop. The assertion
+is not a timing story: the probe holds a `busySettled` flag and requires it to still be false.
+
+Graduation 3 also names one contract that **changed shape** in the crossing, recorded rather than
+hidden (`portBridgedDevice.js` carries the same note): the switch throws synchronously from
+`connect()` on a duplicate endpoint, and across a message boundary that answer cannot be back before
+`connect()` returns. The bridge preserves the error *code* and carries it to the first `send()`. A
+consumer that relies on the synchronous throw has to move that expectation one call later.
+
+### The blocker, and it is not the worker's fault
+
+A guest that has a packet device cannot use that device after restoring its own portable image. The
+first call into the surface traps with `table index is out of bounds` or `Argument to hiwire_get is
+falsy`, which kills the interpreter. It reproduces **on the main thread with the shipped
+`createPyprocGuestFactory`**, both for a guest that used the surface before the image and for one
+that never touched it. So it is a defect in `src`, not a limit of worker hosting, and the campaign
+found it only because the candidate needed the same path.
+
+Four explanations were tested below the machine layer and all four are dead: across a materialized
+image, a session carries a plain global, a callable JS function, `pyodide.ffi`, and a `to_py()`
+conversion without a scratch (`MINIMAL` checks in the probe). The session layer is healthy, so the
+cause sits above it, in what the machine layer does around `removePythonSurface` /
+`installPythonSurface`. Root-causing that is the next step, and it belongs in `src` with a gate,
+because `snapshotScope: "portable"` is a claim the shipped in-process adapter makes today.
+
+One neighbouring defect on the same path is already understood and fixed in the working tree:
+`PyprocGuestAdapter._attachPacketPort` re-attached without detaching, so a warm restore of a
+networked guest died with `WEB_MACHINE_NETWORK_ENDPOINT_DUPLICATE` before it could reach the trap
+above. No gate covered a networked guest's restore at all; that fix ships with the root-cause fix and
+its gate rather than alone, because half of this path being fixed still leaves the path broken.
+
+### Two defects the campaign found in `src` (both fixed, each with its own gate)
 
 1. **`bootSession` does not forward `loadPyodide`.** A worker has no `document`, so the engine script
    cannot be injected as a tag; `bootRuntime` already accepts a `loadPyodide` the worker supplies
@@ -89,9 +137,17 @@ drives it through `createMachine`/`boot`/`request`. `WebMachineHost`, `MachineHa
    still unreleased, so this is fixable before it ships.
 
 Neither is smuggled in from a probe: a campaign finds defects, and the fix lands where the contract
-lives with its own gate.
+lives with its own gate. Both landed that way. (1) is the `bootSession` passthrough with a Node gate
+that observes the caller's loader through a sentinel plus three browser-gate checks for a
+worker-hosted deterministic session. (2) is the `pyproc/runtime` assembly point, fixed so the subpath
+yields a complete `Runtime`; this worker no longer needs to reach past it.
 
 ## 졸업 게이트
+
+Status after the second candidate run (2026-07-31): **1, 2, 3, 5 hold; 4 holds for the image and is
+blocked for the device by the shipped defect above.** The campaign stays open until that defect is
+root-caused, because closing it now would move a candidate into `src` while the path it depends on is
+known to be broken there.
 
 Move to `src/` only when all of these hold, measured in a real browser:
 

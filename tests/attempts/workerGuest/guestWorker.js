@@ -2,35 +2,56 @@
 // thread, driven by the same request shapes the in-process adapter accepts.
 //
 // This is deliberately thin. The question the campaign asks is whether the *adapter contract* is the
-// right seam, so this file does the minimum needed to answer it: boot a kernel, run code, answer
-// history requests, and report. If the seam is right, nothing here needs to know it is in a worker.
+// right seam, so this file does the minimum needed to answer it: boot a deterministic session, run
+// code, answer history requests, carry its packet device across the boundary, and hand its image out.
+// If the seam is right, nothing here needs to know it is in a worker - except for the two places a
+// worker genuinely differs, and both are explicit:
 //
-// FINDING (2026-07-27, recorded in the campaign README): this uses `bootRuntime`, not `bootSession`.
-// A worker has no `document`, so the engine script cannot be injected as a tag; the runtime already
-// handles that through its `loadPyodide` option, which a worker consumer supplies after importing
-// pyodide.mjs itself. But `bootSession` does not forward `loadPyodide` from its manifest, so the
-// deterministic-replay boot cannot currently be worker-hosted at all. That is a one-line passthrough
-// in `src/session/session.js` and it belongs in the graduation commit, not smuggled in from a probe.
-// SECOND FINDING: importing `bootRuntime` from `src/runtime/index.js` (what `pyproc/runtime` points at)
-// yields a Runtime whose `enable*` factories do not exist - `rt.enableReactive is not a function`.
-// The bindings are installed at import time by `src/composition/runtimeApi.js`, whose own header says
-// both index.js and pyproc/runtime consume it, but package.json points ./runtime at the rank-0 barrel
-// instead. So this worker imports the composition root. That defect is the campaign's, not this
-// probe's, and it is recorded in the README.
-// Until then this worker gets `run` plus a reactive controller, which is what the blocking assertion
-// needs, and the campaign records that history/export are not yet crossed.
-import { boot as bootRuntime } from "../../../src/composition/runtimeApi.js";
+//  1. **No document.** The engine script cannot be injected as a tag, so this worker imports
+//     pyodide.mjs itself and hands `loadPyodide` to the session as a host capability. `bootSession`
+//     used to drop that option (the campaign's first finding, fixed in src with its own gates), which
+//     is why history, save, and export could not be worker-hosted at all.
+//  2. **The devices live on the host thread.** The switch is shared between guests, so it cannot move
+//     here. `createBridgedDevice` gives this side a device-shaped proxy; what survives the crossing
+//     and what changes shape is documented in portBridgedDevice.js.
+import { bootSession, openMachine } from "../../../src/session/session.js";
+import { toErrorPayload } from "../../../src/runtime/errors.js";
+import { DEFAULT_INDEX } from "../../../src/runtime/runtime.js";
+import { PyprocPacketPort } from "../../../src/machine/guests/pyprocPacketPort.js";
+import { createBridgedDevice } from "./portBridgedDevice.js";
 
-let rt = null;
-let reactive = null;
+let session = null;
+let packetPort = null;
+let devicePort = null;
+let endpointId = null;
+let network = null;
+let indexURL = DEFAULT_INDEX;
 
-function replyError(reqId, error) {
-  postMessage({
-    reqId,
-    type: "error",
-    code: error?.code || "PYPROC_WORKER_TASK_ERROR",
-    message: String(error?.message || error),
+const engineLoader = async (url) => {
+  const engine = await import(url + "pyodide.mjs");
+  return (cfg) => engine.loadPyodide(cfg);
+};
+
+// The packet port is attached the same way after a boot and after a restore, because a restored
+// guest is a booted guest as far as its devices are concerned.
+// The addresses come from the machine's manifest, not from this file: two guests on one switch need
+// distinct hardware addresses, and "which address is this machine" is a declaration, not a default.
+function attachPacketPort() {
+  if (!devicePort || !endpointId) return;
+  packetPort = new PyprocPacketPort({
+    device: createBridgedDevice({ port: devicePort, kind: "network", mode: "packet" }),
+    endpointId,
+    ...(network?.macAddress ? { macAddress: network.macAddress } : {}),
+    ...(network?.ipv4Address ? { ipv4Address: network.ipv4Address } : {}),
   });
+  packetPort.attach(session.rt);
+}
+
+// The wire shape of an error is the runtime's, not this file's. The first edition of this worker
+// invented a `message` field, so every failure arrived on the host as "unknown worker error" and hid
+// its own cause - a probe that lies about why it failed is worse than a probe that fails.
+function replyError(reqId, error) {
+  postMessage({ reqId, type: "error", ...toErrorPayload(error) });
 }
 
 onmessage = async (event) => {
@@ -39,44 +60,74 @@ onmessage = async (event) => {
   try {
     if (message.type === "boot") {
       const manifest = message.manifest || {};
-      const indexURL = manifest.indexURL || "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
-      // The worker imports the engine itself and hands loadPyodide to the runtime, so no script tag
-      // and no globalThis mutation is needed.
-      const engine = await import(indexURL + "pyodide.mjs");
-      rt = await bootRuntime({
-        indexURL,
-        ...(manifest.env ? { env: manifest.env } : {}),
-        loadPyodide: (cfg) => engine.loadPyodide(cfg),
-      });
-      reactive = rt.enableReactive();
-      reactive.checkpoint(); // cp0, the same boundary the in-process adapter establishes
-      postMessage({ reqId, type: "ok", heapBytes: rt.memory.byteLength() });
+      indexURL = manifest.indexURL || DEFAULT_INDEX;
+      const loadPyodide = await engineLoader(indexURL);
+      session = await bootSession({ indexURL, ...(manifest.env ? { env: manifest.env } : {}), loadPyodide });
+      devicePort = event.ports[0] || null;
+      endpointId = message.endpointId || null;
+      network = message.network || null;
+      attachPacketPort();
+      postMessage({ reqId, type: "ok", heapBytes: session.rt.memory.byteLength(), h0: await session._cp0Digest() });
       return;
     }
-    if (!rt) throw new Error("guestWorker: not booted");
+    // Restore stands beside boot, not behind the `not booted` guard: it is the other way a session
+    // comes into existence. It revives through the same host-capability route, because the file's
+    // manifest is JSON and cannot carry the engine loader.
+    if (message.type === "restore") {
+      indexURL = message.indexURL || indexURL;
+      const loadPyodide = await engineLoader(indexURL);
+      session = await openMachine(new Blob([message.bytes]), { trust: true, loadPyodide });
+      devicePort = event.ports[0] || devicePort;
+      endpointId = message.endpointId || endpointId;
+      network = message.network || network;
+      attachPacketPort();
+      // Measured 2026-07-31: calling the freshly re-installed surface here is already fatal, so this
+      // reply deliberately does not touch it. The reading lives in the campaign README, and probing
+      // it from inside restore only poisons every later step with "already fatally failed".
+      postMessage({ reqId, type: "ok", h0: await session._cp0Digest() });
+      return;
+    }
+    if (!session) throw new Error("guestWorker: not booted");
     if (message.type === "run") {
-      const value = rt.run(String(message.code || ""));
+      const value = session.rt.run(String(message.code || ""));
       // Values cross postMessage, so only structured-cloneable results return. That is a genuine
       // constraint of worker hosting and is recorded in the campaign rather than hidden by a cast.
       postMessage({ reqId, type: "ok", value: typeof value === "bigint" ? String(value) : value });
       return;
     }
     if (message.type === "checkpoint") {
-      const info = reactive.checkpoint();
+      const info = session.reactive.checkpoint();
       postMessage({ reqId, type: "ok", index: info.index, changedPages: info.changedPages });
       return;
     }
     if (message.type === "historyDepth") {
-      postMessage({ reqId, type: "ok", depth: reactive.tree().length, live: reactive.liveIdx });
+      postMessage({ reqId, type: "ok", depth: session.reactive.tree().length, live: session.reactive.liveIdx });
       return;
     }
-    if (message.type === "inspect") {
-      postMessage({ reqId, type: "ok", heapBytes: rt.memory.byteLength(), ready: true });
+    if (message.type === "netInspect") {
+      postMessage({ reqId, type: "ok", stats: packetPort ? packetPort.inspect() : null });
+      return;
+    }
+    if (message.type === "snapshot") {
+      // A movable image cannot carry live JS proxies: the packet port's Python surface comes out
+      // first and goes back in after, exactly as the in-process adapter does it.
+      if (packetPort) packetPort.removePythonSurface();
+      try {
+        const image = await session.exportImage();
+        const bytes = new Uint8Array(await image.arrayBuffer());
+        postMessage({ reqId, type: "ok", bytes }, [bytes.buffer]);
+      } finally {
+        if (packetPort) packetPort.installPythonSurface();
+      }
       return;
     }
     if (message.type === "shutdown") {
-      rt = null;
-      reactive = null;
+      if (packetPort) {
+        await packetPort.drain(); // frames already sent must leave the switch before the port closes
+        packetPort.detach();
+        packetPort = null;
+      }
+      session = null;
       postMessage({ reqId, type: "ok" });
       return;
     }

@@ -4,41 +4,55 @@
 // (boot/pause/resume/snapshot/restore/shutdown/request/inspect) is already async and message-shaped,
 // so a proxy can satisfy it over a worker boundary and `WebMachineHost` needs no new branch.
 //
-// What it deliberately does NOT do yet, so the campaign record stays honest:
-//  - snapshot/restore declare `snapshotScope: "none"`. Moving a heap image out of a worker is a real
-//    piece of work (the payload has to cross postMessage), and claiming portable before proving it
-//    would be the exact defect this project keeps finding in itself.
-//  - devices are not bridged. That is graduation item 3 and needs `portBridgedDevice`.
-// Both are named in the campaign README's graduation gate rather than papered over here.
+// The two capabilities that were honestly withheld in the first candidate are now carried, and each
+// is carried by a mechanism rather than a claim:
+//  - **snapshotScope: "portable"**, because the worker exports a real signed image through the same
+//    `exportImage` the in-process adapter uses, and `restore` revives it in a *fresh worker*. The
+//    qualification the campaign measured stays true and is stated in the README: cp0 is decided by
+//    the host context, so an image made in a worker revives in a worker. This adapter only ever
+//    revives into a worker, so the scope it declares is the scope it delivers.
+//  - **a bridged packet device**, so the guest reaches the shared switch that cannot leave the host
+//    thread. What survives the crossing and what changes shape is in portBridgedDevice.js.
 import { createRpcPort } from "../../../src/runtime/rpcChannel.js";
+import { indexRequirements, resolveRequiredDevice } from "../../../src/machine/contracts/deviceRequirement.js";
+import { serveBridgedDevice } from "./portBridgedDevice.js";
 
-export function createWorkerGuestFactory({ workerURL } = {}) {
+export function createWorkerGuestFactory({ workerURL, networkDeviceName = null } = {}) {
   if (!workerURL) throw new TypeError("createWorkerGuestFactory: a workerURL is required");
-  return () => new WorkerGuestAdapter({ workerURL });
+  return () => new WorkerGuestAdapter({ workerURL, networkDeviceName });
 }
 
 class WorkerGuestAdapter {
-  constructor({ workerURL }) {
+  constructor({ workerURL, networkDeviceName }) {
     this._workerURL = workerURL;
+    this._networkDeviceName = networkDeviceName ? String(networkDeviceName) : null;
+    // The declaration is the single truth about what this guest needs, exactly as the in-process
+    // adapter has it: the host reads `requiredDevices` for its allowlist, and the adapter resolves
+    // devices only through that declaration. A bridge does not earn an exemption from that law.
     this.capabilities = {
-      adapterVersion: "worker-guest-probe-v1",
-      // Honest for now: this adapter cannot yet move an image out of the worker, so it must not
-      // claim a scope the host would then trust.
-      snapshotScope: "none",
+      adapterVersion: this._networkDeviceName ? "worker-guest-probe-net-v2" : "worker-guest-probe-v2",
+      snapshotScope: "portable",
       pauseMode: "cooperative",
       shutdownMode: "release",
-      requiredDevices: [{ name: "console", kind: "console" }],
+      requiredDevices: [
+        { name: "console", kind: "console" },
+        ...(this._networkDeviceName
+          ? [{ name: this._networkDeviceName, kind: "network", mode: "packet", methods: ["connect"] }]
+          : []),
+      ],
     };
+    this._requirementByName = indexRequirements(this.capabilities.requiredDevices);
     this._worker = null;
     this._port = null;
     this._context = null;
+    this._deviceServer = null;
+    this._manifest = null;
   }
 
   async boot(context, manifest) {
     this._context = context;
-    this._worker = new Worker(this._workerURL, { type: "module" });
-    this._port = createRpcPort(this._worker, { label: "workerGuest" });
-    await this._port.call({ type: "boot", manifest: manifest.session || {} });
+    this._manifest = manifest;
+    await this._spawn(context, { type: "boot", manifest: manifest.session || {} });
     context.devices.console?.write?.(`workerGuest:boot:${context.machineId}`);
   }
 
@@ -54,20 +68,31 @@ class WorkerGuestAdapter {
   }
 
   async snapshot() {
-    throw new Error("workerGuest: snapshot is not implemented yet (graduation item 4)");
+    if (!this._port) throw new Error("workerGuest: not booted");
+    const reply = await this._port.call({ type: "snapshot" });
+    return reply.bytes;
   }
 
-  async restore() {
-    throw new Error("workerGuest: restore is not implemented yet (graduation item 4)");
+  // A restore replaces the worker rather than reusing it. That is the honest shape: the image was
+  // taken at a boundary, and a fresh worker is a fresh process image - which is precisely what
+  // graduation item 4 asks the adapter to prove instead of assert.
+  async restore(payload, context, manifest) {
+    this._context = context;
+    this._manifest = manifest || this._manifest;
+    await this._teardown();
+    await this._spawn(context, {
+      type: "restore",
+      bytes: payload instanceof Uint8Array ? payload : new Uint8Array(payload),
+      indexURL: (this._manifest?.session || {}).indexURL,
+    });
+    context.devices.console?.write?.(`workerGuest:restore:${context.machineId}`);
   }
 
   async shutdown() {
     if (this._port) {
       try { await this._port.call({ type: "shutdown" }); } catch (error) { /* the worker may already be gone */ }
     }
-    this._worker?.terminate();
-    this._worker = null;
-    this._port = null;
+    await this._teardown();
     this._context?.devices.console?.write?.("workerGuest:shutdown");
   }
 
@@ -85,6 +110,10 @@ class WorkerGuestAdapter {
       const reply = await this._port.call({ type: "historyDepth" });
       return { depth: reply.depth, live: reply.live };
     }
+    if (message.type === "netInspect") {
+      const reply = await this._port.call({ type: "netInspect" });
+      return reply.stats;
+    }
     throw new Error(`workerGuest: unsupported request ${message.type}`);
   }
 
@@ -94,6 +123,36 @@ class WorkerGuestAdapter {
       hosted: "worker",
       ready: !!this._port,
       snapshotScope: this.capabilities.snapshotScope,
+      networkBridged: !!this._deviceServer,
     };
+  }
+
+  // One place spawns a worker, wires its device channel, and sends the first message, because boot
+  // and restore differ only in that message. Two copies of this wiring would drift.
+  async _spawn(context, first) {
+    this._worker = new Worker(this._workerURL, { type: "module" });
+    this._port = createRpcPort(this._worker, { label: "workerGuest" });
+    const transfer = [];
+    if (this._networkDeviceName) {
+      const device = resolveRequiredDevice(context.devices, this._requirementByName.get(this._networkDeviceName), "workerGuest adapter");
+      const channel = new MessageChannel();
+      this._deviceServer = serveBridgedDevice({ port: channel.port1, device, label: context.machineId });
+      first.endpointId = `${context.machineId}:${this._networkDeviceName}`;
+      // Addresses are the machine's declaration, not the adapter's invention: two guests on one
+      // switch need distinct ones, and the manifest is where a machine says who it is.
+      first.network = this._manifest?.network || null;
+      transfer.push(channel.port2);
+    }
+    // The image payload is copied, not transferred: the host owns those bytes (they are its stored
+    // machine image) and detaching its buffer would destroy the copy it keeps.
+    await this._port.call(first, transfer);
+  }
+
+  async _teardown() {
+    this._deviceServer?.stop();
+    this._deviceServer = null;
+    this._worker?.terminate();
+    this._worker = null;
+    this._port = null;
   }
 }
