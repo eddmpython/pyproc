@@ -1,0 +1,113 @@
+<!doctype html>
+<!--
+Why the campaign needs this probe.
+
+Wiring `loadPyodide` through `bootSession` made a worker-hosted deterministic boot possible, and the
+first assertion written on top of it failed: the worker kernel's cp0 digest did not equal the main
+thread's (8ef74cf8.. vs f37b1cec..), so the image the worker exported could not be revived on the
+main thread at all - openState rejected it with an h0 mismatch.
+
+Two things differ between those two boots at once, and one measurement cannot tell them apart:
+  (a) the engine entry - the main thread injects the classic script (pyodide.js) and calls the global
+      loadPyodide, while a worker imports pyodide.mjs and hands the runtime that function;
+  (b) the host context itself - window vs worker (no document, different globals).
+
+This probe separates them by booting three kernels and comparing cp0:
+  A  main thread, engine entry = pyodide.mjs (ESM), supplied through loadPyodide
+  B  main thread, engine entry = pyodide.js  (script tag), the default path
+  C  worker,      engine entry = pyodide.mjs (ESM)
+
+  A == C and A != B  -> the engine entry decides. Portability holds if both sides use one entry.
+  A == B and A != C  -> the host context decides. Images are not portable across the boundary.
+  all three differ   -> both factors matter and each must be pinned separately.
+
+MEASURED (2026-07-27, headless Chromium):
+  A main+esm     f37b1cecc205..
+  B main+script  f37b1cecc205..   == A
+  C worker+esm   8ef74cf87a1c..   != A
+
+The second reading held: **the host context decides cp0, and the engine entry does not.** So a
+deterministic boot is deterministic within a host-context class, not across one, and the assertion
+this probe was written to check - that a worker-exported image revives on the main thread - is false.
+That is now the contract: within a class images travel, across one the h0 check refuses them. The
+gate asserts both halves, including the refusal, so the boundary cannot rot into silent corruption.
+
+What this probe does NOT establish: which part of the worker environment moves those bytes. Pyodide
+initialization touches globals a worker lacks, and narrowing it to a specific one is a separate
+question - it is only worth answering if cross-context portability becomes a requirement, and the
+h0 check makes today's behaviour safe rather than silently wrong either way.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>workerGuest probe - what makes cp0 differ</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module init", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "unhandled rejection", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>workerGuest probe: what makes cp0 differ</h1>
+<pre id="out">running...</pre>
+<script type="module">
+  import { bootSession } from "../../../src/session/session.js";
+  import { DEFAULT_INDEX } from "../../../src/runtime/runtime.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+
+  const indexURL = new URLSearchParams(location.search).get("indexURL") || DEFAULT_INDEX;
+  const absolute = new URL(indexURL, location.href).href;
+
+  try {
+    // A: main thread, ESM entry handed to the runtime.
+    const esm = await import(absolute + "pyodide.mjs");
+    const a = await bootSession({ indexURL: absolute, loadPyodide: (cfg) => esm.loadPyodide(cfg) });
+    const h0a = await a._cp0Digest();
+
+    // B: main thread, the default path (script tag + global loadPyodide).
+    const b = await bootSession({ indexURL: absolute });
+    const h0b = await b._cp0Digest();
+
+    // C: worker, ESM entry - the same worker the gate uses.
+    const worker = new Worker(new URL("../../browser/deterministicSessionWorker.js", import.meta.url), { type: "module" });
+    const h0c = await new Promise((resolve, reject) => {
+      worker.addEventListener("message", (event) => (event.data.ok ? resolve(event.data.h0) : reject(new Error(event.data.message))));
+      worker.postMessage({ reqId: 1, type: "boot", indexURL: absolute });
+    });
+    worker.terminate();
+
+    out.textContent += `\n\nA main+esm    ${h0a}\nB main+script ${h0b}\nC worker+esm  ${h0c}\n`;
+    // The two assertions below are the measured law, written in the direction the reading came out.
+    // Each fails if the other factor turns out to be the one that matters, so the pair stays
+    // falsifiable rather than becoming a restatement of the result.
+    check("the engine entry does not decide cp0: main+esm == main+script", h0a === h0b,
+      `${h0a.slice(0, 12)}.. == ${h0b.slice(0, 12)}..`);
+    check("the host context decides cp0: worker != main on the same manifest", h0c !== h0a,
+      `worker ${h0c.slice(0, 12)}.. != main ${h0a.slice(0, 12)}..`);
+    check("a deterministic boot is self-consistent inside one context: B repeats itself",
+      (await (await bootSession({ indexURL: absolute }))._cp0Digest()) === h0b, "second script-entry boot");
+  } catch (error) {
+    check("no exception", false, String(error?.message || error).slice(-300));
+  } finally {
+    await report();
+  }
+</script>
+</body>
+</html>

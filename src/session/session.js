@@ -62,6 +62,13 @@ export function bootSession(manifest = {}) {
         engineScriptIntegrity: manifest.engineScriptIntegrity,
         coreIntegrity: manifest.coreIntegrity,
         coreCacheDir: manifest.coreCacheDir,
+        // 워커 호스팅의 열쇠: 워커에는 document가 없어 엔진 스크립트를 태그로 심을 수 없다.
+        // 런타임은 이미 이 옵션으로 그 경로를 열어놨고(runtime.js doLoad) porcelain boot의
+        // 옵션 허용 목록도 loadPyodide를 받는데, 결정적 부팅만 그것을 조용히 떨어뜨렸다.
+        // 결과는 메인 스레드에서 무증상(전역 엔진이 대신 로드된다)이고 워커에서 즉사였다.
+        // 리플레이 신원(_manifest)은 indexURL/env/packages/setup만 세므로 이 전달은 결정성을
+        // 건드리지 않는다: 워커 커널과 메인 커널의 cp0 바이트 동일성이 게이트로 남는다.
+        loadPyodide: manifest.loadPyodide,
         patchScope: reenterPatch,
       });
       if (manifest.packages && manifest.packages.length) {
@@ -80,6 +87,11 @@ export function bootSession(manifest = {}) {
     return new Session(rt, reactive, manifest);
   });
 }
+
+// 부활 경로의 매니페스트는 파일에서 온 JSON이라 함수를 담을 수 없다(validateManifest도 4키만
+// 허용한다). 그래서 워커 호스팅의 엔진 로더는 매니페스트가 아니라 호출 옵션으로 오고, 여기서
+// 합친다. 환경 선언(파일)과 호스트 능력(호출자)의 출처가 다르다는 사실을 한 곳에 적는다.
+const withHostLoader = (manifest, opts) => (opts.loadPyodide ? { ...manifest, loadPyodide: opts.loadPyodide } : manifest);
 
 // 머신 파일은 "살아있는 상태"라서 실행 파일과 동급 위험이다: { trust: true } 또는 신뢰
 // 공개키 없이는 열지 않는다(해시는 무결성이지 출처가 아니다). 이 게이트는 포맷과 무관한
@@ -113,7 +125,7 @@ async function openBundleMachine(buf, opts) {
   requireTrust(signature, decoded.envelope, opts);
   if (typeof decoded.meta?.manifest !== "string") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: bundle meta has no manifest. A .webmachine file is not a session bundle; open it through the Web Computer surface");
   const manifest = validateManifest(JSON.parse(decoded.meta.manifest));
-  const session = await bootSession(manifest);
+  const session = await bootSession(withHostLoader(manifest, opts));
   const store = new MemoryStateStore();
   for (const [address, bytes] of decoded.objects) await store.writeObject(address, bytes);
   await store.writeRef("HEAD", { commit: decoded.commit });
@@ -134,7 +146,7 @@ export async function openMachine(blob, opts = {}) {
   const manifest = validateManifest(JSON.parse(meta.manifest));
   const signature = await verifyMachineSignature(meta, bin, homeBin || new Uint8Array(0), opts);
   requireTrust(signature, envelope, opts);
-  const session = await bootSession(manifest);
+  const session = await bootSession(withHostLoader(manifest, opts));
   await session._applyMeta(meta, bin);
   if (meta.home) session._applyHome(meta.home, homeBin);
   return session;

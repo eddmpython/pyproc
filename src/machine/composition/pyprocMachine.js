@@ -240,7 +240,11 @@ export async function open(source, opts = {}) {
     return openPersistentMachine(source.persistent === true ? opts : { ...source.persistent, ...opts });
   }
   if (source && typeof source === "object" && source.dir && source.name) {
-    const session = await bootSession(opts.manifest || {});
+    // 저장분 부활도 워커에서 성립해야 한다: 매니페스트는 호출자가 주지만 엔진 로더는 호스트
+    // 능력이라 옵션으로 온다(bundle 경로의 withHostLoader와 같은 계약).
+    const manifest = { ...(opts.manifest || {}) };
+    if (opts.loadPyodide) manifest.loadPyodide = opts.loadPyodide;
+    const session = await bootSession(manifest);
     await session.load(source.dir, source.name);
     return new PyprocMachine({ rt: session.rt, reactive: session.reactive, session });
   }

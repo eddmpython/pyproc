@@ -983,6 +983,12 @@ export interface SessionManifest {
   engineScriptIntegrity?: string;
   coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy;
   coreCacheDir?: FileSystemDirectoryHandle;
+  /**
+   * loadPyodide supplied by a worker consumer, which has no document to inject the engine script
+   * into. It is a host capability, not part of the environment declaration, so it does not enter
+   * the replay identity: a worker-hosted kernel and a main-thread kernel reach the same cp0 bytes.
+   */
+  loadPyodide?: (cfg: unknown) => Promise<unknown>;
 }
 
 export interface SessionIo {
@@ -1185,6 +1191,11 @@ export interface OpenTrustOptions {
   trustedPublicKey?: CryptoKey | JsonWebKey;
   trustedPublicKeys?: (CryptoKey | JsonWebKey)[];
   requireSignature?: boolean;
+  /**
+   * loadPyodide for a worker-hosted revival. A bundle carries its own manifest, and that manifest
+   * is JSON, so the engine loader cannot travel inside the file: it comes from the caller.
+   */
+  loadPyodide?: (cfg: unknown) => Promise<unknown>;
 }
 
 /** Verbs of the two-region history. checkpoint and restore are volatile (RAM, time travel); commit and export are durable (promoted to sha256). */
@@ -1252,7 +1263,7 @@ export function boot(options?: BootMachineOptions): Promise<PyprocMachine>;
  * election and revives from the journal, returning a KernelElection handle.
  */
 export function open(source: Blob | Uint8Array | ArrayBuffer, opts?: OpenTrustOptions): Promise<PyprocMachine>;
-export function open(source: { dir: FileSystemDirectoryHandle; name: string }, opts?: { manifest?: SessionManifest }): Promise<PyprocMachine>;
+export function open(source: { dir: FileSystemDirectoryHandle; name: string }, opts?: { manifest?: SessionManifest; loadPyodide?: (cfg: unknown) => Promise<unknown> }): Promise<PyprocMachine>;
 export function open(source: { persistent: PersistentMachineOptions | true }, opts?: PersistentMachineOptions): Promise<KernelElection>;
 
 

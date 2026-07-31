@@ -794,6 +794,68 @@ try {
   }
   await (await navigator.storage.getDirectory()).removeEntry("pyprocGateSess", { recursive: true });
 
+  // 워커 호스팅: 결정적 리플레이 세션을 메인 스레드 밖에서 돌린다. workerGuest 캠페인이
+  // 실측한 것(2026-07-27): 한 스레드에 게스트를 얹으면 한쪽의 파이썬 루프가 다른 쪽 요청을
+  // 통째로 막는다(917ms -> 1ms). 그 해법의 전제가 이 경로였는데, bootSession이 loadPyodide를
+  // 전달하지 않아 결정적 부팅 = history/save/export 전부가 워커에 올라가지 못했다.
+  //
+  // 리플레이 경계(cp0)의 사정 범위는 실측으로 정했다(engineEntryCp0Probe, 2026-07-27):
+  //   main+pyodide.mjs == main+script tag != worker+pyodide.mjs
+  // 엔진 진입 파일은 cp0을 가르지 않고, **호스트 문맥(window vs worker)이 가른다.** 그래서
+  // 결정성은 "같은 매니페스트 + 같은 호스트 문맥" 안에서 성립하는 계약이고, 문맥을 건너는
+  // 이미지 이식은 성립하지 않는다. 이 절은 그 두 사실을 다 문다: 문맥 안에서는 이식되고,
+  // 문맥을 건너면 조용히 오염되는 대신 h0 불일치로 큰 소리로 거부된다.
+  {
+    const newSessionWorker = () => {
+      const worker = new Worker(new URL("./deterministicSessionWorker.js", import.meta.url), { type: "module" });
+      let seq = 0;
+      const call = (message, transfer = []) => new Promise((resolve, reject) => {
+        const reqId = ++seq;
+        const onMessage = (event) => {
+          if (event.data?.reqId !== reqId) return;
+          worker.removeEventListener("message", onMessage);
+          if (event.data.ok) resolve(event.data);
+          else reject(new Error(`${event.data.code} ${event.data.message}`));
+        };
+        worker.addEventListener("message", onMessage);
+        worker.postMessage({ ...message, reqId }, transfer);
+      });
+      return { worker, call };
+    };
+    const source = newSessionWorker();
+    const target = newSessionWorker();
+    try {
+      const workerBootStart = performance.now();
+      const booted = await source.call({ type: "boot", indexURL: INDEX });
+      timings.workerSessionBootMs = Math.round(performance.now() - workerBootStart);
+      check("워커 세션: document 없는 워커에서 결정적 부팅(전역 엔진 미오염)",
+        booted.hasDocument === false && booted.globalEngine === "undefined" && /^[0-9a-f]{64}$/.test(booted.h0),
+        `${timings.workerSessionBootMs}ms, h0 ${booted.h0.slice(0, 12)}..`);
+      await source.call({ type: "run", code: "workerState = 7331" });
+      const exported = await source.call({ type: "exportImage" });
+      // 같은 호스트 문맥 안의 이식: 부활이 성공한다는 것 자체가 두 워커 커널의 cp0이 바이트
+      // 단위로 같다는 증거다(openState가 expectH0로 대조하고, 어긋나면 던진다).
+      const revived = await target.call({ type: "openImage", indexURL: INDEX, bytes: exported.bytes }, [exported.bytes.buffer]);
+      const targetValue = await target.call({ type: "run", code: "workerState + 1" });
+      check("워커 세션: 워커가 내보낸 이미지가 다른 워커에서 부활(문맥 안 cp0 동일)",
+        targetValue.value === 7332 && revived.h0 === booted.h0,
+        `h0 ${revived.h0.slice(0, 12)}.. == ${booted.h0.slice(0, 12)}..`);
+      // 문맥을 건너는 이식은 성립하지 않는다: 워커 힙을 window 커널에 덮으면 조용한 오염이
+      // 되므로, 부활 경로가 h0 대조로 거부해야 한다. 메인 커널의 cp0은 실제로 다르다(위 실측).
+      const mainH0 = await s1._cp0Digest();
+      // 앞의 이미지 바이트는 target 워커로 transfer돼 버퍼가 분리됐다. 그래서 다시 내보낸다.
+      const crossImage = await source.call({ type: "exportImage" });
+      let crossCode = "";
+      try { await openMachine(new Blob([crossImage.bytes]), { trust: true }); } catch (e) { crossCode = e.code; }
+      check("워커 세션: 문맥을 건너는 이식은 h0 불일치로 거부(조용한 오염 금지)",
+        crossCode === "PYPROC_REPLAY_MISMATCH" && booted.h0 !== mainH0,
+        `${crossCode}, worker ${booted.h0.slice(0, 8)}.. != main ${mainH0.slice(0, 8)}..`);
+    } finally {
+      source.worker.terminate();
+      target.worker.terminate();
+    }
+  }
+
   // state 커널 OPFS 드라이버: 커밋 왕복 + verify-on-read 적발 + PREV 후퇴가 실제 OPFS에서
   // 성립하는지(프로토콜 자체의 음성 시험 전체는 tests/run.mjs [state 커널]이 매 커밋 문다).
   {

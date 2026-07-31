@@ -2311,6 +2311,49 @@ check("패키지 소비자가 공개 표면과 설치된 pyproc-assets를 사용
   if (r.status !== 0) throw new Error(`${r.stdout ?? ""}\n${r.stderr ?? ""}`.trim().slice(-4000));
   if (!r.stdout.includes("package consumer ok:")) throw new Error("package consumer 완료 신호 없음");
 });
+// 워커 호스팅 계약: 워커에는 document가 없어 엔진 스크립트를 태그로 심을 수 없다. 런타임은
+// loadPyodide 옵션으로 그 경로를 열어놨고 porcelain boot의 옵션 허용 목록과 BootOptions 타입도
+// 그것을 약속했는데, 결정적 부팅 경로만 그 옵션을 조용히 떨어뜨렸다: 메인 스레드에서는 전역
+// 엔진이 대신 로드돼 무증상이고(호출자가 준 엔진이 무시된다) 워커에서는 즉사였다. 그래서
+// 결정적 리플레이 = history/save/export 전부가 워커에 올라가지 못했다.
+// WASM 없이 문다: 호출자가 준 로더가 실제로 불리는지만 보면 되고, 그 자리에 센티넬을 심으면
+// 전달 여부가 관측된다. cfg까지 보므로 "불렸지만 비결정 부팅이었다"도 걸린다.
+await checkAsync("워커 호스팅: 결정적 부팅이 호출자의 엔진 로더를 런타임까지 전달", async () => {
+  let calls = 0;
+  let deterministicCfg = false;
+  const loadPyodide = (cfg) => {
+    calls++;
+    deterministicCfg = cfg?.env?.PYTHONHASHSEED === "0";
+    throw new Error("PYPROC_GATE_LOADER_SENTINEL");
+  };
+  let message = "";
+  try { await sessionApi.bootSession({ indexURL: "https://engine.invalid/pyodide/", loadPyodide }); }
+  catch (e) { message = String(e?.message || e); }
+  if (calls !== 1) throw new Error(`호출자 로더가 불리지 않았다(calls=${calls}): bootSession이 loadPyodide를 떨어뜨린다`);
+  if (!message.includes("PYPROC_GATE_LOADER_SENTINEL")) throw new Error(`센티넬이 아닌 경로로 실패했다: ${message.slice(0, 160)}`);
+  if (!deterministicCfg) throw new Error("결정적 부팅의 PYTHONHASHSEED=0이 로더 cfg에 실리지 않았다");
+});
+// 부활 경로는 따로 문다: bundle의 매니페스트는 파일 안 JSON이라 함수를 담을 수 없으므로,
+// 워커 호스팅의 로더는 호출 옵션에서 와야 한다(session.js withHostLoader). 봉투는 실물로
+// 만든다: 로더는 verify-on-read와 신뢰 게이트를 통과한 뒤에 불려야 의미가 있다.
+await checkAsync("워커 호스팅: bundle 부활도 호출자의 엔진 로더로 부팅", async () => {
+  const { encodeStateBundle } = await import(pathToFileURL(join(ROOT, "src", "state", "bundleFormat.js")).href);
+  const { sha256AddressWith } = await import(pathToFileURL(join(ROOT, "src", "runtime", "contentDigest.js")).href);
+  const payload = new TextEncoder().encode("pyproc gate bundle object");
+  // 봉투는 자기 색인에 commit 오브젝트가 있어야 디코드된다(decodeStateBundle). 커밋 트리의
+  // 내용 검증은 bootSession 뒤의 openState 몫이므로, 로더 전달을 보는 데는 색인 정합만 필요하다.
+  const commit = await sha256AddressWith(globalThis.crypto, payload);
+  const objects = [[commit, payload]];
+  const meta = { manifest: JSON.stringify({ indexURL: "https://engine.invalid/pyodide/" }) };
+  const image = await encodeStateBundle(globalThis.crypto, { commit, meta, objects, tag: null });
+  let calls = 0;
+  const loadPyodide = () => { calls++; throw new Error("PYPROC_GATE_LOADER_SENTINEL"); };
+  let message = "";
+  try { await sessionApi.openMachine(new Blob([image]), { trust: true, loadPyodide }); }
+  catch (e) { message = String(e?.message || e); }
+  if (calls !== 1) throw new Error(`부활이 호출자 로더를 쓰지 않았다(calls=${calls}): 파일 매니페스트는 JSON이라 로더를 담을 수 없다`);
+  if (!message.includes("PYPROC_GATE_LOADER_SENTINEL")) throw new Error(`센티넬이 아닌 경로로 실패했다: ${message.slice(0, 160)}`);
+});
 
 // 6) 상대 링크 생존: 모든 *.md의 상대 링크가 "git 추적" 경로를 가리키는가.
 //    존재 검사만으로는 부족하다: 로컬에만 있는 미추적 파일(로컬 규칙 문서 등)을 가리키면
