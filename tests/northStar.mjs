@@ -196,12 +196,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 8.5,
     en: Object.freeze({
       title: "A machine you can carry",
-      state: "`.pymachine` and `.webmachine` files are signed content-addressed envelopes: signature and trusted-key verification, byte-tamper rejection, layout-independent reparse, worker-to-worker revival, and a cross-context transport refused on an `h0` mismatch instead of opened silently. The product gate exports a signed image and imports it into a fresh browser profile behind an explicit signer trust screen. Portability still assumes the same engine and manifest.",
+      state: "`.pymachine` and `.webmachine` files are signed content-addressed envelopes: signature and trusted-key verification, byte-tamper rejection, layout-independent reparse, worker-to-worker revival, and a cross-context transport refused on an `h0` mismatch instead of opened silently. The product gate exports a signed image and imports it into a fresh browser profile behind an explicit signer trust screen. Portability still assumes the same engine and manifest, and a guest that owns a packet device cannot use that device after reviving its own image (measured 2026-07-31, on the main thread as well as in a worker).",
       target: "A machine file opens on any compatible profile from a verified signer, across engine versions.",
     }),
     ko: Object.freeze({
       title: "들고 다니는 머신",
-      state: "`.pymachine`과 `.webmachine`은 서명된 내용 주소 봉투다: 서명과 신뢰 공개키 검증, 바이트 변조 거부, 레이아웃 독립 재파싱, 워커 사이 부활, 문맥을 건너는 이식은 조용히 열리는 대신 `h0` 불일치로 거부된다. 제품 게이트가 서명 이미지를 내보내고 새 브라우저 프로필에서 명시적 서명자 신뢰 화면을 거쳐 가져온다. 이식성은 아직 같은 엔진과 같은 매니페스트를 전제한다.",
+      state: "`.pymachine`과 `.webmachine`은 서명된 내용 주소 봉투다: 서명과 신뢰 공개키 검증, 바이트 변조 거부, 레이아웃 독립 재파싱, 워커 사이 부활, 문맥을 건너는 이식은 조용히 열리는 대신 `h0` 불일치로 거부된다. 제품 게이트가 서명 이미지를 내보내고 새 브라우저 프로필에서 명시적 서명자 신뢰 화면을 거쳐 가져온다. 이식성은 아직 같은 엔진과 같은 매니페스트를 전제하고, packet 장치를 가진 guest는 자기 이미지로 되살아난 뒤 그 장치를 쓰지 못한다(2026-07-31 실측, 워커만이 아니라 메인 스레드도).",
       target: "머신 파일이 검증된 서명자에게서 왔다면 엔진 버전을 건너서도 호환 프로필 어디서나 열린다.",
     }),
     evidence: Object.freeze([
@@ -211,6 +211,11 @@ export const NORTH_STAR_AXES = Object.freeze([
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
+      Object.freeze({
+        id: "deviceSurvivesRevival",
+        en: "Root-cause and fix the revived-guest device trap, so an image carries a working device and not only its bytes",
+        ko: "부활한 guest의 장치 트랩을 근본 수리해 이미지가 바이트만이 아니라 동작하는 장치를 싣게 한다",
+      }),
       Object.freeze({
         id: "manifestNegotiation",
         en: "Open an image across engine versions by negotiating the manifest instead of demanding an exact match",
