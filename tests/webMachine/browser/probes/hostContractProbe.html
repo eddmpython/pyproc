@@ -19,7 +19,7 @@ ownership 상실 request 실행 1회·자동 replay 0회·late response 오염 0
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
-  import { WebMachineHost } from "../../../../src/machine/index.js";
+  import { CanvasRgbaFrameSink, MemoryRgbaDisplayDevice, WebMachineHost } from "../../../../src/machine/index.js";
   import { createFakeGuestFactory } from "../../contracts/fakeGuestAdapter.js";
 
   const out = document.getElementById("out");
@@ -218,6 +218,46 @@ ownership 상실 request 실행 1회·자동 replay 0회·late response 오염 0
       host.listDevices().every((entry) => entry.name !== "scratchDevice"));
 
     check("console device capability 연결", consoleLines.some((line) => line.includes("alphaMachine")) && consoleLines.some((line) => line.includes("betaMachine")), `${consoleLines.length} lines`);
+
+    // 픽셀 출력 경로(소비 방향). 프레임버퍼는 오래 "만들어지지만 아무도 못 보는" 장치였다:
+    // 저장소에 캡처 방향(CanvasRgbaFrameSource)만 있고 present된 프레임을 화면에 올리는 배선이
+    // 없었다. CanvasRgbaFrameSink가 그 방향이고, 여기서 세 계약을 문다: 바이트가 그대로 캔버스에
+    // 도착하는가, 크기의 정본이 프레임인가, 앞서지 않는 revision을 건너뛰는가.
+    {
+      const canvas = document.createElement("canvas");
+      const display = new MemoryRgbaDisplayDevice({ maxWidth: 64, maxHeight: 64, maxFrameBytes: 64 * 64 * 4 });
+      const sink = new CanvasRgbaFrameSink({ canvas, device: display }).start();
+      const port = display.connect({ endpointId: "sinkProbe" });
+      port.configure({ width: 2, height: 1 });
+      // 왼쪽 픽셀은 빨강, 오른쪽은 파랑. alpha는 255로 둔다(alpha: false 컨텍스트라 합성 없음).
+      port.writeRegion({ x: 0, y: 0, width: 2, height: 1, pixels: new Uint8ClampedArray([255, 0, 0, 255, 0, 0, 255, 255]) });
+      const firstRevision = port.present();
+      const painted = canvas.getContext("2d").getImageData(0, 0, 2, 1).data;
+      check("frame sink: present된 바이트가 캔버스에 그대로 도착",
+        canvas.width === 2 && canvas.height === 1
+        && painted[0] === 255 && painted[1] === 0 && painted[2] === 0
+        && painted[4] === 0 && painted[5] === 0 && painted[6] === 255,
+        `${canvas.width}x${canvas.height}, rgba ${[...painted].join(",")}`);
+
+      // 크기의 정본은 프레임이다: guest가 해상도를 바꾸면 캔버스가 따라간다.
+      port.configure({ width: 4, height: 2 });
+      port.writeRegion({ x: 0, y: 0, width: 4, height: 2, pixels: new Uint8ClampedArray(4 * 2 * 4).fill(128) });
+      port.present();
+      check("frame sink: 해상도 변경을 프레임이 정한다", canvas.width === 4 && canvas.height === 2, `${canvas.width}x${canvas.height}`);
+
+      // 뒤늦게 도착한 옛 프레임은 새 화면을 덮지 않는다(구독 알림과 초기 readFrame이 겹칠 때의 계약).
+      // 공개 경로로는 revision이 항상 앞서므로 내부 경로를 직접 몬다: 이 계약은 배달 순서가
+      // 뒤집힌 상황을 위한 것이고, 장치를 통해서는 그 상황을 만들 수 없다.
+      const beforeSkip = sink.inspect();
+      sink._paint({ width: 2, height: 1, revision: firstRevision, pixels: new Uint8ClampedArray(8) });
+      const afterSkip = sink.inspect();
+      check("frame sink: 앞서지 않는 revision은 건너뛴다",
+        afterSkip.skippedFrames === beforeSkip.skippedFrames + 1 && afterSkip.paintedFrames === beforeSkip.paintedFrames
+        && canvas.width === 4 && afterSkip.paintErrors === 0,
+        `painted ${afterSkip.paintedFrames}, skipped ${afterSkip.skippedFrames}, errors ${afterSkip.paintErrors}`);
+      sink.stop();
+      port.close();
+    }
   } catch (error) {
     check("예외 없음", false, String(error?.stack || error).slice(-600));
   }

@@ -487,6 +487,28 @@ export class MemoryRgbaDisplayDevice {
   inspect(): Record<string, unknown>;
 }
 
+/**
+ * Paints the frames an rgba-frame display device presents onto a canvas: the consuming direction,
+ * symmetric to CanvasRgbaFrameSource. The frame decides the canvas size, frames whose revision does
+ * not advance are skipped, and a paint failure is counted rather than thrown into the device's
+ * listener loop.
+ */
+export class CanvasRgbaFrameSink {
+  constructor(options: { canvas: HTMLCanvasElement; device: MemoryRgbaDisplayDevice });
+  start(): this;
+  stop(): this;
+  inspect(): Readonly<{
+    attached: boolean;
+    width: number;
+    height: number;
+    lastRevision: number;
+    paintedFrames: number;
+    skippedFrames: number;
+    paintErrors: number;
+    lastError: string | null;
+  }>;
+}
+
 export class CanvasRgbaFrameSource {
   constructor(options: { canvas: HTMLCanvasElement });
   subscribe(listener: (update: {

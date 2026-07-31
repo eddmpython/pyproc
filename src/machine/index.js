@@ -40,6 +40,7 @@ export { MachineEnvelopeCoordinator } from "./image/machineEnvelopeCoordinator.j
 // 장치
 export { BrowserClockDevice } from "./devices/browserClockDevice.js";
 export { BrowserEntropyDevice } from "./devices/browserEntropyDevice.js";
+export { CanvasRgbaFrameSink } from "./devices/canvasRgbaFrameSink.js";
 export { CanvasRgbaFrameSource } from "./devices/canvasRgbaFrameSource.js";
 export { MemoryBlockDevice } from "./devices/memoryBlockDevice.js";
 export { MemoryEthernetSwitch } from "./devices/memoryEthernetSwitch.js";
