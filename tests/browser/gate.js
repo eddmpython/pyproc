@@ -598,6 +598,32 @@ try {
     JSON.stringify(forkState));
   fos.terminate();
 
+  // fork 성장 비대칭: 부모가 경계 이후 힙을 키운 채로 fork하면 자식은 **먼저 부모 길이까지
+  // 자란 뒤** 델타를 받아야 한다. 자식이 안 자라면 델타가 힙 밖을 가리키고, 그 경로는
+  // PYPROC_INPUT_INVALID로 죽거나 조용히 잘린 상태를 낳는다(둘 다 조용한 오염 후보다).
+  // 이 경로는 worker.js applyDelta의 growHeapTo 한 줄이 전부이고 지금까지 수동 probe로만
+  // 확인돼 왔다: 성장은 힙 레이아웃을 바꾸므로 회귀가 나면 델타 계약 전체가 흔들린다.
+  {
+    const gos = new PyProc({ replay: {}, indexURL: INDEX });
+    await gos.boot(2, false);
+    const [gp, gc] = gos.ps().map((p) => p.pid);
+    // 부모만 크게 키운다(자식은 경계 그대로) = 비대칭. 32MB는 기본 힙을 확실히 넘긴다.
+    await gos.repl(gp, "grownPool = bytearray(32 * 1024 * 1024)\ngrownPool[16 * 1024 * 1024] = 42\ngrownMark = 'parent'");
+    const gfk = await gos.fork(gp, gc).catch((e) => ({ error: e.code || String(e) }));
+    check("fork: 성장 비대칭(자식이 부모 길이까지 자란 뒤 델타를 받는다)",
+      !gfk.error && gfk.pages > 0,
+      gfk.error ? String(gfk.error).slice(0, 90) : `${gfk.pages}p/${gfk.mb}MB, 정화 ${gfk.reverted}p`);
+    // 성장 범위 **안쪽**의 바이트까지 옮겨왔는지 본다. 길이만 맞고 내용이 0이면 델타가
+    // 성장분을 안 실은 것이고, 그것이 정확히 이 게이트가 잡으려는 조용한 손실이다.
+    // repl은 repr 문자열을 돌려준다(map의 값 계약과 다르다). 성장 범위 안쪽 바이트가 42로
+    // 살아 있어야 한다: 길이만 맞고 내용이 0이면 델타가 성장분을 안 실은 것이다.
+    const grownState = (await gos.repl(gc, "[grownMark, len(grownPool), grownPool[16 * 1024 * 1024]]")).value;
+    check("fork: 성장분의 바이트가 자식에 그대로 도착",
+      grownState === `['parent', ${32 * 1024 * 1024}, 42]`,
+      String(grownState));
+    gos.terminate();
+  }
+
   // forkMany(투기적 탐색 프리미티브, 2026-07-17 승격): 부모 델타를 한 번만 수확해 N 레인에
   // 방송한다. 이득의 근원(수확 1회)과 격리(레인별 상태 + 본선 불변)를 상시 검증한다.
   // 실측 정본은 attempts/branchFleet/fleetFanOutProbe(방송 4.05배, 탐색 5.2배).
@@ -878,6 +904,29 @@ try {
     const fell = await openState(crypto, stateStore, { expectH0: "gate-h0" });
     check("state 커널: OPFS 변조 blob 적발 + PREV 후퇴", fell.fallback === true && fell.pages.get(0)[0] === 11, String(fell.headFailure || "").slice(0, 60));
     await stateRoot.removeEntry("pyprocGateState", { recursive: true });
+
+    // 자란 세대의 커밋: 힙이 자라면 다음 세대는 heapLen이 커지고 색인 범위 밖에 새 페이지가
+    // 생긴다. 델타만 보는 코드가 성장분을 흘리면 부활한 세대가 "옛 길이 + 새 내용"이 되어
+    // 조용히 잘린다. 이 경로는 그동안 게이트가 없었다(성장은 수동 probe로만 봐 왔다).
+    // 전용 디렉터리를 쓰는 이유: 같은 store에 세대를 더하면 위 PREV 후퇴 검사의 PREV가 바뀐다.
+    try { await stateRoot.removeEntry("pyprocGateGrow", { recursive: true }); } catch (e) {}
+    const growDir = await stateRoot.getDirectoryHandle("pyprocGateGrow", { create: true });
+    const growStore = new OpfsStateStore(growDir);
+    // 세대는 델타가 아니라 완전한 page table이다(commitState 계약). 그래서 성장 세대는 구
+    // 페이지를 함께 실어야 하고, 그 구 페이지는 내용 주소가 같으므로 한 바이트도 다시 쓰지
+    // 않아야 한다. 두 사실을 한 검사로 문다: 성장분이 살아 있고, 무변경분은 dedup된다.
+    await commitState(crypto, growStore, { pages: [[0, kb(11)], [1, kb(12)]], pageSize: 1024, heapLen: 2048, sp: 0, env: { h0: "grow-h0" } });
+    const grownCommit = await commitState(crypto, growStore, {
+      pages: [[0, kb(11)], [1, kb(12)], [2, kb(31)], [3, kb(32)]],
+      pageSize: 1024, heapLen: 4096, sp: 16, env: { h0: "grow-h0" },
+    });
+    const grown = await openState(crypto, growStore, { expectH0: "grow-h0" });
+    check("state 커널: 자란 세대 커밋(heapLen 증가 + 성장분 보존 + 무변경 페이지 dedup)",
+      grown.tree.heapLen === 4096 && grown.tree.sp === 16
+      && grown.pages.get(2)[0] === 31 && grown.pages.get(3)[0] === 32 && grown.pages.get(0)[0] === 11
+      && grownCommit.pagesWrote === 2 && grownCommit.deduped >= 2,
+      `heapLen ${grown.tree.heapLen}, pages ${grown.pages.size}, 쓴 페이지 ${grownCommit.pagesWrote}, dedup ${grownCommit.deduped}`);
+    await stateRoot.removeEntry("pyprocGateGrow", { recursive: true });
 
     // 쓰기 순서 법이 실 OPFS backend에서도 성립하는가(리뷰의 "OPFS write 중 탭 crash").
     // Node는 MemoryStore(부분 쓰기 물리적으로 불가)로 이 법을 문다 - 실 backend의 부분
