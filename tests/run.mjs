@@ -112,6 +112,27 @@ function findCycles(graph) {
   return cycles;
 }
 
+function workflowSources() {
+  const dir = join(ROOT, ".github", "workflows");
+  return new Map(readdirSync(dir).filter((f) => f.endsWith(".yml")).map((f) => [f, readFileSync(join(dir, f), "utf8")]));
+}
+// "무엇이 실제 실행 경로인가"의 판정. [북극성]과 [CI 배관] 두 절이 같은 답을 써야 한다
+// (사본이 둘이면 한쪽만 고쳐지고 갈라진다). 실행 경로는 npm script, 워크플로의 실행 라인,
+// tests의 러너 소스뿐이다. 주석은 실행이 아니다: CI 주석 한 줄에 적힌 script 이름이 그 레인
+// 전체를 초록으로 만들 수 있었다.
+function executableCorpus() {
+  const scripts = Object.values(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {}).join(NEWLINE);
+  const workflowRunLines = [...workflowSources().values()].flatMap((source) => source.split(NEWLINE))
+    .filter((line) => /^\s*-?\s*run:/.test(line) || /^\s+(npm|node)\s/.test(line))
+    .filter((line) => !/^\s*#/.test(line));
+  // 북극성 원장은 증거 목록이지 실행 경로가 아니다. corpus에 넣으면 "여기 적혔으니 돈다"가 되어
+  // 고아 페이지 검사가 자기 눈을 가린다(원장에 적는 것만으로 페이지가 실행된 것이 된다).
+  const runnerSources = collect(join(ROOT, "tests"), [".mjs"], [])
+    .filter((f) => rel(f) !== "tests/northStar.mjs")
+    .map((f) => stripComments(readFileSync(f, "utf8")));
+  return [scripts, ...workflowRunLines, ...runnerSources].join(NEWLINE);
+}
+
 console.log("pyproc 게이트\n");
 
 // 1) 공개 표면: index.js가 기대 export를 내는가.
@@ -2221,6 +2242,250 @@ check("소비 계약 문서의 자산 목록 = 실제 매니페스트", () => {
   if (fmt(listed) !== fmt(actual)) throw new Error(`문서 [${fmt(listed)}] != 실제 [${fmt(actual)}]`);
 });
 
+// 4.5) 북극성: 축 원장(tests/northStar.mjs)과 README 두 판, 그리고 실제 게이트 레인의 정합.
+//      규칙은 하나다. **점수의 근거는 CI에서 실제로 도는 게이트다.** 산문으로 적힌 증거는 썩는다:
+//      게이트 파일이 개명되거나 삭제되거나 러너에 한 번도 안 꽂혀도 "이 축은 검증됐다"는 문장은
+//      그대로 남는다(이 저장소에서 probe 15개가 그렇게 좌초해 있었다). 그래서 축마다 실행 가능한
+//      산출물을 등재하고, README 표는 원장에서 렌더한 문자열이며, 수동 증거는 점수를 9점 아래로
+//      묶는다. 문서만 고쳐서 점수를 올리는 경로를 없애는 것이 이 절의 전부다.
+section("북극성");
+{
+  const northStar = await import(pathToFileURL(join(ROOT, "tests", "northStar.mjs")).href);
+  const { NORTH_STAR_AXES, NORTH_STAR_BROWSER_LANES, northStarScore, renderNorthStarMarkdown } = northStar;
+  const { ceilingLadder, renderCeilingLadderMarkdown } = northStar;
+  const scriptNames = new Set(Object.keys(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {}));
+  const ciSource = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
+  const ciRunLines = ciSource.split(NEWLINE)
+    .filter((line) => !/^\s*#/.test(line))
+    .filter((line) => /^\s*-?\s*run:/.test(line) || /^\s+(npm|node)\s/.test(line));
+  const corpus = executableCorpus();
+  // 증거가 실행 경로에 있는가. `.html`은 러너가 경로 문자열로 여니 전체 경로를 요구하고,
+  // 모듈은 상대 경로로 import되므로(`./immortalProductGate.js`) 파일명까지 인정한다.
+  const reachable = (path) => {
+    if (corpus.includes(path)) return true;
+    if (path.endsWith(".html")) return false;
+    return corpus.includes(path.slice(path.lastIndexOf("/") + 1));
+  };
+  // 무자산 레인 목록은 webMachine 러너가 정본이다. x86 자산이 필요한 probe를 CI 증거로 등재하면
+  // 여기서 걸린다: 그 레인은 자산이 gitignore라 CI에서 아예 돌 수 없다.
+  const webMachineRunner = readFileSync(join(ROOT, "tests", "webMachine", "run.mjs"), "utf8");
+  const assetFreeBlock = webMachineRunner.slice(
+    webMachineRunner.indexOf("const ASSET_FREE"),
+    webMachineRunner.indexOf("const V86_BACKED"),
+  );
+  // 페이지가 CI에서 열리는 길은 셋뿐이다: ci.yml 명령 줄에 경로가 박혔거나, 기본 게이트 페이지거나,
+  // webMachine 무자산 레인에 등재돼 있거나. 손목록이 아니라 실물 소스에서 각각을 읽는다.
+  const ciOpensPage = (path) => ciRunLines.some((line) => line.includes(path))
+    || path === "tests/browser/gate.html"
+    || assetFreeBlock.includes(path);
+  const laneRuns = (lane, path) => {
+    // lane "ci" = npm script가 아니라 ci.yml이 직접 부르는 명령. 그 명령 줄에 경로가 있어야 한다.
+    if (lane === "ci") return ciRunLines.some((line) => line.includes(path));
+    if (!scriptNames.has(lane)) return false;
+    if (lane === "test:web-machine" && !assetFreeBlock.includes(path)) return false;
+    const pattern = lane === "test" ? /npm test(\s|$)/ : new RegExp(`npm run ${lane}(\\s|$)`);
+    return ciRunLines.some((line) => pattern.test(line));
+  };
+  const missingPaths = (axis) => [...axis.evidence, ...axis.manual]
+    .filter((entry) => !existsSync(join(ROOT, entry.path)))
+    .map((entry) => entry.path);
+  const unreachable = (axis) => axis.evidence.filter((entry) => !reachable(entry.path)).map((entry) => entry.path);
+  const laneProblems = (axis) => [
+    ...axis.evidence.filter((entry) => !laneRuns(entry.lane, entry.path))
+      .map((entry) => `${entry.path}: 레인 ${entry.lane}이 CI에서 돌지 않는다`),
+    // 반대 방향도 본다. CI에서 도는 것을 수동이라 적으면 점수 상한(9점)이 근거 없이 낮아지고,
+    // 그 다음에는 "수동이니 어쩔 수 없다"가 사실이 아닌 채로 원장에 남는다.
+    ...axis.manual.filter((entry) => ciOpensPage(entry.path))
+      .map((entry) => `${entry.path}: 수동이라 적혔는데 CI가 연다`),
+    ...axis.manual.filter((entry) => !entry.why).map((entry) => `${entry.path}: 수동 사유 없음`),
+  ];
+  const scoreProblems = (axis) => {
+    const problems = [];
+    if (!(axis.score > 0 && axis.score <= 10)) problems.push(`점수 범위 밖: ${axis.score}`);
+    if (!Number.isInteger(Math.round(axis.score * 10)) || Math.abs(axis.score * 10 - Math.round(axis.score * 10)) > 1e-9) {
+      problems.push(`소수 한 자리가 아니다: ${axis.score}`);
+    }
+    // 9점 = "거의 끝났다"는 주장이다. 그 주장이 사람이 기억해서 돌리는 probe에 기대면 안 된다.
+    if (axis.score >= 9 && axis.manual.length) problems.push(`수동 증거를 든 축이 ${axis.score}점`);
+    if (!axis.evidence.some((entry) => NORTH_STAR_BROWSER_LANES.includes(entry.lane))) {
+      problems.push("브라우저 레인 증거 0(WASM 런타임의 진짜 검증은 브라우저에서만 가능하다)");
+    }
+    return problems;
+  };
+  // 다음 수(next)의 법. 축은 "지금"과 "10점"만으로는 반쪽이고, 둘을 잇는 경로가 원장 밖 산문에
+  // 살면 그 경로가 표류한다(천장 사다리가 vision.md와 README 두 판에 손으로 세 벌 있었다).
+  // **계획은 증거가 아니다**: next에 path/lane이 붙는 순간 게이트 없는 것이 증거로 위장하므로 막는다.
+  const nextProblems = (axis) => {
+    const problems = [];
+    if (axis.score >= 10 && axis.next.length) problems.push("10점 축에 다음 수가 남아 있다");
+    if (axis.score < 10 && !axis.next.length) problems.push("다음 수 0(경로가 원장 밖에 산다)");
+    for (const move of axis.next) {
+      if (!/^[a-z][A-Za-z0-9]*$/.test(move.id || "")) problems.push(`다음 수 id가 camelCase가 아니다: ${move.id}`);
+      if ("path" in move || "lane" in move) problems.push(`${move.id}: 계획에 증거 경로가 붙었다`);
+      for (const locale of ["en", "ko"]) {
+        const line = move[locale];
+        if (typeof line !== "string" || !line.trim()) problems.push(`${move.id}: ${locale} 문장 없음`);
+        else if (line.length > 160) problems.push(`${move.id}: ${locale} 문장이 160자를 넘는다`);
+      }
+      if (move.rung !== undefined && !(Number.isInteger(move.rung) && move.rung > 0)) {
+        problems.push(`${move.id}: 단 번호가 양의 정수가 아니다`);
+      }
+    }
+    return problems;
+  };
+  // 사다리는 전역 순서 하나다. 구멍이나 중복이 나면 "몇 단부터 잡을 것인가"가 답이 없어진다.
+  const ladderProblems = (axes) => {
+    const rungs = ceilingLadder(axes).map(({ move }) => move.rung);
+    const problems = rungs.length ? [] : ["사다리가 비었다"];
+    rungs.forEach((rung, at) => { if (rung !== at + 1) problems.push(`${at + 1}번째 단이 ${rung}`); });
+    return problems;
+  };
+  const raise = (label, problems) => { if (problems.length) throw new Error(`${label}: ${problems.join("; ")}`); };
+
+  check("북극성 축 id가 유일하고 camelCase다", () => {
+    const ids = NORTH_STAR_AXES.map((axis) => axis.id);
+    const duplicated = ids.filter((id, at) => ids.indexOf(id) !== at);
+    if (duplicated.length) throw new Error(`중복 축 id: ${duplicated.join(", ")}`);
+    const bad = ids.filter((id) => !/^[a-z][A-Za-z0-9]*$/.test(id));
+    if (bad.length) throw new Error(`camelCase 아님: ${bad.join(", ")}`);
+    if (ids.length < 8) throw new Error(`축 ${ids.length}개(원장이 비었다)`);
+  });
+  for (const axis of NORTH_STAR_AXES) {
+    check(`북극성 증거 실존: ${axis.id}`, () => raise("없는 증거", missingPaths(axis)));
+    check(`북극성 실행 경로: ${axis.id}`, () => raise("아무도 열지 않는 증거", unreachable(axis)));
+    check(`북극성 레인: ${axis.id}`, () => raise("레인 불일치", laneProblems(axis)));
+    check(`북극성 점수 법: ${axis.id}`, () => raise("점수 법 위반", scoreProblems(axis)));
+    check(`북극성 다음 수: ${axis.id}`, () => raise("다음 수 법 위반", nextProblems(axis)));
+  }
+  check("북극성 다음 수 id가 유일하다", () => {
+    const ids = NORTH_STAR_AXES.flatMap((axis) => axis.next.map((move) => move.id));
+    const duplicated = ids.filter((id, at) => ids.indexOf(id) !== at);
+    if (duplicated.length) throw new Error(`중복 다음 수 id: ${duplicated.join(", ")}`);
+  });
+  check("천장 사다리 단이 1..N 연속이다", () => raise("사다리 번호", ladderProblems(NORTH_STAR_AXES)));
+  check("북극성 표 = 원장 렌더(README.md)", () => {
+    const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+    if (!readme.includes(renderNorthStarMarkdown("en"))) throw new Error("README.md 북극성 블록이 원장 렌더와 불일치");
+  });
+  check("북극성 표 = 원장 렌더(README.ko.md)", () => {
+    const readme = readFileSync(join(ROOT, "README.ko.md"), "utf8");
+    if (!readme.includes(renderNorthStarMarkdown("ko"))) throw new Error("README.ko.md 북극성 블록이 원장 렌더와 불일치");
+  });
+  check("천장 사다리 = 원장 렌더(README.md)", () => {
+    const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+    if (!readme.includes(renderCeilingLadderMarkdown("en"))) throw new Error("README.md 사다리 블록이 원장 렌더와 불일치");
+  });
+  check("천장 사다리 = 원장 렌더(README.ko.md)", () => {
+    const readme = readFileSync(join(ROOT, "README.ko.md"), "utf8");
+    if (!readme.includes(renderCeilingLadderMarkdown("ko"))) throw new Error("README.ko.md 사다리 블록이 원장 렌더와 불일치");
+  });
+  // vision.md는 단마다 왜 그 순서인지를 논증하는 정본이라 산문이 길다. 목록 자체는 원장이 정본이므로
+  // 여기서는 단 수만 맞춘다: 한쪽에서 단이 늘거나 줄면 다른 쪽이 조용히 옛 사다리로 남는 것을 막는다.
+  check("제품 방향의 사다리 단 수 = 원장 단 수", () => {
+    const vision = readFileSync(join(ROOT, "docs", "product", "vision.md"), "utf8");
+    const start = vision.indexOf("## Where the ceiling moves next");
+    if (start < 0) throw new Error("제품 방향에 사다리 절이 없다");
+    const after = vision.indexOf("\n## ", start + 1);
+    const body = vision.slice(start, after < 0 ? vision.length : after);
+    const numbered = body.split(NEWLINE).filter((line) => /^\d+\. /.test(line)).length;
+    const rungs = ceilingLadder(NORTH_STAR_AXES).length;
+    if (numbered !== rungs) throw new Error(`제품 방향 ${numbered}단 != 원장 ${rungs}단`);
+  });
+  // 북극성 정의가 두 곳에 있으면 둘은 반드시 갈라진다. README가 정본이고 나머지는 가리킨다.
+  check("북극성 정의는 한 곳에만 산다", () => {
+    const sites = [];
+    for (const f of [join(ROOT, "README.md"), ...collect(join(ROOT, "docs"), [".md"], [])]) {
+      for (const line of readFileSync(f, "utf8").split(NEWLINE)) {
+        if (line.trim() === "## North Star") sites.push(rel(f));
+      }
+    }
+    if (sites.length !== 1 || sites[0] !== "README.md") throw new Error(`정의 위치: ${sites.join(", ") || "없음"}`);
+    const vision = readFileSync(join(ROOT, "docs", "product", "vision.md"), "utf8");
+    if (!vision.includes("tests/northStar.mjs")) throw new Error("제품 방향 문서가 축 원장을 가리키지 않는다");
+    if (!vision.includes("## North Star axes")) throw new Error("제품 방향 문서에 축 계약 절이 없다");
+  });
+  check("북극성 총점이 축 합과 같다", () => {
+    const score = northStarScore();
+    const sum = NORTH_STAR_AXES.reduce((total, axis) => total + axis.score, 0);
+    if (score.total !== sum.toFixed(1)) throw new Error(`${score.total} != ${sum.toFixed(1)}`);
+    if (score.max !== String(NORTH_STAR_AXES.length * 10)) throw new Error(`만점 ${score.max}`);
+  });
+  // 이 절의 법들이 실제로 무는지를 매 실행마다 오염 fixture로 본다. 음성 증명이 커밋 메시지에만
+  // 있으면 그것은 한 번의 사건이지 게이트가 아니다([탐지기 자기 시험] 절과 같은 이유).
+  const fixture = (over) => ({
+    id: "fixtureAxis",
+    score: 8.0,
+    evidence: [{ path: "tests/browser/gate.html", lane: "test:browser" }],
+    manual: [],
+    next: [{ id: "fixtureMove", en: "fixture move", ko: "fixture 다음 수" }],
+    ...over,
+  });
+  const ladderFixture = (...rungs) => [fixture({ next: rungs.map((rung, at) => ({ id: `fixtureRung${at}`, rung, en: "x", ko: "x" })) })];
+  check("탐지기가 문다: 북극성 법", () => {
+    if (missingPaths(fixture({ evidence: [{ path: "tests/browser/noSuchGate.html", lane: "test:browser" }] })).length !== 1) {
+      throw new Error("없는 증거 경로를 놓쳤다");
+    }
+    if (missingPaths(fixture()).length) throw new Error("실존 증거를 없다고 했다(오탐)");
+    // 고아 경로는 조립한다. 이 파일도 corpus에 들어가므로(tests의 .mjs 전수), 리터럴로 쓰면
+    // 그 문자열 자체가 corpus에 생겨서 탐지기가 자기 fixture를 "실행된다"고 판정한다.
+    const orphanPath = ["tests/browser/", "neverOpened", "Fixture.html"].join("");
+    if (!unreachable(fixture({ evidence: [{ path: "tests/browser/gate.html", lane: "test:browser" }, { path: orphanPath, lane: "test" }] })).length) {
+      throw new Error("아무 러너도 열지 않는 증거를 놓쳤다");
+    }
+    if (unreachable(fixture()).length) throw new Error("러너가 여는 페이지를 고아라고 했다(오탐)");
+    if (!laneProblems(fixture({ evidence: [{ path: "tests/browser/gate.html", lane: "test:web-machine:v86" }] })).length) {
+      throw new Error("CI 밖 레인을 CI 증거로 셌다");
+    }
+    if (!laneProblems(fixture({ evidence: [{ path: "tests/webMachine/browser/probes/dualBootProbe.html", lane: "test:web-machine" }] })).length) {
+      throw new Error("x86 자산이 필요한 probe를 CI 레인 증거로 셌다");
+    }
+    if (!laneProblems(fixture({ manual: [{ path: "tests/browser/gate.html", why: "x" }] })).length) {
+      throw new Error("CI가 부르는 것을 수동이라 적은 원장을 놓쳤다");
+    }
+    if (!laneProblems(fixture({ manual: [{ path: "tests/attempts/gpuCompute/gpuPythonProbe.html" }] })).length) {
+      throw new Error("사유 없는 수동 증거를 놓쳤다");
+    }
+    if (laneProblems(fixture()).length) throw new Error("CI에서 도는 레인을 불합격시켰다(오탐)");
+    if (!scoreProblems(fixture({ score: 9.5, manual: [{ path: "tests/attempts/gpuCompute/gpuPythonProbe.html", why: "x" }] })).length) {
+      throw new Error("수동 증거를 든 9점대 축을 놓쳤다");
+    }
+    if (!scoreProblems(fixture({ score: 8.25 })).length) throw new Error("소수 두 자리 점수를 놓쳤다");
+    if (!scoreProblems(fixture({ score: 11 })).length) throw new Error("범위 밖 점수를 놓쳤다");
+    if (!scoreProblems(fixture({ evidence: [{ path: "tests/run.mjs", lane: "test" }] })).length) {
+      throw new Error("브라우저 증거 0인 축을 놓쳤다");
+    }
+    if (scoreProblems(fixture()).length) throw new Error("법을 지킨 축을 불합격시켰다(오탐)");
+    if (!nextProblems(fixture({ next: [] })).length) throw new Error("다음 수 없는 축을 놓쳤다");
+    if (!nextProblems(fixture({ score: 10 })).length) throw new Error("끝난 축에 남은 다음 수를 놓쳤다");
+    if (nextProblems(fixture({ score: 10, next: [] })).length) throw new Error("끝난 축을 불합격시켰다(오탐)");
+    if (!nextProblems(fixture({ next: [{ id: "fixtureMove", en: "x", ko: "x", path: "tests/browser/gate.html" }] })).length) {
+      throw new Error("증거 경로를 단 계획을 놓쳤다");
+    }
+    if (!nextProblems(fixture({ next: [{ id: "fixture_move", en: "x", ko: "x" }] })).length) {
+      throw new Error("camelCase 아닌 다음 수 id를 놓쳤다");
+    }
+    if (!nextProblems(fixture({ next: [{ id: "fixtureMove", en: "x" }] })).length) throw new Error("한 로케일이 빈 다음 수를 놓쳤다");
+    if (!nextProblems(fixture({ next: [{ id: "fixtureMove", en: "x", ko: "x", rung: 0 }] })).length) {
+      throw new Error("단 번호 0을 놓쳤다");
+    }
+    if (nextProblems(fixture()).length) throw new Error("법을 지킨 다음 수를 불합격시켰다(오탐)");
+    if (!ladderProblems(ladderFixture(1, 3)).length) throw new Error("사다리 구멍을 놓쳤다");
+    if (!ladderProblems(ladderFixture(1, 1)).length) throw new Error("중복 단 번호를 놓쳤다");
+    if (!ladderProblems([fixture()]).length) throw new Error("빈 사다리를 놓쳤다");
+    if (ladderProblems(ladderFixture(1, 2, 3)).length) throw new Error("연속 사다리를 불합격시켰다(오탐)");
+    // 표 대조도 탐지기다: 점수 한 칸을 고친 렌더가 README와 같으면 그 대조는 죽어 있다.
+    const poisoned = renderNorthStarMarkdown("en", NORTH_STAR_AXES.map((axis, at) => (at ? axis : { ...axis, score: 1 })));
+    if (readFileSync(join(ROOT, "README.md"), "utf8").includes(poisoned)) throw new Error("점수를 바꾼 표가 README와 일치했다");
+    // 사다리 대조도 같다: 단 하나를 다른 축에 옮겨 붙인 렌더가 README와 같으면 그 대조는 죽어 있다.
+    const moved = NORTH_STAR_AXES.map((axis) => (axis.id === "virtualizedNetwork"
+      ? { ...axis, next: axis.next.map((move) => (move.rung === 1 ? { ...move, en: "Climb some other wall first" } : move)) }
+      : axis));
+    if (readFileSync(join(ROOT, "README.md"), "utf8").includes(renderCeilingLadderMarkdown("en", moved))) {
+      throw new Error("단을 바꾼 사다리가 README와 일치했다");
+    }
+  });
+}
+
 // 5) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.
 //    worker.js는 pyProc.js와 같은 폴더 = new URL 상대경로(번들러 워커 emit) 계약.
 section("worker");
@@ -3371,16 +3636,9 @@ section("CI 배관");
   // 존재를 고정하고 문서가 과거 수치를 인용하는데 실행은 0이었다(깨져도 아무도 모르고, 지우면
   // 구조 게이트가 RED가 되는 최악의 조합). attempts는 실험 레인이라 스코프 밖이다.
   check("게이트 폴더에 실행되지 않는 페이지가 없다", () => {
-    const scripts = Object.values(JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {}).join("\n");
-    // 실행 경로는 "주석이 아닌 실행 라인"에서만 센다. 예전 판정은 corpus를 파일 전문으로 잡아
-    // 주석과 미사용 배열도 실행으로 셌다: CI 주석 한 줄에 적힌 script 이름이 그 레인 전체를
-    // 초록으로 만들 수 있었다. 워크플로는 실행 줄만, 러너는 주석 제거 후 본문만 본다.
-    const workflowRunLines = [...workflows.values()].flatMap((source) => source.split("\n"))
-      .filter((line) => /^\s*-?\s*run:/.test(line) || /^\s+(npm|node)\s/.test(line))
-      .filter((line) => !/^\s*#/.test(line));
-    const runnerSources = collect(join(ROOT, "tests"), [".mjs"], [])
-      .map((f) => stripComments(readFileSync(f, "utf8")));
-    const executable = [scripts, ...workflowRunLines, ...runnerSources].join("\n");
+    // 실행 경로 판정은 executableCorpus() 하나다([북극성] 절이 같은 답을 쓴다). 주석과 미사용
+    // 배열은 실행이 아니고, 증거 원장에 적힌 것도 실행이 아니다.
+    const executable = executableCorpus();
     const pages = [
       ...collect(join(ROOT, "tests", "browser"), [".html"], []),
       ...collect(join(ROOT, "tests", "webMachine", "browser"), [".html"], []),
