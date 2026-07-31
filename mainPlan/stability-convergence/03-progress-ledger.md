@@ -134,17 +134,18 @@
   잡는 것(커널 무단 변경·치환 회귀·미등재 커널)과 못 잡는 것(GPU에서의 값 정확성)을 나눠 적었다.
 - 전 게이트 상태: npm test 3504, 브라우저 108/108, 소비자 33/33, web-machine 5/5 probe, 타입 green.
 
+- **NEXT 1(소비자 앱 수명주기 10벌)과 3(죽은 export)을 닫았다.** 전자는 createWebComputer에
+  adoptMachines를 주고 앱을 위임으로 줄였다(동사 하나의 부재가 사본 아홉을 낳고 있었다). 후자는
+  14건 중 10건을 un-export, 2건 삭제, 2건은 사본의 증거였다(JSPI 판정이 두 곳). 둘 다 재발
+  차단 게이트를 함께 냈다: [컴퓨터 조립] 4검사, [export 도달성] 1검사, 각각 음성 시험 통과.
+
 ## NEXT
 
 ROI 순이고, 각 항목의 근거는 2차 재심사 목록이다.
 
-1. **소비자 앱의 수명주기 10벌 제거**: `createWebComputer`에 `adoptMachines` 동사를 주고
-   webComputerContext를 위임으로 축소한다(오류 타입이 이미 갈렸다: new Error vs WebMachineError).
-2. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
+1. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
    `[구조]` 641줄을 4분할. 법 게이트 스코프를 tests/apps/scripts로 확장(자기 위반 3곳 해소).
-3. **죽은 export 정리와 도달성 게이트**: 완전 죽음 3(requireJspi 포함), 파일 내부 전용 export 11,
-   배럴 죽은 re-export 39. `./worker` subpath의 검증 0 지위 결정.
-4. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
-5. **픽셀 출력 경로**: rgba 프레임을 화면에 그리는 소비 방향 렌더러가 저장소에 없다(캡처 방향만).
-6. **워커에 사는 guest**: machine 층에 `new Worker`가 0건이라 두 guest가 한 스레드를 나눈다.
-   2차 웹컴퓨터 감사가 "가장 ROI 높은 한 수"로 지목했고, 5번을 그 뒤에 두면 재작업이 줄어든다.
+2. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
+3. **픽셀 출력 경로**: rgba 프레임을 화면에 그리는 소비 방향 렌더러가 저장소에 없다(캡처 방향만).
+4. **워커에 사는 guest**: machine 층에 `new Worker`가 0건이라 두 guest가 한 스레드를 나눈다.
+   2차 웹컴퓨터 감사가 "가장 ROI 높은 한 수"로 지목했고, 3번을 그 뒤에 두면 재작업이 줄어든다.
