@@ -129,7 +129,17 @@ and partly on the JS side. An image carries the heap half. A fresh interpreter h
 so the two halves disagree the moment either is touched. Nothing at the Python level can repair that,
 which is exactly why `removePythonSurface` - a Python-level fix for a JS-level problem - never could.
 
-The fix follows from pyproc's own determinism law rather than from more cleanup: **a proxy-backed
+**One fix was tried and rejected by measurement (2026-07-31).** The most attractive reading of the
+map said: establish the surface inside the deterministic boot window, before cp0, so both kernels
+agree on the bookkeeping. A temporary `installers` hook in `bootSession` tested it. The boot half
+worked exactly as predicted - both kernels reached the same cp0 with the surface installed, the h0
+comparison passed, and a kernel that forgot the installers was refused with PYPROC_REPLAY_MISMATCH
+rather than opened onto mismatched state. But the proxy call still trapped once the image was
+applied. So agreeing bookkeeping is not sufficient: what the image carries is the heap representation
+of the proxy objects, and that disagrees with the reviving interpreter JS half all over again. The
+hook did not deliver what it was added for, so it was reverted rather than left as surface.
+
+The direction still follows from pyproc's own determinism law rather than from more cleanup: **a proxy-backed
 surface has to be established inside the deterministic boot window, before cp0.** Two kernels booted
 from the same manifest reach byte-identical cp0, so their proxy bookkeeping agrees by construction,
 and an image taken after that boundary stays meaningful. That is a change to the boot contract
