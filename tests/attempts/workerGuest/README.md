@@ -26,6 +26,7 @@ If the hypothesis is false, the failure will be specific and worth recording: it
 |---|---|---|
 | `headOfLineProbe.html` | The current cost, on the main thread: while guest A runs a CPU-bound loop, how long guest B's `request` takes and whether a frame can round-trip at all | baseline measured |
 | `engineEntryCp0Probe.html` | Whether the engine entry file or the host context decides cp0 | measured: the context decides |
+| `revivedSurfaceProbe.html` | Ten bisected cases isolating what makes a revived kernel trap on a JS proxy | root cause found |
 | `workerHostedProbe.html` | The same assertions with each guest's kernel in its own worker, plus the bridged device, the portable image, and the in-process controls that tell a worker limitation apart from a shipped defect | 14/17, and all three failures are one defect that is not worker-specific |
 
 The baseline exists first on purpose. "A worker fixes it" is not a measurement; "the same assertion fails now and passes then" is. The probe is therefore RED by design and stays in this campaign - it is not a gate.
@@ -98,7 +99,45 @@ hidden (`portBridgedDevice.js` carries the same note): the switch throws synchro
 `connect()` returns. The bridge preserves the error *code* and carries it to the first `send()`. A
 consumer that relies on the synchronous throw has to move that expectation one call later.
 
-### The blocker, and it is not the worker's fault
+### The blocker, root-caused (2026-07-31): a heap image cannot carry JS proxy handles
+
+`revivedSurfaceProbe.html` bisects it in ten cases, each one step from its neighbour. The pattern is
+not about devices, workers, or portability at all:
+
+| Case | Seed created a JS proxy | Revived kernel | Result |
+|---|---|---|---|
+| A | no | installs a surface, calls it | **works** |
+| J | no | installs twice, calls both | **works** |
+| F | yes, then removed | plain Python only | **works** |
+| G | yes, then removed | re-installs, plain Python only | **works** |
+| B | yes, then removed | re-installs, calls it | traps |
+| C | yes, kept | re-installs, calls it | traps |
+| D | yes, never called, removed | re-installs, calls it | traps |
+| I | yes, kept | does not re-install, calls the image's own surface | traps |
+| E | a bare `setGlobal` function | sets it again, calls a pre-image wrapper | traps |
+| H | same as E, wrapper recompiled after the restore | same | traps |
+
+Read together: **if the exporting kernel created any JS proxy after cp0, every proxy path in a kernel
+revived from that image traps** (`table index is out of bounds`). Removing the surface before the
+export does not help (B, D), keeping it does not help (C, I), recompiling the caller does not help
+(H), and re-installing does not help (B). A kernel whose seed created no proxy is completely fine
+(A, J), and plain Python is unaffected either way (F, G). The trap fires at the moment the image's
+proxy handle is overwritten, which is why the failure often surfaced far from its cause.
+
+The reading: a JS proxy's handle is interpreter-local bookkeeping that lives partly in the WASM heap
+and partly on the JS side. An image carries the heap half. A fresh interpreter has a fresh JS half,
+so the two halves disagree the moment either is touched. Nothing at the Python level can repair that,
+which is exactly why `removePythonSurface` - a Python-level fix for a JS-level problem - never could.
+
+The fix follows from pyproc's own determinism law rather than from more cleanup: **a proxy-backed
+surface has to be established inside the deterministic boot window, before cp0.** Two kernels booted
+from the same manifest reach byte-identical cp0, so their proxy bookkeeping agrees by construction,
+and an image taken after that boundary stays meaningful. That is a change to the boot contract
+(`bootSession` has `setup` for Python source but no hook for a JS-side install), so it belongs in a
+plan rather than in this campaign. Until then the limit is pinned by a browser gate and written into
+[contract reality](../../../docs/operations/contractReality.md).
+
+### How it looked before it was root-caused
 
 A guest that has a packet device cannot use that device after restoring its own portable image. The
 first call into the surface traps with `table index is out of bounds` or `Argument to hiwire_get is

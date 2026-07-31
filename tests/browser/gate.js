@@ -756,6 +756,30 @@ try {
   await s2.load(sDir, "gate");
   check("session: 델타로 크로스 커널 부활", s2.rt.run("k + 42") === 4142, `${sv.pages}p, ${sv.mb}MB`);
 
+  // 알려진 한계(2026-07-31 실측, workerGuest 캠페인 10케이스 이분): **JS 프록시 핸들은 인터프리터
+  // 국소 상태라 힙 이미지가 나르지 못한다.** 씨앗이 cp0 이후 프록시를 하나라도 만들면, 그 이미지로
+  // 부활한 커널에서는 프록시 호출이 전부 트랩한다(table index is out of bounds). 제거·재컴파일·
+  // 재설치 어느 것도 고치지 못하고, 씨앗이 프록시를 안 만들었으면 부활 커널의 프록시는 정상이다.
+  // 순수 파이썬은 영향 없다. 이 게이트는 그 한계를 고정한다: **통과하면(트랩이 없으면) 한계가
+  // 풀린 것이므로** 계약 실태 표와 snapshotScope 주장을 같은 커밋에서 고쳐야 한다.
+  {
+    const proxySeed = await bootSession({ indexURL: INDEX });
+    proxySeed.rt.setGlobal("probeBridge", () => 7); // cp0 이후 프록시 1개 = 오염 조건 전부
+    const proxyImage = await proxySeed.exportImage();
+    const proxyRevived = await openMachine(proxyImage, { trust: true });
+    const plain = proxyRevived.rt.run("sum(range(10))"); // 순수 파이썬은 산다
+    // 트랩은 호출이 아니라 **이미지가 나른 프록시를 덮어쓰는 순간**에 난다: 옛 핸들의 파기가
+    // 이 인터프리터에 없는 함수 테이블 항목을 가리킨다. 그래서 두 줄을 함께 감싼다.
+    let trapped = "";
+    try {
+      proxyRevived.rt.setGlobal("probeBridge", () => 9);
+      proxyRevived.rt.run("probeBridge()");
+    } catch (e) { trapped = String(e?.message || e).slice(0, 60); }
+    check("알려진 한계: 이미지가 나른 프록시 부기 위에서 프록시 호출은 트랩한다",
+      plain === 45 && trapped.length > 0,
+      trapped ? `plain ${plain}, trap "${trapped}"` : `plain ${plain}, 트랩 없음 = 한계가 풀렸다(문서와 주장 갱신 필요)`);
+  }
+
   // 힙 성장 부활: 저장 커널이 자란 뒤의 상태는, 부활 커널이 먼저 같은 길이까지 힙을
   // 늘려야(heapGrow) 델타가 들어갈 자리가 생긴다. 이 경로는 그동안 자동 게이트가 없었고
   // 수동 probe(largeHeapEnvelope)로만 검증됐다.

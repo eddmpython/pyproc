@@ -1,0 +1,216 @@
+<!doctype html>
+<!--
+Bisecting the blocker the candidate hit: a guest that owns a packet device cannot use that device
+after reviving its own portable image. The first four hypotheses died below the machine layer (a
+materialized image carries a plain global, a callable JS function, pyodide.ffi, and to_py without a
+scratch), so this probe drops the host and the adapter entirely and keeps only the two pieces that
+were never tested together: PyprocPacketPort's Python surface, and an image round trip.
+
+Each case differs from the one above it by exactly one step, so whichever case first turns red names
+the step that poisons the image.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>workerGuest - what poisons a revived surface</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module init", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "unhandled rejection", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>What poisons a revived packet surface</h1>
+<pre id="out">running...</pre>
+<script type="module">
+  import { bootSession, openMachine } from "../../../src/session/session.js";
+  import { PyprocPacketPort } from "../../../src/machine/guests/pyprocPacketPort.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks }) });
+    } catch (error) {}
+  };
+
+  const params = new URLSearchParams(location.search);
+  const indexURL = params.get("indexURL") || undefined;
+  const bootOptions = { ...(indexURL ? { indexURL } : {}) };
+  // A device that satisfies the port's type check without a switch behind it: this probe is about
+  // the Python surface crossing an image, not about frames.
+  const fakeDevice = {
+    kind: "network",
+    mode: "packet",
+    connect: ({ endpointId }) => Object.freeze({ endpointId, send: () => Promise.resolve(), close: () => {} }),
+  };
+  const attachPort = (session, endpointId) => {
+    const port = new PyprocPacketPort({ device: fakeDevice, endpointId });
+    port.attach(session.rt);
+    return port;
+  };
+  const callSurface = (session) => {
+    try {
+      return String(session.rt.run("import pyprocNet\nstr(pyprocNet.address()['endpointId'])"));
+    } catch (error) {
+      return `THREW ${String(error?.message || error).slice(0, 110)}`;
+    }
+  };
+
+  // 케이스마다 독립 try: 한 케이스의 트랩이 인터프리터를 죽이면 다음 케이스가 아예 안 돌고,
+  // 그러면 이분이 첫 실패에서 멈춘다(실제로 B에서 멈췄다).
+  const runCase = async (name, body) => {
+    try { await body(); } catch (error) { check(name, false, `THREW ${String(error?.message || error).slice(0, 110)}`); }
+  };
+  try {
+    // CASE A: the surface never existed before the image. If this is already red, the poison is the
+    // install-after-restore itself and has nothing to do with what the seed did.
+    await runCase("A: surface installed only after the restore", async () => {
+      const seed = await bootSession(bootOptions);
+      seed.rt.run("caseMarker = 'A'");
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      attachPort(revived, "probe:a");
+      check("A: surface installed only after the restore", callSurface(revived) === "probe:a", callSurface(revived));
+    });
+
+    // CASE B: the seed installed the surface and removed it before the export, which is exactly what
+    // the shipped adapter's snapshot() does.
+    await runCase("B: seed installed and removed the surface before the image", async () => {
+      const seed = await bootSession(bootOptions);
+      const seedPort = attachPort(seed, "probe:b-seed");
+      seed.rt.run("import pyprocNet\nseedAddress = pyprocNet.address()['endpointId']");
+      seedPort.removePythonSurface();
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      attachPort(revived, "probe:b");
+      check("B: seed installed and removed the surface before the image", callSurface(revived) === "probe:b", callSurface(revived));
+    });
+
+    // CASE C: the seed installed the surface and left it in place. If B is red and C is green, the
+    // removal is what breaks it; if both are red, the mere presence of the surface in the seed is.
+    await runCase("C: seed left the surface installed in the image", async () => {
+      const seed = await bootSession(bootOptions);
+      attachPort(seed, "probe:c-seed");
+      seed.rt.run("import pyprocNet\nseedAddress = pyprocNet.address()['endpointId']");
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      attachPort(revived, "probe:c");
+      check("C: seed left the surface installed in the image", callSurface(revived) === "probe:c", callSurface(revived));
+    });
+
+    // CASE D: the seed installed the surface but Python never called it. Separates "the proxies were
+    // used" from "the proxies were present".
+    await runCase("D: seed installed the surface but never called it", async () => {
+      const seed = await bootSession(bootOptions);
+      const seedPort = attachPort(seed, "probe:d-seed");
+      seedPort.removePythonSurface();
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      attachPort(revived, "probe:d");
+      check("D: seed installed the surface but never called it", callSurface(revived) === "probe:d", callSurface(revived));
+    });
+
+    // CASE E: no port object at all, just the bare setGlobal of a function that returns an object,
+    // called through a Python wrapper defined before the image. That is the shape of the surface
+    // without any of PyprocPacketPort's own code.
+    await runCase("E: a pre-image Python wrapper calls a post-restore JS proxy", async () => {
+      const seed = await bootSession(bootOptions);
+      seed.rt.setGlobal("probeBridge", () => ({ endpointId: "probe:e-seed" }));
+      seed.rt.run([
+        "def probeWrapper():",
+        "    value = probeBridge()",
+        "    toPy = getattr(value, 'to_py', None)",
+        "    data = toPy() if toPy is not None else value",
+        "    return data['endpointId']",
+        "seedValue = probeWrapper()",
+      ].join("\n"));
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      revived.rt.setGlobal("probeBridge", () => ({ endpointId: "probe:e" }));
+      let result = "";
+      try { result = String(revived.rt.run("probeWrapper()")); } catch (error) { result = `THREW ${String(error?.message || error).slice(0, 110)}`; }
+      check("E: a pre-image Python wrapper calls a post-restore JS proxy", result === "probe:e", result);
+    });
+    // CASE F: the seed had the surface, but the revived kernel never re-installs it and only runs
+    // plain Python. Separates "the image itself is poisoned" from "re-installing poisons it".
+    await runCase("F: revived image with a poisoned seed, plain Python only", async () => {
+      const seed = await bootSession(bootOptions);
+      const seedPort = attachPort(seed, "probe:f-seed");
+      seed.rt.run("import pyprocNet\nseedAddress = pyprocNet.address()['endpointId']");
+      seedPort.removePythonSurface();
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      const value = String(revived.rt.run("sum(range(10))"));
+      check("F: revived image with a poisoned seed, plain Python only", value === "45", value);
+    });
+
+    // CASE G: same, but the surface is re-installed and then only plain Python runs. If G is red the
+    // trap is inside the re-install (the bootstrap's own pre-image imports), not in the later call.
+    await runCase("G: re-install the surface, then plain Python only", async () => {
+      const seed = await bootSession(bootOptions);
+      const seedPort = attachPort(seed, "probe:g-seed");
+      seed.rt.run("import pyprocNet\nseedAddress = pyprocNet.address()['endpointId']");
+      seedPort.removePythonSurface();
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      attachPort(revived, "probe:g");
+      const value = String(revived.rt.run("sum(range(10))"));
+      check("G: re-install the surface, then plain Python only", value === "45", value);
+    });
+
+    // CASE H: like E, but the pre-image wrapper is recompiled after the restore before it is called.
+    // If H is green while E is red, the poison is the code object that came in with the image, and
+    // the fix is "recompile the surface after a restore" rather than anything about proxies.
+    await runCase("H: recompile the wrapper after the restore", async () => {
+      const seed = await bootSession(bootOptions);
+      const wrapperSource = [
+        "def probeWrapper():",
+        "    value = probeBridge()",
+        "    toPy = getattr(value, 'to_py', None)",
+        "    data = toPy() if toPy is not None else value",
+        "    return data['endpointId']",
+      ].join("\n");
+      seed.rt.setGlobal("probeBridge", () => ({ endpointId: "probe:h-seed" }));
+      seed.rt.run(`${wrapperSource}\nseedValue = probeWrapper()`);
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      revived.rt.setGlobal("probeBridge", () => ({ endpointId: "probe:h" }));
+      revived.rt.run(wrapperSource); // 같은 소스를 다시 컴파일 = 새 코드 오브젝트
+      const value = String(revived.rt.run("probeWrapper()"));
+      check("H: recompile the wrapper after the restore", value === "probe:h", value);
+    });
+    // CASE I: the image already carries the surface and the revived kernel does NOT re-install it.
+    // If this is green while C is red, the poison is re-creating proxies on top of an image that
+    // already holds proxy bookkeeping, and the fix is small: revive without re-installing.
+    await runCase("I: image carries the surface, no re-install after the restore", async () => {
+      const seed = await bootSession(bootOptions);
+      attachPort(seed, "probe:i-seed");
+      seed.rt.run("import pyprocNet\nseedAddress = pyprocNet.address()['endpointId']");
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      check("I: image carries the surface, no re-install after the restore",
+        callSurface(revived) === "probe:i-seed", callSurface(revived));
+    });
+
+    // CASE J: the image carries no surface and the revived kernel installs one, then a *second*
+    // install happens. If J is red while A is green, the count of installs is what matters, not the
+    // image at all - which would point at proxy handles rather than anything portable.
+    await runCase("J: two installs in the same revived kernel", async () => {
+      const seed = await bootSession(bootOptions);
+      seed.rt.run("caseMarker = 'J'");
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      attachPort(revived, "probe:j-one");
+      const first = callSurface(revived);
+      attachPort(revived, "probe:j-two");
+      check("J: two installs in the same revived kernel",
+        first === "probe:j-one" && callSurface(revived) === "probe:j-two", `${first} then ${callSurface(revived)}`);
+    });
+  } catch (error) {
+    check("no exception", false, String(error?.message || error).slice(-300));
+  } finally {
+    await report();
+  }
+</script>
+</body>
+</html>
