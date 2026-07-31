@@ -202,6 +202,15 @@ const html = `<!DOCTYPE html>
       machine.run([
         "import json",
         "async def app(scope, receive, send):",
+        "    if scope['path'] == '/product/cookie':",
+        "        await send({'type': 'http.response.start', 'status': 200, 'headers': [(b'set-cookie', b'pyprocGateCookie=1; Path=/'), (b'content-type', b'text/plain')]})",
+        "        await send({'type': 'http.response.body', 'body': b'cookie-attempted'})",
+        "        return",
+        "    if scope['path'] == '/product/stream':",
+        "        await send({'type': 'http.response.start', 'status': 200, 'headers': [(b'content-type', b'text/event-stream')]})",
+        "        await send({'type': 'http.response.body', 'body': b'data: one\\\\n\\\\n', 'more_body': True})",
+        "        await send({'type': 'http.response.body', 'body': b'data: two\\\\n\\\\n'})",
+        "        return",
         "    message = await receive()",
         "    bodyBytes = message.get('body', b'')",
         "    requestHeaders = {k.decode(): v.decode() for k, v in scope['headers']}",
@@ -238,6 +247,50 @@ const html = `<!DOCTYPE html>
         virtualJson.body === "hello-from-product" &&
         virtualJson.gate === "installed-virtual-origin",
         timings.virtualOriginMs + "ms");
+
+      // The virtual origin is a real URL, and a consumer will assume everything a real origin does.
+      // Three of those assumptions are false, and each was a boundary nobody had measured. A limit
+      // that is not gated is a limit that gets discovered by a product, in production, as a bug.
+
+      // 1) Cookies. A Service-Worker-synthesized response never enters the cookie store, and fetch
+      // hides the set-cookie header from the caller, so a Python server cannot set browser state
+      // this way. Session state belongs in the kernel, which is where this runtime keeps it anyway.
+      const cookieResp = await fetch("/pyproc/product/cookie");
+      const cookieBody = await cookieResp.text();
+      const cookieStored = document.cookie.includes("pyprocGateCookie");
+      check("Boundary: the virtual origin cannot set a browser cookie (state stays in the kernel)",
+        cookieResp.status === 200 && cookieBody === "cookie-attempted"
+        && cookieResp.headers.get("set-cookie") === null && !cookieStored,
+        "readable set-cookie " + cookieResp.headers.get("set-cookie") + ", stored: " + cookieStored);
+
+      // 2) WebSocket upgrade. A Service Worker's fetch handler never sees a WebSocket handshake, so
+      // the in-kernel server is unreachable over ws:// no matter what the ASGI app declares.
+      const wsUrl = location.origin.replace(/^http/, "ws") + "/pyproc/product/socket";
+      const wsOutcome = await new Promise((resolve) => {
+        let settled = false;
+        const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+        const timer = setTimeout(() => done("timeout"), 5000);
+        const socket = new WebSocket(wsUrl);
+        socket.addEventListener("open", () => { clearTimeout(timer); socket.close(); done("open"); });
+        socket.addEventListener("error", () => { clearTimeout(timer); done("refused"); });
+        socket.addEventListener("close", () => { clearTimeout(timer); done("refused"); });
+      });
+      check("Boundary: a WebSocket upgrade does not reach the in-kernel server (fetch interception only)",
+        wsOutcome === "refused", wsOutcome);
+
+      // 3) Streaming. The ASGI helper accumulates every http.response.body chunk and answers once,
+      // so more_body is accepted but not honoured on the wire: an SSE endpoint delivers its whole
+      // stream in one piece, after the handler returns. A consumer that expects incremental delivery
+      // gets correctness without liveness, which is exactly the kind of surprise a gate should own.
+      const streamResp = await fetch("/pyproc/product/stream");
+      const reader = streamResp.body.getReader();
+      const firstRead = await reader.read();
+      const firstChunk = new TextDecoder().decode(firstRead.value || new Uint8Array());
+      const secondRead = await reader.read();
+      check("Boundary: a streaming response arrives as one buffered body (no incremental SSE)",
+        streamResp.headers.get("content-type") === "text/event-stream"
+        && firstChunk.includes("data: one") && firstChunk.includes("data: two") && secondRead.done === true,
+        "first chunk " + JSON.stringify(firstChunk) + ", more chunks: " + String(!secondRead.done));
 
       // MachineJail 클래스 직수출 폐지: 제품 permission manifest를 machine.runtime 탈출구의
       // 협조 choke point(setGlobal + Python 모듈 주입)와 CSP connect-src 문자열로 집행한다
