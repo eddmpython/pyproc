@@ -151,6 +151,15 @@ class PyprocGuestAdapter {
   // 서로를 구분한다(machineId를 씨앗으로 마지막 옥텟을 나눈다).
   _attachPacketPort(context) {
     if (!this._packetDeviceName) return;
+    // 재부착 전 옛 endpoint를 끊는다. restore는 세션을 통째로 갈아끼우므로 이 어댑터는 두 번째
+    // port를 같은 endpointId로 열게 되는데, 스위치는 중복 endpoint를 거부한다(그래야 두 guest가
+    // 서로의 프레임을 훔치지 않는다). 그래서 네트워크를 쓰는 guest는 warm restore 자체가
+    // WEB_MACHINE_NETWORK_ENDPOINT_DUPLICATE로 죽었다(workerGuest 캠페인 통제군 실측 2026-07-31:
+    // 워커가 아니라 메인 스레드의 shipped 어댑터에서 났다. 이 경로에 게이트가 없었다).
+    if (this._packetPort) {
+      this._packetPort.detach();
+      this._packetPort = null;
+    }
     const device = this._device(this._packetDeviceName);
     const seed = this._machineOctet(context.machineId);
     this._packetPort = new PyprocPacketPort({

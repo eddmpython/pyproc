@@ -152,7 +152,41 @@ pyprocNet.send(_buildArp(${JSON.stringify(senderMac)}, ${JSON.stringify(senderIp
       + `_seen\n` });
     check("ARP 응답이 요청자 guest의 파이썬까지 돌아온다", arpSeen >= 1, `reply=${arpSeen}`);
 
-    // 3) 스위치가 bounded임을 확인: 통계가 양쪽에서 대칭으로 늘었다.
+    // 3) warm restore: 네트워크를 쓰는 guest가 자기 이미지로 되살아나는 경로. 이 게이트가 없어서
+    //    어댑터가 옛 endpoint를 끊지 않고 다시 붙었고, 그래서 restore 자체가
+    //    WEB_MACHINE_NETWORK_ENDPOINT_DUPLICATE로 죽었다(workerGuest 캠페인 통제군 실측
+    //    2026-07-31: 워커가 아니라 메인 스레드의 shipped 어댑터에서 났다).
+    //    부활 뒤 파이썬 표면 호출은 아직 단정하지 않는다: 그 경로에는 별개의 미해결 결함이 있고
+    //    캠페인 원장이 그것을 들고 있다. 게이트는 고친 것만 문다.
+    //    전용 머신으로 격리하고 국소 try로 감싼다: 열려 있는 결함이 이 절 밖의 검사를 오염시키면
+    //    게이트가 "고친 것"이 아니라 "그날의 사고"를 재는 물건이 된다.
+    let warmRestoreCode = "";
+    let endpointsAfterRestore = 0;
+    let restoredAttached = false;
+    const restorable = host.createMachine({
+      machineId: "pythonRestorable",
+      adapterId: "pyproc",
+      manifest: { session: { ...(indexURL ? { indexURL } : {}) } },
+      permissions: { devices: ["console", "network"] },
+    });
+    try {
+      await restorable.boot();
+      const before = network.inspect().endpoints;
+      await restorable.pause();
+      await restorable.restore(await restorable.snapshot());
+      await restorable.resume();
+      endpointsAfterRestore = network.inspect().endpoints;
+      restoredAttached = !!(await restorable.inspect()).guest.network?.attached;
+      warmRestoreCode = endpointsAfterRestore === before ? "" : `endpoint 수가 ${before} -> ${endpointsAfterRestore}`;
+    } catch (error) {
+      warmRestoreCode = error?.code || String(error?.message || error).slice(0, 120);
+    }
+    check("네트워크 guest가 warm restore를 통과하고 endpoint를 하나만 유지한다",
+      !warmRestoreCode && restoredAttached,
+      `${warmRestoreCode || "ok"}, endpoints=${endpointsAfterRestore}`);
+    try { await restorable.shutdown(); } catch (error) {}
+
+    // 4) 스위치가 bounded임을 확인: 통계가 양쪽에서 대칭으로 늘었다.
     const switchState = network.inspect();
     check("스위치가 두 endpoint를 붙들고 프레임을 셌다",
       switchState.endpoints >= 2 && switchState.deliveredFrames >= 2,
