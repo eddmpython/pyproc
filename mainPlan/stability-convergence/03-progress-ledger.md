@@ -119,24 +119,32 @@
   fileSystem). 남은 약 500개는 NEXT에 있다: 게이트를 전수 기본 RED + 단조 감소 예산으로 역전하는
   것이 2차 감사의 권고이고 그 방향이 옳다.
 
+## 2026-07-31: NEXT 1~3 처리와 성장 경로 게이트
+
+- **1(오류 메시지 언어)과 2(웹컴퓨터 네트워크 배선)는 이미 처져 있었다.** 실물 확인: 언어 게이트는
+  예산 단계를 끝내고 `src` 전수 하드 0이고(메시지·d.ts·채택 문서·데모 주석 4표면), 스위치는
+  `createWebComputer`가 두 guest에 `packetDeviceName`으로 꽂는다. 목록이 실물보다 뒤처져 있었다.
+- **3(없는 증거 3건)을 닫았다.** 힙 성장 경로 3검사(fork 성장 비대칭 2 + 자란 세대 커밋 1),
+  가상 origin 경계 3계약(cookie/WS upgrade/SSE), WGSL 셰이더 바이트 동일성 10검사. 전부 음성
+  시험으로 이빨을 확인했다(growHeapTo 제거, dedup 분기 제거, 타일 상수 변경, 미등재 커널 추가).
+- 가상 origin의 세 경계는 전부 **거짓으로 밝혀진 소비자 전제**였다: 쿠키는 저장되지 않고,
+  WebSocket은 커널에 닿지 않으며, SSE는 스트리밍이 아니라 핸들러가 끝난 뒤 통째로 온다.
+  capabilityMatrix의 "별도 검증 필요" 문장을 그 실측으로 바꿨다.
+- GPU는 헤드리스에 어댑터가 없어 바이트 동일성이 상한이다. 그 한계를 절 머리에 명시했다:
+  잡는 것(커널 무단 변경·치환 회귀·미등재 커널)과 못 잡는 것(GPU에서의 값 정확성)을 나눠 적었다.
+- 전 게이트 상태: npm test 3504, 브라우저 108/108, 소비자 33/33, web-machine 5/5 probe, 타입 green.
+
 ## NEXT
 
 ROI 순이고, 각 항목의 근거는 2차 재심사 목록이다.
 
-1. **오류 메시지 언어 정책 전수 기계화**(DX 최대 항목). 게이트를 `src/**` 기본 RED + 단조 감소
-   예산으로 역전하고, 공개 문서가 영문으로 지시하는 경로부터 비운다(session/processOs/runtime/
-   state 208개 -> machine 322개). 게이트가 substring을 단정하는 곳은 같은 커밋에서 함께 옮긴다.
-2. **웹컴퓨터 네트워크 배선**: 스위치는 완성돼 있고 컴퓨터에 꽂히지 않았다. pyproc guest에
-   packet port를 주면 guest 간 IPC도 같은 계약으로 닫힌다(발명이 아니라 배선).
-3. **없는 증거 3건**: fork/forkMany 성장 비대칭과 저널 성장 커밋, 가상 origin 경계 3계약
-   (cookie/WS upgrade/SSE), GPU 셰이더 바이트 동일성(또는 비출하 결정).
-4. **소비자 앱의 수명주기 10벌 제거**: `createWebComputer`에 `adoptMachines` 동사를 주고
+1. **소비자 앱의 수명주기 10벌 제거**: `createWebComputer`에 `adoptMachines` 동사를 주고
    webComputerContext를 위임으로 축소한다(오류 타입이 이미 갈렸다: new Error vs WebMachineError).
-5. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
+2. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
    `[구조]` 641줄을 4분할. 법 게이트 스코프를 tests/apps/scripts로 확장(자기 위반 3곳 해소).
-6. **죽은 export 정리와 도달성 게이트**: 완전 죽음 3(requireJspi 포함), 파일 내부 전용 export 11,
+3. **죽은 export 정리와 도달성 게이트**: 완전 죽음 3(requireJspi 포함), 파일 내부 전용 export 11,
    배럴 죽은 re-export 39. `./worker` subpath의 검증 0 지위 결정.
-7. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
-8. **픽셀 출력 경로**: rgba 프레임을 화면에 그리는 소비 방향 렌더러가 저장소에 없다(캡처 방향만).
-9. **워커에 사는 guest**: machine 층에 `new Worker`가 0건이라 두 guest가 한 스레드를 나눈다.
-   2차 웹컴퓨터 감사가 "가장 ROI 높은 한 수"로 지목했고, 2·8을 그 뒤에 두면 재작업이 줄어든다.
+4. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
+5. **픽셀 출력 경로**: rgba 프레임을 화면에 그리는 소비 방향 렌더러가 저장소에 없다(캡처 방향만).
+6. **워커에 사는 guest**: machine 층에 `new Worker`가 0건이라 두 guest가 한 스레드를 나눈다.
+   2차 웹컴퓨터 감사가 "가장 ROI 높은 한 수"로 지목했고, 5번을 그 뒤에 두면 재작업이 줄어든다.
