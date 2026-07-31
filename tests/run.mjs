@@ -2486,6 +2486,60 @@ section("북극성");
   });
 }
 
+// 4.6) 셰이더 바이트 동일성: 헤드리스 CI에 WebGPU 어댑터가 없다는 사실이 이 절의 전제다.
+//      실행할 수 없으면 실행했다고 쓰지 않는다. 대신 **가능한 가장 강한 대조**를 둔다: 소비자
+//      경로가 실제로 컴파일에 넘기는 최종 WGSL 문자열의 해시를 고정한다. GPU 없이도 잡히는 것:
+//      커널 수식의 무단 변경, 템플릿 치환 경로의 회귀(__EXPR__/__OP__/__IDENTITY__가 안 박히는
+//      경우), 새 커널이 게이트 없이 들어오는 것. 잡히지 않는 것: 그 셰이더가 GPU에서 옳은 값을
+//      내는지. 그 한계를 여기 적어두는 것이 상한을 명시한다는 뜻이다(계약 실태 표와 같은 규율).
+section("셰이더");
+{
+  const kernels = await import(pathToFileURL(join(ROOT, "src", "capabilities", "gpuKernels.js")).href);
+  const { MATMUL_WGSL, ELEMENTWISE_WGSL, BINARY_WGSL, TRANSPOSE_WGSL, REDUCE_WGSL, REDUCE_OPS } = kernels;
+  // 소비자 경로가 만드는 최종 문자열 그대로 만든다(gpuCompute의 치환과 같은 형태여야 한다).
+  const finalShaders = new Map([
+    ["matmul", MATMUL_WGSL],
+    ["transpose", TRANSPOSE_WGSL],
+    ["elementwise:x * 2.0", ELEMENTWISE_WGSL.replace("__EXPR__", "x * 2.0")],
+    ["binary:a + b", BINARY_WGSL.replace("__EXPR__", "a + b")],
+    ...Object.keys(REDUCE_OPS).map((op) => [
+      `reduce:${op}`,
+      REDUCE_WGSL.replace("__OP__", REDUCE_OPS[op][0]).replace("__IDENTITY__", REDUCE_OPS[op][1]),
+    ]),
+  ]);
+  const digestOf = (text) => createHash("sha256").update(text, "utf8").digest("hex").slice(0, 16);
+  const recorded = JSON.parse(readFileSync(join(ROOT, "tests", "shaderDigests.json"), "utf8"));
+  check("셰이더 등재가 전수다(새 커널은 해시 없이 못 들어온다)", () => {
+    const exported = Object.keys(kernels).filter((name) => name.endsWith("_WGSL"));
+    const covered = new Set([...finalShaders.keys()].map((key) => key.split(":")[0]));
+    const missing = exported.filter((name) => !covered.has(name.replace("_WGSL", "").toLowerCase()));
+    if (missing.length) throw new Error(`대조되지 않는 커널: ${missing.join(", ")}`);
+    const recordedKeys = Object.keys(recorded.shaders).sort().join(",");
+    const builtKeys = [...finalShaders.keys()].sort().join(",");
+    if (recordedKeys !== builtKeys) throw new Error(`등재 목록 불일치: ${recordedKeys} != ${builtKeys}`);
+  });
+  for (const [name, source] of finalShaders) {
+    check(`셰이더 바이트 동일성: ${name}`, () => {
+      const actual = digestOf(source);
+      if (recorded.shaders[name] !== actual) {
+        throw new Error(`해시 불일치: ${recorded.shaders[name]} != ${actual}(커널을 고쳤으면 같은 커밋에서 이 값을 고친다)`);
+      }
+    });
+  }
+  // 치환이 실제로 일어났는가. 해시 고정만으로는 "치환 안 된 채로 고정된" 상태를 정상이라 부를 수
+  // 있다. 자리표시자가 최종 문자열에 남아 있으면 그 셰이더는 컴파일 자체가 안 된다.
+  check("치환 자리표시자가 최종 셰이더에 남지 않는다", () => {
+    const leftovers = [...finalShaders].filter(([, source]) => /__[A-Z]+__/.test(source)).map(([name]) => name);
+    if (leftovers.length) throw new Error(`자리표시자 잔류: ${leftovers.join(", ")}`);
+  });
+  // GPU가 잡아줄 구조 불변식 중 텍스트로 볼 수 있는 것. 어댑터가 없으니 이것이 상한이다.
+  check("모든 커널이 compute 진입점과 workgroup_size를 갖는다", () => {
+    const bad = [...finalShaders].filter(([, source]) =>
+      !/@compute\s/.test(source) || !/@workgroup_size\(/.test(source) || !/fn\s+main\s*\(/.test(source));
+    if (bad.length) throw new Error(`진입점 계약 위반: ${bad.map(([name]) => name).join(", ")}`);
+  });
+}
+
 // 5) worker 계약: Node import 불가(onmessage 전역)라 텍스트로 확인.
 //    worker.js는 pyProc.js와 같은 폴더 = new URL 상대경로(번들러 워커 emit) 계약.
 section("worker");
