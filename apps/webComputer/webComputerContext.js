@@ -7,8 +7,6 @@ import {
   createLinuxMachineManifest,
 } from "./machineConfig.js";
 
-export const WEB_COMPUTER_MACHINE_IDS = Object.freeze(["pythonOs", "linuxOs"]);
-
 function displayText(frame) {
   const lines = [];
   for (let row = 0; row < frame.rows; row += 1) {
@@ -82,68 +80,48 @@ export class WebComputerContext {
     this._active = false;
   }
 
+  // 아래 동사들은 전부 위임이다. 예전에는 같은 팬아웃 10벌이 이 파일에 다시 구현돼 있었는데,
+  // 그 사본은 오류 어휘까지 갈라져 있었다(이 파일은 new Error, 커널은 WebMachineError). 계약이
+  // 두 곳에 있으면 소비자가 코드로 분기할 수 없다. 제품이 소유하는 것은 화면 관심사(활성 상태,
+  // console/display 관찰, dispose)뿐이고 수명주기는 컴퓨터가 소유한다.
   setMachines(machines) {
-    if (!(machines instanceof Map)) throw new TypeError("machines Map이 필요하다");
-    this.machines = machines;
+    this.computer.adoptMachines(machines);
   }
 
   adoptOwnership(token) {
-    for (const machine of this.machines.values()) machine.adoptOwnership(token);
+    this.computer.adoptOwnership(token);
   }
 
   invalidateOwnership(reason) {
-    for (const machine of this.machines.values()) machine.invalidateOwnership(reason);
+    this.computer.invalidateOwnership(reason);
   }
 
   machine(machineId) {
-    const machine = this.machines.get(machineId);
-    if (!machine || !WEB_COMPUTER_MACHINE_IDS.includes(machineId)) throw new Error(`Machine is not available: ${machineId}`);
-    return machine;
+    return this.computer.machine(machineId);
   }
 
   runningMachineIds() {
-    return [...this.machines.values()]
-      .filter((machine) => machine.state === "running")
-      .map((machine) => machine.machineId);
+    return this.computer.runningMachineIds();
   }
 
-  async bootAll(control) {
-    await Promise.all([...this.machines.values()].map((machine) => machine.boot(control)));
+  bootAll(control) {
+    return this.computer.bootAll(control);
   }
 
-  async pauseRunning(control) {
-    const runningIds = this.runningMachineIds();
-    const pausedIds = [];
-    try {
-      for (const machineId of runningIds) {
-        await this.machine(machineId).pause(control);
-        pausedIds.push(machineId);
-      }
-    } catch (error) {
-      await this.resumeMachineIds(pausedIds).catch(() => undefined);
-      throw error;
-    }
-    return runningIds;
+  pauseRunning(control) {
+    return this.computer.pauseRunning(control);
   }
 
-  async resumeMachineIds(machineIds, control) {
-    await Promise.all(machineIds.map((machineId) => {
-      const machine = this.machine(machineId);
-      return machine.state === "paused" ? machine.resume(control) : undefined;
-    }));
+  resumeMachineIds(machineIds, control) {
+    return this.computer.resumeMachineIds(machineIds, control);
   }
 
-  async resumeAll(control) {
-    await this.resumeMachineIds(
-      [...this.machines.values()].filter((machine) => machine.state === "paused").map((machine) => machine.machineId),
-      control,
-    );
+  resumeAll(control) {
+    return this.computer.resumeAll(control);
   }
 
-  async shutdownAll(control) {
-    await Promise.all([...this.machines.values()]
-      .filter((machine) => machine.state !== "stopped")
-      .map((machine) => machine.shutdown(control)));
+  shutdownAll(control) {
+    return this.computer.shutdownAll(control);
   }
 
   sendLinuxScanCodes(codes) {

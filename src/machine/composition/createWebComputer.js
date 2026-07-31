@@ -150,6 +150,21 @@ export function createWebComputer({
         .filter((m) => m.state !== "stopped")
         .map((m) => m.shutdown(control)));
     },
+    // 머신 집합 교체. 이미지에서 만들어진 머신으로 갈아끼우는 소비자(신뢰 화면 preflight,
+    // import 후보 조립, deferBoot 복원)에게 필요한 동사다. 없는 동안 앱은 자기 Map을 들고
+    // 위 수명주기 동사 전부를 통째로 다시 구현했다: 동사 하나의 부재가 사본 하나를 낳는다.
+    // Map을 갈아끼우지 않고 내용만 바꾸는 이유는 위 클로저들이 이 Map을 붙들고 있기 때문이다.
+    adoptMachines(next) {
+      if (!(next instanceof Map)) throw new TypeError("adoptMachines: a Map of machines is required");
+      for (const [machineId, candidate] of next) {
+        if (typeof machineId !== "string" || !machineId || !candidate || typeof candidate.boot !== "function") {
+          throw new WebMachineError("WEB_MACHINE_INPUT_INVALID", `adoptMachines: ${String(machineId)} is not a machine handle`);
+        }
+      }
+      machines.clear();
+      for (const [machineId, candidate] of next) machines.set(machineId, candidate);
+      return machines;
+    },
     adoptOwnership(token) {
       for (const m of machines.values()) m.adoptOwnership(token);
     },

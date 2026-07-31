@@ -864,6 +864,12 @@ export interface WebComputer {
   resumeMachineIds(machineIds: string[], control?: OperationControl): Promise<void>;
   resumeAll(control?: OperationControl): Promise<void>;
   shutdownAll(control?: OperationControl): Promise<void>;
+  /**
+   * Replace the machine set with machines built elsewhere - from an image manifest, a trust-screen
+   * preflight, or a deferred-boot restore. The computer keeps the same Map instance, so every verb
+   * above keeps operating on the adopted set. Throws if a value is not a machine handle.
+   */
+  adoptMachines(machines: Map<string, MachineHandle>): Map<string, MachineHandle>;
   adoptOwnership(token: unknown): void;
   invalidateOwnership(reason?: string): void;
 }

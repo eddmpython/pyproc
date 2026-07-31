@@ -2486,6 +2486,50 @@ section("북극성");
   });
 }
 
+// 4.55) 컴퓨터 조립 계약: createWebComputer가 브라우저 없이도 조립되는 부분(장치·어댑터 등록·
+//       머신 집합)의 법. 소비자 앱이 이 동사들을 다시 구현하면 계약이 두 곳에 살고 오류 어휘가
+//       갈라진다(실제로 갈라져 있었다: 앱은 new Error, 커널은 WebMachineError). adoptMachines가
+//       그 사본의 유일한 존재 이유였으므로, 그 동사의 법을 여기서 문다.
+section("컴퓨터 조립");
+{
+  const { createWebComputer } = await import(pathToFileURL(join(ROOT, "src", "machine", "index.js")).href);
+  const fakeMachine = (machineId) => ({
+    machineId, state: "created", boot() {}, adoptOwnership() {}, invalidateOwnership() {},
+  });
+  check("adoptMachines가 Map 정체를 유지한다(수명주기 동사가 붙들고 있다)", () => {
+    const computer = createWebComputer({ createMachines: false });
+    const before = computer.machines;
+    const returned = computer.adoptMachines(new Map([["pythonOs", fakeMachine("pythonOs")]]));
+    if (returned !== before || computer.machines !== before) throw new Error("Map을 갈아끼웠다(클로저가 옛 Map을 본다)");
+    if (computer.machines.size !== 1) throw new Error(`size ${computer.machines.size}`);
+    if (computer.machine("pythonOs").machineId !== "pythonOs") throw new Error("machine()이 입양분을 못 본다");
+  });
+  check("adoptMachines가 두 번째 입양에서 옛 머신을 남기지 않는다", () => {
+    const computer = createWebComputer({ createMachines: false });
+    computer.adoptMachines(new Map([["pythonOs", fakeMachine("pythonOs")]]));
+    computer.adoptMachines(new Map([["linuxOs", fakeMachine("linuxOs")]]));
+    if (computer.machines.size !== 1 || !computer.machines.has("linuxOs")) {
+      throw new Error(`잔재: ${[...computer.machines.keys()].join(",")}`);
+    }
+  });
+  check("adoptMachines가 인자 계약과 오류 어휘를 지킨다", () => {
+    const computer = createWebComputer({ createMachines: false });
+    let typeCode = "";
+    try { computer.adoptMachines({}); } catch (error) { typeCode = error.constructor.name; }
+    if (typeCode !== "TypeError") throw new Error(`비-Map 거부가 ${typeCode}`);
+    let handleCode = "";
+    try { computer.adoptMachines(new Map([["x", {}]])); } catch (error) { handleCode = error.code; }
+    if (handleCode !== "WEB_MACHINE_INPUT_INVALID") throw new Error(`비-핸들 거부가 ${handleCode}`);
+  });
+  // 사본 재발 차단: 앱이 다시 자기 팬아웃을 들면 이 검사가 RED가 된다. 수명주기의 정본은
+  // 컴퓨터이고 제품이 소유하는 것은 화면 관심사뿐이라는 결정을 기계가 지킨다.
+  check("소비자 앱이 수명주기 팬아웃을 다시 구현하지 않는다", () => {
+    const source = readFileSync(join(ROOT, "apps", "webComputer", "webComputerContext.js"), "utf8");
+    const reimplemented = [...source.matchAll(/\[\.\.\.this\.machines\.values\(\)\]/g)].length;
+    if (reimplemented) throw new Error(`머신 팬아웃 사본 ${reimplemented}곳(위임으로 옮긴다)`);
+  });
+}
+
 // 4.6) 셰이더 바이트 동일성: 헤드리스 CI에 WebGPU 어댑터가 없다는 사실이 이 절의 전제다.
 //      실행할 수 없으면 실행했다고 쓰지 않는다. 대신 **가능한 가장 강한 대조**를 둔다: 소비자
 //      경로가 실제로 컴파일에 넘기는 최종 WGSL 문자열의 해시를 고정한다. GPU 없이도 잡히는 것:
