@@ -11,6 +11,7 @@
 // 메서드명(recv/sendall/makefile/settimeout/create_connection)은 외부 API라 원어 유지(그 이름이라야
 // http.client/urllib이 찾는다). _RelayRaw는 io.RawIOBase(readinto/readable)를 구현한다.
 import { PyProcError } from "../runtime/errors.js";
+import { hasJspi, requireJspi } from "../runtime/preflight.js";
 
 const BOOTSTRAP = `
 import socket, io
@@ -119,6 +120,9 @@ export class SocketBridge {
         }
       },
       recv: (id) => new Promise((resolve) => {
+        // 블로킹 recv는 JSPI로 파이썬을 서스펜드한다. 없는 브라우저에서는 엔진 깊은 곳의 암호
+        // 같은 실패 대신 여기서 실행 가능한 문장으로 끝낸다(COI 가드와 같은 규율).
+        requireJspi("Blocking socket recv");
         const st = socks.get(id);
         if (!st) return resolve(new Uint8Array(0));       // 닫힌/없는 소켓 = EOF(크래시 대신)
         if (st.queue.length) return resolve(st.queue.shift());
@@ -139,7 +143,9 @@ export class SocketBridge {
     this._rt.setGlobal("_pyprocSocket", bridge);
     this._rt.run(BOOTSTRAP);
     // 블로킹 recv는 JSPI(run_sync)라 runAsync 경로에서만 동작한다. 소비자는 rt.runAsync로 소켓 코드를 돌린다.
-    const jspi = typeof WebAssembly !== "undefined" && "Suspending" in WebAssembly;
+    // JSPI 판정의 정본은 preflight 하나다. 이 파일에 사본이 있던 동안 preflight의 것은 아무도
+    // 부르지 않는 export였고, 두 판정이 갈라져도 아무도 몰랐을 것이다.
+    const jspi = hasJspi();
     return { installed: ["socket.socket->relay", "socket.create_connection->relay"], relayURL, jspi, note: jspi ? "블로킹 recv = JSPI, runAsync 경로에서" : "JSPI 미가용: 블로킹 recv 불가" };
   }
 }

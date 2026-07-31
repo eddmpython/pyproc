@@ -15,9 +15,9 @@ import { sha256Hex } from "../runtime/contentDigest.js";
 
 export const MACHINE_MAGIC = "PYMACHINE2\n";
 export const MACHINE_MAGIC_V1 = "PYMACHINE1\n";
-export const HEAD_MAX_BYTES = 1024 * 1024;        // 헤더 JSON 상한(비정상 파일의 메모리 폭식 차단)
-export const SETUP_MAX_BYTES = 256 * 1024;        // manifest.setup 상한
-export const HEAP_MAX_BYTES = 4 * 1024 * 1024 * 1024; // wasm32 주소공간 상한(출처: 선형 메모리 4GB)
+const HEAD_MAX_BYTES = 1024 * 1024;        // 헤더 JSON 상한(비정상 파일의 메모리 폭식 차단)
+const SETUP_MAX_BYTES = 256 * 1024;        // manifest.setup 상한
+const HEAP_MAX_BYTES = 4 * 1024 * 1024 * 1024; // wasm32 주소공간 상한(출처: 선형 메모리 4GB)
 
 // 봉투 본문: u32(헤더 길이) || 헤더 JSON || 델타 || homePack. 해시와 서명이 모두 이 바이트열을 본다.
 export function toBytesWithHead(meta, bin, homeBin = new Uint8Array(0)) {
@@ -30,7 +30,7 @@ export function toBytesWithHead(meta, bin, homeBin = new Uint8Array(0)) {
   return body;
 }
 
-export function unsignedMeta(meta) {
+function unsignedMeta(meta) {
   const out = { ...meta };
   delete out.signature;
   return out;

@@ -10,7 +10,7 @@ const HOME_MAX_BYTES = 512 * 1024 * 1024;
 const HOME_MAX_ENTRIES = 10000;
 const PATH_MAX_BYTES = 4096;
 
-export function normalizeMachineHomeRoot(path, label = "home path") {
+function normalizeMachineHomeRoot(path, label = "home path") {
   if (typeof path !== "string" || !path.startsWith("/") || path.includes("\0")) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: malformed ${label}`);
   const trimmed = path.replace(/\/+$/, "") || "/";
   if (trimmed === "/") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `machine: ${label} cannot be the root`);

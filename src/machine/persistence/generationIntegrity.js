@@ -39,14 +39,3 @@ export async function digestGenerationManifest(cryptoProvider, manifest) {
   return digestGenerationBytes(cryptoProvider, encoder.encode(machineCanonicalJson(cryptoProvider, manifest)));
 }
 
-export async function verifyGenerationBlob(cryptoProvider, reference, value) {
-  const bytes = copyGenerationBytes(value);
-  if (!reference || reference.byteLength !== bytes.byteLength) {
-    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", "blob byteLength mismatch");
-  }
-  const actual = await digestGenerationBytes(cryptoProvider, bytes);
-  if (actual !== reference.digest) {
-    throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `blob digest mismatch: ${reference.digest}`);
-  }
-  return bytes;
-}

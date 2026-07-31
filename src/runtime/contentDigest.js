@@ -104,7 +104,7 @@ export function hexFromBytes(bytes) {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function sha256Bytes(data) {
+async function sha256Bytes(data) {
   return new Uint8Array(await subtleOrThrow().digest("SHA-256", asBytes(data)));
 }
 

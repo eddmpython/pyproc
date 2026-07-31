@@ -49,24 +49,6 @@ export async function fingerprintWebMachinePublicKey(cryptoProvider, publicKey) 
   return digestGenerationBytes(cryptoProvider, encoder.encode(machineCanonicalJson(cryptoProvider, jwk)));
 }
 
-export async function signWebMachineContent(cryptoProvider, contentDigest, signingKeyPair) {
-  requireProvider(cryptoProvider);
-  if (!signingKeyPair?.privateKey || !signingKeyPair?.publicKey) throw new TypeError("a signingKeyPair is required");
-  const publicKey = await publicJwk(cryptoProvider, signingKeyPair.publicKey);
-  let value;
-  try {
-    value = await cryptoProvider.signDigest(signingKeyPair.privateKey, contentDigest);
-  } catch (cause) {
-    throw new WebMachineError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "signing the image failed", { cause: String(cause) });
-  }
-  return Object.freeze({
-    version: 1,
-    algorithm: "ECDSA-P256-SHA256",
-    publicKey,
-    value: hexFromBytes(value),
-  });
-}
-
 export async function verifyWebMachineTrust(cryptoProvider, contentDigest, signature, trustedPublicKeys) {
   requireProvider(cryptoProvider);
   if (!signature) throw new WebMachineError("WEB_MACHINE_IMAGE_UNTRUSTED", "refusing to run an unsigned image");

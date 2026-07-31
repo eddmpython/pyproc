@@ -12,7 +12,7 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 import { copyGenerationBytes } from "./generationIntegrity.js";
 import { compareNames } from "../contracts/byteCodec.js";
 
-export const GENERATION_SCHEMA_VERSION = 2;
+const GENERATION_SCHEMA_VERSION = 2;
 
 const RECOVERABLE_CODES = new Set([
   "WEB_MACHINE_BLOB_MISSING",

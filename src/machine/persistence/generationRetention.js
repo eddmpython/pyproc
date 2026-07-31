@@ -12,7 +12,7 @@ export function generationStorageKey(groupId, generationId) {
 // record.blobDigests = 커밋이 도달하는 blob 전수(commit·tree 오브젝트 포함)의 저장소 지역
 // 색인이다. 정본은 commit 체인이고 복원은 색인을 신뢰하지 않는다(coordinator가 걷는다) -
 // 색인이 거짓이어도 오염 반경은 gc뿐이다. 구 manifest 스키마는 미지원(P2 브레이킹, 원장 기록).
-export function generationBlobDigests(record) {
+function generationBlobDigests(record) {
   if (record?.schemaVersion !== 2 || !Array.isArray(record.blobDigests)) {
     throw new WebMachineError("WEB_MACHINE_GENERATION_CORRUPT", `retention: unsupported generation record (schemaVersion ${record?.schemaVersion})`);
   }

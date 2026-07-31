@@ -2486,6 +2486,46 @@ section("북극성");
   });
 }
 
+// 4.54) export 도달성: src가 export하는 이름은 자기 파일 밖에서 소비되거나 공개 표면에 등재돼야
+//       한다. 아무도 안 부르는 export는 두 가지를 동시에 판다. (1) 파일 경계가 실제보다 넓어 보여
+//       리팩터가 "이건 밖에서 쓰니 못 고친다"고 잘못 판단하고, (2) 죽은 코드가 계약처럼 읽힌다.
+//       실제로 그 사이에서 법이 복제됐다: JSPI 판정이 preflight와 socketBridge 두 곳에 있었고
+//       preflight의 것은 아무도 안 불렀다(2026-07-31 실측 14건).
+//       한계도 적어둔다: 판정이 텍스트라 남아 있는 import 한 줄도 소비로 센다. 즉 이 게이트는
+//       "쓰는 곳이 없다"가 아니라 "이름이 다른 파일에 없다"를 본다. 죽은 import까지 잡으려면
+//       사용 여부 분석이 필요하고, 그것은 이 게이트의 스코프가 아니다(과녁을 넓히면 오탐이 산다).
+section("export 도달성");
+{
+  const srcFiles = collect(join(ROOT, "src"), [".js"], []);
+  const consumers = [
+    ...srcFiles,
+    join(ROOT, "index.js"),
+    ...collect(join(ROOT, "tests"), [".js", ".mjs", ".html"], []),
+    ...collect(join(ROOT, "apps"), [".js"], []),
+    ...collect(join(ROOT, "scripts"), [".mjs"], []),
+    ...collect(join(ROOT, "examples"), [".js", ".html"], []),
+  ].map((f) => [rel(f), readFileSync(f, "utf8")]);
+  // 타입 선언도 소비 지점이다: d.ts에 이름이 있으면 그것은 계약이지 죽은 코드가 아니다.
+  const declarations = [join(ROOT, "index.d.ts"), ...SUBPATH_DTS.map((p) => join(ROOT, p))]
+    .filter((f) => existsSync(f)).map((f) => [rel(f), readFileSync(f, "utf8")]);
+  const unreachable = [];
+  for (const file of srcFiles) {
+    const path = rel(file);
+    const text = readFileSync(file, "utf8");
+    for (const match of text.matchAll(/^export (?:async )?(?:function|class|const|let) (\w+)/gm)) {
+      const name = match[1];
+      const pattern = new RegExp(`\\b${name}\\b`);
+      const used = [...consumers, ...declarations].some(([other, source]) => other !== path && pattern.test(source));
+      if (!used) unreachable.push(`${path}:${name}`);
+    }
+  }
+  check("src의 export는 파일 밖에서 소비되거나 표면에 등재된다", () => {
+    if (unreachable.length) {
+      throw new Error(`아무도 부르지 않는 export ${unreachable.length}건: ${unreachable.slice(0, 8).join(", ")}${unreachable.length > 8 ? " ..." : ""}`);
+    }
+  });
+}
+
 // 4.55) 컴퓨터 조립 계약: createWebComputer가 브라우저 없이도 조립되는 부분(장치·어댑터 등록·
 //       머신 집합)의 법. 소비자 앱이 이 동사들을 다시 구현하면 계약이 두 곳에 살고 오류 어휘가
 //       갈라진다(실제로 갈라져 있었다: 앱은 new Error, 커널은 WebMachineError). adoptMachines가
@@ -2958,6 +2998,10 @@ check("src layer edge는 아래로만", () => {
     "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",
     "src/capabilities/syscallBridge.js -> src/runtime/assets.js",
     "src/capabilities/syscallBridge.js -> src/runtime/rpcChannel.js",
+    // 환경 판정(JSPI 유무)과 그 가드는 preflight 하나가 소유한다. 이 edge를 열기 전에는 같은
+    // 판정이 socketBridge 안에 사본으로 있었고, preflight 쪽은 아무도 부르지 않는 export였다:
+    // 사본과 죽은 코드를 동시에 만드는 배치였다. 예산 한 줄이 그 둘을 없앤다.
+    "src/capabilities/socketBridge.js -> src/runtime/preflight.js",
   ]);
   const problems = [];
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
