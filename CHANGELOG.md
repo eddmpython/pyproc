@@ -25,6 +25,17 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Breaking
 
+- **`history.save()` and `history.export()` refuse a heap that holds JS handles** with
+  `PYPROC_IMAGE_PROXY_SURFACE`, naming the surfaces that installed them. A JS handle is
+  interpreter-local and cannot cross an image: a kernel revived from such an image traps on every
+  proxy path, including handles it mints itself, and the failure used to appear far from its cause
+  as `table index is out of bounds`. Blocking surfaces need a handle by construction (the syscall
+  bridge behind `input()`, `pyproc/socket`, `pyproc/gpu`), so a machine that used one now says so
+  at the moment the image is written. Pass `{ allowHostProxies: true }` to acknowledge it: the
+  revived kernel keeps its plain Python state and cannot use those surfaces again. Machines that
+  only use the packet device or the permission jail are unaffected - both moved to value
+  boundaries in this same change and cross an image intact.
+
 - **`MachineCommitCoordinator` no longer takes `idFactory`** (`pyproc/machine`). Generation
   identity has been the commit address itself since the state-kernel refactor, so the parameter
   was stored and never read while still being required - a signature that misled callers into
