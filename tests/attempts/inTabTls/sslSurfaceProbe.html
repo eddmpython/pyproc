@@ -1,0 +1,86 @@
+<!doctype html>
+<!--
+캠페인의 첫 측정. 릴레이 코드를 한 줄도 쓰기 전에 답해야 하는 질문이다: 이 엔진의 파이썬이
+TLS를 스스로 할 수 있는가? CPython의 ssl이 살아 있으면 경로 2(JS에서 TLS 1.3 레코드 층을
+직접 구현)는 통째로 불필요하고, 없으면 경로 1이 죽는다. 어느 쪽이든 이 한 페이지가 가른다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>probe: python ssl surface</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>파이썬 ssl 표면</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "/index.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks }) }); } catch (error) {}
+  };
+
+  const params = new URLSearchParams(location.search);
+  try {
+    const machine = await boot({ ...(params.get("indexURL") ? { indexURL: params.get("indexURL") } : {}) });
+    const rt = machine.runtime;
+
+    // (1) ssl 모듈이 import되는가. 이것이 없으면 경로 1(CPython 자체 TLS)은 즉시 죽는다.
+    const importReport = String(rt.run([
+      "import importlib.util as _u",
+      "spec = _u.find_spec('ssl')",
+      "'found' if spec is not None else 'missing'",
+    ].join("\n")));
+    check("ssl 모듈이 배포에 있다", importReport === "found", importReport);
+
+    // (2) 실제로 import되고 SSLContext를 만들 수 있는가(스펙 존재와 동작은 다른 사실이다).
+    const contextReport = String(rt.run([
+      "def probeSslContext():",
+      "    try:",
+      "        import ssl",
+      "        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)",
+      "        return 'ok:' + ssl.OPENSSL_VERSION",
+      "    except BaseException as error:",
+      "        return type(error).__name__ + ': ' + str(error)[:80]",
+      "probeSslContext()",
+    ].join("\n")));
+    check("SSLContext를 만들 수 있다", contextReport.startsWith("ok:"), contextReport);
+
+    // (3) 핸드셰이크에 필요한 것들이 실제로 있는가. wrap_socket과 인증서 검증 스위치가
+    //     없으면 "TLS를 한다"가 아니라 "TLS 흉내를 낸다"가 된다.
+    const capabilityReport = String(rt.run([
+      "def probeSslCapabilities():",
+      "    try:",
+      "        import ssl",
+      "        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)",
+      "        bits = []",
+      "        bits.append('wrap' if hasattr(ctx, 'wrap_socket') else 'nowrap')",
+      "        bits.append('verify' if ctx.verify_mode == ssl.CERT_REQUIRED else 'noverify')",
+      "        bits.append('certs' if ssl.create_default_context().get_ca_certs() else 'nocerts')",
+      "        return ','.join(bits)",
+      "    except BaseException as error:",
+      "        return type(error).__name__ + ': ' + str(error)[:80]",
+      "probeSslCapabilities()",
+    ].join("\n")));
+    check("wrap_socket과 인증서 검증 재료가 있다", capabilityReport === "wrap,verify,certs", capabilityReport);
+
+    await machine.dispose();
+  } catch (error) {
+    check("예외 없음", false, String(error?.message || error).slice(-200));
+  }
+  await report();
+</script>
+</body>
+</html>
