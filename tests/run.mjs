@@ -134,7 +134,8 @@ function findCycles(graph) {
 
 function workflowSources() {
   const dir = join(ROOT, ".github", "workflows");
-  return new Map(readdirSync(dir).filter((f) => f.endsWith(".yml")).map((f) => [f, readFileSync(join(dir, f), "utf8")]));
+  return new Map(readdirSync(dir).filter((f) => f.endsWith(".yml"))
+    .map((f) => [f, readFileSync(join(dir, f), "utf8").replaceAll("\r\n", "\n")]));
 }
 // "무엇이 실제 실행 경로인가"의 판정. [북극성]과 [CI 배관] 두 절이 같은 답을 써야 한다
 // (사본이 둘이면 한쪽만 고쳐지고 갈라진다). 실행 경로는 npm script, 워크플로의 실행 라인,
@@ -3045,7 +3046,7 @@ section("CI 배관");
   const workflowRoot = join(ROOT, ".github", "workflows");
   const workflows = new Map(
     readdirSync(workflowRoot).filter((f) => f.endsWith(".yml"))
-      .map((f) => [f, readFileSync(join(workflowRoot, f), "utf8")]),
+      .map((f) => [f, readFileSync(join(workflowRoot, f), "utf8").replaceAll("\r\n", "\n")]),
   );
   check("workflow action은 승인한 exact commit SHA에 고정", () => {
     const approved = new Map([

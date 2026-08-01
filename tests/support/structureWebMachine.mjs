@@ -112,7 +112,7 @@ check("Web Machine public type와 runtime store 의미 일치", () => {
 // string이라 소비자가 코드로 분기할 수 없었다. 양방향으로 대조해야 한쪽만 늘어나는 표류가 잡힌다.
 check("Web Machine 오류 코드 union = 실제 throw 집합", () => {
   const dts = readFileSync(join(machineRoot, "index.d.ts"), "utf8");
-  const unionBlock = /export type WebMachineErrorCode =([\s\S]*?);\n/.exec(dts);
+  const unionBlock = /export type WebMachineErrorCode =([\s\S]*?);\r?\n/.exec(dts);
   if (!unionBlock) throw new Error("WebMachineErrorCode union 선언 없음");
   const declared = new Set([...unionBlock[1].matchAll(/"(WEB_MACHINE_[A-Z_]+)"/g)].map((m) => m[1]));
   const thrown = new Set();
