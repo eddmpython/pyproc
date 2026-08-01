@@ -15,7 +15,7 @@ import { PyProcError } from "../errors.js";
 const PYODIDE_CAPABILITIES = Object.freeze(Object.values(ENGINE_CAPABILITIES));
 
 export class PyodideEngine {
-  constructor(py) { this._py = py; this._micropip = null; this._fs = null; }
+  constructor(py) { this._py = py; this._micropip = null; this._fs = null; this.hostProxyNames = new Set(); }
   get engineContractVersion() { return ENGINE_CONTRACT_VERSION; }
   get engineKind() { return "pyodide"; }
   capabilities() { return PYODIDE_CAPABILITIES; }
@@ -24,8 +24,16 @@ export class PyodideEngine {
   runSync(code) { return this._py.runPython(code); }
   runAsync(code) { return this._py.runPythonAsync(code); }
 
+
   // --- 값 다리 --- (Pyodide: FFI 프록시. WASI: JSON 직렬화 = 값 프로토콜, FFI 없음)
-  setGlobal(name, value) { this._py.globals.set(name, value); }
+  // 프록시가 되는 값(함수/객체)만 센다. 문자열·숫자는 값으로 건너가 힙에 핸들을 남기지 않는다.
+  // 이 카운터가 존재하는 이유는 실측이다(workerGuest 캠페인 A~O): 힙에 JS 핸들이 하나라도 있으면
+  // 그 힙 이미지로 부활한 커널은 프록시 경로 전부가 트랩한다. 그래서 "이미지를 뜰 수 있는가"는
+  // 이 숫자가 0인가와 같은 질문이고, 세는 곳은 핸들이 실제로 생기는 이 한 줄뿐이다.
+  setGlobal(name, value) {
+    if (typeof value === "function" || (value !== null && typeof value === "object")) this.hostProxyNames.add(String(name));
+    this._py.globals.set(name, value);
+  }
   getGlobal(name) { return this._py.globals.get(name); }
   toHostValue(value, options = {}) {
     const proxyMode = options.proxyMode || "copy";

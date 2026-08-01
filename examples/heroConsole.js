@@ -291,7 +291,15 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
       const home = await machine.runtime.mountHome(homeDir);
       machineCache = {
         machine,
-        hibernate: async () => { const r = await machine.history.save(stateDir, "heroMachine"); await home.sync(); return r; },
+        // The terminal tab installs a blocking syscall bridge, which puts a JS handle in this heap, and
+      // a JS handle cannot cross an image: after waking up, plain Python state is intact (the counter
+      // keeps counting, which is what this demo claims) but the blocking surfaces are not usable
+      // again. Acknowledging that here is the honest form: the runtime refuses by default.
+      hibernate: async () => {
+        const r = await machine.history.save(stateDir, "heroMachine", { allowHostProxies: true });
+        await home.sync();
+        return r;
+      },
       };
       // Hibernate automatically when the tab goes away - armed only once the machine tab has been used.
       addEventListener("pagehide", () => { machineCache.hibernate(); });

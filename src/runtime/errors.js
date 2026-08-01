@@ -15,6 +15,7 @@ export const PYPROC_ERROR_CODES = Object.freeze([
   "PYPROC_MACHINE_INTEGRITY",    // .pymachine 봉투 해시/서명 검증 실패(손상 또는 변조)
   "PYPROC_MACHINE_UNTRUSTED",    // trust 게이트 미승인
   "PYPROC_REPLAY_MISMATCH",      // cp0/h0 리플레이 결정성 불일치
+  "PYPROC_IMAGE_PROXY_SURFACE",  // 힙에 JS 핸들이 있어 이미지가 부활 후 못 쓰인다(값 경계로 옮기거나 명시 승인)
   "PYPROC_HEAP_GROW_FAILED",     // 파이썬 할당 경로 힙 성장 실패
   "PYPROC_CHECKPOINT_PRUNED",    // prune/dispose된 노드 복원 시도
   "PYPROC_PROCESS_UNAVAILABLE",  // pid/cid 부재, dead, 준비 안 됨

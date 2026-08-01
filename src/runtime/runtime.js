@@ -215,6 +215,10 @@ export class Runtime {
     if (engine.has(ENGINE_CAPABILITIES.packages)) runtime.push(RUNTIME_CAPABILITIES.packages);
     return Object.freeze(runtime);
   }
+  // 이 런타임의 힙에 JS 핸들이 심겼는가. 이미지 이식성의 전제라 세션이 이것을 보고 판정한다
+  // (엔진마다 값 다리가 다르므로 미지원 엔진은 0 = 핸들 없음이 참이다: WASI는 JSON 값 프로토콜).
+  hostProxySurfaces() { return [...(this._engine.hostProxyNames || [])]; }
+
   run(code) { this.execSeq++; return this._engine.runSync(code); }
   runAsync(code) { this.execSeq++; return this._engine.runAsync(code); }
   setGlobal(name, value) { this.execSeq++; this._engine.setGlobal(name, value); }

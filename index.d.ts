@@ -14,6 +14,7 @@ export type PyProcErrorCode =
   | "PYPROC_MACHINE_INTEGRITY"
   | "PYPROC_MACHINE_UNTRUSTED"
   | "PYPROC_REPLAY_MISMATCH"
+  | "PYPROC_IMAGE_PROXY_SURFACE"
   | "PYPROC_HEAP_GROW_FAILED"
   | "PYPROC_CHECKPOINT_PRUNED"
   | "PYPROC_PROCESS_UNAVAILABLE"
@@ -971,6 +972,16 @@ declare class Runtime {
   readonly raw: unknown;
 }
 
+export interface ImagePortabilityOptions {
+  /**
+   * Acknowledges that this heap holds JS handles installed by a blocking host surface (the syscall
+   * bridge, sockets, GPU). A JS handle cannot cross an image, so the revived kernel keeps its plain
+   * Python state but cannot use those surfaces again. Without this flag both save and export refuse
+   * with PYPROC_IMAGE_PROXY_SURFACE rather than writing an image that fails later.
+   */
+  allowHostProxies?: boolean;
+}
+
 export interface SessionManifest {
   indexURL?: string;
   env?: Record<string, string>;
@@ -996,7 +1007,7 @@ export interface SessionIo {
   mb: number;
 }
 
-export interface SessionImageOptions {
+export interface SessionImageOptions extends ImagePortabilityOptions {
   /**
    * True, or the default, includes the existing /home/web file tree in the .pymachine. False
    * exports only the heap delta. True with no such path raises an explicit error.
@@ -1016,7 +1027,7 @@ declare class Session {
   /** Exports this whole computer as one .pymachine file, integrity hashes included, along with /home/web when it exists. */
   exportImage(opts?: SessionImageOptions): Promise<Blob>;
   /** Saves only user state - the pages that differ from the replay boundary. Replay supplies the base. */
-  save(dir: FileSystemDirectoryHandle, name: string): Promise<SessionIo>;
+  save(dir: FileSystemDirectoryHandle, name: string, opts?: ImagePortabilityOptions): Promise<SessionIo>;
   /** Assumes the same manifest and the same heap size; a mismatch raises an explicit error. */
   load(dir: FileSystemDirectoryHandle, name: string): Promise<SessionIo>;
 }
@@ -1215,7 +1226,7 @@ declare class PyprocHistory {
   /** A portable signed bundle. Deterministic boots only: a non-deterministic state has no replay guarantee. */
   export(opts?: SessionImageOptions): Promise<Blob>;
   /** Saves the session (deterministic boots only). Revival replays the same manifest and applies the delta. */
-  save(dir: FileSystemDirectoryHandle, name: string): Promise<{ pages: number; mb: number }>;
+  save(dir: FileSystemDirectoryHandle, name: string, opts?: ImagePortabilityOptions): Promise<{ pages: number; mb: number }>;
 }
 
 /** Handle to a Python machine that has a history. Capability detail is reached through the runtime escape hatch. */

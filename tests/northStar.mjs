@@ -196,12 +196,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 8.5,
     en: Object.freeze({
       title: "A machine you can carry",
-      state: "`.pymachine` and `.webmachine` files are signed content-addressed envelopes: signature and trusted-key verification, byte-tamper rejection, layout-independent reparse, worker-to-worker revival, and a cross-context transport refused on an `h0` mismatch instead of opened silently. The product gate exports a signed image and imports it into a fresh browser profile behind an explicit signer trust screen. Portability still assumes the same engine and manifest. A JS proxy handle cannot cross an image at all, so a surface that installs one poisons every proxy path in the revived kernel; the packet device was moved to a value boundary and now survives a revival in CI, while the socket and GPU surfaces still carry that limit.",
+      state: "`.pymachine` and `.webmachine` files are signed content-addressed envelopes: signature and trusted-key verification, byte-tamper rejection, layout-independent reparse, worker-to-worker revival, and a cross-context transport refused on an `h0` mismatch instead of opened silently. The product gate exports a signed image and imports it into a fresh browser profile behind an explicit signer trust screen. Portability still assumes the same engine and manifest. A JS proxy handle cannot cross an image at all, so a surface that installs one poisons every proxy path in the revived kernel; the packet device and the permission jail were moved to value boundaries and survive a revival in CI, while a blocking surface (the syscall bridge behind input(), sockets, GPU) cannot move and is refused at export unless the caller acknowledges it.",
       target: "A machine file opens on any compatible profile from a verified signer, across engine versions.",
     }),
     ko: Object.freeze({
       title: "들고 다니는 머신",
-      state: "`.pymachine`과 `.webmachine`은 서명된 내용 주소 봉투다: 서명과 신뢰 공개키 검증, 바이트 변조 거부, 레이아웃 독립 재파싱, 워커 사이 부활, 문맥을 건너는 이식은 조용히 열리는 대신 `h0` 불일치로 거부된다. 제품 게이트가 서명 이미지를 내보내고 새 브라우저 프로필에서 명시적 서명자 신뢰 화면을 거쳐 가져온다. 이식성은 아직 같은 엔진과 같은 매니페스트를 전제하고, JS 프록시 핸들은 이미지를 건너지 못해서, 프록시를 심는 표면은 부활 커널의 프록시 경로 전부를 오염시킨다. packet 장치는 값 경계로 옮겨 부활 뒤에도 살아나는 것을 CI가 물지만, socket과 GPU 표면은 아직 그 한계를 안고 있다.",
+      state: "`.pymachine`과 `.webmachine`은 서명된 내용 주소 봉투다: 서명과 신뢰 공개키 검증, 바이트 변조 거부, 레이아웃 독립 재파싱, 워커 사이 부활, 문맥을 건너는 이식은 조용히 열리는 대신 `h0` 불일치로 거부된다. 제품 게이트가 서명 이미지를 내보내고 새 브라우저 프로필에서 명시적 서명자 신뢰 화면을 거쳐 가져온다. 이식성은 아직 같은 엔진과 같은 매니페스트를 전제하고, JS 프록시 핸들은 이미지를 건너지 못해서, 프록시를 심는 표면은 부활 커널의 프록시 경로 전부를 오염시킨다. packet 장치와 권한 감옥은 값 경계로 옮겨 부활 뒤에도 살아나는 것을 CI가 물지만, 블로킹 표면(input() 뒤의 syscall 다리, socket, GPU)은 구조상 옮길 수 없어 이미지를 뜰 때 명시 승인 없이는 거부된다.",
       target: "머신 파일이 검증된 서명자에게서 왔다면 엔진 버전을 건너서도 호환 프로필 어디서나 열린다.",
     }),
     evidence: Object.freeze([
@@ -212,9 +212,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "proxyFreeSurfaces",
-        en: "Move the socket and GPU surfaces to the same value boundary the packet port now uses, so no shipped surface poisons an image",
-        ko: "socket과 GPU 표면을 packet port가 쓰는 값 경계로 옮겨, 이미지를 오염시키는 출하 표면을 0으로 만든다",
+        id: "handlesSurviveMaterialisation",
+        en: "Rebind JS handles after materialisation, or find a blocking mechanism that needs none, so a machine that used input() can still ship a portable image",
+        ko: "물질화 뒤 핸들을 다시 묶는 엔진 층 길이나 핸들 없는 블로킹 기전을 찾아, input()을 쓴 머신도 이식 가능한 이미지를 내게 한다",
       }),
       Object.freeze({
         id: "manifestNegotiation",

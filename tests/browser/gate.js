@@ -765,7 +765,8 @@ try {
   {
     const proxySeed = await bootSession({ indexURL: INDEX });
     proxySeed.rt.setGlobal("probeBridge", () => 7); // cp0 이후 프록시 1개 = 오염 조건 전부
-    const proxyImage = await proxySeed.exportImage();
+    // 일부러 오염된 이미지를 만드는 자리이므로 명시 승인으로 뜬다(그 승인 경로 자체도 계약이다).
+    const proxyImage = await proxySeed.exportImage({ allowHostProxies: true });
     const proxyRevived = await openMachine(proxyImage, { trust: true });
     const plain = proxyRevived.rt.run("sum(range(10))"); // 순수 파이썬은 산다
     // 트랩은 호출이 아니라 **이미지가 나른 프록시를 덮어쓰는 순간**에 난다: 옛 핸들의 파기가
@@ -778,6 +779,32 @@ try {
     check("알려진 한계: 이미지가 나른 프록시 부기 위에서 프록시 호출은 트랩한다",
       plain === 45 && trapped.length > 0,
       trapped ? `plain ${plain}, trap "${trapped}"` : `plain ${plain}, 트랩 없음 = 한계가 풀렸다(문서와 주장 갱신 필요)`);
+  }
+
+  // 그 한계를 조용한 트랩이 아니라 **이미지를 뜨는 순간의 거부**로 만든다. 위 probe가 보여주듯
+  // 오염은 부활 뒤 한참 있다가 엔진 깊은 곳의 문장으로 나타났고, 그때는 무엇을 고쳐야 하는지가
+  // 남지 않는다. 이제 exportImage/save가 힙의 JS 핸들 수를 보고 거부하며, 같은 문맥 전용
+  // 이미지라는 판단은 소비자가 명시 승인으로 표현한다.
+  {
+    const clean = await bootSession({ indexURL: INDEX });
+    clean.rt.run("cleanMarker = 1");
+    const cleanImage = await clean.exportImage();
+    let cleanOk = cleanImage instanceof Blob && cleanImage.size > 0;
+
+    const dirty = await bootSession({ indexURL: INDEX });
+    dirty.rt.setGlobal("hostBridge", () => 1); // 값이 아니라 핸들 = 이미지 이식성의 전제 위반
+    let refusedCode = "";
+    try { await dirty.exportImage(); } catch (e) { refusedCode = e.code || String(e?.message || e); }
+    let savedCode = "";
+    const refuseDir = await (await navigator.storage.getDirectory()).getDirectoryHandle("pyprocGateRefuse", { create: true });
+    try { await dirty.save(refuseDir, "dirty"); } catch (e) { savedCode = e.code || String(e?.message || e); }
+    // 승인 탈출구는 실제로 열려야 한다: 닫힌 문은 계약이 아니라 벽이다.
+    const acknowledged = await dirty.exportImage({ allowHostProxies: true });
+    check("이미지 이식성 전제: 힙에 JS 핸들이 있으면 뜨는 순간 거부(승인 시 통과)",
+      cleanOk && refusedCode === "PYPROC_IMAGE_PROXY_SURFACE" && savedCode === "PYPROC_IMAGE_PROXY_SURFACE"
+      && acknowledged instanceof Blob && acknowledged.size > 0,
+      `clean ${cleanOk}, export ${refusedCode}, save ${savedCode}, 승인 ${acknowledged?.size || 0}B`);
+    await (await navigator.storage.getDirectory()).removeEntry("pyprocGateRefuse", { recursive: true });
   }
 
   // 힙 성장 부활: 저장 커널이 자란 뒤의 상태는, 부활 커널이 먼저 같은 길이까지 힙을

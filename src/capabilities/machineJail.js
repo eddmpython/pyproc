@@ -13,13 +13,34 @@
 // 그 측면 통로를 닫으려면 감옥을 opaque origin(sandbox 속성, allow-same-origin 없이)으로 둔다.
 // 단 opaque origin은 crossOriginIsolated가 아니라 SAB를 잃는다(감옥 머신 = 단일 Runtime, fork 없음).
 // 즉 "네트워크 egress 차단"은 same-origin 감옥에서도 성립하고, "부모 격리"까지는 opaque 감옥이다.
-const BOOTSTRAP = `
+// 정책은 정적 데이터다. 그래서 초크포인트는 JS 콜백이 아니라 **값**으로 심는다: 허용 집합을
+// 소스에 리터럴로 굽고 파이썬이 그것만 본다. 예전에는 `setGlobal("_pyprocJailAllows", fn)`이라
+// 힙에 JS 핸들이 남았고, 그 핸들 하나가 그 머신의 이미지 전체를 부활 후 못 쓰게 만들었다
+// (workerGuest 캠페인 A~O 실측: 핸들이 하나라도 있으면 부활 커널의 프록시 경로가 전부 트랩한다).
+// 판정 로직 자체는 JS의 allows()가 정본이고, 여기 굽는 것은 그 판정의 입력인 권한 선언뿐이다.
+// 파이썬 리터럴 변환. JSON은 true/false를 소문자로 쓰고 파이썬은 True/False라, 값 경계에서는
+// 이 한 줄이 계약이다(문자열과 리스트는 두 문법이 같아 JSON 표기를 그대로 쓴다).
+function pythonLiteral(value) {
+  if (value === true) return "True";
+  if (value === false) return "False";
+  if (Array.isArray(value)) return "[" + value.map((item) => JSON.stringify(String(item))).join(", ") + "]";
+  return JSON.stringify(value);
+}
+
+const BOOTSTRAP = (netLiteral, clipboardLiteral, homeLiteral, workersLiteral) => `
 import sys as _pyprocSys, types as _pyprocTypes
 
 _pyprocJailMod = _pyprocTypes.ModuleType('pyprocJail')
+_pyprocJailPolicy = {'net': ${netLiteral}, 'clipboard': ${clipboardLiteral}, 'home': ${homeLiteral}, 'workers': ${workersLiteral}}
+
+def _pyprocJailAllowed(perm, arg=''):
+    allowed = _pyprocJailPolicy[perm]
+    if perm == 'net':
+        return allowed is True or (isinstance(allowed, list) and arg in allowed)
+    return bool(allowed)
 
 def _pyprocJailCheck(perm, arg=''):
-    if not _pyprocJailAllows(perm, arg):
+    if not _pyprocJailAllowed(perm, arg):
         raise PermissionError('jail: no ' + perm + ' permission' + ((' (' + arg + ')') if arg else ''))
     return True
 
@@ -29,7 +50,6 @@ _pyprocJailMod.home = lambda: _pyprocJailCheck('home')
 _pyprocJailMod.workers = lambda: _pyprocJailCheck('workers')
 _pyprocSys.modules['pyprocJail'] = _pyprocJailMod
 `;
-
 export class MachineJail {
   // permissions: { net: false | true | ["host", ...], clipboard, home, workers: bool }.
   // net=false 전부 차단, true 전부 허용, 배열 허용 목록.
@@ -67,8 +87,12 @@ export class MachineJail {
   // 협조 초크포인트를 파이썬에 심는다. 감옥 머신 코드가 pyprocJail.net(host) 등으로 권한을
   // 확인한다(정직: import js 우회는 CSP가 잡는다. 이 티어는 실수 방지 + 명시 계약).
   install(rt) {
-    rt.setGlobal("_pyprocJailAllows", (perm, arg) => this.allows(perm, arg || ""));
-    rt.run(BOOTSTRAP);
+    rt.run(BOOTSTRAP(
+      pythonLiteral(this.net === true ? true : (Array.isArray(this.net) ? this.net : false)),
+      pythonLiteral(this.clipboard),
+      pythonLiteral(this.home),
+      pythonLiteral(this.workers),
+    ));
     return { permissions: { net: this.net, clipboard: this.clipboard, home: this.home, workers: this.workers }, connectSrc: this.connectSrc() };
   }
 }

@@ -174,11 +174,20 @@ await pool.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</
       for (const demo of demos) {
         hero.showTab(demo);
         let pass = false;
-        try { pass = await demo.run(hero.ctx) === true; } catch (e) { hero.ctx.print(String(e).split("\n")[0]); }
-        checks.push({ name: demo.id, pass, info: "" });
+        let failure = "";
+        try {
+          pass = await demo.run(hero.ctx) === true;
+        } catch (e) {
+          failure = `${e.code || ""} ${String(e.message || e).split("\n")[0]}`.trim().slice(0, 130);
+          hero.ctx.print(failure);
+        }
+        checks.push({ name: demo.id, pass, info: failure });
       }
       const ok = checks.every((c) => c.pass);
-      checks[0].info = checks.map((c) => `${c.name}:${c.pass ? "ok" : "FAIL"}`).join(" ");
+      // A failing demo has to say why. Without this the gate reported "machine:FAIL" and nothing else,
+      // so diagnosing it meant reproducing the whole tab sequence by hand.
+      const why = checks.filter((c) => !c.pass && c.info).map((c) => `${c.name}: ${c.info}`).join(" | ");
+      checks[0].info = checks.map((c) => `${c.name}:${c.pass ? "ok" : "FAIL"}`).join(" ") + (why ? ` || ${why}` : "");
       fetch("/gateReport", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ok, checks }),

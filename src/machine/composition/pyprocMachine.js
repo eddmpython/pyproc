@@ -108,10 +108,10 @@ class PyprocHistory {
     }
     return session.exportImage(opts);
   }
-  save(dir, name) {
+  save(dir, name, opts = {}) {
     const session = this._machine._session;
     if (!session) throw new PyProcError("PYPROC_INPUT_INVALID", "history.save: only a deterministic-replay machine can be saved. Revival is replay plus delta, so boot with boot({ deterministic: true }).");
-    return session.save(dir, name);
+    return session.save(dir, name, opts);
   }
 }
 
