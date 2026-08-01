@@ -13,6 +13,7 @@
 <script type="module">
   // pyproc/wasi subpath 표면(루트에서 강등됨). 게이트는 소스 경로로 같은 모듈을 연다.
   import { bootWasi } from "../../src/runtime/engines/wasi/wasiSession.js";
+  import { assertRuntimeContract } from "../../src/runtime/runtimeContract.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
@@ -31,6 +32,14 @@
     let t = performance.now();
     const s = await bootWasi({ wasmURL: WASM_URL, stdlibURL: STDLIB_URL });
     timings.bootMs = Math.round(performance.now() - t);
+    check("WASI runtime 공통 계약", assertRuntimeContract(s) === s && s.runtimeKind === "wasi" && s.runtimeContractVersion === 1);
+    const capabilities = s.capabilities();
+    check("WASI capability 선언", ["asyncExecution", "globals", "hostValues", "checkpoint", "packages"].every((name) => capabilities.includes(name)));
+    const asyncResult = await s.runAsync("print('async-ok')");
+    check("RuntimeContract runAsync 별칭", asyncResult.trim() === "async-ok", asyncResult.trim());
+    await s.setGlobal("aliasPayload", { branch: "wasi", n: 7 });
+    const aliasPayload = await s.getGlobal("aliasPayload");
+    check("RuntimeContract global 별칭", JSON.stringify(aliasPayload) === '{"branch":"wasi","n":7}', JSON.stringify(aliasPayload));
     await s.run("x = 41");
     await s.run("x = x + 1");
     const r1 = await s.run("import sys\nprint(x, sys.version.split()[0])");

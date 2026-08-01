@@ -15,11 +15,11 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const wantV86 = process.argv.includes("--v86");
+const wantWasi = wantV86 || process.argv.includes("--wasi");
 
-// 자산 없이 도는 probe: host 계약, 3-guest 계약(WASI adapter 포함), owner 승계 경쟁.
+// 자산 없이 도는 probe: host 계약, owner 승계, Python guest networking, 내구성 계약.
 const ASSET_FREE = [
   "tests/webMachine/browser/probes/hostContractProbe.html",
-  "tests/webMachine/browser/probes/dualEngineProbe.html",
   "tests/webMachine/browser/probes/ownerSuccessorProbe.html",
   "tests/webMachine/browser/probes/guestNetworkProbe.html",
   // 내구 커밋의 핵(찢어진 커밋·CAS 경쟁·세대 불변성·retention gc)을 보는 probe다. x86 자산이
@@ -34,6 +34,9 @@ const ASSET_FREE = [
   // 공개 createWebComputer가 보편 내구 수명주기를 한 핸들에서 소유한다. fake portable guest와
   // memory store로 owner, restore-or-boot, save, signed import/export, dispose를 전부 문다.
   "tests/webMachine/browser/probes/durableComputerProbe.html",
+];
+const WASI_BACKED = [
+  "tests/webMachine/browser/probes/dualEngineProbe.html",
 ];
 // x86 자산이 필요한 probe. ownerSuccessorParticipant는 probe가 iframe으로 여는 참가자 페이지다.
 const V86_BACKED = [
@@ -51,7 +54,12 @@ const V86_ASSET_DIR = join(ROOT, "tests", "webMachine", "fixtures", "v86", "asse
 
 // --v86은 레인을 더한다(바꾸지 않는다). 치환이면 x86 레인을 돌 때 자산 없이 도는 계약
 // 3개가 빠져, 두 레인을 함께 돈 적이 한 번도 없게 된다(외부 감사 지적, 2026-07-27).
-const pages = wantV86 ? [...ASSET_FREE, ...V86_BACKED] : ASSET_FREE;
+const pages = [...ASSET_FREE, ...(wantWasi ? WASI_BACKED : []), ...(wantV86 ? V86_BACKED : [])];
+const WASI_ASSET_DIR = join(ROOT, "tests", "attempts", "enginePort");
+if (wantWasi && (!existsSync(join(WASI_ASSET_DIR, "python-3.14.6.wasm")) || !existsSync(join(WASI_ASSET_DIR, "python314-stdlib.zip")))) {
+  console.error(`FAIL WASI 자산 없음: ${WASI_ASSET_DIR}. node scripts/fetchWasiAssets.mjs를 먼저 실행한다.`);
+  process.exit(1);
+}
 if (wantV86 && !existsSync(join(V86_ASSET_DIR, "libv86.mjs"))) {
   console.error(`FAIL v86 자산 없음: ${V86_ASSET_DIR}. npm run test:web-machine:v86가 prepareAssets를 먼저 돈다.`);
   process.exit(1);
