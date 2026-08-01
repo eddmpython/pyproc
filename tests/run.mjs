@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { runContractSuites } from "./contracts/run.mjs";
 import { createGateCounter } from "./support/gateCounter.mjs";
+import { mulberry32 } from "./support/seededRandom.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const gate = createGateCounter();
@@ -1018,12 +1019,6 @@ section("해시 soundness");
   // 실엔진 계약(HEAPU8)을 재현해야 한다(비정렬 view면 Uint32Array(buf,0,..)가 어긋난다).
   const hashesOf = (arr) => new MemoryCapability({ heapU8: () => arr }).pageHashes();
   // 시드 고정 PRNG(mulberry32): fuzz 실패는 시드+반복 인덱스로 재현 가능해야 한다.
-  const mulberry32 = (seed) => () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 
   // 핵심 주장(reactive.js:4 "완전 해시가 sound의 열쇠 - 샘플링 금지"): 임의 힙 변이 시퀀스에서
   // hashDiffPages가 실제로 바뀐 페이지를 하나도 놓치지 않는다(false-negative 0). 오라클은
@@ -1297,12 +1292,6 @@ section("reactive 나무");
 {
   const { MemoryCapability, PAGE_SIZE: RPAGE } = await import(pathToFileURL(join(ROOT, "src", "runtime", "memoryCapability.js")).href);
   const { ReactiveController } = await import(pathToFileURL(join(ROOT, "src", "capabilities", "reactive.js")).href);
-  const mulberry32 = (seed) => () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
   const equalBytes = (a, b) => {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
