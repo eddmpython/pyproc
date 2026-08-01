@@ -1,6 +1,6 @@
 import { WEB_COMPUTER_ASSET_PROVENANCE } from "./assetProvenance.js";
 
-export const WEB_COMPUTER_ADAPTER_VERSION = "v86-0.5.424-buildroot68-product-v2";
+export const WEB_COMPUTER_ADAPTER_VERSION = "v86-0.5.424-buildroot612-product-v2";
 export const WEB_COMPUTER_CAPABILITIES = Object.freeze(["pyproc", "x86-linux"]);
 export const WEB_COMPUTER_GROUP_ID = "webComputerDefault";
 export const WEB_COMPUTER_DATABASE = "webComputerProductV1";
@@ -35,7 +35,7 @@ export async function loadV86Constructor() {
 // 판정은 저장소 게이트가 하고, 봉투는 "어떤 catalog와 SBOM으로 만들어졌는가"만 나른다.
 export function createLinuxMachineManifest() {
   return {
-    product: { image: "buildroot-linux-6.8.12-i686" },
+    product: { image: "buildroot-linux-6.12.27-i686" },
     provenance: WEB_COMPUTER_ASSET_PROVENANCE,
     v86: {
       readyPattern: LINUX_LOGIN_PATTERN,
@@ -50,7 +50,7 @@ export function createLinuxMachineManifest() {
         vga_bios: { url: new URL("vgabios.bin", assetRoot).href },
         bzimage: { url: new URL("buildroot-pyproc-i686.bin", assetRoot).href, async: false },
         filesystem: {},
-        cmdline: "tsc=reliable mitigations=off random.trust_cpu=on console=ttyS0",
+        cmdline: "tsc=reliable mitigations=off random.trust_cpu=on nomodeset console=tty0 console=ttyS0",
         memory_size: 64 * 1024 * 1024,
         disable_keyboard: false,
         disable_mouse: true,

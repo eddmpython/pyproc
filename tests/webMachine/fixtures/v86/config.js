@@ -1,5 +1,5 @@
 // config.js - 해시 고정 자산을 쓰는 v86 guest probe manifest 정본.
-export const V86_ADAPTER_VERSION = "v86-0.5.424-buildroot68-state-v2";
+export const V86_ADAPTER_VERSION = "v86-0.5.424-buildroot612-state-v2";
 export const V86_GRAPHICAL_ADAPTER_VERSION = "v86-0.5.424-kolibri-state-v1";
 export const V86_SHELL_PROMPT = "# ";
 
@@ -18,7 +18,7 @@ export function createV86ProbeManifest() {
         vga_bios: { url: "../../fixtures/v86/assets/vgabios.bin" },
         bzimage: { url: "../../fixtures/v86/assets/buildroot-pyproc-i686.bin", async: false },
         filesystem: {},
-        cmdline: "tsc=reliable mitigations=off random.trust_cpu=on console=ttyS0",
+        cmdline: "tsc=reliable mitigations=off random.trust_cpu=on nomodeset console=tty0 console=ttyS0",
         memory_size: 64 * 1024 * 1024,
         disable_keyboard: true,
         disable_mouse: true,

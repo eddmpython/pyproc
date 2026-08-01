@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "releaseTag": "buildroot-pyproc-i686-v2",
-  "targetCommit": "77c95ddf1bc7ccd787e33217b6fc2ebfb7e21556",
+  "releaseTag": "buildroot-pyproc-i686-v1",
+  "targetCommit": "42856504a4ecb3bafef7afd8d4a9bd400131daba",
   "assets": [
     {
       "name": "build-manifest.json",
-      "byteLength": 1598,
-      "sha256": "5319891a01dc3a569e2a72230eb04e6f8ec01ff9f5b6b2fdbf6f3a5fc8f6b9d8"
+      "byteLength": 1082,
+      "sha256": "7969609bc040889cb1d638dcbd44c3ebdde7516c2f4825b1dadef32ab9708200"
     },
     {
       "name": "buildroot-2025.02.16.tar.xz",
@@ -15,18 +15,18 @@
     },
     {
       "name": "buildroot-legal-info-complete.zip",
-      "byteLength": 650752356,
-      "sha256": "fd2356e03f5a7da1887b3f42531db9942fab4ae526f694937e61be148894de31"
+      "byteLength": 650774247,
+      "sha256": "c56c69d01d87678d45ae03ca5a983c191f2db5c8d6350073e3bedec71206b551"
     },
     {
       "name": "buildroot-pyproc-i686.bin",
-      "byteLength": 7791104,
-      "sha256": "9c4f2b818986ee238c773d45240d33b6a35a9f15e32f65cc1c10b5574c12c760"
+      "byteLength": 7721472,
+      "sha256": "c3fc456de757e333a3fe543fb126d6aeddda19835e1a6fda187b27f1ce56a606"
     },
     {
       "name": "buildroot.config",
-      "byteLength": 626,
-      "sha256": "b7290cef7a4f0ab58412a948e174f8d9274dcfd7f9132e2749f09d3a0e4cf79c"
+      "byteLength": 508,
+      "sha256": "189a5658a6993e3104fd0072fe86b5dfe492c27040a077c30ba8460981f8ca20"
     },
     {
       "name": "buildroot.cyclonedx.json",
@@ -36,13 +36,13 @@
     {
       "name": "reproducibility-manifest.json",
       "byteLength": 394,
-      "sha256": "16a3022ce1e14dc9e7632bd120019db9a172dbc00e92ffbf9f5779044a73db4d"
+      "sha256": "4f96239efe6058ee5b5ad76bc07d93640424d50615adda11cea8d8746d208cfe"
     }
   ],
   "legalInfoInventory": {
     "checksumRows": 132,
     "files": 132,
-    "verifiedBytes": 653011093,
+    "verifiedBytes": 653011039,
     "missing": 0,
     "extra": 0,
     "duplicates": 0,

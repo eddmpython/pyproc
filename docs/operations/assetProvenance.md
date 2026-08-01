@@ -77,7 +77,7 @@ Web Machine fixture(v86 계열):
 | `v86.wasm` | 위와 같음. composite binary의 최종 inventory 미검증 | local test만 |
 | `seabios.bin` | v86 `2f1346b` build script가 SeaBIOS `rel-1.16.2`와 고정 config 사용. **exact version + 공개 config가 있어 재현 경로가 열려 있다** | 재현 build·license 전달물 전 local test만 |
 | `vgabios.bin` | 위 SeaBIOS build의 `out/vgabios.bin` | 위와 같음 |
-| `buildroot-pyproc-i686.bin` | Buildroot `2025.02.16` exact source와 config로 만든 프로젝트 재현 빌드. 독립 builder 둘의 byte-identical 결과, complete legal-info, CycloneDX, build/repro manifest를 `buildroot-pyproc-i686-v1` release에서 함께 제공 | project release runtime 참조, npm 번들 제외 |
+| `buildroot-pyproc-i686.bin` | Buildroot `2025.02.16` exact source와 config로 만든 프로젝트 재현 빌드. 독립 builder 둘의 byte-identical 결과, complete legal-info, CycloneDX, build/repro manifest를 `buildroot-pyproc-i686-v2` release에서 함께 제공 | project release runtime 참조, npm 번들 제외 |
 | `kolibri.img` | `i.copy.sh/kolibri.img`와 `cdn.jsdelivr.net/gh/copy/images@master/kolibri.img` 두 출처. SHA-256는 일치. exact image revision 없음 | 번들·공식 image 배포 금지 |
 
 component 결론은 전부 위 불변식이 도출한다. `Pyodide`는 `pyodide.asm.wasm`(inventory 미검증)을
@@ -99,16 +99,16 @@ binary라 `NOASSERTION`이다.
 
 7번은 닫혔다(봉투가 `policyVersion`/`catalogId`/`sbomDigest`를 서명 대상 안에 나른다).
 4번과 6번은 catalog가 기술하는 전 자산에 대해 닫혔다. Buildroot guest의 1~3번과 5번도
-`buildroot-pyproc-i686-v1` project release에서 닫혔다. 전체 공식 `.webmachine` 배포는 별도
+`buildroot-pyproc-i686-v2` project release에서 닫혔다. 전체 공식 `.webmachine` 배포는 별도
 firmware와 emulator 자산이 같은 수준에 도달할 때까지 계속 금지한다.
 
 교체 recipe는 `scripts/buildroot/`에 있다. 현재 지원 중인 Buildroot `2025.02.16` exact commit과
 i686 config를 고정하고, initramfs 포함 bzImage, `legal-info`, CycloneDX, build manifest를
-만든다. GitHub Actions run `30182336754`의 독립 builder `a`/`b`는 2026-07-26에 바이트 동일한
-7,721,472-byte 이미지를 만들었다(SHA-256
-`c3fc456de757e333a3fe543fb126d6aeddda19835e1a6fda187b27f1ce56a606`). 그 후보는 2026-08-01
-Edge에서 실제 Python-Linux 양방향 packet, 두 guest 동시 commit, process cold restore를 15/15로
-통과했다. 2026-08-01 `buildroot-pyproc-i686-v1` release에 binary, exact Buildroot source archive,
+만든다. GitHub Actions run `30707101027`의 독립 builder `a`/`b`는 2026-08-02에 바이트 동일한
+7,791,104-byte 이미지를 만들었다(SHA-256
+`9c4f2b818986ee238c773d45240d33b6a35a9f15e32f65cc1c10b5574c12c760`). 이 v2 guest는
+virtio 9P host volume, serial login shell, VGA console shell을 재현 recipe에 포함한다.
+2026-08-02 `buildroot-pyproc-i686-v2` release에 binary, exact Buildroot source archive,
 complete legal-info, CycloneDX, config, build/repro manifest를 함께 게시하고 catalog를 그
 SHA-256 고정 URL로 전환했다. `scripts/buildroot/releaseAssets.json`은 공개한 7개 자산의 이름,
 크기, SHA-256을 모두 고정하며, catalog의 `evidenceManifest`가 그 파일 자체의 SHA-256과 크기를

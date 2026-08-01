@@ -8,13 +8,18 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
 function assertBuildrootReleaseEvidence(catalog, releaseAssetsBytes) {
-  const component = catalog.components.find((item) => item.componentId === "buildroot-pyproc-i686-v1");
+  const component = catalog.components.find((item) => item.componentId === "buildroot-pyproc-i686-v2");
   const releaseAssets = JSON.parse(releaseAssetsBytes);
   const digest = createHash("sha256").update(releaseAssetsBytes).digest("hex");
   if (component?.evidenceManifest?.sha256 !== digest) throw new Error("Buildroot release evidence manifest digest 표류");
   if (component.evidenceManifest.byteLength !== releaseAssetsBytes.byteLength) throw new Error("Buildroot release evidence manifest 크기 표류");
   if (component.evidenceManifest.assetCount !== releaseAssets.assets.length) throw new Error("Buildroot release evidence asset 수 표류");
   if (!component.evidence.includes(component.evidenceManifest.url)) throw new Error("Buildroot release evidence URL 누락");
+  const legal = releaseAssets.legalInfoInventory;
+  if (!legal || legal.checksumRows !== legal.files) throw new Error("Buildroot legal-info checksum row와 file 수가 다르다");
+  for (const field of ["missing", "extra", "duplicates", "checksumMismatches"]) {
+    if (legal[field] !== 0) throw new Error(`Buildroot legal-info ${field}가 0이 아니다`);
+  }
   const releaseImage = releaseAssets.assets.find((asset) => asset.name === "buildroot-pyproc-i686.bin");
   const catalogImage = catalog.assets.find((asset) => asset.componentId === component.componentId);
   if (releaseImage?.sha256 !== catalogImage?.sha256 || releaseImage?.byteLength !== catalogImage?.byteLength) {
@@ -145,7 +150,7 @@ check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () 
     if (!asset.bundleBlockers?.length) throw new Error(`${asset.name}: bundle blocker가 없다`);
     const expected = asset.componentId.startsWith("pyodide-release-")
       ? "upstream-cdn-runtime-reference"
-      : asset.componentId === "buildroot-pyproc-i686-v1"
+      : asset.componentId === "buildroot-pyproc-i686-v2"
         ? "project-release-runtime-reference"
         : "local-test-only";
     if (asset.distribution !== expected) throw new Error(`${asset.name}: distribution은 ${expected}여야 한다(현재 ${asset.distribution})`);
@@ -173,12 +178,22 @@ check("탐지기가 문다: Buildroot release evidence 변조", () => {
   image.sha256 = "0".repeat(64);
   const tamperedBytes = Buffer.from(`${JSON.stringify(releaseAssets, null, 2)}\n`);
   const tamperedCatalog = structuredClone(catalog);
-  const component = tamperedCatalog.components.find((item) => item.componentId === "buildroot-pyproc-i686-v1");
+  const component = tamperedCatalog.components.find((item) => item.componentId === "buildroot-pyproc-i686-v2");
   component.evidenceManifest.sha256 = createHash("sha256").update(tamperedBytes).digest("hex");
   component.evidenceManifest.byteLength = tamperedBytes.byteLength;
   let caught = false;
   try { assertBuildrootReleaseEvidence(tamperedCatalog, tamperedBytes); } catch { caught = true; }
   if (!caught) throw new Error("Buildroot release evidence 음성 fixture를 놓쳤다");
+  const badLegal = structuredClone(releaseAssets);
+  badLegal.legalInfoInventory.checksumMismatches = 1;
+  const badLegalBytes = Buffer.from(`${JSON.stringify(badLegal, null, 2)}\n`);
+  const badLegalCatalog = structuredClone(catalog);
+  const badLegalComponent = badLegalCatalog.components.find((item) => item.componentId === "buildroot-pyproc-i686-v2");
+  badLegalComponent.evidenceManifest.sha256 = createHash("sha256").update(badLegalBytes).digest("hex");
+  badLegalComponent.evidenceManifest.byteLength = badLegalBytes.byteLength;
+  caught = false;
+  try { assertBuildrootReleaseEvidence(badLegalCatalog, badLegalBytes); } catch { caught = true; }
+  if (!caught) throw new Error("Buildroot legal-info inventory 음성 fixture를 놓쳤다");
 });
 check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
   const deviceRoot = join(machineRoot, "devices");

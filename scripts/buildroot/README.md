@@ -23,9 +23,9 @@ Buildroot archive 자체는 recipe의 exact SHA-256으로 별도 전달되므로
 `WARNING: the Buildroot source code has not been saved` 한 줄만 manifest의 `acceptedNotices`에
 남는다. 빌드 성공만으로 현재 catalog 자산을 자동 교체하지 않는다.
 
-2026-07-26 GitHub run `30182336754`에서 서로 독립된 두 build가 SHA-256
-`c3fc456de757e333a3fe543fb126d6aeddda19835e1a6fda187b27f1ce56a606`으로 일치했고, 2026-08-01
+2026-08-02 GitHub run `30707101027`에서 서로 독립된 두 build가 SHA-256
+`9c4f2b818986ee238c773d45240d33b6a35a9f15e32f65cc1c10b5574c12c760`으로 일치했고, 2026-08-02
 후보 이미지가 Python-Linux packet과 process cold restore probe 15/15를 통과했다. 2026-08-01
-`buildroot-pyproc-i686-v1` GitHub Release에 image, exact source archive, complete legal-info,
+`buildroot-pyproc-i686-v2` GitHub Release에 image, exact source archive, complete legal-info,
 CycloneDX, config, build/repro manifest를 함께 게시했다. `releaseAssets.json`이 7개 자산의
 이름, 크기, SHA-256을 하나로 묶고, catalog가 그 manifest 자체의 SHA-256을 고정한다.

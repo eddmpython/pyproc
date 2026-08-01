@@ -12,7 +12,7 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
-## 0.0.11 - 2026-08-01
+## 0.0.11 - 2026-08-02
 
 ### Breaking
 
@@ -45,7 +45,7 @@ Users upgrading directly from 0.0.9 must also apply the 0.0.10 migration from ro
   first visit, so important state still needs an external signed export.
 - **A project-built Linux guest.** The reproducible i686 Buildroot image, exact source archive,
   complete legal material, CycloneDX inventory, build manifest, config, and independent-build
-  receipt are published together in the `buildroot-pyproc-i686-v1` asset release. The catalog pins
+  receipt are published together in the `buildroot-pyproc-i686-v2` asset release. The catalog pins
   the guest image by hash and the Web Computer can place it on the same packet switch as Python.
 - **`pyproc/runtime` returns as a stable plumbing subpath** with `Runtime`, `bootRuntime`,
   `MemoryCapability`, `FileSystem`, `checkEnvironment`, and engine/runtime contract assertions.

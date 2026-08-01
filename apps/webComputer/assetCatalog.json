@@ -207,13 +207,13 @@
     {
       "name": "buildroot-pyproc-i686.bin",
       "sources": [
-        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-i686-v1/buildroot-pyproc-i686.bin"
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-i686-v2/buildroot-pyproc-i686.bin"
       ],
       "role": "guest-image",
-      "url": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-i686-v1/buildroot-pyproc-i686.bin",
-      "sha1": "59776d405a455dd650dbd8c9d2f2a6863add7227",
-      "sha256": "c3fc456de757e333a3fe543fb126d6aeddda19835e1a6fda187b27f1ce56a606",
-      "byteLength": 7721472,
+      "url": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-i686-v2/buildroot-pyproc-i686.bin",
+      "sha1": "a36d46069ca49da9650c3eecd2122e7a94284b35",
+      "sha256": "9c4f2b818986ee238c773d45240d33b6a35a9f15e32f65cc1c10b5574c12c760",
+      "byteLength": 7791104,
       "licenseConcluded": "NOASSERTION",
       "distribution": "project-release-runtime-reference",
       "provenanceStatus": "reproducible-project-release-with-complete-source-and-legal-material",
