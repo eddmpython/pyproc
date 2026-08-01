@@ -184,4 +184,27 @@ export async function assertElectionProtocol(check, checkAsync) {
     ctrl._acceptLeader({ epoch: 4, leaderId: "new", ready: false, recovered: false });
     if (code !== "PYPROC_RPC_OUTCOME_UNKNOWN") throw new Error(`거부 코드 ${code || "없음"}`);
   });
+
+  // S10: 승계를 건너는 순서 보존. 대기 줄은 삽입 순서를 지키므로 재전송도 호출자가 보낸
+  // 순서 그대로 나간다. 정직한 한계: "승계 중 들어온 새 명령이 줄 뒤에 선다"는 절반은 여기서
+  // 못 문다(가입하지 않은 컨트롤러는 _request의 환경 가드에서 먼저 거부된다). 그 절반의 증거는
+  // 브라우저 레인의 불멸 게이트가 실제 참가자로 들고 있다.
+  await checkAsync("election: 대기 줄은 호출자가 보낸 순서대로 재전송된다", async () => {
+    const ctrl = makeCtrl();
+    ctrl._journalDir = {};
+    ctrl._phase = "ready"; ctrl._leaderId = "old"; ctrl._epoch = 3;
+    const posted = [];
+    ctrl._chan = { postMessage: (message) => posted.push(message) };
+    for (const [id, code] of [["q/1/1", "first"], ["q/1/2", "second"], ["q/1/3", "third"]]) {
+      ctrl._pending.set(id, {
+        resolve: () => {}, reject: () => {}, timer: null, leaderId: "old", epoch: 3,
+        action: "run", payload: { code }, timeoutMs: 5000,
+      });
+    }
+    ctrl._acceptLeader({ epoch: 4, leaderId: "new", ready: false, recovered: false });
+    ctrl._acceptLeader({ epoch: 4, leaderId: "new", ready: true, recovered: true });
+    const order = posted.filter((message) => message.type === "rpcReq").map((message) => message.code);
+    if (order.join(",") !== "first,second,third") throw new Error(`순서 ${order.join(",")}`);
+    for (const entry of ctrl._pending.values()) if (entry.timer) clearTimeout(entry.timer);
+  });
 }

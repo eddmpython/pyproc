@@ -435,20 +435,26 @@ export class KernelElection {
         return result;
       }
     }
-    if (!this._leaderId || this._phase !== "ready") {
+    const replayQueued = this._journalDir && [...this._pending.values()].some((entry) => entry.awaitingLeader);
+    if (!replayQueued && (!this._leaderId || this._phase !== "ready")) {
       throw kernelError("KernelElection: no leader is available to run this", "PYPROC_LEADER_UNAVAILABLE", true);
     }
     const leaderId = this._leaderId;
     const epoch = this._epoch;
     const requestId = `${this.participantId}/${++this._seq}`;
     const timeoutMs = opts.timeoutMs || this._rpcTimeoutMs;
+    // 승계 대기 중인 요청이 있으면 새 명령도 그 뒤에 선다. 먼저 보내면 호출자가 보낸 순서와
+    // 리더가 실행한 순서가 달라진다(재전송이 나가기 전에 새 명령이 도착한다). Map은 삽입
+    // 순서를 지키므로 줄 자체가 순서의 정본이다.
+    const queuedBehindReplay = replayQueued;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = queuedBehindReplay ? null : setTimeout(() => {
         this._pending.delete(requestId);
         this._notify();
         reject(kernelError("KernelElection: the sent RPC timed out. Whether it ran is unknown, so it is not re-executed automatically", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
       }, timeoutMs);
-      this._pending.set(requestId, { resolve, reject, timer, leaderId, epoch, action, payload, timeoutMs });
+      this._pending.set(requestId, { resolve, reject, timer, leaderId, epoch, action, payload, timeoutMs, awaitingLeader: queuedBehindReplay });
+      if (queuedBehindReplay) { this._notify(); return; }
       this._post({
         type: "rpcReq",
         requestId,
