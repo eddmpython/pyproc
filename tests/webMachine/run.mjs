@@ -26,6 +26,9 @@ const ASSET_FREE = [
   // 필요 없는데(fake guest adapter + store 계약 스위트) V86_BACKED에 잘못 등재돼 있어서 CI에서
   // 한 번도 돌지 않았다(외부 감사, 2026-07-27). 크래시 안전성의 25검사가 그렇게 좌초해 있었다.
   "tests/webMachine/browser/probes/generationContractProbe.html",
+  // 이식성 계약(값 경계 표면은 이미지를 건너 살고, 블로킹 표면은 뜨는 순간 거부된다). 무자산이다:
+  // 세션 둘과 감옥만 쓴다. 브라우저 게이트 본편이 시간 예산 끝이라 전용 페이지로 세웠다.
+  "tests/webMachine/browser/probes/imagePortabilityProbe.html",
 ];
 // x86 자산이 필요한 probe. ownerSuccessorParticipant는 probe가 iframe으로 여는 참가자 페이지다.
 const V86_BACKED = [

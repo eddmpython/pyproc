@@ -2486,6 +2486,32 @@ section("북극성");
   });
 }
 
+// 4.53) 핸들 유입구 고정: JS 핸들이 파이썬 힙에 생기는 곳은 엔진의 globals.set 한 줄이어야 한다.
+//       이식성 판정(imagePortability)이 그 지점을 세기 때문이다. 우회가 새로 생기면 판정은
+//       조용히 바닥이 되고, 그것이 외부 감사가 잡은 구멍이었다. 증명할 수 없는 영역을 없앨 수는
+//       없지만(guest 파이썬의 import js, rt.raw 탈출구) **넓어지는 것은 막을 수 있다.**
+section("핸들 유입구");
+{
+  // 승인된 예외는 이 표가 정본이고, 늘리려면 이 줄을 고치는 것이 곧 심사다.
+  const approved = new Map([
+    ["src/runtime/engines/pyodideEngine.js", "계수 지점 그 자체(판정의 정본)"],
+    ["src/processOs/worker.js", "워커 커널에는 Runtime 래퍼가 없다(태스크 인자/REPL 소스 주입). 이 커널은 이미지를 쓰지 않는다: fork는 델타이지 이미지가 아니다"],
+  ]);
+  const offenders = [];
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    const path = rel(f);
+    const code = stripComments(readFileSync(f, "utf8"));
+    if (!code.includes("globals.set(")) continue;
+    if (!approved.has(path)) offenders.push(path);
+  }
+  check("파이썬 힙에 핸들을 심는 곳은 승인된 지점뿐이다", () => {
+    if (offenders.length) throw new Error(`승인 밖 globals.set: ${offenders.join(", ")}`);
+    for (const [path] of approved) {
+      if (!existsSync(join(ROOT, path))) throw new Error(`승인 목록의 죽은 항목: ${path}`);
+    }
+  });
+}
+
 // 4.54) export 도달성: src가 export하는 이름은 자기 파일 밖에서 소비되거나 공개 표면에 등재돼야
 //       한다. 아무도 안 부르는 export는 두 가지를 동시에 판다. (1) 파일 경계가 실제보다 넓어 보여
 //       리팩터가 "이건 밖에서 쓰니 못 고친다"고 잘못 판단하고, (2) 죽은 코드가 계약처럼 읽힌다.

@@ -1,0 +1,92 @@
+<!doctype html>
+<!--
+이식성 계약의 전용 페이지. 브라우저 게이트 본편에 붙이려다 시간 예산을 넘겼고(부팅 둘을 더하니
+240s 러너 타임아웃), 그래서 계약 실태 표가 "감옥의 이미지 왕복에 CI 증거가 없다"를 부채로 들고
+있었다. 이 페이지가 그 행을 닫는다.
+
+무는 것: 값 경계로 옮긴 표면은 이미지를 건너 살고(감옥), 옮길 수 없는 블로킹 표면은 이미지를
+쓰는 순간 거부되며(syscall 다리), 승인 경로는 실제로 열린다. 세 주장이 한 페이지에 있는 이유는
+셋이 같은 계약의 세 면이기 때문이다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>image portability probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "처리되지 않은 promise", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>이미지 이식성 계약</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { bootSession, openMachine } from "../../../../src/session/session.js";
+  import { MachineJail } from "../../../../src/capabilities/machineJail.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+
+  const params = new URLSearchParams(location.search);
+  const indexURL = params.get("indexURL") || undefined;
+  const bootOptions = { ...(indexURL ? { indexURL } : {}) };
+
+  try {
+    const started = performance.now();
+    // 씨앗 하나로 세 주장을 전부 잰다: 부팅 비용이 이 페이지의 전부이므로 부팅을 늘리지 않는다.
+    const seed = await bootSession(bootOptions);
+    new MachineJail({ net: ["api.example.com"], home: true }).install(seed.rt);
+    const seedAllows = seed.rt.run("import pyprocJail\npyprocJail.net('api.example.com')");
+
+    // (1) 감옥은 값 경계다: 승인 없이 이미지가 떠야 한다. 옮기기 전(setGlobal 콜백)이었다면
+    //     이 줄이 PYPROC_IMAGE_PROXY_SURFACE로 거부됐다.
+    const image = await seed.exportImage();
+    check("값 경계 표면(감옥)은 승인 없이 이미지를 뜬다", image instanceof Blob && image.size > 0, `${image.size}B`);
+
+    // (2) 그리고 부활한 커널에서 판정이 그대로 산다. 옮기기 전이었다면 여기서 트랩했다.
+    const revived = await openMachine(image, { trust: true });
+    const revivedAllows = revived.rt.run("import pyprocJail\npyprocJail.net('api.example.com')");
+    let denied = "";
+    try { revived.rt.run("pyprocJail.net('evil.example.com')"); }
+    catch (error) { denied = String(error?.message || error).slice(-60); }
+    check("감옥 판정이 이미지를 건너 그대로 산다(허용과 거부 양쪽)",
+      seedAllows === true && revivedAllows === true && denied.includes("no net permission"),
+      `seed ${seedAllows}, revived ${revivedAllows}, deny "${denied}"`);
+
+    // (3) 옮길 수 없는 표면은 뜨는 순간 거부되고, 승인 경로는 실제로 열린다. 핸들을 심는 방식은
+    //     블로킹 표면과 같다(함수 값). 거부가 이름을 말하는지까지 본다: 무엇을 고쳐야 하는지가
+    //     메시지에 없으면 그 거부는 사고 통보이지 계약이 아니다.
+    revived.rt.setGlobal("blockingBridge", () => 1);
+    let refusedCode = "";
+    let refusedNames = false;
+    try { await revived.exportImage(); }
+    catch (error) { refusedCode = error?.code || ""; refusedNames = String(error?.message || "").includes("blockingBridge"); }
+    const acknowledged = await revived.exportImage({ allowHostProxies: true });
+    check("핸들이 심긴 힙은 거부되고 그 표면 이름을 말한다(승인 시 통과)",
+      refusedCode === "PYPROC_IMAGE_PROXY_SURFACE" && refusedNames && acknowledged instanceof Blob && acknowledged.size > 0,
+      `${refusedCode}, 이름 ${refusedNames}, 승인 ${acknowledged?.size || 0}B`);
+    timings.portabilityMs = Math.round(performance.now() - started);
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-400));
+  }
+
+  await report();
+</script>
+</body>
+</html>
