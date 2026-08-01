@@ -873,7 +873,7 @@ section("state 커널");
 {
   // 순수 집합: 커널은 브라우저 저장·전역 관심사를 모른다. backend(OPFS/IndexedDB)와 정책은
   // 전부 위에서 주입된다. 이 불변식이 무너지면 통합이 결합으로 역전된다(god layer).
-  const PURE_STATE = ["objectModel.js", "refProtocol.js", "signedTag.js", "memoryStateStore.js"];
+  const PURE_STATE = ["objectModel.js", "refProtocol.js", "signedTag.js", "memoryStateStore.js", "outcomeLog.js"];
   const BROWSER_GLOBAL = /\b(navigator|window|document|indexedDB|localStorage|sessionStorage|crossOriginIsolated)\b|globalThis\.crypto|\bfetch\s*\(/;
   for (const name of PURE_STATE) {
     check(`state 순수 집합: ${name} 브라우저 전역 0`, () => {
@@ -2096,6 +2096,60 @@ section("export 도달성");
 //       머신 집합)의 법. 소비자 앱이 이 동사들을 다시 구현하면 계약이 두 곳에 살고 오류 어휘가
 //       갈라진다(실제로 갈라져 있었다: 앱은 new Error, 커널은 WebMachineError). adoptMachines가
 //       그 사본의 유일한 존재 이유였으므로, 그 동사의 법을 여기서 문다.
+// 4.52) 결과 기록: 정확히 한 번의 수렴이 서는 자리. 순수 코덱이라 WASM 없이 전부 문다.
+//       핵심 판정 하나: 실릴 수 없는 결과는 조용히 잘리는 대신 **기록되지 않는다**. 잘린 결과를
+//       세대가 나르면 승계자가 "됐다"고 답하면서 다른 값을 준다(가장 나쁜 실패다).
+section("결과 기록");
+{
+  const log = await import(pathToFileURL(join(ROOT, "src", "state", "outcomeLog.js")).href);
+  const record = (requestId, extra = {}) => ({ requestId, epoch: 1, action: "run", ok: true, result: 42, at: 0, ...extra });
+  check("결과 기록 왕복: 인코딩한 것이 그대로 돌아온다", () => {
+    const records = log.appendOutcomeRecord([], record("a/1/1"));
+    const back = log.decodeOutcomeLog(log.encodeOutcomeLog(records));
+    if (back.length !== 1 || back[0].requestId !== "a/1/1" || back[0].result !== 42) throw new Error(JSON.stringify(back));
+    if (log.findOutcome(back, "a/1/1")?.ok !== true) throw new Error("findOutcome이 답을 못 찾는다");
+    if (log.findOutcome(back, "a/1/2")) throw new Error("없는 요청에 답을 지어냈다");
+  });
+  check("첫 결과가 정본이다(같은 requestId를 덮지 않는다)", () => {
+    let records = log.appendOutcomeRecord([], record("a/1/1", { result: 1 }));
+    records = log.appendOutcomeRecord(records, record("a/1/1", { result: 2 }));
+    if (records.length !== 1 || records[0].result !== 1) throw new Error(JSON.stringify(records));
+  });
+  check("링 상한: 오래된 기록부터 밀려난다", () => {
+    let records = [];
+    for (let at = 0; at < log.OUTCOME_LOG_MAX_RECORDS + 5; at += 1) records = log.appendOutcomeRecord(records, record(`a/1/${at}`));
+    if (records.length !== log.OUTCOME_LOG_MAX_RECORDS) throw new Error(`길이 ${records.length}`);
+    if (log.findOutcome(records, "a/1/0")) throw new Error("상한을 넘겼는데 가장 오래된 것이 남았다");
+  });
+  check("실릴 수 없는 결과는 기록하지 않는다(자르지 않는다)", () => {
+    const circular = {};
+    circular.self = circular;
+    if (log.isRecordable(record("a/1/1", { result: circular }))) throw new Error("순환 참조를 실을 수 있다고 했다");
+    if (log.appendOutcomeRecord([], record("a/1/1", { result: circular })).length) throw new Error("실을 수 없는 것을 기록했다");
+    const huge = "x".repeat(log.OUTCOME_RECORD_MAX_BYTES + 1);
+    if (log.appendOutcomeRecord([], record("a/1/2", { result: huge })).length) throw new Error("상한 초과를 기록했다");
+  });
+  check("파손된 기록은 큰 소리로 거부한다", () => {
+    const codes = [];
+    for (const bytes of [
+      new TextEncoder().encode('{"kind":"other","version":1,"records":[]}'),
+      new TextEncoder().encode('{"kind":"outcomeLog","version":9,"records":[]}'),
+      new TextEncoder().encode('{"kind":"outcomeLog","version":1,"records":[{"ok":true}]}'),
+      new TextEncoder().encode("not json"),
+    ]) {
+      try { log.decodeOutcomeLog(bytes); codes.push("없음"); }
+      catch (error) { codes.push(error.code); }
+    }
+    if (codes.some((code) => code !== "PYPROC_STATE_CORRUPT")) throw new Error(codes.join(","));
+    if (log.decodeOutcomeLog(new Uint8Array(0)).length !== 0) throw new Error("빈 바이트는 빈 목록이어야 한다");
+  });
+  check("requestId 없는 기록은 입력 계약 위반이다", () => {
+    let code = "";
+    try { log.appendOutcomeRecord([], { ok: true }); } catch (error) { code = error.code; }
+    if (code !== "PYPROC_INPUT_INVALID") throw new Error(code);
+  });
+}
+
 section("컴퓨터 조립");
 {
   const { createWebComputer } = await import(pathToFileURL(join(ROOT, "src", "machine", "index.js")).href);
