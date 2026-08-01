@@ -13,7 +13,7 @@ pyproc의 수치 속도 답은 vertical(빠른 단일 인터프리터, 벽에 �
 | 행블록 샤딩 matmul이 선형 배속을 내나 | [shardMatmulProbe.html](shardMatmulProbe.html) | P워커 speedup(단일워커 대비) >= 0.7P + 샤딩 결과 == 단일워커 결과(수치 동등) + 전송비 정직 보고 |
 | matmul 밖 op는 어디서 이기고 지나(손익분기) | [shardOpsProbe.html](shardOpsProbe.html) | 리덕션·ufunc 정확성(==단일) + compute-bound(sin)는 이김 + 작은 배열은 진다(손익분기 실측·문서화) |
 
-승격 조건: 위 게이트 GREEN 후 `PyProc` 표면에 2D/matmul + 병렬 op(mapArray 차원 확장). 정확한 표면은 probe와 [공개 소비 계약](../../../docs/consuming/contract.md)으로 확정한다.
+승격 조건: 위 게이트 GREEN 후 `PyProc` 표면에 2D/matmul + 병렬 op(mapArray 차원 확장). 정확한 표면은 probe와 [공개 패키지 계약](../../../docs/consuming/contract.md)으로 확정한다.
 
 ## 자산 / 재현
 

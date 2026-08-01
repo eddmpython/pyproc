@@ -96,7 +96,7 @@ export class ReactiveController {
   // 전제는 파일 상단의 "실행 경계 계약" 참조. 성장 처리: 현재 힙이 목표보다 크면 목표 범위
   // 밖 페이지도 base로 되돌려야 dlmalloc/break 정합이 깨지지 않는다. liveH.length 기준 순회.
   // opts.rehash: 경계 계약이 깨졌을 수 있으면(실행 중 예외 = checkpoint 없이 더러워진 힙)
-  // 저장 해시 대신 현재 힙을 재해시해 비교한다(dartlab 노트북 런타임에서 흡수, 2026-07-11).
+  // 저장 해시 대신 현재 힙을 재해시해 비교한다(브라우저 노트북 실측, 2026-07-11).
   restoreLive(j, savedSP, opts = {}) {
     this._requireNode(j, "restoreLive");
     const mem = this._mem, targetH = this.hashes[j];

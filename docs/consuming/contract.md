@@ -1,10 +1,10 @@
-# Consumption contract - how a product takes pyproc as a dependency
+# Package contract - installation, public surface, and runtime boundaries
 
-pyproc becomes an SSOT through **actual imports**, not through references. This document is the contract with consumers: codaro, dartlab, xlpod, and external users.
+This document defines the install, import, type, asset, and runtime boundaries of the published package.
 
 The roles are split.
 
-- This document: install, version pinning, import boundaries, runtime-asset deployment, runtime consistency, per-consumer wiring status.
+- This document: install, version pinning, import boundaries, runtime-asset deployment, and runtime consistency.
 - [capabilityMatrix.md](capabilityMatrix.md): per-capability product value, status, prerequisites, runnable surface, verification, boundaries.
 - [trustPermissions.md](trustPermissions.md): `.pymachine` public keys, signer fingerprints, the permission UI.
 - [resumeCatalog.md](resumeCatalog.md): policy for reopening product resources after a revival.
@@ -24,7 +24,7 @@ The roles are split.
 
 ## Public import boundary
 
-Consumers use only the public package entry and the stable subpaths. The per-capability export list and product judgments are canonical in [capabilityMatrix.md](capabilityMatrix.md); the type contract is the bundled `index.d.ts`.
+Only the public package entry and stable subpaths are supported. The per-capability export list is canonical in [capabilityMatrix.md](capabilityMatrix.md); the type contract is the bundled `index.d.ts`.
 
 | Specifier | Purpose |
 | --- | --- |
@@ -158,67 +158,60 @@ A request still waiting for a ready leader has not crossed the send boundary: `P
 
 **Virtual origin boundaries (the honest wall)**: these are synthetic SW responses, so they differ from a real origin. `tests/attempts/runtimeParity/virtualOriginBoundaryProbe.html` keeps measuring this boundary in a browser. (1) `Set-Cookie` is not exposed as a response header and is not stored. Do not depend on cookie sessions; use explicit tokens such as an `Authorization` header, a bearer token, or a signed URL. (2) A WebSocket upgrade is not intercepted by the Service Worker fetch event, so it never reaches ASGI dispatch. Design bidirectional streams with a separate relay or the SocketBridge family. (3) For streaming and SSE, `AsgiServer` accumulates the `http.response.body` chunks and returns one `Response`, so a product needing chunk-by-chunk UI updates must not depend on this path. (4) Endpoints must be `async def`; there is no synchronous dispatch.
 
-After a revival - journal, session, or image open - process resources such as file handles and DB connections are not guaranteed by a heap delta alone. A `.pymachine` restores the Python heap and the `/home/web` file bytes, but open file descriptors, sockets, and DB connections must be reopened, so the consumer calls `Init.resume(reason)` to run `/home/web/resume.py` and reopen them. Per-product policy is canonical in [resumeCatalog.md](resumeCatalog.md). A signature is provenance verification, not a sandbox permission grant, so public-key distribution and the permission UI are managed separately; that policy is canonical in [trustPermissions.md](trustPermissions.md).
+After a revival - journal, session, or image open - process resources such as file handles and DB connections are not guaranteed by a heap delta alone. A `.pymachine` restores the Python heap and the `/home/web` file bytes, but open file descriptors, sockets, and DB connections must be reopened through `Init.resume(reason)` and `/home/web/resume.py`. The resource policy is canonical in [resumeCatalog.md](resumeCatalog.md). A signature is provenance verification, not a sandbox permission grant, so public-key distribution and the permission UI are managed separately; that policy is canonical in [trustPermissions.md](trustPermissions.md).
 
 ## Contract verification
 
 - `npm test` checks that `package.json` exports expose only approved stable specifiers, that the public examples consume only the root API or subpath exports, and that `index.d.ts` covers the public type contract.
-- `npm run test:consumer` verifies the installed-package contract from a browser app that has no repo-relative imports and exposes only the installed `node_modules/pyproc`.
-- That same consumer gate exercises `DeviceFs` file devices, the `JobControl` job lifecycle, the `MachineContainer` child-machine lifecycle, `MachineJournal` commit and recover, a force-removed `open({ persistent })` leader across three independent browsing contexts with a cold reopen of heap plus `/home/web` plus prepared environment, the permission-jail manifest, signed `.pymachine` export and open, trusted public key and wrong-key rejection, signer fingerprints, and reopening a SQLite connection from `/home/web/resume.py`.
+- `npm run test:consumer` verifies the installed-package contract from an isolated browser fixture that has no repo-relative imports and exposes only the installed `node_modules/pyproc`.
+- That installed-package browser gate exercises `DeviceFs` file devices, the `JobControl` job lifecycle, the `MachineContainer` child-machine lifecycle, `MachineJournal` commit and recover, a force-removed `open({ persistent })` leader across three independent browsing contexts with a cold reopen of heap plus `/home/web` plus prepared environment, the permission-jail manifest, signed `.pymachine` export and open, trusted public key and wrong-key rejection, signer fingerprints, and reopening a SQLite connection from `/home/web/resume.py`.
 - `pyproc/runtime` is the public Runtime wrapper from 0.0.11. The internal `runtime.js` core handles only the engine wrapper and `Runtime.fs`; the composition root `src/composition/runtimeApi.js` installs the `runtimeBindings.js` registry to provide opt-in capability factories such as `enableReactive`.
 - The `restoreLive` execution boundary is machine-verified. Respect the boundary and restore is immediate with zero rehashing; violate it and the violation is detected automatically and promoted to the rehash path. Check which path ran through the returned `rehashed`.
 
-### Installed-package consumer gate coverage
+### Installed-package browser gate coverage
 
-`npm run test:package` and `npm run test:consumer` look only at the installed tarball's public specifiers, never at doc links or repo-relative imports. This table is the consumption surface actually verified against the installed package. The table data is canonical in [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs).
+`npm run test:package` and `npm run test:consumer` look only at the installed tarball's public specifiers, never at doc links or repo-relative imports. This table is the public surface actually verified against the installed package. The table data is canonical in [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs).
 
 | Gate | Exposed specifiers | Actual public surface | Contract verified |
 | --- | --- | --- | --- |
-| package consumer | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine` | `boot`, `open`, `createWebComputer`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, a `commitState`/`openState` kernel round trip, `pyproc-assets` bin | package exports, stable subpath, `index.d.ts`, npm files, CLI graph copy and SRI manifest |
-| product consumer - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | An asset manifest rooted at `/node_modules/pyproc/`, worker graph SRI, registration of the installed `pyprocSw.js`, and rejection of a bad worker SRI before spawn |
-| product consumer - runtime/server | `pyproc` | `boot`, the machine runtime's `enableAsgiServer`, ASGI delegation wiring of the installed `pyprocSw.js` | Machine boot from the installed package, a Python ASGI app, a `fetch("/pyproc/...")` virtual-origin round trip, the S3 timing source |
-| product consumer - device filesystem | `pyproc` | machine runtime `enableDeviceFs` | Reading and writing `/dev/productState` and `/proc/meminfo` through the Python `open()` file contract on an installed-package machine |
-| product consumer - process OS | `pyproc` | the machine's `proc()` pool | Running pool `map` and `terminate` on the installed worker graph, rejection of a bad worker SRI before spawn, and no collision between the SRI and the ASGI Service Worker prefix |
-| product consumer - shell jobs | `pyproc` | `fork`/`repl`/`signal` on a `proc({ replay })` pool | Building an interactive namespace on the installed worker graph and running the `expr &`, `fg`, `kill`, `terminate` job lifecycle |
-| product consumer - machine container | `pyproc` | child kernels of the machine's `proc()` (a `setup` manifest plus `exec`/`kill`) | Spawning, running, measuring heapLen, killing a child machine on the installed worker graph, and rejecting calls after the kill |
-| product consumer - crash resume | `pyproc` | `boot({ deterministic: true })`, machine `history.commit`/`history.recover` | Leaving a reactive boundary on an installed-package `deterministic` machine with `history.commit()` and recovering product state in a new machine with `history.recover()` |
-| product consumer - immortal python machine | `pyproc` | `open({ persistent })`, the `KernelElection` handle | Three independent browsing contexts of the installed package sharing one Python state and prepared environment, confirming participant request IDs never collide and late responses are discarded, then continuing execution after the leader is force-removed through persistent epoch succession and recovery of heap plus `/home/web` from OPFS, and reopening from the last commit and the manifest environment after every context has closed |
-| product consumer - product policy | `pyproc` | the machine `runtime` escape hatch (the `setGlobal` chokepoint plus the CSP `connect-src`) | Enforcement of a product permission manifest (`net=false`, `clipboard=false`, `home=true`, `workers=false`) and of the Python chokepoints |
-| product consumer - portable machine | `pyproc`, `pyproc/history` | `boot({ deterministic: true })`, `open(blob)`, `createStateKeyPair`, `exportStatePublicKey`, `fingerprintStatePublicKey`, machine `history.export({ signingKey })`, Runtime `enableInit` | Signed `.pymachine` plus `/home/web` export, signer fingerprint, untrusted and wrong-key rejection, trusted open, reopening the `resume.py` SQLite resource, the S4 timing source |
-| product consumer - web computer | `pyproc` | `createWebComputer` | Assembling a browser computer from the installed package alone: booting the Python guest, running code, and stopping the whole thing |
+| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine` | `boot`, `open`, `createWebComputer`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, a `commitState`/`openState` kernel round trip, `pyproc-assets` bin | package exports, stable subpath, `index.d.ts`, npm files, CLI graph copy and SRI manifest |
+| installed package - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | An asset manifest rooted at `/node_modules/pyproc/`, worker graph SRI, registration of the installed `pyprocSw.js`, and rejection of a bad worker SRI before spawn |
+| installed package - runtime/server | `pyproc` | `boot`, the machine runtime's `enableAsgiServer`, ASGI delegation wiring of the installed `pyprocSw.js` | Machine boot from the installed package, a Python ASGI app, a `fetch("/pyproc/...")` virtual-origin round trip, the S3 timing source |
+| installed package - device filesystem | `pyproc` | machine runtime `enableDeviceFs` | Reading and writing `/dev/productState` and `/proc/meminfo` through the Python `open()` file contract on an installed-package machine |
+| installed package - process OS | `pyproc` | the machine's `proc()` pool | Running pool `map` and `terminate` on the installed worker graph, rejection of a bad worker SRI before spawn, and no collision between the SRI and the ASGI Service Worker prefix |
+| installed package - shell jobs | `pyproc` | `fork`/`repl`/`signal` on a `proc({ replay })` pool | Building an interactive namespace on the installed worker graph and running the `expr &`, `fg`, `kill`, `terminate` job lifecycle |
+| installed package - machine container | `pyproc` | child kernels of the machine's `proc()` (a `setup` manifest plus `exec`/`kill`) | Spawning, running, measuring heapLen, killing a child machine on the installed worker graph, and rejecting calls after the kill |
+| installed package - crash resume | `pyproc` | `boot({ deterministic: true })`, machine `history.commit`/`history.recover` | Leaving a reactive boundary on an installed-package `deterministic` machine with `history.commit()` and recovering product state in a new machine with `history.recover()` |
+| installed package - immortal python machine | `pyproc` | `open({ persistent })`, the `KernelElection` handle | Three independent browsing contexts of the installed package sharing one Python state and prepared environment, confirming participant request IDs never collide and late responses are discarded, then continuing execution after the leader is force-removed through persistent epoch succession and recovery of heap plus `/home/web` from OPFS, and reopening from the last commit and the manifest environment after every context has closed |
+| installed package - permission policy | `pyproc` | the machine `runtime` escape hatch (the `setGlobal` chokepoint plus the CSP `connect-src`) | Enforcement of a product permission manifest (`net=false`, `clipboard=false`, `home=true`, `workers=false`) and of the Python chokepoints |
+| installed package - portable machine | `pyproc`, `pyproc/history` | `boot({ deterministic: true })`, `open(blob)`, `createStateKeyPair`, `exportStatePublicKey`, `fingerprintStatePublicKey`, machine `history.export({ signingKey })`, Runtime `enableInit` | Signed `.pymachine` plus `/home/web` export, signer fingerprint, untrusted and wrong-key rejection, trusted open, reopening the `resume.py` SQLite resource, the S4 timing source |
+| installed package - web computer | `pyproc` | `createWebComputer` | Assembling a browser computer from the installed package alone: booting the Python guest, running code, and stopping the whole thing |
 
 ## Direction and boundaries
 
-- Dependency flows **one way: products depend on pyproc**. pyproc imports no consuming product.
-- Product UI and domain logic do not go into pyproc. pyproc provides runtime and capabilities only.
+- Package-internal paths are private. Only root and documented subpath exports are public.
+- UI and domain logic do not go into pyproc. pyproc provides runtime and capabilities only.
 - Support: Chromium/Edge only (JSPI + SharedArrayBuffer + crossOriginIsolated). The page needs COOP/COEP headers.
 
 ## Runtime consistency (hard constraints)
 
-- Default Pyodide: **v314.0.2 (CPython 3.14)**, loaded from a CDN by default. While a consuming product still runs its own Pyodide code alongside (xlpod), it must stay on the same version for the migration to hold.
+- Default Pyodide: **v314.0.2 (CPython 3.14)**, loaded from a CDN by default. A supplied Pyodide loader must resolve the same version.
 - **Self-hosting (distribution independence)**: CDN availability and policy are outside our control, so the whole distribution point can be moved. `npm run fetch:engine` prepares the full distribution (core plus every package wheel, 426MB) from GitHub Releases into `vendor/pyodide/`, and you consume it with `boot({ indexURL: "/vendor/pyodide/" })` - zero CDN traffic even for package installs and lock resolution. The full gate runs on the same switch: `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:browser` (measured 2026-07-13: 39/39 GREEN on the self-hosted path, with offlineBoot and swOffline re-measured GREEN). `indexURL` is recorded as a property of the booting kernel, so child workers (subprocess) use the same point and nothing leaks to a CDN.
 - **Boot asset SRI (v2)**: `engineScriptIntegrity` attaches a standard `sha256-...` SRI to the `pyodide.js` script tag pyproc injects. `coreIntegrity` verifies the fetch-path indexURL assets (wasm, stdlib, lock, wheels) against the same SRI manifest, and in strict mode - the default - a missing manifest entry or a tampered OPFS cache converges to a boot failure. `assetIntegrity` fetches and SHA-256 verifies the local import graph of pyproc's Worker, SharedWorker, and WASI worker before spawn. `registerPyProcServiceWorker()` binds the Service Worker registration file to the same manifest, and the `coreIntegrity` mode of `pyprocSw.js` verifies, at the SW fetch event, even the Pyodide internal modules that a browser dynamic import pulls in outside the JavaScript `fetch` wrapper. Measured: `runtimeIntegrityProbe.html` GREEN 6/6; the Node gate's asset integrity preflight and assetManifest CLI GREEN; the browser gate's Service Worker registration path and SW `coreIntegrity` verification GREEN.
-- **The WASI session (bootWasi/WasiSession) is a separate async surface on the `pyproc/wasi` subpath.** It was added additively, independent of the Pyodide-based surfaces (boot/Runtime/PyProc/ReactiveController), so existing consumers are unaffected. It is an opt-in for proving engine independence, and the consumer provides `wasmURL` (self-hosted under COOP/COEP). Constraints: the value bridge is JSON-serializable only (no FFI), native extensions are impossible (static linking), and a cross-engine `.pymachine` is not possible. For production Python the Pyodide surface is canonical.
-- Bundler contract: types resolve under `moduleResolution: "Bundler"` with `allowJs: false`, and Vite emits `new Worker(new URL(...))` as a worker chunk (verified in three stages in codaro).
+- **The WASI session (bootWasi/WasiSession) is a separate async surface on the `pyproc/wasi` subpath.** It is additive and independent of the Pyodide-based surfaces (boot/Runtime/PyProc/ReactiveController). It is an opt-in for proving engine independence, with `wasmURL` supplied by the caller and self-hosted under COOP/COEP. Constraints: the value bridge is JSON-serializable only (no FFI), native extensions are impossible (static linking), and a cross-engine `.pymachine` is not possible. For production Python the Pyodide surface is canonical.
+- Bundler contract: types resolve under `moduleResolution: "Bundler"` with `allowJs: false`, and Vite emits `new Worker(new URL(...))` as a worker chunk under the installed-package gate.
 
-## Per-consumer wiring status
+## Package surface boundary
 
-Read-only audit date: **2026-08-01**. These rows describe executable imports, package locks, and product
-browser gates in the sibling repositories, not intended roadmaps. No sibling currently imports the
-`pyproc/runtime` subpath; 0.0.11 makes it available for future self-booted-engine consumers.
-
-| Consumer | Status |
-|---|---|
-| dartlab | **Live exact-release consumer.** `package.json` and its lock pin registry `pyproc` **0.0.10** with tarball integrity. The notebook worker imports the root `pyproc`, calls `boot()`, and uses `machine.runtime`, `machine.history`, and `machine.proc()`. Its pin-bump workflow runs a smoke gate, type/unit/build checks, and a real Chromium product gate before proposing a review PR |
-| xlpod | **Live exact-release consumer.** Its package and lock pin registry `pyproc` **0.0.10** with integrity. The worker imports root `pyproc`, calls `boot()`, and uses `machine.runtime` and `machine.proc()`. Product gates cover process offload, OPFS warm boot, and Python after the server is disabled. Its workflow is manually dispatched, and two sibling comments/doc passages still incorrectly claim a `pyproc/runtime` import; executable code does not |
-| codaro | **Immutable legacy-SHA consumer, migration required.** It pins `a7fc83906cfa7bf24c009c8631043738423fa84a` (package metadata 0.0.9) and assumes that root `boot()` returns a `Runtime`, the contract at that SHA. Product browser gates cover asset SRI, `Runtime.fs`, and ASGI. Runtime code imports the root, but one asset-build script and one audit test read package-internal `src` files. Moving it to the current machine contract requires `machine.runtime` plus public asset APIs; merely replacing the pin would break it. Its browser gates are not CI-required |
+This repository records only the package contract and its executable gates. Root `boot()` returns a
+`PyprocMachine`; `pyproc/runtime` provides Runtime-only boot and loaded-engine adoption; the
+public `pyproc-assets` executable emits hosted runtime assets. Package-internal paths are never public.
 
 ## Adopting a self-booted Pyodide (optional pattern)
 
 If a worker already has a self-booted Pyodide, adopt that instance rather than calling pyproc's `boot()` a second time:
 
-This pattern imports `pyproc/runtime`, available from 0.0.11. The 2026-08-01 sibling audit found no
-current consumer of this pattern; dartlab and xlpod both use root `boot()` today.
+This pattern imports `pyproc/runtime`, available from 0.0.11.
 
 ```js
 // In a worker that already owns a self-booted Pyodide

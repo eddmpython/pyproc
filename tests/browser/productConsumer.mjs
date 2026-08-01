@@ -1,4 +1,4 @@
-// tests/browser/productConsumer.mjs - 설치된 npm 패키지를 실제 브라우저 앱처럼 소비하는 게이트.
+// tests/browser/productConsumer.mjs - 설치된 npm 패키지의 공개 표면을 검증하는 브라우저 게이트.
 // repo 상대 import가 아니라 npm pack으로 설치된 node_modules/pyproc만 브라우저에 노출한다.
 import { createServer } from "node:http";
 import { existsSync, rmSync } from "node:fs";
@@ -43,7 +43,7 @@ const html = `<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <title>pyproc product consumer gate</title>
+  <title>pyproc installed-package browser gate</title>
   <script type="importmap">
     {
       "imports": {
@@ -294,7 +294,7 @@ const html = `<!DOCTYPE html>
 
       // MachineJail 클래스 직수출 폐지: 제품 permission manifest를 machine.runtime 탈출구의
       // 협조 choke point(setGlobal + Python 모듈 주입)와 CSP connect-src 문자열로 집행한다
-      // (감옥 패턴의 문면 계약: 소비 계약 문서 trustPermissions 참조).
+      // (감옥 패턴의 문면 계약: 패키지 계약 문서 trustPermissions 참조).
       const jailPermissions = { net: false, clipboard: false, home: true, workers: false };
       const jailAllows = (perm, arg) => perm === "net"
         ? jailPermissions.net === true || (Array.isArray(jailPermissions.net) && jailPermissions.net.includes(arg))
@@ -565,7 +565,7 @@ try {
   const url = `http://127.0.0.1:${server.address().port}/${indexQuery}`;
   const session = launchBrowser(url, { prefix: "pyprocProduct-" });
 
-  console.log(`pyproc 제품 소비자 게이트\n  browser: ${session.browser}\n  url:     ${url}\n`);
+  console.log(`pyproc 설치 패키지 브라우저 게이트\n  browser: ${session.browser}\n  url:     ${url}\n`);
   const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);
   const result = await reportPromise;
   clearTimeout(timeout);
@@ -579,7 +579,7 @@ try {
   }
   const coverageOk = JSON.stringify(result.coverageManifest) === COVERAGE_MANIFEST_JSON;
   for (const c of result.checks) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.name}${c.info ? " (" + c.info + ")" : ""}`);
-  console.log(`  ${coverageOk ? "PASS" : "FAIL"} product consumer coverage manifest${coverageOk ? ` (${COVERAGE_MANIFEST.rows.length} rows)` : ""}`);
+  console.log(`  ${coverageOk ? "PASS" : "FAIL"} installed-package coverage manifest${coverageOk ? ` (${COVERAGE_MANIFEST.rows.length} rows)` : ""}`);
   if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
   const passCount = result.checks.filter((c) => c.pass).length + (coverageOk ? 1 : 0);
   const totalCount = result.checks.length + 1;

@@ -5,7 +5,7 @@
 <body>
 <h1>probe: requests가 진짜로 도나 (pyodide-http 흡수)</h1>
 <p>파이썬 생태계의 표준 HTTP는 urllib이 아니라 requests다. pyodide-http의 patch_all이
-requests를 동기 XHR로 배선한다(dartlab 체크리스트의 requests 계열 항목). 실측으로 판정.</p>
+requests를 동기 XHR로 배선하고 실측으로 판정한다.</p>
 <pre id="out">실행 중...</pre>
 <script type="module">
   import { boot } from "../../../index.js";

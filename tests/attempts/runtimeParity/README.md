@@ -14,9 +14,9 @@
 | 64비트급 해시가 여전히 싼가 | [soundnessProbe.html](soundnessProbe.html) | 이중 해시 비용 <= 단일의 2.2배, 절대치 <= 150ms -> 이중 해시 승격 |
 | 시스템콜을 실제로 빌릴 수 있나 | [syscallProbe.html](syscallProbe.html) | 동기 input + urllib 실 GET 필수 PASS -> v1 승격. JSPI/subprocess는 능력 보고 |
 | 탭이 진짜 터미널이 되나 | [terminalProbe.html](terminalProbe.html) | REPL 시맨틱 + REPL 안 `input()` 블로킹 재개 -> Terminal 능력 계약으로 승격 |
-| 예외로 더러워진 힙을 안전 복원할 수 있나 | [exceptionRestoreProbe.html](exceptionRestoreProbe.html) | 결함 재현 + rehash 복원 정확 -> `restoreLive({rehash})` 승격 (dartlab 흡수) |
-| dartlab 스택이 v314에서 도는가 (이관 관문) | [versionParityProbe.html](versionParityProbe.html) | fastapi/pydantic/polars/numpy/requests 설치·import 성공률 보고 |
-| FastAPI가 커널 안에서 소켓 0으로 도는가 | [asgiProbe.html](asgiProbe.html) | GET 200 + POST 검증 200/422 -> `AsgiServer` 능력 승격 (dartlab 흡수) |
+| 예외로 더러워진 힙을 안전 복원할 수 있나 | [exceptionRestoreProbe.html](exceptionRestoreProbe.html) | 결함 재현 + rehash 복원 정확 -> `restoreLive({rehash})` 승격 |
+| 대표 패키지 스택이 v314에서 도는가 | [versionParityProbe.html](versionParityProbe.html) | fastapi/pydantic/polars/numpy/requests 설치·import 성공률 보고 |
+| FastAPI가 커널 안에서 소켓 0으로 도는가 | [asgiProbe.html](asgiProbe.html) | GET 200 + POST 검증 200/422 -> `AsgiServer` 능력 승격 |
 | 행 워커를 kill 없이 회수할 수 있나 | [interruptProbe.html](interruptProbe.html) | SIGINT 수렴 + 같은 워커 재사용 -> `interrupt(pid)` 승격 |
 | 대표 라이브러리가 얼마나 깔리나 | [libCoverageProbe.html](libCoverageProbe.html) | 대표군 설치·import 성공률 실측(성공/실패 분류가 산출물) |
 | 기준 힙을 RAM 밖(OPFS)에 둘 수 있나 | [opfsCheckpointProbe.html](opfsCheckpointProbe.html) | 쓰기/읽기 처리량 + 로드본 복원 정확 -> `saveBase`/`loadBase` 승격 |
@@ -34,15 +34,15 @@
 | 2026-07-11 | soundnessProbe | Edge headless | 30MB 힙: 단일 9.3ms vs 이중 14.3ms(1.54x). 1바이트 변경 감지 | 대역폭 지배 가설 입증 | 졸업 -> `memoryCapability.js`+`reactive.js` 이중 해시(~2^-64) |
 | 2026-07-11 | syscallProbe(+임시 diag) | Edge headless | v314엔 `callSyncifying` 없음 -> `pyodide.ffi.run_sync`+`can_run_sync()` 확정. 동기 input PASS, urllib 실 GET(200) PASS, JSPI input 동작, subprocess 2007ms | 3종 전부 실동작 | 졸업 -> `syscallBridge.js` v1. 저수준 socket·requests는 이 캠페인 잔여 |
 | 2026-07-11 | terminalProbe | Edge headless | 식 평가 4, 다중행+상태 유지 70, REPL 안 input() 블로킹 재개 24ms | 탭 = 터미널 개념 성립 | 졸업 -> `terminal.js` `Terminal`(push 계약) + examples/terminal.html + 게이트 상시화 |
-| 2026-07-11 | exceptionRestoreProbe | Edge headless | 예외 후 rehash 없는 restoreLive는 오염 잔존(재현). `{rehash:true}` 복원 17.6ms/162p, 연속 실행 정상 | dartlab의 재해시 해법 유효 | 졸업 -> `reactive.js` `restoreLive(j, sp, {rehash})`, 게이트 상시화 |
-| 2026-07-11 | versionParityProbe | Edge headless | v314.0.2에서 fastapi 0.136.1, pydantic 2.12.5, polars 1.33.1, numpy 2.4.3, requests 2.33.1 전부 설치·import ok | **버전 관문 통과. dartlab 스택은 v314에서 돈다** | 이관 시 0.27.5 -> v314 정합 장애물 없음 |
-| 2026-07-11 | asgiProbe | Edge headless | fastapi 설치 960ms(v314). dispatch 3.4ms. GET /ping 200, POST pydantic 200/422 | dartlab browser-as-server 핵심을 pyproc 프리미티브로 재현 | 졸업 -> `asgiServer.js` `AsgiServer`(enableAsgiServer), 게이트 상시화. SW 배선은 소비 제품 몫 |
+| 2026-07-11 | exceptionRestoreProbe | Edge headless | 예외 후 rehash 없는 restoreLive는 오염 잔존(재현). `{rehash:true}` 복원 17.6ms/162p, 연속 실행 정상 | 재해시 복원 해법 유효 | 졸업 -> `reactive.js` `restoreLive(j, sp, {rehash})`, 게이트 상시화 |
+| 2026-07-11 | versionParityProbe | Edge headless | v314.0.2에서 fastapi 0.136.1, pydantic 2.12.5, polars 1.33.1, numpy 2.4.3, requests 2.33.1 전부 설치·import ok | **대표 패키지 버전 관문 통과** | v314 정합 장애물 없음 |
+| 2026-07-11 | asgiProbe | Edge headless | fastapi 설치 960ms(v314). dispatch 3.4ms. GET /ping 200, POST pydantic 200/422 | 커널 내부 browser-as-server 핵심 재현 | 졸업 -> `asgiServer.js` `AsgiServer`(enableAsgiServer), 게이트 상시화 |
 
 | 2026-07-11 | interruptProbe | Edge headless | setInterruptBuffer(SAB) SIGINT: busy 루프 517ms 수렴(대기 500 포함), respawn 0으로 같은 워커 재사용. 발견: 워커 에러는 꼬리를 남겨야 예외 타입이 살아남는다 | 협조적 취소 성립 | 졸업 -> `pyProc.js` `interrupt(pid)` + worker SIGINT 채널, 게이트 상시화 |
 
 | 2026-07-11 | libCoverageProbe | Edge headless | v314 대표 12종 전부 ok: pandas 3.0.2(5.9s), scipy 1.18, scikit-learn 1.8(6.1s), matplotlib 3.10, pillow, sqlalchemy, bs4, lxml, openpyxl, httpx, jinja2, cryptography. 이전 5종 포함 누적 17/17 | 대표 워크로드 커버리지 100% | 다음: 실패군 탐색(더 넓은 표본) + wheel OPFS 캐시로 재설치 0 |
 
-| 2026-07-11 | opfsCheckpointProbe | Edge headless | 30MB base: OPFS 쓰기 256ms, 읽기 46ms. 로드본 base로 rehash 복원 정확 + 연속 실행 | 기준 힙 영속 성립(dartlab 156MB RAM 부담의 해법 방향) | 졸업 -> `reactive.js` `saveBase`/`loadBase`(핸들은 소비자 제공), 게이트 상시화 |
+| 2026-07-11 | opfsCheckpointProbe | Edge headless | 30MB base: OPFS 쓰기 256ms, 읽기 46ms. 로드본 base로 rehash 복원 정확 + 연속 실행 | 기준 힙 영속 성립 | 졸업 -> `reactive.js` `saveBase`/`loadBase`, 게이트 상시화 |
 
 | 2026-07-11 | reharvestProbe | Edge headless | 런타임 중 loadPackage 후, 부팅 옵션 packages 후 **양 경로 모두** makeMemorySnapshot이 `Unexpected hiwire entry at index 6`으로 거부 | **벽 좌표 확정**: v314 스냅샷은 bare 전용. 패키지 로드 상태(JS FFI 흔적)는 이미지화 불가 | warm-fork·환경=힙이미지는 upstream 프론티어로 격상. 웹의 uv는 wheel OPFS 캐시(다운로드 0) 경로로 진행 |
 
@@ -57,12 +57,12 @@
 
 | 2026-07-12 | swOriginProbe | Edge headless | SW가 `/pyproc/*` fetch를 가로채 페이지 커널 ASGI로 위임: GET(쿼리 포함)/POST body 왕복 정합, 무관 경로 통과, 평균 **3.4ms/req**(직접 dispatch와 동일 = SW 오버헤드 0) | **가상 오리진 성립**: 파이썬 서버가 진짜 URL이 된다(WebContainers의 localhost 개념을 ASGI 위에) | 졸업 -> `pyprocSw.js`(SW 자산, ?asgi=접두) + `VirtualOrigin`(페이지 배선) |
 
-| 2026-07-12 | requestsProbe | Edge headless | requests+pyodide-http 설치 247ms, patch_all 후 requests.get **15ms**(자기 자신 200), 재사용/커스텀 헤더 정상. 1차 실측 발견: requests는 절대 URL만(상대 경로 MissingSchema) | 파이썬 생태계 표준 HTTP 성립(dartlab 체크리스트의 requests 계열 해소) | 졸업 -> `SyscallBridge({requests:true})` |
+| 2026-07-12 | requestsProbe | Edge headless | requests+pyodide-http 설치 247ms, patch_all 후 requests.get **15ms**(자기 자신 200), 재사용/커스텀 헤더 정상. 1차 실측 발견: requests는 절대 URL만(상대 경로 MissingSchema) | 파이썬 생태계 표준 HTTP 성립 | 졸업 -> `SyscallBridge({requests:true})` |
 
 | 2026-07-12 | signalTableProbe | Edge headless | interrupt SAB에 **10(SIGUSR1)**을 쓰면 파이썬 `signal.signal` 핸들러가 발화하고 실행이 계속된다(hits=[10]). **15(SIGTERM)**는 핸들러의 SystemExit로 **협조적 종료 264ms**, 그 뒤 같은 워커에서 재실행 성공(42). 대조 SIGINT(2)는 KeyboardInterrupt 유지(203ms) | **시그널 표가 발명 0으로 열렸다**: SAB 채널은 이미 "시그널 번호를 쓰는 채널"이었고, CPython eval 루프가 번호대로 핸들러를 부른다. 잡 컨트롤(%kill/%stop)의 토대 | 졸업 -> `PyProc.signal(pid, signum)` + `SIGNAL` 표(INT/USR1/USR2/TERM). `interrupt`는 별칭으로 유지 |
 
 | 2026-07-12 | originFidelityProbe | Edge headless | 셀프호스팅 심판이 찾은 4구멍 수리 실측 GREEN 7/7: 요청 헤더 전달(Authorization), 바이너리 응답(PNG)/요청(512B, 0x00-0xFF) 무손상, 204/404 정합, **iframe(커널 밖 문서)의 fetch가 hello 등록 라우팅으로 커널 도달 20ms**, 커널 부재 시 10s 후 504(무한 대기 소거). 발견 2건: `setGlobal(null)`은 None이 아니라 JsNull 프록시(널 정규화는 JS 경계에서), SW 합성 응답에 COI 헤더가 없으면 부모 COEP가 iframe을 차단 | **서빙된 웹앱이 커널 페이지 밖에서 산다**(진짜 웹앱 동선 성립) | 졸업 -> `pyprocSw.js`(커널 등록부 + 타임아웃 + COI 헤더) + `virtualOrigin.js`(hello) + `asgiServer.js`(headers/bodyBytes). 벽: Set-Cookie 스트립(토큰 방식), WebSocket 미가로채기, 스트리밍/SSE 미지원 |
-| 2026-07-15 | virtualOriginBoundaryProbe | Edge headless | GREEN 4/4. Set-Cookie 응답 후 `set-cookie` header null, `document.cookie` empty, 다음 요청 cookie empty. WebSocket `/pyproc/ws`는 `error`이고 Python ASGI `seenPaths`에 `/ws` 없음. SSE body는 `asyncio.sleep(0.16)` 뒤 fetch 170ms에 `data: first` + `data: second` 일괄 수신 | **VirtualOrigin의 로컬 서버 흉내 한계가 실행 계약이 됐다**. 쿠키 세션, WebSocket upgrade, 청크 스트리밍은 의존 대상이 아니다 | 승격 -> 소비 계약의 product-facing compatibility lab. 제품은 토큰/header auth, 별도 WS relay, 일괄 응답 또는 다른 스트림 경로를 쓴다 |
+| 2026-07-15 | virtualOriginBoundaryProbe | Edge headless | GREEN 4/4. Set-Cookie 응답 후 `set-cookie` header null, `document.cookie` empty, 다음 요청 cookie empty. WebSocket `/pyproc/ws`는 `error`이고 Python ASGI `seenPaths`에 `/ws` 없음. SSE body는 `asyncio.sleep(0.16)` 뒤 fetch 170ms에 `data: first` + `data: second` 일괄 수신 | **VirtualOrigin의 로컬 서버 흉내 한계가 실행 계약이 됐다**. 쿠키 세션, WebSocket upgrade, 청크 스트리밍은 의존 대상이 아니다 | 승격 -> 패키지 계약의 compatibility lab. 토큰/header auth, 별도 WS relay, 일괄 응답 또는 다른 스트림 경로를 쓴다 |
 
 ## 판정
 

@@ -1,7 +1,7 @@
 # Experimental 표면 동결
 
 기존 Beta/Experimental 계약을 안정화하는 동안 새 공개 capability와 새 package subpath를 추가하지
-않는다. 내부 리팩터링, soundness 수정, 문서·타입·consumer gate 강화는 허용한다.
+않는다. 내부 리팩터링, soundness 수정, 문서·타입·설치 패키지 게이트 강화는 허용한다.
 
 동결된 Experimental subpath는 다음 셋이다.
 
@@ -17,9 +17,9 @@ root value export는 `boot`, `open`, `createWebComputer`, `checkEnvironment`, `P
 
 1. 공개 Markdown import 예제가 설치 package에 대해 실행 대조된다.
 2. `index.d.ts`와 모든 subpath type gate가 green이다.
-3. 추가하려는 표면에 독립 browser 또는 consumer gate가 있다.
+3. 추가하려는 표면에 독립 browser 또는 설치 패키지 게이트가 있다.
 4. capability matrix의 경계와 실패 code가 확정됐다.
-5. 해당 `tests/attempts/` campaign과 소비 계약 변경이 추가 surface, 실패 경계, rollback을 명시한다.
+5. 해당 `tests/attempts/` campaign과 패키지 계약 변경이 추가 surface, 실패 경계, rollback을 명시한다.
 
 `tests/contracts/publicSurface.mjs`가 root/subpath allowlist와 이 문서의 Experimental 목록을
 기계 검사한다.

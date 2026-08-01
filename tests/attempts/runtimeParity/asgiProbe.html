@@ -20,7 +20,7 @@
     await rt.install("fastapi");
     timings.fastapiInstallMs = Math.round(performance.now() - t);
 
-    // dartlab 제약 반영: 엔드포인트는 async def 강제(sync def는 스레드풀 -> 불가)
+    // 브라우저 런타임 제약: 엔드포인트는 async def 강제(sync def는 스레드풀 -> 불가)
     rt.run(
       "import json, asyncio\n" +
       "from fastapi import FastAPI\n" +

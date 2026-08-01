@@ -25,13 +25,12 @@ _site/
   examples/  src/  index.js  index.d.ts  LICENSE
 ```
 
-랜딩의 Build 섹션은 `docs/`를 상대 링크로 가리키지 않는다. GitHub Pages 산출물에 `docs/`를 복사하지 않기 때문에 capability matrix, 소비 계약, benchmark 계약은 GitHub blob URL로 연결한다.
+랜딩의 Build 섹션은 `docs/`를 상대 링크로 가리키지 않는다. GitHub Pages 산출물에 `docs/`를 복사하지 않기 때문에 capability matrix, 패키지 계약, benchmark 계약은 GitHub blob URL로 연결한다.
 
 ## 예비: Cloudflare (연결하지 않음, 기록만)
 
 - 루트 [_headers](../../_headers)는 Cloudflare Pages/Netlify가 그대로 읽는 형식으로 유지한다.
   GH Pages가 막히거나 진짜 헤더가 필요한 데모가 생기면 전환할 예비.
-- dartlab의 wrangler 인증이 이 머신에 살아 있어(eddmpython 계정, CLOUDFLARE_API_TOKEN)
   전환 결정 시 대시보드 없이 `wrangler pages deploy`로 몇 분 안에 열 수 있다(2026-07-12 확인).
 
 ## 확인 절차 (배포 후)

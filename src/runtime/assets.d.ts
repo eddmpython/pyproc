@@ -1,5 +1,5 @@
 // assets.d.ts - type contract of the pyproc/assets subpath (placed next to its own .js).
-// The manifest, SRI, and Service Worker contract for the runtime assets a consuming product
+// The manifest, SRI, and Service Worker contract for runtime assets that a deployment
 // deploys on its own origin.
 
 export const PYPROC_ASSET_MANIFEST_VERSION: 1;

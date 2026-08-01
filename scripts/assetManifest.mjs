@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // assetManifest.mjs - pyproc 실행 자산 copy/SRI manifest 생성기.
-// 빌드 단계는 도입하지 않는다. 소비 제품 배포 파이프라인이 필요할 때 실행하는 zero-dep CLI다.
+// 빌드 단계는 도입하지 않는다. 배포 파이프라인에서 필요할 때 실행하는 zero-dep CLI다.
 // 정본 경로는 공개 API getPyProcAssetManifest()에서 가져오고, 이 스크립트는 파일 바이트의
 // sha256 SRI와 상대 import graph를 계산한다.
 import { createHash } from "node:crypto";

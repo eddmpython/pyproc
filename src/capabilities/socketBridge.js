@@ -76,7 +76,7 @@ socket.create_connection = _pyprocCreateConnection
 
 # HTTPS: 릴레이가 port 443에서 TLS를 종단한다. 그래서 파이썬은 평문 HTTP를 보내고 ssl.wrap_socket은
 # 소켓을 그대로 돌려준다(이중 암호화 방지). http.client.HTTPSConnection/urllib/requests가 그대로 돈다.
-# 정직: 릴레이가 평문을 보므로 e2e TLS가 아니다(소비 제품이 신뢰하는 릴레이여야 한다. in-tab TLS는 v2).
+# 정직: 릴레이가 평문을 보므로 e2e TLS가 아니다(신뢰할 수 있는 릴레이여야 한다. in-tab TLS는 v2).
 import ssl
 ssl.SSLContext.wrap_socket = lambda self, sock, server_hostname=None, **kwargs: sock
 `;

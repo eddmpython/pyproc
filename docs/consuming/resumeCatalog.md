@@ -29,14 +29,11 @@ Recommended reason values:
 | `tests/attempts/pythonMachine/resumeHookProbe.html` | Contract probe | Reopens a sqlite connection as `resumeConn` and records reason and value. Covers all three revival paths (`open({ dir, name })`, `machine.history.recover()`, `open(blob, trustOpts)`) plus the no-op when the file is absent | `node tests/browser/run.mjs tests/attempts/pythonMachine/resumeHookProbe.html` |
 | `examples/machine.html` | Live demo surface | On a first boot or after a revival, `/home/web/resume.py` opens the `appDb` SQLite connection and records the reason in `resumeEvent`. The same hook runs after casting a signed `.pymachine` through `open(blob, trustOpts)` | `npm run test:examples`, or `node tests/browser/run.mjs examples/machine.html?gate=1` |
 
-## Per-product policy
+## Application boundary
 
-| Product | What needs reopening | What belongs in resume.py | Status on the pyproc side |
-|---|---|---|---|
-| codaro | Cell execution records, the `/home/web/codaro` artifact index, DB and file connections held by the ASGI dev server | Treat the `/home/web/codaro` file tree as canonical and reopen the SQLite/index connection and the ASGI app's global connection. Do not persist per-cell PyProxies, DOM handles, or editor callbacks | Pinned by a gate when the next product-consumption axis adopts `.pymachine` or `VirtualOrigin` |
-| dartlab | The notebook worker's ASGI `/pyapi`, sqlite and file connections, the package cache index | After adopting its self-booted Pyodide through `Runtime`, reconnect DB connections and the app-state adapter against `/home/web`. Reopening external connections matters more than the FastAPI route functions themselves | The pyproc contract is ready; adoption needs a product gate |
-| xlpod | Spreadsheet UDF caches, the formula bridge callback, the cancellation SAB, per-workbook artifacts | Treat the workbook identifier and `/home/web/xlpod` artifacts as canonical. Do not reuse callbacks, SABs, or worksheet bridges from the heap - have the host inject them again | Needs its own gate when the synchronous UDF bridge is adopted |
-| Any external product | User files, a local DB, relay or session tokens, device permissions | Keep a manifest under `/home/web/<app>` and have resume.py read only that manifest to rebuild connections. For anything permission-gated, check the UI approval state first | Published as a consumption contract; per-product evidence is required by that product's own gate |
+pyproc invokes `/home/web/resume.py` with a reason after revival. Which files, databases, sessions, or
+device grants are reopened is application policy and stays outside this repository. The hook must rebuild
+connections from durable values and must not persist PyProxies, DOM handles, callbacks, or SAB views.
 
 ## Minimal template
 

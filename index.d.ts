@@ -922,7 +922,7 @@ declare class Runtime {
   /**
    * Takes either an EngineContract or a **loaded Pyodide instance**. The latter is wrapped, so a
    * worker that booted its own Pyodide can adopt pyproc with `new Runtime(py)` - the pattern
-   * dartlab uses in production. The two are told apart by the presence of `runSync`, which a
+   * existing integrations may already use. The two are told apart by the presence of `runSync`, which a
    * loaded Pyodide does not have.
    */
   constructor(engineOrPyodide: EngineContract | unknown, indexURL?: string, opts?: { assetIntegrity?: PyProcAssetIntegrityManifest });

@@ -68,7 +68,7 @@ server.on("upgrade", (req, socket) => {
         let req2; try { req2 = JSON.parse(f.payload.toString()); } catch (e) { sendText({ type: "error", msg: "bad dial" }); continue; }
         // TLS 종단: port 443(또는 tls 플래그)이면 릴레이가 TLS 핸드셰이크를 한다. 그러면 파이썬은
         // 평문 HTTP를 보내고(ssl.wrap_socket은 패스스루로 스텁), 릴레이가 암복호화한다. 릴레이가
-        // 평문을 보므로 end-to-end는 아니다(정직: 소비 제품이 신뢰하는 릴레이여야 한다).
+        // 평문을 보므로 end-to-end는 아니다(정직: 신뢰할 수 있는 릴레이여야 한다).
         const useTls = req2.tls === true || req2.port === 443;
         const onReady = () => sendText({ type: "connected" });
         tcp = useTls

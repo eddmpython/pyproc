@@ -7,7 +7,7 @@
 //   content-type 미지정 시에만 application/json을 기본값으로 채운다(기존 계약 보존).
 // - 응답: body(utf-8 텍스트 뷰)와 bodyBytes(원시 바이트) 둘 다 준다(requests의 .text/.content 등가).
 //   이미지 같은 바이너리 응답은 bodyBytes가 정본이다.
-// 제약(dartlab 실측): 엔드포인트는 async def 강제(sync def는 스레드풀 -> WASM 불가).
+// 실측 제약: 엔드포인트는 async def 강제(sync def는 스레드풀 -> WASM 불가).
 // lifespan 이벤트는 발화하지 않는다(dispatch 단위 계약).
 import { PyProcError } from "../runtime/errors.js";
 import { bytesFromBase64 } from "../runtime/contentDigest.js";

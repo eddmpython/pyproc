@@ -1623,45 +1623,58 @@ check("소비 문서 역할 분리", () => {
   if (!contract.includes("## Public import boundary")) throw new Error("contract.md import 경계 절 누락");
   if (!contract.includes("## Runtime-asset deployment contract")) throw new Error("contract.md 실행 자산 배포 절 누락");
   if (!contract.includes("## Contract verification")) throw new Error("contract.md 계약 검증 절 누락");
-  if (!contract.includes("### Installed-package consumer gate coverage")) throw new Error("contract.md 설치 패키지 consumer gate coverage 절 누락");
+  if (!contract.includes("### Installed-package browser gate coverage")) throw new Error("contract.md 설치 패키지 브라우저 게이트 coverage 절 누락");
   if (!contract.includes("[capabilityMatrix.md](capabilityMatrix.md): per-capability product value")) throw new Error("contract.md가 capability matrix 역할을 위임하지 않음");
   if (contract.includes("| export | what |")) throw new Error("contract.md가 capability별 export 설명표로 회귀");
   if (!docsMap.includes("install, version pinning, import boundaries, runtime-asset deployment")) throw new Error("docs/README.md contract 역할 설명이 낡음");
 });
-check("외부 소비 증거는 실행 import와 pin의 2026-08-01 감사 사실만 주장", () => {
+check("공개 표면은 명명된 외부 저장소를 기록하지 않는다", () => {
   const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
   const readme = readFileSync(join(ROOT, "README.md"), "utf8");
-  const assertAdoption = (documents) => {
-    for (const term of [
-      "Read-only audit date: **2026-08-01**",
-      "No sibling currently imports the",
-      "dartlab | **Live exact-release consumer.**",
-      "xlpod | **Live exact-release consumer.**",
-      "codaro | **Immutable legacy-SHA consumer, migration required.**",
-      "a7fc83906cfa7bf24c009c8631043738423fa84a",
-      "package-internal `src` files",
-    ]) {
-      if (!documents.contract.includes(term)) throw new Error(`contract.md 소비 감사 축 누락: ${term}`);
-    }
-    for (const term of ["exact registry `pyproc@0.0.10`", "0.0.9-era root contract", "migration required"]) {
-      if (!documents.readme.includes(term)) throw new Error(`README 소비 감사 요약 누락: ${term}`);
-    }
-    for (const stale of [
-      "codaro and xlpod consume the same seam",
-      "The notebook worker adopts its self-booted Pyodide with `new Runtime(py)`",
-      "| xlpod | In preparation",
-      "the dartlab and xlpod pattern",
-    ]) {
-      if (documents.contract.includes(stale) || documents.readme.includes(stale)) {
-        throw new Error(`낡은 외부 소비 주장 재등장: ${stale}`);
+  for (const term of ["## Package surface boundary", "Package-internal paths are never public."]) {
+    if (!contract.includes(term)) throw new Error(`package boundary 누락: ${term}`);
+  }
+  if (readme.includes("## Who uses it")) throw new Error("README에 외부 사용 목록이 재등장했다");
+
+  const forbiddenNames = ["eGxwb2Q=", "ZGFydGxhYg==", "Y29kYXJv"].map((value) =>
+    Buffer.from(value, "base64").toString("utf8"));
+  const forbiddenFraming = [
+    "cHJvZHVjdCBjb25zdW1lcg==",
+    "cGVyLWNvbnN1bWVy",
+    "Y29uc3VtZXIgc3VwcG9ydA==",
+    "Y29uc3VtaW5nIHByb2R1Y3Q=",
+    "cGVyLXByb2R1Y3Q=",
+    "Y29uc3VtcHRpb24gY29udHJhY3Q=",
+  ].map((value) => Buffer.from(value, "base64").toString("utf8"));
+  forbiddenFraming.push(
+    String.fromCodePoint(0xc18c, 0xbe44, 0xc790, 0x20, 0xc9c0, 0xc6d0),
+    String.fromCodePoint(0xc18c, 0xbe44, 0x20, 0xc81c, 0xd488),
+    String.fromCodePoint(0xc18c, 0xbe44, 0x20, 0xacc4, 0xc57d),
+  );
+  const textExtensions = [".md", ".js", ".mjs", ".ts", ".html", ".json", ".yml", ".yaml", ".css", ".sh"];
+  const assertIndependentSurface = (entries) => {
+    for (const [path, text] of entries) {
+      const lowered = text.toLowerCase();
+      if (forbiddenNames.some((name) => lowered.includes(name))) {
+        throw new Error(`명명된 외부 저장소가 남았다: ${path}`);
+      }
+      if (forbiddenFraming.some((term) => lowered.includes(term))) {
+        throw new Error(`외부 지원 프레이밍이 남았다: ${path}`);
       }
     }
   };
-  assertAdoption({ contract, readme });
+  const texts = [...repositorySurfaceFiles]
+    .filter((path) => textExtensions.some((extension) => path.endsWith(extension)))
+    .map((path) => [path, readFileSync(join(ROOT, path), "utf8")]);
+  assertIndependentSurface(texts);
   let caught = false;
-  try { assertAdoption({ contract: `${contract}\n| xlpod | In preparation`, readme }); }
+  try { assertIndependentSurface([["fixture.md", forbiddenNames[0]]]); }
   catch { caught = true; }
-  if (!caught) throw new Error("외부 소비 drift 음성 fixture를 놓쳤다");
+  if (!caught) throw new Error("명명 저장소 음성 fixture를 놓쳤다");
+  caught = false;
+  try { assertIndependentSurface([["fixture.md", forbiddenFraming[0]]]); }
+  catch { caught = true; }
+  if (!caught) throw new Error("외부 지원 프레이밍 음성 fixture를 놓쳤다");
 });
 check("durable RPC 상태표와 공개 투영이 한 의미다", () => {
   const paths = [
@@ -1765,7 +1778,7 @@ check("Python-Linux 교차 엔진 packet 경로가 cold restore까지 실증", (
   catch { caught = true; }
   if (!caught) throw new Error("교차 엔진 generation 음성 fixture를 놓쳤다");
 });
-check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", () => {
+check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 정합", () => {
   const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
   const testing = readFileSync(join(ROOT, "docs", "operations", "testing.md"), "utf8");
   const packageConsumer = readFileSync(join(ROOT, "tests", "packageConsumer.mjs"), "utf8");
@@ -1773,10 +1786,10 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
   const immortalGate = readFileSync(join(ROOT, "tests", "browser", "immortalProductGate.js"), "utf8");
   const immortalParticipant = readFileSync(join(ROOT, "tests", "browser", "immortalProductParticipant.html"), "utf8");
   const expectedTable = productConsumerCoverage.renderProductConsumerCoverageMarkdown();
-  if (!contract.includes(expectedTable)) throw new Error("contract.md consumer coverage 표가 productConsumerCoverage.mjs 렌더링과 불일치");
+  if (!contract.includes(expectedTable)) throw new Error("contract.md 설치 패키지 coverage 표가 productConsumerCoverage.mjs 렌더링과 불일치");
   if (!productConsumer.includes("productConsumerCoverageManifest")) throw new Error("productConsumer.mjs가 coverage manifest SSOT를 import하지 않음");
   if (!productConsumer.includes("coverageManifest")) throw new Error("productConsumer.mjs가 coverage manifest를 report하지 않음");
-  if (!productConsumer.includes("product consumer coverage manifest")) throw new Error("productConsumer.mjs가 coverage manifest report 검증을 출력하지 않음");
+  if (!productConsumer.includes("installed-package coverage manifest")) throw new Error("productConsumer.mjs가 coverage manifest report 검증을 출력하지 않음");
   // state-kernel 7b 표면: 루트 porcelain + 핸들 어휘 + pyproc/history 서명 코어.
   for (const name of [
     "boot",
@@ -1834,11 +1847,11 @@ check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", (
     "productPrepared",
     "PYPROC_RPC_OUTCOME_UNKNOWN",
   ]) {
-    if (!immortalGate.includes(term) && !immortalParticipant.includes(term)) throw new Error(`immortal product consumer coverage 누락: ${term}`);
+    if (!immortalGate.includes(term) && !immortalParticipant.includes(term)) throw new Error(`immortal installed-package coverage 누락: ${term}`);
   }
   if (!productConsumer.includes("runImmortalProductGate")) throw new Error("productConsumer.mjs가 immortal product gate를 실행하지 않음");
   if (!immortalParticipant.includes('from "pyproc"')) throw new Error("immortal participant가 설치 패키지 root export를 쓰지 않음");
-  if (!testing.includes("설치 패키지 consumer gate coverage 표")) throw new Error("testing.md consumer coverage 표 포인터 누락");
+  if (!testing.includes("설치 패키지 브라우저 게이트 coverage 표")) throw new Error("testing.md 설치 패키지 coverage 표 포인터 누락");
 });
 check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   const matrixPath = join(ROOT, "docs", "consuming", "capabilityMatrix.md");
@@ -1887,10 +1900,10 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   }
   if (checkedRows < 10) throw new Error(`능력 매트릭스 행 파싱 실패: ${checkedRows}`);
 });
-// 소비 계약 문서가 게시하는 자산 경로 목록이 실제 매니페스트와 같은가.
+// 패키지 계약 문서가 게시하는 자산 경로 목록이 실제 매니페스트와 같은가.
 // 링크 게이트는 마크다운 링크만 보고 코드블록 산문은 아무도 안 봤다. 그 사이 이 목록은
 // 이미 표류해서, 삭제된 파일(sharedKernelHost)을 소비자에게 계약으로 게시하고 있었다.
-check("소비 계약 문서의 자산 목록 = 실제 매니페스트", () => {
+check("패키지 계약 문서의 자산 목록 = 실제 매니페스트", () => {
   const doc = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
   const block = doc.slice(doc.indexOf("// manifest.assets:"));
   const listed = [...block.matchAll(/^\/\/ - (\w+)\s+(\S+)$/gm)].map((m) => ({ role: m[1], path: m[2] }));

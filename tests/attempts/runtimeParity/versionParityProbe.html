@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>probe: versionParity</title>
 <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:52rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
 <body>
-<h1>probe: v314에서 dartlab 스택이 도는가 (이관 관문)</h1>
+<h1>probe: v314에서 대표 패키지 스택이 도는가</h1>
 <pre id="out">실행 중...</pre>
 <script type="module">
   import { boot } from "../../../index.js";
@@ -16,7 +16,7 @@
   };
   try {
     const rt = await boot();
-    // dartlab 실측 스택(0.27.5 기준)이 v314에서 설치·임포트되는지. 결과 자체가 데이터(능력 보고).
+    // 대표 패키지 스택이 v314에서 설치·임포트되는지 확인한다. 결과 자체가 능력 데이터다.
     for (const [pkg, mod] of [["fastapi", "fastapi"], ["pydantic", "pydantic"], ["polars", "polars"], ["numpy", "numpy"], ["requests", "requests"]]) {
       const t0 = performance.now();
       let info;

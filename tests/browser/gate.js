@@ -483,10 +483,8 @@ try {
   rt.run(`_u = "${location.origin}/index.js"`);
   check("syscall urllib: 실제 HTTP GET", rt.run('import urllib.request\nurllib.request.urlopen(_u).read(8).decode()') === "// pypro");
 
-  // 소비자 채택 경로(하위 호환): 자체 부팅한 Pyodide를 new Runtime(py)로 감싼다(dartlab 라이브
-  // 패턴). EngineContract seam이 이 경로를 깰 뻔한 회귀의 상시 가드.
-  // 소비자 채택 경로(하위 호환): 자체 부팅한 Pyodide를 new Runtime(py)로 감싼다(dartlab 라이브
-  // 패턴). EngineContract seam이 이 경로를 깰 뻔한 회귀의 상시 가드. setInterruptBuffer 공개 +
+  // 로드된 엔진 채택 경로: 자체 부팅한 Pyodide를 new Runtime(py)로 감싼다.
+  // EngineContract seam 회귀의 상시 가드다. setInterruptBuffer 공개 +
   // getGlobal PyProxy 계약의 실동작은 격리된 전용 probe가 검증한다(runtimeParity/consumerAdoptProbe):
   // 공유 rt에 인터럽트 버퍼를 걸거나 PyProxy를 호출하면 이 게이트의 무거운 후속 실행이 방해된다.
   const adopted = new Runtime(rt.raw);

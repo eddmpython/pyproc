@@ -59,14 +59,10 @@ The cooperative tier of `enableJail(permissions)` provides mistake prevention an
 | `examples/machine.html` | Shows the signer fingerprint and the `home=yes, net=no, clipboard=no, workers=no` permission policy in the demo UI, and opens only signed `.pymachine` files |
 | `machine.runtime.enableJail(permissions)` | Plants the cooperative chokepoints and returns `{ jail, permissions, connectSrc }` |
 
-## Per-product application
+## Application boundary
 
-| Product | Public key distribution | Permission UI |
-|---|---|---|
-| codaro | Ships a trusted key JWK or a keyset manifest with the editor build, and records the build hash and fingerprint in the quality report | Shows the per-project `/home/web/codaro`, the ASGI endpoint, the network allowlist, and whether workers are used, before execution |
-| dartlab | Bundles the keyset with the notebook runtime distribution and shows the fingerprint when importing a shared notebook | Separates `/pyapi`, file and DB connections, the package cache, and external fetch/relay as notebook permissions |
-| xlpod | Distributes a per-workbook UDF runtime keyset | States workbook file access, the formula callback bridge, the cancellation SAB, and external network explicitly |
-| External products | Distribute the JWK through a product release asset or a server endpoint | Put the jail permission manifest and the product's own permissions on the same approval screen |
+pyproc verifies keys, fingerprints, signatures, and the jail manifest. Distribution of trusted keys and
+the surrounding permission UI are application policy and stay outside this repository.
 
 ## Forbidden
 

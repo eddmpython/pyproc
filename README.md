@@ -51,7 +51,6 @@
 - [Public surface](#public-surface)
 - [Setup](#setup)
 - [Install and pinning](#install-and-pinning)
-- [Who uses it](#who-uses-it)
 - [North Star](#north-star)
 - [Development](#development)
 - [License](#license)
@@ -247,7 +246,7 @@ risky attempt run, and rolls back in milliseconds (`checkpointRestore`) instead 
 rebuilding the environment. Trusted engine boot finishes first; agent code then runs under a
 fail-closed external-network CSP while same-origin MCP control traffic stays open. Self-host the
 engine if boot itself must make no CDN request. Tool results intentionally cross the MCP channel, so
-the consuming product still owns output review and authorization. `npm run test:mcp` verifies the
+the calling application still owns output review and authorization. `npm run test:mcp` verifies the
 full round trip and an `import js` / `fetch` exfiltration attempt against a controlled receiver in CI.
 
 ## Feature status
@@ -259,7 +258,7 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 | Python execution (`boot` / `run` / `loadPackages`) | Stable |
 | Process OS: snapshot-fork spawn, `map` parallelism (`PyProc`) | Beta |
 | Restore-based reactivity (`enableReactive`: checkpoint / time-travel) | Beta |
-| In-kernel ASGI (`AsgiServer` - in dartlab production today) | Beta |
+| In-kernel ASGI (`AsgiServer`) | Beta |
 | Declared-environment lane (`boot` manifest: `packages` / `env` / `setup` / `wheelDir`), wheel cache, terminal, syscall bridge | Beta |
 | Session revival + `.pymachine` images, machine journal (WAL) | Experimental |
 | Live process fork, device FS, init / cron / resume hooks, virtual-origin URL | Experimental |
@@ -285,7 +284,7 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 
 ## Scope and platform direction
 
-pyproc is the first Python guest OS of the computer described in the [North Star](#north-star) above. The Web Machine host ships inside this package (`src/machine`, entered through `createWebComputer`), and it plus the local Web Computer product boot pyproc and Linux through one lifecycle, save their memory and disks together, recover them after a browser-process restart, and import a signed image in a fresh browser profile. The reproducible Buildroot Linux guest ships separately as a hash-pinned project release with source, legal material, SBOM, configuration, and independent-build evidence. The x86 emulator and remaining firmware stay external consumer-supplied assets and are not part of npm.
+pyproc is the first Python guest OS of the computer described in the [North Star](#north-star) above. The Web Machine host ships inside this package (`src/machine`, entered through `createWebComputer`), and it plus the local Web Computer product boot pyproc and Linux through one lifecycle, save their memory and disks together, recover them after a browser-process restart, and import a signed image in a fresh browser profile. The reproducible Buildroot Linux guest ships separately as a hash-pinned project release with source, legal material, SBOM, configuration, and independent-build evidence. The x86 emulator and remaining firmware stay externally supplied assets and are not part of npm.
 
 Within that larger goal, pyproc's compatibility direction remains: whatever Python runs locally should eventually run in the browser, with no server. Everything local sorts into four states, and pyproc's job is to push things up the list and absorb a wall when the platform reopens it:
 
@@ -413,7 +412,7 @@ await boot({ engineScriptIntegrity: "sha256-...", coreIntegrity: { /* per-file S
 
 For (1) this repository vendors a release with `npm run fetch:engine` (a development script, not
 part of the published package); in your own product, copy `node_modules/pyodide` or a release
-tarball into the path you serve. The pinned version is the consuming contract:
+tarball into the path you serve. The pinned version is the package contract:
 [docs/consuming/contract.md](docs/consuming/contract.md).
 
 Serve the page that hosts pyproc with:
@@ -476,25 +475,17 @@ You can also import straight from a CDN with no install (single-runtime path onl
 </script>
 ```
 
-## Who uses it
-
-- **dartlab** (live): exact registry `pyproc@0.0.10` plus lockfile integrity; imports root `pyproc`, calls `boot()`, and uses `machine.runtime`, history, and processes behind real Chromium product gates.
-- **xlpod** (live): exact registry `pyproc@0.0.10` plus lockfile integrity; its spreadsheet worker uses the same root machine contract and gates process offload, OPFS warm boot, and offline Python.
-- **codaro** (migration required): immutable SHA on a 0.0.9-era root contract where `boot()` returned `Runtime`. Its runtime import is public, but one asset builder and one audit test still read package-internal files.
-
-pyproc becomes an SSOT only through **real imports**, not references: consumers pin a SHA, depend on the public surface plus the shipped `index.d.ts`, and never import in reverse. Full policy: [docs/consuming/contract.md](docs/consuming/contract.md).
-
 ## North Star
 
 **Make the browser a computer that boots more than one guest operating system - and make that computer pyproc itself.**
 
-Scores are anchored to gates that actually run in CI. A path no automated gate runs does not score, however complete the implementation is, and an axis whose evidence includes a manual-only probe is held below 9. A 10 means the axis is finished: repeatedly verified in a real browser, with nothing left for a consumer to work around.
+Scores are anchored to gates that actually run in CI. A path no automated gate runs does not score, however complete the implementation is, and an axis whose evidence includes a manual-only probe is held below 9. A 10 means the axis is finished: repeatedly verified in a real browser, with no workaround left in the public surface.
 
 Today that is **103.0 / 120, average 8.6 / 10**.
 
 | Axis | Score | Where it stands today | Where it has to land | Next move |
 |---|---:|---|---|---|
-| Real Python in the tab | 9.5 | `boot` / `run` / `loadPackages` drive CPython on WebAssembly from one handle, with a terminal REPL, PEP 723 scripts, a wheel cache, and a declared-environment lane. The browser gate, the installed-package consumer gate, the demo gate, and the agent (MCP) gate all run it. Engine assets come from a CDN unless you self-host, and the platform is Chromium and Edge only. | The Python a local interpreter runs, running in a tab, with no server and no setup ritual. | Make the verified self-hosted asset lane the default path, so a first boot depends on no CDN |
+| Real Python in the tab | 9.5 | `boot` / `run` / `loadPackages` drive CPython on WebAssembly from one handle, with a terminal REPL, PEP 723 scripts, a wheel cache, and a declared-environment lane. The browser gate, the installed-package gate, the demo gate, and the agent (MCP) gate all run it. Engine assets come from a CDN unless you self-host, and the platform is Chromium and Edge only. | The Python a local interpreter runs, running in a tab, with no server and no setup ritual. | Make the verified self-hosted asset lane the default path, so a first boot depends on no CDN |
 | State you can rewind | 9.0 | Checkpoint, restore, branch, and prune run at execution boundaries over complete heap hashing: a full-heap byte-equality round trip, sibling-delta isolation across a branch tree, and a violated boundary that falls back to a full rehash instead of restoring something corrupt. Node property and fuzz gates cover delta soundness and tree integrity. An arbitrary instant is still not capturable, because in-flight promises and network requests live outside the boundary. | Any past state comes back instantly, including the work that was in flight when it was left. | Capture an arbitrary instant rather than an execution boundary, by pulling in-flight promises and requests inside the boundary |
 | Processes and real parallelism | 8.5 | Workers are processes: snapshot-fork spawn, `map`, `forkMany`, a signal table, kill, job control, nested containers, pool exhaustion, and mid-flight worker death all converge under the browser gate. N interpreters are N GILs, so the parallelism is structural rather than scheduled. There is no shared-memory threading and no arbitrary POSIX process tree. | A process model with the vocabulary of a real operating system, threads included once the platform allows them. | Take shared-memory threading the moment nogil and WASM threads land upstream, without changing the process vocabulary |
 | A disk that survives | 9.0 | The state kernel commits content-addressed generations into OPFS under a write-order law: a tampered blob is caught, a broken HEAD falls back to PREV instead of impersonating a first boot, journals pack, an unchanged re-commit writes zero bytes, and the durable generation is what the browser computer restores after its process restarts. There is exactly one format on disk now: the legacy envelope reader was retired, and a file written by an older version is refused with what to do about it rather than half-read. | Durability with the guarantees of a real filesystem: no torn commit, no silent loss, exactly one format. | Survive an OPFS quota eviction as explicitly as a torn commit: today persistence is requested best-effort and a denial is a browser heuristic |
@@ -503,8 +494,8 @@ Today that is **103.0 / 120, average 8.6 / 10**.
 | A computer that boots guests | 9.0 | The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. The x86 lane puts the real Python and Linux guests on one switch: Linux pings Python, a Python-sent Ethernet frame increments Linux's NIC receive counter, and both directions survive one generation commit and a process cold restore. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others. Presenting a frame onto a canvas is gated in CI as well (`CanvasRgbaFrameSink`). The default Linux image is the reproducible project build, hash-pinned to a release that carries its exact source, complete legal material, SBOM, config, and independent-build receipt. | Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does. | rung 5: Adopt memory64 to lift the per-module heap ceiling that a large guest hits first; rung 7: Boot a Node guest beside Python and Linux, making JavaScript CLI tools residents of the computer |
 | Primitives that outlive the engine | 7.0 | A non-Pyodide lane boots CPython 3.14.6 on WASI in the browser and takes checkpoint, time travel, repeated branching, and pure-Python wheel installation through the same contracts, which is what proves the primitives are not Pyodide internals. That lane has no `dlopen`, so it carries no dynamic C extensions, and its value bridge is JSON only. | Every primitive runs on any CPython-on-WebAssembly engine, with the same package reach on each. | Close the WASI gap: dynamic linking (cpython#142234) for C extensions, and a value bridge that is not JSON only |
 | Network, the browser way | 8.0 | An in-kernel ASGI server answers `fetch` from Python with concurrent requests kept apart, a virtual origin serves it from the installed package, `urllib` performs real HTTP through the syscall bridge, and the permission jail decides `connectSrc` per host. Python-to-Python traffic is gated without assets, while the x86 lane proves the real cross-engine path: Linux pings Python and a Python-sent Ethernet frame arrives at the Linux NIC before and after process cold restore. Outbound raw sockets still need a WS-to-TCP relay this package does not ship, but a hermetic lane starts the in-repo relay and a local TCP origin and reads bytes back through Python `urllib`. | Python network code runs unmodified, and the relay boundary is the only thing a reader has to know. | rung 1: Terminate TLS inside the tab, so a relay carries ciphertext it cannot read and needs no trust; rung 2: Carry many sockets over one WebSocket, the Wisp class of relay hardening; rung 3: Open a direct tab-to-tab transport over WebRTC as an opt-in subpath, once the surface freeze clears; rung 4: Keep an Isolated Web App packaging lane ready for the day Direct Sockets opens a real inbound listen |
-| Everything local Python does | 7.5 | Pyodide's `dlopen` already loads native C-extension wheels (numpy, pandas, scipy and more), packages install from a cache, `%pip` and `freeze` work inside the machine, and the WASI lane installs pure-Python wheels. The long tail is what is missing: an arbitrary package needs a published pyemscripten wheel, numpy has no SIMD build, threading is upstream-pending, and the GPU lane has no headless adapter, so what CI holds is the byte identity of the WGSL each consumer path compiles, not its result on a GPU. | Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology. | Widen package reach where it is thin: a pyemscripten wheel for the long tail, and a SIMD numpy build; rung 6: Bring the tools a working machine assumes (the git and ripgrep class) inside as wasm residents, so shelling out is real |
-| One kernel that products import | 8.5 | The public surface is one noun and its verbs, fixed by structure, type, installed-package, and browser product gates. The 2026-08-01 read-only consumer audit found two exact registry consumers: dartlab and xlpod pin 0.0.10 with lockfile integrity and import the root machine contract. codaro is immutable but remains on a 0.0.9-era SHA whose root `boot()` returned `Runtime`; one build script and one audit test also read package-internal files. No sibling imported `pyproc/runtime` at the audit date; 0.0.11 now ships that optional seam. Registry adoption is counted only after each product moves its exact pin and passes its own gate. | Every consumer builds on the public surface and the shipped types, pinned to an exact version, with no deep path. | Migrate dartlab and xlpod to 0.0.11, then move codaro off its legacy SHA and package-internal reads; rung 8: Specify the local-agent boundary once (pairing, authorization, capability list), so consumers stop reinventing the share that stays outside |
+| Everything local Python does | 7.5 | Pyodide's `dlopen` already loads native C-extension wheels (numpy, pandas, scipy and more), packages install from a cache, `%pip` and `freeze` work inside the machine, and the WASI lane installs pure-Python wheels. The long tail is what is missing: an arbitrary package needs a published pyemscripten wheel, numpy has no SIMD build, threading is upstream-pending, and the GPU lane has no headless adapter, so what CI holds is the byte identity of the WGSL each integration path compiles, not its result on a GPU. | Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology. | Widen package reach where it is thin: a pyemscripten wheel for the long tail, and a SIMD numpy build; rung 6: Bring the tools a working machine assumes (the git and ripgrep class) inside as wasm residents, so shelling out is real |
+| One stable kernel surface | 8.5 | The public surface is one noun and its verbs, fixed by structure, types, installed-package gates, and real browser execution. The packed artifact proves root and subpath imports, shipped declarations, worker emission, and runtime assets without any package-internal path. | One exact-version public surface and shipped type contract, with every supported import pattern gated and no deep path. | Put every supported public import pattern under installed-package and browser gates; rung 8: Specify the local-agent boundary once (pairing, authorization, capability list) for the share that stays outside the browser |
 | A supply chain you can verify | 8.5 | The asset CLI emits SRI over the worker and Service Worker import graph, `verifyPyProcAssetIntegrity` refuses a spawn on a bad hash, engine boot supports fail-closed SRI with a re-verifying offline cache, npm releases publish through OIDC trusted publishing with provenance and manual publishes disabled, and the browser computer verifies a signer before importing an image. The default Linux guest comes from two byte-identical independent builds, passes real Python-Linux traffic plus process cold restore, and is published with exact source, complete legal material, SBOM, config, and manifests at a stable hash-pinned project release. | Every byte that executes traces back to a source somebody else can rebuild and verify. | Reproduce the remaining firmware and emulator assets under the same project-controlled release discipline |
 
 The axis ledger is [tests/northStar.mjs](tests/northStar.mjs): each axis registers the executable artifacts standing behind it, and the structure gate turns red when a registered gate is missing, is opened by no runner, or does not run in CI. This table is rendered from that ledger, so no score moves by editing prose. What each axis means, and what would move it, is in the [product direction](docs/product/vision.md#north-star-axes).
@@ -520,7 +511,7 @@ The distance that remains is two walls with different fates. The transport wall 
 5. Adopt memory64 to lift the per-module heap ceiling that a large guest hits first (moves: A computer that boots guests)
 6. Bring the tools a working machine assumes (the git and ripgrep class) inside as wasm residents, so shelling out is real (moves: Everything local Python does)
 7. Boot a Node guest beside Python and Linux, making JavaScript CLI tools residents of the computer (moves: A computer that boots guests)
-8. Specify the local-agent boundary once (pairing, authorization, capability list), so consumers stop reinventing the share that stays outside (moves: One kernel that products import)
+8. Specify the local-agent boundary once (pairing, authorization, capability list) for the share that stays outside the browser (moves: One stable kernel surface)
 
 Why the order is what it is, and the external triggers that would reorder it, are in the [product direction](docs/product/vision.md#where-the-ceiling-moves-next). The rungs are registered in the axis ledger, so a rung cannot drift away from the score it claims to move.
 
@@ -528,7 +519,7 @@ Why the order is what it is, and the external triggers that would reorder it, ar
 
 ```bash
 npm test              # Node structure / lint gate (zero dependencies)
-npm run test:consumer # installed package browser consumer gate
+npm run test:consumer # installed package browser gate
 npm run test:browser  # headless Chromium runtime gate: boot / reactive / fork / map (zero dependencies)
 npm run serve         # COOP/COEP static server for manual validation and benchmarks
 ```

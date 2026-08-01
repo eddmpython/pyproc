@@ -93,7 +93,7 @@ PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:consumer    # 자가 호스팅 �
 - trusted public key로 연 `.pymachine`이 `resume.py`를 실행해 SQLite connection 같은 프로세스 자원을 다시 열고 `/home/web` 상태를 유지한다.
 
 이 게이트는 "repo에서는 되는데 소비 앱에서는 깨지는" 구조 결함을 막는다. 특히 `asgi=/pyproc/`가 `/node_modules/pyproc/...` 패키지 자산을 오인해 가로채는 충돌을 막기 위해, `VirtualOrigin` fetch 뒤에도 `PyProc` worker graph 검증과 실행이 통과해야 한다. CI에서도 돈다.
-public export별 coverage 정본은 [소비 계약](../consuming/contract.md)의 설치 패키지 consumer gate coverage 표다.
+public export별 coverage 정본은 [패키지 계약](../consuming/contract.md)의 설치 패키지 브라우저 게이트 coverage 표다.
 
 ## 4. 예제 실행 게이트 (`npm run test:examples`)
 
@@ -158,14 +158,14 @@ npm run bench:artifact -- --scenario S2 --candidate pyproc --command "npm run te
 npm run bench:compare -- .tmp/pyproc-s2.json --out .tmp/s2-compare.md
 ```
 
-S3 browser server는 설치 패키지 consumer gate의 `VirtualOrigin` POST 왕복 시간을 latency sample로 남긴다:
+S3 browser server는 설치 패키지 브라우저 게이트의 `VirtualOrigin` POST 왕복 시간을 latency sample로 남긴다:
 
 ```bash
 npm run bench:artifact -- --scenario S3 --candidate pyproc --command "npm run test:consumer timings.virtualOriginMs" --sample 15,0 --sample 18,0 --sample 14,0 --out .tmp/pyproc-s3.json
 npm run bench:compare -- .tmp/pyproc-s3.json --out .tmp/s3-compare.md
 ```
 
-S4 machine resume는 설치 패키지 consumer gate의 signed `.pymachine` export/open/resume 값을 sample로 남긴다:
+S4 machine resume는 설치 패키지 브라우저 게이트의 signed `.pymachine` export/open/resume 값을 sample로 남긴다:
 
 ```bash
 npm run bench:artifact -- --scenario S4 --candidate pyproc --command "npm run test:consumer timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows" --sample 76,2264,10.8,2,0 --sample 75,2346,10.8,2,0 --sample 80,2136,10.8,2,0 --out .tmp/pyproc-s4.json

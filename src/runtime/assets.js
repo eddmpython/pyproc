@@ -1,4 +1,4 @@
-// assets.js - Layer 0: 소비 제품이 같은 오리진에 배포해야 하는 실행 자산 manifest.
+// assets.js - Layer 0: 같은 오리진에 배포해야 하는 실행 자산 manifest.
 // 브라우저 Worker/SharedWorker/Service Worker는 same-origin 경계가 강하고, import 그래프는 런타임에
 // 브라우저가 직접 가져간다. 따라서 제품은 "어떤 파일이 실행 자산인가"를 문서 추측이 아니라
 // 공개 계약으로 받아야 한다. 실제 SRI 해시 봉인은 배포 파이프라인 단계가 담당하고, 이 모듈은

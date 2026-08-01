@@ -1,6 +1,6 @@
 # Environment compatibility - one page
 
-The table a consuming product reads to answer "which pyproc surfaces can we turn on in our target environment" in one pass. The runtime verdict comes from `checkEnvironment()` (mapping one to one onto the code below); the values here are the basis for that verdict. Per-capability detail (product value, status, boundaries) is canonical in [capabilityMatrix.md](capabilityMatrix.md).
+This table answers which pyproc surfaces can run in a target environment. The runtime verdict comes from `checkEnvironment()` (mapping one to one onto the code below); the values here are the basis for that verdict. Per-capability detail (value, status, boundaries) is canonical in [capabilityMatrix.md](capabilityMatrix.md).
 
 ## Supported browsers
 
@@ -25,7 +25,7 @@ The table a consuming product reads to answer "which pyproc surfaces can we turn
 
 ## Engine
 
-- **Pyodide v314.0.2 (CPython 3.14).** Loaded from a CDN by default, self-hostable through `indexURL`. Changing the version is a release-worthy event and moves together with consuming products (detail: the runtime-consistency section of [contract.md](contract.md)).
+- **Pyodide v314.0.2 (CPython 3.14).** Loaded from a CDN by default, self-hostable through `indexURL`. Changing the version is a release-worthy event that requires the full runtime-consistency gate (detail: the runtime-consistency section of [contract.md](contract.md)).
 - The WASI engine (`pyproc/wasi`) is a separate async surface for proving engine independence. Pyodide is the production canon.
 
 ## Resource characteristics (for sizing your heap)

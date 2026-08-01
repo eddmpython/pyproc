@@ -144,7 +144,7 @@ export async function boot(opts = {}) {
   if (opts.lockFileURL) cfg.lockFileURL = opts.lockFileURL;
   // opts.loadPyodide: 워커 소비자(document 없음)가 자체 import한 loadPyodide를 준다. 그러면
   // document 기반 script 로드(ensureEngineScript)를 건너뛰고 globalThis를 오염시키지 않는다.
-  // dartlab/xlpod처럼 워커에서 boot의 캐시/env/packages 로직을 쓰려는 소비자의 경로.
+  // 워커에서 boot의 캐시/env/packages 로직을 쓰려는 소비자의 경로.
   const doLoad = opts.loadPyodide
     ? () => opts.loadPyodide(cfg)
     : async () => { await ensureEngineScript(indexURL, { integrity: opts.engineScriptIntegrity }); return loadPyodide(cfg); };
@@ -182,8 +182,8 @@ export async function boot(opts = {}) {
 
 export class Runtime {
   // engineOrPy: EngineContract(기본 PyodideEngine) 또는 **로드된 Pyodide 인스턴스**.
-  // 후자면 PyodideEngine으로 감싼다(하위 호환 + 채택 경로): dartlab처럼 워커에서 자체 부팅한
-  // Pyodide를 `new Runtime(py)`로 채택하는 라이브 소비자를 지원한다. EngineContract seam(계약
+  // 후자면 PyodideEngine으로 감싼다(하위 호환 + 채택 경로): 워커에서 자체 부팅한
+  // Pyodide를 `new Runtime(py)`로 채택하는 소비자를 지원한다. EngineContract seam(계약
   // 격리) 도입 시 `Runtime(py)` 채택 경로가 깨질 뻔한 회귀를 이 판별로 복원한다(runSync 유무로 구분).
   constructor(engineOrPy, indexURL, opts = {}) {
     const engine = engineOrPy?.engineContractVersion === 1 ? engineOrPy : new PyodideEngine(engineOrPy);

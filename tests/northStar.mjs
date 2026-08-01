@@ -1,8 +1,8 @@
 // tests/northStar.mjs - 북극성 축 원장(SSOT). 데이터와 렌더만 산다. 판정은 tests/run.mjs [북극성] 절이 한다.
 //
 // 왜 원장이 코드인가: 산문 증거는 썩는다. "이 축은 게이트가 있다"는 문장은 그 게이트 파일이
-// 개명되거나 삭제되거나 러너에 한 번도 안 꽂혀도 그대로 남는다(xlpod의 같은 장치가 존재하는
-// 이유이고, 이 저장소에서도 probe 15개가 게이트 폴더에 있으면서 아무도 안 돌리던 사건이 있었다).
+// 개명되거나 삭제되거나 러너에 한 번도 안 꽂혀도 그대로 남는다. 이 저장소에서도 probe 15개가
+// 게이트 폴더에 있으면서 아무도 안 돌리던 사건이 있었다.
 // 그래서 축마다 실행 가능한 산출물을 등재하고, README 두 판의 표는 여기서 렌더한 문자열이다.
 // 문서를 고쳐도 점수는 안 움직이고, 점수를 고치려면 이 파일과 증거 목록을 함께 고쳐야 한다.
 //
@@ -22,7 +22,7 @@
 export const NORTH_STAR = Object.freeze({
   en: Object.freeze({
     statement: "Make the browser a computer that boots more than one guest operating system - and make that computer pyproc itself.",
-    rule: "Scores are anchored to gates that actually run in CI. A path no automated gate runs does not score, however complete the implementation is, and an axis whose evidence includes a manual-only probe is held below 9. A 10 means the axis is finished: repeatedly verified in a real browser, with nothing left for a consumer to work around.",
+    rule: "Scores are anchored to gates that actually run in CI. A path no automated gate runs does not score, however complete the implementation is, and an axis whose evidence includes a manual-only probe is held below 9. A 10 means the axis is finished: repeatedly verified in a real browser, with no workaround left in the public surface.",
     total: (total, max, average) => `Today that is **${total} / ${max}, average ${average} / 10**.`,
     header: "| Axis | Score | Where it stands today | Where it has to land | Next move |",
     divider: "|---|---:|---|---|---|",
@@ -30,7 +30,7 @@ export const NORTH_STAR = Object.freeze({
   }),
   ko: Object.freeze({
     statement: "브라우저를 여러 guest OS가 부팅되는 컴퓨터로 만들고, 그 컴퓨터를 pyproc 자신으로 만든다.",
-    rule: "점수의 근거는 CI에서 실제로 도는 게이트다. 자동으로 실행되지 않는 경로는 구현이 아무리 완성돼 있어도 점수로 세지 않고, 증거에 수동 probe가 섞인 축은 9점 아래로 묶인다. 10점은 그 축이 끝난 상태다: 실제 브라우저에서 반복 검증됐고 소비자가 우회해야 할 것이 남지 않았다.",
+    rule: "점수의 근거는 CI에서 실제로 도는 게이트다. 자동으로 실행되지 않는 경로는 구현이 아무리 완성돼 있어도 점수로 세지 않고, 증거에 수동 probe가 섞인 축은 9점 아래로 묶인다. 10점은 그 축이 끝난 상태다: 실제 브라우저에서 반복 검증됐고 공개 표면에 우회로가 남지 않았다.",
     total: (total, max, average) => `지금 총점은 **${total} / ${max}, 평균 ${average} / 10**이다.`,
     header: "| 축 | 현재 점수 | 지금 서 있는 자리 | 도달해야 하는 자리 | 다음 수 |",
     divider: "|---|---:|---|---|---|",
@@ -59,12 +59,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 9.5,
     en: Object.freeze({
       title: "Real Python in the tab",
-      state: "`boot` / `run` / `loadPackages` drive CPython on WebAssembly from one handle, with a terminal REPL, PEP 723 scripts, a wheel cache, and a declared-environment lane. The browser gate, the installed-package consumer gate, the demo gate, and the agent (MCP) gate all run it. Engine assets come from a CDN unless you self-host, and the platform is Chromium and Edge only.",
+      state: "`boot` / `run` / `loadPackages` drive CPython on WebAssembly from one handle, with a terminal REPL, PEP 723 scripts, a wheel cache, and a declared-environment lane. The browser gate, the installed-package gate, the demo gate, and the agent (MCP) gate all run it. Engine assets come from a CDN unless you self-host, and the platform is Chromium and Edge only.",
       target: "The Python a local interpreter runs, running in a tab, with no server and no setup ritual.",
     }),
     ko: Object.freeze({
       title: "탭 안의 진짜 파이썬",
-      state: "`boot` / `run` / `loadPackages`가 핸들 하나로 WebAssembly 위 CPython을 몰고, 터미널 REPL, PEP 723 스크립트, wheel 캐시, 선언 환경 레인이 붙는다. 브라우저 게이트, 설치 패키지 소비자 게이트, 데모 게이트, 에이전트(MCP) 게이트가 전부 이것을 돌린다. 자체 호스팅하지 않으면 엔진 자산은 CDN에서 오고, 플랫폼은 Chromium과 Edge뿐이다.",
+      state: "`boot` / `run` / `loadPackages`가 핸들 하나로 WebAssembly 위 CPython을 몰고, 터미널 REPL, PEP 723 스크립트, wheel 캐시, 선언 환경 레인이 붙는다. 브라우저 게이트, 설치 패키지 게이트, 데모 게이트, 에이전트(MCP) 게이트가 전부 이것을 돌린다. 자체 호스팅하지 않으면 엔진 자산은 CDN에서 오고, 플랫폼은 Chromium과 Edge뿐이다.",
       target: "로컬 인터프리터가 돌리는 파이썬을 서버도 준비 의식도 없이 탭에서 그대로 돌린다.",
     }),
     evidence: Object.freeze([
@@ -343,12 +343,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 7.5,
     en: Object.freeze({
       title: "Everything local Python does",
-      state: "Pyodide's `dlopen` already loads native C-extension wheels (numpy, pandas, scipy and more), packages install from a cache, `%pip` and `freeze` work inside the machine, and the WASI lane installs pure-Python wheels. The long tail is what is missing: an arbitrary package needs a published pyemscripten wheel, numpy has no SIMD build, threading is upstream-pending, and the GPU lane has no headless adapter, so what CI holds is the byte identity of the WGSL each consumer path compiles, not its result on a GPU.",
+      state: "Pyodide's `dlopen` already loads native C-extension wheels (numpy, pandas, scipy and more), packages install from a cache, `%pip` and `freeze` work inside the machine, and the WASI lane installs pure-Python wheels. The long tail is what is missing: an arbitrary package needs a published pyemscripten wheel, numpy has no SIMD build, threading is upstream-pending, and the GPU lane has no headless adapter, so what CI holds is the byte identity of the WGSL each integration path compiles, not its result on a GPU.",
       target: "Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology.",
     }),
     ko: Object.freeze({
       title: "로컬 파이썬이 하는 전부",
-      state: "Pyodide의 `dlopen`이 이미 네이티브 C 확장 wheel(numpy, pandas, scipy 등)을 싣고, 패키지가 캐시에서 설치되고, 머신 안에서 `%pip`과 `freeze`가 돌고, WASI 레인이 순수 파이썬 wheel을 설치한다. 없는 것은 롱테일이다: 임의 패키지는 게시된 pyemscripten wheel을 요구하고, numpy에는 SIMD 빌드가 없고, 스레딩은 upstream 대기이며, GPU 레인은 헤드리스 어댑터가 없어 CI가 무는 것은 소비자 경로가 컴파일에 넘기는 WGSL의 바이트 동일성이지 GPU에서의 결과가 아니다.",
+      state: "Pyodide의 `dlopen`이 이미 네이티브 C 확장 wheel(numpy, pandas, scipy 등)을 싣고, 패키지가 캐시에서 설치되고, 머신 안에서 `%pip`과 `freeze`가 돌고, WASI 레인이 순수 파이썬 wheel을 설치한다. 없는 것은 롱테일이다: 임의 패키지는 게시된 pyemscripten wheel을 요구하고, numpy에는 SIMD 빌드가 없고, 스레딩은 upstream 대기이며, GPU 레인은 헤드리스 어댑터가 없어 CI가 무는 것은 통합 경로가 컴파일에 넘기는 WGSL의 바이트 동일성이지 GPU에서의 결과가 아니다.",
       target: "로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다.",
     }),
     evidence: Object.freeze([
@@ -375,17 +375,17 @@ export const NORTH_STAR_AXES = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: "consumableKernel",
+    id: "stableKernelSurface",
     score: 8.5,
     en: Object.freeze({
-      title: "One kernel that products import",
-      state: "The public surface is one noun and its verbs, fixed by structure, type, installed-package, and browser product gates. The 2026-08-01 read-only consumer audit found two exact registry consumers: dartlab and xlpod pin 0.0.10 with lockfile integrity and import the root machine contract. codaro is immutable but remains on a 0.0.9-era SHA whose root `boot()` returned `Runtime`; one build script and one audit test also read package-internal files. No sibling imported `pyproc/runtime` at the audit date; 0.0.11 now ships that optional seam. Registry adoption is counted only after each product moves its exact pin and passes its own gate.",
-      target: "Every consumer builds on the public surface and the shipped types, pinned to an exact version, with no deep path.",
+      title: "One stable kernel surface",
+      state: "The public surface is one noun and its verbs, fixed by structure, types, installed-package gates, and real browser execution. The packed artifact proves root and subpath imports, shipped declarations, worker emission, and runtime assets without any package-internal path.",
+      target: "One exact-version public surface and shipped type contract, with every supported import pattern gated and no deep path.",
     }),
     ko: Object.freeze({
-      title: "제품이 실제로 import하는 커널 하나",
-      state: "공개 표면은 명사 하나와 그 동사들이고 구조, 타입, 설치 package, 브라우저 제품 gate가 고정한다. 2026-08-01 read-only 소비 감사에서 exact registry 소비자는 둘이었다. dartlab과 xlpod은 lockfile integrity와 함께 0.0.10을 고정하고 root machine 계약을 import한다. codaro는 불변이지만 root `boot()`가 `Runtime`을 반환하던 0.0.9 시대 SHA에 남았고 build script 하나와 audit test 하나가 package 내부 파일도 읽는다. 감사 당시 `pyproc/runtime`을 import한 sibling은 없었고, 0.0.11이 이제 그 선택적 seam을 출하한다. registry 채택은 각 제품이 exact pin을 옮기고 자기 gate를 통과한 뒤에만 센다.",
-      target: "모든 소비자가 공개 표면과 함께 나가는 타입만으로, 정확한 버전에 핀으로, deep path 없이 짓는다.",
+      title: "안정 커널 표면 하나",
+      state: "공개 표면은 명사 하나와 그 동사들이고 구조, 타입, 설치 package gate, 실제 브라우저 실행이 고정한다. packed artifact가 root와 subpath import, 동봉 선언, worker emit, runtime asset을 package 내부 경로 없이 증명한다.",
+      target: "지원하는 모든 import 패턴이 gate 아래 있고 deep path가 없는 exact-version 공개 표면과 동봉 타입 계약 하나.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
@@ -399,15 +399,15 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "migrateReleasedSurface",
-        en: "Migrate dartlab and xlpod to 0.0.11, then move codaro off its legacy SHA and package-internal reads",
-        ko: "dartlab과 xlpod을 0.0.11로 옮긴 뒤 codaro를 legacy SHA와 package 내부 읽기에서 이관한다",
+        id: "installedSurfaceCoverage",
+        en: "Put every supported public import pattern under installed-package and browser gates",
+        ko: "지원하는 모든 공개 import 패턴을 installed-package와 browser gate 아래 둔다",
       }),
       Object.freeze({
         id: "localAgentContract",
         rung: 8,
-        en: "Specify the local-agent boundary once (pairing, authorization, capability list), so consumers stop reinventing the share that stays outside",
-        ko: "밖에 남는 몫을 위해 로컬 에이전트 경계(페어링·인가·능력 목록)를 한 번 명세해 소비자마다 다시 짓지 않게 한다",
+        en: "Specify the local-agent boundary once (pairing, authorization, capability list) for the share that stays outside the browser",
+        ko: "브라우저 밖에 남는 몫을 위해 로컬 에이전트 경계(페어링·인가·능력 목록)를 한 번 명세한다",
       }),
     ]),
   }),
