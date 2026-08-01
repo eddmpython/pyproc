@@ -14,6 +14,14 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Added
 
+- **Exactly-once resolution across a leader failover.** A leader now records every command outcome
+  into the same durable generation as the heap, and a durable machine parks an interrupted command
+  and re-asks the successor once instead of answering `PYPROC_RPC_OUTCOME_UNKNOWN`. A repeated
+  request is answered from the record rather than run twice, and a request absent from the
+  generation is provably safe to run.  remains for the cases where no
+  record can exist: a non-durable machine, a timeout while the leader is still alive, a caller that
+  goes away, and a heap that installed a JS handle (that kernel cannot serve a replay after revival,
+  which the image-portability contract already states).
 - **`pyproc/runtime` is a declared plumbing subpath again**: `Runtime`, `bootRuntime`,
   `MemoryCapability`, `FileSystem`, `checkEnvironment`, and the engine/runtime contract
   assertions. 0.0.10 removed it, but the adoption seam for consumers that boot Pyodide

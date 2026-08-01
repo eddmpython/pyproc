@@ -166,15 +166,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "survivesTabDeath",
-    score: 8.0,
+    score: 9.0,
     en: Object.freeze({
       title: "A machine that outlives its tab",
-      state: "One logical machine spans same-origin tabs through leader election: a forcibly removed leader is taken over, followers commit through the leader, and the committed heap and `/home/web` cold-reopen after every participant closes, all of it exercised on the installed package. Half of exactly-once is now delivered: a leader records every command's outcome into the same durable generation as the heap, so a successor answers a repeated request from that record instead of running it twice, and a request absent from the generation is provably safe to run. What is still declared rather than delivered is the caller half - an interrupted caller is told `PYPROC_RPC_OUTCOME_UNKNOWN` instead of being parked and re-asked.",
+      state: "One logical machine spans same-origin tabs through leader election: a forcibly removed leader is taken over, followers commit through the leader, and the committed heap and `/home/web` cold-reopen after every participant closes, all of it exercised on the installed package. Exactly-once is delivered on both halves: a leader records every command's outcome into the same durable generation as the heap, and an interrupted caller on a durable machine is parked rather than told the outcome is unknown, then re-asks the successor once. A repeated request is answered from the record instead of run twice; a request absent from the generation is provably safe to run. The remaining `PYPROC_RPC_OUTCOME_UNKNOWN` cases are honest ones: a timeout with the leader still alive, a non-durable machine, a caller that itself goes away, and a heap that installed a JS handle - there the revived kernel cannot serve a replay at all, which the image-portability contract already states.",
       target: "The machine keeps running while any tab is open, and every command it accepted resolves exactly once.",
     }),
     ko: Object.freeze({
       title: "탭보다 오래 사는 머신",
-      state: "리더 선출로 논리 머신 하나가 동일 오리진 탭들을 가로지른다: 강제 제거된 리더는 승계되고, 팔로워는 리더를 통해 커밋하며, 참가자가 전부 닫힌 뒤에도 커밋된 힙과 `/home/web`이 콜드 재개된다. 전부 설치 패키지 위에서 돈다. 정확히 한 번의 절반이 배송됐다: 리더가 모든 명령의 결과를 힙과 같은 내구 세대에 기록하므로, 승계자는 되풀이된 요청을 다시 돌리지 않고 그 기록으로 답하고, 세대에 없는 요청은 다시 돌려도 정확히 한 번이다. 아직 선언인 것은 호출자 절반이다: 끊긴 호출자는 대기 후 재요청되는 대신 `PYPROC_RPC_OUTCOME_UNKNOWN`을 받는다.",
+      state: "리더 선출로 논리 머신 하나가 동일 오리진 탭들을 가로지른다: 강제 제거된 리더는 승계되고, 팔로워는 리더를 통해 커밋하며, 참가자가 전부 닫힌 뒤에도 커밋된 힙과 `/home/web`이 콜드 재개된다. 전부 설치 패키지 위에서 돈다. 정확히 한 번이 양쪽 절반 다 배송됐다: 리더가 모든 명령의 결과를 힙과 같은 내구 세대에 기록하고, 내구 머신의 끊긴 호출자는 모른다는 답 대신 대기했다가 승계자에게 한 번 다시 묻는다. 되풀이된 요청은 다시 돌지 않고 기록으로 답하고, 세대에 없는 요청은 다시 돌려도 정확히 한 번이다. 남은 `PYPROC_RPC_OUTCOME_UNKNOWN`은 정직한 경우들이다: 리더가 살아 있는데 난 타임아웃, 내구하지 않은 머신, 호출자 자신이 사라진 경우, 그리고 JS 핸들을 심은 힙(그 커널은 부활 뒤 재전송을 처리할 수 없다는 것이 이미 이식성 계약이다).",
       target: "탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다.",
     }),
     evidence: Object.freeze([
@@ -185,9 +185,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "callerSideReplay",
-        en: "Park an interrupted caller instead of telling it the outcome is unknown, and re-ask the successor once it announces ready",
-        ko: "끊긴 호출자에게 모른다고 답하는 대신 대기시키고, 승계자가 준비를 알리면 한 번 다시 묻는다",
+        id: "orderingAcrossReplay",
+        en: "Preserve ordering between concurrent commands across a failover, which replay does not guarantee today",
+        ko: "장애 승계를 건너는 동시 명령들의 순서를 보존한다(지금의 재전송은 그것을 보장하지 않는다)",
       }),
     ]),
   }),

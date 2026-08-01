@@ -60,7 +60,7 @@ deliberately not flattened into one code path:
   `PYPROC_LEADER_UNAVAILABLE` (retryable), `PYPROC_SPLIT_BRAIN`,
   `PYPROC_LEADER_LOCK_FAILED`, `PYPROC_PARTICIPANT_LEFT`, `PYPROC_RPC_ACTION_INVALID`,
   `PYPROC_KERNEL_EXECUTION_ERROR`. In-flight requests during a leader change fail with
-  `PYPROC_RPC_OUTCOME_UNKNOWN` and are never auto-replayed.
+  `PYPROC_RPC_OUTCOME_UNKNOWN`. On a durable machine a leader change instead parks the command and re-asks the successor once, which answers from the outcome recorded in the same generation as the heap.
 
 Any other source shape is `PYPROC_INPUT_INVALID`.
 
@@ -85,7 +85,7 @@ process-OS preconditions; `machine.proc`, IPC, and blocking sockets need them.
 ### `PyProcError`
 
 `{ code, retryable, context?, cause? }`. `retryable` is honest: outcome-unknown RPC
-failures are never retryable (`PYPROC_RPC_OUTCOME_UNKNOWN` means "do not auto-replay").
+failures are never retryable (`PYPROC_RPC_OUTCOME_UNKNOWN` means "no record exists, so do not auto-replay").
 
 ### `PYPROC_ERROR_CODES`
 

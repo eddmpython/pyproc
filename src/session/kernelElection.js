@@ -140,7 +140,7 @@ export class KernelElection {
 
   async _becomeLeader() {
     const started = now();
-    if (this._pending.size) this._rejectPendingOutcomeUnknown("요청을 보낸 participant가 새 leader로 승격됐다");
+    if (this._pending.size) this._parkOrRejectPending("요청을 보낸 participant가 새 leader로 승격됐다");
     this._role = "leader";
     this._phase = "recovering";
     this._leaderId = this.participantId;
@@ -271,7 +271,7 @@ export class KernelElection {
       return;
     }
     const changed = this._leaderId && (message.epoch > this._epoch || message.leaderId !== this._leaderId);
-    if (changed) this._rejectPendingOutcomeUnknown("leader가 요청 처리 중 바뀌었다");
+    if (changed) this._parkOrRejectPending("leader가 요청 처리 중 바뀌었다");
     this._leaderId = message.leaderId;
     this._epoch = message.epoch;
     this._recovered = message.recovered === true;
@@ -366,6 +366,50 @@ export class KernelElection {
     this._notify();
   }
 
+  // 리더 교체는 "모른다"가 아니라 "아직 모른다"다. 내구 머신이면 승계자가 세대를 부활시키고
+  // 그 세대가 결과 기록을 나르므로, 대기시켰다가 준비 announce에서 한 번 다시 물으면 답이 온다.
+  // 내구 머신이 아니면(journalDir 없음) 승계자에게 물어볼 세대가 없으므로 예전대로 거부한다:
+  // 그 경우의 "모른다"는 여전히 참이다.
+  _parkOrRejectPending(reason) {
+    if (!this._journalDir) { this._rejectPendingOutcomeUnknown(reason); return; }
+    // 승계자에게 다시 물으려면 그 커널이 쓸 수 있어야 한다. 힙에 JS 핸들이 있었던 머신은
+    // 부활한 커널에서 프록시 경로가 전부 트랩하므로(이미지 이식성 계약, 2026-08-01 실측)
+    // 재전송이 답 대신 죽은 인터프리터를 만난다. 그 경우의 "모른다"는 여전히 참이다.
+    if (this._session?.rt?.hostProxySurfaces?.().length) { this._rejectPendingOutcomeUnknown(reason); return; }
+    for (const entry of this._pending.values()) {
+      clearTimeout(entry.timer);
+      entry.timer = null;
+      entry.awaitingLeader = true;
+    }
+    this._notify();
+  }
+
+  // 준비된 리더가 생기면 대기 중인 요청을 정확히 한 번 다시 보낸다. 중복 배달이 되더라도
+  // 서버측이 결과 기록으로 답하므로(정확히 한 번의 리더 절반) 두 번 실행되지 않는다.
+  _resendParkedPending() {
+    if (this._phase !== "ready" || !this._leaderId) return;
+    for (const [requestId, entry] of this._pending) {
+      if (!entry.awaitingLeader) continue;
+      entry.awaitingLeader = false;
+      entry.leaderId = this._leaderId;
+      entry.epoch = this._epoch;
+      entry.timer = setTimeout(() => {
+        this._pending.delete(requestId);
+        this._notify();
+        entry.reject(kernelError("KernelElection: the sent RPC timed out. Whether it ran is unknown, so it is not re-executed automatically", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
+      }, entry.timeoutMs);
+      this._post({
+        type: "rpcReq",
+        requestId,
+        participantId: this.participantId,
+        targetLeaderId: this._leaderId,
+        epoch: this._epoch,
+        action: entry.action,
+        ...entry.payload,
+      });
+    }
+  }
+
   _rejectPendingOutcomeUnknown(reason) {
     for (const pending of this._pending.values()) {
       clearTimeout(pending.timer);
@@ -404,7 +448,7 @@ export class KernelElection {
         this._notify();
         reject(kernelError("KernelElection: the sent RPC timed out. Whether it ran is unknown, so it is not re-executed automatically", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
       }, timeoutMs);
-      this._pending.set(requestId, { resolve, reject, timer, leaderId, epoch });
+      this._pending.set(requestId, { resolve, reject, timer, leaderId, epoch, action, payload, timeoutMs });
       this._post({
         type: "rpcReq",
         requestId,
@@ -443,6 +487,7 @@ export class KernelElection {
 
   _settleReady() {
     if (this._phase !== "ready" || !this._leaderId) return;
+    this._resendParkedPending();
     const status = this.status();
     for (const waiter of this._readyWaiters) {
       clearTimeout(waiter.timer);

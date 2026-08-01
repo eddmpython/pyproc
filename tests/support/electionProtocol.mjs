@@ -142,4 +142,46 @@ export async function assertElectionProtocol(check, checkAsync) {
     const recorded = ctrl._outcomes.find((entry) => entry.requestId === "f/1/1");
     if (!recorded || recorded.ok !== false) throw new Error(JSON.stringify(ctrl._outcomes));
   });
+
+  // S8: 호출자 절반. 리더가 바뀌면 내구 머신의 대기 요청은 거부되지 않고 park되며, 준비된
+  // 승계자가 announce하면 정확히 한 번 다시 나간다. 서버측이 기록으로 답하므로 재전송이
+  // 두 번 실행을 만들지 않는다(S5가 그 절반을 문다).
+  await checkAsync("election: 리더 교체 시 대기 요청은 park되고 승계자에게 한 번 재전송된다", async () => {
+    const ctrl = makeCtrl();
+    ctrl._journalDir = {}; // 내구 머신(승계자에게 물어볼 세대가 있다)
+    ctrl._phase = "ready"; ctrl._leaderId = "old"; ctrl._epoch = 3;
+    const posted = [];
+    ctrl._chan = { postMessage: (message) => posted.push(message) };
+    let settled = 0;
+    ctrl._pending.set("c/1/1", {
+      resolve: () => { settled++; }, reject: () => { settled++; },
+      timer: null, leaderId: "old", epoch: 3, action: "run", payload: { code: "1" }, timeoutMs: 5000,
+    });
+    ctrl._acceptLeader({ epoch: 4, leaderId: "new", ready: false, recovered: false });
+    if (settled !== 0) throw new Error("리더 교체가 요청을 settle했다(park이어야 한다)");
+    if (!ctrl._pending.get("c/1/1")?.awaitingLeader) throw new Error("park 표시가 없다");
+    ctrl._acceptLeader({ epoch: 4, leaderId: "new", ready: true, recovered: true });
+    const resent = posted.filter((message) => message.type === "rpcReq" && message.requestId === "c/1/1");
+    if (resent.length !== 1) throw new Error(`재전송 횟수 ${resent.length}`);
+    if (resent[0].targetLeaderId !== "new" || resent[0].epoch !== 4) throw new Error(`옛 리더로 보냈다: ${resent[0].targetLeaderId}/${resent[0].epoch}`);
+    if (resent[0].code !== "1") throw new Error("payload가 재전송에 실리지 않았다");
+    const timer = ctrl._pending.get("c/1/1")?.timer;
+    if (timer) clearTimeout(timer);
+  });
+
+  // S9: 내구하지 않은 머신은 예전대로 거부한다. 승계자에게 물어볼 세대가 없으므로 그 경우의
+  // "모른다"는 여전히 참이고, park하면 영원히 답이 오지 않는 요청이 된다.
+  await checkAsync("election: 내구하지 않은 머신은 리더 교체에서 여전히 거부한다", async () => {
+    const ctrl = makeCtrl();
+    ctrl._journalDir = null;
+    ctrl._phase = "ready"; ctrl._leaderId = "old"; ctrl._epoch = 3;
+    ctrl._chan = { postMessage: () => {} };
+    let code = "";
+    ctrl._pending.set("d/1/1", {
+      resolve: () => {}, reject: (error) => { code = error.code; },
+      timer: null, leaderId: "old", epoch: 3, action: "run", payload: { code: "1" }, timeoutMs: 5000,
+    });
+    ctrl._acceptLeader({ epoch: 4, leaderId: "new", ready: false, recovered: false });
+    if (code !== "PYPROC_RPC_OUTCOME_UNKNOWN") throw new Error(`거부 코드 ${code || "없음"}`);
+  });
 }
