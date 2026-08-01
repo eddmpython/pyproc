@@ -78,6 +78,10 @@ export class MachineJournal {
     this._autoPack = normalizeAutoPackPolicy(cfg.autoPack);
     // 이식성 승인은 저널을 켤 때 한 번 선언한다(커밋마다 묻지 않는다: 정책은 세션 단위다).
     this._opts = { allowHostProxies: cfg.allowHostProxies === true };
+    // 세대에 함께 실리는 소비자 payload. 저널은 그 내용을 모른다: id와 두 함수만 안다.
+    // 이것이 있어야 "답이 내구적이다"와 "효과가 내구적이다"가 한 세대의 한 사실이 된다
+    // (결과를 세대 밖에 두면 승계자가 힙에 없는 효과의 결과를 답할 수 있다).
+    this._sidecar = cfg.sidecar && cfg.sidecar.id ? cfg.sidecar : null;
     this._onStatus = typeof cfg.onStatus === "function" ? cfg.onStatus : null;
     this._pruneAfterCommit = cfg.pruneAfterCommit === true;
     this._timer = null;
@@ -152,6 +156,8 @@ export class MachineJournal {
         ? collectMachineHome(this._rt.fs, this._homePath, { required: false, errorPrefix: "journal.commit" })
         : null;
       const files = home && home.bin.length ? [{ id: "home", bytes: home.bin, meta: home.meta }] : [];
+      const sidecarBytes = this._sidecar ? this._sidecar.collect() : null;
+      if (sidecarBytes && sidecarBytes.byteLength) files.push({ id: this._sidecar.id, bytes: sidecarBytes, meta: null });
       const committedAt = new Date().toISOString();
       this._kernel.resetCache();
       const committed = await commitState(globalThis.crypto, this._kernel, {
@@ -352,6 +358,7 @@ export class MachineJournal {
   // 끝냈고, 여기는 힙 성장 + 경계 되감기 + 페이지/홈 적용만 한다.
   _applyKernelGeneration(opened) {
     const { tree, pages, files, commit } = opened;
+    if (this._sidecar) this._sidecar.apply((files && files.get(this._sidecar.id)?.bytes) || null);
     const applied = materializeHeapGeneration({
       rt: this._rt, reactive: this._reactive, label: "journal.recover",
       heapLen: tree.heapLen, sp: tree.sp, pages,

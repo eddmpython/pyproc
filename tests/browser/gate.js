@@ -305,6 +305,30 @@ try {
     `recovered=${!!packRecovered}, 999로 어긋낸 뒤 jrx=${rt.run("jrx")}`);
   await jRootDir.removeEntry("pyprocGateJournal", { recursive: true });
 
+  // 세대 사이드카: 소비자 payload가 힙과 **같은 세대**에 실려 함께 부활한다. 정확히 한 번의
+  // 수렴이 이 사실 위에 선다(kernelElection의 결과 기록이 이 자리를 쓴다): 결과를 세대 밖에
+  // 두면 승계자가 힙에 없는 효과의 결과를 답할 수 있다. 그래서 "같은 세대"가 계약이다.
+  {
+    const sRootDir = await navigator.storage.getDirectory();
+    const sDirJ = await sRootDir.getDirectoryHandle("pyprocGateSidecar", { create: true });
+    const encoder = new TextEncoder();
+    let carried = null;
+    const sidecar = (payload) => ({
+      id: "outcomes",
+      collect: () => (payload ? encoder.encode(payload) : null),
+      apply: (bytes) => { carried = bytes ? new TextDecoder().decode(bytes) : null; },
+    });
+    rt.run("sidecarMark = 11");
+    const writer = rt.enableJournal({ dir: sDirJ, reactive, includeHome: false, sidecar: sidecar("outcome-A") });
+    await writer.commit();
+    rt.run("sidecarMark = 22"); // 힙을 어긋내야 "복구가 되돌렸다"가 증명된다
+    const recovered = await rt.enableJournal({ dir: sDirJ, reactive, includeHome: false, sidecar: sidecar(null) }).recover();
+    check("세대 사이드카: 소비자 payload가 힙과 같은 세대로 함께 부활한다",
+      !!recovered && rt.run("sidecarMark") === 11 && carried === "outcome-A",
+      `heap=${rt.run("sidecarMark")}, sidecar=${carried}`);
+    await sRootDir.removeEntry("pyprocGateSidecar", { recursive: true });
+  }
+
   // state-kernel 3단계(저널 재기초) 게이트 3종.
   {
     const { PAGE_SIZE } = await import("../../src/state/index.js"); // pyproc/history subpath 실물
