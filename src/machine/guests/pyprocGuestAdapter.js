@@ -70,16 +70,13 @@ class PyprocGuestAdapter {
 
   async snapshot(control) {
     throwIfOperationAborted(control, "pyproc snapshot");
-    // 이동 가능한 이미지는 살아있는 JS 프록시를 담을 수 없다. packet port의 파이썬 표면을
-    // 걷어낸 뒤 뜨고 곧 다시 심는다(걷지 않으면 복원한 힙이 죽은 함수 테이블을 가리킨다).
-    if (this._packetPort) this._packetPort.removePythonSurface();
-    try {
-      const image = await this._session.exportImage({ includeHome: !this._blockDeviceName });
-      throwIfOperationAborted(control, "pyproc snapshot", { outcomeUnknown: true });
-      return new Uint8Array(await image.arrayBuffer());
-    } finally {
-      if (this._packetPort) this._packetPort.installPythonSurface();
-    }
+    // 표면을 걷어낼 이유가 사라졌다: 값 경계에는 이미지가 나르지 못할 핸들이 없다(2026-08-01
+    // 근본 원인 기록). 대신 뜨기 전에 펌프를 한 번 돌려, 파이썬이 보낸 프레임이 이미지 안에
+    // 갇힌 채 저장되지 않게 한다(저장된 outbox는 부활 뒤 다시 나가 중복 배달이 된다).
+    if (this._packetPort) this._packetPort.pump();
+    const image = await this._session.exportImage({ includeHome: !this._blockDeviceName });
+    throwIfOperationAborted(control, "pyproc snapshot", { outcomeUnknown: true });
+    return new Uint8Array(await image.arrayBuffer());
   }
 
   async restore(payload, context, _manifest, control) {
@@ -133,7 +130,15 @@ class PyprocGuestAdapter {
       return { depth: reactive.tree().length, live: reactive.liveIdx };
     }
     if (message.type !== "run") throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `unsupported pyproc adapter request: ${message.type}`);
-    return this._session.rt.run(String(message.code || ""));
+    // 패킷 표면은 값 경계라 바이트가 저절로 건너지 않는다. 턴 경계에서만 펌프를 돌린다:
+    // 들어온 프레임을 실행 전에 파이썬 inbox로 넣고, 파이썬이 send한 것을 실행 뒤에 스위치로
+    // 내보낸다. 파이썬이 스택에 있는 동안 run()을 다시 부를 수 없으므로 여기가 유일한 지점이다.
+    if (this._packetPort) this._packetPort.pump();
+    try {
+      return this._session.rt.run(String(message.code || ""));
+    } finally {
+      if (this._packetPort) this._packetPort.pump();
+    }
   }
 
   inspect() {

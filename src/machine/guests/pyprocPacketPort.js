@@ -14,36 +14,64 @@
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { buildArpReply, buildIcmpEchoReply, describeFrame, toAddressBytes } from "../contracts/ipv4Frames.js";
 
-// 파이썬 표면. 경계를 넘는 변환은 명시적으로 한다: 암묵 변환은 Pyodide 판본에 따라 bytes를
-// JsProxy로도 Uint8Array로도 만들어서, 어느 쪽이 오는지 모르는 코드가 된다. to_js/to_py가 계약이다.
-const BOOTSTRAP = `
-import sys as _pyprocSys, types as _pyprocTypes
-from pyodide.ffi import to_js as _pyprocToJs
+// 파이썬 표면. **값 경계다: 이 소스는 JS 프록시를 하나도 심지 않는다.**
+// 근거는 실측이다(workerGuest 캠페인 A~O, 2026-08-01): setGlobal로 심은 JS 프록시가 힙에 있으면
+// 그 힙 이미지로 부활한 커널은 프록시 경로 전부가 트랩한다. 이미지가 Pyodide의 핸들 할당기 상태를
+// 통째로 나르기 때문이라, 부활 커널이 다른 이름으로 새로 만든 프록시조차 죽는다. 반대로 순수
+// 파이썬 큐 + run()의 인자와 반환값으로만 바이트가 건너는 표면은 이미지를 그대로 건넌다(케이스 O).
+// 그래서 파이썬은 리스트만 들고, 바이트는 base64 문자열로 소스에 실려 들어오고 나간다.
+// 파이썬 쪽 계약(send/recv/pending/address)은 한 글자도 바뀌지 않는다: 소비자 코드는 그대로다.
+// 프레임을 소스에 싣는 코덱. contracts/byteCodec을 안 쓰는 이유는 층 규칙이다: 그 파일은
+// btoa/Buffer(브라우저 전역)를 만지므로 platform이고, guest는 순수 계약만 소비한다. hex는
+// 전역 없이 성립하는 순수 변환이라 여기 여섯 줄로 산다(사본 논쟁이 아니라 층 경계의 결과다).
+const HEX = "0123456789abcdef";
+function hexFromFrame(bytes) {
+  let out = "";
+  for (const byte of bytes) out += HEX[byte >> 4] + HEX[byte & 15];
+  return out;
+}
+function frameFromHex(text) {
+  const bytes = new Uint8Array(text.length / 2);
+  for (let at = 0; at < bytes.length; at += 1) bytes[at] = parseInt(text.slice(at * 2, at * 2 + 2), 16);
+  return bytes;
+}
 
+const BOOTSTRAP = (macLiteral, ipv4Literal, endpointLiteral) => `
+import sys as _pyprocSys, types as _pyprocTypes
+
+class _PyprocNetQueues:
+    def __init__(self):
+        self.inbox = []
+        self.outbox = []
+
+_pyprocNetState = _PyprocNetQueues()
 _pyprocNetMod = _pyprocTypes.ModuleType('pyprocNet')
 
 def _pyprocNetSend(frame):
-    return _pyprocNetSendFrame(_pyprocToJs(bytes(frame)))
+    payload = bytes(frame)
+    _pyprocNetState.outbox.append(payload)
+    return len(payload)
 
 def _pyprocNetRecv():
-    value = _pyprocNetRecvFrame()
-    if value is None:
-        return None
-    toPy = getattr(value, 'to_py', None)
-    return bytes(toPy()) if toPy is not None else bytes(value)
+    return _pyprocNetState.inbox.pop(0) if _pyprocNetState.inbox else None
 
-def _pyprocNetAddressDict():
-    value = _pyprocNetAddress()
-    toPy = getattr(value, 'to_py', None)
-    return toPy() if toPy is not None else value
+def _pyprocNetIngest(encoded):
+    for chunk in encoded.split(','):
+        if chunk:
+            _pyprocNetState.inbox.append(bytes.fromhex(chunk))
+    return len(_pyprocNetState.inbox)
+
+def _pyprocNetDrain():
+    out = ','.join(frame.hex() for frame in _pyprocNetState.outbox)
+    _pyprocNetState.outbox.clear()
+    return out
 
 _pyprocNetMod.send = _pyprocNetSend
 _pyprocNetMod.recv = _pyprocNetRecv
-_pyprocNetMod.pending = lambda: _pyprocNetPending()
-_pyprocNetMod.address = _pyprocNetAddressDict
+_pyprocNetMod.pending = lambda: len(_pyprocNetState.inbox)
+_pyprocNetMod.address = lambda: {'mac': ${macLiteral}, 'ipv4': ${ipv4Literal}, 'endpointId': ${endpointLiteral}}
 _pyprocSys.modules['pyprocNet'] = _pyprocNetMod
 `;
-
 export class PyprocPacketPort {
   // queueLimit: 파이썬이 안 읽어도 메모리가 무한히 늘지 않게 하는 상한. 넘으면 가장 오래된
   // 프레임을 버리고 그 사실을 센다(조용히 버리지 않는다는 뜻: inspect에 droppedFrames로 남는다).
@@ -86,29 +114,38 @@ export class PyprocPacketPort {
   installPythonSurface() {
     const runtime = this._runtime;
     if (!runtime) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `pyproc packet port has no runtime: ${this._endpointId}`);
-    runtime.setGlobal("_pyprocNetSendFrame", (frame) => this.send(frame));
-    runtime.setGlobal("_pyprocNetRecvFrame", () => this._shift());
-    runtime.setGlobal("_pyprocNetPending", () => this._inbox.length);
-    runtime.setGlobal("_pyprocNetAddress", () => ({ mac: [...this._mac], ipv4: [...this._ipv4], endpointId: this._endpointId }));
-    runtime.run(BOOTSTRAP);
+    // 주소는 리터럴로 소스에 굽는다: 값이므로 프록시가 필요 없고, 이미지를 그대로 건넌다.
+    runtime.run(BOOTSTRAP(
+      JSON.stringify([...this._mac]),
+      JSON.stringify([...this._ipv4]),
+      JSON.stringify(this._endpointId),
+    ));
   }
 
-  // 스냅샷 직전에 파이썬 표면을 걷어낸다. 이 어댑터는 snapshotScope "portable"을 선언하는데,
-  // 살아있는 JS 프록시가 힙에 있으면 그 힙은 다른 프로세스에서 되살아나지 못한다(실측
-  // 2026-07-27: 배선 직후 web-computer 게이트가 `table index is out of bounds`로 죽었다.
-  // 프록시가 가리키던 함수 테이블 항목이 새 인터프리터에 없다). 복원 뒤에는 다시 심는다.
-  // 정직한 한계: 소비자 코드가 `import pyprocNet`으로 모듈 객체를 따로 붙들고 있으면 그
-  // 참조까지 지우지는 못한다. 그래서 이 표면은 모듈 전역으로만 쓰는 것이 계약이다.
-  removePythonSurface() {
-    if (!this._runtime) return;
-    this._runtime.run(
-      "import sys as _pyprocSys\n"
-      + "_pyprocSys.modules.pop('pyprocNet', None)\n"
-      + "for _name in ('_pyprocNetSendFrame', '_pyprocNetRecvFrame', '_pyprocNetPending', '_pyprocNetAddress', '_pyprocNetMod', '_pyprocToJs'):\n"
-      + "    globals().pop(_name, None)\n"
-      + "del _name\n",
-    );
+  // 턴 경계의 펌프. 값 경계라 바이트가 저절로 건너지 않는다: 들어온 프레임을 파이썬 inbox에
+  // 넣고, 파이썬이 send한 것을 스위치로 내보낸다. 어댑터가 매 요청 앞뒤로 부른다(파이썬이
+  // 스택에 있는 동안 run()을 다시 부르는 재진입을 피하는 유일한 지점이 턴 경계다).
+  pump() {
+    if (!this._runtime || !this._port) return { ingested: 0, drained: 0 };
+    let ingested = 0;
+    if (this._inbox.length) {
+      const encoded = this._inbox.map((frame) => hexFromFrame(frame)).join(",");
+      ingested = this._inbox.length;
+      this._inbox.length = 0;
+      this._runtime.run(`_pyprocNetIngest(${JSON.stringify(encoded)})`);
+    }
+    const drainedText = String(this._runtime.run("_pyprocNetDrain()") || "");
+    const frames = drainedText ? drainedText.split(",").filter(Boolean).map((chunk) => frameFromHex(chunk)) : [];
+    for (const frame of frames) this.send(frame);
+    return { ingested, drained: frames.length };
   }
+
+  // 이미지 직전에 표면을 걷어낼 이유가 사라졌다. 예전에는 살아있는 JS 프록시가 힙에 있으면
+  // 그 힙이 다른 프로세스에서 되살아나지 못해서(2026-07-27 실측) 뜨기 전에 걷고 다시 심었는데,
+  // 그 파이썬 층 수리는 애초에 닿을 수 없는 곳을 겨눈 것이었다(2026-08-01 근본 원인). 표면이
+  // 값 경계가 된 지금은 걷을 것이 없고, 이미지는 큐까지 그대로 나른다. 호출부 호환을 위해
+  // 두 메서드는 남기되 아무것도 하지 않는다는 사실을 이름이 아니라 이 주석이 말한다.
+  removePythonSurface() {}
 
   // 프레임 하나를 스위치로 보낸다. 파이썬에서도 이 경로를 쓴다(표면이 둘이면 통계가 갈린다).
   send(frame) {
