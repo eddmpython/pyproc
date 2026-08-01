@@ -91,6 +91,10 @@ export class MachineJournal {
     this._h0Key = null; // 리플레이 경계(cp0) 지문 캐시. 커밋/부활의 결정성 대조 축.
     this._legacyCleaned = false;
     this.commits = 0;
+    // 지속 스토리지 승인 여부. null은 "아직 묻지 않았다"이고, false는 "거절당했다"이다. 이 값이
+    // 보이지 않으면 소비자는 자기 내구 머신이 브라우저 압박에 지워질 수 있는지조차 모른다:
+    // 커밋은 성공했는데 다음 부팅이 첫 부팅이 되는 실패 모드가 조용히 남는다.
+    this.persistentStorage = null;
     this.pagesWritten = 0; // 실제 디스크에 쓴 페이지(dedupe로 걸러진 것은 제외)
     this.packs = 0;
     this.packBytes = 0;
@@ -113,7 +117,11 @@ export class MachineJournal {
     if (this._timer) return this;
     // 저널 디스크(OPFS)가 브라우저 압박 시 지워지는 best-effort 캐시로 남지 않게 지속 스토리지를
     // 요청한다. 거부돼도 동작은 계속된다(내구성 능력의 계약상 요청은 이 능력의 몫이다).
-    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().then((granted) => { this.persistentStorage = granted === true; }, () => { this.persistentStorage = false; });
+    } else {
+      this.persistentStorage = false; // 요청할 방법이 없는 환경 = 승인되지 않은 것과 같다
+    }
     this._sp = this._reactive.stackSave();
     this._lastSeq = this._rt.execSeq;
     let idleSince = null;

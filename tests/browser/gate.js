@@ -303,6 +303,12 @@ try {
   const packRecovered = await rt.enableJournal({ dir: jDir, reactive, includeHome: false }).recover();
   check("journal pack: pack만 남은 저널에서 복구(loose 0)", !!packRecovered && rt.run("jrx") === 1,
     `recovered=${!!packRecovered}, 999로 어긋낸 뒤 jrx=${rt.run("jrx")}`);
+  // 내구성의 전제가 보이는가. 커밋이 성공해도 브라우저가 저장소를 축출하면 다음 부팅이 첫
+  // 부팅이 된다. 그 위험을 소비자가 볼 수 없으면 "내구"는 확인 불가능한 주장이다: 승인 여부를
+  // 값으로 드러내고, 요청 자체가 불가능한 환경도 승인되지 않은 것과 같게 다룬다.
+  check("저널이 지속 스토리지 승인 여부를 값으로 드러낸다",
+    typeof gj.persistentStorage === "boolean" || gj.persistentStorage === null,
+    `persistentStorage=${gj.persistentStorage}`);
   await jRootDir.removeEntry("pyprocGateJournal", { recursive: true });
 
   // 세대 사이드카: 소비자 payload가 힙과 **같은 세대**에 실려 함께 부활한다. 정확히 한 번의

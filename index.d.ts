@@ -737,6 +737,14 @@ export interface JournalRecoverResult {
 declare class MachineJournal {
   readonly commits: number;
   readonly pagesWritten: number;
+  /**
+   * Whether the browser granted persistent storage. `null` before the request settles, `false` when
+   * it was denied or cannot be asked. A denial does not stop the journal - it means the browser may
+   * evict this machine under pressure, so a later boot would look like a first boot. Measured on
+   * headless Chromium 2026-08-01: denied. Consumers that need durability across eviction export an
+   * image rather than relying on the journal alone.
+   */
+  readonly persistentStorage: boolean | null;
   readonly packs: number;
   readonly packBytes: number;
   /** Starts the idle watcher. It never interrupts running code. */
