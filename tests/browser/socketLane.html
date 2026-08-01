@@ -1,0 +1,93 @@
+<!doctype html>
+<!--
+소켓 레인의 CI 증거. 이 표면(`pyproc/socket`)은 오랫동안 헤드리스 게이트가 0이었고, 그 이유는
+"릴레이를 이 패키지가 배송하지 않는다"였다. 그러나 릴레이는 이 저장소 안에 의존성 0으로 있고,
+러너가 그것과 로컬 TCP 서버를 함께 띄우면 바깥으로 한 바이트도 나가지 않는 밀폐 레인이 된다.
+릴레이를 배송하지 않는다는 제품 결정은 그대로다: 게이트가 자기 릴레이를 띄우는 것과 패키지가
+릴레이를 배송하는 것은 다른 문장이다.
+
+무는 것: 파이썬 socket 심이 실제 TCP를 건너 응답을 가져오는가(urllib -> socket -> WS -> TCP),
+그리고 릴레이가 끊겼을 때 조용히 매달리지 않고 오류로 끝나는가.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>socket lane gate</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "처리되지 않은 promise", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>socket lane</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "/index.js";
+  // 이 subpath는 클래스 직수출이다: 소비자가 Runtime에 직접 얹는다(공개 계약 그대로 쓴다).
+  import { SocketBridge } from "/src/capabilities/socketBridge.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+
+  const params = new URLSearchParams(location.search);
+  const relayURL = params.get("relay");
+  const originPort = params.get("originPort");
+  const indexURL = params.get("indexURL") || undefined;
+
+  try {
+    const machine = await boot({ ...(indexURL ? { indexURL } : {}) });
+    const rt = machine.runtime;
+    const info = new SocketBridge(rt, { relayURL }).install();
+    check("SocketBridge 설치: socket 심 두 개 + JSPI 가용",
+      info.jspi === true && info.installed.length >= 2, JSON.stringify(info.installed));
+
+    // urllib -> socket 심 -> WebSocket -> 릴레이 -> 로컬 TCP. 바깥으로 나가지 않는다.
+    const started = performance.now();
+    const raw = await rt.runAsync(`
+import urllib.request
+resp = urllib.request.urlopen('http://127.0.0.1:${originPort}/gateBody', timeout=10)
+body = resp.read()
+[int(resp.status), body.decode()]
+`);
+    timings.httpMs = Math.round(performance.now() - started);
+    const result = raw && raw.toJs ? raw.toJs() : raw;
+    check("파이썬 urllib이 릴레이를 건너 로컬 TCP에서 바이트를 받는다",
+      Array.isArray(result) && result[0] === 200 && result[1] === "pyproc-socket-lane",
+      result ? `status=${result[0]}, "${result[1]}", ${timings.httpMs}ms` : "null");
+    if (raw && raw.destroy) raw.destroy();
+
+    // 정직한 실패: 릴레이가 없는 포트로 다이얼하면 매달리지 않고 오류로 끝난다.
+    const deadPort = Number(originPort) + 1; // 아무도 듣지 않는 포트(릴레이가 다이얼에 실패한다)
+    let refusal = "";
+    try {
+      await rt.runAsync([
+        "import urllib.request",
+        `urllib.request.urlopen('http://127.0.0.1:${deadPort}/gateBody', timeout=5)`,
+      ].join("\n"));
+    } catch (error) { refusal = String(error?.message || error).slice(-70); }
+    check("닿을 수 없는 포트는 매달리지 않고 오류로 끝난다", refusal.length > 0, refusal || "조용히 성공했다");
+    await machine.dispose();
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-400));
+  }
+
+  await report();
+</script>
+</body>
+</html>

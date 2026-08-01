@@ -297,25 +297,24 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "virtualizedNetwork",
-    score: 7.5,
+    score: 8.0,
     en: Object.freeze({
       title: "Network, the browser way",
-      state: "An in-kernel ASGI server answers `fetch` from Python with concurrent requests kept apart, a virtual origin serves it from the installed package, `urllib` performs real HTTP through the syscall bridge, the permission jail decides `connectSrc` per host, and two guests exchange IPv4 frames on one switch. Outbound raw sockets need a WS-to-TCP relay this package does not ship, so that subpath has no headless gate at all.",
+      state: "An in-kernel ASGI server answers `fetch` from Python with concurrent requests kept apart, a virtual origin serves it from the installed package, `urllib` performs real HTTP through the syscall bridge, the permission jail decides `connectSrc` per host, and two guests exchange IPv4 frames on one switch. Outbound raw sockets still need a WS-to-TCP relay this package does not ship, but the surface is no longer ungated: a hermetic lane starts the in-repo relay and a local TCP origin, and Python's `urllib` crosses both to read bytes back.",
       target: "Python network code runs unmodified, and the relay boundary is the only thing a reader has to know.",
     }),
     ko: Object.freeze({
       title: "브라우저 방식의 네트워크",
-      state: "커널 내 ASGI 서버가 파이썬으로 `fetch`에 답하고 동시 요청이 서로를 덮지 않는다. 가상 오리진이 설치 패키지에서 그것을 서빙하고, `urllib`이 syscall 다리로 진짜 HTTP를 하고, 권한 감옥이 host별 `connectSrc`를 가르고, 두 guest가 한 스위치에서 IPv4 프레임을 주고받는다. 아웃바운드 raw 소켓은 이 패키지가 배송하지 않는 WS-TCP 릴레이가 필요해 그 subpath에는 헤드리스 게이트가 아예 없다.",
+      state: "커널 내 ASGI 서버가 파이썬으로 `fetch`에 답하고 동시 요청이 서로를 덮지 않는다. 가상 오리진이 설치 패키지에서 그것을 서빙하고, `urllib`이 syscall 다리로 진짜 HTTP를 하고, 권한 감옥이 host별 `connectSrc`를 가르고, 두 guest가 한 스위치에서 IPv4 프레임을 주고받는다. 아웃바운드 raw 소켓은 여전히 이 패키지가 배송하지 않는 WS-TCP 릴레이를 요구하지만, 그 표면이 더는 무게이트가 아니다: 밀폐 레인이 저장소 안 릴레이와 로컬 TCP 오리진을 띄우고 파이썬 `urllib`이 둘을 건너 바이트를 읽는다.",
       target: "파이썬 네트워크 코드가 고쳐지지 않고 돌고, 읽는 사람이 알아야 할 것은 릴레이 경계 하나뿐이다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/guestNetworkProbe.html", lane: "test:web-machine" }),
+      Object.freeze({ path: "tests/browser/socketLane.mjs", lane: "test:socket" }),
     ]),
-    manual: Object.freeze([
-      Object.freeze({ path: "tests/attempts/socketBridge/socketCapProbe.html", why: "outbound sockets need a WS-to-TCP relay this package does not ship" }),
-    ]),
+    manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
         id: "inTabTls",

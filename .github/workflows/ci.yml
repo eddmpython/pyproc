@@ -79,6 +79,11 @@ jobs:
       - run: npm run test:web-machine
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # 소켓 레인: 이 표면은 "릴레이를 배송하지 않는다"는 이유로 오래 무게이트였다. 러너가
+      # 저장소 안 릴레이와 로컬 TCP 오리진을 소유하므로 바깥으로 한 바이트도 나가지 않는다.
+      - run: npm run test:socket
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       # MCP 레시피 게이트: 에이전트 통합 표면(stdio JSON-RPC + 샌드박스 도구 4종)의 실왕복.
       - run: npm run test:mcp
         env:
