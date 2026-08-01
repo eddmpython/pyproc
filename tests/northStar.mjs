@@ -193,7 +193,7 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "portableMachineImage",
-    score: 8.5,
+    score: 9.0,
     en: Object.freeze({
       title: "A machine you can carry",
       state: "`.pymachine` and `.webmachine` files are signed content-addressed envelopes: signature and trusted-key verification, byte-tamper rejection, layout-independent reparse, worker-to-worker revival, and a cross-context transport refused on an `h0` mismatch instead of opened silently. The product gate exports a signed image and imports it into a fresh browser profile behind an explicit signer trust screen. Portability still assumes the same engine and manifest. A JS proxy handle cannot cross an image at all, so a surface that installs one poisons every proxy path in the revived kernel; the packet device and the permission jail were moved to value boundaries and survive a revival in CI, while a blocking surface (the syscall bridge behind input(), sockets, GPU) cannot move and is refused at export unless the caller acknowledges it.",
@@ -208,6 +208,7 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
+      Object.freeze({ path: "tests/webMachine/browser/probes/imagePortabilityProbe.html", lane: "test:web-machine" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
@@ -225,15 +226,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "multiGuestComputer",
-    score: 8.0,
+    score: 8.5,
     en: Object.freeze({
       title: "A computer that boots guests",
-      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others and a frame round-trips while another guest is inside a loop, all proven in CI. The display, framebuffer, packet-network, and dual-boot probes need x86 assets and run only in a local lane, and the Linux engine and image stay a hash-pinned development channel that cannot be redistributed.",
+      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others and a frame round-trips while another guest is inside a loop, all proven in CI. Presenting a frame onto a canvas is gated in CI as well (`CanvasRgbaFrameSink`). The display, packet-network, and dual-boot probes need x86 assets and run only in a local lane, and the Linux engine and image stay a hash-pinned development channel that cannot be redistributed.",
       target: "Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does.",
     }),
     ko: Object.freeze({
       title: "guest를 부팅하는 컴퓨터",
-      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. guest를 자기 워커에 얹는 길도 생겼다(`pyproc-worker`): CPU 바운드 guest가 다른 guest를 멈추지 않고 프레임이 상대의 루프 도중에 왕복하는 것을 CI가 문다. 디스플레이, 프레임버퍼, 패킷 네트워크, dual-boot probe는 x86 자산이 필요해 로컬 레인에서만 돌고, Linux 엔진과 이미지는 재배포 불가한 해시 고정 개발 채널로 남아 있다.",
+      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. guest를 자기 워커에 얹는 길도 생겼다(`pyproc-worker`): CPU 바운드 guest가 다른 guest를 멈추지 않고 프레임이 상대의 루프 도중에 왕복하는 것을 CI가 문다. 프레임을 캔버스에 올리는 경로도 CI가 문다(`CanvasRgbaFrameSink`). 디스플레이, 패킷 네트워크, dual-boot probe는 x86 자산이 필요해 로컬 레인에서만 돌고, Linux 엔진과 이미지는 재배포 불가한 해시 고정 개발 채널로 남아 있다.",
       target: "어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다.",
     }),
     evidence: Object.freeze([
@@ -241,6 +242,7 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/webMachine/browser/probes/dualEngineProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/ownerSuccessorProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
+      Object.freeze({ path: "tests/webMachine/browser/probes/workerHostedGuestProbe.html", lane: "test:web-machine" }),
     ]),
     manual: Object.freeze([
       Object.freeze({ path: "tests/webMachine/browser/probes/dualBootProbe.html", why: "x86 engine/firmware/guest image are gitignored, so the lane cannot be built in CI" }),
@@ -343,21 +345,22 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "localPythonParity",
-    score: 7.0,
+    score: 7.5,
     en: Object.freeze({
       title: "Everything local Python does",
-      state: "Pyodide's `dlopen` already loads native C-extension wheels (numpy, pandas, scipy and more), packages install from a cache, `%pip` and `freeze` work inside the machine, and the WASI lane installs pure-Python wheels. The long tail is what is missing: an arbitrary package needs a published pyemscripten wheel, numpy has no SIMD build, threading is upstream-pending, and the GPU lane has no headless adapter, so its only evidence is a manual probe.",
+      state: "Pyodide's `dlopen` already loads native C-extension wheels (numpy, pandas, scipy and more), packages install from a cache, `%pip` and `freeze` work inside the machine, and the WASI lane installs pure-Python wheels. The long tail is what is missing: an arbitrary package needs a published pyemscripten wheel, numpy has no SIMD build, threading is upstream-pending, and the GPU lane has no headless adapter, so what CI holds is the byte identity of the WGSL each consumer path compiles, not its result on a GPU.",
       target: "Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology.",
     }),
     ko: Object.freeze({
       title: "로컬 파이썬이 하는 전부",
-      state: "Pyodide의 `dlopen`이 이미 네이티브 C 확장 wheel(numpy, pandas, scipy 등)을 싣고, 패키지가 캐시에서 설치되고, 머신 안에서 `%pip`과 `freeze`가 돌고, WASI 레인이 순수 파이썬 wheel을 설치한다. 없는 것은 롱테일이다: 임의 패키지는 게시된 pyemscripten wheel을 요구하고, numpy에는 SIMD 빌드가 없고, 스레딩은 upstream 대기이며, GPU 레인은 헤드리스 어댑터가 없어 증거가 수동 probe뿐이다.",
+      state: "Pyodide의 `dlopen`이 이미 네이티브 C 확장 wheel(numpy, pandas, scipy 등)을 싣고, 패키지가 캐시에서 설치되고, 머신 안에서 `%pip`과 `freeze`가 돌고, WASI 레인이 순수 파이썬 wheel을 설치한다. 없는 것은 롱테일이다: 임의 패키지는 게시된 pyemscripten wheel을 요구하고, numpy에는 SIMD 빌드가 없고, 스레딩은 upstream 대기이며, GPU 레인은 헤드리스 어댑터가 없어 CI가 무는 것은 소비자 경로가 컴파일에 넘기는 WGSL의 바이트 동일성이지 GPU에서의 결과가 아니다.",
       target: "로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/browser/wasiGate.html", lane: "ci" }),
       Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
     manual: Object.freeze([
       Object.freeze({ path: "tests/attempts/gpuCompute/gpuPythonProbe.html", why: "headless CI has no WebGPU adapter, so shader byte identity is the ceiling" }),
