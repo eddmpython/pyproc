@@ -1,0 +1,118 @@
+<!doctype html>
+<!--
+워커 호스팅 guest의 CI 증거. 캠페인(tests/attempts/workerGuest)이 졸업시킨 계약을 출하 경로로
+다시 잰다: 공개 조립 표면으로 두 guest가 각자 워커에서 부팅하고, 한 guest의 CPU 루프가 다른
+guest를 막지 않으며, 프레임이 그 루프 도중에 파이썬을 왕복하고, 이미지가 새 워커에서 부활한다.
+x86 자산이 필요 없으므로 무자산 레인이다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>worker hosted guest probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+  <script>
+    window.addEventListener("error", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module 초기화", pass: false, info: event.message }] }) }).catch(() => {});
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "처리되지 않은 promise", pass: false, info: String(event.reason) }] }) }).catch(() => {});
+    });
+  </script>
+</head>
+<body>
+<h1>워커에 사는 guest</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { createWebComputer } from "../../../../src/machine/index.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    try {
+      await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) });
+    } catch (error) {}
+  };
+
+  const params = new URLSearchParams(location.search);
+  const indexURL = params.get("indexURL") || undefined;
+  const busyIterations = Number(params.get("iterations") || 8000000);
+  let alpha = null;
+  let beta = null;
+  try {
+    const computer = createWebComputer({ python: { manifest: { session: { ...(indexURL ? { indexURL } : {}) } } } });
+    const manifest = { session: { ...(indexURL ? { indexURL } : {}) } };
+    alpha = computer.host.createMachine({ machineId: "workerAlpha", adapterId: "pyproc-worker", manifest, permissions: { devices: ["console", "network"] } });
+    beta = computer.host.createMachine({ machineId: "workerBeta", adapterId: "pyproc-worker", manifest, permissions: { devices: ["console", "network"] } });
+    const bootStart = performance.now();
+    await Promise.all([alpha.boot(), beta.boot()]);
+    timings.workerBootMs = Math.round(performance.now() - bootStart);
+    check("두 guest가 각자 워커에서 공개 조립 표면으로 부팅한다",
+      (await alpha.inspect()).guest.hosted === "worker" && (await beta.inspect()).guest.hosted === "worker",
+      `boot ${timings.workerBootMs}ms`);
+
+    const idleStart = performance.now();
+    await beta.request({ type: "run", code: "1 + 1" });
+    timings.idleRequestMs = Math.round(performance.now() - idleStart);
+    const busy = alpha.request({ type: "run", code: `total = 0\nfor i in range(${busyIterations}):\n    total += i\ntotal` });
+    let busySettled = false;
+    busy.then(() => { busySettled = true; }, () => { busySettled = true; });
+    const blockedStart = performance.now();
+    const value = await beta.request({ type: "run", code: "6 * 7" });
+    timings.blockedRequestMs = Math.round(performance.now() - blockedStart);
+    check("한 guest의 CPU 루프가 다른 guest를 막지 않는다",
+      value === 42 && timings.blockedRequestMs <= timings.idleRequestMs + 250 && !busySettled,
+      `idle ${timings.idleRequestMs}ms, blocked ${timings.blockedRequestMs}ms`);
+
+    const betaNet = await beta.request({ type: "netInspect" });
+    const peer = computer.devices.network.connect({
+      endpointId: "probePeer",
+      receive: () => {
+        peer.send(Uint8Array.from([...betaNet.macAddress, 2, 0, 0, 0, 0, 254, 0x88, 0xb5, ...new TextEncoder().encode("pong")]));
+      },
+    });
+    await beta.request({ type: "run", code: [
+      "import pyprocNet",
+      "mac = list(pyprocNet.address()['mac'])",
+      "pyprocNet.send(bytes([2,0,0,0,0,254] + mac + [136,181] + list(b'ping')))",
+    ].join("\n") });
+    let payload = null;
+    for (let attempt = 0; attempt < 40 && payload === null && !busySettled; attempt += 1) {
+      payload = await beta.request({ type: "run", code: [
+        "import pyprocNet",
+        "frame = pyprocNet.recv()",
+        "while frame is not None and frame[12:14] != bytes([136,181]):",
+        "    frame = pyprocNet.recv()",
+        "None if frame is None else frame[14:].decode()",
+      ].join("\n") }) ?? null;
+    }
+    check("프레임이 상대 guest의 루프 도중에 파이썬을 왕복한다",
+      payload === "pong" && !busySettled, `payload=${payload}`);
+    await busy;
+
+    await beta.request({ type: "run", code: "portableMarker = 4242" });
+    await beta.pause();
+    const image = await beta.snapshot();
+    await beta.restore(image);
+    await beta.resume();
+    const revived = await beta.request({ type: "run", code: "portableMarker + 1" });
+    const address = await beta.request({ type: "run", code: "import pyprocNet\nstr(pyprocNet.address()['endpointId'])" });
+    check("이미지가 새 워커에서 부활하고 packet 장치가 다시 붙는다",
+      image.snapshotScope === "portable" && revived === 4243 && address === "workerBeta:network",
+      `${image.payload.byteLength}B, marker ${revived}, ${address}`);
+    peer.close();
+  } catch (error) {
+    check("예외 없음", false, String(error?.stack || error).slice(-400));
+  } finally {
+    try { await alpha?.shutdown(); } catch (error) {}
+    try { await beta?.shutdown(); } catch (error) {}
+    await report();
+  }
+</script>
+</body>
+</html>

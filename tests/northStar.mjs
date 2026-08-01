@@ -228,12 +228,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 8.0,
     en: Object.freeze({
       title: "A computer that boots guests",
-      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. The display, framebuffer, packet-network, and dual-boot probes need x86 assets and run only in a local lane, and the Linux engine and image stay a hash-pinned development channel that cannot be redistributed.",
+      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others and a frame round-trips while another guest is inside a loop, all proven in CI. The display, framebuffer, packet-network, and dual-boot probes need x86 assets and run only in a local lane, and the Linux engine and image stay a hash-pinned development channel that cannot be redistributed.",
       target: "Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does.",
     }),
     ko: Object.freeze({
       title: "guest를 부팅하는 컴퓨터",
-      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. 디스플레이, 프레임버퍼, 패킷 네트워크, dual-boot probe는 x86 자산이 필요해 로컬 레인에서만 돌고, Linux 엔진과 이미지는 재배포 불가한 해시 고정 개발 채널로 남아 있다.",
+      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. guest를 자기 워커에 얹는 길도 생겼다(`pyproc-worker`): CPU 바운드 guest가 다른 guest를 멈추지 않고 프레임이 상대의 루프 도중에 왕복하는 것을 CI가 문다. 디스플레이, 프레임버퍼, 패킷 네트워크, dual-boot probe는 x86 자산이 필요해 로컬 레인에서만 돌고, Linux 엔진과 이미지는 재배포 불가한 해시 고정 개발 채널로 남아 있다.",
       target: "어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다.",
     }),
     evidence: Object.freeze([

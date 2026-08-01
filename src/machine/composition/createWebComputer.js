@@ -11,6 +11,8 @@ import { bootSession, openMachine } from "../../session/session.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { createBrowserHost } from "./createBrowserHost.js";
 import { createPyprocGuestFactory } from "../guests/pyprocGuestAdapter.js";
+import { createWorkerHostedGuestFactory } from "../guests/workerHostedGuestAdapter.js";
+import { createRpcPort } from "../../runtime/rpcChannel.js";
 import { createV86GuestFactory } from "../guests/v86GuestAdapter.js";
 import { MemoryEthernetSwitch } from "../devices/memoryEthernetSwitch.js";
 import { MemoryBlockDevice } from "../devices/memoryBlockDevice.js";
@@ -59,6 +61,15 @@ export function createWebComputer({
   };
 
   const host = createBrowserHost({ devices, cryptoProvider });
+  // 워커 호스팅 어댑터. 등록만 하고 머신은 만들지 않는다: 소비자가 adapterId로 고르는 모드다.
+  // 한 스레드를 나누는 기본 어댑터와 달리 guest 커널이 자기 스레드를 갖는다(CPU 바운드 guest가
+  // 다른 guest를 막지 않는다). 조립이 platform 조각 둘을 주입하는 이유는 층 법이다: guest는
+  // 순수 계약만 소비하고, machine 밖(rpcChannel)과 자산 URL은 조립 지점이 안다.
+  host.registerAdapter("pyproc-worker", createWorkerHostedGuestFactory({
+    createPort: createRpcPort,
+    workerURL: new URL("./workerHostedGuestWorker.js", import.meta.url).href,
+    ...(builtInDevices.network ? { networkDeviceName: "network" } : {}),
+  }));
   host.registerAdapter("pyproc-block", createPyprocGuestFactory({
     bootSession: python.bootSession ?? bootSession,
     openMachine: python.openMachine ?? openMachine,

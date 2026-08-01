@@ -1,4 +1,4 @@
-// workerGuestAdapter.js - the campaign's candidate: a guest adapter whose session lives in a worker.
+// workerHostedGuestAdapter.js - Layer 5/guests: 세션이 워커에 사는 guest 어댑터.
 //
 // The hypothesis this file tests is narrow and falsifiable: the 8-method adapter contract
 // (boot/pause/resume/snapshot/restore/shutdown/request/inspect) is already async and message-shaped,
@@ -13,24 +13,29 @@
 //    revives into a worker, so the scope it declares is the scope it delivers.
 //  - **a bridged packet device**, so the guest reaches the shared switch that cannot leave the host
 //    thread. What survives the crossing and what changes shape is in portBridgedDevice.js.
-import { createRpcPort } from "../../../src/runtime/rpcChannel.js";
-import { indexRequirements, resolveRequiredDevice } from "../../../src/machine/contracts/deviceRequirement.js";
+import { indexRequirements, resolveRequiredDevice } from "../contracts/deviceRequirement.js";
+import { WebMachineError } from "../contracts/webMachineError.js";
 import { serveBridgedDevice } from "./portBridgedDevice.js";
 
-export function createWorkerGuestFactory({ workerURL, networkDeviceName = null } = {}) {
-  if (!workerURL) throw new TypeError("createWorkerGuestFactory: a workerURL is required");
-  return () => new WorkerGuestAdapter({ workerURL, networkDeviceName });
+// createPort는 주입이다. guest는 순수 계약만 소비하고 machine 밖(runtime의 rpcChannel)은 조립
+// 지점만 만질 수 있다는 층 법의 결과이며, 출하 pyproc 어댑터가 bootSession/openMachine을 받는
+// 것과 같은 형태다. workerURL도 주입인 이유는 같다: 자산 위치는 조립이 안다.
+export function createWorkerHostedGuestFactory({ createPort, workerURL, networkDeviceName = null } = {}) {
+  if (typeof createPort !== "function") throw new TypeError("a createPort function is required");
+  if (!workerURL) throw new TypeError("a workerURL is required");
+  return () => new WorkerHostedGuestAdapter({ createPort, workerURL, networkDeviceName });
 }
 
-class WorkerGuestAdapter {
-  constructor({ workerURL, networkDeviceName }) {
+class WorkerHostedGuestAdapter {
+  constructor({ createPort, workerURL, networkDeviceName }) {
+    this._createPort = createPort;
     this._workerURL = workerURL;
     this._networkDeviceName = networkDeviceName ? String(networkDeviceName) : null;
     // The declaration is the single truth about what this guest needs, exactly as the in-process
     // adapter has it: the host reads `requiredDevices` for its allowlist, and the adapter resolves
     // devices only through that declaration. A bridge does not earn an exemption from that law.
     this.capabilities = {
-      adapterVersion: this._networkDeviceName ? "worker-guest-probe-net-v2" : "worker-guest-probe-v2",
+      adapterVersion: this._networkDeviceName ? "worker-hosted-net-v1" : "worker-hosted-v1",
       snapshotScope: "portable",
       pauseMode: "cooperative",
       shutdownMode: "release",
@@ -68,7 +73,7 @@ class WorkerGuestAdapter {
   }
 
   async snapshot() {
-    if (!this._port) throw new Error("workerGuest: not booted");
+    if (!this._port) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "workerHostedGuest: not booted");
     const reply = await this._port.call({ type: "snapshot" });
     return reply.bytes;
   }
@@ -97,7 +102,7 @@ class WorkerGuestAdapter {
   }
 
   async request(message) {
-    if (!this._port) throw new Error("workerGuest: not booted");
+    if (!this._port) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "workerHostedGuest: not booted");
     if (message.type === "run") {
       const reply = await this._port.call({ type: "run", code: String(message.code || "") });
       return reply.value;
@@ -114,7 +119,7 @@ class WorkerGuestAdapter {
       const reply = await this._port.call({ type: "netInspect" });
       return reply.stats;
     }
-    throw new Error(`workerGuest: unsupported request ${message.type}`);
+    throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `workerHostedGuest: unsupported request ${message.type}`);
   }
 
   inspect() {
@@ -131,7 +136,7 @@ class WorkerGuestAdapter {
   // and restore differ only in that message. Two copies of this wiring would drift.
   async _spawn(context, first) {
     this._worker = new Worker(this._workerURL, { type: "module" });
-    this._port = createRpcPort(this._worker, { label: "workerGuest" });
+    this._port = this._createPort(this._worker, { label: "workerHostedGuest" });
     const transfer = [];
     if (this._networkDeviceName) {
       const device = resolveRequiredDevice(context.devices, this._requirementByName.get(this._networkDeviceName), "workerGuest adapter");

@@ -1,4 +1,4 @@
-// portBridgedDevice.js - graduation item 3: can a device contract cross a worker boundary intact?
+// portBridgedDevice.js - Layer 5/guests: 장치 계약이 워커 경계를 건너는 다리(양쪽 절반).
 //
 // The device lives on the host thread (the switch is shared between guests, so it has to). The guest
 // that consumes it now lives in a worker. This file is the two halves of the crossing, and it exists
@@ -19,7 +19,7 @@
 //    `connect()` returns, so the bridged port carries the failure to the first `send()`/`close()`.
 //    The code is preserved; the timing is not. Any consumer that relies on `connect()` throwing has
 //    to move that expectation one call later.
-import { WebMachineError } from "../../../src/machine/contracts/webMachineError.js";
+import { WebMachineError } from "../contracts/webMachineError.js";
 
 const DEVICE_CHANNEL = "workerGuestDevice";
 
@@ -36,7 +36,7 @@ export function serveBridgedDevice({ port, device, label = "device" }) {
     channel: DEVICE_CHANNEL,
     reqId,
     ok: false,
-    code: error?.code || "WEB_MACHINE_DEVICE_BRIDGE_FAILED",
+    code: error?.code || "WEB_MACHINE_DEVICE_MISSING",
     message: String(error?.message || error),
   });
 

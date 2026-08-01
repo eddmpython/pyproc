@@ -29,6 +29,8 @@ const ASSET_FREE = [
   // 이식성 계약(값 경계 표면은 이미지를 건너 살고, 블로킹 표면은 뜨는 순간 거부된다). 무자산이다:
   // 세션 둘과 감옥만 쓴다. 브라우저 게이트 본편이 시간 예산 끝이라 전용 페이지로 세웠다.
   "tests/webMachine/browser/probes/imagePortabilityProbe.html",
+  // 워커 호스팅 guest(캠페인 졸업). 무자산이다: 워커 둘과 내장 스위치만 쓴다.
+  "tests/webMachine/browser/probes/workerHostedGuestProbe.html",
 ];
 // x86 자산이 필요한 probe. ownerSuccessorParticipant는 probe가 iframe으로 여는 참가자 페이지다.
 const V86_BACKED = [

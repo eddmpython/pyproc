@@ -1,5 +1,6 @@
-// guestWorker.js - the worker side of the workerGuest campaign: a pyproc kernel hosted off the main
-// thread, driven by the same request shapes the in-process adapter accepts.
+// workerHostedGuestWorker.js - Layer 5/composition: 워커 안에서 도는 pyproc 커널.
+// composition에 사는 이유는 층 법이다: 이 파일은 session과 runtime을 만지고, machine 밖으로
+// 나갈 수 있는 것은 조립 지점뿐이다. 어댑터(rank 2)는 이 파일을 알지 못하고 URL을 주입받는다.
 //
 // This is deliberately thin. The question the campaign asks is whether the *adapter contract* is the
 // right seam, so this file does the minimum needed to answer it: boot a deterministic session, run
@@ -14,11 +15,12 @@
 //  2. **The devices live on the host thread.** The switch is shared between guests, so it cannot move
 //     here. `createBridgedDevice` gives this side a device-shaped proxy; what survives the crossing
 //     and what changes shape is documented in portBridgedDevice.js.
-import { bootSession, openMachine } from "../../../src/session/session.js";
-import { toErrorPayload } from "../../../src/runtime/errors.js";
-import { DEFAULT_INDEX } from "../../../src/runtime/runtime.js";
-import { PyprocPacketPort } from "../../../src/machine/guests/pyprocPacketPort.js";
-import { createBridgedDevice } from "./portBridgedDevice.js";
+import { bootSession, openMachine } from "../../session/session.js";
+import { toErrorPayload } from "../../runtime/errors.js";
+import { WebMachineError } from "../contracts/webMachineError.js";
+import { DEFAULT_INDEX } from "../../runtime/runtime.js";
+import { PyprocPacketPort } from "../guests/pyprocPacketPort.js";
+import { createBridgedDevice } from "../guests/portBridgedDevice.js";
 
 let session = null;
 let packetPort = null;
@@ -84,7 +86,7 @@ onmessage = async (event) => {
       postMessage({ reqId, type: "ok", h0: await session._cp0Digest() });
       return;
     }
-    if (!session) throw new Error("guestWorker: not booted");
+    if (!session) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", "workerHostedGuest: not booted");
     if (message.type === "run") {
       // 값 경계 표면은 턴 경계에서 펌프가 돌아야 바이트가 건넌다(in-process 어댑터와 같은 계약).
       // 워커에서도 같은 자리다: 파이썬이 스택에 있는 동안 run()을 다시 부를 수 없다.
@@ -129,7 +131,7 @@ onmessage = async (event) => {
       postMessage({ reqId, type: "ok" });
       return;
     }
-    throw new Error(`guestWorker: unsupported request ${message.type}`);
+    throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `workerHostedGuest: unsupported request ${message.type}`);
   } catch (error) {
     replyError(reqId, error);
   }

@@ -200,14 +200,25 @@
 - 이식성 계약의 남은 부채도 하나 닫고 하나 좁혔다: 전용 probe(imagePortabilityProbe, CI 레인
   6/6)가 감옥의 이미지 왕복을 물고, 핸들 유입구는 승인 지점 표로 고정됐다(우회가 새로 생기면 RED).
 
+## 2026-08-01 (4): 워커 guest가 src로 졸업하고 캠페인이 닫혔다
+
+- `src/machine/guests/workerHostedGuestAdapter.js` + `portBridgedDevice.js`, 워커 본체는
+  `src/machine/composition/workerHostedGuestWorker.js`. 워커가 composition에 사는 이유는 층 법이다:
+  그 파일은 session과 runtime을 만지고 machine 밖으로 나갈 수 있는 것은 조립 지점뿐이다. 어댑터는
+  `createPort`와 `workerURL`을 주입받아 rank 2를 지킨다(출하 pyproc 어댑터의 주입 형태와 같다).
+- `createWebComputer`가 `pyproc-worker` 어댑터를 등록한다. 머신은 만들지 않는다: 소비자가
+  adapterId로 고르는 모드다(한 스레드를 나누는 기본과 자기 스레드를 갖는 워커).
+- CI 레인 probe(workerHostedGuestProbe) 4/4가 출하 경로로 그 계약을 문다: 공개 조립 표면 부팅,
+  CPU 루프가 다른 guest를 막지 않음(idle 23ms / blocked 4ms), 프레임이 루프 도중 파이썬 왕복,
+  이미지가 새 워커에서 부활하고 packet 장치 재부착.
+- 캠페인 폴더는 규칙대로 지웠다(기록은 이 원장, 이력은 git). 계약 실태 표의 "와이어가 턴 기반"
+  부채도 닫혔다: 그 행이 요구하던 것이 정확히 이 배치였다.
+
 ## NEXT
 
 ROI 순이다. 파일 분해류가 뒤인 이유는 그것이 유지보수이고, 앞의 하나는 북극성 축과 최고 ROI
 캠페인을 동시에 막고 있던 능력 문제의 마지막 조각이기 때문이다.
 
-1. **워커 guest를 src로 배치**: 행동은 전부 증명됐다(17/17). 남은 것은 층 법 아래 놓는 일이다:
-   composition 주입 형태로 어댑터를 옮기고, 워커 파일을 같은 폴더에 두고, CI 레인 probe로 캠페인
-   probe의 단정을 옮긴 뒤 캠페인 폴더를 지운다.
-2. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
+1. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
    `[구조]` 641줄을 4분할. 법 게이트 스코프를 tests/apps/scripts로 확장(자기 위반 3곳 해소).
-3. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
+2. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
