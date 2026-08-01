@@ -693,14 +693,21 @@ section("digest 법");
   const CODEC_PATTERN = /\batob\s*\(|\bbtoa\s*\(|toString\(16\)/;
   const LOCALE_PATTERN = /localeCompare/;
   const VENDOR_BUNDLE = "src/runtime/engines/wasi/browserWasiShim.js";
+  // 로케일 비교자 금지는 src 밖에서도 산다. 게이트와 도구가 로케일 정렬로 목록을 만들면 그
+  // 결과가 러너의 로케일에 따라 달라지고, 그러면 "이 커밋에서 통과했다"가 기계마다 다른 말이
+  // 된다(내용주소가 로케일에 종속되던 것과 같은 부류의 사고다). 그래서 스코프를 넓힌다.
+  const localeScopes = [join(ROOT, "src"), join(ROOT, "tests"), join(ROOT, "apps"), join(ROOT, "scripts")];
+  for (const f of localeScopes.flatMap((dir) => collect(dir, [".js", ".mjs"], []))) {
+    const relPath = rel(f);
+    if (relPath === VENDOR_BUNDLE || relPath === "tests/run.mjs") continue; // 이 파일은 법 자체를 담는다
+    const code = stripComments(readFileSync(f, "utf8"));
+    check(`로케일 비교자 0: ${relPath}`, () => {
+      if (LOCALE_PATTERN.test(code)) throw new Error("localeCompare는 결과를 러너 로케일에 종속시킨다(deterministicOrder 경유)");
+    });
+  }
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
     const relPath = rel(f);
     const code = stripComments(readFileSync(f, "utf8"));
-    if (relPath !== VENDOR_BUNDLE) {
-      check(`로케일 비교자 0: ${relPath}`, () => {
-        if (LOCALE_PATTERN.test(code)) throw new Error("localeCompare는 내용주소를 로케일에 종속시킨다(deterministicOrder 경유)");
-      });
-    }
     if (CODEC_CORE.has(relPath)) continue;
     check(`코덱 법: ${relPath}`, () => {
       if (CODEC_PATTERN.test(code)) throw new Error("base64/hex 변환 사본(코덱 코어 경유해야 한다)");
