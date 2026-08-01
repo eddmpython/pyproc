@@ -11,36 +11,7 @@ const HEADS = "heads";
 const OWNERS = "owners";
 const ALL_STORES = Object.freeze([BLOBS, GENERATIONS, HEADS, OWNERS]);
 
-function requestValue(request) {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "the IndexedDB request failed"));
-  });
-}
-
-function transactionDone(transaction) {
-  return new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "IndexedDB transaction abort"));
-    transaction.onerror = () => reject(transaction.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "the IndexedDB transaction failed"));
-  });
-}
-
-function cloneRecord(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function copyToken(value) {
-  return Object.freeze({ groupId: value.groupId, ownerId: value.ownerId, epoch: value.epoch });
-}
-
-function validateIdentity(groupId, ownerId) {
-  const group = String(groupId || "");
-  const owner = String(ownerId || "");
-  if (!group) throw new TypeError("a groupId is required");
-  if (!owner) throw new TypeError("an ownerId is required");
-  return { groupId: group, ownerId: owner };
-}
+import { cloneRecord, copyToken, requestValue, transactionDone, validateIdentity } from "./indexedDbPrimitives.js";
 
 async function abortAndReject(transaction, done, error) {
   try { transaction.abort(); } catch (abortError) {}
