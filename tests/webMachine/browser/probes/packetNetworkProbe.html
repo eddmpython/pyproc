@@ -1,9 +1,8 @@
 <!doctype html>
 <!--
-결과(2026-07-15, Edge headless, COOP+COEP): 3회 연속 GREEN 14/14.
-Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/332ms,
-새 Edge process cold restore 452/380/357ms, 새 packet port 재연결 뒤 ping 137/117/129ms.
-판정: request와 packet network를 분리하고 browser process보다 오래 사는 NIC 재연결 계약이 성립했다.
+Linux와 실제 pyproc guest를 같은 switch에 올린다. Linux -> Python ICMP와 Python -> Linux
+raw Ethernet frame을 모두 확인하고, 두 guest를 한 generation으로 commit한 뒤 새 browser process에서
+boot 없이 cold restore해 같은 왕복을 반복한다.
 -->
 <html lang="ko">
 <head>
@@ -27,10 +26,10 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
   {"imports":{"@web-machine/core":"/src/machine/index.js"}}
 </script>
 <script type="module">
+  import { bootSession, openMachine } from "../../../../src/session/session.js";
   import { WebMachineHost, createMachineCryptoProvider } from "../../../../src/machine/index.js";
   import { IndexedDbMachineStore, MachineCommitCoordinator, MemoryEthernetSwitch } from "../../../../src/machine/index.js";
-  import { createV86GuestFactory } from "../../../../src/machine/index.js";
-  import { createIpv4EchoPeer } from "../../fixtures/network/ipv4EchoPeer.js";
+  import { createPyprocGuestFactory, createV86GuestFactory } from "../../../../src/machine/index.js";
   import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
   import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../fixtures/v86/config.js";
 
@@ -124,8 +123,10 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
 
   const params = new URLSearchParams(location.search);
   const restoring = params.get("restore") === "1";
+  // The catalog-pinned project release is the canonical Buildroot guest. Its manifest owns the
+  // serial-console and root-login bootstrap; requests start at the resulting root shell.
+  const shellPrompt = "# ";
   const network = new MemoryEthernetSwitch({ maxFrameBytes: 1518, maxQueuedFrames: 64 });
-  const peer = createIpv4EchoPeer({ network, endpointId: "echoPeer" });
   const consoleLines = [];
   let instanceSequence = 0;
   const host = new WebMachineHost({
@@ -140,10 +141,17 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
     adapterVersion: `${V86_ADAPTER_VERSION}-packet-v1`,
     packetDeviceName: "packetNetwork",
   }));
+  host.registerAdapter("pyproc", createPyprocGuestFactory({ bootSession, openMachine, packetDeviceName: "packetNetwork" }));
+  const linuxManifest = createV86ProbeManifest();
   const linux = host.createMachine({
     machineId: "linuxOs",
     adapterId: "x86-linux",
-    manifest: createV86ProbeManifest(),
+    manifest: linuxManifest,
+    permissions: { devices: ["console", "packetNetwork"] },
+  });
+  const python = host.createMachine({
+    machineId: "pythonOs",
+    adapterId: "pyproc",
     permissions: { devices: ["console", "packetNetwork"] },
   });
   const store = new IndexedDbMachineStore({ indexedDb: indexedDB, databaseName: "webMachinePacketNetworkV1" });
@@ -156,32 +164,64 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
   const groupId = "packetNetwork";
   const ownerToken = await store.claimOwner({ groupId, ownerId: restoring ? "restore" : "initial" });
   linux.adoptOwnership(ownerToken);
+  python.adoptOwnership(ownerToken);
+
+  const linuxRxPackets = async (label) => {
+    const text = await linux.request({
+      type: "serial",
+      data: `echo ${label}:$(cat /sys/class/net/eth0/statistics/rx_packets)\n`,
+      waitFor: shellPrompt,
+      timeoutMs: 30000,
+    });
+    const match = new RegExp(`${label}:(\\d+)`).exec(text);
+    if (!match) throw new Error(`Linux rx_packets 판독 실패: ${text.trim().slice(-300)}`);
+    return Number(match[1]);
+  };
+
+  const pythonToLinuxFrame = async () => {
+    const before = await linuxRxPackets("PYPROC_RX_BEFORE");
+    await python.request({ type: "run", code:
+      "import pyprocNet\n"
+      + "frame = bytearray(60)\n"
+      + "frame[0:6] = b'\\xff' * 6\n"
+      + "frame[6:12] = bytes(pyprocNet.address()['mac'])\n"
+      + "frame[12:14] = (0x88b5).to_bytes(2, 'big')\n"
+      + "frame[14:35] = b'PYPROC_TO_LINUX_WIRE'\n"
+      + "pyprocNet.send(bytes(frame))\n" });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const after = await linuxRxPackets("PYPROC_RX_AFTER");
+    return { before, after };
+  };
 
   try {
     if (!restoring) {
       let startedAt = performance.now();
-      await linux.boot();
+      await Promise.all([linux.boot(), python.boot()]);
       timings.initialBootMs = Math.round(performance.now() - startedAt);
+      const pythonNetwork = (await python.inspect()).guest.network;
+      const pythonIp = pythonNetwork.ipv4Address.join(".");
       startedAt = performance.now();
       const initial = await linux.request({
         type: "serial",
-        data: "ifconfig eth0 10.77.0.2 netmask 255.255.255.0 up; ping -c 1 -W 3 10.77.0.1; packet_status=$?; echo PACKET_INITIAL_STATUS:$packet_status\n",
-        waitFor: "~% ",
+        data: `ifconfig eth0 10.77.0.1 netmask 255.255.255.0 up; ping -c 1 -W 3 ${pythonIp}; packet_status=$?; echo PACKET_INITIAL_STATUS:$packet_status\n`,
+        waitFor: shellPrompt,
         timeoutMs: 30000,
       });
       timings.initialRoundTripMs = Math.round(performance.now() - startedAt);
-      const peerBeforeCommit = peer.inspect();
-      if (!initial.includes("PACKET_INITIAL_STATUS:0") || peerBeforeCommit.arpRequests < 1 || peerBeforeCommit.echoRequests < 1) {
-        throw new Error(`초기 packet round trip 실패: ${initial.trim().slice(-500)} / ${JSON.stringify(peerBeforeCommit)}`);
+      const pythonBeforeCommit = (await python.inspect()).guest.network;
+      if (!initial.includes("PACKET_INITIAL_STATUS:0") || pythonBeforeCommit.arpReplies < 1 || pythonBeforeCommit.echoReplies < 1) {
+        throw new Error(`초기 cross-engine round trip 실패: ${initial.trim().slice(-500)} / ${JSON.stringify(pythonBeforeCommit)}`);
       }
-      timings.initialArpRequests = peerBeforeCommit.arpRequests;
-      timings.initialEchoRequests = peerBeforeCommit.echoRequests;
-      await linux.pause();
+      const initialWire = await pythonToLinuxFrame();
+      if (!(initialWire.after > initialWire.before)) throw new Error(`Python frame이 Linux NIC에 도착하지 않음: ${initialWire.before} -> ${initialWire.after}`);
+      timings.initialArpReplies = pythonBeforeCommit.arpReplies;
+      timings.initialEchoReplies = pythonBeforeCommit.echoReplies;
+      timings.initialPythonToLinuxRx = initialWire.after - initialWire.before;
+      await Promise.all([linux.pause(), python.pause()]);
       startedAt = performance.now();
-      const committed = await coordinator.commitPaused({ groupId, machines: [linux], expectedHead: null, ownerToken });
+      const committed = await coordinator.commitPaused({ groupId, machines: [python, linux], expectedHead: null, ownerToken });
       timings.commitMs = Math.round(performance.now() - startedAt);
-      await linux.shutdown();
-      peer.close();
+      await Promise.all([linux.shutdown(), python.shutdown()]);
       store.close();
       await fetch("/gateRestart", {
         method: "POST",
@@ -193,38 +233,41 @@ Linux eth0 최초 ARP/ICMP round trip 160/185/167ms, generation commit 412/329/3
       await verifyPacketDeviceContract();
       await verifyCapabilityBoundary();
       let startedAt = performance.now();
-      const restored = await coordinator.restoreLatest({ groupId, machines: { linuxOs: linux } });
+      const restored = await coordinator.restoreLatest({ groupId, machines: { pythonOs: python, linuxOs: linux } });
       timings.processColdRestoreMs = Math.round(performance.now() - startedAt);
       check("새 process가 NIC handle 없이 machine generation 복원", restored.generationId === new URLSearchParams(location.search).get("commit") && restored.devices.length === 0, `${restored.generationId.slice(0, 18)}../${restored.devices.length}`);
-      check("cold restore가 새 packet port 연결", network.inspect().endpoints === 2 && linux.state === "paused", `${network.inspect().endpoints}/${linux.state}`);
-      await linux.resume();
+      check("cold restore가 두 guest의 새 packet port 연결", network.inspect().endpoints === 2 && linux.state === "paused" && python.state === "paused", `${network.inspect().endpoints}/${linux.state}/${python.state}`);
+      await Promise.all([linux.resume(), python.resume()]);
+      const pythonIp = (await python.inspect()).guest.network.ipv4Address.join(".");
       startedAt = performance.now();
       const reopened = await linux.request({
         type: "serial",
-        data: "ping -c 1 -W 3 10.77.0.1; packet_status=$?; echo PACKET_REOPEN_STATUS:$packet_status\n",
-        waitFor: "~% ",
+        data: `ping -c 1 -W 3 ${pythonIp}; packet_status=$?; echo PACKET_REOPEN_STATUS:$packet_status\n`,
+        waitFor: shellPrompt,
         timeoutMs: 30000,
       });
       timings.reopenedRoundTripMs = Math.round(performance.now() - startedAt);
-      const peerAfterRestore = peer.inspect();
+      const pythonAfterRestore = (await python.inspect()).guest.network;
+      const reopenedWire = await pythonToLinuxFrame();
       const machineInspect = await linux.inspect();
       const networkInspect = network.inspect();
-      check("Linux eth0 ICMP packet process cold round trip", reopened.includes("PACKET_REOPEN_STATUS:0") && peerAfterRestore.echoRequests >= 1, reopened.trim().slice(-240));
+      check("Linux -> Python ICMP가 process cold restore 뒤 왕복", reopened.includes("PACKET_REOPEN_STATUS:0") && pythonAfterRestore.echoReplies >= 1, reopened.trim().slice(-240));
+      check("Python -> Linux frame이 process cold restore 뒤 NIC에 도착", reopenedWire.after > reopenedWire.before, `${reopenedWire.before} -> ${reopenedWire.after}`);
       check("v86 NIC가 공통 packet port 양방향 사용", machineInspect.guest?.network?.sentFrames >= 1 && machineInspect.guest.network.receivedFrames >= 1 && machineInspect.guest.network.sendErrors === 0, JSON.stringify(machineInspect.guest?.network));
       check("switch가 MAC 학습하고 drop 없이 전달", networkInspect.learnedAddresses >= 2 && networkInspect.deliveredFrames >= 2 && networkInspect.droppedFrames === 0 && networkInspect.deliveryErrors === 0, JSON.stringify(networkInspect));
-      check("새 host history는 boot 없이 restore", linux.history.some((entry) => entry.event === "restored") && !linux.history.some((entry) => entry.event === "booted"));
-      await linux.pause();
+      check("두 guest의 새 host history는 boot 없이 restore", [python, linux].every((machine) => machine.history.some((entry) => entry.event === "restored") && !machine.history.some((entry) => entry.event === "booted")));
+      await Promise.all([linux.pause(), python.pause()]);
       await linux.shutdown();
-      check("adapter shutdown이 NIC endpoint 분리", network.inspect().endpoints === 1, network.inspect().endpoints);
-      peer.close();
-      check("network owner 종료 뒤 endpoint 0", network.inspect().endpoints === 0, network.inspect().endpoints);
+      check("Linux shutdown이 NIC endpoint 하나를 분리", network.inspect().endpoints === 1, network.inspect().endpoints);
+      await python.shutdown();
+      check("두 guest 종료 뒤 endpoint 0", network.inspect().endpoints === 0, network.inspect().endpoints);
       store.close();
       await report();
     }
   } catch (error) {
     check("예외 없음", false, String(error?.stack || error).slice(-1600));
     try { if (["running", "paused", "failed"].includes(linux.state)) await linux.shutdown(); } catch (cleanupError) {}
-    peer.close();
+    try { if (["running", "paused", "failed"].includes(python.state)) await python.shutdown(); } catch (cleanupError) {}
     store.close();
     await report();
   }

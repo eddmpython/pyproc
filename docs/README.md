@@ -1,6 +1,6 @@
 # docs - the documentation tree
 
-pyproc's public persistent documentation: the SSOT for "what it aims at" (product) and "how it is operated" (operations, consuming). Day-to-day development plans and decision records belong to [mainPlan/](../mainPlan/) and move to `_done` when they finish; the summary of hard rules lives in `CLAUDE.md` at the repository root (a local rules document, untracked by git).
+pyproc's public persistent documentation: the SSOT for product direction, consumption contracts, references, and operating policy. Executable truth lives in `src/` and `tests/`; experiments begin under `tests/attempts/`; historical decisions remain available through git history. The summary of hard rules lives in `CLAUDE.md` at the repository root (a local rules document, untracked by git).
 
 Language: `consuming/`, `reference/`, and `product/` are English, because that is where an adopter makes decisions. `operations/` is the internal operating tree and stays Korean.
 
@@ -16,7 +16,7 @@ Language: `consuming/`, `reference/`, and `product/` are English, because that i
 |---|---|---|
 | [product/](product/) | [vision.md](product/vision.md) | Product direction: the North Star, what it is and is not, success and failure criteria, the support boundary |
 | | [glossary.md](product/glossary.md) | Glossary: the naming boundary between the pyproc kernel and the Web Machine layer (`src/machine`, bundled in npm) |
-| [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: the three-layer information structure, the idea lifecycle (attempts to mainPlan to src to _done), memory operations, development principles |
+| [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: documentation, executable truth, experiments, git history, memory operations, development principles |
 | | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
 | | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
 | | [testing.md](operations/testing.md) | The test gates (`npm test`) and the browser measurement procedure (a COOP/COEP server) |
@@ -39,7 +39,7 @@ Language: `consuming/`, `reference/`, and `product/` are English, because that i
 - Looking up a function signature or an error code: [reference/api.md](reference/api.md)
 - What pyproc is and where it is going: [product/vision.md](product/vision.md)
 - Where a new idea starts: [tests/attempts/README.md](../tests/attempts/README.md)
-- Design, roadmap, and decision records: [mainPlan/](../mainPlan/README.md) (finished initiatives are in [_done/](../mainPlan/_done/README.md); with zero active, start by opening a new initiative)
+- Product direction and roadmap: [product/vision.md](product/vision.md); current contract gaps: [operations/contractReality.md](operations/contractReality.md); executable status: [`tests/northStar.mjs`](../tests/northStar.mjs); historical decisions: git history
 - What must be green before a commit: [operations/testing.md](operations/testing.md)
 - How speed is measured and where it is recorded (never on a public surface): [operations/benchmarking.md](operations/benchmarking.md)
 - When and how the version moves: [operations/release.md](operations/release.md)

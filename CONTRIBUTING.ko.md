@@ -21,7 +21,7 @@ pyproc은 [Mozilla Public License 2.0](LICENSE)이다(엔진 Pyodide와 같은 �
 ## 작업 흐름
 
 1. **신규 능력은 `tests/attempts/<카테고리>/`에서 시작한다.** `src/` 직행 금지. 카테고리는 가설과 명시적 졸업 게이트를 가진 질문 하나이고, 브라우저 실측으로 입증한다. [tests/attempts/README.md](tests/attempts/README.md) 참조.
-2. **졸업한 학습은 `mainPlan/<이니셔티브>/`에서 계획이 된다**(번호 문서 + 진행 원장). 완료된 이니셔티브는 `mainPlan/_done/`으로 이관.
+2. **졸업한 학습은 지속 계약은 `docs/`, 자동 증거는 `tests/`, 검토 가능한 결정은 git 이력에 남긴다.** 임시 기획 archive는 저장소에 보존하지 않는다.
 3. **그 다음에야 코드가 `src/`에 들어간다.** src는 폴더 = 레이어이고 import는 아래로만 흐른다: `runtime/`(0: 엔진 core) <- `state/`(1: 내구 상태 커널) <- `capabilities/`(2: 런타임에 얹히는 것들) <- `composition/`(3: 능력 registry 설치 + public 표면) <- `session/`(4)·`processOs/`(4) <- `machine/`(5: 브라우저 컴퓨터 host와 guest). 모든 edge가 순위를 낮추므로 순환은 불가능하다. 엔진 내부는 능력 계약 뒤에 머문다.
 
    `src/`의 모든 파일은 첫 줄에 자기 순위를 적는다. 게이트 소스를 열지 않고도 층을 알 수 있어야 한다: `// fileName.js - Layer 2: 무엇을 하는가`. `machine/` 아래 파일은 내부 파일 rank까지 적는다. import 방향과 순수성 판정의 실제 기준이 폴더가 아니라 그 rank이기 때문이다: `// v86SerialPort.js - Layer 5/guests: ...`, 순서는 `pure` <- `platform` <- `guests` <- `composition`. 라벨이 없거나 rank 맵과 다르면 `npm test`가 실패한다.

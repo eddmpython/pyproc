@@ -35,9 +35,27 @@ import {
 
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
 const DEFAULT_AUTO_PACK_LOOSE_MB = 8;
+const JOURNAL_MARKER_FILE = "journalMarker.json";
+const JOURNAL_MARKER_VERSION = 1;
+const JOURNAL_STORAGE_ENTRIES = Object.freeze([
+  ["state", true],
+  ["blob", true],
+  ["pack", true],
+  ["PACKS.json", false],
+  ["HEAD.json", false],
+  ["PREV.json", false],
+]);
 
 function journalCorrupt(message, cause) {
   return new PyProcError("PYPROC_JOURNAL_CORRUPT", message, cause !== undefined ? { cause } : undefined);
+}
+
+function journalEvicted(marker) {
+  return new PyProcError(
+    "PYPROC_JOURNAL_EVICTED",
+    "journal.recover: a committed journal marker exists but HEAD and PREV are missing. The backing generations were removed; refusing to start a fresh machine.",
+    { context: { marker } },
+  );
 }
 
 function normalizeAutoPackPolicy(policy) {
@@ -146,6 +164,35 @@ export class MachineJournal {
 
   stop() { if (this._timer) { clearInterval(this._timer); this._timer = null; } }
 
+  async _readMarker() {
+    let text;
+    try { text = await (await (await this._dir.getFileHandle(JOURNAL_MARKER_FILE)).getFile()).text(); }
+    catch (e) {
+      if (e.name === "NotFoundError") return { missing: true };
+      return { corrupt: `${JOURNAL_MARKER_FILE} 읽기 실패(${e.name})` };
+    }
+    try {
+      const marker = JSON.parse(text);
+      if (marker?.version !== JOURNAL_MARKER_VERSION || !["committed", "deleted"].includes(marker.state)) {
+        return { corrupt: `${JOURNAL_MARKER_FILE} 형식 위반` };
+      }
+      return { marker: { version: marker.version, state: marker.state } };
+    } catch (e) {
+      return { corrupt: `${JOURNAL_MARKER_FILE} JSON 파손` };
+    }
+  }
+
+  async _writeMarker(state) {
+    try {
+      const fh = await this._dir.getFileHandle(JOURNAL_MARKER_FILE, { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify({ version: JOURNAL_MARKER_VERSION, state }));
+      await w.close();
+    } catch (e) {
+      throw new PyProcError("PYPROC_JOURNAL_IO", `journal marker write failed: ${String((e && e.message) || e).slice(-180)}`, { retryable: true, cause: e });
+    }
+  }
+
   // 지금 상태를 커밋한다(수동 호출도 계약: 중요한 경계에서 명시적으로 남길 수 있다).
   // 저장은 커널 커밋 한 호출이다: sha256 승격은 정확히 이 지점에서만 일어난다(collectDelta는
   // 페이지 목록만 주고, 페이지 바이트의 주소화·dedupe·쓰기 순서 법은 커널이 소유한다).
@@ -178,6 +225,10 @@ export class MachineJournal {
         createdAt: committedAt,
       });
       await this._cleanupLegacyRefs();
+      // HEAD가 완전히 선 뒤 marker를 쓴다. marker가 committed인데 훗날 HEAD/PREV가 모두
+      // 사라지면 recover는 그 부재를 첫 부팅으로 해석하지 않는다. 첫 커밋 중간 크래시는
+      // accepted commit이 아니므로 marker를 만들지 않는다.
+      await this._writeMarker("committed");
       this.commits++; this.pagesWritten += committed.pagesWrote;
       const result = {
         pages: pages.length,
@@ -190,6 +241,29 @@ export class MachineJournal {
       if (autoPack) result.autoPack = autoPack;
       if (this._pruneAfterCommit) result.pruned = r.pruneTo(r.liveIdx);
       return result;
+    } finally { this._busy = false; }
+  }
+
+  // 의도한 삭제는 backing store를 먼저 지우고 tombstone을 마지막에 쓴다. 중간 실패에서 옛
+  // committed marker가 남으면 다음 recover가 eviction/corruption으로 fail-closed한다.
+  async delete() {
+    if (this._busy) throw new PyProcError("PYPROC_JOURNAL_IO", "journal.delete: journal is busy", { retryable: true });
+    this.stop();
+    this._busy = true;
+    try {
+      this._kernel.resetStorage();
+      for (const [name, recursive] of JOURNAL_STORAGE_ENTRIES) {
+        try { await this._dir.removeEntry(name, recursive ? { recursive: true } : undefined); }
+        catch (e) {
+          if (e.name !== "NotFoundError") {
+            throw new PyProcError("PYPROC_JOURNAL_IO", `journal.delete: failed to remove ${name} (${e.name})`, { retryable: true, cause: e });
+          }
+        }
+      }
+      await this._writeMarker("deleted");
+      this._kernel.resetStorage();
+      this._legacyCleaned = false;
+      return { deleted: true };
     } finally { this._busy = false; }
   }
 
@@ -389,9 +463,15 @@ export class MachineJournal {
   // 후퇴 없이 즉시 예외(다른 엔진/매니페스트).
   async recover() {
     this._kernel.resetCache();
+    const markerRead = await this._readMarker();
+    if (markerRead.corrupt) throw journalCorrupt(`journal.recover: ${markerRead.corrupt}`);
+    const marker = markerRead.marker || null;
     const head = await this._kernel.readRef("HEAD");
     const prev = await this._kernel.readRef("PREV");
     if (!(head.missing && prev.missing)) {
+      if (marker?.state === "deleted") {
+        throw journalCorrupt("journal.recover: deleted tombstone conflicts with a live or corrupt state generation");
+      }
       let opened;
       try {
         opened = await openState(globalThis.crypto, this._kernel, { expectH0: await this._boundaryKey() });
@@ -407,6 +487,11 @@ export class MachineJournal {
     // legacy: HEAD 세대로 부활하고, HEAD가 파손이면 PREV 세대로 후퇴한다(잃는 것은 마지막
     // 커밋 하나). 둘 다 없으면 null(첫 부팅), 둘 다 파손이면 명시적 예외.
     const cur = await this._readGeneration("HEAD.json");
+    const legacyPrev = await this._readGeneration("PREV.json");
+    if (marker?.state === "deleted") {
+      if (cur.missing && legacyPrev.missing) return null;
+      throw journalCorrupt("journal.recover: deleted tombstone conflicts with a legacy generation");
+    }
     if (cur.head) {
       try { return await this._applyGeneration(cur.head); }
       catch (e) {
@@ -414,13 +499,15 @@ export class MachineJournal {
         cur.corrupt = e.message;
       }
     }
-    const legacyPrev = await this._readGeneration("PREV.json");
     if (legacyPrev.head) {
       const r = await this._applyGeneration(legacyPrev.head);
       r.fallback = true; // 직전 세대로 부활했음을 알린다(마지막 커밋 1개 유실)
       return r;
     }
-    if (cur.missing && legacyPrev.missing) return null; // 저널 없음 = 첫 부팅
+    if (cur.missing && legacyPrev.missing) {
+      if (marker?.state === "committed") throw journalEvicted(marker);
+      return null; // marker 없음 = 첫 부팅, deleted tombstone = 의도한 삭제
+    }
     throw journalCorrupt(`journal.recover: journal is corrupt (${cur.corrupt || "no HEAD"} / ${legacyPrev.corrupt || "no PREV"}). Refusing to masquerade as a first boot.`);
   }
 }

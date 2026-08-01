@@ -169,12 +169,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 9.5,
     en: Object.freeze({
       title: "A machine that outlives its tab",
-      state: "One logical machine spans same-origin tabs through leader election: a forcibly removed leader is taken over, followers commit through the leader, and the committed heap and `/home/web` cold-reopen after every participant closes, all of it exercised on the installed package. Exactly-once is delivered on both halves: a leader records every command's outcome into the same durable generation as the heap, and an interrupted caller on a durable machine is parked rather than told the outcome is unknown, then re-asks the successor once. A repeated request is answered from the record instead of run twice; a request absent from the generation is provably safe to run. Ordering survives a failover too: parked commands re-send in the order the caller sent them, and a command issued during a succession queues behind them. The remaining `PYPROC_RPC_OUTCOME_UNKNOWN` cases are honest ones: a timeout with the leader still alive, a non-durable machine, a caller that itself goes away, and a heap that installed a JS handle - there the revived kernel cannot serve a replay at all, which the image-portability contract already states.",
+      state: "One logical machine spans same-origin tabs through leader election: a forcibly removed leader is taken over, followers commit through the leader, and the committed heap and `/home/web` cold-reopen after every participant closes, all of it exercised on the installed package. The leader records command outcomes in the same durable generation as the heap, so a repeated request ID is answered from the record instead of run twice, and a durable caller controller that can prove its session proxy-free parks and asks the successor once. The installed-package path also fixes the honest boundary: a normal follower cannot inspect the leader session, so its in-flight call ends as `PYPROC_RPC_OUTCOME_UNKNOWN` on failover and is not resent. Live-leader timeout, non-durable state, caller loss, and a known proxy heap are never resent. The complete rule is the [durable RPC state table](docs/consuming/contract.md#durable-rpc-state-table-normative).",
       target: "The machine keeps running while any tab is open, and every command it accepted resolves exactly once.",
     }),
     ko: Object.freeze({
       title: "탭보다 오래 사는 머신",
-      state: "리더 선출로 논리 머신 하나가 동일 오리진 탭들을 가로지른다: 강제 제거된 리더는 승계되고, 팔로워는 리더를 통해 커밋하며, 참가자가 전부 닫힌 뒤에도 커밋된 힙과 `/home/web`이 콜드 재개된다. 전부 설치 패키지 위에서 돈다. 정확히 한 번이 양쪽 절반 다 배송됐다: 리더가 모든 명령의 결과를 힙과 같은 내구 세대에 기록하고, 내구 머신의 끊긴 호출자는 모른다는 답 대신 대기했다가 승계자에게 한 번 다시 묻는다. 되풀이된 요청은 다시 돌지 않고 기록으로 답하고, 세대에 없는 요청은 다시 돌려도 정확히 한 번이다. 순서도 승계를 건너 보존된다: 대기한 명령은 호출자가 보낸 순서로 재전송되고, 승계 중 들어온 명령은 그 뒤에 선다. 남은 `PYPROC_RPC_OUTCOME_UNKNOWN`은 정직한 경우들이다: 리더가 살아 있는데 난 타임아웃, 내구하지 않은 머신, 호출자 자신이 사라진 경우, 그리고 JS 핸들을 심은 힙(그 커널은 부활 뒤 재전송을 처리할 수 없다는 것이 이미 이식성 계약이다).",
+      state: "leader 선출로 논리 머신 하나가 동일 origin tab들을 가로지른다. 강제 제거된 leader는 승계되고, follower는 leader를 통해 commit하며, 참가자가 전부 닫힌 뒤에도 commit된 heap과 `/home/web`이 cold reopen된다. leader는 명령 결과를 heap과 같은 durable generation에 기록하므로 반복된 request ID에는 기록으로 답하고, 자기 session에 proxy가 없음을 증명할 수 있는 durable caller controller는 요청을 대기시켰다가 승계자에게 한 번 묻는다. 설치 패키지 경로는 정직한 경계도 고정한다. 일반 follower는 leader session을 검사할 수 없으므로 in-flight 호출이 승계에서 `PYPROC_RPC_OUTCOME_UNKNOWN`으로 끝나고 다시 보내지지 않는다. live-leader timeout, non-durable 상태, caller 소멸, 확인된 proxy heap도 다시 보내지 않는다. 전체 규칙은 [durable RPC 상태표](docs/consuming/contract.md#durable-rpc-state-table-normative)다.",
       target: "탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다.",
     }),
     evidence: Object.freeze([
@@ -186,8 +186,8 @@ export const NORTH_STAR_AXES = Object.freeze([
     next: Object.freeze([
       Object.freeze({
         id: "revivedKernelServesReplay",
-        en: "Let a kernel that used a blocking surface serve a replay after revival, the last case that still answers with an unknown outcome",
-        ko: "블로킹 표면을 쓴 커널도 부활 뒤 재전송을 처리하게 한다(마지막까지 모른다고 답하는 경우다)",
+        en: "Carry a fenced portability fact to ordinary followers so they can safely use the outcome-record path; a proxy-bearing heap remains outcome-unknown",
+        ko: "fenced portability fact를 일반 follower에게 전달해 outcome-record 경로를 안전하게 쓰게 한다. proxy-bearing heap은 outcome-unknown으로 남는다",
       }),
     ]),
   }),
@@ -229,12 +229,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 9.0,
     en: Object.freeze({
       title: "A computer that boots guests",
-      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others and a frame round-trips while another guest is inside a loop, all proven in CI. Presenting a frame onto a canvas is gated in CI as well (`CanvasRgbaFrameSink`), and the x86 lane runs in CI too: the same catalog-pinned assets the product job already fetches boot a real Linux guest, so dual-boot and the Linux device probes are automated rather than remembered. The Linux engine and image stay a hash-pinned development channel that cannot be redistributed.",
+      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. The x86 lane puts the real Python and Linux guests on one switch: Linux pings Python, a Python-sent Ethernet frame increments Linux's NIC receive counter, and both directions survive one generation commit and a process cold restore. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others. Presenting a frame onto a canvas is gated in CI as well (`CanvasRgbaFrameSink`). The default Linux image is the reproducible project build, hash-pinned to a release that carries its exact source, complete legal material, SBOM, config, and independent-build receipt.",
       target: "Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does.",
     }),
     ko: Object.freeze({
       title: "guest를 부팅하는 컴퓨터",
-      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. guest를 자기 워커에 얹는 길도 생겼다(`pyproc-worker`): CPU 바운드 guest가 다른 guest를 멈추지 않고 프레임이 상대의 루프 도중에 왕복하는 것을 CI가 문다. 프레임을 캔버스에 올리는 경로도 CI가 물고, x86 레인도 CI에서 돈다: 제품 job이 이미 받아오는 같은 catalog 고정 자산으로 실제 Linux guest를 부팅하므로 dual-boot과 Linux 장치 probe가 기억이 아니라 자동으로 검증된다. Linux 엔진과 이미지는 재배포 불가한 해시 고정 개발 채널로 남아 있다.",
+      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. x86 레인은 실제 Python과 Linux guest를 한 switch에 올린다. Linux가 Python을 ping하고 Python이 보낸 Ethernet frame이 Linux NIC 수신 계수를 올리며, 양방향이 한 세대 commit과 process cold restore 뒤에도 살아난다. guest를 자기 워커에 얹는 길도 있어 CPU 바운드 guest가 다른 guest를 멈추지 않는다. 프레임을 캔버스에 올리는 경로도 CI가 문다. 기본 Linux image는 프로젝트 재현 빌드이며 exact source, 전체 legal material, SBOM, config, 독립 빌드 영수증을 함께 제공하는 release에 hash 고정된다.",
       target: "어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다.",
     }),
     evidence: Object.freeze([
@@ -245,14 +245,10 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/webMachine/browser/probes/workerHostedGuestProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/dualBootProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/linuxGuestProbe.html", lane: "test:web-machine:v86" }),
+      Object.freeze({ path: "tests/webMachine/browser/probes/packetNetworkProbe.html", lane: "test:web-machine:v86" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
-      Object.freeze({
-        id: "redistributableGuestImage",
-        en: "Finish the self-built Linux image, so a guest ships as freely as the host and its lane can run in CI",
-        ko: "Linux 자체 빌드를 끝내 guest가 host만큼 자유롭게 나가고 그 레인이 CI에서 돌게 한다",
-      }),
       Object.freeze({
         id: "memory64",
         rung: 5,
@@ -299,18 +295,19 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 8.0,
     en: Object.freeze({
       title: "Network, the browser way",
-      state: "An in-kernel ASGI server answers `fetch` from Python with concurrent requests kept apart, a virtual origin serves it from the installed package, `urllib` performs real HTTP through the syscall bridge, the permission jail decides `connectSrc` per host, and two guests exchange IPv4 frames on one switch. Outbound raw sockets still need a WS-to-TCP relay this package does not ship, but the surface is no longer ungated: a hermetic lane starts the in-repo relay and a local TCP origin, and Python's `urllib` crosses both to read bytes back.",
+      state: "An in-kernel ASGI server answers `fetch` from Python with concurrent requests kept apart, a virtual origin serves it from the installed package, `urllib` performs real HTTP through the syscall bridge, and the permission jail decides `connectSrc` per host. Python-to-Python traffic is gated without assets, while the x86 lane proves the real cross-engine path: Linux pings Python and a Python-sent Ethernet frame arrives at the Linux NIC before and after process cold restore. Outbound raw sockets still need a WS-to-TCP relay this package does not ship, but a hermetic lane starts the in-repo relay and a local TCP origin and reads bytes back through Python `urllib`.",
       target: "Python network code runs unmodified, and the relay boundary is the only thing a reader has to know.",
     }),
     ko: Object.freeze({
       title: "브라우저 방식의 네트워크",
-      state: "커널 내 ASGI 서버가 파이썬으로 `fetch`에 답하고 동시 요청이 서로를 덮지 않는다. 가상 오리진이 설치 패키지에서 그것을 서빙하고, `urllib`이 syscall 다리로 진짜 HTTP를 하고, 권한 감옥이 host별 `connectSrc`를 가르고, 두 guest가 한 스위치에서 IPv4 프레임을 주고받는다. 아웃바운드 raw 소켓은 여전히 이 패키지가 배송하지 않는 WS-TCP 릴레이를 요구하지만, 그 표면이 더는 무게이트가 아니다: 밀폐 레인이 저장소 안 릴레이와 로컬 TCP 오리진을 띄우고 파이썬 `urllib`이 둘을 건너 바이트를 읽는다.",
+      state: "커널 내 ASGI 서버가 파이썬으로 `fetch`에 답하고 동시 요청이 서로를 덮지 않는다. 가상 오리진이 설치 패키지에서 그것을 서빙하고, `urllib`이 syscall 다리로 진짜 HTTP를 하며, 권한 감옥이 host별 `connectSrc`를 가른다. Python-to-Python 통신은 무자산 레인이, 실제 교차 엔진 경로는 x86 레인이 증명한다. Linux가 Python을 ping하고 Python이 보낸 Ethernet frame이 process cold restore 전후 Linux NIC에 도착한다. 아웃바운드 raw 소켓은 여전히 이 패키지가 배송하지 않는 WS-TCP 릴레이를 요구하지만, 밀폐 레인이 저장소 안 릴레이와 로컬 TCP 오리진을 띄우고 Python `urllib`로 바이트를 읽는다.",
       target: "파이썬 네트워크 코드가 고쳐지지 않고 돌고, 읽는 사람이 알아야 할 것은 릴레이 경계 하나뿐이다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/guestNetworkProbe.html", lane: "test:web-machine" }),
+      Object.freeze({ path: "tests/webMachine/browser/probes/packetNetworkProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/browser/socketLane.mjs", lane: "test:socket" }),
     ]),
     manual: Object.freeze([]),
@@ -379,15 +376,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "consumableKernel",
-    score: 9.0,
+    score: 8.5,
     en: Object.freeze({
       title: "One kernel that products import",
-      state: "The public surface is one noun and its verbs, fixed by the structure gate, the public-surface and module-boundary contracts, a typechecked `index.d.ts`, an installed-package gate, and a browser product gate that imports the packed tarball by public specifier. dartlab runs it in production, codaro and xlpod consume the same seam. `pyproc/runtime` is unreleased and needs a SHA pin until the next release, and a breaking change is queued in the changelog.",
+      state: "The public surface is one noun and its verbs, fixed by structure, type, installed-package, and browser product gates. The 2026-08-01 read-only consumer audit found two exact registry consumers: dartlab and xlpod pin 0.0.10 with lockfile integrity and import the root machine contract. codaro is immutable but remains on a 0.0.9-era SHA whose root `boot()` returned `Runtime`; one build script and one audit test also read package-internal files. No sibling imported `pyproc/runtime` at the audit date; 0.0.11 now ships that optional seam. Registry adoption is counted only after each product moves its exact pin and passes its own gate.",
       target: "Every consumer builds on the public surface and the shipped types, pinned to an exact version, with no deep path.",
     }),
     ko: Object.freeze({
       title: "제품이 실제로 import하는 커널 하나",
-      state: "공개 표면은 명사 하나와 그 동사들이고, 구조 게이트, 공개 표면과 모듈 경계 계약, 타입체크된 `index.d.ts`, 설치 패키지 게이트, pack한 tarball을 공개 specifier로 import하는 브라우저 제품 게이트가 그것을 고정한다. dartlab이 프로덕션에서 돌리고 codaro와 xlpod가 같은 이음매를 소비한다. `pyproc/runtime`은 미출시라 다음 릴리즈까지 SHA 핀이 필요하고, 브레이킹 1건이 CHANGELOG에 쌓여 있다.",
+      state: "공개 표면은 명사 하나와 그 동사들이고 구조, 타입, 설치 package, 브라우저 제품 gate가 고정한다. 2026-08-01 read-only 소비 감사에서 exact registry 소비자는 둘이었다. dartlab과 xlpod은 lockfile integrity와 함께 0.0.10을 고정하고 root machine 계약을 import한다. codaro는 불변이지만 root `boot()`가 `Runtime`을 반환하던 0.0.9 시대 SHA에 남았고 build script 하나와 audit test 하나가 package 내부 파일도 읽는다. 감사 당시 `pyproc/runtime`을 import한 sibling은 없었고, 0.0.11이 이제 그 선택적 seam을 출하한다. registry 채택은 각 제품이 exact pin을 옮기고 자기 gate를 통과한 뒤에만 센다.",
       target: "모든 소비자가 공개 표면과 함께 나가는 타입만으로, 정확한 버전에 핀으로, deep path 없이 짓는다.",
     }),
     evidence: Object.freeze([
@@ -402,9 +399,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "releaseQueuedSurface",
-        en: "Release the queued breaking change, so `pyproc/runtime` is consumable by an exact version pin instead of a SHA",
-        ko: "쌓인 브레이킹을 릴리즈해 `pyproc/runtime`을 SHA가 아니라 정확 버전 핀으로 소비하게 한다",
+        id: "migrateReleasedSurface",
+        en: "Migrate dartlab and xlpod to 0.0.11, then move codaro off its legacy SHA and package-internal reads",
+        ko: "dartlab과 xlpod을 0.0.11로 옮긴 뒤 codaro를 legacy SHA와 package 내부 읽기에서 이관한다",
       }),
       Object.freeze({
         id: "localAgentContract",
@@ -419,12 +416,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 8.5,
     en: Object.freeze({
       title: "A supply chain you can verify",
-      state: "The asset CLI emits SRI over the worker and Service Worker import graph, `verifyPyProcAssetIntegrity` refuses a spawn on a bad hash, engine boot supports fail-closed SRI with a re-verifying offline cache, npm releases publish through OIDC trusted publishing with provenance and manual publishes disabled, and the browser computer verifies a signer before importing an image. The provenance of the Linux development channel is not reproducible yet.",
+      state: "The asset CLI emits SRI over the worker and Service Worker import graph, `verifyPyProcAssetIntegrity` refuses a spawn on a bad hash, engine boot supports fail-closed SRI with a re-verifying offline cache, npm releases publish through OIDC trusted publishing with provenance and manual publishes disabled, and the browser computer verifies a signer before importing an image. The default Linux guest comes from two byte-identical independent builds, passes real Python-Linux traffic plus process cold restore, and is published with exact source, complete legal material, SBOM, config, and manifests at a stable hash-pinned project release.",
       target: "Every byte that executes traces back to a source somebody else can rebuild and verify.",
     }),
     ko: Object.freeze({
       title: "검증 가능한 공급망",
-      state: "자산 CLI가 워커와 Service Worker import 그래프 위에 SRI를 내고, `verifyPyProcAssetIntegrity`가 해시 불일치에서 spawn을 거부하고, 엔진 부팅이 재검증 오프라인 캐시와 함께 fail-closed SRI를 지원하고, npm 게시는 provenance가 붙는 OIDC trusted publishing으로만 나가며(수동 게시 비활성), 브라우저 컴퓨터는 이미지를 가져오기 전에 서명자를 검증한다. Linux 개발 채널의 provenance는 아직 재현 가능하지 않다.",
+      state: "자산 CLI가 워커와 Service Worker import 그래프 위에 SRI를 내고, `verifyPyProcAssetIntegrity`가 해시 불일치에서 spawn을 거부하고, 엔진 부팅이 재검증 오프라인 캐시와 함께 fail-closed SRI를 지원하고, npm 게시는 provenance가 붙는 OIDC trusted publishing으로만 나가며(수동 게시 비활성), 브라우저 컴퓨터는 이미지를 가져오기 전에 서명자를 검증한다. 기본 Linux guest는 독립 빌드 둘의 byte-identical 결과이고 실제 Python-Linux 통신과 process cold restore를 통과했다. exact source, 전체 legal material, SBOM, config와 manifest를 안정된 프로젝트 release에서 image hash와 함께 제공한다.",
       target: "실행되는 모든 바이트가 남이 다시 빌드하고 검증할 수 있는 출처로 이어진다.",
     }),
     evidence: Object.freeze([
@@ -436,9 +433,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "reproducibleGuestChannel",
-        en: "Make the Linux development channel reproducible, so its provenance is rebuildable like every other byte",
-        ko: "Linux 개발 채널을 재현 가능하게 만들어 그 provenance도 나머지 바이트처럼 다시 빌드되게 한다",
+        id: "remainingReproducibleAssets",
+        en: "Reproduce the remaining firmware and emulator assets under the same project-controlled release discipline",
+        ko: "남은 firmware와 emulator 자산도 같은 프로젝트 통제 release 규율로 재현한다",
       }),
     ]),
   }),
@@ -448,7 +445,7 @@ export const NORTH_STAR_AXES = Object.freeze([
 // 축마다 최소 하나는 여기 속한 레인이어야 한다. Node 게이트만 든 축은 구조만 본 것이다.
 export const NORTH_STAR_BROWSER_LANES = Object.freeze([
   "test:browser", "test:consumer", "test:examples", "test:mcp",
-  "test:preflight", "test:web-machine", "test:web-computer", "ci",
+  "test:preflight", "test:web-machine", "test:web-machine:v86", "test:web-computer", "test:socket", "ci",
 ]);
 
 /** 총점, 만점, 평균. 표의 숫자는 전부 여기서 나온다(손으로 더한 총점 = 표류의 씨앗). */

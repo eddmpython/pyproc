@@ -5,8 +5,24 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
-export async function assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machinePureFiles, machineFileRank, runMemoryMachineStoreContract, runContextSwapContract }) {
+function assertBuildrootReleaseEvidence(catalog, releaseAssetsBytes) {
+  const component = catalog.components.find((item) => item.componentId === "buildroot-pyproc-i686-v1");
+  const releaseAssets = JSON.parse(releaseAssetsBytes);
+  const digest = createHash("sha256").update(releaseAssetsBytes).digest("hex");
+  if (component?.evidenceManifest?.sha256 !== digest) throw new Error("Buildroot release evidence manifest digest 표류");
+  if (component.evidenceManifest.byteLength !== releaseAssetsBytes.byteLength) throw new Error("Buildroot release evidence manifest 크기 표류");
+  if (component.evidenceManifest.assetCount !== releaseAssets.assets.length) throw new Error("Buildroot release evidence asset 수 표류");
+  if (!component.evidence.includes(component.evidenceManifest.url)) throw new Error("Buildroot release evidence URL 누락");
+  const releaseImage = releaseAssets.assets.find((asset) => asset.name === "buildroot-pyproc-i686.bin");
+  const catalogImage = catalog.assets.find((asset) => asset.componentId === component.componentId);
+  if (releaseImage?.sha256 !== catalogImage?.sha256 || releaseImage?.byteLength !== catalogImage?.byteLength) {
+    throw new Error("Buildroot release manifest와 runtime catalog가 다르다");
+  }
+}
+
+export async function assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machinePureFiles, machineFileRank, runMemoryMachineStoreContract, runDurableComputerContract }) {
 const webMachineTestRoot = join(ROOT, "tests", "webMachine");
 const webMachineSourceRoots = [machineRoot, webMachineTestRoot];
 // 엔진·브라우저를 모르는 순수 집합. 옛 @web-machine/core의 경계가 파일 불변식으로 남는다
@@ -67,7 +83,7 @@ check("Web Machine public 표면은 machine 배럴 하나", () => {
   if (!rootIndex.includes("createWebComputer")) throw new Error("루트 표면에 createWebComputer가 없음");
 });
 await checkAsync("Web Machine memory MachineStore contract", runMemoryMachineStoreContract);
-await checkAsync("Web Computer context swap rollback matrix", runContextSwapContract);
+await checkAsync("Web Computer durable import atomicity contract", runDurableComputerContract);
 check("Web Machine public type와 runtime store 의미 일치", () => {
   const source = readFileSync(join(machineRoot, "index.d.ts"), "utf8");
   for (const required of [
@@ -120,16 +136,23 @@ check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () 
   if (audit.status !== 0) throw new Error(audit.stderr || audit.stdout || "fixture SBOM audit 실패");
   const catalog = JSON.parse(readFileSync(join(ROOT, "scripts", "assetCatalog.json"), "utf8"));
   if (catalog.packagePolicy?.thirdPartyBinaryBundling !== "forbidden") throw new Error("third-party binary bundling 금지 정책 없음");
-  // 배포 판정 두 어휘: 우리는 어느 쪽도 재배포하지 않는다. 엔진 부팅 집합만 상류 CDN을
-  // 런타임 참조하고(참조는 재배포가 아니다, policyVersion 2), 나머지는 로컬 시험 전용이다.
+  const releaseAssetsPath = join(ROOT, "scripts", "buildroot", "releaseAssets.json");
+  const releaseAssetsBytes = readFileSync(releaseAssetsPath);
+  assertBuildrootReleaseEvidence(catalog, releaseAssetsBytes);
+  // 엔진 부팅 집합은 상류 CDN을 참조하고, 자체 Buildroot guest만 complete source/legal과
+  // 함께 프로젝트 release asset으로 배포한다. 나머지 third-party 자산은 로컬 시험 전용이다.
   for (const asset of catalog.assets) {
     if (!asset.bundleBlockers?.length) throw new Error(`${asset.name}: bundle blocker가 없다`);
-    const expected = asset.componentId.startsWith("pyodide-release-") ? "upstream-cdn-runtime-reference" : "local-test-only";
+    const expected = asset.componentId.startsWith("pyodide-release-")
+      ? "upstream-cdn-runtime-reference"
+      : asset.componentId === "buildroot-pyproc-i686-v1"
+        ? "project-release-runtime-reference"
+        : "local-test-only";
     if (asset.distribution !== expected) throw new Error(`${asset.name}: distribution은 ${expected}여야 한다(현재 ${asset.distribution})`);
   }
-  const opaqueGuestAssets = catalog.assets.filter((asset) => asset.role === "guest-image");
-  if (!opaqueGuestAssets.length || opaqueGuestAssets.some((asset) => asset.licenseConcluded !== "NOASSERTION")) {
-    throw new Error("opaque guest image license를 추정으로 확정하면 안 된다");
+  const guestAssets = catalog.assets.filter((asset) => asset.role === "guest-image");
+  if (!guestAssets.length || guestAssets.some((asset) => asset.licenseConcluded !== "NOASSERTION")) {
+    throw new Error("guest image license를 단일 식별자로 추정하면 안 된다");
   }
   const prepareSource = readFileSync(join(fixtureRoot, "prepareAssets.mjs"), "utf8");
   if (prepareSource.includes("https://") || /[0-9a-f]{64}/.test(prepareSource)) {
@@ -141,6 +164,21 @@ check("Web Machine third-party fixture는 미번들 provenance/SBOM 고정", () 
     timeout: 5000,
   });
   if (trackedAssets.status !== 0 || trackedAssets.stdout.trim()) throw new Error("third-party fixture binary가 git에 포함됨");
+});
+
+check("탐지기가 문다: Buildroot release evidence 변조", () => {
+  const catalog = JSON.parse(readFileSync(join(ROOT, "scripts", "assetCatalog.json"), "utf8"));
+  const releaseAssets = JSON.parse(readFileSync(join(ROOT, "scripts", "buildroot", "releaseAssets.json"), "utf8"));
+  const image = releaseAssets.assets.find((asset) => asset.name === "buildroot-pyproc-i686.bin");
+  image.sha256 = "0".repeat(64);
+  const tamperedBytes = Buffer.from(`${JSON.stringify(releaseAssets, null, 2)}\n`);
+  const tamperedCatalog = structuredClone(catalog);
+  const component = tamperedCatalog.components.find((item) => item.componentId === "buildroot-pyproc-i686-v1");
+  component.evidenceManifest.sha256 = createHash("sha256").update(tamperedBytes).digest("hex");
+  component.evidenceManifest.byteLength = tamperedBytes.byteLength;
+  let caught = false;
+  try { assertBuildrootReleaseEvidence(tamperedCatalog, tamperedBytes); } catch { caught = true; }
+  if (!caught) throw new Error("Buildroot release evidence 음성 fixture를 놓쳤다");
 });
 check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
   const deviceRoot = join(machineRoot, "devices");

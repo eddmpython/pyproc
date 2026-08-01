@@ -24,6 +24,7 @@ export type PyProcErrorCode =
   | "PYPROC_TASK_TIMEOUT"
   | "PYPROC_POOL_EXHAUSTED"
   | "PYPROC_JOURNAL_CORRUPT"
+  | "PYPROC_JOURNAL_EVICTED"
   | "PYPROC_JOURNAL_IO"
   | "PYPROC_STATE_CORRUPT"
   | "PYPROC_STATE_FENCE_STALE"
@@ -716,6 +717,10 @@ export interface JournalPruneResult {
   packsRemoved: number;
 }
 
+export interface JournalDeleteResult {
+  deleted: true;
+}
+
 export interface JournalRecoverResult {
   pages: number;
   mb: number;
@@ -740,9 +745,10 @@ declare class MachineJournal {
   /**
    * Whether the browser granted persistent storage. `null` before the request settles, `false` when
    * it was denied or cannot be asked. A denial does not stop the journal - it means the browser may
-   * evict this machine under pressure, so a later boot would look like a first boot. Measured on
-   * headless Chromium 2026-08-01: denied. Consumers that need durability across eviction export an
-   * image rather than relying on the journal alone.
+   * evict this machine under pressure. A surviving committed marker makes missing generations fail
+   * with PYPROC_JOURNAL_EVICTED, but origin-wide eviction can remove the marker too and is then
+   * indistinguishable from a first boot. Consumers that need durability across eviction export an
+   * image outside the origin rather than relying on the journal alone.
    */
   readonly persistentStorage: boolean | null;
   readonly packs: number;
@@ -752,11 +758,13 @@ declare class MachineJournal {
   stop(): void;
   /** Commits the current state at a manual boundary. Returns the changed page count and the bytes actually written after dedupe. */
   commit(): Promise<JournalCommitResult | null>;
+  /** Removes journal generations and leaves a deleted tombstone so intentional deletion is not reported as eviction. */
+  delete(): Promise<JournalDeleteResult>;
   /** Bundles only the HEAD/PREV live blobs into one pack file and reduces loose and stale files. */
   pack(): Promise<JournalPackResult | null>;
   /** Deletes loose blobs and stale pack files that HEAD/PREV no longer reference. */
   prune(): Promise<JournalPruneResult>;
-  /** Revives from the last commit. Returns null when there is no journal, i.e. a first boot. */
+  /** Revives from the last commit. Returns null only for a first boot or an explicit delete; missing generations behind a committed marker throw PYPROC_JOURNAL_EVICTED. */
   recover(): Promise<JournalRecoverResult | null>;
 }
 
@@ -1227,6 +1235,8 @@ declare class PyprocHistory {
   setRetentionPolicy(policy: ReactiveRetentionPolicy | null): Readonly<ReactiveRetentionPolicy> | null;
   /** Kernel commit through the WAL journal. The same dir shares one journal instance. */
   commit(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalCommitResult | null>;
+  /** Explicitly deletes the journal and leaves a tombstone so intentional absence is not reported as eviction. */
+  delete(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalDeleteResult>;
   recover(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalRecoverResult | null>;
   /** Starts the idle watcher (WAL). Durable failures surface through onStatus. */
   watch(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): MachineJournal;

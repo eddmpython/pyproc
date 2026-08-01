@@ -21,6 +21,9 @@ export class JournalKernelStore {
   }
   // 커밋/복원/pack 한 번의 경계에서 호출한다(캐시가 경계를 넘어 살아남으면 stale pack index를 본다).
   resetCache() { this._cache = {}; }
+  // 명시 delete 뒤에는 제거된 state 디렉터리 핸들을 재사용하면 안 된다. 다음 commit이 새
+  // 디렉터리를 만들고, recover는 실제 부재를 다시 관찰하도록 backend 캐시를 함께 비운다.
+  resetStorage() { this._refStore = null; this.resetCache(); }
   _hex(address) {
     const hex = parseSha256Address(address);
     if (!hex) throw new PyProcError("PYPROC_INPUT_INVALID", `journal store: malformed address (${address})`);

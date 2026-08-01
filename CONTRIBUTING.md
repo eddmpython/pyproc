@@ -21,7 +21,7 @@ Also welcome besides code: bug reports, browser measurements (please include Chr
 ## How work flows here
 
 1. **New capabilities start in `tests/attempts/<category>/`**, never directly in `src/`. A category is one question with a hypothesis and an explicit graduation gate, proven by browser measurements. See [tests/attempts/README.md](tests/attempts/README.md).
-2. **Graduated learnings become a plan** in `mainPlan/<initiative>/` (numbered docs + progress ledger). Finished initiatives move to `mainPlan/_done/`.
+2. **Graduated learnings become maintained contracts** in `docs/`, automated evidence in `tests/`, and reviewable decisions in git history. Temporary planning archives are not kept in the repository.
 3. **Only then does code land in `src/`**, where folder = layer and imports only ever point downward: `runtime/` (0: engine core) <- `state/` (1: the durable state kernel) <- `capabilities/` (2: things that attach to a runtime) <- `composition/` (3: installs the capability registry, exposes the public surface) <- `session/` (4) and `processOs/` (4) <- `machine/` (5: the browser-computer host and its guests). Every edge lowers the rank, so a cycle is impossible. Engine internals stay behind capability contracts.
 
    Every file in `src/` states its own rank on the first line, so you never have to open the gate source to find out: `// fileName.js - Layer 2: what it does`. Files under `machine/` also state their internal file rank, because that rank (not the folder) is what the import-direction and purity checks actually enforce: `// v86SerialPort.js - Layer 5/guests: ...`, ordered `pure` <- `platform` <- `guests` <- `composition`. `npm test` fails if a label is missing or disagrees with the rank map.

@@ -11,7 +11,7 @@
 ## 릴리즈 절차 (명시 지시가 있을 때만)
 
 1. `npm test` green + 브라우저 게이트 green([testing.md](testing.md)).
-2. 문서 정합: README·mainPlan 진행 원장이 릴리즈 범위를 반영했는가.
+2. 문서 정합: README, CHANGELOG, `docs/`, `tests/northStar.mjs`가 릴리즈 범위와 현재 공개 계약을 함께 반영했는가.
 3. `package.json` 버전 끝자리 +1 + 릴리즈 커밋(릴리즈 노트 = 커밋 메시지, 위 정책).
 4. `git tag v0.0.x` (릴리즈 커밋에, package.json과 동일 값).
 5. `main -> origin/main` 푸시 + `git push origin v0.0.x`.
@@ -24,11 +24,13 @@
 - **인증은 npm Trusted Publishing(OIDC)**이다. 장수 토큰(`NPM_TOKEN` 시크릿)을 두지 않는다. 러너가 GitHub OIDC로 신원을 증명하면 npm이 단기 자격을 발급하므로 유출될 비밀이 없고 provenance(SLSA 출처 증명)가 자동으로 붙는다. 설정은 npmjs.com > pyproc > Settings > Trusted Publisher > GitHub Actions(repository `eddmpython/pyproc`, workflow `publish.yml`, Environment 없음, Allowed actions = `npm publish`). 패키지당 1회이고 **등록 완료 상태다**.
 - **게시 전 관문 3개**(퍼블리시는 되돌릴 수 없다. 버전 번호는 재사용 불가): 태그와 `package.json` 버전 일치, 구조 게이트, 브라우저 게이트. 하나라도 적색이면 게시하지 않는다.
 - **재시도·백필은 수동 실행**(`gh workflow run publish.yml --ref <ref>`). 게시 버전은 언제나 체크아웃한 ref의 `package.json`이다. 태그-버전 일치 검증은 태그 ref일 때만 돈다. 태그가 워크플로보다 먼저 나간 경우 태그 push로는 발동하지 않으므로(그 태그가 가리키는 커밋에 워크플로 파일이 없다) 이 경로로 게시한다.
-- npm CLI는 워크플로가 `npm@latest`로 올린다. trusted publishing은 npm 11.5.1+에서만 동작하는데 node 22 번들은 10.x다.
+- npm CLI는 워크플로가 검증한 exact `npm@11.19.0`으로 올린다. trusted publishing은 npm 11.5.1+에서만 동작하는데 node 22 번들은 10.x다. `latest`를 쓰지 않아 같은 태그가 시간에 따라 다른 게시 도구를 받지 않는다.
+- GitHub Actions도 major tag가 아니라 감사한 40자리 commit SHA에 고정한다. `tests/run.mjs`의 승인 표와 workflow를 같은 변경에서 갱신하며, floating tag가 돌아오면 음성 fixture가 구조 gate를 RED로 만든다.
+- 타입 컴파일러는 devDependency `typescript: 5.9.3`과 lockfile로 고정한다. 배포 package의 런타임 의존성 0 계약은 유지하면서 `npx`가 실행 시점의 다른 compiler를 받는 경로를 없앤다.
 
 ## 소비 반영 (npm 버전 핀)
 
-- 소비 제품은 **npm 정확 버전**을 핀한다: `"pyproc": "0.0.10"`(+ 락파일). 플로팅(`^`/`~`/`latest`) 금지. 재현성은 정확 버전 + 락파일이 보장하고, 릴리즈 없이 최신 커밋이 급하면 SHA 핀(`github:eddmpython/pyproc#<sha>`)이 대안이다.
+- 소비 제품은 **npm 정확 버전**을 핀한다: `"pyproc": "0.0.11"`(+ 락파일). 플로팅(`^`/`~`/`latest`) 금지. 재현성은 정확 버전 + 락파일이 보장하고, 릴리즈 없이 최신 커밋이 급하면 SHA 핀(`github:eddmpython/pyproc#<sha>`)이 대안이다.
 - 소비자가 새 버전으로 올라올 때: 새 릴리즈 버전으로 되핀 + 소비자 쪽 빌드 3단계 확인(npm 해석, tsc 타입, 번들러 워커 emit).
 - pyproc은 어떤 변경으로도 소비자를 즉시 깨지 않는다(핀이므로). 문제가 나면 소비자는 이전 버전으로 되핀하면 된다.
 

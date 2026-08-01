@@ -1,19 +1,24 @@
 // config.js - 해시 고정 자산을 쓰는 v86 guest probe manifest 정본.
-export const V86_ADAPTER_VERSION = "v86-0.5.424-buildroot68-state-v1";
+export const V86_ADAPTER_VERSION = "v86-0.5.424-buildroot68-state-v2";
 export const V86_GRAPHICAL_ADAPTER_VERSION = "v86-0.5.424-kolibri-state-v1";
+export const V86_SHELL_PROMPT = "# ";
 
 export function createV86ProbeManifest() {
   return {
     v86: {
-      readyPattern: "~% ",
+      readyPattern: "buildroot login: ",
+      shellPrompt: V86_SHELL_PROMPT,
+      serialBootstrap: [
+        { data: "root\n", waitFor: V86_SHELL_PROMPT, timeoutMs: 30000 },
+      ],
       bootTimeoutMs: 120000,
       options: {
         wasm_path: "../../fixtures/v86/assets/v86.wasm",
         bios: { url: "../../fixtures/v86/assets/seabios.bin" },
         vga_bios: { url: "../../fixtures/v86/assets/vgabios.bin" },
-        bzimage: { url: "../../fixtures/v86/assets/buildroot-bzimage68.bin", async: false },
+        bzimage: { url: "../../fixtures/v86/assets/buildroot-pyproc-i686.bin", async: false },
         filesystem: {},
-        cmdline: "tsc=reliable mitigations=off random.trust_cpu=on",
+        cmdline: "tsc=reliable mitigations=off random.trust_cpu=on console=ttyS0",
         memory_size: 64 * 1024 * 1024,
         disable_keyboard: true,
         disable_mouse: true,

@@ -95,6 +95,12 @@ class PyprocHistory {
   }
   commit(opts) { return this._journal(opts).commit(); }
   recover(opts) { return this._journal(opts).recover(); }
+  async delete(opts) {
+    const journal = this._journal(opts);
+    const result = await journal.delete();
+    this._journals.delete(opts.dir);
+    return result;
+  }
   // 유휴 감시(WAL): durable 주장의 실패는 onStatus로 관측 가능하다.
   watch(opts) { return this._journal(opts).start(); }
   pack(opts) { return this._journal(opts).pack(); }

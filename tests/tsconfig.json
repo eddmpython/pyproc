@@ -14,6 +14,7 @@
     "allowJs": false
   },
   "files": [
+    "./typeSurface.ts",
     "../index.d.ts",
     "../src/composition/runtimeSubpath.d.ts",
     "../src/capabilities/gpuCompute.d.ts",

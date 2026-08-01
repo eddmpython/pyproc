@@ -408,6 +408,66 @@ try {
     await jRootDir.removeEntry("pyprocGateJournalH0", { recursive: true });
   }
 
+  // OPFS eviction sentinel: marker 없는 빈 디렉터리만 첫 부팅이다. accepted commit 뒤 marker가
+  // 남았는데 backing refs가 사라졌다면 새 머신으로 조용히 시작하지 않는다.
+  {
+    const clean = async (name) => { try { await jRootDir.removeEntry(name, { recursive: true }); } catch (e) {} };
+    const dirOf = async (name) => {
+      await clean(name);
+      return jRootDir.getDirectoryHandle(name, { create: true });
+    };
+
+    const freshName = "pyprocGateJournalFresh";
+    const freshDir = await dirOf(freshName);
+    const fresh = await rt.enableJournal({ dir: freshDir, reactive, includeHome: false }).recover();
+    check("journal eviction: marker와 refs가 없는 디렉터리만 fresh boot", fresh === null);
+    await clean(freshName);
+
+    const evictedName = "pyprocGateJournalEvicted";
+    const evictedDir = await dirOf(evictedName);
+    rt.run("journalEvictionMark = 1");
+    await rt.enableJournal({ dir: evictedDir, reactive, includeHome: false }).commit();
+    await evictedDir.removeEntry("state", { recursive: true });
+    for (const name of ["blob", "pack"]) { try { await evictedDir.removeEntry(name, { recursive: true }); } catch (e) {} }
+    try { await evictedDir.removeEntry("PACKS.json"); } catch (e) {}
+    let evictedCode = null;
+    try { await rt.enableJournal({ dir: evictedDir, reactive, includeHome: false }).recover(); }
+    catch (e) { evictedCode = e.code; }
+    check("journal eviction: committed marker만 남고 HEAD/PREV 없음은 fail-closed", evictedCode === "PYPROC_JOURNAL_EVICTED", evictedCode);
+    await clean(evictedName);
+
+    const fallbackName = "pyprocGateJournalMarkerFallback";
+    const fallbackDir = await dirOf(fallbackName);
+    const fallbackJournal = rt.enableJournal({ dir: fallbackDir, reactive, includeHome: false });
+    rt.run("journalFallbackMark = 1");
+    await fallbackJournal.commit();
+    rt.run("journalFallbackMark = 2");
+    await fallbackJournal.commit();
+    const fallbackState = await fallbackDir.getDirectoryHandle("state");
+    const corruptHead = await fallbackState.getFileHandle("HEAD.json");
+    const corruptWriter = await corruptHead.createWritable();
+    await corruptWriter.write("{"); await corruptWriter.close();
+    rt.run("journalFallbackMark = 9");
+    const fallbackRecovered = await rt.enableJournal({ dir: fallbackDir, reactive, includeHome: false }).recover();
+    check("journal eviction: marker 아래 corrupt HEAD는 PREV fallback", fallbackRecovered?.fallback === true && rt.run("journalFallbackMark") === 1);
+    await fallbackState.removeEntry("PREV.json");
+    let corruptCode = null;
+    try { await rt.enableJournal({ dir: fallbackDir, reactive, includeHome: false }).recover(); }
+    catch (e) { corruptCode = e.code; }
+    check("journal eviction: corrupt HEAD와 PREV 없음은 corruption", corruptCode === "PYPROC_JOURNAL_CORRUPT", corruptCode);
+    await clean(fallbackName);
+
+    const deletedName = "pyprocGateJournalDeleted";
+    const deletedDir = await dirOf(deletedName);
+    rt.run("journalDeletedMark = 1");
+    await pm.history.commit({ dir: deletedDir, includeHome: false });
+    const deleted = await pm.history.delete({ dir: deletedDir, includeHome: false });
+    const tombstone = JSON.parse(await (await (await deletedDir.getFileHandle("journalMarker.json")).getFile()).text());
+    const deletedRecovered = await rt.enableJournal({ dir: deletedDir, reactive, includeHome: false }).recover();
+    check("journal eviction: explicit delete는 tombstone 뒤 intentional absence", deleted.deleted === true && tombstone.state === "deleted" && deletedRecovered === null);
+    await clean(deletedName);
+  }
+
   // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)
   const badInheritedRt = new Runtime(rt.raw, rt.indexURL, { assetIntegrity: badAssetIntegrity });
   await badInheritedRt.enableSyscallBridge({ input: () => "bad" }).install();

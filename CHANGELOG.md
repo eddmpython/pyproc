@@ -8,78 +8,84 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
-<!-- unreleased-subpaths: pyproc/runtime -->
+<!-- unreleased-subpaths: -->
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
-### Added
-
-- **Exactly-once resolution across a leader failover.** A leader now records every command outcome
-  into the same durable generation as the heap, and a durable machine parks an interrupted command
-  and re-asks the successor once instead of answering `PYPROC_RPC_OUTCOME_UNKNOWN`. A repeated
-  request is answered from the record rather than run twice, and a request absent from the
-  generation is provably safe to run.  remains for the cases where no
-  record can exist: a non-durable machine, a timeout while the leader is still alive, a caller that
-  goes away, and a heap that installed a JS handle (that kernel cannot serve a replay after revival,
-  which the image-portability contract already states).
-- **`pyproc/runtime` is a declared plumbing subpath again**: `Runtime`, `bootRuntime`,
-  `MemoryCapability`, `FileSystem`, `checkEnvironment`, and the engine/runtime contract
-  assertions. 0.0.10 removed it, but the adoption seam for consumers that boot Pyodide
-  themselves (`new Runtime(py)`) has no root-surface equivalent, so it returns. Its boot verb
-  is named `bootRuntime`, not `boot`: two public `boot` functions that differ only in return
-  type make adoption depend on which docs the editor happens to show.
-- Every subpath in `exports` now carries a `types` entry, so `pyproc/history`,
-  `pyproc/machine`, and `pyproc/assets` type-resolve without `paths` mapping.
+## 0.0.11 - 2026-08-01
 
 ### Breaking
 
-- **The legacy `PYMACHINE2` envelope reader is retired.** `open()` now accepts only the state-bundle
-  format that `history.export()` has written since 0.0.9. A file produced by 0.0.10 or earlier is
-  refused with `PYPROC_MACHINE_FORMAT_INVALID` and a message saying to re-export it from the version
-  that wrote it. Carrying a read-only second format was debt rather than a contract: nothing created
-  it any more, yet every revival path and its gates had to keep both branches alive.
-- **`history.save()` and `history.export()` refuse a heap that holds JS handles** with
-  `PYPROC_IMAGE_PROXY_SURFACE`, naming the surfaces that installed them. A JS handle is
-  interpreter-local and cannot cross an image: a kernel revived from such an image traps on every
-  proxy path, including handles it mints itself, and the failure used to appear far from its cause
-  as `table index is out of bounds`. Blocking surfaces need a handle by construction (the syscall
-  bridge behind `input()`, `pyproc/socket`, `pyproc/gpu`), so a machine that used one now says so
-  at the moment the image is written. Pass `{ allowHostProxies: true }` to acknowledge it: the
-  revived kernel keeps its plain Python state and cannot use those surfaces again. Machines that
-  only use the packet device or the permission jail are unaffected - both moved to value
-  boundaries in this same change and cross an image intact.
+- **The 0.0.9-era `PYMACHINE2` reader is retired.** `open()` accepts the `PYBUNDLE1` format written
+  by 0.0.10 and later. Open an older `PYMACHINE2` file with the version that wrote it and export it
+  again before upgrading. The error is `PYPROC_MACHINE_FORMAT_INVALID`.
+- **`history.save()` and `history.export()` refuse heaps that hold JS handles** with
+  `PYPROC_IMAGE_PROXY_SURFACE`. Export before enabling a blocking host surface when possible.
+  `{ allowHostProxies: true }` explicitly accepts that the revived kernel keeps plain Python state
+  but cannot use those surfaces again. Packet networking and the permission jail use value
+  boundaries and remain portable.
+- **`MachineCommitCoordinator` no longer takes `idFactory`** (`pyproc/machine`). Generation identity
+  is the content address produced by the commit itself; remove the unused constructor argument.
+- **`boot()` now rejects unknown option keys immediately.** Existing callers that mixed custom keys
+  into boot options must move those values outside the boot option object.
 
-- **`MachineCommitCoordinator` no longer takes `idFactory`** (`pyproc/machine`). Generation
-  identity has been the commit address itself since the state-kernel refactor, so the parameter
-  was stored and never read while still being required - a signature that misled callers into
-  believing they controlled generation ids. Drop the argument; nothing else changes.
+Users upgrading directly from 0.0.9 must also apply the 0.0.10 migration from root
+`boot() -> Runtime` to root `boot() -> PyprocMachine`; the 0.0.10 section below is the migration map.
 
 ### Added
 
-- **`machine.dispose()`** terminates the process pool and releases reactive retention.
-  `machine.proc()` is now memoized per machine, so a remount reuses the pool instead of
-  stacking workers (each lane is an independent interpreter).
-- **`boot()` rejects unknown option keys** with the received name and the nearest known key.
-  A typo like `determinstic: true` used to boot non-deterministically in silence and fail much
-  later at `history.export`.
-- Consumer-facing diagnostics on the entry surface (`checkEnvironment` issues, `requireCoi`,
-  the new `requireJspi`, and the porcelain input/refusal errors) are in English, matching the
-  README and API reference. Internal comments stay Korean.
-- IPC pipe / lock / semaphore / shared-memory creation and `bootWasi` now pass the
-  cross-origin-isolation guard, so a missing header reports the actionable error instead of a
-  bare `SharedArrayBuffer is not defined`.
+- **A durable Web Computer lifecycle on the existing `createWebComputer()` handle.** Opt into it
+  with `durability`, then use `initialize`, `save`, `exportImage`, `importImage`, `inspect`, and
+  `dispose`. Owner fencing, restore-or-boot, pause/snapshot/commit/resume, signed export, candidate
+  preflight, and conflict-safe active-context replacement are one public composition contract.
+  Additional guest factories can be installed through `adapters` without adding a root export.
+- **Explicit journal deletion and eviction detection.** `machine.history.delete()` leaves a deletion
+  tombstone, while a committed marker with missing generations fails closed as
+  `PYPROC_JOURNAL_EVICTED`. A fully origin-wide browser eviction remains indistinguishable from a
+  first visit, so important state still needs an external signed export.
+- **A project-built Linux guest.** The reproducible i686 Buildroot image, exact source archive,
+  complete legal material, CycloneDX inventory, build manifest, config, and independent-build
+  receipt are published together in the `buildroot-pyproc-i686-v1` asset release. The catalog pins
+  the guest image by hash and the Web Computer can place it on the same packet switch as Python.
+- **`pyproc/runtime` returns as a stable plumbing subpath** with `Runtime`, `bootRuntime`,
+  `MemoryCapability`, `FileSystem`, `checkEnvironment`, and engine/runtime contract assertions.
+  The separate `bootRuntime` name keeps its return type distinct from the root machine `boot`.
+- The typed API subpaths `pyproc/runtime`, `pyproc/history`, `pyproc/machine`, and `pyproc/assets`
+  now declare their type entry explicitly.
+- `machine.dispose()` terminates the process pool and releases reactive retention.
+  `machine.proc()` is memoized per machine so a remount reuses the existing pool.
+
+### Changed
+
+- Durable RPC now has one normative retry boundary. A direct durable controller may resend the same
+  request id once only when it can prove a proxy-free session. A normal follower, a live timeout,
+  a vanished caller, or an unportable heap returns non-retryable `PYPROC_RPC_OUTCOME_UNKNOWN`
+  instead of guessing and replaying a possibly completed command.
+- Agent and MCP sandbox examples install both the cooperative `net: false` jail and a browser CSP
+  wall after trusted engine/package preparation. Local execution alone is no longer described as a
+  no-exfiltration guarantee.
+- Consumer-facing diagnostics and capability preflight errors use English on the public surface.
+  IPC and WASI paths report their cross-origin-isolation requirement before allocating shared
+  memory.
+- GitHub Actions, TypeScript, and the publishing npm CLI are exact-version pinned. Chrome and Edge
+  run independent release lanes, and npm Trusted Publishing grants OIDC only to the publish job.
+- The internal `mainPlan` archive was removed. Persistent product, contract, and operating policy
+  remains under `docs/`; implementation evidence remains in automated tests and git history.
 
 ### Fixed
 
-- Consumer docs that still named the pre-0.0.10 root verbs now name the shipped surface
-  (`docs/consuming/trustPermissions.md`, `resumeCatalog.md`, `contract.md`,
-  `docs/product/glossary.md`, `docs/reference/bundleFormat.md`, `SECURITY.md`, both READMEs).
-  The signature helpers in particular are `createStateKeyPair` / `exportStatePublicKey` /
-  `fingerprintStatePublicKey` from `pyproc/history`, and they take a crypto provider first.
+- Consumer docs now name the shipped porcelain machine verbs and current signature helpers.
+- Durable image import preserves the running machine set and HEAD when trust validation or commit
+  conflicts fail.
+- A serial timeout includes the Linux console tail, making a failed guest boot actionable.
+- The project Buildroot guest mounts the v86 `host9p` volume at `/mnt/web` and starts both serial
+  and VGA shells, so Linux disk, display, and keyboard state cross save and cold-restore boundaries.
 
-한국어 요약: `pyproc/runtime`을 안정 plumbing subpath로 되돌리고 boot 동사를 `bootRuntime`으로
-분리했다(공개 `boot` 두 개의 이름 충돌 제거). 모든 subpath에 `types` 항목을 붙였다. 0.0.10
-개명 뒤에도 옛 루트 이름을 지시문으로 쓰던 소비자 문서를 현재 표면으로 고쳤다.
+한국어 요약: 기존 root 6-export를 유지하면서 Web Computer의 내구 저장·복원·서명 이동 수명주기를
+공개 핸들에 완성했다. OPFS 삭제와 축출을 분리하고 Python과 재현 가능한 Buildroot Linux를 실제
+packet network와 cold restore로 묶었다. `pyproc/runtime`은 안정 subpath로 출하한다. 0.0.9 시대
+`PYMACHINE2`, JS handle을 가진 heap 저장, `MachineCommitCoordinator.idFactory`, 알 수 없는 boot
+option에는 위 Breaking 절의 이관이 필요하다.
 
 ## 0.0.10 - 2026-07-19
 

@@ -25,8 +25,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
       # RED 커밋이 공개 진열장으로 나가지 않게 한다. 배포는 사람이 보는 표면이고, 구조 게이트는
@@ -42,8 +42,8 @@ jobs:
           cp src/capabilities/pyprocSw.js _site/pyprocSw.js
           # 랜딩은 examples/index.html이 정본이고 배포 루트로 승격된다(상대 경로가 루트 기준).
           mv _site/examples/index.html _site/index.html
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

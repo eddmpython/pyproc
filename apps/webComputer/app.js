@@ -181,7 +181,8 @@ async function importComputer() {
   const { file, inspection } = pendingImport;
   pendingImport = null;
   trustDialog.close();
-  const imported = await runOperation("Importing the trusted computer", () => runtime.importImage(file, inspection.publicKey));
+  const imported = await runOperation("Importing the trusted computer",
+    () => runtime.importImage(file, inspection.publicKey, inspection.permissions));
   if (!imported) return;
   markSaved(Number(imported.committed.commit.createdAt));
   notify(`Imported computer signed by ${shortFingerprint(inspection.fingerprint)}.`);

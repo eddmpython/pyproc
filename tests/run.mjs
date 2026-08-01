@@ -146,10 +146,9 @@ console.log("pyproc 게이트\n");
 // 1) 공개 표면: index.js가 기대 export를 내는가.
 section("표면");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
-const benchArtifactContract = await import(pathToFileURL(join(ROOT, "tests", "browser", "benchArtifacts.mjs")).href);
 const productConsumerCoverage = await import(pathToFileURL(join(ROOT, "tests", "browser", "productConsumerCoverage.mjs")).href);
 const { runMemoryMachineStoreContract } = await import(pathToFileURL(join(ROOT, "tests", "webMachine", "contracts", "machineStoreContract.mjs")).href);
-const { runContextSwapContract } = await import(pathToFileURL(join(ROOT, "tests", "webMachine", "contracts", "contextSwapContract.mjs")).href);
+const { runDurableComputerContract } = await import(pathToFileURL(join(ROOT, "tests", "webMachine", "contracts", "durableComputerContract.mjs")).href);
 // porcelain 일격(state-kernel 7b) 이후 루트는 정확히 6개다: 진입 동사 2(boot,
 // createWebComputer) + 부활 동사 1(open) + 진단 1(checkEnvironment) + 오류 계약 2.
 // 능력 상세는 핸들(runtime 탈출구)과 subpath(history/machine/worker/assets, 강등 gpu/socket/wasi)로 산다.
@@ -347,7 +346,7 @@ check("DeviceFs/Init 메서드", () => {
   for (const m of ["install", "resume", "stop"]) if (typeof initApi.Init.prototype[m] !== "function") throw new Error("Init." + m);
 });
 check("MachineJournal 메서드", () => {
-  for (const m of ["start", "stop", "commit", "pack", "prune", "recover"])
+  for (const m of ["start", "stop", "commit", "delete", "pack", "prune", "recover"])
     if (typeof journalApi.MachineJournal.prototype[m] !== "function") throw new Error("MachineJournal." + m);
 });
 check("MachineJail 메서드", () => {
@@ -514,7 +513,7 @@ for (const scope of ["src", "examples", "tests", "apps", "scripts"]) {
 
 // 3.3) 성능 주장 가드: 공개 표면에 숫자 간판을 걸지 않는다(2026-07-17 확정).
 //      숫자를 간판으로 걸면 그 숫자를 영원히 방어할 의무가 생기고, 그 의무가 제품 방향을
-//      벤치에 종속시킨다. 실측은 계속하되(개발 원칙 4) 측정치는 mainPlan/tests 기록과
+//      벤치에 종속시킨다. 실측은 계속하되(개발 원칙 4) 측정치는 tests의 재현 가능한
 //      benchmark artifact에만 산다. 스코프 밖 둘: docs/operations의 게이트 임계값은 자랑이
 //      아니라 계약이고, examples/의 Speed Lab은 사용자가 자기 기계에서 직접 재는 도구다.
 // 강등 subpath의 타입 선언 목록. [성능 주장]과 [타입] 두 절이 함께 소비한다.
@@ -1053,7 +1052,7 @@ section("election 프로토콜");
 await assertElectionProtocol(check, checkAsync);
 
 // 파일/폴더 이름도 camelCase다. 위 검사는 파일 "내용"의 식별자만 봐서 이름 규칙은 기계 검사가
-// 0이었다. mainPlan은 kebab-case 번호 문서라 예외(dartlab 관례), 검증 데이터/픽스처도 제외.
+// 0이었다. 검증 데이터와 엔진 픽스처는 제외한다.
 check("파일과 폴더 이름 camelCase", () => {
   const CAMEL = /^[a-z][A-Za-z0-9]*$/;
   const exempt = new Set(["_done", "web-machine", "guest-pyproc", "guest-v86"]);
@@ -1166,7 +1165,7 @@ check("Stable 라벨 = 승격 원장 정합(근거 없는 라벨 상승 차단)"
   if (stableRows !== ledgerRows) throw new Error(`Stable 라벨 ${stableRows}행 != 승격 원장 ${ledgerRows}행`);
 });
 // 영문 비교 페이지 게이트는 제거했다(2026-07-17). 그 게이트는 경쟁 비교 게시를 강제해
-// 숫자 자랑 금지 규칙과 정면으로 충돌했다. 지난 비교는 mainPlan/_done 원장에 기록으로 남는다.
+// 숫자 자랑 금지 규칙과 정면으로 충돌했다. 비교는 재현 가능한 로컬 벤치 도구로만 수행한다.
 check("공개 문서 인프라 존재(CHANGELOG/SECURITY/glossary)", () => {
   for (const f of ["CHANGELOG.md", "SECURITY.md", join("docs", "product", "glossary.md")]) {
     if (!existsSync(join(ROOT, f))) throw new Error(`${f} 없음`);
@@ -1195,29 +1194,20 @@ check("Speed Lab 반복 벤치 통계 helper 공유", () => {
 });
 check("속도 비교 벤치 계약 고정", () => {
   const contract = readFileSync(join(ROOT, "docs", "operations", "benchmarking.md"), "utf8");
-  const plan = readFileSync(join(ROOT, "mainPlan", "_done", "browser-os-north-star", "06-speed-comparison.md"), "utf8");
   const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");
-  const initiativeMap = readFileSync(join(ROOT, "mainPlan", "_done", "browser-os-north-star", "README.md"), "utf8");
   const speedLab = readFileSync(join(ROOT, "examples", "speedLab.html"), "utf8");
   const speedBench = readFileSync(join(ROOT, "tests", "browser", "speedBench.mjs"), "utf8");
   const benchArtifact = readFileSync(join(ROOT, "tests", "browser", "benchArtifact.mjs"), "utf8");
   const benchArtifacts = readFileSync(join(ROOT, "tests", "browser", "benchArtifacts.mjs"), "utf8");
   const benchCompare = readFileSync(join(ROOT, "tests", "browser", "benchCompare.mjs"), "utf8");
   const pkgForBench = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  // 후보 이름(WebVM/JupyterLite/marimo)은 더 이상 benchmarking.md의 필수 항목이 아니다.
-  // 경쟁 비교는 게시물이 아니라 원장 기록이므로 mainPlan/_done 계약에서만 요구한다.
   for (const term of ["S0", "S0C", "S1", "S1L", "S2", "S3", "S4", "S5", "median", "p95", "raw output"]) {
     if (!contract.includes(term)) throw new Error(`benchmarking.md 필수 항목 누락: ${term}`);
-    if (!plan.includes(term)) throw new Error(`06-speed-comparison.md 필수 항목 누락: ${term}`);
-  }
-  for (const name of ["WebVM", "JupyterLite", "marimo"]) {
-    if (!plan.includes(name)) throw new Error(`06-speed-comparison.md 후보 누락: ${name}`);
   }
   for (const term of ["schema v2", "schemaVersion", "scenarioDefinition", "measurement", "environment", "evidence", "commit", "command", "browser", "engine", "samples", "metrics"]) {
     if (!contract.includes(term)) throw new Error(`실측 봉투 필드 누락: ${term}`);
   }
   if (!docsMap.includes("operations/benchmarking.md")) throw new Error("docs 지도에 benchmarking.md 없음");
-  if (!initiativeMap.includes("06-speed-comparison.md")) throw new Error("이니셔티브 지도에 06-speed-comparison.md 없음");
   if (pkgForBench.scripts?.["bench:speed"] !== "node tests/browser/speedBench.mjs") throw new Error("bench:speed 스크립트 없음");
   if (pkgForBench.scripts?.["bench:artifact"] !== "node tests/browser/benchArtifact.mjs") throw new Error("bench:artifact 스크립트 없음");
   if (pkgForBench.scripts?.["bench:compare"] !== "node tests/browser/benchCompare.mjs") throw new Error("bench:compare 스크립트 없음");
@@ -1233,25 +1223,6 @@ check("속도 비교 벤치 계약 고정", () => {
   }
   for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--raw-output", "--raw-output-file", "--profile", "--warmup-count", "--browser-headless", "--na", "scenarioDefinition", "measurement", "environment", "evidence", "rawOutputSidecar", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "parseImmortalMachineSample", "summarizeImmortalMachineBench", "isImmortalMachineBenchGreen", "normalizeBenchArtifact"]) {
     if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
-  }
-  const artifactDir = join(ROOT, "mainPlan", "_done", "browser-os-north-star", "benchmarks");
-  const artifactFiles = readdirSync(artifactDir).filter((name) => name.endsWith(".json")).sort();
-  if (!artifactFiles.length) throw new Error("benchmark JSON artifact 없음");
-  for (const name of artifactFiles) {
-    const file = join(artifactDir, name);
-    const raw = JSON.parse(readFileSync(file, "utf8"));
-    if (raw.schemaVersion !== benchArtifactContract.BENCH_ARTIFACT_SCHEMA_VERSION) throw new Error(`${name}: schemaVersion v2 아님`);
-    if (!raw.scenarioDefinition || !raw.measurement || !raw.environment || !raw.evidence) throw new Error(`${name}: v2 봉투 누락`);
-    benchArtifactContract.normalizeBenchArtifactFile(file);
-    const rawOutputPath = benchArtifactContract.rawOutputPathForArtifact(raw, file);
-    if (rawOutputPath) {
-      const relativeRawOutput = rel(rawOutputPath);
-      const tracked = spawnSync("git", ["ls-files", "--error-unmatch", relativeRawOutput], { cwd: ROOT, encoding: "utf8", timeout: 5000 });
-      if (tracked.status !== 0) throw new Error(`${name}: rawOutput file git 미추적: ${relativeRawOutput}`);
-      if (!readFileSync(rawOutputPath, "utf8").trim()) throw new Error(`${name}: rawOutput file 비어 있음`);
-    } else if (raw.evidence.rawOutput !== benchArtifactContract.RAW_OUTPUT_EMBEDDED_REPORT) {
-      throw new Error(`${name}: rawOutput reference 형식 불명`);
-    }
   }
   const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
   const immortalProductGate = readFileSync(join(ROOT, "tests", "browser", "immortalProductGate.js"), "utf8");
@@ -1531,7 +1502,7 @@ check("강등 subpath 타입은 자기 .js 옆에", () => {
   }
 });
 check("타입 계약 게이트 배선", () => {
-  if (pkg.scripts?.["test:types"] !== "npx -y -p typescript@5 tsc -p tests/tsconfig.json") throw new Error("test:types 누락");
+  if (pkg.scripts?.["test:types"] !== "tsc -p tests/tsconfig.json") throw new Error("test:types 누락 또는 lockfile compiler 미사용");
   const cfg = JSON.parse(readFileSync(join(ROOT, "tests", "tsconfig.json"), "utf8"));
   // skipLibCheck는 .d.ts 검사 자체를 건너뛴다. 켜지면 게이트가 조용히 통과한다.
   if (cfg.compilerOptions?.skipLibCheck !== false) throw new Error("skipLibCheck가 false가 아니다(게이트가 조용히 통과한다)");
@@ -1644,6 +1615,143 @@ check("소비 문서 역할 분리", () => {
   if (contract.includes("| export | what |")) throw new Error("contract.md가 capability별 export 설명표로 회귀");
   if (!docsMap.includes("install, version pinning, import boundaries, runtime-asset deployment")) throw new Error("docs/README.md contract 역할 설명이 낡음");
 });
+check("외부 소비 증거는 실행 import와 pin의 2026-08-01 감사 사실만 주장", () => {
+  const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
+  const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+  const assertAdoption = (documents) => {
+    for (const term of [
+      "Read-only audit date: **2026-08-01**",
+      "No sibling currently imports the",
+      "dartlab | **Live exact-release consumer.**",
+      "xlpod | **Live exact-release consumer.**",
+      "codaro | **Immutable legacy-SHA consumer, migration required.**",
+      "a7fc83906cfa7bf24c009c8631043738423fa84a",
+      "package-internal `src` files",
+    ]) {
+      if (!documents.contract.includes(term)) throw new Error(`contract.md 소비 감사 축 누락: ${term}`);
+    }
+    for (const term of ["exact registry `pyproc@0.0.10`", "0.0.9-era root contract", "migration required"]) {
+      if (!documents.readme.includes(term)) throw new Error(`README 소비 감사 요약 누락: ${term}`);
+    }
+    for (const stale of [
+      "codaro and xlpod consume the same seam",
+      "The notebook worker adopts its self-booted Pyodide with `new Runtime(py)`",
+      "| xlpod | In preparation",
+      "the dartlab and xlpod pattern",
+    ]) {
+      if (documents.contract.includes(stale) || documents.readme.includes(stale)) {
+        throw new Error(`낡은 외부 소비 주장 재등장: ${stale}`);
+      }
+    }
+  };
+  assertAdoption({ contract, readme });
+  let caught = false;
+  try { assertAdoption({ contract: `${contract}\n| xlpod | In preparation`, readme }); }
+  catch { caught = true; }
+  if (!caught) throw new Error("외부 소비 drift 음성 fixture를 놓쳤다");
+});
+check("durable RPC 상태표와 공개 투영이 한 의미다", () => {
+  const paths = [
+    "README.md",
+    "README.ko.md",
+    "SECURITY.md",
+    "docs/reference/api.md",
+    "docs/consuming/contract.md",
+    "docs/consuming/capabilityMatrix.md",
+    "docs/operations/contractReality.md",
+  ];
+  const texts = new Map(paths.map((path) => [path, readFileSync(join(ROOT, path), "utf8")]));
+  const anchor = "durable-rpc-state-table-normative";
+  const contract = texts.get("docs/consuming/contract.md");
+  const assertProjection = (documents) => {
+    const canonical = documents.get("docs/consuming/contract.md") || "";
+    for (const term of [
+      "### Durable RPC state table (normative)",
+      "Leader stays live and the caller timer expires",
+      "No or proxy present",
+      "Outcome in recovered generation",
+      "Caller leaves or its browsing context disappears",
+      "`PYPROC_RPC_OUTCOME_UNKNOWN`, `retryable=false`",
+    ]) {
+      if (!canonical.includes(term)) throw new Error(`contract.md 상태표 축 누락: ${term}`);
+    }
+    for (const [path, text] of documents) {
+      if (path === "docs/consuming/contract.md") continue;
+      if (!text.includes(anchor)) throw new Error(`${path} durable RPC 정본 포인터 누락`);
+    }
+  };
+  assertProjection(texts);
+  for (const stale of [
+    "sent request is never auto-replayed; leader change or timeout means outcome unknown",
+    "On a durable machine a leader change instead parks the command",
+    "An RPC cut off after being sent has an unknown outcome and is never replayed automatically",
+  ]) {
+    for (const [path, text] of texts) if (text.includes(stale)) throw new Error(`${path} 낡은 blanket RPC 주장: ${stale}`);
+  }
+  const runtime = readFileSync(join(ROOT, "src", "session", "kernelElection.js"), "utf8");
+  for (const term of ["timeout or unprovable failover: outcome unknown", "durable proven-portable failover: resend once by requestId"]) {
+    if (!runtime.includes(term)) throw new Error(`runtime status 의미 누락: ${term}`);
+  }
+  // 음성 fixture: 표 머리글만 지우면 포인터가 남아 있어도 검출기가 반드시 RED여야 한다.
+  const broken = new Map(texts);
+  broken.set("docs/consuming/contract.md", contract.replace("### Durable RPC state table (normative)", "### RPC notes"));
+  let caught = false;
+  try { assertProjection(broken); }
+  catch { caught = true; }
+  if (!caught) throw new Error("durable RPC 상태표 음성 fixture를 놓쳤다");
+});
+check("shipped subpath 실행 증거가 CI와 계약 실태에서 정합", () => {
+  const reality = readFileSync(join(ROOT, "docs", "operations", "contractReality.md"), "utf8");
+  const ci = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
+  const socketScript = pkg.scripts?.["test:socket"];
+  const staleClaims = [
+    "`pyproc/gpu` and `pyproc/socket` have zero headless CI gates",
+    "The GPU and socket subpaths have no headless CI gate",
+    "Build that socket lane",
+  ];
+  const assertEvidence = (text) => {
+    if (!socketScript) throw new Error("package.json test:socket 누락");
+    if (!ci.includes("npm run test:socket")) throw new Error("ci.yml test:socket 실행 누락");
+    if (!text.includes("The GPU subpath has no headless execution gate")) {
+      throw new Error("contractReality.md GPU 단독 실행 증거 부채 누락");
+    }
+    if (!text.includes("`test:socket`")) throw new Error("contractReality.md socket 게이트 증거 누락");
+    for (const stale of staleClaims) {
+      if (text.includes(stale)) throw new Error(`contractReality.md 낡은 실행 증거 주장: ${stale}`);
+    }
+  };
+  assertEvidence(reality);
+  // 음성 fixture: 과거의 GPU/socket 일괄 무게이트 주장이 돌아오면 반드시 RED여야 한다.
+  let caught = false;
+  try { assertEvidence(`${reality}\nThe GPU and socket subpaths have no headless CI gate`); }
+  catch { caught = true; }
+  if (!caught) throw new Error("shipped subpath 실행 증거 음성 fixture를 놓쳤다");
+});
+check("Python-Linux 교차 엔진 packet 경로가 cold restore까지 실증", () => {
+  const page = readFileSync(join(ROOT, "tests", "webMachine", "browser", "probes", "packetNetworkProbe.html"), "utf8");
+  const runner = readFileSync(join(ROOT, "tests", "webMachine", "run.mjs"), "utf8");
+  const assertCrossEngine = (source) => {
+    for (const term of [
+      "createPyprocGuestFactory",
+      'machineId: "pythonOs"',
+      "PYPROC_TO_LINUX_WIRE",
+      "/sys/class/net/eth0/statistics/rx_packets",
+      "machines: [python, linux]",
+      "machines: { pythonOs: python, linuxOs: linux }",
+      "Linux -> Python ICMP",
+      "Python -> Linux frame",
+    ]) {
+      if (!source.includes(term)) throw new Error(`packetNetworkProbe 교차 엔진 증거 누락: ${term}`);
+    }
+    if (source.includes("createIpv4EchoPeer")) throw new Error("packetNetworkProbe가 실제 Python 대신 JS peer를 사용");
+  };
+  assertCrossEngine(page);
+  if (!runner.includes('"tests/webMachine/browser/probes/packetNetworkProbe.html"')) throw new Error("packetNetworkProbe 실행 레인 누락");
+  let caught = false;
+  try { assertCrossEngine(page.replace("machines: [python, linux]", "machines: [linux]")); }
+  catch { caught = true; }
+  if (!caught) throw new Error("교차 엔진 generation 음성 fixture를 놓쳤다");
+});
 check("설치 패키지 consumer gate coverage가 실제 게이트와 정합", () => {
   const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
   const testing = readFileSync(join(ROOT, "docs", "operations", "testing.md"), "utf8");
@@ -1751,9 +1859,6 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
     "../../examples/machine.html",
     "../../examples/immortal.html",
     "../../tests/browser/productConsumer.mjs",
-    "../../mainPlan/_done/browser-os-north-star/benchmarks/s1-pyproc-2026-07-15.json",
-    "../../mainPlan/_done/browser-os-north-star/benchmarks/s3-pyproc-2026-07-15.json",
-    "../../mainPlan/_done/browser-os-north-star/benchmarks/s4-pyproc-2026-07-15.json",
   ];
   for (const target of runnableLinks) {
     if (!matrix.includes(`](${target})`)) throw new Error(`능력 매트릭스 실행 표면 링크 누락: ${target}`);
@@ -2432,7 +2537,7 @@ for (const f of collect(ROOT, [".md"], [])) {
   });
 }
 
-// 7) 구조 불변식: attempts 카테고리와 mainPlan 이니셔티브의 README 의무.
+// 7) 구조 불변식: attempts 카테고리와 공개 문서의 README 의무.
 section("구조");
 // 레이어 = 폴더. 순위가 작을수록 바닥이고, import는 아래로만 흐른다(큰 쪽 -> 작은 쪽).
 // 같은 순위끼리의 교차도 금지다(같은 층은 서로를 몰라야 한다).
@@ -2676,7 +2781,7 @@ check("examples는 공개 표면으로만 pyproc 소비", () => {
 assertDocLifecycleStructure({ check, ROOT, collect, rel });
 
 const machineRoot = join(ROOT, "src", "machine");
-await assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machinePureFiles, machineFileRank, runMemoryMachineStoreContract, runContextSwapContract });
+await assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machinePureFiles, machineFileRank, runMemoryMachineStoreContract, runDurableComputerContract });
 assertWebComputerStructure({ check, ROOT, collect, rel, jsModuleRefs, moduleTarget, machineRoot });
 
 // 7.4) 소비자 진입 표면: 사용자가 실제로 읽는 진단·거부 문장은 영문이다. README와 api.md가
@@ -2746,7 +2851,7 @@ section("진입 표면 언어");
     found.delete("docs/reference/api.md");
     // 한 홉 더 따라간다. 진입점이 직접 가리키지 않아도 채택 문서가 가리키는 곳은 여전히 채택
     // 경로다(trustPermissions는 contract.md에서 한 홉이라 첫 판정에서 빠졌다). 두 홉까지는
-    // 가지 않는다: 그러면 mainPlan 원장과 내부 운영 문서가 전부 들어온다.
+    // 가지 않는다: 그러면 내부 운영 문서가 전부 들어온다.
     // 한 홉 확장은 소비자 대면 트리에만 적용한다. `docs/operations/`는 내부 절차(릴리즈 수순,
     // 게이트 임계값)라 진입점이 직접 가리킬 때만 스코프다: 규칙이 공개 표면과 내부 문서를
     // 가르는 지점이 여기다. `docs/product/`는 제품 방향이라 공개 표면이다(숫자 자랑 게이트도
@@ -2825,6 +2930,36 @@ section("진입 표면 언어");
       throw new Error(`사용자 대면 메시지에 한국어가 남았다: ${[...byFile].map(([path, n]) => `${path}(${n})`).join(", ")}`);
     }
   });
+  // npm 배포 메타데이터. 채택 결정자가 이 프로젝트에서 **가장 먼저** 읽는 문장이고, 대개 유일하게
+  // 읽는 문장이다: npm 검색 결과와 패키지 페이지가 렌더하는 것이 description이고, 검색에 걸리는
+  // 키가 keywords다. 규칙은 이미 있었다(CLAUDE.md: 공개 데모 표면 = 레포 설명 포함 영문 우선).
+  // 게이트가 없어서 0.0.10까지 게시된 description은 한국어로 시작했다. 규칙만 있고 게이트가 없는
+  // 자리는 규칙이 아니라 의도다.
+  check("npm 배포 메타데이터는 영문 우선이다", () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+    const description = String(pkg.description || "");
+    if (!description) throw new Error("description이 비어 있다");
+    // 한국어 병기 자체는 규칙이 허용한다(영문 우선 + 한국어 아래). 금지는 순서다: 첫 한글이
+    // 나오기 전에 영문 문장 하나가 끝나 있어야 한다.
+    const firstKorean = description.search(/[가-힣]/);
+    const head = firstKorean < 0 ? description : description.slice(0, firstKorean);
+    if (!/[.!?]/.test(head)) throw new Error(`description이 영문 문장 하나를 끝내기 전에 한국어로 넘어간다: ${description.slice(0, 60)}`);
+    // keywords는 검색 키라 번역 대상이 아니다(한국어 키워드는 npm 검색에서 죽은 값이다).
+    const korean = (pkg.keywords || []).filter((word) => /[가-힣]/.test(String(word)));
+    if (korean.length) throw new Error(`keywords에 한국어: ${korean.join(", ")}`);
+  });
+  check("탐지기가 문다: npm 메타데이터 언어", () => {
+    const firstEnglishSentence = (text) => {
+      const at = text.search(/[가-힣]/);
+      return /[.!?]/.test(at < 0 ? text : text.slice(0, at));
+    };
+    if (firstEnglishSentence("브라우저 파이썬 - Real Python in the browser tab.")) {
+      throw new Error("한국어로 시작하는 description을 놓쳤다");
+    }
+    if (!firstEnglishSentence("Real CPython in a browser tab. 탭에서 도는 진짜 CPython.")) {
+      throw new Error("영문 우선 description을 불합격시켰다(오탐)");
+    }
+  });
   check("가드에 넘기는 feature 이름도 영문", () => {
     const korean = [];
     for (const f of collect(join(ROOT, "src"), [".js"], [])) {
@@ -2900,17 +3035,50 @@ section("CI 배관");
     readdirSync(workflowRoot).filter((f) => f.endsWith(".yml"))
       .map((f) => [f, readFileSync(join(workflowRoot, f), "utf8")]),
   );
-  check("액션 major는 저장소 전체에서 하나", () => {
-    const refs = new Map();
-    for (const [name, source] of workflows) {
-      for (const m of source.matchAll(/uses:\s*(actions\/[\w-]+)@(v\d+)/g)) {
-        if (!refs.has(m[1])) refs.set(m[1], new Map());
-        refs.get(m[1]).set(m[2], name);
+  check("workflow action은 승인한 exact commit SHA에 고정", () => {
+    const approved = new Map([
+      ["actions/checkout", "3d3c42e5aac5ba805825da76410c181273ba90b1"],
+      ["actions/setup-node", "820762786026740c76f36085b0efc47a31fe5020"],
+      ["actions/upload-artifact", "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"],
+      ["actions/download-artifact", "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"],
+      ["actions/cache", "0057852bfaa89a56745cba8c7296529d2fc39830"],
+      ["actions/upload-pages-artifact", "56afc609e74202658d3ffba0e8f6dda462b719fa"],
+      ["actions/deploy-pages", "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e"],
+    ]);
+    const assertPinned = (sources) => {
+      const seen = new Set();
+      for (const [name, source] of sources) {
+        for (const m of source.matchAll(/uses:\s*(actions\/[\w-]+)@([^\s#]+)/g)) {
+          const expected = approved.get(m[1]);
+          if (!expected) throw new Error(`${name}: 승인 목록 밖 action ${m[1]}`);
+          if (!/^[0-9a-f]{40}$/.test(m[2])) throw new Error(`${name}: floating action ref ${m[1]}@${m[2]}`);
+          if (m[2] !== expected) throw new Error(`${name}: 승인 SHA 불일치 ${m[1]}@${m[2]}`);
+          seen.add(m[1]);
+        }
       }
+      for (const action of approved.keys()) if (!seen.has(action)) throw new Error(`승인 action이 workflow에서 사라짐: ${action}`);
+    };
+    assertPinned(workflows);
+    // 음성 fixture: exact SHA 하나를 floating major로 돌리면 반드시 RED여야 한다.
+    const broken = new Map(workflows);
+    broken.set("ci.yml", broken.get("ci.yml").replace(approved.get("actions/checkout"), "v7"));
+    let caught = false;
+    try { assertPinned(broken); }
+    catch { caught = true; }
+    if (!caught) throw new Error("workflow action floating-ref 음성 fixture를 놓쳤다");
+  });
+  check("릴리즈 도구와 타입 컴파일러는 exact version과 lockfile에 고정", () => {
+    const packageLock = JSON.parse(readFileSync(join(ROOT, "package-lock.json"), "utf8"));
+    const publish = workflows.get("publish.yml");
+    const typescript = pkg.devDependencies?.typescript;
+    if (typescript !== "5.9.3") throw new Error(`TypeScript exact pin 불일치: ${typescript || "missing"}`);
+    if (pkg.scripts?.["test:types"] !== "tsc -p tests/tsconfig.json") throw new Error("test:types가 lockfile compiler를 쓰지 않는다");
+    if (packageLock.packages?.[""]?.devDependencies?.typescript !== typescript) throw new Error("package-lock root TypeScript pin 불일치");
+    if (packageLock.packages?.["node_modules/typescript"]?.version !== typescript) throw new Error("package-lock TypeScript resolved version 불일치");
+    if (!publish.includes("npm install -g npm@11.19.0")) throw new Error("publish npm CLI exact pin 누락");
+    if (/npm@(latest|next)\b/.test(publish) || /typescript@[~^]?\d+\b/.test(pkg.scripts?.["test:types"] || "")) {
+      throw new Error("릴리즈/타입 도구에 floating version 재등장");
     }
-    const split = [...refs].filter(([, byRef]) => byRef.size > 1)
-      .map(([action, byRef]) => `${action}: ${[...byRef].map(([ref, file]) => `${ref}(${file})`).join(" vs ")}`);
-    if (split.length) throw new Error(split.join(" / "));
   });
   check("게시 경로는 ci 게이트 집합을 재사용한다", () => {
     const publish = workflows.get("publish.yml");
@@ -3007,6 +3175,79 @@ section("CI 배관");
     }
     return commands;
   };
+  // 출시 브라우저 경계는 엔진 이름만 바꾼 단일 Linux job이 아니다. Windows에 설치된 실제
+  // Microsoft Edge가 설치 tarball 소비 경로와 핵심 브라우저 계약을 독립적으로 완주해야 한다.
+  // 아래 fixture 둘은 이 검사가 문구 존재 확인으로 퇴행하지 않게 각각 Chrome-only와 Edge 핵심
+  // 레인 누락을 고의로 만든다. 둘 다 판정기에 잡혀야 실제 회귀 방지 게이트다.
+  check("Chrome/Edge 릴리스 매트릭스가 OS와 핵심 레인을 고정", () => {
+    const assertReleaseMatrix = (source) => {
+      const jobs = jobsOf(source);
+      const chrome = jobs.get("browser");
+      const edge = jobs.get("edge-release");
+      if (!chrome) throw new Error("Chrome browser job 없음");
+      if (!edge) throw new Error("Windows Edge release job 없음(Chrome-only 매트릭스)");
+
+      const chromeText = chrome.join("\n");
+      const edgeText = edge.join("\n");
+      const chromeRuns = runCommandsOf(chrome);
+      const edgeRuns = runCommandsOf(edge);
+      if (!chromeText.includes("runs-on: ubuntu-latest") || !chromeText.includes("PYPROC_BROWSER: /usr/bin/google-chrome")) {
+        throw new Error("Chrome job이 Ubuntu의 실제 Google Chrome을 고정하지 않음");
+      }
+      if (!edgeText.includes("runs-on: windows-latest")) throw new Error("Edge job이 Windows runner가 아님");
+      if (!edgeText.includes("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe")) {
+        throw new Error("Edge job이 실제 Microsoft Edge 실행 파일을 고정하지 않음");
+      }
+      if (!edgeText.includes("Test-Path -LiteralPath $env:PYPROC_BROWSER")) {
+        throw new Error("Edge 설치 확인이 fail-closed가 아님");
+      }
+
+      const requiredChrome = ["npm run test:browser", "npm run test:consumer", "npm run test:golden"];
+      const requiredEdge = [
+        "npm ci",
+        "npm test",
+        "npm run test:browser",
+        "npm run test:consumer",
+        "npm run test:golden",
+        "npm run test:web-machine",
+      ];
+      for (const command of requiredChrome) {
+        if (!chromeRuns.includes(command)) throw new Error(`Chrome 핵심 릴리스 레인 누락: ${command}`);
+      }
+      for (const command of requiredEdge) {
+        if (!edgeRuns.includes(command)) throw new Error(`Edge 핵심 릴리스 레인 누락: ${command}`);
+      }
+      for (const assetCommand of ["npm run test:web-machine:v86", "node scripts/fetchWasiAssets.mjs", "prepareWebComputerAssets"]) {
+        if (edgeRuns.some((command) => command.includes(assetCommand))) {
+          throw new Error(`Edge 핵심 레인은 무자산이어야 함: ${assetCommand}`);
+        }
+      }
+    };
+
+    const ci = workflows.get("ci.yml");
+    assertReleaseMatrix(ci);
+    const editJob = (source, jobName, edit) => {
+      const lines = source.split(NEWLINE);
+      const start = lines.findIndex((line) => line === `  ${jobName}:`);
+      if (start < 0) throw new Error(`fixture 대상 job 없음: ${jobName}`);
+      let end = start + 1;
+      while (end < lines.length && !/^ {2}[A-Za-z0-9_-]+:\s*$/.test(lines[end])) end++;
+      return [...lines.slice(0, start), ...edit(lines.slice(start, end)), ...lines.slice(end)].join("\n");
+    };
+    const expectRejected = (fixture, label) => {
+      try {
+        assertReleaseMatrix(fixture);
+      } catch {
+        return;
+      }
+      throw new Error(`negative fixture를 놓침: ${label}`);
+    };
+    expectRejected(editJob(ci, "edge-release", () => []), "Chrome-only");
+    expectRejected(
+      editJob(ci, "edge-release", (lines) => lines.filter((line) => !line.includes("- run: npm run test:golden"))),
+      "Edge test:golden 누락",
+    );
+  });
   // 자산을 요구하는 probe는 그 자산을 만드는 step 뒤에, 그리고 같은 job 안에 있어야 한다.
   // 예전 판정은 파일 전문에 indexOf를 걸었다: 다른 job에 있어도 줄이 뒤면 통과하고(병렬이라
   // 순서 보장이 없다), 주석에 적힌 명령도 실행으로 셌다(2026-07-27 발견한 두 사각).

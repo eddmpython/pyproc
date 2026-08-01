@@ -167,6 +167,7 @@ export type WebMachineErrorCode =
   | "WEB_MACHINE_CLOCK_TIMER_FULL"
   | "WEB_MACHINE_CLOCK_VALUE"
   | "WEB_MACHINE_COMMIT_STATE"
+  | "WEB_MACHINE_COMPUTER_DISPOSED"
   | "WEB_MACHINE_DEVICE_IN_USE"
   | "WEB_MACHINE_DEVICE_INVALID"
   | "WEB_MACHINE_DEVICE_KIND_UNSUPPORTED"
@@ -183,6 +184,7 @@ export type WebMachineErrorCode =
   | "WEB_MACHINE_DISPLAY_SIZE"
   | "WEB_MACHINE_DISPLAY_STRIDE"
   | "WEB_MACHINE_DUPLICATE"
+  | "WEB_MACHINE_DURABILITY_UNAVAILABLE"
   | "WEB_MACHINE_ENTROPY_SIZE"
   | "WEB_MACHINE_ENTROPY_SOURCE_FAILURE"
   | "WEB_MACHINE_GENERATION_CORRUPT"
@@ -239,6 +241,7 @@ export type WebMachineErrorCode =
   | "WEB_MACHINE_RECOVERY_UNAVAILABLE"
   | "WEB_MACHINE_RESTORE_TARGET_MISSING"
   | "WEB_MACHINE_SCHEMA_UPGRADE_BLOCKED"
+  | "WEB_MACHINE_SIGNER_REQUIRED"
   | "WEB_MACHINE_SNAPSHOT_INCOMPATIBLE"
   | "WEB_MACHINE_SNAPSHOT_INVALID"
   | "WEB_MACHINE_SNAPSHOT_SCOPE"
@@ -875,6 +878,38 @@ export interface WebComputerLinuxOptions {
   adapterOptions?: Record<string, unknown>;
 }
 
+export interface WebComputerDurabilityOptions {
+  groupId: string;
+  store: MachineStore;
+  /** Defaults to `navigator.locks` when available. */
+  lockManager?: LockManager;
+  ownerId?: string;
+  nowFactory?: () => number;
+  getSigningKeyPair?: () => Promise<CryptoKeyPair> | CryptoKeyPair;
+  requiredCapabilities?: Record<string, string[]> | Map<string, string[]>;
+  availableCapabilities?: string[];
+  onOwnerChanged?: (event: Readonly<{
+    state: "acquired" | "lost";
+    token?: unknown;
+    reason?: string;
+  }>) => void;
+}
+
+export interface WebComputerInspection {
+  readonly machines: Readonly<Record<string, MachineInspection>>;
+  readonly devices: Readonly<Record<string, unknown>>;
+  readonly owner: Readonly<Record<string, unknown>> | null;
+  readonly startupMode: "none" | "deferred" | "booted" | "restored" | "imported";
+  readonly persistence: Readonly<{
+    configured: boolean;
+    durabilityState: "unconfigured" | "clean" | "unsaved";
+    durabilityError: string | null;
+    cleanupPending: boolean;
+    lastPrune: PruneReport | Readonly<{ error: string }> | null;
+    cleanupError: string | null;
+  }>;
+}
+
 export interface WebComputer {
   host: WebMachineHost;
   devices: Record<string, unknown>;
@@ -894,16 +929,51 @@ export interface WebComputer {
   adoptMachines(machines: Map<string, MachineHandle>): Map<string, MachineHandle>;
   adoptOwnership(token: unknown): void;
   invalidateOwnership(reason?: string): void;
+  /** Acquire the single owner, then restore the durable HEAD or boot when no generation exists. */
+  initialize(options?: {
+    deferBoot?: boolean;
+    control?: OperationControl;
+    ownerControl?: OperationControl;
+    restoreControl?: OperationControl;
+    resumeControl?: OperationControl;
+    pruneControl?: OperationControl;
+  }): Promise<WebComputerInspection>;
+  /** Pause every running guest, flush block devices, publish one fenced generation, then resume. */
+  save(control?: OperationControl): Promise<GenerationCommitResult & {
+    retention: PruneReport | Readonly<{ error: string }> | null;
+    cleanupPending: boolean;
+  }>;
+  /** Export all paused guest snapshots and block devices as one signed `.webmachine`. */
+  exportImage(options?: {
+    signingKeyPair?: CryptoKeyPair;
+    requiredCapabilities?: Record<string, string[]> | Map<string, string[]>;
+    control?: OperationControl;
+  }): Promise<WebMachineFile>;
+  /** Verify a signed image, stage it in an isolated context, atomically adopt it, and save it locally. */
+  importImage(file: Blob | Uint8Array | ArrayBuffer, options: {
+    trustedPublicKeys: Array<CryptoKey | JsonWebKey>;
+    approvedPermissions: Record<string, MachinePermissions> | Map<string, MachinePermissions>;
+    availableCapabilities?: string[];
+    control?: OperationControl;
+  }): Promise<Readonly<{
+    archive: WebMachineArchive;
+    machines: Map<string, MachineHandle>;
+    committed: GenerationCommitResult;
+    cleanupError: unknown;
+  }>>;
+  inspect(): WebComputerInspection;
+  dispose(control?: OperationControl): Promise<void>;
 }
 
 export const WEB_COMPUTER_MACHINE_IDS: readonly string[];
 
-export function createWebComputer(options?: {
+export interface WebComputerBaseOptions {
   python?: WebComputerPythonOptions;
   linux?: WebComputerLinuxOptions | null;
+  /** Additional adapter factories, installed in both the active and import-candidate contexts. */
+  adapters?: Record<string, GuestAdapterFactory>;
   devices?: Record<string, unknown>;
   onConsole?: ((line: string) => void) | null;
-  cryptoProvider?: { randomUUID(): string };
   /**
    * Built-in L2 Ethernet switch, on by default and registered as the `network` device. With more
    * than one guest it is the only byte path between them. Pass `false` to disable it, or an
@@ -917,4 +987,20 @@ export function createWebComputer(options?: {
    * mode (trust-screen preflight, assembling an import candidate, deferred-boot restore).
    */
   createMachines?: boolean;
-}): WebComputer;
+}
+
+export type WebComputerOptions = WebComputerBaseOptions & (
+  | {
+      /** Product-owned store/identity inputs that activate the durable lifecycle. */
+      durability: WebComputerDurabilityOptions;
+      /** Durability needs digest, signature, key generation, and random UUID support. */
+      cryptoProvider?: Crypto;
+    }
+  | {
+      durability?: null | undefined;
+      /** The non-durable computer preserves the original minimal provider contract. */
+      cryptoProvider?: { randomUUID(): string };
+    }
+);
+
+export function createWebComputer(options?: WebComputerOptions): WebComputer;

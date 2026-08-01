@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "releaseTag": "buildroot-pyproc-i686-v1",
+  "targetCommit": "42856504a4ecb3bafef7afd8d4a9bd400131daba",
+  "assets": [
+    {
+      "name": "build-manifest.json",
+      "byteLength": 1082,
+      "sha256": "7969609bc040889cb1d638dcbd44c3ebdde7516c2f4825b1dadef32ab9708200"
+    },
+    {
+      "name": "buildroot-2025.02.16.tar.xz",
+      "byteLength": 5950224,
+      "sha256": "15305e3d366eeaf4a5ecaf2ed42f685fd6af7fe5dbf1f62e1de5f46ee83225e2"
+    },
+    {
+      "name": "buildroot-legal-info-complete.zip",
+      "byteLength": 650774247,
+      "sha256": "c56c69d01d87678d45ae03ca5a983c191f2db5c8d6350073e3bedec71206b551"
+    },
+    {
+      "name": "buildroot-pyproc-i686.bin",
+      "byteLength": 7721472,
+      "sha256": "c3fc456de757e333a3fe543fb126d6aeddda19835e1a6fda187b27f1ce56a606"
+    },
+    {
+      "name": "buildroot.config",
+      "byteLength": 508,
+      "sha256": "189a5658a6993e3104fd0072fe86b5dfe492c27040a077c30ba8460981f8ca20"
+    },
+    {
+      "name": "buildroot.cyclonedx.json",
+      "byteLength": 130474,
+      "sha256": "d176fb180eb516325301e7630623f57306fef57e61d90625e628560e0463a471"
+    },
+    {
+      "name": "reproducibility-manifest.json",
+      "byteLength": 394,
+      "sha256": "4f96239efe6058ee5b5ad76bc07d93640424d50615adda11cea8d8746d208cfe"
+    }
+  ],
+  "legalInfoInventory": {
+    "checksumRows": 132,
+    "files": 132,
+    "verifiedBytes": 653011039,
+    "missing": 0,
+    "extra": 0,
+    "duplicates": 0,
+    "checksumMismatches": 0
+  }
+}

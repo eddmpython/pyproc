@@ -51,7 +51,7 @@ S1 is the canonical axis for speed measurement today - an internal baseline, not
 ## Recording gates
 
 - Measurements are recorded only in progress ledgers and benchmark artifacts. They are never posted on a public surface (no bragging with numbers).
-- Past external comparisons are preserved as a record in [the completed speed comparison contract](../../mainPlan/_done/browser-os-north-star/06-speed-comparison.md). They are not revived and republished.
+- Past external comparisons remain in git history. They are historical decision evidence, not current product claims, and are not revived or republished.
 - Leave the canonical S1 raw JSON with `npm run bench:speed -- --out <path>` or `PYPROC_BENCH_OUT=<path> npm run bench:speed`. The default conditions are `workers=4`, `size=1024`, `samples=3`.
 - The Speed Lab's human UI defaults to a matrix size of 768 for responsiveness; the canonical runner states `?workers=4&size=1024&samples=3` in the URL.
 - To change the S1 conditions use `--workers`, `--size`, `--samples` or `PYPROC_BENCH_WORKERS`, `PYPROC_BENCH_SIZE`, `PYPROC_BENCH_SAMPLES`, and record them in the command field.

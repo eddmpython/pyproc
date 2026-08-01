@@ -187,7 +187,8 @@ export async function runImmortalProductGate(opts = {}) {
     check("installed timeout/failover RPC rejects unknown outcome, ignores late response and never replays",
       uncertain.ok === false && uncertain.error.code === "PYPROC_RPC_OUTCOME_UNKNOWN" && uncertain.error.retryable === false &&
       pendingAfter.status.pendingRequests === 0 && uncertainValue.result === 0 && lateOutcome.ok === false &&
-      lateOutcome.error.code === "PYPROC_RPC_OUTCOME_UNKNOWN" && afterLate.result === 42,
+      lateOutcome.error.code === "PYPROC_RPC_OUTCOME_UNKNOWN" && afterLate.result === 42 &&
+      pendingAfter.status.rpcSemantics === "timeout or unprovable failover: outcome unknown; durable proven-portable failover: resend once by requestId",
       uncertain.ok ? "unexpected success" : `${uncertain.error.code}, late=${lateOutcome.ok ? "unexpected" : lateOutcome.error.code}, pending=${pendingAfter.status.pendingRequests}`);
 
     await command(survivors[0], { cmd: "run", code: [

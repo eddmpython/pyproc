@@ -1,7 +1,7 @@
 // Buildroot i686 guest를 exact source/config에서 만들고 provenance 영수증을 남긴다.
 // Linux/WSL build host에서 실행한다. 대형 build/output은 .cache 아래에만 둔다.
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,6 +67,15 @@ if (process.platform === "win32") {
 }
 await mkdir(workspace, { recursive: true });
 await prepareSource();
+const boardDir = join(sourceDir, "board", "pyproc");
+await mkdir(boardDir, { recursive: true });
+await copyFile(join(scriptDir, "linux.fragment"), join(boardDir, "linux.fragment"));
+const rootfsOverlayDir = join(boardDir, "rootfs-overlay");
+await mkdir(join(rootfsOverlayDir, "etc", "init.d"), { recursive: true });
+await copyFile(join(scriptDir, "rootfsOverlay", "etc", "inittab"), join(rootfsOverlayDir, "etc", "inittab"));
+const rootfsInitTarget = join(rootfsOverlayDir, "etc", "init.d", "S40pyproc");
+await copyFile(join(scriptDir, "rootfsOverlay", "etc", "initScripts", "S40pyproc"), rootfsInitTarget);
+await chmod(rootfsInitTarget, 0o755);
 await rm(outputDir, { recursive: true, force: true });
 await rm(distDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
@@ -109,12 +118,24 @@ const acceptedNotices = reportedLegalWarnings.filter((line) => acceptedLegalNoti
 const legalWarnings = reportedLegalWarnings.filter((line) => !acceptedLegalNotices.has(line));
 const manifest = {
   schemaVersion: 1,
-  recipe: "pyproc-buildroot-i686-v1",
+  recipe: "pyproc-buildroot-i686-v2",
   buildroot: BUILDROOT,
   sourceDateEpoch: Number(sourceDateEpoch),
   config: {
     path: "scripts/buildroot/buildroot.config",
     sha256: await sha256(configPath),
+    linuxFragment: {
+      path: "scripts/buildroot/linux.fragment",
+      sha256: await sha256(join(scriptDir, "linux.fragment")),
+    },
+    rootfsInit: {
+      path: "scripts/buildroot/rootfsOverlay/etc/initScripts/S40pyproc",
+      sha256: await sha256(join(scriptDir, "rootfsOverlay", "etc", "initScripts", "S40pyproc")),
+    },
+    inittab: {
+      path: "scripts/buildroot/rootfsOverlay/etc/inittab",
+      sha256: await sha256(join(scriptDir, "rootfsOverlay", "etc", "inittab")),
+    },
   },
   output: {
     name: "buildroot-pyproc-i686.bin",

@@ -17,10 +17,12 @@
   <h1>pyproc MCP sandbox machine</h1>
   <p>The machine page scripts/mcpSandboxServer.mjs opens headless. It holds a Python machine booted
      through deterministic replay, runs the server's commands (long-poll), and returns the results.
-     Open it yourself and you can watch the state.</p>
+     Open it yourself and you can watch the state. After trusted engine boot, a fail-closed CSP
+     blocks external network requests from agent code; same-origin MCP control traffic remains open.</p>
   <pre id="out">booting...</pre>
   <script type="module">
     import { boot } from "../index.js";
+    import { installFailClosedNetworkPolicy } from "./sandboxPolicy.js";
 
     const out = document.getElementById("out");
     const log = (m) => { out.textContent += "\n" + m; };
@@ -42,8 +44,10 @@
     const params = new URLSearchParams(location.search);
     // A deterministic replay boot, where cp0 is the replay boundary that sandboxReset returns to.
     const machine = await boot({ deterministic: true, indexURL: params.get("indexURL") || undefined });
+    const installPolicy = () => installFailClosedNetworkPolicy(machine);
+    installPolicy();
     const saved = []; // restore handles that checkpointSave accumulates
-    log("machine ready (cp0 is the replay boundary)");
+    log("machine ready (cp0 is the replay boundary; external network is fail-closed)");
 
     const tools = {
       pythonRun({ code }) {
@@ -69,6 +73,7 @@
       sandboxReset() {
         const info = machine.history.restore(0); // cp0 is the prepared state right after boot
         saved.length = 0;
+        installPolicy(); // restore removes the cooperative module; the document CSP stays active
         return { index: 0, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
       },
     };

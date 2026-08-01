@@ -1,19 +1,14 @@
-import { IndexedDbMachineStore, WebLockOwnerCoordinator } from "/src/machine/index.js";
+import { IndexedDbMachineStore } from "/src/machine/index.js";
 import {
-  WEB_COMPUTER_CAPABILITIES,
   WEB_COMPUTER_DATABASE,
   WEB_COMPUTER_GROUP_ID,
   WEB_COMPUTER_OWNER_DATABASE,
   WEB_COMPUTER_TIMEOUTS,
+  LINUX_SHELL_PROMPT,
   loadV86Constructor,
 } from "./machineConfig.js";
 import { WebComputerContext } from "./webComputerContext.js";
-import { swapWebComputerContext } from "./webComputerContextSwap.js";
-import { WebComputerPersistence } from "./webComputerPersistence.js";
-
-function approvedPermissions(manifest) {
-  return Object.fromEntries(manifest.machines.map((entry) => [entry.machineId, { devices: [...entry.permissions.devices] }]));
-}
+import { createWebComputerDurabilityPolicy } from "./webComputerPersistence.js";
 
 function operationControl(lifetimeSignal, timeoutMs) {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
@@ -31,18 +26,15 @@ export class WebComputerRuntime {
     this.onState = onState;
     this.groupId = WEB_COMPUTER_GROUP_ID;
     this.ownerId = crypto.randomUUID();
-    this.startupMode = "none";
     this.V86 = null;
     this.store = null;
-    this.persistence = null;
-    this.ownerCoordinator = null;
-    this.ownerToken = null;
     this.context = null;
     this.disposed = false;
-    this.cleanupError = null;
-    this.durabilityState = "clean";
-    this.durabilityError = null;
     this._lifetime = new AbortController();
+  }
+
+  get startupMode() {
+    return this.context?.computer.inspect().startupMode || "none";
   }
 
   async initialize({ deferBoot = false, indexURL } = {}) {
@@ -58,43 +50,23 @@ export class WebComputerRuntime {
         databaseName: WEB_COMPUTER_DATABASE,
         legacyOwnerDatabaseName: WEB_COMPUTER_OWNER_DATABASE,
       });
-      this.persistence = new WebComputerPersistence({
+      const durability = createWebComputerDurabilityPolicy({
         store: this.store,
-        cryptoProvider: crypto,
-        nowFactory: () => Date.now(),
+        ownerId: this.ownerId,
+        onOwnerChanged: () => this._emitState(),
       });
-      await this._acquireOwnership(this._control("owner"));
-      const context = this._createContext({ createMachines: !deferBoot, indexURL });
-      context.adoptOwnership(this.ownerToken);
+      const context = this._createContext({ createMachines: !deferBoot, indexURL, durability });
+      this.context = context;
       try {
-        if (deferBoot) {
-          this._commitContext(context);
-          this.startupMode = "deferred";
-          this._emitState();
-          return this.inspect();
-        }
-
-        const head = await this.persistence.readHead(this.groupId);
-        if (head?.head) {
-          this.onActivity("Restoring the last complete state");
-          await this.persistence.restoreLatest({
-            groupId: this.groupId,
-            context,
-            control: this._control("restore"),
-          });
-          await context.resumeAll(this._control("request"));
-          this.startupMode = "restored";
-          await this.persistence.pruneRecoveryWindow({
-            groupId: this.groupId,
-            ownerToken: this.ownerToken,
-            control: this._control("save"),
-          });
-        } else {
-          this.onActivity("Booting Python OS and Linux");
-          await context.bootAll(this._control("restore"));
-          this.startupMode = "booted";
-        }
-        this._commitContext(context);
+        this.onActivity("Claiming and restoring the Web Computer");
+        await context.computer.initialize({
+          deferBoot,
+          ownerControl: this._control("owner"),
+          restoreControl: this._control("restore"),
+          resumeControl: this._control("request"),
+          pruneControl: this._control("save"),
+        });
+        context.activate();
       } catch (error) {
         await context.dispose().catch(() => undefined);
         throw error;
@@ -134,7 +106,7 @@ export class WebComputerRuntime {
   async runLinux(command) {
     const data = `${String(command || "").replace(/\n+$/, "")}\n`;
     const result = await this._machine("linuxOs").request(
-      { type: "serial", data, waitFor: "~% " },
+      { type: "serial", data, waitFor: LINUX_SHELL_PROMPT },
       this._control("request"),
     );
     this._emitState();
@@ -166,100 +138,54 @@ export class WebComputerRuntime {
   }
 
   async pauseAll() {
-    await this._requireContext().pauseRunning(this._control("request"));
+    await this._computer().pauseRunning(this._control("request"));
     this._emitState();
   }
 
   async resumeAll() {
-    await this._requireContext().resumeAll(this._control("request"));
+    await this._computer().resumeAll(this._control("request"));
     this._emitState();
   }
 
   async save() {
     try {
-      const committed = await this.persistence.save({
-        groupId: this.groupId,
-        context: this._requireContext(),
-        ownerToken: this.ownerToken,
-        control: this._control("save"),
-      });
-      this.durabilityState = "clean";
-      this.durabilityError = null;
+      return await this._computer().save(this._control("save"));
+    } finally {
       this._emitState();
-      return committed;
-    } catch (error) {
-      this.durabilityState = "unsaved";
-      this.durabilityError = error;
-      this._emitState();
-      throw error;
     }
   }
 
   exportImage() {
-    return this.persistence.exportImage({
-      groupId: this.groupId,
-      context: this._requireContext(),
-      control: this._control("export"),
-    });
+    return this._computer().exportImage({ control: this._control("export") });
   }
 
-  async importImage(file, trustedPublicKey) {
+  async importImage(file, trustedPublicKey, approvedPermissions) {
+    if (!approvedPermissions) throw new TypeError("Approved machine permissions are required");
     const control = this._control("import");
     this.onActivity("Verifying signature and every machine byte");
-    const archive = await this.persistence.readImage({ file, trustedPublicKey, control });
-    const preflightContext = this._createContext({ createMachines: false });
     try {
-      this.persistence.preflightImport({
-        archive,
-        host: preflightContext.host,
-        devices: preflightContext.blockDevices,
-        approvedPermissions: approvedPermissions(archive.manifest),
-        availableCapabilities: WEB_COMPUTER_CAPABILITIES,
+      return await this._computer().importImage(file, {
+        trustedPublicKeys: [trustedPublicKey],
+        approvedPermissions,
+        control,
       });
     } finally {
-      await preflightContext.dispose();
+      // commit 실패면 같은 display이고, 성공이면 새 candidate의 display다. 두 경우 모두 한
+      // 호출로 제품 구독을 active 장치에 맞춘다.
+      this._requireContext().refreshPresentation();
+      this._emitState();
     }
-    const swapped = await swapWebComputerContext({
-      current: this._requireContext(),
-      createCandidate: () => this._createContext({ createMachines: false }),
-      stageCandidate: async (next) => {
-        const imported = await this.persistence.importVerified({
-          archive,
-          host: next.host,
-          devices: next.blockDevices,
-          approvedPermissions: approvedPermissions(archive.manifest),
-          availableCapabilities: WEB_COMPUTER_CAPABILITIES,
-          ownerToken: this.ownerToken,
-          control,
-        });
-        next.setMachines(imported.machines);
-      },
-      commitCandidate: (next) => { this.context = next; },
-      control,
-    });
-    this.cleanupError = swapped.cleanupError;
-    this.startupMode = "imported";
-    this.durabilityState = "unsaved";
-    this._emitState();
-    const committed = await this.save();
-    return Object.freeze({ archive, cleanupError: this.cleanupError, committed });
   }
 
   inspect() {
     const snapshot = this.context?.inspect();
     return Object.freeze({
-      owner: this.ownerCoordinator?.inspect() || null,
-      startupMode: this.startupMode,
+      owner: snapshot?.owner || null,
+      startupMode: snapshot?.startupMode || "none",
       groupId: this.groupId,
       machines: snapshot?.machines || Object.freeze({}),
       devices: snapshot?.devices || Object.freeze({}),
-      persistence: Object.freeze({
-        cleanupPending: this.persistence?.cleanupPending || false,
-        lastPrune: this.persistence?.lastPrune || null,
-        cleanupError: this.cleanupError ? String(this.cleanupError?.message || this.cleanupError) : null,
-        durabilityState: this.durabilityState,
-        durabilityError: this.durabilityError ? this.durabilityError?.code || String(this.durabilityError) : null,
-      }),
+      persistence: snapshot?.persistence || Object.freeze({}),
     });
   }
 
@@ -268,46 +194,23 @@ export class WebComputerRuntime {
     this.disposed = true;
     this._lifetime.abort(new DOMException("Web Computer disposed", "AbortError"));
     await this.context?.dispose().catch(() => undefined);
-    await this.ownerCoordinator?.stop("page closed").catch(() => undefined);
     this.store?.close();
     this.context = null;
   }
 
-  _createContext({ createMachines, indexURL } = {}) {
+  _createContext({ createMachines, indexURL, durability } = {}) {
     return new WebComputerContext({
       V86: this.V86,
       createMachines,
       indexURL,
+      durability,
       onConsole: this.onConsole,
       onDisplay: this.onDisplay,
     });
   }
 
-  _commitContext(context) {
-    this.context?.deactivate();
-    this.context = context;
-    this.context.activate();
-  }
-
-  async _acquireOwnership(control) {
-    this.onActivity("Waiting for exclusive workspace ownership");
-    this.ownerCoordinator = new WebLockOwnerCoordinator({
-      lockManager: navigator.locks,
-      ownerStore: this.store,
-      groupId: this.groupId,
-      ownerId: this.ownerId,
-      onAcquired: (token) => { this.ownerToken = token; },
-      onLost: (_token, reason) => {
-        this.context?.invalidateOwnership(reason);
-        this._emitState();
-      },
-    });
-    await this.ownerCoordinator.start(control);
-  }
-
   async _cleanupFailedInitialize() {
     await this.context?.dispose().catch(() => undefined);
-    await this.ownerCoordinator?.stop("startup failed").catch(() => undefined);
     this.store?.close();
     this.context = null;
   }
@@ -322,7 +225,11 @@ export class WebComputerRuntime {
   }
 
   _machine(machineId) {
-    return this._requireContext().machine(machineId);
+    return this._computer().machine(machineId);
+  }
+
+  _computer() {
+    return this._requireContext().computer;
   }
 
   _emitState() {

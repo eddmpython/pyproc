@@ -59,8 +59,10 @@ deliberately not flattened into one code path:
   [Multi-tab machine](#multi-tab-machine-open-persistent-) below). Errors:
   `PYPROC_LEADER_UNAVAILABLE` (retryable), `PYPROC_SPLIT_BRAIN`,
   `PYPROC_LEADER_LOCK_FAILED`, `PYPROC_PARTICIPANT_LEFT`, `PYPROC_RPC_ACTION_INVALID`,
-  `PYPROC_KERNEL_EXECUTION_ERROR`. In-flight requests during a leader change fail with
-  `PYPROC_RPC_OUTCOME_UNKNOWN`. On a durable machine a leader change instead parks the command and re-asks the successor once, which answers from the outcome recorded in the same generation as the heap.
+  `PYPROC_KERNEL_EXECUTION_ERROR`. A sent request follows the
+  [normative durable RPC state table](../consuming/contract.md#durable-rpc-state-table-normative):
+  ordinary followers fail closed with `PYPROC_RPC_OUTCOME_UNKNOWN`; only a durable caller
+  controller that can prove a proxy-free session parks and re-asks the successor once.
 
 Any other source shape is `PYPROC_INPUT_INVALID`.
 
@@ -85,7 +87,8 @@ process-OS preconditions; `machine.proc`, IPC, and blocking sockets need them.
 ### `PyProcError`
 
 `{ code, retryable, context?, cause? }`. `retryable` is honest: outcome-unknown RPC
-failures are never retryable (`PYPROC_RPC_OUTCOME_UNKNOWN` means "no record exists, so do not auto-replay").
+failures are never retryable. The code means that this caller cannot prove an outcome; it
+does not prove that no record or effect exists.
 
 ### `PYPROC_ERROR_CODES`
 
@@ -160,9 +163,12 @@ one journal instance):
 
 - `commit(opts)` commits the heap delta and `/home/web` into the same HEAD/PREV
   generation (WAL). Crash contract: what you lose is "since the last commit".
+- `delete(opts)` removes the journal generations and writes a `deleted` tombstone last.
 - `recover(opts)` revives from the last complete commit (falls back to PREV on a corrupt
   HEAD; `PYPROC_JOURNAL_CORRUPT` when both generations fail,
-  `PYPROC_REPLAY_MISMATCH` on engine mismatch).
+  `PYPROC_JOURNAL_EVICTED` when a committed marker survives but both refs are missing,
+  `PYPROC_REPLAY_MISMATCH` on engine mismatch). It returns `null` only for a
+  never-committed directory or an explicit delete.
 - `watch(opts)` starts the idle watcher (commits when the machine goes idle; never
   interrupts execution). Durable-claim failures are observable via `onStatus`
   (`PYPROC_JOURNAL_IO`), never silently swallowed.
@@ -274,9 +280,17 @@ Via `machine.runtime.enableWheelCache({ dir })`: OPFS wheel cache for
 
 The WAL engine under `machine.history`'s durable verbs, constructed via
 `machine.runtime.enableJournal(cfg)` when you need the raw surface (`start` / `stop` /
-`commit` / `pack` / `prune` / `recover`, counters). `cfg.onStatus` observes idle-commit
+`commit` / `delete` / `pack` / `prune` / `recover`, counters). `cfg.onStatus` observes idle-commit
 success/failure (`PYPROC_JOURNAL_IO`); `cfg.autoPack` packs past a loose-blob threshold;
 `cfg.pruneAfterCommit` trims the checkpoint tree each commit.
+
+A successful commit writes `journalMarker.json` only after HEAD is complete. If that committed
+marker remains while HEAD and PREV are both absent, `recover()` raises
+`PYPROC_JOURNAL_EVICTED` instead of impersonating a fresh machine. `delete()` removes the backing
+generations first and writes a `deleted` tombstone last, for which `recover()` returns `null`.
+This sentinel detects partial loss, not origin-wide eviction: a browser may evict the marker and
+the backing store together, which is indistinguishable from a never-created journal. Keep an
+exported image outside the origin when recovery from that event is required.
 
 ### `enableJail(permissions?)` and `MachineJail`
 
@@ -364,7 +378,9 @@ boots the kernel (deterministic session + journal); followers are RPC views over
 BroadcastChannel. When the leader tab dies, the lock releases, a follower promotes and
 resumes from the journal. Errors: `PYPROC_LEADER_UNAVAILABLE` (retryable),
 `PYPROC_SPLIT_BRAIN`, `PYPROC_LEADER_LOCK_FAILED`, `PYPROC_PARTICIPANT_LEFT`,
-`PYPROC_KERNEL_EXECUTION_ERROR`, `PYPROC_RPC_OUTCOME_UNKNOWN` (never auto-replayed).
+`PYPROC_KERNEL_EXECUTION_ERROR`, `PYPROC_RPC_OUTCOME_UNKNOWN` (never retryable). The
+[durable RPC state table](../consuming/contract.md#durable-rpc-state-table-normative) owns
+the exact resend boundary; `status().rpcSemantics` is its compact runtime projection.
 
 ## Python-side surface (inside the interpreter)
 
@@ -477,9 +493,9 @@ headless CI cannot see a GPU adapter; `PYPROC_GPU_UNAVAILABLE`), `pyproc/socket`
 `WasiSession` - research preview proving the engine-independent core; the production
 lane is Pyodide).
 
-### `pyproc/runtime` (unreleased)
+### `pyproc/runtime`
 
-Not in 0.0.10; it returns in the next release and needs a SHA pin until then.
+Available from 0.0.11.
 The adoption seam for a Pyodide instance you booted yourself: `new Runtime(py)`,
 `bootRuntime(opts)` (resolves to a `Runtime`, not a machine), `MemoryCapability`,
 `FileSystem`, `checkEnvironment`, and the Engine/Runtime contract assertions
@@ -498,7 +514,7 @@ carries the process pool. The migration table lives in the
 
 ## Errors
 
-All 29 codes of `PYPROC_ERROR_CODES`, grouped by lane:
+All codes in `PYPROC_ERROR_CODES`, grouped by lane:
 
 | Code | Meaning |
 |---|---|
@@ -519,15 +535,16 @@ All 29 codes of `PYPROC_ERROR_CODES`, grouped by lane:
 | `PYPROC_TASK_TIMEOUT` | Task exceeded `taskTimeoutMs`; the lane is killed and respawned |
 | `PYPROC_POOL_EXHAUSTED` | Every lane died; unrun `map` tasks resolve to error values |
 | `PYPROC_JOURNAL_CORRUPT` | Both journal generations (HEAD and PREV) failed to recover |
+| `PYPROC_JOURNAL_EVICTED` | A committed journal marker survived but HEAD and PREV are both missing; do not create a fresh machine over it |
 | `PYPROC_JOURNAL_IO` | Journal storage IO failure (observable via `onStatus`) |
 | `PYPROC_STATE_CORRUPT` | State kernel object or generation failed verify-on-read (PREV fallback axis) |
 | `PYPROC_STATE_FENCE_STALE` | Ref update fenced: a superseded owner epoch tried to write (HEAD untouched) |
-| `PYPROC_RPC_OUTCOME_UNKNOWN` | Request sent, outcome unknown (leader change or timeout); never retryable, never auto-replayed |
+| `PYPROC_RPC_OUTCOME_UNKNOWN` | This caller cannot establish the result of a sent request; never retryable. See the durable RPC state table before deciding whether a product-level retry is safe |
 | `PYPROC_LEADER_UNAVAILABLE` | No leader is serving (retryable) |
 | `PYPROC_SPLIT_BRAIN` | Two leaders detected for one machine name |
 | `PYPROC_LEADER_LOCK_FAILED` | Web Locks acquisition failed |
 | `PYPROC_RPC_ACTION_INVALID` | Unknown RPC action reached the leader |
-| `PYPROC_PARTICIPANT_LEFT` | The participant left the election mid-request |
+| `PYPROC_PARTICIPANT_LEFT` | The participant left while waiting for leader readiness. An already-sent request uses `PYPROC_RPC_OUTCOME_UNKNOWN` |
 | `PYPROC_KERNEL_EXECUTION_ERROR` | Leader-side kernel execution failed |
 | `PYPROC_GPU_UNAVAILABLE` | No WebGPU adapter (`pyproc/gpu`) |
 | `PYPROC_INTERNAL` | Invariant violation inside pyproc (a bug; please report) |

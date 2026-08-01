@@ -13,8 +13,8 @@ export async function assertElectionProtocol(check, checkAsync) {
   const { KernelElection } = await import(pathToFileURL(join(ROOT, "src", "session", "kernelElection.js")).href);
   const makeCtrl = () => new KernelElection({ name: "gateElect", manifest: {} });
 
-  // S1: 리더 교체/사망/떠남/timeout 시 in-flight 요청은 PYPROC_RPC_OUTCOME_UNKNOWN,
-  // retryable=false로 끝난다(조용한 유실도 자동 재실행도 아니다). 상태기계 property:
+  // S1: 재전송 전제를 충족하지 못한 리더 교체/사망/떠남/timeout에서 in-flight 요청은
+  // PYPROC_RPC_OUTCOME_UNKNOWN, retryable=false로 끝난다. 상태기계 property:
   // 모든 pending이 정확히 한 번 settle되고, reject 후 도착한 응답은 무시된다(_pending 비었음).
   await checkAsync("election: reject 상태기계(outcome-unknown, 한 번만 settle, 늦은 응답 무시)", async () => {
     const ctrl = makeCtrl();
@@ -187,7 +187,69 @@ export async function assertElectionProtocol(check, checkAsync) {
     if (code !== "PYPROC_RPC_OUTCOME_UNKNOWN") throw new Error(`거부 코드 ${code || "없음"}`);
   });
 
-  // S10: 승계를 건너는 순서 보존. 대기 줄은 삽입 순서를 지키므로 재전송도 호출자가 보낸
+  // S10: durable만으로는 재전송 전제가 되지 않는다. 일반 follower는 leader의 session을
+  // 관찰할 수 없고, JS handle이 확인된 heap도 successor에서 쓸 수 없으므로 둘 다 fail-closed다.
+  // 이 두 fixture는 조건을 durable 하나로 줄이는 잘못된 판정이 실제로 RED가 되게 한다.
+  await checkAsync("election: durable follower의 미확인 heap과 proxy heap은 재전송하지 않는다", async () => {
+    for (const [label, session] of [
+      ["미확인", null],
+      ["proxy", { rt: { hostProxySurfaces: () => ["syscallBridge"] } }],
+    ]) {
+      const ctrl = makeCtrl();
+      ctrl._journalDir = {};
+      ctrl._session = session;
+      ctrl._phase = "ready"; ctrl._leaderId = "old"; ctrl._epoch = 3;
+      ctrl._chan = { postMessage: () => {} };
+      let error = null;
+      ctrl._pending.set(`unsafe/${label}`, {
+        resolve: () => {}, reject: (value) => { error = value; },
+        timer: null, leaderId: "old", epoch: 3, action: "run", payload: { code: "1" }, timeoutMs: 5000,
+      });
+      ctrl._acceptLeader({ epoch: 4, leaderId: "new", ready: false, recovered: false });
+      if (ctrl._pending.size !== 0 || error?.code !== "PYPROC_RPC_OUTCOME_UNKNOWN" || error?.retryable !== false) {
+        throw new Error(`${label}: unsafe durable failover를 거부하지 않음`);
+      }
+    }
+  });
+
+  // S11: 살아 있는 leader에 대한 timeout은 leader 교체가 아니므로 resend할 successor가 없다.
+  // caller가 leave하면 그 Promise를 이어 받을 실행 주체도 없다. 두 경우 모두 이미 보낸 요청은
+  // outcome-unknown이고, 늦은 응답이나 새 전송으로 다시 살아나지 않는다.
+  await checkAsync("election: live-leader timeout과 caller leave는 outcome-unknown으로 끝난다", async () => {
+    const timeoutCtrl = makeCtrl();
+    timeoutCtrl._joined = true;
+    timeoutCtrl._role = "follower"; timeoutCtrl._phase = "ready";
+    timeoutCtrl._leaderId = "live"; timeoutCtrl._epoch = 8;
+    const posted = [];
+    timeoutCtrl._chan = { postMessage: (message) => posted.push(message) };
+    const timeoutError = await timeoutCtrl.run("1", { timeoutMs: 5 }).then(
+      () => null,
+      (error) => error,
+    );
+    if (timeoutError?.code !== "PYPROC_RPC_OUTCOME_UNKNOWN" || timeoutError?.retryable !== false) {
+      throw new Error(`live timeout 분류 ${timeoutError?.code || "없음"}`);
+    }
+    if (posted.filter((message) => message.type === "rpcReq").length !== 1 || timeoutCtrl._pending.size !== 0) {
+      throw new Error("live timeout 뒤 요청을 다시 보냈거나 pending을 남김");
+    }
+
+    const leaveCtrl = makeCtrl();
+    leaveCtrl._joined = true;
+    leaveCtrl._role = "follower"; leaveCtrl._phase = "ready";
+    leaveCtrl._leaderId = "live"; leaveCtrl._epoch = 8;
+    leaveCtrl._chan = { postMessage: () => {}, close: () => {} };
+    let leaveError = null;
+    leaveCtrl._pending.set("leaving/1", {
+      resolve: () => {}, reject: (error) => { leaveError = error; }, timer: null,
+      leaderId: "live", epoch: 8, action: "run", payload: { code: "1" }, timeoutMs: 5000,
+    });
+    leaveCtrl.leave();
+    if (leaveError?.code !== "PYPROC_RPC_OUTCOME_UNKNOWN" || leaveError?.retryable !== false || leaveCtrl._pending.size !== 0) {
+      throw new Error(`caller leave 분류 ${leaveError?.code || "없음"}`);
+    }
+  });
+
+  // S12: 승계를 건너는 순서 보존. 대기 줄은 삽입 순서를 지키므로 재전송도 호출자가 보낸
   // 순서 그대로 나간다. 정직한 한계: "승계 중 들어온 새 명령이 줄 뒤에 선다"는 절반은 여기서
   // 못 문다(가입하지 않은 컨트롤러는 _request의 환경 가드에서 먼저 거부된다). 그 절반의 증거는
   // 브라우저 레인의 불멸 게이트가 실제 참가자로 들고 있다.

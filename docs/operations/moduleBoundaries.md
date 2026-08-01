@@ -1,48 +1,47 @@
-# 모듈 경계 운영
+# Module boundaries
 
-pyproc의 모듈화 기준은 파일 수가 아니라 변경 이유와 의존 방향이다. 공개 표면을 늘리지 않고
-구현, 조립, 정책, 검증의 소유권을 분리한다.
+pyproc divides modules by reason to change and dependency direction, not by file count. Implementation,
+composition, policy, and verification have separate owners without widening the public surface.
 
-## Runtime 조립
+## Runtime composition
 
-- `src/runtime/`은 엔진과 최소 Runtime 계약만 소유한다.
-- `src/capabilities/`은 선택 기능을 소유하며 composition을 import하지 않는다.
-- `src/composition/runtimeBindings/`의 cluster가 capability 생성 규칙을 소유한다.
-- `src/composition/runtimeBindings.js`는 cluster 병합, 중복 차단, prototype 설치만 담당한다.
-- 새 capability를 추가할 때 중앙 installer에 class import를 추가하지 않는다.
+- `src/runtime/` owns the engine wrapper and the minimal Runtime contract.
+- `src/capabilities/` owns optional capabilities and does not import composition.
+- Clusters under `src/composition/runtimeBindings/` own capability construction rules.
+- `src/composition/runtimeBindings.js` only merges clusters, rejects duplicates, and installs prototypes.
+- Adding a capability must not add a class import to a central installer.
 
-현재 cluster는 다음과 같다.
+The current clusters are:
 
-| cluster | 책임 |
+| Cluster | Responsibility |
 |---|---|
-| `state` | reactive checkpoint와 durable journal |
-| `service` | syscall, ASGI, virtual origin, terminal |
-| `environment` | wheel cache, device filesystem, init |
+| `state` | Reactive checkpoints and the durable journal |
+| `service` | Syscalls, ASGI, virtual origins, and terminals |
+| `environment` | Wheel cache, device filesystem, and init |
 
-## 정책과 메커니즘
+## Policy and mechanism
 
-상태를 직접 변경하는 메커니즘과 입력 검증·초과 판정 같은 순수 정책을 분리한다.
-리액티브 retention의 정규화와 budget 초과 판정은
-`src/capabilities/reactive/retentionPolicy.js`가 소유하고, `ReactiveController`는 관측,
-prune 실행, pressure event 전달만 담당한다.
+Keep state-changing mechanisms separate from pure policy such as input normalization and budget checks.
+`src/capabilities/reactive/retentionPolicy.js` owns reactive-retention normalization and budget decisions.
+`ReactiveController` only observes, runs pruning, and emits pressure events.
 
-## 계약 검증
+## Contract verification
 
-- `tests/contracts/`의 suite는 `assert*` 함수를 정확히 하나 export한다.
-- `tests/contracts/run.mjs`가 suite를 자동 발견한다.
-- 공용 fixture와 helper는 runner의 helper allowlist에 두며 suite로 위장하지 않는다.
-- 동기 검사는 Promise를 받을 수 없다. 비동기 계약은 `checkAsync`를 사용한다.
-- `tests/browser/gate.html`은 문서 shell이고 실행 코드는 `tests/browser/gate.js`가 소유한다.
+- Each suite in `tests/contracts/` exports exactly one `assert*` function.
+- `tests/contracts/run.mjs` discovers suites automatically.
+- Shared fixtures and helpers belong to the runner helper allowlist and must not masquerade as suites.
+- Synchronous checks cannot receive a Promise. Asynchronous contracts use `checkAsync`.
+- `tests/browser/gate.html` is a document shell; `tests/browser/gate.js` owns execution.
 
-## 공개 표면
+## Public surface
 
-내부 모듈 분리는 package export 추가의 근거가 아니다. 새 subpath나 root value는
-[Experimental 동결 정책](experimentalFreeze.md)의 해제 조건을 먼저 충족해야 한다.
-타입은 각 공개 subpath의 형제 `.d.ts`가 소유하며 root 선언에 ambient module을 쌓지 않는다.
+An internal module split is not a reason to add a package export. A new subpath or root value must first
+meet the exit criteria in the [Experimental freeze policy](experimentalFreeze.md). Each public subpath owns
+its sibling `.d.ts`; ambient modules do not accumulate in the root declaration.
 
-## 실행 자산
+## Runtime assets
 
-Buildroot guest는 `scripts/buildroot/`의 공식 release archive SHA-256, 대응 revision, config,
-legal-info, SBOM 계약으로 재현한다.
-`.github/workflows/buildroot-guest.yml`은 Linux 빌드와 artifact 보존을 담당한다. 생성 artifact를
-development catalog에 승격하는 행위는 해시와 provenance 대조 후 별도 리뷰로 수행한다.
+The Buildroot guest is reproducible from the official release archive SHA-256, matching revision, config,
+legal-info, and SBOM contract under `scripts/buildroot/`. `.github/workflows/buildroot-guest.yml` owns the
+Linux build and evidence retention. Promoting a generated artifact into the development catalog requires a
+separate review after its digest and provenance have been reconciled.

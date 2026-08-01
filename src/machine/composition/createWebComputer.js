@@ -18,6 +18,7 @@ import { MemoryEthernetSwitch } from "../devices/memoryEthernetSwitch.js";
 import { MemoryBlockDevice } from "../devices/memoryBlockDevice.js";
 import { MemoryScanCodeInputDevice } from "../devices/memoryScanCodeInputDevice.js";
 import { MemoryTextDisplayDevice } from "../devices/memoryTextDisplayDevice.js";
+import { createDurableWebComputerFacade } from "./durableWebComputer.js";
 
 // 기본 디스크 크기. 출처: 제품 실측 상수(apps/webComputer/machineConfig.js의 2MiB)와 동일값.
 const DEFAULT_DISK_BYTES = 2 * 1024 * 1024;
@@ -26,9 +27,10 @@ export const WEB_COMPUTER_MACHINE_IDS = Object.freeze(["pythonOs", "linuxOs"]);
 
 // 컴퓨터 한 대를 조립한다. 반환값은 host/장치/머신과 수명주기 제어다.
 // python은 항상 만들어지고, linux는 options.linux.V86이 주입될 때만 만들어진다.
-export function createWebComputer({
+function createBasicWebComputer({
   python = {},
   linux = null,
+  adapters = {},
   devices: extraDevices = {},
   onConsole = null,
   cryptoProvider = globalThis.crypto,
@@ -91,6 +93,9 @@ export function createWebComputer({
       ...(builtInDevices.network ? { packetDeviceName: "network" } : {}),
       ...(linux.adapterOptions || {}),
     }));
+  }
+  for (const [adapterId, factory] of Object.entries(adapters || {})) {
+    host.registerAdapter(adapterId, factory);
   }
 
   const machines = new Map();
@@ -182,5 +187,44 @@ export function createWebComputer({
     invalidateOwnership(reason) {
       for (const m of machines.values()) m.invalidateOwnership(reason);
     },
+  });
+}
+
+// 공개 컴퓨터 핸들. 기본 수명주기와 내구 수명주기를 같은 active context에 묶는다.
+// durability를 주입하지 않은 기존 소비자는 전과 같은 동사를 쓰고, 주입한 소비자는 같은
+// 핸들에서 initialize/save/exportImage/importImage/dispose까지 이어 간다. import가 검증된
+// candidate로 성공하면 getter가 새 active context를 가리키므로 옛 host/device 참조가 공개
+// 핸들에 남지 않는다.
+export function createWebComputer(options = {}) {
+  if (!options || typeof options !== "object") throw new TypeError("createWebComputer: options must be an object");
+  let active = createBasicWebComputer(options);
+  const createCandidate = () => createBasicWebComputer({ ...options, createMachines: false });
+  const durable = createDurableWebComputerFacade({
+    getActive: () => active,
+    setActive: (candidate) => { active = candidate; },
+    createCandidate,
+    durability: options.durability,
+    cryptoProvider: options.cryptoProvider ?? globalThis.crypto,
+  });
+  return Object.freeze({
+    get host() { return active.host; },
+    get devices() { return active.devices; },
+    get machines() { return active.machines; },
+    machine: (machineId) => active.machine(machineId),
+    runningMachineIds: () => active.runningMachineIds(),
+    bootAll: (control) => active.bootAll(control),
+    pauseRunning: (control) => active.pauseRunning(control),
+    resumeMachineIds: (machineIds, control) => active.resumeMachineIds(machineIds, control),
+    resumeAll: (control) => active.resumeAll(control),
+    shutdownAll: (control) => active.shutdownAll(control),
+    adoptMachines: (machines) => active.adoptMachines(machines),
+    adoptOwnership: (token) => active.adoptOwnership(token),
+    invalidateOwnership: (reason) => active.invalidateOwnership(reason),
+    initialize: durable.initialize,
+    save: durable.save,
+    exportImage: durable.exportImage,
+    importImage: durable.importImage,
+    inspect: durable.inspect,
+    dispose: durable.dispose,
   });
 }

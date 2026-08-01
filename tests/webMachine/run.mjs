@@ -31,6 +31,9 @@ const ASSET_FREE = [
   "tests/webMachine/browser/probes/imagePortabilityProbe.html",
   // 워커 호스팅 guest(캠페인 졸업). 무자산이다: 워커 둘과 내장 스위치만 쓴다.
   "tests/webMachine/browser/probes/workerHostedGuestProbe.html",
+  // 공개 createWebComputer가 보편 내구 수명주기를 한 핸들에서 소유한다. fake portable guest와
+  // memory store로 owner, restore-or-boot, save, signed import/export, dispose를 전부 문다.
+  "tests/webMachine/browser/probes/durableComputerProbe.html",
 ];
 // x86 자산이 필요한 probe. ownerSuccessorParticipant는 probe가 iframe으로 여는 참가자 페이지다.
 const V86_BACKED = [

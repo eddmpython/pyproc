@@ -1,10 +1,9 @@
 # 자산 provenance와 배포 정책
 
-**policyVersion: 2.** 이 숫자는 서명된 `.webmachine` 봉투가 나르는 값이다
+**policyVersion: 3.** 이 숫자는 서명된 `.webmachine` 봉투가 나르는 값이다
 (`apps/webComputer/assetProvenance.js`). 이 문서의 결정이 바뀌면 함께 올리고, `npm test`가
-문서와 봉투의 값 일치를 강제한다. v2의 변경: 배포 판정에 두 번째 값
-`upstream-cdn-runtime-reference`를 추가하고(결정 3의 정밀화), 엔진 부팅 집합(pyodide)을
-catalog에 기술해 미기술 게스트를 소멸시켰다(부재 명시 장치 은퇴).
+문서와 봉투의 값 일치를 강제한다. v3의 변경: complete source, legal material, SBOM과 함께
+프로젝트 release로 공개한 자산을 가리키는 `project-release-runtime-reference` 판정을 추가했다.
 
 ## 결정
 
@@ -15,8 +14,9 @@ Web Machine code package와 실행 자산을 같은 배포물로 취급하지 �
 3. provenance가 불완전한 binary는 우리가 재배포하지 않는다: 번들도, 재호스팅도 금지.
    hash가 맞아도 마찬가지다. 다만 **상류 자신의 배포 지점을 런타임에 참조하는 것은
    재배포가 아니다**: 바이트는 상류에서 소비자의 브라우저로 직접 간다. 그 참조 사실과
-   대상 바이트의 digest는 catalog가 기술한다(`upstream-cdn-runtime-reference`). 로컬
-   시험에서만 내려받는 fixture는 `local-test-only`다.
+   대상 바이트의 digest는 catalog가 기술한다(`upstream-cdn-runtime-reference`). 프로젝트가
+   source/legal/SBOM과 함께 별도 release asset으로 공개한 바이트는
+   `project-release-runtime-reference`, 로컬 시험에서만 받는 fixture는 `local-test-only`다.
 4. 공식 `.webmachine` image 배포는 image가 포함한 OS·filesystem의 SBOM과 compliance material을 갖추기 전까지 금지한다.
 
 hash는 무결성을 증명하지만 재배포 권리를 증명하지 않는다. 프로젝트 이름의 license만 알아도
@@ -77,7 +77,7 @@ Web Machine fixture(v86 계열):
 | `v86.wasm` | 위와 같음. composite binary의 최종 inventory 미검증 | local test만 |
 | `seabios.bin` | v86 `2f1346b` build script가 SeaBIOS `rel-1.16.2`와 고정 config 사용. **exact version + 공개 config가 있어 재현 경로가 열려 있다** | 재현 build·license 전달물 전 local test만 |
 | `vgabios.bin` | 위 SeaBIOS build의 `out/vgabios.bin` | 위와 같음 |
-| `buildroot-bzimage68.bin` | **커널 6.8.12**(bzImage setup header에서 직접 판독), 툴체인 gcc 13.2.0 / binutils 2.42, Buildroot 트리 `2021.11-11272-ge2962af`. `.config` 미탑재(CONFIG_IKCONFIG 비활성), 그 트리는 mainline에 없음 | 번들·공식 image 배포 금지 |
+| `buildroot-pyproc-i686.bin` | Buildroot `2025.02.16` exact source와 config로 만든 프로젝트 재현 빌드. 독립 builder 둘의 byte-identical 결과, complete legal-info, CycloneDX, build/repro manifest를 `buildroot-pyproc-i686-v1` release에서 함께 제공 | project release runtime 참조, npm 번들 제외 |
 | `kolibri.img` | `i.copy.sh/kolibri.img`와 `cdn.jsdelivr.net/gh/copy/images@master/kolibri.img` 두 출처. SHA-256는 일치. exact image revision 없음 | 번들·공식 image 배포 금지 |
 
 component 결론은 전부 위 불변식이 도출한다. `Pyodide`는 `pyodide.asm.wasm`(inventory 미검증)을
@@ -98,15 +98,22 @@ binary라 `NOASSERTION`이다.
 7. signed image manifest가 SBOM digest와 provenance policy version을 포함한다.
 
 7번은 닫혔다(봉투가 `policyVersion`/`catalogId`/`sbomDigest`를 서명 대상 안에 나른다).
-4번과 6번은 catalog가 기술하는 전 자산에 대해 닫혔다. 1~3번과 5번은
-`buildroot-bzimage68.bin`이 막고 있고, 그건 조사가 아니라 **자산 교체** 과제다: 커널
-6.8.12는 이미 식별됐으므로 문서화된 `.config`로 같은 버전을 빌드하면 1~3번과 5번이 함께
-열린다. 그들의 빌드를 재현할 필요가 없다.
+4번과 6번은 catalog가 기술하는 전 자산에 대해 닫혔다. Buildroot guest의 1~3번과 5번도
+`buildroot-pyproc-i686-v1` project release에서 닫혔다. 전체 공식 `.webmachine` 배포는 별도
+firmware와 emulator 자산이 같은 수준에 도달할 때까지 계속 금지한다.
 
 교체 recipe는 `scripts/buildroot/`에 있다. 현재 지원 중인 Buildroot `2025.02.16` exact commit과
 i686 config를 고정하고, initramfs 포함 bzImage, `legal-info`, CycloneDX, build manifest를
-만든다. 첫 빌드 결과를 곧바로 catalog에 넣지 않는다. 독립 builder 두 곳의 SHA-256 동일성과
-Web Computer browser gate가 모두 확인된 뒤 opaque 자산을 교체한다.
+만든다. GitHub Actions run `30182336754`의 독립 builder `a`/`b`는 2026-07-26에 바이트 동일한
+7,721,472-byte 이미지를 만들었다(SHA-256
+`c3fc456de757e333a3fe543fb126d6aeddda19835e1a6fda187b27f1ce56a606`). 그 후보는 2026-08-01
+Edge에서 실제 Python-Linux 양방향 packet, 두 guest 동시 commit, process cold restore를 15/15로
+통과했다. 2026-08-01 `buildroot-pyproc-i686-v1` release에 binary, exact Buildroot source archive,
+complete legal-info, CycloneDX, config, build/repro manifest를 함께 게시하고 catalog를 그
+SHA-256 고정 URL로 전환했다. `scripts/buildroot/releaseAssets.json`은 공개한 7개 자산의 이름,
+크기, SHA-256을 모두 고정하며, catalog의 `evidenceManifest`가 그 파일 자체의 SHA-256과 크기를
+고정한다. 따라서 GitHub Release 자산이 같은 URL로 교체돼도 다음 대조에서 탐지한다. 만료되는
+Actions artifact는 재현 영수증의 출처일 뿐 runtime URL이 아니다.
 
 `.webmachine` schema는 engine과 boot image를 파일에 복사하지 않는다. 다만 guest RAM snapshot과
 block state는 원래 OS의 executable·filesystem material을 포함할 수 있다. 사용자가 자기
@@ -117,15 +124,14 @@ distribution이 된다.
 
 | 위험 | 실태 |
 |---|---|
-| `i.copy.sh` 단일 출처 | `buildroot-bzimage68.bin`은 여전히 단일 출처다. `kolibri.img`는 `copy/images` CDN 백업이 추가돼 다중화되었다. 현재 준비기(`scripts/prepareWebComputerAssets.mjs`, `tests/webMachine/fixtures/v86/prepareAssets.mjs`)는 catalog의 `sources` 순서를 따라 실패 시 다른 출처를 순차 시도하고, `i.copy.sh`가 단일 소스일 때 경고를 남겨 운영에서 대체 소스 준비를 강제한다. |
-| 배포 기제 | Web Machine 플랫폼은 `src/machine`으로 편입돼 npm `files`의 `src`에 실린다(코드 배포는 열림). 단 guest 실행 자산은 여전히 안 나간다: `redistribution: "disabled"`는 사실의 기술이고, 이 표의 provenance 조건이 채워지기 전까지 공식 image 배포는 금지다 |
+| `i.copy.sh` 자산 | `kolibri.img`는 `copy/images` CDN 백업이 추가돼 다중화되었다. 준비기는 catalog의 `sources` 순서를 따라 실패 시 다른 출처를 시도한다. 프로젝트 Buildroot guest는 `i.copy.sh`를 사용하지 않는다. |
+| 배포 기제 | Web Machine code는 npm `files`의 `src`에 실린다. Buildroot guest만 project release runtime asset으로 공개했고 npm에는 넣지 않는다. 제품 catalog 전체의 `redistribution: "disabled"`는 나머지 firmware/emulator를 묶은 공식 machine image 배포가 아직 닫혔다는 뜻이다. |
 
 운영 규칙:
 
 - `scripts/assetProvenance.mjs`는 `assets[].sources`를 검증하고, 각 자산의 후보 소스를 정리한다.
 - `scripts/prepareWebComputerAssets.mjs`와 `tests/webMachine/fixtures/v86/prepareAssets.mjs`는 `sources` 순서로 우회 다운로드한다.
-- `i.copy.sh`가 단일 소스인 자산은 허용되나, `sources`가 하나뿐일 때 실행 로그는 `주의:` 경고를 남겨 `N+1` 출처 준비를 촉발한다. 현재 해당은 `buildroot-bzimage68.bin`뿐이다.
+- `i.copy.sh`가 단일 소스인 자산은 허용되나, `sources`가 하나뿐일 때 실행 로그는 `주의:` 경고를 남겨 `N+1` 출처 준비를 촉발한다.
 
-설계 근거와 완료 기록은
-[web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md), 이 정책을 실제로
-물게 만든 작업은 [asset-provenance](../../mainPlan/_done/asset-provenance/README.md)에 있다.
+지속 설계 근거는 이 문서, catalog, 생성기와 구조 게이트가 함께 보존한다. 완료 과정은 git
+이력과 Buildroot release의 manifest가 보존한다.

@@ -93,9 +93,14 @@ function typesOf(value) {
   return typeof value === "object" ? value.types : null;
 }
 
+// 문서의 import 예제에서 (specifier, 이름들)을 뽑는다. 이름 목록에 따옴표와 중괄호를 금지하는
+// 것이 이 함수의 정확성 조건이다: `[\s\S]*?`로 열어두면 pyproc이 아닌 specifier를 쓴 앞 블록의
+// `import {`가 한참 뒤의 `} from "pyproc"`과 짝지어져 그 사이 본문 전체를 "이름"으로 삼는다.
+// 그러면 없는 이름을 신고하는 오탐이 나고, 더 나쁘게는 그 사이에 있던 진짜 import 예제가 한 번도
+// 개별 검사되지 않고 삼켜진다. 실제 이름 목록에는 따옴표도 중괄호도 절대 오지 않으므로 안전하다.
 function importedNames(markdown) {
   const imports = [];
-  const pattern = /import\s+(?!type\b)\{([\s\S]*?)\}\s+from\s+["'](pyproc(?:\/[^"']+)?)["']/g;
+  const pattern = /import\s+(?!type\b)\{([^{}"'`]*?)\}\s+from\s+["'](pyproc(?:\/[^"']+)?)["']/g;
   for (const match of markdown.matchAll(pattern)) {
     imports.push({
       specifier: match[2],

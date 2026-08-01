@@ -29,8 +29,8 @@ function subtleOrThrow() {
 // ---- 순수 코어(cryptoProvider 매개변수화, 브라우저 전역 접근 0) ----
 // 상태 커널(state-kernel)의 digest 법이 여기 산다. 아래 편의 함수들은 전부 이 코어의
 // 브라우저 전역 바인딩이다. machine 층의 generationIntegrity는 경계상 이 파일을 import하지
-// 못해 같은 법의 주입식 사본을 유지하며, coordinator가 커널에 저장을 위임하는 단계에서
-// 소멸 예정이다(mainPlan/_done/state-kernel 02 문서 5단계).
+// 못해 같은 법의 주입식 사본을 유지한다. 두 구현의 경계와 일치 여부는 구조·계약 게이트가
+// 지킨다.
 
 function requireProvider(cryptoProvider) {
   if (!cryptoProvider?.subtle) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "contentDigest: cryptoProvider.subtle is required");

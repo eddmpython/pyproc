@@ -17,6 +17,7 @@ const DEFAULT_READY_TIMEOUT_MS = 20000;
 const DEFAULT_RPC_TIMEOUT_MS = 8000;
 const SERVED_CACHE_MAX = 256;
 const MACHINE_ROOT = "pyprocMachines";
+const RPC_SEMANTICS = "timeout or unprovable failover: outcome unknown; durable proven-portable failover: resend once by requestId";
 
 function makeId() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -550,7 +551,7 @@ export class KernelElection {
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
       jspi: typeof WebAssembly.Suspending === "function",
       durable: !!this._journalDir,
-      rpcSemantics: "sent request is never auto-replayed; leader change or timeout means outcome unknown",
+      rpcSemantics: RPC_SEMANTICS,
       error: this._error ? String(this._error.message || this._error) : null,
     });
   }

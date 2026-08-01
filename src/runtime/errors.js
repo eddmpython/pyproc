@@ -3,8 +3,8 @@
 // code = 프로그램적 분기의 축, retryable = 재시도 가능성(outcome unknown은 항상 false),
 // context = 부가 정보(pid, path, pyExcType 등). 메시지는 사람용이고 계약은 code다.
 //
-// 코드 카탈로그는 mainPlan의 core-surface-hardening 01-architecture와 index.d.ts의
-// PyProcErrorCode union과 삼자 일치해야 한다(구조 게이트가 d.ts와의 일치를 검사).
+// 코드 카탈로그는 이 파일의 PYPROC_ERROR_CODES와 index.d.ts의 PyProcErrorCode union이
+// 일치해야 한다(구조 게이트가 둘의 일치를 검사).
 
 export const PYPROC_ERROR_CODES = Object.freeze([
   "PYPROC_ENV_UNSUPPORTED",      // COI/JSPI/SAB 등 환경 전제 미충족
@@ -25,6 +25,7 @@ export const PYPROC_ERROR_CODES = Object.freeze([
   "PYPROC_TASK_TIMEOUT",         // map 태스크 타임아웃
   "PYPROC_POOL_EXHAUSTED",       // 레인 전멸로 미실행 태스크 발생
   "PYPROC_JOURNAL_CORRUPT",      // 저널 blob/세대 파손
+  "PYPROC_JOURNAL_EVICTED",      // 커밋 marker는 남았지만 backing HEAD/PREV 세대가 없음
   "PYPROC_JOURNAL_IO",           // 저널 저장소 IO 실패(커밋 실패 관측 채널)
   "PYPROC_STATE_CORRUPT",        // 상태 커널 오브젝트/세대 파손(verify-on-read 불일치, PREV 후퇴 가능 축)
   "PYPROC_STATE_FENCE_STALE",    // 상태 커널 ref 갱신의 fence 전제조건 위반(승계된 owner의 옛 토큰)

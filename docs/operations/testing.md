@@ -20,7 +20,7 @@ npm run test:contracts  # tests/contracts/ suite 자동 발견
 - **문서 위생**: 전체 `*.md`/`*.js`에 em dash(U+2014) 0.
 - **상대 링크**: 모든 `*.md`의 상대 링크가 실존 파일을 가리키는가(죽은 링크 차단).
 - **attempts 구조**: `tests/attempts/` 각 카테고리에 README(+ 졸업 게이트 절)가 있는가.
-- **mainPlan 구조**: 각 이니셔티브 폴더에 README가 있는가.
+- **docs 정본 경계**: 지속 계약은 `docs/`, 실행 증거는 `tests/`, 구현은 `src/`에 있고 삭제된 계획 경로를 공개 문서가 다시 참조하지 않는가.
 - **worker 계약**: `src/processOs/worker.js`가 boot/task 프로토콜을 처리하는가(텍스트 검사. Node에서 import 불가).
 - **실행 자산 manifest**: `getPyProcAssetManifest()`와 `pyproc-assets` CLI가 Worker/SW graph + SRI manifest를 만들고, `--copy-to`로 필요한 파일을 복사하며, 브라우저 게이트 서버가 그 CLI 산출물을 `/pyproc-assets.json`으로 제공하고 `verifyPyProcAssetIntegrity()`가 잘못된 SRI를 spawn 전 거부하는가.
 - **패키지 소비자 계약**: `npm pack` tarball을 임시 앱에 설치한 뒤 `pyproc`, `pyproc/assets`, 설치된 `pyproc-assets` bin만으로 public import, graph SRI manifest, `--copy-to` 복사가 성립하는가(`npm run test:package`로 단독 실행 가능).
@@ -72,7 +72,7 @@ COOP/COEP 서버를 임시 포트로 띄우고, 로컬 Chromium 계열 브라우
 - 복원 리액티브의 실행 경계 계약(경계를 닫은 `restoreLive`, 안전 기준선 `restore`).
 - 스냅샷-fork spawn, `map` 병렬 결과 정확성, 직렬 exec 기준선 일치(벤치 계약 S2의 mapSerialMs 산출 경로), `ps`/`terminate`.
 
-런타임 동작을 바꾸는 커밋은 이 게이트 green이 조건이다. 실측 수치(부팅/복원/fork/map ms)가 함께 출력되므로, 의미 있는 변화는 활성 이니셔티브의 진행 원장에 기록한다(활성이 없으면 다음 이니셔티브 개설과 함께 시작. 직전 원장: [mainPlan/_done/web-python-runtime/03-progress-ledger.md](../../mainPlan/_done/web-python-runtime/03-progress-ledger.md)). CI에서도 같은 게이트가 돈다(`.github/workflows/ci.yml`).
+런타임 동작을 바꾸는 커밋은 이 게이트 green이 조건이다. 부팅/복원/fork/map 계측은 해당 CI run과 필요하면 `bench:artifact` raw JSON에 남긴다. 현재 제품 주장은 `tests/northStar.mjs`와 이 게이트가 소유하고, 과거 측정과 변경 이유는 git history가 보존한다. CI에서도 같은 게이트가 돈다(`.github/workflows/ci.yml`).
 
 ## 3. 브라우저 제품 소비자 게이트 (`npm run test:consumer`)
 
@@ -183,8 +183,8 @@ npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/webvm-s1l.json --out .tmp/s1l
 체크리스트:
 
 - 콘솔에 `crossOriginIsolated`가 true인지(`false`면 헤더 문제).
-- 공개 표면·런타임 동작을 바꾼 커밋은 실측 결과(수치)를 활성 이니셔티브의 진행 원장에 남긴다(활성 0이면 다음 이니셔티브에서). README의 실측 수치는 그 원장에서만 가져온다. 과거 수치의 출처: [mainPlan/_done/web-python-runtime/03-progress-ledger.md](../../mainPlan/_done/web-python-runtime/03-progress-ledger.md).
-- 속도 실측은 [benchmarking.md](benchmarking.md)의 canonical scenario, sample, raw output 규칙을 따르고, 결과는 진행 원장과 artifact에만 남긴다(공개 표면 게시 금지).
+- 공개 표면·런타임 동작을 바꾼 커밋은 재현 명령과 raw 결과를 CI artifact 또는 `bench:artifact` 산출물로 남긴다. README에는 현재 게이트나 추적 가능한 raw evidence가 직접 뒷받침하는 수치만 올리고, 과거 수치는 git history에서만 조회한다.
+- 속도 실측은 [benchmarking.md](benchmarking.md)의 canonical scenario, sample, raw output 규칙을 따르고, 결과는 CI artifact와 필요 시 추적 가능한 raw evidence에만 남긴다(공개 표면 게시 금지).
 
 ## 6. 개념증명 실측 (tests/attempts/)
 

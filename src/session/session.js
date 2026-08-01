@@ -147,8 +147,8 @@ export async function openMachine(blob, opts = {}) {
   if (isStateBundle(buf)) return openBundleMachine(buf, opts);
   throw new PyProcError(
     "PYPROC_MACHINE_FORMAT_INVALID",
-    "open: this is not a state bundle. The legacy PYMACHINE2 envelope was retired, so a file written by "
-    + "pyproc 0.0.10 or earlier has to be re-exported by the version that wrote it (open it there, then "
+    "open: this is not a state bundle. The 0.0.9-era PYMACHINE2 envelope was retired, so it has to be "
+    + "re-exported by the version that wrote it (open it there, then "
     + "history.export() again) before this version can read it.",
   );
 }
@@ -276,4 +276,3 @@ export class Session {
     return { pages: applied.pages, mb: applied.mb };
   }
 }
-

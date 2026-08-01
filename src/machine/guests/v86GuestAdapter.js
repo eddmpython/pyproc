@@ -147,6 +147,7 @@ class V86GuestAdapter {
       await this._emulator.run();
     }
     await this._awaitReadiness(control);
+    await this._runSerialBootstrap(control);
     consoleWrite(context, `x86:boot:${context.machineId}`);
   }
 
@@ -271,7 +272,7 @@ class V86GuestAdapter {
     const emulator = this._requireEmulator();
     if (message.type !== "serial") throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `unsupported x86 adapter request: ${message.type}`);
     const data = String(message.data || "");
-    const waitFor = String(message.waitFor || this._manifest.v86?.readyPattern || "~% ");
+    const waitFor = String(message.waitFor || this._manifest.v86?.shellPrompt || this._manifest.v86?.readyPattern || "~% ");
     const from = this._serialPort.length;
     const waiting = this._serialPort.waitFor(waitFor, from, Number(message.timeoutMs || 30000), control);
     emulator.serial0_send(data);
@@ -404,6 +405,17 @@ class V86GuestAdapter {
       framebufferPort: this._framebufferPort,
       control,
     });
+  }
+
+  async _runSerialBootstrap(control) {
+    const steps = this._manifest?.v86?.serialBootstrap || [];
+    if (!Array.isArray(steps)) throw new TypeError("v86 serialBootstrap must be an array");
+    for (const step of steps) {
+      if (!step || typeof step !== "object" || typeof step.data !== "string" || typeof step.waitFor !== "string" || !step.waitFor) {
+        throw new TypeError("each v86 serialBootstrap step requires data and waitFor strings");
+      }
+      await this.request({ type: "serial", data: step.data, waitFor: step.waitFor, timeoutMs: step.timeoutMs }, control);
+    }
   }
 
   _requireEmulator() {

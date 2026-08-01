@@ -322,14 +322,14 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
       let startedAt = performance.now();
       await linux.boot();
       timings.initialBootMs = Math.round(performance.now() - startedAt);
-      await linux.request({ type: "serial", data: `${installBinaryCommand("/tmp/web_rdrand", createRdrandElf())}\n`, waitFor: "~% " });
-      await linux.request({ type: "serial", data: `${installBinaryCommand("/tmp/web_rtc", createRtcElf())}\n`, waitFor: "~% " });
+      await linux.request({ type: "serial", data: `${installBinaryCommand("/tmp/web_rdrand", createRdrandElf())}\n`, waitFor: "# " });
+      await linux.request({ type: "serial", data: `${installBinaryCommand("/tmp/web_rtc", createRtcElf())}\n`, waitFor: "# " });
       const wordsBefore = entropyWords.length;
       startedAt = performance.now();
       const initial = await linux.request({
         type: "serial",
         data: "grep -m1 '^flags' /proc/cpuinfo; echo CLOCK_SECONDS:$(date +%s); echo UPTIME_SECONDS:$(cut -d' ' -f1 /proc/uptime); echo RTC_HEX:$(/tmp/web_rtc | od -An -tx1 | tr -d ' '); echo RDRAND_HEX:$(/tmp/web_rdrand | od -An -tx1 | tr -d ' ')\n",
-        waitFor: "~% ",
+        waitFor: "# ",
       });
       timings.initialGuestReadMs = Math.round(performance.now() - startedAt);
       const initialSeconds = Number(readMarker(initial, "CLOCK_SECONDS", "[0-9]+"));
@@ -339,7 +339,7 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
       const initialWord = readMarker(initial, "RDRAND_HEX", "[0-9a-fA-F]{8}").toLowerCase();
       const newWords = entropyWords.slice(wordsBefore);
       const initialInspect = await linux.inspect();
-      if (Math.abs(initialSeconds - targetSeconds) > 10 || Math.abs(initialRtcSeconds - targetSeconds) > 10) {
+      if (Math.abs((initialSeconds - targetSeconds) - initialUptime) > 3 || Math.abs((initialRtcSeconds - targetSeconds) - initialUptime) > 3) {
         throw new Error(`초기 RTC 주입 실패: ${initialSeconds}/${initialRtcSeconds}/${targetSeconds}/${initial.trim().slice(-900)}`);
       }
       if (!/\brdrand\b/.test(initial) || !newWords.includes(initialWord)) throw new Error(`초기 RDRAND bridge 실패: ${initialWord}/${newWords.join(",")}`);
@@ -370,7 +370,7 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
         initialUptime: Number(params.get("initialUptime")),
         initialWord: params.get("initialWord") || "",
       };
-      check("최초 Linux가 2030 RTC와 host RDRAND 소비", Math.abs(phaseOne.initialSeconds - Date.UTC(2030, 0, 2, 3, 4, 5) / 1000) <= 10 && /^[0-9a-f]{8}$/.test(phaseOne.initialWord), JSON.stringify(phaseOne));
+      check("최초 Linux가 2030 RTC와 host RDRAND 소비", Math.abs((phaseOne.initialSeconds - Date.UTC(2030, 0, 2, 3, 4, 5) / 1000) - phaseOne.initialUptime) <= 3 && /^[0-9a-f]{8}$/.test(phaseOne.initialWord), JSON.stringify(phaseOne));
 
       let startedAt = performance.now();
       const restored = await coordinator.restoreLatest({ groupId, machines: { linuxOs: linux } });
@@ -386,7 +386,7 @@ Linux boot 3844/3913/3872ms, commit 337/301/491ms, 새 process cold restore 308/
       const reopened = await linux.request({
         type: "serial",
         data: "echo RTC_HEX:$(/tmp/web_rtc | od -An -tx1 | tr -d ' '); echo CLOCK_SECONDS:$(date +%s); echo UPTIME_SECONDS:$(cut -d' ' -f1 /proc/uptime); echo RDRAND_HEX:$(/tmp/web_rdrand | od -An -tx1 | tr -d ' ')\n",
-        waitFor: "~% ",
+        waitFor: "# ",
       });
       timings.reopenedGuestReadMs = Math.round(performance.now() - startedAt);
       const reopenedSeconds = Number(readMarker(reopened, "CLOCK_SECONDS", "[0-9]+"));

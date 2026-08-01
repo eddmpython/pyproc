@@ -71,7 +71,7 @@ async function restorePhase(runtime) {
 
 async function importPhase(runtime) {
   const checks = [];
-  const before = await runtime.persistence.readHead(runtime.groupId);
+  const before = await runtime.store.readHead(runtime.groupId);
   check(checks, "fresh profile has no source generation", !before?.head, before?.head || "empty");
   const response = await fetch("/gateArtifact");
   if (!response.ok) throw new Error(`Artifact download failed: ${response.status}`);
@@ -80,7 +80,7 @@ async function importPhase(runtime) {
   check(checks, "trust screen sees two machines before execution", inspected.machines.join(",") === "linuxOs,pythonOs" || inspected.machines.join(",") === "pythonOs,linuxOs", inspected.machines.join(","));
   check(checks, "portable image includes both block devices", inspected.devices.length === 2, inspected.devices.join(","));
   const startedAt = performance.now();
-  const imported = await runtime.importImage(file, inspected.publicKey);
+  const imported = await runtime.importImage(file, inspected.publicKey, inspected.permissions);
   timings.freshProfileImportMs = Math.round(performance.now() - startedAt);
   const afterImport = runtime.inspect();
   check(checks, "signature and integrity verified before two engines started", imported.archive.signerFingerprint === inspected.fingerprint, imported.archive.signerFingerprint);
@@ -95,9 +95,11 @@ async function importPhase(runtime) {
   const committed = imported.committed;
   check(checks, "imported computer becomes a new local durable generation", !!committed.head?.head || !!committed.commitAddress, committed.commitAddress);
 
-  const durableHead = (await runtime.persistence.readHead(runtime.groupId))?.head;
-  const originalSave = runtime.persistence.save.bind(runtime.persistence);
-  runtime.persistence.save = async () => {
+  const durableHead = (await runtime.store.readHead(runtime.groupId))?.head;
+  await runtime.runPython("machineValue = 404");
+  await runtime.runLinux("machine_value=404; echo ACTIVE:$machine_value");
+  const originalCommitGeneration = runtime.store.commitGeneration.bind(runtime.store);
+  runtime.store.commitGeneration = async () => {
     const error = new Error("Injected fenced save failure");
     error.code = "WEB_MACHINE_HEAD_CONFLICT";
     throw error;
@@ -105,24 +107,24 @@ async function importPhase(runtime) {
   const activeImportAt = performance.now();
   let unsavedImportCode = "";
   try {
-    await runtime.importImage(file, inspected.publicKey);
+    await runtime.importImage(file, inspected.publicKey, inspected.permissions);
   } catch (error) {
     unsavedImportCode = error?.code || String(error);
   } finally {
-    runtime.persistence.save = originalSave;
+    runtime.store.commitGeneration = originalCommitGeneration;
   }
-  timings.activeImportUnsavedMs = Math.round(performance.now() - activeImportAt);
+  timings.rejectedImportMs = Math.round(performance.now() - activeImportAt);
   const afterUnsavedImport = runtime.inspect();
-  const headAfterUnsavedImport = (await runtime.persistence.readHead(runtime.groupId))?.head;
-  check(checks, "active-context import save failure is explicit and leaves HEAD unchanged", unsavedImportCode === "WEB_MACHINE_HEAD_CONFLICT" && afterUnsavedImport.persistence.durabilityState === "unsaved" && headAfterUnsavedImport === durableHead, `${unsavedImportCode}/${afterUnsavedImport.persistence.durabilityState}/${headAfterUnsavedImport}`);
-  check(checks, "unsaved imported context keeps both guests and device endpoints active", Object.values(afterUnsavedImport.machines).every((machine) => machine.state === "running") && afterUnsavedImport.devices.display.attached && afterUnsavedImport.devices.input.attached && afterUnsavedImport.devices.display.listenerErrors === 0, `${afterUnsavedImport.devices.display.attached}/${afterUnsavedImport.devices.input.attached}/${afterUnsavedImport.devices.display.listenerErrors}`);
-  const [unsavedPython, unsavedLinux] = await Promise.all([
+  const headAfterRejectedImport = (await runtime.store.readHead(runtime.groupId))?.head;
+  check(checks, "active-context import commit failure is explicit and leaves HEAD unchanged", unsavedImportCode === "WEB_MACHINE_HEAD_CONFLICT" && headAfterRejectedImport === durableHead, `${unsavedImportCode}/${headAfterRejectedImport}`);
+  check(checks, "rejected import keeps the previous guests and device endpoints active", Object.values(afterUnsavedImport.machines).every((machine) => machine.state === "running") && afterUnsavedImport.devices.display.attached && afterUnsavedImport.devices.input.attached && afterUnsavedImport.devices.display.listenerErrors === 0, `${afterUnsavedImport.devices.display.attached}/${afterUnsavedImport.devices.input.attached}/${afterUnsavedImport.devices.display.listenerErrors}`);
+  const [activePython, activeLinux] = await Promise.all([
     runtime.runPython("from pathlib import Path\nf'{machineValue}:{Path(\"/home/web/product_value\").read_text()}'"),
-    runtime.runLinux("echo UNSAVED:$machine_value:$(cat /mnt/web/product_value)"),
+    runtime.runLinux("echo ACTIVE:$machine_value:$(cat /mnt/web/product_value)"),
   ]);
-  check(checks, "unsaved imported context remains usable without replay", unsavedPython === "91:PYTHON_PRODUCT:91" && unsavedLinux.includes("UNSAVED:91:LINUX_PRODUCT:91"), `${unsavedPython}/${unsavedLinux.trim().slice(-100)}`);
+  check(checks, "rejected import preserves the previous active values without replay", activePython === "404:PYTHON_PRODUCT:91" && activeLinux.includes("ACTIVE:404:LINUX_PRODUCT:91"), `${activePython}/${activeLinux.trim().slice(-100)}`);
   const recoveredCommit = await runtime.save();
-  check(checks, "manual retry durably saves active imported context", runtime.inspect().persistence.durabilityState === "clean" && recoveredCommit.commitAddress !== durableHead, recoveredCommit.commitAddress);
+  check(checks, "manual save durably commits the preserved active context", runtime.inspect().persistence.durabilityState === "clean" && recoveredCommit.commitAddress !== durableHead, recoveredCommit.commitAddress);
   await post("/gateReport", { ok: checks.every((entry) => entry.pass), checks, timings });
 }
 

@@ -1,9 +1,9 @@
 # State bundle format (`PYBUNDLE1`)
 
 The portable machine image format written by `machine.history.export()` and read by
-`open()`. One writer, one parser: the legacy `.pymachine` envelopes
-(`PYMACHINE2`, meta v2/v3) are still readable through a format-detecting reader,
-and that legacy reader sunsets at the next breaking release.
+`open()`. One writer, one parser: the 0.0.9-era `.pymachine` envelopes
+(`PYMACHINE2`, meta v2/v3) are no longer readable. Open one with the version that wrote it and
+re-export it as `PYBUNDLE1`. Files exported by 0.0.10 already use `PYBUNDLE1` and remain compatible.
 
 A bundle is a signed, content-addressed object pack: every heap page, file
 payload, tree, and commit travels as a sha256-addressed object, and the reader

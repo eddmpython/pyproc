@@ -63,7 +63,13 @@ export class V86SerialPort {
         abort: () => waiter.reject(operationAbortError(control, `v86 serial wait: ${pattern}`, { outcomeUnknown: true })),
         timer: null,
       };
-      waiter.timer = setTimeout(() => waiter.reject(new WebMachineError("WEB_MACHINE_GUEST_TIMEOUT", `x86 serial wait timeout: ${pattern}`)), timeoutMs);
+      waiter.timer = setTimeout(() => {
+        const tail = this._serial.slice(-800);
+        waiter.reject(new WebMachineError(
+          "WEB_MACHINE_GUEST_TIMEOUT",
+          `x86 serial wait timeout: ${pattern}${tail ? `\nserial tail:\n${tail}` : ""}`,
+        ));
+      }, timeoutMs);
       this._waiters.add(waiter);
       control?.signal?.addEventListener("abort", waiter.abort, { once: true });
       if (control?.signal?.aborted) waiter.abort();

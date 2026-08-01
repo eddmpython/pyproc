@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Durable Web Computer facade probe</title></head>
+<body>
+<pre id="out">running</pre>
+<script type="module">
+  import {
+    MemoryMachineStore,
+    createMachineCryptoProvider,
+    createWebComputer,
+    createWebMachineKeyPair,
+  } from "../../../../src/machine/index.js";
+  import { createFakeGuestFactory } from "../../contracts/fakeGuestAdapter.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const codeOf = async (operation) => {
+    try { await operation(); return ""; }
+    catch (error) { return error?.code || String(error); }
+  };
+  const lockManager = {
+    request(_name, _options, callback) { return Promise.resolve().then(callback); },
+  };
+  const store = new MemoryMachineStore();
+  const metrics = {};
+  const adapterFactory = createFakeGuestFactory({ adapterVersion: "durable-v1", metrics });
+  const signingKeyPair = await createWebMachineKeyPair(createMachineCryptoProvider(crypto));
+  const createComputer = (ownerId) => {
+    const computer = createWebComputer({
+      createMachines: false,
+      adapters: { durableFake: adapterFactory },
+      cryptoProvider: crypto,
+      durability: {
+        groupId: "durableFacadeProbe",
+        store,
+        lockManager,
+        ownerId,
+        getSigningKeyPair: () => signingKeyPair,
+      },
+    });
+    const machine = computer.host.createMachine({
+      machineId: "durableMachine",
+      adapterId: "durableFake",
+      manifest: { initialValue: 10 },
+      permissions: { devices: ["console"] },
+    });
+    computer.adoptMachines(new Map([[machine.machineId, machine]]));
+    return computer;
+  };
+
+  let first = null;
+  let reopened = null;
+  try {
+    const volatile = createWebComputer({ createMachines: false });
+    check("durability is explicit rather than ambient",
+      await codeOf(() => volatile.save()) === "WEB_MACHINE_DURABILITY_UNAVAILABLE");
+
+    first = createComputer("ownerA");
+    const initialized = await first.initialize();
+    check("initialize acquires owner and boots when HEAD is absent",
+      initialized.startupMode === "booted" && initialized.owner?.state === "owned",
+      `${initialized.startupMode}/${initialized.owner?.state}`);
+    const incremented = await first.machine("durableMachine").request({ type: "increment", by: 1 });
+    const committed = await first.save();
+    check("save publishes one fenced generation and resumes the guest",
+      incremented === 11 && !!committed.commitAddress
+      && first.machine("durableMachine").state === "running",
+      committed.commitAddress);
+
+    const exported = await first.exportImage();
+    check("signed export carries the complete computer", exported.file instanceof Blob && exported.file.size > 0, exported.file.size);
+    await first.machine("durableMachine").request({ type: "increment", by: 100 });
+    const untrustedKeyPair = await createWebMachineKeyPair(createMachineCryptoProvider(crypto));
+    const untrustedCode = await codeOf(() => first.importImage(exported.file, {
+      trustedPublicKeys: [untrustedKeyPair.publicKey],
+      approvedPermissions: { durableMachine: { devices: ["console"] } },
+    }));
+    const valueAfterRejectedImport = await first.machine("durableMachine").request({ type: "get" });
+    check("untrusted import cannot replace or pause the active context",
+      untrustedCode === "WEB_MACHINE_IMAGE_UNTRUSTED" && valueAfterRejectedImport === 111
+      && first.machine("durableMachine").state === "running",
+      `${untrustedCode}/${valueAfterRejectedImport}`);
+    const headBeforeConflict = (await store.readHead("durableFacadeProbe"))?.head;
+    const originalCommitGeneration = store.commitGeneration.bind(store);
+    store.commitGeneration = async () => {
+      const error = new Error("injected import commit conflict");
+      error.code = "WEB_MACHINE_HEAD_CONFLICT";
+      throw error;
+    };
+    const conflictCode = await codeOf(() => first.importImage(exported.file, {
+      trustedPublicKeys: [signingKeyPair.publicKey],
+      approvedPermissions: { durableMachine: { devices: ["console"] } },
+    }));
+    store.commitGeneration = originalCommitGeneration;
+    const valueAfterConflict = await first.machine("durableMachine").request({ type: "get" });
+    check("import commit conflict preserves the previous active context and HEAD",
+      conflictCode === "WEB_MACHINE_HEAD_CONFLICT" && valueAfterConflict === 111
+      && first.machine("durableMachine").state === "running"
+      && (await store.readHead("durableFacadeProbe"))?.head === headBeforeConflict,
+      `${conflictCode}/${valueAfterConflict}`);
+    const imported = await first.importImage(exported.file, {
+      trustedPublicKeys: [signingKeyPair.publicKey],
+      approvedPermissions: { durableMachine: { devices: ["console"] } },
+    });
+    const importedValue = await first.machine("durableMachine").request({ type: "get" });
+    check("trusted import swaps the active context and saves it locally",
+      importedValue === 11 && !!imported.committed.commitAddress
+      && first.inspect().startupMode === "imported",
+      `${importedValue}/${first.inspect().startupMode}`);
+
+    await first.dispose();
+    check("dispose releases the durable owner", (await store.readOwner("durableFacadeProbe"))?.active === false);
+
+    reopened = createComputer("ownerB");
+    const restored = await reopened.initialize();
+    const reopenedValue = await reopened.machine("durableMachine").request({ type: "get" });
+    check("a new computer restores HEAD without booting the guest",
+      restored.startupMode === "restored" && reopenedValue === 11
+      && reopened.machine("durableMachine").history.some((entry) => entry.event === "restored")
+      && !reopened.machine("durableMachine").history.some((entry) => entry.event === "booted"),
+      `${restored.startupMode}/${reopenedValue}`);
+    const disposedComputer = reopened;
+    await disposedComputer.dispose();
+    await disposedComputer.dispose();
+    reopened = null;
+    check("dispose is idempotent", true);
+  } catch (error) {
+    check("facade probe has no uncaught error", false, String(error?.stack || error).slice(-800));
+  } finally {
+    await reopened?.dispose().catch(() => undefined);
+    await first?.dispose().catch(() => undefined);
+  }
+
+  await fetch("/gateReport", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ok: checks.length > 0 && checks.every((entry) => entry.pass), checks }),
+  }).catch(() => undefined);
+</script>
+</body>
+</html>

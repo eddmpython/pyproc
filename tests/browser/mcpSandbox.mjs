@@ -3,12 +3,22 @@
 // initialize -> tools/list -> pythonRun(1+1)=2 -> checkpointSave -> 오염 -> checkpointRestore
 // -> 오염 소거 확인 -> sandboxReset -> 재실행. 도구 오류 경로(파이썬 예외)도 isError로 온다.
 import { spawn } from "node:child_process";
+import { createServer } from "node:http";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..");
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
+
+let exfilRequests = 0;
+const receiver = createServer((req, res) => {
+  if (new URL(req.url, "http://receiver.invalid").pathname === "/collect") exfilRequests++;
+  res.writeHead(204, { "Access-Control-Allow-Origin": "*" });
+  res.end();
+});
+await new Promise((resolve) => receiver.listen(0, "127.0.0.1", resolve));
+const receiverOrigin = `http://127.0.0.1:${receiver.address().port}`;
 
 let passed = 0, failed = 0;
 const check = (name, pass, info = "") => {
@@ -60,6 +70,15 @@ try {
   const run1 = toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "1 + 1" } }));
   check("pythonRun: 1 + 1 == 2 (부팅 포함 첫 호출)", run1.value === "2", `${Date.now() - t0}ms`);
 
+  const health = await fetch(receiverOrigin + "/health");
+  check("네트워크 음성 시험 대조군: 통제 수신기 도달 가능", health.status === 204);
+  await request("tools/call", {
+    name: "pythonRun",
+    arguments: { code: `import js\njs.fetch(${JSON.stringify(receiverOrigin + "/collect")})` },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  check("fail-closed CSP: import js/fetch 외부 전송 0건", exfilRequests === 0, `${exfilRequests} requests`);
+
   toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "prepared = [10, 20, 30]" } }));
   const cp = toolText(await request("tools/call", { name: "checkpointSave", arguments: {} }));
   check("checkpointSave: 인덱스 반환", Number.isInteger(cp.index) && cp.index > 0, `index ${cp.index}`);
@@ -73,12 +92,16 @@ try {
   check("도구 오류: isError 결과로 전달(프로토콜 오류 아님)", failCall.result && failCall.result.isError === true && failCall.result.content[0].text.includes("boom"));
 
   const reset = toolText(await request("tools/call", { name: "sandboxReset", arguments: {} }));
-  const afterReset = toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "'prepared' in globals()" } }));
-  check("sandboxReset: cp0 복귀(준비 상태 초기화)", afterReset.value === "False", `reset ${reset.pagesWritten}p`);
+  const afterReset = toolText(await request("tools/call", {
+    name: "pythonRun",
+    arguments: { code: "('prepared' in globals(), 'pyprocJail' in __import__('sys').modules)" },
+  }));
+  check("sandboxReset: cp0 복귀 후 권한 감옥 재설치", afterReset.value === "(False, True)", `${afterReset.value}, reset ${reset.pagesWritten}p`);
 } catch (e) {
   check("예외 없음", false, String(e).slice(0, 200));
 }
 
 child.kill();
+receiver.close();
 console.log(`\n결과: ${failed === 0 ? "GREEN" : "RED"} (${passed}/${passed + failed})`);
 process.exit(failed === 0 ? 0 : 1);

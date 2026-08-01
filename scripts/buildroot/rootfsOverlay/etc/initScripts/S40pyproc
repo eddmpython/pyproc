@@ -1,0 +1,4 @@
+#!/bin/sh
+
+mkdir -p /mnt/web
+mount -t 9p -o trans=virtio,version=9p2000.L host9p /mnt/web

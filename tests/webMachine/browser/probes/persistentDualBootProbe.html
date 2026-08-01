@@ -99,7 +99,7 @@ initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2
       timings.initialBootMs = Math.round(performance.now() - startedAt);
       await Promise.all([
         python.request({ type: "run", code: "from pathlib import Path\nmachineValue = 42\nPath('/home/web').mkdir(parents=True, exist_ok=True)\nPath('/home/web/durable_value').write_text(str(machineValue))" }),
-        linux.request({ type: "serial", data: "machine_value=42; printf 42 > /tmp/durable_value\n", waitFor: "~% " }),
+        linux.request({ type: "serial", data: "machine_value=42; printf 42 > /tmp/durable_value\n", waitFor: "# " }),
       ]);
       await block.write(0, blockMarker);
       await Promise.all([python.pause(), linux.pause()]);
@@ -138,7 +138,7 @@ initial boot 5986/6299/6214ms, commit 599/467/469ms, process cold restore 2601/2
       await Promise.all([python.resume(), linux.resume()]);
       const [pythonValue, linuxValue] = await Promise.all([
         python.request({ type: "run", code: "from pathlib import Path\nf\"{machineValue}:{Path('/home/web/durable_value').read_text()}\"" }),
-        linux.request({ type: "serial", data: "echo DURABLE:$machine_value:$(cat /tmp/durable_value)\n", waitFor: "~% " }),
+        linux.request({ type: "serial", data: "echo DURABLE:$machine_value:$(cat /tmp/durable_value)\n", waitFor: "# " }),
       ]);
       check("Python OS memory와 file 복원", pythonValue === "42:42", pythonValue);
       check("Linux memory와 file 복원", linuxValue.includes("DURABLE:42:42"), linuxValue.trim().slice(-180));

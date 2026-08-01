@@ -20,7 +20,7 @@ function displayText(frame) {
 }
 
 export class WebComputerContext {
-  constructor({ V86, indexURL, createMachines = true, onConsole = () => {}, onDisplay = () => {} }) {
+  constructor({ V86, indexURL, createMachines = true, durability, onConsole = () => {}, onDisplay = () => {} }) {
     if (typeof V86 !== "function") throw new TypeError("V86 constructor가 필요하다");
     this._onConsole = onConsole;
     this._onDisplay = onDisplay;
@@ -46,23 +46,28 @@ export class WebComputerContext {
         adapterVersion: WEB_COMPUTER_ADAPTER_VERSION,
         manifest: createLinuxMachineManifest(),
       },
+      durability,
       onConsole: (line) => {
         this._lastConsole = line;
         if (this._active) this._onConsole(line);
       },
     });
     this.computer = computer;
-    this.devices = computer.devices;
-    this.blockDevices = Object.freeze({
-      pythonDisk: computer.devices.pythonDisk,
-      linuxDisk: computer.devices.linuxDisk,
-    });
-    this.host = computer.host;
-    this.machines = computer.machines;
-    this._unsubscribeDisplay = this.devices.display.subscribe((frame) => {
-      this._lastDisplay = { frame, text: displayText(frame) };
-      if (this._active) this._onDisplay(this._lastDisplay);
-    });
+    this._displayDevice = null;
+    this._unsubscribeDisplay = null;
+    this.refreshPresentation();
+  }
+
+  get devices() {
+    return this.computer.devices;
+  }
+
+  get host() {
+    return this.computer.host;
+  }
+
+  get machines() {
+    return this.computer.machines;
   }
 
   activate() {
@@ -80,48 +85,21 @@ export class WebComputerContext {
     this._active = false;
   }
 
-  // 아래 동사들은 전부 위임이다. 예전에는 같은 팬아웃 10벌이 이 파일에 다시 구현돼 있었는데,
-  // 그 사본은 오류 어휘까지 갈라져 있었다(이 파일은 new Error, 커널은 WebMachineError). 계약이
-  // 두 곳에 있으면 소비자가 코드로 분기할 수 없다. 제품이 소유하는 것은 화면 관심사(활성 상태,
-  // console/display 관찰, dispose)뿐이고 수명주기는 컴퓨터가 소유한다.
-  setMachines(machines) {
-    this.computer.adoptMachines(machines);
-  }
-
-  adoptOwnership(token) {
-    this.computer.adoptOwnership(token);
-  }
-
-  invalidateOwnership(reason) {
-    this.computer.invalidateOwnership(reason);
-  }
-
-  machine(machineId) {
-    return this.computer.machine(machineId);
-  }
-
-  runningMachineIds() {
-    return this.computer.runningMachineIds();
-  }
-
-  bootAll(control) {
-    return this.computer.bootAll(control);
-  }
-
-  pauseRunning(control) {
-    return this.computer.pauseRunning(control);
-  }
-
-  resumeMachineIds(machineIds, control) {
-    return this.computer.resumeMachineIds(machineIds, control);
-  }
-
-  resumeAll(control) {
-    return this.computer.resumeAll(control);
-  }
-
-  shutdownAll(control) {
-    return this.computer.shutdownAll(control);
+  // import가 내부 candidate를 active로 바꾼 뒤 제품의 유일한 책임인 display 구독을 새 장치로
+  // 옮긴다. machine/device pointer와 수명주기 자체는 computer의 동적 getter가 소유한다.
+  refreshPresentation() {
+    const display = this.computer.devices.display;
+    if (display === this._displayDevice) return;
+    this._unsubscribeDisplay?.();
+    this._displayDevice = display;
+    this._unsubscribeDisplay = display.subscribe((frame) => {
+      this._lastDisplay = { frame, text: displayText(frame) };
+      if (this._active) this._onDisplay(this._lastDisplay);
+    });
+    if (this._active) {
+      const frame = display.readFrame();
+      if (frame.rows) this._onDisplay({ frame, text: displayText(frame) });
+    }
   }
 
   sendLinuxScanCodes(codes) {
@@ -129,17 +107,10 @@ export class WebComputerContext {
   }
 
   inspect() {
+    const snapshot = this.computer.inspect();
     return Object.freeze({
+      ...snapshot,
       active: this._active,
-      machines: Object.freeze(Object.fromEntries(
-        [...this.machines].map(([id, machine]) => [id, machine.inspectNow()]),
-      )),
-      devices: Object.freeze({
-        pythonDisk: this.devices.pythonDisk.inspect(),
-        linuxDisk: this.devices.linuxDisk.inspect(),
-        display: this.devices.display.inspect(),
-        input: this.devices.input.inspect(),
-      }),
     });
   }
 
@@ -149,7 +120,7 @@ export class WebComputerContext {
     this.deactivate();
     let failure = null;
     try {
-      await this.shutdownAll(control);
+      await this.computer.dispose(control);
     } catch (error) {
       failure = error;
     } finally {

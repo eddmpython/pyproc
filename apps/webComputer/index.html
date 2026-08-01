@@ -51,7 +51,7 @@
         <div class="railMeta">
           <div><span>Storage</span><b id="storageState">Not saved</b></div>
           <div><span>Image channel</span><b>Development</b></div>
-          <p>The Linux image is hash-pinned and locally verified. Public redistribution remains disabled until its complete source inventory is available.</p>
+          <p>The Linux image is a reproducible project build, hash-pinned to a release that includes its exact source, complete legal material, SBOM, config, and build receipts.</p>
         </div>
       </aside>
 
@@ -97,7 +97,7 @@ visits</textarea>
           </div>
           <form class="terminal" id="linuxForm">
             <label for="linuxCommand">root@webcomputer</label>
-            <div class="terminalInput"><span>~%</span><input id="linuxCommand" autocomplete="off" spellcheck="false" value="uname -a" aria-label="Linux command"><button type="submit">Run</button></div>
+            <div class="terminalInput"><span>#</span><input id="linuxCommand" autocomplete="off" spellcheck="false" value="uname -a" aria-label="Linux command"><button type="submit">Run</button></div>
           </form>
           <pre class="output terminalOutput" id="linuxOutput" aria-live="polite">Linux command output will appear here.</pre>
         </section>

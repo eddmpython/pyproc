@@ -151,9 +151,9 @@ runner가 원본 profile과 분리한 새 browser profile을 연 뒤 파일을 �
       const linuxWrite = await linux.request({
         type: "serial",
         data: `mkdir -p /mnt/web; machine_value=73; printf 73 > /tmp/image_value; printf '${linuxMarker}' > /mnt/web/image_value; sync; cat /mnt/web/image_value\n`,
-        waitFor: "~% ",
+        waitFor: "# ",
       });
-      if (!linuxWrite.includes(`${linuxMarker}~% `)) throw new Error(`Linux file round trip 실패: ${linuxWrite.slice(-500)}`);
+      if (!linuxWrite.includes(linuxMarker) || !linuxWrite.includes("# ")) throw new Error(`Linux file round trip 실패: ${linuxWrite.slice(-500)}`);
       await Promise.all([python.pause(), linux.pause()]);
       const signingKeyPair = await createWebMachineKeyPair(machineCrypto);
       const trustedKey = await exportWebMachinePublicKey(machineCrypto, signingKeyPair.publicKey);
@@ -340,7 +340,7 @@ runner가 원본 profile과 분리한 새 browser profile을 연 뒤 파일을 �
       linux.request({
         type: "serial",
         data: "echo IMAGE:$machine_value:$(cat /tmp/image_value):$(cat /mnt/web/image_value)\n",
-        waitFor: "~% ",
+        waitFor: "# ",
       }),
     ]);
     check("Python memory와 home file이 새 profile에서 실행", pythonValue === `73:${pythonMarker}`, pythonValue);

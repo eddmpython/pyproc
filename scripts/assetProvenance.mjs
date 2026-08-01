@@ -20,11 +20,16 @@ const webComputerCatalogPath = resolve(root, "..", "apps", "webComputer", "asset
 const webComputerProvenancePath = resolve(root, "..", "apps", "webComputer", "assetProvenance.js");
 const sha1Pattern = /^[0-9a-f]{40}$/;
 const sha256Pattern = /^[0-9a-f]{64}$/;
-// 배포 판정 두 값. 둘 다 "우리는 바이트를 재배포하지 않는다"이고 사용처가 다르다:
+// 배포 판정. 앞의 두 값은 바이트를 재배포하지 않고, project-release-runtime-reference는
+// 프로젝트가 source/legal/SBOM과 함께 별도 release asset으로 공개한 바이트를 참조한다:
 // local-test-only는 로컬 시험에서만 내려받아 쓰는 fixture, upstream-cdn-runtime-reference는
 // 라이브러리가 런타임에 상류 자신의 배포 지점(CDN)을 참조하는 자산이다. 참조는 재배포가
 // 아니다(정책 문서 결정 3의 정밀화, policyVersion 2).
-const allowedDistributions = new Set(["local-test-only", "upstream-cdn-runtime-reference"]);
+const allowedDistributions = new Set([
+  "local-test-only",
+  "upstream-cdn-runtime-reference",
+  "project-release-runtime-reference",
+]);
 // 이 자산들을 적재하는 곳. pyproc은 라이브러리 런타임 자신(엔진 부팅 집합),
 // v86Probe는 수동 probe 6개, webComputer는 제품(두 guest OS의 실행 자산 전부).
 const knownConsumers = new Set(["pyproc", "v86Probe", "webComputer"]);

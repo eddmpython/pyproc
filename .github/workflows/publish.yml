@@ -17,29 +17,33 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OIDC 신원 증명. 이게 없으면 trusted publishing이 성립하지 않는다.
 
 jobs:
   # 게시는 되돌릴 수 없다(버전 번호 재사용 불가). 그래서 ci의 게이트 집합 전부를 통과해야 한다.
   # 목록을 여기 복사하지 않는 이유: 복사본은 ci가 자랄 때 조용히 뒤처진다.
   gates:
+    permissions:
+      contents: read
     uses: ./.github/workflows/ci.yml
 
   publish:
     needs: gates
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm Trusted Publishing OIDC는 게시 job에만 연다.
     steps:
       # 태그 확인을 위해 전체 이력을 받는다(dispatch 경로는 ref가 태그가 아니다).
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
       # trusted publishing은 npm >= 11.5.1에서만 동작한다(node 22 번들은 10.x).
-      - run: npm install -g npm@latest
+      - run: npm install -g npm@11.19.0
 
       # 릴리즈 정책: package.json 버전과 태그는 항상 같은 값이다. 어긋나면 여기서 멈춘다
       # (태그만 앞서 나가 엉뚱한 버전이 게시되는 사고 방지). 이 검증에는 조건을 걸지 않는다:

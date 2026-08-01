@@ -50,10 +50,27 @@ boot, not concurrently with it.
 wall is the CSP (`connect-src`) the product applies to the jail context. Do not present
 the Python tier alone as a security boundary.
 
+Local execution and no-exfiltration are separate claims. `boot()` keeps computation in the
+browser, but it does not by itself stop executed code from using the network. The Agent and MCP
+sandbox examples finish trusted engine and package preparation, install `enableJail({ net: false })`,
+then apply the returned jail CSP before accepting agent code. The MCP page keeps only same-origin
+control traffic open. Its browser gate attempts an external request through `import js` and
+`fetch` and requires the controlled receiver to observe zero requests.
+
+The default engine distribution is fetched from a CDN before that example policy closes. Self-host
+the engine when even trusted boot must make no external request. `connect-src 'self'` also treats the
+product origin as trusted; protect same-origin endpoints with their own authorization and input
+validation. MCP tool results intentionally cross that trusted control channel, so this policy is not
+a confidentiality boundary against the MCP client; products still constrain and review returned
+data. A same-origin parent remains a separate side channel, as described in the jail contract.
+
 ### Revival never fakes continuity
 
 Journal recovery refuses foreign state: a generation whose replay fingerprint (h0) does
 not match the current engine/manifest fails with `PYPROC_REPLAY_MISMATCH` instead of
 silently corrupting the heap, and corrupted stores fail loudly rather than masquerading
-as a first boot. RPCs cut off mid-flight report `PYPROC_RPC_OUTCOME_UNKNOWN` and are never
-auto-replayed.
+as a first boot. A sent RPC is re-asked after leader loss only when the caller controller
+can prove both a durable generation and a proxy-free session. Ordinary followers cannot
+inspect the leader session and fail closed with `PYPROC_RPC_OUTCOME_UNKNOWN`; live-leader
+timeouts and caller loss do too. The full resend and result boundary is the
+[durable RPC state table](docs/consuming/contract.md#durable-rpc-state-table-normative).

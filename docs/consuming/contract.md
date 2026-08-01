@@ -14,7 +14,7 @@ The roles are split.
 ```jsonc
 // package.json
 "dependencies": {
-  "pyproc": "0.0.10"
+  "pyproc": "0.0.11"
 }
 ```
 
@@ -29,7 +29,7 @@ Consumers use only the public package entry and the stable subpaths. The per-cap
 | Specifier | Purpose |
 | --- | --- |
 | `pyproc` | The six root values: `boot`, `open`, `createWebComputer`, `checkEnvironment`, `PyProcError`, `PYPROC_ERROR_CODES` |
-| `pyproc/runtime` | For adopting a self-booted Pyodide: the `Runtime` value, `bootRuntime` (which gives a `Runtime`, not a machine), `MemoryCapability`, `FileSystem`, and the EngineContract/RuntimeContract checks. **Unreleased**: this subpath is not in 0.0.10, so until the next release it needs a SHA pin |
+| `pyproc/runtime` | For adopting a self-booted Pyodide: the `Runtime` value, `bootRuntime` (which gives a `Runtime`, not a machine), `MemoryCapability`, `FileSystem`, and the EngineContract/RuntimeContract checks. Available from 0.0.11 |
 | `pyproc/assets` | Runtime-asset manifest and SRI preflight: `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` |
 | `pyproc/history` | The state kernel plus the store, bundle, and signature contracts |
 | `pyproc/machine` | Web Machine host, device, store, and guest assembly detail |
@@ -135,9 +135,26 @@ Note the variable name: this path returns a `KernelElection` handle, not the `Py
 - `KernelElection` is the lower contract providing one Web Locks leader, BroadcastChannel RPC, a unique participant ID, and a persistent OPFS epoch. The leader kernel lives in its own document, so it keeps `crossOriginIsolated` along with the SAB and JSPI capabilities.
 - `MachineJournal` puts the WASM heap delta and a `/home/web` snapshot into one commit. A new leader, and a new participant after every tab has closed, recover only the last completed commit.
 - The SharedWorker-based alternative (`SharedKernel`) was removed. A SharedWorker is `crossOriginIsolated=false`, so it could not offer SAB interrupts, snapshot-fork, or persistent epoch recovery; `open({ persistent })` above is the single canonical multi-tab path.
-- A request not yet sent when the leader disappears can wait for the new leader to be ready and then be sent safely. If an already-sent request times out or the leader changes, whether it ran cannot be established, so it returns `PYPROC_RPC_OUTCOME_UNKNOWN` and is never re-executed automatically.
-- `status()` provides `participantId`, `leaderId`, `epoch`, `role`, `phase`, `recovered`, `lastCommitAt`, `participantCount`, and `pendingRequests`. Two leaders in the same epoch fail with `PYPROC_SPLIT_BRAIN`.
+- A request not yet sent can wait for a ready leader and then be sent once. A sent request follows the durable RPC state table below; `durable` alone never authorizes a resend.
+- `status()` provides `participantId`, `leaderId`, `epoch`, `role`, `phase`, `recovered`, `lastCommitAt`, `participantCount`, `pendingRequests`, `durable`, and a concise `rpcSemantics` projection. Two leaders in the same epoch fail with `PYPROC_SPLIT_BRAIN`.
 - `manifest.packages` and `manifest.setup` are the contract by which a new leader deterministically reproduces the same prepared environment. They are not a promise to revive, as they were, a native package installed mid-run, an open socket, a file descriptor, a DB connection, a Promise, or an arbitrary Python stack. Reopen external resources with `resume.py`.
+
+### Durable RPC state table (normative)
+
+This table is the semantic SSOT for a sent `KernelElection` request. "Portable known" means the caller controller owns a session and can prove that `hostProxySurfaces()` is empty. A normal follower does not own the leader's session, so its value is unknown even when the machine is durable. "Recorded" means the request outcome is in the recovered journal generation, not merely in the former leader's RAM cache.
+
+| Event after send | Durable generation | Portable known | Outcome in recovered generation | Caller alive | Resend | Result and execution bound | Error |
+|---|---|---|---|---|---|---|---|
+| Response matches leader and epoch | Any | Any | Any | Yes | No | Resolve or reject with that response; one leader delivery | Leader result |
+| Same request ID is delivered again to the same leader | Any | Any | RAM cache | Yes | Client does not initiate one | Return the served-cache response; do not execute again | Leader result |
+| Leader changes | No | Any | No durable record | Yes | No | The former effect may or may not have run; no durable conclusion | `PYPROC_RPC_OUTCOME_UNKNOWN`, `retryable=false` |
+| Leader changes | Yes | No or proxy present | Any | Yes | No | Fail closed because successor usability is not proven | `PYPROC_RPC_OUTCOME_UNKNOWN`, `retryable=false` |
+| Leader changes | Yes | Yes | Yes | Yes | Once, with the same request ID | Successor returns the recorded result; no second execution | Recorded result |
+| Leader changes | Yes | Yes | No | Yes | Once, with the same request ID | Successor executes against the last committed generation. The former leader may have executed only in discarded, uncommitted state; one effect enters durable history | Successor result |
+| Leader stays live and the caller timer expires | Any | Any | Any | Yes | No | A late response is ignored; whether the leader ran is unknown | `PYPROC_RPC_OUTCOME_UNKNOWN`, `retryable=false` |
+| Caller leaves or its browsing context disappears | Any | Any | Any | No | No | No participant continues the Promise. The leader may finish the one delivery | `PYPROC_RPC_OUTCOME_UNKNOWN` while `leave()` can still reject; otherwise no observer |
+
+A request still waiting for a ready leader has not crossed the send boundary: `PYPROC_LEADER_UNAVAILABLE` is retryable there. `PYPROC_RPC_OUTCOME_UNKNOWN` is never retryable. A product must not issue a new request ID for the same effect unless it has its own idempotency policy. The installed-package browser gate fixes the normal follower boundary: forced leader loss rejects the in-flight call, does not replay it, and continues from the last commit. The structure gate fixes the conditional portable resend, outcome-record lookup, unsafe-heap refusal, fencing, and ordering branches.
 
 **Virtual origin boundaries (the honest wall)**: these are synthetic SW responses, so they differ from a real origin. `tests/attempts/runtimeParity/virtualOriginBoundaryProbe.html` keeps measuring this boundary in a browser. (1) `Set-Cookie` is not exposed as a response header and is not stored. Do not depend on cookie sessions; use explicit tokens such as an `Authorization` header, a bearer token, or a signed URL. (2) A WebSocket upgrade is not intercepted by the Service Worker fetch event, so it never reaches ASGI dispatch. Design bidirectional streams with a separate relay or the SocketBridge family. (3) For streaming and SSE, `AsgiServer` accumulates the `http.response.body` chunks and returns one `Response`, so a product needing chunk-by-chunk UI updates must not depend on this path. (4) Endpoints must be `async def`; there is no synchronous dispatch.
 
@@ -148,7 +165,7 @@ After a revival - journal, session, or image open - process resources such as fi
 - `npm test` checks that `package.json` exports expose only approved stable specifiers, that the public examples consume only the root API or subpath exports, and that `index.d.ts` covers the public type contract.
 - `npm run test:consumer` verifies the installed-package contract from a browser app that has no repo-relative imports and exposes only the installed `node_modules/pyproc`.
 - That same consumer gate exercises `DeviceFs` file devices, the `JobControl` job lifecycle, the `MachineContainer` child-machine lifecycle, `MachineJournal` commit and recover, a force-removed `open({ persistent })` leader across three independent browsing contexts with a cold reopen of heap plus `/home/web` plus prepared environment, the permission-jail manifest, signed `.pymachine` export and open, trusted public key and wrong-key rejection, signer fingerprints, and reopening a SQLite connection from `/home/web/resume.py`.
-- `pyproc/runtime` is the public Runtime wrapper (**unreleased**: absent from 0.0.10; use a SHA pin until the next release). The internal `runtime.js` core handles only the engine wrapper and `Runtime.fs`; the composition root `src/composition/runtimeApi.js` installs the `runtimeBindings.js` registry to provide opt-in capability factories such as `enableReactive`.
+- `pyproc/runtime` is the public Runtime wrapper from 0.0.11. The internal `runtime.js` core handles only the engine wrapper and `Runtime.fs`; the composition root `src/composition/runtimeApi.js` installs the `runtimeBindings.js` registry to provide opt-in capability factories such as `enableReactive`.
 - The `restoreLive` execution boundary is machine-verified. Respect the boundary and restore is immediate with zero rehashing; violate it and the violation is detected automatically and promoted to the rehash path. Check which path ran through the returned `rehashed`.
 
 ### Installed-package consumer gate coverage
@@ -186,21 +203,25 @@ After a revival - journal, session, or image open - process resources such as fi
 
 ## Per-consumer wiring status
 
+Read-only audit date: **2026-08-01**. These rows describe executable imports, package locks, and product
+browser gates in the sibling repositories, not intended roadmaps. No sibling currently imports the
+`pyproc/runtime` subpath; 0.0.11 makes it available for future self-booted-engine consumers.
+
 | Consumer | Status |
 |---|---|
-| dartlab | **Live consumer.** The notebook worker adopts its self-booted Pyodide with `new Runtime(py)` and ships `enableAsgiServer` in production as its default ASGI kernel (browser-as-server `/pyapi`). Process parallelism (scan) and the time-travel UI are follow-on adoption candidates |
-| codaro | First consumer. Pinned at SHA `a7fc83906cfa7bf24c009c8631043738423fa84a` with a `browserPythonRuntime.ts` seam. It imports the Runtime and PyProc types and consumes `Runtime.fs` and `AsgiServer` in the product. The codaro seam reads `pyproc-assets.json` relative to Vite's `BASE_URL` and passes it through `boot({ assetIntegrity })`. Post-processing of the editor build extracts the runtime-asset graph and SRI from the installed pyproc package and writes them to `webBuild/pyproc-assets.json` and `webBuild/vendor/pyproc/**`. Measured: the codaro editor build produced a 25-file graph and 5 entrypoint roles, and the `pyproc-assets-browser` product gate fetches `/pyproc-assets.json` and `/vendor/pyproc/**` in a real browser and verifies the `sha256-...` SRI. The `pyproc-runtime-fs-browser` gate at codaro `e862593f090e471f4bc0345a6c7fefc1c0e91576` confirms that the built editor boots real pyproc, writes cell sources and an execution record to `/home/web/codaro` through `Runtime.fs`, and that the next cell reads the same record through Python `open()`. The `pyproc-asgi-browser` gate at codaro `527e0e26` calls `rt.enableAsgiServer({ app })` in the same editor build and confirms that the method, path, query, body, and headers of `POST /codaro/pyproc-asgi?value=41` reach the Python ASGI app and come back as a `207` with `x-codaro-runtime: pyproc-asgi`. The product UI exposes browser file artifacts through `data-runtime-artifacts`, and the quality cycle cross-checks `pyproc-assets-report.json`, `pyproc-runtime-fs-report.json`, and `pyproc-asgi-report.json` as freshness evidence |
-| xlpod | In preparation (synchronous Python calls inside spreadsheet `=PYUDF` cells). pyproc consumption is settled in its PRD. `setInterruptBuffer`, which was the hard blocker, has been promoted to the public surface, opening the migration path. Its own SAB synchronous bridge (the formualizer callback) remains, and the roadmap's syncUdfBridge is expected to absorb it |
+| dartlab | **Live exact-release consumer.** `package.json` and its lock pin registry `pyproc` **0.0.10** with tarball integrity. The notebook worker imports the root `pyproc`, calls `boot()`, and uses `machine.runtime`, `machine.history`, and `machine.proc()`. Its pin-bump workflow runs a smoke gate, type/unit/build checks, and a real Chromium product gate before proposing a review PR |
+| xlpod | **Live exact-release consumer.** Its package and lock pin registry `pyproc` **0.0.10** with integrity. The worker imports root `pyproc`, calls `boot()`, and uses `machine.runtime` and `machine.proc()`. Product gates cover process offload, OPFS warm boot, and Python after the server is disabled. Its workflow is manually dispatched, and two sibling comments/doc passages still incorrectly claim a `pyproc/runtime` import; executable code does not |
+| codaro | **Immutable legacy-SHA consumer, migration required.** It pins `a7fc83906cfa7bf24c009c8631043738423fa84a` (package metadata 0.0.9) and assumes that root `boot()` returns a `Runtime`, the contract at that SHA. Product browser gates cover asset SRI, `Runtime.fs`, and ASGI. Runtime code imports the root, but one asset-build script and one audit test read package-internal `src` files. Moving it to the current machine contract requires `machine.runtime` plus public asset APIs; merely replacing the pin would break it. Its browser gates are not CI-required |
 
-## Adopting a self-booted Pyodide (the dartlab and xlpod pattern)
+## Adopting a self-booted Pyodide (optional pattern)
 
 If a worker already has a self-booted Pyodide, adopt that instance rather than calling pyproc's `boot()` a second time:
 
-This pattern imports `pyproc/runtime`, which is **unreleased**: it is not in 0.0.10, so pin a SHA
-until the next release ships it.
+This pattern imports `pyproc/runtime`, available from 0.0.11. The 2026-08-01 sibling audit found no
+current consumer of this pattern; dartlab and xlpod both use root `boot()` today.
 
 ```js
-// In a worker: a self-booted Pyodide, e.g. dartlab's notebook worker
+// In a worker that already owns a self-booted Pyodide
 const py = await loadPyodide({ indexURL });
 // Layer pyproc capabilities on top of it (do not create a second interpreter)
 import { Runtime } from "pyproc/runtime";
@@ -219,6 +240,6 @@ rt.destroyHostValue(raw);
 - `getGlobal(name)` returns the engine proxy as is. Normalize the return value into a host value with `toHostValue(raw, options)` and release it with `destroyHostValue(raw)` when done.
 - `toHostValue(value, { proxyMode, fallback })` is the engine-neutral value bridge. `proxyMode` is `copy` or `preserve`, and the adapter translates it into engine-specific options. Without a `fallback`, a conversion failure propagates as a throw.
 - The Pyodide `Runtime` and `WasiSession` implement a minimum RuntimeContract sharing `runtimeContractVersion=1`, `runtimeKind`, `capabilities()`, `runAsync`, and the global and value bridges. Synchronous execution and heap access are capability differences.
-- The WASI session (`bootWasi`) is a separate async surface with a JSON-only value bridge, so for dartlab and xlpod - which depend on C extensions such as polars and pyarrow - the canonical path is Pyodide.
+- The WASI session (`bootWasi`) is a separate async surface with a JSON-only value bridge. Products that depend on C extensions such as polars and pyarrow use the Pyodide engine path.
 
-Wiring roadmap detail: [mainPlan/_done/web-python-runtime/02-phasing-and-wiring.md](../../mainPlan/_done/web-python-runtime/02-phasing-and-wiring.md)
+The runtime wrapper, engine contracts, and installed-package gates are the maintained wiring record.

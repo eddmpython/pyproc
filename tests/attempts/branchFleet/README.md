@@ -64,7 +64,7 @@ probe 판정 수리 1건: 파이썬 `None`은 pyodide `toJs`에서 `undefined`�
 위임으로 남는다(이름과 반환 계약 불변). 함대 루프(prepare -> explore -> adopt)는 이 프리미티브
 위 3줄이라 별도 추상화를 만들지 않는다(소비자 하나에 거짓 공통화 금지).
 
-정본 설계: [mainPlan/speculative-fleet](../../../mainPlan/_done/speculative-fleet/README.md)
+현재 설계와 실측 근거는 이 README와 위 probe가 정본이다.
 
 ### 다음 질문 (미착수)
 

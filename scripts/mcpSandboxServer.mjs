@@ -19,7 +19,7 @@ const POLL_HOLD_MS = 20000; // long-poll 보류 상한(프록시 idle 타임아�
 const TOOLS = [
   {
     name: "pythonRun",
-    description: "Run Python in the prepared browser machine. Returns stdout and the repr of the last expression. State persists across calls.",
+    description: "Run Python in the prepared browser machine under a fail-closed external-network policy. Returns stdout and the repr of the last expression. State persists across calls.",
     inputSchema: { type: "object", properties: { code: { type: "string", description: "Python source to execute" } }, required: ["code"] },
   },
   {
@@ -147,7 +147,7 @@ rl.on("line", async (line) => {
         protocolVersion: (params && params.protocolVersion) || PROTOCOL_VERSION,
         capabilities: { tools: {} },
         serverInfo: { name: "pyproc-sandbox", version: "1" },
-        instructions: "A persistent Python machine in a browser sandbox. Prepare state with pythonRun, checkpointSave before risky attempts, checkpointRestore to roll back in milliseconds.",
+        instructions: "A persistent Python machine in a browser sandbox. Agent code has no external network permission; same-origin MCP control traffic remains open. Prepare state with pythonRun, checkpointSave before risky attempts, checkpointRestore to roll back in milliseconds.",
       });
     } else if (method === "notifications/initialized") {
       // 알림: 응답 없음

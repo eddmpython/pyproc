@@ -1,7 +1,7 @@
 # enginePort - EngineContract를 non-Pyodide CPython이 구현할 수 있는가 (D2 관문)
 
-캠페인 = engine-independence의 D2 관문. 정본: [engine-independence](../../../mainPlan/_done/engine-independence/README.md),
-계약 표면과 WASI 매핑 표: [engineContract](../engineContract/README.md).
+엔진 독립성의 D2 관문 캠페인. 구현 정본은 [EngineContract](../../../src/runtime/engineContract.js),
+계약 표면과 WASI 매핑 실측표는 [engineContract](../engineContract/README.md)에 둔다.
 
 ## 가설
 

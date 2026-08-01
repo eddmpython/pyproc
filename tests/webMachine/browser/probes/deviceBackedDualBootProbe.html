@@ -119,15 +119,15 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
       });
       const linuxWrite = await linux.request({
         type: "serial",
-        data: `mkdir -p /mnt/web; machine_value=42; printf 42 > /tmp/device_value; printf '${linuxMarker}' > /mnt/web/device_value; printf DELETED_SECRET > /mnt/web/deleted_secret; sync; cat /mnt/web/device_value\n`,
-        waitFor: "~% ",
+        data: `mount | grep /mnt/web; echo MOUNT_STATUS:$?; machine_value=42; printf 42 > /tmp/device_value; printf '${linuxMarker}' > /mnt/web/device_value; printf DELETED_SECRET > /mnt/web/deleted_secret; sync; cat /mnt/web/device_value\n`,
+        waitFor: "# ",
       });
-      if (!linuxWrite.includes(`${linuxMarker}~% `)) throw new Error(`Linux 9P round trip 실패: ${linuxWrite.slice(-1000)}`);
+      if (!linuxWrite.includes("MOUNT_STATUS:0") || !linuxWrite.includes(linuxMarker) || !linuxWrite.includes("# ")) throw new Error(`Linux 9P round trip 실패: ${linuxWrite.slice(-1000)}`);
       await Promise.all([python.pause(), linux.pause()]);
       await Promise.all([python.resume(), linux.resume()]);
       await Promise.all([
         python.request({ type: "run", code: "from pathlib import Path\nPath('/home/web/deleted_secret').unlink()" }),
-        linux.request({ type: "serial", data: "rm /mnt/web/deleted_secret; sync\n", waitFor: "~% " }),
+        linux.request({ type: "serial", data: "rm /mnt/web/deleted_secret; sync\n", waitFor: "# " }),
       ]);
       await Promise.all([python.pause(), linux.pause()]);
       if (!pythonDisk.inspect().dirty || !linuxDisk.inspect().dirty) {
@@ -186,7 +186,7 @@ boot 5681/6091/6210ms, commit 525/544/660ms, process cold restore 2541/2316/2145
         linux.request({
           type: "serial",
           data: "echo DEVICE:$machine_value:$(cat /tmp/device_value):$(cat /mnt/web/device_value)\n",
-          waitFor: "~% ",
+          waitFor: "# ",
         }),
       ]);
       check("Python memory와 block-backed home 복원", pythonValue === "42:42", pythonValue);

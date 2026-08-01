@@ -15,7 +15,6 @@ check("Web Computer 제품 composition root 고정", () => {
     "app.js",
     "webComputerRuntime.js",
     "webComputerContext.js",
-    "webComputerContextSwap.js",
     "webComputerPersistence.js",
     "machineConfig.js",
     "identityStore.js",
@@ -31,6 +30,34 @@ check("Web Computer 제품 composition root 고정", () => {
     if (!html.includes(`id="${id}"`)) throw new Error(`제품 UI 누락: ${id}`);
   }
   if (html.includes("importmap") || html.includes("@web-machine")) throw new Error("제품에 죽은 import map 잔존: 공개 표면은 /index.js 하나다");
+});
+
+check("Web Computer durable lifecycle는 공개 computer 핸들에만 있다", () => {
+  const runtime = readFileSync(join(webComputerRoot, "webComputerRuntime.js"), "utf8");
+  const context = readFileSync(join(webComputerRoot, "webComputerContext.js"), "utf8");
+  const policy = readFileSync(join(webComputerRoot, "webComputerPersistence.js"), "utf8");
+  if (existsSync(join(webComputerRoot, "webComputerContextSwap.js"))) {
+    throw new Error("제품 context swap 사본 재등장: createWebComputer.importImage()에 위임한다");
+  }
+  for (const symbol of ["MachineCommitCoordinator", "MachineEnvelopeCoordinator", "WebLockOwnerCoordinator", "swapWebComputerContext"]) {
+    if (runtime.includes(symbol) || context.includes(symbol) || policy.includes(symbol)) {
+      throw new Error(`제품에 보편 수명주기 구현 재등장: ${symbol}`);
+    }
+  }
+  for (const method of ["initialize", "save", "exportImage", "importImage", "dispose"]) {
+    if (!new RegExp(`\\.computer\\.${method}\\(`).test(runtime) && !new RegExp(`_computer\\(\\)\\.${method}\\(`).test(runtime)
+      && !(method === "dispose" && new RegExp(`\\.computer\\.${method}\\(`).test(context))) {
+      throw new Error(`Runtime이 공개 computer.${method}()를 호출하지 않는다`);
+    }
+  }
+  for (const implementationVerb of ["commitPaused(", "restoreLatest(", "importVerified(", "preflightImport(", "adoptOwnership(", "invalidateOwnership("]) {
+    if (runtime.includes(implementationVerb) || context.includes(implementationVerb) || policy.includes(implementationVerb)) {
+      throw new Error(`제품 수명주기 사본 재등장: ${implementationVerb}`);
+    }
+  }
+  for (const productPolicy of ["groupId:", "store,", "lockManager:", "getSigningKeyPair:", "requiredCapabilities:", "availableCapabilities:"]) {
+    if (!policy.includes(productPolicy)) throw new Error(`제품 durability 정책 누락: ${productPolicy}`);
+  }
 });
 
 check("Web Computer 제품은 공개 package root만 소비", () => {

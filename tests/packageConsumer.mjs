@@ -17,6 +17,14 @@ try {
       if (typeof fn !== "function") throw new Error(name + " export missing");
     }
     if (fromMachine !== createWebComputer) throw new Error("machine subpath createWebComputer drift");
+    const computer = createWebComputer({ createMachines: false });
+    for (const verb of ["initialize", "save", "exportImage", "importImage", "inspect", "dispose"]) {
+      if (typeof computer[verb] !== "function") throw new Error("durable WebComputer verb missing: " + verb);
+    }
+    let durabilityCode = "";
+    try { await computer.save(); } catch (error) { durabilityCode = error?.code || String(error); }
+    if (durabilityCode !== "WEB_MACHINE_DURABILITY_UNAVAILABLE") throw new Error("durability opt-in error drift: " + durabilityCode);
+    await computer.dispose();
     if (!Array.isArray(PYPROC_ERROR_CODES) || typeof PyProcError !== "function") throw new Error("error contract missing");
     if (PAGE_SIZE !== 65536) throw new Error("history PAGE_SIZE drift");
     for (const fn of [commitState, openState, decodeStateBundle, createMachineCryptoProvider]) {

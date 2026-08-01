@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
 import { findBrowser, headlessArgs, killBrowser } from "./harness.mjs";
 
-const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000); // 콜드 CDN 감안. 무거운 probe는 env로 연장
+const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000); // 콜드 CDN 감안. 무거운 probe는 env로 연장
 const MAX_ARTIFACT_BYTES = Number(process.env.PYPROC_GATE_ARTIFACT_MAX || 512 * 1024 * 1024);
 const runRoot = mkdtempSync(join(tmpdir(), "pyprocGate-"));
 const artifactPath = join(runRoot, "gateArtifact.bin");

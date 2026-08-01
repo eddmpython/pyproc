@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>pyproc installed-package golden workflow</title>
+  <script type="importmap">
+    {"imports":{"pyproc":"/node_modules/pyproc/index.js","pyproc/history":"/node_modules/pyproc/src/state/index.js"}}
+  </script>
+</head>
+<body>
+<pre id="out">running</pre>
+<script type="module">
+  import { boot, open } from "pyproc";
+  import { createStateKeyPair, exportStatePublicKey } from "pyproc/history";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+    await fetch("/gateReport", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ok, checks, timings }),
+    }).catch(() => {});
+  };
+  const progress = async (stage) => {
+    await fetch("/gateProgress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stage }),
+    }).catch(() => {});
+  };
+
+  const params = new URLSearchParams(location.search);
+  const indexParam = params.get("indexURL");
+  const indexURL = indexParam ? new URL(indexParam, location.href).href : undefined;
+  const journalName = `pyprocGolden-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  let opfsRoot = null;
+  let first = null;
+  let reopened = null;
+  let imported = null;
+  let pool = null;
+
+  try {
+    opfsRoot = await navigator.storage.getDirectory();
+    const journalDir = await opfsRoot.getDirectoryHandle(journalName, { create: true });
+    const manifest = { deterministic: true, indexURL };
+
+    let startedAt = performance.now();
+    first = await boot(manifest);
+    await progress("main booted");
+    timings.prepareMs = Math.round(performance.now() - startedAt);
+    first.run([
+      "import math",
+      "preparedData = list(range(1, 101))",
+      "preparedPackage = math.__name__",
+    ].join("\n"));
+    check("public porcelain prepares one reusable environment",
+      first.run("sum(preparedData)") === 5050 && first.run("preparedPackage") === "math",
+      `${timings.prepareMs}ms`);
+    await progress("prepared state ready");
+
+    const baseline = first.history.checkpoint();
+    let failed = false;
+    try {
+      first.run("preparedData.append(999)\nraise ValueError('candidate failed')");
+    } catch (error) {
+      failed = String(error).includes("candidate failed") || String(error).includes("ValueError");
+    }
+    const restored = first.history.restore(baseline);
+    check("failed candidate restores the prepared state",
+      failed && restored?.rehashed === true &&
+      first.run("len(preparedData)") === 100 && first.run("sum(preparedData)") === 5050,
+      `rehash=${restored?.rehashed === true}`);
+    await progress("failed candidate restored");
+
+    // Full COI lane: a replay-symmetric worker is the prepared coordinator. forkMany broadcasts
+    // that live state to two isolated candidates, then fork adopts the validated winner back into
+    // the coordinator. This is deliberately worker-to-worker: a main-thread heap and a worker heap
+    // do not have the byte-identical replay boundary that public fork requires.
+    const replaySetup = [
+      "preparedData = list(range(1, 101))",
+      "acceptedResult = None",
+      "acceptedCandidate = None",
+    ].join("\n");
+    pool = await first.proc({ lanes: 3, replay: { setup: replaySetup } });
+    await progress("process pool booted");
+    const [coordinatorPid, evenPid, oddPid] = pool.ps().map((entry) => entry.pid);
+    await pool.repl(coordinatorPid, "preparedPackage = 'math'\nfanoutReady = True");
+    const fanned = await pool.forkMany(coordinatorPid, [evenPid, oddPid]);
+    await Promise.all([
+      pool.repl(evenPid, [
+        "acceptedCandidate = 'even-squares'",
+        "acceptedResult = sum(value * value for value in preparedData if value % 2 == 0)",
+      ].join("\n")),
+      pool.repl(oddPid, [
+        "acceptedCandidate = 'odd-squares'",
+        "acceptedResult = sum(value * value for value in preparedData if value % 2 == 1)",
+      ].join("\n")),
+    ]);
+    const [evenCandidate, oddCandidate] = await Promise.all([
+      pool.repl(evenPid, "acceptedResult"),
+      pool.repl(oddPid, "acceptedResult"),
+    ]);
+    const candidatesAreIsolated =
+      (await pool.repl(evenPid, "acceptedCandidate")).value === "'even-squares'" &&
+      (await pool.repl(oddPid, "acceptedCandidate")).value === "'odd-squares'" &&
+      (await pool.repl(coordinatorPid, "acceptedCandidate")).value == null;
+    const candidateValue = Number(evenCandidate.value);
+    check("public process pool fans out isolated candidates",
+      crossOriginIsolated && fanned.lanes.length === 2 && fanned.pages > 0 &&
+      candidatesAreIsolated && candidateValue === 171700 && Number(oddCandidate.value) === 166650,
+      `${fanned.lanes.length} lanes`);
+    await pool.fork(evenPid, coordinatorPid);
+    check("validated process winner is adopted into the coordinator",
+      (await pool.repl(coordinatorPid, "acceptedCandidate")).value === "'even-squares'" &&
+      Number((await pool.repl(coordinatorPid, "acceptedResult")).value) === 171700);
+    await progress("process winner adopted");
+    pool.terminate();
+    pool = null;
+
+    first.run(`acceptedResult = ${candidateValue}\nacceptedCandidate = 'even-squares'`);
+    first.history.checkpoint();
+    startedAt = performance.now();
+    const committed = await first.history.commit({ dir: journalDir, idleMs: 100000 });
+    timings.commitMs = Math.round(performance.now() - startedAt);
+    check("validated winner commits through the porcelain history",
+      candidateValue === 171700 && committed.pages > 0 && committed.wrote > 0,
+      `${timings.commitMs}ms`);
+    await progress("winner committed");
+
+    startedAt = performance.now();
+    reopened = await boot(manifest);
+    await progress("cold machine booted");
+    const recovered = await reopened.history.recover({ dir: journalDir });
+    timings.reopenMs = Math.round(performance.now() - startedAt);
+    check("a new installed-package machine reopens the accepted result",
+      recovered.pages > 0 &&
+      reopened.run("acceptedResult") === 171700 &&
+      reopened.run("acceptedCandidate") === "even-squares" &&
+      reopened.run("preparedPackage") === "math",
+      `${timings.reopenMs}ms`);
+    await progress("cold recovery complete");
+
+    const signingKey = await createStateKeyPair(crypto);
+    const trustedPublicKey = await exportStatePublicKey(crypto, signingKey.publicKey);
+    const imageBlob = await reopened.history.export({ includeHome: false, signingKey });
+    const wrongSigningKey = await createStateKeyPair(crypto);
+    const wrongPublicKey = await exportStatePublicKey(crypto, wrongSigningKey.publicKey);
+    let wrongKeyCode = "";
+    try {
+      await open(imageBlob, { trustedPublicKeys: [wrongPublicKey], requireSignature: true });
+    } catch (error) {
+      wrongKeyCode = error?.code || "";
+    }
+    check("signed machine image rejects the wrong public key",
+      wrongKeyCode === "PYPROC_MACHINE_UNTRUSTED", wrongKeyCode);
+    await progress("wrong key rejected");
+
+    imported = await open(imageBlob, {
+      trustedPublicKeys: [trustedPublicKey],
+      requireSignature: true,
+    });
+    await progress("signed image opened");
+    check("signed machine image imports the accepted result through public contracts",
+      imported.run("acceptedResult") === 171700 &&
+      imported.run("acceptedCandidate") === "even-squares" &&
+      imported.run("sum(preparedData)") === 5050,
+      `${imageBlob.size} bytes`);
+  } catch (error) {
+    check("uncaught", false, String(error?.stack || error).slice(-1600));
+  } finally {
+    try { first?.dispose(); } catch (error) {}
+    try { reopened?.dispose(); } catch (error) {}
+    try { imported?.dispose(); } catch (error) {}
+    try { pool?.terminate(); } catch (error) {}
+    if (opfsRoot) {
+      try { await opfsRoot.removeEntry(journalName, { recursive: true }); } catch (error) {}
+    }
+    await report();
+  }
+</script>
+</body>
+</html>

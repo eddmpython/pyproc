@@ -1,7 +1,7 @@
 {
   "name": "pyproc",
-  "version": "0.0.10",
-  "description": "브라우저 파이썬 프로세스 OS - 서버 없이 브라우저 탭에서 도는 진짜 런타임 파이썬(프로세스·병렬·복원 리액티브·머신 이미지). Real Python runtime in the browser tab: processes, parallelism, checkpoint/time-travel, portable .pymachine images.",
+  "version": "0.0.11",
+  "description": "Real CPython in a browser tab, with save states: checkpoint the live interpreter, fork it across cores, and restore it when a run goes wrong. No server. (서버 없이 탭에서 도는 진짜 CPython - 체크포인트·분기·복원.)",
   "type": "module",
   "repository": {
     "type": "git",
@@ -62,7 +62,7 @@
   ],
   "scripts": {
     "test": "node tests/run.mjs",
-    "test:types": "npx -y -p typescript@5 tsc -p tests/tsconfig.json",
+    "test:types": "tsc -p tests/tsconfig.json",
     "test:contracts": "node tests/contracts/run.mjs",
     "assets:provenance": "node scripts/assetProvenance.mjs",
     "test:package": "node tests/packageConsumer.mjs",
@@ -83,17 +83,31 @@
     "test:preflight": "node tests/browser/run.mjs tests/browser/preflightNoCoi.html",
     "test:web-machine": "node tests/webMachine/run.mjs",
     "test:web-machine:v86": "node tests/webMachine/fixtures/v86/prepareAssets.mjs && node tests/webMachine/run.mjs --v86",
-    "test:socket": "node tests/browser/socketLane.mjs"
+    "test:socket": "node tests/browser/socketLane.mjs",
+    "test:golden": "node tests/browser/goldenWorkflow.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
   },
   "keywords": [
-    "pyodide",
     "python",
+    "python-in-browser",
+    "cpython",
+    "pyodide",
     "browser",
     "wasm",
+    "webassembly",
+    "sandbox",
+    "code-execution",
+    "checkpoint",
+    "snapshot",
+    "time-travel",
     "process",
     "parallel",
     "reactive",
-    "runtime"
+    "runtime",
+    "repl",
+    "ai-agent"
   ],
   "license": "MPL-2.0"
 }

@@ -1,9 +1,10 @@
 # Web Machine 정식 검증 트리
 
-완료 설계 기록: [web-machine-platform](../../mainPlan/_done/web-machine-platform/README.md).
+현재 설계 경계는 [machine 모듈](../../src/machine/index.js), 공개 계약은
+[소비 계약](../../docs/consuming/contract.md)에 둔다.
 
 `tests/attempts/webMachine` 캠페인의 졸업 게이트를 모두 통과한 뒤 독립 package와 함께 승격한 검증 표면이다.
-과거 실측 수치와 실패에서 고친 계약은 [진행 원장](../../mainPlan/_done/web-machine-platform/03-progress-ledger.md)에 둔다.
+과거 실측 수치와 실패에서 고친 계약은 이 README와 아래 probe에 함께 둔다.
 
 ## 구조
 

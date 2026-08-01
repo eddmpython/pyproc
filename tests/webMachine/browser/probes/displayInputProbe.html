@@ -188,12 +188,12 @@ Linux VGA/PS2 최초 I/O 354/349/344ms, generation commit 347/297/299ms,
       let startedAt = performance.now();
       await linux.boot();
       timings.initialBootMs = Math.round(performance.now() - startedAt);
-      await waitForDisplay(display, "~% ");
+      await waitForDisplay(display, "# ");
       startedAt = performance.now();
       await input.sendScanCodes(encodePs2Set1Text("touch /tmp/first\necho displayfirst\n"));
       const firstDisplay = await waitForDisplay(display, "displayfirst");
       timings.initialKeyboardDisplayMs = Math.round(performance.now() - startedAt);
-      const firstFile = await linux.request({ type: "serial", data: "test -f /tmp/first; echo FIRST_FILE_STATUS:$?\n", waitFor: "~% " });
+      const firstFile = await linux.request({ type: "serial", data: "test -f /tmp/first; echo FIRST_FILE_STATUS:$?\n", waitFor: "# " });
       if (!firstFile.includes("FIRST_FILE_STATUS:0")) throw new Error(`PS/2 file command 실패: ${firstFile.slice(-500)}\n${firstDisplay.slice(-1000)}`);
       const beforePause = await linux.inspect();
       if (beforePause.guest?.display?.cellWrites < 1 || beforePause.guest?.input?.receivedCodes < 1) throw new Error(`display/input bridge I/O 없음: ${JSON.stringify(beforePause.guest)}`);
@@ -229,7 +229,7 @@ Linux VGA/PS2 최초 I/O 354/349/344ms, generation commit 347/297/299ms,
       await input.sendScanCodes(encodePs2Set1Text("touch /tmp/reopened\necho displayreopened\n"));
       const reopenedScreen = await waitForDisplay(display, "displayreopened");
       timings.reopenedKeyboardDisplayMs = Math.round(performance.now() - startedAt);
-      const reopenedFile = await linux.request({ type: "serial", data: "test -f /tmp/reopened; echo REOPENED_FILE_STATUS:$?\n", waitFor: "~% " });
+      const reopenedFile = await linux.request({ type: "serial", data: "test -f /tmp/reopened; echo REOPENED_FILE_STATUS:$?\n", waitFor: "# " });
       check("PS/2 keyboard가 Linux command 실행", reopenedFile.includes("REOPENED_FILE_STATUS:0"), reopenedFile.trim().slice(-240));
       const inspected = await linux.inspect();
       check("VGA와 keyboard가 console 밖 별도 port 사용", inspected.guest?.display?.cellWrites > 0 && inspected.guest?.display?.errors === 0 && inspected.guest?.input?.receivedCodes > 0 && input.inspect().deliveryErrors === 0, JSON.stringify({ display: inspected.guest?.display, input: inspected.guest?.input }));
