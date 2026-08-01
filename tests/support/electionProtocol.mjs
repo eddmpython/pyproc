@@ -149,6 +149,8 @@ export async function assertElectionProtocol(check, checkAsync) {
   await checkAsync("election: 리더 교체 시 대기 요청은 park되고 승계자에게 한 번 재전송된다", async () => {
     const ctrl = makeCtrl();
     ctrl._journalDir = {}; // 내구 머신(승계자에게 물어볼 세대가 있다)
+    // park의 전제: 이 참가자가 자기 커널을 알고 그 힙에 JS 핸들이 없다(모르면 정직하게 거부한다).
+    ctrl._session = { rt: { hostProxySurfaces: () => [] } };
     ctrl._phase = "ready"; ctrl._leaderId = "old"; ctrl._epoch = 3;
     const posted = [];
     ctrl._chan = { postMessage: (message) => posted.push(message) };
@@ -192,6 +194,8 @@ export async function assertElectionProtocol(check, checkAsync) {
   await checkAsync("election: 대기 줄은 호출자가 보낸 순서대로 재전송된다", async () => {
     const ctrl = makeCtrl();
     ctrl._journalDir = {};
+    // park의 전제: 이 참가자가 자기 커널을 알고 그 힙에 JS 핸들이 없다(모르면 정직하게 거부한다).
+    ctrl._session = { rt: { hostProxySurfaces: () => [] } };
     ctrl._phase = "ready"; ctrl._leaderId = "old"; ctrl._epoch = 3;
     const posted = [];
     ctrl._chan = { postMessage: (message) => posted.push(message) };

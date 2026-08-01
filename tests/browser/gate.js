@@ -892,8 +892,16 @@ try {
     const legacyMeta = { version: 2, manifest: s2._manifest, pages: legacyDelta.pages, sp: legacyDelta.sp, heapLen: legacyDelta.heapLen, h0: await s2._cp0Digest() };
     const legacyBody = toBytesWithHead(legacyMeta, legacyDelta.bin, new Uint8Array(0));
     const legacyEnvelope = [...new Uint8Array(await crypto.subtle.digest("SHA-256", legacyBody))].map((b) => b.toString(16).padStart(2, "0")).join("");
-    const legacyOpened = await openMachine(new Blob([MACHINE_MAGIC, legacyEnvelope, legacyBody]), { trust: true });
-    check("bundle: 구 봉투(PYMACHINE2 v2) reader 호환", legacyOpened.rt.run("k") === 4100, `${legacyMeta.pages.length}p`);
+    // 일몰(2026-08-01): 구 봉투는 더 이상 읽지 않는다. 읽기만 남은 포맷은 계약이 아니라
+    // 부채였다(writer가 없으므로 아무도 새로 만들지 않는데 모든 부활 경로가 두 갈래를 감당했다).
+    // 거부는 조용하지 않아야 한다: 무엇이었고 무엇을 해야 하는지를 메시지가 말하는지까지 본다.
+    let legacyCode = "";
+    let legacySaysWhat = false;
+    try { await openMachine(new Blob([MACHINE_MAGIC, legacyEnvelope, legacyBody]), { trust: true }); }
+    catch (error) { legacyCode = error.code; legacySaysWhat = /re-export|PYMACHINE2/.test(String(error.message || "")); }
+    check("bundle: 일몰한 구 봉투는 무엇을 해야 하는지와 함께 거부된다",
+      legacyCode === "PYPROC_MACHINE_FORMAT_INVALID" && legacySaysWhat,
+      `${legacyCode}, 안내 ${legacySaysWhat}`);
   }
   await (await navigator.storage.getDirectory()).removeEntry("pyprocGateSess", { recursive: true });
 

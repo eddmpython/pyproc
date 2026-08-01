@@ -136,21 +136,21 @@ async function openBundleMachine(buf, opts) {
 }
 
 // .pymachine/bundle 파일로 같은 컴퓨터를 부팅한다(매니페스트가 파일 안에 있다).
-// writer는 bundle 하나다(exportImage). 구 봉투(PYMACHINE2 v2/v3)는 감지형 reader로 읽기만
-// 지원하며 다음 브레이킹 릴리즈에 일몰한다. 신뢰 게이트는 두 경로가 같은 함수를 쓴다.
+// 포맷은 하나다: state bundle. 구 봉투(PYMACHINE2 v2/v3)의 감지형 reader는 일몰했다.
+//
+// 왜 지금인가: 두 포맷을 읽는 동안 "디스크 위 포맷은 하나"라는 계약이 참이 아니었고, 그 둘째
+// 포맷은 writer가 없는 읽기 전용이었다(2026-07-15 이후 아무도 만들지 않는다). 읽기만 남은
+// 포맷은 계약이 아니라 부채다: 모든 부활 경로가 두 갈래를 계속 감당하고, 그 갈래는 게이트도
+// 두 벌을 요구한다. 거부는 조용하지 않다 - 무엇이었고 무엇을 해야 하는지 코드와 함께 말한다.
 export async function openMachine(blob, opts = {}) {
   const buf = new Uint8Array(await blob.arrayBuffer());
   if (isStateBundle(buf)) return openBundleMachine(buf, opts);
-  const { envelope, meta, bin, homeBin } = await decodeMachineEnvelope(buf);
-  if (meta.home) validateMachineHomeMeta(meta.home, homeBin ? homeBin.length : 0);
-  else if (homeBin && homeBin.length) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: home payload present without home meta");
-  const manifest = validateManifest(JSON.parse(meta.manifest));
-  const signature = await verifyMachineSignature(meta, bin, homeBin || new Uint8Array(0), opts);
-  requireTrust(signature, envelope, opts);
-  const session = await bootSession(withHostLoader(manifest, opts));
-  await session._applyMeta(meta, bin);
-  if (meta.home) session._applyHome(meta.home, homeBin);
-  return session;
+  throw new PyProcError(
+    "PYPROC_MACHINE_FORMAT_INVALID",
+    "open: this is not a state bundle. The legacy PYMACHINE2 envelope was retired, so a file written by "
+    + "pyproc 0.0.10 or earlier has to be re-exported by the version that wrote it (open it there, then "
+    + "history.export() again) before this version can read it.",
+  );
 }
 
 export class Session {

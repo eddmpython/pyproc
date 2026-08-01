@@ -375,7 +375,12 @@ export class KernelElection {
     // 승계자에게 다시 물으려면 그 커널이 쓸 수 있어야 한다. 힙에 JS 핸들이 있었던 머신은
     // 부활한 커널에서 프록시 경로가 전부 트랩하므로(이미지 이식성 계약, 2026-08-01 실측)
     // 재전송이 답 대신 죽은 인터프리터를 만난다. 그 경우의 "모른다"는 여전히 참이다.
-    if (this._session?.rt?.hostProxySurfaces?.().length) { this._rejectPendingOutcomeUnknown(reason); return; }
+    // 재전송이 안전하려면 승계자의 커널이 쓸 수 있어야 하는데, 그것을 아는 참가자는 세션을
+    // 가진 쪽뿐이다. 세션이 없는 follower는 리더의 힙에 핸들이 있었는지 알 수 없으므로 park하지
+    // 않는다: 모르는 것을 안다고 가정하면 재전송이 죽은 인터프리터를 만난다(소비자 게이트가
+    // 부하 상태에서 그것을 잡았다). 아는 경우에만 park하고, 모르면 예전대로 정직하게 거부한다.
+    const surfaces = this._session?.rt?.hostProxySurfaces?.();
+    if (!surfaces || surfaces.length) { this._rejectPendingOutcomeUnknown(reason); return; }
     for (const entry of this._pending.values()) {
       clearTimeout(entry.timer);
       entry.timer = null;

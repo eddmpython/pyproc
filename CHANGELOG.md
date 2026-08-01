@@ -33,6 +33,11 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Breaking
 
+- **The legacy `PYMACHINE2` envelope reader is retired.** `open()` now accepts only the state-bundle
+  format that `history.export()` has written since 0.0.9. A file produced by 0.0.10 or earlier is
+  refused with `PYPROC_MACHINE_FORMAT_INVALID` and a message saying to re-export it from the version
+  that wrote it. Carrying a read-only second format was debt rather than a contract: nothing created
+  it any more, yet every revival path and its gates had to keep both branches alive.
 - **`history.save()` and `history.export()` refuse a heap that holds JS handles** with
   `PYPROC_IMAGE_PROXY_SURFACE`, naming the surfaces that installed them. A JS handle is
   interpreter-local and cannot cross an image: a kernel revived from such an image traps on every
