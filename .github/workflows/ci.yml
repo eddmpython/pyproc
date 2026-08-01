@@ -106,3 +106,24 @@ jobs:
       - run: npm run test:web-computer
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+
+  # x86 자산 레인. 오랫동안 "자산이 gitignore라 CI에서 못 돈다"고 적혀 있었지만 그것은 낡은
+  # 문장이었다: 위 job이 같은 catalog의 같은 자산을 매 push마다 받아온다. gitignore는 "받을 수
+  # 없다"가 아니라 "커밋하지 않는다"이고, 준비 스크립트가 SHA-256 핀으로 받아온다.
+  web-machine-x86:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: tests/webMachine/fixtures/v86/assets
+          key: web-machine-v86-assets-${{ hashFiles('scripts/assetCatalog.json') }}
+      # 실 x86 Linux guest를 부팅해 dual-boot과 장치(디스플레이·프레임버퍼·패킷·포인터)를 문다.
+      # 타임아웃을 올린 이유는 공유 러너에서 v86 부팅이 느리기 때문이다(자산이 아니라 CPU 몫).
+      - run: npm run test:web-machine:v86
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
+          PYPROC_GATE_TIMEOUT: "600000"

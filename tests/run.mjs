@@ -1813,6 +1813,10 @@ section("북극성");
     webMachineRunner.indexOf("const ASSET_FREE"),
     webMachineRunner.indexOf("const V86_BACKED"),
   );
+  const v86Block = webMachineRunner.slice(
+    webMachineRunner.indexOf("const V86_BACKED"),
+    webMachineRunner.indexOf("const V86_ASSET_DIR"),
+  );
   // 페이지가 CI에서 열리는 길은 셋뿐이다: ci.yml 명령 줄에 경로가 박혔거나, 기본 게이트 페이지거나,
   // webMachine 무자산 레인에 등재돼 있거나. 손목록이 아니라 실물 소스에서 각각을 읽는다.
   const ciOpensPage = (path) => ciRunLines.some((line) => line.includes(path))
@@ -1823,6 +1827,9 @@ section("북극성");
     if (lane === "ci") return ciRunLines.some((line) => line.includes(path));
     if (!scriptNames.has(lane)) return false;
     if (lane === "test:web-machine" && !assetFreeBlock.includes(path)) return false;
+    // v86 레인은 자산이 필요한 페이지 목록에 대해서만 성립한다. 두 레인이 서로의 페이지를
+    // 증거로 세면 "무자산 CI"와 "자산 CI"의 구분이 사라진다.
+    if (lane === "test:web-machine:v86" && !v86Block.includes(path)) return false;
     const pattern = lane === "test" ? /npm test(\s|$)/ : new RegExp(`npm run ${lane}(\\s|$)`);
     return ciRunLines.some((line) => pattern.test(line));
   };
@@ -1973,8 +1980,14 @@ section("북극성");
       throw new Error("아무 러너도 열지 않는 증거를 놓쳤다");
     }
     if (unreachable(fixture()).length) throw new Error("러너가 여는 페이지를 고아라고 했다(오탐)");
-    if (!laneProblems(fixture({ evidence: [{ path: "tests/browser/gate.html", lane: "test:web-machine:v86" }] })).length) {
+    // bench:speed는 실제로 CI에 없는 레인이다(v86은 이제 CI에서 돈다: 이 fixture가 그것을 모르면
+    // 레인 판정이 조용히 죽는다 - 감사가 정확히 이 지점을 예고했다).
+    if (!laneProblems(fixture({ evidence: [{ path: "tests/browser/gate.html", lane: "bench:speed" }] })).length) {
       throw new Error("CI 밖 레인을 CI 증거로 셌다");
+    }
+    // 두 레인이 서로의 페이지를 증거로 세지 못한다(양방향). 한쪽만 막으면 구분이 반만 산다.
+    if (!laneProblems(fixture({ evidence: [{ path: "tests/webMachine/browser/probes/hostContractProbe.html", lane: "test:web-machine:v86" }] })).length) {
+      throw new Error("무자산 페이지를 v86 레인 증거로 셌다");
     }
     if (!laneProblems(fixture({ evidence: [{ path: "tests/webMachine/browser/probes/dualBootProbe.html", lane: "test:web-machine" }] })).length) {
       throw new Error("x86 자산이 필요한 probe를 CI 레인 증거로 셌다");
@@ -2949,7 +2962,6 @@ section("CI 배관");
   check("test:* 레인은 CI에서 돌거나 로컬 전용으로 승인돼 있다", () => {
     const scripts = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).scripts || {};
     const LOCAL_ONLY = new Map([
-      ["test:web-machine:v86", "x86 자산(engine/firmware/guest image)이 gitignore라 CI에서 만들 수 없다"],
       ["test:contracts", "npm test가 같은 aggregator를 부른다(CI 이중 실행 회피)"],
       ["test:package", "npm test가 spawn으로 부른다"],
     ]);

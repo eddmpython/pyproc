@@ -226,15 +226,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "multiGuestComputer",
-    score: 8.5,
+    score: 9.0,
     en: Object.freeze({
       title: "A computer that boots guests",
-      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others and a frame round-trips while another guest is inside a loop, all proven in CI. Presenting a frame onto a canvas is gated in CI as well (`CanvasRgbaFrameSink`). The display, packet-network, and dual-boot probes need x86 assets and run only in a local lane, and the Linux engine and image stay a hash-pinned development channel that cannot be redistributed.",
+      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others and a frame round-trips while another guest is inside a loop, all proven in CI. Presenting a frame onto a canvas is gated in CI as well (`CanvasRgbaFrameSink`), and the x86 lane runs in CI too: the same catalog-pinned assets the product job already fetches boot a real Linux guest, so dual-boot and the Linux device probes are automated rather than remembered. The Linux engine and image stay a hash-pinned development channel that cannot be redistributed.",
       target: "Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does.",
     }),
     ko: Object.freeze({
       title: "guest를 부팅하는 컴퓨터",
-      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. guest를 자기 워커에 얹는 길도 생겼다(`pyproc-worker`): CPU 바운드 guest가 다른 guest를 멈추지 않고 프레임이 상대의 루프 도중에 왕복하는 것을 CI가 문다. 프레임을 캔버스에 올리는 경로도 CI가 문다(`CanvasRgbaFrameSink`). 디스플레이, 패킷 네트워크, dual-boot probe는 x86 자산이 필요해 로컬 레인에서만 돌고, Linux 엔진과 이미지는 재배포 불가한 해시 고정 개발 채널로 남아 있다.",
+      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. guest를 자기 워커에 얹는 길도 생겼다(`pyproc-worker`): CPU 바운드 guest가 다른 guest를 멈추지 않고 프레임이 상대의 루프 도중에 왕복하는 것을 CI가 문다. 프레임을 캔버스에 올리는 경로도 CI가 물고, x86 레인도 CI에서 돈다: 제품 job이 이미 받아오는 같은 catalog 고정 자산으로 실제 Linux guest를 부팅하므로 dual-boot과 Linux 장치 probe가 기억이 아니라 자동으로 검증된다. Linux 엔진과 이미지는 재배포 불가한 해시 고정 개발 채널로 남아 있다.",
       target: "어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다.",
     }),
     evidence: Object.freeze([
@@ -243,11 +243,10 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/webMachine/browser/probes/ownerSuccessorProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/workerHostedGuestProbe.html", lane: "test:web-machine" }),
+      Object.freeze({ path: "tests/webMachine/browser/probes/dualBootProbe.html", lane: "test:web-machine:v86" }),
+      Object.freeze({ path: "tests/webMachine/browser/probes/linuxGuestProbe.html", lane: "test:web-machine:v86" }),
     ]),
-    manual: Object.freeze([
-      Object.freeze({ path: "tests/webMachine/browser/probes/dualBootProbe.html", why: "x86 engine/firmware/guest image are gitignored, so the lane cannot be built in CI" }),
-      Object.freeze({ path: "tests/webMachine/browser/probes/linuxGuestProbe.html", why: "same x86 asset lane: run locally with the v86 script" }),
-    ]),
+    manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
         id: "redistributableGuestImage",
