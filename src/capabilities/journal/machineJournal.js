@@ -17,6 +17,7 @@
 //
 // 계약(정직하게): 크래시 시 잃는 것은 "마지막 커밋 이후"다. 문장 단위 내구성이 아니라
 // 경계 일관성을 준다. 커밋 주기는 소비자가 정한다(하드코딩 없음).
+import { requirePortableHeap } from "../imagePortability.js";
 import { PAGE_SIZE as PAGE, bytesToMb, mbToBytes } from "../../runtime/memoryLayout.js";
 import { PyProcError } from "../../runtime/errors.js";
 import { parseSha256Address, sha256Hex, verifySha256 } from "../../runtime/contentDigest.js";
@@ -75,6 +76,8 @@ export class MachineJournal {
     this._idleMs = cfg.idleMs || 2000;
     this._homePath = cfg.includeHome === false ? null : (cfg.homePath || DEFAULT_MACHINE_HOME_PATH);
     this._autoPack = normalizeAutoPackPolicy(cfg.autoPack);
+    // 이식성 승인은 저널을 켤 때 한 번 선언한다(커밋마다 묻지 않는다: 정책은 세션 단위다).
+    this._opts = { allowHostProxies: cfg.allowHostProxies === true };
     this._onStatus = typeof cfg.onStatus === "function" ? cfg.onStatus : null;
     this._pruneAfterCommit = cfg.pruneAfterCommit === true;
     this._timer = null;
@@ -138,6 +141,10 @@ export class MachineJournal {
     if (this._busy) return null;
     this._busy = true;
     try {
+      // 저널 커밋도 "부활을 전제한 쓰기"다(recover가 새 탭의 새 커널로 되살린다). 그러므로
+      // 세션 저장/내보내기와 같은 이식성 전제를 통과해야 한다: 힙에 JS 핸들이 있으면 그 세대는
+      // 되살아나도 블로킹 표면을 못 쓴다. 감사 실측(2026-08-01)이 이 우회를 잡았다.
+      requirePortableHeap(this._rt, "journal.commit", this._opts);
       const r = this._reactive, mem = this._rt.memory;
       r.checkpoint(); // 경계 닫기(cp0 대비 차이가 곧 사용자 상태)
       const { pages } = r.collectDelta(0, r.liveIdx, { pack: false }); // 델타 수집의 정본(세션 저장과 같은 프리미티브)

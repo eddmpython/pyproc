@@ -38,6 +38,7 @@ import { decodeStateBundle, encodeStateBundle, isStateBundle, stateBundleHeaderD
 export { createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey } from "./machineSignature.js";
 import { WheelCache } from "../capabilities/wheelCache.js";
 import { materializeHeapGeneration } from "../capabilities/heapMaterialize.js";
+import { requirePortableHeap } from "../capabilities/imagePortability.js";
 import {
   DEFAULT_MACHINE_HOME_PATH,
   applyMachineHome,
@@ -163,25 +164,6 @@ export class Session {
 
   // 사용자 상태(리플레이 경계와 다른 페이지) 수집. save/exportImage 공용.
   // 델타 수집의 정본은 ReactiveController.collectDelta다(저널 커밋과 같은 프리미티브).
-  // 이미지 이식성의 전제: 힙에 JS 핸들이 없어야 한다. 있으면 그 이미지는 부활은 하되 프록시
-  // 경로가 전부 트랩한다(workerGuest 캠페인 A~O 실측). 예전에는 그 사실이 부활 뒤 한참 있다가
-  // 엔진 깊은 곳의 "table index is out of bounds"로 나타났다. 지금은 이미지를 뜨는 순간,
-  // 무엇을 고쳐야 하는지와 함께 거부한다. 조용한 오염 대신 큰 소리로 거부하는 것이 이 계약이다.
-  // 승인 탈출구를 두는 이유: 같은 문맥 안에서만 쓸 이미지(같은 탭의 fork 원본 등)는 여전히
-  // 유효하고, 그 판단은 소비자 몫이다. 다만 기본값은 거부다.
-  _requirePortableHeap(entry, opts = {}) {
-    if (opts.allowHostProxies === true) return;
-    const names = typeof this.rt.hostProxySurfaces === "function" ? this.rt.hostProxySurfaces() : [];
-    if (!names.length) return;
-    throw new PyProcError(
-      "PYPROC_IMAGE_PROXY_SURFACE",
-      `${entry}: this heap holds JS handles installed as ${names.join(", ")}, and a JS handle cannot cross an image: `
-      + "the revived kernel traps on every proxy path, including handles it mints itself. "
-      + "Move the surface to a value boundary (pure Python plus bytes through run(), as the packet port does), "
-      + "or pass { allowHostProxies: true } if this image is only ever opened in the context that made it.",
-    );
-  }
-
   _collectDelta() {
     const r = this.reactive;
     r.checkpoint(); // 경계 닫기(사용자 상태 확정)
@@ -204,7 +186,7 @@ export class Session {
 
   // 사용자 상태만 OPFS에 저장. base는 리플레이가 대체하므로 저장하지 않는다.
   async save(dir, name, opts = {}) {
-    this._requirePortableHeap("save", opts);
+    requirePortableHeap(this.rt, "save", opts);
     const { bin, meta } = this._collectDelta();
     meta.h0 = await this._cp0Digest();
     const mf = await dir.getFileHandle(name + ".json", { create: true });
@@ -219,7 +201,7 @@ export class Session {
   // 환경 지문 commit이 내용주소 오브젝트로 실리고, 봉투 무결성(다이제스트)과 출처(tag)가
   // 분리된다. 구 .pymachine v2/v3 writer는 폐지됐다(reader만 잔존).
   async exportImage(opts = {}) {
-    this._requirePortableHeap("exportImage", opts);
+    requirePortableHeap(this.rt, "exportImage", opts);
     const r = this.reactive;
     r.checkpoint(); // 경계 닫기(사용자 상태 확정)
     const { pages, sp, heapLen } = r.collectDelta(0, r.liveIdx, { pack: false });

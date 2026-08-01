@@ -775,9 +775,11 @@ try {
     try {
       proxyRevived.rt.setGlobal("probeBridge", () => 9);
       proxyRevived.rt.run("probeBridge()");
-    } catch (e) { trapped = String(e?.message || e).slice(0, 60); }
+    } catch (e) { trapped = String(e?.message || e).slice(0, 80); }
+    // 아무 예외나 통과시키면 이 검사는 "그날의 사고"를 재는 물건이 된다(감사 지적). 엔진 층
+    // 한계의 서명은 함수 테이블 밖 접근이거나 죽은 hiwire 핸들이다: 그 둘만 증거로 인정한다.
     check("알려진 한계: 이미지가 나른 프록시 부기 위에서 프록시 호출은 트랩한다",
-      plain === 45 && trapped.length > 0,
+      plain === 45 && /table index is out of bounds|hiwire/i.test(trapped),
       trapped ? `plain ${plain}, trap "${trapped}"` : `plain ${plain}, 트랩 없음 = 한계가 풀렸다(문서와 주장 갱신 필요)`);
   }
 

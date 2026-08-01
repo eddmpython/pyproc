@@ -23,7 +23,10 @@
 function pythonLiteral(value) {
   if (value === true) return "True";
   if (value === false) return "False";
-  if (Array.isArray(value)) return "[" + value.map((item) => JSON.stringify(String(item))).join(", ") + "]";
+  // 항목을 String()으로 강제하면 판정이 갈라진다: net: [8080]에서 JS allows("net","8080")은
+  // false인데 구운 파이썬은 "8080" in ["8080"]으로 True가 됐다(감사 실측). 굽는 것은 판정
+  // 대상 그 자체여야 하므로 항목을 그대로 옮긴다(숫자는 파이썬 int로, 문자열은 문자열로).
+  if (Array.isArray(value)) return "[" + value.map((item) => JSON.stringify(item)).join(", ") + "]";
   return JSON.stringify(value);
 }
 
@@ -34,7 +37,7 @@ _pyprocJailMod = _pyprocTypes.ModuleType('pyprocJail')
 _pyprocJailPolicy = {'net': ${netLiteral}, 'clipboard': ${clipboardLiteral}, 'home': ${homeLiteral}, 'workers': ${workersLiteral}}
 
 def _pyprocJailAllowed(perm, arg=''):
-    allowed = _pyprocJailPolicy[perm]
+    allowed = _pyprocJailPolicy.get(perm, False)
     if perm == 'net':
         return allowed is True or (isinstance(allowed, list) and arg in allowed)
     return bool(allowed)

@@ -332,7 +332,9 @@ export function mountHeroConsole(root, { gateMode = false } = {}) {
       btn.className = "ghost heroExport";
       btn.textContent = "Export .pymachine";
       btn.onclick = async () => {
-        const blob = await persisted.machine.history.export();
+        // Same acknowledgement as hibernate: the terminal tab's blocking bridge put a JS handle in
+        // this heap, so the runtime refuses a portable claim unless the caller states the limit.
+        const blob = await persisted.machine.history.export({ allowHostProxies: true });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = "computer.pymachine";

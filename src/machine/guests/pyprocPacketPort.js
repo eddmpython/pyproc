@@ -14,7 +14,7 @@
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { buildArpReply, buildIcmpEchoReply, describeFrame, toAddressBytes } from "../contracts/ipv4Frames.js";
 
-// 파이썬 표면. **값 경계다: 이 소스는 JS 프록시를 하나도 심지 않는다.**
+// 파이썬 표면. **값 경계다: 이 소스는 JS 프록시를 하나도 심지 않는다.** 바이트는 hex로 건넌다.
 // 근거는 실측이다(workerGuest 캠페인 A~O, 2026-08-01): setGlobal로 심은 JS 프록시가 힙에 있으면
 // 그 힙 이미지로 부활한 커널은 프록시 경로 전부가 트랩한다. 이미지가 Pyodide의 핸들 할당기 상태를
 // 통째로 나르기 때문이라, 부활 커널이 다른 이름으로 새로 만든 프록시조차 죽는다. 반대로 순수
@@ -44,7 +44,8 @@ class _PyprocNetQueues:
         self.inbox = []
         self.outbox = []
 
-_pyprocNetState = _PyprocNetQueues()
+if '_pyprocNetState' not in globals():
+    _pyprocNetState = _PyprocNetQueues()
 _pyprocNetMod = _pyprocTypes.ModuleType('pyprocNet')
 
 def _pyprocNetSend(frame):
@@ -109,8 +110,9 @@ export class PyprocPacketPort {
     this._port = this._device.connect({ endpointId: this._endpointId, receive: (frame) => this._receive(frame) });
   }
 
-  // 파이썬 표면을 심는다. 여기 들어가는 것은 JS 함수 프록시이고, 그것이 힙에 남은 채로는
-  // 이미지가 이동하지 못한다(아래 removePythonSurface의 근거).
+  // 파이썬 표면을 심는다. 멱등이다: 이미 큐가 있으면(이미지가 나른 경우, 또는 재부착) 그것을
+  // 유지하고 모듈만 다시 세운다. 예전 판본은 여기서 JS 함수 프록시를 심었고 그것이 이미지
+  // 이식성을 깨뜨렸다(캠페인 근본 원인). 지금 들어가는 것은 순수 파이썬과 리터럴뿐이다.
   installPythonSurface() {
     const runtime = this._runtime;
     if (!runtime) throw new WebMachineError("WEB_MACHINE_GUEST_STATE", `pyproc packet port has no runtime: ${this._endpointId}`);
@@ -127,13 +129,20 @@ export class PyprocPacketPort {
   // 스택에 있는 동안 run()을 다시 부르는 재진입을 피하는 유일한 지점이 턴 경계다).
   pump() {
     if (!this._runtime || !this._port) return { ingested: 0, drained: 0 };
+    // 시간여행이 설치 이전 경계로 되감기면 이 이름들이 없다. 그때 펌프가 던지면 파이썬을 쓰지도
+    // 않는 요청까지 전부 죽는다(감사 실측). 표면이 없으면 다시 심는 것이 옳다: 설치는 멱등이다.
+    if (this._runtime.run("'_pyprocNetDrain' in globals()") !== true) this.installPythonSurface();
     let ingested = 0;
-    if (this._inbox.length) {
-      const encoded = this._inbox.map((frame) => hexFromFrame(frame)).join(",");
-      ingested = this._inbox.length;
-      this._inbox.length = 0;
+    // 큐를 먼저 비우면 ingest가 던졌을 때 그 프레임들이 사라진다(감사 실측). 성공 뒤에 비운다.
+    // 길이 0 프레임은 이 경계를 건너지 못하므로(구분자가 ','다) 애초에 큐에 넣지 않는다:
+    // 이더넷 프레임은 최소 14바이트라 0바이트는 유효한 입력이 아니고, 세면 통계가 거짓말을 한다.
+    const pending = this._inbox.filter((frame) => frame.byteLength > 0);
+    if (pending.length) {
+      const encoded = pending.map((frame) => hexFromFrame(frame)).join(",");
       this._runtime.run(`_pyprocNetIngest(${JSON.stringify(encoded)})`);
+      ingested = pending.length;
     }
+    this._inbox.length = 0;
     const drainedText = String(this._runtime.run("_pyprocNetDrain()") || "");
     const frames = drainedText ? drainedText.split(",").filter(Boolean).map((chunk) => frameFromHex(chunk)) : [];
     for (const frame of frames) this.send(frame);
