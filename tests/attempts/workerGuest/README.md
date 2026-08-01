@@ -129,6 +129,26 @@ and partly on the JS side. An image carries the heap half. A fresh interpreter h
 so the two halves disagree the moment either is touched. Nothing at the Python level can repair that,
 which is exactly why `removePythonSurface` - a Python-level fix for a JS-level problem - never could.
 
+Three more cases (2026-08-01) settled both the cost of the repair and its shape:
+
+| Case | Setup | Result |
+|---|---|---|
+| M | image holds a proxy; the revived kernel never touches it and uses a **different** name | traps (`hiwire_get is falsy`) |
+| N | the revived kernel deletes the image's proxy name (so it is destroyed) | traps (`table index is out of bounds`) |
+| O | **no proxy anywhere**: a pure-Python surface, bytes crossing as `run()` arguments and return values | **works** |
+
+M is the one that decides the price. A fresh proxy under a fresh name still fails, so there is no
+cheap discipline like "never touch what the image brought": the image carries Pyodide's own handle
+allocator state, so every handle the revived kernel mints lands outside its own table. The proxy
+machinery as a whole is poisoned, not just the objects that travelled.
+
+O is the way out, and it is measured rather than argued: the seed's queued frame survived the round
+trip, a frame ingested after the restore was read back, and the outbox drained - all with zero
+handles on either side. **A device surface has to be a value boundary, not a proxy boundary.** Python
+keeps plain lists; bytes cross as `run()` arguments and return values; JS drives ingest and drain at
+turn boundaries. That is also the shape the worker-hosted guest needs anyway, because its device
+bridge already crosses `postMessage` at turn boundaries.
+
 **One fix was tried and rejected by measurement (2026-07-31).** The most attractive reading of the
 map said: establish the surface inside the deterministic boot window, before cp0, so both kernels
 agree on the bookkeeping. A temporary `installers` hook in `bootSession` tested it. The boot half

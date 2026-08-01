@@ -147,13 +147,24 @@
 - **NEXT 3(픽셀 출력 경로)을 닫았다.** CanvasRgbaFrameSink로 소비 방향을 열고 무자산 CI 레인
   (hostContractProbe)에 3검사를 세웠다. 프레임버퍼가 "만들어지지만 아무도 못 보는" 장치를 벗어났다.
 
+- **프록시 한계의 수리안을 실측으로 확정했다(2026-08-01).** 케이스 M: 이미지가 프록시를 나르면
+  부활 커널이 **다른 이름으로 새로 만든** 프록시조차 트랩한다(hiwire_get is falsy). 이미지가
+  Pyodide 핸들 할당기 상태를 통째로 나르기 때문이고, 그래서 "이미지 것은 안 건드린다"는 싼 규율은
+  없다. 케이스 O: 프록시 0인 값 경계 표면(순수 파이썬 큐 + run 인자/반환값)은 이미지를 그대로
+  건넌다. 장치 표면을 프록시에서 값으로 옮기는 것이 남은 유일한 길이고 NEXT 1번이 됐다.
+
 ## NEXT
 
-ROI 순이고, 각 항목의 근거는 2차 재심사 목록이다.
+ROI 순이다. 파일 분해류가 뒤로 간 이유는 그것이 유지보수이고, 앞의 둘은 북극성 축과 최고 ROI
+캠페인을 동시에 막고 있는 능력 문제이기 때문이다.
 
-1. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
+1. **장치 표면을 프록시 경계에서 값 경계로 옮긴다**(막힌 것을 푸는 유일한 길, 실측으로 확정).
+   `PyprocPacketPort`의 파이썬 표면이 `setGlobal`로 JS 프록시를 힙에 심는 한 그 guest의 이미지는
+   부활 뒤 프록시 경로 전부가 트랩한다(캠페인 케이스 A~O). 순수 파이썬 큐 + `run()` 인자/반환값
+   으로만 바이트가 건너는 표면은 이미지를 그대로 건넌다(케이스 O). 같은 이유로 `socketBridge`와
+   `gpuCompute`도 같은 부채를 지고 있으니 계약을 한 번에 정하고 순서대로 옮긴다.
+2. **워커에 사는 guest 졸업**: 1번이 풀리면 졸업 게이트 4(이미지 이식성)의 장치 절반이 닫힌다.
+   나머지 넷은 이미 섰다(host 무변경, head-of-line 제거, 장치 계약 횡단, 비용 명시).
+3. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
    `[구조]` 641줄을 4분할. 법 게이트 스코프를 tests/apps/scripts로 확장(자기 위반 3곳 해소).
-2. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
-3. **워커에 사는 guest**: machine 층에 `new Worker`가 0건이라 두 guest가 한 스레드를 나눈다.
-   2차 웹컴퓨터 감사가 "가장 ROI 높은 한 수"로 지목했다. 캠페인은 졸업 게이트 1·2·3·5를 세웠고
-   4는 위 프록시 한계에 걸려 있다: 그 한계를 풀지 않으면 워커 guest도 이미지를 나를 수 없다.
+4. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).

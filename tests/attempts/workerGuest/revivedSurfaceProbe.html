@@ -214,6 +214,75 @@ the step that poisons the image.
     // 충분조건이 아니다: 이미지가 나르는 것은 프록시 객체의 힙 표현이고, 그것이 부활 커널의
     // JS 절반과 다시 어긋난다. 목적을 못 이룬 옵션은 남기지 않는 규칙대로 src 훅은 되돌렸고,
     // 이 문단이 그 실측의 기록이다(같은 안을 다음 세션이 다시 시도하지 않도록).
+    // CASE M: 값을 가르는 마지막 칸. 이미지에 프록시가 있지만 부활 커널이 **그것을 건드리지 않고**
+    // 다른 이름으로 새 프록시를 만들어 쓴다. 통과하면 수리는 싸다("이미지가 나른 프록시는 손대지
+    // 않는다"는 규율만 세우면 된다). 실패하면 프록시 기계 전체가 오염된 것이고, 장치 표면을
+    // 프록시가 아닌 메모리 링으로 다시 짓는 것 말고는 길이 없다.
+    await runCase("M: 이미지의 프록시를 손대지 않고 새 이름으로만 쓴다", async () => {
+      const seed = await bootSession(bootOptions);
+      seed.rt.setGlobal("imageBridge", () => 1);
+      seed.rt.run("imageValue = imageBridge()");
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      let result = "";
+      try {
+        revived.rt.setGlobal("freshBridge", () => 5); // 다른 이름 = 이미지의 핸들을 덮지 않는다
+        result = String(revived.rt.run("freshBridge()"));
+      } catch (error) { result = `THREW ${String(error?.message || error).slice(0, 110)}`; }
+      check("M: 이미지의 프록시를 손대지 않고 새 이름으로만 쓴다", result === "5", result);
+    });
+
+    // CASE N: M이 통과하면 곧바로 따라오는 질문. 이미지가 나른 프록시를 **파기하지 않고 그대로
+    // 둔 채** 새 표면만 쓰는 것이 실제로 성립하는가(파기는 트랩 지점이었다). 파이썬이 그 이름을
+    // 지우면 refcount가 0이 되어 파기가 일어나므로, 지우지 않는 것이 계약이 된다.
+    await runCase("N: 이미지의 프록시 이름을 지우면(파기) 트랩한다", async () => {
+      const seed = await bootSession(bootOptions);
+      seed.rt.setGlobal("imageBridge", () => 1);
+      seed.rt.run("imageValue = imageBridge()");
+      const revived = await openMachine(await seed.exportImage(), { trust: true });
+      let trapped = "";
+      try { revived.rt.run("del imageBridge"); } catch (error) { trapped = String(error?.message || error).slice(0, 60); }
+      check("N: 이미지의 프록시 이름을 지우면(파기) 트랩한다", trapped.length > 0, trapped || "트랩 없음");
+    });
+    // CASE O: 남은 유일한 길이 실제로 사는가. 프록시를 아예 안 만드는 표면 - 파이썬 쪽은 순수
+    // 파이썬 큐이고, 바이트는 run()의 인자와 반환값으로만 건넌다(값 복사, 핸들 0) - 을 씨앗에
+    // 심고 이미지를 왕복시킨다. 이것이 통과하면 장치 표면을 프록시에서 값 경계로 옮기는 것이
+    // 수리안이 된다. 실패하면 이미지와 장치는 근본적으로 공존할 수 없다.
+    await runCase("O: 프록시 0인 값 경계 표면은 이미지를 건너 산다", async () => {
+      const surface = [
+        "class _ProbeNet:",
+        "    def __init__(self):",
+        "        self.inbox = []",
+        "        self.outbox = []",
+        "    def ingest(self, payload):",
+        "        self.inbox.append(bytes(payload))",
+        "        return len(self.inbox)",
+        "    def recv(self):",
+        "        return self.inbox.pop(0) if self.inbox else None",
+        "    def send(self, payload):",
+        "        self.outbox.append(bytes(payload))",
+        "        return len(payload)",
+        "    def drain(self):",
+        "        out = list(self.outbox)",
+        "        self.outbox.clear()",
+        "        return out",
+        "probeNet = _ProbeNet()",
+      ].join("\n");
+      const seed = await bootSession(bootOptions);
+      seed.rt.run(surface);
+      // 프레임 배달: JS가 값으로 넘긴다(프록시 아님). 파이썬 리터럴로 넘기는 것이 계약이다.
+      seed.rt.run("probeNet.ingest(b'seed-frame')");
+      seed.rt.run("probeNet.send(b'seed-out')");
+      const image = await seed.exportImage();
+      const revived = await openMachine(image, { trust: true });
+      // 부활 커널: 표면을 다시 심지 않는다. 이미지가 그대로 나르고, 값 경계라 나를 수 있다.
+      const carried = String(revived.rt.run("probeNet.recv().decode()"));
+      revived.rt.run("probeNet.ingest(b'post-restore')");
+      const fresh = String(revived.rt.run("probeNet.recv().decode()"));
+      const drained = String(revived.rt.run("b','.join(probeNet.drain()).decode()"));
+      check("O: 프록시 0인 값 경계 표면은 이미지를 건너 산다",
+        carried === "seed-frame" && fresh === "post-restore" && drained === "seed-out",
+        `carried ${carried}, fresh ${fresh}, drained ${drained}`);
+    });
   } catch (error) {
     check("no exception", false, String(error?.message || error).slice(-300));
   } finally {
