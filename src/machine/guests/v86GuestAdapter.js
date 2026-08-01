@@ -17,6 +17,7 @@ import { V86EntropyPort } from "./v86EntropyPort.js";
 import { createV86WasmHostFunction } from "./v86WasmHostBridge.js";
 import { V86SerialPort } from "./v86SerialPort.js";
 import { indexRequirements, resolveRequiredDevice } from "../contracts/deviceRequirement.js";
+import { awaitV86Readiness } from "./v86Readiness.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
@@ -396,25 +397,13 @@ class V86GuestAdapter {
     }
   }
 
-  async _awaitReadiness(control) {
-    const readiness = this._manifest?.v86?.readiness;
-    if (!readiness) {
-      const pattern = String(this._manifest?.v86?.readyPattern || "~% ");
-      await this._serialPort.waitFor(pattern, 0, Number(this._manifest?.v86?.bootTimeoutMs || 120000), control);
-      return;
-    }
-    if (readiness.kind === "serial-pattern") {
-      const pattern = String(readiness.pattern || "");
-      if (!pattern) throw new TypeError("serial-pattern readiness requires a pattern");
-      await this._serialPort.waitFor(pattern, 0, Number(readiness.timeoutMs || 120000), control);
-      return;
-    }
-    if (readiness.kind === "framebuffer") {
-      if (!this._framebufferPort) throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "framebuffer readiness requires a framebuffer device");
-      await this._framebufferPort.waitForFrame(Number(readiness.timeoutMs || 30000));
-      return;
-    }
-    throw new TypeError(`unsupported v86 readiness: ${readiness.kind}`);
+  _awaitReadiness(control) {
+    return awaitV86Readiness({
+      manifest: this._manifest,
+      serialPort: this._serialPort,
+      framebufferPort: this._framebufferPort,
+      control,
+    });
   }
 
   _requireEmulator() {
