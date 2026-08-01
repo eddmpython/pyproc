@@ -185,16 +185,29 @@
   전용 probe가 필요하다. 둘 다 계약 실태 표에 행으로 올렸다.
 - 트랩 단정도 좁혔다: 아무 예외나 통과하던 것을 함수 테이블/hiwire 서명으로 못 박았다.
 
+## 2026-08-01 (3): 워커 guest가 졸업 게이트 다섯을 전부 통과했다
+
+- 값 경계 이전 뒤 캠페인 probe가 **17/17 GREEN**이다. in-process 통제군 둘도 통과한다: 부활한
+  guest가 packet 표면을 그대로 쓴다(이 캠페인이 열어젖힌 그 결함이 src에서 닫혔다).
+- 워커도 턴 경계 펌프를 배웠다. 값 경계는 바이트를 턴 경계에서 옮기고, 워커에도 같은 두 모서리가
+  있으므로 in-process 어댑터와 같은 자리다(정직한 대칭이지 특수 케이스가 아니다).
+- **src 배치의 형태는 정해졌다(열린 질문 아님).** 후보가 `createRpcPort`를 import하는데 machine
+  층 법이 그것을 금지한다(guest는 순수 계약만, machine 밖 import는 composition만). 그래서 형태는
+  이미 출하 어댑터가 쓰는 것과 같다: **composition이 platform 조각을 주입한다**
+  (`createPyprocGuestFactory`가 bootSession/openMachine을 받는 것과 같은 패턴). 졸업 커밋은
+  `createWorkerHostedGuestFactory({ createPort, workerURL })` + 워커 파일 동거(같은 폴더 자산 URL)
+  + CI 레인 probe다.
+- 이식성 계약의 남은 부채도 하나 닫고 하나 좁혔다: 전용 probe(imagePortabilityProbe, CI 레인
+  6/6)가 감옥의 이미지 왕복을 물고, 핸들 유입구는 승인 지점 표로 고정됐다(우회가 새로 생기면 RED).
+
 ## NEXT
 
 ROI 순이다. 파일 분해류가 뒤인 이유는 그것이 유지보수이고, 앞의 하나는 북극성 축과 최고 ROI
 캠페인을 동시에 막고 있던 능력 문제의 마지막 조각이기 때문이다.
 
-1. **워커에 사는 guest 졸업**: 장치 절반이 닫혔으므로(값 경계 이전 완료) 남은 것은 워커 후보의
-   이미지 왕복을 같은 계약으로 다시 재는 일이다. 나머지 넷은 이미 섰다(host 무변경, head-of-line
-   제거, 장치 계약 횡단, 비용 명시).
-2. **이식성 계약의 남은 두 구멍**: setGlobal 밖 핸들 경로의 계수 또는 경계 명시, 감옥 이미지
-   왕복의 전용 CI probe(계약 실태 표의 두 행이 정본).
-3. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
+1. **워커 guest를 src로 배치**: 행동은 전부 증명됐다(17/17). 남은 것은 층 법 아래 놓는 일이다:
+   composition 주입 형태로 어댑터를 옮기고, 워커 파일을 같은 폴더에 두고, CI 레인 probe로 캠페인
+   probe의 단정을 옮긴 뒤 캠페인 폴더를 지운다.
+2. **`tests/run.mjs` 분해**: fake를 `tests/support/`로, property 5절을 `tests/contracts/`로,
    `[구조]` 641줄을 4분할. 법 게이트 스코프를 tests/apps/scripts로 확장(자기 위반 3곳 해소).
-4. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).
+3. **대형 파일 축 단위 분해**(kernelElection 545줄 5관심사, v86GuestAdapter, indexedDbMachineStore).

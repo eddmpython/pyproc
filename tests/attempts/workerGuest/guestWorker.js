@@ -81,15 +81,16 @@ onmessage = async (event) => {
       endpointId = message.endpointId || endpointId;
       network = message.network || network;
       attachPacketPort();
-      // Measured 2026-07-31: calling the freshly re-installed surface here is already fatal, so this
-      // reply deliberately does not touch it. The reading lives in the campaign README, and probing
-      // it from inside restore only poisons every later step with "already fatally failed".
       postMessage({ reqId, type: "ok", h0: await session._cp0Digest() });
       return;
     }
     if (!session) throw new Error("guestWorker: not booted");
     if (message.type === "run") {
+      // 값 경계 표면은 턴 경계에서 펌프가 돌아야 바이트가 건넌다(in-process 어댑터와 같은 계약).
+      // 워커에서도 같은 자리다: 파이썬이 스택에 있는 동안 run()을 다시 부를 수 없다.
+      packetPort?.pump();
       const value = session.rt.run(String(message.code || ""));
+      packetPort?.pump();
       // Values cross postMessage, so only structured-cloneable results return. That is a genuine
       // constraint of worker hosting and is recorded in the campaign rather than hidden by a cast.
       postMessage({ reqId, type: "ok", value: typeof value === "bigint" ? String(value) : value });
@@ -109,16 +110,13 @@ onmessage = async (event) => {
       return;
     }
     if (message.type === "snapshot") {
-      // A movable image cannot carry live JS proxies: the packet port's Python surface comes out
-      // first and goes back in after, exactly as the in-process adapter does it.
-      if (packetPort) packetPort.removePythonSurface();
-      try {
-        const image = await session.exportImage();
-        const bytes = new Uint8Array(await image.arrayBuffer());
-        postMessage({ reqId, type: "ok", bytes }, [bytes.buffer]);
-      } finally {
-        if (packetPort) packetPort.installPythonSurface();
-      }
+      // The surface is a value boundary now, so there is nothing to strip before an image: what
+      // used to be removed and re-installed here was a JS handle, and that is exactly what could
+      // not cross. One pump first, so frames Python already sent leave instead of riding along.
+      packetPort?.pump();
+      const image = await session.exportImage();
+      const bytes = new Uint8Array(await image.arrayBuffer());
+      postMessage({ reqId, type: "ok", bytes }, [bytes.buffer]);
       return;
     }
     if (message.type === "shutdown") {

@@ -213,10 +213,31 @@ yields a complete `Runtime`; this worker no longer needs to reach past it.
 
 ## 졸업 게이트
 
-Status after the second candidate run (2026-07-31): **1, 2, 3, 5 hold; 4 holds for the image and is
-blocked for the device by the shipped defect above.** The campaign stays open until that defect is
-root-caused, because closing it now would move a candidate into `src` while the path it depends on is
-known to be broken there.
+**Status 2026-08-01: all five hold. 17/17 GREEN.** The blocker is fixed in `src` (the packet surface
+is a value boundary now), so the two in-process controls pass as well:
+
+```
+CONTROL  packet surface callable after a portable restore: yes, on both control machines
+GRADUATION 2  idle 4ms   blocked 4ms   loop 1852ms
+GRADUATION 3  frame round-trip 11ms, while the other guest is inside its loop
+GRADUATION 4  portable image 10,315,405 bytes, revived in a fresh worker, device re-attached
+GRADUATION 5  per-request hop ~4ms
+```
+
+The worker had to learn the same turn-boundary pump the in-process adapter got, which is the honest
+shape: a value boundary moves bytes at turn boundaries, and a worker has the same two turn edges.
+
+### What the move into `src` requires (determined, not open)
+
+The candidate imports `createRpcPort` from `src/runtime/rpcChannel.js`. The machine layer forbids
+that: a guest consumes pure contracts, and only `composition` may import outside `src/machine/`
+(`tests/run.mjs` structure gate). The shape is therefore the one the shipped pyproc adapter already
+uses: **composition injects the platform piece**, exactly as `createPyprocGuestFactory` takes
+`bootSession`/`openMachine` today. So the graduation commit is
+`createWorkerHostedGuestFactory({ createPort, workerURL })` wired from `createWebComputer`, with the
+worker file beside the adapter (a same-folder asset URL, not an upward edge), plus a CI-lane probe
+that carries the assertions this campaign's probe holds. Nothing about the candidate's behaviour is
+in question any more; what remains is placing it under the layer law.
 
 Move to `src/` only when all of these hold, measured in a real browser:
 
