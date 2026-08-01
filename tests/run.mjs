@@ -22,18 +22,30 @@ import { assertWebMachineStructure } from "./support/structureWebMachine.mjs";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const gate = createGateCounter();
 const { check, checkAsync, section } = gate;
+const trackedResult = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], {
+  cwd: ROOT,
+  encoding: "utf8",
+  timeout: 10000,
+});
+if (trackedResult.status !== 0) throw new Error(trackedResult.stderr || "검사 표면을 읽지 못했다");
+const repositorySurfaceFiles = new Set(trackedResult.stdout.split("\0").filter(Boolean).map((file) => file.replaceAll("\\", "/")));
 
-// 재귀로 지정 확장자 파일 수집(node_modules 제외).
+// 재귀로 지정 확장자 파일 수집(node_modules와 생성 cache 제외).
 function collect(dir, exts, acc = []) {
   for (const entry of readdirSync(dir)) {
     // vendor/는 fetchEngine이 받은 서드파티 배포판(gitignore) = 우리 린트 표면이 아니다.
-    if (entry === "node_modules" || entry === "vendor" || entry.startsWith(".git")) continue;
+    // .cache/도 빌드 증거와 내려받은 release 문서가 쌓이는 gitignore 산출물이다. 이를 세면
+    // 로컬 검사 수가 깨끗한 CI보다 커져 파일 삭제 하한을 거짓으로 만족시킨다.
+    if (entry === "node_modules" || entry === "vendor" || entry === ".cache" || entry.startsWith(".git")) continue;
     const full = join(dir, entry);
     // assets/ 디렉터리는 엔진 배포판과 바이너리 fixture가 사는 곳(전부 gitignore)이다.
     // vendor/와 같은 이유로 린트 표면 밖이다. 파일 assets.js는 이 규칙에 걸리지 않는다.
     if (statSync(full).isDirectory() && entry === "assets") continue;
     if (statSync(full).isDirectory()) collect(full, exts, acc);
-    else if (exts.some((e) => entry.endsWith(e))) acc.push(full);
+    else {
+      const relative = full.slice(ROOT.length + 1).replaceAll("\\", "/");
+      if (repositorySurfaceFiles.has(relative) && exts.some((e) => entry.endsWith(e))) acc.push(full);
+    }
   }
   return acc;
 }
