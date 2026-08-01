@@ -31,6 +31,10 @@ export function findBrowser() {
 }
 
 // headless 실행 인자(프로필 경로는 호출자가 준다). CI에선 --no-sandbox(컨테이너 러너 호환).
+// PYPROC_GPU=1 실측 결과(2026-08-01): 이 스위치로는 어댑터가 안 잡힌다. Edge headless에
+// --enable-unsafe-swiftshader --use-angle=swiftshader를 줘도 requestAdapter()가 null을 준다.
+// 그러므로 GPU 축의 수동 probe 상한은 이 경로로 못 푼다(CI 하드웨어가 바뀌어야 한다).
+// 스위치는 남긴다: 러너가 바뀌면 먼저 시험할 자리가 여기다.
 // PYPROC_GPU=1이면 소프트웨어 WebGPU 어댑터(SwiftShader)를 켠다: GPU 능력 probe가 하드웨어
 // GPU 없는 CI에서도 정합성(업로드/컴퓨트/리드백)을 실측하기 위함. 속도(G2)는 소프트웨어라
 // 무의미하니 실 GPU 머신 몫(numerical-acceleration 02-phasing). 기본은 --disable-gpu(모든 게이트 불변).
