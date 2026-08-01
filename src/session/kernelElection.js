@@ -4,6 +4,7 @@
 // 리더 탭이 사라지면 다음 참여자가 같은 매니페스트로 부팅하고 MachineJournal의 마지막
 // commit 경계에서 힙과 /home/web을 함께 복구한다. SharedWorker와 달리 문서의 COI/SAB를 유지한다.
 import { bootSession } from "./session.js";
+import { appendOutcomeRecord, decodeOutcomeLog, encodeOutcomeLog, findOutcome } from "../state/outcomeLog.js";
 import { MachineJournal } from "../capabilities/journal/machineJournal.js";
 import { PyProcError } from "../runtime/errors.js";
 import { hexFromBytes, sha256Hex } from "../runtime/contentDigest.js";
@@ -82,6 +83,8 @@ export class KernelElection {
     this._seq = 0;
     this._pending = new Map();
     this._served = new Map();
+    // 세대가 나르는 결과 기록. 승계자가 "그 명령이 실행됐는가"에 답할 수 있게 하는 유일한 근거다.
+    this._outcomes = [];
     this._participants = new Map();
     this._readyWaiters = new Set();
     this._releaseLeader = null;
@@ -155,6 +158,13 @@ export class KernelElection {
         this._journal = new MachineJournal(this._session.rt, {
           dir: this._journalDir,
           reactive: this._session.reactive,
+          // 결과 기록은 힙과 같은 세대에 실린다: 그래야 "답이 내구적이다"와 "효과가 내구적이다"가
+          // 한 사실이 된다(세대 밖에 두면 승계자가 힙에 없는 효과의 결과를 답할 수 있다).
+          sidecar: {
+            id: "outcomes",
+            collect: () => (this._outcomes.length ? encodeOutcomeLog(this._outcomes) : null),
+            apply: (bytes) => { this._outcomes = bytes ? decodeOutcomeLog(bytes) : []; },
+          },
         });
         const recoveryStarted = now();
         recovered = await this._journal.recover();
@@ -281,6 +291,22 @@ export class KernelElection {
     if (message.targetLeaderId !== this.participantId || message.epoch !== this._epoch) return;
     const cached = this._served.get(message.requestId);
     if (cached) { this._post(cached); return; }
+    // 세대가 나른 기록이 있으면 그 명령은 이미 실행됐고 효과가 이 힙 안에 있다. 다시 돌리면
+    // 두 번 실행이므로, 기록으로 답한다(리더 신원과 epoch는 지금 것으로 채운다).
+    const recorded = findOutcome(this._outcomes, message.requestId);
+    if (recorded) {
+      this._post({
+        type: "rpcRes",
+        to: message.participantId,
+        requestId: message.requestId,
+        leaderId: this.participantId,
+        epoch: this._epoch,
+        ok: recorded.ok,
+        ...(recorded.ok ? { result: recorded.result } : { error: recorded.error, code: recorded.code, retryable: recorded.retryable }),
+        replayed: true,
+      });
+      return;
+    }
     let response;
     try {
       let result;
@@ -316,6 +342,14 @@ export class KernelElection {
         ...errorPayload(error),
       };
     }
+    // 기록은 응답 직전에 남긴다. 다음 커밋이 이것을 세대에 싣고, 그때부터 승계자가 답할 수 있다.
+    this._outcomes = appendOutcomeRecord(this._outcomes, {
+      requestId: message.requestId,
+      epoch: this._epoch,
+      action: message.action,
+      ok: response.ok === true,
+      ...(response.ok === true ? { result: response.result } : { error: response.error, code: response.code, retryable: response.retryable === true }),
+    });
     this._served.set(message.requestId, response);
     if (this._served.size > SERVED_CACHE_MAX) this._served.delete(this._served.keys().next().value);
     this._post(response);

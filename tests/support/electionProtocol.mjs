@@ -97,4 +97,49 @@ export async function assertElectionProtocol(check, checkAsync) {
     }
     if (ctrl._served.size !== 256) throw new Error(`LRU 축출이 안 됨(size ${ctrl._served.size})`);
   });
+
+  // S5: 세대가 나른 결과로 답한다. 승계자는 새 커널이라 _served가 비어 있지만, 세대가 결과를
+  // 실어 왔으면 그 명령은 이미 실행됐고 효과가 이 힙 안에 있다. 다시 돌리면 두 번 실행이다.
+  await checkAsync("election: 세대가 나른 결과로 답하고 다시 실행하지 않는다", async () => {
+    const ctrl = makeCtrl();
+    ctrl._epoch = 7; ctrl._servingLeader = true; ctrl._role = "leader";
+    let runCount = 0;
+    ctrl._session = { rt: { run: () => { runCount++; return 1; }, runAsync: async () => { runCount++; return 1; } } };
+    const posted = [];
+    ctrl._chan = { postMessage: (message) => posted.push(message) };
+    // 승계자가 부활한 상태를 흉내낸다: 결과 기록만 있고 served 캐시는 비었다.
+    ctrl._outcomes = [{ requestId: "r/1/1", epoch: 3, action: "run", ok: true, result: 42 }];
+    await ctrl._serve({ type: "rpcReq", action: "run", code: "1", requestId: "r/1/1", participantId: "caller", targetLeaderId: ctrl.participantId, epoch: 7 });
+    if (runCount !== 0) throw new Error(`기록이 있는데 다시 실행했다(runCount ${runCount})`);
+    const answer = posted.find((message) => message.requestId === "r/1/1");
+    if (!answer || answer.ok !== true || answer.result !== 42) throw new Error(JSON.stringify(answer));
+    // 리더 신원과 epoch는 지금 것이어야 한다: 호출자의 fence가 그것으로 응답을 받아들인다.
+    if (answer.leaderId !== ctrl.participantId || answer.epoch !== 7) throw new Error(`fence 불일치: ${answer.leaderId}/${answer.epoch}`);
+    if (answer.replayed !== true) throw new Error("기록으로 답한 사실이 응답에 없다");
+  });
+
+  // S6: 기록이 없으면 실행하고 남긴다. 기록이 없다는 것은 효과가 이 세대에 없다는 뜻이므로
+  // 재실행이 곧 정확히 한 번이다(그 두 갈래가 exactly-once의 전부다).
+  await checkAsync("election: 기록이 없으면 실행하고 그 결과를 남긴다", async () => {
+    const ctrl = makeCtrl();
+    ctrl._epoch = 2; ctrl._servingLeader = true; ctrl._role = "leader";
+    let runCount = 0;
+    ctrl._session = { rt: { run: () => { runCount++; return 5; }, runAsync: async () => { runCount++; return 5; } } };
+    ctrl._chan = { postMessage: () => {} };
+    await ctrl._serve({ type: "rpcReq", action: "run", code: "1", requestId: "n/1/1", participantId: "caller", targetLeaderId: ctrl.participantId, epoch: 2 });
+    if (runCount !== 1) throw new Error(`실행 횟수 ${runCount}`);
+    const recorded = ctrl._outcomes.find((entry) => entry.requestId === "n/1/1");
+    if (!recorded || recorded.ok !== true || recorded.result !== 5) throw new Error(JSON.stringify(ctrl._outcomes));
+  });
+
+  // S7: 실패도 기록된다. 실패를 안 남기면 승계자가 그 명령을 다시 돌려 "두 번 실행"이 된다.
+  await checkAsync("election: 실패한 명령의 결과도 기록에 남는다", async () => {
+    const ctrl = makeCtrl();
+    ctrl._epoch = 2; ctrl._servingLeader = true; ctrl._role = "leader";
+    ctrl._session = { rt: { run: () => { throw new Error("boom"); }, runAsync: async () => { throw new Error("boom"); } } };
+    ctrl._chan = { postMessage: () => {} };
+    await ctrl._serve({ type: "rpcReq", action: "run", code: "1", requestId: "f/1/1", participantId: "caller", targetLeaderId: ctrl.participantId, epoch: 2 });
+    const recorded = ctrl._outcomes.find((entry) => entry.requestId === "f/1/1");
+    if (!recorded || recorded.ok !== false) throw new Error(JSON.stringify(ctrl._outcomes));
+  });
 }
