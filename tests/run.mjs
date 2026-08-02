@@ -159,7 +159,7 @@ console.log("pyproc 게이트\n");
 // 1) 공개 표면: index.js가 기대 export를 내는가.
 section("표면");
 const api = await import(pathToFileURL(join(ROOT, "index.js")).href);
-const productConsumerCoverage = await import(pathToFileURL(join(ROOT, "tests", "browser", "productConsumerCoverage.mjs")).href);
+const installedPackageCoverage = await import(pathToFileURL(join(ROOT, "tests", "browser", "installedPackageCoverage.mjs")).href);
 const { runMemoryMachineStoreContract } = await import(pathToFileURL(join(ROOT, "tests", "webMachine", "contracts", "machineStoreContract.mjs")).href);
 const { runDurableComputerContract } = await import(pathToFileURL(join(ROOT, "tests", "webMachine", "contracts", "durableComputerContract.mjs")).href);
 // porcelain 일격(state-kernel 7b) 이후 루트는 정확히 6개다: 진입 동사 2(boot,
@@ -1237,10 +1237,10 @@ check("속도 비교 벤치 계약 고정", () => {
   for (const term of ["--candidate", "--scenario", "--sample", "--command", "--source", "--raw-output", "--raw-output-file", "--profile", "--warmup-count", "--browser-headless", "--na", "scenarioDefinition", "measurement", "environment", "evidence", "rawOutputSidecar", "summarizePairedLatencyBench", "isProcessMapBenchGreen", "summarizeLatencyBench", "parseLatencySample", "parseMachineResumeSample", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "parseImmortalMachineSample", "summarizeImmortalMachineBench", "isImmortalMachineBenchGreen", "normalizeBenchArtifact"]) {
     if (!benchArtifact.includes(term)) throw new Error(`benchArtifact.mjs 필수 항목 누락: ${term}`);
   }
-  const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
+  const installedPackageGate = readFileSync(join(ROOT, "tests", "browser", "installedPackageGate.mjs"), "utf8");
   const immortalProductGate = readFileSync(join(ROOT, "tests", "browser", "immortalProductGate.js"), "utf8");
   for (const term of ["machineExportMs", "machineOpenMs", "machineMB", "machineResumeRows"]) {
-    if (!productConsumer.includes(term)) throw new Error(`productConsumer.mjs S4 timing 누락: ${term}`);
+    if (!installedPackageGate.includes(term)) throw new Error(`installedPackageGate.mjs S4 timing 누락: ${term}`);
   }
   for (const term of ["immortalInitialReadyMs", "immortalRpcP50Ms", "immortalRpcP90Ms", "immortalFailoverMs", "immortalRecoveryMs", "immortalColdReopenMs"]) {
     if (!immortalProductGate.includes(term)) throw new Error(`immortalProductGate.js S5 timing 누락: ${term}`);
@@ -1529,8 +1529,8 @@ check("package.json bin -> assetManifest CLI", () => {
   if (!pkg.files.includes("scripts/assetManifest.mjs")) throw new Error("files에 assetManifest.mjs 누락");
 });
 check("package.json 소비자 게이트 스크립트", () => {
-  if (pkg.scripts?.["test:package"] !== "node tests/packageConsumer.mjs") throw new Error("test:package 누락");
-  if (pkg.scripts?.["test:consumer"] !== "node tests/browser/productConsumer.mjs") throw new Error("test:consumer 누락");
+  if (pkg.scripts?.["test:package"] !== "node tests/packageGate.mjs") throw new Error("test:package 누락");
+  if (pkg.scripts?.["test:installed"] !== "node tests/browser/installedPackageGate.mjs") throw new Error("test:installed 누락");
 });
 check("d.ts가 PyProc 샤딩 옵션 계약을 선언", () => {
   if (!dts.includes("export interface PyProcShardOptions extends PyProcMapOptions")) throw new Error("PyProcShardOptions 누락");
@@ -1651,15 +1651,25 @@ check("공개 표면은 명명된 외부 저장소를 기록하지 않는다", (
     String.fromCodePoint(0xc18c, 0xbe44, 0x20, 0xc81c, 0xd488),
     String.fromCodePoint(0xc18c, 0xbe44, 0x20, 0xacc4, 0xc57d),
   );
+  const forbiddenLegacyNames = [
+    "dGVzdDpjb25zdW1lcg==",
+    "cHJvZHVjdGNvbnN1bWVy",
+    "cGFja2FnZWNvbnN1bWVy",
+    "Y29uc3VtZXJhZG9wdA==",
+  ].map((value) => Buffer.from(value, "base64").toString("utf8"));
   const textExtensions = [".md", ".js", ".mjs", ".ts", ".html", ".json", ".yml", ".yaml", ".css", ".sh"];
   const assertIndependentSurface = (entries) => {
     for (const [path, text] of entries) {
       const lowered = text.toLowerCase();
+      const loweredPath = path.toLowerCase();
       if (forbiddenNames.some((name) => lowered.includes(name))) {
         throw new Error(`명명된 외부 저장소가 남았다: ${path}`);
       }
       if (forbiddenFraming.some((term) => lowered.includes(term))) {
         throw new Error(`외부 지원 프레이밍이 남았다: ${path}`);
+      }
+      if (forbiddenLegacyNames.some((term) => lowered.includes(term) || loweredPath.includes(term))) {
+        throw new Error(`레거시 호환 식별자가 남았다: ${path}`);
       }
     }
   };
@@ -1675,6 +1685,10 @@ check("공개 표면은 명명된 외부 저장소를 기록하지 않는다", (
   try { assertIndependentSurface([["fixture.md", forbiddenFraming[0]]]); }
   catch { caught = true; }
   if (!caught) throw new Error("외부 지원 프레이밍 음성 fixture를 놓쳤다");
+  caught = false;
+  try { assertIndependentSurface([[forbiddenLegacyNames[0], "fixture"]]); }
+  catch { caught = true; }
+  if (!caught) throw new Error("레거시 호환 식별자 음성 fixture를 놓쳤다");
 });
 check("durable RPC 상태표와 공개 투영이 한 의미다", () => {
   const paths = [
@@ -1781,15 +1795,15 @@ check("Python-Linux 교차 엔진 packet 경로가 cold restore까지 실증", (
 check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 정합", () => {
   const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
   const testing = readFileSync(join(ROOT, "docs", "operations", "testing.md"), "utf8");
-  const packageConsumer = readFileSync(join(ROOT, "tests", "packageConsumer.mjs"), "utf8");
-  const productConsumer = readFileSync(join(ROOT, "tests", "browser", "productConsumer.mjs"), "utf8");
+  const packageGate = readFileSync(join(ROOT, "tests", "packageGate.mjs"), "utf8");
+  const installedPackageGate = readFileSync(join(ROOT, "tests", "browser", "installedPackageGate.mjs"), "utf8");
   const immortalGate = readFileSync(join(ROOT, "tests", "browser", "immortalProductGate.js"), "utf8");
   const immortalParticipant = readFileSync(join(ROOT, "tests", "browser", "immortalProductParticipant.html"), "utf8");
-  const expectedTable = productConsumerCoverage.renderProductConsumerCoverageMarkdown();
-  if (!contract.includes(expectedTable)) throw new Error("contract.md 설치 패키지 coverage 표가 productConsumerCoverage.mjs 렌더링과 불일치");
-  if (!productConsumer.includes("productConsumerCoverageManifest")) throw new Error("productConsumer.mjs가 coverage manifest SSOT를 import하지 않음");
-  if (!productConsumer.includes("coverageManifest")) throw new Error("productConsumer.mjs가 coverage manifest를 report하지 않음");
-  if (!productConsumer.includes("installed-package coverage manifest")) throw new Error("productConsumer.mjs가 coverage manifest report 검증을 출력하지 않음");
+  const expectedTable = installedPackageCoverage.renderInstalledPackageCoverageMarkdown();
+  if (!contract.includes(expectedTable)) throw new Error("contract.md 설치 패키지 coverage 표가 installedPackageCoverage.mjs 렌더링과 불일치");
+  if (!installedPackageGate.includes("installedPackageCoverageManifest")) throw new Error("installedPackageGate.mjs가 coverage manifest SSOT를 import하지 않음");
+  if (!installedPackageGate.includes("coverageManifest")) throw new Error("installedPackageGate.mjs가 coverage manifest를 report하지 않음");
+  if (!installedPackageGate.includes("installed-package coverage manifest")) throw new Error("installedPackageGate.mjs가 coverage manifest report 검증을 출력하지 않음");
   // state-kernel 7b 표면: 루트 porcelain + 핸들 어휘 + pyproc/history 서명 코어.
   for (const name of [
     "boot",
@@ -1809,7 +1823,7 @@ check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 �
     "proc",
   ]) {
     if (!mentionsSymbol(contract, name)) throw new Error(`contract.md consumer coverage export 누락: ${name}`);
-    if (!productConsumer.includes(name)) throw new Error(`productConsumer.mjs export 사용 누락: ${name}`);
+    if (!installedPackageGate.includes(name)) throw new Error(`installedPackageGate.mjs export 사용 누락: ${name}`);
   }
   for (const term of [
     "pyproc/assets",
@@ -1819,7 +1833,7 @@ check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 �
     "pyproc-assets",
     "--copy-to",
   ]) {
-    if (!packageConsumer.includes(term)) throw new Error(`packageConsumer.mjs 설치 패키지 표면 검사 누락: ${term}`);
+    if (!packageGate.includes(term)) throw new Error(`packageGate.mjs 설치 패키지 표면 검사 누락: ${term}`);
   }
   for (const term of [
     "installed worker graph SRI verifies",
@@ -1834,7 +1848,7 @@ check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 �
     "installed product exports signed .pymachine with home",
     "installed product opens trusted .pymachine and resumes resources",
   ]) {
-    if (!productConsumer.includes(term)) throw new Error(`productConsumer.mjs coverage check 누락: ${term}`);
+    if (!installedPackageGate.includes(term)) throw new Error(`installedPackageGate.mjs coverage check 누락: ${term}`);
   }
   for (const term of [
     "openPersistentMachine",
@@ -1849,7 +1863,7 @@ check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 �
   ]) {
     if (!immortalGate.includes(term) && !immortalParticipant.includes(term)) throw new Error(`immortal installed-package coverage 누락: ${term}`);
   }
-  if (!productConsumer.includes("runImmortalProductGate")) throw new Error("productConsumer.mjs가 immortal product gate를 실행하지 않음");
+  if (!installedPackageGate.includes("runImmortalProductGate")) throw new Error("installedPackageGate.mjs가 immortal product gate를 실행하지 않음");
   if (!immortalParticipant.includes('from "pyproc"')) throw new Error("immortal participant가 설치 패키지 root export를 쓰지 않음");
   if (!testing.includes("설치 패키지 브라우저 게이트 coverage 표")) throw new Error("testing.md 설치 패키지 coverage 표 포인터 누락");
 });
@@ -1884,7 +1898,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
     "../../examples/terminal.html",
     "../../examples/machine.html",
     "../../examples/immortal.html",
-    "../../tests/browser/productConsumer.mjs",
+    "../../tests/browser/installedPackageGate.mjs",
   ];
   for (const target of runnableLinks) {
     if (!matrix.includes(`](${target})`)) throw new Error(`능력 매트릭스 실행 표면 링크 누락: ${target}`);
@@ -2471,12 +2485,12 @@ check("브라우저 게이트가 CLI asset manifest를 소비", () => {
     throw new Error("gate.html이 Service Worker 등록 경로와 SW coreIntegrity를 검증하지 않음");
   if (!gateSrc.includes("Runtime -> SyscallBridge 상속 거부") || !gateSrc.includes("assetIntegrity 상속 childWorker"))
     throw new Error("gate.html이 Runtime assetIntegrity 상속 경로를 검증하지 않음");
-  if (!ciSrc.includes("npm run test:consumer")) throw new Error("CI가 제품 소비자 브라우저 게이트를 실행하지 않음");
+  if (!ciSrc.includes("npm run test:installed")) throw new Error("CI가 설치 패키지 브라우저 게이트를 실행하지 않음");
 });
-check("패키지 소비자가 공개 표면과 설치된 pyproc-assets를 사용", () => {
-  const r = spawnSync(process.execPath, ["tests/packageConsumer.mjs"], { cwd: ROOT, encoding: "utf8" });
+check("설치 패키지 게이트가 공개 표면과 pyproc-assets를 사용", () => {
+  const r = spawnSync(process.execPath, ["tests/packageGate.mjs"], { cwd: ROOT, encoding: "utf8" });
   if (r.status !== 0) throw new Error(`${r.stdout ?? ""}\n${r.stderr ?? ""}`.trim().slice(-4000));
-  if (!r.stdout.includes("package consumer ok:")) throw new Error("package consumer 완료 신호 없음");
+  if (!r.stdout.includes("package gate ok:")) throw new Error("package gate 완료 신호 없음");
 });
 // 워커 호스팅 계약: 워커에는 document가 없어 엔진 스크립트를 태그로 심을 수 없다. 런타임은
 // loadPyodide 옵션으로 그 경로를 열어놨고 porcelain boot의 옵션 허용 목록과 BootOptions 타입도
@@ -3228,12 +3242,12 @@ section("CI 배관");
         throw new Error("Edge 설치 확인이 fail-closed가 아님");
       }
 
-      const requiredChrome = ["npm run test:browser", "npm run test:consumer", "npm run test:golden"];
+      const requiredChrome = ["npm run test:browser", "npm run test:installed", "npm run test:golden"];
       const requiredEdge = [
         "npm ci",
         "npm test",
         "npm run test:browser",
-        "npm run test:consumer",
+        "npm run test:installed",
         "npm run test:golden",
         "npm run test:web-machine",
       ];

@@ -1,5 +1,5 @@
 // harness.mjs - 브라우저 게이트 공용 조각. 브라우저를 띄우는 모든 게이트(run/examples/
-// productConsumer/speedBench/mcpSandboxServer)가 같은 탐색과 같은 수명주기를 쓴다.
+// installedPackageGate/speedBench/mcpSandboxServer)가 같은 탐색과 같은 수명주기를 쓴다.
 //
 // 왜 수명주기까지 여기인가: spawn -> 대기 -> 종료 -> 프로필 삭제가 다섯 벌로 복제돼 있었고
 // 이미 갈라져 있었다(프로필을 mkdtemp로 만드는 곳과 pid 고정 경로로 만드는 곳, 종료를

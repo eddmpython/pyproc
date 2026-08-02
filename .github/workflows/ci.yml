@@ -39,8 +39,8 @@ jobs:
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
           PYPROC_GATE_OUT: gateMeasurements.json
-      # 제품 소비자 게이트: npm pack으로 설치한 pyproc을 브라우저 앱이 public specifier로 import한다.
-      - run: npm run test:consumer
+      # 설치 패키지 게이트: npm pack으로 설치한 pyproc을 격리 브라우저가 public specifier로 import한다.
+      - run: npm run test:installed
       - run: npm run test:golden
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -93,7 +93,7 @@ jobs:
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
 
-  # 실제 Microsoft Edge의 Windows 배포 경계. 설치 tarball 소비자/골든 경로와 핵심 브라우저
+  # 실제 Microsoft Edge의 Windows 배포 경계. 설치 tarball/골든 경로와 핵심 브라우저
   # 계약을 Chrome과 독립해 문다. examples는 Chrome의 동일 쇼케이스를 그대로 반복해 비용이
   # 커서 제외하고, WASI/v86 실행 자산 레인은 Ubuntu 전용 job이 계속 소유한다.
   edge-release:
@@ -119,7 +119,7 @@ jobs:
         env:
           PYPROC_GATE_OUT: edgeGateMeasurements.json
       # npm pack 설치물의 public specifier와 골든 워크플로를 실제 Edge에서 검증한다.
-      - run: npm run test:consumer
+      - run: npm run test:installed
       - run: npm run test:golden
       # 무자산 Web Machine 계약만 실행한다. 실제 WASI/v86 guest는 Ubuntu 레인이 소유한다.
       - run: npm run test:web-machine

@@ -163,14 +163,14 @@ After a revival - journal, session, or image open - process resources such as fi
 ## Contract verification
 
 - `npm test` checks that `package.json` exports expose only approved stable specifiers, that the public examples consume only the root API or subpath exports, and that `index.d.ts` covers the public type contract.
-- `npm run test:consumer` verifies the installed-package contract from an isolated browser fixture that has no repo-relative imports and exposes only the installed `node_modules/pyproc`.
+- `npm run test:installed` verifies the installed-package contract from an isolated browser fixture that has no repo-relative imports and exposes only the installed `node_modules/pyproc`.
 - That installed-package browser gate exercises `DeviceFs` file devices, the `JobControl` job lifecycle, the `MachineContainer` child-machine lifecycle, `MachineJournal` commit and recover, a force-removed `open({ persistent })` leader across three independent browsing contexts with a cold reopen of heap plus `/home/web` plus prepared environment, the permission-jail manifest, signed `.pymachine` export and open, trusted public key and wrong-key rejection, signer fingerprints, and reopening a SQLite connection from `/home/web/resume.py`.
 - `pyproc/runtime` is the public Runtime wrapper from 0.0.11. The internal `runtime.js` core handles only the engine wrapper and `Runtime.fs`; the composition root `src/composition/runtimeApi.js` installs the `runtimeBindings.js` registry to provide opt-in capability factories such as `enableReactive`.
 - The `restoreLive` execution boundary is machine-verified. Respect the boundary and restore is immediate with zero rehashing; violate it and the violation is detected automatically and promoted to the rehash path. Check which path ran through the returned `rehashed`.
 
 ### Installed-package browser gate coverage
 
-`npm run test:package` and `npm run test:consumer` look only at the installed tarball's public specifiers, never at doc links or repo-relative imports. This table is the public surface actually verified against the installed package. The table data is canonical in [productConsumerCoverage.mjs](../../tests/browser/productConsumerCoverage.mjs).
+`npm run test:package` and `npm run test:installed` look only at the installed tarball's public specifiers, never at doc links or repo-relative imports. This table is the public surface actually verified against the installed package. The table data is canonical in [installedPackageCoverage.mjs](../../tests/browser/installedPackageCoverage.mjs).
 
 | Gate | Exposed specifiers | Actual public surface | Contract verified |
 | --- | --- | --- | --- |

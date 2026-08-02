@@ -1,6 +1,6 @@
 # 테스트 - 게이트와 브라우저 실측
 
-WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다. 그래서 검증은 5단이다: Node 구조 게이트(커밋마다), 브라우저 런타임 게이트(공개 표면의 실동작), **브라우저 제품 소비자 게이트(설치 패키지 소비)**, **예제 실행 게이트(데모 페이지 완주)**, 수동 실측(사람 눈 확인·벤치). 자동 게이트는 CI에서 매 푸시마다 돈다.
+WASM 런타임 특성상 진짜 검증은 브라우저에서만 가능하다. 그래서 검증은 5단이다: Node 구조 게이트(커밋마다), 브라우저 런타임 게이트(공개 표면의 실동작), **설치 패키지 브라우저 게이트**, **예제 실행 게이트(데모 페이지 완주)**, 수동 실측(사람 눈 확인·벤치). 자동 게이트는 CI에서 매 푸시마다 돈다.
 
 ## 1. Node 구조 게이트 (`npm test`)
 
@@ -23,7 +23,7 @@ npm run test:contracts  # tests/contracts/ suite 자동 발견
 - **docs 정본 경계**: 지속 계약은 `docs/`, 실행 증거는 `tests/`, 구현은 `src/`에 있고 삭제된 계획 경로를 공개 문서가 다시 참조하지 않는가.
 - **worker 계약**: `src/processOs/worker.js`가 boot/task 프로토콜을 처리하는가(텍스트 검사. Node에서 import 불가).
 - **실행 자산 manifest**: `getPyProcAssetManifest()`와 `pyproc-assets` CLI가 Worker/SW graph + SRI manifest를 만들고, `--copy-to`로 필요한 파일을 복사하며, 브라우저 게이트 서버가 그 CLI 산출물을 `/pyproc-assets.json`으로 제공하고 `verifyPyProcAssetIntegrity()`가 잘못된 SRI를 spawn 전 거부하는가.
-- **패키지 소비자 계약**: `npm pack` tarball을 임시 앱에 설치한 뒤 `pyproc`, `pyproc/assets`, 설치된 `pyproc-assets` bin만으로 public import, graph SRI manifest, `--copy-to` 복사가 성립하는가(`npm run test:package`로 단독 실행 가능).
+- **설치 패키지 계약**: `npm pack` tarball을 격리 fixture에 설치한 뒤 `pyproc`, `pyproc/assets`, 설치된 `pyproc-assets` bin만으로 public import, graph SRI manifest, `--copy-to` 복사가 성립하는가(`npm run test:package`로 단독 실행 가능).
 
 새 규칙을 만들면 가능한 한 여기(또는 `.githooks`)에 기계 가드를 짝지어 추가한다.
 
@@ -74,11 +74,11 @@ COOP/COEP 서버를 임시 포트로 띄우고, 로컬 Chromium 계열 브라우
 
 런타임 동작을 바꾸는 커밋은 이 게이트 green이 조건이다. 부팅/복원/fork/map 계측은 해당 CI run과 필요하면 `bench:artifact` raw JSON에 남긴다. 현재 제품 주장은 `tests/northStar.mjs`와 이 게이트가 소유하고, 과거 측정과 변경 이유는 git history가 보존한다. CI에서도 같은 게이트가 돈다(`.github/workflows/ci.yml`).
 
-## 3. 브라우저 제품 소비자 게이트 (`npm run test:consumer`)
+## 3. 설치 패키지 브라우저 게이트 (`npm run test:installed`)
 
 ```bash
-npm run test:consumer
-PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:consumer    # 자가 호스팅 엔진으로 설치 패키지 소비 검사
+npm run test:installed
+PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:installed    # 자가 호스팅 엔진으로 설치 패키지 검사
 ```
 
 `npm pack`으로 만든 tarball을 임시 앱에 설치한 뒤, 브라우저 import map에서 `pyproc`와 `pyproc/assets` public specifier만 노출한다. 그 앱이 설치된 `pyproc-assets`로 `/node_modules/pyproc/` 기준 SRI manifest를 만들고, headless Chromium에서 다음을 검증한다:
@@ -161,14 +161,14 @@ npm run bench:compare -- .tmp/pyproc-s2.json --out .tmp/s2-compare.md
 S3 browser server는 설치 패키지 브라우저 게이트의 `VirtualOrigin` POST 왕복 시간을 latency sample로 남긴다:
 
 ```bash
-npm run bench:artifact -- --scenario S3 --candidate pyproc --command "npm run test:consumer timings.virtualOriginMs" --sample 15,0 --sample 18,0 --sample 14,0 --out .tmp/pyproc-s3.json
+npm run bench:artifact -- --scenario S3 --candidate pyproc --command "npm run test:installed timings.virtualOriginMs" --sample 15,0 --sample 18,0 --sample 14,0 --out .tmp/pyproc-s3.json
 npm run bench:compare -- .tmp/pyproc-s3.json --out .tmp/s3-compare.md
 ```
 
 S4 machine resume는 설치 패키지 브라우저 게이트의 signed `.pymachine` export/open/resume 값을 sample로 남긴다:
 
 ```bash
-npm run bench:artifact -- --scenario S4 --candidate pyproc --command "npm run test:consumer timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows" --sample 76,2264,10.8,2,0 --sample 75,2346,10.8,2,0 --sample 80,2136,10.8,2,0 --out .tmp/pyproc-s4.json
+npm run bench:artifact -- --scenario S4 --candidate pyproc --command "npm run test:installed timings.machineExportMs/machineOpenMs/machineMB/machineResumeRows" --sample 76,2264,10.8,2,0 --sample 75,2346,10.8,2,0 --sample 80,2136,10.8,2,0 --out .tmp/pyproc-s4.json
 npm run bench:compare -- .tmp/pyproc-s4.json --out .tmp/s4-compare.md
 ```
 
@@ -189,4 +189,4 @@ npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/webvm-s1l.json --out .tmp/s1l
 ## 6. 개념증명 실측 (tests/attempts/)
 
 신규 능력의 실측은 examples가 아니라 `tests/attempts/<카테고리>/`의 probe에서 한다. probe도 같은 서버로 띄운다(`http://localhost:8788/tests/attempts/...`). 결과 기록 형식은 [tests/attempts/README.md](../../tests/attempts/README.md) 참조.
-`runtimeParity/virtualOriginBoundaryProbe.html`처럼 "지원하지 않는 벽"을 제품 계약으로 고정하는 probe도 여기에 둔다. 이런 probe는 기능 확장이 아니라 소비자가 쿠키 세션, WebSocket upgrade, 청크 스트리밍 같은 플랫폼 벽에 의존하지 않도록 막는 compatibility lab이다.
+`runtimeParity/virtualOriginBoundaryProbe.html`처럼 "지원하지 않는 벽"을 패키지 계약으로 고정하는 probe도 여기에 둔다. 이런 probe는 기능 확장이 아니라 호출 코드가 쿠키 세션, WebSocket upgrade, 청크 스트리밍 같은 플랫폼 벽에 의존하지 않도록 막는 compatibility lab이다.

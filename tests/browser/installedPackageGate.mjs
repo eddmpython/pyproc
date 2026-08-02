@@ -1,4 +1,4 @@
-// tests/browser/productConsumer.mjs - 설치된 npm 패키지의 공개 표면을 검증하는 브라우저 게이트.
+// tests/browser/installedPackageGate.mjs - 설치된 npm 패키지의 공개 표면을 검증하는 브라우저 게이트.
 // repo 상대 import가 아니라 npm pack으로 설치된 node_modules/pyproc만 브라우저에 노출한다.
 import { createServer } from "node:http";
 import { existsSync, rmSync } from "node:fs";
@@ -7,10 +7,10 @@ import { join } from "node:path";
 import { safeJoin, sendFile } from "../../scripts/staticServer.mjs";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 import { launchBrowser } from "./harness.mjs";
-import { productConsumerCoverageManifest } from "./productConsumerCoverage.mjs";
+import { installedPackageCoverageManifest } from "./installedPackageCoverage.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
-const COVERAGE_MANIFEST = productConsumerCoverageManifest();
+const COVERAGE_MANIFEST = installedPackageCoverageManifest();
 const COVERAGE_MANIFEST_JSON = JSON.stringify(COVERAGE_MANIFEST);
 
 // 라우팅만 이 게이트 고유다: 저장소 루트를 서빙하면 안 된다(설치된 node_modules/pyproc만
@@ -28,7 +28,7 @@ function createProductServer(appDir, publicDir, onReport) {
     }
 
     let file = null;
-    if (url.pathname === "/") file = join(publicDir, "productConsumer.html");
+    if (url.pathname === "/") file = join(publicDir, "installedPackageGate.html");
     else if (url.pathname === "/pyproc-assets.json") file = join(publicDir, "pyproc-assets.json");
     else if (url.pathname.startsWith("/node_modules/")) file = safeJoin(appDir, url.pathname);
     else if (url.pathname.startsWith("/vendor/pyodide/")) file = safeJoin(ROOT, url.pathname);
@@ -248,7 +248,7 @@ const html = `<!DOCTYPE html>
         virtualJson.gate === "installed-virtual-origin",
         timings.virtualOriginMs + "ms");
 
-      // The virtual origin is a real URL, and a consumer will assume everything a real origin does.
+      // The virtual origin is a real URL, so callers may assume everything a real origin does.
       // Three of those assumptions are false, and each was a boundary nobody had measured. A limit
       // that is not gated is a limit that gets discovered by a product, in production, as a bug.
 
@@ -280,7 +280,7 @@ const html = `<!DOCTYPE html>
 
       // 3) Streaming. The ASGI helper accumulates every http.response.body chunk and answers once,
       // so more_body is accepted but not honoured on the wire: an SSE endpoint delivers its whole
-      // stream in one piece, after the handler returns. A consumer that expects incremental delivery
+      // stream in one piece, after the handler returns. A caller that expects incremental delivery
       // gets correctness without liveness, which is exactly the kind of surprise a gate should own.
       const streamResp = await fetch("/pyproc/product/stream");
       const reader = streamResp.body.getReader();
@@ -548,7 +548,7 @@ const { tmp, appDir } = await installPackedPyProc("pyprocProduct-");
 try {
   const publicDir = join(appDir, "public");
   await mkdir(publicDir, { recursive: true });
-  await writeFile(join(publicDir, "productConsumer.html"), html);
+  await writeFile(join(publicDir, "installedPackageGate.html"), html);
   await writeFile(join(publicDir, "immortalProductParticipant.html"), await readFile(join(ROOT, "tests", "browser", "immortalProductParticipant.html")));
   await writeFile(join(publicDir, "immortalProductGate.js"), await readFile(join(ROOT, "tests", "browser", "immortalProductGate.js")));
 

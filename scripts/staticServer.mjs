@@ -7,7 +7,7 @@
 // scripts/mcpSandboxServer). 진열장(examples/)에 두면 제품 데모가 검증 인프라의 의존 대상이
 // 되는 방향 역전이 생긴다. 이건 개발 도구지 예제가 아니다.
 //
-// 조각(MIME/COI_HEADERS/safeJoin/sendFile)을 따로 내는 이유: productConsumer 게이트는
+// 조각(MIME/COI_HEADERS/safeJoin/sendFile)을 따로 내는 이유: installedPackage 게이트는
 // 저장소 루트를 서빙하면 안 된다(설치된 node_modules만 노출하는 것이 그 게이트의 존재 이유다).
 // 라우팅은 각자 하되 MIME 표와 COI 헤더와 경로 탈출 방어는 한 곳에서 가져간다.
 import { createServer } from "node:http";

@@ -517,12 +517,12 @@ npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm inst
 
 ```bash
 npm test              # Node 구조 / 린트 게이트 (의존성 0)
-npm run test:consumer # 설치 패키지 브라우저 게이트
+npm run test:installed # 설치 패키지 브라우저 게이트
 npm run test:browser  # headless Chromium 런타임 게이트: 부팅 / 리액티브 / fork / map (의존성 0)
 npm run serve         # 수동 검증·벤치용 COOP/COEP 정적 서버
 ```
 
-WASM 런타임이라 진짜 검증은 브라우저에서만 한다. `test:browser`는 repo 공개 표면을 보고, `test:consumer`는 임시 브라우저 앱 안에서 설치된 npm 패키지와 Service Worker + `VirtualOrigin` URL 동선을 검증한다. 둘 다 CI에서 돈다. 지속되는 제품·운영 결정은 [docs/](docs/README.md), 실행 정본은 `src/`와 `tests/`, 과거 결정은 git 이력, 기여 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md)에 있다.
+WASM 런타임이라 진짜 검증은 브라우저에서만 한다. `test:browser`는 repo 공개 표면을 보고, `test:installed`는 격리 브라우저 fixture에서 설치된 npm 패키지와 Service Worker + `VirtualOrigin` URL 동선을 검증한다. 둘 다 CI에서 돈다. 지속되는 제품·운영 결정은 [docs/](docs/README.md), 실행 정본은 `src/`와 `tests/`, 과거 결정은 git 이력, 기여 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md)에 있다.
 
 ## 라이선스
 

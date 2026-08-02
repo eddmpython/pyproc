@@ -182,7 +182,7 @@ export async function boot(opts = {}) {
 
 export class Runtime {
   // engineOrPy: EngineContract(기본 PyodideEngine) 또는 **로드된 Pyodide 인스턴스**.
-  // 후자면 PyodideEngine으로 감싼다(하위 호환 + 채택 경로): 워커에서 자체 부팅한
+  // 후자면 PyodideEngine으로 감싼다(로드 엔진 채택 경로): 워커에서 자체 부팅한
   // Pyodide를 `new Runtime(py)`로 채택하는 소비자를 지원한다. EngineContract seam(계약
   // 격리) 도입 시 `Runtime(py)` 채택 경로가 깨질 뻔한 회귀를 이 판별로 복원한다(runSync 유무로 구분).
   constructor(engineOrPy, indexURL, opts = {}) {

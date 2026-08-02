@@ -1,11 +1,11 @@
 // 설치 패키지 브라우저 게이트 coverage의 데이터 정본.
-// contract.md와 productConsumer.mjs가 같은 배열을 본다.
+// contract.md와 installedPackageGate.mjs가 같은 배열을 본다.
 // state-kernel 7b 표면 개편 반영: 루트는 porcelain 6개(boot/open/createWebComputer/
 // checkEnvironment/PyProcError/PYPROC_ERROR_CODES)이고, 능력 상세는 machine 핸들의
 // runtime escape hatch, the proc() pool, the history verbs, and the pyproc/history signature core.
-export const PRODUCT_CONSUMER_COVERAGE_VERSION = 2;
+export const INSTALLED_PACKAGE_COVERAGE_VERSION = 2;
 
-export const PRODUCT_CONSUMER_COVERAGE = Object.freeze([
+export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
   Object.freeze({
     gate: "package surface",
     specifiers: Object.freeze(["`pyproc`", "`pyproc/assets`", "`pyproc/history`", "`pyproc/machine`"]),
@@ -102,14 +102,14 @@ export const PRODUCT_CONSUMER_COVERAGE = Object.freeze([
   }),
 ]);
 
-export function productConsumerCoverageManifest() {
+export function installedPackageCoverageManifest() {
   return {
-    schemaVersion: PRODUCT_CONSUMER_COVERAGE_VERSION,
-    rows: PRODUCT_CONSUMER_COVERAGE,
+    schemaVersion: INSTALLED_PACKAGE_COVERAGE_VERSION,
+    rows: INSTALLED_PACKAGE_COVERAGE,
   };
 }
 
-export function renderProductConsumerCoverageMarkdown(rows = PRODUCT_CONSUMER_COVERAGE) {
+export function renderInstalledPackageCoverageMarkdown(rows = INSTALLED_PACKAGE_COVERAGE) {
   const lines = [
     "| Gate | Exposed specifiers | Actual public surface | Contract verified |",
     "| --- | --- | --- | --- |",

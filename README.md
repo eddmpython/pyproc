@@ -519,12 +519,12 @@ Why the order is what it is, and the external triggers that would reorder it, ar
 
 ```bash
 npm test              # Node structure / lint gate (zero dependencies)
-npm run test:consumer # installed package browser gate
+npm run test:installed # installed package browser gate
 npm run test:browser  # headless Chromium runtime gate: boot / reactive / fork / map (zero dependencies)
 npm run serve         # COOP/COEP static server for manual validation and benchmarks
 ```
 
-Because this is a WASM runtime, real validation only happens in a browser: `test:browser` verifies the repo public surface, and `test:consumer` verifies an installed npm package inside a temporary browser app, including the Service Worker + `VirtualOrigin` URL path. Both run in CI. Persistent product and operating decisions live in [docs/](docs/README.md), executable truth lives in `src/` and `tests/`, historical decisions remain in git history, and contribution rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
+Because this is a WASM runtime, real validation only happens in a browser: `test:browser` verifies the repo public surface, and `test:installed` verifies an installed npm package inside an isolated browser fixture, including the Service Worker + `VirtualOrigin` URL path. Both run in CI. Persistent product and operating decisions live in [docs/](docs/README.md), executable truth lives in `src/` and `tests/`, historical decisions remain in git history, and contribution rules live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

@@ -485,10 +485,10 @@ try {
 
   // 로드된 엔진 채택 경로: 자체 부팅한 Pyodide를 new Runtime(py)로 감싼다.
   // EngineContract seam 회귀의 상시 가드다. setInterruptBuffer 공개 +
-  // getGlobal PyProxy 계약의 실동작은 격리된 전용 probe가 검증한다(runtimeParity/consumerAdoptProbe):
+  // getGlobal PyProxy 계약의 실동작은 격리된 전용 probe가 검증한다(runtimeParity/loadedEngineProbe):
   // 공유 rt에 인터럽트 버퍼를 걸거나 PyProxy를 호출하면 이 게이트의 무거운 후속 실행이 방해된다.
   const adopted = new Runtime(rt.raw);
-  check("Runtime(py) 채택 경로(하위 호환)", adopted.run("40 + 2") === 42 && adopted.memory.byteLength() > 0
+  check("Runtime(py) 로드 엔진 채택 경로", adopted.run("40 + 2") === 42 && adopted.memory.byteLength() > 0
     && typeof rt.setInterruptBuffer === "function");
 
   // Layer 1: 커널 안 ASGI 서버 (FastAPI, 소켓 0, async def 강제)

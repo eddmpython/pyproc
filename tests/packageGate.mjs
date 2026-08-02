@@ -1,10 +1,10 @@
-// tests/packageConsumer.mjs - npm tarball 소비자 게이트.
+// tests/packageGate.mjs - npm tarball 공개 표면 게이트.
 // 저장소 소스가 아니라 설치된 패키지 표면만 써서 exports, bin, files 계약을 검증한다.
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { binPath, installPackedPyProc, run } from "./packageHarness.mjs";
 
-const { tmp, appDir } = await installPackedPyProc("pyprocConsumer-");
+const { tmp, appDir } = await installPackedPyProc("pyprocPackageGate-");
 
 try {
   const smoke = `
@@ -62,7 +62,7 @@ try {
     if (!existsSync(join(copyTo, ...path.split("/")))) throw new Error(`installed CLI copy 누락: ${path}`);
   }
 
-  console.log(`package consumer ok: ${manifest.files.length} files`);
+  console.log(`package gate ok: ${manifest.files.length} files`);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

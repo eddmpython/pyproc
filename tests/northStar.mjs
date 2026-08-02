@@ -69,7 +69,7 @@ export const NORTH_STAR_AXES = Object.freeze([
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
-      Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/browser/examples.mjs", lane: "test:examples" }),
       Object.freeze({ path: "tests/browser/mcpSandbox.mjs", lane: "test:mcp" }),
     ]),
@@ -98,7 +98,7 @@ export const NORTH_STAR_AXES = Object.freeze([
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
-      Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
@@ -124,7 +124,7 @@ export const NORTH_STAR_AXES = Object.freeze([
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
-      Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/browser/examples.mjs", lane: "test:examples" }),
     ]),
     manual: Object.freeze([]),
@@ -178,8 +178,8 @@ export const NORTH_STAR_AXES = Object.freeze([
       target: "탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다.",
     }),
     evidence: Object.freeze([
-      Object.freeze({ path: "tests/browser/immortalProductGate.js", lane: "test:consumer" }),
-      Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/browser/immortalProductGate.js", lane: "test:installed" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
     manual: Object.freeze([]),
@@ -305,7 +305,7 @@ export const NORTH_STAR_AXES = Object.freeze([
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
-      Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/guestNetworkProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/packetNetworkProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/browser/socketLane.mjs", lane: "test:socket" }),
@@ -354,7 +354,7 @@ export const NORTH_STAR_AXES = Object.freeze([
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/browser/wasiGate.html", lane: "ci" }),
-      Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
     manual: Object.freeze([
@@ -391,9 +391,9 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
       Object.freeze({ path: "tests/contracts/publicSurface.mjs", lane: "test" }),
       Object.freeze({ path: "tests/contracts/moduleBoundaries.mjs", lane: "test" }),
-      Object.freeze({ path: "tests/packageConsumer.mjs", lane: "test" }),
+      Object.freeze({ path: "tests/packageGate.mjs", lane: "test" }),
       Object.freeze({ path: "tests/tsconfig.json", lane: "test:types" }),
-      Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/browser/preflightNoCoi.html", lane: "test:preflight" }),
     ]),
     manual: Object.freeze([]),
@@ -426,7 +426,7 @@ export const NORTH_STAR_AXES = Object.freeze([
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
-      Object.freeze({ path: "tests/browser/productConsumer.mjs", lane: "test:consumer" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
     ]),
@@ -444,7 +444,7 @@ export const NORTH_STAR_AXES = Object.freeze([
 // 브라우저 레인의 집합. WASM 런타임의 진짜 검증은 브라우저에서만 가능하므로(테스트 규칙),
 // 축마다 최소 하나는 여기 속한 레인이어야 한다. Node 게이트만 든 축은 구조만 본 것이다.
 export const NORTH_STAR_BROWSER_LANES = Object.freeze([
-  "test:browser", "test:consumer", "test:examples", "test:mcp",
+  "test:browser", "test:installed", "test:examples", "test:mcp",
   "test:preflight", "test:web-machine", "test:web-machine:v86", "test:web-computer", "test:socket", "ci",
 ]);
 
