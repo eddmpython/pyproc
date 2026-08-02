@@ -55,6 +55,7 @@
   "files": [
     "index.js",
     "index.d.ts",
+    "unMachine.js",
     "src",
     "scripts/assetManifest.mjs",
     "scripts/assetCatalog.json",

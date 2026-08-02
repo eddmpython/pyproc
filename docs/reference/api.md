@@ -1,7 +1,7 @@
 # pyproc API reference
 
-The root surface is exactly six exports and gathers the complete product choice: `open` for the
-durable Python Machine and source-specific revival, `boot` for an explicit transient Machine,
+The root surface gathers the complete product choice through `Machine` (unified Builder/Fluent/Preset),
+`open` for the durable Python Machine and source-specific revival, `boot` for an explicit transient Machine,
 `createWebComputer` for the multi-guest host, `checkEnvironment` for preflight, and the shared error
 contract (`PyProcError`, `PYPROC_ERROR_CODES`). Everything else is a verb on a returned handle, an
 advanced escape hatch, or a plumbing subpath. Signatures are

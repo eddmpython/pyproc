@@ -376,16 +376,16 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "gatheredProductEntry",
-    score: 10.0,
+    score: 9.5,
     en: Object.freeze({
-      title: "One gathered product entrance",
-      state: "The `pyproc` root gathers the complete choice: `open` for the durable Python Machine, `boot` for an explicit transient Machine, `createWebComputer` for the multi-guest host, and `checkEnvironment` for preflight. Errors share one contract, advanced plumbing stays in named subpaths, and installed-package plus browser gates prove every root door without a deep import.",
-      target: "One root import that shows every product door, the handle each door returns, and the capability path beneath it, with no competing top-level identity.",
+      title: "Developer experience & unified entrance",
+      state: "The `pyproc` root delivers a complete developer experience through one `Machine` class: zero-config `Machine.create().launch()`, Builder/Fluent chains with `.with*()`, ten built-in presets plus user-registered recipes (`Machine.fromPreset` / `Machine.registerRecipe`), blueprint file loading from URL (`Machine.fromFile`), full JIT capability cascade (network, ASGI, virtual origin, jail, device FS, wheel cache, init), JIT auto-discovery that detects import/network patterns and activates capabilities automatically, `asServer()` one-call complete web server setup, auto-optimization with core detection, and actionable error messages that name the exact blueprint key to change. Getting-started example ships in `< 10` lines. Every verb reaches IDE autocompletion through `@param`/`@throws` JSDoc. Browser gates will close the remaining gap to 10.",
+      target: "A new user writes their first line of Python in 30 seconds, IDE autocompletion guides every capability, Builder/Fluent/Preset/Recipe patterns make discovery effortless, and every configuration path is reachable without reading the source. The entrance is not just gathered - it is inviting.",
     }),
     ko: Object.freeze({
-      title: "한곳에 모인 제품 진입점",
-      state: "`pyproc` root가 전체 선택을 모은다. `open`은 내구 Python Machine, `boot`은 명시적 휘발 Machine, `createWebComputer`는 multi-guest host, `checkEnvironment`는 사전 진단이다. 오류는 한 계약을 쓰고 상세 배관은 이름 있는 subpath에 머물며 설치 package와 browser gate가 deep import 없이 모든 root 문을 증명한다.",
-      target: "제품의 모든 문, 각 문이 돌려주는 handle, 그 아래 capability 경로를 하나의 root import에서 보여주며 경쟁하는 최상위 정체성은 없다.",
+      title: "사용자 최상위 경험과 통합 진입점",
+      state: "`pyproc` root가 하나의 `Machine` 클래스로 완전한 개발자 경험을 전달한다: 제로 설정 `Machine.create().launch()`, `.with*()` Builder/Fluent 체인, 10개 내장 프리셋 + 사용자 등록 레시피(`Machine.fromPreset` / `Machine.registerRecipe`), URL에서 블루프린트 파일 로딩(`Machine.fromFile`), 완전한 JIT 능력 cascade(network, ASGI, virtual origin, jail, device FS, wheel cache, init), import/network 패턴을 감지해 능력을 자동 활성화하는 JIT auto-discovery, `asServer()` 한 번의 호출로 완전한 웹 서버 구성, 코어 자동 감지·최적화, 그리고 정확한 블루프린트 키를 지목하는 액션 가능한 오류 메시지. 시작하기 예제가 `< 10`줄로 제공된다. 모든 동사가 `@param`/`@throws` JSDoc을 통해 IDE 자동완성에 도달한다. 브라우저 게이트가 10점까지의 남은 격차를 닫을 것이다.",
+      target: "신규 사용자가 30초 안에 첫 Python을 실행하고, IDE 자동완성이 모든 능력을 가이드하며, Builder/Fluent/Preset/Recipe 패턴이 발견을 자연스럽게 만들고, 소스를 읽지 않고도 모든 구성 경로에 도달할 수 있다. 진입점은 단순히 모여 있는 것이 아니라 초대하는 경험이다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
@@ -395,9 +395,18 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/tsconfig.json", lane: "test:types" }),
       Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/browser/preflightNoCoi.html", lane: "test:preflight" }),
+      Object.freeze({ path: "unMachine.js", lane: "test" }),
+      Object.freeze({ path: "examples/gettingStarted.html", lane: "test:examples" }),
+      Object.freeze({ path: "index.d.ts", lane: "test:types" }),
     ]),
     manual: Object.freeze([]),
-    next: Object.freeze([]),
+    next: Object.freeze([
+      Object.freeze({
+        id: "productBrowserGates",
+        en: "Wire the getting-started example and 10-preset boot verification into headless browser CI so every push proves the full developer experience end-to-end",
+        ko: "시작하기 예제와 10개 프리셋 부팅 검증을 headless 브라우저 CI에 연결해 매 push마다 완전한 개발자 경험을 end-to-end로 증명한다",
+      }),
+    ]),
   }),
   Object.freeze({
     id: "supplyChainIntegrity",
