@@ -134,6 +134,7 @@ const html = `<!DOCTYPE html>
     let jobs = null;
     let containers = null;
     let opfsRoot = null;
+    let defaultMachine = null;
     const cleanupEntries = [];
     try {
       check("crossOriginIsolated", crossOriginIsolated === true);
@@ -150,6 +151,16 @@ const html = `<!DOCTYPE html>
         sw.integrity.files.includes("src/capabilities/pyprocSw.js") && sw.url.includes("/node_modules/pyproc/src/capabilities/pyprocSw.js") && sw.url.includes("asgi=%2Fpyproc%2F"),
         sw.url);
       await waitForServiceWorkerControl();
+
+      defaultMachine = await open();
+      const defaultValue = await defaultMachine.run("'default-machine-ready'");
+      const defaultStatus = defaultMachine.status();
+      check("open() is the durable auto-commit Machine",
+        defaultValue === "default-machine-ready" && defaultStatus.name === "pyprocMachine" &&
+        defaultStatus.durable === true && defaultStatus.autoCommit === true && !!defaultStatus.lastCommitAt,
+        "name=" + defaultStatus.name + ", committed=" + defaultStatus.lastCommitAt);
+      defaultMachine.leave();
+      defaultMachine = null;
 
       const immortal = await runImmortalProductGate({ indexURL: INDEX });
       for (const result of immortal.checks) check(result.name, result.pass, result.info);
@@ -528,6 +539,7 @@ const html = `<!DOCTYPE html>
       check("uncaught", false, e && (e.stack || e.message || String(e)));
     } finally {
       if (origin) origin.unbind();
+      if (defaultMachine) defaultMachine.leave();
       if (jobs) jobs.terminate();
       if (containers) containers.terminate();
       if (sw) await sw.registration.unregister();

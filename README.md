@@ -74,11 +74,11 @@ separate identities.
 
 | Product concept | Current contract | What it owns |
 |---|---|---|
-| **Machine** | `boot()` / `open()` | The single root handle and lifecycle |
-| **Workspace** | named persistent machine + `/home/web` | Files and live work that survive reopening |
+| **Machine** | `open()` by default; `boot()` for an explicit transient kernel | The single durable root and lifecycle |
+| **Workspace** | `open({ name })` + `/home/web` | Files and live work that survive reopening |
 | **Environment** | deterministic manifest + exact engine version | Packages, setup, and replay boundary |
 | **Processes** | `machine.proc()` | Independent worker interpreters, forks, signals, and parallel work |
-| **History** | `machine.history` + persistent `machine.commit()` | Checkpoints, branches, restore, journal, and recovery |
+| **History** | automatic Machine generations + explicit transient checkpoints | Checkpoints, branches, restore, journal, and recovery |
 | **Image** | signed `.pymachine` / `.webmachine` | Portable state with integrity and an explicit trust gate |
 | **Permissions** | capability contracts + permission jail | Network, storage, devices, memory, and execution policy |
 
@@ -92,9 +92,11 @@ create / open  ->  work  ->  checkpoint / commit  ->  branch / restore  ->  expo
       Machine      Workspace + Environment     History + Processes           Image + Trust
 ```
 
-The library makes durable commits explicit. The first-party Web Computer automatically commits after
-commands and also exposes manual Save, so automatic durability never hides the recovery boundary.
-This is the default lifecycle every surface should reinforce.
+The default Machine commits each completed command before its Promise settles. `commit()` remains a
+force-boundary verb, while `boot()` is the explicit transient workbench for checkpoint and branching
+experiments. A commit failure is outcome-unknown and never invites an automatic retry.
+
+For an explicit transient rewind session:
 
 ```js
 import { boot } from "pyproc";
@@ -104,7 +106,7 @@ await machine.loadPackages(["numpy"]);   // prepare once (packages, data)
 const cp = machine.history.checkpoint(); // save the prepared state
 
 const attempts = [
-  "import numpy as np; float(np.arange(10).men())",
+  "import numpy as np; float(np.arange(10).men())", // deliberate failing attempt
   "import numpy as np; float(np.arange(10).mean())",
 ];
 
@@ -142,7 +144,7 @@ restored. A fail-closed network policy can also keep selected data local while c
   Chromium renderer sandbox and WebAssembly boundary. Resource and network policy remain explicit;
   see [Security model](#security-model).
 - **Restore without rebuilding.** Checkpoint a state with packages and data already loaded, then roll back to it - no re-run, no re-install.
-- **Close the tab; keep the machine** (Experimental - `open({ persistent })`). Tabs share one logical Python state. If the leader closes, another tab recovers the last committed memory and `/home/web` files from OPFS and continues locally.
+- **Close the tab; keep the machine** (`open()` / `open({ name })`). Tabs share one logical Python state. Every completed command auto-commits memory, `/home/web`, and forwarded outcomes before returning; if the leader closes, another tab recovers that generation from OPFS and continues locally.
 - **Branch from one state** (Beta - `machine.history` + `machine.proc()`). An agent runs several code candidates from the same prepared state, independently, and compares results.
 - **Data can stay local under a fail-closed policy.** Process data in the tab and export only selected
   results. Local execution alone is not a no-exfiltration boundary.
@@ -152,24 +154,23 @@ restored. A fail-closed network policy can also keep selected data local while c
 
 ```sh
 npm install pyproc
+npx pyproc-engine --out public/vendor/pyodide
 ```
-
-```js
-import { boot } from "pyproc";
-
-const machine = await boot();
-await machine.loadPackages(["numpy"]);
-console.log(machine.run("import numpy as np; int(np.arange(1_000_000).sum())"));  // 499999500000
-```
-
-Open one persistent machine from any number of same-origin tabs:
 
 ```js
 import { open } from "pyproc";
 
-const persistentMachine = await open({ persistent: { name: "workspace" } });
+const machine = await open();
+console.log(await machine.run("sum(range(1_000_000))")); // 499999500000
+```
+
+Name a Machine to open the same workspace from any number of same-origin tabs:
+
+```js
+import { open } from "pyproc";
+
+const persistentMachine = await open({ name: "workspace" });
 await persistentMachine.run("counter = globals().get('counter', 40) + 1");
-await persistentMachine.commit();
 console.log(await persistentMachine.run("counter")); // 41, including after leader takeover
 ```
 
@@ -198,11 +199,11 @@ One question at a time, one obvious door:
 
 | You need | Entry point | You get |
 |---|---|---|
+| The durable Python Machine | `open()` or `open({ name })` | multi-tab Machine handle; every completed run is committed before it settles |
 | Run Python in this tab, no revival | `boot()` | machine handle (`run`/`fs`/`history`/`proc`, `runtime` escape hatch) |
 | A state that saves, exports, and revives | `boot({ deterministic: true, ...manifest })` | same handle; `history.export`/`history.save` become legal |
 | Open a portable machine file | `open(blob, { trustedPublicKeys })` | machine handle, after integrity + trust checks |
 | Revive a saved session | `open({ dir, name })` | machine handle (same-manifest replay + delta) |
-| One living machine across tabs | `open({ persistent: { name } })` | multi-tab election handle (run/commit/status) |
 | Real parallelism / live fork | `await machine.proc({ lanes, replay })` | worker process pool (`map`/`fork`/`signal`) |
 
 Deterministic replay is the shared foundation: `boot({ deterministic: true })` fixes the boot
@@ -271,7 +272,7 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 | Declared-environment lane (`boot` manifest: `packages` / `env` / `setup` / `wheelDir`), wheel cache, terminal, syscall bridge | Beta |
 | Session revival + `.pymachine` images, machine journal (WAL) | Experimental |
 | Live process fork, device FS, init / cron / resume hooks, virtual-origin URL | Experimental |
-| Persistent multi-tab machine (`open({ persistent })` -> `KernelElection`) | Experimental |
+| Default durable Machine (`open()` / `open({ name })` -> `KernelElection`) | Beta |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
 
 ## What it guarantees, and what it doesn't
@@ -376,7 +377,7 @@ The root surface is one noun and its verbs: a **machine with history**. Two entr
 | Boot a Python machine and run code | `boot` (returns a machine handle: `machine.run`, `machine.runAsync`, `machine.fs`, `machine.term`, `machine.runtime` escape hatch) | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
 | Time-travel, branch, and durably commit state | `boot` handle's `machine.history` (`checkpoint`/`restore`/`tree` are volatile; `commit`/`recover`/`watch`/`export`/`save` are durable, content-addressed) | [browser gate](tests/browser/gate.html), [machine demo](examples/machine.html) |
 | Use browser workers as processes (independent GILs) | `boot` handle's `machine.proc` (pool verbs: `map`, `fork`, `forkMany`, `mapArray`, `matmul`; signal table on the pool class) | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html) |
-| Revive a machine from a file, saved session, or other tabs | `open` (signed bundle blob, `{ dir, name }` session, `{ persistent }` multi-tab machine) | [immortal demo](examples/immortal.html), [machine demo](examples/machine.html) |
+| Revive a machine from a file, saved session, or other tabs | `open` (default/named Machine, signed bundle blob, `{ dir, name }` session) | [immortal demo](examples/immortal.html), [machine demo](examples/machine.html) |
 | Assemble the browser computer (multi-guest OS host) | `createWebComputer` | [web computer app](apps/webComputer/index.html), [web computer gate](tests/browser/webComputerProduct.mjs) |
 | Check platform readiness before booting | `checkEnvironment` | [browser gate](tests/browser/gate.html) |
 | Branch on failures programmatically | `PyProcError`, `PYPROC_ERROR_CODES` | [structure gate](tests/run.mjs), [browser gate](tests/browser/gate.html) |
@@ -417,14 +418,14 @@ on an engine, browser primitives, and any explicitly enabled external capability
 | Layer | Current boundary | Can it be removed? |
 |---|---|---|
 | Runtime npm graph | No packages under `dependencies`; native ESM ships as source | Already zero |
-| Python engine assets | Pyodide v314.0.2; CDN by default, self-hostable with SRI | The CDN dependency can be removed; the engine cannot be removed without replacing CPython |
+| Python engine assets | Pyodide v314.0.2 at the verified same-origin `/vendor/pyodide/` default | Third-party delivery is absent by default; the engine itself cannot be removed without replacing CPython |
 | Browser platform | Chromium/Edge, WebAssembly, Workers, OPFS; JSPI and COOP/COEP for blocking/process paths | No; this is the hardware and security boundary |
 | Optional capabilities | Relay for raw outbound sockets; WebGPU hardware; injected x86 emulator, firmware, and Linux image | Yes; omit the capability and the Python Machine remains complete |
 
 The strongest deployment is therefore not an imaginary dependency-free computer. It is an
-**owned and verified dependency chain**: pin the exact pyproc version, self-host the pinned engine,
-emit and verify the asset SRI manifest, and cache verified assets in OPFS. The CDN route remains a
-convenient evaluation path, not the production default.
+**owned and verified dependency chain**: pin the exact pyproc version, prepare the pinned engine with
+`pyproc-engine`, emit and verify the JavaScript asset SRI manifest, and cache verified assets in
+OPFS. An explicit CDN `indexURL` remains an evaluation route, never the default.
 
 ## Setup
 
@@ -434,24 +435,29 @@ There are two tiers of setup, so "just install and import" is true for the basic
 
 | You want | You need | Engine assets |
 |---|---|---|
-| `boot` / `run` / packages, `machine.history` (checkpoint, time-travel) | `npm install` plus a Chromium browser. No headers. | Self-host the pinned Pyodide release for deployment; the default fetches `cdn.jsdelivr.net/pyodide/v314.0.2/full/` |
+| `open` / `run`, or transient `boot` / packages / `machine.history` | `npm install`, `npx pyproc-engine --out <static-root>/vendor/pyodide`, and Chromium. No headers. | The verified same-origin `/vendor/pyodide/` distribution |
 | `machine.proc()` (fork, `map`, interrupt), IPC, blocking sockets | The two headers below, plus **same-origin worker files** (so npm install / vendoring, not CDN import) | Same, and the worker file must be same-origin |
 
-**Engine assets are not in this package.** The default `indexURL` points at jsDelivr, so the first
-boot downloads the Pyodide distribution (wasm + stdlib + lock). Three ways to control that:
+**Engine assets are prepared at deployment, not embedded in the npm tarball.** The published
+`pyproc-engine` CLI downloads the exact release, verifies the six boot anchors against pyproc's
+catalog, then verifies all package files against the pinned lock before placing them under the
+default `/vendor/pyodide/` URL.
 
-```js
-// 1. Self-host: copy a Pyodide release into your static assets and point at it.
-await boot({ indexURL: "/vendor/pyodide/" });
-// 2. Cache the core in OPFS so later boots do no network at the fetch layer.
-await boot({ coreCacheDir: await navigator.storage.getDirectory() });
-// 3. Verify what you fetch (fail-closed SRI over the engine graph).
-await boot({ engineScriptIntegrity: "sha256-...", coreIntegrity: { /* per-file SRI */ } });
+```sh
+npx pyproc-engine --out public/vendor/pyodide
 ```
 
-For (1) this repository vendors a release with `npm run fetch:engine` (a development script, not
-part of the published package); copy `node_modules/pyodide` or a release tarball into the path being
-served. The pinned version is the package contract:
+```js
+// The default verifies pyodide.js plus fetched core bytes from /vendor/pyodide/.
+await boot();
+// Optionally cache the verified core in OPFS so later boots do no network at the fetch layer.
+await boot({ coreCacheDir: await navigator.storage.getDirectory() });
+// Evaluation only: opt into a different distribution point explicitly.
+await boot({ indexURL: "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/" });
+```
+
+The default runtime re-verifies core bytes as they are fetched. Custom engine loaders own their own
+trust policy. The pinned version and distribution boundary are the package contract:
 [docs/consuming/contract.md](docs/consuming/contract.md).
 
 Serve the page that hosts pyproc with:
@@ -520,22 +526,22 @@ You can also import straight from a CDN with no install (single-runtime path onl
 
 Scores are anchored to gates that actually run in CI. A path no automated gate runs does not score, however complete the implementation is, and an axis whose evidence includes a manual-only probe is held below 9. A 10 means the axis is finished: repeatedly verified in a real browser, with no workaround left in the public surface.
 
-Today that is **103.0 / 120, average 8.6 / 10**.
+Today that is **103.7 / 120, average 8.6 / 10**.
 
 | Axis | Score | Where it stands today | Where it has to land | Next move |
 |---|---:|---|---|---|
-| Real Python in the tab | 9.5 | `boot` / `run` / `loadPackages` drive CPython on WebAssembly from one handle, with a terminal REPL, PEP 723 scripts, a wheel cache, and a declared-environment lane. The browser gate, the installed-package gate, the demo gate, and the agent (MCP) gate all run it. Engine assets come from a CDN unless you self-host, and the platform is Chromium and Edge only. | The Python a local interpreter runs, running in a tab, with no server and no setup ritual. | Make the verified self-hosted asset lane the default path, so a first boot depends on no CDN |
+| Real Python in the tab | 9.7 | `open` is the durable Machine and `boot` is the transient workbench; both drive CPython on WebAssembly. The pinned engine is prepared by the shipped zero-dependency CLI, served from the same origin, checked against catalog and lock hashes, then core-verified again in the browser with zero third-party requests. Browser, installed-package, demo, and agent gates run it. The platform is Chromium and Edge only. | The Python a local interpreter runs, running in a tab, with no server and no setup ritual. | Broaden the browser platform without weakening the Machine contract or hiding unavailable capabilities |
 | State you can rewind | 9.0 | Checkpoint, restore, branch, and prune run at execution boundaries over complete heap hashing: a full-heap byte-equality round trip, sibling-delta isolation across a branch tree, and a violated boundary that falls back to a full rehash instead of restoring something corrupt. Node property and fuzz gates cover delta soundness and tree integrity. An arbitrary instant is still not capturable, because in-flight promises and network requests live outside the boundary. | Any past state comes back instantly, including the work that was in flight when it was left. | Capture an arbitrary instant rather than an execution boundary, by pulling in-flight promises and requests inside the boundary |
 | Processes and real parallelism | 8.5 | Workers are processes: snapshot-fork spawn, `map`, `forkMany`, a signal table, kill, job control, nested containers, pool exhaustion, and mid-flight worker death all converge under the browser gate. N interpreters are N GILs, so the parallelism is structural rather than scheduled. There is no shared-memory threading and no arbitrary POSIX process tree. | A process model with the vocabulary of a real operating system, threads included once the platform allows them. | Take shared-memory threading the moment nogil and WASM threads land upstream, without changing the process vocabulary |
 | A disk that survives | 9.0 | The state kernel commits content-addressed generations into OPFS under a write-order law: a tampered blob is caught, a broken HEAD falls back to PREV instead of impersonating a first boot, journals pack, an unchanged re-commit writes zero bytes, and the durable generation is what the browser computer restores after its process restarts. There is exactly one format on disk now: the legacy envelope reader was retired, and a file written by an older version is refused with what to do about it rather than half-read. | Durability with the guarantees of a real filesystem: no torn commit, no silent loss, exactly one format. | Survive an OPFS quota eviction as explicitly as a torn commit: today persistence is requested best-effort and a denial is a browser heuristic |
-| A machine that outlives its tab | 9.5 | One logical machine spans same-origin tabs through leader election: a forcibly removed leader is taken over, followers commit through the leader, and the committed heap and `/home/web` cold-reopen after every participant closes, all of it exercised on the installed package. The leader records command outcomes in the same durable generation as the heap, so a repeated request ID is answered from the record instead of run twice, and a durable caller controller that can prove its session proxy-free parks and asks the successor once. The installed-package path also fixes the honest boundary: a normal follower cannot inspect the leader session, so its in-flight call ends as `PYPROC_RPC_OUTCOME_UNKNOWN` on failover and is not resent. Live-leader timeout, non-durable state, caller loss, and a known proxy heap are never resent. The complete rule is the [durable RPC state table](docs/consuming/contract.md#durable-rpc-state-table-normative). | The machine keeps running while any tab is open, and every command it accepted resolves exactly once. | Carry a fenced portability fact to ordinary followers so they can safely use the outcome-record path; a proxy-bearing heap remains outcome-unknown |
+| A machine that outlives its tab | 9.7 | Argument-free `open()` now enters the named OPFS Machine rather than a transient kernel. Commands and commits are serialized, and every completed run reaches a generation carrying heap, `/home/web`, and forwarded outcome before settling; the installed package cold-reopens that state without a manual commit. Leader election spans same-origin tabs, a repeated request ID is answered from its durable record, and commit failure is non-retryable outcome-unknown. A normal follower still cannot prove a cut-off leader heap portable, so failover of an in-flight call remains `PYPROC_RPC_OUTCOME_UNKNOWN`. The complete rule is the [durable RPC state table](docs/consuming/contract.md#durable-rpc-state-table-normative). | The machine keeps running while any tab is open, and every command it accepted resolves exactly once. | Carry a fenced portability fact to ordinary followers so they can safely use the outcome-record path; a proxy-bearing heap remains outcome-unknown |
 | A machine you can carry | 9.0 | `.pymachine` and `.webmachine` files are signed content-addressed envelopes: signature and trusted-key verification, byte-tamper rejection, layout-independent reparse, worker-to-worker revival, and a cross-context transport refused on an `h0` mismatch instead of opened silently. The product gate exports a signed image and imports it into a fresh browser profile behind an explicit signer trust screen. Portability still assumes the same engine and manifest. A JS proxy handle cannot cross an image at all, so a surface that installs one poisons every proxy path in the revived kernel; the packet device and the permission jail were moved to value boundaries and survive a revival in CI, while a blocking surface (the syscall bridge behind input(), sockets, GPU) cannot move and is refused at export unless the caller acknowledges it. | A machine file opens on any compatible profile from a verified signer, across engine versions. | Rebind JS handles after materialisation, or find a blocking mechanism that needs none, so a machine that used input() can still ship a portable image; Open an image across engine versions by negotiating the manifest instead of demanding an exact match |
 | A computer that boots guests | 9.0 | The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. The x86 lane puts the real Python and Linux guests on one switch: Linux pings Python, a Python-sent Ethernet frame increments Linux's NIC receive counter, and both directions survive one generation commit and a process cold restore. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others. Presenting a frame onto a canvas is gated in CI as well (`CanvasRgbaFrameSink`). The default Linux image is the reproducible project build, hash-pinned to a release that carries its exact source, complete legal material, SBOM, config, and independent-build receipt. | Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does. | rung 5: Adopt memory64 to lift the per-module heap ceiling that a large guest hits first; rung 7: Boot a Node guest beside Python and Linux, making JavaScript CLI tools residents of the computer |
 | Primitives that outlive the engine | 7.0 | A non-Pyodide lane boots CPython 3.14.6 on WASI in the browser and takes checkpoint, time travel, repeated branching, and pure-Python wheel installation through the same contracts, which is what proves the primitives are not Pyodide internals. That lane has no `dlopen`, so it carries no dynamic C extensions, and its value bridge is JSON only. | Every primitive runs on any CPython-on-WebAssembly engine, with the same package reach on each. | Close the WASI gap: dynamic linking (cpython#142234) for C extensions, and a value bridge that is not JSON only |
 | Network, the browser way | 8.0 | An in-kernel ASGI server answers `fetch` from Python with concurrent requests kept apart, a virtual origin serves it from the installed package, `urllib` performs real HTTP through the syscall bridge, and the permission jail decides `connectSrc` per host. Python-to-Python traffic is gated without assets, while the x86 lane proves the real cross-engine path: Linux pings Python and a Python-sent Ethernet frame arrives at the Linux NIC before and after process cold restore. Outbound raw sockets still need a WS-to-TCP relay this package does not ship, but a hermetic lane starts the in-repo relay and a local TCP origin and reads bytes back through Python `urllib`. | Python network code runs unmodified, and the relay boundary is the only thing a reader has to know. | rung 1: Terminate TLS inside the tab, so a relay carries ciphertext it cannot read and needs no trust; rung 2: Carry many sockets over one WebSocket, the Wisp class of relay hardening; rung 3: Open a direct tab-to-tab transport over WebRTC as an opt-in subpath, once the surface freeze clears; rung 4: Keep an Isolated Web App packaging lane ready for the day Direct Sockets opens a real inbound listen |
 | Everything local Python does | 7.5 | Pyodide's `dlopen` already loads native C-extension wheels (numpy, pandas, scipy and more), packages install from a cache, `%pip` and `freeze` work inside the machine, and the WASI lane installs pure-Python wheels. The long tail is what is missing: an arbitrary package needs a published pyemscripten wheel, numpy has no SIMD build, threading is upstream-pending, and the GPU lane has no headless adapter, so what CI holds is the byte identity of the WGSL each integration path compiles, not its result on a GPU. | Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology. | Widen package reach where it is thin: a pyemscripten wheel for the long tail, and a SIMD numpy build; rung 6: Bring the tools a working machine assumes (the git and ripgrep class) inside as wasm residents, so shelling out is real |
 | One stable kernel surface | 8.5 | The public surface is one noun and its verbs, fixed by structure, types, installed-package gates, and real browser execution. The packed artifact proves root and subpath imports, shipped declarations, worker emission, and runtime assets without any package-internal path. | One exact-version public surface and shipped type contract, with every supported import pattern gated and no deep path. | Put every supported public import pattern under installed-package and browser gates; rung 8: Specify the local-agent boundary once (pairing, authorization, capability list) for the share that stays outside the browser |
-| A supply chain you can verify | 8.5 | The asset CLI emits SRI over the worker and Service Worker import graph, `verifyPyProcAssetIntegrity` refuses a spawn on a bad hash, engine boot supports fail-closed SRI with a re-verifying offline cache, npm releases publish through OIDC trusted publishing with provenance and manual publishes disabled, and the browser computer verifies a signer before importing an image. The default Linux guest comes from two byte-identical independent builds, passes real Python-Linux traffic plus process cold restore, and is published with exact source, complete legal material, SBOM, config, and manifests at a stable hash-pinned project release. | Every byte that executes traces back to a source somebody else can rebuild and verify. | Reproduce the remaining firmware and emulator assets under the same project-controlled release discipline |
+| A supply chain you can verify | 8.8 | The shipped zero-dependency engine CLI verifies catalog-pinned boot anchors and all 354 lock-listed package files before same-origin deployment; runtime then pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. The asset CLI separately seals the worker and Service Worker graph, and bad hashes refuse spawn. npm publishing uses OIDC provenance, machine images verify signers before import, and the default Linux guest comes from two byte-identical independent builds with source, legal material, SBOM, config, and manifests at a hash-pinned project release. | Every byte that executes traces back to a source somebody else can rebuild and verify. | Reproduce the remaining firmware and emulator assets under the same project-controlled release discipline |
 
 The axis ledger is [tests/northStar.mjs](tests/northStar.mjs): each axis registers the executable artifacts standing behind it, and the structure gate turns red when a registered gate is missing, is opened by no runner, or does not run in CI. This table is rendered from that ledger, so no score moves by editing prose. What each axis means, and what would move it, is in the [product direction](docs/product/vision.md#north-star-axes).
 

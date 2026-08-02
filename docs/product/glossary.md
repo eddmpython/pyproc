@@ -13,7 +13,7 @@
 | Checkpoint | cp0 위 페이지 해시 나무의 노드(복원 핸들) | `machine.history.checkpoint()` |
 | Journal | 유휴마다 HEAD/PREV 세대로 커밋되는 WAL | `MachineJournal` |
 | Machine image | 서명된 이동 가능 상태 파일 `.pymachine` | `machine.history.export`, `open(blob, trustOpts)` |
-| Kernel (선출) | 여러 탭 중 실제 파이썬을 소유한 리더 | `KernelElection`, `open({ persistent })` |
+| Kernel (선출) | 여러 탭 중 실제 파이썬을 소유한 리더 | `KernelElection`, `open()` / `open({ name })` |
 | Process | PyProc 풀의 워커 인터프리터(독립 GIL) | `PyProc` |
 | Container | 머신 안 머신(자기 매니페스트로 부팅한 커널) | `MachineContainer`, `pyprocMachine` |
 

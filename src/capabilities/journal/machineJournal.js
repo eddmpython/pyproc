@@ -103,6 +103,7 @@ export class MachineJournal {
     this._onStatus = typeof cfg.onStatus === "function" ? cfg.onStatus : null;
     this._pruneAfterCommit = cfg.pruneAfterCommit === true;
     this._timer = null;
+    this._persistenceRequested = false;
     this._lastSeq = -1;
     this._sp = null;
     this._busy = false;
@@ -128,18 +129,25 @@ export class MachineJournal {
     return this._h0Key;
   }
 
-  // 유휴 감시 시작. execSeq가 멈춘 채 idleMs가 지나면 커밋한다(실행 중에는 끼어들지 않는다).
-  start() {
-    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.dir (a FileSystemDirectoryHandle) is required. Get one with navigator.storage.getDirectory()");
-    if (!this._reactive) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.reactive (a ReactiveController) is required");
-    if (this._timer) return this;
-    // 저널 디스크(OPFS)가 브라우저 압박 시 지워지는 best-effort 캐시로 남지 않게 지속 스토리지를
-    // 요청한다. 거부돼도 동작은 계속된다(내구성 능력의 계약상 요청은 이 능력의 몫이다).
+  // 저장소 지속성 요청은 idle timer와 별개다. 명령 경계마다 즉시 커밋하는 KernelElection은
+  // timer를 켜면 같은 저널에 두 commit이 경합하지만, 브라우저 eviction 경계는 계속 알아야 한다.
+  requestPersistentStorage() {
+    if (this._persistenceRequested) return this;
+    this._persistenceRequested = true;
     if (navigator.storage && navigator.storage.persist) {
       navigator.storage.persist().then((granted) => { this.persistentStorage = granted === true; }, () => { this.persistentStorage = false; });
     } else {
       this.persistentStorage = false; // 요청할 방법이 없는 환경 = 승인되지 않은 것과 같다
     }
+    return this;
+  }
+
+  // 유휴 감시 시작. execSeq가 멈춘 채 idleMs가 지나면 커밋한다(실행 중에는 끼어들지 않는다).
+  start() {
+    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.dir (a FileSystemDirectoryHandle) is required. Get one with navigator.storage.getDirectory()");
+    if (!this._reactive) throw new PyProcError("PYPROC_INPUT_INVALID", "journal: cfg.reactive (a ReactiveController) is required");
+    this.requestPersistentStorage();
+    if (this._timer) return this;
     this._sp = this._reactive.stackSave();
     this._lastSeq = this._rt.execSeq;
     let idleSince = null;

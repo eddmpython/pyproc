@@ -39,6 +39,14 @@ function errorPayload(error) {
   };
 }
 
+function durabilityUnknown(error) {
+  return kernelError(
+    `KernelElection: Python execution finished but its durable commit failed (${String(error?.message || error).slice(-180)}). The effect may still exist in the live kernel, so do not retry automatically`,
+    "PYPROC_RPC_OUTCOME_UNKNOWN",
+    false,
+  );
+}
+
 function normalizeResult(runtime, result) {
   const value = runtime?.toHostValue ? runtime.toHostValue(result, { fallback: null }) : (result === undefined ? null : result);
   if (runtime?.destroyHostValue) runtime.destroyHostValue(result);
@@ -65,6 +73,7 @@ export class KernelElection {
     this._heartbeatMs = opts.heartbeatMs || DEFAULT_HEARTBEAT_MS;
     this._presenceTimeoutMs = opts.presenceTimeoutMs || DEFAULT_PRESENCE_TIMEOUT_MS;
     this._rpcTimeoutMs = opts.rpcTimeoutMs || DEFAULT_RPC_TIMEOUT_MS;
+    this._autoCommit = opts.autoCommit !== false;
     this._onLeader = opts.onLeader || null;
     this._listeners = new Set();
     if (opts.onStatus) this._listeners.add(opts.onStatus);
@@ -84,6 +93,9 @@ export class KernelElection {
     this._seq = 0;
     this._pending = new Map();
     this._served = new Map();
+    // 명령 실행과 generation commit은 한 줄에서 순서대로 끝난다. async run 두 개나 idle commit이
+    // 겹치면 뒤 명령의 결과가 앞 generation에 섞이므로, durable 응답의 선형화 지점이 필요하다.
+    this._commandChain = Promise.resolve();
     // 세대가 나르는 결과 기록. 승계자가 "그 명령이 실행됐는가"에 답할 수 있게 하는 유일한 근거다.
     this._outcomes = [];
     this._participants = new Map();
@@ -172,7 +184,9 @@ export class KernelElection {
         this._recoveryMs = Math.round(now() - recoveryStarted);
         this._recovered = !!recovered;
         this._lastCommitAt = recovered?.committedAt || null;
-        this._journal.start();
+        this._journal.requestPersistentStorage();
+        // 자동 commit 경로는 명령 queue가 유일한 writer다. opt-out 경로만 옛 idle 저장을 쓴다.
+        if (!this._autoCommit) this._journal.start();
       } else {
         this._recoveryMs = 0;
       }
@@ -258,7 +272,9 @@ export class KernelElection {
       return;
     }
     if (message.type === "rpcReq" && this._role === "leader" && this._servingLeader) {
-      this._serve(message);
+      this._enqueueCommand(() => this._serve(message)).catch((error) => {
+        this._fail(error);
+      });
       return;
     }
     if (message.type === "rpcRes") this._acceptResponse(message);
@@ -308,52 +324,73 @@ export class KernelElection {
       });
       return;
     }
-    let response;
-    try {
-      let result;
-      if (message.action === "run") {
-        const raw = message.async
-          ? await this._session.rt.runAsync(message.code)
-          : this._session.rt.run(message.code);
-        result = normalizeResult(this._session.rt, raw);
-      } else if (message.action === "commit") {
-        result = this._journal ? await this._journal.commit() : null;
-        this._lastCommitAt = result?.committedAt || this._lastCommitAt;
-        this._announceLeader(true);
-      } else {
-        throw kernelError(`KernelElection: unknown RPC action (${message.action})`, "PYPROC_RPC_ACTION_INVALID");
-      }
-      response = {
-        type: "rpcRes",
-        to: message.participantId,
-        requestId: message.requestId,
-        leaderId: this.participantId,
-        epoch: this._epoch,
-        ok: true,
-        result,
-      };
-    } catch (error) {
-      response = {
-        type: "rpcRes",
-        to: message.participantId,
-        requestId: message.requestId,
-        leaderId: this.participantId,
-        epoch: this._epoch,
-        ok: false,
-        ...errorPayload(error),
-      };
-    }
-    // 기록은 응답 직전에 남긴다. 다음 커밋이 이것을 세대에 싣고, 그때부터 승계자가 답할 수 있다.
-    this._outcomes = appendOutcomeRecord(this._outcomes, {
+    let response = await this._execute(message.action, message);
+    const outcomesBefore = this._outcomes;
+    this._outcomes = appendOutcomeRecord(outcomesBefore, {
       requestId: message.requestId,
       epoch: this._epoch,
       action: message.action,
       ok: response.ok === true,
       ...(response.ok === true ? { result: response.result } : { error: response.error, code: response.code, retryable: response.retryable === true }),
     });
+    // run의 결과 기록과 Python 효과를 같은 generation에 싣고 나서만 응답한다. commit action은
+    // 자기 자신이 이미 generation 경계이므로 다음 세대에 결과 기록을 싣지 않아도 재실행 효과가 없다.
+    if (message.action === "run" && this._autoCommit && this._journal) {
+      try {
+        await this._commitJournal();
+      } catch (error) {
+        this._outcomes = outcomesBefore;
+        response = this._responseFor(message, false, errorPayload(durabilityUnknown(error)));
+      }
+    }
     this._served.set(message.requestId, response);
     if (this._served.size > SERVED_CACHE_MAX) this._served.delete(this._served.keys().next().value);
     this._post(response);
+  }
+
+  _responseFor(message, ok, payload) {
+    return {
+      type: "rpcRes",
+      to: message.participantId,
+      requestId: message.requestId,
+      leaderId: this.participantId,
+      epoch: this._epoch,
+      ok,
+      ...payload,
+    };
+  }
+
+  async _execute(action, payload) {
+    try {
+      let result;
+      if (action === "run") {
+        const raw = payload.async
+          ? await this._session.rt.runAsync(payload.code)
+          : this._session.rt.run(payload.code);
+        result = normalizeResult(this._session.rt, raw);
+      } else if (action === "commit") {
+        result = await this._commitJournal();
+      } else {
+        throw kernelError(`KernelElection: unknown RPC action (${action})`, "PYPROC_RPC_ACTION_INVALID");
+      }
+      return this._responseFor(payload, true, { result });
+    } catch (error) {
+      return this._responseFor(payload, false, errorPayload(error));
+    }
+  }
+
+  async _commitJournal() {
+    const result = this._journal ? await this._journal.commit() : null;
+    this._lastCommitAt = result?.committedAt || this._lastCommitAt;
+    this._announceLeader(true);
+    this._notify();
+    return result;
+  }
+
+  _enqueueCommand(work) {
+    const pending = this._commandChain.then(work, work);
+    this._commandChain = pending.catch(() => {});
+    return pending;
   }
 
   _acceptResponse(message) {
@@ -428,17 +465,18 @@ export class KernelElection {
     await this.ready({ timeoutMs: opts.timeoutMs || this._rpcTimeoutMs });
     if (this._role === "leader") {
       if (action === "run") {
-        const raw = payload.async
-          ? await this._session.rt.runAsync(payload.code)
-          : this._session.rt.run(payload.code);
-        return normalizeResult(this._session.rt, raw);
+        return this._enqueueCommand(async () => {
+          const response = await this._execute("run", payload);
+          if (this._autoCommit && this._journal) {
+            try { await this._commitJournal(); }
+            catch (error) { throw durabilityUnknown(error); }
+          }
+          if (response.ok) return response.result;
+          throw kernelError(response.error, response.code || "PYPROC_KERNEL_EXECUTION_ERROR", response.retryable === true);
+        });
       }
       if (action === "commit") {
-        const result = this._journal ? await this._journal.commit() : null;
-        this._lastCommitAt = result?.committedAt || this._lastCommitAt;
-        this._announceLeader(true);
-        this._notify();
-        return result;
+        return this._enqueueCommand(() => this._commitJournal());
       }
     }
     const replayQueued = this._journalDir && [...this._pending.values()].some((entry) => entry.awaitingLeader);
@@ -551,6 +589,7 @@ export class KernelElection {
       crossOriginIsolated: globalThis.crossOriginIsolated === true,
       jspi: typeof WebAssembly.Suspending === "function",
       durable: !!this._journalDir,
+      autoCommit: this._autoCommit,
       rpcSemantics: RPC_SEMANTICS,
       error: this._error ? String(this._error.message || this._error) : null,
     });
@@ -598,12 +637,12 @@ export class KernelElection {
   }
 }
 
-export async function openPersistentMachine(opts = {}) {
+export async function openDurableMachine(opts = {}) {
   const name = opts.name || "pyprocMachine";
   let journalDir = opts.journalDir || null;
   let storageKey = opts.storageKey || null;
   if (!journalDir) {
-    if (!globalThis.navigator?.storage?.getDirectory) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "open({ persistent }): OPFS is required");
+    if (!globalThis.navigator?.storage?.getDirectory) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "open(): OPFS is required");
     const root = opts.storageRoot || await navigator.storage.getDirectory();
     const machines = await root.getDirectoryHandle(opts.machineRoot || MACHINE_ROOT, { create: true });
     storageKey ||= await sha256Name(name);
@@ -624,6 +663,7 @@ export async function openPersistentMachine(opts = {}) {
     rpcTimeoutMs: opts.rpcTimeoutMs,
     onLeader: opts.onLeader,
     onStatus: opts.onStatus,
+    autoCommit: opts.autoCommit,
   });
   machine.join();
   try {

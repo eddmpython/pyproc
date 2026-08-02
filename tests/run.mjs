@@ -174,6 +174,7 @@ const containerApi = await import(pathToFileURL(join(ROOT, "src", "processOs", "
 const jobApi = await import(pathToFileURL(join(ROOT, "src", "processOs", "jobControl.js")).href);
 const reactiveApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "reactive.js")).href);
 const journalApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "journal", "machineJournal.js")).href);
+const distributionApi = await import(pathToFileURL(join(ROOT, "src", "runtime", "pyodideDistribution.js")).href);
 const jailApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "machineJail.js")).href);
 const deviceFsApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "deviceFs.js")).href);
 const initApi = await import(pathToFileURL(join(ROOT, "src", "capabilities", "init.js")).href);
@@ -312,25 +313,28 @@ check("checkEnvironment() 진단 형태", () => {
   if (!Array.isArray(r.issues)) throw new Error("issues 배열 아님");
   for (const it of r.issues) for (const k of ["code", "need", "why", "fix"]) if (typeof it[k] !== "string") throw new Error("issue." + k + " 형식");
 });
-// 자가 호스팅(engine-independence P0)의 핀 정합: fetchEngine이 받는 배포판 버전과
-// DEFAULT_INDEX(배포 지점의 유일 정의처)가 같은 값이어야 한다. 버전 변경 = 릴리즈 사유.
-check("자가 호스팅 핀 정합(fetchEngine == DEFAULT_INDEX == assetCatalog)", () => {
+// 기본 엔진 배포 계약: 같은 origin 주소, 평가용 upstream 주소, 준비 CLI, catalog와 런타임
+// trust anchor가 하나의 버전과 바이트 집합을 말해야 한다.
+check("기본 엔진 배포 핀 정합(fetchEngine == distribution == assetCatalog)", () => {
   const fe = readFileSync(join(ROOT, "scripts", "fetchEngine.mjs"), "utf8");
   const m = fe.match(/ENGINE_VERSION = "([^"]+)"/);
   if (!m) throw new Error("scripts/fetchEngine.mjs에서 ENGINE_VERSION을 못 찾음");
-  const rt = readFileSync(join(ROOT, "src", "runtime", "runtime.js"), "utf8");
-  const idx = rt.match(/DEFAULT_INDEX = "([^"]+)"/);
-  if (!idx || !idx[1].includes("/v" + m[1] + "/")) throw new Error("DEFAULT_INDEX에 v" + m[1] + " 없음(핀 불일치)");
-  // 엔진 부팅 집합의 provenance 결합: catalog의 pyodide 자산은 정확히 DEFAULT_INDEX 밑에
-  // 살아야 한다. 엔진 버전을 올리면서 catalog를 안 옮기면 여기서 RED가 난다(고아 기술 금지).
+  if (m[1] !== distributionApi.PYODIDE_VERSION) throw new Error("fetchEngine과 runtime 엔진 버전 불일치");
+  if (distributionApi.DEFAULT_INDEX !== "/vendor/pyodide/") throw new Error("기본 엔진이 same-origin 경로가 아니다");
   const catalog = JSON.parse(readFileSync(join(ROOT, "scripts", "assetCatalog.json"), "utf8"));
-  const engineAssets = catalog.assets.filter((asset) => asset.componentId.startsWith("pyodide-release-"));
+  const engineAssets = catalog.assets.filter((asset) => asset.componentId === `pyodide-release-${m[1]}` && asset.consumers?.includes("pyproc"));
   if (!engineAssets.length) throw new Error("assetCatalog가 엔진 부팅 집합을 기술하지 않는다");
   for (const asset of engineAssets) {
-    if (asset.url !== idx[1] + asset.name) throw new Error(`${asset.name}: catalog url이 DEFAULT_INDEX 밖이다(${asset.url})`);
+    if (asset.url !== distributionApi.EVALUATION_INDEX + asset.name) throw new Error(`${asset.name}: upstream provenance URL 불일치`);
+    if (asset.localPath !== "." + distributionApi.DEFAULT_INDEX + asset.name) throw new Error(`${asset.name}: same-origin 배포 경로 불일치`);
+    const sri = "sha256-" + Buffer.from(asset.sha256, "hex").toString("base64");
+    if (distributionApi.DEFAULT_CORE_INTEGRITY.files[asset.name] !== sri) throw new Error(`${asset.name}: runtime trust anchor 불일치`);
   }
   for (const name of ["pyodide.js", "pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"]) {
     if (!engineAssets.some((asset) => asset.name === name)) throw new Error(`엔진 부팅 자산 미기술: ${name}`);
+  }
+  if (distributionApi.DEFAULT_CORE_INTEGRITY.files["pyodide.js"] !== distributionApi.DEFAULT_ENGINE_SCRIPT_INTEGRITY) {
+    throw new Error("pyodide.js script/core trust anchor 불일치");
   }
 });
 
@@ -386,7 +390,7 @@ check("KernelElection 메서드", () => {
   const p = electionApi.KernelElection.prototype;
   for (const m of ["join", "run", "commit", "ready", "status", "subscribe", "role", "leave"])
     if (typeof p[m] !== "function") throw new Error("missing " + m);
-  if (typeof electionApi.openPersistentMachine !== "function") throw new Error("openPersistentMachine");
+  if (typeof electionApi.openDurableMachine !== "function") throw new Error("openDurableMachine");
 });
 check("JobControl 메서드", () => {
   const p = jobApi.JobControl.prototype;
@@ -1524,9 +1528,13 @@ check("타입 계약 게이트 배선", () => {
     if (!cfg.files.includes(rel)) throw new Error(`tsconfig files에 ${rel} 누락`);
   }
 });
-check("package.json bin -> assetManifest CLI", () => {
+check("package.json bin -> asset와 엔진 준비 CLI", () => {
   if (pkg.bin?.["pyproc-assets"] !== "./scripts/assetManifest.mjs") throw new Error("pyproc-assets bin 누락");
+  if (pkg.bin?.["pyproc-engine"] !== "./scripts/fetchEngine.mjs") throw new Error("pyproc-engine bin 누락");
   if (!pkg.files.includes("scripts/assetManifest.mjs")) throw new Error("files에 assetManifest.mjs 누락");
+  for (const file of ["scripts/fetchEngine.mjs", "scripts/assetCatalog.json"]) {
+    if (!pkg.files.includes(file)) throw new Error(`files에 ${file} 누락`);
+  }
 });
 check("package.json 소비자 게이트 스크립트", () => {
   if (pkg.scripts?.["test:package"] !== "node tests/packageGate.mjs") throw new Error("test:package 누락");
@@ -1604,8 +1612,8 @@ check("단일 Machine 제품 언어와 의존성 경계가 공개 표면에 고�
       "## One machine lifecycle",
       "## Dependency boundary",
       "Zero runtime npm dependencies is an exact package fact",
-      "| **Machine** | `boot()` / `open()` |",
-      "| **Workspace** | named persistent machine + `/home/web` |",
+      "| **Machine** | `open()` by default; `boot()` for an explicit transient kernel |",
+      "| **Workspace** | `open({ name })` + `/home/web` |",
       "Make the browser a persistent computer, make Python its default Machine",
     ]],
     ["README.ko.md", readmeKo, [
@@ -1614,8 +1622,8 @@ check("단일 Machine 제품 언어와 의존성 경계가 공개 표면에 고�
       "## 하나의 Machine 생명주기",
       "## 의존성 경계",
       "runtime npm 의존성 0은 정확한 package 사실",
-      "| **Machine** | `boot()` / `open()` |",
-      "| **Workspace** | 이름 있는 persistent machine + `/home/web` |",
+      "| **Machine** | 기본 `open()`, 명시적 휘발 kernel은 `boot()` |",
+      "| **Workspace** | `open({ name })` + `/home/web` |",
       "브라우저를 영속하는 컴퓨터로 만들고, Python을 기본 Machine으로 삼으며",
     ]],
     ["docs/product/vision.md", vision, ["pyproc is a persistent Python computer"]],
@@ -1879,6 +1887,7 @@ check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 �
     "pyproc/machine",
     "commitState",
     "pyproc-assets",
+    "pyproc-engine",
     "--copy-to",
   ]) {
     if (!packageGate.includes(term)) throw new Error(`packageGate.mjs 설치 패키지 표면 검사 누락: ${term}`);
@@ -1899,12 +1908,13 @@ check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 �
     if (!installedPackageGate.includes(term)) throw new Error(`installedPackageGate.mjs coverage check 누락: ${term}`);
   }
   for (const term of [
-    "openPersistentMachine",
+    "default durable Machine",
+    "durable auto-commit",
     "installed machine elects exactly one leader across browsing contexts",
     "installed machine survives forced leader context removal",
     "installed timeout/failover RPC rejects unknown outcome, ignores late response and never replays",
     "collision-free request IDs",
-    "installed machine cold-reopens committed heap and home after all participants close",
+    "installed machine cold-reopens auto-committed heap and home after all participants close",
     "prepared environment",
     "productPrepared",
     "PYPROC_RPC_OUTCOME_UNKNOWN",
@@ -1935,7 +1945,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   for (const term of ["Stable", "Beta", "Experimental", "Research preview"]) {
     if (!matrix.includes(term)) throw new Error(`능력 매트릭스 상태 누락: ${term}`);
   }
-  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "enableJail", "SocketBridge", "openPersistentMachine", "KernelElection", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
+  const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "enableJail", "SocketBridge", "KernelElection", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
   const missing = required.filter((name) => !mentionsSymbol(matrix, name));
   if (missing.length) throw new Error(`능력 매트릭스 공개 표면 누락: ${missing.join(", ")}`);
   const runnableLinks = [

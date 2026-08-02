@@ -14,6 +14,7 @@ export type Runtime = RuntimeShape;
 export type MemoryCapability = MemoryCapabilityShape;
 export type FileSystem = FileSystemShape;
 
+/** Verified same-origin engine distribution path: /vendor/pyodide/. */
 export const DEFAULT_INDEX: string;
 export const PAGE_SIZE: 65536;
 export const ENGINE_CONTRACT_VERSION: 1;

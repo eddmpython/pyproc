@@ -1,4 +1,4 @@
-// 부활 통합 동사 open({ persistent })가 옛 openPersistentMachine의 설치 표면이다(state-kernel 7b).
+// 설치된 public open({ name }) 기본 Machine이 선출, 자동 commit, cold revival까지 지키는가.
 import { open } from "pyproc";
 
 const waitFor = async (predicate, timeoutMs, stepMs = 50) => {
@@ -92,8 +92,7 @@ export async function runImmortalProductGate(opts = {}) {
   };
 
   try {
-    // 검사 의미: 멀티탭 영속 머신 진입점이 설치 패키지의 public 표면인가(지금은 open({ persistent })).
-    check("openPersistentMachine is installed public surface", typeof open === "function");
+    check("default durable Machine is installed public surface", typeof open === "function");
     const initialStarted = performance.now();
     await Promise.all([makeParticipant("A"), makeParticipant("B"), makeParticipant("C")]);
     const joined = await Promise.all(["A", "B", "C"].map((participantId) => command(participantId, {
@@ -114,6 +113,9 @@ export async function runImmortalProductGate(opts = {}) {
     check("installed canonical kernel preserves COI and JSPI",
       initialStatuses.every((status) => status.crossOriginIsolated && status.jspi),
       `coi=${leader?.crossOriginIsolated}, jspi=${leader?.jspi}`);
+    check("installed Machine defaults to durable auto-commit",
+      initialStatuses.every((status) => status.durable && status.autoCommit === true),
+      `durable=${leader?.durable}, autoCommit=${leader?.autoCommit}`);
 
     await command(followers[0], { cmd: "run", code: [
       "import os",
@@ -148,10 +150,9 @@ export async function runImmortalProductGate(opts = {}) {
     await new Promise((resolve) => setTimeout(resolve, 300));
     const afterLate = await command(followers[1], { cmd: "run", code: "6 * 7" });
 
-    const commit = await command(followers[0], { cmd: "commit", timeoutMs: 12000 });
-    check("installed follower commits heap and home through leader",
-      !!commit.commit?.committedAt && commit.commit?.home?.files >= 1,
-      `pages=${commit.commit?.pages}, homeFiles=${commit.commit?.home?.files}`);
+    check("installed run resolves only after heap, home and outcome are durable",
+      !!shared.status.lastCommitAt,
+      `lastCommitAt=${shared.status.lastCommitAt}`);
 
     const uncertainRequest = command(followers[0], {
       cmd: "run",
@@ -191,12 +192,12 @@ export async function runImmortalProductGate(opts = {}) {
       pendingAfter.status.rpcSemantics === "timeout or unprovable failover: outcome unknown; durable proven-portable failover: resend once by requestId",
       uncertain.ok ? "unexpected success" : `${uncertain.error.code}, late=${lateOutcome.ok ? "unexpected" : lateOutcome.error.code}, pending=${pendingAfter.status.pendingRequests}`);
 
-    await command(survivors[0], { cmd: "run", code: [
+    const coldRun = await command(survivors[0], { cmd: "run", code: [
       "productColdValue = 99",
       "open('/home/web/productImmortal/state.txt', 'w').write('installed-cold')",
     ].join("\n") });
-    const coldCommit = await command(survivors[1], { cmd: "commit", timeoutMs: 12000 });
-    const previousEpoch = coldCommit.status.epoch;
+    const previousEpoch = coldRun.status.epoch;
+    const automaticCommitAt = coldRun.status.lastCommitAt;
     for (const participantId of survivors) removeParticipant(participantId);
     const reopenStarted = performance.now();
     await makeParticipant("D");
@@ -206,9 +207,9 @@ export async function runImmortalProductGate(opts = {}) {
       cmd: "run",
       code: "f'{productSharedValue}|{productColdValue}|{open(\"/home/web/productImmortal/state.txt\").read()}|{productPrepared}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
     });
-    check("installed machine cold-reopens committed heap and home after all participants close",
+    check("installed machine cold-reopens auto-committed heap and home after all participants close",
       reopened.status.role === "leader" && reopened.status.recovered === true && reopened.status.epoch === previousEpoch + 1 &&
-      reopened.status.lastCommitAt === coldCommit.commit.committedAt &&
+      !!automaticCommitAt && reopened.status.lastCommitAt === automaticCommitAt &&
       reopenedValue.result === '41|99|installed-cold|7|{"lane": "prepared"}',
       `epoch=${reopened.status.epoch}, value=${reopenedValue.result}, reopen=${timings.immortalColdReopenMs}ms`);
     await command("D", { cmd: "leave" });

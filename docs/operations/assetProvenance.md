@@ -58,16 +58,17 @@ exact binary에 포함된 component, source revision, build config를 모르면 
 
 ## 현재 자산 판정
 
-엔진 부팅 집합(Pyodide 314.0.2, `DEFAULT_INDEX` 밑, 두 유통 경로 교차 검증: GitHub release
-tarball과 jsdelivr CDN의 바이트가 sha256 동일함을 2026-07-19 실측):
+엔진 부팅 집합(Pyodide 314.0.2): GitHub release가 provenance 지점이고
+`pyproc-engine`이 same-origin `/vendor/pyodide/` 배포판을 준비한다. catalog가 여섯 core anchor를,
+검증된 lock이 모든 package 파일을 봉인하며 runtime이 부팅 core를 다시 검증한다.
 
 | 자산 | 확인된 provenance | 배포 판정 |
 |---|---|---|
-| `pyodide.js` / `pyodide.mjs` | Pyodide 자기 소스의 loader 빌드물. exact tag `314.0.2`, 공개 빌드 recipe(미재현) | 상류 CDN 런타임 참조만 |
-| `pyodide.asm.mjs` | Emscripten 생성 글루. 제3자 런타임 코드 포함, inventory 미검증 | 상류 CDN 런타임 참조만 |
-| `pyodide.asm.wasm` | 합성 바이너리(CPython + 링크 라이브러리). 최종 inventory 미검증. `v86.wasm`과 동일 잣대 | 상류 CDN 런타임 참조만 |
-| `python_stdlib.zip` | CPython stdlib + Pyodide 패치. 내용 inventory 미검증 | 상류 CDN 런타임 참조만 |
-| `pyodide-lock.json` | Pyodide 빌드가 생성한 패키지 메타데이터 | 상류 CDN 런타임 참조만 |
+| `pyodide.js` / `pyodide.mjs` | Pyodide 자기 소스의 loader 빌드물. exact tag `314.0.2`, catalog SHA-256 | verified same-origin 기본 배포 |
+| `pyodide.asm.mjs` | Emscripten 생성 글루. exact release와 catalog SHA-256 | verified same-origin 기본 배포 |
+| `pyodide.asm.wasm` | 합성 바이너리(CPython + 링크 라이브러리). exact release와 catalog SHA-256 | verified same-origin 기본 배포 |
+| `python_stdlib.zip` | CPython stdlib + Pyodide 패치. exact release와 catalog SHA-256 | verified same-origin 기본 배포 |
+| `pyodide-lock.json` | Pyodide 빌드 package metadata. catalog가 lock을 봉인하고 CLI가 그 안의 354 package hash를 전수 검사 | verified same-origin 기본 배포 |
 
 Web Machine fixture(v86 계열):
 

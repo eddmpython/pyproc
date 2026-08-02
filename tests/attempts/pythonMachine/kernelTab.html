@@ -4,7 +4,7 @@
 <html lang="ko"><head><meta charset="utf-8"><title>persistent machine participant</title></head>
 <body>
 <script type="module">
-  import { openPersistentMachine } from "../../../index.js";
+  import { open } from "../../../index.js";
   const parent = window.parent;
   const post = (message) => parent.postMessage({ from: "kernelTab", ...message }, "*");
   const indexParam = new URLSearchParams(location.search).get("indexURL");
@@ -20,7 +20,7 @@
         const root = await navigator.storage.getDirectory();
         const journalDir = await root.getDirectoryHandle(message.journalName, { create: true });
         const assetIntegrity = await fetch("/pyproc-assets.json", { cache: "no-store" }).then((response) => response.json());
-        machine = await openPersistentMachine({
+        machine = await open({
           name: message.name,
           participantId: message.tabId,
           manifest: {

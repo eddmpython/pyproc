@@ -103,7 +103,7 @@ export interface CoreAssetStats {
 export function checkEnvironment(): EnvReport;
 
 export interface BootOptions {
-  /** Pyodide distribution URL. Defaults to jsdelivr v314.0.2. */
+  /** Pyodide distribution URL. Defaults to the verified same-origin path /vendor/pyodide/. */
   indexURL?: string;
   stdout?: (line: string) => void;
   stderr?: (line: string) => void;
@@ -113,10 +113,10 @@ export interface BootOptions {
   env?: Record<string, string>;
   /** Caches the core assets (wasm/stdlib/lock) in this directory so a later boot touches the network zero times. */
   coreCacheDir?: FileSystemDirectoryHandle;
-  /** Browser SRI value (sha256-...) for the pyodide.js script tag pyproc injects. Can only be enforced before the first boot. */
-  engineScriptIntegrity?: string;
-  /** SRI-verifies the indexURL assets on the fetch path (wasm, stdlib, lock, wheels). */
-  coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy;
+  /** Browser SRI value for pyodide.js. The pinned default is enforced before the first boot; false explicitly disables it. */
+  engineScriptIntegrity?: string | false;
+  /** SRI-verifies fetched engine assets. The pinned core policy is the default; false explicitly disables it. */
+  coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy | false;
   /** Output of the pyproc-assets CLI. Worker capabilities created from a Runtime SRI-verify the graph before spawning. */
   assetIntegrity?: PyProcAssetIntegrityManifest;
   /** Replacement lock file, e.g. the output of Runtime.freeze(): the same versions reproduce with zero resolution. */
@@ -213,6 +213,8 @@ export interface SyscallInstallInfo {
 
 export interface PyProcOptions {
   indexURL?: string;
+  /** Browser SRI value for the process engine script. The pinned default is used unless false. */
+  engineScriptIntegrity?: string | false;
   /** Packages each process loads at boot, e.g. ["numpy"]. */
   packages?: string[];
   /** Python warm-up code run at boot, e.g. "import numpy". */
@@ -510,6 +512,8 @@ export interface KernelElectionOptions {
   heartbeatMs?: number;
   presenceTimeoutMs?: number;
   rpcTimeoutMs?: number;
+  /** Commits each completed run, including its durable outcome record, before resolving or rejecting. Defaults to true. */
+  autoCommit?: boolean;
   /** Called when this participant becomes the leader. */
   onLeader?: (info: KernelLeaderInfo) => void;
   /** Called whenever the role, leader, epoch, or recovery state changes. */
@@ -543,6 +547,7 @@ export interface KernelStatus {
   crossOriginIsolated: boolean;
   jspi: boolean;
   durable: boolean;
+  autoCommit: boolean;
   rpcSemantics: string;
   error: string | null;
 }
@@ -561,7 +566,7 @@ declare class KernelElection {
   constructor(opts?: KernelElectionOptions);
   /** Joins the election. Winning the lock makes this the leader and boots the kernel; losing makes it a follower, an RPC view. */
   join(): KernelElection;
-  /** Runs code. If the leader changes or the request times out after it was sent, this raises an outcome-unknown error rather than risking a duplicate execution. */
+  /** Runs code. By default the Python effect and any forwarded RPC outcome commit in one generation before this settles. If durability cannot be proved, it raises outcome-unknown rather than inviting duplicate execution. */
   run(code: string, opts?: { async?: boolean; timeoutMs?: number }): Promise<unknown>;
   /** Commits the heap and /home/web as one journal generation. A follower's call is forwarded to the leader. */
   commit(opts?: { timeoutMs?: number }): Promise<JournalCommitResult | null>;
@@ -730,12 +735,9 @@ export interface JournalRecoverResult {
 }
 
 /**
- * Write-ahead log: tolerance for a forced kill. On each idle period it stores changed pages
+ * Write-ahead log: tolerance for a forced kill. At each requested boundary it stores changed pages
  * content-addressed, and the next boot revives from the last commit through `recover()` - it
  * survives even when a hibernate hook fails.
- * Why the commit unit is **idle** rather than per statement: even a no-op statement dirties around
- * ninety pages (fixed scratch in CPython's eval loop and GC), so committing per statement makes
- * write volume explode. Batching on idle cuts it dramatically.
  * The contract: a crash loses everything "since the last commit". That is boundary consistency,
  * not per-statement durability.
  */
@@ -1007,8 +1009,8 @@ export interface SessionManifest {
   setup?: string;
   /** Asset SRI manifest handed to the booting Runtime. It is not part of the replay state itself. */
   assetIntegrity?: PyProcAssetIntegrityManifest;
-  engineScriptIntegrity?: string;
-  coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy;
+  engineScriptIntegrity?: string | false;
+  coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy | false;
   coreCacheDir?: FileSystemDirectoryHandle;
   /**
    * loadPyodide supplied by a worker consumer, which has no document to inject the engine script
@@ -1282,18 +1284,19 @@ declare class PyprocMachine {
   dispose(): Promise<void>;
 }
 
-/** Fast path for the first guest: boots a Python machine and returns its handle. */
+/** Explicit transient path: boots a Python machine without the default durable Machine lifecycle. */
 export function boot(options?: BootMachineOptions): Promise<PyprocMachine>;
 
 /**
  * One verb for revival, with a trust contract that differs by source - the semantics are not
  * flattened. An external bundle is integrity- and signature-verified before any heap is touched;
- * your own OPFS session save is replayed and checked against h0; `persistent` runs multi-tab
- * election and revives from the journal, returning a KernelElection handle.
+ * your own OPFS session save is replayed and checked against h0. With no source, or with a durable
+ * Machine name, it opens the OPFS-backed multi-tab Machine and auto-commits every completed run.
  */
+export function open(): Promise<KernelElection>;
+export function open(options: PersistentMachineOptions): Promise<KernelElection>;
 export function open(source: Blob | Uint8Array | ArrayBuffer, opts?: OpenTrustOptions): Promise<PyprocMachine>;
 export function open(source: { dir: FileSystemDirectoryHandle; name: string }, opts?: { manifest?: SessionManifest; loadPyodide?: (cfg: unknown) => Promise<unknown> }): Promise<PyprocMachine>;
-export function open(source: { persistent: PersistentMachineOptions | true }, opts?: PersistentMachineOptions): Promise<KernelElection>;
 
 
  // Type-only surface: the contract of what handles and escape hatches return, with no value export.

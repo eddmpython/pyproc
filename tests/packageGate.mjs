@@ -47,6 +47,11 @@ try {
 
   const cli = binPath(appDir, "pyproc-assets");
   if (!existsSync(cli)) throw new Error("installed pyproc-assets bin shim 없음");
+  const engineCli = binPath(appDir, "pyproc-engine");
+  if (!existsSync(engineCli)) throw new Error("installed pyproc-engine bin shim 없음");
+  const installedEngineCli = readFileSync(join(appDir, "node_modules", "pyproc", "scripts", "fetchEngine.mjs"), "utf8");
+  if (!installedEngineCli.includes('argv[index] === "--out"')) throw new Error("installed pyproc-engine --out 계약 누락");
+  if (!existsSync(join(appDir, "node_modules", "pyproc", "scripts", "assetCatalog.json"))) throw new Error("installed engine catalog 누락");
 
   const manifestOut = join(appDir, "public", "pyproc-assets.json");
   const copyTo = join(appDir, "public", "vendor", "pyproc");

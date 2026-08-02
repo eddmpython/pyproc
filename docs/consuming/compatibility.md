@@ -25,7 +25,7 @@ This table answers which pyproc surfaces can run in a target environment. The ru
 
 ## Engine
 
-- **Pyodide v314.0.2 (CPython 3.14).** Loaded from a CDN by default, self-hostable through `indexURL`. Changing the version is a release-worthy event that requires the full runtime-consistency gate (detail: the runtime-consistency section of [contract.md](contract.md)).
+- **Pyodide v314.0.2 (CPython 3.14).** Loaded from the verified same-origin `/vendor/pyodide/` distribution by default. `indexURL` is an explicit distribution override. Changing the version is a release-worthy event that requires the full runtime-consistency gate (detail: the runtime-consistency section of [contract.md](contract.md)).
 - The WASI engine (`pyproc/wasi`) is a separate async surface for proving engine independence. Pyodide is the production canon.
 
 ## Resource characteristics (for sizing your heap)

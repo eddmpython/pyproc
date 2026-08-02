@@ -56,15 +56,15 @@ export const CEILING_LADDER = Object.freeze({
 export const NORTH_STAR_AXES = Object.freeze([
   Object.freeze({
     id: "runPython",
-    score: 9.5,
+    score: 9.7,
     en: Object.freeze({
       title: "Real Python in the tab",
-      state: "`boot` / `run` / `loadPackages` drive CPython on WebAssembly from one handle, with a terminal REPL, PEP 723 scripts, a wheel cache, and a declared-environment lane. The browser gate, the installed-package gate, the demo gate, and the agent (MCP) gate all run it. Engine assets come from a CDN unless you self-host, and the platform is Chromium and Edge only.",
+      state: "`open` is the durable Machine and `boot` is the transient workbench; both drive CPython on WebAssembly. The pinned engine is prepared by the shipped zero-dependency CLI, served from the same origin, checked against catalog and lock hashes, then core-verified again in the browser with zero third-party requests. Browser, installed-package, demo, and agent gates run it. The platform is Chromium and Edge only.",
       target: "The Python a local interpreter runs, running in a tab, with no server and no setup ritual.",
     }),
     ko: Object.freeze({
       title: "탭 안의 진짜 파이썬",
-      state: "`boot` / `run` / `loadPackages`가 핸들 하나로 WebAssembly 위 CPython을 몰고, 터미널 REPL, PEP 723 스크립트, wheel 캐시, 선언 환경 레인이 붙는다. 브라우저 게이트, 설치 패키지 게이트, 데모 게이트, 에이전트(MCP) 게이트가 전부 이것을 돌린다. 자체 호스팅하지 않으면 엔진 자산은 CDN에서 오고, 플랫폼은 Chromium과 Edge뿐이다.",
+      state: "`open`은 내구 Machine이고 `boot`은 휘발 작업대이며 둘 다 WebAssembly 위 CPython을 몬다. 게시된 무의존 CLI가 pin된 engine을 준비하고, same-origin에서 catalog와 lock hash를 검증한 뒤 브라우저가 core를 다시 검증하며 제3자 요청은 0이다. 브라우저, 설치 패키지, 데모, 에이전트 게이트가 이를 돌린다. 플랫폼은 Chromium과 Edge뿐이다.",
       target: "로컬 인터프리터가 돌리는 파이썬을 서버도 준비 의식도 없이 탭에서 그대로 돌린다.",
     }),
     evidence: Object.freeze([
@@ -76,9 +76,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "assetLaneWithoutCdn",
-        en: "Make the verified self-hosted asset lane the default path, so a first boot depends on no CDN",
-        ko: "검증된 자체 호스팅 자산 레인을 기본 경로로 올려 첫 부팅이 CDN에 의존하지 않게 한다",
+        id: "broadenBrowserPlatform",
+        en: "Broaden the browser platform without weakening the Machine contract or hiding unavailable capabilities",
+        ko: "Machine 계약을 약화하거나 없는 능력을 숨기지 않고 브라우저 플랫폼 범위를 넓힌다",
       }),
     ]),
   }),
@@ -166,15 +166,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "survivesTabDeath",
-    score: 9.5,
+    score: 9.7,
     en: Object.freeze({
       title: "A machine that outlives its tab",
-      state: "One logical machine spans same-origin tabs through leader election: a forcibly removed leader is taken over, followers commit through the leader, and the committed heap and `/home/web` cold-reopen after every participant closes, all of it exercised on the installed package. The leader records command outcomes in the same durable generation as the heap, so a repeated request ID is answered from the record instead of run twice, and a durable caller controller that can prove its session proxy-free parks and asks the successor once. The installed-package path also fixes the honest boundary: a normal follower cannot inspect the leader session, so its in-flight call ends as `PYPROC_RPC_OUTCOME_UNKNOWN` on failover and is not resent. Live-leader timeout, non-durable state, caller loss, and a known proxy heap are never resent. The complete rule is the [durable RPC state table](docs/consuming/contract.md#durable-rpc-state-table-normative).",
+      state: "Argument-free `open()` now enters the named OPFS Machine rather than a transient kernel. Commands and commits are serialized, and every completed run reaches a generation carrying heap, `/home/web`, and forwarded outcome before settling; the installed package cold-reopens that state without a manual commit. Leader election spans same-origin tabs, a repeated request ID is answered from its durable record, and commit failure is non-retryable outcome-unknown. A normal follower still cannot prove a cut-off leader heap portable, so failover of an in-flight call remains `PYPROC_RPC_OUTCOME_UNKNOWN`. The complete rule is the [durable RPC state table](docs/consuming/contract.md#durable-rpc-state-table-normative).",
       target: "The machine keeps running while any tab is open, and every command it accepted resolves exactly once.",
     }),
     ko: Object.freeze({
       title: "탭보다 오래 사는 머신",
-      state: "leader 선출로 논리 머신 하나가 동일 origin tab들을 가로지른다. 강제 제거된 leader는 승계되고, follower는 leader를 통해 commit하며, 참가자가 전부 닫힌 뒤에도 commit된 heap과 `/home/web`이 cold reopen된다. leader는 명령 결과를 heap과 같은 durable generation에 기록하므로 반복된 request ID에는 기록으로 답하고, 자기 session에 proxy가 없음을 증명할 수 있는 durable caller controller는 요청을 대기시켰다가 승계자에게 한 번 묻는다. 설치 패키지 경로는 정직한 경계도 고정한다. 일반 follower는 leader session을 검사할 수 없으므로 in-flight 호출이 승계에서 `PYPROC_RPC_OUTCOME_UNKNOWN`으로 끝나고 다시 보내지지 않는다. live-leader timeout, non-durable 상태, caller 소멸, 확인된 proxy heap도 다시 보내지 않는다. 전체 규칙은 [durable RPC 상태표](docs/consuming/contract.md#durable-rpc-state-table-normative)다.",
+      state: "인자 없는 `open()`이 휘발 kernel 대신 이름 있는 OPFS Machine으로 들어간다. 명령과 commit은 직렬화되고, 완료된 run은 heap, `/home/web`, 전달된 outcome을 실은 generation에 도달한 뒤 settle된다. 설치 package는 수동 commit 없이 그 상태를 cold reopen한다. leader 선출이 동일 origin tab을 가로지르고 반복 request ID는 durable record로 답하며 commit 실패는 non-retryable outcome-unknown이다. 일반 follower는 끊긴 leader heap의 이식성을 증명할 수 없으므로 in-flight failover는 여전히 `PYPROC_RPC_OUTCOME_UNKNOWN`이다. 전체 규칙은 [durable RPC 상태표](docs/consuming/contract.md#durable-rpc-state-table-normative)다.",
       target: "탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다.",
     }),
     evidence: Object.freeze([
@@ -413,15 +413,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "supplyChainIntegrity",
-    score: 8.5,
+    score: 8.8,
     en: Object.freeze({
       title: "A supply chain you can verify",
-      state: "The asset CLI emits SRI over the worker and Service Worker import graph, `verifyPyProcAssetIntegrity` refuses a spawn on a bad hash, engine boot supports fail-closed SRI with a re-verifying offline cache, npm releases publish through OIDC trusted publishing with provenance and manual publishes disabled, and the browser computer verifies a signer before importing an image. The default Linux guest comes from two byte-identical independent builds, passes real Python-Linux traffic plus process cold restore, and is published with exact source, complete legal material, SBOM, config, and manifests at a stable hash-pinned project release.",
+      state: "The shipped zero-dependency engine CLI verifies catalog-pinned boot anchors and all 354 lock-listed package files before same-origin deployment; runtime then pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. The asset CLI separately seals the worker and Service Worker graph, and bad hashes refuse spawn. npm publishing uses OIDC provenance, machine images verify signers before import, and the default Linux guest comes from two byte-identical independent builds with source, legal material, SBOM, config, and manifests at a hash-pinned project release.",
       target: "Every byte that executes traces back to a source somebody else can rebuild and verify.",
     }),
     ko: Object.freeze({
       title: "검증 가능한 공급망",
-      state: "자산 CLI가 워커와 Service Worker import 그래프 위에 SRI를 내고, `verifyPyProcAssetIntegrity`가 해시 불일치에서 spawn을 거부하고, 엔진 부팅이 재검증 오프라인 캐시와 함께 fail-closed SRI를 지원하고, npm 게시는 provenance가 붙는 OIDC trusted publishing으로만 나가며(수동 게시 비활성), 브라우저 컴퓨터는 이미지를 가져오기 전에 서명자를 검증한다. 기본 Linux guest는 독립 빌드 둘의 byte-identical 결과이고 실제 Python-Linux 통신과 process cold restore를 통과했다. exact source, 전체 legal material, SBOM, config와 manifest를 안정된 프로젝트 release에서 image hash와 함께 제공한다.",
+      state: "게시된 무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package 354개를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. 자산 CLI는 worker와 Service Worker graph를 별도로 봉인하고 나쁜 hash는 spawn을 거부한다. npm은 OIDC provenance로 게시되고 Machine image는 import 전에 서명자를 검증한다. 기본 Linux guest는 독립 빌드 둘의 byte-identical 결과와 source, legal material, SBOM, config, manifest를 hash-pin된 project release에 둔다.",
       target: "실행되는 모든 바이트가 남이 다시 빌드하고 검증할 수 있는 출처로 이어진다.",
     }),
     evidence: Object.freeze([

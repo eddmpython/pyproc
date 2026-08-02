@@ -49,8 +49,8 @@ export async function bootEnv(manifest = {}, dirs = {}) {
   }
   const bootMs = Math.round(performance.now() - t0);
 
-  // indexURL을 반드시 넘긴다: 빠뜨리면 기본 CDN으로 되돌아가 자식 워커/subprocess가
-  // 자체 호스팅·오프라인 배포 지점에서 샌다(외부 평가 적발 실버그, 2026-07-12).
+  // indexURL을 반드시 넘긴다: 빠뜨리면 자식 워커/subprocess가 부모와 다른 배포 지점을
+  // 쓸 수 있어 same-origin과 offline 계약이 깨진다.
   const rt = new Runtime(new PyodideEngine(py), indexURL);
   const t1 = performance.now();
   if (manifest.packages && manifest.packages.length) {

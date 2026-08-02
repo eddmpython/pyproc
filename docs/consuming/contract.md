@@ -115,28 +115,30 @@ const os = await machine.proc({ lanes: 4 });
 
 ## The canonical persistent machine
 
-For a product path where several tabs share one Python machine, `open({ persistent })` is canonical.
+`open()` is the canonical product entry. It opens the default named OPFS Machine; `open({ name })`
+selects another durable identity shared by same-origin tabs. `boot()` is the explicit transient path.
 
 ```js
 import { open } from "pyproc";
 
-const kernel = await open({ persistent: {
+const kernel = await open({
   name: "workspace",
   manifest: { packages: ["numpy"], setup: "import numpy", assetIntegrity },
-} });
+});
 
 await kernel.run("counter = 41");
-await kernel.commit();
 console.log(kernel.status());
 ```
 
-Note the variable name: this path returns a `KernelElection` handle, not the `PyprocMachine` that `boot()` and the other `open()` forms give you. Its `run` is asynchronous and it carries `commit`/`status` instead of `fs`/`history`/`proc`.
+This default path returns a `KernelElection` handle, not the transient `PyprocMachine` returned by
+`boot()` and the bundle/session forms of `open`. Its `run` is asynchronous and auto-commits by
+default; `commit()` remains an explicit force boundary.
 
 - `KernelElection` is the lower contract providing one Web Locks leader, BroadcastChannel RPC, a unique participant ID, and a persistent OPFS epoch. The leader kernel lives in its own document, so it keeps `crossOriginIsolated` along with the SAB and JSPI capabilities.
-- `MachineJournal` puts the WASM heap delta and a `/home/web` snapshot into one commit. A new leader, and a new participant after every tab has closed, recover only the last completed commit.
-- The SharedWorker-based alternative (`SharedKernel`) was removed. A SharedWorker is `crossOriginIsolated=false`, so it could not offer SAB interrupts, snapshot-fork, or persistent epoch recovery; `open({ persistent })` above is the single canonical multi-tab path.
+- `MachineJournal` puts the WASM heap delta, `/home/web`, and forwarded command outcome into one generation. A completed `run` settles only after that generation commits. Commit failure becomes non-retryable `PYPROC_RPC_OUTCOME_UNKNOWN` because the live effect may already exist.
+- The SharedWorker-based alternative (`SharedKernel`) was removed. A SharedWorker is `crossOriginIsolated=false`, so it could not offer SAB interrupts, snapshot-fork, or persistent epoch recovery; `open()` is the single canonical multi-tab path.
 - A request not yet sent can wait for a ready leader and then be sent once. A sent request follows the durable RPC state table below; `durable` alone never authorizes a resend.
-- `status()` provides `participantId`, `leaderId`, `epoch`, `role`, `phase`, `recovered`, `lastCommitAt`, `participantCount`, `pendingRequests`, `durable`, and a concise `rpcSemantics` projection. Two leaders in the same epoch fail with `PYPROC_SPLIT_BRAIN`.
+- `status()` provides `participantId`, `leaderId`, `epoch`, `role`, `phase`, `recovered`, `lastCommitAt`, `participantCount`, `pendingRequests`, `durable`, `autoCommit`, and a concise `rpcSemantics` projection. Two leaders in the same epoch fail with `PYPROC_SPLIT_BRAIN`.
 - `manifest.packages` and `manifest.setup` are the contract by which a new leader deterministically reproduces the same prepared environment. They are not a promise to revive, as they were, a native package installed mid-run, an open socket, a file descriptor, a DB connection, a Promise, or an arbitrary Python stack. Reopen external resources with `resume.py`.
 
 ### Durable RPC state table (normative)
@@ -164,7 +166,7 @@ After a revival - journal, session, or image open - process resources such as fi
 
 - `npm test` checks that `package.json` exports expose only approved stable specifiers, that the public examples consume only the root API or subpath exports, and that `index.d.ts` covers the public type contract.
 - `npm run test:installed` verifies the installed-package contract from an isolated browser fixture that has no repo-relative imports and exposes only the installed `node_modules/pyproc`.
-- That installed-package browser gate exercises `DeviceFs` file devices, the `JobControl` job lifecycle, the `MachineContainer` child-machine lifecycle, `MachineJournal` commit and recover, a force-removed `open({ persistent })` leader across three independent browsing contexts with a cold reopen of heap plus `/home/web` plus prepared environment, the permission-jail manifest, signed `.pymachine` export and open, trusted public key and wrong-key rejection, signer fingerprints, and reopening a SQLite connection from `/home/web/resume.py`.
+- That installed-package browser gate exercises argument-free `open()`, `DeviceFs` file devices, the `JobControl` job lifecycle, the `MachineContainer` child-machine lifecycle, a force-removed `open({ name })` leader across three independent browsing contexts, and a cold reopen of auto-committed heap plus `/home/web` plus prepared environment. It also covers the permission-jail manifest, signed `.pymachine` export and open, trusted public key and wrong-key rejection, signer fingerprints, and reopening a SQLite connection from `/home/web/resume.py`.
 - `pyproc/runtime` is the public Runtime wrapper from 0.0.11. The internal `runtime.js` core handles only the engine wrapper and `Runtime.fs`; the composition root `src/composition/runtimeApi.js` installs the `runtimeBindings.js` registry to provide opt-in capability factories such as `enableReactive`.
 - The `restoreLive` execution boundary is machine-verified. Respect the boundary and restore is immediate with zero rehashing; violate it and the violation is detected automatically and promoted to the rehash path. Check which path ran through the returned `rehashed`.
 
@@ -174,7 +176,7 @@ After a revival - journal, session, or image open - process resources such as fi
 
 | Gate | Exposed specifiers | Actual public surface | Contract verified |
 | --- | --- | --- | --- |
-| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine` | `boot`, `open`, `createWebComputer`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, a `commitState`/`openState` kernel round trip, `pyproc-assets` bin | package exports, stable subpath, `index.d.ts`, npm files, CLI graph copy and SRI manifest |
+| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine` | `boot`, `open`, `createWebComputer`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, a `commitState`/`openState` kernel round trip, `pyproc-assets` and `pyproc-engine` bins | package exports, stable subpath, `index.d.ts`, npm files, engine preparation, CLI graph copy and SRI manifest |
 | installed package - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | An asset manifest rooted at `/node_modules/pyproc/`, worker graph SRI, registration of the installed `pyprocSw.js`, and rejection of a bad worker SRI before spawn |
 | installed package - runtime/server | `pyproc` | `boot`, the machine runtime's `enableAsgiServer`, ASGI delegation wiring of the installed `pyprocSw.js` | Machine boot from the installed package, a Python ASGI app, a `fetch("/pyproc/...")` virtual-origin round trip, the S3 timing source |
 | installed package - device filesystem | `pyproc` | machine runtime `enableDeviceFs` | Reading and writing `/dev/productState` and `/proc/meminfo` through the Python `open()` file contract on an installed-package machine |
@@ -182,7 +184,7 @@ After a revival - journal, session, or image open - process resources such as fi
 | installed package - shell jobs | `pyproc` | `fork`/`repl`/`signal` on a `proc({ replay })` pool | Building an interactive namespace on the installed worker graph and running the `expr &`, `fg`, `kill`, `terminate` job lifecycle |
 | installed package - machine container | `pyproc` | child kernels of the machine's `proc()` (a `setup` manifest plus `exec`/`kill`) | Spawning, running, measuring heapLen, killing a child machine on the installed worker graph, and rejecting calls after the kill |
 | installed package - crash resume | `pyproc` | `boot({ deterministic: true })`, machine `history.commit`/`history.recover` | Leaving a reactive boundary on an installed-package `deterministic` machine with `history.commit()` and recovering product state in a new machine with `history.recover()` |
-| installed package - immortal python machine | `pyproc` | `open({ persistent })`, the `KernelElection` handle | Three independent browsing contexts of the installed package sharing one Python state and prepared environment, confirming participant request IDs never collide and late responses are discarded, then continuing execution after the leader is force-removed through persistent epoch succession and recovery of heap plus `/home/web` from OPFS, and reopening from the last commit and the manifest environment after every context has closed |
+| installed package - immortal python machine | `pyproc` | `open()` / `open({ name })`, the `KernelElection` handle | The default durable auto-commit Machine plus three independent browsing contexts sharing one Python state and prepared environment, continuing after forced leader removal, and cold-reopening automatically committed heap plus `/home/web` after every context closes |
 | installed package - permission policy | `pyproc` | the machine `runtime` escape hatch (the `setGlobal` chokepoint plus the CSP `connect-src`) | Enforcement of a product permission manifest (`net=false`, `clipboard=false`, `home=true`, `workers=false`) and of the Python chokepoints |
 | installed package - portable machine | `pyproc`, `pyproc/history` | `boot({ deterministic: true })`, `open(blob)`, `createStateKeyPair`, `exportStatePublicKey`, `fingerprintStatePublicKey`, machine `history.export({ signingKey })`, Runtime `enableInit` | Signed `.pymachine` plus `/home/web` export, signer fingerprint, untrusted and wrong-key rejection, trusted open, reopening the `resume.py` SQLite resource, the S4 timing source |
 | installed package - web computer | `pyproc` | `createWebComputer` | Assembling a browser computer from the installed package alone: booting the Python guest, running code, and stopping the whole thing |
@@ -195,9 +197,9 @@ After a revival - journal, session, or image open - process resources such as fi
 
 ## Runtime consistency (hard constraints)
 
-- Default Pyodide: **v314.0.2 (CPython 3.14)**, loaded from a CDN by default. A supplied Pyodide loader must resolve the same version.
-- **Self-hosting (distribution independence)**: CDN availability and policy are outside our control, so the whole distribution point can be moved. `npm run fetch:engine` prepares the full distribution (core plus every package wheel, 426MB) from GitHub Releases into `vendor/pyodide/`, and you consume it with `boot({ indexURL: "/vendor/pyodide/" })` - zero CDN traffic even for package installs and lock resolution. The full gate runs on the same switch: `PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:browser` (measured 2026-07-13: 39/39 GREEN on the self-hosted path, with offlineBoot and swOffline re-measured GREEN). `indexURL` is recorded as a property of the booting kernel, so child workers (subprocess) use the same point and nothing leaks to a CDN.
-- **Boot asset SRI (v2)**: `engineScriptIntegrity` attaches a standard `sha256-...` SRI to the `pyodide.js` script tag pyproc injects. `coreIntegrity` verifies the fetch-path indexURL assets (wasm, stdlib, lock, wheels) against the same SRI manifest, and in strict mode - the default - a missing manifest entry or a tampered OPFS cache converges to a boot failure. `assetIntegrity` fetches and SHA-256 verifies the local import graph of pyproc's Worker, SharedWorker, and WASI worker before spawn. `registerPyProcServiceWorker()` binds the Service Worker registration file to the same manifest, and the `coreIntegrity` mode of `pyprocSw.js` verifies, at the SW fetch event, even the Pyodide internal modules that a browser dynamic import pulls in outside the JavaScript `fetch` wrapper. Measured: `runtimeIntegrityProbe.html` GREEN 6/6; the Node gate's asset integrity preflight and assetManifest CLI GREEN; the browser gate's Service Worker registration path and SW `coreIntegrity` verification GREEN.
+- Default Pyodide: **v314.0.2 (CPython 3.14)** at the verified same-origin `/vendor/pyodide/` path. A supplied loader owns its version and trust contract.
+- **Owned distribution**: `npx pyproc-engine --out <static-root>/vendor/pyodide` downloads the pinned full release, verifies six catalog anchors, then verifies every package file named by the trusted lock. The browser gate boots from that path and rejects third-party engine traffic. `indexURL` is recorded on the kernel so child workers use the same point. A CDN URL exists only as an explicit evaluation override.
+- **Boot asset SRI**: default boot pins the `pyodide.js` script SRI and verifies fetched core assets against the built-in trust anchor. `engineScriptIntegrity` and `coreIntegrity` may replace that policy; explicit `false` disables it. `assetIntegrity` separately verifies pyproc's Worker, SharedWorker, and WASI worker graph before spawn. `registerPyProcServiceWorker()` binds the Service Worker registration file to the same manifest.
 - **The WASI session (bootWasi/WasiSession) is a separate async surface on the `pyproc/wasi` subpath.** It is additive and independent of the Pyodide-based surfaces (boot/Runtime/PyProc/ReactiveController). It is an opt-in for proving engine independence, with `wasmURL` supplied by the caller and self-hosted under COOP/COEP. Constraints: the value bridge is JSON-serializable only (no FFI), native extensions are impossible (static linking), and a cross-engine `.pymachine` is not possible. For production Python the Pyodide surface is canonical.
 - Bundler contract: types resolve under `moduleResolution: "Bundler"` with `allowJs: false`, and Vite emits `new Worker(new URL(...))` as a worker chunk under the installed-package gate.
 

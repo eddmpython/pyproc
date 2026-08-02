@@ -1,30 +1,85 @@
+#!/usr/bin/env node
 // fetchEngine.mjs - 엔진 배포판 자가 호스팅 준비(engine-independence P0: 유통 독립). Node 전용, 의존성 0.
-// GitHub Releases의 전체 배포판(코어 + 전 패키지 wheel, 약 426MB)을 vendor/pyodide/로 내려받아 푼다.
-// 이후 어떤 부팅도 CDN 없이 된다: boot({ indexURL: "/vendor/pyodide/" }) 또는
-// PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:browser (게이트 전 검사를 자가 경로로).
+// GitHub Releases의 전체 배포판(코어 + 전 패키지 wheel)을 지정한 pyodide/ 디렉터리로 내려받아 푼다.
+// 저장소에서는 vendor/pyodide/, 배포 프로젝트에서는 public/vendor/pyodide/처럼 쓴다.
 //
-// 버전 상수의 출처: src/runtime/runtime.js DEFAULT_INDEX(배포 지점의 유일 정의처)와 같은 값이어야
-// 하며 tests/run.mjs가 일치를 기계 검사한다. 버전 변경 = 릴리즈 사유(docs/consuming/contract.md).
+// 버전 상수는 src/runtime/pyodideDistribution.js와 같아야 하며 tests/run.mjs가 기계 검사한다.
 // 압축 해제는 OS 기본 tar(bsdtar, Windows 10+/리눅스/맥 내장)를 쓴다. npm 의존성 0 유지.
-import { createWriteStream, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 export const ENGINE_VERSION = "314.0.2";
 const RELEASE_URL = `https://github.com/pyodide/pyodide/releases/download/${ENGINE_VERSION}/pyodide-${ENGINE_VERSION}.tar.bz2`;
 
-const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
-const VENDOR = join(ROOT, "vendor");
-const DIST = join(VENDOR, "pyodide");
+const PACKAGE_ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
+const CATALOG = JSON.parse(readFileSync(join(PACKAGE_ROOT, "scripts", "assetCatalog.json"), "utf8"));
+
+function outputDirectory(argv) {
+  let value = "vendor/pyodide";
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === "--out") {
+      value = argv[index + 1];
+      if (!value) throw new Error("--out 뒤에 pyodide 디렉터리가 필요하다");
+      index += 1;
+    } else {
+      throw new Error(`알 수 없는 인자: ${argv[index]}`);
+    }
+  }
+  const target = isAbsolute(value) ? value : resolve(process.cwd(), value);
+  if (basename(target).toLowerCase() !== "pyodide") {
+    throw new Error(`--out은 pyodide로 끝나야 한다: ${target}`);
+  }
+  return target;
+}
+
+const DIST = outputDirectory(process.argv.slice(2));
+const VENDOR = dirname(DIST);
 const TARBALL = join(VENDOR, `pyodide-${ENGINE_VERSION}.tar.bz2`);
+
+function coreAssets() {
+  return CATALOG.assets.filter((asset) =>
+    asset.componentId === `pyodide-release-${ENGINE_VERSION}` &&
+    Array.isArray(asset.consumers) && asset.consumers.includes("pyproc"));
+}
+
+function sha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function verifyPreparedDistribution() {
+  const assets = coreAssets();
+  if (!assets.length) throw new Error(`assetCatalog에 Pyodide ${ENGINE_VERSION} core가 없다`);
+  for (const asset of assets) {
+    const path = join(DIST, asset.name);
+    if (!existsSync(path)) throw new Error(`engine core 누락: ${path}`);
+    const bytes = readFileSync(path);
+    if (bytes.byteLength !== asset.byteLength) throw new Error(`${asset.name}: byteLength 불일치`);
+    const actual = createHash("sha256").update(bytes).digest("hex");
+    if (actual !== asset.sha256) throw new Error(`${asset.name}: SHA-256 불일치`);
+  }
+  // 검증된 lock 파일이 가리키는 모든 wheel도 검사한다. 따라서 배포 디렉터리의 실행 가능
+  // 바이트는 catalog -> lock -> package hash의 단일 신뢰 사슬로 닫힌다.
+  const lock = JSON.parse(readFileSync(join(DIST, "pyodide-lock.json"), "utf8"));
+  const packages = Object.values(lock.packages || {}).filter((entry) => entry?.file_name && entry?.sha256);
+  if (!packages.length) throw new Error("pyodide-lock.json에 검증할 package가 없다");
+  for (const entry of packages) {
+    const path = join(DIST, entry.file_name);
+    if (!existsSync(path)) throw new Error(`engine package 누락: ${path}`);
+    if (sha256(path) !== entry.sha256) throw new Error(`${entry.file_name}: lock SHA-256 불일치`);
+  }
+  console.log(`검증됨: Pyodide ${ENGINE_VERSION} core ${assets.length}개, package ${packages.length}개`);
+}
 
 async function main() {
   // 멱등: 이미 풀린 배포판이 있으면(락 파일 존재) 아무것도 안 한다.
   if (existsSync(join(DIST, "pyodide-lock.json"))) {
-    console.log(`이미 준비됨: ${DIST} (pyodide-lock.json 존재). 다시 받으려면 vendor/pyodide/를 지우고 재실행.`);
+    verifyPreparedDistribution();
+    console.log(`이미 준비됨: ${DIST}`);
     return;
   }
   mkdirSync(VENDOR, { recursive: true });
@@ -56,10 +111,10 @@ async function main() {
   const tar = spawnSync(tarBin, ["-xjf", TARBALL, "-C", VENDOR], { stdio: "inherit" });
   if (tar.status !== 0) throw new Error(`tar 실패(status ${tar.status}). OS 내장 tar(bsdtar)가 필요하다.`);
   if (!existsSync(join(DIST, "pyodide-lock.json"))) throw new Error(`해제 결과에 ${DIST}/pyodide-lock.json이 없다(배포판 구조 변경?).`);
+  verifyPreparedDistribution();
   rmSync(TARBALL, { force: true }); // 풀린 배포판만 남긴다(중복 426MB 방지)
   console.log(`완료: ${DIST}`);
-  console.log(`자가 경로 부팅: boot({ indexURL: "/vendor/pyodide/" })`);
-  console.log(`게이트 전 검사: PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:browser`);
+  console.log("기본 부팅 URL: /vendor/pyodide/");
 }
 
 main().catch((e) => { console.error(String(e)); process.exit(1); });

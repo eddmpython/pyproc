@@ -22,7 +22,7 @@ _site/
   index.html        <- 랜딩. 정본은 examples/index.html이고 배포 루트로 승격된다
                        (상대 경로가 루트 기준. 로컬은 staticServer가 "/"에서 서빙)
   pyprocSw.js       <- src/capabilities/pyprocSw.js의 루트 사본(?coi=1 스코프 확보)
-  examples/  src/  index.js  index.d.ts  LICENSE
+  examples/  src/  vendor/pyodide/  index.js  index.d.ts  LICENSE
 ```
 
 랜딩의 Build 섹션은 `docs/`를 상대 링크로 가리키지 않는다. GitHub Pages 산출물에 `docs/`를 복사하지 않기 때문에 capability matrix, 패키지 계약, benchmark 계약은 GitHub blob URL로 연결한다.

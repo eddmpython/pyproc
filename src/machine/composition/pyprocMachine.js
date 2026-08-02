@@ -14,7 +14,7 @@
 import { PyProcError } from "../../runtime/errors.js";
 import { boot as bootRuntime } from "../../composition/runtimeApi.js";
 import { bootSession, openMachine } from "../../session/session.js";
-import { openPersistentMachine } from "../../session/kernelElection.js";
+import { openDurableMachine } from "../../session/kernelElection.js";
 
 const DEFAULT_PROC_LANES = 2; // 워커 2개 = 대부분의 기기에서 안전한 기본값(코어 수와 무관하게 시작)
 // boot가 받는 키 전수. 미지의 키를 조용히 버리면 오타 하나(`determinstic`)가 무증상 비결정
@@ -235,15 +235,16 @@ export async function boot(options = {}) {
 // 부활 통합 동사: 어디서 왔는가에 따라 신뢰 계약이 갈라진다(의미론 평탄화 금지).
 // - Blob/bytes(외부 bundle): 힙 접촉 전 봉투 무결성 + 서명 검증. trust 게이트 필수.
 // - { dir, name }(자기 OPFS 세션 저장): 같은 매니페스트 리플레이 + h0 대조 후 델타 적용.
-// - { persistent }(멀티탭 영속 머신): Web Locks 선출 + 저널 부활(KernelElection 핸들 반환).
+// - 인자 없음 / { name }(영속 머신): Web Locks 선출 + 명령 경계 자동 commit.
 export async function open(source, opts = {}) {
+  if (source === undefined || source === null) return openDurableMachine(opts);
   if (source instanceof Blob || source instanceof Uint8Array || source instanceof ArrayBuffer) {
     const blob = source instanceof Blob ? source : new Blob([source]);
     const session = await openMachine(blob, opts);
     return new PyprocMachine({ rt: session.rt, reactive: session.reactive, session });
   }
-  if (source && typeof source === "object" && source.persistent) {
-    return openPersistentMachine(source.persistent === true ? opts : { ...source.persistent, ...opts });
+  if (source && typeof source === "object" && source.name && !source.dir) {
+    return openDurableMachine({ ...source, ...opts });
   }
   if (source && typeof source === "object" && source.dir && source.name) {
     // 저장분 부활도 워커에서 성립해야 한다: 매니페스트는 호출자가 주지만 엔진 로더는 호스트
@@ -254,5 +255,5 @@ export async function open(source, opts = {}) {
     await session.load(source.dir, source.name);
     return new PyprocMachine({ rt: session.rt, reactive: session.reactive, session });
   }
-  throw new PyProcError("PYPROC_INPUT_INVALID", "open: needs one of a Blob/bytes bundle, { dir, name } (a saved session), or { persistent } (the multi-tab machine)");
+  throw new PyProcError("PYPROC_INPUT_INVALID", "open: needs no argument, { name } (a durable machine), Blob/bytes, or { dir, name } (a saved session)");
 }

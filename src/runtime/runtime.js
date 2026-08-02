@@ -14,13 +14,16 @@ import {
   requireEngineCapability,
 } from "./engineContract.js";
 import { RUNTIME_CAPABILITIES, RUNTIME_CONTRACT_VERSION } from "./runtimeContract.js";
+import {
+  DEFAULT_CORE_INTEGRITY,
+  DEFAULT_ENGINE_SCRIPT_INTEGRITY,
+  DEFAULT_INDEX,
+} from "./pyodideDistribution.js";
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
 
-// 기본 엔진 배포 지점(출처: docs/consuming/contract.md의 Pyodide 버전 계약). 이 상수의
-// 유일한 정의처다: boot/bootEnv/PyProc이 여기서 가져간다. 버전 변경 = 릴리즈 사유.
-export const DEFAULT_INDEX = "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+export { DEFAULT_INDEX } from "./pyodideDistribution.js";
 
 function normalizeCoreIntegrity(policy) {
   if (!policy) return null;
@@ -88,12 +91,18 @@ const CORE_MIME = { ".wasm": "application/wasm", ".zip": "application/zip", ".js
 
 export async function boot(opts = {}) {
   const indexURL = opts.indexURL || DEFAULT_INDEX;
+  const indexRoot = new URL(indexURL, globalThis.location?.href || "http://localhost/").href;
   // 오프라인 부팅(기둥5): coreCacheDir을 주면 indexURL 자산을 OPFS에 저장/서빙한다.
   // fetch를 타는 자산(wasm/stdlib/lock 등 대용량)이 대상이고, 부팅 구간에만 fetch를 감싼다.
   // coreIntegrity를 주면 캐시 hit와 네트워크 miss 모두 SRI(sha256-...)로 검증한다.
   // manifest가 strict(required 기본 true)일 때 누락된 자산은 실패한다. 변조 캐시는 네트워크로
   // 조용히 우회하지 않는다: 로컬 캐시도 실행 바이트이므로 파손이면 부팅을 멈춘다.
-  const coreIntegrity = normalizeCoreIntegrity(opts.coreIntegrity);
+  // 기본 부팅은 package에 박힌 trust anchor로 core graph를 검증한다. 자체 engine loader는
+  // 다른 engine일 수 있으므로 명시 policy가 없으면 Pyodide hash를 강제하지 않는다.
+  const corePolicy = opts.coreIntegrity === undefined && !opts.loadPyodide
+    ? DEFAULT_CORE_INTEGRITY
+    : opts.coreIntegrity;
+  const coreIntegrity = normalizeCoreIntegrity(corePolicy);
   if (coreIntegrity) coreIntegrity.indexURL = indexURL;
   const cache = opts.coreCacheDir || coreIntegrity
     ? { dir: opts.coreCacheDir || null, hits: 0, misses: 0, verified: 0, integrityMissing: 0, integrity: coreIntegrity }
@@ -145,9 +154,12 @@ export async function boot(opts = {}) {
   // opts.loadPyodide: 워커 소비자(document 없음)가 자체 import한 loadPyodide를 준다. 그러면
   // document 기반 script 로드(ensureEngineScript)를 건너뛰고 globalThis를 오염시키지 않는다.
   // 워커에서 boot의 캐시/env/packages 로직을 쓰려는 소비자의 경로.
+  const engineScriptIntegrity = opts.engineScriptIntegrity === undefined && !opts.loadPyodide
+    ? DEFAULT_ENGINE_SCRIPT_INTEGRITY
+    : opts.engineScriptIntegrity || null;
   const doLoad = opts.loadPyodide
     ? () => opts.loadPyodide(cfg)
-    : async () => { await ensureEngineScript(indexURL, { integrity: opts.engineScriptIntegrity }); return loadPyodide(cfg); };
+    : async () => { await ensureEngineScript(indexURL, { integrity: engineScriptIntegrity }); return loadPyodide(cfg); };
   if (opts.loadPyodide && opts.engineScriptIntegrity) throw new PyProcError("PYPROC_INPUT_INVALID", "engineScriptIntegrity applies only when pyproc loads pyodide.js itself.");
   let py;
   if (cache) {
@@ -165,7 +177,8 @@ export async function boot(opts = {}) {
     };
     globalThis.fetch = (input, init) => {
       const u = typeof input === "string" ? input : (input && input.url) || String(input);
-      return u.startsWith(indexURL) ? cachedFetch(u) : fetchOrig(input, init);
+      const href = new URL(u, globalThis.location?.href || indexRoot).href;
+      return href.startsWith(indexRoot) ? cachedFetch(href) : fetchOrig(input, init);
     };
     try {
       return await Promise.race([loadAll(), integrityFailure]);

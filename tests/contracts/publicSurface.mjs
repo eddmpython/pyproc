@@ -29,7 +29,7 @@ const EXPERIMENTAL_SUBPATHS = Object.freeze(["./gpu", "./socket", "./wasi"]);
 // 죽은 이름 3개를 import했다). 이력 문서에서 "구 X"/"formerly X"로 언급하는 것은 허용한다.
 const RETIRED_IDENTIFIERS = Object.freeze({
   openMachine: "open(blob, trustOpts)",
-  openPersistentMachine: "open({ persistent })",
+  openPersistentMachine: "open({ name })",
   bootSession: "boot({ deterministic: true })",
   bootEnv: "boot manifest(packages/env/setup/wheelDir)",
   runScript: "boot manifest(setup) 또는 machine.run",

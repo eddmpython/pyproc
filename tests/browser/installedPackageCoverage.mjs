@@ -18,9 +18,9 @@ export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
       "`verifyPyProcAssetIntegrity`",
       "`registerPyProcServiceWorker`",
       "a `commitState`/`openState` kernel round trip",
-      "`pyproc-assets` bin",
+      "`pyproc-assets` and `pyproc-engine` bins",
     ]),
-    contract: "package exports, stable subpath, `index.d.ts`, npm files, CLI graph copy and SRI manifest",
+    contract: "package exports, stable subpath, `index.d.ts`, npm files, engine preparation, CLI graph copy and SRI manifest",
   }),
   Object.freeze({
     gate: "installed package - asset path",
@@ -71,8 +71,8 @@ export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
   Object.freeze({
     gate: "installed package - immortal python machine",
     specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["`open({ persistent })`", "the `KernelElection` handle"]),
-    contract: "Three independent browsing contexts of the installed package sharing one Python state and prepared environment, confirming participant request IDs never collide and late responses are discarded, then continuing execution after the leader is force-removed through persistent epoch succession and recovery of heap plus `/home/web` from OPFS, and reopening from the last commit and the manifest environment after every context has closed",
+    publicSurface: Object.freeze(["`open()` / `open({ name })`", "the `KernelElection` handle"]),
+    contract: "The default durable auto-commit Machine plus three independent browsing contexts sharing one Python state and prepared environment, continuing after forced leader removal, and cold-reopening automatically committed heap plus `/home/web` after every context closes",
   }),
   Object.freeze({
     gate: "installed package - permission policy",

@@ -10,6 +10,8 @@ import {
 import { WebComputerContext } from "./webComputerContext.js";
 import { createWebComputerDurabilityPolicy } from "./webComputerPersistence.js";
 
+const PRODUCT_ENGINE_INDEX = new URL("./assets/", import.meta.url).href;
+
 function operationControl(lifetimeSignal, timeoutMs) {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   return Object.freeze({
@@ -37,7 +39,7 @@ export class WebComputerRuntime {
     return this.context?.computer.inspect().startupMode || "none";
   }
 
-  async initialize({ deferBoot = false, indexURL } = {}) {
+  async initialize({ deferBoot = false, indexURL = PRODUCT_ENGINE_INDEX } = {}) {
     if (!crossOriginIsolated || typeof SharedArrayBuffer !== "function") {
       throw new Error("Web Computer requires cross-origin isolation and SharedArrayBuffer");
     }

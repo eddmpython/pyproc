@@ -9,6 +9,7 @@
 // 겹쳐도 응답이 교차하지 않고, 워커가 죽으면(사고/kill) 그 워커의 대기 중 요청 전부가
 // 즉시 명시적으로 reject된다(영원히 매달리는 Promise 금지).
 import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
+import { DEFAULT_ENGINE_SCRIPT_INTEGRITY } from "../runtime/pyodideDistribution.js";
 import { PyProcError } from "../runtime/errors.js";
 import { createRpcPort } from "../runtime/rpcChannel.js";
 import { requireCoi } from "../runtime/preflight.js";
@@ -26,6 +27,9 @@ export class PyProc {
   static SIGNAL = SIGNAL;
   constructor(opts = {}) {
     this.indexURL = opts.indexURL || DEFAULT_INDEX;
+    this.engineScriptIntegrity = opts.engineScriptIntegrity === false
+      ? null
+      : opts.engineScriptIntegrity || DEFAULT_ENGINE_SCRIPT_INTEGRITY;
     this.packages = opts.packages || []; // 각 프로세스가 부팅 시 로드할 패키지(numpy 등)
     this.setup = opts.setup || null;     // 부팅 시 실행할 파이썬(예: "import numpy" 예열)
     this.assetIntegrity = opts.assetIntegrity || null; // pyproc-assets CLI 산출물. Worker spawn 전 graph를 SRI 검증.
@@ -48,7 +52,7 @@ export class PyProc {
 
   // 부모 하나 부팅해 bare 스냅샷(프로세스 이미지)을 만들고, SAB에 실어 워커가 공유하게.
   async _makeSnapshot() {
-    await ensureEngineScript(this.indexURL);
+    await ensureEngineScript(this.indexURL, { integrity: this.engineScriptIntegrity });
     const parent = await loadPyodide({ indexURL: this.indexURL, _makeSnapshot: true });
     const snap = parent.makeMemorySnapshot();
     const sab = new SharedArrayBuffer(snap.byteLength);  // 모든 워커가 detach 없이 공유(N번 복사 회피)

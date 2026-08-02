@@ -9,6 +9,7 @@ import { JobControl } from "../../src/processOs/jobControl.js";
 import { MachineContainer } from "../../src/processOs/machineContainer.js";
 import { bootSession, openMachine } from "../../src/session/session.js";
 import { verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "../../src/runtime/assets.js";
+import { DEFAULT_ENGINE_SCRIPT_INTEGRITY, DEFAULT_INDEX } from "../../src/runtime/pyodideDistribution.js";
 
 const out = document.getElementById("out");
 const checks = [];
@@ -86,6 +87,22 @@ try {
   const rt = pm.runtime;
   timings.bootMs = Math.round(performance.now() - t);
   check("boot()", true, timings.bootMs + "ms" + (INDEX ? " @" + INDEX : ""));
+  if (!INDEX) {
+    const engineURL = new URL(rt.indexURL, location.href);
+    const engineScript = [...document.scripts].find((script) => script.src === new URL("pyodide.js", engineURL).href);
+    const thirdParty = performance.getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .filter((url) => { try { return new URL(url).origin !== location.origin; } catch { return false; } });
+    check("기본 엔진: verified same-origin 배포",
+      engineURL.origin === location.origin && engineURL.pathname === DEFAULT_INDEX,
+      rt.indexURL);
+    check("기본 엔진: pyodide.js pinned SRI",
+      engineScript?.integrity === DEFAULT_ENGINE_SCRIPT_INTEGRITY,
+      engineScript?.integrity || "script missing");
+    check("기본 엔진: core byte 검증 + third-party 요청 0",
+      rt.coreCache?.verified >= 3 && rt.coreCache.integrityMissing === 0 && thirdParty.length === 0,
+      `verified=${rt.coreCache?.verified ?? 0}, external=${thirdParty.join(",") || "none"}`);
+  }
   check("run: sum(range(100)) === 4950", rt.run("sum(range(100))") === 4950);
   check("Runtime.assetIntegrity 보관", rt.assetIntegrity === assetIntegrity);
 

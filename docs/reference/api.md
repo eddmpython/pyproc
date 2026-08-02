@@ -19,7 +19,8 @@ table is in [Errors](#errors) below.
 
 ### `boot(options?)`
 
-Boots one Python machine in this tab and resolves to a `PyprocMachine` handle. Options
+Boots one explicit transient Python kernel in this tab and resolves to a `PyprocMachine` handle. Use
+`open()` for the default durable Machine. Options
 are the engine boot options (`indexURL`, `packages`, `env`, `stdout` / `stderr`,
 `coreCacheDir` for OPFS offline caching, `engineScriptIntegrity`, `coreIntegrity`,
 `assetIntegrity` from the `pyproc-assets` CLI, `lockFileURL` from a previous `freeze()`)
@@ -35,11 +36,19 @@ durable commit, and it is the precondition for `history.export` and `history.sav
 Errors: `PYPROC_BOOT_FAILED` (retryable), `PYPROC_ASSET_INTEGRITY`,
 `PYPROC_ENV_UNSUPPORTED`, `PYPROC_INPUT_INVALID`.
 
-### `open(source, opts?)`
+### `open(source?, opts?)`
 
-The one revival verb. The trust contract follows the source; the semantics are
+The default Machine and the one revival verb. The trust contract follows the source; semantics are
 deliberately not flattened into one code path:
 
+- **`open()` / `open({ name?, ...machineOptions })`** opens an OPFS-backed Machine. Same-origin tabs
+  elect one leader, followers use BroadcastChannel RPC, and each completed command auto-commits its
+  heap, `/home/web`, and any forwarded outcome before settling. It resolves to `KernelElection`.
+  `commit()` remains an explicit force boundary; `autoCommit: false` opts into manual/idle behavior.
+  Errors: `PYPROC_LEADER_UNAVAILABLE` (retryable), `PYPROC_SPLIT_BRAIN`,
+  `PYPROC_LEADER_LOCK_FAILED`, `PYPROC_PARTICIPANT_LEFT`, `PYPROC_RPC_ACTION_INVALID`, and
+  `PYPROC_KERNEL_EXECUTION_ERROR`. A sent request follows the
+  [normative durable RPC state table](../consuming/contract.md#durable-rpc-state-table-normative).
 - **`open(blob | bytes, trustOpts?)`** revives a portable bundle from outside. Envelope
   integrity and signature are verified before any byte reaches the heap. A machine file
   is live state, as dangerous as an executable: without a verified trusted signer
@@ -52,17 +61,6 @@ deliberately not flattened into one code path:
   the manifest, checks the cp0 fingerprint (h0), then applies the saved delta. Errors:
   `PYPROC_REPLAY_MISMATCH` (engine or manifest changed since `history.save`),
   `PYPROC_HEAP_GROW_FAILED`. Resolves to a `PyprocMachine`.
-- **`open({ persistent })`** opens the multi-tab persistent machine: tabs elect one
-  leader (Web Locks), followers speak RPC (BroadcastChannel), and when the leader dies a
-  follower promotes and revives from the last journal commit. Resolves to a
-  `KernelElection` handle, not a `PyprocMachine` (see
-  [Multi-tab machine](#multi-tab-machine-open-persistent-) below). Errors:
-  `PYPROC_LEADER_UNAVAILABLE` (retryable), `PYPROC_SPLIT_BRAIN`,
-  `PYPROC_LEADER_LOCK_FAILED`, `PYPROC_PARTICIPANT_LEFT`, `PYPROC_RPC_ACTION_INVALID`,
-  `PYPROC_KERNEL_EXECUTION_ERROR`. A sent request follows the
-  [normative durable RPC state table](../consuming/contract.md#durable-rpc-state-table-normative):
-  ordinary followers fail closed with `PYPROC_RPC_OUTCOME_UNKNOWN`; only a durable caller
-  controller that can prove a proxy-free session parks and re-asks the successor once.
 
 Any other source shape is `PYPROC_INPUT_INVALID`.
 
@@ -367,18 +365,21 @@ workers, exposes them to Python as `pyprocMachine` values, and routes nested con
 (`"m1/c2/c1"`) through an explicit path router at any depth. A dead container rejects
 calls immediately (`PYPROC_PROCESS_UNAVAILABLE`) instead of hanging.
 
-## Multi-tab machine (`open({ persistent })`)
+## Default durable machine
 
 ### `KernelElection`
 
-The handle returned by `open({ persistent })` (formerly `openPersistentMachine`), and the
+The handle returned by `open()` or `open({ name })`, and the
 underlying election/RPC contract: `join` / `run` / `commit` / `ready` / `status` /
 `subscribe` / `role` / `leave`. Tabs elect one leader over Web Locks; only the leader
 boots the kernel (deterministic session + journal); followers are RPC views over
 BroadcastChannel. When the leader tab dies, the lock releases, a follower promotes and
 resumes from the journal. Errors: `PYPROC_LEADER_UNAVAILABLE` (retryable),
 `PYPROC_SPLIT_BRAIN`, `PYPROC_LEADER_LOCK_FAILED`, `PYPROC_PARTICIPANT_LEFT`,
-`PYPROC_KERNEL_EXECUTION_ERROR`, `PYPROC_RPC_OUTCOME_UNKNOWN` (never retryable). The
+`PYPROC_KERNEL_EXECUTION_ERROR`, `PYPROC_RPC_OUTCOME_UNKNOWN` (never retryable). With the default
+`autoCommit: true`, command execution and generation commit are serialized; the Promise settles only
+after commit. A commit failure after execution is outcome-unknown because retrying could duplicate an
+effect. `status().autoCommit` exposes the mode. The
 [durable RPC state table](../consuming/contract.md#durable-rpc-state-table-normative) owns
 the exact resend boundary; `status().rpcSemantics` is its compact runtime projection.
 
@@ -460,11 +461,12 @@ depends on the thing being removed, rather than succeeding and leaving a danglin
 
 ### Engine assets
 
-`boot()` does not carry the Pyodide distribution; it fetches it from `indexURL` (default
-`https://cdn.jsdelivr.net/pyodide/v314.0.2/full/`). Control it with `indexURL` (self-hosted path),
-`coreCacheDir` (an OPFS directory: later boots read the cached core instead of the network), and
-`engineScriptIntegrity` / `coreIntegrity` (fail-closed SRI over the engine graph). A boot that
-cannot reach the distribution fails with `PYPROC_BOOT_FAILED` naming the URL it tried.
+The npm tarball does not embed the Pyodide distribution. Prepare the pinned release with
+`npx pyproc-engine --out <static-root>/vendor/pyodide`; default boot reads the verified same-origin
+`/vendor/pyodide/` path. The CLI verifies catalog-pinned core anchors and every package file named by
+the trusted lock. Runtime boot pins the engine script SRI and re-verifies fetched core bytes. Control
+caching with `coreCacheDir`; use `indexURL` only to select another explicit distribution point. A boot
+that cannot reach the distribution fails with `PYPROC_BOOT_FAILED` naming the URL it tried.
 
 ### `pyproc/assets`
 

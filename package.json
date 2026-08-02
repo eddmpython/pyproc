@@ -14,7 +14,8 @@
   "main": "index.js",
   "types": "./index.d.ts",
   "bin": {
-    "pyproc-assets": "./scripts/assetManifest.mjs"
+    "pyproc-assets": "./scripts/assetManifest.mjs",
+    "pyproc-engine": "./scripts/fetchEngine.mjs"
   },
   "exports": {
     ".": {
@@ -56,6 +57,8 @@
     "index.d.ts",
     "src",
     "scripts/assetManifest.mjs",
+    "scripts/assetCatalog.json",
+    "scripts/fetchEngine.mjs",
     "README.md",
     "README.ko.md",
     "LICENSE"
@@ -78,7 +81,7 @@
     "assets:web-computer": "node scripts/prepareWebComputerAssets.mjs",
     "assets:buildroot": "node scripts/buildroot/buildGuest.mjs",
     "serve": "node scripts/staticServer.mjs",
-    "fetch:engine": "node scripts/fetchEngine.mjs",
+    "fetch:engine": "node scripts/fetchEngine.mjs --out vendor/pyodide",
     "mcp:sandbox": "node scripts/mcpSandboxServer.mjs",
     "test:preflight": "node tests/browser/run.mjs tests/browser/preflightNoCoi.html",
     "test:web-machine": "node tests/webMachine/run.mjs",

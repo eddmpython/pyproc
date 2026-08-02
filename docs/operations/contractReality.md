@@ -20,7 +20,7 @@ It is consulted whenever the engine version moves or a capability changes.
 | Item | Contract | Actual | Re-verification trigger |
 |---|---|---|---|
 | Pyodide snapshot API | Snapshot-fork | `_makeSnapshot`/`_loadSnapshot`/`makeMemorySnapshot` are underscore (experimental) Pyodide APIs. Safe only through the version pin (v314.0.2). The serializer still assumes the current hiwire bootstrap slots, and the browser snapshot/fork gates hold that boundary | Whenever the Pyodide version changes. Upstream #5195 (adopting FS snapshots) and #5971 (leaving draft) landing could change this API |
-| Self-hosting pin consistency | fetchEngine version == DEFAULT_INDEX | `ENGINE_VERSION` in `scripts/fetchEngine.mjs` and `DEFAULT_INDEX` in `src/runtime/runtime.js` hold the same value | Machine-checked by `tests/run.mjs`. A version change is release-worthy ([release.md](release.md)) |
+| Engine distribution pin consistency | fetchEngine version == runtime trust anchor == asset catalog | `ENGINE_VERSION`, `PYODIDE_VERSION`, the same-origin path, upstream provenance URLs, local paths, and six SRI values form one checked contract | Machine-checked by `tests/run.mjs`. A version change is release-worthy ([release.md](release.md)) |
 
 ## Documented tradeoffs (intended contracts)
 

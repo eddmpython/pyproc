@@ -273,4 +273,36 @@ export async function assertElectionProtocol(check, checkAsync) {
     if (order.join(",") !== "first,second,third") throw new Error(`순서 ${order.join(",")}`);
     for (const entry of ctrl._pending.values()) if (entry.timer) clearTimeout(entry.timer);
   });
+
+  // S13: 기본 Machine의 선형화 지점은 run 완료가 아니라 generation commit 완료다. 동시에
+  // 들어온 명령은 run/commit 쌍으로 직렬화되고, commit 실패는 재시도 가능한 IO 오류가 아니라
+  // 이미 실행됐을 수 있다는 non-retryable outcome-unknown으로 닫혀야 한다.
+  await checkAsync("election: 기본 run은 commit 뒤 resolve되고 commit 실패는 outcome-unknown이다", async () => {
+    const ctrl = makeCtrl();
+    ctrl._joined = true;
+    ctrl._role = "leader"; ctrl._phase = "ready";
+    ctrl._leaderId = ctrl.participantId; ctrl._epoch = 1;
+    ctrl._journalDir = {};
+    const events = [];
+    ctrl._session = { rt: {
+      run: (code) => { events.push(`run:${code}`); return Number(code); },
+      runAsync: async (code) => { events.push(`run:${code}`); return Number(code); },
+    } };
+    let generation = 0;
+    ctrl._journal = { commit: async () => {
+      generation += 1;
+      events.push(`commit:${generation}`);
+      return { committedAt: `generation-${generation}` };
+    } };
+    const values = await Promise.all([ctrl.run("1"), ctrl.run("2")]);
+    if (values.join(",") !== "1,2") throw new Error(`결과 순서 ${values.join(",")}`);
+    if (events.join(",") !== "run:1,commit:1,run:2,commit:2") throw new Error(`명령/commit 순서 ${events.join(",")}`);
+    if (ctrl.status().lastCommitAt !== "generation-2" || ctrl.status().autoCommit !== true) throw new Error("자동 commit 상태가 드러나지 않는다");
+
+    ctrl._journal = { commit: async () => { throw new Error("disk full"); } };
+    const failure = await ctrl.run("3").then(() => null, (error) => error);
+    if (failure?.code !== "PYPROC_RPC_OUTCOME_UNKNOWN" || failure?.retryable !== false) {
+      throw new Error(`commit 실패 분류 ${failure?.code || "없음"}/${failure?.retryable}`);
+    }
+  });
 }

@@ -1,7 +1,7 @@
 // pyprocSw.js - Layer 2: pyproc의 Service Worker 계층(소비자가 자기 오리진에서 등록하는 자산).
 // virtualOrigin.js와 같은 폴더 고정(자산 경로 계약). 이 파일은 SW 컨텍스트에서 돌므로
 // 모듈 import 없이 자기충족이다. 기능은 등록 URL 쿼리로 켠다:
-//   pyprocSw.js?cache=1                 - Pyodide CDN 자산 캐시-우선(2차 부팅 네트워크 0).
+//   pyprocSw.js?cache=1                 - same-origin Pyodide 자산 캐시-우선(2차 부팅 네트워크 0).
 //   pyprocSw.js?cache=1&coreIntegrity=/pyodide-integrity.json
 //                                       - SW가 script/module/wasm/zip 바이트를 캐시 전 SRI 검증.
 //   pyprocSw.js?asgi=/pyproc/           - 그 접두 경로 fetch를 페이지 커널 ASGI로 위임(가상 오리진).
@@ -18,7 +18,7 @@ const params = new URL(self.location.href).searchParams;
 const CACHE_ON = params.get("cache") === "1";
 const ASGI_PREFIX = params.get("asgi"); // 예: "/pyproc/". 없으면 위임 꺼짐. pathname/scope prefix로만 매칭한다.
 const COI_ON = params.get("coi") === "1";
-const CDN = params.get("cdn") || "https://cdn.jsdelivr.net/pyodide/"; // 기본 엔진 배포 지점(runtime.js DEFAULT_INDEX의 버전 상위 접두)
+const CDN = params.get("cdn") || new URL("/vendor/pyodide/", self.location.origin).href;
 const CORE_INTEGRITY_URL = params.get("coreIntegrity");
 const CORE_REQUIRED = params.get("coreRequired") !== "0";
 const CACHE_NAME = "pyprocCore";

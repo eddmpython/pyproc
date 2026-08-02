@@ -15,7 +15,7 @@ import { PyProcError, toErrorPayload } from "../runtime/errors.js";
 import { PAGE_SIZE as PAGE } from "../runtime/memoryLayout.js";
 import { byteDiffPages, packPages, samePage, unpackPages } from "../runtime/heapDelta.js";
 import { growHeapTo } from "../runtime/heapGrow.js";
-import { Runtime } from "../runtime/runtime.js";
+import { DEFAULT_INDEX, Runtime } from "../runtime/runtime.js";
 import { DETERMINISTIC_RESEED_SOURCE, stubDeterministicBootSources } from "../runtime/globalPatch.js";
 let py = null;
 let rt = null;
@@ -38,7 +38,7 @@ function reseedRandom() {
 
 onmessage = async (e) => {
   const msg = e.data;
-  const indexURL = msg.indexURL || "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/";
+  const indexURL = msg.indexURL || DEFAULT_INDEX;
   try {
     if (msg.type === "boot") {
       const t0 = performance.now();
