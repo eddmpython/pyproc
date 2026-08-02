@@ -1,7 +1,7 @@
 {
   "name": "pyproc",
   "version": "0.0.11",
-  "description": "Real CPython in a browser tab, with save states: checkpoint the live interpreter, fork it across cores, and restore it when a run goes wrong. No server. (서버 없이 탭에서 도는 진짜 CPython - 체크포인트·분기·복원.)",
+  "description": "A persistent Python computer in the browser: real CPython, durable workspaces, processes, rewindable history, and signed machine images. No application server. (브라우저에 영속하는 Python 컴퓨터.)",
   "type": "module",
   "repository": {
     "type": "git",
@@ -93,6 +93,9 @@
   "keywords": [
     "python",
     "python-in-browser",
+    "browser-computer",
+    "persistent-state",
+    "machine-image",
     "cpython",
     "pyodide",
     "browser",

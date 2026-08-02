@@ -21,7 +21,7 @@
 
 export const NORTH_STAR = Object.freeze({
   en: Object.freeze({
-    statement: "Make the browser a computer that boots more than one guest operating system - and make that computer pyproc itself.",
+    statement: "Make the browser a persistent computer, make Python its default Machine, and make that computer pyproc itself.",
     rule: "Scores are anchored to gates that actually run in CI. A path no automated gate runs does not score, however complete the implementation is, and an axis whose evidence includes a manual-only probe is held below 9. A 10 means the axis is finished: repeatedly verified in a real browser, with no workaround left in the public surface.",
     total: (total, max, average) => `Today that is **${total} / ${max}, average ${average} / 10**.`,
     header: "| Axis | Score | Where it stands today | Where it has to land | Next move |",
@@ -29,7 +29,7 @@ export const NORTH_STAR = Object.freeze({
     rung: (at) => `rung ${at}`,
   }),
   ko: Object.freeze({
-    statement: "브라우저를 여러 guest OS가 부팅되는 컴퓨터로 만들고, 그 컴퓨터를 pyproc 자신으로 만든다.",
+    statement: "브라우저를 영속하는 컴퓨터로 만들고, Python을 기본 Machine으로 삼으며, 그 컴퓨터를 pyproc 자신으로 만든다.",
     rule: "점수의 근거는 CI에서 실제로 도는 게이트다. 자동으로 실행되지 않는 경로는 구현이 아무리 완성돼 있어도 점수로 세지 않고, 증거에 수동 probe가 섞인 축은 9점 아래로 묶인다. 10점은 그 축이 끝난 상태다: 실제 브라우저에서 반복 검증됐고 공개 표면에 우회로가 남지 않았다.",
     total: (total, max, average) => `지금 총점은 **${total} / ${max}, 평균 ${average} / 10**이다.`,
     header: "| 축 | 현재 점수 | 지금 서 있는 자리 | 도달해야 하는 자리 | 다음 수 |",

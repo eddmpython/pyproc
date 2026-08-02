@@ -4,23 +4,24 @@
 
 <h1 align="center">pyproc</h1>
 
-<p align="center"><b>브라우저 탭에서 도는 진짜 파이썬. 서버 없이.</b></p>
+<p align="center"><b>브라우저에 영속하는 파이썬 컴퓨터.</b></p>
 
 <p align="center">
-  살아 있는 인터프리터의 세이브 스테이트: 체크포인트하고, 코어 수만큼 분기하고, 실행이 잘못되면<br>
-  복원한다. 재시도 루프가 환경을 다시 짓지 않고 준비된 것을 재사용한다.
+  Machine 하나를 열고 workspace, environment, processes, history를 유지한다. 잘못된 작업은<br>
+  되돌리고, 서명 image로 옮긴다. 진짜 CPython이며 애플리케이션 서버는 필요 없다.
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=5b8cff&labelColor=0a0f1c" alt="npm"></a>
   <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=0a0f1c" alt="ci"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-7c4dff?labelColor=0a0f1c" alt="license MPL-2.0"></a>
-  <img src="https://img.shields.io/badge/dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero dependencies">
+  <img src="https://img.shields.io/badge/runtime_npm_dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero runtime npm dependencies">
   <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-5b8cff?labelColor=0a0f1c" alt="CPython 3.14 on WebAssembly">
 </p>
 
 <p align="center">
   <a href="https://eddmpython.github.io/pyproc/"><b>라이브 데모</b></a> ·
+  <a href="#제품-모델">제품 모델</a> ·
   <a href="#빠른-시작">빠른 시작</a> ·
   <a href="#ai-에이전트에서-쓰기">AI 에이전트에서 쓰기</a> ·
   <a href="#기능-상태">상태</a> ·
@@ -32,11 +33,11 @@
 <details>
 <summary><b>목차</b></summary>
 
-- [아무것도 설치하지 않고 해보기](#아무것도-설치하지-않고-해보기)
-- [무엇을 해결하나](#무엇을-해결하나)
-- [한 예제로](#한-예제로)
-- [브라우저 Python 샌드박스가 쓸모 있는 곳](#브라우저-python-샌드박스가-쓸모-있는-곳)
-- [얻는 것 (내부 원리가 아니라 결과로)](#얻는-것-내부-원리가-아니라-결과로)
+- [제품](#제품)
+- [제품 모델](#제품-모델)
+- [하나의 Machine 생명주기](#하나의-machine-생명주기)
+- [Machine의 가치가 드러나는 곳](#machine의-가치가-드러나는-곳)
+- [Machine이 제공하는 결과](#machine이-제공하는-결과)
 - [빠른 시작](#빠른-시작)
 - [진입점 고르기](#진입점-고르기)
 - [AI 에이전트에서 쓰기](#ai-에이전트에서-쓰기)
@@ -49,6 +50,7 @@
 - [형태가 값을 하는 자리](#형태가-값을-하는-자리)
 - [Web Computer 실행](#web-computer-실행)
 - [공개 표면](#공개-표면)
+- [의존성 경계](#의존성-경계)
 - [셋업](#셋업)
 - [설치와 핀](#설치와-핀)
 - [북극성](#북극성)
@@ -57,39 +59,42 @@
 
 </details>
 
-## 아무것도 설치하지 않고 해보기
+## 제품
 
-`index.html`로 저장해서 Chrome이나 Edge에서 열면 된다. 번들러도, 빌드 단계도, 서버도, 헤더도
-없이 파일 하나다.
+pyproc은 하나의 제품이다. **브라우저에 영속하는 Python 컴퓨터**다. 서로 무관한 runtime
+helper 모음이 아니다. 공개 명사는 `Machine` 하나이며 실행, 파일, 프로세스, 내구 history,
+image, permission은 모두 그 Machine의 일부다.
 
-```html
-<script type="module">
-import { boot } from "https://cdn.jsdelivr.net/npm/pyproc@0.0.11/index.js";
+약속은 단순하다. Python을 한 번 준비하고, 살아 있는 상태를 유지하고, 분기하거나 되돌리고,
+탭을 닫아도 이어가며, 검증된 파일로 Machine을 옮긴다. 기본 제품 경로는 Python Machine이다.
+Linux, WASI, GPU, socket, MCP는 같은 계약 주변의 선택 guest 또는 capability이지 별도 정체성이
+아니다.
 
-const py = await boot();                   // 진짜 CPython 3.14 (첫 부팅이 엔진을 받는다)
-console.log(py.run("sum(range(100))"));    // 4950
+## 제품 모델
 
-const saved = py.history.checkpoint();     // 살아 있는 인터프리터를 저장
-py.run("data = [1] * 100000");             // 바꾸고
-py.history.restore(saved);                 // 되돌린다
-console.log(py.run("'data' in dir()"));    // false
-</script>
+| 제품 개념 | 현재 계약 | 소유하는 것 |
+|---|---|---|
+| **Machine** | `boot()` / `open()` | 단일 root handle과 생명주기 |
+| **Workspace** | 이름 있는 persistent machine + `/home/web` | 다시 열어도 남는 파일과 작업 |
+| **Environment** | deterministic manifest + 정확한 engine version | package, setup, replay 경계 |
+| **Processes** | `machine.proc()` | 독립 worker interpreter, fork, signal, 병렬 작업 |
+| **History** | `machine.history` + persistent `machine.commit()` | checkpoint, branch, restore, journal, recovery |
+| **Image** | 서명된 `.pymachine` / `.webmachine` | 무결성과 명시적 trust gate를 가진 이동 상태 |
+| **Permissions** | capability contract + permission jail | network, storage, device, memory, 실행 정책 |
+
+이것들은 서로 경쟁하는 최상위 API 일곱 개가 아니라 제품 개념이다. Machine handle이 root로
+남고, 그 동사가 필요한 capability만 드러낸다. 내부 engine object는 이 경계 뒤에 둔다.
+
+## 하나의 Machine 생명주기
+
+```text
+create / open  ->  work  ->  checkpoint / commit  ->  branch / restore  ->  export / reopen
+      Machine      Workspace + Environment     History + Processes           Image + Trust
 ```
 
-이것이 전부다. `checkpoint`와 `restore`가 옮기는 것은 변수를 직렬화한 사본이 아니라 인터프리터
-자신이라, 되돌아오는 데 재import도 재설치도 들지 않는다. 재시도 루프가 싸지는 이유가 그것이다.
-실제로 쓸 때는 설치하고 정확한 버전에 핀한다([설치와 핀](#설치와-핀)).
-
-## 무엇을 해결하나
-
-AI 에이전트는 Python을 한 번만 실행하지 않는다. 코드를 생성하고, 실행하고, 실패 원인을 보고, 고친 뒤 다시 실행한다. 여러 접근을 동시에 시험하거나, 마지막에 어질러지기 전의 정상 상태로 되돌아가야 할 때도 있다.
-
-보통의 답은 매 시도마다 서버 컨테이너나 새 Python 환경이다 - 느리게 뜨고, 유지 비용이 들고, 시도 사이에 버려진다. pyproc은 준비된 Python 상태를 **사용자 브라우저에** 살려두고, 그것을 **체크포인트·분기·복원**할 수 있게 한다. 그래서 재시도 루프가 콜드 부팅이 아니라 밀리초로 끝난다. 제품이 아래의 fail-closed 네트워크 정책을 적용하면 사용자 데이터도 탭 안에 둘 수 있다. 제품 입장에선, 서버에서 돌릴 세션당 샌드박스가 사용자 브라우저로 이동한다: 프로비저닝도 비용도 없는 샌드박스 실행이, 이미 웹 전체에 단련된 경계(Chrome + WASM) 위에서.
-
-## 한 예제로
-
-재시도 루프가 곧 제품이다. 한 번 준비하고, 체크포인트하고, 에이전트가 실패하면
-밀리초에 복원한다:
+라이브러리는 durable commit을 명시적으로 수행한다. pyproc Web Computer 앱은 명령 뒤 자동
+commit하고 수동 Save도 노출하므로 자동 내구성이 recovery 경계를 감추지 않는다. 모든 표면은
+이 기본 생명주기를 강화해야 한다.
 
 ```js
 import { boot } from "pyproc";
@@ -99,8 +104,8 @@ await machine.loadPackages(["numpy"]);   // 한 번 준비(패키지, 데이터)
 const cp = machine.history.checkpoint(); // 준비된 상태 저장
 
 const attempts = [
-  "import numpy as np; float(np.arange(10).men())",   // 에이전트가 처음 쓴 것
-  "import numpy as np; float(np.arange(10).mean())",  // 오류를 읽고 고쳐 쓴 것
+  "import numpy as np; float(np.arange(10).men())",
+  "import numpy as np; float(np.arange(10).mean())",
 ];
 
 for (const code of attempts) {
@@ -108,17 +113,17 @@ for (const code of attempts) {
     console.log(machine.run(code));      // 되는 시도에서 4.5
     break;
   } catch (error) {
-    machine.history.restore(cp);         // 준비 상태 복귀 - 재부팅 0, 재설치 0
+    machine.history.restore(cp);         // 준비 상태 복귀
   }
 }
 ```
 
-진짜 CPython([Pyodide](https://pyodide.org) / WebAssembly)이 탭 안에서 돌며 진짜 값을 돌려준다.
-그리고 그 상태를 저장하고, 분기하고, 되찾을 수 있다.
+`checkpoint`와 `restore`가 옮기는 것은 일부 변수를 직렬화한 사본이 아니라 interpreter
+상태다. 준비된 environment가 재import와 재설치 없이 돌아온다.
 
-## 브라우저 Python 샌드박스가 쓸모 있는 곳
+## Machine의 가치가 드러나는 곳
 
-| 사용처 | 사용 방식 | pyproc의 이점 |
+| 작업 | 일어나는 일 | Machine의 이점 |
 |---|---|---|
 | AI 데이터 분석 | AI가 생성한 pandas / NumPy 코드를 사용자 파일에 실행 | 원본 파일을 서버로 보내지 않고 분석 |
 | AI 코딩 도구 | AI 코드 실행 전 체크포인트, 실패하면 복원 | 값싼 시행착오, 환경 초기화 없음 |
@@ -128,15 +133,19 @@ for (const code of attempts) {
 | 사내 분석 도구 | 민감한 CSV / Excel을 로컬 탭에서 처리 | 데이터 외부 전송 최소화 |
 | 오프라인 도구 | 런타임과 패키지를 캐시 | 네트워크가 제한된 환경에서도 실행 |
 
-관통하는 것 하나: **AI 에이전트는 한 번 준비한 뒤 저장·분기·복원할 수 있는 Python 환경이 필요하다** - 그리고 제품이 fail-closed 네트워크 정책까지 적용하면 브라우저 샌드박스가 그 과정에서 사용자 데이터를 로컬에 둘 수 있다.
+관통하는 것은 한 번 준비한 뒤 저장, 분기, 복원할 수 있는 장수 Python Machine 하나다.
+fail-closed network policy를 적용하면 선택한 데이터도 code 실행 중 로컬에 둘 수 있다.
 
-## 얻는 것 (내부 원리가 아니라 결과로)
+## Machine이 제공하는 결과
 
-- **사용자 브라우저에서 실행 - 운영하거나 비용 낼 서버 샌드박스가 없다.** Python이 탭 안, Chrome 렌더러 샌드박스 + WASM 격리(웹 전체에 단련된 경계) 안에서 돈다. 샌드박스 코드 실행을 인프라 밖으로 옮기며, 데이터 외부 전송을 막으려면 제품의 네트워크 정책이 추가로 필요하다. (자원·네트워크 한도는 직접 설정한다. 브라우저는 탈출을 막지 자원 고갈을 막지 않는다 - [보안 모델](#보안-모델) 참조. 코드로부터 사용자를 지키지, 사용자로부터 회사 비밀을 지키는 건 아니다.)
+- **브라우저에서 실행 - 애플리케이션 서버가 필요 없다.** Python이 Chromium renderer
+  sandbox와 WebAssembly 경계 안에서 돈다. resource와 network policy는 명시적으로 설정한다.
+  자세한 경계는 [보안 모델](#보안-모델)에 있다.
 - **다시 만들지 않고 복원.** 패키지와 데이터를 이미 로드한 상태를 체크포인트로 저장하고 그 지점으로 되돌린다 - 재실행도, 재설치도 없이.
 - **탭을 닫아도 머신은 유지**(Experimental - `open({ persistent })`). 여러 탭이 하나의 논리적 Python 상태를 공유한다. 리더가 닫히면 다른 탭이 OPFS의 마지막 commit에서 메모리와 `/home/web` 파일을 복구해 로컬에서 계속한다.
 - **한 상태에서 분기**(Beta - `machine.history` + `machine.proc()`). 에이전트가 같은 준비 상태에서 여러 코드 후보를 독립적으로 실행하고 결과를 비교한다.
-- **fail-closed 정책 아래 데이터는 로컬에 둘 수 있다.** CSV / Excel / 기업 데이터를 탭에서 처리하고 요약된 결과만 내보낸다. 로컬 실행만으로는 no-exfiltration 경계가 되지 않는다.
+- **fail-closed 정책 아래 데이터는 로컬에 둘 수 있다.** 데이터를 탭에서 처리하고 선택한
+  결과만 내보낸다. 로컬 실행만으로는 no-exfiltration 경계가 되지 않는다.
 - **격리된 실행.** Python이 메인 UI 스레드와 분리돼, 관리하는 여러 워커에서 돈다.
 
 ## 빠른 시작
@@ -158,10 +167,10 @@ console.log(machine.run("import numpy as np; int(np.arange(1_000_000).sum())"));
 ```js
 import { open } from "pyproc";
 
-const machine = await open({ persistent: { name: "workspace" } });
-await machine.run("counter = globals().get('counter', 40) + 1");
-await machine.commit();
-console.log(await machine.run("counter")); // 리더 승계 뒤에도 41
+const persistentMachine = await open({ persistent: { name: "workspace" } });
+await persistentMachine.run("counter = globals().get('counter', 40) + 1");
+await persistentMachine.commit();
+console.log(await persistentMachine.run("counter")); // 리더 승계 뒤에도 41
 ```
 
 [Immortal Python Machine 데모](examples/immortal.html)에서 상태 공유, leader identity, 영속 epoch, 강제 승계, 서버 없는 로컬 복구를 직접 시험할 수 있다.
@@ -226,7 +235,7 @@ console.log(machine.run("len(values)"));      // 3
 
 ## AI 에이전트에 꽂기 (MCP)
 
-레포에 zero-dependency MCP 서버가 들어 있다. 지속 pyproc 머신을 에이전트 도구 4개
+레포에 추가 runtime npm package가 없는 MCP 서버가 들어 있다. 지속 pyproc Machine을 도구 4개
 (`pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`)로 노출한다.
 COOP/COEP 서버 뒤에 headless Chromium 머신 페이지를 띄우고 stdio로 MCP를 말하므로,
 위의 재시도 루프가 그대로 도구 호출이 된다:
@@ -281,9 +290,18 @@ same-origin MCP 제어 트래픽만 열린다. 부팅 자체도 CDN 요청이 �
 
 ## 스코프와 플랫폼 방향
 
-pyproc은 위 [북극성](#북극성)이 말하는 컴퓨터의 첫 Python guest OS다. Web Machine host는 이 패키지 안에서 나가고(`src/machine`, 진입은 `createWebComputer`), 그것과 로컬 Web Computer 제품이 한 lifecycle로 pyproc과 Linux를 부팅하고, 두 memory와 disk를 함께 저장하며, browser process 재시작 뒤 복구하고, 새 browser profile에서 signed image를 가져온다. 재현 가능한 Buildroot Linux guest는 source, legal material, SBOM, config, 독립 빌드 증거와 함께 hash-pinned project release로 별도 출하한다. x86 emulator와 남은 firmware는 외부 공급 자산이며 npm에는 들어가지 않는다.
+pyproc은 위 [북극성](#북극성)이 말하는 persistent Python computer다. Python이 기본
+Machine이다. Web Machine host는 package 안에서 나가고(`src/machine`, 진입은
+`createWebComputer`) 같은 lifecycle을 Linux까지 확장한다. 두 guest의 memory와 disk를 함께
+저장하고, browser process 재시작 뒤 복구하며, 새 browser profile에서 signed image를 연다.
+재현 가능한 Buildroot Linux guest는 source, legal material, SBOM, config, 독립 빌드 증거와
+함께 hash-pinned project release로 별도 출하한다. x86 emulator와 남은 firmware는 외부 공급
+asset이며 npm에는 들어가지 않는다.
 
-그 큰 목표 안에서 pyproc의 호환성 방향은 계속 "로컬에서 되는 모든 파이썬을 언젠가 브라우저에서, 서버 없이"다. 로컬에서 되는 것은 네 상태로 갈리고, pyproc의 일은 이것들을 위 칸으로 밀어 올리는 것과 플랫폼이 벽을 다시 여는 순간 가장 먼저 흡수하는 구조가 되는 것이다:
+그 큰 목표 안에서 Python 도달 범위에는 상한을 두지 않는다. 로컬에서 되는 모든 Python을
+언젠가 애플리케이션 서버 없이 브라우저에서 돌린다. 로컬에서 되는 것은 네 상태로 갈리고,
+pyproc의 일은 이것들을 위 칸으로 밀어 올리는 것과 platform이 벽을 다시 여는 순간 가장 먼저
+흡수하는 구조가 되는 것이다:
 
 - **현재 달성**(CI 브라우저 게이트가 도는 것): 순수 파이썬 + Pyodide 패키지, 멀티코어 프로세스, 체크포인트 / 복원, 커널 내 ASGI, 터미널, 영속 FS, 이동 가능한 `.pymachine`·`.webmachine` 이미지.
 - **출하되나 headless CI 게이트 없음**: `pyproc/socket`(아웃바운드 소켓은 이 패키지가 배송하지 않는 WS-TCP 릴레이가 필요하다), `pyproc/gpu`(headless에 WebGPU 어댑터가 없다). 둘 다 제품 안에서 직접 검증해야 하는 opt-in subpath이고, 이 공백은 [계약 실태](docs/operations/contractReality.md)가 기록한다.
@@ -329,7 +347,11 @@ pyproc은 "그냥 더 빠른 파이썬"이 아니다. 프로세스 모델을 가
 
 ## Web Computer 실행
 
-Web Computer 제품은 한 브라우저 workspace에서 Python OS와 Linux를 부팅한다. 두 guest의 실제 memory와 block-backed file을 하나의 IndexedDB generation으로 저장하고, 브라우저 프로세스를 닫았다 열어도 복구하며, 서명된 `.webmachine` 파일 하나로 함께 옮긴다.
+다중 guest Web Computer 표면은 같은 Machine 생명주기를 한 브라우저 workspace의 Python과
+Linux로 확장한다. 두 guest의 실제 memory와 block-backed file을 하나의 IndexedDB
+generation으로 저장하고, 브라우저 프로세스를 닫았다 열어도 복구하며, 서명된 `.webmachine`
+파일 하나로 함께 옮긴다. Machine 계약이 Python 밖도 host할 수 있음을 증명하지만 pyproc의
+기본 제품 경로인 persistent Python Machine을 대체하지 않는다.
 
 ```sh
 npm run assets:web-computer
@@ -385,6 +407,24 @@ npx pyproc-assets --baseURL /vendor/pyproc/ --out public/vendor/pyproc-assets.js
 
 CLI는 Worker / SharedWorker / Service Worker import graph를 따라가고, `--copy-to`가 있으면 필요한 파일을 복사하며, 모든 파일에 `sha256-...` integrity를 붙인다. 이 JSON을 worker 기반 능력 spawn 전 `assetIntegrity`로 넘기고, Service Worker 경로도 `registerPyProcServiceWorker(...)`로 검증한다.
 
+## 의존성 경계
+
+**runtime npm 의존성 0은 정확한 package 사실이지 컴퓨터에 의존성이 없다는 주장이 아니다.**
+pyproc은 출하하는 JavaScript runtime graph를 직접 소유한다. 작동하는 Machine은 여전히
+engine, browser primitive, 명시적으로 켠 외부 capability 위에 선다.
+
+| 층 | 현재 경계 | 제거 가능한가 |
+|---|---|---|
+| Runtime npm graph | `dependencies` 아래 package 없음. native ESM source 그대로 출하 | 이미 0 |
+| Python engine asset | Pyodide v314.0.2. 기본은 CDN, SRI와 함께 자체 호스팅 가능 | CDN 의존은 제거 가능. CPython을 대체하지 않고 engine 자체를 제거할 수는 없음 |
+| Browser platform | Chromium/Edge, WebAssembly, Worker, OPFS. blocking/process 경로는 JSPI와 COOP/COEP | 제거 불가. 이것이 hardware와 security boundary |
+| 선택 capability | raw outbound socket relay, WebGPU hardware, 주입하는 x86 emulator, firmware, Linux image | 제거 가능. capability를 빼도 Python Machine은 온전함 |
+
+따라서 가장 강한 배포는 존재하지 않는 무의존 컴퓨터가 아니라 **소유하고 검증하는 의존성
+chain**이다. pyproc 정확 버전을 pin하고, pin한 engine을 자체 호스팅하고, asset SRI manifest를
+생성하고 검증하며, 검증한 asset을 OPFS에 cache한다. CDN 경로는 편리한 평가 경로일 뿐 배포
+기본값이 아니다.
+
 ## 셋업
 
 **Chromium / Edge 전용**이고, 요구는 패키지 단위가 아니라 능력 단위다. 부팅, 코드 실행, 패키지 설치, `machine.history` 전부는 브라우저 말고 아무것도 요구하지 않는다(헤더 없음, 번들러 설정 없음). JSPI(Chrome 137부터 기본)는 블로킹 경로가, COOP/COEP를 통한 SharedArrayBuffer는 프로세스 OS가 요구한다. `checkEnvironment()`가 페이지가 어디 서 있는지 정확히 보고하고, 각 능력은 조용히 실패하는 대신 실행 가능한 오류를 던진다. Firefox / Safari 미지원은 결함이 아니라 의도된 스코프다.
@@ -393,7 +433,7 @@ CLI는 Worker / SharedWorker / Service Worker import graph를 따라가고, `--c
 
 | 하고 싶은 것 | 필요한 것 | 엔진 자산 |
 |---|---|---|
-| `boot` / `run` / 패키지, `machine.history`(체크포인트·시간여행) | `npm install` + Chromium 브라우저. 헤더 불필요. | 런타임에 `cdn.jsdelivr.net/pyodide/v314.0.2/full/`에서 받는다(`indexURL`로 대체 가능) |
+| `boot` / `run` / 패키지, `machine.history`(체크포인트·시간여행) | `npm install` + Chromium 브라우저. 헤더 불필요. | 배포에서는 pin한 Pyodide를 자체 호스팅한다. 기본값은 `cdn.jsdelivr.net/pyodide/v314.0.2/full/`에서 받는다 |
 | `machine.proc()`(fork·`map`·interrupt), IPC, 블로킹 소켓 | 아래 두 헤더 + **same-origin 워커 파일**(= npm 설치/벤더링, CDN 직접 import 불가) | 같고, 워커 파일도 same-origin이어야 한다 |
 
 
@@ -475,7 +515,7 @@ npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm inst
 
 ## 북극성
 
-**브라우저를 여러 guest OS가 부팅되는 컴퓨터로 만들고, 그 컴퓨터를 pyproc 자신으로 만든다.**
+**브라우저를 영속하는 컴퓨터로 만들고, Python을 기본 Machine으로 삼으며, 그 컴퓨터를 pyproc 자신으로 만든다.**
 
 점수의 근거는 CI에서 실제로 도는 게이트다. 자동으로 실행되지 않는 경로는 구현이 아무리 완성돼 있어도 점수로 세지 않고, 증거에 수동 probe가 섞인 축은 9점 아래로 묶인다. 10점은 그 축이 끝난 상태다: 실제 브라우저에서 반복 검증됐고 공개 표면에 우회로가 남지 않았다.
 
@@ -516,9 +556,9 @@ npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm inst
 ## 개발
 
 ```bash
-npm test              # Node 구조 / 린트 게이트 (의존성 0)
+npm test              # Node 구조 / 린트 게이트 (runtime npm 의존성 없음)
 npm run test:installed # 설치 패키지 브라우저 게이트
-npm run test:browser  # headless Chromium 런타임 게이트: 부팅 / 리액티브 / fork / map (의존성 0)
+npm run test:browser  # headless Chromium 런타임 게이트: 부팅 / 리액티브 / fork / map (runtime npm 의존성 없음)
 npm run serve         # 수동 검증·벤치용 COOP/COEP 정적 서버
 ```
 

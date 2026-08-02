@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>pyproc - real Python in your browser tab</title>
-  <meta name="description" content="Real CPython in the browser: processes and multi-core parallelism, checkpoint/time-travel, portable .pymachine images, uv-grade instant environments. No server, no build step.">
+  <title>pyproc - a persistent Python computer in your browser</title>
+  <meta name="description" content="A persistent Python computer in the browser: real CPython, durable workspaces, processes, rewindable history, and signed machine images. No application server.">
   <link rel="icon" href="assets/logo.svg">
   <meta name="theme-color" content="#0a0f1c">
   <link rel="stylesheet" href="examples/demo.css">
@@ -21,7 +21,7 @@
       <nav>
         <a href="#demos">Demos</a>
         <a href="#features">Features</a>
-        <a href="#build">Build</a>
+        <a href="#build">Contract</a>
         <a href="#install">Install</a>
       </nav>
       <sns-links></sns-links>
@@ -32,12 +32,12 @@
          file as the header. -->
     <section class="hero">
       <img class="heroMark" src="assets/logo.svg" width="112" height="112" alt="pyproc" fetchpriority="high">
-      <h1>Real Python in your browser tab.<br><span class="accent">No server.</span></h1>
-      <p class="lead">CPython 3.14 on WebAssembly with real processes, multi-core parallelism,
-      checkpoint/time-travel, and a computer you can export as a single file.
-      Zero dependencies, no build step. Chromium/Edge.</p>
+      <h1>A persistent Python computer.<br><span class="accent">In your browser.</span></h1>
+      <p class="lead">One Machine owns a durable workspace, exact environment, real processes,
+      rewindable history, and signed images. CPython 3.14 on WebAssembly, zero runtime npm
+      dependencies, no application server. Chromium/Edge.</p>
       <div class="row heroCta">
-        <a class="btn" href="examples/immortal.html">Open the Immortal Python Machine</a>
+        <a class="btn" href="examples/immortal.html">Open the Python Machine</a>
         <a class="btn ghostBtn" href="https://github.com/eddmpython/pyproc">GitHub</a>
         <code class="chip" id="installChip" title="click to copy">npm install pyproc</code>
       </div>
@@ -97,7 +97,7 @@
       </a>
     </div>
 
-    <h2 id="features">The OS primitives underneath</h2>
+    <h2 id="features">The Machine primitives underneath</h2>
     <div class="cards features">
       <div class="card"><h3>Processes and fork</h3><p>Web Worker = process. Boot once, snapshot the heap, fork N interpreters: N GILs, N cores, kill/interrupt/respawn lifecycle.</p></div>
       <div class="card"><h3>Checkpoint and time-travel</h3><p>Full-hash heap checkpoints at execution boundaries. Restore writes only the changed pages instead of re-running, guarded against silent corruption by a mutation counter.</p></div>
@@ -114,8 +114,8 @@
     </div>
     <p class="dim" style="margin:.2rem 0 0">Capability detail (ASGI server, syscall bridge, interrupts, journal) stays one hop away: <code>machine.runtime</code> is the documented escape hatch on every machine handle.</p>
 
-    <h2 id="build">Build with pyproc as a library</h2>
-    <p class="dim" style="margin:.2rem 0 0">Product code should consume root exports, stable subpaths, and documented execution assets, never engine internals. These are the decision surfaces before wiring pyproc into a product.</p>
+    <h2 id="build">Build on the Machine contract</h2>
+    <p class="dim" style="margin:.2rem 0 0">Use the root Machine handle, stable subpaths, and documented execution assets, never engine internals. These are the boundaries for extending pyproc without fragmenting the product.</p>
     <div class="cards">
       <a class="card" href="https://github.com/eddmpython/pyproc#public-surface">
         <h3>Public surface map</h3>
@@ -126,8 +126,8 @@
         <p>Decide what to enable by product value, status, browser requirements, runnable surfaces, gates, and hard boundaries.</p>
       </a>
       <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md">
-        <h3>Consumer contract</h3>
-        <p>Pin exact versions, keep import boundaries clean, deploy same-origin assets, and verify the product gate.</p>
+        <h3>Package contract</h3>
+        <p>Pin exact versions, keep import boundaries clean, deploy same-origin assets, and verify the installed package.</p>
       </a>
       <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/operations/benchmarking.md">
         <h3>Benchmark contract</h3>
@@ -144,7 +144,7 @@ import { boot } from "pyproc";
 const machine = await boot();                  <span class="dim">// real CPython in this tab</span>
 const pool = await machine.proc({ lanes: 4 }); <span class="dim">// fork 4 interpreters from one snapshot</span>
 await pool.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</div>
-      <p class="dim" style="margin:.7rem 0 0">Pin an exact npm version for product use. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md">consumer contract</a>.</p>
+      <p class="dim" style="margin:.7rem 0 0">Pin an exact npm version. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md">package contract</a>.</p>
     </div>
 
     <footer class="site">

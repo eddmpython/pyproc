@@ -4,23 +4,24 @@
 
 <h1 align="center">pyproc</h1>
 
-<p align="center"><b>Real Python in your browser tab. No server.</b></p>
+<p align="center"><b>A persistent Python computer in your browser.</b></p>
 
 <p align="center">
-  Save states for a live interpreter: checkpoint it, fork it across cores, and restore it when a run<br>
-  goes wrong - so a retry loop reuses a prepared environment instead of rebuilding one.
+  Open one Machine. Keep its workspace, environment, processes, and history; rewind it when work<br>
+  goes wrong; carry it as a signed image. Real CPython, no application server required.
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=5b8cff&labelColor=0a0f1c" alt="npm"></a>
   <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=0a0f1c" alt="ci"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-7c4dff?labelColor=0a0f1c" alt="license MPL-2.0"></a>
-  <img src="https://img.shields.io/badge/dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero dependencies">
+  <img src="https://img.shields.io/badge/runtime_npm_dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero runtime npm dependencies">
   <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-5b8cff?labelColor=0a0f1c" alt="CPython 3.14 on WebAssembly">
 </p>
 
 <p align="center">
   <a href="https://eddmpython.github.io/pyproc/"><b>Live demo</b></a> ·
+  <a href="#product-model">Product model</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#using-it-from-an-ai-agent">AI-agent patterns</a> ·
   <a href="#feature-status">Status</a> ·
@@ -32,11 +33,11 @@
 <details>
 <summary><b>Contents</b></summary>
 
-- [Try it with nothing installed](#try-it-with-nothing-installed)
-- [The problem it solves](#the-problem-it-solves)
-- [In one example](#in-one-example)
-- [Where a browser Python sandbox helps](#where-a-browser-python-sandbox-helps)
-- [What you get (results, not internals)](#what-you-get-results-not-internals)
+- [The product](#the-product)
+- [Product model](#product-model)
+- [One machine lifecycle](#one-machine-lifecycle)
+- [Where the Machine pays off](#where-the-machine-pays-off)
+- [What the Machine delivers](#what-the-machine-delivers)
 - [Quick start](#quick-start)
 - [Choosing your entry point](#choosing-your-entry-point)
 - [Using it from an AI agent](#using-it-from-an-ai-agent)
@@ -49,6 +50,7 @@
 - [Where the shape pays off](#where-the-shape-pays-off)
 - [Run the Web Computer](#run-the-web-computer)
 - [Public surface](#public-surface)
+- [Dependency boundary](#dependency-boundary)
 - [Setup](#setup)
 - [Install and pinning](#install-and-pinning)
 - [North Star](#north-star)
@@ -57,40 +59,42 @@
 
 </details>
 
-## Try it with nothing installed
+## The product
 
-Save this as `index.html` and open it in Chrome or Edge. No bundler, no build step, no server, no
-headers - just a file.
+pyproc is one product: **a persistent, browser-native Python computer**. It is not a bag of unrelated
+runtime helpers. The public noun is `Machine`; execution, files, processes, durable history, images,
+and permissions are parts of that machine.
 
-```html
-<script type="module">
-import { boot } from "https://cdn.jsdelivr.net/npm/pyproc@0.0.11/index.js";
+The promise is simple: prepare Python once, keep the live state, branch or rewind it, survive a tab
+closing, and move the machine as a verified file. The default product path is the Python Machine.
+Linux, WASI, GPU, sockets, and MCP are optional guests or capabilities around the same contract, not
+separate identities.
 
-const py = await boot();                   // real CPython 3.14 (the first boot fetches the engine)
-console.log(py.run("sum(range(100))"));    // 4950
+## Product model
 
-const saved = py.history.checkpoint();     // save the live interpreter
-py.run("data = [1] * 100000");             // change it
-py.history.restore(saved);                 // put it back
-console.log(py.run("'data' in dir()"));    // false
-</script>
+| Product concept | Current contract | What it owns |
+|---|---|---|
+| **Machine** | `boot()` / `open()` | The single root handle and lifecycle |
+| **Workspace** | named persistent machine + `/home/web` | Files and live work that survive reopening |
+| **Environment** | deterministic manifest + exact engine version | Packages, setup, and replay boundary |
+| **Processes** | `machine.proc()` | Independent worker interpreters, forks, signals, and parallel work |
+| **History** | `machine.history` + persistent `machine.commit()` | Checkpoints, branches, restore, journal, and recovery |
+| **Image** | signed `.pymachine` / `.webmachine` | Portable state with integrity and an explicit trust gate |
+| **Permissions** | capability contracts + permission jail | Network, storage, devices, memory, and execution policy |
+
+These are product concepts, not seven competing top-level APIs. A Machine remains the root, and its
+verbs reveal only the capability being used. Internal engine objects stay behind that boundary.
+
+## One machine lifecycle
+
+```text
+create / open  ->  work  ->  checkpoint / commit  ->  branch / restore  ->  export / reopen
+      Machine      Workspace + Environment     History + Processes           Image + Trust
 ```
 
-That is the whole idea. `checkpoint` and `restore` move the interpreter itself, not a serialized
-copy of your variables, so coming back costs no re-import and no re-install - which is what makes a
-retry loop cheap. For anything real, install it and pin an exact version
-([Install and pinning](#install-and-pinning)).
-
-## The problem it solves
-
-AI agents don't run Python once. They generate code, run it, read the failure, fix it, and run again. They try several approaches in parallel, or roll back to a known-good state before the last mess.
-
-The usual answer is a server container or a fresh Python environment per attempt: slow to start, costly to keep, and thrown away between tries. pyproc keeps a prepared Python state alive **in the user's browser**, and lets you **checkpoint, branch, and restore** it, so the retry loop costs milliseconds instead of a cold boot. A product can keep user data in the tab by applying the fail-closed network policy described below. The per-session sandbox you would otherwise run server-side moves into the user's browser: sandboxed execution you don't provision or pay for, on a boundary (Chrome + WASM) already hardened against the whole web.
-
-## In one example
-
-The retry loop is the product. Prepare once, checkpoint, let the agent try, restore in
-milliseconds when it fails:
+The library makes durable commits explicit. The first-party Web Computer automatically commits after
+commands and also exposes manual Save, so automatic durability never hides the recovery boundary.
+This is the default lifecycle every surface should reinforce.
 
 ```js
 import { boot } from "pyproc";
@@ -100,26 +104,26 @@ await machine.loadPackages(["numpy"]);   // prepare once (packages, data)
 const cp = machine.history.checkpoint(); // save the prepared state
 
 const attempts = [
-  "import numpy as np; float(np.arange(10).men())",  // what the agent wrote first
-  "import numpy as np; float(np.arange(10).mean())", // what it wrote after reading the error
+  "import numpy as np; float(np.arange(10).men())",
+  "import numpy as np; float(np.arange(10).mean())",
 ];
 
 for (const code of attempts) {
   try {
-    console.log(machine.run(code));      // 4.5 on the attempt that works
+    console.log(machine.run(code));      // 4.5 on the successful attempt
     break;
   } catch (error) {
-    machine.history.restore(cp);         // prepared state is back - no re-boot, no re-install
+    machine.history.restore(cp);         // prepared state is back
   }
 }
 ```
 
-Real CPython (via [Pyodide](https://pyodide.org) / WebAssembly), running in the tab, returning
-real values - with a state you can save, branch, and get back.
+`checkpoint` and `restore` move the interpreter state, not a serialized copy of selected variables.
+The prepared environment returns without re-importing or reinstalling it.
 
-## Where a browser Python sandbox helps
+## Where the Machine pays off
 
-| Use case | How it's used | What pyproc gives |
+| Work | What happens | Why the Machine helps |
 |---|---|---|
 | AI data analysis | Run AI-written pandas / NumPy on the user's file | Analyze without shipping the raw file to a server |
 | AI coding tools | Checkpoint before running AI code; restore on failure | Cheap trial-and-error, no environment reset |
@@ -129,15 +133,19 @@ real values - with a state you can save, branch, and get back.
 | Internal analytics | Process sensitive CSV / Excel in the local tab | Minimize sending data off-device |
 | Offline tools | Cache the runtime and packages | Runs where the network is limited |
 
-The through-line: **an AI agent needs a Python environment it can prepare once, then save, branch, and restore** - and a browser sandbox can keep the user's data local when the product also applies a fail-closed network policy.
+The common thread is one long-lived Python Machine that can be prepared once, saved, branched, and
+restored. A fail-closed network policy can also keep selected data local while code runs.
 
-## What you get (results, not internals)
+## What the Machine delivers
 
-- **Runs in the user's browser - no server sandbox to run or pay for.** Python executes in the tab, inside Chrome's renderer sandbox plus WASM isolation, a boundary hardened against the whole web. You move sandboxed code execution off your own infrastructure; keeping data from leaving additionally requires the product's network policy. (You still set resource and network limits yourself; the browser isolates escape, not resource exhaustion - see [Security model](#security-model). It protects the user from the code, not your secrets from the user.)
+- **Runs in the browser - no application server is required.** Python executes in the tab inside the
+  Chromium renderer sandbox and WebAssembly boundary. Resource and network policy remain explicit;
+  see [Security model](#security-model).
 - **Restore without rebuilding.** Checkpoint a state with packages and data already loaded, then roll back to it - no re-run, no re-install.
 - **Close the tab; keep the machine** (Experimental - `open({ persistent })`). Tabs share one logical Python state. If the leader closes, another tab recovers the last committed memory and `/home/web` files from OPFS and continues locally.
 - **Branch from one state** (Beta - `machine.history` + `machine.proc()`). An agent runs several code candidates from the same prepared state, independently, and compares results.
-- **Data can stay local under a fail-closed policy.** Process CSV / Excel / enterprise data in the tab and send only the summarized result onward. Local execution alone is not a no-exfiltration boundary.
+- **Data can stay local under a fail-closed policy.** Process data in the tab and export only selected
+  results. Local execution alone is not a no-exfiltration boundary.
 - **Isolated execution.** Python runs off the main UI thread, across multiple workers you manage.
 
 ## Quick start
@@ -159,10 +167,10 @@ Open one persistent machine from any number of same-origin tabs:
 ```js
 import { open } from "pyproc";
 
-const machine = await open({ persistent: { name: "workspace" } });
-await machine.run("counter = globals().get('counter', 40) + 1");
-await machine.commit();
-console.log(await machine.run("counter")); // 41, including after leader takeover
+const persistentMachine = await open({ persistent: { name: "workspace" } });
+await persistentMachine.run("counter = globals().get('counter', 40) + 1");
+await persistentMachine.commit();
+console.log(await persistentMachine.run("counter")); // 41, including after leader takeover
 ```
 
 Try the full lifecycle in the [Immortal Python Machine demo](examples/immortal.html): shared state, leader identity, durable epoch, forced takeover, and local recovery with no backend.
@@ -228,7 +236,8 @@ user file  ->  browser Python  ->  summary only  ->  AI model
 
 ## Plug it into an AI agent (MCP)
 
-The repo ships a zero-dependency MCP server that exposes a persistent pyproc machine as
+The repo ships an MCP server with no additional runtime npm packages. It exposes a persistent
+pyproc Machine as
 four agent tools: `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`.
 It boots a headless Chromium machine page behind a COOP/COEP server and speaks MCP over
 stdio, so the retry loop above becomes tool calls:
@@ -284,9 +293,17 @@ Honest maturity by browser-gate coverage. Everything below has a runtime gate; t
 
 ## Scope and platform direction
 
-pyproc is the first Python guest OS of the computer described in the [North Star](#north-star) above. The Web Machine host ships inside this package (`src/machine`, entered through `createWebComputer`), and it plus the local Web Computer product boot pyproc and Linux through one lifecycle, save their memory and disks together, recover them after a browser-process restart, and import a signed image in a fresh browser profile. The reproducible Buildroot Linux guest ships separately as a hash-pinned project release with source, legal material, SBOM, configuration, and independent-build evidence. The x86 emulator and remaining firmware stay externally supplied assets and are not part of npm.
+pyproc is the persistent Python computer described in the [North Star](#north-star) above. Python is
+the default Machine. The Web Machine host ships inside the package (`src/machine`, entered through
+`createWebComputer`) and extends the same lifecycle to Linux: both guests can save memory and disks
+together, recover after a browser-process restart, and open a signed image in a fresh browser profile.
+The reproducible Buildroot Linux guest ships separately as a hash-pinned project release with source,
+legal material, SBOM, configuration, and independent-build evidence. The x86 emulator and remaining
+firmware stay externally supplied assets and are not part of npm.
 
-Within that larger goal, pyproc's compatibility direction remains: whatever Python runs locally should eventually run in the browser, with no server. Everything local sorts into four states, and pyproc's job is to push things up the list and absorb a wall when the platform reopens it:
+Within that larger goal, Python reach remains unbounded: whatever Python runs locally should
+eventually run in the browser without an application server. Everything local sorts into four
+states, and pyproc's job is to push things up the list and absorb a wall when the platform reopens it:
 
 - **Delivered** (browser-gated in CI today): pure-Python + Pyodide packages, multi-core processes, checkpoint / restore, in-kernel ASGI, terminal, persistent FS, portable `.pymachine` and `.webmachine` images.
 - **Shipped without a headless CI gate**: `pyproc/socket` (outbound Python sockets need a WS-to-TCP relay this package does not ship) and `pyproc/gpu` (needs a real WebGPU adapter, which headless CI does not have). Both are opt-in subpaths you must verify inside your own product; the standing gap is tracked in [contract reality](docs/operations/contractReality.md).
@@ -333,7 +350,11 @@ Measure the envelope on your own hardware: run [Speed Lab](examples/speedLab.htm
 
 ## Run the Web Computer
 
-The Web Computer product boots Python OS and Linux in one browser workspace. Both guests have real memory and block-backed files, save into one durable IndexedDB generation, recover after the browser process closes, and move together in a signed `.webmachine` file.
+The multi-guest Web Computer surface extends the same Machine lifecycle to Python and Linux in one
+browser workspace. Both guests have real memory and block-backed files, save into one durable
+IndexedDB generation, recover after the browser process closes, and move together in a signed
+`.webmachine` file. It proves that the Machine contract can host more than Python; it does not replace
+the persistent Python Machine as pyproc's default product path.
 
 ```sh
 npm run assets:web-computer
@@ -387,6 +408,24 @@ npx pyproc-assets --baseURL /vendor/pyproc/ --out public/vendor/pyproc-assets.js
 
 The CLI follows the Worker / SharedWorker / Service Worker import graph, copies the required files when `--copy-to` is set, and emits `sha256-...` integrity for every file. Load that JSON as `assetIntegrity` before worker-backed capabilities spawn, and register `pyprocSw.js` through `registerPyProcServiceWorker(...)` so the Service Worker path is verified too.
 
+## Dependency boundary
+
+**Zero runtime npm dependencies is an exact package fact, not a claim that computers have no
+dependencies.** pyproc owns the JavaScript runtime graph it publishes. A working Machine still rests
+on an engine, browser primitives, and any explicitly enabled external capability.
+
+| Layer | Current boundary | Can it be removed? |
+|---|---|---|
+| Runtime npm graph | No packages under `dependencies`; native ESM ships as source | Already zero |
+| Python engine assets | Pyodide v314.0.2; CDN by default, self-hostable with SRI | The CDN dependency can be removed; the engine cannot be removed without replacing CPython |
+| Browser platform | Chromium/Edge, WebAssembly, Workers, OPFS; JSPI and COOP/COEP for blocking/process paths | No; this is the hardware and security boundary |
+| Optional capabilities | Relay for raw outbound sockets; WebGPU hardware; injected x86 emulator, firmware, and Linux image | Yes; omit the capability and the Python Machine remains complete |
+
+The strongest deployment is therefore not an imaginary dependency-free computer. It is an
+**owned and verified dependency chain**: pin the exact pyproc version, self-host the pinned engine,
+emit and verify the asset SRI manifest, and cache verified assets in OPFS. The CDN route remains a
+convenient evaluation path, not the production default.
+
 ## Setup
 
 **Chromium / Edge only**, and the requirements are per capability rather than per package. Booting, running code, installing packages, and the whole of `machine.history` need nothing but the browser: no headers, no bundler configuration. JSPI (default since Chrome 137) is what the blocking paths need, and SharedArrayBuffer through COOP/COEP is what the process OS needs. `checkEnvironment()` reports exactly where a page stands, and each capability raises an actionable error rather than failing obscurely. Lack of Firefox / Safari support is a deliberate scope choice, not a defect. Full environment matrix (per-capability requirements, engine version, resource characteristics): [docs/consuming/compatibility.md](docs/consuming/compatibility.md).
@@ -395,7 +434,7 @@ There are two tiers of setup, so "just install and import" is true for the basic
 
 | You want | You need | Engine assets |
 |---|---|---|
-| `boot` / `run` / packages, `machine.history` (checkpoint, time-travel) | `npm install` plus a Chromium browser. No headers. | Fetched at runtime from `cdn.jsdelivr.net/pyodide/v314.0.2/full/` unless you pass `indexURL` |
+| `boot` / `run` / packages, `machine.history` (checkpoint, time-travel) | `npm install` plus a Chromium browser. No headers. | Self-host the pinned Pyodide release for deployment; the default fetches `cdn.jsdelivr.net/pyodide/v314.0.2/full/` |
 | `machine.proc()` (fork, `map`, interrupt), IPC, blocking sockets | The two headers below, plus **same-origin worker files** (so npm install / vendoring, not CDN import) | Same, and the worker file must be same-origin |
 
 **Engine assets are not in this package.** The default `indexURL` points at jsDelivr, so the first
@@ -411,8 +450,8 @@ await boot({ engineScriptIntegrity: "sha256-...", coreIntegrity: { /* per-file S
 ```
 
 For (1) this repository vendors a release with `npm run fetch:engine` (a development script, not
-part of the published package); in your own product, copy `node_modules/pyodide` or a release
-tarball into the path you serve. The pinned version is the package contract:
+part of the published package); copy `node_modules/pyodide` or a release tarball into the path being
+served. The pinned version is the package contract:
 [docs/consuming/contract.md](docs/consuming/contract.md).
 
 Serve the page that hosts pyproc with:
@@ -477,7 +516,7 @@ You can also import straight from a CDN with no install (single-runtime path onl
 
 ## North Star
 
-**Make the browser a computer that boots more than one guest operating system - and make that computer pyproc itself.**
+**Make the browser a persistent computer, make Python its default Machine, and make that computer pyproc itself.**
 
 Scores are anchored to gates that actually run in CI. A path no automated gate runs does not score, however complete the implementation is, and an axis whose evidence includes a manual-only probe is held below 9. A 10 means the axis is finished: repeatedly verified in a real browser, with no workaround left in the public surface.
 
@@ -518,9 +557,9 @@ Why the order is what it is, and the external triggers that would reorder it, ar
 ## Development
 
 ```bash
-npm test              # Node structure / lint gate (zero dependencies)
+npm test              # Node structure / lint gate (no runtime npm dependencies)
 npm run test:installed # installed package browser gate
-npm run test:browser  # headless Chromium runtime gate: boot / reactive / fork / map (zero dependencies)
+npm run test:browser  # headless Chromium runtime gate: boot / reactive / fork / map (no runtime npm dependencies)
 npm run serve         # COOP/COEP static server for manual validation and benchmarks
 ```
 

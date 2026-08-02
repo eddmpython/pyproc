@@ -6,9 +6,15 @@ The canonical statement of pyproc's overall direction and product policy. Persis
 
 The one-line statement and the current score of every axis live in the [root README](../../README.md#north-star). This section says what that statement commits to.
 
-**Make the browser into a computer.** Precisely: take Chromium as the hardware and security boundary, and bind virtual CPU, memory, disk, display, network, devices, permissions, boot, and recovery into one Web Machine contract so that different guest OSes can run on it.
+**Make the browser a persistent computer, with Python as the default Machine.** Precisely: take
+Chromium as the hardware and security boundary, and bind virtual CPU, memory, disk, display, network,
+devices, permissions, boot, and recovery into one Machine contract. Python is the product path; other
+guests prove that the contract is a computer rather than an interpreter wrapper.
 
-The goal is not to draw a Windows- or macOS-shaped UI in the browser. It is to build a thin host contract an operating system can believe there is a computer beneath, and to make the pyproc Python OS and a separate Linux guest consume the same boot, device, snapshot, and restore lifecycle.
+The goal is not to draw a Windows- or macOS-shaped UI in the browser. It is to make one Python
+Machine people can open, work in, commit, rewind, and carry. The thin multi-guest host underneath
+keeps that lifecycle coherent and lets a Linux guest use the same boot, device, snapshot, and restore
+contract without splitting pyproc into a second product.
 
 ## North Star axes
 
@@ -24,7 +30,11 @@ New work names the axis it moves. Work that moves no axis, weakens a guardrail i
 
 ## Where pyproc sits today
 
-pyproc is the first Python guest OS of the Web Machine platform. The public npm package stays a reusable kernel that provides Python execution, processes, files, permissions, network virtualization, and restore-based reactivity in the browser with no server. The `src/machine/` layer and `apps/webComputer/` assemble pyproc and Linux under the same lifecycle, device, and signed-image contracts. The exact-version package surface is the only public boundary; package-internal reads are forbidden.
+pyproc is a persistent Python computer delivered as an exact-version native ESM package. Its public
+root is one Machine handle that owns Python execution, processes, files, permissions, network
+virtualization, and rewindable history in the browser with no application server. The
+`src/machine/` layer and `apps/webComputer/` extend that same lifecycle to Python and Linux under
+shared device and signed-image contracts. Package-internal reads are forbidden.
 
 Even as the higher goal grows, present-tense claims do not widen with it. The general host, shared `.webmachine` image, and Linux dual-boot are represented by the shipped `src/machine/` contract and the browser evidence registered in [`tests/northStar.mjs`](../../tests/northStar.mjs). The host ships through the single `createWebComputer` entry point and the `pyproc/machine` subpath. The reproducible Buildroot Linux guest also ships, separately from npm, as the hash-pinned `buildroot-pyproc-i686-v2` project release with exact source, complete legal material, SBOM, configuration, and independent-build receipt. The x86 emulator and remaining firmware are externally supplied assets; pyproc does not redistribute them or claim their provenance as its own.
 
@@ -34,18 +44,23 @@ Do not unify the syscalls and internal state of every OS. What the Web Machine m
 
 ## The problem
 
-The pieces for running real Python in a browser already exist: Pyodide, JSPI, File System Access, SharedArrayBuffer. What does not exist is the layer that binds them into something behaving like a real local runtime - so every product writes that layer again. The result:
+The pieces for running real Python in a browser already exist: Pyodide, JSPI, File System Access,
+and SharedArrayBuffer. What is missing is a single object that binds them into a computer whose work
+survives. Without that object, browser Python starts as a disposable interpreter and each capability
+creates another competing entry point. The result:
 
-- Browser Python stacks repeatedly rebuild the same runtime layer, and copy-pasting creates divergent implementations.
+- Execution, files, process control, and persistence drift into separate runtime layers.
 - Pyodide is one single interpreter. The physical properties of a runtime - parallelism, processes, state restore - are not provided, so they get reinvented every time.
 - Browser projects fill missing capabilities (sockets, subprocess, blocking input) in incompatible ways, so the work is not reusable.
 
-pyproc builds that layer **once, properly, and publishes it under a version pin**. Improvements collect in one place, and the executable package contract remains the SSOT.
+pyproc builds that Machine **once, properly, and publishes it under a version pin**. Improvements
+collect behind one handle, and the executable package contract remains the SSOT.
 
 ## What it is and what it is not
 
 **pyproc is:**
-- A framework-agnostic ESM library. No build step (native `.js` plus a hand-maintained `.d.ts`).
+- A persistent browser-native Python computer delivered as a framework-agnostic ESM package. No
+  build step (native `.js` plus a hand-maintained `.d.ts`).
 - OS kernel primitives at the browser tier: runtime boot, restore-based reactivity, the process OS, the file world, the permission jail, network virtualization, capability contracts.
 - A clean public surface that encapsulates the cross-cutting concerns - WASM heap access, stack pointers, monkeypatching - behind capability contracts.
 
@@ -68,13 +83,18 @@ Tempting things that are wrong for us. Each was rejected after review. This list
 5. **VT100/xterm.js emulation plus a shell pipe mini-language (`|`, `>`).** That re-imports the constraints of 1978 and stacks a second syntax on top of Python. The shell language is Python itself, and the essence of a pipe - lazy composition - is already in generators.
 6. **Split panes and a window manager.** UI belongs outside the kernel. The answer to "one machine on several screens" is `KernelElection`.
 7. **Maintaining a custom Pyodide build (pthread/nogil) permanently.** A custom engine build is conditional insurance, taken only when upstream threading or engine compatibility requires it. The current engine pin and re-verification triggers are in [contract reality](../operations/contractReality.md).
-8. **A WebRTC distributed machine.** Depending on a signaling server violates zero-dep. Moving between devices is the job of the `.pymachine` file.
+8. **A WebRTC distributed machine.** Depending on a signaling service violates the local-first
+   default. Moving between devices is the job of the `.pymachine` file.
 
 ## Success and failure criteria
 
-- **Package success**: the exact-version public surface exposes restore-based reactivity, process parallelism, the file world, permissions, and virtual origins through capability contracts without leaking engine internals.
-- **Higher-platform success**: the same Web Machine host boots pyproc and a Linux guest under common lifecycle, device, and image contracts, and both machines recover after a tab failure and a cold reopen.
-- **Failure**: the runtime diverges into copied implementations; pyproc absorbs UI and x86-specific logic; or the host core grows per-OS branches every time a guest is added.
+- **Product success**: one exact-version Machine opens a durable Python workspace, reproduces its
+  environment, runs and forks processes, commits and rewinds history, and moves through a signed
+  image without leaking engine internals.
+- **Architecture success**: the same host boots Python and a Linux guest under common lifecycle,
+  device, and image contracts, while Python remains the default product path.
+- **Failure**: public identity fragments into capability products; runtime layers are copied;
+  pyproc absorbs UI or x86-specific logic; or the host core grows per-OS branches for each guest.
 
 ## The four states of a Python guest capability (the goal is unbounded; present-tense claims go only as far as the proof)
 

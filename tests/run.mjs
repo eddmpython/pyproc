@@ -1590,21 +1590,69 @@ check("README 공개 표면은 작업별 지도 형태", () => {
   if (readmeEn.includes("| Export | What |")) throw new Error("README.md가 장황한 export 설명표로 회귀");
   if (readmeKo.includes("| Export | 무엇 |")) throw new Error("README.ko.md가 장황한 export 설명표로 회귀");
 });
+check("단일 Machine 제품 언어와 의존성 경계가 공개 표면에 고정", () => {
+  const readmeEn = readFileSync(join(ROOT, "README.md"), "utf8");
+  const readmeKo = readFileSync(join(ROOT, "README.ko.md"), "utf8");
+  const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  const vision = readFileSync(join(ROOT, "docs", "product", "vision.md"), "utf8");
+  const webComputer = readFileSync(join(ROOT, "apps", "webComputer", "index.html"), "utf8");
+
+  for (const [surface, source, required] of [
+    ["README.md", readmeEn, [
+      "A persistent Python computer in your browser.",
+      "## Product model",
+      "## One machine lifecycle",
+      "## Dependency boundary",
+      "Zero runtime npm dependencies is an exact package fact",
+      "| **Machine** | `boot()` / `open()` |",
+      "| **Workspace** | named persistent machine + `/home/web` |",
+      "Make the browser a persistent computer, make Python its default Machine",
+    ]],
+    ["README.ko.md", readmeKo, [
+      "브라우저에 영속하는 파이썬 컴퓨터.",
+      "## 제품 모델",
+      "## 하나의 Machine 생명주기",
+      "## 의존성 경계",
+      "runtime npm 의존성 0은 정확한 package 사실",
+      "| **Machine** | `boot()` / `open()` |",
+      "| **Workspace** | 이름 있는 persistent machine + `/home/web` |",
+      "브라우저를 영속하는 컴퓨터로 만들고, Python을 기본 Machine으로 삼으며",
+    ]],
+    ["docs/product/vision.md", vision, ["pyproc is a persistent Python computer"]],
+    ["apps/webComputer/index.html", webComputer, ["Python as the default Machine"]],
+  ]) {
+    for (const term of required) {
+      if (!source.includes(term)) throw new Error(`${surface} 단일 제품 계약 누락: ${term}`);
+    }
+  }
+  if (!packageJson.description.includes("A persistent Python computer in the browser")) {
+    throw new Error("package.json description이 Machine 제품 언어와 불일치");
+  }
+  if (Object.keys(packageJson.dependencies || {}).length) {
+    throw new Error("runtime npm dependency 0 계약과 package.json이 불일치");
+  }
+  for (const [surface, source] of [["README.md", readmeEn], ["README.ko.md", readmeKo]]) {
+    if (source.includes("badge/dependencies-0") || source.includes('alt="zero dependencies"')) {
+      throw new Error(`${surface}가 npm·engine·platform 의존성을 한데 뭉친다`);
+    }
+  }
+  if (landing.includes("Consumer contract")) throw new Error("랜딩 package 계약 명칭 회귀");
+});
 // 랜딩 벤치 메시지 게이트는 제거했다(2026-07-17). 이 게이트는 랜딩에 박힌 측정치(3.95x, 18ms,
 // 76ms, 10.8MB ...)를 필수로 강제하고 '낡은 벤치 숫자' 목록까지 따로 관리했다. 숫자를 간판으로
 // 걸면 그 숫자를 영원히 방어해야 한다는 규칙의 근거가 바로 이 게이트였다. 성능 주장 가드가 대신한다.
-check("랜딩이 라이브러리 소비 판단 경로를 직접 노출", () => {
+check("랜딩이 Machine 계약 판단 경로를 직접 노출", () => {
   for (const term of [
-    '<a href="#build">Build</a>',
-    '<h2 id="build">Build with pyproc as a library</h2>',
-    "Product code should consume root exports, stable subpaths, and documented execution assets, never engine internals.",
+    '<a href="#build">Contract</a>',
+    '<h2 id="build">Build on the Machine contract</h2>',
+    "Use the root Machine handle, stable subpaths, and documented execution assets, never engine internals.",
     "Public surface map",
     "Capability matrix",
-    "Consumer contract",
+    "Package contract",
     "Benchmark contract",
-    "Pin an exact npm version for product use.",
+    "Pin an exact npm version.",
   ]) {
-    if (!landing.includes(term)) throw new Error(`examples/index.html 라이브러리 소비 경로 누락: ${term}`);
+    if (!landing.includes(term)) throw new Error(`examples/index.html Machine 계약 경로 누락: ${term}`);
   }
   for (const url of [
     "https://github.com/eddmpython/pyproc#public-surface",
