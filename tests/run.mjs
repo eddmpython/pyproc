@@ -3515,6 +3515,19 @@ section("커밋 규칙");
     // sh grep으로 같은 판정을 또 하면 두 판정이 표류한다. 정본은 한 곳이다.
     if (/grep\s+-\w*[Ee]\w*\s+'\(/.test(hook)) throw new Error("훅에 정규식 판정 사본이 남아 있다");
   });
+  // 커밋 메시지의 검증 줄은 주장이지 증거가 아니다. 실제 사고(2026-08-02): 378d370이
+  // "npm test 3188 passed"를 적고 나갔지만 구조 게이트는 9건 RED였고, 아무도 게이트를 다시
+  // 돌리지 않아 그대로 origin/main에 올랐다. 공개된 이력은 되감을 수 없으므로 푸시가 마지막
+  // 차단 지점이다. 판정은 tests/run.mjs에 있고 훅은 호출과 exit code만 본다.
+  check("pre-push 훅이 구조 게이트를 호출한다", () => {
+    const push = readFileSync(join(ROOT, ".githooks", "pre-push"), "utf8");
+    // 주석에 남은 호출은 호출이 아니다: 실행되는 줄에서 찾는다(문자열 포함만 보면 주석
+    // 처리된 훅이 통과한다).
+    const invokes = push.split("\n").some((line) => !line.trimStart().startsWith("#") && line.includes("node tests/run.mjs"));
+    if (!invokes) throw new Error("훅이 구조 게이트를 돌리지 않는다");
+    if (!/command -v node/.test(push)) throw new Error("node 부재 시 fail-closed 아님");
+    if (!/structure gate is RED/.test(push)) throw new Error("RED에서 차단하는 경로가 없다");
+  });
   // 규칙 문장은 추적되는 문서에 있어야 한다. CLAUDE.md는 로컬 전용(.gitignore)이라 clone에
   // 없으므로 여기서 읽으면 CI에서만 RED가 된다. 기여자 문서 2판이 규칙의 공개 정본이다.
   for (const doc of ["CONTRIBUTING.md", "CONTRIBUTING.ko.md"]) {
@@ -3530,6 +3543,15 @@ section("커밋 규칙");
       // 문서가 말하는 숫자와 판정 정본의 상수가 어긋나면 둘 중 하나는 거짓말이다.
       for (const [value, what] of limits) {
         if (!rules.includes(String(value))) throw new Error(`${what} 상수(${value})가 문서에 없다`);
+      }
+    });
+  }
+  // 훅이 무엇을 막는지 문서에 없으면 차단당한 기여자는 규칙이 아니라 고장으로 읽고 우회를 찾는다.
+  for (const doc of ["CONTRIBUTING.md", "CONTRIBUTING.ko.md"]) {
+    check(`${doc}가 푸시 게이트 규칙을 문장으로 갖는다`, () => {
+      const rules = readFileSync(join(ROOT, doc), "utf8");
+      for (const token of [".githooks/pre-push", "npm test"]) {
+        if (!rules.includes(token)) throw new Error(`규칙 요소 누락: ${token}`);
       }
     });
   }

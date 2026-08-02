@@ -51,7 +51,7 @@ pyproc 크기에 맞춘 운영 체계다(2026-07-11). 규칙은 가능한 한 "�
 |---|---|---|
 | commit-msg | `.githooks/commit-msg` | 커밋 메시지의 도구·생성 흔적 |
 | pre-commit | `.githooks/pre-commit` | 스테이징된 `*.md`/`*.js`의 em dash(U+2014) |
-| pre-push / reference-transaction | `.githooks/` | non-main 브랜치 생성·푸시 |
+| pre-push / reference-transaction | `.githooks/` | non-main 브랜치 생성·푸시, 그리고 구조 게이트가 RED인 트리의 게시(커밋 메시지의 검증 줄은 주장이라 푸시에서 다시 판정한다) |
 | 구조 게이트 | `tests/run.mjs` | 공개 표면·타입 커버리지 누락, em dash, 깨진 상대 링크, attempts와 docs 계약 위반 |
 | 런타임 게이트 | `tests/browser/run.mjs` | 공개 표면의 실제 브라우저 동작 회귀(부팅, 리액티브 실행 경계 계약, 스냅샷-fork, map 병렬). headless Chromium 자동 실행, 의존성 0 |
 

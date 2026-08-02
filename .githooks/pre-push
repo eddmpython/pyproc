@@ -1,7 +1,16 @@
 #!/bin/sh
-# Block pushes to any branch except main.
+# Two guards on the last point where history is still private:
+#   1. Block pushes to any branch except main.
+#   2. Block a push whose tree fails the structure gate.
+# Rule SSOT: CLAUDE.md "main 전용" and "커밋 전 green". The verification line in a commit
+# message was an honor system until now: 378d370 shipped "npm test 3188 passed" while the
+# gate was RED with 9 failures, and it reached origin/main because nothing re-ran the gate.
+# Published history cannot be rewound, so the push is the last place to stop that.
+# The judgment stays in tests/run.mjs; this hook only calls it and reads the exit code.
 allowed_remote_ref="refs/heads/main"
 allowed_local_ref="refs/heads/main"
+zero="0000000000000000000000000000000000000000"
+pushing=0
 
 while read local_ref local_sha remote_ref remote_sha
 do
@@ -15,8 +24,28 @@ do
         echo "blocked: refusing push from non-main ref $local_ref" >&2
         exit 1
       fi
+      # A delete push carries no tree to judge.
+      if [ "$local_sha" != "$zero" ]; then
+        pushing=1
+      fi
       ;;
   esac
 done
+
+if [ "$pushing" -eq 0 ]; then
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "blocked: node not found, so the structure gate cannot judge this push" >&2
+  exit 1
+fi
+
+if ! gate_output="$(node tests/run.mjs 2>&1)"; then
+  printf '%s\n' "$gate_output" | grep "FAIL" >&2
+  echo "blocked: structure gate is RED, so this push would publish a broken tree" >&2
+  echo "blocked: fix the tree and run 'npm test' green (never bypass with --no-verify)" >&2
+  exit 1
+fi
 
 exit 0

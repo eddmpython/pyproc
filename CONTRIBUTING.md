@@ -41,7 +41,9 @@ Browser validation: open `http://localhost:8788/examples/basic.html` and `proces
 
 ## Hard gates (machine enforced)
 
-- `npm test` must be green before every commit.
+- `npm test` must be green before every commit, and `.githooks/pre-push` re-runs it on the tree you
+  are about to publish. A verification line in a commit message is a claim; the push gate is the
+  check. A RED tree cannot reach `origin/main`, and `--no-verify` is not an escape hatch.
 - **main only.** No local branches in this repository; hooks block non-main refs. External contributions come from forks targeting `main`.
 - **No em dash (U+2014)** in any text-surface file (`*.md`, `*.js`, `*.mjs`, `*.ts`, `*.html`, `*.css`, `*.yml`, `*.json`). Use a hyphen, a comma, or rewrite the sentence. The pre-commit hook blocks it.
 - **Commit messages are records, not labels** (machine-enforced). A commit message is the primary
