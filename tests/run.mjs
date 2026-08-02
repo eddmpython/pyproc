@@ -565,7 +565,7 @@ const BRAG_SURFACE = [
   ...collect(join(ROOT, "docs", "reference"), [".md"]),
   // 소비 문서는 제품이 채택 판단에 읽는 공개 계약이다. 규칙 문구의 문자적 스코프 밖이었지만
   // 실제로 측정치가 여기 살아 있었다(2026-07-26: contract.md의 median, 매트릭스의 p95).
-  ...collect(join(ROOT, "docs", "consuming"), [".md"]),
+  ...collect(join(ROOT, "docs", "usage"), [".md"]),
   // 타입 선언은 소비자가 가장 많이 읽는 공개 표면이다(에디터 자동완성이 JSDoc을 그대로 띄운다).
   // 규칙 문구가 문서 파일만 열거해 스코프 밖이었지만 실제로 측정치 4개가 여기 살아 있었다
   // (2026-07-27: matmul 3.67배, forkMany 316ms->78ms/4.05배, signal 264ms).
@@ -1169,17 +1169,54 @@ check("머신 핸들 멤버는 api.md 핸들 절에 등재된다", () => {
   const missing = [...members].filter((name) => !section.includes(`machine.${name}`)).sort();
   if (missing.length) throw new Error(`api.md 핸들 절에 없는 동사: ${missing.join(", ")}`);
 });
-check("Stable 라벨 = 승격 원장 정합(근거 없는 라벨 상승 차단)", () => {
-  const matrix = readFileSync(join(ROOT, "docs", "consuming", "capabilityMatrix.md"), "utf8");
-  if (!matrix.includes("## Promotion criteria")) throw new Error("승격 기준 절 없음");
-  const ledgerStart = matrix.indexOf("### Promotion ledger");
-  if (ledgerStart < 0) throw new Error("승격 원장 절 없음");
-  const ledgerBlock = matrix.slice(ledgerStart, matrix.indexOf("Promotion waiting clock", ledgerStart));
-  const ledgerRows = [...ledgerBlock.matchAll(/^\| [^|]+ \| [^|]*20\d\d-/gm)].length;
-  // 능력 표의 상태 셀만 센다(라인 중간의 "| Stable |"). 승격 기준 표의 라벨 열은
-  // 라인 시작이라 제외된다.
-  const stableRows = [...matrix.matchAll(/[^\n]\| Stable \|/g)].length;
-  if (stableRows !== ledgerRows) throw new Error(`Stable 라벨 ${stableRows}행 != 승격 원장 ${ledgerRows}행`);
+const capabilityContractProblems = (matrix) => {
+  const problems = [];
+  for (const pattern of [
+    /30-day/i, /\bsoak\b/i, /release has passed/i, /releases elapsed/i,
+    /promotion waiting clock/i, /stable since/i,
+  ]) {
+    if (pattern.test(matrix)) problems.push(`외부 시간 기준: ${pattern}`);
+  }
+  if (!matrix.includes("## Contract-state criteria")) problems.push("계약 상태 기준 절 없음");
+  const tableHeader = matrix.indexOf("| Capability | Product value | Public surface | Contract state |");
+  const tableEnd = matrix.indexOf("\n## Product decision rules", tableHeader);
+  if (tableHeader < 0 || tableEnd < 0) problems.push("능력 계약 표 경계 없음");
+  const states = new Set(["Complete", "Bounded", "Probe", "Engine proof"]);
+  const capabilityRows = tableHeader < 0 || tableEnd < 0 ? [] : matrix.slice(tableHeader, tableEnd)
+    .split(NEWLINE)
+    .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()))
+    .filter((cells) => cells.length === 8 && states.has(cells[3]));
+  const complete = capabilityRows.filter((cells) => cells[3] === "Complete").map((cells) => cells[0]).sort();
+  const ledgerStart = matrix.indexOf("### Complete capability evidence");
+  const ledgerEnd = matrix.indexOf("\nA runnable surface", ledgerStart);
+  if (ledgerStart < 0 || ledgerEnd < 0) problems.push("Complete 증거 원장 경계 없음");
+  const ledgerRows = ledgerStart < 0 || ledgerEnd < 0 ? [] : matrix.slice(ledgerStart, ledgerEnd)
+    .split(NEWLINE)
+    .map((line) => line.split("|").slice(1, -1).map((cell) => cell.trim()))
+    .filter((cells) => cells.length === 6 && cells[0] !== "Surface" && !/^-+$/.test(cells[0]));
+  const recorded = ledgerRows.map((cells) => cells[0]).sort();
+  if (complete.join("|") !== recorded.join("|")) {
+    problems.push(`Complete 표/증거 불일치: ${complete.join(", ")} != ${recorded.join(", ")}`);
+  }
+  for (const cells of ledgerRows) {
+    if (!cells[2].includes("test:browser")) problems.push(`${cells[0]}: 실제 browser gate 없음`);
+    if (!cells[3].includes("test:installed")) problems.push(`${cells[0]}: installed-package gate 없음`);
+    if (!/RED|negative|corrupt|bad |failure|invalid/i.test(cells[4])) problems.push(`${cells[0]}: 음성 증거 없음`);
+    if (!cells[5]) problems.push(`${cells[0]}: 선언 경계 없음`);
+  }
+  return problems;
+};
+check("능력 상태 = 자체 불변식 증거(외부 시간·채택 기준 차단)", () => {
+  const matrix = readFileSync(join(ROOT, "docs", "usage", "capabilityMatrix.md"), "utf8");
+  const problems = capabilityContractProblems(matrix);
+  if (problems.length) throw new Error(problems.join("; "));
+});
+check("탐지기가 문다: 능력 상태 외부 기준과 증거 누락", () => {
+  const matrix = readFileSync(join(ROOT, "docs", "usage", "capabilityMatrix.md"), "utf8");
+  if (!capabilityContractProblems(`${matrix}\n30-day soak`).length) throw new Error("달력 기준을 놓쳤다");
+  const noInstalled = matrix.replace("`npm run test:installed`", "`npm run test:package`");
+  if (!capabilityContractProblems(noInstalled).length) throw new Error("설치 package 증거 누락을 놓쳤다");
+  if (capabilityContractProblems(matrix).length) throw new Error("자체 불변식 원장을 불합격시켰다(오탐)");
 });
 // 영문 비교 페이지 게이트는 제거했다(2026-07-17). 그 게이트는 경쟁 비교 게시를 강제해
 // 숫자 자랑 금지 규칙과 정면으로 충돌했다. 비교는 재현 가능한 로컬 벤치 도구로만 수행한다.
@@ -1590,11 +1627,11 @@ for (const readme of ["README.md", "README.ko.md"]) {
     if (stale.length) throw new Error(`죽은 목차 앵커: ${stale.slice(0, 4).join(", ")}`);
   });
 }
-check("README 공개 표면은 작업별 지도 형태", () => {
+check("README가 root 제품 진입점을 한 표에 모음", () => {
   const readmeEn = readFileSync(join(ROOT, "README.md"), "utf8");
   const readmeKo = readFileSync(join(ROOT, "README.ko.md"), "utf8");
-  if (!readmeEn.includes("| Need | Public exports | Runnable proof |")) throw new Error("README.md 공개 표면 지도 헤더 누락");
-  if (!readmeKo.includes("| 필요한 것 | 공개 export | 실행 증거 |")) throw new Error("README.ko.md 공개 표면 지도 헤더 누락");
+  if (!readmeEn.includes("| You need | Root entry | Returned handle and capability path |")) throw new Error("README.md 제품 진입점 표 누락");
+  if (!readmeKo.includes("| 필요한 것 | root 진입점 | 반환 handle과 capability 경로 |")) throw new Error("README.ko.md 제품 진입점 표 누락");
   if (readmeEn.includes("| Export | What |")) throw new Error("README.md가 장황한 export 설명표로 회귀");
   if (readmeKo.includes("| Export | 무엇 |")) throw new Error("README.ko.md가 장황한 export 설명표로 회귀");
 });
@@ -1653,8 +1690,8 @@ check("랜딩이 Machine 계약 판단 경로를 직접 노출", () => {
   for (const term of [
     '<a href="#build">Contract</a>',
     '<h2 id="build">Build on the Machine contract</h2>',
-    "Use the root Machine handle, stable subpaths, and documented execution assets, never engine internals.",
-    "Public surface map",
+    "Use the gathered root entrances, named plumbing subpaths, and documented execution assets, never engine internals.",
+    "Product entrances",
     "Capability matrix",
     "Package contract",
     "Benchmark contract",
@@ -1663,29 +1700,29 @@ check("랜딩이 Machine 계약 판단 경로를 직접 노출", () => {
     if (!landing.includes(term)) throw new Error(`examples/index.html Machine 계약 경로 누락: ${term}`);
   }
   for (const url of [
-    "https://github.com/eddmpython/pyproc#public-surface",
-    "https://github.com/eddmpython/pyproc/blob/main/docs/consuming/capabilityMatrix.md",
-    "https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md",
+    "https://github.com/eddmpython/pyproc#product-entrances",
+    "https://github.com/eddmpython/pyproc/blob/main/docs/usage/capabilityMatrix.md",
+    "https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md",
     "https://github.com/eddmpython/pyproc/blob/main/docs/operations/benchmarking.md",
   ]) {
     if (!landing.includes(`href="${url}"`)) throw new Error(`examples/index.html GitHub 문서 링크 누락: ${url}`);
   }
   if (/href="docs\//.test(landing)) throw new Error("Pages 배포에서 깨질 로컬 docs 링크 사용");
 });
-check("소비 문서 역할 분리", () => {
-  const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
+check("사용 문서 역할 분리", () => {
+  const contract = readFileSync(join(ROOT, "docs", "usage", "contract.md"), "utf8");
   const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");
   if (!contract.includes("The roles are split.")) throw new Error("contract.md 역할 분리 선언 누락");
   if (!contract.includes("## Public import boundary")) throw new Error("contract.md import 경계 절 누락");
   if (!contract.includes("## Runtime-asset deployment contract")) throw new Error("contract.md 실행 자산 배포 절 누락");
   if (!contract.includes("## Contract verification")) throw new Error("contract.md 계약 검증 절 누락");
   if (!contract.includes("### Installed-package browser gate coverage")) throw new Error("contract.md 설치 패키지 브라우저 게이트 coverage 절 누락");
-  if (!contract.includes("[capabilityMatrix.md](capabilityMatrix.md): per-capability product value")) throw new Error("contract.md가 capability matrix 역할을 위임하지 않음");
+  if (!contract.includes("[capabilityMatrix.md](capabilityMatrix.md): per-capability intrinsic value")) throw new Error("contract.md가 capability matrix 역할을 위임하지 않음");
   if (contract.includes("| export | what |")) throw new Error("contract.md가 capability별 export 설명표로 회귀");
   if (!docsMap.includes("install, version pinning, import boundaries, runtime-asset deployment")) throw new Error("docs/README.md contract 역할 설명이 낡음");
 });
 check("공개 표면은 명명된 외부 저장소를 기록하지 않는다", () => {
-  const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
+  const contract = readFileSync(join(ROOT, "docs", "usage", "contract.md"), "utf8");
   const readme = readFileSync(join(ROOT, "README.md"), "utf8");
   for (const term of ["## Package surface boundary", "Package-internal paths are never public."]) {
     if (!contract.includes(term)) throw new Error(`package boundary 누락: ${term}`);
@@ -1752,15 +1789,15 @@ check("durable RPC 상태표와 공개 투영이 한 의미다", () => {
     "README.ko.md",
     "SECURITY.md",
     "docs/reference/api.md",
-    "docs/consuming/contract.md",
-    "docs/consuming/capabilityMatrix.md",
+    "docs/usage/contract.md",
+    "docs/usage/capabilityMatrix.md",
     "docs/operations/contractReality.md",
   ];
   const texts = new Map(paths.map((path) => [path, readFileSync(join(ROOT, path), "utf8")]));
   const anchor = "durable-rpc-state-table-normative";
-  const contract = texts.get("docs/consuming/contract.md");
+  const contract = texts.get("docs/usage/contract.md");
   const assertProjection = (documents) => {
-    const canonical = documents.get("docs/consuming/contract.md") || "";
+    const canonical = documents.get("docs/usage/contract.md") || "";
     for (const term of [
       "### Durable RPC state table (normative)",
       "Leader stays live and the caller timer expires",
@@ -1772,7 +1809,7 @@ check("durable RPC 상태표와 공개 투영이 한 의미다", () => {
       if (!canonical.includes(term)) throw new Error(`contract.md 상태표 축 누락: ${term}`);
     }
     for (const [path, text] of documents) {
-      if (path === "docs/consuming/contract.md") continue;
+      if (path === "docs/usage/contract.md") continue;
       if (!text.includes(anchor)) throw new Error(`${path} durable RPC 정본 포인터 누락`);
     }
   };
@@ -1790,7 +1827,7 @@ check("durable RPC 상태표와 공개 투영이 한 의미다", () => {
   }
   // 음성 fixture: 표 머리글만 지우면 포인터가 남아 있어도 검출기가 반드시 RED여야 한다.
   const broken = new Map(texts);
-  broken.set("docs/consuming/contract.md", contract.replace("### Durable RPC state table (normative)", "### RPC notes"));
+  broken.set("docs/usage/contract.md", contract.replace("### Durable RPC state table (normative)", "### RPC notes"));
   let caught = false;
   try { assertProjection(broken); }
   catch { caught = true; }
@@ -1849,7 +1886,7 @@ check("Python-Linux 교차 엔진 packet 경로가 cold restore까지 실증", (
   if (!caught) throw new Error("교차 엔진 generation 음성 fixture를 놓쳤다");
 });
 check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 정합", () => {
-  const contract = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
+  const contract = readFileSync(join(ROOT, "docs", "usage", "contract.md"), "utf8");
   const testing = readFileSync(join(ROOT, "docs", "operations", "testing.md"), "utf8");
   const packageGate = readFileSync(join(ROOT, "tests", "packageGate.mjs"), "utf8");
   const installedPackageGate = readFileSync(join(ROOT, "tests", "browser", "installedPackageGate.mjs"), "utf8");
@@ -1925,8 +1962,8 @@ check("설치 패키지 브라우저 게이트 coverage가 실제 게이트와 �
   if (!immortalParticipant.includes('from "pyproc"')) throw new Error("immortal participant가 설치 패키지 root export를 쓰지 않음");
   if (!testing.includes("설치 패키지 브라우저 게이트 coverage 표")) throw new Error("testing.md 설치 패키지 coverage 표 포인터 누락");
 });
-check("능력 매트릭스가 제품 판단 표면을 고정", () => {
-  const matrixPath = join(ROOT, "docs", "consuming", "capabilityMatrix.md");
+check("능력 매트릭스가 자체 capability 계약을 고정", () => {
+  const matrixPath = join(ROOT, "docs", "usage", "capabilityMatrix.md");
   if (!existsSync(matrixPath)) throw new Error("capabilityMatrix.md 없음");
   const matrix = readFileSync(matrixPath, "utf8");
   const docsMap = readFileSync(join(ROOT, "docs", "README.md"), "utf8");
@@ -1939,10 +1976,10 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   // 표를 대신할 수 있다(문자열 존재 검사 계열의 약점).
   const capabilityHeader = matrix.split(NEWLINE).find((line) => line.startsWith("| Capability |"));
   if (!capabilityHeader) throw new Error("능력 표 헤더 행 없음");
-  for (const term of ["Product value", "Public surface", "Status", "Prerequisites", "Runnable surface", "Verification", "Boundaries"]) {
+  for (const term of ["Product value", "Public surface", "Contract state", "Prerequisites", "Runnable surface", "Verification", "Boundaries"]) {
     if (!capabilityHeader.includes(term)) throw new Error(`능력 매트릭스 필드 누락: ${term}`);
   }
-  for (const term of ["Stable", "Beta", "Experimental", "Research preview"]) {
+  for (const term of ["Complete", "Bounded", "Probe", "Engine proof"]) {
     if (!matrix.includes(term)) throw new Error(`능력 매트릭스 상태 누락: ${term}`);
   }
   const required = ["boot", "Runtime", "ReactiveController", "PyProc", "AsgiServer", "VirtualOrigin", "bootSession", "openMachine", "MachineJournal", "enableJail", "SocketBridge", "KernelElection", "bootWasi", "GpuCompute", "getPyProcAssetManifest", "checkEnvironment"];
@@ -1961,7 +1998,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
   for (const target of runnableLinks) {
     if (!matrix.includes(`](${target})`)) throw new Error(`능력 매트릭스 실행 표면 링크 누락: ${target}`);
   }
-  const statusLabels = new Set(["Stable", "Beta", "Experimental", "Research preview"]);
+  const statusLabels = new Set(["Complete", "Bounded", "Probe", "Engine proof"]);
   const rows = matrix.split("\n").filter((line) => line.startsWith("| ") && !line.startsWith("| ---") && !line.startsWith("| 능력"));
   let checkedRows = 0;
   for (const row of rows) {
@@ -1976,7 +2013,7 @@ check("능력 매트릭스가 제품 판단 표면을 고정", () => {
 // 링크 게이트는 마크다운 링크만 보고 코드블록 산문은 아무도 안 봤다. 그 사이 이 목록은
 // 이미 표류해서, 삭제된 파일(sharedKernelHost)을 소비자에게 계약으로 게시하고 있었다.
 check("패키지 계약 문서의 자산 목록 = 실제 매니페스트", () => {
-  const doc = readFileSync(join(ROOT, "docs", "consuming", "contract.md"), "utf8");
+  const doc = readFileSync(join(ROOT, "docs", "usage", "contract.md"), "utf8");
   const block = doc.slice(doc.indexOf("// manifest.assets:"));
   const listed = [...block.matchAll(/^\/\/ - (\w+)\s+(\S+)$/gm)].map((m) => ({ role: m[1], path: m[2] }));
   if (!listed.length) throw new Error("문서에서 자산 목록 블록을 못 찾음");
@@ -2062,6 +2099,14 @@ section("북극성");
     }
     return problems;
   };
+  const intrinsicValueProblems = (axis) => {
+    const text = JSON.stringify({ en: axis.en, ko: axis.ko, next: axis.next }).toLowerCase();
+    const forbidden = [
+      "adoption", "user count", "release age", "market response", "other repositories",
+      "30-day", "soak", "project release", "release discipline", "local-agent",
+    ];
+    return forbidden.filter((term) => text.includes(term)).map((term) => `외부 가치 기준: ${term}`);
+  };
   // 다음 수(next)의 법. 축은 "지금"과 "10점"만으로는 반쪽이고, 둘을 잇는 경로가 원장 밖 산문에
   // 살면 그 경로가 표류한다(천장 사다리가 vision.md와 README 두 판에 손으로 세 벌 있었다).
   // **계획은 증거가 아니다**: next에 path/lane이 붙는 순간 게이트 없는 것이 증거로 위장하므로 막는다.
@@ -2105,6 +2150,7 @@ section("북극성");
     check(`북극성 실행 경로: ${axis.id}`, () => raise("아무도 열지 않는 증거", unreachable(axis)));
     check(`북극성 레인: ${axis.id}`, () => raise("레인 불일치", laneProblems(axis)));
     check(`북극성 점수 법: ${axis.id}`, () => raise("점수 법 위반", scoreProblems(axis)));
+    check(`북극성 자체 가치 법: ${axis.id}`, () => raise("자체 가치 법 위반", intrinsicValueProblems(axis)));
     check(`북극성 다음 수: ${axis.id}`, () => raise("다음 수 법 위반", nextProblems(axis)));
   }
   check("북극성 다음 수 id가 유일하다", () => {
@@ -2211,6 +2257,10 @@ section("북극성");
       throw new Error("브라우저 증거 0인 축을 놓쳤다");
     }
     if (scoreProblems(fixture()).length) throw new Error("법을 지킨 축을 불합격시켰다(오탐)");
+    if (!intrinsicValueProblems(fixture({ en: { target: "Wait for market response" } })).length) {
+      throw new Error("외부 시장 기준을 놓쳤다");
+    }
+    if (intrinsicValueProblems(fixture()).length) throw new Error("자체 능력 기준을 불합격시켰다(오탐)");
     if (!nextProblems(fixture({ next: [] })).length) throw new Error("다음 수 없는 축을 놓쳤다");
     if (!nextProblems(fixture({ score: 10 })).length) throw new Error("끝난 축에 남은 다음 수를 놓쳤다");
     if (nextProblems(fixture({ score: 10, next: [] })).length) throw new Error("끝난 축을 불합격시켰다(오탐)");
@@ -2876,14 +2926,37 @@ check("examples는 공개 표면으로만 pyproc 소비", () => {
   }
   if (problems.length) throw new Error([...new Set(problems)].slice(0, 8).join("; "));
 });
+const demoEnginePathProblems = (sources) => {
+  const expected = 'new URL("../vendor/pyodide/", import.meta.url).href';
+  return Object.entries(sources)
+    .filter(([, source]) => !source.includes(expected))
+    .map(([file]) => `${file}: document-relative engine default 없음`);
+};
+check("공개 examples는 subpath hosting에서도 준비된 same-site engine을 기본 사용", () => {
+  const files = [
+    "heroConsole.js", "agentSandbox.html", "basic.html", "immortal.html", "machine.html",
+    "mcpSandbox.html", "processOs.html", "serverDev.html", "speedLab.html", "terminal.html",
+  ];
+  const sources = Object.fromEntries(files.map((file) => [file, readFileSync(join(ROOT, "examples", file), "utf8")]));
+  const problems = demoEnginePathProblems(sources);
+  if (problems.length) throw new Error(problems.join("; "));
+  const subpathEngine = new URL("../vendor/pyodide/", "https://example.test/pyproc/examples/basic.html");
+  if (subpathEngine.pathname !== "/pyproc/vendor/pyodide/") throw new Error(`subpath engine 해석 오류: ${subpathEngine.pathname}`);
+  const pages = readFileSync(join(ROOT, ".github", "workflows", "pages.yml"), "utf8");
+  if (!/cp -r [^\n]*\bvendor\b[^\n]*_site\//.test(pages)) throw new Error("Pages가 same-site vendor tree를 배치하지 않는다");
+});
+check("탐지기가 문다: 공개 example의 origin-root 엔진 회귀", () => {
+  const poisoned = { "basic.html": 'const INDEX = "/vendor/pyodide/";' };
+  if (!demoEnginePathProblems(poisoned).length) throw new Error("origin-root engine 회귀를 놓쳤다");
+});
 assertDocLifecycleStructure({ check, ROOT, collect, rel });
 
 const machineRoot = join(ROOT, "src", "machine");
 await assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machinePureFiles, machineFileRank, runMemoryMachineStoreContract, runDurableComputerContract });
 assertWebComputerStructure({ check, ROOT, collect, rel, jsModuleRefs, moduleTarget, machineRoot });
 
-// 7.4) 소비자 진입 표면: 사용자가 실제로 읽는 진단·거부 문장은 영문이다. README와 api.md가
-//      영문인데 이 문장들이 한국어면, 채택 결정자가 checkEnvironment()를 부른 첫 순간
+// 7.4) 사용자 진입 표면: 사용자가 실제로 읽는 진단·거부 문장은 영문이다. README와 api.md가
+//      영문인데 이 문장들이 한국어면, 사용자가 checkEnvironment()를 부른 첫 순간
 //      읽을 수 없는 진단을 받는다(유일한 온보딩 장치가 무력화된다). 내부 주석은 한국어 유지다.
 //      스코프는 진입 표면 파일로 좁힌다: 나머지 진단 텍스트는 열린 부채로 기록돼 있다.
 section("진입 표면 언어");
@@ -2904,19 +2977,19 @@ section("진입 표면 언어");
   ];
   // machine 층 322개는 아직 한국어다. 이 층의 문장은 Web Computer 제품 화면에 뜨고 라이브러리
   // API 표면에는 거의 안 나오므로 우선순위가 뒤였다. 옮길 때 게이트 단정과 같은 커밋으로.
-  // 타입 선언의 주석 언어. 소비자가 가장 많이 읽는 표면이다: 에디터 자동완성이 JSDoc을 그대로
+  // 타입 선언의 주석 언어. 사용자가 가장 많이 읽는 표면이다: 에디터 자동완성이 JSDoc을 그대로
   // 띄우고, npm 패키지에 함께 나가고, api.md가 서명의 정본으로 이 파일을 지정한다.
   // 예산 단계는 끝났다(339 -> 291 -> 0): 루트와 강등 subpath 8파일 전부 하드 0이다. 예산이
   // 남아 있으면 "조금은 되돌려도 된다"가 되므로, 0에 닿은 표면은 0으로 잠근다.
-  // 채택 판단 문서의 언어. 스코프를 손으로 열거하면 벽이 옮겨간다: d.ts를 영문화한 뒤에도
-  // README가 핀 정책·능력 매트릭스·호환 표·계약 실태로 보내는 문서가 전부 한국어였다(외부 감사,
-  // 2026-07-27). 그래서 목록을 박지 않고 **소비자 진입점에서 링크로 닿는 문서**를 스코프로 계산한다.
-  // README(영/한)와 api.md가 가리키는 곳이 곧 채택 판단이 일어나는 곳이다.
+  // 사용 문서의 언어. 스코프를 손으로 열거하면 벽이 옮겨간다: d.ts를 영문화한 뒤에도
+  // README가 핀 정책·능력 매트릭스·플랫폼 요구·계약 실태로 보내는 문서가 전부 한국어였다(외부 감사,
+  // 2026-07-27). 그래서 목록을 박지 않고 **사용자 진입점에서 링크로 닿는 문서**를 스코프로 계산한다.
+  // README(영/한)와 api.md가 가리키는 곳이 곧 사용 경로다.
   // 한국어판 README는 그 자체가 한국어 표면이라 스코프 밖이고, 내부 운영 문서는 링크되지 않는 한
   // 한국어로 남는다(규칙: 공개 표면 영문 우선, 내부 문서 한국어).
-  const ADOPTION_ENTRY_POINTS = ["README.md", "docs/reference/api.md"];
+  const USER_ENTRY_POINTS = ["README.md", "docs/reference/api.md"];
   // 링크를 담은 파일 기준으로 상대 경로를 저장소 기준으로 정규화한다. 첫 판본은 href가
-  // 문자 그대로 `docs/`로 시작하는 것만 잡았는데, api.md의 링크는 전부 `../consuming/...`
+  // 문자 그대로 `docs/`로 시작하는 것만 잡았는데, api.md의 링크는 전부 `../usage/...`
   // 형태라 두 진입점 중 하나가 스코프에 0개를 기여했다(외부 감사 실측). 진입점을 둘 적어두고
   // 하나가 죽어 있으면 그 목록은 의도를 말할 뿐 집행하지 않는다.
   const resolveDocHref = (fromFile, href) => {
@@ -2938,25 +3011,25 @@ section("진입 표면 언어");
     }
     return out;
   };
-  const adoptionDocs = () => {
+  const usageDocs = () => {
     const found = new Set();
-    for (const entry of ADOPTION_ENTRY_POINTS) {
+    for (const entry of USER_ENTRY_POINTS) {
       for (const doc of docLinksOf(entry)) found.add(doc);
     }
     // 배럴 문서(docs/README.md)는 라우팅 표라 그 자체가 판단 문서가 아니다. 그것이 가리키는
     // 곳까지 따라가면 내부 운영 문서 전체가 스코프에 들어온다.
     found.delete("docs/README.md");
     found.delete("docs/reference/api.md");
-    // 한 홉 더 따라간다. 진입점이 직접 가리키지 않아도 채택 문서가 가리키는 곳은 여전히 채택
+    // 한 홉 더 따라간다. 진입점이 직접 가리키지 않아도 사용 문서가 가리키는 곳은 같은
     // 경로다(trustPermissions는 contract.md에서 한 홉이라 첫 판정에서 빠졌다). 두 홉까지는
     // 가지 않는다: 그러면 내부 운영 문서가 전부 들어온다.
-    // 한 홉 확장은 소비자 대면 트리에만 적용한다. `docs/operations/`는 내부 절차(릴리즈 수순,
+    // 한 홉 확장은 사용자 대면 트리에만 적용한다. `docs/operations/`는 내부 절차(릴리즈 수순,
     // 게이트 임계값)라 진입점이 직접 가리킬 때만 스코프다: 규칙이 공개 표면과 내부 문서를
     // 가르는 지점이 여기다. `docs/product/`는 제품 방향이라 공개 표면이다(숫자 자랑 게이트도
     // 그 트리를 공개로 본다).
     for (const doc of [...found]) {
       for (const linked of docLinksOf(doc)) {
-        if (linked.startsWith("docs/consuming/") || linked.startsWith("docs/product/")) found.add(linked);
+        if (linked.startsWith("docs/usage/") || linked.startsWith("docs/product/")) found.add(linked);
       }
     }
     found.delete("docs/README.md");
@@ -2965,9 +3038,9 @@ section("진입 표면 언어");
   };
   // 예산 단계는 끝났다(343 -> 275 -> 178 -> 51 -> 0). 0에 닿은 표면은 0으로 잠근다: 예산이
   // 남아 있으면 "조금은 되돌려도 된다"가 되고, 그 여유가 벽이 다시 서는 자리다.
-  check("채택 판단 문서는 전부 영문이다", () => {
-    const docs = adoptionDocs();
-    if (docs.length < 4) throw new Error(`채택 문서를 ${docs.length}개만 찾았다(링크 추출이 죽었다)`);
+  check("사용 문서는 전부 영문이다", () => {
+    const docs = usageDocs();
+    if (docs.length < 4) throw new Error(`사용 문서를 ${docs.length}개만 찾았다(링크 추출이 죽었다)`);
     const byFile = [];
     let korean = 0;
     for (const relative of docs) {
@@ -2976,7 +3049,7 @@ section("진입 표면 언어");
       if (count) byFile.push(`${relative}(${count})`);
       korean += count;
     }
-    if (korean) throw new Error(`채택 판단 문서에 한국어가 남았다: ${byFile.join(", ")}`);
+    if (korean) throw new Error(`사용 문서에 한국어가 남았다: ${byFile.join(", ")}`);
   });
   check("d.ts 주석은 전부 영문이다", () => {
     const byFile = [];

@@ -1,6 +1,6 @@
-# Environment compatibility - one page
+# Platform requirements and preflight
 
-This table answers which pyproc surfaces can run in a target environment. The runtime verdict comes from `checkEnvironment()` (mapping one to one onto the code below); the values here are the basis for that verdict. Per-capability detail (value, status, boundaries) is canonical in [capabilityMatrix.md](capabilityMatrix.md).
+This table states the technical conditions each pyproc capability needs. It is neither backward-support policy nor a value score. The runtime verdict comes from `checkEnvironment()`; per-capability value, contract state, and boundaries are canonical in [capabilityMatrix.md](capabilityMatrix.md).
 
 ## Supported browsers
 
@@ -19,13 +19,13 @@ This table answers which pyproc surfaces can run in a target environment. The ru
 
 | Capability group | Chromium | JSPI | COOP/COEP (SAB) | Note |
 |---|:---:|:---:|:---:|---|
-| Python execution, packages, file IO, checkpoint/restore/time travel | required | - | - | Works from `npm install` alone, no headers |
+| Python execution, packages, file IO, checkpoint/restore/time travel | required | - | - | Needs the exact package plus `pyproc-engine` prepared at the same-origin engine path; no headers |
 | Terminal, borrowed syscalls, subprocess, in-kernel ASGI server | required | required | - | The synchronous blocking paths depend on JSPI |
 | Process OS (fork/forkMany/map/mapArray/matmul), sockets, interrupts, multi-tab persistence using SAB capabilities | required | required | required | Only under `crossOriginIsolated` |
 
 ## Engine
 
-- **Pyodide v314.0.2 (CPython 3.14).** Loaded from the verified same-origin `/vendor/pyodide/` distribution by default. `indexURL` is an explicit distribution override. Changing the version is a release-worthy event that requires the full runtime-consistency gate (detail: the runtime-consistency section of [contract.md](contract.md)).
+- **Pyodide v314.0.2 (CPython 3.14).** Loaded from the verified same-origin `/vendor/pyodide/` distribution by default. `indexURL` is an explicit distribution override. Changing the version requires the full runtime-consistency gate (detail: the runtime-consistency section of [contract.md](contract.md)).
 - The WASI engine (`pyproc/wasi`) is a separate async surface for proving engine independence. Pyodide is the production canon.
 
 ## Resource characteristics (for sizing your heap)
@@ -45,7 +45,7 @@ This guide assumes the current operating constraints. The core of a memory spike
 2. Managing rollback candidates with `history.prune()` is the first valve. Called with no argument it clears nodes off the live path.
 3. Control OPFS object spam with `MachineJournal`'s `pack()` or `cfg.autoPack`. Packing does not reduce RAM immediately, but it reduces the object count.
 4. The reactive controller's `saveBase()` moves the base-heap copy to OPFS for restore continuity and portability. It is not a RAM-relief device.
-5. Use `dispose()` only as a last resort when you want a hard path cleanup - and check the effect on other consumers if you share the same reactive controller.
+5. Use `dispose()` only as a last resort when you want a hard path cleanup - and check every caller sharing the same reactive controller.
 
 #### 2) Interactive REPL and teaching demos
 

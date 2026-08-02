@@ -17,12 +17,12 @@
 // `rung`을 단 항목은 천장 사다리의 한 단이고(전역 순서 1..N, 벽을 무는 순서), 없는 항목은 그 축
 // 국소의 다음 수다. **계획은 증거가 아니다**: next 항목은 path/lane을 갖지 않는다. 한 단이 실현되면
 // 그 항목은 next에서 사라지고 evidence가 늘어나며 점수가 움직인다. 그것이 이 원장이 기록하는 졸업이다.
-// 각 단을 왜 그 순서로 미는지와 우선순위를 재배열할 외부 트리거는 docs/product/vision.md가 정본이다.
+// 각 단의 저장소 내부 수용 조건과 순서는 docs/product/vision.md가 정본이다.
 
 export const NORTH_STAR = Object.freeze({
   en: Object.freeze({
     statement: "Make the browser a persistent computer, make Python its default Machine, and make that computer pyproc itself.",
-    rule: "Scores are anchored to gates that actually run in CI. A path no automated gate runs does not score, however complete the implementation is, and an axis whose evidence includes a manual-only probe is held below 9. A 10 means the axis is finished: repeatedly verified in a real browser, with no workaround left in the public surface.",
+    rule: "Scores measure only capabilities and invariants pyproc owns. Adoption, user counts, release age, other repositories, and market response never score. A path no automated gate runs does not score, and an axis with manual-only evidence stays below 9. A 10 means the capability is complete: repeatedly verified in a real browser, with no workaround left in the public surface.",
     total: (total, max, average) => `Today that is **${total} / ${max}, average ${average} / 10**.`,
     header: "| Axis | Score | Where it stands today | Where it has to land | Next move |",
     divider: "|---|---:|---|---|---|",
@@ -30,7 +30,7 @@ export const NORTH_STAR = Object.freeze({
   }),
   ko: Object.freeze({
     statement: "브라우저를 영속하는 컴퓨터로 만들고, Python을 기본 Machine으로 삼으며, 그 컴퓨터를 pyproc 자신으로 만든다.",
-    rule: "점수의 근거는 CI에서 실제로 도는 게이트다. 자동으로 실행되지 않는 경로는 구현이 아무리 완성돼 있어도 점수로 세지 않고, 증거에 수동 probe가 섞인 축은 9점 아래로 묶인다. 10점은 그 축이 끝난 상태다: 실제 브라우저에서 반복 검증됐고 공개 표면에 우회로가 남지 않았다.",
+    rule: "점수는 pyproc이 소유한 능력과 불변식만 잰다. 채택, 사용자 수, 릴리즈 경과, 다른 저장소, 시장 반응은 점수가 아니다. 자동 gate가 돌지 않는 경로는 점수로 세지 않고 수동 증거가 섞인 축은 9점 아래로 묶는다. 10점은 능력이 끝난 상태다: 실제 브라우저에서 반복 검증됐고 공개 표면에 우회로가 없다.",
     total: (total, max, average) => `지금 총점은 **${total} / ${max}, 평균 ${average} / 10**이다.`,
     header: "| 축 | 현재 점수 | 지금 서 있는 자리 | 도달해야 하는 자리 | 다음 수 |",
     divider: "|---|---:|---|---|---|",
@@ -44,12 +44,12 @@ export const CEILING_LADDER = Object.freeze({
   en: Object.freeze({
     intro: "The distance that remains is two walls with different fates. The transport wall (a tab accepting an inbound connection) is opening, so it gets climbed in order. The native wall (web content spawning a native process) never opens, by the design of the web itself, so what only local machines run moves inward instead. Every rung names the axis it moves:",
     axis: (title) => `moves: ${title}`,
-    outro: "Why the order is what it is, and the external triggers that would reorder it, are in the [product direction](docs/product/vision.md#where-the-ceiling-moves-next). The rungs are registered in the axis ledger, so a rung cannot drift away from the score it claims to move.",
+    outro: "The repo-local acceptance condition and order of every rung are in the [product direction](docs/product/vision.md#where-the-ceiling-moves-next). The rungs are registered in the axis ledger, so no outside adoption signal can move a score or reorder the work.",
   }),
   ko: Object.freeze({
     intro: "남은 거리는 운명이 다른 두 벽이다. 전송 벽(탭이 인바운드 연결을 받는 것)은 열리는 중이라 순서대로 오른다. 네이티브 벽(웹 콘텐츠가 네이티브 프로세스를 띄우는 것)은 웹 자체의 설계상 열리지 않으니, 로컬 머신만 돌리는 것은 대신 안으로 옮긴다. 모든 단은 자기가 움직이는 축을 밝힌다:",
     axis: (title) => `움직이는 축: ${title}`,
-    outro: "순서가 왜 이 순서인지와 우선순위를 재배열할 외부 트리거는 [제품 방향](docs/product/vision.md#where-the-ceiling-moves-next)에 있다. 단은 축 원장에 등재되므로, 자기가 움직인다고 주장한 점수에서 떨어져 나갈 수 없다.",
+    outro: "각 단의 저장소 내부 수용 조건과 순서는 [제품 방향](docs/product/vision.md#where-the-ceiling-moves-next)에 있다. 단은 축 원장에 등재되므로 외부 채택 신호가 점수나 작업 순서를 움직일 수 없다.",
   }),
 });
 
@@ -169,12 +169,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 9.7,
     en: Object.freeze({
       title: "A machine that outlives its tab",
-      state: "Argument-free `open()` now enters the named OPFS Machine rather than a transient kernel. Commands and commits are serialized, and every completed run reaches a generation carrying heap, `/home/web`, and forwarded outcome before settling; the installed package cold-reopens that state without a manual commit. Leader election spans same-origin tabs, a repeated request ID is answered from its durable record, and commit failure is non-retryable outcome-unknown. A normal follower still cannot prove a cut-off leader heap portable, so failover of an in-flight call remains `PYPROC_RPC_OUTCOME_UNKNOWN`. The complete rule is the [durable RPC state table](docs/consuming/contract.md#durable-rpc-state-table-normative).",
+      state: "Argument-free `open()` now enters the named OPFS Machine rather than a transient kernel. Commands and commits are serialized, and every completed run reaches a generation carrying heap, `/home/web`, and forwarded outcome before settling; the installed package cold-reopens that state without a manual commit. Leader election spans same-origin tabs, a repeated request ID is answered from its durable record, and commit failure is non-retryable outcome-unknown. A normal follower still cannot prove a cut-off leader heap portable, so failover of an in-flight call remains `PYPROC_RPC_OUTCOME_UNKNOWN`. The complete rule is the [durable RPC state table](docs/usage/contract.md#durable-rpc-state-table-normative).",
       target: "The machine keeps running while any tab is open, and every command it accepted resolves exactly once.",
     }),
     ko: Object.freeze({
       title: "탭보다 오래 사는 머신",
-      state: "인자 없는 `open()`이 휘발 kernel 대신 이름 있는 OPFS Machine으로 들어간다. 명령과 commit은 직렬화되고, 완료된 run은 heap, `/home/web`, 전달된 outcome을 실은 generation에 도달한 뒤 settle된다. 설치 package는 수동 commit 없이 그 상태를 cold reopen한다. leader 선출이 동일 origin tab을 가로지르고 반복 request ID는 durable record로 답하며 commit 실패는 non-retryable outcome-unknown이다. 일반 follower는 끊긴 leader heap의 이식성을 증명할 수 없으므로 in-flight failover는 여전히 `PYPROC_RPC_OUTCOME_UNKNOWN`이다. 전체 규칙은 [durable RPC 상태표](docs/consuming/contract.md#durable-rpc-state-table-normative)다.",
+      state: "인자 없는 `open()`이 휘발 kernel 대신 이름 있는 OPFS Machine으로 들어간다. 명령과 commit은 직렬화되고, 완료된 run은 heap, `/home/web`, 전달된 outcome을 실은 generation에 도달한 뒤 settle된다. 설치 package는 수동 commit 없이 그 상태를 cold reopen한다. leader 선출이 동일 origin tab을 가로지르고 반복 request ID는 durable record로 답하며 commit 실패는 non-retryable outcome-unknown이다. 일반 follower는 끊긴 leader heap의 이식성을 증명할 수 없으므로 in-flight failover는 여전히 `PYPROC_RPC_OUTCOME_UNKNOWN`이다. 전체 규칙은 [durable RPC 상태표](docs/usage/contract.md#durable-rpc-state-table-normative)다.",
       target: "탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다.",
     }),
     evidence: Object.freeze([
@@ -197,12 +197,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     en: Object.freeze({
       title: "A machine you can carry",
       state: "`.pymachine` and `.webmachine` files are signed content-addressed envelopes: signature and trusted-key verification, byte-tamper rejection, layout-independent reparse, worker-to-worker revival, and a cross-context transport refused on an `h0` mismatch instead of opened silently. The product gate exports a signed image and imports it into a fresh browser profile behind an explicit signer trust screen. Portability still assumes the same engine and manifest. A JS proxy handle cannot cross an image at all, so a surface that installs one poisons every proxy path in the revived kernel; the packet device and the permission jail were moved to value boundaries and survive a revival in CI, while a blocking surface (the syscall bridge behind input(), sockets, GPU) cannot move and is refused at export unless the caller acknowledges it.",
-      target: "A machine file opens on any compatible profile from a verified signer, across engine versions.",
+      target: "A machine file verifies and revives offline in a clean profile under one explicit execution contract; every mismatch is rejected with an actionable error.",
     }),
     ko: Object.freeze({
       title: "들고 다니는 머신",
       state: "`.pymachine`과 `.webmachine`은 서명된 내용 주소 봉투다: 서명과 신뢰 공개키 검증, 바이트 변조 거부, 레이아웃 독립 재파싱, 워커 사이 부활, 문맥을 건너는 이식은 조용히 열리는 대신 `h0` 불일치로 거부된다. 제품 게이트가 서명 이미지를 내보내고 새 브라우저 프로필에서 명시적 서명자 신뢰 화면을 거쳐 가져온다. 이식성은 아직 같은 엔진과 같은 매니페스트를 전제하고, JS 프록시 핸들은 이미지를 건너지 못해서, 프록시를 심는 표면은 부활 커널의 프록시 경로 전부를 오염시킨다. packet 장치와 권한 감옥은 값 경계로 옮겨 부활 뒤에도 살아나는 것을 CI가 물지만, 블로킹 표면(input() 뒤의 syscall 다리, socket, GPU)은 구조상 옮길 수 없어 이미지를 뜰 때 명시 승인 없이는 거부된다.",
-      target: "머신 파일이 검증된 서명자에게서 왔다면 엔진 버전을 건너서도 호환 프로필 어디서나 열린다.",
+      target: "머신 파일이 명시된 실행 계약 아래 새 프로필에서 오프라인으로 검증·부활하고, 모든 불일치는 행동 가능한 오류로 거부된다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
@@ -218,9 +218,9 @@ export const NORTH_STAR_AXES = Object.freeze([
         ko: "물질화 뒤 핸들을 다시 묶는 엔진 층 길이나 핸들 없는 블로킹 기전을 찾아, input()을 쓴 머신도 이식 가능한 이미지를 내게 한다",
       }),
       Object.freeze({
-        id: "manifestNegotiation",
-        en: "Open an image across engine versions by negotiating the manifest instead of demanding an exact match",
-        ko: "매니페스트 정확 일치를 요구하는 대신 협상해서 엔진 버전을 건너 이미지를 연다",
+        id: "offlineCleanProfileRevival",
+        en: "Prove offline signed-image revival in a clean browser profile while rejecting every engine or manifest mismatch",
+        ko: "새 브라우저 프로필에서 서명 image의 오프라인 부활을 증명하고 engine 또는 manifest 불일치를 모두 거부한다",
       }),
     ]),
   }),
@@ -229,12 +229,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 9.0,
     en: Object.freeze({
       title: "A computer that boots guests",
-      state: "The Web Machine host ships inside this package behind `createWebComputer`, and a Python guest and an x86 Linux guest consume the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. The x86 lane puts the real Python and Linux guests on one switch: Linux pings Python, a Python-sent Ethernet frame increments Linux's NIC receive counter, and both directions survive one generation commit and a process cold restore. A guest can also be hosted in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others. Presenting a frame onto a canvas is gated in CI as well (`CanvasRgbaFrameSink`). The default Linux image is the reproducible project build, hash-pinned to a release that carries its exact source, complete legal material, SBOM, config, and independent-build receipt.",
+      state: "The Web Machine host lives inside this package behind `createWebComputer`, and Python and x86 Linux guests use the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. The x86 lane puts the real Python and Linux guests on one switch: Linux pings Python, a Python-sent Ethernet frame increments Linux's NIC receive counter, and both directions survive one generation commit and a process cold restore. A guest can also run in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others. The reproducible Linux build is checked against exact source, legal inventory, SBOM, config, and an independent byte-identical build receipt.",
       target: "Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does.",
     }),
     ko: Object.freeze({
       title: "guest를 부팅하는 컴퓨터",
-      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. x86 레인은 실제 Python과 Linux guest를 한 switch에 올린다. Linux가 Python을 ping하고 Python이 보낸 Ethernet frame이 Linux NIC 수신 계수를 올리며, 양방향이 한 세대 commit과 process cold restore 뒤에도 살아난다. guest를 자기 워커에 얹는 길도 있어 CPU 바운드 guest가 다른 guest를 멈추지 않는다. 프레임을 캔버스에 올리는 경로도 CI가 문다. 기본 Linux image는 프로젝트 재현 빌드이며 exact source, 전체 legal material, SBOM, config, 독립 빌드 영수증을 함께 제공하는 release에 hash 고정된다.",
+      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 살고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 쓴다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 image로 옮긴다. x86 레인은 실제 Python과 Linux guest를 한 switch에 올리고 양방향 통신을 한 세대 commit과 process cold restore 뒤에도 유지한다. guest를 자기 worker에 얹는 길과 frame을 canvas에 올리는 경로도 CI가 문다. 재현 Linux build는 exact source, 전체 legal inventory, SBOM, config, 독립 byte-identical build 영수증에 대조된다.",
       target: "어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다.",
     }),
     evidence: Object.freeze([
@@ -252,8 +252,8 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({
         id: "memory64",
         rung: 5,
-        en: "Adopt memory64 to lift the per-module heap ceiling that a large guest hits first",
-        ko: "memory64를 채택해 큰 guest가 가장 먼저 부딪히는 모듈별 힙 상한을 올린다",
+        en: "Enable memory64 once the engine contract can prove it, lifting the per-module heap ceiling a large guest hits first",
+        ko: "engine 계약이 증명할 수 있게 되면 memory64를 켜서 큰 guest가 먼저 부딪히는 모듈별 힙 상한을 올린다",
       }),
       Object.freeze({
         id: "nodeGuest",
@@ -375,17 +375,17 @@ export const NORTH_STAR_AXES = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: "stableKernelSurface",
-    score: 8.5,
+    id: "gatheredProductEntry",
+    score: 10.0,
     en: Object.freeze({
-      title: "One stable kernel surface",
-      state: "The public surface is one noun and its verbs, fixed by structure, types, installed-package gates, and real browser execution. The packed artifact proves root and subpath imports, shipped declarations, worker emission, and runtime assets without any package-internal path.",
-      target: "One exact-version public surface and shipped type contract, with every supported import pattern gated and no deep path.",
+      title: "One gathered product entrance",
+      state: "The `pyproc` root gathers the complete choice: `open` for the durable Python Machine, `boot` for an explicit transient Machine, `createWebComputer` for the multi-guest host, and `checkEnvironment` for preflight. Errors share one contract, advanced plumbing stays in named subpaths, and installed-package plus browser gates prove every root door without a deep import.",
+      target: "One root import that shows every product door, the handle each door returns, and the capability path beneath it, with no competing top-level identity.",
     }),
     ko: Object.freeze({
-      title: "안정 커널 표면 하나",
-      state: "공개 표면은 명사 하나와 그 동사들이고 구조, 타입, 설치 package gate, 실제 브라우저 실행이 고정한다. packed artifact가 root와 subpath import, 동봉 선언, worker emit, runtime asset을 package 내부 경로 없이 증명한다.",
-      target: "지원하는 모든 import 패턴이 gate 아래 있고 deep path가 없는 exact-version 공개 표면과 동봉 타입 계약 하나.",
+      title: "한곳에 모인 제품 진입점",
+      state: "`pyproc` root가 전체 선택을 모은다. `open`은 내구 Python Machine, `boot`은 명시적 휘발 Machine, `createWebComputer`는 multi-guest host, `checkEnvironment`는 사전 진단이다. 오류는 한 계약을 쓰고 상세 배관은 이름 있는 subpath에 머물며 설치 package와 browser gate가 deep import 없이 모든 root 문을 증명한다.",
+      target: "제품의 모든 문, 각 문이 돌려주는 handle, 그 아래 capability 경로를 하나의 root import에서 보여주며 경쟁하는 최상위 정체성은 없다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
@@ -397,32 +397,20 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/browser/preflightNoCoi.html", lane: "test:preflight" }),
     ]),
     manual: Object.freeze([]),
-    next: Object.freeze([
-      Object.freeze({
-        id: "installedSurfaceCoverage",
-        en: "Put every supported public import pattern under installed-package and browser gates",
-        ko: "지원하는 모든 공개 import 패턴을 installed-package와 browser gate 아래 둔다",
-      }),
-      Object.freeze({
-        id: "localAgentContract",
-        rung: 8,
-        en: "Specify the local-agent boundary once (pairing, authorization, capability list) for the share that stays outside the browser",
-        ko: "브라우저 밖에 남는 몫을 위해 로컬 에이전트 경계(페어링·인가·능력 목록)를 한 번 명세한다",
-      }),
-    ]),
+    next: Object.freeze([]),
   }),
   Object.freeze({
     id: "supplyChainIntegrity",
     score: 8.8,
     en: Object.freeze({
       title: "A supply chain you can verify",
-      state: "The shipped zero-dependency engine CLI verifies catalog-pinned boot anchors and all 354 lock-listed package files before same-origin deployment; runtime then pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. The asset CLI separately seals the worker and Service Worker graph, and bad hashes refuse spawn. npm publishing uses OIDC provenance, machine images verify signers before import, and the default Linux guest comes from two byte-identical independent builds with source, legal material, SBOM, config, and manifests at a hash-pinned project release.",
-      target: "Every byte that executes traces back to a source somebody else can rebuild and verify.",
+      state: "The zero-dependency engine CLI verifies catalog-pinned boot anchors and every lock-listed package before same-origin deployment; runtime pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. The asset CLI seals the worker and Service Worker graph, bad hashes refuse spawn, machine images verify signers before import, and the Linux guest build is checked by byte-identical independent rebuild plus source, legal inventory, SBOM, config, and manifest.",
+      target: "Every byte pyproc executes is either built by a repository recipe or pinned by a digest, and every mismatch fails before execution.",
     }),
     ko: Object.freeze({
       title: "검증 가능한 공급망",
-      state: "게시된 무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package 354개를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. 자산 CLI는 worker와 Service Worker graph를 별도로 봉인하고 나쁜 hash는 spawn을 거부한다. npm은 OIDC provenance로 게시되고 Machine image는 import 전에 서명자를 검증한다. 기본 Linux guest는 독립 빌드 둘의 byte-identical 결과와 source, legal material, SBOM, config, manifest를 hash-pin된 project release에 둔다.",
-      target: "실행되는 모든 바이트가 남이 다시 빌드하고 검증할 수 있는 출처로 이어진다.",
+      state: "무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. 자산 CLI는 worker와 Service Worker graph를 봉인하고 나쁜 hash는 spawn을 거부한다. Machine image는 import 전에 서명자를 검증하고 Linux guest build는 독립 byte-identical rebuild와 source, legal inventory, SBOM, config, manifest에 대조된다.",
+      target: "pyproc이 실행하는 모든 byte는 저장소 recipe로 build되거나 digest로 pin되고, 불일치는 실행 전에 실패한다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
@@ -434,8 +422,8 @@ export const NORTH_STAR_AXES = Object.freeze([
     next: Object.freeze([
       Object.freeze({
         id: "remainingReproducibleAssets",
-        en: "Reproduce the remaining firmware and emulator assets under the same project-controlled release discipline",
-        ko: "남은 firmware와 emulator 자산도 같은 프로젝트 통제 release 규율로 재현한다",
+        en: "Build the remaining firmware and emulator assets twice from repository recipes and gate every digest in the final execution graph",
+        ko: "남은 firmware와 emulator 자산을 저장소 recipe로 두 번 build하고 최종 실행 graph의 모든 digest를 gate로 대조한다",
       }),
     ]),
   }),

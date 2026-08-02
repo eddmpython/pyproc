@@ -1,12 +1,13 @@
 # pyproc API reference
 
-The root surface is exactly six exports: two entry verbs (`boot`, `createWebComputer`),
-one revival verb (`open`), one diagnostic (`checkEnvironment`), and the error contract
-(`PyProcError`, `PYPROC_ERROR_CODES`). Everything else is a verb on the machine handle
-those entries return, an escape hatch off that handle, or a subpath. Signatures are
+The root surface is exactly six exports and gathers the complete product choice: `open` for the
+durable Python Machine and source-specific revival, `boot` for an explicit transient Machine,
+`createWebComputer` for the multi-guest host, `checkEnvironment` for preflight, and the shared error
+contract (`PyProcError`, `PYPROC_ERROR_CODES`). Everything else is a verb on a returned handle, an
+advanced escape hatch, or a plumbing subpath. Signatures are
 authoritative in [index.d.ts](../../index.d.ts); this page adds the error codes and
-boundaries you need to consume each entry without reading source. Status labels and
-runnable evidence live in the [capability matrix](../consuming/capabilityMatrix.md). A
+boundaries needed to use each entry without reading source. Contract states and
+runnable evidence live in the [capability matrix](../usage/capabilityMatrix.md). A
 structure gate keeps this page in sync: every root export must be anchored here or
 `npm test` fails.
 
@@ -16,6 +17,14 @@ carry `context.pyExcType`). Branch on `error.code`, never on message text. The f
 table is in [Errors](#errors) below.
 
 ## Root exports
+
+| Need | Root entry | Return |
+|---|---|---|
+| Durable Python work that survives tabs | `open()` / `open({ name })` | `KernelElection` |
+| Transient Python, rewind, processes, or portable state | `boot()` / source-bearing `open(...)` | `PyprocMachine` |
+| Multiple guest operating systems under one lifecycle | `createWebComputer()` | `WebComputer` |
+| Capability preflight | `checkEnvironment()` | `EnvReport` |
+| Failure branching | `PyProcError`, `PYPROC_ERROR_CODES` | shared error contract |
 
 ### `boot(options?)`
 
@@ -48,7 +57,7 @@ deliberately not flattened into one code path:
   Errors: `PYPROC_LEADER_UNAVAILABLE` (retryable), `PYPROC_SPLIT_BRAIN`,
   `PYPROC_LEADER_LOCK_FAILED`, `PYPROC_PARTICIPANT_LEFT`, `PYPROC_RPC_ACTION_INVALID`, and
   `PYPROC_KERNEL_EXECUTION_ERROR`. A sent request follows the
-  [normative durable RPC state table](../consuming/contract.md#durable-rpc-state-table-normative).
+  [normative durable RPC state table](../usage/contract.md#durable-rpc-state-table-normative).
 - **`open(blob | bytes, trustOpts?)`** revives a portable bundle from outside. Envelope
   integrity and signature are verified before any byte reaches the heap. A machine file
   is live state, as dangerous as an executable: without a verified trusted signer
@@ -74,6 +83,15 @@ controls (`bootAll`, `pauseRunning`, `resumeAll`, `shutdownAll`, ownership fan-o
 `createMachines: false` assembles hardware only, for restore paths where a signed
 `.webmachine` image creates the machines. The full machine surface (devices, stores,
 image envelope, trust) lives under the `pyproc/machine` subpath.
+
+With `options.durability = { groupId, store, ... }`, the returned `WebComputer` owns the complete
+durable lifecycle. `initialize()` acquires ownership and either restores the fenced HEAD or boots a
+new set. `save()` pauses running guests, flushes devices, publishes one generation, and resumes.
+`exportImage()` signs all guest snapshots and devices as one `.webmachine`; `importImage()` verifies
+trust and permissions in an isolated candidate before atomically replacing the active set.
+`inspect()` exposes `startupMode` and `durabilityState`; `dispose()` releases ownership and guests.
+If a save fails, the computer remains explicitly `unsaved` rather than presenting the old generation
+as current.
 
 ### `checkEnvironment()`
 
@@ -201,7 +219,7 @@ Every state verb returns its cost; nothing is free and nothing hides:
 ## Runtime escape hatch (`machine.runtime`)
 
 Porcelain is a summary, not a jail: capability detail rides on the assembled `Runtime`
-behind `machine.runtime`. Consumers use capability contracts, never engine internals
+behind `machine.runtime`. Callers use capability contracts, never engine internals
 (`HEAPU8`, `raw.FS`).
 
 ### `Runtime`
@@ -298,7 +316,7 @@ itself is not exported, so reach it through the returned `jail` handle when you 
 `allows(perm, arg?)`, `connectSrc()`, or `csp()`.
 
 Two tiers of enforcement. The cooperative tier plants Python chokepoints (the `pyprocJail`
-module), and the browser tier is the CSP `connect-src` of the jailed context, which the consumer
+module), and the browser tier is the CSP `connect-src` of the jailed context, which the caller
 applies. Honest boundary: the Python tier alone is bypassable via `import js`, which is exactly
 why the browser wall exists; that wall requires a jailed context (a CSP iframe), and full
 isolation (an opaque origin) costs the SharedArrayBuffer capabilities.
@@ -380,7 +398,7 @@ resumes from the journal. Errors: `PYPROC_LEADER_UNAVAILABLE` (retryable),
 `autoCommit: true`, command execution and generation commit are serialized; the Promise settles only
 after commit. A commit failure after execution is outcome-unknown because retrying could duplicate an
 effect. `status().autoCommit` exposes the mode. The
-[durable RPC state table](../consuming/contract.md#durable-rpc-state-table-normative) owns
+[durable RPC state table](../usage/contract.md#durable-rpc-state-table-normative) owns
 the exact resend boundary; `status().rpcSemantics` is its compact runtime projection.
 
 ## Python-side surface (inside the interpreter)

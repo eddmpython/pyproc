@@ -97,7 +97,7 @@ f'counter={counter}, file={open("/home/web/immortal/counter.txt").read()}'</text
     ].map((id) => [id, document.getElementById(id)]));
     const params = new URLSearchParams(location.search);
     const gateMode = params.has("gate");
-    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
+    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : new URL("../vendor/pyodide/", import.meta.url).href;
     const machineName = params.get("machine") || "pyprocImmortalDemo";
     const short = (value) => value ? String(value).slice(0, 8) : "-";
     const print = (text) => {

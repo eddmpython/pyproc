@@ -93,7 +93,7 @@ PYPROC_INDEX_URL=/vendor/pyodide/ npm run test:installed    # 자가 호스팅 �
 - trusted public key로 연 `.pymachine`이 `resume.py`를 실행해 SQLite connection 같은 프로세스 자원을 다시 열고 `/home/web` 상태를 유지한다.
 
 이 게이트는 "repo에서는 되는데 소비 앱에서는 깨지는" 구조 결함을 막는다. 특히 `asgi=/pyproc/`가 `/node_modules/pyproc/...` 패키지 자산을 오인해 가로채는 충돌을 막기 위해, `VirtualOrigin` fetch 뒤에도 `PyProc` worker graph 검증과 실행이 통과해야 한다. CI에서도 돈다.
-public export별 coverage 정본은 [패키지 계약](../consuming/contract.md)의 설치 패키지 브라우저 게이트 coverage 표다.
+public export별 coverage 정본은 [패키지 계약](../usage/contract.md)의 설치 패키지 브라우저 게이트 coverage 표다.
 
 ## 4. 예제 실행 게이트 (`npm run test:examples`)
 
@@ -189,4 +189,4 @@ npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/webvm-s1l.json --out .tmp/s1l
 ## 6. 개념증명 실측 (tests/attempts/)
 
 신규 능력의 실측은 examples가 아니라 `tests/attempts/<카테고리>/`의 probe에서 한다. probe도 같은 서버로 띄운다(`http://localhost:8788/tests/attempts/...`). 결과 기록 형식은 [tests/attempts/README.md](../../tests/attempts/README.md) 참조.
-`runtimeParity/virtualOriginBoundaryProbe.html`처럼 "지원하지 않는 벽"을 패키지 계약으로 고정하는 probe도 여기에 둔다. 이런 probe는 기능 확장이 아니라 호출 코드가 쿠키 세션, WebSocket upgrade, 청크 스트리밍 같은 플랫폼 벽에 의존하지 않도록 막는 compatibility lab이다.
+`runtimeParity/virtualOriginBoundaryProbe.html`처럼 "지원하지 않는 벽"을 패키지 계약으로 고정하는 probe도 여기에 둔다. 이런 probe는 기능 확장이 아니라 호출 코드가 쿠키 세션, WebSocket upgrade, 청크 스트리밍 같은 플랫폼 벽에 의존하지 않도록 막는 boundary lab이다.

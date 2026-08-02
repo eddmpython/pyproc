@@ -18,13 +18,15 @@ contract without splitting pyproc into a second product.
 
 ## North Star axes
 
-An axis is a facility the computer has to provide: execution, rewindable state, processes, a durable disk, survival past its tab, a portable image, guests, engine independence, network, package reach, a stable public surface, and a verifiable supply chain. Each carries a score out of 10, where it stands today, and where it has to land. The rules that keep those scores honest:
+An axis is a facility the computer itself has to provide: execution, rewindable state, processes, a durable disk, survival past its tab, a portable image, guests, engine independence, network, package reach, one gathered product entrance, and a verifiable byte chain. Each carries a score out of 10, where it stands today, and where it has to land. The rules that keep those scores honest:
 
 - **The ledger is executable, and the document is its projection.** [`tests/northStar.mjs`](../../tests/northStar.mjs) holds every axis together with the artifacts standing behind it. The README table is rendered from that file and compared to it by the structure gate, so a score cannot be raised by editing prose. Moving a score means editing the ledger, and that diff is the review.
 - **Only gates that run in CI count.** A capability with no automated gate scores nothing, however complete the implementation. Every registered artifact must exist, must be opened by some runner, and its lane must appear in the CI workflow. Registering a local-only lane as CI evidence fails the gate.
 - **Manual evidence caps an axis below 9.** Where a headless gate is impossible (no WebGPU adapter, a relay this package does not ship, x86 assets that cannot be committed), the probe is registered as manual with its reason. A near-complete claim may not rest on evidence that lives in someone's memory.
 - **Every axis needs at least one browser gate.** Real validation of a WASM runtime happens only in a browser, so an axis proven by Node structure checks alone is not proven.
-- **A 10 is finished, not shipped.** It means the axis is repeatedly verified in a real browser with no workaround left outside the public surface. Everything below 10 states the gap in the same row.
+- **Value is intrinsic.** Adoption, user counts, release age, other repositories, market response, and retired surfaces never move a score. pyproc proves value by what its own Machine can do and by how directly a user can enter that ability.
+- **Evidence is a gauge, not the North Star.** Tests and failure injection prove an invariant; they are not a substitute for it and never become a popularity or release-readiness score.
+- **A 10 is complete, not popular.** It means the capability is repeatedly verified in a real browser with no workaround left outside the public surface. Everything below 10 states the intrinsic gap in the same row.
 
 New work names the axis it moves. Work that moves no axis, weakens a guardrail in [contract reality](../operations/contractReality.md), or trades an axis for a number on a benchmark is not a priority here.
 
@@ -53,8 +55,8 @@ creates another competing entry point. The result:
 - Pyodide is one single interpreter. The physical properties of a runtime - parallelism, processes, state restore - are not provided, so they get reinvented every time.
 - Browser projects fill missing capabilities (sockets, subprocess, blocking input) in incompatible ways, so the work is not reusable.
 
-pyproc builds that Machine **once, properly, and publishes it under a version pin**. Improvements
-collect behind one handle, and the executable package contract remains the SSOT.
+pyproc builds that Machine **once, properly**. Improvements collect behind the root `pyproc` entrance,
+and the executable package contract remains the SSOT.
 
 ## What it is and what it is not
 
@@ -82,7 +84,7 @@ Tempting things that are wrong for us. Each was rejected after review. This list
 4. **Promising zero-copy numpy over a SAB.** Impossible against the single-linear-memory wall. "One memcpy" stays the public contract.
 5. **VT100/xterm.js emulation plus a shell pipe mini-language (`|`, `>`).** That re-imports the constraints of 1978 and stacks a second syntax on top of Python. The shell language is Python itself, and the essence of a pipe - lazy composition - is already in generators.
 6. **Split panes and a window manager.** UI belongs outside the kernel. The answer to "one machine on several screens" is `KernelElection`.
-7. **Maintaining a custom Pyodide build (pthread/nogil) permanently.** A custom engine build is conditional insurance, taken only when upstream threading or engine compatibility requires it. The current engine pin and re-verification triggers are in [contract reality](../operations/contractReality.md).
+7. **Maintaining a custom Pyodide build (pthread/nogil) permanently.** A custom engine build is conditional insurance, taken only when the pinned engine contract cannot provide a required primitive. The current engine pin and re-verification triggers are in [contract reality](../operations/contractReality.md).
 8. **A WebRTC distributed machine.** Depending on a signaling service violates the local-first
    default. Moving between devices is the job of the `.pymachine` file.
 
@@ -98,34 +100,33 @@ Tempting things that are wrong for us. Each was rejected after review. This list
 
 ## The four states of a Python guest capability (the goal is unbounded; present-tense claims go only as far as the proof)
 
-Under the higher Web Machine North Star, the compatibility direction for the pyproc guest is "everything that works in local Python, in the browser". Each capability sits in one of the four states below, and pyproc's job is to push capabilities up a row and to be the structure that absorbs a wall the moment upstream opens it. "Impossible" is a verdict about current conditions, not surrender. The canonical coordinates are the executable axis ledger in [`tests/northStar.mjs`](../../tests/northStar.mjs), the capability matrix, and the browser gates they register.
+Under the higher Web Machine North Star, the capability direction for the Python guest is "everything local Python can do, in the browser". Each capability sits in one of the four states below, and pyproc's job is to push capabilities up a row when its own executable acceptance condition can pass. "Impossible" is a verdict about current platform conditions, not surrender. The canonical coordinates are the executable axis ledger in [`tests/northStar.mjs`](../../tests/northStar.mjs), the capability matrix, and the browser gates they register.
 
 1. **Achieved today (measured in a browser today)**: pure Python plus **native C-extension packages** (numpy, pandas, scipy, scikit-learn, matplotlib and more - the Pyodide distribution's 158 pyemscripten (PEP 783) wheels load through dlopen and already work); multi-core processes, snapshot-fork, and map; checkpoint and time travel; session persistence and revival; the terminal; the in-kernel ASGI server; a persistent FS (OPFS); input, HTTP, and subprocess; the process OS broadly (pipes, shm, locks, job control, kernel election, machine containers, the permission jail, fsWorld); and booting non-Pyodide WASI CPython 3.14.6 with pure-Python wheel installation. **Pyodide does dlopen dynamic C-extension `.so` files** - "no dynamic C extensions" was only ever true of the WASI lane.
 2. **Available through a workaround (virtualized the browser way, measured)**: outbound sockets (`SocketBridge`), servers (`AsgiServer`/`VirtualOrigin`), processes (worker kernels). **GPU numerical acceleration** (WebGPU compute, reached from a worker and driven synchronously through JSPI; the precursor WgPy demonstrated matmul acceleration on Pyodide). It works today in the narrow class of large f32 linear algebra - not transparent numpy acceleration but a separate array API. Building numpy as a WASI static fat binary is also a settled path, but it brings **no speed gain and is in fact slower** (reference BLAS, no SIMD, and a JSON-only WASI value bridge), so it is a coverage experiment rather than a speed path.
-3. **Waiting on upstream (blocked now, reopened by platform progress)**: **installing an arbitrary C extension on demand** (Pyodide's dlopen works, but that package's pyemscripten wheel has to be published - PEP 783 ecosystem adoption is around 28 packages, in ABI lockstep, and most of the long tail is unpublished); WASI dynamic linking (cpython#142234); a **SIMD numpy build** (Pyodide does not build with SIMD yet, so the gain is pending); and real threading with nogil (WASM threads plus shared memory, PR #6285 draft).
+3. **Waiting on a technical prerequisite**: **installing an arbitrary C extension on demand** needs a matching pyemscripten wheel in the pinned package corpus; WASI dynamic linking needs the engine contract implemented; a **SIMD numpy build** needs a verified SIMD-enabled artifact; and real threading needs nogil plus WASM shared-memory support. These conditions change only when pyproc's corresponding install, execution, and failure gates can pass.
 4. **A permanent wall for web security reasons (impossible without an external piece)**: inbound servers, executing arbitrary native binaries, direct local drivers (CUDA), and desktop automation. Those capabilities require a local or remote execution tier outside pyproc.
 
-Corrections (honest, from the 2026-07-13 research synthesis): (1) **availability** of native numerical packages is already solved (numpy and others load through dlopen from 158 wheels). (2) "No dynamic C extensions" was WASI-only; Pyodide does dlopen. (3) The wall that actually remains is **speed** in large numpy arithmetic. The active paths are horizontal sharding through `machine.proc()` and the opt-in GPU-resident lane described by the [capability matrix](../consuming/capabilityMatrix.md); arbitrary package coverage still depends on pyemscripten wheel ecosystem adoption. (4) GPU is corrected to state 2 (it works as a library today; the previous edition's state 3 was stale).
+Corrections fixed by executable checks: (1) native numerical packages in the pinned Pyodide corpus load through dlopen. (2) "No dynamic C extensions" was WASI-only; Pyodide does dlopen. (3) The remaining numerical wall is large-array execution, addressed by horizontal sharding through `machine.proc()` and the opt-in GPU-resident lane in the [capability matrix](../usage/capabilityMatrix.md). Package reach is measured against the corpus pyproc pins and runs, never by ecosystem size. (4) GPU is state 2 because the library path works; its missing headless adapter remains an explicit evidence boundary.
 
 ## Where the ceiling moves next
 
 The four states above are verdicts about today. This section fixes the direction for moving them (from the 2026-07-31 ceiling review), so a later session can pick up the frontier without re-deriving it. The remaining distance is two walls with different fates, and the work orders itself around that difference. Every rung below is registered in the [axis ledger](../../tests/northStar.mjs) against the axis it moves, so a rung cannot drift away from the score it claims to move, and the structure gate holds that list and this one to the same count.
 
-**The transport wall opens.** A tab cannot accept an inbound connection today, but every piece of that limitation is in motion. The rungs are ordered by leverage, and the fifth is filed here because it is the same class of upstream adoption, not because it carries packets:
+**The transport wall can open only through executable acceptance conditions.** A tab cannot accept an inbound connection on the default web path today. The rungs are ordered by what they add to the Machine, and the fifth is filed here because it changes the guest memory contract rather than the network contract:
 
 1. **TLS terminated inside the tab.** The socket relay currently terminates TLS and sees plaintext, so it has to be trusted. In-tab TLS (already recorded as the socket lane's v2) turns any relay into untrusted infrastructure: the requirement drops from "a relay you trust" to "any relay at all". It comes first because every later rung inherits its trust model.
 2. **Relay multiplexing** (Wisp class): one WebSocket carrying many sockets. Already on the ledger as relay hardening.
 3. **Browser-to-browser transport** (WebRTC DataChannel): a direct peer link between tabs on different machines, NAT traversal included. The rejected-ideas list turns down a WebRTC distributed machine, and that rejection stands; a transport subpath is a different object, and the `pyproc/socket` precedent (an opt-in subpath may depend on an external piece it does not ship) already covers it. First pairing can exchange the offer manually (a QR code), which shrinks the signaling dependency to reconnects. Subject to the Experimental surface freeze: no new subpath until the freeze condition clears.
-4. **An Isolated Web App lane.** The platform already ships a true inbound listen (Direct Sockets `TCPServerSocket`) for installed IWAs, today gated to managed distribution. The move is to keep a packaging lane ready for general desktop distribution.
-5. **memory64 adoption**: engines have shipped it, and adopting it lifts the per-module heap ceiling that a large guest hits first. It moves the guest axis, not the network one, which is why the ledger files it under the computer that boots guests.
+4. **An Isolated Web App lane.** It lands when a `TCPServerSocket` capability probe, permission boundary, encrypted transport path, and failure gate all pass in the environment pyproc itself can package and run.
+5. **memory64 enablement**: it lands when the pinned engine, snapshot format, process fork, and image round trip all pass with memory64 enabled. It moves the guest axis, not the network one.
 
 **The native wall does not open.** No web standard proposes letting web content spawn a native process, and none will; that would contradict the browser's definitional security boundary. The platform's actual trajectory points the other way: compile the world into the sandbox. So "run what only local machines run" is never answered by a bridge outward. It is answered by moving the work inward:
 
 6. **A wasm tool layer**: the tools a working machine assumes (git and ripgrep class) as wasm builds inside the machine.
-7. **A Node guest** (long horizon): Node.js as a third guest beside Python and Linux. Node in a browser has been demonstrated elsewhere; a Node guest would make JavaScript CLI tools browser residents, on the same multi-guest contract as everything else.
-8. **The local-agent contract**: native-only work stays outside by design. pyproc can still specify the boundary once (pairing, authorization, capability list) without owning a local implementation.
+7. **A Node guest** (long horizon): Node.js as a third guest beside Python and Linux. It lands only when its `MachineGuest` adapter, offline boot, lifecycle, signed-image round trip, byte provenance, and browser gate all pass inside this repository.
 
-Two external triggers reorder these priorities when they fire: Direct Sockets reaching general desktop distribution, and an open Node-in-browser implementation maturing enough to vendor. Until then the ladder above is the order.
+Nothing outside the repository reorders these priorities. A rung moves only when its stated pyproc acceptance condition becomes executable and passes without weakening an existing Machine invariant.
 
 ## Support boundary (Chromium/Edge only)
 
@@ -140,6 +141,6 @@ Cross-Origin-Embedder-Policy: require-corp
 
 - The executable North Star and its registered evidence: [`tests/northStar.mjs`](../../tests/northStar.mjs)
 - The shipped Web Machine implementation and browser probes: [`src/machine/`](../../src/machine/) and [`tests/webMachine/`](../../tests/webMachine/)
-- The package contract (install, public surface, version consistency): [docs/consuming/contract.md](../consuming/contract.md)
+- The package contract (install, public surface, version consistency): [docs/usage/contract.md](../usage/contract.md)
 - The operating model (lifecycle, development principles): [docs/operations/operatingModel.md](../operations/operatingModel.md)
 - Current gaps and re-verification triggers: [docs/operations/contractReality.md](../operations/contractReality.md); completed decision history: git history

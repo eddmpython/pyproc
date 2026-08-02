@@ -5,7 +5,7 @@ This document defines the install, import, type, asset, and runtime boundaries o
 The roles are split.
 
 - This document: install, version pinning, import boundaries, runtime-asset deployment, and runtime consistency.
-- [capabilityMatrix.md](capabilityMatrix.md): per-capability product value, status, prerequisites, runnable surface, verification, boundaries.
+- [capabilityMatrix.md](capabilityMatrix.md): per-capability intrinsic value, contract state, prerequisites, runnable surface, verification, boundaries.
 - [trustPermissions.md](trustPermissions.md): `.pymachine` public keys, signer fingerprints, the permission UI.
 - [resumeCatalog.md](resumeCatalog.md): policy for reopening product resources after a revival.
 
@@ -20,11 +20,11 @@ The roles are split.
 
 - **Take it from the npm registry at an exact version.** No floating ranges (`^`, `~`, `latest`): an exact version plus a lockfile is what guarantees reproducibility. To move up, deliberately re-pin to a new release version. A release is one bundle of version bump, tag, GitHub Release, and npm publish ([release.md](../operations/release.md)).
 - There is no build step (native ESM). It works from `<script type="module">` with no bundler.
-- **Alternative paths** (optional): to pull a pre-release commit, pin a SHA with `"pyproc": "github:eddmpython/pyproc#<commit-sha>"`; for zero-install, use the CDN at `https://cdn.jsdelivr.net/npm/pyproc@<version>/index.js`. Note that the process OS (`machine.proc`) needs its worker file same-origin with the page - browsers block cross-origin workers - so it requires an npm install or vendoring.
+- **Source pin** (optional): to run a specific commit, pin a SHA with `"pyproc": "github:eddmpython/pyproc#<commit-sha>"`. The canonical runtime path remains an exact installed package plus same-origin engine and worker assets; a CDN module alone is not a complete Machine deployment.
 
 ## Public import boundary
 
-Only the public package entry and stable subpaths are supported. The per-capability export list is canonical in [capabilityMatrix.md](capabilityMatrix.md); the type contract is the bundled `index.d.ts`.
+Only the public package entry and named subpaths form the product contract. The per-capability export list is canonical in [capabilityMatrix.md](capabilityMatrix.md); the type contract is the bundled `index.d.ts`.
 
 | Specifier | Purpose |
 | --- | --- |

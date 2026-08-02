@@ -22,7 +22,7 @@ or you explicitly accept the risk with `trust: true`. Integrity is a full-envelo
 rejected). Signing is WebCrypto ECDSA P-256; `fingerprintStatePublicKey` (from `pyproc/history`) gives the
 stable `sha256:<hex>` shown in approval UIs. Signature verifies **origin**, not safety:
 key distribution and permission UI belong to the product
-(see [trustPermissions](docs/consuming/trustPermissions.md), Korean).
+(see [trustPermissions](docs/usage/trustPermissions.md), Korean).
 
 ### Supply chain: every executed byte is pinned
 
@@ -73,4 +73,4 @@ as a first boot. A sent RPC is re-asked after leader loss only when the caller c
 can prove both a durable generation and a proxy-free session. Ordinary followers cannot
 inspect the leader session and fail closed with `PYPROC_RPC_OUTCOME_UNKNOWN`; live-leader
 timeouts and caller loss do too. The full resend and result boundary is the
-[durable RPC state table](docs/consuming/contract.md#durable-rpc-state-table-normative).
+[durable RPC state table](docs/usage/contract.md#durable-rpc-state-table-normative).

@@ -52,7 +52,7 @@ const LIVE_UNEXPORTED_IDENTIFIERS = Object.freeze({
 const MIGRATION_MARKERS = Object.freeze(["formerly", "구 ", "retired", "no longer", "->", "renamed"]);
 // 내부 운영 문서는 내부 함수 이름으로 말하는 것이 정확하다(예: contractReality의 결정적 부팅
 // 경로 서술). 소비자에게 "이렇게 호출하라"고 말하는 문서만 금칙어 스코프다.
-const CONSUMER_DOC_ROOTS = Object.freeze(["README.md", "README.ko.md", "SECURITY.md", "docs/consuming", "docs/product", "docs/reference"]);
+const USER_DOC_ROOTS = Object.freeze(["README.md", "README.ko.md", "SECURITY.md", "docs/usage", "docs/product", "docs/reference"]);
 
 function collectMarkdown(dir, acc = []) {
   for (const entry of readdirSync(dir)) {
@@ -164,7 +164,7 @@ export async function assertPublicSurface() {
     throw new Error(`이관 표의 ${name}이 은퇴 사전에도 살아있는 목록에도 없다(둘 중 하나로 판단을 기록한다)`);
   }
   for (const file of docFiles) {
-    if (!CONSUMER_DOC_ROOTS.some((root) => file === root || file.startsWith(`${root}/`))) continue;
+    if (!USER_DOC_ROOTS.some((root) => file === root || file.startsWith(`${root}/`))) continue;
     const markdown = readFileSync(join(ROOT, file), "utf8");
     for (const paragraph of paragraphsOf(markdown)) {
       if (MIGRATION_MARKERS.some((marker) => paragraph.includes(marker))) continue;
@@ -184,7 +184,7 @@ export async function assertPublicSurface() {
   const unreleasedSubpaths = declared.split(",").map((name) => name.trim()).filter(Boolean);
   const MARKERS = ["unreleased", "미출하", "SHA pin", "SHA 핀"];
   // 스코프는 손으로 적지 않는다. 3파일 고정 목록이던 판정은 소비자 진입점이 가리키는 다른
-  // 문서를 못 봤다: `docs/consuming/contract.md`가 정확한 버전 핀을 지시하면서 그 버전에 없는
+  // 문서를 못 봤다: `docs/usage/contract.md`가 정확한 버전 핀을 지시하면서 그 버전에 없는
   // subpath의 import 예제를 표식 없이 담고 있었다(외부 감사 실측 - 소비자가 그대로 따르면
   // ERR_PACKAGE_PATH_NOT_EXPORTED다). 언어 게이트와 같은 링크 유도 스코프를 쓴다.
   const resolveHref = (fromFile, href) => {
@@ -203,7 +203,7 @@ export async function assertPublicSurface() {
     for (const m of text.matchAll(/\]\((?!https?:)([A-Za-z0-9/_.-]+\.md)\)/g)) {
       const resolved = resolveHref(entry, m[1]);
       // 소비자 대면 트리만. 내부 운영 문서는 핀 지시를 하지 않는다.
-      if (!resolved.startsWith("docs/consuming/") && !resolved.startsWith("docs/reference/")) continue;
+      if (!resolved.startsWith("docs/usage/") && !resolved.startsWith("docs/reference/")) continue;
       if (existsSync(join(ROOT, resolved))) markerScope.add(resolved);
     }
   }

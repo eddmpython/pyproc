@@ -14,7 +14,7 @@ Also welcome besides code: bug reports, browser measurements (please include Chr
 
 ## Scope (so you do not waste effort)
 
-- **Chromium / Edge only.** pyproc requires JSPI, SharedArrayBuffer, and `crossOriginIsolated`. Firefox/Safari support is out of scope by design; PRs adding compatibility shims will be declined.
+- **Chromium / Edge only.** pyproc requires JSPI, SharedArrayBuffer, and `crossOriginIsolated`. Firefox/Safari are outside the declared platform boundary; PRs adding browser-emulation shims will be declined.
 - **No product UI or domain logic.** pyproc ships runtime primitives and capability contracts only. Products build their own surface on top.
 - **No build step, ever.** Native ESM `.js` plus a hand-maintained `index.d.ts`. Bundlers and transpilers will not be introduced.
 

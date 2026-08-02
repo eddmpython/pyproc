@@ -27,7 +27,7 @@ Header JSON fields:
 {
   "version": 1,
   "commit": "sha256:<hex>",
-  "meta": { "manifest": "<consumer-owned JSON string>" },
+  "meta": { "manifest": "<caller-owned JSON string>" },
   "objects": [["sha256:<hex>", byteLength], ...],
   "tag": {
     "alg": "ECDSA-P256-SHA256",

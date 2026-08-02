@@ -2,7 +2,7 @@
 
 pyproc's public persistent documentation: the SSOT for product direction, package contracts, references, and operating policy. Executable truth lives in `src/` and `tests/`; experiments begin under `tests/attempts/`; historical decisions remain available through git history. The summary of hard rules lives in `CLAUDE.md` at the repository root.
 
-Language: `consuming/`, `reference/`, and `product/` are English. `operations/` is the internal operating tree and stays Korean.
+Language: `usage/`, `reference/`, and `product/` are English. `operations/` is the internal operating tree and stays Korean.
 
 ## Category rules
 
@@ -25,11 +25,11 @@ Language: `consuming/`, `reference/`, and `product/` are English. `operations/` 
 | | [benchmarking.md](operations/benchmarking.md) | The measurement contract for internal benchmarks, canonical scenarios, and raw-evidence rules (posting on a public surface is forbidden: the no-bragging-with-numbers rule) |
 | | [release.md](operations/release.md) | The version, tag, and release procedure (the `0.0.x` line, SHA-pin consumption) |
 | | [demoHosting.md](operations/demoHosting.md) | The live demo deployment procedure (COOP/COEP static hosting, the root `_headers`) |
-| [consuming/](consuming/) | [contract.md](consuming/contract.md) | The package contract: install, version pinning, import boundaries, runtime-asset deployment, Pyodide version consistency |
-| | [capabilityMatrix.md](consuming/capabilityMatrix.md) | The capability matrix: per-surface value, status, prerequisites, runnable surface, verification, boundaries |
-| | [compatibility.md](consuming/compatibility.md) | Environment compatibility on one page: browsers, JSPI, COOP/COEP, engine pin, resource characteristics, memory-pressure guidance |
-| | [resumeCatalog.md](consuming/resumeCatalog.md) | The resource policy for which file descriptors, sockets, and DB connections `resume.py` must reopen after a revival |
-| | [trustPermissions.md](consuming/trustPermissions.md) | `.pymachine` public key distribution, signer fingerprints, and the permission UI contract |
+| [usage/](usage/) | [contract.md](usage/contract.md) | The package contract: install, version pinning, import boundaries, runtime-asset deployment, Pyodide version consistency |
+| | [capabilityMatrix.md](usage/capabilityMatrix.md) | The capability matrix: intrinsic value, contract state, prerequisites, runnable surface, verification, boundaries |
+| | [platformRequirements.md](usage/platformRequirements.md) | Platform requirements and preflight: browsers, JSPI, COOP/COEP, engine pin, resources, memory-pressure guidance |
+| | [resumeCatalog.md](usage/resumeCatalog.md) | The resource policy for which file descriptors, sockets, and DB connections `resume.py` must reopen after a revival |
+| | [trustPermissions.md](usage/trustPermissions.md) | `.pymachine` public key distribution, signer fingerprints, and the permission UI contract |
 | [reference/](reference/) | [api.md](reference/api.md) | The function-level API reference: the six root exports and the machine handle vocabulary, escape hatches and subpaths, the full error code table (a machine gate forces every root export to be anchored) |
 | | [bundleFormat.md](reference/bundleFormat.md) | The canonical layout of the portable bundle (`PYBUNDLE1`) envelope: byte placement, header fields, the separation of integrity from signature |
 
@@ -43,9 +43,9 @@ Language: `consuming/`, `reference/`, and `product/` are English. `operations/` 
 - What must be green before a commit: [operations/testing.md](operations/testing.md)
 - How speed is measured and where it is recorded (never on a public surface): [operations/benchmarking.md](operations/benchmarking.md)
 - When and how the version moves: [operations/release.md](operations/release.md)
-- Package installation and public boundaries: [consuming/contract.md](consuming/contract.md)
-- Capability status and prerequisites: [consuming/capabilityMatrix.md](consuming/capabilityMatrix.md)
-- Whether a target environment can run it: [consuming/compatibility.md](consuming/compatibility.md)
-- The policy for reopening resources after a revival: [consuming/resumeCatalog.md](consuming/resumeCatalog.md)
-- Public key distribution and permission UI policy: [consuming/trustPermissions.md](consuming/trustPermissions.md)
+- Package installation and public boundaries: [usage/contract.md](usage/contract.md)
+- Capability contract and prerequisites: [usage/capabilityMatrix.md](usage/capabilityMatrix.md)
+- Whether a target environment can run it: [usage/platformRequirements.md](usage/platformRequirements.md)
+- The policy for reopening resources after a revival: [usage/resumeCatalog.md](usage/resumeCatalog.md)
+- Public key distribution and permission UI policy: [usage/trustPermissions.md](usage/trustPermissions.md)
 - Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

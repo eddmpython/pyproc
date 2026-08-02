@@ -16,7 +16,7 @@ const err = (t) => `<span class="err">${t}</span>`;
 const ms = (t) => `${t.toFixed(1)}ms`;
 const pageIndexURL = () => {
   const indexParam = new URLSearchParams(location.search).get("indexURL");
-  return indexParam ? new URL(indexParam, location.href).href : undefined;
+  return indexParam ? new URL(indexParam, location.href).href : new URL("../vendor/pyodide/", import.meta.url).href;
 };
 
 // The shared machine, booted through deterministic replay: the machine tab (hibernate, revive, and

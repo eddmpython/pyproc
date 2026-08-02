@@ -115,17 +115,17 @@
     <p class="dim" style="margin:.2rem 0 0">Capability detail (ASGI server, syscall bridge, interrupts, journal) stays one hop away: <code>machine.runtime</code> is the documented escape hatch on every machine handle.</p>
 
     <h2 id="build">Build on the Machine contract</h2>
-    <p class="dim" style="margin:.2rem 0 0">Use the root Machine handle, stable subpaths, and documented execution assets, never engine internals. These are the boundaries for extending pyproc without fragmenting the product.</p>
+    <p class="dim" style="margin:.2rem 0 0">Use the gathered root entrances, named plumbing subpaths, and documented execution assets, never engine internals. These are the boundaries for extending pyproc without fragmenting the product.</p>
     <div class="cards">
-      <a class="card" href="https://github.com/eddmpython/pyproc#public-surface">
-        <h3>Public surface map</h3>
+      <a class="card" href="https://github.com/eddmpython/pyproc#product-entrances">
+        <h3>Product entrances</h3>
         <p>Start from the task: which public exports to import, and which runnable proof backs that capability.</p>
       </a>
-      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/capabilityMatrix.md">
+      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/capabilityMatrix.md">
         <h3>Capability matrix</h3>
         <p>Decide what to enable by product value, status, browser requirements, runnable surfaces, gates, and hard boundaries.</p>
       </a>
-      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md">
+      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md">
         <h3>Package contract</h3>
         <p>Pin exact versions, keep import boundaries clean, deploy same-origin assets, and verify the installed package.</p>
       </a>
@@ -144,7 +144,7 @@ import { boot } from "pyproc";
 const machine = await boot();                  <span class="dim">// real CPython in this tab</span>
 const pool = await machine.proc({ lanes: 4 }); <span class="dim">// fork 4 interpreters from one snapshot</span>
 await pool.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</div>
-      <p class="dim" style="margin:.7rem 0 0">Pin an exact npm version. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/consuming/contract.md">package contract</a>.</p>
+      <p class="dim" style="margin:.7rem 0 0">Pin an exact npm version. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md">package contract</a>.</p>
     </div>
 
     <footer class="site">

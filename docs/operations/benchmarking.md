@@ -13,7 +13,7 @@ Speed is an intermediate goal for pyproc. But speed is something I measure, not 
 
 ## Required fields of the measurement envelope
 
-To put a benchmark result into a ledger, leave a schema v2 artifact. v2 keeps the older flat fields for compatibility but requires the four groups below as an envelope.
+To put a benchmark result into a ledger, leave a schema v2 artifact. v2 retains the older flat fields and requires the four groups below as an envelope.
 
 | Field | Contents |
 |---|---|

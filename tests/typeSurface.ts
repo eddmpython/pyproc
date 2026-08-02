@@ -26,5 +26,5 @@ async function durableMachineSurface() {
 }
 void durableMachineSurface;
 
-// @ts-expect-error the compatibility wrapper is removed; durable options are direct
+// @ts-expect-error the legacy wrapper is removed; durable options are direct
 open({ persistent: true });

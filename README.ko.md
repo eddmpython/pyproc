@@ -24,7 +24,7 @@
   <a href="#제품-모델">제품 모델</a> ·
   <a href="#빠른-시작">빠른 시작</a> ·
   <a href="#ai-에이전트에서-쓰기">AI 에이전트에서 쓰기</a> ·
-  <a href="#기능-상태">상태</a> ·
+  <a href="#제품-진입점">진입점</a> ·
   <a href="README.md">English</a>
 </p>
 
@@ -39,17 +39,17 @@
 - [Machine의 가치가 드러나는 곳](#machine의-가치가-드러나는-곳)
 - [Machine이 제공하는 결과](#machine이-제공하는-결과)
 - [빠른 시작](#빠른-시작)
-- [진입점 고르기](#진입점-고르기)
+- [제품 진입점](#제품-진입점)
 - [AI 에이전트에서 쓰기](#ai-에이전트에서-쓰기)
 - [AI 에이전트에 꽂기 (MCP)](#ai-에이전트에-꽂기-mcp)
-- [기능 상태](#기능-상태)
+- [능력 계약](#능력-계약)
 - [보장하는 것과 아직 아닌 것](#보장하는-것과-아직-아닌-것)
 - [스코프와 플랫폼 방향](#스코프와-플랫폼-방향)
 - [보안 모델](#보안-모델)
 - [어떻게 도나 (한 장)](#어떻게-도나-한-장)
 - [형태가 값을 하는 자리](#형태가-값을-하는-자리)
 - [Web Computer 실행](#web-computer-실행)
-- [공개 표면](#공개-표면)
+- [능력 경로](#능력-경로)
 - [의존성 경계](#의존성-경계)
 - [셋업](#셋업)
 - [설치와 핀](#설치와-핀)
@@ -145,7 +145,7 @@ fail-closed network policy를 적용하면 선택한 데이터도 code 실행 �
   자세한 경계는 [보안 모델](#보안-모델)에 있다.
 - **다시 만들지 않고 복원.** 패키지와 데이터를 이미 로드한 상태를 체크포인트로 저장하고 그 지점으로 되돌린다 - 재실행도, 재설치도 없이.
 - **탭을 닫아도 머신은 유지**(`open()` / `open({ name })`). 여러 탭이 하나의 논리적 Python 상태를 공유한다. 완료된 명령마다 메모리, `/home/web`, 전달된 결과가 반환 전에 자동 commit되고, 리더가 닫히면 다른 탭이 그 OPFS generation에서 계속한다.
-- **한 상태에서 분기**(Beta - `machine.history` + `machine.proc()`). 에이전트가 같은 준비 상태에서 여러 코드 후보를 독립적으로 실행하고 결과를 비교한다.
+- **한 상태에서 분기**(`machine.history` + `machine.proc()`). 에이전트가 같은 준비 상태에서 여러 코드 후보를 독립적으로 실행하고 결과를 비교한다.
 - **fail-closed 정책 아래 데이터는 로컬에 둘 수 있다.** 데이터를 탭에서 처리하고 선택한
   결과만 내보낸다. 로컬 실행만으로는 no-exfiltration 경계가 되지 않는다.
 - **격리된 실행.** Python이 메인 UI 스레드와 분리돼, 관리하는 여러 워커에서 돈다.
@@ -153,7 +153,7 @@ fail-closed network policy를 적용하면 선택한 데이터도 code 실행 �
 ## 빠른 시작
 
 ```sh
-npm install pyproc
+npm install pyproc@0.0.11 --save-exact
 npx pyproc-engine --out public/vendor/pyodide
 ```
 
@@ -193,18 +193,18 @@ console.log(machine.run("len(values)"));      // 3
 
 > 위 기본은 Chromium 브라우저만 있으면 된다. `PyProc`(프로세스 OS)와 소켓은 `crossOriginIsolated`(`COOP: same-origin`, `COEP: require-corp`)와 same-origin 워커도 필요하다 - [셋업](#셋업) 참조. `checkEnvironment()`로 확인하라.
 
-## 진입점 고르기
+## 제품 진입점
 
-한 번에 한 질문, 명백한 문 하나:
+`pyproc`에서 import한다. 이 root가 완전한 제품 진입점이며 subpath는 고급 배관이지 경쟁 제품이 아니다.
 
-| 필요한 것 | 진입점 | 얻는 것 |
+| 필요한 것 | root 진입점 | 반환 handle과 capability 경로 |
 |---|---|---|
-| 내구 Python Machine | `open()` 또는 `open({ name })` | 멀티탭 Machine 핸들. 완료된 run은 settle 전에 commit |
-| 이 탭에서 파이썬 실행(부활 불요) | `boot()` | 머신 핸들 (`run`/`fs`/`history`/`proc`, `runtime` 탈출구) |
-| 저장·내보내기·부활하는 상태 | `boot({ deterministic: true, ...manifest })` | 같은 핸들. `history.export`/`history.save`가 성립 |
-| 이동 가능한 머신 파일 열기 | `open(blob, { trustedPublicKeys })` | 무결성/신뢰 검증 뒤 머신 핸들 |
-| 저장한 세션의 부활 | `open({ dir, name })` | 머신 핸들(같은 매니페스트 리플레이 + 델타) |
-| 진짜 병렬 / 라이브 fork | `await machine.proc({ lanes, replay })` | 워커 프로세스 풀 (`map`/`fork`/`signal`) |
+| 내구 Python Machine | `open()` 또는 `open({ name })` | `KernelElection`: async `run`, 자동 내구 commit, 상태, leader 승계, cold reopen |
+| 휘발 Python Machine | `boot()` | `PyprocMachine`: `run`, `fs`, `history`, `term`, `proc`, 고급 `runtime` 탈출구 |
+| 이동 또는 저장한 휘발 Machine | `open(blob, trust)` 또는 `open({ dir, name })` | source별 무결성, trust, replay 검증 뒤 `PyprocMachine` |
+| multi-guest 브라우저 컴퓨터 | `createWebComputer()` | `WebComputer`: guest lifecycle, 공유 장치, 내구 generation, 서명 computer image |
+| 플랫폼 준비 상태 | `checkEnvironment()` | 해결 방법이 포함된 구조화 capability report |
+| 프로그램 실패 처리 | `PyProcError`, `PYPROC_ERROR_CODES` | 모든 root 경로가 공유하는 단일 error-code 계약 |
 
 공통 기반은 결정적 리플레이다: `boot({ deterministic: true })`가 부팅 엔트로피를 고정해 같은
 매니페스트가 리플레이 경계(cp0)에서 바이트 동일한 메모리를 재현하고, 그것이 델타 저장/저널 부활/워커 간 `fork`를
@@ -256,21 +256,17 @@ same-origin MCP 제어 트래픽만 열린다. 부팅 자체도 CDN 요청이 �
 도구 결과는 의도적으로 MCP 채널을 건너므로 호출 애플리케이션이 출력 검토와 인가를 계속 소유한다.
 `npm run test:mcp`가 전체 왕복과 통제 수신기를 향한 `import js` / `fetch` 외부 전송 시도를 CI에서 검증한다.
 
-## 기능 상태
+## 능력 계약
 
-브라우저 게이트 커버리지 기준의 정직한 성숙도. 아래는 전부 런타임 게이트가 있고, 라벨은 오늘 얼마나 걸 수 있는지다.
+이 상태는 pyproc 자체 불변식만 잰다. 채택, 사용자 수, 다른 저장소, 릴리즈 경과, 시장 반응은 어떤 상태에도 영향을 주지 않는다. `Complete`는 선언한 실행·실패·복구 계약을 설치 package와 실제 browser가 증명한다는 뜻이고, `Bounded`는 명시된 자체 경계 안에서 동작하며, `Probe`는 기본 진입점 밖의 선택 기전이다.
 
-| 영역 | 상태 |
+| 영역 | 계약 상태 |
 |---|---|
-| Python 실행 (`boot` / `run` / `loadPackages`) | Stable |
-| 프로세스 OS: 스냅샷-fork 스폰, `map` 병렬 (`PyProc`) | Beta |
-| 복원 기반 리액티비티 (`enableReactive`: 체크포인트 / 시간여행) | Beta |
-| 커널 내 ASGI (`AsgiServer`) | Beta |
-| 선언 환경 레인 (`boot` 매니페스트: `packages` / `env` / `setup` / `wheelDir`), wheel 캐시, 터미널, syscall 브리지 | Beta |
-| 세션 부활 + `.pymachine` 이미지, 머신 저널(WAL) | Experimental |
-| 라이브 프로세스 fork, 장치 FS, init / cron / resume hook, 가상 오리진 URL | Experimental |
-| 기본 내구 Machine(`open()` / `open({ name })` -> `KernelElection`) | Beta |
-| non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Research preview |
+| Python 실행 (`boot` / `run` / `loadPackages`) | Complete |
+| 기본 내구 Machine(`open()` / `open({ name })`) | Complete |
+| 프로세스 OS, 복원 reactivity, ASGI, 선언 environment, terminal, machine image, journal | Bounded |
+| Device FS, permission jail, GPU, socket | Probe |
+| non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## 보장하는 것과 아직 아닌 것
 
@@ -278,15 +274,15 @@ same-origin MCP 제어 트래픽만 열린다. 부팅 자체도 CDN 요청이 �
 
 - 지원 브라우저에서 Pyodide 기반 Python 실행.
 - 명시된 실행 경계에서 WASM 힙 상태 저장.
-- 호환되는 런타임 조건에서 상태 복원.
+- 기록된 engine과 manifest 계약 아래 상태 복원.
 - 워커 기반 실행 격리.
 
 **아직 보장하지 않음:**
 
 - 임의 시점의 완전한 프로세스 복제 - 진행 중인 네트워크 요청과 Promise는 복원되지 않는다.
-- 효과를 확인할 수 없는 조용한 재실행. 일반 follower는 leader의 heap을 검사할 수 없으므로 전송된 호출이 승계 중 끊기면 `PYPROC_RPC_OUTCOME_UNKNOWN`을 반환하고 다시 보내지 않는다. 자기 session에 JS proxy가 없음을 증명할 수 있는 durable caller controller만 같은 request ID를 대기시켰다가 승계자에게 한 번 묻는다. 살아 있는 leader의 timeout과 caller 소멸은 다시 보내지 않는다. 정본은 [durable RPC 상태표](docs/consuming/contract.md#durable-rpc-state-table-normative)다.
+- 효과를 확인할 수 없는 조용한 재실행. 일반 follower는 leader의 heap을 검사할 수 없으므로 전송된 호출이 승계 중 끊기면 `PYPROC_RPC_OUTCOME_UNKNOWN`을 반환하고 다시 보내지 않는다. 자기 session에 JS proxy가 없음을 증명할 수 있는 durable caller controller만 같은 request ID를 대기시켰다가 승계자에게 한 번 묻는다. 살아 있는 leader의 timeout과 caller 소멸은 다시 보내지 않는다. 정본은 [durable RPC 상태표](docs/usage/contract.md#durable-rpc-state-table-normative)다.
 - 모든 Python 패키지 - 네이티브 C 확장 wheel은 정적 빌드가 필요하다(순수 파이썬 + Pyodide 빌드 패키지는 된다).
-- Pyodide 버전 간 snapshot 호환. `.pymachine` 이동성은 같은 엔진/매니페스트와 명시적 신뢰 또는 검증된 서명자를 전제로 한다.
+- Pyodide 버전을 건너는 snapshot loading. `.pymachine` 이동성은 기록된 engine/manifest와 명시적 trust 또는 검증된 signer를 요구하며 불일치는 fail-closed다.
 - GPU / 네이티브 Linux 패키지, 완전한 POSIX `fork`, 임의 네이티브 바이너리.
 
 ## 스코프와 플랫폼 방향
@@ -310,7 +306,7 @@ pyproc의 일은 이것들을 위 칸으로 밀어 올리는 것과 platform이 
 - **upstream 대기**(지금 막혔으나 다시 열림): 네이티브 C 확장 wheel(Emscripten 정적 빌드 / WebAssembly 컴포넌트 모델), 진짜 threading.
 - **웹 보안상 영구 벽**: 임의 인바운드 연결과 임의 네이티브 바이너리는 외부 릴레이나 에이전트가 필요하다.
 
-현재 격차 지도는 [능력 매트릭스](docs/consuming/capabilityMatrix.md)다. host 아키텍처의 정본은 출하되는 [`src/machine`](src/machine/) 계약이고, Dual-Boot 증거는 실행 가능한 [북극성 원장](tests/northStar.mjs)과 [Web Machine 브라우저 게이트](tests/webMachine/)에 등록돼 있다.
+현재 격차 지도는 [능력 매트릭스](docs/usage/capabilityMatrix.md)다. host 아키텍처의 정본은 출하되는 [`src/machine`](src/machine/) 계약이고, Dual-Boot 증거는 실행 가능한 [북극성 원장](tests/northStar.mjs)과 [Web Machine 브라우저 게이트](tests/webMachine/)에 등록돼 있다.
 
 ## 보안 모델
 
@@ -365,26 +361,14 @@ Linux 실행 catalog는 프로젝트가 재현 빌드한 guest image를 가리�
 전체 legal-info, SBOM, config와 재현 manifest를 한 자산 릴리즈에서 제공하며, image binary는
 git과 npm package에서 계속 제외된다.
 
-## 공개 표면
+## 능력 경로
 
-능력은 opt-in이다. 필요한 것만 켜고, 엔진 내부(`HEAPU8` 등)가 아니라 능력 계약을 소비한다. 이 README는 공개 표면의 지도이고, 제품 판단 정본은 [능력 매트릭스](docs/consuming/capabilityMatrix.md)에 있다.
-
-루트 표면은 명사 하나와 그 동사들이다: **역사를 가진 머신**. 진입 동사 둘이 머신 핸들을 돌려주고, 부활 동사 하나가 어디서 왔든 머신을 되살리며, 나머지는 전부 핸들의 어휘다.
-
-| 필요한 것 | 공개 export | 실행 증거 |
-| --- | --- | --- |
-| Python 머신 부팅과 실행 | `boot` (머신 핸들 반환: `machine.run`, `machine.runAsync`, `machine.fs`, `machine.term`, 탈출구 `machine.runtime`) | [basic example](examples/basic.html), [browser gate](tests/browser/gate.html) |
-| 시간여행·분기·내구 커밋 | `boot` 핸들의 `machine.history` (`checkpoint`/`restore`/`tree`는 휘발, `commit`/`recover`/`watch`/`export`/`save`는 내구·내용주소) | [browser gate](tests/browser/gate.html), [machine demo](examples/machine.html) |
-| 브라우저 worker를 프로세스로(독립 GIL) | `boot` 핸들의 `machine.proc` (풀 동사: `map`, `fork`, `forkMany`, `mapArray`, `matmul`) | [process demo](examples/processOs.html), [speed lab](examples/speedLab.html) |
-| 파일·저장 세션·다른 탭에서 머신 부활 | `open` (기본/이름 있는 Machine, 서명 bundle blob, `{ dir, name }` 세션) | [immortal demo](examples/immortal.html), [machine demo](examples/machine.html) |
-| 브라우저 컴퓨터 조립(다중 guest OS host) | `createWebComputer` | [웹 컴퓨터 앱](apps/webComputer/index.html), [웹 컴퓨터 게이트](tests/browser/webComputerProduct.mjs) |
-| 부팅 전 플랫폼 준비 확인 | `checkEnvironment` | [browser gate](tests/browser/gate.html) |
-| 실패를 프로그램적으로 분기 | `PyProcError`, `PYPROC_ERROR_CODES` | [structure gate](tests/run.mjs), [browser gate](tests/browser/gate.html) |
+먼저 [제품 진입점](#제품-진입점) 표에서 시작한다. 그 handle 아래 capability는 opt-in이며 engine 내부(`HEAPU8` 등)가 아니라 capability 계약을 쓴다. 자체 능력표 전체는 [능력 매트릭스](docs/usage/capabilityMatrix.md)에 있다.
 
 핸들 아래의 계약은 plumbing 서브패스가 나른다:
 
 ```js
-// 자체 부팅한 Pyodide 인스턴스를 pyproc에 넘기는 채택 이음새.
+// 자체 부팅한 Pyodide 인스턴스를 pyproc에 넘기는 고급 engine 이음새.
 import { Runtime, bootRuntime, checkEnvironment } from "pyproc/runtime";
 // 내구 상태 커널: 오브젝트 모델, commit/open 프로토콜, store, 서명 bundle.
 import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
@@ -398,7 +382,7 @@ import { SocketBridge } from "pyproc/socket";
 import { bootWasi } from "pyproc/wasi";
 ```
 
-능력별 예제 중심 상세 문서는 [docs/](docs/README.md)에 있다. 이 README는 지도로 둔다. 제품에서 어떤 능력을 켤지 판단할 때는 [능력 매트릭스](docs/consuming/capabilityMatrix.md)를 본다. 각 공개 export를 제품 가치, 상태, 설정 조건, 실행 표면, 게이트, 경계로 묶어 둔다.
+능력별 예제 중심 상세 문서는 [docs/](docs/README.md)에 있다. 이 README는 지도로 둔다. 제품에서 어떤 능력을 켤지 판단할 때는 [능력 매트릭스](docs/usage/capabilityMatrix.md)를 본다. 각 공개 export를 제품 가치, 상태, 설정 조건, 실행 표면, 게이트, 경계로 묶어 둔다.
 
 배포 자산 manifest:
 
@@ -457,7 +441,7 @@ await boot({ indexURL: "https://cdn.jsdelivr.net/pyodide/v314.0.2/full/" });
 
 기본 runtime은 fetch되는 core 바이트를 다시 검증한다. custom engine loader는 자기 trust policy를
 소유한다. pin 버전과 배포 경계가 package 계약이다:
-[docs/consuming/contract.md](docs/consuming/contract.md).
+[docs/usage/contract.md](docs/usage/contract.md).
 
 pyproc을 띄우는 페이지를 다음 헤더로 서빙한다:
 
@@ -500,7 +484,7 @@ export default { server: { headers: {
 
 ## 설치와 핀
 
-npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc`. 빌드 단계 없음(네이티브 ESM). 정확한 버전으로 핀한다 - 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 리플레이 보장은 버전에 묶여 있다:
+npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.11 --save-exact`. 빌드 단계는 없다(네이티브 ESM). 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 replay 보장은 버전에 묶여 있다:
 
 ```jsonc
 // package.json
@@ -509,23 +493,15 @@ npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm inst
 
 `pyproc/runtime`과 typed API subpath 항목은 0.0.11에 출하된다. 아직 릴리즈하지 않은 커밋을
 소비할 때는 SHA 핀(`github:eddmpython/pyproc#<commit-sha>`)을 쓴다. 전체 정책:
-[docs/consuming/contract.md](docs/consuming/contract.md).
-
-설치 없이 CDN에서 바로 import도 된다(단일 런타임 경로만; 프로세스 OS는 워커 파일이 페이지와 same-origin이라야 한다):
-
-```html
-<script type="module">
-  import { boot } from "https://cdn.jsdelivr.net/npm/pyproc@0.0.11/index.js";
-</script>
-```
+[docs/usage/contract.md](docs/usage/contract.md).
 
 ## 북극성
 
 **브라우저를 영속하는 컴퓨터로 만들고, Python을 기본 Machine으로 삼으며, 그 컴퓨터를 pyproc 자신으로 만든다.**
 
-점수의 근거는 CI에서 실제로 도는 게이트다. 자동으로 실행되지 않는 경로는 구현이 아무리 완성돼 있어도 점수로 세지 않고, 증거에 수동 probe가 섞인 축은 9점 아래로 묶인다. 10점은 그 축이 끝난 상태다: 실제 브라우저에서 반복 검증됐고 공개 표면에 우회로가 남지 않았다.
+점수는 pyproc이 소유한 능력과 불변식만 잰다. 채택, 사용자 수, 릴리즈 경과, 다른 저장소, 시장 반응은 점수가 아니다. 자동 gate가 돌지 않는 경로는 점수로 세지 않고 수동 증거가 섞인 축은 9점 아래로 묶는다. 10점은 능력이 끝난 상태다: 실제 브라우저에서 반복 검증됐고 공개 표면에 우회로가 없다.
 
-지금 총점은 **103.7 / 120, 평균 8.6 / 10**이다.
+지금 총점은 **105.2 / 120, 평균 8.8 / 10**이다.
 
 | 축 | 현재 점수 | 지금 서 있는 자리 | 도달해야 하는 자리 | 다음 수 |
 |---|---:|---|---|---|
@@ -533,14 +509,14 @@ npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm inst
 | 되감을 수 있는 상태 | 9.0 | 체크포인트, 복원, 분기, 가지치기가 완전 힙 해시 위에서 실행 경계마다 돈다: 전 바이트 동일 full-heap 왕복, 분기 나무의 형제 델타 격리, 경계를 어겼을 때 오염된 복원 대신 전체 재해시로 물러나는 경로까지 게이트가 문다. 델타 건전성과 나무 무결성은 Node property/fuzz 게이트가 덮는다. 임의 순간의 포획은 아직 아니다: 진행 중인 promise와 네트워크 요청은 경계 밖에 산다. | 떠날 때 진행 중이던 작업까지 포함해 과거의 어느 상태든 즉시 돌아온다. | 실행 경계가 아니라 임의 순간을 포획한다: 진행 중인 promise와 요청을 경계 안으로 들인다 |
 | 프로세스와 진짜 병렬 | 8.5 | 워커가 프로세스다: 스냅샷 fork 생성, `map`, `forkMany`, 시그널 표, kill, 잡 컨트롤, 중첩 컨테이너, 풀 소진, mid-flight 워커 사망까지 브라우저 게이트에서 수렴한다. 독립 인터프리터 N개 = 독립 GIL N개라 병렬성이 스케줄이 아니라 구조에서 나온다. 공유 메모리 스레딩과 임의의 POSIX 프로세스 트리는 없다. | 진짜 운영체제의 어휘를 가진 프로세스 모델. 플랫폼이 허락하는 순간 스레드까지. | nogil과 WASM 스레드가 upstream에 착륙하는 순간 프로세스 어휘를 바꾸지 않은 채 공유 메모리 스레딩을 받는다 |
 | 살아남는 디스크 | 9.0 | 상태 커널이 내용 주소 세대를 쓰기 순서 법 아래 OPFS에 커밋한다: 변조된 blob은 적발되고, 파손된 HEAD는 첫 부팅을 위장하지 않고 PREV로 후퇴하며, 저널은 pack되고, 바뀐 것이 없는 재커밋은 0바이트를 쓴다. 브라우저 컴퓨터가 프로세스 재시작 뒤 복원하는 것이 바로 그 내구 세대다. 디스크 위 포맷은 이제 하나다: 구 봉투 reader를 일몰했고, 옛 버전이 쓴 파일은 반쯤 읽히는 대신 무엇을 해야 하는지와 함께 거부된다. | 진짜 파일시스템의 보장을 가진 내구성: 찢어진 커밋 없음, 조용한 손실 없음, 포맷은 하나. | OPFS quota 축출을 찢어진 커밋만큼 명시적으로 다룬다: 지금 지속성은 best-effort 요청이고 거절은 브라우저 휴리스틱이다 |
-| 탭보다 오래 사는 머신 | 9.7 | 인자 없는 `open()`이 휘발 kernel 대신 이름 있는 OPFS Machine으로 들어간다. 명령과 commit은 직렬화되고, 완료된 run은 heap, `/home/web`, 전달된 outcome을 실은 generation에 도달한 뒤 settle된다. 설치 package는 수동 commit 없이 그 상태를 cold reopen한다. leader 선출이 동일 origin tab을 가로지르고 반복 request ID는 durable record로 답하며 commit 실패는 non-retryable outcome-unknown이다. 일반 follower는 끊긴 leader heap의 이식성을 증명할 수 없으므로 in-flight failover는 여전히 `PYPROC_RPC_OUTCOME_UNKNOWN`이다. 전체 규칙은 [durable RPC 상태표](docs/consuming/contract.md#durable-rpc-state-table-normative)다. | 탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다. | fenced portability fact를 일반 follower에게 전달해 outcome-record 경로를 안전하게 쓰게 한다. proxy-bearing heap은 outcome-unknown으로 남는다 |
-| 들고 다니는 머신 | 9.0 | `.pymachine`과 `.webmachine`은 서명된 내용 주소 봉투다: 서명과 신뢰 공개키 검증, 바이트 변조 거부, 레이아웃 독립 재파싱, 워커 사이 부활, 문맥을 건너는 이식은 조용히 열리는 대신 `h0` 불일치로 거부된다. 제품 게이트가 서명 이미지를 내보내고 새 브라우저 프로필에서 명시적 서명자 신뢰 화면을 거쳐 가져온다. 이식성은 아직 같은 엔진과 같은 매니페스트를 전제하고, JS 프록시 핸들은 이미지를 건너지 못해서, 프록시를 심는 표면은 부활 커널의 프록시 경로 전부를 오염시킨다. packet 장치와 권한 감옥은 값 경계로 옮겨 부활 뒤에도 살아나는 것을 CI가 물지만, 블로킹 표면(input() 뒤의 syscall 다리, socket, GPU)은 구조상 옮길 수 없어 이미지를 뜰 때 명시 승인 없이는 거부된다. | 머신 파일이 검증된 서명자에게서 왔다면 엔진 버전을 건너서도 호환 프로필 어디서나 열린다. | 물질화 뒤 핸들을 다시 묶는 엔진 층 길이나 핸들 없는 블로킹 기전을 찾아, input()을 쓴 머신도 이식 가능한 이미지를 내게 한다; 매니페스트 정확 일치를 요구하는 대신 협상해서 엔진 버전을 건너 이미지를 연다 |
-| guest를 부팅하는 컴퓨터 | 9.0 | Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 실려 나가고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 소비한다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 이미지로 옮긴다. x86 레인은 실제 Python과 Linux guest를 한 switch에 올린다. Linux가 Python을 ping하고 Python이 보낸 Ethernet frame이 Linux NIC 수신 계수를 올리며, 양방향이 한 세대 commit과 process cold restore 뒤에도 살아난다. guest를 자기 워커에 얹는 길도 있어 CPU 바운드 guest가 다른 guest를 멈추지 않는다. 프레임을 캔버스에 올리는 경로도 CI가 문다. 기본 Linux image는 프로젝트 재현 빌드이며 exact source, 전체 legal material, SBOM, config, 독립 빌드 영수증을 함께 제공하는 release에 hash 고정된다. | 어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다. | 5단: memory64를 채택해 큰 guest가 가장 먼저 부딪히는 모듈별 힙 상한을 올린다; 7단: Python과 Linux 옆에 Node guest를 부팅해 JavaScript CLI 도구를 이 컴퓨터의 거주자로 만든다 |
+| 탭보다 오래 사는 머신 | 9.7 | 인자 없는 `open()`이 휘발 kernel 대신 이름 있는 OPFS Machine으로 들어간다. 명령과 commit은 직렬화되고, 완료된 run은 heap, `/home/web`, 전달된 outcome을 실은 generation에 도달한 뒤 settle된다. 설치 package는 수동 commit 없이 그 상태를 cold reopen한다. leader 선출이 동일 origin tab을 가로지르고 반복 request ID는 durable record로 답하며 commit 실패는 non-retryable outcome-unknown이다. 일반 follower는 끊긴 leader heap의 이식성을 증명할 수 없으므로 in-flight failover는 여전히 `PYPROC_RPC_OUTCOME_UNKNOWN`이다. 전체 규칙은 [durable RPC 상태표](docs/usage/contract.md#durable-rpc-state-table-normative)다. | 탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다. | fenced portability fact를 일반 follower에게 전달해 outcome-record 경로를 안전하게 쓰게 한다. proxy-bearing heap은 outcome-unknown으로 남는다 |
+| 들고 다니는 머신 | 9.0 | `.pymachine`과 `.webmachine`은 서명된 내용 주소 봉투다: 서명과 신뢰 공개키 검증, 바이트 변조 거부, 레이아웃 독립 재파싱, 워커 사이 부활, 문맥을 건너는 이식은 조용히 열리는 대신 `h0` 불일치로 거부된다. 제품 게이트가 서명 이미지를 내보내고 새 브라우저 프로필에서 명시적 서명자 신뢰 화면을 거쳐 가져온다. 이식성은 아직 같은 엔진과 같은 매니페스트를 전제하고, JS 프록시 핸들은 이미지를 건너지 못해서, 프록시를 심는 표면은 부활 커널의 프록시 경로 전부를 오염시킨다. packet 장치와 권한 감옥은 값 경계로 옮겨 부활 뒤에도 살아나는 것을 CI가 물지만, 블로킹 표면(input() 뒤의 syscall 다리, socket, GPU)은 구조상 옮길 수 없어 이미지를 뜰 때 명시 승인 없이는 거부된다. | 머신 파일이 명시된 실행 계약 아래 새 프로필에서 오프라인으로 검증·부활하고, 모든 불일치는 행동 가능한 오류로 거부된다. | 물질화 뒤 핸들을 다시 묶는 엔진 층 길이나 핸들 없는 블로킹 기전을 찾아, input()을 쓴 머신도 이식 가능한 이미지를 내게 한다; 새 브라우저 프로필에서 서명 image의 오프라인 부활을 증명하고 engine 또는 manifest 불일치를 모두 거부한다 |
+| guest를 부팅하는 컴퓨터 | 9.0 | Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 살고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 쓴다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 image로 옮긴다. x86 레인은 실제 Python과 Linux guest를 한 switch에 올리고 양방향 통신을 한 세대 commit과 process cold restore 뒤에도 유지한다. guest를 자기 worker에 얹는 길과 frame을 canvas에 올리는 경로도 CI가 문다. 재현 Linux build는 exact source, 전체 legal inventory, SBOM, config, 독립 byte-identical build 영수증에 대조된다. | 어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다. | 5단: engine 계약이 증명할 수 있게 되면 memory64를 켜서 큰 guest가 먼저 부딪히는 모듈별 힙 상한을 올린다; 7단: Python과 Linux 옆에 Node guest를 부팅해 JavaScript CLI 도구를 이 컴퓨터의 거주자로 만든다 |
 | 엔진보다 오래 사는 프리미티브 | 7.0 | 비 Pyodide 레인이 브라우저에서 WASI 위 CPython 3.14.6을 부팅하고, 체크포인트, 시간여행, 반복 분기, 순수 파이썬 wheel 설치를 같은 계약으로 통과한다. 프리미티브가 Pyodide 내부가 아니라는 증명이 이것이다. 그 레인에는 `dlopen`이 없어 동적 C 확장을 못 싣고, 값 다리는 JSON뿐이다. | 모든 프리미티브가 어떤 CPython-on-WebAssembly 엔진에서도 돌고, 패키지 도달 범위도 같다. | WASI 격차를 닫는다: C 확장을 위한 동적 링킹(cpython#142234)과 JSON만이 아닌 값 다리 |
 | 브라우저 방식의 네트워크 | 8.0 | 커널 내 ASGI 서버가 파이썬으로 `fetch`에 답하고 동시 요청이 서로를 덮지 않는다. 가상 오리진이 설치 패키지에서 그것을 서빙하고, `urllib`이 syscall 다리로 진짜 HTTP를 하며, 권한 감옥이 host별 `connectSrc`를 가른다. Python-to-Python 통신은 무자산 레인이, 실제 교차 엔진 경로는 x86 레인이 증명한다. Linux가 Python을 ping하고 Python이 보낸 Ethernet frame이 process cold restore 전후 Linux NIC에 도착한다. 아웃바운드 raw 소켓은 여전히 이 패키지가 배송하지 않는 WS-TCP 릴레이를 요구하지만, 밀폐 레인이 저장소 안 릴레이와 로컬 TCP 오리진을 띄우고 Python `urllib`로 바이트를 읽는다. | 파이썬 네트워크 코드가 고쳐지지 않고 돌고, 읽는 사람이 알아야 할 것은 릴레이 경계 하나뿐이다. | 1단: 탭 안에서 TLS를 종단해 릴레이가 읽지 못하는 암호문만 나르게 하고 신뢰를 요구하지 않게 한다; 2단: WebSocket 하나가 소켓 여럿을 나르게 한다(Wisp 계열 릴레이 강화); 3단: 표면 동결이 풀리는 대로 WebRTC 위에 탭 사이 직접 전송을 opt-in subpath로 연다; 4단: Direct Sockets가 진짜 인바운드 listen을 여는 날을 위해 Isolated Web App 패키징 레인을 준비해 둔다 |
 | 로컬 파이썬이 하는 전부 | 7.5 | Pyodide의 `dlopen`이 이미 네이티브 C 확장 wheel(numpy, pandas, scipy 등)을 싣고, 패키지가 캐시에서 설치되고, 머신 안에서 `%pip`과 `freeze`가 돌고, WASI 레인이 순수 파이썬 wheel을 설치한다. 없는 것은 롱테일이다: 임의 패키지는 게시된 pyemscripten wheel을 요구하고, numpy에는 SIMD 빌드가 없고, 스레딩은 upstream 대기이며, GPU 레인은 헤드리스 어댑터가 없어 CI가 무는 것은 통합 경로가 컴파일에 넘기는 WGSL의 바이트 동일성이지 GPU에서의 결과가 아니다. | 로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다. | 얇은 곳의 패키지 도달 범위를 넓힌다: 롱테일의 pyemscripten wheel과 SIMD numpy 빌드; 6단: 일하는 머신이 전제하는 도구(git·ripgrep 급)를 wasm 거주자로 안에 들여 셸 호출이 진짜가 되게 한다 |
-| 안정 커널 표면 하나 | 8.5 | 공개 표면은 명사 하나와 그 동사들이고 구조, 타입, 설치 package gate, 실제 브라우저 실행이 고정한다. packed artifact가 root와 subpath import, 동봉 선언, worker emit, runtime asset을 package 내부 경로 없이 증명한다. | 지원하는 모든 import 패턴이 gate 아래 있고 deep path가 없는 exact-version 공개 표면과 동봉 타입 계약 하나. | 지원하는 모든 공개 import 패턴을 installed-package와 browser gate 아래 둔다; 8단: 브라우저 밖에 남는 몫을 위해 로컬 에이전트 경계(페어링·인가·능력 목록)를 한 번 명세한다 |
-| 검증 가능한 공급망 | 8.8 | 게시된 무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package 354개를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. 자산 CLI는 worker와 Service Worker graph를 별도로 봉인하고 나쁜 hash는 spawn을 거부한다. npm은 OIDC provenance로 게시되고 Machine image는 import 전에 서명자를 검증한다. 기본 Linux guest는 독립 빌드 둘의 byte-identical 결과와 source, legal material, SBOM, config, manifest를 hash-pin된 project release에 둔다. | 실행되는 모든 바이트가 남이 다시 빌드하고 검증할 수 있는 출처로 이어진다. | 남은 firmware와 emulator 자산도 같은 프로젝트 통제 release 규율로 재현한다 |
+| 한곳에 모인 제품 진입점 | 10.0 | `pyproc` root가 전체 선택을 모은다. `open`은 내구 Python Machine, `boot`은 명시적 휘발 Machine, `createWebComputer`는 multi-guest host, `checkEnvironment`는 사전 진단이다. 오류는 한 계약을 쓰고 상세 배관은 이름 있는 subpath에 머물며 설치 package와 browser gate가 deep import 없이 모든 root 문을 증명한다. | 제품의 모든 문, 각 문이 돌려주는 handle, 그 아래 capability 경로를 하나의 root import에서 보여주며 경쟁하는 최상위 정체성은 없다. |  |
+| 검증 가능한 공급망 | 8.8 | 무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. 자산 CLI는 worker와 Service Worker graph를 봉인하고 나쁜 hash는 spawn을 거부한다. Machine image는 import 전에 서명자를 검증하고 Linux guest build는 독립 byte-identical rebuild와 source, legal inventory, SBOM, config, manifest에 대조된다. | pyproc이 실행하는 모든 byte는 저장소 recipe로 build되거나 digest로 pin되고, 불일치는 실행 전에 실패한다. | 남은 firmware와 emulator 자산을 저장소 recipe로 두 번 build하고 최종 실행 graph의 모든 digest를 gate로 대조한다 |
 
 축 원장은 [tests/northStar.mjs](tests/northStar.mjs)다: 축마다 그 뒤에 선 실행 가능한 산출물을 등재하고, 등재된 게이트가 사라지거나 어떤 러너도 열지 않거나 CI에서 돌지 않으면 구조 게이트가 RED가 된다. 위 표는 그 원장에서 렌더한 것이라 문서를 고쳐서 점수를 올릴 수 없다. 각 축이 무엇을 뜻하고 무엇이 그 점수를 움직이는지는 [제품 방향](docs/product/vision.md#north-star-axes)에 있다.
 
@@ -552,12 +528,11 @@ npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm inst
 2. WebSocket 하나가 소켓 여럿을 나르게 한다(Wisp 계열 릴레이 강화) (움직이는 축: 브라우저 방식의 네트워크)
 3. 표면 동결이 풀리는 대로 WebRTC 위에 탭 사이 직접 전송을 opt-in subpath로 연다 (움직이는 축: 브라우저 방식의 네트워크)
 4. Direct Sockets가 진짜 인바운드 listen을 여는 날을 위해 Isolated Web App 패키징 레인을 준비해 둔다 (움직이는 축: 브라우저 방식의 네트워크)
-5. memory64를 채택해 큰 guest가 가장 먼저 부딪히는 모듈별 힙 상한을 올린다 (움직이는 축: guest를 부팅하는 컴퓨터)
+5. engine 계약이 증명할 수 있게 되면 memory64를 켜서 큰 guest가 먼저 부딪히는 모듈별 힙 상한을 올린다 (움직이는 축: guest를 부팅하는 컴퓨터)
 6. 일하는 머신이 전제하는 도구(git·ripgrep 급)를 wasm 거주자로 안에 들여 셸 호출이 진짜가 되게 한다 (움직이는 축: 로컬 파이썬이 하는 전부)
 7. Python과 Linux 옆에 Node guest를 부팅해 JavaScript CLI 도구를 이 컴퓨터의 거주자로 만든다 (움직이는 축: guest를 부팅하는 컴퓨터)
-8. 브라우저 밖에 남는 몫을 위해 로컬 에이전트 경계(페어링·인가·능력 목록)를 한 번 명세한다 (움직이는 축: 안정 커널 표면 하나)
 
-순서가 왜 이 순서인지와 우선순위를 재배열할 외부 트리거는 [제품 방향](docs/product/vision.md#where-the-ceiling-moves-next)에 있다. 단은 축 원장에 등재되므로, 자기가 움직인다고 주장한 점수에서 떨어져 나갈 수 없다.
+각 단의 저장소 내부 수용 조건과 순서는 [제품 방향](docs/product/vision.md#where-the-ceiling-moves-next)에 있다. 단은 축 원장에 등재되므로 외부 채택 신호가 점수나 작업 순서를 움직일 수 없다.
 
 ## 개발
 

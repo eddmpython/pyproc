@@ -54,7 +54,7 @@
     // The example gate (?gate): self-checks a REPL round trip and reports. A no-op when a person opens the page.
     const params = new URLSearchParams(location.search);
     const gateMode = params.has("gate");
-    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : undefined;
+    const INDEX = params.get("indexURL") ? new URL(params.get("indexURL"), location.href).href : new URL("../vendor/pyodide/", import.meta.url).href;
     const gateReport = (ok) => { if (!gateMode) return; fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: !!ok, checks: [{ name: document.title, pass: !!ok, info: out.textContent.slice(-180) }] }) }).catch(() => {}); };
 
     const machine = await boot({ indexURL: INDEX });

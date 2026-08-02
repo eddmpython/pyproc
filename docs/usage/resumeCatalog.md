@@ -5,7 +5,7 @@
 ## Shared contract
 
 - The default location is `/home/web/resume.py`. Use `rt.enableInit({ resumePath })` to name a different one.
-- After a revival the consumer calls `rt.enableInit().resume(reason)`. Inside `resume.py`, `reason` is readable as the global `pyprocResumeReason`.
+- After a revival the caller invokes `rt.enableInit().resume(reason)`. Inside `resume.py`, `reason` is readable as the global `pyprocResumeReason`.
 - The same file may run more than once, so it must be idempotent. Write table creation, directory creation, and cache rebuilds with `if not exists` and a retryable shape.
 - What to reopen is "anything whose platform state can be gone even though the object still looks present in the heap": SQLite connections, open file handles, SocketBridge/relay sessions, an ASGI app's global DB connection, browser device handles, in-memory caches of external permission tokens.
 - Treat the files persisted under `/home/web` and your explicit configuration as canonical. Do not trust a stale Python object.

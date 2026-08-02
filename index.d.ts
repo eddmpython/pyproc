@@ -1,5 +1,5 @@
 // Type declarations for the pyproc public surface. The source is plain ESM .js; this file is
-// what gives TypeScript consumers the contract. There is no build step, so it is maintained by
+// what gives TypeScript callers the contract. There is no build step, so it is maintained by
 // hand and updated together with the source.
 
 import type { PyProcAssetIntegrityManifest } from "./src/runtime/assets.js";
@@ -121,7 +121,7 @@ export interface BootOptions {
   assetIntegrity?: PyProcAssetIntegrityManifest;
   /** Replacement lock file, e.g. the output of Runtime.freeze(): the same versions reproduce with zero resolution. */
   lockFileURL?: string;
-  /** loadPyodide imported by a worker consumer, where there is no document. Passing it skips the script load and leaves globalThis untouched. */
+  /** loadPyodide imported by a worker caller, where there is no document. Passing it skips the script load and leaves globalThis untouched. */
   loadPyodide?: (cfg: unknown) => Promise<unknown>;
 }
 
@@ -253,7 +253,7 @@ export interface PyProcEntry {
   parentPid: number;
 }
 
-/** Capability contract that encapsulates WASM heap access. Consumers never touch HEAPU8 directly. */
+/** Capability contract that encapsulates WASM heap access. Callers never touch HEAPU8 directly. */
 declare class MemoryCapability {
   heap(): Uint8Array;
   byteLength(): number;
@@ -295,7 +295,7 @@ declare class ReactiveController {
    * Collects the user state between two checkpoints as { pages, bin }: the shared primitive
    * behind session save, journal commit, and image export. toIdx must be a live node, so call this
    * right after closing the boundary with checkpoint(). With opts.pack false, bin is null, which
-   * avoids a reallocation for consumers that only need the page list.
+   * avoids a reallocation for callers that only need the page list.
    */
   collectDelta(fromIdx?: number, toIdx?: number, opts?: { pack?: boolean }): { pages: number[]; bin: Uint8Array | null; sp: number | null; heapLen: number };
   /** Declares an external mutation: call it after an uninstrumented heap change (such as a live PyProxy call) and the next restoreLive is promoted to the rehash path. */
@@ -315,7 +315,7 @@ declare class ReactiveController {
   /**
    * Backs the base heap up to a file handle. This does not reduce RAM, because the restore path
    * assumes the base stays resident; pruneTo and dispose are the canonical memory relief valves.
-   * The consumer supplies the handle.
+   * The caller supplies the handle.
    */
   saveBase(dir: FileSystemDirectoryHandle, name: string): Promise<{ bytes: number }>;
   loadBase(dir: FileSystemDirectoryHandle, name: string): Promise<{ bytes: number }>;
@@ -385,7 +385,7 @@ declare class AsgiServer {
 
 /**
  * Gives the Python server a real URL. Register pyprocSw.js (an asset in the same folder) on the
- * consumer origin with navigator.serviceWorker.register(".../pyprocSw.js?asgi=/pyproc/") and every
+ * caller origin with navigator.serviceWorker.register(".../pyprocSw.js?asgi=/pyproc/") and every
  * fetch under that prefix is answered by AsgiServer through this binding. The SW only routes; the
  * kernel produces the response body. bind() registers the kernel with the SW (a hello), so fetches
  * from documents served on the virtual origin (an iframe or another tab) also route to the kernel.
@@ -656,7 +656,7 @@ declare class Init {
 }
 
 export interface JournalConfig {
-  /** Directory the journal lives in (OPFS or similar). The consumer supplies it. */
+  /** Directory the journal lives in (OPFS or similar). The caller supplies it. */
   dir: FileSystemDirectoryHandle;
   /** Controller whose cp0 is the replay boundary (the reactive from bootSession). Required for revival. */
   reactive: ReactiveController;
@@ -680,8 +680,8 @@ export interface JournalConfig {
   /**
    * Defaults to false. When true, a commit is followed by reactive.pruneTo(liveIdx), leaving only
    * the live path of the checkpoint tree: the RAM relief valve for a long-lived machine. If the
-   * same controller is shared with another consumer (Terminal's %undo marks, for instance) their
-   * nodes are cut too, so the decision belongs to the consumer.
+   * same controller is shared with another caller (Terminal's %undo marks, for instance) their
+   * nodes are cut too, so the decision belongs to the caller.
    */
   pruneAfterCommit?: boolean;
 }
@@ -749,7 +749,7 @@ declare class MachineJournal {
    * it was denied or cannot be asked. A denial does not stop the journal - it means the browser may
    * evict this machine under pressure. A surviving committed marker makes missing generations fail
    * with PYPROC_JOURNAL_EVICTED, but origin-wide eviction can remove the marker too and is then
-   * indistinguishable from a first boot. Consumers that need durability across eviction export an
+   * indistinguishable from a first boot. Callers that need durability across eviction export an
    * image outside the origin rather than relying on the journal alone.
    */
   readonly persistentStorage: boolean | null;
@@ -809,7 +809,7 @@ declare class Terminal {
 }
 
 export interface WheelCacheConfig {
-  /** Directory the wheel bytes are stored in (OPFS or similar). The consumer supplies it. */
+  /** Directory the wheel bytes are stored in (OPFS or similar). The caller supplies it. */
   dir: FileSystemDirectoryHandle;
 }
 
@@ -822,7 +822,7 @@ declare class WheelCache {
 }
 
 /**
- * Engine-independent general file IO (Runtime.fs), so consumers read and write files without
+ * Engine-independent general file IO (Runtime.fs), so callers read and write files without
  * touching rt.raw.FS. Persistence comes from mountHome mounting OPFS; this is the file-operation
  * layer on top of it, not a new VFS. Mutations bump execSeq, which is what guards reactivity.
  */
@@ -1013,7 +1013,7 @@ export interface SessionManifest {
   coreIntegrity?: CoreIntegrityMap | CoreIntegrityPolicy | false;
   coreCacheDir?: FileSystemDirectoryHandle;
   /**
-   * loadPyodide supplied by a worker consumer, which has no document to inject the engine script
+   * loadPyodide supplied by a worker caller, which has no document to inject the engine script
    * into. It is a host capability, not part of the environment declaration, so it does not enter
    * the replay identity: a worker-hosted kernel and a main-thread kernel reach the same cp0 bytes.
    */
@@ -1080,7 +1080,7 @@ export interface Pipe {
   readonly sab: SharedArrayBuffer;
   bindReader(pid: number, name: string): Promise<boolean>;
   bindWriter(pid: number, name: string): Promise<boolean>;
-  /** Kernel endpoint: pushes into the ring, waiting for a consumer when it is full. Returns the bytes written. */
+  /** Kernel endpoint: pushes into the ring, waiting for a reader when it is full. Returns the bytes written. */
   write(bytes: Uint8Array): Promise<number>;
   /** Kernel endpoint: pulls from the ring. Returns bytes, or null at EOF (closed and drained). */
   read(max?: number): Promise<Uint8Array | null>;
@@ -1198,7 +1198,7 @@ declare class PyProc {
 
 export { createWebComputer, type WebComputer } from "./src/machine/index.js";
 
-// ---- Porcelain surface: two entry verbs plus one revival verb; everything else is the machine handle's vocabulary ----
+// ---- Product entrance: durable Machine, transient Machine, multi-guest Computer, and preflight in one root ----
 
 export interface BootMachineOptions extends BootOptions {
   /**
