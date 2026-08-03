@@ -16,7 +16,7 @@ export function hexFromBytes(value) {
 
 export function bytesFromHex(value, code = "WEB_MACHINE_IMAGE_SIGNATURE_INVALID") {
   if (typeof value !== "string" || !value.length || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) {
-    throw new WebMachineError(code, "hex 바이트 형식 불일치");
+    throw new WebMachineError(code, "the hex byte format does not match");
   }
   const bytes = new Uint8Array(value.length / 2);
   for (let index = 0; index < bytes.length; index += 1) {
@@ -35,7 +35,7 @@ export function bytesFromBase64(value, code = "WEB_MACHINE_IMAGE_SIGNATURE_INVAL
     return bytes;
   }
   if (typeof Buffer !== "undefined") return new Uint8Array(Buffer.from(value, "base64"));
-  throw new WebMachineError(code, "base64 디코더가 없다");
+  throw new WebMachineError(code, "no base64 decoder is available");
 }
 
 export function sameBytes(left, right) {

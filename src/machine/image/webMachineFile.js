@@ -40,7 +40,7 @@ function imageError(code, message, details) {
 
 function assertFile(value) {
   if (!value || !Number.isSafeInteger(value.size) || typeof value.slice !== "function") {
-    imageError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "Blob 호환 .webmachine 파일 필요");
+    imageError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "a Blob-compatible .webmachine file is required");
   }
 }
 
@@ -113,7 +113,7 @@ function hexFromBase64(value) {
 // tag(header-target 서명) -> 기존 WebMachineSignature 형태로 매핑(하위호환).
 function synthesizeSignature(tag) {
   if (!tag || typeof tag !== "object" || !tag.publicKey || typeof tag.signature !== "string") {
-    imageError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "tag 형식 위반");
+    imageError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "the tag format is invalid");
   }
   return {
     version: 1,
@@ -128,10 +128,10 @@ function synthesizeSignature(tag) {
 // createWebMachineManifest가 전 필드를 재검증하므로 형태 계약이 그대로 유지된다.
 function synthesizeManifest(meta, resolveAddress, headerDigest, tag) {
   if (!meta || typeof meta !== "object" || meta.format !== WEB_MACHINE_FORMAT) {
-    imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "webmachine meta 형식 위반");
+    imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "the webmachine meta format is invalid");
   }
   if (!Array.isArray(meta.machines) || !Array.isArray(meta.devices)) {
-    imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "webmachine meta machines/devices 형식 위반");
+    imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "the webmachine meta machines/devices format is invalid");
   }
   const blobs = [];
   const record = (blobId, address) => {
@@ -291,13 +291,13 @@ export async function readWebMachineFile({ file, cryptoProvider, trustedPublicKe
     throw wrapHeaderError(error);
   }
 
-  if (!header.tag) imageError("WEB_MACHINE_IMAGE_UNTRUSTED", "서명 없는 image 실행 거부");
+  if (!header.tag) imageError("WEB_MACHINE_IMAGE_UNTRUSTED", "refusing to run an unsigned image");
   const verdict = await abortable(
     grammar.verifyTag(header.tag, header.headerDigest, { trustedPublicKeys: trustedPublicKeys || [] }),
     control,
     "webmachine trust verify",
   );
-  if (!verdict.valid) imageError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "image 서명 불일치");
+  if (!verdict.valid) imageError("WEB_MACHINE_IMAGE_SIGNATURE_INVALID", "the image signature does not match");
   if (!verdict.trusted) imageError("WEB_MACHINE_IMAGE_UNTRUSTED", `trusted key에 없는 signer: ${verdict.signerFingerprint}`);
 
   // 신뢰됨: 전량 verify-on-read로 오브젝트를 회수한다(통과 못 한 바이트는 소비자에 안 닿는다).
@@ -332,14 +332,14 @@ export async function readWebMachineFile({ file, cryptoProvider, trustedPublicKe
 // writer는 bundle로 단일화됐고 이 경로는 구 fixture를 읽기만 한다. 새 봉투는 이 함수에
 // 닿지 않는다(감지형 dispatch). 신 포맷이 자리 잡으면 제거한다.
 async function readLegacyWebMachineFile({ file, cryptoProvider, trustedPublicKeys, control }) {
-  if (file.size < legacyPrefixByteLength) imageError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "file prefix가 잘림");
+  if (file.size < legacyPrefixByteLength) imageError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "the file prefix is truncated");
   const prefix = new Uint8Array(await abortable(file.slice(0, legacyPrefixByteLength).arrayBuffer(), control, "webmachine prefix read"));
   if (!sameBytes(prefix.subarray(0, legacyMagic.byteLength), legacyMagic)) {
-    imageError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "WEBMACHINE magic 불일치");
+    imageError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "the WEBMACHINE magic does not match");
   }
   const manifestByteLength = new DataView(prefix.buffer, prefix.byteOffset + legacyMagic.byteLength, legacyHeaderLengthBytes).getUint32(0, false);
   if (!manifestByteLength || manifestByteLength > legacyMaximumManifestBytes || legacyPrefixByteLength + manifestByteLength > file.size) {
-    imageError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "manifest byteLength 불일치");
+    imageError("WEB_MACHINE_IMAGE_FORMAT_INVALID", "the manifest byteLength does not match");
   }
   const manifestBytes = new Uint8Array(await abortable(
     file.slice(legacyPrefixByteLength, legacyPrefixByteLength + manifestByteLength).arrayBuffer(),
@@ -352,17 +352,17 @@ async function readLegacyWebMachineFile({ file, cryptoProvider, trustedPublicKey
     manifestText = decoder.decode(manifestBytes);
     parsed = JSON.parse(manifestText);
   } catch (cause) {
-    imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "manifest JSON 해석 실패", { cause: String(cause) });
+    imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "the manifest JSON could not be parsed", { cause: String(cause) });
   }
   const manifest = validateWebMachineManifest(parsed);
-  if (manifestText !== machineCanonicalJson(cryptoProvider, manifest)) imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "manifest canonical encoding 불일치");
+  if (manifestText !== machineCanonicalJson(cryptoProvider, manifest)) imageError("WEB_MACHINE_IMAGE_MANIFEST_INVALID", "the manifest canonical encoding does not match");
   const contentDigest = await abortable(
     digestGenerationManifest(cryptoProvider, getWebMachineManifestContent(manifest)),
     control,
     "webmachine manifest verify",
   );
   if (contentDigest !== manifest.integrity.contentDigest) {
-    imageError("WEB_MACHINE_IMAGE_INTEGRITY_INVALID", "manifest content digest 불일치");
+    imageError("WEB_MACHINE_IMAGE_INTEGRITY_INVALID", "the manifest content digest does not match");
   }
   const trust = await abortable(
     verifyWebMachineTrust(cryptoProvider, contentDigest, manifest.signature, trustedPublicKeys),

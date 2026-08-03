@@ -1200,6 +1200,30 @@ check("파일과 폴더 이름 camelCase", () => {
 //      프로그램적 분기가 다시 문자열 매칭으로 퇴행한다. 예외: pyprocSw.js는 SW 자기충족
 //      파일(모듈 import 금지 계약)이라 로컬 swError 헬퍼의 new Error 1곳만 허용한다.
 section("오류 계약");
+// 오류 message와 API 반환 문자열은 소비자가 콘솔·이슈·로그에서 읽는 공개 표면이다. 규칙은
+// 공개 표면 영문 우선이고, 실제로 한 파일 안에서 갈려 있었다(operationControl은 한 템플릿
+// 리터럴 안에서 영어와 한국어가 섞였다). 판정선: message와 반환 문자열은 영어, 주석은 한국어.
+{
+  const HANGUL = /[가-힣]/;
+  // 코드 인자와 메시지를 가른다: 오류 생성 줄의 모든 문자열 리터럴 중 코드 모양이 아닌 것만 본다.
+  const CODE_LIKE = /^[A-Z][A-Z0-9_]*$/;
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    const code = stripComments(readFileSync(f, "utf8"));
+    check(`메시지 언어: ${rel(f)}`, () => {
+      const hits = [];
+      for (const line of code.split("\n")) {
+        // 오류 생성은 생성자 직접 호출만이 아니다(imageError, kernelError 같은 얇은 헬퍼가 있다).
+        // 코드 리터럴이 있는 줄을 오류 줄로 보고, 그 줄의 나머지 문자열을 메시지로 판정한다.
+        if (!/"(?:WEB_MACHINE|PYPROC)_[A-Z0-9_]+"/.test(line) && !/note:\s*"/.test(line)) continue;
+        for (const m of line.matchAll(/"([^"]*)"/g)) {
+          const text = m[1];
+          if (!CODE_LIKE.test(text) && HANGUL.test(text)) hits.push(text);
+        }
+      }
+      if (hits.length) throw new Error(`공개 메시지에 한글: ${hits.slice(0, 3).join(" | ").slice(0, 160)}`);
+    });
+  }
+}
 // 코드 카탈로그와 실제 throw의 양방향 대조. 한쪽만 늘어나는 표류가 둘 다 나 있었다:
 // PYPROC_TASK_TIMEOUT은 카탈로그와 공개 union에 선언만 있고 어디서도 생산되지 않았고
 // (소비자는 존재하지 않는 값을 광고받았다), 생성자는 미등록 코드를 조용히 PYPROC_INTERNAL로

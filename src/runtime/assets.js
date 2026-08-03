@@ -131,7 +131,7 @@ export function getPyProcAssetManifest(opts = {}) {
       sameOriginRequired: true,
       preserveRelativeImports: true,
       runtimePreflight: true,
-      note: "src/ 트리의 상대 import 구조를 보존해 같은 오리진에 배포한다. Worker/SW 엔트리포인트만 CDN 교차 오리진으로 두면 실패한다.",
+      note: "Deploy the src/ tree on your own origin with its relative import structure intact. Leaving only the Worker and Service Worker entrypoints on a cross-origin CDN fails.",
     },
     assets: ASSETS.map((asset) => ({ ...asset, url: joinAssetURL(root, asset.path) })),
   };

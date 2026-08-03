@@ -272,7 +272,7 @@ export class GpuBridge {
     };
     this._rt.setGlobal("_pyprocGpuMatmulBridge", bridge);
     this._rt.run(GPU_BOOTSTRAP);
-    return { installed: "pyprocGpu", note: "블로킹은 JSPI(run_sync)라 rt.runAsync 경로에서. numpy 필요" };
+    return { installed: "pyprocGpu", note: "blocking calls need JSPI (run_sync), so use the rt.runAsync path. numpy is required" };
   }
 
   destroy() { if (this._gc) this._gc.destroy(); }

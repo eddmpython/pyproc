@@ -17,7 +17,7 @@ export function operationAbortError(control, label, { outcomeUnknown = false, de
   const timedOut = isTimeoutReason(reason);
   return new WebMachineError(
     timedOut ? "WEB_MACHINE_OPERATION_TIMEOUT" : "WEB_MACHINE_OPERATION_ABORTED",
-    `${label}: ${timedOut ? "timeout" : "취소"}`,
+    `${label}: ${timedOut ? "timeout" : "aborted"}`,
     { ...details, retryable: true },
   );
 }

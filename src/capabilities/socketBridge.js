@@ -146,6 +146,6 @@ export class SocketBridge {
     // JSPI 판정의 정본은 preflight 하나다. 이 파일에 사본이 있던 동안 preflight의 것은 아무도
     // 부르지 않는 export였고, 두 판정이 갈라져도 아무도 몰랐을 것이다.
     const jspi = hasJspi();
-    return { installed: ["socket.socket->relay", "socket.create_connection->relay"], relayURL, jspi, note: jspi ? "블로킹 recv = JSPI, runAsync 경로에서" : "JSPI 미가용: 블로킹 recv 불가" };
+    return { installed: ["socket.socket->relay", "socket.create_connection->relay"], relayURL, jspi, note: jspi ? "blocking recv needs JSPI, so use the runAsync path" : "JSPI is unavailable, so blocking recv is not possible" };
   }
 }

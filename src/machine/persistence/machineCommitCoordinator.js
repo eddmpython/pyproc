@@ -207,7 +207,7 @@ export class MachineCommitCoordinator {
         throw generationCorrupt(groupId, `알 수 없는 엔트리(${entry.id})`);
       }
     }
-    if (!machineEntries.length) throw generationCorrupt(groupId, "machine 엔트리가 없다");
+    if (!machineEntries.length) throw generationCorrupt(groupId, "the machine entry is missing");
     return { commit, machines: machineEntries, devices: deviceEntries };
   }
 
