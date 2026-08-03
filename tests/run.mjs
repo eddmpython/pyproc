@@ -850,7 +850,7 @@ section("digest 법");
   // 힙 물질화 법: "성장 -> 경계 되감기 -> 페이지 쓰기 -> 스택 복원 -> 새 경계"는 부활 정확성
   // 그 자체다. 예전에는 이 순서가 네 곳에 각자 구현돼 독립 표류가 가능했다(session.load /
   // openMachine / journal.recover 구포맷 / 커널). 소스를 한 파일로 좁혀 고정한다.
-  const MATERIALIZE_CORE = "src/capabilities/heapMaterialize.js";
+  const MATERIALIZE_CORE = "src/capabilities/image/heapMaterialize.js";
   check("힙 물질화 법의 소스는 한 곳", () => {
     const holders = [];
     for (const f of collect(join(ROOT, "src"), [".js"], [])) {
@@ -2952,7 +2952,7 @@ check("src layer edge는 아래로만", () => {
   const capabilityToRuntimeBudget = new Set([
     "src/capabilities/envManager.js -> src/runtime/runtime.js",
     "src/capabilities/envManager.js -> src/runtime/engines/pyodideEngine.js",
-    "src/capabilities/envManager.js -> src/runtime/contentDigest.js",
+    "src/composition/envManager.js -> src/runtime/contentDigest.js",
     "src/capabilities/journal/journalBlobStore.js -> src/runtime/contentDigest.js",
     "src/capabilities/journal/journalKernelStore.js -> src/runtime/contentDigest.js",
     "src/capabilities/journal/machineJournal.js -> src/runtime/contentDigest.js",
@@ -2965,8 +2965,8 @@ check("src layer edge는 아래로만", () => {
     // 힙 물질화 법의 유일한 보관소. 성장은 파이썬 할당 경로여야 하고(heapGrow) 페이지 단위는
     // 엔진 ABI가 정한다(memoryLayout). 그래서 이 두 edge는 이 파일 하나로 모았다: 예전에는
     // 같은 두 edge가 session/journal 네 사본에 흩어져 있었다.
-    "src/capabilities/heapMaterialize.js -> src/runtime/heapGrow.js",
-    "src/capabilities/heapMaterialize.js -> src/runtime/memoryLayout.js",
+    "src/capabilities/image/heapMaterialize.js -> src/runtime/heapGrow.js",
+    "src/capabilities/image/heapMaterialize.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/memoryLayout.js",
     // 단위 계약(PAGE_SIZE, bytesToMb)은 rank 0에 있고 비용 영수증을 내는 능력이 그것을 쓴다.
     // 각자 1048576을 다시 쓰는 것보다 이 edge가 싸다(정밀도까지 갈리던 사본 8곳을 수렴).
@@ -2974,7 +2974,7 @@ check("src layer edge는 아래로만", () => {
     // ASGI 응답 body는 base64로 건너온다. 디코더를 또 쓰는 것보다 코덱 코어를 지나는 것이
     // 옳다(폴백 한쪽만 갖춘 사본이 "같은 입력에 다르게 실패"를 만든 전례가 이 코어의 근거다).
     "src/capabilities/asgiServer.js -> src/runtime/contentDigest.js",
-    "src/capabilities/machineHome.js -> src/runtime/memoryLayout.js",
+    "src/capabilities/image/machineHome.js -> src/runtime/memoryLayout.js",
     "src/capabilities/reactive.js -> src/runtime/heapDelta.js",
     "src/capabilities/wheelCache.js -> src/runtime/globalPatch.js",
     "src/capabilities/syscallBridge.js -> src/runtime/assets.js",

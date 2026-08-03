@@ -1,4 +1,4 @@
-// envManager.js - Layer 2 능력: uv 레인 = 환경의 선언 -> 즉시 부팅 -> 스크립트 자급.
+// envManager.js - Layer 3 능력: uv 레인 = 환경의 선언 -> 즉시 부팅 -> 스크립트 자급.
 // 실측(tests/attempts/envManager, 2026-07-12):
 //   - 패키지가 실린 힙 스냅샷은 hiwire 벽(#5195, "Unexpected hiwire entry at index 6").
 //     postImport / loadPyodide({packages}) / makeMemorySnapshot({serializer}) 3레인 전부 거부.
@@ -10,7 +10,7 @@
 import { DEFAULT_INDEX, ensureEngineScript, Runtime } from "../runtime/runtime.js";
 import { PyodideEngine } from "../runtime/engines/pyodideEngine.js";
 import { sha256HexShort } from "../runtime/contentDigest.js";
-import { WheelCache } from "./wheelCache.js";
+import { WheelCache } from "../capabilities/wheelCache.js";
 
 // 환경 선언(manifest: indexURL/env/lockFileURL/packages/setup)으로 부팅한다.
 // dirs(소비자 제공 디렉터리 핸들)가 캐시를 결정한다:

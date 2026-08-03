@@ -9,7 +9,7 @@
 // 프록시 경로 전부가 트랩한다 - 이름을 지우거나 표면을 다시 심어도 살아나지 않는다. 그래서
 // 판정은 "지금 핸들이 있는가"가 아니라 "이 힙에 핸들이 심긴 적이 있는가"이고, 그 집합은
 // 단조 증가한다(케이스 B/D가 제거로도 못 살린다는 것을 보였다).
-import { PyProcError } from "../runtime/errors.js";
+import { PyProcError } from "../../runtime/errors.js";
 
 export function requirePortableHeap(rt, entry, opts = {}) {
   if (opts.allowHostProxies === true) return;

@@ -2,7 +2,7 @@
 // PYPROC_ERROR_CODES)로 개편됐다. 이 게이트는 런타임 계약의 실동작을 검증하므로,
 // 루트에서 내린 내부 표면은 src 경로로 직접 가져온다(테스트 파일의 심층 import 허용).
 import { boot, checkEnvironment } from "../../index.js";
-import { bootEnv, runScript } from "../../src/capabilities/envManager.js";
+import { bootEnv, runScript } from "../../src/composition/envManager.js";
 import { Runtime } from "../../src/composition/runtimeApi.js";
 import { PyProc, SIGNAL } from "../../src/processOs/pyProc.js";
 import { JobControl } from "../../src/processOs/jobControl.js";

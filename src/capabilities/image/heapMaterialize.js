@@ -12,8 +12,8 @@
 // 성장을 파이썬 할당으로 태우는 이유: JS에서 wasm Memory.grow를 직접 호출하면 Emscripten
 // 글루의 클로저 뷰가 갱신되지 않아 런타임이 파손된다(sessionGrowProbe 실측). 초과 성장은
 // 무해하다: 델타가 복원하는 저장 시점 할당자 상태가 힙 끝을 정하고 잉여 페이지는 미사용이다.
-import { PAGE_SIZE, bytesToMb } from "../runtime/memoryLayout.js";
-import { growHeapTo } from "../runtime/heapGrow.js";
+import { PAGE_SIZE, bytesToMb } from "../../runtime/memoryLayout.js";
+import { growHeapTo } from "../../runtime/heapGrow.js";
 import { applyMachineHome, validateMachineHomeMeta } from "./machineHome.js";
 
 // 세대 하나를 힙에 물질화한다.

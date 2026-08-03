@@ -33,9 +33,9 @@ import { decodeStateBundle, encodeStateBundle, isStateBundle, stateBundleHeaderD
 // 서명 API는 이 모듈의 공개 표면이다(index.js가 여기서 가져간다). 구현은 machineSignature가 소유한다.
 export { createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicKey } from "./machineSignature.js";
 import { WheelCache } from "../capabilities/wheelCache.js";
-import { materializeHeapGeneration } from "../capabilities/heapMaterialize.js";
-import { requirePortableHeap } from "../capabilities/imagePortability.js";
-import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome } from "../capabilities/machineHome.js";
+import { materializeHeapGeneration } from "../capabilities/image/heapMaterialize.js";
+import { requirePortableHeap } from "../capabilities/image/imagePortability.js";
+import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome } from "../capabilities/image/machineHome.js";
 
 // 결정적 부팅 구간은 전역(엔트로피/시간)을 패치하므로 전역 패치 체인에서 하나만 진입한다.
 // 두 bootSession(또는 boot 코어 캐시/wheel 캐시의 fetch 스왑)이 겹치면 먼저 끝난 쪽이

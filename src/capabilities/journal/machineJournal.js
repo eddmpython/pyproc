@@ -17,18 +17,18 @@
 //
 // 계약(정직하게): 크래시 시 잃는 것은 "마지막 커밋 이후"다. 문장 단위 내구성이 아니라
 // 경계 일관성을 준다. 커밋 주기는 소비자가 정한다(하드코딩 없음).
-import { requirePortableHeap } from "../imagePortability.js";
+import { requirePortableHeap } from "../image/imagePortability.js";
 import { PAGE_SIZE as PAGE, bytesToMb, mbToBytes } from "../../runtime/memoryLayout.js";
 import { PyProcError } from "../../runtime/errors.js";
 import { parseSha256Address, sha256Hex, verifySha256 } from "../../runtime/contentDigest.js";
 import { commitState, openState } from "../../state/refProtocol.js";
 import { decodeStateObject, validateStateCommit, validateStateTree } from "../../state/objectModel.js";
-import { materializeHeapGeneration } from "../heapMaterialize.js";
+import { materializeHeapGeneration } from "../image/heapMaterialize.js";
 import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
 import { readJsonFile } from "./journalJsonFile.js";
 import { applyLegacyGeneration, cleanupLegacyRefs, legacyLiveKeys, readLegacyGeneration } from "./journalLegacyGeneration.js";
 import { JournalKernelStore } from "./journalKernelStore.js";
-import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome } from "../machineHome.js";
+import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome } from "../image/machineHome.js";
 
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
 const DEFAULT_AUTO_PACK_LOOSE_MB = 8;

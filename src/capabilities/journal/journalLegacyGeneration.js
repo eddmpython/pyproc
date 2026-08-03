@@ -9,8 +9,8 @@
 // 브라우저 게이트의 "journal prune: 이관 전 구 세대 blob을 live로 지킨다"가 그것을 문다.
 import { PyProcError } from "../../runtime/errors.js";
 import { verifySha256 } from "../../runtime/contentDigest.js";
-import { materializeHeapGeneration } from "../heapMaterialize.js";
-import { validateMachineHomeMeta } from "../machineHome.js";
+import { materializeHeapGeneration } from "../image/heapMaterialize.js";
+import { validateMachineHomeMeta } from "../image/machineHome.js";
 import { readJsonFile } from "./journalJsonFile.js";
 
 // 세대 파일 1개 판독: { head } | { missing: true } | { corrupt: 사유 }.
