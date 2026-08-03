@@ -298,6 +298,30 @@ try {
     && statsAfterPrune.totalBytes < statsBeforePrune.totalBytes,
     `노드 ${statsBeforePrune.activeNodes} -> ${statsAfterPrune.activeNodes}, 총 ${statsBeforePrune.totalMB} -> ${statsAfterPrune.totalMB}MB`);
   timings.reactiveTotalMb = statsAfterPrune.totalMB;
+
+  // 선형 역사의 회수. 가지치기는 경로 **밖** 노드만 놓으므로, 문장마다 체크포인트를 찍는
+  // 지배적 모양에서는 0바이트를 돌려준다. 그 상태에서 setRetentionPolicy는 한계 초과를
+  // 관측만 하고 메모리는 그대로였다(공개 표면이 약속한 능력이 실제로는 없었다).
+  // rebaseLinear는 경로 자체를 base로 접는다. 그 대가는 경계 이동이고, 그것까지 함께 단정한다.
+  {
+    const epochBefore = reactive.boundaryEpoch;
+    rt.run("rebaseSeed = [0] * 200000");
+    for (let i = 0; i < 6; i++) { rt.run(`rebaseStep${i} = ${i}`); reactive.checkpoint(); }
+    const linearBefore = reactive.stats();
+    reactive.setRetentionPolicy({ maxNodes: 2, pruneBranches: true, rebaseLinear: true });
+    rt.run("rebaseStepLast = 1");
+    reactive.checkpoint(); // 정책은 체크포인트 경계에서 적용된다
+    const linearAfter = reactive.stats();
+    const survived = rt.run("rebaseStep5 + rebaseStepLast"); // 접힌 상태가 힙에 그대로 있는가
+    check("reactive 회수: 선형 역사도 rebase로 바이트를 돌려준다",
+      linearBefore.activeNodes > linearAfter.activeNodes
+      && linearAfter.deltaBytes < linearBefore.deltaBytes
+      && reactive.boundaryEpoch > epochBefore
+      && survived === 6,
+      `노드 ${linearBefore.activeNodes} -> ${linearAfter.activeNodes}, 델타 ${linearBefore.deltaBytes} -> ${linearAfter.deltaBytes}B, 경계 세대 +${reactive.boundaryEpoch - epochBefore}`);
+    reactive.setRetentionPolicy(null);
+    reactive.checkpoint();
+  }
   let prunedCode = "";
   try { reactive.restoreLive(cpDrop.index); } catch (e) { prunedCode = e.code; }
   check("pruneTo: 경로 밖 노드 해제 + PYPROC_CHECKPOINT_PRUNED 거부",

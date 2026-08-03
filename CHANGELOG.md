@@ -8,6 +8,22 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+### Added
+
+- **`setRetentionPolicy({ rebaseLinear: true })` reclaims memory on a linear history.** Pruning only
+  frees nodes off the root-to-live path, so a session that checkpoints per statement (the dominant
+  shape) got zero bytes back no matter what limit was set: the policy observed the overrun and the
+  memory stayed. Rebase folds the path itself into the base, so the same limit now holds. Measured in
+  the browser gate: 13 nodes to 2 and the delta store from 86.3 MB to 5.2 MB.
+
+  **This moves the replay boundary, and that is breaking for anything written against the old one.**
+  `hashes[0]` becomes the rebased state, so a journal or image committed before the rebase is refused
+  with `PYPROC_REPLAY_MISMATCH`, and time travel to any checkpoint before the new boundary is refused
+  with `PYPROC_CHECKPOINT_PRUNED`. Both refusals are explicit, neither is silent. The flag is off by
+  default for exactly this reason; turn it on when a long-lived session matters more than its past.
+  `ReactiveController.boundaryEpoch` counts boundary moves so a consumer caching the fingerprint (the
+  journal does) can drop its cache.
+
 ### Fixed
 
 - **The asset manifest now lists `workerHostedGuestWorker`** (`src/machine/composition/workerHostedGuestWorker.js`).

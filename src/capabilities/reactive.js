@@ -30,6 +30,7 @@ export class ReactiveController {
     this._seqAt = -1; // 마지막 checkpoint/restore 시점의 Runtime.execSeq (경계 위반 감지)
     this._retentionPolicy = null;
     this._lastPressure = null;
+    this._boundaryEpoch = 0; // 경계(cp0)가 옮겨간 횟수. rebase가 올린다.
   }
   _requireNode(j, op) {
     if (!Number.isInteger(j) || j < 0 || j >= this.deltas.length) {
@@ -144,6 +145,49 @@ export class ReactiveController {
     this._rt.noteStateMutation();
   }
 
+  // 경계(cp0)가 옮겨간 횟수. rebase가 base를 전진시키면 hashes[0]이 바뀌므로 그 지문을
+  // 캐시하는 소비자(저널의 h0)가 자기 캐시를 버릴 수 있어야 한다.
+  get boundaryEpoch() { return this._boundaryEpoch; }
+
+  // 선형 역사의 배출 밸브. pruneTo는 경로 **밖** 노드만 놓으므로, 문장마다 체크포인트를 찍는
+  // 지배적 사용 모양(부모 체인이 선형)에서는 한 바이트도 돌려주지 못한다. rebase는 경로 자체를
+  // base로 접어 넣는다: 루트->j의 델타를 순서대로 base에 적용하고 그 지점을 새 경계로 삼는다.
+  //
+  // 잃는 것은 j 이전으로의 시간여행이고 그것은 이미 표현 가능한 결말이다(PYPROC_CHECKPOINT_PRUNED).
+  // **경계가 바뀐다**: hashes[0]이 j의 해시가 되므로 이전 경계로 쓴 저널과 이미지는 h0 불일치로
+  // 거부된다. 그래서 이것은 브레이킹이고, boundaryEpoch로 소비자가 그 사실을 관측한다.
+  rebaseTo(j) {
+    this._requireNode(j, "rebaseTo");
+    if (j !== this.liveIdx) {
+      throw new PyProcError("PYPROC_INPUT_INVALID", `rebaseTo: only the live node can become the new boundary (live ${this.liveIdx}, asked ${j}).`);
+    }
+    const pruned = this.pruneTo(j); // 경로 밖은 먼저 놓는다(접을 대상은 경로뿐이다)
+    const path = [];
+    for (let k = j; k >= 1; k = this.parents[k]) path.push(k);
+    let foldedBytes = 0;
+    for (let i = path.length - 1; i >= 0; i--) {
+      for (const [p, bytes] of this.deltas[path[i]]) {
+        const at = p * PAGE;
+        if (at + bytes.length > this.base.length) {
+          // 성장분은 base 밖이다. base를 늘려 그 바이트를 담는다(경계가 곧 그 힙이어야 한다).
+          const grown = new Uint8Array(at + bytes.length);
+          grown.set(this.base);
+          this.base = grown;
+        }
+        this.base.set(bytes, at);
+        foldedBytes += bytes.length;
+      }
+    }
+    this.hashes[0] = this.hashes[j];
+    this.sps[0] = this.sps[j];
+    this.deltas[0] = new Map();
+    for (const k of path) { this.deltas[k] = null; this.hashes[k] = null; this.sps[k] = null; }
+    this.liveIdx = 0;
+    this.prevHashes = this.hashes[0];
+    this._boundaryEpoch++;
+    return { foldedNodes: path.length, foldedMB: bytesToMb(foldedBytes, 2), prunedNodes: pruned.freedNodes, baseMB: bytesToMb(this.base.length, 2) };
+  }
+
   // 루트->j 부모 체인 밖 노드의 델타/해시를 해제한다(체크포인트 나무의 배출 밸브).
   // 인덱스 안정성을 위해 배열 길이는 유지하고 내용만 비운다. 해제된 노드의 복원은
   // PYPROC_CHECKPOINT_PRUNED로 거부된다. liveIdx는 경로 위에 있어야 한다.
@@ -170,6 +214,7 @@ export class ReactiveController {
     this.base = null; this.deltas = []; this.hashes = []; this.parents = []; this.sps = [];
     this.prevHashes = null; this.liveIdx = -1; this._seqAt = -1;
     this._lastPressure = null;
+    this._boundaryEpoch++;
   }
 
   // 나무 조회(머신의 git): 노드마다 부모와 자식. 분기 UI와 원장이 읽는다.
@@ -244,7 +289,13 @@ export class ReactiveController {
     if (this._retentionPolicy.pruneBranches && before.branches > 0 && this.liveIdx >= 0) {
       pruned = this.pruneTo(this.liveIdx);
     }
-    const event = Object.freeze({ trigger, exceeded: Object.freeze(exceeded), before, after: this.stats(), pruned });
+    // 가지치기는 경로 밖만 놓는다. 선형 역사에서는 그것이 0바이트이고, 그 모양이 지배적이다
+    // (문장마다 체크포인트). 정책이 여전히 초과면 경로 자체를 접는다.
+    let rebased = null;
+    if (this._retentionPolicy.rebaseLinear && this.liveIdx > 0 && retentionExceeded(this._retentionPolicy, this.stats()).length) {
+      rebased = this.rebaseTo(this.liveIdx);
+    }
+    const event = Object.freeze({ trigger, exceeded: Object.freeze(exceeded), before, after: this.stats(), pruned, rebased });
     this._lastPressure = event;
     if (this._retentionPolicy.onPressure) {
       try { this._retentionPolicy.onPressure(event); }

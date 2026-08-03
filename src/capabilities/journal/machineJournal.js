@@ -108,6 +108,7 @@ export class MachineJournal {
     // 기다리지 않으면, 이미 해제된 리액티브 컨트롤러를 읽는 커밋이 파손 세대를 쓸 수 있다.
     this._inFlight = null;
     this._h0Key = null; // 리플레이 경계(cp0) 지문 캐시. 커밋/부활의 결정성 대조 축.
+    this._h0Epoch = -1; // 그 캐시가 어느 경계 세대의 것인지(rebase가 세대를 올린다).
     // 페이지 주소 캐시: page -> { a, b, address }. a/b는 직전 커밋 시점의 페이지 해시 두 워드다.
     // 커밋 비용이 "직전 변경분"이 아니라 "부팅 이후 누적 델타"에 비례하던 자리를 좁힌다:
     // 누적 델타의 대부분은 매 커밋 바이트가 같은데도 페이지마다 SHA-256 + 저장소 조회를 다시
@@ -141,8 +142,12 @@ export class MachineJournal {
   // 리플레이 경계(cp0)의 지문: 경계 해시 배열 전체의 SHA-256. 같은 엔진 + 같은 매니페스트라야 같다.
   // 커밋마다 commit.env.h0에 싣고, recover가 대조한다(엔진이 바뀐 채 부활하면 조용한 힙 오염이므로).
   async _boundaryKey() {
-    if (!this._h0Key) {
+    // 캐시는 경계 세대로 키를 잡는다. rebase가 base를 전진시키면 hashes[0]이 바뀌므로, 세대를
+    // 안 보면 옛 지문으로 새 경계를 커밋한다(부활이 조용히 다른 힙을 덮는다).
+    const epoch = this._reactive.boundaryEpoch;
+    if (!this._h0Key || this._h0Epoch !== epoch) {
       this._h0Key = await boundaryDigest(globalThis.crypto, this._reactive.hashes);
+      this._h0Epoch = epoch;
     }
     return this._h0Key;
   }

@@ -12,6 +12,10 @@ export function normalizeRetentionPolicy(policy) {
     maxDeltaBytes: policy.maxDeltaBytes ?? null,
     maxTotalBytes: policy.maxTotalBytes ?? null,
     pruneBranches: policy.pruneBranches === true,
+    // 선형 역사의 배출 밸브. 가지치기는 경로 밖만 놓으므로 문장마다 체크포인트를 찍는 모양에서
+    // 0바이트를 회수한다. 이것을 켜면 경로 자체를 base로 접어 넣는다: 경계가 옮겨가므로 그
+    // 이전으로의 시간여행과 그 경계로 쓴 저널·이미지를 잃는다. 그래서 기본값은 꺼짐이다.
+    rebaseLinear: policy.rebaseLinear === true,
     onPressure: typeof policy.onPressure === "function" ? policy.onPressure : null,
   };
   for (const key of LIMIT_KEYS) {
