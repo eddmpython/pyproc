@@ -114,9 +114,17 @@ onmessage = async (e) => {
       const h = mem().heap();
       // 바이트 비교 전략의 정본은 heapDelta.byteDiffPages다(성긴 기각 + 확정 비교 + 성장분 전량).
       const pages = byteDiffPages(h, cp0, PAGE);
-      const bin = packPages((p) => h.subarray(p * PAGE, (p + 1) * PAGE), pages, PAGE);
       const sp = mem().stackSave();
-      postMessage({ type: "harvested", id: msg.id, reqId: msg.reqId, pages, bin: bin.buffer, sp, heapLen: h.length, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
+      // 커널이 공유 버퍼를 실어 보내면 거기에 직접 팩한다. 그러지 않으면 transfer로 넘긴 직후
+      // 커널이 그것을 SAB로 다시 memcpy해야 했다(21.4MB 델타면 그 순간 두 벌이 산다).
+      const target = msg.into && msg.into.byteLength >= pages.length * PAGE ? new Uint8Array(msg.into) : null;
+      if (target) {
+        pages.forEach((p, i) => target.set(h.subarray(p * PAGE, (p + 1) * PAGE), i * PAGE));
+        postMessage({ type: "harvested", id: msg.id, reqId: msg.reqId, pages, bin: null, sp, heapLen: h.length, ms: Math.round((performance.now() - t0) * 10) / 10 });
+      } else {
+        const bin = packPages((p) => h.subarray(p * PAGE, (p + 1) * PAGE), pages, PAGE);
+        postMessage({ type: "harvested", id: msg.id, reqId: msg.reqId, pages, bin: bin.buffer, sp, heapLen: h.length, ms: Math.round((performance.now() - t0) * 10) / 10 }, [bin.buffer]);
+      }
     } else if (msg.type === "applyDelta") {
       // fork의 자식측: 이 워커를 정확히 "cp0 + 부모 델타" 상태로 만든다(주소공간은 독립).
       // 델타만 덮으면 안 된다: dst가 경계 이후 실행으로 더럽힌 페이지 중 델타 밖의 것이 남아

@@ -136,10 +136,14 @@ export class PyProc {
       if (!dst || dst.state !== "ready") throw new PyProcError("PYPROC_PROCESS_UNAVAILABLE", `fork: dst pid ${pid} is not ready`);
       return dst;
     });
-    const h = await this._call(src, { type: "harvest" });
-    // 공유 버퍼로 1회 복사: 이후 N 워커가 같은 바이트를 읽는다(postMessage는 SAB를 transfer하지 않는다).
-    const shared = new SharedArrayBuffer(h.bin.byteLength);
-    new Uint8Array(shared).set(new Uint8Array(h.bin));
+    // 2단계 수확: 먼저 페이지 목록만 받아 정확한 크기의 공유 버퍼를 만들고, 두 번째 호출에서
+    // 워커가 그 버퍼에 직접 팬다. 예전에는 워커가 transfer로 넘긴 델타를 커널이 SAB로 다시
+    // memcpy했다(21.4MB 델타면 그 순간 두 벌이 산다). 목록 수확은 스캔이 비용의 대부분이라
+    // 두 번 도는 대신, 1차에서 크기를 알고 2차에서 팩만 시킨다.
+    const probe = await this._call(src, { type: "harvest", into: null });
+    const shared = new SharedArrayBuffer(probe.pages.length * PAGE_SIZE);
+    const h = await this._call(src, { type: "harvest", into: shared });
+    if (h.bin) new Uint8Array(shared).set(new Uint8Array(h.bin)); // 크기가 바뀌었으면 폴백
     const applied = await Promise.all(dsts.map((dst) => this._call(dst, {
       type: "applyDelta", bin: shared, pages: h.pages, sp: h.sp, heapLen: h.heapLen,
     })));
