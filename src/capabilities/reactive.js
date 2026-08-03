@@ -42,12 +42,13 @@ export class ReactiveController {
   // 새 노드의 부모 = 지금의 live 노드(과거로 여행한 뒤라면 그 도착점 = 분기).
   // 반환 핸들: { index, ..., sp, restore(opts) }. restore()가 sp 운반 의식을 대체한다.
   checkpoint() {
-    const mem = this._mem, hashes = mem.pageHashes();
+    const mem = this._mem;
     const handle = (index, info) => Object.freeze({
       ...info, index, sp: this.sps[index],
       restore: (opts = {}) => this.restoreLive(index, null, opts),
     });
     if (this.base === null) {
+      const hashes = mem.pageHashes();
       this.base = mem.sliceAll(); this.deltas.push(new Map()); this.parents.push(-1);
       this.hashes.push(hashes); this.prevHashes = hashes; this.liveIdx = 0;
       this.sps.push(mem.stackSave());
@@ -58,8 +59,10 @@ export class ReactiveController {
     }
     const parent = this.liveIdx; // 델타의 기준이자 나무의 부모
     // 해시 배열은 페이지당 2워드 interleave(실효 64비트). 두 워드 모두 같아야 "안 바뀜".
+    // 주사와 수집이 한 번의 순회다: 페이지를 해시하려고 방금 읽은 자리에서 바로 복사하므로
+    // 변경분을 다시 도는 두 번째 통과가 없다(판정 법은 hashDiffPages와 같고 게이트가 문다).
     const delta = new Map();
-    for (const p of hashDiffPages(this.prevHashes, hashes)) delta.set(p, mem.slicePage(p));
+    const hashes = mem.pageHashes(this.prevHashes, (p) => delta.set(p, mem.slicePage(p)));
     this.deltas.push(delta); this.hashes.push(hashes); this.parents.push(parent); this.prevHashes = hashes;
     this.sps.push(mem.stackSave());
     this.liveIdx = this.deltas.length - 1;

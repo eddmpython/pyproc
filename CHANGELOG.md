@@ -8,13 +8,33 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+### Breaking
+
+- **The page-hash mixer splits each lane into two accumulator chains, so the replay boundary
+  fingerprint (`h0`) changes.** Every word still goes through the identical non-linear step; only the
+  dependency chain is shorter, which lets the multiply latencies overlap. The digest values differ, so a
+  journal or `.pymachine` image written by an earlier version is refused with
+  `PYPROC_REPLAY_MISMATCH` rather than applied to a heap whose page identity is computed differently.
+
+  **Migration:** export what you want to keep with the version that wrote it (`history.export()`),
+  upgrade, then `open()` the exported bundle - the bundle carries its own boundary and is re-anchored
+  on load. A journal that was only ever a crash-recovery cache can be dropped with
+  `history.forget()`. There is no in-place conversion: the fingerprint is the identity of the boundary,
+  not a field beside it.
+
+  Cheaper mixers were measured and rejected. Prefix-sum families (Fletcher/Adler) do less work per
+  word but are linear over Z_2^32, and flipping the top bit of two words carries
+  nothing, so the delta is `2^31*(L_i+L_j)` and vanishes whenever those weights have the same parity.
+  The FNV lane cancels on the same pairs. The right shift in the second lane is the only thing that
+  breaks that propagation, so per-word non-linearity is not negotiable. `[해시 soundness]`
+  now asserts exactly that pair, and a linear mixer fails it.
+
 ### Added
 
 - **`setRetentionPolicy({ rebaseLinear: true })` reclaims memory on a linear history.** Pruning only
   frees nodes off the root-to-live path, so a session that checkpoints per statement (the dominant
   shape) got zero bytes back no matter what limit was set: the policy observed the overrun and the
-  memory stayed. Rebase folds the path itself into the base, so the same limit now holds. Measured in
-  the browser gate: 13 nodes to 2 and the delta store from 86.3 MB to 5.2 MB.
+  memory stayed. Rebase folds the path itself into the base, so the same limit now holds.
 
   **This moves the replay boundary, and that is breaking for anything written against the old one.**
   `hashes[0]` becomes the rebased state, so a journal or image committed before the rebase is refused

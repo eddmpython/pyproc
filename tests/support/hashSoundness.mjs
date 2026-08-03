@@ -81,6 +81,59 @@ export async function assertHashSoundness(check) {
     }
   });
 
+  // MSB 쌍(2^31 두 개)의 상쇄를 막는다. 이 판정이 믹서 형태를 고정한다: 워드에 2^31을 더하면
+  // 자리올림이 없으므로 어떤 Z_2^32-선형 누산기(Fletcher/Adler 계열)에서도 델타가
+  // 2^31*(L_i+L_j)이고, 두 자리의 가중치 합이 짝수면 정확히 0이다. FNV 레인도 xor->imul이라
+  // MSB 차이가 MSB로만 전파돼 같은 쌍에서 상쇄된다. 지금 b레인의 >>>15가 그 전파를 깨는
+  // 유일한 장치이므로, 믹서를 더 싼 것으로 바꾸려는 시도는 여기서 걸린다.
+  check("해시 soundness: MSB 쌍 뒤집기 상쇄 없음(믹서 비선형 요구)", () => {
+    const words = PAGE_SIZE / 4;
+    const heap = new Uint8Array(PAGE_SIZE);
+    const view = new Uint32Array(heap.buffer);
+    const rand = mulberry32(0x6d736200); // "msb"
+    for (let i = 0; i < view.length; i++) view[i] = Math.floor(rand() * 0x100000000) >>> 0;
+    const before = hashesOf(heap);
+    // 같은 패리티(i+j 짝수)를 포함해 여러 간격을 훑는다. 선형 믹서가 통과하는 자리가 거기다.
+    for (const gap of [1, 2, 3, 4, 6, 8, 16, 1024]) {
+      for (const start of [0, 1, 2, 3, 17, words - gap - 1]) {
+        const i = start, j = start + gap;
+        if (j >= words) continue;
+        view[i] ^= 0x80000000; view[j] ^= 0x80000000;
+        const after = hashesOf(heap);
+        const changed = after[0] !== before[0] || after[1] !== before[1];
+        view[i] ^= 0x80000000; view[j] ^= 0x80000000; // 원복(다음 쌍은 같은 배경에서)
+        if (!changed) throw new Error(`워드 ${i},${j}의 MSB 쌍 뒤집기가 페이지 해시를 안 바꾼다 - 믹서가 선형이다(불완전 델타 = 복원 크래시)`);
+      }
+    }
+  });
+
+  // 융합 주사와 독립 주사가 같은 변경 집합을 낸다. checkpoint()는 융합 형태(prev + onChanged)를
+  // 쓰고 collectDelta는 hashDiffPages를 쓰므로, 두 법이 갈리면 저널이 커밋하는 페이지 집합과
+  // 리액티브가 델타로 잡은 집합이 달라진다(한쪽이 빠지면 조용한 불완전 델타).
+  check("해시 soundness: 융합 주사 = hashDiffPages 동치 (fuzz 400회)", () => {
+    const rand = mulberry32(0x66757365); // "fuse"
+    for (let it = 0; it < 400; it++) {
+      const fromPages = 1 + Math.floor(rand() * 3);
+      const grew = Math.floor(rand() * 3);
+      const before = new Uint8Array(fromPages * PAGE_SIZE);
+      for (let i = 0; i < before.length; i += 1 + Math.floor(rand() * 150)) before[i] = Math.floor(rand() * 256);
+      const prev = hashesOf(before);
+      const after = new Uint8Array((fromPages + grew) * PAGE_SIZE);
+      after.set(before);
+      for (let c = 0, n = Math.floor(rand() * 8); c < n; c++) {
+        const idx = Math.floor(rand() * after.length);
+        after[idx] = (after[idx] + 1 + Math.floor(rand() * 255)) & 0xff;
+      }
+      const mem = new MemoryCapability({ heapU8: () => after });
+      const fused = [];
+      const hashes = mem.pageHashes(prev, (p) => fused.push(p));
+      const standalone = heapDelta.hashDiffPages(prev, hashes);
+      if (fused.join(",") !== standalone.join(",")) {
+        throw new Error(`it=${it}: 융합 [${fused}] != hashDiffPages [${standalone}]`);
+      }
+    }
+  });
+
   // 4바이트 정렬 전제(RG3, 실측 발견): pageHashes는 Uint32 워드 전수라 힙 길이의 마지막
   // len%4 바이트를 해싱하지 않는다. 실WASM 힙은 항상 PAGE_SIZE(=65536, 4의 배수) 배수라
   // 꼬리 미해싱이 발생하지 않지만, 그 전제가 load-bearing임을 고정한다: 전제가 깨지면(비정렬
