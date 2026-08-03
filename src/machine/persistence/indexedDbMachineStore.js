@@ -11,7 +11,7 @@ const HEADS = "heads";
 const OWNERS = "owners";
 const ALL_STORES = Object.freeze([BLOBS, GENERATIONS, HEADS, OWNERS]);
 
-import { cloneRecord, copyToken, requestValue, transactionDone, validateIdentity } from "./indexedDbPrimitives.js";
+import { cloneRecord, copyToken, cursorByteLengths, requestValue, transactionDone, validateIdentity } from "./indexedDbPrimitives.js";
 
 async function abortAndReject(transaction, done, error) {
   try { transaction.abort(); } catch (abortError) {}
@@ -177,15 +177,20 @@ export class IndexedDbMachineStore {
     const database = await this._open();
     const transaction = database.transaction([BLOBS, GENERATIONS, HEADS], "readonly");
     const done = transactionDone(transaction);
-    const [blobValues, generationKeys, headKeys] = await Promise.all([
-      requestValue(transaction.objectStore(BLOBS).getAll()),
+    // 길이만 필요하므로 값을 붙잡지 않는다. 예전에는 getAll로 전 blob을 끌어온 뒤 각각을 한 번
+    // 더 복사해서 byteLength만 읽고 버렸다(저장소 크기의 2배가 순간 상주). 두 감사가 독립적으로
+    // 같은 줄을 지목했다.
+    const [blobSizes, generationKeys, headKeys] = await Promise.all([
+      cursorByteLengths(transaction.objectStore(BLOBS)),
       requestValue(transaction.objectStore(GENERATIONS).getAllKeys()),
       requestValue(transaction.objectStore(HEADS).getAllKeys()),
     ]);
     await done;
+    let totalBlobBytes = 0;
+    for (const size of blobSizes.values()) totalBlobBytes += size;
     return Object.freeze({
-      blobs: blobValues.length,
-      blobBytes: blobValues.reduce((sum, value) => sum + copyGenerationBytes(value).byteLength, 0),
+      blobs: blobSizes.size,
+      blobBytes: totalBlobBytes,
       generations: generationKeys.length,
       groups: headKeys.length,
     });
@@ -210,23 +215,23 @@ export class IndexedDbMachineStore {
     try {
       const owner = await requestValue(transaction.objectStore(OWNERS).get(group));
       this._requireOwner(owner, ownerToken, group);
-      const [headKeys, headValues, generationKeys, generationValues, blobKeys, blobValues] = await Promise.all([
+      const [headKeys, headValues, generationKeys, generationValues, blobSizes] = await Promise.all([
         requestValue(transaction.objectStore(HEADS).getAllKeys()),
         requestValue(transaction.objectStore(HEADS).getAll()),
         requestValue(transaction.objectStore(GENERATIONS).getAllKeys()),
         requestValue(transaction.objectStore(GENERATIONS).getAll()),
-        requestValue(transaction.objectStore(BLOBS).getAllKeys()),
-        requestValue(transaction.objectStore(BLOBS).getAll()),
+        // blob은 크기만 필요하다. 바이트를 끌어오면 회수 계획 한 번이 저장소 전체를 상주시킨다.
+        cursorByteLengths(transaction.objectStore(BLOBS)),
       ]);
+      const blobKeys = [...blobSizes.keys()];
       const heads = new Map(headKeys.map((key, index) => [String(key), headValues[index]]));
       const generations = new Map(generationKeys.map((key, index) => [String(key), generationValues[index]]));
       const plan = planGenerationRetention({ targetGroupId: group, heads, generations, blobDigests: blobKeys.map(String) });
-      const blobBytes = new Map(blobKeys.map((key, index) => [String(key), copyGenerationBytes(blobValues[index]).byteLength]));
       const report = Object.freeze({
         ...plan,
         deletedGenerations: plan.deletedGenerationKeys.length,
         deletedBlobs: plan.deletedBlobDigests.length,
-        reclaimedBytes: plan.deletedBlobDigests.reduce((sum, digest) => sum + (blobBytes.get(digest) || 0), 0),
+        reclaimedBytes: plan.deletedBlobDigests.reduce((sum, digest) => sum + (blobSizes.get(digest) || 0), 0),
         retainedGenerations: plan.retainedGenerationKeys.length,
         retainedBlobs: plan.retainedBlobDigests.length,
       });
