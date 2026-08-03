@@ -1,7 +1,8 @@
 # enginePort - EngineContract를 non-Pyodide CPython이 구현할 수 있는가 (D2 관문)
 
 엔진 독립성의 D2 관문 캠페인. 구현 정본은 [EngineContract](../../../src/runtime/engineContract.js),
-계약 표면과 WASI 매핑 실측표는 [engineContract](../engineContract/README.md)에 둔다.
+계약 표면의 정본은 [EngineContract](../../../src/runtime/engineContract.js)와 `index.d.ts`이고,
+WASI 매핑표는 이 문서 아래에 있다(engineContract 캠페인이 종결되면서 이리로 옮겼다).
 
 ## 가설
 
@@ -63,3 +64,28 @@ reactive를 이 엔진 위에서(엔진 무관성의 최종 증명).
 게이트 tests/browser/wasiGate.html GREEN 6/6(부팅 122ms, 값 다리, 완전 시간여행 재개+분기). shim은
 라이선스 고지 후 커밋, wasm은 wasmURL 소비자 제공. 이 캠페인은 승격 완료로 다음 정리 시 폴더 삭제 대상
 (기록은 이 원장 + git). 잔여(v2): reactive 페이지-델타 트리의 워커-내 재사용(현 v1은 전체-힙 스냅샷).
+
+## WASI 매핑 (계약이 non-Pyodide를 구현 가능한가 = D2 관문)
+
+D2 조사 결과를 계약 메서드별로 정리한다.
+
+| 계약 메서드 | Pyodide | WASI 프리빌트(brettcannon) | emscripten 자가빌드 |
+|---|---|---|---|
+| runSync/runAsync | 직접 | stdin 프레임 드라이버(exec 루프). runAsync는 워커 경계로 흡수 | callMain REPL 또는 PyRun_SimpleString export |
+| setGlobal/getGlobal | FFI 프록시 | **값 프로토콜로 강등**(JSON 직렬화, FFI 없음 - D2의 실제 비용) | 동일 |
+| heapU8 | `_module.HEAPU8` | `exports.memory`(wasm ABI 강제, 자명) | 동일 |
+| stackSave/stackRestore | `_emscripten_stack_*` | **미노출 -> null 반환**(복원은 페이지 델타로 성립, sp는 정합성 옵션) | export 플래그로 노출 |
+| setInterruptBuffer | 지원(true) | 시그널 없음 -> false(워커 terminate = kill 의미론) | `Py_EmscriptenSignalBuffer` 업스트림 내장 |
+| makeSnapshot | 지원 | memory.buffer 전체 복사(전망 양호, 미실측) | MEMFS 상태 복제 동반 |
+| 결정적 부팅 | 엔트로피 3소스 스텁 | **더 깨끗**: `random_get` import 하나로 수렴, shim에서 고정 | JS 글루 표면 넓음 |
+
+핵심 결론: 우리 보석(reactive/session/.pymachine)이 요구하는 것은 **heapU8 + 결정적 부팅**뿐이고 둘 다
+WASI에서 성립(오히려 부팅 결정성은 더 깨끗). 벽은 값 다리(FFI)이고, 계약이 "값 프로토콜"을 기본으로
+두면 우회된다. 스택 sp는 null 허용 계약이라 프리빌트에서도 복원이 선다.
+
+## 판정
+
+졸업 -> `src/runtime/engines/pyodideEngine.js`(EngineContract Pyodide 구현). MemoryCapability/Runtime이
+계약을 경유하도록 리팩터(동작 무변경: 구조 298 + 브라우저 38 + 예제 4 GREEN). 엔진 접점이 8파일
+40지점에서 **한 파일 뒤로** 격리됐다. 다음(별도 캠페인): D2 관문 = 이 계약을 non-Pyodide(WASI
+CPython)가 구현해 reactive/session이 도는지 실측(값 프로토콜 재설계 + browser_wasi_shim vendoring).

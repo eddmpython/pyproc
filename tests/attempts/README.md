@@ -49,7 +49,6 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 | [pythonMachine/](pythonMachine/) | 꺼지지 않고 파일 하나로 이동하는 컴퓨터 (browser-os) | 진행 중 (핵심 OS 질문 실측 + src 승격 지속) |
 | [envManager/](envManager/) | 환경의 선언·캐시·재현을 uv급으로 (local-parity 라이브러리 축) | 진행 중 (4개 질문 실측 + 승격) |
 | [selfHost/](selfHost/) | 이 OS 위에서 서버와 웹을 개발할 수 있는가 (러너가 아니라 플랫폼) | 진행 중 (풀스택 실측 8/8, 1번 질문 졸업) |
-| [engineContract/](engineContract/) | 엔진 접점을 계약 하나로 모으면 프리미티브가 계약만으로 도는가 (Pyodide 제거의 인프라) | 졸업 -> src/runtime/engines/pyodideEngine.js (P1 seam) |
 | [enginePort/](enginePort/) | EngineContract를 non-Pyodide CPython(WASI)이 구현 가능한가 (Pyodide 제거의 실증, D2 관문) | 진행 중 (부팅+계약 코어 6/6 + 반복 실행/값 프로토콜/**완전 시간여행** 12/12) |
 | [largeHeapEnvelope/](largeHeapEnvelope/) | 대형 힙에서 OS 프리미티브 비용은 어디서 무너지는가 (Browser Python OS 성능 봉투) | 진행 중 |
 | [stateKernel/](stateKernel/) | 내구 상태 3벌(저널·세션 이미지·machine generation)을 이중 구역 커널 하나로 통합할 수 있는가 | 진행 중 |
