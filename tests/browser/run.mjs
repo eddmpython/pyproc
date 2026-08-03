@@ -13,7 +13,7 @@ import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
-import { findBrowser, headlessArgs, killBrowser } from "./harness.mjs";
+import { findBrowser, headlessArgs, judgeReport, killBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000); // 콜드 CDN 감안. 무거운 probe는 env로 연장
 const MAX_ARTIFACT_BYTES = Number(process.env.PYPROC_GATE_ARTIFACT_MAX || 512 * 1024 * 1024);
@@ -170,15 +170,9 @@ if (result.timedOut) {
   process.exit(1);
 }
 for (const c of result.checks) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.name}${c.info ? " (" + c.info + ")" : ""}`);
-// 판정은 러너가 한다. `result.ok`는 시험 대상인 페이지가 계산해 보내온 값이라 그것만 믿으면
-// 검증 대상이 자기 합격을 선언한다. 15개 페이지가 각자 `checks.every(pass)`를 사본으로 갖고
-// 있었고 어느 게이트도 그 공식을 강제하지 않았다: 한 페이지가 `some(...)`으로 표류하거나
-// `ok: true`를 박으면 FAIL 줄을 인쇄하면서 exit 0이었다. 체크 0개도 합격이 아니다.
-if (!result.checks.length) {
-  console.log("\nFAIL 체크 0개: 페이지가 아무것도 단정하지 않았다(GREEN (0/0)은 합격이 아니다)");
-  result.ok = false;
-}
-if (result.checks.some((c) => !c.pass)) result.ok = false;
+// 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다). 예산 초과처럼 러너가
+// 페이지 밖에서 만든 단정은 extra로 넘긴다.
+const budgetProblems = [];
 if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
 if (phase > 1) console.log(`브라우저 프로세스 phase: ${phase}`);
 // 성능 예산: 기본 게이트의 핵 경로 측정치가 상한(자릿수 회귀 차단용, perfBudget.json)을 넘으면 RED.
@@ -188,34 +182,23 @@ if (result.timings) {
   const over = Object.entries(budget)
     .filter(([key, limit]) => Number.isFinite(result.timings[key]) && result.timings[key] > limit)
     .map(([key, limit]) => `${key} ${result.timings[key]} > ${limit}`);
-  if (over.length) {
-    console.log(`\nFAIL 성능 예산 초과: ${over.join(", ")}`);
-    result.ok = false;
-  }
+  if (over.length) budgetProblems.push(`성능 예산 초과: ${over.join(", ")}`);
   // 키가 없으면 그 예산은 조용히 무효가 된다(위 filter가 걸러낸다). 기본 게이트 페이지는
   // 예산 키 전부를 내놓아야 한다: 측정 이름을 바꾸면 예산이 영구히 죽는 자리였다.
   // probe 지정 실행은 다른 측정 집합이라 하한이 등재된 페이지에만 요구한다.
   const floors = JSON.parse(readFileSync(new URL("./gateFloor.json", import.meta.url), "utf8")).floors;
   if (page in floors && page.endsWith("gate.html")) {
     const absent = Object.keys(budget).filter((key) => !Number.isFinite(result.timings[key]));
-    if (absent.length) {
-      console.log(`\nFAIL 성능 예산 키가 측정에 없다: ${absent.join(", ")}(이름을 바꾸면 예산이 죽는다)`);
-      result.ok = false;
-    }
+    if (absent.length) budgetProblems.push(`성능 예산 키가 측정에 없다: ${absent.join(", ")}(이름을 바꾸면 예산이 죽는다)`);
   }
 }
-// 체크 수 하한: 'ok && 전부 pass'만 보면 체크를 지운 게이트가 더 적은 수로 GREEN이 된다.
-// 하한 근거와 유지 규칙은 gateFloor.json에 있다. 등재 없는 페이지(probe)는 자연 통과.
-{
-  const floors = JSON.parse(readFileSync(new URL("./gateFloor.json", import.meta.url), "utf8")).floors;
-  const minimum = floors[page];
-  const passedChecks = result.checks.filter((c) => c.pass).length;
-  if (Number.isFinite(minimum) && passedChecks < minimum) {
-    console.log(`\nFAIL 게이트 층 하한: ${page} 통과 체크 ${passedChecks} < 하한 ${minimum}`);
-    result.ok = false;
-  }
-}
+// 체크 수 하한 근거와 유지 규칙은 gateFloor.json에 있다. 등재 없는 페이지(probe)는 자연 통과.
+const verdict = judgeReport(result, {
+  floor: JSON.parse(readFileSync(new URL("./gateFloor.json", import.meta.url), "utf8")).floors[page],
+  extra: budgetProblems.map((name) => ({ name, pass: false })),
+});
+for (const problem of verdict.problems) console.log(`\nFAIL ${problem}`);
 // 실측 수치 아카이브(CI 아티팩트용): 러너 숫자와 로컬 숫자를 비교 가능하게 보존한다.
-if (process.env.PYPROC_GATE_OUT) writeFileSync(process.env.PYPROC_GATE_OUT, JSON.stringify({ page, browser, ...result }, null, 2));
-console.log(`\n결과: ${result.ok ? "GREEN" : "RED"} (${result.checks.filter((c) => c.pass).length}/${result.checks.length})`);
-process.exit(result.ok ? 0 : 1);
+if (process.env.PYPROC_GATE_OUT) writeFileSync(process.env.PYPROC_GATE_OUT, JSON.stringify({ page, browser, ...result, verdict }, null, 2));
+console.log(`\n결과: ${verdict.ok ? "GREEN" : "RED"} (${result.checks.filter((c) => c.pass).length}/${result.checks.length})`);
+process.exit(verdict.ok ? 0 : 1);

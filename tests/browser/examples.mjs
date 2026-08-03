@@ -3,8 +3,9 @@
 // 라이브 데모까지 나갔다. 공개 표면 게이트(gate.html)는 라이브러리를 검증하지 예제를
 // 실행하지 않는다. 예제는 데모(진열장)이므로 이 게이트가 매 CI에서 실제로 연다.
 // 각 예제는 ?gate 쿼리에서만 /gateReport로 완주 여부를 보고한다(사람이 열면 no-op).
+import { readFileSync } from "node:fs";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
-import { findBrowser, launchBrowser } from "./harness.mjs";
+import { findBrowser, judgeReport, launchBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 // brandGate: 예제가 쓰는 브랜드 자산(마크 SVG + demo.css 팔레트)이 실제로 그려지는지 먼저 본다.
@@ -15,6 +16,10 @@ const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 // (examples/index.html 경로로 열면 assets/와 index.js가 어긋난다. staticServer가 "/"를 랜딩에 매핑한다).
 const PAGES = ["tests/browser/brandGate.html", "", "examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/immortal.html", "examples/serverDev.html", "examples/speedLab.html", "examples/processOs.html"];
 const label = (page) => page || "/ (랜딩 히어로 라이브 데모)";
+// 페이지별 통과 체크 수 하한. 예제 페이지는 단정이 하나뿐인 것이 많아서, 그 하나를 지우거나
+// 약화시키면 이 레인이 통째로 무의미해진다(그것을 막는 층은 여기밖에 없다). 하한은
+// tests/browser/gateFloor.json 한 곳에 산다: 브라우저 레인의 하한 정본이 갈리면 안 된다.
+const FLOORS = JSON.parse(readFileSync(new URL("./gateFloor.json", import.meta.url), "utf8")).floors;
 const indexQuery = process.env.PYPROC_INDEX_URL ? `&indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
 
 const browser = findBrowser();
@@ -45,8 +50,12 @@ for (const page of PAGES) {
   });
   session.close();
   const info = ((result.checks && result.checks[0] && result.checks[0].info) || "").replaceAll("\n", " | ").slice(-150);
-  if (result.ok !== true) failed++;
-  console.log(`  ${result.ok === true ? "PASS" : "FAIL"} ${label(page)}${result.timedOut ? " (타임아웃)" : ""}${info ? "\n        " + info : ""}`);
+  // 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다). 예제 페이지는
+  // 단정이 하나뿐인 경우가 많아 하한이 특히 중요하다: 단정을 지우면 체크 0개로 RED가 된다.
+  const verdict = judgeReport(result, { floor: FLOORS[page], timeoutLabel: "타임아웃" });
+  if (!verdict.ok) failed++;
+  const problems = verdict.problems.length ? "\n        " + verdict.problems.join(" / ") : "";
+  console.log(`  ${verdict.ok ? "PASS" : "FAIL"} ${label(page)} (${verdict.passed}/${verdict.total})${result.timedOut ? " 타임아웃" : ""}${info ? "\n        " + info : ""}${problems}`);
 }
 server.close();
 console.log(`\n결과: ${PAGES.length - failed}/${PAGES.length} ${failed ? "RED" : "GREEN"}`);

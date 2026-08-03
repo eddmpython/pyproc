@@ -98,3 +98,34 @@ export function launchBrowser(url, opts = {}) {
     },
   };
 }
+
+// 판정은 러너가 한다. `result.ok`는 시험 대상인 페이지가 계산해 보내온 값이라 그것만 믿으면
+// 검증 대상이 자기 합격을 선언한다. 페이지들이 각자 `checks.every(pass)` 사본을 갖고 있었고
+// 어느 게이트도 그 공식을 강제하지 않았다: 한 페이지가 `some(...)`으로 표류하거나 `ok: true`를
+// 박으면 FAIL 줄을 인쇄하면서 exit 0이었다. 그 판정이 러너 5개에 흩어져 있었으므로 여기 모은다.
+// 페이지가 보낸 ok는 참고값으로 강등하고 읽지 않는다.
+//
+// opts.floor: 통과 체크 수 하한(등재된 페이지만). opts.extra: 러너가 페이지 밖에서 만든 단정
+// 목록([{ name, pass }]). opts.timeoutLabel: 타임아웃 표기.
+export function judgeReport(result, opts = {}) {
+  const checks = Array.isArray(result?.checks) ? result.checks : [];
+  const passed = checks.filter((entry) => entry.pass).length;
+  const extra = Array.isArray(opts.extra) ? opts.extra : [];
+  const problems = [];
+  if (result?.timedOut) problems.push(opts.timeoutLabel || "타임아웃");
+  // 체크 0개는 합격이 아니다. 빈 보고를 통과로 세면 페이지 사망이 GREEN (0/0)이 된다.
+  if (!checks.length) problems.push("체크 0개: 페이지가 아무것도 단정하지 않았다");
+  const failed = checks.filter((entry) => !entry.pass);
+  if (failed.length) problems.push(`실패 체크 ${failed.length}개: ${failed.map((entry) => entry.name).join(", ").slice(0, 160)}`);
+  for (const entry of extra) if (!entry.pass) problems.push(entry.name);
+  const floor = opts.floor;
+  if (Number.isFinite(floor) && passed + extra.filter((entry) => entry.pass).length < floor) {
+    problems.push(`게이트 층 하한: 통과 ${passed + extra.filter((entry) => entry.pass).length} < 하한 ${floor}`);
+  }
+  return Object.freeze({
+    ok: problems.length === 0,
+    passed: passed + extra.filter((entry) => entry.pass).length,
+    total: checks.length + extra.length,
+    problems: Object.freeze(problems),
+  });
+}

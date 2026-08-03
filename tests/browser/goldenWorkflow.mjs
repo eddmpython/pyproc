@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { safeJoin, sendFile } from "../../scripts/staticServer.mjs";
 import { installPackedPyProc, ROOT } from "../packageHarness.mjs";
-import { launchBrowser } from "./harness.mjs";
+import { judgeReport, launchBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GOLDEN_TIMEOUT || 180000);
 const GOLDEN_PAGE = "tests/browser/goldenWorkflow.html";
@@ -74,10 +74,11 @@ try {
       console.log(`  ${entry.pass ? "PASS" : "FAIL"} ${entry.name}${entry.info ? ` (${entry.info})` : ""}`);
     }
     if (result.timings) console.log(`\nmeasurement: ${JSON.stringify(result.timings)}`);
-    const passCount = (result.checks || []).filter((entry) => entry.pass).length;
-    const ok = result.ok && passCount > 0;
-    console.log(`\nresult: ${ok ? "GREEN" : "RED"} (${passCount}/${(result.checks || []).length})`);
-    if (!ok) process.exitCode = 1;
+    // 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다).
+    const verdict = judgeReport(result);
+    for (const problem of verdict.problems) console.log(`FAIL ${problem}`);
+    console.log(`\nresult: ${verdict.ok ? "GREEN" : "RED"} (${verdict.passed}/${verdict.total})`);
+    if (!verdict.ok) process.exitCode = 1;
   }
 } finally {
   session?.close();

@@ -649,6 +649,34 @@ section("탐지기 자기 시험");
     // 살아 있으면 이 단정이 뒤집힌다.
     if (verdict("spawn")) throw new Error("다른 클래스의 이름을 이 수신자의 구현으로 셌다");
   });
+  // 브라우저 러너의 판정자도 탐지기다. 시험 대상 페이지가 보낸 ok를 믿으면 검증 대상이 자기
+  // 합격을 선언한다. 실물 함수를 오염 보고로 구동해 매 실행마다 그것이 무는지 본다.
+  await checkAsync("탐지기가 문다: judgeReport는 페이지의 self-ok를 믿지 않는다", async () => {
+    const { judgeReport } = await import(pathToFileURL(join(ROOT, "tests", "browser", "harness.mjs")).href);
+    const failing = judgeReport({ ok: true, checks: [{ name: "x", pass: false }] });
+    if (failing.ok) throw new Error("실패 체크를 실은 self-ok 보고를 통과시켰다");
+    const empty = judgeReport({ ok: true, checks: [] });
+    if (empty.ok) throw new Error("체크 0개 보고를 통과시켰다(GREEN 0/0은 합격이 아니다)");
+    const timedOut = judgeReport({ ok: true, checks: [{ name: "x", pass: true }], timedOut: true });
+    if (timedOut.ok) throw new Error("타임아웃 보고를 통과시켰다");
+    const short = judgeReport({ ok: true, checks: [{ name: "x", pass: true }] }, { floor: 2 });
+    if (short.ok) throw new Error("하한 미달 보고를 통과시켰다");
+    const good = judgeReport({ ok: false, checks: [{ name: "x", pass: true }] }, { floor: 1 });
+    if (!good.ok) throw new Error("전부 통과한 보고를 떨어뜨렸다(오탐)");
+  });
+  // 러너가 다시 페이지의 판정을 읽는 자리로 돌아가지 못하게 막는다. 판정자는 한 곳이다.
+  check("게이트 러너는 페이지가 보낸 ok를 최종 판정으로 쓰지 않는다", () => {
+    const runners = ["run.mjs", "examples.mjs", "socketLane.mjs", "goldenWorkflow.mjs", "installedPackageGate.mjs"];
+    const offenders = [];
+    for (const name of runners) {
+      const src = readFileSync(join(ROOT, "tests", "browser", name), "utf8");
+      if (!src.includes("judgeReport")) offenders.push(`${name}: judgeReport를 쓰지 않는다`);
+      for (const [index, line] of src.split("\n").entries()) {
+        if (stripComments(line).includes("result.ok")) offenders.push(`${name}:${index + 1} result.ok를 읽는다`);
+      }
+    }
+    if (offenders.length) throw new Error(offenders.join(" / "));
+  });
   // 스캐너 자체도 탐지기다: 문자열 안의 `//`를 주석으로 오인하면 그 줄 뒤가 모든 법에서 사라진다.
   check("탐지기가 문다: stripComments가 문자열 안의 //를 주석으로 보지 않는다", () => {
     const line = `const u = "https://cdn.example/x"; atob(payload);`;

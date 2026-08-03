@@ -6,7 +6,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { safeJoin, sendFile } from "../../scripts/staticServer.mjs";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
-import { launchBrowser } from "./harness.mjs";
+import { judgeReport, launchBrowser } from "./harness.mjs";
 import { installedPackageCoverageManifest } from "./installedPackageCoverage.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
@@ -593,11 +593,14 @@ try {
   for (const c of result.checks) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.name}${c.info ? " (" + c.info + ")" : ""}`);
   console.log(`  ${coverageOk ? "PASS" : "FAIL"} installed-package coverage manifest${coverageOk ? ` (${COVERAGE_MANIFEST.rows.length} rows)` : ""}`);
   if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
-  const passCount = result.checks.filter((c) => c.pass).length + (coverageOk ? 1 : 0);
-  const totalCount = result.checks.length + 1;
-  const ok = result.ok && coverageOk;
-  console.log(`\n결과: ${ok ? "GREEN" : "RED"} (${passCount}/${totalCount})`);
-  process.exit(ok ? 0 : 1);
+  // 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다). 커버리지 매니페스트는
+  // 러너가 페이지 밖에서 만든 단정이므로 extra로 넘긴다.
+  const verdict = judgeReport(result, {
+    extra: [{ name: "installed-package coverage manifest 불일치", pass: coverageOk }],
+  });
+  for (const problem of verdict.problems) console.log(`FAIL ${problem}`);
+  console.log(`\n결과: ${verdict.ok ? "GREEN" : "RED"} (${verdict.passed}/${verdict.total})`);
+  process.exit(verdict.ok ? 0 : 1);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

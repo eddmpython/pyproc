@@ -9,7 +9,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
-import { findBrowser, headlessArgs, killBrowser } from "./harness.mjs";
+import { findBrowser, headlessArgs, judgeReport, killBrowser } from "./harness.mjs";
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..");
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
@@ -72,9 +72,10 @@ for (const entry of result.checks || []) {
   console.log(`  ${entry.pass ? "PASS" : "FAIL"} ${entry.name}${entry.info ? ` (${entry.info})` : ""}`);
 }
 if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
-const passed = (result.checks || []).filter((entry) => entry.pass).length;
-const total = (result.checks || []).length;
+// 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다).
+const verdict = judgeReport(result, { timeoutLabel: "타임아웃" });
 // 보고가 비면 그 사실을 말한다. 빈 보고를 "0/0 RED"로만 찍으면 타임아웃과 페이지 사망이 구분되지 않는다.
-if (!total) console.log(`  보고 없음: ${result.timedOut ? "타임아웃" : JSON.stringify(result).slice(0, 200)}`);
-console.log(`\n결과: ${result.ok === true ? "GREEN" : "RED"} (${passed}/${total})`);
-process.exit(result.ok === true ? 0 : 1);
+if (!verdict.total) console.log(`  보고 없음: ${result.timedOut ? "타임아웃" : JSON.stringify(result).slice(0, 200)}`);
+for (const problem of verdict.problems) console.log(`\nFAIL ${problem}`);
+console.log(`\n결과: ${verdict.ok ? "GREEN" : "RED"} (${verdict.passed}/${verdict.total})`);
+process.exit(verdict.ok ? 0 : 1);
