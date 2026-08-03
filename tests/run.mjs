@@ -2612,7 +2612,10 @@ check("브라우저 게이트가 CLI asset manifest를 소비", () => {
   }
   if (!gateSrc.includes('fetch("/pyproc-assets.json"')) throw new Error("gate.html이 CLI 산출 manifest를 fetch하지 않음");
   if (!gateSrc.includes('assetOk.verified > 1') || !gateSrc.includes('"src/processOs/ipc.js"')) throw new Error("gate.html이 graph 단위 preflight를 검증하지 않음");
-  if (!gateSrc.includes("registerPyProcServiceWorker") || !gateSrc.includes("coreIntegrity=/pyproc-assets.json"))
+  // 배선을 본다. 예전에는 info 문자열의 `coreIntegrity=/pyproc-assets.json` 에코를 찾았는데,
+  // 그것은 메시지 문구를 다듬는 것만으로 법이 깨지고(2026-08-03 실제로 깨졌다) 반대로 실제
+  // 등록이 사라져도 메시지만 남으면 통과한다. 실제 옵션 전달을 찾는다.
+  if (!gateSrc.includes("registerPyProcServiceWorker") || !/coreIntegrity:\s*"\/pyproc-assets\.json"/.test(gateSrc))
     throw new Error("gate.html이 Service Worker 등록 경로와 SW coreIntegrity를 검증하지 않음");
   if (!gateSrc.includes("Runtime -> SyscallBridge 상속 거부") || !gateSrc.includes("assetIntegrity 상속 childWorker"))
     throw new Error("gate.html이 Runtime assetIntegrity 상속 경로를 검증하지 않음");
