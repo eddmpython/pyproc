@@ -107,6 +107,9 @@ export class MachineJournal {
     this._lastSeq = -1;
     this._sp = null;
     this._busy = false;
+    // 진행 중 작업을 값으로 드러낸다. 회수하는 쪽(machine dispose)이 stop() 뒤에 이것을
+    // 기다리지 않으면, 이미 해제된 리액티브 컨트롤러를 읽는 커밋이 파손 세대를 쓸 수 있다.
+    this._inFlight = null;
     this._h0Key = null; // 리플레이 경계(cp0) 지문 캐시. 커밋/부활의 결정성 대조 축.
     this._legacyCleaned = false;
     this.commits = 0;
@@ -118,6 +121,19 @@ export class MachineJournal {
     this.packs = 0;
     this.packBytes = 0;
   }
+
+  // 배타 구간의 시작과 끝. _busy 불리언만으로는 "지금 도는 중"을 알 수 있어도 "끝날 때까지
+  // 기다린다"를 표현할 수 없다. 회수 경로가 그 대기를 요구하므로 in-flight를 값으로 남긴다.
+  _begin() {
+    this._busy = true;
+    let release = null;
+    this._inFlight = new Promise((resolve) => { release = resolve; });
+    return () => { this._busy = false; this._inFlight = null; release(); };
+  }
+
+  // 진행 중 작업이 끝날 때까지 기다린다(없으면 즉시 반환). stop() 뒤에 이것을 기다려야
+  // 해제된 컨트롤러를 읽는 커밋이 남지 않는다.
+  async settle() { while (this._inFlight) await this._inFlight; }
 
   // 리플레이 경계(cp0)의 지문: 경계 해시 배열 전체의 SHA-256. 같은 엔진 + 같은 매니페스트라야 같다.
   // 커밋마다 commit.env.h0에 싣고, recover가 대조한다(엔진이 바뀐 채 부활하면 조용한 힙 오염이므로).
@@ -206,7 +222,7 @@ export class MachineJournal {
   // 페이지 목록만 주고, 페이지 바이트의 주소화·dedupe·쓰기 순서 법은 커널이 소유한다).
   async commit() {
     if (this._busy) return null;
-    this._busy = true;
+    const endBusy = this._begin();
     try {
       // 저널 커밋도 "부활을 전제한 쓰기"다(recover가 새 탭의 새 커널로 되살린다). 그러므로
       // 세션 저장/내보내기와 같은 이식성 전제를 통과해야 한다: 힙에 JS 핸들이 있으면 그 세대는
@@ -249,7 +265,7 @@ export class MachineJournal {
       if (autoPack) result.autoPack = autoPack;
       if (this._pruneAfterCommit) result.pruned = r.pruneTo(r.liveIdx);
       return result;
-    } finally { this._busy = false; }
+    } finally { endBusy(); }
   }
 
   // 의도한 삭제는 backing store를 먼저 지우고 tombstone을 마지막에 쓴다. 중간 실패에서 옛
@@ -257,7 +273,7 @@ export class MachineJournal {
   async delete() {
     if (this._busy) throw new PyProcError("PYPROC_JOURNAL_IO", "journal.delete: journal is busy", { retryable: true });
     this.stop();
-    this._busy = true;
+    const endBusy = this._begin();
     try {
       this._kernel.resetStorage();
       for (const [name, recursive] of JOURNAL_STORAGE_ENTRIES) {
@@ -272,7 +288,7 @@ export class MachineJournal {
       this._kernel.resetStorage();
       this._legacyCleaned = false;
       return { deleted: true };
-    } finally { this._busy = false; }
+    } finally { endBusy(); }
   }
 
   // 이관 완료 청소: 커널 refs가 섰으니 루트의 구 세대 파일(HEAD.json/PREV.json)은 죽은
@@ -353,10 +369,10 @@ export class MachineJournal {
   // 모두 읽으므로 기존 저널과 호환된다.
   async pack() {
     if (this._busy) return null;
-    this._busy = true;
+    const endBusy = this._begin();
     try {
       return await this._packNow();
-    } finally { this._busy = false; }
+    } finally { endBusy(); }
   }
 
   async _packNow() {

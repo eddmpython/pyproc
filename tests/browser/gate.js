@@ -483,6 +483,25 @@ try {
     const deletedRecovered = await rt.enableJournal({ dir: deletedDir, reactive, includeHome: false }).recover();
     check("journal eviction: explicit delete는 tombstone 뒤 intentional absence", deleted.deleted === true && tombstone.state === "deleted" && deletedRecovered === null);
     await clean(deletedName);
+
+    // dispose는 저널 유휴 감시까지 회수한다. 회수하지 않으면 인터벌이 런타임과 리액티브
+    // 컨트롤러를 붙잡은 채 탭 수명 내내 살아 있고, dispose 뒤의 실행이 해제된 컨트롤러를 읽는
+    // 커밋을 부른다. 판정은 dispose 뒤에 상태를 변이시켜 보는 것이다: 감시가 살아 있으면
+    // 유휴 판정에 걸려 onStatus가 다시 불린다(그 커밋은 실패한다).
+    const disposeName = "pyprocGateJournalDispose";
+    const disposeDir = await dirOf(disposeName);
+    const dm = await boot({ indexURL: INDEX, assetIntegrity });
+    let watchEvents = 0;
+    dm.history.watch({ dir: disposeDir, includeHome: false, idleMs: 150, onStatus: () => { watchEvents++; } });
+    dm.run("disposeWatchMark = 1");
+    const watched = await waitFor(() => watchEvents >= 1, 10000);
+    await dm.dispose();
+    const afterDispose = watchEvents;
+    dm.run("disposeWatchMark = 2"); // 회수 안 된 감시라면 이 변이가 유휴 커밋을 다시 부른다
+    await new Promise((res) => setTimeout(res, 150 * 6));
+    check("dispose: 저널 유휴 감시 회수(dispose 뒤 변이가 커밋을 되살리지 않는다)",
+      watched && watchEvents === afterDispose, `dispose 전 ${afterDispose}, 뒤 ${watchEvents - afterDispose}`);
+    await clean(disposeName);
   }
 
   // Layer 1: 빌린 시스템콜 v1 (input 동기 + urllib 실 HTTP)

@@ -103,6 +103,17 @@ class PyprocHistory {
   }
   // 유휴 감시(WAL): durable 주장의 실패는 onStatus로 관측 가능하다.
   watch(opts) { return this._journal(opts).start(); }
+  // 저널 수명주기는 이 이력 핸들이 소유한다. 회수하지 않으면 watch가 켠 인터벌이 런타임과
+  // 리액티브 컨트롤러를 붙잡은 채 탭이 사는 동안 계속 깨어난다(감시만 하고 커밋은 못 한다:
+  // execSeq가 멈춘 머신은 유휴 판정에 걸리지 않는다). 진행 중 커밋은 기다렸다 회수한다.
+  async disposeJournals() {
+    const journals = [...this._journals.values()];
+    this._journals.clear();
+    for (const journal of journals) {
+      journal.stop();
+      await journal.settle();
+    }
+  }
   pack(opts) { return this._journal(opts).pack(); }
 
   // 이동 가능한 서명 bundle. 결정 부팅 전용: 비결정 출신 커밋에는 리플레이 보증이 없다.
@@ -211,6 +222,8 @@ export class PyprocMachine {
     const containers = await (this._containers || Promise.resolve(null)).catch(() => null);
     this._containers = null;
     if (containers) containers.terminate();
+    // 리액티브 해제보다 먼저다. 순서가 뒤집히면 진행 중 커밋이 해제된 컨트롤러를 읽는다.
+    await this.history.disposeJournals();
     this._reactive.dispose();
   }
 }
