@@ -8,6 +8,12 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+<!-- unreleased-subpaths: -->
+소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
+예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
+
+## 0.0.12 - 2026-08-03
+
 ### Breaking
 
 - **The page-hash mixer splits each lane into two accumulator chains, so the replay boundary
@@ -30,6 +36,18 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   now asserts exactly that pair, and a linear mixer fails it.
 
 ### Changed
+
+- **`/home` is committed as one content-addressed blob per file.** It used to be concatenated into a
+  single pack, so one changed byte in one file changed the pack's address and the whole tree was
+  re-read, re-hashed, and re-written on every commit. Now an unchanged file is already in the store
+  and costs no write at all: a commit that changed nothing under `/home` writes zero home blobs, and
+  a commit that changed one file writes one. `journal.commit()` reports that as `home.wrote`, which
+  is now a count rather than a boolean.
+
+  Older generations keep working - the v1 pack layout is still read, so upgrading does not lose a
+  journal or an image. The **new** layout is not readable by older pyproc versions, so a
+  `.pymachine` file exported after this change must be opened with this version or later; an older
+  reader refuses it with `PYPROC_MACHINE_FORMAT_INVALID` rather than restoring a partial tree.
 
 - **The Web Machine IndexedDB schema is now version 3, with a blob size index.** Asking how much a
   store holds - `inspectStorage()`, and every recovery-window plan - used to require deserializing
@@ -76,9 +94,7 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   started by `history.watch()`, so the interval no longer holds the runtime and the reactive
   controller for the life of the tab.
 
-<!-- unreleased-subpaths: -->
-소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
-예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
+한국어 요약: 리플레이 경계 지문(h0)이 바뀌는 브레이킹 릴리즈다. 페이지 해시 믹서가 레인마다 사슬 둘로 갈라지고, 체크포인트 노드는 바뀐 페이지의 해시만 담고, `/home`은 파일마다 내용주소 blob 하나로 커밋되고, Web Machine IndexedDB는 스키마 v3에 blob 크기 색인을 갖는다. 옛 저널과 이미지는 `PYPROC_REPLAY_MISMATCH`로 명시 거부되므로, 지키려는 상태는 이전 버전에서 `history.export()`로 내보낸 뒤 업그레이드하고 `open()`한다. 크래시 복구 캐시일 뿐인 저널은 `history.forget()`으로 버린다. `setRetentionPolicy({ rebaseLinear: true })`는 선형 역사에서 메모리 한계가 실제로 걸리게 하는 새 옵션이고, 경계를 옮기는 대가 때문에 기본값은 꺼짐이다.
 
 ## 0.0.11 - 2026-08-02
 
@@ -124,19 +140,6 @@ Users upgrading directly from 0.0.9 must also apply the 0.0.10 migration from ro
   `machine.proc()` is memoized per machine so a remount reuses the existing pool.
 
 ### Changed
-
-- **`/home` is committed as one content-addressed blob per file.** It used to be concatenated into a
-  single pack, so one changed byte in one file changed the pack's address and the whole tree was
-  re-read, re-hashed, and re-written on every commit. Now an unchanged file is already in the store
-  and costs no write at all: a commit that changed nothing under `/home` writes zero home blobs, and
-  a commit that changed one file writes one. `journal.commit()` reports that as `home.wrote`, which
-  is now a count rather than a boolean.
-
-  Older generations keep working - the v1 pack layout is still read, so upgrading does not lose a
-  journal or an image. The **new** layout is not readable by older pyproc versions, so a
-  `.pymachine` file exported after this change must be opened with this version or later; an older
-  reader refuses it with `PYPROC_MACHINE_FORMAT_INVALID` rather than restoring a partial tree.
-
 
 - Durable RPC now has one normative retry boundary. A direct durable controller may resend the same
   request id once only when it can prove a proxy-free session. A normal follower, a live timeout,

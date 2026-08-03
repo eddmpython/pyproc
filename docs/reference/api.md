@@ -171,8 +171,14 @@ Volatile verbs:
 - `stats()` reports exact controller-owned base/delta/hash bytes, node/branch counts,
   live depth, and the last pressure event.
 - `setRetentionPolicy(policy)` sets observable budgets (`maxNodes`, `maxDeltaBytes`,
-  `maxTotalBytes`). `pruneBranches: true` may remove only off-live-path branches;
-  the live path is never silently dropped or rebased.
+  `maxTotalBytes`). `pruneBranches: true` may remove only off-live-path branches, so a
+  linear history - the shape a per-statement checkpoint produces - gets nothing back from
+  it. `rebaseLinear: true` folds the live path into the base instead, which is what makes
+  a budget hold there. It is off by default because folding moves the replay boundary:
+  a journal or image written against the old one is refused with `PYPROC_REPLAY_MISMATCH`,
+  and time travel before the new boundary with `PYPROC_CHECKPOINT_PRUNED`. Available from
+  0.0.12, along with `rebaseTo(j)` for folding explicitly and `boundaryEpoch`, which counts
+  boundary moves so a consumer caching the fingerprint can drop its cache.
 
 Durable verbs (all take `{ dir }`, a `FileSystemDirectoryHandle`; the same `dir` shares
 one journal instance):

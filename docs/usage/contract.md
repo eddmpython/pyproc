@@ -14,7 +14,7 @@ The roles are split.
 ```jsonc
 // package.json
 "dependencies": {
-  "pyproc": "0.0.11"
+  "pyproc": "0.0.12"
 }
 ```
 
