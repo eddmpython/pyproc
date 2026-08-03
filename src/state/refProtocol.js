@@ -48,15 +48,24 @@ async function putObject(cryptoProvider, store, bytes, counters, bucket) {
 // (stale이면 PYPROC_STATE_FENCE_STALE, HEAD 불변).
 export async function commitState(cryptoProvider, store, input = {}) {
   const { pages = null, payloads = null, files = [], env = {}, fence = null, parents = [], createdAt = null } = input;
-  const counters = { wrote: 0, deduped: 0, pagesWrote: 0, filesWrote: 0, metaWrote: 0 };
+  const counters = { wrote: 0, deduped: 0, reused: 0, pagesWrote: 0, filesWrote: 0, metaWrote: 0 };
   // (1) payload 먼저
   let tree;
+  let pageTable = null;
   if (pages) {
     const table = [];
     // 페이지 바이트는 lazy로 받는다: `[page, bytes]`도 `[page, () => bytes]`도 같다. 후자면
     // 호출자가 페이지 하나를 만들고 여기서 쓰고 놓으므로, 커밋 중 JS 상주가 델타 전량이 아니라
     // 페이지 하나로 내려간다(200MB 델타 커밋이 async 루프 내내 힙에 살아 있던 자리다).
     for (const [p, source] of pages) {
+      // 호출자가 "이 페이지는 이미 이 주소에 저장돼 있다"를 단언할 수 있다. 그 단언이 틀리면
+      // tree가 없는 오브젝트를 가리키므로, 단언은 같은 저장소에 대한 직전 커밋의 성공과
+      // 페이지 해시 불변을 함께 확인한 쪽만 할 수 있다(저널의 주소 캐시가 그 조건이다).
+      if (source && typeof source === "object" && typeof source.address === "string") {
+        table.push([p, source.address]);
+        counters.reused++;
+        continue;
+      }
       const bytes = typeof source === "function" ? source() : source;
       table.push([p, await putObject(cryptoProvider, store, bytes, counters, "pagesWrote")]);
     }
@@ -64,6 +73,7 @@ export async function commitState(cryptoProvider, store, input = {}) {
     for (const { id, bytes, meta = null } of files) {
       fileEntries.push({ id, address: await putObject(cryptoProvider, store, bytes, counters, "filesWrote"), byteLength: bytes.length, meta });
     }
+    pageTable = table;
     tree = makePageTableTree({ pageSize: input.pageSize, heapLen: input.heapLen, sp: input.sp ?? null, pages: table, files: fileEntries });
   } else if (payloads) {
     const entries = [];
@@ -96,7 +106,9 @@ export async function commitState(cryptoProvider, store, input = {}) {
   await store.writeRef("HEAD", { commit: commitAddress });
   return {
     commitAddress, treeAddress,
-    wrote: counters.wrote, deduped: counters.deduped,
+    // 커밋된 page -> address. 호출자가 다음 커밋에서 주소를 단언하려면 이것이 필요하다.
+    pageTable,
+    wrote: counters.wrote, deduped: counters.deduped, reused: counters.reused,
     pagesWrote: counters.pagesWrote, filesWrote: counters.filesWrote, metaWrote: counters.metaWrote,
   };
 }

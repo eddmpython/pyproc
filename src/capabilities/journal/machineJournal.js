@@ -108,6 +108,12 @@ export class MachineJournal {
     // 기다리지 않으면, 이미 해제된 리액티브 컨트롤러를 읽는 커밋이 파손 세대를 쓸 수 있다.
     this._inFlight = null;
     this._h0Key = null; // 리플레이 경계(cp0) 지문 캐시. 커밋/부활의 결정성 대조 축.
+    // 페이지 주소 캐시: page -> { a, b, address }. a/b는 직전 커밋 시점의 페이지 해시 두 워드다.
+    // 커밋 비용이 "직전 변경분"이 아니라 "부팅 이후 누적 델타"에 비례하던 자리를 좁힌다:
+    // 누적 델타의 대부분은 매 커밋 바이트가 같은데도 페이지마다 SHA-256 + 저장소 조회를 다시
+    // 했다. 힙 해시는 체크포인트가 이미 계산해 두므로 이 대조는 추가 비용이 0이다.
+    // 무효화: 저장소가 사라지는 경계(delete/resetStorage)와 부활(recover) 뒤.
+    this._addressCache = new Map();
     this._legacyCleaned = false;
     this.commits = 0;
     // 지속 스토리지 승인 여부. null은 "아직 묻지 않았다"이고, false는 "거절당했다"이다. 이 값이
@@ -227,10 +233,16 @@ export class MachineJournal {
       const sidecarBytes = this._sidecar ? this._sidecar.collect() : null;
       if (sidecarBytes && sidecarBytes.byteLength) files.push({ id: this._sidecar.id, bytes: sidecarBytes, meta: null });
       const committedAt = new Date().toISOString();
+      const liveHashes = r.hashes[r.liveIdx];
       this._kernel.resetCache();
       const committed = await commitState(globalThis.crypto, this._kernel, {
         // 페이지 사본은 커밋이 그것을 쓸 때 만든다(전량 동시 상주 대신 한 장씩).
-        pages: pages.map((p) => [p, () => mem.slicePage(p)]),
+        // 해시가 직전 커밋과 같은 페이지는 이미 저장된 주소를 단언한다(해시+조회를 건너뛴다).
+        pages: pages.map((p) => {
+          const cached = this._addressCache.get(p);
+          if (cached && cached.a === liveHashes[2 * p] && cached.b === liveHashes[2 * p + 1]) return [p, { address: cached.address }];
+          return [p, () => mem.slicePage(p)];
+        }),
         pageSize: PAGE,
         heapLen: mem.byteLength(),
         sp: this._reactive.stackSave() ?? this._sp,
@@ -238,6 +250,11 @@ export class MachineJournal {
         env: { h0: await this._boundaryKey() },
         createdAt: committedAt,
       });
+      // 커밋이 성공한 뒤에만 캐시를 갱신한다. 실패한 커밋의 주소를 기억하면 다음 커밋이
+      // 저장되지 않은 주소를 단언한다.
+      for (const [page, address] of committed.pageTable || []) {
+        this._addressCache.set(page, { a: liveHashes[2 * page], b: liveHashes[2 * page + 1], address });
+      }
       await this._cleanupLegacyRefs();
       // HEAD가 완전히 선 뒤 marker를 쓴다. marker가 committed인데 훗날 HEAD/PREV가 모두
       // 사라지면 recover는 그 부재를 첫 부팅으로 해석하지 않는다. 첫 커밋 중간 크래시는
@@ -247,6 +264,8 @@ export class MachineJournal {
       const result = {
         pages: pages.length,
         wrote: committed.pagesWrote,
+        // 주소 캐시가 건너뛴 페이지 수. 커밋 비용이 변경분에 비례하는지 보는 관측점이다.
+        reused: committed.reused,
         mb: bytesToMb(committed.pagesWrote * PAGE),
         committedAt,
         ...(home ? { home: { files: home.meta.entries.filter((entry) => entry.type === "file").length, mb: bytesToMb(home.bin.length), wrote: committed.filesWrote > 0 } } : {}),
@@ -266,6 +285,7 @@ export class MachineJournal {
     const endBusy = this._begin();
     try {
       this._kernel.resetStorage();
+      this._addressCache.clear();
       for (const [name, recursive] of JOURNAL_STORAGE_ENTRIES) {
         try { await this._dir.removeEntry(name, recursive ? { recursive: true } : undefined); }
         catch (e) {
@@ -276,6 +296,7 @@ export class MachineJournal {
       }
       await this._writeMarker("deleted");
       this._kernel.resetStorage();
+      this._addressCache.clear();
       this._legacyCleaned = false;
       return { deleted: true };
     } finally { endBusy(); }
@@ -406,6 +427,9 @@ export class MachineJournal {
   // 후퇴 없이 즉시 예외(다른 엔진/매니페스트).
   async recover() {
     this._kernel.resetCache();
+    // 부활은 힙을 통째로 갈아끼운다. 이전 힙 기준의 페이지 해시로 주소를 단언하면 다음 커밋이
+    // 다른 내용을 그 주소로 기록한 것처럼 만든다(조용한 오염). 캐시는 여기서 버린다.
+    this._addressCache.clear();
     const markerRead = await this._readMarker();
     if (markerRead.corrupt) throw journalCorrupt(`journal.recover: ${markerRead.corrupt}`);
     const marker = markerRead.marker || null;

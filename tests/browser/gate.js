@@ -317,6 +317,20 @@ try {
   check("journal: 복원 후 유휴 커밋 발생(복원 상태의 durable 반영)",
     commitsAfterRun >= 1 && commitsAfterRestore > commitsAfterRun, `run 후 ${commitsAfterRun}, 복원 후 ${commitsAfterRestore}`);
 
+  // 주소 캐시: 해시가 그대로인 페이지는 SHA-256도 저장소 조회도 다시 하지 않는다. 커밋 비용이
+  // "직전 변경분"이 아니라 "누적 델타"에 비례하던 자리다. 재사용이 실제로 일어나는지(효과)와
+  // 그렇게 단언한 주소로도 부활이 성립하는지(정확성)를 함께 본다. 후자가 없으면 이 캐시는
+  // tree가 없는 오브젝트를 가리키게 만드는 조용한 오염 장치다.
+  rt.run("jaddr = 1");
+  const cacheFirst = await gj.commit();
+  rt.run("jaddr = 2");
+  const cacheSecond = await gj.commit();
+  rt.run("jaddr = 999");
+  const cacheRecovered = await rt.enableJournal({ dir: jDir, reactive, includeHome: false }).recover();
+  check("journal 주소 캐시: 불변 페이지는 재사용하고 그 주소로 부활한다",
+    !!cacheFirst && cacheSecond && cacheSecond.reused > 0 && !!cacheRecovered && rt.run("jaddr") === 2,
+    `1차 reused ${cacheFirst && cacheFirst.reused}, 2차 reused ${cacheSecond && cacheSecond.reused}/${cacheSecond && cacheSecond.pages}p, 부활 ${cacheRecovered && cacheRecovered.pages}p`);
+
   // pack/prune: loose CAS를 pack 파일 1개로 묶고도 recover가 성립하는가. 이 경로는 그동안
   // 자동 게이트가 없었고 수동 probe(journalPackProbe)로만 검증됐다. pack은 blob을 옮기는
   // 작업이라 조용히 틀리면 "복구는 되는데 내용이 다르다"가 된다.
