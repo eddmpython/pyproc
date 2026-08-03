@@ -1476,12 +1476,20 @@ check("siteChrome.js가 sns-links를 정의", () => {
 check("Speed Lab 반복 벤치 통계 helper 공유", () => {
   const helper = readFileSync(join(ROOT, "examples", "benchStats.js"), "utf8");
   const speedLab = readFileSync(join(ROOT, "examples", "speedLab.html"), "utf8");
-  const matmulProbe = readFileSync(join(ROOT, "tests", "attempts", "numericShard", "matmulSurfaceProbe.html"), "utf8");
   for (const sym of ["percentile", "median", "summarizePairedLatencyBench", "isShardedSpeedBenchGreen", "isProcessMapBenchGreen", "summarizeLatencyBench", "isLatencyBenchGreen", "summarizeMachineResumeBench", "isMachineResumeBenchGreen", "summarizeImmortalMachineBench", "isImmortalMachineBenchGreen"]) {
     if (!helper.includes(`export function ${sym}`)) throw new Error(`benchStats.${sym} 누락`);
   }
   if (!speedLab.includes('from "./benchStats.js"')) throw new Error("Speed Lab이 benchStats.js를 쓰지 않음");
-  if (!matmulProbe.includes('from "../../../examples/benchStats.js"')) throw new Error("matmulSurfaceProbe가 benchStats.js를 쓰지 않음");
+  // 예전에는 attempts probe를 두 번째 소비자로 읽어 "공유"를 확인했다. 그 폴더는 승격 후
+  // 사라지는 자리라 증인이 될 수 없다. 공유의 진짜 계약은 재구현 금지이므로 그것을 직접 문다.
+  for (const f of [...collect(join(ROOT, "examples"), [".js", ".html"], []), ...collect(join(ROOT, "tests"), [".js", ".mjs", ".html"], [])]) {
+    const relPath = rel(f);
+    if (relPath === "examples/benchStats.js" || relPath === "tests/run.mjs") continue; // 게이트 자신은 이름을 문자열로 갖는다
+    const code = stripComments(readFileSync(f, "utf8"));
+    for (const sym of ["function percentile", "function median", "function summarizePairedLatencyBench"]) {
+      if (code.includes(sym)) throw new Error(`benchStats 사본: ${relPath}의 ${sym}`);
+    }
+  }
 });
 check("속도 비교 벤치 계약 고정", () => {
   const contract = readFileSync(join(ROOT, "docs", "operations", "benchmarking.md"), "utf8");
