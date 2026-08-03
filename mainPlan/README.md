@@ -49,6 +49,12 @@
   스폰되는 워커의 자산 매니페스트 누락. 셋 다 게이트를 함께 냈고 음성 시험으로 이빨을 봤다.
   자산 그래프가 23파일에서 59파일로 늘었다(그 차이가 그동안 SRI preflight 밖이던 범위다).
 
+- **06 moduleBoundaries 완료(2026-08-03)**: machine 순수 집합 allowlist 11개를 파일 이동으로 없애
+  rank를 폴더에서 유도한다. capabilities/에서 능력 아닌 파일 넷을 옮기고(image/ 신설, envManager는
+  composition으로), coordination/을 흡수하고 guests/를 v86·pyproc·bridged로 갈랐다. 비리터럴 워커
+  스폰과 bare import를 게이트가 물고, moduleBoundaries.md가 rank 표를 갖고 그것을 게이트가 대조한다.
+  타입 그래프 지적은 정정했다: 공개 Runtime은 능력 타입을 이름으로 갖는 합성 rank 타입이라 못 내린다.
+
 - **05 commitIncremental 완료(2026-08-03)**: 커밋 비용을 누적 델타에서 변경분으로 옮겼다. 주소 캐시가
   불변 페이지의 해시와 저장소 조회를 건너뛰고(실측: 두 번째 커밋이 426페이지 중 354 재사용), 페이지
   사본은 한 장씩 만들며, 오브젝트 저장은 상한 8의 동시성으로 돈다. blob 디렉터리 핸들을 캐시하고
@@ -71,7 +77,6 @@
 
 | 순서 | 덩어리 | 주 축 | 선정 근거 | 입장 조건 |
 |---:|---|---|---|---|
-| 06 | [moduleBoundaries](06_moduleBoundaries/README.md) | 모듈화, 폴더구조 | 타입 그래프가 값 그래프와 반대로 흐르고, 순수 집합이 손유지 목록이다 | 충족(02 완료) |
 | 07 | [bootPath](07_bootPath/README.md) | 속도, 클린코드 | 기본 부팅이 탭 전역으로 직렬화된다. 01의 patchScope 수리가 여는 자리 | 충족(01 완료) |
 | 08 | [kernelDecomposition](08_kernelDecomposition/README.md) | 클린코드 | 최대 파일에서 커밋 정책이 이미 두 벌로 갈렸다 | 충족(04, 05 완료) |
 | 09 | [heapReclaim](09_heapReclaim/README.md) | 메모리 | 워커당 힙 사본 1벌이 프로세스 OS의 지배적 비용이다. h0와 무관 | 충족(03 완료) |
