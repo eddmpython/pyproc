@@ -1,7 +1,7 @@
 // socketLane.mjs - 소켓 표면의 밀폐 게이트(Node 전용, 의존성 0).
 //
 // 이 표면은 "릴레이를 이 패키지가 배송하지 않는다"는 이유로 헤드리스 게이트가 0이었다. 그런데
-// 릴레이는 이 저장소 안에 의존성 0으로 있으므로(tests/attempts/socketBridge/relay.mjs), 러너가
+// 릴레이는 이 저장소 안에 의존성 0으로 있으므로(tests/browser/socketRelay.mjs), 러너가
 // 릴레이와 로컬 HTTP 오리진을 함께 소유하면 바깥으로 한 바이트도 나가지 않는 레인이 된다.
 // 배송 결정은 그대로다: 게이트가 자기 릴레이를 띄우는 것과 패키지가 릴레이를 싣는 것은 다르다.
 import { spawn } from "node:child_process";
@@ -29,7 +29,7 @@ const originPort = await listenOn(origin);
 const portLender = createServer();
 const relayPort = await listenOn(portLender);
 await new Promise((resolve) => portLender.close(resolve));
-const relay = spawn(process.execPath, [join(ROOT, "tests", "attempts", "socketBridge", "relay.mjs"), String(relayPort)], {
+const relay = spawn(process.execPath, [join(ROOT, "tests", "browser", "socketRelay.mjs"), String(relayPort)], {
   cwd: ROOT, stdio: ["ignore", "pipe", "pipe"],
 });
 relay.stderr.on("data", (chunk) => process.stderr.write(String(chunk)));

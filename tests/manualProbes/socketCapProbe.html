@@ -15,7 +15,7 @@ socket(create_connection + makefile)을 그대로 써서 진짜 TCP로 HTTP를 �
 JSPI. requests도 같은 경로다. 릴레이 없으면 SKIP.</p>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { boot } from "../../../index.js";
+  import { boot } from "../../index.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };

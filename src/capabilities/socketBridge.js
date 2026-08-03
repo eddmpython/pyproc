@@ -4,7 +4,7 @@
 // 소켓으로 심한다. 블로킹 recv는 JSPI(run_sync)로 파이썬을 서스펜드해 WS 데이터를 기다린다(메인
 // 스레드는 Atomics 불가라 JSPI = runAsync 경로에서 동작). urllib/http.client가 같은 socket API라
 // 그대로 돈다(https는 릴레이가 port 443에서 TLS 종단, ssl.wrap_socket은 패스스루). 실측:
-// tests/attempts/socketBridge. 인바운드(공개 서버)는 물리 벽이다(역터널 릴레이 = 별도 조각).
+// 릴레이 경계까지가 이 능력의 계약이다. 인바운드(공개 서버)는 물리 벽이다(역터널 릴레이 = 별도 조각).
 // 릴레이 계약은 소비자 교체 가능(Wisp/websockify/자체). https는 릴레이가 평문을 보므로 e2e 아님.
 //
 // 파이썬 식별자 camelCase 규칙: RelaySocket/_pyprocSocket 등. socket 모듈 인터페이스를 구현하는

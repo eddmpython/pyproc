@@ -14,11 +14,10 @@
 | pythonMachine | docs 2곳, `src/processOs/` 2곳 | 진행 중 |
 | runtimeParity | docs 2곳, src 3곳, 게이트 1곳 | 살아 있음(09가 쓸 자리) |
 | selfHost | 없음 | 진행 중(남은 질문 셋 명시) |
-| socketBridge | `docs/usage/capabilityMatrix.md`, `src/capabilities/socketBridge.js`, `tests/browser/socketLane.mjs` | 승격 필요 |
 | stateKernel | `src/state/objectModel.js`, `tests/run.mjs` | 살아 있음(10이 쓸 자리) |
 | wasiPackages | `tests/browser/wasiGate.html` | 승격 필요 |
 
-**종결 5건**: `externalS1`(지식이 benchmarking.md에 승격돼 있었다)과 `branchFleet`(주석의 경로 인용을
+**종결 6건**: `externalS1`(지식이 benchmarking.md에 승격돼 있었다)과 `branchFleet`(주석의 경로 인용을
 사실 서술로 바꿔 승격했다. 숫자는 주석에 남고 과정은 git 이력이 보존한다), `engineContract`
 (WASI 매핑표를 그것을 쓰는 살아 있는 캠페인 enginePort로 옮기고 주석 인용을 사실 서술로 바꿨다),
 `numericShard`(게이트가 이 폴더의 probe를 helper 공유의 두 번째 증인으로 읽고 있었다. 삭제되는
@@ -26,9 +25,11 @@
 `gpuCompute`(**북극성 증거가 이 폴더의 probe였다.** probe 7개를 `tests/manualProbes/`로 옮기고
 원장·게이트·문서의 경로를 함께 고쳤다. `tests/browser/`가 아닌 이유는 그 폴더가 게이트 폴더라
 안의 페이지를 러너가 전부 열어야 하는데, WebGPU probe는 헤드리스에 어댑터가 없어 그 조건을
-만족할 수 없기 때문이다).
+만족할 수 없기 때문이다), `socketBridge`(**CI 레인이 이 폴더의 릴레이를 실행 자산으로 쓰고
+있었다.** `relay.mjs`를 `tests/browser/socketRelay.mjs`로, 수동 probe 4개와 워커 자산 2개를
+`tests/manualProbes/`로 옮겼다).
 
-**결론: 나머지 9개는 지금 지울 수 없다.** 이유가 폴더마다 다르지 않다:
+**결론: 나머지 8개는 지금 지울 수 없다.** 이유가 폴더마다 다르지 않다:
 출하 코드와 문서가 그 폴더의 probe를 "실측 정본"으로 인용하고, 북극성 원장은 `gpuCompute`의
 probe 파일을 축 증거로 등재하고 있다. 규칙은 "종결 시 폴더째 삭제하고 지속 계약만 docs에
 남긴다"인데, 지금 상태는 **지속 계약이 아니라 실측 자체가 삭제 대상 폴더에 산다.**
