@@ -12,6 +12,22 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.13 - 2026-08-03
+
+Supersedes 0.0.12, which was tagged but never reached npm: the pre-publish gate refused it. The
+x86 CI lane did not fetch the self-hosted engine, so the probes that boot Python beside the Linux
+guest failed on a missing `/vendor/pyodide/`. That lane is fixed here, and a gate now asserts that
+any CI job which starts a browser provisions the engine in the same job, derived from the package
+scripts rather than a hand-written list.
+
+**The package contents are identical to what 0.0.12 would have shipped.** Everything in the 0.0.12
+section below is what this release delivers, including the breaking replay-boundary change and its
+migration. Pin `0.0.13`.
+
+한국어 요약: 0.0.12는 태그까지 나갔지만 게시 전 관문에서 막혀 npm에 도달하지 못했다. x86 CI
+레인이 자체 호스팅 엔진을 안 받아 Python guest를 올리는 probe가 죽었고, 그 배관을 고치면서
+"브라우저를 띄우는 job은 같은 job에서 엔진을 마련한다"를 게이트로 세웠다. **패키지 내용은
+0.0.12가 냈을 것과 같다.** 아래 0.0.12 절의 브레이킹과 이관 안내가 이 릴리즈의 내용이다.
 ## 0.0.12 - 2026-08-03
 
 ### Breaking
