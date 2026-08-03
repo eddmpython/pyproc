@@ -8,7 +8,13 @@ import { runWithGlobalPatch } from "../runtime/globalPatch.js";
 export class WheelCache {
   constructor(rt, cfg = {}) {
     this._rt = rt;
+    // 옵션을 읽는 곳과 검증하는 곳을 한 자리에 둔다. 예전에는 검증이 _withCache에 있어서
+    // 잘못된 cfg가 install/loadPackages를 부를 때까지 침묵했다.
+    if (!cfg.dir) throw new PyProcError("PYPROC_INPUT_INVALID", "wheelCache: cfg.dir (a FileSystemDirectoryHandle) is required");
     this._dir = cfg.dir; // FileSystemDirectoryHandle (필수)
+    // 이미 열린 전역 패치 창 안에서 조립될 때 그 창이 넘겨준 재진입 스코프. 이것을 버리면
+    // 아래 _withCache가 공용 체인으로 떨어져 자기 창을 기다린다(globalPatch.js 중첩 계약).
+    this._patchScope = cfg.patchScope || null;
     this.hits = 0; this.misses = 0;
   }
 
@@ -18,7 +24,6 @@ export class WheelCache {
   }
 
   async _withCache(fn) {
-    if (!this._dir) throw new PyProcError("PYPROC_INPUT_INVALID", "wheelCache: cfg.dir (a FileSystemDirectoryHandle) is required");
     // fetch 스왑은 전역 패치 창이다: 단독 사용은 공용 체인으로 직렬화하고,
     // 이미 열린 창 안(예: bootSession)에서는 그 창이 넘겨준 patchScope로 중첩한다.
     const scope = this._patchScope || runWithGlobalPatch;
