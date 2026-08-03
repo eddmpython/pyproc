@@ -31,6 +31,14 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Changed
 
+- **The Web Machine IndexedDB schema is now version 3, with a blob size index.** Asking how much a
+  store holds - `inspectStorage()`, and every recovery-window plan - used to require deserializing
+  every blob value just to read its length, so the question cost a full read of the database. Sizes
+  now live in their own small store and neither call reads a blob value at all. Opening an older
+  database migrates it in the version-change transaction; that one pass replaces the full read that
+  every later call was paying. A database already upgraded to v3 is refused by an older pyproc with
+  `WEB_MACHINE_SCHEMA_UPGRADE_BLOCKED` rather than opened with a store it does not know.
+
 - **A checkpoint node now stores hashes only for the pages it changed.** The boundary keeps the full
   array, because it is what the replay fingerprint is computed from; every node above it keeps
   `[page, a, b]` triples and `ReactiveController.hashesAt(j)` folds the root-to-j chain when a

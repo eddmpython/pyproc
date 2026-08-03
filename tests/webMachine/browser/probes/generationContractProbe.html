@@ -238,6 +238,10 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
       new Promise((_, reject) => setTimeout(() => reject(new Error("schema migration claim timeout")), 3000)),
     ]);
     check("v1 data migration은 HEAD를 보존하고 pre-fence epoch 0을 기록", migratedHead?.head === "legacy-generation" && migratedHead?.ownerEpoch === 0 && migratedOwner.epoch === 1 && (await migratedStore.getBlob("legacy-digest"))[0] === 7, `${migratedHead?.head}/${migratedHead?.ownerEpoch}/${migratedOwner.epoch}`);
+    // v3 크기 색인은 마이그레이션에서 채워져야 한다. 안 채워지면 inspectStorage가 기존 blob을
+    // 0바이트로 보고하고, 저장 압박을 재는 소비자가 저장소가 비어 있다고 믿는다.
+    const migratedInspect = await migratedStore.inspectStorage();
+    check("v3 migration이 기존 blob의 크기 색인을 채운다", migratedInspect.blobs === 1 && migratedInspect.blobBytes === 1, JSON.stringify(migratedInspect));
     migratedStore.close();
 
     const legacyOwnerDatabaseName = "webMachineLegacyOwnerEpochV1";
@@ -334,6 +338,9 @@ first commit 1-2ms, second commit 0ms, PREV recovery 1ms.
     const retentionInspect = await retentionStore.inspectStorage();
     const retainedHead = await retentionStore.readHead(retentionGroup);
     check("IndexedDB 20 generation은 HEAD/PREV 두 개로 정리", retentionReport.deletedGenerations === 18 && retentionReport.deletedBlobs === 18 && retentionInspect.generations === 2 && retentionInspect.blobs === 2, JSON.stringify(retentionInspect));
+    // 크기 색인이 회수와 함께 지워지는지. 안 지워지면 blobBytes가 20으로 남아 저장소가 회수된
+    // 뒤에도 옛 무게를 보고한다(prune이 두 표 중 하나만 건드린 자리다).
+    check("v3 크기 색인이 회수 뒤 남은 blob 바이트만 보고", retentionInspect.blobBytes === 2, JSON.stringify(retentionInspect));
     check("retention 뒤 HEAD/PREV payload 보존", retainedHead.head === "r20" && retainedHead.prev === "r19" && (await retentionStore.getBlob("sha256:" + (30).toString(16).padStart(2, "0").repeat(32)))[0] === 20 && (await retentionStore.getBlob("sha256:" + (29).toString(16).padStart(2, "0").repeat(32)))[0] === 19, `${retainedHead.head}/${retainedHead.prev}`);
     check("retention이 old generation과 blob 제거", await codeOf(retentionStore.readGeneration(retentionGroup, "r1")) === "WEB_MACHINE_GENERATION_MISSING" && await codeOf(retentionStore.getBlob("sha256:" + (11).toString(16).padStart(2, "0").repeat(32))) === "WEB_MACHINE_BLOB_MISSING");
     retentionStore.close();

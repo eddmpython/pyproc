@@ -37,23 +37,4 @@ function validateIdentity(groupId, ownerId) {
 }
 
 
-// 값의 크기만 필요할 때 쓰는 순회. getAll은 store의 모든 값을 한 번에 메모리로 끌어오므로,
-// 길이 하나를 재려고 데이터베이스 전체를 상주시키는 것이 된다(수 GB 저장소에서 OOM 후보).
-// cursor는 값 하나씩 지나가며 바이트를 붙잡지 않는다.
-function cursorByteLengths(store) {
-  return new Promise((resolve, reject) => {
-    const sizes = new Map();
-    const request = store.openCursor();
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) { resolve(sizes); return; }
-      const value = cursor.value;
-      // ArrayBuffer로 저장하지만 드라이버가 뷰를 돌려줄 수도 있다. 둘 다 byteLength를 갖는다.
-      sizes.set(String(cursor.key), value && Number.isFinite(value.byteLength) ? value.byteLength : 0);
-      cursor.continue();
-    };
-    request.onerror = () => reject(request.error || new WebMachineError("WEB_MACHINE_STORE_FAILURE", "the IndexedDB cursor failed"));
-  });
-}
-
-export { requestValue, transactionDone, cloneRecord, copyToken, validateIdentity, cursorByteLengths };
+export { requestValue, transactionDone, cloneRecord, copyToken, validateIdentity };
