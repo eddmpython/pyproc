@@ -20,7 +20,7 @@
 import { requirePortableHeap } from "../image/imagePortability.js";
 import { PAGE_SIZE as PAGE, bytesToMb, mbToBytes } from "../../runtime/memoryLayout.js";
 import { PyProcError } from "../../runtime/errors.js";
-import { parseSha256Address, sha256Hex, verifySha256 } from "../../runtime/contentDigest.js";
+import { boundaryDigest, parseSha256Address, verifySha256 } from "../../runtime/contentDigest.js";
 import { commitState, openState } from "../../state/refProtocol.js";
 import { decodeStateObject, validateStateCommit, validateStateTree } from "../../state/objectModel.js";
 import { materializeHeapGeneration } from "../image/heapMaterialize.js";
@@ -142,8 +142,7 @@ export class MachineJournal {
   // 커밋마다 commit.env.h0에 싣고, recover가 대조한다(엔진이 바뀐 채 부활하면 조용한 힙 오염이므로).
   async _boundaryKey() {
     if (!this._h0Key) {
-      const h0 = this._reactive.hashes[0];
-      this._h0Key = await sha256Hex(new Uint8Array(h0.buffer, h0.byteOffset, h0.byteLength));
+      this._h0Key = await boundaryDigest(globalThis.crypto, this._reactive.hashes);
     }
     return this._h0Key;
   }

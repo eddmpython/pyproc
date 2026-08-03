@@ -1271,6 +1271,19 @@ await checkAsync("MachineHandle 이력 상한: created를 남기고 오래된 �
   const last = handle._history[handle._history.length - 1];
   if (last.event !== "step499") throw new Error("최근 엔트리가 남지 않았다");
 });
+// 경계 지문(h0)의 계산은 한 곳이다. 저널의 commit.env.h0, 세션 봉투의 meta.h0, 워커 호스팅
+// guest가 각자 같은 두 줄을 갖고 있었다. 입력 표현이 바뀌는 날(희소 해시 등) 세 곳이 함께
+// 움직이지 않으면 한쪽만 부활하지 못하는 조용한 갈림이 된다.
+check("경계 지문 계산은 boundaryDigest 한 곳이다", () => {
+  const holders = [];
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    const relPath = rel(f);
+    if (relPath === "src/runtime/contentDigest.js") continue;
+    const code = stripComments(readFileSync(f, "utf8"));
+    if (/hashes\[0\]/.test(code) && !/boundaryDigest/.test(code)) holders.push(relPath);
+  }
+  if (holders.length) throw new Error(`경계 지문 계산 사본: ${holders.join(", ")}`);
+});
 section("오류 계약");
 // 오류 message와 API 반환 문자열은 소비자가 콘솔·이슈·로그에서 읽는 공개 표면이다. 규칙은
 // 공개 표면 영문 우선이고, 실제로 한 파일 안에서 갈려 있었다(operationControl은 한 템플릿

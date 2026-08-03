@@ -22,7 +22,7 @@ import { boot } from "../composition/runtimeApi.js";
 import { DETERMINISTIC_RESEED_SOURCE, runWithGlobalPatch, stubDeterministicBootSources } from "../runtime/globalPatch.js";
 import { PAGE_SIZE, bytesToMb } from "../runtime/memoryLayout.js";
 import { unpackPages } from "../runtime/heapDelta.js";
-import { sha256Hex } from "../runtime/contentDigest.js";
+import { boundaryDigest } from "../runtime/contentDigest.js";
 import { validateManifest, validateMeta } from "./machineImage.js";
 import { machineSigningMaterial } from "./machineSignature.js";
 import { MemoryStateStore } from "../state/memoryStateStore.js";
@@ -171,8 +171,7 @@ export class Session {
   // 엔진 버전/엔트로피 변화로 리플레이가 달라진 커널에 델타를 덮는 조용한 오염을
   // load 시점의 명시적 예외로 바꾸는 근거다.
   async _cp0Digest() {
-    const h = this.reactive.hashes[0];
-    return sha256Hex(new Uint8Array(h.buffer, h.byteOffset, h.byteLength));
+    return boundaryDigest(globalThis.crypto, this.reactive.hashes);
   }
 
   // 사용자 상태만 OPFS에 저장. base는 리플레이가 대체하므로 저장하지 않는다.

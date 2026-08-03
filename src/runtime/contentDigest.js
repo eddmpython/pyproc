@@ -148,3 +148,11 @@ export async function verifySri(data, expected, label) {
   }
   return actual;
 }
+
+// 리플레이 경계(cp0)의 지문. 경계 해시 배열 전체의 SHA-256이고, 같은 엔진 + 같은 매니페스트라야
+// 같다. 세 소비자(저널의 commit.env.h0, 세션 봉투의 meta.h0, 워커 호스팅 guest)가 각자 이 두 줄을
+// 갖고 있었다. 입력 표현이 바뀌는 날 세 곳이 함께 움직여야 하므로 계산은 한 곳에 산다.
+export function boundaryDigest(cryptoProvider, hashes) {
+  const h0 = hashes[0];
+  return sha256HexWith(cryptoProvider, new Uint8Array(h0.buffer, h0.byteOffset, h0.byteLength));
+}
