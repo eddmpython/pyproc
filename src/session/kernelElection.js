@@ -6,6 +6,7 @@
 import { bootSession } from "./session.js";
 import { OUTCOME_LOG_MAX_RECORDS, appendOutcomeRecord, decodeOutcomeLog, encodeOutcomeLog, findOutcome } from "../state/outcomeLog.js";
 import { KernelPresence } from "./kernel/kernelPresence.js";
+import { PendingRequests } from "./kernel/pendingRequests.js";
 import { MachineJournal } from "../capabilities/journal/machineJournal.js";
 import { PyProcError } from "../runtime/errors.js";
 import { hexFromBytes, sha256Hex } from "../runtime/contentDigest.js";
@@ -91,8 +92,7 @@ export class KernelElection {
     this._session = null;
     this._journal = null;
     this._chan = null;
-    this._seq = 0;
-    this._pending = new Map();
+    this._pending = new PendingRequests();
     this._served = new Map();
     // 명령 실행과 generation commit은 한 줄에서 순서대로 끝난다. async run 두 개나 idle commit이
     // 겹치면 뒤 명령의 결과가 앞 generation에 섞이므로, durable 응답의 선형화 지점이 필요하다.
@@ -406,7 +406,6 @@ export class KernelElection {
     const pending = this._pending.get(message.requestId);
     if (!pending) return;
     if (message.leaderId !== pending.leaderId || message.epoch !== pending.epoch) return;
-    clearTimeout(pending.timer);
     this._pending.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
     else pending.reject(kernelError(message.error, message.code || "PYPROC_KERNEL_EXECUTION_ERROR", message.retryable === true));
@@ -428,11 +427,7 @@ export class KernelElection {
     // 부하 상태에서 그것을 잡았다). 아는 경우에만 park하고, 모르면 예전대로 정직하게 거부한다.
     const surfaces = this._session?.rt?.hostProxySurfaces?.();
     if (!surfaces || surfaces.length) { this._rejectPendingOutcomeUnknown(reason); return; }
-    for (const entry of this._pending.values()) {
-      clearTimeout(entry.timer);
-      entry.timer = null;
-      entry.awaitingLeader = true;
-    }
+    this._pending.parkAll();
     this._notify();
   }
 
@@ -440,16 +435,14 @@ export class KernelElection {
   // 서버측이 결과 기록으로 답하므로(정확히 한 번의 리더 절반) 두 번 실행되지 않는다.
   _resendParkedPending() {
     if (this._phase !== "ready" || !this._leaderId) return;
-    for (const [requestId, entry] of this._pending) {
-      if (!entry.awaitingLeader) continue;
+    for (const [requestId, entry] of this._pending.parked()) {
       entry.awaitingLeader = false;
       entry.leaderId = this._leaderId;
       entry.epoch = this._epoch;
-      entry.timer = setTimeout(() => {
-        this._pending.delete(requestId);
+      this._pending.arm(requestId, entry.timeoutMs, (timedOut) => {
         this._notify();
-        entry.reject(kernelError("KernelElection: the sent RPC timed out. Whether it ran is unknown, so it is not re-executed automatically", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
-      }, entry.timeoutMs);
+        timedOut.reject(kernelError("KernelElection: the sent RPC timed out. Whether it ran is unknown, so it is not re-executed automatically", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
+      });
       this._post({
         type: "rpcReq",
         requestId,
@@ -463,11 +456,9 @@ export class KernelElection {
   }
 
   _rejectPendingOutcomeUnknown(reason) {
-    for (const pending of this._pending.values()) {
-      clearTimeout(pending.timer);
+    for (const pending of this._pending.drain()) {
       pending.reject(kernelError(`KernelElection: ${reason}. The outcome of the request is unknown, so it is not re-executed automatically`, "PYPROC_RPC_OUTCOME_UNKNOWN", false));
     }
-    this._pending.clear();
   }
 
   async _request(action, payload = {}, opts = {}) {
@@ -491,25 +482,27 @@ export class KernelElection {
         });
       }
     }
-    const replayQueued = this._journalDir && [...this._pending.values()].some((entry) => entry.awaitingLeader);
+    const replayQueued = Boolean(this._journalDir) && this._pending.hasAwaitingLeader();
     if (!replayQueued && (!this._leaderId || this._phase !== "ready")) {
       throw kernelError("KernelElection: no leader is available to run this", "PYPROC_LEADER_UNAVAILABLE", true);
     }
     const leaderId = this._leaderId;
     const epoch = this._epoch;
-    const requestId = `${this.participantId}/${++this._seq}`;
+    const requestId = this._pending.nextId(this.participantId);
     const timeoutMs = opts.timeoutMs || this._rpcTimeoutMs;
     // 승계 대기 중인 요청이 있으면 새 명령도 그 뒤에 선다. 먼저 보내면 호출자가 보낸 순서와
     // 리더가 실행한 순서가 달라진다(재전송이 나가기 전에 새 명령이 도착한다). Map은 삽입
     // 순서를 지키므로 줄 자체가 순서의 정본이다.
     const queuedBehindReplay = replayQueued;
     return new Promise((resolve, reject) => {
-      const timer = queuedBehindReplay ? null : setTimeout(() => {
-        this._pending.delete(requestId);
-        this._notify();
-        reject(kernelError("KernelElection: the sent RPC timed out. Whether it ran is unknown, so it is not re-executed automatically", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
-      }, timeoutMs);
-      this._pending.set(requestId, { resolve, reject, timer, leaderId, epoch, action, payload, timeoutMs, awaitingLeader: queuedBehindReplay });
+      this._pending.add(requestId, { resolve, reject, timer: null, leaderId, epoch, action, payload, timeoutMs, awaitingLeader: queuedBehindReplay });
+      // 승계 대기 뒤에 선 요청은 타이머를 걸지 않는다: 아직 보내지도 않았다.
+      if (!queuedBehindReplay) {
+        this._pending.arm(requestId, timeoutMs, () => {
+          this._notify();
+          reject(kernelError("KernelElection: the sent RPC timed out. Whether it ran is unknown, so it is not re-executed automatically", "PYPROC_RPC_OUTCOME_UNKNOWN", false));
+        });
+      }
       if (queuedBehindReplay) { this._notify(); return; }
       this._post({
         type: "rpcReq",

@@ -1302,6 +1302,31 @@ await checkAsync("presence: 만료는 남을 지우고 자기 자신은 지우�
   presence.remove("peerA");
   if (presence.liveIds(clock).includes("peerA")) throw new Error("명시 제거가 듣지 않았다");
 });
+// 대기 표의 park/resend 정책. 타이머를 주입할 수 있으므로 실 함수로 판정한다: 이 규칙이
+// 지금까지 10분짜리 설치 패키지 레인에서만 증명됐다는 것이 분할 전의 상태였다.
+await checkAsync("pending 표: park는 타이머를 끄고 순서를 지킨다", async () => {
+  const { PendingRequests } = await import(pathToFileURL(join(ROOT, "src", "session", "kernel", "pendingRequests.js")).href);
+  const armed = new Set();
+  const table = new PendingRequests({
+    setTimer: (fn, ms) => { const id = Symbol("timer"); armed.add(id); return id; },
+    clearTimer: (id) => { armed.delete(id); },
+  });
+  const idA = table.nextId("me");
+  const idB = table.nextId("me");
+  if (idA === idB) throw new Error("요청 ID가 유일하지 않다");
+  for (const id of [idA, idB]) {
+    table.add(id, { resolve() {}, reject() {}, timer: null, timeoutMs: 10, awaitingLeader: false });
+    table.arm(id, 10, () => {});
+  }
+  if (armed.size !== 2) throw new Error("타이머가 걸리지 않았다");
+  table.parkAll();
+  if (armed.size !== 0) throw new Error("park가 타이머를 끄지 않았다(대기는 모른다가 아니라 아직 모른다)");
+  if (!table.hasAwaitingLeader()) throw new Error("park 표시가 없다");
+  const parkedOrder = table.parked().map(([id]) => id);
+  if (parkedOrder.join(",") !== `${idA},${idB}`) throw new Error(`재전송 순서가 호출 순서와 다르다: ${parkedOrder}`);
+  const drained = table.drain();
+  if (drained.length !== 2 || table.size !== 0) throw new Error("drain이 표를 비우지 않았다");
+});
 section("오류 계약");
 // 오류 message와 API 반환 문자열은 소비자가 콘솔·이슈·로그에서 읽는 공개 표면이다. 규칙은
 // 공개 표면 영문 우선이고, 실제로 한 파일 안에서 갈려 있었다(operationControl은 한 템플릿

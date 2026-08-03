@@ -24,7 +24,7 @@ export async function assertElectionProtocol(check, checkAsync) {
       const reqId = `r${i}`;
       settled.set(reqId, 0);
       const promise = new Promise((resolve, reject) => {
-        ctrl._pending.set(reqId, {
+        ctrl._pending.add(reqId, {
           resolve: (v) => { settled.set(reqId, settled.get(reqId) + 1); results.set(reqId, { ok: true, v }); resolve(v); },
           reject: (e) => { settled.set(reqId, settled.get(reqId) + 1); results.set(reqId, { ok: false, e }); reject(e); },
           timer: setTimeout(() => {}, 1_000_000), leaderId: "leaderA", epoch: 3,
@@ -51,7 +51,7 @@ export async function assertElectionProtocol(check, checkAsync) {
     const ctrl = makeCtrl();
     let resolved = null, count = 0;
     const p = new Promise((resolve) => {
-      ctrl._pending.set("q1", { resolve: (v) => { count++; resolved = v; resolve(v); }, reject: () => { count++; }, timer: setTimeout(() => {}, 1_000_000), leaderId: "L1", epoch: 7 });
+      ctrl._pending.add("q1", { resolve: (v) => { count++; resolved = v; resolve(v); }, reject: () => { count++; }, timer: setTimeout(() => {}, 1_000_000), leaderId: "L1", epoch: 7 });
     });
     p.catch(() => {});
     ctrl._acceptResponse({ requestId: "q1", leaderId: "L2", epoch: 7, ok: true, result: 1 }); // 다른 리더
@@ -155,7 +155,7 @@ export async function assertElectionProtocol(check, checkAsync) {
     const posted = [];
     ctrl._chan = { postMessage: (message) => posted.push(message) };
     let settled = 0;
-    ctrl._pending.set("c/1/1", {
+    ctrl._pending.add("c/1/1", {
       resolve: () => { settled++; }, reject: () => { settled++; },
       timer: null, leaderId: "old", epoch: 3, action: "run", payload: { code: "1" }, timeoutMs: 5000,
     });
@@ -179,7 +179,7 @@ export async function assertElectionProtocol(check, checkAsync) {
     ctrl._phase = "ready"; ctrl._leaderId = "old"; ctrl._epoch = 3;
     ctrl._chan = { postMessage: () => {} };
     let code = "";
-    ctrl._pending.set("d/1/1", {
+    ctrl._pending.add("d/1/1", {
       resolve: () => {}, reject: (error) => { code = error.code; },
       timer: null, leaderId: "old", epoch: 3, action: "run", payload: { code: "1" }, timeoutMs: 5000,
     });
@@ -201,7 +201,7 @@ export async function assertElectionProtocol(check, checkAsync) {
       ctrl._phase = "ready"; ctrl._leaderId = "old"; ctrl._epoch = 3;
       ctrl._chan = { postMessage: () => {} };
       let error = null;
-      ctrl._pending.set(`unsafe/${label}`, {
+      ctrl._pending.add(`unsafe/${label}`, {
         resolve: () => {}, reject: (value) => { error = value; },
         timer: null, leaderId: "old", epoch: 3, action: "run", payload: { code: "1" }, timeoutMs: 5000,
       });
@@ -239,7 +239,7 @@ export async function assertElectionProtocol(check, checkAsync) {
     leaveCtrl._leaderId = "live"; leaveCtrl._epoch = 8;
     leaveCtrl._chan = { postMessage: () => {}, close: () => {} };
     let leaveError = null;
-    leaveCtrl._pending.set("leaving/1", {
+    leaveCtrl._pending.add("leaving/1", {
       resolve: () => {}, reject: (error) => { leaveError = error; }, timer: null,
       leaderId: "live", epoch: 8, action: "run", payload: { code: "1" }, timeoutMs: 5000,
     });
@@ -262,7 +262,7 @@ export async function assertElectionProtocol(check, checkAsync) {
     const posted = [];
     ctrl._chan = { postMessage: (message) => posted.push(message) };
     for (const [id, code] of [["q/1/1", "first"], ["q/1/2", "second"], ["q/1/3", "third"]]) {
-      ctrl._pending.set(id, {
+      ctrl._pending.add(id, {
         resolve: () => {}, reject: () => {}, timer: null, leaderId: "old", epoch: 3,
         action: "run", payload: { code }, timeoutMs: 5000,
       });
@@ -271,7 +271,7 @@ export async function assertElectionProtocol(check, checkAsync) {
     ctrl._acceptLeader({ epoch: 4, leaderId: "new", ready: true, recovered: true });
     const order = posted.filter((message) => message.type === "rpcReq").map((message) => message.code);
     if (order.join(",") !== "first,second,third") throw new Error(`순서 ${order.join(",")}`);
-    for (const entry of ctrl._pending.values()) if (entry.timer) clearTimeout(entry.timer);
+    ctrl._pending.drain(); // 남은 타이머 회수(대기 표가 타이머를 소유한다)
   });
 
   // S13: 기본 Machine의 선형화 지점은 run 완료가 아니라 generation commit 완료다. 동시에
