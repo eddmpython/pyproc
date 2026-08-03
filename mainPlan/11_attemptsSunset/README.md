@@ -1,5 +1,28 @@
 # attemptsSunset
 
+## 진행 상태(2026-08-03)
+
+판정 근거로 쓸 실측 하나를 먼저 냈다. 각 캠페인이 폴더 밖에서 인용되는 횟수다(인용이 있으면
+지식이 이미 승격됐거나 살아 있는 계약이라는 뜻이고, 지우면 링크 게이트가 문다).
+
+`runtimeParity` 6, `pythonMachine` 4, `gpuCompute` 3, `socketBridge` 3, `branchFleet` 2,
+`envManager` 2, `stateKernel` 2, `engineContract` 1, `enginePort` 1, `largeHeapEnvelope` 1,
+`externalS1` 0, `inTabTls` 0, `numericShard` 0, `selfHost` 0, `wasiPackages` 0.
+
+**종결 1건**: `externalS1`은 README 판정이 "완료"이고 그 지식(S1/S1L 축의 정의, 게이트 기준,
+후보 판정)이 `docs/operations/benchmarking.md`의 시나리오 표에 이미 산다. 폴더째 삭제하고
+`tests/attempts/README.md`의 줄과 링크 하한을 같은 커밋에서 내렸다.
+
+**살아 있음 확인**: `selfHost`는 판정이 "진행 중"이고(남은 질문 셋이 명시돼 있다), `inTabTls`는
+북극성 네트워크 축의 사다리 1단이다. `runtimeParity`, `stateKernel`, `largeHeapEnvelope`는
+09와 10이 앞으로 쓸 실측 자리로 지목한 폴더다. 다섯 다 삭제 대상이 아니다.
+
+**남은 판정**: 인용이 0인 `numericShard`, `wasiPackages`와 인용이 적은 `engineContract`,
+`enginePort`, `envManager`, `branchFleet`. 각각 README의 결론 표를 읽고 그 답이 지금
+어디에 사는지(docs, 게이트, src 계약) 확인한 뒤에 판정한다. 인용 수는 판정의 입력이지
+판정 자체가 아니다: 인용이 0이어도 살아 있는 질문일 수 있고(inTabTls가 그 예다), 인용이
+있어도 그 인용이 삭제 예정 probe를 가리키는 부채일 수 있다.
+
 `tests/attempts/`의 실험 폴더 15개에 판정을 내린다. 규칙은 "종결 시 폴더째 삭제하고 지속 계약만 docs에
 남긴다"인데 지금 15개가 전부 살아 있다. 폴더구조 축에서 가장 큰 미집행 부채다.
 

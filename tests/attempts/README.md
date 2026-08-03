@@ -52,6 +52,5 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 | [engineContract/](engineContract/) | 엔진 접점을 계약 하나로 모으면 프리미티브가 계약만으로 도는가 (Pyodide 제거의 인프라) | 졸업 -> src/runtime/engines/pyodideEngine.js (P1 seam) |
 | [enginePort/](enginePort/) | EngineContract를 non-Pyodide CPython(WASI)이 구현 가능한가 (Pyodide 제거의 실증, D2 관문) | 진행 중 (부팅+계약 코어 6/6 + 반복 실행/값 프로토콜/**완전 시간여행** 12/12) |
 | [largeHeapEnvelope/](largeHeapEnvelope/) | 대형 힙에서 OS 프리미티브 비용은 어디서 무너지는가 (Browser Python OS 성능 봉투) | 진행 중 |
-| [externalS1/](externalS1/) | 외부 웹파이썬 후보가 pyproc S1과 같은 병렬 worker pool matmul을 제공하는가 | 진행 중 |
 | [stateKernel/](stateKernel/) | 내구 상태 3벌(저널·세션 이미지·machine generation)을 이중 구역 커널 하나로 통합할 수 있는가 | 진행 중 |
 | [Web Machine](../webMachine/) | 서로 다른 guest engine을 같은 browser computer lifecycle/device/image 계약으로 다룰 수 있는가 | 졸업 -> `src/machine` + `tests/webMachine` |
