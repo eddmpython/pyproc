@@ -7,7 +7,6 @@
 
 | 폴더 | 인용처 | 판정 |
 |---|---|---|
-| branchFleet | `src/processOs/pyProc.js`, `tests/browser/gate.js` | 승격 필요(출하 코드가 실측 정본으로 인용) |
 | engineContract | `src/runtime/engines/pyodideEngine.js`, `enginePort/README.md` | 승격 필요(WASI 매핑표를 enginePort가 참조) |
 | enginePort | `docs/usage/capabilityMatrix.md`, `scripts/fetchWasiAssets.mjs`, wasi 게이트 2곳 | 살아 있음(북극성 엔진 축의 다음 수) |
 | envManager | `docs/usage/capabilityMatrix.md`, `src/composition/envManager.js` | 진행 중 |
@@ -22,7 +21,10 @@
 | stateKernel | `src/state/objectModel.js`, `tests/run.mjs` | 살아 있음(10이 쓸 자리) |
 | wasiPackages | `tests/browser/wasiGate.html` | 승격 필요 |
 
-**결론: `externalS1` 하나를 뺀 13개는 지금 지울 수 없다.** 이유가 폴더마다 다르지 않다:
+**종결 2건**: `externalS1`(지식이 benchmarking.md에 승격돼 있었다)과 `branchFleet`(주석의 경로 인용을
+사실 서술로 바꿔 승격했다. 숫자는 주석에 남고 과정은 git 이력이 보존한다).
+
+**결론: 나머지 12개는 지금 지울 수 없다.** 이유가 폴더마다 다르지 않다:
 출하 코드와 문서가 그 폴더의 probe를 "실측 정본"으로 인용하고, 북극성 원장은 `gpuCompute`의
 probe 파일을 축 증거로 등재하고 있다. 규칙은 "종결 시 폴더째 삭제하고 지속 계약만 docs에
 남긴다"인데, 지금 상태는 **지속 계약이 아니라 실측 자체가 삭제 대상 폴더에 산다.**

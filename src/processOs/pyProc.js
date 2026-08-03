@@ -121,8 +121,8 @@ export class PyProc {
   // 부모 델타는 값이 하나인데 fork를 N번 부르면 부모 힙을 N번 수확한다(O(N x heap)).
   // 여기서는 **한 번 수확해 SAB로 방송**한다(O(heap + N x delta)): 레인 수가 늘어도 수확은 1회고
   // 델타 바이트는 워커들이 같은 공유 버퍼에서 함께 읽는다(레인당 복사 0).
-  // 실측(attempts/branchFleet/fleetFanOutProbe 7/7, 21.4MB 델타 4레인): 방송 78ms vs 순차 fork
-  // 316ms = 4.05배. 그 위에서 4-후보 병렬 탐색이 직렬 재시도 대비 5.2배(90ms vs 468ms)다.
+  // 실측(21.4MB 델타 4레인): 방송 78ms vs 순차 fork 316ms = 4.05배. 그 위에서 4-후보 병렬
+  // 탐색이 직렬 재시도 대비 5.2배(90ms vs 468ms)다. 측정 과정은 git 이력이 보존한다.
   // 전제는 fork와 같다: 같은 replay 매니페스트로 부팅한 대칭 풀(워커끼리만 바이트 동일).
   async forkMany(srcPid, dstPids) {
     if (!this.replay) throw new PyProcError("PYPROC_FORK_UNAVAILABLE", "fork: only a replay-booted pool can fork. Boot it with machine.proc({ replay: {...} })");

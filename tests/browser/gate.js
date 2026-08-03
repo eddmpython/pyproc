@@ -835,7 +835,7 @@ try {
 
   // forkMany(투기적 탐색 프리미티브, 2026-07-17 승격): 부모 델타를 한 번만 수확해 N 레인에
   // 방송한다. 이득의 근원(수확 1회)과 격리(레인별 상태 + 본선 불변)를 상시 검증한다.
-  // 실측 정본은 attempts/branchFleet/fleetFanOutProbe(방송 4.05배, 탐색 5.2배).
+  // 승격 근거 실측: 방송 4.05배, 4-후보 병렬 탐색 5.2배(측정 과정은 git 이력).
   const fanOs = new PyProc({ replay: {}, indexURL: INDEX });
   await fanOs.boot(3, false); // 본선 1 + 후보 2
   const [fanMain, fanA, fanB] = fanOs.ps().map((p) => p.pid);
