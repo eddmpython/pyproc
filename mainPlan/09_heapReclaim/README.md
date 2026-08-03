@@ -63,9 +63,9 @@
 
 ## 구현 계약
 
-1. `PyProc.terminate()`에 `this._snapshot = null`을 더한다. `MachineContainer`도 같이. `_replace`가
-   `!!this._snapshot`을 읽으므로 terminate 후 respawn은 콜드가 되는데, terminate된 풀에서 respawn하지 않는
-   계약상 무해하다.
+1. **03에서 완료(1b84511).** `PyProc.terminate()`와 `MachineContainer.terminate()`가 스냅샷 SAB를 놓고,
+   브라우저 게이트가 그 회수를 단정한다. 메모리 판정을 세우면서 그 단정이 RED인 채로 남지 않도록
+   당겨왔다(실측: 회수 전 30MB가 풀 핸들 수명 내내 남았다).
 2. `_makeSnapshot`을 전용 워커에서 돌린다. 스냅샷 바이트를 transfer로 커널에 넘긴 뒤 SAB에 한 번만 싣는다.
    메인스레드 long task와 전역 오염이 함께 사라진다. **선결**: 메인에서 만든 스냅샷과 워커에서 만든
    스냅샷이 바이트 동일한지 attempts probe로 확인한다(`worker.js:10-12`가 메인과 워커의 리플레이는 바이트가
