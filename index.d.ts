@@ -306,6 +306,19 @@ declare class ReactiveController {
    * PYPROC_CHECKPOINT_PRUNED, and liveIdx must lie on the retained path.
    */
   pruneTo(j: number): { freedNodes: number; freedMB: number; keptNodes: number };
+  /**
+   * Fold the root-to-live path into the base so the live node becomes the new replay boundary.
+   * Pruning only frees nodes off that path, so a linear history (the shape a per-statement
+   * checkpoint produces) gets nothing back from it; this is the valve that works there.
+   *
+   * The boundary moves, which is breaking for anything written against the old one: a journal or
+   * image committed earlier is refused with `PYPROC_REPLAY_MISMATCH`, and time travel to a
+   * checkpoint before the new boundary is refused with `PYPROC_CHECKPOINT_PRUNED`. Only the live
+   * node may become the boundary.
+   */
+  rebaseTo(j: number): { foldedNodes: number; foldedMB: number; prunedNodes: number; baseMB: number };
+  /** Counts boundary moves. A consumer caching the boundary fingerprint drops its cache when this changes. */
+  readonly boundaryEpoch: number;
   stats(): ReactiveStats;
   setRetentionPolicy(policy: ReactiveRetentionPolicy | null): Readonly<ReactiveRetentionPolicy> | null;
   /** Releases the whole tree. Restoring an existing node is refused, and the next checkpoint() starts a new tree. */
@@ -342,6 +355,13 @@ export interface ReactiveRetentionPolicy {
   maxTotalBytes?: number;
   /** When true, exceeding the budget auto-prunes only branches off the live path; the live path is preserved. */
   pruneBranches?: boolean;
+  /**
+   * Defaults to false. When the limit is still exceeded after pruning, fold the live path into the
+   * base (see `rebaseTo`). Off by default because it moves the replay boundary: the session keeps
+   * running and keeps its state, but its past and any journal or image written against the old
+   * boundary are gone. Turn it on when a long-lived session matters more than its history.
+   */
+  rebaseLinear?: boolean;
   onPressure?: (event: ReactivePressureEvent) => void;
 }
 
