@@ -1,27 +1,42 @@
 # attemptsSunset
 
-## 진행 상태(2026-08-03)
+## 판정 결과(2026-08-03)
 
-판정 근거로 쓸 실측 하나를 먼저 냈다. 각 캠페인이 폴더 밖에서 인용되는 횟수다(인용이 있으면
-지식이 이미 승격됐거나 살아 있는 계약이라는 뜻이고, 지우면 링크 게이트가 문다).
+14개 폴더 전부에 대해 "누가 이 폴더를 인용하는가"를 실측했다. 인용이 있으면 삭제가 링크
+게이트나 북극성 증거 게이트를 RED로 만든다(실제로 시도해서 확인했다).
 
-`runtimeParity` 6, `pythonMachine` 4, `gpuCompute` 3, `socketBridge` 3, `branchFleet` 2,
-`envManager` 2, `stateKernel` 2, `engineContract` 1, `enginePort` 1, `largeHeapEnvelope` 1,
-`externalS1` 0, `inTabTls` 0, `numericShard` 0, `selfHost` 0, `wasiPackages` 0.
+| 폴더 | 인용처 | 판정 |
+|---|---|---|
+| branchFleet | `src/processOs/pyProc.js`, `tests/browser/gate.js` | 승격 필요(출하 코드가 실측 정본으로 인용) |
+| engineContract | `src/runtime/engines/pyodideEngine.js`, `enginePort/README.md` | 승격 필요(WASI 매핑표를 enginePort가 참조) |
+| enginePort | `docs/usage/capabilityMatrix.md`, `scripts/fetchWasiAssets.mjs`, wasi 게이트 2곳 | 살아 있음(북극성 엔진 축의 다음 수) |
+| envManager | `docs/usage/capabilityMatrix.md`, `src/composition/envManager.js` | 진행 중 |
+| gpuCompute | `docs/usage/capabilityMatrix.md`, `tests/northStar.mjs`, `tests/run.mjs` | 승격 필요(**북극성 증거가 이 폴더의 probe다**) |
+| inTabTls | 없음 | 살아 있음(북극성 네트워크 축 사다리 1단) |
+| largeHeapEnvelope | `docs/usage/capabilityMatrix.md` | 살아 있음(10이 쓸 자리) |
+| numericShard | `tests/run.mjs`(Speed Lab helper 공유 검사) | 승격 필요 |
+| pythonMachine | docs 2곳, `src/processOs/` 2곳 | 진행 중 |
+| runtimeParity | docs 2곳, src 3곳, 게이트 1곳 | 살아 있음(09가 쓸 자리) |
+| selfHost | 없음 | 진행 중(남은 질문 셋 명시) |
+| socketBridge | `docs/usage/capabilityMatrix.md`, `src/capabilities/socketBridge.js`, `tests/browser/socketLane.mjs` | 승격 필요 |
+| stateKernel | `src/state/objectModel.js`, `tests/run.mjs` | 살아 있음(10이 쓸 자리) |
+| wasiPackages | `tests/browser/wasiGate.html` | 승격 필요 |
 
-**종결 1건**: `externalS1`은 README 판정이 "완료"이고 그 지식(S1/S1L 축의 정의, 게이트 기준,
-후보 판정)이 `docs/operations/benchmarking.md`의 시나리오 표에 이미 산다. 폴더째 삭제하고
-`tests/attempts/README.md`의 줄과 링크 하한을 같은 커밋에서 내렸다.
+**결론: `externalS1` 하나를 뺀 13개는 지금 지울 수 없다.** 이유가 폴더마다 다르지 않다:
+출하 코드와 문서가 그 폴더의 probe를 "실측 정본"으로 인용하고, 북극성 원장은 `gpuCompute`의
+probe 파일을 축 증거로 등재하고 있다. 규칙은 "종결 시 폴더째 삭제하고 지속 계약만 docs에
+남긴다"인데, 지금 상태는 **지속 계약이 아니라 실측 자체가 삭제 대상 폴더에 산다.**
 
-**살아 있음 확인**: `selfHost`는 판정이 "진행 중"이고(남은 질문 셋이 명시돼 있다), `inTabTls`는
-북극성 네트워크 축의 사다리 1단이다. `runtimeParity`, `stateKernel`, `largeHeapEnvelope`는
-09와 10이 앞으로 쓸 실측 자리로 지목한 폴더다. 다섯 다 삭제 대상이 아니다.
+## 다음 착수(승격 6건)
 
-**남은 판정**: 인용이 0인 `numericShard`, `wasiPackages`와 인용이 적은 `engineContract`,
-`enginePort`, `envManager`, `branchFleet`. 각각 README의 결론 표를 읽고 그 답이 지금
-어디에 사는지(docs, 게이트, src 계약) 확인한 뒤에 판정한다. 인용 수는 판정의 입력이지
-판정 자체가 아니다: 인용이 0이어도 살아 있는 질문일 수 있고(inTabTls가 그 예다), 인용이
-있어도 그 인용이 삭제 예정 probe를 가리키는 부채일 수 있다.
+승격은 "숫자를 docs로 옮기고 인용을 그쪽으로 돌린다"가 아니다. 인용의 성격이 둘로 갈린다.
+
+1. **주석의 실측 인용**(branchFleet, runtimeParity 일부): 주석이 폴더 경로를 가리키는 대신
+   사실을 말하게 고친다. git 이력이 과정을 보존하므로 경로는 필요 없다.
+2. **게이트와 원장의 파일 인용**(gpuCompute, numericShard, wasiPackages, socketBridge): 그
+   probe가 실제로 게이트에서 돌거나 증거로 등재돼 있다. 폴더를 지우려면 probe를 정식 위치
+   (`tests/browser/` 또는 `tests/webMachine/browser/probes/`)로 옮기고 북극성 증거 경로를 함께
+   바꿔야 한다. 이것이 "핵심 주장의 증거가 삭제 예정 폴더에 상주"라는 감사 지적의 실체다.
 
 `tests/attempts/`의 실험 폴더 15개에 판정을 내린다. 규칙은 "종결 시 폴더째 삭제하고 지속 계약만 docs에
 남긴다"인데 지금 15개가 전부 살아 있다. 폴더구조 축에서 가장 큰 미집행 부채다.
