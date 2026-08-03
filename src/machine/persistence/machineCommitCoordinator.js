@@ -10,7 +10,7 @@
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { copyGenerationBytes } from "./generationIntegrity.js";
-import { compareNames } from "../contracts/deterministicOrder.js";
+import { assertBlockDevice, assertPausedComputer, capturePaused } from "./pausedCapture.js";
 
 const GENERATION_SCHEMA_VERSION = 2;
 
@@ -22,14 +22,6 @@ const RECOVERABLE_CODES = new Set([
 
 function lookup(collection, key) {
   return collection instanceof Map ? collection.get(key) : collection?.[key];
-}
-
-function sortedMachines(machines) {
-  return [...machines].sort((left, right) => compareNames(left.machineId, right.machineId));
-}
-
-function sortedDevices(devices) {
-  return Object.entries(devices).sort(([left], [right]) => compareNames(left, right));
 }
 
 function generationCorrupt(groupId, detail) {
@@ -57,23 +49,15 @@ export class MachineCommitCoordinator {
     if (expectedHead === undefined) throw new TypeError("an expectedHead is required");
     if (!ownerToken) throw new TypeError("an ownerToken is required");
     throwIfOperationAborted(control, `${groupId}: paused commit`);
-    const machineList = sortedMachines(machines || []);
-    if (!machineList.length) throw new TypeError("machines are required");
-    for (const machine of machineList) {
-      if (machine.state !== "paused") {
-        throw new WebMachineError("WEB_MACHINE_COMMIT_STATE", `${machine.machineId}: only a paused machine can be committed`);
-      }
-    }
-    const deviceEntries = sortedDevices(devices);
-    for (const [name, device] of deviceEntries) this._assertBlockDevice(name, device);
-
-    await Promise.all(deviceEntries.map(([, device]) => device.flush()));
-    throwIfOperationAborted(control, `${groupId}: paused commit`);
-    const [machineSnapshots, deviceSnapshots] = await Promise.all([
-      Promise.all(machineList.map((machine) => machine.snapshot(control))),
-      Promise.all(deviceEntries.map(async ([name, device]) => ({ name, device, payload: await device.snapshot() }))),
-    ]);
-    throwIfOperationAborted(control, `${groupId}: paused commit`);
+    const { machineList, deviceEntries } = assertPausedComputer({
+      machines, devices,
+      stateCode: "WEB_MACHINE_COMMIT_STATE", stateVerb: "committed",
+      deviceKindCode: "WEB_MACHINE_DEVICE_KIND_UNSUPPORTED", deviceInvalidCode: "WEB_MACHINE_DEVICE_INVALID",
+    });
+    const { machineSnapshots, deviceSnapshots } = await capturePaused({
+      machineList, deviceEntries, control, label: `${groupId}: paused commit`,
+      deviceShape: (name, device, payload) => ({ name, device, payload }),
+    });
 
     const grammar = this._cryptoProvider.state;
     const blobs = new Map();
@@ -232,7 +216,7 @@ export class MachineCommitCoordinator {
       throwIfOperationAborted(control, `${groupId}: restore generation`);
       const device = lookup(devices, entry.name);
       if (!device) throw new WebMachineError("WEB_MACHINE_RESTORE_TARGET_MISSING", `no target device: ${entry.name}`);
-      this._assertBlockDevice(entry.name, device);
+      assertBlockDevice(entry.name, device, "WEB_MACHINE_DEVICE_KIND_UNSUPPORTED", "WEB_MACHINE_DEVICE_INVALID");
       if (device.byteLength !== entry.byteLength) {
         throw new WebMachineError("WEB_MACHINE_BLOCK_SIZE", `${entry.name}: block size mismatch`);
       }
@@ -254,10 +238,4 @@ export class MachineCommitCoordinator {
     }
   }
 
-  _assertBlockDevice(name, device) {
-    if (!device || device.kind !== "block") throw new WebMachineError("WEB_MACHINE_DEVICE_KIND_UNSUPPORTED", `${name}: a block device is required`);
-    for (const method of ["flush", "snapshot", "restore"]) {
-      if (typeof device[method] !== "function") throw new WebMachineError("WEB_MACHINE_DEVICE_INVALID", `${name}: ${method}() is missing`);
-    }
-  }
 }

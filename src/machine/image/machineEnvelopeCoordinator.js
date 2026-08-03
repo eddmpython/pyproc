@@ -2,18 +2,10 @@
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { assertWebMachineArchive, createWebMachineFile, readWebMachineFile } from "./webMachineFile.js";
-import { compareNames } from "../contracts/deterministicOrder.js";
+import { assertBlockDevice, assertPausedComputer, capturePaused } from "../persistence/pausedCapture.js";
 
 function lookup(collection, key) {
   return collection instanceof Map ? collection.get(key) : collection?.[key];
-}
-
-function sortedMachines(machines) {
-  return [...(machines || [])].sort((left, right) => compareNames(left.machineId, right.machineId));
-}
-
-function sortedDevices(devices) {
-  return Object.entries(devices || {}).sort(([left], [right]) => compareNames(left, right));
 }
 
 function asStringSet(value) {
@@ -39,26 +31,15 @@ export class MachineEnvelopeCoordinator {
 
   async exportPaused({ groupId, machines, devices = {}, requiredCapabilities = {}, signingKeyPair, control }) {
     throwIfOperationAborted(control, `${groupId}: image export`);
-    const machineList = sortedMachines(machines);
-    if (!machineList.length) throw new TypeError("machines are required");
-    for (const machine of machineList) {
-      if (machine.state !== "paused") {
-        throw new WebMachineError("WEB_MACHINE_IMAGE_EXPORT_STATE", `${machine.machineId}: only a paused machine can be exported`);
-      }
-    }
-    const deviceEntries = sortedDevices(devices);
-    for (const [name, device] of deviceEntries) this._assertBlockDevice(name, device);
-    await Promise.all(deviceEntries.map(([, device]) => device.flush()));
-    throwIfOperationAborted(control, `${groupId}: image export`);
-    const [machineSnapshots, deviceSnapshots] = await Promise.all([
-      Promise.all(machineList.map((machine) => machine.snapshot(control))),
-      Promise.all(deviceEntries.map(async ([name, device]) => ({
-        name,
-        kind: device.kind,
-        byteLength: device.byteLength,
-        payload: await device.snapshot(),
-      }))),
-    ]);
+    const { machineList, deviceEntries } = assertPausedComputer({
+      machines, devices,
+      stateCode: "WEB_MACHINE_IMAGE_EXPORT_STATE", stateVerb: "exported",
+      deviceKindCode: "WEB_MACHINE_IMAGE_DEVICE_KIND", deviceInvalidCode: "WEB_MACHINE_IMAGE_DEVICE_INVALID",
+    });
+    const { machineSnapshots, deviceSnapshots } = await capturePaused({
+      machineList, deviceEntries, control, label: `${groupId}: image export`,
+      deviceShape: (name, device, payload) => ({ name, kind: device.kind, byteLength: device.byteLength, payload }),
+    });
     const machineById = new Map(machineList.map((machine) => [machine.machineId, machine]));
     const machineRecords = machineSnapshots.map((snapshot) => {
       if (snapshot.snapshotScope !== "portable") {
@@ -98,7 +79,7 @@ export class MachineEnvelopeCoordinator {
     for (const record of archive.manifest.devices) {
       const device = lookup(devices, record.name);
       if (!device) throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_MISSING", `no target device: ${record.name}`);
-      this._assertBlockDevice(record.name, device);
+      assertBlockDevice(record.name, device, "WEB_MACHINE_IMAGE_DEVICE_KIND", "WEB_MACHINE_IMAGE_DEVICE_INVALID");
       if (device.byteLength !== record.byteLength) {
         throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_SIZE", `${record.name}: ${device.byteLength} != ${record.byteLength}`);
       }
@@ -185,14 +166,4 @@ export class MachineEnvelopeCoordinator {
     }
   }
 
-  _assertBlockDevice(name, device) {
-    if (!device || device.kind !== "block") {
-      throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_KIND", `${name}: a block device is required`);
-    }
-    for (const method of ["flush", "snapshot", "restore"]) {
-      if (typeof device[method] !== "function") {
-        throw new WebMachineError("WEB_MACHINE_IMAGE_DEVICE_INVALID", `${name}: ${method}() is missing`);
-      }
-    }
-  }
 }
