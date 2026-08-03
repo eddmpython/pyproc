@@ -1199,6 +1199,32 @@ check("파일과 폴더 이름 camelCase", () => {
 //      계약의 축은 message가 아니라 code이므로, 코드 없는 오류가 하나라도 생기면 소비자의
 //      프로그램적 분기가 다시 문자열 매칭으로 퇴행한다. 예외: pyprocSw.js는 SW 자기충족
 //      파일(모듈 import 금지 계약)이라 로컬 swError 헬퍼의 new Error 1곳만 허용한다.
+// samePage는 워드 비교로 도는데 그 답이 바이트 비교와 같아야 한다. property 시험으로 매 실행
+// 대조한다: 정렬된 뷰와 정렬이 깨진 뷰(byteOffset 홀수) 양쪽에서 같은 답을 내는지 본다.
+await checkAsync("samePage: 워드 비교가 바이트 비교와 같은 답을 낸다", async () => {
+  const { samePage } = await import(pathToFileURL(join(ROOT, "src", "runtime", "heapDelta.js")).href);
+  const PAGE = 64;
+  const byteSame = (a, b, page) => {
+    for (let i = page * PAGE; i < (page + 1) * PAGE; i++) if (a[i] !== b[i]) return false;
+    return true;
+  };
+  let seed = 12345;
+  const rand = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % 256;
+  for (let trial = 0; trial < 200; trial++) {
+    const buffer = new ArrayBuffer(PAGE * 4 + 8);
+    const a = new Uint8Array(buffer, trial % 2 === 0 ? 0 : 1, PAGE * 4);
+    const b = new Uint8Array(new ArrayBuffer(PAGE * 4 + 8), trial % 2 === 0 ? 0 : 1, PAGE * 4);
+    for (let i = 0; i < a.length; i++) { const v = rand(); a[i] = v; b[i] = v; }
+    // 성긴 비교가 건너뛰는 자리에 어긋냄을 심는다. 워드 stride는 바이트 0-3, 8-11...만 보므로
+    // 4-7 구간의 차이는 확정 비교만 잡는다. 그 자리를 쓰지 않으면 확정 비교를 지워도 통과한다.
+    if (trial % 3 === 0) b[(trial % 4) * PAGE + 5] ^= 0xff;
+    for (let page = 0; page < 4; page++) {
+      if (samePage(a, b, page, PAGE) !== byteSame(a, b, page)) {
+        throw new Error(`trial ${trial} page ${page}: 워드 비교와 바이트 비교가 갈렸다`);
+      }
+    }
+  }
+});
 section("오류 계약");
 // 오류 message와 API 반환 문자열은 소비자가 콘솔·이슈·로그에서 읽는 공개 표면이다. 규칙은
 // 공개 표면 영문 우선이고, 실제로 한 파일 안에서 갈려 있었다(operationControl은 한 템플릿

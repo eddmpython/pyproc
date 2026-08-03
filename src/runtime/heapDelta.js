@@ -34,10 +34,23 @@ export function byteDiffPages(current, baseline, pageSize) {
 // 한 페이지 동일성: 성긴 기각(8바이트 stride) 후 확정 비교. byteDiffPages와 드리프트 정화
 // (worker.js applyDelta)가 같은 판정을 쓰도록 분리해 둔다.
 export function samePage(a, b, page, pageSize) {
-  const av = a.subarray(page * pageSize, (page + 1) * pageSize);
-  const bv = b.subarray(page * pageSize, (page + 1) * pageSize);
-  for (let i = 0; i < pageSize; i += 8) { if (av[i] !== bv[i]) return false; } // 성긴 비교(빠른 기각)
-  for (let i = 0; i < pageSize; i++) { if (av[i] !== bv[i]) return false; }    // 확정 비교
+  const start = page * pageSize;
+  // 확정 비교를 워드 단위로 돈다. 결과는 바이트 비교와 동일하고(정렬만 성립하면) 반복 횟수가
+  // 1/4이다. 미변경 페이지가 최악인 구조라서(성긴 기각을 통과한 뒤 전 바이트를 도는) 이 경로가
+  // 힙 크기에 비례하는 비용의 대부분이었다. 정렬이 깨지면 바이트 경로로 물러난다.
+  const aligned = (a.byteOffset + start) % 4 === 0 && (b.byteOffset + start) % 4 === 0 && pageSize % 4 === 0;
+  if (aligned) {
+    const words = pageSize / 4;
+    const aw = new Uint32Array(a.buffer, a.byteOffset + start, words);
+    const bw = new Uint32Array(b.buffer, b.byteOffset + start, words);
+    for (let i = 0; i < words; i += 2) { if (aw[i] !== bw[i]) return false; } // 성긴 비교(빠른 기각)
+    for (let i = 0; i < words; i++) { if (aw[i] !== bw[i]) return false; }    // 확정 비교
+    return true;
+  }
+  const av = a.subarray(start, start + pageSize);
+  const bv = b.subarray(start, start + pageSize);
+  for (let i = 0; i < pageSize; i += 8) { if (av[i] !== bv[i]) return false; }
+  for (let i = 0; i < pageSize; i++) { if (av[i] !== bv[i]) return false; }
   return true;
 }
 
