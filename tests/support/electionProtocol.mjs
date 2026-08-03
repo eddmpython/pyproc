@@ -93,9 +93,9 @@ export async function assertElectionProtocol(check, checkAsync) {
     // LRU: 상한(256)을 넘겨 서빙하면 _served가 무한 성장하지 않는다.
     for (let i = 0; i < 300; i++) {
       await ctrl._serve({ type: "rpcReq", action: "run", code: "1", requestId: `u${i}`, participantId: "caller", targetLeaderId: ctrl.participantId, epoch: 2 });
-      if (ctrl._served.size > 256) throw new Error(`served-cache 상한 초과(${ctrl._served.size})`);
+      if (ctrl._served.cacheSize > 256) throw new Error(`served-cache 상한 초과(${ctrl._served.cacheSize})`);
     }
-    if (ctrl._served.size !== 256) throw new Error(`LRU 축출이 안 됨(size ${ctrl._served.size})`);
+    if (ctrl._served.cacheSize !== 256) throw new Error(`LRU 축출이 안 됨(size ${ctrl._served.cacheSize})`);
   });
 
   // S5: 세대가 나른 결과로 답한다. 승계자는 새 커널이라 _served가 비어 있지만, 세대가 결과를
@@ -108,7 +108,7 @@ export async function assertElectionProtocol(check, checkAsync) {
     const posted = [];
     ctrl._chan = { postMessage: (message) => posted.push(message) };
     // 승계자가 부활한 상태를 흉내낸다: 결과 기록만 있고 served 캐시는 비었다.
-    ctrl._outcomes = [{ requestId: "r/1/1", epoch: 3, action: "run", ok: true, result: 42 }];
+    ctrl._served.record({ requestId: "r/1/1", epoch: 3, action: "run", ok: true, result: 42 });
     await ctrl._serve({ type: "rpcReq", action: "run", code: "1", requestId: "r/1/1", participantId: "caller", targetLeaderId: ctrl.participantId, epoch: 7 });
     if (runCount !== 0) throw new Error(`기록이 있는데 다시 실행했다(runCount ${runCount})`);
     const answer = posted.find((message) => message.requestId === "r/1/1");
@@ -128,8 +128,8 @@ export async function assertElectionProtocol(check, checkAsync) {
     ctrl._chan = { postMessage: () => {} };
     await ctrl._serve({ type: "rpcReq", action: "run", code: "1", requestId: "n/1/1", participantId: "caller", targetLeaderId: ctrl.participantId, epoch: 2 });
     if (runCount !== 1) throw new Error(`실행 횟수 ${runCount}`);
-    const recorded = ctrl._outcomes.find((entry) => entry.requestId === "n/1/1");
-    if (!recorded || recorded.ok !== true || recorded.result !== 5) throw new Error(JSON.stringify(ctrl._outcomes));
+    const recorded = ctrl._served.recorded("n/1/1");
+    if (!recorded || recorded.ok !== true || recorded.result !== 5) throw new Error(`결과 기록 ${ctrl._served.outcomeCount}건`);
   });
 
   // S7: 실패도 기록된다. 실패를 안 남기면 승계자가 그 명령을 다시 돌려 "두 번 실행"이 된다.
@@ -139,8 +139,8 @@ export async function assertElectionProtocol(check, checkAsync) {
     ctrl._session = { rt: { run: () => { throw new Error("boom"); }, runAsync: async () => { throw new Error("boom"); } } };
     ctrl._chan = { postMessage: () => {} };
     await ctrl._serve({ type: "rpcReq", action: "run", code: "1", requestId: "f/1/1", participantId: "caller", targetLeaderId: ctrl.participantId, epoch: 2 });
-    const recorded = ctrl._outcomes.find((entry) => entry.requestId === "f/1/1");
-    if (!recorded || recorded.ok !== false) throw new Error(JSON.stringify(ctrl._outcomes));
+    const recorded = ctrl._served.recorded("f/1/1");
+    if (!recorded || recorded.ok !== false) throw new Error(`결과 기록 ${ctrl._served.outcomeCount}건`);
   });
 
   // S8: 호출자 절반. 리더가 바뀌면 내구 머신의 대기 요청은 거부되지 않고 park되며, 준비된

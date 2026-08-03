@@ -4,7 +4,8 @@
 // 리더 탭이 사라지면 다음 참여자가 같은 매니페스트로 부팅하고 MachineJournal의 마지막
 // commit 경계에서 힙과 /home/web을 함께 복구한다. SharedWorker와 달리 문서의 COI/SAB를 유지한다.
 import { bootSession } from "./session.js";
-import { OUTCOME_LOG_MAX_RECORDS, appendOutcomeRecord, decodeOutcomeLog, encodeOutcomeLog, findOutcome } from "../state/outcomeLog.js";
+import { OUTCOME_LOG_MAX_RECORDS } from "../state/outcomeLog.js";
+import { ServedResponses } from "./kernel/servedResponses.js";
 import { KernelPresence } from "./kernel/kernelPresence.js";
 import { PendingRequests } from "./kernel/pendingRequests.js";
 import { MachineJournal } from "../capabilities/journal/machineJournal.js";
@@ -93,12 +94,11 @@ export class KernelElection {
     this._journal = null;
     this._chan = null;
     this._pending = new PendingRequests();
-    this._served = new Map();
+    this._served = new ServedResponses();
     // 명령 실행과 generation commit은 한 줄에서 순서대로 끝난다. async run 두 개나 idle commit이
     // 겹치면 뒤 명령의 결과가 앞 generation에 섞이므로, durable 응답의 선형화 지점이 필요하다.
     this._commandChain = Promise.resolve();
     // 세대가 나르는 결과 기록. 승계자가 "그 명령이 실행됐는가"에 답할 수 있게 하는 유일한 근거다.
-    this._outcomes = [];
     this._presence = new KernelPresence(this.participantId, this._presenceTimeoutMs);
     this._readyWaiters = new Set();
     this._releaseLeader = null;
@@ -176,8 +176,8 @@ export class KernelElection {
           // 한 사실이 된다(세대 밖에 두면 승계자가 힙에 없는 효과의 결과를 답할 수 있다).
           sidecar: {
             id: "outcomes",
-            collect: () => (this._outcomes.length ? encodeOutcomeLog(this._outcomes) : null),
-            apply: (bytes) => { this._outcomes = bytes ? decodeOutcomeLog(bytes) : []; },
+            collect: () => this._served.encode(),
+            apply: (bytes) => { this._served.decode(bytes); },
           },
         });
         const recoveryStarted = now();
@@ -304,11 +304,11 @@ export class KernelElection {
 
   async _serve(message) {
     if (message.targetLeaderId !== this.participantId || message.epoch !== this._epoch) return;
-    const cached = this._served.get(message.requestId);
+    const cached = this._served.cached(message.requestId);
     if (cached) { this._post(cached); return; }
     // 세대가 나른 기록이 있으면 그 명령은 이미 실행됐고 효과가 이 힙 안에 있다. 다시 돌리면
     // 두 번 실행이므로, 기록으로 답한다(리더 신원과 epoch는 지금 것으로 채운다).
-    const recorded = findOutcome(this._outcomes, message.requestId);
+    const recorded = this._served.recorded(message.requestId);
     if (recorded) {
       this._post({
         type: "rpcRes",
@@ -322,11 +322,11 @@ export class KernelElection {
       });
       return;
     }
-    const outcomesBefore = this._outcomes;
     // 실행과 내구 커밋의 정책은 _runCommand 하나다. 리더가 자기 요청을 로컬로 처리하는 경로와
     // 원격 요청을 서비스하는 경로가 각자 이 정책을 구현하고 있었고, 한쪽만 고치면 조용히 갈렸다.
-    let outcome = await this._runCommand(message.action, message, (response) => {
-      this._outcomes = appendOutcomeRecord(outcomesBefore, {
+    let rollbackOutcome = null;
+    const outcome = await this._runCommand(message.action, message, (response) => {
+      rollbackOutcome = this._served.record({
         requestId: message.requestId,
         epoch: this._epoch,
         action: message.action,
@@ -336,11 +336,12 @@ export class KernelElection {
     });
     let response = outcome;
     if (outcome.durabilityUnknown) {
-      this._outcomes = outcomesBefore;
+      // 효과가 세대에 들지 않았으므로 결과 기록도 남으면 안 된다(남으면 승계자가 안 된 일을
+      // 됐다고 답한다).
+      if (rollbackOutcome) rollbackOutcome();
       response = this._responseFor(message, false, errorPayload(durabilityUnknown(outcome.cause)));
     }
-    this._served.set(message.requestId, response);
-    if (this._served.size > OUTCOME_LOG_MAX_RECORDS) this._served.delete(this._served.keys().next().value);
+    this._served.remember(message.requestId, response);
     this._post(response);
   }
 
