@@ -53,11 +53,11 @@ export { MemoryTextDisplayDevice } from "./devices/memoryTextDisplayDevice.js";
 export { IndexedDbMachineStore } from "./persistence/indexedDbMachineStore.js";
 export { MemoryMachineStore } from "./persistence/memoryMachineStore.js";
 export { MachineCommitCoordinator } from "./persistence/machineCommitCoordinator.js";
-export { WebLockOwnerCoordinator, webMachineOwnerLockName } from "./coordination/webLockOwnerCoordinator.js";
+export { WebLockOwnerCoordinator, webMachineOwnerLockName } from "./persistence/webLockOwnerCoordinator.js";
 
 // 게스트 어댑터와 조립
-export { createPyprocGuestFactory } from "./guests/pyprocGuestAdapter.js";
-export { createV86GuestFactory } from "./guests/v86GuestAdapter.js";
+export { createPyprocGuestFactory } from "./guests/pyproc/pyprocGuestAdapter.js";
+export { createV86GuestFactory } from "./guests/v86/v86GuestAdapter.js";
 export { createBrowserHost } from "./composition/createBrowserHost.js";
 export { createMachineCryptoProvider } from "./composition/machineCryptoProvider.js";
 export { createWebComputer, WEB_COMPUTER_MACHINE_IDS } from "./composition/createWebComputer.js";

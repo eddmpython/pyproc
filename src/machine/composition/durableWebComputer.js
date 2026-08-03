@@ -6,7 +6,7 @@
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { MachineEnvelopeCoordinator } from "../image/machineEnvelopeCoordinator.js";
 import { MachineCommitCoordinator } from "../persistence/machineCommitCoordinator.js";
-import { WebLockOwnerCoordinator } from "../coordination/webLockOwnerCoordinator.js";
+import { WebLockOwnerCoordinator } from "../persistence/webLockOwnerCoordinator.js";
 import { createMachineCryptoProvider } from "./machineCryptoProvider.js";
 
 function blockDevices(computer) {

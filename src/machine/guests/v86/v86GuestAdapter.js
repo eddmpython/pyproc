@@ -1,6 +1,6 @@
 // v86GuestAdapter.js - Layer 5/guests: 주입된 v86 engine과 이름 있는 virtual device port를 guest 계약으로 변환한다.
-import { WebMachineError } from "../contracts/webMachineError.js";
-import { operationAbortError, throwIfOperationAborted } from "../contracts/operationControl.js";
+import { WebMachineError } from "../../contracts/webMachineError.js";
+import { operationAbortError, throwIfOperationAborted } from "../../contracts/operationControl.js";
 import { V86BlockBuffer } from "./v86BlockBuffer.js";
 import {
   readV86FileSystemVolume,
@@ -16,7 +16,7 @@ import { V86ClockPort } from "./v86ClockPort.js";
 import { V86EntropyPort } from "./v86EntropyPort.js";
 import { createV86WasmHostFunction } from "./v86WasmHostBridge.js";
 import { V86SerialPort } from "./v86SerialPort.js";
-import { indexRequirements, resolveRequiredDevice } from "../contracts/deviceRequirement.js";
+import { indexRequirements, resolveRequiredDevice } from "../../contracts/deviceRequirement.js";
 import { awaitV86Readiness } from "./v86Readiness.js";
 
 function consoleWrite(context, message) {

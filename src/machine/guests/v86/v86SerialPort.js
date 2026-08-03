@@ -1,6 +1,6 @@
 // v86SerialPort.js - Layer 5/guests: serial output buffer, line projection, pattern waiter와 종료 경계.
-import { WebMachineError } from "../contracts/webMachineError.js";
-import { operationAbortError } from "../contracts/operationControl.js";
+import { WebMachineError } from "../../contracts/webMachineError.js";
+import { operationAbortError } from "../../contracts/operationControl.js";
 
 export class V86SerialPort {
   constructor({ writeLine = () => {} } = {}) {

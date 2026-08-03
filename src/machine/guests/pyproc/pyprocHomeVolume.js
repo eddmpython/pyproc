@@ -4,8 +4,8 @@ const decoder = new TextDecoder("utf-8", { fatal: true });
 const magic = encoder.encode("PYPROC_HOME_VOLUME_1\n");
 const maxEntries = 10000;
 
-import { WebMachineError } from "../contracts/webMachineError.js";
-import { compareNames } from "../contracts/deterministicOrder.js";
+import { WebMachineError } from "../../contracts/webMachineError.js";
+import { compareNames } from "../../contracts/deterministicOrder.js";
 function joinPath(base, name) {
   return `${base.replace(/\/+$/, "")}/${name}`;
 }

@@ -38,7 +38,7 @@ check("Web Machine 층과 검증 트리 구조 고정", () => {
   // packages/ 감옥은 철거됐다. 플랫폼은 pyproc의 machine 층이다.
   if (existsSync(join(ROOT, "packages"))) throw new Error("packages/ 잔존: Web Machine은 src/machine 층이다");
   const entries = readdirSync(machineRoot).sort();
-  const expected = ["composition", "contracts", "coordination", "devices", "guests", "host", "image", "index.d.ts", "index.js", "persistence"];
+  const expected = ["composition", "contracts", "devices", "guests", "host", "image", "index.d.ts", "index.js", "persistence"];
   if (entries.join("\n") !== expected.join("\n")) throw new Error(`machine 층 경계 불일치: ${entries.join(", ")}`);
   const testEntries = readdirSync(webMachineTestRoot).sort();
   // run.mjs = probe 러너. probe가 게이트 폴더에 있으면서 아무도 안 돌리던 상태를 끝낸 자리다
@@ -273,7 +273,7 @@ check("Web Machine 장치·지속층은 guest를 모름", () => {
   // 옛 @web-machine/browser의 경계: 장치/지속성/조율은 어떤 게스트 이름도 모른다.
   const guestTerms = /\b(?:pyodide|wasi|v86|x86|buildroot)\b/i;
   const problems = [];
-  for (const folder of ["devices", "persistence", "coordination"]) {
+  for (const folder of ["devices", "persistence"]) {
     for (const file of collect(join(machineRoot, folder), [".js"], [])) {
       if (guestTerms.test(readFileSync(file, "utf8"))) problems.push(`${rel(file)}: guest/engine 이름`);
     }

@@ -11,8 +11,8 @@
 //     파이썬 쪽에 아무 코드가 없어도 ping이 통한다(장치가 있으면 주소가 살아 있어야 한다).
 //  2. 파이썬 표면: `pyprocNet` 모듈로 프레임을 직접 보내고 받는다. 자동 응답만 주면 그것은
 //     장치가 아니라 장식이다. 파이썬이 자기 프로토콜을 쌓을 수 있어야 장치 계약이 성립한다.
-import { WebMachineError } from "../contracts/webMachineError.js";
-import { buildArpReply, buildIcmpEchoReply, describeFrame, toAddressBytes } from "../contracts/ipv4Frames.js";
+import { WebMachineError } from "../../contracts/webMachineError.js";
+import { buildArpReply, buildIcmpEchoReply, describeFrame, toAddressBytes } from "../../contracts/ipv4Frames.js";
 
 // 파이썬 표면. **값 경계다: 이 소스는 JS 프록시를 하나도 심지 않는다.** 바이트는 hex로 건넌다.
 // 근거는 실측이다(workerGuest 캠페인 A~O, 2026-08-01): setGlobal로 심은 JS 프록시가 힙에 있으면

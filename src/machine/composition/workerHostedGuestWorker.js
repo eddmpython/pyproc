@@ -19,8 +19,8 @@ import { bootSession, openMachine } from "../../session/session.js";
 import { toErrorPayload } from "../../runtime/errors.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { DEFAULT_INDEX } from "../../runtime/runtime.js";
-import { PyprocPacketPort } from "../guests/pyprocPacketPort.js";
-import { createBridgedDevice } from "../guests/portBridgedDevice.js";
+import { PyprocPacketPort } from "../guests/pyproc/pyprocPacketPort.js";
+import { createBridgedDevice } from "../guests/bridged/portBridgedDevice.js";
 
 let session = null;
 let packetPort = null;

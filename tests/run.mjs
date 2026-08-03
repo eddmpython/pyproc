@@ -2988,7 +2988,7 @@ check("src layer edge는 아래로만", () => {
   // 워커를 스폰하는데 그 대상이 코드에 없다"는 사실의 공개이고, 그 대상은 자산 매니페스트가
   // 계약으로 갖는다(자산 역방향 대조가 그 짝이다).
   const injectedWorkerSpawns = new Set([
-    "src/machine/guests/workerHostedGuestAdapter.js:this._workerURL",
+    "src/machine/guests/bridged/workerHostedGuestAdapter.js:this._workerURL",
   ]);
   const problems = [];
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {

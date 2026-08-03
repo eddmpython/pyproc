@@ -3,7 +3,7 @@
 // 어댑터에서 나온 이유는 축이다: 이것은 매니페스트가 선언한 준비 조건을 읽고 기다리는 정책이고,
 // 에뮬레이터를 조립하거나 수명주기를 모는 일과 같은 이유로 바뀌지 않는다. 어댑터 상태를 통째로
 // 만지지 않는 것이 그 증거다: 필요한 것은 선언과 포트 둘뿐이라 인자로 받는다.
-import { WebMachineError } from "../contracts/webMachineError.js";
+import { WebMachineError } from "../../contracts/webMachineError.js";
 
 export async function awaitV86Readiness({ manifest, serialPort, framebufferPort, control }) {
   const readiness = manifest?.v86?.readiness;

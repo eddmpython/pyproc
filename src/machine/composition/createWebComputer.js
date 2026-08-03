@@ -10,10 +10,10 @@
 import { bootSession, openMachine } from "../../session/session.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { createBrowserHost } from "./createBrowserHost.js";
-import { createPyprocGuestFactory } from "../guests/pyprocGuestAdapter.js";
-import { createWorkerHostedGuestFactory } from "../guests/workerHostedGuestAdapter.js";
+import { createPyprocGuestFactory } from "../guests/pyproc/pyprocGuestAdapter.js";
+import { createWorkerHostedGuestFactory } from "../guests/bridged/workerHostedGuestAdapter.js";
 import { createRpcPort } from "../../runtime/rpcChannel.js";
-import { createV86GuestFactory } from "../guests/v86GuestAdapter.js";
+import { createV86GuestFactory } from "../guests/v86/v86GuestAdapter.js";
 import { MemoryEthernetSwitch } from "../devices/memoryEthernetSwitch.js";
 import { MemoryBlockDevice } from "../devices/memoryBlockDevice.js";
 import { MemoryScanCodeInputDevice } from "../devices/memoryScanCodeInputDevice.js";

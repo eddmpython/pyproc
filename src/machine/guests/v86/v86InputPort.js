@@ -1,5 +1,5 @@
 // v86InputPort.js - Layer 5/guests: 공통 PS/2 scan code batch를 v86 keyboard bus에 주입한다.
-import { WebMachineError } from "../contracts/webMachineError.js";
+import { WebMachineError } from "../../contracts/webMachineError.js";
 export class V86InputPort {
   constructor({ device, endpointId, codeDelayMs = 1 }) {
     if (!device || device.kind !== "input" || device.mode !== "ps2-scan-code" || typeof device.connect !== "function" || typeof device.drain !== "function") {

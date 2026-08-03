@@ -19,7 +19,7 @@
 //    `connect()` returns, so the bridged port carries the failure to the first `send()`/`close()`.
 //    The code is preserved; the timing is not. Any consumer that relies on `connect()` throwing has
 //    to move that expectation one call later.
-import { WebMachineError } from "../contracts/webMachineError.js";
+import { WebMachineError } from "../../contracts/webMachineError.js";
 
 const DEVICE_CHANNEL = "workerGuestDevice";
 

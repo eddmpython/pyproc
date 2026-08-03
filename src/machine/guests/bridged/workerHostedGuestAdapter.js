@@ -13,8 +13,8 @@
 //    revives into a worker, so the scope it declares is the scope it delivers.
 //  - **a bridged packet device**, so the guest reaches the shared switch that cannot leave the host
 //    thread. What survives the crossing and what changes shape is in portBridgedDevice.js.
-import { indexRequirements, resolveRequiredDevice } from "../contracts/deviceRequirement.js";
-import { WebMachineError } from "../contracts/webMachineError.js";
+import { indexRequirements, resolveRequiredDevice } from "../../contracts/deviceRequirement.js";
+import { WebMachineError } from "../../contracts/webMachineError.js";
 import { serveBridgedDevice } from "./portBridgedDevice.js";
 
 // createPort는 주입이다. guest는 순수 계약만 소비하고 machine 밖(runtime의 rpcChannel)은 조립
