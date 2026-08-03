@@ -237,7 +237,7 @@ export class MachineJournal {
       const sidecarBytes = this._sidecar ? this._sidecar.collect() : null;
       if (sidecarBytes && sidecarBytes.byteLength) files.push({ id: this._sidecar.id, bytes: sidecarBytes, meta: null });
       const committedAt = new Date().toISOString();
-      const liveHashes = r.hashes[r.liveIdx];
+      const liveHashes = r.hashesAt(r.liveIdx); // 노드별 저장 표현은 희소다. 전량은 이 접근자가 준다.
       this._kernel.resetCache();
       const committed = await commitState(globalThis.crypto, this._kernel, {
         // 페이지 사본은 커밋이 그것을 쓸 때 만든다(전량 동시 상주 대신 한 장씩).

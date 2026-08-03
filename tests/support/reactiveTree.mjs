@@ -35,7 +35,7 @@ export async function assertReactiveTree(check) {
       // 힙과 컨트롤러 포인터를 노드 P로 강제 이동(restore 정확성에 의존하지 않음).
       const gotoNode = (P) => {
         heap.set(model[P]);
-        ctrl.liveIdx = P; ctrl.prevHashes = ctrl.hashes[P]; ctrl._seqAt = execSeq;
+        ctrl.prevHashes = ctrl.hashesAt(P); ctrl.liveIdx = P; ctrl._seqAt = execSeq;
       };
       const nNodes = 6 + Math.floor(rand() * 8);
       for (let n = 1; n < nNodes; n++) {
@@ -68,6 +68,66 @@ export async function assertReactiveTree(check) {
     }
   });
 
+  // 노드별 해시의 저장 표현이 희소(변경 페이지의 [page,a,b] 3워드)로 내려간 뒤, 전량이 필요한
+  // 소비자는 hashesAt으로 되접는다. 되접기가 틀리면 라이브-차분 복원이 "안 바뀐 페이지"를
+  // 잘못 판정해 조용히 오염된다. 독립 오라클(그 노드 힙을 직접 해시)과 대조한다.
+  check("reactive 나무: hashesAt 되접기 = 그 노드 힙의 전량 해시 (property)", () => {
+    const rand = mulberry32(0x686f6c64); // "hold"
+    for (let trial = 0; trial < 20; trial++) {
+      const nPages = 2 + Math.floor(rand() * 4);
+      const heap = new Uint8Array(nPages * RPAGE);
+      let sp = 512, execSeq = 0;
+      const engine = { heapU8: () => heap, stackSave: () => sp, stackRestore: (v) => { sp = v; } };
+      const rt = { memory: new MemoryCapability(engine), get execSeq() { return execSeq; }, noteStateMutation() { execSeq++; } };
+      const ctrl = new ReactiveController(rt);
+      const model = [];
+      ctrl.checkpoint(); model.push(heap.slice());
+      const gotoNode = (P) => { heap.set(model[P]); ctrl.prevHashes = ctrl.hashesAt(P); ctrl.liveIdx = P; ctrl._seqAt = execSeq; };
+      for (let n = 1; n < 8 + Math.floor(rand() * 6); n++) {
+        gotoNode(Math.floor(rand() * model.length)); // 임의 기존 노드에서 분기
+        for (let c = 0, k = 1 + Math.floor(rand() * nPages); c < k; c++) {
+          const at = Math.floor(rand() * nPages) * RPAGE + Math.floor(rand() * RPAGE);
+          heap[at] = (heap[at] + 1 + Math.floor(rand() * 255)) & 0xff;
+        }
+        model.push(heap.slice());
+        ctrl.checkpoint();
+      }
+      // 오라클: 그 노드의 힙 바이트를 직접 해시한 전량 배열.
+      for (let j = 0; j < model.length; j++) {
+        const truth = new MemoryCapability({ heapU8: () => model[j] }).pageHashes();
+        gotoNode(0); // 라이브 지름길을 피해 되접기 경로를 강제한다
+        const folded = ctrl.hashesAt(j);
+        if (folded.length !== truth.length) throw new Error(`trial ${trial} node ${j}: 길이 ${folded.length}!=${truth.length}`);
+        for (let i = 0; i < truth.length; i++) {
+          if (folded[i] !== truth[i]) throw new Error(`trial ${trial} node ${j}: 워드 ${i} 되접기 불일치(가까운 조상 우선 규칙 위반 의심)`);
+        }
+      }
+    }
+  });
+
+  // 저장 비용이 힙 크기가 아니라 변경분에 비례한다. 이것이 희소화의 목적이고, 전량 배열로
+  // 되돌리면 노드마다 힙 전량의 해시가 다시 상주한다(512MB 힙이면 노드당 64KB).
+  check("reactive 나무: 노드 해시가 변경 페이지에 비례한다(희소 저장)", () => {
+    const nPages = 64;
+    const heap = new Uint8Array(nPages * RPAGE);
+    let sp = 0, execSeq = 0;
+    const engine = { heapU8: () => heap, stackSave: () => sp, stackRestore: (v) => { sp = v; } };
+    const rt = { memory: new MemoryCapability(engine), get execSeq() { return execSeq; }, noteStateMutation() { execSeq++; } };
+    const ctrl = new ReactiveController(rt);
+    ctrl.checkpoint();
+    const full = ctrl.hashes[0].byteLength; // 경계는 전량이다(h0의 입력이므로 희소화 대상 아님)
+    for (let n = 1; n <= 12; n++) {
+      heap[(n % nPages) * RPAGE] ^= 0xff; // 매번 페이지 하나만 더럽힌다
+      ctrl.checkpoint();
+      const overlay = ctrl.hashes[n];
+      if (overlay.byteLength !== 12) throw new Error(`노드 ${n}: 겹침 ${overlay.byteLength}B (변경 1페이지면 [page,a,b] 3워드 = 12B여야 한다)`);
+    }
+    // 노드 12개의 합은 12 * 12B다. 전량 저장이면 12 * (경계 크기)였다.
+    const nodeBytes = ctrl.stats().hashBytes - full - ctrl.prevHashes.byteLength;
+    if (nodeBytes !== 12 * 12) throw new Error(`노드 12개의 해시 합 ${nodeBytes}B (변경 1페이지씩이면 144B여야 한다)`);
+    if (nodeBytes >= 12 * full) throw new Error(`노드 합 ${nodeBytes}B가 전량 저장(${12 * full}B) 이상 - 희소 저장이 아니다`);
+  });
+
   check("reactive 나무: pruneTo 생존자 정확 + 해제 노드 거부 + off-path 거부", () => {
     const rand = mulberry32(0x7072756e); // "prun"
     for (let trial = 0; trial < 20; trial++) {
@@ -79,7 +139,7 @@ export async function assertReactiveTree(check) {
       const ctrl = new ReactiveController(rt);
       const model = [];
       ctrl.checkpoint(); model.push(heap.slice());
-      const gotoNode = (P) => { heap.set(model[P]); ctrl.liveIdx = P; ctrl.prevHashes = ctrl.hashes[P]; ctrl._seqAt = execSeq; };
+      const gotoNode = (P) => { heap.set(model[P]); ctrl.prevHashes = ctrl.hashesAt(P); ctrl.liveIdx = P; ctrl._seqAt = execSeq; };
       const nNodes = 6 + Math.floor(rand() * 6);
       for (let n = 1; n < nNodes; n++) {
         const parent = Math.floor(rand() * model.length);

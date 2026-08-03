@@ -29,6 +29,16 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   breaks that propagation, so per-word non-linearity is not negotiable. `[해시 soundness]`
   now asserts exactly that pair, and a linear mixer fails it.
 
+### Changed
+
+- **A checkpoint node now stores hashes only for the pages it changed.** The boundary keeps the full
+  array, because it is what the replay fingerprint is computed from; every node above it keeps
+  `[page, a, b]` triples and `ReactiveController.hashesAt(j)` folds the root-to-j chain when a
+  consumer needs the whole array. Node cost stops tracking heap size and starts tracking churn, so
+  `stats().hashBytes` on a long session reports a much smaller number than before - recalibrate any
+  budget derived from it. `hashesAt` is new on the public surface; the `hashes` array itself was
+  never part of it.
+
 ### Added
 
 - **`setRetentionPolicy({ rebaseLinear: true })` reclaims memory on a linear history.** Pruning only

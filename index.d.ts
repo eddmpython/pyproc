@@ -301,6 +301,12 @@ declare class ReactiveController {
   /** Declares an external mutation: call it after an uninstrumented heap change (such as a live PyProxy call) and the next restoreLive is promoted to the rehash path. */
   markDirty(): void;
   /**
+   * The full page-hash array of node j. Only the boundary keeps a full array; every node above it
+   * stores just the pages it changed, so this folds the root-to-j chain to answer. A pruned node on
+   * that chain is refused with PYPROC_CHECKPOINT_PRUNED.
+   */
+  hashesAt(j: number): Uint32Array;
+  /**
    * Releases the deltas and hashes of nodes outside the root-to-j parent chain: the RAM relief
    * valve of the checkpoint tree. Restoring a released node is refused with
    * PYPROC_CHECKPOINT_PRUNED, and liveIdx must lie on the retained path.
