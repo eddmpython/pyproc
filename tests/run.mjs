@@ -721,17 +721,33 @@ section("탐지기 자기 시험");
     if (secondLaunches !== 1) throw new Error(`이중 사망의 재발사 수 ${secondLaunches} (1이어야 한다)`);
     if (!doubleDead.result.timedOut || doubleDead.result.diagnosis?.relaunched !== true) throw new Error("이중 사망 진단이 재발사 사실을 안 남겼다");
   });
-  // 타임아웃 경로가 awaitGateReport를 우회해 증거 없는 한 줄로 돌아가지 못하게 잡는다.
-  check("installed 게이트의 리포트 대기는 진단 경로를 쓴다", () => {
-    const src = readFileSync(join(ROOT, "tests", "browser", "installedPackageGate.mjs"), "utf8");
-    const lines = src.split("\n").map((line) => stripComments(line));
-    if (!lines.some((line) => line.includes("awaitGateReport"))) throw new Error("awaitGateReport를 쓰지 않는다(증거 없는 타임아웃으로 회귀)");
-    if (!lines.some((line) => line.includes("result.diagnosis"))) throw new Error("타임아웃 진단을 출력하지 않는다");
-    // 회귀의 실제 모양은 "러너가 timedOut 보고를 스스로 만든다"이다. setTimeout 짝을 정규식으로
-    // 잡으려던 첫 판은 화살표 함수의 첫 )에서 끊겨 못 물었다(음성 시험이 잡았다).
-    if (lines.some((line) => line.includes("reportResolve") && line.includes("timedOut"))) {
-      throw new Error("러너가 자체 timedOut 보고를 만든다(진단 없는 타임아웃으로 회귀)");
+  // 타임아웃 경로가 진단 없이 죽는 자리로 돌아가지 못하게 잡는다. 단일 발사 러너는
+  // awaitGateReport가 대기를 소유하고, run.mjs만 예외다(재시작 phase가 같은 프로필을 다시
+  // 물어야 SW/OPFS 지속성을 검증하므로 자기 루프를 유지하되 같은 어휘의 진단을 만든다).
+  check("브라우저 러너의 리포트 대기는 진단 경로를 쓴다", () => {
+    const offenders = [];
+    // 러너는 진단 없는 timedOut 보고를 만들지 못한다: `timedOut: true` 리터럴이 있는 줄은
+    // 같은 줄에 diagnosis를 실어야 한다(harness와 run.mjs의 timeoutReport가 그 모양이다).
+    // setTimeout 짝을 정규식으로 잡으려던 첫 판은 화살표 함수의 첫 )에서 끊겨 못 물었다
+    // (음성 시험이 잡았다). 리터럴 기준이 회귀의 실제 모양을 바로 문다.
+    const forbidBareTimedOut = (name, lines) => {
+      for (const [index, line] of lines.entries()) {
+        if (line.includes("timedOut: true") && !line.includes("diagnosis")) {
+          offenders.push(`${name}:${index + 1} 진단 없는 timedOut 보고를 만든다`);
+        }
+      }
+    };
+    for (const name of ["installedPackageGate.mjs", "goldenWorkflow.mjs", "examples.mjs", "socketLane.mjs", "speedBench.mjs"]) {
+      const lines = readFileSync(join(ROOT, "tests", "browser", name), "utf8").split("\n").map((line) => stripComments(line));
+      if (!lines.some((line) => line.includes("awaitGateReport"))) offenders.push(`${name}: awaitGateReport를 쓰지 않는다`);
+      if (!lines.some((line) => line.includes("result.diagnosis"))) offenders.push(`${name}: 타임아웃 진단을 출력하지 않는다`);
+      forbidBareTimedOut(name, lines);
     }
+    const runner = readFileSync(join(ROOT, "tests", "browser", "run.mjs"), "utf8").split("\n").map((line) => stripComments(line));
+    if (!runner.some((line) => line.includes("timeoutReport()"))) offenders.push("run.mjs: 진단을 싣는 timeoutReport를 쓰지 않는다");
+    if (!runner.some((line) => line.includes("result.diagnosis"))) offenders.push("run.mjs: 타임아웃 진단을 출력하지 않는다");
+    forbidBareTimedOut("run.mjs", runner);
+    if (offenders.length) throw new Error(offenders.join(" / "));
   });
   // 러너가 다시 페이지의 판정을 읽는 자리로 돌아가지 못하게 막는다. 판정자는 한 곳이다.
   check("게이트 러너는 페이지가 보낸 ok를 최종 판정으로 쓰지 않는다", () => {

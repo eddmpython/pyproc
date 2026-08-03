@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { cpus, freemem, platform, release, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
-import { findBrowser, launchBrowser } from "./harness.mjs";
+import { awaitGateReport, countRequests, findBrowser, launchBrowser } from "./harness.mjs";
 import { BENCH_ARTIFACT_SCHEMA_VERSION, RAW_OUTPUT_EMBEDDED_REPORT, S1_SCENARIO, normalizeBenchArtifact, scenarioDefinitionFor } from "./benchArtifacts.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_BENCH_TIMEOUT || process.env.PYPROC_GATE_TIMEOUT || 240000);
@@ -97,13 +97,12 @@ const pageParams = new URLSearchParams({
 if (process.env.PYPROC_INDEX_URL) pageParams.set("indexURL", process.env.PYPROC_INDEX_URL);
 const url = `http://127.0.0.1:${port}/examples/speedLab.html?${pageParams}`;
 const startedAt = new Date().toISOString();
-const session = launchBrowser(url, { browser, prefix: "pyprocSpeedBench-" });
+const requestCount = countRequests(server);
+const launch = () => launchBrowser(url, { browser, prefix: "pyprocSpeedBench-" });
 
-const result = await new Promise((res) => {
-  resolveReport = res;
-  setTimeout(() => {
-    if (resolveReport === res) { resolveReport = null; res({ ok: false, timedOut: true }); }
-  }, TIMEOUT_MS);
+const { result, session } = await awaitGateReport({
+  reportPromise: new Promise((res) => { resolveReport = res; }),
+  timeoutMs: TIMEOUT_MS, session: launch(), relaunch: launch, requestCount,
 });
 
 session.close();
@@ -208,7 +207,8 @@ if (b) {
   console.log(`  maxErr:  ${b.maxErr}`);
 }
 if (outPath) console.log(`  json:    ${resolve(outPath)}`);
-if (result.timedOut) console.log(`  FAIL timeout ${TIMEOUT_MS}ms`);
+if (result.timedOut) console.log(`  FAIL timeout ${TIMEOUT_MS}ms
+  진단: ${JSON.stringify(result.diagnosis)}`);
 else console.log(`  result:  ${artifact.ok ? "GREEN" : "RED"}`);
 
 process.exit(artifact.ok ? 0 : 1);

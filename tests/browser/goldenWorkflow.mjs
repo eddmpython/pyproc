@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { safeJoin, sendFile } from "../../scripts/staticServer.mjs";
 import { installPackedPyProc, ROOT } from "../packageHarness.mjs";
-import { judgeReport, launchBrowser } from "./harness.mjs";
+import { awaitGateReport, countRequests, judgeReport, launchBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GOLDEN_TIMEOUT || 180000);
 const GOLDEN_PAGE = "tests/browser/goldenWorkflow.html";
@@ -60,14 +60,17 @@ try {
   const indexQuery = process.env.PYPROC_INDEX_URL
     ? `?indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
   const url = `http://127.0.0.1:${server.address().port}/${indexQuery}`;
-  session = launchBrowser(url, { prefix: "pyprocGolden-" });
+  const requestCount = countRequests(server);
+  const launch = () => launchBrowser(url, { prefix: "pyprocGolden-" });
+  session = launch();
   console.log(`pyproc golden workflow\n  package: pyproc@${installedPackage.version} (${packed.filename})\n  browser: ${session.browser}\n  url:     ${url}\n`);
 
-  const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);
-  const result = await reportPromise;
-  clearTimeout(timeout);
+  const awaited = await awaitGateReport({ reportPromise, timeoutMs: TIMEOUT_MS, session, relaunch: launch, requestCount });
+  session = awaited.session;
+  const result = awaited.result;
   if (result.timedOut) {
     console.log(`FAIL golden workflow timeout(${TIMEOUT_MS / 1000}s)`);
+    console.log(`  진단: ${JSON.stringify(result.diagnosis)}`);
     process.exitCode = 1;
   } else {
     for (const entry of result.checks || []) {

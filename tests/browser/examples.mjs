@@ -5,7 +5,7 @@
 // 각 예제는 ?gate 쿼리에서만 /gateReport로 완주 여부를 보고한다(사람이 열면 no-op).
 import { readFileSync } from "node:fs";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
-import { findBrowser, judgeReport, launchBrowser } from "./harness.mjs";
+import { awaitGateReport, countRequests, findBrowser, judgeReport, launchBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 // brandGate: 예제가 쓰는 브랜드 자산(마크 SVG + demo.css 팔레트)이 실제로 그려지는지 먼저 본다.
@@ -33,6 +33,7 @@ const server = createStaticServer(async (req, res) => {
   if (r) { resolveReport = null; try { r(JSON.parse(body)); } catch (e) { r({ ok: false, parseError: String(e) }); } }
   return true;
 });
+const totalRequests = countRequests(server);
 await new Promise((res) => server.listen(0, "127.0.0.1", res));
 const port = server.address().port;
 console.log(`pyproc 예제 게이트\n  browser: ${browser}\n`);
@@ -43,19 +44,25 @@ for (const page of PAGES) {
   // 속도 주장 자체의 인증은 artifact 계약이 담당한다(docs/operations/benchmarking.md S1).
   const minSpeedup = page === "examples/speedLab.html" && process.env.PYPROC_EXAMPLES_MIN_SPEEDUP
     ? `&minSpeedup=${process.env.PYPROC_EXAMPLES_MIN_SPEEDUP}` : "";
-  const session = launchBrowser(`http://127.0.0.1:${port}/${page}?gate=1${indexQuery}${minSpeedup}`, { browser, prefix: "pyprocExample-" });
-  const result = await new Promise((res) => {
-    resolveReport = res;
-    setTimeout(() => { if (resolveReport === res) { resolveReport = null; res({ ok: false, timedOut: true }); } }, TIMEOUT_MS);
+  const launch = () => launchBrowser(`http://127.0.0.1:${port}/${page}?gate=1${indexQuery}${minSpeedup}`, { browser, prefix: "pyprocExample-" });
+  const before = totalRequests();
+  const reportPromise = new Promise((res) => { resolveReport = res; });
+  const awaited = await awaitGateReport({
+    reportPromise, timeoutMs: TIMEOUT_MS, session: launch(),
+    relaunch: launch, requestCount: () => totalRequests() - before,
   });
-  session.close();
+  const result = awaited.result;
+  // 타임아웃이면 이 페이지의 늦은 보고가 다음 페이지의 promise를 가로채지 못하게 끊는다.
+  if (result.timedOut) resolveReport = null;
+  awaited.session.close();
   const info = ((result.checks && result.checks[0] && result.checks[0].info) || "").replaceAll("\n", " | ").slice(-150);
   // 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다). 예제 페이지는
   // 단정이 하나뿐인 경우가 많아 하한이 특히 중요하다: 단정을 지우면 체크 0개로 RED가 된다.
   const verdict = judgeReport(result, { floor: FLOORS[page], timeoutLabel: "타임아웃" });
   if (!verdict.ok) failed++;
   const problems = verdict.problems.length ? "\n        " + verdict.problems.join(" / ") : "";
-  console.log(`  ${verdict.ok ? "PASS" : "FAIL"} ${label(page)} (${verdict.passed}/${verdict.total})${result.timedOut ? " 타임아웃" : ""}${info ? "\n        " + info : ""}${problems}`);
+  const diagnosis = result.timedOut ? `\n        진단: ${JSON.stringify(result.diagnosis)}` : "";
+  console.log(`  ${verdict.ok ? "PASS" : "FAIL"} ${label(page)} (${verdict.passed}/${verdict.total})${result.timedOut ? " 타임아웃" : ""}${diagnosis}${info ? "\n        " + info : ""}${problems}`);
 }
 server.close();
 console.log(`\n결과: ${PAGES.length - failed}/${PAGES.length} ${failed ? "RED" : "GREEN"}`);

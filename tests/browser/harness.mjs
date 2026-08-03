@@ -117,6 +117,14 @@ export function launchBrowser(url, opts = {}) {
   };
 }
 
+// 서버가 본 요청 수. http.Server의 request 이벤트는 리스너를 더 달아도 기존 처리에 영향이
+// 없으므로 러너의 서버 조립(createStaticServer든 직접 createServer든)을 건드리지 않는다.
+export function countRequests(server) {
+  let seen = 0;
+  server.on("request", () => { seen++; });
+  return () => seen;
+}
+
 // 리포트 대기 + 타임아웃 진단 + 발사 실패 1회 재발사. 세 결정이 한 곳에 사는 이유:
 //
 // 지금까지 타임아웃은 증거 없이 "FAIL 타임아웃" 한 줄이었다. 실측(2026-08-03, edge-release
@@ -132,9 +140,10 @@ export function launchBrowser(url, opts = {}) {
 //
 // 인자: reportPromise(페이지의 최종 보고), timeoutMs, session(launchBrowser 반환),
 // relaunch(새 session을 만드는 함수, 생략 시 재발사 없음), requestCount(서버가 본 요청 수를
-// 주는 함수, 생략 시 진단에서 "미측정"), log. 반환: { result, session }. 호출자는 반환된
-// session을 close()한다(재발사됐으면 처음 것이 아니다).
-export async function awaitGateReport({ reportPromise, timeoutMs, session, relaunch = null, requestCount = null, log = console.log }) {
+// 주는 함수, 생략 시 진단에서 "미측정"), progress(페이지가 흘린 마지막 진행 단계를 주는 함수,
+// 선택), log. 반환: { result, session }. 호출자는 반환된 session을 close()한다(재발사됐으면
+// 처음 것이 아니다).
+export async function awaitGateReport({ reportPromise, timeoutMs, session, relaunch = null, requestCount = null, progress = null, log = console.log }) {
   const startedAt = Date.now();
   let current = session;
   let relaunched = false;
@@ -175,6 +184,8 @@ export async function awaitGateReport({ reportPromise, timeoutMs, session, relau
   const diagnosis = {
     browser: exit ? `exited(code=${exit.code} signal=${exit.signal ?? "없음"} +${exit.afterMs}ms${exit.error ? ` error=${exit.error}` : ""})` : "alive-but-silent",
     requests: requests() ?? "미측정",
+    // 페이지가 흘린 마지막 진행 단계. 행은 이 단계와 그다음 단계 사이에 있다.
+    lastProgress: progress ? progress() : undefined,
     relaunched,
     elapsedMs: Date.now() - startedAt,
   };

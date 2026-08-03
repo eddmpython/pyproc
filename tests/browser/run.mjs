@@ -13,7 +13,7 @@ import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
-import { findBrowser, headlessArgs, judgeReport, killBrowser } from "./harness.mjs";
+import { countRequests, findBrowser, headlessArgs, judgeReport, killBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000); // 콜드 CDN 감안. 무거운 probe는 env로 연장
 const MAX_ARTIFACT_BYTES = Number(process.env.PYPROC_GATE_ARTIFACT_MAX || 512 * 1024 * 1024);
@@ -122,10 +122,28 @@ function pageUrl(nextSearch = "") {
 }
 
 const browser = findBrowser();
+const requestsSeen = countRequests(server);
 let currentProfile = mkdtempSync(join(runRoot, "profile-"));
+// 런처 종료 기록. 판정이 아니라 진단 재료다(Edge는 위임 종료할 수 있다 - harness 주석 참조).
+let launcherExit = null;
 function launch(url, phase) {
   console.log(`${phase === 1 ? "pyproc 브라우저 게이트" : `\n브라우저 재시작 phase ${phase}`}\n  browser: ${browser}\n  url:     ${url}\n`);
-  return spawn(browser, [...headlessArgs(currentProfile), url], { stdio: "ignore" });
+  launcherExit = null;
+  const spawnedAt = Date.now();
+  const child = spawn(browser, [...headlessArgs(currentProfile), url], { stdio: "ignore" });
+  child.on("exit", (code, signal) => { launcherExit = { code, signal, afterMs: Date.now() - spawnedAt }; });
+  return child;
+}
+// 타임아웃은 증거를 실어야 한다. 침묵 240초로 죽고 아무것도 안 남긴 사건(installed 레인,
+// 2026-08-03)과 콜드 119/120 미식별이 근거다. 여기의 어휘는 awaitGateReport의 진단과 같다.
+function timeoutReport() {
+  const diagnosis = {
+    browser: launcherExit ? `exited(code=${launcherExit.code} signal=${launcherExit.signal ?? "없음"} +${launcherExit.afterMs}ms)` : "alive-but-silent",
+    requests: requestsSeen(),
+    phase,
+    elapsedMs: TIMEOUT_MS,
+  };
+  return { ok: false, checks: [], timedOut: true, diagnosis };
 }
 // 프로필 수명주기는 이 게이트 고유다(재시작 phase가 같은 프로필을 다시 물어야 SW/OPFS
 // 지속성을 검증할 수 있다). 그래서 launchBrowser 대신 종료 지식만 하네스와 공유한다.
@@ -135,7 +153,7 @@ let phase = 1;
 let proc = launch(pageUrl(process.env.PYPROC_GATE_INITIAL_SEARCH || ""), phase);
 const restartTimings = {};
 
-const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);
+const timeout = setTimeout(() => reportResolve(timeoutReport()), TIMEOUT_MS);
 let result;
 while (!result) {
   const event = await Promise.race([
@@ -167,6 +185,7 @@ try { rmSync(runRoot, { recursive: true, force: true }); } catch (e) {}
 
 if (result.timedOut) {
   console.log(`FAIL 게이트 타임아웃(${TIMEOUT_MS / 1000}s). 네트워크(Pyodide CDN) 또는 브라우저 실행을 확인하라.`);
+  console.log(`  진단: ${JSON.stringify(result.diagnosis)}`);
   process.exit(1);
 }
 for (const c of result.checks) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.name}${c.info ? " (" + c.info + ")" : ""}`);

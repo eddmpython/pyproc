@@ -20,6 +20,16 @@ function createProductServer(appDir, publicDir, onReport) {
   const server = createServer(async (req, res) => {
     server.gateRequests++; // 진단 재료: 타임아웃 때 "페이지가 로드는 됐는가"를 답할 수 있어야 한다
     const url = new URL(req.url, "http://x");
+    // 진행 비컨: 페이지가 체크 하나를 끝낼 때마다 이름을 흘린다. 행은 "마지막으로 끝난 체크"와
+    // 그다음 체크 사이에 있으므로, 타임아웃 진단이 멈춘 단계를 이름으로 말할 수 있게 된다
+    // (alive-but-silent + requests 693으로 절반만 식별된 실측이 근거다, 2026-08-03 로컬 재현).
+    if (req.method === "POST" && url.pathname === "/gateProgress") {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      res.writeHead(204); res.end();
+      server.gateProgress = { stage: body.slice(0, 200), atMs: Date.now() };
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/gateReport") {
       let body = "";
       for await (const chunk of req) body += chunk;
@@ -39,6 +49,7 @@ function createProductServer(appDir, publicDir, onReport) {
     await sendFile(res, file);
   });
   server.gateRequests = 0;
+  server.gateProgress = null;
   return server;
 }
 
@@ -76,10 +87,13 @@ const html = `<!DOCTYPE html>
     const log = (msg) => { out.textContent += "\\n" + msg; };
     const indexParam = new URLSearchParams(location.search).get("indexURL");
     const INDEX = indexParam ? new URL(indexParam, location.href).href : undefined;
+    const progress = (stage) => { try { fetch("/gateProgress", { method: "POST", body: stage }); } catch (e) {} };
     const check = (name, pass, info = "") => {
       checks.push({ name, pass: !!pass, info: String(info) });
       log((pass ? "PASS " : "FAIL ") + name + (info ? " (" + info + ")" : ""));
+      progress(name); // 행 진단용: 마지막으로 끝난 체크가 러너에 남는다
     };
+    progress("페이지 모듈 로드 완료");
     const report = async () => {
       const ok = checks.length > 0 && checks.every((c) => c.pass);
       try {
@@ -585,6 +599,7 @@ try {
   const { result, session } = await awaitGateReport({
     reportPromise, timeoutMs: TIMEOUT_MS, session: first,
     relaunch: launch, requestCount: () => server.gateRequests,
+    progress: () => server.gateProgress ? { ...server.gateProgress, msAgo: Date.now() - server.gateProgress.atMs } : null,
   });
 
   session.close();

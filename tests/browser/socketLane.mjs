@@ -9,7 +9,7 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
-import { findBrowser, headlessArgs, judgeReport, killBrowser } from "./harness.mjs";
+import { awaitGateReport, countRequests, findBrowser, judgeReport, launchBrowser } from "./harness.mjs";
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..");
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
@@ -54,16 +54,18 @@ const pagePort = pageServer.address().port;
 
 const browser = findBrowser();
 console.log(`pyproc 소켓 레인 게이트\n  browser: ${browser}\n  relay:   ws://127.0.0.1:${relayPort}\n  origin:  http://127.0.0.1:${originPort}\n`);
-const profileDir = join(ROOT, "node_modules", ".pyprocSocketLaneProfile");
 const url = `http://127.0.0.1:${pagePort}/tests/browser/socketLane.html?gate=1&relay=${encodeURIComponent(`ws://127.0.0.1:${relayPort}`)}&originPort=${originPort}${indexQuery}`;
-const child = spawn(browser, [...headlessArgs(profileDir), url], { stdio: "ignore" });
-
-const result = await new Promise((resolve) => {
-  resolveReport = resolve;
-  setTimeout(() => { if (resolveReport === resolve) { resolveReport = null; resolve({ ok: false, timedOut: true }); } }, TIMEOUT_MS);
+// launchBrowser로 통일: 예전의 고정 프로필(node_modules/.pyprocSocketLaneProfile)은 하네스
+// 헤더가 경고하는 바로 그 위험이었다 - 살아남은 인스턴스가 있으면 다음 실행이 탭만 위임하고
+// 죽어 리포트가 영영 안 온다. 프로필은 매 실행 mkdtemp가 정본이다.
+const pageRequests = countRequests(pageServer);
+const launch = () => launchBrowser(url, { browser, prefix: "pyprocSocketLane-" });
+const { result, session } = await awaitGateReport({
+  reportPromise: new Promise((resolve) => { resolveReport = resolve; }),
+  timeoutMs: TIMEOUT_MS, session: launch(), relaunch: launch, requestCount: pageRequests,
 });
 
-await killBrowser(child, profileDir);
+session.close();
 relay.kill();
 origin.close();
 pageServer.close();
@@ -75,7 +77,7 @@ if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
 // 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다).
 const verdict = judgeReport(result, { timeoutLabel: "타임아웃" });
 // 보고가 비면 그 사실을 말한다. 빈 보고를 "0/0 RED"로만 찍으면 타임아웃과 페이지 사망이 구분되지 않는다.
-if (!verdict.total) console.log(`  보고 없음: ${result.timedOut ? "타임아웃" : JSON.stringify(result).slice(0, 200)}`);
+if (!verdict.total) console.log(`  보고 없음: ${result.timedOut ? `타임아웃, 진단: ${JSON.stringify(result.diagnosis)}` : JSON.stringify(result).slice(0, 200)}`);
 for (const problem of verdict.problems) console.log(`\nFAIL ${problem}`);
 console.log(`\n결과: ${verdict.ok ? "GREEN" : "RED"} (${verdict.passed}/${verdict.total})`);
 process.exit(verdict.ok ? 0 : 1);
