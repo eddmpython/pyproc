@@ -49,6 +49,11 @@
   스폰되는 워커의 자산 매니페스트 누락. 셋 다 게이트를 함께 냈고 음성 시험으로 이빨을 봤다.
   자산 그래프가 23파일에서 59파일로 늘었다(그 차이가 그동안 SRI preflight 밖이던 범위다).
 
+- **07 bootPath 완료(2026-08-03)**: boot()이 99줄에서 57줄로 줄었다. 코어 자산 캐시를 자기 파일로
+  분리하고, 엔진 신뢰 규칙 두 사본을 resolveEngineTrust 하나로 모으고 검증을 파생 앞으로 옮겼다.
+  캐시 미스 판정을 오류 문자열에서 code 구조로 바꿨다. 동시 부팅은 1.59배로 실측해 계약 실태 표에
+  등재했다(창을 없앨 수 없는 이유와 함께). proc 풀 memoize의 참조 동일성 규칙을 계약으로 못 박았다.
+
 - **06 moduleBoundaries 완료(2026-08-03)**: machine 순수 집합 allowlist 11개를 파일 이동으로 없애
   rank를 폴더에서 유도한다. capabilities/에서 능력 아닌 파일 넷을 옮기고(image/ 신설, envManager는
   composition으로), coordination/을 흡수하고 guests/를 v86·pyproc·bridged로 갈랐다. 비리터럴 워커
@@ -77,7 +82,6 @@
 
 | 순서 | 덩어리 | 주 축 | 선정 근거 | 입장 조건 |
 |---:|---|---|---|---|
-| 07 | [bootPath](07_bootPath/README.md) | 속도, 클린코드 | 기본 부팅이 탭 전역으로 직렬화된다. 01의 patchScope 수리가 여는 자리 | 충족(01 완료) |
 | 08 | [kernelDecomposition](08_kernelDecomposition/README.md) | 클린코드 | 최대 파일에서 커밋 정책이 이미 두 벌로 갈렸다 | 충족(04, 05 완료) |
 | 09 | [heapReclaim](09_heapReclaim/README.md) | 메모리 | 워커당 힙 사본 1벌이 프로세스 OS의 지배적 비용이다. h0와 무관 | 충족(03 완료) |
 | 10 | [h0Break](10_h0Break/README.md) | 속도, 메모리 | h0 지문에 닿는 것 전부. 브레이킹을 한 번으로 모은다 | 명시 릴리즈 지시 + attempts 실측 |
