@@ -2850,6 +2850,20 @@ check("src 전 파일이 헤더에 Layer 라벨을 갖고 rank 맵과 일치한�
 });
 // 규칙 문서와 게이트가 같은 순위를 말하는가. CLAUDE.md는 로컬 전용이라 CI에 없으므로
 // 추적되는 기여자 문서를 대조 대상으로 둔다(규칙 문장의 공개 정본).
+// moduleBoundaries.md는 규칙이 모듈 경계의 SSOT로 지목하는 문서인데 rank 표가 없었다. 이제
+// 있고, 두 문서가 같은 순위를 말하는지 함께 대조한다(세 곳에 적힌 숫자는 반드시 갈라진다).
+check("moduleBoundaries의 레이어 순위 = rank 맵", () => {
+  const doc = readFileSync(join(ROOT, "docs", "operations", "moduleBoundaries.md"), "utf8");
+  for (const [layer, rank] of LAYER_RANK) {
+    const stated = [...doc.matchAll(new RegExp("`" + layer + "/`\\s*\\((\\d)", "g"))].map((m) => Number(m[1]));
+    if (!stated.length) throw new Error(`moduleBoundaries에 ${layer}(${rank}) 순위 표기 없음`);
+    if (stated.some((value) => value !== rank)) throw new Error(`moduleBoundaries의 ${layer} 순위 표기 모순: ${stated.join(",")}`);
+  }
+  // machine 내부 rank도 이 문서가 말해야 한다. 그 rank가 순수성 판정의 실제 기준이다.
+  for (const marker of ["`contracts/`", "`host/`", "`guests/`", "pure"]) {
+    if (!doc.includes(marker)) throw new Error(`moduleBoundaries에 machine 내부 rank 표기 없음: ${marker}`);
+  }
+});
 check("CONTRIBUTING의 레이어 순위 = rank 맵", () => {
   const doc = readFileSync(join(ROOT, "CONTRIBUTING.md"), "utf8");
   // 존재만 보면 모순을 못 잡는다: 같은 층을 두 순위로 적어도 맞는 쪽 하나가 통과시킨다.
