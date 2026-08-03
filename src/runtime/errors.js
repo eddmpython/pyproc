@@ -46,10 +46,28 @@ export class PyProcError extends Error {
   constructor(code, message, opts = {}) {
     super(message, opts.cause !== undefined ? { cause: opts.cause } : undefined);
     this.name = "PyProcError";
+    // 미등록 코드는 PYPROC_INTERNAL로 강등하되 원래 값을 남긴다. 조용한 강등은 오타나 등록
+    // 누락을 신호 없이 삼켜서, 소비자는 분기를 잃고 개발자는 그 사실조차 모른다.
+    if (!CODE_SET.has(code)) {
+      const context = opts.context && typeof opts.context === "object" ? { ...opts.context } : {};
+      context.unregisteredCode = code;
+      opts = { ...opts, context };
+    }
     this.code = CODE_SET.has(code) ? code : "PYPROC_INTERNAL";
     this.retryable = opts.retryable === true;
     if (opts.context !== undefined) this.context = opts.context;
   }
+}
+
+// map 같은 값 결과에 오류를 실을 때의 변환. 던지는 대신 값으로 돌려주는 자리에서도 계약은
+// code다: 문자열 접두사로 분기하게 두면 소비자가 문구 변경에 묶인다. 문구는 보존한다.
+export function toResultError(error, fallbackCode = "PYPROC_WORKER_TASK_ERROR") {
+  const message = String((error && error.message) || error);
+  const code = error && typeof error.code === "string" ? error.code : fallbackCode;
+  const result = { error: message, code, retryable: Boolean(error && error.retryable) };
+  const pyExcType = error && error.context && error.context.pyExcType;
+  if (pyExcType) result.pyExcType = pyExcType;
+  return result;
 }
 
 // postMessage 경계용 직렬화: 워커의 오류를 code/retryable/pyExcType까지 보존해 나른다.

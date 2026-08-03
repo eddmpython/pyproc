@@ -10,7 +10,7 @@
 // 즉시 명시적으로 reject된다(영원히 매달리는 Promise 금지).
 import { DEFAULT_INDEX, ensureEngineScript } from "../runtime/runtime.js";
 import { DEFAULT_ENGINE_SCRIPT_INTEGRITY } from "../runtime/pyodideDistribution.js";
-import { PyProcError } from "../runtime/errors.js";
+import { PyProcError, toResultError } from "../runtime/errors.js";
 import { createRpcPort } from "../runtime/rpcChannel.js";
 import { requireCoi } from "../runtime/preflight.js";
 import { verifyPyProcAssetIntegrity } from "../runtime/assets.js";
@@ -275,10 +275,13 @@ export class PyProc {
         if (timer) clearTimeout(timer);
         if (outcome.timeout) {
           cancel(); // 늦은 응답은 라우터가 버린다
-          results[i] = { error: `timeout: exceeded ${timeoutMs}ms` };
+          // 문구는 그대로 둔다(문자열로 분기하는 소비자를 깨지 않는다). code만 더한다:
+          // 지금까지 소비자는 타임아웃과 레인 전멸과 파이썬 예외를 접두사로만 구분해야 했고,
+          // 워커가 경계를 넘겨 보낸 code와 pyExcType은 여기서 문자열로 납작해졌다.
+          results[i] = { error: `timeout: exceeded ${timeoutMs}ms`, code: "PYPROC_TASK_TIMEOUT", retryable: true };
           try { entry = await this._replace(entry); } catch (e) { return; } // respawn 실패 = 레인 종료
         } else if (outcome.err) {
-          results[i] = { error: String(outcome.err.message || outcome.err) };
+          results[i] = toResultError(outcome.err);
           if (entry.state === "dead") {
             try { entry = await this._replace(entry); } catch (e) { return; }
           }
@@ -291,7 +294,9 @@ export class PyProc {
     // 레인 전멸(전부 respawn 실패)로 실행되지 못한 태스크를 조용한 undefined 구멍으로 남기지
     // 않는다: 부분 실패는 map의 {error} 계약과 동형인 값 오류로 정직하게 표현한다.
     for (let i = 0; i < results.length; i++) {
-      if (results[i] === undefined) results[i] = { error: "pool exhausted: every lane died, so the task never ran" };
+      if (results[i] === undefined) {
+        results[i] = { error: "pool exhausted: every lane died, so the task never ran", code: "PYPROC_POOL_EXHAUSTED", retryable: false };
+      }
     }
     return results;
   }

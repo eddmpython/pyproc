@@ -1200,6 +1200,32 @@ check("파일과 폴더 이름 camelCase", () => {
 //      프로그램적 분기가 다시 문자열 매칭으로 퇴행한다. 예외: pyprocSw.js는 SW 자기충족
 //      파일(모듈 import 금지 계약)이라 로컬 swError 헬퍼의 new Error 1곳만 허용한다.
 section("오류 계약");
+// 코드 카탈로그와 실제 throw의 양방향 대조. 한쪽만 늘어나는 표류가 둘 다 나 있었다:
+// PYPROC_TASK_TIMEOUT은 카탈로그와 공개 union에 선언만 있고 어디서도 생산되지 않았고
+// (소비자는 존재하지 않는 값을 광고받았다), 생성자는 미등록 코드를 조용히 PYPROC_INTERNAL로
+// 강등해 오타를 신호 없이 삼켰다. 정적 검사라 리터럴이 아닌 전달 지점은 못 본다: 그 한계를
+// 이름에 적어 둔다.
+{
+  const codes = new Set(api.PYPROC_ERROR_CODES);
+  const literalCodes = new Set();
+  for (const f of collect(join(ROOT, "src"), [".js"], [])) {
+    const code = stripComments(readFileSync(f, "utf8"));
+    for (const m of code.matchAll(/new\s+PyProcError\s*\(\s*"([A-Z_]+)"/g)) literalCodes.add(m[1]);
+    for (const m of code.matchAll(/[^\w]code:\s*"(PYPROC_[A-Z_]+)"/g)) literalCodes.add(m[1]);
+    for (const m of code.matchAll(/kernelError\([^\n]*?"(PYPROC_[A-Z_]+)"/g)) literalCodes.add(m[1]);
+  }
+  check("오류 코드 리터럴은 카탈로그 안에 있다(정적 리터럴 한정)", () => {
+    const unknown = [...literalCodes].filter((code) => !codes.has(code)).sort();
+    if (unknown.length) throw new Error(`카탈로그에 없는 코드: ${unknown.join(", ")}`);
+  });
+  check("카탈로그의 코드는 최소 한 번 생산된다(정적 리터럴 한정)", () => {
+    // 워커 경계를 건너온 payload처럼 리터럴이 아닌 생산 지점이 있는 코드는 여기서 면제한다.
+    // 면제는 목록으로 남긴다: "정적으로 안 보인다"와 "아무도 안 쓴다"는 다르다.
+    const dynamicallyProduced = new Set(["PYPROC_INTERNAL", "PYPROC_WORKER_TASK_ERROR"]);
+    const orphan = [...codes].filter((code) => !literalCodes.has(code) && !dynamicallyProduced.has(code)).sort();
+    if (orphan.length) throw new Error(`선언만 있고 생산되지 않는 코드: ${orphan.join(", ")}`);
+  });
+}
 // machine 층은 자기 오류 계약을 갖는다(web-machine 클린 아키텍처 기록): 상태 오류 =
 // WebMachineError(코드), 인자 계약 위반 = TypeError. 그래서 machine에선 TypeError를 세지 않는다.
 // packages/ 시절 게이트 밖에 쌓였던 무코드 new Error 80건은 전부 코드를 얻었다(감소 전용

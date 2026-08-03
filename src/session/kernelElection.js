@@ -4,7 +4,7 @@
 // 리더 탭이 사라지면 다음 참여자가 같은 매니페스트로 부팅하고 MachineJournal의 마지막
 // commit 경계에서 힙과 /home/web을 함께 복구한다. SharedWorker와 달리 문서의 COI/SAB를 유지한다.
 import { bootSession } from "./session.js";
-import { appendOutcomeRecord, decodeOutcomeLog, encodeOutcomeLog, findOutcome } from "../state/outcomeLog.js";
+import { OUTCOME_LOG_MAX_RECORDS, appendOutcomeRecord, decodeOutcomeLog, encodeOutcomeLog, findOutcome } from "../state/outcomeLog.js";
 import { MachineJournal } from "../capabilities/journal/machineJournal.js";
 import { PyProcError } from "../runtime/errors.js";
 import { hexFromBytes, sha256Hex } from "../runtime/contentDigest.js";
@@ -15,7 +15,7 @@ const DEFAULT_HEARTBEAT_MS = 1000;
 const DEFAULT_PRESENCE_TIMEOUT_MS = 5000;
 const DEFAULT_READY_TIMEOUT_MS = 20000;
 const DEFAULT_RPC_TIMEOUT_MS = 8000;
-const SERVED_CACHE_MAX = 256;
+
 const MACHINE_ROOT = "pyprocMachines";
 const RPC_SEMANTICS = "timeout or unprovable failover: outcome unknown; durable proven-portable failover: resend once by requestId";
 
@@ -344,7 +344,7 @@ export class KernelElection {
       }
     }
     this._served.set(message.requestId, response);
-    if (this._served.size > SERVED_CACHE_MAX) this._served.delete(this._served.keys().next().value);
+    if (this._served.size > OUTCOME_LOG_MAX_RECORDS) this._served.delete(this._served.keys().next().value);
     this._post(response);
   }
 
