@@ -6,7 +6,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { safeJoin, sendFile } from "../../scripts/staticServer.mjs";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
-import { judgeReport, launchBrowser } from "./harness.mjs";
+import { awaitGateReport, judgeReport, launchBrowser } from "./harness.mjs";
 import { installedPackageCoverageManifest } from "./installedPackageCoverage.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
@@ -17,7 +17,8 @@ const COVERAGE_MANIFEST_JSON = JSON.stringify(COVERAGE_MANIFEST);
 // 브라우저에 노출하는 것이 이 게이트의 존재 이유다). 그래서 createStaticServer를 쓰지 않고
 // MIME/COI 헤더/경로 탈출 방어/404만 staticServer에서 가져와 조립한다.
 function createProductServer(appDir, publicDir, onReport) {
-  return createServer(async (req, res) => {
+  const server = createServer(async (req, res) => {
+    server.gateRequests++; // 진단 재료: 타임아웃 때 "페이지가 로드는 됐는가"를 답할 수 있어야 한다
     const url = new URL(req.url, "http://x");
     if (req.method === "POST" && url.pathname === "/gateReport") {
       let body = "";
@@ -37,6 +38,8 @@ function createProductServer(appDir, publicDir, onReport) {
     if (!file) { res.writeHead(403); res.end("forbidden"); return; }
     await sendFile(res, file);
   });
+  server.gateRequests = 0;
+  return server;
 }
 
 const html = `<!DOCTYPE html>
@@ -575,18 +578,21 @@ try {
 
   const indexQuery = process.env.PYPROC_INDEX_URL ? `?indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
   const url = `http://127.0.0.1:${server.address().port}/${indexQuery}`;
-  const session = launchBrowser(url, { prefix: "pyprocProduct-" });
+  const launch = () => launchBrowser(url, { prefix: "pyprocProduct-" });
+  const first = launch();
 
-  console.log(`pyproc 설치 패키지 브라우저 게이트\n  browser: ${session.browser}\n  url:     ${url}\n`);
-  const timeout = setTimeout(() => reportResolve({ ok: false, checks: [], timedOut: true }), TIMEOUT_MS);
-  const result = await reportPromise;
-  clearTimeout(timeout);
+  console.log(`pyproc 설치 패키지 브라우저 게이트\n  browser: ${first.browser}\n  url:     ${url}\n`);
+  const { result, session } = await awaitGateReport({
+    reportPromise, timeoutMs: TIMEOUT_MS, session: first,
+    relaunch: launch, requestCount: () => server.gateRequests,
+  });
 
   session.close();
   server.close();
 
   if (result.timedOut) {
     console.log(`FAIL 게이트 타임아웃(${TIMEOUT_MS / 1000}s)`);
+    console.log(`  진단: ${JSON.stringify(result.diagnosis)}`);
     process.exit(1);
   }
   const coverageOk = JSON.stringify(result.coverageManifest) === COVERAGE_MANIFEST_JSON;

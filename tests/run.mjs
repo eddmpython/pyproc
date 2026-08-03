@@ -668,6 +668,71 @@ section("탐지기 자기 시험");
     const good = judgeReport({ ok: false, checks: [{ name: "x", pass: true }] }, { floor: 1 });
     if (!good.ok) throw new Error("전부 통과한 보고를 떨어뜨렸다(오탐)");
   });
+  // 리포트 대기도 탐지기다. 타임아웃이 증거 없이 죽으면 같은 사건이 계속 미식별로 남는다
+  // (edge-release installed 레인이 240초 침묵으로 죽었는데 브라우저 생사도 페이지 로드 여부도
+  // 안 남았다, 2026-08-03). 실물 함수를 가짜 session으로 구동해 세 결정을 문다: 진단을 남기는가,
+  // 발사 실패(요청 0 + 런처 사망)에만 1회 재발사하는가, 페이지가 살아 있으면 재발사하지 않는가.
+  await checkAsync("탐지기가 문다: awaitGateReport의 진단·재발사 규칙", async () => {
+    const { awaitGateReport } = await import(pathToFileURL(join(ROOT, "tests", "browser", "harness.mjs")).href);
+    const quiet = () => {};
+    const fakeSession = (exit) => {
+      let info = null;
+      return {
+        exited: () => info,
+        whenExited: exit === null ? new Promise(() => {}) : new Promise((resolve) => setTimeout(() => { info = exit; resolve(info); }, 5)),
+        close() { this.closed = true; },
+      };
+    };
+    // 1) 살아 있는데 침묵 -> 재발사 없이 진단을 실은 타임아웃.
+    const silent = await awaitGateReport({
+      reportPromise: new Promise(() => {}), timeoutMs: 60, session: fakeSession(null),
+      relaunch: () => { throw new Error("살아 있는 침묵에 재발사했다"); }, requestCount: () => 3, log: quiet,
+    });
+    if (!silent.result.timedOut) throw new Error("침묵 타임아웃이 timedOut이 아니다");
+    if (silent.result.diagnosis?.browser !== "alive-but-silent") throw new Error(`생존 진단이 없다: ${JSON.stringify(silent.result.diagnosis)}`);
+    if (silent.result.diagnosis?.requests !== 3) throw new Error("요청 수가 진단에 없다");
+    // 2) 요청 0 + 런처 사망 -> 정확히 1회 재발사하고, 재발사분이 리포트를 내면 그것이 결과다.
+    let relaunches = 0;
+    let reportResolve2;
+    const report2 = new Promise((resolve) => { reportResolve2 = resolve; });
+    const revived = await awaitGateReport({
+      reportPromise: report2, timeoutMs: 5000, session: fakeSession({ code: 1, signal: null, afterMs: 5 }),
+      relaunch: () => { relaunches++; setTimeout(() => reportResolve2({ ok: true, checks: [{ name: "x", pass: true }] }), 5); return fakeSession(null); },
+      requestCount: () => 0, log: quiet,
+    });
+    if (relaunches !== 1) throw new Error(`재발사 수 ${relaunches} (1이어야 한다)`);
+    if (revived.result.timedOut || revived.result.checks.length !== 1) throw new Error("재발사분의 리포트가 결과가 아니다");
+    // 3) 요청이 이미 있었던 사망(Edge 위임 종료) -> 재발사 없이 리포트를 계속 기다린다.
+    let reportResolve3;
+    const report3 = new Promise((resolve) => { reportResolve3 = resolve; });
+    setTimeout(() => reportResolve3({ ok: true, checks: [{ name: "y", pass: true }] }), 30);
+    const delegated = await awaitGateReport({
+      reportPromise: report3, timeoutMs: 5000, session: fakeSession({ code: 0, signal: null, afterMs: 5 }),
+      relaunch: () => { throw new Error("위임 종료에 재발사했다"); }, requestCount: () => 7, log: quiet,
+    });
+    if (delegated.result.timedOut || delegated.result.checks.length !== 1) throw new Error("위임 종료 뒤 리포트를 못 받았다");
+    // 4) 재발사는 1회다: 두 번째 발사도 죽으면 진단을 실은 타임아웃으로 끝난다.
+    let secondLaunches = 0;
+    const doubleDead = await awaitGateReport({
+      reportPromise: new Promise(() => {}), timeoutMs: 200, session: fakeSession({ code: 1, signal: null, afterMs: 5 }),
+      relaunch: () => { secondLaunches++; return fakeSession({ code: 1, signal: null, afterMs: 5 }); },
+      requestCount: () => 0, log: quiet,
+    });
+    if (secondLaunches !== 1) throw new Error(`이중 사망의 재발사 수 ${secondLaunches} (1이어야 한다)`);
+    if (!doubleDead.result.timedOut || doubleDead.result.diagnosis?.relaunched !== true) throw new Error("이중 사망 진단이 재발사 사실을 안 남겼다");
+  });
+  // 타임아웃 경로가 awaitGateReport를 우회해 증거 없는 한 줄로 돌아가지 못하게 잡는다.
+  check("installed 게이트의 리포트 대기는 진단 경로를 쓴다", () => {
+    const src = readFileSync(join(ROOT, "tests", "browser", "installedPackageGate.mjs"), "utf8");
+    const lines = src.split("\n").map((line) => stripComments(line));
+    if (!lines.some((line) => line.includes("awaitGateReport"))) throw new Error("awaitGateReport를 쓰지 않는다(증거 없는 타임아웃으로 회귀)");
+    if (!lines.some((line) => line.includes("result.diagnosis"))) throw new Error("타임아웃 진단을 출력하지 않는다");
+    // 회귀의 실제 모양은 "러너가 timedOut 보고를 스스로 만든다"이다. setTimeout 짝을 정규식으로
+    // 잡으려던 첫 판은 화살표 함수의 첫 )에서 끊겨 못 물었다(음성 시험이 잡았다).
+    if (lines.some((line) => line.includes("reportResolve") && line.includes("timedOut"))) {
+      throw new Error("러너가 자체 timedOut 보고를 만든다(진단 없는 타임아웃으로 회귀)");
+    }
+  });
   // 러너가 다시 페이지의 판정을 읽는 자리로 돌아가지 못하게 막는다. 판정자는 한 곳이다.
   check("게이트 러너는 페이지가 보낸 ok를 최종 판정으로 쓰지 않는다", () => {
     const runners = ["run.mjs", "examples.mjs", "socketLane.mjs", "goldenWorkflow.mjs", "installedPackageGate.mjs"];
