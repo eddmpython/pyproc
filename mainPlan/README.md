@@ -49,6 +49,11 @@
   스폰되는 워커의 자산 매니페스트 누락. 셋 다 게이트를 함께 냈고 음성 시험으로 이빨을 봤다.
   자산 그래프가 23파일에서 59파일로 늘었다(그 차이가 그동안 SRI preflight 밖이던 범위다).
 
+- **04 legacySunset 완료(2026-08-03)**: 저널의 구 포맷 reader를 자기 파일로 갈랐고(은퇴가 파일 하나
+  삭제가 된다), JSON 판독 두 벌을 하나로 모았다. PYMACHINE2 시대의 죽은 코드를 회수해 session 세 파일이
+  99/46/265줄로 줄었다. pack/prune의 live 판정이 구 세대를 덮는지 게이트가 문다(음성 시험에서 실제로
+  live blob이 지워지고 recover가 거부했다). 계획의 "fixture 삭제" 항목은 틀린 것으로 판정해 버렸다.
+
 - **03 memoryJudgment 완료(2026-08-03)**: 다섯 축 중 판정이 0이던 메모리 축에 예산을 세웠다.
   bootHeapBytes/reactiveTotalMb/journalPackMb/forkDeltaMb/sessionDeltaMb + 설치 레인 machineMB.
   pruneTo가 바이트를 돌려주는지, terminate가 스냅샷 SAB를 놓는지 단정한다. 음성 시험 3종 통과.
@@ -60,8 +65,7 @@
 
 | 순서 | 덩어리 | 주 축 | 선정 근거 | 입장 조건 |
 |---:|---|---|---|---|
-| 04 | [legacySunset](04_legacySunset/README.md) | 클린코드 | 죽은 포맷 리더 두 벌이 05의 대상 파일을 두 배로 만든다 | 충족(02 완료) |
-| 05 | [commitIncremental](05_commitIncremental/README.md) | 속도, 메모리 | 계약을 안 바꾸고 여는 최대 항목. 커밋 비용이 누적 델타에 비례한다 | 04 (03은 완료) |
+| 05 | [commitIncremental](05_commitIncremental/README.md) | 속도, 메모리 | 계약을 안 바꾸고 여는 최대 항목. 커밋 비용이 누적 델타에 비례한다 | 충족(03, 04 완료) |
 | 06 | [moduleBoundaries](06_moduleBoundaries/README.md) | 모듈화, 폴더구조 | 타입 그래프가 값 그래프와 반대로 흐르고, 순수 집합이 손유지 목록이다 | 충족(02 완료) |
 | 07 | [bootPath](07_bootPath/README.md) | 속도, 클린코드 | 기본 부팅이 탭 전역으로 직렬화된다. 01의 patchScope 수리가 여는 자리 | 충족(01 완료) |
 | 08 | [kernelDecomposition](08_kernelDecomposition/README.md) | 클린코드 | 최대 파일에서 커밋 정책이 이미 두 벌로 갈렸다 | 04, 05 |
@@ -72,7 +76,7 @@
 ## 의존 관계
 
 ```text
-04 -> 05 -> 08        (legacy 분리가 _liveKeys 교차점을 없앤 뒤 증분화, 그 뒤 분해)
+05 -> 08              (증분화가 커밋 경로를 안정시킨 뒤 분해)
 10 == 05(rebase)      (h0 브레이킹은 한 커밋에 모은다. 나누면 두 번 깨진다)
 11                    (독립)
 ```
