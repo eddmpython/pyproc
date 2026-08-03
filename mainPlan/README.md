@@ -43,15 +43,20 @@
 
 ## 실행 순서
 
+완료된 덩어리는 폴더를 지운다. 무엇을 했는지는 git 이력이 정본이고, 지속 계약은 코드와 게이트에 산다.
+
+- **01 latentDefects 완료(2026-08-03)**: WheelCache patchScope 데드락, dispose의 저널 감시 누수,
+  스폰되는 워커의 자산 매니페스트 누락. 셋 다 게이트를 함께 냈고 음성 시험으로 이빨을 봤다.
+  자산 그래프가 23파일에서 59파일로 늘었다(그 차이가 그동안 SRI preflight 밖이던 범위다).
+
 | 순서 | 덩어리 | 주 축 | 선정 근거 | 입장 조건 |
 |---:|---|---|---|---|
-| 01 | [latentDefects](01_latentDefects/README.md) | 클린코드 | 지금 틀린 것 셋. 데드락 1, 자원 누수 1, 자산 계약 누락 1 | 없음 |
 | 02 | [gateTeeth](02_gateTeeth/README.md) | 전 축 | 뒤 캠페인의 검증 줄이 확인이 되려면 판정자를 먼저 믿을 수 있어야 한다 | 없음 |
 | 03 | [memoryJudgment](03_memoryJudgment/README.md) | 메모리 | 다섯 축 중 유일하게 기계 판정이 0인 축. 09와 10의 측정 도구 | 02의 러너 판정 수렴 |
 | 04 | [legacySunset](04_legacySunset/README.md) | 클린코드 | 죽은 포맷 리더 두 벌이 05의 대상 파일을 두 배로 만든다 | 02 |
 | 05 | [commitIncremental](05_commitIncremental/README.md) | 속도, 메모리 | 계약을 안 바꾸고 여는 최대 항목. 커밋 비용이 누적 델타에 비례한다 | 04, 03의 메모리 예산 |
 | 06 | [moduleBoundaries](06_moduleBoundaries/README.md) | 모듈화, 폴더구조 | 타입 그래프가 값 그래프와 반대로 흐르고, 순수 집합이 손유지 목록이다 | 02 |
-| 07 | [bootPath](07_bootPath/README.md) | 속도, 클린코드 | 기본 부팅이 탭 전역으로 직렬화된다. 01의 patchScope 수리가 여는 자리 | 01 |
+| 07 | [bootPath](07_bootPath/README.md) | 속도, 클린코드 | 기본 부팅이 탭 전역으로 직렬화된다. 01의 patchScope 수리가 여는 자리 | 충족(01 완료) |
 | 08 | [kernelDecomposition](08_kernelDecomposition/README.md) | 클린코드 | 최대 파일에서 커밋 정책이 이미 두 벌로 갈렸다 | 04, 05 |
 | 09 | [heapReclaim](09_heapReclaim/README.md) | 메모리 | 워커당 힙 사본 1벌이 프로세스 OS의 지배적 비용이다. h0와 무관 | 03 |
 | 10 | [h0Break](10_h0Break/README.md) | 속도, 메모리 | h0 지문에 닿는 것 전부. 브레이킹을 한 번으로 모은다 | 명시 릴리즈 지시 + attempts 실측 |
@@ -60,7 +65,6 @@
 ## 의존 관계
 
 ```text
-01 -> 07              (patchScope 중첩 계약을 두 구현이 나눠 갖고 있다)
 02 -> 03, 04, 06      (판정자 수렴이 새 단정의 전제)
 03 -> 05, 09, 10      (메모리 예산 없이는 회수를 증명할 수 없다)
 04 -> 05 -> 08        (legacy 분리가 _liveKeys 교차점을 없앤 뒤 증분화, 그 뒤 분해)
