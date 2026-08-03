@@ -22,6 +22,8 @@ import { PAGE_SIZE, bytesToMb } from "../runtime/memoryLayout.js";
 // 워커의 SAB 채널에 쓰면 CPython eval 루프가 해당 핸들러를 부른다(signalTableProbe 실측).
 export const SIGNAL = { INT: 2, USR1: 10, USR2: 12, TERM: 15 };
 
+const DEAD_ENTRY_MAX = 32; // 이력으로 남기는 죽은 프로세스 수. 그 위는 참조를 끊는다.
+
 export class PyProc {
   // 시그널 번호표는 프로세스 네임스페이스의 소유다(루트 상수 아님): pool.SIGNAL.INT 등으로 소비.
   static SIGNAL = SIGNAL;
@@ -94,6 +96,7 @@ export class PyProc {
     // RPC 상관(reqId/pending)과 크래시 수렴은 rpcChannel이 소유한다. 사망은 테이블에 dead로 남는다.
     entry.port = createRpcPort(w, { label: `worker pid ${pid}`, onDead: () => { entry.state = "dead"; } });
     this.table.push(entry);
+    this._reapDeadEntries();
     const ready = this._call(entry, {
       type: "boot", indexURL: this.indexURL, snapshot: useSnapshot ? this._snapshot : null,
       interruptSab, packages: this.packages, setup: this.setup, replay: this.replay,
@@ -318,6 +321,22 @@ export class PyProc {
 
   // 프로세스 테이블 스냅샷(pid/state 조회).
   ps() { return this.table.map(({ pid, state, parentPid }) => ({ pid, state, parentPid })); }
+
+  // 죽은 엔트리는 이력 조회용으로 남기지만 상한이 없으면 단조 증가한다. 타임아웃이 반복되는
+  // 장수 풀에서 엔트리마다 terminate된 Worker, SAB 뷰, rpc 포트 클로저를 붙잡는다. 상한을
+  // 넘으면 가장 오래된 것의 참조를 끊는다: ps()의 공개 형태(pid/state/parentPid)는 그대로다.
+  // 출처는 같은 계열의 선례다(kernelElection의 served 캐시가 같은 이유로 FIFO evict한다).
+  _reapDeadEntries() {
+    const dead = this.table.filter((t) => t.state === "dead");
+    if (dead.length <= DEAD_ENTRY_MAX) return;
+    for (const entry of dead.slice(0, dead.length - DEAD_ENTRY_MAX)) {
+      if (entry.port && typeof entry.port.dispose === "function") entry.port.dispose();
+      entry.worker = null;
+      entry.port = null;
+      entry.interrupt = null;
+      entry.reaped = true;
+    }
+  }
 
   terminate() {
     for (const t of this.table) {

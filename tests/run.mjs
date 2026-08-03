@@ -1225,6 +1225,36 @@ await checkAsync("samePage: 워드 비교가 바이트 비교와 같은 답을 �
     }
   }
 });
+// 죽은 프로세스 엔트리의 상한. 이력 조회용으로 남기되 단조 증가하면 엔트리마다 terminate된
+// Worker와 rpc 포트 클로저를 붙잡는다. 정책이 순수하므로 fake 테이블로 실 함수를 구동한다
+// (브라우저에서 40회 respawn을 돌리면 게이트 예산을 넘긴다: 판정은 여기가 맞는 층이다).
+await checkAsync("프로세스 테이블: 죽은 엔트리 상한이 참조를 회수한다", async () => {
+  const { PyProc } = await import(pathToFileURL(join(ROOT, "src", "processOs", "pyProc.js")).href);
+  const pool = Object.create(PyProc.prototype);
+  let disposed = 0;
+  pool.table = [];
+  for (let pid = 1; pid <= 50; pid++) {
+    pool.table.push({
+      pid, state: pid <= 45 ? "dead" : "ready", parentPid: 0,
+      worker: { terminate() {} }, port: { dispose() { disposed++; } }, interrupt: new Uint8Array(1),
+    });
+  }
+  pool._reapDeadEntries();
+  const dead = pool.table.filter((entry) => entry.state === "dead");
+  const live = pool.table.filter((entry) => entry.state !== "dead");
+  if (dead.length !== 45) throw new Error(`이력 엔트리가 사라졌다: ${dead.length}`);
+  if (live.some((entry) => entry.reaped)) throw new Error("살아 있는 엔트리를 회수했다");
+  const reaped = dead.filter((entry) => entry.reaped);
+  if (!reaped.length) throw new Error("상한을 넘겼는데 아무것도 회수하지 않았다");
+  if (reaped.some((entry) => entry.worker || entry.port || entry.interrupt)) throw new Error("회수했는데 참조가 남았다");
+  if (disposed !== reaped.length) throw new Error(`rpc 포트 해제 수 불일치: ${disposed} vs ${reaped.length}`);
+  // 공개 형태(ps의 세 필드)는 회수 뒤에도 그대로다.
+  for (const entry of reaped) {
+    if (!Number.isInteger(entry.pid) || entry.state !== "dead" || !Number.isInteger(entry.parentPid)) {
+      throw new Error("회수가 ps() 계약 필드를 지웠다");
+    }
+  }
+});
 section("오류 계약");
 // 오류 message와 API 반환 문자열은 소비자가 콘솔·이슈·로그에서 읽는 공개 표면이다. 규칙은
 // 공개 표면 영문 우선이고, 실제로 한 파일 안에서 갈려 있었다(operationControl은 한 템플릿

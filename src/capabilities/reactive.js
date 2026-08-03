@@ -131,7 +131,9 @@ export class ReactiveController {
     const mem = this._mem;
     const pages = hashDiffPages(this.hashes[fromIdx], this.hashes[toIdx]);
     // pack:false = 페이지 목록만 필요한 소비자(저널 커밋)가 델타 전체 재할당을 피한다.
-    const bin = opts.pack === false ? null : packPages((p) => mem.slicePage(p), pages, PAGE);
+    // packPages가 즉시 bin에 복사하므로 여기서 사본을 먼저 만들 이유가 없다(그 사이에 파이썬이
+    // 돌지 않는다). 예전에는 slicePage 사본 -> bin 복사로 델타 바이트마다 두 벌이 생겼다.
+    const bin = opts.pack === false ? null : packPages((p) => mem.viewPageUnsafe(p), pages, PAGE);
     return { pages, bin, sp: mem.stackSave(), heapLen: mem.byteLength() };
   }
 

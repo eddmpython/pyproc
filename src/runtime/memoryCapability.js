@@ -34,6 +34,10 @@ export class MemoryCapability {
     return digs;
   }
   slicePage(p) { const h = this.heap(); return h.slice(p * PAGE_SIZE, Math.min((p + 1) * PAGE_SIZE, h.length)); }
+  // 복사 없는 페이지 뷰. **즉시 소비 전용**이다: 힙이 자라면 detach되고 파이썬이 돌면 내용이
+  // 바뀐다. 보관하려면 slicePage를 써야 한다. 이 구분이 없을 때 packPages가 복사본을 받아
+  // 다시 복사해서 델타 바이트마다 사본이 두 벌 생겼다.
+  viewPageUnsafe(p) { const h = this.heap(); return h.subarray(p * PAGE_SIZE, Math.min((p + 1) * PAGE_SIZE, h.length)); }
   sliceAll() { const h = this.heap(); return h.slice(0, h.length); }
   writePage(p, bytes) { this.heap().set(bytes, p * PAGE_SIZE); }
   writeBase(base) { const h = this.heap(); h.set(base.subarray(0, Math.min(base.length, h.length))); }

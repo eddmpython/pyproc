@@ -19,18 +19,21 @@ export function createRpcPort(worker, opts = {}) {
   let reqSeq = 0;
   let deadError = null;
 
-  worker.addEventListener("message", (e) => {
+  const onMessage = (e) => {
     const p = pending.get(e.data.reqId);
     if (!p) return; // 취소/타임아웃된 요청의 늦은 응답
     pending.delete(e.data.reqId);
     if (e.data.type === "error") p.reject(fromErrorPayload(e.data)); else p.resolve(e.data);
-  });
-  worker.addEventListener("error", (e) => {
+  };
+  const onError = (e) => {
     fail(new PyProcError("PYPROC_WORKER_CRASHED", `${label} crashed: ${e.message || "unknown"}`, { retryable: true }));
-  });
-  worker.addEventListener("messageerror", () => {
+  };
+  const onMessageError = () => {
     fail(new PyProcError("PYPROC_WORKER_CRASHED", `${label} failed to deserialize a message`, { retryable: true }));
-  });
+  };
+  worker.addEventListener("message", onMessage);
+  worker.addEventListener("error", onError);
+  worker.addEventListener("messageerror", onMessageError);
 
   function fail(err) {
     if (deadError) return;
@@ -59,5 +62,13 @@ export function createRpcPort(worker, opts = {}) {
     fail,
     isDead: () => deadError !== null,
     pendingCount: () => pending.size,
+    // 회수: 리스너와 대기 목록을 놓는다. 죽은 프로세스 엔트리가 이력으로 남는 동안에도 이
+    // 클로저가 worker를 붙잡고 있으면 terminate된 워커가 회수되지 않는다.
+    dispose() {
+      worker.removeEventListener("message", onMessage);
+      worker.removeEventListener("error", onError);
+      worker.removeEventListener("messageerror", onMessageError);
+      pending.clear();
+    },
   };
 }
