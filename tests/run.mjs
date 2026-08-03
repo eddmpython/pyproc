@@ -103,6 +103,10 @@ function jsModuleRefs(file) {
   for (const m of src.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g)) add("dynamic", m);
   for (const m of src.matchAll(/\bimportScripts\s*\(\s*["']([^"']+)["']\s*\)/g)) add("importScripts", m);
   for (const m of src.matchAll(/new\s+URL\s*\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g)) add("newURL", m);
+  // 워커 스폰이 리터럴이 아니면 그래프에도 게이트에도 안 나타난다. "상향 자산 edge는 하나"라는
+  // 규칙의 실효 범위가 리터럴 newURL에 한정돼 있었고, 주입된 workerURL로 스폰하는 어댑터가
+  // 이미 트리에 있다. 정적으로 못 푸는 스폰은 선언 목록에 등재돼야 통과한다.
+  for (const m of src.matchAll(/new\s+(?:Shared)?Worker\s*\(\s*([A-Za-z_$][\w$.]*)\s*[,)]/g)) refs.push({ kind: "workerSpawn", spec: m[1] });
   return refs;
 }
 function moduleTarget(file, spec) {
@@ -2994,11 +2998,28 @@ check("src layer edge는 아래로만", () => {
     // 사본과 죽은 코드를 동시에 만드는 배치였다. 예산 한 줄이 그 둘을 없앤다.
     "src/capabilities/socketBridge.js -> src/runtime/preflight.js",
   ]);
+  // 정적으로 대상을 못 푸는 워커 스폰(주입된 URL)은 여기 등재돼야 통과한다. 등재는 "이 파일이
+  // 워커를 스폰하는데 그 대상이 코드에 없다"는 사실의 공개이고, 그 대상은 자산 매니페스트가
+  // 계약으로 갖는다(자산 역방향 대조가 그 짝이다).
+  const injectedWorkerSpawns = new Set([
+    "src/machine/guests/workerHostedGuestAdapter.js:this._workerURL",
+  ]);
   const problems = [];
   for (const f of collect(join(ROOT, "src"), [".js"], [])) {
     for (const ref of jsModuleRefs(f)) {
+      if (ref.kind === "workerSpawn") {
+        const entry = `${rel(f)}:${ref.spec}`;
+        if (!injectedWorkerSpawns.has(entry)) problems.push(`${entry} (주입 워커 스폰 선언 목록 밖: 대상이 정적으로 풀리지 않는다)`);
+        continue;
+      }
       const target = moduleTarget(f, ref.spec);
-      if (!target || !existsSync(target)) continue;
+      // bare specifier는 저장소 안에 대상이 없다. machine 게이트는 이미 이것을 물지만 src 전역
+      // 게이트는 조용히 흘려보내고 있었다(현재 src에 bare import 0건이라 즉시 green이다).
+      if (!target) {
+        if (ref.kind === "module" || ref.kind === "dynamic") problems.push(`${rel(f)} -> ${ref.spec} (bare specifier: src는 저장소 안 상대 경로만 쓴다)`);
+        continue;
+      }
+      if (!existsSync(target)) continue;
       const fromLayer = srcLayerName(rel(f));
       const targetRel = rel(target);
       const toLayer = srcLayerName(targetRel);

@@ -236,6 +236,9 @@ check("Web Machine 층 내부 import는 아래로만", () => {
     const fromRel = rel(file);
     const fromRank = machineFileRank(fromRel);
     for (const ref of jsModuleRefs(file)) {
+      // 워커 스폰은 모듈 import가 아니다(대상이 주입된 URL이라 정적으로 안 풀린다). 그 판정은
+      // src 전역 게이트의 주입 스폰 선언 목록이 소유한다: 여기서 또 보면 판정이 두 곳이 된다.
+      if (ref.kind === "workerSpawn") continue;
       const target = moduleTarget(file, ref.spec);
       if (!target) { problems.push(`${fromRel} -> ${ref.spec}: bare import 금지`); continue; }
       const targetRel = rel(target);
