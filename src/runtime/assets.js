@@ -36,6 +36,14 @@ const ASSETS = Object.freeze([
     reason: "non-Pyodide CPython WASI 세션 워커 엔트리포인트",
   }),
   Object.freeze({
+    role: "workerHostedGuestWorker",
+    path: "src/machine/composition/workerHostedGuestWorker.js",
+    kind: "module-worker",
+    sameOrigin: true,
+    usedBy: ["WorkerHostedGuestAdapter", "createWebComputer"],
+    reason: "guest를 자기 워커에 얹는 host 어댑터의 워커 엔트리포인트",
+  }),
+  Object.freeze({
     role: "pyprocServiceWorker",
     path: "src/capabilities/pyprocSw.js",
     kind: "service-worker",

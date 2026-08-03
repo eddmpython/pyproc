@@ -8,6 +8,20 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+### Fixed
+
+- **The asset manifest now lists `workerHostedGuestWorker`** (`src/machine/composition/workerHostedGuestWorker.js`).
+  `createWebComputer()` has always spawned that module worker, but it was missing from
+  `getPyProcAssetManifest()`, so a deployment that copied exactly the listed files left it out of
+  the same-origin set and out of the `assetIntegrity` preflight. Deployment pipelines pick up one
+  additional file; the manifest format is unchanged and `PYPROC_ASSET_MANIFEST_VERSION` stays `1`.
+- **`WheelCache` honours the `patchScope` it is given.** `bootSession({ wheelDir, packages })`
+  deadlocked because the constructor dropped the re-entrant scope and the wheel fetch swap queued
+  behind the boot window that was waiting for it.
+- **Disposing a machine now reclaims journal watchers.** `machine.dispose()` stops the idle watcher
+  started by `history.watch()`, so the interval no longer holds the runtime and the reactive
+  controller for the life of the tab.
+
 <!-- unreleased-subpaths: -->
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.

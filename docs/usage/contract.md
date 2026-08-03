@@ -75,7 +75,7 @@ Keeping this file in the same folder as `virtualOrigin.js` is a path contract. D
 
 ### The same-origin runtime asset manifest
 
-`PyProc`, `MachineContainer`, `WasiSession`, and `VirtualOrigin` each have a Worker, SharedWorker, or Service Worker entrypoint the browser opens directly. Those files fail if they exist only at a cross-origin CDN URL, so a product deploys them on its own origin while preserving the package's `src/` relative import structure.
+`PyProc`, `MachineContainer`, `WasiSession`, `createWebComputer`, and `VirtualOrigin` each have a Worker, SharedWorker, or Service Worker entrypoint the browser opens directly. Those files fail if they exist only at a cross-origin CDN URL, so a product deploys them on its own origin while preserving the package's `src/` relative import structure.
 
 ```js
 import { getPyProcAssetManifest } from "pyproc/assets";
@@ -85,6 +85,7 @@ const manifest = getPyProcAssetManifest({ baseURL: "/vendor/pyproc/" });
 // - processWorker        src/processOs/worker.js
 // - machineWorker        src/processOs/machineWorker.js
 // - wasiWorker           src/runtime/engines/wasi/wasiWorker.js
+// - workerHostedGuestWorker  src/machine/composition/workerHostedGuestWorker.js
 // - pyprocServiceWorker  src/capabilities/pyprocSw.js
 ```
 

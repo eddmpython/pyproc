@@ -66,10 +66,15 @@ try {
     ]);
   }
   const swGood = await fetch(`/src/capabilities/pyprocSw.js?swSeal=${Date.now()}`, { cache: "reload" });
-  const swDenied = await fetch(`/src/capabilities/virtualOrigin.js?swSeal=${Date.now()}`, { cache: "reload" });
+  // 봉인 밖 경로는 거부돼야 한다. fixture는 봉인 그래프에 없는 파일이어야 하므로 그 사실을
+  // 먼저 단정한다: 그래프가 자라 이 파일을 삼키면(자산 role이 늘면 실제로 일어난다) 검사가
+  // 조용히 무의미해지는 대신 "다른 fixture를 골라라"라고 말하며 RED가 된다.
+  const outsidePath = "src/capabilities/gpuCompute.js";
+  const outsideSealed = sealedSw.integrity.files.includes(outsidePath);
+  const swDenied = await fetch(`/${outsidePath}?swSeal=${Date.now()}`, { cache: "reload" });
   check("assetIntegrity: SW coreIntegrity가 import 경로를 검증",
-    swGood.ok && swDenied.status === 500,
-    `coreIntegrity=/pyproc-assets.json good ${swGood.status}, missing ${swDenied.status}`);
+    swGood.ok && !outsideSealed && swDenied.status === 500,
+    `good ${swGood.status}, 봉인 밖 ${outsidePath} ${swDenied.status}${outsideSealed ? " (fixture가 봉인 안으로 들어왔다)" : ""}`);
   await sealedSw.registration.unregister();
   const badAssetIntegrity = {
     ...assetIntegrity,

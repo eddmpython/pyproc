@@ -245,11 +245,32 @@ check("asset manifest 형태 (pyproc/assets 표면)", () => {
   if (!relRoot.assets[0].url.startsWith("/vendor/pyproc/src/")) throw new Error("root-relative asset URL 계산 실패");
   if (!m.policy.sameOriginRequired || !m.policy.preserveRelativeImports || !m.policy.runtimePreflight) throw new Error("policy 불충분");
   const roles = new Set(m.assets.map((a) => a.role));
-  for (const role of ["processWorker", "machineWorker", "wasiWorker", "pyprocServiceWorker"])
+  for (const role of ["processWorker", "machineWorker", "wasiWorker", "workerHostedGuestWorker", "pyprocServiceWorker"])
     if (!roles.has(role)) throw new Error("role 누락: " + role);
   for (const a of m.assets) {
     if (!a.path.startsWith("src/")) throw new Error("src 밖 자산: " + a.path);
     if (!a.url.startsWith("https://example.test/pkg/src/")) throw new Error("URL 계산 실패: " + a.url);
+  }
+});
+// 역방향 대조. 위 검사는 등재된 role의 "존재"만 보므로 누락을 구조적으로 못 본다: 실제로
+// createWebComputer가 스폰하는 workerHostedGuestWorker.js가 그렇게 빠져 있었고, 소비자가
+// 매니페스트대로 배포하면 그 워커만 same-origin 배치도 SRI preflight도 못 받았다.
+// 스코프의 한계를 명시한다: newURL로 스폰되는 워커 자산만 자동 대조한다. Service Worker는
+// 등록 URL로 가고, 주입된 workerURL로 스폰하는 어댑터는 정적으로 풀리지 않는다.
+check("asset manifest 역방향 대조: src가 스폰하는 워커가 전부 등재됐다", () => {
+  const manifestPaths = new Set(assetsApi.getPyProcAssetManifest().assets.map((a) => a.path));
+  const spawned = new Set();
+  for (const file of collect(join(ROOT, "src"), [".js"], [])) {
+    for (const ref of jsModuleRefs(file)) {
+      if (ref.kind !== "newURL") continue;
+      const target = moduleTarget(file, ref.spec);
+      if (target && existsSync(target)) spawned.add(rel(target));
+    }
+  }
+  const missing = [...spawned].filter((path) => !manifestPaths.has(path));
+  if (missing.length) throw new Error("매니페스트에 없는 실행 자산: " + missing.join(", "));
+  for (const path of manifestPaths) {
+    if (!existsSync(join(ROOT, path))) throw new Error("매니페스트 경로가 실존하지 않는다: " + path);
   }
 });
 await checkAsync("asset integrity preflight가 graph 바이트를 검증", async () => {
