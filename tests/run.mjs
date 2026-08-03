@@ -3640,6 +3640,29 @@ section("CI 배관");
       throw new Error("릴리즈/타입 도구에 floating version 재등장");
     }
   });
+  // 브라우저를 띄우는 job은 엔진을 그 job 안에서 마련해야 한다. 기본 부팅 URL이 자체 호스팅
+  // `/vendor/pyodide/`로 옮겨간 뒤 이 배관이 갈라졌고, x86 레인은 엔진을 안 받아 dual-boot
+  // probe가 404로 죽었다. 로컬은 vendor/가 이미 있어 초록이라 아무도 못 봤고, CI는 하루 넘게
+  // 붉은 채로 게시를 막고 있었다. 목록을 손으로 적지 않는다: 어떤 script가 브라우저 레인이고
+  // 어떤 script가 엔진을 마련하는지는 package.json의 script 본문에서 유도한다.
+  check("브라우저를 띄우는 CI job은 같은 job에서 엔진을 마련한다", () => {
+    const scripts = pkg.scripts || {};
+    const browserLanes = Object.keys(scripts).filter((name) => /tests[/\\](browser|webMachine)[/\\][\w]+\.mjs/.test(scripts[name]));
+    const engineProviders = Object.keys(scripts).filter((name) => /fetchEngine\.mjs|prepareWebComputerAssets\.mjs/.test(scripts[name]));
+    if (!browserLanes.length || !engineProviders.length) throw new Error("브라우저 레인 또는 엔진 준비 script를 못 찾았다(유도 규칙이 낡았다)");
+    // job 경계는 줄 단위로 자른다. 정규식 하나로 묶으면 마지막 job이 조용히 빠질 수 있고
+    // (JS에는 \Z가 없다), 그 빠진 자리가 하필 이 결함이 살던 job이었다. 음성 시험이 잡았다.
+    const ciLines = workflows.get("ci.yml").split("\n");
+    const headers = ciLines.map((line, index) => [index, /^ {2}([\w-]+):\s*$/.exec(line)?.[1]]).filter(([, name]) => name);
+    const jobs = headers.map(([at, name], i) => [name, ciLines.slice(at + 1, headers[i + 1]?.[0] ?? ciLines.length).join("\n")]);
+    if (jobs.length < 5) throw new Error(`ci.yml job 파싱 실패(${jobs.length}개)`);
+    const usesLane = (body) => browserLanes.some((name) => body.includes(`npm run ${name}`));
+    const providesEngine = (body) =>
+      engineProviders.some((name) => body.includes(`npm run ${name}`))
+      || /node scripts\/(fetchEngine|prepareWebComputerAssets)\.mjs/.test(body);
+    const naked = jobs.filter(([name, body]) => usesLane(body) && !providesEngine(body)).map(([name]) => name);
+    if (naked.length) throw new Error(`엔진을 안 받고 브라우저 레인을 도는 job: ${naked.join(", ")}`);
+  });
   check("게시 경로는 ci 게이트 집합을 재사용한다", () => {
     const publish = workflows.get("publish.yml");
     if (!publish) throw new Error("publish.yml 없음");

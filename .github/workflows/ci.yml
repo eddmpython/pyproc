@@ -178,6 +178,13 @@ jobs:
             tests/attempts/enginePort/python-3.14.6.wasm
             tests/attempts/enginePort/python314-stdlib.zip
           key: web-machine-v86-assets-${{ hashFiles('scripts/assetCatalog.json') }}
+      # dual-boot probe는 Linux guest 옆에 Python guest를 올린다. 기본 부팅 URL이 자체 호스팅
+      # `/vendor/pyodide/`이므로 이 job도 엔진을 받아야 한다(안 받으면 그 probe만 404로 죽는다).
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: vendor/pyodide
+          key: pyodide-${{ hashFiles('src/runtime/pyodideDistribution.js', 'scripts/assetCatalog.json') }}
+      - run: npm run fetch:engine
       - run: node scripts/fetchWasiAssets.mjs
       # 실 x86 Linux guest를 부팅해 dual-boot과 장치(디스플레이·프레임버퍼·패킷·포인터)를 문다.
       # 타임아웃을 올린 이유는 공유 러너에서 v86 부팅이 느리기 때문이다(자산이 아니라 CPU 몫).
