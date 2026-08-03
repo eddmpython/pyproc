@@ -23,7 +23,9 @@ export class JournalKernelStore {
   resetCache() { this._cache = {}; }
   // 명시 delete 뒤에는 제거된 state 디렉터리 핸들을 재사용하면 안 된다. 다음 commit이 새
   // 디렉터리를 만들고, recover는 실제 부재를 다시 관찰하도록 backend 캐시를 함께 비운다.
-  resetStorage() { this._refStore = null; this.resetCache(); }
+  // blob store의 디렉터리 핸들도 함께 비운다. 이것을 빠뜨리면 delete 후 첫 커밋이 삭제된
+  // 디렉터리 핸들로 쓰기를 시도한다(유령 쓰기: 바이트는 어디에도 남지 않는데 성공으로 보인다).
+  resetStorage() { this._refStore = null; this._blobs.resetCache(); this.resetCache(); }
   _hex(address) {
     const hex = parseSha256Address(address);
     if (!hex) throw new PyProcError("PYPROC_INPUT_INVALID", `journal store: malformed address (${address})`);

@@ -32,16 +32,31 @@ function newPackFileName() {
 }
 
 export class JournalBlobStore {
-  constructor(dir) { this._dir = dir; }
+  constructor(dir) { this._dir = dir; this._blobDir = null; }
+
+  // blob 디렉터리 핸들은 연산마다 다시 해석할 이유가 없다. 캐시가 없을 때 커밋 1회는
+  // 페이지 수만큼 getDirectoryHandle을 다시 불렀다(페이지당 OPFS 왕복 2회 중 하나가 이것이다).
+  // 규율은 state 커널 드라이버와 같다: 생성 이후에만 캐시한다(없음 판정을 캐시하면 뒤에 생긴
+  // 디렉터리를 영영 못 본다). 무효화 지점은 resetStorage 하나이고, delete가 그것을 부른다.
+  async _blobs(create) {
+    if (this._blobDir) return this._blobDir;
+    try {
+      const dir = await this._dir.getDirectoryHandle(BLOB_DIR, { create });
+      if (create) this._blobDir = dir;
+      return dir;
+    } catch (e) {
+      if (notFound(e)) return null;
+      throw e;
+    }
+  }
+
+  // 저장소를 지운 뒤 캐시된 핸들을 계속 쓰면 삭제된 디렉터리에 쓰는 상태가 된다(유령 쓰기).
+  resetCache() { this._blobDir = null; }
 
   // 읽기 cache는 호출자가 들고 있는 빈 객체다: 한 번의 커밋/복원 안에서 PACKS.json과 pack
   // 파일 핸들을 재사용해 OPFS 왕복을 줄인다(경계를 넘어 살아남으면 안 되므로 필드가 아니다).
   async has(key, cache = {}) {
-    let blobDir;
-    try { blobDir = await this._dir.getDirectoryHandle(BLOB_DIR); }
-    catch (e) {
-      if (!notFound(e)) throw e;
-    }
+    const blobDir = await this._blobs(false);
     if (blobDir) {
       try {
         await blobDir.getFileHandle(key);
@@ -55,7 +70,7 @@ export class JournalBlobStore {
   }
 
   async write(key, bytes) {
-    const blobDir = await this._dir.getDirectoryHandle(BLOB_DIR, { create: true });
+    const blobDir = await this._blobs(true);
     const fh = await blobDir.getFileHandle(key, { create: true });
     const w = await fh.createWritable();
     await w.write(bytes);
@@ -63,12 +78,8 @@ export class JournalBlobStore {
   }
 
   async readLoose(key) {
-    let blobDir;
-    try { blobDir = await this._dir.getDirectoryHandle(BLOB_DIR); }
-    catch (e) {
-      if (notFound(e)) return null;
-      throw e;
-    }
+    const blobDir = await this._blobs(false);
+    if (!blobDir) return null;
     try {
       return new Uint8Array(await (await (await blobDir.getFileHandle(key)).getFile()).arrayBuffer());
     } catch (e) {
@@ -117,12 +128,8 @@ export class JournalBlobStore {
   }
 
   async looseStats() {
-    let blobDir;
-    try { blobDir = await this._dir.getDirectoryHandle(BLOB_DIR); }
-    catch (e) {
-      if (notFound(e)) return { count: 0, bytes: 0, mb: 0 };
-      throw e;
-    }
+    const blobDir = await this._blobs(false);
+    if (!blobDir) return { count: 0, bytes: 0, mb: 0 };
     let count = 0;
     let bytes = 0;
     for await (const name of blobDir.keys()) {
@@ -156,12 +163,8 @@ export class JournalBlobStore {
 
   async removeLooseBlobs(predicate) {
     let removed = 0;
-    let blobDir;
-    try { blobDir = await this._dir.getDirectoryHandle(BLOB_DIR); }
-    catch (e) {
-      if (notFound(e)) return removed;
-      throw e;
-    }
+    const blobDir = await this._blobs(false);
+    if (!blobDir) return removed;
     for await (const name of blobDir.keys()) {
       if (!BLOB_KEY.test(name) || !predicate(name)) continue;
       await blobDir.removeEntry(name);

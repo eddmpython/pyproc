@@ -510,6 +510,16 @@ try {
     const tombstone = JSON.parse(await (await (await deletedDir.getFileHandle("journalMarker.json")).getFile()).text());
     const deletedRecovered = await rt.enableJournal({ dir: deletedDir, reactive, includeHome: false }).recover();
     check("journal eviction: explicit delete는 tombstone 뒤 intentional absence", deleted.deleted === true && tombstone.state === "deleted" && deletedRecovered === null);
+    // delete는 backing store를 통째로 지운다. 캐시된 디렉터리 핸들을 그대로 재사용하면 다음
+    // 커밋이 삭제된 디렉터리에 쓴다(유령 쓰기: 성공으로 보이는데 바이트가 어디에도 없다).
+    // 그래서 delete 뒤 재커밋과 재복구가 성립해야 캐시 무효화가 배선된 것이다.
+    rt.run("journalDeletedMark = 2");
+    const reborn = await pm.history.commit({ dir: deletedDir, includeHome: false });
+    rt.run("journalDeletedMark = 999");
+    const rebornRecovered = await rt.enableJournal({ dir: deletedDir, reactive, includeHome: false }).recover();
+    check("journal eviction: delete 뒤 재커밋이 새 저장소에 실제로 쓴다",
+      !!reborn && !!rebornRecovered && rt.run("journalDeletedMark") === 2,
+      `재커밋 wrote ${reborn && reborn.wrote}, 재복구 ${rebornRecovered && rebornRecovered.pages}p`);
     await clean(deletedName);
 
     // dispose는 저널 유휴 감시까지 회수한다. 회수하지 않으면 인터벌이 런타임과 리액티브
