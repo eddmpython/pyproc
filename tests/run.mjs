@@ -36,7 +36,9 @@ function collect(dir, exts, acc = []) {
     // vendor/는 fetchEngine이 받은 서드파티 배포판(gitignore) = 우리 린트 표면이 아니다.
     // .cache/도 빌드 증거와 내려받은 release 문서가 쌓이는 gitignore 산출물이다. 이를 세면
     // 로컬 검사 수가 깨끗한 CI보다 커져 파일 삭제 하한을 거짓으로 만족시킨다.
-    if (entry === "node_modules" || entry === "vendor" || entry === ".cache" || entry.startsWith(".git")) continue;
+    // mainPlan/은 착수 전 계획이 사는 작업 공간이다. 아직 없는 파일 경로와 신설 예정 심볼을 참조하는
+    // 것이 그 문서의 일이므로 링크 생존과 문서 법의 대상이 아니다. 계획이 끝나면 폴더째 사라진다.
+    if (entry === "node_modules" || entry === "vendor" || entry === ".cache" || entry === "mainPlan" || entry.startsWith(".git")) continue;
     const full = join(dir, entry);
     // assets/ 디렉터리는 엔진 배포판과 바이너리 fixture가 사는 곳(전부 gitignore)이다.
     // vendor/와 같은 이유로 린트 표면 밖이다. 파일 assets.js는 이 규칙에 걸리지 않는다.

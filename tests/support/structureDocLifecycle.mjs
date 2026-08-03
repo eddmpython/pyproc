@@ -19,8 +19,13 @@ check("attempts 카테고리마다 README + 졸업 게이트 절", () => {
     if (!readFileSync(readme, "utf8").includes("졸업 게이트")) throw new Error(`${entry}: 졸업 게이트 절 없음`);
   }
 });
-check("은퇴한 mainPlan archive가 재등장하지 않는다", () => {
-  if (existsSync(join(ROOT, "mainPlan"))) throw new Error("mainPlan은 docs/tests/git 이력으로 수렴해 은퇴했다");
+// mainPlan/은 착수 전 계획 작업 공간이다. 아직 없는 파일과 신설 예정 심볼을 참조하는 것이 그 문서의
+// 일이라 링크 생존과 문서 법의 대상이 아니고, 그래서 러너의 collect가 건너뛴다. 그 배선이 사라지면
+// 계획 문서가 제품 문서인 척 검사를 받아 엉뚱한 RED가 난다. 여기서 배선만 확인한다(내용은 안 본다).
+check("mainPlan은 계획 작업 공간이라 린트 표면 밖이다", () => {
+  const runner = readFileSync(join(ROOT, "tests", "run.mjs"), "utf8");
+  const skips = runner.split("\n").some((line) => !line.trimStart().startsWith("//") && line.includes('entry === "mainPlan"'));
+  if (!skips) throw new Error("collect가 mainPlan을 건너뛰지 않는다");
 });
 check("지속 제품·운영 계약 문서가 존재한다", () => {
   for (const path of [
