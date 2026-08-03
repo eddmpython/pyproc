@@ -229,7 +229,8 @@ export class MachineJournal {
       const committedAt = new Date().toISOString();
       this._kernel.resetCache();
       const committed = await commitState(globalThis.crypto, this._kernel, {
-        pages: pages.map((p) => [p, mem.slicePage(p)]),
+        // 페이지 사본은 커밋이 그것을 쓸 때 만든다(전량 동시 상주 대신 한 장씩).
+        pages: pages.map((p) => [p, () => mem.slicePage(p)]),
         pageSize: PAGE,
         heapLen: mem.byteLength(),
         sp: this._reactive.stackSave() ?? this._sp,

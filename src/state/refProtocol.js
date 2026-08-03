@@ -53,7 +53,13 @@ export async function commitState(cryptoProvider, store, input = {}) {
   let tree;
   if (pages) {
     const table = [];
-    for (const [p, bytes] of pages) table.push([p, await putObject(cryptoProvider, store, bytes, counters, "pagesWrote")]);
+    // 페이지 바이트는 lazy로 받는다: `[page, bytes]`도 `[page, () => bytes]`도 같다. 후자면
+    // 호출자가 페이지 하나를 만들고 여기서 쓰고 놓으므로, 커밋 중 JS 상주가 델타 전량이 아니라
+    // 페이지 하나로 내려간다(200MB 델타 커밋이 async 루프 내내 힙에 살아 있던 자리다).
+    for (const [p, source] of pages) {
+      const bytes = typeof source === "function" ? source() : source;
+      table.push([p, await putObject(cryptoProvider, store, bytes, counters, "pagesWrote")]);
+    }
     const fileEntries = [];
     for (const { id, bytes, meta = null } of files) {
       fileEntries.push({ id, address: await putObject(cryptoProvider, store, bytes, counters, "filesWrote"), byteLength: bytes.length, meta });

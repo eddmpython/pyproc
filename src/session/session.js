@@ -202,7 +202,8 @@ export class Session {
     const files = home && home.bin.length ? [{ id: "home", bytes: home.bin, meta: home.meta }] : [];
     const store = new MemoryStateStore();
     const committed = await commitState(globalThis.crypto, store, {
-      pages: pages.map((p) => [p, mem.slicePage(p)]),
+      // 페이지 사본은 커밋이 그것을 쓸 때 만든다(전량 동시 상주 대신 한 장씩).
+      pages: pages.map((p) => [p, () => mem.slicePage(p)]),
       pageSize: PAGE_SIZE, heapLen, sp, files,
       env: { h0: await this._cp0Digest(), deterministic: true },
     });
