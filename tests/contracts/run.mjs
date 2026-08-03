@@ -13,6 +13,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "retentionPolicy.mjs",
   "runtimeCapabilityClusters.mjs",
   "runtimeContract.mjs",
+  "sourceParses.mjs",
 ]);
 
 export async function runContractSuites() {

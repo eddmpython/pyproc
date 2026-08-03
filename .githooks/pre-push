@@ -48,4 +48,24 @@ if ! gate_output="$(node tests/run.mjs 2>&1)"; then
   exit 1
 fi
 
+# index.d.ts is a hand-maintained 1300-line file and it IS the contract consumers read, but the
+# structure gate only checks it as text. Until now the only thing standing behind the type surface
+# at push time was the claim in the commit message. Absent evidence is not a pass: if the compiler
+# is missing, this blocks rather than skipping.
+if [ ! -x "node_modules/.bin/tsc" ] && ! command -v tsc >/dev/null 2>&1; then
+  echo "blocked: typescript is not installed, so the type gate cannot judge this push" >&2
+  echo "blocked: run 'npm install' (typescript is a CI tool, not a runtime dependency)" >&2
+  exit 1
+fi
+if [ -x "node_modules/.bin/tsc" ]; then
+  type_cmd="node_modules/.bin/tsc"
+else
+  type_cmd="tsc"
+fi
+if ! type_output="$("$type_cmd" -p tests/tsconfig.json 2>&1)"; then
+  printf '%s\n' "$type_output" | head -20 >&2
+  echo "blocked: type gate is RED, so this push would publish a broken type contract" >&2
+  exit 1
+fi
+
 exit 0

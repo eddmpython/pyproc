@@ -3603,6 +3603,11 @@ section("커밋 규칙");
     if (!invokes) throw new Error("훅이 구조 게이트를 돌리지 않는다");
     if (!/command -v node/.test(push)) throw new Error("node 부재 시 fail-closed 아님");
     if (!/structure gate is RED/.test(push)) throw new Error("RED에서 차단하는 경로가 없다");
+    // 타입 계약도 푸시에서 다시 판정한다. index.d.ts는 손유지 1300줄이고 소비자가 읽는 계약
+    // 자체인데 구조 게이트는 그것을 텍스트로만 본다. 컴파일러가 없으면 건너뛰지 않고 막는다.
+    const typeLine = push.split("\n").some((line) => !line.trimStart().startsWith("#") && line.includes("tests/tsconfig.json"));
+    if (!typeLine) throw new Error("훅이 타입 게이트를 돌리지 않는다");
+    if (!/typescript is not installed/.test(push)) throw new Error("컴파일러 부재 시 fail-closed 아님");
   });
   // 규칙 문장은 추적되는 문서에 있어야 한다. CLAUDE.md는 로컬 전용(.gitignore)이라 clone에
   // 없으므로 여기서 읽으면 CI에서만 RED가 된다. 기여자 문서 2판이 규칙의 공개 정본이다.
