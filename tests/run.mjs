@@ -3677,6 +3677,18 @@ section("CI 배관");
 //    git 이력은 되감을 수 없으므로 커밋 시점에 막는 훅이 유일한 집행 지점이다. 그래서 훅이
 //    정본을 실제로 호출하는지(배선)와 정본이 위반마다 RED인지(이빨)를 매 게이트 실행마다
 //    양성/음성 fixture로 확인한다. 규칙 문장의 SSOT는 CLAUDE.md "Git 규칙"이다.
+// 명령 실행과 내구 커밋의 정책은 한 함수다. 리더 로컬 경로와 서버 경로가 각자 그 정책을
+// 구현하고 있었고(둘 다 execute -> autoCommit -> outcome-unknown), 한쪽만 고치면 조용히 갈렸다.
+// 정책 사본이 되살아나면 RED가 되도록 두 경로가 같은 함수를 부르는지 본다.
+check("커널 명령 정책은 _runCommand 한 곳이다", () => {
+  const src = stripComments(readFileSync(join(ROOT, "src", "session", "kernelElection.js"), "utf8"));
+  const calls = (src.match(/this\._runCommand\(/g) || []).length;
+  if (calls < 2) throw new Error(`_runCommand 호출이 ${calls}개다(리더 로컬과 서버 경로 둘이어야 한다)`);
+  // 정책의 재료가 함수 밖에서 다시 조립되면 사본이다. _commitJournal은 _runCommand와
+  // commit action 경로에서만 불린다.
+  const commitCalls = (src.match(/this\._commitJournal\(/g) || []).length;
+  if (commitCalls > 2) throw new Error(`_commitJournal 호출이 ${commitCalls}개다(정책 사본이 되살아났다)`);
+});
 section("커밋 규칙");
 {
   const { checkCommitMessage, COMMIT_MESSAGE_LIMITS } = await import(

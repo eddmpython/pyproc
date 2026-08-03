@@ -324,28 +324,39 @@ export class KernelElection {
       });
       return;
     }
-    let response = await this._execute(message.action, message);
     const outcomesBefore = this._outcomes;
-    this._outcomes = appendOutcomeRecord(outcomesBefore, {
-      requestId: message.requestId,
-      epoch: this._epoch,
-      action: message.action,
-      ok: response.ok === true,
-      ...(response.ok === true ? { result: response.result } : { error: response.error, code: response.code, retryable: response.retryable === true }),
+    // 실행과 내구 커밋의 정책은 _runCommand 하나다. 리더가 자기 요청을 로컬로 처리하는 경로와
+    // 원격 요청을 서비스하는 경로가 각자 이 정책을 구현하고 있었고, 한쪽만 고치면 조용히 갈렸다.
+    let outcome = await this._runCommand(message.action, message, (response) => {
+      this._outcomes = appendOutcomeRecord(outcomesBefore, {
+        requestId: message.requestId,
+        epoch: this._epoch,
+        action: message.action,
+        ok: response.ok === true,
+        ...(response.ok === true ? { result: response.result } : { error: response.error, code: response.code, retryable: response.retryable === true }),
+      });
     });
-    // run의 결과 기록과 Python 효과를 같은 generation에 싣고 나서만 응답한다. commit action은
-    // 자기 자신이 이미 generation 경계이므로 다음 세대에 결과 기록을 싣지 않아도 재실행 효과가 없다.
-    if (message.action === "run" && this._autoCommit && this._journal) {
-      try {
-        await this._commitJournal();
-      } catch (error) {
-        this._outcomes = outcomesBefore;
-        response = this._responseFor(message, false, errorPayload(durabilityUnknown(error)));
-      }
+    let response = outcome;
+    if (outcome.durabilityUnknown) {
+      this._outcomes = outcomesBefore;
+      response = this._responseFor(message, false, errorPayload(durabilityUnknown(outcome.cause)));
     }
     this._served.set(message.requestId, response);
     if (this._served.size > OUTCOME_LOG_MAX_RECORDS) this._served.delete(this._served.keys().next().value);
     this._post(response);
+  }
+
+  // 명령 하나의 정책: 실행하고, run이면 그 효과와 결과 기록이 같은 generation에 든 뒤에
+  // 성립을 선언한다. commit action은 자기 자신이 generation 경계라 다음 세대를 기다리지 않는다.
+  // 커밋 실패는 재실행을 막는 outcome-unknown으로 닫는다(그 판정은 호출자가 자기 어휘로 낸다).
+  async _runCommand(action, payload, recordOutcome = null) {
+    const response = await this._execute(action, payload);
+    if (recordOutcome) recordOutcome(response);
+    if (action === "run" && this._autoCommit && this._journal) {
+      try { await this._commitJournal(); }
+      catch (error) { return { ...response, ok: false, durabilityUnknown: true, cause: error }; }
+    }
+    return response;
   }
 
   _responseFor(message, ok, payload) {
@@ -466,17 +477,20 @@ export class KernelElection {
     if (this._role === "leader") {
       if (action === "run") {
         return this._enqueueCommand(async () => {
-          const response = await this._execute("run", payload);
-          if (this._autoCommit && this._journal) {
-            try { await this._commitJournal(); }
-            catch (error) { throw durabilityUnknown(error); }
-          }
+          const response = await this._runCommand("run", payload);
           if (response.ok) return response.result;
+          if (response.durabilityUnknown) throw durabilityUnknown(response.cause);
           throw kernelError(response.error, response.code || "PYPROC_KERNEL_EXECUTION_ERROR", response.retryable === true);
         });
       }
       if (action === "commit") {
-        return this._enqueueCommand(() => this._commitJournal());
+        // 서버 경로와 같은 정책을 탄다(_execute의 commit action). 예전에는 여기서 저널을 직접
+        // 불러 같은 명령이 두 경로에서 다른 코드를 밟았다.
+        return this._enqueueCommand(async () => {
+          const response = await this._runCommand("commit", payload);
+          if (response.ok) return response.result;
+          throw kernelError(response.error, response.code || "PYPROC_KERNEL_EXECUTION_ERROR", response.retryable === true);
+        });
       }
     }
     const replayQueued = this._journalDir && [...this._pending.values()].some((entry) => entry.awaitingLeader);
