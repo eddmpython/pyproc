@@ -1,10 +1,10 @@
 // machineManifest.js - Layer 5/pure: 이동 가능한 머신 이미지의 순수 구조와 불변식.
 import { isSnapshotScope } from "./snapshotEnvelope.js";
-import { WebMachineError } from "../contracts/webMachineError.js";
+import { WebMachineError } from "./webMachineError.js";
 // 정렬 비교자는 순수 집합의 계약을 그대로 쓴다. 손으로 베낀 사본이 여기 있었는데, 두 파일이
 // 모두 순수 집합이라 순수-순수 import가 합법이므로 그 사본에는 경계상의 이유가 없었다.
 // 이 비교자는 서명 대상(매니페스트 엔트리 순서)을 정하므로 판본이 갈리면 주소가 갈린다.
-import { compareNames } from "../contracts/deterministicOrder.js";
+import { compareNames } from "./deterministicOrder.js";
 
 export const WEB_MACHINE_FORMAT = "webmachine";
 export const WEB_MACHINE_SCHEMA_VERSION = 1;

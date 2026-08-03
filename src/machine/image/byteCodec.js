@@ -7,9 +7,8 @@
 //
 // 오류 어휘: 이 층은 WebMachineError(code)로 말한다. 코드는 호출자가 주입한다(형식 위반이
 // 서명 문제인지 이미지 문제인지는 machine 도메인 맥락이 정한다).
-import { WebMachineError } from "./webMachineError.js";
+import { WebMachineError } from "../contracts/webMachineError.js";
 // 정렬 비교는 순수 계약이 소유한다(guest도 직접 소비해야 하므로 platform에 둘 수 없다).
-export { compareNames } from "./deterministicOrder.js";
 
 export function hexFromBytes(value) {
   return [...value].map((byte) => byte.toString(16).padStart(2, "0")).join("");

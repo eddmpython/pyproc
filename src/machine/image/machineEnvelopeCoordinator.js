@@ -2,7 +2,7 @@
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { assertWebMachineArchive, createWebMachineFile, readWebMachineFile } from "./webMachineFile.js";
-import { compareNames } from "../contracts/byteCodec.js";
+import { compareNames } from "../contracts/deterministicOrder.js";
 
 function lookup(collection, key) {
   return collection instanceof Map ? collection.get(key) : collection?.[key];

@@ -14,7 +14,7 @@
 // 새 파일은 PYBUNDLE1로만 나간다. 구 fixture 호환을 위해 legacy 파싱을 함수로 보존한다.
 import { operationAbortError, throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
-import { createWebMachineManifest, getWebMachineManifestContent, validateWebMachineManifest, WEB_MACHINE_FORMAT, WEB_MACHINE_SCHEMA_VERSION } from "./machineManifest.js";
+import { createWebMachineManifest, getWebMachineManifestContent, validateWebMachineManifest, WEB_MACHINE_FORMAT, WEB_MACHINE_SCHEMA_VERSION } from "../contracts/machineManifest.js";
 import {
   machineCanonicalJson,
   copyGenerationBytes,
@@ -22,7 +22,8 @@ import {
   digestGenerationManifest,
 } from "../persistence/generationIntegrity.js";
 import { fingerprintWebMachinePublicKey, verifyWebMachineTrust } from "./webMachineTrust.js";
-import { bytesFromBase64, compareNames, hexFromBytes, sameBytes } from "../contracts/byteCodec.js";
+import { bytesFromBase64, hexFromBytes, sameBytes } from "./byteCodec.js";
+import { compareNames } from "../contracts/deterministicOrder.js";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });

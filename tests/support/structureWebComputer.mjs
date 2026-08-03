@@ -118,7 +118,7 @@ check("봉투는 출처를 나르고 채널 판정은 나르지 않는다", () =
     throw new Error("linuxOs가 자산 출처를 밝히지 않는다");
   }
   // provenance가 서명 대상 안에 있다는 구조 사실: content가 machines를 통째로 싣는다.
-  const manifestSrc = readFileSync(join(machineRoot, "image", "machineManifest.js"), "utf8");
+  const manifestSrc = readFileSync(join(machineRoot, "contracts", "machineManifest.js"), "utf8");
   if (!/machines:\s*normalized\.machines/.test(manifestSrc)) {
     throw new Error("machineManifest: content가 machines를 싣지 않는다(guestManifest.provenance가 서명 밖으로 샌다)");
   }

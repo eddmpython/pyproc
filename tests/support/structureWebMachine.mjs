@@ -27,7 +27,7 @@ function assertBuildrootReleaseEvidence(catalog, releaseAssetsBytes) {
   }
 }
 
-export async function assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machinePureFiles, machineFileRank, runMemoryMachineStoreContract, runDurableComputerContract }) {
+export async function assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machineFileRank, runMemoryMachineStoreContract, runDurableComputerContract }) {
 const webMachineTestRoot = join(ROOT, "tests", "webMachine");
 const webMachineSourceRoots = [machineRoot, webMachineTestRoot];
 // 엔진·브라우저를 모르는 순수 집합. 옛 @web-machine/core의 경계가 파일 불변식으로 남는다
@@ -207,19 +207,21 @@ check("Web Machine clock/entropy 공급원은 생성자 주입", () => {
   }
 });
 check("Web Machine host는 guest와 browser 구현을 모름", () => {
-  // 옛 @web-machine/core의 경계. 순수 집합(contracts/host + 순수 image 2파일)은
-  // 엔진 이름도 브라우저 전역도 모르고, 자기들끼리만 import한다.
+  // 옛 @web-machine/core의 경계. 순수 집합은 이제 폴더다(contracts/ + host/): 엔진 이름도
+  // 브라우저 전역도 모르고, 자기들끼리만 import한다. 손유지 목록이던 시절에는 새 파일이
+  // 등재되지 않으면 이 검사를 통째로 건너뛰었다(누락에 의한 침묵).
   const guestTerms = /\b(?:pyproc|pyodide|wasi|v86|x86|linux|buildroot)\b/i;
   const browserTerms = /\b(?:window|document|navigator|location|indexedDB|localStorage|sessionStorage|caches|fetch|XMLHttpRequest|WebSocket|BroadcastChannel|Worker|SharedWorker|MessageChannel|crypto|performance|Date|setTimeout|setInterval)\b/;
   const problems = [];
-  for (const relPath of machinePureFiles) {
+  const pureFiles = collect(machineRoot, [".js"], []).map(rel).filter((relPath) => machineFileRank(relPath) === 0);
+  for (const relPath of pureFiles) {
     const file = join(ROOT, relPath);
     const source = readFileSync(file, "utf8");
     if (guestTerms.test(source)) problems.push(`${relPath}: guest/engine 이름`);
     if (browserTerms.test(source)) problems.push(`${relPath}: browser 구현 직접 접근`);
     for (const ref of jsModuleRefs(file)) {
       const target = moduleTarget(file, ref.spec);
-      if (!target || !machinePureFiles.has(rel(target))) {
+      if (!target || machineFileRank(rel(target)) !== 0) {
         problems.push(`${relPath} -> ${ref.spec}: 순수 집합 밖 import`);
       }
     }

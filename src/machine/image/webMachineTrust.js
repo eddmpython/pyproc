@@ -6,7 +6,7 @@
 // 규약 변경 = 신뢰 목록 무효화), 그리고 신뢰 판정 순서(임베디드 검증 -> 지문 대조 -> 재검증).
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { digestGenerationBytes, machineCanonicalJson } from "../persistence/generationIntegrity.js";
-import { bytesFromHex, hexFromBytes } from "../contracts/byteCodec.js";
+import { bytesFromHex, hexFromBytes } from "./byteCodec.js";
 
 const encoder = new TextEncoder();
 

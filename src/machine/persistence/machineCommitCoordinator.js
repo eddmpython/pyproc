@@ -10,7 +10,7 @@
 import { throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { copyGenerationBytes } from "./generationIntegrity.js";
-import { compareNames } from "../contracts/byteCodec.js";
+import { compareNames } from "../contracts/deterministicOrder.js";
 
 const GENERATION_SCHEMA_VERSION = 2;
 

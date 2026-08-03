@@ -1,6 +1,6 @@
 // memoryEthernetSwitch.js - Layer 5/platform: guest를 모르는 bounded packet network 기준 구현.
 import { WebMachineError } from "../contracts/webMachineError.js";
-import { hexFromBytes } from "../contracts/byteCodec.js";
+import { hexFromBytes } from "../image/byteCodec.js";
 
 const ETHERNET_HEADER_BYTES = 14;
 

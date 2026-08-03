@@ -20,7 +20,7 @@ export {
   createSnapshotEnvelope,
   isSnapshotScope,
   validateSnapshotEnvelope,
-} from "./image/snapshotEnvelope.js";
+} from "./contracts/snapshotEnvelope.js";
 export {
   WEB_MACHINE_FORMAT,
   WEB_MACHINE_SCHEMA_VERSION,
@@ -28,7 +28,7 @@ export {
   createWebMachineManifestContent,
   getWebMachineManifestContent,
   validateWebMachineManifest,
-} from "./image/machineManifest.js";
+} from "./contracts/machineManifest.js";
 export { assertWebMachineArchive, createWebMachineFile, readWebMachineFile } from "./image/webMachineFile.js";
 export {
   createWebMachineKeyPair,

@@ -762,7 +762,7 @@ section("digest 법");
   // pyprocSw는 import 0 자기충족 자산이라 의도된 중복이고 자산 매니페스트가 그 사실을 게시한다.
   const CODEC_CORE = new Set([
     "src/runtime/contentDigest.js",
-    "src/machine/contracts/byteCodec.js",
+    "src/machine/image/byteCodec.js",
     "src/capabilities/pyprocSw.js",
     "src/runtime/engines/wasi/browserWasiShim.js", // 벤더 번들(서드파티 스코프)
   ]);
@@ -2805,28 +2805,14 @@ const LAYER_RANK = new Map([
   ["processOs", 4],     // 워커 = 프로세스, 스냅샷 = 프로세스 이미지
   ["machine", 5],       // 브라우저를 여러 guest OS가 올라가는 컴퓨터로. pyproc의 최상층
 ]);
-const machinePureFiles = new Set([
-  "src/machine/contracts/adapterContract.js",
-  // 프레임 해석은 순수하다: import 0, browser 전역 0, guest 이름 0. 파이썬 port와 v86 port가
-  // 같은 계약을 소비해야 하므로(그래야 두 guest가 한 와이어에서 말이 통한다) 순수 집합에 산다.
-  "src/machine/contracts/ipv4Frames.js",
-  // 장치 요구 해석 법. 순수하다: 오류 계약만 import하고 browser 전역도 guest 이름도 없다.
-  // 그래서 guest가 직접 소비할 수 있고, 그것이 이 파일이 존재하는 이유다(선언 = 유일 진실).
-  // byteCodec은 여기 없다: atob/Buffer 전역을 만지므로 platform(1)이 정직한 층위다.
-  "src/machine/contracts/deterministicOrder.js",
-  "src/machine/contracts/deviceRequirement.js",
-  "src/machine/contracts/operationControl.js",
-  "src/machine/contracts/webMachineError.js",
-  "src/machine/host/commandQueue.js",
-  "src/machine/host/machineHandle.js",
-  "src/machine/host/webMachineHost.js",
-  "src/machine/image/machineManifest.js",
-  "src/machine/image/snapshotEnvelope.js",
-]);
 // 층위 = 옛 package 소속. pure(0: 옛 core) <- platform(1: 옛 browser) <- guests(2) <- composition(3).
+// rank는 폴더에서 나온다. 예전에는 순수 집합이 손으로 유지하는 11개 파일 목록이었고, 새 파일을
+// 만들 때마다 게이트 소스를 열어 등재를 판단해야 했다. 빠뜨리면 자동으로 platform이 되어 순수성
+// 검사를 아예 안 받았다(누락에 의한 침묵). 계약 층 두 파일을 contracts/로, 전역을 만지는 코덱을
+// image/로 옮겨 그 목록을 없앴다: 이제 "레이어 = 폴더" 원칙이 최상층에서도 성립한다.
 const machineFileRank = (relPath) => {
-  if (machinePureFiles.has(relPath)) return 0;
   const folder = relPath.split("/")[2];
+  if (folder === "contracts" || folder === "host") return 0;
   if (folder === "guests") return 2;
   // 층 배럴은 조립 지점이다: guests와 composition을 재수출하므로 platform으로 부르면
   // 그 재수출이 전부 위로 향하는 edge가 된다(그래서 edge 검사가 배럴을 건너뛰어 왔다).
@@ -3078,7 +3064,7 @@ check("탐지기가 문다: 공개 example의 origin-root 엔진 회귀", () => 
 assertDocLifecycleStructure({ check, ROOT, collect, rel });
 
 const machineRoot = join(ROOT, "src", "machine");
-await assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machinePureFiles, machineFileRank, runMemoryMachineStoreContract, runDurableComputerContract });
+await assertWebMachineStructure({ check, checkAsync, ROOT, collect, rel, stripComments, jsModuleRefs, moduleTarget, findCycles, machineRoot, machineFileRank, runMemoryMachineStoreContract, runDurableComputerContract });
 assertWebComputerStructure({ check, ROOT, collect, rel, jsModuleRefs, moduleTarget, machineRoot });
 
 // 7.4) 사용자 진입 표면: 사용자가 실제로 읽는 진단·거부 문장은 영문이다. README와 api.md가

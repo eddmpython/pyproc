@@ -1,6 +1,6 @@
 // adapterContract.js - Layer 5/pure: adapter의 필수 동작과 보장 수준을 host 형식으로 정규화한다.
 import { WebMachineError } from "./webMachineError.js";
-import { isSnapshotScope } from "../image/snapshotEnvelope.js";
+import { isSnapshotScope } from "./snapshotEnvelope.js";
 
 const requiredMethods = Object.freeze(["boot", "pause", "resume", "snapshot", "restore", "shutdown", "request", "inspect"]);
 
