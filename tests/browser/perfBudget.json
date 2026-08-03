@@ -7,5 +7,17 @@
     "avgWorkerBootMs": 3000,
     "mapParallelMs": 2000,
     "timeoutConvergeMs": 6000
+  },
+  "memoryComment": "메모리 상한. 이 축은 2026-08-03까지 기계 판정이 하나도 없었다: 게이트가 MB 값을 여러 개 재면서 문자열로만 인쇄했고, 델타 수집이 두 배가 되거나 pack이 안 되거나 이미지가 부는 회귀는 시간 예산의 여유(bootMs 상한은 실측의 12배다) 안에 전부 숨었다. 기준 실측(2026-08-03 로컬, Edge): bootHeapBytes 31457280, reactiveTotalMb 77.85, journalPackMb 26.5, forkDeltaMb 9.1, sessionDeltaMb 7.1. 시간 예산과 달리 여유는 3배 안쪽으로 좁힌다: 메모리는 자릿수가 아니라 배수에서 이미 제품 수명을 바꾼다. 값을 올리려면 왜 그 크기가 정당한지를 같은 커밋에 적는다.",
+  "installedMemoryComment": "설치 패키지 레인의 메모리 상한. machineMB는 소비자가 실제로 내려받는 산출물 크기다(기준 실측 2026-08-03: 10.8). 이 레인은 '소비 앱에서 깨지는 것'을 잡으려고 세웠는데 산출물이 부는 회귀는 그 목적에서 빠져 있었다.",
+  "installedMemoryBudgets": {
+    "machineMB": 32
+  },
+  "memoryBudgets": {
+    "bootHeapBytes": 94371840,
+    "reactiveTotalMb": 240,
+    "journalPackMb": 80,
+    "forkDeltaMb": 30,
+    "sessionDeltaMb": 24
   }
 }

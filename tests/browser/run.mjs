@@ -178,18 +178,23 @@ if (phase > 1) console.log(`브라우저 프로세스 phase: ${phase}`);
 // 성능 예산: 기본 게이트의 핵 경로 측정치가 상한(자릿수 회귀 차단용, perfBudget.json)을 넘으면 RED.
 // 상한 근거와 여유 계수는 그 파일에 있다. probe 지정 실행(다른 페이지)은 해당 키가 없어 자연 통과.
 if (result.timings) {
-  const budget = JSON.parse(readFileSync(new URL("./perfBudget.json", import.meta.url), "utf8")).budgets;
-  const over = Object.entries(budget)
-    .filter(([key, limit]) => Number.isFinite(result.timings[key]) && result.timings[key] > limit)
-    .map(([key, limit]) => `${key} ${result.timings[key]} > ${limit}`);
-  if (over.length) budgetProblems.push(`성능 예산 초과: ${over.join(", ")}`);
-  // 키가 없으면 그 예산은 조용히 무효가 된다(위 filter가 걸러낸다). 기본 게이트 페이지는
-  // 예산 키 전부를 내놓아야 한다: 측정 이름을 바꾸면 예산이 영구히 죽는 자리였다.
-  // probe 지정 실행은 다른 측정 집합이라 하한이 등재된 페이지에만 요구한다.
+  const budgetFile = JSON.parse(readFileSync(new URL("./perfBudget.json", import.meta.url), "utf8"));
   const floors = JSON.parse(readFileSync(new URL("./gateFloor.json", import.meta.url), "utf8")).floors;
-  if (page in floors && page.endsWith("gate.html")) {
-    const absent = Object.keys(budget).filter((key) => !Number.isFinite(result.timings[key]));
-    if (absent.length) budgetProblems.push(`성능 예산 키가 측정에 없다: ${absent.join(", ")}(이름을 바꾸면 예산이 죽는다)`);
+  // 시간과 메모리는 같은 규율로 판정한다. 메모리 축은 2026-08-03까지 판정이 0이었다: 게이트가
+  // MB를 재면서 인쇄만 했고, 그 회귀는 시간 예산의 여유 안에 전부 숨었다.
+  for (const [label, budget] of [["성능", budgetFile.budgets], ["메모리", budgetFile.memoryBudgets]]) {
+    if (!budget) continue;
+    const over = Object.entries(budget)
+      .filter(([key, limit]) => Number.isFinite(result.timings[key]) && result.timings[key] > limit)
+      .map(([key, limit]) => `${key} ${result.timings[key]} > ${limit}`);
+    if (over.length) budgetProblems.push(`${label} 예산 초과: ${over.join(", ")}`);
+    // 키가 없으면 그 예산은 조용히 무효가 된다(위 filter가 걸러낸다). 기본 게이트 페이지는
+    // 예산 키 전부를 내놓아야 한다: 측정 이름을 바꾸면 예산이 영구히 죽는 자리였다.
+    // probe 지정 실행은 다른 측정 집합이라 하한이 등재된 페이지에만 요구한다.
+    if (page in floors && page.endsWith("gate.html")) {
+      const absent = Object.keys(budget).filter((key) => !Number.isFinite(result.timings[key]));
+      if (absent.length) budgetProblems.push(`${label} 예산 키가 측정에 없다: ${absent.join(", ")}(이름을 바꾸면 예산이 죽는다)`);
+    }
   }
 }
 // 체크 수 하한 근거와 유지 규칙은 gateFloor.json에 있다. 등재 없는 페이지(probe)는 자연 통과.

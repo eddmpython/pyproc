@@ -319,5 +319,9 @@ export class PyProc {
       if (t.state !== "dead") { t.worker.terminate(); this._fail(t, new PyProcError("PYPROC_PROCESS_UNAVAILABLE", "terminate")); }
     }
     this.table = []; this._seq = 0;
+    // 스냅샷 SAB는 부팅 스냅샷 전체(수십 MB)를 붙잡는다. 워커만 죽이고 이것을 놓지 않으면
+    // 회수 동사를 불러도 그 바이트가 풀 핸들 수명 내내 남는다. terminate된 풀에서 respawn하지
+    // 않는 것이 계약이므로 여기서 놓는 것은 안전하다(_replace는 이 값의 유무만 읽는다).
+    this._snapshot = null;
   }
 }

@@ -144,5 +144,7 @@ export class MachineContainer {
 
   terminate() {
     for (const cid of [...this._containers.keys()]) this.kill(cid);
+    // 컨테이너를 전부 죽였는데 스냅샷 SAB가 남으면 그 바이트는 회수되지 않는다(PyProc과 동형).
+    this._snapshot = null;
   }
 }

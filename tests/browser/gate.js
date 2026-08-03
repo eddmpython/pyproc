@@ -91,6 +91,9 @@ try {
   const pm = await boot({ indexURL: INDEX, assetIntegrity });
   const rt = pm.runtime;
   timings.bootMs = Math.round(performance.now() - t);
+  // 메모리 예산의 앵커. 시간만 재면 델타 수집이 두 배가 되거나 이미지가 부는 회귀가 시간 여유
+  // 안에 전부 숨는다(bootMs 상한은 실측의 12배다). 힙 자체가 이 제품의 정체성이므로 그 크기를 잰다.
+  timings.bootHeapBytes = pm.runtime.memory.byteLength();
   check("boot()", true, timings.bootMs + "ms" + (INDEX ? " @" + INDEX : ""));
   if (!INDEX) {
     const engineURL = new URL(rt.indexURL, location.href);
@@ -273,7 +276,17 @@ try {
   reactive.restoreLive(cpKeep.index);
   rt.run("es4 = 2");
   const cpLive = reactive.checkpoint();
+  // 회수 단정: 가지치기는 노드 수만 줄이는 것이 아니라 바이트를 돌려줘야 한다. stats()는 이미
+  // 정확한 계측기인데 어떤 게이트도 그것을 읽지 않았다. 여기서 예산의 앵커를 세운다.
+  const statsBeforePrune = reactive.stats();
   const prunedInfo = reactive.pruneTo(cpLive.index);
+  const statsAfterPrune = reactive.stats();
+  check("reactive 회수: pruneTo가 델타 바이트를 실제로 돌려준다",
+    prunedInfo.freedNodes >= 1
+    && statsAfterPrune.activeNodes < statsBeforePrune.activeNodes
+    && statsAfterPrune.totalBytes < statsBeforePrune.totalBytes,
+    `노드 ${statsBeforePrune.activeNodes} -> ${statsAfterPrune.activeNodes}, 총 ${statsBeforePrune.totalMB} -> ${statsAfterPrune.totalMB}MB`);
+  timings.reactiveTotalMb = statsAfterPrune.totalMB;
   let prunedCode = "";
   try { reactive.restoreLive(cpDrop.index); } catch (e) { prunedCode = e.code; }
   check("pruneTo: 경로 밖 노드 해제 + PYPROC_CHECKPOINT_PRUNED 거부",
@@ -317,6 +330,7 @@ try {
     packed && packed.packed > 0 && packed.looseRemoved > 0 && packFiles === 1
     && packIndex.packs.length === 1 && Object.keys(packIndex.packs[0].blobs).length === packed.packed,
     `live ${packed && packed.liveKeys}p, ${packed && packed.mb}MB, loose 정리 ${packed && packed.looseRemoved}, pack 파일 ${packFiles}, prune 후 loose ${prunedAfterPack.looseRemoved}`);
+  timings.journalPackMb = packed && packed.mb; // pack이 커지는 회귀는 시간으로 안 보인다
 
   // pack만 남은 저널에서 복구되는가. loose는 위에서 전부 지워졌으므로 성공하면 pack
   // 경로로만 읽은 것이다. 상태를 먼저 어긋내야 "복구가 실제로 되돌렸다"가 증명된다.
@@ -673,8 +687,13 @@ try {
   try { await os.exec(victim, "def _fn(arg):\n    return 1"); } catch (e) { deadErr = e; }
   check("PyProcError: dead pid 거부 코드", !!deadErr && deadErr.code === "PYPROC_PROCESS_UNAVAILABLE", deadErr && deadErr.code);
 
+  const snapshotBeforeTerminate = os._snapshot; // 내부 필드가 이 회수의 유일한 관측점이다
   os.terminate();
   check("terminate: 프로세스 테이블 비움", os.ps().length === 0);
+  // 회수 단정: 워커만 죽이고 스냅샷 SAB를 남기면 부팅 스냅샷 전체가 풀 핸들 수명 내내 산다.
+  // 이 풀은 스냅샷 부팅이 아닐 수 있으므로 "있었다면 놓였는가"로 판정한다.
+  check("terminate: 스냅샷 SAB 회수", os._snapshot === null,
+    snapshotBeforeTerminate ? `${Math.round(snapshotBeforeTerminate.byteLength / 1048576)}MB 반환` : "스냅샷 없는 풀");
 
   // 풀 소진 계약(api.md: 전 레인 사망 시 {error}로 resolve, silent undefined 없음). 구현은
   // 있었지만 증거가 0이었다: 이 계약이 깨지면 소비자에게 undefined가 새고 원인이 안 보인다.
@@ -720,6 +739,7 @@ try {
   const fk = await fos.fork(p1, p2).catch((e) => ({ error: String(e) }));
   check("fork(2): 살아있는 상태 복제(델타 수확 + 적용)", !fk.error && fk.pages > 0 && fk.reverted > 0,
     fk.error ? String(fk.error).slice(0, 90) : `${fk.pages}p/${fk.mb}MB, 수확 ${fk.harvestMs}ms + 적용 ${fk.applyMs}ms, 정화 ${fk.reverted}p`);
+  timings.forkDeltaMb = fk.mb; // 델타가 조용히 부는 회귀는 시간 예산에 안 걸린다
   check("fork(2): 계보 기록(parentPid)", fos.ps().find((p) => p.pid === p2).parentPid === p1);
   fos.kill(p1); // 남은 ready = p2(자식)만 -> 다음 map은 반드시 자식에서 돈다
   const [forkState] = await fos.map("def _fn(a):\n    src = 1 if 'only1' in globals() else 0\n    clean = ('only0' in globals()) != ('only1' in globals())\n    return [clean, tag, len(payload) - 50000 * src]", [0]);
@@ -884,6 +904,7 @@ try {
   const s2 = await bootSession({ indexURL: INDEX });
   await s2.load(sDir, "gate");
   check("session: 델타로 크로스 커널 부활", s2.rt.run("k + 42") === 4142, `${sv.pages}p, ${sv.mb}MB`);
+  timings.sessionDeltaMb = sv.mb; // 사용자가 실제로 내려받는 크기의 대리 지표
 
   // 알려진 한계(2026-07-31 실측, workerGuest 캠페인 10케이스 이분): **JS 프록시 핸들은 인터프리터
   // 국소 상태라 힙 이미지가 나르지 못한다.** 씨앗이 cp0 이후 프록시를 하나라도 만들면, 그 이미지로

@@ -595,8 +595,19 @@ try {
   if (result.timings) console.log(`\n실측: ${JSON.stringify(result.timings)}`);
   // 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다). 커버리지 매니페스트는
   // 러너가 페이지 밖에서 만든 단정이므로 extra로 넘긴다.
+  // 이 레인의 machineMB는 소비자가 실제로 내려받는 산출물 크기다. 지금까지 재기만 하고
+  // 아무도 단정하지 않아서, 이미지가 두 배로 불어도 이 레인은 GREEN이었다.
+  const installedBudgets = JSON.parse(await readFile(new URL("./perfBudget.json", import.meta.url), "utf8")).installedMemoryBudgets;
+  const overBudget = Object.entries(installedBudgets || {})
+    .filter(([key, limit]) => Number.isFinite(result.timings?.[key]) && result.timings[key] > limit)
+    .map(([key, limit]) => `${key} ${result.timings[key]} > ${limit}`);
+  const missingKeys = Object.keys(installedBudgets || {}).filter((key) => !Number.isFinite(result.timings?.[key]));
   const verdict = judgeReport(result, {
-    extra: [{ name: "installed-package coverage manifest 불일치", pass: coverageOk }],
+    extra: [
+      { name: "installed-package coverage manifest 불일치", pass: coverageOk },
+      { name: `메모리 예산 초과: ${overBudget.join(", ")}`, pass: overBudget.length === 0 },
+      { name: `메모리 예산 키가 측정에 없다: ${missingKeys.join(", ")}`, pass: missingKeys.length === 0 },
+    ],
   });
   for (const problem of verdict.problems) console.log(`FAIL ${problem}`);
   console.log(`\n결과: ${verdict.ok ? "GREEN" : "RED"} (${verdict.passed}/${verdict.total})`);
