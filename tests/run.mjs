@@ -1137,6 +1137,81 @@ section("state 커널");
     const wrongTarget = await tags.verifyStateTag(provider, tag, "sha256:" + "ef".repeat(32), { trustedPublicKeys: [jwk] });
     if (wrongTarget.valid) throw new Error("기대 target 불일치가 통과");
   });
+
+  // /home은 파일마다 blob 하나로 커밋된다(v2). 한 팩이던 시절에는 파일 하나가 1바이트 바뀌어도
+  // 팩 전체의 주소가 바뀌어 홈 전량이 다시 쓰였다. 그 성질을 카운터로 단정한다: 안 바꾼 커밋은
+  // 파일을 하나도 쓰지 않고, 한 파일만 바꾼 커밋은 그 파일 하나만 쓴다.
+  const home = await import(pathToFileURL(join(ROOT, "src", "capabilities", "image", "machineHome.js")).href);
+  // MEMFS 대역. Runtime.fs가 쓰는 표면만 갖는다(경로는 문자열 키, 디렉터리는 집합).
+  const makeFakeFs = () => {
+    const files = new Map(), dirs = new Set(["/", "/home"]);
+    const parentOf = (p) => p.slice(0, p.lastIndexOf("/")) || "/";
+    return {
+      files, dirs,
+      exists: (p) => files.has(p) || dirs.has(p),
+      stat: (p) => ({ isDir: dirs.has(p), isFile: files.has(p) }),
+      readdir: (p) => {
+        const prefix = p === "/" ? "/" : p + "/";
+        const names = new Set();
+        for (const key of [...files.keys(), ...dirs]) {
+          if (key !== p && key.startsWith(prefix)) names.add(key.slice(prefix.length).split("/")[0]);
+        }
+        return [...names];
+      },
+      readFile: (p) => files.get(p),
+      writeFile: (p, bytes) => { files.set(p, bytes.slice()); },
+      mkdirTree: (p) => { const parts = p.split("/").filter(Boolean); let at = ""; for (const part of parts) { at += "/" + part; dirs.add(at); } },
+      unlink: (p) => files.delete(p),
+      rmdir: (p) => dirs.delete(p),
+    };
+  };
+  const homeCommit = async (store, fs) => {
+    const collected = home.collectMachineHome(fs, "/home/web", { required: true, errorPrefix: "gate" });
+    return state.commitState(provider, store, {
+      pages: [[0, statePage(1)]], pageSize: 1024, heapLen: 1024, sp: 0,
+      files: home.machineHomeFileEntries(collected), env: { h0: "h0-home" },
+    });
+  };
+  await checkAsync("state 홈 CAS: 안 바꾼 커밋은 파일을 쓰지 않고 한 파일만 바꾸면 그 하나만 쓴다", async () => {
+    const fs = makeFakeFs(), store = new MemoryStateStore();
+    fs.mkdirTree("/home/web/pkg");
+    fs.writeFile("/home/web/a.txt", new Uint8Array([1, 2, 3]));
+    fs.writeFile("/home/web/pkg/b.txt", new Uint8Array([4, 5, 6]));
+    fs.writeFile("/home/web/pkg/c.txt", new Uint8Array(2048).fill(7));
+    const first = await homeCommit(store, fs);
+    // 루트 메타 엔트리(빈 blob) + 파일 3개. 빈 blob은 주소가 하나뿐이라 한 번만 쓰인다.
+    if (first.filesWrote !== 4) throw new Error(`첫 커밋 filesWrote ${first.filesWrote} (메타 1 + 파일 3이어야 한다)`);
+    const unchanged = await homeCommit(store, fs);
+    if (unchanged.filesWrote !== 0) throw new Error(`안 바꾼 커밋이 파일을 ${unchanged.filesWrote}개 썼다 (0이어야 한다)`);
+    fs.writeFile("/home/web/pkg/b.txt", new Uint8Array([4, 5, 9])); // 1바이트만
+    const oneChanged = await homeCommit(store, fs);
+    if (oneChanged.filesWrote !== 1) throw new Error(`1바이트 변경 커밋이 파일을 ${oneChanged.filesWrote}개 썼다 (1이어야 한다)`);
+  });
+  await checkAsync("state 홈 CAS: 파일 단위 세대가 트리 구조 그대로 되살아난다", async () => {
+    const fs = makeFakeFs(), store = new MemoryStateStore();
+    fs.mkdirTree("/home/web/deep/nest");
+    fs.writeFile("/home/web/deep/nest/x.bin", new Uint8Array([9, 8, 7]));
+    fs.writeFile("/home/web/top.txt", new Uint8Array([1]));
+    await homeCommit(store, fs);
+    const opened = await state.openState(provider, store, { expectH0: "h0-home" });
+    const payload = home.readMachineHomePayload(opened.files);
+    if (payload.meta.version !== 2) throw new Error(`쓰기 판이 v2가 아니다 (${payload.meta.version})`);
+    const target = makeFakeFs();
+    const applied = home.applyMachineHome(target, payload.meta, payload.payload);
+    if (applied.files !== 2 || applied.dirs !== 2) throw new Error(`적용 결과 files ${applied.files} dirs ${applied.dirs}`);
+    const restored = target.readFile("/home/web/deep/nest/x.bin");
+    if (!restored || restored.join(",") !== "9,8,7") throw new Error("중첩 파일 바이트 불일치");
+    if (!target.dirs.has("/home/web/deep/nest")) throw new Error("빈 경로 구조가 복원되지 않았다");
+  });
+  // 옛 세대(v1 팩)는 그대로 읽힌다. 이 갈래가 죽으면 업그레이드가 조용히 홈을 잃는다.
+  check("state 홈 CAS: v1 팩 세대가 계속 읽힌다", () => {
+    const meta = { version: 1, path: "/home/web", bytes: 5, entries: [{ path: "d", type: "dir" }, { path: "d/f", type: "file", offset: 0, size: 5 }] };
+    const bin = new Uint8Array([1, 2, 3, 4, 5]);
+    const target = makeFakeFs();
+    const applied = home.applyMachineHome(target, meta, bin);
+    if (applied.files !== 1 || applied.dirs !== 1) throw new Error(`v1 적용 결과 files ${applied.files} dirs ${applied.dirs}`);
+    if (target.readFile("/home/web/d/f").join(",") !== "1,2,3,4,5") throw new Error("v1 팩 바이트 불일치");
+  });
 }
 
 // 델타 재구성 soundness(휘발 구역)의 property/fuzz. 지금까지 이 경로는 고정 시나리오

@@ -35,7 +35,7 @@ export { createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicK
 import { WheelCache } from "../capabilities/wheelCache.js";
 import { materializeHeapGeneration } from "../capabilities/image/heapMaterialize.js";
 import { requirePortableHeap } from "../capabilities/image/imagePortability.js";
-import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome } from "../capabilities/image/machineHome.js";
+import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome, machineHomeFileEntries, readMachineHomePayload } from "../capabilities/image/machineHome.js";
 
 // 결정적 부팅 구간은 전역(엔트로피/시간)을 패치하므로 전역 패치 체인에서 하나만 진입한다.
 // 두 bootSession(또는 boot 코어 캐시/wheel 캐시의 fetch 스왑)이 겹치면 먼저 끝난 쪽이
@@ -198,7 +198,7 @@ export class Session {
     const mem = this.rt.memory;
     const includeHome = opts.includeHome !== false;
     const home = includeHome ? this._collectHome(opts.homePath || DEFAULT_MACHINE_HOME_PATH, opts.includeHome === true) : null;
-    const files = home && home.bin.length ? [{ id: "home", bytes: home.bin, meta: home.meta }] : [];
+    const files = home && home.meta.entries.length ? machineHomeFileEntries(home) : [];
     const store = new MemoryStateStore();
     const committed = await commitState(globalThis.crypto, store, {
       // 페이지 사본은 커밋이 그것을 쓸 때 만든다(전량 동시 상주 대신 한 장씩).
@@ -256,7 +256,7 @@ export class Session {
     const applied = materializeHeapGeneration({
       rt: this.rt, reactive: this.reactive, label: "openMachine",
       heapLen: tree.heapLen, sp: tree.sp, pages,
-      home: (files && files.get("home")) || null,
+      home: readMachineHomePayload(files),
       // 층마다 오류 어휘가 다르다: 세션 부활의 파손은 머신 포맷 계약 위반으로 말한다.
       wrapHomeError: (e) => new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `open: home meta is corrupt (${String(e.message || e).slice(-160)})`, { cause: e }),
     });

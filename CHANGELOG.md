@@ -117,6 +117,19 @@ Users upgrading directly from 0.0.9 must also apply the 0.0.10 migration from ro
 
 ### Changed
 
+- **`/home` is committed as one content-addressed blob per file.** It used to be concatenated into a
+  single pack, so one changed byte in one file changed the pack's address and the whole tree was
+  re-read, re-hashed, and re-written on every commit. Now an unchanged file is already in the store
+  and costs no write at all: a commit that changed nothing under `/home` writes zero home blobs, and
+  a commit that changed one file writes one. `journal.commit()` reports that as `home.wrote`, which
+  is now a count rather than a boolean.
+
+  Older generations keep working - the v1 pack layout is still read, so upgrading does not lose a
+  journal or an image. The **new** layout is not readable by older pyproc versions, so a
+  `.pymachine` file exported after this change must be opened with this version or later; an older
+  reader refuses it with `PYPROC_MACHINE_FORMAT_INVALID` rather than restoring a partial tree.
+
+
 - Durable RPC now has one normative retry boundary. A direct durable controller may resend the same
   request id once only when it can prove a proxy-free session. A normal follower, a live timeout,
   a vanished caller, or an unportable heap returns non-retryable `PYPROC_RPC_OUTCOME_UNKNOWN`

@@ -28,7 +28,7 @@ import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
 import { readJsonFile } from "./journalJsonFile.js";
 import { applyLegacyGeneration, cleanupLegacyRefs, legacyLiveKeys, readLegacyGeneration } from "./journalLegacyGeneration.js";
 import { JournalKernelStore } from "./journalKernelStore.js";
-import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome } from "../image/machineHome.js";
+import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome, machineHomeFileEntries, readMachineHomePayload } from "../image/machineHome.js";
 
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
 const DEFAULT_AUTO_PACK_LOOSE_MB = 8;
@@ -233,7 +233,9 @@ export class MachineJournal {
       const home = this._homePath
         ? collectMachineHome(this._rt.fs, this._homePath, { required: false, errorPrefix: "journal.commit" })
         : null;
-      const files = home && home.bin.length ? [{ id: "home", bytes: home.bin, meta: home.meta }] : [];
+      // 파일마다 blob 하나다. 안 바뀐 파일은 주소가 그대로라 저장소가 이미 갖고 있고 쓰기가
+      // 사라진다(팩 하나였을 때는 한 바이트만 바뀌어도 홈 전량을 다시 썼다).
+      const files = home && home.meta.entries.length ? machineHomeFileEntries(home) : [];
       const sidecarBytes = this._sidecar ? this._sidecar.collect() : null;
       if (sidecarBytes && sidecarBytes.byteLength) files.push({ id: this._sidecar.id, bytes: sidecarBytes, meta: null });
       const committedAt = new Date().toISOString();
@@ -272,7 +274,7 @@ export class MachineJournal {
         reused: committed.reused,
         mb: bytesToMb(committed.pagesWrote * PAGE),
         committedAt,
-        ...(home ? { home: { files: home.meta.entries.filter((entry) => entry.type === "file").length, mb: bytesToMb(home.bin.length), wrote: committed.filesWrote > 0 } } : {}),
+        ...(home ? { home: { files: home.meta.entries.filter((entry) => entry.type === "file").length, mb: bytesToMb(home.bytes), wrote: committed.filesWrote } } : {}),
       };
       const autoPack = await this._autoPackAfterCommit(result);
       if (autoPack) result.autoPack = autoPack;
@@ -412,7 +414,7 @@ export class MachineJournal {
     const applied = materializeHeapGeneration({
       rt: this._rt, reactive: this._reactive, label: "journal.recover",
       heapLen: tree.heapLen, sp: tree.sp, pages,
-      home: (files && files.get("home")) || null,
+      home: readMachineHomePayload(files),
       wrapHomeError: (e) => journalCorrupt(`journal.recover: home generation is corrupt (${String(e.message || e).slice(-180)})`, e),
     });
     this._lastSeq = this._rt.execSeq;

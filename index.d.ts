@@ -724,7 +724,8 @@ export interface JournalCommitResult {
   wrote: number;
   mb: number;
   committedAt: string;
-  home?: { files: number; mb: number; wrote: boolean };
+  /** `wrote` counts the home blobs this commit actually stored: 0 when nothing under /home changed. */
+  home?: { files: number; mb: number; wrote: number };
   /** Present when the autoPack policy ran a pack after this same commit. */
   autoPack?: JournalPackResult;
   /** Present when pruneAfterCommit is on: the result of pruning the tree right after the commit. */

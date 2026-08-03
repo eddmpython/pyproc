@@ -24,7 +24,8 @@ import { applyMachineHome, validateMachineHomeMeta } from "./machineHome.js";
 //   sp        : 저장 시점 스택 포인터(null이면 계약이 흡수)
 //   pages     : [pageIndex, bytes] 순회 가능(Map 또는 배열). 전량 준비된 뒤 들어와야 한다
 //               (부분 적용 상태 방지는 호출자의 검증 단계에서 끝낸다)
-//   home      : { meta, bytes } 또는 null
+//   home      : { meta, payload } 또는 null. payload는 홈 판에 따라 팩 바이트(v1) 또는
+//               경로 -> 바이트 Map(v2)이고, 판정은 machineHome이 meta.version으로 한다
 //   wrapHomeError : home 메타 파손을 이 층의 오류 코드로 감싸는 함수(층마다 어휘가 다르다)
 export function materializeHeapGeneration({ rt, reactive, label, heapLen, sp, pages, home = null, wrapHomeError = null }) {
   const mem = rt.memory;
@@ -40,9 +41,9 @@ export function materializeHeapGeneration({ rt, reactive, label, heapLen, sp, pa
   mem.stackRestore(sp);
   let appliedHome = null;
   if (home) {
-    try { validateMachineHomeMeta(home.meta, home.bytes.length); }
+    try { validateMachineHomeMeta(home.meta, home.payload); }
     catch (error) { throw wrapHomeError ? wrapHomeError(error) : error; }
-    appliedHome = applyMachineHome(rt.fs, home.meta, home.bytes);
+    appliedHome = applyMachineHome(rt.fs, home.meta, home.payload);
   }
   reactive.checkpoint(); // 부활 상태를 새 경계로
   return { pages: pageCount, mb: bytesToMb(writtenBytes || pageCount * PAGE_SIZE), home: appliedHome };

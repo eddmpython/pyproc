@@ -63,7 +63,7 @@ export async function applyLegacyGeneration({ head, rt, reactive, blobs, boundar
     try {
       const bin = key ? await blobs.read(key, readCache) : new Uint8Array(0);
       if (key && !(await verifySha256(bin, key)).ok) throw corrupt(`journal.recover: home blob is corrupt (${key.slice(0, 12)}..)`);
-      validateMachineHomeMeta(meta, bin.length);
+      validateMachineHomeMeta(meta, bin);
       homePayload = { meta, bin };
     } catch (e) {
       if (e && e.code === "PYPROC_JOURNAL_CORRUPT") throw e;
@@ -74,7 +74,7 @@ export async function applyLegacyGeneration({ head, rt, reactive, blobs, boundar
   const applied = materializeHeapGeneration({
     rt, reactive, label: "journal.recover",
     heapLen: head.heapLen, sp: head.sp, pages: buffered,
-    home: homePayload ? { meta: homePayload.meta, bytes: homePayload.bin } : null,
+    home: homePayload ? { meta: homePayload.meta, payload: homePayload.bin } : null,
     wrapHomeError: (e) => corrupt(`journal.recover: home generation is corrupt (${String(e.message || e).slice(-180)})`, e),
   });
   return {
