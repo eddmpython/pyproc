@@ -95,6 +95,17 @@ try {
   // 안에 전부 숨는다(bootMs 상한은 실측의 12배다). 힙 자체가 이 제품의 정체성이므로 그 크기를 잰다.
   timings.bootHeapBytes = pm.runtime.memory.byteLength();
   check("boot()", true, timings.bootMs + "ms" + (INDEX ? " @" + INDEX : ""));
+  // 동시 부팅 실측. 기본 부팅은 coreIntegrity 기본값 때문에 항상 코어 캐시 창을 열고, 그 창은
+  // 탭 전역 체인이라 두 부팅이 서로를 기다린다. 그 사실을 숫자로 남긴다: 비율이 2에 가까우면
+  // 직렬, 1에 가까우면 겹친 것이다. 판정이 아니라 관측이고, 계약 실태 표가 그것을 인용한다.
+  const concurrentStart = performance.now();
+  const [cbA, cbB] = await Promise.all([boot({ indexURL: INDEX, assetIntegrity }), boot({ indexURL: INDEX, assetIntegrity })]);
+  timings.concurrentBootMs = Math.round(performance.now() - concurrentStart);
+  check("boot: 두 머신 동시 부팅이 완료된다",
+    cbA.run("1 + 1") === 2 && cbB.run("2 + 2") === 4,
+    `동시 ${timings.concurrentBootMs}ms / 단일 ${timings.bootMs}ms = ${(timings.concurrentBootMs / Math.max(1, timings.bootMs)).toFixed(2)}배`);
+  await cbA.dispose();
+  await cbB.dispose();
   if (!INDEX) {
     const engineURL = new URL(rt.indexURL, location.href);
     const engineScript = [...document.scripts].find((script) => script.src === new URL("pyodide.js", engineURL).href);
@@ -719,6 +730,22 @@ try {
   let deadErr = null;
   try { await os.exec(victim, "def _fn(arg):\n    return 1"); } catch (e) { deadErr = e; }
   check("PyProcError: dead pid 거부 코드", !!deadErr && deadErr.code === "PYPROC_PROCESS_UNAVAILABLE", deadErr && deadErr.code);
+
+  // proc 풀 memoize 계약: 원시값은 값으로, 객체는 참조 동일성으로 구분한다. 후자가 계약인
+  // 이유는 객체 옵션에 함수가 들어갈 수 있어 구조 비교가 일반적으로 성립하지 않기 때문이다.
+  // 그 사실이 게이트로 굳어야 소비자가 "같은 모양이면 같은 풀"이라고 잘못 기대하지 않는다.
+  {
+    const memoMachine = await boot({ indexURL: INDEX, assetIntegrity });
+    const poolA = await memoMachine.proc({ lanes: 1 });
+    const poolB = await memoMachine.proc({ lanes: 1 });
+    const sharedReplay = { seed: 1 };
+    const jobsA = await memoMachine.jobs({ workers: 2, replay: sharedReplay });
+    const jobsB = await memoMachine.jobs({ workers: 2, replay: sharedReplay });
+    check("proc 풀 memoize: 원시값 옵션은 값으로, 객체 옵션은 참조로 구분한다",
+      poolA === poolB && jobsA === jobsB,
+      `원시값 재사용 ${poolA === poolB}, 같은 참조 재사용 ${jobsA === jobsB}`);
+    await memoMachine.dispose();
+  }
 
   const snapshotBeforeTerminate = os._snapshot; // 내부 필드가 이 회수의 유일한 관측점이다
   os.terminate();

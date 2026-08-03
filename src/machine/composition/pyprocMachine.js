@@ -163,6 +163,11 @@ export class PyprocMachine {
   //    풀이어야 한다. 머신당 하나로 강제하면 두 번째 호출의 옵션이 조용히 버려진다(실측: 제품
   //    소비자 게이트의 잡 컨트롤 경로가 그렇게 깨졌다).
   // dispose()가 이 캐시의 모든 풀을 회수한다.
+  //
+  // 계약(명시): 원시값 옵션은 값으로, 객체와 함수 옵션은 **참조 동일성**으로 구분한다. 객체
+  // 옵션(예: jobs의 replay)에 함수가 들어갈 수 있어 구조 비교가 일반적으로 성립하지 않기
+  // 때문이다. 그래서 같은 모양의 새 객체 리터럴을 매 호출 넘기면 매번 새 풀이 붙는다.
+  // 소비자는 그 옵션 객체를 한 번 만들어 재사용해야 한다. 브라우저 게이트가 두 방향을 문다.
   async proc(opts = {}) {
     const key = JSON.stringify(Object.keys(opts).sort().map((name) => [name, describeOption(opts[name])]));
     if (!this._procPools) this._procPools = new Map();
