@@ -1284,6 +1284,24 @@ check("경계 지문 계산은 boundaryDigest 한 곳이다", () => {
   }
   if (holders.length) throw new Error(`경계 지문 계산 사본: ${holders.join(", ")}`);
 });
+// presence 정책(만료, 자기 자신 불멸, 정렬된 목록)은 순수 자료구조다. 시계를 주입할 수 있으므로
+// 실 함수로 판정한다: 선출 프로토콜 전체를 띄우지 않고 이 규칙만 시험하는 것이 맞는 층이다.
+await checkAsync("presence: 만료는 남을 지우고 자기 자신은 지우지 않는다", async () => {
+  const { KernelPresence } = await import(pathToFileURL(join(ROOT, "src", "session", "kernel", "kernelPresence.js")).href);
+  let clock = 1000;
+  const presence = new KernelPresence("self", 500, () => clock);
+  presence.note("self").note("peerA").note("peerB");
+  if (presence.liveIds().join(",") !== "peerA,peerB,self") throw new Error("정렬된 목록 불일치");
+  clock += 600;
+  presence.note("peerA", clock); // peerA만 다시 보였다
+  presence.expire(clock);
+  const alive = presence.liveIds(clock);
+  if (!alive.includes("peerA")) throw new Error("최근에 본 참가자를 지웠다");
+  if (alive.includes("peerB")) throw new Error("만료된 참가자가 남았다");
+  if (!alive.includes("self")) throw new Error("자기 자신이 만료됐다(자기가 자기를 못 보는 상태는 없다)");
+  presence.remove("peerA");
+  if (presence.liveIds(clock).includes("peerA")) throw new Error("명시 제거가 듣지 않았다");
+});
 section("오류 계약");
 // 오류 message와 API 반환 문자열은 소비자가 콘솔·이슈·로그에서 읽는 공개 표면이다. 규칙은
 // 공개 표면 영문 우선이고, 실제로 한 파일 안에서 갈려 있었다(operationControl은 한 템플릿

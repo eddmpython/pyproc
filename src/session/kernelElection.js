@@ -5,6 +5,7 @@
 // commit 경계에서 힙과 /home/web을 함께 복구한다. SharedWorker와 달리 문서의 COI/SAB를 유지한다.
 import { bootSession } from "./session.js";
 import { OUTCOME_LOG_MAX_RECORDS, appendOutcomeRecord, decodeOutcomeLog, encodeOutcomeLog, findOutcome } from "../state/outcomeLog.js";
+import { KernelPresence } from "./kernel/kernelPresence.js";
 import { MachineJournal } from "../capabilities/journal/machineJournal.js";
 import { PyProcError } from "../runtime/errors.js";
 import { hexFromBytes, sha256Hex } from "../runtime/contentDigest.js";
@@ -98,7 +99,7 @@ export class KernelElection {
     this._commandChain = Promise.resolve();
     // 세대가 나르는 결과 기록. 승계자가 "그 명령이 실행됐는가"에 답할 수 있게 하는 유일한 근거다.
     this._outcomes = [];
-    this._participants = new Map();
+    this._presence = new KernelPresence(this.participantId, this._presenceTimeoutMs);
     this._readyWaiters = new Set();
     this._releaseLeader = null;
     this._lockAbort = null;
@@ -116,7 +117,7 @@ export class KernelElection {
     this._left = false;
     this._chan = new BroadcastChannel(this._chanName);
     this._chan.onmessage = (event) => this._onChannel(event.data);
-    this._participants.set(this.participantId, Date.now());
+    this._presence.note(this.participantId);
     this._setState({ role: "pending", phase: "joining" });
     this._post({ type: "hello", participantId: this.participantId });
     this._heartbeatTimer = setInterval(() => this._heartbeat(), this._heartbeatMs);
@@ -192,7 +193,7 @@ export class KernelElection {
       }
       this._servingLeader = true;
       this._phase = "ready";
-      this._participants.set(this.participantId, Date.now());
+      this._presence.note(this.participantId);
       this._notify();
       this._settleReady();
       this._announceLeader(true);
@@ -217,10 +218,7 @@ export class KernelElection {
   _heartbeat() {
     if (!this._chan || this._left) return;
     const time = Date.now();
-    this._participants.set(this.participantId, time);
-    for (const [id, seenAt] of this._participants) {
-      if (id !== this.participantId && time - seenAt > this._presenceTimeoutMs) this._participants.delete(id);
-    }
+    this._presence.note(this.participantId, time).expire(time);
     this._post({ type: "presence", participantId: this.participantId });
     if (this._role === "leader") this._announceLeader(this._phase === "ready");
     this._notify();
@@ -248,7 +246,7 @@ export class KernelElection {
   _onChannel(message) {
     if (!message || message.protocol !== PROTOCOL_VERSION || message.machine !== this.name) return;
     if (message.to && message.to !== this.participantId) return;
-    if (message.participantId) this._participants.set(message.participantId, Date.now());
+    if (message.participantId) this._presence.note(message.participantId);
     if (message.type === "hello") {
       this._post({ type: "presence", participantId: this.participantId, to: message.participantId });
       if (this._role === "leader") this._announceLeader(this._phase === "ready", message.participantId);
@@ -260,7 +258,7 @@ export class KernelElection {
       return;
     }
     if (message.type === "bye") {
-      this._participants.delete(message.participantId);
+      this._presence.remove(message.participantId);
       if (message.participantId === this._leaderId && this._role !== "leader") {
         this._leaderId = null;
         this._setState({ role: "pending", phase: "joining" });
@@ -295,7 +293,7 @@ export class KernelElection {
     this._lastCommitAt = message.lastCommitAt || null;
     this._leaderBootMs = message.bootMs ?? this._leaderBootMs;
     this._recoveryMs = message.recoveryMs ?? this._recoveryMs;
-    this._participants.set(message.leaderId, Date.now());
+    this._presence.note(message.leaderId);
     if (this._role !== "leader") {
       this._role = message.ready ? "follower" : "pending";
       this._phase = message.ready ? "ready" : "recovering";
@@ -579,11 +577,7 @@ export class KernelElection {
   }
 
   status() {
-    const cutoff = Date.now() - this._presenceTimeoutMs;
-    const participants = [...this._participants.entries()]
-      .filter(([, seenAt]) => seenAt >= cutoff)
-      .map(([id]) => id)
-      .sort();
+    const participants = this._presence.liveIds();
     if (!participants.includes(this.participantId) && !this._left) participants.push(this.participantId);
     return Object.freeze({
       name: this.name,
@@ -643,7 +637,7 @@ export class KernelElection {
     this._readyWaiters.clear();
     if (this._releaseLeader) { this._releaseLeader(); this._releaseLeader = null; }
     if (this._chan) { this._chan.close(); this._chan = null; }
-    this._participants.clear();
+    this._presence.clear();
     this._leaderId = null;
     this._role = "idle";
     this._phase = "left";
