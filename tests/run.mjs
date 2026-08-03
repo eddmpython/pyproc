@@ -1255,6 +1255,22 @@ await checkAsync("프로세스 테이블: 죽은 엔트리 상한이 참조를 �
     }
   }
 });
+// MachineHandle의 상태 전이 이력 상한. pause/save/resume을 반복하는 내구 소비자에서 배열이
+// 무한히 자라고, inspect를 폴링하면 매 호출이 전체 복사가 된다. created는 남기고 오래된
+// 것부터 자르며 자른 수를 센다.
+await checkAsync("MachineHandle 이력 상한: created를 남기고 오래된 것부터 자른다", async () => {
+  const { MachineHandle } = await import(pathToFileURL(join(ROOT, "src", "machine", "host", "machineHandle.js")).href);
+  const handle = Object.create(MachineHandle.prototype);
+  handle.epoch = 1;
+  handle._history = [{ event: "created", state: "created", epoch: 1 }];
+  handle._historyTruncated = 0;
+  for (let i = 0; i < 500; i += 1) handle._note({ event: `step${i}`, state: "ready", epoch: 1 });
+  if (handle._history.length > 200) throw new Error(`이력이 상한 없이 자랐다: ${handle._history.length}`);
+  if (handle._history[0].event !== "created") throw new Error("created 엔트리가 잘렸다");
+  if (handle._historyTruncated <= 0) throw new Error("자른 수를 세지 않았다");
+  const last = handle._history[handle._history.length - 1];
+  if (last.event !== "step499") throw new Error("최근 엔트리가 남지 않았다");
+});
 section("오류 계약");
 // 오류 message와 API 반환 문자열은 소비자가 콘솔·이슈·로그에서 읽는 공개 표면이다. 규칙은
 // 공개 표면 영문 우선이고, 실제로 한 파일 안에서 갈려 있었다(operationControl은 한 템플릿

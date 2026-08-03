@@ -8,6 +8,8 @@ function copyRecord(value) {
   return { ...value };
 }
 
+const HISTORY_MAX = 128; // 상태 전이 이력의 상한. 그 위는 오래된 것부터 자르고 수를 센다.
+
 export class MachineHandle {
   constructor(host, { machineId, adapterId, manifest, permissions, instanceId }) {
     this._host = host;
@@ -23,11 +25,23 @@ export class MachineHandle {
     this._capabilities = null;
     this._context = null;
     this._history = [{ event: "created", state: "created", epoch: this.epoch }];
+    this._historyTruncated = 0;
     this._commands = new CommandQueue({
       machineId,
       instanceId,
       readFence: () => ({ ownerId: this.ownerId, epoch: this.epoch }),
     });
+  }
+
+  // 이력은 상한을 갖는다. pause/save/resume을 반복하는 내구 소비자에서 배열이 무한히 자라고,
+  // inspect를 폴링하는 UI가 있으면 매 호출이 전체 복사가 된다. 자르는 쪽은 오래된 것이고
+  // created 엔트리는 남긴다(그것이 없으면 이력이 어디서 시작했는지 알 수 없다).
+  _note(entry) {
+    this._history.push(entry);
+    if (this._history.length <= HISTORY_MAX) return;
+    const drop = this._history.length - HISTORY_MAX;
+    this._history.splice(1, drop);
+    this._historyTruncated += drop;
   }
 
   get history() {
@@ -55,14 +69,14 @@ export class MachineHandle {
     }
     this.ownerId = nextOwnerId;
     this.epoch = epoch;
-    this._history.push({ event: "ownershipAdopted", state: this.state, ownerId: this.ownerId, epoch: this.epoch });
+    this._note({ event: "ownershipAdopted", state: this.state, ownerId: this.ownerId, epoch: this.epoch });
     return Object.freeze({ ownerId: this.ownerId, epoch: this.epoch });
   }
 
   invalidateOwnership(reason = "owner lost") {
     this.ownerId = null;
     this.epoch += 1;
-    this._history.push({ event: "ownershipInvalidated", state: this.state, epoch: this.epoch, reason: String(reason) });
+    this._note({ event: "ownershipInvalidated", state: this.state, epoch: this.epoch, reason: String(reason) });
     return this.epoch;
   }
 
@@ -123,7 +137,7 @@ export class MachineHandle {
         instanceId: this.instanceId,
         payload: await this._adapter.snapshot(control),
       });
-      this._history.push({
+      this._note({
         event: "snapshotted",
         state: this.state,
         epoch: this.epoch,
@@ -209,7 +223,7 @@ export class MachineHandle {
 
   _setState(state, event) {
     this.state = state;
-    this._history.push({ event, state, epoch: this.epoch });
+    this._note({ event, state, epoch: this.epoch });
   }
 
   _enqueue(label, operation, options) {
