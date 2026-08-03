@@ -69,8 +69,8 @@
 
     // 5) 패키지 설치: 순수 파이썬 wheel을 라이브 세션에 installWheel -> import(브라우저판 pip).
     //    단일 모듈(six) + 중첩 패키지(packaging, stdlib만 의존하는 실 작업)로 두 경로를 가드한다.
-    //    wheel 자산은 wasiPackages 캠페인에 있다(미추적). 없으면 SKIP. 재현: 그 README 레시피.
-    const wheelDir = "../attempts/wasiPackages/";
+    //    wheel 자산은 미추적이다(서드파티 바이트). 없으면 SKIP. 받는 법은 그 폴더 README에 있다.
+    const wheelDir = "./wasiWheels/";
     const sixResp = await fetch(wheelDir + "six-1.17.0-py2.py3-none-any.whl").catch(() => ({ ok: false }));
     const pkgResp = await fetch(wheelDir + "packaging-26.2-py3-none-any.whl").catch(() => ({ ok: false }));
     if (sixResp.ok && pkgResp.ok) {
@@ -83,7 +83,7 @@
       const pg = await s.run("from packaging.version import Version\nprint(Version('2.0') > Version('1.9.9'), Version('1.9.9').micro)");
       check("installWheel(중첩 패키지 wheel: packaging) -> 실작업", pg.trim() === "True 9", `설치 ${timings.installMs}ms`);
     } else {
-      check("SKIP: wheel 자산 없음(tests/attempts/wasiPackages README 레시피)", true);
+      check("SKIP: wheel 자산 없음(tests/browser/wasiWheels README 레시피)", true);
     }
     // 정직한 경계(재구성): "C 확장 불가"가 아니라 "동적은 불가, 정적은 이미 됨".
     // (a) 동적 C 확장(.so를 런타임에 dlopen)은 불가 - WASI엔 dlopen이 없다. EXTENSION_SUFFIXES는

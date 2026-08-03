@@ -17,7 +17,7 @@
 | stateKernel | `src/state/objectModel.js`, `tests/run.mjs` | 살아 있음(10이 쓸 자리) |
 | wasiPackages | `tests/browser/wasiGate.html` | 승격 필요 |
 
-**종결 6건**: `externalS1`(지식이 benchmarking.md에 승격돼 있었다)과 `branchFleet`(주석의 경로 인용을
+**종결 7건**: `externalS1`(지식이 benchmarking.md에 승격돼 있었다)과 `branchFleet`(주석의 경로 인용을
 사실 서술로 바꿔 승격했다. 숫자는 주석에 남고 과정은 git 이력이 보존한다), `engineContract`
 (WASI 매핑표를 그것을 쓰는 살아 있는 캠페인 enginePort로 옮기고 주석 인용을 사실 서술로 바꿨다),
 `numericShard`(게이트가 이 폴더의 probe를 helper 공유의 두 번째 증인으로 읽고 있었다. 삭제되는
@@ -27,9 +27,13 @@
 안의 페이지를 러너가 전부 열어야 하는데, WebGPU probe는 헤드리스에 어댑터가 없어 그 조건을
 만족할 수 없기 때문이다), `socketBridge`(**CI 레인이 이 폴더의 릴레이를 실행 자산으로 쓰고
 있었다.** `relay.mjs`를 `tests/browser/socketRelay.mjs`로, 수동 probe 4개와 워커 자산 2개를
-`tests/manualProbes/`로 옮겼다).
+`tests/manualProbes/`로 옮겼다), `wasiPackages`(**게이트가 이 폴더를 wheel 자산 경로로 읽고
+있었다.** 자산을 `tests/browser/wasiWheels/`로 옮기고 받는 법 레시피를 그 폴더 README로 승격했다.
+gitignore 규칙도 함께 옮겼다).
 
-**결론: 나머지 8개는 지금 지울 수 없다.** 이유가 폴더마다 다르지 않다:
+**결론: 남은 8개는 규칙상 지울 수 없다.** 전부 종결되지 않은 캠페인이다(진행 중 판정이거나
+북극성의 열린 다음 수이거나 09와 10이 쓸 실측 자리다). 규칙은 '종결 시 삭제'이므로 이들을 지우는
+것은 규칙 위반이지 미완료가 아니다. 이유가 폴더마다 다르지 않다:
 출하 코드와 문서가 그 폴더의 probe를 "실측 정본"으로 인용하고, 북극성 원장은 `gpuCompute`의
 probe 파일을 축 증거로 등재하고 있다. 규칙은 "종결 시 폴더째 삭제하고 지속 계약만 docs에
 남긴다"인데, 지금 상태는 **지속 계약이 아니라 실측 자체가 삭제 대상 폴더에 산다.**
