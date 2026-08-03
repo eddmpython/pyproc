@@ -7,7 +7,6 @@ import { PyodideEngine } from "./engines/pyodideEngine.js";
 import { FileSystem } from "./fileSystem.js";
 import { PyProcError } from "./errors.js";
 import { runWithGlobalPatch } from "./globalPatch.js";
-import { verifySri } from "./contentDigest.js";
 import {
   ENGINE_CAPABILITIES,
   assertEngineContract,
@@ -22,36 +21,9 @@ import {
 
 export { MemoryCapability, PAGE_SIZE } from "./memoryCapability.js";
 export { checkEnvironment } from "./preflight.js";
+import { createCoreAssetCache, normalizeCoreIntegrity } from "./coreAssetCache.js";
 
 export { DEFAULT_INDEX } from "./pyodideDistribution.js";
-
-function normalizeCoreIntegrity(policy) {
-  if (!policy) return null;
-  const files = policy.files || policy;
-  return { files, required: policy.required !== false };
-}
-
-function expectedCoreIntegrity(policy, url, name) {
-  if (!policy) return null;
-  const href = new URL(url, location.href).href;
-  const pathname = new URL(href).pathname;
-  let relative = null;
-  const indexRoot = policy.indexURL ? new URL(policy.indexURL, location.href).href : "";
-  if (indexRoot && href.startsWith(indexRoot)) relative = href.slice(indexRoot.length);
-  return policy.files[href]
-    || policy.files[url]
-    || policy.files[pathname]
-    || policy.files[pathname.replace(/^\/+/, "")]
-    || (relative ? policy.files[relative] : null)
-    || policy.files[name]
-    || null;
-}
-
-function failIntegrity(cache, err) {
-  const e = err instanceof Error ? err : new PyProcError("PYPROC_ASSET_INTEGRITY", String(err));
-  if (cache.rejectIntegrity) cache.rejectIntegrity(e);
-  throw e;
-}
 
 // 엔진 스크립트 1회 로드(전역 loadPyodide 확보). boot/bootEnv/PyProc 공용.
 // 진행 중 로드는 공유한다: 동시 첫 호출이 script 태그를 중복 삽입하지 않게(부팅 동시성 수리).
@@ -87,7 +59,24 @@ export function ensureEngineScript(indexURL, opts = {}) {
 }
 
 // 코어 자산 MIME(캐시 서빙용). instantiateStreaming이 wasm 타입을 요구한다.
-const CORE_MIME = { ".wasm": "application/wasm", ".zip": "application/zip", ".json": "application/json", ".js": "text/javascript", ".mjs": "text/javascript" };
+
+// 엔진 신뢰 규칙 한 자리. 검증이 파생 앞에 온다: 예전에는 두 파생값을 계산한 뒤에 검증이 와서
+// "잘못된 조합"이 이미 정책으로 굳은 다음에야 거부됐다.
+function resolveEngineTrust(opts, indexURL) {
+  if (opts.loadPyodide && opts.engineScriptIntegrity) {
+    throw new PyProcError("PYPROC_INPUT_INVALID", "engineScriptIntegrity applies only when pyproc loads pyodide.js itself.");
+  }
+  // 기본 부팅은 package에 박힌 trust anchor로 core graph를 검증한다. 자체 engine loader는 다른
+  // engine일 수 있으므로 명시 policy가 없으면 Pyodide hash를 강제하지 않는다.
+  const selfLoaded = Boolean(opts.loadPyodide);
+  const corePolicy = opts.coreIntegrity === undefined && !selfLoaded ? DEFAULT_CORE_INTEGRITY : opts.coreIntegrity;
+  const coreIntegrity = normalizeCoreIntegrity(corePolicy);
+  if (coreIntegrity) coreIntegrity.indexURL = indexURL;
+  const engineScriptIntegrity = opts.engineScriptIntegrity === undefined && !selfLoaded
+    ? DEFAULT_ENGINE_SCRIPT_INTEGRITY
+    : opts.engineScriptIntegrity || null;
+  return { coreIntegrity, engineScriptIntegrity };
+}
 
 export async function boot(opts = {}) {
   const indexURL = opts.indexURL || DEFAULT_INDEX;
@@ -99,52 +88,12 @@ export async function boot(opts = {}) {
   // 조용히 우회하지 않는다: 로컬 캐시도 실행 바이트이므로 파손이면 부팅을 멈춘다.
   // 기본 부팅은 package에 박힌 trust anchor로 core graph를 검증한다. 자체 engine loader는
   // 다른 engine일 수 있으므로 명시 policy가 없으면 Pyodide hash를 강제하지 않는다.
-  const corePolicy = opts.coreIntegrity === undefined && !opts.loadPyodide
-    ? DEFAULT_CORE_INTEGRITY
-    : opts.coreIntegrity;
-  const coreIntegrity = normalizeCoreIntegrity(corePolicy);
-  if (coreIntegrity) coreIntegrity.indexURL = indexURL;
-  const cache = opts.coreCacheDir || coreIntegrity
-    ? { dir: opts.coreCacheDir || null, hits: 0, misses: 0, verified: 0, integrityMissing: 0, integrity: coreIntegrity }
+  // 엔진 신뢰 해석은 한 자리에서 끝낸다. 예전에는 같은 규칙("자체 loader를 주면 기본 SRI를
+  // 끈다")이 함수 안 두 곳에 각각 적혀 있었고, 인자 검증은 그 두 파생값을 계산한 뒤에 왔다.
+  const trust = resolveEngineTrust(opts, indexURL);
+  const cache = opts.coreCacheDir || trust.coreIntegrity
+    ? createCoreAssetCache({ dir: opts.coreCacheDir || null, integrity: trust.coreIntegrity })
     : null;
-  const cachedFetch = cache ? async (url) => {
-    const name = new URL(url).pathname.split("/").pop();
-    const ext = name.slice(name.lastIndexOf("."));
-    const type = CORE_MIME[ext] || "application/octet-stream";
-    const expected = expectedCoreIntegrity(cache.integrity, url, name);
-    if (cache.integrity?.required && !expected) {
-      cache.integrityMissing++;
-      failIntegrity(cache, new PyProcError("PYPROC_ASSET_INTEGRITY", `integrity: ${name} is not listed in coreIntegrity`));
-    }
-    if (cache.dir) {
-      try {
-        const f = await (await cache.dir.getFileHandle(name)).getFile();
-        const data = await f.arrayBuffer();
-        if (expected) {
-          try { await verifySri(data, expected, name); cache.verified++; }
-          catch (e) { failIntegrity(cache, e); }
-        }
-        cache.hits++;
-        return new Response(data, { headers: { "Content-Type": type } });
-      } catch (e) {
-        if (String(e).includes("integrity:")) throw e;
-        // 미스 -> 네트워크
-      }
-    }
-    const resp = await (cache.orig || fetch)(url); // 감싼 fetch 재진입(무한 재귀) 방지
-    if (!resp.ok) return resp;
-    const data = await resp.arrayBuffer();
-    if (expected) {
-      try { await verifySri(data, expected, name); cache.verified++; }
-      catch (e) { failIntegrity(cache, e); }
-    }
-    if (cache.dir) {
-      const fh = await cache.dir.getFileHandle(name, { create: true });
-      const w = await fh.createWritable(); await w.write(data); await w.close();
-    }
-    cache.misses++;
-    return new Response(data, { headers: { "Content-Type": type } });
-  } : null;
   // env: 초기화 전에 CPython 환경변수로 반영된다(예: PYTHONHASHSEED=0 -> 결정적 부팅).
   // undefined로 명시 전달하면 pyodide가 env.HOME 접근에서 죽으므로 있을 때만 싣는다.
   const cfg = { indexURL, stdout: opts.stdout, stderr: opts.stderr };
@@ -154,13 +103,9 @@ export async function boot(opts = {}) {
   // opts.loadPyodide: 워커 소비자(document 없음)가 자체 import한 loadPyodide를 준다. 그러면
   // document 기반 script 로드(ensureEngineScript)를 건너뛰고 globalThis를 오염시키지 않는다.
   // 워커에서 boot의 캐시/env/packages 로직을 쓰려는 소비자의 경로.
-  const engineScriptIntegrity = opts.engineScriptIntegrity === undefined && !opts.loadPyodide
-    ? DEFAULT_ENGINE_SCRIPT_INTEGRITY
-    : opts.engineScriptIntegrity || null;
   const doLoad = opts.loadPyodide
     ? () => opts.loadPyodide(cfg)
-    : async () => { await ensureEngineScript(indexURL, { integrity: engineScriptIntegrity }); return loadPyodide(cfg); };
-  if (opts.loadPyodide && opts.engineScriptIntegrity) throw new PyProcError("PYPROC_INPUT_INVALID", "engineScriptIntegrity applies only when pyproc loads pyodide.js itself.");
+    : async () => { await ensureEngineScript(indexURL, { integrity: trust.engineScriptIntegrity }); return loadPyodide(cfg); };
   let py;
   if (cache) {
     // 코어 캐시의 fetch 랩은 전역 패치 창이다: 단독 boot는 공용 체인으로 직렬화하고,
@@ -168,8 +113,7 @@ export async function boot(opts = {}) {
     const patchScope = opts.patchScope || runWithGlobalPatch;
     py = await patchScope(async () => {
     const fetchOrig = globalThis.fetch;
-    cache.orig = fetchOrig;
-    const integrityFailure = new Promise((_, reject) => { cache.rejectIntegrity = reject; });
+    cache.setOriginalFetch(fetchOrig);
     const loadAll = async () => {
       const loaded = await doLoad();
       if (opts.packages && opts.packages.length) await loaded.loadPackage(opts.packages);
@@ -178,10 +122,10 @@ export async function boot(opts = {}) {
     globalThis.fetch = (input, init) => {
       const u = typeof input === "string" ? input : (input && input.url) || String(input);
       const href = new URL(u, globalThis.location?.href || indexRoot).href;
-      return href.startsWith(indexRoot) ? cachedFetch(href) : fetchOrig(input, init);
+      return href.startsWith(indexRoot) ? cache.fetchAsset(href) : fetchOrig(input, init);
     };
     try {
-      return await Promise.race([loadAll(), integrityFailure]);
+      return await Promise.race([loadAll(), cache.integrityFailure]);
     } finally { globalThis.fetch = fetchOrig; }
     });
   } else {
@@ -189,7 +133,7 @@ export async function boot(opts = {}) {
     if (opts.packages && opts.packages.length) await py.loadPackage(opts.packages);
   }
   const rt = new Runtime(new PyodideEngine(py), indexURL, { assetIntegrity: opts.assetIntegrity || null });
-  if (cache) rt.coreCache = { hits: cache.hits, misses: cache.misses, verified: cache.verified, integrityMissing: cache.integrityMissing }; // 부팅 자산 캐시/검증 통계
+  if (cache) rt.coreCache = { ...cache.stats }; // 부팅 자산 캐시/검증 통계
   return rt;
 }
 
