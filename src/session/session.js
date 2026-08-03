@@ -23,12 +23,8 @@ import { DETERMINISTIC_RESEED_SOURCE, runWithGlobalPatch, stubDeterministicBootS
 import { PAGE_SIZE, bytesToMb } from "../runtime/memoryLayout.js";
 import { unpackPages } from "../runtime/heapDelta.js";
 import { sha256Hex } from "../runtime/contentDigest.js";
-import {
-  decodeMachineEnvelope,
-  validateManifest,
-  validateMeta,
-} from "./machineImage.js";
-import { machineSigningMaterial, verifyMachineSignature } from "./machineSignature.js";
+import { validateManifest, validateMeta } from "./machineImage.js";
+import { machineSigningMaterial } from "./machineSignature.js";
 import { MemoryStateStore } from "../state/memoryStateStore.js";
 import { commitState, openState } from "../state/refProtocol.js";
 import { STATE_TAG_ALG, makeStateTag, verifyStateTag } from "../state/signedTag.js";
@@ -39,12 +35,7 @@ export { createMachineKeyPair, exportMachinePublicKey, fingerprintMachinePublicK
 import { WheelCache } from "../capabilities/wheelCache.js";
 import { materializeHeapGeneration } from "../capabilities/heapMaterialize.js";
 import { requirePortableHeap } from "../capabilities/imagePortability.js";
-import {
-  DEFAULT_MACHINE_HOME_PATH,
-  applyMachineHome,
-  collectMachineHome,
-  validateMachineHomeMeta,
-} from "../capabilities/machineHome.js";
+import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome } from "../capabilities/machineHome.js";
 
 // 결정적 부팅 구간은 전역(엔트로피/시간)을 패치하므로 전역 패치 체인에서 하나만 진입한다.
 // 두 bootSession(또는 boot 코어 캐시/wheel 캐시의 fetch 스왑)이 겹치면 먼저 끝난 쪽이
@@ -256,10 +247,6 @@ export class Session {
       heapLen: meta.heapLen, sp: meta.sp, pages: staged,
     });
     return { pages: applied.pages, mb: applied.mb };
-  }
-
-  _applyHome(home, bin) {
-    return applyMachineHome(this.rt.fs, home, bin);
   }
 
   // 커널 세대(openState 결과) 적용: 검증(verify-on-read, h0 대조)은 커널이 끝냈고, 여기는

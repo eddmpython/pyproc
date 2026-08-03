@@ -12,14 +12,6 @@ import {
   fingerprintStatePublicKey,
   verifyStateDigest,
 } from "../state/signedTag.js";
-import { unsignedEnvelope } from "./machineImage.js";
-import { bytesFromBase64 } from "../runtime/contentDigest.js";
-
-// 형식 판정은 이 층의 오류 어휘로 하고, 바이트 변환은 코덱 코어가 한다(폴백 포함).
-function base64UrlToBytes(s) {
-  if (typeof s !== "string" || !/^[A-Za-z0-9_-]+$/.test(s)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "machine: signature is not valid base64url");
-  return bytesFromBase64(s, { urlSafe: true });
-}
 
 function isCryptoKey(k) {
   return typeof CryptoKey !== "undefined" && k instanceof CryptoKey;
@@ -51,36 +43,4 @@ export async function machineSigningMaterial(opts) {
   if (!isCryptoKey(privateKey)) throw new PyProcError("PYPROC_INPUT_INVALID", "history.export: signingKey must be a private CryptoKey");
   if (!publicKey) throw new PyProcError("PYPROC_INPUT_INVALID", "history.export: publicKey or a CryptoKeyPair is required");
   return { privateKey, publicKey: await exportMachinePublicKey(publicKey) };
-}
-
-// ---- 구 .pymachine signature v1 reader (읽기 전용, 다음 브레이킹 릴리즈에 일몰) ----
-
-function readMachineSignature(meta) {
-  const sig = meta.signature;
-  if (sig == null) return null;
-  if (typeof sig !== "object" || sig.version !== 1) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: signature has the wrong type");
-  if (sig.algorithm !== "ECDSA-P256-SHA256") throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", `open: unsupported signature algorithm (${sig.algorithm})`);
-  if (typeof sig.envelope !== "string" || !/^[0-9a-f]{64}$/.test(sig.envelope)) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: signature envelope has the wrong type");
-  if (typeof sig.publicKey !== "object" || sig.publicKey === null) throw new PyProcError("PYPROC_MACHINE_FORMAT_INVALID", "open: signature publicKey has the wrong type");
-  return sig;
-}
-
-// 반환 { present, trusted }. 서명이 있는데 깨졌으면 던진다(조용한 통과 금지).
-// trusted는 opts의 신뢰 목록과 맞을 때만 참이다: 파일에 박힌 공개키로 검증되는 것은
-// "자기가 자기를 보증"하는 것이라 출처 인증이 아니다.
-export async function verifyMachineSignature(meta, bin, homeBin, opts) {
-  const sig = readMachineSignature(meta);
-  if (!sig) return { present: false, trusted: false };
-  const actual = await unsignedEnvelope(meta, bin, homeBin);
-  if (actual !== sig.envelope) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "open: envelope digest mismatch (this file is not what the signature envelope covers)");
-  const signature = base64UrlToBytes(sig.signature);
-  const validEmbedded = await verifyStateDigest(globalThis.crypto, sig.publicKey, sig.envelope, signature);
-  if (!validEmbedded) throw new PyProcError("PYPROC_MACHINE_INTEGRITY", "open: signature verification failed");
-  const trusted = [];
-  if (opts.trustedPublicKey) trusted.push(opts.trustedPublicKey);
-  if (Array.isArray(opts.trustedPublicKeys)) trusted.push(...opts.trustedPublicKeys);
-  for (const key of trusted) {
-    if (await verifyStateDigest(globalThis.crypto, key, sig.envelope, signature)) return { present: true, trusted: true };
-  }
-  return { present: true, trusted: false };
 }

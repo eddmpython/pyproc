@@ -30,17 +30,6 @@ export function toBytesWithHead(meta, bin, homeBin = new Uint8Array(0)) {
   return body;
 }
 
-function unsignedMeta(meta) {
-  const out = { ...meta };
-  delete out.signature;
-  return out;
-}
-
-// 서명 대상 해시. signature 자체는 빼고 계산하므로 무결성(봉투해시)과 출처(서명)가 분리된다.
-export async function unsignedEnvelope(meta, bin, homeBin) {
-  return sha256Hex(toBytesWithHead(unsignedMeta(meta), bin, homeBin));
-}
-
 // 저장 메타(헤더/세션 파일 공용)의 형식 검증: 손상·변조 파일이 예외가 아니라
 // 과대 할당·부분 복원으로 새는 것을 막는다. 위반은 전부 명시적 예외.
 export function validateMeta(meta, binLen) {

@@ -28,12 +28,7 @@ import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
 import { readJsonFile } from "./journalJsonFile.js";
 import { applyLegacyGeneration, cleanupLegacyRefs, legacyLiveKeys, readLegacyGeneration } from "./journalLegacyGeneration.js";
 import { JournalKernelStore } from "./journalKernelStore.js";
-import {
-  DEFAULT_MACHINE_HOME_PATH,
-  applyMachineHome,
-  collectMachineHome,
-  validateMachineHomeMeta,
-} from "../machineHome.js";
+import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome } from "../machineHome.js";
 
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
 const DEFAULT_AUTO_PACK_LOOSE_MB = 8;
