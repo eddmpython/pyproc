@@ -684,6 +684,15 @@ section("탐지기 자기 시험");
     if (!kept.includes("atob(")) throw new Error("문자열 뒤 코드가 잘렸다(코덱 법이 부분맹이 된다)");
     if (stripComments(`code(); // atob(x)`).includes("atob(")) throw new Error("진짜 주석을 남겼다");
   });
+  // 전처리가 두 벌이면 하나는 반드시 뒤처진다. 실제로 네 법(힙 물질화, MB 단위, 공유 헬퍼
+  // import 실존, 엔진 내부 접근 106검사)이 나이브 전처리를 쓰고 있었고, 같은 줄에 URL이 있는
+  // src 파일 6개에서 그 줄 뒤가 통째로 사라지고 있었다. 전처리는 stripComments 하나다.
+  check("법 전처리는 stripComments 하나뿐이다", () => {
+    // 바늘을 리터럴로 쓰면 이 검사 자신이 걸린다(em dash 법이 EMDASH를 조립하는 것과 같은 이유).
+    const naive = "split(" + '"' + "//" + '"' + ")[0]";
+    const own = stripComments(readFileSync(join(ROOT, "tests", "run.mjs"), "utf8"));
+    if (own.includes(naive)) throw new Error("나이브 전처리가 되살아났다(문자열 안의 //를 주석으로 본다)");
+  });
 }
 // 3.0.2) 흔적 금지의 문서·소스 절. 규칙은 "커밋 메시지/주석/문서"를 함께 덮는 절대 게이트인데
 //        집행은 commit-msg 훅 한 곳뿐이었다(외부 감사 지적, 2026-07-27: 문서와 소스 커버리지 0).
@@ -846,7 +855,7 @@ section("digest 법");
       // 워커는 fork 경로라 다른 법을 쓴다(cp0 드리프트 정화 + 델타). 여기 스코프는 부활 경로다.
       if (relPath === "src/processOs/worker.js") continue;
       if (relPath === "src/runtime/heapGrow.js") continue; // growHeapTo의 정의처
-      const code = readFileSync(f, "utf8").split("\n").map((line) => line.split("//")[0]).join("\n");
+      const code = stripComments(readFileSync(f, "utf8"));
       if (/\brestore\(\s*0\s*,/.test(code) || /growHeapTo\s*\(/.test(code)) holders.push(relPath);
     }
     if (holders.length) throw new Error(`부활 물질화 사본: ${holders.join(", ")}`);
@@ -860,7 +869,7 @@ section("digest 법");
     for (const f of collect(join(ROOT, "src"), [".js"], [])) {
       const relPath = rel(f);
       if (relPath === UNIT_CORE || relPath === VENDORED_SHIM) continue;
-      const code = readFileSync(f, "utf8").split("\n").map((line) => line.split("//")[0]).join("\n");
+      const code = stripComments(readFileSync(f, "utf8"));
       if (/1048576/.test(code)) holders.push(relPath);
     }
     if (holders.length) throw new Error(`MB 단위 사본: ${holders.join(", ")}`);
@@ -886,7 +895,7 @@ section("digest 법");
       // 심으므로(`exec(open(path).read())`) 문자열을 남기면 파이썬 호출이 JS 호출로 오인된다.
       // 템플릿 리터럴은 여러 줄에 걸치므로 줄 단위로는 못 지운다. 통째로 먼저 비운다.
       const code = source.replace(/`[^`]*`/g, '""').split("\n")
-        .map((line) => line.split("//")[0].replace(/"[^"]*"|'[^']*'/g, '""'))
+        .map((line) => stripComments(line).replace(/"[^"]*"|'[^']*'/g, '""'))
         .join("\n");
       // 파일이 "쓸 수 있는 이름" 집합: import 절(여러 줄 포함) + 선언 + 구조분해 + 인자.
       // 이름이 이 집합 안에 있으면 판정하지 않는다(오탐 0 우선: 노이즈 게이트는 무시를 학습시킨다).
@@ -926,7 +935,7 @@ section("digest 법");
     const relPath = rel(f);
     if (relPath.startsWith(ENGINE_ADAPTER_DIR)) continue;
     // 주석은 스코프 밖이다: 이 법의 근거를 주석에 쓰는 것 자체가 위반이 되면 안 된다.
-    const code = readFileSync(f, "utf8").split("\n").map((line) => line.split("//")[0]).join("\n");
+    const code = stripComments(readFileSync(f, "utf8"));
     check(`엔진 내부 접근 법: ${relPath}`, () => {
       if (ENGINE_INTERNAL.test(code)) throw new Error("엔진 내부 직접 접근(MemoryCapability 경유해야 한다)");
     });
@@ -940,7 +949,20 @@ section("state 커널");
 {
   // 순수 집합: 커널은 브라우저 저장·전역 관심사를 모른다. backend(OPFS/IndexedDB)와 정책은
   // 전부 위에서 주입된다. 이 불변식이 무너지면 통합이 결합으로 역전된다(god layer).
-  const PURE_STATE = ["objectModel.js", "refProtocol.js", "signedTag.js", "memoryStateStore.js", "outcomeLog.js"];
+  const PURE_STATE = ["bundleFormat.js", "objectModel.js", "refProtocol.js", "signedTag.js", "memoryStateStore.js", "outcomeLog.js"];
+  // 브라우저 backend는 순수 집합 밖이다. 배럴은 재수출뿐이라 판정 대상이 아니다.
+  const BROWSER_BACKED_STATE = ["opfsStateStore.js", "index.js"];
+  // 등재 강제. 이 목록이 allowlist이던 동안 bundleFormat.js가 어느 쪽에도 없어서 **아무 검사도
+  // 받지 않고 출력에도 나타나지 않았다**(빠진 파일은 침묵한다). 이제 src/state의 모든 파일이
+  // 순수 집합이나 backend 목록 중 정확히 한쪽에 있어야 하고, 새 파일은 판정을 요구받는다.
+  check("state 순수 집합 등재 강제: 모든 파일이 한쪽에 있다", () => {
+    const listed = new Set([...PURE_STATE, ...BROWSER_BACKED_STATE]);
+    const actual = readdirSync(join(ROOT, "src", "state")).filter((name) => name.endsWith(".js"));
+    const unlisted = actual.filter((name) => !listed.has(name));
+    if (unlisted.length) throw new Error(`어느 목록에도 없다(순수인지 backend인지 판정하라): ${unlisted.join(", ")}`);
+    const ghost = [...listed].filter((name) => !actual.includes(name));
+    if (ghost.length) throw new Error(`목록에 있는데 파일이 없다: ${ghost.join(", ")}`);
+  });
   const BROWSER_GLOBAL = /\b(navigator|window|document|indexedDB|localStorage|sessionStorage|crossOriginIsolated)\b|globalThis\.crypto|\bfetch\s*\(/;
   for (const name of PURE_STATE) {
     check(`state 순수 집합: ${name} 브라우저 전역 0`, () => {
