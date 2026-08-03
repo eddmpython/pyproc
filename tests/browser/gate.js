@@ -416,6 +416,15 @@ try {
     const lj = rt.enableJournal({ dir: legacyDir, reactive, includeHome: false });
     const lr = await lj.recover();
     check("journal 재기초: 구 포맷(루트 HEAD.json v2) recover 호환", !!lr && rt.run("jlx") === 7, `${lr && lr.pages}p, committedAt=${lr && lr.committedAt}`);
+    // pack/prune의 live 판정은 커널 세대와 구 세대의 **합집합**이어야 한다. legacy 갈래가 빠지면
+    // 아직 이관 안 된 저널에서 살아 있는 blob을 청소가 지운다(데이터 유실이고 조용하다).
+    // 이관 커밋 전에 prune을 돌려 그 합집합을 증명한다.
+    const legacyPruned = await lj.prune();
+    rt.run("jlx = 111"); // 어긋내야 재복구가 실제로 되돌렸다는 것이 증명된다
+    const afterPrune = await rt.enableJournal({ dir: legacyDir, reactive, includeHome: false }).recover();
+    check("journal prune: 이관 전 구 세대 blob을 live로 지킨다",
+      !!afterPrune && rt.run("jlx") === 7,
+      `live ${legacyPruned.liveKeys}, loose 삭제 ${legacyPruned.looseRemoved}, 재복구 ${afterPrune && afterPrune.pages}p`);
     const mig = await lj.commit();
     let kernelRefExists = false;
     try { await (await legacyDir.getDirectoryHandle("state")).getFileHandle("HEAD.json"); kernelRefExists = true; } catch (e) {}
