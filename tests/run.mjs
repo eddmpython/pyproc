@@ -2941,6 +2941,10 @@ check("src layer edge는 아래로만", () => {
     "src/capabilities/journal/journalBlobStore.js -> src/runtime/contentDigest.js",
     "src/capabilities/journal/journalKernelStore.js -> src/runtime/contentDigest.js",
     "src/capabilities/journal/machineJournal.js -> src/runtime/contentDigest.js",
+    // 구 포맷 reader를 별도 파일로 가르면서 함께 옮겨간 edge다. 새 예산이 아니라 이사다:
+    // machineJournal이 갖고 있던 같은 두 edge가 그 파일에서 줄어든다(은퇴 시 파일째 사라진다).
+    "src/capabilities/journal/journalLegacyGeneration.js -> src/runtime/contentDigest.js",
+    "src/capabilities/journal/journalLegacyGeneration.js -> src/runtime/errors.js",
     // machineJournal은 heapGrow를 직접 쓰지 않게 됐지만 memoryLayout(PAGE)은 남는다.
     "src/capabilities/journal/machineJournal.js -> src/runtime/memoryLayout.js",
     // 힙 물질화 법의 유일한 보관소. 성장은 파이썬 할당 경로여야 하고(heapGrow) 페이지 단위는

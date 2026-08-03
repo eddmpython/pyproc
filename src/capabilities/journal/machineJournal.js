@@ -25,6 +25,8 @@ import { commitState, openState } from "../../state/refProtocol.js";
 import { decodeStateObject, validateStateCommit, validateStateTree } from "../../state/objectModel.js";
 import { materializeHeapGeneration } from "../heapMaterialize.js";
 import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
+import { readJsonFile } from "./journalJsonFile.js";
+import { applyLegacyGeneration, cleanupLegacyRefs, legacyLiveKeys, readLegacyGeneration } from "./journalLegacyGeneration.js";
 import { JournalKernelStore } from "./journalKernelStore.js";
 import {
   DEFAULT_MACHINE_HOME_PATH,
@@ -189,21 +191,13 @@ export class MachineJournal {
   stop() { if (this._timer) { clearInterval(this._timer); this._timer = null; } }
 
   async _readMarker() {
-    let text;
-    try { text = await (await (await this._dir.getFileHandle(JOURNAL_MARKER_FILE)).getFile()).text(); }
-    catch (e) {
-      if (e.name === "NotFoundError") return { missing: true };
-      return { corrupt: `${JOURNAL_MARKER_FILE} 읽기 실패(${e.name})` };
+    const read = await readJsonFile(this._dir, JOURNAL_MARKER_FILE);
+    if (!("value" in read)) return read; // missing | corrupt는 그대로 흐른다
+    const marker = read.value;
+    if (marker?.version !== JOURNAL_MARKER_VERSION || !["committed", "deleted"].includes(marker.state)) {
+      return { corrupt: `${JOURNAL_MARKER_FILE} 형식 위반` };
     }
-    try {
-      const marker = JSON.parse(text);
-      if (marker?.version !== JOURNAL_MARKER_VERSION || !["committed", "deleted"].includes(marker.state)) {
-        return { corrupt: `${JOURNAL_MARKER_FILE} 형식 위반` };
-      }
-      return { marker: { version: marker.version, state: marker.state } };
-    } catch (e) {
-      return { corrupt: `${JOURNAL_MARKER_FILE} JSON 파손` };
-    }
+    return { marker: { version: marker.version, state: marker.state } };
   }
 
   async _writeMarker(state) {
@@ -297,9 +291,7 @@ export class MachineJournal {
   // 삭제 실패는 커밋 성공을 물릴 사유가 아니고, 커널 refs 우선순위가 구 세대를 가린다.
   async _cleanupLegacyRefs() {
     if (this._legacyCleaned) return;
-    for (const name of ["HEAD.json", "PREV.json"]) {
-      try { await this._dir.removeEntry(name); } catch (e) {}
-    }
+    await cleanupLegacyRefs(this._dir);
     this._legacyCleaned = true;
   }
 
@@ -339,28 +331,11 @@ export class MachineJournal {
     return keys;
   }
 
-  async _readLiveHeads() {
-    const heads = [];
-    for (const name of ["HEAD.json", "PREV.json"]) {
-      const generation = await this._readGeneration(name);
-      if (generation.head) heads.push(generation.head);
-      else if (generation.corrupt) throw journalCorrupt(`journal.pack: ${generation.corrupt}`);
-    }
-    return heads;
-  }
-
-  _legacyLiveKeys(heads, keys) {
-    for (const head of heads) {
-      for (const key of Object.values(head.pages || {})) keys.add(key);
-      if (head.home && head.home.key) keys.add(head.home.key);
-    }
-    return keys;
-  }
-
   async _liveKeys() {
     const keys = new Set();
     await this._kernelLiveKeys(keys);
-    this._legacyLiveKeys(await this._readLiveHeads(), keys); // 이관 전이면 구 세대도 live다
+    // 이관 전이면 구 세대도 live다. 이 갈래가 빠지면 prune이 살아 있는 blob을 지운다.
+    await legacyLiveKeys(this._dir, keys, (why) => journalCorrupt(`journal.pack: ${why}`));
     keys.delete(null);
     return keys;
   }
@@ -398,66 +373,14 @@ export class MachineJournal {
   // ---- legacy reader: 구 포맷(루트 HEAD.json v2/v3)은 읽기만 지원한다 ----
 
   // 세대 파일 1개 판독: { head } | { missing: true } | { corrupt: 사유 }.
-  // "파일 없음"(첫 부팅)과 "파일 파손"(손상)을 구분한다: 손상을 첫 부팅으로 위장하면
-  // 저널이 있는데도 조용히 빈 머신으로 부팅하는 데이터 유실이 된다(외부 평가 적발).
-  async _readGeneration(name) {
-    let text;
-    try { text = await (await (await this._dir.getFileHandle(name)).getFile()).text(); }
-    catch (e) {
-      if (e.name === "NotFoundError") return { missing: true };
-      return { corrupt: `${name} 읽기 실패: ${e.name}` };
-    }
-    try { return { head: JSON.parse(text) }; }
-    catch (e) { return { corrupt: `${name} JSON 파손` }; }
-  }
-
-  // 구 세대 1개를 힙에 적용한다. blob은 내용 주소와 실제 바이트를 재대조해 저장 후 파손을
-  // 잡는다. h0 불일치는 손상이 아니라 환경 불일치라 즉시 던진다.
-  async _applyGeneration(head) {
-    const mem = this._rt.memory;
-    if (head.h0 && head.h0 !== await this._boundaryKey()) {
-      throw new PyProcError("PYPROC_REPLAY_MISMATCH", "journal.recover: replay-boundary fingerprint (h0) mismatch. This journal belongs to a different engine or manifest; refusing rather than silently corrupting the heap.");
-    }
-    const entries = Object.entries(head.pages);
-    const buffered = [];
-    const blobCache = new Map();
-    const readCache = {};
-    for (const [p, key] of entries) {
-      let bytes = blobCache.get(key);
-      if (!bytes) {
-        bytes = await this._blobs.read(key, readCache);
-        if (!(await verifySha256(bytes, key)).ok) throw journalCorrupt(`journal.recover: blob is corrupt (${key.slice(0, 12)}..)`);
-        blobCache.set(key, bytes);
-      }
-      buffered.push([+p, bytes]); // 전량 검증 후에 쓴다(부분 적용 상태 방지)
-    }
-    let homePayload = null;
-    if (head.home) {
-      const { key, ...meta } = head.home;
-      try {
-        const bin = key ? await this._blobs.read(key, readCache) : new Uint8Array(0);
-        if (key && !(await verifySha256(bin, key)).ok) throw journalCorrupt(`journal.recover: home blob is corrupt (${key.slice(0, 12)}..)`);
-        validateMachineHomeMeta(meta, bin.length);
-        homePayload = { meta, bin };
-      } catch (e) {
-        if (e && e.code === "PYPROC_JOURNAL_CORRUPT") throw e;
-        throw journalCorrupt(`journal.recover: home generation is corrupt (${String(e.message || e).slice(-180)})`);
-      }
-    }
-    // 물질화 순서는 heapMaterialize가 정본이다(검증은 위에서 전량 끝냈다 = 부분 적용 없음).
-    const applied = materializeHeapGeneration({
-      rt: this._rt, reactive: this._reactive, label: "journal.recover",
-      heapLen: head.heapLen, sp: head.sp, pages: buffered,
-      home: homePayload ? { meta: homePayload.meta, bytes: homePayload.bin } : null,
-      wrapHomeError: (e) => journalCorrupt(`journal.recover: home generation is corrupt (${String(e.message || e).slice(-180)})`, e),
+  // 구 세대 적용은 legacy 모듈이 한다. 여기 남는 것은 컨텍스트 주입뿐이다.
+  async _applyLegacy(head) {
+    const applied = await applyLegacyGeneration({
+      head, rt: this._rt, reactive: this._reactive, blobs: this._blobs,
+      boundaryKey: () => this._boundaryKey(), corrupt: journalCorrupt,
     });
     this._lastSeq = this._rt.execSeq;
-    return {
-      pages: applied.pages,
-      mb: applied.mb,
-      committedAt: head.committedAt || null,
-      ...(applied.home ? { home: applied.home } : {}),
-    };
+    return applied;
   }
 
   // 커널 세대 1개를 힙에 적용한다. 검증(verify-on-read, h0 대조, HEAD->PREV 후퇴)은 openState가
@@ -510,21 +433,21 @@ export class MachineJournal {
     }
     // legacy: HEAD 세대로 부활하고, HEAD가 파손이면 PREV 세대로 후퇴한다(잃는 것은 마지막
     // 커밋 하나). 둘 다 없으면 null(첫 부팅), 둘 다 파손이면 명시적 예외.
-    const cur = await this._readGeneration("HEAD.json");
-    const legacyPrev = await this._readGeneration("PREV.json");
+    const cur = await readLegacyGeneration(this._dir, "HEAD.json");
+    const legacyPrev = await readLegacyGeneration(this._dir, "PREV.json");
     if (marker?.state === "deleted") {
       if (cur.missing && legacyPrev.missing) return null;
       throw journalCorrupt("journal.recover: deleted tombstone conflicts with a legacy generation");
     }
     if (cur.head) {
-      try { return await this._applyGeneration(cur.head); }
+      try { return await this._applyLegacy(cur.head); }
       catch (e) {
         if (!e || e.code !== "PYPROC_JOURNAL_CORRUPT") throw e; // 환경 불일치는 후퇴 대상이 아니다
         cur.corrupt = e.message;
       }
     }
     if (legacyPrev.head) {
-      const r = await this._applyGeneration(legacyPrev.head);
+      const r = await this._applyLegacy(legacyPrev.head);
       r.fallback = true; // 직전 세대로 부활했음을 알린다(마지막 커밋 1개 유실)
       return r;
     }
