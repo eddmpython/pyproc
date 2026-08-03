@@ -981,6 +981,31 @@ section("state 커널");
     pages: [[0, statePage(n)], [1, statePage(n + 1)]],
     pageSize: 1024, heapLen: 2048, sp: 64, env: { h0: "h0-real" }, ...extra,
   });
+  // 오브젝트 저장은 bounded concurrency로 돈다. 병렬화가 깨뜨릴 수 있는 것은 둘이다: 페이지
+  // 표의 순서와, 같은 주소를 동시에 쓰는 경합(둘 다 hasObject=false를 보고 겹쳐 쓰면 카운터가
+  // 부푼다). 중복 페이지를 섞은 커밋으로 두 성질을 함께 단정한다.
+  await checkAsync("state 프로토콜: 병렬 저장이 순서와 카운터를 보존한다", async () => {
+    const store = new MemoryStateStore();
+    const fills = [7, 7, 9, 7, 9, 11]; // 고유 3개, 중복 3개
+    const committed = await state.commitState(provider, store, {
+      pages: fills.map((fill, index) => [index, statePage(fill)]),
+      pageSize: 1024, heapLen: 1024 * fills.length, sp: 0, env: { h0: "h0-parallel" },
+    });
+    const table = committed.pageTable;
+    if (table.length !== fills.length) throw new Error(`페이지 수 불일치: ${table.length}`);
+    for (const [index, [page]] of table.entries()) {
+      if (page !== index) throw new Error(`페이지 순서가 뒤섞였다: ${index}번째가 page ${page}`);
+    }
+    // 같은 내용은 같은 주소여야 한다(CAS). 그리고 고유 내용만 쓰여야 한다.
+    const unique = new Set(table.map(([, address]) => address));
+    if (unique.size !== 3) throw new Error(`고유 주소 수 불일치: ${unique.size}`);
+    if (committed.pagesWrote !== 3) throw new Error(`고유 페이지만 쓰지 않았다: pagesWrote ${committed.pagesWrote}`);
+    if (committed.deduped !== fills.length - 3) throw new Error(`중복 합류 수 불일치: deduped ${committed.deduped}`);
+    const opened = await state.openState(provider, store, { expectH0: "h0-parallel" });
+    for (const [index, fill] of fills.entries()) {
+      if (opened.pages.get(index)[0] !== fill) throw new Error(`page ${index} 내용 불일치`);
+    }
+  });
   await checkAsync("state 프로토콜: 정상 왕복 + dedupe", async () => {
     const store = new MemoryStateStore();
     await state.commitState(provider, store, stateInput(10));

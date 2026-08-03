@@ -34,13 +34,44 @@ function corrupt(message) {
   return new PyProcError("PYPROC_STATE_CORRUPT", message);
 }
 
-async function putObject(cryptoProvider, store, bytes, counters, bucket) {
+async function putObject(cryptoProvider, store, bytes, counters, bucket, inFlight = null) {
   const address = await stateAddressOf(cryptoProvider, bytes);
-  if (await store.hasObject(address)) { counters.deduped++; return address; }
-  await store.writeObject(address, bytes);
-  counters.wrote++;
-  counters[bucket]++;
+  // 같은 주소를 동시에 쓰는 두 호출이 둘 다 hasObject=false를 보면 같은 파일에 겹쳐 쓴다.
+  // CAS라 바이트는 같지만 카운터가 부풀고 저장소가 같은 파일을 두 번 연다. 주소별로 합류시킨다.
+  if (inFlight) {
+    const running = inFlight.get(address);
+    if (running) { await running; counters.deduped++; return address; }
+  }
+  const task = (async () => {
+    if (await store.hasObject(address)) { counters.deduped++; return; }
+    await store.writeObject(address, bytes);
+    counters.wrote++;
+    counters[bucket]++;
+  })();
+  if (inFlight) inFlight.set(address, task);
+  await task;
   return address;
+}
+
+// 동시에 띄우는 오브젝트 저장 수. 페이지마다 SHA-256과 저장소 왕복을 직렬로 기다리면 지연이
+// 오브젝트 수만큼 곱해진다(각 단계는 독립이다: 주소는 내용에서만 나오고 서로 참조하지 않는다).
+// 상한이 필요한 이유는 페이지 수천 개에서 파일 핸들이 폭발하기 때문이다. 값의 출처는 실측이
+// 아니라 보수적 선택이고, 쓰기 순서 법(blob -> tree -> commit -> PREV -> HEAD)은 단계 사이의
+// 순서라 이 병렬화가 건드리지 않는다.
+const OBJECT_WRITE_CONCURRENCY = 8;
+
+// bounded concurrency map: 입력 순서를 유지한 결과 배열을 돌려준다.
+async function mapBounded(items, limit, task) {
+  const results = new Array(items.length);
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await task(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+  return results;
 }
 
 // 커밋: input은 { pages, pageSize, heapLen, sp } 또는 { payloads }, 공통으로
@@ -57,18 +88,20 @@ export async function commitState(cryptoProvider, store, input = {}) {
     // 페이지 바이트는 lazy로 받는다: `[page, bytes]`도 `[page, () => bytes]`도 같다. 후자면
     // 호출자가 페이지 하나를 만들고 여기서 쓰고 놓으므로, 커밋 중 JS 상주가 델타 전량이 아니라
     // 페이지 하나로 내려간다(200MB 델타 커밋이 async 루프 내내 힙에 살아 있던 자리다).
-    for (const [p, source] of pages) {
+    const pageList = [...pages];
+    const inFlight = new Map();
+    const addresses = await mapBounded(pageList, OBJECT_WRITE_CONCURRENCY, async ([p, source]) => {
       // 호출자가 "이 페이지는 이미 이 주소에 저장돼 있다"를 단언할 수 있다. 그 단언이 틀리면
       // tree가 없는 오브젝트를 가리키므로, 단언은 같은 저장소에 대한 직전 커밋의 성공과
       // 페이지 해시 불변을 함께 확인한 쪽만 할 수 있다(저널의 주소 캐시가 그 조건이다).
       if (source && typeof source === "object" && typeof source.address === "string") {
-        table.push([p, source.address]);
         counters.reused++;
-        continue;
+        return source.address;
       }
       const bytes = typeof source === "function" ? source() : source;
-      table.push([p, await putObject(cryptoProvider, store, bytes, counters, "pagesWrote")]);
-    }
+      return putObject(cryptoProvider, store, bytes, counters, "pagesWrote", inFlight);
+    });
+    for (const [index, [p]] of pageList.entries()) table.push([p, addresses[index]]);
     const fileEntries = [];
     for (const { id, bytes, meta = null } of files) {
       fileEntries.push({ id, address: await putObject(cryptoProvider, store, bytes, counters, "filesWrote"), byteLength: bytes.length, meta });
