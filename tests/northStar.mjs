@@ -358,7 +358,7 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
     manual: Object.freeze([
-      Object.freeze({ path: "tests/attempts/gpuCompute/gpuPythonProbe.html", why: "headless CI has no WebGPU adapter, so shader byte identity is the ceiling" }),
+      Object.freeze({ path: "tests/manualProbes/gpuPythonProbe.html", why: "headless CI has no WebGPU adapter, so shader byte identity is the ceiling" }),
     ]),
     next: Object.freeze([
       Object.freeze({

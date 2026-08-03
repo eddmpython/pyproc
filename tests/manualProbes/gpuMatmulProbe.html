@@ -12,7 +12,7 @@ f32 A@B를 GPU 컴퓨트 셰이더로: SAB view writeBuffer 업로드 -> 타일�
 <h1>probe: WebGPU 컴퓨트 matmul (Phase 2 - f32 대규모 선형대수)</h1>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { PyProc } from "../../../index.js";
+  import { PyProc } from "../../index.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };

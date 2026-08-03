@@ -10,7 +10,7 @@ gc.array(f32)로 업로드 -> a.matmul(b)는 GPU 잔류 새 핸들 -> chain -> t
 <body>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { GpuCompute } from "../../../index.js";
+  import { GpuCompute } from "../../index.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };

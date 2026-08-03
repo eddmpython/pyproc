@@ -13,7 +13,7 @@
 <h1>probe: GpuArray.transpose + A.T @ B 잔류 패턴</h1>
 <pre id="out">실행 중...</pre>
 <script type="module">
-  import { GpuCompute } from "../../../index.js";
+  import { GpuCompute } from "../../index.js";
   const out = document.getElementById("out");
   const checks = []; const timings = {};
   const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };

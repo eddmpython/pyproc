@@ -2532,11 +2532,11 @@ section("북극성");
     if (!laneProblems(fixture({ manual: [{ path: "tests/browser/gate.html", why: "x" }] })).length) {
       throw new Error("CI가 부르는 것을 수동이라 적은 원장을 놓쳤다");
     }
-    if (!laneProblems(fixture({ manual: [{ path: "tests/attempts/gpuCompute/gpuPythonProbe.html" }] })).length) {
+    if (!laneProblems(fixture({ manual: [{ path: "tests/manualProbes/gpuPythonProbe.html" }] })).length) {
       throw new Error("사유 없는 수동 증거를 놓쳤다");
     }
     if (laneProblems(fixture()).length) throw new Error("CI에서 도는 레인을 불합격시켰다(오탐)");
-    if (!scoreProblems(fixture({ score: 9.5, manual: [{ path: "tests/attempts/gpuCompute/gpuPythonProbe.html", why: "x" }] })).length) {
+    if (!scoreProblems(fixture({ score: 9.5, manual: [{ path: "tests/manualProbes/gpuPythonProbe.html", why: "x" }] })).length) {
       throw new Error("수동 증거를 든 9점대 축을 놓쳤다");
     }
     if (!scoreProblems(fixture({ score: 8.25 })).length) throw new Error("소수 두 자리 점수를 놓쳤다");
