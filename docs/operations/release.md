@@ -10,7 +10,8 @@
 
 ## 릴리즈 절차 (명시 지시가 있을 때만)
 
-1. `npm test` green + 브라우저 게이트 green([testing.md](testing.md)).
+1. **릴리즈의 게이트 집합은 로컬 실행이 아니라 `publish.yml`이 도는 것이다**(`ci.yml`의 job 전부: structure, browser, edge-release, web-computer, web-machine-x86). 로컬 `npm test`와 `npm run test:browser`는 그 부분집합이고, `test:web-machine:v86`과 Edge `test:installed`는 로컬 기본 실행에 없다. 부분집합을 돌고 "게이트 green"이라 쓰지 않는다.
+1-1. **태그를 붙이기 전에 그 커밋의 `ci` 실행이 success인지 확인한다**(`gh run list --commit <sha> --workflow=ci.yml`). 태그는 푸시 뒤 옮길 수 없고(force push 금지) 붉은 커밋의 태그는 버전 번호를 태운다. 0.0.12가 그렇게 탔다: 로컬은 초록이었지만 x86 레인이 하루 넘게 붉었고 게시 관문이 막았다. `.githooks/pre-push`가 이 확인을 기계로 집행한다(gh 부재 시 fail-closed).
 2. 문서 정합: README, CHANGELOG, `docs/`, `tests/northStar.mjs`가 릴리즈 범위와 현재 공개 계약을 함께 반영했는가.
 3. `package.json` 버전 끝자리 +1 + 릴리즈 커밋(릴리즈 노트 = 커밋 메시지, 위 정책).
 4. `git tag v0.0.x` (릴리즈 커밋에, package.json과 동일 값).

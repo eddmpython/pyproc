@@ -3956,6 +3956,19 @@ section("커밋 규칙");
     const typeLine = push.split("\n").some((line) => !line.trimStart().startsWith("#") && line.includes("tests/tsconfig.json"));
     if (!typeLine) throw new Error("훅이 타입 게이트를 돌리지 않는다");
     if (!/typescript is not installed/.test(push)) throw new Error("컴파일러 부재 시 fail-closed 아님");
+    // 버전 태그는 되돌릴 수 없는 유일한 산출물이다: 옮기려면 force push가 필요한데 그것은
+    // 막혀 있으므로, 붉은 커밋에 붙은 태그는 버전 번호를 태운다. 0.0.12가 정확히 그렇게 탔다.
+    // 로컬 게이트가 초록이어도 릴리즈의 게이트 집합은 publish.yml이 도는 것이고, 그 집합에는
+    // 로컬 실행에 없는 레인이 있었다. 그래서 판정은 "그 커밋의 ci가 success인가"여야 한다.
+    const tagLines = push.split("\n").filter((line) => !line.trimStart().startsWith("#"));
+    if (!tagLines.some((line) => line.includes("refs/tags/v*"))) throw new Error("훅이 버전 태그 푸시를 갈래로 잡지 않는다");
+    if (!tagLines.some((line) => line.includes("gh run list") && line.includes("--commit"))) {
+      throw new Error("훅이 그 커밋의 ci 판정을 읽지 않는다");
+    }
+    if (!tagLines.some((line) => line.includes("verdict") && line.includes("success"))) {
+      throw new Error("훅이 success 이외를 차단하지 않는다");
+    }
+    if (!/gh not found/.test(push)) throw new Error("gh 부재 시 fail-closed 아님");
   });
   // 규칙 문장은 추적되는 문서에 있어야 한다. CLAUDE.md는 로컬 전용(.gitignore)이라 clone에
   // 없으므로 여기서 읽으면 CI에서만 RED가 된다. 기여자 문서 2판이 규칙의 공개 정본이다.

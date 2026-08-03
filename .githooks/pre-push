@@ -7,10 +7,16 @@
 # gate was RED with 9 failures, and it reached origin/main because nothing re-ran the gate.
 # Published history cannot be rewound, so the push is the last place to stop that.
 # The judgment stays in tests/run.mjs; this hook only calls it and reads the exit code.
+#   3. Block a version tag whose commit has not been proven green by the release gate set.
+# A tag is the one artifact that cannot be taken back: moving it needs a force push, which is
+# refused, so a tag on a red commit burns the version number. 0.0.12 burned exactly that way.
+# The local gates were green, but the release gate set is what publish.yml runs, and it had been
+# red on main for a day over a lane that is not part of the local run. Absent evidence is not a pass.
 allowed_remote_ref="refs/heads/main"
 allowed_local_ref="refs/heads/main"
 zero="0000000000000000000000000000000000000000"
 pushing=0
+version_tags=""
 
 while read local_ref local_sha remote_ref remote_sha
 do
@@ -29,7 +35,39 @@ do
         pushing=1
       fi
       ;;
+    refs/tags/v*)
+      # A delete push carries no commit to judge. Git already hands us the object being pushed,
+      # so carry it as "ref:sha" rather than resolving the ref name again.
+      if [ "$local_sha" != "$zero" ]; then
+        version_tags="$version_tags ${remote_ref}:${local_sha}"
+      fi
+      ;;
   esac
+done
+
+for tag_entry in $version_tags
+do
+  tag_name="${tag_entry%%:*}"
+  tag_name="${tag_name#refs/tags/}"
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "blocked: gh not found, so the release gate verdict for $tag_name cannot be read" >&2
+    echo "blocked: a version tag cannot be moved once pushed, so an unproven tag is not allowed" >&2
+    exit 1
+  fi
+  # --verify so an unresolvable object fails instead of echoing the string back: without it the
+  # sha check below reads a literal and every tag looks unproven (the first draft did exactly that).
+  tag_sha="$(git rev-parse --verify --quiet "${tag_entry##*:}^{commit}")"
+  if [ -z "$tag_sha" ]; then
+    echo "blocked: $tag_name does not resolve to a commit" >&2
+    exit 1
+  fi
+  verdict="$(gh run list --commit "$tag_sha" --workflow=ci.yml --limit 1 --json conclusion --jq '.[0].conclusion' 2>/dev/null)"
+  if [ "$verdict" != "success" ]; then
+    echo "blocked: the release gate set is not green on the commit $tag_name points at" >&2
+    echo "blocked: commit $tag_sha, ci verdict '${verdict:-none}'" >&2
+    echo "blocked: push the commit first, wait for ci to conclude success, then push the tag" >&2
+    exit 1
+  fi
 done
 
 if [ "$pushing" -eq 0 ]; then
