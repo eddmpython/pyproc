@@ -1,5 +1,7 @@
 # largeHeapEnvelope - 대형 힙에서 OS 프리미티브 비용은 어디서 무너지는가
 
+**살아 있는 이유**: 대형 힙에서 프리미티브 비용이 무너지는 지점을 재는 자리다. h0 포맷 브레이킹이 열릴 때 그 실측이 여기서 나온다.
+
 ## 가설
 
 Browser Python OS 간판의 가장 약한 지점은 기능 부재가 아니라 O(힙) 비용이다. checkpoint, restore, session save/load, journal commit/recover, fork가 500MB 이상 힙에서 어느 비용 곡선을 보이는지 실측하면 "로컬급" 주장 가능 범위를 정확히 자를 수 있다.

@@ -49,6 +49,12 @@
   스폰되는 워커의 자산 매니페스트 누락. 셋 다 게이트를 함께 냈고 음성 시험으로 이빨을 봤다.
   자산 그래프가 23파일에서 59파일로 늘었다(그 차이가 그동안 SRI preflight 밖이던 범위다).
 
+- **11 attemptsSunset 완료(2026-08-03)**: 15개 폴더 전부에 판정을 내렸다. 종결 7건은 승격 후 삭제했고
+  (externalS1, branchFleet, engineContract, numericShard, gpuCompute, socketBridge, wasiPackages), 살아 있는
+  8개는 각 README 첫 줄에 왜 살아 있는지를 적었다. 승격은 성격별로 달랐다: 주석의 경로 인용은 사실
+  서술로, 게이트의 두 번째 증인은 더 강한 법으로, 북극성 증거와 CI 실행 자산과 wheel 데이터는
+  `tests/manualProbes/`·`tests/browser/`의 정식 위치로 옮겼다.
+
 - **09 heapReclaim 완료(2026-08-03)**: 스냅샷 SAB 회수, `samePage` 워드화(fork 수확 43.6ms대에서
   7.1ms로), `collectDelta` 이중 복사 제거, 죽은 엔트리 상한과 rpc 포트 해제, 이력 상한, fork 델타의
   공유 버퍼 직접 팩까지 냈다. 조건부였던 두 항목(워커 cp0 해시 강등, 스냅샷 생성의 워커 이관)은
@@ -94,7 +100,6 @@
 | 순서 | 덩어리 | 주 축 | 선정 근거 | 입장 조건 |
 |---:|---|---|---|---|
 | 10 | [h0Break](10_h0Break/README.md) | 속도, 메모리 | h0 지문에 닿는 것 전부. 브레이킹을 한 번으로 모은다 | 명시 릴리즈 지시 + attempts 실측 |
-| 11 | [attemptsSunset](11_attemptsSunset/README.md) | 폴더구조 | attempts 15폴더가 전부 살아 있다. 증식 금지 규칙의 미집행 부채 | 없음(언제든 병렬) |
 
 ## 의존 관계
 

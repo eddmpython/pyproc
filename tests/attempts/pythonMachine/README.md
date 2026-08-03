@@ -1,5 +1,7 @@
 # pythonMachine - 파이썬 머신 캠페인 (browser-os 이니셔티브의 실측 레인)
 
+**살아 있는 이유**: 핵심 OS 질문의 실측과 src 승격이 계속되는 캠페인이다.
+
 runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지지 않고 파일 하나로 이동하는 컴퓨터.**
 세부 질문은 폴더가 아니라 probe 파일로 늘린다. 현재 공개 계약은 [패키지 계약](../../../docs/usage/contract.md), 실측 근거는 이 README와 probe가 정본이다.
 

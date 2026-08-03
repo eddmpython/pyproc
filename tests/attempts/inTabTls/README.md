@@ -1,5 +1,7 @@
 # inTabTls - terminate TLS inside the tab
 
+**살아 있는 이유**: 북극성 `브라우저 방식의 네트워크` 축의 사다리 1단(탭 안 TLS 종단)이 이 캠페인이다.
+
 One campaign, one question.
 
 ## Question

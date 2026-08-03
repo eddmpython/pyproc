@@ -1,5 +1,7 @@
 # enginePort - EngineContract를 non-Pyodide CPython이 구현할 수 있는가 (D2 관문)
 
+**살아 있는 이유**: 북극성 `엔진보다 오래 사는 프리미티브` 축의 다음 수(WASI 동적 링킹과 값 다리)가 여기서 답을 찾는다.
+
 엔진 독립성의 D2 관문 캠페인. 구현 정본은 [EngineContract](../../../src/runtime/engineContract.js),
 계약 표면의 정본은 [EngineContract](../../../src/runtime/engineContract.js)와 `index.d.ts`이고,
 WASI 매핑표는 이 문서 아래에 있다(engineContract 캠페인이 종결되면서 이리로 옮겼다).
