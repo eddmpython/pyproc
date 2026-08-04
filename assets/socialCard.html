@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!-- socialCard.html: og:image source. Regenerate the PNG with a headless Chromium screenshot:
+       msedge --headless=new --disable-gpu --hide-scrollbars --screenshot=socialCard.png
+              --window-size=1200,630 file:///.../assets/socialCard.html
+     Palette source: examples/demo.css (brand marks in assets/logo.svg). 1200x630 = og standard. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --markFrom:#247efd; --markTo:#6c38fd; --bg:#0a0f1c; --panel:#111a2e; --deep:#060b15;
+    --border:#1e2a44; --text:#e2e8f0; --dim:#94a3b8; --blue:#5b8cff; --teal:#00d4c8; --violet:#a78bfa; --red:#ff6b7c;
+  }
+  * { margin:0; box-sizing:border-box; }
+  body {
+    width:1200px; height:630px; overflow:hidden; background:var(--bg);
+    font-family: ui-monospace,'Cascadia Code',Consolas,'SF Mono',monospace; color:var(--text);
+    display:flex; flex-direction:column; justify-content:space-between; padding:64px 72px 48px;
+    position:relative;
+  }
+  .glow { position:absolute; width:760px; height:760px; border-radius:50%; filter:blur(140px); opacity:.22; }
+  .glow.a { background:var(--markFrom); top:-380px; right:-180px; }
+  .glow.b { background:var(--markTo); bottom:-420px; left:-200px; }
+  .head { display:flex; align-items:center; gap:24px; }
+  .head img { width:84px; height:84px; }
+  .head .name { font-size:56px; font-weight:700; letter-spacing:-1px; }
+  h1 { font-size:44px; line-height:1.25; font-weight:700; margin-top:34px; max-width:980px; }
+  h1 .hi { background:linear-gradient(90deg, var(--markFrom), var(--markTo)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .term {
+    margin-top:38px; background:var(--deep); border:1px solid var(--border); border-radius:12px;
+    padding:22px 26px; font-size:21px; line-height:1.75; max-width:860px;
+  }
+  .p { color:var(--blue); } .dim { color:var(--dim); } .ok { color:var(--teal); }
+  .foot { display:flex; justify-content:space-between; align-items:baseline; font-size:20px; color:var(--dim); }
+  .foot b { color:var(--text); font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="glow a"></div><div class="glow b"></div>
+  <div class="head">
+    <img src="logo.svg" alt="">
+    <div class="name">pyproc</div>
+  </div>
+  <h1>A persistent <span class="hi">Python computer</span> in your browser. Kill the tab. Reopen. It continues.</h1>
+  <div class="term">
+    <div><span class="p">&gt;</span> const m = await open({ name: "lab" })  <span class="dim">// a new tab</span></div>
+    <div><span class="dim">revived from the last committed generation</span></div>
+    <div><span class="p">&gt;</span> await m.run("counter")  <span class="dim">&rarr;</span> <span class="ok">same Python, same memory</span></div>
+  </div>
+  <div class="foot">
+    <div>real CPython &middot; processes &middot; rewindable history &middot; signed images</div>
+    <div><b>eddmpython.github.io/pyproc</b></div>
+  </div>
+</body>
+</html>
