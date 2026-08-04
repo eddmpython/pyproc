@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 470" font-family="ui-monospace,'Cascadia Code',Consolas,'SF Mono',monospace" role="img" aria-label="pyproc demo: a Python machine survives its tab being killed and rewinds its history">
+  <!-- Animated replay of the gated lifecycle (open / auto-commit / leader takeover / checkpoint-restore).
+       Every API line mirrors README quick-start code that the browser gates run in CI.
+       Palette source: examples/demo.css (brand marks in assets/logo.svg). -->
+  <style>
+    .t { font-size: 15px; fill: #e2e8f0; }
+    .dim { fill: #94a3b8; }
+    .p { fill: #5b8cff; }
+    .ok { fill: #00d4c8; }
+    .vi { fill: #a78bfa; }
+    .red { fill: #ff6b7c; }
+    .anim { opacity: 0; }
+    /* Scene windows over one 30s loop. Lines reveal inside their scene group. */
+    .s1 { animation: s1 30s linear infinite; }
+    @keyframes s1 { 0%,1% {opacity:0} 2%,26.5% {opacity:1} 28%,100% {opacity:0} }
+    .s2 { animation: s2 30s linear infinite; }
+    @keyframes s2 { 0%,29% {opacity:0} 30.5%,40.5% {opacity:1} 42%,100% {opacity:0} }
+    .s3 { animation: s3 30s linear infinite; }
+    @keyframes s3 { 0%,43% {opacity:0} 44%,67.5% {opacity:1} 69%,100% {opacity:0} }
+    .s4 { animation: s4 30s linear infinite; }
+    @keyframes s4 { 0%,70% {opacity:0} 71%,90.5% {opacity:1} 92%,100% {opacity:0} }
+    .end { animation: end 30s linear infinite; }
+    @keyframes end { 0%,92% {opacity:0} 94%,100% {opacity:1} }
+    .a1 { animation: a1 30s linear infinite; } @keyframes a1 { 0%,4% {opacity:0} 4.7%,100% {opacity:1} }
+    .a2 { animation: a2 30s linear infinite; } @keyframes a2 { 0%,8% {opacity:0} 8.7%,100% {opacity:1} }
+    .a3 { animation: a3 30s linear infinite; } @keyframes a3 { 0%,12% {opacity:0} 12.7%,100% {opacity:1} }
+    .a4 { animation: a4 30s linear infinite; } @keyframes a4 { 0%,15.5% {opacity:0} 16.2%,100% {opacity:1} }
+    .a5 { animation: a5 30s linear infinite; } @keyframes a5 { 0%,18% {opacity:0} 18.7%,100% {opacity:1} }
+    .a6 { animation: a6 30s linear infinite; } @keyframes a6 { 0%,22% {opacity:0} 22.7%,100% {opacity:1} }
+    .b1 { animation: b1 30s linear infinite; } @keyframes b1 { 0%,46% {opacity:0} 46.7%,100% {opacity:1} }
+    .b2 { animation: b2 30s linear infinite; } @keyframes b2 { 0%,50% {opacity:0} 50.7%,100% {opacity:1} }
+    .b3 { animation: b3 30s linear infinite; } @keyframes b3 { 0%,54% {opacity:0} 54.7%,100% {opacity:1} }
+    .b4 { animation: b4 30s linear infinite; } @keyframes b4 { 0%,57.5% {opacity:0} 58.2%,100% {opacity:1} }
+    .b5 { animation: b5 30s linear infinite; } @keyframes b5 { 0%,61% {opacity:0} 61.7%,100% {opacity:1} }
+    .c1 { animation: c1 30s linear infinite; } @keyframes c1 { 0%,73% {opacity:0} 73.7%,100% {opacity:1} }
+    .c2 { animation: c2 30s linear infinite; } @keyframes c2 { 0%,77% {opacity:0} 77.7%,100% {opacity:1} }
+    .c3 { animation: c3 30s linear infinite; } @keyframes c3 { 0%,81% {opacity:0} 81.7%,100% {opacity:1} }
+    .c4 { animation: c4 30s linear infinite; } @keyframes c4 { 0%,85% {opacity:0} 85.7%,100% {opacity:1} }
+    @media (prefers-reduced-motion: reduce) {
+      .anim { animation: none !important; }
+      .s3, .s3 .anim { opacity: 1 !important; }
+    }
+  </style>
+
+  <!-- window chrome -->
+  <rect x="8" y="8" width="864" height="454" rx="14" fill="#0a0f1c" stroke="#1e2a44"/>
+  <rect x="8" y="8" width="864" height="40" rx="14" fill="#111a2e"/>
+  <rect x="8" y="34" width="864" height="14" fill="#111a2e"/>
+  <circle cx="34" cy="28" r="6" fill="#ff6b7c"/>
+  <circle cx="56" cy="28" r="6" fill="#f5c518"/>
+  <circle cx="78" cy="28" r="6" fill="#00d4c8"/>
+  <text x="440" y="33" text-anchor="middle" font-size="13" fill="#94a3b8">pyproc · a browser tab</text>
+
+  <!-- scene 1: boot and build state -->
+  <g class="anim s1">
+    <text class="t anim a1" x="36" y="86"><tspan class="p">&gt;</tspan> const m = await open({ name: "lab" })</text>
+    <text class="t dim anim a2" x="36" y="116">CPython 3.14 on WebAssembly · booted in this tab</text>
+    <text class="t anim a3" x="36" y="156"><tspan class="p">&gt;</tspan> await m.run("counter = globals().get('counter', 0) + 1")</text>
+    <text class="t anim a4" x="36" y="186"><tspan class="p">&gt;</tspan> await m.run("counter")</text>
+    <text class="t ok anim a5" x="36" y="216">1</text>
+    <text class="t dim anim a6" x="36" y="256">· every completed command commits this machine to disk</text>
+  </g>
+
+  <!-- scene 2: the tab is killed -->
+  <g class="anim s2">
+    <rect x="9" y="49" width="862" height="412" fill="#060b15"/>
+    <text class="red" x="440" y="235" text-anchor="middle" font-size="34" font-weight="bold">✕ the tab is killed</text>
+    <text class="dim" x="440" y="275" text-anchor="middle" font-size="16">the machine is not</text>
+  </g>
+
+  <!-- scene 3: a new tab revives the same machine -->
+  <g class="anim s3">
+    <text class="t anim b1" x="36" y="86"><tspan class="p">&gt;</tspan> const m = await open({ name: "lab" })  <tspan class="dim">// a new tab</tspan></text>
+    <text class="t dim anim b2" x="36" y="116">revived from the last committed generation</text>
+    <text class="t anim b3" x="36" y="156"><tspan class="p">&gt;</tspan> await m.run("counter = counter + 1")</text>
+    <text class="t anim b4" x="36" y="186"><tspan class="p">&gt;</tspan> await m.run("counter")</text>
+    <text class="t anim b5" x="36" y="216"><tspan class="ok">2</tspan>  <tspan class="dim">← same Python, same memory, new tab</tspan></text>
+  </g>
+
+  <!-- scene 4: rewind when work goes wrong -->
+  <g class="anim s4">
+    <text class="t anim c1" x="36" y="86"><tspan class="p">&gt;</tspan> const cp = m.history.checkpoint()</text>
+    <text class="t anim c2" x="36" y="116"><tspan class="p">&gt;</tspan> await m.run("counter = 999")  <tspan class="red">// wrong turn</tspan></text>
+    <text class="t anim c3" x="36" y="146"><tspan class="p">&gt;</tspan> m.history.restore(cp); await m.run("counter")</text>
+    <text class="t anim c4" x="36" y="176"><tspan class="vi">2</tspan>  <tspan class="dim">← rewound, environment intact</tspan></text>
+  </g>
+
+  <!-- end card -->
+  <g class="anim end">
+    <rect x="9" y="49" width="862" height="412" fill="#060b15"/>
+    <text x="440" y="225" text-anchor="middle" font-size="24" font-weight="bold" fill="#e2e8f0">A persistent Python computer in your browser.</text>
+    <text x="440" y="268" text-anchor="middle" font-size="16" class="ok">npm install pyproc</text>
+  </g>
+
+  <!-- footer -->
+  <text x="440" y="440" text-anchor="middle" font-size="12" fill="#94a3b8">no application server · real CPython · the live demo runs this in your tab</text>
+</svg>

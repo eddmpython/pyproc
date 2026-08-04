@@ -28,6 +28,10 @@
   <a href="README.md">English</a>
 </p>
 
+<p align="center">
+  <a href="https://eddmpython.github.io/pyproc/"><img src="https://raw.githubusercontent.com/eddmpython/pyproc/main/assets/demoReel.svg" width="760" alt="pyproc demo reel: a Python machine keeps its state after its tab is killed, and rewinds its history with checkpoint and restore"></a>
+</p>
+
 ---
 
 <details>
