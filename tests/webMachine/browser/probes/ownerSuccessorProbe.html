@@ -188,7 +188,12 @@ owner context 강제 제거 successor 21/22/23ms.
     await waitingOwner.stop().catch(() => undefined);
     const afterWaitLocks = await lockCounts();
     const ownerAfterWait = await machineStore.readOwner(groupId);
-    check("owner lock 대기 timeout은 claim 없이 즉시 정리", waitCode === "WEB_MACHINE_OPERATION_TIMEOUT" && waitAbortMs < 250 && afterWaitLocks.held === 1 && afterWaitLocks.pending === 0 && ownerAfterWait?.ownerId === fourth.ownerId, `${waitCode}/${Math.round(waitAbortMs)}ms/${afterWaitLocks.held}/${afterWaitLocks.pending}`);
+    // 지연 한계는 "abort가 lock 해제를 기다리지 않는다"의 양화다. 진짜 결함 부류(대기 후
+    // 획득 = claim 발생, lock 누수)는 뒤의 상태 단정이 잡고, 이 숫자는 스케줄러 노이즈만
+    // 견디면 된다. 250ms는 공유 Windows 러너 부하에서 한 번 404ms로 깨졌다(2026-08-04,
+    // 상태 단정은 전부 통과). lock 해제 대기라면 이 시나리오에서 사실상 무한이므로
+    // 1500ms는 여전히 그 결함을 문다.
+    check("owner lock 대기 timeout은 claim 없이 즉시 정리", waitCode === "WEB_MACHINE_OPERATION_TIMEOUT" && waitAbortMs < 1500 && afterWaitLocks.held === 1 && afterWaitLocks.pending === 0 && ownerAfterWait?.ownerId === fourth.ownerId, `${waitCode}/${Math.round(waitAbortMs)}ms/${afterWaitLocks.held}/${afterWaitLocks.pending}`);
 
     const remaining = [...participants.keys()];
     const pendingId = remaining.find((id) => id !== first.ownerId && id !== second.ownerId && id !== fourth.ownerId);
