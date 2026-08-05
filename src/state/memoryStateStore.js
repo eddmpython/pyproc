@@ -26,6 +26,8 @@ export class MemoryStateStore {
     this._corruptRefs.delete(name);
     this._refs.set(name, { commit: ref.commit });
   }
+  async listRefs() { return [...new Set([...this._refs.keys(), ...this._corruptRefs.keys()])].sort(); }
+  async removeRef(name) { this._refs.delete(name); this._corruptRefs.delete(name); }
   async readOwner() { return this._owner ? { ...this._owner } : null; }
   // fence 시험용 소유권: claim이 epoch를 올린다(실제 멀티탭 fence는 Web Locks 조율자가 발급).
   async claimOwner(ownerId) {

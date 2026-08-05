@@ -56,6 +56,14 @@ export class JournalKernelStore {
     return refs.readRef(name);
   }
   async writeRef(name, ref) { return (await this._refs(true)).writeRef(name, ref); }
+  async listRefs() {
+    const refs = await this._refs(false);
+    return refs ? refs.listRefs() : [];
+  }
+  async removeRef(name) {
+    const refs = await this._refs(false);
+    if (refs) await refs.removeRef(name);
+  }
   // 저널은 단일 컨트롤러 경로다(kernelElection의 Web Locks가 단일성을 구조 보장). fence 없음.
   async readOwner() { return null; }
 }

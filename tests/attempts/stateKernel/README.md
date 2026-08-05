@@ -29,6 +29,7 @@ fence 전제조건은 고의 위반 주입을 전부 잡아낸다.
 
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
+| 2026-08-04 | branchRefsProbe | Edge headless, 실 OPFS + 실 힙 | 10/10 GREEN | 이름 있는 가지(commitBranch/listBranches/recoverBranch/adoptBranch)가 ref 프로토콜 (5') 위에서 성립. pack 뒤 가지 부활 = live 판정이 가지를 지킨다. 가지 존재 = 마커 v2(구 버전 fail-closed), 전부 삭제 = v1 복원. note(provenance)와 갈림점 parents 왕복 확인 | src 흡수 완료(가지 동사 + attempts). 게이트는 gate.js 3검사 + [state 가지] 2검사가 상시 판정 |
 | 2026-07-18 | promotionCostProbe | Edge headless, COOP/COEP | 64/128/256/512MB 전부 GREEN 6/6. checkpoint 중앙값 비율 0.965/0.901/1.008/0.902(전부 <= 1.05). checkpoint 루프 중 store 증가 0. 승격 해시 82/256/407/808ms(페이지 수 선형), promote 2.9/5.6/7.9/14.1s. dedupe 940/1964/4012/8108(내용주소가 동일 페이지를 접음, wrote는 전 구간 136) | 승격은 커밋 시점에만 발생하고 경계 비용 회귀 0. 시안 채택 | 1단계 법 추출 |
 | 2026-07-18 | legacyReconstructProbe | Edge headless, COOP/COEP | GREEN 6/6. 423p/26.4MB 델타를 세션 save·저널 HEAD+blob(raw OPFS 판독)·.pymachine(독자 파서)·machine generation(IndexedDB) 4포맷 전부 신 모델 재구성 바이트 대조 100%. 신 모델 -> legacy 재합성 -> 새 커널 부활까지 성립 | 구 포맷 4종 무손실 표현 가능. 이관 착수 자격 확보 | 3~5단계 recover 게이트의 원형 |
 | 2026-07-18 | refCasProbe | Edge headless, COOP/COEP | GREEN 7/7. 쓰기 순서 법 크래시 6지점 전부 구 HEAD 무결, HEAD-first 위반 corruption 감지 + PREV 후퇴, PREV 미보존 + HEAD 파손 = 명시 예외, stale fence 거부 + HEAD 불변, env(h0) 불일치 즉시 예외(후퇴 금지), 변조 blob verify-on-read 적발 | ref CAS 프로토콜 시안이 전 위반을 문다. 2단계 음성 시험의 원형 | 2단계 src/state 신설 |

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<!--
+probe: 이름 있는 가지(branch ref)의 실 런타임 수명주기.
+가설: 커널 ref 프로토콜의 (5') 가지 교체 위에서 commitBranch / listBranches / recoverBranch /
+adoptBranch가 실 WASM 힙과 실 OPFS에서 성립하고, pack/prune의 live 판정이 가지 세대를
+지키며, 마커가 가지 존재를 v2로 게시해 구 버전 recover가 fail-closed한다.
+게이트: 한 단계라도 어긋나면(특히 prune 후 가지 유실, adopt 후 HEAD/provenance 불일치) 기각.
+실행: node tests/browser/run.mjs tests/attempts/stateKernel/branchRefsProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: stateKernel branch refs</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: stateKernel - 이름 있는 가지 수명주기</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const indexParam = new URLSearchParams(location.search).get("indexURL");
+    const machine = await boot(indexParam ? { indexURL: new URL(indexParam, location.href).href } : {});
+    const rt = machine.runtime;
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("pyprocBranchProbe", { recursive: true }); } catch (e) {}
+    const dir = await root.getDirectoryHandle("pyprocBranchProbe", { create: true });
+
+    machine.run("jbr = 'base'");
+    const first = await machine.history.commit({ dir });
+    check("1. HEAD 커밋", !!first && first.ref === "HEAD", JSON.stringify(first && { ref: first.ref, pages: first.pages }));
+
+    machine.run("jbr = 'A'");
+    const brA = await machine.history.branch("expA", { dir, note: { attempt: "vectorized" } });
+    check("2. 가지 expA 커밋", !!brA && brA.ref === "branch-expA", JSON.stringify(brA && { ref: brA.ref }));
+
+    const headBack = await machine.history.recover({ dir });
+    check("3. HEAD 부활 = base(가지 커밋은 HEAD 불변)", !!headBack && machine.run("jbr") === "base", `jbr=${machine.run("jbr")}`);
+
+    machine.run("jbr = 'B'");
+    const brB = await machine.history.branch("expB", { dir, note: { attempt: "loop" } });
+    check("4. 가지 expB 커밋", !!brB && brB.ref === "branch-expB");
+
+    const list = await machine.history.branches({ dir });
+    check("5. 가지 목록 + note + 갈림점", list.length === 2 && list.map((b) => b.name).join(",") === "expA,expB"
+      && list[0].note.attempt === "vectorized" && list[0].parents.length === 1,
+      JSON.stringify(list.map((b) => ({ name: b.name, note: b.note }))));
+
+    const marker = JSON.parse(await (await (await dir.getFileHandle("journalMarker.json")).getFile()).text());
+    check("6. 가지가 있으면 마커 v2(구 버전 fail-closed)", marker.version === 2, `v${marker.version}`);
+
+    const packed = await machine.history.pack({ dir });
+    const rec = await machine.history.recoverBranch("expA", { dir });
+    check("7. pack 뒤 가지 부활(live 판정이 가지를 지킨다)", !!packed && !!rec && machine.run("jbr") === "A", `jbr=${machine.run("jbr")}`);
+
+    const adopted = await machine.history.adopt("expB", { dir, note: { reason: "probe pick" } });
+    check("8. 채택 = 가지 상태가 HEAD가 된다", !!adopted && adopted.adopted === "expB" && machine.run("jbr") === "B",
+      JSON.stringify(adopted && { adopted: adopted.adopted, ref: adopted.ref }));
+
+    const headNow = await machine.history.recover({ dir });
+    check("9. 채택 커밋 부활 + provenance", !!headNow && machine.run("jbr") === "B", `jbr=${machine.run("jbr")}`);
+
+    await machine.history.deleteBranch("expA", { dir });
+    await machine.history.deleteBranch("expB", { dir });
+    const markerAfter = JSON.parse(await (await (await dir.getFileHandle("journalMarker.json")).getFile()).text());
+    const listAfter = await machine.history.branches({ dir });
+    check("10. 가지 전부 삭제 = 마커 v1 복원", markerAfter.version === 1 && listAfter.length === 0, `v${markerAfter.version}`);
+
+    await root.removeEntry("pyprocBranchProbe", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e && (e.stack || e.message) || e).slice(0, 1600));
+  } finally {
+    await report();
+  }
+</script>
+</body>
+</html>

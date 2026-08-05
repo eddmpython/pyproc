@@ -10,6 +10,7 @@ import { PyProcError } from "../runtime/errors.js";
 import { SHA256_ADDRESS_RE, sha256AddressWith } from "../runtime/contentDigest.js";
 
 const textEncoder = new TextEncoder();
+const COMMIT_NOTE_MAX_BYTES = 4096;
 const textDecoder = new TextDecoder();
 
 function inputError(message) {
@@ -106,9 +107,15 @@ export function validateStateTree(tree) {
 }
 
 // commit: { parents[], tree, env, fence, createdAt }.
-// env = 환경 지문 { h0, engineAssetDigest, deterministic }: fork·부활 결정성을 upstream 우연에서
-// "헤더에 핀되고 열 때 대조되는 계약"으로 바꾼다(해결이 아니라 감지다). 스키마는 변경 페이지
-// 집합만 가정하고 해시 배열의 존재를 가정하지 않는다(감지기는 MemoryCapability 뒤에서 교체 가능).
+// env = 환경 지문 { h0, engineAssetDigest, deterministic } + note: fork·부활 결정성을 upstream
+// 우연에서 "헤더에 핀되고 열 때 대조되는 계약"으로 바꾼다(해결이 아니라 감지다). 스키마는 변경
+// 페이지 집합만 가정하고 해시 배열의 존재를 가정하지 않는다(감지기는 MemoryCapability 뒤에서
+// 교체 가능).
+//
+// env.note는 소비자 소유의 provenance 채널이다: 무엇을 시도했고 왜 이 상태를 채택했는가가
+// 커밋과 같은 오브젝트에 산다(에이전트의 해결 경로가 1급 기록이 된다). 저장소는 내용을
+// 해석하지 않고 크기와 형태만 잰다: canonical JSON 4096바이트 이하의 평범한 객체. 상한이
+// 없으면 note가 상태 본문의 뒷문이 된다.
 export function makeStateCommit({ parents = [], tree, env = {}, fence = null, createdAt = null }) {
   if (!Array.isArray(parents)) throw inputError("commit: a parents array is required");
   for (const p of parents) if (!SHA256_ADDRESS_RE.test(p)) throw inputError(`commit: malformed parent address (${p})`);
@@ -119,6 +126,14 @@ export function makeStateCommit({ parents = [], tree, env = {}, fence = null, cr
     engineAssetDigest: env.engineAssetDigest == null ? null : String(env.engineAssetDigest),
     deterministic: env.deterministic === true,
   };
+  if (env.note !== undefined && env.note !== null) {
+    if (typeof env.note !== "object" || Array.isArray(env.note)) throw inputError("commit: env.note must be a plain object");
+    const encoded = textEncoder.encode(canonicalStateJson(env.note));
+    if (encoded.length > COMMIT_NOTE_MAX_BYTES) {
+      throw inputError(`commit: env.note exceeds ${COMMIT_NOTE_MAX_BYTES} bytes (${encoded.length}). The note is provenance, not a payload channel.`);
+    }
+    environment.note = JSON.parse(canonicalStateJson(env.note)); // 정규화된 사본(참조 공유 차단)
+  }
   let commitFence = null;
   if (fence !== null) {
     if (typeof fence?.ownerId !== "string" || !fence.ownerId) throw inputError("commit: invalid fence.ownerId");

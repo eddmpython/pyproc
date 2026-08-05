@@ -83,6 +83,36 @@ class PyprocHistory {
   stats() { return this._reactive.stats(); }
   setRetentionPolicy(policy) { return this._reactive.setRetentionPolicy(policy); }
 
+  // 시도 경쟁(휘발 구역): 같은 기반에서 후보 코드를 하나씩 돌려 각각을 체크포인트로 남기고
+  // 기반으로 되감는다. 끝나면 기반 상태다. 채택은 그 시도의 체크포인트로 복원하는 것뿐이라
+  // adopt(i)가 그 한 줄을 준다. 병렬이 아니라 직렬인 이유: restoreLive가 ms 단위라 직렬이
+  // 이미 싸고, 병렬(fork)은 시도 수만큼 힙을 복제한다(proc().map은 그쪽 용도로 남는다).
+  // 나무에는 기반을 부모로 하는 형제 가지들로 남아 tree()가 경쟁의 모양을 그대로 보여준다.
+  attempts(codes) {
+    if (!Array.isArray(codes) || codes.length === 0) {
+      throw new PyProcError("PYPROC_INPUT_INVALID", "history.attempts: needs a non-empty array of code strings");
+    }
+    const rt = this._machine._rt;
+    const reactive = this._reactive;
+    const base = reactive.checkpoint();
+    const rows = codes.map((code, index) => {
+      let value;
+      let error = null;
+      try { value = rt.run(String(code)); }
+      catch (thrown) { error = thrown; }
+      const checkpoint = reactive.checkpoint(); // 이 시도의 끝 상태(성공이든 예외든)
+      reactive.restoreLive(base.index);         // 다음 시도는 같은 기반에서
+      return { index, code: String(code), ok: error === null, value, error, checkpoint };
+    });
+    const adopt = (index) => {
+      const row = rows[index];
+      if (!row) throw new PyProcError("PYPROC_INPUT_INVALID", `history.attempts: no attempt ${index} (0..${rows.length - 1})`);
+      reactive.restoreLive(row.checkpoint.index);
+      return row;
+    };
+    return { base, attempts: rows, adopt };
+  }
+
   // ---- 내구 구역: 커널 커밋(저널)과 이동 bundle. sha256 승격은 여기서만 일어난다 ----
   _journal(opts = {}) {
     if (!opts.dir) throw new PyProcError("PYPROC_INPUT_INVALID", "history: needs { dir } (a FileSystemDirectoryHandle). Get one with navigator.storage.getDirectory()");
@@ -93,8 +123,17 @@ class PyprocHistory {
     }
     return journal;
   }
-  commit(opts) { return this._journal(opts).commit(); }
+  commit(opts) { return this._journal(opts).commit({ note: opts?.note }); }
   recover(opts) { return this._journal(opts).recover(); }
+
+  // ---- 가지(내구 분기): 만들고 세고 되살리고 채택한다. 힙 상태는 병합이 성립하지 않으므로
+  // merge는 없다 - 가지의 소비 동사는 adopt이고, 채택 커밋의 parents와 note가 "무엇을 왜
+  // 택했는가"를 역사에 남긴다(에이전트의 해결 경로가 1급 기록이 된다). ----
+  branch(name, opts = {}) { return this._journal(opts).commitBranch(name, { note: opts.note }); }
+  branches(opts = {}) { return this._journal(opts).listBranches(); }
+  recoverBranch(name, opts = {}) { return this._journal(opts).recoverBranch(name); }
+  adopt(name, opts = {}) { return this._journal(opts).adoptBranch(name, { note: opts.note }); }
+  deleteBranch(name, opts = {}) { return this._journal(opts).deleteBranch(name); }
   async delete(opts) {
     const journal = this._journal(opts);
     const result = await journal.delete();

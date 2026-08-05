@@ -1204,6 +1204,52 @@ section("state 커널");
     const other = await tags.verifyStateTag(provider, otherTag, unsigned, { trustedPublicKeys: [jwk] });
     if (!other.valid || other.trusted) throw new Error("잘못된 키가 trusted로 통과");
   });
+  // 가지(이름 있는 ref): 같은 쓰기 순서 법의 (5')가 그 ref 하나를 교체한다. 가지 커밋이
+  // HEAD/PREV를 건드리면 크래시 창 계약이 무너지고, prune의 live 판정이 가지를 모르면
+  // 살아 있는 가지의 blob이 지워진다. 실물 함수로 두 성질을 함께 문다.
+  await checkAsync("state 가지: 가지 커밋은 그 ref만 움직이고 HEAD/PREV는 불변", async () => {
+    const store = new MemoryStateStore();
+    const first = await state.commitState(provider, store, stateInput(1));
+    const headBefore = (await store.readRef("HEAD")).ref.commit;
+    const branched = await state.commitState(provider, store, stateInput(2, { ref: "branch-expA", parents: [headBefore] }));
+    if ((await store.readRef("HEAD")).ref.commit !== headBefore) throw new Error("가지 커밋이 HEAD를 움직였다");
+    if (!(await store.readRef("PREV")).missing) throw new Error("가지 커밋이 PREV를 만들었다");
+    if ((await store.readRef("branch-expA")).ref.commit !== branched.commitAddress) throw new Error("가지 ref가 커밋을 가리키지 않는다");
+    const opened = await state.openState(provider, store, { ref: "branch-expA", expectH0: "h0-real" });
+    if (opened.generation !== "branch-expA" || opened.pages.get(0)[0] !== 2) throw new Error("가지 판독 왕복 불일치");
+    if (opened.commit.parents[0] !== headBefore) throw new Error("가지 커밋의 parents가 갈림점을 가리키지 않는다");
+    const missing = await state.openState(provider, store, { ref: "branch-none" });
+    if (missing !== null) throw new Error("없는 가지가 null이 아니다");
+    // 파손된 가지는 첫 부팅으로 위장하지 않는다(가지에는 PREV가 없어 물러날 곳이 없다).
+    store.corruptRef("branch-expA");
+    let corruptCode = "";
+    try { await state.openState(provider, store, { ref: "branch-expA" }); } catch (e) { corruptCode = e.code; }
+    if (corruptCode !== "PYPROC_STATE_CORRUPT") throw new Error(`가지 파손 판정 코드 ${corruptCode}`);
+    void first;
+  });
+  await checkAsync("state 가지: PREV 직접 커밋 거부 + ref 이름 법 + note 상한", async () => {
+    const store = new MemoryStateStore();
+    let prevCode = "";
+    try { await state.commitState(provider, store, stateInput(3, { ref: "PREV" })); } catch (e) { prevCode = e.code; }
+    if (prevCode !== "PYPROC_INPUT_INVALID") throw new Error(`PREV 직접 커밋이 통과했다(${prevCode})`);
+    for (const bad of ["", "1abc", "a/b", "a".repeat(81), "branch name"]) {
+      let code = "";
+      try { await state.commitState(provider, store, stateInput(3, { ref: bad })); } catch (e) { code = e.code; }
+      if (code !== "PYPROC_INPUT_INVALID") throw new Error(`잘못된 ref 이름(${JSON.stringify(bad)})이 통과했다`);
+    }
+    // note(provenance): 왕복 + 정규화 + 상한. note는 기록이지 본문 뒷문이 아니다.
+    const noted = await state.commitState(provider, store, stateInput(4, { env: { h0: "h0-note", note: { tried: ["a", "b"], picked: 1 } } }));
+    const reopened = await state.openState(provider, store, { expectH0: "h0-note" });
+    if (JSON.stringify(reopened.commit.env.note) !== JSON.stringify({ picked: 1, tried: ["a", "b"] })) {
+      throw new Error(`note 왕복 불일치: ${JSON.stringify(reopened.commit.env.note)}`);
+    }
+    let capCode = "";
+    try {
+      await state.commitState(provider, store, stateInput(5, { env: { h0: "x", note: { pad: "x".repeat(5000) } } }));
+    } catch (e) { capCode = e.code; }
+    if (capCode !== "PYPROC_INPUT_INVALID") throw new Error(`note 상한이 물지 않았다(${capCode})`);
+    void noted;
+  });
   await checkAsync("state 서명: signedTag 서명·검증·변조 적발", async () => {
     const keyPair = await tags.createStateKeyPair(provider);
     const tag = await tags.signStateTag(provider, keyPair, "sha256:" + "ab".repeat(32));

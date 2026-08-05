@@ -6,11 +6,19 @@
 //   readObject(address) -> Uint8Array | null   (없으면 null. 판정은 프로토콜이 한다)
 //   readRef(name) -> { ref: { commit } } | { missing: true } | { corrupt: 사유 }
 //   writeRef(name, ref) -> void               (createWritable close 원자 교체 등 backend 몫)
+//   listRefs() -> string[]                    (가지 열거. 정본은 색인이 아니라 실재하는 ref다)
+//   removeRef(name) -> void                   (없으면 no-op)
 //   readOwner() -> { ownerId, epoch } | null  (fence 미사용 store는 null 고정이면 된다)
 //
 // 쓰기 순서 법(커널 불변식, refCasProbe 크래시 6지점 실측으로 확정):
 //   (1) blob -> (2) tree -> (3) commit -> (4) PREV 보존 -> (5) HEAD 교체.
 //   어느 지점에서 크래시해도 구 HEAD가 가리키는 세대는 완전하다.
+//
+// 이름 있는 ref(가지): 같은 법의 (1)-(3) 뒤 (5')가 그 ref 하나를 교체한다. PREV는 HEAD의
+// 크래시 창이지 가지의 것이 아니므로 가지 커밋은 PREV에 손대지 않고, 가지 판독의 파손은
+// 후퇴 없이 명시 예외다(물러날 곳이 없다). PREV로의 직접 커밋은 금지다: PREV는 HEAD 교체가
+// 보존하는 산출물이지 쓰기 대상이 아니다. 힙 상태는 병합이 성립하지 않으므로 이 프로토콜에
+// merge는 없다: 가지는 만들고(compare) 채택한다(adopt = 가지 세대를 물질화해 HEAD로 커밋).
 //
 // 복구 의미론 2축(1급 의미):
 //   corruption(digest/형식 불일치) = PYPROC_STATE_CORRUPT, PREV 후퇴 가능.
@@ -60,6 +68,20 @@ async function putObject(cryptoProvider, store, bytes, counters, bucket, inFligh
 // 순서라 이 병렬화가 건드리지 않는다.
 const OBJECT_WRITE_CONCURRENCY = 8;
 
+// ref 이름 법: HEAD는 기본 세대, PREV는 그 크래시 창(직접 쓰기 금지), 나머지는 가지다.
+// 가지 이름은 저장 파일명(<name>.json)이 되므로 보수적으로 제한한다.
+const REF_NAME_RE = /^[A-Za-z][A-Za-z0-9._-]{0,79}$/;
+export function assertRefName(name, { forWrite = false } = {}) {
+  const ref = String(name || "");
+  if (!REF_NAME_RE.test(ref)) {
+    throw new PyProcError("PYPROC_INPUT_INVALID", `state: malformed ref name (${ref}). Use letters, digits, dot, dash, underscore; start with a letter; at most 80 chars.`);
+  }
+  if (forWrite && ref === "PREV") {
+    throw new PyProcError("PYPROC_INPUT_INVALID", "state: PREV is written only by HEAD replacement (the crash fallback), never directly.");
+  }
+  return ref;
+}
+
 // bounded concurrency map: 입력 순서를 유지한 결과 배열을 돌려준다.
 async function mapBounded(items, limit, task) {
   const results = new Array(items.length);
@@ -75,10 +97,12 @@ async function mapBounded(items, limit, task) {
 }
 
 // 커밋: input은 { pages, pageSize, heapLen, sp } 또는 { payloads }, 공통으로
-// { env, fence, parents, createdAt }. fence가 있으면 HEAD 교체 직전에 현 owner와 대조한다
-// (stale이면 PYPROC_STATE_FENCE_STALE, HEAD 불변).
+// { env, fence, parents, createdAt, ref }. fence가 있으면 ref 교체 직전에 현 owner와 대조한다
+// (stale이면 PYPROC_STATE_FENCE_STALE, ref 불변). ref 기본은 HEAD이고, 가지 이름이면 위
+// 가지 법을 따른다(PREV 불변, 후퇴 없음).
 export async function commitState(cryptoProvider, store, input = {}) {
   const { pages = null, payloads = null, files = [], env = {}, fence = null, parents = [], createdAt = null } = input;
+  const refName = assertRefName(input.ref ?? "HEAD", { forWrite: true });
   const counters = { wrote: 0, deduped: 0, reused: 0, pagesWrote: 0, filesWrote: 0, metaWrote: 0 };
   // (1) payload 먼저
   let tree;
@@ -132,11 +156,17 @@ export async function commitState(cryptoProvider, store, input = {}) {
         { context: { fence, owner } });
     }
   }
-  // (4) PREV 보존 (5) HEAD 교체
-  const head = await store.readRef("HEAD");
-  if (head.corrupt) throw corrupt(`commitState: HEAD 파손 위에 커밋하지 않는다(${head.corrupt})`);
-  if (head.ref) await store.writeRef("PREV", head.ref);
-  await store.writeRef("HEAD", { commit: commitAddress });
+  // (4) PREV 보존 (5) HEAD 교체 - 또는 가지면 (5') 그 ref 하나만 교체(PREV는 HEAD의 창).
+  if (refName === "HEAD") {
+    const head = await store.readRef("HEAD");
+    if (head.corrupt) throw corrupt(`commitState: HEAD 파손 위에 커밋하지 않는다(${head.corrupt})`);
+    if (head.ref) await store.writeRef("PREV", head.ref);
+    await store.writeRef("HEAD", { commit: commitAddress });
+  } else {
+    const existing = await store.readRef(refName);
+    if (existing.corrupt) throw corrupt(`commitState: 파손된 ref 위에 커밋하지 않는다(${refName}: ${existing.corrupt})`);
+    await store.writeRef(refName, { commit: commitAddress });
+  }
   return {
     commitAddress, treeAddress,
     // 커밋된 page -> address. 호출자가 다음 커밋에서 주소를 단언하려면 이것이 필요하다.
@@ -184,7 +214,16 @@ async function materialize(cryptoProvider, store, ref, expectH0) {
 
 // 부활: HEAD -> (corruption에 한해) PREV 후퇴 -> 둘 다 없으면 첫 부팅(null),
 // 둘 다 파손이면 명시 예외(손상을 첫 부팅으로 위장하지 않는다).
+// opts.ref가 가지 이름이면 그 ref 하나만 판독한다: 없으면 null, 파손이면 즉시 예외
+// (가지에는 PREV가 없으므로 물러날 곳이 없고, 위장은 데이터 유실이다).
 export async function openState(cryptoProvider, store, opts = {}) {
+  if (opts.ref !== undefined && opts.ref !== "HEAD") {
+    const refName = assertRefName(opts.ref);
+    const branch = await store.readRef(refName);
+    if (branch.corrupt) throw corrupt(`openState: 가지 파손(${refName}: ${branch.corrupt}). 첫 부팅으로 위장하지 않는다.`);
+    if (branch.missing || !branch.ref) return null;
+    return { ...await materialize(cryptoProvider, store, branch.ref, opts.expectH0), generation: refName };
+  }
   const head = await store.readRef("HEAD");
   let headFailure = head.corrupt || null;
   if (head.ref) {

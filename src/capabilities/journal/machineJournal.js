@@ -21,7 +21,7 @@ import { requirePortableHeap } from "../image/imagePortability.js";
 import { PAGE_SIZE as PAGE, bytesToMb, mbToBytes } from "../../runtime/memoryLayout.js";
 import { PyProcError } from "../../runtime/errors.js";
 import { boundaryDigest, parseSha256Address, verifySha256 } from "../../runtime/contentDigest.js";
-import { commitState, openState } from "../../state/refProtocol.js";
+import { assertRefName, commitState, openState } from "../../state/refProtocol.js";
 import { decodeStateObject, validateStateCommit, validateStateTree } from "../../state/objectModel.js";
 import { materializeHeapGeneration } from "../image/heapMaterialize.js";
 import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
@@ -33,7 +33,20 @@ import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome, machineHomeFileEntries, 
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
 const DEFAULT_AUTO_PACK_LOOSE_MB = 8;
 const JOURNAL_MARKER_FILE = "journalMarker.json";
-const JOURNAL_MARKER_VERSION = 1;
+// v1 = 가지 없는 저널(기존 전부). v2 = 이름 있는 가지를 나르는 저널. 구 pyproc의 pack/prune은
+// HEAD/PREV만 live로 보므로 가지 blob을 지울 수 있다 - 그래서 가지가 생기는 순간 마커를 v2로
+// 올려 구 recover가 fail-closed하게 한다(형식 위반). 가지를 전부 지우면 v1로 돌아간다.
+const JOURNAL_MARKER_VERSIONS = Object.freeze([1, 2]);
+const BRANCH_REF_PREFIX = "branch-";
+const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+function branchRefName(name) {
+  const branch = String(name || "");
+  if (!BRANCH_NAME_RE.test(branch)) {
+    throw new PyProcError("PYPROC_INPUT_INVALID", `journal.branch: malformed branch name (${branch}). Use letters, digits, dot, dash, underscore; at most 64 chars.`);
+  }
+  return assertRefName(BRANCH_REF_PREFIX + branch, { forWrite: true });
+}
 const JOURNAL_STORAGE_ENTRIES = Object.freeze([
   ["state", true],
   ["blob", true],
@@ -199,17 +212,18 @@ export class MachineJournal {
     const read = await readJsonFile(this._dir, JOURNAL_MARKER_FILE);
     if (!("value" in read)) return read; // missing | corrupt는 그대로 흐른다
     const marker = read.value;
-    if (marker?.version !== JOURNAL_MARKER_VERSION || !["committed", "deleted"].includes(marker.state)) {
+    if (!JOURNAL_MARKER_VERSIONS.includes(marker?.version) || !["committed", "deleted"].includes(marker.state)) {
       return { corrupt: `${JOURNAL_MARKER_FILE} 형식 위반` };
     }
     return { marker: { version: marker.version, state: marker.state } };
   }
 
   async _writeMarker(state) {
+    const version = (await this._branchNames()).length ? 2 : 1;
     try {
       const fh = await this._dir.getFileHandle(JOURNAL_MARKER_FILE, { create: true });
       const w = await fh.createWritable();
-      await w.write(JSON.stringify({ version: JOURNAL_MARKER_VERSION, state }));
+      await w.write(JSON.stringify({ version, state }));
       await w.close();
     } catch (e) {
       throw new PyProcError("PYPROC_JOURNAL_IO", `journal marker write failed: ${String((e && e.message) || e).slice(-180)}`, { retryable: true, cause: e });
@@ -219,10 +233,31 @@ export class MachineJournal {
   // 지금 상태를 커밋한다(수동 호출도 계약: 중요한 경계에서 명시적으로 남길 수 있다).
   // 저장은 커널 커밋 한 호출이다: sha256 승격은 정확히 이 지점에서만 일어난다(collectDelta는
   // 페이지 목록만 주고, 페이지 바이트의 주소화·dedupe·쓰기 순서 법은 커널이 소유한다).
-  async commit() {
+  // opts.note: 커밋과 같은 오브젝트에 실리는 provenance(무엇을 시도했고 왜 채택했는가).
+  async commit(opts = {}) {
     if (this._busy) return null;
     const endBusy = this._begin();
     try {
+      return await this._commitTo("HEAD", opts);
+    } finally { endBusy(); }
+  }
+
+  // 이름 있는 가지로 커밋한다. HEAD/PREV는 불변이고(가지 법, refProtocol 상단), 커밋의 parents가
+  // 현 HEAD를 가리켜 어디서 갈라졌는지가 기록된다. 힙 상태는 병합이 성립하지 않으므로 가지의
+  // 소비 동사는 merge가 아니라 adopt다.
+  async commitBranch(name, opts = {}) {
+    const refName = branchRefName(name);
+    if (this._busy) return null;
+    const endBusy = this._begin();
+    try {
+      const head = await this._kernel.readRef("HEAD");
+      const parents = head.ref ? [head.ref.commit] : [];
+      return await this._commitTo(refName, { ...opts, parents });
+    } finally { endBusy(); }
+  }
+
+  // 커밋 본문. 배타 구간(_begin)은 호출자(commit/commitBranch/adoptBranch)가 잡는다.
+  async _commitTo(refName, opts = {}) {
       // 저널 커밋도 "부활을 전제한 쓰기"다(recover가 새 탭의 새 커널로 되살린다). 그러므로
       // 세션 저장/내보내기와 같은 이식성 전제를 통과해야 한다: 힙에 JS 핸들이 있으면 그 세대는
       // 되살아나도 블로킹 표면을 못 쓴다. 감사 실측(2026-08-01)이 이 우회를 잡았다.
@@ -253,7 +288,9 @@ export class MachineJournal {
         heapLen: mem.byteLength(),
         sp: this._reactive.stackSave() ?? this._sp,
         files,
-        env: { h0: await this._boundaryKey() },
+        env: { h0: await this._boundaryKey(), ...(opts.note !== undefined && opts.note !== null ? { note: opts.note } : {}) },
+        parents: opts.parents || [],
+        ref: refName,
         createdAt: committedAt,
       });
       // 커밋이 성공한 뒤에만 캐시를 갱신한다. 실패한 커밋의 주소를 기억하면 다음 커밋이
@@ -268,6 +305,8 @@ export class MachineJournal {
       await this._writeMarker("committed");
       this.commits++; this.pagesWritten += committed.pagesWrote;
       const result = {
+        ref: refName,
+        commit: committed.commitAddress,
         pages: pages.length,
         wrote: committed.pagesWrote,
         // 주소 캐시가 건너뛴 페이지 수. 커밋 비용이 변경분에 비례하는지 보는 관측점이다.
@@ -280,7 +319,6 @@ export class MachineJournal {
       if (autoPack) result.autoPack = autoPack;
       if (this._pruneAfterCommit) result.pruned = r.pruneTo(r.liveIdx);
       return result;
-    } finally { endBusy(); }
   }
 
   // 의도한 삭제는 backing store를 먼저 지우고 tombstone을 마지막에 쓴다. 중간 실패에서 옛
@@ -330,9 +368,10 @@ export class MachineJournal {
   // ---- live 판정: 무엇이 살아있는가는 세대를 아는 저널이 정하고, 어떻게 묶는가는 store가 안다 ----
 
   // 커널 세대의 live 키(hex): commit/tree 오브젝트 자체도 live다(pack만으로 recover가 성립해야
-  // 하므로). HEAD와 PREV 두 세대를 모두 지킨다(PREV 깊이 2 고정).
+  // 하므로). HEAD와 PREV 두 세대에 더해 모든 가지 세대를 지킨다 - 이 갈래가 빠지면 prune이
+  // 살아 있는 가지의 blob을 지운다(가지 도입의 soundness 핵심이 이 한 줄이다).
   async _kernelLiveKeys(keys) {
-    for (const name of ["HEAD", "PREV"]) {
+    for (const name of ["HEAD", "PREV", ...(await this._kernel.listRefs()).filter((ref) => ref.startsWith(BRANCH_REF_PREFIX))]) {
       const r = await this._kernel.readRef(name);
       if (r.corrupt) throw journalCorrupt(`journal.pack: state ${r.corrupt}`);
       if (!r.ref) continue;
@@ -361,6 +400,83 @@ export class MachineJournal {
     await legacyLiveKeys(this._dir, keys, (why) => journalCorrupt(`journal.pack: ${why}`));
     keys.delete(null);
     return keys;
+  }
+
+  // ---- 가지: 이름 있는 내구 분기. 만들고(commitBranch) 세고(listBranches) 되살리고
+  // (recoverBranch) 채택한다(adoptBranch). 힙 상태는 병합이 성립하지 않으므로 merge는 없다. ----
+
+  async _branchNames() {
+    return (await this._kernel.listRefs())
+      .filter((name) => name.startsWith(BRANCH_REF_PREFIX))
+      .map((name) => name.slice(BRANCH_REF_PREFIX.length))
+      .sort();
+  }
+
+  // 가지 목록: 이름 + 커밋 주소 + 시각 + note(provenance). 정본은 ref 파일 자체다.
+  async listBranches() {
+    this._kernel.resetCache();
+    const branches = [];
+    for (const name of await this._branchNames()) {
+      const read = await this._kernel.readRef(BRANCH_REF_PREFIX + name);
+      if (read.corrupt) throw journalCorrupt(`journal.branches: ${read.corrupt}`);
+      if (!read.ref) continue;
+      const commitBytes = await this._kernel.readObject(read.ref.commit);
+      if (!commitBytes) throw journalCorrupt(`journal.branches: commit object is missing (${name})`);
+      const commit = validateStateCommit(decodeStateObject(commitBytes));
+      branches.push({ name, commit: read.ref.commit, createdAt: commit.createdAt || null, note: commit.env.note ?? null, parents: commit.parents });
+    }
+    return branches;
+  }
+
+  // 가지 세대를 힙에 물질화한다(h0 대조 포함 - 다른 엔진의 가지로 조용히 덮지 않는다).
+  // 가지에는 PREV가 없으므로 파손은 후퇴 없이 명시 예외이고, 없으면 null이다.
+  async recoverBranch(name) {
+    const refName = branchRefName(name);
+    this._kernel.resetCache();
+    this._addressCache.clear(); // 부활은 힙을 통째로 갈아끼운다(recover와 같은 근거)
+    let opened;
+    try {
+      opened = await openState(globalThis.crypto, this._kernel, { ref: refName, expectH0: await this._boundaryKey() });
+    } catch (e) {
+      if (e instanceof PyProcError && e.code === "PYPROC_STATE_CORRUPT") {
+        throw journalCorrupt(`journal.recoverBranch: ${e.message}`, e);
+      }
+      throw e;
+    }
+    if (!opened) return null;
+    return this._applyKernelGeneration(opened);
+  }
+
+  // 채택: 가지 세대를 물질화해 HEAD로 커밋한다. 커밋의 parents가 가지 커밋을 가리켜 "무엇을
+  // 채택했는가"가 역사에 남고, note에 채택 사유를 실을 수 있다(에이전트의 해결 경로 기록).
+  async adoptBranch(name, opts = {}) {
+    const refName = branchRefName(name);
+    const applied = await this.recoverBranch(name);
+    if (!applied) {
+      throw new PyProcError("PYPROC_INPUT_INVALID", `journal.adopt: no such branch (${name})`);
+    }
+    if (this._busy) return null;
+    const endBusy = this._begin();
+    try {
+      const branch = await this._kernel.readRef(refName);
+      const note = { adoptedFrom: name, ...(opts.note || {}) };
+      const result = await this._commitTo("HEAD", { note, parents: branch.ref ? [branch.ref.commit] : [] });
+      return { ...result, adopted: name, applied };
+    } finally { endBusy(); }
+  }
+
+  // 가지 삭제: ref를 지우고 마커 버전을 재계산한다(마지막 가지가 사라지면 v1로 돌아가
+  // 구 버전 호환이 복원된다). blob 회수는 다음 prune 몫이다(live 판정이 자연히 제외한다).
+  async deleteBranch(name) {
+    const refName = branchRefName(name);
+    if (this._busy) throw new PyProcError("PYPROC_JOURNAL_IO", "journal.deleteBranch: journal is busy", { retryable: true });
+    const endBusy = this._begin();
+    try {
+      await this._kernel.removeRef(refName);
+      const marker = await this._readMarker();
+      if (marker.marker) await this._writeMarker(marker.marker.state);
+      return { deleted: name };
+    } finally { endBusy(); }
   }
 
   // 현재 세대들이 참조하는 live blob만 새 pack 파일 1개에 묶는다. recover는 loose와 pack을

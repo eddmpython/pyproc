@@ -135,6 +135,24 @@ try {
   check("porcelain: history.checkpoint/restore 왕복", pm.run("porcelainX") === 1);
   check("porcelain: 일반 부팅은 deterministic === false", pm.deterministic === false);
 
+  // 시도 경쟁(휘발 구역): 같은 기반에서 후보 N개를 직렬로 돌려 형제 가지로 남기고, 채택은
+  // 그 가지로의 복원이다. 실패한 시도는 오류가 값으로 잡히고 다음 시도는 오염 없이 기반에서
+  // 시작해야 한다(그것이 이 동사의 존재 이유다: 잘못된 시도가 다음 시도를 오염시키지 않는다).
+  pm.run("att = 10");
+  const race = pm.history.attempts([
+    "att = att * 2",                       // 후보 0: 20
+    "att = att.upper()",                   // 후보 1: AttributeError(int에 upper 없음)
+    "att = att + 5",                       // 후보 2: 15
+  ]);
+  const attemptsBaseIntact = pm.run("att") === 10; // 경쟁이 끝나면 기반 상태다
+  race.adopt(2);
+  const attemptsSiblings = pm.history.tree().filter((node) => node.parent === race.base.index).length;
+  check("porcelain: history.attempts가 실패를 격리하고 채택이 그 상태를 복원한다",
+    attemptsBaseIntact && race.attempts[0].ok && !race.attempts[1].ok && race.attempts[2].ok
+    && race.attempts[1].error && String(race.attempts[1].error.message || race.attempts[1].error).includes("upper")
+    && pm.run("att") === 15 && attemptsSiblings >= 3,
+    `기반 유지=${attemptsBaseIntact}, 실패 격리=${!race.attempts[1].ok}, 채택 후 att=${pm.run("att")}, 형제 가지 ${attemptsSiblings}`);
+
   // 오타를 침묵으로 만들지 않는다: 미지의 옵션 키는 입구에서 거부된다(전에는 조용히 버려져
   // `determinstic` 오타가 무증상 비결정 부팅이 됐고 실패는 history.export에서 나타났다).
   let optionErr = null;
@@ -388,6 +406,46 @@ try {
   const packRecovered = await rt.enableJournal({ dir: jDir, reactive, includeHome: false }).recover();
   check("journal pack: pack만 남은 저널에서 복구(loose 0)", !!packRecovered && rt.run("jrx") === 1,
     `recovered=${!!packRecovered}, 999로 어긋낸 뒤 jrx=${rt.run("jrx")}`);
+
+  // ---- 가지: 이름 있는 내구 분기(만들고 비교하고 채택한다 - merge는 힙 상태에 성립하지 않는다) ----
+  // 실 OPFS + 실 힙에서 전 수명주기를 문다. 특히 pack/prune 뒤에도 가지가 살아 있는가가
+  // soundness의 핵심이다: live 판정이 가지를 모르면 청소가 살아 있는 실험을 지운다.
+  rt.run("jbr = 'base'");
+  await gj.commit();
+  rt.run("jbr = 'A'");
+  const brA = await gj.commitBranch("expA", { note: { attempt: "vectorized" } });
+  const headAfterBranch = await gj.recover(); // HEAD는 base 그대로여야 한다(가지 커밋은 HEAD 불변)
+  const brResumedAtBase = rt.run("jbr");
+  rt.run("jbr = 'B'");
+  const brB = await gj.commitBranch("expB", { note: { attempt: "loop" } });
+  const brList = await gj.listBranches();
+  check("journal 가지: 두 가지가 HEAD를 움직이지 않고 note와 갈림점을 나른다",
+    !!brA && !!brB && !!headAfterBranch && brResumedAtBase === "base"
+    && brList.length === 2 && brList.map((b) => b.name).join(",") === "expA,expB"
+    && brList[0].note.attempt === "vectorized" && brList[0].parents.length === 1,
+    `HEAD 부활 후 jbr=${brResumedAtBase}, 가지=${brList.map((b) => b.name).join("/")}`);
+  // 마커: 가지가 있으면 v2(구 pyproc recover는 fail-closed), 전부 지우면 v1로 복원.
+  const markerWithBranches = JSON.parse(await (await (await jDir.getFileHandle("journalMarker.json")).getFile()).text());
+  // pack + prune 뒤에도 가지 세대가 물질화되는가(live 판정에 가지가 들어 있는가).
+  await gj.pack();
+  await gj.prune();
+  const brRecovered = await gj.recoverBranch("expA");
+  const brValueAfterRecover = rt.run("jbr");
+  // 채택: 가지 상태가 HEAD가 되고, 채택 커밋의 note와 parents가 "무엇을 택했는가"를 남긴다.
+  const brAdopted = await gj.adoptBranch("expB", { note: { reason: "faster on the gate" } });
+  const brAdoptedValue = rt.run("jbr");
+  const brAdoptedHead = await gj.recover();
+  check("journal 가지: pack/prune 생존 + 채택이 HEAD와 provenance를 남긴다",
+    markerWithBranches.version === 2 && !!brRecovered && brValueAfterRecover === "A"
+    && !!brAdopted && brAdopted.adopted === "expB" && brAdoptedValue === "B"
+    && !!brAdoptedHead && rt.run("jbr") === "B",
+    `marker v${markerWithBranches.version}, expA 부활 후 ${brValueAfterRecover}, 채택 후 ${brAdoptedValue}`);
+  await gj.deleteBranch("expA");
+  await gj.deleteBranch("expB");
+  const markerAfterDelete = JSON.parse(await (await (await jDir.getFileHandle("journalMarker.json")).getFile()).text());
+  const brGone = await gj.listBranches();
+  check("journal 가지: 삭제 후 마커가 v1로 돌아와 구 버전 호환이 복원된다",
+    markerAfterDelete.version === 1 && brGone.length === 0, `marker v${markerAfterDelete.version}, 가지 ${brGone.length}`);
   // 내구성의 전제가 보이는가. 커밋이 성공해도 브라우저가 저장소를 축출하면 다음 부팅이 첫
   // 부팅이 된다. 그 위험을 소비자가 볼 수 없으면 "내구"는 확인 불가능한 주장이다: 승인 여부를
   // 값으로 드러내고, 요청 자체가 불가능한 환경도 승인되지 않은 것과 같게 다룬다.
@@ -1266,6 +1324,9 @@ try {
     await stateRoot.removeEntry("pyprocGateRef", { recursive: true });
   }
 } catch (e) {
-  check("예외 없음", false, String(e).slice(0, 300));
+  // 머리와 꼬리를 함께 싣는다. 파이썬 traceback은 예외 타입이 마지막 줄이라 머리만 자르면
+  // 병명이 사라진다(실측: PythonError가 어느 예외인지 안 보여 원인 특정이 한 라운드 늦었다).
+  const described = String(e && (e.stack || e.message) || e);
+  check("예외 없음", false, described.length > 600 ? described.slice(0, 300) + " ... " + described.slice(-300) : described);
 }
 await report();

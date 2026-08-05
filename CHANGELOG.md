@@ -8,6 +8,28 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+### Added
+
+- **Named durable branches with provenance, and an attempts verb for competing solutions.** The
+  journal already speaks git's object model (content-addressed blob/tree/commit, HEAD/PREV refs);
+  this names the missing layer. `history.branch(name, { dir, note })` commits the current state to
+  a branch ref without touching HEAD, `history.branches()` lists them with their fork parents and
+  notes, `history.recoverBranch(name)` materializes one, and `history.adopt(name)` makes a branch
+  the machine state and the new HEAD - the adopting commit's parents point at the branch commit and
+  its note records `{ adoptedFrom }`. Heap states cannot be merged, so the consuming verb is adopt,
+  not merge. Commits accept `note` (canonical JSON, 4 KB cap): what was tried and why a state was
+  chosen lives in the same object as the state itself.
+
+  In the volatile zone, `history.attempts([codes])` runs candidates serially from one base, each
+  attempt checkpointed as a sibling branch with the heap rewound in between, so a failing attempt
+  cannot contaminate the next; `adopt(i)` restores the winner. Serial on purpose: restoreLive is
+  cheap, while parallel attempts cost one heap each.
+
+  **Compatibility**: a journal carrying branches marks itself format version 2, and an older
+  pyproc refuses to recover it (fail closed) rather than pruning branch data its live-set walk
+  cannot see. Do not run an older pyproc's `pack()`/`prune()` directly against a branched journal.
+  Deleting the last branch restores version 1. Journals without branches are unchanged.
+
 <!-- unreleased-subpaths: -->
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
@@ -28,6 +50,7 @@ migration. Pin `0.0.13`.
 레인이 자체 호스팅 엔진을 안 받아 Python guest를 올리는 probe가 죽었고, 그 배관을 고치면서
 "브라우저를 띄우는 job은 같은 job에서 엔진을 마련한다"를 게이트로 세웠다. **패키지 내용은
 0.0.12가 냈을 것과 같다.** 아래 0.0.12 절의 브레이킹과 이관 안내가 이 릴리즈의 내용이다.
+
 ## 0.0.12 - 2026-08-03
 
 ### Breaking

@@ -720,6 +720,10 @@ export interface JournalAutoPackPolicy {
 }
 
 export interface JournalCommitResult {
+  /** Which ref this commit moved: "HEAD", or "branch-<name>" for a branch commit. */
+  ref: string;
+  /** The content address of the commit object this generation is anchored at. */
+  commit: string;
   pages: number;
   wrote: number;
   mb: number;
@@ -785,8 +789,23 @@ declare class MachineJournal {
   /** Starts the idle watcher. It never interrupts running code. */
   start(): MachineJournal;
   stop(): void;
-  /** Commits the current state at a manual boundary. Returns the changed page count and the bytes actually written after dedupe. */
-  commit(): Promise<JournalCommitResult | null>;
+  /** Commits the current state at a manual boundary. Returns the changed page count and the bytes actually written after dedupe. opts.note rides the commit object as provenance. */
+  commit(opts?: { note?: Record<string, unknown> }): Promise<JournalCommitResult | null>;
+  /**
+   * Commits the current state to a named branch ref. HEAD and PREV are untouched, and the commit's
+   * parents record the fork point (the HEAD commit at branch time). Heap states cannot be merged,
+   * so the consuming verb is adopt, not merge. A journal carrying branches marks itself version 2:
+   * an older pyproc refuses it (fail closed) instead of pruning branch data it cannot see.
+   */
+  commitBranch(name: string, opts?: { note?: Record<string, unknown> }): Promise<JournalCommitResult | null>;
+  /** Lists branch refs with their commit address, creation time, provenance note, and fork parents. */
+  listBranches(): Promise<Array<{ name: string; commit: string; createdAt: string | null; note: Record<string, unknown> | null; parents: string[] }>>;
+  /** Materializes a branch generation onto the heap (same h0 contract as recover). Null when the branch does not exist; corruption is an explicit error, never a first-boot masquerade. */
+  recoverBranch(name: string): Promise<JournalRecoverResult | null>;
+  /** Materializes the branch and commits that state to HEAD. The adopting commit's parents point at the branch commit and its note carries { adoptedFrom } plus opts.note. */
+  adoptBranch(name: string, opts?: { note?: Record<string, unknown> }): Promise<(JournalCommitResult & { adopted: string; applied: JournalRecoverResult }) | null>;
+  /** Removes the branch ref. Blob reclamation is the next prune's job. Deleting the last branch restores marker version 1 (older-version compatibility). */
+  deleteBranch(name: string): Promise<{ deleted: string }>;
   /** Removes journal generations and leaves a deleted tombstone so intentional deletion is not reported as eviction. */
   delete(): Promise<JournalDeleteResult>;
   /** Bundles only the HEAD/PREV live blobs into one pack file and reduces loose and stale files. */
@@ -1262,8 +1281,30 @@ declare class PyprocHistory {
   prune(target?: number | CheckpointInfo): { freedNodes: number; freedMB: number; keptNodes: number };
   stats(): ReactiveStats;
   setRetentionPolicy(policy: ReactiveRetentionPolicy | null): Readonly<ReactiveRetentionPolicy> | null;
-  /** Kernel commit through the WAL journal. The same dir shares one journal instance. */
-  commit(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalCommitResult | null>;
+  /**
+   * Runs candidate codes serially from the current state, each attempt checkpointed as a sibling
+   * branch of the same base and the heap rewound to the base in between, so a failing attempt
+   * cannot contaminate the next one. Ends at the base state; adopt(i) restores attempt i's end
+   * state. Serial on purpose: restoreLive is cheap, while parallel attempts cost one heap each
+   * (that is what proc().map is for).
+   */
+  attempts(codes: string[]): {
+    base: CheckpointInfo;
+    attempts: Array<{ index: number; code: string; ok: boolean; value: unknown; error: unknown; checkpoint: CheckpointInfo }>;
+    adopt(index: number): { index: number; code: string; ok: boolean; value: unknown; error: unknown; checkpoint: CheckpointInfo };
+  };
+  /** Kernel commit through the WAL journal. The same dir shares one journal instance. opts.note rides the commit as provenance. */
+  commit(opts: { dir: FileSystemDirectoryHandle; note?: Record<string, unknown> } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalCommitResult | null>;
+  /** Commits the current state to a named durable branch (HEAD untouched). See MachineJournal.commitBranch. */
+  branch(name: string, opts: { dir: FileSystemDirectoryHandle; note?: Record<string, unknown> } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalCommitResult | null>;
+  /** Lists durable branches with provenance notes and fork parents. */
+  branches(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<Array<{ name: string; commit: string; createdAt: string | null; note: Record<string, unknown> | null; parents: string[] }>>;
+  /** Materializes a branch generation onto the heap. */
+  recoverBranch(name: string, opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalRecoverResult | null>;
+  /** Adopts a branch: its state becomes the machine state and the new HEAD, with provenance recording what was adopted and why. */
+  adopt(name: string, opts: { dir: FileSystemDirectoryHandle; note?: Record<string, unknown> } & Omit<JournalConfig, "reactive" | "dir">): Promise<(JournalCommitResult & { adopted: string; applied: JournalRecoverResult }) | null>;
+  /** Deletes a branch ref. */
+  deleteBranch(name: string, opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<{ deleted: string }>;
   /** Explicitly deletes the journal and leaves a tombstone so intentional absence is not reported as eviction. */
   delete(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalDeleteResult>;
   recover(opts: { dir: FileSystemDirectoryHandle } & Omit<JournalConfig, "reactive" | "dir">): Promise<JournalRecoverResult | null>;

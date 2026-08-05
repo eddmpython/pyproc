@@ -74,6 +74,19 @@ export class OpfsStateStore {
     await w.write(JSON.stringify({ commit: ref.commit }));
     await w.close();
   }
+  // ref 열거: state 디렉터리의 <name>.json 전부(오브젝트 디렉터리는 제외). 가지 목록의 정본은
+  // 색인 파일이 아니라 실재하는 ref 파일이다(색인은 두 번째 진실이 되어 표류한다).
+  async listRefs() {
+    const names = [];
+    for await (const name of this._dir.keys()) {
+      if (name.endsWith(".json")) names.push(name.slice(0, -".json".length));
+    }
+    return names.sort();
+  }
+  async removeRef(name) {
+    try { await this._dir.removeEntry(name + ".json"); }
+    catch (e) { if (e.name !== "NotFoundError") throw e; }
+  }
   // fence 미사용 단일 컨트롤러 store: owner는 없다(kernelElection의 Web Locks가 단일성을 구조
   // 보장하는 저널 경로가 이 드라이버의 첫 소비자다). 멀티탭 fence는 조율자가 owner를 주입하는
   // store(coordinator 위임 단계의 IndexedDB backend)가 소유한다.
