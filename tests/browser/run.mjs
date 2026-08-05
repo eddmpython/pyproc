@@ -116,6 +116,11 @@ await new Promise((res) => server.listen(0, "127.0.0.1", res));
 const baseUrl = `http://127.0.0.1:${server.address().port}/${page}`;
 function pageUrl(nextSearch = "") {
   const params = new URLSearchParams(String(nextSearch).replace(/^\?/, ""));
+  // 예제·랜딩 페이지는 ?gate가 있어야 보고한다(사람이 열면 no-op이 이 표면의 계약이다).
+  // 이 러너로 예제를 직접 돌리면 gate 없이 300초 침묵 타임아웃이 된다(실측 2026-08-05:
+  // 이 침묵을 src 회귀로 오독해 유령을 한 시간 추적했다. 정본 레인은 test:examples이고,
+  // 이 러너는 단일 페이지 재현용이다). 조건을 페이지 경로에서 유도해 함정을 없앤다.
+  if ((page.startsWith("examples/") || page === "") && !params.has("gate")) params.set("gate", "1");
   if (process.env.PYPROC_INDEX_URL && !params.has("indexURL")) params.set("indexURL", process.env.PYPROC_INDEX_URL);
   const search = params.toString();
   return `${baseUrl}${search ? `?${search}` : ""}`;
