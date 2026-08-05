@@ -305,4 +305,53 @@ export async function assertElectionProtocol(check, checkAsync) {
       throw new Error(`commit 실패 분류 ${failure?.code || "없음"}/${failure?.retryable}`);
     }
   });
+
+  // 가지 동사가 같은 파이프라인을 탄다: 리더 로컬 경로도 원격 서비스 경로도 _runCommand
+  // 하나이고, 결과 기록(정확히 한 번)과 epoch fence를 run과 똑같이 상속한다. fake 저널로
+  // 실물 KernelElection을 구동해 세 성질을 문다: 채택이 저널 동사에 위임되는가, 저널 없는
+  // 머신은 명시 거부하는가, 원격 가지 요청의 재도착이 재실행 없이 기록으로 답하는가.
+  await checkAsync("election: 가지 동사는 명령 파이프라인을 타고 정확히 한 번 실행된다", async () => {
+    const ctrl = makeCtrl();
+    ctrl._joined = true;
+    ctrl._role = "leader"; ctrl._phase = "ready";
+    ctrl._leaderId = ctrl.participantId; ctrl._epoch = 1;
+    ctrl._journalDir = {};
+    const calls = [];
+    ctrl._journal = {
+      commit: async () => ({ committedAt: "g" }),
+      commitBranch: async (name, opts) => { calls.push(["branch", name, opts?.note ?? null]); return { ref: "branch-" + name, commit: "sha256:" + "a".repeat(64) }; },
+      listBranches: async () => { calls.push(["list"]); return [{ name: "expA" }]; },
+      adoptBranch: async (name, opts) => { calls.push(["adopt", name, opts?.note ?? null]); return { ref: "HEAD", adopted: name, committedAt: "g-adopt" }; },
+      deleteBranch: async (name) => { calls.push(["delete", name]); return { deleted: name }; },
+    };
+    const made = await ctrl.branch("expA", { note: { attempt: 1 } });
+    if (made.ref !== "branch-expA") throw new Error("리더 로컬 가지 커밋이 저널에 위임되지 않았다");
+    const listed = await ctrl.branches();
+    if (listed[0]?.name !== "expA") throw new Error("가지 목록이 저널에 위임되지 않았다");
+    const adopted = await ctrl.adopt("expA", { note: { reason: "test" } });
+    if (adopted.adopted !== "expA") throw new Error("채택이 저널에 위임되지 않았다");
+    if (ctrl.status().lastCommitAt !== "g-adopt") throw new Error("채택이 세대 경계로 게시되지 않았다");
+    const removed = await ctrl.deleteBranch("expA");
+    if (removed.deleted !== "expA") throw new Error("가지 삭제가 저널에 위임되지 않았다");
+    if (calls.map((entry) => entry[0]).join(",") !== "branch,list,adopt,delete") throw new Error(`위임 순서 ${calls.map((entry) => entry[0]).join(",")}`);
+
+    // 원격 요청 재도착 = 기록으로 답한다(재실행 없음). 서버 경로가 action 일반형임을 함께 문다.
+    const responses = [];
+    ctrl._post = (message) => { responses.push(message); };
+    const request = { type: "rpcReq", requestId: "b1", participantId: "peer", targetLeaderId: ctrl.participantId, epoch: 1, action: "branch", name: "expB" };
+    await ctrl._serve(request);
+    await ctrl._serve(request);
+    const branchCalls = calls.filter((entry) => entry[0] === "branch" && entry[1] === "expB").length;
+    if (branchCalls !== 1) throw new Error(`재도착이 재실행됐다(branch expB ${branchCalls}회)`);
+    if (responses.length !== 2 || responses.some((r) => r.ok !== true)) throw new Error("재도착 응답이 기록으로 답하지 않았다");
+
+    // 저널 없는 머신(내구 아님)은 가지 동사를 명시 거부한다.
+    const bare = makeCtrl();
+    bare._joined = true;
+    bare._role = "leader"; bare._phase = "ready";
+    bare._leaderId = bare.participantId; bare._epoch = 1;
+    bare._journal = null;
+    const refusal = await bare.branch("x").then(() => null, (error) => error);
+    if (refusal?.code !== "PYPROC_INPUT_INVALID") throw new Error(`저널 없는 가지 거부 코드 ${refusal?.code || "없음"}`);
+  });
 }

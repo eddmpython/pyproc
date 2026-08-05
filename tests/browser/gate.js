@@ -411,19 +411,26 @@ try {
   // 실 OPFS + 실 힙에서 전 수명주기를 문다. 특히 pack/prune 뒤에도 가지가 살아 있는가가
   // soundness의 핵심이다: live 판정이 가지를 모르면 청소가 살아 있는 실험을 지운다.
   rt.run("jbr = 'base'");
-  await gj.commit();
+  // 반환값을 판정에 싣는다: commit()은 busy 충돌이면 null을 돌려주고, 그 null을 버리면
+  // "HEAD에 jbr이 없다"가 한참 뒤 NameError로 터져 원인 좌표가 사라진다(간헐 실측 2회).
+  const brBaseCommit = await gj.commit();
   rt.run("jbr = 'A'");
   const brA = await gj.commitBranch("expA", { note: { attempt: "vectorized" } });
+  const headRefAtRecover = await gj._kernel.readRef("HEAD");
   const headAfterBranch = await gj.recover(); // HEAD는 base 그대로여야 한다(가지 커밋은 HEAD 불변)
-  const brResumedAtBase = rt.run("jbr");
+  const jbrDefined = rt.run("'jbr' in globals()");
+  const brResumedAtBase = jbrDefined ? rt.run("jbr") : "(jbr 실종)";
   rt.run("jbr = 'B'");
   const brB = await gj.commitBranch("expB", { note: { attempt: "loop" } });
   const brList = await gj.listBranches();
   check("journal 가지: 두 가지가 HEAD를 움직이지 않고 note와 갈림점을 나른다",
-    !!brA && !!brB && !!headAfterBranch && brResumedAtBase === "base"
+    !!brBaseCommit && !!brA && !!brB && !!headAfterBranch && brResumedAtBase === "base"
+    && headRefAtRecover.ref && headRefAtRecover.ref.commit === brBaseCommit.commit
     && brList.length === 2 && brList.map((b) => b.name).join(",") === "expA,expB"
     && brList[0].note.attempt === "vectorized" && brList[0].parents.length === 1,
-    `HEAD 부활 후 jbr=${brResumedAtBase}, 가지=${brList.map((b) => b.name).join("/")}`);
+    `base커밋=${brBaseCommit ? brBaseCommit.commit.slice(7, 19) : "null(busy 충돌)"}, `
+    + `HEAD@recover=${headRefAtRecover.ref ? headRefAtRecover.ref.commit.slice(7, 19) : "없음"}, `
+    + `jbr=${brResumedAtBase}, 가지=${brList.map((b) => b.name).join("/")}`);
   // 마커: 가지가 있으면 v2(구 pyproc recover는 fail-closed), 전부 지우면 v1로 복원.
   const markerWithBranches = JSON.parse(await (await (await jDir.getFileHandle("journalMarker.json")).getFile()).text());
   // pack + prune 뒤에도 가지 세대가 물질화되는가(live 판정에 가지가 들어 있는가).
@@ -446,6 +453,37 @@ try {
   const brGone = await gj.listBranches();
   check("journal 가지: 삭제 후 마커가 v1로 돌아와 구 버전 호환이 복원된다",
     markerAfterDelete.version === 1 && brGone.length === 0, `marker v${markerAfterDelete.version}, 가지 ${brGone.length}`);
+
+  // 이정표(어제로 돌아가): HEAD 커밋마다 그날의 auto-<날짜> 가지가 그 커밋을 가리키게 갱신되고
+  // (그날의 끝 상태로 수렴), 날짜 수가 keep을 넘으면 가장 오래된 것이 지워진다. 이정표는 ref
+  // 파일 하나라 blob 비용이 0이다(내용주소 커밋은 이미 저장소에 있다). 과거 날짜는 벽시계를
+  // 못 미니 ref 직접 주입으로 재현한다(트림 법은 이름 사전순 = 시간순만 본다).
+  const mj = rt.enableJournal({ dir: jDir, reactive, includeHome: false, milestones: { keep: 2 } });
+  rt.run("jms = 1");
+  const ms1 = await mj.commit();
+  const today = new Date().toISOString().slice(0, 10);
+  const msAfterFirst = await mj.listBranches();
+  const todayRef = msAfterFirst.find((b) => b.name === `auto-${today}`);
+  rt.run("jms = 2");
+  const ms2 = await mj.commit();
+  const msAfterSecond = await mj.listBranches();
+  const todayRef2 = msAfterSecond.find((b) => b.name === `auto-${today}`);
+  check("journal 이정표: 그날의 auto 가지가 마지막 커밋으로 수렴한다",
+    !!ms1 && !!todayRef && todayRef.commit === ms1.commit
+    && !!ms2 && !!todayRef2 && todayRef2.commit === ms2.commit && todayRef2.commit !== todayRef.commit,
+    `auto-${today}: ${todayRef && todayRef.commit.slice(0, 18)}.. -> ${todayRef2 && todayRef2.commit.slice(0, 18)}..`);
+  // 과거 이정표 둘을 주입하고 커밋하면 keep=2 초과분(가장 오래된 날짜)이 지워진다.
+  const mjKernel = mj._kernel;
+  await mjKernel.writeRef("branch-auto-2000-01-01", { commit: todayRef2.commit });
+  await mjKernel.writeRef("branch-auto-2000-01-02", { commit: todayRef2.commit });
+  rt.run("jms = 3");
+  await mj.commit();
+  const msNames = (await mj.listBranches()).map((b) => b.name);
+  const msRestored = await mj.recoverBranch(`auto-${today}`);
+  check("journal 이정표: keep 초과분 트림 + 이정표로 부활",
+    msNames.join(",") === `auto-2000-01-02,auto-${today}` && !!msRestored && rt.run("jms") === 3,
+    `가지=${msNames.join("/")}, 부활 후 jms=${rt.run("jms")}`);
+  for (const name of msNames) await mj.deleteBranch(name);
   // 내구성의 전제가 보이는가. 커밋이 성공해도 브라우저가 저장소를 축출하면 다음 부팅이 첫
   // 부팅이 된다. 그 위험을 소비자가 볼 수 없으면 "내구"는 확인 불가능한 주장이다: 승인 여부를
   // 값으로 드러내고, 요청 자체가 불가능한 환경도 승인되지 않은 것과 같게 다룬다.

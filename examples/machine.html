@@ -57,6 +57,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
         <button id="cast" class="ghost">Cast signed copy</button>
         <button id="exp" class="ghost">Export signed .pymachine</button>
         <button id="imp" class="ghost">Open signed machine file</button>
+        <button id="race" class="ghost">Race 3 solutions</button>
         <input id="file" type="file" accept=".pymachine" style="display:none">
       </div>
       <div class="term" id="out"></div>
@@ -261,6 +262,39 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
       st.textContent = `Switched to a signed machine verified by key ${trustedKeyShort}.`;
       return next;
     };
+    // Solution race: three candidate implementations compete from the same state. Each attempt is
+    // checkpointed as a sibling branch and the heap is rewound in between, so a failing candidate
+    // cannot contaminate the next. A Python assertion judges each end state, the winner is adopted,
+    // and the whole decision (what ran, what judged, what won) is committed to a durable branch
+    // whose note carries the provenance. This is the layer an agent drives: compete, verify, adopt.
+    const raceSolutions = async () => {
+      machine.run("import re; logText = 'a=1 b=22 c=333'");
+      const judge = "nums == [1, 22, 333]";
+      const candidates = [
+        "nums = [int(t) for t in logText.split() if t.isdigit()]",
+        "nums = [int(m) for m in re.findall(r'[0-9]+', logText)]",
+        "nums = sorted(logText)",
+      ];
+      const race = machine.history.attempts(candidates);
+      let winner = -1;
+      for (const attempt of race.attempts) {
+        if (!attempt.ok) continue;
+        race.adopt(attempt.index);
+        if (machine.run(judge) === true) { winner = attempt.index; break; }
+      }
+      if (winner < 0) { race.adopt(0); throw new Error("no candidate satisfied the judge"); }
+      race.adopt(winner);
+      const note = { tried: candidates, judge, picked: winner, by: "solution race demo" };
+      const raceDir = await stateDir.getDirectoryHandle("raceJournal", { create: true });
+      // The race journal carries the decision, not the workspace: /home/web is mounted to OPFS
+      // in this demo and stays owned by the hibernate path, so the race generations skip it.
+      await machine.history.branch("raceWinner", { dir: raceDir, note, includeHome: false });
+      const adopted = await machine.history.adopt("raceWinner", { dir: raceDir, note: { reason: "judge passed" }, includeHome: false });
+      const recorded = (await machine.history.branches({ dir: raceDir, includeHome: false })).find((b) => b.name === "raceWinner");
+      print(`race: candidate ${winner} won (${judge}); adopted commit ${adopted.commit.slice(7, 19)}.. carries the note.`);
+      return { winner, note: recorded && recorded.note, adoptedFrom: adopted && adopted.commit ? winner : -1 };
+    };
+
     const castSigned = async () => {
       const blob = await exportSignedImage();
       await switchToSignedImage(blob);
@@ -269,6 +303,7 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
     };
     if (gateMode) {
       try {
+        await Promise.race([(async () => {
         const r = await runCode();
         print(r);
         const blob = await castSigned();
@@ -276,9 +311,17 @@ print('counter:', n, '| lines in visits.txt:', len(open('/home/web/visits.txt').
         const fileOk = String(machine.run("open('/home/web/visits.txt').read()")).includes("visit");
         const resumeOk = machine.run("resumeReasonSeen == 'openMachine' and appDb.execute('select count(*) from resumeEvent').fetchone()[0] >= 3") === true;
         const trustUiOk = keyFp.textContent.includes("trusted signer:") && keyFp.textContent.includes("rejected");
-        gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && resumeOk && trustUiOk && st.textContent.includes("verified"));
-      } catch (e) { print(String(e).slice(-160)); gateReport(false); }
+        const raced = await Promise.race([
+          raceSolutions(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("race watchdog 60s: " + out.textContent.slice(-160))), 60000)),
+        ]);
+        const raceOk = raced.winner === 1 && machine.run("nums == [1, 22, 333]") === true
+          && raced.note && raced.note.picked === 1 && Array.isArray(raced.note.tried) && raced.note.tried.length === 3;
+        gateReport(r.includes("counter") && blob.size > 0 && stateOk && fileOk && resumeOk && trustUiOk && raceOk && st.textContent.includes("verified"));
+        })(), new Promise((_, reject) => setTimeout(() => reject(new Error("gate watchdog 120s | " + out.textContent.split(String.fromCharCode(10)).join(" · ").slice(-200))), 120000))]);
+      } catch (e) { print(String(e).slice(-320)); gateReport(false); }
     }
+    document.getElementById("race").onclick = () => raceSolutions().catch((e) => print(String(e).slice(-160)));
     // Lifecycle: hibernate automatically when the tab goes away
     addEventListener("pagehide", () => { hibernate(); });
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") hibernate(); });

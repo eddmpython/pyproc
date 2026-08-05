@@ -40,6 +40,18 @@ const JOURNAL_MARKER_VERSIONS = Object.freeze([1, 2]);
 const BRANCH_REF_PREFIX = "branch-";
 const BRANCH_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
+// 자동 이정표 가지의 이름 접두. "어제로 돌아가"의 정체는 ref 파일 하나다: 내용주소 커밋은
+// 이미 저장소에 있으므로 이정표는 blob 비용 0으로 그 주소를 가리키기만 한다.
+const MILESTONE_BRANCH_PREFIX = "auto-";
+
+function normalizeMilestonePolicy(policy) {
+  if (!policy) return null;
+  if (typeof policy !== "object" || Array.isArray(policy)) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.milestones: needs a policy object like { keep: 7 }");
+  const keep = policy.keep ?? 7;
+  if (!Number.isInteger(keep) || keep < 1 || keep > 366) throw new PyProcError("PYPROC_INPUT_INVALID", "journal.milestones: keep must be an integer from 1 to 366");
+  return { keep };
+}
+
 function branchRefName(name) {
   const branch = String(name || "");
   if (!BRANCH_NAME_RE.test(branch)) {
@@ -104,6 +116,10 @@ export class MachineJournal {
     this._idleMs = cfg.idleMs || 2000;
     this._homePath = cfg.includeHome === false ? null : (cfg.homePath || DEFAULT_MACHINE_HOME_PATH);
     this._autoPack = normalizeAutoPackPolicy(cfg.autoPack);
+    // cfg.milestones: { keep: N }. HEAD 커밋마다 그날의 auto-<날짜> 이정표 가지가 그 커밋을
+    // 가리키게 갱신되고(그날의 마지막 커밋 = 그날의 끝 상태), 날짜가 keep개를 넘으면 가장
+    // 오래된 것이 지워진다. 켜는 순간 가지가 생기므로 마커가 v2가 된다(구 버전 fail-closed).
+    this._milestones = normalizeMilestonePolicy(cfg.milestones);
     // 이식성 승인은 저널을 켤 때 한 번 선언한다(커밋마다 묻지 않는다: 정책은 세션 단위다).
     this._opts = { allowHostProxies: cfg.allowHostProxies === true };
     // 세대에 함께 실리는 소비자 payload. 저널은 그 내용을 모른다: id와 두 함수만 안다.
@@ -299,6 +315,7 @@ export class MachineJournal {
         this._addressCache.set(page, { a: liveHashes[2 * page], b: liveHashes[2 * page + 1], address });
       }
       await this._cleanupLegacyRefs();
+      if (refName === "HEAD" && this._milestones) await this._touchMilestone(committed.commitAddress, committedAt);
       // HEAD가 완전히 선 뒤 marker를 쓴다. marker가 committed인데 훗날 HEAD/PREV가 모두
       // 사라지면 recover는 그 부재를 첫 부팅으로 해석하지 않는다. 첫 커밋 중간 크래시는
       // accepted commit이 아니므로 marker를 만들지 않는다.
@@ -410,6 +427,18 @@ export class MachineJournal {
       .filter((name) => name.startsWith(BRANCH_REF_PREFIX))
       .map((name) => name.slice(BRANCH_REF_PREFIX.length))
       .sort();
+  }
+
+  // 이정표 갱신: 그날의 auto-<YYYY-MM-DD> ref가 방금 커밋을 가리키게 하고(그날의 끝 상태로
+  // 수렴), 날짜 수가 keep을 넘으면 가장 오래된 이정표 ref를 지운다(사전순 = 시간순). 사용자
+  // 가지는 세지 않는다. blob 회수는 다음 prune 몫이다(live 판정이 자연히 제외한다).
+  async _touchMilestone(commitAddress, committedAt) {
+    const day = String(committedAt).slice(0, 10);
+    await this._kernel.writeRef(BRANCH_REF_PREFIX + MILESTONE_BRANCH_PREFIX + day, { commit: commitAddress });
+    const milestones = (await this._branchNames()).filter((name) => name.startsWith(MILESTONE_BRANCH_PREFIX)).sort();
+    for (const stale of milestones.slice(0, Math.max(0, milestones.length - this._milestones.keep))) {
+      await this._kernel.removeRef(BRANCH_REF_PREFIX + stale);
+    }
   }
 
   // 가지 목록: 이름 + 커밋 주소 + 시각 + note(provenance). 정본은 ref 파일 자체다.

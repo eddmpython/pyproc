@@ -17,6 +17,9 @@ const EPOCH_FILE = "EPOCH.json";
 const DEFAULT_HEARTBEAT_MS = 1000;
 const DEFAULT_PRESENCE_TIMEOUT_MS = 5000;
 const DEFAULT_READY_TIMEOUT_MS = 20000;
+// 리더가 로컬로 처리하는 action 전수. _execute의 스위치와 같은 집합이어야 한다: 여기 없는
+// action은 리더 자신도 원격 왕복을 타고, _execute에 없는 action은 명시 거부된다.
+const LOCAL_ACTIONS = new Set(["run", "commit", "branch", "branches", "adopt", "deleteBranch"]);
 const DEFAULT_RPC_TIMEOUT_MS = 8000;
 
 const MACHINE_ROOT = "pyprocMachines";
@@ -92,6 +95,7 @@ export class KernelElection {
     this._error = null;
     this._session = null;
     this._journal = null;
+    this._milestones = opts.milestones || null; // { keep: N } - 이정표 가지(어제로 돌아가). 판정은 저널이 한다
     this._chan = null;
     this._pending = new PendingRequests();
     this._served = new ServedResponses();
@@ -172,6 +176,7 @@ export class KernelElection {
         this._journal = new MachineJournal(this._session.rt, {
           dir: this._journalDir,
           reactive: this._session.reactive,
+          ...(this._milestones ? { milestones: this._milestones } : {}),
           // 결과 기록은 힙과 같은 세대에 실린다: 그래야 "답이 내구적이다"와 "효과가 내구적이다"가
           // 한 사실이 된다(세대 밖에 두면 승계자가 힙에 없는 효과의 결과를 답할 수 있다).
           sidecar: {
@@ -380,6 +385,20 @@ export class KernelElection {
         result = normalizeResult(this._session.rt, raw);
       } else if (action === "commit") {
         result = await this._commitJournal();
+      } else if (action === "branch") {
+        result = await this._requireJournal("branch").commitBranch(payload.name, { note: payload.note });
+      } else if (action === "branches") {
+        result = await this._requireJournal("branches").listBranches();
+      } else if (action === "adopt") {
+        // 물질화 + HEAD 커밋이 한 명령이다: 힙이 HEAD와 어긋난 채 리더가 죽는 창을 열지 않는다
+        // (그래서 내구 핸들에 recoverBranch는 없다). 채택 커밋이 곧 세대 경계라 auto-commit을
+        // 따로 기다리지 않는 것도 commit action과 같은 이유다.
+        result = await this._requireJournal("adopt").adoptBranch(payload.name, { note: payload.note });
+        this._lastCommitAt = result?.committedAt || this._lastCommitAt;
+        this._announceLeader(true);
+        this._notify();
+      } else if (action === "deleteBranch") {
+        result = await this._requireJournal("deleteBranch").deleteBranch(payload.name);
       } else {
         throw kernelError(`KernelElection: unknown RPC action (${action})`, "PYPROC_RPC_ACTION_INVALID");
       }
@@ -387,6 +406,13 @@ export class KernelElection {
     } catch (error) {
       return this._responseFor(payload, false, errorPayload(error));
     }
+  }
+
+  _requireJournal(verb) {
+    if (!this._journal) {
+      throw kernelError(`KernelElection: ${verb} needs a durable machine (open({ name }) with a journal)`, "PYPROC_INPUT_INVALID");
+    }
+    return this._journal;
   }
 
   async _commitJournal() {
@@ -464,24 +490,15 @@ export class KernelElection {
 
   async _request(action, payload = {}, opts = {}) {
     await this.ready({ timeoutMs: opts.timeoutMs || this._rpcTimeoutMs });
-    if (this._role === "leader") {
-      if (action === "run") {
-        return this._enqueueCommand(async () => {
-          const response = await this._runCommand("run", payload);
-          if (response.ok) return response.result;
-          if (response.durabilityUnknown) throw durabilityUnknown(response.cause);
-          throw kernelError(response.error, response.code || "PYPROC_KERNEL_EXECUTION_ERROR", response.retryable === true);
-        });
-      }
-      if (action === "commit") {
-        // 서버 경로와 같은 정책을 탄다(_execute의 commit action). 예전에는 여기서 저널을 직접
-        // 불러 같은 명령이 두 경로에서 다른 코드를 밟았다.
-        return this._enqueueCommand(async () => {
-          const response = await this._runCommand("commit", payload);
-          if (response.ok) return response.result;
-          throw kernelError(response.error, response.code || "PYPROC_KERNEL_EXECUTION_ERROR", response.retryable === true);
-        });
-      }
+    if (this._role === "leader" && LOCAL_ACTIONS.has(action)) {
+      // 서버 경로와 같은 정책을 탄다(_execute의 action 스위치 + _runCommand 하나). 예전에는
+      // run과 commit이 각자 분기를 갖고 있었고, action이 늘 때마다 사본이 하나씩 늘 자리였다.
+      return this._enqueueCommand(async () => {
+        const response = await this._runCommand(action, payload);
+        if (response.ok) return response.result;
+        if (response.durabilityUnknown) throw durabilityUnknown(response.cause);
+        throw kernelError(response.error, response.code || "PYPROC_KERNEL_EXECUTION_ERROR", response.retryable === true);
+      });
     }
     const replayQueued = Boolean(this._journalDir) && this._pending.hasAwaitingLeader();
     if (!replayQueued && (!this._leaderId || this._phase !== "ready")) {
@@ -524,6 +541,25 @@ export class KernelElection {
 
   commit(opts = {}) {
     return this._request("commit", {}, opts);
+  }
+
+  // ---- 가지: 내구 분기가 선출 파이프라인을 그대로 탄다(정확히 한 번 보증·승계·epoch fence).
+  // recoverBranch는 이 핸들에 없다: 힙이 HEAD와 어긋난 채 리더가 죽는 창을 만들지 않는다.
+  // 채택은 물질화 + HEAD 커밋이 한 명령이다(_execute의 adopt action). ----
+  branch(name, opts = {}) {
+    return this._request("branch", { name: String(name), ...(opts.note ? { note: opts.note } : {}) }, opts);
+  }
+
+  branches(opts = {}) {
+    return this._request("branches", {}, opts);
+  }
+
+  adopt(name, opts = {}) {
+    return this._request("adopt", { name: String(name), ...(opts.note ? { note: opts.note } : {}) }, opts);
+  }
+
+  deleteBranch(name, opts = {}) {
+    return this._request("deleteBranch", { name: String(name) }, opts);
   }
 
   ready(opts = {}) {
@@ -666,6 +702,7 @@ export async function openDurableMachine(opts = {}) {
     onLeader: opts.onLeader,
     onStatus: opts.onStatus,
     autoCommit: opts.autoCommit,
+    milestones: opts.milestones,
   });
   machine.join();
   try {

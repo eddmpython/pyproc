@@ -540,6 +540,8 @@ export interface KernelElectionOptions {
   rpcTimeoutMs?: number;
   /** Commits each completed run, including its durable outcome record, before resolving or rejecting. Defaults to true. */
   autoCommit?: boolean;
+  /** Daily milestone branches for the durable journal (see JournalConfig.milestones). */
+  milestones?: { keep?: number };
   /** Called when this participant becomes the leader. */
   onLeader?: (info: KernelLeaderInfo) => void;
   /** Called whenever the role, leader, epoch, or recovery state changes. */
@@ -596,6 +598,21 @@ declare class KernelElection {
   run(code: string, opts?: { async?: boolean; timeoutMs?: number }): Promise<unknown>;
   /** Commits the heap and /home/web as one journal generation. A follower's call is forwarded to the leader. */
   commit(opts?: { timeoutMs?: number }): Promise<JournalCommitResult | null>;
+  /**
+   * Commits the machine's state to a named durable branch without moving HEAD. Rides the same
+   * command pipeline as run: exactly-once outcome recording, succession, and epoch fencing apply.
+   */
+  branch(name: string, opts?: { note?: Record<string, unknown>; timeoutMs?: number }): Promise<JournalCommitResult | null>;
+  /** Lists durable branches with provenance notes and fork parents. */
+  branches(opts?: { timeoutMs?: number }): Promise<Array<{ name: string; commit: string; createdAt: string | null; note: Record<string, unknown> | null; parents: string[] }>>;
+  /**
+   * Materializes a branch and commits that state as the new HEAD in one command, so the leader
+   * never sits on a heap that diverges from HEAD (which is why this handle has no recoverBranch).
+   * The adopting commit's parents point at the branch commit and its note records adoptedFrom.
+   */
+  adopt(name: string, opts?: { note?: Record<string, unknown>; timeoutMs?: number }): Promise<(JournalCommitResult & { adopted: string; applied: JournalRecoverResult }) | null>;
+  /** Removes a branch ref. Blob reclamation is the next prune's job. */
+  deleteBranch(name: string, opts?: { timeoutMs?: number }): Promise<{ deleted: string }>;
   /** Waits until the leader has finished recovery and is ready to serve. */
   ready(opts?: { timeoutMs?: number }): Promise<KernelStatus>;
   /** Current machine, participant, leader, epoch, and recovery state. */
@@ -697,6 +714,14 @@ export interface JournalConfig {
    * The default policy for true is 128 loose blobs or 8MB.
    */
   autoPack?: boolean | JournalAutoPackPolicy;
+  /**
+   * Opt-in daily milestones: every HEAD commit updates the auto-<YYYY-MM-DD> branch ref to point at
+   * it (the day's milestone converges to the day's last commit), and dates beyond keep are trimmed
+   * oldest-first. A milestone is one tiny ref file: the content-addressed commit already exists, so
+   * going back to yesterday costs no extra blobs. Enabling this creates branches, which marks the
+   * journal format version 2 (an older pyproc refuses it fail-closed).
+   */
+  milestones?: { keep?: number };
   /**
    * Observation channel for idle-commit success and failure. A failed durability claim is never
    * swallowed: failures arrive as { kind: "commitError", error } where error.code is in the

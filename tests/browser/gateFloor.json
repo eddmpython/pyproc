@@ -1,7 +1,7 @@
 {
   "comment": "페이지별 통과 체크 수 하한. 브라우저 게이트는 'ok && 전부 pass'만 보므로, 체크를 지우면 더 적은 수로 GREEN이 된다(2026-07-26 실측: 87개 중 80개를 지워도 7/7 GREEN). 값은 신설 당시 실측 카운트이고, 내리려면 같은 커밋에서 이 숫자를 고쳐야 한다. 여기 없는 페이지(attempts probe 등)는 자연 통과한다: 하한은 정규 게이트 페이지의 계약이다. x86 자산이 필요한 probe 10개도 등재했다(2026-07-27 실측). 그 레인은 2026-08-01부터 CI에서 돈다: gitignore는 '커밋하지 않는다'이지 '받을 수 없다'가 아니고, 준비 스크립트가 catalog의 SHA-256 핀으로 받아온다. 러너가 체크 0개를 RED로 보므로 최악의 경우는 이미 막혀 있고, 하한은 그 위에서 '조용히 줄어드는' 경우를 막는다.",
   "floors": {
-    "tests/browser/gate.html": 133,
+    "tests/browser/gate.html": 135,
     "tests/browser/brandGate.html": 4,
     "": 5,
     "examples/basic.html": 1,

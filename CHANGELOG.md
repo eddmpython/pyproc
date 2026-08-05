@@ -25,6 +25,19 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   cannot contaminate the next; `adopt(i)` restores the winner. Serial on purpose: restoreLive is
   cheap, while parallel attempts cost one heap each.
 
+  The durable machine speaks the same verbs. `open({ name })` handles carry `branch` / `branches` /
+  `adopt` / `deleteBranch` through the election command pipeline, so exactly-once outcome recording,
+  succession, and epoch fencing apply to branching exactly as they do to `run`. Adoption
+  materializes the branch and commits it as the new HEAD in one command, which is why that handle
+  has no `recoverBranch`: the leader never sits on a heap that diverges from HEAD.
+
+  **Daily milestones make "go back to yesterday" a verb.** Opt in with
+  `milestones: { keep: N }` (journal config, or the `open({ name })` options): every HEAD commit
+  updates the `auto-<date>` branch to point at it, so a day's milestone converges to that day's
+  last state, and dates beyond `keep` are trimmed oldest-first. A milestone is one tiny ref file -
+  the content-addressed commit already exists - so this costs no extra state.
+  `adopt("auto-2026-08-03")` is the whole journey back.
+
   **Compatibility**: a journal carrying branches marks itself format version 2, and an older
   pyproc refuses to recover it (fail closed) rather than pruning branch data its live-set walk
   cannot see. Do not run an older pyproc's `pack()`/`prune()` directly against a branched journal.
