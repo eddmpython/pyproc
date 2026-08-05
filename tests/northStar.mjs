@@ -84,15 +84,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "timeTravelState",
-    score: 9.0,
+    score: 9.3,
     en: Object.freeze({
       title: "State you can rewind",
-      state: "Checkpoint, restore, branch, and prune run at execution boundaries over complete heap hashing: a full-heap byte-equality round trip, sibling-delta isolation across a branch tree, and a violated boundary that falls back to a full rehash instead of restoring something corrupt. Node property and fuzz gates cover delta soundness and tree integrity. An arbitrary instant is still not capturable, because in-flight promises and network requests live outside the boundary.",
+      state: "Checkpoint, restore, branch, and prune run at execution boundaries over complete heap hashing: a full-heap byte-equality round trip, sibling-delta isolation across a branch tree, and a violated boundary that falls back to a full rehash instead of restoring something corrupt. History is a first-class value beyond the session: named durable branches with provenance notes, adopt as the consuming verb (heap states cannot merge), serial attempts that race candidate solutions without contamination, and daily auto milestones that make going back to yesterday one verb - on the single-controller journal and on the elected durable machine through the same exactly-once command pipeline. Node property and fuzz gates cover delta soundness, tree integrity, and ref-protocol branch laws. An arbitrary instant is still not capturable, because in-flight promises and network requests live outside the boundary.",
       target: "Any past state comes back instantly, including the work that was in flight when it was left.",
     }),
     ko: Object.freeze({
       title: "되감을 수 있는 상태",
-      state: "체크포인트, 복원, 분기, 가지치기가 완전 힙 해시 위에서 실행 경계마다 돈다: 전 바이트 동일 full-heap 왕복, 분기 나무의 형제 델타 격리, 경계를 어겼을 때 오염된 복원 대신 전체 재해시로 물러나는 경로까지 게이트가 문다. 델타 건전성과 나무 무결성은 Node property/fuzz 게이트가 덮는다. 임의 순간의 포획은 아직 아니다: 진행 중인 promise와 네트워크 요청은 경계 밖에 산다.",
+      state: "체크포인트, 복원, 분기, 가지치기가 완전 힙 해시 위에서 실행 경계마다 돈다: 전 바이트 동일 full-heap 왕복, 분기 나무의 형제 델타 격리, 경계를 어겼을 때 오염된 복원 대신 전체 재해시로 물러나는 경로까지 게이트가 문다. 역사는 세션 너머의 1급 값이다: 이름 있는 내구 가지와 provenance note, 채택(adopt)이라는 소비 동사(힙 상태는 병합이 성립하지 않는다), 오염 없이 후보를 경쟁시키는 직렬 attempts, 어제로 돌아가기를 동사 하나로 만드는 일일 자동 이정표가 단일 컨트롤러 저널과 선출 내구 머신 양쪽에서 - 같은 정확히 한 번 명령 파이프라인으로 - 돈다. 델타 건전성, 나무 무결성, ref 프로토콜 가지 법은 Node property/fuzz 게이트가 덮는다. 임의 순간의 포획은 아직 아니다: 진행 중인 promise와 네트워크 요청은 경계 밖에 산다.",
       target: "떠날 때 진행 중이던 작업까지 포함해 과거의 어느 상태든 즉시 돌아온다.",
     }),
     evidence: Object.freeze([
