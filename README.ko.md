@@ -195,6 +195,27 @@ console.log(machine.run("len(values)"));      // 3
 전체 재해시 경로로 복원한다 - 느려질 뿐 조용히 오염되지 않는다. 라이브 프록시 핸들로
 파이썬을 호출했다면 `machine.markDirty()`로 신고한다.
 
+가지와 채택. 내구 Machine은 실행 상태에 대해 git의 동사를 말한다: 경쟁하는 상태를 이름 있는
+가지로 커밋하고, 왜인지를 커밋 자체에 사는 provenance note로 남기고, 승자를 채택한다. 힙
+상태는 병합이 성립하지 않으므로 소비 동사는 merge가 아니라 `adopt`다:
+
+```js
+const m = await open({ name: "lab", milestones: { keep: 7 } });
+await m.run("model = trainStep({})");
+await m.branch("adamRun", { note: { attempt: "adam", lr: 0.001 } });
+await m.run("model = trainStep({'optimizer': 'sgd'})");
+await m.branch("sgdRun", { note: { attempt: "sgd" } });
+await m.adopt("adamRun", { note: { reason: "validation passed" } }); // 그 상태가 이제 HEAD다
+await m.adopt("auto-2026-08-05");                                    // 또는 어제로 돌아간다
+```
+
+`branches()`가 모든 가지를 갈림점과 note와 함께 나열하므로, 결정 전체 - 무엇을 시도했고
+무엇이 판정했고 무엇이 이겼나 - 가 역사로 되읽힌다. `milestones: { keep }`이면 날마다 그날의
+마지막 커밋을 가리키는 `auto-<날짜>` 가지가 추가 상태 비용 없이 생긴다. 휘발 머신에서는
+`machine.history.attempts([codes])`가 한 기반에서 후보들을 경주시키고 사이마다 힙을 되감아
+실패한 후보가 다음을 오염시키지 못한다. [Machine 데모](examples/machine.html)가 그 경주를
+라이브로 돌린다.
+
 > 위 기본은 Chromium 브라우저만 있으면 된다. `PyProc`(프로세스 OS)와 소켓은 `crossOriginIsolated`(`COOP: same-origin`, `COEP: require-corp`)와 same-origin 워커도 필요하다 - [셋업](#셋업) 참조. `checkEnvironment()`로 확인하라.
 
 ## 제품 진입점
@@ -223,13 +244,17 @@ console.log(machine.run("len(values)"));      // 3
 환경 준비  ->  체크포인트  ->  AI 코드 실행  ->  (실패)  ->  복원  ->  수정 코드 실행
 ```
 
-**패턴 2 - 후보 분기.** 공통 데이터와 패키지를 한 번 로드하고, 같은 준비 상태에서 여러 접근을 각각 격리해 실행한다 - `PyProc` 워커로, 또는 한 체크포인트에서 반복 복원으로.
+**패턴 2 - 경쟁·검증·채택.** 공통 데이터를 한 번 로드하고, `history.attempts([...])`로 같은
+준비 상태에서 후보 해법들을 경주시킨다: 후보마다 형제 가지로 체크포인트되고 사이마다 힙이
+기반으로 되감기므로 실패한 후보가 다음을 오염시키지 못한다. 각 끝 상태를 파이썬 단정으로
+채점하고, 승자를 `adopt`한 뒤 이름 있는 내구 가지에 커밋하면 - 무엇을 시도했고 왜 이겼는지가
+note에 남아 - 에이전트의 해결 경로가 채팅 로그 고고학이 아니라 1급 역사가 된다.
 
 ```text
 데이터 + 패키지 로드
-        |-- pandas 접근
-        |-- SQL 접근
-        \-- NumPy 접근
+        |-- pandas 접근   -> 채점
+        |-- SQL 접근      -> 채점
+        \-- NumPy 접근    -> 채점  ->  승자 채택(note: 무엇을 돌렸고 무엇이 판정했고 무엇이 이겼나)
 ```
 
 **패턴 3 - 로컬 우선 데이터.** 사용자 파일은 탭에서 분석되고, 요약만 나간다. 에이전트 코드를 실행하기 전에 fail-closed CSP를 적용해 코드가 외부 endpoint를 열지 못하게 하고, 신뢰한 agent 제어 채널이 돌려주는 값도 제한한다.

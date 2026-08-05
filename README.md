@@ -195,6 +195,27 @@ If the boundary was not closed (an exception mid-run, a stray mutation), `cp.res
 it and falls back to a full rehash automatically - slower, never silently corrupt. After calling
 Python through a live proxy handle, report it with `machine.markDirty()`.
 
+Branch and adopt. The durable Machine speaks git's verbs about execution state: commit competing
+states to named branches, record why in a provenance note that lives in the commit itself, and adopt
+the winner. Heap states cannot be merged, so the consuming verb is `adopt`, not merge:
+
+```js
+const m = await open({ name: "lab", milestones: { keep: 7 } });
+await m.run("model = trainStep({})");
+await m.branch("adamRun", { note: { attempt: "adam", lr: 0.001 } });
+await m.run("model = trainStep({'optimizer': 'sgd'})");
+await m.branch("sgdRun", { note: { attempt: "sgd" } });
+await m.adopt("adamRun", { note: { reason: "validation passed" } }); // its state is now HEAD
+await m.adopt("auto-2026-08-05");                                    // or go back to yesterday
+```
+
+`branches()` lists every branch with its fork parent and note, so the whole decision - what was
+tried, what judged, what won - reads back as history. With `milestones: { keep }`, every day gets an
+`auto-<date>` branch pointing at that day's last commit at no extra state cost. On transient
+machines, `machine.history.attempts([codes])` races candidates from one base with the heap rewound
+in between, so a failing candidate cannot contaminate the next; the
+[Machine demo](examples/machine.html) runs that race live.
+
 > The basics above need only a Chromium browser. `PyProc` (process OS) and sockets also need `crossOriginIsolated` (`COOP: same-origin`, `COEP: require-corp`) and same-origin workers - see [Setup](#setup). Run `checkEnvironment()` to check.
 
 ## Product entrances
@@ -224,13 +245,18 @@ of silently losing the replay guarantee.
 prepare env  ->  checkpoint  ->  run AI code  ->  (fails)  ->  restore  ->  run fixed code
 ```
 
-**Pattern 2 - branch candidates.** Load shared data and packages once, then run several approaches from the same prepared state, each isolated - via `PyProc` workers, or by repeated restore from one checkpoint.
+**Pattern 2 - compete, verify, adopt.** Load shared data once, then race candidate solutions from
+the same prepared state with `history.attempts([...])`: each candidate is checkpointed as a sibling
+branch and the heap is rewound in between, so a failing candidate cannot contaminate the next. Judge
+each end state with a Python assertion, `adopt` the winner, and commit it to a named durable branch
+whose note records what was tried and why it won - the agent's solution path becomes first-class
+history, not chat-log archaeology.
 
 ```text
 load data + packages
-        |-- pandas approach
-        |-- SQL approach
-        \-- NumPy approach
+        |-- pandas approach   -> judge
+        |-- SQL approach      -> judge
+        \-- NumPy approach    -> judge  ->  adopt the winner (note: what ran, what judged, what won)
 ```
 
 **Pattern 3 - local-first data.** The user's file is analyzed in the tab; only the summary leaves. Apply a fail-closed CSP before agent code runs so it cannot open an external endpoint, and constrain what the trusted agent control channel returns.

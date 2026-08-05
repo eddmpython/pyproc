@@ -170,6 +170,14 @@ Volatile verbs:
   valve). Restoring a pruned node throws `PYPROC_CHECKPOINT_PRUNED`.
 - `stats()` reports exact controller-owned base/delta/hash bytes, node/branch counts,
   live depth, and the last pressure event.
+- `attempts(codes)` races candidate solutions from the current state. Each candidate runs
+  serially, its end state is checkpointed as a sibling branch of the same base, and the
+  heap is rewound to the base in between, so a failing candidate cannot contaminate the
+  next; the machine ends at the base state. The result carries `{ base, attempts, adopt }`:
+  each attempt records `{ index, code, ok, value, error, checkpoint }`, and `adopt(i)`
+  restores attempt `i`'s end state. Serial on purpose: `restoreLive` is cheap, while
+  parallel attempts cost one heap each (`proc().map` is the parallel tool). This is the
+  compete-verify-adopt loop an agent drives. Available from 0.0.14.
 - `setRetentionPolicy(policy)` sets observable budgets (`maxNodes`, `maxDeltaBytes`,
   `maxTotalBytes`). `pruneBranches: true` may remove only off-live-path branches, so a
   linear history - the shape a per-statement checkpoint produces - gets nothing back from
@@ -195,6 +203,24 @@ one journal instance):
   interrupts execution). Durable-claim failures are observable via `onStatus`
   (`PYPROC_JOURNAL_IO`), never silently swallowed.
 - `pack(opts)` compacts live blobs into one pack file and drops loose/stale files.
+- `branch(name, opts)` commits the current state to a named branch ref without touching
+  HEAD/PREV; the commit's parents record the fork point and `opts.note` (canonical JSON,
+  4KB cap) rides the commit as provenance - what was tried and why lives in the same
+  object as the state. `branches(opts)` lists branches with commit address, creation
+  time, note, and fork parents. `recoverBranch(name, opts)` materializes a branch onto
+  the heap (same `h0` contract as recover; corruption is an explicit error, never a
+  first-boot masquerade). `adopt(name, opts)` materializes the branch and commits it as
+  the new HEAD - the adopting commit's parents point at the branch commit and its note
+  records `adoptedFrom`. `deleteBranch(name, opts)` removes the ref (blob reclamation is
+  the next prune). Heap states cannot be merged, so the consuming verb is adopt, not
+  merge. A journal carrying branches marks itself format version 2: an older pyproc
+  refuses it fail-closed instead of pruning branch data it cannot see; deleting the last
+  branch restores version 1. Available from 0.0.14.
+- `milestones: { keep: N }` (journal config) opts into daily auto branches: every HEAD
+  commit updates `auto-<date>` to point at it, so a day's milestone converges to that
+  day's last state, and dates beyond `keep` are trimmed oldest-first. A milestone is one
+  tiny ref file - the content-addressed commit already exists - so going back to
+  yesterday is `adopt("auto-<date>")` at no extra state cost. Available from 0.0.14.
 - `export(opts?)` exports a signed portable bundle (`PYBUNDLE1`). Deterministic boots
   only.
 - `save(dir, name)` saves the session delta to OPFS; revival is
@@ -217,8 +243,11 @@ Every state verb returns its cost; nothing is free and nothing hides:
   (`kind` is `"base"` or `"delta"`).
 - `restore(...)` returns `{ pagesWritten, mbWritten, rehashed }` (`rehashed` reports
   whether the boundary-violation rehash path ran).
-- `commit(...)` returns `{ pages, wrote, mb, committedAt, home?, autoPack?, pruned? }`
-  (`wrote` is after content-address dedupe; `home` reports the file-tree generation).
+- `commit(...)` returns `{ ref, commit, pages, wrote, mb, committedAt, home?, autoPack?, pruned? }`
+  (`wrote` is after content-address dedupe; `home` reports the file-tree generation;
+  `ref`/`commit` name the moved ref and the commit's content address).
+- `adopt(...)` returns the commit receipt plus `{ adopted, applied }` (which branch, and
+  the materialization receipt).
 - `pack(...)` returns `{ liveKeys, packed, bytes, mb, looseRemoved, packsRemoved }`.
 - `prune(target)` returns `{ freedNodes, freedMB, keptNodes }`.
 
@@ -394,8 +423,13 @@ calls immediately (`PYPROC_PROCESS_UNAVAILABLE`) instead of hanging.
 ### `KernelElection`
 
 The handle returned by `open()` or `open({ name })`, and the
-underlying election/RPC contract: `join` / `run` / `commit` / `ready` / `status` /
-`subscribe` / `role` / `leave`. Tabs elect one leader over Web Locks; only the leader
+underlying election/RPC contract: `join` / `run` / `commit` / `branch` / `branches` /
+`adopt` / `deleteBranch` / `ready` / `status` / `subscribe` / `role` / `leave`. The
+branch verbs ride the same command pipeline as `run`, so exactly-once outcome recording,
+succession, and epoch fencing apply to branching unchanged; `adopt` materializes the
+branch and commits the new HEAD in one command, which is why this handle has no
+`recoverBranch` (the leader never sits on a heap that diverges from HEAD). Daily
+milestones opt in through `open({ name, milestones: { keep } })`. Available from 0.0.14. Tabs elect one leader over Web Locks; only the leader
 boots the kernel (deterministic session + journal); followers are RPC views over
 BroadcastChannel. When the leader tab dies, the lock releases, a follower promotes and
 resumes from the journal. Errors: `PYPROC_LEADER_UNAVAILABLE` (retryable),
