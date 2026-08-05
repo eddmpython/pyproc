@@ -8,6 +8,12 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
+<!-- unreleased-subpaths: -->
+소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
+예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
+
+## 0.0.14 - 2026-08-06
+
 ### Added
 
 - **Named durable branches with provenance, and an attempts verb for competing solutions.** The
@@ -43,9 +49,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   cannot see. Do not run an older pyproc's `pack()`/`prune()` directly against a branched journal.
   Deleting the last branch restores version 1. Journals without branches are unchanged.
 
-<!-- unreleased-subpaths: -->
-소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
-예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
+한국어 요약: 브레이킹 없는 기능 릴리즈다. 실행 상태가 git의 동사를 얻는다: 이름 있는 내구
+가지(commitBranch), 목록(branches), 물질화(recoverBranch), 채택(adopt - 힙 상태는 병합이
+성립하지 않으므로 merge는 없다), provenance note(무엇을 시도했고 왜 채택했는지가 커밋 자체에
+산다), 직렬 attempts(오염 없는 후보 경쟁), 일일 이정표(auto-<날짜> 가지, adopt 한 번이 어제로
+돌아가기). 같은 동사가 선출 내구 머신에서도 정확히 한 번 파이프라인으로 돈다. 가지를 나르는
+저널은 마커 v2가 되어 구 버전이 fail-closed로 거부한다(가지 없는 저널은 불변).
+
 
 ## 0.0.13 - 2026-08-03
 
