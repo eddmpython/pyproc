@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!--
+probe: 간헐 델타 유실 재현기.
+증상(게이트 실측 3회, 간헐): 커밋 성공 + HEAD 정확 + 물질화된 힙에서 직전 변수 실종, 이어
+blob is missing. 가설: pack/prune + pack-recover(다른 저널 인스턴스) 직후의 커밋에서
+collectDelta가 변경 페이지를 빠뜨린다(희소 hashesAt 되접기 또는 융합 주사 경로).
+게이트: 한 번이라도 재현되면 그 반복의 전체 법의학(페이지 목록, 해시 대조)을 실어 RED.
+실행: node tests/browser/run.mjs tests/attempts/stateKernel/commitDeltaLossProbe.html
+-->
+<html lang="ko">
+<head><meta charset="utf-8"><title>probe: commit delta loss</title>
+<style>body{font:14px/1.5 system-ui;margin:2rem;max-width:56rem} pre{background:#f4f4f5;padding:1rem;border-radius:6px;white-space:pre-wrap}</style></head>
+<body>
+<h1>probe: 간헐 델타 유실(커밋 성공 + 변수 실종) 재현</h1>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { boot } from "../../../index.js";
+  const out = document.getElementById("out");
+  const checks = []; const timings = {};
+  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
+  const report = async () => {
+    const ok = checks.length > 0 && checks.every((c) => c.pass);
+    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks, timings }) }); } catch (e) {}
+  };
+  try {
+    const indexParam = new URLSearchParams(location.search).get("indexURL");
+    const machine = await boot(indexParam ? { indexURL: new URL(indexParam, location.href).href } : {});
+    const rt = machine.runtime;
+    const reactive = rt.enableReactive();
+    const root = await navigator.storage.getDirectory();
+    try { await root.removeEntry("pyprocDeltaLossProbe", { recursive: true }); } catch (e) {}
+    const dir = await root.getDirectoryHandle("pyprocDeltaLossProbe", { create: true });
+
+    // 게이트의 선행 조건을 재현: 긴 체크포인트 역사 + 가지치기 흔적.
+    for (let i = 0; i < 6; i++) { rt.run(`churn${i} = list(range(${1000 + i * 500}))`); reactive.checkpoint(); }
+    const keepCp = reactive.checkpoint();
+    rt.run("churnBranch = 'x' * 50000"); reactive.checkpoint();
+    reactive.restoreLive(keepCp.index);
+    reactive.pruneTo(keepCp.index);
+
+    const gj = rt.enableJournal({ dir, reactive, includeHome: false });
+    let failDetail = null;
+    let iterations = 0;
+    for (let round = 0; round < 10 && !failDetail; round++) {
+      iterations = round + 1;
+      // 게이트와 같은 순서: 두 커밋(주소 캐시 적재) -> pack -> prune -> 다른 인스턴스 recover.
+      rt.run(`probeA = ${round} * 2 + 1`);
+      await gj.commit();
+      rt.run(`probeA = ${round} * 2 + 2`);
+      const second = await gj.commit();
+      await gj.pack();
+      await gj.prune();
+      rt.run("probeA = 999999");
+      const other = rt.enableJournal({ dir, reactive, includeHome: false });
+      const recovered = await other.recover();
+      if (!recovered || rt.run("probeA") !== round * 2 + 2) { failDetail = { round, stage: "pack-recover", probeA: rt.run("probeA") }; break; }
+      // 표적 구간: pack-recover 직후의 커밋이 새 변수를 담는가.
+      rt.run(`probeFresh = 'round-${round}'`);
+      const fresh = await gj.commit();
+      const headRef = await gj._kernel.readRef("HEAD");
+      rt.run("probeFresh = 'clobbered'");
+      const back = await gj.recover();
+      const survived = rt.run("'probeFresh' in globals()") === true && rt.run("probeFresh") === `round-${round}`;
+      if (!back || !fresh || headRef.ref.commit !== fresh.commit || !survived) {
+        // 법의학: 방금 커밋의 델타에 probeFresh 페이지가 들었는지 재계산으로 대조한다.
+        const live = reactive.liveIdx;
+        const nowHashes = rt.memory.pageHashes();
+        const foldedLive = reactive.hashesAt(live);
+        const boundary = reactive.hashesAt(0);
+        let foldMismatch = 0;
+        for (let i = 0; i < Math.min(nowHashes.length, foldedLive.length); i++) {
+          if (nowHashes[i] !== foldedLive[i]) foldMismatch++;
+        }
+        failDetail = {
+          round, stage: "fresh-commit",
+          freshCommit: fresh && fresh.commit && fresh.commit.slice(7, 19),
+          headAtRecover: headRef.ref && headRef.ref.commit.slice(7, 19),
+          freshPages: fresh && fresh.pages,
+          survived,
+          probeFreshDefined: rt.run("'probeFresh' in globals()"),
+          foldMismatchWords: foldMismatch,
+          boundaryLen: boundary.length, liveLen: foldedLive.length, nowLen: nowHashes.length,
+        };
+      }
+    }
+    check(`델타 유실 없음(${iterations}회 반복: 커밋 -> pack -> prune -> 타 인스턴스 recover -> 커밋 -> recover)`,
+      failDetail === null, failDetail ? JSON.stringify(failDetail) : `${iterations} rounds clean`);
+    await root.removeEntry("pyprocDeltaLossProbe", { recursive: true });
+  } catch (e) {
+    check("예외 없음", false, String(e && (e.stack || e.message) || e).slice(0, 1200));
+  } finally {
+    await report();
+  }
+</script>
+</body>
+</html>
