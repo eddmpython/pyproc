@@ -216,7 +216,7 @@ focus, actionability, remote-object release를 48회 검증한다. 통합 흐름
 
 broker 연결은 `Browser.getVersion`으로 Chromium major 137 이상과 CDP protocol major 1을 확인한다.
 지원 밖 조합은 target 생성 전에 실패한다. `test:contracts`가 compatibility rejection, popup raw ID
-비노출과 denied target 폐쇄, destination parameter guard, closed shadow root의 명시적 미지원,
+비노출과 denied target 폐쇄 및 opener 복원, destination parameter guard, closed shadow root의 명시적 미지원,
 filesystem root startup 검사를 소유한다. `test:package`는 `pyproc-mcp` bin과 필요한 runtime file이
 tarball에 들어가되 root 및 subpath JS export가 늘지 않았음을 설치본에서 확인한다.
 

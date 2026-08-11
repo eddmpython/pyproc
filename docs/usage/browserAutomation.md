@@ -196,9 +196,11 @@ element and pending counts, and restores the original scroll position. Put it im
 `screenshot` in the same pipeline. A `truncated` or `timedOut` result is explicit, and screenshot never runs
 hydration implicitly.
 
-Dialog, download, and popup effects must be declared on `click`. A denied popup is closed. Navigation and
-popup final origins are rechecked after send and report `outcome: "applied"` when the browser already crossed
-the effect boundary. Console and network observations omit headers and bodies, redact secret-shaped text,
+Dialog, download, and popup effects must be declared on `click`. A denied popup is closed and its opener is
+reactivated as part of the already acknowledged popup cleanup, while an allowed popup keeps its browser focus.
+This prevents later capture from inheriting a closed popup surface. Navigation and popup final origins are
+rechecked after send and report `outcome: "applied"` when the browser already crossed the effect boundary.
+Console and network observations omit headers and bodies, redact secret-shaped text,
 and remove URL credentials, query, and fragment. Cookie reads omit values.
 
 The broker proves configured authority boundaries, not ownership of a site or legal permission to automate
