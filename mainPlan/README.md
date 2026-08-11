@@ -17,5 +17,4 @@
 
 ## 현재 상태
 
-- [browserScreenshotStability/](browserScreenshotStability/): 장기 Chrome 세션에서도 screenshot이
-  제품 deadline 안에 완료되도록 원인을 최소화하고 복구 계약을 고정한다.
+활성 이니셔티브 없음.
