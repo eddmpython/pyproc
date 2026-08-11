@@ -20,7 +20,7 @@ const DEFAULT_READY_TIMEOUT_MS = 20000;
 // 리더가 로컬로 처리하는 action 전수. _execute의 스위치와 같은 집합이어야 한다: 여기 없는
 // action은 리더 자신도 원격 왕복을 타고, _execute에 없는 action은 명시 거부된다.
 const LOCAL_ACTIONS = new Set(["run", "commit", "branch", "branches", "adopt", "deleteBranch"]);
-const DEFAULT_RPC_TIMEOUT_MS = 8000;
+const DEFAULT_RPC_TIMEOUT_MS = 30000;
 
 const MACHINE_ROOT = "pyprocMachines";
 const RPC_SEMANTICS = "timeout or unprovable failover: outcome unknown; durable proven-portable failover: resend once by requestId";

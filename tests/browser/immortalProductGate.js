@@ -176,8 +176,9 @@ export async function runImmortalProductGate(opts = {}) {
       code: "f'{productSharedValue}|{open(\"/home/web/productImmortal/state.txt\").read()}|{productPrepared}|' + json.dumps({'lane': 'prepared'}, sort_keys=True)",
       timeoutMs: 9000,
     });
+    // 기본 5초 presence window 뒤 스케줄링 여유를 포함한 7초 관측 창 안에서 복구해야 한다.
     check("installed machine survives forced leader context removal",
-      !!promoted && timings.immortalFailoverMs < 5000 && promoted.epoch === initialEpoch + 1 && promoted.recovered === true &&
+      !!promoted && timings.immortalFailoverMs < 7000 && promoted.epoch === initialEpoch + 1 && promoted.recovered === true &&
       survivorStatuses.filter((entry) => entry.status.role === "leader").length === 1 &&
       afterFailover.result === '41|installed-survives|7|{"lane": "prepared"}',
       `leader=${promoted?.leaderId}, epoch=${promoted?.epoch}, failover=${timings.immortalFailoverMs}ms`);

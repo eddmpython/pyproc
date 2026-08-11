@@ -537,6 +537,7 @@ export interface KernelElectionOptions {
   storageKey?: string;
   heartbeatMs?: number;
   presenceTimeoutMs?: number;
+  /** RPC deadline in milliseconds. Defaults to 30,000; a timed-out sent request has an unknown outcome. */
   rpcTimeoutMs?: number;
   /** Commits each completed run, including its durable outcome record, before resolving or rejecting. Defaults to true. */
   autoCommit?: boolean;

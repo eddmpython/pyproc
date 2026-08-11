@@ -13,6 +13,11 @@ export async function assertElectionProtocol(check, checkAsync) {
   const { KernelElection } = await import(pathToFileURL(join(ROOT, "src", "session", "kernelElection.js")).href);
   const makeCtrl = () => new KernelElection({ name: "gateElect", manifest: {} });
 
+  check("election: durable RPC 기본 deadline은 브라우저 부하 여유를 포함", () => {
+    const ctrl = makeCtrl();
+    if (ctrl._rpcTimeoutMs !== 30000) throw new Error(`기본 RPC deadline ${ctrl._rpcTimeoutMs}ms`);
+  });
+
   // S1: 재전송 전제를 충족하지 못한 리더 교체/사망/떠남/timeout에서 in-flight 요청은
   // PYPROC_RPC_OUTCOME_UNKNOWN, retryable=false로 끝난다. 상태기계 property:
   // 모든 pending이 정확히 한 번 settle되고, reject 후 도착한 응답은 무시된다(_pending 비었음).
