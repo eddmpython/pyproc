@@ -109,6 +109,61 @@ const UPLOAD_STATE_FUNCTION = `function() {
   return { files: Array.from(this.files || [], (file) => ({ name: file.name, size: file.size, type: file.type })) };
 }`;
 
+const HYDRATE_LAZY_FUNCTION = ({ maxScrolls, settleMs, timeoutMs }) => `(async () => {
+  "use strict";
+  const original = { x: scrollX, y: scrollY };
+  const startedAt = performance.now();
+  const deadline = startedAt + ${timeoutMs};
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const lazy = () => Array.from(document.querySelectorAll("img[loading='lazy'], iframe[loading='lazy']"));
+  const before = lazy();
+  const initialHeight = Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0);
+  const maximum = Math.max(0, initialHeight - innerHeight);
+  const step = Math.max(1, Math.floor(innerHeight * 0.8));
+  const idealScrolls = Math.floor(maximum / step) + 2;
+  let scrolls = 0;
+  let timedOut = false;
+  try {
+    for (let y = 0; y < maximum && scrolls < ${maxScrolls} - 1; y += step) {
+      if (performance.now() >= deadline) { timedOut = true; break; }
+      scrollTo(original.x, y);
+      scrolls += 1;
+      await wait(Math.min(${settleMs}, Math.max(0, deadline - performance.now())));
+    }
+    if (!timedOut && scrolls < ${maxScrolls}) {
+      scrollTo(original.x, maximum);
+      scrolls += 1;
+      await wait(Math.min(${settleMs}, Math.max(0, deadline - performance.now())));
+    }
+    while (performance.now() < deadline && lazy().some((node) => "complete" in node && !node.complete)) {
+      await wait(Math.min(50, Math.max(0, deadline - performance.now())));
+    }
+    if (performance.now() >= deadline) timedOut = true;
+  } finally {
+    scrollTo(original.x, original.y);
+    await wait(Math.min(${settleMs}, 100));
+  }
+  const after = lazy();
+  return {
+    scrolls,
+    truncated: idealScrolls > ${maxScrolls},
+    timedOut,
+    initialHeight,
+    finalHeight: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0),
+    lazyBefore: before.length,
+    pendingBefore: before.filter((node) => "complete" in node && !node.complete).length,
+    lazyAfter: after.length,
+    pendingAfter: after.filter((node) => "complete" in node && !node.complete).length,
+    restored: scrollX === original.x && scrollY === original.y,
+    elapsedMs: Math.round(performance.now() - startedAt)
+  };
+})()`;
+
+function sameRect(left, right) {
+  if (!left || !right) return false;
+  return ["x", "y", "width", "height"].every((key) => Math.abs(Number(left[key]) - Number(right[key])) <= 0.25);
+}
+
 function sessionKey(ref) {
   return `${ref?.protocolVersion || ""}:${ref?.brokerId || ""}:${ref?.brokerEpoch || ""}:${ref?.sessionId || ""}:${ref?.targetRef || ""}`;
 }
@@ -360,6 +415,7 @@ export class BrowserAutomation {
       return this._screenshot.capture(sessionRef, action, commandResults, signal);
     }
     if (action.kind === "waitFor") return this._waitFor(sessionRef, action, commandResults, signal);
+    if (action.kind === "hydrateLazy") return this._hydrateLazy(sessionRef, action, commandResults, signal);
     if (action.kind === "navigate") return this._navigate(sessionRef, action, commandResults, signal);
     if (action.kind === "cookiesGet") return this._cookiesGet(sessionRef, action, commandResults, signal);
     if (action.kind === "cookieSet") return this._cookieSet(sessionRef, action, commandResults, signal);
@@ -430,35 +486,72 @@ export class BrowserAutomation {
     const state = action.state || "attached";
     const timeoutMs = action.timeoutMs || BROWSER_AUTOMATION_DEFAULT_WAIT_MS;
     const deadline = Date.now() + timeoutMs;
-    let rootNodeId = 0;
     let polls = 0;
+    let previousRect = null;
+    let stablePolls = 0;
     while (true) {
       if (signal?.aborted) throw cancelledBeforeSend();
-      if (!rootNodeId) {
-        const documentResult = await this._command(sessionRef, "DOM.getDocument", { depth: 0, pierce: true }, commandResults, signal);
-        rootNodeId = documentResult.result?.root?.nodeId || 0;
-      }
-      let nodeId = 0;
+      let target = null;
       try {
-        const query = await this._command(sessionRef, "DOM.querySelector", {
-          nodeId: rootNodeId,
-          selector: action.selector,
-        }, commandResults, signal);
-        nodeId = query.result?.nodeId || 0;
+        target = await this._resolveActionTarget(sessionRef, action, commandResults, signal, true);
       } catch (error) {
         if (error?.code !== BROWSER_CONTROL_ERROR_CODES.contextReplaced) throw error;
-        rootNodeId = 0;
       }
       polls += 1;
-      if ((state === "attached" && nodeId) || (state === "detached" && !nodeId)) {
-        return Object.freeze({ selector: action.selector, state, polls });
+      let reached = (state === "attached" && !!target) || (state === "detached" && !target)
+        || (state === "hidden" && !target);
+      let status = null;
+      if (target) {
+        try {
+          status = await this._inspectTarget(sessionRef, target, {}, commandResults, signal, true);
+          if (state === "visible") reached = status.visible === true;
+          if (state === "hidden") reached = status.visible !== true;
+          if (state === "enabled") reached = status.enabled === true;
+          if (state === "disabled") reached = status.enabled === false;
+          if (state === "editable") reached = status.editable === true;
+          if (state === "stable") {
+            stablePolls = sameRect(previousRect, status.rect) ? stablePolls + 1 : 0;
+            previousRect = status.rect;
+            reached = stablePolls >= 2;
+          }
+        } finally {
+          await this._releaseTarget(sessionRef, target, commandResults, signal, true);
+        }
+      } else {
+        previousRect = null;
+        stablePolls = 0;
+      }
+      if (reached) {
+        return Object.freeze({ state, polls, ...(status ? {
+          status: Object.freeze({ visible: status.visible, enabled: status.enabled, editable: status.editable,
+            connected: status.connected, rect: status.rect }),
+        } : {}) });
       }
       if (Date.now() >= deadline) {
         throw automationError(BROWSER_AUTOMATION_ERROR_CODES.waitTimeout,
-          `browser wait timed out for ${state} selector`, { outcome: "notSent", retryable: true });
+          `browser wait timed out for ${state} target`, { outcome: "notSent", retryable: true });
       }
       await delay(Math.min(WAIT_POLL_MS, Math.max(1, deadline - Date.now())), signal);
     }
+  }
+
+  async _hydrateLazy(sessionRef, action, commandResults, signal) {
+    const timeoutMs = action.timeoutMs || 10000;
+    const command = await this._command(sessionRef, "Runtime.evaluate", {
+      expression: HYDRATE_LAZY_FUNCTION({
+        maxScrolls: action.maxScrolls || 50,
+        settleMs: action.settleMs === undefined ? 100 : action.settleMs,
+        timeoutMs,
+      }),
+      awaitPromise: true,
+      returnByValue: true,
+    }, commandResults, signal);
+    const scriptError = exceptionText(command);
+    if (scriptError) {
+      throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionRejected,
+        `browser lazy hydration failed: ${scriptError}`, { outcome: "applied" });
+    }
+    return Object.freeze(commandValue(command) || {});
   }
 
   async _navigate(sessionRef, action, commandResults, signal) {
@@ -772,15 +865,7 @@ export class BrowserAutomation {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.targetMissing,
         "browser upload target is not a file input", { outcome: "notSent" });
     }
-    const requested = await this._command(sessionRef, "DOM.requestNode", {
-      objectId: prepared.target.objectId,
-    }, commandResults, signal);
-    const nodeId = requested.result?.nodeId;
-    if (!Number.isInteger(nodeId) || nodeId < 1) {
-      throw automationError(BROWSER_AUTOMATION_ERROR_CODES.targetMissing,
-        "browser upload target has no DOM node", { outcome: "notSent" });
-    }
-    await this._command(sessionRef, "DOM.setFileInputFiles", { nodeId, files }, commandResults, signal);
+    await this._command(sessionRef, "DOM.setFileInputFiles", { objectId: prepared.target.objectId, files }, commandResults, signal);
     return this._callTargetFunction(sessionRef, prepared.target, UPLOAD_STATE_FUNCTION, [], commandResults, signal);
   }
 
@@ -886,13 +971,13 @@ export class BrowserAutomation {
     });
   }
 
-  async _inspectTarget(sessionRef, target, requirements, commandResults, signal) {
-    const command = await this._command(sessionRef, "Runtime.callFunctionOn", {
+  async _inspectTarget(sessionRef, target, requirements, commandResults, signal, trustedRead = false) {
+    const command = await this._sendCommand(sessionRef, "Runtime.callFunctionOn", {
       objectId: target.objectId,
       functionDeclaration: BROWSER_ACTIONABILITY_FUNCTION,
       arguments: [{ value: requirements }],
       returnByValue: true,
-    }, commandResults, signal);
+    }, commandResults, signal, trustedRead);
     const scriptError = exceptionText(command);
     if (scriptError) {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.targetMissing,
@@ -908,16 +993,16 @@ export class BrowserAutomation {
     return status;
   }
 
-  async _resolveActionTarget(sessionRef, action, commandResults, signal) {
-    if (action.locatorRef) return this._resolveOpaqueLocator(sessionRef, action.locatorRef, commandResults, signal);
+  async _resolveActionTarget(sessionRef, action, commandResults, signal, trustedRead = false) {
+    if (action.locatorRef) return this._resolveOpaqueLocator(sessionRef, action.locatorRef, commandResults, signal, trustedRead);
     const locator = actionLocator(action);
-    const frame = await this._resolveFrameContext(sessionRef, locator, commandResults, signal);
+    const frame = await this._resolveFrameContext(sessionRef, locator, commandResults, signal, trustedRead);
     if (locator.frame && !frame) return null;
-    const command = await this._command(sessionRef, "Runtime.evaluate", {
+    const command = await this._sendCommand(sessionRef, "Runtime.evaluate", {
       expression: browserLocatorExpression(locator),
       returnByValue: false,
       ...(frame ? { contextId: frame.contextId } : {}),
-    }, commandResults, signal);
+    }, commandResults, signal, trustedRead);
     const scriptError = exceptionText(command);
     if (scriptError) {
       const count = parseBrowserLocatorCount(scriptError);
@@ -936,9 +1021,9 @@ export class BrowserAutomation {
       ...(frame ? { pointOffset: frame.pointOffset } : {}) });
   }
 
-  async _resolveFrameContext(sessionRef, locator, commandResults, signal) {
+  async _resolveFrameContext(sessionRef, locator, commandResults, signal, trustedRead = false) {
     if (!locator.frame) return null;
-    const treeCommand = await this._command(sessionRef, "Page.getFrameTree", {}, commandResults, signal);
+    const treeCommand = await this._sendCommand(sessionRef, "Page.getFrameTree", {}, commandResults, signal, trustedRead);
     let branch = treeCommand.result?.frameTree;
     let authorityUrl = branch?.frame?.url || "";
     for (const frameLocator of locator.frame) {
@@ -965,37 +1050,37 @@ export class BrowserAutomation {
     }
     const frameId = branch?.frame?.id;
     if (!frameId) return null;
-    const isolated = await this._command(sessionRef, "Page.createIsolatedWorld", {
+    const isolated = await this._sendCommand(sessionRef, "Page.createIsolatedWorld", {
       frameId,
       worldName: "pyproc-browser-control",
       grantUniveralAccess: false,
-    }, commandResults, signal);
+    }, commandResults, signal, trustedRead);
     const contextId = isolated.result?.executionContextId;
     if (!Number.isInteger(contextId)) return null;
-    const owner = await this._command(sessionRef, "DOM.getFrameOwner", { frameId }, commandResults, signal);
+    const owner = await this._sendCommand(sessionRef, "DOM.getFrameOwner", { frameId }, commandResults, signal, trustedRead);
     const backendNodeId = owner.result?.backendNodeId;
     if (!Number.isInteger(backendNodeId)) return null;
-    const box = await this._command(sessionRef, "DOM.getBoxModel", { backendNodeId }, commandResults, signal);
+    const box = await this._sendCommand(sessionRef, "DOM.getBoxModel", { backendNodeId }, commandResults, signal, trustedRead);
     const quad = box.result?.model?.content || box.result?.model?.border;
     if (!Array.isArray(quad) || quad.length < 2) return null;
     return Object.freeze({ contextId, pointOffset: Object.freeze({ x: Number(quad[0]) || 0, y: Number(quad[1]) || 0 }) });
   }
 
-  async _resolveOpaqueLocator(sessionRef, locatorRef, commandResults, signal) {
+  async _resolveOpaqueLocator(sessionRef, locatorRef, commandResults, signal, trustedRead = false) {
     const locator = this._locators.get(locatorRef);
     if (!locator || locator.sessionKey !== sessionKey(sessionRef)) {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
         "browser locator is unknown or belongs to another session", { outcome: "notSent" });
     }
-    const guarded = await this._command(sessionRef, "Page.getFrameTree", {}, commandResults, signal);
+    const guarded = await this._sendCommand(sessionRef, "Page.getFrameTree", {}, commandResults, signal, trustedRead);
     if (guarded.contextEpoch !== locator.contextEpoch) {
       this._clearSessionLocators(locator.sessionKey);
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
         "browser locator belongs to a replaced document", { outcome: "notSent", retryable: true });
     }
-    const resolved = await this._command(sessionRef, "DOM.resolveNode", {
+    const resolved = await this._sendCommand(sessionRef, "DOM.resolveNode", {
       backendNodeId: locator.backendNodeId,
-    }, commandResults, signal);
+    }, commandResults, signal, trustedRead);
     if (resolved.contextEpoch !== locator.contextEpoch) {
       this._clearSessionLocators(locator.sessionKey);
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
@@ -1009,22 +1094,26 @@ export class BrowserAutomation {
     return Object.freeze({ objectId, description: locatorRef, contextEpoch: resolved.contextEpoch });
   }
 
-  async _releaseTarget(sessionRef, target, commandResults, signal) {
+  async _releaseTarget(sessionRef, target, commandResults, signal, trustedRead = false) {
     if (!target?.objectId) return;
     try {
-      await this._command(sessionRef, "Runtime.releaseObject", { objectId: target.objectId }, commandResults, signal);
+      await this._sendCommand(sessionRef, "Runtime.releaseObject", { objectId: target.objectId }, commandResults, signal, trustedRead);
     } catch (error) {
       this._audit({ kind: "remoteObjectRelease", risk: "read", state: "failed", code: error?.code || "PYPROC_INTERNAL" });
     }
   }
 
   async _command(sessionRef, method, params, commandResults, signal) {
+    return this._sendCommand(sessionRef, method, params, commandResults, signal, false);
+  }
+
+  async _sendCommand(sessionRef, method, params, commandResults, signal, trustedRead) {
     try {
       const result = await this._port.send(sessionRef, {
         method,
         params,
-        expectedRisk: BROWSER_CONTROL_COMMAND_RISKS[method],
-      }, { signal });
+        expectedRisk: trustedRead ? "read" : BROWSER_CONTROL_COMMAND_RISKS[method],
+      }, { signal, trustedRead });
       commandResults.push(Object.freeze({ method, result }));
       return result;
     } catch (error) {

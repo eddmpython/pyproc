@@ -3,12 +3,13 @@ import { readFile } from "node:fs/promises";
 import { realpathSync, statSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
 import { parseBrowserControlConfig } from "./browserControl/mcpBrowserControl.js";
+import { normalizeBrowserViewport } from "./browserControl/browserViewport.js";
 
 const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["root", "indexURL"]);
 const BROWSER_KEYS = new Set([
   "enabled", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
-  "fileRoots", "externalEffects", "purpose", "artifacts",
+  "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
 ]);
 const ARTIFACT_KEYS = new Set([
   "maxArtifactBytes", "maxTotalBytes", "maxArtifacts", "inlineMaxBytes", "ttlMs",
@@ -21,6 +22,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_BROWSER_ARTIFACT_MAX_BYTES", "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",
   "PYPROC_BROWSER_ARTIFACT_MAX_COUNT", "PYPROC_BROWSER_ARTIFACT_INLINE_BYTES",
   "PYPROC_BROWSER_ARTIFACT_TTL_MS",
+  "PYPROC_BROWSER_VIEWPORT",
 ]);
 
 function plainObject(value, label) {
@@ -142,6 +144,9 @@ function normalizedBrowser(input = { enabled: false }) {
     externalEffects: browser.externalEffects || "",
     purpose,
     artifacts: normalizedArtifacts(browser.artifacts),
+    ...(browser.viewport === undefined ? {} : {
+      viewport: normalizeBrowserViewport(browser.viewport, { label: "browser.viewport" }),
+    }),
   };
   for (const root of normalized.fileRoots) {
     if (!isAbsolute(root)) throw new TypeError(`browser.fileRoots entry must be absolute: ${root}`);
@@ -168,6 +173,7 @@ function projectedEnvironment(config, baseEnv = {}) {
   env.PYPROC_BROWSER_FILE_ROOTS = browser.fileRoots.join(delimiter);
   if (browser.externalEffects) env.PYPROC_BROWSER_EXTERNAL_EFFECTS = browser.externalEffects;
   if (browser.purpose) env.PYPROC_BROWSER_PURPOSE = browser.purpose;
+  if (browser.viewport) env.PYPROC_BROWSER_VIEWPORT = JSON.stringify(browser.viewport);
   const artifactEnv = {
     maxArtifactBytes: "PYPROC_BROWSER_ARTIFACT_MAX_BYTES",
     maxTotalBytes: "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",

@@ -29,6 +29,7 @@ import {
 } from "./browserArtifactStore.js";
 import { realpathSync, statSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { parseBrowserViewportEnvironment } from "./browserViewport.js";
 
 const EXTERNAL_EFFECT_ACK = "acknowledged";
 
@@ -130,6 +131,7 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   }
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new TypeError("browser control timeoutMs must be positive");
   const fileRoots = parseFileRoots(env.PYPROC_BROWSER_FILE_ROOTS);
+  const viewport = parseBrowserViewportEnvironment(env.PYPROC_BROWSER_VIEWPORT);
   if ((actions.includes("upload") || rawMethods.includes("DOM.setFileInputFiles")) && fileRoots.length < 1) {
     throw new Error("browser file upload requires PYPROC_BROWSER_FILE_ROOTS");
   }
@@ -163,6 +165,7 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
     purpose,
     externalEffectsAcknowledged,
     artifacts,
+    viewport,
   });
 }
 
@@ -180,7 +183,8 @@ function browserBaseTools() {
     },
     {
       name: "browserOpen",
-      description: "Open an allowed HTTP(S) URL in the isolated automation profile. Requires explicit external-effect acknowledgement.",
+      description: "Instrument a blank target, apply configured device metrics, navigate to an allowed HTTP(S) URL, "
+        + "and return its redacted startup trace. Requires explicit external-effect acknowledgement.",
       inputSchema: {
         type: "object",
         properties: {
@@ -402,6 +406,7 @@ export class McpBrowserControl {
         downloadRoot: downloadDir,
         maxRisk: this.config.maxRisk,
         timeoutMs: this.config.timeoutMs,
+        viewport: this.config.viewport,
       });
     }
     const broker = await this._brokerPromise;

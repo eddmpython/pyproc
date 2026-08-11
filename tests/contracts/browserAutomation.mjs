@@ -7,6 +7,7 @@ import {
 } from "../../scripts/browserControl/browserAutomation.js";
 import {
   BROWSER_AUTOMATION_ACTIONS,
+  validateBrowserAutomationAction,
 } from "../../scripts/browserControl/browserAutomationCatalog.js";
 import {
   McpBrowserControl,
@@ -43,6 +44,7 @@ class FakePort {
     this.commands = [];
     this.contextEpoch = 3;
     this.failMethod = null;
+    this.failExpression = null;
     this.queryAttached = true;
     this.listeners = new Set();
     this.dialogOnClick = false;
@@ -73,7 +75,8 @@ class FakePort {
       throw error;
     }
     this.commands.push({ ref, command });
-    if (command.method === this.failMethod) {
+    if (command.method === this.failMethod
+      && (!this.failExpression || String(command.params?.expression || "").includes(this.failExpression))) {
       const error = new Error(`failed ${command.method}`);
       error.code = "BROWSER_CONTROL_COMMAND_REJECTED";
       error.outcome = "rejected";
@@ -210,6 +213,16 @@ export async function assertBrowserAutomationContract() {
   assert(/file root is unavailable/.test(unavailableUploadRoot?.message),
     "존재하지 않는 upload root가 broker 시작 전 fail-closed가 아니다");
 
+  const readWaitConfig = parseBrowserControlConfig({
+    PYPROC_BROWSER_ALLOWED_ORIGINS: "http://allowed.test",
+    PYPROC_BROWSER_MAX_RISK: "read",
+    PYPROC_BROWSER_ACTIONS: "waitFor",
+    PYPROC_BROWSER_METHODS: "",
+  }, { timeoutMs: 1000 });
+  assert(readWaitConfig.methods.length === 0 && readWaitConfig.rawMethods.length === 0
+    && BROWSER_AUTOMATION_ACTIONS.waitFor.trustedReadMethods.includes("Runtime.evaluate"),
+  "read-only semantic wait가 raw Runtime 권한이나 external-effect maxRisk를 요구한다");
+
   const config = parseBrowserControlConfig({
     PYPROC_BROWSER_ALLOWED_ORIGINS: "http://allowed.test",
     PYPROC_BROWSER_MAX_RISK: "externalEffect",
@@ -229,6 +242,21 @@ export async function assertBrowserAutomationContract() {
   const browserAct = tools.find((tool) => tool.name === "browserAct");
   assert(browserAct.inputSchema.properties.actions.items.oneOf.length === config.actions.length,
     "MCP action schema가 action catalog에서 파생되지 않았다");
+  const semanticWait = validateBrowserAutomationAction({
+    kind: "waitFor", locator: { by: "role", value: "button", name: "Save" }, state: "visible", expectedRisk: "read",
+  });
+  assert(semanticWait.state === "visible" && semanticWait.locator.by === "role",
+    "semantic wait state와 locator validation이 한 계약을 쓰지 않는다");
+  const invalidWaitState = await errorOf(() => validateBrowserAutomationAction({
+    kind: "waitFor", selector: "#save", state: "painted", expectedRisk: "read",
+  }));
+  assert(invalidWaitState?.code === BROWSER_AUTOMATION_ERROR_CODES.invalidAction,
+    "알 수 없는 waitFor state가 fail-closed가 아니다");
+  const invalidHydrationBound = await errorOf(() => validateBrowserAutomationAction({
+    kind: "hydrateLazy", maxScrolls: 101, expectedRisk: "externalEffect",
+  }));
+  assert(invalidHydrationBound?.code === BROWSER_AUTOMATION_ERROR_CODES.invalidAction,
+    "hydrateLazy scroll 상한이 fail-closed가 아니다");
 
   let id = 0;
   const port = new FakePort();
@@ -373,6 +401,7 @@ export async function assertBrowserAutomationContract() {
     "cookie domain scope 확장이 schema를 통과했다");
 
   port.failMethod = "Runtime.evaluate";
+  port.failExpression = '"value":"#save"';
   const partial = await errorOf(() => automation.run(session, [
     { kind: "waitFor", selector: "#ready", expectedRisk: "read" },
     { kind: "click", selector: "#save", expectedRisk: "externalEffect" },
@@ -382,6 +411,7 @@ export async function assertBrowserAutomationContract() {
     && partial.trace.steps.at(-1)?.commands.at(-1)?.method === "Runtime.evaluate",
   "pipeline 실패가 완료 prefix와 실패 index를 보존하지 않았다");
   port.failMethod = null;
+  port.failExpression = null;
 
   const wrongRisk = await errorOf(() => automation.run(session, [
     { kind: "click", selector: "#save", expectedRisk: "read" },

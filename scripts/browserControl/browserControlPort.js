@@ -1,5 +1,6 @@
 // browserControlPort.js - transport 독립 target/session/permission/outcome 계약.
 import { BrowserControlPolicy } from "./browserControlPolicy.js";
+import { applyBrowserViewport } from "./browserViewport.js";
 
 export const BROWSER_CONTROL_PROTOCOL_VERSION = "1";
 
@@ -20,6 +21,10 @@ export const BROWSER_CONTROL_ERROR_CODES = Object.freeze({
 // JavaScript dialog가 열린 동안 Page.getFrameTree도 멈춘다. 이 한 method만 dialog를 연
 // 직전 verified target을 사용해야 modal을 닫을 수 있다. 다른 method는 매번 origin을 재검사한다.
 const MODAL_UNBLOCK_METHODS = new Set(["Page.handleJavaScriptDialog"]);
+const TRUSTED_READ_METHODS = new Set([
+  "DOM.getBoxModel", "DOM.getFrameOwner", "DOM.resolveNode", "Page.createIsolatedWorld",
+  "Page.getFrameTree", "Runtime.callFunctionOn", "Runtime.evaluate", "Runtime.releaseObject",
+]);
 
 export class BrowserControlError extends Error {
   constructor(code, message, { outcome = "notSent", retryable = false, cause = undefined } = {}) {
@@ -235,7 +240,7 @@ export class BrowserControlPort {
     this._popupCaptures.delete(String(captureRef));
   }
 
-  async send(sessionRef, command, { signal } = {}) {
+  async send(sessionRef, command, { signal, trustedRead = false } = {}) {
     this._requireOpen();
     validateSignal(signal);
     const session = this._requireSession(sessionRef);
@@ -265,8 +270,16 @@ export class BrowserControlPort {
     }
     let risk;
     const params = command.params && typeof command.params === "object" ? command.params : {};
-    try { risk = this.policy.authorizeCommand(target, command.method, params); }
-    catch (error) { throw this._mapPolicyError(error); }
+    if (trustedRead) {
+      if (!TRUSTED_READ_METHODS.has(command.method)) {
+        throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+          `browser trusted read method is not approved: ${command.method}`);
+      }
+      risk = "read";
+    } else {
+      try { risk = this.policy.authorizeCommand(target, command.method, params); }
+      catch (error) { throw this._mapPolicyError(error); }
+    }
     if (command.expectedRisk !== undefined && command.expectedRisk !== risk) {
       throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
         `browser command risk acknowledgement mismatch: expected ${command.expectedRisk}, actual ${risk}`);
@@ -322,6 +335,16 @@ export class BrowserControlPort {
     if (typeof listener !== "function") throw new TypeError("browser control listener must be a function");
     session.listeners.add(listener);
     return () => session.listeners.delete(listener);
+  }
+
+  async applyViewport(sessionRef, viewport) {
+    this._requireOpen();
+    const session = this._requireSession(sessionRef);
+    const target = await this._describe(session);
+    session.authorizationState = "verified";
+    session.authorizedTarget = target;
+    await applyBrowserViewport((method, params) => this._transport.send(session.transportSession, { method, params }), viewport);
+    return viewport;
   }
 
   async detach(sessionRef) {

@@ -86,6 +86,6 @@ export class BrowserScreenshot {
       cssWidth,
       cssHeight,
       fullPage: options.fullPage === true,
-    }, { inline: options.inline === true });
+    }, { inline: options.inline !== false });
   }
 }

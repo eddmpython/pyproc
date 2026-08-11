@@ -37,6 +37,7 @@ export async function assertBrowserAutomationProductContract() {
       maxRisk: "read",
       actions: ["snapshot", "screenshot", "waitFor"],
       methods: [],
+      viewport: { width: 390, height: 844, deviceScaleFactor: 3, mobile: true, touch: true },
       artifacts: { maxArtifactBytes: 1024, maxTotalBytes: 4096, maxArtifacts: 4, inlineMaxBytes: 128, ttlMs: 5000 },
     },
   };
@@ -44,8 +45,10 @@ export async function assertBrowserAutomationProductContract() {
   assert(validated.env.PYPROC_MCP_ENGINE_ROOT === engineRoot
     && validated.env.PYPROC_BROWSER_METHODS === ""
     && validated.browserControl.rawMethods.length === 0
-    && validated.browserControl.actions.includes("screenshot"),
-  "제품 manifest가 engine, empty raw permission, screenshot action으로 투영되지 않았다");
+    && validated.browserControl.actions.includes("screenshot")
+    && validated.env.PYPROC_BROWSER_VIEWPORT.includes('"width":390')
+    && validated.browserControl.viewport?.height === 844,
+  "제품 manifest가 engine, permission, screenshot, viewport로 투영되지 않았다");
   const unknownKey = await errorOf(() => validateMcpProductConfig({ ...manifest, surprise: true }));
   assert(/does not accept surprise/.test(unknownKey?.message), "제품 manifest unknown key가 fail-closed가 아니다");
   const unknownBrowserKey = await errorOf(() => validateMcpProductConfig({
@@ -53,6 +56,16 @@ export async function assertBrowserAutomationProductContract() {
   }));
   assert(/browser does not accept surprise/.test(unknownBrowserKey?.message),
     "제품 browser manifest unknown key가 fail-closed가 아니다");
+  const invalidViewport = await errorOf(() => validateMcpProductConfig({
+    ...manifest, browser: { ...manifest.browser, viewport: { width: 0, height: 844 } },
+  }));
+  assert(/browser\.viewport\.width must be an integer/.test(invalidViewport?.message),
+    "제품 browser viewport 범위가 fail-closed가 아니다");
+  const unknownViewportKey = await errorOf(() => validateMcpProductConfig({
+    ...manifest, browser: { ...manifest.browser, viewport: { width: 390, height: 844, colorDepth: 24 } },
+  }));
+  assert(/browser\.viewport does not accept colorDepth/.test(unknownViewportKey?.message),
+    "제품 browser viewport unknown key가 fail-closed가 아니다");
   const hostedEngine = validateMcpProductConfig({
     schemaVersion: 1,
     engine: { indexURL: "https://engine.example.test/pyodide-v1" },

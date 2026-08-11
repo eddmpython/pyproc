@@ -36,7 +36,7 @@ function consoleArgument(argument) {
   return clipped(argument.description || argument.className || argument.type || "value");
 }
 
-function normalizeEvent(event, idFactory) {
+export function normalizeBrowserObservationEvent(event, idFactory) {
   const params = event.params || {};
   if (event.method === "Runtime.consoleAPICalled") {
     return Object.freeze({
@@ -149,7 +149,7 @@ export class BrowserObservation {
     if (present) return present;
     const state = { console: [], network: [], consoleEnabled: false, networkEnabled: false, unsubscribe: null };
     state.unsubscribe = this._port.subscribe(sessionRef, (event) => {
-      const normalized = normalizeEvent(event, this._idFactory);
+      const normalized = normalizeBrowserObservationEvent(event, this._idFactory);
       if (!normalized) return;
       const bucket = normalized.kind === "console" ? state.console : state.network;
       bucket.push(normalized);

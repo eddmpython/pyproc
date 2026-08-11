@@ -50,7 +50,7 @@ const TRUSTED_DRAG_METHODS = Object.freeze([
   ...TRUSTED_POINTER_METHODS, "Input.setInterceptDrags", "Input.dispatchDragEvent",
 ]);
 
-function actionSpec({ risk, description, methods, events = [], properties = {}, required = [], target = "none" }) {
+function actionSpec({ risk, description, methods, trustedReadMethods = [], events = [], properties = {}, required = [], target = "none" }) {
   const targetRule = target === "required"
     ? {
         oneOf: [
@@ -70,6 +70,7 @@ function actionSpec({ risk, description, methods, events = [], properties = {}, 
     risk,
     description,
     methods: Object.freeze([...methods]),
+    trustedReadMethods: Object.freeze([...trustedReadMethods]),
     events: Object.freeze([...events]),
     schema: Object.freeze({
       type: "object",
@@ -108,14 +109,24 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
   }),
   waitFor: actionSpec({
     risk: "read",
-    description: "Wait for a selector to become attached or detached without client polling.",
-    methods: ["DOM.getDocument", "DOM.querySelector"],
+    description: "Wait for one selector or semantic locator to reach a user-visible readiness state without client polling.",
+    methods: [],
+    trustedReadMethods: TARGET_RESOLUTION_METHODS,
     properties: {
-      selector: TARGET_PROPERTIES.selector,
-      state: { type: "string", enum: ["attached", "detached"] },
+      ...TARGET_PROPERTIES,
+      state: { type: "string", enum: ["attached", "detached", "visible", "hidden", "enabled", "disabled", "editable", "stable"] },
+    },
+    target: "required",
+  }),
+  hydrateLazy: actionSpec({
+    risk: "externalEffect",
+    description: "Run a bounded viewport sweep to trigger lazy assets, then restore the original scroll position.",
+    methods: ["Runtime.evaluate"],
+    properties: {
+      maxScrolls: { type: "integer", minimum: 1, maximum: 100 },
+      settleMs: { type: "integer", minimum: 0, maximum: 2000 },
       timeoutMs: { type: "integer", minimum: 1, maximum: BROWSER_AUTOMATION_MAX_WAIT_MS },
     },
-    required: ["selector"],
   }),
   navigate: actionSpec({
     risk: "externalEffect",
@@ -319,7 +330,7 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
   upload: actionSpec({
     risk: "externalEffect",
     description: "Set files on one file input after filesystem root authorization.",
-    methods: [...TARGET_RESOLUTION_METHODS, "DOM.requestNode", "DOM.setFileInputFiles"],
+    methods: [...TARGET_RESOLUTION_METHODS, "DOM.setFileInputFiles"],
     properties: {
       ...TARGET_PROPERTIES,
       files: {
@@ -424,11 +435,17 @@ export function validateBrowserAutomationAction(action) {
     }
   }
   if (action.kind === "waitFor") {
-    requireString(action.selector, "waitFor.selector", { max: 2000 });
-    if (action.state !== undefined && action.state !== "attached" && action.state !== "detached") {
-      fail("waitFor.state must be attached or detached");
+    validateTarget(action);
+    if (action.state !== undefined && !["attached", "detached", "visible", "hidden", "enabled", "disabled",
+      "editable", "stable"].includes(action.state)) {
+      fail("waitFor.state is invalid");
     }
     if (action.timeoutMs !== undefined) validateInteger(action.timeoutMs, "waitFor.timeoutMs", 1, BROWSER_AUTOMATION_MAX_WAIT_MS);
+  }
+  if (action.kind === "hydrateLazy") {
+    if (action.maxScrolls !== undefined) validateInteger(action.maxScrolls, "hydrateLazy.maxScrolls", 1, 100);
+    if (action.settleMs !== undefined) validateInteger(action.settleMs, "hydrateLazy.settleMs", 0, 2000);
+    if (action.timeoutMs !== undefined) validateInteger(action.timeoutMs, "hydrateLazy.timeoutMs", 1, BROWSER_AUTOMATION_MAX_WAIT_MS);
   }
   if (action.kind === "navigate") {
     requireString(action.url, "navigate.url", { max: 10000 });
@@ -529,7 +546,8 @@ export function inspectBrowserAutomationActions(actionNames = Object.keys(BROWSE
   return Object.freeze(actionNames.map((name) => {
     const spec = BROWSER_AUTOMATION_ACTIONS[name];
     if (!spec) fail(`unknown browser action: ${name}`);
-    return Object.freeze({ name, risk: spec.risk, methods: spec.methods, events: spec.events, description: spec.description });
+    return Object.freeze({ name, risk: spec.risk, methods: spec.methods, trustedReadMethods: spec.trustedReadMethods,
+      events: spec.events, description: spec.description });
   }));
 }
 

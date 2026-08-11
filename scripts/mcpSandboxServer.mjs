@@ -178,8 +178,27 @@ const write = (message) => process.stdout.write(JSON.stringify(message) + "\n");
 const resultOf = (id, result) => write({ jsonrpc: "2.0", id, result });
 const errorOf = (id, code, message) => write({ jsonrpc: "2.0", id, error: { code, message } });
 
+function toolContent(payload) {
+  const images = [];
+  const seen = new Set();
+  const textPayload = JSON.parse(JSON.stringify(payload, function scrubInlineImage(key, value) {
+    if (key !== "dataBase64" || typeof value !== "string" || Object.hasOwn(this, "offset")
+      || this.kind !== "screenshot" || !String(this.mimeType || "").startsWith("image/")
+      || !/^artifact:[A-Za-z0-9_-]+$/.test(String(this.artifactRef || ""))) return value;
+    if (!seen.has(this.artifactRef)) {
+      seen.add(this.artifactRef);
+      images.push(Object.freeze({ type: "image", data: value, mimeType: this.mimeType }));
+    }
+    return undefined;
+  }));
+  return Object.freeze([
+    Object.freeze({ type: "text", text: JSON.stringify(textPayload, null, 1) }),
+    ...images,
+  ]);
+}
+
 function toolResult(id, payload) {
-  resultOf(id, { content: [{ type: "text", text: JSON.stringify(payload, null, 1) }] });
+  resultOf(id, { content: toolContent(payload) });
 }
 
 function toolError(id, error) {
