@@ -45,7 +45,7 @@
 - [빠른 시작](#빠른-시작)
 - [제품 진입점](#제품-진입점)
 - [AI 에이전트에서 쓰기](#ai-에이전트에서-쓰기)
-- [AI 에이전트에 꽂기 (MCP)](#ai-에이전트에-꽂기-mcp)
+- [에이전트에 꽂기 (MCP)](#에이전트에-꽂기-mcp)
 - [능력 계약](#능력-계약)
 - [보장하는 것과 아직 아닌 것](#보장하는-것과-아직-아닌-것)
 - [스코프와 플랫폼 방향](#스코프와-플랫폼-방향)
@@ -263,83 +263,65 @@ note에 남아 - 에이전트의 해결 경로가 채팅 로그 고고학이 아
 사용자 파일  ->  브라우저 Python  ->  요약만  ->  AI 모델
 ```
 
-## AI 에이전트에 꽂기 (MCP)
+## 에이전트에 꽂기 (MCP)
 
-레포에 추가 runtime npm package가 없는 MCP 서버가 들어 있다. 지속 pyproc Machine을 도구 4개
-(`pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`)로 노출한다.
-COOP/COEP 서버 뒤에 headless Chromium 머신 페이지를 띄우고 stdio로 MCP를 말하므로,
-위의 재시도 루프가 그대로 도구 호출이 된다:
-
-```sh
-git clone https://github.com/eddmpython/pyproc && cd pyproc
-# MCP 클라이언트 등록(claude CLI 예시):
-claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
-# 또는 직접 실행해 stdio로 newline-delimited JSON-RPC를 말한다:
-npm run mcp:sandbox
-```
-
-브라우저 제어는 기본적으로 꺼져 있다. 운영자가 명시하면 저장소 레시피가 같은 격리 자동화
-프로필에 범위가 제한된 Node CDP broker를 붙인다:
+npm package가 runtime dependency 없는 stable `pyproc-mcp` 명령을 출하한다. 이 명령은 지속 Python
+Machine을 시작하고, manifest가 명시적으로 켠 경우에만 별도 범위의 Chrome, Chromium 또는 Edge
+자동화 profile을 붙인다.
 
 ```sh
-PYPROC_BROWSER_CONTROL=1 \
-PYPROC_BROWSER_ALLOWED_ORIGINS=https://example.test \
-PYPROC_BROWSER_MAX_RISK=externalEffect \
-PYPROC_BROWSER_ACTIONS=snapshot,waitFor,navigate,click,fill,press,select,scroll,cookiesGet,cookieSet,cookieDelete,storageGet,storageSet,storageRemove,storageClear \
-PYPROC_BROWSER_EXTERNAL_EFFECTS=acknowledged \
-PYPROC_BROWSER_PURPOSE="승인된 회귀 테스트" \
-npm run mcp:sandbox
+npm install pyproc
+npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
-| 환경 변수 | 의미 |
-|---|---|
-| `PYPROC_BROWSER_CONTROL=1` | browser 도구를 켠다. 다른 값이면 기존 네 도구 표면이 그대로다 |
-| `PYPROC_BROWSER_ALLOWED_ORIGINS` | 쉼표로 나눈 exact HTTP(S) origin. 경로, 자격증명, 다른 scheme은 거부한다. 생략하면 어떤 target도 보이지 않는다 |
-| `PYPROC_BROWSER_MAX_RISK` | 기본은 `read`. `mutate`나 `externalEffect`는 명시해야 한다. `browserOpen`은 `externalEffect`가 필요하다 |
-| `PYPROC_BROWSER_ACTIONS` | exact 고수준 action. 기본은 `snapshot,waitFor`다 |
-| `PYPROC_BROWSER_METHODS` | 별도의 exact raw CDP allowlist. 고수준 action의 내부 method는 raw 권한을 열지 않는다 |
-| `PYPROC_BROWSER_EXTERNAL_EFFECTS` | `maxRisk=externalEffect`이면 `acknowledged`가 필수다 |
-| `PYPROC_BROWSER_PURPOSE` | external-effect 설정에 필요한 출력 가능한 운영 목적이다 |
-| `PYPROC_BROWSER_FILE_ROOTS` | platform path delimiter로 나눈 기존 절대 upload root. upload action을 켤 때만 필수다 |
+필요한 exact origin과 최소 action만 넣어 `pyproc-mcp.json`을 만든다:
 
-이때 생명주기와 raw 제어인 `browserListTargets`, `browserOpen`, `browserAttach`, `browserCommand`,
-`browserDetach`, 정책 확인인 `browserInspect`, compact semantic 관찰인 `browserObserve`, 순차 고수준
-pipeline인 `browserAct`가 추가된다. 21개 action catalog는 관찰, load-state 탐색, semantic trusted
-input, hover와 focus, checked state, native drag, guarded upload, bounded download, 명시한 dialog와 popup,
-cookie metadata 및 변경, local 또는 session storage를 다룬다. snapshot은 document에 묶인 opaque
-locator를 반환한다. pipeline은 첫 실패에서 멈추고 완료 prefix와 실패 action index를 보고하므로
-적용된 효과를 조용히 재실행하지 않는다.
+```json
+{
+  "schemaVersion": 1,
+  "engine": { "root": "/absolute/path/to/pyodide" },
+  "browser": {
+    "enabled": true,
+    "allowedOrigins": ["https://example.test"],
+    "maxRisk": "externalEffect",
+    "actions": ["snapshot", "screenshot", "waitFor", "navigate", "fill", "click"],
+    "methods": [],
+    "externalEffects": "acknowledged",
+    "purpose": "승인된 회귀 테스트"
+  }
+}
+```
 
-origin, action, raw method는 서로 분리된 exact allowlist다. 위험도는 broker 코드가 고정하므로
-호출자가 `Runtime.evaluate`나 `click`을 read-only로 낮출 수 없다. target 열기와 모든 action 및 raw
-command는 고정 위험도를 확인해야 한다. 목적 URL을 가진 CDP method는 전송 전에 origin 정책을 다시
-검사한다. `read`는 비변이라는 뜻이지 민감하지 않다는 뜻이 아니다. cookie, storage, accessibility,
-전체 DOM 출력에는 최소 권한과 검토가 필요하다. CDP endpoint는 broker만 소유하고 target, session,
-locator는 opaque reference로 반환하며 별도 localhost proxy를 열지 않는다.
+같은 명령을 MCP client에 등록하기 전에 engine, browser, limit, permission을 검증한다:
 
-broker는 Chromium 계열 major 137 이상과 CDP protocol major 1을 지원한다. target을 열기 전에
-`Browser.getVersion`을 검사하고 `browserInspect`로 제한된 compatibility 진단을 제공한다. semantic
-locator는 CSS, role, text, label, test ID, open shadow root, origin을 상속한 frame, 명시적으로 허용한
-cross-origin frame chain을 지원한다. target effect는 strict uniqueness, visibility, stable geometry,
-enabled 또는 editable state, viewport, hit target을 만족한 뒤 처음 effect command를 보낸다.
+```sh
+npx pyproc-mcp --config ./pyproc-mcp.json --check
+npx pyproc-mcp --config ./pyproc-mcp.json
+```
 
-사용자 기본 Chrome profile에는 attach하지 않으며 CAPTCHA 우회, stealth, 자격증명 수집, 결과 불명
-효과의 자동 재시도를 제공하지 않는다. 설정은 broker 권한 경계를 증명할 뿐 사이트 자동화의 법적
-권한을 증명하지 않는다. 운영자가 적용 법률, 사이트 약관, 계정 권한, 중대한 action 승인을 소유한다.
-이는 저장소 레시피이며 새 npm export나 배포 browser extension이 아니다. 전체 action과 outcome
-계약은 [browser automation 가이드](docs/usage/browserAutomation.md)에 있다.
+`{ "enabled": false }`이면 서버는 `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`
+네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
+별도 allowlist raw command, artifact read/delete를 위한 열 개 도구가 추가된다.
 
-에이전트는 상태를 한 번 준비하고(`pythonRun`), 핸들을 저장하고(`checkpointSave`),
-위험한 시도를 돌린 뒤 밀리초에 되돌린다(`checkpointRestore`). 환경 재구축이 없다.
-신뢰한 엔진 부팅을 먼저 끝낸 뒤 에이전트 코드는 fail-closed 외부 네트워크 CSP 아래에서 돌고,
-same-origin MCP 제어 트래픽만 열린다. 부팅 자체도 CDN 요청이 없어야 한다면 엔진을 자체 호스팅한다.
-도구 결과는 의도적으로 MCP 채널을 건너므로 호출 애플리케이션이 출력 검토와 인가를 계속 소유한다.
-Python restore는 browser mutation, navigation, storage 변경, download, 외부 요청을 되돌리지 않는다.
-전송 뒤 연결이 끊긴 browser 명령은 `outcomeUnknown`이며 자동 재시도하지 않는다.
-`npm run test:mcp`는 기본 네 도구와 CSP를, `npm run test:browser-control`은 opt-in 경로의 58개 단정,
-복원 경계, 자원 정리, 실제 browser 사망 결과를 Chrome과 Edge CI에서 검증한다.
-`npm run test:browser-control-stress`는 두 browser에서 semantic action과 remote-object release 경계를
-48회 독립 반복한다.
+22개 action catalog에는 정식 순차 `screenshot` action이 있다. viewport, full-page, clip 범위에서 PNG,
+JPEG, WebP를 만든다. screenshot과 download는 opaque ref, SHA-256, byte 및 count quota, bounded chunk
+read, TTL 만료, 명시 삭제, 종료 정리를 가진 하나의 broker-owned artifact store에 들어간다. 큰
+base64 값을 action 응답에 억지로 넣지 않는다.
+
+origin, action, raw method는 서로 분리된 exact allowlist다. 위험도는 broker가 고정하므로 호출자가
+`Runtime.evaluate`, navigation, click을 read-only로 낮출 수 없다. broker는 CDP endpoint를 소유하고
+새 temporary profile을 쓰며 opaque target, session, locator, artifact reference만 반환한다. 별도 proxy
+listener는 열지 않는다. 지원 경계는 Chromium 계열 major 137 이상과 CDP protocol major 1이다.
+
+Python restore는 browser mutation, navigation, storage 변경, download, popup, 외부 요청을 되돌리지
+않는다. 전송 뒤 끊긴 명령은 `outcomeUnknown`이며 자동 재시도하지 않는다. 제품은 사용자 기본
+profile attach, CAPTCHA 우회, stealth, 자격증명 수집이나 사이트 자동화의 법적 권한을 제공하지
+않는다. 운영자가 사이트 권한과 중대한 action 승인을 소유한다.
+
+전체 manifest, artifact, action, security, recovery 계약은
+[browser automation 제품 가이드](docs/usage/browserAutomation.md)에 있다. `npm run test:mcp-product`는
+package를 pack/install한 뒤 bin, Python persistence, 순차 PNG/JPEG/WebP capture, chunk 재조립, digest,
+delete를 실제 browser에서 검증한다. Chrome Ubuntu와 Edge Windows CI가 같은 gate를 실행한다.
 
 ## 능력 계약
 
@@ -350,7 +332,8 @@ Python restore는 browser mutation, navigation, storage 변경, download, 외부
 | Python 실행 (`boot` / `run` / `loadPackages`) | Complete |
 | 기본 내구 Machine(`open()` / `open({ name })`) | Complete |
 | 프로세스 OS, 복원 reactivity, ASGI, 선언 environment, terminal, machine image, journal | Bounded |
-| Device FS, permission jail, GPU, socket, 저장소 MCP browser-control broker | Probe |
+| Device FS, permission jail, GPU, socket | Probe |
+| 설치형 MCP browser automation과 artifact 제품 | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## 보장하는 것과 아직 아닌 것

@@ -44,6 +44,21 @@ Forbidden boundaries:
 - Do not put product UI or domain policy into pyproc. pyproc provides runtime and capabilities only.
 - Worker and Service Worker files, which the browser requires to be same-origin, are handled as a deployment-asset contract rather than as public JavaScript imports.
 
+## Installed command boundary
+
+The package ships three stable commands without adding a JavaScript subpath:
+
+| Command | Product contract |
+|---|---|
+| `pyproc-assets` | Copy the verified worker graph and emit its SRI manifest |
+| `pyproc-engine` | Download and verify the pinned Pyodide distribution |
+| `pyproc-mcp` | Validate a version 1 manifest and start the persistent Python plus optional browser-automation MCP server |
+
+`pyproc-mcp` is the only supported entrance to its package-internal Node files. Deep imports from
+`scripts/browserControl/`, `mcpProductConfig.mjs`, or `mcpSandboxServer.mjs` are not public contracts. The
+command, its manifest, and its behavior are browser-gated through the packed and installed package. See the
+[browser automation product guide](browserAutomation.md).
+
 ## Runtime-asset deployment contract
 
 ### The Service Worker asset (pyprocSw.js)
@@ -208,7 +223,8 @@ After a revival - journal, session, or image open - process resources such as fi
 
 This repository records only the package contract and its executable gates. Root `boot()` returns a
 `PyprocMachine`; `pyproc/runtime` provides Runtime-only boot and loaded-engine adoption; the
-public `pyproc-assets` executable emits hosted runtime assets. Package-internal paths are never public.
+public `pyproc-assets`, `pyproc-engine`, and `pyproc-mcp` executables own their installed workflows.
+Package-internal paths are never public.
 
 ## Adopting a self-booted Pyodide (optional pattern)
 

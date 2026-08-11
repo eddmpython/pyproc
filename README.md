@@ -45,7 +45,7 @@
 - [Quick start](#quick-start)
 - [Product entrances](#product-entrances)
 - [Using it from an AI agent](#using-it-from-an-ai-agent)
-- [Plug it into an AI agent (MCP)](#plug-it-into-an-ai-agent-mcp)
+- [Plug it into an agent (MCP)](#plug-it-into-an-agent-mcp)
 - [Capability contract](#capability-contract)
 - [What it guarantees, and what it doesn't](#what-it-guarantees-and-what-it-doesnt)
 - [Scope and platform direction](#scope-and-platform-direction)
@@ -265,88 +265,66 @@ load data + packages
 user file  ->  browser Python  ->  summary only  ->  AI model
 ```
 
-## Plug it into an AI agent (MCP)
+## Plug it into an agent (MCP)
 
-The repo ships an MCP server with no additional runtime npm packages. It exposes a persistent
-pyproc Machine as
-four agent tools: `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`.
-It boots a headless Chromium machine page behind a COOP/COEP server and speaks MCP over
-stdio, so the retry loop above becomes tool calls:
+The npm package ships a stable `pyproc-mcp` command with no runtime dependency. It starts a persistent
+Python Machine and, only when the manifest enables it, a separately scoped Chrome, Chromium, or Edge
+automation profile.
 
 ```sh
-git clone https://github.com/eddmpython/pyproc && cd pyproc
-# register with your MCP client (claude CLI shown):
-claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
-# or run it directly and speak newline-delimited JSON-RPC on stdio:
-npm run mcp:sandbox
+npm install pyproc
+npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
-Browser control is disabled by default. An operator can opt the repository recipe into a scoped
-Node CDP broker for the same isolated automation profile:
+Create `pyproc-mcp.json`, using exact origins and the smallest action set required:
+
+```json
+{
+  "schemaVersion": 1,
+  "engine": { "root": "/absolute/path/to/pyodide" },
+  "browser": {
+    "enabled": true,
+    "allowedOrigins": ["https://example.test"],
+    "maxRisk": "externalEffect",
+    "actions": ["snapshot", "screenshot", "waitFor", "navigate", "fill", "click"],
+    "methods": [],
+    "externalEffects": "acknowledged",
+    "purpose": "authorized regression testing"
+  }
+}
+```
+
+Validate the engine, browser, limits, and permissions before registering the same command with an MCP
+client:
 
 ```sh
-PYPROC_BROWSER_CONTROL=1 \
-PYPROC_BROWSER_ALLOWED_ORIGINS=https://example.test \
-PYPROC_BROWSER_MAX_RISK=externalEffect \
-PYPROC_BROWSER_ACTIONS=snapshot,waitFor,navigate,click,fill,press,select,scroll,cookiesGet,cookieSet,cookieDelete,storageGet,storageSet,storageRemove,storageClear \
-PYPROC_BROWSER_EXTERNAL_EFFECTS=acknowledged \
-PYPROC_BROWSER_PURPOSE="authorized regression testing" \
-npm run mcp:sandbox
+npx pyproc-mcp --config ./pyproc-mcp.json --check
+npx pyproc-mcp --config ./pyproc-mcp.json
 ```
 
-| Variable | Meaning |
-|---|---|
-| `PYPROC_BROWSER_CONTROL=1` | Enables the browser tools. Any other value leaves the original four-tool surface unchanged |
-| `PYPROC_BROWSER_ALLOWED_ORIGINS` | Comma-separated exact HTTP(S) origins. Paths, credentials, and other schemes are rejected. If omitted, no target is visible |
-| `PYPROC_BROWSER_MAX_RISK` | `read` by default; `mutate` or `externalEffect` must be explicit. `browserOpen` requires `externalEffect` |
-| `PYPROC_BROWSER_ACTIONS` | Exact high-level actions. Defaults to `snapshot,waitFor` |
-| `PYPROC_BROWSER_METHODS` | Separate exact raw CDP allowlist. High-level required methods never grant raw command access |
-| `PYPROC_BROWSER_EXTERNAL_EFFECTS` | Must equal `acknowledged` when `maxRisk=externalEffect` |
-| `PYPROC_BROWSER_PURPOSE` | Required printable operator purpose for an external-effect configuration |
-| `PYPROC_BROWSER_FILE_ROOTS` | Existing absolute upload roots, separated by the platform path delimiter. Required only when upload is enabled |
+With `{ "enabled": false }`, the server exposes exactly four Python tools: `pythonRun`, `checkpointSave`,
+`checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
+semantic observation, ordered actions, separately allowlisted raw commands, and artifact read/delete.
 
-This adds eight sibling tools: lifecycle and raw control through `browserListTargets`, `browserOpen`,
-`browserAttach`, `browserCommand`, and `browserDetach`; policy discovery through `browserInspect`;
-compact semantic observation through `browserObserve`; and ordered high-level pipelines through
-`browserAct`. The 21-action catalog covers observation, explicit load-state navigation, semantic trusted
-input, hover and focus, checked state, native drag, guarded upload, bounded download, declared dialogs and
-popups, cookie metadata and mutation, and local or session storage. A snapshot returns opaque
-document-scoped locators. A pipeline stops on its first failure and reports the completed prefix and failed
-action index, so applied effects are never silently replayed.
+The 22-action catalog includes a first-class ordered `screenshot` action. It captures PNG, JPEG, or WebP at
+the viewport, full-page, or clip boundary. Screenshots and downloads enter one broker-owned artifact store
+with an opaque ref, SHA-256, byte and count quotas, bounded chunk reads, TTL expiry, explicit deletion, and
+shutdown cleanup. Large base64 values are not forced into the action response.
 
-Origins, actions, and raw methods are separate exact allowlists. Risk is broker-owned, so a caller cannot
-label `Runtime.evaluate` or `click` as read-only. Opening a target and every action or raw command must
-acknowledge its fixed risk. Destination-bearing CDP methods are checked against the origin policy before
-send. `read` means non-mutating, not non-sensitive: cookie, storage, accessibility, and full-DOM output still
-need least privilege and review. The broker owns the CDP endpoint, returns opaque target, session, and locator
-references, and opens no additional localhost proxy.
+Origins, actions, and raw methods are separate exact allowlists. Risk is fixed by the broker. The caller
+cannot label `Runtime.evaluate`, navigation, or click as read-only. The broker owns the CDP endpoint, uses a
+new temporary profile, returns only opaque target, session, locator, and artifact references, and opens no
+additional proxy listener. It supports Chromium-family major 137 or newer with CDP protocol major 1.
 
-The broker supports Chromium-family major 137 or newer with CDP protocol major 1. It checks
-`Browser.getVersion` before opening a target and exposes a bounded compatibility diagnostic through
-`browserInspect`. Semantic locators support CSS, role, text, label, test ID, open shadow roots, inherited
-same-origin frames, and explicitly authorized cross-origin frame chains. Target effects wait for strict
-uniqueness, visibility, stable geometry, enabled or editable state, viewport position, and hit target before
-the first effect command.
+Python restore never rolls back a browser mutation, navigation, storage change, download, popup, or external
+request. A command cut off after send is `outcomeUnknown` and is never retried automatically. The product
+does not provide default-profile attachment, CAPTCHA bypass, stealth, credential harvesting, or legal
+authorization to automate a site. The operator owns site permission and consequential-action approval.
 
-The recipe does not attach to the user's default Chrome profile and provides no CAPTCHA bypass, stealth,
-credential harvesting, or uncertain-effect retry. Configuration proves the broker boundary, not legal
-permission to automate a site; the operator remains responsible for authorization, applicable law, site
-terms, and consequential-action approval. This is a repository recipe, not a new npm export or a shipped
-browser extension. The complete action and outcome contract is in
-[the browser automation guide](docs/usage/browserAutomation.md).
-
-The agent prepares state once (`pythonRun`), saves a handle (`checkpointSave`), lets a
-risky attempt run, and rolls back in milliseconds (`checkpointRestore`) instead of
-rebuilding the environment. Trusted engine boot finishes first; agent code then runs under a
-fail-closed external-network CSP while same-origin MCP control traffic stays open. Self-host the
-engine if boot itself must make no CDN request. Tool results intentionally cross the MCP channel, so
-the calling application still owns output review and authorization. Python restore does not undo a
-browser mutation, navigation, storage change, download, or external request. A browser command whose
-connection dies after send is `outcomeUnknown` and is never retried automatically. `npm run test:mcp`
-verifies the default four-tool path and CSP; `npm run test:browser-control` verifies the opt-in path,
-58 browser-control assertions, restore boundary, resource cleanup, and real browser-death outcome on Chrome
-and Edge CI. `npm run test:browser-control-stress` independently repeats 48 semantic actions and remote-object
-release boundaries in both browsers.
+See the [browser automation product guide](docs/usage/browserAutomation.md) for the complete manifest,
+artifact, action, security, and recovery contracts. `npm run test:mcp-product` packs and installs the package,
+then verifies the bin, Python persistence, ordered PNG/JPEG/WebP capture, chunk reconstruction, digest, and
+deletion in a real browser. Chrome on Ubuntu and Edge on Windows run that gate in CI.
 
 ## Capability contract
 
@@ -357,7 +335,8 @@ These states measure only pyproc's own invariants. They never depend on adoption
 | Python execution (`boot` / `run` / `loadPackages`) | Complete |
 | Default durable Machine (`open()` / `open({ name })`) | Complete |
 | Process OS, restore reactivity, ASGI, declared environments, terminal, machine images, and journal | Bounded |
-| Device FS, permission jail, GPU, sockets, and the repository MCP browser-control broker | Probe |
+| Device FS, permission jail, GPU, and sockets | Probe |
+| Installed MCP browser automation and artifact product | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## What it guarantees, and what it doesn't
