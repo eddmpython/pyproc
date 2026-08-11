@@ -9,11 +9,12 @@ import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const targetHtml = `<!doctype html>
-<html><head><meta charset="utf-8"><title>installed product target</title></head>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>installed product target</title></head>
 <body style="margin:0;min-height:1800px;background:#f8fafc">
   <label>Title <input id="title" value="ready"></label>
   <button id="apply">Apply</button><output id="state">ready</output>
   <script>
+    console.info("installed-startup", "token=must-redact");
     document.getElementById("apply").addEventListener("click", () => {
       document.getElementById("state").textContent = document.getElementById("title").value;
     });
@@ -47,15 +48,16 @@ const config = {
     ...(browser ? { executable: browser } : {}),
     allowedOrigins: [targetOrigin],
     maxRisk: "externalEffect",
-    actions: ["snapshot", "screenshot", "waitFor", "fill", "click"],
+    actions: ["snapshot", "screenshot", "waitFor", "hydrateLazy", "fill", "click"],
     methods: ["Runtime.evaluate"],
+    viewport: { width: 390, height: 844, deviceScaleFactor: 3, mobile: true, touch: true },
     externalEffects: "acknowledged",
     purpose: "installed browser automation product gate",
     artifacts: {
       maxArtifactBytes: 16 * 1024 * 1024,
       maxTotalBytes: 32 * 1024 * 1024,
       maxArtifacts: 16,
-      inlineMaxBytes: 1024,
+      inlineMaxBytes: 4 * 1024 * 1024,
       ttlMs: 120000,
     },
   },
@@ -140,8 +142,13 @@ try {
   check("설치 제품의 persistent Python Machine 실행", python.value === "42", python.value);
 
   const opened = toolText(await callTool("browserOpen", { url: targetUrl, expectedRisk: "externalEffect" }));
+  check("설치 제품 browserOpen이 viewport와 첫 navigation trace를 반환",
+    opened.startup?.viewport?.width === 390
+      && opened.startup?.network?.some((event) => event.phase === "request" && event.url === targetUrl)
+      && opened.startup?.console?.some((event) => event.args?.includes("installed-startup"))
+      && !JSON.stringify(opened.startup).includes("must-redact"));
   const sessionRef = toolText(await callTool("browserAttach", { targetRef: opened.targetRef }));
-  const pipeline = toolText(await callTool("browserAct", {
+  const pipelineResponse = await callTool("browserAct", {
     sessionRef,
     actions: [
       { kind: "fill", selector: "#title", value: "installed-ready", expectedRisk: "externalEffect" },
@@ -151,12 +158,22 @@ try {
       { kind: "screenshot", format: "webp", quality: 70,
         clip: { x: 0, y: 0, width: 320, height: 180, scale: 1 }, expectedRisk: "read" },
     ],
-  }));
+  });
+  const pipeline = toolText(pipelineResponse);
   const artifacts = pipeline.actions.slice(2).map((action) => action.result);
   check("설치 제품에서 effect 뒤 ordered screenshot 3종 생성",
     pipeline.actions.length === 5 && artifacts.map((artifact) => artifact.format).join(",") === "png,jpeg,webp"
       && artifacts.every((artifact) => artifact.artifactRef.startsWith("artifact:")),
   artifacts.map((artifact) => `${artifact.format}:${artifact.byteLength}`).join(", "));
+  const nativeImages = pipelineResponse.result.content.filter((entry) => entry.type === "image");
+  check("설치 제품 screenshot이 artifact와 ordered native image를 함께 반환",
+    nativeImages.map((entry) => entry.mimeType).join(",") === "image/png,image/jpeg,image/webp"
+      && !pipelineResponse.result.content[0].text.includes("dataBase64")
+      && Buffer.from(nativeImages[0].data, "base64").subarray(0, 8)
+        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      && Buffer.from(nativeImages[1].data, "base64")[0] === 0xff
+      && Buffer.from(nativeImages[2].data, "base64").subarray(0, 4).toString("ascii") === "RIFF",
+  nativeImages.map((entry) => `${entry.mimeType}:${entry.data.length}`).join(", "));
   const state = toolText(await callTool("browserCommand", {
     sessionRef,
     method: "Runtime.evaluate",

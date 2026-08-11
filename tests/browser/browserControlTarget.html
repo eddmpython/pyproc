@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>browser control target</title>
   <style>
     #moving-action { position: relative; }
@@ -10,10 +11,13 @@
     #actionability-cover { position: absolute; inset: 0; z-index: 2; background: rgba(255, 0, 0, .1); }
     @keyframes browser-control-settle { from { left: 0; } to { left: 80px; } }
     #drag-source, #drop-target { display: inline-grid; place-items: center; width: 120px; height: 48px; border: 1px solid; }
+    #readiness-hidden { position: fixed; inset: 0; opacity: 0; pointer-events: none; }
+    #lazy-asset { display: block; margin-top: 2200px; width: 320px; height: 180px; background: #ddd; }
   </style>
 </head>
 <body>
   <main>
+    <div id="readiness-hidden" data-testid="readiness-hidden">Boot overlay</div>
     <h1>Browser control target</h1>
     <output id="status" data-count="0">ready:0</output>
     <button id="increment" type="button">increment</button>
@@ -51,8 +55,10 @@
         srcdoc="<!doctype html><button id='frame-action' type='button'>Frame action</button>"></iframe>
       <iframe id="cross-origin-frame" title="cross origin frame"></iframe>
     </section>
+    <img id="lazy-asset" alt="Lazy product asset" width="320" height="180" loading="lazy">
   </main>
   <script>
+    console.info("browser-startup", "token=must-redact");
     const status = document.getElementById("status");
     let count = Number(sessionStorage.getItem("browserControlCount") || 0);
 
@@ -128,6 +134,13 @@
     const shadow = document.getElementById("semantic-shadow").attachShadow({ mode: "open" });
     shadow.innerHTML = '<button type="button" data-testid="shadow-action">Shadow action</button>';
     shadow.querySelector("button").addEventListener("click", (event) => recordAction("shadow", event));
+    const lazyAsset = document.getElementById("lazy-asset");
+    const lazyObserver = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting) || lazyAsset.src) return;
+      lazyAsset.src = "/tests/browser/browserControlLazy.svg";
+      lazyObserver.disconnect();
+    });
+    lazyObserver.observe(lazyAsset);
     document.getElementById("semantic-frame").addEventListener("load", (event) => {
       event.currentTarget.contentDocument.getElementById("frame-action")
         .addEventListener("click", (clickEvent) => recordAction("frame", clickEvent));

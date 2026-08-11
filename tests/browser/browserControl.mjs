@@ -17,9 +17,14 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let receiverRequests = 0;
 let receiverBody = null;
+let lazyAssetRequests = 0;
 let deniedOrigin = "";
 const receiverHandler = async (req, res) => {
   const url = new URL(req.url, "http://fixture.invalid");
+  if (url.pathname === "/tests/browser/browserControlLazy.svg") {
+    lazyAssetRequests += 1;
+    return false;
+  }
   if (url.pathname === "/browserControlRedirect") {
     res.writeHead(302, { Location: `${deniedOrigin}/tests/browser/browserControlFrameTarget.html?redirected=1` });
     res.end();
@@ -59,6 +64,9 @@ const child = spawn(process.execPath, [join(ROOT, "scripts", "mcpSandboxServer.m
     PYPROC_BROWSER_ACTIONS: Object.keys(BROWSER_AUTOMATION_ACTIONS).join(","),
     PYPROC_BROWSER_EXTERNAL_EFFECTS: "acknowledged",
     PYPROC_BROWSER_PURPOSE: "authorized pyproc browser-control regression test",
+    PYPROC_BROWSER_VIEWPORT: JSON.stringify({
+      width: 390, height: 844, deviceScaleFactor: 3, mobile: true, touch: true,
+    }),
     PYPROC_BROWSER_FILE_ROOTS: ROOT,
     PYPROC_BROWSER_METHODS: [
       "DOM.getDocument", "DOM.getOuterHTML", "DOM.querySelector", "Network.enable",
@@ -164,13 +172,32 @@ try {
   check("browserOpen expectedRisk 생략은 target 생성 전 거부", openWithoutRisk.result.isError === true
     && toolText(openWithoutRisk).code === "BROWSER_CONTROL_PERMISSION_DENIED");
   const opened = toolText(await callTool("browserOpen", { url: targetUrl, expectedRisk: "externalEffect" }));
-  check("browserOpen이 opaque targetRef 반환", opened.targetRef?.startsWith("target:") && opened.url === targetUrl, opened.targetRef);
+  const startupText = JSON.stringify(opened.startup || {});
+  check("browserOpen이 첫 navigation 전에 viewport와 trace를 준비",
+    opened.targetRef?.startsWith("target:") && opened.url === targetUrl
+      && opened.startup?.readyState === "complete"
+      && opened.startup?.viewport?.width === 390
+      && opened.startup?.network?.some((event) => event.phase === "request" && event.url === targetUrl)
+      && opened.startup?.console?.some((event) => event.args?.includes("browser-startup"))
+      && !startupText.includes("must-redact") && !startupText.includes("?"),
+  `${opened.startup?.console?.length || 0} console, ${opened.startup?.network?.length || 0} network`);
 
   const sessionRef = toolText(await callTool("browserAttach", { targetRef: opened.targetRef }));
   check("browserAttach가 versioned broker-scoped sessionRef 반환",
     sessionRef.protocolVersion === "1" && sessionRef.sessionId?.startsWith("session:") && Number.isInteger(sessionRef.brokerEpoch));
   await browserCommand(sessionRef, "Runtime.enable", {}, "read");
   await browserCommand(sessionRef, "Network.enable", {}, "read");
+
+  const viewportState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "({width: innerWidth, height: innerHeight, dpr: devicePixelRatio, touch: navigator.maxTouchPoints})",
+    returnByValue: true,
+  }, "externalEffect"));
+  check("manifest viewport가 open과 attach 뒤 같은 device state를 유지",
+    viewportState.result?.result?.value?.width === 390
+      && viewportState.result?.result?.value?.height === 844
+      && viewportState.result?.result?.value?.dpr === 3
+      && viewportState.result?.result?.value?.touch === 5,
+  JSON.stringify(viewportState.result?.result?.value));
 
   let ready = null;
   const readyDeadline = Date.now() + TIMEOUT_MS;
@@ -182,6 +209,60 @@ try {
     await delay(50);
   }
   check("browserCommand가 controlled target을 관찰", ready?.result?.result?.value?.text === "ready:0", JSON.stringify(ready?.result?.result?.value));
+
+  const movingReady = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: `window.browserControlFixture.resetActionability('moving');
+      document.getElementById('enabled-action').disabled = true;
+      setTimeout(() => { document.getElementById('enabled-action').disabled = false; }, 2000);
+      'moving'`,
+    returnByValue: true,
+  }, "externalEffect"));
+  check("readiness stable fixture 시작", movingReady.result?.result?.value === "moving");
+  const readiness = toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [
+      { kind: "waitFor", selector: "#readiness-hidden", state: "attached", expectedRisk: "read" },
+      { kind: "waitFor", locator: { by: "testId", value: "readiness-hidden" }, state: "hidden", expectedRisk: "read" },
+      { kind: "waitFor", locator: { by: "role", value: "heading", name: "Browser control target" }, state: "visible", expectedRisk: "read" },
+      { kind: "waitFor", locator: { by: "role", value: "button", name: "Apply" }, state: "enabled", expectedRisk: "read" },
+      { kind: "waitFor", locator: { by: "role", value: "button", name: "Enable later" }, state: "disabled", expectedRisk: "read" },
+      { kind: "waitFor", locator: { by: "label", value: "Work email" }, state: "editable", expectedRisk: "read" },
+      { kind: "waitFor", selector: "#moving-action", state: "stable", expectedRisk: "read" },
+      { kind: "waitFor", selector: "#never-created", state: "detached", expectedRisk: "read" },
+    ],
+  }));
+  check("waitFor가 semantic locator와 사용자 표시 상태를 고수준으로 판정",
+    readiness.actions?.length === 8
+      && readiness.actions.map((entry) => entry.result?.state).join(",")
+        === "attached,hidden,visible,enabled,disabled,editable,stable,detached",
+  readiness.actions?.map((entry) => `${entry.result?.state}:${entry.result?.polls}`).join(","));
+  const readinessTimeoutResponse = await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "waitFor", selector: "#never-visible", state: "visible", timeoutMs: 1, expectedRisk: "read" }],
+  });
+  const readinessTimeout = toolText(readinessTimeoutResponse);
+  check("waitFor timeout이 read-only 재시도 가능 오류로 분리",
+    readinessTimeoutResponse.result.isError === true
+      && readinessTimeout.code === "BROWSER_AUTOMATION_WAIT_TIMEOUT"
+      && readinessTimeout.outcome === "notSent" && readinessTimeout.retryable === true,
+  readinessTimeout.code);
+
+  lazyAssetRequests = 0;
+  const hydratedResponse = await callTool("browserAct", {
+    sessionRef,
+    actions: [
+      { kind: "hydrateLazy", maxScrolls: 20, settleMs: 50, timeoutMs: 5000, expectedRisk: "externalEffect" },
+      { kind: "screenshot", format: "png", fullPage: true, expectedRisk: "read" },
+    ],
+  });
+  const hydrated = toolText(hydratedResponse);
+  check("명시적 hydrateLazy가 offscreen asset을 적재하고 원위치에서 full-page capture",
+    lazyAssetRequests === 1
+      && hydrated.actions?.[0]?.result?.restored === true
+      && hydrated.actions?.[0]?.result?.pendingAfter === 0
+      && hydrated.actions?.[1]?.result?.fullPage === true
+      && hydratedResponse.result.content.some((entry) => entry.type === "image" && entry.mimeType === "image/png"),
+  `${hydrated.actions?.[0]?.result?.scrolls || 0} scrolls, ${lazyAssetRequests} requests`);
 
   const observed = toolText(await callTool("browserObserve", {
     sessionRef,
@@ -196,6 +277,7 @@ try {
   const highLevel = toolText(await callTool("browserAct", {
     sessionRef,
     actions: [
+      { kind: "waitFor", locatorRef: titleLocator, state: "editable", expectedRisk: "read" },
       { kind: "fill", locatorRef: titleLocator, value: "hello", expectedRisk: "externalEffect" },
       { kind: "select", selector: "#lane", values: ["fast"], expectedRisk: "externalEffect" },
       { kind: "press", locatorRef: titleLocator, key: "Enter", expectedRisk: "externalEffect" },
@@ -204,8 +286,8 @@ try {
       { kind: "waitFor", selector: "#applied", state: "attached", expectedRisk: "read" },
     ],
   }));
-  check("browserAct가 고수준 작업 여섯 개를 MCP 한 호출에서 순서 실행", highLevel.state === "completed"
-    && highLevel.actions?.length === 6 && highLevel.actions[5]?.result?.state === "attached",
+  check("browserAct가 locatorRef 대기와 고수준 작업을 MCP 한 호출에서 순서 실행", highLevel.state === "completed"
+    && highLevel.actions?.length === 7 && highLevel.actions[6]?.result?.state === "attached",
   `${highLevel.actions?.length} actions`);
   const highLevelState = toolText(await browserCommand(sessionRef, "Runtime.evaluate",
     { expression: "window.browserControlFixture.form()", returnByValue: true }, "externalEffect"));
@@ -456,15 +538,15 @@ try {
 
   const strictDuplicate = await callTool("browserAct", {
     sessionRef,
-    actions: [{ kind: "click", locator: { by: "text", value: "Strict duplicate" }, expectedRisk: "externalEffect" }],
+    actions: [{ kind: "waitFor", locator: { by: "text", value: "Strict duplicate" }, state: "visible", expectedRisk: "read" }],
   });
   const strictDuplicatePayload = toolText(strictDuplicate);
-  check("semantic locator가 둘 이상이면 effect 전 strict 거부",
+  check("waitFor semantic locator가 둘 이상이면 read 단계에서 strict 거부",
     strictDuplicate.result.isError === true && strictDuplicatePayload.code === "BROWSER_AUTOMATION_STRICT_LOCATOR"
       && strictDuplicatePayload.outcome === "notSent",
   strictDuplicatePayload.code);
 
-  const artifactReady = toolText(await callTool("browserObserve", {
+  const artifactReadyResponse = await callTool("browserObserve", {
     sessionRef,
     expectedRisk: "read",
     maxNodes: 100,
@@ -472,12 +554,14 @@ try {
     includeConsole: true,
     includeNetwork: true,
     maxEvents: 20,
-  }));
+  });
+  const artifactReady = toolText(artifactReadyResponse);
   check("bounded screenshot와 trace schema가 semantic observation에 결합",
     artifactReady.result?.screenshot?.mimeType === "image/png"
       && artifactReady.result.screenshot.byteLength > 0
-      && artifactReady.result.screenshot.dataBase64.length > 100
       && artifactReady.result.screenshot.artifactRef?.startsWith("artifact:")
+      && artifactReadyResponse.result.content.some((entry) => entry.type === "image" && entry.mimeType === "image/png")
+      && !artifactReadyResponse.result.content[0].text.includes("dataBase64")
       && artifactReady.trace?.schemaVersion === "1"
       && artifactReady.trace.steps?.[0]?.commands.some((command) => command.method === "Page.captureScreenshot"),
   `${artifactReady.result?.screenshot?.byteLength || 0} bytes`);
@@ -552,10 +636,10 @@ try {
   await delay(250);
   const staleLocatorUse = await callTool("browserAct", {
     sessionRef,
-    actions: [{ kind: "fill", locatorRef: titleLocator, value: "must-not-apply", expectedRisk: "externalEffect" }],
+    actions: [{ kind: "waitFor", locatorRef: titleLocator, state: "attached", expectedRisk: "read" }],
   });
   const staleLocatorPayload = toolText(staleLocatorUse);
-  check("raw same-origin navigation 뒤 locator는 external command 전에 무효화",
+  check("raw same-origin navigation 뒤 waitFor locatorRef는 stale로 무효화",
     staleLocatorUse.result.isError === true
       && staleLocatorPayload.code === "BROWSER_AUTOMATION_STALE_LOCATOR"
       && staleLocatorPayload.outcome === "notSent",
