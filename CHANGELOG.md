@@ -12,6 +12,45 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.15 - 2026-08-12
+
+### Added
+
+- **An installed browser automation product beside the persistent Python Machine.** The package now ships
+  `pyproc-mcp`, a manifest-driven stdio entrance that can open a broker-owned temporary Chrome, Chromium,
+  or Edge profile without exposing its DevTools endpoint to Python or the caller. Exact origin, action,
+  method, file, risk, and artifact policies fail closed before launch. Browser authority remains opt-in;
+  disabling it preserves the existing Python-only tool surface.
+
+- **Semantic observation and ordered interaction for autonomous work.** Opaque target, session, locator,
+  and artifact references replace browser internals. Focused accessibility observations retain actionable
+  controls and live state before applying output bounds. Action pipelines cover navigation, readiness,
+  pointer and keyboard input, trusted controlled-editor input, form state, drag, scrolling, uploads,
+  cookies, storage, screenshots, and downloads. A failed pipeline reports its completed prefix, failure
+  position, trace, and outcome instead of silently replaying an effect.
+
+- **Product-grade visual artifacts.** Viewport, full-page, and clipped PNG, JPEG, and WebP captures can be
+  returned as native MCP image content or retained behind an opaque artifact reference. Digests, quotas,
+  bounded reads, expiry, explicit deletion, and shutdown cleanup make large screenshots and downloads
+  usable without revealing host paths.
+
+### Changed
+
+- Browser navigation now returns control at commit by default. Callers can request DOM-ready or load
+  completion explicitly, so an application that intentionally keeps loading cannot hold the session
+  indefinitely. Denied popup cleanup restores the opener capture surface, while an allowed popup keeps
+  focus.
+
+- Durable command RPC has a documented deadline. If transport is lost after an effect was sent, the
+  outcome is unknown and the command is never retried automatically. Python checkpoint restore remains
+  intentionally separate from browser, network, storage, download, and popup effects.
+
+한국어 요약: 브레이킹 없는 기능 릴리즈다. 설치 패키지에 manifest 기반 `pyproc-mcp`를 추가해
+영속 Python Machine과 별도 권한의 Chromium 자동화 프로필을 한 세션에서 사용한다. 의미 기반
+관찰, 불투명 참조, 순서가 보존되는 입력과 화면 캡처, 다운로드 아티팩트, 정확한 권한과 위험도,
+감사 및 실패 결과 계약을 제품 경계로 고정했다. 기본 탐색 완료 경계는 commit이며 더 강한 대기는
+명시적으로 선택한다. Python 복원은 이미 발생한 브라우저 외부 효과를 되돌린다고 주장하지 않는다.
+
 ## 0.0.14 - 2026-08-06
 
 ### Added

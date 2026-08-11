@@ -157,7 +157,7 @@ restored. A fail-closed network policy can also keep selected data local while c
 ## Quick start
 
 ```sh
-npm install pyproc@0.0.14 --save-exact
+npm install pyproc@0.0.15 --save-exact
 npx pyproc-engine --out public/vendor/pyodide
 ```
 
@@ -556,11 +556,11 @@ Can't set headers at all (e.g. GitHub Pages)? Register `pyprocSw.js?coi=1` and r
 
 ## Install and pinning
 
-From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.14 --save-exact`. There is no build step (native ESM). Floating ranges (`^`, `~`, `latest`) are not supported because a state kernel's replay guarantee is version-bound:
+From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.15 --save-exact`. There is no build step (native ESM). Floating ranges (`^`, `~`, `latest`) are not supported because a state kernel's replay guarantee is version-bound:
 
 ```jsonc
 // package.json
-"dependencies": { "pyproc": "0.0.14" }
+"dependencies": { "pyproc": "0.0.15" }
 ```
 
 `pyproc/runtime` and the typed API subpath entries ship in 0.0.11. A SHA pin
