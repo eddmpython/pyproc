@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>browser control target</title>
+  <style>
+    #moving-action { position: relative; }
+    #actionability-wrap { position: relative; width: 180px; height: 40px; }
+    #covered-action { position: absolute; inset: 0; }
+    #actionability-cover { position: absolute; inset: 0; z-index: 2; background: rgba(255, 0, 0, .1); }
+    @keyframes browser-control-settle { from { left: 0; } to { left: 80px; } }
+    #drag-source, #drop-target { display: inline-grid; place-items: center; width: 120px; height: 48px; border: 1px solid; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Browser control target</h1>
+    <output id="status" data-count="0">ready:0</output>
+    <button id="increment" type="button">increment</button>
+    <button id="send" type="button">send</button>
+    <label>Title <input id="title" type="text"></label>
+    <label>Lane
+      <select id="lane">
+        <option value="safe">safe</option>
+        <option value="fast">fast</option>
+      </select>
+    </label>
+    <button id="apply" type="button">Apply</button>
+    <button id="signal" type="button">Signal</button>
+    <button id="hang" type="button">Hang</button>
+    <output id="form-status">idle</output>
+    <section aria-label="Actionability fixtures">
+      <button id="moving-action" type="button">Moving action</button>
+      <div id="actionability-wrap"><button id="covered-action" type="button">Covered action</button></div>
+      <button id="enabled-action" type="button">Enable later</button>
+      <label for="semantic-email">Work email</label>
+      <input id="semantic-email" type="email" data-testid="email-field">
+      <button id="hover-action" type="button" data-testid="hover-action">Hover action</button>
+      <label><input id="check-action" type="checkbox"> Receive updates</label>
+      <input id="upload-action" type="file" data-testid="upload-field">
+      <button id="dialog-action" type="button">Confirm action</button>
+      <button id="download-action" type="button">Download action</button>
+      <button id="popup-action" type="button">Open allowed popup</button>
+      <button id="denied-popup-action" type="button">Open denied popup</button>
+      <div id="drag-source" draggable="true" data-testid="drag-source">Drag source</div>
+      <div id="drop-target" data-testid="drop-target">Drop target</div>
+      <button class="strict-duplicate" type="button">Strict duplicate</button>
+      <button class="strict-duplicate" type="button">Strict duplicate</button>
+      <div id="semantic-shadow"></div>
+      <iframe id="semantic-frame" title="semantic frame"
+        srcdoc="<!doctype html><button id='frame-action' type='button'>Frame action</button>"></iframe>
+      <iframe id="cross-origin-frame" title="cross origin frame"></iframe>
+    </section>
+  </main>
+  <script>
+    const status = document.getElementById("status");
+    let count = Number(sessionStorage.getItem("browserControlCount") || 0);
+
+    function render() {
+      status.dataset.count = String(count);
+      status.textContent = `ready:${count}`;
+      sessionStorage.setItem("browserControlCount", String(count));
+      return count;
+    }
+
+    async function send(marker = "default") {
+      const response = await fetch(`/browserControlReceiver?marker=${encodeURIComponent(marker)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marker, count }),
+      });
+      return { status: response.status, marker, count };
+    }
+
+    document.getElementById("increment").addEventListener("click", () => {
+      count += 1;
+      render();
+    });
+    document.getElementById("send").addEventListener("click", () => void send("button"));
+    const title = document.getElementById("title");
+    const lane = document.getElementById("lane");
+    const formStatus = document.getElementById("form-status");
+    title.addEventListener("keydown", (event) => { title.dataset.lastKey = event.key; });
+    document.getElementById("apply").addEventListener("click", () => {
+      document.getElementById("applied")?.remove();
+      const applied = document.createElement("output");
+      applied.id = "applied";
+      applied.textContent = `${title.value}:${lane.value}:${title.dataset.lastKey || "none"}`;
+      formStatus.replaceChildren(applied);
+    });
+    document.getElementById("signal").addEventListener("click", () => void send("high-level-cancel"));
+    document.getElementById("hang").addEventListener("click", () => {
+      sessionStorage.setItem("browserControlHungClick", String(Number(sessionStorage.getItem("browserControlHungClick") || 0) + 1));
+      while (true) { /* renderer를 고의로 멈춰 post-send browser death를 실측한다. */ }
+    });
+    const actionabilityCounts = { moving: 0, covered: 0, enabled: 0, shadow: 0, frame: 0, hover: 0, check: 0, drag: 0 };
+    const trusted = {};
+    const recordAction = (name, event) => {
+      actionabilityCounts[name] += 1;
+      trusted[name] = event.isTrusted;
+    };
+    document.getElementById("moving-action").addEventListener("click", (event) => recordAction("moving", event));
+    document.getElementById("covered-action").addEventListener("click", (event) => recordAction("covered", event));
+    document.getElementById("enabled-action").addEventListener("click", (event) => recordAction("enabled", event));
+    document.getElementById("hover-action").addEventListener("mouseenter", (event) => recordAction("hover", event));
+    document.getElementById("check-action").addEventListener("change", (event) => recordAction("check", event));
+    let dialogDecision = null;
+    document.getElementById("dialog-action").addEventListener("click", () => {
+      dialogDecision = confirm("browser control confirmation") ? "accepted" : "dismissed";
+    });
+    document.getElementById("download-action").addEventListener("click", () => {
+      const link = document.createElement("a");
+      link.download = "browser-control.txt";
+      link.href = URL.createObjectURL(new Blob(["bounded browser download"], { type: "text/plain" }));
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    });
+    for (const id of ["popup-action", "denied-popup-action"]) {
+      document.getElementById(id).addEventListener("click", (event) => {
+        window.open(event.currentTarget.dataset.url, "_blank");
+      });
+    }
+    document.getElementById("drop-target").addEventListener("dragover", (event) => event.preventDefault());
+    document.getElementById("drop-target").addEventListener("drop", (event) => {
+      event.preventDefault();
+      recordAction("drag", event);
+    });
+    const shadow = document.getElementById("semantic-shadow").attachShadow({ mode: "open" });
+    shadow.innerHTML = '<button type="button" data-testid="shadow-action">Shadow action</button>';
+    shadow.querySelector("button").addEventListener("click", (event) => recordAction("shadow", event));
+    document.getElementById("semantic-frame").addEventListener("load", (event) => {
+      event.currentTarget.contentDocument.getElementById("frame-action")
+        .addEventListener("click", (clickEvent) => recordAction("frame", clickEvent));
+    });
+
+    function resetActionability(kind) {
+      if (kind === "moving") {
+        const moving = document.getElementById("moving-action");
+        moving.style.animation = "none";
+        void moving.offsetWidth;
+        moving.style.animation = "browser-control-settle 260ms linear 1";
+      }
+      if (kind === "covered") {
+        document.getElementById("actionability-cover")?.remove();
+        const cover = document.createElement("div");
+        cover.id = "actionability-cover";
+        document.getElementById("actionability-wrap").append(cover);
+        setTimeout(() => cover.remove(), 260);
+      }
+      if (kind === "enabled") {
+        const enabled = document.getElementById("enabled-action");
+        enabled.disabled = true;
+        setTimeout(() => { enabled.disabled = false; }, 260);
+      }
+      actionabilityCounts[kind] = 0;
+      delete trusted[kind];
+      return kind;
+    }
+
+    window.browserControlFixture = Object.freeze({
+      read: () => ({ count, text: status.textContent, href: location.href }),
+      increment: () => { count += 1; return render(); },
+      send,
+      form: () => ({
+        title: title.value,
+        lane: lane.value,
+        lastKey: title.dataset.lastKey || null,
+        applied: document.getElementById("applied")?.textContent || null,
+      }),
+      resetActionability,
+      actionability: () => ({
+        counts: { ...actionabilityCounts },
+        trusted: { ...trusted },
+        email: document.getElementById("semantic-email").value,
+        focused: document.activeElement?.id || null,
+        checked: document.getElementById("check-action").checked,
+        files: Array.from(document.getElementById("upload-action").files || [], (file) => file.name),
+        dialogDecision,
+      }),
+      observeArtifacts: async () => {
+        console.info("browser-observation", "token=must-redact");
+        const response = await fetch("/browserControlReceiver?marker=observation&token=must-redact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ marker: "observation", count }),
+        });
+        return response.status;
+      },
+    });
+    render();
+  </script>
+</body>
+</html>

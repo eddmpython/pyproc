@@ -1,9 +1,11 @@
 // mcpSandboxServer.mjs - pyproc 샌드박스를 MCP(stdio) 도구로 노출하는 레시피(Node 전용, 의존성 0).
-// AI 에이전트(Claude Code 등)가 이 서버를 붙이면 도구 4개를 얻는다:
+// 에이전트가 이 서버를 붙이면 기본 도구 4개를 얻는다:
 //   pythonRun(code)          - 준비된 파이썬 머신에서 실행(stdout + 마지막 식 repr)
 //   checkpointSave()         - 지금 상태를 복원 핸들로 저장
 //   checkpointRestore(index) - 저장 지점으로 밀리초 복귀(생략 시 마지막)
 //   sandboxReset()           - 부팅 직후 준비 상태(cp0)로 복귀
+// PYPROC_BROWSER_CONTROL=1을 명시하면 격리 profile의 저수준 및 고수준 browser 도구가 더 열린다.
+// CDP endpoint는 Node broker만 소유하고 MCP stdio 밖에 listener를 추가하지 않는다.
 // 구조: COOP/COEP 정적 서버(scripts/staticServer.mjs) + headless Chromium(tests/browser/harness.mjs)
 // 위에 examples/mcpSandbox.html 머신 페이지를 띄우고, long-poll 훅으로 명령을 왕복한다.
 // MCP 전송은 stdio의 newline-delimited JSON-RPC 2.0이다(스펙의 stdio transport).
@@ -11,12 +13,22 @@
 import { createInterface } from "node:readline";
 import { createStaticServer } from "./staticServer.mjs";
 import { launchBrowser } from "../tests/browser/harness.mjs";
+import {
+  McpBrowserControl,
+  browserToolErrorDetails,
+  createBrowserControlTools,
+  parseBrowserControlConfig,
+} from "./browserControl/index.js";
 
 const PROTOCOL_VERSION = "2025-06-18"; // 지원 MCP 스펙 리비전(클라이언트 제안을 에코 우선)
 const COMMAND_TIMEOUT_MS = Number(process.env.PYPROC_MCP_TIMEOUT || 180000); // 첫 호출은 엔진 부팅 포함
 const POLL_HOLD_MS = 20000; // long-poll 보류 상한(프록시 idle 타임아웃 회피)
+const BROWSER_CONTROL_ENABLED = process.env.PYPROC_BROWSER_CONTROL === "1";
+const BROWSER_CONTROL_CONFIG = BROWSER_CONTROL_ENABLED
+  ? parseBrowserControlConfig(process.env, { timeoutMs: COMMAND_TIMEOUT_MS })
+  : null;
 
-const TOOLS = [
+const PYTHON_TOOLS = [
   {
     name: "pythonRun",
     description: "Run Python in the prepared browser machine under a fail-closed external-network policy. Returns stdout and the repr of the last expression. State persists across calls.",
@@ -38,6 +50,10 @@ const TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
 ];
+
+const BROWSER_TOOLS = BROWSER_CONTROL_CONFIG ? createBrowserControlTools(BROWSER_CONTROL_CONFIG) : [];
+const TOOLS = Object.freeze(BROWSER_CONTROL_ENABLED ? [...PYTHON_TOOLS, ...BROWSER_TOOLS] : PYTHON_TOOLS);
+const PYTHON_TOOL_NAMES = new Set(PYTHON_TOOLS.map((tool) => tool.name));
 
 // ---- 페이지 <-> 서버 명령 채널(게이트 하네스와 같은 훅 패턴) ----
 const commandQueue = [];
@@ -103,16 +119,29 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${server.address().port}/examples/mcpSandbox.html`
   + (process.env.PYPROC_INDEX_URL ? `?indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "");
 
-const browserSession = launchBrowser(pageUrl, { prefix: "pyprocMcp-" });
+const browserSession = launchBrowser(pageUrl, {
+  prefix: "pyprocMcp-",
+  extraArgs: BROWSER_CONTROL_ENABLED
+    ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"]
+    : [],
+});
 process.stderr.write(`pyproc MCP sandbox: ${browserSession.browser} -> ${pageUrl}\n`);
 
-function shutdown(code = 0) {
+const browserControl = BROWSER_CONTROL_ENABLED
+  ? new McpBrowserControl({ profileDir: browserSession.profile, config: BROWSER_CONTROL_CONFIG })
+  : null;
+
+let shuttingDown = false;
+async function shutdown(code = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try { await browserControl?.close(); } catch (e) {}
   try { browserSession.close(); } catch (e) {}
   try { server.close(); } catch (e) {}
   process.exit(code);
 }
-process.on("SIGINT", () => shutdown(0));
-process.on("SIGTERM", () => shutdown(0));
+process.on("SIGINT", () => void shutdown(0));
+process.on("SIGTERM", () => void shutdown(0));
 
 function waitForPage() {
   if (pageReady) return Promise.resolve();
@@ -134,7 +163,34 @@ function toolError(id, error) {
 }
 
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
-rl.on("close", () => shutdown(0));
+const activeRequests = new Map();
+rl.on("close", () => void shutdown(0));
+
+async function invokeTool(tool, args, { signal } = {}) {
+  if (PYTHON_TOOL_NAMES.has(tool)) {
+    await waitForPage();
+    const outcome = await dispatch(tool, args);
+    if (!outcome.ok) {
+      const error = new Error(outcome.error?.message || "Python tool failed");
+      error.code = outcome.error?.code;
+      throw error;
+    }
+    return outcome.value;
+  }
+  if (browserControl) return browserControl.invoke(tool, args, { signal });
+  throw new Error(`unknown tool: ${tool}`);
+}
+
+function toolErrorPayload(error) {
+  return {
+    code: error?.code || "PYPROC_INTERNAL",
+    message: String(error?.message || error).slice(-500),
+    ...(error?.outcome ? { outcome: error.outcome } : {}),
+    ...(typeof error?.retryable === "boolean" ? { retryable: error.retryable } : {}),
+    ...browserToolErrorDetails(error),
+  };
+}
+
 rl.on("line", async (line) => {
   const text = line.trim();
   if (!text) return;
@@ -147,10 +203,12 @@ rl.on("line", async (line) => {
         protocolVersion: (params && params.protocolVersion) || PROTOCOL_VERSION,
         capabilities: { tools: {} },
         serverInfo: { name: "pyproc-sandbox", version: "1" },
-        instructions: "A persistent Python machine in a browser sandbox. Agent code has no external network permission; same-origin MCP control traffic remains open. Prepare state with pythonRun, checkpointSave before risky attempts, checkpointRestore to roll back in milliseconds.",
+        instructions: "A persistent Python machine in a browser sandbox. Agent code has no external network permission; same-origin MCP control traffic remains open. Prepare state with pythonRun, checkpointSave before risky attempts, and checkpointRestore after a failed attempt. Python checkpointRestore never rolls back browser actions. Browser tools appear only when the operator enables a scoped broker. Prefer compact browserObserve and bounded browserAct pipelines; use browserCommand only for separately raw-allowlisted CDP methods. Never retry an outcomeUnknown browser effect.",
       });
     } else if (method === "notifications/initialized") {
       // 알림: 응답 없음
+    } else if (method === "notifications/cancelled") {
+      activeRequests.get(params?.requestId)?.abort(params?.reason || "MCP client cancelled the request");
     } else if (method === "ping") {
       resultOf(id, {});
     } else if (method === "tools/list") {
@@ -158,10 +216,15 @@ rl.on("line", async (line) => {
     } else if (method === "tools/call") {
       const tool = params && params.name;
       if (!TOOLS.some((t) => t.name === tool)) { errorOf(id, -32602, `unknown tool: ${tool}`); return; }
-      await waitForPage();
-      const outcome = await dispatch(tool, (params && params.arguments) || {});
-      if (outcome.ok) toolResult(id, outcome.value);
-      else toolError(id, outcome.error);
+      const controller = new AbortController();
+      activeRequests.set(id, controller);
+      try {
+        toolResult(id, await invokeTool(tool, (params && params.arguments) || {}, { signal: controller.signal }));
+      } catch (error) {
+        toolError(id, toolErrorPayload(error));
+      } finally {
+        activeRequests.delete(id);
+      }
     } else if (id !== undefined) {
       errorOf(id, -32601, `unknown method: ${method}`);
     }

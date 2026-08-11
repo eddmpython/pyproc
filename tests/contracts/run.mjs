@@ -7,6 +7,8 @@ const HELPERS = new Set(["engineConformance.mjs", "run.mjs"]);
 // suite 이름을 고정한다. 자동 발견은 새 suite를 공짜로 태우지만, 개수만 세면 suite를 지운
 // 커밋이 조용히 통과한다(4개를 지워도 "1 suite" PASS였다). 목록을 고치는 diff가 심사 지점이다.
 export const EXPECTED_SUITES = Object.freeze([
+  "browserAutomation.mjs",
+  "browserControl.mjs",
   "moduleBoundaries.mjs",
   "nestedPatchScope.mjs",
   "publicSurface.mjs",

@@ -52,6 +52,10 @@ try {
   const installedEngineCli = readFileSync(join(appDir, "node_modules", "pyproc", "scripts", "fetchEngine.mjs"), "utf8");
   if (!installedEngineCli.includes('argv[index] === "--out"')) throw new Error("installed pyproc-engine --out 계약 누락");
   if (!existsSync(join(appDir, "node_modules", "pyproc", "scripts", "assetCatalog.json"))) throw new Error("installed engine catalog 누락");
+  if (existsSync(join(appDir, "node_modules", "pyproc", "scripts", "browserControl"))
+    || existsSync(join(appDir, "node_modules", "pyproc", "scripts", "mcpSandboxServer.mjs"))) {
+    throw new Error("repository-only browser broker가 npm package에 포함됐다");
+  }
 
   const manifestOut = join(appDir, "public", "pyproc-assets.json");
   const copyTo = join(appDir, "public", "vendor", "pyproc");

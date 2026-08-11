@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>cross origin frame target</title></head>
+<body>
+  <button id="cross-frame-action" type="button">Cross frame action</button>
+  <script>
+    document.getElementById("cross-frame-action").addEventListener("click", (event) => {
+      void fetch("/browserControlReceiver?marker=cross-frame", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marker: "cross-frame", trusted: event.isTrusted === true }),
+      });
+    });
+  </script>
+</body>
+</html>

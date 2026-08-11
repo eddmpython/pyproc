@@ -57,6 +57,7 @@ export async function sendFile(res, file, opts = {}) {
     const body = await readFile(file);
     const headers = { "Content-Type": MIME[extname(file)] || "application/octet-stream", "Cache-Control": "no-store" };
     if (opts.coi !== false) Object.assign(headers, COI_HEADERS);
+    if (opts.headers) Object.assign(headers, opts.headers);
     res.writeHead(200, headers);
     res.end(body);
   } catch (e) {
@@ -81,7 +82,7 @@ export function createStaticServer(onRequest = null, opts = {}) {
     const rel = urlPath === "/" ? "/examples/index.html" : urlPath.endsWith("/") ? `${urlPath}index.html` : urlPath;
     const file = safeJoin(root, rel);
     if (!file) { res.writeHead(403); return res.end("forbidden"); }
-    await sendFile(res, file, { coi });
+    await sendFile(res, file, { coi, headers: opts.headers });
   });
 }
 
