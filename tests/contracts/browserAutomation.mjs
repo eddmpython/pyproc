@@ -248,6 +248,9 @@ export async function assertBrowserAutomationContract() {
   const browserAct = tools.find((tool) => tool.name === "browserAct");
   assert(browserAct.inputSchema.properties.actions.items.oneOf.length === config.actions.length,
     "MCP action schema가 action catalog에서 파생되지 않았다");
+  const browserOpen = tools.find((tool) => tool.name === "browserOpen");
+  assert(browserOpen.inputSchema.properties.waitUntil?.enum?.join(",") === "commit,domcontentloaded,load",
+    "browserOpen이 명시적 readiness 경계를 제공하지 않는다");
   const semanticWait = validateBrowserAutomationAction({
     kind: "waitFor", locator: { by: "role", value: "button", name: "Save" }, state: "visible", expectedRisk: "read",
   });
@@ -511,11 +514,12 @@ export async function assertBrowserAutomationContract() {
     "target 권한 재검사가 title Runtime.evaluate 왕복을 남겼다");
 
   const mcpPort = new FakePort();
+  let openedWith = null;
   const fakeBroker = {
     port: mcpPort,
     inspect: () => ({ transport: "fake", listener: null }),
     listTargets: async () => [],
-    openTarget: async () => ({ targetRef: "target:opened" }),
+    openTarget: async (...args) => { openedWith = args; return { targetRef: "target:opened" }; },
     attach: async () => session,
     command: (ref, command, options) => mcpPort.send(ref, command, options),
     detach: async () => {},
@@ -523,7 +527,7 @@ export async function assertBrowserAutomationContract() {
   };
   let brokerStarts = 0;
   const mcp = new McpBrowserControl({
-    profileDir: "fake-profile",
+    profileDir: join(tmpdir(), "fake-profile"),
     config,
     brokerFactory: async () => { brokerStarts += 1; return fakeBroker; },
     auditWriter: () => {},
@@ -540,6 +544,12 @@ export async function assertBrowserAutomationContract() {
   assert(openDenied?.code === "BROWSER_CONTROL_PERMISSION_DENIED",
     "browserOpen 호출별 external risk 확인이 없다");
   assert(brokerStarts === 0, "전송 전 permission 거부가 CDP broker를 불필요하게 시작했다");
+  await mcp.invoke("browserOpen", { url: "http://allowed.test/app", expectedRisk: "externalEffect" });
+  assert(openedWith?.[1]?.waitUntil === "commit", "browserOpen 기본 완료 경계가 navigation commit이 아니다");
+  await mcp.invoke("browserOpen", {
+    url: "http://allowed.test/app", expectedRisk: "externalEffect", waitUntil: "load",
+  });
+  assert(openedWith?.[1]?.waitUntil === "load", "browserOpen의 명시적 load 경계가 broker로 전달되지 않았다");
   await mcp.close();
 
   const serverSource = await readFile(new URL("../../scripts/mcpSandboxServer.mjs", import.meta.url), "utf8");

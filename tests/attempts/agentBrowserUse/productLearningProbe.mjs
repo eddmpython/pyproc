@@ -1,6 +1,6 @@
 // productLearningProbe.mjs - 실제 제품을 설치 browser MCP 표면으로 관찰하는 측정 probe.
-// 결과: 2026-08-12, Edge 151 Web strong 검증 완료. interactive 159/912 node, compact 19,611 bytes.
-// Local 제품은 health 성공 뒤 핵심 JS 4개가 404여서 화면 진입 전에 차단됨.
+// 결과: 2026-08-12, Edge 151 Web과 Local 학습 검증 완료. raw command 0개.
+// Local은 open commit 뒤 interactive 135/837 node, compact 18,069 bytes, PNG SHA-256 a9109d55...2645.
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -12,10 +12,13 @@ const root = new URL("../../..", import.meta.url);
 const rootPath = decodeURIComponent(root.pathname.replace(/^\/(?:([A-Za-z]):)/, "$1:"));
 const url = process.argv[2];
 const label = process.argv[3] || "observation";
-const clickName = process.argv[4] || "";
-const waitHeading = process.argv[5] || clickName;
+const clickNameArg = process.argv[4] || "";
+const clickName = clickNameArg === "-" ? "" : clickNameArg;
+const waitHeadingArg = process.argv[5] || clickName;
+const waitHeading = waitHeadingArg === "-" ? "" : waitHeadingArg;
 const operation = process.argv[6] || "";
 const learningCode = process.argv[7] || 'print("verified")';
+const clickRole = process.argv[8] || "link";
 if (!url) throw new TypeError("usage: node productLearningProbe.mjs <url> [label]");
 
 const parsedUrl = new URL(url);
@@ -149,6 +152,50 @@ try {
     } catch (error) {
       preflightError = error instanceof Error ? error.message : String(error);
     }
+    if (!preflightError && clickName) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          toolText(await callTool("browserAct", {
+            sessionRef,
+            actions: [{
+              kind: "waitFor",
+              locator: { by: "role", value: clickRole, name: clickName, exact: true },
+              state: "visible",
+              timeoutMs: 30000,
+              expectedRisk: "read",
+            }],
+          }));
+          preflightError = null;
+          break;
+        } catch (error) {
+          preflightError = error instanceof Error ? error.message : String(error);
+        }
+      }
+    }
+    if (!preflightError && !clickName && operation === "run") {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          toolText(await callTool("browserAct", {
+            sessionRef,
+            actions: [{
+              kind: "waitFor",
+              locator: {
+                by: "label",
+                value: "Hello World 실습 직접 해보기 코드 편집기",
+                exact: true,
+              },
+              state: "visible",
+              timeoutMs: 30000,
+              expectedRisk: "read",
+            }],
+          }));
+          preflightError = null;
+          break;
+        } catch (error) {
+          preflightError = error instanceof Error ? error.message : String(error);
+        }
+      }
+    }
   }
   const initial = toolText(await callTool("browserObserve", {
     sessionRef,
@@ -166,7 +213,7 @@ try {
   let observed = initial;
   let finalScreenshot = initialScreenshot;
   if (clickName) {
-    const target = initial.result.nodes.find((node) => node.role === "link" && node.name === clickName);
+    const target = initial.result.nodes.find((node) => node.role === clickRole && node.name === clickName);
     if (!target?.locatorRef) throw new Error(`snapshot link is unavailable: ${clickName}`);
     interaction = toolText(await callTool("browserAct", {
       sessionRef,
@@ -217,12 +264,29 @@ try {
       ? await readArtifact(observed.result.screenshot, "final")
       : null;
   }
+  if (!clickName && operation === "run") {
+    observed = toolText(await callTool("browserObserve", {
+      sessionRef,
+      expectedRisk: "read",
+      maxNodes: 200,
+      mode: "interactive",
+      includeScreenshot: true,
+      includeConsole: true,
+      includeNetwork: true,
+      maxEvents: 100,
+    }));
+    finalScreenshot = observed.result.screenshot
+      ? await readArtifact(observed.result.screenshot, "final")
+      : null;
+  }
   let learning = null;
   let learningError = null;
   if (operation === "run") {
     const editor = observed.result.nodes.find((node) => node.role === "textbox"
       && node.name?.includes("Hello World 실습 직접 해보기 코드 편집기"));
-    const runButton = observed.result.nodes.find((node) => node.role === "button" && node.name === "셀 실행");
+    const editorBlockName = editor?.name?.replace(/ 직접 해보기 코드 편집기$/, "") || "";
+    const runButton = observed.result.nodes.find((node) => node.role === "button"
+      && (node.name === "셀 실행" || (editorBlockName && node.name === `${editorBlockName} 셀 실행`)));
     if (!editor?.locatorRef || !runButton?.locatorRef) {
       throw new Error(`learning controls are unavailable: editor=${!!editor}, run=${!!runButton}`);
     }

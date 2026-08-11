@@ -141,7 +141,9 @@ try {
   const python = toolText(await callTool("pythonRun", { code: "product_state + 1" }));
   check("설치 제품의 persistent Python Machine 실행", python.value === "42", python.value);
 
-  const opened = toolText(await callTool("browserOpen", { url: targetUrl, expectedRisk: "externalEffect" }));
+  const opened = toolText(await callTool("browserOpen", {
+    url: targetUrl, expectedRisk: "externalEffect", waitUntil: "load",
+  }));
   check("설치 제품 browserOpen이 viewport와 첫 navigation trace를 반환",
     opened.startup?.viewport?.width === 390
       && opened.startup?.network?.some((event) => event.phase === "request" && event.url === targetUrl)

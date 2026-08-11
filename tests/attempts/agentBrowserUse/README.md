@@ -21,6 +21,7 @@
 | 2026-08-12 | `productLearningProbe.mjs` | 공개 Web, 개선 전 | 512 node 제한에서 editor 누락, 1000 node 관찰 95,142 bytes, contenteditable DOM만 변경 | 실패 | focused 관찰과 trusted 입력 계약 추가 |
 | 2026-08-12 | `productLearningProbe.mjs` | 공개 Web, 개선 후 Edge 151 | AX 912개 중 후보 159개, compact 19,611 bytes, raw command 0개, strong 검증 완료, PNG SHA-256 `c99b1d4f58ede0e9d3e116f9fde801044a4a8db5058aae89e1cc0cacbf407594` | Web 졸업 | Local 제품 차단 분리 |
 | 2026-08-12 | `productLearningProbe.mjs` | Local Edge 151 | 서버 health 성공, 핵심 JS 4개 404, AX node 2개, 빈 PNG SHA-256 `5174949aa8c450d15c99ba1d0bf15bd8d4256f8bd54eaac56ca8e1ec3a844d8c` | 측정 대상 차단 | 대상 제품 이니셔티브에서 build 원자성 복구 후 재측정 |
+| 2026-08-12 | `productLearningProbe.mjs` | 복구된 Local, Edge 151 | open commit, AX 837개 중 후보 135개, compact 18,069 bytes, trusted 입력과 4-action 검증 완료, PNG SHA-256 `a9109d5530612fddd55280369367700e5eb0b369cd6d8912c4308062769b2645` | Local 졸업 | 정식 gate로 회귀 고정 |
 
 ## 모듈화 설계
 
@@ -29,8 +30,9 @@
 - MCP 도구 수와 raw method 권한은 늘리지 않고 `browserObserve` 또는 `browserAct`의 버전된 결과로 제공한다.
 - 공개 root export와 Experimental subpath는 추가하지 않는다.
 
-Probe의 일곱 번째 인자는 학습 제품에 넣을 코드다. 측정 대상의 이름이나 정답 코드는 repository에
-고정하지 않고 실행 시점 인자로만 전달한다.
+Probe의 일곱 번째 인자는 학습 제품에 넣을 코드이고 여덟 번째 인자는 진입 control의 role이다. `-`를
+진입 이름과 heading 자리에 주면 이미 알려진 lesson URL을 직접 측정한다. 측정 대상의 이름이나 정답
+코드는 repository에 고정하지 않고 실행 시점 인자로만 전달한다.
 
 ## 덕지덕지 제거
 
@@ -40,5 +42,6 @@ Probe의 일곱 번째 인자는 학습 제품에 넣을 코드다. 측정 대�
 
 ## 판정
 
-진행 중. Web은 졸업했고 Local은 측정 대상의 정적 bundle 불일치로 차단됐다. pyproc의 동일 Local 입력
-경로는 hermetic Edge live gate에서 통과했다.
+졸업 -> `scripts/browserControl/`. 공개 Web과 복구된 Local에서 같은 첫 학습의 입력, 실행, 검증 상태,
+PNG digest를 raw command 없이 완료했다. Local의 load 미완료가 `browserOpen`을 240초 막은 결함은
+commit 기본 완료 경계와 명시적 `waitUntil` 계약으로 승격했다.

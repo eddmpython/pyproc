@@ -116,7 +116,7 @@ The ten opt-in browser tools are:
 |---|---|
 | `browserInspect` | Active policy, compatibility, action catalog, artifact limits, and resource counters |
 | `browserListTargets` | Allowed exact-origin targets as opaque `targetRef` values |
-| `browserOpen` | Instrument an empty target, apply the configured viewport, navigate to an allowed URL, and return the target plus startup trace |
+| `browserOpen` | Instrument an empty target, apply the viewport, navigate to an allowed URL, and return at commit by default |
 | `browserAttach` | Create a versioned broker-scoped session |
 | `browserObserve` | Compact semantic snapshot with optional screenshot, console, and network data |
 | `browserAct` | Run an ordered pipeline of up to 16 high-level actions |
@@ -236,8 +236,9 @@ An `outcomeUnknown` effect is never retried automatically.
 ## Minimal tool flow
 
 1. Call `browserInspect` and require `compatibility.supported: true`.
-2. Call `browserOpen` with `expectedRisk: "externalEffect"`; inspect its redacted startup console and network
-   trace, then call `browserAttach`.
+2. Call `browserOpen` with `expectedRisk: "externalEffect"`; it returns at navigation `commit` by default so
+   long application startup cannot withhold the target. Use `waitUntil: "domcontentloaded"` or `"load"` only
+   when that stronger boundary is required, inspect the bounded startup trace, then call `browserAttach`.
 3. Use `waitFor` for user-visible readiness. If required, run `hydrateLazy` and full-page `screenshot` in one
    ordered `browserAct` pipeline.
 4. Reconstruct large artifacts with `browserArtifactRead` and verify their SHA-256.

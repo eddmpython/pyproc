@@ -19,8 +19,21 @@ let receiverRequests = 0;
 let receiverBody = null;
 let lazyAssetRequests = 0;
 let deniedOrigin = "";
+const heldResponses = new Set();
 const receiverHandler = async (req, res) => {
   const url = new URL(req.url, "http://fixture.invalid");
+  if (url.pathname === "/browserControlNeverLoad.html") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end('<!doctype html><html><body><h1>Commit ready</h1><img src="/browserControlHoldOpen"></body></html>');
+    return true;
+  }
+  if (url.pathname === "/browserControlHoldOpen") {
+    heldResponses.add(res);
+    res.once("close", () => heldResponses.delete(res));
+    res.writeHead(200, { "Content-Type": "image/svg+xml" });
+    res.write("<svg xmlns=\"http://www.w3.org/2000/svg\">");
+    return true;
+  }
   if (url.pathname === "/tests/browser/browserControlLazy.svg") {
     lazyAssetRequests += 1;
     return false;
@@ -171,11 +184,32 @@ try {
   const openWithoutRisk = await callTool("browserOpen", { url: targetUrl });
   check("browserOpen expectedRisk 생략은 target 생성 전 거부", openWithoutRisk.result.isError === true
     && toolText(openWithoutRisk).code === "BROWSER_CONTROL_PERMISSION_DENIED");
-  const opened = toolText(await callTool("browserOpen", { url: targetUrl, expectedRisk: "externalEffect" }));
+  const commitUrl = `${targetOrigin}/browserControlNeverLoad.html`;
+  const commitStartedAt = Date.now();
+  const commitOpened = toolText(await Promise.race([
+    callTool("browserOpen", { url: commitUrl, expectedRisk: "externalEffect" }),
+    delay(10000).then(() => { throw new Error("browserOpen commit boundary timeout"); }),
+  ]));
+  const commitElapsedMs = Date.now() - commitStartedAt;
+  check("browserOpen 기본값이 load 미완료 target의 commit에서 제어권을 반환",
+    commitOpened.url === commitUrl && commitOpened.startup?.waitUntil === "commit"
+      && commitOpened.startup?.readyState === "commit" && commitElapsedMs < 10000,
+  `${commitElapsedMs}ms`);
+  const commitSession = toolText(await callTool("browserAttach", { targetRef: commitOpened.targetRef }));
+  const commitObserved = toolText(await callTool("browserObserve", {
+    sessionRef: commitSession, expectedRisk: "read", maxNodes: 32,
+  }));
+  check("commit에서 반환한 target을 즉시 attach하고 관찰",
+    commitObserved.result?.nodes?.some((node) => node.name === "Commit ready"));
+  await callTool("browserDetach", { sessionRef: commitSession });
+
+  const opened = toolText(await callTool("browserOpen", {
+    url: targetUrl, expectedRisk: "externalEffect", waitUntil: "load",
+  }));
   const startupText = JSON.stringify(opened.startup || {});
   check("browserOpen이 첫 navigation 전에 viewport와 trace를 준비",
     opened.targetRef?.startsWith("target:") && opened.url === targetUrl
-      && opened.startup?.readyState === "complete"
+      && opened.startup?.waitUntil === "load" && opened.startup?.readyState === "complete"
       && opened.startup?.viewport?.width === 390
       && opened.startup?.network?.some((event) => event.phase === "request" && event.url === targetUrl)
       && opened.startup?.console?.some((event) => event.args?.includes("browser-startup"))
@@ -919,6 +953,7 @@ try {
   try { await directBroker?.close(); } catch (error) {}
   try { directBrowser?.close(); } catch (error) {}
   child.kill();
+  for (const response of heldResponses) response.destroy();
   await new Promise((resolve) => targetServer.close(resolve));
   await new Promise((resolve) => crossServer.close(resolve));
   await new Promise((resolve) => deniedServer.close(resolve));

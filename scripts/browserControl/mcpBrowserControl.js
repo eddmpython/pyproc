@@ -184,12 +184,14 @@ function browserBaseTools() {
     {
       name: "browserOpen",
       description: "Instrument a blank target, apply configured device metrics, navigate to an allowed HTTP(S) URL, "
-        + "and return its redacted startup trace. Requires explicit external-effect acknowledgement.",
+        + "and return at navigation commit by default. DOM-ready and load are explicit options. "
+        + "Requires external-effect acknowledgement.",
       inputSchema: {
         type: "object",
         properties: {
           url: { type: "string", format: "uri" },
           expectedRisk: { type: "string", const: "externalEffect" },
+          waitUntil: { type: "string", enum: ["commit", "domcontentloaded", "load"] },
         },
         required: ["url", "expectedRisk"],
         additionalProperties: false,
@@ -351,7 +353,7 @@ export class McpBrowserControl {
     if (tool === "browserListTargets") return broker.listTargets();
     if (tool === "browserOpen") {
       this._audit({ kind: "open", risk: "externalEffect", state: "attempted" });
-      const target = await broker.openTarget(args.url);
+      const target = await broker.openTarget(args.url, { waitUntil: args.waitUntil || "commit" });
       this._audit({ kind: "open", risk: "externalEffect", state: "applied" });
       return target;
     }

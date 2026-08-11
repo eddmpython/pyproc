@@ -14,6 +14,7 @@ const DEFAULT_TIMEOUT_MS = 30000;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const STARTUP_EVENT_LIMIT = 100;
 const STARTUP_RAW_EVENT_LIMIT = STARTUP_EVENT_LIMIT * 4;
+const OPEN_WAIT_STATES = new Set(["commit", "domcontentloaded", "load"]);
 
 function startupObservation(events, rawTruncated = false) {
   const consoleEvents = [];
@@ -80,7 +81,8 @@ export class NodeBrowserControlBroker {
   command(sessionRef, command, { signal } = {}) { return this.port.send(sessionRef, command, { signal }); }
   detach(sessionRef) { return this.port.detach(sessionRef); }
 
-  async openTarget(url) {
+  async openTarget(url, { waitUntil = "commit" } = {}) {
+    if (!OPEN_WAIT_STATES.has(waitUntil)) throw new TypeError("browser open waitUntil is invalid");
     const parsed = new URL(url);
     if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password) {
       throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
@@ -121,18 +123,22 @@ export class NodeBrowserControlBroker {
       if (navigation.errorText) throw new Error(`navigation rejected: ${navigation.errorText}`);
       const deadline = Date.now() + this._timeoutMs;
       let finalTarget = null;
-      let readyState = "";
+      let readyState = "commit";
       while (Date.now() < deadline) {
         try {
           const tree = await this._connection.send("Page.getFrameTree", {}, sessionId);
           const frame = tree.frameTree?.frame;
           if (frame?.url && frame.url !== "about:blank") {
-            const ready = await this._connection.send("Runtime.evaluate", {
-              expression: "document.readyState",
-              returnByValue: true,
-            }, sessionId);
-            readyState = String(ready.result?.value || "");
-            if (readyState === "complete") {
+            if (waitUntil !== "commit") {
+              const ready = await this._connection.send("Runtime.evaluate", {
+                expression: "document.readyState",
+                returnByValue: true,
+              }, sessionId);
+              readyState = String(ready.result?.value || "");
+            }
+            if (waitUntil === "commit"
+              || (waitUntil === "domcontentloaded" && ["interactive", "complete"].includes(readyState))
+              || (waitUntil === "load" && readyState === "complete")) {
               finalTarget = { id: targetId, type: "page", url: frame.url, title: "" };
               break;
             }
@@ -142,7 +148,7 @@ export class NodeBrowserControlBroker {
         }
         await delay(RETRY_MS);
       }
-      if (!finalTarget) throw new Error(`navigation did not reach load: ${normalized}`);
+      if (!finalTarget) throw new Error(`navigation did not reach ${waitUntil}: ${normalized}`);
       try { this.port.policy.authorizeTarget(finalTarget); }
       catch (error) {
         throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
@@ -159,6 +165,7 @@ export class NodeBrowserControlBroker {
           return Object.freeze({
             ...target,
             startup: Object.freeze({
+              waitUntil,
               readyState,
               viewport: this._viewport,
               ...startupObservation(events, rawEventsTruncated),
