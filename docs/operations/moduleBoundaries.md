@@ -46,6 +46,22 @@ legal-info, and SBOM contract under `scripts/buildroot/`. `.github/workflows/bui
 Linux build and evidence retention. Promoting a generated artifact into the development catalog requires a
 separate review after its digest and provenance have been reconciled.
 
+## Repository browser automation
+
+`scripts/browserControl/` is a repository-only Node integration library and does not enter the npm public
+surface. `browserControlPolicy.js` owns raw method risk and parameter guards,
+`browserAutomationCatalog.js` owns high-level action risk, schema, and required methods,
+`browserLocator.js` and `browserActionability.js` own strict target resolution and pre-effect waiting,
+`browserObservation.js` and `browserTrace.js` own bounded evidence,
+`browserLifecycle.js` and `browserDownload.js` own declared event effects,
+`browserCompatibility.js` owns the supported Chromium and CDP boundary,
+`browserControlPort.js` owns opaque target, popup, session, outcome, and event fencing,
+`browserAutomation.js` owns action orchestration, and `mcpBrowserControl.js` alone adapts configuration and
+tools to MCP. `scripts/browserControl/index.js` is the repository-only composition surface, and
+`mcpSandboxServer.mjs` imports only that surface. A contract test rejects browser schema or configuration
+lists that return to the server composition root. The installed-package gate rejects this whole integration
+if it enters the npm tarball.
+
 ## Layer ranks
 
 The layer contract is a total order, and every import edge must point downward. Peers do not import peers.

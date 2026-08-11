@@ -190,3 +190,33 @@ npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/webvm-s1l.json --out .tmp/s1l
 
 신규 능력의 실측은 examples가 아니라 `tests/attempts/<카테고리>/`의 probe에서 한다. probe도 같은 서버로 띄운다(`http://localhost:8788/tests/attempts/...`). 결과 기록 형식은 [tests/attempts/README.md](../../tests/attempts/README.md) 참조.
 `runtimeParity/virtualOriginBoundaryProbe.html`처럼 "지원하지 않는 벽"을 패키지 계약으로 고정하는 probe도 여기에 둔다. 이런 probe는 기능 확장이 아니라 호출 코드가 쿠키 세션, WebSocket upgrade, 청크 스트리밍 같은 플랫폼 벽에 의존하지 않도록 막는 boundary lab이다.
+
+## 7. Repository MCP browser automation
+
+```bash
+npm run test:mcp
+npm run test:browser-control
+npm run test:browser-control-stress
+```
+
+`test:mcp`는 browser opt-in이 없을 때 Python 도구 네 개만 보이고 remote-debugging authority가 열리지
+않는 기본 회귀다. `test:browser-control`의 58개 단정은 별도 automation profile에서 exact origin과
+21개 action catalog, compact accessibility snapshot, opaque locator, open shadow root, same-origin 및
+허용 cross-origin frame, strict actionability, trusted input, popup, dialog, upload, download, native drag,
+cookie와 Web Storage, load-state 탐색, 권한 밖 redirect, raw method 분리, Python restore 비복원 경계,
+취소, browser 사망 결과, detach 자원 정리를 함께 검증한다. Chrome과 Edge CI가 같은 파일을 실행한다.
+`test:browser-control-stress`는 별도 profile에서 최대 pipeline 길이 16을 세 번 실행해 semantic
+focus, actionability, remote-object release를 48회 검증한다. 통합 흐름의 기본 5초 timeout과 soak를
+결합하지 않으므로 기능 실패와 장기 안정성 실패를 분리해 보고한다.
+
+broker 연결은 `Browser.getVersion`으로 Chromium major 137 이상과 CDP protocol major 1을 확인한다.
+지원 밖 조합은 target 생성 전에 실패한다. `test:contracts`가 compatibility rejection, popup raw ID
+비노출과 denied target 폐쇄, destination parameter guard, closed shadow root의 명시적 미지원,
+filesystem root startup 검사를 소유한다. `test:package`는 repository-only broker와 MCP 서버가 npm
+tarball에 들어가지 않음을 설치본에서 확인한다.
+
+성능 계약은 벽시계 자랑이 아니라 구조로 문다. snapshot은 accessibility 관찰 command 하나로
+compact 결과를 만들고 gate fixture에서 payload가 raw의 절반 이하여야 한다. 여러 action은 MCP
+`tools/call` 하나로 전달되며
+target 권한 재검사는 URL 판단에 필요하지 않은 title evaluation을 호출하지 않는다. 실제 payload
+크기와 action 수는 gate 출력에만 남긴다.

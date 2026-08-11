@@ -281,13 +281,72 @@ claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
 npm run mcp:sandbox
 ```
 
+Browser control is disabled by default. An operator can opt the repository recipe into a scoped
+Node CDP broker for the same isolated automation profile:
+
+```sh
+PYPROC_BROWSER_CONTROL=1 \
+PYPROC_BROWSER_ALLOWED_ORIGINS=https://example.test \
+PYPROC_BROWSER_MAX_RISK=externalEffect \
+PYPROC_BROWSER_ACTIONS=snapshot,waitFor,navigate,click,fill,press,select,scroll,cookiesGet,cookieSet,cookieDelete,storageGet,storageSet,storageRemove,storageClear \
+PYPROC_BROWSER_EXTERNAL_EFFECTS=acknowledged \
+PYPROC_BROWSER_PURPOSE="authorized regression testing" \
+npm run mcp:sandbox
+```
+
+| Variable | Meaning |
+|---|---|
+| `PYPROC_BROWSER_CONTROL=1` | Enables the browser tools. Any other value leaves the original four-tool surface unchanged |
+| `PYPROC_BROWSER_ALLOWED_ORIGINS` | Comma-separated exact HTTP(S) origins. Paths, credentials, and other schemes are rejected. If omitted, no target is visible |
+| `PYPROC_BROWSER_MAX_RISK` | `read` by default; `mutate` or `externalEffect` must be explicit. `browserOpen` requires `externalEffect` |
+| `PYPROC_BROWSER_ACTIONS` | Exact high-level actions. Defaults to `snapshot,waitFor` |
+| `PYPROC_BROWSER_METHODS` | Separate exact raw CDP allowlist. High-level required methods never grant raw command access |
+| `PYPROC_BROWSER_EXTERNAL_EFFECTS` | Must equal `acknowledged` when `maxRisk=externalEffect` |
+| `PYPROC_BROWSER_PURPOSE` | Required printable operator purpose for an external-effect configuration |
+| `PYPROC_BROWSER_FILE_ROOTS` | Existing absolute upload roots, separated by the platform path delimiter. Required only when upload is enabled |
+
+This adds eight sibling tools: lifecycle and raw control through `browserListTargets`, `browserOpen`,
+`browserAttach`, `browserCommand`, and `browserDetach`; policy discovery through `browserInspect`;
+compact semantic observation through `browserObserve`; and ordered high-level pipelines through
+`browserAct`. The 21-action catalog covers observation, explicit load-state navigation, semantic trusted
+input, hover and focus, checked state, native drag, guarded upload, bounded download, declared dialogs and
+popups, cookie metadata and mutation, and local or session storage. A snapshot returns opaque
+document-scoped locators. A pipeline stops on its first failure and reports the completed prefix and failed
+action index, so applied effects are never silently replayed.
+
+Origins, actions, and raw methods are separate exact allowlists. Risk is broker-owned, so a caller cannot
+label `Runtime.evaluate` or `click` as read-only. Opening a target and every action or raw command must
+acknowledge its fixed risk. Destination-bearing CDP methods are checked against the origin policy before
+send. `read` means non-mutating, not non-sensitive: cookie, storage, accessibility, and full-DOM output still
+need least privilege and review. The broker owns the CDP endpoint, returns opaque target, session, and locator
+references, and opens no additional localhost proxy.
+
+The broker supports Chromium-family major 137 or newer with CDP protocol major 1. It checks
+`Browser.getVersion` before opening a target and exposes a bounded compatibility diagnostic through
+`browserInspect`. Semantic locators support CSS, role, text, label, test ID, open shadow roots, inherited
+same-origin frames, and explicitly authorized cross-origin frame chains. Target effects wait for strict
+uniqueness, visibility, stable geometry, enabled or editable state, viewport position, and hit target before
+the first effect command.
+
+The recipe does not attach to the user's default Chrome profile and provides no CAPTCHA bypass, stealth,
+credential harvesting, or uncertain-effect retry. Configuration proves the broker boundary, not legal
+permission to automate a site; the operator remains responsible for authorization, applicable law, site
+terms, and consequential-action approval. This is a repository recipe, not a new npm export or a shipped
+browser extension. The complete action and outcome contract is in
+[the browser automation guide](docs/usage/browserAutomation.md).
+
 The agent prepares state once (`pythonRun`), saves a handle (`checkpointSave`), lets a
 risky attempt run, and rolls back in milliseconds (`checkpointRestore`) instead of
 rebuilding the environment. Trusted engine boot finishes first; agent code then runs under a
 fail-closed external-network CSP while same-origin MCP control traffic stays open. Self-host the
 engine if boot itself must make no CDN request. Tool results intentionally cross the MCP channel, so
-the calling application still owns output review and authorization. `npm run test:mcp` verifies the
-full round trip and an `import js` / `fetch` exfiltration attempt against a controlled receiver in CI.
+the calling application still owns output review and authorization. Python restore does not undo a
+browser mutation, navigation, storage change, download, or external request. A browser command whose
+connection dies after send is `outcomeUnknown` and is never retried automatically. `npm run test:mcp`
+verifies the default four-tool path and CSP; `npm run test:browser-control` verifies the opt-in path,
+58 browser-control assertions, restore boundary, resource cleanup, and real browser-death outcome on Chrome
+and Edge CI. `npm run test:browser-control-stress` independently repeats 48 semantic actions and remote-object
+release boundaries in both browsers.
 
 ## Capability contract
 
@@ -298,7 +357,7 @@ These states measure only pyproc's own invariants. They never depend on adoption
 | Python execution (`boot` / `run` / `loadPackages`) | Complete |
 | Default durable Machine (`open()` / `open({ name })`) | Complete |
 | Process OS, restore reactivity, ASGI, declared environments, terminal, machine images, and journal | Bounded |
-| Device FS, permission jail, GPU, and sockets | Probe |
+| Device FS, permission jail, GPU, sockets, and the repository MCP browser-control broker | Probe |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## What it guarantees, and what it doesn't

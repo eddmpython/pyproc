@@ -278,12 +278,68 @@ claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
 npm run mcp:sandbox
 ```
 
+브라우저 제어는 기본적으로 꺼져 있다. 운영자가 명시하면 저장소 레시피가 같은 격리 자동화
+프로필에 범위가 제한된 Node CDP broker를 붙인다:
+
+```sh
+PYPROC_BROWSER_CONTROL=1 \
+PYPROC_BROWSER_ALLOWED_ORIGINS=https://example.test \
+PYPROC_BROWSER_MAX_RISK=externalEffect \
+PYPROC_BROWSER_ACTIONS=snapshot,waitFor,navigate,click,fill,press,select,scroll,cookiesGet,cookieSet,cookieDelete,storageGet,storageSet,storageRemove,storageClear \
+PYPROC_BROWSER_EXTERNAL_EFFECTS=acknowledged \
+PYPROC_BROWSER_PURPOSE="승인된 회귀 테스트" \
+npm run mcp:sandbox
+```
+
+| 환경 변수 | 의미 |
+|---|---|
+| `PYPROC_BROWSER_CONTROL=1` | browser 도구를 켠다. 다른 값이면 기존 네 도구 표면이 그대로다 |
+| `PYPROC_BROWSER_ALLOWED_ORIGINS` | 쉼표로 나눈 exact HTTP(S) origin. 경로, 자격증명, 다른 scheme은 거부한다. 생략하면 어떤 target도 보이지 않는다 |
+| `PYPROC_BROWSER_MAX_RISK` | 기본은 `read`. `mutate`나 `externalEffect`는 명시해야 한다. `browserOpen`은 `externalEffect`가 필요하다 |
+| `PYPROC_BROWSER_ACTIONS` | exact 고수준 action. 기본은 `snapshot,waitFor`다 |
+| `PYPROC_BROWSER_METHODS` | 별도의 exact raw CDP allowlist. 고수준 action의 내부 method는 raw 권한을 열지 않는다 |
+| `PYPROC_BROWSER_EXTERNAL_EFFECTS` | `maxRisk=externalEffect`이면 `acknowledged`가 필수다 |
+| `PYPROC_BROWSER_PURPOSE` | external-effect 설정에 필요한 출력 가능한 운영 목적이다 |
+| `PYPROC_BROWSER_FILE_ROOTS` | platform path delimiter로 나눈 기존 절대 upload root. upload action을 켤 때만 필수다 |
+
+이때 생명주기와 raw 제어인 `browserListTargets`, `browserOpen`, `browserAttach`, `browserCommand`,
+`browserDetach`, 정책 확인인 `browserInspect`, compact semantic 관찰인 `browserObserve`, 순차 고수준
+pipeline인 `browserAct`가 추가된다. 21개 action catalog는 관찰, load-state 탐색, semantic trusted
+input, hover와 focus, checked state, native drag, guarded upload, bounded download, 명시한 dialog와 popup,
+cookie metadata 및 변경, local 또는 session storage를 다룬다. snapshot은 document에 묶인 opaque
+locator를 반환한다. pipeline은 첫 실패에서 멈추고 완료 prefix와 실패 action index를 보고하므로
+적용된 효과를 조용히 재실행하지 않는다.
+
+origin, action, raw method는 서로 분리된 exact allowlist다. 위험도는 broker 코드가 고정하므로
+호출자가 `Runtime.evaluate`나 `click`을 read-only로 낮출 수 없다. target 열기와 모든 action 및 raw
+command는 고정 위험도를 확인해야 한다. 목적 URL을 가진 CDP method는 전송 전에 origin 정책을 다시
+검사한다. `read`는 비변이라는 뜻이지 민감하지 않다는 뜻이 아니다. cookie, storage, accessibility,
+전체 DOM 출력에는 최소 권한과 검토가 필요하다. CDP endpoint는 broker만 소유하고 target, session,
+locator는 opaque reference로 반환하며 별도 localhost proxy를 열지 않는다.
+
+broker는 Chromium 계열 major 137 이상과 CDP protocol major 1을 지원한다. target을 열기 전에
+`Browser.getVersion`을 검사하고 `browserInspect`로 제한된 compatibility 진단을 제공한다. semantic
+locator는 CSS, role, text, label, test ID, open shadow root, origin을 상속한 frame, 명시적으로 허용한
+cross-origin frame chain을 지원한다. target effect는 strict uniqueness, visibility, stable geometry,
+enabled 또는 editable state, viewport, hit target을 만족한 뒤 처음 effect command를 보낸다.
+
+사용자 기본 Chrome profile에는 attach하지 않으며 CAPTCHA 우회, stealth, 자격증명 수집, 결과 불명
+효과의 자동 재시도를 제공하지 않는다. 설정은 broker 권한 경계를 증명할 뿐 사이트 자동화의 법적
+권한을 증명하지 않는다. 운영자가 적용 법률, 사이트 약관, 계정 권한, 중대한 action 승인을 소유한다.
+이는 저장소 레시피이며 새 npm export나 배포 browser extension이 아니다. 전체 action과 outcome
+계약은 [browser automation 가이드](docs/usage/browserAutomation.md)에 있다.
+
 에이전트는 상태를 한 번 준비하고(`pythonRun`), 핸들을 저장하고(`checkpointSave`),
 위험한 시도를 돌린 뒤 밀리초에 되돌린다(`checkpointRestore`). 환경 재구축이 없다.
 신뢰한 엔진 부팅을 먼저 끝낸 뒤 에이전트 코드는 fail-closed 외부 네트워크 CSP 아래에서 돌고,
 same-origin MCP 제어 트래픽만 열린다. 부팅 자체도 CDN 요청이 없어야 한다면 엔진을 자체 호스팅한다.
 도구 결과는 의도적으로 MCP 채널을 건너므로 호출 애플리케이션이 출력 검토와 인가를 계속 소유한다.
-`npm run test:mcp`가 전체 왕복과 통제 수신기를 향한 `import js` / `fetch` 외부 전송 시도를 CI에서 검증한다.
+Python restore는 browser mutation, navigation, storage 변경, download, 외부 요청을 되돌리지 않는다.
+전송 뒤 연결이 끊긴 browser 명령은 `outcomeUnknown`이며 자동 재시도하지 않는다.
+`npm run test:mcp`는 기본 네 도구와 CSP를, `npm run test:browser-control`은 opt-in 경로의 58개 단정,
+복원 경계, 자원 정리, 실제 browser 사망 결과를 Chrome과 Edge CI에서 검증한다.
+`npm run test:browser-control-stress`는 두 browser에서 semantic action과 remote-object release 경계를
+48회 독립 반복한다.
 
 ## 능력 계약
 
@@ -294,7 +350,7 @@ same-origin MCP 제어 트래픽만 열린다. 부팅 자체도 CDN 요청이 �
 | Python 실행 (`boot` / `run` / `loadPackages`) | Complete |
 | 기본 내구 Machine(`open()` / `open({ name })`) | Complete |
 | 프로세스 OS, 복원 reactivity, ASGI, 선언 environment, terminal, machine image, journal | Bounded |
-| Device FS, permission jail, GPU, socket | Probe |
+| Device FS, permission jail, GPU, socket, 저장소 MCP browser-control broker | Probe |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## 보장하는 것과 아직 아닌 것
