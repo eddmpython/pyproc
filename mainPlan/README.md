@@ -17,4 +17,4 @@
 
 ## 현재 상태
 
-활성 이니셔티브는 [browserAutomationProduct/](browserAutomationProduct/) 하나다.
+활성 이니셔티브 없음.
