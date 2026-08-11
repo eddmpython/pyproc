@@ -17,4 +17,4 @@
 
 ## 현재 상태
 
-활성 이니셔티브가 없다.
+활성 이니셔티브는 [browserAgentComputer/](browserAgentComputer/) 하나다.

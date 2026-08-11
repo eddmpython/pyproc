@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>browser agent computer probe</title>
+  <style>
+    body { min-height: 1200px; font-family: sans-serif; }
+    #moving { position: relative; animation: settle 220ms linear 1; }
+    @keyframes settle { from { left: 0; } to { left: 80px; } }
+    #covered-wrap { position: relative; width: 180px; height: 48px; }
+    #cover { position: absolute; inset: 0; z-index: 2; background: rgba(255, 0, 0, .2); }
+    #covered { position: absolute; inset: 0; }
+    #offscreen { margin-top: 900px; }
+  </style>
+</head>
+<body>
+  <main>
+    <button id="moving" type="button">Moving target</button>
+    <div id="covered-wrap">
+      <button id="covered" type="button">Covered target</button>
+      <div id="cover"></div>
+    </div>
+    <button id="disabled" type="button" disabled>Enable later</button>
+    <label for="email">Work email</label>
+    <input id="email" data-testid="email-field" type="email">
+    <button class="duplicate" type="button">Duplicate</button>
+    <button class="duplicate" type="button">Duplicate</button>
+    <div id="shadow-host"></div>
+    <iframe id="same-origin-frame" srcdoc="<!doctype html><button id='frame-button'>Frame action</button>"></iframe>
+    <button id="dialog" type="button">Open dialog</button>
+    <button id="popup" type="button">Open popup</button>
+    <input id="upload" type="file">
+    <button id="download" type="button">Download artifact</button>
+    <button id="offscreen" type="button">Offscreen target</button>
+    <output id="result"></output>
+  </main>
+  <script>
+    const result = document.getElementById("result");
+    const mark = (name) => { result.dataset[name] = String(Number(result.dataset[name] || 0) + 1); };
+    document.getElementById("moving").addEventListener("click", () => mark("moving"));
+    document.getElementById("covered").addEventListener("click", () => mark("covered"));
+    document.getElementById("dialog").addEventListener("click", () => alert("probe dialog"));
+    document.getElementById("popup").addEventListener("click", () => window.open(location.href + "?popup=1", "_blank"));
+    document.getElementById("download").addEventListener("click", () => {
+      const link = document.createElement("a");
+      link.download = "probe.txt";
+      link.href = URL.createObjectURL(new Blob(["probe artifact"], { type: "text/plain" }));
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    });
+    const shadow = document.getElementById("shadow-host").attachShadow({ mode: "open" });
+    shadow.innerHTML = '<button id="shadow-button" aria-label="Shadow action">Shadow action</button>';
+    setTimeout(() => document.getElementById("cover")?.remove(), 260);
+    setTimeout(() => { document.getElementById("disabled").disabled = false; }, 260);
+    setTimeout(() => {
+      const delayed = document.createElement("button");
+      delayed.id = "delayed";
+      delayed.textContent = "Delayed action";
+      document.querySelector("main").append(delayed);
+    }, 180);
+    window.runProbeSignal = () => {
+      console.info("probe-console", "token=must-redact");
+      return fetch("/browserControlProbe?token=must-redact").then((response) => response.text());
+    };
+  </script>
+</body>
+</html>
