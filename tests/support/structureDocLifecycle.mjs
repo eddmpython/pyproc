@@ -27,6 +27,17 @@ check("mainPlan은 계획 작업 공간이라 린트 표면 밖이다", () => {
   const skips = runner.split("\n").some((line) => !line.trimStart().startsWith("//") && line.includes('entry === "mainPlan"'));
   if (!skips) throw new Error("collect가 mainPlan을 건너뛰지 않는다");
 });
+check("mainPlan은 큰 카테고리 자력 완결과 삭제를 요구한다", () => {
+  const body = readFileSync(join(ROOT, "mainPlan", "README.md"), "utf8");
+  for (const requiredRule of [
+    "이니셔티브 하나를 큰 작업 카테고리로 고정한다",
+    "자력으로 수행할 수 있는 모든",
+    "같은 사이클에",
+    "폴더째 삭제한다",
+  ]) {
+    if (!body.includes(requiredRule)) throw new Error(`mainPlan 운영 규칙 누락: ${requiredRule}`);
+  }
+});
 check("지속 제품·운영 계약 문서가 존재한다", () => {
   for (const path of [
     ["docs", "product", "vision.md"],
