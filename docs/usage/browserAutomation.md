@@ -25,8 +25,15 @@ Create `pyproc-mcp.json`:
     "enabled": true,
     "allowedOrigins": ["https://example.test"],
     "maxRisk": "externalEffect",
-    "actions": ["snapshot", "screenshot", "waitFor", "navigate", "fill", "click"],
+    "actions": ["snapshot", "screenshot", "waitFor", "hydrateLazy", "navigate", "fill", "click"],
     "methods": [],
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "deviceScaleFactor": 3,
+      "mobile": true,
+      "touch": true
+    },
     "externalEffects": "acknowledged",
     "purpose": "authorized regression testing",
     "artifacts": {
@@ -71,6 +78,7 @@ and incomplete external-effect approval fail closed.
 | `browser.maxRisk` | `read`, `mutate`, or `externalEffect` |
 | `browser.actions` | Non-empty exact high-level action allowlist |
 | `browser.methods` | Separate exact raw CDP allowlist. An empty list opens no raw command |
+| `browser.viewport` | Optional strict `{width,height,deviceScaleFactor?,mobile?,touch?}` device metrics. Dimensions are 1 to 10000 and scale is 0.1 to 10 |
 | `browser.fileRoots` | Existing absolute upload roots. Required when upload is enabled |
 | `browser.externalEffects` | Must equal `acknowledged` when `maxRisk` is `externalEffect` |
 | `browser.purpose` | Required printable purpose for an external-effect configuration |
@@ -108,7 +116,7 @@ The ten opt-in browser tools are:
 |---|---|
 | `browserInspect` | Active policy, compatibility, action catalog, artifact limits, and resource counters |
 | `browserListTargets` | Allowed exact-origin targets as opaque `targetRef` values |
-| `browserOpen` | Open an allowed URL in the temporary profile |
+| `browserOpen` | Instrument an empty target, apply the configured viewport, navigate to an allowed URL, and return the target plus startup trace |
 | `browserAttach` | Create a versioned broker-scoped session |
 | `browserObserve` | Compact semantic snapshot with optional screenshot, console, and network data |
 | `browserAct` | Run an ordered pipeline of up to 16 high-level actions |
@@ -119,7 +127,7 @@ The ten opt-in browser tools are:
 
 ## Ordered actions and screenshots
 
-The 22-action catalog includes `snapshot`, `screenshot`, `waitFor`, `navigate`, `click`, `hover`, `focus`,
+The 23-action catalog includes `snapshot`, `screenshot`, `waitFor`, `hydrateLazy`, `navigate`, `click`, `hover`, `focus`,
 `check`, `uncheck`, `drag`, `fill`, `press`, `select`, `scroll`, `upload`, cookie get/set/delete, and Web
 Storage get/set/remove/clear.
 
@@ -133,11 +141,16 @@ with another effect, and capture again without a client-side race. Supported opt
 | `fullPage` | Capture the guarded document content bounds |
 | `clip` | `{x,y,width,height,scale?}` in CSS pixels. Exclusive with `fullPage` |
 | `optimizeForSpeed` | Pass the Chromium encoding preference explicitly |
-| `inline` | Include base64 only when the result is within `inlineMaxBytes` |
+| `inline` | Defaults to `true`. Permit native MCP image content only when the result is within `inlineMaxBytes`; `false` forces artifact-only delivery |
 
 Width and height are each limited to 32768 CSS pixels and the scaled area to 67108864 CSS pixels. The
 returned bytes must match the requested PNG, JPEG, or WebP signature before they enter the artifact store.
 The per-artifact byte limit is then enforced independently.
+
+When an inline screenshot fits the configured bound, the MCP result contains its text descriptor followed by
+one native `image` content block. The text descriptor omits the duplicate base64. Multiple screenshots keep
+action order. When a screenshot exceeds the inline bound, capture still succeeds and the descriptor plus
+`browserArtifactRead` remains the fallback.
 
 Every action carries its catalog-owned `expectedRisk`. A caller cannot relabel a click, navigation,
 `Runtime.evaluate`, upload, cookie change, or storage change as read-only. The pipeline stops at the first
@@ -173,6 +186,16 @@ cross-origin frame chains. Closed shadow roots are unsupported. Effects wait for
 visibility, stable geometry, enabled or editable state, viewport position, and hit target before the first
 effect command.
 
+`waitFor` accepts the same three target forms and the states `attached`, `detached`, `visible`, `hidden`,
+`enabled`, `disabled`, `editable`, and `stable`. It uses fixed internal read-only resolver scripts rather than
+granting `Runtime.evaluate` to `browserCommand`. A strict or stale semantic locator remains an error.
+
+`hydrateLazy` is a separate `externalEffect` action because scrolling can run observers and start requests.
+It performs at most 100 viewport steps within a 30-second action bound, waits between steps, reports lazy
+element and pending counts, and restores the original scroll position. Put it immediately before a full-page
+`screenshot` in the same pipeline. A `truncated` or `timedOut` result is explicit, and screenshot never runs
+hydration implicitly.
+
 Dialog, download, and popup effects must be declared on `click`. A denied popup is closed. Navigation and
 popup final origins are rechecked after send and report `outcome: "applied"` when the browser already crossed
 the effect boundary. Console and network observations omit headers and bodies, redact secret-shaped text,
@@ -199,8 +222,10 @@ An `outcomeUnknown` effect is never retried automatically.
 ## Minimal tool flow
 
 1. Call `browserInspect` and require `compatibility.supported: true`.
-2. Call `browserOpen` with `expectedRisk: "externalEffect"`, then `browserAttach`.
-3. Call `browserObserve` or run semantic effects and `screenshot` actions through `browserAct`.
+2. Call `browserOpen` with `expectedRisk: "externalEffect"`; inspect its redacted startup console and network
+   trace, then call `browserAttach`.
+3. Use `waitFor` for user-visible readiness. If required, run `hydrateLazy` and full-page `screenshot` in one
+   ordered `browserAct` pipeline.
 4. Reconstruct large artifacts with `browserArtifactRead` and verify their SHA-256.
 5. Delete consumed artifacts and call `browserDetach`.
 6. On failure, inspect `outcome`, `completed`, `failedActionIndex`, and `trace` before deciding what can run.
@@ -238,10 +263,11 @@ Example screenshot action:
 - `npm run test:package` checks the installed bin and required runtime files without adding a JS package export.
 - `npm run test:mcp` proves the default server remains exactly four Python tools with no browser authority.
 - `npm run test:mcp-product` packs and installs the npm package, invokes `--check`, boots the Python Machine,
-  captures PNG, JPEG, and WebP after ordered effects, reconstructs chunks, verifies digests, and deletes a ref.
-- `npm run test:browser-control` exercises 61 browser-control assertions including screenshot and artifact
-  retrieval, semantic actions, lifecycle effects, redirect denial, cancellation, browser death, cleanup, and
-  the Python restore boundary.
+  captures PNG, JPEG, and WebP as native image content after ordered effects, reconstructs chunks, verifies
+  digests, and deletes a ref.
+- `npm run test:browser-control` covers viewport emulation, startup trace, readiness states, lazy hydration,
+  screenshot and artifact retrieval, semantic actions, lifecycle effects, redirect denial, cancellation,
+  browser death, cleanup, and the Python restore boundary.
 - `npm run test:browser-control-stress` repeats 48 semantic focus actions and remote-object release boundaries.
 
 Chrome on Ubuntu and Microsoft Edge on Windows run the installed product and browser-control gates in CI.

@@ -202,9 +202,10 @@ npm run test:browser-control-stress
 
 `test:mcp`는 browser opt-in이 없을 때 Python 도구 네 개만 보이고 remote-debugging authority가 열리지
 않는 기본 회귀다. `test:mcp-product`는 npm pack/install한 tarball의 stable bin과 versioned config를
-검증하고, 설치본만으로 Python persistence, ordered PNG/JPEG/WebP screenshot, artifact chunk 재조립,
-digest와 delete를 완주한다. `test:browser-control`의 61개 단정은 별도 automation profile에서 exact origin과
-22개 action catalog, compact accessibility snapshot, opaque locator, open shadow root, same-origin 및
+검증하고, 설치본만으로 Python persistence, 첫 탐색 trace, ordered PNG/JPEG/WebP native image,
+artifact chunk 재조립, digest와 delete를 완주한다. `test:browser-control`의 66개 단정은 별도 automation
+profile에서 exact origin과 23개 action catalog, manifest viewport, 첫 탐색 trace, 8-state 의미 기반 대기,
+명시적 lazy hydration, compact accessibility snapshot, opaque locator, open shadow root, same-origin 및
 허용 cross-origin frame, strict actionability, trusted input, popup, dialog, upload, download, native drag,
 cookie와 Web Storage, load-state 탐색, 순차 screenshot, artifact store, 권한 밖 redirect, raw method 분리,
 Python restore 비복원 경계, 취소, browser 사망 결과, detach 자원 정리를 함께 검증한다. Chrome과 Edge

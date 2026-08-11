@@ -284,8 +284,9 @@ npx pyproc-engine --out /absolute/path/to/pyodide
     "enabled": true,
     "allowedOrigins": ["https://example.test"],
     "maxRisk": "externalEffect",
-    "actions": ["snapshot", "screenshot", "waitFor", "navigate", "fill", "click"],
+    "actions": ["snapshot", "screenshot", "waitFor", "hydrateLazy", "navigate", "fill", "click"],
     "methods": [],
+    "viewport": { "width": 390, "height": 844, "deviceScaleFactor": 3, "mobile": true, "touch": true },
     "externalEffects": "acknowledged",
     "purpose": "승인된 회귀 테스트"
   }
@@ -303,10 +304,12 @@ npx pyproc-mcp --config ./pyproc-mcp.json
 네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
 별도 allowlist raw command, artifact read/delete를 위한 열 개 도구가 추가된다.
 
-22개 action catalog에는 정식 순차 `screenshot` action이 있다. viewport, full-page, clip 범위에서 PNG,
-JPEG, WebP를 만든다. screenshot과 download는 opaque ref, SHA-256, byte 및 count quota, bounded chunk
-read, TTL 만료, 명시 삭제, 종료 정리를 가진 하나의 broker-owned artifact store에 들어간다. 큰
-base64 값을 action 응답에 억지로 넣지 않는다.
+23개 action catalog에는 의미 기반 준비 대기, 명시적 bounded lazy hydration, 정식 순차 `screenshot`
+action이 있다. `browserOpen`은 첫 navigation 전에 viewport와 계측을 적용하고 redacted startup trace를
+돌려준다. inline 상한 안의 screenshot은 native MCP image content로 바로 도착한다. screenshot과
+download는 opaque ref, SHA-256, byte 및 count quota, bounded chunk read, TTL 만료, 명시 삭제, 종료
+정리를 가진 하나의 broker-owned artifact store에 들어간다. 큰 image는 artifact와 chunk fallback을
+유지하고 text에 base64를 억지로 넣지 않는다.
 
 origin, action, raw method는 서로 분리된 exact allowlist다. 위험도는 broker가 고정하므로 호출자가
 `Runtime.evaluate`, navigation, click을 read-only로 낮출 수 없다. broker는 CDP endpoint를 소유하고

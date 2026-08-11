@@ -286,8 +286,9 @@ Create `pyproc-mcp.json`, using exact origins and the smallest action set requir
     "enabled": true,
     "allowedOrigins": ["https://example.test"],
     "maxRisk": "externalEffect",
-    "actions": ["snapshot", "screenshot", "waitFor", "navigate", "fill", "click"],
+    "actions": ["snapshot", "screenshot", "waitFor", "hydrateLazy", "navigate", "fill", "click"],
     "methods": [],
+    "viewport": { "width": 390, "height": 844, "deviceScaleFactor": 3, "mobile": true, "touch": true },
     "externalEffects": "acknowledged",
     "purpose": "authorized regression testing"
   }
@@ -306,10 +307,12 @@ With `{ "enabled": false }`, the server exposes exactly four Python tools: `pyth
 `checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
 semantic observation, ordered actions, separately allowlisted raw commands, and artifact read/delete.
 
-The 22-action catalog includes a first-class ordered `screenshot` action. It captures PNG, JPEG, or WebP at
+The 23-action catalog includes semantic readiness waits, explicit bounded lazy hydration, and a first-class
+ordered `screenshot` action. `browserOpen` applies the viewport before navigation and returns the redacted
+first-navigation trace. Screenshot results that fit the inline bound arrive as native MCP image content at
 the viewport, full-page, or clip boundary. Screenshots and downloads enter one broker-owned artifact store
 with an opaque ref, SHA-256, byte and count quotas, bounded chunk reads, TTL expiry, explicit deletion, and
-shutdown cleanup. Large base64 values are not forced into the action response.
+shutdown cleanup. Larger images keep the artifact and chunk fallback without forcing base64 into text.
 
 Origins, actions, and raw methods are separate exact allowlists. Risk is fixed by the broker. The caller
 cannot label `Runtime.evaluate`, navigation, or click as read-only. The broker owns the CDP endpoint, uses a
