@@ -245,6 +245,7 @@ export function createBrowserControlTools(config) {
           sessionRef: BROWSER_SESSION_SCHEMA,
           expectedRisk: { type: "string", const: "read" },
           maxNodes: { type: "integer", minimum: 1, maximum: BROWSER_AUTOMATION_MAX_NODES },
+          mode: { type: "string", enum: ["all", "interactive"] },
           includeScreenshot: { type: "boolean" },
           includeConsole: { type: "boolean" },
           includeNetwork: { type: "boolean" },
@@ -365,6 +366,7 @@ export class McpBrowserControl {
     if (tool === "browserObserve") {
       return automation.observe(args.sessionRef, {
         ...(args.maxNodes === undefined ? {} : { maxNodes: args.maxNodes }),
+        ...(args.mode === undefined ? {} : { mode: args.mode }),
         ...(args.includeScreenshot === undefined ? {} : { includeScreenshot: args.includeScreenshot }),
         ...(args.includeConsole === undefined ? {} : { includeConsole: args.includeConsole }),
         ...(args.includeNetwork === undefined ? {} : { includeNetwork: args.includeNetwork }),

@@ -49,23 +49,44 @@ const STORAGE_VALUE_LIMIT = 10000;
 const AX_STATES = new Set([
   "checked", "disabled", "expanded", "focused", "level", "pressed", "readonly", "required", "selected",
 ]);
+const AX_INTERACTIVE_ROLES = new Set([
+  "button", "checkbox", "combobox", "gridcell", "link", "listbox", "menuitem", "menuitemcheckbox",
+  "menuitemradio", "option", "radio", "scrollbar", "searchbox", "slider", "spinbutton", "switch", "tab",
+  "textbox", "treeitem",
+]);
+const AX_CONTEXT_ROLES = new Set([
+  "alert", "dialog", "form", "heading", "main", "navigation", "region", "status",
+]);
+const AX_LIVE_ROLES = new Set(["alert", "status"]);
+const AX_TEXT_ROLES = new Set(["InlineTextBox", "StaticText"]);
 
 const FILL_FUNCTION = `function(value) {
   "use strict";
   if (!this || this.nodeType !== 1) throw new Error("browser action target is not an Element");
   this.focus();
   if (this.isContentEditable) {
-    this.textContent = value;
-  } else {
-    const view = this.ownerDocument.defaultView;
-    const prototype = this.tagName === "TEXTAREA" ? view.HTMLTextAreaElement.prototype : view.HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-    if (!setter) throw new Error("browser fill target is not editable");
-    setter.call(this, value);
+    const selection = this.ownerDocument.getSelection();
+    const range = this.ownerDocument.createRange();
+    range.selectNodeContents(this);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return { tag: this.tagName.toLowerCase(), contenteditable: true };
   }
+  const view = this.ownerDocument.defaultView;
+  const prototype = this.tagName === "TEXTAREA" ? view.HTMLTextAreaElement.prototype : view.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  if (!setter) throw new Error("browser fill target is not editable");
+  setter.call(this, value);
   this.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
   this.dispatchEvent(new Event("change", { bubbles: true }));
-  return { tag: this.tagName.toLowerCase(), value: "value" in this ? String(this.value) : String(this.textContent || "") };
+  return { tag: this.tagName.toLowerCase(), value: String(this.value), inputMode: "nativeSetter" };
+}`;
+
+const CONTENTEDITABLE_FILL_RESULT_FUNCTION = `function() {
+  "use strict";
+  if (!this || this.nodeType !== 1 || !this.isContentEditable) throw new Error("browser fill target is not editable");
+  this.dispatchEvent(new Event("change", { bubbles: true }));
+  return { tag: this.tagName.toLowerCase(), value: String(this.textContent || ""), inputMode: "trusted" };
 }`;
 
 const SELECT_FUNCTION = `function(values) {
@@ -433,9 +454,10 @@ export class BrowserAutomation {
     const maxNodes = action.maxNodes || BROWSER_AUTOMATION_DEFAULT_MAX_NODES;
     const key = sessionKey(sessionRef);
     this._clearSessionLocators(key);
-    const nodes = [];
+    const mode = action.mode || "all";
+    const eligibleNodes = [];
+    const rawNodeById = new Map((raw.nodes || []).map((node) => [node.nodeId, node]));
     const locatorRefs = new Set();
-    let eligible = 0;
     for (const node of raw.nodes || []) {
       if (node.ignored) continue;
       const role = clipped(remoteValue(node.role));
@@ -443,8 +465,6 @@ export class BrowserAutomation {
       const value = clipped(remoteValue(node.value));
       const description = clipped(remoteValue(node.description));
       if (!role && !name && !value && !description) continue;
-      eligible += 1;
-      if (nodes.length >= maxNodes) continue;
       const compact = { role: role || "unknown" };
       if (name) compact.name = name;
       if (value) compact.value = value;
@@ -456,6 +476,25 @@ export class BrowserAutomation {
         if (propertyValue !== undefined) states[property.name] = propertyValue;
       }
       if (Object.keys(states).length) compact.states = Object.freeze(states);
+      eligibleNodes.push({ node, compact });
+    }
+    const liveText = ({ node, compact }) => {
+      if (!AX_TEXT_ROLES.has(compact.role)) return false;
+      let parentId = node.parentId;
+      for (let depth = 0; parentId && depth < 4; depth += 1) {
+        const parent = rawNodeById.get(parentId);
+        if (!parent) return false;
+        if (AX_LIVE_ROLES.has(clipped(remoteValue(parent.role)))) return true;
+        parentId = parent.parentId;
+      }
+      return false;
+    };
+    const candidates = mode === "interactive"
+      ? eligibleNodes.filter((entry) => AX_INTERACTIVE_ROLES.has(entry.compact.role)
+        || AX_CONTEXT_ROLES.has(entry.compact.role) || liveText(entry))
+      : eligibleNodes;
+    const nodes = [];
+    for (const { node, compact } of candidates.slice(0, maxNodes)) {
       if (Number.isInteger(node.backendDOMNodeId) && node.backendDOMNodeId > 0) {
         const locatorRef = `locator:${this._idFactory()}`;
         compact.locatorRef = locatorRef;
@@ -473,8 +512,11 @@ export class BrowserAutomation {
       snapshotId: `snapshot:${this._idFactory()}`,
       contextEpoch: command.contextEpoch,
       url: command.target.url,
+      mode,
       nodes: Object.freeze(nodes),
-      truncated: eligible > nodes.length,
+      eligibleNodes: eligibleNodes.length,
+      candidateNodes: candidates.length,
+      truncated: candidates.length > nodes.length,
       rawBytes: byteLength(raw),
     };
     response.compactBytes = byteLength(response);
@@ -726,9 +768,18 @@ export class BrowserAutomation {
         result = await this._uploadTarget(sessionRef, prepared, action.files, commandResults, signal);
       } else if (action.kind === "drag") {
         result = await this._dragTarget(sessionRef, prepared, action, commandResults, signal);
+      } else if (action.kind === "fill") {
+        result = await this._callTargetFunction(
+          sessionRef, prepared.target, FILL_FUNCTION, [action.value], commandResults, signal,
+        );
+        if (result.contenteditable === true) {
+          await this._command(sessionRef, "Input.insertText", { text: action.value }, commandResults, signal);
+          result = await this._callTargetFunction(
+            sessionRef, prepared.target, CONTENTEDITABLE_FILL_RESULT_FUNCTION, [], commandResults, signal,
+          );
+        }
       } else {
         const functions = {
-          fill: [FILL_FUNCTION, [action.value]],
           select: [SELECT_FUNCTION, [action.values]],
           scroll: [SCROLL_FUNCTION, [action.block || "center"]],
         };

@@ -186,6 +186,18 @@ cross-origin frame chains. Closed shadow roots are unsupported. Effects wait for
 visibility, stable geometry, enabled or editable state, viewport position, and hit target before the first
 effect command.
 
+`browserObserve` uses `mode: "all"` by default for compatibility. Use `mode: "interactive"` on large product
+pages when the next step is an action. This mode scans the full accessibility tree, selects controls,
+landmarks, live regions, and live-region text, and only then applies `maxNodes`. The result reports `mode`,
+`eligibleNodes`, `candidateNodes`, and `truncated`, so a caller can distinguish page size from the focused
+result size. It keeps opaque `locatorRef` values for immediate actions. A later observation replaces the
+session's locator set, so finish actions derived from one snapshot before observing again.
+
+`fill` uses the native value setter for `input` and `textarea`. For contenteditable editors it focuses and
+selects the current document content, then sends trusted browser text input so controlled editors update
+their application state instead of only changing displayed DOM text. A contenteditable result reports
+`inputMode: "trusted"` and the resulting visible value.
+
 `waitFor` accepts the same three target forms and the states `attached`, `detached`, `visible`, `hidden`,
 `enabled`, `disabled`, `editable`, and `stable`. It uses fixed internal read-only resolver scripts rather than
 granting `Runtime.evaluate` to `browserCommand`. A strict or stale semantic locator remains an error.
@@ -268,8 +280,9 @@ Example screenshot action:
   captures PNG, JPEG, and WebP as native image content after ordered effects, reconstructs chunks, verifies
   digests, and deletes a ref.
 - `npm run test:browser-control` covers viewport emulation, startup trace, readiness states, lazy hydration,
-  screenshot and artifact retrieval, semantic actions, lifecycle effects, redirect denial, cancellation,
-  browser death, cleanup, and the Python restore boundary.
+  focused interactive observation, trusted contenteditable input, screenshot and artifact retrieval,
+  semantic actions, lifecycle effects, redirect denial, cancellation, browser death, cleanup, and the
+  Python restore boundary.
 - `npm run test:browser-control-stress` repeats 48 semantic focus actions and remote-object release boundaries.
 
 Chrome on Ubuntu and Microsoft Edge on Windows run the installed product and browser-control gates in CI.

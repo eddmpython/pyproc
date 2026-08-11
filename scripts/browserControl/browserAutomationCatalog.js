@@ -92,7 +92,10 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
     description: "Capture a compact semantic snapshot with optional bounded screenshot, console, and network artifacts.",
     methods: BROWSER_OBSERVATION_METHODS,
     events: BROWSER_OBSERVATION_EVENTS,
-    properties: BROWSER_OBSERVATION_PROPERTIES,
+    properties: {
+      ...BROWSER_OBSERVATION_PROPERTIES,
+      mode: { type: "string", enum: ["all", "interactive"] },
+    },
   }),
   screenshot: actionSpec({
     risk: "read",
@@ -275,8 +278,8 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
   }),
   fill: actionSpec({
     risk: "externalEffect",
-    description: "Fill an input, textarea, or contenteditable target and dispatch input/change.",
-    methods: TARGET_RESOLUTION_METHODS,
+    description: "Fill an input or textarea through its native setter, or a contenteditable through trusted text input.",
+    methods: [...TARGET_RESOLUTION_METHODS, "Input.insertText"],
     properties: {
       ...TARGET_PROPERTIES,
       value: { type: "string", maxLength: 100000 },
@@ -396,6 +399,9 @@ export function validateBrowserAutomationAction(action) {
     validateInteger(action.maxNodes, "snapshot.maxNodes", 1, BROWSER_AUTOMATION_MAX_NODES);
   }
   if (action.kind === "snapshot") {
+    if (action.mode !== undefined && !["all", "interactive"].includes(action.mode)) {
+      fail("snapshot.mode must be all or interactive");
+    }
     for (const key of ["includeScreenshot", "includeConsole", "includeNetwork"]) {
       if (action[key] !== undefined && typeof action[key] !== "boolean") fail(`snapshot.${key} must be boolean`);
     }

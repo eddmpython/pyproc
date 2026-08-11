@@ -50,6 +50,7 @@ class FakePort {
     this.dialogOnClick = false;
     this.url = "http://allowed.test/app";
     this.popupCapture = 0;
+    this.axNodes = null;
   }
 
   subscribe(ref, listener) {
@@ -114,6 +115,7 @@ class FakePort {
         ],
       };
     }
+    if (command.method === "Accessibility.getFullAXTree" && this.axNodes) result = { nodes: this.axNodes };
     if (command.method === "DOM.getDocument") result = { root: { nodeId: 1 } };
     if (command.method === "DOM.querySelector") result = { nodeId: this.queryAttached ? 9 : 0 };
     if (command.method === "DOM.resolveNode") result = { object: { objectId: "remote:11" } };
@@ -133,6 +135,10 @@ class FakePort {
             point: { x: 60, y: 25 }, visible: true, enabled: true, editable: true,
             inViewport: true, receivesEvents: true, needsScroll: false, reasons: [],
           } } }
+        : command.params?.functionDeclaration?.includes("selection.addRange")
+          ? { result: { value: { tag: "div", contenteditable: true } } }
+          : command.params?.functionDeclaration?.includes('inputMode: "trusted"')
+            ? { result: { value: { tag: "div", value: "filled", inputMode: "trusted" } } }
         : { result: { value: { ok: true } } };
     }
     if (command.method === "Page.navigate") {
@@ -247,6 +253,10 @@ export async function assertBrowserAutomationContract() {
   });
   assert(semanticWait.state === "visible" && semanticWait.locator.by === "role",
     "semantic wait state와 locator validation이 한 계약을 쓰지 않는다");
+  const interactiveSnapshot = validateBrowserAutomationAction({
+    kind: "snapshot", mode: "interactive", maxNodes: 3, expectedRisk: "read",
+  });
+  assert(interactiveSnapshot.mode === "interactive", "interactive snapshot mode가 action 계약을 통과하지 못했다");
   const invalidWaitState = await errorOf(() => validateBrowserAutomationAction({
     kind: "waitFor", selector: "#save", state: "painted", expectedRisk: "read",
   }));
@@ -283,6 +293,50 @@ export async function assertBrowserAutomationContract() {
     "compact accessibility snapshot 또는 opaque locator가 어긋났다");
   assert(observed.result.compactBytes < observed.result.rawBytes,
     `compact snapshot이 raw payload보다 작지 않다 (${observed.result.compactBytes}/${observed.result.rawBytes})`);
+
+  port.axNodes = [
+    ...Array.from({ length: 8 }, (_, index) => ({
+      nodeId: `noise:${index}`,
+      ignored: false,
+      role: { type: "role", value: "StaticText" },
+      name: { type: "computedString", value: `noise ${index}` },
+      childIds: [],
+    })),
+    {
+      nodeId: "late-editor", backendDOMNodeId: 91, ignored: false,
+      role: { type: "role", value: "textbox" },
+      name: { type: "computedString", value: "Late editor" },
+      properties: [{ name: "focused", value: { type: "booleanOrUndefined", value: false } }],
+      childIds: [],
+    },
+    {
+      nodeId: "late-action", backendDOMNodeId: 92, ignored: false,
+      role: { type: "role", value: "button" },
+      name: { type: "computedString", value: "Run late editor" },
+      childIds: [],
+    },
+    {
+      nodeId: "completion-status", backendDOMNodeId: 93, ignored: false,
+      role: { type: "role", value: "status" },
+      name: { type: "computedString", value: "" },
+      childIds: ["completion-text"],
+    },
+    {
+      nodeId: "completion-text", parentId: "completion-status", backendDOMNodeId: 94, ignored: false,
+      role: { type: "role", value: "StaticText" },
+      name: { type: "computedString", value: "Completion saved" },
+      childIds: [],
+    },
+  ];
+  const focused = await automation.observe(session, { mode: "interactive", maxNodes: 4 });
+  assert(focused.result.mode === "interactive"
+    && focused.result.eligibleNodes === 12 && focused.result.candidateNodes === 4
+    && focused.result.nodes.length === 4
+    && focused.result.nodes.every((node) => node.locatorRef)
+    && focused.result.nodes.some((node) => node.name === "Late editor")
+    && focused.result.nodes.some((node) => node.name === "Completion saved"),
+  "interactive snapshot이 전체 AX tree에서 control과 live status text를 먼저 고르지 않았다");
+  port.axNodes = null;
 
   const artifactReady = await automation.observe(session, {
     maxNodes: 10, includeScreenshot: true, includeConsole: true, includeNetwork: true, maxEvents: 5,
@@ -329,6 +383,8 @@ export async function assertBrowserAutomationContract() {
   ]);
   assert(highLevel.state === "completed" && highLevel.actions.length === 7,
     "고수준 action pipeline이 한 run에서 순서를 보존하지 않았다");
+  assert(port.commands.some((entry) => entry.command.method === "Input.insertText"),
+    "fill이 contenteditable 호환 trusted text 입력 경로를 사용하지 않았다");
   assert(new Set(highLevel.actions.map((action) => action.actionId)).size === 7,
     "action ID가 pipeline 안에서 고유하지 않다");
   assert(audit.some((record) => record.kind === "click" && record.state === "applied"),

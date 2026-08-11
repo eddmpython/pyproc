@@ -55,6 +55,11 @@
         srcdoc="<!doctype html><button id='frame-action' type='button'>Frame action</button>"></iframe>
       <iframe id="cross-origin-frame" title="cross origin frame"></iframe>
     </section>
+    <section aria-label="Late editor fixture">
+      <div id="late-editor-noise"></div>
+      <div id="structured-editor" contenteditable="true" role="textbox" aria-label="Structured code editor">starter</div>
+      <output id="structured-editor-state">starter:false</output>
+    </section>
     <img id="lazy-asset" alt="Lazy product asset" width="320" height="180" loading="lazy">
   </main>
   <script>
@@ -86,6 +91,21 @@
     const title = document.getElementById("title");
     const lane = document.getElementById("lane");
     const formStatus = document.getElementById("form-status");
+    const structuredEditor = document.getElementById("structured-editor");
+    const structuredEditorState = document.getElementById("structured-editor-state");
+    document.getElementById("late-editor-noise").replaceChildren(...Array.from({ length: 120 }, (_, index) => {
+      const node = document.createElement("span");
+      node.textContent = `late editor context ${index} `;
+      return node;
+    }));
+    let structuredDraft = structuredEditor.textContent;
+    let structuredTrusted = false;
+    structuredEditor.addEventListener("input", (event) => {
+      if (!event.isTrusted) return;
+      structuredDraft = structuredEditor.textContent;
+      structuredTrusted = true;
+      structuredEditorState.textContent = `${structuredDraft}:${structuredTrusted}`;
+    });
     title.addEventListener("keydown", (event) => { title.dataset.lastKey = event.key; });
     document.getElementById("apply").addEventListener("click", () => {
       document.getElementById("applied")?.remove();
@@ -180,6 +200,7 @@
         lastKey: title.dataset.lastKey || null,
         applied: document.getElementById("applied")?.textContent || null,
       }),
+      structuredEditor: () => ({ draft: structuredDraft, trusted: structuredTrusted }),
       resetActionability,
       actionability: () => ({
         counts: { ...actionabilityCounts },

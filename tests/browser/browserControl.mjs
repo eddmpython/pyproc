@@ -274,13 +274,57 @@ try {
     && observed.result?.compactBytes * 2 <= observed.result?.rawBytes && !!titleLocator,
   `${observed.result?.compactBytes}/${observed.result?.rawBytes}`);
 
+  const interactiveObserved = toolText(await callTool("browserObserve", {
+    sessionRef,
+    expectedRisk: "read",
+    mode: "interactive",
+    maxNodes: 100,
+  }));
+  const structuredLocator = interactiveObserved.result?.nodes
+    ?.find((node) => node.role === "textbox" && node.name === "Structured code editor")?.locatorRef;
+  const interactiveTitleLocator = interactiveObserved.result?.nodes
+    ?.find((node) => node.role === "textbox" && node.name?.trim() === "Title")?.locatorRef;
+  check("interactive snapshot이 늦게 배치된 control을 bounded 결과에 보존",
+    interactiveObserved.result?.mode === "interactive"
+      && interactiveObserved.result?.candidateNodes < interactiveObserved.result?.eligibleNodes
+      && !!structuredLocator && !!interactiveTitleLocator,
+  `${interactiveObserved.result?.candidateNodes}/${interactiveObserved.result?.eligibleNodes}; ${interactiveObserved.result?.nodes
+    ?.filter((node) => node.role === "textbox").map((node) => node.name).join(" | ")}`);
+
+  const structuredFill = toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [{
+      kind: "fill", locatorRef: structuredLocator, value: "print(42)", expectedRisk: "externalEffect",
+    }],
+  }));
+  const structuredState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "window.browserControlFixture.structuredEditor()", returnByValue: true,
+  }, "externalEffect"));
+  check("contenteditable fill이 trusted 편집 상태를 갱신",
+    structuredFill.actions?.[0]?.result?.inputMode === "trusted"
+      && structuredState.result?.result?.value?.draft === "print(42)"
+      && structuredState.result.result.value.trusted === true,
+  JSON.stringify(structuredState.result?.result?.value));
+  const structuredClear = toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "fill", locatorRef: structuredLocator, value: "", expectedRisk: "externalEffect" }],
+  }));
+  const structuredClearedState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "window.browserControlFixture.structuredEditor()", returnByValue: true,
+  }, "externalEffect"));
+  check("contenteditable fill이 빈 문자열도 trusted 상태로 반영",
+    structuredClear.actions?.[0]?.result?.inputMode === "trusted"
+      && structuredClear.actions[0].result.value === ""
+      && structuredClearedState.result?.result?.value?.draft === "",
+  JSON.stringify(structuredClearedState.result?.result?.value));
+
   const highLevel = toolText(await callTool("browserAct", {
     sessionRef,
     actions: [
-      { kind: "waitFor", locatorRef: titleLocator, state: "editable", expectedRisk: "read" },
-      { kind: "fill", locatorRef: titleLocator, value: "hello", expectedRisk: "externalEffect" },
+      { kind: "waitFor", locatorRef: interactiveTitleLocator, state: "editable", expectedRisk: "read" },
+      { kind: "fill", locatorRef: interactiveTitleLocator, value: "hello", expectedRisk: "externalEffect" },
       { kind: "select", selector: "#lane", values: ["fast"], expectedRisk: "externalEffect" },
-      { kind: "press", locatorRef: titleLocator, key: "Enter", expectedRisk: "externalEffect" },
+      { kind: "press", locatorRef: interactiveTitleLocator, key: "Enter", expectedRisk: "externalEffect" },
       { kind: "scroll", selector: "#apply", block: "center", expectedRisk: "externalEffect" },
       { kind: "click", selector: "#apply", expectedRisk: "externalEffect" },
       { kind: "waitFor", selector: "#applied", state: "attached", expectedRisk: "read" },
