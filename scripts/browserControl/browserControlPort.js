@@ -38,7 +38,7 @@ export class BrowserControlError extends Error {
 
 function validateTransport(transport) {
   if (!transport || typeof transport !== "object") throw new TypeError("browser control transport is required");
-  for (const method of ["listTargets", "closeTarget", "attach", "describe", "send", "subscribe", "detach", "close"]) {
+  for (const method of ["listTargets", "closeTarget", "activateTarget", "attach", "describe", "send", "subscribe", "detach", "close"]) {
     if (typeof transport[method] !== "function") throw new TypeError(`browser control transport is missing ${method}()`);
   }
   return transport;
@@ -202,6 +202,7 @@ export class BrowserControlPort {
         for (const target of candidates) discovered.add(target.id);
         if (candidates.length > 1) {
           await Promise.allSettled(candidates.map((target) => this._transport.closeTarget(target.id)));
+          await this._restorePopupOpener(session);
           throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
             `browser click opened ${candidates.length} popup targets`, { outcome: "applied" });
         }
@@ -210,6 +211,7 @@ export class BrowserControlPort {
           try { this._authorizeTarget(target); }
           catch (error) {
             await Promise.allSettled([this._transport.closeTarget(target.id)]);
+            await this._restorePopupOpener(session);
             throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
               "browser popup final URL is outside permission", { outcome: "applied", cause: error });
           }
@@ -229,6 +231,7 @@ export class BrowserControlPort {
         await popupDelay(Math.min(50, Math.max(1, deadline - Date.now())), signal);
       }
       await Promise.allSettled([...discovered].map((targetId) => this._transport.closeTarget(targetId)));
+      await this._restorePopupOpener(session);
       throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
         "browser popup did not reach an allowed stable URL", { outcome: "outcomeUnknown" });
     } finally {
@@ -238,6 +241,14 @@ export class BrowserControlPort {
 
   cancelPopupCapture(captureRef) {
     this._popupCaptures.delete(String(captureRef));
+  }
+
+  async _restorePopupOpener(session) {
+    try { await this._transport.activateTarget(session.targetId); }
+    catch (error) {
+      throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
+        "browser popup cleanup could not restore the opener", { outcome: "applied", cause: error });
+    }
   }
 
   async send(sessionRef, command, { signal, trustedRead = false } = {}) {

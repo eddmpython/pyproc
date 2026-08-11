@@ -21,6 +21,10 @@ export class NodeCdpTransport {
     return this._connection.send("Target.closeTarget", { targetId: String(targetId) });
   }
 
+  activateTarget(targetId) {
+    return this._connection.send("Target.activateTarget", { targetId: String(targetId) });
+  }
+
   async attach(targetId) {
     const { sessionId } = await this._connection.send("Target.attachToTarget", { targetId, flatten: true });
     const session = Object.freeze({ id: sessionId, targetId: String(targetId) });

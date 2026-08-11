@@ -34,6 +34,7 @@ class FakeTransport {
     this.sessions = new Map();
     this.listeners = new Map();
     this.commands = [];
+    this.activations = [];
     this.failure = null;
     this.afterSend = null;
     this.describeOverride = null;
@@ -45,6 +46,11 @@ class FakeTransport {
 
   async closeTarget(targetId) {
     this.targets = this.targets.filter((target) => target.id !== targetId);
+    return { success: true };
+  }
+
+  async activateTarget(targetId) {
+    this.activations.push(targetId);
     return { success: true };
   }
 
@@ -304,8 +310,9 @@ export async function assertBrowserControlContract() {
   const deniedPopup = await errorOf(() => port.finishPopupCapture(session, deniedCapture, { timeoutMs: 500 }));
   assert(deniedPopup?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied && deniedPopup.outcome === "applied"
     && !transport.targets.some((target) => target.id === "popup-denied")
+    && transport.activations.at(-1) === "allowed"
     && !deniedPopup.message.includes("denied.test"),
-  "권한 밖 popup을 닫고 applied 실패로 보존하지 못했다");
+  "권한 밖 popup을 닫고 opener를 복원한 applied 실패로 보존하지 못했다");
 
   const read = await port.send(session, { method: "DOM.getDocument" });
   const mutate = await port.send(session, { method: "DOM.setAttributeValue" });
