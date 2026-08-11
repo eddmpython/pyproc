@@ -52,4 +52,5 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 | [enginePort/](enginePort/) | EngineContract를 non-Pyodide CPython(WASI)이 구현 가능한가 (Pyodide 제거의 실증, D2 관문) | 진행 중 (부팅+계약 코어 6/6 + 반복 실행/값 프로토콜/**완전 시간여행** 12/12) |
 | [largeHeapEnvelope/](largeHeapEnvelope/) | 대형 힙에서 OS 프리미티브 비용은 어디서 무너지는가 (Browser Python OS 성능 봉투) | 진행 중 |
 | [stateKernel/](stateKernel/) | 내구 상태 3벌(저널·세션 이미지·machine generation)을 이중 구역 커널 하나로 통합할 수 있는가 | 진행 중 |
+| [browserAutomationProduct/](browserAutomationProduct/) | screenshot과 artifact를 설치형 browser automation 제품으로 전달할 수 있는가 | 진행 중 |
 | [Web Machine](../webMachine/) | 서로 다른 guest engine을 같은 browser computer lifecycle/device/image 계약으로 다룰 수 있는가 | 졸업 -> `src/machine` + `tests/webMachine` |
