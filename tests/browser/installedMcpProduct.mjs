@@ -63,13 +63,17 @@ const config = {
 await writeFile(configPath, JSON.stringify(config, null, 2));
 
 const cli = binPath(installed.appDir, "pyproc-mcp");
+const versionRun = run(cli, ["--version"], { cwd: installed.appDir });
+const helpRun = run(cli, ["--help"], { cwd: installed.appDir });
 const checkRun = run(cli, ["--config", configPath, "--check"], { cwd: installed.appDir });
 const checkReport = JSON.parse(checkRun.stdout);
-check("installed bin --check가 engine, browser, 권한을 시작 전 검증",
-  checkReport.ok === true && checkReport.browser.actions.includes("screenshot")
+check("installed bin help, version, check가 제품 시작 표면과 권한을 검증",
+  versionRun.stdout.trim() === installed.packed.version && helpRun.stdout.includes("--config <file>")
+    && helpRun.stdout.includes("--check") && checkReport.ok === true
+    && checkReport.browser.actions.includes("screenshot")
     && checkReport.browser.rawMethods.join(",") === "Runtime.evaluate"
     && checkReport.engine.mode === "root",
-`${checkReport.browser.actions.length} actions`);
+`${versionRun.stdout.trim()}, ${checkReport.browser.actions.length} actions`);
 
 const installedScript = join(installed.appDir, "node_modules", "pyproc", "scripts", "pyprocMcp.mjs");
 const child = spawn(process.execPath, [installedScript, "--config", configPath], {

@@ -48,6 +48,18 @@ export async function assertBrowserAutomationProductContract() {
   "제품 manifest가 engine, empty raw permission, screenshot action으로 투영되지 않았다");
   const unknownKey = await errorOf(() => validateMcpProductConfig({ ...manifest, surprise: true }));
   assert(/does not accept surprise/.test(unknownKey?.message), "제품 manifest unknown key가 fail-closed가 아니다");
+  const unknownBrowserKey = await errorOf(() => validateMcpProductConfig({
+    ...manifest, browser: { ...manifest.browser, surprise: true },
+  }));
+  assert(/browser does not accept surprise/.test(unknownBrowserKey?.message),
+    "제품 browser manifest unknown key가 fail-closed가 아니다");
+  const hostedEngine = validateMcpProductConfig({
+    schemaVersion: 1,
+    engine: { indexURL: "https://engine.example.test/pyodide-v1" },
+    browser: { enabled: false },
+  });
+  assert(hostedEngine.config.engine.indexURL === "https://engine.example.test/pyodide-v1/",
+    "제품 engine.indexURL이 absolute directory URL로 정규화되지 않았다");
   const relativeEngine = await errorOf(() => validateMcpProductConfig({
     ...manifest, engine: { root: "vendor/pyodide" },
   }));
