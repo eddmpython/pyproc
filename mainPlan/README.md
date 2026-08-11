@@ -17,5 +17,4 @@
 
 ## 현재 상태
 
-- [browserProductClosure/](browserProductClosure/): 실사용 점검에서 확인한 viewport, 준비 대기,
-  lazy hydration, 첫 탐색 계측, native image 응답을 설치 제품 계약으로 마감한다.
+활성 이니셔티브 없음.
