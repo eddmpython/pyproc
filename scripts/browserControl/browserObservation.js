@@ -1,10 +1,7 @@
 // browserObservation.js - bounded screenshot, console, network artifact와 redaction.
-import { createHash } from "node:crypto";
-import { BrowserControlError } from "./browserControlPort.js";
 import {
   BROWSER_OBSERVATION_DEFAULT_EVENTS,
   BROWSER_OBSERVATION_MAX_EVENTS,
-  BROWSER_OBSERVATION_MAX_SCREENSHOT_BYTES,
   BROWSER_OBSERVATION_TEXT_LIMIT,
 } from "./browserObservationCatalog.js";
 
@@ -87,12 +84,13 @@ function normalizeEvent(event, idFactory) {
 }
 
 export class BrowserObservation {
-  constructor({ port, command, idFactory = () => crypto.randomUUID() } = {}) {
+  constructor({ port, command, screenshot = null, idFactory = () => crypto.randomUUID() } = {}) {
     if (!port || typeof port.subscribe !== "function") throw new TypeError("browser observation port is required");
     if (typeof command !== "function") throw new TypeError("browser observation command callback is required");
     if (typeof idFactory !== "function") throw new TypeError("browser observation idFactory is required");
     this._port = port;
     this._command = command;
+    this._screenshot = screenshot;
     this._idFactory = idFactory;
     this._sessions = new Map();
   }
@@ -113,7 +111,12 @@ export class BrowserObservation {
       session.networkEnabled = true;
     }
     const artifact = {};
-    if (includeScreenshot) artifact.screenshot = await this._screenshot(sessionRef, commandResults, signal);
+    if (includeScreenshot) {
+      if (!this._screenshot) throw new Error("browser screenshot artifact store is unavailable");
+      artifact.screenshot = await this._screenshot.capture(sessionRef, {
+        format: "png", inline: true,
+      }, commandResults, signal);
+    }
     if (includeConsole) artifact.console = Object.freeze(this._drain(session.console, maxEvents));
     if (includeNetwork) artifact.network = Object.freeze(this._drain(session.network, maxEvents));
     return Object.freeze(artifact);
@@ -154,31 +157,6 @@ export class BrowserObservation {
     });
     this._sessions.set(key, state);
     return state;
-  }
-
-  async _screenshot(sessionRef, commandResults, signal) {
-    const command = await this._command(sessionRef, "Page.captureScreenshot", {
-      format: "png",
-      fromSurface: true,
-      captureBeyondViewport: false,
-    }, commandResults, signal);
-    const dataBase64 = command.result?.data;
-    if (typeof dataBase64 !== "string") {
-      throw new BrowserControlError("BROWSER_AUTOMATION_ARTIFACT_INVALID",
-        "browser screenshot did not return PNG data", { outcome: "notSent" });
-    }
-    const byteLength = Buffer.byteLength(dataBase64, "base64");
-    if (byteLength > BROWSER_OBSERVATION_MAX_SCREENSHOT_BYTES) {
-      throw new BrowserControlError("BROWSER_AUTOMATION_ARTIFACT_TOO_LARGE",
-        "browser screenshot exceeds the bounded artifact limit", { outcome: "notSent" });
-    }
-    return Object.freeze({
-      artifactId: `artifact:${this._idFactory()}`,
-      mimeType: "image/png",
-      byteLength,
-      sha256: createHash("sha256").update(dataBase64, "base64").digest("hex"),
-      dataBase64,
-    });
   }
 
   _drain(bucket, maxEvents) {

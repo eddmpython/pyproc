@@ -15,7 +15,8 @@
   "types": "./index.d.ts",
   "bin": {
     "pyproc-assets": "./scripts/assetManifest.mjs",
-    "pyproc-engine": "./scripts/fetchEngine.mjs"
+    "pyproc-engine": "./scripts/fetchEngine.mjs",
+    "pyproc-mcp": "./scripts/pyprocMcp.mjs"
   },
   "exports": {
     ".": {
@@ -59,6 +60,11 @@
     "scripts/assetManifest.mjs",
     "scripts/assetCatalog.json",
     "scripts/fetchEngine.mjs",
+    "scripts/pyprocMcp.mjs",
+    "scripts/mcpProductConfig.mjs",
+    "scripts/mcpSandboxServer.mjs",
+    "scripts/staticServer.mjs",
+    "scripts/browserControl",
     "README.md",
     "README.ko.md",
     "LICENSE"
@@ -72,6 +78,7 @@
     "test:installed": "node tests/browser/installedPackageGate.mjs",
     "test:web-computer": "node scripts/prepareWebComputerAssets.mjs && node tests/browser/webComputerProduct.mjs",
     "test:mcp": "node tests/browser/mcpSandbox.mjs",
+    "test:mcp-product": "node tests/browser/installedMcpProduct.mjs",
     "test:browser-control": "node tests/browser/browserControl.mjs",
     "test:browser-control-stress": "node tests/browser/browserControlStress.mjs",
     "test:browser": "node tests/browser/run.mjs",

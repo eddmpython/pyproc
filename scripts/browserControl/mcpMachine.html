@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pyproc machine</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem}pre{white-space:pre-wrap}</style>
+</head>
+<body>
+  <pre id="out">booting</pre>
+  <script type="module">
+    import { boot } from "../../index.js";
+    import { installFailClosedNetworkPolicy } from "./mcpMachinePolicy.js";
+
+    const out = document.getElementById("out");
+    const log = (message) => { out.textContent += "\n" + message; };
+    const RUN_HARNESS = [
+      "import io as _mcpIo, contextlib as _mcpCtx",
+      "_mcpBuf = _mcpIo.StringIO()",
+      "_mcpVal = None",
+      "with _mcpCtx.redirect_stdout(_mcpBuf), _mcpCtx.redirect_stderr(_mcpBuf):",
+      "    try:",
+      "        _mcpVal = eval(compile(_mcpSrc, '<mcp>', 'eval'), globals())",
+      "    except SyntaxError:",
+      "        exec(_mcpSrc, globals())",
+      "[_mcpBuf.getvalue(), None if _mcpVal is None else repr(_mcpVal)]",
+    ].join("\n");
+    const params = new URLSearchParams(location.search);
+    const requestedIndex = params.get("indexURL");
+    if (!requestedIndex) throw new Error("pyproc machine requires indexURL");
+    const indexURL = new URL(requestedIndex, location.href).href;
+    const machine = await boot({ deterministic: true, indexURL });
+    const installPolicy = () => installFailClosedNetworkPolicy(machine);
+    installPolicy();
+    const saved = [];
+    log("machine ready");
+
+    const tools = {
+      pythonRun({ code }) {
+        machine.runtime.setGlobal("_mcpSrc", String(code ?? ""));
+        const result = machine.run(RUN_HARNESS);
+        const [stdout, value] = result && result.toJs ? result.toJs() : result;
+        if (result && result.destroy) result.destroy();
+        return { stdout, value };
+      },
+      checkpointSave() {
+        const checkpoint = machine.history.checkpoint();
+        saved.push(checkpoint);
+        return { index: checkpoint.index, changedPages: checkpoint.changedPages, kind: checkpoint.kind };
+      },
+      checkpointRestore({ index } = {}) {
+        const target = index === undefined || index === null
+          ? saved[saved.length - 1]
+          : saved.find((checkpoint) => checkpoint.index === index);
+        if (!target) throw new Error(`checkpointRestore: no saved checkpoint (index ${index ?? "latest"})`);
+        const info = target.restore();
+        return { index: target.index, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
+      },
+      sandboxReset() {
+        const info = machine.history.restore(0);
+        saved.length = 0;
+        installPolicy();
+        return { index: 0, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
+      },
+    };
+
+    await fetch("/mcpReady", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ready: true }),
+    });
+    for (;;) {
+      let command;
+      try {
+        const response = await fetch("/mcpCommand", { cache: "no-store" });
+        command = await response.json();
+      } catch (error) {
+        break;
+      }
+      if (!command || command.none) continue;
+      let body;
+      try {
+        if (!tools[command.tool]) throw new Error(`unknown tool: ${command.tool}`);
+        body = { id: command.id, ok: true, value: tools[command.tool](command.args || {}) };
+        log(`${command.tool} done`);
+      } catch (error) {
+        body = {
+          id: command.id,
+          ok: false,
+          error: {
+            code: error?.code || "PYPROC_INTERNAL",
+            message: String(error?.message || error).slice(-400),
+          },
+        };
+        log(`${command.tool} failed: ${body.error.code}`);
+      }
+      await fetch("/mcpResult", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }).catch(() => {});
+    }
+  </script>
+</body>
+</html>

@@ -1,11 +1,8 @@
-// browserDownload.js - declared click download를 bounded in-memory artifact로 회수한다.
-import { createHash } from "node:crypto";
+// browserDownload.js - declared click download를 broker-owned artifact store로 회수한다.
 import { mkdir, readFile, unlink } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { BrowserControlError } from "./browserControlPort.js";
 import { redactBrowserUrl } from "./browserObservation.js";
-
-export const BROWSER_DOWNLOAD_MAX_BYTES = 2 * 1024 * 1024;
 
 function sessionKey(ref) {
   return `${ref?.protocolVersion || ""}:${ref?.brokerId || ""}:${ref?.brokerEpoch || ""}:${ref?.sessionId || ""}:${ref?.targetRef || ""}`;
@@ -17,14 +14,15 @@ function inside(root, candidate) {
 }
 
 export class BrowserDownload {
-  constructor({ lifecycle, command, downloadDir, idFactory = () => crypto.randomUUID() } = {}) {
+  constructor({ lifecycle, command, downloadDir, artifactStore } = {}) {
     if (!lifecycle || typeof lifecycle.watch !== "function") throw new TypeError("browser download lifecycle is required");
     if (typeof command !== "function") throw new TypeError("browser download command callback is required");
     if (!downloadDir || !isAbsolute(downloadDir)) throw new TypeError("browser download directory must be absolute");
+    if (!artifactStore || typeof artifactStore.put !== "function") throw new TypeError("browser download artifact store is required");
     this._lifecycle = lifecycle;
     this._command = command;
     this._downloadDir = resolve(downloadDir);
-    this._idFactory = idFactory;
+    this._artifactStore = artifactStore;
     this._enabledSessions = new Set();
   }
 
@@ -63,22 +61,23 @@ export class BrowserDownload {
       }
       const bytes = await readFile(filePath);
       try {
-        if (bytes.byteLength > BROWSER_DOWNLOAD_MAX_BYTES) {
-          throw new BrowserControlError("BROWSER_AUTOMATION_ARTIFACT_TOO_LARGE",
-            "browser download exceeds the bounded artifact limit", { outcome: "applied" });
+        try {
+          return Object.freeze({
+            click: clickResult,
+            artifact: await this._artifactStore.put(bytes, {
+              kind: "download",
+              suggestedFilename: basename(String(beginEvent.params?.suggestedFilename || "download")),
+              sourceUrl: redactBrowserUrl(beginEvent.params?.url),
+              mimeType: "application/octet-stream",
+            }, { inline: true }),
+          });
+        } catch (error) {
+          if (error instanceof BrowserControlError) {
+            throw new BrowserControlError(error.code, error.message,
+              { outcome: "applied", retryable: error.retryable, cause: error });
+          }
+          throw error;
         }
-        return Object.freeze({
-          click: clickResult,
-          artifact: Object.freeze({
-            artifactId: `artifact:${this._idFactory()}`,
-            suggestedFilename: basename(String(beginEvent.params?.suggestedFilename || "download")),
-            sourceUrl: redactBrowserUrl(beginEvent.params?.url),
-            mimeType: "application/octet-stream",
-            byteLength: bytes.byteLength,
-            sha256: createHash("sha256").update(bytes).digest("hex"),
-            dataBase64: bytes.toString("base64"),
-          }),
-        });
       } finally {
         try { await unlink(filePath); }
         catch (error) { if (error?.code !== "ENOENT") throw error; }

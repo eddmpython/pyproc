@@ -29,6 +29,7 @@ import { BrowserObservation } from "./browserObservation.js";
 import { BrowserTrace } from "./browserTrace.js";
 import { BrowserLifecycle } from "./browserLifecycle.js";
 import { BrowserDownload } from "./browserDownload.js";
+import { BrowserScreenshot } from "./browserScreenshot.js";
 
 export const BROWSER_AUTOMATION_ERROR_CODES = Object.freeze({
   actionRejected: "BROWSER_AUTOMATION_ACTION_REJECTED",
@@ -226,7 +227,8 @@ function modifierBits(modifiers = []) {
 }
 
 export class BrowserAutomation {
-  constructor({ port, actions = Object.keys(BROWSER_AUTOMATION_ACTIONS), idFactory = () => crypto.randomUUID(), onAudit = () => {}, downloadDir = null } = {}) {
+  constructor({ port, actions = Object.keys(BROWSER_AUTOMATION_ACTIONS), idFactory = () => crypto.randomUUID(),
+    onAudit = () => {}, downloadDir = null, artifactStore = null } = {}) {
     if (!port || typeof port.send !== "function" || !port.policy) throw new TypeError("browser automation port is required");
     if (typeof idFactory !== "function") throw new TypeError("browser automation idFactory must be a function");
     if (typeof onAudit !== "function") throw new TypeError("browser automation onAudit must be a function");
@@ -239,17 +241,23 @@ export class BrowserAutomation {
     this._onAudit = onAudit;
     this._locators = new Map();
     this._sessionLocators = new Map();
+    this._artifactStore = artifactStore;
+    this._screenshot = artifactStore ? new BrowserScreenshot({
+      command: (sessionRef, method, params, commandResults, signal) => this._command(sessionRef, method, params, commandResults, signal),
+      artifactStore,
+    }) : null;
     this._observation = new BrowserObservation({
       port,
       command: (sessionRef, method, params, commandResults, signal) => this._command(sessionRef, method, params, commandResults, signal),
+      screenshot: this._screenshot,
       idFactory,
     });
     this._lifecycle = new BrowserLifecycle({ port });
-    this._download = downloadDir ? new BrowserDownload({
+    this._download = downloadDir && artifactStore ? new BrowserDownload({
       lifecycle: this._lifecycle,
       command: (sessionRef, method, params, commandResults, signal) => this._command(sessionRef, method, params, commandResults, signal),
       downloadDir,
-      idFactory,
+      artifactStore,
     }) : null;
   }
 
@@ -334,6 +342,7 @@ export class BrowserAutomation {
       observation: this._observation.inspect(),
       lifecycle: this._lifecycle.inspect(),
       download: this._download?.inspect() || null,
+      artifacts: this._artifactStore?.inspect() || null,
     });
   }
 
@@ -345,6 +354,11 @@ export class BrowserAutomation {
 
   async _execute(sessionRef, action, commandResults, signal) {
     if (action.kind === "snapshot") return this._snapshot(sessionRef, action, commandResults, signal);
+    if (action.kind === "screenshot") {
+      if (!this._screenshot) throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionDenied,
+        "browser screenshot artifact store is unavailable", { outcome: "notSent" });
+      return this._screenshot.capture(sessionRef, action, commandResults, signal);
+    }
     if (action.kind === "waitFor") return this._waitFor(sessionRef, action, commandResults, signal);
     if (action.kind === "navigate") return this._navigate(sessionRef, action, commandResults, signal);
     if (action.kind === "cookiesGet") return this._cookiesGet(sessionRef, action, commandResults, signal);

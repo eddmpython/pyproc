@@ -29,6 +29,7 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
   "Network.getCookies": "read",
   "Page.getFrameTree": "read",
   "Page.captureScreenshot": "read",
+  "Page.getLayoutMetrics": "read",
   "Page.createIsolatedWorld": "read",
   "Runtime.enable": "read",
   "Runtime.getProperties": "read",

@@ -1,6 +1,7 @@
 // browserControl.mjs - opt-in MCP browser broker의 hermetic end-to-end gate.
 // Python restore와 외부 Chromium effect를 한 흐름에서 대조하고, 둘을 같은 rollback으로 위장하지 않는다.
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
@@ -99,6 +100,17 @@ function callTool(name, args = {}) {
   return request("tools/call", { name, arguments: args });
 }
 
+async function readArtifact(artifactRef, chunkBytes = 4096) {
+  const chunks = [];
+  let offset = 0;
+  for (;;) {
+    const part = toolText(await callTool("browserArtifactRead", { artifactRef, offset, maxBytes: chunkBytes }));
+    chunks.push(Buffer.from(part.dataBase64, "base64"));
+    offset = part.nextOffset;
+    if (part.eof) return { descriptor: part, bytes: Buffer.concat(chunks) };
+  }
+}
+
 function browserCommand(sessionRef, method, params, expectedRisk) {
   return callTool("browserCommand", { sessionRef, method, params: params || {}, expectedRisk });
 }
@@ -129,8 +141,9 @@ try {
 
   const listedTools = await request("tools/list", {});
   const names = listedTools.result.tools.map((tool) => tool.name).sort();
-  check("opt-in에서 Python 4종과 browser 8종", names.length === 12 && names.includes("pythonRun")
-    && names.includes("browserCommand") && names.includes("browserObserve") && names.includes("browserAct"), names.join(","));
+  check("opt-in에서 Python 4종과 browser 10종", names.length === 14 && names.includes("pythonRun")
+    && names.includes("browserCommand") && names.includes("browserObserve") && names.includes("browserAct")
+    && names.includes("browserArtifactRead") && names.includes("browserArtifactDelete"), names.join(","));
 
   // 엔진 부팅과 CDP target 생성이 CPU를 놓고 경쟁하면 공유 CI에서 준비 시간이 크게 흔들린다.
   // Python Machine을 먼저 준비한 뒤 외부 browser target을 여는 것이 실제 agent 소비 순서이기도 하다.
@@ -342,10 +355,13 @@ try {
     }],
   }));
   const downloadArtifact = downloadAction.actions?.[0]?.result?.download;
+  const downloaded = downloadArtifact?.artifactRef ? await readArtifact(downloadArtifact.artifactRef, 7) : null;
   check("선언된 download가 controlled profile에서 bounded artifact로 회수",
     downloadArtifact?.suggestedFilename === "browser-control.txt"
       && downloadArtifact?.sourceUrl === "[redacted-url]"
       && Buffer.from(downloadArtifact?.dataBase64 || "", "base64").toString("utf8") === "bounded browser download"
+      && downloaded?.bytes.toString("utf8") === "bounded browser download"
+      && downloaded?.descriptor.sha256 === downloadArtifact?.sha256
       && /^[a-f0-9]{64}$/.test(downloadArtifact?.sha256 || ""),
   `${downloadArtifact?.byteLength || 0} bytes`);
 
@@ -461,9 +477,45 @@ try {
     artifactReady.result?.screenshot?.mimeType === "image/png"
       && artifactReady.result.screenshot.byteLength > 0
       && artifactReady.result.screenshot.dataBase64.length > 100
+      && artifactReady.result.screenshot.artifactRef?.startsWith("artifact:")
       && artifactReady.trace?.schemaVersion === "1"
       && artifactReady.trace.steps?.[0]?.commands.some((command) => command.method === "Page.captureScreenshot"),
   `${artifactReady.result?.screenshot?.byteLength || 0} bytes`);
+  const observationArtifact = await readArtifact(artifactReady.result.screenshot.artifactRef, 1024);
+  check("screenshot artifact를 bounded chunk로 재조립하고 digest 검증",
+    observationArtifact.bytes.byteLength === artifactReady.result.screenshot.byteLength
+      && createHash("sha256").update(observationArtifact.bytes).digest("hex") === artifactReady.result.screenshot.sha256
+      && observationArtifact.bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+  `${observationArtifact.bytes.byteLength} bytes`);
+  const screenshotPipeline = toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [
+      { kind: "screenshot", format: "png", expectedRisk: "read" },
+      { kind: "screenshot", format: "jpeg", quality: 75, fullPage: true, expectedRisk: "read" },
+      { kind: "screenshot", format: "webp", quality: 70,
+        clip: { x: 0, y: 0, width: 320, height: 180, scale: 1 }, expectedRisk: "read" },
+    ],
+  }));
+  const screenshotDescriptors = screenshotPipeline.actions.map((action) => action.result);
+  const screenshotBytes = await Promise.all(screenshotDescriptors.map((artifact) => readArtifact(artifact.artifactRef)));
+  check("ordered screenshot action이 PNG, JPEG, WebP와 viewport, full-page, clip을 보존",
+    screenshotPipeline.actions.map((action) => action.kind).join(",") === "screenshot,screenshot,screenshot"
+      && screenshotDescriptors.map((artifact) => artifact.format).join(",") === "png,jpeg,webp"
+      && screenshotDescriptors[1].fullPage === true
+      && screenshotBytes[0].bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+      && screenshotBytes[1].bytes[0] === 0xff && screenshotBytes[1].bytes[1] === 0xd8
+      && screenshotBytes[2].bytes.subarray(0, 4).toString("ascii") === "RIFF"
+      && screenshotBytes[2].bytes.subarray(8, 12).toString("ascii") === "WEBP",
+  screenshotDescriptors.map((artifact) => `${artifact.format}:${artifact.byteLength}`).join(", "));
+  const deletedArtifact = toolText(await callTool("browserArtifactDelete", {
+    artifactRef: artifactReady.result.screenshot.artifactRef,
+  }));
+  const staleArtifact = await callTool("browserArtifactRead", {
+    artifactRef: artifactReady.result.screenshot.artifactRef,
+  });
+  check("artifact 명시 삭제 뒤 opaque ref가 즉시 stale",
+    deletedArtifact.deleted === true && staleArtifact.result.isError === true
+      && toolText(staleArtifact).code === "BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND");
   receiverRequests = 0;
   receiverBody = null;
   await browserCommand(sessionRef, "Runtime.evaluate", {

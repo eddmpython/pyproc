@@ -49,12 +49,31 @@ try {
   if (!existsSync(cli)) throw new Error("installed pyproc-assets bin shim 없음");
   const engineCli = binPath(appDir, "pyproc-engine");
   if (!existsSync(engineCli)) throw new Error("installed pyproc-engine bin shim 없음");
+  const mcpCli = binPath(appDir, "pyproc-mcp");
+  if (!existsSync(mcpCli)) throw new Error("installed pyproc-mcp bin shim 없음");
+  const installedPackage = JSON.parse(readFileSync(join(appDir, "node_modules", "pyproc", "package.json"), "utf8"));
+  if (installedPackage.bin?.["pyproc-mcp"] !== "./scripts/pyprocMcp.mjs") {
+    throw new Error("installed pyproc-mcp bin manifest 불일치");
+  }
+  if (Object.keys(installedPackage.exports || {}).some((key) => key.includes("browser"))) {
+    throw new Error("browser automation이 JS package export를 추가했다");
+  }
+  if (installedPackage.dependencies && Object.keys(installedPackage.dependencies).length) {
+    throw new Error("installed pyproc runtime dependency 0 계약 위반");
+  }
   const installedEngineCli = readFileSync(join(appDir, "node_modules", "pyproc", "scripts", "fetchEngine.mjs"), "utf8");
   if (!installedEngineCli.includes('argv[index] === "--out"')) throw new Error("installed pyproc-engine --out 계약 누락");
   if (!existsSync(join(appDir, "node_modules", "pyproc", "scripts", "assetCatalog.json"))) throw new Error("installed engine catalog 누락");
-  if (existsSync(join(appDir, "node_modules", "pyproc", "scripts", "browserControl"))
-    || existsSync(join(appDir, "node_modules", "pyproc", "scripts", "mcpSandboxServer.mjs"))) {
-    throw new Error("repository-only browser broker가 npm package에 포함됐다");
+  for (const path of [
+    ["scripts", "pyprocMcp.mjs"],
+    ["scripts", "mcpProductConfig.mjs"],
+    ["scripts", "mcpSandboxServer.mjs"],
+    ["scripts", "browserControl", "mcpMachine.html"],
+    ["scripts", "browserControl", "browserArtifactStore.js"],
+  ]) {
+    if (!existsSync(join(appDir, "node_modules", "pyproc", ...path))) {
+      throw new Error(`installed pyproc-mcp runtime 누락: ${path.join("/")}`);
+    }
   }
 
   const manifestOut = join(appDir, "public", "pyproc-assets.json");

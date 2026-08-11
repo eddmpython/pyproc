@@ -1,4 +1,4 @@
-// mcpSandboxServer.mjs - pyproc 샌드박스를 MCP(stdio) 도구로 노출하는 레시피(Node 전용, 의존성 0).
+// mcpSandboxServer.mjs - pyproc 샌드박스를 MCP(stdio) 도구로 노출하는 설치 런타임(Node 전용, 의존성 0).
 // 에이전트가 이 서버를 붙이면 기본 도구 4개를 얻는다:
 //   pythonRun(code)          - 준비된 파이썬 머신에서 실행(stdout + 마지막 식 repr)
 //   checkpointSave()         - 지금 상태를 복원 핸들로 저장
@@ -6,13 +6,16 @@
 //   sandboxReset()           - 부팅 직후 준비 상태(cp0)로 복귀
 // PYPROC_BROWSER_CONTROL=1을 명시하면 격리 profile의 저수준 및 고수준 browser 도구가 더 열린다.
 // CDP endpoint는 Node broker만 소유하고 MCP stdio 밖에 listener를 추가하지 않는다.
-// 구조: COOP/COEP 정적 서버(scripts/staticServer.mjs) + headless Chromium(tests/browser/harness.mjs)
-// 위에 examples/mcpSandbox.html 머신 페이지를 띄우고, long-poll 훅으로 명령을 왕복한다.
+// 구조: COOP/COEP 정적 서버 + product browser launcher
+// 설치 패키지의 전용 머신 페이지를 띄우고, long-poll 훅으로 명령을 왕복한다.
 // MCP 전송은 stdio의 newline-delimited JSON-RPC 2.0이다(스펙의 stdio transport).
 // 등록 예시: claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
 import { createInterface } from "node:readline";
-import { createStaticServer } from "./staticServer.mjs";
-import { launchBrowser } from "../tests/browser/harness.mjs";
+import { realpathSync, statSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createStaticServer, safeJoin, sendFile } from "./staticServer.mjs";
+import { launchBrowser } from "./browserControl/browserLauncher.mjs";
 import {
   McpBrowserControl,
   browserToolErrorDetails,
@@ -27,6 +30,17 @@ const BROWSER_CONTROL_ENABLED = process.env.PYPROC_BROWSER_CONTROL === "1";
 const BROWSER_CONTROL_CONFIG = BROWSER_CONTROL_ENABLED
   ? parseBrowserControlConfig(process.env, { timeoutMs: COMMAND_TIMEOUT_MS })
   : null;
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+function configuredEngineRoot(value) {
+  if (!value) return null;
+  if (!isAbsolute(value)) throw new TypeError("PYPROC_MCP_ENGINE_ROOT must be absolute");
+  const root = realpathSync(resolve(value));
+  if (!statSync(root).isDirectory()) throw new TypeError("PYPROC_MCP_ENGINE_ROOT must be a directory");
+  return root;
+}
+
+const ENGINE_ROOT = configuredEngineRoot(process.env.PYPROC_MCP_ENGINE_ROOT);
 
 const PYTHON_TOOLS = [
   {
@@ -83,6 +97,13 @@ function dispatch(tool, args) {
 }
 
 const server = createStaticServer(async (req, res) => {
+  const requestUrl = new URL(req.url, "http://mcp.local");
+  if (req.method === "GET" && ENGINE_ROOT && requestUrl.pathname.startsWith("/pyprocEngine/")) {
+    const file = safeJoin(ENGINE_ROOT, requestUrl.pathname.slice("/pyprocEngine/".length));
+    if (!file) { res.writeHead(403); res.end("forbidden"); return true; }
+    await sendFile(res, file);
+    return true;
+  }
   if (req.method === "POST" && req.url.startsWith("/mcpReady")) {
     for await (const chunk of req) void chunk;
     pageReady = true;
@@ -113,11 +134,15 @@ const server = createStaticServer(async (req, res) => {
     return true;
   }
   return false;
-});
+}, { root: PACKAGE_ROOT });
 
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const pageUrl = `http://127.0.0.1:${server.address().port}/examples/mcpSandbox.html`
-  + (process.env.PYPROC_INDEX_URL ? `?indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "");
+const serverOrigin = `http://127.0.0.1:${server.address().port}`;
+const engineIndexURL = ENGINE_ROOT
+  ? `${serverOrigin}/pyprocEngine/`
+  : (process.env.PYPROC_INDEX_URL || `${serverOrigin}/vendor/pyodide/`);
+const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html`
+  + `?indexURL=${encodeURIComponent(engineIndexURL)}`;
 
 const browserSession = launchBrowser(pageUrl, {
   prefix: "pyprocMcp-",

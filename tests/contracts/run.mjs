@@ -8,6 +8,7 @@ const HELPERS = new Set(["engineConformance.mjs", "run.mjs"]);
 // 커밋이 조용히 통과한다(4개를 지워도 "1 suite" PASS였다). 목록을 고치는 diff가 심사 지점이다.
 export const EXPECTED_SUITES = Object.freeze([
   "browserAutomation.mjs",
+  "browserAutomationProduct.mjs",
   "browserControl.mjs",
   "moduleBoundaries.mjs",
   "nestedPatchScope.mjs",

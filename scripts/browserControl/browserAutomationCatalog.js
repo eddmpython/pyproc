@@ -8,6 +8,10 @@ import {
   BROWSER_OBSERVATION_METHODS,
   BROWSER_OBSERVATION_PROPERTIES,
 } from "./browserObservationCatalog.js";
+import {
+  BROWSER_SCREENSHOT_FORMATS,
+  BROWSER_SCREENSHOT_MAX_CSS_DIMENSION,
+} from "./browserScreenshot.js";
 
 export const BROWSER_AUTOMATION_MAX_ACTIONS = 16;
 export const BROWSER_AUTOMATION_DEFAULT_MAX_NODES = 200;
@@ -17,6 +21,18 @@ export const BROWSER_AUTOMATION_MAX_WAIT_MS = 30000;
 
 const URL_PROPERTY = Object.freeze({ type: "string", format: "uri", minLength: 1, maxLength: 10000 });
 const STORAGE_AREA_PROPERTY = Object.freeze({ type: "string", enum: ["local", "session"] });
+const SCREENSHOT_CLIP_PROPERTY = Object.freeze({
+  type: "object",
+  properties: Object.freeze({
+    x: { type: "number", minimum: 0, maximum: BROWSER_SCREENSHOT_MAX_CSS_DIMENSION },
+    y: { type: "number", minimum: 0, maximum: BROWSER_SCREENSHOT_MAX_CSS_DIMENSION },
+    width: { type: "number", exclusiveMinimum: 0, maximum: BROWSER_SCREENSHOT_MAX_CSS_DIMENSION },
+    height: { type: "number", exclusiveMinimum: 0, maximum: BROWSER_SCREENSHOT_MAX_CSS_DIMENSION },
+    scale: { type: "number", minimum: 0.1, maximum: 3 },
+  }),
+  required: Object.freeze(["x", "y", "width", "height"]),
+  additionalProperties: false,
+});
 
 const TARGET_PROPERTIES = Object.freeze({
   selector: { type: "string", minLength: 1, maxLength: 2000 },
@@ -76,6 +92,19 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
     methods: BROWSER_OBSERVATION_METHODS,
     events: BROWSER_OBSERVATION_EVENTS,
     properties: BROWSER_OBSERVATION_PROPERTIES,
+  }),
+  screenshot: actionSpec({
+    risk: "read",
+    description: "Capture a bounded viewport, full-page, or clipped PNG, JPEG, or WebP artifact.",
+    methods: ["Page.getLayoutMetrics", "Page.captureScreenshot"],
+    properties: {
+      format: { type: "string", enum: BROWSER_SCREENSHOT_FORMATS },
+      quality: { type: "integer", minimum: 0, maximum: 100 },
+      fullPage: { type: "boolean" },
+      clip: SCREENSHOT_CLIP_PROPERTY,
+      optimizeForSpeed: { type: "boolean" },
+      inline: { type: "boolean" },
+    },
   }),
   waitFor: actionSpec({
     risk: "read",
@@ -305,7 +334,7 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
   }),
 });
 
-export const BROWSER_AUTOMATION_DEFAULT_ACTIONS = Object.freeze(["snapshot", "waitFor"]);
+export const BROWSER_AUTOMATION_DEFAULT_ACTIONS = Object.freeze(["snapshot", "screenshot", "waitFor"]);
 
 function fail(message) {
   const error = new TypeError(message);
@@ -360,6 +389,39 @@ export function validateBrowserAutomationAction(action) {
       if (action[key] !== undefined && typeof action[key] !== "boolean") fail(`snapshot.${key} must be boolean`);
     }
     if (action.maxEvents !== undefined) validateInteger(action.maxEvents, "snapshot.maxEvents", 1, BROWSER_OBSERVATION_MAX_EVENTS);
+  }
+  if (action.kind === "screenshot") {
+    if (action.format !== undefined && !BROWSER_SCREENSHOT_FORMATS.includes(action.format)) {
+      fail("screenshot.format is invalid");
+    }
+    if (action.quality !== undefined) {
+      validateInteger(action.quality, "screenshot.quality", 0, 100);
+      if ((action.format || "png") === "png") fail("screenshot.quality is only valid for JPEG or WebP");
+    }
+    for (const key of ["fullPage", "optimizeForSpeed", "inline"]) {
+      if (action[key] !== undefined && typeof action[key] !== "boolean") fail(`screenshot.${key} must be boolean`);
+    }
+    if (action.fullPage === true && action.clip !== undefined) fail("screenshot accepts fullPage or clip, not both");
+    if (action.clip !== undefined) {
+      requirePlainObject(action.clip, "screenshot.clip");
+      for (const key of Object.keys(action.clip)) {
+        if (!["x", "y", "width", "height", "scale"].includes(key)) fail(`screenshot.clip does not accept ${key}`);
+      }
+      for (const key of ["x", "y", "width", "height"]) {
+        if (typeof action.clip[key] !== "number" || !Number.isFinite(action.clip[key])) fail(`screenshot.clip.${key} must be finite`);
+      }
+      if (action.clip.x < 0 || action.clip.y < 0 || action.clip.width <= 0 || action.clip.height <= 0
+        || action.clip.x > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+        || action.clip.y > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+        || action.clip.width > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+        || action.clip.height > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+        || action.clip.x + action.clip.width > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+        || action.clip.y + action.clip.height > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION) {
+        fail("screenshot.clip is outside CSS bounds");
+      }
+      if (action.clip.scale !== undefined && (typeof action.clip.scale !== "number" || !Number.isFinite(action.clip.scale)
+        || action.clip.scale < 0.1 || action.clip.scale > 3)) fail("screenshot.clip.scale is invalid");
+    }
   }
   if (action.kind === "waitFor") {
     requireString(action.selector, "waitFor.selector", { max: 2000 });

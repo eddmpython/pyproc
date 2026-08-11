@@ -1,0 +1,149 @@
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  BrowserArtifactStore,
+  BROWSER_ARTIFACT_MAX_CHUNK_BYTES,
+} from "../../scripts/browserControl/browserArtifactStore.js";
+import { BrowserScreenshot } from "../../scripts/browserControl/browserScreenshot.js";
+import { validateBrowserAutomationAction } from "../../scripts/browserControl/browserAutomationCatalog.js";
+import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function errorOf(operation) {
+  try { await operation(); return null; }
+  catch (error) { return error; }
+}
+
+export async function assertBrowserAutomationProductContract() {
+  const root = await mkdtemp(join(tmpdir(), "pyprocBrowserProductContract-"));
+  const engineRoot = join(root, "engine");
+  await mkdir(engineRoot);
+  await writeFile(join(engineRoot, "pyodide.js"), "fixture");
+  await writeFile(join(engineRoot, "pyodide-lock.json"), "{}");
+
+  const manifest = {
+    schemaVersion: 1,
+    engine: { root: engineRoot },
+    timeoutMs: 120000,
+    browser: {
+      enabled: true,
+      allowedOrigins: ["http://allowed.test"],
+      maxRisk: "read",
+      actions: ["snapshot", "screenshot", "waitFor"],
+      methods: [],
+      artifacts: { maxArtifactBytes: 1024, maxTotalBytes: 4096, maxArtifacts: 4, inlineMaxBytes: 128, ttlMs: 5000 },
+    },
+  };
+  const validated = validateMcpProductConfig(manifest);
+  assert(validated.env.PYPROC_MCP_ENGINE_ROOT === engineRoot
+    && validated.env.PYPROC_BROWSER_METHODS === ""
+    && validated.browserControl.rawMethods.length === 0
+    && validated.browserControl.actions.includes("screenshot"),
+  "제품 manifest가 engine, empty raw permission, screenshot action으로 투영되지 않았다");
+  const unknownKey = await errorOf(() => validateMcpProductConfig({ ...manifest, surprise: true }));
+  assert(/does not accept surprise/.test(unknownKey?.message), "제품 manifest unknown key가 fail-closed가 아니다");
+  const relativeEngine = await errorOf(() => validateMcpProductConfig({
+    ...manifest, engine: { root: "vendor/pyodide" },
+  }));
+  assert(/must be an absolute directory/.test(relativeEngine?.message), "상대 engine root가 허용됐다");
+  const unacknowledgedEffect = await errorOf(() => validateMcpProductConfig({
+    ...manifest,
+    browser: { ...manifest.browser, maxRisk: "externalEffect", actions: ["screenshot", "click"] },
+  }));
+  assert(/externalEffect requires/.test(unacknowledgedEffect?.message), "제품 manifest가 external effect 이중 승인을 건너뛴다");
+
+  let now = 1000;
+  let sequence = 0;
+  const artifactRoot = join(root, "artifacts");
+  const store = new BrowserArtifactStore({
+    root: artifactRoot,
+    maxArtifactBytes: 32,
+    maxTotalBytes: 40,
+    maxArtifacts: 2,
+    inlineMaxBytes: 8,
+    ttlMs: 100,
+    idFactory: () => `opaque-${++sequence}`,
+    now: () => now,
+  });
+  const firstBytes = Buffer.from("0123456789abcdef");
+  const first = await store.put(firstBytes, { kind: "fixture", mimeType: "application/octet-stream" }, { inline: true });
+  assert(first.artifactRef === "artifact:opaque-1" && !first.dataBase64
+    && first.sha256 === createHash("sha256").update(firstBytes).digest("hex")
+    && !JSON.stringify(first).includes(artifactRoot),
+  "artifact descriptor가 opaque ref, inline limit, digest 경계를 보존하지 않았다");
+  const part1 = await store.read(first.artifactRef, { maxBytes: 5 });
+  const part2 = await store.read(first.artifactRef, { offset: part1.nextOffset, maxBytes: 32 });
+  assert(Buffer.concat([Buffer.from(part1.dataBase64, "base64"), Buffer.from(part2.dataBase64, "base64")]).equals(firstBytes)
+    && part1.eof === false && part2.eof === true
+    && store.inspect().maxChunkBytes === BROWSER_ARTIFACT_MAX_CHUNK_BYTES,
+  "artifact chunk offset와 EOF 계약으로 원본이 재조립되지 않았다");
+  const quota = await errorOf(() => store.put(Buffer.alloc(25, 1)));
+  assert(quota?.code === "BROWSER_AUTOMATION_ARTIFACT_QUOTA", "artifact total quota가 초과 쓰기를 거부하지 않았다");
+  now += 101;
+  assert(await store.reap() === 1 && existsSync(artifactRoot),
+    "artifact TTL reap가 만료 레코드를 회수하지 않았다");
+  const stale = await errorOf(() => store.read(first.artifactRef));
+  assert(stale?.code === "BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND", "만료 artifact ref가 stale 처리되지 않았다");
+
+  const pngBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const commands = [];
+  const screenshot = new BrowserScreenshot({
+    artifactStore: store,
+    command: async (sessionRef, method, params) => {
+      commands.push({ method, params });
+      if (method === "Page.getLayoutMetrics") {
+        return { result: { cssVisualViewport: { clientWidth: 800, clientHeight: 600 }, contentSize: { width: 800, height: 1400 } } };
+      }
+      return { result: { data: pngBytes.toString("base64") } };
+    },
+  });
+  const captured = await screenshot.capture({}, { format: "png", fullPage: true, inline: true }, [], null);
+  assert(captured.format === "png" && captured.fullPage === true && captured.cssHeight === 1400
+    && Buffer.from(captured.dataBase64, "base64").equals(pngBytes)
+    && commands[1].params.clip.height === 1400 && commands[1].params.captureBeyondViewport === true,
+  "full-page screenshot이 layout guard와 artifact store를 통과하지 않았다");
+  const invalidQuality = await errorOf(() => validateBrowserAutomationAction({
+    kind: "screenshot", format: "png", quality: 80, expectedRisk: "read",
+  }));
+  assert(/only valid for JPEG or WebP/.test(invalidQuality?.message), "PNG quality 조합이 action validation을 우회했다");
+  const invalidClip = await errorOf(() => validateBrowserAutomationAction({
+    kind: "screenshot", fullPage: true, clip: { x: 0, y: 0, width: 1, height: 1 }, expectedRisk: "read",
+  }));
+  assert(/fullPage or clip/.test(invalidClip?.message), "full-page와 clip 동시 지정이 허용됐다");
+
+  const capturedDelete = await store.delete(captured.artifactRef);
+  assert(capturedDelete.deleted === true, "artifact 명시 삭제가 파일을 회수하지 않았다");
+
+  const soakRoot = join(root, "artifactSoak");
+  let soakId = 0;
+  const soak = new BrowserArtifactStore({
+    root: soakRoot,
+    maxArtifactBytes: 1024,
+    maxTotalBytes: 8192,
+    maxArtifacts: 8,
+    inlineMaxBytes: 64,
+    ttlMs: 10000,
+    idFactory: () => `soak-${++soakId}`,
+  });
+  for (let index = 0; index < 128; index += 1) {
+    const bytes = Buffer.from(`artifact-soak-${index}`);
+    const descriptor = await soak.put(bytes);
+    const read = await soak.read(descriptor.artifactRef, { maxBytes: 7 });
+    assert(Buffer.from(read.dataBase64, "base64").equals(bytes.subarray(0, 7)),
+      `artifact soak chunk mismatch at ${index}`);
+    assert((await soak.delete(descriptor.artifactRef)).deleted === true,
+      `artifact soak delete mismatch at ${index}`);
+  }
+  assert(soak.inspect().artifacts === 0 && soak.inspect().totalBytes === 0,
+    "artifact 반복 생성과 삭제 뒤 quota 원장이 0으로 수렴하지 않았다");
+  await soak.close();
+  assert(!existsSync(soakRoot), "artifact soak 종료가 디렉터리를 정리하지 않았다");
+  await store.close();
+  assert(!existsSync(artifactRoot), "artifact store 종료가 디렉터리를 정리하지 않았다");
+}

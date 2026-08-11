@@ -3,13 +3,13 @@
 export const BROWSER_OBSERVATION_MAX_EVENTS = 100;
 export const BROWSER_OBSERVATION_DEFAULT_EVENTS = 40;
 export const BROWSER_OBSERVATION_MAX_NODES = 1000;
-export const BROWSER_OBSERVATION_MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024;
 export const BROWSER_OBSERVATION_TEXT_LIMIT = 300;
 
 export const BROWSER_OBSERVATION_METHODS = Object.freeze([
   "Accessibility.getFullAXTree",
   "Network.enable",
   "Page.captureScreenshot",
+  "Page.getLayoutMetrics",
   "Runtime.enable",
 ]);
 

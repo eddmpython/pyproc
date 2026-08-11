@@ -1,4 +1,4 @@
-// browserControl/index.js - repository-only browser integration composition surface.
+// browserControl/index.js - package-internal browser integration composition surface.
 export { BrowserAutomation, BROWSER_AUTOMATION_ERROR_CODES } from "./browserAutomation.js";
 export {
   BROWSER_ACTIONABILITY_DEFAULT_TIMEOUT_MS,
@@ -41,14 +41,28 @@ export {
   validateBrowserLocator,
 } from "./browserLocator.js";
 export { BrowserLifecycle } from "./browserLifecycle.js";
-export { BrowserDownload, BROWSER_DOWNLOAD_MAX_BYTES } from "./browserDownload.js";
+export { BrowserDownload } from "./browserDownload.js";
+export {
+  BrowserArtifactStore,
+  BROWSER_ARTIFACT_DEFAULT_INLINE_BYTES,
+  BROWSER_ARTIFACT_DEFAULT_MAX_BYTES,
+  BROWSER_ARTIFACT_DEFAULT_MAX_COUNT,
+  BROWSER_ARTIFACT_DEFAULT_TOTAL_BYTES,
+  BROWSER_ARTIFACT_DEFAULT_TTL_MS,
+  BROWSER_ARTIFACT_MAX_CHUNK_BYTES,
+} from "./browserArtifactStore.js";
+export {
+  BrowserScreenshot,
+  BROWSER_SCREENSHOT_FORMATS,
+  BROWSER_SCREENSHOT_MAX_CSS_DIMENSION,
+  BROWSER_SCREENSHOT_MAX_CSS_PIXELS,
+} from "./browserScreenshot.js";
 export { BrowserObservation, redactBrowserUrl } from "./browserObservation.js";
 export {
   BROWSER_OBSERVATION_DEFAULT_EVENTS,
   BROWSER_OBSERVATION_EVENTS,
   BROWSER_OBSERVATION_MAX_EVENTS,
   BROWSER_OBSERVATION_MAX_NODES,
-  BROWSER_OBSERVATION_MAX_SCREENSHOT_BYTES,
   BROWSER_OBSERVATION_METHODS,
   BROWSER_OBSERVATION_PROPERTIES,
   BROWSER_OBSERVATION_TEXT_LIMIT,

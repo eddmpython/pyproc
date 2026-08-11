@@ -97,6 +97,10 @@ jobs:
       - run: npm run test:mcp
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # 설치 tarball의 stable bin으로 Python, ordered screenshot, chunk read/delete를 완주한다.
+      - run: npm run test:mcp-product
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       # Opt-in browser automation broker: compact observe, 고수준 action pipeline, Python restore와
       # 외부 Chromium effect의 비복원 경계, permission, 취소와 사망 outcome을 같은 MCP 흐름에서 검증한다.
       - run: npm run test:browser-control
@@ -144,6 +148,7 @@ jobs:
       # 로컬 relay/TCP만 쓰는 통합면은 추가 다운로드 없이 Edge 차이를 잡을 수 있어 함께 돈다.
       - run: npm run test:socket
       - run: npm run test:mcp
+      - run: npm run test:mcp-product
       - run: npm run test:browser-control
       - run: npm run test:browser-control-stress
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

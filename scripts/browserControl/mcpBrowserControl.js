@@ -18,6 +18,15 @@ import {
 } from "./browserControlPolicy.js";
 import { BrowserControlError, BROWSER_CONTROL_ERROR_CODES } from "./browserControlPort.js";
 import { BROWSER_OBSERVATION_MAX_EVENTS } from "./browserObservationCatalog.js";
+import {
+  BrowserArtifactStore,
+  BROWSER_ARTIFACT_DEFAULT_INLINE_BYTES,
+  BROWSER_ARTIFACT_DEFAULT_MAX_BYTES,
+  BROWSER_ARTIFACT_DEFAULT_MAX_COUNT,
+  BROWSER_ARTIFACT_DEFAULT_TOTAL_BYTES,
+  BROWSER_ARTIFACT_DEFAULT_TTL_MS,
+  BROWSER_ARTIFACT_MAX_CHUNK_BYTES,
+} from "./browserArtifactStore.js";
 import { realpathSync, statSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
 
@@ -42,6 +51,14 @@ function csv(value) {
 
 function unique(values) {
   return [...new Set(values)];
+}
+
+function boundedEnvironmentInteger(env, key, fallback, maximum) {
+  if (env[key] === undefined || env[key] === "") return fallback;
+  if (!/^[1-9][0-9]*$/.test(String(env[key]))) throw new Error(`${key} must be a positive integer`);
+  const value = Number(env[key]);
+  if (!Number.isSafeInteger(value) || value > maximum) throw new Error(`${key} exceeds ${maximum}`);
+  return value;
 }
 
 function permissionError(message) {
@@ -97,7 +114,8 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   const maxRisk = env.PYPROC_BROWSER_MAX_RISK || "read";
   if (!Object.hasOwn(BROWSER_CONTROL_RISKS, maxRisk)) throw new Error(`invalid PYPROC_BROWSER_MAX_RISK: ${maxRisk}`);
   const requestedRawMethods = csv(env.PYPROC_BROWSER_METHODS);
-  const rawMethods = unique(requestedRawMethods.length ? requestedRawMethods : BROWSER_CONTROL_DEFAULT_READ_METHODS);
+  const rawMethods = unique(Object.hasOwn(env, "PYPROC_BROWSER_METHODS")
+    ? requestedRawMethods : BROWSER_CONTROL_DEFAULT_READ_METHODS);
   validateMethods(rawMethods, maxRisk, "PYPROC_BROWSER_METHODS");
   const requestedActions = csv(env.PYPROC_BROWSER_ACTIONS);
   const actions = unique(requestedActions.length ? requestedActions : BROWSER_AUTOMATION_DEFAULT_ACTIONS);
@@ -115,6 +133,24 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   if ((actions.includes("upload") || rawMethods.includes("DOM.setFileInputFiles")) && fileRoots.length < 1) {
     throw new Error("browser file upload requires PYPROC_BROWSER_FILE_ROOTS");
   }
+  const artifacts = Object.freeze({
+    maxArtifactBytes: boundedEnvironmentInteger(env, "PYPROC_BROWSER_ARTIFACT_MAX_BYTES",
+      BROWSER_ARTIFACT_DEFAULT_MAX_BYTES, 64 * 1024 * 1024),
+    maxTotalBytes: boundedEnvironmentInteger(env, "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",
+      BROWSER_ARTIFACT_DEFAULT_TOTAL_BYTES, 512 * 1024 * 1024),
+    maxArtifacts: boundedEnvironmentInteger(env, "PYPROC_BROWSER_ARTIFACT_MAX_COUNT",
+      BROWSER_ARTIFACT_DEFAULT_MAX_COUNT, 1024),
+    inlineMaxBytes: boundedEnvironmentInteger(env, "PYPROC_BROWSER_ARTIFACT_INLINE_BYTES",
+      BROWSER_ARTIFACT_DEFAULT_INLINE_BYTES, 4 * 1024 * 1024),
+    ttlMs: boundedEnvironmentInteger(env, "PYPROC_BROWSER_ARTIFACT_TTL_MS",
+      BROWSER_ARTIFACT_DEFAULT_TTL_MS, 24 * 60 * 60 * 1000),
+  });
+  if (artifacts.maxArtifactBytes > artifacts.maxTotalBytes) {
+    throw new Error("PYPROC_BROWSER_ARTIFACT_MAX_BYTES must not exceed total bytes");
+  }
+  if (artifacts.inlineMaxBytes > artifacts.maxArtifactBytes) {
+    throw new Error("PYPROC_BROWSER_ARTIFACT_INLINE_BYTES must not exceed max artifact bytes");
+  }
   return Object.freeze({
     targetOrigins: Object.freeze(parseOrigins(env.PYPROC_BROWSER_ALLOWED_ORIGINS)),
     rawMethods: Object.freeze(rawMethods),
@@ -126,6 +162,7 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
     timeoutMs,
     purpose,
     externalEffectsAcknowledged,
+    artifacts,
   });
 }
 
@@ -232,6 +269,30 @@ export function createBrowserControlTools(config) {
       additionalProperties: false,
     },
   });
+  tools.push({
+    name: "browserArtifactRead",
+    description: "Read one bounded base64 chunk from an opaque screenshot or download artifact.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        artifactRef: { type: "string", pattern: "^artifact:[A-Za-z0-9_-]+$", minLength: 10, maxLength: 105 },
+        offset: { type: "integer", minimum: 0 },
+        maxBytes: { type: "integer", minimum: 1, maximum: BROWSER_ARTIFACT_MAX_CHUNK_BYTES },
+      },
+      required: ["artifactRef"],
+      additionalProperties: false,
+    },
+  });
+  tools.push({
+    name: "browserArtifactDelete",
+    description: "Delete one broker-owned artifact before its TTL expires.",
+    inputSchema: {
+      type: "object",
+      properties: { artifactRef: { type: "string", pattern: "^artifact:[A-Za-z0-9_-]+$", minLength: 10, maxLength: 105 } },
+      required: ["artifactRef"],
+      additionalProperties: false,
+    },
+  });
   return Object.freeze(tools.map((tool) => Object.freeze(tool)));
 }
 
@@ -251,6 +312,7 @@ export class McpBrowserControl {
     this._rawMethods = new Set(config.rawMethods);
     this._brokerPromise = null;
     this._automation = null;
+    this._artifactStore = null;
     this._profileDir = profileDir;
     this._brokerFactory = brokerFactory;
     this._auditWriter = auditWriter;
@@ -270,8 +332,9 @@ export class McpBrowserControl {
     if (tool === "browserObserve" && args.expectedRisk !== "read") {
       throw permissionError("browserObserve requires expectedRisk read");
     }
-    const { broker, automation } = await this._ready();
+    const { broker, automation, artifactStore } = await this._ready();
     if (tool === "browserInspect") {
+      await artifactStore.reap();
       return Object.freeze({
         ...broker.inspect(),
         automation: automation.inspect(),
@@ -305,6 +368,13 @@ export class McpBrowserControl {
       }, { signal });
     }
     if (tool === "browserAct") return automation.run(args.sessionRef, args.actions, { signal });
+    if (tool === "browserArtifactRead") {
+      return artifactStore.read(args.artifactRef, {
+        ...(args.offset === undefined ? {} : { offset: args.offset }),
+        ...(args.maxBytes === undefined ? {} : { maxBytes: args.maxBytes }),
+      });
+    }
+    if (tool === "browserArtifactDelete") return artifactStore.delete(args.artifactRef);
     if (tool === "browserDetach") {
       automation.dropSession(args.sessionRef);
       await broker.detach(args.sessionRef);
@@ -315,13 +385,13 @@ export class McpBrowserControl {
 
   async close() {
     this._automation?.close();
-    if (!this._brokerPromise) return;
-    const broker = await this._brokerPromise;
-    await broker.close();
+    await this._artifactStore?.close();
+    if (this._brokerPromise) await (await this._brokerPromise).close();
   }
 
   async _ready() {
     const downloadDir = join(this._profileDir, "browserDownloads");
+    const artifactDir = join(this._profileDir, "browserArtifacts");
     if (!this._brokerPromise) {
       this._brokerPromise = this._brokerFactory({
         profileDir: this._profileDir,
@@ -335,6 +405,9 @@ export class McpBrowserControl {
       });
     }
     const broker = await this._brokerPromise;
+    if (!this._artifactStore) {
+      this._artifactStore = new BrowserArtifactStore({ root: artifactDir, ...this.config.artifacts });
+    }
     if (!this._automation) {
       this._automation = new BrowserAutomation({
         port: broker.port,
@@ -343,9 +416,10 @@ export class McpBrowserControl {
           if (record.risk === "externalEffect" || record.state === "failed") this._audit(record);
         },
         downloadDir,
+        artifactStore: this._artifactStore,
       });
     }
-    return { broker, automation: this._automation };
+    return { broker, automation: this._automation, artifactStore: this._artifactStore };
   }
 
   _audit(record) {

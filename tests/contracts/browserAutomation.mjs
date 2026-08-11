@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   BrowserAutomation,
@@ -15,6 +16,7 @@ import {
 import { BROWSER_CONTROL_COMMAND_RISKS } from "../../scripts/browserControl/browserControlPolicy.js";
 import { NodeCdpTransport } from "../../scripts/browserControl/nodeCdpTransport.js";
 import { redactBrowserUrl } from "../../scripts/browserControl/browserObservation.js";
+import { BrowserArtifactStore } from "../../scripts/browserControl/browserArtifactStore.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -143,7 +145,14 @@ class FakePort {
       size: 24, httpOnly: true, secure: false, session: true, sameSite: "Lax", priority: "Medium",
     }] };
     if (command.method === "DOMStorage.getDOMStorageItems") result = { entries: [["mode", "ready"]] };
-    if (command.method === "Page.captureScreenshot") result = { data: Buffer.from("bounded png fixture").toString("base64") };
+    if (command.method === "Page.getLayoutMetrics") {
+      result = { cssVisualViewport: { clientWidth: 800, clientHeight: 600 }, contentSize: { width: 800, height: 1200 } };
+    }
+    if (command.method === "Page.captureScreenshot") {
+      result = { data: Buffer.concat([
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from("bounded png fixture"),
+      ]).toString("base64") };
+    }
     if (this.dialogOnClick && command.method === "Input.dispatchMouseEvent" && command.params?.type === "mouseReleased") {
       queueMicrotask(() => this.emit("Page.javascriptDialogOpening", { type: "confirm", hasBrowserHandler: false }));
     }
@@ -224,11 +233,16 @@ export async function assertBrowserAutomationContract() {
   let id = 0;
   const port = new FakePort();
   const audit = [];
+  const artifactStore = new BrowserArtifactStore({
+    root: await mkdtemp(join(tmpdir(), "pyprocBrowserArtifactContract-")),
+    idFactory: () => `artifact-${++id}`,
+  });
   const automation = new BrowserAutomation({
     port,
     actions: config.actions,
     idFactory: () => String(++id),
     onAudit: (record) => audit.push(record),
+    artifactStore,
   });
   const session = sessionRef();
   const observed = await automation.observe(session, { maxNodes: 10 });
@@ -246,7 +260,8 @@ export async function assertBrowserAutomationContract() {
     maxNodes: 10, includeScreenshot: true, includeConsole: true, includeNetwork: true, maxEvents: 5,
   });
   assert(artifactReady.result.screenshot?.mimeType === "image/png" && artifactReady.result.screenshot?.dataBase64
-    && artifactReady.requestCount === 4,
+    && artifactReady.result.screenshot?.artifactRef?.startsWith("artifact:")
+    && artifactReady.requestCount === 5,
   "screenshot와 event domain 준비가 bounded observation으로 합쳐지지 않았다");
   port.emit("Runtime.consoleAPICalled", {
     type: "info", timestamp: 1, args: [{ value: "token=must-not-leak" }, { value: 42 }],
@@ -448,5 +463,7 @@ export async function assertBrowserAutomationContract() {
   assert(serverSource.includes('from "./browserControl/index.js"')
     && !serverSource.includes('from "./browserControl/mcpBrowserControl.js"'),
   "MCP composition root가 repository browser-control surface를 우회했다");
+  automation.close();
+  await artifactStore.close();
   return true;
 }

@@ -14,7 +14,7 @@ import {
   assertBrowserCompatibility,
   inspectBrowserCompatibility,
 } from "../../scripts/browserControl/browserCompatibility.js";
-import { headlessArgs } from "../browser/harness.mjs";
+import { headlessArgs } from "../../scripts/browserControl/browserLauncher.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
