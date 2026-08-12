@@ -77,8 +77,11 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
   byte-identical PNG, target 요청 0, identity/final/cursor/prefix resume을 고정했다. 기록 시작 전 0600
   초기 commit과 단일 writer lock, generation 원자 교체, symlink confinement, post-effect 실패 보수화,
   fatal latch, FIFO, shutdown drain도 계약화했다.
-- 단계 7 진행: v86 Linux guest 안의 browser 후보를 cold/warm boot, heap, display, input, network,
-  screenshot 수치로 승격 또는 기각한다.
+- 단계 7 완료: 정식 `nestedBrowserBoundaryProbe` 12/12가 Buildroot의 boot, text display, PS/2 input,
+  packet, snapshot과 warm/cold restore 및 Kolibri의 RGBA, pointer, PNG와 cold restore를 실측했다.
+  Buildroot에는 browser와 GUI가 없고 Kolibri는 opaque image이며 external network와 semantic browser
+  control이 없어 provider 승격을 거부했다. 현재 제품 공간은 NativeCdpSpace, FrameSpace, ReplaySpace다.
+- 단계 8 진행: 전체 설치 여정과 회귀 게이트, 문서, attempts 제거, 버전과 tag를 한 릴리즈로 졸업한다.
 
 ## 제품 최소선
 

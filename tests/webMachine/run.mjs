@@ -49,6 +49,7 @@ const V86_BACKED = [
   "tests/webMachine/browser/probes/framebufferPointerProbe.html",
   "tests/webMachine/browser/probes/machineEnvelopeProbe.html",
   "tests/webMachine/browser/probes/packetNetworkProbe.html",
+  "tests/webMachine/browser/probes/nestedBrowserBoundaryProbe.html",
 ];
 const V86_ASSET_DIR = join(ROOT, "tests", "webMachine", "fixtures", "v86", "assets");
 

@@ -32,7 +32,8 @@ workflow는 바뀌지 않는다.
 | 2026-08-12 | nativeCdpSpaceProbe | Node 22.19, fake CDP implementation | GREEN 4/4. provider identity, 능력 7종, operation 10종, close | 제품 composition이 NativeCdpSpace를 직접 조립 | Chrome과 Edge 실제 CDP 여정 유지 확인 |
 | 2026-08-12 | frameSpaceProbe + installed product | Edge, opaque-origin sandbox, MessageChannel, packed npm | GREEN 8/8 probe, 18/18 product. Control, MCP, Python SDK, control-token 공격 거부, same/cross origin, 부모와 storage 격리, partial과 첫 effect unknown outcome, PNG 음성 검증 | cooperative credentialless provider 채택. 임의 페이지, trusted input, compositor capture는 경계 밖 | ReplaySpace 실패 우선 기록 probe |
 | 2026-08-12 | replaySpaceProbe + installed product | Node 22.19, Edge, packed npm | GREEN 10/10 probe, 14/14 product. Control/MCP preflight, generation sidecar, mutation/missing 거부, input divergence, target 요청 0, identity/final/cursor/prefix resume | live provider를 소유하지 않는 deterministic ReplaySpace 채택 | v86 browser guest 실측 |
+| 2026-08-12 | nestedBrowserBoundaryProbe | Edge, v86 Buildroot와 Kolibri | GREEN 12/12. Linux boot, text/RGBA 화면, PS/2/pointer, packet, PNG, snapshot, warm/cold restore 실측 | Buildroot에는 browser와 GUI가 없고 Kolibri는 opaque image이며 external network와 semantic control이 없어 provider 승격 거부 | NativeCdpSpace, FrameSpace, ReplaySpace를 제품 경계로 고정 |
 
 ## 판정
 
-진행 중 (v86 browser guest 실측)
+졸업. 지속 경계와 정식 probe를 제품 검증 트리로 옮겼다.

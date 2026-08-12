@@ -1,0 +1,381 @@
+<!doctype html>
+<!--
+nestedBrowserBoundaryProbe.html - v86 nested browser 후보의 제품 최소선을 실제 guest 두 종류로 측정한다.
+결과(2026-08-12, Edge headless, COOP+COEP): GREEN 12/12.
+Buildroot는 Linux, text display, PS/2 input, packet NIC, snapshot과 cold restore를 제공하지만 browser와
+GUI가 없었다. Kolibri는 RGBA, pointer, PNG와 cold restore를 제공하지만 opaque image이고 외부 network와
+semantic browser control이 없다. 따라서 nested provider는 승격하지 않고 NativeCdpSpace와 FrameSpace를
+제품 경계로 유지한다.
+-->
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>v86 nested browser feasibility probe</title>
+  <style>
+    body{font:14px/1.5 system-ui;margin:2rem;max-width:64rem}
+    pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}
+    #graphicalScreen{position:fixed;left:-4000px;top:0}
+    #graphicalScreen canvas{width:640px;height:480px}
+  </style>
+</head>
+<body>
+<h1>v86 nested browser feasibility probe</h1>
+<p>현재 출하 가능한 x86 guest가 browser engine, GUI, display, input, network, screenshot, restore 최소선을 한 guest에서 만족하는지 측정한다.</p>
+<pre id="out">실행 중...</pre>
+<div id="graphicalScreen"><div></div><canvas></canvas></div>
+<script type="importmap">
+  {"imports":{"@web-machine/core":"/src/machine/index.js"}}
+</script>
+<script type="module">
+  import {
+    CanvasRgbaFrameSource,
+    MemoryEthernetSwitch,
+    MemoryRelativePointerDevice,
+    MemoryRgbaDisplayDevice,
+    MemoryScanCodeInputDevice,
+    MemoryTextDisplayDevice,
+    WebMachineHost,
+    createV86GuestFactory,
+  } from "../../../../src/machine/index.js";
+  import { encodePs2Set1Text } from "../../fixtures/input/ps2Set1Text.js";
+  import { V86 } from "../../fixtures/v86/assets/libv86.mjs";
+  import {
+    V86_ADAPTER_VERSION,
+    V86_GRAPHICAL_ADAPTER_VERSION,
+    createV86GraphicalProbeManifest,
+    createV86ProbeManifest,
+  } from "../../fixtures/v86/config.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const timings = {};
+  const measurements = {};
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+  const v86AssetPath = (name) => `/tests/webMachine/fixtures/v86/assets/${name}`;
+  let assetCatalogPromise = null;
+
+  function loadAssetCatalog() {
+    if (!assetCatalogPromise) {
+      assetCatalogPromise = fetch("/scripts/assetCatalog.json").then((response) => {
+        if (!response.ok) throw new Error(`asset catalog unavailable: ${response.status}`);
+        return response.json();
+      });
+    }
+    return assetCatalogPromise;
+  }
+
+  function buildrootManifest() {
+    const manifest = createV86ProbeManifest();
+    manifest.v86.options.wasm_path = v86AssetPath("v86.wasm");
+    manifest.v86.options.bios.url = v86AssetPath("seabios.bin");
+    manifest.v86.options.vga_bios.url = v86AssetPath("vgabios.bin");
+    manifest.v86.options.bzimage.url = v86AssetPath("buildroot-pyproc-i686.bin");
+    return manifest;
+  }
+
+  function graphicalManifest(screenContainer) {
+    const manifest = createV86GraphicalProbeManifest({ screenContainer });
+    manifest.v86.options.wasm_path = v86AssetPath("v86.wasm");
+    manifest.v86.options.bios.url = v86AssetPath("seabios.bin");
+    manifest.v86.options.vga_bios.url = v86AssetPath("vgabios.bin");
+    manifest.v86.options.fda.url = v86AssetPath("kolibri.img");
+    return manifest;
+  }
+
+  async function waitFor(read, timeoutMs = 30000) {
+    const deadline = performance.now() + timeoutMs;
+    while (performance.now() < deadline) {
+      const value = await read();
+      if (value) return value;
+      await delay(40);
+    }
+    return null;
+  }
+
+  function textFrame(display) {
+    const frame = display.readFrame();
+    const lines = [];
+    for (let row = 0; row < frame.rows; row += 1) {
+      const offset = row * frame.columns;
+      lines.push(Array.from(frame.cells.subarray(offset, offset + frame.columns),
+        (glyph) => String.fromCharCode(glyph || 32)).join(""));
+    }
+    return lines.join("\n");
+  }
+
+  function frameFingerprint(frame) {
+    let hash = 2166136261;
+    for (let index = 0; index < frame.pixels.length; index += 1) {
+      hash ^= frame.pixels[index];
+      hash = Math.imul(hash, 16777619);
+    }
+    return `${frame.width}x${frame.height}:${(hash >>> 0).toString(16)}`;
+  }
+
+  async function pngFromRgba(frame) {
+    const canvas = document.createElement("canvas");
+    canvas.width = frame.width;
+    canvas.height = frame.height;
+    const context = canvas.getContext("2d", { alpha: false });
+    context.putImageData(new ImageData(new Uint8ClampedArray(frame.pixels), frame.width, frame.height), 0, 0);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
+  async function inspectBuildrootCandidate() {
+    const display = new MemoryTextDisplayDevice();
+    const input = new MemoryScanCodeInputDevice({ maxBatchBytes: 512 });
+    let idSequence = 0;
+    const host = new WebMachineHost({
+      idFactory: () => `nested-buildroot-${++idSequence}`,
+      devices: { console: { kind: "console", write: () => {} }, display, input },
+    });
+    host.registerAdapter("nested-buildroot", createV86GuestFactory({
+      V86,
+      adapterVersion: `${V86_ADAPTER_VERSION}-nested-browser-probe-v1`,
+      displayDeviceName: "display",
+      inputDeviceName: "input",
+    }));
+    const machine = host.createMachine({
+      machineId: "nestedBuildroot",
+      adapterId: "nested-buildroot",
+      manifest: buildrootManifest(),
+      permissions: { devices: ["console", "display", "input"] },
+    });
+    const heapBefore = performance.memory?.usedJSHeapSize || 0;
+    let startedAt = performance.now();
+    await machine.boot();
+    timings.buildrootColdBootMs = Math.round(performance.now() - startedAt);
+    const firstScreen = await waitFor(() => display.inspect().revision > 0 ? textFrame(display) : null);
+    timings.buildrootFirstScreenMs = timings.buildrootColdBootMs;
+    await machine.request({ type: "serial", data: "stty -echo\n", waitFor: "# " });
+    const inventory = await machine.request({
+      type: "serial",
+      data: "echo PYPROC_BROWSER_BEGIN; for x in chromium chromium-browser google-chrome firefox firefox-esr netsurf surf links2 dillo; do command -v $x >/dev/null 2>&1 && echo FOUND_BROWSER=$x; done; for x in Xorg X weston cage sway openbox matchbox-window-manager; do command -v $x >/dev/null 2>&1 && echo FOUND_GUI=$x; done; awk '/MemTotal:/{print \"MEM_TOTAL_KIB=\"$2}' /proc/meminfo; set -- $(df -k / | tail -n 1); echo ROOT_TOTAL_KIB=$2; echo ROOT_FREE_KIB=$4; test -e /dev/fb0; echo FRAMEBUFFER_STATUS=$?; echo PYPROC_BROWSER_END\n",
+      waitFor: "# ",
+      timeoutMs: 30000,
+    });
+    await machine.request({ type: "serial", data: "stty echo\n", waitFor: "# " });
+    const browserMatches = [...inventory.matchAll(/(?:^|\r?\n)FOUND_BROWSER=([a-z0-9-]+)/g)].map((match) => match[1]);
+    const guiMatches = [...inventory.matchAll(/(?:^|\r?\n)FOUND_GUI=([A-Za-z0-9-]+)/g)].map((match) => match[1]);
+    const memoryMatch = /(?:^|\r?\n)MEM_TOTAL_KIB=(\d+)/.exec(inventory);
+    const rootTotalMatch = /(?:^|\r?\n)ROOT_TOTAL_KIB=(\d+)/.exec(inventory);
+    const rootFreeMatch = /(?:^|\r?\n)ROOT_FREE_KIB=(\d+)/.exec(inventory);
+    const catalog = await loadAssetCatalog();
+    const buildrootAsset = catalog.assets.find((entry) => entry.name === "buildroot-pyproc-i686.bin");
+    if (!buildrootAsset) throw new Error("Buildroot asset metadata is missing");
+    measurements.buildroot = {
+      configuredMemoryBytes: buildrootManifest().v86.options.memory_size,
+      observedMemoryKiB: Number(memoryMatch?.[1] || 0),
+      rootTotalKiB: Number(rootTotalMatch?.[1] || 0),
+      rootFreeKiB: Number(rootFreeMatch?.[1] || 0),
+      guestImageBytes: buildrootAsset.byteLength,
+      browserBinaries: browserMatches,
+      guiPrograms: guiMatches,
+      textColumns: display.inspect().columns,
+      textRows: display.inspect().rows,
+    };
+    check("Buildroot cold boot와 first text screen", machine.state === "running"
+      && firstScreen?.includes("# "), `${timings.buildrootColdBootMs}ms/${display.inspect().columns}x${display.inspect().rows}`);
+    check("Buildroot browser engine 후보 0", browserMatches.length === 0, browserMatches.join(",") || "none");
+    check("Buildroot GUI compositor/window server 후보 0", guiMatches.length === 0, guiMatches.join(",") || "none");
+    check("Buildroot guest memory와 image size 실측",
+      measurements.buildroot.observedMemoryKiB > 0 && measurements.buildroot.guestImageBytes > 0,
+      `${measurements.buildroot.observedMemoryKiB}KiB/${measurements.buildroot.guestImageBytes} image bytes`);
+
+    startedAt = performance.now();
+    await input.sendScanCodes(encodePs2Set1Text("echo nestedinputok\n"));
+    const inputScreen = await waitFor(() => {
+      const text = textFrame(display);
+      return text.includes("nestedinputok") ? text : null;
+    }, 10000);
+    timings.buildrootInputMs = Math.round(performance.now() - startedAt);
+    check("Buildroot PS/2 input reaches guest display", !!inputScreen, `${timings.buildrootInputMs}ms`);
+
+    await machine.request({ type: "serial", data: "nested_value=42\n", waitFor: "# " });
+    await machine.pause();
+    startedAt = performance.now();
+    const snapshot = await machine.snapshot();
+    timings.buildrootSnapshotMs = Math.round(performance.now() - startedAt);
+    measurements.buildroot.snapshotBytes = snapshot.payload.byteLength;
+    await machine.resume();
+    await machine.request({ type: "serial", data: "nested_value=99\n", waitFor: "# " });
+    await machine.pause();
+    startedAt = performance.now();
+    await machine.restore(snapshot);
+    timings.buildrootWarmRestoreMs = Math.round(performance.now() - startedAt);
+    await machine.shutdown();
+    startedAt = performance.now();
+    await machine.restore(snapshot);
+    timings.buildrootColdRestoreMs = Math.round(performance.now() - startedAt);
+    await machine.resume();
+    const restored = await machine.request({ type: "serial", data: "echo NESTED_RESTORED:$nested_value\n", waitFor: "# " });
+    check("Buildroot warm/cold restore와 state bytes", restored.includes("NESTED_RESTORED:42")
+      && snapshot.payload.byteLength > 1024 * 1024,
+      `${timings.buildrootWarmRestoreMs}/${timings.buildrootColdRestoreMs}ms/${snapshot.payload.byteLength} bytes`);
+    measurements.buildroot.hostHeapDeltaBytes = Math.max(0, (performance.memory?.usedJSHeapSize || 0) - heapBefore);
+    await machine.pause();
+    await machine.shutdown();
+  }
+
+  async function inspectPacketCandidate() {
+    const network = new MemoryEthernetSwitch({ maxFrameBytes: 1518, maxQueuedFrames: 64 });
+    let idSequence = 0;
+    const host = new WebMachineHost({
+      idFactory: () => `nested-packet-${++idSequence}`,
+      devices: { console: { kind: "console", write: () => {} }, network },
+    });
+    host.registerAdapter("nested-packet", createV86GuestFactory({
+      V86,
+      adapterVersion: `${V86_ADAPTER_VERSION}-nested-packet-probe-v1`,
+      packetDeviceName: "network",
+    }));
+    const machine = host.createMachine({
+      machineId: "nestedPacket",
+      adapterId: "nested-packet",
+      manifest: buildrootManifest(),
+      permissions: { devices: ["console", "network"] },
+    });
+    let startedAt = performance.now();
+    await machine.boot();
+    timings.buildrootPacketBootMs = Math.round(performance.now() - startedAt);
+    const peer = network.connect({ endpointId: "nestedProbePeer", receive: () => {} });
+    const readRxPackets = async (label) => {
+      const text = await machine.request({
+        type: "serial",
+        data: `echo ${label}:$(cat /sys/class/net/eth0/statistics/rx_packets)\n`,
+        waitFor: "# ",
+      });
+      const match = new RegExp(`${label}:(\\d+)`).exec(text);
+      if (!match) throw new Error(`packet count unavailable: ${text.slice(-500)}`);
+      return Number(match[1]);
+    };
+    const before = await readRxPackets("NESTED_RX_BEFORE");
+    const frame = new Uint8Array(60);
+    frame.fill(255, 0, 6);
+    frame.set([2, 0, 0, 0, 0, 9], 6);
+    frame.set([0x88, 0xb5], 12);
+    startedAt = performance.now();
+    await peer.send(frame);
+    const after = await waitFor(async () => {
+      const count = await readRxPackets("NESTED_RX_AFTER");
+      return count > before ? count : null;
+    }, 10000);
+    timings.buildrootPacketInputMs = Math.round(performance.now() - startedAt);
+    peer.close();
+    measurements.buildroot.packetRxDelta = Number(after || before) - before;
+    check("Buildroot packet NIC receives bounded local frame", Number(after) > before,
+      `${before}->${after || before}/${timings.buildrootPacketInputMs}ms`);
+    await machine.pause();
+    await machine.shutdown();
+  }
+
+  async function inspectGraphicalCandidate() {
+    const screenContainer = document.getElementById("graphicalScreen");
+    const sourceCanvas = screenContainer.querySelector("canvas");
+    const frameSource = new CanvasRgbaFrameSource({ canvas: sourceCanvas });
+    const framebuffer = new MemoryRgbaDisplayDevice({ maxWidth: 1920, maxHeight: 1200,
+      maxFrameBytes: 1920 * 1200 * 4 });
+    const pointer = new MemoryRelativePointerDevice({ maxDelta: 255, maxQueuedEvents: 64 });
+    const host = new WebMachineHost({
+      idFactory: () => "nested-graphical-1",
+      devices: { console: { kind: "console", write: () => {} }, framebuffer, pointer },
+    });
+    host.registerAdapter("nested-graphical", createV86GuestFactory({
+      V86,
+      adapterVersion: `${V86_GRAPHICAL_ADAPTER_VERSION}-nested-browser-probe-v1`,
+      framebufferDeviceName: "framebuffer",
+      framebufferSource: frameSource,
+      pointerDeviceName: "pointer",
+    }));
+    const manifest = graphicalManifest(screenContainer);
+    const machine = host.createMachine({
+      machineId: "nestedGraphical",
+      adapterId: "nested-graphical",
+      manifest,
+      permissions: { devices: ["console", "framebuffer", "pointer"] },
+    });
+    let startedAt = performance.now();
+    await machine.boot();
+    timings.graphicalColdBootMs = Math.round(performance.now() - startedAt);
+    const firstFrame = await waitFor(() => {
+      const frame = framebuffer.readFrame();
+      return frame.revision > 0 && frame.width > 0 ? frame : null;
+    });
+    if (!firstFrame) throw new Error("graphical guest did not present a frame");
+    const pointerReady = await waitFor(async () => {
+      const inspected = await machine.inspect();
+      return inspected.guest?.pointer?.guestEnabled ? inspected : null;
+    });
+    if (!pointerReady) throw new Error("graphical guest pointer did not become ready");
+    const beforeFingerprint = frameFingerprint(firstFrame);
+    startedAt = performance.now();
+    await pointer.move({ deltaX: 80, deltaY: 40 });
+    const movedFrame = await waitFor(() => {
+      const frame = framebuffer.readFrame();
+      return frame.revision > firstFrame.revision && frameFingerprint(frame) !== beforeFingerprint ? frame : null;
+    }, 10000);
+    timings.graphicalInputMs = Math.round(performance.now() - startedAt);
+    const png = await pngFromRgba(movedFrame || firstFrame);
+    const pngSha256 = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", png)),
+      (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const catalog = await loadAssetCatalog();
+    const kolibriComponent = catalog.components.find((entry) => entry.componentId === "kolibri-image-opaque");
+    if (!kolibriComponent) throw new Error("Kolibri provenance component is missing");
+    measurements.graphical = {
+      width: (movedFrame || firstFrame).width,
+      height: (movedFrame || firstFrame).height,
+      pngBytes: png.byteLength,
+      pngSha256,
+      configuredMemoryBytes: manifest.v86.options.memory_size,
+      provenanceStatus: kolibriComponent.provenanceStatus,
+      externalPacketProvider: false,
+      semanticBrowserControl: false,
+    };
+    check("graphical guest first RGBA frame와 pointer input", !!movedFrame,
+      `${timings.graphicalColdBootMs}ms/${timings.graphicalInputMs}ms/${measurements.graphical.width}x${measurements.graphical.height}`);
+    check("graphical guest screenshot PNG와 digest", png.byteLength > 8
+      && png[0] === 137 && png[1] === 80 && pngSha256.length === 64,
+      `${png.byteLength} bytes/${pngSha256.slice(0, 12)}`);
+    check("graphical candidate는 provenance와 web automation 계약 미달",
+      measurements.graphical.provenanceStatus === "opaque-upstream-binary"
+      && !measurements.graphical.externalPacketProvider && !measurements.graphical.semanticBrowserControl,
+      `${measurements.graphical.provenanceStatus}/network=${measurements.graphical.externalPacketProvider}`);
+    await machine.pause();
+    const snapshot = await machine.snapshot();
+    await machine.shutdown();
+    startedAt = performance.now();
+    await machine.restore(snapshot);
+    timings.graphicalColdRestoreMs = Math.round(performance.now() - startedAt);
+    const restoredFrame = await waitFor(() => framebuffer.readFrame().revision > 0 ? framebuffer.readFrame() : null, 10000);
+    check("graphical guest cold restore redraw", !!restoredFrame,
+      `${timings.graphicalColdRestoreMs}ms/${snapshot.payload.byteLength} bytes`);
+    await machine.shutdown();
+    frameSource.destroy();
+  }
+
+  try {
+    await inspectBuildrootCandidate();
+    await inspectPacketCandidate();
+    await inspectGraphicalCandidate();
+    check("v86 nested browser provider 승격 거부",
+      measurements.buildroot.browserBinaries.length === 0
+      && measurements.buildroot.guiPrograms.length === 0
+      && measurements.graphical.provenanceStatus === "opaque-upstream-binary"
+      && measurements.graphical.externalPacketProvider === false
+      && measurements.graphical.semanticBrowserControl === false,
+      "FrameSpace와 NativeCdpSpace가 현재 제품 provider 경계");
+  } catch (error) {
+    check("probe 예외 없음", false, String(error?.stack || error).slice(-1800));
+  }
+
+  const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+  await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ok, checks, timings, measurements }) });
+</script>
+</body>
+</html>

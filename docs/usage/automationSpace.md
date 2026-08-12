@@ -68,6 +68,21 @@ the recorded capabilities, consumes exactly one matching entry at a time, and ow
 
 Recording and replay details are in the [ReplaySpace guide](replaySpace.md).
 
+## Nested browser guest boundary
+
+The current product does not claim a browser engine running inside a v86 guest. The formal
+`nestedBrowserBoundaryProbe` boots the two available guest candidates and keeps that decision executable.
+The reproducible Buildroot guest provides Linux, text display, PS/2 input, a packet NIC, and portable restore,
+but its image contains neither a browser engine nor a graphical server. The graphical Kolibri fixture provides
+RGBA frames, pointer input, PNG capture, and restore, but its image provenance is opaque and it has neither the
+external network provider nor semantic browser-control contract required for automation.
+
+`NativeCdpSpace` is the provider for authoritative Chromium control and compositor screenshots. `FrameSpace`
+is the provider for a cooperative, credentialless page nested in the machine tab. `ReplaySpace` is the provider
+for effect-free reproduction. A future v86 browser provider must place a reproducibly built browser engine,
+graphical stack, external network boundary, semantic actions, screenshot artifacts, permission policy, and
+restore semantics in one guest before it can join this list. Booting a graphical guest alone is not sufficient.
+
 Close is idempotent. The Control host first rejects new requests, aborts active work, and waits for every terminal
 to settle. The router then drains its FIFO before closing the provider. After close, every new operation fails
 with `AUTOMATION_SPACE_CLOSED` before provider code. The provider is responsible for dropping session-owned
