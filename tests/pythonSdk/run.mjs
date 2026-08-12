@@ -124,7 +124,7 @@ try {
     wheelMetadata.includes("Version: 0.0.17") && sourceMetadata.includes("Version: 0.0.17"));
 
   const protocol = run(sourcePython, [join(HERE, "protocolContract.py")], { cwd: installed.appDir });
-  check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("15 fixtures"));
+  check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("16 fixtures"));
 
   const productPath = join(installed.appDir, "node_modules", ".bin");
   const journey = await runAsync(wheelPython, [join(HERE, "productJourney.py"), configPath,

@@ -86,6 +86,30 @@ export async function assertControlProtocolContract() {
     && writeFailure.outcome === "outcomeUnknown" && writeFailure.retryable === false,
   "JS control client의 request write 실패가 canonical outcome을 잃었다");
 
+  let cancelWriteCount = 0;
+  const cancelReadable = new PassThrough();
+  const cancelWritable = new PassThrough();
+  const cancelOriginalWrite = cancelWritable.write.bind(cancelWritable);
+  cancelWritable.write = (chunk, callback) => {
+    cancelWriteCount += 1;
+    if (cancelWriteCount < 3) return cancelOriginalWrite(chunk, callback);
+    queueMicrotask(() => callback(new Error("cancel write failed")));
+    return true;
+  };
+  const cancelClient = new ControlStdioClient({ readable: cancelReadable, writable: cancelWritable });
+  cancelReadable.write(encodeControlFrame({ ...hello, requestId: "hello:client" }));
+  await cancelClient.ready;
+  const cancelPending = cancelClient.request("machine.run", { code: "effect" }, { requestId: "cancel:write" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const cancelFailure = await errorOf(() => cancelClient.cancel("cancel:write"));
+  const cancelPendingFailure = await errorOf(() => cancelPending);
+  assert(cancelFailure instanceof ControlRemoteError && cancelFailure.code === "CONTROL_CONNECTION_LOST"
+    && cancelFailure.outcome === "outcomeUnknown" && cancelFailure.retryable === false
+    && cancelPendingFailure instanceof ControlRemoteError
+    && cancelPendingFailure.code === "CONTROL_CONNECTION_LOST"
+    && cancelPendingFailure.outcome === "outcomeUnknown" && cancelPendingFailure.retryable === false,
+  "JS control client의 cancel write 실패와 원 request가 canonical outcome으로 함께 닫히지 않았다");
+
   const mapped = Object.entries(CONTROL_TOOL_OPERATIONS);
   assert(mapped.length === 14 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
     && controlToolForOperation(operation) === tool), "MCP tool과 control operation 14종 mapping이 양방향이 아니다");

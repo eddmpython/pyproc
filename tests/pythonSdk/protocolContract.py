@@ -139,4 +139,47 @@ assert writeError is not None and writeError.code == "CONTROL_CONNECTION_LOST"
 assert writeError.outcome == "outcomeUnknown" and writeError.retryable is False
 assert writeClient._pending == {}
 
-print("python sdk protocol contract green: 15 fixtures")
+
+class ToggleWritable:
+    def __init__(self):
+        self.failed = False
+
+    def write(self, text):
+        if self.failed:
+            raise BrokenPipeError("cancel pipe closed")
+        return len(text)
+
+    def flush(self):
+        if self.failed:
+            raise BrokenPipeError("cancel flush closed")
+
+
+cancelClient = object.__new__(PyProcClient)
+cancelClient._stateLock = threading.RLock()
+cancelClient._writeLock = threading.Lock()
+cancelClient._helloEvent = threading.Event()
+cancelClient._helloEvent.set()
+cancelClient._connectionError = None
+cancelClient._closed = False
+cancelClient._sequence = 0
+cancelClient._used = set()
+cancelClient._pending = {}
+cancelClient.writable = ToggleWritable()
+pendingRequest = cancelClient.requestAsync("machine.run", {"code": "cancelEffect = True"})
+cancelClient.writable.failed = True
+cancelWriteError = None
+try:
+    cancelClient.cancel(pendingRequest.requestId)
+except ControlError as error:
+    cancelWriteError = error
+pendingError = None
+try:
+    pendingRequest.future.result(1)
+except ControlError as error:
+    pendingError = error
+assert cancelWriteError is not None and cancelWriteError.code == "CONTROL_CONNECTION_LOST"
+assert cancelWriteError.outcome == "outcomeUnknown" and cancelWriteError.retryable is False
+assert pendingError is not None and pendingError.code == "CONTROL_CONNECTION_LOST"
+assert pendingError.outcome == "outcomeUnknown" and pendingError.retryable is False
+
+print("python sdk protocol contract green: 16 fixtures")
