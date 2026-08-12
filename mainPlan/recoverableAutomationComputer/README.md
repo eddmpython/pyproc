@@ -60,8 +60,11 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
 - 단계 2 완료: runtime dependency 0 `pyproc-control` Python SDK를 wheel과 source distribution으로
   빌드하고 서로 다른 clean venv에 설치했다. PATH 기반 제품 시작, Python과 checkpoint, 전달 뒤
   cancel, permission 사전 거부, 실제 PNG attachment와 digest 여정이 Edge에서 4/4 통과했다.
-- 단계 3 진행: 같은 operation contract를 fake와 실제 provider가 공유하도록 `AutomationSpace`를
-  추출한다.
+- 단계 3 완료: `AutomationSpaceRouter`가 10개 canonical operation, authorize-before-execute,
+  pre-cancel, lifecycle, artifact, restore와 replay 경계를 소유한다. fake provider 11/11과 정식
+  contract suite가 통과했고 설치 MCP, native, Python 경로가 같은 router를 사용한다.
+- 단계 4 진행: 기존 Chromium 구현을 `NativeCdpSpace` provider로 승격하고 CDP 능력과 오류를
+  provider 계약으로 고정한다.
 
 ## 제품 최소선
 

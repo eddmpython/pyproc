@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 import { createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
 import { McpBrowserControl, createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
+import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
+import { BrowserControlSpace } from "../automationSpace/browserControlSpace.js";
 import { ControlHost } from "./controlHost.js";
-import { controlOperationCatalog, controlToolForOperation } from "./controlOperations.js";
+import { controlOperationCatalog } from "./controlOperations.js";
 import { PageCommandBridge } from "./pageCommandBridge.mjs";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 180000;
@@ -122,6 +124,7 @@ export async function createControlProduct({ env = process.env } = {}) {
   const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html?indexURL=${encodeURIComponent(engineIndexURL)}`;
   let browserSession = null;
   let browserControl = null;
+  let automationRouter = null;
   try {
     browserSession = launchBrowser(pageUrl, {
       prefix: "pyprocControl-",
@@ -129,6 +132,8 @@ export async function createControlProduct({ env = process.env } = {}) {
     });
     browserControl = browserEnabled
       ? new McpBrowserControl({ profileDir: browserSession.profile, config: browserConfig }) : null;
+    automationRouter = browserControl
+      ? new AutomationSpaceRouter(new BrowserControlSpace(browserControl)) : null;
     const operationCatalog = controlOperationCatalog(tools);
     const operationHandlers = Object.fromEntries(operationCatalog.map(({ name, toolName }) => [name,
       async (input, { signal, requestId }) => {
@@ -136,7 +141,7 @@ export async function createControlProduct({ env = process.env } = {}) {
           await pageBridge.waitForReady();
           return pageBridge.dispatch(name, input, { signal, requestId });
         }
-        if (browserControl) return browserControl.invoke(controlToolForOperation(name), input, { signal });
+        if (automationRouter) return automationRouter.invoke(name, input, { signal, requestId });
         const error = new Error(`control operation is unavailable: ${name}`);
         error.code = "CONTROL_OPERATION_UNAVAILABLE";
         error.outcome = "notSent";
@@ -146,20 +151,21 @@ export async function createControlProduct({ env = process.env } = {}) {
     const host = new ControlHost({ handlers: operationHandlers, operations: operationCatalog });
     let closed = false;
     return Object.freeze({
-      tools, operationCatalog, host, pageBridge, browserControl, browserSession, serverOrigin, pageUrl,
+      tools, operationCatalog, host, pageBridge, automationRouter, browserControl, browserSession, serverOrigin, pageUrl,
       async close() {
         if (closed) return;
         closed = true;
         host.close("control product is shutting down");
         pageBridge.close();
-        try { await browserControl?.close(); } catch (error) {}
+        try { await automationRouter?.close(); } catch (error) {}
         try { browserSession?.close(); } catch (error) {}
         await new Promise((resolveClose) => server.close(resolveClose));
       },
     });
   } catch (error) {
     pageBridge.close();
-    try { await browserControl?.close(); } catch (closeError) {}
+    try { await automationRouter?.close(); } catch (closeError) {}
+    if (!automationRouter) try { await browserControl?.close(); } catch (closeError) {}
     try { browserSession?.close(); } catch (closeError) {}
     await new Promise((resolveClose) => server.close(resolveClose));
     throw error;

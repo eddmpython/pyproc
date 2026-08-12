@@ -323,9 +323,10 @@ export class McpBrowserControl {
     this._profileDir = profileDir;
     this._brokerFactory = brokerFactory;
     this._auditWriter = auditWriter;
+    this._authorities = new WeakSet();
   }
 
-  async invoke(tool, args = {}, { signal } = {}) {
+  authorize(tool, args = {}) {
     if (!this._toolNames.has(tool)) throw new Error(`unknown browser tool: ${tool}`);
     if (tool === "browserOpen" && args.expectedRisk !== "externalEffect") {
       throw permissionError("browserOpen requires expectedRisk externalEffect");
@@ -339,6 +340,20 @@ export class McpBrowserControl {
     if (tool === "browserObserve" && args.expectedRisk !== "read") {
       throw permissionError("browserObserve requires expectedRisk read");
     }
+    const authority = Object.freeze({ tool });
+    this._authorities.add(authority);
+    return authority;
+  }
+
+  invoke(tool, args = {}, { signal } = {}) {
+    return this.invokeAuthorized(tool, args, { signal, authority: this.authorize(tool, args) });
+  }
+
+  async invokeAuthorized(tool, args = {}, { signal, authority } = {}) {
+    if (!authority || !this._authorities.has(authority) || authority.tool !== tool) {
+      throw permissionError("browser operation requires a current authorization token");
+    }
+    this._authorities.delete(authority);
     const { broker, automation, artifactStore } = await this._ready();
     if (tool === "browserInspect") {
       await artifactStore.reap();

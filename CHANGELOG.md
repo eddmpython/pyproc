@@ -32,6 +32,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   caller has already received failure. Duplicate MCP request IDs can no longer overwrite an active request
   and execute a second effect. Reloaded machine pages fence late results with a new page epoch.
 
+### Changed
+
+- Browser automation now enters through the provider-neutral `AutomationSpace` contract. Its router fixes
+  authorization before execution, supported operations, idempotent close, opaque artifacts, and explicit
+  Python-restore plus provider-replay boundaries. The current Chromium implementation retains its external
+  behavior behind a single-use authority token.
+
 한국어 요약: MCP와 native NDJSON이 하나의 ControlHost, operation, 취소, 오류, attachment 계약을
 공유한다. 공식 Python SDK는 별도 JavaScript 코드 없이 영속 Python, checkpoint, browser action,
 screenshot byte를 사용하며 wheel과 source distribution 설치 여정으로 검증한다. 전달 전 취소된

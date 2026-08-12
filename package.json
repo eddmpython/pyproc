@@ -67,6 +67,7 @@
     "scripts/mcpProductConfig.mjs",
     "scripts/mcpSandboxServer.mjs",
     "scripts/staticServer.mjs",
+    "scripts/automationSpace",
     "scripts/controlProtocol",
     "scripts/browserControl",
     "README.md",

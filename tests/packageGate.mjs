@@ -81,6 +81,8 @@ try {
     ["scripts", "controlProtocol", "mcpControlAdapter.js"],
     ["scripts", "controlProtocol", "controlClient.js"],
     ["scripts", "controlProtocol", "controlProduct.mjs"],
+    ["scripts", "automationSpace", "automationSpace.js"],
+    ["scripts", "automationSpace", "browserControlSpace.js"],
     ["scripts", "browserControl", "mcpMachine.html"],
     ["scripts", "browserControl", "browserArtifactStore.js"],
   ]) {
