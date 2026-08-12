@@ -12,6 +12,40 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.18 - 2026-08-12
+
+### Added
+
+- **PyProc Eyes adds the APX 1.0 perception contract.** Opt-in `automation.observe` calls now return a bounded
+  semantic, structural, spatial, and temporal graph with stable entity identity, short-lived locator
+  capability, full or delta delivery, attention queries, explicit truncation, provenance, and canonical
+  integrity. Native CDP fuses Accessibility and DOMSnapshot facts. FrameSpace provides the same envelope at
+  its honest cooperative-page boundary.
+
+- **Pixels are captured only when structured evidence is unresolved.** Native CDP can attach verified
+  overview and entity-crop artifacts for canvas, unlabelled images, and unlabelled controls. MIME type, byte
+  length, SHA-256, quota, permission, and artifact lifetime remain under the existing product host.
+
+- **External effects can carry Action Evidence.** An action with `verify` captures before and after APX
+  observations, sends the effect once, correlates broker-issued network request references, and separates
+  `confirmed`, `contradicted`, `ambiguous`, `notObserved`, and `outcomeUnknown` from transport outcome.
+
+- **Python receives a first-class perception entry point.** `client.perception(sessionRef)` provides typed
+  observe, query, single-match, actionability, delta, and evidence-backed action helpers over the same Control
+  Protocol operations used by native and MCP clients. Recording and ReplaySpace preserve APX terminals and
+  artifacts without repeating live effects.
+
+### Compatibility
+
+- This patch adds no npm root export, Control Protocol operation, or breaking JavaScript type signature.
+  Legacy observations remain unchanged unless `representation: "apx.graph"` is requested. Native CDP reports
+  live conformance level L4, FrameSpace reports L3 with APX visual mode off, and no provider claims inference.
+
+한국어 요약: PyProc Eyes와 APX 1.0을 추가했다. 의미, 구조, 공간, 시간, 선택적 픽셀을 bounded graph로
+결합하고 행동 전후의 DOM 및 network evidence를 한 번만 전송되는 effect와 묶는다. Native CDP,
+FrameSpace, MCP, Control, Replay, Python SDK가 같은 의미론을 사용하며 기존 관찰 형식은 opt-in 밖에서
+그대로 유지된다.
+
 ## 0.0.17 - 2026-08-12
 
 ### Fixed
