@@ -27,7 +27,8 @@ workflow는 바뀌지 않는다.
 |---|---|---|---|---|---|
 | 2026-08-12 | controlProtocolProbe | Node 22.19, NDJSON wire | GREEN 32/32. frame/상태 양성과 schema/version/order/digest 음성 fixture | request ID 단회성, terminal 단일성, attachment 선검증을 갖춘 v1 채택 | shared host와 설치 제품 게이트로 승격 |
 | 2026-08-12 | controlProtocolProduct | packed npm, Edge, Pyodide | GREEN 6/6. hello 14종, Python persistence, post-send cancel, PNG attachment와 digest | MCP와 native NDJSON이 같은 ControlHost와 page epoch bridge를 사용 | Python SDK가 이 wire를 외부 구현 없이 소비 |
+| 2026-08-12 | pythonSdk | Python 3.13, clean wheel/sdist venv, packed npm, Edge | GREEN 4/4. 배포물 2종, codec 11 fixtures, checkpoint, cancel, permission, PNG digest | runtime dependency 0 공식 SDK가 PATH에서 설치 제품을 직접 시작 | AutomationSpace provider contract 추출 |
 
 ## 판정
 
-진행 중 (Python SDK wheel, source distribution, 설치 통합)
+진행 중 (AutomationSpace provider contract)

@@ -311,6 +311,18 @@ npx pyproc-control --config ./pyproc-mcp.json
 전달 전 cancel, 전달 뒤의 정직한 `outcomeUnknown`, SHA-256 검증 binary attachment를 제공한다.
 wire와 operation 계약은 [Control Protocol v1 가이드](docs/usage/controlProtocol.md)에 있다.
 
+Python application은 JavaScript 작성 없이 공식 runtime dependency 0 SDK를 사용한다:
+
+```python
+from pyprocControl import PyProcClient
+
+with PyProcClient.start("pyproc-mcp.json") as client:
+    print(client.runPython("40 + 2").output["value"])
+```
+
+[Python SDK 가이드](docs/usage/pythonSdk.md)는 설치, checkpoint 복구, cancel, browser action,
+검증된 screenshot byte를 설명한다.
+
 `{ "enabled": false }`이면 서버는 `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`
 네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
 별도 allowlist raw command, artifact read/delete를 위한 열 개 도구가 추가된다.

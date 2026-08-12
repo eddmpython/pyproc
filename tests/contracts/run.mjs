@@ -14,6 +14,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "moduleBoundaries.mjs",
   "nestedPatchScope.mjs",
   "publicSurface.mjs",
+  "pythonSdk.mjs",
   "retentionPolicy.mjs",
   "runtimeCapabilityClusters.mjs",
   "runtimeContract.mjs",

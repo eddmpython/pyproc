@@ -314,6 +314,18 @@ This entrance reserves stdout for strict NDJSON. It provides single-use request 
 pre-delivery cancellation, honest post-delivery `outcomeUnknown`, and SHA-256 verified binary attachments.
 See the [Control Protocol v1 guide](docs/usage/controlProtocol.md) for the wire and operation contract.
 
+Python applications use the official zero-dependency SDK without writing JavaScript:
+
+```python
+from pyprocControl import PyProcClient
+
+with PyProcClient.start("pyproc-mcp.json") as client:
+    print(client.runPython("40 + 2").output["value"])
+```
+
+The [Python SDK guide](docs/usage/pythonSdk.md) covers installation, checkpoint recovery, cancellation,
+browser actions, and verified screenshot bytes.
+
 With `{ "enabled": false }`, the server exposes exactly four Python tools: `pythonRun`, `checkpointSave`,
 `checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
 semantic observation, ordered actions, separately allowlisted raw commands, and artifact read/delete.

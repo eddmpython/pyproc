@@ -12,6 +12,31 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **One language-neutral product host for native clients and MCP.** The installed `pyproc-control` command
+  exposes strict versioned NDJSON with single-use request IDs, exactly one terminal per request, page-epoch
+  fencing, queue removal on pre-delivery cancellation, honest post-delivery `outcomeUnknown`, and ordered
+  SHA-256 verified binary attachments. The MCP adapter now uses the same operation catalog and host instead
+  of owning separate execution semantics.
+
+- **An official zero-runtime-dependency Python SDK.** The separately built `pyproc-control` wheel and source
+  distribution start the npm product from `PATH` and expose persistent Python, checkpoint recovery,
+  cancellable requests, browser lifecycle and actions, stable errors, artifacts, and verified screenshot
+  bytes. Both distribution formats install in clean environments, and Chrome plus Edge execute the installed
+  Python journey.
+
+### Fixed
+
+- Timed out or cancelled queued page commands are removed before delivery instead of running later after the
+  caller has already received failure. Duplicate MCP request IDs can no longer overwrite an active request
+  and execute a second effect. Reloaded machine pages fence late results with a new page epoch.
+
+한국어 요약: MCP와 native NDJSON이 하나의 ControlHost, operation, 취소, 오류, attachment 계약을
+공유한다. 공식 Python SDK는 별도 JavaScript 코드 없이 영속 Python, checkpoint, browser action,
+screenshot byte를 사용하며 wheel과 source distribution 설치 여정으로 검증한다. 전달 전 취소된
+명령의 지연 실행, 중복 request ID 효과, page reload 뒤 late result 혼입을 막았다.
+
 ## 0.0.15 - 2026-08-12
 
 ### Added

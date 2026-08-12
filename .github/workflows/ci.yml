@@ -105,6 +105,10 @@ jobs:
       - run: npm run test:control-product
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      - run: python -m pip install -r pythonSdk/buildRequirements.txt
+      - run: npm run test:python-sdk
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       # Opt-in browser automation broker: compact observe, 고수준 action pipeline, Python restore와
       # 외부 Chromium effect의 비복원 경계, permission, 취소와 사망 outcome을 같은 MCP 흐름에서 검증한다.
       - run: npm run test:browser-control
@@ -154,6 +158,8 @@ jobs:
       - run: npm run test:mcp
       - run: npm run test:mcp-product
       - run: npm run test:control-product
+      - run: python -m pip install -r pythonSdk/buildRequirements.txt
+      - run: npm run test:python-sdk
       - run: npm run test:browser-control
       - run: npm run test:browser-control-stress
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

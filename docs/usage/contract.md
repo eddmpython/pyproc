@@ -44,20 +44,26 @@ Forbidden boundaries:
 - Do not put product UI or domain policy into pyproc. pyproc provides runtime and capabilities only.
 - Worker and Service Worker files, which the browser requires to be same-origin, are handled as a deployment-asset contract rather than as public JavaScript imports.
 
-## Installed command boundary
+## Installed command and Python boundary
 
-The package ships three stable commands without adding a JavaScript subpath:
+The npm package ships four stable commands without adding a JavaScript subpath:
 
 | Command | Product contract |
 |---|---|
 | `pyproc-assets` | Copy the verified worker graph and emit its SRI manifest |
 | `pyproc-engine` | Download and verify the pinned Pyodide distribution |
+| `pyproc-control` | Validate the manifest and start the language-neutral Control Protocol over strict NDJSON |
 | `pyproc-mcp` | Validate a version 1 manifest and start the persistent Python plus optional browser-automation MCP server |
 
-`pyproc-mcp` is the only supported entrance to its package-internal Node files. Deep imports from
+`pyproc-control` and `pyproc-mcp` are the supported entrances to their package-internal Node files. Deep imports from
 `scripts/browserControl/`, `mcpProductConfig.mjs`, or `mcpSandboxServer.mjs` are not public contracts. The
 command, its manifest, and its behavior are browser-gated through the packed and installed package. See the
-[browser automation product guide](browserAutomation.md).
+[browser automation product guide](browserAutomation.md) and [Control Protocol guide](controlProtocol.md).
+
+The separately built `pyproc-control` Python distribution is the official native client. Its `PyProcClient`
+starts the npm command from `PATH`, validates the handshake and every frame, exposes cancellation and stable
+errors, and withholds binary output until byte length and SHA-256 verification succeed. It has no runtime
+dependency and adds no JavaScript export. See the [Python SDK guide](pythonSdk.md).
 
 ## Runtime-asset deployment contract
 

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools==80.10.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyproc-control"
+version = "0.0.15"
+description = "Python client for the pyproc Control Protocol"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MPL-2.0"
+license-files = ["LICENSE.txt"]
+authors = [{ name = "pyproc contributors" }]
+keywords = ["python", "browser", "automation", "sandbox", "checkpoint"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/eddmpython/pyproc"
+Documentation = "https://github.com/eddmpython/pyproc/blob/main/docs/usage/pythonSdk.md"
+Issues = "https://github.com/eddmpython/pyproc/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pyprocControl*"]
+
+[tool.setuptools.package-data]
+pyprocControl = ["py.typed"]

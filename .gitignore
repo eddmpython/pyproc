@@ -13,6 +13,9 @@ Thumbs.db
 .idea/
 scratch/
 *.local
+__pycache__/
+*.py[cod]
+*.egg-info/
 
 # 대형 엔진 wasm 바이너리는 레포 자산 0 유지(소비자가 wasmURL로 제공, 재현 레시피는 README).
 # src의 vendored shim(browser_wasi_shim)은 라이선스 고지(LICENSE.browserWasiShim) 후 추적한다.

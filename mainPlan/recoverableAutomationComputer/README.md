@@ -57,7 +57,11 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
 - 단계 1 완료: strict NDJSON codec, 단일 ControlHost, page epoch와 queued cancel, ordered binary
   attachment를 구현했다. 기존 MCP 12/12, 설치 MCP 10/10, native 설치 제품 6/6, browser control
   71/71과 48-action stress가 같은 host에서 통과했다.
-- 단계 2 진행: 공식 Python SDK의 wheel, source distribution과 깨끗한 설치 통합 시험을 구현한다.
+- 단계 2 완료: runtime dependency 0 `pyproc-control` Python SDK를 wheel과 source distribution으로
+  빌드하고 서로 다른 clean venv에 설치했다. PATH 기반 제품 시작, Python과 checkpoint, 전달 뒤
+  cancel, permission 사전 거부, 실제 PNG attachment와 digest 여정이 Edge에서 4/4 통과했다.
+- 단계 3 진행: 같은 operation contract를 fake와 실제 provider가 공유하도록 `AutomationSpace`를
+  추출한다.
 
 ## 제품 최소선
 
