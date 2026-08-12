@@ -18,6 +18,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 - Fatal MCP protocol errors now arm the five-second exit watchdog before waiting for the stdout flush callback.
   A stalled callback can no longer prevent process termination after the fatal terminal reaches the client.
+- The Native APX product gate now creates and loads its inspected target through the browser broker, removing a
+  Chromium startup-tab race while preserving fail-closed origin checks.
 
 ### Compatibility
 

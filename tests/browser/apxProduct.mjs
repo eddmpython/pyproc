@@ -9,7 +9,6 @@ import { APX_WEB_COMPUTED_STYLES, parseWebDomSnapshot } from "../../scripts/perc
 import { launchBrowser } from "./harness.mjs";
 
 const timeoutMs = Number(process.env.PYPROC_GATE_TIMEOUT || 120000);
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const server = createStaticServer(async (request, response) => {
   const url = new URL(request.url, "http://fixture.invalid");
   if (url.pathname !== "/apxProbeOrder") return false;
@@ -35,7 +34,7 @@ const check = (name, pass, info = "") => {
 
 console.log("APX Native CDP product gate");
 try {
-  browser = launchBrowser(targetUrl, {
+  browser = launchBrowser("about:blank", {
     prefix: "pyprocApxProductProbe-",
     extraArgs: ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"],
   });
@@ -48,13 +47,7 @@ try {
     maxRisk: "externalEffect",
     timeoutMs,
   });
-  let target = null;
-  const deadline = Date.now() + timeoutMs;
-  while (!target && Date.now() < deadline) {
-    target = (await broker.listTargets()).find((entry) => entry.url === targetUrl);
-    if (!target) await delay(50);
-  }
-  if (!target) throw new Error("APX product target did not become ready");
+  const target = await broker.openTarget(targetUrl, { waitUntil: "load" });
   const sessionRef = await broker.attach(target.targetRef);
   artifactStore = new BrowserArtifactStore({ root: join(browser.profile, "apxProductArtifacts") });
   automation = new BrowserAutomation({ port: broker.port, actions: actionNames, artifactStore });
