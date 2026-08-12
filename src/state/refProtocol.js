@@ -115,12 +115,18 @@ export async function commitState(cryptoProvider, store, input = {}) {
     const pageList = [...pages];
     const inFlight = new Map();
     const addresses = await mapBounded(pageList, OBJECT_WRITE_CONCURRENCY, async ([p, source]) => {
-      // 호출자가 "이 페이지는 이미 이 주소에 저장돼 있다"를 단언할 수 있다. 그 단언이 틀리면
-      // tree가 없는 오브젝트를 가리키므로, 단언은 같은 저장소에 대한 직전 커밋의 성공과
-      // 페이지 해시 불변을 함께 확인한 쪽만 할 수 있다(저널의 주소 캐시가 그 조건이다).
+      // 주소 cache는 단언이 아니라 hint다. pack/prune이나 다른 controller가 그 오브젝트를
+      // 지웠을 수 있으므로 현재 store에서 존재를 다시 확인한다. 없으면 함께 받은 lazy bytes로
+      // 주소화하고 쓴다. fallback이 없는데 주소도 없으면 깨진 tree를 쓰지 말고 명시 오류다.
       if (source && typeof source === "object" && typeof source.address === "string") {
-        counters.reused++;
-        return source.address;
+        if (await store.hasObject(source.address)) {
+          counters.reused++;
+          return source.address;
+        }
+        if (source.bytes === undefined) {
+          throw new PyProcError("PYPROC_STATE_CORRUPT", `commitState: cached object is missing (${source.address.slice(0, 20)}..)`);
+        }
+        source = source.bytes;
       }
       const bytes = typeof source === "function" ? source() : source;
       return putObject(cryptoProvider, store, bytes, counters, "pagesWrote", inFlight);

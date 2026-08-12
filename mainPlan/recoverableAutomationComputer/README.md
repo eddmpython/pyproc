@@ -50,6 +50,12 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
 | 7 | v86 browser probe | cold/warm boot, heap, 첫 화면, 입력, network, screenshot 수치 | 제품 최소선 충족 시 provider 후보 계약, 미달 시 명시적 경계 문서 |
 | 8 | 제품 졸업 | 설치물 양쪽 언어 여정, 전체 Node/브라우저/type 게이트, 계약 현실표 정리 | attempts 제거, 현재 문서 갱신, 이 이니셔티브 폴더 삭제 |
 
+## 현재 실행 위치
+
+- 단계 0 완료: 결정적 RED를 거쳐 Runtime+directory coordination domain, 주소 hint 존재 대조,
+  storage epoch 공유를 구현했다. 정식 Edge 게이트 137/137과 Node 게이트 3595/3595가 통과했다.
+- 단계 1 진행: Control Protocol의 wire fixture와 음성 시험부터 시작한다.
+
 ## 제품 최소선
 
 - 첫 명령부터 오류까지 request ID와 space ID로 추적 가능하다.
@@ -62,6 +68,6 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
 
 ## 외부 제품 검증
 
-기존 `xlpod`와 `codaro` 점검 기록은 provider 구현의 사용자 여정 입력으로 사용한다. pyproc에서 고쳐야
-하는 결함은 이 이니셔티브에서 구현하고, 각 제품이 소유한 GUI와 학습 흐름 개선은 해당 저장소의
-계획 문서에만 남긴다. 다른 저장소를 pyproc 구현의 우회 경로로 수정하지 않는다.
+기존 외부 제품 점검 기록은 provider 구현의 사용자 여정 입력으로 사용한다. pyproc에서 고쳐야 하는
+결함은 이 이니셔티브에서 구현하고, 각 제품이 소유한 GUI와 학습 흐름 개선은 해당 저장소의 계획
+문서에만 남긴다. 다른 저장소를 pyproc 구현의 우회 경로로 수정하지 않는다.

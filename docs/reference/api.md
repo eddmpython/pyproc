@@ -335,6 +335,12 @@ The WAL engine under `machine.history`'s durable verbs, constructed via
 success/failure (`PYPROC_JOURNAL_IO`); `cfg.autoPack` packs past a loose-blob threshold;
 `cfg.pruneAfterCommit` trims the checkpoint tree each commit.
 
+All journal facades created from the same Runtime and directory-handle object form one coordination
+domain. Commit, recover, branch, adopt, pack, prune, and delete are ordered through that domain;
+page-address hints and storage-handle invalidation are shared. This closes races inside one Runtime.
+A raw journal spanning tabs still needs an elected owner; the durable machine provides that owner
+through its existing lock and fence contract.
+
 A successful commit writes `journalMarker.json` only after HEAD is complete. If that committed
 marker remains while HEAD and PREV are both absent, `recover()` raises
 `PYPROC_JOURNAL_EVICTED` instead of impersonating a fresh machine. `delete()` removes the backing

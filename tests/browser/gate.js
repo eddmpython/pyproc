@@ -370,10 +370,9 @@ try {
   check("journal: 복원 후 유휴 커밋 발생(복원 상태의 durable 반영)",
     commitsAfterRun >= 1 && commitsAfterRestore > commitsAfterRun, `run 후 ${commitsAfterRun}, 복원 후 ${commitsAfterRestore}`);
 
-  // 주소 캐시: 해시가 그대로인 페이지는 SHA-256도 저장소 조회도 다시 하지 않는다. 커밋 비용이
-  // "직전 변경분"이 아니라 "누적 델타"에 비례하던 자리다. 재사용이 실제로 일어나는지(효과)와
-  // 그렇게 단언한 주소로도 부활이 성립하는지(정확성)를 함께 본다. 후자가 없으면 이 캐시는
-  // tree가 없는 오브젝트를 가리키게 만드는 조용한 오염 장치다.
+  // 주소 캐시: 해시가 그대로인 페이지는 SHA-256을 다시 하지 않고 기존 주소를 hint로 쓴다.
+  // 저장소 존재 대조 뒤 재사용이 실제로 일어나는지(효과)와 그 주소로 부활이 성립하는지(정확성)를
+  // 함께 본다. 후자가 없으면 이 cache는 tree가 없는 오브젝트를 가리키는 조용한 오염 장치다.
   rt.run("jaddr = 1");
   const cacheFirst = await gj.commit();
   rt.run("jaddr = 2");
@@ -383,6 +382,45 @@ try {
   check("journal 주소 캐시: 불변 페이지는 재사용하고 그 주소로 부활한다",
     !!cacheFirst && cacheSecond && cacheSecond.reused > 0 && !!cacheRecovered && rt.run("jaddr") === 2,
     `1차 reused ${cacheFirst && cacheFirst.reused}, 2차 reused ${cacheSecond && cacheSecond.reused}/${cacheSecond && cacheSecond.pages}p, 부활 ${cacheRecovered && cacheRecovered.pages}p`);
+
+  // 같은 Runtime+directory의 여러 facade는 coordination domain 하나다. writer가 X 주소를
+  // 기억한 뒤 collector가 X를 HEAD/PREV 밖으로 밀고 pack하면 X 전용 blob이 사라진다. 현재
+  // 저장소를 확인하지 않고 writer cache를 단언하던 코드는 성공한 HEAD가 없는 blob을 가리켰고,
+  // recover가 PREV로 후퇴했다. 이 수명주기는 확률 없이 그 결함을 재현한 음성 시험의 정식 승격이다.
+  const coordName = "pyprocGateJournalCoordination";
+  try { await jRootDir.removeEntry(coordName, { recursive: true }); } catch (e) {}
+  const coordDir = await jRootDir.getDirectoryHandle(coordName, { create: true });
+  const coordWriter = rt.enableJournal({ dir: coordDir, reactive, includeHome: false });
+  const coordCollector = rt.enableJournal({ dir: coordDir, reactive, includeHome: false });
+  const coordBase = reactive.checkpoint();
+  rt.run("journalCoordPayload = 'coord-state-' * 100000");
+  const coordState = reactive.checkpoint();
+  const coordFirst = await coordWriter.commit();
+  reactive.restoreLive(coordBase.index);
+  rt.run("journalCoordReplacement = 'a'"); await coordCollector.commit();
+  rt.run("journalCoordReplacement = 'b'"); await coordCollector.commit();
+  const coordPack = await coordCollector.pack();
+  reactive.restoreLive(coordState.index);
+  const coordStaleCommit = await coordWriter.commit();
+  rt.run("journalCoordPayload = 'clobbered'");
+  const coordRecovered = await coordCollector.recover();
+  const coordValue = rt.run("globals().get('journalCoordPayload', None)");
+  check("journal coordination: 다른 facade의 pack 뒤 stale 주소를 HEAD에 싣지 않는다",
+    !!coordFirst && !!coordPack && !!coordStaleCommit && !!coordRecovered
+    && coordRecovered.fallback !== true && coordValue === "coord-state-".repeat(100000),
+    `pack ${coordPack && coordPack.packed}, fallback=${coordRecovered && coordRecovered.fallback}, value=${typeof coordValue === "string" ? coordValue.length : "none"}`);
+
+  // delete도 coordination domain 전체의 storage handle 수명을 올린다. 삭제하지 않은 facade가
+  // 예전 blob/state handle로 유령 쓰기를 하지 않고 새 저장소를 만들어야 한다.
+  await coordCollector.delete();
+  rt.run("journalCoordReborn = 17");
+  const coordReborn = await coordWriter.commit();
+  rt.run("journalCoordReborn = 999");
+  const coordRebornRecovered = await coordCollector.recover();
+  check("journal coordination: 다른 facade의 delete 뒤 새 저장소로 재커밋한다",
+    !!coordReborn && !!coordRebornRecovered && rt.run("journalCoordReborn") === 17,
+    `wrote ${coordReborn && coordReborn.wrote}, recovered ${coordRebornRecovered && coordRebornRecovered.pages}p`);
+  await jRootDir.removeEntry(coordName, { recursive: true });
 
   // pack/prune: loose CAS를 pack 파일 1개로 묶고도 recover가 성립하는가. 이 경로는 그동안
   // 자동 게이트가 없었고 수동 probe(journalPackProbe)로만 검증됐다. pack은 blob을 옮기는

@@ -700,7 +700,7 @@ declare class Init {
 }
 
 export interface JournalConfig {
-  /** Directory the journal lives in (OPFS or similar). The caller supplies it. */
+  /** Directory the journal lives in (OPFS or similar). Facades using the same Runtime and handle share one coordination domain. */
   dir: FileSystemDirectoryHandle;
   /** Controller whose cp0 is the replay boundary (the reactive from bootSession). Required for revival. */
   reactive: ReactiveController;
@@ -797,6 +797,8 @@ export interface JournalRecoverResult {
  * survives even when a hibernate hook fails.
  * The contract: a crash loses everything "since the last commit". That is boundary consistency,
  * not per-statement durability.
+ * Every facade created from one Runtime and directory handle shares operation ordering, address
+ * cache lifetime, and storage invalidation. A raw journal used across tabs still needs one owner.
  */
 declare class MachineJournal {
   readonly commits: number;

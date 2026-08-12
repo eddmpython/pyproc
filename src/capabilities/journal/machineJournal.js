@@ -28,6 +28,7 @@ import { BLOB_KEY, JournalBlobStore } from "./journalBlobStore.js";
 import { readJsonFile } from "./journalJsonFile.js";
 import { applyLegacyGeneration, cleanupLegacyRefs, legacyLiveKeys, readLegacyGeneration } from "./journalLegacyGeneration.js";
 import { JournalKernelStore } from "./journalKernelStore.js";
+import { journalCoordinatorFor } from "./journalCoordinator.js";
 import { DEFAULT_MACHINE_HOME_PATH, collectMachineHome, machineHomeFileEntries, readMachineHomePayload } from "../image/machineHome.js";
 
 const DEFAULT_AUTO_PACK_LOOSE_BLOBS = 128;
@@ -132,18 +133,19 @@ export class MachineJournal {
     this._persistenceRequested = false;
     this._lastSeq = -1;
     this._sp = null;
-    this._busy = false;
-    // 진행 중 작업을 값으로 드러낸다. 회수하는 쪽(machine dispose)이 stop() 뒤에 이것을
-    // 기다리지 않으면, 이미 해제된 리액티브 컨트롤러를 읽는 커밋이 파손 세대를 쓸 수 있다.
-    this._inFlight = null;
+    // 같은 Runtime과 directory handle은 heap, ref, CAS 연산 순서와 주소 cache를 공유한다.
+    // 서로 다른 facade의 설정과 관측 counter는 독립이지만 저장 불변식은 하나다.
+    this._coordinator = journalCoordinatorFor(rt, cfg.dir, cfg.reactive);
+    this._storageEpoch = this._coordinator.storageEpoch;
     this._h0Key = null; // 리플레이 경계(cp0) 지문 캐시. 커밋/부활의 결정성 대조 축.
     this._h0Epoch = -1; // 그 캐시가 어느 경계 세대의 것인지(rebase가 세대를 올린다).
     // 페이지 주소 캐시: page -> { a, b, address }. a/b는 직전 커밋 시점의 페이지 해시 두 워드다.
     // 커밋 비용이 "직전 변경분"이 아니라 "부팅 이후 누적 델타"에 비례하던 자리를 좁힌다:
     // 누적 델타의 대부분은 매 커밋 바이트가 같은데도 페이지마다 SHA-256 + 저장소 조회를 다시
     // 했다. 힙 해시는 체크포인트가 이미 계산해 두므로 이 대조는 추가 비용이 0이다.
-    // 무효화: 저장소가 사라지는 경계(delete/resetStorage)와 부활(recover) 뒤.
-    this._addressCache = new Map();
+    // 수명과 무효화는 coordinator가 소유한다. pack/prune/recover/delete 뒤 모든 facade가 같은
+    // 판단을 보게 해야 이미 지워진 주소를 다른 facade가 다시 단언하지 않는다.
+    this._addressCache = this._coordinator.addressCache;
     this._legacyCleaned = false;
     this.commits = 0;
     // 지속 스토리지 승인 여부. null은 "아직 묻지 않았다"이고, false는 "거절당했다"이다. 이 값이
@@ -155,18 +157,23 @@ export class MachineJournal {
     this.packBytes = 0;
   }
 
-  // 배타 구간의 시작과 끝. _busy 불리언만으로는 "지금 도는 중"을 알 수 있어도 "끝날 때까지
-  // 기다린다"를 표현할 수 없다. 회수 경로가 그 대기를 요구하므로 in-flight를 값으로 남긴다.
-  _begin() {
-    this._busy = true;
-    let release = null;
-    this._inFlight = new Promise((resolve) => { release = resolve; });
-    return () => { this._busy = false; this._inFlight = null; release(); };
+  _syncStorageEpoch() {
+    if (this._storageEpoch === this._coordinator.storageEpoch) return;
+    this._kernel.resetStorage();
+    this._legacyCleaned = false;
+    this._storageEpoch = this._coordinator.storageEpoch;
   }
 
-  // 진행 중 작업이 끝날 때까지 기다린다(없으면 즉시 반환). stop() 뒤에 이것을 기다려야
+  _run(operation) {
+    return this._coordinator.run(async () => {
+      this._syncStorageEpoch();
+      return operation();
+    });
+  }
+
+  // 같은 coordination domain의 진행 중 작업을 전부 기다린다. stop() 뒤에 이것을 기다려야
   // 해제된 컨트롤러를 읽는 커밋이 남지 않는다.
-  async settle() { while (this._inFlight) await this._inFlight; }
+  async settle() { await this._coordinator.settle(); }
 
   // 리플레이 경계(cp0)의 지문: 경계 해시 배열 전체의 SHA-256. 같은 엔진 + 같은 매니페스트라야 같다.
   // 커밋마다 commit.env.h0에 싣고, recover가 대조한다(엔진이 바뀐 채 부활하면 조용한 힙 오염이므로).
@@ -204,7 +211,7 @@ export class MachineJournal {
     this._lastSeq = this._rt.execSeq;
     let idleSince = null;
     this._timer = setInterval(() => {
-      if (this._busy) return;
+      if (this._coordinator.busy) return;
       if (this._rt.execSeq !== this._lastSeq) { this._lastSeq = this._rt.execSeq; idleSince = Date.now(); return; }
       if (idleSince === null) return;                 // 변이가 아직 없었다(커밋할 게 없다)
       if (Date.now() - idleSince < this._idleMs) return;
@@ -251,11 +258,7 @@ export class MachineJournal {
   // 페이지 목록만 주고, 페이지 바이트의 주소화·dedupe·쓰기 순서 법은 커널이 소유한다).
   // opts.note: 커밋과 같은 오브젝트에 실리는 provenance(무엇을 시도했고 왜 채택했는가).
   async commit(opts = {}) {
-    if (this._busy) return null;
-    const endBusy = this._begin();
-    try {
-      return await this._commitTo("HEAD", opts);
-    } finally { endBusy(); }
+    return this._run(() => this._commitTo("HEAD", opts));
   }
 
   // 이름 있는 가지로 커밋한다. HEAD/PREV는 불변이고(가지 법, refProtocol 상단), 커밋의 parents가
@@ -263,16 +266,14 @@ export class MachineJournal {
   // 소비 동사는 merge가 아니라 adopt다.
   async commitBranch(name, opts = {}) {
     const refName = branchRefName(name);
-    if (this._busy) return null;
-    const endBusy = this._begin();
-    try {
+    return this._run(async () => {
       const head = await this._kernel.readRef("HEAD");
       const parents = head.ref ? [head.ref.commit] : [];
       return await this._commitTo(refName, { ...opts, parents });
-    } finally { endBusy(); }
+    });
   }
 
-  // 커밋 본문. 배타 구간(_begin)은 호출자(commit/commitBranch/adoptBranch)가 잡는다.
+  // 커밋 본문. coordination 구간은 호출자(commit/commitBranch/adoptBranch)가 잡는다.
   async _commitTo(refName, opts = {}) {
       // 저널 커밋도 "부활을 전제한 쓰기"다(recover가 새 탭의 새 커널로 되살린다). 그러므로
       // 세션 저장/내보내기와 같은 이식성 전제를 통과해야 한다: 힙에 JS 핸들이 있으면 그 세대는
@@ -294,10 +295,13 @@ export class MachineJournal {
       this._kernel.resetCache();
       const committed = await commitState(globalThis.crypto, this._kernel, {
         // 페이지 사본은 커밋이 그것을 쓸 때 만든다(전량 동시 상주 대신 한 장씩).
-        // 해시가 직전 커밋과 같은 페이지는 이미 저장된 주소를 단언한다(해시+조회를 건너뛴다).
+        // 해시가 직전 커밋과 같은 페이지는 주소 hint와 lazy fallback을 함께 건넨다. 상태 커널이
+        // 현재 저장소의 존재를 확인하므로 pack/prune 뒤에도 없는 주소를 tree에 넣지 않는다.
         pages: pages.map((p) => {
           const cached = this._addressCache.get(p);
-          if (cached && cached.a === liveHashes[2 * p] && cached.b === liveHashes[2 * p + 1]) return [p, { address: cached.address }];
+          if (cached && cached.a === liveHashes[2 * p] && cached.b === liveHashes[2 * p + 1]) {
+            return [p, { address: cached.address, bytes: () => mem.slicePage(p) }];
+          }
           return [p, () => mem.slicePage(p)];
         }),
         pageSize: PAGE,
@@ -341,26 +345,28 @@ export class MachineJournal {
   // 의도한 삭제는 backing store를 먼저 지우고 tombstone을 마지막에 쓴다. 중간 실패에서 옛
   // committed marker가 남으면 다음 recover가 eviction/corruption으로 fail-closed한다.
   async delete() {
-    if (this._busy) throw new PyProcError("PYPROC_JOURNAL_IO", "journal.delete: journal is busy", { retryable: true });
     this.stop();
-    const endBusy = this._begin();
-    try {
+    return this._run(async () => {
       this._kernel.resetStorage();
-      this._addressCache.clear();
-      for (const [name, recursive] of JOURNAL_STORAGE_ENTRIES) {
-        try { await this._dir.removeEntry(name, recursive ? { recursive: true } : undefined); }
-        catch (e) {
-          if (e.name !== "NotFoundError") {
-            throw new PyProcError("PYPROC_JOURNAL_IO", `journal.delete: failed to remove ${name} (${e.name})`, { retryable: true, cause: e });
+      this._coordinator.invalidateAddresses();
+      try {
+        for (const [name, recursive] of JOURNAL_STORAGE_ENTRIES) {
+          try { await this._dir.removeEntry(name, recursive ? { recursive: true } : undefined); }
+          catch (e) {
+            if (e.name !== "NotFoundError") {
+              throw new PyProcError("PYPROC_JOURNAL_IO", `journal.delete: failed to remove ${name} (${e.name})`, { retryable: true, cause: e });
+            }
           }
         }
+        await this._writeMarker("deleted");
+        return { deleted: true };
+      } finally {
+        const epoch = this._coordinator.resetStorage();
+        this._kernel.resetStorage();
+        this._storageEpoch = epoch;
+        this._legacyCleaned = false;
       }
-      await this._writeMarker("deleted");
-      this._kernel.resetStorage();
-      this._addressCache.clear();
-      this._legacyCleaned = false;
-      return { deleted: true };
-    } finally { endBusy(); }
+    });
   }
 
   // 이관 완료 청소: 커널 refs가 섰으니 루트의 구 세대 파일(HEAD.json/PREV.json)은 죽은
@@ -443,6 +449,10 @@ export class MachineJournal {
 
   // 가지 목록: 이름 + 커밋 주소 + 시각 + note(provenance). 정본은 ref 파일 자체다.
   async listBranches() {
+    return this._run(() => this._listBranches());
+  }
+
+  async _listBranches() {
     this._kernel.resetCache();
     const branches = [];
     for (const name of await this._branchNames()) {
@@ -461,8 +471,12 @@ export class MachineJournal {
   // 가지에는 PREV가 없으므로 파손은 후퇴 없이 명시 예외이고, 없으면 null이다.
   async recoverBranch(name) {
     const refName = branchRefName(name);
+    return this._run(() => this._recoverBranch(refName));
+  }
+
+  async _recoverBranch(refName) {
     this._kernel.resetCache();
-    this._addressCache.clear(); // 부활은 힙을 통째로 갈아끼운다(recover와 같은 근거)
+    this._coordinator.invalidateAddresses(); // 부활은 힙을 통째로 갈아끼운다(recover와 같은 근거)
     let opened;
     try {
       opened = await openState(globalThis.crypto, this._kernel, { ref: refName, expectH0: await this._boundaryKey() });
@@ -480,62 +494,65 @@ export class MachineJournal {
   // 채택했는가"가 역사에 남고, note에 채택 사유를 실을 수 있다(에이전트의 해결 경로 기록).
   async adoptBranch(name, opts = {}) {
     const refName = branchRefName(name);
-    const applied = await this.recoverBranch(name);
-    if (!applied) {
-      throw new PyProcError("PYPROC_INPUT_INVALID", `journal.adopt: no such branch (${name})`);
-    }
-    if (this._busy) return null;
-    const endBusy = this._begin();
-    try {
+    return this._run(async () => {
+      const applied = await this._recoverBranch(refName);
+      if (!applied) {
+        throw new PyProcError("PYPROC_INPUT_INVALID", `journal.adopt: no such branch (${name})`);
+      }
       const branch = await this._kernel.readRef(refName);
       const note = { adoptedFrom: name, ...(opts.note || {}) };
       const result = await this._commitTo("HEAD", { note, parents: branch.ref ? [branch.ref.commit] : [] });
       return { ...result, adopted: name, applied };
-    } finally { endBusy(); }
+    });
   }
 
   // 가지 삭제: ref를 지우고 마커 버전을 재계산한다(마지막 가지가 사라지면 v1로 돌아가
   // 구 버전 호환이 복원된다). blob 회수는 다음 prune 몫이다(live 판정이 자연히 제외한다).
   async deleteBranch(name) {
     const refName = branchRefName(name);
-    if (this._busy) throw new PyProcError("PYPROC_JOURNAL_IO", "journal.deleteBranch: journal is busy", { retryable: true });
-    const endBusy = this._begin();
-    try {
+    return this._run(async () => {
       await this._kernel.removeRef(refName);
       const marker = await this._readMarker();
       if (marker.marker) await this._writeMarker(marker.marker.state);
       return { deleted: name };
-    } finally { endBusy(); }
+    });
   }
 
   // 현재 세대들이 참조하는 live blob만 새 pack 파일 1개에 묶는다. recover는 loose와 pack을
   // 모두 읽으므로 기존 저널과 호환된다.
   async pack() {
-    if (this._busy) return null;
-    const endBusy = this._begin();
-    try {
-      return await this._packNow();
-    } finally { endBusy(); }
+    return this._run(() => this._packNow());
   }
 
   async _packNow() {
-    this._kernel.resetCache();
-    const liveKeys = [...await this._liveKeys()].filter((key) => BLOB_KEY.test(key)).sort();
-    const result = await this._blobs.packLive(liveKeys);
-    if (result.bytes) { this.packs++; this.packBytes += result.bytes; }
-    return result;
+    try {
+      this._kernel.resetCache();
+      const liveKeys = [...await this._liveKeys()].filter((key) => BLOB_KEY.test(key)).sort();
+      const result = await this._blobs.packLive(liveKeys);
+      if (result.bytes) { this.packs++; this.packBytes += result.bytes; }
+      return result;
+    } finally {
+      // pack은 live 밖 주소를 지운다. 성공 여부와 무관하게 어느 주소가 남았는지 다시 증명해야 한다.
+      this._coordinator.invalidateAddresses();
+    }
   }
 
   // 세대들이 더 이상 참조하지 않는 loose blob과 PACKS.json에 없는 stale pack 파일을 지운다.
   // pack을 새로 만들지는 않으므로, 긴 실행 중간의 가벼운 청소에 쓴다.
   async prune() {
-    this._kernel.resetCache();
-    const liveKeys = await this._liveKeys();
-    const looseRemoved = await this._blobs.removeLooseBlobs((key) => !liveKeys.has(key));
-    const index = await this._blobs.readPackIndex();
-    const indexedPacks = new Set(index.packs.map((pack) => pack.file));
-    const packsRemoved = await this._blobs.removePackFilesExcept(indexedPacks);
-    return { liveKeys: liveKeys.size, looseRemoved, packsRemoved };
+    return this._run(async () => {
+      try {
+        this._kernel.resetCache();
+        const liveKeys = await this._liveKeys();
+        const looseRemoved = await this._blobs.removeLooseBlobs((key) => !liveKeys.has(key));
+        const index = await this._blobs.readPackIndex();
+        const indexedPacks = new Set(index.packs.map((pack) => pack.file));
+        const packsRemoved = await this._blobs.removePackFilesExcept(indexedPacks);
+        return { liveKeys: liveKeys.size, looseRemoved, packsRemoved };
+      } finally {
+        this._coordinator.invalidateAddresses();
+      }
+    });
   }
 
   // ---- legacy reader: 구 포맷(루트 HEAD.json v2/v3)은 읽기만 지원한다 ----
@@ -577,10 +594,14 @@ export class MachineJournal {
   // 남은 구 세대로 되감기는 것을 구조로 차단한다. 힙 크기/경계 지문 불일치는 손상이 아니므로
   // 후퇴 없이 즉시 예외(다른 엔진/매니페스트).
   async recover() {
+    return this._run(() => this._recover());
+  }
+
+  async _recover() {
     this._kernel.resetCache();
     // 부활은 힙을 통째로 갈아끼운다. 이전 힙 기준의 페이지 해시로 주소를 단언하면 다음 커밋이
     // 다른 내용을 그 주소로 기록한 것처럼 만든다(조용한 오염). 캐시는 여기서 버린다.
-    this._addressCache.clear();
+    this._coordinator.invalidateAddresses();
     const markerRead = await this._readMarker();
     if (markerRead.corrupt) throw journalCorrupt(`journal.recover: ${markerRead.corrupt}`);
     const marker = markerRead.marker || null;
