@@ -1,10 +1,11 @@
 <!DOCTYPE html>
 <!--
-probe: 간헐 델타 유실 재현기.
+probe: 델타 유실 결정적 재현기.
 증상(게이트 실측 3회, 간헐): 커밋 성공 + HEAD 정확 + 물질화된 힙에서 직전 변수 실종, 이어
 blob is missing. 가설: pack/prune + pack-recover(다른 저널 인스턴스) 직후의 커밋에서
-collectDelta가 변경 페이지를 빠뜨린다(희소 hashesAt 되접기 또는 융합 주사 경로).
-게이트: 한 번이라도 재현되면 그 반복의 전체 법의학(페이지 목록, 해시 대조)을 실어 RED.
+한 인스턴스의 주소 캐시가 다른 인스턴스의 pack 뒤에도 살아 있어 이미 지워진 blob 주소를
+다시 단언한다. 첫 검사는 stale 주소 수명주기를 결정적으로 만들고, 둘째 검사는 원래 관측 순서를
+반복한다.
 실행: node tests/browser/run.mjs tests/attempts/stateKernel/commitDeltaLossProbe.html
 -->
 <html lang="ko">
@@ -39,6 +40,36 @@ collectDelta가 변경 페이지를 빠뜨린다(희소 hashesAt 되접기 또�
     reactive.pruneTo(keepCp.index);
 
     const gj = rt.enableJournal({ dir, reactive, includeHome: false });
+
+    // 결정적 RED: writer만 X의 주소를 기억한다. collector가 X를 HEAD/PREV 밖으로 민 뒤 pack하면
+    // X 전용 blob은 사라지지만 writer의 캐시는 남는다. X 체크포인트를 다시 커밋할 때 그 주소를
+    // 검증 없이 재사용하면 성공한 HEAD가 없는 blob을 가리키고 recover는 PREV로 후퇴한다.
+    const baseline = reactive.checkpoint();
+    rt.run("stalePayload = 'x-state-' * 200000");
+    const staleCp = reactive.checkpoint();
+    const firstStale = await gj.commit();
+    reactive.restoreLive(baseline.index);
+    const collector = rt.enableJournal({ dir, reactive, includeHome: false });
+    rt.run("replacementPayload = 'base-a'");
+    await collector.commit();
+    rt.run("replacementPayload = 'base-b'");
+    await collector.commit();
+    const packed = await collector.pack();
+    reactive.restoreLive(staleCp.index);
+    const staleCommit = await gj.commit();
+    rt.run("stalePayload = 'clobbered'");
+    const staleRecovered = await gj.recover();
+    const staleValue = rt.run("globals().get('stalePayload', None)");
+    const staleExact = !!staleRecovered && staleRecovered.fallback !== true
+      && staleValue === "x-state-".repeat(200000);
+    check("다른 controller의 pack 뒤 cached address가 없는 blob을 가리키지 않음", staleExact,
+      JSON.stringify({ first: firstStale.commit.slice(7, 19), packed: packed.packed,
+        stale: staleCommit.commit.slice(7, 19), fallback: staleRecovered && staleRecovered.fallback,
+        valueLength: typeof staleValue === "string" ? staleValue.length : null }));
+
+    // 아래 반복 검사는 결정적 수명주기와 별개인 원래 release 순서를 계속 보존한다.
+    await gj.delete();
+    reactive.restoreLive(keepCp.index);
     let failDetail = null;
     let iterations = 0;
     for (let round = 0; round < 10 && !failDetail; round++) {

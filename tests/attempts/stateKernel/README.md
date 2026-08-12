@@ -29,6 +29,7 @@ fence 전제조건은 고의 위반 주입을 전부 잡아낸다.
 
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
+| 2026-08-12 | commitDeltaLossProbe | Edge headless, 실 OPFS + 실 힙 | RED. controller A가 X 주소를 cache한 뒤 controller B가 X를 HEAD/PREV 밖으로 밀고 pack하면, A의 다음 X 커밋은 성공하지만 recover가 PREV로 후퇴 | 원인은 `collectDelta` 유실이 아니라 controller별 stale address 단언과 공유 저장소 연산의 비직렬화다 | Runtime+dir coordination domain, 주소 hint 존재 대조, commit/recover/pack/prune/delete 직렬화를 src와 정식 게이트에 흡수 |
 | 2026-08-04 | branchRefsProbe | Edge headless, 실 OPFS + 실 힙 | 10/10 GREEN | 이름 있는 가지(commitBranch/listBranches/recoverBranch/adoptBranch)가 ref 프로토콜 (5') 위에서 성립. pack 뒤 가지 부활 = live 판정이 가지를 지킨다. 가지 존재 = 마커 v2(구 버전 fail-closed), 전부 삭제 = v1 복원. note(provenance)와 갈림점 parents 왕복 확인 | src 흡수 완료(가지 동사 + attempts). 게이트는 gate.js 3검사 + [state 가지] 2검사가 상시 판정 |
 | 2026-07-18 | promotionCostProbe | Edge headless, COOP/COEP | 64/128/256/512MB 전부 GREEN 6/6. checkpoint 중앙값 비율 0.965/0.901/1.008/0.902(전부 <= 1.05). checkpoint 루프 중 store 증가 0. 승격 해시 82/256/407/808ms(페이지 수 선형), promote 2.9/5.6/7.9/14.1s. dedupe 940/1964/4012/8108(내용주소가 동일 페이지를 접음, wrote는 전 구간 136) | 승격은 커밋 시점에만 발생하고 경계 비용 회귀 0. 시안 채택 | 1단계 법 추출 |
 | 2026-07-18 | legacyReconstructProbe | Edge headless, COOP/COEP | GREEN 6/6. 423p/26.4MB 델타를 세션 save·저널 HEAD+blob(raw OPFS 판독)·.pymachine(독자 파서)·machine generation(IndexedDB) 4포맷 전부 신 모델 재구성 바이트 대조 100%. 신 모델 -> legacy 재합성 -> 새 커널 부활까지 성립 | 구 포맷 4종 무손실 표현 가능. 이관 착수 자격 확보 | 3~5단계 recover 게이트의 원형 |
@@ -38,4 +39,4 @@ fence 전제조건은 고의 위반 주입을 전부 잡아낸다.
 
 ## 판정
 
-진행 중 (0단계 probe 3종 전부 통과. 시안 채택, 1단계 법 추출 착수 자격 확보)
+진행 중 (기존 시안은 승격됐고, 2026-08-12 저널 coordination 결함 수리 자격을 RED로 확보)
