@@ -4,10 +4,11 @@ The installed `pyproc-mcp` command runs a persistent Python Machine and a separa
 automation profile in one stdio MCP session. It ships in the npm package, uses no runtime dependency, never
 attaches to a normal browser profile, and never puts the CDP endpoint inside Python.
 
-The same host is available through `pyproc-control` and the Python SDK. Internally, the Chromium path is the
-`NativeCdpSpace` provider behind the [AutomationSpace contract](automationSpace.md). It declares DOM,
+The same host is available through `pyproc-control` and the Python SDK. `browser.provider` selects a provider
+behind the [AutomationSpace contract](automationSpace.md). The default `NativeCdpSpace` declares DOM,
 network, target, storage, runtime, screenshot, and artifact capabilities while keeping endpoint and provider
-objects private.
+objects private. The cooperative [FrameSpace provider](frameSpace.md) uses a credentialless sandbox and no
+DevTools port.
 
 ## Install and start
 
@@ -28,6 +29,7 @@ Create `pyproc-mcp.json`:
   "timeoutMs": 180000,
   "browser": {
     "enabled": true,
+    "provider": "nativeCdp",
     "allowedOrigins": ["https://example.test"],
     "maxRisk": "externalEffect",
     "actions": ["snapshot", "screenshot", "waitFor", "hydrateLazy", "navigate", "fill", "click"],
@@ -78,6 +80,7 @@ and incomplete external-effect approval fail closed.
 | `engine.indexURL` | Absolute HTTP(S) directory URL without credentials, query, or fragment |
 | `timeoutMs` | Positive integer, at most 900000 |
 | `browser.executable` | Optional absolute Chrome, Chromium, or Edge executable. Discovery is used when absent |
+| `browser.provider` | `nativeCdp` by default, or `frame` for a cooperative credentialless target bridge |
 | `browser.headed`, `browser.gpu` | Optional booleans. Headless with an isolated profile is the default |
 | `browser.allowedOrigins` | Non-empty list of exact HTTP(S) origins. Paths and credentials are rejected |
 | `browser.maxRisk` | `read`, `mutate`, or `externalEffect` |
@@ -88,6 +91,9 @@ and incomplete external-effect approval fail closed.
 | `browser.externalEffects` | Must equal `acknowledged` when `maxRisk` is `externalEffect` |
 | `browser.purpose` | Required printable purpose for an external-effect configuration |
 | `browser.artifacts` | Optional disk, count, inline, and TTL limits described below |
+
+FrameSpace supports a smaller action catalog and requires `browser.methods` to be empty. Its exact setup,
+sandbox, screenshot, and credentialless-session limits are in the [FrameSpace guide](frameSpace.md).
 
 The repository `npm run mcp:sandbox` command still accepts the corresponding `PYPROC_*` environment
 variables for development and compatibility. The shipped command's versioned manifest is the product entry.

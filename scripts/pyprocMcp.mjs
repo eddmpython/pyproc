@@ -59,6 +59,7 @@ try {
           : { mode: "indexURL", indexURL: loaded.config.engine.indexURL },
         browser: loaded.config.browser.enabled ? {
           enabled: true,
+          provider: loaded.config.browser.provider,
           executable: browserExecutable,
           allowedOrigins: loaded.browserControl.targetOrigins,
           actions: loaded.browserControl.actions,

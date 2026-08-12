@@ -57,7 +57,9 @@ not replay a provider operation.
 
 The operation list above is abbreviated. `restoreBoundary` is deliberately fixed: restoring Python never
 claims to reverse provider effects. `replayBoundary` describes what that provider can do with a recorded
-operation. The current native adapter records evidence but does not replay effects.
+operation. The current native and frame adapters record evidence but do not replay effects. FrameSpace
+declares `dom`, `target`, `screenshot`, and `artifact`, omits `automation.command`, and keeps the same restore
+boundary.
 
 Close is idempotent. After close, every new operation fails with `AUTOMATION_SPACE_CLOSED` before provider
 code. The provider is responsible for dropping session-owned locators, observations, lifecycle watchers,

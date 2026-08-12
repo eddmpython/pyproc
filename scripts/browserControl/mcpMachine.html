@@ -10,6 +10,7 @@
   <pre id="out">booting</pre>
   <script type="module">
     import { boot } from "../../index.js";
+    import { FrameSpacePage } from "../automationSpace/frameSpacePage.js";
     import { installFailClosedNetworkPolicy } from "./mcpMachinePolicy.js";
 
     const out = document.getElementById("out");
@@ -26,11 +27,28 @@
       "[_mcpBuf.getvalue(), None if _mcpVal is None else repr(_mcpVal)]",
     ].join("\n");
     const params = new URLSearchParams(location.search);
+    const controlToken = new URLSearchParams(location.hash.slice(1)).get("controlToken");
+    if (!controlToken) throw new Error("pyproc machine requires a control token");
+    history.replaceState(null, "", location.pathname + location.search);
+    const controlFetch = (url, options = {}) => fetch(url, {
+      ...options,
+      headers: { ...(options.headers || {}), "X-PyProc-Control-Token": controlToken },
+    });
     const requestedIndex = params.get("indexURL");
     if (!requestedIndex) throw new Error("pyproc machine requires indexURL");
     const indexURL = new URL(requestedIndex, location.href).href;
+    const automationProvider = params.get("automationProvider") || "";
+    let frameConfig = null;
+    if (automationProvider === "frame") {
+      const encoded = params.get("frameConfig") || "";
+      const base64 = encoded.replaceAll("-", "+").replaceAll("_", "/");
+      const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+      frameConfig = JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0))));
+    }
     const machine = await boot({ deterministic: true, indexURL });
-    const installPolicy = () => installFailClosedNetworkPolicy(machine);
+    const installPolicy = () => installFailClosedNetworkPolicy(machine, {
+      frameOrigins: frameConfig?.targetOrigins || [],
+    });
     installPolicy();
     const saved = [];
     log("machine ready");
@@ -63,9 +81,11 @@
         return { index: 0, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
       },
     };
+    const frameSpace = frameConfig ? new FrameSpacePage(frameConfig) : null;
+    if (frameSpace) Object.assign(operations, frameSpace.operations());
 
     const pageEpoch = crypto.randomUUID();
-    const ready = await fetch("/controlReady", {
+    const ready = await controlFetch("/controlReady", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ protocol: "pyproc-control", version: 1, pageEpoch, spaceId: "machine:primary" }),
@@ -74,7 +94,7 @@
     for (;;) {
       let command;
       try {
-        const response = await fetch(`/controlCommand?pageEpoch=${encodeURIComponent(pageEpoch)}`, { cache: "no-store" });
+        const response = await controlFetch(`/controlCommand?pageEpoch=${encodeURIComponent(pageEpoch)}`, { cache: "no-store" });
         if (!response.ok) throw new Error(`control poll failed: ${response.status}`);
         command = await response.json();
       } catch (error) {
@@ -86,7 +106,7 @@
         if (command.pageEpoch !== pageEpoch) throw new Error("stale control page epoch");
         if (!operations[command.operation]) throw new Error(`unknown operation: ${command.operation}`);
         body = { requestId: command.requestId, pageEpoch, ok: true,
-          value: operations[command.operation](command.input || {}) };
+          value: await operations[command.operation](command.input || {}) };
         log(`${command.operation} done`);
       } catch (error) {
         body = {
@@ -96,13 +116,19 @@
           error: {
             code: error?.code || "PYPROC_INTERNAL",
             message: String(error?.message || error).slice(-400),
-            outcome: "applied",
-            retryable: false,
+            outcome: error?.outcome || "applied",
+            retryable: error?.retryable === true,
+            details: {
+              ...(error?.details && typeof error.details === "object" ? error.details : {}),
+              ...(Number.isInteger(error?.failedActionIndex) ? { failedActionIndex: error.failedActionIndex } : {}),
+              ...(error?.failedAction ? { failedAction: error.failedAction } : {}),
+              ...(Array.isArray(error?.completed) ? { completed: error.completed } : {}),
+            },
           },
         };
         log(`${command.operation} failed: ${body.error.code}`);
       }
-      await fetch("/controlResult", {
+      await controlFetch("/controlResult", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

@@ -101,6 +101,7 @@ export class PageCommandBridge {
       const failure = new PageCommandError(error?.code || "PYPROC_INTERNAL", String(error?.message || "page command failed"), {
         outcome: error?.outcome || "notSent", retryable: error?.retryable === true,
       });
+      if (error?.details && typeof error.details === "object") failure.details = error.details;
       this._finish(record, failure);
     }
     return Object.freeze({ accepted: true });

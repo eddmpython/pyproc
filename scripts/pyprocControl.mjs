@@ -59,6 +59,7 @@ try {
         machineBrowser: browserExecutable,
         automation: loaded.config.browser.enabled ? {
           enabled: true,
+          provider: loaded.config.browser.provider,
           allowedOrigins: loaded.browserControl.targetOrigins,
           actions: loaded.browserControl.actions,
           rawMethods: loaded.browserControl.rawMethods,

@@ -284,6 +284,7 @@ Create `pyproc-mcp.json`, using exact origins and the smallest action set requir
   "engine": { "root": "/absolute/path/to/pyodide" },
   "browser": {
     "enabled": true,
+    "provider": "nativeCdp",
     "allowedOrigins": ["https://example.test"],
     "maxRisk": "externalEffect",
     "actions": ["snapshot", "screenshot", "waitFor", "hydrateLazy", "navigate", "fill", "click"],
@@ -329,6 +330,10 @@ browser actions, and verified screenshot bytes.
 With `{ "enabled": false }`, the server exposes exactly four Python tools: `pythonRun`, `checkpointSave`,
 `checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
 semantic observation, ordered actions, separately allowlisted raw commands, and artifact read/delete.
+
+Set `"provider": "frame"` for a cooperative credentialless sandbox that opens no DevTools port. It exposes
+nine browser tools when snapshot is allowed, omits raw commands, and requires the target to load the shipped
+bridge. See the [FrameSpace guide](docs/usage/frameSpace.md) for its exact isolation and screenshot boundary.
 
 The 23-action catalog includes semantic readiness waits, explicit bounded lazy hydration, and a first-class
 ordered `screenshot` action. `browserOpen` applies the viewport before navigation and returns the redacted

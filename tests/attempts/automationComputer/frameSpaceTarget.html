@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>FrameSpace cooperative target</title>
+  <style>body{font:16px system-ui;background:#f4f7fb;color:#172033;padding:24px}label{display:block;margin:12px 0}button,input{font:inherit;padding:8px}</style>
+</head>
+<body>
+  <h1>Cooperative target</h1>
+  <label>Name <input id="name" value="before"></label>
+  <button id="apply">Apply</button>
+  <output id="result">waiting</output>
+  <script>document.querySelector('#apply').addEventListener('click',()=>{document.querySelector('#result').textContent=document.querySelector('#name').value})</script>
+  <script src="./frameSpaceTargetDraft.js"></script>
+</body>
+</html>

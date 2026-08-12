@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>FrameSpace probe</title></head>
+<body>
+<script type="module">
+const checks = [];
+const check = (name, pass, details = null) => checks.push({ name, pass: !!pass, ...(details ? { details } : {}) });
+const PROTOCOL = "pyproc-frame";
+const VERSION = 1;
+const allowedOrigins = new Set([location.origin, `http://localhost:${location.port}`]);
+
+function allowed(url) {
+  try { return allowedOrigins.has(new URL(url).origin); }
+  catch (error) { return false; }
+}
+
+async function connect(url) {
+  if (!allowed(url)) {
+    const error = new Error(`origin is outside FrameSpace permission: ${url}`);
+    error.code = "FRAME_SPACE_PERMISSION_DENIED";
+    throw error;
+  }
+  const iframe = document.createElement("iframe");
+  iframe.sandbox = "allow-scripts allow-forms";
+  iframe.src = url;
+  iframe.style.cssText = "position:absolute;left:-10000px;width:800px;height:600px";
+  const ready = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("frame bridge did not become ready")), 5000);
+    const listener = (event) => {
+      if (event.source !== iframe.contentWindow || event.data?.protocol !== PROTOCOL
+        || event.data?.version !== VERSION || event.data?.type !== "ready") return;
+      clearTimeout(timer);
+      removeEventListener("message", listener);
+      resolve();
+    };
+    addEventListener("message", listener);
+  });
+  document.body.append(iframe);
+  await ready;
+  const channel = new MessageChannel();
+  const nonce = crypto.randomUUID();
+  const hello = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("frame handshake timed out")), 5000);
+    channel.port1.onmessage = ({ data }) => {
+      if (data?.type !== "hello" || data?.nonce !== nonce) return;
+      clearTimeout(timer);
+      resolve(data);
+    };
+    channel.port1.start();
+    iframe.contentWindow.postMessage({ protocol: PROTOCOL, version: VERSION, type: "hello", nonce }, "*", [channel.port2]);
+  });
+  if (!allowed(hello.url)) throw new Error("target reported a denied origin");
+  let nextId = 0;
+  const call = (operation, input = {}) => new Promise((resolve, reject) => {
+    const id = `probe:${++nextId}`;
+    const timer = setTimeout(() => reject(new Error(`frame call timed out: ${operation}`)), 5000);
+    const listener = ({ data }) => {
+      if (data?.type !== "response" || data?.id !== id) return;
+      clearTimeout(timer);
+      channel.port1.removeEventListener("message", listener);
+      if (data.ok) resolve(data.value);
+      else reject(Object.assign(new Error(data.error?.message || "frame call failed"), data.error));
+    };
+    channel.port1.addEventListener("message", listener);
+    channel.port1.postMessage({ protocol: PROTOCOL, version: VERSION, type: "request", id, operation, input });
+  });
+  return { iframe, hello, call };
+}
+
+try {
+  const same = await connect(new URL("./frameSpaceTarget.html", location.href).href);
+  check("same-origin resource completes cooperative handshake", same.hello.url.startsWith(location.origin));
+  check("sandbox target cannot read parent DOM", same.hello.parentAccessible === false);
+  check("sandbox omits same-origin and navigation escape powers",
+    same.iframe.sandbox.value === "allow-scripts allow-forms");
+  await same.call("action.fill", { selector: "#name", value: "frame-ready" });
+  await same.call("action.click", { selector: "#apply" });
+  const observed = await same.call("observe");
+  check("semantic fill and click change target state",
+    observed.elements.some((entry) => entry.id === "result" && entry.text === "frame-ready"));
+  const shot = await same.call("action.screenshot");
+  const bytes = Uint8Array.from(atob(shot.dataBase64), (char) => char.charCodeAt(0));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  const sha256 = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  check("target produces a verified PNG screenshot",
+    shot.mimeType === "image/png" && bytes[0] === 0x89 && bytes[1] === 0x50
+      && shot.byteLength === bytes.byteLength && shot.sha256 === sha256,
+    { byteLength: bytes.byteLength });
+
+  const crossUrl = new URL("./frameSpaceTarget.html", location.href);
+  crossUrl.hostname = "localhost";
+  const cross = await connect(crossUrl.href);
+  check("explicitly allowed cross-origin resource completes the same bridge",
+    new URL(cross.hello.url).origin === crossUrl.origin);
+  check("cross-origin target remains parent-isolated", cross.hello.parentAccessible === false);
+
+  const deniedBefore = document.querySelectorAll("iframe").length;
+  let denied = null;
+  try { await connect("https://example.invalid/target"); } catch (error) { denied = error; }
+  check("denied origin fails before a frame is created",
+    denied?.code === "FRAME_SPACE_PERMISSION_DENIED" && document.querySelectorAll("iframe").length === deniedBefore);
+} catch (error) {
+  check(`probe completes: ${String(error?.message || error).slice(0, 160)}`, false,
+    { message: String(error?.stack || error) });
+}
+
+await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ ok: checks.every((entry) => entry.pass), checks }) });
+</script>
+</body>
+</html>

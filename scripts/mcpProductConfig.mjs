@@ -8,7 +8,7 @@ import { normalizeBrowserViewport } from "./browserControl/browserViewport.js";
 const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["root", "indexURL"]);
 const BROWSER_KEYS = new Set([
-  "enabled", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
+  "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
 ]);
 const ARTIFACT_KEYS = new Set([
@@ -16,6 +16,7 @@ const ARTIFACT_KEYS = new Set([
 ]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_INDEX_URL", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
+  "PYPROC_AUTOMATION_PROVIDER",
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
   "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
   "PYPROC_BROWSER_FILE_ROOTS", "PYPROC_BROWSER_EXTERNAL_EFFECTS", "PYPROC_BROWSER_PURPOSE",
@@ -121,6 +122,10 @@ function normalizedBrowser(input = { enabled: false }) {
   if (browser.executable !== undefined && (typeof browser.executable !== "string" || !isAbsolute(browser.executable))) {
     throw new TypeError("browser.executable must be an absolute file path");
   }
+  const provider = browser.provider === undefined ? "nativeCdp" : browser.provider;
+  if (!["nativeCdp", "frame"].includes(provider)) {
+    throw new TypeError("browser.provider must be nativeCdp or frame");
+  }
   if (browser.maxRisk !== undefined && typeof browser.maxRisk !== "string") {
     throw new TypeError("browser.maxRisk must be a string");
   }
@@ -133,6 +138,7 @@ function normalizedBrowser(input = { enabled: false }) {
   const purpose = (browser.purpose || "").trim();
   const normalized = {
     enabled: true,
+    provider,
     ...(browser.executable === undefined ? {} : { executable: resolve(browser.executable) }),
     headed: optionalBoolean(browser.headed, "browser.headed"),
     gpu: optionalBoolean(browser.gpu, "browser.gpu"),
@@ -163,6 +169,7 @@ function projectedEnvironment(config, baseEnv = {}) {
   if (!config.browser.enabled) return env;
   const browser = config.browser;
   env.PYPROC_BROWSER_CONTROL = "1";
+  env.PYPROC_AUTOMATION_PROVIDER = browser.provider;
   if (browser.executable) env.PYPROC_BROWSER = browser.executable;
   if (browser.headed) env.PYPROC_HEADED = "1";
   if (browser.gpu) env.PYPROC_GPU = "1";

@@ -282,6 +282,7 @@ npx pyproc-engine --out /absolute/path/to/pyodide
   "engine": { "root": "/absolute/path/to/pyodide" },
   "browser": {
     "enabled": true,
+    "provider": "nativeCdp",
     "allowedOrigins": ["https://example.test"],
     "maxRisk": "externalEffect",
     "actions": ["snapshot", "screenshot", "waitFor", "hydrateLazy", "navigate", "fill", "click"],
@@ -326,6 +327,10 @@ with PyProcClient.start("pyproc-mcp.json") as client:
 `{ "enabled": false }`이면 서버는 `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`
 네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
 별도 allowlist raw command, artifact read/delete를 위한 열 개 도구가 추가된다.
+
+`"provider": "frame"`을 지정하면 DevTools port 없이 cooperative credentialless sandbox를 사용한다.
+snapshot 허용 시 browser 도구 아홉 개를 제공하고 raw command는 열지 않으며 target이 출하 bridge를
+로딩해야 한다. 정확한 격리와 screenshot 경계는 [FrameSpace 가이드](docs/usage/frameSpace.md)에 있다.
 
 23개 action catalog에는 의미 기반 준비 대기, 명시적 bounded lazy hydration, 정식 순차 `screenshot`
 action이 있다. `browserOpen`은 첫 navigation 전에 viewport와 계측을 적용하고 redacted startup trace를

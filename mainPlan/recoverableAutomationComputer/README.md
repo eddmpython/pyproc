@@ -59,15 +59,21 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
   71/71과 48-action stress가 같은 host에서 통과했다.
 - 단계 2 완료: runtime dependency 0 `pyproc-control` Python SDK를 wheel과 source distribution으로
   빌드하고 서로 다른 clean venv에 설치했다. PATH 기반 제품 시작, Python과 checkpoint, 전달 뒤
-  cancel, permission 사전 거부, 실제 PNG attachment와 digest 여정이 Edge에서 4/4 통과했다.
+  cancel, permission 사전 거부, Native CDP와 FrameSpace PNG attachment 여정이 Edge에서 5/5 통과했다.
 - 단계 3 완료: `AutomationSpaceRouter`가 10개 canonical operation, authorize-before-execute,
   pre-cancel, lifecycle, artifact, restore와 replay 경계를 소유한다. fake provider 11/11과 정식
   contract suite가 통과했고 설치 MCP, native, Python 경로가 같은 router를 사용한다.
 - 단계 4 완료: 제품 composition이 `NativeCdpSpace`를 직접 조립하고 `dom`, `network`, `target`,
   `storage`, `runtime`, `screenshot`, `artifact` 능력을 선언한다. provider probe 4/4, native 설치
   제품 7/7, 실제 Edge browser-control 71/71이 기존 오류와 effect 경계를 유지했다.
-- 단계 5 진행: pyproc이 소유한 격리 frame을 `FrameSpace`로 구현하고 origin과 sandbox 권한을
-  브라우저 게이트로 고정한다.
+- 단계 5 완료: `FrameSpace`가 CDP port 없이 credentialless sandbox와 private `MessageChannel`을
+  사용한다. same-origin과 허용 cross-origin, 부모 DOM 격리, ordered action, PNG attachment, denied
+  control-token 공격 거부, same-origin과 허용 cross-origin, 부모와 storage 격리, partial outcome,
+  첫 effect unknown outcome과 PNG 음성 검증을 설치 Control과 MCP 제품 18/18 및 Python SDK로
+  검증했다. 임의 페이지와 trusted
+  input은 지원한다고 주장하지 않는다.
+- 단계 6 진행: 기록 digest, artifact 완전성, effect 0회 재생, checkpoint 이후 resume를
+  `ReplaySpace` probe로 고정한다.
 
 ## 제품 최소선
 

@@ -1,11 +1,14 @@
 // controlProduct.mjs - Python machine page와 automation provider를 한 ControlHost로 조립한다.
 import { realpathSync, statSync } from "node:fs";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
 import { createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
 import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
+import { FrameSpace, assertFrameSpaceConfig } from "../automationSpace/frameSpace.js";
+import { createFrameSpaceTools } from "../automationSpace/frameSpaceTools.js";
 import { NativeCdpSpace } from "../automationSpace/nativeCdpSpace.js";
 import { ControlHost } from "./controlHost.js";
 import { controlOperationCatalog } from "./controlOperations.js";
@@ -66,12 +69,24 @@ export async function createControlProduct({ env = process.env } = {}) {
   const timeoutMs = Number(env.PYPROC_MCP_TIMEOUT || DEFAULT_COMMAND_TIMEOUT_MS);
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new TypeError("PYPROC_MCP_TIMEOUT must be positive");
   const browserEnabled = env.PYPROC_BROWSER_CONTROL === "1";
+  const providerKind = browserEnabled ? (env.PYPROC_AUTOMATION_PROVIDER || "nativeCdp") : null;
+  if (browserEnabled && !["nativeCdp", "frame"].includes(providerKind)) {
+    throw new TypeError(`unsupported automation provider: ${providerKind}`);
+  }
   const browserConfig = browserEnabled ? parseBrowserControlConfig(env, { timeoutMs }) : null;
-  const browserTools = browserConfig ? createBrowserControlTools(browserConfig) : [];
+  if (providerKind === "frame") assertFrameSpaceConfig(browserConfig);
+  const browserTools = browserConfig
+    ? (providerKind === "frame" ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig)) : [];
   const tools = Object.freeze(browserEnabled ? [...CONTROL_PYTHON_TOOLS, ...browserTools] : [...CONTROL_PYTHON_TOOLS]);
   const pythonToolNames = new Set(CONTROL_PYTHON_TOOLS.map((tool) => tool.name));
   const engineRoot = configuredEngineRoot(env.PYPROC_MCP_ENGINE_ROOT);
   const pageBridge = new PageCommandBridge({ timeoutMs });
+  const controlToken = randomBytes(32).toString("base64url");
+  const expectedToken = Buffer.from(controlToken);
+  const authorizedControlRequest = (req) => {
+    const supplied = Buffer.from(String(req.headers["x-pyproc-control-token"] || ""));
+    return supplied.byteLength === expectedToken.byteLength && timingSafeEqual(supplied, expectedToken);
+  };
 
   const server = createStaticServer(async (req, res) => {
     const requestUrl = new URL(req.url, "http://control.local");
@@ -79,6 +94,12 @@ export async function createControlProduct({ env = process.env } = {}) {
       const file = safeJoin(engineRoot, requestUrl.pathname.slice("/pyprocEngine/".length));
       if (!file) { res.writeHead(403); res.end("forbidden"); return true; }
       await sendFile(res, file);
+      return true;
+    }
+    if (["/controlReady", "/controlCommand", "/controlResult"].includes(requestUrl.pathname)
+      && !authorizedControlRequest(req)) {
+      req.resume();
+      sendJson(res, 403, { error: "CONTROL_BRIDGE_UNAUTHORIZED", message: "control bridge token is invalid" });
       return true;
     }
     if (req.method === "POST" && requestUrl.pathname === "/controlReady") {
@@ -121,18 +142,32 @@ export async function createControlProduct({ env = process.env } = {}) {
   const serverOrigin = `http://127.0.0.1:${server.address().port}`;
   const engineIndexURL = engineRoot ? `${serverOrigin}/pyprocEngine/`
     : (env.PYPROC_INDEX_URL || `${serverOrigin}/vendor/pyodide/`);
-  const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html?indexURL=${encodeURIComponent(engineIndexURL)}`;
+  const pageParams = new URLSearchParams({ indexURL: engineIndexURL });
+  if (providerKind === "frame") {
+    pageParams.set("automationProvider", "frame");
+    pageParams.set("frameConfig", Buffer.from(JSON.stringify({
+      spaceId: "space:frame",
+      targetOrigins: browserConfig.targetOrigins,
+      actions: browserConfig.actions,
+      timeoutMs: Math.min(timeoutMs, 10000),
+      artifacts: browserConfig.artifacts,
+    })).toString("base64url"));
+  }
+  const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html?${pageParams}`;
+  const launchUrl = `${pageUrl}#controlToken=${encodeURIComponent(controlToken)}`;
   let browserSession = null;
   let browserControl = null;
   let automationSpace = null;
   let automationRouter = null;
   try {
-    browserSession = launchBrowser(pageUrl, {
+    browserSession = launchBrowser(launchUrl, {
       prefix: "pyprocControl-",
-      extraArgs: browserEnabled ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : [],
+      extraArgs: providerKind === "nativeCdp" ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : [],
     });
     automationSpace = browserEnabled
-      ? new NativeCdpSpace({ profileDir: browserSession.profile, config: browserConfig }) : null;
+      ? (providerKind === "frame"
+        ? new FrameSpace({ pageBridge, config: browserConfig, spaceId: "space:frame" })
+        : new NativeCdpSpace({ profileDir: browserSession.profile, config: browserConfig })) : null;
     browserControl = automationSpace?.control || null;
     automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
     const operationCatalog = controlOperationCatalog(tools);
@@ -158,8 +193,8 @@ export async function createControlProduct({ env = process.env } = {}) {
         if (closed) return;
         closed = true;
         host.close("control product is shutting down");
-        pageBridge.close();
         try { await automationRouter?.close(); } catch (error) {}
+        pageBridge.close();
         try { browserSession?.close(); } catch (error) {}
         await new Promise((resolveClose) => server.close(resolveClose));
       },
