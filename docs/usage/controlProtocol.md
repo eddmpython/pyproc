@@ -4,8 +4,7 @@
 browser automation. It uses the same product host as `pyproc-mcp`; only the stdio adapter differs. The npm
 package has no runtime dependency.
 
-The stable `pyproc/control` facade is unreleased until the next exact version after 0.0.20. Node.js
-applications use it instead of implementing this framing directly.
+Node.js applications use the stable `pyproc/control` facade instead of implementing this framing directly.
 See the [JavaScript Control SDK](javascriptControl.md). Other languages can implement the wire contract below;
 the official Python client is documented in the [Python SDK guide](pythonSdk.md).
 

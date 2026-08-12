@@ -14,7 +14,7 @@ The roles are split.
 ```jsonc
 // package.json
 "dependencies": {
-  "pyproc": "0.0.20"
+  "pyproc": "0.0.21"
 }
 ```
 
@@ -33,7 +33,7 @@ Only the public package entry and named subpaths form the product contract. The 
 | `pyproc/assets` | Runtime-asset manifest and SRI preflight: `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` |
 | `pyproc/history` | The state kernel plus the store, bundle, and signature contracts |
 | `pyproc/machine` | Web Machine host, device, store, and guest assembly detail |
-| `pyproc/control` | Stable Node.js client for the installed Control product, persistent Python, APX, cancellation, and verified attachments. unreleased until the next exact version after 0.0.20 |
+| `pyproc/control` | Stable Node.js client for the installed Control product, persistent Python, APX, cancellation, and verified attachments. Available from 0.0.21 |
 | `pyproc/worker` | Only when a bundler or product build must reference the worker entrypoint explicitly |
 | `pyproc/gpu`, `pyproc/socket`, `pyproc/wasi` | Demoted Experimental and Research surfaces. New Experimental subpaths are frozen |
 

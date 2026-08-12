@@ -5,13 +5,17 @@
 <h1 align="center">pyproc</h1>
 
 <p align="center">
-  <b>Close the tab. Reopen the browser. Your Python computer comes back.</b><br>
+  <b>Close every tab, or quit the browser. Reopen it. Your Python computer comes back.</b><br>
   A persistent Python computer in your browser.
 </p>
 
 <p align="center">
-  Real CPython, a durable workspace, rewindable history, parallel processes, signed machine images,<br>
-  and evidence-backed eyes and hands for allowed web pages. No application server required.
+  Keep a live CPython workspace across tabs and browser restarts. Rewind it, branch it, run parallel processes,<br>
+  and give an authorized agent structured browser eyes, controlled hands, screenshots, and proof of change.
+</p>
+
+<p align="center">
+  State is durably restored after a browser restart; code does not run while the browser is closed. No application server required.
 </p>
 
 <p align="center">
@@ -171,7 +175,7 @@ restored. A fail-closed network policy can also keep selected data local while c
 ## Quick start
 
 ```sh
-npm install pyproc@0.0.20 --save-exact
+npm install pyproc@0.0.21 --save-exact
 npx pyproc-engine --out public/vendor/pyodide
 ```
 
@@ -289,7 +293,7 @@ Python Machine and, only when the manifest enables it, a separately scoped Chrom
 automation profile.
 
 ```sh
-npm install pyproc
+npm install pyproc@0.0.21 --save-exact
 npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
@@ -337,7 +341,7 @@ writing JavaScript:
 
 ```sh
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.20/pyproc_control-0.0.20-py3-none-any.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.21/pyproc_control-0.0.21-py3-none-any.whl"
 ```
 
 ```python
@@ -398,8 +402,8 @@ gates in CI.
 
 ## Use the installed product from JavaScript
 
-unreleased until the next exact version after 0.0.20: the stable Node.js `pyproc/control` subpath turns the
-same installed product host into a supported JavaScript API. It starts the matching package copy, so it cannot
+The stable Node.js `pyproc/control` subpath turns the same installed product host into a supported JavaScript
+API. It starts the matching package copy, so it cannot
 silently pick up a different global CLI version.
 
 ```js
@@ -660,11 +664,11 @@ Can't set headers at all (e.g. GitHub Pages)? Register `pyprocSw.js?coi=1` and r
 
 ## Install and pinning
 
-From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.20 --save-exact`. There is no build step (native ESM). Floating ranges (`^`, `~`, `latest`) are not supported because a state kernel's replay guarantee is version-bound:
+From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.21 --save-exact`. There is no build step (native ESM). Floating ranges (`^`, `~`, `latest`) are not supported because a state kernel's replay guarantee is version-bound:
 
 ```jsonc
 // package.json
-"dependencies": { "pyproc": "0.0.20" }
+"dependencies": { "pyproc": "0.0.21" }
 ```
 
 `pyproc/runtime` and the typed API subpath entries ship in 0.0.11. A SHA pin

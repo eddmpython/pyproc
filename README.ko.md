@@ -5,13 +5,17 @@
 <h1 align="center">pyproc</h1>
 
 <p align="center">
-  <b>탭을 닫고 브라우저를 다시 열어도 Python 컴퓨터가 돌아온다.</b><br>
+  <b>모든 탭을 닫거나 브라우저를 종료해도, 다시 열면 Python 컴퓨터가 돌아온다.</b><br>
   브라우저에 영속하는 파이썬 컴퓨터.
 </p>
 
 <p align="center">
-  진짜 CPython, 내구 workspace, 되감는 history, 병렬 process, 서명 machine image,<br>
-  허용한 웹페이지를 보고 움직인 뒤 결과를 증명하는 눈과 손. 애플리케이션 서버는 필요 없다.
+  탭과 브라우저 재시작을 넘어 CPython workspace를 유지하고, 되감고, 분기하고, 병렬 실행한다.<br>
+  승인된 에이전트에는 구조화된 브라우저의 눈, 통제된 손, screenshot, 변화의 증거를 제공한다.
+</p>
+
+<p align="center">
+  브라우저 재시작 뒤 내구 상태를 복원하며, 브라우저가 꺼진 동안 code가 실행되는 것은 아니다. 애플리케이션 서버는 필요 없다.
 </p>
 
 <p align="center">
@@ -172,7 +176,7 @@ fail-closed network policy를 적용하면 선택한 데이터도 code 실행 �
 ## 빠른 시작
 
 ```sh
-npm install pyproc@0.0.20 --save-exact
+npm install pyproc@0.0.21 --save-exact
 npx pyproc-engine --out public/vendor/pyodide
 ```
 
@@ -288,7 +292,7 @@ Machine을 시작하고, manifest가 명시적으로 켠 경우에만 별도 범
 자동화 profile을 붙인다.
 
 ```sh
-npm install pyproc
+npm install pyproc@0.0.21 --save-exact
 npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
@@ -335,7 +339,7 @@ SDK를 사용한다:
 
 ```sh
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.20/pyproc_control-0.0.20-py3-none-any.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.21/pyproc_control-0.0.21-py3-none-any.whl"
 ```
 
 ```python
@@ -396,8 +400,8 @@ delete를 실제 browser에서 검증한다. `npm run test:control-product`는 �
 
 ## 설치 제품을 JavaScript에서 쓰기
 
-0.0.20 다음 exact version에서 출하 예정인 미출하 표면이다. stable Node.js `pyproc/control`
-subpath가 같은 설치 제품 host를 지원 JavaScript API로 제공한다. 설치된 package 안의 일치하는
+stable Node.js `pyproc/control` subpath가 같은 설치 제품 host를 지원 JavaScript API로 제공한다.
+설치된 package 안의 일치하는
 command를 직접 시작하므로 다른 global CLI version을 조용히 고르지 않는다.
 
 ```js
@@ -660,11 +664,11 @@ export default { server: { headers: {
 
 ## 설치와 핀
 
-npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.20 --save-exact`. 빌드 단계는 없다(네이티브 ESM). 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 replay 보장은 버전에 묶여 있다:
+npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.21 --save-exact`. 빌드 단계는 없다(네이티브 ESM). 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 replay 보장은 버전에 묶여 있다:
 
 ```jsonc
 // package.json
-"dependencies": { "pyproc": "0.0.20" }
+"dependencies": { "pyproc": "0.0.21" }
 ```
 
 `pyproc/runtime`과 typed API subpath 항목은 0.0.11에 출하된다. 아직 릴리즈하지 않은 커밋을

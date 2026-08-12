@@ -546,7 +546,7 @@ Deployment asset integrity, typed in `src/runtime/assets.d.ts`:
   ASGI virtual origin, COOP/COEP injection - by query flags).
 - `PYPROC_ASSET_MANIFEST_VERSION` - manifest format version (currently 1).
 
-### `pyproc/control` (unreleased until the next exact version after 0.0.20)
+### `pyproc/control` (available from 0.0.21)
 
 Stable Node.js facade for the installed Control product, typed in
 `scripts/controlProtocol/controlApi.d.ts`:

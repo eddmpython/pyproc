@@ -8,13 +8,15 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## Unreleased
 
-<!-- unreleased-subpaths: pyproc/control -->
+<!-- unreleased-subpaths: -->
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.21 - 2026-08-13
+
 ### Added
 
-- **A supported JavaScript control entrance.** The unreleased `pyproc/control` stable subpath starts the
+- **A supported JavaScript control entrance.** The `pyproc/control` stable subpath starts the
   installed product, exposes persistent Python, checkpoint recovery, provider-neutral browser lifecycle,
   APX query and action evidence, verified screenshot bytes, cancellation, and bounded shutdown through the
   same Control Protocol used by MCP and the Python SDK.
@@ -24,7 +26,7 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - The root stays at six exports and no wire operation changes. The new subpath is additive and Node.js-only.
   Browser application code continues to use the root Machine entrance.
 
-한국어 요약: 미출하 `pyproc/control` 안정 subpath가 설치 제품의 JavaScript 사용 경로를 제공한다.
+한국어 요약: `pyproc/control` 안정 subpath가 설치 제품의 JavaScript 사용 경로를 제공한다.
 기존 Control Protocol의 취소, 결과, attachment 검증을 그대로 사용하며 root와 wire operation은
 바뀌지 않는다.
 

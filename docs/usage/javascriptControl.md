@@ -1,19 +1,15 @@
 # JavaScript Control SDK
 
-The unreleased stable `pyproc/control` Node.js subpath starts the installed pyproc product and exposes persistent Python,
+The stable `pyproc/control` Node.js subpath starts the installed pyproc product and exposes persistent Python,
 checkpoint recovery, browser automation, PyProc Eyes, verified binary attachments, and cancellation through
 one supported JavaScript API.
 
-unreleased package surface: this subpath is available from the next exact release after 0.0.20. Until that
-release is published, use a source SHA pin and do not claim the 0.0.20 npm tarball contains it.
-
 ## Install and preflight
 
-Install one exact npm version and prepare the pinned engine distribution. The final release note supplies the
-matching version number.
+Install the exact npm version and prepare the pinned engine distribution.
 
 ```sh
-npm install --save-exact pyproc@<exact-version>
+npm install --save-exact pyproc@0.0.21
 npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
