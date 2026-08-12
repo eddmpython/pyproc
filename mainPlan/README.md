@@ -17,4 +17,4 @@
 
 ## 현재 상태
 
-활성 이니셔티브: 없음
+활성 이니셔티브: [JavaScript Control 제품화](javascriptControlProduct/README.md)
