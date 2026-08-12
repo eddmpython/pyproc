@@ -10,6 +10,12 @@ import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
 import { FrameSpace, assertFrameSpaceConfig } from "../automationSpace/frameSpace.js";
 import { createFrameSpaceTools } from "../automationSpace/frameSpaceTools.js";
 import { NativeCdpSpace } from "../automationSpace/nativeCdpSpace.js";
+import {
+  assertAutomationRecordingSelection,
+  loadAutomationRecording,
+} from "../automationSpace/automationRecording.js";
+import { RecordingSpace } from "../automationSpace/recordingSpace.js";
+import { ReplaySpace } from "../automationSpace/replaySpace.js";
 import { ControlHost } from "./controlHost.js";
 import { controlOperationCatalog } from "./controlOperations.js";
 import { PageCommandBridge } from "./pageCommandBridge.mjs";
@@ -70,13 +76,26 @@ export async function createControlProduct({ env = process.env } = {}) {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new TypeError("PYPROC_MCP_TIMEOUT must be positive");
   const browserEnabled = env.PYPROC_BROWSER_CONTROL === "1";
   const providerKind = browserEnabled ? (env.PYPROC_AUTOMATION_PROVIDER || "nativeCdp") : null;
-  if (browserEnabled && !["nativeCdp", "frame"].includes(providerKind)) {
+  if (browserEnabled && !["nativeCdp", "frame", "replay"].includes(providerKind)) {
     throw new TypeError(`unsupported automation provider: ${providerKind}`);
   }
+  let recordingConfig = null;
+  if (env.PYPROC_AUTOMATION_RECORDING) {
+    try { recordingConfig = JSON.parse(env.PYPROC_AUTOMATION_RECORDING); }
+    catch (error) { throw new TypeError("PYPROC_AUTOMATION_RECORDING must be JSON"); }
+  }
+  if (providerKind === "replay" && recordingConfig?.mode !== "replay") {
+    throw new TypeError("ReplaySpace requires replay recording config");
+  }
   const browserConfig = browserEnabled ? parseBrowserControlConfig(env, { timeoutMs }) : null;
+  const replayRecording = providerKind === "replay" ? await loadAutomationRecording(recordingConfig.file) : null;
+  if (replayRecording) assertAutomationRecordingSelection(replayRecording, recordingConfig, browserConfig);
   if (providerKind === "frame") assertFrameSpaceConfig(browserConfig);
+  if (providerKind === "replay" && replayRecording.provider.providerKind === "frame") assertFrameSpaceConfig(browserConfig);
+  const frameToolProvider = providerKind === "frame"
+    || (providerKind === "replay" && replayRecording.provider.providerKind === "frame");
   const browserTools = browserConfig
-    ? (providerKind === "frame" ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig)) : [];
+    ? (frameToolProvider ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig)) : [];
   const tools = Object.freeze(browserEnabled ? [...CONTROL_PYTHON_TOOLS, ...browserTools] : [...CONTROL_PYTHON_TOOLS]);
   const pythonToolNames = new Set(CONTROL_PYTHON_TOOLS.map((tool) => tool.name));
   const engineRoot = configuredEngineRoot(env.PYPROC_MCP_ENGINE_ROOT);
@@ -167,7 +186,15 @@ export async function createControlProduct({ env = process.env } = {}) {
     automationSpace = browserEnabled
       ? (providerKind === "frame"
         ? new FrameSpace({ pageBridge, config: browserConfig, spaceId: "space:frame" })
-        : new NativeCdpSpace({ profileDir: browserSession.profile, config: browserConfig })) : null;
+        : providerKind === "replay"
+          ? new ReplaySpace({ recording: replayRecording,
+              cursor: recordingConfig.startCursor || 0,
+              prefixSha256: recordingConfig.prefixSha256 || null })
+          : new NativeCdpSpace({ profileDir: browserSession.profile, config: browserConfig })) : null;
+    if (automationSpace && recordingConfig?.mode === "record") {
+      automationSpace = await RecordingSpace.open({ provider: automationSpace, file: recordingConfig.file,
+        overwrite: recordingConfig.overwrite });
+    }
     browserControl = automationSpace?.control || null;
     automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
     const operationCatalog = controlOperationCatalog(tools);
@@ -192,7 +219,7 @@ export async function createControlProduct({ env = process.env } = {}) {
       async close() {
         if (closed) return;
         closed = true;
-        host.close("control product is shutting down");
+        await host.close("control product is shutting down");
         try { await automationRouter?.close(); } catch (error) {}
         pageBridge.close();
         try { browserSession?.close(); } catch (error) {}
@@ -202,7 +229,7 @@ export async function createControlProduct({ env = process.env } = {}) {
   } catch (error) {
     pageBridge.close();
     try { await automationRouter?.close(); } catch (closeError) {}
-    if (!automationRouter) try { await browserControl?.close(); } catch (closeError) {}
+    if (!automationRouter) try { await automationSpace?.close(); } catch (closeError) {}
     try { browserSession?.close(); } catch (closeError) {}
     await new Promise((resolveClose) => server.close(resolveClose));
     throw error;

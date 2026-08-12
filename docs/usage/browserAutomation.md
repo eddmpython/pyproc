@@ -91,9 +91,12 @@ and incomplete external-effect approval fail closed.
 | `browser.externalEffects` | Must equal `acknowledged` when `maxRisk` is `externalEffect` |
 | `browser.purpose` | Required printable purpose for an external-effect configuration |
 | `browser.artifacts` | Optional disk, count, inline, and TTL limits described below |
+| `browser.recording` | Optional `{mode:"record",file,overwrite?}` for native/frame, or required `{mode:"replay",file,recordingId,finalSha256,startCursor?,prefixSha256?}` for ReplaySpace. Paths are absolute and nonzero cursors require a prefix digest |
 
 FrameSpace supports a smaller action catalog and requires `browser.methods` to be empty. Its exact setup,
 sandbox, screenshot, and credentialless-session limits are in the [FrameSpace guide](frameSpace.md).
+Hash-chained recording, sensitive-input retention, deterministic replay, and cursor resume are in the
+[ReplaySpace guide](replaySpace.md).
 
 The repository `npm run mcp:sandbox` command still accepts the corresponding `PYPROC_*` environment
 variables for development and compatibility. The shipped command's versioned manifest is the product entry.

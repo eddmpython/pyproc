@@ -40,6 +40,10 @@ Provider execution owns the exact send boundary. An interruption before send is 
 may have crossed that boundary, failure is `applied` or `outcomeUnknown` and never retryable. The router does
 not replay a provider operation.
 
+Providers that declare `linearizeInvocations` run authorization, execution, terminal recording, and persistence
+as one FIFO turn. `RecordingSpace` and `ReplaySpace` use this boundary so concurrent callers produce and consume
+one reproducible order. A queued request cancelled before its turn reaches no provider code.
+
 ## Lifecycle and recovery
 
 `automation.space.inspect` adds a provider-neutral descriptor to the implementation report:
@@ -59,11 +63,15 @@ The operation list above is abbreviated. `restoreBoundary` is deliberately fixed
 claims to reverse provider effects. `replayBoundary` describes what that provider can do with a recorded
 operation. The current native and frame adapters record evidence but do not replay effects. FrameSpace
 declares `dom`, `target`, `screenshot`, and `artifact`, omits `automation.command`, and keeps the same restore
-boundary.
+boundary. `RecordingSpace` wraps either live provider without changing that identity. `ReplaySpace` declares
+the recorded capabilities, consumes exactly one matching entry at a time, and owns no live browser provider.
 
-Close is idempotent. After close, every new operation fails with `AUTOMATION_SPACE_CLOSED` before provider
-code. The provider is responsible for dropping session-owned locators, observations, lifecycle watchers,
-downloads, popup captures, artifacts, and transport state.
+Recording and replay details are in the [ReplaySpace guide](replaySpace.md).
+
+Close is idempotent. The Control host first rejects new requests, aborts active work, and waits for every terminal
+to settle. The router then drains its FIFO before closing the provider. After close, every new operation fails
+with `AUTOMATION_SPACE_CLOSED` before provider code. The provider is responsible for dropping session-owned
+locators, observations, lifecycle watchers, downloads, popup captures, artifacts, and transport state.
 
 ## Contract verification
 

@@ -86,6 +86,7 @@
     "test:mcp-product": "node tests/browser/installedMcpProduct.mjs",
     "test:control-product": "node tests/browser/controlProtocolProduct.mjs",
     "test:frame-space": "node tests/browser/frameSpaceProduct.mjs",
+    "test:replay-space": "node tests/browser/replaySpaceProduct.mjs",
     "test:python-sdk": "node tests/pythonSdk/run.mjs",
     "test:browser-control": "node tests/browser/browserControl.mjs",
     "test:browser-control-stress": "node tests/browser/browserControlStress.mjs",

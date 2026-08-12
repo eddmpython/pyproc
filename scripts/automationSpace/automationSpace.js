@@ -63,9 +63,19 @@ export class AutomationSpaceRouter {
     this.capabilities = Object.freeze([...(provider.capabilities || [])]);
     this._operations = new Set(this.operations);
     this._closed = false;
+    this._invokeTail = Promise.resolve();
   }
 
   async invoke(operation, input = {}, { signal, requestId = null } = {}) {
+    if (this.provider.linearizeInvocations === true) {
+      const turn = this._invokeTail.then(() => this._invoke(operation, input, { signal, requestId }));
+      this._invokeTail = turn.catch(() => {});
+      return turn;
+    }
+    return this._invoke(operation, input, { signal, requestId });
+  }
+
+  async _invoke(operation, input, { signal, requestId }) {
     if (this._closed) throw spaceError("AUTOMATION_SPACE_CLOSED", "automation space is closed");
     if (!this._operations.has(operation)) {
       throw spaceError("AUTOMATION_SPACE_OPERATION_UNSUPPORTED", `automation space operation is unsupported: ${operation}`);
@@ -94,6 +104,7 @@ export class AutomationSpaceRouter {
   async close() {
     if (this._closed) return;
     this._closed = true;
+    await this._invokeTail;
     await this.provider.close();
   }
 }

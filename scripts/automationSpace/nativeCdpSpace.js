@@ -17,6 +17,7 @@ export class NativeCdpSpace extends BrowserControlSpace {
     spaceId = "space:native" } = {}) {
     const implementation = control || new McpBrowserControl({ profileDir, config, brokerFactory, auditWriter });
     super(implementation, { spaceId });
+    this.config = config || implementation.config;
     this.providerKind = "nativeCdp";
     this.capabilities = NATIVE_CDP_CAPABILITIES;
   }

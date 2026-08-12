@@ -67,13 +67,18 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
   `storage`, `runtime`, `screenshot`, `artifact` 능력을 선언한다. provider probe 4/4, native 설치
   제품 7/7, 실제 Edge browser-control 71/71이 기존 오류와 effect 경계를 유지했다.
 - 단계 5 완료: `FrameSpace`가 CDP port 없이 credentialless sandbox와 private `MessageChannel`을
-  사용한다. same-origin과 허용 cross-origin, 부모 DOM 격리, ordered action, PNG attachment, denied
-  control-token 공격 거부, same-origin과 허용 cross-origin, 부모와 storage 격리, partial outcome,
-  첫 effect unknown outcome과 PNG 음성 검증을 설치 Control과 MCP 제품 18/18 및 Python SDK로
-  검증했다. 임의 페이지와 trusted
-  input은 지원한다고 주장하지 않는다.
-- 단계 6 진행: 기록 digest, artifact 완전성, effect 0회 재생, checkpoint 이후 resume를
-  `ReplaySpace` probe로 고정한다.
+  사용한다. control-token 공격 거부, same-origin과 허용 cross-origin, 부모와 storage 격리, partial
+  outcome, 첫 effect unknown outcome과 PNG 음성 검증을 설치 Control과 MCP 제품 18/18 및 Python
+  SDK로 검증했다. 임의 페이지와 trusted input은 지원한다고 주장하지 않는다.
+- 단계 6 완료: `RecordingSpace`가 live provider terminal과 screenshot을 canonical SHA-256 chain과
+  content-addressed sidecar로 저장하고 `ReplaySpace`가 provider 호출 없이 정확한 input 순서만 소비한다.
+  설치 제품 14/14에서 Control/MCP preflight, unrecomputed mutation, missing sidecar, non-file target 거부,
+  inline/non-inline
+  byte-identical PNG, target 요청 0, identity/final/cursor/prefix resume을 고정했다. 기록 시작 전 0600
+  초기 commit과 단일 writer lock, generation 원자 교체, symlink confinement, post-effect 실패 보수화,
+  fatal latch, FIFO, shutdown drain도 계약화했다.
+- 단계 7 진행: v86 Linux guest 안의 browser 후보를 cold/warm boot, heap, display, input, network,
+  screenshot 수치로 승격 또는 기각한다.
 
 ## 제품 최소선
 

@@ -100,6 +100,26 @@ export async function assertControlProtocolContract() {
     && uncertain.terminal.error.retryable === false && uncertain.terminal.error.details.completed.length === 1,
   "control error가 outcomeUnknown의 비재시도와 completed prefix를 보존하지 않았다");
 
+  let drained = false;
+  const drainHost = new ControlHost({ operations: catalog, handlers: {
+    "automation.act": async (input, { signal }) => new Promise((resolve, reject) => {
+      signal.addEventListener("abort", () => setTimeout(() => {
+        drained = true;
+        const error = new Error("effect terminal persisted during shutdown");
+        error.outcome = "outcomeUnknown";
+        reject(error);
+      }, 15), { once: true });
+    }),
+  } });
+  const active = drainHost.request(request("host:drain", "automation.act", { actions: [] }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await drainHost.close("contract shutdown");
+  const drainedTerminal = await active;
+  assert(drained && drainedTerminal.terminal.error.outcome === "outcomeUnknown",
+    "control host close가 active terminal 정착을 기다리지 않았다");
+  assert((await errorOf(() => drainHost.request(request("host:after-close"))))?.code === "CONTROL_HOST_CLOSED",
+    "control host close 뒤 새 요청이 차단되지 않았다");
+
   const conversation = new ControlClientConversation();
   conversation.begin(request("conversation:1"));
   await conversation.accept({ ...controlBase("response"), requestId: "conversation:1", outcome: "observed", output: {} });

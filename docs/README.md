@@ -35,6 +35,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [pythonSdk.md](usage/pythonSdk.md) | Official Python client: clean installation, persistent execution, checkpoint recovery, cancellation, and screenshots |
 | | [automationSpace.md](usage/automationSpace.md) | Provider-neutral automation lifecycle, authorization, effect, artifact, restore, and replay boundaries |
 | | [frameSpace.md](usage/frameSpace.md) | Cooperative credentialless frame automation, target bridge, sandbox, screenshot, and origin boundaries |
+| | [replaySpace.md](usage/replaySpace.md) | Hash-chained automation recording, artifact completeness, effect-free replay, and checkpoint-aligned resume |
 | [reference/](reference/) | [api.md](reference/api.md) | The function-level API reference: the six root exports and the machine handle vocabulary, escape hatches and subpaths, the full error code table (a machine gate forces every root export to be anchored) |
 | | [bundleFormat.md](reference/bundleFormat.md) | The canonical layout of the portable bundle (`PYBUNDLE1`) envelope: byte placement, header fields, the separation of integrity from signature |
 
@@ -58,4 +59,5 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 - Official Python client: [usage/pythonSdk.md](usage/pythonSdk.md)
 - Automation provider contract: [usage/automationSpace.md](usage/automationSpace.md)
 - Cooperative frame provider: [usage/frameSpace.md](usage/frameSpace.md)
+- Automation recording and replay: [usage/replaySpace.md](usage/replaySpace.md)
 - Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

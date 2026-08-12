@@ -332,6 +332,12 @@ with PyProcClient.start("pyproc-mcp.json") as client:
 snapshot 허용 시 browser 도구 아홉 개를 제공하고 raw command는 열지 않으며 target이 출하 bridge를
 로딩해야 한다. 정확한 격리와 screenshot 경계는 [FrameSpace 가이드](docs/usage/frameSpace.md)에 있다.
 
+`browser.recording`을 추가하면 승인된 여정을 hash chain으로 저장하고, 이후
+`"provider": "replay"`를 선택해 browser effect를 다시 보내지 않고 같은 terminal과 screenshot
+sidecar byte를 검증해 반환한다. replay에는 별도로 보관한 recording identity와 final digest pin이
+필수다. Python checkpoint 옆에 cursor와 prefix digest를 저장하면 기록 suffix를 이어 갈 수 있다.
+자세한 계약은 [ReplaySpace 가이드](docs/usage/replaySpace.md)에 있다.
+
 23개 action catalog에는 의미 기반 준비 대기, 명시적 bounded lazy hydration, 정식 순차 `screenshot`
 action이 있다. `browserOpen`은 첫 navigation 전에 viewport와 계측을 적용하고 redacted startup trace를
 돌려준다. inline 상한 안의 screenshot은 native MCP image content로 바로 도착한다. screenshot과

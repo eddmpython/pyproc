@@ -2,33 +2,9 @@
 import { controlAttachmentDescriptors, extractControlAttachments } from "./controlAttachments.mjs";
 import { controlBase, validateControlFrame } from "./controlProtocol.js";
 import { controlSuccessOutcome } from "./controlOperations.js";
+import { canonicalControlError } from "./controlError.js";
 
-function controlErrorDetails(error) {
-  const details = {
-    ...(Number.isInteger(error?.failedActionIndex) ? { failedActionIndex: error.failedActionIndex } : {}),
-    ...(error?.failedAction ? { failedAction: error.failedAction } : {}),
-    ...(Array.isArray(error?.completed) ? { completed: error.completed } : {}),
-    ...(error?.actionability ? { actionability: error.actionability } : {}),
-    ...(error?.trace ? { trace: error.trace } : {}),
-    ...(error?.details && typeof error.details === "object" ? error.details : {}),
-  };
-  return Object.keys(details).length ? details : null;
-}
-
-export function canonicalControlError(error) {
-  const outcome = ["notSent", "rejected", "applied", "outcomeUnknown"].includes(error?.outcome)
-    ? error.outcome : "notSent";
-  const retryable = (outcome === "applied" || outcome === "outcomeUnknown")
-    ? false : error?.retryable === true;
-  const details = controlErrorDetails(error);
-  return Object.freeze({
-    code: String(error?.code || "PYPROC_INTERNAL"),
-    message: String(error?.message || error || "control operation failed").slice(-2000),
-    retryable,
-    outcome,
-    ...(details ? { details } : {}),
-  });
-}
+export { canonicalControlError } from "./controlError.js";
 
 export class ControlHost {
   constructor({ handlers = {}, operations = [] } = {}) {
@@ -36,11 +12,17 @@ export class ControlHost {
     this.operations = Object.freeze([...operations]);
     this._used = new Set();
     this._active = new Map();
+    this._closed = false;
   }
 
   async request(frame) {
     validateControlFrame(frame);
     if (frame.type !== "request") throw new TypeError("control host requires a request frame");
+    if (this._closed) {
+      const error = new Error("control host is closed");
+      error.code = "CONTROL_HOST_CLOSED";
+      throw error;
+    }
     if (this._used.has(frame.requestId)) {
       const error = new Error(`control request ID was already used: ${frame.requestId}`);
       error.code = "CONTROL_REQUEST_DUPLICATE";
@@ -56,7 +38,9 @@ export class ControlHost {
       });
     }
     const controller = new AbortController();
-    const record = { controller, terminal: false };
+    let settle;
+    const settled = new Promise((resolve) => { settle = resolve; });
+    const record = { controller, terminal: false, settled };
     this._active.set(frame.requestId, record);
     try {
       const payload = await handler(frame.input, { signal: controller.signal, requestId: frame.requestId, spaceId: frame.spaceId || null });
@@ -79,6 +63,7 @@ export class ControlHost {
       return Object.freeze({ terminal, attachments: Object.freeze([]) });
     } finally {
       this._active.delete(frame.requestId);
+      settle();
     }
   }
 
@@ -89,7 +74,10 @@ export class ControlHost {
     return true;
   }
 
-  close(reason = "control host closed") {
-    for (const record of this._active.values()) record.controller.abort(reason);
+  async close(reason = "control host closed") {
+    this._closed = true;
+    const active = [...this._active.values()];
+    for (const record of active) record.controller.abort(reason);
+    await Promise.allSettled(active.map((record) => record.settled));
   }
 }

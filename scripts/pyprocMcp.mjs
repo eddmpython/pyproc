@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { applyMcpProductEnvironment, loadMcpProductConfig } from "./mcpProductConfig.mjs";
 import { findBrowser } from "./browserControl/browserLauncher.mjs";
+import { assertAutomationRecordingSelection, loadAutomationRecording } from "./automationSpace/automationRecording.js";
 
 const HELP = `Usage: pyproc-mcp --config <file> [--check]
 
@@ -51,6 +52,9 @@ try {
       ? findBrowser({ executable: loaded.config.browser.executable })
       : null;
     if (args.check) {
+      const replay = loaded.config.browser.provider === "replay"
+        ? await loadAutomationRecording(loaded.config.browser.recording.file) : null;
+      if (replay) assertAutomationRecordingSelection(replay, loaded.config.browser.recording, loaded.browserControl);
       process.stdout.write(`${JSON.stringify({
         ok: true,
         schemaVersion: loaded.config.schemaVersion,
@@ -66,6 +70,9 @@ try {
           rawMethods: loaded.browserControl.rawMethods,
           maxRisk: loaded.browserControl.maxRisk,
           artifacts: loaded.browserControl.artifacts,
+          ...(loaded.config.browser.recording ? { recording: loaded.config.browser.recording } : {}),
+          ...(replay ? { replay: { recordingId: replay.recordingId, entries: replay.entries.length,
+            finalSha256: replay.finalSha256, sourceProvider: replay.provider.providerKind } } : {}),
         } : { enabled: false },
       }, null, 2)}\n`);
     } else {

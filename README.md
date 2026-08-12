@@ -335,6 +335,12 @@ Set `"provider": "frame"` for a cooperative credentialless sandbox that opens no
 nine browser tools when snapshot is allowed, omits raw commands, and requires the target to load the shipped
 bridge. See the [FrameSpace guide](docs/usage/frameSpace.md) for its exact isolation and screenshot boundary.
 
+Add `browser.recording` to persist a hash-chained authorized journey, then select `"provider": "replay"` to
+return the same verified terminals and content-addressed screenshot sidecars without sending browser effects.
+Replay requires independently stored recording identity and final-digest pins; cursor plus prefix digest resumes
+a recorded suffix next to a Python checkpoint. See the
+[ReplaySpace guide](docs/usage/replaySpace.md).
+
 The 23-action catalog includes semantic readiness waits, explicit bounded lazy hydration, and a first-class
 ordered `screenshot` action. `browserOpen` applies the viewport before navigation and returns the redacted
 first-navigation trace. Screenshot results that fit the inline bound arrive as native MCP image content at

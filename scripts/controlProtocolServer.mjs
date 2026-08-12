@@ -13,6 +13,7 @@ import {
 const product = await createControlProduct();
 let helloComplete = false;
 let closing = false;
+let shutdownPromise = null;
 let outputTail = Promise.resolve();
 
 async function writeText(text) {
@@ -108,9 +109,14 @@ async function handleLine(line) {
 }
 
 async function shutdown(code = 0) {
-  if (!closing) closing = true;
-  try { await product.close(); } catch (error) {}
-  process.exit(code);
+  if (shutdownPromise) return shutdownPromise;
+  closing = true;
+  shutdownPromise = (async () => {
+    try { await product.close(); } catch (error) {}
+    await outputTail.catch(() => {});
+    process.exit(code);
+  })();
+  return shutdownPromise;
 }
 
 process.stderr.write(`pyproc control: ${product.browserSession.browser} -> ${product.pageUrl}\n`);

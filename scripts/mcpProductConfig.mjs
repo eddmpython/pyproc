@@ -1,15 +1,23 @@
 // mcpProductConfig.mjs - installed pyproc-mcp manifest validation and environment projection.
 import { readFile } from "node:fs/promises";
-import { realpathSync, statSync } from "node:fs";
-import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { lstatSync, realpathSync, statSync } from "node:fs";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseBrowserControlConfig } from "./browserControl/mcpBrowserControl.js";
 import { normalizeBrowserViewport } from "./browserControl/browserViewport.js";
+import {
+  AUTOMATION_RECORDING_MAX_ARTIFACT_BYTES,
+  AUTOMATION_RECORDING_MAX_TOTAL_ARTIFACT_BYTES,
+} from "./automationSpace/automationRecording.js";
 
 const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["root", "indexURL"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
+  "recording",
+]);
+const RECORDING_KEYS = new Set([
+  "mode", "file", "overwrite", "recordingId", "finalSha256", "startCursor", "prefixSha256",
 ]);
 const ARTIFACT_KEYS = new Set([
   "maxArtifactBytes", "maxTotalBytes", "maxArtifacts", "inlineMaxBytes", "ttlMs",
@@ -24,6 +32,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_BROWSER_ARTIFACT_MAX_COUNT", "PYPROC_BROWSER_ARTIFACT_INLINE_BYTES",
   "PYPROC_BROWSER_ARTIFACT_TTL_MS",
   "PYPROC_BROWSER_VIEWPORT",
+  "PYPROC_AUTOMATION_RECORDING",
 ]);
 
 function plainObject(value, label) {
@@ -110,6 +119,81 @@ function normalizedArtifacts(input = {}) {
   return Object.freeze(normalized);
 }
 
+function normalizedRecording(input, provider, artifacts) {
+  if (input === undefined) {
+    if (provider === "replay") throw new TypeError("browser.provider replay requires browser.recording");
+    return null;
+  }
+  const recording = plainObject(input, "browser.recording");
+  knownKeys(recording, RECORDING_KEYS, "browser.recording");
+  const expectedMode = provider === "replay" ? "replay" : "record";
+  if (recording.mode !== expectedMode) throw new TypeError(`browser.recording.mode must be ${expectedMode}`);
+  if (typeof recording.file !== "string" || !isAbsolute(recording.file)) {
+    throw new TypeError("browser.recording.file must be an absolute path");
+  }
+  const file = resolve(recording.file);
+  const overwrite = optionalBoolean(recording.overwrite, "browser.recording.overwrite");
+  let fileExists = false;
+  if (expectedMode === "replay") {
+    try {
+      if (!lstatSync(file).isFile()) throw new Error("not a file");
+    } catch (error) {
+      throw new TypeError(`browser.recording.file is unavailable: ${file}`);
+    }
+  } else {
+    try {
+      if (!statSync(realpathSync(dirname(file))).isDirectory()) throw new Error("not a directory");
+    } catch (error) {
+      throw new TypeError(`browser.recording.file parent is unavailable: ${dirname(file)}`);
+    }
+    try {
+      const target = lstatSync(file);
+      if (!target.isFile()) throw new TypeError("browser.recording.file must be a regular file");
+      fileExists = true;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  if (expectedMode === "record" && fileExists && !overwrite) {
+    throw new TypeError("browser.recording.file already exists; set overwrite true to replace it");
+  }
+  if (recording.startCursor !== undefined && (!Number.isInteger(recording.startCursor)
+    || recording.startCursor < 0 || recording.startCursor > 10000000)) {
+    throw new TypeError("browser.recording.startCursor must be an integer from 0 to 10000000");
+  }
+  if (recording.prefixSha256 !== undefined && !/^[0-9a-f]{64}$/.test(recording.prefixSha256)) {
+    throw new TypeError("browser.recording.prefixSha256 must be a lowercase SHA-256 digest");
+  }
+  if (recording.recordingId !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/.test(recording.recordingId)) {
+    throw new TypeError("browser.recording.recordingId is invalid");
+  }
+  if (recording.finalSha256 !== undefined && !/^[0-9a-f]{64}$/.test(recording.finalSha256)) {
+    throw new TypeError("browser.recording.finalSha256 must be a lowercase SHA-256 digest");
+  }
+  if (expectedMode === "record" && (recording.startCursor !== undefined || recording.prefixSha256 !== undefined
+    || recording.recordingId !== undefined || recording.finalSha256 !== undefined)) {
+    throw new TypeError("record mode does not accept replay pins or cursor");
+  }
+  if (expectedMode === "replay" && (!recording.recordingId || !recording.finalSha256)) {
+    throw new TypeError("replay mode requires recordingId and finalSha256 pins");
+  }
+  if (expectedMode === "replay" && (recording.startCursor || 0) > 0 && !recording.prefixSha256) {
+    throw new TypeError("nonzero replay startCursor requires prefixSha256");
+  }
+  if (expectedMode === "replay" && overwrite) {
+    throw new TypeError("replay mode does not accept overwrite");
+  }
+  if (artifacts.maxArtifactBytes > AUTOMATION_RECORDING_MAX_ARTIFACT_BYTES
+    || artifacts.maxTotalBytes > AUTOMATION_RECORDING_MAX_TOTAL_ARTIFACT_BYTES) {
+    throw new TypeError("browser recording artifact limits exceed the recording format limits");
+  }
+  return Object.freeze({ mode: expectedMode, file, ...(expectedMode === "record" ? { overwrite } : {}),
+    ...(recording.recordingId === undefined ? {} : { recordingId: recording.recordingId }),
+    ...(recording.finalSha256 === undefined ? {} : { finalSha256: recording.finalSha256 }),
+    ...(recording.startCursor === undefined ? {} : { startCursor: recording.startCursor }),
+    ...(recording.prefixSha256 === undefined ? {} : { prefixSha256: recording.prefixSha256 }) });
+}
+
 function normalizedBrowser(input = { enabled: false }) {
   const browser = plainObject(input, "browser");
   knownKeys(browser, BROWSER_KEYS, "browser");
@@ -123,8 +207,8 @@ function normalizedBrowser(input = { enabled: false }) {
     throw new TypeError("browser.executable must be an absolute file path");
   }
   const provider = browser.provider === undefined ? "nativeCdp" : browser.provider;
-  if (!["nativeCdp", "frame"].includes(provider)) {
-    throw new TypeError("browser.provider must be nativeCdp or frame");
+  if (!["nativeCdp", "frame", "replay"].includes(provider)) {
+    throw new TypeError("browser.provider must be nativeCdp, frame, or replay");
   }
   if (browser.maxRisk !== undefined && typeof browser.maxRisk !== "string") {
     throw new TypeError("browser.maxRisk must be a string");
@@ -136,6 +220,7 @@ function normalizedBrowser(input = { enabled: false }) {
     throw new TypeError("browser.purpose must be a string");
   }
   const purpose = (browser.purpose || "").trim();
+  const artifacts = normalizedArtifacts(browser.artifacts);
   const normalized = {
     enabled: true,
     provider,
@@ -149,7 +234,8 @@ function normalizedBrowser(input = { enabled: false }) {
     fileRoots: browser.fileRoots === undefined ? [] : stringArray(browser.fileRoots, "browser.fileRoots"),
     externalEffects: browser.externalEffects || "",
     purpose,
-    artifacts: normalizedArtifacts(browser.artifacts),
+    artifacts,
+    recording: normalizedRecording(browser.recording, provider, artifacts),
     ...(browser.viewport === undefined ? {} : {
       viewport: normalizeBrowserViewport(browser.viewport, { label: "browser.viewport" }),
     }),
@@ -181,6 +267,7 @@ function projectedEnvironment(config, baseEnv = {}) {
   if (browser.externalEffects) env.PYPROC_BROWSER_EXTERNAL_EFFECTS = browser.externalEffects;
   if (browser.purpose) env.PYPROC_BROWSER_PURPOSE = browser.purpose;
   if (browser.viewport) env.PYPROC_BROWSER_VIEWPORT = JSON.stringify(browser.viewport);
+  if (browser.recording) env.PYPROC_AUTOMATION_RECORDING = JSON.stringify(browser.recording);
   const artifactEnv = {
     maxArtifactBytes: "PYPROC_BROWSER_ARTIFACT_MAX_BYTES",
     maxTotalBytes: "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",

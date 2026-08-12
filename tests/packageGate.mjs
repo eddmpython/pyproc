@@ -88,6 +88,9 @@ try {
     ["scripts", "automationSpace", "frameSpaceTools.js"],
     ["scripts", "automationSpace", "frameSpacePage.js"],
     ["scripts", "automationSpace", "frameSpaceTarget.js"],
+    ["scripts", "automationSpace", "automationRecording.js"],
+    ["scripts", "automationSpace", "recordingSpace.js"],
+    ["scripts", "automationSpace", "replaySpace.js"],
     ["scripts", "browserControl", "mcpMachine.html"],
     ["scripts", "browserControl", "browserArtifactStore.js"],
   ]) {
