@@ -8,7 +8,7 @@ Install the exact wheel from the matching GitHub Release:
 
 ```sh
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.18/pyproc_control-0.0.18-py3-none-any.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.19/pyproc_control-0.0.19-py3-none-any.whl"
 ```
 
 PyPI is not an installation source yet. The versioned GitHub Release also contains the source distribution.

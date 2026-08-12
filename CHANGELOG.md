@@ -12,6 +12,22 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.19 - 2026-08-12
+
+### Fixed
+
+- MCP fatal protocol errors now start a five-second shutdown deadline before draining product resources.
+  The fatal terminal is flushed first, duplicate request IDs still execute no second effect, and a delayed
+  Chromium or server cleanup can no longer leave the stdio process alive without an exit code.
+
+### Compatibility
+
+- This patch changes no operation, schema, result, export, or type signature. It supersedes 0.0.18, whose
+  publish gate exposed the shutdown race before npm publication.
+
+한국어 요약: 중복 MCP request ID의 fatal terminal 뒤 제품 정리가 지연돼도 프로세스가 5초 안에
+종료되도록 bounded shutdown을 추가했다. effect 및 wire 의미론과 공개 표면은 바뀌지 않는다.
+
 ## 0.0.18 - 2026-08-12
 
 ### Added

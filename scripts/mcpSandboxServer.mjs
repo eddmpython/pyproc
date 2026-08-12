@@ -21,10 +21,14 @@ const mcpAdapter = new McpControlAdapter({ host: controlHost, tools: TOOLS });
 process.stderr.write(`pyproc MCP sandbox: ${product.browserSession.browser} -> ${product.pageUrl}\n`);
 
 let shuttingDown = false;
+let rl = null;
 async function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
+  const forcedExit = setTimeout(() => process.exit(code), 5000);
+  rl?.close();
   try { await product.close(); } catch (error) {}
+  clearTimeout(forcedExit);
   process.exit(code);
 }
 process.on("SIGINT", () => void shutdown(0));
@@ -50,7 +54,7 @@ async function fatalRequestError(code, message) {
   await shutdown(1);
 }
 
-const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 rl.on("close", () => void shutdown(0));
 
 rl.on("line", async (line) => {
