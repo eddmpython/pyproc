@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import threading
 from collections import deque
-from concurrent.futures import Future
+from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Sequence, TextIO
 
@@ -18,6 +18,7 @@ from .models import Attachment, ControlError, ControlResult
 from .protocol import (
     CONTROL_ATTACHMENT_CHUNK_BYTES,
     CONTROL_MAX_ATTACHMENT_BYTES,
+    ControlProtocolError,
     controlBase,
     decodeFrame,
     encodeFrame,
@@ -45,7 +46,42 @@ class ControlRequest:
         self.future = future
 
     def result(self, timeout: float | None = None) -> ControlResult:
-        return self.future.result(timeout)
+        if timeout is None:
+            return self.future.result()
+        try:
+            return self.future.result(timeout)
+        except FutureTimeoutError:
+            if self.future.done():
+                try:
+                    return self.future.result()
+                except ControlError:
+                    raise
+                except BaseException as error:
+                    self._raiseDeadlineFailure("control connection ended at the request deadline", error)
+            try:
+                self.client.cancel(self.requestId, "Python client request deadline reached")
+            except BaseException as error:
+                self._raiseDeadlineFailure("control request cancellation could not be sent", error)
+            try:
+                return self.future.result(self.client.cancelSettleTimeout)
+            except FutureTimeoutError as error:
+                self._raiseDeadlineFailure("control request did not settle after cancellation", error)
+            except ControlError:
+                raise
+            except BaseException as error:
+                self._raiseDeadlineFailure("control connection ended while cancellation was settling", error)
+
+    def _raiseDeadlineFailure(self, message: str, cause: BaseException) -> None:
+        try:
+            self.client.close()
+        except BaseException:
+            pass
+        raise ControlError({
+            "code": "CONTROL_TIMEOUT",
+            "message": message,
+            "retryable": False,
+            "outcome": "outcomeUnknown",
+        }) from cause
 
     def cancel(self, reason: str = "Python client cancelled the request") -> bool:
         return self.client.cancel(self.requestId, reason)
@@ -57,11 +93,17 @@ class ControlRequest:
 class PyProcClient:
     def __init__(self, readable: TextIO, writable: TextIO, *, process: subprocess.Popen[str] | None = None,
                  stderr: TextIO | None = None, startupTimeout: float = 30.0,
+                 cancelSettleTimeout: float = 5.0,
                  eventHandler: Callable[[dict[str, Any]], None] | None = None) -> None:
+        if cancelSettleTimeout <= 0:
+            raise ValueError("cancelSettleTimeout must be positive")
         self.readable = readable
         self.writable = writable
         self.process = process
         self.eventHandler = eventHandler
+        self.cancelSettleTimeout = cancelSettleTimeout
+        self._stderr = stderr
+        self._serverEvents = False
         self.operations: tuple[str, ...] = ()
         self._pending: dict[str, dict[str, Any]] = {}
         self._used: set[str] = set()
@@ -73,6 +115,7 @@ class PyProcClient:
         self._helloError: BaseException | None = None
         self._helloId = "hello:python"
         self._closed = False
+        self._connectionError: ControlError | None = None
         self._diagnostics: deque[str] = deque(maxlen=200)
         self._readerThread = threading.Thread(target=self._readerLoop, name="pyprocControlReader", daemon=True)
         self._readerThread.start()
@@ -84,7 +127,7 @@ class PyProcClient:
         self._sendFrame({
             **controlBase("hello"), "requestId": self._helloId, "role": "client",
             "peer": {"name": "pyproc-python", "version": "1"},
-            "capabilities": {"cancel": True, "events": True,
+            "capabilities": {"cancel": True, "events": False,
                              "attachments": {"encoding": "base64",
                                              "maxChunkBytes": CONTROL_ATTACHMENT_CHUNK_BYTES}},
         })
@@ -99,6 +142,7 @@ class PyProcClient:
     def start(cls, configPath: str | os.PathLike[str], *,
               command: str | os.PathLike[str] | Sequence[str | os.PathLike[str]] | None = None,
               startupTimeout: float = 30.0,
+              cancelSettleTimeout: float = 5.0,
               eventHandler: Callable[[dict[str, Any]], None] | None = None,
               environment: dict[str, str] | None = None) -> "PyProcClient":
         args = [*resolvedCommand(command), "--config", str(Path(configPath).resolve())]
@@ -118,10 +162,16 @@ class PyProcClient:
             raise RuntimeError("pyproc-control stdio pipes were not created")
         try:
             return cls(process.stdout, process.stdin, process=process, stderr=process.stderr,
-                       startupTimeout=startupTimeout, eventHandler=eventHandler)
+                       startupTimeout=startupTimeout, cancelSettleTimeout=cancelSettleTimeout,
+                       eventHandler=eventHandler)
         except BaseException:
             if process.poll() is None:
                 process.terminate()
+                try:
+                    process.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5.0)
             raise
 
     @classmethod
@@ -176,10 +226,13 @@ class PyProcClient:
                         or frame["requestId"] != self._helloId:
                     raise RuntimeError("control server did not answer with the matching hello")
                 self.operations = tuple(frame["operations"])
+                self._serverEvents = frame["capabilities"]["events"] is True
                 self._helloEvent.set()
                 return
             frameType = frame["type"]
             if frameType == "event":
+                if not self._serverEvents:
+                    raise RuntimeError("control server emitted an event without advertising event support")
                 if frame["eventId"] in self._events:
                     raise RuntimeError(f"duplicate control event: {frame['eventId']}")
                 self._events.add(frame["eventId"])
@@ -253,17 +306,30 @@ class PyProcClient:
             if not self._helloEvent.is_set():
                 self._helloError = error
                 self._helloEvent.set()
+            connectionError = self._connectionFailure("control connection ended before the request terminal")
+            self._connectionError = connectionError
             for pending in self._pending.values():
                 future: Future[ControlResult] = pending["future"]
                 if not future.done():
-                    future.set_exception(error)
+                    future.set_exception(connectionError)
             self._pending.clear()
+
+    @staticmethod
+    def _connectionFailure(message: str, *, outcome: str = "outcomeUnknown") -> ControlError:
+        return ControlError({
+            "code": "CONTROL_CONNECTION_LOST",
+            "message": message,
+            "retryable": False,
+            "outcome": outcome,
+        })
 
     def requestAsync(self, operation: str, input: dict[str, Any] | None = None, *,
                      requestId: str | None = None, spaceId: str | None = None) -> ControlRequest:
         with self._stateLock:
             if self._closed:
                 raise RuntimeError("pyproc control client is closed")
+            if self._connectionError is not None:
+                raise self._connectionFailure("control connection is unavailable", outcome="notSent")
             self._sequence += 1
             currentId = requestId or f"request:{self._sequence}"
             if currentId in self._used:
@@ -280,10 +346,14 @@ class PyProcClient:
             frame["spaceId"] = spaceId
         try:
             self._sendFrame(frame)
-        except BaseException:
+        except ControlProtocolError:
             with self._stateLock:
                 self._pending.pop(currentId, None)
             raise
+        except BaseException as error:
+            connectionError = self._connectionFailure("control request frame could not be sent")
+            self._failAll(error)
+            raise connectionError from error
         return ControlRequest(self, currentId, future)
 
     def request(self, operation: str, input: dict[str, Any] | None = None, *,
@@ -295,7 +365,14 @@ class PyProcClient:
         with self._stateLock:
             if requestId not in self._pending:
                 return False
-        self._sendFrame({**controlBase("cancel"), "requestId": requestId, "reason": reason})
+        try:
+            self._sendFrame({**controlBase("cancel"), "requestId": requestId, "reason": reason})
+        except ControlProtocolError:
+            raise
+        except BaseException as error:
+            connectionError = self._connectionFailure("control cancel frame could not be sent")
+            self._failAll(error)
+            raise connectionError from error
         return True
 
     def runPython(self, code: str, *, timeout: float | None = None) -> ControlResult:
@@ -372,6 +449,16 @@ class PyProcClient:
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=timeout)
+        for stream in (self.readable, self._stderr):
+            try:
+                stream.close() if stream is not None else None
+            except BaseException:
+                pass
+        current = threading.current_thread()
+        if self._readerThread is not current:
+            self._readerThread.join(timeout)
+        if self._stderrThread is not None and self._stderrThread is not current:
+            self._stderrThread.join(timeout)
 
     def __enter__(self) -> "PyProcClient":
         return self

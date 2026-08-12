@@ -26,12 +26,21 @@ Every frame contains:
 ```
 
 The client sends exactly one `hello` first. The server replies with the same hello `requestId`, its limits,
-and the enabled operation names. A version mismatch, malformed frame, wrong direction, or frame larger than
-1 MiB closes the connection after one `fatal` error when a response can still be written.
+and the enabled operation names. Version 1 advertises `events: false`; unsolicited event frames are rejected
+until a later version provides an event source and consumer contract. A version mismatch, malformed frame,
+wrong direction, or frame larger than 1 MiB closes the connection after one `fatal` error when a response can
+still be written.
 
 Request IDs are 1 to 128 ASCII characters from the documented identifier alphabet. An ID is single-use for
 the lifetime of one connection, including after its terminal frame. A request has exactly one `response` or
 request `error`. A late provider result after cancellation cannot create a second terminal.
+
+The machine page starts through a single-use bootstrap URL. The server consumes its nonce once, injects the
+separate bearer capability into a module closure, and removes the bootstrap script before guest code runs.
+The capability never appears in the URL or guest-readable Web Storage, and the recorded bootstrap URL returns
+410 after first use. A direct page reload therefore fails closed instead of silently reconnecting: already
+delivered work settles as `outcomeUnknown`, queued follow-up work remains `notSent`, and the client must restart
+the product process.
 
 ## Operations
 
@@ -63,6 +72,11 @@ The operation names, error outcomes, permission checks, action catalog, and arti
 host. The MCP adapter only maps tool names and native image content. This prevents the native and MCP paths
 from assigning different meaning to the same action.
 
+The optional request `spaceId` is a fence, not an alternate router. Omit it to use the configured machine or
+automation space. When supplied, `machine:primary` is required for machine operations and the exact `spaceId`
+reported by `automation.space.inspect` is required for automation operations. A mismatch is rejected before
+the provider is called.
+
 ## Cancellation and effects
 
 A `cancel` frame is not a terminal. The original request still ends with a response or error.
@@ -71,6 +85,8 @@ A `cancel` frame is not a terminal. The original request still ends with a respo
 - Cancellation after delivery returns `outcomeUnknown` unless the provider proves a narrower boundary.
 - `applied` and `outcomeUnknown` errors are never retryable.
 - No effect command is replayed automatically.
+- A pending connection loss or request write with unprovable delivery is non-retryable
+  `CONTROL_CONNECTION_LOST` with `outcomeUnknown` in the supplied native clients.
 
 Python checkpoint restore only rewinds the Python Machine. It does not roll back browser navigation, input,
 storage, download, popup, network, or other external effects.
@@ -83,8 +99,9 @@ the attachment ID, kind, MIME type, byte length, and digest. A client must withh
 declared attachment is complete and verified.
 
 The maximum JSON frame is 1 MiB, each decoded attachment chunk is at most 256 KiB, and one attachment is at
-most 64 MiB. Screenshot output removes inline base64 from the JSON result and preserves the broker artifact
-reference for later chunk reads or deletion.
+most 64 MiB. A client may advertise a smaller `maxChunkBytes` in its hello; the server sends chunks no larger
+than that negotiated receive limit. Screenshot output removes inline base64 from the JSON result and preserves
+the broker artifact reference for later chunk reads or deletion.
 
 ## Verification
 

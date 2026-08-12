@@ -4,6 +4,20 @@ Official Python client for the pyproc Control Protocol. It starts the installed 
 verifies every protocol frame and binary attachment, and exposes persistent Python plus optional browser
 automation without requiring JavaScript application code.
 
+Install the exact wheel from the matching GitHub Release:
+
+```sh
+python -m pip install \
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.17/pyproc_control-0.0.17-py3-none-any.whl"
+```
+
+PyPI is not an installation source yet. The versioned GitHub Release also contains the source distribution.
+
+Synchronous `timeout=` values cancel the protocol request and wait for its canonical terminal. A delivered
+effect that cannot be proven absent returns non-retryable `outcomeUnknown`; it is never silently retried.
+Pending EOF and partial request-write failures are likewise exposed as non-retryable
+`CONTROL_CONNECTION_LOST` with `outcomeUnknown`, never as raw pipe exceptions.
+
 ```python
 from pyprocControl import PyProcClient
 

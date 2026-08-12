@@ -27,6 +27,11 @@ export class PageCommandBridge {
     if (protocol !== "pyproc-control" || version !== 1 || typeof pageEpoch !== "string" || !pageEpoch
       || typeof spaceId !== "string" || !spaceId) throw new PageCommandError("CONTROL_BRIDGE_HANDSHAKE", "page bridge hello is invalid");
     if (this.pageEpoch && this.pageEpoch !== pageEpoch) {
+      if (this._pollWaiter) {
+        const waiter = this._pollWaiter;
+        this._pollWaiter = null;
+        waiter.deliver(null, new PageCommandError("CONTROL_PAGE_REPLACED", "page poll was replaced by a new epoch"));
+      }
       for (const record of this._pending.values()) {
         if (record.state === "delivered" && record.pageEpoch !== pageEpoch) {
           this._finish(record, new PageCommandError("CONTROL_PAGE_REPLACED", "page was replaced after command delivery", {

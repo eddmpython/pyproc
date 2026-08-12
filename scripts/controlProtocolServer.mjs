@@ -15,6 +15,7 @@ let helloComplete = false;
 let closing = false;
 let shutdownPromise = null;
 let outputTail = Promise.resolve();
+let attachmentChunkBytes = CONTROL_ATTACHMENT_CHUNK_BYTES;
 
 async function writeText(text) {
   if (!process.stdout.write(text)) await once(process.stdout, "drain");
@@ -46,8 +47,8 @@ function attachmentFrames(requestId, attachment) {
       byteLength: attachment.byteLength, sha256: attachment.sha256 });
     return frames;
   }
-  for (let offset = 0; offset < bytes.byteLength; offset += CONTROL_ATTACHMENT_CHUNK_BYTES) {
-    const chunk = bytes.subarray(offset, Math.min(bytes.byteLength, offset + CONTROL_ATTACHMENT_CHUNK_BYTES));
+  for (let offset = 0; offset < bytes.byteLength; offset += attachmentChunkBytes) {
+    const chunk = bytes.subarray(offset, Math.min(bytes.byteLength, offset + attachmentChunkBytes));
     const eof = offset + chunk.byteLength === bytes.byteLength;
     frames.push({ ...controlBase("attachment"), requestId, attachmentId: attachment.attachmentId,
       mimeType: attachment.mimeType, offset, dataBase64: chunk.toString("base64"), eof,
@@ -86,10 +87,11 @@ async function handleLine(line) {
       return;
     }
     helloComplete = true;
+    attachmentChunkBytes = frame.capabilities.attachments.maxChunkBytes;
     await queueFrames([{
       ...controlBase("hello"), requestId: frame.requestId, role: "server",
       peer: { name: "pyproc", version: "1" },
-      capabilities: { cancel: true, events: true,
+      capabilities: { cancel: true, events: false,
         attachments: { encoding: "base64", maxChunkBytes: CONTROL_ATTACHMENT_CHUNK_BYTES } },
       operations: product.operationCatalog.map((operation) => operation.name),
     }]);

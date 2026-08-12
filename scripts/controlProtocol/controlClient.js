@@ -19,13 +19,22 @@ export class ControlRemoteError extends Error {
   }
 }
 
+function connectionLost(message, outcome = "outcomeUnknown") {
+  return new ControlRemoteError({ code: "CONTROL_CONNECTION_LOST", message,
+    retryable: false, outcome });
+}
+
 export class ControlStdioClient {
-  constructor({ readable, writable, peer = { name: "pyproc-js", version: "1" } } = {}) {
+  constructor({ readable, writable, peer = { name: "pyproc-js", version: "1" },
+    maxAttachmentChunkBytes = CONTROL_ATTACHMENT_CHUNK_BYTES, eventHandler = null } = {}) {
     if (!readable?.on || !writable?.write) throw new TypeError("control client requires readable and writable streams");
+    if (eventHandler !== null && typeof eventHandler !== "function") throw new TypeError("control eventHandler must be a function");
     this.readable = readable;
     this.writable = writable;
     this.operations = Object.freeze([]);
-    this._conversation = new ControlClientConversation();
+    this._conversation = new ControlClientConversation({ maxAttachmentChunkBytes });
+    this._serverEvents = false;
+    this._eventHandler = eventHandler;
     this._pending = new Map();
     this._sequence = 0;
     this._closed = false;
@@ -42,8 +51,8 @@ export class ControlStdioClient {
     writable.on?.("error", (error) => this._fail(error));
     void this._write({
       ...controlBase("hello"), requestId: this._helloId, role: "client", peer,
-      capabilities: { cancel: true, events: true,
-        attachments: { encoding: "base64", maxChunkBytes: CONTROL_ATTACHMENT_CHUNK_BYTES } },
+      capabilities: { cancel: true, events: false,
+        attachments: { encoding: "base64", maxChunkBytes: maxAttachmentChunkBytes } },
     }).catch((error) => this._fail(error));
   }
 
@@ -64,6 +73,7 @@ export class ControlStdioClient {
         throw new Error("control server did not answer with the matching hello");
       }
       this._readySettled = true;
+      this._serverEvents = frame.capabilities.events === true;
       this.operations = Object.freeze([...frame.operations]);
       this._readyResolve(this);
       return;
@@ -72,7 +82,14 @@ export class ControlStdioClient {
       && frame.type !== "response" && frame.type !== "error") {
       throw new Error(`control server sent an invalid frame direction: ${frame.type}`);
     }
+    if (frame.type === "event" && !this._serverEvents) {
+      throw new Error("control server emitted an event without advertising event support");
+    }
     await this._conversation.accept(frame);
+    if (frame.type === "event") {
+      this._eventHandler?.(frame);
+      return;
+    }
     if (frame.type !== "response" && frame.type !== "error") return;
     const pending = this._pending.get(frame.requestId);
     if (!pending) throw new Error(`control server completed an unknown request: ${frame.requestId}`);
@@ -89,7 +106,8 @@ export class ControlStdioClient {
       this._readySettled = true;
       this._readyReject(error);
     }
-    for (const pending of this._pending.values()) pending.reject(error);
+    const pendingError = connectionLost("control connection ended before the request terminal");
+    for (const pending of this._pending.values()) pending.reject(pendingError);
     this._pending.clear();
   }
 
@@ -101,13 +119,24 @@ export class ControlStdioClient {
     this._conversation.begin(frame);
     const result = new Promise((resolve, reject) => this._pending.set(id, { resolve, reject }));
     try { await this._write(frame); }
-    catch (error) { this._pending.delete(id); throw error; }
+    catch (error) {
+      if (!this._pending.has(id)) return result;
+      this._pending.delete(id);
+      const failure = connectionLost("control request frame could not be sent");
+      this._fail(error);
+      throw failure;
+    }
     return result;
   }
 
   async cancel(requestId, reason = "control client cancelled the request") {
     await this.ready;
-    return this._write({ ...controlBase("cancel"), requestId, reason });
+    try { return await this._write({ ...controlBase("cancel"), requestId, reason }); }
+    catch (error) {
+      const failure = connectionLost("control cancel frame could not be sent");
+      this._fail(error);
+      throw failure;
+    }
   }
 
   close() {
@@ -115,7 +144,7 @@ export class ControlStdioClient {
     this._closed = true;
     this._lines.close();
     this.writable.end?.();
-    const error = new Error("control client closed");
+    const error = connectionLost("control client closed with requests pending");
     for (const pending of this._pending.values()) pending.reject(error);
     this._pending.clear();
   }

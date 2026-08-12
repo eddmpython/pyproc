@@ -2,15 +2,21 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { rm, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
+const frameBridge = await readFile(join(ROOT, "scripts", "automationSpace", "frameSpaceTarget.js"));
 const targetServer = createServer((req, res) => {
+  if (req.url === "/frameSpaceTarget.js") {
+    res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(frameBridge);
+    return;
+  }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  res.end("<!doctype html><html><body><h1 id=title>control-ready</h1></body></html>");
+  res.end("<!doctype html><html><body><h1 id=title>control-ready</h1><script src=/frameSpaceTarget.js></script></body></html>");
 });
 await new Promise((resolve) => targetServer.listen(0, "127.0.0.1", resolve));
 const targetOrigin = `http://127.0.0.1:${targetServer.address().port}`;
@@ -24,6 +30,7 @@ const check = (name, pass, info = "") => {
 
 const installed = await installPackedPyProc("pyprocControlProduct-");
 const configPath = join(installed.appDir, "pyproc-control.json");
+const reloadConfigPath = join(installed.appDir, "pyproc-control-reload.json");
 const browser = process.env.PYPROC_BROWSER || undefined;
 await writeFile(configPath, JSON.stringify({
   schemaVersion: 1,
@@ -42,15 +49,117 @@ await writeFile(configPath, JSON.stringify({
       maxArtifacts: 8, inlineMaxBytes: 4 * 1024 * 1024, ttlMs: 120000 },
   },
 }, null, 2));
+await writeFile(reloadConfigPath, JSON.stringify({
+  schemaVersion: 1,
+  engine: { root: join(ROOT, "vendor", "pyodide") },
+  timeoutMs: 1500,
+  browser: {
+    enabled: true,
+    provider: "frame",
+    ...(browser ? { executable: browser } : {}),
+    allowedOrigins: [targetOrigin],
+    maxRisk: "externalEffect",
+    actions: ["snapshot", "waitFor"],
+    methods: [],
+    externalEffects: "acknowledged",
+    purpose: "control page reload product gate",
+    artifacts: { maxArtifactBytes: 8 * 1024 * 1024, maxTotalBytes: 16 * 1024 * 1024,
+      maxArtifacts: 8, inlineMaxBytes: 4 * 1024 * 1024, ttlMs: 120000 },
+  },
+}, null, 2));
 
 const cli = binPath(installed.appDir, "pyproc-control");
 const checkReport = JSON.parse(run(cli, ["--config", configPath, "--check"], { cwd: installed.appDir }).stdout);
 check("installed pyproc-control preflight", checkReport.ok === true
   && checkReport.automation.actions.includes("screenshot") && !!checkReport.machineBrowser);
 
-const clientFile = join(installed.appDir, "node_modules", "pyproc", "scripts", "controlProtocol", "controlClient.js");
+const packageRoot = join(installed.appDir, "node_modules", "pyproc");
+const clientFile = join(packageRoot, "scripts", "controlProtocol", "controlClient.js");
 const { ControlRemoteError, ControlStdioClient } = await import(pathToFileURL(clientFile).href);
-const script = join(installed.appDir, "node_modules", "pyproc", "scripts", "pyprocControl.mjs");
+const { createControlProduct } = await import(pathToFileURL(join(packageRoot,
+  "scripts", "controlProtocol", "controlProduct.mjs")).href);
+const { loadMcpProductConfig } = await import(pathToFileURL(join(packageRoot,
+  "scripts", "mcpProductConfig.mjs")).href);
+const { launchBrowser } = await import(pathToFileURL(join(packageRoot,
+  "scripts", "browserControl", "browserLauncher.mjs")).href);
+const { readDevToolsEndpoint } = await import(pathToFileURL(join(packageRoot,
+  "scripts", "browserControl", "browserControlBroker.mjs")).href);
+const { CdpConnection } = await import(pathToFileURL(join(packageRoot,
+  "scripts", "browserControl", "cdpConnection.mjs")).href);
+const { controlBase } = await import(pathToFileURL(join(packageRoot,
+  "scripts", "controlProtocol", "controlProtocol.js")).href);
+
+let reloadProduct = null;
+let reloadConnection = null;
+try {
+  const loaded = await loadMcpProductConfig(reloadConfigPath);
+  reloadProduct = await createControlProduct({ env: loaded.env,
+    browserLauncher: (url, options) => launchBrowser(url, { ...options,
+      extraArgs: [...(options.extraArgs || []), "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] }) });
+  await reloadProduct.pageBridge.waitForReady();
+  const opened = await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:reload-open",
+    operation: "automation.target.open", input: { url: `${targetOrigin}/reload`,
+      expectedRisk: "externalEffect", waitUntil: "load" } });
+  const attached = await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:reload-attach",
+    operation: "automation.session.attach", input: { targetRef: opened.terminal.output.targetRef } });
+  await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:fetch-interceptor-install",
+    operation: "machine.run", input: { code: `import js
+js.eval("globalThis.pyprocOriginalFetch=globalThis.fetch;globalThis.pyprocFetchIntercepted=false;globalThis.fetch=(...args)=>{globalThis.pyprocFetchIntercepted=true;return globalThis.pyprocOriginalFetch(...args)}")` } });
+  const fetchFence = await reloadProduct.host.request({ ...controlBase("request"),
+    requestId: "product:fetch-interceptor-probe", operation: "machine.run",
+    input: { code: "bool(js.pyprocFetchIntercepted)" } });
+  await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:fetch-interceptor-restore",
+    operation: "machine.run", input: { code: `import js
+js.eval("globalThis.fetch=globalThis.pyprocOriginalFetch;delete globalThis.pyprocOriginalFetch;delete globalThis.pyprocFetchIntercepted")` } });
+  const activeId = "product:page-reload";
+  const active = reloadProduct.host.request({ ...controlBase("request"), requestId: activeId,
+    operation: "automation.act", input: { sessionRef: attached.terminal.output,
+      actions: [{ kind: "waitFor", selector: "#never", state: "visible", expectedRisk: "read" }] } });
+  const deliveryDeadline = Date.now() + 30000;
+  while (reloadProduct.pageBridge._pending.get(activeId)?.state !== "delivered"
+    && Date.now() < deliveryDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  const previousEpoch = reloadProduct.pageBridge.pageEpoch;
+  reloadConnection = await CdpConnection.connect(await readDevToolsEndpoint(reloadProduct.browserSession.profile));
+  const targets = await reloadConnection.send("Target.getTargets");
+  const controlTarget = targets.targetInfos.find((target) => target.type === "page"
+    && target.url.startsWith(reloadProduct.pageUrl));
+  if (!controlTarget) throw new Error("control product page target was not found");
+  const { sessionId } = await reloadConnection.send("Target.attachToTarget",
+    { targetId: controlTarget.targetId, flatten: true });
+  const tokenProbe = await reloadConnection.send("Runtime.evaluate", {
+    expression: `(async () => {
+      const navigationNames = performance.getEntriesByType('navigation').map((entry) => entry.name);
+      const replayStatus = await fetch(navigationNames[0], { cache: 'no-store' }).then((response) => response.status);
+      return { stored: sessionStorage.getItem('pyprocControlToken'), hash: location.hash,
+        navigationNames, replayStatus };
+    })()`,
+    awaitPromise: true,
+    returnByValue: true,
+  }, sessionId);
+  await reloadConnection.send("Page.reload", { ignoreCache: true }, sessionId);
+  const terminal = (await active).terminal;
+  const afterReload = await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:after-reload",
+    operation: "machine.run", input: { code: "40 + 2" } });
+  const reloadPassed = fetchFence.terminal.output.value === "False"
+      && tokenProbe.result.value.stored === null && tokenProbe.result.value.hash === ""
+      && tokenProbe.result.value.navigationNames.every((name) => !name.includes("controlToken"))
+      && tokenProbe.result.value.replayStatus === 410
+      && terminal.type === "error" && terminal.error.code === "CONTROL_TIMEOUT"
+      && terminal.error.outcome === "outcomeUnknown" && reloadProduct.pageBridge.pageEpoch === previousEpoch
+      && afterReload.terminal.type === "error" && afterReload.terminal.error.code === "CONTROL_TIMEOUT"
+      && afterReload.terminal.error.outcome === "notSent";
+  check("control token을 guest realm 밖에 두고 실제 reload를 fail-closed 처리", reloadPassed,
+    reloadPassed ? "" : JSON.stringify({ terminal, previousEpoch,
+      pageEpoch: reloadProduct.pageBridge.pageEpoch, tokenProbe: tokenProbe.result.value,
+      fetchFence: fetchFence.terminal, afterReload: afterReload.terminal }));
+} catch (error) {
+  check("실제 control page reload 제품 경로", false, String(error?.stack || error).slice(-800));
+} finally {
+  reloadConnection?.close();
+  await reloadProduct?.close();
+}
+
+const script = join(packageRoot, "scripts", "pyprocControl.mjs");
 const child = spawn(process.execPath, [script, "--config", configPath], {
   cwd: installed.appDir,
   stdio: ["pipe", "pipe", "pipe"],
@@ -63,7 +172,7 @@ child.stderr.on("data", (chunk) => {
   process.stderr.write(text);
 });
 const client = new ControlStdioClient({ readable: child.stdout, writable: child.stdin,
-  peer: { name: "product-gate", version: "1" } });
+  peer: { name: "product-gate", version: "1" }, maxAttachmentChunkBytes: 64 });
 
 console.log("installed pyproc-control product gate");
 try {
@@ -84,6 +193,13 @@ try {
       && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact"
       && space.output.space?.restoreBoundary === "externalEffectsRemain"
       && space.output.space?.replayBoundary === "recordOnly");
+  let wrongSpace = null;
+  try {
+    await client.request("automation.space.inspect", {}, { spaceId: "space:wrong" });
+  } catch (error) { wrongSpace = error; }
+  check("request spaceId가 configured provider와 다르면 effect 전에 거부",
+    wrongSpace instanceof ControlRemoteError && wrongSpace.code === "CONTROL_SPACE_MISMATCH"
+      && wrongSpace.outcome === "notSent");
 
   const cancelId = "request:cancel";
   const cancelled = client.request("machine.run", {
@@ -108,7 +224,7 @@ try {
   });
   const attachment = captured.attachments[0];
   const bytes = Buffer.from(attachment.bytes);
-  check("screenshot descriptor와 binary attachment가 terminal 전에 검증됨",
+  check("협상된 작은 chunk로 screenshot attachment가 terminal 전에 검증됨",
     captured.outcome === "observed" && captured.attachments.length === 1
       && attachment.mimeType === "image/png"
       && createHash("sha256").update(bytes).digest("hex") === attachment.sha256

@@ -157,7 +157,7 @@ restored. A fail-closed network policy can also keep selected data local while c
 ## Quick start
 
 ```sh
-npm install pyproc@0.0.16 --save-exact
+npm install pyproc@0.0.17 --save-exact
 npx pyproc-engine --out public/vendor/pyodide
 ```
 
@@ -315,7 +315,13 @@ This entrance reserves stdout for strict NDJSON. It provides single-use request 
 pre-delivery cancellation, honest post-delivery `outcomeUnknown`, and SHA-256 verified binary attachments.
 See the [Control Protocol v1 guide](docs/usage/controlProtocol.md) for the wire and operation contract.
 
-Python applications use the official zero-dependency SDK without writing JavaScript:
+Python applications install the matching Release wheel and use the official zero-dependency SDK without
+writing JavaScript:
+
+```sh
+python -m pip install \
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.17/pyproc_control-0.0.17-py3-none-any.whl"
+```
 
 ```python
 from pyprocControl import PyProcClient
@@ -592,11 +598,11 @@ Can't set headers at all (e.g. GitHub Pages)? Register `pyprocSw.js?coi=1` and r
 
 ## Install and pinning
 
-From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.16 --save-exact`. There is no build step (native ESM). Floating ranges (`^`, `~`, `latest`) are not supported because a state kernel's replay guarantee is version-bound:
+From npm ([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.17 --save-exact`. There is no build step (native ESM). Floating ranges (`^`, `~`, `latest`) are not supported because a state kernel's replay guarantee is version-bound:
 
 ```jsonc
 // package.json
-"dependencies": { "pyproc": "0.0.16" }
+"dependencies": { "pyproc": "0.0.17" }
 ```
 
 `pyproc/runtime` and the typed API subpath entries ship in 0.0.11. A SHA pin

@@ -12,6 +12,38 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.17 - 2026-08-12
+
+### Fixed
+
+- **Control clients preserve their wire safety boundaries under deadlines and reuse.** Python request
+  timeouts send a protocol cancel and wait for one canonical terminal. Pending EOF and partial request-write
+  failures become non-retryable `CONTROL_CONNECTION_LOST` instead of raw transport exceptions. MCP duplicate
+  JSON-RPC IDs close the connection without a second terminal. Attachment chunks obey the client receive limit, and request
+  `spaceId` values are checked before provider dispatch. Version 1 advertises its actual `events: false`
+  capability instead of exposing a schema-only promise. The machine bearer remains outside guest-readable
+  storage, and a direct control-page reload fails closed instead of reusing authority in the guest realm.
+
+- Temporary browser profiles and Python SDK product fixtures now close their process streams and retry
+  transient Windows file locks before cleanup. Installed wheel, source distribution, Native CDP, and
+  FrameSpace journeys finish with a clean process exit.
+
+### Changed
+
+- The matching GitHub Release is the official Python distribution source until a PyPI trusted publisher is
+  registered. Public examples use the exact-version wheel URL, and the release procedure requires both wheel
+  and source distribution assets plus a clean-environment installation check.
+
+### Compatibility
+
+- This patch has no breaking JavaScript export or type-signature change. The existing version 1 frame schema
+  remains valid; capability flags and request fences now match the behavior already promised by the protocol.
+
+한국어 요약: Python timeout은 실제 cancel 뒤 canonical terminal에 수렴하고, MCP 중복 JSON-RPC ID는
+terminal을 복제하지 않고 연결을 닫는다. attachment chunk 협상, `spaceId` fence, 정확한 event capability,
+Windows 종료 정리를 고정했다. control bearer는 guest-readable storage 밖에 머물고 page reload는
+fail-closed 처리한다. Python SDK의 공식 설치 경로는 같은 버전 GitHub Release 자산이다.
+
 ## 0.0.16 - 2026-08-12
 
 ### Added
@@ -22,8 +54,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   SHA-256 verified binary attachments. The MCP adapter now uses the same operation catalog and host instead
   of owning separate execution semantics.
 
-- **An official zero-runtime-dependency Python SDK.** The separately built `pyproc-control` wheel and source
-  distribution start the npm product from `PATH` and expose persistent Python, checkpoint recovery,
+- **An official zero-runtime-dependency Python SDK.** The `pyproc-control` wheel and source distribution on
+  the matching GitHub Release start the npm product from `PATH` and expose persistent Python, checkpoint recovery,
   cancellable requests, browser lifecycle and actions, stable errors, artifacts, and verified screenshot
   bytes. Both distribution formats install in clean environments, and Chrome plus Edge execute the installed
   Python journey.

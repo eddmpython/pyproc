@@ -32,8 +32,23 @@ process.on("SIGTERM", () => void shutdown(0));
 
 // ---- MCP stdio(JSON-RPC 2.0, 한 줄 = 한 메시지) ----
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\n");
-const resultOf = (id, result) => write({ jsonrpc: "2.0", id, result });
-const errorOf = (id, code, message) => write({ jsonrpc: "2.0", id, error: { code, message } });
+const resultOf = (id, result) => { if (!shuttingDown) write({ jsonrpc: "2.0", id, result }); };
+const errorOf = (id, code, message) => { if (!shuttingDown) write({ jsonrpc: "2.0", id, error: { code, message } }); };
+const requestIds = new Set();
+
+function requestIdKey(id) {
+  if (typeof id === "string") return `s:${id}`;
+  if (Number.isSafeInteger(id)) return `n:${id}`;
+  return null;
+}
+
+async function fatalRequestError(code, message) {
+  if (shuttingDown) return;
+  await new Promise((resolve) => process.stdout.write(JSON.stringify({
+    jsonrpc: "2.0", id: null, error: { code, message },
+  }) + "\n", resolve));
+  await shutdown(1);
+}
 
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 rl.on("close", () => void shutdown(0));
@@ -45,6 +60,15 @@ rl.on("line", async (line) => {
   try { message = JSON.parse(text); }
   catch (e) { errorOf(null, -32700, "invalid JSON-RPC message"); return; }
   const { id, method, params } = message;
+  if (id !== undefined) {
+    const key = requestIdKey(id);
+    if (!key) { await fatalRequestError(-32600, "MCP request id must be a string or safe integer"); return; }
+    if (requestIds.has(key)) {
+      await fatalRequestError(-32600, `MCP request id was already used: ${String(id)}`);
+      return;
+    }
+    requestIds.add(key);
+  }
   try {
     if (method === "initialize") {
       resultOf(id, {

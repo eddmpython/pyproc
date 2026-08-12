@@ -121,10 +121,10 @@ try {
   const wheelMetadata = run(wheelPython, ["-m", "pip", "show", "pyproc-control"], { cwd: installed.tmp }).stdout;
   const sourceMetadata = run(sourcePython, ["-m", "pip", "show", "pyproc-control"], { cwd: installed.tmp }).stdout;
   check("서로 다른 clean venv에 wheel과 source distribution 설치",
-    wheelMetadata.includes("Version: 0.0.16") && sourceMetadata.includes("Version: 0.0.16"));
+    wheelMetadata.includes("Version: 0.0.17") && sourceMetadata.includes("Version: 0.0.17"));
 
   const protocol = run(sourcePython, [join(HERE, "protocolContract.py")], { cwd: installed.appDir });
-  check("source 설치본 Python codec 음성 fixture", protocol.stdout.includes("11 fixtures"));
+  check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("15 fixtures"));
 
   const productPath = join(installed.appDir, "node_modules", ".bin");
   const journey = await runAsync(wheelPython, [join(HERE, "productJourney.py"), configPath,
@@ -133,7 +133,8 @@ try {
   const report = JSON.parse(journey.stdout.trim().split(/\r?\n/).at(-1));
   check("wheel 설치본이 Python, checkpoint, cancel, permission, screenshot 여정을 완주",
     report.ok === true && report.operations === 14 && report.checkpoint > 0
-      && report.attachmentBytes > 0 && report.cancelOutcome === "outcomeUnknown",
+      && report.attachmentBytes > 0 && report.cancelOutcome === "outcomeUnknown"
+      && report.timeoutOutcome === "outcomeUnknown",
   `${report.attachmentBytes} bytes`);
   const frameJourney = await runAsync(wheelPython, [join(HERE, "frameJourney.py"), frameConfigPath,
     `${targetOrigin}/frame`], { cwd: installed.appDir,

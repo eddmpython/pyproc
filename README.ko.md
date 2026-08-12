@@ -157,7 +157,7 @@ fail-closed network policy를 적용하면 선택한 데이터도 code 실행 �
 ## 빠른 시작
 
 ```sh
-npm install pyproc@0.0.16 --save-exact
+npm install pyproc@0.0.17 --save-exact
 npx pyproc-engine --out public/vendor/pyodide
 ```
 
@@ -312,7 +312,13 @@ npx pyproc-control --config ./pyproc-mcp.json
 전달 전 cancel, 전달 뒤의 정직한 `outcomeUnknown`, SHA-256 검증 binary attachment를 제공한다.
 wire와 operation 계약은 [Control Protocol v1 가이드](docs/usage/controlProtocol.md)에 있다.
 
-Python application은 JavaScript 작성 없이 공식 runtime dependency 0 SDK를 사용한다:
+Python application은 같은 버전 Release wheel을 설치하고 JavaScript 작성 없이 공식 runtime dependency 0
+SDK를 사용한다:
+
+```sh
+python -m pip install \
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.17/pyproc_control-0.0.17-py3-none-any.whl"
+```
 
 ```python
 from pyprocControl import PyProcClient
@@ -591,11 +597,11 @@ export default { server: { headers: {
 
 ## 설치와 핀
 
-npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.16 --save-exact`. 빌드 단계는 없다(네이티브 ESM). 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 replay 보장은 버전에 묶여 있다:
+npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.17 --save-exact`. 빌드 단계는 없다(네이티브 ESM). 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 replay 보장은 버전에 묶여 있다:
 
 ```jsonc
 // package.json
-"dependencies": { "pyproc": "0.0.16" }
+"dependencies": { "pyproc": "0.0.17" }
 ```
 
 `pyproc/runtime`과 typed API subpath 항목은 0.0.11에 출하된다. 아직 릴리즈하지 않은 커밋을

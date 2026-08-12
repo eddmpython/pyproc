@@ -97,7 +97,7 @@ export function launchBrowser(url, opts = {}) {
       if (closed) return;
       closed = true;
       killBrowserProcess(proc, profile);
-      try { rmSync(profile, { recursive: true, force: true }); }
+      try { rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); }
       catch (error) { if (existsSync(profile)) process.stderr.write(`pyproc browser profile cleanup deferred: ${error?.code || error}\n`); }
     },
   });

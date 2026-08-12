@@ -1,9 +1,10 @@
 // controlProduct.mjs - Python machine page와 automation provider를 한 ControlHost로 조립한다.
 import { realpathSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
+import { COI_HEADERS, createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
 import { createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
 import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
@@ -71,7 +72,8 @@ function sendJson(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
-export async function createControlProduct({ env = process.env } = {}) {
+export async function createControlProduct({ env = process.env, browserLauncher = launchBrowser } = {}) {
+  if (typeof browserLauncher !== "function") throw new TypeError("control product browserLauncher must be a function");
   const timeoutMs = Number(env.PYPROC_MCP_TIMEOUT || DEFAULT_COMMAND_TIMEOUT_MS);
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new TypeError("PYPROC_MCP_TIMEOUT must be positive");
   const browserEnabled = env.PYPROC_BROWSER_CONTROL === "1";
@@ -101,14 +103,38 @@ export async function createControlProduct({ env = process.env } = {}) {
   const engineRoot = configuredEngineRoot(env.PYPROC_MCP_ENGINE_ROOT);
   const pageBridge = new PageCommandBridge({ timeoutMs });
   const controlToken = randomBytes(32).toString("base64url");
+  const bootstrapNonce = randomBytes(32).toString("base64url");
   const expectedToken = Buffer.from(controlToken);
+  const expectedBootstrap = Buffer.from(bootstrapNonce);
+  const machinePagePath = resolve(PACKAGE_ROOT, "scripts", "browserControl", "mcpMachine.html");
+  const machinePageTemplate = await readFile(machinePagePath, "utf8");
+  const tokenMarker = '"__PYPROC_CONTROL_TOKEN__"';
+  if (!machinePageTemplate.includes(tokenMarker)) throw new Error("control machine page token marker is missing");
+  const machinePage = machinePageTemplate.replace(tokenMarker, JSON.stringify(controlToken));
+  let bootstrapServed = false;
+  const matchesSecret = (supplied, expected) => supplied.byteLength === expected.byteLength
+    && timingSafeEqual(supplied, expected);
   const authorizedControlRequest = (req) => {
     const supplied = Buffer.from(String(req.headers["x-pyproc-control-token"] || ""));
-    return supplied.byteLength === expectedToken.byteLength && timingSafeEqual(supplied, expectedToken);
+    return matchesSecret(supplied, expectedToken);
   };
 
   const server = createStaticServer(async (req, res) => {
     const requestUrl = new URL(req.url, "http://control.local");
+    if (req.method === "GET" && requestUrl.pathname === "/scripts/browserControl/mcpMachine.html"
+      && requestUrl.searchParams.has("controlBootstrap")) {
+      const supplied = Buffer.from(requestUrl.searchParams.get("controlBootstrap") || "");
+      if (bootstrapServed || !matchesSecret(supplied, expectedBootstrap)) {
+        res.writeHead(bootstrapServed ? 410 : 403, { "Cache-Control": "no-store", ...COI_HEADERS });
+        res.end(bootstrapServed ? "control bootstrap already consumed" : "control bootstrap is invalid");
+        return true;
+      }
+      bootstrapServed = true;
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
+        ...COI_HEADERS });
+      res.end(machinePage);
+      return true;
+    }
     if (req.method === "GET" && engineRoot && requestUrl.pathname.startsWith("/pyprocEngine/")) {
       const file = safeJoin(engineRoot, requestUrl.pathname.slice("/pyprocEngine/".length));
       if (!file) { res.writeHead(403); res.end("forbidden"); return true; }
@@ -173,13 +199,13 @@ export async function createControlProduct({ env = process.env } = {}) {
     })).toString("base64url"));
   }
   const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html?${pageParams}`;
-  const launchUrl = `${pageUrl}#controlToken=${encodeURIComponent(controlToken)}`;
+  const launchUrl = `${pageUrl}&controlBootstrap=${encodeURIComponent(bootstrapNonce)}`;
   let browserSession = null;
   let browserControl = null;
   let automationSpace = null;
   let automationRouter = null;
   try {
-    browserSession = launchBrowser(launchUrl, {
+    browserSession = browserLauncher(launchUrl, {
       prefix: "pyprocControl-",
       extraArgs: providerKind === "nativeCdp" ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : [],
     });
@@ -199,7 +225,15 @@ export async function createControlProduct({ env = process.env } = {}) {
     automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
     const operationCatalog = controlOperationCatalog(tools);
     const operationHandlers = Object.fromEntries(operationCatalog.map(({ name, toolName }) => [name,
-      async (input, { signal, requestId }) => {
+      async (input, { signal, requestId, spaceId }) => {
+        const expectedSpaceId = pythonToolNames.has(toolName) ? "machine:primary" : automationRouter?.spaceId;
+        if (spaceId && spaceId !== expectedSpaceId) {
+          const error = new Error(`control request space does not match ${expectedSpaceId}`);
+          error.code = "CONTROL_SPACE_MISMATCH";
+          error.outcome = "notSent";
+          error.retryable = false;
+          throw error;
+        }
         if (pythonToolNames.has(toolName)) {
           await pageBridge.waitForReady();
           return pageBridge.dispatch(name, input, { signal, requestId });

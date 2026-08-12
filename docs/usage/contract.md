@@ -14,7 +14,7 @@ The roles are split.
 ```jsonc
 // package.json
 "dependencies": {
-  "pyproc": "0.0.16"
+  "pyproc": "0.0.17"
 }
 ```
 
@@ -63,7 +63,8 @@ command, its manifest, and its behavior are browser-gated through the packed and
 The separately built `pyproc-control` Python distribution is the official native client. Its `PyProcClient`
 starts the npm command from `PATH`, validates the handshake and every frame, exposes cancellation and stable
 errors, and withholds binary output until byte length and SHA-256 verification succeed. It has no runtime
-dependency and adds no JavaScript export. See the [Python SDK guide](pythonSdk.md).
+dependency and adds no JavaScript export. Its official installation sources are the exact-version wheel and
+source distribution assets on the matching GitHub Release, not PyPI. See the [Python SDK guide](pythonSdk.md).
 
 ## Runtime-asset deployment contract
 

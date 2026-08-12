@@ -36,6 +36,16 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     time.sleep(1.1)
     assert client.runPython("pythonEffect", timeout=60.0).output["value"] == "'applied'"
 
+    timeoutError = None
+    try:
+        client.runPython("import time\ntimeoutEffect = 'applied'\ntime.sleep(1.0)", timeout=0.1)
+    except ControlError as error:
+        timeoutError = error
+    assert timeoutError is not None and timeoutError.code == "CONTROL_CANCELLED"
+    assert timeoutError.outcome == "outcomeUnknown" and timeoutError.retryable is False
+    time.sleep(1.1)
+    assert client.runPython("timeoutEffect", timeout=30.0).output["value"] == "'applied'"
+
     permissionError = None
     try:
         client.request("automation.target.open", {"url": targetUrl}, timeout=30.0)
@@ -71,4 +81,5 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     assert client.runPython("'duplicateEffect' in globals()", timeout=30.0).output["value"] == "False"
 
 print(json.dumps({"ok": True, "operations": 14, "checkpoint": checkpoint.output["index"],
-                  "attachmentBytes": attachment.byteLength, "cancelOutcome": cancelError.outcome}))
+                  "attachmentBytes": attachment.byteLength, "cancelOutcome": cancelError.outcome,
+                  "timeoutOutcome": timeoutError.outcome}))

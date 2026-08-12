@@ -238,7 +238,12 @@ export function decodeControlFrame(line) {
 export const controlBase = (type) => ({ protocol: CONTROL_PROTOCOL, version: CONTROL_VERSION, type });
 
 export class ControlClientConversation {
-  constructor() {
+  constructor({ maxAttachmentChunkBytes = CONTROL_ATTACHMENT_CHUNK_BYTES } = {}) {
+    if (!Number.isSafeInteger(maxAttachmentChunkBytes) || maxAttachmentChunkBytes < 1
+      || maxAttachmentChunkBytes > CONTROL_ATTACHMENT_CHUNK_BYTES) {
+      throw new TypeError("control attachment chunk limit is invalid");
+    }
+    this.maxAttachmentChunkBytes = maxAttachmentChunkBytes;
     this._started = new Set();
     this._active = new Set();
     this._terminal = new Set();
@@ -270,6 +275,9 @@ export class ControlClientConversation {
         fail("CONTROL_ATTACHMENT_INVALID", `attachment chunk is out of order: ${frame.attachmentId}`);
       }
       const bytes = base64Bytes(frame.dataBase64);
+      if (bytes.byteLength > this.maxAttachmentChunkBytes) {
+        fail("CONTROL_ATTACHMENT_INVALID", `attachment chunk exceeds the negotiated limit: ${frame.attachmentId}`);
+      }
       current.parts.push(bytes);
       current.offset += bytes.byteLength;
       if (current.offset > CONTROL_MAX_ATTACHMENT_BYTES) fail("CONTROL_ATTACHMENT_INVALID", `attachment exceeds the byte limit: ${frame.attachmentId}`);

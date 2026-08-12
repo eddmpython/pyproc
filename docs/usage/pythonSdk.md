@@ -9,15 +9,20 @@ The two packages have separate jobs:
 - Python `pyproc-control` ships the strict protocol client, typed values, cancellation, and attachment
   verification.
 
-Pin both packages to the same version. A normal release uses `0.0.16` for each.
+Pin both packages to the same version. A normal release uses `0.0.17` for each.
 
 ## Install
 
 ```sh
-npm install --save-exact pyproc@0.0.16
+npm install --save-exact pyproc@0.0.17
 npx pyproc-engine --out /absolute/path/to/pyodide
-python -m pip install pyproc-control==0.0.16
+python -m pip install \
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.17/pyproc_control-0.0.17-py3-none-any.whl"
 ```
+
+The Python distribution is currently published as wheel and source distribution assets on the matching
+GitHub Release. PyPI is not an installation source yet. Use the exact-version asset URL because floating
+release URLs are outside the reproducible installation contract.
 
 Create the version 1 manifest from the [browser automation guide](browserAutomation.md). A Python-only
 machine uses `"browser": { "enabled": false }`. Validate the complete local product before use:
@@ -98,6 +103,16 @@ try:
 except ControlError as error:
     print(error.code, error.outcome, error.retryable)
 ```
+
+Every synchronous `timeout=` is an effect-safe request deadline. When the local wait expires, the client sends
+one protocol cancel and waits for the canonical terminal. A queued request ends as `notSent`; a delivered effect
+normally ends as non-retryable `outcomeUnknown`. If the server does not settle after cancellation, the client
+closes the connection and raises non-retryable `CONTROL_TIMEOUT` with `outcomeUnknown`.
+
+If the transport ends while a request is pending, or a request frame write cannot prove full delivery, the
+SDK raises non-retryable `CONTROL_CONNECTION_LOST` with `outcomeUnknown`. A request rejected before writing
+because the connection is already known to be unavailable is `notSent`. Raw pipe and EOF errors do not escape
+through the request surface.
 
 Cancellation before delivery is `notSent`. After delivery, the product returns `outcomeUnknown` unless the
 provider proves a narrower boundary. Never retry an `applied` or `outcomeUnknown` effect automatically.

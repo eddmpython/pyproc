@@ -34,14 +34,17 @@ const child = spawn(process.execPath, [join(ROOT, "scripts", "mcpSandboxServer.m
 child.stderr.on("data", (chunk) => process.stderr.write(String(chunk)));
 
 const waiters = new Map();
+const messages = [];
 let reqSeq = 0;
 const rl = createInterface({ input: child.stdout, crlfDelay: Infinity });
 rl.on("line", (line) => {
   let message;
   try { message = JSON.parse(line); } catch (e) { return; }
+  messages.push(message);
   const waiter = waiters.get(message.id);
   if (waiter) { waiters.delete(message.id); waiter(message); }
 });
+const childExit = new Promise((resolve) => child.once("exit", (code, signal) => resolve({ code, signal })));
 
 function request(method, params) {
   const id = ++reqSeq;
@@ -113,19 +116,27 @@ try {
   const afterCancel = toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "cancelEffect" } }));
   check("취소 뒤 page bridge가 다음 명령을 받고 기존 effect는 한 번만 남는다", afterCancel.value === "'applied'", afterCancel.value);
 
-  const duplicateId = 900001;
-  const firstDuplicate = await requestWithId(duplicateId, "tools/call", { name: "pythonRun", arguments: { code: "6 * 7" } });
-  const secondDuplicate = await requestWithId(duplicateId, "tools/call", { name: "pythonRun", arguments: { code: "duplicateEffect = True" } });
-  const duplicateAbsent = toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "'duplicateEffect' in globals()" } }));
-  check("같은 MCP request id 재사용은 두 번째 효과 전에 거부",
-    toolText(firstDuplicate).value === "42" && secondDuplicate.error?.code === -32600 && duplicateAbsent.value === "False");
-
   const reset = toolText(await request("tools/call", { name: "sandboxReset", arguments: {} }));
   const afterReset = toolText(await request("tools/call", {
     name: "pythonRun",
     arguments: { code: "('prepared' in globals(), 'pyprocJail' in __import__('sys').modules)" },
   }));
   check("sandboxReset: cp0 복귀 후 권한 감옥 재설치", afterReset.value === "(False, True)", `${afterReset.value}, reset ${reset.pagesWritten}p`);
+
+  const duplicateId = 900001;
+  const firstDuplicate = await requestWithId(duplicateId, "tools/call", { name: "pythonRun", arguments: { code: "6 * 7" } });
+  child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: duplicateId, method: "tools/call",
+    params: { name: "pythonRun", arguments: { code: "duplicateEffect = True" } } }) + "\n");
+  const exited = await Promise.race([
+    childExit,
+    new Promise((resolve) => setTimeout(() => resolve(null), 10000)),
+  ]);
+  const duplicateTerminals = messages.filter((message) => message.id === duplicateId);
+  const fatalDuplicate = messages.find((message) => message.id === null && message.error?.code === -32600);
+  check("같은 MCP request id 재사용은 terminal을 복제하지 않고 연결을 닫는다",
+    toolText(firstDuplicate).value === "42" && duplicateTerminals.length === 1
+    && fatalDuplicate?.error?.message.includes("already used") && exited?.code === 1,
+  `${duplicateTerminals.length} terminals, exit ${exited?.code}`);
 } catch (e) {
   check("예외 없음", false, String(e).slice(0, 200));
 }

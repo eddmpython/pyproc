@@ -8,13 +8,15 @@
 </head>
 <body>
   <pre id="out">booting</pre>
-  <script type="module">
+  <script id="pyprocControlBootstrap" type="module">
     import { boot } from "../../index.js";
     import { FrameSpacePage } from "../automationSpace/frameSpacePage.js";
     import { installFailClosedNetworkPolicy } from "./mcpMachinePolicy.js";
 
+    document.getElementById("pyprocControlBootstrap")?.remove();
     const out = document.getElementById("out");
     const log = (message) => { out.textContent += "\n" + message; };
+    const trustedFetch = globalThis.fetch.bind(globalThis);
     const RUN_HARNESS = [
       "import io as _mcpIo, contextlib as _mcpCtx",
       "_mcpBuf = _mcpIo.StringIO()",
@@ -27,10 +29,11 @@
       "[_mcpBuf.getvalue(), None if _mcpVal is None else repr(_mcpVal)]",
     ].join("\n");
     const params = new URLSearchParams(location.search);
-    const controlToken = new URLSearchParams(location.hash.slice(1)).get("controlToken");
+    const controlToken = "__PYPROC_CONTROL_TOKEN__";
     if (!controlToken) throw new Error("pyproc machine requires a control token");
-    history.replaceState(null, "", location.pathname + location.search);
-    const controlFetch = (url, options = {}) => fetch(url, {
+    params.delete("controlBootstrap");
+    history.replaceState(null, "", `${location.pathname}?${params}`);
+    const controlFetch = (url, options = {}) => trustedFetch(url, {
       ...options,
       headers: { ...(options.headers || {}), "X-PyProc-Control-Token": controlToken },
     });

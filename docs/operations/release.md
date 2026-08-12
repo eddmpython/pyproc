@@ -17,6 +17,7 @@
 4. `git tag v0.0.x` (릴리즈 커밋에, package.json과 동일 값).
 5. `main -> origin/main` 푸시 + `git push origin v0.0.x`.
 6. **GitHub Release 발행**: `gh release create v0.0.x --title "v0.0.x - <한 줄 영문>" --notes-file <노트>`. 제목·노트 **영문 우선, 한국어는 노트 하단에**(위 정책). 태그만 있고 Release가 비면 배선 누락이다.
+6-1. **Python distribution 첨부**: 릴리즈 커밋에서 `python -m build pythonSdk --outdir <임시 경로>`로 wheel과 source distribution을 만들고 같은 GitHub Release에 첨부한다. 새 가상 환경이 exact wheel HTTPS URL을 설치하고 `importlib.metadata.version("pyproc-control")`로 같은 버전을 돌려주는지 확인한다. PyPI trusted publisher가 등록되기 전까지 이 Release 자산이 공식 Python 배포 경로다. 공개 문서에 bare `pip install pyproc-control==...`을 쓰지 않는다.
 7. **npm 퍼블리시**: 자동이다. 5번의 태그 푸시가 [`publish.yml`](../../.github/workflows/publish.yml)을 깨우고, 워크플로가 태그와 `package.json` 버전 일치를 검증한 뒤 구조·브라우저 게이트를 돌리고 `npm publish`한다. 게시 확인은 `npm view pyproc version`.
 
 ## npm 퍼블리시 배선 (2026-07-12 확정)
@@ -31,7 +32,8 @@
 
 ## 설치 재현성
 
-- 공식 설치 예제는 **npm 정확 버전**을 사용한다: `"pyproc": "0.0.16"`(+ 락파일). 플로팅(`^`/`~`/`latest`)은 재현 가능한 제품 입구가 아니므로 문서에 두지 않는다.
+- 공식 설치 예제는 **npm 정확 버전**을 사용한다: `"pyproc": "0.0.17"`(+ 락파일). 플로팅(`^`/`~`/`latest`)은 재현 가능한 제품 입구가 아니므로 문서에 두지 않는다.
+- Python SDK는 같은 버전 GitHub Release의 exact wheel URL을 사용한다. wheel과 source distribution을 Release에 함께 첨부하고 clean venv에서 wheel 설치를 확인한다.
 - 새 버전은 pyproc tarball 자체에서 npm 해석, 타입 검사, 워커 emit, 브라우저 부팅을 모두 통과해야 한다.
 - 버전이나 태그는 북극성 점수의 증거가 아니다. 제품 능력은 저장소의 실행 계약과 실패 게이트로만 판정한다.
 

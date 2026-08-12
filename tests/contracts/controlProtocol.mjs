@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { PassThrough } from "node:stream";
 import {
   CONTROL_ATTACHMENT_CHUNK_BYTES,
   ControlClientConversation,
@@ -8,6 +9,8 @@ import {
   validateControlFrame,
 } from "../../scripts/controlProtocol/controlProtocol.js";
 import { ControlHost } from "../../scripts/controlProtocol/controlHost.js";
+import { createBrowserControlTools } from "../../scripts/browserControl/mcpBrowserControl.js";
+import { McpControlAdapter } from "../../scripts/controlProtocol/mcpControlAdapter.js";
 import {
   CONTROL_TOOL_OPERATIONS,
   controlOperationCatalog,
@@ -16,6 +19,7 @@ import {
   controlToolForOperation,
 } from "../../scripts/controlProtocol/controlOperations.js";
 import { PageCommandBridge } from "../../scripts/controlProtocol/pageCommandBridge.mjs";
+import { ControlRemoteError, ControlStdioClient } from "../../scripts/controlProtocol/controlClient.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -34,7 +38,7 @@ export async function assertControlProtocolContract() {
   const hello = {
     ...controlBase("hello"), requestId: "hello:contract", role: "server",
     peer: { name: "pyproc", version: "1" },
-    capabilities: { cancel: true, events: true,
+    capabilities: { cancel: true, events: false,
       attachments: { encoding: "base64", maxChunkBytes: CONTROL_ATTACHMENT_CHUNK_BYTES } },
     operations: ["artifact.read", "machine.run"],
   };
@@ -51,15 +55,73 @@ export async function assertControlProtocolContract() {
   assert((await errorOf(() => validateControlFrame({ ...fatal, requestId: "fatal:bad" })))?.code === "CONTROL_INVALID_FRAME",
     "fatal error가 request terminal로 위장할 수 있다");
 
+  const eofReadable = new PassThrough();
+  const eofWritable = new PassThrough();
+  const eofClient = new ControlStdioClient({ readable: eofReadable, writable: eofWritable });
+  eofReadable.write(encodeControlFrame({ ...hello, requestId: "hello:client" }));
+  await eofClient.ready;
+  const eofRequest = eofClient.request("machine.run", { code: "effect" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  eofReadable.end();
+  const eofFailure = await errorOf(() => eofRequest);
+  assert(eofFailure instanceof ControlRemoteError && eofFailure.code === "CONTROL_CONNECTION_LOST"
+    && eofFailure.outcome === "outcomeUnknown" && eofFailure.retryable === false,
+  "JS control client의 pending EOF가 canonical outcome을 잃었다");
+
+  let writeCount = 0;
+  const writeReadable = new PassThrough();
+  const failingWritable = new PassThrough();
+  const originalWrite = failingWritable.write.bind(failingWritable);
+  failingWritable.write = (chunk, callback) => {
+    writeCount += 1;
+    if (writeCount === 1) return originalWrite(chunk, callback);
+    queueMicrotask(() => callback(new Error("request write failed")));
+    return true;
+  };
+  const writeClient = new ControlStdioClient({ readable: writeReadable, writable: failingWritable });
+  writeReadable.write(encodeControlFrame({ ...hello, requestId: "hello:client" }));
+  await writeClient.ready;
+  const writeFailure = await errorOf(() => writeClient.request("machine.run", { code: "effect" }));
+  assert(writeFailure instanceof ControlRemoteError && writeFailure.code === "CONTROL_CONNECTION_LOST"
+    && writeFailure.outcome === "outcomeUnknown" && writeFailure.retryable === false,
+  "JS control client의 request write 실패가 canonical outcome을 잃었다");
+
   const mapped = Object.entries(CONTROL_TOOL_OPERATIONS);
   assert(mapped.length === 14 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
     && controlToolForOperation(operation) === tool), "MCP tool과 control operation 14종 mapping이 양방향이 아니다");
   const catalog = controlOperationCatalog(mapped.map(([name]) => ({ name, inputSchema: { type: "object" } })));
   assert(catalog.length === 14 && catalog.every((entry) => entry.operationVersion === 1),
     "control operation catalog가 versioned 14종이 아니다");
+  const withoutSnapshotTools = createBrowserControlTools({ actions: ["screenshot"] });
+  const withoutSnapshotCatalog = controlOperationCatalog(withoutSnapshotTools);
+  assert(withoutSnapshotTools.length === 9
+    && !withoutSnapshotTools.some((tool) => tool.name === "browserObserve")
+    && withoutSnapshotCatalog.length === 9
+    && !withoutSnapshotCatalog.some((entry) => entry.name === "automation.observe"),
+  "snapshot 권한 없이 MCP와 Control Protocol에 observe가 노출됐다");
   assert(controlSuccessOutcome("automation.command", { expectedRisk: "read" }) === "observed"
     && controlSuccessOutcome("automation.command", { expectedRisk: "externalEffect" }) === "applied",
   "control 성공 outcome이 관찰과 효과를 가르지 않는다");
+
+  let mcpCalls = 0;
+  let releaseMcpCall;
+  const mcpAdapter = new McpControlAdapter({ tools: [{ name: "pythonRun" }], host: {
+    request: async () => {
+      mcpCalls++;
+      await new Promise((resolve) => { releaseMcpCall = resolve; });
+      return { terminal: { type: "response" } };
+    },
+    cancel: () => false,
+  } });
+  const activeMcpCall = mcpAdapter.invoke(77, "pythonRun", { code: "first" });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const activeMcpDuplicate = await errorOf(() => mcpAdapter.invoke(77, "pythonRun", { code: "second" }));
+  releaseMcpCall();
+  await activeMcpCall;
+  const terminalMcpDuplicate = await errorOf(() => mcpAdapter.invoke(77, "pythonRun", { code: "third" }));
+  assert(activeMcpDuplicate?.code === "CONTROL_REQUEST_DUPLICATE"
+    && terminalMcpDuplicate?.code === "CONTROL_REQUEST_DUPLICATE" && mcpCalls === 1,
+  "MCP adapter가 active 또는 terminal request ID 재사용을 두 번째 효과 전에 막지 않았다");
 
   const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const sha256 = createHash("sha256").update(png).digest("hex");
@@ -127,6 +189,37 @@ export async function assertControlProtocolContract() {
     error: { code: "CONTROL_FAILED", message: "late", retryable: false, outcome: "notSent" } }));
   assert(terminalDuplicate?.code === "CONTROL_TERMINAL_DUPLICATE", "control client가 terminal 2개를 허용했다");
 
+  const attachmentDescriptor = { attachmentId: "attachment:negative", kind: "screen.capture",
+    mimeType: "image/png", byteLength: png.byteLength, sha256 };
+  const badDigestConversation = new ControlClientConversation();
+  badDigestConversation.begin(request("attachment:digest"));
+  const badDigest = await errorOf(() => badDigestConversation.accept({ ...controlBase("attachment"),
+    requestId: "attachment:digest", attachmentId: attachmentDescriptor.attachmentId, mimeType: "image/png",
+    offset: 0, dataBase64: png.toString("base64"), eof: true, byteLength: png.byteLength,
+    sha256: "0".repeat(64) }));
+  assert(badDigest?.code === "CONTROL_ATTACHMENT_INVALID",
+    "attachment digest 변조가 terminal 노출 전에 거부되지 않았다");
+  const badOffsetConversation = new ControlClientConversation();
+  badOffsetConversation.begin(request("attachment:offset"));
+  const badOffset = await errorOf(() => badOffsetConversation.accept({ ...controlBase("attachment"),
+    requestId: "attachment:offset", attachmentId: attachmentDescriptor.attachmentId, mimeType: "image/png",
+    offset: 1, dataBase64: png.toString("base64"), eof: false }));
+  assert(badOffset?.code === "CONTROL_ATTACHMENT_INVALID", "attachment offset gap이 거부되지 않았다");
+  const incompleteConversation = new ControlClientConversation();
+  incompleteConversation.begin(request("attachment:incomplete"));
+  await incompleteConversation.accept({ ...controlBase("attachment"), requestId: "attachment:incomplete",
+    attachmentId: attachmentDescriptor.attachmentId, mimeType: "image/png", offset: 0,
+    dataBase64: png.subarray(0, 4).toString("base64"), eof: false });
+  const incomplete = await errorOf(() => incompleteConversation.accept({ ...controlBase("response"),
+    requestId: "attachment:incomplete", outcome: "observed", output: {}, attachments: [attachmentDescriptor] }));
+  assert(incomplete?.code === "CONTROL_ATTACHMENT_INVALID", "미완료 attachment를 terminal이 노출했다");
+  const negotiatedConversation = new ControlClientConversation({ maxAttachmentChunkBytes: 4 });
+  negotiatedConversation.begin(request("attachment:limit"));
+  const overNegotiated = await errorOf(() => negotiatedConversation.accept({ ...controlBase("attachment"),
+    requestId: "attachment:limit", attachmentId: attachmentDescriptor.attachmentId, mimeType: "image/png",
+    offset: 0, dataBase64: png.toString("base64"), eof: false }));
+  assert(overNegotiated?.code === "CONTROL_ATTACHMENT_INVALID", "협상된 attachment chunk 상한을 넘겼다");
+
   const queuedBridge = new PageCommandBridge({ timeoutMs: 1000 });
   queuedBridge.ready({ protocol: "pyproc-control", version: 1, pageEpoch: "page:1", spaceId: "machine:primary" });
   const queuedAbort = new AbortController();
@@ -135,6 +228,13 @@ export async function assertControlProtocolContract() {
   const queuedError = await errorOf(() => queued);
   assert(queuedError?.code === "CONTROL_CANCELLED" && queuedError.outcome === "notSent"
     && queuedBridge.poll("page:1") === null, "queued cancel이 명령을 queue에서 실제 제거하지 않았다");
+
+  const timeoutBridge = new PageCommandBridge({ timeoutMs: 10 });
+  timeoutBridge.ready({ protocol: "pyproc-control", version: 1, pageEpoch: "page:timeout", spaceId: "machine:primary" });
+  const timedOut = await errorOf(() => timeoutBridge.dispatch("machine.run", { code: "late" },
+    { requestId: "page:timeout" }));
+  assert(timedOut?.code === "CONTROL_TIMEOUT" && timedOut.outcome === "notSent"
+    && timeoutBridge.poll("page:timeout") === null, "queued timeout이 명령을 queue에서 제거하지 않았다");
 
   const deliveredAbort = new AbortController();
   const delivered = queuedBridge.dispatch("machine.run", { code: "delivered" }, { signal: deliveredAbort.signal, requestId: "page:delivered" });
@@ -147,9 +247,12 @@ export async function assertControlProtocolContract() {
 
   const reload = queuedBridge.dispatch("machine.run", { code: "reload" }, { requestId: "page:reload" });
   queuedBridge.poll("page:1");
+  let replacedPoll = null;
+  queuedBridge.holdPoll("page:1", (commandValue, error) => { replacedPoll = { commandValue, error }; });
   queuedBridge.ready({ protocol: "pyproc-control", version: 1, pageEpoch: "page:2", spaceId: "machine:primary" });
   const reloadError = await errorOf(() => reload);
-  assert(reloadError?.code === "CONTROL_PAGE_REPLACED" && reloadError.outcome === "outcomeUnknown",
-    "page epoch 교체가 전달된 명령을 결과 불명으로 fence하지 않았다");
+  assert(reloadError?.code === "CONTROL_PAGE_REPLACED" && reloadError.outcome === "outcomeUnknown"
+    && replacedPoll?.commandValue === null && replacedPoll?.error?.code === "CONTROL_PAGE_REPLACED",
+  "page epoch 교체가 전달된 명령과 이전 poll을 fence하지 않았다");
   queuedBridge.close();
 }
