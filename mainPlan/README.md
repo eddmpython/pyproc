@@ -17,4 +17,4 @@
 
 ## 현재 상태
 
-활성 이니셔티브 없음.
+활성 이니셔티브: [복구 가능한 자동화 컴퓨터](recoverableAutomationComputer/README.md)
