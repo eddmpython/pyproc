@@ -3,7 +3,7 @@
 import threading
 from concurrent.futures import Future
 
-from pyprocControl import ControlError, ControlProtocolError, controlBase, decodeFrame, encodeFrame, validateFrame
+from pyprocControl import ControlError, ControlProtocolError, ControlResult, PerceptionClient, controlBase, decodeFrame, encodeFrame, validateFrame
 from pyprocControl.client import ControlRequest, PyProcClient
 
 
@@ -182,4 +182,38 @@ assert cancelWriteError.outcome == "outcomeUnknown" and cancelWriteError.retryab
 assert pendingError is not None and pendingError.code == "CONTROL_CONNECTION_LOST"
 assert pendingError.outcome == "outcomeUnknown" and pendingError.retryable is False
 
-print("python sdk protocol contract green: 16 fixtures")
+
+class PerceptionFixtureClient:
+    def __init__(self):
+        self.calls = []
+
+    def observe(self, sessionRef, options, timeout=None):
+        self.calls.append(("observe", sessionRef, options, timeout))
+        return ControlResult({"protocol": "apx", "entities": [{"entityRef": "entity:save",
+                              "kind": "ui.control", "semantic": {"role": "button", "name": "Save"},
+                              "interaction": {"actionable": True}, "locatorRef": "locator:save"}]}, "observed")
+
+    def act(self, sessionRef, actions, timeout=None):
+        self.calls.append(("act", sessionRef, actions, timeout))
+        return ControlResult({"actions": [{"result": {"evidence": {"verification": {"state": "confirmed"}}}}]},
+                             "applied")
+
+
+perceptionFixture = PerceptionFixtureClient()
+eyes = PerceptionClient(perceptionFixture, {"sessionId": "session:eyes"})
+saveEntity = eyes.query(role="button", name="Save", actionable=True).one()
+assert saveEntity.entityRef == "entity:save" and saveEntity.locatorRef == "locator:save"
+evidenced = eyes.act("click", saveEntity.locatorRef, verify={"entityAppeared": {"role": "status"}})
+assert evidenced.output["actions"][0]["result"]["evidence"]["verification"]["state"] == "confirmed"
+assert perceptionFixture.calls[0][2]["representation"] == "apx.graph"
+assert perceptionFixture.calls[0][2]["expectedRisk"] == "read"
+assert perceptionFixture.calls[1][2][0]["verify"]["entityAppeared"]["role"] == "status"
+
+unboundError = None
+try:
+    PerceptionClient(perceptionFixture).observe()
+except ValueError as error:
+    unboundError = error
+assert unboundError is not None
+
+print("python sdk protocol contract green: 18 fixtures")

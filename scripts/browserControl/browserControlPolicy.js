@@ -10,6 +10,7 @@ export const BROWSER_CONTROL_RISKS = Object.freeze({
 
 // 호출자가 위험도를 낮춰 적는 구조를 막는다. 알려진 method의 최소 위험도는 코드가 소유한다.
 export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
+  "Accessibility.enable": "read",
   "Accessibility.getFullAXTree": "read",
   "Browser.getVersion": "read",
   "DOM.describeNode": "read",
@@ -57,6 +58,7 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
 });
 
 export const BROWSER_CONTROL_DEFAULT_READ_METHODS = Object.freeze([
+  "Accessibility.enable",
   "Accessibility.getFullAXTree",
   "DOM.describeNode",
   "DOM.getAttributes",

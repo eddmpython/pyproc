@@ -5,7 +5,9 @@
   const VERSION = 1;
   const targetEpoch = crypto.randomUUID();
   const locatorByRef = new Map();
+  const nativeRefByElement = new WeakMap();
   let locatorSequence = 0;
+  let nativeSequence = 0;
 
   function frameError(code, message, outcome = "rejected") {
     const error = new Error(message);
@@ -47,6 +49,216 @@
     const ref = `locator:${targetEpoch}:${++locatorSequence}`;
     locatorByRef.set(ref, element);
     return ref;
+  }
+
+  function nativeRefFor(element) {
+    let ref = nativeRefByElement.get(element);
+    if (!ref) {
+      ref = `frameNode:${targetEpoch}:${++nativeSequence}`;
+      nativeRefByElement.set(element, ref);
+    }
+    return ref;
+  }
+
+  function clipped(value, limit = 300) {
+    const text = String(value ?? "").trim();
+    return text.length > limit ? `${text.slice(0, limit)}...` : text;
+  }
+
+  function implicitRole(element) {
+    const explicit = clipped(element.getAttribute("role"), 80);
+    if (explicit) return explicit;
+    const tag = element.tagName;
+    if (/^H[1-6]$/u.test(tag)) return "heading";
+    if (tag === "A" && element.hasAttribute("href")) return "link";
+    if (tag === "BUTTON") return "button";
+    if (tag === "TEXTAREA") return "textbox";
+    if (tag === "SELECT") return element.multiple ? "listbox" : "combobox";
+    if (tag === "IMG") return "img";
+    if (tag === "CANVAS") return "canvas";
+    if (tag === "OUTPUT") return "status";
+    if (tag === "FORM") return "form";
+    if (tag === "MAIN") return "main";
+    if (tag === "NAV") return "navigation";
+    if (tag === "ARTICLE") return "article";
+    if (tag === "SECTION") return "region";
+    if (tag === "P") return "paragraph";
+    if (tag === "INPUT") {
+      if (["button", "submit", "reset", "image"].includes(element.type)) return "button";
+      if (element.type === "checkbox") return "checkbox";
+      if (element.type === "radio") return "radio";
+      if (element.type === "range") return "slider";
+      if (element.type === "number") return "spinbutton";
+      if (element.type === "search") return "searchbox";
+      return "textbox";
+    }
+    return "generic";
+  }
+
+  function accessibleName(element, role) {
+    const labelledBy = clipped(element.getAttribute("aria-labelledby"), 500);
+    if (labelledBy) {
+      const text = labelledBy.split(/\s+/u).map((id) => document.getElementById(id)?.textContent || "").join(" ");
+      if (clipped(text)) return clipped(text);
+    }
+    const aria = clipped(element.getAttribute("aria-label"));
+    if (aria) return aria;
+    if (element instanceof HTMLInputElement && element.labels?.length) {
+      const text = clipped([...element.labels].map((label) => label.textContent || "").join(" "));
+      if (text) return text;
+    }
+    if (element instanceof HTMLImageElement) return clipped(element.alt || element.title);
+    if (element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)) {
+      return clipped(element.value);
+    }
+    if (["button", "link", "heading", "status", "paragraph"].includes(role)) return clipped(element.innerText);
+    return clipped(element.getAttribute("name") || element.title);
+  }
+
+  function protectedValue(element) {
+    if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+      || element instanceof HTMLSelectElement)) return { value: "", sensitivity: "public" };
+    const autocomplete = String(element.autocomplete || "").toLowerCase();
+    const credential = element instanceof HTMLInputElement && (element.type === "password"
+      || /password|one-time-code|webauthn/u.test(autocomplete));
+    const financial = /cc-|transaction-/u.test(autocomplete);
+    if (credential || financial) return { value: "[redacted]", sensitivity: credential ? "credential" : "financial" };
+    return { value: clipped(element.value), sensitivity: "unknown-sensitive" };
+  }
+
+  function entityKind(role, element) {
+    if (role === "canvas") return "content.canvas";
+    if (role === "img") return "content.image";
+    if (["textbox", "searchbox", "combobox", "spinbutton"].includes(role)) return "ui.input";
+    if (["button", "checkbox", "link", "radio", "slider", "switch", "tab"].includes(role)) return "ui.control";
+    if (["dialog", "alertdialog"].includes(role)) return "ui.dialog";
+    if (["alert", "log", "status", "timer"].includes(role)) return "ui.status";
+    if (["main", "navigation", "region", "banner", "contentinfo", "search"].includes(role)) return "ui.landmark";
+    if (["heading", "paragraph"].includes(role)) return "content.text";
+    if (role === "document" || element === document.documentElement) return "content.document";
+    return "ui.container";
+  }
+
+  function supportedActions(role, element, disabled) {
+    if (disabled) return [];
+    if (["checkbox", "radio", "switch"].includes(role)) return ["focus", "click", "check"];
+    if (["textbox", "searchbox", "spinbutton"].includes(role)) return ["focus", "fill"];
+    if (role === "combobox" || element instanceof HTMLSelectElement) return ["focus", "select"];
+    if (["button", "link", "slider", "tab"].includes(role)) return ["focus", "click"];
+    return [];
+  }
+
+  function viewportRatio(rect) {
+    if (rect.width <= 0 || rect.height <= 0) return 0;
+    const width = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(rect.left, 0));
+    const height = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
+    return width * height / (rect.width * rect.height);
+  }
+
+  function perceptionSnapshot({ maxEntities = 1000, issueLocators = true } = {}) {
+    const limit = Math.max(1, Math.min(1000, Number(maxEntities) || 1000));
+    if (issueLocators) locatorByRef.clear();
+    const eligible = [document.documentElement, ...document.querySelectorAll("body *")]
+      .filter((element) => !["SCRIPT", "STYLE", "LINK", "META", "NOSCRIPT"].includes(element.tagName));
+    const candidates = eligible.slice(0, limit);
+    const included = new Set(candidates);
+    const entities = [];
+    const relationSeeds = [];
+    for (const element of candidates) {
+      const nativeRef = nativeRefFor(element);
+      const role = implicitRole(element);
+      const name = accessibleName(element, role);
+      const value = protectedValue(element);
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const ratio = viewportRatio(rect);
+      const visible = style.display !== "none" && style.visibility !== "hidden"
+        && Number(style.opacity || "1") > 0 && rect.width > 0 && rect.height > 0;
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const hit = visible && ratio > 0 ? document.elementFromPoint(centerX, centerY) : null;
+      const occluded = !!hit && hit !== element && !element.contains(hit);
+      const disabled = element.matches(":disabled,[aria-disabled='true']");
+      const actions = supportedActions(role, element, disabled);
+      const reasons = [];
+      if (disabled) reasons.push("disabled");
+      if (!visible) reasons.push("hidden");
+      if (ratio === 0) reasons.push("outsideViewport");
+      if (occluded) reasons.push("occluded");
+      const states = {
+        disabled,
+        focused: document.activeElement === element,
+        hidden: !visible,
+        ...(element.hasAttribute("aria-expanded") ? { expanded: element.getAttribute("aria-expanded") === "true" } : {}),
+        ...(element.hasAttribute("aria-selected") ? { selected: element.getAttribute("aria-selected") === "true" } : {}),
+        ...("checked" in element ? { checked: !!element.checked } : {}),
+        ...("readOnly" in element ? { readonly: !!element.readOnly } : {}),
+      };
+      const unresolvedReason = element.tagName === "CANVAS" ? "canvas"
+        : element.tagName === "IMG" && !name ? "unlabelledImage"
+          : actions.length && !name ? "unlabelledControl" : null;
+      entities.push(Object.freeze({
+        nativeRef,
+        ...(actions.length && issueLocators ? { locatorData: { locatorRef: locatorFor(element) } } : {}),
+        kind: entityKind(role, element),
+        semantic: { role, ...(name ? { name } : {}), ...(value.value ? { value: value.value } : {}),
+          states, sensitivity: value.sensitivity },
+        structure: { frameNativeRef: `frame:${targetEpoch}`, nodeName: element.tagName,
+          parentNativeRef: element.parentElement && included.has(element.parentElement)
+            ? nativeRefFor(element.parentElement) : null },
+        geometry: { rect: { x: rect.left + scrollX, y: rect.top + scrollY,
+          width: Math.max(0, rect.width), height: Math.max(0, rect.height) },
+        viewportRatio: ratio, paintOrder: null, visible, occluded },
+        interaction: { supportedActions: actions, actionable: actions.length > 0 && reasons.length === 0, reasons },
+        provenance: {
+          semantic: { mode: "reported", source: "frame.dom", trust: "page" },
+          geometry: { mode: "observed", source: "frame.layout", trust: "page" },
+          interaction: { mode: "derived", source: "frame.actionability", trust: "page" },
+        },
+        ...(unresolvedReason ? { unresolved: { reason: unresolvedReason } } : {}),
+      }));
+      relationSeeds.push({ element, nativeRef });
+    }
+    const relations = [];
+    const seenRelations = new Set();
+    const addRelation = (type, fromNativeRef, toNativeRef, mode = "observed") => {
+      if (!fromNativeRef || !toNativeRef || fromNativeRef === toNativeRef) return;
+      const key = `${type}:${fromNativeRef}:${toNativeRef}`;
+      if (seenRelations.has(key)) return;
+      seenRelations.add(key);
+      relations.push(Object.freeze({ type, fromNativeRef, toNativeRef,
+        provenance: { mode, source: "frame.dom", trust: "page" } }));
+    };
+    for (const { element, nativeRef } of relationSeeds) {
+      if (element.parentElement && included.has(element.parentElement)) {
+        const parentRef = nativeRefFor(element.parentElement);
+        addRelation("parentOf", parentRef, nativeRef);
+        addRelation("childOf", nativeRef, parentRef);
+      }
+      for (const [attribute, type] of [["aria-labelledby", "labelledBy"], ["aria-describedby", "describedBy"],
+        ["aria-controls", "controls"], ["aria-owns", "owns"]]) {
+        for (const id of String(element.getAttribute(attribute) || "").split(/\s+/u).filter(Boolean)) {
+          const related = document.getElementById(id);
+          if (related && included.has(related)) addRelation(type, nativeRef, nativeRefFor(related));
+        }
+      }
+    }
+    return Object.freeze({
+      page: Object.freeze({ url: location.href, title: document.title,
+        viewport: Object.freeze({ width: innerWidth, height: innerHeight, scale: devicePixelRatio || 1 }),
+        scroll: Object.freeze({ x: scrollX, y: scrollY }) }),
+      entities: Object.freeze(entities),
+      relations: Object.freeze(relations),
+      events: Object.freeze([]),
+      omitted: Object.freeze({ entities: Math.max(0, eligible.length - candidates.length) }),
+      completeness: Object.freeze({
+        semantic: candidates.length < eligible.length ? "partial" : "complete",
+        structure: candidates.length < eligible.length ? "partial" : "complete",
+        geometry: candidates.length < eligible.length ? "partial" : "complete",
+        interaction: candidates.length < eligible.length ? "partial" : "complete",
+        network: "notAvailable", captureAuthority: "dom-rendered",
+      }),
+    });
   }
 
   function elementSummary(element) {
@@ -184,6 +396,7 @@
 
   async function dispatch(operation, input = {}) {
     if (operation === "observe") return snapshot(input);
+    if (operation === "perception.capture") return perceptionSnapshot(input);
     if (operation === "action.snapshot") return snapshot(input);
     if (operation === "action.screenshot") return screenshot();
     if (operation === "action.waitFor") return waitFor(input);

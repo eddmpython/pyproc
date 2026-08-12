@@ -1,0 +1,43 @@
+{
+  "protocol": "apx",
+  "version": "1.0",
+  "representation": "apx.graph",
+  "profile": ["apx-core/1", "apx-web/1"],
+  "kind": "full",
+  "spaceRef": "space:example",
+  "targetRef": "target:example",
+  "sessionRef": "session:example",
+  "observationRef": "observation:example1",
+  "documentEpoch": 1,
+  "capturedAt": "2026-08-12T00:00:00.000Z",
+  "page": {
+    "url": "https://example.test/orders",
+    "title": "Orders",
+    "viewport": {"width": 1280, "height": 720, "scale": 1},
+    "scroll": {"x": 0, "y": 0}
+  },
+  "channels": ["semantic", "structure", "geometry", "interaction"],
+  "entities": [
+    {
+      "entityRef": "entity:save",
+      "kind": "ui.control",
+      "semantic": {"role": "button", "name": "Save", "states": {"disabled": false}, "sensitivity": "public"},
+      "structure": {"nodeName": "BUTTON", "frameRef": "frame:main"},
+      "geometry": {"rect": {"x": 1040, "y": 640, "width": 120, "height": 40}, "viewportRatio": 1, "paintOrder": 42, "visible": true, "occluded": false},
+      "interaction": {"supportedActions": ["focus", "click"], "actionable": true, "reasons": []},
+      "temporal": {"firstSeen": "observation:example1", "lastSeen": "observation:example1", "lastChanged": "observation:example1"},
+      "provenance": {
+        "semantic": {"mode": "observed", "source": "web.accessibility", "trust": "page"},
+        "geometry": {"mode": "observed", "source": "web.layout", "trust": "browser"},
+        "interaction": {"mode": "derived", "source": "pyproc.actionability", "trust": "broker"}
+      },
+      "locatorRef": "locator:example1"
+    }
+  ],
+  "relations": [],
+  "events": [],
+  "unresolved": [],
+  "completeness": {"semantic": "complete", "structure": "complete", "geometry": "complete", "interaction": "complete", "network": "notRequested", "visual": "notRequested"},
+  "budget": {"maxEntities": 120, "maxRelations": 300, "maxBytes": 65536, "usedBytes": 1851, "truncated": false, "omitted": {"entities": 0, "relations": 0, "visualProbes": 0}},
+  "integrity": {"canonicalSha256": "cccac3cd132b43acc34e1910382edfd02cdfd5c5ffee31f6f3eebd5bc7d42811", "graphSha256": "b9b3462a1f82e95dd270af2c5ed682e0d3fbb98fb68f235d6d6fece788935db1"}
+}

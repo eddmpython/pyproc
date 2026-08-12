@@ -1,5 +1,6 @@
 // browserControlSpace.js - 기존 browser control을 canonical AutomationSpace로 투영한다.
 import { controlOperationForTool, controlToolForOperation } from "../controlProtocol/controlOperations.js";
+import { APX_REPRESENTATION } from "../perception/apxCatalog.js";
 
 export class BrowserControlSpace {
   constructor(control, { spaceId = "space:native" } = {}) {
@@ -19,9 +20,13 @@ export class BrowserControlSpace {
     return this.control.authorize(tool, input);
   }
 
-  execute(operation, input, { signal, authority }) {
+  async execute(operation, input, { signal, authority }) {
     const tool = controlToolForOperation(operation);
-    return this.control.invokeAuthorized(tool, input, { signal, authority });
+    const output = await this.control.invokeAuthorized(tool, input, { signal, authority });
+    if (operation === "automation.observe" && input.representation === APX_REPRESENTATION) {
+      return output.result;
+    }
+    return output;
   }
 
   close() { return this.control.close(); }

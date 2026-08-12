@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>APX product gate</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    main { padding: 24px; min-height: 1800px; }
+    #stage { position: relative; width: 420px; height: 240px; }
+    #save { position: absolute; left: 24px; top: 48px; width: 140px; height: 44px; }
+    #covered { position: absolute; left: 210px; top: 48px; width: 140px; height: 44px; }
+    #overlay { position: absolute; left: 205px; top: 43px; width: 150px; height: 54px;
+      background: rgba(180, 0, 0, 0.35); z-index: 10; }
+    #offscreen { position: absolute; left: 24px; top: 1350px; width: 160px; height: 44px; }
+    canvas { border: 1px solid #333; }
+  </style>
+</head>
+<body>
+  <main aria-label="주문 편집기">
+    <h1>주문 편집</h1>
+    <label for="title">제목</label>
+    <input id="title" value="초안">
+    <section id="stage" aria-label="작업 영역">
+      <button id="save" aria-describedby="saveHelp">저장</button>
+      <p id="saveHelp">현재 주문을 저장합니다.</p>
+      <button id="covered">가려진 작업</button>
+      <div id="overlay" aria-hidden="true"></div>
+    </section>
+    <canvas id="chart" width="240" height="100"></canvas>
+    <img id="unnamedImage" alt="" width="80" height="40"
+      src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40'%3E%3Crect width='80' height='40' fill='navy'/%3E%3C/svg%3E">
+    <button id="offscreen">화면 밖 작업</button>
+    <div id="status" role="status">대기</div>
+  </main>
+  <script>
+    const canvas = document.querySelector("#chart");
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#1677ff";
+    context.fillRect(20, 20, 50, 60);
+    context.fillStyle = "#ff8a00";
+    context.fillRect(90, 35, 50, 45);
+
+    globalThis.apxProbe = Object.freeze({
+      update() {
+        document.querySelector("#save").disabled = true;
+        document.querySelector("#status").textContent = "저장 완료";
+      },
+      replace() {
+        const before = document.querySelector("#save");
+        const after = before.cloneNode(true);
+        after.disabled = false;
+        after.textContent = "새 저장";
+        before.replaceWith(after);
+      },
+    });
+    document.addEventListener("click", async (event) => {
+      if (event.target?.id !== "save") return;
+      const response = await fetch("/apxProbeOrder", { method: "POST", body: "save" });
+      document.querySelector("#save").disabled = true;
+      document.querySelector("#status").textContent = response.ok ? "저장 완료" : "저장 실패";
+    });
+  </script>
+</body>
+</html>

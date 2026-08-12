@@ -30,6 +30,10 @@ import {
 import { realpathSync, statSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
 import { parseBrowserViewportEnvironment } from "./browserViewport.js";
+import {
+  APX_OBSERVE_PROPERTIES,
+  APX_OBSERVE_OPTION_KEYS,
+} from "../perception/apxCatalog.js";
 
 const EXTERNAL_EFFECT_ACK = "acknowledged";
 
@@ -240,7 +244,7 @@ export function createBrowserControlTools(config) {
   if (config.actions.includes("snapshot")) {
     tools.push({
       name: "browserObserve",
-      description: "Capture a compact accessibility snapshot in one observation command and return opaque locators.",
+      description: "Capture a legacy accessibility snapshot or an opt-in bounded APX perception graph.",
       inputSchema: {
         type: "object",
         properties: {
@@ -252,6 +256,7 @@ export function createBrowserControlTools(config) {
           includeConsole: { type: "boolean" },
           includeNetwork: { type: "boolean" },
           maxEvents: { type: "integer", minimum: 1, maximum: BROWSER_OBSERVATION_MAX_EVENTS },
+          ...APX_OBSERVE_PROPERTIES,
         },
         required: ["sessionRef", "expectedRisk"],
         additionalProperties: false,
@@ -357,9 +362,11 @@ export class McpBrowserControl {
     const { broker, automation, artifactStore } = await this._ready();
     if (tool === "browserInspect") {
       await artifactStore.reap();
+      const automationInspection = automation.inspect();
       return Object.freeze({
         ...broker.inspect(),
-        automation: automation.inspect(),
+        automation: automationInspection,
+        perception: automationInspection.perception,
         rawMethods: this.config.rawMethods,
         purposeDeclared: !!this.config.purpose,
         externalEffectsAcknowledged: this.config.externalEffectsAcknowledged,
@@ -381,6 +388,8 @@ export class McpBrowserControl {
       }, { signal });
     }
     if (tool === "browserObserve") {
+      const perceptionOptions = Object.fromEntries(APX_OBSERVE_OPTION_KEYS
+        .filter((key) => args[key] !== undefined).map((key) => [key, args[key]]));
       return automation.observe(args.sessionRef, {
         ...(args.maxNodes === undefined ? {} : { maxNodes: args.maxNodes }),
         ...(args.mode === undefined ? {} : { mode: args.mode }),
@@ -388,6 +397,7 @@ export class McpBrowserControl {
         ...(args.includeConsole === undefined ? {} : { includeConsole: args.includeConsole }),
         ...(args.includeNetwork === undefined ? {} : { includeNetwork: args.includeNetwork }),
         ...(args.maxEvents === undefined ? {} : { maxEvents: args.maxEvents }),
+        ...perceptionOptions,
       }, { signal });
     }
     if (tool === "browserAct") return automation.run(args.sessionRef, args.actions, { signal });
@@ -461,6 +471,7 @@ export function browserToolErrorDetails(error) {
     ...(error?.failedAction ? { failedAction: error.failedAction } : {}),
     ...(Array.isArray(error?.completed) ? { completed: error.completed } : {}),
     ...(error?.actionability ? { actionability: error.actionability } : {}),
+    ...(error?.actionEvidence ? { actionEvidence: error.actionEvidence } : {}),
     ...(error?.trace ? { trace: error.trace } : {}),
   };
 }

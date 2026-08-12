@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyproc.dev/schemas/apx/1/apx-action.schema.json",
+  "title": "APX Action Evidence 1.0",
+  "type": "object",
+  "required": ["evidenceRef", "actionRef", "beforeObservationRef", "afterObservationRef", "effectOutcome", "verification", "effectWindow"],
+  "properties": {
+    "evidenceRef": { "type": "string", "pattern": "^evidence:[A-Za-z0-9_-]{1,128}$" },
+    "actionRef": { "type": "string", "pattern": "^action:[A-Za-z0-9_-]{1,128}$" },
+    "beforeObservationRef": { "type": "string", "pattern": "^observation:[A-Za-z0-9_-]{1,128}$" },
+    "afterObservationRef": { "type": ["string", "null"], "pattern": "^observation:[A-Za-z0-9_-]{1,128}$" },
+    "effectOutcome": { "enum": ["applied", "notSent", "rejected", "outcomeUnknown"] },
+    "verification": { "type": "object", "required": ["state", "postcondition", "evidenceRefs"], "properties": { "state": { "enum": ["confirmed", "contradicted", "ambiguous", "notObserved", "outcomeUnknown"] }, "postcondition": { "type": "object" }, "evidenceRefs": { "type": "array", "uniqueItems": true, "items": { "type": "string" } } }, "additionalProperties": false },
+    "correlatedEvidence": { "type": "object", "required": ["level", "eventRefs", "delta"], "properties": { "level": { "enum": ["direct", "strong", "weak", "unknown"] }, "eventRefs": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }, "delta": { "type": ["object", "null"] } }, "additionalProperties": false },
+    "effectWindow": { "type": "object", "required": ["startedAt", "endedAt"], "properties": { "startedAt": { "type": "number" }, "endedAt": { "type": "number" } }, "additionalProperties": false }
+  },
+  "additionalProperties": false
+}

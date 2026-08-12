@@ -16,6 +16,8 @@ import { RecordingSpace } from "../../scripts/automationSpace/recordingSpace.js"
 import { ReplaySpace } from "../../scripts/automationSpace/replaySpace.js";
 import { ControlHost } from "../../scripts/controlProtocol/controlHost.js";
 import { controlBase } from "../../scripts/controlProtocol/controlProtocol.js";
+import { apxDigest } from "../../scripts/perception/apxCanonical.js";
+import { assertApxObservation } from "../../scripts/perception/apxCatalog.js";
 
 async function errorOf(operation) {
   try { await operation(); return null; } catch (error) { return error; }
@@ -26,6 +28,36 @@ export async function assertAutomationRecordingContract() {
   const file = join(root, "recording.json");
   const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
   const sha256 = createHash("sha256").update(png).digest("hex");
+  const apxEntity = { entityRef: "entity:recorded_status", kind: "ui.status",
+    semantic: { role: "status", name: "Saved", states: {} },
+    provenance: { semantic: { mode: "reported", source: "fixture", trust: "page" } } };
+  let apxObservationBody = {
+    protocol: "apx", version: "1.0", representation: "apx.graph", profile: ["apx-core/1", "apx-web/1"],
+    kind: "full", spaceRef: "space:recordingContract", targetRef: "target:recorded",
+    sessionRef: "session:recorded", observationRef: "observation:recorded_status", documentEpoch: 1,
+    capturedAt: "2026-08-12T00:00:00.000Z", page: { url: "https://recording.example/", title: "Recorded",
+      viewport: { width: 800, height: 600, scale: 1 }, scroll: { x: 0, y: 0 } },
+    channels: ["semantic"], entities: [apxEntity], relations: [], events: [], unresolved: [],
+    completeness: { semantic: "complete", visual: "notRequested" },
+    budget: { maxEntities: 20, maxRelations: 20, maxBytes: 16384, usedBytes: 0,
+      truncated: false, omitted: { entities: 0, relations: 0, visualProbes: 0 } },
+    integrity: { canonicalSha256: "0".repeat(64), graphSha256: apxDigest({ entities: [apxEntity], relations: [] }) },
+  };
+  for (let pass = 0; pass < 2; pass += 1) {
+    apxObservationBody = { ...apxObservationBody, budget: { ...apxObservationBody.budget,
+      usedBytes: Buffer.byteLength(JSON.stringify(apxObservationBody)) } };
+  }
+  const apxObservation = Object.freeze({ ...apxObservationBody, integrity: {
+    ...apxObservationBody.integrity,
+    canonicalSha256: apxDigest({ ...apxObservationBody,
+      integrity: { ...apxObservationBody.integrity, canonicalSha256: null } }),
+  } });
+  assertApxObservation(apxObservation);
+  const actionEvidence = Object.freeze({ evidenceRef: "evidence:recorded", actionRef: "action:recorded",
+    beforeObservationRef: "observation:before", afterObservationRef: apxObservation.observationRef,
+    effectOutcome: "applied", verification: Object.freeze({ state: "confirmed",
+      postcondition: { entityAppeared: { role: "status", nameContains: "Saved" } },
+      evidenceRefs: Object.freeze([apxEntity.entityRef]) }) });
   let effects = 0;
   const authorities = new WeakSet();
   const provider = {
@@ -53,9 +85,14 @@ export async function assertAutomationRecordingContract() {
         error.retryable = false;
         error.actionability = { reason: "covered" };
         error.trace = { phase: "contract" };
+        error.actionEvidence = { ...actionEvidence, effectOutcome: "outcomeUnknown",
+          verification: { ...actionEvidence.verification, state: "outcomeUnknown" } };
         throw error;
       }
-      if (operation === "automation.observe") return { title: "recorded" };
+      if (operation === "automation.observe") {
+        return input.representation === "apx.graph" ? apxObservation : { title: "recorded" };
+      }
+      if (input.evidence === true) return { actions: [{ result: { evidence: actionEvidence } }] };
       return { results: [{ kind: "screenshot", artifactRef: "artifact:recording_contract",
         mimeType: "image/png", byteLength: png.byteLength, sha256, dataBase64: png.toString("base64") }] };
     },
@@ -68,6 +105,11 @@ export async function assertAutomationRecordingContract() {
     const inspected = await recordingRouter.invoke("automation.space.inspect", {});
     assert.equal(inspected.recording.mode, "record");
     assert.deepEqual(await recordingRouter.invoke("automation.observe", { expectedRisk: "read" }), { title: "recorded" });
+    assert.deepEqual(await recordingRouter.invoke("automation.observe", {
+      expectedRisk: "read", representation: "apx.graph",
+    }), apxObservation);
+    const recordedEvidence = await recordingRouter.invoke("automation.act", { evidence: true });
+    assert.deepEqual(recordedEvidence.actions[0].result.evidence, actionEvidence);
     const captured = await recordingRouter.invoke("automation.act", {
       actions: [{ kind: "screenshot", expectedRisk: "read" }],
     });
@@ -78,7 +120,7 @@ export async function assertAutomationRecordingContract() {
 
     const recording = await loadAutomationRecording(file);
     const originalGeneration = recording.artifactGeneration;
-    assert.equal(recording.entries.length, 3);
+    assert.equal(recording.entries.length, 5);
     assert.equal(recording.complete, true);
     assert.equal(Object.hasOwn(recording.artifacts["artifact:recording_contract"], "dataBase64"), false);
     assert.match(recording.artifacts["artifact:recording_contract"].file, /^[0-9a-f]{64}\.bin$/);
@@ -89,6 +131,11 @@ export async function assertAutomationRecordingContract() {
     assert.equal(replayInspect.space.providerKind, "replay");
     assert.equal(replayInspect.recording.cursor, 0);
     assert.deepEqual(await replayRouter.invoke("automation.observe", { expectedRisk: "read" }), { title: "recorded" });
+    assert.deepEqual(await replayRouter.invoke("automation.observe", {
+      expectedRisk: "read", representation: "apx.graph",
+    }), apxObservation);
+    const replayEvidence = await replayRouter.invoke("automation.act", { evidence: true });
+    assert.deepEqual(replayEvidence.actions[0].result.evidence, actionEvidence);
     const checkpoint = replay.checkpoint();
     const replayCapture = await replayRouter.invoke("automation.act", {
       actions: [{ kind: "screenshot", expectedRisk: "read" }],
@@ -103,7 +150,8 @@ export async function assertAutomationRecordingContract() {
     assert.equal(replayError?.retryable, false);
     assert.deepEqual(replayError?.details?.actionability, { reason: "covered" });
     assert.deepEqual(replayError?.details?.trace, { phase: "contract" });
-    assert.equal(effects, 3);
+    assert.equal(replayError?.details?.actionEvidence?.verification?.state, "outcomeUnknown");
+    assert.equal(effects, 5);
     const exhausted = await errorOf(() => replayRouter.invoke("automation.observe", { expectedRisk: "read" }));
     assert.equal(exhausted?.code, "AUTOMATION_REPLAY_EXHAUSTED");
 

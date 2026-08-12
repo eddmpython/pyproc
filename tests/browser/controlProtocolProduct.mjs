@@ -190,7 +190,7 @@ try {
   const space = await client.request("automation.space.inspect", {});
   check("설치 제품이 NativeCdpSpace 능력과 복원 경계를 선언",
     space.output.space?.providerKind === "nativeCdp"
-      && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact"
+      && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception"
       && space.output.space?.restoreBoundary === "externalEffectsRemain"
       && space.output.space?.replayBoundary === "recordOnly");
   let wrongSpace = null;
@@ -218,6 +218,18 @@ try {
     url: `${targetOrigin}/product`, expectedRisk: "externalEffect", waitUntil: "load",
   });
   const attached = await client.request("automation.session.attach", { targetRef: opened.output.targetRef });
+  const perceived = await client.request("automation.observe", {
+    sessionRef: attached.output,
+    expectedRisk: "read",
+    representation: "apx.graph",
+    budget: { maxEntities: 40, maxRelations: 80, maxBytes: 65536 },
+  });
+  const perceptionGraph = perceived.output;
+  check("언어 중립 protocol이 같은 APX graph와 conformance 경계를 반환",
+    perceptionGraph.protocol === "apx"
+      && perceptionGraph.profile.includes("apx-core/1")
+      && perceptionGraph.entities.length > 0
+      && !JSON.stringify(perceptionGraph).includes("backendNodeId"));
   const captured = await client.request("automation.act", {
     sessionRef: attached.output,
     actions: [{ kind: "screenshot", format: "png", expectedRisk: "read" }],

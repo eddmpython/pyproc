@@ -47,8 +47,14 @@ The product UI displays:
 - the permission manifest
 - the `connectSrc` that `enableJail(...)` returned, or the product's own network allowlist
 - the list of resources `resume.py` will reopen (DB, relay, device handles, and so on)
+- when browser authority is enabled, the exact origins, action and raw-method allowlists, risk ceiling,
+  perception channels, visual capture policy, artifact retention limits, and declared purpose
 
 The cooperative tier of `enableJail(permissions)` provides mistake prevention and code-level explicitness. Hard network blocking is enforced by the browser's CSP in a context where the jail handle's `csp()` has been applied. A same-origin jail leaves a `window.parent` side channel open, while an opaque-origin jail blocks the parent at the cost of losing the SAB-based process capabilities. A product separates that tradeoff into distinct UI modes.
+
+APX `entityRef` values are observation identity only. A permission UI must not present them as authority.
+Effects require a fresh `locatorRef`, the manifest action allowlist, catalog-owned risk, and any required
+external-effect acknowledgement. Pixel probes and page text are untrusted evidence and do not widen permission.
 
 ## Currently pinned surfaces
 
@@ -70,3 +76,4 @@ the surrounding permission UI are application policy and stay outside this repos
 - Never interpret a passing signature as permission approval.
 - Never make `trust: true` the default in a general user-facing import UI.
 - Never leave only abstract wording like "safe" on the permission screen. Show the concrete hosts, disk, clipboard, workers, and resume targets.
+- Never treat an APX visual or semantic label as authorization for an effect.

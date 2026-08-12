@@ -333,6 +333,14 @@ with PyProcClient.start("pyproc-mcp.json") as client:
 The [Python SDK guide](docs/usage/pythonSdk.md) covers installation, checkpoint recovery, cancellation,
 browser actions, and verified screenshot bytes.
 
+**PyProc Eyes** is the opt-in APX perception path behind the same `automation.observe` operation. It fuses
+semantic facts, structure, geometry and occlusion, stable temporal identity, bounded deltas, and pixels only
+for unresolved regions. `entityRef` is observation identity, while a fresh `locatorRef` is the short-lived
+action capability. Actions can declare DOM and network postconditions and return `ActionEvidence` instead of
+treating a completed click as proof of success. Native CDP, FrameSpace, ReplaySpace, MCP, Control Protocol,
+and `client.perception(sessionRef)` in the Python SDK share this one contract. See the
+[APX 1.0 Working Draft](docs/specs/apx/README.md).
+
 With `{ "enabled": false }`, the server exposes exactly four Python tools: `pythonRun`, `checkpointSave`,
 `checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
 semantic observation, ordered actions, separately allowlisted raw commands, and artifact read/delete.
@@ -382,6 +390,7 @@ These states measure only pyproc's own invariants. They never depend on adoption
 | Process OS, restore reactivity, ASGI, declared environments, terminal, machine images, and journal | Bounded |
 | Device FS, permission jail, GPU, and sockets | Probe |
 | Installed MCP browser automation and artifact product | Bounded |
+| PyProc Eyes APX perception and action evidence | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## What it guarantees, and what it doesn't

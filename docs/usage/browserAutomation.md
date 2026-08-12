@@ -6,7 +6,7 @@ attaches to a normal browser profile, and never puts the CDP endpoint inside Pyt
 
 The same host is available through `pyproc-control` and the Python SDK. `browser.provider` selects a provider
 behind the [AutomationSpace contract](automationSpace.md). The default `NativeCdpSpace` declares DOM,
-network, target, storage, runtime, screenshot, and artifact capabilities while keeping endpoint and provider
+network, target, storage, runtime, screenshot, artifact, and perception capabilities while keeping endpoint and provider
 objects private. The cooperative [FrameSpace provider](frameSpace.md) uses a credentialless sandbox and no
 DevTools port.
 
@@ -138,6 +138,56 @@ The ten opt-in browser tools are:
 | `browserArtifactRead` | Read at most 256 KiB from an opaque screenshot or download artifact |
 | `browserArtifactDelete` | Delete an artifact before its TTL expires |
 | `browserDetach` | Detach and clear locators, watchers, download state, and popup captures |
+
+## PyProc Eyes and APX
+
+`browserObserve` keeps its legacy compact accessibility result unless the caller opts into
+`representation: "apx.graph"`. The APX result fuses semantic, structural, geometric, interaction, temporal,
+event, and redacted network facts into a bounded graph. It is provider-neutral and never exposes CDP node,
+frame, object, or execution-context identifiers.
+
+```json
+{
+  "sessionRef": { "protocolVersion": "1", "spaceId": "space:native", "sessionId": "...", "targetRef": "..." },
+  "expectedRisk": "read",
+  "representation": "apx.graph",
+  "query": { "role": "button", "name": "Save", "actionable": true },
+  "visual": { "mode": "auto", "maxCrops": 2 },
+  "budget": { "maxEntities": 120, "maxRelations": 300, "maxBytes": 131072 }
+}
+```
+
+The first response is a full observation. Passing its `observationRef` as `since` requests a temporal delta.
+An `entityRef` is stable observation identity within one document epoch and grants no authority. A
+`locatorRef` is a fresh, session-bound action capability and becomes stale after another observation or
+document replacement.
+
+Native CDP uses pixels only for unresolved canvas, images, and controls. A verified crop enters the normal
+artifact and attachment path. FrameSpace provides semantic, spatial, and temporal APX through its cooperative
+bridge but rejects non-off visual modes because a DOM-rendered screenshot is not compositor evidence.
+
+An external-effect action can attach a bounded `verify` condition:
+
+```json
+{
+  "kind": "click",
+  "locatorRef": "locator:...",
+  "expectedRisk": "externalEffect",
+  "verify": {
+    "all": [
+      { "entityAppeared": { "role": "status", "nameContains": "Saved" } },
+      { "networkResponse": { "method": "POST", "urlPath": "/orders", "status": 201 } }
+    ],
+    "withinMs": 5000
+  }
+}
+```
+
+The result contains `ActionEvidence` with before and after observations, the one-shot effect outcome, matched
+entity and event references, and one of `confirmed`, `contradicted`, `ambiguous`, `notObserved`, or
+`outcomeUnknown`. A completed click is not itself proof that the requested postcondition happened. The full
+wire, provenance, budget, visual, evidence, and conformance contract is the
+[APX 1.0 Working Draft](../specs/apx/README.md).
 
 ## Ordered actions and screenshots
 
@@ -292,8 +342,10 @@ Example screenshot action:
 - `npm run test:package` checks the installed bin and required runtime files without adding a JS package export.
 - `npm run test:mcp` proves the default server remains exactly four Python tools with no browser authority.
 - `npm run test:mcp-product` packs and installs the npm package, invokes `--check`, boots the Python Machine,
-  captures PNG, JPEG, and WebP as native image content after ordered effects, reconstructs chunks, verifies
-  digests, and deletes a ref.
+  returns APX graph, visual, and action evidence, captures PNG, JPEG, and WebP as native image content after
+  ordered effects, reconstructs chunks, verifies digests, and deletes a ref.
+- `npm run test:apx` verifies Native CDP occlusion, stable entity identity, temporal delta, pixel-on-demand,
+  raw identifier exclusion, and DOM plus network postconditions in one real-browser journey.
 - `npm run test:browser-control` covers viewport emulation, startup trace, readiness states, lazy hydration,
   focused interactive observation, trusted contenteditable input, screenshot and artifact retrieval,
   semantic actions, lifecycle effects, redirect denial, cancellation, browser death, cleanup, and the

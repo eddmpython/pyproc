@@ -105,6 +105,11 @@ outcome and never become retryable after an `applied` or `outcomeUnknown` termin
 Screenshot bytes are rehydrated only for descriptors that were inline in the original terminal, then pass
 through the normal Control Protocol byte length and SHA-256 attachment verification.
 
+APX observations and `ActionEvidence` are ordinary canonical terminals in the same chain. Replay preserves
+their graph digests, entity and observation references, verification state, and attachment order byte-for-byte.
+It does not recapture the page, rerun a postcondition, or resend the original effect. This gives deterministic
+perception review without misrepresenting recorded evidence as a new live observation.
+
 ## Checkpoint-aligned resume
 
 `automation.space.inspect` returns the current `recording.cursor` and `recording.prefixSha256`. Store those
@@ -127,8 +132,8 @@ resending them.
 
 ## Verification
 
-`npm run test:replay-space` packs and installs pyproc, records real FrameSpace inline and non-inline PNG paths,
-replays the full sequence with target requests fixed at zero, proves divergence does not move the cursor, resumes
+`npm run test:replay-space` packs and installs pyproc, records a real FrameSpace APX observation plus inline and
+non-inline PNG paths, replays the full sequence with target requests fixed at zero, proves divergence does not move the cursor, resumes
 a suffix in a new process with pinned identity plus prefix digest, and rejects an unrecomputed mutation, a missing
 sidecar, and a non-file record target during Control and MCP installed preflight. The contract suite also fixes single-writer,
 post-effect write failure, fatal latch, concurrent FIFO, shutdown drain, missing-artifact, forged-cursor,

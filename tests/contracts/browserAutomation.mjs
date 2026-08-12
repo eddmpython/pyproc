@@ -278,6 +278,19 @@ export async function assertBrowserAutomationContract() {
     root: await mkdtemp(join(tmpdir(), "pyprocBrowserArtifactContract-")),
     idFactory: () => `artifact-${++id}`,
   });
+  const snapshotOnly = new BrowserAutomation({
+    port,
+    actions: ["snapshot"],
+    idFactory: () => String(++id),
+    artifactStore,
+  });
+  const beforeVisualDenial = port.commands.length;
+  const visualDenied = await errorOf(() => snapshotOnly.observe(sessionRef("snapshot-only"), {
+    representation: "apx.graph", visual: { mode: "auto", maxCrops: 1 },
+  }));
+  assert(visualDenied?.code === "APX_VISUAL_PROVIDER_DENIED" && port.commands.length === beforeVisualDenial,
+    "screenshot allowlist 없는 APX visual request가 명령 전에 거부되지 않았다");
+  snapshotOnly.close();
   const automation = new BrowserAutomation({
     port,
     actions: config.actions,

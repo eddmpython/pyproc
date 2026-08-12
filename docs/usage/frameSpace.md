@@ -70,6 +70,19 @@ Credentialless frames use an ephemeral storage and cookie context. FrameSpace is
 an existing signed-in browser session. Use `NativeCdpSpace` when native browser input, cookies, network
 inspection, arbitrary compatible pages, or compositor screenshots are required.
 
+## APX perception boundary
+
+With `snapshot` allowed, `browserObserve` accepts `representation: "apx.graph"`. The target bridge reports a
+fresh document epoch, semantic roles and names, parent and ARIA relations, geometry, hit-test occlusion,
+actionability, and short-lived locators. The host maps private target identities to stable `entityRef` values,
+removes native identifiers, redacts sensitive values and URL query data, and computes full or delta graphs.
+If the target-side entity ceiling truncates capture, that omitted count enters the public APX budget and every
+affected completeness channel reports `partial`.
+
+FrameSpace declares APX conformance level L3 with core and web profiles. It does not claim L4 Action Evidence
+or APX visual inference. `visual.mode` values other than `off` fail before target capture. Explicit screenshot
+actions remain available under the separate DOM-rendering boundary below.
+
 ## Screenshot and artifact boundary
 
 The cooperative bridge serializes its DOM into an SVG `foreignObject`, renders that into a PNG, and reports
@@ -86,6 +99,7 @@ authoritative page screenshot.
 
 `npm run test:frame-space` packs and installs the npm artifact, starts the Control and MCP products, keeps
 Python state, opens cooperative targets on two origins, proves parent and storage isolation, rejects a forged
-control-page epoch, preserves a partial-effect outcome, verifies positive and negative PNG cases, and proves
-that a denied origin receives zero requests. `npm run test:python-sdk` repeats the FrameSpace screenshot
-journey from an installed wheel. Chrome on Ubuntu and Edge on Windows run both gates in CI.
+control-page epoch, preserves a partial-effect outcome, verifies APX identity and delta plus positive and
+negative PNG cases, and proves that a denied origin receives zero requests. `npm run test:python-sdk` repeats
+the FrameSpace APX query and screenshot journey from an installed wheel. Chrome on Ubuntu and Edge on Windows
+run both gates in CI.

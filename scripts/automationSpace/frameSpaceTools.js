@@ -1,5 +1,6 @@
 // frameSpaceTools.js - FrameSpace가 제공하는 MCP 이름과 strict input schema.
 import { FRAME_SPACE_ACTION_RISKS } from "./frameSpace.js";
+import { APX_OBSERVE_PROPERTIES } from "../perception/apxCatalog.js";
 
 const TARGET_PROPERTIES = Object.freeze({
   selector: { type: "string", minLength: 1, maxLength: 2000 },
@@ -88,13 +89,14 @@ export function createFrameSpaceTools(config) {
         required: ["sessionRef"], additionalProperties: false } },
   ];
   if (config.actions.includes("snapshot")) tools.push({
-    name: "browserObserve", description: "Capture a bounded semantic snapshot from a cooperative target.",
+    name: "browserObserve", description: "Capture a legacy semantic snapshot or an opt-in bounded APX graph from a cooperative target.",
     inputSchema: { type: "object", properties: {
       sessionRef: FRAME_SESSION_SCHEMA,
       expectedRisk: { type: "string", const: "read" },
       maxNodes: { type: "integer", minimum: 1, maximum: 1000 },
       mode: { type: "string", enum: ["all", "interactive"] },
       includeScreenshot: { type: "boolean" },
+      ...APX_OBSERVE_PROPERTIES,
     }, required: ["sessionRef", "expectedRisk"], additionalProperties: false },
   });
   tools.push({

@@ -36,7 +36,7 @@ function consoleArgument(argument) {
   return clipped(argument.description || argument.className || argument.type || "value");
 }
 
-export function normalizeBrowserObservationEvent(event, idFactory) {
+export function normalizeBrowserObservationEvent(event, idFactory, requestRef = null) {
   const params = event.params || {};
   if (event.method === "Runtime.consoleAPICalled") {
     return Object.freeze({
@@ -56,6 +56,7 @@ export function normalizeBrowserObservationEvent(event, idFactory) {
       url: redactBrowserUrl(params.request?.url),
       resourceType: clipped(params.type || "Other", 40),
       timestamp: Number(params.timestamp) || null,
+      ...(requestRef ? { requestRef } : {}),
     });
   }
   if (event.method === "Network.responseReceived") {
@@ -68,6 +69,7 @@ export function normalizeBrowserObservationEvent(event, idFactory) {
       url: redactBrowserUrl(params.response?.url),
       resourceType: clipped(params.type || "Other", 40),
       timestamp: Number(params.timestamp) || null,
+      ...(requestRef ? { requestRef } : {}),
     });
   }
   if (event.method === "Network.loadingFailed") {
@@ -78,6 +80,7 @@ export function normalizeBrowserObservationEvent(event, idFactory) {
       error: clipped(params.errorText || "network request failed"),
       resourceType: clipped(params.type || "Other", 40),
       timestamp: Number(params.timestamp) || null,
+      ...(requestRef ? { requestRef } : {}),
     });
   }
   return null;
@@ -147,9 +150,27 @@ export class BrowserObservation {
     const key = sessionKey(sessionRef);
     const present = this._sessions.get(key);
     if (present) return present;
-    const state = { console: [], network: [], consoleEnabled: false, networkEnabled: false, unsubscribe: null };
+    const state = { console: [], network: [], requestRefs: new Map(),
+      consoleEnabled: false, networkEnabled: false, unsubscribe: null };
     state.unsubscribe = this._port.subscribe(sessionRef, (event) => {
-      const normalized = normalizeBrowserObservationEvent(event, this._idFactory);
+      const nativeRequestId = event.params?.requestId;
+      if (event.method === "Network.loadingFinished" && nativeRequestId) {
+        state.requestRefs.delete(nativeRequestId);
+        return;
+      }
+      let requestRef = null;
+      if (typeof event.method === "string" && event.method.startsWith("Network.") && nativeRequestId) {
+        requestRef = state.requestRefs.get(nativeRequestId);
+        if (!requestRef) {
+          requestRef = `request:${this._idFactory()}`;
+          state.requestRefs.set(nativeRequestId, requestRef);
+          if (state.requestRefs.size > BROWSER_OBSERVATION_MAX_EVENTS) {
+            state.requestRefs.delete(state.requestRefs.keys().next().value);
+          }
+        }
+      }
+      const normalized = normalizeBrowserObservationEvent(event, this._idFactory, requestRef);
+      if (event.method === "Network.loadingFailed" && nativeRequestId) state.requestRefs.delete(nativeRequestId);
       if (!normalized) return;
       const bucket = normalized.kind === "console" ? state.console : state.network;
       bucket.push(normalized);

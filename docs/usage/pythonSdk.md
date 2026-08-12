@@ -86,6 +86,40 @@ with PyProcClient.start("pyproc-mcp.json") as client:
 The client does not expose attachment bytes until chunk order, byte length, MIME type, and SHA-256 match the
 terminal descriptor. The JSON output retains the opaque artifact reference for bounded reads and deletion.
 
+## PyProc Eyes from Python
+
+`client.perception(sessionRef)` binds the provider-neutral APX graph to one attached session. It uses the same
+`automation.observe` and `automation.act` operations as MCP and native JavaScript clients, so Python does not
+gain a second automation meaning or a raw CDP entrance.
+
+```python
+with PyProcClient.start("pyproc-mcp.json") as client:
+    opened = client.openTarget(
+        "https://example.test",
+        expectedRisk="externalEffect",
+        waitUntil="load",
+    )
+    attached = client.attachSession(opened.output["targetRef"])
+    eyes = client.perception(attached.output)
+
+    save = eyes.query(role="button", name="Save", actionable=True).one()
+    result = eyes.act(
+        "click",
+        save.locatorRef,
+        verify={"entityAppeared": {"role": "status", "nameContains": "Saved"}},
+    )
+    assert result.output["actions"][0]["result"]["evidence"]["verification"]["state"] == "confirmed"
+```
+
+`PerceptionEntity` exposes `entityRef`, `locatorRef`, `kind`, `role`, `name`, and `actionable` properties.
+`query(...).one()` rejects zero or multiple matches instead of guessing. `whatChanged(observationRef)` requests
+a delta, while `explainActionability(entityRef)` narrows the graph to semantic, geometry, and interaction
+facts. Observation identity never grants action authority, and locator capability remains short-lived.
+
+Native CDP supports verified pixel-on-demand attachments. FrameSpace supports APX through temporal level L3
+but rejects visual inference. See the [APX 1.0 Working Draft](../specs/apx/README.md) for the graph and evidence
+contract.
+
 ## Cancellation and errors
 
 `requestAsync` returns a `ControlRequest`:
@@ -131,6 +165,7 @@ each into a separate clean virtual environment, and runs these installed-package
 - persistent Python and checkpoint restore;
 - post-send cancellation and request ID single-use;
 - permission denial before browser effect;
+- APX query through both Native CDP and FrameSpace;
 - real browser open, attach, PNG capture, SHA-256 verification, artifact deletion, and detach.
 
 Chrome on Ubuntu and Edge on Windows run the same gate in CI.

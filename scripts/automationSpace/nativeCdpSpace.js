@@ -10,6 +10,7 @@ export const NATIVE_CDP_CAPABILITIES = Object.freeze([
   "runtime",
   "screenshot",
   "artifact",
+  "perception",
 ]);
 
 export class NativeCdpSpace extends BrowserControlSpace {

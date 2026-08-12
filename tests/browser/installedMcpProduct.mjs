@@ -13,11 +13,20 @@ const targetHtml = `<!doctype html>
 <body style="margin:0;min-height:1800px;background:#f8fafc">
   <label>Title <input id="title" value="ready"></label>
   <button id="apply">Apply</button><output id="state">ready</output>
+  <canvas id="chart" width="160" height="60" aria-label=""></canvas>
+  <button id="verify">Verify</button><output id="verified" role="status">waiting</output>
   <script>
     console.info("installed-startup", "token=must-redact");
     document.getElementById("apply").addEventListener("click", () => {
       document.getElementById("state").textContent = document.getElementById("title").value;
     });
+    document.getElementById("verify").addEventListener("click", async () => {
+      const response = await fetch("/evidence", { method: "POST" });
+      document.getElementById("verified").textContent = response.ok ? "verified" : "failed";
+    });
+    const context = document.getElementById("chart").getContext("2d");
+    context.fillStyle = "#2563eb";
+    context.fillRect(10, 10, 90, 35);
   </script>
 </body></html>`;
 
@@ -150,6 +159,38 @@ try {
       && opened.startup?.console?.some((event) => event.args?.includes("installed-startup"))
       && !JSON.stringify(opened.startup).includes("must-redact"));
   const sessionRef = toolText(await callTool("browserAttach", { targetRef: opened.targetRef }));
+  const apxResponse = await callTool("browserObserve", {
+    sessionRef,
+    expectedRisk: "read",
+    representation: "apx.graph",
+    visual: { mode: "auto", maxCrops: 2 },
+    budget: { maxEntities: 80, maxRelations: 160, maxBytes: 131072 },
+  });
+  const apx = toolText(apxResponse);
+  const verifyEntity = apx.entities.find((entity) => entity.semantic?.name === "Verify");
+  const apxImages = apxResponse.result.content.filter((entry) => entry.type === "image");
+  check("설치 MCP가 APX semantic, spatial, temporal graph와 pixel-on-demand를 반환",
+    apx.protocol === "apx"
+      && apx.kind === "full"
+      && verifyEntity?.locatorRef?.startsWith("locator:")
+      && apx.visualProbes.some((probe) => probe.reason === "canvas")
+      && apxImages.length >= 1
+      && !apxResponse.result.content[0].text.includes("dataBase64")
+      && !JSON.stringify(apx).includes("backendNodeId"));
+
+  const evidenced = toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "click", locatorRef: verifyEntity.locatorRef, expectedRisk: "externalEffect",
+      verify: { all: [
+        { entityAppeared: { role: "status", nameContains: "verified" } },
+        { networkResponse: { method: "POST", urlPath: "/evidence", status: 200 } },
+      ], withinMs: 5000 } }],
+  }));
+  check("설치 MCP의 EvidenceLoop가 실제 DOM과 network postcondition을 함께 확인",
+    evidenced.actions[0].result.evidence?.effectOutcome === "applied"
+      && evidenced.actions[0].result.evidence?.verification?.state === "confirmed"
+      && evidenced.actions[0].result.evidence?.verification?.evidenceRefs?.length >= 2);
+
   const pipelineResponse = await callTool("browserAct", {
     sessionRef,
     actions: [

@@ -30,6 +30,14 @@ import { BrowserTrace } from "./browserTrace.js";
 import { BrowserLifecycle } from "./browserLifecycle.js";
 import { BrowserDownload } from "./browserDownload.js";
 import { BrowserScreenshot } from "./browserScreenshot.js";
+import {
+  APX_ERROR_CODES,
+  APX_REPRESENTATION,
+  perceptionOptionsFromInput,
+} from "../perception/apxCatalog.js";
+import { ActionEvidenceLoop } from "../perception/actionEvidence.js";
+import { PerceptionSpace } from "../perception/perceptionSpace.js";
+import { WebCdpSensor } from "../perception/profiles/webCdpSensor.js";
 
 export const BROWSER_AUTOMATION_ERROR_CODES = Object.freeze({
   actionRejected: "BROWSER_AUTOMATION_ACTION_REJECTED",
@@ -322,12 +330,30 @@ export class BrowserAutomation {
       command: (sessionRef, method, params, commandResults, signal) => this._command(sessionRef, method, params, commandResults, signal),
       artifactStore,
     }) : null;
+    const visualProbeEnabled = !!this._screenshot && this._allowedActions.has("screenshot");
     this._observation = new BrowserObservation({
       port,
       command: (sessionRef, method, params, commandResults, signal) => this._command(sessionRef, method, params, commandResults, signal),
       screenshot: this._screenshot,
       idFactory,
     });
+    this._perception = new PerceptionSpace({
+      sensor: new WebCdpSensor({
+        command: (sessionRef, method, params, commandResults, signal) =>
+          this._command(sessionRef, method, params, commandResults, signal),
+        eventCapture: (sessionRef, options, commandResults, signal) =>
+          this._observation.capture(sessionRef, options, commandResults, signal),
+      }),
+      idFactory,
+      locatorReset: (sessionRef) => this._clearSessionLocators(sessionKey(sessionRef)),
+      locatorIssuer: (sessionRef, contextEpoch, locatorData) =>
+        this._issueOpaqueLocator(sessionRef, contextEpoch, locatorData.backendNodeId),
+      visualProbe: visualProbeEnabled ? (sessionRef, entity, visual, context) =>
+        this._captureVisualProbe(sessionRef, entity, visual, context) : null,
+      visualRelease: visualProbeEnabled ? (probe) => artifactStore.delete(probe.artifact.artifactRef) : null,
+      providerKind: "nativeCdp",
+    });
+    this._evidence = new ActionEvidenceLoop({ idFactory });
     this._lifecycle = new BrowserLifecycle({ port });
     this._download = downloadDir && artifactStore ? new BrowserDownload({
       lifecycle: this._lifecycle,
@@ -344,7 +370,10 @@ export class BrowserAutomation {
 
   async run(sessionRef, inputActions, { signal } = {}) {
     const actions = validateBrowserAutomationActions(inputActions);
-    for (const action of actions) this._authorizeAction(action.kind);
+    for (const action of actions) {
+      this._authorizeAction(action.kind);
+      if (action.verify) this._authorizeAction("snapshot");
+    }
     const runId = `run:${this._idFactory()}`;
     const trace = new BrowserTrace({ traceId: `trace:${this._idFactory()}`, runId });
     const completed = [];
@@ -354,7 +383,23 @@ export class BrowserAutomation {
       const commandResults = [];
       const traceToken = trace.begin({ index, actionId, kind: action.kind, risk: BROWSER_AUTOMATION_ACTIONS[action.kind].risk });
       try {
-        const result = await this._execute(sessionRef, action, commandResults, signal);
+        let result;
+        if (action.verify) {
+          const evidenced = await this._evidence.run({
+            actionRef: actionId,
+            postcondition: action.verify,
+            signal,
+            capture: ({ since }) => this._perception.observe(sessionRef, {
+              representation: APX_REPRESENTATION,
+              ...(since ? { since } : {}),
+              channels: ["semantic", "structure", "geometry", "interaction", "events", "networkMetadata"],
+              visual: { mode: "off" },
+              budget: { maxEntities: 500, maxRelations: 1000, maxBytes: 512 * 1024 },
+            }, { signal, commandResults, issueLocators: false }),
+            effect: () => this._execute(sessionRef, action, commandResults, signal),
+          });
+          result = Object.freeze({ ...(evidenced.effectResult || {}), evidence: evidenced.evidence });
+        } else result = await this._execute(sessionRef, action, commandResults, signal);
         const summary = summarizeCommands(commandResults);
         const normalized = Object.freeze({
           actionId,
@@ -398,12 +443,14 @@ export class BrowserAutomation {
   dropSession(sessionRef) {
     this._clearSessionLocators(sessionKey(sessionRef));
     this._observation.dropSession(sessionRef);
+    this._perception.dropSession(sessionRef);
     this._lifecycle.dropSession(sessionRef);
     this._download?.dropSession(sessionRef);
   }
 
   close() {
     this._observation.close();
+    this._perception.close();
     this._lifecycle.close();
     this._download?.close();
     this._locators.clear();
@@ -416,6 +463,7 @@ export class BrowserAutomation {
       maxActions: BROWSER_AUTOMATION_MAX_ACTIONS,
       locators: this._locators.size,
       observation: this._observation.inspect(),
+      perception: this._perception.inspect(),
       lifecycle: this._lifecycle.inspect(),
       download: this._download?.inspect() || null,
       artifacts: this._artifactStore?.inspect() || null,
@@ -449,6 +497,9 @@ export class BrowserAutomation {
   }
 
   async _snapshot(sessionRef, action, commandResults, signal) {
+    if (action.representation === APX_REPRESENTATION) {
+      return this._perception.observe(sessionRef, perceptionOptionsFromInput(action), { signal, commandResults });
+    }
     const command = await this._command(sessionRef, "Accessibility.getFullAXTree", {}, commandResults, signal);
     const raw = command.result || {};
     const maxNodes = action.maxNodes || BROWSER_AUTOMATION_DEFAULT_MAX_NODES;
@@ -1176,6 +1227,54 @@ export class BrowserAutomation {
   _clearSessionLocators(key) {
     for (const locatorRef of this._sessionLocators.get(key) || []) this._locators.delete(locatorRef);
     this._sessionLocators.delete(key);
+  }
+
+  _issueOpaqueLocator(sessionRef, contextEpoch, backendNodeId) {
+    if (!Number.isInteger(backendNodeId) || backendNodeId < 1) return null;
+    const key = sessionKey(sessionRef);
+    const locatorRef = `locator:${this._idFactory()}`;
+    let refs = this._sessionLocators.get(key);
+    if (!refs) {
+      refs = new Set();
+      this._sessionLocators.set(key, refs);
+    }
+    refs.add(locatorRef);
+    this._locators.set(locatorRef, Object.freeze({ sessionKey: key, contextEpoch, backendNodeId }));
+    return locatorRef;
+  }
+
+  async _captureVisualProbe(sessionRef, entity, visual, context) {
+    if (!this._screenshot) {
+      throw automationError(APX_ERROR_CODES.visualProviderDenied,
+        "APX visual probe requires the screenshot artifact store", { outcome: "notSent" });
+    }
+    let action;
+    if (entity?.geometry?.rect) {
+      const rect = entity.geometry.rect;
+      const x = Math.max(0, rect.x);
+      const y = Math.max(0, rect.y);
+      const width = Math.max(1, rect.width - Math.max(0, -rect.x));
+      const height = Math.max(1, rect.height - Math.max(0, -rect.y));
+      action = { format: "png", inline: true, clip: { x, y, width, height, scale: 1 } };
+    } else {
+      const page = context.page || {};
+      action = { format: "jpeg", quality: 60, inline: true, clip: {
+        x: Math.max(0, page.scroll?.x || 0),
+        y: Math.max(0, page.scroll?.y || 0),
+        width: Math.max(1, page.viewport?.width || 1),
+        height: Math.max(1, page.viewport?.height || 1),
+        scale: 0.25,
+      } };
+    }
+    const artifact = await this._screenshot.capture(sessionRef, action,
+      context.commandResults || [], context.signal);
+    return Object.freeze({
+      kind: entity ? "entityCrop" : "overview",
+      entityRef: entity?.entityRef || null,
+      reason: entity?.unresolved?.reason || (visual.overview === "lowResolution" ? "overview" : "requested"),
+      artifact,
+      provenance: Object.freeze({ mode: "observed", source: "cdp.screenshot", trust: "browser" }),
+    });
   }
 
   _audit(record) {

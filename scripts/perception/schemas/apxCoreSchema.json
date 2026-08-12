@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyproc.dev/schemas/apx/1/apx-core.schema.json",
+  "title": "APX Core Observation 1.0",
+  "type": "object",
+  "required": ["protocol", "version", "representation", "profile", "kind", "spaceRef", "targetRef", "sessionRef", "observationRef", "documentEpoch", "capturedAt", "page", "channels", "entities", "relations", "events", "unresolved", "completeness", "budget", "integrity"],
+  "properties": {
+    "protocol": { "const": "apx" },
+    "version": { "const": "1.0" },
+    "representation": { "const": "apx.graph" },
+    "profile": { "type": "array", "minItems": 2, "maxItems": 4, "uniqueItems": true, "items": { "enum": ["apx-core/1", "apx-web/1", "apx-action/1", "apx-visual/1"] }, "allOf": [{ "contains": { "const": "apx-core/1" } }, { "contains": { "const": "apx-web/1" } }] },
+    "kind": { "enum": ["full", "delta"] },
+    "spaceRef": { "$ref": "#/$defs/ref" },
+    "targetRef": { "$ref": "#/$defs/ref" },
+    "sessionRef": { "$ref": "#/$defs/ref" },
+    "observationRef": { "$ref": "#/$defs/observationRef" },
+    "baseObservationRef": { "$ref": "#/$defs/observationRef" },
+    "documentEpoch": { "type": "integer", "minimum": 0 },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "page": { "type": "object" },
+    "channels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["semantic", "structure", "geometry", "interaction", "events", "networkMetadata", "visual"] } },
+    "entities": { "type": "array", "items": { "$ref": "#/$defs/entity" } },
+    "relations": { "type": "array", "items": { "$ref": "#/$defs/relation" } },
+    "events": { "type": "array", "items": { "type": "object" } },
+    "delta": { "$ref": "#/$defs/delta" },
+    "unresolved": { "type": "array", "items": { "type": "object", "required": ["entityRef", "reason"], "properties": { "entityRef": { "$ref": "#/$defs/entityRef" }, "reason": { "type": "string", "minLength": 1 } }, "additionalProperties": true } },
+    "visualProbes": { "type": "array", "maxItems": 8, "items": { "$ref": "apxVisualSchema.json#/$defs/visualProbe" } },
+    "completeness": { "type": "object" },
+    "query": { "type": "object" },
+    "resyncRequired": { "type": "boolean" },
+    "budget": { "$ref": "#/$defs/budget" },
+    "integrity": { "type": "object", "required": ["canonicalSha256", "graphSha256"], "properties": { "canonicalSha256": { "$ref": "#/$defs/digest" }, "graphSha256": { "$ref": "#/$defs/digest" } }, "additionalProperties": false }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "delta" } } }, "then": { "required": ["baseObservationRef", "delta"] } },
+    { "if": { "properties": { "kind": { "const": "full" } } }, "then": { "not": { "required": ["baseObservationRef"] } } }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "ref": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*:[A-Za-z0-9._:-]{1,128}$" },
+    "observationRef": { "type": "string", "pattern": "^observation:[A-Za-z0-9_-]{1,128}$" },
+    "entityRef": { "type": "string", "pattern": "^entity:[A-Za-z0-9_-]{1,128}$" },
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "provenance": { "type": "object", "required": ["mode", "source", "trust"], "properties": { "mode": { "enum": ["observed", "derived", "inferred", "reported"] }, "source": { "type": "string", "minLength": 1 }, "trust": { "enum": ["broker", "browser", "page", "model", "external"] } }, "additionalProperties": false },
+    "entity": { "type": "object", "required": ["entityRef", "kind", "provenance"], "properties": { "entityRef": { "$ref": "#/$defs/entityRef" }, "kind": { "type": "string", "minLength": 1 }, "semantic": { "type": "object" }, "structure": { "type": "object" }, "geometry": { "type": "object" }, "interaction": { "type": "object" }, "temporal": { "type": "object" }, "provenance": { "type": "object", "additionalProperties": { "$ref": "#/$defs/provenance" } }, "locatorRef": { "type": "string", "pattern": "^locator:[A-Za-z0-9._:-]{1,256}$" }, "unresolved": { "type": "object" } }, "additionalProperties": false },
+    "relation": { "type": "object", "required": ["type", "from", "to", "provenance"], "properties": { "type": { "type": "string", "minLength": 1 }, "from": { "$ref": "#/$defs/entityRef" }, "to": { "$ref": "#/$defs/entityRef" }, "provenance": { "$ref": "#/$defs/provenance" } }, "additionalProperties": false },
+    "delta": {
+      "type": "object",
+      "required": ["added", "removed", "changed"],
+      "properties": {
+        "added": { "type": "array", "items": { "$ref": "#/$defs/entityRef" }, "uniqueItems": true },
+        "removed": { "type": "array", "items": { "$ref": "#/$defs/entityRef" }, "uniqueItems": true },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["entityRef", "paths"],
+            "properties": {
+              "entityRef": { "$ref": "#/$defs/entityRef" },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["path", "before", "after"],
+                  "properties": {
+                    "path": { "type": "string", "pattern": "^/" },
+                    "before": true,
+                    "after": true
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "budget": { "type": "object", "required": ["maxEntities", "maxRelations", "maxBytes", "usedBytes", "truncated", "omitted"], "properties": { "maxEntities": { "type": "integer", "minimum": 1, "maximum": 1000 }, "maxRelations": { "type": "integer", "minimum": 0, "maximum": 3000 }, "maxBytes": { "type": "integer", "minimum": 4096, "maximum": 1048576 }, "usedBytes": { "type": "integer", "minimum": 0 }, "truncated": { "type": "boolean" }, "omitted": { "type": "object", "required": ["entities", "relations", "visualProbes"], "properties": { "entities": { "type": "integer", "minimum": 0 }, "relations": { "type": "integer", "minimum": 0 }, "visualProbes": { "type": "integer", "minimum": 0 } }, "additionalProperties": false } }, "additionalProperties": false }
+  }
+}

@@ -330,6 +330,14 @@ with PyProcClient.start("pyproc-mcp.json") as client:
 [Python SDK 가이드](docs/usage/pythonSdk.md)는 설치, checkpoint 복구, cancel, browser action,
 검증된 screenshot byte를 설명한다.
 
+**PyProc Eyes**는 같은 `automation.observe` operation 뒤에 있는 opt-in APX perception 경로다. semantic
+fact, structure, geometry와 occlusion, stable temporal identity, bounded delta를 융합하고 해결되지 않은
+영역에만 pixel을 요청한다. `entityRef`는 observation identity이고 fresh `locatorRef`는 단기 action
+capability다. action은 DOM과 network postcondition을 선언하고, click 완료를 성공 증거로 오인하는 대신
+`ActionEvidence`를 반환할 수 있다. Native CDP, FrameSpace, ReplaySpace, MCP, Control Protocol, Python SDK의
+`client.perception(sessionRef)`가 이 한 계약을 공유한다. 자세한 계약은
+[APX 1.0 Working Draft](docs/specs/apx/README.md)에 있다.
+
 `{ "enabled": false }`이면 서버는 `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`
 네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
 별도 allowlist raw command, artifact read/delete를 위한 열 개 도구가 추가된다.
@@ -378,6 +386,7 @@ delete를 실제 browser에서 검증한다. `npm run test:control-product`는 �
 | 기본 내구 Machine(`open()` / `open({ name })`) | Complete |
 | 프로세스 OS, 복원 reactivity, ASGI, 선언 environment, terminal, machine image, journal | Bounded |
 | Device FS, permission jail, GPU, socket | Probe |
+| PyProc Eyes APX perception과 action evidence | Bounded |
 | 설치형 MCP browser automation과 artifact 제품 | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 

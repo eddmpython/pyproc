@@ -61,7 +61,7 @@ When the manifest enables browser authority, ten more operations appear:
 | `automation.target.list` | List allowed targets |
 | `automation.target.open` | Open an allowed URL |
 | `automation.session.attach` | Create an opaque controlled session |
-| `automation.observe` | Return a bounded semantic observation |
+| `automation.observe` | Return a legacy semantic observation or opt-in APX graph |
 | `automation.act` | Run an ordered high-level action pipeline |
 | `automation.command` | Send one separately allowlisted low-level command |
 | `automation.session.detach` | Drop session-owned state and detach |
@@ -71,6 +71,11 @@ When the manifest enables browser authority, ten more operations appear:
 The operation names, error outcomes, permission checks, action catalog, and artifacts are owned by the shared
 host. The MCP adapter only maps tool names and native image content. This prevents the native and MCP paths
 from assigning different meaning to the same action.
+
+APX adds no operation. Pass `representation: "apx.graph"` to `automation.observe` for the provider-neutral
+semantic, spatial, temporal, and visual-on-demand graph. Pixel probes use the existing verified attachment
+framing. An action `verify` condition returns `ActionEvidence` inside the normal `automation.act` terminal.
+The [APX draft](../specs/apx/README.md) defines the envelope, provenance, budgets, and verification states.
 
 The optional request `spaceId` is a fence, not an alternate router. Omit it to use the configured machine or
 automation space. When supplied, `machine:primary` is required for machine operations and the exact `spaceId`
@@ -106,5 +111,6 @@ the broker artifact reference for later chunk reads or deletion.
 ## Verification
 
 `npm run test:control-product` packs and installs the npm package, runs `--check`, completes the handshake,
-executes persistent Python, verifies post-send cancellation, opens a real allowed page, captures a PNG, and
-checks its ordered attachment bytes and SHA-256. Chrome on Ubuntu and Edge on Windows run the same gate.
+executes persistent Python, verifies post-send cancellation, opens a real allowed page, returns an APX graph,
+captures a PNG, and checks its ordered attachment bytes and SHA-256. Chrome on Ubuntu and Edge on Windows run
+the same gate.

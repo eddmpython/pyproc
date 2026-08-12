@@ -12,6 +12,15 @@ import {
   BROWSER_SCREENSHOT_FORMATS,
   BROWSER_SCREENSHOT_MAX_CSS_DIMENSION,
 } from "./browserScreenshot.js";
+import {
+  APX_LEGACY_REPRESENTATION,
+  APX_OBSERVE_PROPERTIES,
+  APX_POSTCONDITION_SCHEMA,
+  APX_REPRESENTATION,
+  perceptionOptionsFromInput,
+  validatePerceptionOptions,
+} from "../perception/apxCatalog.js";
+import { validatePostcondition } from "../perception/postconditionVerifier.js";
 
 export const BROWSER_AUTOMATION_MAX_ACTIONS = 16;
 export const BROWSER_AUTOMATION_DEFAULT_MAX_NODES = 200;
@@ -77,6 +86,7 @@ function actionSpec({ risk, description, methods, trustedReadMethods = [], event
       properties: Object.freeze({
         kind: { type: "string" },
         expectedRisk: { type: "string", const: risk },
+        ...(risk === "externalEffect" ? { verify: APX_POSTCONDITION_SCHEMA } : {}),
         ...properties,
       }),
       required: Object.freeze(["kind", "expectedRisk", ...required]),
@@ -94,6 +104,7 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
     events: BROWSER_OBSERVATION_EVENTS,
     properties: {
       ...BROWSER_OBSERVATION_PROPERTIES,
+      ...APX_OBSERVE_PROPERTIES,
       mode: { type: "string", enum: ["all", "interactive"] },
     },
   }),
@@ -406,6 +417,18 @@ export function validateBrowserAutomationAction(action) {
       if (action[key] !== undefined && typeof action[key] !== "boolean") fail(`snapshot.${key} must be boolean`);
     }
     if (action.maxEvents !== undefined) validateInteger(action.maxEvents, "snapshot.maxEvents", 1, BROWSER_OBSERVATION_MAX_EVENTS);
+    const apxFields = ["profile", "since", "query", "visual", "budget", "channels"]
+      .filter((key) => action[key] !== undefined);
+    if (action.representation === APX_REPRESENTATION) {
+      for (const key of ["mode", "maxNodes", "includeScreenshot", "includeConsole", "includeNetwork", "maxEvents"]) {
+        if (action[key] !== undefined) fail(`APX snapshot does not accept legacy option ${key}`);
+      }
+      validatePerceptionOptions(perceptionOptionsFromInput(action));
+    } else if (action.representation !== undefined && action.representation !== APX_LEGACY_REPRESENTATION) {
+      fail("snapshot.representation is invalid");
+    } else if (apxFields.length) {
+      fail(`legacy snapshot does not accept APX option ${apxFields[0]}`);
+    }
   }
   if (action.kind === "screenshot") {
     if (action.format !== undefined && !BROWSER_SCREENSHOT_FORMATS.includes(action.format)) {
@@ -524,6 +547,7 @@ export function validateBrowserAutomationAction(action) {
     for (const value of action.files) requireString(value, "upload.files entry", { max: 10000 });
   }
   if (action.kind === "drag") validateBrowserLocator(action.to);
+  if (action.verify !== undefined) validatePostcondition(action.verify);
   return Object.freeze({ ...action });
 }
 

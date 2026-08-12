@@ -6,7 +6,9 @@ export const BROWSER_OBSERVATION_MAX_NODES = 1000;
 export const BROWSER_OBSERVATION_TEXT_LIMIT = 300;
 
 export const BROWSER_OBSERVATION_METHODS = Object.freeze([
+  "Accessibility.enable",
   "Accessibility.getFullAXTree",
+  "DOMSnapshot.captureSnapshot",
   "Network.enable",
   "Page.captureScreenshot",
   "Page.getLayoutMetrics",

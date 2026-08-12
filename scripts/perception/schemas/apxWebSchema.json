@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyproc.dev/schemas/apx/1/apx-web.schema.json",
+  "title": "APX Web Channels 1.0",
+  "type": "object",
+  "properties": {
+    "semantic": { "$ref": "#/$defs/semantic" },
+    "structure": { "$ref": "#/$defs/structure" },
+    "geometry": { "$ref": "#/$defs/geometry" },
+    "interaction": { "$ref": "#/$defs/interaction" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "semantic": { "type": "object", "required": ["role", "states", "sensitivity"], "properties": { "role": { "type": "string", "minLength": 1 }, "name": { "type": "string", "maxLength": 300 }, "description": { "type": "string", "maxLength": 300 }, "value": { "type": ["string", "number", "boolean", "null"] }, "states": { "type": "object" }, "sensitivity": { "enum": ["public", "internal", "personal", "credential", "financial", "health", "secret", "unknown-sensitive"] } }, "additionalProperties": false },
+    "structure": { "type": "object", "properties": { "nodeName": { "type": "string", "maxLength": 80 }, "frameRef": { "type": "string", "pattern": "^frame:[A-Za-z0-9_-]{1,128}$" }, "shadowRoot": { "type": "string", "maxLength": 20 } }, "additionalProperties": false },
+    "rect": { "type": "object", "required": ["x", "y", "width", "height"], "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "width": { "type": "number", "minimum": 0 }, "height": { "type": "number", "minimum": 0 } }, "additionalProperties": false },
+    "geometry": { "type": "object", "properties": { "rect": { "$ref": "#/$defs/rect" }, "viewportRatio": { "type": "number", "minimum": 0, "maximum": 1 }, "paintOrder": { "type": ["integer", "null"] }, "visible": { "type": "boolean" }, "occluded": { "type": "boolean" } }, "additionalProperties": false },
+    "interaction": { "type": "object", "required": ["supportedActions", "actionable", "reasons"], "properties": { "supportedActions": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }, "actionable": { "type": "boolean" }, "reasons": { "type": "array", "uniqueItems": true, "items": { "type": "string" } } }, "additionalProperties": false }
+  }
+}

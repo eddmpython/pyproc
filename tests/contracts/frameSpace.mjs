@@ -4,6 +4,7 @@ import { FrameSpacePage } from "../../scripts/automationSpace/frameSpacePage.js"
 import { createFrameSpaceTools } from "../../scripts/automationSpace/frameSpaceTools.js";
 import { AutomationSpaceRouter } from "../../scripts/automationSpace/automationSpace.js";
 import { PageCommandBridge } from "../../scripts/controlProtocol/pageCommandBridge.mjs";
+import { APX_REPRESENTATION } from "../../scripts/perception/apxCatalog.js";
 
 async function errorOf(operation) {
   try { await operation(); return null; } catch (error) { return error; }
@@ -16,6 +17,21 @@ export async function assertFrameSpaceContract() {
     dispatch(operation, input, options) {
       calls.push(["dispatch", operation, input, options.requestId]);
       if (operation === "automation.space.inspect") return { transport: "messageChannel" };
+      if (operation === "frame.perception.capture") return {
+        documentEpoch: 3,
+        page: { url: "https://allowed.example/path?secret=hidden", title: "Frame target",
+          viewport: { width: 800, height: 600, scale: 1 }, scroll: { x: 0, y: 0 } },
+        entities: [{ nativeRef: "frameNode:private:1", locatorData: { locatorRef: "locator:frame:1" },
+          kind: "ui.control", semantic: { role: "button", name: "Save", states: {} },
+          structure: { frameNativeRef: "frame:private", nodeName: "BUTTON" },
+          geometry: { rect: { x: 10, y: 10, width: 80, height: 30 }, viewportRatio: 1,
+            visible: true, occluded: false },
+          interaction: { supportedActions: ["focus", "click"], actionable: true, reasons: [] },
+          provenance: { semantic: { mode: "reported", source: "frame.dom", trust: "page" } } }],
+        relations: [], events: [], completeness: { semantic: "complete", structure: "complete",
+          geometry: "complete", interaction: "complete", network: "notAvailable" },
+        omitted: { entities: 2 },
+      };
       return { operation, input };
     },
   };
@@ -29,13 +45,44 @@ export async function assertFrameSpaceContract() {
   const tools = createFrameSpaceTools(config);
   assert.equal(tools.length, 9);
   assert.equal(tools.some((tool) => tool.name === "browserCommand"), false);
+  assert.equal(tools.find((tool) => tool.name === "browserObserve")
+    .inputSchema.properties.representation.enum.includes(APX_REPRESENTATION), true);
   const space = new FrameSpace({ pageBridge, config, spaceId: "space:frameContract" });
   assert.equal(space.providerKind, "frame");
-  assert.deepEqual(space.capabilities, ["dom", "target", "screenshot", "artifact"]);
+  assert.deepEqual(space.capabilities, ["dom", "target", "screenshot", "artifact", "perception"]);
   const router = new AutomationSpaceRouter(space);
   const inspect = await router.invoke("automation.space.inspect", {}, { requestId: "contract:inspect" });
   assert.equal(inspect.space.providerKind, "frame");
   assert.equal(inspect.transport, "messageChannel");
+  assert.equal(inspect.perception.level, "L3");
+  assert.equal(inspect.perception.profiles.includes("apx-action/1"), false);
+
+  const observed = await router.invoke("automation.observe", {
+    sessionRef: { protocolVersion: "1", spaceId: "space:frameContract",
+      sessionId: "session:contract", targetRef: "target:contract" },
+    expectedRisk: "read",
+    representation: APX_REPRESENTATION,
+  }, { requestId: "contract:apx" });
+  assert.equal(observed.protocol, "apx");
+  assert.equal(observed.entities[0].semantic.name, "Save");
+  assert.equal(observed.entities[0].locatorRef, "locator:frame:1");
+  assert.equal(observed.budget.truncated, true);
+  assert.equal(observed.budget.omitted.entities, 2);
+  assert.equal(JSON.stringify(observed).includes("frameNode:private"), false);
+  assert.equal(observed.page.url, "https://allowed.example/path");
+
+  const beforeUnsupported = calls.length;
+  const unsupportedProfile = await errorOf(() => router.invoke("automation.observe", {
+    sessionRef: {}, expectedRisk: "read", representation: APX_REPRESENTATION,
+    profile: ["apx-core/1", "apx-web/1", "apx-action/1"],
+  }));
+  assert.equal(unsupportedProfile?.code, "APX_PROFILE_UNSUPPORTED");
+  const unsupportedVisual = await errorOf(() => router.invoke("automation.observe", {
+    sessionRef: {}, expectedRisk: "read", representation: APX_REPRESENTATION,
+    visual: { mode: "auto" },
+  }));
+  assert.equal(unsupportedVisual?.code, "APX_VISUAL_PROVIDER_DENIED");
+  assert.equal(calls.length, beforeUnsupported);
 
   const beforeDenied = calls.length;
   const denied = await errorOf(() => router.invoke("automation.target.open", {
@@ -49,6 +96,12 @@ export async function assertFrameSpaceContract() {
     sessionRef: {}, actions: [{ kind: "click", selector: "#save", expectedRisk: "read" }],
   }));
   assert.equal(risk?.code, "FRAME_SPACE_PERMISSION_DENIED");
+  assert.equal(calls.length, beforeDenied);
+  const unsupportedEvidence = await errorOf(() => router.invoke("automation.act", {
+    sessionRef: {}, actions: [{ kind: "click", selector: "#save", expectedRisk: "externalEffect",
+      verify: { entityAppeared: { role: "status" } } }],
+  }));
+  assert.equal(unsupportedEvidence?.code, "APX_PROFILE_UNSUPPORTED");
   assert.equal(calls.length, beforeDenied);
 
   const readOnly = new AutomationSpaceRouter(new FrameSpace({ pageBridge, config: {

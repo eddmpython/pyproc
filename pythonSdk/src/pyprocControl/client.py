@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, Sequence, TextIO
 
 from .models import Attachment, ControlError, ControlResult
+from .perception import PerceptionClient
 from .protocol import (
     CONTROL_ATTACHMENT_CHUNK_BYTES,
     CONTROL_MAX_ATTACHMENT_BYTES,
@@ -428,6 +429,9 @@ class PyProcClient:
 
     def deleteArtifact(self, artifactRef: str, *, timeout: float | None = None) -> ControlResult:
         return self.request("artifact.delete", {"artifactRef": artifactRef}, timeout=timeout)
+
+    def perception(self, sessionRef: dict[str, Any] | None = None) -> PerceptionClient:
+        return PerceptionClient(self, sessionRef)
 
     def close(self, timeout: float = 5.0) -> None:
         with self._stateLock:

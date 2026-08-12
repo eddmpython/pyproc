@@ -75,6 +75,7 @@ export class FrameSpacePage {
       "automation.session.attach": (input) => this.attach(input),
       "automation.session.detach": (input) => this.detach(input),
       "automation.observe": (input) => this.observe(input),
+      "frame.perception.capture": (input) => this.perceptionCapture(input),
       "automation.act": (input) => this.act(input),
       "artifact.read": (input) => this.readArtifact(input),
       "artifact.delete": (input) => this.deleteArtifact(input),
@@ -158,6 +159,17 @@ export class FrameSpacePage {
     if (!includeScreenshot) return observed;
     const captured = await this._call(target, "action.screenshot", {});
     return Object.freeze({ ...observed, screenshot: await this._storeScreenshot(captured, true) });
+  }
+
+  async perceptionCapture({ sessionRef, maxEntities, issueLocators } = {}) {
+    const target = this._targetForSession(sessionRef);
+    const facts = await this._call(target, "perception.capture", {
+      maxEntities,
+      issueLocators: issueLocators !== false,
+    });
+    target.url = String(facts.page?.url || target.url);
+    target.title = String(facts.page?.title || target.title).slice(0, 500);
+    return Object.freeze({ ...facts, documentEpoch: target.generation });
   }
 
   async act({ sessionRef, actions } = {}) {

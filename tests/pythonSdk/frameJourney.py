@@ -22,6 +22,9 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     attached = client.attachSession(opened.output["targetRef"], timeout=30.0)
     observed = client.observe(attached.output, {"expectedRisk": "read"}, timeout=30.0)
     assert observed.output["parentAccessible"] is False
+    heading = client.perception(attached.output).query(
+        role="heading", name="python-sdk-ready", timeout=30.0).one()
+    assert heading.entityRef.startswith("entity:") and heading.name == "python-sdk-ready"
     captured = client.act(attached.output, [
         {"kind": "screenshot", "expectedRisk": "read"}
     ], timeout=60.0)
@@ -33,4 +36,5 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     assert client.deleteArtifact(artifactRef, timeout=30.0).output["deleted"] is True
     client.detachSession(attached.output, timeout=30.0)
 
-print(json.dumps({"ok": True, "operations": 13, "attachmentBytes": attachment.byteLength}))
+print(json.dumps({"ok": True, "operations": 13, "attachmentBytes": attachment.byteLength,
+                  "perceptionEntityRef": heading.entityRef}))

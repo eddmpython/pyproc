@@ -56,6 +56,9 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
 
     opened = client.openTarget(targetUrl, expectedRisk="externalEffect", waitUntil="load", timeout=60.0)
     attached = client.attachSession(opened.output["targetRef"], timeout=30.0)
+    heading = client.perception(attached.output).query(
+        role="heading", name="python-sdk-ready", timeout=30.0).one()
+    assert heading.entityRef.startswith("entity:") and heading.name == "python-sdk-ready"
     captured = client.act(attached.output, [
         {"kind": "screenshot", "format": "png", "expectedRisk": "read"}
     ], timeout=60.0)
@@ -82,4 +85,4 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
 
 print(json.dumps({"ok": True, "operations": 14, "checkpoint": checkpoint.output["index"],
                   "attachmentBytes": attachment.byteLength, "cancelOutcome": cancelError.outcome,
-                  "timeoutOutcome": timeoutError.outcome}))
+                  "timeoutOutcome": timeoutError.outcome, "perceptionEntityRef": heading.entityRef}))

@@ -1,5 +1,14 @@
 // frameSpace.js - credentialless sandbox page bridge를 AutomationSpace 계약으로 노출한다.
 import { BROWSER_CONTROL_RISKS } from "../browserControl/browserControlPolicy.js";
+import {
+  APX_LEGACY_REPRESENTATION,
+  APX_OBSERVE_OPTION_KEYS,
+  APX_REPRESENTATION,
+  perceptionOptionsFromInput,
+  validatePerceptionOptions,
+} from "../perception/apxCatalog.js";
+import { PerceptionSpace } from "../perception/perceptionSpace.js";
+import { FrameSensor } from "../perception/profiles/frameSensor.js";
 
 export const FRAME_SPACE_ACTION_RISKS = Object.freeze({
   snapshot: "read",
@@ -29,6 +38,7 @@ const FRAME_OPERATIONS = Object.freeze([
 ]);
 const TARGET_ACTIONS = new Set(["waitFor", "click", "focus", "fill", "press", "select", "check", "uncheck", "scroll"]);
 const ARTIFACT_REF = /^artifact:[A-Za-z0-9_-]+$/;
+const LEGACY_OBSERVE_KEYS = Object.freeze(["maxNodes", "mode", "includeScreenshot"]);
 
 function frameError(code, message, outcome = "notSent") {
   const error = new Error(message);
@@ -63,18 +73,28 @@ export function assertFrameSpaceConfig(config) {
 }
 
 export class FrameSpace {
-  constructor({ pageBridge, config, spaceId = "space:frame" } = {}) {
+  constructor({ pageBridge, config, spaceId = "space:frame", idFactory = () => crypto.randomUUID() } = {}) {
     if (!pageBridge || typeof pageBridge.dispatch !== "function" || typeof pageBridge.waitForReady !== "function") {
       throw new TypeError("FrameSpace pageBridge is required");
     }
     this.config = assertFrameSpaceConfig(config);
     this.spaceId = spaceId;
     this.providerKind = "frame";
-    this.capabilities = Object.freeze(["dom", "target", "screenshot", "artifact"]);
+    this.capabilities = Object.freeze(["dom", "target", "screenshot", "artifact", "perception"]);
     this.operations = Object.freeze(FRAME_OPERATIONS.filter((operation) => operation !== "automation.observe"
       || this.config.actions.includes("snapshot")));
     this.replayBoundary = "recordOnly";
     this.pageBridge = pageBridge;
+    this._perception = new PerceptionSpace({
+      sensor: new FrameSensor({
+        dispatch: (operation, input, context) => this.pageBridge.dispatch(operation, input, context),
+        idFactory,
+      }),
+      idFactory,
+      locatorIssuer: (sessionRef, documentEpoch, locatorData) => locatorData.locatorRef || null,
+      providerKind: "frame",
+      conformanceLevel: "L3",
+    });
     this._authorities = new WeakSet();
     this._sequence = 0;
     this._closed = false;
@@ -95,8 +115,20 @@ export class FrameSpace {
       }
       this._assertAllowedUrl(input.url);
     }
-    if (operation === "automation.observe" && input.expectedRisk !== "read") {
-      throw frameError("FRAME_SPACE_PERMISSION_DENIED", "observe requires expectedRisk read");
+    if (operation === "automation.observe") {
+      if (input.expectedRisk !== "read") {
+        throw frameError("FRAME_SPACE_PERMISSION_DENIED", "observe requires expectedRisk read");
+      }
+      const apxKeys = APX_OBSERVE_OPTION_KEYS.filter((key) => key !== "representation" && input[key] !== undefined);
+      if (input.representation === APX_REPRESENTATION) {
+        const legacyKey = LEGACY_OBSERVE_KEYS.find((key) => input[key] !== undefined);
+        if (legacyKey) throw frameError("FRAME_SPACE_ACTION_INVALID", `APX observe does not accept ${legacyKey}`);
+        validatePerceptionOptions(perceptionOptionsFromInput(input));
+      } else if (input.representation !== undefined && input.representation !== APX_LEGACY_REPRESENTATION) {
+        throw frameError("FRAME_SPACE_ACTION_INVALID", "observe representation is invalid");
+      } else if (apxKeys.length) {
+        throw frameError("FRAME_SPACE_ACTION_INVALID", `legacy observe does not accept ${apxKeys[0]}`);
+      }
     }
     if (operation === "automation.act") this._assertActions(input.actions);
     if ((operation === "artifact.read" || operation === "artifact.delete") && !ARTIFACT_REF.test(String(input.artifactRef || ""))) {
@@ -112,15 +144,24 @@ export class FrameSpace {
       throw frameError("FRAME_SPACE_PERMISSION_DENIED", "FrameSpace operation requires a current authorization token");
     }
     this._authorities.delete(authority);
-    return this.pageBridge.dispatch(operation, input, {
+    if (operation === "automation.observe" && input.representation === APX_REPRESENTATION) {
+      return this._perception.observe(input.sessionRef, perceptionOptionsFromInput(input), { signal });
+    }
+    const output = await this.pageBridge.dispatch(operation, input, {
       signal,
       requestId: typeof requestId === "string" && requestId ? requestId : `frame:${++this._sequence}`,
     });
+    if (operation === "automation.space.inspect") {
+      return Object.freeze({ ...output, perception: this._perception.inspect() });
+    }
+    if (operation === "automation.session.detach") this._perception.dropSession(input.sessionRef);
+    return output;
   }
 
   async close() {
     if (this._closed) return;
     this._closed = true;
+    this._perception.close();
   }
 
   _assertAllowedUrl(value) {
@@ -135,6 +176,9 @@ export class FrameSpace {
       throw frameError("FRAME_SPACE_ACTION_INVALID", "FrameSpace requires 1 to 16 actions");
     }
     for (const action of actions) {
+      if (action?.verify !== undefined) {
+        throw frameError("APX_PROFILE_UNSUPPORTED", "FrameSpace does not provide Action Evidence");
+      }
       if (!action || typeof action !== "object" || Array.isArray(action)
         || !this.config.actions.includes(action.kind)) {
         throw frameError("FRAME_SPACE_PERMISSION_DENIED", `FrameSpace action is outside permission: ${action?.kind}`);

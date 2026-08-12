@@ -180,7 +180,7 @@ try {
     && inspected.externalEffectsAcknowledged === true && inspected.listener === null
     && inspected.compatibility?.supported === true && inspected.compatibility?.browserMajor >= 137
     && inspected.space?.spaceId === "space:native" && inspected.space?.providerKind === "nativeCdp"
-    && inspected.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact"
+    && inspected.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception"
     && inspected.space?.restoreBoundary === "externalEffectsRemain"
     && inspected.space?.replayBoundary === "recordOnly" && inspected.space?.operations?.length === 10,
   `${inspected.automation?.actions?.length} actions`);

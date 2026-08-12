@@ -136,10 +136,12 @@ try {
   const inspected = await client.request("automation.space.inspect", {});
   check("inspect declares credentialless sandbox and provider boundary",
     inspected.output.space?.providerKind === "frame"
-      && inspected.output.space?.capabilities?.join(",") === "dom,target,screenshot,artifact"
+      && inspected.output.space?.capabilities?.join(",") === "dom,target,screenshot,artifact,perception"
       && inspected.output.transport === "messageChannel"
       && inspected.output.sandbox === "allow-scripts allow-forms"
-      && inspected.output.credentialless === true);
+      && inspected.output.credentialless === true
+      && inspected.output.perception?.level === "L3"
+      && inspected.output.perception?.profiles?.includes("apx-action/1") === false);
 
   const opened = await client.request("automation.target.open", {
     url: `${originA}/first`, expectedRisk: "externalEffect", waitUntil: "load",
@@ -155,6 +157,37 @@ try {
     opened.output.parentAccessible === false && opened.output.storageAccessible === false
       && opened.output.cookieAccessible === false && opened.output.credentialless === true
       && first.output.parentAccessible === false && first.output.nodes.some((node) => node.id === "name"));
+
+  const firstApx = await client.request("automation.observe", {
+    sessionRef: attached.output,
+    expectedRisk: "read",
+    representation: "apx.graph",
+    query: { role: "button", name: "Apply", actionable: true },
+    budget: { maxEntities: 20, maxRelations: 40, maxBytes: 32768 },
+  });
+  const applyEntity = firstApx.output.entities[0];
+  check("FrameSpace emits a bounded L3 APX graph without native identifiers",
+    firstApx.output.protocol === "apx"
+      && firstApx.output.kind === "full"
+      && firstApx.output.query?.matched === 1
+      && applyEntity?.semantic?.name === "Apply"
+      && applyEntity?.locatorRef?.startsWith("locator:")
+      && !JSON.stringify(firstApx.output).includes("frameNode:")
+      && !firstApx.output.page.url.includes("?"));
+
+  let visualDenied = null;
+  try {
+    await client.request("automation.observe", {
+      sessionRef: attached.output,
+      expectedRisk: "read",
+      representation: "apx.graph",
+      visual: { mode: "auto", maxCrops: 1 },
+    });
+  } catch (error) { visualDenied = error; }
+  check("FrameSpace refuses compositor visual claims before target capture",
+    visualDenied instanceof ControlRemoteError
+      && visualDenied.code === "APX_VISUAL_PROVIDER_DENIED"
+      && visualDenied.outcome === "notSent");
   await new Promise((resolve) => setTimeout(resolve, 200));
   const afterAttack = await client.request("machine.run", { code: "frameState + 3" });
   check("frame target cannot replace the authenticated control page epoch", afterAttack.output.value === "43");
@@ -190,7 +223,7 @@ try {
     sessionRef: attached.output,
     actions: [
       { kind: "fill", selector: "#name", value: "frame-ready", expectedRisk: "externalEffect" },
-      { kind: "click", selector: "#apply", expectedRisk: "externalEffect" },
+      { kind: "click", locatorRef: applyEntity.locatorRef, expectedRisk: "externalEffect" },
       { kind: "waitFor", selector: "#result", state: "visible", expectedRisk: "read" },
     ],
   });
@@ -199,6 +232,19 @@ try {
   });
   check("ordered semantic actions change only the sandbox target",
     changed.output.nodes.some((node) => node.id === "result" && node.text === "frame-ready"));
+
+  const changedApx = await client.request("automation.observe", {
+    sessionRef: attached.output,
+    expectedRisk: "read",
+    representation: "apx.graph",
+    since: firstApx.output.observationRef,
+    budget: { maxEntities: 50, maxRelations: 100, maxBytes: 65536 },
+  });
+  check("FrameSpace preserves entity identity and reports a temporal delta",
+    changedApx.output.kind === "delta"
+      && changedApx.output.baseObservationRef === firstApx.output.observationRef
+      && changedApx.output.delta.changed.length >= 1
+      && changedApx.output.entities.some((entity) => entity.semantic?.name === "frame-ready"));
 
   const captured = await client.request("automation.act", {
     sessionRef: attached.output,

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyproc.dev/schemas/apx/1/apx-visual.schema.json",
+  "title": "APX Visual Probe 1.0",
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "visualProbe": {
+      "type": "object",
+      "required": ["kind", "entityRef", "reason", "artifact", "provenance"],
+      "properties": {
+        "kind": { "enum": ["entityCrop", "overview"] },
+        "entityRef": { "type": ["string", "null"], "pattern": "^entity:[A-Za-z0-9_-]{1,128}$" },
+        "reason": { "type": "string", "minLength": 1 },
+        "artifact": { "type": "object", "required": ["kind", "mimeType", "artifactRef", "byteLength", "sha256"], "properties": { "kind": { "const": "screenshot" }, "mimeType": { "type": "string", "pattern": "^image/" }, "artifactRef": { "type": "string", "pattern": "^artifact:[A-Za-z0-9_-]+$" }, "byteLength": { "type": "integer", "minimum": 1 }, "sha256": { "$ref": "#/$defs/digest" }, "dataBase64": { "type": "string" }, "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } }, "additionalProperties": true },
+        "provenance": { "type": "object", "required": ["mode", "source", "trust"], "properties": { "mode": { "enum": ["observed", "inferred"] }, "source": { "type": "string", "minLength": 1 }, "trust": { "enum": ["browser", "page", "model", "external"] } }, "additionalProperties": false }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "evidenceRef": "evidence:example1",
+  "actionRef": "action:example1",
+  "beforeObservationRef": "observation:example1",
+  "afterObservationRef": "observation:example2",
+  "effectOutcome": "applied",
+  "verification": {
+    "state": "confirmed",
+    "postcondition": {"all": [{"entityAppeared": {"role": "status", "nameContains": "Saved"}}, {"networkResponse": {"method": "POST", "urlPath": "/orders", "status": 201}}], "withinMs": 5000},
+    "evidenceRefs": ["entity:savedStatus", "event:orderResponse"]
+  },
+  "correlatedEvidence": {"level": "strong", "eventRefs": ["event:orderRequest", "event:orderResponse"], "delta": {"added": ["entity:savedStatus"], "removed": [], "changed": []}},
+  "effectWindow": {"startedAt": 1786492800000, "endedAt": 1786492800420}
+}

@@ -65,6 +65,15 @@ surface imported by `mcpSandboxServer.mjs`. A contract test rejects browser sche
 that return to the server composition root. The installed-package gate requires the bin runtime while also
 rejecting any browser JavaScript export or runtime dependency.
 
+`scripts/perception/` owns the provider-neutral APX contract. `apxCatalog.js` and the JSON schemas own strict
+wire validation and conformance vocabulary; `perceptionIdentity.js` and `perceptionTimeline.js` own epoch-bound
+identity and deltas; `perceptionBudget.js` and `perceptionQuery.js` own bounded attention; `perceptionSpace.js`
+owns sensor fusion; `postconditionVerifier.js` and `actionEvidence.js` own one-shot verification. Provider
+adapters live only under `scripts/perception/profiles/`. They may consume private CDP or Frame facts but must
+emit no native identifier. `browserAutomation.js` composes perception with policy, artifact, and action
+orchestration. MCP, Control, recording, replay, and Python code adapt this one result rather than reimplementing
+it. The directory ships in the tarball but is not an npm JavaScript export.
+
 ## Layer ranks
 
 The layer contract is a total order, and every import edge must point downward. Peers do not import peers.

@@ -53,7 +53,7 @@ one reproducible order. A queued request cancelled before its turn reaches no pr
   "spaceId": "space:native",
   "providerKind": "nativeCdp",
   "operations": ["automation.space.inspect"],
-  "capabilities": ["dom", "network", "target", "storage", "runtime", "screenshot", "artifact"],
+  "capabilities": ["dom", "network", "target", "storage", "runtime", "screenshot", "artifact", "perception"],
   "restoreBoundary": "externalEffectsRemain",
   "replayBoundary": "recordOnly"
 }
@@ -65,6 +65,13 @@ operation. The current native and frame adapters record evidence but do not repl
 declares `dom`, `target`, `screenshot`, and `artifact`, omits `automation.command`, and keeps the same restore
 boundary. `RecordingSpace` wraps either live provider without changing that identity. `ReplaySpace` declares
 the recorded capabilities, consumes exactly one matching entry at a time, and owns no live browser provider.
+
+`perception` means the provider can return an APX graph through the existing `automation.observe` operation.
+It does not imply pixel authority. Provider inspection separately declares conformance level, supported APX
+profiles, channels, and visual modes. Native CDP reports live semantic, spatial, temporal, evidence, and
+verified crop support. FrameSpace reports semantic, spatial, and temporal facts while accepting only visual
+mode `off`. ReplaySpace returns recorded APX terminals and artifacts without pretending to be a live sensor.
+The [APX draft](../specs/apx/README.md) owns this provider-neutral contract.
 
 Recording and replay details are in the [ReplaySpace guide](replaySpace.md).
 

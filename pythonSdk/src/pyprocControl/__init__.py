@@ -2,6 +2,7 @@
 
 from .client import ControlRequest, PyProcClient
 from .models import Attachment, ControlError, ControlResult
+from .perception import PerceptionClient, PerceptionEntity, PerceptionQueryResult
 from .protocol import (
     CONTROL_ATTACHMENT_CHUNK_BYTES,
     CONTROL_MAX_ATTACHMENT_BYTES,
@@ -22,6 +23,9 @@ __all__ = [
     "ControlRequest",
     "ControlResult",
     "PyProcClient",
+    "PerceptionClient",
+    "PerceptionEntity",
+    "PerceptionQueryResult",
     "CONTROL_ATTACHMENT_CHUNK_BYTES",
     "CONTROL_MAX_ATTACHMENT_BYTES",
     "CONTROL_MAX_FRAME_BYTES",

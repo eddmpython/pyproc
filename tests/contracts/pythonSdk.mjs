@@ -10,6 +10,7 @@ const requiredFiles = [
   "pythonSdk/src/pyprocControl/__init__.py",
   "pythonSdk/src/pyprocControl/client.py",
   "pythonSdk/src/pyprocControl/models.py",
+  "pythonSdk/src/pyprocControl/perception.py",
   "pythonSdk/src/pyprocControl/protocol.py",
   "pythonSdk/src/pyprocControl/py.typed",
   "tests/pythonSdk/protocolContract.py",
@@ -30,7 +31,8 @@ export async function assertPythonSdkContract() {
     throw new Error("Python SDK build backend exact pin 누락");
   }
   const source = readFileSync(join(ROOT, "pythonSdk", "src", "pyprocControl", "__init__.py"), "utf8");
-  for (const name of ["PyProcClient", "ControlRequest", "ControlResult", "ControlError", "Attachment"]) {
+  for (const name of ["PyProcClient", "ControlRequest", "ControlResult", "ControlError", "Attachment",
+    "PerceptionClient", "PerceptionEntity", "PerceptionQueryResult"]) {
     if (!source.includes(`"${name}"`)) throw new Error(`Python SDK 공개 값 누락: ${name}`);
   }
   if (pkg.scripts?.["test:python-sdk"] !== "node tests/pythonSdk/run.mjs") {
