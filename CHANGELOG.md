@@ -12,6 +12,21 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.20 - 2026-08-12
+
+### Fixed
+
+- Fatal MCP protocol errors now arm the five-second exit watchdog before waiting for the stdout flush callback.
+  A stalled callback can no longer prevent process termination after the fatal terminal reaches the client.
+
+### Compatibility
+
+- This patch changes no operation, schema, result, export, or type signature. It supersedes the GitHub-only
+  0.0.18 and 0.0.19 releases, whose publish gates prevented npm publication.
+
+한국어 요약: fatal MCP terminal의 stdout callback을 기다리기 전에 5초 종료 watchdog을 시작한다.
+callback이 지연돼도 프로세스 종료가 보장되며 공개 표면은 바뀌지 않는다.
+
 ## 0.0.19 - 2026-08-12
 
 ### Fixed

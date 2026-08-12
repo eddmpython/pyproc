@@ -9,15 +9,15 @@ The two packages have separate jobs:
 - Python `pyproc-control` ships the strict protocol client, typed values, cancellation, and attachment
   verification.
 
-Pin both packages to the same version. A normal release uses `0.0.19` for each.
+Pin both packages to the same version. A normal release uses `0.0.20` for each.
 
 ## Install
 
 ```sh
-npm install --save-exact pyproc@0.0.19
+npm install --save-exact pyproc@0.0.20
 npx pyproc-engine --out /absolute/path/to/pyodide
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.19/pyproc_control-0.0.19-py3-none-any.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.20/pyproc_control-0.0.20-py3-none-any.whl"
 ```
 
 The Python distribution is currently published as wheel and source distribution assets on the matching

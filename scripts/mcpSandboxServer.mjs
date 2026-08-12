@@ -22,14 +22,24 @@ process.stderr.write(`pyproc MCP sandbox: ${product.browserSession.browser} -> $
 
 let shuttingDown = false;
 let rl = null;
-async function shutdown(code = 0) {
-  if (shuttingDown) return;
+function beginShutdown(code) {
+  if (shuttingDown) return null;
   shuttingDown = true;
   const forcedExit = setTimeout(() => process.exit(code), 5000);
   rl?.close();
+  return forcedExit;
+}
+
+async function finishShutdown(code, forcedExit) {
   try { await product.close(); } catch (error) {}
   clearTimeout(forcedExit);
   process.exit(code);
+}
+
+async function shutdown(code = 0) {
+  const forcedExit = beginShutdown(code);
+  if (!forcedExit) return;
+  await finishShutdown(code, forcedExit);
 }
 process.on("SIGINT", () => void shutdown(0));
 process.on("SIGTERM", () => void shutdown(0));
@@ -47,11 +57,15 @@ function requestIdKey(id) {
 }
 
 async function fatalRequestError(code, message) {
-  if (shuttingDown) return;
-  await new Promise((resolve) => process.stdout.write(JSON.stringify({
-    jsonrpc: "2.0", id: null, error: { code, message },
-  }) + "\n", resolve));
-  await shutdown(1);
+  const forcedExit = beginShutdown(1);
+  if (!forcedExit) return;
+  try {
+    await new Promise((resolve) => process.stdout.write(JSON.stringify({
+      jsonrpc: "2.0", id: null, error: { code, message },
+    }) + "\n", resolve));
+  } finally {
+    await finishShutdown(1, forcedExit);
+  }
 }
 
 rl = createInterface({ input: process.stdin, crlfDelay: Infinity });

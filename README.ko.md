@@ -157,7 +157,7 @@ fail-closed network policy를 적용하면 선택한 데이터도 code 실행 �
 ## 빠른 시작
 
 ```sh
-npm install pyproc@0.0.19 --save-exact
+npm install pyproc@0.0.20 --save-exact
 npx pyproc-engine --out public/vendor/pyodide
 ```
 
@@ -317,7 +317,7 @@ SDK를 사용한다:
 
 ```sh
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.19/pyproc_control-0.0.19-py3-none-any.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.20/pyproc_control-0.0.20-py3-none-any.whl"
 ```
 
 ```python
@@ -606,11 +606,11 @@ export default { server: { headers: {
 
 ## 설치와 핀
 
-npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.19 --save-exact`. 빌드 단계는 없다(네이티브 ESM). 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 replay 보장은 버전에 묶여 있다:
+npm([npmjs.com/package/pyproc](https://www.npmjs.com/package/pyproc)): `npm install pyproc@0.0.20 --save-exact`. 빌드 단계는 없다(네이티브 ESM). 플로팅 범위(`^`, `~`, `latest`)는 지원하지 않는다. 상태 커널의 replay 보장은 버전에 묶여 있다:
 
 ```jsonc
 // package.json
-"dependencies": { "pyproc": "0.0.19" }
+"dependencies": { "pyproc": "0.0.20" }
 ```
 
 `pyproc/runtime`과 typed API subpath 항목은 0.0.11에 출하된다. 아직 릴리즈하지 않은 커밋을
