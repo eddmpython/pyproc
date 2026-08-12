@@ -20,6 +20,7 @@ verified attachment, cancellation을 통과하면 새 driver가 아니라 기존
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-08-13 | `jsClientProbe.mjs` | Windows, packed install, Edge | 제품 여정 10/10 | 공개 승격 바닥 통과 | 지원 API, 타입, 독립 설치 게이트 구현 |
+| 2026-08-13 | `test:control-product` | Windows, packed install, Edge | 공개 제품 여정 14/14 | 졸업 | `pyproc/control` 안정 subpath와 지속 계약만 유지 |
 
 ## 모듈화 설계
 
@@ -36,4 +37,8 @@ wire codec과 request ledger는 `controlClient.js`, 설치 프로세스 수명�
 
 ## 판정
 
-내부 제품 바닥 졸업. 공개 `pyproc/control` 설치 여정과 타입 게이트를 완성한 뒤 본진으로 승격한다.
+졸업 -> `scripts/controlProtocol/controlApi.js`, `pyproc/control`.
+
+Native CDP와 FrameSpace가 같은 공개 facade로 APX query를 반환하고, Native 경로는 DOM과 network
+postcondition evidence, verified PNG, artifact 삭제를 함께 통과했다. timeout은 protocol cancel 뒤
+canonical terminal로 끝나며 root export와 runtime dependency 0은 유지됐다.

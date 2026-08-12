@@ -3,7 +3,7 @@
 import threading
 from concurrent.futures import Future
 
-from pyprocControl import ControlError, ControlProtocolError, ControlResult, PerceptionClient, controlBase, decodeFrame, encodeFrame, validateFrame
+from pyprocControl import ControlError, ControlProtocolError, ControlResult, PerceptionClient, PerceptionQueryResult, controlBase, decodeFrame, encodeFrame, validateFrame
 from pyprocControl.client import ControlRequest, PyProcClient
 
 
@@ -209,6 +209,17 @@ assert perceptionFixture.calls[0][2]["representation"] == "apx.graph"
 assert perceptionFixture.calls[0][2]["expectedRisk"] == "read"
 assert perceptionFixture.calls[1][2][0]["verify"]["entityAppeared"]["role"] == "status"
 
+truncatedAmbiguous = None
+try:
+    PerceptionQueryResult(ControlResult({
+        "protocol": "apx",
+        "entities": [{"entityRef": "entity:only-returned", "kind": "ui.control"}],
+        "query": {"matched": 2, "total": 10},
+    }, "observed")).one()
+except LookupError as error:
+    truncatedAmbiguous = error
+assert truncatedAmbiguous is not None and "received 2" in str(truncatedAmbiguous)
+
 unboundError = None
 try:
     PerceptionClient(perceptionFixture).observe()
@@ -216,4 +227,4 @@ except ValueError as error:
     unboundError = error
 assert unboundError is not None
 
-print("python sdk protocol contract green: 18 fixtures")
+print("python sdk protocol contract green: 19 fixtures")

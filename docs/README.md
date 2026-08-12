@@ -16,7 +16,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 |---|---|---|
 | [product/](product/) | [vision.md](product/vision.md) | Product direction: the North Star, what it is and is not, success and failure criteria, the support boundary |
 | | [glossary.md](product/glossary.md) | Glossary: the naming boundary between the pyproc kernel and the Web Machine layer (`src/machine`, bundled in npm) |
-| [specs/](specs/) | [apx/README.md](specs/apx/README.md) | APX 1.0 Working Draft: PyProc Eyes graph, provenance, temporal identity, visual evidence, action verification, and conformance |
+| [specs/](specs/) | [apx/README.md](specs/apx/README.md) | APX 1.0 product contract: PyProc Eyes graph, provenance, temporal identity, visual evidence, action verification, and conformance |
 | [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: documentation, executable truth, experiments, git history, memory operations, development principles |
 | | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
 | | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
@@ -34,6 +34,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [browserAutomation.md](usage/browserAutomation.md) | Installed MCP browser automation: manifest, screenshots, artifacts, authority, outcomes, and authorized-use boundaries |
 | | [controlProtocol.md](usage/controlProtocol.md) | Language-neutral installed control: handshake, operations, cancellation, outcomes, and verified binary attachments |
 | | [pythonSdk.md](usage/pythonSdk.md) | Official Python client: clean installation, persistent execution, checkpoint recovery, cancellation, and screenshots |
+| | [javascriptControl.md](usage/javascriptControl.md) | Stable Node.js client: installed product lifecycle, persistent Python, APX, verified attachments, cancellation, and shutdown |
 | | [automationSpace.md](usage/automationSpace.md) | Provider-neutral automation lifecycle, authorization, effect, artifact, restore, and replay boundaries |
 | | [frameSpace.md](usage/frameSpace.md) | Cooperative credentialless frame automation, target bridge, sandbox, screenshot, and origin boundaries |
 | | [replaySpace.md](usage/replaySpace.md) | Hash-chained automation recording, artifact completeness, effect-free replay, and checkpoint-aligned resume |
@@ -58,8 +59,9 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 - Installed MCP browser automation: [usage/browserAutomation.md](usage/browserAutomation.md)
 - Language-neutral installed control: [usage/controlProtocol.md](usage/controlProtocol.md)
 - Official Python client: [usage/pythonSdk.md](usage/pythonSdk.md)
+- Official JavaScript control client: [usage/javascriptControl.md](usage/javascriptControl.md)
 - Automation provider contract: [usage/automationSpace.md](usage/automationSpace.md)
 - Cooperative frame provider: [usage/frameSpace.md](usage/frameSpace.md)
 - Automation recording and replay: [usage/replaySpace.md](usage/replaySpace.md)
-- PyProc Eyes wire and evidence contract: [specs/apx/README.md](specs/apx/README.md)
+- PyProc Eyes wire and evidence contract: [APX 1.0](specs/apx/README.md)
 - Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

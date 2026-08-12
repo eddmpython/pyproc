@@ -4,6 +4,11 @@
 browser automation. It uses the same product host as `pyproc-mcp`; only the stdio adapter differs. The npm
 package has no runtime dependency.
 
+The stable `pyproc/control` facade is unreleased until the next exact version after 0.0.20. Node.js
+applications use it instead of implementing this framing directly.
+See the [JavaScript Control SDK](javascriptControl.md). Other languages can implement the wire contract below;
+the official Python client is documented in the [Python SDK guide](pythonSdk.md).
+
 ## Start and preflight
 
 Use the same version 1 manifest documented in [browserAutomation.md](browserAutomation.md):
@@ -75,7 +80,7 @@ from assigning different meaning to the same action.
 APX adds no operation. Pass `representation: "apx.graph"` to `automation.observe` for the provider-neutral
 semantic, spatial, temporal, and visual-on-demand graph. Pixel probes use the existing verified attachment
 framing. An action `verify` condition returns `ActionEvidence` inside the normal `automation.act` terminal.
-The [APX draft](../specs/apx/README.md) defines the envelope, provenance, budgets, and verification states.
+The [APX 1.0 contract](../specs/apx/README.md) defines the envelope, provenance, budgets, and verification states.
 
 The optional request `spaceId` is a fence, not an alternate router. Omit it to use the configured machine or
 automation space. When supplied, `machine:primary` is required for machine operations and the exact `spaceId`

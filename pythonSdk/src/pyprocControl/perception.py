@@ -72,8 +72,12 @@ class PerceptionQueryResult:
 
     def one(self) -> PerceptionEntity:
         matches = self.matches
-        if len(matches) != 1:
-            raise LookupError(f"APX query expected one entity, received {len(matches)}")
+        query = self.observation.get("query")
+        matched = query.get("matched") if isinstance(query, Mapping) else None
+        count = matched if isinstance(matched, int) and not isinstance(matched, bool) else len(matches)
+        if count != 1 or len(matches) != 1:
+            received = len(matches) if count == 1 else count
+            raise LookupError(f"APX query expected one entity, received {received}")
         return matches[0]
 
 

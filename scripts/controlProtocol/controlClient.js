@@ -131,7 +131,11 @@ export class ControlStdioClient {
 
   async cancel(requestId, reason = "control client cancelled the request") {
     await this.ready;
-    try { return await this._write({ ...controlBase("cancel"), requestId, reason }); }
+    if (!this._pending.has(requestId)) return false;
+    try {
+      await this._write({ ...controlBase("cancel"), requestId, reason });
+      return true;
+    }
     catch (error) {
       const failure = connectionLost("control cancel frame could not be sent");
       this._fail(error);

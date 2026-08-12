@@ -41,6 +41,10 @@
       "types": "./src/runtime/assets.d.ts",
       "default": "./src/runtime/assets.js"
     },
+    "./control": {
+      "types": "./scripts/controlProtocol/controlApi.d.ts",
+      "default": "./scripts/controlProtocol/controlApi.js"
+    },
     "./gpu": {
       "types": "./src/capabilities/gpuCompute.d.ts",
       "default": "./src/capabilities/gpuCompute.js"
@@ -134,7 +138,11 @@
     "reactive",
     "runtime",
     "repl",
-    "ai-agent"
+    "ai-agent",
+    "browser-automation",
+    "agent-perception",
+    "mcp",
+    "cdp"
   ],
   "license": "MPL-2.0"
 }

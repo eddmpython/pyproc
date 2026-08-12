@@ -22,6 +22,7 @@
     "../src/capabilities/socketBridge.d.ts",
     "../src/runtime/engines/wasi/wasiSession.d.ts",
     "../src/state/index.d.ts",
-    "../src/runtime/assets.d.ts"
+    "../src/runtime/assets.d.ts",
+    "../scripts/controlProtocol/controlApi.d.ts"
   ]
 }

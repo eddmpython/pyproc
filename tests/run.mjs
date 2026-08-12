@@ -2082,7 +2082,7 @@ check("exports 경로 실존", () => {
   }
 });
 check("exports 안정 subpath 고정", () => {
-  const allowed = new Set([".", "./runtime", "./history", "./machine", "./worker", "./assets", "./gpu", "./socket", "./wasi"]);
+  const allowed = new Set([".", "./runtime", "./history", "./machine", "./worker", "./assets", "./control", "./gpu", "./socket", "./wasi"]);
   const keys = Object.keys(pkg.exports);
   for (const key of keys) {
     if (!allowed.has(key)) throw new Error(`승인 안 된 export key: ${key}`);

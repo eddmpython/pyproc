@@ -12,6 +12,7 @@ try {
     import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
     import { commitState, openState, MemoryStateStore, decodeStateBundle, PAGE_SIZE } from "pyproc/history";
     import { createWebComputer as fromMachine, createMachineCryptoProvider } from "pyproc/machine";
+    import { PyProcControlClient, ControlRemoteError, ControlRequest, PerceptionClient } from "pyproc/control";
 
     for (const [name, fn] of [["boot", boot], ["open", open], ["createWebComputer", createWebComputer], ["checkEnvironment", checkEnvironment]]) {
       if (typeof fn !== "function") throw new Error(name + " export missing");
@@ -29,6 +30,9 @@ try {
     if (PAGE_SIZE !== 65536) throw new Error("history PAGE_SIZE drift");
     for (const fn of [commitState, openState, decodeStateBundle, createMachineCryptoProvider]) {
       if (typeof fn !== "function") throw new Error("kernel surface missing");
+    }
+    for (const [name, value] of Object.entries({ PyProcControlClient, ControlRemoteError, ControlRequest, PerceptionClient })) {
+      if (typeof value !== "function") throw new Error("control surface missing: " + name);
     }
     // 커널 프로토콜이 설치본에서도 실동작하는가(Node webcrypto로 커밋 왕복).
     const store = new MemoryStateStore();
@@ -80,6 +84,8 @@ try {
     ["scripts", "controlProtocol", "pageCommandBridge.mjs"],
     ["scripts", "controlProtocol", "mcpControlAdapter.js"],
     ["scripts", "controlProtocol", "controlClient.js"],
+    ["scripts", "controlProtocol", "controlApi.js"],
+    ["scripts", "controlProtocol", "controlApi.d.ts"],
     ["scripts", "controlProtocol", "controlProduct.mjs"],
     ["scripts", "automationSpace", "automationSpace.js"],
     ["scripts", "automationSpace", "browserControlSpace.js"],

@@ -112,12 +112,13 @@ with PyProcClient.start("pyproc-mcp.json") as client:
 ```
 
 `PerceptionEntity` exposes `entityRef`, `locatorRef`, `kind`, `role`, `name`, and `actionable` properties.
-`query(...).one()` rejects zero or multiple matches instead of guessing. `whatChanged(observationRef)` requests
+`query(...).one()` checks APX `query.matched` and rejects zero or multiple matches even when the byte budget
+returns only one candidate. `whatChanged(observationRef)` requests
 a delta, while `explainActionability(entityRef)` narrows the graph to semantic, geometry, and interaction
 facts. Observation identity never grants action authority, and locator capability remains short-lived.
 
 Native CDP supports verified pixel-on-demand attachments. FrameSpace supports APX through temporal level L3
-but rejects visual inference. See the [APX 1.0 Working Draft](../specs/apx/README.md) for the graph and evidence
+but rejects visual inference. See the [APX 1.0 product contract](../specs/apx/README.md) for the graph and evidence
 contract.
 
 ## Cancellation and errors

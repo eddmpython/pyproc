@@ -24,7 +24,7 @@ The roles are split.
 
 ## Public import boundary
 
-Only the public package entry and named subpaths form the product contract. The per-capability export list is canonical in [capabilityMatrix.md](capabilityMatrix.md); the type contract is the bundled `index.d.ts`.
+Only the public package entry and named subpaths form the product contract. The per-capability export list is canonical in [capabilityMatrix.md](capabilityMatrix.md); the type contract is the bundled root and subpath declarations.
 
 | Specifier | Purpose |
 | --- | --- |
@@ -33,6 +33,7 @@ Only the public package entry and named subpaths form the product contract. The 
 | `pyproc/assets` | Runtime-asset manifest and SRI preflight: `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` |
 | `pyproc/history` | The state kernel plus the store, bundle, and signature contracts |
 | `pyproc/machine` | Web Machine host, device, store, and guest assembly detail |
+| `pyproc/control` | Stable Node.js client for the installed Control product, persistent Python, APX, cancellation, and verified attachments. unreleased until the next exact version after 0.0.20 |
 | `pyproc/worker` | Only when a bundler or product build must reference the worker entrypoint explicitly |
 | `pyproc/gpu`, `pyproc/socket`, `pyproc/wasi` | Demoted Experimental and Research surfaces. New Experimental subpaths are frozen |
 
@@ -44,9 +45,10 @@ Forbidden boundaries:
 - Do not put product UI or domain policy into pyproc. pyproc provides runtime and capabilities only.
 - Worker and Service Worker files, which the browser requires to be same-origin, are handled as a deployment-asset contract rather than as public JavaScript imports.
 
-## Installed command and Python boundary
+## Installed command and language clients
 
-The npm package ships four stable commands without adding a JavaScript subpath:
+The npm package ships four stable commands. Node.js applications use the `pyproc/control` facade; other
+languages use Control Protocol clients:
 
 | Command | Product contract |
 |---|---|
@@ -59,6 +61,11 @@ The npm package ships four stable commands without adding a JavaScript subpath:
 `scripts/browserControl/`, `mcpProductConfig.mjs`, or `mcpSandboxServer.mjs` are not public contracts. The
 command, its manifest, and its behavior are browser-gated through the packed and installed package. See the
 [browser automation product guide](browserAutomation.md) and [Control Protocol guide](controlProtocol.md).
+
+The stable Node.js facade starts the matching package-internal command directly, so it cannot drift to a
+different globally installed version. `PyProcControlClient`, `ControlRequest`, `ControlRemoteError`, and
+`PerceptionClient` share the host's operation, outcome, cancellation, and attachment contracts. See the
+[JavaScript Control SDK](javascriptControl.md).
 
 The separately built `pyproc-control` Python distribution is the official native client. Its `PyProcClient`
 starts the npm command from `PATH`, validates the handshake and every frame, exposes cancellation and stable
@@ -199,7 +206,7 @@ After a revival - journal, session, or image open - process resources such as fi
 
 | Gate | Exposed specifiers | Actual public surface | Contract verified |
 | --- | --- | --- | --- |
-| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine` | `boot`, `open`, `createWebComputer`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, a `commitState`/`openState` kernel round trip, `pyproc-assets` and `pyproc-engine` bins | package exports, stable subpath, `index.d.ts`, npm files, engine preparation, CLI graph copy and SRI manifest |
+| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine`, `pyproc/control` | `boot`, `open`, `createWebComputer`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PyProcControlClient`, `PerceptionClient`, a `commitState`/`openState` kernel round trip, the four installed bins | package exports, stable subpath types, npm files, engine preparation, CLI graph copy and SRI manifest |
 | installed package - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | An asset manifest rooted at `/node_modules/pyproc/`, worker graph SRI, registration of the installed `pyprocSw.js`, and rejection of a bad worker SRI before spawn |
 | installed package - runtime/server | `pyproc` | `boot`, the machine runtime's `enableAsgiServer`, ASGI delegation wiring of the installed `pyprocSw.js` | Machine boot from the installed package, a Python ASGI app, a `fetch("/pyproc/...")` virtual-origin round trip, the S3 timing source |
 | installed package - device filesystem | `pyproc` | machine runtime `enableDeviceFs` | Reading and writing `/dev/productState` and `/proc/meminfo` through the Python `open()` file contract on an installed-package machine |

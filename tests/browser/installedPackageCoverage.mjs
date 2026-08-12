@@ -8,7 +8,7 @@ export const INSTALLED_PACKAGE_COVERAGE_VERSION = 2;
 export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
   Object.freeze({
     gate: "package surface",
-    specifiers: Object.freeze(["`pyproc`", "`pyproc/assets`", "`pyproc/history`", "`pyproc/machine`"]),
+    specifiers: Object.freeze(["`pyproc`", "`pyproc/assets`", "`pyproc/history`", "`pyproc/machine`", "`pyproc/control`"]),
     publicSurface: Object.freeze([
       "`boot`",
       "`open`",
@@ -17,10 +17,12 @@ export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
       "`getPyProcAssetManifest`",
       "`verifyPyProcAssetIntegrity`",
       "`registerPyProcServiceWorker`",
+      "`PyProcControlClient`",
+      "`PerceptionClient`",
       "a `commitState`/`openState` kernel round trip",
-      "`pyproc-assets` and `pyproc-engine` bins",
+      "the four installed bins",
     ]),
-    contract: "package exports, stable subpath, `index.d.ts`, npm files, engine preparation, CLI graph copy and SRI manifest",
+    contract: "package exports, stable subpath types, npm files, engine preparation, CLI graph copy and SRI manifest",
   }),
   Object.freeze({
     gate: "installed package - asset path",

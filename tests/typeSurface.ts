@@ -1,5 +1,6 @@
 import { createWebComputer, open } from "../index.js";
 import type { MachineStore } from "../src/machine/index.js";
+import { PyProcControlClient, ControlRemoteError } from "../scripts/controlProtocol/controlApi.js";
 
 declare const minimalCrypto: { randomUUID(): string };
 declare const store: MachineStore;
@@ -25,6 +26,26 @@ async function durableMachineSurface() {
   return autoCommit;
 }
 void durableMachineSurface;
+
+async function controlSurface() {
+  const client = await PyProcControlClient.start("pyproc-control.json");
+  const result = await client.runPython("40 + 2", { timeoutMs: 1000 });
+  const value: string | null = result.output.value;
+  const checkpoint = await client.saveCheckpoint();
+  await client.restoreCheckpoint(checkpoint.output.index);
+  const request = client.requestAsync("machine.run", { code: "6 * 7" });
+  await request.cancel("typed cancellation");
+  const eyes = client.perception({ sessionId: "session:typed" });
+  const save = (await eyes.query({ role: "button", name: "Save", actionable: true })).one();
+  await eyes.act("click", save.locatorRef!, { verify: { entityAppeared: { role: "status" } } });
+  await client.close();
+  return value;
+}
+void controlSurface;
+
+declare const controlFailure: ControlRemoteError;
+const controlOutcome: string = controlFailure.outcome;
+void controlOutcome;
 
 // @ts-expect-error the legacy wrapper is removed; durable options are direct
 open({ persistent: true });

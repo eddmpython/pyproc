@@ -546,6 +546,26 @@ Deployment asset integrity, typed in `src/runtime/assets.d.ts`:
   ASGI virtual origin, COOP/COEP injection - by query flags).
 - `PYPROC_ASSET_MANIFEST_VERSION` - manifest format version (currently 1).
 
+### `pyproc/control` (unreleased until the next exact version after 0.0.20)
+
+Stable Node.js facade for the installed Control product, typed in
+`scripts/controlProtocol/controlApi.d.ts`:
+
+- `PyProcControlClient.check(configPath, opts?)` validates the complete product manifest.
+- `PyProcControlClient.start(configPath, opts?)` starts the exact `pyproc-control` file beside the imported
+  module and resolves after the strict hello handshake.
+- Machine verbs: `runPython`, `saveCheckpoint`, `restoreCheckpoint`, and `reset`.
+- Automation verbs: `inspectSpace`, `listTargets`, `openTarget`, `attachSession`, `observe`, `act`, `command`,
+  `detachSession`, `readArtifact`, and `deleteArtifact`.
+- `client.perception(sessionRef)` returns `PerceptionClient`, whose `observe`, `query`, `one`,
+  `explainActionability`, `whatChanged`, and evidence-backed `act` methods use APX 1.0.
+- `requestAsync` returns a `ControlRequest` with the request ID, terminal Promise, explicit cancel, and an
+  effect-safe deadline wait. `ControlRemoteError` preserves `code`, `outcome`, `retryable`, and `details`.
+- `close()` drains the owned product process under a bounded shutdown deadline.
+
+This is a Node.js surface. Browser application code uses the root Machine entrance. The facade defines no
+new Control operation and performs no automatic effect retry.
+
 ### `pyproc/worker`
 
 The worker asset entry (`src/processOs/worker.js`). Not an API to call: it exists so

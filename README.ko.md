@@ -4,11 +4,19 @@
 
 <h1 align="center">pyproc</h1>
 
-<p align="center"><b>브라우저에 영속하는 파이썬 컴퓨터.</b></p>
+<p align="center">
+  <b>탭을 닫고 브라우저를 다시 열어도 Python 컴퓨터가 돌아온다.</b><br>
+  브라우저에 영속하는 파이썬 컴퓨터.
+</p>
 
 <p align="center">
-  Machine 하나를 열고 workspace, environment, processes, history를 유지한다. 잘못된 작업은<br>
-  되돌리고, 서명 image로 옮긴다. 진짜 CPython이며 애플리케이션 서버는 필요 없다.
+  진짜 CPython, 내구 workspace, 되감는 history, 병렬 process, 서명 machine image,<br>
+  허용한 웹페이지를 보고 움직인 뒤 결과를 증명하는 눈과 손. 애플리케이션 서버는 필요 없다.
+</p>
+
+<p align="center">
+  <code>유지</code> · <code>복원</code> · <code>분기</code> · <code>병렬화</code> ·
+  <code>보기</code> · <code>행동</code> · <code>검증</code>
 </p>
 
 <p align="center">
@@ -23,6 +31,7 @@
   <a href="https://eddmpython.github.io/pyproc/"><b>라이브 데모</b></a> ·
   <a href="#제품-모델">제품 모델</a> ·
   <a href="#빠른-시작">빠른 시작</a> ·
+  <a href="#설치-제품을-javascript에서-쓰기">JavaScript SDK</a> ·
   <a href="#ai-에이전트에서-쓰기">AI 에이전트에서 쓰기</a> ·
   <a href="#제품-진입점">진입점</a> ·
   <a href="README.md">English</a>
@@ -46,6 +55,7 @@
 - [제품 진입점](#제품-진입점)
 - [AI 에이전트에서 쓰기](#ai-에이전트에서-쓰기)
 - [에이전트에 꽂기 (MCP)](#에이전트에-꽂기-mcp)
+- [설치 제품을 JavaScript에서 쓰기](#설치-제품을-javascript에서-쓰기)
 - [능력 계약](#능력-계약)
 - [보장하는 것과 아직 아닌 것](#보장하는-것과-아직-아닌-것)
 - [스코프와 플랫폼 방향](#스코프와-플랫폼-방향)
@@ -67,12 +77,12 @@
 
 pyproc은 하나의 제품이다. **브라우저에 영속하는 Python 컴퓨터**다. 서로 무관한 runtime
 helper 모음이 아니다. 공개 명사는 `Machine` 하나이며 실행, 파일, 프로세스, 내구 history,
-image, permission은 모두 그 Machine의 일부다.
+image, permission, perception, 통제된 action은 모두 그 Machine의 일부다.
 
 약속은 단순하다. Python을 한 번 준비하고, 살아 있는 상태를 유지하고, 분기하거나 되돌리고,
 탭을 닫아도 이어가며, 검증된 파일로 Machine을 옮긴다. 기본 제품 경로는 Python Machine이다.
-Linux, WASI, GPU, socket, MCP는 같은 계약 주변의 선택 guest 또는 capability이지 별도 정체성이
-아니다.
+Linux, WASI, GPU, socket, MCP, 설치형 Control client는 같은 계약 주변의 선택 guest 또는
+capability이지 별도 정체성이 아니다.
 
 ## 제품 모델
 
@@ -85,9 +95,10 @@ Linux, WASI, GPU, socket, MCP는 같은 계약 주변의 선택 guest 또는 cap
 | **History** | 자동 Machine generation + 명시적 휘발 checkpoint | checkpoint, branch, restore, journal, recovery |
 | **Image** | 서명된 `.pymachine` / `.webmachine` | 무결성과 명시적 trust gate를 가진 이동 상태 |
 | **Permissions** | capability contract + permission jail | network, storage, device, memory, 실행 정책 |
+| **눈과 손** | `pyproc/control` + APX + AutomationSpace | bounded perception, 승인된 action, screenshot, postcondition evidence |
 
-이것들은 서로 경쟁하는 최상위 API 일곱 개가 아니라 제품 개념이다. Machine handle이 root로
-남고, 그 동사가 필요한 capability만 드러낸다. 내부 engine object는 이 경계 뒤에 둔다.
+이것들은 서로 경쟁하는 최상위 API가 아니라 제품 개념이다. browser application에서는 Machine
+handle이 root로 남고, 그 동사가 필요한 capability만 드러낸다. 내부 engine object는 이 경계 뒤에 둔다.
 
 ## 하나의 Machine 생명주기
 
@@ -138,6 +149,7 @@ for (const code of attempts) {
 | 코딩 교육 | 학생 상태를 저장하고 AI 수정안을 별도 분기에서 시험 | 학생 작업을 훼손하지 않고 피드백 |
 | 사내 분석 도구 | 민감한 CSV / Excel을 로컬 탭에서 처리 | 데이터 외부 전송 최소화 |
 | 오프라인 도구 | 런타임과 패키지를 캐시 | 네트워크가 제한된 환경에서도 실행 |
+| 브라우저 workflow | bounded page graph를 묻고 fresh locator로 행동한 뒤 결과 검증 | screenshot loop가 아니라 구조화된 눈, 통제된 손, 증거를 제공 |
 
 관통하는 것은 한 번 준비한 뒤 저장, 분기, 복원할 수 있는 장수 Python Machine 하나다.
 fail-closed network policy를 적용하면 선택한 데이터도 code 실행 중 로컬에 둘 수 있다.
@@ -153,6 +165,9 @@ fail-closed network policy를 적용하면 선택한 데이터도 code 실행 �
 - **fail-closed 정책 아래 데이터는 로컬에 둘 수 있다.** 데이터를 탭에서 처리하고 선택한
   결과만 내보낸다. 로컬 실행만으로는 no-exfiltration 경계가 되지 않는다.
 - **격리된 실행.** Python이 메인 UI 스레드와 분리돼, 관리하는 여러 워커에서 돈다.
+- **허용한 페이지를 보는 눈, 움직이는 손, 성공 증거.** PyProc Eyes가 bounded semantic, spatial,
+  temporal graph를 돌려준다. 통제된 action은 DOM 또는 network postcondition을 요구할 수 있고
+  screenshot은 검증된 byte로 도착한다.
 
 ## 빠른 시작
 
@@ -220,7 +235,9 @@ await m.adopt("auto-2026-08-05");                                    // 또는 �
 
 ## 제품 진입점
 
-`pyproc`에서 import한다. 이 root가 완전한 제품 진입점이며 subpath는 고급 배관이지 경쟁 제품이 아니다.
+browser Machine은 `pyproc`에서 import한다. 이 root는 완전한 embedded-browser 진입점으로 남는다.
+stable `pyproc/control` subpath는 설치형 Node.js host adapter이고, 나머지 subpath는 경쟁 제품이 아니라
+고급 배관이다.
 
 | 필요한 것 | root 진입점 | 반환 handle과 capability 경로 |
 |---|---|---|
@@ -230,6 +247,7 @@ await m.adopt("auto-2026-08-05");                                    // 또는 �
 | multi-guest 브라우저 컴퓨터 | `createWebComputer()` | `WebComputer`: guest lifecycle, 공유 장치, 내구 generation, 서명 computer image |
 | 플랫폼 준비 상태 | `checkEnvironment()` | 해결 방법이 포함된 구조화 capability report |
 | 프로그램 실패 처리 | `PyProcError`, `PYPROC_ERROR_CODES` | 모든 root 경로가 공유하는 단일 error-code 계약 |
+| 설치형 Node.js control | `pyproc/control`의 `PyProcControlClient` | persistent Python, browser lifecycle, PyProc Eyes, action, 검증 artifact, cancel, bounded shutdown |
 
 공통 기반은 결정적 리플레이다: `boot({ deterministic: true })`가 부팅 엔트로피를 고정해 같은
 매니페스트가 리플레이 경계(cp0)에서 바이트 동일한 메모리를 재현하고, 그것이 델타 저장/저널 부활/워커 간 `fork`를
@@ -336,7 +354,7 @@ fact, structure, geometry와 occlusion, stable temporal identity, bounded delta�
 capability다. action은 DOM과 network postcondition을 선언하고, click 완료를 성공 증거로 오인하는 대신
 `ActionEvidence`를 반환할 수 있다. Native CDP, FrameSpace, ReplaySpace, MCP, Control Protocol, Python SDK의
 `client.perception(sessionRef)`가 이 한 계약을 공유한다. 자세한 계약은
-[APX 1.0 Working Draft](docs/specs/apx/README.md)에 있다.
+[APX 1.0 제품 계약](docs/specs/apx/README.md)에 있다.
 
 `{ "enabled": false }`이면 서버는 `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`
 네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
@@ -376,6 +394,41 @@ delete를 실제 browser에서 검증한다. `npm run test:control-product`는 �
 검증하며 cancel과 binary PNG attachment까지 포함한다. Chrome Ubuntu와 Edge Windows CI가 두 gate를
 모두 실행한다.
 
+## 설치 제품을 JavaScript에서 쓰기
+
+0.0.20 다음 exact version에서 출하 예정인 미출하 표면이다. stable Node.js `pyproc/control`
+subpath가 같은 설치 제품 host를 지원 JavaScript API로 제공한다. 설치된 package 안의 일치하는
+command를 직접 시작하므로 다른 global CLI version을 조용히 고르지 않는다.
+
+```js
+import { PyProcControlClient } from "pyproc/control";
+
+const client = await PyProcControlClient.start("pyproc-control.json");
+try {
+  console.log((await client.runPython("40 + 2")).output.value);
+
+  const opened = await client.openTarget("https://example.test", {
+    expectedRisk: "externalEffect",
+    waitUntil: "load",
+  });
+  const attached = await client.attachSession(opened.output.targetRef);
+  const eyes = client.perception(attached.output);
+  const save = (await eyes.query({ role: "button", name: "Save", actionable: true })).one();
+
+  const result = await eyes.act("click", save.locatorRef, {
+    verify: { entityAppeared: { role: "status", nameContains: "Saved" } },
+  });
+  console.log(result.output.actions[0].result.evidence.verification.state);
+} finally {
+  await client.close();
+}
+```
+
+같은 client가 checkpoint recovery, request deadline과 cancel, digest 검증 뒤의 PNG/JPEG/WebP
+screenshot byte, bounded artifact read, 명시 삭제를 제공한다. Native CDP와 credentialless
+FrameSpace는 이 facade를 공유하면서 서로 다른 정직한 conformance level을 보고한다. 자세한 사용법은
+[JavaScript Control SDK 가이드](docs/usage/javascriptControl.md)에 있다.
+
 ## 능력 계약
 
 이 상태는 pyproc 자체 불변식만 잰다. 채택, 사용자 수, 다른 저장소, 릴리즈 경과, 시장 반응은 어떤 상태에도 영향을 주지 않는다. `Complete`는 선언한 실행·실패·복구 계약을 설치 package와 실제 browser가 증명한다는 뜻이고, `Bounded`는 명시된 자체 경계 안에서 동작하며, `Probe`는 기본 진입점 밖의 선택 기전이다.
@@ -388,6 +441,7 @@ delete를 실제 browser에서 검증한다. `npm run test:control-product`는 �
 | Device FS, permission jail, GPU, socket | Probe |
 | PyProc Eyes APX perception과 action evidence | Bounded |
 | 설치형 MCP browser automation과 artifact 제품 | Bounded |
+| 설치형 JavaScript Control SDK | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## 보장하는 것과 아직 아닌 것

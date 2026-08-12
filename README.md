@@ -4,11 +4,19 @@
 
 <h1 align="center">pyproc</h1>
 
-<p align="center"><b>A persistent Python computer in your browser.</b></p>
+<p align="center">
+  <b>Close the tab. Reopen the browser. Your Python computer comes back.</b><br>
+  A persistent Python computer in your browser.
+</p>
 
 <p align="center">
-  Open one Machine. Keep its workspace, environment, processes, and history; rewind it when work<br>
-  goes wrong; carry it as a signed image. Real CPython, no application server required.
+  Real CPython, a durable workspace, rewindable history, parallel processes, signed machine images,<br>
+  and evidence-backed eyes and hands for allowed web pages. No application server required.
+</p>
+
+<p align="center">
+  <code>persist</code> · <code>rewind</code> · <code>branch</code> · <code>parallelize</code> ·
+  <code>see</code> · <code>act</code> · <code>verify</code>
 </p>
 
 <p align="center">
@@ -23,6 +31,7 @@
   <a href="https://eddmpython.github.io/pyproc/"><b>Live demo</b></a> ·
   <a href="#product-model">Product model</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#use-the-installed-product-from-javascript">JavaScript SDK</a> ·
   <a href="#using-it-from-an-ai-agent">AI-agent patterns</a> ·
   <a href="#product-entrances">Entrances</a> ·
   <a href="README.ko.md">한국어</a>
@@ -46,6 +55,7 @@
 - [Product entrances](#product-entrances)
 - [Using it from an AI agent](#using-it-from-an-ai-agent)
 - [Plug it into an agent (MCP)](#plug-it-into-an-agent-mcp)
+- [Use the installed product from JavaScript](#use-the-installed-product-from-javascript)
 - [Capability contract](#capability-contract)
 - [What it guarantees, and what it doesn't](#what-it-guarantees-and-what-it-doesnt)
 - [Scope and platform direction](#scope-and-platform-direction)
@@ -67,12 +77,12 @@
 
 pyproc is one product: **a persistent, browser-native Python computer**. It is not a bag of unrelated
 runtime helpers. The public noun is `Machine`; execution, files, processes, durable history, images,
-and permissions are parts of that machine.
+permissions, perception, and controlled action are parts of that machine.
 
 The promise is simple: prepare Python once, keep the live state, branch or rewind it, survive a tab
 closing, and move the machine as a verified file. The default product path is the Python Machine.
-Linux, WASI, GPU, sockets, and MCP are optional guests or capabilities around the same contract, not
-separate identities.
+Linux, WASI, GPU, sockets, MCP, and installed Control clients are optional guests or capabilities around
+the same contract, not separate identities.
 
 ## Product model
 
@@ -85,8 +95,9 @@ separate identities.
 | **History** | automatic Machine generations + explicit transient checkpoints | Checkpoints, branches, restore, journal, and recovery |
 | **Image** | signed `.pymachine` / `.webmachine` | Portable state with integrity and an explicit trust gate |
 | **Permissions** | capability contracts + permission jail | Network, storage, devices, memory, and execution policy |
+| **Eyes and hands** | `pyproc/control` + APX + AutomationSpace | Bounded perception, authorized action, screenshots, and postcondition evidence |
 
-These are product concepts, not seven competing top-level APIs. A Machine remains the root, and its
+These are product concepts, not competing top-level APIs. A Machine remains the browser-app root, and its
 verbs reveal only the capability being used. Internal engine objects stay behind that boundary.
 
 ## One machine lifecycle
@@ -138,6 +149,7 @@ The prepared environment returns without re-importing or reinstalling it.
 | Coding education | Save the student state; test AI fixes on a branch | Feedback without touching their work |
 | Internal analytics | Process sensitive CSV / Excel in the local tab | Minimize sending data off-device |
 | Offline tools | Cache the runtime and packages | Runs where the network is limited |
+| Browser workflows | Query a bounded page graph, act through a fresh locator, verify the result | An agent gets structured eyes, controlled hands, and evidence instead of a screenshot-only loop |
 
 The common thread is one long-lived Python Machine that can be prepared once, saved, branched, and
 restored. A fail-closed network policy can also keep selected data local while code runs.
@@ -153,6 +165,8 @@ restored. A fail-closed network policy can also keep selected data local while c
 - **Data can stay local under a fail-closed policy.** Process data in the tab and export only selected
   results. Local execution alone is not a no-exfiltration boundary.
 - **Isolated execution.** Python runs off the main UI thread, across multiple workers you manage.
+- **Eyes, hands, and proof for allowed pages.** PyProc Eyes returns a bounded semantic, spatial, and temporal
+  graph. Controlled actions can require DOM or network postconditions, and screenshots arrive as verified bytes.
 
 ## Quick start
 
@@ -220,7 +234,9 @@ in between, so a failing candidate cannot contaminate the next; the
 
 ## Product entrances
 
-Import from `pyproc`. That root is the complete product entrance; subpaths are advanced plumbing, not competing products.
+Import the browser Machine from `pyproc`. That root remains the complete embedded-browser entrance; the stable
+`pyproc/control` subpath is the installed Node.js host adapter, and other subpaths are advanced plumbing rather
+than competing products.
 
 | You need | Root entry | Returned handle and capability path |
 |---|---|---|
@@ -230,6 +246,7 @@ Import from `pyproc`. That root is the complete product entrance; subpaths are a
 | A multi-guest browser computer | `createWebComputer()` | `WebComputer`: guest lifecycle, shared devices, durable generations, and signed computer images |
 | Platform readiness | `checkEnvironment()` | Structured capability report with actionable issues |
 | Programmatic failure handling | `PyProcError`, `PYPROC_ERROR_CODES` | One error-code contract shared by every root path |
+| Installed Node.js control | `PyProcControlClient` from `pyproc/control` | Persistent Python, browser lifecycle, PyProc Eyes, actions, verified artifacts, cancellation, and bounded shutdown |
 
 Deterministic replay is the shared foundation: `boot({ deterministic: true })` fixes the boot
 entropy so the same manifest reproduces byte-identical memory at the replay boundary (cp0), which is what makes delta save,
@@ -339,7 +356,7 @@ for unresolved regions. `entityRef` is observation identity, while a fresh `loca
 action capability. Actions can declare DOM and network postconditions and return `ActionEvidence` instead of
 treating a completed click as proof of success. Native CDP, FrameSpace, ReplaySpace, MCP, Control Protocol,
 and `client.perception(sessionRef)` in the Python SDK share this one contract. See the
-[APX 1.0 Working Draft](docs/specs/apx/README.md).
+[APX 1.0 product contract](docs/specs/apx/README.md).
 
 With `{ "enabled": false }`, the server exposes exactly four Python tools: `pythonRun`, `checkpointSave`,
 `checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
@@ -379,6 +396,41 @@ deletion in a real browser. `npm run test:control-product` verifies the same ins
 NDJSON, including cancellation and a binary PNG attachment. Chrome on Ubuntu and Edge on Windows run both
 gates in CI.
 
+## Use the installed product from JavaScript
+
+unreleased until the next exact version after 0.0.20: the stable Node.js `pyproc/control` subpath turns the
+same installed product host into a supported JavaScript API. It starts the matching package copy, so it cannot
+silently pick up a different global CLI version.
+
+```js
+import { PyProcControlClient } from "pyproc/control";
+
+const client = await PyProcControlClient.start("pyproc-control.json");
+try {
+  console.log((await client.runPython("40 + 2")).output.value);
+
+  const opened = await client.openTarget("https://example.test", {
+    expectedRisk: "externalEffect",
+    waitUntil: "load",
+  });
+  const attached = await client.attachSession(opened.output.targetRef);
+  const eyes = client.perception(attached.output);
+  const save = (await eyes.query({ role: "button", name: "Save", actionable: true })).one();
+
+  const result = await eyes.act("click", save.locatorRef, {
+    verify: { entityAppeared: { role: "status", nameContains: "Saved" } },
+  });
+  console.log(result.output.actions[0].result.evidence.verification.state);
+} finally {
+  await client.close();
+}
+```
+
+The same client exposes checkpoint recovery, request deadlines and cancellation, PNG/JPEG/WebP screenshot
+bytes after digest verification, bounded artifact reads, and explicit deletion. Native CDP and credentialless
+FrameSpace share the facade while reporting different honest conformance levels. See the
+[JavaScript Control SDK guide](docs/usage/javascriptControl.md).
+
 ## Capability contract
 
 These states measure only pyproc's own invariants. They never depend on adoption, user count, another repository, release age, or market response. `Complete` means the declared path, failure, and recovery contract is browser-gated through the installed package; `Bounded` means the listed ability works inside an explicit intrinsic boundary; `Probe` is an opt-in mechanism outside the default entrance.
@@ -390,6 +442,7 @@ These states measure only pyproc's own invariants. They never depend on adoption
 | Process OS, restore reactivity, ASGI, declared environments, terminal, machine images, and journal | Bounded |
 | Device FS, permission jail, GPU, and sockets | Probe |
 | Installed MCP browser automation and artifact product | Bounded |
+| Installed JavaScript Control SDK | Bounded |
 | PyProc Eyes APX perception and action evidence | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 

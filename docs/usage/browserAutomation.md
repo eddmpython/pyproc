@@ -187,7 +187,7 @@ The result contains `ActionEvidence` with before and after observations, the one
 entity and event references, and one of `confirmed`, `contradicted`, `ambiguous`, `notObserved`, or
 `outcomeUnknown`. A completed click is not itself proof that the requested postcondition happened. The full
 wire, provenance, budget, visual, evidence, and conformance contract is the
-[APX 1.0 Working Draft](../specs/apx/README.md).
+[APX 1.0 product contract](../specs/apx/README.md).
 
 ## Ordered actions and screenshots
 

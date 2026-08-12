@@ -40,8 +40,8 @@
 ## 진행
 
 - [x] 내부 client의 packed install 실측과 공개 승격 판정: Edge 10/10
-- [ ] 안정 JavaScript API와 타입
-- [ ] 계약 및 실제 브라우저 제품 게이트
-- [ ] README와 지속 문서 통합
+- [x] 안정 JavaScript API와 타입: `pyproc/control`
+- [x] 계약 및 실제 브라우저 제품 게이트: contracts 17, Control product 14/14, Python SDK 5/5
+- [x] README와 지속 문서 통합
 - [ ] 릴리즈와 배포 확인
 - [ ] 임시 카테고리 정리

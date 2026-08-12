@@ -18,6 +18,7 @@ const SUBPATHS = Object.freeze([
   "./machine",
   "./worker",
   "./assets",
+  "./control",
   "./gpu",
   "./socket",
   "./wasi",

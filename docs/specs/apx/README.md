@@ -1,8 +1,8 @@
-# APX 1.0 Working Draft
+# APX 1.0 Product Contract
 
 APX, Agent Perception Exchange, is the provider-neutral data contract behind PyProc Eyes. It turns browser
 facts into a bounded, temporal graph and keeps observation identity separate from action authority. This
-document describes the shipped 1.0 draft. It is not a standards-body publication.
+document describes the shipped 1.0 product contract. It is not a standards-body publication.
 
 The normative implementation artifacts are:
 
@@ -32,7 +32,7 @@ without placing raw driver identifiers in the APX envelope.
 
 ## Core invariants
 
-An APX implementation conforming to this draft MUST preserve these rules:
+An APX 1.0 implementation MUST preserve these rules:
 
 1. `entityRef` identifies an observed entity within a document epoch. It grants no action authority.
 2. `locatorRef` is a short-lived action capability. A provider MUST bind it to its session and document epoch.
