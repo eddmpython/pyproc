@@ -63,8 +63,11 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
 - 단계 3 완료: `AutomationSpaceRouter`가 10개 canonical operation, authorize-before-execute,
   pre-cancel, lifecycle, artifact, restore와 replay 경계를 소유한다. fake provider 11/11과 정식
   contract suite가 통과했고 설치 MCP, native, Python 경로가 같은 router를 사용한다.
-- 단계 4 진행: 기존 Chromium 구현을 `NativeCdpSpace` provider로 승격하고 CDP 능력과 오류를
-  provider 계약으로 고정한다.
+- 단계 4 완료: 제품 composition이 `NativeCdpSpace`를 직접 조립하고 `dom`, `network`, `target`,
+  `storage`, `runtime`, `screenshot`, `artifact` 능력을 선언한다. provider probe 4/4, native 설치
+  제품 7/7, 실제 Edge browser-control 71/71이 기존 오류와 effect 경계를 유지했다.
+- 단계 5 진행: pyproc이 소유한 격리 frame을 `FrameSpace`로 구현하고 origin과 sandbox 권한을
+  브라우저 게이트로 고정한다.
 
 ## 제품 최소선
 

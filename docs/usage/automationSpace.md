@@ -47,8 +47,9 @@ not replay a provider operation.
 ```json
 {
   "spaceId": "space:native",
-  "providerKind": "browserControl",
+  "providerKind": "nativeCdp",
   "operations": ["automation.space.inspect"],
+  "capabilities": ["dom", "network", "target", "storage", "runtime", "screenshot", "artifact"],
   "restoreBoundary": "externalEffectsRemain",
   "replayBoundary": "recordOnly"
 }

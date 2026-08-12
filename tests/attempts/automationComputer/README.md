@@ -29,7 +29,8 @@ workflow는 바뀌지 않는다.
 | 2026-08-12 | controlProtocolProduct | packed npm, Edge, Pyodide | GREEN 6/6. hello 14종, Python persistence, post-send cancel, PNG attachment와 digest | MCP와 native NDJSON이 같은 ControlHost와 page epoch bridge를 사용 | Python SDK가 이 wire를 외부 구현 없이 소비 |
 | 2026-08-12 | pythonSdk | Python 3.13, clean wheel/sdist venv, packed npm, Edge | GREEN 4/4. 배포물 2종, codec 11 fixtures, checkpoint, cancel, permission, PNG digest | runtime dependency 0 공식 SDK가 PATH에서 설치 제품을 직접 시작 | AutomationSpace provider contract 추출 |
 | 2026-08-12 | automationSpaceProbe | Node 22.19, fake provider | GREEN 11/11. operation 10종, authorize 순서, cancel, permission, artifact, unknown outcome, close | provider-neutral router와 restore/replay 경계 채택 | 현재 browser control을 NativeCdpSpace로 승격 |
+| 2026-08-12 | nativeCdpSpaceProbe | Node 22.19, fake CDP implementation | GREEN 4/4. provider identity, 능력 7종, operation 10종, close | 제품 composition이 NativeCdpSpace를 직접 조립 | Chrome과 Edge 실제 CDP 여정 유지 확인 |
 
 ## 판정
 
-진행 중 (NativeCdpSpace provider 승격)
+진행 중 (FrameSpace 격리 자동화)

@@ -78,6 +78,12 @@ try {
   await client.request("machine.run", { code: "controlState = 40" });
   const machine = await client.request("machine.run", { code: "controlState + 2" });
   check("Control Protocol의 persistent Python Machine", machine.output.value === "42", machine.output.value);
+  const space = await client.request("automation.space.inspect", {});
+  check("설치 제품이 NativeCdpSpace 능력과 복원 경계를 선언",
+    space.output.space?.providerKind === "nativeCdp"
+      && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact"
+      && space.output.space?.restoreBoundary === "externalEffectsRemain"
+      && space.output.space?.replayBoundary === "recordOnly");
 
   const cancelId = "request:cancel";
   const cancelled = client.request("machine.run", {

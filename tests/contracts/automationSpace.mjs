@@ -5,6 +5,7 @@ import {
   assertAutomationSpace,
 } from "../../scripts/automationSpace/automationSpace.js";
 import { BrowserControlSpace } from "../../scripts/automationSpace/browserControlSpace.js";
+import { NativeCdpSpace, NATIVE_CDP_CAPABILITIES } from "../../scripts/automationSpace/nativeCdpSpace.js";
 import { controlToolForOperation } from "../../scripts/controlProtocol/controlOperations.js";
 
 async function errorOf(operation) {
@@ -55,6 +56,7 @@ export async function assertAutomationSpaceContract() {
   const inspect = await router.invoke("automation.space.inspect", {});
   assert.deepEqual(inspect.space, {
     spaceId: "space:contract", providerKind: "fakeSpace", operations: AUTOMATION_SPACE_OPERATIONS,
+    capabilities: [],
     restoreBoundary: "externalEffectsRemain", replayBoundary: "deterministic",
   });
   const beforeDenied = calls.filter((call) => call.phase === "execute").length;
@@ -91,6 +93,19 @@ export async function assertAutomationSpaceContract() {
   await adapterRouter.close();
   await adapterRouter.close();
   assert.equal(controlCalls.filter(([phase]) => phase === "close").length, 1);
+  const nativeControl = {
+    ...control,
+    async close() {},
+  };
+  const native = new NativeCdpSpace({ control: nativeControl, spaceId: "space:nativeContract" });
+  assert.equal(native.providerKind, "nativeCdp");
+  assert.deepEqual(native.capabilities, NATIVE_CDP_CAPABILITIES);
+  const nativeRouter = new AutomationSpaceRouter(native);
+  const nativeInspect = await nativeRouter.invoke("automation.space.inspect", {});
+  assert.equal(nativeInspect.space.providerKind, "nativeCdp");
+  assert.deepEqual(nativeInspect.space.capabilities,
+    ["dom", "network", "target", "storage", "runtime", "screenshot", "artifact"]);
+  await nativeRouter.close();
   await router.close();
   await router.close();
   assert.equal(calls.filter((call) => call.phase === "close").length, 1);

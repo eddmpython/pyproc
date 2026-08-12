@@ -83,6 +83,7 @@ try {
     ["scripts", "controlProtocol", "controlProduct.mjs"],
     ["scripts", "automationSpace", "automationSpace.js"],
     ["scripts", "automationSpace", "browserControlSpace.js"],
+    ["scripts", "automationSpace", "nativeCdpSpace.js"],
     ["scripts", "browserControl", "mcpMachine.html"],
     ["scripts", "browserControl", "browserArtifactStore.js"],
   ]) {

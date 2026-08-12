@@ -4,6 +4,11 @@ The installed `pyproc-mcp` command runs a persistent Python Machine and a separa
 automation profile in one stdio MCP session. It ships in the npm package, uses no runtime dependency, never
 attaches to a normal browser profile, and never puts the CDP endpoint inside Python.
 
+The same host is available through `pyproc-control` and the Python SDK. Internally, the Chromium path is the
+`NativeCdpSpace` provider behind the [AutomationSpace contract](automationSpace.md). It declares DOM,
+network, target, storage, runtime, screenshot, and artifact capabilities while keeping endpoint and provider
+objects private.
+
 ## Install and start
 
 Install the package and provision a pinned Pyodide distribution. `engine.root` must be an existing absolute

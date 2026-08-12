@@ -179,7 +179,8 @@ try {
   check("browserInspect가 action과 이중 승인 상태를 보고", inspected.automation?.actions?.length === Object.keys(BROWSER_AUTOMATION_ACTIONS).length
     && inspected.externalEffectsAcknowledged === true && inspected.listener === null
     && inspected.compatibility?.supported === true && inspected.compatibility?.browserMajor >= 137
-    && inspected.space?.spaceId === "space:native" && inspected.space?.providerKind === "browserControl"
+    && inspected.space?.spaceId === "space:native" && inspected.space?.providerKind === "nativeCdp"
+    && inspected.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact"
     && inspected.space?.restoreBoundary === "externalEffectsRemain"
     && inspected.space?.replayBoundary === "recordOnly" && inspected.space?.operations?.length === 10,
   `${inspected.automation?.actions?.length} actions`);

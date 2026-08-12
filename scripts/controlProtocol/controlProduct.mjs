@@ -4,9 +4,9 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
-import { McpBrowserControl, createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
+import { createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
 import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
-import { BrowserControlSpace } from "../automationSpace/browserControlSpace.js";
+import { NativeCdpSpace } from "../automationSpace/nativeCdpSpace.js";
 import { ControlHost } from "./controlHost.js";
 import { controlOperationCatalog } from "./controlOperations.js";
 import { PageCommandBridge } from "./pageCommandBridge.mjs";
@@ -124,16 +124,17 @@ export async function createControlProduct({ env = process.env } = {}) {
   const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html?indexURL=${encodeURIComponent(engineIndexURL)}`;
   let browserSession = null;
   let browserControl = null;
+  let automationSpace = null;
   let automationRouter = null;
   try {
     browserSession = launchBrowser(pageUrl, {
       prefix: "pyprocControl-",
       extraArgs: browserEnabled ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : [],
     });
-    browserControl = browserEnabled
-      ? new McpBrowserControl({ profileDir: browserSession.profile, config: browserConfig }) : null;
-    automationRouter = browserControl
-      ? new AutomationSpaceRouter(new BrowserControlSpace(browserControl)) : null;
+    automationSpace = browserEnabled
+      ? new NativeCdpSpace({ profileDir: browserSession.profile, config: browserConfig }) : null;
+    browserControl = automationSpace?.control || null;
+    automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
     const operationCatalog = controlOperationCatalog(tools);
     const operationHandlers = Object.fromEntries(operationCatalog.map(({ name, toolName }) => [name,
       async (input, { signal, requestId }) => {
@@ -151,7 +152,8 @@ export async function createControlProduct({ env = process.env } = {}) {
     const host = new ControlHost({ handlers: operationHandlers, operations: operationCatalog });
     let closed = false;
     return Object.freeze({
-      tools, operationCatalog, host, pageBridge, automationRouter, browserControl, browserSession, serverOrigin, pageUrl,
+      tools, operationCatalog, host, pageBridge, automationSpace, automationRouter,
+      browserControl, browserSession, serverOrigin, pageUrl,
       async close() {
         if (closed) return;
         closed = true;

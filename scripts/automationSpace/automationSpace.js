@@ -15,6 +15,7 @@ export const AUTOMATION_SPACE_OPERATIONS = Object.freeze([
 const OPERATION_SET = new Set(AUTOMATION_SPACE_OPERATIONS);
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const PROVIDER_RE = /^[a-z][A-Za-z0-9]{0,63}$/;
+const CAPABILITY_RE = /^[a-z][A-Za-z0-9]{0,63}$/;
 
 function spaceError(code, message, outcome = "notSent") {
   const error = new Error(message);
@@ -38,6 +39,11 @@ export function assertAutomationSpace(provider) {
   if (!Array.isArray(provider.operations) || provider.operations.length < 1) {
     throw new TypeError("automation space operations are required");
   }
+  if (provider.capabilities !== undefined && (!Array.isArray(provider.capabilities)
+    || provider.capabilities.some((capability) => typeof capability !== "string" || !CAPABILITY_RE.test(capability))
+    || new Set(provider.capabilities).size !== provider.capabilities.length)) {
+    throw new TypeError("automation space capabilities are invalid");
+  }
   const operations = new Set();
   for (const operation of provider.operations) {
     if (!OPERATION_SET.has(operation) || operations.has(operation)) {
@@ -54,6 +60,7 @@ export class AutomationSpaceRouter {
     this.spaceId = provider.spaceId;
     this.providerKind = provider.providerKind;
     this.operations = Object.freeze([...provider.operations]);
+    this.capabilities = Object.freeze([...(provider.capabilities || [])]);
     this._operations = new Set(this.operations);
     this._closed = false;
   }
@@ -76,6 +83,7 @@ export class AutomationSpaceRouter {
         spaceId: this.spaceId,
         providerKind: this.providerKind,
         operations: this.operations,
+        capabilities: this.capabilities,
         restoreBoundary: "externalEffectsRemain",
         replayBoundary: String(this.provider.replayBoundary || "unsupported"),
       }),

@@ -39,6 +39,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   Python-restore plus provider-replay boundaries. The current Chromium implementation retains its external
   behavior behind a single-use authority token.
 
+- The installed Chromium implementation is now composed as `NativeCdpSpace`. Inspection declares its DOM,
+  network, target, storage, runtime, screenshot, and artifact capabilities plus the record-only replay
+  boundary. The broker-owned endpoint, opaque references, and existing browser error contract are unchanged.
+
 한국어 요약: MCP와 native NDJSON이 하나의 ControlHost, operation, 취소, 오류, attachment 계약을
 공유한다. 공식 Python SDK는 별도 JavaScript 코드 없이 영속 Python, checkpoint, browser action,
 screenshot byte를 사용하며 wheel과 source distribution 설치 여정으로 검증한다. 전달 전 취소된
