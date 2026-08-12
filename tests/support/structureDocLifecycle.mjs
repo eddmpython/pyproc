@@ -5,6 +5,10 @@
 import { readdirSync, statSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+function missingCategoryReadmes({ directoryNames, hasReadme }) {
+  return directoryNames.filter((name) => !hasReadme(name));
+}
+
 export function assertDocLifecycleStructure({ check, ROOT }) {
 check("tests/attempts/README.md 존재(운영 규칙 SSOT)", () => {
   if (!existsSync(join(ROOT, "tests", "attempts", "README.md"))) throw new Error("없음");
@@ -36,6 +40,27 @@ check("mainPlan은 큰 카테고리 자력 완결과 삭제를 요구한다", ()
     "폴더째 삭제한다",
   ]) {
     if (!body.includes(requiredRule)) throw new Error(`mainPlan 운영 규칙 누락: ${requiredRule}`);
+  }
+});
+// Git은 빈 디렉터리를 추적하지 않는다. 그래서 git tree에 경로가 0개라는 판정만으로는 완료한
+// 카테고리의 물리 폴더가 사라졌다고 말할 수 없다. 실제 worktree의 모든 하위 디렉터리가 계획
+// README를 갖는지 검사하면 완료 뒤 남거나 다시 생긴 빈 폴더가 commit과 push 전에 RED가 된다.
+check("mainPlan 카테고리는 빈 물리 폴더로 남을 수 없다", () => {
+  const dir = join(ROOT, "mainPlan");
+  const directoryNames = readdirSync(dir).filter((entry) => statSync(join(dir, entry)).isDirectory());
+  const missing = missingCategoryReadmes({
+    directoryNames,
+    hasReadme: (name) => existsSync(join(dir, name, "README.md")),
+  });
+  if (missing.length) throw new Error(`README 없는 mainPlan 카테고리: ${missing.join(", ")}`);
+});
+check("탐지기가 문다: 완료 뒤 남은 빈 mainPlan 폴더", () => {
+  const missing = missingCategoryReadmes({
+    directoryNames: ["finishedInitiative"],
+    hasReadme: () => false,
+  });
+  if (missing.length !== 1 || missing[0] !== "finishedInitiative") {
+    throw new Error("빈 mainPlan 카테고리 음성 fixture를 놓쳤다");
   }
 });
 check("지속 제품·운영 계약 문서가 존재한다", () => {
