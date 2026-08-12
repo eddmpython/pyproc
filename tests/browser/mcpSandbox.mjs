@@ -45,6 +45,10 @@ rl.on("line", (line) => {
 
 function request(method, params) {
   const id = ++reqSeq;
+  return requestWithId(id, method, params);
+}
+
+function requestWithId(id, method, params) {
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { waiters.delete(id); reject(new Error(`${method} timeout`)); }, TIMEOUT_MS);
@@ -90,6 +94,31 @@ try {
 
   const failCall = await request("tools/call", { name: "pythonRun", arguments: { code: "raise ValueError('boom')" } });
   check("도구 오류: isError 결과로 전달(프로토콜 오류 아님)", failCall.result && failCall.result.isError === true && failCall.result.content[0].text.includes("boom"));
+
+  // 전달 뒤 취소는 Python 실행을 되감았다고 주장할 수 없다. caller는 즉시 결과 불명으로 끝나고,
+  // page가 나중에 올린 결과는 두 번째 terminal이 되지 않아야 한다.
+  const cancelId = ++reqSeq;
+  const cancelledCall = requestWithId(cancelId, "tools/call", {
+    name: "pythonRun",
+    arguments: { code: "import time\ncancelEffect = 'applied'\ntime.sleep(1.0)" },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled",
+    params: { requestId: cancelId, reason: "gate cancellation" } }) + "\n");
+  const cancelledPayload = toolText(await cancelledCall);
+  check("전달 뒤 Python 취소는 outcomeUnknown이며 late result를 재응답하지 않는다",
+    cancelledPayload.code === "CONTROL_CANCELLED" && cancelledPayload.outcome === "outcomeUnknown"
+    && cancelledPayload.retryable === false, JSON.stringify(cancelledPayload));
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  const afterCancel = toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "cancelEffect" } }));
+  check("취소 뒤 page bridge가 다음 명령을 받고 기존 effect는 한 번만 남는다", afterCancel.value === "'applied'", afterCancel.value);
+
+  const duplicateId = 900001;
+  const firstDuplicate = await requestWithId(duplicateId, "tools/call", { name: "pythonRun", arguments: { code: "6 * 7" } });
+  const secondDuplicate = await requestWithId(duplicateId, "tools/call", { name: "pythonRun", arguments: { code: "duplicateEffect = True" } });
+  const duplicateAbsent = toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "'duplicateEffect' in globals()" } }));
+  check("같은 MCP request id 재사용은 두 번째 효과 전에 거부",
+    toolText(firstDuplicate).value === "42" && secondDuplicate.error?.code === -32600 && duplicateAbsent.value === "False");
 
   const reset = toolText(await request("tools/call", { name: "sandboxReset", arguments: {} }));
   const afterReset = toolText(await request("tools/call", {

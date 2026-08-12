@@ -49,11 +49,16 @@ try {
   if (!existsSync(cli)) throw new Error("installed pyproc-assets bin shim 없음");
   const engineCli = binPath(appDir, "pyproc-engine");
   if (!existsSync(engineCli)) throw new Error("installed pyproc-engine bin shim 없음");
+  const controlCli = binPath(appDir, "pyproc-control");
+  if (!existsSync(controlCli)) throw new Error("installed pyproc-control bin shim 없음");
   const mcpCli = binPath(appDir, "pyproc-mcp");
   if (!existsSync(mcpCli)) throw new Error("installed pyproc-mcp bin shim 없음");
   const installedPackage = JSON.parse(readFileSync(join(appDir, "node_modules", "pyproc", "package.json"), "utf8"));
   if (installedPackage.bin?.["pyproc-mcp"] !== "./scripts/pyprocMcp.mjs") {
     throw new Error("installed pyproc-mcp bin manifest 불일치");
+  }
+  if (installedPackage.bin?.["pyproc-control"] !== "./scripts/pyprocControl.mjs") {
+    throw new Error("installed pyproc-control bin manifest 불일치");
   }
   if (Object.keys(installedPackage.exports || {}).some((key) => key.includes("browser"))) {
     throw new Error("browser automation이 JS package export를 추가했다");
@@ -66,14 +71,28 @@ try {
   if (!existsSync(join(appDir, "node_modules", "pyproc", "scripts", "assetCatalog.json"))) throw new Error("installed engine catalog 누락");
   for (const path of [
     ["scripts", "pyprocMcp.mjs"],
+    ["scripts", "pyprocControl.mjs"],
+    ["scripts", "controlProtocolServer.mjs"],
     ["scripts", "mcpProductConfig.mjs"],
     ["scripts", "mcpSandboxServer.mjs"],
+    ["scripts", "controlProtocol", "controlProtocol.js"],
+    ["scripts", "controlProtocol", "controlHost.js"],
+    ["scripts", "controlProtocol", "pageCommandBridge.mjs"],
+    ["scripts", "controlProtocol", "mcpControlAdapter.js"],
+    ["scripts", "controlProtocol", "controlClient.js"],
+    ["scripts", "controlProtocol", "controlProduct.mjs"],
     ["scripts", "browserControl", "mcpMachine.html"],
     ["scripts", "browserControl", "browserArtifactStore.js"],
   ]) {
     if (!existsSync(join(appDir, "node_modules", "pyproc", ...path))) {
       throw new Error(`installed pyproc-mcp runtime 누락: ${path.join("/")}`);
     }
+  }
+  const controlHelp = run(controlCli, ["--help"], { cwd: appDir });
+  const controlVersion = run(controlCli, ["--version"], { cwd: appDir });
+  if (!controlHelp.stdout.includes("pyproc-control --config")
+    || controlVersion.stdout.trim() !== installedPackage.version) {
+    throw new Error("installed pyproc-control help/version 계약 불일치");
   }
 
   const manifestOut = join(appDir, "public", "pyproc-assets.json");

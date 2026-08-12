@@ -35,20 +35,20 @@
     const saved = [];
     log("machine ready");
 
-    const tools = {
-      pythonRun({ code }) {
+    const operations = {
+      "machine.run"({ code }) {
         machine.runtime.setGlobal("_mcpSrc", String(code ?? ""));
         const result = machine.run(RUN_HARNESS);
         const [stdout, value] = result && result.toJs ? result.toJs() : result;
         if (result && result.destroy) result.destroy();
         return { stdout, value };
       },
-      checkpointSave() {
+      "machine.checkpoint.save"() {
         const checkpoint = machine.history.checkpoint();
         saved.push(checkpoint);
         return { index: checkpoint.index, changedPages: checkpoint.changedPages, kind: checkpoint.kind };
       },
-      checkpointRestore({ index } = {}) {
+      "machine.checkpoint.restore"({ index } = {}) {
         const target = index === undefined || index === null
           ? saved[saved.length - 1]
           : saved.find((checkpoint) => checkpoint.index === index);
@@ -56,7 +56,7 @@
         const info = target.restore();
         return { index: target.index, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
       },
-      sandboxReset() {
+      "machine.reset"() {
         const info = machine.history.restore(0);
         saved.length = 0;
         installPolicy();
@@ -64,15 +64,18 @@
       },
     };
 
-    await fetch("/mcpReady", {
+    const pageEpoch = crypto.randomUUID();
+    const ready = await fetch("/controlReady", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ready: true }),
+      body: JSON.stringify({ protocol: "pyproc-control", version: 1, pageEpoch, spaceId: "machine:primary" }),
     });
+    if (!ready.ok) throw new Error(`control ready failed: ${ready.status}`);
     for (;;) {
       let command;
       try {
-        const response = await fetch("/mcpCommand", { cache: "no-store" });
+        const response = await fetch(`/controlCommand?pageEpoch=${encodeURIComponent(pageEpoch)}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`control poll failed: ${response.status}`);
         command = await response.json();
       } catch (error) {
         break;
@@ -80,21 +83,26 @@
       if (!command || command.none) continue;
       let body;
       try {
-        if (!tools[command.tool]) throw new Error(`unknown tool: ${command.tool}`);
-        body = { id: command.id, ok: true, value: tools[command.tool](command.args || {}) };
-        log(`${command.tool} done`);
+        if (command.pageEpoch !== pageEpoch) throw new Error("stale control page epoch");
+        if (!operations[command.operation]) throw new Error(`unknown operation: ${command.operation}`);
+        body = { requestId: command.requestId, pageEpoch, ok: true,
+          value: operations[command.operation](command.input || {}) };
+        log(`${command.operation} done`);
       } catch (error) {
         body = {
-          id: command.id,
+          requestId: command.requestId,
+          pageEpoch,
           ok: false,
           error: {
             code: error?.code || "PYPROC_INTERNAL",
             message: String(error?.message || error).slice(-400),
+            outcome: "applied",
+            retryable: false,
           },
         };
-        log(`${command.tool} failed: ${body.error.code}`);
+        log(`${command.operation} failed: ${body.error.code}`);
       }
-      await fetch("/mcpResult", {
+      await fetch("/controlResult", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

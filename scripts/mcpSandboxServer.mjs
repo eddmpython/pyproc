@@ -11,235 +11,39 @@
 // MCP 전송은 stdio의 newline-delimited JSON-RPC 2.0이다(스펙의 stdio transport).
 // 등록 예시: claude mcp add pyproc-sandbox -- node scripts/mcpSandboxServer.mjs
 import { createInterface } from "node:readline";
-import { realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createStaticServer, safeJoin, sendFile } from "./staticServer.mjs";
-import { launchBrowser } from "./browserControl/browserLauncher.mjs";
-import {
-  McpBrowserControl,
-  browserToolErrorDetails,
-  createBrowserControlTools,
-  parseBrowserControlConfig,
-} from "./browserControl/index.js";
+import { createControlProduct } from "./controlProtocol/controlProduct.mjs";
+import { McpControlAdapter, mcpToolResult } from "./controlProtocol/mcpControlAdapter.js";
 
 const PROTOCOL_VERSION = "2025-06-18"; // 지원 MCP 스펙 리비전(클라이언트 제안을 에코 우선)
-const COMMAND_TIMEOUT_MS = Number(process.env.PYPROC_MCP_TIMEOUT || 180000); // 첫 호출은 엔진 부팅 포함
-const POLL_HOLD_MS = 20000; // long-poll 보류 상한(프록시 idle 타임아웃 회피)
-const BROWSER_CONTROL_ENABLED = process.env.PYPROC_BROWSER_CONTROL === "1";
-const BROWSER_CONTROL_CONFIG = BROWSER_CONTROL_ENABLED
-  ? parseBrowserControlConfig(process.env, { timeoutMs: COMMAND_TIMEOUT_MS })
-  : null;
-const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-function configuredEngineRoot(value) {
-  if (!value) return null;
-  if (!isAbsolute(value)) throw new TypeError("PYPROC_MCP_ENGINE_ROOT must be absolute");
-  const root = realpathSync(resolve(value));
-  if (!statSync(root).isDirectory()) throw new TypeError("PYPROC_MCP_ENGINE_ROOT must be a directory");
-  return root;
-}
-
-const ENGINE_ROOT = configuredEngineRoot(process.env.PYPROC_MCP_ENGINE_ROOT);
-
-const PYTHON_TOOLS = [
-  {
-    name: "pythonRun",
-    description: "Run Python in the prepared browser machine under a fail-closed external-network policy. Returns stdout and the repr of the last expression. State persists across calls.",
-    inputSchema: { type: "object", properties: { code: { type: "string", description: "Python source to execute" } }, required: ["code"] },
-  },
-  {
-    name: "checkpointSave",
-    description: "Save the current machine state as a restore handle. Returns the checkpoint index.",
-    inputSchema: { type: "object", properties: {} },
-  },
-  {
-    name: "checkpointRestore",
-    description: "Restore a saved checkpoint in milliseconds (omit index for the most recent save). Use after a failed attempt to get the prepared state back.",
-    inputSchema: { type: "object", properties: { index: { type: "number", description: "Checkpoint index from checkpointSave" } } },
-  },
-  {
-    name: "sandboxReset",
-    description: "Restore the machine to its just-booted prepared state (cp0) and drop saved checkpoints.",
-    inputSchema: { type: "object", properties: {} },
-  },
-];
-
-const BROWSER_TOOLS = BROWSER_CONTROL_CONFIG ? createBrowserControlTools(BROWSER_CONTROL_CONFIG) : [];
-const TOOLS = Object.freeze(BROWSER_CONTROL_ENABLED ? [...PYTHON_TOOLS, ...BROWSER_TOOLS] : PYTHON_TOOLS);
-const PYTHON_TOOL_NAMES = new Set(PYTHON_TOOLS.map((tool) => tool.name));
-
-// ---- 페이지 <-> 서버 명령 채널(게이트 하네스와 같은 훅 패턴) ----
-const commandQueue = [];
-let pollWaiter = null;      // 페이지의 보류 중 long-poll 응답
-const pending = new Map();  // 명령 id -> { resolve }
-let commandSeq = 0;
-let pageReady = false;
-let readyWaiters = [];
-
-function drainCommand(res) {
-  const command = commandQueue.shift();
-  res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-  res.end(JSON.stringify(command));
-}
-
-function dispatch(tool, args) {
-  const id = ++commandSeq;
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`sandbox 명령 timeout(${COMMAND_TIMEOUT_MS}ms): ${tool}`));
-    }, COMMAND_TIMEOUT_MS);
-    pending.set(id, { resolve: (value) => { clearTimeout(timer); resolve(value); } });
-    commandQueue.push({ id, tool, args });
-    if (pollWaiter) { const w = pollWaiter; pollWaiter = null; clearTimeout(w.hold); drainCommand(w.res); }
-  });
-}
-
-const server = createStaticServer(async (req, res) => {
-  const requestUrl = new URL(req.url, "http://mcp.local");
-  if (req.method === "GET" && ENGINE_ROOT && requestUrl.pathname.startsWith("/pyprocEngine/")) {
-    const file = safeJoin(ENGINE_ROOT, requestUrl.pathname.slice("/pyprocEngine/".length));
-    if (!file) { res.writeHead(403); res.end("forbidden"); return true; }
-    await sendFile(res, file);
-    return true;
-  }
-  if (req.method === "POST" && req.url.startsWith("/mcpReady")) {
-    for await (const chunk of req) void chunk;
-    pageReady = true;
-    for (const resolve of readyWaiters) resolve();
-    readyWaiters = [];
-    res.writeHead(204); res.end();
-    return true;
-  }
-  if (req.method === "GET" && req.url.startsWith("/mcpCommand")) {
-    if (commandQueue.length) { drainCommand(res); return true; }
-    const hold = setTimeout(() => {
-      if (pollWaiter && pollWaiter.res === res) pollWaiter = null;
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ none: true }));
-    }, POLL_HOLD_MS);
-    pollWaiter = { res, hold };
-    return true;
-  }
-  if (req.method === "POST" && req.url.startsWith("/mcpResult")) {
-    let body = "";
-    for await (const chunk of req) body += chunk;
-    res.writeHead(204); res.end();
-    try {
-      const result = JSON.parse(body);
-      const waiter = pending.get(result.id);
-      if (waiter) { pending.delete(result.id); waiter.resolve(result); }
-    } catch (e) { process.stderr.write(`mcpResult 파싱 실패: ${e}\n`); }
-    return true;
-  }
-  return false;
-}, { root: PACKAGE_ROOT });
-
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-const serverOrigin = `http://127.0.0.1:${server.address().port}`;
-const engineIndexURL = ENGINE_ROOT
-  ? `${serverOrigin}/pyprocEngine/`
-  : (process.env.PYPROC_INDEX_URL || `${serverOrigin}/vendor/pyodide/`);
-const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html`
-  + `?indexURL=${encodeURIComponent(engineIndexURL)}`;
-
-const browserSession = launchBrowser(pageUrl, {
-  prefix: "pyprocMcp-",
-  extraArgs: BROWSER_CONTROL_ENABLED
-    ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"]
-    : [],
-});
-process.stderr.write(`pyproc MCP sandbox: ${browserSession.browser} -> ${pageUrl}\n`);
-
-const browserControl = BROWSER_CONTROL_ENABLED
-  ? new McpBrowserControl({ profileDir: browserSession.profile, config: BROWSER_CONTROL_CONFIG })
-  : null;
+const product = await createControlProduct();
+const { host: controlHost, tools: TOOLS } = product;
+const mcpAdapter = new McpControlAdapter({ host: controlHost, tools: TOOLS });
+process.stderr.write(`pyproc MCP sandbox: ${product.browserSession.browser} -> ${product.pageUrl}\n`);
 
 let shuttingDown = false;
 async function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
-  try { await browserControl?.close(); } catch (e) {}
-  try { browserSession.close(); } catch (e) {}
-  try { server.close(); } catch (e) {}
+  try { await product.close(); } catch (error) {}
   process.exit(code);
 }
 process.on("SIGINT", () => void shutdown(0));
 process.on("SIGTERM", () => void shutdown(0));
-
-function waitForPage() {
-  if (pageReady) return Promise.resolve();
-  return new Promise((resolve) => readyWaiters.push(resolve));
-}
 
 // ---- MCP stdio(JSON-RPC 2.0, 한 줄 = 한 메시지) ----
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\n");
 const resultOf = (id, result) => write({ jsonrpc: "2.0", id, result });
 const errorOf = (id, code, message) => write({ jsonrpc: "2.0", id, error: { code, message } });
 
-function toolContent(payload) {
-  const images = [];
-  const seen = new Set();
-  const textPayload = JSON.parse(JSON.stringify(payload, function scrubInlineImage(key, value) {
-    if (key !== "dataBase64" || typeof value !== "string" || Object.hasOwn(this, "offset")
-      || this.kind !== "screenshot" || !String(this.mimeType || "").startsWith("image/")
-      || !/^artifact:[A-Za-z0-9_-]+$/.test(String(this.artifactRef || ""))) return value;
-    if (!seen.has(this.artifactRef)) {
-      seen.add(this.artifactRef);
-      images.push(Object.freeze({ type: "image", data: value, mimeType: this.mimeType }));
-    }
-    return undefined;
-  }));
-  return Object.freeze([
-    Object.freeze({ type: "text", text: JSON.stringify(textPayload, null, 1) }),
-    ...images,
-  ]);
-}
-
-function toolResult(id, payload) {
-  resultOf(id, { content: toolContent(payload) });
-}
-
-function toolError(id, error) {
-  // 도구 실패는 프로토콜 오류가 아니라 isError 결과다(에이전트가 읽고 재시도 판단).
-  resultOf(id, { content: [{ type: "text", text: JSON.stringify(error, null, 1) }], isError: true });
-}
-
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
-const activeRequests = new Map();
 rl.on("close", () => void shutdown(0));
-
-async function invokeTool(tool, args, { signal } = {}) {
-  if (PYTHON_TOOL_NAMES.has(tool)) {
-    await waitForPage();
-    const outcome = await dispatch(tool, args);
-    if (!outcome.ok) {
-      const error = new Error(outcome.error?.message || "Python tool failed");
-      error.code = outcome.error?.code;
-      throw error;
-    }
-    return outcome.value;
-  }
-  if (browserControl) return browserControl.invoke(tool, args, { signal });
-  throw new Error(`unknown tool: ${tool}`);
-}
-
-function toolErrorPayload(error) {
-  return {
-    code: error?.code || "PYPROC_INTERNAL",
-    message: String(error?.message || error).slice(-500),
-    ...(error?.outcome ? { outcome: error.outcome } : {}),
-    ...(typeof error?.retryable === "boolean" ? { retryable: error.retryable } : {}),
-    ...browserToolErrorDetails(error),
-  };
-}
 
 rl.on("line", async (line) => {
   const text = line.trim();
   if (!text) return;
   let message;
-  try { message = JSON.parse(text); } catch (e) { return; }
+  try { message = JSON.parse(text); }
+  catch (e) { errorOf(null, -32700, "invalid JSON-RPC message"); return; }
   const { id, method, params } = message;
   try {
     if (method === "initialize") {
@@ -252,22 +56,22 @@ rl.on("line", async (line) => {
     } else if (method === "notifications/initialized") {
       // 알림: 응답 없음
     } else if (method === "notifications/cancelled") {
-      activeRequests.get(params?.requestId)?.abort(params?.reason || "MCP client cancelled the request");
+      mcpAdapter.cancel(params?.requestId, params?.reason || "MCP client cancelled the request");
     } else if (method === "ping") {
       resultOf(id, {});
     } else if (method === "tools/list") {
       resultOf(id, { tools: TOOLS });
     } else if (method === "tools/call") {
       const tool = params && params.name;
-      if (!TOOLS.some((t) => t.name === tool)) { errorOf(id, -32602, `unknown tool: ${tool}`); return; }
-      const controller = new AbortController();
-      activeRequests.set(id, controller);
+      if (!mcpAdapter.hasTool(tool)) { errorOf(id, -32602, `unknown tool: ${tool}`); return; }
       try {
-        toolResult(id, await invokeTool(tool, (params && params.arguments) || {}, { signal: controller.signal }));
+        resultOf(id, mcpToolResult(await mcpAdapter.invoke(id, tool, (params && params.arguments) || {})));
       } catch (error) {
-        toolError(id, toolErrorPayload(error));
-      } finally {
-        activeRequests.delete(id);
+        if (error?.code === "CONTROL_REQUEST_DUPLICATE") errorOf(id, -32600, error.message);
+        else resultOf(id, { content: [{ type: "text", text: JSON.stringify({
+          code: error?.code || "PYPROC_INTERNAL", message: String(error?.message || error).slice(-500),
+          outcome: error?.outcome || "notSent", retryable: error?.retryable === true,
+        }, null, 1) }], isError: true });
       }
     } else if (id !== undefined) {
       errorOf(id, -32601, `unknown method: ${method}`);

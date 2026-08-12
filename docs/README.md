@@ -31,6 +31,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [resumeCatalog.md](usage/resumeCatalog.md) | The resource policy for which file descriptors, sockets, and DB connections `resume.py` must reopen after a revival |
 | | [trustPermissions.md](usage/trustPermissions.md) | `.pymachine` public key distribution, signer fingerprints, and the permission UI contract |
 | | [browserAutomation.md](usage/browserAutomation.md) | Installed MCP browser automation: manifest, screenshots, artifacts, authority, outcomes, and authorized-use boundaries |
+| | [controlProtocol.md](usage/controlProtocol.md) | Language-neutral installed control: handshake, operations, cancellation, outcomes, and verified binary attachments |
 | [reference/](reference/) | [api.md](reference/api.md) | The function-level API reference: the six root exports and the machine handle vocabulary, escape hatches and subpaths, the full error code table (a machine gate forces every root export to be anchored) |
 | | [bundleFormat.md](reference/bundleFormat.md) | The canonical layout of the portable bundle (`PYBUNDLE1`) envelope: byte placement, header fields, the separation of integrity from signature |
 
@@ -50,4 +51,5 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 - The policy for reopening resources after a revival: [usage/resumeCatalog.md](usage/resumeCatalog.md)
 - Public key distribution and permission UI policy: [usage/trustPermissions.md](usage/trustPermissions.md)
 - Installed MCP browser automation: [usage/browserAutomation.md](usage/browserAutomation.md)
+- Language-neutral installed control: [usage/controlProtocol.md](usage/controlProtocol.md)
 - Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

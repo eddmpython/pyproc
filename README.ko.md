@@ -300,6 +300,17 @@ npx pyproc-mcp --config ./pyproc-mcp.json --check
 npx pyproc-mcp --config ./pyproc-mcp.json
 ```
 
+native client는 같은 manifest와 제품 host를 언어 중립 Control Protocol로 사용한다:
+
+```sh
+npx pyproc-control --config ./pyproc-mcp.json --check
+npx pyproc-control --config ./pyproc-mcp.json
+```
+
+이 진입점은 stdout을 strict NDJSON 전용으로 쓰며 request ID 단회성, request별 terminal 하나,
+전달 전 cancel, 전달 뒤의 정직한 `outcomeUnknown`, SHA-256 검증 binary attachment를 제공한다.
+wire와 operation 계약은 [Control Protocol v1 가이드](docs/usage/controlProtocol.md)에 있다.
+
 `{ "enabled": false }`이면 서버는 `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`
 네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
 별도 allowlist raw command, artifact read/delete를 위한 열 개 도구가 추가된다.
@@ -324,7 +335,9 @@ profile attach, CAPTCHA 우회, stealth, 자격증명 수집이나 사이트 자
 전체 manifest, artifact, action, security, recovery 계약은
 [browser automation 제품 가이드](docs/usage/browserAutomation.md)에 있다. `npm run test:mcp-product`는
 package를 pack/install한 뒤 bin, Python persistence, 순차 PNG/JPEG/WebP capture, chunk 재조립, digest,
-delete를 실제 browser에서 검증한다. Chrome Ubuntu와 Edge Windows CI가 같은 gate를 실행한다.
+delete를 실제 browser에서 검증한다. `npm run test:control-product`는 같은 설치 host를 native NDJSON으로
+검증하며 cancel과 binary PNG attachment까지 포함한다. Chrome Ubuntu와 Edge Windows CI가 두 gate를
+모두 실행한다.
 
 ## 능력 계약
 

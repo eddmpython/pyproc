@@ -54,7 +54,10 @@ pyproc을 브라우저 탭 안의 Python 실행기에서, 여러 guest와 자동
 
 - 단계 0 완료: 결정적 RED를 거쳐 Runtime+directory coordination domain, 주소 hint 존재 대조,
   storage epoch 공유를 구현했다. 정식 Edge 게이트 137/137과 Node 게이트 3595/3595가 통과했다.
-- 단계 1 진행: Control Protocol의 wire fixture와 음성 시험부터 시작한다.
+- 단계 1 완료: strict NDJSON codec, 단일 ControlHost, page epoch와 queued cancel, ordered binary
+  attachment를 구현했다. 기존 MCP 12/12, 설치 MCP 10/10, native 설치 제품 6/6, browser control
+  71/71과 48-action stress가 같은 host에서 통과했다.
+- 단계 2 진행: 공식 Python SDK의 wheel, source distribution과 깨끗한 설치 통합 시험을 구현한다.
 
 ## 제품 최소선
 

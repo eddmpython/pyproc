@@ -553,12 +553,15 @@ export async function assertBrowserAutomationContract() {
   await mcp.close();
 
   const serverSource = await readFile(new URL("../../scripts/mcpSandboxServer.mjs", import.meta.url), "utf8");
+  const productSource = await readFile(new URL("../../scripts/controlProtocol/controlProduct.mjs", import.meta.url), "utf8");
   for (const duplicate of ["BROWSER_SESSION_SCHEMA", "function browserControlConfig", "const BROWSER_TOOLS = ["]) {
-    assert(!serverSource.includes(duplicate), `MCP composition root에 browser SSOT 중복이 남았다: ${duplicate}`);
+    assert(!serverSource.includes(duplicate) && !productSource.includes(duplicate),
+      `Control composition root에 browser SSOT 중복이 남았다: ${duplicate}`);
   }
-  assert(serverSource.includes('from "./browserControl/index.js"')
-    && !serverSource.includes('from "./browserControl/mcpBrowserControl.js"'),
-  "MCP composition root가 repository browser-control surface를 우회했다");
+  assert(serverSource.includes('from "./controlProtocol/controlProduct.mjs"')
+    && productSource.includes('from "../browserControl/index.js"')
+    && !productSource.includes('from "../browserControl/mcpBrowserControl.js"'),
+  "Control composition root가 repository browser-control surface를 우회했다");
   automation.close();
   await artifactStore.close();
   return true;

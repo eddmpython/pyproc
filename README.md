@@ -303,6 +303,17 @@ npx pyproc-mcp --config ./pyproc-mcp.json --check
 npx pyproc-mcp --config ./pyproc-mcp.json
 ```
 
+Native clients use the same manifest and product host through the language-neutral Control Protocol:
+
+```sh
+npx pyproc-control --config ./pyproc-mcp.json --check
+npx pyproc-control --config ./pyproc-mcp.json
+```
+
+This entrance reserves stdout for strict NDJSON. It provides single-use request IDs, one terminal per request,
+pre-delivery cancellation, honest post-delivery `outcomeUnknown`, and SHA-256 verified binary attachments.
+See the [Control Protocol v1 guide](docs/usage/controlProtocol.md) for the wire and operation contract.
+
 With `{ "enabled": false }`, the server exposes exactly four Python tools: `pythonRun`, `checkpointSave`,
 `checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
 semantic observation, ordered actions, separately allowlisted raw commands, and artifact read/delete.
@@ -327,7 +338,9 @@ authorization to automate a site. The operator owns site permission and conseque
 See the [browser automation product guide](docs/usage/browserAutomation.md) for the complete manifest,
 artifact, action, security, and recovery contracts. `npm run test:mcp-product` packs and installs the package,
 then verifies the bin, Python persistence, ordered PNG/JPEG/WebP capture, chunk reconstruction, digest, and
-deletion in a real browser. Chrome on Ubuntu and Edge on Windows run that gate in CI.
+deletion in a real browser. `npm run test:control-product` verifies the same installed host through native
+NDJSON, including cancellation and a binary PNG attachment. Chrome on Ubuntu and Edge on Windows run both
+gates in CI.
 
 ## Capability contract
 
