@@ -9,14 +9,14 @@ The two packages have separate jobs:
 - Python `pyproc-control` ships the strict protocol client, typed values, cancellation, and attachment
   verification.
 
-Pin both packages to the same version. A normal release uses `0.0.15` for each.
+Pin both packages to the same version. A normal release uses `0.0.16` for each.
 
 ## Install
 
 ```sh
-npm install --save-exact pyproc@0.0.15
+npm install --save-exact pyproc@0.0.16
 npx pyproc-engine --out /absolute/path/to/pyodide
-python -m pip install pyproc-control==0.0.15
+python -m pip install pyproc-control==0.0.16
 ```
 
 Create the version 1 manifest from the [browser automation guide](browserAutomation.md). A Python-only

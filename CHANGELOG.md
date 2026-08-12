@@ -12,6 +12,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.16 - 2026-08-12
+
 ### Added
 
 - **One language-neutral product host for native clients and MCP.** The installed `pyproc-control` command
@@ -26,11 +28,30 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   bytes. Both distribution formats install in clean environments, and Chrome plus Edge execute the installed
   Python journey.
 
+- **Cooperative frame automation without a DevTools port.** `FrameSpace` runs an opted-in target inside a
+  credentialless sandbox, authenticates a private `MessageChannel`, enforces exact origin and action policy,
+  and returns verified PNG artifacts. It deliberately excludes arbitrary pages, signed-in storage, trusted
+  native input, and compositor capture.
+
+- **Deterministic automation recording and effect-free replay.** `RecordingSpace` stores canonical operation
+  terminals and screenshot sidecars behind an exclusive writer and bounded private files. `ReplaySpace`
+  verifies recording identity, final digest, cursor, and prefix pins before reproducing the exact remaining
+  operation sequence without opening a live browser provider.
+
 ### Fixed
 
 - Timed out or cancelled queued page commands are removed before delivery instead of running later after the
   caller has already received failure. Duplicate MCP request IDs can no longer overwrite an active request
   and execute a second effect. Reloaded machine pages fence late results with a new page epoch.
+
+- Journal operations that share one Runtime and storage directory now share one coordinator. Commit, recover,
+  branch adoption, pack, prune, and deletion are serialized against one storage epoch, and stale page-address
+  hints are revalidated before reuse. Packing can no longer leave a tree that names a deleted state blob.
+
+- Automation recordings now fail closed before a live effect when their destination is not writable or another
+  writer owns it. Post-effect persistence failure preserves the original outcome or becomes non-retryable
+  `outcomeUnknown`. Generation sidecars, symlink confinement, strict byte limits, shutdown draining, and stale
+  generation cleanup close secret-retention, memory, and partial-write paths.
 
 ### Changed
 
@@ -43,10 +64,25 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   network, target, storage, runtime, screenshot, and artifact capabilities plus the record-only replay
   boundary. The broker-owned endpoint, opaque references, and existing browser error contract are unchanged.
 
+- A formal v86 boundary probe now boots the available Linux and graphical guests and checks display, input,
+  packet networking, PNG capture, snapshot, and restore. Neither candidate is promoted as an automation
+  provider: the reproducible Linux image has no browser or GUI, while the graphical fixture has opaque
+  provenance and lacks the required external-network and semantic-control contracts.
+
+### Compatibility
+
+- This release has no breaking JavaScript package-export or type-signature change. `nativeCdp` remains the
+  default opt-in browser provider, and the Python-only default still opens no browser authority. The Python SDK
+  is a separately installed distribution whose version must match the npm package.
+
 한국어 요약: MCP와 native NDJSON이 하나의 ControlHost, operation, 취소, 오류, attachment 계약을
 공유한다. 공식 Python SDK는 별도 JavaScript 코드 없이 영속 Python, checkpoint, browser action,
 screenshot byte를 사용하며 wheel과 source distribution 설치 여정으로 검증한다. 전달 전 취소된
-명령의 지연 실행, 중복 request ID 효과, page reload 뒤 late result 혼입을 막았다.
+명령의 지연 실행, 중복 request ID 효과, page reload 뒤 late result 혼입을 막았다. FrameSpace는
+DevTools port 없는 cooperative 격리 자동화를 제공하고, RecordingSpace와 ReplaySpace는 외부 효과를
+다시 보내지 않는 결정적 재현 경계를 제공한다. 저널 공유 저장소의 경쟁과 stale 주소 재사용을
+차단했고, 기록 파일의 원자성, 크기, symlink, 종료 drain 경계를 강화했다. 공개 JavaScript export와
+type signature에는 브레이킹 변경이 없다.
 
 ## 0.0.15 - 2026-08-12
 

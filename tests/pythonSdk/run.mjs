@@ -121,7 +121,7 @@ try {
   const wheelMetadata = run(wheelPython, ["-m", "pip", "show", "pyproc-control"], { cwd: installed.tmp }).stdout;
   const sourceMetadata = run(sourcePython, ["-m", "pip", "show", "pyproc-control"], { cwd: installed.tmp }).stdout;
   check("서로 다른 clean venv에 wheel과 source distribution 설치",
-    wheelMetadata.includes("Version: 0.0.15") && sourceMetadata.includes("Version: 0.0.15"));
+    wheelMetadata.includes("Version: 0.0.16") && sourceMetadata.includes("Version: 0.0.16"));
 
   const protocol = run(sourcePython, [join(HERE, "protocolContract.py")], { cwd: installed.appDir });
   check("source 설치본 Python codec 음성 fixture", protocol.stdout.includes("11 fixtures"));
