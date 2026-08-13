@@ -4,6 +4,7 @@ AGENTS.md
 .claude/
 
 node_modules/
+**/nativeHost/target/
 npm-debug.log*
 *.tgz
 .DS_Store
