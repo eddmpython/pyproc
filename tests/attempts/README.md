@@ -52,8 +52,7 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 | [enginePort/](enginePort/) | EngineContract를 non-Pyodide CPython(WASI)이 구현 가능한가 (Pyodide 제거의 실증, D2 관문) | 진행 중 (부팅+계약 코어 6/6 + 반복 실행/값 프로토콜/**완전 시간여행** 12/12) |
 | [largeHeapEnvelope/](largeHeapEnvelope/) | 대형 힙에서 OS 프리미티브 비용은 어디서 무너지는가 (Browser Python OS 성능 봉투) | 진행 중 |
 | [stateKernel/](stateKernel/) | 내구 상태 3벌(저널·세션 이미지·machine generation)을 이중 구역 커널 하나로 통합할 수 있는가 | 진행 중 |
-| [Initiative 1](perceptionComputer/) | screenshot이나 full tree 대신 목표별 최소 충분 상황 모델을 만들 수 있는가 | 진행 중 |
-| [Initiative 2](verifiedChangeLoop/) | 저장소 변경 완료를 strict 경험 계약과 replay 가능한 Evidence Pack으로 판정할 수 있는가 | Initiative 1 후행 대기 |
+| [Initiative 2](verifiedChangeLoop/) | 저장소 변경 완료를 strict 경험 계약과 replay 가능한 Evidence Pack으로 판정할 수 있는가 | 진행 중 |
 | [Initiative 3](hibernatingMachineFleet/) | inactive Machine 실행 owner를 끝내고 hot budget을 지킬 수 있는가 | Initiative 2 후행 대기 |
 | [Initiative 4](executionMemoryRegistry/) | 대화가 아니라 실행 상태를 durable session으로 이어받을 수 있는가 | Initiative 3 후행 대기 |
 | [Initiative 5](rehearseCommitTransactions/) | 연습한 effect를 승인 뒤 현실에 한 번만 보낼 수 있는가 | Initiative 4 후행 대기 |

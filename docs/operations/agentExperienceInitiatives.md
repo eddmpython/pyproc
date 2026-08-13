@@ -344,6 +344,8 @@ FrameSpace, ReplaySpace, JavaScript, Python, MCP installed gate가 여섯 항목
 
 ## Initiative 2 - Verified Change Loop
 
+상태: 구현 중. Perception Computer 졸업 뒤 현재 직렬 대기열의 활성 이니셔티브다.
+
 ### 제품 명제
 
 Perception Computer가 현재 browser의 상황과 행동 결과를 계산해도 저장소 변경의 완료 여부는 자동으로
@@ -460,7 +462,7 @@ terminal은 다음 세 개로 닫는다.
 ### 검증 캠페인과 출구 gate
 
 새 능력은 [Initiative 2 attempt](../../tests/attempts/verifiedChangeLoop/)에서만 시작한다.
-Perception Computer가 졸업하기 전에는 probe를 실행하지 않는다.
+Perception Computer 정식 gate를 기준선으로 고정하고 probe를 실행한다.
 
 Initiative 2은 다음이 모두 green일 때만 끝난다.
 

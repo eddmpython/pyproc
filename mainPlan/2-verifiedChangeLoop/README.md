@@ -1,16 +1,16 @@
 # Initiative 2: Verified Change Loop 실행 계획
 
-상태: **Initiative 1 후행 대기**
+상태: **구현 중**
 
 이 문서는 브라우저를 관찰하고 조작하는 능력을 저장소 변경의 완료 여부를 판정하는 검증 런타임으로
 확장하는 세 번째 이니셔티브의 임시 실행 계획이다. 실행 순서는 Machine Entrance, Perception Computer,
-Verified Change Loop로 고정한다. 앞 이니셔티브가 끝나기 전에는 이 계획의 코드를 구현하거나 probe를
-실행하지 않는다.
+Verified Change Loop로 고정한다. Machine Entrance와 Perception Computer는 졸업했고, 이 계획이 현재
+직렬 대기열의 유일한 활성 구현이다.
 
 지속 제품 결정은
 [Agent experience initiatives](../../docs/operations/agentExperienceInitiatives.md#initiative-2---verified-change-loop),
-현재 관찰 계약은 [APX 1.0](../../docs/specs/apx/README.md), 선행 실험은
-[Initiative 1 attempt](../../tests/attempts/perceptionComputer/README.md), 이 이니셔티브의 실험 원장은
+현재 관찰 계약은 [APX 1.0](../../docs/specs/apx/README.md), 선행 정식 증거는
+[`perceptionComputer` contract](../../tests/contracts/perceptionComputer.mjs), 이 이니셔티브의 실험 원장은
 [Initiative 2 attempt](../../tests/attempts/verifiedChangeLoop/README.md)가 소유한다. 이 문서는 구현
 순서, 책임 경계, 검증 방법, 문서 정합, 종료 절차만 소유한다.
 

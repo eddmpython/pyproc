@@ -64,8 +64,7 @@ probe를 실행하지 않는다.
 | `replayVerdictProbe.mjs` | effect 없이 판정을 재계산하는가 | provider 호출, effect 재전송, oracle 변경 묵인 0 |
 | `consumerParityProbe.mjs` | 모든 client가 같은 의미를 받는가 | client별 verdict 축약 0 |
 
-현재 상태에서는 probe 파일을 만들지 않는다. 선행 이니셔티브가 졸업한 뒤 exact dependency와 fixture를
-다시 잠그고 시작한다.
+선행 이니셔티브가 졸업했다. exact dependency와 fixture를 다시 잠그고 probe를 시작한다.
 
 ## 모듈화 설계 후보
 

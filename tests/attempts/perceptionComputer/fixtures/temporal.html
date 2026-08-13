@@ -1,9 +1,0 @@
-<!doctype html>
-<html lang="en"><meta charset="utf-8"><title>Temporal</title><body><main><h1>Temporal list</h1>
-<button id="rerender">Rerender</button><button id="replace">Replace document</button>
-<ul id="items"><li><button>Open Alpha</button></li><li><button>Open Beta</button></li></ul></main>
-<script>
-document.getElementById("rerender").onclick=()=>document.getElementById("items").replaceChildren(
-  ...["Beta","Alpha"].map(name=>{const li=document.createElement("li");li.innerHTML=`<button>Open ${name}</button>`;return li;}));
-document.getElementById("replace").onclick=()=>location.href="lifecycle.html?replacement=1";
-</script></body></html>
