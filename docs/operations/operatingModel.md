@@ -27,6 +27,10 @@ pyproc 크기에 맞춘 운영 체계다(2026-07-11). 규칙은 가능한 한 "�
 - **지속되는 결정만 docs로 승격한다.** 제품 방향은 `docs/product/vision.md`, 실제와 계약의 열린 차이는 `docs/operations/contractReality.md`, 소비 표면은 `docs/usage/`, 함수 계약은 `docs/reference/`가 소유한다. 일회성 작업 계획을 새 영구 트리로 만들지 않는다.
 - **src는 승격된 코드만.** 레이어 = 폴더(순위 정본: [CONTRIBUTING.md](../../CONTRIBUTING.md) 3항), import는 아래로만, 교차 관심사는 능력 계약 뒤에.
 - **완료 기록은 git history다.** 현재 문서는 현재 계약만 말한다. 과거 계획이나 삭제된 구조를 되살리지 않고, 필요하면 관련 파일의 `git log --follow`와 커밋 diff에서 당시 결정을 찾는다.
+- **호출자 실측은 재현 가능한 입력으로 승격한다.** 다른 제품이 pyproc의 공개 브라우저 조작 또는 시각
+  검수 표면을 사용하다가 pyproc 소유의 간극을 발견하면
+  [소비 저장소 피드백 계약](consumerFeedback.md)에 따라 과정과 증거를 비식별화해 기록한다. 지속
+  템플릿은 `docs/`가 소유하고, 실제 미완료 건만 직렬 `mainPlan/` 이니셔티브가 된다.
 
 ## 3. 메모리 운영
 
