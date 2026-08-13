@@ -1,18 +1,26 @@
 // controlProtocolProduct.mjs - packed pyproc-control의 machine, cancel, automation, attachment 제품 게이트.
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const frameBridge = await readFile(join(ROOT, "scripts", "automationSpace", "frameSpaceTarget.js"));
+let committedEffects = 0;
 const targetServer = createServer((req, res) => {
   if (req.url === "/evidence" && req.method === "POST") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end('{"ok":true}');
+    return;
+  }
+  if (req.url === "/effect" && req.method === "POST") {
+    committedEffects += 1;
+    res.writeHead(201, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ committedEffects }));
     return;
   }
   if (req.url === "/frameSpaceTarget.js") {
@@ -21,11 +29,15 @@ const targetServer = createServer((req, res) => {
     return;
   }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(`<!doctype html><html><body><h1 id=title>control-ready</h1><button id=verify>Verify</button>
+  res.end(`<!doctype html><html><body><h1 id=title>control-ready</h1><button id=commit>Commit</button>
+    <output id=committed role=status>not committed</output><button id=verify>Verify</button>
     <script>document.getElementById("verify").addEventListener("click", async () => {
       const response = await fetch("/evidence", { method: "POST" });
       const status = document.createElement("p"); status.setAttribute("role", "status");
       status.textContent = response.ok ? "verified" : "failed"; document.body.append(status);
+    }); document.getElementById("commit").addEventListener("click", async () => {
+      const response = await fetch("/effect", { method: "POST" });
+      document.getElementById("committed").textContent = response.ok ? "effect committed" : "effect failed";
     });</script><script src=/frameSpaceTarget.js></script></body></html>`);
 });
 await new Promise((resolve) => targetServer.listen(0, "127.0.0.1", resolve));
@@ -48,7 +60,10 @@ const browser = process.env.PYPROC_BROWSER || undefined;
 const mcpCli = binPath(installed.appDir, "pyproc-mcp");
 const executionMemoryRoot = join(installed.appDir, ".pyproc-execution-memory");
 const automationRecordingFile = join(installed.appDir, ".pyproc-execution-memory", "automation.json");
+const approvalKeyFile = join(installed.appDir, ".pyproc-execution-memory", "approval-public.pem");
+const approvalPair = generateKeyPairSync("ed25519");
 await mkdir(executionMemoryRoot, { recursive: true });
+await writeFile(approvalKeyFile, approvalPair.publicKey.export({ type: "spki", format: "pem" }));
 run(mcpCli, ["init", "--recipe", "pythonOnly", "--project-root", installed.appDir,
   "--out", ".pyproc-python-only", "--engine-root", join(ROOT, "vendor", "pyodide"),
   "--timeout-ms", String(TIMEOUT_MS)], { cwd: installed.appDir });
@@ -67,6 +82,9 @@ run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installe
   "--artifact-ttl-ms", "120000", ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
 const memoryConfig = JSON.parse(await readFile(configPath, "utf8"));
 memoryConfig.executionMemory = { enabled: true, root: executionMemoryRoot };
+memoryConfig.effectTransactions = { enabled: true, approvalAuthorities: [{
+  authorityId: "operator:control-product", publicKeyFile: approvalKeyFile,
+}] };
 memoryConfig.browser.recording = { mode: "record", file: automationRecordingFile, overwrite: true };
 await writeFile(configPath, JSON.stringify(memoryConfig, null, 2));
 await writeFile(reloadConfigPath, JSON.stringify({
@@ -126,7 +144,7 @@ check("installed pyproc-control preflight", checkReport.ok === true
 const packageRoot = join(installed.appDir, "node_modules", "pyproc");
 const installedRequire = createRequire(join(installed.appDir, "controlProductEntry.mjs"));
 const controlEntry = installedRequire.resolve("pyproc/control");
-const { ControlRemoteError, PyProcControlClient } = await import(pathToFileURL(controlEntry).href);
+const { ControlRemoteError, PyProcControlClient, createApprovalGrant } = await import(pathToFileURL(controlEntry).href);
 const { createControlProduct } = await import(pathToFileURL(join(packageRoot,
   "scripts", "controlProtocol", "controlProduct.mjs")).href);
 const { loadMcpProductConfig } = await import(pathToFileURL(join(packageRoot,
@@ -139,6 +157,8 @@ const { CdpConnection } = await import(pathToFileURL(join(packageRoot,
   "scripts", "browserControl", "cdpConnection.mjs")).href);
 const { controlBase } = await import(pathToFileURL(join(packageRoot,
   "scripts", "controlProtocol", "controlProtocol.js")).href);
+const { createEvidencePack, publishEvidencePack } = await import(pathToFileURL(join(packageRoot,
+  "scripts", "verification", "evidencePack.js")).href);
 
 let reloadProduct = null;
 let reloadConnection = null;
@@ -236,11 +256,12 @@ try {
   const preflight = await PyProcControlClient.check(configPath, { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
   client = await PyProcControlClient.start(configPath, { cwd: installed.appDir,
     startupTimeoutMs: TIMEOUT_MS, maxAttachmentChunkBytes: 64 });
-  check("공개 JavaScript 입구가 preflight와 Execution Memory 포함 operation 26종을 제공",
+  check("공개 JavaScript 입구가 Execution Memory와 Rehearse-Commit 포함 operation 33종을 제공",
     preflight.ok === true
       && controlEntry === join(packageRoot, "scripts", "controlProtocol", "controlApi.js")
-      && client.operations.length === 26 && client.operations.includes("machine.run")
-      && client.operations.includes("automation.act") && client.operations.includes("memory.create"),
+      && client.operations.length === 33 && client.operations.includes("machine.run")
+      && client.operations.includes("automation.act") && client.operations.includes("memory.create")
+      && client.operations.includes("effect.commit") && preflight.effectTransactions?.enabled === true,
   client.operations.join(","));
 
   await client.runPython("controlState = 40");
@@ -312,6 +333,54 @@ try {
       && perceptionGraph.entities.length > 0
       && heading.role === "heading" && heading.name === "control-ready"
       && !JSON.stringify(perceptionGraph).includes("backendNodeId"));
+  const effectTransition = { all: [
+    { entityAppeared: { role: "status", nameContains: "effect committed" } },
+    { networkResponse: { method: "POST", urlPath: "/effect", status: 201 } },
+  ], withinMs: 5000 };
+  const effectPrepared = await client.prepareEffectTransaction({
+    transactionId: "effect:control-product", intentId: "intent:control-product",
+    executionSessionId: "session:control-product",
+    expectedSessionRevisionSha256: memoryFirst.output.contentSha256,
+    destination: { origin: targetOrigin, subjectSha256: createHash("sha256").update("control-product")
+      .digest("hex"), purpose: "Commit the exact installed product fixture" },
+    effectTemplate: { sessionRef: attached.output, focus: { requirements: [{
+      requirementRef: "requirement:commit", select: { role: "button", name: "Commit", actionable: true },
+      need: ["fact", "affordance"], cardinality: "one",
+    }] }, actions: [{ kind: "click", requirementRef: "requirement:commit", expectedRisk: "externalEffect",
+      verify: effectTransition }] }, expectedTransition: effectTransition,
+  });
+  const effectRehearsed = await client.rehearseEffectTransaction("effect:control-product",
+    effectPrepared.output.transaction.contentSha256, { mode: "computed", code: "6 * 7", expectedValue: "42" });
+  const effectGrant = createApprovalGrant({ intent: effectRehearsed.output.intent,
+    authorityId: "operator:control-product",
+    trustDomainSha256: effectPrepared.output.trustDomain.trustDomainSha256,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), nonce: "nonce:control-product",
+    policyVersion: "control-product/1" }, approvalPair.privateKey);
+  const effectApproved = await client.approveEffectTransaction("effect:control-product",
+    effectRehearsed.output.contentSha256, effectGrant);
+  const effectTerminal = await client.commitEffectTransaction("effect:control-product",
+    effectApproved.output.contentSha256);
+  const effectRetried = await client.commitEffectTransaction("effect:control-product",
+    effectTerminal.output.contentSha256);
+  const effectEvidence = await publishVerifiedEffectPack({ createEvidencePack, publishEvidencePack,
+    repositoryRoot: executionMemoryRoot, outputDir: "packs/effect-control-product", repository: projectIdentity,
+    projectId: "control-product", transaction: effectTerminal.output });
+  const effectSealed = await client.sealEffectTransaction("effect:control-product",
+    effectTerminal.output.contentSha256, effectEvidence.outputDir);
+  check("설치 JavaScript 제품이 approved effect를 한 번만 보내고 terminal evidence를 보존",
+    committedEffects === 1 && effectTerminal.output.state === "terminal"
+      && effectTerminal.output.effectResult?.terminal === "confirmed"
+      && effectTerminal.output.effectResult?.actionEvidence?.length === 1
+      && effectRetried.output.contentSha256 === effectTerminal.output.contentSha256
+      && effectTerminal.output.session.terminalSha256 && effectSealed.output.state === "sealed"
+      && effectSealed.output.receipt?.evidencePackSha256 === effectEvidence.contentSha256,
+  JSON.stringify({ committedEffects, state: effectTerminal.output.state,
+    terminal: effectTerminal.output.effectResult?.terminal,
+    errorCode: effectTerminal.output.effectResult?.errorCode,
+    actionEvidence: effectTerminal.output.effectResult?.actionEvidence?.length,
+    sameRetry: effectRetried.output.contentSha256 === effectTerminal.output.contentSha256,
+    terminalSession: effectTerminal.output.session.terminalSha256 || null,
+    transaction: effectTerminal.output.contentSha256, receipt: effectSealed.output.receipt?.contentSha256 || null }));
   const situation = await eyes.situate({ objective: "Verify and prove the accepted state", requirements: [{
     requirementRef: "requirement:verify", select: { role: "button", name: "Verify", actionable: true },
     need: ["fact", "affordance"], cardinality: "one",
@@ -331,7 +400,7 @@ try {
   const recordingState = await client.inspectSpace();
   const recording = recordingState.output.recording;
   const memorySecond = await client.checkpointExecutionSession("session:control-product",
-    memoryFirst.output.contentSha256, { state: "active", branch: "browser:verified",
+    effectTerminal.output.session.terminalSha256, { state: "active", branch: "browser:verified",
       checkpoint: "checkpoint:browser", outcomeUnknown: false, pendingIntentSha256: null }, {
       browser: { situation: situation.situation, cursor: recording.entries,
         prefixSha256: recording.prefixSha256 },
@@ -339,7 +408,7 @@ try {
   const memoryOpened = await client.openExecutionSession("session:control-product");
   const memoryHandoff = await client.exportExecutionHandoff("session:control-product", "control-product-handoff");
   check("SituationCapsule과 exact recording cursor가 Machine revision 및 signed handoff에 결속",
-    memorySecond.output.revision === 2
+    memorySecond.output.revision === 4
       && memorySecond.output.browser.situationRef === situation.situationRef
       && memorySecond.output.browser.cursor === recording.entries
       && memoryOpened.output.contentSha256 === memorySecond.output.contentSha256

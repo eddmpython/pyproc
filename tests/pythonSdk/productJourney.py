@@ -4,16 +4,17 @@ import hashlib
 import json
 import sys
 import time
+import urllib.request
 
 from pyprocControl import ControlError, PyProcClient
 
 
-configPath, targetUrl = sys.argv[1:3]
+configPath, targetUrl, approvalUrl, effectEvidenceUrl = sys.argv[1:5]
 report = PyProcClient.check(configPath)
 assert report["ok"] is True and report["automation"]["enabled"] is True
 
 with PyProcClient.start(configPath, startupTimeout=60.0) as client:
-    assert len(client.operations) == 26
+    assert len(client.operations) == 33
     prepared = client.runPython("prepared = [10, 20, 30]", timeout=60.0)
     assert prepared.terminal == "completed"
     checkpoint = client.saveCheckpoint(timeout=60.0)
@@ -93,6 +94,57 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     assert "dataBase64" not in json.dumps(captured.output)
     artifactRef = captured.output["actions"][0]["result"]["artifactRef"]
     assert client.deleteArtifact(artifactRef, timeout=30.0).output["deleted"] is True
+
+    effectTransition = {"all": [
+        {"entityAppeared": {"role": "status", "nameContains": "effect committed"}},
+        {"networkResponse": {"method": "POST", "urlPath": "/effect", "status": 201}},
+    ], "withinMs": 5000}
+    effectPrepared = client.prepareEffectTransaction({
+        "transactionId": "effect:python-product", "intentId": "intent:python-product",
+        "executionSessionId": "session:installed-python",
+        "expectedSessionRevisionSha256": memoryCreated.output["contentSha256"],
+        "destination": {"origin": targetUrl.rsplit("/", 1)[0],
+                        "subjectSha256": hashlib.sha256(b"python-product").hexdigest(),
+                        "purpose": "Commit the exact installed Python fixture"},
+        "effectTemplate": {"sessionRef": attached.output, "focus": {"requirements": [{
+            "requirementRef": "requirement:commit",
+            "select": {"role": "button", "name": "Commit", "actionable": True},
+            "need": ["fact", "affordance"], "cardinality": "one",
+        }]}, "actions": [{"kind": "click", "requirementRef": "requirement:commit",
+                            "expectedRisk": "externalEffect", "verify": effectTransition}]},
+        "expectedTransition": effectTransition,
+    }, timeout=60.0)
+    effectRehearsed = client.rehearseEffectTransaction(
+        "effect:python-product", effectPrepared.output["transaction"]["contentSha256"],
+        {"mode": "computed", "code": "6 * 7", "expectedValue": "42"}, timeout=60.0)
+    approvalRequest = urllib.request.Request(approvalUrl, data=json.dumps({
+        "intent": effectRehearsed.output["intent"],
+        "trustDomainSha256": effectPrepared.output["trustDomain"]["trustDomainSha256"],
+    }).encode("utf8"), headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(approvalRequest, timeout=30.0) as approvalResponse:
+        effectGrant = json.load(approvalResponse)
+    effectApproved = client.approveEffectTransaction(
+        "effect:python-product", effectRehearsed.output["contentSha256"], effectGrant, timeout=60.0)
+    effectTerminal = client.commitEffectTransaction(
+        "effect:python-product", effectApproved.output["contentSha256"], timeout=60.0)
+    effectRetried = client.commitEffectTransaction(
+        "effect:python-product", effectTerminal.output["contentSha256"], timeout=30.0)
+    effectListed = client.listEffectTransactions(timeout=30.0)
+    effectInspected = client.inspectEffectTransaction("effect:python-product", timeout=30.0)
+    assert effectTerminal.output["state"] == "terminal"
+    assert effectTerminal.output["effectResult"]["terminal"] == "confirmed"
+    assert effectRetried.output["contentSha256"] == effectTerminal.output["contentSha256"]
+    assert any(entry["transactionId"] == "effect:python-product" for entry in effectListed.output)
+    assert effectInspected.output["transaction"]["contentSha256"] == effectTerminal.output["contentSha256"]
+    evidenceRequest = urllib.request.Request(effectEvidenceUrl,
+        data=json.dumps(effectTerminal.output).encode("utf8"),
+        headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(evidenceRequest, timeout=30.0) as evidenceResponse:
+        effectEvidenceDir = json.load(evidenceResponse)["outputDir"]
+    effectSealed = client.sealEffectTransaction(
+        "effect:python-product", effectTerminal.output["contentSha256"], effectEvidenceDir, timeout=30.0)
+    assert effectSealed.output["state"] == "sealed"
+    assert effectSealed.output["receipt"]["evidencePackSha256"]
     client.detachSession(attached.output, timeout=30.0)
 
     first = client.request("machine.run", {"code": "6 * 7"}, requestId="python:single-use", timeout=30.0)
@@ -111,4 +163,6 @@ print(json.dumps({"ok": True, "operations": len(client.operations), "checkpoint"
                   "cancelTerminal": cancelError.terminal, "timeoutOutcome": timeoutError.outcome,
                   "timeoutTerminal": timeoutError.terminal, "permissionTerminal": permissionError.terminal,
                   "successTerminal": captured.terminal, "perceptionEntityRef": heading.entityRef,
-                  "situationRef": situation.situationRef, "executionMemory": True}))
+                  "situationRef": situation.situationRef, "executionMemory": True,
+                  "effectTerminal": effectTerminal.output["effectResult"]["terminal"],
+                  "effectSealed": effectSealed.output["state"] == "sealed"}))

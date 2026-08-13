@@ -66,16 +66,16 @@ export class AutomationSpaceRouter {
     this._invokeTail = Promise.resolve();
   }
 
-  async invoke(operation, input = {}, { signal, requestId = null } = {}) {
+  async invoke(operation, input = {}, { signal, requestId = null, recordingInput = undefined } = {}) {
     if (this.provider.linearizeInvocations === true) {
-      const turn = this._invokeTail.then(() => this._invoke(operation, input, { signal, requestId }));
+      const turn = this._invokeTail.then(() => this._invoke(operation, input, { signal, requestId, recordingInput }));
       this._invokeTail = turn.catch(() => {});
       return turn;
     }
-    return this._invoke(operation, input, { signal, requestId });
+    return this._invoke(operation, input, { signal, requestId, recordingInput });
   }
 
-  async _invoke(operation, input, { signal, requestId }) {
+  async _invoke(operation, input, { signal, requestId, recordingInput }) {
     if (this._closed) throw spaceError("AUTOMATION_SPACE_CLOSED", "automation space is closed");
     if (!this._operations.has(operation)) {
       throw spaceError("AUTOMATION_SPACE_OPERATION_UNSUPPORTED", `automation space operation is unsupported: ${operation}`);
@@ -86,7 +86,7 @@ export class AutomationSpaceRouter {
     if (signal?.aborted) throw spaceError("CONTROL_CANCELLED", String(signal.reason || "control request cancelled"));
     const authority = await this.provider.authorize(operation, input, { signal, requestId });
     if (signal?.aborted) throw spaceError("CONTROL_CANCELLED", String(signal.reason || "control request cancelled"));
-    const output = await this.provider.execute(operation, input, { signal, requestId, authority });
+    const output = await this.provider.execute(operation, input, { signal, requestId, authority, recordingInput });
     if (operation !== "automation.space.inspect") return output;
     return Object.freeze({
       space: Object.freeze({

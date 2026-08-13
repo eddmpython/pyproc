@@ -1,11 +1,13 @@
 // installedMcpProduct.mjs - packed pyproc-mcp command, Python machine, browser and artifacts in one gate.
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
+import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const targetHtml = `<!doctype html>
@@ -15,6 +17,7 @@ const targetHtml = `<!doctype html>
   <button id="apply">Apply</button><output id="state">ready</output>
   <canvas id="chart" width="160" height="60" aria-label=""></canvas>
   <button id="verify">Verify</button><output id="verified" role="status">waiting</output>
+  <button id="commit">Commit</button><output id="committed" role="status">not committed</output>
   <script>
     console.info("installed-startup", "token=must-redact");
     document.getElementById("apply").addEventListener("click", () => {
@@ -24,13 +27,24 @@ const targetHtml = `<!doctype html>
       const response = await fetch("/evidence", { method: "POST" });
       document.getElementById("verified").textContent = response.ok ? "verified" : "failed";
     });
+    document.getElementById("commit").addEventListener("click", async () => {
+      const response = await fetch("/effect", { method: "POST" });
+      document.getElementById("committed").textContent = response.ok ? "effect committed" : "effect failed";
+    });
     const context = document.getElementById("chart").getContext("2d");
     context.fillStyle = "#2563eb";
     context.fillRect(10, 10, 90, 35);
   </script>
 </body></html>`;
 
+let committedEffects = 0;
 const targetServer = createServer((req, res) => {
+  if (req.url === "/effect" && req.method === "POST") {
+    committedEffects += 1;
+    res.writeHead(201, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ committedEffects }));
+    return;
+  }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(targetHtml);
 });
@@ -48,6 +62,14 @@ const check = (name, pass, info = "") => {
 const installed = await installPackedPyProc("pyprocInstalledMcpProduct-");
 const configPath = join(installed.appDir, ".pyproc-mcp-product", "manifest.json");
 const memoryRoot = join(installed.appDir, ".pyproc-mcp-memory");
+const approvalKeyFile = join(memoryRoot, "approval-public.pem");
+const approvalPair = generateKeyPairSync("ed25519");
+await mkdir(memoryRoot, { recursive: true });
+await writeFile(approvalKeyFile, approvalPair.publicKey.export({ type: "spki", format: "pem" }));
+const { createApprovalGrant } = await import(pathToFileURL(join(installed.appDir, "node_modules", "pyproc",
+  "scripts", "controlProtocol", "controlApi.js")).href);
+const { createEvidencePack, publishEvidencePack } = await import(pathToFileURL(join(installed.appDir,
+  "node_modules", "pyproc", "scripts", "verification", "evidencePack.js")).href);
 const browser = process.env.PYPROC_BROWSER || undefined;
 const cli = binPath(installed.appDir, "pyproc-mcp");
 const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
@@ -60,6 +82,7 @@ const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", ins
   "--artifact-max-count", "16", "--artifact-inline-bytes", String(4 * 1024 * 1024),
   "--artifact-ttl-ms", "120000",
   "--execution-memory-root", memoryRoot,
+  "--enable-effect-transactions", "--effect-approval-authority", `operator:mcp-product=${approvalKeyFile}`,
   ...["snapshot", "screenshot", "waitFor", "hydrateLazy", "fill", "click"].flatMap((action) => ["--action", action]),
   ...(browser ? ["--browser", browser] : []),
 ];
@@ -75,6 +98,7 @@ check("installed bin help, version, check가 제품 시작 표면과 권한을 �
     && checkReport.browser.actions.includes("screenshot")
     && checkReport.executionMemory?.enabled === true
     && checkReport.executionMemory?.root === memoryRoot
+    && checkReport.effectTransactions?.enabled === true
     && checkReport.browser.rawMethods.join(",") === "Runtime.evaluate"
     && checkReport.engine.mode === "root",
 `${versionRun.stdout.trim()}, ${checkReport.browser.actions.length} actions`);
@@ -137,10 +161,11 @@ try {
   check("installed server initialize", initialized.result?.serverInfo?.name === "pyproc-sandbox");
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
   const tools = (await request("tools/list")).result.tools.map((tool) => tool.name);
-  check("설치 제품이 Python, browser, Execution Memory operation을 함께 제공",
-    tools.length === 26 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete")
+  check("설치 제품이 Python, browser, Execution Memory, Rehearse-Commit operation을 함께 제공",
+    tools.length === 33 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete")
       && tools.includes("machineImageExport") && tools.includes("memoryCreate") && tools.includes("memoryImport")
-      && tools.includes("eyesAudit") && tools.includes("eyesVerify") && tools.includes("eyesReplay"), tools.join(","));
+      && tools.includes("eyesAudit") && tools.includes("eyesVerify") && tools.includes("eyesReplay")
+      && tools.includes("effectPrepare") && tools.includes("effectCommit") && tools.includes("effectSeal"), tools.join(","));
   await callTool("pythonRun", { code: "product_state = 41" });
   const pythonResponse = await callTool("pythonRun", { code: "product_state + 1" });
   const python = toolText(pythonResponse);
@@ -264,6 +289,76 @@ try {
     expectedRisk: "externalEffect",
   }));
   check("ordered pipeline의 fill과 click이 screenshot 전에 적용", state.result?.result?.value === "installed-ready");
+
+  const effectTransition = { all: [
+    { entityAppeared: { role: "status", nameContains: "effect committed" } },
+    { networkResponse: { method: "POST", urlPath: "/effect", status: 201 } },
+  ], withinMs: 5000 };
+  const effectPrepared = toolText(await callTool("effectPrepare", {
+    transactionId: "effect:mcp-product", intentId: "intent:mcp-product",
+    executionSessionId: "session:installed-mcp", expectedSessionRevisionSha256: memoryCreated.contentSha256,
+    destination: { origin: targetOrigin, subjectSha256: createHash("sha256").update("mcp-product").digest("hex"),
+      purpose: "Commit the exact installed MCP fixture" },
+    effectTemplate: { sessionRef, focus: { requirements: [{ requirementRef: "requirement:commit",
+      select: { role: "button", name: "Commit", actionable: true }, need: ["fact", "affordance"],
+      cardinality: "one" }] }, actions: [{ kind: "click", requirementRef: "requirement:commit",
+      expectedRisk: "externalEffect", verify: effectTransition }] }, expectedTransition: effectTransition,
+  }));
+  const effectRehearsed = toolText(await callTool("effectRehearse", { transactionId: "effect:mcp-product",
+    expectedRevisionSha256: effectPrepared.transaction.contentSha256, mode: "computed", code: "6 * 7",
+    expectedValue: "42" }));
+  const effectGrant = createApprovalGrant({ intent: effectRehearsed.intent, authorityId: "operator:mcp-product",
+    trustDomainSha256: effectPrepared.trustDomain.trustDomainSha256,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), nonce: "nonce:mcp-product",
+    policyVersion: "mcp-product/1" }, approvalPair.privateKey);
+  const effectApproved = toolText(await callTool("effectApprove", { transactionId: "effect:mcp-product",
+    expectedRevisionSha256: effectRehearsed.contentSha256, grant: effectGrant }));
+  const effectTerminal = toolText(await callTool("effectCommit", { transactionId: "effect:mcp-product",
+    expectedRevisionSha256: effectApproved.contentSha256 }));
+  const effectRetried = toolText(await callTool("effectCommit", { transactionId: "effect:mcp-product",
+    expectedRevisionSha256: effectTerminal.contentSha256 }));
+  const effectListed = toolText(await callTool("effectList"));
+  const effectInspected = toolText(await callTool("effectInspect", { transactionId: "effect:mcp-product" }));
+  const effectEvidence = await publishVerifiedEffectPack({ createEvidencePack, publishEvidencePack,
+    repositoryRoot: memoryRoot, outputDir: "packs/effect-mcp-product", repository: projectIdentity,
+    projectId: "mcp-product", transaction: effectTerminal });
+  const effectSealed = toolText(await callTool("effectSeal", { transactionId: "effect:mcp-product",
+    expectedRevisionSha256: effectTerminal.contentSha256, evidencePackDir: effectEvidence.outputDir }));
+  check("설치 MCP가 approved effect를 한 번만 보내고 terminal evidence를 보존",
+    committedEffects === 1 && effectTerminal.state === "terminal"
+      && effectTerminal.effectResult?.terminal === "confirmed"
+      && effectTerminal.effectResult?.actionEvidence?.length === 1
+      && effectRetried.contentSha256 === effectTerminal.contentSha256
+      && effectListed.some((entry) => entry.transactionId === "effect:mcp-product")
+      && effectInspected.transaction.contentSha256 === effectTerminal.contentSha256
+      && effectSealed.state === "sealed" && effectSealed.receipt?.evidencePackSha256 === effectEvidence.contentSha256,
+  JSON.stringify({ committedEffects, state: effectTerminal.state, terminal: effectTerminal.effectResult?.terminal }));
+  const wrongMemory = toolText(await callTool("memoryCreate", { executionSessionId: "session:mcp-destination",
+    project: projectIdentity }));
+  const wrongPrepared = toolText(await callTool("effectPrepare", {
+    transactionId: "effect:mcp-destination", intentId: "intent:mcp-destination",
+    executionSessionId: "session:mcp-destination", expectedSessionRevisionSha256: wrongMemory.contentSha256,
+    destination: { origin: "https://wrong.example", subjectSha256: createHash("sha256")
+      .update("wrong-destination").digest("hex"), purpose: "Reject a changed live destination" },
+    effectTemplate: { sessionRef, focus: { requirements: [{ requirementRef: "requirement:commit",
+      select: { role: "button", name: "Commit", actionable: true }, need: ["fact", "affordance"],
+      cardinality: "one" }] }, actions: [{ kind: "click", requirementRef: "requirement:commit",
+      expectedRisk: "externalEffect", verify: effectTransition }] }, expectedTransition: effectTransition,
+  }));
+  const wrongRehearsed = toolText(await callTool("effectRehearse", { transactionId: "effect:mcp-destination",
+    expectedRevisionSha256: wrongPrepared.transaction.contentSha256, mode: "computed", code: "6 * 7",
+    expectedValue: "42" }));
+  const wrongGrant = createApprovalGrant({ intent: wrongRehearsed.intent, authorityId: "operator:mcp-product",
+    trustDomainSha256: wrongPrepared.trustDomain.trustDomainSha256,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), nonce: "nonce:mcp-destination",
+    policyVersion: "mcp-product/1" }, approvalPair.privateKey);
+  const wrongApproved = toolText(await callTool("effectApprove", { transactionId: "effect:mcp-destination",
+    expectedRevisionSha256: wrongRehearsed.contentSha256, grant: wrongGrant }));
+  const wrongCommitMessage = await callTool("effectCommit", { transactionId: "effect:mcp-destination",
+    expectedRevisionSha256: wrongApproved.contentSha256 });
+  check("승인 뒤 live target origin이 바뀌면 CommitLease 전에 거부",
+    wrongCommitMessage.result?.isError === true && toolText(wrongCommitMessage).code === "EFFECT_DESTINATION_MISMATCH"
+      && committedEffects === 1);
 
   const read = await Promise.all(artifacts.map((artifact) => readArtifact(artifact.artifactRef)));
   check("설치 제품 artifact chunk, digest, PNG/JPEG/WebP signature",

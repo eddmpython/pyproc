@@ -75,6 +75,7 @@
     "scripts/automationSpace",
     "scripts/controlProtocol",
     "scripts/executionMemory",
+    "scripts/effectTransaction",
     "scripts/browserControl",
     "scripts/perception",
     "scripts/verification",

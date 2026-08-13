@@ -1,4 +1,5 @@
 // Machine Entrance의 recipe, initializer, doctor, CLI argument 계약을 고정한다.
+import { generateKeyPairSync } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,9 @@ export async function assertMachineEntranceContract() {
     await mkdir(engineRoot, { recursive: true });
     await writeFile(join(engineRoot, "pyodide.js"), "fixture");
     await writeFile(join(engineRoot, "pyodide-lock.json"), "{}");
+    const approvalPublicKey = join(projectRoot, "approval-public.pem");
+    await writeFile(approvalPublicKey, generateKeyPairSync("ed25519").publicKey
+      .export({ type: "spki", format: "pem" }));
 
     const parsed = parseMachineProfileInitArguments([
       "--recipe", "pythonOnly", "--project-root", projectRoot, "--engine-root", "vendor/pyodide", "--dry-run",
@@ -33,6 +37,17 @@ export async function assertMachineEntranceContract() {
     assert(parsed.profile.executionMemory.root === join(projectRoot, ".pyproc", "memory")
       && parsed.profile.executionMemory.importRoots[0] === join(projectRoot, "handoffs"),
     "Machine Entrance CLI가 Execution Memory 경로를 absolute profile로 컴파일하지 않았다");
+    const effectParsed = parseMachineProfileInitArguments([
+      "--recipe", "authorizedBrowser", "--project-root", projectRoot, "--engine-root", "vendor/pyodide",
+      "--origin", "https://example.test", "--max-risk", "externalEffect", "--purpose", "Commit fixture",
+      "--acknowledge-effects", "--action", "snapshot", "--action", "click",
+      "--execution-memory-root", ".pyproc/effect-memory", "--enable-effect-transactions",
+      "--effect-approval-authority", "operator:fixture=approval-public.pem",
+    ]);
+    assert(effectParsed.profile.effectTransactions.enabled
+      && effectParsed.profile.effectTransactions.approvalAuthorities[0].authorityId === "operator:fixture"
+      && effectParsed.profile.effectTransactions.approvalAuthorities[0].publicKeyFile === approvalPublicKey,
+    "Machine Entrance CLI가 Rehearse-Commit authority를 absolute profile로 컴파일하지 않았다");
     assert(parseMachineRunArguments(["--config", "profile.json", "--code", "40 + 2"]).code === "40 + 2",
       "Machine Entrance run CLI가 shell-safe Python source를 보존하지 않았다");
 

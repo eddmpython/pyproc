@@ -268,6 +268,26 @@ export async function assertAutomationRecordingContract() {
     assert.deepEqual((await loadAutomationRecording(orderedFile)).entries.map((entry) => entry.input.name),
       ["first", "second"]);
 
+    const boundedFile = join(root, "bounded-input.json");
+    let deliveredValue = null;
+    const boundedProvider = {
+      ...provider,
+      spaceId: "space:boundedInput",
+      authorize(operation) { return { operation }; },
+      execute(operation, input) { deliveredValue = input.actions[0].value; return { applied: true }; },
+      async close() {},
+    };
+    const boundedRouter = new AutomationSpaceRouter(await RecordingSpace.open({ provider: boundedProvider,
+      file: boundedFile }));
+    const placeholder = { secretEnv: "PAYMENT_SECRET", bindingSha256: "a".repeat(64) };
+    await boundedRouter.invoke("automation.act", { actions: [{ kind: "fill", value: "fixture-bound-value" }] },
+      { recordingInput: { actions: [{ kind: "fill", value: placeholder }] } });
+    await boundedRouter.close();
+    const boundedRecording = await loadAutomationRecording(boundedFile);
+    assert.equal(deliveredValue, "fixture-bound-value");
+    assert.deepEqual(boundedRecording.entries[0].input.actions[0].value, placeholder);
+    assert.equal((await readFile(boundedFile, "utf8")).includes("fixture-bound-value"), false);
+
     const chunkFile = join(root, "chunk-limit.json");
     let chunkEffects = 0;
     const chunkProvider = {

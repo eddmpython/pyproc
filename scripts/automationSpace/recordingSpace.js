@@ -131,6 +131,7 @@ export class RecordingSpace {
 
   async execute(operation, input, context) {
     this._assertWritable();
+    const persistedInput = context?.recordingInput === undefined ? input : context.recordingInput;
     if (operation === "automation.space.inspect") {
       const output = await this.provider.execute(operation, input, context);
       return Object.freeze({ ...output, recording: this._status() });
@@ -140,7 +141,7 @@ export class RecordingSpace {
     catch (providerError) {
       const terminalError = canonicalControlError(providerError);
       try {
-        this._append(operation, input, { ok: false, error: terminalError }, [], []);
+        this._append(operation, persistedInput, { ok: false, error: terminalError }, [], []);
         await this._persist();
       } catch (recordingError) {
         this._fatalError = recordingError;
@@ -151,7 +152,7 @@ export class RecordingSpace {
     try {
       if (operation === "artifact.read") this._collectArtifactChunk(output);
       const copied = recordingCopy(output, this.recording);
-      this._append(operation, input, { ok: true, output: copied.output }, copied.inlineArtifacts, copied.artifactRefs);
+      this._append(operation, persistedInput, { ok: true, output: copied.output }, copied.inlineArtifacts, copied.artifactRefs);
       await this._persist();
     } catch (error) {
       this._fatalError = error;

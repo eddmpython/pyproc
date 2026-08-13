@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -68,6 +68,29 @@ export async function assertBrowserAutomationProductContract() {
   assert(JSON.stringify(validateMcpProductConfig(memoryValidated.config,
     { baseEnv: { PYPROC_CONTRACT_SECRET: "fixture-secret-value" } }).config)
     === JSON.stringify(memoryValidated.config), "Execution Memory 정규 manifest가 roundtrip하지 않았다");
+  const approvalPublicKey = join(root, "approval-public.pem");
+  const approvalPair = generateKeyPairSync("ed25519");
+  await writeFile(approvalPublicKey, approvalPair.publicKey.export({ type: "spki", format: "pem" }));
+  const effectManifest = { ...manifest,
+    browser: { ...manifest.browser, maxRisk: "externalEffect", actions: ["snapshot", "click"],
+      externalEffects: "acknowledged", purpose: "Commit an exact approved fixture" },
+    executionMemory: { enabled: true, root: memoryRoot, importRoots: [importRoot],
+      secretEnv: ["PYPROC_CONTRACT_SECRET"] },
+    effectTransactions: { enabled: true, approvalAuthorities: [{
+      authorityId: "operator:contract", publicKeyFile: approvalPublicKey,
+    }] },
+  };
+  const effectValidated = validateMcpProductConfig(effectManifest,
+    { baseEnv: { PYPROC_CONTRACT_SECRET: "fixture-secret-value" } });
+  assert(effectValidated.config.effectTransactions.enabled
+    && effectValidated.config.effectTransactions.approvalAuthorities[0].publicKeyFile === approvalPublicKey
+    && effectValidated.env.PYPROC_EFFECT_TRANSACTIONS === "1"
+    && JSON.parse(effectValidated.env.PYPROC_EFFECT_SECRET_BINDINGS).PYPROC_CONTRACT_SECRET === "fixture-secret-value"
+    && !JSON.stringify(effectValidated.config).includes("fixture-secret-value"),
+  "Rehearse-Commit manifest가 trusted authority와 ephemeral secret provider를 분리하지 못했다");
+  assert((await errorOf(() => validateMcpProductConfig({ ...manifest,
+    effectTransactions: effectManifest.effectTransactions })))?.message.includes("requires executionMemory"),
+  "Rehearse-Commit이 Execution Memory 없이 열렸다");
   const missingSecret = await errorOf(() => validateMcpProductConfig({ ...manifest,
     executionMemory: { enabled: true, root: memoryRoot, secretEnv: ["PYPROC_CONTRACT_SECRET"] },
   }));

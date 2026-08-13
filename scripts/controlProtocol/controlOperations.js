@@ -27,6 +27,13 @@ export const CONTROL_TOOL_OPERATIONS = Object.freeze({
   memoryInspect: "memory.inspect",
   memoryExport: "memory.export",
   memoryImport: "memory.import",
+  effectPrepare: "effect.prepare",
+  effectRehearse: "effect.rehearse",
+  effectApprove: "effect.approve",
+  effectCommit: "effect.commit",
+  effectInspect: "effect.inspect",
+  effectList: "effect.list",
+  effectSeal: "effect.seal",
 });
 
 const TOOL_FOR_OPERATION = Object.freeze(Object.fromEntries(
@@ -42,7 +49,7 @@ export function controlToolForOperation(operation) {
 }
 
 export function controlSuccessOutcome(operation, input = {}) {
-  if (["memory.open", "memory.list", "memory.inspect"].includes(operation)) return "observed";
+  if (["memory.open", "memory.list", "memory.inspect", "effect.inspect", "effect.list"].includes(operation)) return "observed";
   if (operation === "verification.audit") return "applied";
   if (operation === "automation.command") return input.expectedRisk === "read" ? "observed" : "applied";
   if (operation === "automation.act") {
@@ -52,7 +59,7 @@ export function controlSuccessOutcome(operation, input = {}) {
   if (operation === "machine.run" || operation === "machine.image.export" || operation.startsWith("machine.checkpoint.")
     || operation === "machine.reset" || operation === "automation.target.open"
     || operation === "automation.session.attach" || operation === "automation.session.detach"
-    || operation === "artifact.delete" || operation.startsWith("memory.")) return "applied";
+    || operation === "artifact.delete" || operation.startsWith("memory.") || operation.startsWith("effect.")) return "applied";
   return "observed";
 }
 

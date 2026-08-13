@@ -111,11 +111,11 @@ export async function assertControlProtocolContract() {
   "JS control client의 cancel write 실패와 원 request가 canonical outcome으로 함께 닫히지 않았다");
 
   const mapped = Object.entries(CONTROL_TOOL_OPERATIONS);
-  assert(mapped.length === 26 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
-    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 26종 mapping이 양방향이 아니다");
+  assert(mapped.length === 33 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
+    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 33종 mapping이 양방향이 아니다");
   const catalog = controlOperationCatalog(mapped.map(([name]) => ({ name, inputSchema: { type: "object" } })));
-  assert(catalog.length === 26 && catalog.every((entry) => entry.operationVersion === 1),
-    "control operation catalog가 versioned 26종이 아니다");
+  assert(catalog.length === 33 && catalog.every((entry) => entry.operationVersion === 1),
+    "control operation catalog가 versioned 33종이 아니다");
   const withoutSnapshotTools = createBrowserControlTools({ actions: ["screenshot"] });
   const withoutSnapshotCatalog = controlOperationCatalog(withoutSnapshotTools);
   assert(withoutSnapshotTools.length === 9

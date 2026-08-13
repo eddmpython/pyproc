@@ -1,10 +1,14 @@
 // 공개 JavaScript Control facade가 기존 protocol 의미론 위에만 사는지 고정한다.
 import { PassThrough } from "node:stream";
 import {
+  createApprovalGrant,
+  createEffectTransactionRegistry,
   ControlRemoteError,
   ControlRequest,
+  EffectTransactionRegistry,
   ExecutionMemoryArtifacts,
   ExecutionMemoryRegistry,
+  FileEffectTransactionStore,
   FileExecutionMemoryStore,
   PerceptionClient,
   PerceptionEntity,
@@ -32,8 +36,11 @@ function serverHello() {
 export async function assertControlJsSdkContract() {
   for (const value of [ControlRemoteError, ControlRequest, PerceptionClient, PerceptionEntity,
     PerceptionQueryResult, PyProcControlClient, ExecutionMemoryArtifacts, ExecutionMemoryRegistry,
-    FileExecutionMemoryStore]) {
+    FileExecutionMemoryStore, EffectTransactionRegistry, FileEffectTransactionStore]) {
     assert(typeof value === "function", "pyproc/control 공개 class가 누락됐다");
+  }
+  for (const value of [createApprovalGrant, createEffectTransactionRegistry]) {
+    assert(typeof value === "function", "pyproc/control Rehearse-Commit factory가 누락됐다");
   }
   for (const method of ["auditExperience", "verifyExperience", "replayEvidencePack"]) {
     assert(typeof PyProcControlClient.prototype[method] === "function", `verification facade가 누락됐다: ${method}`);
@@ -42,6 +49,10 @@ export async function assertControlJsSdkContract() {
     "completeExecutionSession", "openExecutionSession", "listExecutionSessions", "inspectExecutionSession",
     "exportExecutionHandoff", "importExecutionHandoff"]) {
     assert(typeof PyProcControlClient.prototype[method] === "function", `Execution Memory facade가 누락됐다: ${method}`);
+  }
+  for (const method of ["prepareEffectTransaction", "rehearseEffectTransaction", "approveEffectTransaction",
+    "commitEffectTransaction", "inspectEffectTransaction", "listEffectTransactions", "sealEffectTransaction"]) {
+    assert(typeof PyProcControlClient.prototype[method] === "function", `Rehearse-Commit facade가 누락됐다: ${method}`);
   }
 
   const readable = new PassThrough();

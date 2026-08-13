@@ -1,6 +1,7 @@
 import { createWebComputer, open } from "../index.js";
 import type { MachineStore } from "../src/machine/index.js";
 import {
+  createEffectTransactionRegistry,
   createExecutionMemoryRegistry,
   PyProcControlClient,
   ControlRemoteError,
@@ -66,8 +67,29 @@ async function controlSurface() {
   await client.listExecutionSessions();
   await client.inspectExecutionSession("session:typed");
   await client.exportExecutionHandoff("session:typed", "typed-handoff");
+  const preparedEffect = await client.prepareEffectTransaction({
+    transactionId: "effect:typed",
+    intentId: "intent:typed",
+    executionSessionId: "session:typed",
+    expectedSessionRevisionSha256: memory.output.contentSha256,
+    destination: { origin: "https://example.test", subjectSha256: "a".repeat(64), purpose: "Typed effect" },
+    effectTemplate: {
+      sessionRef: { protocolVersion: "1", brokerId: "broker:typed", brokerEpoch: "epoch:typed",
+        sessionId: "browser:typed", targetRef: "target:typed" },
+      focus: { requirements: [{ requirementRef: "requirement:submit", select: { role: "button", name: "Submit" },
+        need: ["fact", "affordance"], cardinality: "one" }] },
+      actions: [{ kind: "click", requirementRef: "requirement:submit", expectedRisk: "externalEffect",
+        verify: { entityAppeared: { role: "status" } } }],
+    },
+    expectedTransition: { entityAppeared: { role: "status" } },
+  });
+  const rehearsedEffect = await client.rehearseEffectTransaction("effect:typed",
+    preparedEffect.output.transaction.contentSha256, { mode: "computed", code: "40 + 2", expectedValue: "42" });
+  await client.inspectEffectTransaction("effect:typed");
+  await client.listEffectTransactions();
+  const effectState: string = rehearsedEffect.output.state;
   await client.close();
-  return `${value}:${verdict}`;
+  return `${value}:${verdict}:${effectState}`;
 }
 void controlSurface;
 
@@ -81,6 +103,14 @@ async function directExecutionMemorySurface() {
   return sessions.length;
 }
 void directExecutionMemorySurface;
+
+async function directEffectTransactionSurface() {
+  const registry = await createEffectTransactionRegistry({ root: "C:/execution-memory",
+    approvalAuthorities: [{ authorityId: "operator:typed", publicKey: new Uint8Array() }] });
+  const transactions: readonly Readonly<Record<string, unknown>>[] = await registry.listTransactions();
+  return transactions.length;
+}
+void directEffectTransactionSurface;
 
 // @ts-expect-error the legacy wrapper is removed; durable options are direct
 open({ persistent: true });

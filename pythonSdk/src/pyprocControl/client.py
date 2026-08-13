@@ -515,6 +515,51 @@ class PyProcClient:
             "approvedPermissionManifestSha256": approvedPermissionManifestSha256,
         }, timeout=timeout)
 
+    def prepareEffectTransaction(self, input: dict[str, Any], *,
+                                 timeout: float | None = None) -> ControlResult:
+        return self.request("effect.prepare", input, timeout=timeout)
+
+    def rehearseEffectTransaction(self, transactionId: str, expectedRevisionSha256: str,
+                                   rehearsal: dict[str, Any], *,
+                                   timeout: float | None = None) -> ControlResult:
+        return self.request("effect.rehearse", {
+            "transactionId": transactionId,
+            "expectedRevisionSha256": expectedRevisionSha256,
+            **rehearsal,
+        }, timeout=timeout)
+
+    def approveEffectTransaction(self, transactionId: str, expectedRevisionSha256: str,
+                                  grant: dict[str, Any], *,
+                                  timeout: float | None = None) -> ControlResult:
+        return self.request("effect.approve", {
+            "transactionId": transactionId,
+            "expectedRevisionSha256": expectedRevisionSha256,
+            "grant": grant,
+        }, timeout=timeout)
+
+    def commitEffectTransaction(self, transactionId: str, expectedRevisionSha256: str, *,
+                                 timeout: float | None = None) -> ControlResult:
+        return self.request("effect.commit", {
+            "transactionId": transactionId,
+            "expectedRevisionSha256": expectedRevisionSha256,
+        }, timeout=timeout)
+
+    def inspectEffectTransaction(self, transactionId: str, *,
+                                 timeout: float | None = None) -> ControlResult:
+        return self.request("effect.inspect", {"transactionId": transactionId}, timeout=timeout)
+
+    def listEffectTransactions(self, *, timeout: float | None = None) -> ControlResult:
+        return self.request("effect.list", timeout=timeout)
+
+    def sealEffectTransaction(self, transactionId: str, expectedRevisionSha256: str,
+                              evidencePackDir: str | os.PathLike[str], *,
+                              timeout: float | None = None) -> ControlResult:
+        return self.request("effect.seal", {
+            "transactionId": transactionId,
+            "expectedRevisionSha256": expectedRevisionSha256,
+            "evidencePackDir": str(Path(evidencePackDir).resolve()),
+        }, timeout=timeout)
+
     def perception(self, sessionRef: dict[str, Any] | None = None) -> PerceptionClient:
         return PerceptionClient(self, sessionRef)
 

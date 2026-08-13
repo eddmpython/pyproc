@@ -65,6 +65,10 @@ Execution Memory:
   --execution-memory-root <directory>
   --execution-memory-import-root <directory>  Allowed handoff import root, repeatable
   --execution-memory-secret-env <name>         Secret environment variable to reject, repeatable
+
+Rehearse-Commit:
+  --enable-effect-transactions
+  --effect-approval-authority <id>=<public-key-file>  Trusted Ed25519 authority, repeatable
 `;
 
 function parseArgs(argv) {
@@ -125,6 +129,10 @@ try {
             root: loaded.config.executionMemory.root,
             importRoots: loaded.config.executionMemory.importRoots,
             secretEnv: loaded.config.executionMemory.secretEnv,
+          } : { enabled: false },
+          effectTransactions: loaded.config.effectTransactions.enabled ? {
+            enabled: true,
+            approvalAuthorities: loaded.config.effectTransactions.approvalAuthorities,
           } : { enabled: false },
           browser: loaded.config.browser.enabled ? {
             enabled: true,

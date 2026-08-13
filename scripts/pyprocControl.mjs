@@ -183,6 +183,10 @@ try {
             importRoots: loaded.config.executionMemory.importRoots,
             secretEnv: loaded.config.executionMemory.secretEnv,
           } : { enabled: false },
+          effectTransactions: loaded.config.effectTransactions.enabled ? {
+            enabled: true,
+            approvalAuthorities: loaded.config.effectTransactions.approvalAuthorities,
+          } : { enabled: false },
           automation: loaded.config.browser.enabled ? {
             enabled: true,
             provider: loaded.config.browser.provider,

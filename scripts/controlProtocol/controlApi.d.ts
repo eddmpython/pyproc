@@ -94,6 +94,57 @@ export interface ExecutionMemoryRevision extends Readonly<Record<string, unknown
   readonly contentSha256: string;
 }
 
+export interface EffectDestination {
+  readonly origin: string;
+  readonly subjectSha256: string;
+  readonly purpose: string;
+}
+
+export interface EffectSecretPlaceholder {
+  readonly secretEnv: string;
+}
+
+export interface EffectTemplate extends Readonly<Record<string, unknown>> {
+  readonly sessionRef: ControlSessionRef;
+  readonly focus: Readonly<Record<string, unknown>>;
+  readonly actions: readonly Readonly<Record<string, unknown>>[];
+}
+
+export interface ApprovalGrant extends Readonly<Record<string, unknown>> {
+  readonly format: "pyproc.approvalGrant";
+  readonly version: 1;
+  readonly authorityId: string;
+  readonly trustDomainSha256: string;
+  readonly intentSha256: string;
+  readonly destinationSha256: string;
+  readonly risk: "externalEffect";
+  readonly sessionRevisionSha256: string;
+  readonly expiresAt: string;
+  readonly nonce: string;
+  readonly policyVersion: string;
+  readonly contentSha256: string;
+  readonly signature: string;
+}
+
+export interface EffectTransactionRevision extends Readonly<Record<string, unknown>> {
+  readonly format: "pyproc.effectTransactionRevision";
+  readonly version: 1;
+  readonly transactionId: string;
+  readonly revision: number;
+  readonly parents: readonly string[];
+  readonly state: "prepared" | "rehearsed" | "approved" | "sending" | "finalizing" | "terminal" | "sealed";
+  readonly intent: Readonly<Record<string, unknown>> & { readonly contentSha256: string };
+  readonly rehearsals: readonly (Readonly<Record<string, unknown>> & { readonly contentSha256: string })[];
+  readonly approval: ApprovalGrant | null;
+  readonly lease: (Readonly<Record<string, unknown>> & { readonly contentSha256: string }) | null;
+  readonly effectResult: (Readonly<Record<string, unknown>> & { readonly terminal: string;
+    readonly contentSha256: string }) | null;
+  readonly receipt: (Readonly<Record<string, unknown>> & { readonly contentSha256: string }) | null;
+  readonly session: Readonly<{ readonly executionSessionId: string; readonly baseSha256: string;
+    readonly pendingSha256: string | null; readonly terminalSha256: string | null }>;
+  readonly contentSha256: string;
+}
+
 export interface CheckpointSaveOutput {
   readonly index: number;
   readonly changedPages: number;
@@ -255,6 +306,73 @@ export function createExecutionMemoryRegistry(options: Readonly<{
   root: string;
   secretValues?: readonly string[];
 }>): Promise<ExecutionMemoryRegistry>;
+
+export class FileEffectTransactionStore {
+  private constructor();
+  static open(root: string, options: Readonly<{
+    approvalAuthorities: readonly Readonly<{ authorityId: string; publicKey: string | Uint8Array }>[];
+    secretBindings?: Readonly<Record<string, string>>;
+  }>): Promise<FileEffectTransactionStore>;
+  readonly root: string;
+  readonly trustDomainSha256: string;
+  inspectTrustDomain(): Readonly<Record<string, unknown>>;
+}
+
+export class EffectTransactionRegistry {
+  private constructor();
+  static open(options: Readonly<{
+    root: string;
+    approvalAuthorities: readonly Readonly<{ authorityId: string; publicKey: string | Uint8Array }>[];
+    secretBindings?: Readonly<Record<string, string>>;
+  }>): Promise<EffectTransactionRegistry>;
+  readonly store: FileEffectTransactionStore;
+  inspectTrustDomain(): Readonly<Record<string, unknown>>;
+  prepareTransaction(input: Readonly<{
+    transactionId: string;
+    intentId: string;
+    destination: EffectDestination;
+    effectTemplate: EffectTemplate;
+    expectedTransition: Readonly<Record<string, unknown>>;
+    environmentSha256: string;
+    executionSessionId: string;
+    sessionRevisionSha256: string;
+    source?: string;
+  }>): Promise<EffectTransactionRevision>;
+  bindPendingSession(transactionId: string, expectedRevisionSha256: string,
+    pendingSha256: string, source?: string): Promise<EffectTransactionRevision>;
+  addRehearsal(transactionId: string, expectedRevisionSha256: string,
+    input: Readonly<Record<string, unknown>>, source?: string): Promise<EffectTransactionRevision>;
+  approveTransaction(transactionId: string, expectedRevisionSha256: string,
+    grant: ApprovalGrant, source?: string): Promise<EffectTransactionRevision>;
+  reserveCommit(transactionId: string, expectedRevisionSha256: string,
+    before: Readonly<Record<string, unknown>>, source?: string): Promise<EffectTransactionRevision>;
+  recordEffectResult(transactionId: string, expectedRevisionSha256: string,
+    result: Readonly<Record<string, unknown>>, source?: string): Promise<EffectTransactionRevision>;
+  bindTerminalSession(transactionId: string, expectedRevisionSha256: string,
+    terminalSha256: string, source?: string): Promise<EffectTransactionRevision>;
+  sealTransaction(transactionId: string, expectedRevisionSha256: string,
+    evidence: ExecutionMemoryEvidenceLink, source?: string): Promise<EffectTransactionRevision>;
+  openTransaction(transactionId: string): Promise<EffectTransactionRevision>;
+  listTransactions(): Promise<readonly Readonly<Record<string, unknown>>[]>;
+}
+
+export function createEffectTransactionRegistry(options: Readonly<{
+  root: string;
+  approvalAuthorities: readonly Readonly<{ authorityId: string; publicKey: string | Uint8Array }>[];
+  secretBindings?: Readonly<Record<string, string>>;
+}>): Promise<EffectTransactionRegistry>;
+
+export function createApprovalGrant(input: Readonly<{
+  intent: Readonly<Record<string, unknown>>;
+  authorityId: string;
+  trustDomainSha256: string;
+  expiresAt: string;
+  nonce: string;
+  policyVersion: string;
+}>, privateKey: string | Uint8Array): ApprovalGrant;
+
+export function verifyApprovalGrant(grant: ApprovalGrant, intent: Readonly<Record<string, unknown>>,
+  options: Readonly<Record<string, unknown>>): ApprovalGrant;
 
 export type ControlSessionRef = Readonly<Record<string, unknown>>;
 
@@ -454,6 +572,32 @@ export class PyProcControlClient {
     trustedPublicKeyFile: string;
     approvedPermissionManifestSha256: string;
   }>): Promise<ControlResult<ExecutionMemoryRevision>>;
+  prepareEffectTransaction(input: Readonly<{
+    transactionId: string;
+    intentId: string;
+    executionSessionId: string;
+    expectedSessionRevisionSha256: string;
+    destination: EffectDestination;
+    effectTemplate: EffectTemplate;
+    expectedTransition: Readonly<Record<string, unknown>>;
+  }>, options?: ControlRequestOptions): Promise<ControlResult<Readonly<{
+    transaction: EffectTransactionRevision;
+    trustDomain: Readonly<Record<string, unknown>>;
+    executionSession: ExecutionMemoryRevision;
+  }>>>;
+  rehearseEffectTransaction(transactionId: string, expectedRevisionSha256: string,
+    rehearsal: Readonly<{ mode: "computed" | "provider"; code?: string; expectedValue?: string | null;
+      branch?: string }>, options?: ControlRequestOptions): Promise<ControlResult<EffectTransactionRevision>>;
+  approveEffectTransaction(transactionId: string, expectedRevisionSha256: string,
+    grant: ApprovalGrant, options?: ControlRequestOptions): Promise<ControlResult<EffectTransactionRevision>>;
+  commitEffectTransaction(transactionId: string, expectedRevisionSha256: string,
+    options?: ControlRequestOptions): Promise<ControlResult<EffectTransactionRevision>>;
+  inspectEffectTransaction(transactionId: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  listEffectTransactions(options?: ControlRequestOptions):
+    Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
+  sealEffectTransaction(transactionId: string, expectedRevisionSha256: string, evidencePackDir: string,
+    options?: ControlRequestOptions): Promise<ControlResult<EffectTransactionRevision>>;
   perception(sessionRef?: ControlSessionRef | null): PerceptionClient;
   close(): Promise<void>;
 }

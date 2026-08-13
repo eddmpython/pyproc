@@ -130,9 +130,16 @@ export async function createExecutionMemoryHandlers({
     return typeof recordingProvider === "function"
       ? recordingProvider(captureSelected) : captureSelected(recordingConfig);
   };
+  const captureEvidence = async (pathInput) => registry.artifacts.captureEvidence(
+    allowedPath(pathInput, roots, "evidencePackDir"));
 
   return Object.freeze({
     registry,
+    permissions,
+    captureMachine,
+    captureBrowser,
+    captureEvidence,
+    allowedImportPath: (pathInput, label) => allowedPath(pathInput, roots, label),
     handlers: Object.freeze({
       "memory.create": async (input, { signal, requestId }) => registry.createSession({
         executionSessionId: input.executionSessionId,
@@ -151,8 +158,7 @@ export async function createExecutionMemoryHandlers({
       },
       "memory.complete": async (input, { signal, requestId }) => {
         const current = await registry.openSession(input.executionSessionId);
-        const packDir = allowedPath(input.evidencePackDir, roots, "evidencePackDir");
-        const evidence = await registry.artifacts.captureEvidence(packDir);
+        const evidence = await captureEvidence(input.evidencePackDir);
         const machine = await captureMachine(current.machine.machineId, signal, requestId);
         return registry.completeSession(input.executionSessionId, input.expectedRevisionSha256, { machine, evidence });
       },

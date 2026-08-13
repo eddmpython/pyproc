@@ -11,10 +11,10 @@ export const MACHINE_PROFILE_RECIPES = Object.freeze([
 const INPUT_KEYS = new Set([
   "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executable", "headed", "gpu",
   "allowedOrigins", "actions", "methods", "fileRoots", "maxRisk", "externalEffects", "purpose",
-  "artifacts", "viewport", "recording", "executionMemory",
+  "artifacts", "viewport", "recording", "executionMemory", "effectTransactions",
 ]);
 const BROWSER_INPUT_KEYS = Object.freeze([...INPUT_KEYS].filter((key) => ![
-  "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executionMemory",
+  "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executionMemory", "effectTransactions",
 ].includes(key)));
 const OBSERVE_ACTIONS = Object.freeze(["snapshot", "screenshot", "waitFor"]);
 
@@ -121,6 +121,7 @@ export function compileMachineProfile(input, { baseEnv = process.env } = {}) {
     engine: engineFrom(value),
     browser,
     ...(value.executionMemory === undefined ? {} : { executionMemory: value.executionMemory }),
+    ...(value.effectTransactions === undefined ? {} : { effectTransactions: value.effectTransactions }),
     ...(value.timeoutMs === undefined ? {} : { timeoutMs: value.timeoutMs }),
   }, { baseEnv }).config;
 }

@@ -9,7 +9,7 @@ import {
   AUTOMATION_RECORDING_MAX_TOTAL_ARTIFACT_BYTES,
 } from "./automationSpace/automationRecording.js";
 
-const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "timeoutMs"]);
+const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["root", "indexURL"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
@@ -23,6 +23,8 @@ const ARTIFACT_KEYS = new Set([
   "maxArtifactBytes", "maxTotalBytes", "maxArtifacts", "inlineMaxBytes", "ttlMs",
 ]);
 const EXECUTION_MEMORY_KEYS = new Set(["enabled", "root", "importRoots", "secretEnv"]);
+const EFFECT_TRANSACTION_KEYS = new Set(["enabled", "approvalAuthorities"]);
+const APPROVAL_AUTHORITY_KEYS = new Set(["authorityId", "publicKeyFile"]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_INDEX_URL", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
@@ -36,6 +38,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_AUTOMATION_RECORDING",
   "PYPROC_EXECUTION_MEMORY_ROOT", "PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS",
   "PYPROC_EXECUTION_MEMORY_SECRET_VALUES",
+  "PYPROC_EFFECT_TRANSACTIONS", "PYPROC_EFFECT_APPROVAL_AUTHORITIES", "PYPROC_EFFECT_SECRET_BINDINGS",
 ]);
 
 function plainObject(value, label) {
@@ -257,7 +260,8 @@ function normalizedExecutionMemory(input = { enabled: false }, baseEnv = {}) {
   if (!enabled) {
     const extra = Object.keys(memory).filter((key) => key !== "enabled");
     if (extra.length) throw new TypeError(`disabled executionMemory does not accept ${extra[0]}`);
-    return Object.freeze({ config: Object.freeze({ enabled: false }), secretValues: Object.freeze([]) });
+    return Object.freeze({ config: Object.freeze({ enabled: false }), secretValues: Object.freeze([]),
+      secretBindings: Object.freeze({}) });
   }
   if (typeof memory.root !== "string" || !isAbsolute(memory.root)) {
     throw new TypeError("executionMemory.root must be an absolute directory path");
@@ -279,10 +283,48 @@ function normalizedExecutionMemory(input = { enabled: false }, baseEnv = {}) {
     return value;
   });
   return Object.freeze({ config: Object.freeze({ enabled: true, root, importRoots: Object.freeze(importRoots),
-    secretEnv: Object.freeze(secretEnv) }), secretValues: Object.freeze(secretValues) });
+    secretEnv: Object.freeze(secretEnv) }), secretValues: Object.freeze(secretValues),
+    secretBindings: Object.freeze(Object.fromEntries(secretEnv.map((name, index) => [name, secretValues[index]]))) });
 }
 
-function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = []) {
+function normalizedEffectTransactions(input = { enabled: false }, { executionMemory, browser } = {}) {
+  const effect = plainObject(input, "effectTransactions");
+  knownKeys(effect, EFFECT_TRANSACTION_KEYS, "effectTransactions");
+  const enabled = optionalBoolean(effect.enabled, "effectTransactions.enabled");
+  if (!enabled) {
+    const extra = Object.keys(effect).filter((key) => key !== "enabled");
+    if (extra.length) throw new TypeError(`disabled effectTransactions does not accept ${extra[0]}`);
+    return Object.freeze({ enabled: false });
+  }
+  if (!executionMemory.enabled) throw new TypeError("effectTransactions requires executionMemory.enabled true");
+  if (!browser.enabled || browser.maxRisk !== "externalEffect" || browser.externalEffects !== "acknowledged") {
+    throw new TypeError("effectTransactions requires an acknowledged externalEffect browser profile");
+  }
+  if (!Array.isArray(effect.approvalAuthorities) || effect.approvalAuthorities.length < 1
+    || effect.approvalAuthorities.length > 16) {
+    throw new TypeError("effectTransactions.approvalAuthorities requires 1 to 16 entries");
+  }
+  const seen = new Set();
+  const approvalAuthorities = effect.approvalAuthorities.map((entry, index) => {
+    const authority = plainObject(entry, `effectTransactions.approvalAuthorities[${index}]`);
+    knownKeys(authority, APPROVAL_AUTHORITY_KEYS, `effectTransactions.approvalAuthorities[${index}]`);
+    if (!/^[A-Za-z][A-Za-z0-9._:-]{0,127}$/.test(String(authority.authorityId || ""))
+      || seen.has(authority.authorityId)) throw new TypeError("effect transaction approval authorityId is invalid or duplicated");
+    seen.add(authority.authorityId);
+    if (typeof authority.publicKeyFile !== "string" || !isAbsolute(authority.publicKeyFile)) {
+      throw new TypeError("effect transaction publicKeyFile must be absolute");
+    }
+    let publicKeyFile;
+    try {
+      publicKeyFile = realpathSync(resolve(authority.publicKeyFile));
+      if (!statSync(publicKeyFile).isFile()) throw new Error("not a file");
+    } catch (error) { throw new TypeError(`effect transaction public key is unavailable: ${authority.publicKeyFile}`); }
+    return Object.freeze({ authorityId: authority.authorityId, publicKeyFile });
+  });
+  return Object.freeze({ enabled: true, approvalAuthorities: Object.freeze(approvalAuthorities) });
+}
+
+function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [], effectSecretBindings = {}) {
   const env = { ...baseEnv };
   for (const key of CONTROLLED_ENV) delete env[key];
   env.PYPROC_MCP_TIMEOUT = String(config.timeoutMs);
@@ -292,6 +334,11 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [])
     env.PYPROC_EXECUTION_MEMORY_ROOT = config.executionMemory.root;
     env.PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS = config.executionMemory.importRoots.join(delimiter);
     env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES = JSON.stringify(executionMemorySecrets);
+  }
+  if (config.effectTransactions.enabled) {
+    env.PYPROC_EFFECT_TRANSACTIONS = "1";
+    env.PYPROC_EFFECT_APPROVAL_AUTHORITIES = JSON.stringify(config.effectTransactions.approvalAuthorities);
+    env.PYPROC_EFFECT_SECRET_BINDINGS = JSON.stringify(effectSecretBindings);
   }
   if (!config.browser.enabled) return env;
   const browser = config.browser;
@@ -327,15 +374,21 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
   knownKeys(value, ROOT_KEYS, "pyproc-mcp config");
   if (value.schemaVersion !== 1) throw new TypeError("schemaVersion must be 1");
   const executionMemory = normalizedExecutionMemory(value.executionMemory, baseEnv);
+  const browser = normalizedBrowser(value.browser);
+  const effectTransactions = normalizedEffectTransactions(value.effectTransactions, {
+    executionMemory: executionMemory.config, browser,
+  });
   const config = Object.freeze({
     schemaVersion: 1,
     engine: normalizedEngine(value.engine),
-    browser: normalizedBrowser(value.browser),
+    browser,
     executionMemory: executionMemory.config,
+    effectTransactions,
     timeoutMs: value.timeoutMs === undefined ? 180000
       : positiveInteger(value.timeoutMs, "timeoutMs", 900000),
   });
-  const env = projectedEnvironment(config, baseEnv, executionMemory.secretValues);
+  const env = projectedEnvironment(config, baseEnv, executionMemory.secretValues,
+    effectTransactions.enabled ? executionMemory.secretBindings : {});
   const browserControl = config.browser.enabled
     ? parseBrowserControlConfig(env, { timeoutMs: config.timeoutMs })
     : null;

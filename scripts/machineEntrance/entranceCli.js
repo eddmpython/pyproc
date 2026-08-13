@@ -31,10 +31,12 @@ const VALUE_OPTIONS = new Map([
   ["--execution-memory-root", "executionMemoryRoot"],
   ["--execution-memory-import-root", "executionMemoryImportRoots"],
   ["--execution-memory-secret-env", "executionMemorySecretEnv"],
+  ["--effect-approval-authority", "effectApprovalAuthorities"],
 ]);
 const REPEATABLE = new Set([
   "allowedOrigins", "actions", "methods", "fileRoots", "executionMemoryImportRoots",
   "executionMemorySecretEnv",
+  "effectApprovalAuthorities",
 ]);
 const FLAG_OPTIONS = new Map([
   ["--acknowledge-effects", "acknowledgeEffects"],
@@ -44,6 +46,7 @@ const FLAG_OPTIONS = new Map([
   ["--gpu", "gpu"],
   ["--mobile", "mobile"],
   ["--touch", "touch"],
+  ["--enable-effect-transactions", "enableEffectTransactions"],
 ]);
 
 function positiveInteger(value, label, maximum) {
@@ -156,6 +159,25 @@ function executionMemoryFrom(raw, projectRoot) {
   };
 }
 
+function effectTransactionsFrom(raw, projectRoot) {
+  const present = raw.enableEffectTransactions || raw.effectApprovalAuthorities !== undefined;
+  if (!present) return undefined;
+  if (!raw.enableEffectTransactions) throw new TypeError("effect approval authorities require --enable-effect-transactions");
+  if (!raw.effectApprovalAuthorities?.length) {
+    throw new TypeError("--enable-effect-transactions requires --effect-approval-authority <id>=<public-key-file>");
+  }
+  const approvalAuthorities = raw.effectApprovalAuthorities.map((entry) => {
+    const separator = entry.indexOf("=");
+    if (separator < 1 || separator === entry.length - 1) {
+      throw new TypeError("--effect-approval-authority requires <id>=<public-key-file>");
+    }
+    const authorityId = entry.slice(0, separator);
+    const file = entry.slice(separator + 1);
+    return { authorityId, publicKeyFile: isAbsolute(file) ? file : resolve(projectRoot, file) };
+  });
+  return { enabled: true, approvalAuthorities };
+}
+
 export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } = {}) {
   if (!Array.isArray(argv)) throw new TypeError("pyproc-mcp init arguments must be an array");
   const raw = parseRaw(argv);
@@ -165,6 +187,7 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
   const viewport = viewportFrom(raw);
   const artifacts = artifactsFrom(raw);
   const executionMemory = executionMemoryFrom(raw, projectRoot);
+  const effectTransactions = effectTransactionsFrom(raw, projectRoot);
   const profile = {
     recipe: raw.recipe,
     ...(raw.engineRoot === undefined ? {} : {
@@ -188,6 +211,7 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
     ...(artifacts === undefined ? {} : { artifacts }),
     ...(recording === undefined ? {} : { recording }),
     ...(executionMemory === undefined ? {} : { executionMemory }),
+    ...(effectTransactions === undefined ? {} : { effectTransactions }),
   };
   return Object.freeze({
     projectRoot,

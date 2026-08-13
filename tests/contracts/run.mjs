@@ -14,6 +14,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "browserControl.mjs",
   "controlJsSdk.mjs",
   "controlProtocol.mjs",
+  "effectTransaction.mjs",
   "executionMemory.mjs",
   "frameSpace.mjs",
   "machineEntrance.mjs",

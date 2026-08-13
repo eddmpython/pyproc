@@ -97,6 +97,10 @@ export { ExecutionMemoryRegistry, createExecutionMemoryRegistry }
   from "../executionMemory/executionMemoryRegistry.js";
 export { ExecutionMemoryArtifacts } from "../executionMemory/executionMemoryArtifacts.js";
 export { FileExecutionMemoryStore } from "../executionMemory/fileExecutionMemoryStore.js";
+export { EffectTransactionRegistry, createEffectTransactionRegistry }
+  from "../effectTransaction/effectTransactionRegistry.js";
+export { FileEffectTransactionStore } from "../effectTransaction/fileEffectTransactionStore.js";
+export { createApprovalGrant, verifyApprovalGrant } from "../effectTransaction/approvalGrant.js";
 
 export class ControlRequest {
   constructor(client, requestId, result) {
@@ -483,6 +487,24 @@ export class PyProcControlClient extends ControlStdioClient {
   } = {}) {
     return this.request("memory.import", { handoffDir: resolve(handoffDir),
       trustedPublicKeyFile: resolve(trustedPublicKeyFile), approvedPermissionManifestSha256 }, options);
+  }
+  prepareEffectTransaction(input, options = {}) { return this.request("effect.prepare", input, options); }
+  rehearseEffectTransaction(transactionId, expectedRevisionSha256, rehearsal, options = {}) {
+    return this.request("effect.rehearse", { transactionId, expectedRevisionSha256, ...rehearsal }, options);
+  }
+  approveEffectTransaction(transactionId, expectedRevisionSha256, grant, options = {}) {
+    return this.request("effect.approve", { transactionId, expectedRevisionSha256, grant }, options);
+  }
+  commitEffectTransaction(transactionId, expectedRevisionSha256, options = {}) {
+    return this.request("effect.commit", { transactionId, expectedRevisionSha256 }, options);
+  }
+  inspectEffectTransaction(transactionId, options = {}) {
+    return this.request("effect.inspect", { transactionId }, options);
+  }
+  listEffectTransactions(options = {}) { return this.request("effect.list", {}, options); }
+  sealEffectTransaction(transactionId, expectedRevisionSha256, evidencePackDir, options = {}) {
+    return this.request("effect.seal", { transactionId, expectedRevisionSha256,
+      evidencePackDir: resolve(evidencePackDir) }, options);
   }
   perception(sessionRef = null) { return new PerceptionClient(this, sessionRef); }
 
