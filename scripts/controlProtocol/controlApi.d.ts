@@ -232,6 +232,92 @@ export interface ReplayWorldCheckpoint extends Readonly<Record<string, unknown>>
   readonly checkpointSha256: string;
 }
 
+export type ActuationIntentKind = "activate" | "focus" | "setValue" | "setSelected" | "setExpanded"
+  | "scrollTo" | "dragTo";
+export type ActuatorKind = "cooperative" | "browserInput" | "accessibility" | "osInput" | "replay";
+export type ActuationTerminal = "confirmed" | "contradicted" | "ambiguous" | "notObserved"
+  | "outcomeUnknown" | "alreadySatisfied" | "notSent" | "rejected";
+
+export interface ActuationIntentInput extends Readonly<Record<string, unknown>> {
+  readonly intent: ActuationIntentKind;
+  readonly target: Readonly<{ readonly spaceRef: string; readonly entityRef: string;
+    readonly worldRef: string; readonly surfaceEpoch: string }>;
+  readonly desired: Readonly<Record<string, unknown>>;
+  readonly preconditions: readonly Readonly<Record<string, unknown>>[];
+  readonly expectedTransition: Readonly<Record<string, unknown>>;
+  readonly authority: Readonly<{ readonly actionCapabilityRef: string;
+    readonly approvalGrantRef: string | null; readonly commitLeaseRef: string | null;
+    readonly controlLeaseRef: string | null }>;
+  readonly policy: Readonly<{ readonly allowedActuatorKinds: readonly ActuatorKind[];
+    readonly allowPreContactFallback: boolean }>;
+}
+
+export interface ActuationIntent extends ActuationIntentInput {
+  readonly protocol: "pyproc.actuationIntent";
+  readonly version: 1;
+  readonly intentSha256: string;
+}
+
+export interface TargetBinding extends Readonly<Record<string, unknown>> {
+  readonly protocol: "pyproc.targetBinding";
+  readonly version: 1;
+  readonly bindingRef: string;
+  readonly bindingSha256: string;
+  readonly actuatorKind: ActuatorKind;
+}
+
+export interface ActuationPlan extends Readonly<Record<string, unknown>> {
+  readonly protocol: "pyproc.actuationPlan";
+  readonly version: 1;
+  readonly planRef: string;
+  readonly planSha256: string;
+  readonly intentSha256: string;
+  readonly bindingSha256: string;
+  readonly selectedActuator: ActuatorKind;
+}
+
+export interface ActuationReceipt extends Readonly<Record<string, unknown>> {
+  readonly protocol: "pyproc.actuation";
+  readonly version: 1;
+  readonly actuationRef: string;
+  readonly intentSha256: string;
+  readonly bindingSha256: string;
+  readonly planSha256: string;
+  readonly terminal: ActuationTerminal;
+  readonly receiptSha256: string;
+  readonly actionEvidenceRef: string | null;
+}
+
+export interface ActuationEpisode extends Readonly<Record<string, unknown>> {
+  readonly protocol: "pyproc.actuationEpisode";
+  readonly version: 1;
+  readonly episodeRef: string;
+  readonly episodeSha256: string;
+  readonly receiptSha256: string;
+}
+
+export interface ActuationPolicyRevision extends Readonly<Record<string, unknown>> {
+  readonly protocol: "pyproc.actuationPolicy";
+  readonly version: 1;
+  readonly previousSha256: string | null;
+  readonly policy: Readonly<Record<string, unknown>>;
+  readonly policySha256: string;
+}
+
+export interface MotorExecuteInput extends Readonly<Record<string, unknown>> {
+  readonly sessionRef: ControlSessionRef;
+  readonly situation: Readonly<Record<string, unknown>>;
+  readonly requirementRef: string;
+  readonly destinationRequirementRef?: string;
+  readonly intent: ActuationIntentInput;
+}
+
+export interface MotorExecuteOutput extends Readonly<Record<string, unknown>> {
+  readonly receipt: ActuationReceipt;
+  readonly episode: ActuationEpisode;
+  readonly terminal: ActuationTerminal;
+}
+
 export interface CheckpointSaveOutput {
   readonly index: number;
   readonly changedPages: number;
@@ -535,6 +621,57 @@ export function inspectReplayGraphCoverage(graph: ReplayGraphRevision): Readonly
 export function retainedReplayGraphObjects(graph: ReplayGraphRevision,
   pinnedNodeRefs?: readonly string[]): Readonly<Record<string, unknown>>;
 
+export const ACTUATION_ERROR_CODES: Readonly<Record<string, string>>;
+export const ACTUATION_INTENTS: readonly ActuationIntentKind[];
+export const ACTUATION_TERMINALS: readonly ActuationTerminal[];
+export const ACTUATOR_KINDS: readonly ActuatorKind[];
+export function canonicalActuationJson(value: unknown): string;
+export function actuationDigest(value: unknown): string;
+export function createActuationIntent(input: ActuationIntentInput): ActuationIntent;
+export function assertActuationIntent(value: ActuationIntent): ActuationIntent;
+export function createTargetBinding(input: Readonly<Record<string, unknown>>): TargetBinding;
+export function assertTargetBinding(value: TargetBinding): TargetBinding;
+export function createActuationPlan(input: Readonly<Record<string, unknown>>): ActuationPlan;
+export function assertActuationPlan(value: ActuationPlan): ActuationPlan;
+export function createActuationReceipt(input: Readonly<Record<string, unknown>>): ActuationReceipt;
+export function assertActuationReceipt(value: ActuationReceipt): ActuationReceipt;
+export function createActuationEpisode(input: Readonly<Record<string, unknown>>): ActuationEpisode;
+export function assertActuationEpisode(value: ActuationEpisode): ActuationEpisode;
+export function createPolicyRevision(input: Readonly<Record<string, unknown>>): ActuationPolicyRevision;
+export function assertPolicyRevision(value: ActuationPolicyRevision): ActuationPolicyRevision;
+export function evaluateCorrection(input: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>>;
+
+export class FileActuationStore {
+  private constructor();
+  static open(root: string): Promise<FileActuationStore>;
+  policy(): Promise<ActuationPolicyRevision>;
+  receipt(receiptSha256: string): Promise<ActuationReceipt>;
+  episode(episodeSha256: string): Promise<ActuationEpisode>;
+  list(): Promise<readonly Readonly<Record<string, unknown>>[]>;
+}
+
+export class ActuationCoordinator {
+  private constructor();
+  static open(options: Readonly<Record<string, unknown>>): Promise<ActuationCoordinator>;
+  execute(input: MotorExecuteInput, context?: Readonly<Record<string, unknown>>): Promise<MotorExecuteOutput>;
+  inspect(): Promise<Readonly<Record<string, unknown>>>;
+  list(): Promise<readonly Readonly<Record<string, unknown>>[]>;
+  replay(input: Readonly<Record<string, unknown>>): Promise<Readonly<Record<string, unknown>>>;
+  evaluate(input: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>>;
+  promote(input: Readonly<Record<string, unknown>>): Promise<Readonly<Record<string, unknown>>>;
+  rollback(input: Readonly<Record<string, unknown>>): Promise<ActuationPolicyRevision>;
+}
+
+export class ControlLease {
+  constructor(scope: Readonly<Record<string, unknown>>, options?: Readonly<Record<string, unknown>>);
+  readonly leaseRef: string;
+  activate(live: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>>;
+  assert(segmentScope: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>>;
+  suspend(reason?: string): Readonly<Record<string, unknown>>;
+  userInput(): Readonly<Record<string, unknown>>;
+  inspect(): Readonly<Record<string, unknown>>;
+}
+
 export type ControlSessionRef = Readonly<Record<string, unknown>>;
 
 export class PerceptionEntity {
@@ -811,6 +948,19 @@ export class PyProcControlClient {
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   listReplayGraphs(options?: ControlRequestOptions):
     Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
+  executeMotor(input: MotorExecuteInput,
+    options?: ControlRequestOptions): Promise<ControlResult<MotorExecuteOutput>>;
+  inspectMotor(options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  listMotorRecords(options?: ControlRequestOptions):
+    Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
+  replayMotor(receiptSha256: string, worldRef: string, expectedNodeRef: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  evaluateMotorPolicy(input: Readonly<Record<string, unknown>>,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  promoteMotorPolicy(input: Readonly<Record<string, unknown>>,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  rollbackMotorPolicy(expectedPolicySha256: string,
+    options?: ControlRequestOptions): Promise<ControlResult<ActuationPolicyRevision>>;
   perception(sessionRef?: ControlSessionRef | null): PerceptionClient;
   close(): Promise<void>;
 }

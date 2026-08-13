@@ -111,11 +111,11 @@ export async function assertControlProtocolContract() {
   "JS control client의 cancel write 실패와 원 request가 canonical outcome으로 함께 닫히지 않았다");
 
   const mapped = Object.entries(CONTROL_TOOL_OPERATIONS);
-  assert(mapped.length === 54 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
-    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 54종 mapping이 양방향이 아니다");
+  assert(mapped.length === 61 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
+    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 61종 mapping이 양방향이 아니다");
   const catalog = controlOperationCatalog(mapped.map(([name]) => ({ name, inputSchema: { type: "object" } })));
-  assert(catalog.length === 54 && catalog.every((entry) => entry.operationVersion === 1),
-    "control operation catalog가 versioned 54종이 아니다");
+  assert(catalog.length === 61 && catalog.every((entry) => entry.operationVersion === 1),
+    "control operation catalog가 versioned 61종이 아니다");
   const withoutSnapshotTools = createBrowserControlTools({ actions: ["screenshot"] });
   const withoutSnapshotCatalog = controlOperationCatalog(withoutSnapshotTools);
   assert(withoutSnapshotTools.length === 9
@@ -131,7 +131,9 @@ export async function assertControlProtocolContract() {
     && controlSuccessOutcome("app.inspect") === "observed"
     && controlSuccessOutcome("app.adopt") === "applied"
     && controlSuccessOutcome("world.edges") === "observed"
-    && controlSuccessOutcome("world.traverse") === "applied",
+    && controlSuccessOutcome("world.traverse") === "applied"
+    && controlSuccessOutcome("motor.inspect") === "observed"
+    && controlSuccessOutcome("motor.execute") === "applied",
   "control 성공 outcome이 관찰과 효과를 가르지 않는다");
 
   let mcpCalls = 0;

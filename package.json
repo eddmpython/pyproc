@@ -100,6 +100,7 @@
     "test:frame-space": "node tests/browser/frameSpaceProduct.mjs",
     "test:app-space": "node tests/browser/appSpaceProduct.mjs",
     "test:replay-graph": "node tests/browser/replayGraphProduct.mjs",
+    "test:actuation": "node tests/browser/actuationProduct.mjs",
     "test:replay-space": "node tests/browser/replaySpaceProduct.mjs",
     "test:python-sdk": "node tests/pythonSdk/run.mjs",
     "test:apx": "node tests/browser/apxProduct.mjs",

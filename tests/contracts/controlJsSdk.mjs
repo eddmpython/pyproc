@@ -18,6 +18,10 @@ import {
   ReplayGraphRegistry,
   ReplayWorld,
   retainedReplayGraphObjects,
+  ActuationCoordinator,
+  ControlLease,
+  FileActuationStore,
+  createActuationIntent,
   PerceptionClient,
   PerceptionEntity,
   PerceptionQueryResult,
@@ -45,11 +49,12 @@ export async function assertControlJsSdkContract() {
   for (const value of [ControlRemoteError, ControlRequest, PerceptionClient, PerceptionEntity,
     PerceptionQueryResult, PyProcControlClient, ExecutionMemoryArtifacts, ExecutionMemoryRegistry,
     FileExecutionMemoryStore, EffectTransactionRegistry, FileEffectTransactionStore,
-    AppSpaceRegistry, FileAppSpaceStore, ReplayGraphRegistry, FileReplayGraphStore, ReplayWorld]) {
+    AppSpaceRegistry, FileAppSpaceStore, ReplayGraphRegistry, FileReplayGraphStore, ReplayWorld,
+    ActuationCoordinator, ControlLease, FileActuationStore]) {
     assert(typeof value === "function", "pyproc/control 공개 class가 누락됐다");
   }
   for (const value of [createApprovalGrant, createEffectTransactionRegistry, createAppSpaceRegistry,
-    createReplayGraphRegistry, retainedReplayGraphObjects]) {
+    createReplayGraphRegistry, retainedReplayGraphObjects, createActuationIntent]) {
     assert(typeof value === "function", "pyproc/control Rehearse-Commit factory가 누락됐다");
   }
   for (const method of ["importReplayGraphRecording", "createReplayGraphAppWorld",
@@ -57,6 +62,10 @@ export async function assertControlJsSdkContract() {
     "traverseReplayWorld", "checkpointReplayWorld", "restoreReplayWorld", "evaluateReplayWorld",
     "inspectReplayWorldCoverage", "listReplayGraphs"]) {
     assert(typeof PyProcControlClient.prototype[method] === "function", `ReplayGraph facade가 누락됐다: ${method}`);
+  }
+  for (const method of ["executeMotor", "inspectMotor", "listMotorRecords", "replayMotor",
+    "evaluateMotorPolicy", "promoteMotorPolicy", "rollbackMotorPolicy"]) {
+    assert(typeof PyProcControlClient.prototype[method] === "function", `Motor facade가 누락됐다: ${method}`);
   }
   for (const method of ["auditExperience", "verifyExperience", "replayEvidencePack"]) {
     assert(typeof PyProcControlClient.prototype[method] === "function", `verification facade가 누락됐다: ${method}`);

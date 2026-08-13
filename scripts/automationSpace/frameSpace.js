@@ -8,6 +8,7 @@ import {
   validatePerceptionOptions,
 } from "../perception/apxCatalog.js";
 import { APX_SITUATION_REPRESENTATION, validateActionContext } from "../perception/situationCatalog.js";
+import { ActionEvidenceLoop } from "../perception/actionEvidence.js";
 import { PerceptionSpace } from "../perception/perceptionSpace.js";
 import { FrameSensor } from "../perception/profiles/frameSensor.js";
 
@@ -81,7 +82,7 @@ export class FrameSpace {
     this.config = assertFrameSpaceConfig(config);
     this.spaceId = spaceId;
     this.providerKind = "frame";
-    this.capabilities = Object.freeze(["dom", "target", "screenshot", "artifact", "perception"]);
+    this.capabilities = Object.freeze(["dom", "target", "screenshot", "artifact", "perception", "actionEvidence"]);
     this.operations = Object.freeze(FRAME_OPERATIONS.filter((operation) => operation !== "automation.observe"
       || this.config.actions.includes("snapshot")));
     this.replayBoundary = "recordOnly";
@@ -99,6 +100,7 @@ export class FrameSpace {
         ? { risk: FRAME_SPACE_ACTION_RISKS[action], destination: null }
         : null,
     });
+    this._evidence = new ActionEvidenceLoop({ idFactory });
     this._authorities = new WeakSet();
     this._sequence = 0;
     this._closed = false;
@@ -152,6 +154,9 @@ export class FrameSpace {
       && [APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(input.representation)) {
       return this._perception.observe(input.sessionRef, perceptionOptionsFromInput(input), { signal });
     }
+    if (operation === "automation.act" && input.actions.some((action) => action.verify)) {
+      return this._act(input, { signal, requestId });
+    }
     if (operation === "automation.act") {
       for (const action of input.actions) {
         if (action.actionContext) this._perception.assertActionContext(input.sessionRef, action.actionContext, action);
@@ -188,9 +193,6 @@ export class FrameSpace {
       throw frameError("FRAME_SPACE_ACTION_INVALID", "FrameSpace requires 1 to 16 actions");
     }
     for (const action of actions) {
-      if (action?.verify !== undefined) {
-        throw frameError("APX_PROFILE_UNSUPPORTED", "FrameSpace does not provide Action Evidence");
-      }
       if (action?.actionContext !== undefined) validateActionContext(action.actionContext);
       if (!action || typeof action !== "object" || Array.isArray(action)
         || !this.config.actions.includes(action.kind)) {
@@ -208,5 +210,44 @@ export class FrameSpace {
           `${action.kind} requires exactly one selector or locatorRef`);
       }
     }
+  }
+
+  async _act(input, { signal, requestId } = {}) {
+    const completed = [];
+    const results = [];
+    for (let index = 0; index < input.actions.length; index += 1) {
+      const action = input.actions[index];
+      if (action.actionContext) this._perception.assertActionContext(input.sessionRef, action.actionContext, action);
+      const { verify, actionContext: _actionContext, ...providerAction } = action;
+      const effect = async () => {
+        const output = await this.pageBridge.dispatch("automation.act", {
+          sessionRef: input.sessionRef, actions: [providerAction],
+        }, { signal, requestId: `${requestId || "frame"}:effect:${index}` });
+        return output.results[0];
+      };
+      try {
+        const result = verify ? await this._evidence.run({
+          actionRef: `action:${crypto.randomUUID()}`,
+          postcondition: verify,
+          signal,
+          capture: ({ since }) => this._perception.observe(input.sessionRef, {
+            representation: APX_REPRESENTATION,
+            ...(since ? { since } : {}),
+            channels: ["semantic", "structure", "geometry", "interaction", "events"],
+            visual: { mode: "off" },
+            budget: { maxEntities: 500, maxRelations: 1000, maxBytes: 512 * 1024 },
+          }, { signal, issueLocators: false }),
+          effect,
+        }) : { effectResult: await effect(), evidence: null };
+        completed.push(Object.freeze({ index, kind: action.kind }));
+        results.push(Object.freeze({ ...(result.effectResult || {}),
+          ...(result.evidence ? { evidence: result.evidence } : {}) }));
+      } catch (error) {
+        error.failedActionIndex = index;
+        error.completed = Object.freeze([...completed]);
+        throw error;
+      }
+    }
+    return Object.freeze({ completed: Object.freeze(completed), results: Object.freeze(results) });
   }
 }

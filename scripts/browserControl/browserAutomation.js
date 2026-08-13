@@ -981,7 +981,7 @@ export class BrowserAutomation {
   async _dragTarget(sessionRef, source, action, commandResults, signal) {
     const destination = await this._prepareTarget(sessionRef, {
       kind: "drag",
-      locator: action.to,
+      ...(action.toLocatorRef ? { locatorRef: action.toLocatorRef } : { locator: action.to }),
       timeoutMs: action.timeoutMs,
     }, commandResults, signal);
     const watcher = this._lifecycle.watch(sessionRef, "Input.dragIntercepted", {

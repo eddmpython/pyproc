@@ -106,6 +106,9 @@ jobs:
       - run: npm run test:frame-space
       - run: npm run test:app-space
       - run: npm run test:replay-graph
+      - run: npm run test:actuation
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       - run: npm run test:replay-space
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -174,6 +177,7 @@ jobs:
       - run: npm run test:frame-space
       - run: npm run test:app-space
       - run: npm run test:replay-graph
+      - run: npm run test:actuation
       - run: npm run test:replay-space
       - run: python -m pip install -r pythonSdk/buildRequirements.txt
       - run: npm run test:python-sdk

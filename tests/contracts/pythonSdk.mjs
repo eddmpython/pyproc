@@ -17,6 +17,7 @@ const requiredFiles = [
   "tests/pythonSdk/productJourney.py",
   "tests/pythonSdk/appSpaceList.py",
   "tests/pythonSdk/replayGraphList.py",
+  "tests/pythonSdk/motorList.py",
   "tests/pythonSdk/run.mjs",
 ];
 
@@ -54,6 +55,10 @@ export async function assertPythonSdkContract() {
     "traverseReplayWorld", "checkpointReplayWorld", "restoreReplayWorld", "evaluateReplayWorld",
     "inspectReplayWorldCoverage", "listReplayGraphs"]) {
     if (!clientSource.includes(`def ${method}(`)) throw new Error(`Python ReplayGraph facade 누락: ${method}`);
+  }
+  for (const method of ["executeMotor", "inspectMotor", "listMotorRecords", "replayMotor",
+    "evaluateMotorPolicy", "promoteMotorPolicy", "rollbackMotorPolicy"]) {
+    if (!clientSource.includes(`def ${method}(`)) throw new Error(`Python Motor facade 누락: ${method}`);
   }
   return true;
 }

@@ -216,7 +216,9 @@ function axStates(node) {
   const states = {};
   for (const property of node.properties || []) {
     if (!AX_STATES.has(property.name)) continue;
-    const value = remoteValue(property.value);
+    const rawValue = remoteValue(property.value);
+    const value = property.name !== "valuetext" && rawValue === "true" ? true
+      : property.name !== "valuetext" && rawValue === "false" ? false : rawValue;
     if (value !== undefined) states[property.name] = value;
   }
   return states;

@@ -189,6 +189,7 @@ try {
           } : { enabled: false },
           appSpace: loaded.config.appSpace.enabled ? loaded.config.appSpace : { enabled: false },
           replayGraph: loaded.config.replayGraph,
+          actuation: loaded.config.actuation,
           automation: loaded.config.browser.enabled ? {
             enabled: true,
             provider: loaded.config.browser.provider,

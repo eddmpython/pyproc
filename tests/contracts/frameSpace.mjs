@@ -23,7 +23,7 @@ export async function assertFrameSpaceContract() {
         page: { url: "https://allowed.example/path?secret=hidden", title: "Frame target",
           viewport: { width: 800, height: 600, scale: 1 }, scroll: { x: 0, y: 0 } },
         entities: [{ nativeRef: "frameNode:private:1", locatorData: { locatorRef: "locator:frame:1" },
-          kind: "ui.control", semantic: { role: "button", name: "Save", states: {} },
+          kind: "ui.control", semantic: { role: "button", name: "Save", states: { disabled: false } },
           structure: { frameNativeRef: "frame:private", nodeName: "BUTTON" },
           geometry: { rect: { x: 10, y: 10, width: 80, height: 30 }, viewportRatio: 1,
             visible: true, occluded: false },
@@ -33,6 +33,7 @@ export async function assertFrameSpaceContract() {
           geometry: "complete", interaction: "complete", network: "notAvailable" },
         omitted: { entities: 2 },
       };
+      if (operation === "automation.act") return { completed: [{ index: 0, kind: input.actions[0].kind }], results: [{}] };
       return { operation, input };
     },
   };
@@ -52,7 +53,7 @@ export async function assertFrameSpaceContract() {
     .inputSchema.properties.representation.enum.includes(APX_SITUATION_REPRESENTATION), true);
   const space = new FrameSpace({ pageBridge, config, spaceId: "space:frameContract" });
   assert.equal(space.providerKind, "frame");
-  assert.deepEqual(space.capabilities, ["dom", "target", "screenshot", "artifact", "perception"]);
+  assert.deepEqual(space.capabilities, ["dom", "target", "screenshot", "artifact", "perception", "actionEvidence"]);
   const router = new AutomationSpaceRouter(space);
   const inspect = await router.invoke("automation.space.inspect", {}, { requestId: "contract:inspect" });
   assert.equal(inspect.space.providerKind, "frame");
@@ -116,12 +117,15 @@ export async function assertFrameSpaceContract() {
   }));
   assert.equal(risk?.code, "FRAME_SPACE_PERMISSION_DENIED");
   assert.equal(calls.length, beforeDenied);
-  const unsupportedEvidence = await errorOf(() => router.invoke("automation.act", {
-    sessionRef: {}, actions: [{ kind: "click", selector: "#save", expectedRisk: "externalEffect",
-      verify: { entityAppeared: { role: "status" } } }],
-  }));
-  assert.equal(unsupportedEvidence?.code, "APX_PROFILE_UNSUPPORTED");
-  assert.equal(calls.length, beforeDenied);
+  const evidenced = await router.invoke("automation.act", {
+    sessionRef: { protocolVersion: "1", spaceId: "space:frameContract",
+      sessionId: "session:contract", targetRef: "target:contract" }, actions: [{ kind: "click",
+      locatorRef: save.locatorRef, expectedRisk: "externalEffect", actionContext: {
+        situationRef: situation.situationRef, worldRef: situation.worldRef, capabilityRef: save.capabilityRef },
+      verify: { entityState: { entityRef: situation.requirements[0].entityRefs[0], disabled: false } } }],
+  }, { requestId: "contract:evidence" });
+  assert.equal(evidenced.results[0].evidence.verification.state, "confirmed");
+  const afterEvidenced = calls.length;
 
   const readOnly = new AutomationSpaceRouter(new FrameSpace({ pageBridge, config: {
     ...config, maxRisk: "read", actions: ["snapshot", "screenshot"],
@@ -130,7 +134,7 @@ export async function assertFrameSpaceContract() {
     url: "https://allowed.example/path", expectedRisk: "externalEffect",
   }));
   assert.equal(readOnlyOpen?.code, "FRAME_SPACE_PERMISSION_DENIED");
-  assert.equal(calls.length, beforeDenied);
+  assert.equal(calls.length, afterEvidenced);
   await readOnly.close();
 
   const queuedBridge = new PageCommandBridge({ timeoutMs: 1000 });

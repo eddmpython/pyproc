@@ -55,6 +55,13 @@ export const CONTROL_TOOL_OPERATIONS = Object.freeze({
   worldEvaluate: "world.evaluate",
   worldCoverage: "world.coverage",
   worldList: "world.list",
+  motorExecute: "motor.execute",
+  motorInspect: "motor.inspect",
+  motorList: "motor.list",
+  motorReplay: "motor.replay",
+  motorPolicyEvaluate: "motor.policy.evaluate",
+  motorPolicyPromote: "motor.policy.promote",
+  motorPolicyRollback: "motor.policy.rollback",
 });
 
 const TOOL_FOR_OPERATION = Object.freeze(Object.fromEntries(
@@ -72,7 +79,7 @@ export function controlToolForOperation(operation) {
 export function controlSuccessOutcome(operation, input = {}) {
   if (["memory.open", "memory.list", "memory.inspect", "effect.inspect", "effect.list",
     "app.inspect", "app.list", "world.inspect", "world.edges", "world.evaluate", "world.coverage",
-    "world.list"].includes(operation)) return "observed";
+    "world.list", "motor.inspect", "motor.list", "motor.replay", "motor.policy.evaluate"].includes(operation)) return "observed";
   if (operation === "verification.audit") return "applied";
   if (operation === "automation.command") return input.expectedRisk === "read" ? "observed" : "applied";
   if (operation === "automation.act") {
@@ -83,7 +90,7 @@ export function controlSuccessOutcome(operation, input = {}) {
     || operation === "machine.reset" || operation === "automation.target.open"
     || operation === "automation.session.attach" || operation === "automation.session.detach"
     || operation === "artifact.delete" || operation.startsWith("memory.") || operation.startsWith("effect.")
-    || operation.startsWith("app.") || operation.startsWith("world.")) return "applied";
+    || operation.startsWith("app.") || operation.startsWith("world.") || operation.startsWith("motor.")) return "applied";
   return "observed";
 }
 

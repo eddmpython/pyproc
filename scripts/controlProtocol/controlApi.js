@@ -107,6 +107,30 @@ export { ReplayGraphRegistry, createReplayGraphRegistry } from "../replayGraph/r
 export { FileReplayGraphStore } from "../replayGraph/fileReplayGraphStore.js";
 export { ReplayWorld, evaluateReplayGraph, inspectReplayGraphCoverage, retainedReplayGraphObjects }
   from "../replayGraph/replayWorld.js";
+export {
+  ACTUATION_ERROR_CODES,
+  ACTUATION_INTENTS,
+  ACTUATION_TERMINALS,
+  ACTUATOR_KINDS,
+  actuationDigest,
+  assertActuationEpisode,
+  assertActuationIntent,
+  assertActuationPlan,
+  assertActuationReceipt,
+  assertPolicyRevision,
+  assertTargetBinding,
+  canonicalActuationJson,
+  createActuationEpisode,
+  createActuationIntent,
+  createActuationPlan,
+  createActuationReceipt,
+  createPolicyRevision,
+  createTargetBinding,
+  evaluateCorrection,
+} from "../actuation/actuationCanonical.js";
+export { ActuationCoordinator } from "../actuation/actuationCoordinator.js";
+export { FileActuationStore } from "../actuation/fileActuationStore.js";
+export { ControlLease } from "../actuation/controlLease.js";
 
 export class ControlRequest {
   constructor(client, requestId, result) {
@@ -568,6 +592,17 @@ export class PyProcControlClient extends ControlStdioClient {
     return this.request("world.coverage", { worldRef }, options);
   }
   listReplayGraphs(options = {}) { return this.request("world.list", {}, options); }
+  executeMotor(input, options = {}) { return this.request("motor.execute", input, options); }
+  inspectMotor(options = {}) { return this.request("motor.inspect", {}, options); }
+  listMotorRecords(options = {}) { return this.request("motor.list", {}, options); }
+  replayMotor(receiptSha256, worldRef, expectedNodeRef, options = {}) {
+    return this.request("motor.replay", { receiptSha256, worldRef, expectedNodeRef }, options);
+  }
+  evaluateMotorPolicy(input, options = {}) { return this.request("motor.policy.evaluate", input, options); }
+  promoteMotorPolicy(input, options = {}) { return this.request("motor.policy.promote", input, options); }
+  rollbackMotorPolicy(expectedPolicySha256, options = {}) {
+    return this.request("motor.policy.rollback", { expectedPolicySha256 }, options);
+  }
   perception(sessionRef = null) { return new PerceptionClient(this, sessionRef); }
 
   async close() {

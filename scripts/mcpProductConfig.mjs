@@ -9,7 +9,7 @@ import {
   AUTOMATION_RECORDING_MAX_TOTAL_ARTIFACT_BYTES,
 } from "./automationSpace/automationRecording.js";
 
-const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "replayGraph", "timeoutMs"]);
+const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "replayGraph", "actuation", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["root", "indexURL"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
@@ -28,6 +28,7 @@ const APPROVAL_AUTHORITY_KEYS = new Set(["authorityId", "publicKeyFile"]);
 const APP_SPACE_KEYS = new Set(["enabled", "apps", "maxStateBytes"]);
 const APP_IDENTITY_KEYS = new Set(["appId", "origin", "adapterVersion", "stateSchema"]);
 const REPLAY_GRAPH_KEYS = new Set(["enabled"]);
+const ACTUATION_KEYS = new Set(["enabled"]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_INDEX_URL", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
@@ -44,6 +45,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_EFFECT_TRANSACTIONS", "PYPROC_EFFECT_APPROVAL_AUTHORITIES", "PYPROC_EFFECT_SECRET_BINDINGS",
   "PYPROC_APP_SPACE",
   "PYPROC_REPLAY_GRAPH",
+  "PYPROC_ACTUATION", "PYPROC_ACTUATION_VALUE_BINDINGS",
 ]);
 
 function plainObject(value, label) {
@@ -378,6 +380,21 @@ function normalizedReplayGraph(input = { enabled: false }, { executionMemory } =
   return Object.freeze({ enabled });
 }
 
+function normalizedActuation(input = { enabled: false }, { executionMemory, browser } = {}) {
+  const actuation = plainObject(input, "actuation");
+  knownKeys(actuation, ACTUATION_KEYS, "actuation");
+  const enabled = optionalBoolean(actuation.enabled, "actuation.enabled");
+  if (enabled && (!executionMemory.enabled || !browser.enabled)) {
+    throw new TypeError("actuation requires executionMemory.enabled and browser.enabled true");
+  }
+  const motorActions = new Set(["click", "focus", "fill", "select", "check", "uncheck", "scroll", "drag"]);
+  if (enabled && (browser.maxRisk !== "externalEffect" || !browser.actions.includes("snapshot")
+    || !browser.actions.some((action) => motorActions.has(action)))) {
+    throw new TypeError("actuation requires snapshot and at least one permitted external-effect Motor action");
+  }
+  return Object.freeze({ enabled });
+}
+
 function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [], effectSecretBindings = {}) {
   const env = { ...baseEnv };
   for (const key of CONTROLLED_ENV) delete env[key];
@@ -399,6 +416,10 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
     maxStateBytes: config.appSpace.maxStateBytes,
   });
   if (config.replayGraph.enabled) env.PYPROC_REPLAY_GRAPH = "1";
+  if (config.actuation.enabled) {
+    env.PYPROC_ACTUATION = "1";
+    env.PYPROC_ACTUATION_VALUE_BINDINGS = JSON.stringify(effectSecretBindings);
+  }
   if (!config.browser.enabled) return env;
   const browser = config.browser;
   env.PYPROC_BROWSER_CONTROL = "1";
@@ -441,6 +462,7 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
     executionMemory: executionMemory.config, effectTransactions, browser,
   });
   const replayGraph = normalizedReplayGraph(value.replayGraph, { executionMemory: executionMemory.config });
+  const actuation = normalizedActuation(value.actuation, { executionMemory: executionMemory.config, browser });
   const config = Object.freeze({
     schemaVersion: 1,
     engine: normalizedEngine(value.engine),
@@ -449,11 +471,12 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
     effectTransactions,
     appSpace,
     replayGraph,
+    actuation,
     timeoutMs: value.timeoutMs === undefined ? 180000
       : positiveInteger(value.timeoutMs, "timeoutMs", 900000),
   });
   const env = projectedEnvironment(config, baseEnv, executionMemory.secretValues,
-    effectTransactions.enabled ? executionMemory.secretBindings : {});
+    effectTransactions.enabled || actuation.enabled ? executionMemory.secretBindings : {});
   const browserControl = config.browser.enabled
     ? parseBrowserControlConfig(env, { timeoutMs: config.timeoutMs })
     : null;

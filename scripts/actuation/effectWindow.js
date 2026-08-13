@@ -50,6 +50,8 @@ export class ActuationEffectWindow {
     if (!boundaryCrossed) {
       this.boundary = "notCrossed";
       this.providerCalls = 0;
+      this.completedSegments = this.completedSegments.filter((entry) => entry.phase === "preContact");
+      this.safetyRelease = null;
     } else this.providerCalls = providerCalls;
     this.phase = "postContact";
     return this.inspect();

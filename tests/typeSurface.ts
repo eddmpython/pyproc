@@ -4,6 +4,7 @@ import {
   createEffectTransactionRegistry,
   createAppSpaceRegistry,
   createExecutionMemoryRegistry,
+  createActuationIntent,
   PyProcControlClient,
   ControlRemoteError,
 } from "../scripts/controlProtocol/controlApi.js";
@@ -104,9 +105,24 @@ async function controlSurface() {
   await client.inspectApp(attachedApp.output.appRef);
   await client.listAppPairs();
   const graphs = await client.listReplayGraphs();
+  const motorIntent = createActuationIntent({ intent: "activate", target: { spaceRef: "space:typed",
+    entityRef: "entity:typed", worldRef: "world:typed", surfaceEpoch: "document:1" },
+  desired: { activated: true }, preconditions: [],
+  expectedTransition: { entityAppeared: { role: "status" } }, authority: {
+    actionCapabilityRef: `capability:${"a".repeat(64)}`, approvalGrantRef: null,
+    commitLeaseRef: null, controlLeaseRef: null }, policy: {
+    allowedActuatorKinds: ["browserInput"], allowPreContactFallback: false } });
+  const motorResult = await client.executeMotor({ sessionRef: { sessionId: "session:typed" },
+    situation: {}, requirementRef: "requirement:typed", intent: motorIntent });
+  const motorTerminal: string = motorResult.output.receipt.terminal;
+  await client.inspectMotor();
+  await client.listMotorRecords();
+  void motorTerminal;
   const importedGraph = await client.importReplayGraphRecording("graph:typed", "/tmp/typed-recording.json");
   const openedWorld = await client.openReplayWorld("graph:typed", importedGraph.output.graph.rootSha256);
   const worldRef = String(openedWorld.output.world.worldRef);
+  await client.replayMotor(motorResult.output.receipt.receiptSha256, worldRef,
+    importedGraph.output.graph.startNodeRefs[0]);
   const worldEdges = await client.listReplayWorldEdges(worldRef);
   if (worldEdges.output[0]) {
     await client.traverseReplayWorld(worldRef, String(worldEdges.output[0].capabilityRef),

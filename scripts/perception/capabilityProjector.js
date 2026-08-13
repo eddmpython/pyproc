@@ -33,7 +33,7 @@ function observedAffordances(entity) {
 }
 
 export class CapabilityProjector {
-  constructor({ authorize = () => null, now = () => Date.now(), ttlMs = 5000 } = {}) {
+  constructor({ authorize = () => null, now = () => Date.now(), ttlMs = 60000 } = {}) {
     if (typeof authorize !== "function" || typeof now !== "function") {
       throw new TypeError("capability projector factories are invalid");
     }

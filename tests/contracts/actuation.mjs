@@ -31,7 +31,7 @@ const input = Object.freeze({
     surfaceEpoch: "document:1" },
   desired: { activated: true },
   preconditions: [],
-  expectedTransition: [{ kind: "entityState", entityRef: "entity:save", state: "disabled", equals: false }],
+  expectedTransition: { entityState: { entityRef: "entity:save", disabled: false } },
   authority,
   policy: { allowedActuatorKinds: ["replay", "browserInput"], allowPreContactFallback: true },
 });

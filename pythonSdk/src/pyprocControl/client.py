@@ -661,6 +661,34 @@ class PyProcClient:
     def listReplayGraphs(self, *, timeout: float | None = None) -> ControlResult:
         return self.request("world.list", timeout=timeout)
 
+    def executeMotor(self, input: dict[str, Any], *,
+                     timeout: float | None = None) -> ControlResult:
+        return self.request("motor.execute", input, timeout=timeout)
+
+    def inspectMotor(self, *, timeout: float | None = None) -> ControlResult:
+        return self.request("motor.inspect", timeout=timeout)
+
+    def listMotorRecords(self, *, timeout: float | None = None) -> ControlResult:
+        return self.request("motor.list", timeout=timeout)
+
+    def replayMotor(self, receiptSha256: str, worldRef: str, expectedNodeRef: str, *,
+                    timeout: float | None = None) -> ControlResult:
+        return self.request("motor.replay", {"receiptSha256": receiptSha256, "worldRef": worldRef,
+                                               "expectedNodeRef": expectedNodeRef}, timeout=timeout)
+
+    def evaluateMotorPolicy(self, input: dict[str, Any], *,
+                            timeout: float | None = None) -> ControlResult:
+        return self.request("motor.policy.evaluate", input, timeout=timeout)
+
+    def promoteMotorPolicy(self, input: dict[str, Any], *,
+                           timeout: float | None = None) -> ControlResult:
+        return self.request("motor.policy.promote", input, timeout=timeout)
+
+    def rollbackMotorPolicy(self, expectedPolicySha256: str, *,
+                            timeout: float | None = None) -> ControlResult:
+        return self.request("motor.policy.rollback", {"expectedPolicySha256": expectedPolicySha256},
+                            timeout=timeout)
+
     def perception(self, sessionRef: dict[str, Any] | None = None) -> PerceptionClient:
         return PerceptionClient(self, sessionRef)
 

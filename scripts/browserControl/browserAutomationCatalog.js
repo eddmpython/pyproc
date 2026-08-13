@@ -286,8 +286,8 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
     properties: {
       ...TARGET_PROPERTIES,
       to: BROWSER_LOCATOR_SCHEMA,
+      toLocatorRef: { type: "string", minLength: 1 },
     },
-    required: ["to"],
     target: "required",
   }),
   fill: actionSpec({
@@ -434,6 +434,12 @@ export function validateBrowserAutomationAction(action) {
     }
   }
   if (action.actionContext !== undefined) validateActionContext(action.actionContext);
+  if (action.kind === "drag") {
+    const destinations = Number(action.to !== undefined) + Number(action.toLocatorRef !== undefined);
+    if (destinations !== 1) fail("drag requires exactly one of to or toLocatorRef");
+    if (action.to !== undefined) validateBrowserLocator(action.to);
+    if (action.toLocatorRef !== undefined) requireString(action.toLocatorRef, "drag.toLocatorRef");
+  }
   if (action.kind === "screenshot") {
     if (action.format !== undefined && !BROWSER_SCREENSHOT_FORMATS.includes(action.format)) {
       fail("screenshot.format is invalid");

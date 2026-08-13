@@ -135,7 +135,11 @@ export function actuationDigest(value) {
   return createHash("sha256").update(canonical).digest("hex");
 }
 
-const clone = (value) => Object.freeze(structuredClone(value));
+function clone(value) {
+  if (Array.isArray(value)) return Object.freeze(value.map(clone));
+  if (!value || typeof value !== "object") return value;
+  return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, child]) => [key, clone(child)])));
+}
 const sortedUnique = (values) => [...new Set(values)].sort();
 
 function validateDesired(intent, desired) {
@@ -194,8 +198,8 @@ export function createActuationIntent(input) {
   exact(input.target, TARGET_KEYS, "ActuationIntent.target");
   for (const key of TARGET_KEYS) reference(input.target[key], `ActuationIntent.target.${key}`);
   validateDesired(input.intent, input.desired);
-  if (!Array.isArray(input.preconditions) || !Array.isArray(input.expectedTransition)) {
-    fail(ACTUATION_ERROR_CODES.intentInvalid, "preconditions and expectedTransition must be arrays");
+  if (!Array.isArray(input.preconditions) || !plainObject(input.expectedTransition)) {
+    fail(ACTUATION_ERROR_CODES.intentInvalid, "preconditions must be an array and expectedTransition must be an object");
   }
   exact(input.authority, AUTHORITY_KEYS, "ActuationIntent.authority");
   reference(input.authority.actionCapabilityRef, "ActuationIntent.authority.actionCapabilityRef");
@@ -277,6 +281,16 @@ export function createActuationPlan({ intent, binding, decision, preflight = {},
   noSensitiveOrHandleKeys(body);
   const planSha256 = actuationDigest(body);
   return Object.freeze({ planRef: `plan:${planSha256}`, ...body, planSha256 });
+}
+
+export function assertActuationPlan(value) {
+  plain(value, "ActuationPlan", ACTUATION_ERROR_CODES.preflightFailed);
+  const { planRef, planSha256, ...body } = value;
+  if (body.protocol !== "pyproc.actuationPlan" || body.version !== 1
+    || planRef !== `plan:${planSha256}` || planSha256 !== actuationDigest(body)) {
+    fail(ACTUATION_ERROR_CODES.preflightFailed, "actuation plan digest changed");
+  }
+  return value;
 }
 
 function assertEffectWindow(value) {
@@ -362,6 +376,17 @@ export function createActuationEpisode({ receipt, worldRef, policyRevisionSha256
   return Object.freeze({ episodeRef: `episode:${episodeSha256}`, ...body, episodeSha256 });
 }
 
+export function assertActuationEpisode(value) {
+  plain(value, "ActuationEpisode", ACTUATION_ERROR_CODES.episodeInvalid);
+  const { episodeRef, episodeSha256, ...body } = value;
+  if (body.protocol !== "pyproc.actuationEpisode" || body.version !== 1
+    || episodeRef !== `episode:${episodeSha256}` || episodeSha256 !== actuationDigest(body)) {
+    fail(ACTUATION_ERROR_CODES.episodeInvalid, "actuation episode digest changed");
+  }
+  noSensitiveOrHandleKeys(body);
+  return value;
+}
+
 export function createPolicyRevision({ previousSha256 = null, policy = {}, proposalSha256 = null,
   evaluationSha256 = null, state = "active" }) {
   for (const [value, label] of [[previousSha256, "previousSha256"], [proposalSha256, "proposalSha256"],
@@ -377,6 +402,16 @@ export function createPolicyRevision({ previousSha256 = null, policy = {}, propo
   const body = clone({ protocol: "pyproc.actuationPolicy", version: 1, previousSha256,
     policy, proposalSha256, evaluationSha256, state });
   return Object.freeze({ ...body, policySha256: actuationDigest(body) });
+}
+
+export function assertPolicyRevision(value) {
+  plain(value, "ActuationPolicy", ACTUATION_ERROR_CODES.policyRejected);
+  const { policySha256, ...body } = value;
+  if (body.protocol !== "pyproc.actuationPolicy" || body.version !== 1
+    || policySha256 !== actuationDigest(body)) {
+    fail(ACTUATION_ERROR_CODES.policyRejected, "policy revision digest changed");
+  }
+  return value;
 }
 
 export function evaluateCorrection({ basePolicySha256, corpusSha256, evaluationManifestSha256, proposal }) {

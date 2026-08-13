@@ -78,6 +78,22 @@ export async function assertBrowserAutomationProductContract() {
   assert((await errorOf(() => validateMcpProductConfig({ ...manifest,
     replayGraph: { enabled: true } })))?.message.includes("requires executionMemory"),
   "ReplayGraph가 Execution Memory durable root 없이 열렸다");
+  const motorValidated = validateMcpProductConfig({ ...manifest,
+    browser: { ...manifest.browser, maxRisk: "externalEffect", actions: ["snapshot", "click"],
+      externalEffects: "acknowledged", purpose: "Execute one proof-carrying fixture intent" },
+    executionMemory: { enabled: true, root: memoryRoot, importRoots: [importRoot],
+      secretEnv: ["PYPROC_CONTRACT_SECRET"] }, actuation: { enabled: true },
+  }, { baseEnv: { PYPROC_CONTRACT_SECRET: "fixture-secret-value" } });
+  assert(motorValidated.config.actuation.enabled === true && motorValidated.env.PYPROC_ACTUATION === "1"
+    && JSON.parse(motorValidated.env.PYPROC_ACTUATION_VALUE_BINDINGS).PYPROC_CONTRACT_SECRET
+      === "fixture-secret-value",
+  "Motor manifest가 durable root와 bounded value provider로 투영되지 않았다");
+  assert((await errorOf(() => validateMcpProductConfig({ ...manifest,
+    actuation: { enabled: true } })))?.message.includes("requires executionMemory"),
+  "Motor가 Execution Memory 없이 열렸다");
+  assert((await errorOf(() => validateMcpProductConfig({ ...manifest,
+    executionMemory: { enabled: true, root: memoryRoot }, actuation: { enabled: true } })))?.message
+    .includes("requires snapshot"), "Motor가 read-only browser permission으로 열렸다");
   const approvalPublicKey = join(root, "approval-public.pem");
   const approvalPair = generateKeyPairSync("ed25519");
   await writeFile(approvalPublicKey, approvalPair.publicKey.export({ type: "spki", format: "pem" }));
