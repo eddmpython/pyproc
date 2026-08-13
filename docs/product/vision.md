@@ -78,8 +78,11 @@ cold records own no live computer, stale leases fail, and exact generations resu
 budget. Execution Memory is delivered through immutable content-addressed revisions, compare-and-swap session
 HEAD, verified existing-format sidecars, evidence-gated completion, retention reachability, and signed handoff
 with separate permission approval. Installed JavaScript, Python, and MCP gates capture and reopen a real Machine
-image. The next active campaign is
-[`rehearseCommitTransactions`](../../tests/attempts/rehearseCommitTransactions/README.md). Later initiatives remain
+image. Rehearse-Commit Transactions is delivered through immutable exact intents, honest coverage receipts,
+trust-domain-bound Ed25519 approvals, a durable one-shot lease, live APX and destination revalidation,
+non-resending recovery, and an Evidence Pack-linked EffectReceipt. Installed JavaScript, MCP, and Python gates
+send one real HTTP effect and converge on the same terminal chain. The next active campaign is
+[`transactionalAppSpace`](../../tests/attempts/transactionalAppSpace/README.md). Later initiatives remain
 locked behind their immediate predecessor. No initiative changes a North Star score before its browser evidence
 is registered in the ledger.
 

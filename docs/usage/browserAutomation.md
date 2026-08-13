@@ -411,3 +411,7 @@ Repository-wide change verification is built above AutomationSpace rather than i
 `eyesAudit` tool loads only a strict `qa/eyes` JSON contract, obtains current broker affordances from
 SituationCapsules, and publishes a canonical Evidence Pack. `eyesVerify` and `eyesReplay` send no browser effect.
 See [experience verification](experienceVerification.md).
+
+For consequential actions that need separate approval and a durable one-shot send boundary, enable
+[Rehearse-Commit](rehearseCommit.md). It composes this same AutomationSpace and ActionEvidence path. It does not
+add a second browser implementation or claim remote rollback.

@@ -33,6 +33,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   session revisions, compare-and-swap HEAD, real `.pymachine` capture, SituationCapsule and Automation Recording
   boundaries, Evidence Pack-gated completion, retention reachability, and signed handoff with separate permission
   approval. JavaScript, Python, MCP, and direct `pyproc/control` registry paths share the same revision digest.
+- **Rehearse-Commit Transactions separate preparation from one-shot external effects.** Exact intents, effect-free
+  rehearsal receipts, externally signed approval grants, durable commit leases, terminal effect results, and
+  Evidence Pack-gated receipts share one immutable revision chain. JavaScript, Python, MCP, Control, and CLI
+  entrances use the same fail-closed coordinator and never resend after the durable sending boundary.
 
 ### Compatibility
 
@@ -44,6 +48,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - Execution Memory is additive on the existing `pyproc/control` subpath and disabled by default. Enabling it adds
   `machine.image.export` and eight `memory.*` Control operations. It creates no new Machine image, evidence
   format, root export, subpath, or executable.
+- Rehearse-Commit is additive on the existing `pyproc/control` subpath and disabled by default. Enabling it adds
+  seven `effect.*` Control operations and requires Execution Memory, acknowledged `externalEffect` authority,
+  and an external Ed25519 approval authority. It does not claim remote exactly-once delivery or rollback.
 
 한국어 요약: 기존 `automation.observe`에 opt-in `apx.situation` 표현을 추가했다. typed focus가 최소 충분
 상황과 명시적 불확실성을 만들고, broker가 발급한 capability만 현재 world와 epoch에 묶여 effect에 쓰인다.
@@ -54,6 +61,9 @@ Control, MCP, JavaScript, Python, CLI가 같은 audit, verify, replay 의미론�
 Execution Memory는 실제 Machine, observation, recording, evidence, permission을 immutable revision으로
 연결하고 CAS HEAD와 별도 permission 승인이 있는 signed handoff로 이어받는다. 기존 `pyproc/control` 안의
 opt-in 기능이며 새 root, subpath, image format은 만들지 않는다.
+Rehearse-Commit Transactions는 exact intent, effect-free rehearsal, 외부 서명 승인, durable send lease,
+terminal result, Evidence Pack receipt를 하나의 immutable chain으로 묶는다. sending 경계 이후에는 자동으로
+재전송하지 않으며, 원격 exactly-once나 rollback을 주장하지 않는다.
 
 ## 0.0.21 - 2026-08-13
 

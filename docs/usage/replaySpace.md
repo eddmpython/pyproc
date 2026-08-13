@@ -117,6 +117,10 @@ Automation recording replay matches and consumes an ordered provider operation c
 instead loads a completed Evidence Pack, validates its canonical digest and every artifact sidecar, then recomputes the
 stored verdict from scenario terminals. It creates no AutomationSpace and sends no target request.
 
+Rehearse-Commit may use ReplaySpace for `recorded` rehearsal coverage. That receipt proves only the exact
+pinned sequence and always declares that current live state and service acceptance remain unproven. A recorded
+success cannot issue approval or consume a live CommitLease. See [Rehearse-Commit](rehearseCommit.md).
+
 Use recording replay when an agent must reproduce exact provider terminals. Use Evidence Pack replay when a caller must
 prove that a published repository verdict and its evidence have not changed. One does not substitute for the other. See
 [Experience verification](experienceVerification.md) and the

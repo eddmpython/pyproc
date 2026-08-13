@@ -83,6 +83,17 @@ and `executionMemoryTools.js` alone adapts it to shared Control and MCP operatio
 state-bundle, perception, recording, and Evidence Pack validators. Those lower producers do not import the
 registry. It is publicly composed only through the existing `pyproc/control` subpath.
 
+`scripts/effectTransaction/` owns the Rehearse-Commit lifecycle above Execution Memory and the existing
+automation spaces. `effectTransactionCanonical.js` owns the closed immutable transaction objects and revision
+links; `effectInput.js` owns secret placeholders and live-only materialization; `approvalGrant.js` verifies the
+external Ed25519 authority, expiry, trust domain, and nonce; `fileEffectTransactionStore.js` owns confined
+objects, compare-and-swap HEAD, locks, and global nonce consumption; `effectTransactionRegistry.js` owns valid
+state transitions and sending recovery; `effectTransactionCoordinator.js` composes Machine checkpoints, APX
+affordances, rehearsal providers, one-shot live dispatch, verification, and sealing; and
+`effectTransactionTools.js` alone adapts the coordinator to shared Control and MCP operations. Lower Machine,
+perception, automation, recording, and evidence producers never import this directory. It is publicly composed
+only through the existing `pyproc/control` subpath.
+
 ## Layer ranks
 
 The layer contract is a total order, and every import edge must point downward. Peers do not import peers.

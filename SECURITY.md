@@ -104,6 +104,30 @@ images, recordings, and evidence. Values shorter than eight bytes are refused. T
 discovery and cannot understand secrets rendered into pixels, transformed values, or unrelated sensitive data.
 Producing subsystems must retain their own redaction rules.
 
+### Rehearsal is not approval and a lease is not remote rollback
+
+Rehearse-Commit is disabled by default. Enabling it requires Execution Memory, an acknowledged
+`externalEffect` Native CDP profile, and at least one exact Ed25519 public-key file. Keep the matching private
+keys outside the page, product manifest, Machine image, and controlled process whenever practical. DOM text,
+accessibility labels, pixels, reported capabilities, and inference output cannot issue an ApprovalGrant.
+
+Approval binds one intent, destination, risk, Execution Session base, local trust domain, expiry, nonce, and
+policy version. Copying transaction files or a signed grant to another memory root does not transfer authority.
+The live target origin and broker-issued APX affordances are rechecked before the CommitLease is reserved.
+
+The lease limits pyproc to one provider dispatch. It does not guarantee that a remote service applies the
+request exactly once and cannot undo an external effect. If the process dies after the durable send boundary,
+recovery records non-retryable `outcomeUnknown` and never resends. Investigate the remote system before
+preparing another intent.
+
+Configured secret placeholders are HMAC-bound during preparation and materialized only for live provider input.
+RecordingSpace receives a separate placeholder-only input. The literal scan is a bounded defense for declared
+secret values, not general data-loss prevention.
+
+A terminal transaction is not an audit receipt until `effect.seal` verifies an Evidence Pack with the same
+repository identity and exact transaction, intent, EffectResult, and terminal session links. A pack digest
+proves content integrity, not issuer identity or legal authorization.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`

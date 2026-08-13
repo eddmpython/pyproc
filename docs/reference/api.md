@@ -593,6 +593,13 @@ Stable Node.js facade for the installed Control product, typed in
   `ExecutionMemoryArtifacts`, and `FileExecutionMemoryStore` from this existing subpath. These lower objects
   index existing `.pymachine`, SituationCapsule, Automation Recording, Evidence Pack, and permission artifacts.
   They do not create Fleet lifecycle authority.
+- Rehearse-Commit verbs: `prepareEffectTransaction`, `rehearseEffectTransaction`,
+  `approveEffectTransaction`, `commitEffectTransaction`, `inspectEffectTransaction`,
+  `listEffectTransactions`, and `sealEffectTransaction`. They are present only when
+  `effectTransactions.enabled` is true and reuse the same Execution Memory and AutomationSpace.
+- Approval and direct host values: `createApprovalGrant`, `verifyApprovalGrant`,
+  `createEffectTransactionRegistry`, `EffectTransactionRegistry`, and `FileEffectTransactionStore`. The
+  approval helper signs one exact `EffectIntent`; it does not grant page authority or bypass manifest policy.
 - `client.perception(sessionRef)` returns `PerceptionClient`. `observe`, `query`, `one`,
   `explainActionability`, `whatChanged`, and evidence-backed `act` retain the APX graph path. `situate` returns
   an immutable `SituationResult`, and `actAffordance` binds an authorized `SituationAffordance` to the effect.
@@ -615,6 +622,13 @@ client.auditExperience(contractRoot, {
 })
 client.verifyExperience(referenceDir, currentDir, options?)
 client.replayEvidencePack(packDir, options?)
+client.prepareEffectTransaction(input, options?)
+client.rehearseEffectTransaction(transactionId, expectedRevisionSha256, rehearsal, options?)
+client.approveEffectTransaction(transactionId, expectedRevisionSha256, grant, options?)
+client.commitEffectTransaction(transactionId, expectedRevisionSha256, options?)
+client.inspectEffectTransaction(transactionId, options?)
+client.listEffectTransactions(options?)
+client.sealEffectTransaction(transactionId, expectedRevisionSha256, evidencePackDir, options?)
 ```
 
 ### Installed Machine Entrance commands
@@ -624,6 +638,9 @@ client.replayEvidencePack(packDir, options?)
 - `--execution-memory-root`, repeated `--execution-memory-import-root`, and repeated
   `--execution-memory-secret-env` opt any recipe into immutable Execution Memory. Relative paths resolve from
   the project root; secret values are validated from the environment and never serialized.
+- `--enable-effect-transactions` plus repeated
+  `--effect-approval-authority <authority-id>=<public-key-file>` enables the exact-intent transaction
+  lifecycle. It requires Execution Memory and an acknowledged `externalEffect` browser profile.
 - `--dry-run` performs path and authority validation without writing. Existing generated files require
   `--overwrite`. The output directory must remain inside the selected project root.
 - `pyproc-control doctor --config <file>` verifies the strict manifest, installed package version, local engine

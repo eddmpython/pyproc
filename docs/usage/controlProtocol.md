@@ -108,6 +108,23 @@ The feature adds no alternate image or evidence format. The revision links exist
 SituationCapsule, Automation Recording, Evidence Pack, and permission sidecars by digest. Machine image bytes
 never enter the JSON result. See [Execution Memory](executionMemory.md).
 
+When `effectTransactions.enabled` is true, seven additional operations appear:
+
+| Operation | Meaning | Success outcome |
+|---|---|---|
+| `effect.prepare` | Bind an exact destination and logical action template to the current Execution Session | `applied` |
+| `effect.rehearse` | Record computed, recorded, cooperative, or live-read-only coverage with limitations | `applied` |
+| `effect.approve` | Verify and consume a signed grant for the exact local intent | `applied` |
+| `effect.commit` | Recheck the live target, reserve one durable send lease, dispatch once, and finalize truth | `applied` |
+| `effect.inspect` | Reverify one transaction and report its next safe lifecycle action | `observed` |
+| `effect.list` | List durable transaction HEAD summaries | `observed` |
+| `effect.seal` | Link a terminal transaction to an exact verified Evidence Pack and publish its receipt | `applied` |
+
+The feature is disabled unless Execution Memory and an acknowledged `externalEffect` browser profile are both
+enabled. A configured Ed25519 public authority verifies approvals; the controlled page cannot issue one. A
+durable CommitLease is published before `automation.act`. Recovery from `sending` records `outcomeUnknown` and
+never dispatches again. See [Rehearse-Commit](rehearseCommit.md).
+
 APX adds no operation. Pass `representation: "apx.graph"` for a provider-neutral graph or
 `representation: "apx.situation"` with typed `focus.requirements` for a SituationCapsule.
 An authorized affordance can be bound to `automation.act` through `actionContext`; stale bindings fail before
@@ -186,3 +203,7 @@ content and Evidence Packs as embedded resource content. It never labels a JSON 
 The installed Control, MCP, and Python gates also create and reopen the same immutable Execution Memory
 revision from a real Machine image. Unit contracts inject stale HEAD, broken sidecar, forged cold receipt,
 handoff inventory, permission, and secret-leak failures.
+
+The same installed gates prepare, rehearse, approve, commit, and seal a real Rehearse-Commit transaction. They
+require one HTTP effect, zero resend on retry, exact destination refusal, matching ActionEvidence, and the same
+sealed receipt links across JavaScript, MCP, and Python.

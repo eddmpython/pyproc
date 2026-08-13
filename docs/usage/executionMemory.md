@@ -191,6 +191,9 @@ and environment. This lower API does not impersonate Fleet authority or terminat
 
 - Execution Memory is not a conversation database or vector index.
 - It does not restore cookies, a default browser profile, unrecorded DOM state, or external effects.
+- A pending Rehearse-Commit intent moves the session to `waitingApproval`. Its terminal EffectResult creates a
+  new active or unresolved session revision, and the final EffectReceipt links all three revisions. Transaction
+  approval is local to its trust domain and is not carried by handoff. See [Rehearse-Commit](rehearseCommit.md).
 - A portable Control image is not called cold.
 - A signature is not a permission grant.
 - `retentionPlan()` reports unreachable objects and sidecars but performs no deletion.

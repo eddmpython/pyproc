@@ -69,6 +69,7 @@
 - [Run the Web Computer](#run-the-web-computer)
 - [Hibernate a Machine Fleet](#hibernate-a-machine-fleet)
 - [Resume work with Execution Memory](#resume-work-with-execution-memory)
+- [Rehearse and commit an approved effect](#rehearse-and-commit-an-approved-effect)
 - [Capability paths](#capability-paths)
 - [Dependency boundary](#dependency-boundary)
 - [Setup](#setup)
@@ -102,6 +103,7 @@ the same contract, not separate identities.
 | **Image** | signed `.pymachine` / `.webmachine` | Portable state with integrity and an explicit trust gate |
 | **Permissions** | capability contracts + permission jail | Network, storage, devices, memory, and execution policy |
 | **Eyes and hands** | `pyproc/control` + APX + AutomationSpace | Bounded perception, authorized action, screenshots, and postcondition evidence |
+| **Effect transaction** | Rehearse-Commit through `pyproc/control` | Exact intent, signed approval, durable one-shot send, honest terminal, and sealed receipt |
 
 These are product concepts, not competing top-level APIs. A Machine remains the browser-app root, and its
 verbs reveal only the capability being used. Internal engine objects stay behind that boundary.
@@ -660,6 +662,36 @@ approval. Browser cookies, ambient profile state, unrecorded effects, and conver
 state. The feature is opt-in under `executionMemory` in the product manifest. See the
 [Execution Memory guide](docs/usage/executionMemory.md) and
 [specification](docs/specs/executionMemory/README.md).
+
+## Rehearse and commit an approved effect
+
+Consequential browser effects cannot be rolled back with a Python checkpoint. Rehearse-Commit instead binds
+one logical APX action plan to an exact destination and Execution Session, records what was checked without the
+live effect, accepts a separately signed approval, publishes a durable one-shot lease, and only then dispatches
+the provider command. Recovery after that send boundary returns `outcomeUnknown` without a second dispatch.
+
+```sh
+npx pyproc-mcp init \
+  --recipe authorizedBrowser \
+  --engine-root /absolute/path/to/pyodide \
+  --origin https://work.example.test \
+  --action snapshot --action click \
+  --max-risk externalEffect \
+  --purpose "submit approved records" \
+  --acknowledge-effects \
+  --execution-memory-root /absolute/private/pyproc-memory \
+  --enable-effect-transactions \
+  --effect-approval-authority operator:records=/absolute/keys/records-public.pem
+```
+
+The page never issues approval. The stored template contains APX `requirementRef` values rather than selectors;
+commit resolves fresh broker-authorized affordances, rechecks the live target origin, and materializes bounded
+secret placeholders only for provider dispatch. A final `EffectReceipt` is created only when a verified
+Evidence Pack links the exact intent, EffectResult, and terminal session revision.
+
+JavaScript, Python, MCP, and Control Protocol clients share the seven operations from prepare through seal.
+See the [Rehearse-Commit guide](docs/usage/rehearseCommit.md) and
+[protocol specification](docs/specs/rehearseCommit/README.md).
 
 ## Capability paths
 

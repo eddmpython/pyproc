@@ -87,6 +87,29 @@ assert created.output["contentSha256"] == opened.output["contentSha256"]
 `inspectExecutionSession`, `exportExecutionHandoff`, and `importExecutionHandoff` map directly to the Control
 operations. The registry persists state, not the client object. See [Execution Memory](executionMemory.md).
 
+## Rehearse-Commit transactions
+
+An effect-enabled profile exposes the same transaction lifecycle as JavaScript and MCP:
+
+```python
+prepared = client.prepareEffectTransaction(intentInput)
+rehearsed = client.rehearseEffectTransaction(
+    intentInput["transactionId"],
+    prepared.output["transaction"]["contentSha256"],
+    {"mode": "computed", "code": "6 * 7", "expectedValue": "42"},
+)
+approved = client.approveEffectTransaction(
+    intentInput["transactionId"], rehearsed.output["contentSha256"], signedGrant)
+terminal = client.commitEffectTransaction(
+    intentInput["transactionId"], approved.output["contentSha256"])
+sealed = client.sealEffectTransaction(
+    intentInput["transactionId"], terminal.output["contentSha256"], evidencePackDir)
+```
+
+`inspectEffectTransaction` and `listEffectTransactions` are read-only lifecycle queries. The Python package
+does not mint approval authority; pass a canonical grant produced by the separately trusted issuer. Recovery
+from a durable `sending` state never repeats the provider call. See [Rehearse-Commit](rehearseCommit.md).
+
 ## Browser automation and screenshots
 
 Browser operations appear only when the manifest grants automation authority. Risk is fixed by the product
@@ -208,6 +231,8 @@ each into a separate clean virtual environment, and runs these installed-package
 - real browser open, attach, PNG capture, SHA-256 verification, artifact deletion, and detach.
 - real Machine image capture, immutable Execution Memory publication, reopen, and list through the installed
   Python wheel.
+- signed exact-intent approval, one live HTTP effect, no resend, and verified EffectReceipt sealing through the
+  installed Python wheel.
 
 Chrome on Ubuntu and Edge on Windows run the same gate in CI.
 ## Repository experience verification

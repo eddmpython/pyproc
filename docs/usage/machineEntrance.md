@@ -110,6 +110,31 @@ Import roots and secret environment-variable names are repeatable. The initializ
 to exist and contain at least eight bytes, but persists only its name. It never writes the secret value. Omit
 all three options to keep Execution Memory closed. See [Execution Memory](executionMemory.md).
 
+## Approved effect transactions
+
+An authorized browser recipe can opt into Rehearse-Commit only when Execution Memory is also enabled:
+
+```sh
+npx pyproc-mcp init \
+  --recipe authorizedBrowser \
+  --engine-root ./vendor/pyodide \
+  --origin https://records.example.test \
+  --action snapshot \
+  --action click \
+  --max-risk externalEffect \
+  --purpose "submit one approved record" \
+  --acknowledge-effects \
+  --execution-memory-root ./.pyproc/memory \
+  --enable-effect-transactions \
+  --effect-approval-authority operator:records=./keys/records-public.pem
+```
+
+The initializer resolves each authority public-key path against the project root and writes only the public
+authority configuration. It never creates or reads a private signing key. The resulting manifest exposes the
+seven `effect.*` operations only after strict product validation confirms Execution Memory, an acknowledged
+`externalEffect` browser profile, and at least one authority. Omit both effect options to keep the transaction
+coordinator closed. See [Rehearse-Commit Transactions](rehearseCommit.md).
+
 ## Pinned replay
 
 `replayPinned` accepts an existing recording only with its identity and final digest:

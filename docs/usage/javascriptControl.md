@@ -84,6 +84,35 @@ Updates require the exact current `contentSha256`; stale writers fail instead of
 requires a verified Evidence Pack matching the repository identity. Signed export proves provenance but import
 still requires a separately approved permission-manifest digest. See [Execution Memory](executionMemory.md).
 
+## Rehearse-Commit transactions
+
+An effect-enabled profile adds `prepareEffectTransaction`, `rehearseEffectTransaction`,
+`approveEffectTransaction`, `commitEffectTransaction`, `inspectEffectTransaction`, `listEffectTransactions`,
+and `sealEffectTransaction`. They map directly to the shared Control operations.
+
+```js
+const prepared = await client.prepareEffectTransaction(intentInput);
+const rehearsed = await client.rehearseEffectTransaction(
+  intentInput.transactionId,
+  prepared.output.transaction.contentSha256,
+  { mode: "computed", code: "6 * 7", expectedValue: "42" },
+);
+const approved = await client.approveEffectTransaction(
+  intentInput.transactionId,
+  rehearsed.output.contentSha256,
+  separatelySignedGrant,
+);
+const terminal = await client.commitEffectTransaction(
+  intentInput.transactionId,
+  approved.output.contentSha256,
+);
+```
+
+The stable subpath also exports `createApprovalGrant`, `verifyApprovalGrant`,
+`createEffectTransactionRegistry`, `EffectTransactionRegistry`, and `FileEffectTransactionStore` for an
+approving or embedded Node.js host. The private signing key must remain outside the page and manifest. See the
+[Rehearse-Commit guide](rehearseCommit.md).
+
 ## PyProc Eyes and evidence-backed action
 
 ```js
@@ -173,6 +202,9 @@ reuse, detach, and shut down on Chrome and Edge.
 
 The same installed gate captures a real portable Machine image, publishes it through Execution Memory, reopens
 the immutable revision, and verifies session discovery without exposing image bytes in JSON.
+
+It also sends one approved HTTP effect, refuses automatic resend, and seals the terminal EffectResult with an
+exact verified Evidence Pack.
 
 ## Repository experience verification
 

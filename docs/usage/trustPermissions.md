@@ -101,3 +101,9 @@ signed the exact revision chain and reachable inventory. Import still requires t
 permission manifest and approve its exact SHA-256 independently. A trusted signer key never widens browser,
 network, file, device, or guest authority, and imported external effects are not replayed. See
 [Execution Memory](executionMemory.md).
+
+Rehearse-Commit adds a narrower consequential-effect authority. Configured Ed25519 public keys identify
+approval issuers, while the private key remains outside the page and product manifest. A grant binds the exact
+intent, destination, risk, base session revision, local trust domain, expiry, nonce, and policy version. It is
+not portable authority. Commit still requires a current broker-issued APX affordance and matching live target
+origin. See [Rehearse-Commit](rehearseCommit.md).
