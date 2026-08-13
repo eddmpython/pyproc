@@ -142,6 +142,9 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   if (actuationEnabled && (!executionMemoryEnabled || !browserEnabled)) {
     throw new TypeError("Motor requires Execution Memory and an automation provider");
   }
+  if (actuationEnabled && providerKind === "frame" && !appSpaceEnabled) {
+    throw new TypeError("Motor with FrameSpace requires AppSpace");
+  }
   const actuationTools = actuationEnabled ? ACTUATION_TOOLS : [];
   const machineImageTools = executionMemoryEnabled ? CONTROL_MACHINE_IMAGE_TOOLS : [];
   const pythonTools = [...CONTROL_PYTHON_TOOLS, ...machineImageTools];
@@ -322,6 +325,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       root: env.PYPROC_EXECUTION_MEMORY_ROOT,
       automationRouter,
       replayGraphProduct,
+      appProduct,
       valueBindings: JSON.parse(env.PYPROC_ACTUATION_VALUE_BINDINGS || "{}"),
     }) : null;
     const operationCatalog = controlOperationCatalog(tools);

@@ -70,6 +70,9 @@ const targetServer = createServer((req, res) => {
         finalizeEffect: async (effect) => { const entry = outbox.find((item) => item.intentSha256 === effect.intentSha256);
           if (!entry) throw new Error("intent unavailable"); entry.state = "terminal"; entry.terminal = effect.terminal;
           entry.effectReceiptSha256 = effect.effectReceiptSha256; revision += 1; },
+        motorIntents: ["activate"],
+        actuate: async ({ intent, target }) => { if (intent !== "activate" || target.role !== "button"
+          || target.name !== "One") throw new Error("typed Motor target is unavailable"); mutate("motor"); },
       }); render();
     </script><script src="/frameSpaceTarget.js"></script></body></html>`);
 });
@@ -92,6 +95,7 @@ await writeFile(configPath, JSON.stringify({
   }] },
   appSpace: { enabled: true, maxStateBytes: 64 * 1024, apps: [{ appId: "product.app",
     origin: targetOrigin, adapterVersion: "1.0.0", stateSchema: "workspace/1" }] },
+  actuation: { enabled: true },
   browser: { enabled: true, provider: "frame",
     ...(process.env.PYPROC_BROWSER ? { executable: process.env.PYPROC_BROWSER } : {}),
     allowedOrigins: [targetOrigin], maxRisk: "externalEffect",
@@ -120,8 +124,8 @@ let clientClosed = false;
 
 console.log("installed Transactional AppSpace product gate");
 try {
-  check("one public wire exposes the nine AppSpace operations",
-    client.operations.length === 41 && ["app.attach", "app.checkpoint", "app.branch", "app.restore",
+  check("one public wire exposes AppSpace and Motor operations",
+    client.operations.length === 48 && ["app.attach", "app.checkpoint", "app.branch", "app.restore",
       "app.adopt", "app.inspect", "app.list", "app.effect.stage", "app.effect.finalize"]
       .every((operation) => client.operations.includes(operation)), `${client.operations.length} operations`);
 
@@ -138,6 +142,27 @@ try {
   const base = await client.checkpointApp({ appRef: app.output.appRef, pairId: "pair:base",
     executionSessionId: "session:app-space", expectedSessionRevisionSha256: memory.output.contentSha256,
     expectedActivePairSha256: null });
+  const motorSituation = (await client.observe(frame.output, { expectedRisk: "read",
+    representation: "apx.situation", focus: { requirements: [{ requirementRef: "requirement:motor-one",
+      select: { role: "button", name: "One" }, need: ["fact", "affordance"], cardinality: "one" }] },
+    visual: { mode: "off" }, budget: { maxEntities: 100, maxRelations: 200, maxBytes: 131072 } })).output;
+  const motorAffordance = motorSituation.affordances.find((entry) => entry.kind === "authorized"
+    && entry.action === "click");
+  const motorEntityRef = motorSituation.requirements[0].entityRefs[0];
+  const motorResult = await client.executeMotor({ sessionRef: frame.output, situation: motorSituation,
+    requirementRef: "requirement:motor-one", intent: { intent: "activate", target: {
+      spaceRef: frame.output.spaceId, entityRef: motorEntityRef, worldRef: motorSituation.worldRef,
+      surfaceEpoch: `document:${motorSituation.documentEpoch}` }, desired: { activated: true }, preconditions: [],
+    expectedTransition: { entityAppeared: { role: "status", name: "motor" }, withinMs: 5000 }, authority: {
+      actionCapabilityRef: motorAffordance.capabilityRef, approvalGrantRef: null, commitLeaseRef: null,
+      controlLeaseRef: null }, policy: { allowedActuatorKinds: ["cooperative"],
+      allowPreContactFallback: false } } });
+  const motorObserved = await client.observe(frame.output, { mode: "interactive", expectedRisk: "read" });
+  check("Motor uses the registered typed AppSpace handler and independent semantic evidence",
+    motorResult.output.terminal === "confirmed"
+      && motorResult.output.receipt.decision.selectedActuator === "cooperative"
+      && motorObserved.output.nodes.some((node) => node.id === "state" && node.text === "motor"));
+  await client.restoreApp(app.output.appRef, "pair:base");
   await client.act(frame.output, [{ kind: "click", selector: "#one", expectedRisk: "externalEffect" }]);
   await client.runPython("app_machine = 'one'");
   const first = await client.branchApp({ appRef: app.output.appRef, pairId: "pair:first",

@@ -468,7 +468,7 @@
           ok: true, value: await dispatch(data.operation, data.input) });
       } catch (error) {
         const externalEffect = ["action.navigate", "action.click", "action.focus", "action.fill", "action.press",
-          "action.select", "action.check", "action.uncheck", "action.scroll"].includes(data.operation);
+          "action.select", "action.check", "action.uncheck", "action.scroll", "app.actuate"].includes(data.operation);
         const outcome = error?.outcome || (externalEffect ? "outcomeUnknown" : "rejected");
         port.postMessage({ protocol: PROTOCOL, version: VERSION, type: "response", id: data.id,
           ok: false, error: { code: error?.code || "FRAME_SPACE_TARGET_FAILED",

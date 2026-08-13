@@ -380,12 +380,15 @@ function normalizedReplayGraph(input = { enabled: false }, { executionMemory } =
   return Object.freeze({ enabled });
 }
 
-function normalizedActuation(input = { enabled: false }, { executionMemory, browser } = {}) {
+function normalizedActuation(input = { enabled: false }, { executionMemory, browser, appSpace } = {}) {
   const actuation = plainObject(input, "actuation");
   knownKeys(actuation, ACTUATION_KEYS, "actuation");
   const enabled = optionalBoolean(actuation.enabled, "actuation.enabled");
   if (enabled && (!executionMemory.enabled || !browser.enabled)) {
     throw new TypeError("actuation requires executionMemory.enabled and browser.enabled true");
+  }
+  if (enabled && browser.provider === "frame" && !appSpace.enabled) {
+    throw new TypeError("actuation with browser.provider frame requires appSpace.enabled true");
   }
   const motorActions = new Set(["click", "focus", "fill", "select", "check", "uncheck", "scroll", "drag"]);
   if (enabled && (browser.maxRisk !== "externalEffect" || !browser.actions.includes("snapshot")
@@ -462,7 +465,9 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
     executionMemory: executionMemory.config, effectTransactions, browser,
   });
   const replayGraph = normalizedReplayGraph(value.replayGraph, { executionMemory: executionMemory.config });
-  const actuation = normalizedActuation(value.actuation, { executionMemory: executionMemory.config, browser });
+  const actuation = normalizedActuation(value.actuation, {
+    executionMemory: executionMemory.config, browser, appSpace,
+  });
   const config = Object.freeze({
     schemaVersion: 1,
     engine: normalizedEngine(value.engine),

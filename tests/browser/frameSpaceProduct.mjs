@@ -137,7 +137,7 @@ try {
   const inspected = await client.request("automation.space.inspect", {});
   check("inspect declares credentialless sandbox and provider boundary",
     inspected.output.space?.providerKind === "frame"
-      && inspected.output.space?.capabilities?.join(",") === "dom,target,screenshot,artifact,perception"
+      && inspected.output.space?.capabilities?.join(",") === "dom,target,screenshot,artifact,perception,actionEvidence"
       && inspected.output.transport === "messageChannel"
       && inspected.output.sandbox === "allow-scripts allow-forms"
       && inspected.output.credentialless === true
@@ -347,9 +347,10 @@ try {
     actions: [{ kind: "screenshot", expectedRisk: "read" }] });
   const mcpImages = mcpCapture.result.content.filter((entry) => entry.type === "image");
   check("installed MCP adapter keeps the FrameSpace tool and native image contract",
-    mcpTools.length === 13 && !mcpTools.includes("browserCommand") && mcpImages.length === 1
+    mcpTools.length === 16 && !mcpTools.includes("browserCommand") && mcpImages.length === 1
       && Buffer.from(mcpImages[0].data, "base64").subarray(0, 8)
-        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])));
+        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+  `tools=${mcpTools.length}, images=${mcpImages.length}`);
   await callTool("browserDetach", { sessionRef: mcpSession });
 } catch (error) {
   check("FrameSpace installed journey has no exception", false, String(error?.stack || error).slice(-1200));

@@ -105,6 +105,13 @@ export class AutomationSpaceRouter {
     return this.withRecordingSnapshot((snapshot) => snapshot);
   }
 
+  assertActionContext(sessionRef, actionContext, action) {
+    if (typeof this.provider.assertActionContext !== "function") {
+      throw spaceError("AUTOMATION_SPACE_OPERATION_UNSUPPORTED", "automation provider cannot validate action context");
+    }
+    return this.provider.assertActionContext(sessionRef, actionContext, action);
+  }
+
   withRecordingSnapshot(consumer) {
     if (typeof consumer !== "function") throw new TypeError("recording snapshot consumer is required");
     if (typeof this.provider.snapshotRecording !== "function") return Promise.resolve(consumer(null));

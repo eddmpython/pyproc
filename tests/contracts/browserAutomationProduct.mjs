@@ -94,6 +94,12 @@ export async function assertBrowserAutomationProductContract() {
   assert((await errorOf(() => validateMcpProductConfig({ ...manifest,
     executionMemory: { enabled: true, root: memoryRoot }, actuation: { enabled: true } })))?.message
     .includes("requires snapshot"), "Motor가 read-only browser permission으로 열렸다");
+  assert((await errorOf(() => validateMcpProductConfig({ ...manifest,
+    browser: { ...manifest.browser, provider: "frame", maxRisk: "externalEffect",
+      actions: ["snapshot", "click"], externalEffects: "acknowledged",
+      purpose: "Reject an unattached cooperative Motor" },
+    executionMemory: { enabled: true, root: memoryRoot }, actuation: { enabled: true } })))?.message
+    .includes("requires appSpace.enabled"), "FrameSpace Motor가 typed AppSpace authority 없이 열렸다");
   const approvalPublicKey = join(root, "approval-public.pem");
   const approvalPair = generateKeyPairSync("ed25519");
   await writeFile(approvalPublicKey, approvalPair.publicKey.export({ type: "spki", format: "pem" }));

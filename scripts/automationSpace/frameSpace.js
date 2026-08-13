@@ -181,6 +181,10 @@ export class FrameSpace {
     this._perception.close();
   }
 
+  assertActionContext(sessionRef, actionContext, action) {
+    return this._perception.assertActionContext(sessionRef, actionContext, action);
+  }
+
   _assertAllowedUrl(value) {
     const origin = exactOrigin(value);
     if (!origin || !this.config.targetOrigins.includes(origin)) {

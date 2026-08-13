@@ -6,6 +6,12 @@ import { ActuationCoordinator } from "../../scripts/actuation/actuationCoordinat
 import { FileActuationStore } from "../../scripts/actuation/fileActuationStore.js";
 import { actuationDigest } from "../../scripts/actuation/actuationCanonical.js";
 import { PerceptionSpace } from "../../scripts/perception/perceptionSpace.js";
+import {
+  createReplayGraphEdge,
+  createReplayGraphNode,
+  createReplayGraphRevision,
+} from "../../scripts/replayGraph/replayGraphCanonical.js";
+import { ReplayGraphCoordinator } from "../../scripts/replayGraph/replayGraphCoordinator.js";
 
 async function errorOf(operation) {
   try { await operation(); return null; }
@@ -119,6 +125,40 @@ export async function assertActuationProductContracts() {
     assert.equal(promoted.policy.previousSha256, inspected.policy.policySha256);
     assert.equal((await motor.rollback({ expectedPolicySha256: promoted.policy.policySha256 })).policySha256,
       inspected.policy.policySha256);
+
+    const replayNodeInput = { providerKind: "motorFixture", environmentSha256: actuationDigest({ environment: 1 }),
+      policySha256: inspected.policy.policySha256, completeness: "complete", artifactSha256s: [],
+      sessionRevisionSha256: null, pendingEffectSha256: null };
+    const replayBefore = createReplayGraphNode({ ...replayNodeInput, state: { motor: "before" } });
+    const replayAfter = createReplayGraphNode({ ...replayNodeInput, state: { motor: "after" } });
+    const replayEdge = createReplayGraphEdge({ sourceNodeRef: replayBefore.nodeRef,
+      targetNodeRef: replayAfter.nodeRef, operation: "motor.execute",
+      input: { receiptSha256: result.receipt.receiptSha256 }, terminal: { ok: true,
+        motorTerminal: result.terminal }, provenance: "syntheticFixture", effectClass: "recordedExternal",
+      risk: "externalEffect", artifactRefs: [],
+      transitionProof: { oracleSha256: actuationDigest({ oracle: "motor receipt" }) } });
+    const replayGraph = createReplayGraphRevision({ graphId: "graph:motor-fixture", parentRootSha256: null,
+      startNodeRefs: [replayBefore.nodeRef], nodes: [replayBefore, replayAfter], edges: [replayEdge], artifacts: [],
+      unexploredActionClasses: [] });
+    const replayCoordinator = new ReplayGraphCoordinator({ registry: {
+      open: async (graphId, rootSha256) => {
+        assert.equal(graphId, replayGraph.graphId);
+        assert.equal(rootSha256, replayGraph.rootSha256);
+        return replayGraph;
+      },
+    } });
+    const opened = await replayCoordinator.open({ graphId: replayGraph.graphId,
+      rootSha256: replayGraph.rootSha256 });
+    const replayMotor = new ActuationCoordinator({ store, automation, replayGraph: replayCoordinator,
+      now: () => now });
+    const callsBeforeReplay = providerCalls;
+    const replayed = await replayMotor.replay({ receiptSha256: result.receipt.receiptSha256,
+      worldRef: opened.world.worldRef, expectedNodeRef: replayBefore.nodeRef });
+    assert.equal(replayed.receipt.receiptSha256, result.receipt.receiptSha256);
+    assert.equal(replayed.replay.edgeRef, replayEdge.edgeRef);
+    assert.equal(replayed.replay.replayedEffect, false);
+    assert.equal(replayed.providerCalls, 0);
+    assert.equal(providerCalls, callsBeforeReplay);
     observed.perception.close();
     selected.perception.close();
   } finally {

@@ -105,6 +105,26 @@ export class AppSpaceCoordinator {
 
   list() { return this.registry.list(); }
 
+  async actuateSession({ sessionRef, intent, target, desired }, context = {}) {
+    const entry = [...this.attachments.values()].find((candidate) => sameIdentity(candidate.sessionRef, sessionRef));
+    if (!entry) throw appSpaceError("APP_SPACE_ATTACHMENT_INVALID",
+      "typed app actuation requires the exact attached FrameSpace session");
+    const described = await this._dispatch("app.describe", { sessionRef: entry.sessionRef }, context,
+      "motor-describe");
+    if (!sameIdentity(entry.identity, described.identity) || described.quiesced
+      || !described.capabilities?.includes("actuate") || !described.motorIntents?.includes(intent)) {
+      throw appSpaceError("APP_SPACE_ACTUATION_UNAVAILABLE",
+        "cooperative app does not expose this typed local-state intent");
+    }
+    const result = await this._dispatch("app.actuate", { sessionRef: entry.sessionRef,
+      intent, target, desired, expectedRevision: described.revision }, context, "motor-actuate");
+    if (result.effectClass !== "localState") {
+      throw appSpaceError("APP_SPACE_EFFECT_INVALID", "typed app actuation cannot send a business effect",
+        null, "outcomeUnknown");
+    }
+    return Object.freeze({ appRef: entry.appRef, identity: entry.identity, ...result });
+  }
+
   async stageEffect(input, context = {}) {
     if (!this.effects?.registry) throw appSpaceError("APP_SPACE_EFFECT_UNAVAILABLE", "Rehearse-Commit is not enabled");
     const entry = this._attachment(input.appRef);

@@ -5,9 +5,10 @@
   let adapter = null;
   let fence = null;
   let quiesced = false;
+  const MOTOR_INTENTS = new Set(["activate", "focus", "setValue", "setSelected", "setExpanded", "scrollTo", "dragTo"]);
 
-  const fail = (code, message) => { const error = new Error(message); error.code = code;
-    error.outcome = "notSent"; error.retryable = false; throw error; };
+  const fail = (code, message, outcome = "notSent") => { const error = new Error(message); error.code = code;
+    error.outcome = outcome; error.retryable = false; throw error; };
   const revisionOf = async () => {
     const revision = String(await adapter.revision());
     if (!/^apprev:[A-Za-z0-9._:-]{1,128}$/.test(revision)) fail("APP_SPACE_REVISION_INVALID", "adapter revision is invalid");
@@ -25,7 +26,8 @@
     requireAdapter();
     if (operation === "describe") return { identity: adapter.identity, revision: await revisionOf(), quiesced,
       capabilities: Object.freeze(["exportState", "importState", ...(adapter.stageEffect ? ["stageEffect"] : []),
-        ...(adapter.finalizeEffect ? ["finalizeEffect"] : [])]) };
+        ...(adapter.finalizeEffect ? ["finalizeEffect"] : []), ...(adapter.actuate ? ["actuate"] : [])]),
+      motorIntents: Object.freeze([...(adapter.motorIntents || [])]) };
     if (operation === "quiesce") {
       if (input.expectedRevision !== await revisionOf()) fail("APP_SPACE_REVISION_CONFLICT", "app revision changed before quiesce");
       await adapter.quiesce();
@@ -66,6 +68,24 @@
       await adapter.finalizeEffect(structuredClone(input.effect));
       return { finalized: true, revision: await revisionOf() };
     }
+    if (operation === "actuate") {
+      if (quiesced || typeof adapter.actuate !== "function") fail("APP_SPACE_ACTUATION_UNAVAILABLE", "typed app actuation is unavailable");
+      if (!input || !MOTOR_INTENTS.has(input.intent) || !adapter.motorIntents.includes(input.intent)
+        || !input.target || typeof input.target !== "object" || Array.isArray(input.target)
+        || typeof input.target.entityRef !== "string" || typeof input.target.role !== "string"
+        || typeof input.target.name !== "string"
+        || !input.desired || typeof input.desired !== "object" || Array.isArray(input.desired)) {
+        fail("APP_SPACE_ACTUATION_INVALID", "typed app actuation intent is invalid");
+      }
+      const beforeRevision = await revisionOf();
+      if (input.expectedRevision !== beforeRevision) fail("APP_SPACE_REVISION_CONFLICT", "app revision changed before actuation");
+      await adapter.actuate(Object.freeze({ intent: input.intent, target: structuredClone(input.target),
+        desired: structuredClone(input.desired) }));
+      const revision = await revisionOf();
+      if (revision === beforeRevision) fail("APP_SPACE_REVISION_CONFLICT",
+        "typed app actuation did not advance logical revision", "outcomeUnknown");
+      return { previousRevision: beforeRevision, revision, effectClass: "localState" };
+    }
     fail("APP_SPACE_OPERATION_UNSUPPORTED", `unsupported app operation: ${operation}`);
   };
 
@@ -75,10 +95,14 @@
         if (adapter) fail("APP_SPACE_ADAPTER_EXISTS", "an app adapter is already registered");
         if (!value || typeof value !== "object" || !value.identity || value.identity.origin !== location.origin
           || !Array.isArray(value.scope) || !value.scope.length
+          || (value.actuate !== undefined && (typeof value.actuate !== "function"
+            || !Array.isArray(value.motorIntents) || !value.motorIntents.length
+            || value.motorIntents.some((intent) => !MOTOR_INTENTS.has(intent))))
           || !["revision", "quiesce", "exportState", "importState", "resume"].every((name) => typeof value[name] === "function")) {
           fail("APP_SPACE_ADAPTER_INVALID", "app adapter contract is invalid");
         }
-        adapter = Object.freeze({ ...value, identity: Object.freeze({ ...value.identity }), scope: Object.freeze([...value.scope]) });
+        adapter = Object.freeze({ ...value, identity: Object.freeze({ ...value.identity }), scope: Object.freeze([...value.scope]),
+          motorIntents: Object.freeze([...(value.motorIntents || [])]) });
         return Object.freeze({ registered: true, identity: adapter.identity });
       },
     }) });

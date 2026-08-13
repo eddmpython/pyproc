@@ -1,6 +1,7 @@
 // actuationTools.js - Proof-Carrying Motor의 Control/MCP operation과 closed input schemas.
 import { ActuationCoordinator } from "./actuationCoordinator.js";
 import { FileActuationStore } from "./fileActuationStore.js";
+import { CooperativeActuator } from "./cooperativeActuator.js";
 
 const DIGEST = Object.freeze({ type: "string", pattern: "^[0-9a-f]{64}$" });
 const REF = Object.freeze({ type: "string", pattern: "^[a-z][A-Za-z0-9.]*:[A-Za-z0-9._:-]{1,192}$" });
@@ -49,10 +50,12 @@ export const ACTUATION_TOOLS = Object.freeze([
 ]);
 
 export async function createActuationHandlers({ root, automationRouter = null, replayGraphProduct = null,
-  valueBindings = {}, authorityValidator = null, cleanup = null } = {}) {
+  appProduct = null, valueBindings = {}, authorityValidator = null, cleanup = null } = {}) {
   const store = await FileActuationStore.open(root);
+  const cooperative = appProduct && automationRouter?.providerKind === "frame"
+    ? new CooperativeActuator({ appCoordinator: appProduct.coordinator, automation: automationRouter }) : null;
   const coordinator = await ActuationCoordinator.open({ store, automation: automationRouter,
-    replayGraph: replayGraphProduct?.coordinator || null, valueBindings, authorityValidator, cleanup });
+    replayGraph: replayGraphProduct?.coordinator || null, cooperative, valueBindings, authorityValidator, cleanup });
   return Object.freeze({ store, coordinator, handlers: Object.freeze({
     "motor.execute": (input, context) => coordinator.execute(input, context),
     "motor.inspect": () => coordinator.inspect(),

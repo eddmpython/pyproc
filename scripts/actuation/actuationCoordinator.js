@@ -62,7 +62,7 @@ export class ActuationCoordinator {
   }
 
   constructor({ store, automation = null, replayGraph = null, valueBindings = {}, authorityValidator = null,
-    cleanup = null, now = () => Date.now() } = {}) {
+    cooperative = null, cleanup = null, now = () => Date.now() } = {}) {
     if (!store) throw new TypeError("ActuationCoordinator requires a durable store");
     if (automation && typeof automation.invoke !== "function") {
       throw new TypeError("ActuationCoordinator automation provider is invalid");
@@ -76,6 +76,7 @@ export class ActuationCoordinator {
     this.store = store;
     this.automation = automation;
     this.replayGraph = replayGraph;
+    this.cooperative = cooperative;
     this.valueBindings = new Map(Object.entries(valueBindings));
     this.authorityValidator = authorityValidator;
     this.cleanup = cleanup;
@@ -98,7 +99,8 @@ export class ActuationCoordinator {
       supportedIntents: Object.freeze(["activate", "focus", "setValue", "setSelected", "setExpanded", "scrollTo",
         ...(this.automation.providerKind === "nativeCdp" ? ["dragTo"] : [])]),
       binding: compiled.binding, now: this.now(), healthy: true, authoritySatisfied: true,
-      evidenceAvailable: this.automation.capabilities.includes("perception"), effectWindowRepresentable: true,
+      evidenceAvailable: this.automation.capabilities.includes("perception")
+        && (kind !== "cooperative" || this.cooperative !== null), effectWindowRepresentable: true,
       semanticSetter: ["setValue", "setSelected", "setExpanded"].includes(intent.intent),
       additionalAuthority: false, postconditionEvidence: true, sharedInput: false });
     const decision = chooseActuator(intent, [candidate], policy.policy.providerPreference || []);
@@ -129,9 +131,11 @@ export class ActuationCoordinator {
       window.sent({ kind: compiled.actionKind });
       timeline.push({ phase: "committedGesture", at: this.now(), worldRef: intent.target.worldRef });
       try {
-        output = await this.automation.invoke("automation.act", {
-          sessionRef: input.sessionRef, actions: [compiled.action],
-        }, { signal: context.signal, requestId: context.requestId || null });
+        output = decision.selected.kind === "cooperative"
+          ? await this.cooperative.execute({ input, intent, compiled, plan }, context)
+          : await this.automation.invoke("automation.act", {
+            sessionRef: input.sessionRef, actions: [compiled.action],
+          }, { signal: context.signal, requestId: context.requestId || null });
         evidence = evidenceFrom(output);
       } catch (error) {
         operationError = error;

@@ -88,6 +88,7 @@ export class FrameSpacePage {
         "app.resume": (input) => this.appResume(input),
         "app.stageEffect": (input) => this.appStageEffect(input),
         "app.finalizeEffect": (input) => this.appFinalizeEffect(input),
+        "app.actuate": (input) => this.appActuate(input),
       } : {}),
       "frame.close": () => this.close(),
     });
@@ -242,6 +243,10 @@ export class FrameSpacePage {
 
   appFinalizeEffect({ sessionRef, effect } = {}) {
     return this._appCall(sessionRef, "finalizeEffect", { effect });
+  }
+
+  appActuate({ sessionRef, intent, target, desired, expectedRevision } = {}) {
+    return this._appCall(sessionRef, "actuate", { intent, target, desired, expectedRevision });
   }
 
   readArtifact({ artifactRef, offset = 0, maxBytes = MAX_READ_BYTES } = {}) {
