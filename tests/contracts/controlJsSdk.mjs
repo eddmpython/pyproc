@@ -4,6 +4,7 @@ import {
   createApprovalGrant,
   createAppSpaceRegistry,
   createEffectTransactionRegistry,
+  createReplayGraphRegistry,
   ControlRemoteError,
   ControlRequest,
   EffectTransactionRegistry,
@@ -13,6 +14,10 @@ import {
   FileEffectTransactionStore,
   FileExecutionMemoryStore,
   FileAppSpaceStore,
+  FileReplayGraphStore,
+  ReplayGraphRegistry,
+  ReplayWorld,
+  retainedReplayGraphObjects,
   PerceptionClient,
   PerceptionEntity,
   PerceptionQueryResult,
@@ -40,11 +45,18 @@ export async function assertControlJsSdkContract() {
   for (const value of [ControlRemoteError, ControlRequest, PerceptionClient, PerceptionEntity,
     PerceptionQueryResult, PyProcControlClient, ExecutionMemoryArtifacts, ExecutionMemoryRegistry,
     FileExecutionMemoryStore, EffectTransactionRegistry, FileEffectTransactionStore,
-    AppSpaceRegistry, FileAppSpaceStore]) {
+    AppSpaceRegistry, FileAppSpaceStore, ReplayGraphRegistry, FileReplayGraphStore, ReplayWorld]) {
     assert(typeof value === "function", "pyproc/control 공개 class가 누락됐다");
   }
-  for (const value of [createApprovalGrant, createEffectTransactionRegistry, createAppSpaceRegistry]) {
+  for (const value of [createApprovalGrant, createEffectTransactionRegistry, createAppSpaceRegistry,
+    createReplayGraphRegistry, retainedReplayGraphObjects]) {
     assert(typeof value === "function", "pyproc/control Rehearse-Commit factory가 누락됐다");
+  }
+  for (const method of ["importReplayGraphRecording", "createReplayGraphAppWorld",
+    "captureReplayGraphAppBranch", "openReplayWorld", "inspectReplayWorld", "listReplayWorldEdges",
+    "traverseReplayWorld", "checkpointReplayWorld", "restoreReplayWorld", "evaluateReplayWorld",
+    "inspectReplayWorldCoverage", "listReplayGraphs"]) {
+    assert(typeof PyProcControlClient.prototype[method] === "function", `ReplayGraph facade가 누락됐다: ${method}`);
   }
   for (const method of ["auditExperience", "verifyExperience", "replayEvidencePack"]) {
     assert(typeof PyProcControlClient.prototype[method] === "function", `verification facade가 누락됐다: ${method}`);

@@ -9,7 +9,7 @@ import {
   AUTOMATION_RECORDING_MAX_TOTAL_ARTIFACT_BYTES,
 } from "./automationSpace/automationRecording.js";
 
-const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "timeoutMs"]);
+const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "replayGraph", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["root", "indexURL"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
@@ -27,6 +27,7 @@ const EFFECT_TRANSACTION_KEYS = new Set(["enabled", "approvalAuthorities"]);
 const APPROVAL_AUTHORITY_KEYS = new Set(["authorityId", "publicKeyFile"]);
 const APP_SPACE_KEYS = new Set(["enabled", "apps", "maxStateBytes"]);
 const APP_IDENTITY_KEYS = new Set(["appId", "origin", "adapterVersion", "stateSchema"]);
+const REPLAY_GRAPH_KEYS = new Set(["enabled"]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_INDEX_URL", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
@@ -42,6 +43,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_EXECUTION_MEMORY_SECRET_VALUES",
   "PYPROC_EFFECT_TRANSACTIONS", "PYPROC_EFFECT_APPROVAL_AUTHORITIES", "PYPROC_EFFECT_SECRET_BINDINGS",
   "PYPROC_APP_SPACE",
+  "PYPROC_REPLAY_GRAPH",
 ]);
 
 function plainObject(value, label) {
@@ -366,6 +368,16 @@ function normalizedAppSpace(input = { enabled: false }, { executionMemory, effec
       : positiveInteger(appSpace.maxStateBytes, "appSpace.maxStateBytes", 8 * 1024 * 1024) });
 }
 
+function normalizedReplayGraph(input = { enabled: false }, { executionMemory } = {}) {
+  const replayGraph = plainObject(input, "replayGraph");
+  knownKeys(replayGraph, REPLAY_GRAPH_KEYS, "replayGraph");
+  const enabled = optionalBoolean(replayGraph.enabled, "replayGraph.enabled");
+  if (enabled && !executionMemory.enabled) {
+    throw new TypeError("replayGraph requires executionMemory.enabled true");
+  }
+  return Object.freeze({ enabled });
+}
+
 function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [], effectSecretBindings = {}) {
   const env = { ...baseEnv };
   for (const key of CONTROLLED_ENV) delete env[key];
@@ -386,6 +398,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
     apps: config.appSpace.apps,
     maxStateBytes: config.appSpace.maxStateBytes,
   });
+  if (config.replayGraph.enabled) env.PYPROC_REPLAY_GRAPH = "1";
   if (!config.browser.enabled) return env;
   const browser = config.browser;
   env.PYPROC_BROWSER_CONTROL = "1";
@@ -427,6 +440,7 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
   const appSpace = normalizedAppSpace(value.appSpace, {
     executionMemory: executionMemory.config, effectTransactions, browser,
   });
+  const replayGraph = normalizedReplayGraph(value.replayGraph, { executionMemory: executionMemory.config });
   const config = Object.freeze({
     schemaVersion: 1,
     engine: normalizedEngine(value.engine),
@@ -434,6 +448,7 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
     executionMemory: executionMemory.config,
     effectTransactions,
     appSpace,
+    replayGraph,
     timeoutMs: value.timeoutMs === undefined ? 180000
       : positiveInteger(value.timeoutMs, "timeoutMs", 900000),
   });

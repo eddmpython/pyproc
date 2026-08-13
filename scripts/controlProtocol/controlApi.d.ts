@@ -191,6 +191,47 @@ export interface AppPairCaptureInput {
   readonly expectedActivePairSha256: string | null;
 }
 
+export interface ReplayGraphNode extends Readonly<Record<string, unknown>> {
+  readonly nodeRef: `node:${string}`;
+  readonly providerKind: string;
+  readonly environmentSha256: string;
+  readonly policySha256: string;
+  readonly state: Readonly<Record<string, unknown>>;
+  readonly completeness: "complete" | "partial" | "implicit";
+}
+
+export interface ReplayGraphEdge extends Readonly<Record<string, unknown>> {
+  readonly edgeRef: `edge:${string}`;
+  readonly sourceNodeRef: `node:${string}`;
+  readonly targetNodeRef: `node:${string}`;
+  readonly operation: string;
+  readonly input: Readonly<Record<string, unknown>>;
+  readonly terminal: Readonly<{ readonly ok: boolean } & Record<string, unknown>>;
+  readonly provenance: "recordedLive" | "recordedFrame" | "transactional" | "syntheticFixture";
+  readonly effectClass: "none" | "recordedExternal";
+}
+
+export interface ReplayGraphRevision extends Readonly<Record<string, unknown>> {
+  readonly format: "pyproc.replayGraph";
+  readonly version: 1;
+  readonly graphId: string;
+  readonly parentRootSha256: string | null;
+  readonly startNodeRefs: readonly `node:${string}`[];
+  readonly nodes: readonly ReplayGraphNode[];
+  readonly edges: readonly ReplayGraphEdge[];
+  readonly artifacts: readonly Readonly<Record<string, unknown>>[];
+  readonly unexploredActionClasses: readonly string[];
+  readonly rootSha256: string;
+}
+
+export interface ReplayWorldCheckpoint extends Readonly<Record<string, unknown>> {
+  readonly worldRef: string;
+  readonly rootSha256: string;
+  readonly currentNodeRef: `node:${string}`;
+  readonly path: readonly `edge:${string}`[];
+  readonly checkpointSha256: string;
+}
+
 export interface CheckpointSaveOutput {
   readonly index: number;
   readonly changedPages: number;
@@ -454,6 +495,46 @@ export class AppSpaceRegistry {
 export function createAppSpaceRegistry(options: Readonly<{ root: string;
   secretValues?: readonly string[]; maxStateBytes?: number }>): Promise<AppSpaceRegistry>;
 
+export class FileReplayGraphStore {
+  private constructor();
+  static open(root: string): Promise<FileReplayGraphStore>;
+  readonly root: string;
+  publish(graph: ReplayGraphRevision, expectedRootSha256: string | null,
+    artifactBytes?: ReadonlyMap<string, Uint8Array>): Promise<ReplayGraphRevision>;
+  readRoot(rootSha256: string): Promise<ReplayGraphRevision>;
+  head(graphId: string): Promise<ReplayGraphRevision | null>;
+  list(): Promise<readonly Readonly<Record<string, unknown>>[]>;
+}
+
+export class ReplayGraphRegistry {
+  private constructor();
+  static open(options: Readonly<{ root: string; importRoots?: readonly string[] }>): Promise<ReplayGraphRegistry>;
+  importRecording(input: Readonly<{ graphId: string; recordingFile: string }>): Promise<Readonly<{
+    graph: ReplayGraphRevision; source: Readonly<Record<string, unknown>> }>>;
+  open(graphId: string, rootSha256?: string | null): Promise<ReplayGraphRevision>;
+  list(): Promise<readonly Readonly<Record<string, unknown>>[]>;
+}
+
+export function createReplayGraphRegistry(options: Readonly<{
+  root: string; importRoots?: readonly string[] }>): Promise<ReplayGraphRegistry>;
+
+export class ReplayWorld {
+  constructor(graph: ReplayGraphRevision, options?: Readonly<{ worldRef?: string; startNodeRef?: string | null }>);
+  readonly worldRef: string;
+  inspect(): Readonly<Record<string, unknown>>;
+  listEdges(): readonly Readonly<Record<string, unknown>>[];
+  traverse(capabilityRef: string, expectedNodeRef: string): Readonly<Record<string, unknown>>;
+  checkpoint(): ReplayWorldCheckpoint;
+  restore(checkpoint: ReplayWorldCheckpoint): ReplayWorldCheckpoint;
+  coverage(): Readonly<Record<string, unknown>>;
+}
+
+export function evaluateReplayGraph(graph: ReplayGraphRevision, contract: Readonly<Record<string, unknown>>,
+  edgeRefs: readonly string[]): Readonly<Record<string, unknown>>;
+export function inspectReplayGraphCoverage(graph: ReplayGraphRevision): Readonly<Record<string, unknown>>;
+export function retainedReplayGraphObjects(graph: ReplayGraphRevision,
+  pinnedNodeRefs?: readonly string[]): Readonly<Record<string, unknown>>;
+
 export type ControlSessionRef = Readonly<Record<string, unknown>>;
 
 export class PerceptionEntity {
@@ -690,7 +771,9 @@ export class PyProcControlClient {
       readonly active: boolean }>>>;
   restoreApp(appRef: string, pairId: string,
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<{ readonly pair: AppPairedGeneration;
-      readonly restored: Readonly<Record<string, unknown>>; readonly activeChanged: false }>>>;
+      readonly restored: Readonly<Record<string, unknown>>;
+      readonly restoreProof: Readonly<{ readonly restoreRef: string; readonly pairSha256: string }>;
+      readonly activeChanged: false }>>>;
   adoptApp(appRef: string, pairId: string, expectedActivePairSha256: string | null,
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<{ readonly pair: AppPairedGeneration;
       readonly restored: Readonly<Record<string, unknown>>; readonly activeChanged: true }>>>;
@@ -702,6 +785,32 @@ export class PyProcControlClient {
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   finalizeAppEffect(appRef: string, transactionId: string, expectedTransactionRevisionSha256: string,
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  importReplayGraphRecording(graphId: string, recordingFile: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<{
+      readonly graph: ReplayGraphRevision; readonly source: Readonly<Record<string, unknown>> }>>>;
+  createReplayGraphAppWorld(graphId: string, pairId: string,
+    options?: ControlRequestOptions): Promise<ControlResult<ReplayGraphRevision>>;
+  captureReplayGraphAppBranch(input: Readonly<Record<string, unknown>>,
+    options?: ControlRequestOptions): Promise<ControlResult<ReplayGraphRevision>>;
+  openReplayWorld(graphId: string, rootSha256: string,
+    options?: ControlRequestOptions & Readonly<{ startNodeRef?: string }>): Promise<ControlResult<Readonly<{
+      readonly world: Readonly<Record<string, unknown>>; readonly node: ReplayGraphNode }>>>;
+  inspectReplayWorld(worldRef: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  listReplayWorldEdges(worldRef: string,
+    options?: ControlRequestOptions): Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
+  traverseReplayWorld(worldRef: string, capabilityRef: string, expectedNodeRef: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  checkpointReplayWorld(worldRef: string,
+    options?: ControlRequestOptions): Promise<ControlResult<ReplayWorldCheckpoint>>;
+  restoreReplayWorld(worldRef: string, checkpoint: ReplayWorldCheckpoint,
+    options?: ControlRequestOptions): Promise<ControlResult<ReplayWorldCheckpoint>>;
+  evaluateReplayWorld(graphId: string, rootSha256: string, contract: Readonly<Record<string, unknown>>,
+    edgeRefs: readonly string[], options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  inspectReplayWorldCoverage(worldRef: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  listReplayGraphs(options?: ControlRequestOptions):
+    Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
   perception(sessionRef?: ControlSessionRef | null): PerceptionClient;
   close(): Promise<void>;
 }

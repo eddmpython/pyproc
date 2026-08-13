@@ -610,6 +610,57 @@ class PyProcClient:
             "expectedTransactionRevisionSha256": expectedTransactionRevisionSha256,
         }, timeout=timeout)
 
+    def importReplayGraphRecording(self, graphId: str, recordingFile: str | os.PathLike[str], *,
+                                   timeout: float | None = None) -> ControlResult:
+        return self.request("world.import.recording", {
+            "graphId": graphId,
+            "recordingFile": str(Path(recordingFile).resolve()),
+        }, timeout=timeout)
+
+    def createReplayGraphAppWorld(self, graphId: str, pairId: str, *,
+                                  timeout: float | None = None) -> ControlResult:
+        return self.request("world.create.app", {"graphId": graphId, "pairId": pairId}, timeout=timeout)
+
+    def captureReplayGraphAppBranch(self, input: dict[str, Any], *,
+                                    timeout: float | None = None) -> ControlResult:
+        return self.request("world.capture.app.branch", input, timeout=timeout)
+
+    def openReplayWorld(self, graphId: str, rootSha256: str, *, startNodeRef: str | None = None,
+                        timeout: float | None = None) -> ControlResult:
+        input: dict[str, Any] = {"graphId": graphId, "rootSha256": rootSha256}
+        if startNodeRef is not None:
+            input["startNodeRef"] = startNodeRef
+        return self.request("world.open", input, timeout=timeout)
+
+    def inspectReplayWorld(self, worldRef: str, *, timeout: float | None = None) -> ControlResult:
+        return self.request("world.inspect", {"worldRef": worldRef}, timeout=timeout)
+
+    def listReplayWorldEdges(self, worldRef: str, *, timeout: float | None = None) -> ControlResult:
+        return self.request("world.edges", {"worldRef": worldRef}, timeout=timeout)
+
+    def traverseReplayWorld(self, worldRef: str, capabilityRef: str, expectedNodeRef: str, *,
+                            timeout: float | None = None) -> ControlResult:
+        return self.request("world.traverse", {"worldRef": worldRef, "capabilityRef": capabilityRef,
+                                                "expectedNodeRef": expectedNodeRef}, timeout=timeout)
+
+    def checkpointReplayWorld(self, worldRef: str, *, timeout: float | None = None) -> ControlResult:
+        return self.request("world.checkpoint", {"worldRef": worldRef}, timeout=timeout)
+
+    def restoreReplayWorld(self, worldRef: str, checkpoint: dict[str, Any], *,
+                           timeout: float | None = None) -> ControlResult:
+        return self.request("world.restore", {"worldRef": worldRef, "checkpoint": checkpoint}, timeout=timeout)
+
+    def evaluateReplayWorld(self, graphId: str, rootSha256: str, contract: dict[str, Any],
+                            edgeRefs: list[str], *, timeout: float | None = None) -> ControlResult:
+        return self.request("world.evaluate", {"graphId": graphId, "rootSha256": rootSha256,
+                                                "contract": contract, "edgeRefs": edgeRefs}, timeout=timeout)
+
+    def inspectReplayWorldCoverage(self, worldRef: str, *, timeout: float | None = None) -> ControlResult:
+        return self.request("world.coverage", {"worldRef": worldRef}, timeout=timeout)
+
+    def listReplayGraphs(self, *, timeout: float | None = None) -> ControlResult:
+        return self.request("world.list", timeout=timeout)
+
     def perception(self, sessionRef: dict[str, Any] | None = None) -> PerceptionClient:
         return PerceptionClient(self, sessionRef)
 

@@ -103,6 +103,10 @@ export { FileEffectTransactionStore } from "../effectTransaction/fileEffectTrans
 export { createApprovalGrant, verifyApprovalGrant } from "../effectTransaction/approvalGrant.js";
 export { AppSpaceRegistry, createAppSpaceRegistry } from "../appSpace/appSpaceRegistry.js";
 export { FileAppSpaceStore } from "../appSpace/fileAppSpaceStore.js";
+export { ReplayGraphRegistry, createReplayGraphRegistry } from "../replayGraph/replayGraphRegistry.js";
+export { FileReplayGraphStore } from "../replayGraph/fileReplayGraphStore.js";
+export { ReplayWorld, evaluateReplayGraph, inspectReplayGraphCoverage, retainedReplayGraphObjects }
+  from "../replayGraph/replayWorld.js";
 
 export class ControlRequest {
   constructor(client, requestId, result) {
@@ -529,6 +533,41 @@ export class PyProcControlClient extends ControlStdioClient {
     return this.request("app.effect.finalize", { appRef, transactionId,
       expectedTransactionRevisionSha256 }, options);
   }
+  importReplayGraphRecording(graphId, recordingFile, options = {}) {
+    return this.request("world.import.recording", { graphId, recordingFile: resolve(recordingFile) }, options);
+  }
+  createReplayGraphAppWorld(graphId, pairId, options = {}) {
+    return this.request("world.create.app", { graphId, pairId }, options);
+  }
+  captureReplayGraphAppBranch(input, options = {}) {
+    return this.request("world.capture.app.branch", input, options);
+  }
+  openReplayWorld(graphId, rootSha256, { startNodeRef, ...options } = {}) {
+    return this.request("world.open", { graphId, rootSha256,
+      ...(startNodeRef === undefined ? {} : { startNodeRef }) }, options);
+  }
+  inspectReplayWorld(worldRef, options = {}) {
+    return this.request("world.inspect", { worldRef }, options);
+  }
+  listReplayWorldEdges(worldRef, options = {}) {
+    return this.request("world.edges", { worldRef }, options);
+  }
+  traverseReplayWorld(worldRef, capabilityRef, expectedNodeRef, options = {}) {
+    return this.request("world.traverse", { worldRef, capabilityRef, expectedNodeRef }, options);
+  }
+  checkpointReplayWorld(worldRef, options = {}) {
+    return this.request("world.checkpoint", { worldRef }, options);
+  }
+  restoreReplayWorld(worldRef, checkpoint, options = {}) {
+    return this.request("world.restore", { worldRef, checkpoint }, options);
+  }
+  evaluateReplayWorld(graphId, rootSha256, contract, edgeRefs, options = {}) {
+    return this.request("world.evaluate", { graphId, rootSha256, contract, edgeRefs }, options);
+  }
+  inspectReplayWorldCoverage(worldRef, options = {}) {
+    return this.request("world.coverage", { worldRef }, options);
+  }
+  listReplayGraphs(options = {}) { return this.request("world.list", {}, options); }
   perception(sessionRef = null) { return new PerceptionClient(this, sessionRef); }
 
   async close() {

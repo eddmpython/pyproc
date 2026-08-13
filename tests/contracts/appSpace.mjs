@@ -135,9 +135,16 @@ export async function assertAppSpaceContract() {
       parentPairId: "pair:base", executionSessionId: session.executionSessionId,
       expectedSessionRevisionSha256: session.contentSha256,
       expectedActivePairSha256: base.pair.contentSha256 });
-    await harness.coordinator.restore({ appRef: attached.appRef, pairId: "pair:base" });
+    const restoredBase = await harness.coordinator.restore({ appRef: attached.appRef, pairId: "pair:base" });
     assert(harness.state().app === "base" && harness.state().machine === "machine-base"
-      && harness.state().quiesced === false, "restore가 app과 Machine을 같은 pair로 복원하지 않았다");
+      && harness.state().quiesced === false && /^restore:[0-9a-f]{32}$/.test(restoredBase.restoreProof.restoreRef),
+    "restore가 app과 Machine을 같은 pair로 복원하거나 restore proof를 발행하지 않았다");
+    const consumedRestore = harness.coordinator.consumeRestoreProof(restoredBase.restoreProof.restoreRef,
+      base.pair.contentSha256);
+    assert(consumedRestore.stateSha256 === base.pair.app.stateSha256
+      && (await errorOf(async () => harness.coordinator.consumeRestoreProof(
+        restoredBase.restoreProof.restoreRef, base.pair.contentSha256)))?.code === "APP_SPACE_RESTORE_PROOF_INVALID",
+    "restore proof가 exact pair에 묶인 one-shot capability가 아니다");
 
     harness.setApp("candidate-two");
     harness.setMachine("machine-two");

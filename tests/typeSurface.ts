@@ -103,6 +103,23 @@ async function controlSurface() {
     appPair.output.pair.contentSha256);
   await client.inspectApp(attachedApp.output.appRef);
   await client.listAppPairs();
+  const graphs = await client.listReplayGraphs();
+  const importedGraph = await client.importReplayGraphRecording("graph:typed", "/tmp/typed-recording.json");
+  const openedWorld = await client.openReplayWorld("graph:typed", importedGraph.output.graph.rootSha256);
+  const worldRef = String(openedWorld.output.world.worldRef);
+  const worldEdges = await client.listReplayWorldEdges(worldRef);
+  if (worldEdges.output[0]) {
+    await client.traverseReplayWorld(worldRef, String(worldEdges.output[0].capabilityRef),
+      String(worldEdges.output[0].sourceNodeRef || importedGraph.output.graph.startNodeRefs[0]));
+  }
+  const worldCheckpoint = await client.checkpointReplayWorld(worldRef);
+  await client.restoreReplayWorld(worldRef, worldCheckpoint.output);
+  await client.inspectReplayWorld(worldRef);
+  await client.inspectReplayWorldCoverage(worldRef);
+  await client.evaluateReplayWorld("graph:typed", importedGraph.output.graph.rootSha256, {
+    startNodeRef: importedGraph.output.graph.startNodeRefs[0], goalNodeRefs: [], forbiddenEdgeRefs: [], stepBudget: 1,
+  }, []);
+  void graphs;
   await client.stageAppEffect(attachedApp.output.appRef, "effect:typed",
     rehearsedEffect.output.contentSha256);
   await client.close();

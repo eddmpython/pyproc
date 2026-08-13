@@ -103,7 +103,7 @@ export async function createExecutionMemoryHandlers({
 }) {
   const registry = await createExecutionMemoryRegistry({ root, secretValues });
   const permissions = await registry.artifacts.capturePermissions(permissionManifest);
-  const roots = Object.freeze([resolve(root), ...importRoots.map(resolve)]);
+  const roots = Object.freeze([resolve(root), ...importRoots.map((importRoot) => resolve(importRoot))]);
 
   const captureMachine = async (machineId, signal, requestId) => {
     const result = await pageBridge.dispatch("machine.image.export", {}, { signal, requestId: `${requestId}:image` });

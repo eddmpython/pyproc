@@ -68,6 +68,16 @@ export async function assertBrowserAutomationProductContract() {
   assert(JSON.stringify(validateMcpProductConfig(memoryValidated.config,
     { baseEnv: { PYPROC_CONTRACT_SECRET: "fixture-secret-value" } }).config)
     === JSON.stringify(memoryValidated.config), "Execution Memory 정규 manifest가 roundtrip하지 않았다");
+  const graphValidated = validateMcpProductConfig({ ...manifest,
+    executionMemory: { enabled: true, root: memoryRoot, importRoots: [importRoot], secretEnv: [] },
+    replayGraph: { enabled: true },
+  });
+  assert(graphValidated.config.replayGraph.enabled === true
+    && graphValidated.env.PYPROC_REPLAY_GRAPH === "1",
+  "ReplayGraph manifest가 durable product environment로 투영되지 않았다");
+  assert((await errorOf(() => validateMcpProductConfig({ ...manifest,
+    replayGraph: { enabled: true } })))?.message.includes("requires executionMemory"),
+  "ReplayGraph가 Execution Memory durable root 없이 열렸다");
   const approvalPublicKey = join(root, "approval-public.pem");
   const approvalPair = generateKeyPairSync("ed25519");
   await writeFile(approvalPublicKey, approvalPair.publicKey.export({ type: "spki", format: "pem" }));

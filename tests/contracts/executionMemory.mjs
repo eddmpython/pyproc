@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ExecutionMemoryRegistry } from "../../scripts/executionMemory/executionMemoryRegistry.js";
+import { createExecutionMemoryHandlers } from "../../scripts/executionMemory/executionMemoryTools.js";
 import { canonicalExecutionMemoryJson } from "../../scripts/executionMemory/executionMemoryCanonical.js";
 import { encodeStateBundle } from "../../src/state/index.js";
 import { createEvidencePack, publishEvidencePack } from "../../scripts/verification/evidencePack.js";
@@ -60,6 +61,11 @@ export async function assertExecutionMemoryContract() {
   const sourceRoot = await mkdtemp(join(tmpdir(), "pyproc-execution-memory-source-"));
   const targetRoot = await mkdtemp(join(tmpdir(), "pyproc-execution-memory-target-"));
   try {
+    const handlerProduct = await createExecutionMemoryHandlers({ root: sourceRoot,
+      pageBridge: { dispatch() { throw new Error("not reached"); } },
+      permissionManifest: { pythonNetwork: "denied", browser: null }, importRoots: [targetRoot] });
+    assert(handlerProduct.registry instanceof ExecutionMemoryRegistry,
+      "비어 있지 않은 importRoots가 제품 handler 초기화를 깨뜨렸다");
     const source = await ExecutionMemoryRegistry.open({ root: sourceRoot, secretValues: ["fixture-secret"] });
     assert((await errorOf(async () => source.artifacts.captureMachineImage({
       bytes: await machineImage("fixture-secret"), machineId: "machine:secret", lifecycle: "portable",

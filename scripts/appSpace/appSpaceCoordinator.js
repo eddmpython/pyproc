@@ -1,4 +1,5 @@
 // appSpaceCoordinator.js - app fence, Machine checkpoint, paired marker, restore와 effect outbox를 조립한다.
+import { randomBytes } from "node:crypto";
 import { canonicalExecutionMemoryJson } from "../executionMemory/executionMemoryCanonical.js";
 import { appSpaceError, validateAppIdentity } from "./appSpaceCanonical.js";
 
@@ -23,6 +24,7 @@ export class AppSpaceCoordinator {
     this.pageBridge = pageBridge;
     this.allowedApps = new Map(allowedApps.map((identity) => [identity.appId, validateAppIdentity(identity)]));
     this.attachments = new Map();
+    this.restoreProofs = new Map();
   }
 
   async attach(input, context = {}) {
@@ -55,7 +57,17 @@ export class AppSpaceCoordinator {
   async restore(input, context = {}) {
     const pair = await this.registry.openPair(input.pairId);
     const restored = await this._restorePair(this._attachment(input.appRef), pair, context);
-    return Object.freeze({ pair, restored: restored.result, activeChanged: false });
+    const restoreProof = this._issueRestoreProof(input.appRef, pair, restored.result);
+    return Object.freeze({ pair, restored: restored.result, restoreProof, activeChanged: false });
+  }
+
+  consumeRestoreProof(restoreRef, pairSha256) {
+    const proof = this.restoreProofs.get(restoreRef);
+    this.restoreProofs.delete(restoreRef);
+    if (!proof || proof.pairSha256 !== pairSha256) {
+      throw appSpaceError("APP_SPACE_RESTORE_PROOF_INVALID", "restore proof is missing, stale, or belongs to another pair");
+    }
+    return proof;
   }
 
   async adopt(input, context = {}) {
@@ -249,6 +261,14 @@ export class AppSpaceCoordinator {
     const entry = this.attachments.get(appRef);
     if (!entry) throw appSpaceError("APP_SPACE_ATTACHMENT_INVALID", `app attachment is unavailable: ${appRef}`);
     return entry;
+  }
+
+  _issueRestoreProof(appRef, pair, restored) {
+    const restoreRef = `restore:${randomBytes(16).toString("hex")}`;
+    const proof = Object.freeze({ restoreRef, appRef, pairId: pair.pairId, pairSha256: pair.contentSha256,
+      stateSha256: restored.stateSha256, machineCheckpointIndex: restored.machineCheckpointIndex });
+    this.restoreProofs.set(restoreRef, proof);
+    return proof;
   }
 
   _dispatch(operation, input, context, suffix) {

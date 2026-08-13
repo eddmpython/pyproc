@@ -141,6 +141,7 @@ try {
             approvalAuthorities: loaded.config.effectTransactions.approvalAuthorities,
           } : { enabled: false },
           appSpace: loaded.config.appSpace.enabled ? loaded.config.appSpace : { enabled: false },
+          replayGraph: loaded.config.replayGraph,
           browser: loaded.config.browser.enabled ? {
             enabled: true,
             provider: loaded.config.browser.provider,

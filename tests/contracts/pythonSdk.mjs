@@ -16,6 +16,7 @@ const requiredFiles = [
   "tests/pythonSdk/protocolContract.py",
   "tests/pythonSdk/productJourney.py",
   "tests/pythonSdk/appSpaceList.py",
+  "tests/pythonSdk/replayGraphList.py",
   "tests/pythonSdk/run.mjs",
 ];
 
@@ -47,6 +48,12 @@ export async function assertPythonSdkContract() {
   for (const method of ["attachApp", "checkpointApp", "branchApp", "restoreApp", "adoptApp",
     "inspectApp", "listAppPairs", "stageAppEffect", "finalizeAppEffect"]) {
     if (!clientSource.includes(`def ${method}(`)) throw new Error(`Python AppSpace facade 누락: ${method}`);
+  }
+  for (const method of ["importReplayGraphRecording", "createReplayGraphAppWorld",
+    "captureReplayGraphAppBranch", "openReplayWorld", "inspectReplayWorld", "listReplayWorldEdges",
+    "traverseReplayWorld", "checkpointReplayWorld", "restoreReplayWorld", "evaluateReplayWorld",
+    "inspectReplayWorldCoverage", "listReplayGraphs"]) {
+    if (!clientSource.includes(`def ${method}(`)) throw new Error(`Python ReplayGraph facade 누락: ${method}`);
   }
   return true;
 }

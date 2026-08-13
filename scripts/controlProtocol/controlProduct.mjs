@@ -30,6 +30,7 @@ import { createExecutionMemoryHandlers, EXECUTION_MEMORY_TOOLS } from "../execut
 import { createEffectTransactionHandlers, EFFECT_TRANSACTION_TOOLS }
   from "../effectTransaction/effectTransactionTools.js";
 import { createAppSpaceHandlers, APP_SPACE_TOOLS } from "../appSpace/appSpaceTools.js";
+import { createReplayGraphHandlers, REPLAY_GRAPH_TOOLS } from "../replayGraph/replayGraphTools.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 180000;
 const POLL_HOLD_MS = 20000;
@@ -131,14 +132,21 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     throw new TypeError("AppSpace requires Execution Memory, Rehearse-Commit, and FrameSpace");
   }
   const appTools = appSpaceEnabled ? APP_SPACE_TOOLS : [];
+  const replayGraphEnabled = env.PYPROC_REPLAY_GRAPH === "1";
+  if (replayGraphEnabled && !executionMemoryEnabled) {
+    throw new TypeError("ReplayGraph requires Execution Memory");
+  }
+  const replayGraphTools = replayGraphEnabled ? REPLAY_GRAPH_TOOLS : [];
   const machineImageTools = executionMemoryEnabled ? CONTROL_MACHINE_IMAGE_TOOLS : [];
   const pythonTools = [...CONTROL_PYTHON_TOOLS, ...machineImageTools];
-  const tools = Object.freeze([...pythonTools, ...browserTools, ...verificationTools, ...memoryTools, ...effectTools, ...appTools]);
+  const tools = Object.freeze([...pythonTools, ...browserTools, ...verificationTools, ...memoryTools,
+    ...effectTools, ...appTools, ...replayGraphTools]);
   const pythonToolNames = new Set(pythonTools.map((tool) => tool.name));
   const verificationToolNames = new Set(VERIFICATION_TOOLS.map((tool) => tool.name));
   const memoryToolNames = new Set(memoryTools.map((tool) => tool.name));
   const effectToolNames = new Set(effectTools.map((tool) => tool.name));
   const appToolNames = new Set(appTools.map((tool) => tool.name));
+  const replayGraphToolNames = new Set(replayGraphTools.map((tool) => tool.name));
   const producerVersion = JSON.parse(await readFile(resolve(PACKAGE_ROOT, "package.json"), "utf8")).version;
   const engineRoot = configuredEngineRoot(env.PYPROC_MCP_ENGINE_ROOT);
   const pageBridge = new PageCommandBridge({ timeoutMs });
@@ -298,12 +306,17 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       secretValues: env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES
         ? JSON.parse(env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES) : [],
     }) : null;
+    const replayGraphProduct = replayGraphEnabled ? await createReplayGraphHandlers({
+      root: env.PYPROC_EXECUTION_MEMORY_ROOT,
+      importRoots: String(env.PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS || "").split(delimiter).filter(Boolean),
+      appProduct,
+    }) : null;
     const operationCatalog = controlOperationCatalog(tools);
     const operationHandlers = Object.fromEntries(operationCatalog.map(({ name, toolName }) => [name,
       async (input, { signal, requestId, spaceId }) => {
         const expectedSpaceId = pythonToolNames.has(toolName) ? "machine:primary"
           : verificationToolNames.has(toolName) || memoryToolNames.has(toolName) || effectToolNames.has(toolName)
-            || appToolNames.has(toolName)
+            || appToolNames.has(toolName) || replayGraphToolNames.has(toolName)
             ? undefined : automationRouter?.spaceId;
         if (spaceId && spaceId !== expectedSpaceId) {
           const error = new Error(`control request space does not match ${expectedSpaceId}`);
@@ -331,6 +344,9 @@ export async function createControlProduct({ env = process.env, browserLauncher 
           await pageBridge.waitForReady();
           return appProduct.handlers[name](input, { signal, requestId });
         }
+        if (replayGraphToolNames.has(toolName)) {
+          return replayGraphProduct.handlers[name](input, { signal, requestId });
+        }
         if (automationRouter) return automationRouter.invoke(name, input, { signal, requestId });
         const error = new Error(`control operation is unavailable: ${name}`);
         error.code = "CONTROL_OPERATION_UNAVAILABLE";
@@ -344,6 +360,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       tools, operationCatalog, host, pageBridge, automationSpace, automationRouter,
       executionMemory: memoryProduct?.registry || null, effectTransactions: effectProduct?.registry || null,
       appSpace: appProduct?.registry || null,
+      replayGraph: replayGraphProduct?.registry || null,
       browserControl, browserSession, serverOrigin, pageUrl,
       async close() {
         if (closed) return;
