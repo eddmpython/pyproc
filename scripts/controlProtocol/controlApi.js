@@ -101,6 +101,8 @@ export { EffectTransactionRegistry, createEffectTransactionRegistry }
   from "../effectTransaction/effectTransactionRegistry.js";
 export { FileEffectTransactionStore } from "../effectTransaction/fileEffectTransactionStore.js";
 export { createApprovalGrant, verifyApprovalGrant } from "../effectTransaction/approvalGrant.js";
+export { AppSpaceRegistry, createAppSpaceRegistry } from "../appSpace/appSpaceRegistry.js";
+export { FileAppSpaceStore } from "../appSpace/fileAppSpaceStore.js";
 
 export class ControlRequest {
   constructor(client, requestId, result) {
@@ -505,6 +507,27 @@ export class PyProcControlClient extends ControlStdioClient {
   sealEffectTransaction(transactionId, expectedRevisionSha256, evidencePackDir, options = {}) {
     return this.request("effect.seal", { transactionId, expectedRevisionSha256,
       evidencePackDir: resolve(evidencePackDir) }, options);
+  }
+  attachApp(sessionRef, options = {}) {
+    return this.request("app.attach", { sessionRef }, options);
+  }
+  checkpointApp(input, options = {}) { return this.request("app.checkpoint", input, options); }
+  branchApp(input, options = {}) { return this.request("app.branch", input, options); }
+  restoreApp(appRef, pairId, options = {}) {
+    return this.request("app.restore", { appRef, pairId }, options);
+  }
+  adoptApp(appRef, pairId, expectedActivePairSha256, options = {}) {
+    return this.request("app.adopt", { appRef, pairId, expectedActivePairSha256 }, options);
+  }
+  inspectApp(appRef, options = {}) { return this.request("app.inspect", { appRef }, options); }
+  listAppPairs(options = {}) { return this.request("app.list", {}, options); }
+  stageAppEffect(appRef, transactionId, expectedTransactionRevisionSha256, options = {}) {
+    return this.request("app.effect.stage", { appRef, transactionId,
+      expectedTransactionRevisionSha256 }, options);
+  }
+  finalizeAppEffect(appRef, transactionId, expectedTransactionRevisionSha256, options = {}) {
+    return this.request("app.effect.finalize", { appRef, transactionId,
+      expectedTransactionRevisionSha256 }, options);
   }
   perception(sessionRef = null) { return new PerceptionClient(this, sessionRef); }
 

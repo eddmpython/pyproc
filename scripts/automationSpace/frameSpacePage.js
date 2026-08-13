@@ -53,6 +53,7 @@ export class FrameSpacePage {
     this.timeoutMs = Math.max(1, Math.min(30000, Number(config.timeoutMs) || 10000));
     this.allowedOrigins = new Set(config.targetOrigins || []);
     this.allowedActions = new Set(config.actions || []);
+    this.appSpaceEnabled = config.appSpaceEnabled === true;
     this.artifactLimits = Object.freeze({
       maxArtifactBytes: Number(config.artifacts?.maxArtifactBytes) || 16 * 1024 * 1024,
       maxTotalBytes: Number(config.artifacts?.maxTotalBytes) || 64 * 1024 * 1024,
@@ -79,6 +80,15 @@ export class FrameSpacePage {
       "automation.act": (input) => this.act(input),
       "artifact.read": (input) => this.readArtifact(input),
       "artifact.delete": (input) => this.deleteArtifact(input),
+      ...(this.appSpaceEnabled ? {
+        "app.describe": (input) => this.appDescribe(input),
+        "app.quiesce": (input) => this.appQuiesce(input),
+        "app.export": (input) => this.appExport(input),
+        "app.import": (input) => this.appImport(input),
+        "app.resume": (input) => this.appResume(input),
+        "app.stageEffect": (input) => this.appStageEffect(input),
+        "app.finalizeEffect": (input) => this.appFinalizeEffect(input),
+      } : {}),
       "frame.close": () => this.close(),
     });
   }
@@ -206,6 +216,34 @@ export class FrameSpacePage {
     return Object.freeze({ completed: Object.freeze(completed), results: Object.freeze(results) });
   }
 
+  appDescribe({ sessionRef } = {}) {
+    return this._appCall(sessionRef, "describe", {});
+  }
+
+  appQuiesce({ sessionRef, expectedRevision } = {}) {
+    return this._appCall(sessionRef, "quiesce", { expectedRevision });
+  }
+
+  appExport({ sessionRef, expectedRevision, fence } = {}) {
+    return this._appCall(sessionRef, "export", { expectedRevision, fence });
+  }
+
+  appImport({ sessionRef, snapshot, fence } = {}) {
+    return this._appCall(sessionRef, "import", { snapshot, fence });
+  }
+
+  appResume({ sessionRef, fence } = {}) {
+    return this._appCall(sessionRef, "resume", { fence });
+  }
+
+  appStageEffect({ sessionRef, effect } = {}) {
+    return this._appCall(sessionRef, "stageEffect", { effect });
+  }
+
+  appFinalizeEffect({ sessionRef, effect } = {}) {
+    return this._appCall(sessionRef, "finalizeEffect", { effect });
+  }
+
   readArtifact({ artifactRef, offset = 0, maxBytes = MAX_READ_BYTES } = {}) {
     this._reap();
     const artifact = this.artifacts.get(artifactRef);
@@ -273,6 +311,11 @@ export class FrameSpacePage {
 
   _targetForSession(sessionRef) {
     return this._target(this._session(sessionRef).targetRef);
+  }
+
+  _appCall(sessionRef, operation, input) {
+    if (!this.appSpaceEnabled) return Promise.reject(frameError("APP_SPACE_DISABLED", "AppSpace is disabled"));
+    return this._call(this._targetForSession(sessionRef), `app.${operation}`, input);
   }
 
   async _navigate(target, url) {

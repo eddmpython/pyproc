@@ -36,6 +36,7 @@ export function run(cmd, args, opts = {}) {
   const spec = commandSpec(cmd, args);
   const r = spawnSync(spec.command, spec.args, {
     cwd: opts.cwd ?? ROOT,
+    env: opts.env ?? process.env,
     encoding: "utf8",
     stdio: "pipe",
     shell: spec.shell ?? false,

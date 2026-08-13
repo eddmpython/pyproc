@@ -2,14 +2,17 @@
 import { PassThrough } from "node:stream";
 import {
   createApprovalGrant,
+  createAppSpaceRegistry,
   createEffectTransactionRegistry,
   ControlRemoteError,
   ControlRequest,
   EffectTransactionRegistry,
   ExecutionMemoryArtifacts,
   ExecutionMemoryRegistry,
+  AppSpaceRegistry,
   FileEffectTransactionStore,
   FileExecutionMemoryStore,
+  FileAppSpaceStore,
   PerceptionClient,
   PerceptionEntity,
   PerceptionQueryResult,
@@ -36,10 +39,11 @@ function serverHello() {
 export async function assertControlJsSdkContract() {
   for (const value of [ControlRemoteError, ControlRequest, PerceptionClient, PerceptionEntity,
     PerceptionQueryResult, PyProcControlClient, ExecutionMemoryArtifacts, ExecutionMemoryRegistry,
-    FileExecutionMemoryStore, EffectTransactionRegistry, FileEffectTransactionStore]) {
+    FileExecutionMemoryStore, EffectTransactionRegistry, FileEffectTransactionStore,
+    AppSpaceRegistry, FileAppSpaceStore]) {
     assert(typeof value === "function", "pyproc/control 공개 class가 누락됐다");
   }
-  for (const value of [createApprovalGrant, createEffectTransactionRegistry]) {
+  for (const value of [createApprovalGrant, createEffectTransactionRegistry, createAppSpaceRegistry]) {
     assert(typeof value === "function", "pyproc/control Rehearse-Commit factory가 누락됐다");
   }
   for (const method of ["auditExperience", "verifyExperience", "replayEvidencePack"]) {
@@ -53,6 +57,10 @@ export async function assertControlJsSdkContract() {
   for (const method of ["prepareEffectTransaction", "rehearseEffectTransaction", "approveEffectTransaction",
     "commitEffectTransaction", "inspectEffectTransaction", "listEffectTransactions", "sealEffectTransaction"]) {
     assert(typeof PyProcControlClient.prototype[method] === "function", `Rehearse-Commit facade가 누락됐다: ${method}`);
+  }
+  for (const method of ["attachApp", "checkpointApp", "branchApp", "restoreApp", "adoptApp",
+    "inspectApp", "listAppPairs", "stageAppEffect", "finalizeAppEffect"]) {
+    assert(typeof PyProcControlClient.prototype[method] === "function", `AppSpace facade가 누락됐다: ${method}`);
   }
 
   const readable = new PassThrough();

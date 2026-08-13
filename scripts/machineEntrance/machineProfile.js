@@ -6,15 +6,16 @@ export const MACHINE_PROFILE_RECIPES = Object.freeze([
   "observeLocal",
   "authorizedBrowser",
   "replayPinned",
+  "transactionalApp",
 ]);
 
 const INPUT_KEYS = new Set([
   "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executable", "headed", "gpu",
   "allowedOrigins", "actions", "methods", "fileRoots", "maxRisk", "externalEffects", "purpose",
-  "artifacts", "viewport", "recording", "executionMemory", "effectTransactions",
+  "artifacts", "viewport", "recording", "executionMemory", "effectTransactions", "appSpace",
 ]);
 const BROWSER_INPUT_KEYS = Object.freeze([...INPUT_KEYS].filter((key) => ![
-  "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executionMemory", "effectTransactions",
+  "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executionMemory", "effectTransactions", "appSpace",
 ].includes(key)));
 const OBSERVE_ACTIONS = Object.freeze(["snapshot", "screenshot", "waitFor"]);
 
@@ -106,6 +107,15 @@ function replayPinnedBrowser(input) {
   return commonBrowser(input, { provider: "replay", actions, maxRisk });
 }
 
+function transactionalAppBrowser(input) {
+  const actions = requiredArray(input.actions, "transactionalApp actions");
+  requireExplicitText(input.purpose, "transactionalApp purpose");
+  if (!input.appSpace?.enabled || !input.executionMemory?.enabled || !input.effectTransactions?.enabled) {
+    throw new TypeError("transactionalApp requires AppSpace, Execution Memory, and Rehearse-Commit");
+  }
+  return commonBrowser(input, { provider: "frame", actions, maxRisk: "externalEffect" });
+}
+
 export function compileMachineProfile(input, { baseEnv = process.env } = {}) {
   const value = plainObject(input, "Machine Entrance profile");
   rejectUnknownKeys(value);
@@ -115,13 +125,15 @@ export function compileMachineProfile(input, { baseEnv = process.env } = {}) {
   const browser = value.recipe === "pythonOnly" ? assertPythonOnly(value)
     : value.recipe === "observeLocal" ? observeLocalBrowser(value)
       : value.recipe === "authorizedBrowser" ? authorizedBrowser(value)
-        : replayPinnedBrowser(value);
+        : value.recipe === "replayPinned" ? replayPinnedBrowser(value)
+          : transactionalAppBrowser(value);
   return validateMcpProductConfig({
     schemaVersion: 1,
     engine: engineFrom(value),
     browser,
     ...(value.executionMemory === undefined ? {} : { executionMemory: value.executionMemory }),
     ...(value.effectTransactions === undefined ? {} : { effectTransactions: value.effectTransactions }),
+    ...(value.appSpace === undefined ? {} : { appSpace: value.appSpace }),
     ...(value.timeoutMs === undefined ? {} : { timeoutMs: value.timeoutMs }),
   }, { baseEnv }).config;
 }

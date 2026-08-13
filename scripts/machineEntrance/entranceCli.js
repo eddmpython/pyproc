@@ -32,6 +32,11 @@ const VALUE_OPTIONS = new Map([
   ["--execution-memory-import-root", "executionMemoryImportRoots"],
   ["--execution-memory-secret-env", "executionMemorySecretEnv"],
   ["--effect-approval-authority", "effectApprovalAuthorities"],
+  ["--app-id", "appId"],
+  ["--app-origin", "appOrigin"],
+  ["--app-adapter-version", "appAdapterVersion"],
+  ["--app-state-schema", "appStateSchema"],
+  ["--app-max-state-bytes", "appMaxStateBytes"],
 ]);
 const REPEATABLE = new Set([
   "allowedOrigins", "actions", "methods", "fileRoots", "executionMemoryImportRoots",
@@ -47,6 +52,7 @@ const FLAG_OPTIONS = new Map([
   ["--mobile", "mobile"],
   ["--touch", "touch"],
   ["--enable-effect-transactions", "enableEffectTransactions"],
+  ["--enable-app-space", "enableAppSpace"],
 ]);
 
 function positiveInteger(value, label, maximum) {
@@ -178,6 +184,22 @@ function effectTransactionsFrom(raw, projectRoot) {
   return { enabled: true, approvalAuthorities };
 }
 
+function appSpaceFrom(raw) {
+  const present = raw.enableAppSpace || ["appId", "appOrigin", "appAdapterVersion", "appStateSchema", "appMaxStateBytes"]
+    .some((key) => raw[key] !== undefined);
+  if (!present) return undefined;
+  if (!raw.enableAppSpace) throw new TypeError("AppSpace options require --enable-app-space");
+  for (const [key, option] of [["appId", "--app-id"], ["appOrigin", "--app-origin"],
+    ["appAdapterVersion", "--app-adapter-version"], ["appStateSchema", "--app-state-schema"]]) {
+    if (!raw[key]) throw new TypeError(`--enable-app-space requires ${option}`);
+  }
+  return { enabled: true, apps: [{ appId: raw.appId, origin: raw.appOrigin,
+    adapterVersion: raw.appAdapterVersion, stateSchema: raw.appStateSchema }],
+  ...(raw.appMaxStateBytes === undefined ? {} : {
+    maxStateBytes: positiveInteger(raw.appMaxStateBytes, "--app-max-state-bytes", 8 * 1024 * 1024),
+  }) };
+}
+
 export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } = {}) {
   if (!Array.isArray(argv)) throw new TypeError("pyproc-mcp init arguments must be an array");
   const raw = parseRaw(argv);
@@ -188,6 +210,7 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
   const artifacts = artifactsFrom(raw);
   const executionMemory = executionMemoryFrom(raw, projectRoot);
   const effectTransactions = effectTransactionsFrom(raw, projectRoot);
+  const appSpace = appSpaceFrom(raw);
   const profile = {
     recipe: raw.recipe,
     ...(raw.engineRoot === undefined ? {} : {
@@ -212,6 +235,7 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
     ...(recording === undefined ? {} : { recording }),
     ...(executionMemory === undefined ? {} : { executionMemory }),
     ...(effectTransactions === undefined ? {} : { effectTransactions }),
+    ...(appSpace === undefined ? {} : { appSpace }),
   };
   return Object.freeze({
     projectRoot,

@@ -29,6 +29,7 @@ import {
 import { createExecutionMemoryHandlers, EXECUTION_MEMORY_TOOLS } from "../executionMemory/executionMemoryTools.js";
 import { createEffectTransactionHandlers, EFFECT_TRANSACTION_TOOLS }
   from "../effectTransaction/effectTransactionTools.js";
+import { createAppSpaceHandlers, APP_SPACE_TOOLS } from "../appSpace/appSpaceTools.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 180000;
 const POLL_HOLD_MS = 20000;
@@ -124,13 +125,20 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     throw new TypeError("effect transactions require Execution Memory");
   }
   const effectTools = effectTransactionsEnabled ? EFFECT_TRANSACTION_TOOLS : [];
+  const appSpaceConfig = env.PYPROC_APP_SPACE ? JSON.parse(env.PYPROC_APP_SPACE) : null;
+  const appSpaceEnabled = !!appSpaceConfig;
+  if (appSpaceEnabled && (!executionMemoryEnabled || !effectTransactionsEnabled || providerKind !== "frame")) {
+    throw new TypeError("AppSpace requires Execution Memory, Rehearse-Commit, and FrameSpace");
+  }
+  const appTools = appSpaceEnabled ? APP_SPACE_TOOLS : [];
   const machineImageTools = executionMemoryEnabled ? CONTROL_MACHINE_IMAGE_TOOLS : [];
   const pythonTools = [...CONTROL_PYTHON_TOOLS, ...machineImageTools];
-  const tools = Object.freeze([...pythonTools, ...browserTools, ...verificationTools, ...memoryTools, ...effectTools]);
+  const tools = Object.freeze([...pythonTools, ...browserTools, ...verificationTools, ...memoryTools, ...effectTools, ...appTools]);
   const pythonToolNames = new Set(pythonTools.map((tool) => tool.name));
   const verificationToolNames = new Set(VERIFICATION_TOOLS.map((tool) => tool.name));
   const memoryToolNames = new Set(memoryTools.map((tool) => tool.name));
   const effectToolNames = new Set(effectTools.map((tool) => tool.name));
+  const appToolNames = new Set(appTools.map((tool) => tool.name));
   const producerVersion = JSON.parse(await readFile(resolve(PACKAGE_ROOT, "package.json"), "utf8")).version;
   const engineRoot = configuredEngineRoot(env.PYPROC_MCP_ENGINE_ROOT);
   const pageBridge = new PageCommandBridge({ timeoutMs });
@@ -228,6 +236,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       actions: browserConfig.actions,
       timeoutMs: Math.min(timeoutMs, 10000),
       artifacts: browserConfig.artifacts,
+      appSpaceEnabled,
     })).toString("base64url"));
   }
   const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html?${pageParams}`;
@@ -279,11 +288,22 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       automationRouter,
       pageBridge,
     }) : null;
+    const appProduct = appSpaceEnabled ? await createAppSpaceHandlers({
+      root: env.PYPROC_EXECUTION_MEMORY_ROOT,
+      config: appSpaceConfig,
+      memoryProduct,
+      effectProduct,
+      automationRouter,
+      pageBridge,
+      secretValues: env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES
+        ? JSON.parse(env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES) : [],
+    }) : null;
     const operationCatalog = controlOperationCatalog(tools);
     const operationHandlers = Object.fromEntries(operationCatalog.map(({ name, toolName }) => [name,
       async (input, { signal, requestId, spaceId }) => {
         const expectedSpaceId = pythonToolNames.has(toolName) ? "machine:primary"
           : verificationToolNames.has(toolName) || memoryToolNames.has(toolName) || effectToolNames.has(toolName)
+            || appToolNames.has(toolName)
             ? undefined : automationRouter?.spaceId;
         if (spaceId && spaceId !== expectedSpaceId) {
           const error = new Error(`control request space does not match ${expectedSpaceId}`);
@@ -307,6 +327,10 @@ export async function createControlProduct({ env = process.env, browserLauncher 
           await pageBridge.waitForReady();
           return effectProduct.handlers[name](input, { signal, requestId });
         }
+        if (appToolNames.has(toolName)) {
+          await pageBridge.waitForReady();
+          return appProduct.handlers[name](input, { signal, requestId });
+        }
         if (automationRouter) return automationRouter.invoke(name, input, { signal, requestId });
         const error = new Error(`control operation is unavailable: ${name}`);
         error.code = "CONTROL_OPERATION_UNAVAILABLE";
@@ -319,6 +343,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     return Object.freeze({
       tools, operationCatalog, host, pageBridge, automationSpace, automationRouter,
       executionMemory: memoryProduct?.registry || null, effectTransactions: effectProduct?.registry || null,
+      appSpace: appProduct?.registry || null,
       browserControl, browserSession, serverOrigin, pageUrl,
       async close() {
         if (closed) return;

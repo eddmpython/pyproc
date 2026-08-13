@@ -145,6 +145,52 @@ export interface EffectTransactionRevision extends Readonly<Record<string, unkno
   readonly contentSha256: string;
 }
 
+export interface AppSpaceIdentity {
+  readonly appId: string;
+  readonly origin: string;
+  readonly adapterVersion: string;
+  readonly stateSchema: string;
+}
+
+export interface AppSpaceOutboxEntry {
+  readonly intentSha256: string;
+  readonly state: "staged" | "terminal";
+  readonly terminal: "confirmed" | "contradicted" | "ambiguous" | "notObserved" | "outcomeUnknown" | null;
+  readonly effectReceiptSha256: string | null;
+}
+
+export interface AppStateSnapshot extends Readonly<Record<string, unknown>> {
+  readonly format: "pyproc.appStateSnapshot";
+  readonly version: 1;
+  readonly identity: AppSpaceIdentity;
+  readonly revision: string;
+  readonly state: Readonly<Record<string, unknown>>;
+  readonly outbox: readonly AppSpaceOutboxEntry[];
+  readonly scope: readonly string[];
+  readonly stateSha256: string;
+  readonly contentSha256: string;
+}
+
+export interface AppPairedGeneration extends Readonly<Record<string, unknown>> {
+  readonly format: "pyproc.pairedAppGeneration";
+  readonly version: 1;
+  readonly pairId: string;
+  readonly parentPairSha256: string | null;
+  readonly app: AppStateSnapshot;
+  readonly machine: Readonly<{ readonly checkpointIndex: number; readonly imageSha256: string;
+    readonly generation: `sha256:${string}`; readonly environment: string }>;
+  readonly session: Readonly<{ readonly executionSessionId: string; readonly revisionSha256: string }>;
+  readonly contentSha256: string;
+}
+
+export interface AppPairCaptureInput {
+  readonly appRef: string;
+  readonly pairId: string;
+  readonly executionSessionId: string;
+  readonly expectedSessionRevisionSha256: string;
+  readonly expectedActivePairSha256: string | null;
+}
+
 export interface CheckpointSaveOutput {
   readonly index: number;
   readonly changedPages: number;
@@ -374,6 +420,40 @@ export function createApprovalGrant(input: Readonly<{
 export function verifyApprovalGrant(grant: ApprovalGrant, intent: Readonly<Record<string, unknown>>,
   options: Readonly<Record<string, unknown>>): ApprovalGrant;
 
+export class FileAppSpaceStore {
+  private constructor();
+  static open(root: string): Promise<FileAppSpaceStore>;
+  readonly root: string;
+  publishCandidate(pair: AppPairedGeneration, expectedMarker?: string | null): Promise<AppPairedGeneration>;
+  readPair(pairId: string): Promise<AppPairedGeneration | null>;
+  readDigest(digest: string): Promise<AppPairedGeneration>;
+  activeDigest(appId: string): Promise<string | null>;
+  adopt(appId: string, expectedDigest: string | null, nextDigest: string): Promise<AppPairedGeneration>;
+  moveActive(appId: string, expectedDigest: string | null,
+    nextDigest: string | null): Promise<AppPairedGeneration | null>;
+  active(appId: string): Promise<AppPairedGeneration | null>;
+  listPairs(): Promise<readonly AppPairedGeneration[]>;
+}
+
+export class AppSpaceRegistry {
+  private constructor();
+  static open(options: Readonly<{ root: string; secretValues?: readonly string[];
+    maxStateBytes?: number }>): Promise<AppSpaceRegistry>;
+  readonly store: FileAppSpaceStore;
+  snapshot(value: Readonly<Record<string, unknown>>): AppStateSnapshot;
+  createCandidate(input: Readonly<{ pairId: string; parentPairSha256: string | null;
+    snapshot: AppStateSnapshot; machine: AppPairedGeneration["machine"];
+    session: AppPairedGeneration["session"]; source?: string }>): Promise<AppPairedGeneration>;
+  adopt(pairId: string, expectedActivePairSha256: string | null): Promise<AppPairedGeneration>;
+  openPair(pairId: string): Promise<AppPairedGeneration>;
+  active(appId: string): Promise<AppPairedGeneration | null>;
+  list(): Promise<readonly Readonly<Record<string, unknown>>[]>;
+  createAppRef(): string;
+}
+
+export function createAppSpaceRegistry(options: Readonly<{ root: string;
+  secretValues?: readonly string[]; maxStateBytes?: number }>): Promise<AppSpaceRegistry>;
+
 export type ControlSessionRef = Readonly<Record<string, unknown>>;
 
 export class PerceptionEntity {
@@ -598,6 +678,30 @@ export class PyProcControlClient {
     Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
   sealEffectTransaction(transactionId: string, expectedRevisionSha256: string, evidencePackDir: string,
     options?: ControlRequestOptions): Promise<ControlResult<EffectTransactionRevision>>;
+  attachApp(sessionRef: ControlSessionRef,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<{ readonly appRef: string;
+      readonly identity: AppSpaceIdentity; readonly revision: string;
+      readonly capabilities: readonly string[]; readonly isolation: "credentialless-opaque-frame" }>>>;
+  checkpointApp(input: AppPairCaptureInput,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<{ readonly pair: AppPairedGeneration;
+      readonly active: boolean }>>>;
+  branchApp(input: AppPairCaptureInput & Readonly<{ readonly parentPairId: string }>,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<{ readonly pair: AppPairedGeneration;
+      readonly active: boolean }>>>;
+  restoreApp(appRef: string, pairId: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<{ readonly pair: AppPairedGeneration;
+      readonly restored: Readonly<Record<string, unknown>>; readonly activeChanged: false }>>>;
+  adoptApp(appRef: string, pairId: string, expectedActivePairSha256: string | null,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<{ readonly pair: AppPairedGeneration;
+      readonly restored: Readonly<Record<string, unknown>>; readonly activeChanged: true }>>>;
+  inspectApp(appRef: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  listAppPairs(options?: ControlRequestOptions):
+    Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
+  stageAppEffect(appRef: string, transactionId: string, expectedTransactionRevisionSha256: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  finalizeAppEffect(appRef: string, transactionId: string, expectedTransactionRevisionSha256: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   perception(sessionRef?: ControlSessionRef | null): PerceptionClient;
   close(): Promise<void>;
 }

@@ -2,6 +2,7 @@ import { createWebComputer, open } from "../index.js";
 import type { MachineStore } from "../src/machine/index.js";
 import {
   createEffectTransactionRegistry,
+  createAppSpaceRegistry,
   createExecutionMemoryRegistry,
   PyProcControlClient,
   ControlRemoteError,
@@ -88,6 +89,22 @@ async function controlSurface() {
   await client.inspectEffectTransaction("effect:typed");
   await client.listEffectTransactions();
   const effectState: string = rehearsedEffect.output.state;
+  const attachedApp = await client.attachApp({ protocolVersion: "1", spaceId: "space:frame",
+    sessionId: "session:frame", targetRef: "target:frame" });
+  const appPair = await client.checkpointApp({ appRef: attachedApp.output.appRef, pairId: "pair:typed",
+    executionSessionId: "session:typed", expectedSessionRevisionSha256: memory.output.contentSha256,
+    expectedActivePairSha256: null });
+  await client.branchApp({ appRef: attachedApp.output.appRef, pairId: "pair:typed-branch",
+    parentPairId: "pair:typed", executionSessionId: "session:typed",
+    expectedSessionRevisionSha256: memory.output.contentSha256,
+    expectedActivePairSha256: appPair.output.pair.contentSha256 });
+  await client.restoreApp(attachedApp.output.appRef, "pair:typed");
+  await client.adoptApp(attachedApp.output.appRef, "pair:typed",
+    appPair.output.pair.contentSha256);
+  await client.inspectApp(attachedApp.output.appRef);
+  await client.listAppPairs();
+  await client.stageAppEffect(attachedApp.output.appRef, "effect:typed",
+    rehearsedEffect.output.contentSha256);
   await client.close();
   return `${value}:${verdict}:${effectState}`;
 }
@@ -111,6 +128,13 @@ async function directEffectTransactionSurface() {
   return transactions.length;
 }
 void directEffectTransactionSurface;
+
+async function directAppSpaceSurface() {
+  const registry = await createAppSpaceRegistry({ root: "C:/execution-memory", maxStateBytes: 4096 });
+  const pairs: readonly Readonly<Record<string, unknown>>[] = await registry.list();
+  return pairs.length;
+}
+void directAppSpaceSurface;
 
 // @ts-expect-error the legacy wrapper is removed; durable options are direct
 open({ persistent: true });

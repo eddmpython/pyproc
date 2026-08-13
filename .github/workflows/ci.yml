@@ -104,6 +104,7 @@ jobs:
       # 같은 제품 런타임의 언어 중립 Control Protocol, cancel, binary attachment를 설치물에서 검증한다.
       - run: npm run test:control-product
       - run: npm run test:frame-space
+      - run: npm run test:app-space
       - run: npm run test:replay-space
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -170,6 +171,7 @@ jobs:
       - run: npm run test:mcp-product
       - run: npm run test:control-product
       - run: npm run test:frame-space
+      - run: npm run test:app-space
       - run: npm run test:replay-space
       - run: python -m pip install -r pythonSdk/buildRequirements.txt
       - run: npm run test:python-sdk

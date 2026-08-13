@@ -24,6 +24,7 @@ Init recipes:
   observeLocal      Exact local origin with read actions and acknowledged initial navigation
   authorizedBrowser Explicit origins, actions, risk, purpose, and effect acknowledgement
   replayPinned      Exact recording identity and digest with no live provider
+  transactionalApp Cooperative logical app state paired with the Python Machine
 
 Run pyproc-mcp init with --dry-run to inspect paths without writing, and --overwrite to replace an
 existing generated profile explicitly.
@@ -35,7 +36,7 @@ const INIT_HELP = `Usage:
 Profile:
   --project-root <directory>  Existing project root, defaults to the current directory
   --out <directory>           Project-relative output, defaults to .pyproc
-  --recipe <name>             pythonOnly, observeLocal, authorizedBrowser, or replayPinned
+  --recipe <name>             pythonOnly, observeLocal, authorizedBrowser, replayPinned, or transactionalApp
   --timeout-ms <n>            Product operation timeout
   --dry-run                   Compile and report paths without writing
   --overwrite                 Explicitly replace an existing generated profile
@@ -69,6 +70,11 @@ Execution Memory:
 Rehearse-Commit:
   --enable-effect-transactions
   --effect-approval-authority <id>=<public-key-file>  Trusted Ed25519 authority, repeatable
+
+Transactional AppSpace:
+  --enable-app-space --app-id <id> --app-origin <origin>
+  --app-adapter-version <version> --app-state-schema <schema>
+  --app-max-state-bytes <n>
 `;
 
 function parseArgs(argv) {
@@ -134,6 +140,7 @@ try {
             enabled: true,
             approvalAuthorities: loaded.config.effectTransactions.approvalAuthorities,
           } : { enabled: false },
+          appSpace: loaded.config.appSpace.enabled ? loaded.config.appSpace : { enabled: false },
           browser: loaded.config.browser.enabled ? {
             enabled: true,
             provider: loaded.config.browser.provider,

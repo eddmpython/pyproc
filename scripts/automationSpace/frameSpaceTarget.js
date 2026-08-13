@@ -410,6 +410,13 @@
   }
 
   async function dispatch(operation, input = {}) {
+    if (operation.startsWith("app.")) {
+      const appTarget = globalThis.pyprocAppSpaceTarget;
+      if (!appTarget || typeof appTarget.dispatch !== "function") {
+        throw frameError("APP_SPACE_ADAPTER_UNAVAILABLE", "cooperative app adapter is not installed", "notSent");
+      }
+      return appTarget.dispatch(operation.slice(4), input);
+    }
     if (operation === "observe") return snapshot(input);
     if (operation === "perception.capture") return perceptionSnapshot(input);
     if (operation === "action.snapshot") return snapshot(input);

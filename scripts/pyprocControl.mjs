@@ -187,6 +187,7 @@ try {
             enabled: true,
             approvalAuthorities: loaded.config.effectTransactions.approvalAuthorities,
           } : { enabled: false },
+          appSpace: loaded.config.appSpace.enabled ? loaded.config.appSpace : { enabled: false },
           automation: loaded.config.browser.enabled ? {
             enabled: true,
             provider: loaded.config.browser.provider,

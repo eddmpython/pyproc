@@ -560,6 +560,56 @@ class PyProcClient:
             "evidencePackDir": str(Path(evidencePackDir).resolve()),
         }, timeout=timeout)
 
+    def attachApp(self, sessionRef: dict[str, Any], *,
+                  timeout: float | None = None) -> ControlResult:
+        return self.request("app.attach", {"sessionRef": sessionRef}, timeout=timeout)
+
+    def checkpointApp(self, input: dict[str, Any], *,
+                      timeout: float | None = None) -> ControlResult:
+        return self.request("app.checkpoint", input, timeout=timeout)
+
+    def branchApp(self, input: dict[str, Any], *,
+                  timeout: float | None = None) -> ControlResult:
+        return self.request("app.branch", input, timeout=timeout)
+
+    def restoreApp(self, appRef: str, pairId: str, *,
+                   timeout: float | None = None) -> ControlResult:
+        return self.request("app.restore", {"appRef": appRef, "pairId": pairId}, timeout=timeout)
+
+    def adoptApp(self, appRef: str, pairId: str,
+                 expectedActivePairSha256: str | None, *,
+                 timeout: float | None = None) -> ControlResult:
+        return self.request("app.adopt", {
+            "appRef": appRef,
+            "pairId": pairId,
+            "expectedActivePairSha256": expectedActivePairSha256,
+        }, timeout=timeout)
+
+    def inspectApp(self, appRef: str, *,
+                   timeout: float | None = None) -> ControlResult:
+        return self.request("app.inspect", {"appRef": appRef}, timeout=timeout)
+
+    def listAppPairs(self, *, timeout: float | None = None) -> ControlResult:
+        return self.request("app.list", timeout=timeout)
+
+    def stageAppEffect(self, appRef: str, transactionId: str,
+                       expectedTransactionRevisionSha256: str, *,
+                       timeout: float | None = None) -> ControlResult:
+        return self.request("app.effect.stage", {
+            "appRef": appRef,
+            "transactionId": transactionId,
+            "expectedTransactionRevisionSha256": expectedTransactionRevisionSha256,
+        }, timeout=timeout)
+
+    def finalizeAppEffect(self, appRef: str, transactionId: str,
+                          expectedTransactionRevisionSha256: str, *,
+                          timeout: float | None = None) -> ControlResult:
+        return self.request("app.effect.finalize", {
+            "appRef": appRef,
+            "transactionId": transactionId,
+            "expectedTransactionRevisionSha256": expectedTransactionRevisionSha256,
+        }, timeout=timeout)
+
     def perception(self, sessionRef: dict[str, Any] | None = None) -> PerceptionClient:
         return PerceptionClient(self, sessionRef)
 

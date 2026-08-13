@@ -15,6 +15,7 @@ const requiredFiles = [
   "pythonSdk/src/pyprocControl/py.typed",
   "tests/pythonSdk/protocolContract.py",
   "tests/pythonSdk/productJourney.py",
+  "tests/pythonSdk/appSpaceList.py",
   "tests/pythonSdk/run.mjs",
 ];
 
@@ -41,6 +42,11 @@ export async function assertPythonSdkContract() {
   const workflow = readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
   if ((workflow.match(/npm run test:python-sdk/g) || []).length !== 2) {
     throw new Error("Python SDK Chrome/Edge CI 배선 불일치");
+  }
+  const clientSource = readFileSync(join(ROOT, "pythonSdk", "src", "pyprocControl", "client.py"), "utf8");
+  for (const method of ["attachApp", "checkpointApp", "branchApp", "restoreApp", "adoptApp",
+    "inspectApp", "listAppPairs", "stageAppEffect", "finalizeAppEffect"]) {
+    if (!clientSource.includes(`def ${method}(`)) throw new Error(`Python AppSpace facade 누락: ${method}`);
   }
   return true;
 }

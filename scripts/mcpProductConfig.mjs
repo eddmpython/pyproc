@@ -9,7 +9,7 @@ import {
   AUTOMATION_RECORDING_MAX_TOTAL_ARTIFACT_BYTES,
 } from "./automationSpace/automationRecording.js";
 
-const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "timeoutMs"]);
+const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["root", "indexURL"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
@@ -25,6 +25,8 @@ const ARTIFACT_KEYS = new Set([
 const EXECUTION_MEMORY_KEYS = new Set(["enabled", "root", "importRoots", "secretEnv"]);
 const EFFECT_TRANSACTION_KEYS = new Set(["enabled", "approvalAuthorities"]);
 const APPROVAL_AUTHORITY_KEYS = new Set(["authorityId", "publicKeyFile"]);
+const APP_SPACE_KEYS = new Set(["enabled", "apps", "maxStateBytes"]);
+const APP_IDENTITY_KEYS = new Set(["appId", "origin", "adapterVersion", "stateSchema"]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_INDEX_URL", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
@@ -39,6 +41,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_EXECUTION_MEMORY_ROOT", "PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS",
   "PYPROC_EXECUTION_MEMORY_SECRET_VALUES",
   "PYPROC_EFFECT_TRANSACTIONS", "PYPROC_EFFECT_APPROVAL_AUTHORITIES", "PYPROC_EFFECT_SECRET_BINDINGS",
+  "PYPROC_APP_SPACE",
 ]);
 
 function plainObject(value, label) {
@@ -324,6 +327,45 @@ function normalizedEffectTransactions(input = { enabled: false }, { executionMem
   return Object.freeze({ enabled: true, approvalAuthorities: Object.freeze(approvalAuthorities) });
 }
 
+function normalizedAppSpace(input = { enabled: false }, { executionMemory, effectTransactions, browser } = {}) {
+  const appSpace = plainObject(input, "appSpace");
+  knownKeys(appSpace, APP_SPACE_KEYS, "appSpace");
+  const enabled = optionalBoolean(appSpace.enabled, "appSpace.enabled");
+  if (!enabled) {
+    const extra = Object.keys(appSpace).filter((key) => key !== "enabled");
+    if (extra.length) throw new TypeError(`disabled appSpace does not accept ${extra[0]}`);
+    return Object.freeze({ enabled: false });
+  }
+  if (!executionMemory.enabled || !effectTransactions.enabled || !browser.enabled || browser.provider !== "frame") {
+    throw new TypeError("appSpace requires Execution Memory, Rehearse-Commit, and browser.provider frame");
+  }
+  if (!Array.isArray(appSpace.apps) || appSpace.apps.length < 1 || appSpace.apps.length > 32) {
+    throw new TypeError("appSpace.apps requires 1 to 32 configured identities");
+  }
+  const seen = new Set();
+  const apps = appSpace.apps.map((entry, index) => {
+    const app = plainObject(entry, `appSpace.apps[${index}]`);
+    knownKeys(app, APP_IDENTITY_KEYS, `appSpace.apps[${index}]`);
+    if (!/^[a-z0-9]+(?:[.-][a-z0-9]+){1,15}$/.test(String(app.appId || "")) || seen.has(app.appId)) {
+      throw new TypeError("appSpace appId is invalid or duplicated");
+    }
+    seen.add(app.appId);
+    let origin;
+    try { origin = new URL(app.origin); } catch (error) { throw new TypeError("appSpace app origin is invalid"); }
+    if (!["http:", "https:"].includes(origin.protocol) || origin.origin !== app.origin
+      || !browser.allowedOrigins.includes(app.origin)) throw new TypeError("appSpace app origin must be an exact allowed origin");
+    if (typeof app.adapterVersion !== "string" || !app.adapterVersion || app.adapterVersion.length > 64
+      || typeof app.stateSchema !== "string" || !app.stateSchema || app.stateSchema.length > 128) {
+      throw new TypeError("appSpace adapterVersion and stateSchema are invalid");
+    }
+    return Object.freeze({ appId: app.appId, origin: app.origin,
+      adapterVersion: app.adapterVersion, stateSchema: app.stateSchema });
+  });
+  return Object.freeze({ enabled: true, apps: Object.freeze(apps),
+    maxStateBytes: appSpace.maxStateBytes === undefined ? 1024 * 1024
+      : positiveInteger(appSpace.maxStateBytes, "appSpace.maxStateBytes", 8 * 1024 * 1024) });
+}
+
 function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [], effectSecretBindings = {}) {
   const env = { ...baseEnv };
   for (const key of CONTROLLED_ENV) delete env[key];
@@ -340,6 +382,10 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
     env.PYPROC_EFFECT_APPROVAL_AUTHORITIES = JSON.stringify(config.effectTransactions.approvalAuthorities);
     env.PYPROC_EFFECT_SECRET_BINDINGS = JSON.stringify(effectSecretBindings);
   }
+  if (config.appSpace.enabled) env.PYPROC_APP_SPACE = JSON.stringify({
+    apps: config.appSpace.apps,
+    maxStateBytes: config.appSpace.maxStateBytes,
+  });
   if (!config.browser.enabled) return env;
   const browser = config.browser;
   env.PYPROC_BROWSER_CONTROL = "1";
@@ -378,12 +424,16 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
   const effectTransactions = normalizedEffectTransactions(value.effectTransactions, {
     executionMemory: executionMemory.config, browser,
   });
+  const appSpace = normalizedAppSpace(value.appSpace, {
+    executionMemory: executionMemory.config, effectTransactions, browser,
+  });
   const config = Object.freeze({
     schemaVersion: 1,
     engine: normalizedEngine(value.engine),
     browser,
     executionMemory: executionMemory.config,
     effectTransactions,
+    appSpace,
     timeoutMs: value.timeoutMs === undefined ? 180000
       : positiveInteger(value.timeoutMs, "timeoutMs", 900000),
   });
@@ -404,7 +454,8 @@ export async function loadMcpProductConfig(file, options = {}) {
   let input;
   try { input = JSON.parse(source); }
   catch (error) { throw new TypeError(`invalid pyproc-mcp JSON: ${error.message}`); }
-  return Object.freeze({ configPath, ...validateMcpProductConfig(input, options) });
+  const validationOptions = Object.hasOwn(options, "baseEnv") ? options : { ...options, baseEnv: process.env };
+  return Object.freeze({ configPath, ...validateMcpProductConfig(input, validationOptions) });
 }
 
 export function applyMcpProductEnvironment(env) {
