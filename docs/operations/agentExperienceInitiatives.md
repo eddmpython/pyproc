@@ -684,6 +684,8 @@ process에서 재검증하고 list할 수 있지만 Machine side restore는 원 
 
 ## Initiative 7 - ReplayGraph Worlds
 
+상태: 착수. Initiative 6의 exact AppSpace pair와 restore 계약을 source state 경계로 재사용한다.
+
 ### 제품 명제
 
 현재 ReplaySpace의 exact linear cursor를 약화하지 않고 verified state node와 exact action edge의 graph로

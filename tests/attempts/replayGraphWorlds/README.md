@@ -57,4 +57,4 @@ Initiative 6이 졸업해 exact source state를 restore한 뒤 안전하게 bran
 
 ## 판정
 
-후행 대기 중. Initiative 6 졸업 전에는 probe를 실행하지 않는다.
+진행 중. Initiative 6의 exact AppSpace pair와 restore 계약을 바닥으로 linear import probe부터 실행한다.

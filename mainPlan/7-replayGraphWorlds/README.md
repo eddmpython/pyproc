@@ -1,6 +1,6 @@
 # Initiative 7: ReplayGraph Worlds 실행 계획
 
-상태: **Initiative 6 후행 대기**
+상태: **착수**
 
 이 문서는 선형 recording을 exact state node와 verified action edge의 그래프로 확장해 실제 site effect 없이
 여러 선택을 탐색하고 평가하는 여덟 번째 이니셔티브의 임시 실행 계획이다.
