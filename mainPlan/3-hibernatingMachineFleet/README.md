@@ -1,6 +1,6 @@
 # Initiative 3: Hibernating Machine Fleet 실행 계획
 
-상태: **Initiative 2 후행 대기**
+상태: **착수**
 
 이 문서는 여러 프로젝트 Machine을 등록해 두되 정해진 수만 실행 상태로 유지하고, 나머지는 durable
 generation으로 안전하게 동면시키는 네 번째 이니셔티브의 임시 실행 계획이다.

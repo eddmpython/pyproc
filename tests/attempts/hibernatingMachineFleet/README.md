@@ -11,7 +11,7 @@ portable worker-hosted guest, fenced generation commit, explicit shutdown, owner
 
 ## 선행 조건
 
-Initiative 0, 02, 03이 모두 졸업해야 한다. 이 캠페인은 pause나 `saveBase()`를 hibernation으로 인정하지
+Initiative 0, 1, 2가 모두 졸업해야 한다. 이 캠페인은 pause나 `saveBase()`를 hibernation으로 인정하지
 않고 worker termination과 cold recovery를 직접 측정한다.
 
 ## 졸업 게이트
@@ -53,4 +53,4 @@ Initiative 0, 02, 03이 모두 졸업해야 한다. 이 캠페인은 pause나 `s
 
 ## 판정
 
-후행 대기 중. Initiative 2 졸업 전에는 probe를 실행하지 않는다.
+진행 중. worker reclaim baseline부터 직렬로 검증한다.
