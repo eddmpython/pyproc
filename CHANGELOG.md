@@ -20,14 +20,21 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - **Proof-carrying actions bind authority to observed state.** JavaScript and Python clients expose `situate()`
   and `actAffordance()`. An `actionContext` binds the capability to its session, situation, world, document
   epoch, action, risk, destination, expiry, and expected transition, and stale bindings fail before the effect.
+- **Verified Change Loop turns repository experience into a replayable verdict.** Strict Experience Contracts,
+  exact environment observation, deterministic structural and behavioral rules, bounded perceptual review,
+  atomic Evidence Packs, comparison, and effect-free replay are available through Control, MCP, JavaScript,
+  Python, and CLI entrances.
 
 ### Compatibility
 
-- `apx.graph` 1.0 and the Control operation set are unchanged. The situation representation is opt-in, adds no
-  root export or bin, and replays through the existing canonical recording contract without live provider calls.
+- `apx.graph` 1.0 remains compatible and the situation representation is opt-in. The root export, package subpath,
+  and bin sets are unchanged. Control adds `verification.audit`, `verification.verify`, and `verification.replay`;
+  browser-disabled profiles expose only the two effect-free operations.
 
 한국어 요약: 기존 `automation.observe`에 opt-in `apx.situation` 표현을 추가했다. typed focus가 최소 충분
 상황과 명시적 불확실성을 만들고, broker가 발급한 capability만 현재 world와 epoch에 묶여 effect에 쓰인다.
+strict Experience Contract와 exact 환경을 실제 browser에서 판정하고 canonical Evidence Pack으로 발행한다.
+Control, MCP, JavaScript, Python, CLI가 같은 audit, verify, replay 의미론을 공유한다.
 
 ## 0.0.21 - 2026-08-13
 

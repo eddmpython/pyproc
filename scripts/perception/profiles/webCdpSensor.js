@@ -27,6 +27,23 @@ const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"]);
 const CONTAINER_ROLES = new Set(["form", "group", "list", "listitem", "row", "table", "tree", "document"]);
 const LANDMARK_ROLES = new Set(["banner", "complementary", "contentinfo", "main", "navigation", "region", "search"]);
 const STATUS_ROLES = new Set(["alert", "log", "marquee", "status", "timer"]);
+const ENVIRONMENT_EXPRESSION = `(() => {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  const fonts = ["sans-serif", "serif", "monospace", "system-ui"];
+  const metrics = context ? fonts.map((font) => {
+    context.font = "16px " + font;
+    return Math.round(context.measureText("PyProc 0123 한글").width * 1000) / 1000;
+  }) : [];
+  return {
+    locale: navigator.language || "unknown",
+    timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown",
+    colorScheme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark"
+      : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "no-preference",
+    reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+    fontFingerprint: "font-metrics-v1:" + metrics.join(",")
+  };
+})()`;
 
 function clipped(value, limit = TEXT_LIMIT) {
   const text = String(value ?? "");
@@ -226,11 +243,15 @@ function axDescendantText(node, axById) {
 function provenance(mode, source, trust) { return Object.freeze({ mode, source, trust }); }
 
 export class WebCdpSensor {
-  constructor({ command, eventCapture = null } = {}) {
+  constructor({ command, eventCapture = null, environmentCommand = null } = {}) {
     if (typeof command !== "function") throw new TypeError("WebCdpSensor command is required");
     if (eventCapture !== null && typeof eventCapture !== "function") throw new TypeError("WebCdpSensor eventCapture is invalid");
+    if (environmentCommand !== null && typeof environmentCommand !== "function") {
+      throw new TypeError("WebCdpSensor environmentCommand is invalid");
+    }
     this.command = command;
     this.eventCapture = eventCapture;
+    this.environmentCommand = environmentCommand || command;
     this.enabledSessions = new Set();
   }
 
@@ -247,6 +268,9 @@ export class WebCdpSensor {
       includeDOMRects: true,
     }, context.commandResults || [], context.signal);
     const metricsCommand = await this.command(sessionRef, "Page.getLayoutMetrics", {}, context.commandResults || [], context.signal);
+    const environmentCommand = options.channels.includes("environment")
+      ? await this.environmentCommand(sessionRef, "Runtime.evaluate", { expression: ENVIRONMENT_EXPRESSION,
+        returnByValue: true, awaitPromise: false }, context.commandResults || [], context.signal) : null;
     const dom = parseWebDomSnapshot(domCommand.result || {}, metricsCommand.result || {});
     const axNodes = (axCommand.result?.nodes || []).filter((node) => !node.ignored);
     const axById = new Map(axNodes.map((node) => [node.nodeId, node]));
@@ -382,12 +406,15 @@ export class WebCdpSensor {
         title: clipped(stringAt(dom.strings, rootDocument.title), 500),
         viewport: Object.freeze({ width: dom.viewport.width, height: dom.viewport.height, scale: dom.viewport.scale }),
         scroll: Object.freeze({ x: dom.viewport.x, y: dom.viewport.y }),
+        ...(environmentCommand?.result?.result?.value
+          ? { environment: Object.freeze(environmentCommand.result.result.value) } : {}),
       }),
       entities: Object.freeze(sources),
       relations: Object.freeze(relations),
       events: Object.freeze([...(capturedEvents.console || []), ...(capturedEvents.network || [])]),
       completeness: Object.freeze({ semantic: "complete", structure: "complete", geometry: "complete",
-        interaction: "complete", network: options.channels.includes("networkMetadata") ? "metadata-only" : "notRequested" }),
+        interaction: "complete", network: options.channels.includes("networkMetadata") ? "metadata-only" : "notRequested",
+        environment: options.channels.includes("environment") ? "complete" : "notRequested" }),
     });
   }
 

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyproc.dev/schemas/verification/evidence-pack-1.json",
+  "title": "PyProc Evidence Pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "manifest", "scenarioRuns", "findings", "artifacts", "comparison", "verdict", "generatedAt", "runId", "complete", "contentSha256"],
+  "properties": {
+    "format": { "const": "pyproc.evidencePack" },
+    "version": { "const": 1 },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["producerVersion", "projectId", "contractSha256", "scenarioCatalogSha256", "baselineCatalogSha256", "eyesSha256", "fixtureSha256", "browserFamily", "browserVersion", "environmentId", "viewportSha256", "locale", "timezoneId", "fontFingerprint", "providerKind", "perception", "repository", "policySha256"],
+      "properties": {
+        "producerVersion": { "type": "string", "minLength": 1 },
+        "projectId": { "type": "string", "minLength": 1 },
+        "contractSha256": { "$ref": "#/$defs/prefixedDigest" },
+        "scenarioCatalogSha256": { "$ref": "#/$defs/prefixedDigest" },
+        "baselineCatalogSha256": { "$ref": "#/$defs/prefixedDigest" },
+        "eyesSha256": { "$ref": "#/$defs/prefixedDigest" },
+        "fixtureSha256": { "$ref": "#/$defs/prefixedDigest" },
+        "browserFamily": { "type": "string", "minLength": 1 },
+        "browserVersion": { "type": "string", "minLength": 1 },
+        "environmentId": { "type": "string", "minLength": 1 },
+        "viewportSha256": { "$ref": "#/$defs/prefixedDigest" },
+        "locale": { "type": "string", "minLength": 1 },
+        "timezoneId": { "type": "string", "minLength": 1 },
+        "fontFingerprint": { "type": "string", "minLength": 1 },
+        "providerKind": { "type": "string", "minLength": 1 },
+        "perception": { "type": "string", "minLength": 1 },
+        "policySha256": { "$ref": "#/$defs/prefixedDigest" },
+        "repository": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commit", "treeSha256", "diffSha256", "untracked"],
+          "properties": {
+            "commit": { "type": "string", "minLength": 1 },
+            "treeSha256": { "$ref": "#/$defs/prefixedDigest" },
+            "diffSha256": { "$ref": "#/$defs/prefixedDigest" },
+            "untracked": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "scenarioRuns": { "type": "array", "items": { "type": "object" } },
+    "findings": { "type": "array", "items": { "type": "object" } },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifactRef", "sha256", "byteLength", "mimeType", "purpose"],
+        "properties": {
+          "artifactRef": { "type": "string", "pattern": "^artifact:sha_[0-9a-f]{64}$" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "byteLength": { "type": "integer", "minimum": 0 },
+          "mimeType": { "type": "string", "minLength": 1 },
+          "purpose": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "comparison": { "type": ["object", "null"] },
+    "verdict": { "enum": ["verified", "rejected", "incomplete"] },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "runId": { "type": "string", "minLength": 1 },
+    "complete": { "const": true },
+    "contentSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  },
+  "$defs": {
+    "prefixedDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  }
+}

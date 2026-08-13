@@ -85,6 +85,7 @@ function normalizedPage(page = {}) {
     title: String(page.title || "").slice(0, 500),
     viewport: frozenObject(page.viewport || { width: 0, height: 0, scale: 1 }),
     scroll: frozenObject(page.scroll || { x: 0, y: 0 }),
+    ...(page.environment ? { environment: frozenObject(page.environment) } : {}),
     ...(page.focusedNativeRef ? {} : {}),
   });
 }
@@ -314,6 +315,8 @@ export class PerceptionSpace {
           visualProbes: bounded.visualProbes || [],
         });
         prepared.commit();
+        const priorSituation = this.situations.get(sessionKey);
+        if (priorSituation) this.capabilityProjector.dropWorld(priorSituation.worldRef);
         this.capabilityProjector.commit(capsule);
         this.situations.set(sessionKey, capsule);
         history.set(capsule.situationRef, capsule);

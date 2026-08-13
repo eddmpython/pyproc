@@ -46,8 +46,14 @@ async function controlSurface() {
   await eyes.situate({ requirements: [{ requirementRef: "requirement:bad", select: { role: "button" },
     // @ts-expect-error situation requirements use the closed fact, affordance, change vocabulary
     need: ["screenshot"] }] });
+  const audited = await client.auditExperience("qa/eyes", { repositoryRoot: ".", outputDir: ".eyes/current",
+    environmentId: "desktop", repository: { commit: "abc123",
+      treeSha256: `sha256:${"a".repeat(64)}`, diffSha256: `sha256:${"b".repeat(64)}`, untracked: false } });
+  const verdict: "verified" | "rejected" | "incomplete" = audited.output.verdict;
+  await client.verifyExperience(".eyes/reference", ".eyes/current");
+  await client.replayEvidencePack(".eyes/current");
   await client.close();
-  return value;
+  return `${value}:${verdict}`;
 }
 void controlSurface;
 

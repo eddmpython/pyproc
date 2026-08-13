@@ -162,7 +162,9 @@ export class FrameSpace {
       requestId: typeof requestId === "string" && requestId ? requestId : `frame:${++this._sequence}`,
     });
     if (operation === "automation.space.inspect") {
-      return Object.freeze({ ...output, perception: this._perception.inspect() });
+      return Object.freeze({ ...output, targetOrigins: Object.freeze([...this.config.targetOrigins]),
+        viewport: this.config.viewport, compatibility: Object.freeze({ family: "chromium", version: "embedded" }),
+        perception: this._perception.inspect() });
     }
     if (operation === "automation.session.detach") this._perception.dropSession(input.sessionRef);
     return output;

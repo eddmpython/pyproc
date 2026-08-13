@@ -430,6 +430,32 @@ class PyProcClient:
     def deleteArtifact(self, artifactRef: str, *, timeout: float | None = None) -> ControlResult:
         return self.request("artifact.delete", {"artifactRef": artifactRef}, timeout=timeout)
 
+    def auditExperience(self, contractRoot: str | os.PathLike[str], *,
+                        repositoryRoot: str | os.PathLike[str], outputDir: str,
+                        environmentId: str, repository: dict[str, Any],
+                        timeout: float | None = None) -> ControlResult:
+        return self.request("verification.audit", {
+            "contractRoot": str(Path(contractRoot).resolve()),
+            "repositoryRoot": str(Path(repositoryRoot).resolve()),
+            "outputDir": outputDir,
+            "environmentId": environmentId,
+            "repository": repository,
+        }, timeout=timeout)
+
+    def verifyExperience(self, referenceDir: str | os.PathLike[str],
+                         currentDir: str | os.PathLike[str], *,
+                         timeout: float | None = None) -> ControlResult:
+        return self.request("verification.verify", {
+            "referenceDir": str(Path(referenceDir).resolve()),
+            "currentDir": str(Path(currentDir).resolve()),
+        }, timeout=timeout)
+
+    def replayEvidencePack(self, packDir: str | os.PathLike[str], *,
+                           timeout: float | None = None) -> ControlResult:
+        return self.request("verification.replay", {
+            "packDir": str(Path(packDir).resolve()),
+        }, timeout=timeout)
+
     def perception(self, sessionRef: dict[str, Any] | None = None) -> PerceptionClient:
         return PerceptionClient(self, sessionRef)
 

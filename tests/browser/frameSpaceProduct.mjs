@@ -127,7 +127,8 @@ try {
   await Promise.race([client.ready,
     new Promise((_, reject) => setTimeout(() => reject(new Error(`FrameSpace hello timeout\n${stderr}`)), TIMEOUT_MS))]);
   check("one wire advertises machine plus nine FrameSpace operations",
-    client.operations.length === 13 && !client.operations.includes("automation.command"));
+    client.operations.length === 16 && !client.operations.includes("automation.command")
+      && client.operations.includes("verification.audit"));
 
   await client.request("machine.run", { code: "frameState = 40" });
   const state = await client.request("machine.run", { code: "frameState + 2" });

@@ -111,6 +111,17 @@ their graph digests, entity and observation references, verification state, and 
 It does not recapture the page, rerun a postcondition, or resend the original effect. This gives deterministic
 perception review without misrepresenting recorded evidence as a new live observation.
 
+## Evidence Pack replay is a separate layer
+
+Automation recording replay matches and consumes an ordered provider operation chain. Experience Verification replay
+instead loads a completed Evidence Pack, validates its canonical digest and every artifact sidecar, then recomputes the
+stored verdict from scenario terminals. It creates no AutomationSpace and sends no target request.
+
+Use recording replay when an agent must reproduce exact provider terminals. Use Evidence Pack replay when a caller must
+prove that a published repository verdict and its evidence have not changed. One does not substitute for the other. See
+[Experience verification](experienceVerification.md) and the
+[Experience Verification 1.0 specification](../specs/verification/README.md).
+
 ## Checkpoint-aligned resume
 
 `automation.space.inspect` returns the current `recording.cursor` and `recording.prefixSha256`. Store those

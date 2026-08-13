@@ -134,7 +134,8 @@ try {
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
   const tools = (await request("tools/list")).result.tools.map((tool) => tool.name);
   check("설치 제품이 Python 4종과 browser 10종을 제공",
-    tools.length === 14 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete"), tools.join(","));
+    tools.length === 17 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete")
+      && tools.includes("eyesAudit") && tools.includes("eyesVerify") && tools.includes("eyesReplay"), tools.join(","));
   await callTool("pythonRun", { code: "product_state = 41" });
   const pythonResponse = await callTool("pythonRun", { code: "product_state + 1" });
   const python = toolText(pythonResponse);

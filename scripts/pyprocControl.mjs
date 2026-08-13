@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // pyprocControl.mjs - Control Protocol 제품 진입점과 manifest preflight.
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findBrowser } from "./browserControl/browserLauncher.mjs";
 import { assertAutomationRecordingSelection, loadAutomationRecording } from "./automationSpace/automationRecording.js";
@@ -18,6 +20,9 @@ const HELP = `Usage:
   pyproc-control doctor --config <file>
   pyproc-control run --config <file> --code <python>
   pyproc-control invoke --config <file> --operation <name> [--input <json>]
+  pyproc-control eyes audit --config <file> --contract-root <dir> --repository-root <dir> --output-dir <relative-dir> --environment <id>
+  pyproc-control eyes verify --config <file> --reference-dir <dir> --current-dir <dir>
+  pyproc-control eyes replay --config <file> --pack-dir <dir>
   pyproc-control --config <file> [--check]
 
 Options:
@@ -27,6 +32,67 @@ Options:
   --help           Show this help
   --version        Print the installed package version
 `;
+
+function parseEyesArgs(argv) {
+  const mode = argv[0];
+  if (!new Set(["audit", "verify", "replay"]).has(mode)) {
+    throw new TypeError("eyes requires audit, verify, or replay");
+  }
+  const values = {};
+  const names = new Map([
+    ["--config", "config"], ["--contract-root", "contractRoot"],
+    ["--repository-root", "repositoryRoot"], ["--output-dir", "outputDir"],
+    ["--environment", "environmentId"], ["--reference-dir", "referenceDir"],
+    ["--current-dir", "currentDir"], ["--pack-dir", "packDir"],
+    ["--timeout-ms", "timeoutMs"],
+  ]);
+  for (let index = 1; index < argv.length; index += 1) {
+    const key = names.get(argv[index]);
+    if (!key) throw new TypeError(`unknown eyes option: ${argv[index]}`);
+    const value = argv[++index];
+    if (!value) throw new TypeError(`${argv[index - 1]} requires a value`);
+    values[key] = key === "timeoutMs" ? Number(value) : value;
+  }
+  const required = mode === "audit" ? ["config", "contractRoot", "repositoryRoot", "outputDir", "environmentId"]
+    : mode === "verify" ? ["config", "referenceDir", "currentDir"] : ["config", "packDir"];
+  for (const key of required) if (!values[key]) throw new TypeError(`eyes ${mode} requires ${key}`);
+  if (values.timeoutMs !== undefined && (!Number.isFinite(values.timeoutMs) || values.timeoutMs < 1)) {
+    throw new TypeError("--timeout-ms must be positive");
+  }
+  return Object.freeze({ mode, ...values });
+}
+
+function gitBytes(repositoryRoot, args) {
+  try { return execFileSync("git", ["-C", repositoryRoot, ...args], { encoding: "buffer", windowsHide: true }); }
+  catch (error) { throw new Error(`repository identity failed: git ${args.join(" ")}`); }
+}
+
+function repositoryIdentity(repositoryRoot) {
+  const commit = gitBytes(repositoryRoot, ["rev-parse", "HEAD"]).toString("utf8").trim();
+  const tree = gitBytes(repositoryRoot, ["rev-parse", "HEAD^{tree}"]);
+  const diff = gitBytes(repositoryRoot, ["diff", "--binary", "HEAD", "--", "."]);
+  const untracked = gitBytes(repositoryRoot, ["ls-files", "--others", "--exclude-standard", "-z"]);
+  const diffHash = createHash("sha256").update(diff).update(Buffer.from([0])).update(untracked).digest("hex");
+  return Object.freeze({ commit,
+    treeSha256: `sha256:${createHash("sha256").update(tree).digest("hex")}`,
+    diffSha256: `sha256:${diffHash}`, untracked: untracked.byteLength > 0 });
+}
+
+function printableResult(result) {
+  return {
+    terminal: result.terminal,
+    outcome: result.outcome,
+    output: result.output,
+    attachments: result.attachments.map((attachment) => ({
+      attachmentId: attachment.attachmentId,
+      kind: attachment.kind,
+      mimeType: attachment.mimeType,
+      byteLength: attachment.byteLength,
+      sha256: attachment.sha256,
+      dataBase64: Buffer.from(attachment.bytes).toString("base64"),
+    })),
+  };
+}
 
 function parseArgs(argv) {
   let config = "";
@@ -58,6 +124,24 @@ try {
     const report = await inspectMachineProfile(args.config);
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     if (!report.ok) process.exitCode = 1;
+  } else if (argv[0] === "eyes") {
+    const args = parseEyesArgs(argv.slice(1));
+    const client = await PyProcControlClient.start(args.config);
+    try {
+      const requestOptions = args.timeoutMs === undefined ? {} : { timeoutMs: args.timeoutMs };
+      const result = args.mode === "audit"
+        ? await client.auditExperience(resolve(args.contractRoot), { repositoryRoot: resolve(args.repositoryRoot),
+          outputDir: args.outputDir, environmentId: args.environmentId,
+          repository: repositoryIdentity(resolve(args.repositoryRoot)), ...requestOptions })
+        : args.mode === "verify"
+          ? await client.verifyExperience(resolve(args.referenceDir), resolve(args.currentDir), requestOptions)
+          : await client.replayEvidencePack(resolve(args.packDir), requestOptions);
+      process.stdout.write(`${JSON.stringify(printableResult(result), null, 2)}\n`);
+      if (result.output.verdict === "rejected") process.exitCode = 1;
+      else if (result.output.verdict === "incomplete") process.exitCode = 2;
+    } finally {
+      await client.close();
+    }
   } else if (argv[0] === "run" || argv[0] === "invoke") {
     const args = argv[0] === "run" ? parseMachineRunArguments(argv.slice(1))
       : parseMachineInvokeArguments(argv.slice(1));
@@ -67,19 +151,7 @@ try {
       const input = argv[0] === "run" ? { code: args.code } : args.input;
       const result = await client.request(operation, input,
         args.timeoutMs === undefined ? {} : { timeoutMs: args.timeoutMs });
-      process.stdout.write(`${JSON.stringify({
-        terminal: result.terminal,
-        outcome: result.outcome,
-        output: result.output,
-        attachments: result.attachments.map((attachment) => ({
-          attachmentId: attachment.attachmentId,
-          kind: attachment.kind,
-          mimeType: attachment.mimeType,
-          byteLength: attachment.byteLength,
-          sha256: attachment.sha256,
-          dataBase64: Buffer.from(attachment.bytes).toString("base64"),
-        })),
-      }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify(printableResult(result), null, 2)}\n`);
     } finally {
       await client.close();
     }

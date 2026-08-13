@@ -382,6 +382,24 @@ with PyProcClient.start(".pyproc/manifest.json") as client:
 The [Python SDK guide](docs/usage/pythonSdk.md) covers installation, checkpoint recovery, cancellation,
 browser actions, and verified screenshot bytes.
 
+**Verified Change Loop** turns a repository-owned browser experience into a repeatable completion verdict.
+A strict `qa/eyes` contract fixes the exact origin, viewport, locale, timezone, visual preferences, font metric
+fingerprint, fixtures, scenarios, deterministic rules, and artifact quotas. Audit waits for semantic readiness,
+uses only current broker-issued affordances, and publishes a canonical Evidence Pack. Exact comparison and pack
+replay send no live browser effect. Missing evidence or an environment mismatch is `incomplete`, never a false
+success.
+
+```sh
+npx pyproc-control eyes audit --config ./.pyproc/manifest.json \
+  --contract-root ./qa/eyes --repository-root . \
+  --output-dir .pyproc/evidence/current --environment desktop
+npx pyproc-control eyes replay --config ./.pyproc/manifest.json \
+  --pack-dir ./.pyproc/evidence/current
+```
+
+Control, MCP, JavaScript, Python, and CLI users share `verification.audit`, `verification.verify`, and
+`verification.replay`. See the [experience verification guide](docs/usage/experienceVerification.md).
+
 **PyProc Eyes** is the opt-in APX perception path behind the same `automation.observe` operation. It does not
 hand the consumer a page dump. `apx.situation` returns the smallest evidence-linked `SituationCapsule` that
 answers typed requirements, states what is known, conflicted, unknown, or stale, and binds every executable
@@ -407,9 +425,9 @@ await eyes.actAffordance(save, {
 
 See the [APX 1.0 product contract](docs/specs/apx/README.md).
 
-With `{ "enabled": false }`, the server exposes exactly four Python tools: `pythonRun`, `checkpointSave`,
-`checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
-semantic observation, ordered actions, separately allowlisted raw commands, and artifact read/delete.
+With `{ "enabled": false }`, the installed product exposes four Python tools plus effect-free `eyesVerify` and
+`eyesReplay`. Enabling the browser adds ten lifecycle, compatibility, observation, action, raw-command, and
+artifact tools plus `eyesAudit`.
 
 Set `"provider": "frame"` for a cooperative credentialless sandbox that opens no DevTools port. It exposes
 nine browser tools when snapshot is allowed, omits raw commands, and requires the target to load the shipped
@@ -493,6 +511,7 @@ These states measure only pyproc's own invariants. They never depend on adoption
 | Installed MCP browser automation and artifact product | Bounded |
 | Installed JavaScript Control SDK | Bounded |
 | PyProc Eyes graph, SituationCapsule, proof-carrying action, and action evidence | Bounded |
+| Verified Change Loop and canonical Evidence Packs | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## What it guarantees, and what it doesn't

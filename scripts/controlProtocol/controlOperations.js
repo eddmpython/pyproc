@@ -15,6 +15,9 @@ export const CONTROL_TOOL_OPERATIONS = Object.freeze({
   browserAct: "automation.act",
   browserArtifactRead: "artifact.read",
   browserArtifactDelete: "artifact.delete",
+  eyesAudit: "verification.audit",
+  eyesVerify: "verification.verify",
+  eyesReplay: "verification.replay",
 });
 
 const TOOL_FOR_OPERATION = Object.freeze(Object.fromEntries(
@@ -30,6 +33,7 @@ export function controlToolForOperation(operation) {
 }
 
 export function controlSuccessOutcome(operation, input = {}) {
+  if (operation === "verification.audit") return "applied";
   if (operation === "automation.command") return input.expectedRisk === "read" ? "observed" : "applied";
   if (operation === "automation.act") {
     return Array.isArray(input.actions) && input.actions.every((action) => action?.expectedRisk === "read")

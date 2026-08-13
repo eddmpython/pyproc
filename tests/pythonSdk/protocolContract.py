@@ -254,4 +254,27 @@ except ValueError as error:
     unboundError = error
 assert unboundError is not None
 
-print("python sdk protocol contract green: 19 fixtures")
+
+class VerificationFixtureClient(PyProcClient):
+    def __init__(self):
+        self.calls = []
+
+    def request(self, operation, input=None, **options):
+        self.calls.append((operation, input, options))
+        return ControlResult({"verdict": "verified", "contentSha256": "a" * 64}, "observed")
+
+
+verificationFixture = VerificationFixtureClient()
+repository = {"commit": "abc123", "treeSha256": "sha256:" + "1" * 64,
+              "diffSha256": "sha256:" + "2" * 64, "untracked": False}
+verificationFixture.auditExperience("qa/eyes", repositoryRoot=".", outputDir=".eyes/current",
+                                    environmentId="desktop", repository=repository)
+verificationFixture.verifyExperience(".eyes/reference", ".eyes/current")
+verificationFixture.replayEvidencePack(".eyes/current")
+assert [call[0] for call in verificationFixture.calls] == [
+    "verification.audit", "verification.verify", "verification.replay"]
+assert all(call[1][key].startswith(("/", "\\")) or ":\\" in call[1][key]
+           for call in verificationFixture.calls
+           for key in call[1] if key in {"contractRoot", "repositoryRoot", "referenceDir", "currentDir", "packDir"})
+
+print("python sdk protocol contract green: 22 fixtures")

@@ -15,7 +15,7 @@ export const APX_GRAPH_PROFILES = Object.freeze(["apx-core/1", "apx-web/1", "apx
 export const APX_PROFILES = Object.freeze([...APX_GRAPH_PROFILES, APX_SITUATION_PROFILE]);
 export const APX_REPRESENTATIONS = Object.freeze([APX_REPRESENTATION, APX_SITUATION_REPRESENTATION]);
 export const APX_CHANNELS = Object.freeze([
-  "semantic", "structure", "geometry", "interaction", "events", "networkMetadata", "visual",
+  "semantic", "structure", "geometry", "interaction", "events", "networkMetadata", "environment", "visual",
 ]);
 export const APX_DEFAULT_CHANNELS = Object.freeze([
   "semantic", "structure", "geometry", "interaction", "events", "networkMetadata",
@@ -65,7 +65,7 @@ export const APX_OBSERVE_PROPERTIES = Object.freeze({
   representation: { type: "string", enum: [...APX_REPRESENTATIONS, APX_LEGACY_REPRESENTATION] },
   profile: { type: "array", items: { type: "string", enum: APX_PROFILES }, uniqueItems: true, minItems: 1, maxItems: 5 },
   since: { type: "string", pattern: "^observation:[A-Za-z0-9_-]{1,128}$" },
-  channels: { type: "array", items: { type: "string", enum: APX_CHANNELS }, uniqueItems: true, minItems: 1, maxItems: 7 },
+  channels: { type: "array", items: { type: "string", enum: APX_CHANNELS }, uniqueItems: true, minItems: 1, maxItems: 8 },
   query: {
     type: "object",
     properties: {

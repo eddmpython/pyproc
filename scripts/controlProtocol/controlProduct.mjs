@@ -20,6 +20,11 @@ import { ReplaySpace } from "../automationSpace/replaySpace.js";
 import { ControlHost } from "./controlHost.js";
 import { controlOperationCatalog } from "./controlOperations.js";
 import { PageCommandBridge } from "./pageCommandBridge.mjs";
+import {
+  createVerificationHandlers,
+  VERIFICATION_OFFLINE_TOOLS,
+  VERIFICATION_TOOLS,
+} from "../verification/verificationTools.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 180000;
 const POLL_HOLD_MS = 20000;
@@ -98,8 +103,11 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     || (providerKind === "replay" && replayRecording.provider.providerKind === "frame");
   const browserTools = browserConfig
     ? (frameToolProvider ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig)) : [];
-  const tools = Object.freeze(browserEnabled ? [...CONTROL_PYTHON_TOOLS, ...browserTools] : [...CONTROL_PYTHON_TOOLS]);
+  const verificationTools = browserEnabled ? VERIFICATION_TOOLS : VERIFICATION_OFFLINE_TOOLS;
+  const tools = Object.freeze([...CONTROL_PYTHON_TOOLS, ...browserTools, ...verificationTools]);
   const pythonToolNames = new Set(CONTROL_PYTHON_TOOLS.map((tool) => tool.name));
+  const verificationToolNames = new Set(VERIFICATION_TOOLS.map((tool) => tool.name));
+  const producerVersion = JSON.parse(await readFile(resolve(PACKAGE_ROOT, "package.json"), "utf8")).version;
   const engineRoot = configuredEngineRoot(env.PYPROC_MCP_ENGINE_ROOT);
   const pageBridge = new PageCommandBridge({ timeoutMs });
   const controlToken = randomBytes(32).toString("base64url");
@@ -223,10 +231,12 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     }
     browserControl = automationSpace?.control || null;
     automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
+    const verificationHandlers = createVerificationHandlers({ automation: automationRouter, producerVersion });
     const operationCatalog = controlOperationCatalog(tools);
     const operationHandlers = Object.fromEntries(operationCatalog.map(({ name, toolName }) => [name,
       async (input, { signal, requestId, spaceId }) => {
-        const expectedSpaceId = pythonToolNames.has(toolName) ? "machine:primary" : automationRouter?.spaceId;
+        const expectedSpaceId = pythonToolNames.has(toolName) ? "machine:primary"
+          : verificationToolNames.has(toolName) ? undefined : automationRouter?.spaceId;
         if (spaceId && spaceId !== expectedSpaceId) {
           const error = new Error(`control request space does not match ${expectedSpaceId}`);
           error.code = "CONTROL_SPACE_MISMATCH";
@@ -237,6 +247,9 @@ export async function createControlProduct({ env = process.env, browserLauncher 
         if (pythonToolNames.has(toolName)) {
           await pageBridge.waitForReady();
           return pageBridge.dispatch(name, input, { signal, requestId });
+        }
+        if (verificationToolNames.has(toolName)) {
+          return verificationHandlers[name](input, { signal, requestId });
         }
         if (automationRouter) return automationRouter.invoke(name, input, { signal, requestId });
         const error = new Error(`control operation is unavailable: ${name}`);

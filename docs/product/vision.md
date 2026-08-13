@@ -70,9 +70,11 @@ The Machine Entrance is delivered through the installed initializer, doctor, and
 Perception Computer is delivered through `apx.situation`, the JavaScript and Python `situate()` facades, and the
 Chrome and Edge `test:perception-computer` gate. It does not claim general superiority over Playwright. The narrow
 LLM perception contract preserves the pinned baseline's action reach while adding smaller task-conditioned state,
-explicit uncertainty, broker authority, transition truth, and effect-free replay. The next active campaign is
-[`verifiedChangeLoop`](../../tests/attempts/verifiedChangeLoop/README.md). Later initiatives remain locked behind
-their immediate predecessor. No initiative changes a North Star score before its browser evidence is registered
+explicit uncertainty, broker authority, transition truth, and effect-free replay. Verified Change Loop is delivered
+through strict Experience Contracts, canonical Evidence Packs, exact comparison, effect-free pack replay, and the
+installed `test:experience-verification` gate. The next active campaign is
+[`hibernatingMachineFleet`](../../tests/attempts/hibernatingMachineFleet/README.md). Later initiatives remain locked
+behind their immediate predecessor. No initiative changes a North Star score before its browser evidence is registered
 in the ledger.
 
 This portfolio does not duplicate the separate ceiling ladder. Serverless local applications, portable Machine

@@ -379,6 +379,25 @@ with PyProcClient.start(".pyproc/manifest.json") as client:
 [Python SDK 가이드](docs/usage/pythonSdk.md)는 설치, checkpoint 복구, cancel, browser action,
 검증된 screenshot byte를 설명한다.
 
+**Verified Change Loop**는 저장소가 소유한 browser experience를 반복 가능한 완료 판정으로 바꾼다.
+strict `qa/eyes` contract가 exact origin, viewport, locale, timezone, visual preference, font metric
+fingerprint, fixture, scenario, deterministic rule, artifact quota를 고정한다. audit은 의미 기반 readiness를
+기다리고 현재 broker가 발급한 affordance만 사용하며 canonical Evidence Pack을 발행한다. exact comparison과
+pack replay는 live browser effect를 보내지 않는다. 증거가 부족하거나 environment가 다르면 false success가
+아니라 `incomplete`다.
+
+```sh
+npx pyproc-control eyes audit --config ./.pyproc/manifest.json \
+  --contract-root ./qa/eyes --repository-root . \
+  --output-dir .pyproc/evidence/current --environment desktop
+npx pyproc-control eyes replay --config ./.pyproc/manifest.json \
+  --pack-dir ./.pyproc/evidence/current
+```
+
+Control, MCP, JavaScript, Python, CLI가 `verification.audit`, `verification.verify`,
+`verification.replay`를 공유한다. 자세한 내용은
+[experience verification 가이드](docs/usage/experienceVerification.md)에 있다.
+
 **PyProc Eyes**는 같은 `automation.observe` operation 뒤에 있는 opt-in APX perception 경로다. 소비자에게
 page dump를 넘기지 않는다. `apx.situation`은 typed requirement에 답하는 최소 evidence-linked
 `SituationCapsule`을 반환하고, 무엇이 `known`, `conflicted`, `unknown`, `stale`인지 밝히며, 실행 가능한
@@ -404,9 +423,9 @@ await eyes.actAffordance(save, {
 
 자세한 계약은 [APX 1.0 제품 계약](docs/specs/apx/README.md)에 있다.
 
-`{ "enabled": false }`이면 서버는 `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`
-네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
-별도 allowlist raw command, artifact read/delete를 위한 열 개 도구가 추가된다.
+`{ "enabled": false }`이면 설치 제품은 네 Python 도구와 effect-free `eyesVerify`, `eyesReplay`를
+노출한다. browser를 켜면 lifecycle, compatibility, observation, action, raw command, artifact를 위한
+열 개 도구와 `eyesAudit`이 추가된다.
 
 `"provider": "frame"`을 지정하면 DevTools port 없이 cooperative credentialless sandbox를 사용한다.
 snapshot 허용 시 browser 도구 아홉 개를 제공하고 raw command는 열지 않으며 target이 출하 bridge를
@@ -488,6 +507,7 @@ FrameSpace는 이 facade를 공유하면서 서로 다른 정직한 conformance 
 | 프로세스 OS, 복원 reactivity, ASGI, 선언 environment, terminal, machine image, journal | Bounded |
 | Device FS, permission jail, GPU, socket | Probe |
 | PyProc Eyes graph, SituationCapsule, proof-carrying action과 action evidence | Bounded |
+| Verified Change Loop와 canonical Evidence Pack | Bounded |
 | 설치형 MCP browser automation과 artifact 제품 | Bounded |
 | 설치형 JavaScript Control SDK | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |

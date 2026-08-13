@@ -76,12 +76,18 @@ export function mcpToolResult(controlResult) {
     byteLength: attachment.byteLength,
     sha256: attachment.sha256,
   })));
+  const attachmentContent = controlResult.attachments.map((attachment) => attachment.kind === "screen.capture"
+    ? Object.freeze({ type: "image", data: Buffer.from(attachment.bytes).toString("base64"),
+      mimeType: attachment.mimeType })
+    : Object.freeze({ type: "resource", resource: Object.freeze({
+      uri: `pyproc-artifact://${attachment.sha256}`,
+      mimeType: attachment.mimeType,
+      blob: Buffer.from(attachment.bytes).toString("base64"),
+    }) }));
   return Object.freeze({
     content: Object.freeze([
       Object.freeze({ type: "text", text: JSON.stringify(terminal.output, null, 1) }),
-      ...controlResult.attachments.map((attachment) => Object.freeze({
-        type: "image", data: Buffer.from(attachment.bytes).toString("base64"), mimeType: attachment.mimeType,
-      })),
+      ...attachmentContent,
     ]),
     _meta: Object.freeze({ pyprocControl: Object.freeze({
       terminal: "completed",

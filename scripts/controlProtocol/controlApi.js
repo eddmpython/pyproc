@@ -437,6 +437,18 @@ export class PyProcControlClient extends ControlStdioClient {
   deleteArtifact(artifactRef, options = {}) {
     return this.request("artifact.delete", { artifactRef }, options);
   }
+  auditExperience(contractRoot, { repositoryRoot, outputDir, environmentId, repository,
+    ...options } = {}) {
+    return this.request("verification.audit", { contractRoot: resolve(contractRoot),
+      repositoryRoot: resolve(repositoryRoot), outputDir, environmentId, repository }, options);
+  }
+  verifyExperience(referenceDir, currentDir, options = {}) {
+    return this.request("verification.verify", { referenceDir: resolve(referenceDir),
+      currentDir: resolve(currentDir) }, options);
+  }
+  replayEvidencePack(packDir, options = {}) {
+    return this.request("verification.replay", { packDir: resolve(packDir) }, options);
+  }
   perception(sessionRef = null) { return new PerceptionClient(this, sessionRef); }
 
   async close() {

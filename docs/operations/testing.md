@@ -198,6 +198,7 @@ npm run test:mcp
 npm run test:mcp-product
 npm run test:apx
 npm run test:perception-computer
+npm run test:experience-verification
 npm run test:browser-control
 npm run test:browser-control-stress
 ```
@@ -209,7 +210,9 @@ artifact chunk 재조립, digest와 delete를 완주한다. `test:apx`와 `test:
 CDP 제품 gate를 두 이름으로 고정한다. graph 1.0의 semantic-spatial fusion, occlusion, stable identity,
 delta, pixel-on-demand, raw identifier 비노출, DOM과 network postcondition에 더해 목표 조건부
 SituationCapsule, broker-issued capability, stale world의 effect 전 거부를 한 실제 browser 여정으로
-검증한다. `test:browser-control`의 71개 단정은 별도 automation
+검증한다. `test:experience-verification`은 설치 tarball에서 APX environment를 관찰하고 strict contract
+audit, 원자적 Evidence Pack 발행, effect-free replay, exact self-comparison을 실제 Chromium으로 검증한다.
+Chrome Ubuntu와 Edge Windows가 같은 제품 gate를 실행한다. `test:browser-control`의 71개 단정은 별도 automation
 profile에서 exact origin과 23개 action catalog, manifest viewport, 첫 탐색 trace, 8-state 의미 기반 대기,
 명시적 lazy hydration, compact accessibility snapshot, opaque locator, open shadow root, same-origin 및
 허용 cross-origin frame, strict actionability, trusted input, popup, dialog, upload, download, native drag,

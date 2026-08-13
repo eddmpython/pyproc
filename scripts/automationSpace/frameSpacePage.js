@@ -161,11 +161,12 @@ export class FrameSpacePage {
     return Object.freeze({ ...observed, screenshot: await this._storeScreenshot(captured, true) });
   }
 
-  async perceptionCapture({ sessionRef, maxEntities, issueLocators } = {}) {
+  async perceptionCapture({ sessionRef, maxEntities, issueLocators, includeEnvironment } = {}) {
     const target = this._targetForSession(sessionRef);
     const facts = await this._call(target, "perception.capture", {
       maxEntities,
       issueLocators: issueLocators !== false,
+      includeEnvironment: includeEnvironment === true,
     });
     target.url = String(facts.page?.url || target.url);
     target.title = String(facts.page?.title || target.title).slice(0, 500);

@@ -155,7 +155,7 @@
     return width * height / (rect.width * rect.height);
   }
 
-  function perceptionSnapshot({ maxEntities = 1000, issueLocators = true } = {}) {
+  function perceptionSnapshot({ maxEntities = 1000, issueLocators = true, includeEnvironment = false } = {}) {
     const limit = Math.max(1, Math.min(1000, Number(maxEntities) || 1000));
     if (issueLocators) locatorByRef.clear();
     const eligible = [document.documentElement, ...document.querySelectorAll("body *")]
@@ -246,7 +246,21 @@
     return Object.freeze({
       page: Object.freeze({ url: location.href, title: document.title,
         viewport: Object.freeze({ width: innerWidth, height: innerHeight, scale: devicePixelRatio || 1 }),
-        scroll: Object.freeze({ x: scrollX, y: scrollY }) }),
+        scroll: Object.freeze({ x: scrollX, y: scrollY }),
+        ...(includeEnvironment ? { environment: Object.freeze((() => {
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          const metrics = context ? ["sans-serif", "serif", "monospace", "system-ui"].map((font) => {
+            context.font = `16px ${font}`;
+            return Math.round(context.measureText("PyProc 0123 한글").width * 1000) / 1000;
+          }) : [];
+          return { locale: navigator.language || "unknown",
+            timezoneId: Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown",
+            colorScheme: matchMedia("(prefers-color-scheme: dark)").matches ? "dark"
+              : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "no-preference",
+            reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+            fontFingerprint: `font-metrics-v1:${metrics.join(",")}` };
+        })()) } : {}) }),
       entities: Object.freeze(entities),
       relations: Object.freeze(relations),
       events: Object.freeze([]),
@@ -256,7 +270,8 @@
         structure: candidates.length < eligible.length ? "partial" : "complete",
         geometry: candidates.length < eligible.length ? "partial" : "complete",
         interaction: candidates.length < eligible.length ? "partial" : "complete",
-        network: "notAvailable", captureAuthority: "dom-rendered",
+        network: "notAvailable", environment: includeEnvironment ? "complete" : "notRequested",
+        captureAuthority: "dom-rendered",
       }),
     });
   }

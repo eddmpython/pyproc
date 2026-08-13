@@ -388,7 +388,8 @@ Example screenshot action:
 - `npm run test:contracts` checks manifest rejection, schema derivation, risk ownership, screenshot validation,
   artifact quota, chunking, digest, TTL, deletion, and shutdown cleanup.
 - `npm run test:package` checks the installed bin and required runtime files without adding a JS package export.
-- `npm run test:mcp` proves the default server remains exactly four Python tools with no browser authority.
+- `npm run test:mcp` proves the standalone Python sandbox remains exactly four Python tools with no browser
+  authority. The installed shared Control product additionally exposes effect-free Evidence Pack verify and replay.
 - `npm run test:mcp-product` packs and installs the npm package, invokes `--check`, boots the Python Machine,
   returns APX graph, visual, and action evidence, captures PNG, JPEG, and WebP as native image content after
   ordered effects, reconstructs chunks, verifies digests, and deletes a ref.
@@ -401,3 +402,12 @@ Example screenshot action:
 - `npm run test:browser-control-stress` repeats 48 semantic focus actions and remote-object release boundaries.
 
 Chrome on Ubuntu and Microsoft Edge on Windows run the installed product and browser-control gates in CI.
+APX also exposes an opt-in `environment` channel. Native CDP and FrameSpace observe locale, timezone, color
+scheme, reduced motion, and a bounded font metric fingerprint inside the target. Verified Change Loop uses those
+facts with the broker viewport and exact browser version to refuse an uncomparable run. The fixed environment
+probe is a trusted internal read. It does not expose arbitrary `Runtime.evaluate` authority to the caller.
+
+Repository-wide change verification is built above AutomationSpace rather than inside the action catalog. Its
+`eyesAudit` tool loads only a strict `qa/eyes` JSON contract, obtains current broker affordances from
+SituationCapsules, and publishes a canonical Evidence Pack. `eyesVerify` and `eyesReplay` send no browser effect.
+See [experience verification](experienceVerification.md).

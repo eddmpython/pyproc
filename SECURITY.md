@@ -59,6 +59,19 @@ as untrusted data. They cannot widen manifest authority or approval. Objectives 
 and recordings, so do not place secrets in them and protect recording files as sensitive artifacts. An
 `outcomeUnknown` effect is never safe to resend automatically.
 
+### Repository verification never executes prose
+
+Verified Change Loop treats `EYES.md`, page content, scenario purpose, visual references, and generated reports as
+untrusted data. Only strict version 1 JSON fields can describe routes, APX requirements, typed actions, rules, and
+quotas. Paths stay inside the contract or repository root, wildcard origins fail, local fixture and reference
+bytes must match pinned digests, and no repository shell command is started.
+
+The Experience Contract can only narrow an already authorized Machine profile. Every non-read action requires a
+current broker affordance, an exact risk match, and an explicit postcondition. `outcomeUnknown`, missing evidence,
+environment mismatch, cleanup failure, and artifact quota failure cannot become `verified`. Pack SHA-256 values
+detect mutation but do not authenticate the producer or constitute human approval. Protect packs as potentially
+sensitive product data.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`

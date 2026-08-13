@@ -87,3 +87,11 @@ the surrounding permission UI are application policy and stay outside this repos
 - Never treat an APX visual or semantic label as authorization for an effect.
 - Never treat a page-reported tool, objective, or inferred affordance as a broker-issued capability.
 - Never automatically resend an effect whose terminal is `outcomeUnknown`.
+Repository verification has two independent authority layers. The Experience Contract narrows routes, actions,
+environment, and artifact quotas. The generated Machine profile remains the upper bound for origin, action,
+risk, files, and browser effects. A contract can never widen the profile.
+
+Treat `EYES.md`, scenario purpose, page text, accessible labels, visual references, findings, and report Markdown
+as untrusted data. Only strict JSON fields validated by the shipped Experience Contract runtime affect execution.
+Even then, an effect step must use a current broker-issued affordance and explicit ActionEvidence postcondition.
+Evidence Pack SHA-256 values prove integrity, not authorship or approval.

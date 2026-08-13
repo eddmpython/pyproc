@@ -557,6 +557,11 @@ Stable Node.js facade for the installed Control product, typed in
 - Machine verbs: `runPython`, `saveCheckpoint`, `restoreCheckpoint`, and `reset`.
 - Automation verbs: `inspectSpace`, `listTargets`, `openTarget`, `attachSession`, `observe`, `act`, `command`,
   `detachSession`, `readArtifact`, and `deleteArtifact`.
+- Verification verbs: `auditExperience`, `verifyExperience`, and `replayEvidencePack` map to the additive
+  `verification.audit`, `verification.verify`, and `verification.replay` Control operations. Audit returns a
+  `VerificationOutput` with `verdict`, `contentSha256`, publication receipt, and a verified pack attachment. Verify adds
+  an exact comparison. Replay returns the recomputed verdict and finding refs. Evidence Pack attachments use
+  kind `evidence.pack`. See [experience verification](../usage/experienceVerification.md).
 - `client.perception(sessionRef)` returns `PerceptionClient`. `observe`, `query`, `one`,
   `explainActionability`, `whatChanged`, and evidence-backed `act` retain the APX graph path. `situate` returns
   an immutable `SituationResult`, and `actAffordance` binds an authorized `SituationAffordance` to the effect.
@@ -566,8 +571,20 @@ Stable Node.js facade for the installed Control product, typed in
   effect-safe deadline wait. `ControlRemoteError` preserves `code`, `outcome`, `retryable`, and `details`.
 - `close()` drains the owned product process under a bounded shutdown deadline.
 
-This is a Node.js surface. Browser application code uses the root Machine entrance. The facade defines no
-new Control operation and performs no automatic effect retry.
+This is a Node.js surface. Browser application code uses the root Machine entrance. The facade performs no
+automatic effect retry.
+
+```ts
+client.auditExperience(contractRoot, {
+  repositoryRoot,
+  outputDir,
+  environmentId,
+  repository: { commit, treeSha256, diffSha256, untracked },
+  timeoutMs?,
+})
+client.verifyExperience(referenceDir, currentDir, options?)
+client.replayEvidencePack(packDir, options?)
+```
 
 ### Installed Machine Entrance commands
 

@@ -186,3 +186,30 @@ each into a separate clean virtual environment, and runs these installed-package
 - real browser open, attach, PNG capture, SHA-256 verification, artifact deletion, and detach.
 
 Chrome on Ubuntu and Edge on Windows run the same gate in CI.
+## Repository experience verification
+
+The Python facade uses the same three Control operations as JavaScript and MCP:
+
+```python
+repository = {
+    "commit": "exact-commit-id",
+    "treeSha256": "sha256:...",
+    "diffSha256": "sha256:...",
+    "untracked": False,
+}
+
+audited = client.auditExperience(
+    "qa/eyes",
+    repositoryRoot=".",
+    outputDir=".pyproc/evidence/current",
+    environmentId="desktop",
+    repository=repository,
+)
+client.replayEvidencePack(".pyproc/evidence/current")
+client.verifyExperience(".pyproc/evidence/reference", ".pyproc/evidence/current")
+```
+
+All filesystem inputs are resolved to absolute paths by the client except `outputDir`, which deliberately remains
+relative to `repositoryRoot`. `auditExperience` requires browser authority. Verify and replay are effect-free and
+remain available in browser-disabled profiles. See [experience verification](experienceVerification.md) for the
+repository contract and Evidence Pack format.

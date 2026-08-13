@@ -122,10 +122,15 @@ issue fresh locators.
 | `interaction` | Supported actions, actionability, reason codes | deterministic derivation |
 | `events` | Bounded console and lifecycle facts | browser observation |
 | `networkMetadata` | Redacted request and response metadata | browser observation |
+| `environment` | Locale, timezone, color scheme, reduced motion, bounded font metric fingerprint | target-observed trusted read |
 | `visual` | Overview or entity crop descriptors | verified artifact store |
 
 Requesting fewer entity channels removes those channels from the returned entities. The internal timeline
 still keeps the fused graph, so a later query can request a different view without weakening identity.
+
+The `environment` channel exists for exact comparability, not authority. Native CDP uses one fixed internal
+trusted read and does not expose arbitrary `Runtime.evaluate` permission. FrameSpace reports the same facts from
+its cooperative target. Verified Change Loop requires exact values before it evaluates a repository scenario.
 
 ## Attention query
 

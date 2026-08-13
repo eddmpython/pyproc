@@ -17,6 +17,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | [product/](product/) | [vision.md](product/vision.md) | Product direction: the North Star, what it is and is not, success and failure criteria, the support boundary |
 | | [glossary.md](product/glossary.md) | Glossary: the naming boundary between the pyproc kernel and the Web Machine layer (`src/machine`, bundled in npm) |
 | [specs/](specs/) | [apx/README.md](specs/apx/README.md) | APX 1.0 product contract: graph and situation representations, provenance, uncertainty, broker authority, visual evidence, action verification, and conformance |
+| | [verification/README.md](specs/verification/README.md) | Experience Verification 1.0: strict repository contracts, deterministic verdicts, Evidence Pack integrity, exact comparison, and effect-free replay |
 | [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: documentation, executable truth, experiments, git history, memory operations, development principles |
 | | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
 | | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
@@ -37,6 +38,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [controlProtocol.md](usage/controlProtocol.md) | Language-neutral installed control: handshake, operations, cancellation, outcomes, and verified binary attachments |
 | | [pythonSdk.md](usage/pythonSdk.md) | Official Python client: clean installation, persistent execution, checkpoint recovery, cancellation, and screenshots |
 | | [javascriptControl.md](usage/javascriptControl.md) | Stable Node.js client: installed product lifecycle, persistent Python, APX, verified attachments, cancellation, and shutdown |
+| | [experienceVerification.md](usage/experienceVerification.md) | Strict repository Experience Contracts, deterministic browser verdicts, canonical Evidence Packs, exact comparison, and effect-free replay |
 | | [automationSpace.md](usage/automationSpace.md) | Provider-neutral automation lifecycle, authorization, effect, artifact, restore, and replay boundaries |
 | | [frameSpace.md](usage/frameSpace.md) | Cooperative credentialless frame automation, target bridge, sandbox, screenshot, and origin boundaries |
 | | [replaySpace.md](usage/replaySpace.md) | Hash-chained automation recording, artifact completeness, effect-free replay, and checkpoint-aligned resume |
@@ -64,8 +66,10 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 - Language-neutral installed control: [usage/controlProtocol.md](usage/controlProtocol.md)
 - Official Python client: [usage/pythonSdk.md](usage/pythonSdk.md)
 - Official JavaScript control client: [usage/javascriptControl.md](usage/javascriptControl.md)
+- Repository experience audit and Evidence Pack verification: [usage/experienceVerification.md](usage/experienceVerification.md)
 - Automation provider contract: [usage/automationSpace.md](usage/automationSpace.md)
 - Cooperative frame provider: [usage/frameSpace.md](usage/frameSpace.md)
 - Automation recording and replay: [usage/replaySpace.md](usage/replaySpace.md)
 - PyProc Eyes graph, SituationCapsule, and evidence contract: [APX 1.0](specs/apx/README.md)
+- Repository change verdict and Evidence Pack contract: [Experience Verification 1.0](specs/verification/README.md)
 - Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

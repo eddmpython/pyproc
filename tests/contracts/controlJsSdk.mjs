@@ -31,6 +31,9 @@ export async function assertControlJsSdkContract() {
     PerceptionQueryResult, PyProcControlClient]) {
     assert(typeof value === "function", "pyproc/control 공개 class가 누락됐다");
   }
+  for (const method of ["auditExperience", "verifyExperience", "replayEvidencePack"]) {
+    assert(typeof PyProcControlClient.prototype[method] === "function", `verification facade가 누락됐다: ${method}`);
+  }
 
   const readable = new PassThrough();
   const writable = new PassThrough();

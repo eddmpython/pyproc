@@ -80,6 +80,19 @@ The [APX draft](../specs/apx/README.md) owns this provider-neutral contract.
 
 Recording and replay details are in the [ReplaySpace guide](replaySpace.md).
 
+## Experience Verification consumer
+
+The repository verification runner is a consumer of this boundary, not a fourth provider. It validates the strict
+Experience Contract before target execution, checks `automation.space.inspect` against the declared viewport and origin
+authority, then uses only the canonical target, session, observe, act, and detach operations. It does not receive a raw
+provider object or bypass provider authorization.
+
+Each action target comes from a current APX SituationCapsule affordance. The runner compares the contract action and risk
+to that affordance, sends the action once, and evaluates the resulting ActionEvidence. `outcomeUnknown` remains
+incomplete and is never retried. Evidence Pack verification and replay can run without this provider boundary because
+they consume already sealed bytes. See [Experience verification](experienceVerification.md) and the
+[Experience Verification 1.0 specification](../specs/verification/README.md).
+
 ## Nested browser guest boundary
 
 The current product does not claim a browser engine running inside a v86 guest. The formal

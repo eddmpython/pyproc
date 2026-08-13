@@ -26,6 +26,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "runtimeCapabilityClusters.mjs",
   "runtimeContract.mjs",
   "sourceParses.mjs",
+  "verification.mjs",
 ]);
 
 export async function runContractSuites() {

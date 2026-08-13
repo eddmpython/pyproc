@@ -69,7 +69,9 @@ The four machine operations are always present:
 | `machine.checkpoint.restore` | Restore a saved Python state | `applied` |
 | `machine.reset` | Restore the prepared boot state | `applied` |
 
-When the manifest enables browser authority, ten more operations appear:
+Two effect-free verification operations, `verification.verify` and `verification.replay`, are also present in a
+browser-disabled installed profile. When the manifest enables browser authority, ten automation operations and
+`verification.audit` appear:
 
 | Operation | Meaning |
 |---|---|
@@ -138,3 +140,23 @@ the broker artifact reference for later chunk reads or deletion.
 executes persistent Python, verifies post-send cancellation, opens a real allowed page, returns an APX graph,
 captures a PNG, and checks its ordered attachment bytes and SHA-256. Chrome on Ubuntu and Edge on Windows run
 the same gate.
+Three repository verification operations share the same host:
+
+| Operation | Effect outcome | Availability |
+|---|---|---|
+| `verification.audit` | `applied`, because it navigates an isolated target and publishes a new pack directory | Browser-enabled AutomationSpace only |
+| `verification.verify` | `observed` | All installed profiles |
+| `verification.replay` | `observed` | All installed profiles |
+
+Audit accepts absolute `contractRoot` and `repositoryRoot`, a repository-confined relative `outputDir`, an exact
+`environmentId`, and repository commit, tree, diff, and untracked identity. Verify accepts exact absolute
+`referenceDir` and `currentDir` pack directories. Replay accepts one absolute `packDir`. All three return
+`verified`, `rejected`, or `incomplete` inside the ordinary completed Control response. A product verdict is not
+a transport terminal.
+
+The matching MCP tools are `eyesAudit`, `eyesVerify`, and `eyesReplay`. See the
+[experience verification guide](experienceVerification.md) for schemas and verdict semantics.
+
+Evidence Packs use the same verified attachment framing as screenshots. Their attachment kind is
+`evidence.pack` and MIME type is `application/vnd.pyproc.evidence-pack+json`. MCP projects screenshots as image
+content and Evidence Packs as embedded resource content. It never labels a JSON pack as an image.

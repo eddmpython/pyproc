@@ -41,5 +41,5 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     assert client.deleteArtifact(artifactRef, timeout=30.0).output["deleted"] is True
     client.detachSession(attached.output, timeout=30.0)
 
-print(json.dumps({"ok": True, "operations": 13, "attachmentBytes": attachment.byteLength,
+print(json.dumps({"ok": True, "operations": len(client.operations), "attachmentBytes": attachment.byteLength,
                   "perceptionEntityRef": heading.entityRef, "situationRef": situation.situationRef}))

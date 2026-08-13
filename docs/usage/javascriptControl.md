@@ -142,3 +142,32 @@ invalid startup input. The package gate imports only `pyproc/control` from a pac
 Control product gate uses that public import to preflight and start the product, run persistent Python, cancel
 a delivered command, query APX through Native CDP and FrameSpace, verify screenshot bytes, reject request ID
 reuse, detach, and shut down on Chrome and Edge.
+## Repository experience verification
+
+`auditExperience(contractRoot, options)` runs the strict repository contract through the configured
+AutomationSpace and atomically publishes one Evidence Pack. `verifyExperience(referenceDir, currentDir)` compares
+two exact packs, and `replayEvidencePack(packDir)` validates content, sidecars, and the stored verdict without a
+live provider effect.
+
+```js
+const audit = await client.auditExperience("qa/eyes", {
+  repositoryRoot: process.cwd(),
+  outputDir: ".pyproc/evidence/current",
+  environmentId: "desktop",
+  repository: {
+    commit: "exact-commit-id",
+    treeSha256: "sha256:...",
+    diffSha256: "sha256:...",
+    untracked: false,
+  },
+});
+
+if (audit.output.verdict !== "verified") {
+  throw new Error(`experience verdict: ${audit.output.verdict}`);
+}
+await client.replayEvidencePack(".pyproc/evidence/current");
+```
+
+The caller supplies repository identity. The SDK does not assume Git, run a shell, or mutate the index. The
+Evidence Pack arrives as a digest-verified `evidence.pack` attachment. Full setup and contract schemas are in the
+[experience verification guide](experienceVerification.md).

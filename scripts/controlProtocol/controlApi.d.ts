@@ -41,6 +41,18 @@ export interface ArtifactDeleteOutput {
   readonly deleted: boolean;
 }
 
+export interface VerificationRepositoryIdentity {
+  readonly commit: string;
+  readonly treeSha256: `sha256:${string}`;
+  readonly diffSha256: `sha256:${string}`;
+  readonly untracked: boolean;
+}
+
+export interface VerificationOutput extends Readonly<Record<string, unknown>> {
+  readonly verdict: "verified" | "rejected" | "incomplete";
+  readonly contentSha256: string;
+}
+
 export interface ControlRequestOptions {
   readonly requestId?: string;
   readonly spaceId?: string;
@@ -241,6 +253,16 @@ export class PyProcControlClient {
   readArtifact(artifactRef: string, options?: ControlRequestOptions & { readonly offset?: number; readonly maxBytes?: number }):
     Promise<ControlResult>;
   deleteArtifact(artifactRef: string, options?: ControlRequestOptions): Promise<ControlResult<ArtifactDeleteOutput>>;
+  auditExperience(contractRoot: string, options: ControlRequestOptions & Readonly<{
+    repositoryRoot: string;
+    outputDir: string;
+    environmentId: string;
+    repository: VerificationRepositoryIdentity;
+  }>): Promise<ControlResult<VerificationOutput>>;
+  verifyExperience(referenceDir: string, currentDir: string,
+    options?: ControlRequestOptions): Promise<ControlResult<VerificationOutput>>;
+  replayEvidencePack(packDir: string,
+    options?: ControlRequestOptions): Promise<ControlResult<VerificationOutput>>;
   perception(sessionRef?: ControlSessionRef | null): PerceptionClient;
   close(): Promise<void>;
 }

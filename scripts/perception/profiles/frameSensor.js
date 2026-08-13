@@ -34,6 +34,7 @@ export class FrameSensor {
       sessionRef,
       maxEntities: options.budget.maxEntities,
       issueLocators: context.issueLocators !== false,
+      includeEnvironment: options.channels.includes("environment"),
     }, { signal: context.signal, requestId: `framePerception:${this.idFactory()}` });
     if (!facts || typeof facts !== "object" || !Number.isInteger(facts.documentEpoch)
       || !Array.isArray(facts.entities) || !Array.isArray(facts.relations)

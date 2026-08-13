@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyproc.dev/schemas/verification/experience-1.json",
+  "title": "PyProc Experience Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project", "target", "readiness", "environments", "scenarioCatalog", "baselineCatalog", "policy"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": { "id": { "$ref": "#/$defs/id" } }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseUrl", "allowedOrigins"],
+      "properties": {
+        "baseUrl": { "type": "string", "format": "uri", "pattern": "^https?://[^/]+$" },
+        "allowedOrigins": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "format": "uri", "pattern": "^https?://[^/]+$" } }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenarioRef", "timeoutMs"],
+      "properties": { "scenarioRef": { "$ref": "#/$defs/id" }, "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 300000 } }
+    },
+    "environments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["environmentId", "viewport", "locale", "timezoneId", "colorScheme", "reducedMotion", "fontFingerprint"],
+        "properties": {
+          "environmentId": { "$ref": "#/$defs/id" },
+          "viewport": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["width", "height", "deviceScaleFactor", "mobile", "touch"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1, "maximum": 10000 },
+              "height": { "type": "integer", "minimum": 1, "maximum": 10000 },
+              "deviceScaleFactor": { "type": "number", "exclusiveMinimum": 0, "maximum": 8 },
+              "mobile": { "type": "boolean" },
+              "touch": { "type": "boolean" }
+            }
+          },
+          "locale": { "type": "string", "minLength": 1 },
+          "timezoneId": { "type": "string", "minLength": 1 },
+          "colorScheme": { "enum": ["light", "dark", "no-preference"] },
+          "reducedMotion": { "type": "boolean" },
+          "fontFingerprint": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "scenarioCatalog": { "$ref": "#/$defs/relativePath" },
+    "baselineCatalog": { "$ref": "#/$defs/relativePath" },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["console", "network", "visual", "externalEffects", "rejectSeverities", "redactions", "artifactQuota"],
+      "properties": {
+        "console": { "const": "rejectUnexpectedError" },
+        "network": { "const": "rejectUnexpectedFailure" },
+        "visual": { "const": "boundedEvidence" },
+        "externalEffects": { "enum": ["deny", "acknowledged"] },
+        "rejectSeverities": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/severity" } },
+        "redactions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "artifactQuota": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["maxArtifacts", "maxArtifactBytes", "maxTotalBytes"],
+          "properties": {
+            "maxArtifacts": { "type": "integer", "minimum": 1, "maximum": 256 },
+            "maxArtifactBytes": { "type": "integer", "minimum": 1, "maximum": 67108864 },
+            "maxTotalBytes": { "type": "integer", "minimum": 1, "maximum": 268435456 }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$" },
+    "relativePath": { "type": "string", "minLength": 1, "not": { "pattern": "^(?:[A-Za-z]:[\\\\/]|/|.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$))" } },
+    "severity": { "enum": ["blocker", "major", "minor", "advisory"] }
+  }
+}

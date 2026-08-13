@@ -342,6 +342,8 @@ export class BrowserAutomation {
       sensor: new WebCdpSensor({
         command: (sessionRef, method, params, commandResults, signal) =>
           this._command(sessionRef, method, params, commandResults, signal),
+        environmentCommand: (sessionRef, method, params, commandResults, signal) =>
+          this._sendCommand(sessionRef, method, params, commandResults, signal, true),
         eventCapture: (sessionRef, options, commandResults, signal) =>
           this._observation.capture(sessionRef, options, commandResults, signal),
       }),

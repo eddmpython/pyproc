@@ -30,6 +30,11 @@ An automation-enabled manifest also exposes PyProc Eyes through `client.percepti
 graph queries, goal-specific `situate(...)`, broker-bound `actAffordance(...)`, and evidence-backed actions,
 without a JavaScript application layer or a raw CDP handle.
 
+Repository experience verification uses `auditExperience`, `verifyExperience`, and `replayEvidencePack` over the
+same Control Protocol. The repository
+[experience verification guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/experienceVerification.md)
+defines the strict `qa/eyes` contract and canonical Evidence Pack.
+
 The npm `pyproc` package and its engine assets are separate installation prerequisites. See the repository
 [Python SDK guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/pythonSdk.md) for setup,
 automation, perception, cancellation, and recovery examples.

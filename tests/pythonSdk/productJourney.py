@@ -93,7 +93,7 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     assert duplicate.code == "CONTROL_REQUEST_DUPLICATE"
     assert client.runPython("'duplicateEffect' in globals()", timeout=30.0).output["value"] == "False"
 
-print(json.dumps({"ok": True, "operations": 14, "checkpoint": checkpoint.output["index"],
+print(json.dumps({"ok": True, "operations": len(client.operations), "checkpoint": checkpoint.output["index"],
                   "attachmentBytes": attachment.byteLength, "cancelOutcome": cancelError.outcome,
                   "cancelTerminal": cancelError.terminal, "timeoutOutcome": timeoutError.outcome,
                   "timeoutTerminal": timeoutError.terminal, "permissionTerminal": permissionError.terminal,

@@ -229,10 +229,10 @@ try {
   const preflight = await PyProcControlClient.check(configPath, { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
   client = await PyProcControlClient.start(configPath, { cwd: installed.appDir,
     startupTimeoutMs: TIMEOUT_MS, maxAttachmentChunkBytes: 64 });
-  check("공개 JavaScript 입구가 preflight와 operation 14종을 제공",
+  check("공개 JavaScript 입구가 preflight와 operation 17종을 제공",
     preflight.ok === true
       && controlEntry === join(packageRoot, "scripts", "controlProtocol", "controlApi.js")
-      && client.operations.length === 14 && client.operations.includes("machine.run")
+      && client.operations.length === 17 && client.operations.includes("machine.run")
       && client.operations.includes("automation.act"), client.operations.join(","));
 
   await client.runPython("controlState = 40");

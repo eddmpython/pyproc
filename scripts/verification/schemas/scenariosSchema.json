@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pyproc.dev/schemas/verification/scenarios-1.json",
+  "title": "PyProc Verification Scenario Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "scenarios"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "scenarios": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/scenario" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$" },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirementRef", "select", "need", "cardinality"],
+      "properties": {
+        "requirementRef": { "$ref": "#/$defs/id" },
+        "select": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["role"],
+          "properties": { "role": { "type": "string", "minLength": 1 }, "name": { "type": "string", "minLength": 1 }, "actionable": { "type": "boolean" } }
+        },
+        "need": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["fact", "affordance", "change"] } },
+        "cardinality": { "enum": ["one", "oneOrMore", "zeroOrMore"] }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "kind", "check", "severity"],
+      "properties": {
+        "ruleId": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["structural", "behavioral", "perceptual"] },
+        "check": { "enum": ["requirementSatisfied", "minimumHitTarget", "notOccluded", "stateEquals", "actionConfirmed", "diagnosticsClean", "referenceReview"] },
+        "severity": { "enum": ["blocker", "major", "minor", "advisory"] },
+        "requirementRef": { "$ref": "#/$defs/id" },
+        "predicate": { "type": "string", "minLength": 1 },
+        "expected": {},
+        "minimum": { "type": "number", "minimum": 0 },
+        "referenceSha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenarioId", "purpose", "route", "fixturePath", "fixtureSha256", "required", "readiness", "steps", "checkpoints", "cleanup"],
+      "properties": {
+        "scenarioId": { "$ref": "#/$defs/id" },
+        "purpose": { "type": "string", "minLength": 1 },
+        "route": { "type": "string", "pattern": "^/(?!/).*" },
+        "fixturePath": { "type": "string", "minLength": 1 },
+        "fixtureSha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "required": { "type": "boolean" },
+        "readiness": { "type": "object", "additionalProperties": false, "required": ["requirements"], "properties": { "requirements": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/requirement" } } } },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["stepId", "target", "action"],
+            "properties": {
+              "stepId": { "$ref": "#/$defs/id" },
+              "target": { "type": "object", "additionalProperties": false, "required": ["role"], "properties": { "role": { "type": "string", "minLength": 1 }, "name": { "type": "string", "minLength": 1 }, "actionable": { "type": "boolean" } } },
+              "action": { "type": "object", "additionalProperties": false, "required": ["kind", "expectedRisk"], "properties": { "kind": { "enum": ["click", "fill", "press", "select", "check", "uncheck", "focus", "hover", "scroll"] }, "expectedRisk": { "enum": ["read", "mutate", "externalEffect"] }, "value": { "type": "string" }, "values": { "type": "array", "minItems": 1, "items": { "type": "string" } }, "key": { "type": "string", "minLength": 1 }, "modifiers": { "type": "array", "uniqueItems": true, "items": { "type": "string" } } } },
+              "verify": { "type": "object" },
+              "expectedTransition": { "type": "object" }
+            }
+          }
+        },
+        "checkpoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["checkpointId", "focus", "rules"],
+            "properties": {
+              "checkpointId": { "$ref": "#/$defs/id" },
+              "focus": { "type": "object", "additionalProperties": false, "required": ["requirements"], "properties": { "requirements": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/requirement" } } } },
+              "rules": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rule" } }
+            }
+          }
+        },
+        "cleanup": { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "detach" } } }
+      }
+    }
+  }
+}

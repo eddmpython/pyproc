@@ -41,6 +41,7 @@ function entityAttestations(entity, observation) {
     ["semantic.value", entity.semantic?.value, entity.provenance?.semantic,
       SENSITIVE.has(entity.semantic?.sensitivity), entity.semantic?.sensitivity || "public"],
     ["geometry.visible", entity.geometry?.visible, entity.provenance?.geometry, false],
+    ["geometry.rect", entity.geometry?.rect, entity.provenance?.geometry, false],
     ["geometry.occluded", entity.geometry?.occluded, entity.provenance?.geometry, false],
     ["interaction.actionable", entity.interaction?.actionable, entity.provenance?.interaction, false],
   ];
@@ -105,9 +106,7 @@ export class WorldModel {
     scanBoundary(reportedClaims);
     const priorState = this.sessions.get(sessionKey) || Object.freeze({ worlds: Object.freeze([]), current: null });
     const digest = worldDigest(observation, reportedClaims);
-    if (priorState.current?.integrity.worldSha256 === digest) {
-      return Object.freeze({ world: priorState.current, unchanged: true, commit: () => priorState.current });
-    }
+    const unchanged = priorState.current?.integrity.worldSha256 === digest;
     const byKey = new Map();
     for (const entity of observation.entities) {
       for (const item of entityAttestations(entity, observation)) {
@@ -159,12 +158,13 @@ export class WorldModel {
       if (this.sessions.get(sessionKey) !== undefined && this.sessions.get(sessionKey) !== priorState) {
         throw new Error("world commit lost its session turn");
       }
-      const next = immutable({ worlds: [...priorState.worlds, world].slice(-this.limit), current: world });
+      const worlds = unchanged ? [...priorState.worlds.slice(0, -1), world] : [...priorState.worlds, world];
+      const next = immutable({ worlds: worlds.slice(-this.limit), current: world });
       this.sessions.set(sessionKey, next);
       committed = true;
       return next.current;
     };
-    return Object.freeze({ world, unchanged: false, commit });
+    return Object.freeze({ world, unchanged, commit });
   }
 
   current(sessionKey) { return this.sessions.get(sessionKey)?.current || null; }

@@ -165,19 +165,28 @@ export async function assertPerceptionComputerContract() {
     === "APX_SCHEMA_INVALID", "missing budget omission report passed situation validation");
   const repeated = await perception.observe(sessionRef, { representation: APX_SITUATION_REPRESENTATION,
     focus, visual: { mode: "auto" }, budget: { maxEntities: 120, maxRelations: 300, maxBytes: 32768 } });
-  assert(repeated.integrity.canonicalSha256 === capsule.integrity.canonicalSha256,
-    "same world and focus produced a nondeterministic capsule digest");
+  const repeatedAuthorized = repeated.affordances.find((item) => item.kind === "authorized" && item.action === "click");
+  const originalAuthorized = capsule.affordances.find((item) => item.kind === "authorized" && item.action === "click");
+  assert(repeated.worldRef === capsule.worldRef && repeatedAuthorized.capabilityRef !== originalAuthorized.capabilityRef
+    && repeatedAuthorized.locatorRef !== originalAuthorized.locatorRef,
+  "same logical world did not refresh observation evidence and rotated locator authority");
 
   const authorized = capsule.affordances.find((item) => item.kind === "authorized" && item.action === "click");
   const action = { kind: "click", locatorRef: authorized.locatorRef, expectedRisk: "externalEffect" };
   const actionContext = { situationRef: capsule.situationRef, worldRef: capsule.worldRef,
     capabilityRef: authorized.capabilityRef };
-  perception.assertActionContext(sessionRef, actionContext, action);
+  const rotated = await errorOf(() => Promise.resolve(perception.assertActionContext(sessionRef, actionContext, action)));
+  assert(rotated?.code === "APX_CAPABILITY_STALE" && rotated.outcome === "notSent",
+    "re-observation left the prior locator capability live");
+  const repeatedAction = { kind: "click", locatorRef: repeatedAuthorized.locatorRef, expectedRisk: "externalEffect" };
+  const repeatedContext = { situationRef: repeated.situationRef, worldRef: repeated.worldRef,
+    capabilityRef: repeatedAuthorized.capabilityRef };
+  perception.assertActionContext(sessionRef, repeatedContext, repeatedAction);
   epoch = 2;
   const replacement = await perception.observe(sessionRef, { representation: APX_SITUATION_REPRESENTATION,
     focus, visual: { mode: "off" }, budget: { maxEntities: 120, maxRelations: 300, maxBytes: 32768 } });
   assert(replacement.worldRef !== capsule.worldRef, "document replacement reused an old world");
-  const stale = await errorOf(() => Promise.resolve(perception.assertActionContext(sessionRef, actionContext, action)));
+  const stale = await errorOf(() => Promise.resolve(perception.assertActionContext(sessionRef, repeatedContext, repeatedAction)));
   assert(stale?.code === "APX_CAPABILITY_STALE" && stale.outcome === "notSent",
     "old epoch capability reached the provider boundary");
 

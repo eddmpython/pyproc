@@ -18,7 +18,7 @@
     "documentEpoch": { "type": "integer", "minimum": 0 },
     "capturedAt": { "type": "string", "format": "date-time" },
     "page": { "type": "object" },
-    "channels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["semantic", "structure", "geometry", "interaction", "events", "networkMetadata", "visual"] } },
+    "channels": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["semantic", "structure", "geometry", "interaction", "events", "networkMetadata", "environment", "visual"] } },
     "entities": { "type": "array", "items": { "$ref": "#/$defs/entity" } },
     "relations": { "type": "array", "items": { "$ref": "#/$defs/relation" } },
     "events": { "type": "array", "items": { "type": "object" } },
