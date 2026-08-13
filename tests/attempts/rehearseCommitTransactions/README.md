@@ -54,7 +54,10 @@ Initiative 4가 졸업해 intent와 receipt가 exact Execution Session revision�
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-08-13 | source contract audit | history branches, ReplaySpace, FrameSpace, ActionEvidence 대조 | probe 미실행 | rollback이 아니라 intent와 one-shot effect lifecycle이 제품 축 | Initiative 4 졸업 뒤 intent prototype |
+| 2026-08-13 | `run.mjs` | Node, Ed25519, concurrent CAS fixture | exact intent, stale approval, preflight, crash, race 17개 검사 | one-shot lease는 effect send 전에 durable consume되어야 하고 post-send crash는 unknown으로만 복구 | browser strict durability 대조 |
+| 2026-08-13 | `runBrowser.mjs` | installed Chromium, IndexedDB strict durability, real HTTP effect | 동시 contender와 reload 뒤 effect request 최대 1 | browser durable lease도 같은 at-most-once 경계를 보존 | 제품 file store와 Control에 승격 |
 
 ## 판정
 
-진행 중. Initiative 4의 Execution Session revision에 exact intent와 receipt를 연결하는 prototype부터 검증한다.
+진행 중. exact intent, signed approval, durable one-shot send의 prototype을 반증했고 제품 file store와 Control
+surface로 승격한다.

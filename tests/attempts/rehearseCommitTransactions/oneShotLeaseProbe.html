@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Rehearse-Commit one-shot lease probe</title></head>
+<body>
+  <button id="send">Send effect</button>
+  <output id="status">ready</output>
+  <script type="module">
+    const openStore = () => new Promise((resolve, reject) => {
+      const request = indexedDB.open("pyproc-rehearse-commit-probe", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("leases");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    const transact = async (mode, operation) => {
+      const database = await openStore();
+      try {
+        const transaction = database.transaction("leases", mode, { durability: "strict" });
+        const store = transaction.objectStore("leases");
+        const request = (method, ...args) => new Promise((resolve, reject) => {
+          const pending = store[method](...args);
+          pending.onsuccess = () => resolve(pending.result);
+          pending.onerror = () => reject(pending.error);
+        });
+        const result = await operation(request);
+        await new Promise((resolve, reject) => {
+          transaction.oncomplete = resolve;
+          transaction.onerror = () => reject(transaction.error);
+          transaction.onabort = () => reject(transaction.error || new Error("transaction aborted"));
+        });
+        return result;
+      } finally { database.close(); }
+    };
+    const readLease = () => transact("readonly", (request) => request("get", "effect:browser"));
+    const reset = () => transact("readwrite", async (request) => { await request("clear");
+      await request("put", { state: "approved", sends: 0 }, "effect:browser"); });
+    const reserve = () => transact("readwrite", async (request) => {
+      const current = await request("get", "effect:browser");
+      if (current?.state !== "approved") return false;
+      await request("put", { ...current, state: "sending" }, "effect:browser");
+      return true;
+    });
+    const send = async () => {
+      if (!await reserve()) return { sent: false, lease: await readLease() };
+      const response = await fetch("/oneShotEffect", { method: "POST", body: "effect:browser" });
+      const count = Number(await response.text());
+      await transact("readwrite", async (request) => {
+        const current = await request("get", "effect:browser");
+        await request("put", { ...current, state: "sent", sends: count }, "effect:browser");
+      });
+      return { sent: true, lease: await readLease() };
+    };
+    globalThis.oneShotProbe = Object.freeze({
+      reset,
+      async race() { await reset(); return Promise.all([send(), send()]); },
+      async leaveSending() { await reset(); return reserve(); },
+      async recover() {
+        const lease = await readLease();
+        if (lease?.state === "sending") {
+          await transact("readwrite", (request) => request("put", { ...lease, state: "outcomeUnknown" }, "effect:browser"));
+        }
+        return readLease();
+      },
+    });
+  </script>
+</body>
+</html>
