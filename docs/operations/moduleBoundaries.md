@@ -104,6 +104,16 @@ existing effect transaction identities; `appSpaceTools.js` adapts the nine opera
 directory never owns arbitrary page RPC, browser credentials, effect approval, or live effect dispatch. It is
 publicly composed only through the existing `pyproc/control` subpath.
 
+`scripts/replayGraph/` owns immutable verified branch worlds above Automation Recording and Transactional
+AppSpace. `replayGraphCanonical.js` owns closed node, edge, artifact, revision, digest, quota, and provenance
+validation; `recordingImporter.js` converts a sealed linear recording without inventing state;
+`fileReplayGraphStore.js` owns immutable revisions, artifact bytes, and graph HEAD compare-and-swap;
+`replayGraphRegistry.js` owns confined import and one-shot restored AppSpace branch capture;
+`replayWorld.js` owns capability-bound effect-free cursors, deterministic evaluation, coverage, and retention
+planning; `replayGraphCoordinator.js` and `replayGraphTools.js` adapt the twelve operations to Control and MCP.
+The directory does not import a browser provider, send a live effect, infer a missing edge, or own AppSpace
+restore. It is publicly composed only through the existing `pyproc/control` subpath.
+
 ## Layer ranks
 
 The layer contract is a total order, and every import edge must point downward. Peers do not import peers.

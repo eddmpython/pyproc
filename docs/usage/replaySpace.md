@@ -159,3 +159,16 @@ a suffix in a new process with pinned identity plus prefix digest, and rejects a
 sidecar, and a non-file record target during Control and MCP installed preflight. The contract suite also fixes single-writer,
 post-effect write failure, fatal latch, concurrent FIFO, shutdown drain, missing-artifact, forged-cursor,
 recorded-error, and provider-call-count boundaries.
+
+## From a linear recording to a branch world
+
+ReplaySpace deliberately consumes one exact next operation. When several already verified choices must be
+explored without another effect, enable ReplayGraph and import the sealed recording. The importer preserves every
+operation, input, terminal, entry digest, artifact descriptor, and artifact byte as a linear graph. Because a
+recording does not necessarily capture complete page state at every boundary, imported cursor nodes are marked
+`implicit` rather than promoted to full browser snapshots.
+
+ReplayGraph traversal does not replace ReplaySpace. ReplaySpace proves exact ordered provider behavior;
+ReplayGraph provides current-node capabilities, immutable branch revisions, coverage, and deterministic path
+evaluation over known transitions. It never searches ahead or creates an unrecorded terminal. See
+[ReplayGraph Worlds](replayGraph.md).

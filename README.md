@@ -69,6 +69,7 @@
 - [Run the Web Computer](#run-the-web-computer)
 - [Hibernate a Machine Fleet](#hibernate-a-machine-fleet)
 - [Resume work with Execution Memory](#resume-work-with-execution-memory)
+- [Explore verified branches without effects](#explore-verified-branches-without-effects)
 - [Rehearse and commit an approved effect](#rehearse-and-commit-an-approved-effect)
 - [Pair a cooperative app with the Machine](#pair-a-cooperative-app-with-the-machine)
 - [Capability paths](#capability-paths)
@@ -106,6 +107,7 @@ the same contract, not separate identities.
 | **Eyes and hands** | `pyproc/control` + APX + AutomationSpace | Bounded perception, authorized action, screenshots, and postcondition evidence |
 | **Effect transaction** | Rehearse-Commit through `pyproc/control` | Exact intent, signed approval, durable one-shot send, honest terminal, and sealed receipt |
 | **App state pair** | Transactional AppSpace through `pyproc/control` | Cooperative logical state and one Machine checkpoint restored and adopted together |
+| **Replay world** | ReplayGraph through `pyproc/control` | Immutable known state nodes, exact transition edges, effect-free traversal, coverage, and deterministic evaluation |
 
 These are product concepts, not competing top-level APIs. A Machine remains the browser-app root, and its
 verbs reveal only the capability being used. Internal engine objects stay behind that boundary.
@@ -728,6 +730,33 @@ AppSpace 1.0 restores the Machine side only while the originating in-process che
 
 See the [Transactional AppSpace guide](docs/usage/appSpace.md) and
 [protocol specification](docs/specs/appSpace/README.md).
+
+## Explore verified branches without effects
+
+ReplayGraph imports a sealed Automation Recording as an exact linear graph or builds branches from complete
+Transactional AppSpace pairs. Every node and edge is content-addressed. App branches require a fresh one-shot
+source restore proof, and graph publication uses compare-and-swap HEAD. Opening and traversing a pinned world
+returns only stored terminals and sends no browser, app, or remote-service request.
+
+```json
+{
+  "executionMemory": {
+    "enabled": true,
+    "root": "/absolute/private/pyproc-memory",
+    "importRoots": ["/absolute/private/recordings"]
+  },
+  "replayGraph": { "enabled": true }
+}
+```
+
+The feature adds twelve `world.*` operations and matching MCP, JavaScript, and Python facades through the existing
+`pyproc/control` boundary. Current-node capabilities are one-shot. A missing edge is an explicit graph gap, never
+an invitation to search ahead or invent a result. Coverage distinguishes known paths, dead ends, provenance, and
+declared unexplored action classes. Revision digests prove content integrity, not authorship, and an open cursor
+checkpoint remains process-local.
+
+See the [ReplayGraph guide](docs/usage/replayGraph.md) and
+[ReplayGraph 1.0 specification](docs/specs/replayGraph/README.md).
 
 ## Capability paths
 

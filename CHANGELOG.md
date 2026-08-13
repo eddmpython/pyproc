@@ -41,6 +41,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   fenced logical-state export, host-side canonical validation, immutable completion markers, in-process Machine
   checkpoints, paired restore, CAS adoption, rollback, and a no-send effect outbox share one Control lifecycle.
   JavaScript, Python, and MCP reopen the same durable pair digest from the packed product.
+- **ReplayGraph Worlds make verified branches traversable without effects.** Sealed recordings and exact
+  Transactional AppSpace pairs become content-addressed state nodes and transition edges. Immutable CAS graph
+  revisions, one-shot cursor capabilities, deterministic path evaluation, coverage, retention planning, and
+  installed JavaScript, Python, MCP, and Control parity share one durable root.
 
 ### Compatibility
 
@@ -58,6 +62,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - Transactional AppSpace is additive on the existing `pyproc/control` subpath and disabled by default. Enabling
   it adds nine `app.*` Control operations and requires FrameSpace, Execution Memory, and Rehearse-Commit. It does
   not capture a renderer heap, cookies, arbitrary site state, or remote effects, and adds no root or subpath.
+- ReplayGraph is additive on the existing `pyproc/control` subpath and disabled by default. Enabling it adds
+  twelve `world.*` operations and requires Execution Memory. It does not open a browser during traversal, invent
+  missing transitions, authenticate authorship, persist an open cursor, or add a root export or package subpath.
 
 한국어 요약: 기존 `automation.observe`에 opt-in `apx.situation` 표현을 추가했다. typed focus가 최소 충분
 상황과 명시적 불확실성을 만들고, broker가 발급한 capability만 현재 world와 epoch에 묶여 effect에 쓰인다.
@@ -74,6 +81,9 @@ terminal result, Evidence Pack receipt를 하나의 immutable chain으로 묶는
 Transactional AppSpace는 협력 app의 fenced logical state와 Python Machine checkpoint를 immutable pair로
 묶는다. marker 없는 object는 후보가 아니며 stale adopt는 app, Machine, active HEAD를 함께 rollback한다.
 effect outbox staging은 live send를 0회 수행하고 기존 Rehearse-Commit transaction만 참조한다.
+ReplayGraph Worlds는 봉인된 recording과 exact AppSpace pair를 content-addressed node와 edge로 만든다.
+one-shot cursor와 pinned root에서 effect 없이 분기를 탐색하고 deterministic evaluation과 coverage를
+공유한다. graph 밖 transition은 생성하지 않으며 digest를 작성자 신원으로 해석하지 않는다.
 
 ## 0.0.21 - 2026-08-13
 

@@ -69,6 +69,7 @@
 - [Web Computer 실행](#web-computer-실행)
 - [Machine Fleet 동면](#machine-fleet-동면)
 - [Execution Memory로 작업 재개](#execution-memory로-작업-재개)
+- [effect 없이 검증된 분기 탐색](#effect-없이-검증된-분기-탐색)
 - [승인된 effect를 연습하고 한 번만 전송](#승인된-effect를-연습하고-한-번만-전송)
 - [협력 app과 Machine을 한 쌍으로 묶기](#협력-app과-machine을-한-쌍으로-묶기)
 - [능력 경로](#능력-경로)
@@ -106,6 +107,7 @@ capability이지 별도 정체성이 아니다.
 | **눈과 손** | `pyproc/control` + APX + AutomationSpace | bounded perception, 승인된 action, screenshot, postcondition evidence |
 | **Effect transaction** | `pyproc/control`의 Rehearse-Commit | exact intent, 서명 승인, durable one-shot send, 정직한 terminal, 봉인 receipt |
 | **App state pair** | `pyproc/control`의 Transactional AppSpace | 협력 app logical state와 Machine checkpoint의 동시 restore, adopt |
+| **Replay world** | `pyproc/control`의 ReplayGraph | immutable known state node, exact transition edge, effect-free traversal, coverage, deterministic evaluation |
 
 이것들은 서로 경쟁하는 최상위 API가 아니라 제품 개념이다. browser application에서는 Machine
 handle이 root로 남고, 그 동사가 필요한 capability만 드러낸다. 내부 engine object는 이 경계 뒤에 둔다.
@@ -728,6 +730,32 @@ target은 credentialless FrameSpace에 남는다. AppSpace는 raw page RPC, cook
 
 [Transactional AppSpace 가이드](docs/usage/appSpace.md)와
 [protocol 명세](docs/specs/appSpace/README.md)를 참고한다.
+
+## effect 없이 검증된 분기 탐색
+
+ReplayGraph는 봉인된 Automation Recording을 exact linear graph로 가져오거나 완전한 Transactional AppSpace
+pair에서 분기를 만든다. 모든 node와 edge는 content-addressed다. App branch는 fresh one-shot source restore
+proof가 있어야 하며 graph 게시는 compare-and-swap HEAD를 쓴다. pinned world를 열고 탐색하는 동안 browser,
+app, remote service request는 0회다. 저장된 terminal만 반환한다.
+
+```json
+{
+  "executionMemory": {
+    "enabled": true,
+    "root": "/absolute/private/pyproc-memory",
+    "importRoots": ["/absolute/private/recordings"]
+  },
+  "replayGraph": { "enabled": true }
+}
+```
+
+기존 `pyproc/control` 경계에 열두 `world.*` operation과 같은 MCP, JavaScript, Python facade가 추가된다.
+현재 node capability는 one-shot이다. 없는 edge는 명시적 graph gap이며 search-ahead나 결과 생성의 근거가
+아니다. coverage는 known path, dead end, provenance, 선언된 unexplored action class를 분리한다. revision
+digest는 내용 무결성을 증명할 뿐 작성자를 증명하지 않으며 열린 cursor checkpoint는 process-local이다.
+
+[ReplayGraph 가이드](docs/usage/replayGraph.md)와
+[ReplayGraph 1.0 명세](docs/specs/replayGraph/README.md)를 참고한다.
 
 ## 능력 경로
 

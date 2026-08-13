@@ -684,7 +684,9 @@ process에서 재검증하고 list할 수 있지만 Machine side restore는 원 
 
 ## Initiative 7 - ReplayGraph Worlds
 
-상태: 착수. Initiative 6의 exact AppSpace pair와 restore 계약을 source state 경계로 재사용한다.
+상태: 구현 및 졸업 gate 통과. 지속 계약은
+[ReplayGraph Worlds 1.0](../specs/replayGraph/README.md)과
+[사용 가이드](../usage/replayGraph.md)가 소유한다.
 
 ### 제품 명제
 
@@ -704,9 +706,9 @@ artifact, completeness digest로 식별한다. edge는 operation input, risk, te
 
 ### world와 평가
 
-World manifest는 start node, goal predicate, forbidden state와 action, budget, terminal oracle, coverage,
-provenance를 선언한다. pyproc은 effect-free deterministic evaluation environment를 제공하지만 특정 model의
-training algorithm이나 leaderboard를 소유하지 않는다.
+World contract는 start node, goal node, forbidden edge, step budget, exact path를 선언한다. pyproc은
+effect-free deterministic evaluation environment를 제공하지만 training algorithm이나 leaderboard를
+소유하지 않는다.
 
 missing edge는 graph coverage gap이다. wrong action과 분리하고, 비슷한 edge를 검색하거나 terminal을
 생성하지 않는다. live graph 확장은 exact source state restore와 별도 authority를 요구한다.
@@ -721,9 +723,25 @@ missing edge는 graph coverage gap이다. wrong action과 분리하고, 비슷�
 6. coverage gap을 caller failure로 판정한 횟수 0이다.
 7. graph mutation, missing object, broken endpoint를 모두 거부한다.
 8. synthetic, cooperative, recorded live provenance가 섞인 횟수 0이다.
-9. deterministic evaluator를 model output이 바꾼 횟수 0이다.
+9. evaluator의 canonical 입력 밖 commentary가 verdict digest를 바꾼 횟수 0이다.
+10. installed Control, MCP, JavaScript, Python이 같은 durable graph root를 다시 연다.
 
-실험은 [Initiative 7 campaign](../../tests/attempts/replayGraphWorlds/)에서 시작한다.
+### 구현 결과
+
+- sealed Automation Recording을 implicit cursor node와 exact entry edge로 손실 없이 가져온다.
+- complete AppSpace pair를 state node로 만들고, direct child pair와 consumed one-shot restore proof가 있는
+  transition만 graph revision에 게시한다.
+- immutable revision과 content-addressed artifact를 Execution Memory root에 저장하고 CAS graph HEAD로
+  동시 writer를 막는다.
+- pinned world cursor는 current-node capability를 한 번만 소비하며 stored terminal을 반환한다. live provider,
+  browser, cooperative app request는 0회다.
+- deterministic evaluator, known coverage, dead end, provenance, unexplored action class, reachable retention
+  set을 같은 pinned revision에서 계산한다.
+- Control 12개 operation, MCP 12개 tool, JavaScript와 Python facade, direct `pyproc/control` host 값이 같은
+  durable root와 terminal을 사용한다.
+- `test:replay-graph` installed gate는 Chrome과 Edge lane에서 8/8을 고정한다. 계약 suite는 mutation,
+  missing artifact와 endpoint, ambiguous transition, invalid one-shot capability, reused restore proof, stale
+  graph HEAD를 음성 증거로 고정한다.
 
 ## Initiative 8 - Proof-Carrying Motor
 

@@ -605,6 +605,14 @@ Stable Node.js facade for the installed Control product, typed in
   `appSpace.enabled` is true and reuse FrameSpace, Execution Memory, and Rehearse-Commit.
 - AppSpace direct host values: `createAppSpaceRegistry`, `AppSpaceRegistry`, and `FileAppSpaceStore`. They own
   content-addressed cooperative state and paired-generation HEADs, not browser or effect authority.
+- ReplayGraph verbs: `importReplayGraphRecording`, `createReplayGraphAppWorld`,
+  `captureReplayGraphAppBranch`, `openReplayWorld`, `inspectReplayWorld`, `listReplayWorldEdges`,
+  `traverseReplayWorld`, `checkpointReplayWorld`, `restoreReplayWorld`, `evaluateReplayWorld`,
+  `inspectReplayWorldCoverage`, and `listReplayGraphs`. They are present only when `replayGraph.enabled` is true
+  and reuse the Execution Memory root and import confinement.
+- ReplayGraph direct host values: `createReplayGraphRegistry`, `ReplayGraphRegistry`, `FileReplayGraphStore`,
+  `ReplayWorld`, `evaluateReplayGraph`, `inspectReplayGraphCoverage`, and `retainedReplayGraphObjects`. They own
+  immutable known-state graph truth and effect-free cursors, not live provider or effect authority.
 - `client.perception(sessionRef)` returns `PerceptionClient`. `observe`, `query`, `one`,
   `explainActionability`, `whatChanged`, and evidence-backed `act` retain the APX graph path. `situate` returns
   an immutable `SituationResult`, and `actAffordance` binds an authorized `SituationAffordance` to the effect.
@@ -643,6 +651,19 @@ client.inspectApp(appRef, options?)
 client.listAppPairs(options?)
 client.stageAppEffect(appRef, transactionId, expectedTransactionRevisionSha256, options?)
 client.finalizeAppEffect(appRef, transactionId, expectedTransactionRevisionSha256, options?)
+client.importReplayGraphRecording(graphId, recordingFile, options?)
+client.createReplayGraphAppWorld(graphId, pairId, options?)
+client.captureReplayGraphAppBranch({ graphId, expectedRootSha256, sourceNodeRef, sourcePairId,
+  targetPairId, restoreRef, operation, input, terminal, risk? }, options?)
+client.openReplayWorld(graphId, rootSha256, { startNodeRef?, ...options }?)
+client.inspectReplayWorld(worldRef, options?)
+client.listReplayWorldEdges(worldRef, options?)
+client.traverseReplayWorld(worldRef, capabilityRef, expectedNodeRef, options?)
+client.checkpointReplayWorld(worldRef, options?)
+client.restoreReplayWorld(worldRef, checkpoint, options?)
+client.evaluateReplayWorld(graphId, rootSha256, contract, edgeRefs, options?)
+client.inspectReplayWorldCoverage(worldRef, options?)
+client.listReplayGraphs(options?)
 ```
 
 ### Installed Machine Entrance commands
@@ -658,6 +679,8 @@ client.finalizeAppEffect(appRef, transactionId, expectedTransactionRevisionSha25
   lifecycle. It requires Execution Memory and an acknowledged `externalEffect` browser profile.
 - `--enable-app-space` plus exact app identity flags enables Transactional AppSpace. The `transactionalApp`
   recipe requires FrameSpace, Execution Memory, Rehearse-Commit, and explicit actions and purpose.
+- `replayGraph.enabled: true` in the strict manifest enables twelve effect-free `world.*` operations. It requires
+  Execution Memory; recording imports are confined by its repeated `--execution-memory-import-root` values.
 - `--dry-run` performs path and authority validation without writing. Existing generated files require
   `--overwrite`. The output directory must remain inside the selected project root.
 - `pyproc-control doctor --config <file>` verifies the strict manifest, installed package version, local engine

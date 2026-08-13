@@ -120,6 +120,19 @@ all three clients and requires the same active pair digest.
 The Python client does not implement an independent app state machine. Live pair restore still requires the
 originating control process and its in-process Machine checkpoints. See [Transactional AppSpace](appSpace.md).
 
+## ReplayGraph Worlds
+
+A ReplayGraph-enabled profile exposes `importReplayGraphRecording`, `createReplayGraphAppWorld`,
+`captureReplayGraphAppBranch`, `openReplayWorld`, `inspectReplayWorld`, `listReplayWorldEdges`,
+`traverseReplayWorld`, `checkpointReplayWorld`, `restoreReplayWorld`, `evaluateReplayWorld`,
+`inspectReplayWorldCoverage`, and `listReplayGraphs`. These methods send the same canonical `world.*`
+operations as JavaScript and MCP.
+
+The Python client owns no independent graph state. Durable revisions live under the shared Execution Memory root;
+open cursor references and checkpoints remain in the originating Control process. The installed product gate
+imports and reopens the same root through Python, JavaScript, and MCP without calling a live provider. See
+[ReplayGraph Worlds](replayGraph.md).
+
 ## Browser automation and screenshots
 
 Browser operations appear only when the manifest grants automation authority. Risk is fixed by the product

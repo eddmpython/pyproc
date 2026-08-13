@@ -83,10 +83,13 @@ non-resending recovery, and an Evidence Pack-linked EffectReceipt. Installed Jav
 send one real HTTP effect and converge on the same terminal chain. Transactional AppSpace is delivered through
 content-addressed objects with strict completion markers and app HEAD compare-and-swap. Installed JavaScript,
 Python, and MCP clients return the same pair digest; the browser gate proves paired restore, stale-adopt rollback,
-secret rejection, and no-send effect staging. The next active campaign is
-[`replayGraphWorlds`](../../tests/attempts/replayGraphWorlds/README.md). Later initiatives remain
-locked behind their immediate predecessor. No initiative changes a North Star score before its browser evidence
-is registered in the ledger.
+secret rejection, and no-send effect staging. ReplayGraph Worlds is also delivered: it imports sealed recordings
+and exact AppSpace pairs into immutable CAS graph
+revisions, issues current-node one-shot traversal capabilities, returns stored terminals with zero live provider
+requests, and computes deterministic evaluation, coverage, and retention reachability. Installed JavaScript,
+Python, and MCP clients reopen the same root. The next active campaign is Proof-Carrying Motor. Later initiatives
+remain locked behind their immediate predecessor. No initiative changes a North Star score before its browser
+evidence is registered in the ledger.
 
 This portfolio does not duplicate the separate ceiling ladder. Serverless local applications, portable Machine
 images, Native CDP, FrameSpace, and ReplaySpace are shipped foundations. The wasm tool layer and Node guest remain

@@ -183,3 +183,14 @@ Memory handoff for durable provenance and a normal Machine revival path for cold
 
 See the [AppSpace specification](../specs/appSpace/README.md), [FrameSpace](frameSpace.md),
 [Execution Memory](executionMemory.md), and [Rehearse-Commit](rehearseCommit.md).
+
+## Publish restored candidates as a ReplayGraph
+
+ReplayGraph can turn complete AppSpace pairs into effect-free state nodes and exact direct-child transitions.
+After `app.restore`, AppSpace returns a random restore proof bound to that source pair. ReplayGraph consumes it
+once when `world.capture.app.branch` publishes the candidate edge. This proves that capture started from the
+declared source and prevents another edge from reusing the same restoration event.
+
+The graph stores pair digests and state identity, not an independent copy of browser authority. It does not call
+the adapter during traversal, adopt a candidate, stage an effect, or cold-import the Machine side. See
+[ReplayGraph Worlds](replayGraph.md).

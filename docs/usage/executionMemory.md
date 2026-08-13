@@ -10,6 +10,11 @@ the exact Execution Session revision and exported Machine image. Its live restor
 checkpoint, so reopening the filesystem registry proves the pair but does not cold-import it into a new running
 Machine. See [Transactional AppSpace](appSpace.md).
 
+ReplayGraph also stores immutable graph revisions, graph HEADs, and content-addressed artifact bytes beneath the
+same configured root. Those objects are not added to an Execution Memory session revision or signed handoff
+inventory in version 1. Graph import reuses the configured import roots, and graph publication reuses the same
+immutable object and compare-and-swap primitives. See [ReplayGraph Worlds](replayGraph.md).
+
 ## Configure it
 
 Add `executionMemory` to the version 1 product manifest. The root and every import root must be absolute.

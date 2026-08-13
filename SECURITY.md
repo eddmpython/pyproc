@@ -146,6 +146,22 @@ make a remote service transactional. AppSpace staging sends nothing. Only Rehear
 dispatch. Restoring a pair cannot undo an external request. A failed paired rollback is `outcomeUnknown`; stop
 and investigate rather than retrying either side.
 
+### ReplayGraph preserves recorded truth but grants no live authority
+
+ReplayGraph is disabled by default and stores graph revisions and artifact bytes beneath the configured private
+Execution Memory root. Recording import is limited to absolute files under approved import roots. Recordings,
+app state, stored terminals, screenshots, and other artifacts may contain credentials or personal data. Keep the
+root out of source control, restrict operating-system access, and apply a deliberate retention policy.
+
+Traversal consumes current-node-bound one-shot capabilities and returns only stored terminals. It does not call
+a browser provider, cooperative app, or remote service. A historical `recordedExternal` edge does not authorize
+or repeat that effect. An AppSpace branch requires a consumed exact source restore proof and a direct child pair;
+a graph digest, pair marker, or recording digest cannot replace permission or approval.
+
+SHA-256 roots and object references detect content changes but do not authenticate an author. Version 1 has no
+graph signature and does not delete unreachable objects automatically. Do not treat a complete coverage flag as
+proof that every site action is represented, or treat a missing edge as permission to invent a transition.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`

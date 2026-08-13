@@ -125,6 +125,18 @@ exported Machine generation, and Execution Session revision. Restore and adopt o
 effect staging returns `sent: false` and leaves dispatch to Rehearse-Commit. See
 [Transactional AppSpace](appSpace.md).
 
+## ReplayGraph Worlds
+
+A ReplayGraph-enabled profile adds `importReplayGraphRecording`, `createReplayGraphAppWorld`,
+`captureReplayGraphAppBranch`, `openReplayWorld`, `inspectReplayWorld`, `listReplayWorldEdges`,
+`traverseReplayWorld`, `checkpointReplayWorld`, `restoreReplayWorld`, `evaluateReplayWorld`,
+`inspectReplayWorldCoverage`, and `listReplayGraphs`. They map directly to the shared `world.*` operations.
+
+The stable subpath also exports `createReplayGraphRegistry`, `ReplayGraphRegistry`, `FileReplayGraphStore`,
+`ReplayWorld`, `evaluateReplayGraph`, `inspectReplayGraphCoverage`, and `retainedReplayGraphObjects` for an
+embedded Node.js host. Traversal returns stored terminals without provider calls. Its capabilities and cursor
+checkpoints are process-local, while graph revisions and HEADs are durable. See [ReplayGraph Worlds](replayGraph.md).
+
 ## PyProc Eyes and evidence-backed action
 
 ```js

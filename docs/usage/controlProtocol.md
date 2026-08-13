@@ -142,6 +142,26 @@ When `appSpace.enabled` is true, nine additional operations appear:
 AppSpace requires FrameSpace, Execution Memory, and Rehearse-Commit. It adds no raw page RPC and no live send
 path. See [Transactional AppSpace](appSpace.md).
 
+When `replayGraph.enabled` is true, twelve additional operations appear:
+
+| Operation | Meaning | Success outcome |
+|---|---|---|
+| `world.import.recording` | Import one sealed recording as an immutable exact chain | `applied` |
+| `world.create.app` | Create a graph start from one complete AppSpace pair | `applied` |
+| `world.capture.app.branch` | Add one direct child after consuming a source restore proof | `applied` |
+| `world.open` | Open an effect-free cursor at one pinned root | `applied` |
+| `world.inspect` | Inspect cursor and graph identity | `observed` |
+| `world.edges` | List exact outgoing edges and issue one-shot capabilities | `observed` |
+| `world.traverse` | Return a stored terminal and advance without an effect | `applied` |
+| `world.checkpoint` | Create a same-process cursor checkpoint | `applied` |
+| `world.restore` | Restore the same open cursor | `applied` |
+| `world.evaluate` | Evaluate one exact edge path deterministically | `observed` |
+| `world.coverage` | Report known, dead-end, provenance, and unexplored coverage | `observed` |
+| `world.list` | List durable graph HEAD revisions | `observed` |
+
+ReplayGraph requires Execution Memory. Import paths use its approved import roots. Traversal never starts or
+calls a browser provider and never invents a missing edge. See [ReplayGraph Worlds](replayGraph.md).
+
 APX adds no operation. Pass `representation: "apx.graph"` for a provider-neutral graph or
 `representation: "apx.situation"` with typed `focus.requirements` for a SituationCapsule.
 An authorized affordance can be bound to `automation.act` through `actionContext`; stale bindings fail before
