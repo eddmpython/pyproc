@@ -14,8 +14,10 @@ assert report["ok"] is True and report["automation"]["enabled"] is True
 
 with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     assert len(client.operations) == 14
-    client.runPython("prepared = [10, 20, 30]", timeout=60.0)
+    prepared = client.runPython("prepared = [10, 20, 30]", timeout=60.0)
+    assert prepared.terminal == "completed"
     checkpoint = client.saveCheckpoint(timeout=60.0)
+    assert checkpoint.terminal == "completed"
     client.runPython("prepared.append(999)\nleak = 'dirty'", timeout=60.0)
     client.restoreCheckpoint(checkpoint.output["index"], timeout=60.0)
     restored = client.runPython("(len(prepared), 'leak' in globals())", timeout=60.0)
@@ -32,6 +34,7 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     except ControlError as error:
         cancelError = error
     assert cancelError is not None and cancelError.code == "CONTROL_CANCELLED"
+    assert cancelError.terminal == "outcomeUnknown"
     assert cancelError.outcome == "outcomeUnknown" and cancelError.retryable is False
     time.sleep(1.1)
     assert client.runPython("pythonEffect", timeout=60.0).output["value"] == "'applied'"
@@ -42,6 +45,7 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     except ControlError as error:
         timeoutError = error
     assert timeoutError is not None and timeoutError.code == "CONTROL_CANCELLED"
+    assert timeoutError.terminal == "outcomeUnknown"
     assert timeoutError.outcome == "outcomeUnknown" and timeoutError.retryable is False
     time.sleep(1.1)
     assert client.runPython("timeoutEffect", timeout=30.0).output["value"] == "'applied'"
@@ -52,7 +56,7 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     except ControlError as error:
         permissionError = error
     assert permissionError is not None and permissionError.code == "BROWSER_CONTROL_PERMISSION_DENIED"
-    assert permissionError.outcome == "notSent"
+    assert permissionError.terminal == "rejected" and permissionError.outcome == "notSent"
 
     opened = client.openTarget(targetUrl, expectedRisk="externalEffect", waitUntil="load", timeout=60.0)
     attached = client.attachSession(opened.output["targetRef"], timeout=30.0)
@@ -62,6 +66,7 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     captured = client.act(attached.output, [
         {"kind": "screenshot", "format": "png", "expectedRisk": "read"}
     ], timeout=60.0)
+    assert captured.terminal == "completed"
     assert captured.outcome == "observed" and len(captured.attachments) == 1
     attachment = captured.attachments[0]
     assert attachment.mimeType == "image/png"
@@ -85,4 +90,6 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
 
 print(json.dumps({"ok": True, "operations": 14, "checkpoint": checkpoint.output["index"],
                   "attachmentBytes": attachment.byteLength, "cancelOutcome": cancelError.outcome,
-                  "timeoutOutcome": timeoutError.outcome, "perceptionEntityRef": heading.entityRef}))
+                  "cancelTerminal": cancelError.terminal, "timeoutOutcome": timeoutError.outcome,
+                  "timeoutTerminal": timeoutError.terminal, "permissionTerminal": permissionError.terminal,
+                  "successTerminal": captured.terminal, "perceptionEntityRef": heading.entityRef}))

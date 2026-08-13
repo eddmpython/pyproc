@@ -39,27 +39,29 @@ const check = (name, pass, info = "") => {
 };
 
 const installed = await installPackedPyProc("pyprocControlProduct-");
-const configPath = join(installed.appDir, "pyproc-control.json");
+const configPath = join(installed.appDir, ".pyproc-control-product", "manifest.json");
+const pythonOnlyConfigPath = join(installed.appDir, ".pyproc-python-only", "manifest.json");
+const observeConfigPath = join(installed.appDir, ".pyproc-observe", "manifest.json");
 const reloadConfigPath = join(installed.appDir, "pyproc-control-reload.json");
 const frameConfigPath = join(installed.appDir, "pyproc-control-frame.json");
 const browser = process.env.PYPROC_BROWSER || undefined;
-await writeFile(configPath, JSON.stringify({
-  schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") },
-  timeoutMs: TIMEOUT_MS,
-  browser: {
-    enabled: true,
-    ...(browser ? { executable: browser } : {}),
-    allowedOrigins: [targetOrigin],
-    maxRisk: "externalEffect",
-    actions: ["snapshot", "screenshot", "click"],
-    methods: [],
-    externalEffects: "acknowledged",
-    purpose: "control protocol product gate",
-    artifacts: { maxArtifactBytes: 8 * 1024 * 1024, maxTotalBytes: 16 * 1024 * 1024,
-      maxArtifacts: 8, inlineMaxBytes: 4 * 1024 * 1024, ttlMs: 120000 },
-  },
-}, null, 2));
+const mcpCli = binPath(installed.appDir, "pyproc-mcp");
+run(mcpCli, ["init", "--recipe", "pythonOnly", "--project-root", installed.appDir,
+  "--out", ".pyproc-python-only", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--timeout-ms", String(TIMEOUT_MS), ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
+run(mcpCli, ["init", "--recipe", "observeLocal", "--project-root", installed.appDir,
+  "--out", ".pyproc-observe", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin,
+  "--purpose", "observe-local-product-gate", "--acknowledge-effects",
+  ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
+run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
+  "--out", ".pyproc-control-product", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
+  "--purpose", "control-protocol-product-gate", "--acknowledge-effects",
+  "--action", "snapshot", "--action", "screenshot", "--action", "click",
+  "--artifact-max-bytes", String(8 * 1024 * 1024), "--artifact-total-bytes", String(16 * 1024 * 1024),
+  "--artifact-max-count", "8", "--artifact-inline-bytes", String(4 * 1024 * 1024),
+  "--artifact-ttl-ms", "120000", ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
 await writeFile(reloadConfigPath, JSON.stringify({
   schemaVersion: 1,
   engine: { root: join(ROOT, "vendor", "pyodide") },
@@ -98,6 +100,18 @@ await writeFile(frameConfigPath, JSON.stringify({
 }, null, 2));
 
 const cli = binPath(installed.appDir, "pyproc-control");
+const pythonOnlyDoctor = JSON.parse(run(cli, ["doctor", "--config", pythonOnlyConfigPath],
+  { cwd: installed.appDir }).stdout);
+check("설치본 Python-only doctor가 자동화와 CDP authority를 effect 없이 닫음",
+  pythonOnlyDoctor.ok === true && pythonOnlyDoctor.automation.enabled === false
+    && pythonOnlyDoctor.automation.cdpEndpoint === false
+    && pythonOnlyDoctor.checks.some((entry) => entry.code === "MACHINE_PREFLIGHT_EFFECT_FREE"));
+const pythonOnlyRun = JSON.parse(run(cli, ["run", "--config", pythonOnlyConfigPath,
+  "--code", "40+2", "--timeout-ms", String(TIMEOUT_MS)],
+{ cwd: installed.appDir, timeoutMs: TIMEOUT_MS + 30000 }).stdout);
+check("설치본 Python-only init, doctor, run, close 여정",
+  pythonOnlyRun.terminal === "completed" && pythonOnlyRun.output?.value === "42"
+    && pythonOnlyRun.attachments?.length === 0);
 const checkReport = JSON.parse(run(cli, ["--config", configPath, "--check"], { cwd: installed.appDir }).stdout);
 check("installed pyproc-control preflight", checkReport.ok === true
   && checkReport.automation.actions.includes("screenshot") && !!checkReport.machineBrowser);
@@ -191,9 +205,27 @@ js.eval("globalThis.fetch=globalThis.pyprocOriginalFetch;delete globalThis.pypro
 
 let client = null;
 let frameClient = null;
+let observeClient = null;
 
 console.log("installed pyproc-control product gate");
 try {
+  const observeDoctor = await PyProcControlClient.check(observeConfigPath,
+    { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
+  observeClient = await PyProcControlClient.start(observeConfigPath,
+    { cwd: installed.appDir, startupTimeoutMs: TIMEOUT_MS });
+  const observeOpened = await observeClient.openTarget(`${targetOrigin}/observe`, {
+    expectedRisk: "externalEffect", waitUntil: "load",
+  });
+  const observeAttached = await observeClient.attachSession(observeOpened.output.targetRef);
+  const observeHeading = (await observeClient.perception(observeAttached.output)
+    .query({ role: "heading", name: "control-ready" })).one();
+  check("observeLocal 설치 profile이 고정 read catalog로 APX observation을 완료",
+    observeDoctor.automation.actions.join(",") === "snapshot,screenshot,waitFor"
+      && observeHeading.name === "control-ready");
+  await observeClient.detachSession(observeAttached.output);
+  await observeClient.close();
+  observeClient = null;
+
   const preflight = await PyProcControlClient.check(configPath, { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
   client = await PyProcControlClient.start(configPath, { cwd: installed.appDir,
     startupTimeoutMs: TIMEOUT_MS, maxAttachmentChunkBytes: 64 });
@@ -205,7 +237,8 @@ try {
 
   await client.runPython("controlState = 40");
   const machine = await client.runPython("controlState + 2");
-  check("JavaScript facade의 persistent Python Machine", machine.output.value === "42", machine.output.value);
+  check("JavaScript facade의 persistent Python Machine과 canonical terminal",
+    machine.terminal === "completed" && machine.output.value === "42", machine.output.value);
   const space = await client.inspectSpace();
   check("설치 제품이 NativeCdpSpace 능력과 복원 경계를 선언",
     space.output.space?.providerKind === "nativeCdp"
@@ -272,7 +305,7 @@ try {
   const attachment = captured.attachments[0];
   const bytes = Buffer.from(attachment.bytes);
   check("협상된 작은 chunk로 screenshot attachment가 terminal 전에 검증됨",
-    captured.outcome === "observed" && captured.attachments.length === 1
+    captured.terminal === "completed" && captured.outcome === "observed" && captured.attachments.length === 1
       && attachment.mimeType === "image/png"
       && createHash("sha256").update(bytes).digest("hex") === attachment.sha256
       && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
@@ -314,6 +347,7 @@ try {
 } finally {
   await client?.close();
   await frameClient?.close();
+  await observeClient?.close();
   targetServer.close();
   await rm(installed.tmp, { recursive: true, force: true });
 }

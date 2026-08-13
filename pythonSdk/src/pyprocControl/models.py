@@ -19,6 +19,7 @@ class ControlResult:
     output: Any
     outcome: str
     attachments: tuple[Attachment, ...] = ()
+    terminal: str = "completed"
 
 
 class ControlError(RuntimeError):
@@ -30,4 +31,12 @@ class ControlError(RuntimeError):
         self.outcome = str(payload.get("outcome") or "notSent")
         self.retryable = payload.get("retryable") is True
         self.details = payload.get("details")
+        if self.outcome == "outcomeUnknown":
+            self.terminal = "outcomeUnknown"
+        elif isinstance(self.details, dict) and self.details.get("completed"):
+            self.terminal = "partial"
+        elif self.code == "CONTROL_CANCELLED":
+            self.terminal = "cancelled"
+        else:
+            self.terminal = "rejected"
         self.fatal = fatal

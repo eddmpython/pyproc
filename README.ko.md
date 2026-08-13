@@ -296,7 +296,34 @@ npm install pyproc@0.0.21 --save-exact
 npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
-필요한 exact origin과 최소 action만 넣어 `pyproc-mcp.json`을 만든다:
+기본 권한 폐쇄 profile을 만들고 browser를 시작하지 않은 채 local engine digest를 모두 검증한 다음 첫
+Python 명령을 실행한다:
+
+```sh
+npx pyproc-mcp init --recipe pythonOnly --engine-root /absolute/path/to/pyodide
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+npx pyproc-control run --config ./.pyproc/manifest.json --code "40 + 2"
+```
+
+이 profile에는 browser automation action과 CDP authority가 없다. caller가 소유한 browser workflow에는
+exact origin, action, risk, purpose, effect acknowledgement를 명시해 컴파일한다:
+
+```sh
+npx pyproc-mcp init \
+  --recipe authorizedBrowser \
+  --engine-root /absolute/path/to/pyodide \
+  --origin http://127.0.0.1:5173 \
+  --action snapshot --action screenshot --action click \
+  --max-risk externalEffect \
+  --purpose "verify the caller-owned application" \
+  --acknowledge-effects --overwrite
+```
+
+`observeLocal`, pinned replay, dry-run, viewport와 artifact budget, 장기 client, cleanup은
+[Machine Entrance guide](docs/usage/machineEntrance.md)를 따른다.
+
+고급 embedding에서는 initializer가 완전히 펼친 `.pyproc/manifest.json`의 strict 형상을 직접 사용할 수
+있다. 생성된 파일이 authority이며 수동 JSON도 같은 validator를 통과해야 한다:
 
 ```json
 {
@@ -319,15 +346,15 @@ npx pyproc-engine --out /absolute/path/to/pyodide
 같은 명령을 MCP client에 등록하기 전에 engine, browser, limit, permission을 검증한다:
 
 ```sh
-npx pyproc-mcp --config ./pyproc-mcp.json --check
-npx pyproc-mcp --config ./pyproc-mcp.json
+npx pyproc-mcp --config ./.pyproc/manifest.json --check
+npx pyproc-mcp --config ./.pyproc/manifest.json
 ```
 
 native client는 같은 manifest와 제품 host를 언어 중립 Control Protocol로 사용한다:
 
 ```sh
-npx pyproc-control --config ./pyproc-mcp.json --check
-npx pyproc-control --config ./pyproc-mcp.json
+npx pyproc-control --config ./.pyproc/manifest.json --check
+npx pyproc-control --config ./.pyproc/manifest.json
 ```
 
 이 진입점은 stdout을 strict NDJSON 전용으로 쓰며 request ID 단회성, request별 terminal 하나,
@@ -345,7 +372,7 @@ python -m pip install \
 ```python
 from pyprocControl import PyProcClient
 
-with PyProcClient.start("pyproc-mcp.json") as client:
+with PyProcClient.start(".pyproc/manifest.json") as client:
     print(client.runPython("40 + 2").output["value"])
 ```
 
@@ -407,7 +434,7 @@ command를 직접 시작하므로 다른 global CLI version을 조용히 고르�
 ```js
 import { PyProcControlClient } from "pyproc/control";
 
-const client = await PyProcControlClient.start("pyproc-control.json");
+const client = await PyProcControlClient.start(".pyproc/manifest.json");
 try {
   console.log((await client.runPython("40 + 2")).output.value);
 

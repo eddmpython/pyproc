@@ -10,12 +10,24 @@ the official Python client is documented in the [Python SDK guide](pythonSdk.md)
 
 ## Start and preflight
 
-Use the same version 1 manifest documented in [browserAutomation.md](browserAutomation.md):
+Compile a profile and run the complete effect-free doctor before starting the protocol:
 
 ```sh
-npx pyproc-control --config ./pyproc-mcp.json --check
-npx pyproc-control --config ./pyproc-mcp.json
+npx pyproc-mcp init --recipe pythonOnly --engine-root /absolute/path/to/pyodide
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+npx pyproc-control run --config ./.pyproc/manifest.json --code "40 + 2"
 ```
+
+Use the same expanded version 1 manifest for a long-lived protocol process:
+
+```sh
+npx pyproc-control --config ./.pyproc/manifest.json --check
+npx pyproc-control --config ./.pyproc/manifest.json
+```
+
+`doctor` verifies every local engine core and package digest and reports blocking facts, advisories, and next
+commands without launching a browser. `run` starts one product, performs `machine.run`, returns a completed JSON
+terminal, and closes it. See [Machine Entrance](machineEntrance.md) for browser recipes and cleanup.
 
 The command reserves stdout for UTF-8 NDJSON protocol frames and writes diagnostics to stderr. Do not mix
 MCP JSON-RPC and Control Protocol frames on one process. Start `pyproc-mcp` for MCP, or `pyproc-control` for
@@ -106,6 +118,11 @@ Binary output is sent as ordered base64 `attachment` frames before the owning te
 continuous decoded-byte offset and a final byte length plus lowercase SHA-256 digest. The terminal declares
 the attachment ID, kind, MIME type, byte length, and digest. A client must withhold output until every
 declared attachment is complete and verified.
+
+The JavaScript and Python clients expose a successful response as `terminal: "completed"` and map errors to
+`rejected`, `partial`, `outcomeUnknown`, or `cancelled` without dropping the wire `code`, `outcome`, retryability,
+or completed prefix. MCP responses preserve the same facts in top-level `_meta.pyprocControl`; attachment
+descriptors there carry the same byte length and digest as native image content.
 
 The maximum JSON frame is 1 MiB, each decoded attachment chunk is at most 256 KiB, and one attachment is at
 most 64 MiB. A client may advertise a smaller `maxChunkBytes` in its hello; the server sends chunks no larger

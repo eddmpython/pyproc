@@ -24,13 +24,18 @@ The Python distribution is currently published as wheel and source distribution 
 GitHub Release. PyPI is not an installation source yet. Use the exact-version asset URL because floating
 release URLs are outside the reproducible installation contract.
 
-Create the version 1 manifest from the [browser automation guide](browserAutomation.md). A Python-only
-machine uses `"browser": { "enabled": false }`. Validate the complete local product before use:
+Create the version 1 manifest with [Machine Entrance](machineEntrance.md). A Python-only recipe expands to
+`"browser": { "enabled": false }`. Run the complete doctor before use:
+
+```sh
+npx pyproc-mcp init --recipe pythonOnly --engine-root /absolute/path/to/pyodide
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+```
 
 ```python
 from pyprocControl import PyProcClient
 
-report = PyProcClient.check("pyproc-mcp.json")
+report = PyProcClient.check(".pyproc/manifest.json")
 print(report["engine"])
 ```
 
@@ -42,7 +47,7 @@ such as `command=[nodePath, controlScriptPath]`.
 ```python
 from pyprocControl import PyProcClient
 
-with PyProcClient.start("pyproc-mcp.json") as client:
+with PyProcClient.start(".pyproc/manifest.json") as client:
     client.runPython("prepared = [10, 20, 30]")
     checkpoint = client.saveCheckpoint()
 
@@ -55,8 +60,10 @@ with PyProcClient.start("pyproc-mcp.json") as client:
     print(result.output["value"])
 ```
 
-`ControlResult` contains `output`, `outcome`, and an ordered tuple of verified `attachments`. Machine state
-persists for the life of the client. `reset()` restores the prepared boot checkpoint.
+`ControlResult` contains `terminal="completed"`, `output`, `outcome`, and an ordered tuple of verified
+`attachments`. `ControlError.terminal` is `rejected`, `partial`, `outcomeUnknown`, or `cancelled` while preserving
+the protocol `code`, `outcome`, and retryability. Machine state persists for the life of the client. `reset()`
+restores the prepared boot checkpoint.
 
 ## Browser automation and screenshots
 
@@ -64,7 +71,7 @@ Browser operations appear only when the manifest grants automation authority. Ri
 catalog and must be acknowledged on each effect:
 
 ```python
-with PyProcClient.start("pyproc-mcp.json") as client:
+with PyProcClient.start(".pyproc/manifest.json") as client:
     opened = client.openTarget(
         "https://example.test",
         expectedRisk="externalEffect",
@@ -93,7 +100,7 @@ terminal descriptor. The JSON output retains the opaque artifact reference for b
 gain a second automation meaning or a raw CDP entrance.
 
 ```python
-with PyProcClient.start("pyproc-mcp.json") as client:
+with PyProcClient.start(".pyproc/manifest.json") as client:
     opened = client.openTarget(
         "https://example.test",
         expectedRisk="externalEffect",

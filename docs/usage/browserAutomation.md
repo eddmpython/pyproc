@@ -12,15 +12,31 @@ DevTools port.
 
 ## Install and start
 
-Install the package and provision a pinned Pyodide distribution. `engine.root` must be an existing absolute
+Install the exact package and provision a pinned Pyodide distribution. `engine.root` becomes an existing absolute
 directory containing `pyodide.js` and `pyodide-lock.json`.
 
 ```sh
-npm install pyproc
+npm install pyproc@0.0.21 --save-exact
 npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
-Create `pyproc-mcp.json`:
+Compile the common authorized profile without hand-editing JSON:
+
+```sh
+npx pyproc-mcp init \
+  --recipe authorizedBrowser \
+  --engine-root /absolute/path/to/pyodide \
+  --origin https://example.test \
+  --action snapshot --action screenshot --action waitFor \
+  --action hydrateLazy --action navigate --action fill --action click \
+  --max-risk externalEffect \
+  --purpose "authorized regression testing" \
+  --acknowledge-effects
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+```
+
+The initializer expands to the strict manifest below. The `.pyproc/manifest.json` JSON form remains available
+for advanced embedding and must pass the same validator:
 
 ```json
 {
@@ -54,12 +70,15 @@ Create `pyproc-mcp.json`:
 }
 ```
 
-Validate without starting Chromium, then register the same command and arguments with an MCP client:
+Validate compatibility without starting Chromium, then register the same command and arguments with an MCP client:
 
 ```sh
-npx pyproc-mcp --config ./pyproc-mcp.json --check
-npx pyproc-mcp --config ./pyproc-mcp.json
+npx pyproc-mcp --config ./.pyproc/manifest.json --check
+npx pyproc-mcp --config ./.pyproc/manifest.json
 ```
+
+`pyproc-control doctor` is the stronger first-use preflight: it also verifies every local engine digest and
+returns blocking facts, advisories, and next commands. See [Machine Entrance](machineEntrance.md).
 
 `engine.indexURL` can replace `engine.root` when an immutable HTTP(S) engine directory is already hosted.
 The local root is the recommended deployment because the command serves it on the machine page's isolated

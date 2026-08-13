@@ -10,7 +10,7 @@ import {
 } from "../../scripts/controlProtocol/controlProtocol.js";
 import { ControlHost } from "../../scripts/controlProtocol/controlHost.js";
 import { createBrowserControlTools } from "../../scripts/browserControl/mcpBrowserControl.js";
-import { McpControlAdapter } from "../../scripts/controlProtocol/mcpControlAdapter.js";
+import { McpControlAdapter, mcpToolResult } from "../../scripts/controlProtocol/mcpControlAdapter.js";
 import {
   CONTROL_TOOL_OPERATIONS,
   controlOperationCatalog,
@@ -181,10 +181,19 @@ export async function assertControlProtocolContract() {
     && observed.terminal.attachments[0].sha256 === sha256
     && Buffer.from(observed.attachments[0].bytes).equals(png),
   "inline screenshot이 검증된 control attachment로 분리되지 않았다");
+  const mcpObserved = mcpToolResult(observed);
+  assert(mcpObserved._meta.pyprocControl.terminal === "completed"
+    && mcpObserved._meta.pyprocControl.outcome === "observed"
+    && mcpObserved._meta.pyprocControl.attachments[0].sha256 === sha256,
+  "MCP success가 Control terminal과 attachment digest를 잃었다");
   const uncertain = await host.request(request("host:uncertain", "automation.act", { actions: [] }));
   assert(uncertain.terminal.type === "error" && uncertain.terminal.error.outcome === "outcomeUnknown"
     && uncertain.terminal.error.retryable === false && uncertain.terminal.error.details.completed.length === 1,
   "control error가 outcomeUnknown의 비재시도와 completed prefix를 보존하지 않았다");
+  const mcpUncertain = mcpToolResult(uncertain);
+  assert(mcpUncertain._meta.pyprocControl.terminal === "outcomeUnknown"
+    && mcpUncertain._meta.pyprocControl.retryable === false,
+  "MCP error가 canonical Control terminal을 잃었다");
 
   let drained = false;
   const drainHost = new ControlHost({ operations: catalog, handlers: {

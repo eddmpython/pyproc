@@ -1,6 +1,7 @@
 // mcpControlAdapter.js - MCP tool 이름과 content block을 Control Protocol에만 투영한다.
 import { controlBase } from "./controlProtocol.js";
 import { controlOperationForTool } from "./controlOperations.js";
+import { controlTerminalStatus } from "./controlError.js";
 
 function mcpIdKey(value) {
   if (typeof value === "string") return `s:${value}`;
@@ -60,8 +61,21 @@ export function mcpToolResult(controlResult) {
     return Object.freeze({
       content: Object.freeze([{ type: "text", text: JSON.stringify(payload, null, 1) }]),
       isError: true,
+      _meta: Object.freeze({ pyprocControl: Object.freeze({
+        terminal: controlTerminalStatus(terminal.error),
+        outcome: terminal.error.outcome,
+        retryable: terminal.error.retryable,
+        attachments: Object.freeze([]),
+      }) }),
     });
   }
+  const attachmentMetadata = Object.freeze(controlResult.attachments.map((attachment) => Object.freeze({
+    attachmentId: attachment.attachmentId,
+    kind: attachment.kind,
+    mimeType: attachment.mimeType,
+    byteLength: attachment.byteLength,
+    sha256: attachment.sha256,
+  })));
   return Object.freeze({
     content: Object.freeze([
       Object.freeze({ type: "text", text: JSON.stringify(terminal.output, null, 1) }),
@@ -69,5 +83,11 @@ export function mcpToolResult(controlResult) {
         type: "image", data: Buffer.from(attachment.bytes).toString("base64"), mimeType: attachment.mimeType,
       })),
     ]),
+    _meta: Object.freeze({ pyprocControl: Object.freeze({
+      terminal: "completed",
+      outcome: terminal.outcome,
+      retryable: false,
+      attachments: attachmentMetadata,
+    }) }),
   });
 }

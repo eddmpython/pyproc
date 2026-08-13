@@ -54,13 +54,15 @@ languages use Control Protocol clients:
 |---|---|
 | `pyproc-assets` | Copy the verified worker graph and emit its SRI manifest |
 | `pyproc-engine` | Download and verify the pinned Pyodide distribution |
-| `pyproc-control` | Validate the manifest and start the language-neutral Control Protocol over strict NDJSON |
-| `pyproc-mcp` | Validate a version 1 manifest and start the persistent Python plus optional browser-automation MCP server |
+| `pyproc-control` | Run effect-free `doctor`, one-shot Python `run`, or the language-neutral Control Protocol over strict NDJSON |
+| `pyproc-mcp` | Compile a named profile with `init`, validate it, and start the persistent Python plus optional browser-automation MCP server |
 
 `pyproc-control` and `pyproc-mcp` are the supported entrances to their package-internal Node files. Deep imports from
 `scripts/browserControl/`, `mcpProductConfig.mjs`, or `mcpSandboxServer.mjs` are not public contracts. The
 command, its manifest, and its behavior are browser-gated through the packed and installed package. See the
 [browser automation product guide](browserAutomation.md) and [Control Protocol guide](controlProtocol.md).
+The shortest installed path is the [Machine Entrance guide](machineEntrance.md): `pyproc-mcp init`,
+`pyproc-control doctor`, then `pyproc-control run` or a long-lived client.
 
 The stable Node.js facade starts the matching package-internal command directly, so it cannot drift to a
 different globally installed version. `PyProcControlClient`, `ControlRequest`, `ControlRemoteError`, and

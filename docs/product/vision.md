@@ -39,6 +39,46 @@ An axis is a facility the computer itself has to provide: execution, rewindable 
 
 New work names the axis it moves. Work that moves no axis, weakens a guardrail in [contract reality](../operations/contractReality.md), or trades an axis for a number on a benchmark is not a priority here.
 
+## Ordered agent-experience initiatives
+
+Agent-computer work follows eight ordered initiatives. The detailed plan, research baseline, failure conditions,
+and graduation gates live in [agent experience initiatives](../operations/agentExperienceInitiatives.md).
+
+0. **Finish the Machine Entrance.** An exact package install must reach a useful Python result and an optional,
+   explicitly authorized browser observation without deep imports, protocol assembly, or permission guesswork.
+1. **Then build the Perception Computer.** A persistent provider-neutral world model produces a goal-conditioned
+   `SituationCapsule` containing the minimum sufficient facts, affordances, changes, unknowns, and evidence.
+   Pixels remain bounded evidence for unresolved claims rather than the default representation of the page.
+2. **Then close the Verified Change Loop.** A repository-scoped Experience Contract drives real browser scenarios,
+   exact reference comparison, and a canonical Evidence Pack whose deterministic verdict can be replayed without
+   sending browser effects again. The runtime audits and verifies; source repair remains the caller's responsibility.
+3. **Hibernate a bounded Machine fleet.** Only leased hot Machines retain execution owners. A safe suspend drains
+   work, commits an exact generation, terminates the owned Worker and devices, and later wakes in a new owner.
+4. **Make execution state the memory.** Immutable session revisions link Machine generations, branches,
+   environments, situations, replay cursors, permissions, and evidence without turning transcripts into state truth.
+5. **Rehearse, approve, and commit one effect.** Effect-free rehearsal states its coverage, an approval binds the
+   exact intent, and a durable one-shot lease prevents automatic resend after the live send boundary.
+6. **Make cooperative application state transactional.** An opt-in application exports versioned logical state and
+   an effect outbox so the application and Python Machine can branch and adopt as one paired generation.
+7. **Build verified replay worlds.** Content-addressed state nodes and exact action edges allow effect-free traversal
+   and deterministic evaluation. Missing graph edges remain missing and are never synthesized.
+
+The first initiative begins as the
+[`machineEntrance` attempt](../../tests/attempts/machineEntrance/README.md). The second begins as the
+[`perceptionComputer` attempt](../../tests/attempts/perceptionComputer/README.md). It makes no claim of general
+superiority over Playwright. That statement becomes admissible only for the narrow LLM perception contract after
+the pinned Playwright baseline, action reach, authority integrity, transition truth, minimality, and replay gates
+all pass. The third begins as the follow-on
+[`verifiedChangeLoop` attempt](../../tests/attempts/verifiedChangeLoop/README.md) and remains locked until that
+graduation. Initiatives four through eight remain locked behind their immediate predecessor and begin in the
+corresponding attempt campaign. No initiative changes a North Star score before its browser evidence is registered
+in the ledger.
+
+This portfolio does not duplicate the separate ceiling ladder. Serverless local applications, portable Machine
+images, Native CDP, FrameSpace, and ReplaySpace are shipped foundations. The wasm tool layer and Node guest remain
+the ladder's sixth and seventh rungs, behind their existing prerequisites. A fully virtual Chromium, zero host RAM,
+and suspension of native editor processes are not product claims.
+
 ## Where pyproc sits today
 
 pyproc is a persistent Python computer delivered as an exact-version native ESM package. Its public

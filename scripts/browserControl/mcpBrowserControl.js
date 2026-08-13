@@ -84,7 +84,8 @@ function parseOrigins(value) {
   for (const entry of csv(value)) {
     const parsed = new URL(entry);
     if ((parsed.protocol !== "http:" && parsed.protocol !== "https:")
-      || parsed.username || parsed.password || parsed.href !== parsed.origin + "/") {
+      || parsed.username || parsed.password || parsed.hostname.includes("*")
+      || parsed.href !== parsed.origin + "/") {
       throw new Error(`browser origin must be an exact HTTP(S) origin: ${entry}`);
     }
     origins.push(parsed.origin);

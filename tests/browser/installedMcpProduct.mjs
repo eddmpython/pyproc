@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
@@ -46,40 +46,29 @@ const check = (name, pass, info = "") => {
 };
 
 const installed = await installPackedPyProc("pyprocInstalledMcpProduct-");
-const configPath = join(installed.appDir, "pyproc-mcp.json");
+const configPath = join(installed.appDir, ".pyproc-mcp-product", "manifest.json");
 const browser = process.env.PYPROC_BROWSER || undefined;
-const config = {
-  schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") },
-  timeoutMs: TIMEOUT_MS,
-  browser: {
-    enabled: true,
-    ...(browser ? { executable: browser } : {}),
-    allowedOrigins: [targetOrigin],
-    maxRisk: "externalEffect",
-    actions: ["snapshot", "screenshot", "waitFor", "hydrateLazy", "fill", "click"],
-    methods: ["Runtime.evaluate"],
-    viewport: { width: 390, height: 844, deviceScaleFactor: 3, mobile: true, touch: true },
-    externalEffects: "acknowledged",
-    purpose: "installed browser automation product gate",
-    artifacts: {
-      maxArtifactBytes: 16 * 1024 * 1024,
-      maxTotalBytes: 32 * 1024 * 1024,
-      maxArtifacts: 16,
-      inlineMaxBytes: 4 * 1024 * 1024,
-      ttlMs: 120000,
-    },
-  },
-};
-await writeFile(configPath, JSON.stringify(config, null, 2));
-
 const cli = binPath(installed.appDir, "pyproc-mcp");
+const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
+  "--out", ".pyproc-mcp-product", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
+  "--purpose", "installed-browser-automation-product-gate", "--acknowledge-effects",
+  "--method", "Runtime.evaluate", "--viewport-width", "390", "--viewport-height", "844",
+  "--device-scale-factor", "3", "--mobile", "--touch",
+  "--artifact-max-bytes", String(16 * 1024 * 1024), "--artifact-total-bytes", String(32 * 1024 * 1024),
+  "--artifact-max-count", "16", "--artifact-inline-bytes", String(4 * 1024 * 1024),
+  "--artifact-ttl-ms", "120000",
+  ...["snapshot", "screenshot", "waitFor", "hydrateLazy", "fill", "click"].flatMap((action) => ["--action", action]),
+  ...(browser ? ["--browser", browser] : []),
+];
+const initializedProfile = JSON.parse(run(cli, initArgs, { cwd: installed.appDir }).stdout);
 const versionRun = run(cli, ["--version"], { cwd: installed.appDir });
 const helpRun = run(cli, ["--help"], { cwd: installed.appDir });
 const checkRun = run(cli, ["--config", configPath, "--check"], { cwd: installed.appDir });
 const checkReport = JSON.parse(checkRun.stdout);
 check("installed bin help, version, check가 제품 시작 표면과 권한을 검증",
-  versionRun.stdout.trim() === installed.packed.version && helpRun.stdout.includes("--config <file>")
+  initializedProfile.manifestPath === configPath
+    && versionRun.stdout.trim() === installed.packed.version && helpRun.stdout.includes("--config <file>")
     && helpRun.stdout.includes("--check") && checkReport.ok === true
     && checkReport.browser.actions.includes("screenshot")
     && checkReport.browser.rawMethods.join(",") === "Runtime.evaluate"
@@ -147,8 +136,11 @@ try {
   check("설치 제품이 Python 4종과 browser 10종을 제공",
     tools.length === 14 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete"), tools.join(","));
   await callTool("pythonRun", { code: "product_state = 41" });
-  const python = toolText(await callTool("pythonRun", { code: "product_state + 1" }));
-  check("설치 제품의 persistent Python Machine 실행", python.value === "42", python.value);
+  const pythonResponse = await callTool("pythonRun", { code: "product_state + 1" });
+  const python = toolText(pythonResponse);
+  check("설치 제품의 persistent Python Machine과 canonical terminal",
+    python.value === "42" && pythonResponse.result._meta?.pyprocControl?.terminal === "completed"
+      && pythonResponse.result._meta?.pyprocControl?.outcome === "applied", python.value);
 
   const opened = toolText(await callTool("browserOpen", {
     url: targetUrl, expectedRisk: "externalEffect", waitUntil: "load",
@@ -217,6 +209,11 @@ try {
       && Buffer.from(nativeImages[1].data, "base64")[0] === 0xff
       && Buffer.from(nativeImages[2].data, "base64").subarray(0, 4).toString("ascii") === "RIFF",
   nativeImages.map((entry) => `${entry.mimeType}:${entry.data.length}`).join(", "));
+  check("MCP terminal metadata가 Control outcome과 attachment digest를 보존",
+    pipelineResponse.result._meta?.pyprocControl?.terminal === "completed"
+      && pipelineResponse.result._meta?.pyprocControl?.outcome === "applied"
+      && pipelineResponse.result._meta?.pyprocControl?.attachments.length === 3
+      && pipelineResponse.result._meta.pyprocControl.attachments.every((entry, index) => entry.sha256 === artifacts[index].sha256));
   const state = toolText(await callTool("browserCommand", {
     sessionRef,
     method: "Runtime.evaluate",

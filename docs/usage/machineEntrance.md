@@ -1,0 +1,129 @@
+# Machine Entrance
+
+Machine Entrance turns one named recipe into the existing strict version 1 product manifest. It does not add a
+second permission system. The expanded `manifest.json` is validated by the same Control and MCP product paths
+that execute it.
+
+## Python-only first result
+
+Install and pin the package, then prepare the engine once:
+
+```sh
+npm install pyproc@0.0.21 --save-exact
+npx pyproc-engine --out vendor/pyodide
+```
+
+From the project root, create the default closed profile:
+
+```sh
+npx pyproc-mcp init \
+  --recipe pythonOnly \
+  --engine-root ./vendor/pyodide
+```
+
+This writes three project-local files:
+
+```text
+.pyproc/
+|-- manifest.json
+|-- client.json
+`-- README.md
+```
+
+`manifest.json` contains the fully expanded authority. `client.json` contains a common `mcpServers` stdio
+snippet. The generated README contains the exact absolute manifest path and cleanup boundary. No credential,
+default browser profile, repository command, or development-server command is generated.
+
+Run the effect-free preflight and the first Python command:
+
+```sh
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+npx pyproc-control run --config ./.pyproc/manifest.json --code "40 + 2"
+```
+
+The successful run returns a `completed` terminal, the existing Control outcome, the Python output, and verified
+attachments when an operation has any. A Python-only profile still needs a supported Chromium-family executable
+as the browser-native Machine host. It does not enable browser automation, browser actions, or a CDP endpoint.
+
+`doctor` verifies the installed package version, strict manifest, complete local engine core and package digests,
+Machine browser discovery, provider authority, operation catalog, and temporary-profile policy. It does not
+launch a browser, create a profile, open a CDP endpoint, or send a target request. Target readiness remains an
+explicit advisory until the caller opens an allowed URL.
+
+## Read-only application observation
+
+`observeLocal` fixes the action catalog to `snapshot`, `screenshot`, and `waitFor`. Opening the initial URL can
+still cause a server-side effect, so exact origin, purpose, and acknowledgement remain mandatory:
+
+```sh
+npx pyproc-mcp init \
+  --recipe observeLocal \
+  --engine-root ./vendor/pyodide \
+  --origin http://127.0.0.1:4173 \
+  --purpose "inspect the caller-owned local application" \
+  --acknowledge-effects
+```
+
+The caller starts the application server. The initializer never executes a repository command.
+
+## Authorized browser workflow
+
+Choose every action explicitly. A recipe never lowers the risk assigned by the canonical action catalog:
+
+```sh
+npx pyproc-mcp init \
+  --recipe authorizedBrowser \
+  --engine-root ./vendor/pyodide \
+  --origin http://127.0.0.1:4173 \
+  --action snapshot \
+  --action screenshot \
+  --action click \
+  --max-risk externalEffect \
+  --purpose "verify the caller-owned checkout flow" \
+  --acknowledge-effects \
+  --overwrite
+```
+
+`--overwrite` is required to replace generated files. Without it, one existing target file rejects the entire
+initialization before a generated file is changed. `--dry-run` validates the recipe and prints paths without
+creating the profile directory.
+
+Advanced bounded options include repeated `--method` and `--file-root`, viewport width and height, device scale,
+mobile and touch flags, and artifact byte, count, inline, and TTL limits. File roots remain absolute and existing.
+Origins remain exact HTTP(S) origins. Wildcards, credentials, paths, queries, and fragments are rejected.
+
+## Pinned replay
+
+`replayPinned` accepts an existing recording only with its identity and final digest:
+
+```sh
+npx pyproc-mcp init \
+  --recipe replayPinned \
+  --engine-root ./vendor/pyodide \
+  --origin https://example.test \
+  --action snapshot \
+  --max-risk read \
+  --purpose "replay an authorized observation" \
+  --recording-file ./recording.json \
+  --recording-id recording:example \
+  --recording-sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+The recording path becomes absolute in the expanded manifest. Replay opens no live automation provider and the
+doctor verifies the pinned recording chain before startup.
+
+## Long-lived clients and cleanup
+
+Use `PyProcControlClient.start()` or the Python SDK when several operations must share one live Python state,
+checkpoint, browser session, and attachment lifecycle. `pyproc-control run` is intentionally one-shot.
+
+Normal client close shuts down the owned Machine browser, automation provider, temporary browser profile,
+artifact store, local control server, and locks. A delivered external effect that loses its terminal remains
+non-retryable `outcomeUnknown`. Closing a Control process does not claim to preserve its transient checkpoint;
+durable browser-restart state is the separate root `open({ name })` Machine contract.
+
+## Failure shape
+
+`doctor` returns a JSON report with `checks`, `blocking`, `advisory`, and exact next commands. `run` and `invoke`
+return a completed terminal on success. Programmatic Control errors preserve `code`, `outcome`, `retryable`, and
+details such as the completed action prefix. Fix a blocking preflight fact and run `doctor` again before startup.

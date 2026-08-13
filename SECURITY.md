@@ -34,6 +34,19 @@ key distribution and permission UI belong to the product
 - Engine boot supports `engineScriptIntegrity` / `coreIntegrity` (fail-closed SRI on the
   Pyodide script and core assets) plus an OPFS offline cache that re-verifies on read.
 
+### Generated Machine profiles do not grant hidden authority
+
+`pyproc-mcp init` compiles a named recipe into the same strict version 1 manifest used at runtime. The default
+`pythonOnly` recipe contains no automation action or CDP authority. Browser recipes require exact origins and
+preserve the canonical risk of every action; wildcard origins are rejected. Initial navigation still requires a
+purpose and explicit effect acknowledgement even when the action catalog is read-only.
+
+The initializer stays inside the selected project root, refuses existing generated files without
+`--overwrite`, and never writes credentials, a default browser profile, or a repository command. Run
+`pyproc-control doctor` before startup to verify the local engine chain and authority without launching a browser
+or sending a target request. Generated `.pyproc/` files are policy and client configuration, so review them like
+other executable configuration and keep recording paths private.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`

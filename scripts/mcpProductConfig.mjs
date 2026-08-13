@@ -221,6 +221,7 @@ function normalizedBrowser(input = { enabled: false }) {
   }
   const purpose = (browser.purpose || "").trim();
   const artifacts = normalizedArtifacts(browser.artifacts);
+  const recording = normalizedRecording(browser.recording, provider, artifacts);
   const normalized = {
     enabled: true,
     provider,
@@ -235,7 +236,7 @@ function normalizedBrowser(input = { enabled: false }) {
     externalEffects: browser.externalEffects || "",
     purpose,
     artifacts,
-    recording: normalizedRecording(browser.recording, provider, artifacts),
+    ...(recording === null ? {} : { recording }),
     ...(browser.viewport === undefined ? {} : {
       viewport: normalizeBrowserViewport(browser.viewport, { label: "browser.viewport" }),
     }),

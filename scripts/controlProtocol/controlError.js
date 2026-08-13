@@ -26,3 +26,10 @@ export function canonicalControlError(error) {
     ...(details ? { details } : {}),
   });
 }
+
+export function controlTerminalStatus(error) {
+  if (error?.outcome === "outcomeUnknown") return "outcomeUnknown";
+  if (Array.isArray(error?.details?.completed) && error.details.completed.length > 0) return "partial";
+  if (error?.code === "CONTROL_CANCELLED") return "cancelled";
+  return "rejected";
+}

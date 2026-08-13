@@ -21,12 +21,14 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
 | | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
 | | [testing.md](operations/testing.md) | The test gates (`npm test`) and the browser measurement procedure (a COOP/COEP server) |
+| | [agentExperienceInitiatives.md](operations/agentExperienceInitiatives.md) | Ordered Initiative 0 through 7 plan: entrance, browser cognition, verified changes, hibernating fleets, execution memory, one-shot effects, transactional apps, and replay worlds |
 | | [experimentalFreeze.md](operations/experimentalFreeze.md) | The freeze on new Experimental public surfaces and the conditions for lifting it |
 | | [moduleBoundaries.md](operations/moduleBoundaries.md) | Ownership boundaries between Runtime capability clusters, policy modules, contract suites, and runtime assets |
 | | [benchmarking.md](operations/benchmarking.md) | The measurement contract for internal benchmarks, canonical scenarios, and raw-evidence rules (posting on a public surface is forbidden: the no-bragging-with-numbers rule) |
 | | [release.md](operations/release.md) | The version, tag, and release procedure (the `0.0.x` line, SHA-pin consumption) |
 | | [demoHosting.md](operations/demoHosting.md) | The live demo deployment procedure (COOP/COEP static hosting, the root `_headers`) |
 | [usage/](usage/) | [contract.md](usage/contract.md) | The package contract: install, version pinning, import boundaries, runtime-asset deployment, Pyodide version consistency |
+| | [machineEntrance.md](usage/machineEntrance.md) | Machine Entrance: compile a closed or explicitly authorized profile, run effect-free doctor, and reach the first installed result |
 | | [capabilityMatrix.md](usage/capabilityMatrix.md) | The capability matrix: intrinsic value, contract state, prerequisites, runnable surface, verification, boundaries |
 | | [platformRequirements.md](usage/platformRequirements.md) | Platform requirements and preflight: browsers, JSPI, COOP/COEP, engine pin, resources, memory-pressure guidance |
 | | [resumeCatalog.md](usage/resumeCatalog.md) | The resource policy for which file descriptors, sockets, and DB connections `resume.py` must reopen after a revival |
@@ -49,9 +51,11 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 - Where a new idea starts: [tests/attempts/README.md](../tests/attempts/README.md)
 - Product direction and roadmap: [product/vision.md](product/vision.md); current contract gaps: [operations/contractReality.md](operations/contractReality.md); executable status: [`tests/northStar.mjs`](../tests/northStar.mjs); historical decisions: git history
 - What must be green before a commit: [operations/testing.md](operations/testing.md)
+- Ordered agent experience work and its graduation gates: [operations/agentExperienceInitiatives.md](operations/agentExperienceInitiatives.md)
 - How speed is measured and where it is recorded (never on a public surface): [operations/benchmarking.md](operations/benchmarking.md)
 - When and how the version moves: [operations/release.md](operations/release.md)
 - Package installation and public boundaries: [usage/contract.md](usage/contract.md)
+- First installed Python or browser result: [usage/machineEntrance.md](usage/machineEntrance.md)
 - Capability contract and prerequisites: [usage/capabilityMatrix.md](usage/capabilityMatrix.md)
 - Whether a target environment can run it: [usage/platformRequirements.md](usage/platformRequirements.md)
 - The policy for reopening resources after a revival: [usage/resumeCatalog.md](usage/resumeCatalog.md)

@@ -13,13 +13,18 @@ npm install --save-exact pyproc@0.0.21
 npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
-Create the version 1 policy manifest from the [browser automation guide](browserAutomation.md), then validate
-it without starting a live product:
+Create the version 1 policy manifest with [Machine Entrance](machineEntrance.md), then validate it without
+starting a live product:
+
+```sh
+npx pyproc-mcp init --recipe pythonOnly --engine-root /absolute/path/to/pyodide
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+```
 
 ```js
 import { PyProcControlClient } from "pyproc/control";
 
-const report = await PyProcControlClient.check("pyproc-control.json");
+const report = await PyProcControlClient.check(".pyproc/manifest.json");
 console.log(report.ok);
 ```
 
@@ -31,7 +36,7 @@ bin lookup. An embedded host can pass `command: [nodePath, controlScriptPath]` e
 ```js
 import { PyProcControlClient } from "pyproc/control";
 
-const client = await PyProcControlClient.start("pyproc-control.json");
+const client = await PyProcControlClient.start(".pyproc/manifest.json");
 try {
   await client.runPython("prepared = [10, 20, 30]");
   const checkpoint = await client.saveCheckpoint();
@@ -96,7 +101,9 @@ await client.deleteArtifact(captured.output.actions[0].result.artifactRef);
 ```
 
 Output is not exposed until chunk order, decoded byte length, MIME type, and SHA-256 match the terminal
-descriptor. JSON keeps the opaque artifact reference for bounded reads and explicit deletion.
+descriptor. A successful `ControlResult` has `terminal: "completed"`; `ControlRemoteError.terminal` preserves
+`rejected`, `partial`, `outcomeUnknown`, or `cancelled`. JSON keeps the opaque artifact reference for bounded
+reads and explicit deletion.
 
 ## Cancellation, deadlines, and external effects
 

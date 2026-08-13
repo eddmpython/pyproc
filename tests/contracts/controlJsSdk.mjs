@@ -48,7 +48,8 @@ export async function assertControlJsSdkContract() {
   "JavaScript request handle이 canonical operation을 보내지 않았다");
   readable.write(encodeControlFrame({ ...controlBase("response"), requestId: "sdk:one",
     outcome: "applied", output: { value: "42" } }));
-  assert((await pending.result).output.value === "42" && await pending.cancel() === false,
+  const completed = await pending.result;
+  assert(completed.terminal === "completed" && completed.output.value === "42" && await pending.cancel() === false,
     "terminal 뒤 cancel이 새 frame을 보냈다");
 
   let deadlineCancel = false;

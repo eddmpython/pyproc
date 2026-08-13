@@ -7,6 +7,7 @@ import {
   decodeControlFrame,
   encodeControlFrame,
 } from "./controlProtocol.js";
+import { controlTerminalStatus } from "./controlError.js";
 
 export class ControlRemoteError extends Error {
   constructor(payload) {
@@ -16,6 +17,7 @@ export class ControlRemoteError extends Error {
     this.retryable = payload.retryable;
     this.outcome = payload.outcome;
     if (payload.details !== undefined) this.details = payload.details;
+    this.terminal = controlTerminalStatus(payload);
   }
 }
 
@@ -96,7 +98,8 @@ export class ControlStdioClient {
     this._pending.delete(frame.requestId);
     const attachments = this._conversation.attachmentsFor(frame.requestId, frame.attachments || []);
     if (frame.type === "error") pending.reject(new ControlRemoteError(frame.error));
-    else pending.resolve(Object.freeze({ output: frame.output, outcome: frame.outcome, attachments }));
+    else pending.resolve(Object.freeze({ terminal: "completed", output: frame.output,
+      outcome: frame.outcome, attachments }));
   }
 
   _fail(error) {

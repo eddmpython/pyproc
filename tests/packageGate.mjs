@@ -1,6 +1,6 @@
 // tests/packageGate.mjs - npm tarball 공개 표면 게이트.
 // 저장소 소스가 아니라 설치된 패키지 표면만 써서 exports, bin, files 계약을 검증한다.
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { binPath, installPackedPyProc, run } from "./packageHarness.mjs";
 
@@ -78,6 +78,11 @@ try {
     ["scripts", "pyprocControl.mjs"],
     ["scripts", "controlProtocolServer.mjs"],
     ["scripts", "mcpProductConfig.mjs"],
+    ["scripts", "machineEntrance", "machineProfile.js"],
+    ["scripts", "machineEntrance", "profileInitializer.js"],
+    ["scripts", "machineEntrance", "machineDoctor.js"],
+    ["scripts", "machineEntrance", "engineInspection.js"],
+    ["scripts", "machineEntrance", "entranceCli.js"],
     ["scripts", "mcpSandboxServer.mjs"],
     ["scripts", "controlProtocol", "controlProtocol.js"],
     ["scripts", "controlProtocol", "controlHost.js"],
@@ -115,9 +120,26 @@ try {
   }
   const controlHelp = run(controlCli, ["--help"], { cwd: appDir });
   const controlVersion = run(controlCli, ["--version"], { cwd: appDir });
-  if (!controlHelp.stdout.includes("pyproc-control --config")
+  const initHelp = run(mcpCli, ["init", "--help"], { cwd: appDir });
+  if (!controlHelp.stdout.includes("pyproc-control --config") || !controlHelp.stdout.includes("pyproc-control doctor")
+    || !controlHelp.stdout.includes("pyproc-control run")
+    || !initHelp.stdout.includes("--engine-index-url") || !initHelp.stdout.includes("--recording-sha256")
     || controlVersion.stdout.trim() !== installedPackage.version) {
     throw new Error("installed pyproc-control help/version 계약 불일치");
+  }
+  const entranceEngine = join(appDir, "entrance", "vendor", "pyodide");
+  mkdirSync(entranceEngine, { recursive: true });
+  writeFileSync(join(entranceEngine, "pyodide.js"), "fixture");
+  writeFileSync(join(entranceEngine, "pyodide-lock.json"), "{}");
+  const entrance = JSON.parse(run(mcpCli, ["init", "--recipe", "pythonOnly", "--project-root",
+    join(appDir, "entrance"), "--engine-root", "vendor/pyodide"], { cwd: appDir }).stdout);
+  if (!entrance.ok || !existsSync(entrance.manifestPath) || !existsSync(entrance.clientPath)
+    || !existsSync(entrance.readmePath)) {
+    throw new Error("installed pyproc-mcp init journey가 profile 산출물을 만들지 않았다");
+  }
+  const entranceManifest = JSON.parse(readFileSync(entrance.manifestPath, "utf8"));
+  if (entranceManifest.browser.enabled !== false || Object.keys(entranceManifest.browser).length !== 1) {
+    throw new Error("installed pythonOnly profile이 browser authority를 열었다");
   }
 
   const manifestOut = join(appDir, "public", "pyproc-assets.json");

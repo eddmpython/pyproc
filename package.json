@@ -69,6 +69,7 @@
     "scripts/controlProtocolServer.mjs",
     "scripts/pyprocMcp.mjs",
     "scripts/mcpProductConfig.mjs",
+    "scripts/machineEntrance",
     "scripts/mcpSandboxServer.mjs",
     "scripts/staticServer.mjs",
     "scripts/automationSpace",

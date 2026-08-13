@@ -49,6 +49,10 @@ export async function assertBrowserAutomationProductContract() {
     && validated.env.PYPROC_BROWSER_VIEWPORT.includes('"width":390')
     && validated.browserControl.viewport?.height === 844,
   "제품 manifest가 engine, permission, screenshot, viewport로 투영되지 않았다");
+  const roundTrip = validateMcpProductConfig(validated.config);
+  assert(roundTrip.config.browser.recording === undefined
+    && JSON.stringify(roundTrip.config) === JSON.stringify(validated.config),
+  "정규화된 제품 manifest가 같은 validator를 다시 통과하지 못했다");
   const unknownKey = await errorOf(() => validateMcpProductConfig({ ...manifest, surprise: true }));
   assert(/does not accept surprise/.test(unknownKey?.message), "제품 manifest unknown key가 fail-closed가 아니다");
   const unknownBrowserKey = await errorOf(() => validateMcpProductConfig({
@@ -77,6 +81,10 @@ export async function assertBrowserAutomationProductContract() {
     ...manifest, engine: { root: "vendor/pyodide" },
   }));
   assert(/must be an absolute directory/.test(relativeEngine?.message), "상대 engine root가 허용됐다");
+  const wildcardOrigin = await errorOf(() => validateMcpProductConfig({
+    ...manifest, browser: { ...manifest.browser, allowedOrigins: ["http://*.test"] },
+  }));
+  assert(/exact HTTP\(S\) origin/.test(wildcardOrigin?.message), "wildcard browser origin이 허용됐다");
   const unacknowledgedEffect = await errorOf(() => validateMcpProductConfig({
     ...manifest,
     browser: { ...manifest.browser, maxRisk: "externalEffect", actions: ["screenshot", "click"] },

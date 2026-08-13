@@ -10,6 +10,7 @@ export interface ControlAttachment {
 }
 
 export interface ControlResult<Output = unknown> {
+  readonly terminal: "completed";
   readonly output: Output;
   readonly outcome: "observed" | "applied";
   readonly attachments: readonly ControlAttachment[];
@@ -63,6 +64,7 @@ export class ControlRemoteError extends Error {
   readonly code: string;
   readonly retryable: boolean;
   readonly outcome: ControlOutcome;
+  readonly terminal: "partial" | "rejected" | "outcomeUnknown" | "cancelled";
   readonly details?: unknown;
 }
 

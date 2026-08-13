@@ -297,7 +297,34 @@ npm install pyproc@0.0.21 --save-exact
 npx pyproc-engine --out /absolute/path/to/pyodide
 ```
 
-Create `pyproc-mcp.json`, using exact origins and the smallest action set required:
+Create the default closed profile, verify every local engine digest without launching a browser, and run the first
+Python command:
+
+```sh
+npx pyproc-mcp init --recipe pythonOnly --engine-root /absolute/path/to/pyodide
+npx pyproc-control doctor --config ./.pyproc/manifest.json
+npx pyproc-control run --config ./.pyproc/manifest.json --code "40 + 2"
+```
+
+The profile contains no browser automation action or CDP authority. For a caller-owned browser workflow, compile
+the exact origins, actions, risk, purpose, and effect acknowledgement instead:
+
+```sh
+npx pyproc-mcp init \
+  --recipe authorizedBrowser \
+  --engine-root /absolute/path/to/pyodide \
+  --origin http://127.0.0.1:5173 \
+  --action snapshot --action screenshot --action click \
+  --max-risk externalEffect \
+  --purpose "verify the caller-owned application" \
+  --acknowledge-effects --overwrite
+```
+
+See the [Machine Entrance guide](docs/usage/machineEntrance.md) for `observeLocal`, pinned replay, dry-run,
+viewport and artifact budgets, long-lived clients, and cleanup.
+
+For advanced embedding, the initializer's fully expanded `.pyproc/manifest.json` has this strict shape. The
+generated file remains the authority, and manual JSON must pass the same validator:
 
 ```json
 {
@@ -321,15 +348,15 @@ Validate the engine, browser, limits, and permissions before registering the sam
 client:
 
 ```sh
-npx pyproc-mcp --config ./pyproc-mcp.json --check
-npx pyproc-mcp --config ./pyproc-mcp.json
+npx pyproc-mcp --config ./.pyproc/manifest.json --check
+npx pyproc-mcp --config ./.pyproc/manifest.json
 ```
 
 Native clients use the same manifest and product host through the language-neutral Control Protocol:
 
 ```sh
-npx pyproc-control --config ./pyproc-mcp.json --check
-npx pyproc-control --config ./pyproc-mcp.json
+npx pyproc-control --config ./.pyproc/manifest.json --check
+npx pyproc-control --config ./.pyproc/manifest.json
 ```
 
 This entrance reserves stdout for strict NDJSON. It provides single-use request IDs, one terminal per request,
@@ -347,7 +374,7 @@ python -m pip install \
 ```python
 from pyprocControl import PyProcClient
 
-with PyProcClient.start("pyproc-mcp.json") as client:
+with PyProcClient.start(".pyproc/manifest.json") as client:
     print(client.runPython("40 + 2").output["value"])
 ```
 
@@ -409,7 +436,7 @@ silently pick up a different global CLI version.
 ```js
 import { PyProcControlClient } from "pyproc/control";
 
-const client = await PyProcControlClient.start("pyproc-control.json");
+const client = await PyProcControlClient.start(".pyproc/manifest.json");
 try {
   console.log((await client.runPython("40 + 2")).output.value);
 

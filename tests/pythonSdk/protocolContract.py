@@ -30,6 +30,12 @@ fatal = {**controlBase("error"), "fatal": True,
                    "retryable": False, "outcome": "notSent"}}
 assert decodeFrame(encodeFrame(fatal))["fatal"] is True
 assert errorCode(lambda: validateFrame({**fatal, "requestId": "bad:fatal"})) == "CONTROL_INVALID_FRAME"
+assert ControlResult({"value": "42"}, "applied").terminal == "completed"
+assert ControlError({"code": "CONTROL_CANCELLED", "message": "cancelled",
+                     "retryable": False, "outcome": "notSent"}).terminal == "cancelled"
+assert ControlError({"code": "CONTROL_FAILED", "message": "partial",
+                     "retryable": False, "outcome": "rejected",
+                     "details": {"completed": [{"index": 0}]}}).terminal == "partial"
 assert errorCode(lambda: validateFrame({**controlBase("error"), "requestId": "bad:retry",
                                         "error": {"code": "CONTROL_FAILED", "message": "unknown",
                                                   "retryable": True, "outcome": "outcomeUnknown"}})) == "CONTROL_INVALID_FRAME"

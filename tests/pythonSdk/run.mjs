@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
+import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const PYTHON = process.env.PYPROC_PYTHON || "python";
@@ -60,27 +60,19 @@ const installed = await installPackedPyProc("pyprocPythonSdk-");
 const distDir = join(installed.tmp, "pythonDist");
 const wheelVenv = join(installed.tmp, "wheelVenv");
 const sourceVenv = join(installed.tmp, "sourceVenv");
-const configPath = join(installed.appDir, "pyproc-python.json");
+const configPath = join(installed.appDir, ".pyproc-python", "manifest.json");
 const frameConfigPath = join(installed.appDir, "pyproc-python-frame.json");
 await mkdir(distDir, { recursive: true });
 const browser = process.env.PYPROC_BROWSER || undefined;
-await writeFile(configPath, JSON.stringify({
-  schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") },
-  timeoutMs: TIMEOUT_MS,
-  browser: {
-    enabled: true,
-    ...(browser ? { executable: browser } : {}),
-    allowedOrigins: [targetOrigin],
-    maxRisk: "externalEffect",
-    actions: ["snapshot", "screenshot"],
-    methods: [],
-    externalEffects: "acknowledged",
-    purpose: "Python SDK product gate",
-    artifacts: { maxArtifactBytes: 8 * 1024 * 1024, maxTotalBytes: 16 * 1024 * 1024,
-      maxArtifacts: 8, inlineMaxBytes: 4 * 1024 * 1024, ttlMs: 120000 },
-  },
-}, null, 2));
+const mcpCli = binPath(installed.appDir, "pyproc-mcp");
+run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
+  "--out", ".pyproc-python", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
+  "--purpose", "Python-SDK-product-gate", "--acknowledge-effects",
+  "--action", "snapshot", "--action", "screenshot",
+  "--artifact-max-bytes", String(8 * 1024 * 1024), "--artifact-total-bytes", String(16 * 1024 * 1024),
+  "--artifact-max-count", "8", "--artifact-inline-bytes", String(4 * 1024 * 1024),
+  "--artifact-ttl-ms", "120000", ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
 await writeFile(frameConfigPath, JSON.stringify({
   schemaVersion: 1,
   engine: { root: join(ROOT, "vendor", "pyodide") },
@@ -134,7 +126,9 @@ try {
   check("wheel 설치본이 Python, checkpoint, cancel, permission, screenshot 여정을 완주",
     report.ok === true && report.operations === 14 && report.checkpoint > 0
       && report.attachmentBytes > 0 && report.cancelOutcome === "outcomeUnknown"
-      && report.timeoutOutcome === "outcomeUnknown" && report.perceptionEntityRef?.startsWith("entity:"),
+      && report.cancelTerminal === "outcomeUnknown" && report.timeoutOutcome === "outcomeUnknown"
+      && report.timeoutTerminal === "outcomeUnknown" && report.permissionTerminal === "rejected"
+      && report.successTerminal === "completed" && report.perceptionEntityRef?.startsWith("entity:"),
   `${report.attachmentBytes} bytes`);
   const frameJourney = await runAsync(wheelPython, [join(HERE, "frameJourney.py"), frameConfigPath,
     `${targetOrigin}/frame`], { cwd: installed.appDir,

@@ -566,6 +566,20 @@ Stable Node.js facade for the installed Control product, typed in
 This is a Node.js surface. Browser application code uses the root Machine entrance. The facade defines no
 new Control operation and performs no automatic effect retry.
 
+### Installed Machine Entrance commands
+
+- `pyproc-mcp init --recipe <name> ...` compiles `pythonOnly`, `observeLocal`, `authorizedBrowser`, or
+  `replayPinned` into `.pyproc/manifest.json`, a common MCP `client.json`, and exact next commands.
+- `--dry-run` performs path and authority validation without writing. Existing generated files require
+  `--overwrite`. The output directory must remain inside the selected project root.
+- `pyproc-control doctor --config <file>` verifies the strict manifest, installed package version, local engine
+  core and package digests, Machine browser, provider pins, operation catalog, and cleanup policy without launch.
+- `pyproc-control run --config <file> --code <python>` performs one `machine.run`, emits a completed JSON terminal,
+  and closes the owned product. `invoke` is the generic one-operation form.
+
+These commands add no root export or npm subpath. The expanded manifest remains the runtime authority. See
+[Machine Entrance](../usage/machineEntrance.md).
+
 ### `pyproc/worker`
 
 The worker asset entry (`src/processOs/worker.js`). Not an API to call: it exists so
