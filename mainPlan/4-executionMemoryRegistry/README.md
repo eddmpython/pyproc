@@ -1,6 +1,6 @@
 # Initiative 4: Execution Memory Registry 실행 계획
 
-상태: **Initiative 3 후행 대기**
+상태: **착수**
 
 이 문서는 대화 요약이 아니라 실제 계산과 browser 작업의 이어받기 지점을 durable record로 만드는 다섯
 번째 이니셔티브의 임시 실행 계획이다.

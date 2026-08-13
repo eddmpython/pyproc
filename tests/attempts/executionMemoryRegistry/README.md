@@ -55,4 +55,5 @@ Initiative 3가 졸업해 session의 suspended state가 실제 cold Machine과 �
 
 ## 판정
 
-후행 대기 중. Initiative 3 졸업 전에는 probe를 실행하지 않는다.
+진행 중. Initiative 3의 cold Machine과 exact generation 계약이 졸업했으므로 immutable revision,
+reference verification, CAS HEAD의 최소 반증 커널부터 실행한다.

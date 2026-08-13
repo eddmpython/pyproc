@@ -528,8 +528,8 @@ lease는 Machine과 owner epoch에 묶인다. stale UI와 다른 tab은 suspend,
 7. cleanup failure는 cold success가 아니라 incomplete다.
 8. memory 수치는 보조 artifact로만 남기고 public 0 MB 주장을 만들지 않는다.
 
-실험은
-[Initiative 3 campaign](../../tests/attempts/hibernatingMachineFleet/)에서 시작한다.
+지속 구현 계약과 검증 명령은
+[Machine Fleet specification](../specs/machineFleet/README.md)이 소유한다.
 
 ## Initiative 4 - Execution Memory Registry
 
