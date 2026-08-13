@@ -6,7 +6,7 @@
   <title>pyproc - a persistent Python computer in your browser</title>
   <meta name="description" content="A persistent Python computer in the browser: real CPython, durable workspaces, processes, rewindable history, and signed machine images. No application server.">
   <link rel="icon" href="assets/logo.svg">
-  <meta name="theme-color" content="#0a0f1c">
+  <meta name="theme-color" content="#101514">
   <!-- Social cards. The image is assets/socialCard.png (source: assets/socialCard.html), deployed with this page. -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="pyproc">
@@ -25,164 +25,205 @@
   <!-- This file is copied to the deploy root as index.html and served from there (pages.yml), so relative paths are root-relative. -->
   <script type="module" src="examples/siteChrome.js"></script>
 </head>
-<body>
-  <div class="wrap">
-    <header class="site">
-      <a class="logo" href="./" aria-label="pyproc home">
-        <img class="logoMark" src="assets/logo.svg" width="24" height="24" alt="">
-        <span><span class="py">py</span>proc</span>
-      </a>
-      <nav>
-        <a href="#demos">Demos</a>
-        <a href="#features">Features</a>
-        <a href="#build">Contract</a>
-        <a href="#install">Install</a>
-      </nav>
+<body class="landing">
+  <a class="skipLink" href="#content">Skip to content</a>
+
+  <header class="landingNav">
+    <a class="logo landingLogo" href="./" aria-label="pyproc home">
+      <img class="logoMark" src="assets/logo.svg" width="30" height="30" alt="">
+      <span>pyproc</span>
+    </a>
+    <nav class="landingLinks" aria-label="primary">
+      <a href="#product">Product</a>
+      <a href="#lifecycle">Lifecycle</a>
+      <a href="#demos">Demos</a>
+      <a href="#build">Contract</a>
+      <a href="#install">Install</a>
+    </nav>
+    <div class="landingChannels">
+      <a class="brandParent" href="https://eddmpython.com" aria-label="Visit eddmpython">by eddmpython</a>
       <sns-links></sns-links>
-    </header>
+    </div>
+  </header>
 
-    <!-- The mark leads the hero: mark, then slogan, then CTA, all centered, with the runnable example
-         below it left-aligned - centered code does not read. The mark comes from the same canonical
-         file as the header. -->
-    <section class="hero">
-      <img class="heroMark" src="assets/logo.svg" width="112" height="112" alt="pyproc" fetchpriority="high">
-      <h1>A persistent Python computer.<br><span class="accent">In your browser.</span></h1>
-      <p class="lead">One Machine owns a durable workspace, exact environment, real processes,
-      rewindable history, and signed images. CPython 3.14 on WebAssembly, zero runtime npm
-      dependencies, no application server. Chromium/Edge.</p>
-      <div class="row heroCta">
-        <a class="btn" href="examples/immortal.html">Open the Python Machine</a>
-        <a class="btn ghostBtn" href="https://github.com/eddmpython/pyproc">GitHub</a>
-        <code class="chip" id="installChip" title="click to copy">npm install pyproc</code>
+  <main id="content">
+    <section class="landingHero" id="product">
+      <div class="heroCopy">
+        <p class="eyebrow">PYPROC / BROWSER-NATIVE MACHINE</p>
+        <h1>The tab can close.<br><span>Your Python computer keeps going.</span></h1>
+        <p class="heroLead">Prepare Python once. Keep its memory, files, environment, and history across tabs and browser restarts. Rewind it, branch it, run real processes, then carry the whole Machine as a signed file.</p>
+        <div class="heroActions">
+          <a class="primaryAction" href="examples/immortal.html">Open the Python Machine</a>
+          <a class="secondaryAction" href="https://github.com/eddmpython/pyproc">View on GitHub</a>
+          <button class="installAction" id="installChip" type="button" title="Copy install command"><span>$</span> npm install pyproc</button>
+        </div>
+        <ul class="heroBoundary" aria-label="product boundaries">
+          <li>Real CPython</li>
+          <li>No application server</li>
+          <li>Exact-version native ESM</li>
+          <li>Chromium / Edge</li>
+        </ul>
       </div>
 
-      <!-- The hero console: it does not show the demo, it runs all of it here (examples/heroConsole.js
-           is canonical). Move between tabs and there is still one runtime, and the engine is not
-           downloaded before you press anything (a dynamic import). -->
-      <div class="panel heroDemo" id="heroConsole">
-        <div class="term">Loading the console...</div>
+      <div class="machineShowcase" aria-label="live pyproc machine">
+        <div class="machineTopline">
+          <span class="machineIdentity"><img src="assets/logo.svg" width="22" height="22" alt="">live machine</span>
+          <span class="machineState"><i></i> ready in this tab</span>
+        </div>
+        <!-- This is the product itself, not a recorded terminal. Every tab shares one lazily booted runtime. -->
+        <div class="heroDemo" id="heroConsole">
+          <div class="term">Loading the Machine...</div>
+        </div>
+        <noscript><p class="dim">The Machine runs real CPython in your tab, so it needs JavaScript.</p></noscript>
+        <div class="machineFooter">
+          <span>memory</span><b>durable</b><span>history</span><b>rewindable</b><span>processes</span><b>independent</b>
+        </div>
       </div>
-      <noscript><p class="dim">The console runs real CPython in your tab, so it needs JavaScript.</p></noscript>
     </section>
 
-    <section class="stats" aria-label="what the contract gives you">
-      <div class="stat"><b>N</b><span>independent interpreters<br>N GILs, real parallelism</span></div>
-      <div class="stat"><b>fork</b><span>a live interpreter<br>snapshot in, process out</span></div>
-      <div class="stat"><b>URL</b><span>fetch() into Python ASGI<br>no sockets, no backend</span></div>
-      <div class="stat"><b>1 file</b><span>a portable machine image<br>with disk and signature</span></div>
-      <div class="stat"><b>0</b><span>CDN requests on second<br>boot (offline-ready)</span></div>
+    <section class="contractRail" aria-label="what one Machine owns">
+      <p>ONE MACHINE OWNS</p>
+      <ul>
+        <li>execution</li>
+        <li>workspace</li>
+        <li>environment</li>
+        <li>processes</li>
+        <li>history</li>
+        <li>image</li>
+      </ul>
     </section>
-    <p class="dim" style="margin:.35rem 0 1rem">This page prints no benchmark headlines. A number on a landing page is a number you owe forever, and that debt steers the product. pyproc pays off when a product can prepare state once, restore it, or shard work across browser processes; single-kernel NumPy remains ordinary WebAssembly BLAS. Measure it on your own machine in Speed Lab.</p>
 
-    <h2 id="demos">The same demos, full page</h2>
-    <p class="dim" style="margin:.2rem 0 0">Every demo above runs in the hero console. These pages are the same thing with room to poke at it.</p>
-    <div class="cards">
-      <a class="card" href="examples/immortal.html">
-        <h3>Immortal Python Machine</h3>
-        <p>One Python state across tabs. Close the leader and another tab recovers memory and files locally.</p>
-      </a>
-      <a class="card" href="examples/agentSandbox.html">
-        <h3>The agent sandbox loop</h3>
-        <p>Prepare a Python environment once, checkpoint, let buggy code corrupt it, restore in milliseconds (no re-run), then branch two approaches from the same state. The agent retry loop, in the tab.</p>
-      </a>
-      <a class="card" href="examples/machine.html">
-        <h3>The Python Machine</h3>
-        <p>A computer that never turns off: close the tab, it hibernates as a few MB; reopen, it resumes. Export it as one signed .pymachine file and open it with a trusted key.</p>
-      </a>
-      <a class="card" href="examples/serverDev.html">
-        <h3>Server Dev</h3>
-        <p>FastAPI, SQLite, editable app.py, and a live iframe preview, all served by Python through a Service Worker virtual origin in this tab.</p>
-      </a>
-      <a class="card" href="examples/speedLab.html">
-        <h3>Speed Lab</h3>
-        <p>Run NumPy matrix multiply once on one Python worker, then shard the same job across 4 workers through the public machine.proc() pool. Measure it on your own machine; single-kernel BLAS is a separate axis.</p>
-      </a>
-      <a class="card" href="examples/terminal.html">
-        <h3>Terminal</h3>
-        <p>A real REPL: input() genuinely blocks (WebAssembly JSPI), and %undo time-travels the heap to before your last statement.</p>
-      </a>
-      <a class="card" href="examples/processOs.html">
-        <h3>Process OS</h3>
-        <p>Fork workers from a memory snapshot and run on real CPU cores in parallel. First visit reloads once to unlock SharedArrayBuffer.</p>
-      </a>
-      <a class="card" href="examples/basic.html">
-        <h3>Basics</h3>
-        <p>Boot CPython, run code, load numpy. The smallest possible start.</p>
-      </a>
+    <section class="landingSection lifecycleSection" id="lifecycle">
+      <div class="sectionIntro">
+        <p class="eyebrow">THE PRODUCT MODEL</p>
+        <h2>One Machine,<br>complete lifecycle.</h2>
+        <p>A runtime becomes a computer when its work survives, its history can move in both directions, and the result can leave the browser intact.</p>
+      </div>
+      <ol class="lifecycle" aria-label="Machine lifecycle">
+        <li><span>01</span><b>Open</b><p>Start a new Machine or revive a named durable one.</p><code>open({ name: "lab" })</code></li>
+        <li><span>02</span><b>Work</b><p>Run CPython with a real workspace and exact environment.</p><code>machine.run(code)</code></li>
+        <li><span>03</span><b>Commit</b><p>Close each execution boundary into durable history.</p><code>auto-commit</code></li>
+        <li><span>04</span><b>Branch</b><p>Try another future without contaminating the prepared state.</p><code>history.branch()</code></li>
+        <li><span>05</span><b>Carry</b><p>Export the complete state through an explicit trust gate.</p><code>.pymachine</code></li>
+      </ol>
+    </section>
+
+    <section class="landingSection proofSection" id="features">
+      <div class="sectionIntro proofIntro">
+        <p class="eyebrow">WHAT CHANGES</p>
+        <h2>Python stops being a disposable tab.</h2>
+        <p>pyproc changes the physical properties around the interpreter. The language stays Python. The surrounding Machine gains continuity, history, processes, and a portable identity.</p>
+      </div>
+
+      <div class="proofList">
+        <article class="proofItem">
+          <div class="proofNumber">01</div>
+          <div class="proofCopy"><p class="proofLabel">PERSIST</p><h3>Close the tab.<br>Keep the Machine.</h3><p>Completed work commits memory, files, and outcomes locally. When another tab takes over, it revives the same logical Python state instead of starting from zero.</p><a href="examples/immortal.html">See tab survival <span>↗</span></a></div>
+          <div class="proofDiagram persistDiagram" aria-hidden="true"><span>tab</span><i></i><span>commit</span><i></i><strong>same Machine</strong></div>
+        </article>
+
+        <article class="proofItem">
+          <div class="proofNumber">02</div>
+          <div class="proofCopy"><p class="proofLabel">REWIND</p><h3>Mistakes become<br>another branch.</h3><p>Checkpoint the prepared heap, let an attempt fail, then restore changed pages. Compare several futures from one clean origin and adopt only the result you want.</p><a href="examples/agentSandbox.html">Run the agent loop <span>↗</span></a></div>
+          <div class="proofDiagram historyDiagram" aria-hidden="true"><span class="origin">prepared</span><i></i><span class="bad">failed</span><i></i><span class="good">adopted</span></div>
+        </article>
+
+        <article class="proofItem">
+          <div class="proofNumber">03</div>
+          <div class="proofCopy"><p class="proofLabel">PARALLELIZE</p><h3>One snapshot.<br>Independent processes.</h3><p>A Web Worker is a process. Fork a prepared interpreter into independent workers, each with its own interpreter and GIL, then interrupt or replace them as a real process pool.</p><a href="examples/processOs.html">Open Process OS <span>↗</span></a></div>
+          <div class="proofDiagram processDiagram" aria-hidden="true"><strong>snapshot</strong><i></i><span>P1</span><span>P2</span><span>P3</span><span>PN</span></div>
+        </article>
+
+        <article class="proofItem">
+          <div class="proofNumber">04</div>
+          <div class="proofCopy"><p class="proofLabel">CARRY</p><h3>The file is<br>the computer.</h3><p>A signed Machine image carries heap state, files, environment identity, and history through an integrity envelope. Opening it is an explicit trust decision.</p><a href="examples/machine.html">Export a Machine <span>↗</span></a></div>
+          <div class="proofDiagram imageDiagram" aria-hidden="true"><img src="assets/logo.svg" width="42" height="42" alt=""><strong>computer.pymachine</strong><span>signed · portable · verified</span></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="landingSection demosSection" id="demos">
+      <div class="sectionIntro demosIntro">
+        <p class="eyebrow">RUNNABLE PROOF</p>
+        <h2>Do not take the landing page's word for it.</h2>
+        <p>Each surface below runs the public package in your browser. They are not mockups, recordings, or backend sessions.</p>
+      </div>
+      <div class="demoIndex">
+        <a href="examples/immortal.html"><span>01 / PERSISTENCE</span><h3>Immortal Python Machine</h3><p>Close the leader tab and recover the same state locally.</p><b>Open demo ↗</b></a>
+        <a href="examples/agentSandbox.html"><span>02 / HISTORY</span><h3>Agent sandbox loop</h3><p>Prepare, fail, rewind, branch, compare, and adopt.</p><b>Open demo ↗</b></a>
+        <a href="examples/processOs.html"><span>03 / PROCESSES</span><h3>Process OS</h3><p>Fork independent interpreters across real CPU cores.</p><b>Open demo ↗</b></a>
+        <a href="examples/serverDev.html"><span>04 / SERVER</span><h3>In-kernel web app</h3><p>Serve FastAPI through a real browser URL with no backend.</p><b>Open demo ↗</b></a>
+      </div>
+      <nav class="demoMore" aria-label="more demos">
+        <span>MORE SURFACES</span>
+        <a href="examples/machine.html">Machine image</a>
+        <a href="examples/terminal.html">Terminal</a>
+        <a href="examples/speedLab.html">Speed Lab</a>
+        <a href="examples/basic.html">Smallest start</a>
+      </nav>
+    </section>
+
+    <section class="landingSection buildSection">
+      <div class="sectionIntro buildIntro">
+        <p class="eyebrow">FOR PRODUCT BUILDERS</p>
+        <h2 id="build">Build on the Machine contract</h2>
+        <p>Use the gathered root entrances, named plumbing subpaths, and documented execution assets, never engine internals. These are the boundaries for extending pyproc without fragmenting the product.</p>
+      </div>
+      <div class="contractIndex">
+        <a href="https://github.com/eddmpython/pyproc#product-entrances"><span>01</span><div><h3>Product entrances</h3><p>Choose the public door by task and see the runnable proof behind it.</p></div><b>↗</b></a>
+        <a href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/capabilityMatrix.md"><span>02</span><div><h3>Capability matrix</h3><p>Compare product value, browser requirements, status, and hard boundaries.</p></div><b>↗</b></a>
+        <a href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md"><span>03</span><div><h3>Package contract</h3><p>Pin exact versions, keep imports clean, and deploy verified same-origin assets.</p></div><b>↗</b></a>
+        <a href="https://github.com/eddmpython/pyproc/blob/main/docs/operations/benchmarking.md"><span>04</span><div><h3>Benchmark contract</h3><p>Measure the structure honestly without turning temporary numbers into product claims.</p></div><b>↗</b></a>
+      </div>
+    </section>
+
+    <section class="installSection" id="install">
+      <div class="installCopy">
+        <p class="eyebrow">START HERE</p>
+        <h2>Put a Python Machine<br>inside your product.</h2>
+        <p>Pin an exact npm version. The package has no runtime npm dependencies and ships as native ESM without a build step.</p>
+      </div>
+      <div class="installPanel">
+        <div class="installCommand"><code>npm install pyproc</code><button type="button" id="installCopy">Copy</button></div>
+        <pre><code><span>// open a durable Machine and keep working</span>
+import { open } from "pyproc";
+
+const machine = await open({ name: "lab" });
+await machine.run("counter = globals().get('counter', 0) + 1");
+await machine.run("counter");</code></pre>
+        <p>Pin an exact npm version. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md">package contract</a>.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="landingFooter">
+    <div class="footerBrand">
+      <a class="logo" href="./"><img class="logoMark" src="assets/logo.svg" width="34" height="34" alt=""><span>pyproc</span></a>
+      <p>A persistent Python computer in your browser.</p>
     </div>
+    <div class="footerColumn"><b>Product</b><a href="#lifecycle">Lifecycle</a><a href="#demos">Demos</a><a href="#install">Install</a></div>
+    <div class="footerColumn"><b>Developers</b><a href="https://github.com/eddmpython/pyproc">GitHub</a><a href="https://www.npmjs.com/package/pyproc">npm</a><a href="https://github.com/eddmpython/pyproc#product-entrances">Documentation</a></div>
+    <div class="footerColumn"><b>Family</b><a href="https://eddmpython.com">eddmpython</a><a href="https://buymeacoffee.com/eddmpython">Support</a></div>
+    <p class="footerLegal">MPL-2.0 · built on Pyodide and WebAssembly · Chromium / Edge</p>
+  </footer>
 
-    <h2 id="features">The Machine primitives underneath</h2>
-    <div class="cards features">
-      <div class="card"><h3>Processes and fork</h3><p>Web Worker = process. Boot once, snapshot the heap, fork N interpreters: N GILs, N cores, kill/interrupt/respawn lifecycle.</p></div>
-      <div class="card"><h3>Checkpoint and time-travel</h3><p>Full-hash heap checkpoints at execution boundaries. Restore writes only the changed pages instead of re-running, guarded against silent corruption by a mutation counter.</p></div>
-      <div class="card"><h3>Portable machine images</h3><p>The whole running computer in one .pymachine file: SHA-256 integrity, explicit trust gate, and a determinism check before any delta is applied.</p></div>
-      <div class="card"><h3>uv-grade environments</h3><p>boot({ deterministic: true }) replays a declared environment: bare-heap snapshot restore, wheels served from an OPFS cache, and freeze() pins the lockfile.</p></div>
-      <div class="card"><h3>A server on a real URL</h3><p>The bundled service worker maps fetch("/pyproc/...") to your in-kernel FastAPI app: real URLs, zero sockets, no backend.</p></div>
-      <div class="card"><h3>Persistent disk and offline</h3><p>/home/web is a real OPFS-backed disk that survives kernels. Core assets cache so the second boot needs no network at all.</p></div>
-    </div>
-
-    <h2 id="used-by">Built-in integration patterns</h2>
-    <div class="cards">
-      <div class="card"><h3>In-kernel web apps</h3><p>The ASGI server lets a Python FastAPI app answer <code>fetch("/pyapi/...")</code> with no socket or backend.</p></div>
-      <div class="card"><h3>Local automation</h3><p>Runtime adoption, interrupt-driven cancellation, processes, and the value bridge support interactive Python work.</p></div>
-    </div>
-    <p class="dim" style="margin:.2rem 0 0">Capability detail (ASGI server, syscall bridge, interrupts, journal) stays one hop away: <code>machine.runtime</code> is the documented escape hatch on every machine handle.</p>
-
-    <h2 id="build">Build on the Machine contract</h2>
-    <p class="dim" style="margin:.2rem 0 0">Use the gathered root entrances, named plumbing subpaths, and documented execution assets, never engine internals. These are the boundaries for extending pyproc without fragmenting the product.</p>
-    <div class="cards">
-      <a class="card" href="https://github.com/eddmpython/pyproc#product-entrances">
-        <h3>Product entrances</h3>
-        <p>Start from the task: which public exports to import, and which runnable proof backs that capability.</p>
-      </a>
-      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/capabilityMatrix.md">
-        <h3>Capability matrix</h3>
-        <p>Decide what to enable by product value, status, browser requirements, runnable surfaces, gates, and hard boundaries.</p>
-      </a>
-      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md">
-        <h3>Package contract</h3>
-        <p>Pin exact versions, keep import boundaries clean, deploy same-origin assets, and verify the installed package.</p>
-      </a>
-      <a class="card" href="https://github.com/eddmpython/pyproc/blob/main/docs/operations/benchmarking.md">
-        <h3>Benchmark contract</h3>
-        <p>Reproduce S0-S5 artifacts before making speed claims. The headline is sharding and OS primitives, not blanket Python speed.</p>
-      </a>
-    </div>
-
-    <h2 id="install">Install</h2>
-    <div class="panel">
-      <div class="term">npm install pyproc</div>
-      <div class="term" style="margin-top:.6rem"><span class="dim">// boot a machine, compute in parallel, keep the state</span>
-import { boot } from "pyproc";
-
-const machine = await boot();                  <span class="dim">// real CPython in this tab</span>
-const pool = await machine.proc({ lanes: 4 }); <span class="dim">// fork 4 interpreters from one snapshot</span>
-await pool.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</div>
-      <p class="dim" style="margin:.7rem 0 0">Pin an exact npm version. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md">package contract</a>.</p>
-    </div>
-
-    <footer class="site">
-      <span>MPL-2.0 · built on <a href="https://pyodide.org">Pyodide</a>/WebAssembly · Chromium/Edge (JSPI + SharedArrayBuffer)</span><br>
-      <span><a href="https://github.com/eddmpython/pyproc">GitHub</a> · <a href="https://www.npmjs.com/package/pyproc">npm</a> · <a href="https://buymeacoffee.com/eddmpython">support</a></span>
-    </footer>
-  </div>
   <script type="module">
-    // Clicking the install chip copies to the clipboard; failing is harmless.
-    document.getElementById("installChip").addEventListener("click", async (e) => {
-      try { await navigator.clipboard.writeText("npm install pyproc"); e.target.textContent = "copied!"; setTimeout(() => { e.target.textContent = "npm install pyproc"; }, 1200); } catch (err) {}
-    });
+    const copyInstall = async (button) => {
+      try {
+        await navigator.clipboard.writeText("npm install pyproc");
+        const prior = button.textContent;
+        button.textContent = "Copied";
+        setTimeout(() => { button.textContent = prior; }, 1200);
+      } catch (err) {}
+    };
+    document.getElementById("installChip").addEventListener("click", (event) => copyInstall(event.currentTarget));
+    document.getElementById("installCopy").addEventListener("click", (event) => copyInstall(event.currentTarget));
 
-    // Attach the hero console. examples/heroConsole.js is canonical for the demo's definition,
-    // execution, and markup. This page is promoted to the deploy root, so the path is relative to
-    // examples/ (the local serve.mjs also maps "/" here).
+    // The live Machine and every gate keep their canonical implementation in heroConsole.js.
     const { mountHeroConsole, demos } = await import("./examples/heroConsole.js");
     const gateMode = new URLSearchParams(location.search).has("gate");
     const hero = mountHeroConsole(document.getElementById("heroConsole"), { gateMode });
 
-    // The example gate (?gate=1) drives every demo to completion through the same path a person
-    // takes when clicking the tabs one by one.
-    // As long as the demos are the runnable surface, the demos succeeding has to be part of
-    // what makes the gate green.
     if (gateMode) {
       const checks = [];
       for (const demo of demos) {
@@ -197,13 +238,12 @@ await pool.map("def _fn(n):\n    return sum(range(n))", [1e6, 1e6, 1e6, 1e6]);</
         }
         checks.push({ name: demo.id, pass, info: failure });
       }
-      const ok = checks.every((c) => c.pass);
-      // A failing demo has to say why. Without this the gate reported "machine:FAIL" and nothing else,
-      // so diagnosing it meant reproducing the whole tab sequence by hand.
-      const why = checks.filter((c) => !c.pass && c.info).map((c) => `${c.name}: ${c.info}`).join(" | ");
-      checks[0].info = checks.map((c) => `${c.name}:${c.pass ? "ok" : "FAIL"}`).join(" ") + (why ? ` || ${why}` : "");
+      const ok = checks.every((check) => check.pass);
+      const why = checks.filter((check) => !check.pass && check.info).map((check) => `${check.name}: ${check.info}`).join(" | ");
+      checks[0].info = checks.map((check) => `${check.name}:${check.pass ? "ok" : "FAIL"}`).join(" ") + (why ? ` || ${why}` : "");
       fetch("/gateReport", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ok, checks }),
       }).catch(() => {});
     }

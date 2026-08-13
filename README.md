@@ -24,11 +24,11 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=ff5a36&labelColor=12100e" alt="npm"></a>
-  <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=12100e" alt="ci"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-ff8a6a?labelColor=12100e" alt="license MPL-2.0"></a>
-  <img src="https://img.shields.io/badge/runtime_npm_dependencies-0-55d6a9?labelColor=12100e" alt="zero runtime npm dependencies">
-  <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-ff5a36?labelColor=12100e" alt="CPython 3.14 on WebAssembly">
+  <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=ff5a36&labelColor=101514" alt="npm"></a>
+  <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=101514" alt="ci"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-ff8a6a?labelColor=101514" alt="license MPL-2.0"></a>
+  <img src="https://img.shields.io/badge/runtime_npm_dependencies-0-55d6a9?labelColor=101514" alt="zero runtime npm dependencies">
+  <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-ff5a36?labelColor=101514" alt="CPython 3.14 on WebAssembly">
 </p>
 
 <p align="center">

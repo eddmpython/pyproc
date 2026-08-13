@@ -1792,16 +1792,13 @@ for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
   });
 }
 
-// 3.6) 브랜드: 마크 정본은 assets/logo.svg 하나다. 파비콘·헤더 로고·색이 여기서만 나온다.
+// 3.6) 브랜드: 마크 정본은 assets/logo.svg 하나다. 파비콘, 헤더 로고, 마크 색이 여기서 나온다.
 //      마크를 인라인으로 복제하거나(6쪽이 갈라진다), 마크와 CSS 색이 어긋나는 드리프트를 차단한다.
 section("브랜드");
 const logoSvg = readFileSync(join(ROOT, "assets", "logo.svg"), "utf8");
 const cssSrc = readFileSync(join(ROOT, "examples", "demo.css"), "utf8");
 const markColors = {
-  // 마크의 그라디언트 양 끝과 터미널 패널 색 = 브랜드 색의 출처.
-  markFrom: logoSvg.match(/<stop offset="0%" stop-color="(#[0-9a-f]{6})"\/>/)?.[1],
-  markTo: logoSvg.match(/<stop offset="100%" stop-color="(#[0-9a-f]{6})"\/>\s*<\/linearGradient>/)?.[1],
-  ink: logoSvg.match(/<path [^>]*fill="(#[0-9a-f]{6})"\/>/g)?.map((m) => m.match(/fill="(#[0-9a-f]{6})"/)[1])[0],
+  mark: logoSvg.match(/<path[\s\S]*?stroke="(#[0-9a-f]{6})"/)?.[1],
 };
 for (const [name, color] of Object.entries(markColors)) {
   check(`demo.css --${name}이 마크 실측색(${color})과 일치`, () => {
@@ -1810,6 +1807,19 @@ for (const [name, color] of Object.entries(markColors)) {
     if (declared !== color) throw new Error(`demo.css는 ${declared}, 마크는 ${color}`);
   });
 }
+check("logo.svg가 단색 한 획 Continuum P", () => {
+  if ((logoSvg.match(/<path\b/g) || []).length !== 1) throw new Error("마크 path는 하나여야 함");
+  if (/<(?:linear|radial)Gradient\b/.test(logoSvg)) throw new Error("형태보다 색에 의존하는 gradient 금지");
+  if (!/<path[\s\S]*?fill="none"[\s\S]*?stroke-linecap="round"/.test(logoSvg)) {
+    throw new Error("마크가 단색 연속선 계약을 벗어남");
+  }
+});
+check("socialCard가 같은 마크 색과 logo.svg 정본을 사용", () => {
+  const socialCard = readFileSync(join(ROOT, "assets", "socialCard.html"), "utf8");
+  const declared = socialCard.match(/--mark:\s*(#[0-9a-f]{6})/)?.[1];
+  if (declared !== markColors.mark) throw new Error(`socialCard는 ${declared}, 마크는 ${markColors.mark}`);
+  if (!socialCard.includes('src="logo.svg"')) throw new Error("socialCard가 logo.svg 정본을 안 씀");
+});
 const landing = readFileSync(join(ROOT, "examples", "index.html"), "utf8");
 for (const f of collect(join(ROOT, "examples"), [".html"], [])) {
   const html = readFileSync(f, "utf8");

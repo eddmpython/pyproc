@@ -3,12 +3,12 @@
        Every API line mirrors README quick-start code that the browser gates run in CI.
        Palette source: examples/demo.css (brand marks in assets/logo.svg). -->
   <style>
-    .t { font-size: 15px; fill: #e2e8f0; }
-    .dim { fill: #94a3b8; }
-    .p { fill: #5b8cff; }
-    .ok { fill: #00d4c8; }
-    .vi { fill: #a78bfa; }
-    .red { fill: #ff6b7c; }
+    .t { font-size: 15px; fill: #f5f3ee; }
+    .dim { fill: #aaa095; }
+    .p { fill: #ff8a6a; }
+    .ok { fill: #55d6a9; }
+    .vi { fill: #ff5a36; }
+    .red { fill: #ff6b6b; }
     .anim { opacity: 0; }
     /* Scene windows over one 30s loop. Lines reveal inside their scene group. */
     .s1 { animation: s1 30s linear infinite; }
@@ -43,13 +43,13 @@
   </style>
 
   <!-- window chrome -->
-  <rect x="8" y="8" width="864" height="454" rx="14" fill="#0a0f1c" stroke="#1e2a44"/>
-  <rect x="8" y="8" width="864" height="40" rx="14" fill="#111a2e"/>
-  <rect x="8" y="34" width="864" height="14" fill="#111a2e"/>
-  <circle cx="34" cy="28" r="6" fill="#ff6b7c"/>
+  <rect x="8" y="8" width="864" height="454" rx="14" fill="#101514" stroke="#303836"/>
+  <rect x="8" y="8" width="864" height="40" rx="14" fill="#181d1b"/>
+  <rect x="8" y="34" width="864" height="14" fill="#181d1b"/>
+  <circle cx="34" cy="28" r="6" fill="#ff6b6b"/>
   <circle cx="56" cy="28" r="6" fill="#f5c518"/>
-  <circle cx="78" cy="28" r="6" fill="#00d4c8"/>
-  <text x="440" y="33" text-anchor="middle" font-size="13" fill="#94a3b8">pyproc · a browser tab</text>
+  <circle cx="78" cy="28" r="6" fill="#55d6a9"/>
+  <text x="440" y="33" text-anchor="middle" font-size="13" fill="#aaa095">pyproc · a browser tab</text>
 
   <!-- scene 1: boot and build state -->
   <g class="anim s1">
@@ -63,7 +63,7 @@
 
   <!-- scene 2: the tab is killed -->
   <g class="anim s2">
-    <rect x="9" y="49" width="862" height="412" fill="#060b15"/>
+    <rect x="9" y="49" width="862" height="412" fill="#0c0f0e"/>
     <text class="red" x="440" y="235" text-anchor="middle" font-size="34" font-weight="bold">✕ the tab is killed</text>
     <text class="dim" x="440" y="275" text-anchor="middle" font-size="16">the machine is not</text>
   </g>
@@ -87,11 +87,11 @@
 
   <!-- end card -->
   <g class="anim end">
-    <rect x="9" y="49" width="862" height="412" fill="#060b15"/>
-    <text x="440" y="225" text-anchor="middle" font-size="24" font-weight="bold" fill="#e2e8f0">A persistent Python computer in your browser.</text>
+    <rect x="9" y="49" width="862" height="412" fill="#0c0f0e"/>
+    <text x="440" y="225" text-anchor="middle" font-size="24" font-weight="bold" fill="#f5f3ee">A persistent Python computer in your browser.</text>
     <text x="440" y="268" text-anchor="middle" font-size="16" class="ok">npm install pyproc</text>
   </g>
 
   <!-- footer -->
-  <text x="440" y="440" text-anchor="middle" font-size="12" fill="#94a3b8">no application server · real CPython · the live demo runs this in your tab</text>
+  <text x="440" y="440" text-anchor="middle" font-size="12" fill="#aaa095">no application server · real CPython · the live demo runs this in your tab</text>
 </svg>
