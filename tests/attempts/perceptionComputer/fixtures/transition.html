@@ -1,0 +1,6 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Transition</title><body><main><h1>Transition evidence</h1>
+<button id="submit">Submit order</button><p role="status">Ready</p></main><script>
+document.getElementById('submit').onclick=async()=>{await fetch('/accepted',{method:'POST'});document.querySelector('[role=status]').textContent='Accepted';};
+setTimeout(()=>fetch('/accepted',{method:'POST',headers:{'X-Unrelated':'1'}}),50);
+</script></body></html>

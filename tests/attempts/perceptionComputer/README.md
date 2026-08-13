@@ -46,17 +46,18 @@ action, expected transition을 소유한다. model trial은 보조 artifact로�
 10. baseline이 성공한 fixture action을 전부 성공하고, baseline이 표현하지 않는 unknown, conflict,
     effect proof, replay 축을 모두 반환한다.
 
-## 예정 probe
+## 실행 probe
 
 | probe | 질문 | 필수 음성 시험 |
 |---|---|---|
 | `baselineProbe.mjs` | pinned Playwright snapshot과 같은 fixture state를 재현하는가 | option 또는 browser version 불일치 거부 |
-| `capsuleBudgetProbe.html` | large page에서 최소 충분 capsule인가 | oracle fact 누락과 omitted 미보고 거부 |
-| `activePerceptionProbe.html` | pixel을 unresolved claim에만 쓰는가 | semantic task screenshot 생성 거부 |
-| `temporalIdentityProbe.html` | rerender, reorder, navigation identity가 정직한가 | old capability 사용 거부 |
-| `capabilityFusionProbe.html` | observed UI와 reported WebMCP tool을 구분하는가 | conflict 자동 실행 거부 |
-| `instructionBoundaryProbe.html` | page data가 authority를 오염시키지 않는가 | hidden label과 chained page instruction effect 0 |
-| `transitionProofProbe.html` | DOM과 network evidence를 정확히 상관하는가 | unrelated response와 post-send death 오판 거부 |
+| `worldModelProbe.mjs` | claim, conflict, epoch, rollback이 atomic한가 | raw provider ID 주입과 partial commit 거부 |
+| `capsuleBudgetProbe.mjs` | large page에서 최소 충분 capsule인가 | oracle fact 누락과 omitted 미보고 거부 |
+| `activePerceptionProbe.mjs` | pixel을 unresolved claim에만 쓰는가 | semantic task screenshot 생성 거부 |
+| `temporalIdentityProbe.mjs` | rerender, reorder, navigation identity가 정직한가 | old capability 사용 거부 |
+| `capabilityFusionProbe.mjs` | observed UI와 reported WebMCP tool을 구분하는가 | conflict 자동 실행 거부 |
+| `instructionBoundaryProbe.mjs` | page data가 authority를 오염시키지 않는가 | page instruction effect 0 |
+| `transitionProofProbe.mjs` | DOM과 network evidence를 정확히 상관하는가 | unrelated response와 post-send death 오판 거부 |
 | `replayCapsuleProbe.mjs` | live effect 없이 같은 상황과 증거를 재현하는가 | digest 또는 input mutation 거부 |
 
 ## 모듈화 설계 후보
@@ -78,7 +79,12 @@ profile 여부는 probe가 wire 호환성을 판정한 뒤 결정한다.
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-08-13 | 조사와 gate 설계 | Playwright MCP, CDP, WebMCP, APX 1.0 문서 대조 | probe 미실행 | screenshot 또는 tree 확대가 아니라 situation model 가설로 좁힘 | exact baseline pin과 `baselineProbe.mjs` |
+| 2026-08-13 | exact Playwright 기준선 | Playwright 1.62.0, Edge 151.0.4129.78, Windows x64, 1280x800 | ARIA+box, role locator, bounding box, element screenshot, click reach PASS, artifact digest 재현 | 약한 대조군 금지, 동일 fixture에서 전체 허용 reach를 기준선으로 고정 | world와 capsule prototype |
+| 2026-08-13 | WorldModel과 SituationCompiler | deterministic fixture graph와 120개 noise entity | 8 prototype probe PASS, semantic visual artifact 0, old capability provider call 0 | `apx.situation`을 graph 1.0과 분리한 representation으로 승격 가능 | schema와 본진 승격 |
+| 2026-08-13 | authority와 transition 반증 | reported tool, page instruction, document replacement, unrelated response | authority widening 0, weak-only confirmed 0, replay provider call 0 | broker capability와 transition proof를 독립 불변식으로 유지 | installed provider 통합 |
 
 ## 판정
 
-대기 중. 개념과 반증 gate만 확정했고 Initiative 0 졸업 전에는 browser probe를 실행하지 않는다.
+Prototype 졸업. exact Playwright 기준선과 deterministic oracle을 고정했고, world atomicity, 최소 충분
+projection, active perception, capability boundary, transition proof, replay의 양성 및 음성 probe가 모두
+통과했다. 다음 단계는 shortcut 없이 `scripts/perception/` 책임 모듈과 strict schema로 다시 작성하는 것이다.
