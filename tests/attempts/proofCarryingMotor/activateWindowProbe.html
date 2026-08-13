@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Proof-Carrying Motor effect window probe</title>
+  <style>
+    body { margin: 0; font: 16px system-ui; }
+    #surface { position: relative; width: 640px; height: 360px; padding: 40px; }
+    button { position: absolute; width: 120px; height: 44px; }
+    #primary { left: 80px; top: 90px; }
+    #duplicate { left: 280px; top: 90px; }
+    #overlay { display: none; position: absolute; left: 70px; top: 80px; width: 140px; height: 64px;
+      background: rgba(200, 0, 0, 0.4); z-index: 10; }
+  </style>
+</head>
+<body>
+<main id="surface">
+  <button id="primary" data-entity="entity:save">Save</button>
+  <button id="duplicate" data-entity="entity:other-save">Save</button>
+  <div id="overlay"></div>
+</main>
+<script>
+globalThis.motorError = null;
+addEventListener("error", (event) => { globalThis.motorError = String(event.error?.stack || event.message || event); });
+addEventListener("unhandledrejection", (event) => {
+  globalThis.motorError = String(event.reason?.stack || event.reason || event);
+});
+</script>
+<script type="module">
+const checks = [];
+const check = (name, pass) => checks.push({ name, pass: Boolean(pass) });
+const target = document.querySelector("#primary");
+const overlay = document.querySelector("#overlay");
+let effects = 0;
+target.addEventListener("pointerdown", () => { effects += 1; });
+
+const intent = Object.freeze({ intent: "activate", target: { spaceRef: "space:fixture",
+  entityRef: "entity:save", worldRef: "world:fixture", surfaceEpoch: "document:1" },
+desired: { activated: true } });
+
+class EffectWindow {
+  constructor() { this.phase = "preContact"; this.providerCalls = 0; this.boundary = null; this.released = false; }
+  approach() { if (this.phase !== "preContact") throw Object.assign(new Error("frozen"),
+    { code: "ACTUATION_GESTURE_ABORTED" }); }
+  cross(boundary) { this.phase = "committedGesture"; this.boundary = boundary; }
+  sent() { if (this.phase !== "committedGesture") throw new Error("outside window"); this.providerCalls += 1; }
+  release() { if (this.released) return false; this.released = true; return true; }
+  close() { this.phase = "postContact"; return this.inspect(); }
+  inspect() { return { phase: this.phase, crossed: Boolean(this.boundary), providerCalls: this.providerCalls }; }
+}
+
+function liveBinding(candidateCount = 1) {
+  if (candidateCount !== 1) throw Object.assign(new Error("ambiguous"),
+    { code: "ACTUATION_TARGET_AMBIGUOUS" });
+  return Object.freeze({ spaceRef: intent.target.spaceRef, worldRef: intent.target.worldRef,
+    entityRef: intent.target.entityRef, surfaceEpoch: intent.target.surfaceEpoch,
+    actuatorKind: "browserInput", invariants: [{ kind: "role", value: "button" },
+      { kind: "name", value: "Save" }, { kind: "entity", value: intent.target.entityRef }],
+    candidateCount, uniqueness: "unique", freshUntil: Date.now() + 10000 });
+}
+
+function contactPoint(element) {
+  const rect = element.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+function topHit(element) {
+  const point = contactPoint(element);
+  return document.elementFromPoint(point.x, point.y) === element;
+}
+
+const binding = liveBinding();
+
+target.style.left = "110px";
+await new Promise((resolve) => requestAnimationFrame(resolve));
+const movingWindow = new EffectWindow();
+movingWindow.approach({ kind: "reacquire", entityRef: intent.target.entityRef });
+check("moving target is reacquired before contact", topHit(target));
+movingWindow.cross("pointer.down");
+target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+movingWindow.sent({ kind: "pointerDown" });
+target.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+movingWindow.release({ kind: "pointerUp" });
+const receipt = { effectWindow: movingWindow.close(), receiptSha256: "fixture" };
+check("one contact produces one provider effect", effects === 1 && receipt.effectWindow.providerCalls === 1);
+
+overlay.style.display = "block";
+await new Promise((resolve) => requestAnimationFrame(resolve));
+const blockedWindow = new EffectWindow();
+blockedWindow.approach({ kind: "move" });
+const effectsBeforeBlocked = effects;
+check("overlay blocks contact before boundary", !topHit(target));
+check("blocked target sends no effect", effects === effectsBeforeBlocked && blockedWindow.inspect().crossed === false);
+
+let ambiguityRejected = false;
+try { liveBinding(2); } catch (error) { ambiguityRejected = error.code === "ACTUATION_TARGET_AMBIGUOUS"; }
+check("duplicate semantic candidate cannot become a binding", ambiguityRejected);
+
+let postContactFallbackRejected = false;
+try { movingWindow.approach({ kind: "fallback", provider: "replay" }); }
+catch (error) { postContactFallbackRejected = error.code === "ACTUATION_GESTURE_ABORTED"; }
+check("fallback after contact is rejected", postContactFallbackRejected && effects === 1);
+
+globalThis.motorProbe = Object.freeze({ checks, effects, receiptSha256: receipt.receiptSha256 });
+</script>
+</body>
+</html>
