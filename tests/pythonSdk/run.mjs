@@ -61,6 +61,7 @@ const distDir = join(installed.tmp, "pythonDist");
 const wheelVenv = join(installed.tmp, "wheelVenv");
 const sourceVenv = join(installed.tmp, "sourceVenv");
 const configPath = join(installed.appDir, ".pyproc-python", "manifest.json");
+const memoryRoot = join(installed.appDir, ".pyproc-python-memory");
 const frameConfigPath = join(installed.appDir, "pyproc-python-frame.json");
 await mkdir(distDir, { recursive: true });
 const browser = process.env.PYPROC_BROWSER || undefined;
@@ -72,7 +73,8 @@ run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installe
   "--action", "snapshot", "--action", "screenshot",
   "--artifact-max-bytes", String(8 * 1024 * 1024), "--artifact-total-bytes", String(16 * 1024 * 1024),
   "--artifact-max-count", "8", "--artifact-inline-bytes", String(4 * 1024 * 1024),
-  "--artifact-ttl-ms", "120000", ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
+  "--artifact-ttl-ms", "120000", "--execution-memory-root", memoryRoot,
+  ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
 await writeFile(frameConfigPath, JSON.stringify({
   schemaVersion: 1,
   engine: { root: join(ROOT, "vendor", "pyodide") },
@@ -116,7 +118,7 @@ try {
     wheelMetadata.includes("Version: 0.0.21") && sourceMetadata.includes("Version: 0.0.21"));
 
   const protocol = run(sourcePython, [join(HERE, "protocolContract.py")], { cwd: installed.appDir });
-  check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("19 fixtures"));
+  check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("22 fixtures"));
 
   const productPath = join(installed.appDir, "node_modules", ".bin");
   const journey = await runAsync(wheelPython, [join(HERE, "productJourney.py"), configPath,
@@ -124,12 +126,12 @@ try {
     env: { ...process.env, PATH: `${productPath}${delimiter}${process.env.PATH || ""}` } });
   const report = JSON.parse(journey.stdout.trim().split(/\r?\n/).at(-1));
   check("wheel 설치본이 Python, checkpoint, cancel, permission, screenshot 여정을 완주",
-    report.ok === true && report.operations === 17 && report.checkpoint > 0
+    report.ok === true && report.operations === 26 && report.checkpoint > 0
       && report.attachmentBytes > 0 && report.cancelOutcome === "outcomeUnknown"
       && report.cancelTerminal === "outcomeUnknown" && report.timeoutOutcome === "outcomeUnknown"
       && report.timeoutTerminal === "outcomeUnknown" && report.permissionTerminal === "rejected"
       && report.successTerminal === "completed" && report.perceptionEntityRef?.startsWith("entity:")
-      && report.situationRef?.startsWith("situation:"),
+      && report.situationRef?.startsWith("situation:") && report.executionMemory === true,
   `${report.attachmentBytes} bytes`);
   const frameJourney = await runAsync(wheelPython, [join(HERE, "frameJourney.py"), frameConfigPath,
     `${targetOrigin}/frame`], { cwd: installed.appDir,

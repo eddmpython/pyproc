@@ -74,6 +74,15 @@ emit no native identifier. `browserAutomation.js` composes perception with polic
 orchestration. MCP, Control, recording, replay, and Python code adapt this one result rather than reimplementing
 it. The directory ships in the tarball but is not an npm JavaScript export.
 
+`scripts/executionMemory/` owns the installed filesystem registry above those existing artifacts.
+`executionMemoryCanonical.js` owns the closed revision schema and digest;
+`fileExecutionMemoryStore.js` owns immutable objects, session HEAD compare-and-swap, locks, and confinement;
+`executionMemoryArtifacts.js` captures and reverifies minimal Machine, situation, recording, evidence, and
+permission sidecars; `executionMemoryRegistry.js` owns publication, completion, retention, and signed handoff;
+and `executionMemoryTools.js` alone adapts it to shared Control and MCP operations. The directory may depend on
+state-bundle, perception, recording, and Evidence Pack validators. Those lower producers do not import the
+registry. It is publicly composed only through the existing `pyproc/control` subpath.
+
 ## Layer ranks
 
 The layer contract is a total order, and every import edge must point downward. Peers do not import peers.

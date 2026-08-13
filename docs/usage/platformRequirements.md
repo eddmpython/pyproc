@@ -23,6 +23,7 @@ This table states the technical conditions each pyproc capability needs. It is n
 | Terminal, borrowed syscalls, subprocess, in-kernel ASGI server | required | required | - | The synchronous blocking paths depend on JSPI |
 | Process OS (fork/forkMany/map/mapArray/matmul), sockets, interrupts, multi-tab persistence using SAB capabilities | required | required | required | Only under `crossOriginIsolated` |
 | Hibernating Machine Fleet with `pyproc-worker` guests | required | - | - | Dedicated module Workers and durable storage; exact environment fingerprint required for cold resume |
+| Installed Execution Memory | required | - | - | Node 22, a private writable filesystem root, exact sidecar bytes, and an independently protected handoff trust key |
 
 ## Engine
 
@@ -35,6 +36,10 @@ This table states the technical conditions each pyproc capability needs. It is n
 - **Peak memory is the resident base plus accumulated deltas.** Restore-based reactivity keeps a base - a full copy of the heap - resident in RAM, and checkpoint deltas accumulate on top. The relief valves are `history.prune` (`pruneTo`) and `dispose`; `saveBase` offloads the base to OPFS but does not reduce RAM, because the restore path assumes the base stays resident.
 - **In the process OS each worker is an independent interpreter with an independent heap.** N workers means N independent Python heaps consuming real memory - and in exchange, N independent GILs, which is physical parallelism. Snapshot-fork shares the initial state through a SAB to avoid a full copy per worker, but once workers diverge each owns its own state.
 - **A cold Fleet Machine releases execution owners, not all browser memory.** `createMachineFleet` commits and verifies the whole durable Web Computer before terminating its adapters and Worker-hosted guests. Cached engine assets, OPFS generations, the Fleet registry, and Chromium process overhead remain. Public inspection reports owner counts and does not promise a numeric MB drop.
+- **Execution Memory uses host disk, not browser OPFS.** The installed Control product stores immutable revisions,
+  content-addressed sidecars, session HEAD files, locks, exports, and its local signing identity under the configured
+  absolute root. Keep that directory private, writable only by the product identity, and outside source control.
+  Browser application code that has no Node filesystem uses the Machine and Fleet APIs instead.
 - Measurements for large heaps (hundreds of MB and up) and for low-end or mobile devices are not posted on public surfaces. Measure them on your own machine with the [Speed Lab](../../examples/speedLab.html). Development measurements live in [benchmarking.md](../operations/benchmarking.md), the ledgers, and the artifacts.
 
 ### Easing reactive memory pressure (by workload)

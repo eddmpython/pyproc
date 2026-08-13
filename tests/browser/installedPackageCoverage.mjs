@@ -20,6 +20,7 @@ export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
       "`registerPyProcServiceWorker`",
       "`PyProcControlClient`",
       "`PerceptionClient`",
+      "`createExecutionMemoryRegistry`",
       "a `commitState`/`openState` kernel round trip",
       "the four installed bins",
     ]),

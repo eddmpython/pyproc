@@ -65,6 +65,28 @@ with PyProcClient.start(".pyproc/manifest.json") as client:
 the protocol `code`, `outcome`, and retryability. Machine state persists for the life of the client. `reset()`
 restores the prepared boot checkpoint.
 
+## Execution Memory
+
+Add `--execution-memory-root /absolute/private/pyproc-memory` to `pyproc-mcp init`. The Python client then uses
+the same immutable revisions as JavaScript and MCP:
+
+```python
+project = {
+    "workspaceId": "workspace:forecast",
+    "commit": "exact-commit",
+    "treeSha256": "sha256:...",
+    "diffSha256": "sha256:...",
+    "untracked": False,
+}
+created = client.createExecutionSession("session:forecast", project)
+opened = client.openExecutionSession("session:forecast")
+assert created.output["contentSha256"] == opened.output["contentSha256"]
+```
+
+`checkpointExecutionSession`, `completeExecutionSession`, `listExecutionSessions`,
+`inspectExecutionSession`, `exportExecutionHandoff`, and `importExecutionHandoff` map directly to the Control
+operations. The registry persists state, not the client object. See [Execution Memory](executionMemory.md).
+
 ## Browser automation and screenshots
 
 Browser operations appear only when the manifest grants automation authority. Risk is fixed by the product
@@ -184,6 +206,8 @@ each into a separate clean virtual environment, and runs these installed-package
 - permission denial before browser effect;
 - APX query through both Native CDP and FrameSpace;
 - real browser open, attach, PNG capture, SHA-256 verification, artifact deletion, and detach.
+- real Machine image capture, immutable Execution Memory publication, reopen, and list through the installed
+  Python wheel.
 
 Chrome on Ubuntu and Edge on Windows run the same gate in CI.
 ## Repository experience verification

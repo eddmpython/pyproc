@@ -28,8 +28,14 @@ const VALUE_OPTIONS = new Map([
   ["--recording-sha256", "recordingSha256"],
   ["--start-cursor", "startCursor"],
   ["--prefix-sha256", "prefixSha256"],
+  ["--execution-memory-root", "executionMemoryRoot"],
+  ["--execution-memory-import-root", "executionMemoryImportRoots"],
+  ["--execution-memory-secret-env", "executionMemorySecretEnv"],
 ]);
-const REPEATABLE = new Set(["allowedOrigins", "actions", "methods", "fileRoots"]);
+const REPEATABLE = new Set([
+  "allowedOrigins", "actions", "methods", "fileRoots", "executionMemoryImportRoots",
+  "executionMemorySecretEnv",
+]);
 const FLAG_OPTIONS = new Map([
   ["--acknowledge-effects", "acknowledgeEffects"],
   ["--overwrite", "overwrite"],
@@ -134,6 +140,22 @@ function artifactsFrom(raw) {
     positiveInteger(raw[rawKey], label, maximum)]));
 }
 
+function executionMemoryFrom(raw, projectRoot) {
+  const present = ["executionMemoryRoot", "executionMemoryImportRoots", "executionMemorySecretEnv"]
+    .some((key) => raw[key] !== undefined);
+  if (!present) return undefined;
+  if (!raw.executionMemoryRoot) {
+    throw new TypeError("Execution Memory options require --execution-memory-root");
+  }
+  const absolute = (value) => isAbsolute(value) ? value : resolve(projectRoot, value);
+  return {
+    enabled: true,
+    root: absolute(raw.executionMemoryRoot),
+    importRoots: (raw.executionMemoryImportRoots || []).map(absolute),
+    secretEnv: raw.executionMemorySecretEnv || [],
+  };
+}
+
 export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } = {}) {
   if (!Array.isArray(argv)) throw new TypeError("pyproc-mcp init arguments must be an array");
   const raw = parseRaw(argv);
@@ -142,6 +164,7 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
   const recording = recordingFrom(raw, projectRoot);
   const viewport = viewportFrom(raw);
   const artifacts = artifactsFrom(raw);
+  const executionMemory = executionMemoryFrom(raw, projectRoot);
   const profile = {
     recipe: raw.recipe,
     ...(raw.engineRoot === undefined ? {} : {
@@ -164,6 +187,7 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
     ...(viewport === undefined ? {} : { viewport }),
     ...(artifacts === undefined ? {} : { artifacts }),
     ...(recording === undefined ? {} : { recording }),
+    ...(executionMemory === undefined ? {} : { executionMemory }),
   };
   return Object.freeze({
     projectRoot,

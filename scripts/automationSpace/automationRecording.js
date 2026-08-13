@@ -434,6 +434,19 @@ export async function loadAutomationRecording(file) {
   }
 }
 
+export async function snapshotAutomationRecording(file, sourceRecording) {
+  const recording = structuredClone(sourceRecording);
+  verifyAutomationRecording(recording);
+  const artifacts = new Map();
+  for (const [artifactRef, artifact] of Object.entries(recording.artifacts)) {
+    const { bytes } = descriptorArtifactBytes(artifactRef, artifact);
+    artifacts.set(artifactRef, bytes || await readExternalArtifact({ file,
+      artifactGeneration: recording.artifactGeneration }, artifactRef, artifact));
+  }
+  recordingArtifacts.set(recording, artifacts);
+  return recording;
+}
+
 export async function readAutomationRecordingArtifact(recording, artifactRef, { offset = 0, length = null } = {}) {
   const artifact = recording?.artifacts?.[artifactRef];
   if (!artifact) throw recordingError("AUTOMATION_RECORDING_ARTIFACT_MISSING", `recording artifact is unavailable: ${artifactRef}`);

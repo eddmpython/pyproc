@@ -92,6 +92,24 @@ Advanced bounded options include repeated `--method` and `--file-root`, viewport
 mobile and touch flags, and artifact byte, count, inline, and TTL limits. File roots remain absolute and existing.
 Origins remain exact HTTP(S) origins. Wildcards, credentials, paths, queries, and fragments are rejected.
 
+## Durable Execution Memory
+
+Any recipe can opt into the same immutable session registry without editing the generated manifest:
+
+```sh
+npx pyproc-mcp init \
+  --recipe pythonOnly \
+  --engine-root ./vendor/pyodide \
+  --execution-memory-root ./.pyproc/memory \
+  --execution-memory-import-root ./approved-handoffs \
+  --execution-memory-secret-env WORKSPACE_SECRET
+```
+
+Relative memory and import paths resolve against the project root and become absolute in `manifest.json`.
+Import roots and secret environment-variable names are repeatable. The initializer requires the named variable
+to exist and contain at least eight bytes, but persists only its name. It never writes the secret value. Omit
+all three options to keep Execution Memory closed. See [Execution Memory](executionMemory.md).
+
 ## Pinned replay
 
 `replayPinned` accepts an existing recording only with its identity and final digest:

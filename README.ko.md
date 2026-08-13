@@ -68,6 +68,7 @@
 - [형태가 값을 하는 자리](#형태가-값을-하는-자리)
 - [Web Computer 실행](#web-computer-실행)
 - [Machine Fleet 동면](#machine-fleet-동면)
+- [Execution Memory로 작업 재개](#execution-memory로-작업-재개)
 - [능력 경로](#능력-경로)
 - [의존성 경계](#의존성-경계)
 - [셋업](#셋업)
@@ -630,6 +631,34 @@ active command, pending approval, unresolved effect, `outcomeUnknown`, unsaved s
 않는다. cold Machine은 Fleet을 통한 live computer를 소유하지 않지만 메모리 0 주장은 아니다. Chromium,
 cache asset, OPFS state, registry는 자원을 계속 쓴다. [Machine Fleet 사용법](docs/usage/machineFleet.md)과
 [명세](docs/specs/machineFleet/README.md)를 참고한다.
+
+## Execution Memory로 작업 재개
+
+Execution Memory는 caller가 무엇을 말했다는 대화문이 아니라, 작업을 계속하려면 무엇이 참이어야 하는지를
+기록한다. immutable session revision은 exact repository identity, portable 또는 cold 증명이 있는 Machine
+generation, branch와 checkpoint label, SituationCapsule, Automation Recording 경계, permission manifest,
+Evidence Pack을 연결한다. compare-and-swap HEAD가 stale writer의 최신 결정 덮어쓰기를 막는다.
+
+```js
+import { PyProcControlClient } from "pyproc/control";
+
+const client = await PyProcControlClient.start("./pyproc.json");
+await client.runPython("prepared = [10, 20, 30]");
+const created = await client.createExecutionSession("session:forecast", projectIdentity);
+
+await client.checkpointExecutionSession(
+  "session:forecast",
+  created.output.contentSha256,
+  { state: "active", branch: "candidate:checked", checkpoint: "checkpoint:7",
+    outcomeUnknown: false, pendingIntentSha256: null },
+);
+```
+
+완료는 같은 repository identity에 대응하는 verified Evidence Pack을 요구한다. signed handoff는 revision
+chain을 검증하고 도달 가능한 sidecar만 복사하지만, 요청 permission은 별도의 exact 승인을 받아야 한다.
+browser cookie, ambient profile state, 기록되지 않은 effect, 대화문은 실행 상태가 아니다. 제품 manifest의
+`executionMemory`에서 명시적으로 켠다. [Execution Memory 사용법](docs/usage/executionMemory.md)과
+[명세](docs/specs/executionMemory/README.md)를 참고한다.
 
 ## 능력 경로
 

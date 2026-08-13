@@ -114,6 +114,7 @@ export async function assertAutomationRecordingContract() {
     assert.equal(locked?.code, "AUTOMATION_RECORDING_LOCKED");
     const inspected = await recordingRouter.invoke("automation.space.inspect", {});
     assert.equal(inspected.recording.mode, "record");
+    assert.equal(inspected.recording.prefixSha256, "0".repeat(64));
     assert.deepEqual(await recordingRouter.invoke("automation.observe", { expectedRisk: "read" }), { title: "recorded" });
     assert.deepEqual(await recordingRouter.invoke("automation.observe", {
       expectedRisk: "read", representation: "apx.graph",
@@ -127,6 +128,10 @@ export async function assertAutomationRecordingContract() {
     assert.equal(captured.results[0].dataBase64, png.toString("base64"));
     const recordedError = await errorOf(() => recordingRouter.invoke("automation.act", { fail: true }));
     assert.equal(recordedError?.outcome, "outcomeUnknown");
+    const liveSnapshot = await recordingRouter.snapshotRecording();
+    assert.equal(liveSnapshot.recording.entries.length, 6);
+    assert.equal(liveSnapshot.recording.finalSha256, liveSnapshot.finalSha256);
+    assert.equal((await errorOf(() => loadAutomationRecording(file)))?.code, "AUTOMATION_RECORDING_LOCKED");
     await recordingRouter.close();
 
     const recording = await loadAutomationRecording(file);

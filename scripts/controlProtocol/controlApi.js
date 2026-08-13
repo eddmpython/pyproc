@@ -93,6 +93,10 @@ async function runCheck(configPath, options) {
 }
 
 export { ControlRemoteError } from "./controlClient.js";
+export { ExecutionMemoryRegistry, createExecutionMemoryRegistry }
+  from "../executionMemory/executionMemoryRegistry.js";
+export { ExecutionMemoryArtifacts } from "../executionMemory/executionMemoryArtifacts.js";
+export { FileExecutionMemoryStore } from "../executionMemory/fileExecutionMemoryStore.js";
 
 export class ControlRequest {
   constructor(client, requestId, result) {
@@ -405,6 +409,7 @@ export class PyProcControlClient extends ControlStdioClient {
   }
 
   runPython(code, options = {}) { return this.request("machine.run", { code }, options); }
+  exportMachineImage(options = {}) { return this.request("machine.image.export", {}, options); }
   saveCheckpoint(options = {}) { return this.request("machine.checkpoint.save", {}, options); }
   restoreCheckpoint(index, options = {}) {
     return this.request("machine.checkpoint.restore", index === undefined ? {} : { index }, options);
@@ -449,13 +454,48 @@ export class PyProcControlClient extends ControlStdioClient {
   replayEvidencePack(packDir, options = {}) {
     return this.request("verification.replay", { packDir: resolve(packDir) }, options);
   }
+  createExecutionSession(executionSessionId, project, { machineId, browser, ...options } = {}) {
+    return this.request("memory.create", { executionSessionId, project,
+      ...(machineId === undefined ? {} : { machineId }),
+      ...(browser === undefined ? {} : { browser }) }, options);
+  }
+  checkpointExecutionSession(executionSessionId, expectedRevisionSha256, work,
+    { browser, ...options } = {}) {
+    return this.request("memory.checkpoint", { executionSessionId, expectedRevisionSha256, work,
+      ...(browser === undefined ? {} : { browser }) }, options);
+  }
+  completeExecutionSession(executionSessionId, expectedRevisionSha256, evidencePackDir, options = {}) {
+    return this.request("memory.complete", { executionSessionId, expectedRevisionSha256,
+      evidencePackDir: resolve(evidencePackDir) }, options);
+  }
+  openExecutionSession(executionSessionId, options = {}) {
+    return this.request("memory.open", { executionSessionId }, options);
+  }
+  listExecutionSessions(options = {}) { return this.request("memory.list", {}, options); }
+  inspectExecutionSession(executionSessionId, options = {}) {
+    return this.request("memory.inspect", { executionSessionId }, options);
+  }
+  exportExecutionHandoff(executionSessionId, outputPath, options = {}) {
+    return this.request("memory.export", { executionSessionId, outputPath }, options);
+  }
+  importExecutionHandoff(handoffDir, {
+    trustedPublicKeyFile, approvedPermissionManifestSha256, ...options
+  } = {}) {
+    return this.request("memory.import", { handoffDir: resolve(handoffDir),
+      trustedPublicKeyFile: resolve(trustedPublicKeyFile), approvedPermissionManifestSha256 }, options);
+  }
   perception(sessionRef = null) { return new PerceptionClient(this, sessionRef); }
 
   async close() {
     if (this._productClosePromise) return this._productClosePromise;
     super.close();
-    this._productClosePromise = this.process
-      ? waitForExit(this.process, this.shutdownTimeoutMs) : Promise.resolve();
+    this._productClosePromise = this.process ? (async () => {
+      await waitForExit(this.process, this.shutdownTimeoutMs);
+      this.process.stdin?.destroy?.();
+      this.process.stdout?.destroy?.();
+      this.process.stderr?.destroy?.();
+      this.process.unref?.();
+    })() : Promise.resolve();
     return this._productClosePromise;
   }
 }

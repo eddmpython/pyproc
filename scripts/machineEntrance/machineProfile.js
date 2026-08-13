@@ -11,10 +11,10 @@ export const MACHINE_PROFILE_RECIPES = Object.freeze([
 const INPUT_KEYS = new Set([
   "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executable", "headed", "gpu",
   "allowedOrigins", "actions", "methods", "fileRoots", "maxRisk", "externalEffects", "purpose",
-  "artifacts", "viewport", "recording",
+  "artifacts", "viewport", "recording", "executionMemory",
 ]);
 const BROWSER_INPUT_KEYS = Object.freeze([...INPUT_KEYS].filter((key) => ![
-  "recipe", "engineRoot", "engineIndexURL", "timeoutMs",
+  "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executionMemory",
 ].includes(key)));
 const OBSERVE_ACTIONS = Object.freeze(["snapshot", "screenshot", "waitFor"]);
 
@@ -106,7 +106,7 @@ function replayPinnedBrowser(input) {
   return commonBrowser(input, { provider: "replay", actions, maxRisk });
 }
 
-export function compileMachineProfile(input) {
+export function compileMachineProfile(input, { baseEnv = process.env } = {}) {
   const value = plainObject(input, "Machine Entrance profile");
   rejectUnknownKeys(value);
   if (!MACHINE_PROFILE_RECIPES.includes(value.recipe)) {
@@ -120,10 +120,11 @@ export function compileMachineProfile(input) {
     schemaVersion: 1,
     engine: engineFrom(value),
     browser,
+    ...(value.executionMemory === undefined ? {} : { executionMemory: value.executionMemory }),
     ...(value.timeoutMs === undefined ? {} : { timeoutMs: value.timeoutMs }),
-  }).config;
+  }, { baseEnv }).config;
 }
 
-export function serializeMachineProfile(input) {
-  return `${JSON.stringify(compileMachineProfile(input), null, 2)}\n`;
+export function serializeMachineProfile(input, options) {
+  return `${JSON.stringify(compileMachineProfile(input, options), null, 2)}\n`;
 }

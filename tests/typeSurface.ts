@@ -1,6 +1,10 @@
 import { createWebComputer, open } from "../index.js";
 import type { MachineStore } from "../src/machine/index.js";
-import { PyProcControlClient, ControlRemoteError } from "../scripts/controlProtocol/controlApi.js";
+import {
+  createExecutionMemoryRegistry,
+  PyProcControlClient,
+  ControlRemoteError,
+} from "../scripts/controlProtocol/controlApi.js";
 
 declare const minimalCrypto: { randomUUID(): string };
 declare const store: MachineStore;
@@ -52,6 +56,16 @@ async function controlSurface() {
   const verdict: "verified" | "rejected" | "incomplete" = audited.output.verdict;
   await client.verifyExperience(".eyes/reference", ".eyes/current");
   await client.replayEvidencePack(".eyes/current");
+  const project = { workspaceId: "workspace:typed", commit: "typed",
+    treeSha256: `sha256:${"a".repeat(64)}` as const,
+    diffSha256: `sha256:${"b".repeat(64)}` as const, untracked: false };
+  const memory = await client.createExecutionSession("session:typed", project);
+  await client.checkpointExecutionSession("session:typed", memory.output.contentSha256,
+    { state: "active", branch: null, checkpoint: null, outcomeUnknown: false, pendingIntentSha256: null });
+  await client.openExecutionSession("session:typed");
+  await client.listExecutionSessions();
+  await client.inspectExecutionSession("session:typed");
+  await client.exportExecutionHandoff("session:typed", "typed-handoff");
   await client.close();
   return `${value}:${verdict}`;
 }
@@ -60,6 +74,13 @@ void controlSurface;
 declare const controlFailure: ControlRemoteError;
 const controlOutcome: string = controlFailure.outcome;
 void controlOutcome;
+
+async function directExecutionMemorySurface() {
+  const registry = await createExecutionMemoryRegistry({ root: "C:/execution-memory" });
+  const sessions: readonly Readonly<Record<string, unknown>>[] = await registry.listSessions();
+  return sessions.length;
+}
+void directExecutionMemorySurface;
 
 // @ts-expect-error the legacy wrapper is removed; durable options are direct
 open({ persistent: true });

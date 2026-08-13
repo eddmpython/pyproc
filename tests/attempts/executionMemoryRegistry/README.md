@@ -53,9 +53,12 @@ Initiative 3가 졸업해 session의 suspended state가 실제 cold Machine과 �
 |---|---|---|---|---|---|
 | 2026-08-13 | source contract audit | generation, branch, recording, Evidence Pack 계획 대조 | probe 미실행 | 실행 상태 사이의 durable index가 실제 간극 | Initiative 3 졸업 뒤 revision prototype |
 | 2026-08-13 | `executionMemoryPrototype.mjs`, `run.mjs` | Node 24, isolated in-memory stores, Ed25519 handoff | 22 checks PASS, stale overwrite 0, false completed 0, permission 자동 grant 0, secret leak 0 | immutable revision, verified links, CAS HEAD, handoff와 retention의 최소 결정 커널 성립 | durable file store와 실제 product verifier에 결합 |
+| 2026-08-13 | durable contract와 installed client gates | Node 22, Pyodide v314.0.2, Edge와 Chrome, packed npm, clean Python wheel와 sdist | contracts 22 suites, structure 4,268/4,268, MCP 15/15, JavaScript Control 21/21, Python SDK 5/5, client digest 의미 차이 0 | actual Machine, SituationCapsule, recording, Evidence Pack, permission을 재검증하는 immutable registry와 signed handoff가 제품 경로에서 성립 | attempt를 삭제하고 Initiative 5 착수 |
 
 ## 판정
 
-진행 중. immutable revision, reference verification, CAS HEAD, completion truth, signed handoff,
-permission 분리, redaction, retention의 최소 반증 커널이 통과했다. 다음은 같은 계약을 durable file store와
-Machine, SituationCapsule, recording, Evidence Pack의 실제 verifier에 결합한다.
+졸업. durable file store, actual Machine image, SituationCapsule와 recording의 동시 boundary, Evidence Pack
+completion, exact cold receipt, CAS HEAD, retention, literal-secret rejection, signed handoff와 별도 permission
+승인이 정식 제품에 결합됐다. Edge와 Chrome에서 MCP, JavaScript Control, Python SDK가 같은 installed
+journey를 통과했고, portable-only handoff의 unrelated cold receipt와 Windows 공백 경로도 음성 시험으로
+닫았다.

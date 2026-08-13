@@ -177,6 +177,12 @@ try {
           engine: loaded.config.engine.root ? { mode: "root", root: loaded.config.engine.root }
             : { mode: "indexURL", indexURL: loaded.config.engine.indexURL },
           machineBrowser: browserExecutable,
+          executionMemory: loaded.config.executionMemory.enabled ? {
+            enabled: true,
+            root: loaded.config.executionMemory.root,
+            importRoots: loaded.config.executionMemory.importRoots,
+            secretEnv: loaded.config.executionMemory.secretEnv,
+          } : { enabled: false },
           automation: loaded.config.browser.enabled ? {
             enabled: true,
             provider: loaded.config.browser.provider,

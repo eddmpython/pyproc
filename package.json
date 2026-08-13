@@ -74,6 +74,7 @@
     "scripts/staticServer.mjs",
     "scripts/automationSpace",
     "scripts/controlProtocol",
+    "scripts/executionMemory",
     "scripts/browserControl",
     "scripts/perception",
     "scripts/verification",

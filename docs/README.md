@@ -19,6 +19,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | [specs/](specs/) | [apx/README.md](specs/apx/README.md) | APX 1.0 product contract: graph and situation representations, provenance, uncertainty, broker authority, visual evidence, action verification, and conformance |
 | | [verification/README.md](specs/verification/README.md) | Experience Verification 1.0: strict repository contracts, deterministic verdicts, Evidence Pack integrity, exact comparison, and effect-free replay |
 | | [machineFleet/README.md](specs/machineFleet/README.md) | Hibernating Machine Fleet protocol: state, lease, commit-before-stop, exact resume, hot admission, and resource evidence |
+| | [executionMemory/README.md](specs/executionMemory/README.md) | Execution Memory protocol: immutable revisions, verified links, CAS HEAD, completion truth, signed handoff, privacy, and retention |
 | [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: documentation, executable truth, experiments, git history, memory operations, development principles |
 | | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
 | | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
@@ -34,6 +35,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [capabilityMatrix.md](usage/capabilityMatrix.md) | The capability matrix: intrinsic value, contract state, prerequisites, runnable surface, verification, boundaries |
 | | [platformRequirements.md](usage/platformRequirements.md) | Platform requirements and preflight: browsers, JSPI, COOP/COEP, engine pin, resources, memory-pressure guidance |
 | | [machineFleet.md](usage/machineFleet.md) | Bounded hot Machine registration, safe suspend, fresh leases, exact cold resume, and honest resource accounting |
+| | [executionMemory.md](usage/executionMemory.md) | Durable execution sessions, browser boundaries, Evidence Pack completion, signed handoff, and client parity |
 | | [resumeCatalog.md](usage/resumeCatalog.md) | The resource policy for which file descriptors, sockets, and DB connections `resume.py` must reopen after a revival |
 | | [trustPermissions.md](usage/trustPermissions.md) | `.pymachine` public key distribution, signer fingerprints, and the permission UI contract |
 | | [browserAutomation.md](usage/browserAutomation.md) | Installed MCP browser automation: manifest, screenshots, artifacts, authority, outcomes, and authorized-use boundaries |

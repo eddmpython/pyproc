@@ -1,9 +1,9 @@
 // tests/packageHarness.mjs - npm tarball 소비자 게이트 공용 조각.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,7 +15,19 @@ function commandSpec(cmd, args) {
     return { command: process.execPath, args: [npmCli, ...args], display: `npm ${args.join(" ")}` };
   }
   if (process.platform === "win32" && cmd.endsWith(".cmd")) {
-    return { command: cmd, args, display: `${cmd} ${args.join(" ")}`, shell: true };
+    const binName = basename(cmd, ".cmd");
+    const packageRoot = resolve(dirname(cmd), "..", "pyproc");
+    const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+    const binRelative = typeof packageJson.bin === "string" ? packageJson.bin : packageJson.bin?.[binName];
+    if (typeof binRelative !== "string" || isAbsolute(binRelative)) {
+      throw new Error(`installed package bin is unavailable: ${binName}`);
+    }
+    const script = resolve(packageRoot, binRelative);
+    const fromRoot = relative(packageRoot, script);
+    if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot) || !existsSync(script)) {
+      throw new Error(`installed package bin leaves package root: ${binName}`);
+    }
+    return { command: process.execPath, args: [script, ...args], display: `${binName} ${args.join(" ")}` };
   }
   return { command: cmd, args, display: `${cmd} ${args.join(" ")}` };
 }

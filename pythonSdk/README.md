@@ -35,6 +35,13 @@ same Control Protocol. The repository
 [experience verification guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/experienceVerification.md)
 defines the strict `qa/eyes` contract and canonical Evidence Pack.
 
+An Execution Memory-enabled manifest adds `createExecutionSession`, `checkpointExecutionSession`,
+`completeExecutionSession`, `openExecutionSession`, `listExecutionSessions`, `inspectExecutionSession`,
+`exportExecutionHandoff`, and `importExecutionHandoff`. These methods publish and verify immutable session
+revisions over the current Machine image. The
+[Execution Memory guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/executionMemory.md) defines
+repository identity, compare-and-swap updates, completion evidence, handoff trust, and storage boundaries.
+
 The npm `pyproc` package and its engine assets are separate installation prerequisites. See the repository
 [Python SDK guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/pythonSdk.md) for setup,
 automation, perception, cancellation, and recovery examples.

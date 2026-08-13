@@ -60,6 +60,11 @@ Viewport and artifacts:
 Pinned replay:
   --recording-file <file> --recording-id <id> --recording-sha256 <sha256>
   --start-cursor <n> --prefix-sha256 <sha256>
+
+Execution Memory:
+  --execution-memory-root <directory>
+  --execution-memory-import-root <directory>  Allowed handoff import root, repeatable
+  --execution-memory-secret-env <name>         Secret environment variable to reject, repeatable
 `;
 
 function parseArgs(argv) {
@@ -115,6 +120,12 @@ try {
           configPath: loaded.configPath,
           engine: loaded.config.engine.root ? { mode: "root", root: loaded.config.engine.root }
             : { mode: "indexURL", indexURL: loaded.config.engine.indexURL },
+          executionMemory: loaded.config.executionMemory.enabled ? {
+            enabled: true,
+            root: loaded.config.executionMemory.root,
+            importRoots: loaded.config.executionMemory.importRoots,
+            secretEnv: loaded.config.executionMemory.secretEnv,
+          } : { enabled: false },
           browser: loaded.config.browser.enabled ? {
             enabled: true,
             provider: loaded.config.browser.provider,

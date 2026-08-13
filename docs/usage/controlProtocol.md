@@ -90,6 +90,24 @@ The operation names, error outcomes, permission checks, action catalog, and arti
 host. The MCP adapter only maps tool names and native image content. This prevents the native and MCP paths
 from assigning different meaning to the same action.
 
+When `executionMemory.enabled` is true, nine additional operations appear:
+
+| Operation | Meaning | Success outcome |
+|---|---|---|
+| `machine.image.export` | Capture the current portable `.pymachine` through the verified attachment lane | `observed` |
+| `memory.create` | Publish revision 1 with the current Machine and exact project identity | `applied` |
+| `memory.checkpoint` | Compare-and-swap HEAD to a new immutable revision | `applied` |
+| `memory.complete` | Close the session with matching verified repository evidence | `applied` |
+| `memory.open` | Reverify and return the current session revision | `observed` |
+| `memory.list` | List reverified session HEAD summaries | `observed` |
+| `memory.inspect` | Return the current revision, chain length, and handoff readiness | `observed` |
+| `memory.export` | Write a signed handoff and exact reachable inventory | `applied` |
+| `memory.import` | Verify signer, chain, inventory, and separate permission approval | `applied` |
+
+The feature adds no alternate image or evidence format. The revision links existing `.pymachine`,
+SituationCapsule, Automation Recording, Evidence Pack, and permission sidecars by digest. Machine image bytes
+never enter the JSON result. See [Execution Memory](executionMemory.md).
+
 APX adds no operation. Pass `representation: "apx.graph"` for a provider-neutral graph or
 `representation: "apx.situation"` with typed `focus.requirements` for a SituationCapsule.
 An authorized affordance can be bound to `automation.act` through `actionContext`; stale bindings fail before
@@ -134,6 +152,10 @@ most 64 MiB. A client may advertise a smaller `maxChunkBytes` in its hello; the 
 than that negotiated receive limit. Screenshot output removes inline base64 from the JSON result and preserves
 the broker artifact reference for later chunk reads or deletion.
 
+Machine images use attachment kind `machine.image` and MIME type `application/x-pymachine`. Execution Memory
+withholds revision publication until those bytes pass state-bundle integrity and configured literal-secret
+checks.
+
 ## Verification
 
 `npm run test:control-product` packs and installs the npm package, runs `--check`, completes the handshake,
@@ -160,3 +182,7 @@ The matching MCP tools are `eyesAudit`, `eyesVerify`, and `eyesReplay`. See the
 Evidence Packs use the same verified attachment framing as screenshots. Their attachment kind is
 `evidence.pack` and MIME type is `application/vnd.pyproc.evidence-pack+json`. MCP projects screenshots as image
 content and Evidence Packs as embedded resource content. It never labels a JSON pack as an image.
+
+The installed Control, MCP, and Python gates also create and reopen the same immutable Execution Memory
+revision from a real Machine image. Unit contracts inject stale HEAD, broken sidecar, forged cold receipt,
+handoff inventory, permission, and secret-leak failures.

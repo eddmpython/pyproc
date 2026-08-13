@@ -145,6 +145,11 @@ product, MCP adapter, and Python guest do not serialize or impersonate that auth
 their individual Machine surface. Cross-client session discovery and handoff require a durable registry above
 the Fleet rather than a second lifecycle hidden in each client.
 
+[Execution Memory](executionMemory.md) is that optional index for installed and direct hosts. Fleet alone owns
+the act of terminating execution owners. Execution Memory accepts a `cold` Machine link only when the caller
+supplies the completed Fleet suspend receipt for the exact Machine, generation, and environment with no pending
+cleanup. A portable Control image remains `portable`, even when no Control process is currently running.
+
 ## Inspect without false memory claims
 
 `fleet.inspect()` returns `hotLimit`, lifecycle counts, generation IDs, lease state, terminal safety, prefetch

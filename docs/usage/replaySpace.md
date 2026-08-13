@@ -142,6 +142,11 @@ The process starts only if that prefix is exactly the digest at `startCursor`. R
 undo the original browser effects. Replay makes the remaining evidence and terminals deterministic without
 resending them.
 
+Execution Memory can link this boundary to a Machine revision. It stores the SituationCapsule plus exact
+recording ID, final digest, cursor, and prefix digest, then reverifies the minimal recording sidecars on every
+open. It does not copy cookies, native profile state, or an unrecorded page. See
+[Execution Memory](executionMemory.md).
+
 ## Verification
 
 `npm run test:replay-space` packs and installs pyproc, records a real FrameSpace APX observation plus inline and

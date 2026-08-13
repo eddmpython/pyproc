@@ -8,6 +8,8 @@ import {
   AutomationRecordingWriter,
   createAutomationRecording,
   putAutomationRecordingArtifact,
+  snapshotAutomationRecording,
+  verifyAutomationRecording,
 } from "./automationRecording.js";
 
 function recordingWriteError(error, outcome = "outcomeUnknown") {
@@ -170,6 +172,14 @@ export class RecordingSpace {
     if (firstError) throw firstError;
   }
 
+  async snapshotRecording() {
+    this._assertWritable();
+    const recording = await snapshotAutomationRecording(this.file, this.recording);
+    verifyAutomationRecording(recording);
+    return Object.freeze({ file: this.file, recording: Object.freeze(recording),
+      recordingId: recording.recordingId, finalSha256: recording.finalSha256 });
+  }
+
   _append(operation, input, terminal, inlineArtifacts, artifactRefs) {
     appendAutomationRecordingEntry(this.recording, {
       operation,
@@ -237,6 +247,7 @@ export class RecordingSpace {
   _status() {
     return Object.freeze({ mode: "record", recordingId: this.recording.recordingId,
       entries: this.recording.entries.length, artifacts: Object.keys(this.recording.artifacts).length,
-      complete: this.recording.complete, finalSha256: this.recording.finalSha256 });
+      complete: this.recording.complete, prefixSha256: this.recording.entriesSha256,
+      finalSha256: this.recording.finalSha256 });
   }
 }

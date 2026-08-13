@@ -86,6 +86,24 @@ so protect the MachineStore with the same confidentiality and quota policy as `.
 not grant permission, and restoring a signed generation does not silently reopen network, device, or browser
 authority.
 
+### Execution Memory handoff does not transfer authority
+
+Execution Memory stores complete interpreter and workspace bytes plus linked observation and evidence artifacts.
+Keep its absolute root private, outside source control, and protected by operating-system permissions and disk
+quota. Export directories are confined beneath that root. Control imports additionally require an absolute path
+under a configured import root.
+
+The handoff descriptor uses Ed25519 to authenticate its canonical revision chain and exact reachable inventory.
+That signature proves provenance only. Import requires an independently trusted public-key file and a separately
+approved exact permission-manifest digest. It never imports browser cookies, a default profile, unrecorded page
+state, or authority to repeat external effects.
+
+Configured `secretEnv` values are projected to the owned process without being persisted in the manifest or
+preflight report. Capture and reopen reject their literal UTF-8 and UTF-16LE bytes in structured data, Machine
+images, recordings, and evidence. Values shorter than eight bytes are refused. This check is not credential
+discovery and cannot understand secrets rendered into pixels, transformed values, or unrelated sensitive data.
+Producing subsystems must retain their own redaction rules.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`

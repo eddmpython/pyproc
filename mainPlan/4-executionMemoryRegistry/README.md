@@ -1,6 +1,6 @@
 # Initiative 4: Execution Memory Registry 실행 계획
 
-상태: **착수**
+상태: **졸업 판정 완료**
 
 이 문서는 대화 요약이 아니라 실제 계산과 browser 작업의 이어받기 지점을 durable record로 만드는 다섯
 번째 이니셔티브의 임시 실행 계획이다.
@@ -19,8 +19,9 @@ environment, situation, replay cursor, evidence를 하나의 session head로 연
 > Execution Memory는 transcript가 아니라 다시 열 수 있는 실행 상태와 그 상태가 현실에 대해 알고 있는
 > 것의 content-addressed index다.
 
-Registry는 Machine byte를 새 포맷으로 복제하지 않는다. 이미 존재하는 generation, `.pymachine`,
-`.webmachine`, recording, Evidence Pack을 immutable reference로 연결한다.
+Registry는 Machine byte를 새 포맷으로 복제하지 않는다. 현재 제품 범위는 기존 `.pymachine`,
+SituationCapsule, Automation Recording, Evidence Pack을 immutable reference로 연결한다. `.webmachine`은
+별도 `pyproc/machine` trust flow에 남는다.
 
 ## 2. 현재 기반과 간극
 
@@ -307,3 +308,30 @@ state storage는 기존 kernel grammar와 store를 사용한다. Machine, APX, r
 
 새 호출자가 session ID 하나로 exact Machine generation, branch, environment, latest situation, replay boundary,
 evidence를 검증하고 같은 safe point에서 작업을 이어갈 때 끝난다.
+
+## 16. 최종 구현과 판정
+
+2026-08-13에 다음 제품 계약으로 졸업했다.
+
+- `scripts/executionMemory/`의 closed canonical revision, content-addressed object와 sidecar store, session
+  HEAD compare-and-swap, stale lock recovery, retention reachability를 구현했다.
+- 현재 Control Machine의 실제 `.pymachine` bytes를 verified attachment로 수집하고, generation,
+  environment, image digest를 다시 검증한다.
+- cold는 exact Fleet suspend receipt가 Machine, generation, environment를 모두 맞추고 cleanup pending이
+  없을 때만 허용한다. Control image는 portable로만 표시한다.
+- live RecordingSpace의 serialization queue 안에서 SituationCapsule, exact cursor, prefix, final digest와
+  최소 recording sidecar를 함께 고정한다.
+- completed는 session repository identity와 일치하는 verified Evidence Pack이 있을 때만 게시한다.
+- signed handoff는 exact revision chain과 reachable inventory만 운반하고, trusted public key와 exact
+  permission manifest 승인을 별도 요구한다. portable-only handoff는 같은 image digest에 남아 있는
+  unrelated cold receipt를 운반하지 않는다.
+- configured secret literal을 structured value와 UTF-8, UTF-16LE artifact bytes에서 거부하고 secret
+  value는 manifest와 preflight에 기록하지 않는다.
+- `pyproc-mcp init`이 registry root, import root, secret environment name을 직접 컴파일한다.
+- 기존 `pyproc/control`, Control Protocol, MCP, Python SDK에 같은 operation과 revision digest를 제공하며
+  새 root export, subpath, executable은 만들지 않았다.
+- Windows installed child의 pipe ownership과 공백 포함 npm bin 경로도 actual product gate에서 닫았다.
+
+최종 증거는 Node contract 22 suites, 구조 4,268 checks, type gate, package 63 files, Edge와 Chrome 각각
+MCP 15/15, JavaScript Control 21/21, Python SDK 5/5다. Initiative 4의 자력 경로와 졸업 gate는 모두
+충족됐고, 지속 계약은 `docs/specs/executionMemory/README.md`와 `docs/usage/executionMemory.md`로 이동했다.

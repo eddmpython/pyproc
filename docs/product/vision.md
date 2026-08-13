@@ -75,10 +75,13 @@ through strict Experience Contracts, canonical Evidence Packs, exact comparison,
 installed `test:experience-verification` gate. Hibernating Machine Fleet is delivered through durable
 `WebComputer.suspend()` and `createMachineFleet`: safe terminals commit and verify HEAD before adapters terminate,
 cold records own no live computer, stale leases fail, and exact generations resume in fresh Workers under a hot
-budget. The next active campaign is
-[`executionMemoryRegistry`](../../tests/attempts/executionMemoryRegistry/README.md). Later initiatives remain locked
-behind their immediate predecessor. No initiative changes a North Star score before its browser evidence is registered
-in the ledger.
+budget. Execution Memory is delivered through immutable content-addressed revisions, compare-and-swap session
+HEAD, verified existing-format sidecars, evidence-gated completion, retention reachability, and signed handoff
+with separate permission approval. Installed JavaScript, Python, and MCP gates capture and reopen a real Machine
+image. The next active campaign is
+[`rehearseCommitTransactions`](../../tests/attempts/rehearseCommitTransactions/README.md). Later initiatives remain
+locked behind their immediate predecessor. No initiative changes a North Star score before its browser evidence
+is registered in the ledger.
 
 This portfolio does not duplicate the separate ceiling ladder. Serverless local applications, portable Machine
 images, Native CDP, FrameSpace, and ReplaySpace are shipped foundations. The wasm tool layer and Node guest remain

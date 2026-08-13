@@ -68,6 +68,7 @@
 - [Where the shape pays off](#where-the-shape-pays-off)
 - [Run the Web Computer](#run-the-web-computer)
 - [Hibernate a Machine Fleet](#hibernate-a-machine-fleet)
+- [Resume work with Execution Memory](#resume-work-with-execution-memory)
 - [Capability paths](#capability-paths)
 - [Dependency boundary](#dependency-boundary)
 - [Setup](#setup)
@@ -630,6 +631,35 @@ Active commands, pending approval, unresolved effects, `outcomeUnknown`, unsaved
 automatically suspended. A cold Machine owns no live computer through the Fleet, but this is not a zero-memory
 claim: Chromium, cached assets, OPFS state, and the registry still consume resources. See the
 [Machine Fleet guide](docs/usage/machineFleet.md) and [specification](docs/specs/machineFleet/README.md).
+
+## Resume work with Execution Memory
+
+Execution Memory records what must be true to continue work, not a transcript of what a caller said. An immutable
+session revision links the exact repository identity, portable or proven-cold Machine generation, branch and
+checkpoint labels, SituationCapsule, Automation Recording boundary, permission manifest, and Evidence Pack.
+A compare-and-swap HEAD prevents stale writers from replacing a newer decision.
+
+```js
+import { PyProcControlClient } from "pyproc/control";
+
+const client = await PyProcControlClient.start("./pyproc.json");
+await client.runPython("prepared = [10, 20, 30]");
+const created = await client.createExecutionSession("session:forecast", projectIdentity);
+
+await client.checkpointExecutionSession(
+  "session:forecast",
+  created.output.contentSha256,
+  { state: "active", branch: "candidate:checked", checkpoint: "checkpoint:7",
+    outcomeUnknown: false, pendingIntentSha256: null },
+);
+```
+
+Completion requires a verified Evidence Pack matching the same repository identity. Signed handoff verifies the
+revision chain and copies only reachable sidecars, while requested permissions still require a separate exact
+approval. Browser cookies, ambient profile state, unrecorded effects, and conversation text are not execution
+state. The feature is opt-in under `executionMemory` in the product manifest. See the
+[Execution Memory guide](docs/usage/executionMemory.md) and
+[specification](docs/specs/executionMemory/README.md).
 
 ## Capability paths
 

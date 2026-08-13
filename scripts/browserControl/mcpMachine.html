@@ -10,6 +10,7 @@
   <pre id="out">booting</pre>
   <script id="pyprocControlBootstrap" type="module">
     import { boot } from "../../index.js";
+    import { readStateBundleHeader } from "../../src/state/index.js";
     import { FrameSpacePage } from "../automationSpace/frameSpacePage.js";
     import { installFailClosedNetworkPolicy } from "./mcpMachinePolicy.js";
 
@@ -63,6 +64,21 @@
         const [stdout, value] = result && result.toJs ? result.toJs() : result;
         if (result && result.destroy) result.destroy();
         return { stdout, value };
+      },
+      async "machine.image.export"() {
+        const image = await machine.history.export();
+        const bytes = new Uint8Array(await image.arrayBuffer());
+        const header = await readStateBundleHeader(crypto, bytes);
+        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const sha256 = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+        let binary = "";
+        const chunkBytes = 32768;
+        for (let offset = 0; offset < bytes.byteLength; offset += chunkBytes) {
+          binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkBytes));
+        }
+        return { kind: "machineImage", mimeType: "application/x-pymachine",
+          artifactRef: `artifact:machine_${sha256}`, byteLength: bytes.byteLength,
+          sha256, generation: header.commit, dataBase64: btoa(binary) };
       },
       "machine.checkpoint.save"() {
         const checkpoint = machine.history.checkpoint();

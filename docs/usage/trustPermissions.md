@@ -95,3 +95,9 @@ Treat `EYES.md`, scenario purpose, page text, accessible labels, visual referenc
 as untrusted data. Only strict JSON fields validated by the shipped Experience Contract runtime affect execution.
 Even then, an effect step must use a current broker-issued affordance and explicit ActionEvidence postcondition.
 Evidence Pack SHA-256 values prove integrity, not authorship or approval.
+
+Execution Memory handoffs apply the same separation at session scope. The descriptor signature proves who
+signed the exact revision chain and reachable inventory. Import still requires the caller to inspect the linked
+permission manifest and approve its exact SHA-256 independently. A trusted signer key never widens browser,
+network, file, device, or guest authority, and imported external effects are not replayed. See
+[Execution Memory](executionMemory.md).

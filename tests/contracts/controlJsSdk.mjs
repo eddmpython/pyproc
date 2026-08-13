@@ -3,6 +3,9 @@ import { PassThrough } from "node:stream";
 import {
   ControlRemoteError,
   ControlRequest,
+  ExecutionMemoryArtifacts,
+  ExecutionMemoryRegistry,
+  FileExecutionMemoryStore,
   PerceptionClient,
   PerceptionEntity,
   PerceptionQueryResult,
@@ -28,11 +31,17 @@ function serverHello() {
 
 export async function assertControlJsSdkContract() {
   for (const value of [ControlRemoteError, ControlRequest, PerceptionClient, PerceptionEntity,
-    PerceptionQueryResult, PyProcControlClient]) {
+    PerceptionQueryResult, PyProcControlClient, ExecutionMemoryArtifacts, ExecutionMemoryRegistry,
+    FileExecutionMemoryStore]) {
     assert(typeof value === "function", "pyproc/control 공개 class가 누락됐다");
   }
   for (const method of ["auditExperience", "verifyExperience", "replayEvidencePack"]) {
     assert(typeof PyProcControlClient.prototype[method] === "function", `verification facade가 누락됐다: ${method}`);
+  }
+  for (const method of ["exportMachineImage", "createExecutionSession", "checkpointExecutionSession",
+    "completeExecutionSession", "openExecutionSession", "listExecutionSessions", "inspectExecutionSession",
+    "exportExecutionHandoff", "importExecutionHandoff"]) {
+    assert(typeof PyProcControlClient.prototype[method] === "function", `Execution Memory facade가 누락됐다: ${method}`);
   }
 
   const readable = new PassThrough();
@@ -98,4 +107,18 @@ export async function assertControlJsSdkContract() {
   const unavailable = await errorOf(() => PyProcControlClient.start("config.json", { command: [] }));
   assert(unavailable instanceof TypeError, "빈 control command가 effect 전에 거부되지 않았다");
   await client.close();
+
+  const ownedReadable = new PassThrough();
+  const ownedWritable = new PassThrough();
+  const released = { stdin: false, stdout: false, stderr: false, unref: false };
+  const ownedProcess = { exitCode: 0, signalCode: null,
+    stdin: { destroy: () => { released.stdin = true; } },
+    stdout: { destroy: () => { released.stdout = true; } },
+    stderr: { destroy: () => { released.stderr = true; } },
+    unref: () => { released.unref = true; } };
+  const ownedClient = new PyProcControlClient({ readable: ownedReadable, writable: ownedWritable,
+    process: ownedProcess });
+  await ownedClient.close();
+  assert(Object.values(released).every(Boolean),
+    "종료된 installed Control child의 소유 pipe와 process handle이 해제되지 않았다");
 }

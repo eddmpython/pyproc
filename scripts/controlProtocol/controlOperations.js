@@ -2,6 +2,7 @@
 
 export const CONTROL_TOOL_OPERATIONS = Object.freeze({
   pythonRun: "machine.run",
+  machineImageExport: "machine.image.export",
   checkpointSave: "machine.checkpoint.save",
   checkpointRestore: "machine.checkpoint.restore",
   sandboxReset: "machine.reset",
@@ -18,6 +19,14 @@ export const CONTROL_TOOL_OPERATIONS = Object.freeze({
   eyesAudit: "verification.audit",
   eyesVerify: "verification.verify",
   eyesReplay: "verification.replay",
+  memoryCreate: "memory.create",
+  memoryCheckpoint: "memory.checkpoint",
+  memoryComplete: "memory.complete",
+  memoryOpen: "memory.open",
+  memoryList: "memory.list",
+  memoryInspect: "memory.inspect",
+  memoryExport: "memory.export",
+  memoryImport: "memory.import",
 });
 
 const TOOL_FOR_OPERATION = Object.freeze(Object.fromEntries(
@@ -33,16 +42,17 @@ export function controlToolForOperation(operation) {
 }
 
 export function controlSuccessOutcome(operation, input = {}) {
+  if (["memory.open", "memory.list", "memory.inspect"].includes(operation)) return "observed";
   if (operation === "verification.audit") return "applied";
   if (operation === "automation.command") return input.expectedRisk === "read" ? "observed" : "applied";
   if (operation === "automation.act") {
     return Array.isArray(input.actions) && input.actions.every((action) => action?.expectedRisk === "read")
       ? "observed" : "applied";
   }
-  if (operation === "machine.run" || operation.startsWith("machine.checkpoint.")
+  if (operation === "machine.run" || operation === "machine.image.export" || operation.startsWith("machine.checkpoint.")
     || operation === "machine.reset" || operation === "automation.target.open"
     || operation === "automation.session.attach" || operation === "automation.session.detach"
-    || operation === "artifact.delete") return "applied";
+    || operation === "artifact.delete" || operation.startsWith("memory.")) return "applied";
   return "observed";
 }
 

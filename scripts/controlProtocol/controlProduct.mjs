@@ -2,7 +2,7 @@
 import { realpathSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COI_HEADERS, createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
@@ -19,16 +19,27 @@ import { RecordingSpace } from "../automationSpace/recordingSpace.js";
 import { ReplaySpace } from "../automationSpace/replaySpace.js";
 import { ControlHost } from "./controlHost.js";
 import { controlOperationCatalog } from "./controlOperations.js";
+import { CONTROL_MAX_ATTACHMENT_BYTES } from "./controlProtocol.js";
 import { PageCommandBridge } from "./pageCommandBridge.mjs";
 import {
   createVerificationHandlers,
   VERIFICATION_OFFLINE_TOOLS,
   VERIFICATION_TOOLS,
 } from "../verification/verificationTools.js";
+import { createExecutionMemoryHandlers, EXECUTION_MEMORY_TOOLS } from "../executionMemory/executionMemoryTools.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 180000;
 const POLL_HOLD_MS = 20000;
+const CONTROL_RESULT_MAX_BYTES = Math.ceil(CONTROL_MAX_ATTACHMENT_BYTES * 4 / 3) + 1024 * 1024;
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+export const CONTROL_MACHINE_IMAGE_TOOLS = Object.freeze([
+  Object.freeze({
+    name: "machineImageExport",
+    description: "Export the current portable Machine image as a verified binary attachment.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  }),
+]);
 
 export const CONTROL_PYTHON_TOOLS = Object.freeze([
   Object.freeze({
@@ -104,9 +115,14 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   const browserTools = browserConfig
     ? (frameToolProvider ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig)) : [];
   const verificationTools = browserEnabled ? VERIFICATION_TOOLS : VERIFICATION_OFFLINE_TOOLS;
-  const tools = Object.freeze([...CONTROL_PYTHON_TOOLS, ...browserTools, ...verificationTools]);
-  const pythonToolNames = new Set(CONTROL_PYTHON_TOOLS.map((tool) => tool.name));
+  const executionMemoryEnabled = !!env.PYPROC_EXECUTION_MEMORY_ROOT;
+  const memoryTools = executionMemoryEnabled ? EXECUTION_MEMORY_TOOLS : [];
+  const machineImageTools = executionMemoryEnabled ? CONTROL_MACHINE_IMAGE_TOOLS : [];
+  const pythonTools = [...CONTROL_PYTHON_TOOLS, ...machineImageTools];
+  const tools = Object.freeze([...pythonTools, ...browserTools, ...verificationTools, ...memoryTools]);
+  const pythonToolNames = new Set(pythonTools.map((tool) => tool.name));
   const verificationToolNames = new Set(VERIFICATION_TOOLS.map((tool) => tool.name));
+  const memoryToolNames = new Set(memoryTools.map((tool) => tool.name));
   const producerVersion = JSON.parse(await readFile(resolve(PACKAGE_ROOT, "package.json"), "utf8")).version;
   const engineRoot = configuredEngineRoot(env.PYPROC_MCP_ENGINE_ROOT);
   const pageBridge = new PageCommandBridge({ timeoutMs });
@@ -184,7 +200,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       return true;
     }
     if (req.method === "POST" && requestUrl.pathname === "/controlResult") {
-      try { sendJson(res, 200, pageBridge.result(await readJsonBody(req))); }
+      try { sendJson(res, 200, pageBridge.result(await readJsonBody(req, CONTROL_RESULT_MAX_BYTES))); }
       catch (error) { sendJson(res, 400, { error: error?.code || "CONTROL_INVALID_FRAME", message: String(error?.message || error) }); }
       return true;
     }
@@ -232,11 +248,26 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     browserControl = automationSpace?.control || null;
     automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
     const verificationHandlers = createVerificationHandlers({ automation: automationRouter, producerVersion });
+    const memoryProduct = executionMemoryEnabled ? await createExecutionMemoryHandlers({
+      root: env.PYPROC_EXECUTION_MEMORY_ROOT,
+      pageBridge,
+      permissionManifest: Object.freeze({
+        pythonNetwork: "denied",
+        browser: browserConfig ? Object.freeze({ providerKind, targetOrigins: browserConfig.targetOrigins,
+          actions: browserConfig.actions, maxRisk: browserConfig.maxRisk }) : null,
+      }),
+      recordingConfig,
+      recordingProvider: (consumer) => typeof automationRouter?.provider?.snapshotRecording === "function"
+        ? automationRouter.withRecordingSnapshot(consumer) : consumer(recordingConfig),
+      importRoots: String(env.PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS || "").split(delimiter).filter(Boolean),
+      secretValues: env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES
+        ? JSON.parse(env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES) : [],
+    }) : null;
     const operationCatalog = controlOperationCatalog(tools);
     const operationHandlers = Object.fromEntries(operationCatalog.map(({ name, toolName }) => [name,
       async (input, { signal, requestId, spaceId }) => {
         const expectedSpaceId = pythonToolNames.has(toolName) ? "machine:primary"
-          : verificationToolNames.has(toolName) ? undefined : automationRouter?.spaceId;
+          : verificationToolNames.has(toolName) || memoryToolNames.has(toolName) ? undefined : automationRouter?.spaceId;
         if (spaceId && spaceId !== expectedSpaceId) {
           const error = new Error(`control request space does not match ${expectedSpaceId}`);
           error.code = "CONTROL_SPACE_MISMATCH";
@@ -251,6 +282,10 @@ export async function createControlProduct({ env = process.env, browserLauncher 
         if (verificationToolNames.has(toolName)) {
           return verificationHandlers[name](input, { signal, requestId });
         }
+        if (memoryToolNames.has(toolName)) {
+          await pageBridge.waitForReady();
+          return memoryProduct.handlers[name](input, { signal, requestId });
+        }
         if (automationRouter) return automationRouter.invoke(name, input, { signal, requestId });
         const error = new Error(`control operation is unavailable: ${name}`);
         error.code = "CONTROL_OPERATION_UNAVAILABLE";
@@ -261,7 +296,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     const host = new ControlHost({ handlers: operationHandlers, operations: operationCatalog });
     let closed = false;
     return Object.freeze({
-      tools, operationCatalog, host, pageBridge, automationSpace, automationRouter,
+      tools, operationCatalog, host, pageBridge, automationSpace, automationRouter, executionMemory: memoryProduct?.registry || null,
       browserControl, browserSession, serverOrigin, pageUrl,
       async close() {
         if (closed) return;

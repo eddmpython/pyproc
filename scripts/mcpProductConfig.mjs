@@ -9,7 +9,7 @@ import {
   AUTOMATION_RECORDING_MAX_TOTAL_ARTIFACT_BYTES,
 } from "./automationSpace/automationRecording.js";
 
-const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "timeoutMs"]);
+const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["root", "indexURL"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
@@ -22,6 +22,7 @@ const RECORDING_KEYS = new Set([
 const ARTIFACT_KEYS = new Set([
   "maxArtifactBytes", "maxTotalBytes", "maxArtifacts", "inlineMaxBytes", "ttlMs",
 ]);
+const EXECUTION_MEMORY_KEYS = new Set(["enabled", "root", "importRoots", "secretEnv"]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_INDEX_URL", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
@@ -33,6 +34,8 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_BROWSER_ARTIFACT_TTL_MS",
   "PYPROC_BROWSER_VIEWPORT",
   "PYPROC_AUTOMATION_RECORDING",
+  "PYPROC_EXECUTION_MEMORY_ROOT", "PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS",
+  "PYPROC_EXECUTION_MEMORY_SECRET_VALUES",
 ]);
 
 function plainObject(value, label) {
@@ -247,12 +250,49 @@ function normalizedBrowser(input = { enabled: false }) {
   return Object.freeze(normalized);
 }
 
-function projectedEnvironment(config, baseEnv = {}) {
+function normalizedExecutionMemory(input = { enabled: false }, baseEnv = {}) {
+  const memory = plainObject(input, "executionMemory");
+  knownKeys(memory, EXECUTION_MEMORY_KEYS, "executionMemory");
+  const enabled = optionalBoolean(memory.enabled, "executionMemory.enabled");
+  if (!enabled) {
+    const extra = Object.keys(memory).filter((key) => key !== "enabled");
+    if (extra.length) throw new TypeError(`disabled executionMemory does not accept ${extra[0]}`);
+    return Object.freeze({ config: Object.freeze({ enabled: false }), secretValues: Object.freeze([]) });
+  }
+  if (typeof memory.root !== "string" || !isAbsolute(memory.root)) {
+    throw new TypeError("executionMemory.root must be an absolute directory path");
+  }
+  const root = resolve(memory.root);
+  const importRoots = memory.importRoots === undefined ? []
+    : stringArray(memory.importRoots, "executionMemory.importRoots").map((entry) => {
+      if (!isAbsolute(entry)) throw new TypeError("executionMemory.importRoots entries must be absolute");
+      return resolve(entry);
+    });
+  const secretEnv = memory.secretEnv === undefined ? [] : stringArray(memory.secretEnv, "executionMemory.secretEnv");
+  const secretValues = secretEnv.map((name) => {
+    if (!/^[A-Z][A-Z0-9_]*$/.test(name)) throw new TypeError(`executionMemory.secretEnv name is invalid: ${name}`);
+    const value = baseEnv[name];
+    if (typeof value !== "string" || !value) throw new TypeError(`executionMemory secret environment variable is unavailable: ${name}`);
+    if (Buffer.byteLength(value) < 8) {
+      throw new TypeError(`executionMemory secret environment variable is too short for binary redaction: ${name}`);
+    }
+    return value;
+  });
+  return Object.freeze({ config: Object.freeze({ enabled: true, root, importRoots: Object.freeze(importRoots),
+    secretEnv: Object.freeze(secretEnv) }), secretValues: Object.freeze(secretValues) });
+}
+
+function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = []) {
   const env = { ...baseEnv };
   for (const key of CONTROLLED_ENV) delete env[key];
   env.PYPROC_MCP_TIMEOUT = String(config.timeoutMs);
   if (config.engine.root) env.PYPROC_MCP_ENGINE_ROOT = config.engine.root;
   else env.PYPROC_INDEX_URL = config.engine.indexURL;
+  if (config.executionMemory.enabled) {
+    env.PYPROC_EXECUTION_MEMORY_ROOT = config.executionMemory.root;
+    env.PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS = config.executionMemory.importRoots.join(delimiter);
+    env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES = JSON.stringify(executionMemorySecrets);
+  }
   if (!config.browser.enabled) return env;
   const browser = config.browser;
   env.PYPROC_BROWSER_CONTROL = "1";
@@ -286,14 +326,16 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
   const value = plainObject(input, "pyproc-mcp config");
   knownKeys(value, ROOT_KEYS, "pyproc-mcp config");
   if (value.schemaVersion !== 1) throw new TypeError("schemaVersion must be 1");
+  const executionMemory = normalizedExecutionMemory(value.executionMemory, baseEnv);
   const config = Object.freeze({
     schemaVersion: 1,
     engine: normalizedEngine(value.engine),
     browser: normalizedBrowser(value.browser),
+    executionMemory: executionMemory.config,
     timeoutMs: value.timeoutMs === undefined ? 180000
       : positiveInteger(value.timeoutMs, "timeoutMs", 900000),
   });
-  const env = projectedEnvironment(config, baseEnv);
+  const env = projectedEnvironment(config, baseEnv, executionMemory.secretValues);
   const browserControl = config.browser.enabled
     ? parseBrowserControlConfig(env, { timeoutMs: config.timeoutMs })
     : null;

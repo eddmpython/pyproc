@@ -101,6 +101,18 @@ export class AutomationSpaceRouter {
     });
   }
 
+  snapshotRecording() {
+    return this.withRecordingSnapshot((snapshot) => snapshot);
+  }
+
+  withRecordingSnapshot(consumer) {
+    if (typeof consumer !== "function") throw new TypeError("recording snapshot consumer is required");
+    if (typeof this.provider.snapshotRecording !== "function") return Promise.resolve(consumer(null));
+    const turn = this._invokeTail.then(async () => consumer(await this.provider.snapshotRecording()));
+    this._invokeTail = turn.catch(() => {});
+    return turn;
+  }
+
   async close() {
     if (this._closed) return;
     this._closed = true;

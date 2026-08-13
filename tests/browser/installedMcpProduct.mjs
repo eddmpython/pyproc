@@ -47,6 +47,7 @@ const check = (name, pass, info = "") => {
 
 const installed = await installPackedPyProc("pyprocInstalledMcpProduct-");
 const configPath = join(installed.appDir, ".pyproc-mcp-product", "manifest.json");
+const memoryRoot = join(installed.appDir, ".pyproc-mcp-memory");
 const browser = process.env.PYPROC_BROWSER || undefined;
 const cli = binPath(installed.appDir, "pyproc-mcp");
 const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
@@ -58,6 +59,7 @@ const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", ins
   "--artifact-max-bytes", String(16 * 1024 * 1024), "--artifact-total-bytes", String(32 * 1024 * 1024),
   "--artifact-max-count", "16", "--artifact-inline-bytes", String(4 * 1024 * 1024),
   "--artifact-ttl-ms", "120000",
+  "--execution-memory-root", memoryRoot,
   ...["snapshot", "screenshot", "waitFor", "hydrateLazy", "fill", "click"].flatMap((action) => ["--action", action]),
   ...(browser ? ["--browser", browser] : []),
 ];
@@ -71,6 +73,8 @@ check("installed bin help, version, check가 제품 시작 표면과 권한을 �
     && versionRun.stdout.trim() === installed.packed.version && helpRun.stdout.includes("--config <file>")
     && helpRun.stdout.includes("--check") && checkReport.ok === true
     && checkReport.browser.actions.includes("screenshot")
+    && checkReport.executionMemory?.enabled === true
+    && checkReport.executionMemory?.root === memoryRoot
     && checkReport.browser.rawMethods.join(",") === "Runtime.evaluate"
     && checkReport.engine.mode === "root",
 `${versionRun.stdout.trim()}, ${checkReport.browser.actions.length} actions`);
@@ -133,8 +137,9 @@ try {
   check("installed server initialize", initialized.result?.serverInfo?.name === "pyproc-sandbox");
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
   const tools = (await request("tools/list")).result.tools.map((tool) => tool.name);
-  check("설치 제품이 Python 4종과 browser 10종을 제공",
-    tools.length === 17 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete")
+  check("설치 제품이 Python, browser, Execution Memory operation을 함께 제공",
+    tools.length === 26 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete")
+      && tools.includes("machineImageExport") && tools.includes("memoryCreate") && tools.includes("memoryImport")
       && tools.includes("eyesAudit") && tools.includes("eyesVerify") && tools.includes("eyesReplay"), tools.join(","));
   await callTool("pythonRun", { code: "product_state = 41" });
   const pythonResponse = await callTool("pythonRun", { code: "product_state + 1" });
@@ -142,6 +147,23 @@ try {
   check("설치 제품의 persistent Python Machine과 canonical terminal",
     python.value === "42" && pythonResponse.result._meta?.pyprocControl?.terminal === "completed"
       && pythonResponse.result._meta?.pyprocControl?.outcome === "applied", python.value);
+
+  const projectIdentity = { workspaceId: "installed:mcp", commit: "fixture",
+    treeSha256: `sha256:${"1".repeat(64)}`, diffSha256: `sha256:${"2".repeat(64)}`, untracked: false };
+  const memoryCreated = toolText(await callTool("memoryCreate", {
+    executionSessionId: "session:installed-mcp", project: projectIdentity,
+  }));
+  const memoryOpened = toolText(await callTool("memoryOpen", {
+    executionSessionId: "session:installed-mcp",
+  }));
+  const memoryListed = toolText(await callTool("memoryList"));
+  check("설치 MCP가 실제 Machine image를 immutable Execution Memory로 다시 연다",
+    memoryCreated.contentSha256 === memoryOpened.contentSha256
+      && /^[0-9a-f]{64}$/.test(memoryOpened.machine?.imageSha256 || "")
+      && typeof memoryOpened.machine?.generation === "string"
+      && memoryListed.some((entry) => entry.executionSessionId === "session:installed-mcp")
+      && memoryOpened.machine?.lifecycle === "portable",
+  memoryOpened.contentSha256);
 
   const opened = toolText(await callTool("browserOpen", {
     url: targetUrl, expectedRisk: "externalEffect", waitUntil: "load",

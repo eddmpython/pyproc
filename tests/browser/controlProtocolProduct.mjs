@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
@@ -46,9 +46,12 @@ const reloadConfigPath = join(installed.appDir, "pyproc-control-reload.json");
 const frameConfigPath = join(installed.appDir, "pyproc-control-frame.json");
 const browser = process.env.PYPROC_BROWSER || undefined;
 const mcpCli = binPath(installed.appDir, "pyproc-mcp");
+const executionMemoryRoot = join(installed.appDir, ".pyproc-execution-memory");
+const automationRecordingFile = join(installed.appDir, ".pyproc-execution-memory", "automation.json");
+await mkdir(executionMemoryRoot, { recursive: true });
 run(mcpCli, ["init", "--recipe", "pythonOnly", "--project-root", installed.appDir,
   "--out", ".pyproc-python-only", "--engine-root", join(ROOT, "vendor", "pyodide"),
-  "--timeout-ms", String(TIMEOUT_MS), ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
+  "--timeout-ms", String(TIMEOUT_MS)], { cwd: installed.appDir });
 run(mcpCli, ["init", "--recipe", "observeLocal", "--project-root", installed.appDir,
   "--out", ".pyproc-observe", "--engine-root", join(ROOT, "vendor", "pyodide"),
   "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin,
@@ -62,6 +65,10 @@ run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installe
   "--artifact-max-bytes", String(8 * 1024 * 1024), "--artifact-total-bytes", String(16 * 1024 * 1024),
   "--artifact-max-count", "8", "--artifact-inline-bytes", String(4 * 1024 * 1024),
   "--artifact-ttl-ms", "120000", ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
+const memoryConfig = JSON.parse(await readFile(configPath, "utf8"));
+memoryConfig.executionMemory = { enabled: true, root: executionMemoryRoot };
+memoryConfig.browser.recording = { mode: "record", file: automationRecordingFile, overwrite: true };
+await writeFile(configPath, JSON.stringify(memoryConfig, null, 2));
 await writeFile(reloadConfigPath, JSON.stringify({
   schemaVersion: 1,
   engine: { root: join(ROOT, "vendor", "pyodide") },
@@ -229,22 +236,36 @@ try {
   const preflight = await PyProcControlClient.check(configPath, { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
   client = await PyProcControlClient.start(configPath, { cwd: installed.appDir,
     startupTimeoutMs: TIMEOUT_MS, maxAttachmentChunkBytes: 64 });
-  check("공개 JavaScript 입구가 preflight와 operation 17종을 제공",
+  check("공개 JavaScript 입구가 preflight와 Execution Memory 포함 operation 26종을 제공",
     preflight.ok === true
       && controlEntry === join(packageRoot, "scripts", "controlProtocol", "controlApi.js")
-      && client.operations.length === 17 && client.operations.includes("machine.run")
-      && client.operations.includes("automation.act"), client.operations.join(","));
+      && client.operations.length === 26 && client.operations.includes("machine.run")
+      && client.operations.includes("automation.act") && client.operations.includes("memory.create"),
+  client.operations.join(","));
 
   await client.runPython("controlState = 40");
   const machine = await client.runPython("controlState + 2");
   check("JavaScript facade의 persistent Python Machine과 canonical terminal",
     machine.terminal === "completed" && machine.output.value === "42", machine.output.value);
+  const image = await client.exportMachineImage();
+  const imageAttachment = image.attachments[0];
+  check("설치 제품이 current Machine generation을 binary attachment로 내보냄",
+    image.output.kind === "machineImage" && image.output.generation.startsWith("sha256:")
+      && image.attachments.length === 1 && imageAttachment.kind === "machine.image"
+      && createHash("sha256").update(imageAttachment.bytes).digest("hex") === image.output.sha256
+      && !JSON.stringify(image.output).includes("dataBase64"), `${imageAttachment.byteLength} bytes`);
+  const projectIdentity = { workspaceId: "workspace:control-product", commit: "commit:control-product",
+    treeSha256: `sha256:${"1".repeat(64)}`, diffSha256: `sha256:${"2".repeat(64)}`, untracked: false };
+  const memoryFirst = await client.createExecutionSession("session:control-product", projectIdentity);
+  check("설치 제품이 current Machine을 immutable Execution Session HEAD로 게시",
+    memoryFirst.output.revision === 1 && memoryFirst.output.machine.imageSha256 === image.output.sha256
+      && memoryFirst.output.work.state === "active", memoryFirst.output.contentSha256);
   const space = await client.inspectSpace();
   check("설치 제품이 NativeCdpSpace 능력과 복원 경계를 선언",
     space.output.space?.providerKind === "nativeCdp"
       && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception"
       && space.output.space?.restoreBoundary === "externalEffectsRemain"
-      && space.output.space?.replayBoundary === "recordOnly");
+      && space.output.space?.replayBoundary === "deterministicRecording");
   let wrongSpace = null;
   try {
     await client.inspectSpace({ spaceId: "space:wrong" });
@@ -307,6 +328,23 @@ try {
     evidenced.output.actions[0].result.evidence?.effectOutcome === "applied"
       && evidenced.output.actions[0].result.evidence?.verification?.state === "confirmed"
       && evidenced.output.actions[0].result.evidence?.verification?.evidenceRefs?.length >= 2);
+  const recordingState = await client.inspectSpace();
+  const recording = recordingState.output.recording;
+  const memorySecond = await client.checkpointExecutionSession("session:control-product",
+    memoryFirst.output.contentSha256, { state: "active", branch: "browser:verified",
+      checkpoint: "checkpoint:browser", outcomeUnknown: false, pendingIntentSha256: null }, {
+      browser: { situation: situation.situation, cursor: recording.entries,
+        prefixSha256: recording.prefixSha256 },
+    });
+  const memoryOpened = await client.openExecutionSession("session:control-product");
+  const memoryHandoff = await client.exportExecutionHandoff("session:control-product", "control-product-handoff");
+  check("SituationCapsule과 exact recording cursor가 Machine revision 및 signed handoff에 결속",
+    memorySecond.output.revision === 2
+      && memorySecond.output.browser.situationRef === situation.situationRef
+      && memorySecond.output.browser.cursor === recording.entries
+      && memoryOpened.output.contentSha256 === memorySecond.output.contentSha256
+      && memoryHandoff.output.headSha256 === memorySecond.output.contentSha256,
+  memorySecond.output.contentSha256);
   const captured = await client.act(attached.output,
     [{ kind: "screenshot", format: "png", expectedRisk: "read" }]);
   const attachment = captured.attachments[0];

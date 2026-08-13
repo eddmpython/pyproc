@@ -26,16 +26,23 @@ export async function assertMachineEntranceContract() {
 
     const parsed = parseMachineProfileInitArguments([
       "--recipe", "pythonOnly", "--project-root", projectRoot, "--engine-root", "vendor/pyodide", "--dry-run",
+      "--execution-memory-root", ".pyproc/memory", "--execution-memory-import-root", "handoffs",
     ]);
     assert(parsed.profile.engineRoot === engineRoot && parsed.dryRun === true,
       "Machine Entrance CLI가 project-relative engine을 absolute profile로 컴파일하지 않았다");
+    assert(parsed.profile.executionMemory.root === join(projectRoot, ".pyproc", "memory")
+      && parsed.profile.executionMemory.importRoots[0] === join(projectRoot, "handoffs"),
+    "Machine Entrance CLI가 Execution Memory 경로를 absolute profile로 컴파일하지 않았다");
     assert(parseMachineRunArguments(["--config", "profile.json", "--code", "40 + 2"]).code === "40 + 2",
       "Machine Entrance run CLI가 shell-safe Python source를 보존하지 않았다");
 
-    const profile = { recipe: "pythonOnly", engineRoot };
+    const memoryRoot = join(projectRoot, ".pyproc", "memory");
+    const profile = { recipe: "pythonOnly", engineRoot,
+      executionMemory: { enabled: true, root: memoryRoot, importRoots: [], secretEnv: [] } };
     const compiled = compileMachineProfile(profile);
-    assert(compiled.browser.enabled === false && Object.keys(compiled.browser).length === 1,
-      "pythonOnly recipe에 browser authority가 섞였다");
+    assert(compiled.browser.enabled === false && Object.keys(compiled.browser).length === 1
+      && compiled.executionMemory.root === memoryRoot,
+    "pythonOnly recipe에 browser authority가 섞이거나 Execution Memory가 누락됐다");
     const wildcard = await errorOf(() => compileMachineProfile({ recipe: "observeLocal", engineRoot,
       allowedOrigins: ["http://*.test"], purpose: "fixture", externalEffects: "acknowledged" }));
     assert(/exact HTTP\(S\) origin/.test(wildcard?.message), "Machine Entrance가 wildcard origin을 거부하지 않았다");
@@ -47,7 +54,8 @@ export async function assertMachineEntranceContract() {
     const initialized = await initializeMachineProfile({ projectRoot, profile });
     const manifest = JSON.parse(await readFile(initialized.manifestPath, "utf8"));
     const client = JSON.parse(await readFile(initialized.clientPath, "utf8"));
-    assert(manifest.browser.enabled === false && client.mcpServers.pyproc.command === "npx"
+    assert(manifest.browser.enabled === false && manifest.executionMemory.root === memoryRoot
+      && client.mcpServers.pyproc.command === "npx"
       && client.mcpServers.pyproc.args.includes("--no-install")
       && client.mcpServers.pyproc.args.at(-1) === initialized.manifestPath,
       "initializer 산출물이 exact manifest와 common MCP snippet을 연결하지 않았다");

@@ -111,11 +111,11 @@ export async function assertControlProtocolContract() {
   "JS control client의 cancel write 실패와 원 request가 canonical outcome으로 함께 닫히지 않았다");
 
   const mapped = Object.entries(CONTROL_TOOL_OPERATIONS);
-  assert(mapped.length === 17 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
-    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 17종 mapping이 양방향이 아니다");
+  assert(mapped.length === 26 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
+    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 26종 mapping이 양방향이 아니다");
   const catalog = controlOperationCatalog(mapped.map(([name]) => ({ name, inputSchema: { type: "object" } })));
-  assert(catalog.length === 17 && catalog.every((entry) => entry.operationVersion === 1),
-    "control operation catalog가 versioned 17종이 아니다");
+  assert(catalog.length === 26 && catalog.every((entry) => entry.operationVersion === 1),
+    "control operation catalog가 versioned 26종이 아니다");
   const withoutSnapshotTools = createBrowserControlTools({ actions: ["screenshot"] });
   const withoutSnapshotCatalog = controlOperationCatalog(withoutSnapshotTools);
   assert(withoutSnapshotTools.length === 9
@@ -124,7 +124,10 @@ export async function assertControlProtocolContract() {
     && !withoutSnapshotCatalog.some((entry) => entry.name === "automation.observe"),
   "snapshot 권한 없이 MCP와 Control Protocol에 observe가 노출됐다");
   assert(controlSuccessOutcome("automation.command", { expectedRisk: "read" }) === "observed"
-    && controlSuccessOutcome("automation.command", { expectedRisk: "externalEffect" }) === "applied",
+    && controlSuccessOutcome("automation.command", { expectedRisk: "externalEffect" }) === "applied"
+    && controlSuccessOutcome("memory.open") === "observed"
+    && controlSuccessOutcome("memory.inspect") === "observed"
+    && controlSuccessOutcome("memory.checkpoint") === "applied",
   "control 성공 outcome이 관찰과 효과를 가르지 않는다");
 
   let mcpCalls = 0;

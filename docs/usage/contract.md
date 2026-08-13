@@ -33,7 +33,7 @@ Only the public package entry and named subpaths form the product contract. The 
 | `pyproc/assets` | Runtime-asset manifest and SRI preflight: `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` |
 | `pyproc/history` | The state kernel plus the store, bundle, and signature contracts |
 | `pyproc/machine` | Web Machine host, device, store, and guest assembly detail |
-| `pyproc/control` | Stable Node.js client for the installed Control product, persistent Python, APX, cancellation, and verified attachments. Available from 0.0.21 |
+| `pyproc/control` | Stable Node.js client for the installed Control product, persistent Python, APX, cancellation, verified attachments, and opt-in Execution Memory. Available from 0.0.21 |
 | `pyproc/worker` | Only when a bundler or product build must reference the worker entrypoint explicitly |
 | `pyproc/gpu`, `pyproc/socket`, `pyproc/wasi` | Demoted Experimental and Research surfaces. New Experimental subpaths are frozen |
 
@@ -68,6 +68,11 @@ The stable Node.js facade starts the matching package-internal command directly,
 different globally installed version. `PyProcControlClient`, `ControlRequest`, `ControlRemoteError`, and
 `PerceptionClient` share the host's operation, outcome, cancellation, and attachment contracts. See the
 [JavaScript Control SDK](javascriptControl.md).
+
+The same subpath exposes opt-in Execution Memory through high-level client verbs and direct registry objects.
+It adds no root export or new subpath. The version 1 manifest must explicitly enable a private registry root;
+otherwise its operations are absent. Immutable revisions index existing state and evidence formats rather than
+creating another Machine image. See [Execution Memory](executionMemory.md).
 
 The separately built `pyproc-control` Python distribution is the official native client. Its `PyProcClient`
 starts the npm command from `PATH`, validates the handshake and every frame, exposes cancellation and stable
@@ -212,7 +217,7 @@ After a revival - journal, session, or image open - process resources such as fi
 
 | Gate | Exposed specifiers | Actual public surface | Contract verified |
 | --- | --- | --- | --- |
-| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine`, `pyproc/control` | `boot`, `open`, `createWebComputer`, `createMachineFleet`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PyProcControlClient`, `PerceptionClient`, a `commitState`/`openState` kernel round trip, the four installed bins | package exports, stable subpath types, npm files, engine preparation, CLI graph copy and SRI manifest |
+| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine`, `pyproc/control` | `boot`, `open`, `createWebComputer`, `createMachineFleet`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PyProcControlClient`, `PerceptionClient`, `createExecutionMemoryRegistry`, a `commitState`/`openState` kernel round trip, the four installed bins | package exports, stable subpath types, npm files, engine preparation, CLI graph copy and SRI manifest |
 | installed package - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | An asset manifest rooted at `/node_modules/pyproc/`, worker graph SRI, registration of the installed `pyprocSw.js`, and rejection of a bad worker SRI before spawn |
 | installed package - runtime/server | `pyproc` | `boot`, the machine runtime's `enableAsgiServer`, ASGI delegation wiring of the installed `pyprocSw.js` | Machine boot from the installed package, a Python ASGI app, a `fetch("/pyproc/...")` virtual-origin round trip, the S3 timing source |
 | installed package - device filesystem | `pyproc` | machine runtime `enableDeviceFs` | Reading and writing `/dev/productState` and `/proc/meminfo` through the Python `open()` file contract on an installed-package machine |

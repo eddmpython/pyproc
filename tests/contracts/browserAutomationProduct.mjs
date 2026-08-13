@@ -53,6 +53,31 @@ export async function assertBrowserAutomationProductContract() {
   assert(roundTrip.config.browser.recording === undefined
     && JSON.stringify(roundTrip.config) === JSON.stringify(validated.config),
   "정규화된 제품 manifest가 같은 validator를 다시 통과하지 못했다");
+  const memoryRoot = join(root, "execution-memory");
+  const importRoot = join(root, "handoffs");
+  const memoryValidated = validateMcpProductConfig({ ...manifest,
+    executionMemory: { enabled: true, root: memoryRoot, importRoots: [importRoot],
+      secretEnv: ["PYPROC_CONTRACT_SECRET"] },
+  }, { baseEnv: { PYPROC_CONTRACT_SECRET: "fixture-secret-value" } });
+  assert(memoryValidated.config.executionMemory.root === memoryRoot
+    && memoryValidated.config.executionMemory.secretEnv[0] === "PYPROC_CONTRACT_SECRET"
+    && !JSON.stringify(memoryValidated.config).includes("fixture-secret-value")
+    && memoryValidated.env.PYPROC_EXECUTION_MEMORY_ROOT === memoryRoot
+    && JSON.parse(memoryValidated.env.PYPROC_EXECUTION_MEMORY_SECRET_VALUES)[0] === "fixture-secret-value",
+  "Execution Memory manifest가 secret 원문과 공개 설정을 분리하지 못했다");
+  assert(JSON.stringify(validateMcpProductConfig(memoryValidated.config,
+    { baseEnv: { PYPROC_CONTRACT_SECRET: "fixture-secret-value" } }).config)
+    === JSON.stringify(memoryValidated.config), "Execution Memory 정규 manifest가 roundtrip하지 않았다");
+  const missingSecret = await errorOf(() => validateMcpProductConfig({ ...manifest,
+    executionMemory: { enabled: true, root: memoryRoot, secretEnv: ["PYPROC_CONTRACT_SECRET"] },
+  }));
+  assert(/secret environment variable is unavailable/.test(missingSecret?.message),
+    "Execution Memory secretEnv가 없는 값으로 조용히 열렸다");
+  const shortSecret = await errorOf(() => validateMcpProductConfig({ ...manifest,
+    executionMemory: { enabled: true, root: memoryRoot, secretEnv: ["PYPROC_CONTRACT_SECRET"] },
+  }, { baseEnv: { PYPROC_CONTRACT_SECRET: "short" } }));
+  assert(/too short for binary redaction/.test(shortSecret?.message),
+    "짧은 secret fixture가 binary false-positive 경계를 우회했다");
   const unknownKey = await errorOf(() => validateMcpProductConfig({ ...manifest, surprise: true }));
   assert(/does not accept surprise/.test(unknownKey?.message), "제품 manifest unknown key가 fail-closed가 아니다");
   const unknownBrowserKey = await errorOf(() => validateMcpProductConfig({

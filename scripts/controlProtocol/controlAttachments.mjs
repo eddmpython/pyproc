@@ -11,6 +11,9 @@ function inlineArtifactKind(owner, key, value) {
   }
   if (owner.kind === "evidencePack"
     && owner.mimeType === "application/vnd.pyproc.evidence-pack+json") return "evidence.pack";
+  if (owner.kind === "machineImage" && owner.mimeType === "application/x-pymachine") {
+    return "machine.image";
+  }
   return null;
 }
 

@@ -56,6 +56,34 @@ try {
 The child process owns one persistent Python Machine for its lifetime. `close()` first closes protocol input,
 allows the product to drain, then applies a bounded termination fallback. It is safe to await more than once.
 
+## Execution Memory
+
+Enable it when creating the profile, then publish the current Machine as an immutable session revision:
+
+```sh
+npx pyproc-mcp init \
+  --recipe pythonOnly \
+  --engine-root /absolute/path/to/pyodide \
+  --execution-memory-root /absolute/private/pyproc-memory
+```
+
+```js
+const project = {
+  workspaceId: "workspace:forecast",
+  commit: "exact-commit",
+  treeSha256: "sha256:...",
+  diffSha256: "sha256:...",
+  untracked: false,
+};
+const created = await client.createExecutionSession("session:forecast", project);
+const opened = await client.openExecutionSession("session:forecast");
+console.log(created.output.contentSha256 === opened.output.contentSha256);
+```
+
+Updates require the exact current `contentSha256`; stale writers fail instead of silently retrying. Completion
+requires a verified Evidence Pack matching the repository identity. Signed export proves provenance but import
+still requires a separately approved permission-manifest digest. See [Execution Memory](executionMemory.md).
+
 ## PyProc Eyes and evidence-backed action
 
 ```js
@@ -142,6 +170,10 @@ invalid startup input. The package gate imports only `pyproc/control` from a pac
 Control product gate uses that public import to preflight and start the product, run persistent Python, cancel
 a delivered command, query APX through Native CDP and FrameSpace, verify screenshot bytes, reject request ID
 reuse, detach, and shut down on Chrome and Edge.
+
+The same installed gate captures a real portable Machine image, publishes it through Execution Memory, reopens
+the immutable revision, and verifies session discovery without exposing image bytes in JSON.
+
 ## Repository experience verification
 
 `auditExperience(contractRoot, options)` runs the strict repository contract through the configured

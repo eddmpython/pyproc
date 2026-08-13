@@ -584,6 +584,15 @@ Stable Node.js facade for the installed Control product, typed in
   `VerificationOutput` with `verdict`, `contentSha256`, publication receipt, and a verified pack attachment. Verify adds
   an exact comparison. Replay returns the recomputed verdict and finding refs. Evidence Pack attachments use
   kind `evidence.pack`. See [experience verification](../usage/experienceVerification.md).
+- Execution Memory verbs: `createExecutionSession`, `checkpointExecutionSession`,
+  `completeExecutionSession`, `openExecutionSession`, `listExecutionSessions`,
+  `inspectExecutionSession`, `exportExecutionHandoff`, and `importExecutionHandoff`. They are present only when
+  `executionMemory.enabled` is true and retain immutable revision digests, compare-and-swap HEAD, verified
+  sidecars, and separate handoff permission approval.
+- Direct hosts may use `createExecutionMemoryRegistry`, `ExecutionMemoryRegistry`,
+  `ExecutionMemoryArtifacts`, and `FileExecutionMemoryStore` from this existing subpath. These lower objects
+  index existing `.pymachine`, SituationCapsule, Automation Recording, Evidence Pack, and permission artifacts.
+  They do not create Fleet lifecycle authority.
 - `client.perception(sessionRef)` returns `PerceptionClient`. `observe`, `query`, `one`,
   `explainActionability`, `whatChanged`, and evidence-backed `act` retain the APX graph path. `situate` returns
   an immutable `SituationResult`, and `actAffordance` binds an authorized `SituationAffordance` to the effect.
@@ -612,6 +621,9 @@ client.replayEvidencePack(packDir, options?)
 
 - `pyproc-mcp init --recipe <name> ...` compiles `pythonOnly`, `observeLocal`, `authorizedBrowser`, or
   `replayPinned` into `.pyproc/manifest.json`, a common MCP `client.json`, and exact next commands.
+- `--execution-memory-root`, repeated `--execution-memory-import-root`, and repeated
+  `--execution-memory-secret-env` opt any recipe into immutable Execution Memory. Relative paths resolve from
+  the project root; secret values are validated from the environment and never serialized.
 - `--dry-run` performs path and authority validation without writing. Existing generated files require
   `--overwrite`. The output directory must remain inside the selected project root.
 - `pyproc-control doctor --config <file>` verifies the strict manifest, installed package version, local engine

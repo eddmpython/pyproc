@@ -379,6 +379,9 @@ class PyProcClient:
     def runPython(self, code: str, *, timeout: float | None = None) -> ControlResult:
         return self.request("machine.run", {"code": code}, timeout=timeout)
 
+    def exportMachineImage(self, *, timeout: float | None = None) -> ControlResult:
+        return self.request("machine.image.export", timeout=timeout)
+
     def saveCheckpoint(self, *, timeout: float | None = None) -> ControlResult:
         return self.request("machine.checkpoint.save", timeout=timeout)
 
@@ -454,6 +457,62 @@ class PyProcClient:
                            timeout: float | None = None) -> ControlResult:
         return self.request("verification.replay", {
             "packDir": str(Path(packDir).resolve()),
+        }, timeout=timeout)
+
+    def createExecutionSession(self, executionSessionId: str, project: dict[str, Any], *,
+                               machineId: str | None = None,
+                               browser: dict[str, Any] | None = None,
+                               timeout: float | None = None) -> ControlResult:
+        input: dict[str, Any] = {"executionSessionId": executionSessionId, "project": project}
+        if machineId is not None:
+            input["machineId"] = machineId
+        if browser is not None:
+            input["browser"] = browser
+        return self.request("memory.create", input, timeout=timeout)
+
+    def checkpointExecutionSession(self, executionSessionId: str, expectedRevisionSha256: str,
+                                   work: dict[str, Any], *, browser: dict[str, Any] | None = None,
+                                   timeout: float | None = None) -> ControlResult:
+        input: dict[str, Any] = {"executionSessionId": executionSessionId,
+                                 "expectedRevisionSha256": expectedRevisionSha256, "work": work}
+        if browser is not None:
+            input["browser"] = browser
+        return self.request("memory.checkpoint", input, timeout=timeout)
+
+    def completeExecutionSession(self, executionSessionId: str, expectedRevisionSha256: str,
+                                 evidencePackDir: str | os.PathLike[str], *,
+                                 timeout: float | None = None) -> ControlResult:
+        return self.request("memory.complete", {
+            "executionSessionId": executionSessionId,
+            "expectedRevisionSha256": expectedRevisionSha256,
+            "evidencePackDir": str(Path(evidencePackDir).resolve()),
+        }, timeout=timeout)
+
+    def openExecutionSession(self, executionSessionId: str, *,
+                             timeout: float | None = None) -> ControlResult:
+        return self.request("memory.open", {"executionSessionId": executionSessionId}, timeout=timeout)
+
+    def listExecutionSessions(self, *, timeout: float | None = None) -> ControlResult:
+        return self.request("memory.list", timeout=timeout)
+
+    def inspectExecutionSession(self, executionSessionId: str, *,
+                                timeout: float | None = None) -> ControlResult:
+        return self.request("memory.inspect", {"executionSessionId": executionSessionId}, timeout=timeout)
+
+    def exportExecutionHandoff(self, executionSessionId: str, outputPath: str, *,
+                               timeout: float | None = None) -> ControlResult:
+        return self.request("memory.export", {
+            "executionSessionId": executionSessionId, "outputPath": outputPath,
+        }, timeout=timeout)
+
+    def importExecutionHandoff(self, handoffDir: str | os.PathLike[str], *,
+                               trustedPublicKeyFile: str | os.PathLike[str],
+                               approvedPermissionManifestSha256: str,
+                               timeout: float | None = None) -> ControlResult:
+        return self.request("memory.import", {
+            "handoffDir": str(Path(handoffDir).resolve()),
+            "trustedPublicKeyFile": str(Path(trustedPublicKeyFile).resolve()),
+            "approvedPermissionManifestSha256": approvedPermissionManifestSha256,
         }, timeout=timeout)
 
     def perception(self, sessionRef: dict[str, Any] | None = None) -> PerceptionClient:

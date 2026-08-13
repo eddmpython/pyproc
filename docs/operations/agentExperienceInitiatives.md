@@ -533,6 +533,10 @@ lease는 Machine과 owner epoch에 묶인다. stale UI와 다른 tab은 suspend,
 
 ## Initiative 4 - Execution Memory Registry
 
+상태: 구현됨. immutable revision, CAS HEAD, 실제 Machine과 browser sidecar 재검증, evidence-gated completion,
+retention reachability, signed handoff와 별도 permission 승인이 Control, MCP, JavaScript, Python 설치 gate로
+고정됐다.
+
 ### 제품 명제
 
 대화 요약은 실제 Python heap, package, file, branch, browser observation, effect evidence를 부활시키지 못한다.
@@ -572,9 +576,12 @@ provenance이며 permission grant가 아니고, 외부 browser cookie와 unknown
 7. proxy와 external browser state를 portable로 표시한 횟수 0이다.
 8. secret 원문 유출과 reachable object 오삭제가 0이다.
 
-실험은 [Initiative 4 campaign](../../tests/attempts/executionMemoryRegistry/)에서 시작한다.
+지속 구현 계약과 검증 명령은
+[Execution Memory specification](../specs/executionMemory/README.md)이 소유한다.
 
 ## Initiative 5 - Rehearse-Commit Transactions
+
+상태: 착수. Initiative 4의 immutable session revision을 effect intent와 receipt의 정본 경계로 사용한다.
 
 ### 제품 명제
 
@@ -814,15 +821,15 @@ provider가 같은 conformance를 통과한 뒤에만 optional actuation operati
 
 | Initiative | reality와 attempt | contract와 product | graduation 핵심 |
 |---|---|---|---|
-| 01 Machine Entrance | installed journey와 recipe negative fixture | init, doctor, one lifecycle, client parity | clean exact-package journey |
-| 02 Perception Computer | pinned browser baseline과 perception probes | WorldModel, SituationCapsule, proof-carrying action | reach 보존, minimal evidence, truth, replay |
-| 03 Verified Change Loop | repository experience fixtures와 exact reference pack | Experience Contract, Evidence Pack, audit, verify | false verified와 secret leak 0 |
-| 04 Hibernating Machine Fleet | worker reclaim, suspend, lease, crash probes | Fleet lifecycle, hot budget, cold recovery | cold execution owner 0, exact wake |
-| 05 Execution Memory Registry | revision, link, handoff, retention probes | immutable session, CAS HEAD, handoff descriptor | exact state handoff와 permission 분리 |
-| 06 Rehearse-Commit Transactions | intent, approval, one-shot, outcome probes | rehearsal and effect receipts, CommitLease | live send 최대 1, false confirmed 0 |
-| 07 Transactional AppSpace | cooperative state, pair commit, outbox probes | logical app state, paired branch, effect staging | one-sided state와 unauthorized effect 0 |
-| 08 ReplayGraph Worlds | graph import, traversal, coverage, integrity probes | state graph, world contract, evaluator | effect 0 traversal과 invented edge 0 |
-| 09 Proof-Carrying Motor | binding, effect window, user preemption, native host, correction promotion probes | semantic intents, actuator broker, ControlLease, ActuationReceipt, experience ledger | wrong target, unsafe continuation, authority escalation, unverified learning 0 |
+| 0 Machine Entrance | installed journey와 recipe negative fixture | init, doctor, one lifecycle, client parity | clean exact-package journey |
+| 1 Perception Computer | pinned browser baseline과 perception probes | WorldModel, SituationCapsule, proof-carrying action | reach 보존, minimal evidence, truth, replay |
+| 2 Verified Change Loop | repository experience fixtures와 exact reference pack | Experience Contract, Evidence Pack, audit, verify | false verified와 secret leak 0 |
+| 3 Hibernating Machine Fleet | worker reclaim, suspend, lease, crash probes | Fleet lifecycle, hot budget, cold recovery | cold execution owner 0, exact wake |
+| 4 Execution Memory Registry | revision, link, handoff, retention probes | immutable session, CAS HEAD, handoff descriptor | exact state handoff와 permission 분리 |
+| 5 Rehearse-Commit Transactions | intent, approval, one-shot, outcome probes | rehearsal and effect receipts, CommitLease | live send 최대 1, false confirmed 0 |
+| 6 Transactional AppSpace | cooperative state, pair commit, outbox probes | logical app state, paired branch, effect staging | one-sided state와 unauthorized effect 0 |
+| 7 ReplayGraph Worlds | graph import, traversal, coverage, integrity probes | state graph, world contract, evaluator | effect 0 traversal과 invented edge 0 |
+| 8 Proof-Carrying Motor | binding, effect window, user preemption, native host, correction promotion probes | semantic intents, actuator broker, ControlLease, ActuationReceipt, experience ledger | wrong target, unsafe continuation, authority escalation, unverified learning 0 |
 
 ## 중단 조건
 

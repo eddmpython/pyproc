@@ -13,7 +13,7 @@ report = PyProcClient.check(configPath)
 assert report["ok"] is True and report["automation"]["enabled"] is True
 
 with PyProcClient.start(configPath, startupTimeout=60.0) as client:
-    assert len(client.operations) == 14
+    assert len(client.operations) == 26
     prepared = client.runPython("prepared = [10, 20, 30]", timeout=60.0)
     assert prepared.terminal == "completed"
     checkpoint = client.saveCheckpoint(timeout=60.0)
@@ -22,6 +22,19 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     client.restoreCheckpoint(checkpoint.output["index"], timeout=60.0)
     restored = client.runPython("(len(prepared), 'leak' in globals())", timeout=60.0)
     assert restored.output["value"] == "(3, False)"
+
+    projectIdentity = {"workspaceId": "installed:python", "commit": "fixture",
+                       "treeSha256": "sha256:" + "1" * 64,
+                       "diffSha256": "sha256:" + "2" * 64, "untracked": False}
+    memoryCreated = client.createExecutionSession(
+        "session:installed-python", projectIdentity, timeout=60.0)
+    memoryOpened = client.openExecutionSession("session:installed-python", timeout=30.0)
+    memoryListed = client.listExecutionSessions(timeout=30.0)
+    assert memoryCreated.output["contentSha256"] == memoryOpened.output["contentSha256"]
+    assert len(memoryOpened.output["machine"]["imageSha256"]) == 64
+    assert memoryOpened.output["machine"]["generation"]
+    assert any(entry["executionSessionId"] == "session:installed-python"
+               for entry in memoryListed.output)
 
     cancelRequest = client.requestAsync("machine.run", {
         "code": "import time\npythonEffect = 'applied'\ntime.sleep(1.0)"
@@ -98,4 +111,4 @@ print(json.dumps({"ok": True, "operations": len(client.operations), "checkpoint"
                   "cancelTerminal": cancelError.terminal, "timeoutOutcome": timeoutError.outcome,
                   "timeoutTerminal": timeoutError.terminal, "permissionTerminal": permissionError.terminal,
                   "successTerminal": captured.terminal, "perceptionEntityRef": heading.entityRef,
-                  "situationRef": situation.situationRef}))
+                  "situationRef": situation.situationRef, "executionMemory": True}))
