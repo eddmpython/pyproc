@@ -213,6 +213,19 @@ function browserBaseTools() {
       },
     },
     {
+      name: "browserClose",
+      description: "Close one target created by this broker and invalidate every session attached to it.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          targetRef: { type: "string", minLength: 1 },
+          expectedRisk: { type: "string", const: "externalEffect" },
+        },
+        required: ["targetRef", "expectedRisk"],
+        additionalProperties: false,
+      },
+    },
+    {
       name: "browserCommand",
       description: "Send a separately raw-allowlisted CDP command. High-level action methods do not grant raw command access.",
       inputSchema: {
@@ -337,6 +350,9 @@ export class McpBrowserControl {
     if (tool === "browserOpen" && args.expectedRisk !== "externalEffect") {
       throw permissionError("browserOpen requires expectedRisk externalEffect");
     }
+    if (tool === "browserClose" && args.expectedRisk !== "externalEffect") {
+      throw permissionError("browserClose requires expectedRisk externalEffect");
+    }
     if (tool === "browserCommand") {
       if (!this._rawMethods.has(args.method)) throw permissionError(`raw browser command is outside permission: ${args.method}`);
       if (!Object.hasOwn(BROWSER_CONTROL_RISKS, args.expectedRisk)) {
@@ -380,6 +396,7 @@ export class McpBrowserControl {
       this._audit({ kind: "open", risk: "externalEffect", state: "applied" });
       return target;
     }
+    if (tool === "browserClose") return broker.closeTarget(args.targetRef);
     if (tool === "browserAttach") return broker.attach(args.targetRef);
     if (tool === "browserCommand") {
       return broker.command(args.sessionRef, {

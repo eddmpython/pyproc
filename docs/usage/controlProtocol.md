@@ -244,3 +244,19 @@ handoff inventory, permission, and secret-leak failures.
 The same installed gates prepare, rehearse, approve, commit, and seal a real Rehearse-Commit transaction. They
 require one HTTP effect, zero resend on retry, exact destination refusal, matching ActionEvidence, and the same
 sealed receipt links across JavaScript, MCP, and Python.
+
+## Motor operations
+
+An actuation-enabled profile adds `motor.execute`, `motor.control.acquire`, `motor.control.revoke`,
+`motor.inspect`, `motor.list`, `motor.replay`, `motor.policy.evaluate`, `motor.policy.promote`, and
+`motor.policy.rollback`. The matching MCP tools use the `motor` prefix. JavaScript and Python preserve the same
+canonical receipt digest.
+
+The JavaScript `openMotorTask()` helper is a public client-side resource scope built from existing Control
+operations. It opens or borrows a target, attaches a session, observes task Situations, executes one exact Motor
+request, and cleans up owned resources. It does not add a wire operation. `automation.target.close` is available
+as `browserClose` and rejects targets not created by the broker.
+
+`verification.audit` also accepts optional Motor journey references. The host resolves stored content by receipt
+digest and projects it into the existing Evidence Pack. Caller-supplied Motor objects cannot enter the pack as
+trusted evidence. See [Proof-Carrying Motor](actuation.md).

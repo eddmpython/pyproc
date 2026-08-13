@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "PyProc Delegated Tab",
+  "description": "Delegates one explicitly chosen tab to a locally bound PyProc control host.",
+  "version": "0.0.21",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "background": {
+    "service_worker": "serviceWorker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Bind host or delegate this tab"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+P",
+        "mac": "MacCtrl+Shift+P"
+      }
+    }
+  },
+  "externally_connectable": {
+    "matches": [
+      "http://127.0.0.1/*"
+    ]
+  }
+}

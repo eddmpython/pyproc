@@ -193,6 +193,33 @@ descriptor. A successful `ControlResult` has `terminal: "completed"`; `ControlRe
 `rejected`, `partial`, `outcomeUnknown`, or `cancelled`. JSON keeps the opaque artifact reference for bounded
 reads and explicit deletion.
 
+## Proof-Carrying Motor
+
+When `actuation.enabled` is true, use `openMotorTask()` to bind target, session, Situation, artifact, and cleanup
+ownership to one scope:
+
+```js
+const task = await client.openMotorTask({ url: "https://app.example/work",
+  expectedRisk: "externalEffect", waitUntil: "load" });
+try {
+  const observed = await task.situate({ requirements: [{
+    requirementRef: "requirement:save",
+    select: { role: "button", name: "Save", actionable: true },
+    need: ["fact", "affordance"], cardinality: "one",
+  }] });
+  const diagnostic = task.diagnoseAmbiguity(observed, "requirement:save");
+  if (!diagnostic.canExecute) throw new Error("caller refinement is required");
+  // Build an absolute ActuationIntent from observed.situation and call task.execute(...).
+} finally {
+  const cleanup = await task.close();
+  if (cleanup.state !== "complete") console.error(cleanup.failures);
+}
+```
+
+The task never chooses among ambiguous candidates. It executes only a Situation observed by the same task and
+closes only a target it created. `retainArtifact()` transfers explicit retention intent. Cleanup attempts remain
+independent, and a cleanup error never retries an earlier effect. See [the Motor guide](actuation.md).
+
 ## Cancellation, deadlines, and external effects
 
 ```js
@@ -248,6 +275,7 @@ const audit = await client.auditExperience("qa/eyes", {
     diffSha256: "sha256:...",
     untracked: false,
   },
+  motorJourneys: [{ receiptSha256, scenarioId: "save-document", checkpointId: "post-save" }],
 });
 
 if (audit.output.verdict !== "verified") {

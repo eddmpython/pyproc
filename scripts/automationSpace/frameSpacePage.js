@@ -73,6 +73,7 @@ export class FrameSpacePage {
       "automation.space.inspect": () => this.inspect(),
       "automation.target.list": () => this.listTargets(),
       "automation.target.open": (input) => this.openTarget(input),
+      "automation.target.close": (input) => this.closeTarget(input),
       "automation.session.attach": (input) => this.attach(input),
       "automation.session.detach": (input) => this.detach(input),
       "automation.observe": (input) => this.observe(input),
@@ -150,6 +151,20 @@ export class FrameSpacePage {
       targetRef: target.targetRef });
     this.sessions.set(sessionId, { session, targetRef: target.targetRef });
     return session;
+  }
+
+  closeTarget({ targetRef } = {}) {
+    const target = this._target(targetRef);
+    for (const [sessionId, record] of this.sessions) {
+      if (record.targetRef === targetRef) this.sessions.delete(sessionId);
+    }
+    for (const pending of target.pending.values()) pending.reject(frameError(
+      "FRAME_SPACE_TARGET_CLOSED", "FrameSpace target closed after command delivery", "outcomeUnknown"));
+    target.pending.clear();
+    target.port?.close();
+    target.iframe.remove();
+    this.targets.delete(targetRef);
+    return Object.freeze({ closed: true, targetRef });
   }
 
   detach({ sessionRef } = {}) {

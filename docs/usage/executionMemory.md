@@ -215,3 +215,14 @@ and environment. This lower API does not impersonate Fleet authority or terminat
 
 See the [specification](../specs/executionMemory/README.md), [Control Protocol](controlProtocol.md),
 [Machine Fleet](machineFleet.md), and [trust and permissions](trustPermissions.md).
+
+## Motor records
+
+When Motor is enabled, its immutable policies, receipts, and episodes live in the `actuation` namespace beneath
+the same private Execution Memory root. Receipt and episode publication uses content-addressed objects plus
+single-assignment heads. A receipt must resolve to exactly one episode before an Experience audit can project it
+into an Evidence Pack.
+
+Execution Memory stores this lineage but does not transfer action, approval, commit, control, browser, or native
+authority. Handoff and replay cannot resend a recorded effect. Apply the same secret, quota, and retention policy
+to Motor records as to linked Situations and Evidence Packs. See [Proof-Carrying Motor](actuation.md).

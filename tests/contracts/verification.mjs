@@ -19,6 +19,14 @@ import {
   verificationScenarioTerminal,
 } from "../../scripts/verification/verificationOracle.js";
 import { VerificationRunner } from "../../scripts/verification/verificationRunner.js";
+import {
+  actuationDigest,
+  createActuationEpisode,
+  createActuationIntent,
+  createActuationPlan,
+  createActuationReceipt,
+  createTargetBinding,
+} from "../../scripts/actuation/actuationCanonical.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -85,6 +93,32 @@ function situation() {
       entityRefs: ["entity:ready"], claimRefs: ["claim:ready"] }],
     facts: [{ claimRef: "claim:ready", subjectRef: "entity:ready", predicate: "semantic.name", value: "Ready" }],
     affordances: [], unknowns: [] });
+}
+
+function motorJourneyFixture(terminal = "contradicted") {
+  const intent = createActuationIntent({ intent: "activate", target: { spaceRef: "space:fixture",
+    entityRef: "entity:save", worldRef: "world:fixture", surfaceEpoch: "document:1" },
+  desired: { activated: true }, preconditions: [], expectedTransition: { saved: true }, authority: {
+    actionCapabilityRef: "capability:save", approvalGrantRef: null, commitLeaseRef: null,
+    controlLeaseRef: null }, policy: { allowedActuatorKinds: ["browserInput"],
+    allowPreContactFallback: false } });
+  const binding = createTargetBinding({ spaceRef: "space:fixture", worldRef: "world:fixture",
+    entityRef: "entity:save", surfaceEpoch: "document:1", actuatorKind: "browserInput",
+    invariants: [{ semantic: "Save" }, { actionable: true }], candidateCount: 1, uniqueness: "unique",
+    freshUntil: Date.parse("2026-08-14T00:01:00.000Z"), providerFenceSha256: actuationDigest({ provider: 1 }) });
+  const decision = { ruleVersion: 1, selected: { kind: "browserInput", adapterVersion: "1",
+    providerId: "provider:fixture", binding }, ordered: [], excluded: [] };
+  const plan = createActuationPlan({ intent, binding, decision, boundary: "provider.effectDispatch" });
+  const receipt = createActuationReceipt({ intent, binding, plan, decision, terminal,
+    effectOutcome: "applied", actionEvidenceRef: "evidence:save",
+    effectWindow: { phase: "postContact", boundary: "provider.effectDispatch", crossed: true,
+      providerCalls: 1, completedSegments: [], safetyRelease: { sent: true } } });
+  const episode = createActuationEpisode({ receipt, worldRef: "world:fixture",
+    policyRevisionSha256: actuationDigest({ policy: 1 }),
+    provider: { kind: "browserInput", version: "1", environmentSha256: actuationDigest({ environment: 1 }) },
+    timeline: [{ phase: "verification", at: 1 }], evidenceRefs: ["evidence:save"],
+    redactionManifestSha256: actuationDigest({ redaction: 1 }) });
+  return Object.freeze({ receipt, episode });
 }
 
 export async function assertVerificationContract() {
@@ -166,6 +200,53 @@ export async function assertVerificationContract() {
     const disk = await loadEvidencePack(join(root, "evidence", "current"));
     assert(replayEvidencePack(disk.pack, disk.artifactBytes).verdict === "verified",
       "published pack replay가 원 verdict를 재현하지 못했다");
+
+    const journey = motorJourneyFixture();
+    let motorObservations = 0;
+    const motorAutomation = { invoke: async (operation) => {
+      if (operation === "automation.space.inspect") return { space: { providerKind: "nativeCdp" },
+        compatibility: { family: "chromium", version: "151.0" },
+        viewport: { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false, touch: false },
+        policy: { targetOrigins: ["http://127.0.0.1:8788"] } };
+      if (operation === "automation.target.open") return { targetRef: "target:motor-fixture" };
+      if (operation === "automation.session.attach") return { sessionId: "session:motor-fixture" };
+      if (operation === "automation.session.detach") return { detached: true };
+      if (operation === "automation.observe" && ++motorObservations === 1) {
+        return { page: { environment: { locale: "en-US", timezoneId: "UTC", colorScheme: "light",
+          reducedMotion: false, fontFingerprint: "font-metrics-v1:1,2,3,4" } } };
+      }
+      return situation();
+    } };
+    const motorRunner = new VerificationRunner({ automation: motorAutomation, producerVersion: "contract",
+      motorJourneyResolver: async (receiptSha256) => {
+        if (receiptSha256 !== journey.receipt.receiptSha256) {
+          const error = new Error("Motor receipt is unavailable");
+          error.code = "ACTUATION_RECEIPT_INVALID";
+          throw error;
+        }
+        return journey;
+      } });
+    const motorResult = await motorRunner.audit({ contractRoot: root, repositoryRoot: root,
+      outputDir: "evidence/motor", environmentId: "desktop",
+      repository: { commit: "fixture", treeSha256: `sha256:${"1".repeat(64)}`,
+        diffSha256: `sha256:${"2".repeat(64)}`, untracked: false },
+      motorJourneys: [{ receiptSha256: journey.receipt.receiptSha256,
+        scenarioId: "ready", checkpointId: "post-motor" }] });
+    const motorDisk = await loadEvidencePack(join(root, "evidence", "motor"));
+    assert(motorResult.verdict === "rejected" && motorDisk.pack.verdict === "rejected"
+      && motorDisk.pack.scenarioRuns[0].motorJourneys[0].receiptSha256 === journey.receipt.receiptSha256
+      && motorDisk.pack.artifacts.some((artifact) => artifact.mimeType
+        === "application/vnd.pyproc.motor-journey+json")
+      && motorDisk.pack.findings.some((finding) => finding.ruleId === "motor.journeyTerminal")
+      && replayEvidencePack(motorDisk.pack, motorDisk.artifactBytes).verdict === "rejected",
+    "Motor receipt와 episode가 기존 Evidence Pack의 verdict, artifact, finding에 흡수되지 않았다");
+    const missingMotor = await errorOf(() => motorRunner.audit({ contractRoot: root, repositoryRoot: root,
+      outputDir: "evidence/missing-motor", environmentId: "desktop",
+      repository: { commit: "fixture", treeSha256: `sha256:${"1".repeat(64)}`,
+        diffSha256: `sha256:${"2".repeat(64)}`, untracked: false },
+      motorJourneys: [{ receiptSha256: "0".repeat(64), scenarioId: "ready", checkpointId: "post-motor" }] }));
+    assert(missingMotor?.code === "ACTUATION_RECEIPT_INVALID",
+      "Evidence Pack이 존재하지 않는 Motor receipt를 fail-closed로 거부하지 않았다");
 
     const inline = evidencePackAttachment(disk.pack);
     const extracted = extractControlAttachments({ packAttachment: inline });

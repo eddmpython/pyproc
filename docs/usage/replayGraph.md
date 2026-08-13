@@ -180,3 +180,10 @@ Direct `pyproc/control` consumers can use `evaluateReplayGraph`, `inspectReplayG
 
 See the [ReplayGraph 1.0 specification](../specs/replayGraph/README.md) for the identity, integrity, provenance,
 quota, and conformance rules.
+
+## Motor integration
+
+The Motor `replay` actuator requires one exact stored edge whose input names the requested receipt. Traversal
+consumes the normal world capability and returns the recorded terminal with `providerCalls: 0`. It never converts
+a missing edge into a guessed action, never calls a live provider, and never turns a historical external effect
+into current authority. See [Proof-Carrying Motor](actuation.md).

@@ -13,11 +13,17 @@ import {
   parseMachineDoctorArguments,
   parseMachineInvokeArguments,
   parseMachineRunArguments,
+  parseWindowsNativeArguments,
 } from "./machineEntrance/entranceCli.js";
 import { inspectMachineProfile } from "./machineEntrance/machineDoctor.js";
+import { inspectWindowsNativeHostConfig, removeWindowsNativeHost,
+  setupWindowsNativeHost } from "./actuation/windowsNativeInstaller.mjs";
 
 const HELP = `Usage:
   pyproc-control doctor --config <file>
+  pyproc-control native setup --config <file>
+  pyproc-control native status --config <file>
+  pyproc-control native remove --config <file>
   pyproc-control run --config <file> --code <python>
   pyproc-control invoke --config <file> --operation <name> [--input <json>]
   pyproc-control eyes audit --config <file> --contract-root <dir> --repository-root <dir> --output-dir <relative-dir> --environment <id>
@@ -124,6 +130,12 @@ try {
     const report = await inspectMachineProfile(args.config);
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     if (!report.ok) process.exitCode = 1;
+  } else if (argv[0] === "native") {
+    const args = parseWindowsNativeArguments(argv.slice(1));
+    const result = args.command === "setup" ? await setupWindowsNativeHost(args.config)
+      : args.command === "remove" ? await removeWindowsNativeHost(args.config)
+        : await inspectWindowsNativeHostConfig(args.config);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else if (argv[0] === "eyes") {
     const args = parseEyesArgs(argv.slice(1));
     const client = await PyProcControlClient.start(args.config);
@@ -164,6 +176,8 @@ try {
     } else {
       if (!args.config) throw new TypeError("pyproc-control requires --config <file>");
       const loaded = await loadMcpProductConfig(args.config);
+      const windowsNative = loaded.config.actuation.native.enabled
+        ? await inspectWindowsNativeHostConfig(args.config) : { enabled: false, installed: false };
       const browserExecutable = findBrowser({ executable: loaded.config.browser.enabled
         ? loaded.config.browser.executable : undefined });
       if (args.check) {
@@ -190,6 +204,7 @@ try {
           appSpace: loaded.config.appSpace.enabled ? loaded.config.appSpace : { enabled: false },
           replayGraph: loaded.config.replayGraph,
           actuation: loaded.config.actuation,
+          windowsNative,
           automation: loaded.config.browser.enabled ? {
             enabled: true,
             provider: loaded.config.browser.provider,

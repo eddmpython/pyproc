@@ -41,7 +41,7 @@ New work names the axis it moves. Work that moves no axis, weakens a guardrail i
 
 ## Ordered agent-experience initiatives
 
-Agent-computer work follows nine ordered initiatives. The detailed plan, research baseline, failure conditions,
+Agent-computer work follows twelve ordered initiatives. The detailed plan, research baseline, failure conditions,
 and graduation gates live in [agent experience initiatives](../operations/agentExperienceInitiatives.md).
 
 0. **Finish the Machine Entrance.** An exact package install must reach a useful Python result and an optional,
@@ -65,6 +65,12 @@ and graduation gates live in [agent experience initiatives](../operations/agentE
 8. **Carry one intent across actuator planes.** A deterministic broker preserves absolute target bindings,
    authority, effect windows, user precedence, and one receipt across cooperative app, browser input, and native
    accessibility providers without making any provider mandatory for the browser-only installation path.
+9. **Close the verified interaction loop.** Active perception, send-boundary revalidation, mandatory input
+   release, and loss-aware postcondition evidence harden the path after Motor has made the effect boundary exact.
+10. **Make the Python kernel independently replaceable.** Prove an engine-neutral worker kernel, hostcalls, VFS,
+    package profile, and deletion gate without weakening the current production engine.
+11. **Cut documentation over to a single-source skill operating system.** Replace parallel knowledge surfaces in
+    one repository-wide transition with deterministic routing and evidence-gated correction.
 The Machine Entrance is delivered through the installed initializer, doctor, and client parity gates. The
 Perception Computer is delivered through `apx.situation`, the JavaScript and Python `situate()` facades, and the
 Chrome and Edge `test:perception-computer` gate. It does not claim general superiority over Playwright. The narrow
@@ -87,8 +93,12 @@ secret rejection, and no-send effect staging. ReplayGraph Worlds is also deliver
 and exact AppSpace pairs into immutable CAS graph
 revisions, issues current-node one-shot traversal capabilities, returns stored terminals with zero live provider
 requests, and computes deterministic evaluation, coverage, and retention reachability. Installed JavaScript,
-Python, and MCP clients reopen the same root. The next active campaign is Proof-Carrying Motor. Later initiatives
-remain locked behind their immediate predecessor. No initiative changes a North Star score before its browser
+Python, and MCP clients reopen the same root. Proof-Carrying Motor is delivered through absolute intents,
+task-complete APX binding, deterministic browser, cooperative, replay, Windows accessibility and physical-input
+routes, one-shot ControlLease, canonical receipt and episode storage, Evidence Pack projection, and owned task
+cleanup. Installed browser, Windows, delegated-tab, client-parity, and negative contract gates preserve the
+honest limits. The next active campaign is Verified Interaction Loop. Later initiatives remain locked behind
+their immediate predecessor. No initiative changes a North Star score before its browser
 evidence is registered in the ledger.
 
 This portfolio does not duplicate the separate ceiling ladder. Serverless local applications, portable Machine

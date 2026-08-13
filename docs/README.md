@@ -23,11 +23,12 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [rehearseCommit/README.md](specs/rehearseCommit/README.md) | Rehearse-Commit protocol: exact intent, signed approval, durable one-shot lease, honest outcome, and evidence-linked receipt |
 | | [appSpace/README.md](specs/appSpace/README.md) | Transactional AppSpace protocol: cooperative logical state, fenced capture, immutable app and Machine pairs, CAS adoption, and effect outbox boundary |
 | | [replayGraph/README.md](specs/replayGraph/README.md) | ReplayGraph Worlds protocol: content-addressed known states, exact verified edges, effect-free traversal, coverage, evaluation, and CAS revisions |
+| | [actuation/README.md](specs/actuation/README.md) | Proof-Carrying Motor 1.0: absolute intents, complete target binding, deterministic actuator selection, bounded effects, receipts, episodes, native trust, and cleanup |
 | [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: documentation, executable truth, experiments, git history, memory operations, development principles |
 | | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
 | | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
 | | [testing.md](operations/testing.md) | The test gates (`npm test`) and the browser measurement procedure (a COOP/COEP server) |
-| | [agentExperienceInitiatives.md](operations/agentExperienceInitiatives.md) | Ordered Initiative 0 through 8 plan: entrance, browser cognition, verified changes, hibernating fleets, execution memory, one-shot effects, transactional apps, replay worlds, and proof-carrying actuation |
+| | [agentExperienceInitiatives.md](operations/agentExperienceInitiatives.md) | Ordered Initiative 0 through 11 plan: entrance, browser cognition, verified changes, durable execution, transactions, replay, actuation, interaction hardening, kernel independence, and knowledge cutover |
 | | [experimentalFreeze.md](operations/experimentalFreeze.md) | The freeze on new Experimental public surfaces and the conditions for lifting it |
 | | [moduleBoundaries.md](operations/moduleBoundaries.md) | Ownership boundaries between Runtime capability clusters, policy modules, contract suites, and runtime assets |
 | | [benchmarking.md](operations/benchmarking.md) | The measurement contract for internal benchmarks, canonical scenarios, and raw-evidence rules (posting on a public surface is forbidden: the no-bragging-with-numbers rule) |
@@ -52,6 +53,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [rehearseCommit.md](usage/rehearseCommit.md) | Configure, rehearse, approve, commit once, recover without resend, and seal an external effect |
 | | [appSpace.md](usage/appSpace.md) | Configure a cooperative app adapter, pair its logical state with a Machine checkpoint, branch, restore, adopt, and stage effects without sending |
 | | [replayGraph.md](usage/replayGraph.md) | Import recordings or AppSpace branches, traverse exact pinned worlds without effects, evaluate paths, and inspect coverage |
+| | [actuation.md](usage/actuation.md) | Configure Motor, complete one public JavaScript task, refine ambiguity, attach journeys to Evidence Packs, and manage the optional Windows host |
 | [reference/](reference/) | [api.md](reference/api.md) | The function-level API reference: the six root exports and the machine handle vocabulary, escape hatches and subpaths, the full error code table (a machine gate forces every root export to be anchored) |
 | | [bundleFormat.md](reference/bundleFormat.md) | The canonical layout of the portable bundle (`PYBUNDLE1`) envelope: byte placement, header fields, the separation of integrity from signature |
 
@@ -83,7 +85,9 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 - Automation recording and replay: [usage/replaySpace.md](usage/replaySpace.md)
 - Cooperative app and Machine state pairs: [usage/appSpace.md](usage/appSpace.md)
 - Effect-free verified branch worlds: [usage/replayGraph.md](usage/replayGraph.md)
+- Proof-carrying browser and Windows actions: [usage/actuation.md](usage/actuation.md)
 - PyProc Eyes graph, SituationCapsule, and evidence contract: [APX 1.0](specs/apx/README.md)
 - Repository change verdict and Evidence Pack contract: [Experience Verification 1.0](specs/verification/README.md)
 - ReplayGraph node, edge, traversal, integrity, and evaluation contract: [ReplayGraph Worlds 1.0](specs/replayGraph/README.md)
+- Absolute intent, actuator, receipt, and cleanup contract: [Proof-Carrying Motor 1.0](specs/actuation/README.md)
 - Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

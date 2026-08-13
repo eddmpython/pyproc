@@ -80,6 +80,20 @@ export class FileActuationStore {
     return assertActuationEpisode(parse(await this._read(episodeSha256, "ActuationEpisode"), "ActuationEpisode"));
   }
 
+  async journey(receiptSha256) {
+    const receipt = await this.receipt(receiptSha256);
+    const episodeIds = (await this.store.listSessionIds()).filter((id) => id.startsWith("motor.episode:"));
+    const matches = [];
+    for (const id of episodeIds) {
+      const episodeSha256 = await this.store.readHead(id);
+      const episode = await this.episode(episodeSha256);
+      if (episode.receiptSha256 === receipt.receiptSha256) matches.push(episode);
+    }
+    if (matches.length !== 1) throw actuationError(ACTUATION_ERROR_CODES.episodeInvalid,
+      "Motor receipt must resolve to one exact episode");
+    return Object.freeze({ receipt, episode: matches[0] });
+  }
+
   async list() {
     const ids = (await this.store.listSessionIds()).filter((id) => id.startsWith("motor.receipt:"));
     const output = [];

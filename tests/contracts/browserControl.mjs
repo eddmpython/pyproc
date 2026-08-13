@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebMachineHost } from "../../src/machine/host/webMachineHost.js";
 import { resolveRequiredDevice } from "../../src/machine/contracts/deviceRequirement.js";
-import { readDevToolsEndpoint } from "../../scripts/browserControl/browserControlBroker.mjs";
+import {
+  NodeBrowserControlBroker,
+  readDevToolsEndpoint,
+} from "../../scripts/browserControl/browserControlBroker.mjs";
 import {
   BrowserControlPort,
   BROWSER_CONTROL_ERROR_CODES,
@@ -269,6 +272,49 @@ export async function assertBrowserControlContract() {
     "blank browser-level URL 뒤 session-level origin 재검사가 실패했다");
   assert(blankTransport.sessions.size === 0, "post-attach origin 거부 뒤 raw debugger session이 남았다");
   await blankPort.close();
+
+  const ownershipTransport = new FakeTransport();
+  ownershipTransport.targets = [
+    { id: "borrowed-same-url", type: "page", url: "http://allowed.test/app", title: "borrowed" },
+  ];
+  const ownershipPort = new BrowserControlPort({
+    transport: ownershipTransport,
+    policy: new BrowserControlPolicy({ targetOrigins: ["http://allowed.test"], maxRisk: "externalEffect" }),
+    brokerId: "ownership-broker",
+    idFactory: (() => { let value = 0; return () => `ownership-${++value}`; })(),
+  });
+  const [borrowedTarget] = await ownershipPort.listTargets();
+  const ownershipConnection = {
+    async send(method) {
+      if (method === "Target.createTarget") {
+        ownershipTransport.targets.push({ id: "created-same-url", type: "page",
+          url: "http://allowed.test/app", title: "created" });
+        return { targetId: "created-same-url" };
+      }
+      if (method === "Target.attachToTarget") return { sessionId: "ownership-session" };
+      if (method === "Page.getFrameTree") return { frameTree: { frame: { url: "http://allowed.test/app" } } };
+      if (method === "Runtime.evaluate") return { result: { value: "complete" } };
+      if (method === "Target.closeTarget") {
+        await ownershipTransport.closeTarget("created-same-url");
+        return { success: true };
+      }
+      return {};
+    },
+    subscribe() { return () => {}; },
+  };
+  const ownershipBroker = new NodeBrowserControlBroker({ connection: ownershipConnection,
+    port: ownershipPort, timeoutMs: 1000 });
+  const openedTarget = await ownershipBroker.openTarget("http://allowed.test/app");
+  assert(openedTarget.targetRef !== borrowedTarget.targetRef,
+    "동일 URL의 기존 target을 새 target 소유권으로 오인했다");
+  const borrowedClose = await errorOf(() => ownershipBroker.closeTarget(borrowedTarget.targetRef));
+  assert(borrowedClose?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+    "broker가 생성하지 않은 target close를 허용했다");
+  await ownershipBroker.closeTarget(openedTarget.targetRef);
+  assert(ownershipTransport.targets.length === 1
+    && ownershipTransport.targets[0].id === "borrowed-same-url",
+  "소유 target cleanup이 동일 URL의 기존 target을 닫았다");
+  await ownershipBroker.close();
 
   const transport = new FakeTransport();
   let id = 0;

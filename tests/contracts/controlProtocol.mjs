@@ -111,16 +111,16 @@ export async function assertControlProtocolContract() {
   "JS control client의 cancel write 실패와 원 request가 canonical outcome으로 함께 닫히지 않았다");
 
   const mapped = Object.entries(CONTROL_TOOL_OPERATIONS);
-  assert(mapped.length === 61 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
-    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 61종 mapping이 양방향이 아니다");
+  assert(mapped.length === 64 && mapped.every(([tool, operation]) => controlOperationForTool(tool) === operation
+    && controlToolForOperation(operation) === tool), "MCP tool과 control operation 64종 mapping이 양방향이 아니다");
   const catalog = controlOperationCatalog(mapped.map(([name]) => ({ name, inputSchema: { type: "object" } })));
-  assert(catalog.length === 61 && catalog.every((entry) => entry.operationVersion === 1),
-    "control operation catalog가 versioned 61종이 아니다");
+  assert(catalog.length === 64 && catalog.every((entry) => entry.operationVersion === 1),
+    "control operation catalog가 versioned 64종이 아니다");
   const withoutSnapshotTools = createBrowserControlTools({ actions: ["screenshot"] });
   const withoutSnapshotCatalog = controlOperationCatalog(withoutSnapshotTools);
-  assert(withoutSnapshotTools.length === 9
+  assert(withoutSnapshotTools.length === 10
     && !withoutSnapshotTools.some((tool) => tool.name === "browserObserve")
-    && withoutSnapshotCatalog.length === 9
+    && withoutSnapshotCatalog.length === 10
     && !withoutSnapshotCatalog.some((entry) => entry.name === "automation.observe"),
   "snapshot 권한 없이 MCP와 Control Protocol에 observe가 노출됐다");
   assert(controlSuccessOutcome("automation.command", { expectedRisk: "read" }) === "observed"

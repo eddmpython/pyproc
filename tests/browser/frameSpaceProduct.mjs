@@ -126,8 +126,8 @@ console.log("installed FrameSpace product gate");
 try {
   await Promise.race([client.ready,
     new Promise((_, reject) => setTimeout(() => reject(new Error(`FrameSpace hello timeout\n${stderr}`)), TIMEOUT_MS))]);
-  check("one wire advertises machine plus nine FrameSpace operations",
-    client.operations.length === 16 && !client.operations.includes("automation.command")
+  check("one wire advertises machine plus ten FrameSpace operations",
+    client.operations.length === 17 && !client.operations.includes("automation.command")
       && client.operations.includes("verification.audit"));
 
   await client.request("machine.run", { code: "frameState = 40" });
@@ -347,7 +347,7 @@ try {
     actions: [{ kind: "screenshot", expectedRisk: "read" }] });
   const mcpImages = mcpCapture.result.content.filter((entry) => entry.type === "image");
   check("installed MCP adapter keeps the FrameSpace tool and native image contract",
-    mcpTools.length === 16 && !mcpTools.includes("browserCommand") && mcpImages.length === 1
+    mcpTools.length === 17 && !mcpTools.includes("browserCommand") && mcpImages.length === 1
       && Buffer.from(mcpImages[0].data, "base64").subarray(0, 8)
         .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
   `tools=${mcpTools.length}, images=${mcpImages.length}`);

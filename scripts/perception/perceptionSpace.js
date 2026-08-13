@@ -158,7 +158,8 @@ export class PerceptionSpace {
       throw error;
     }
     if (context.signal?.aborted) throw context.signal.reason || new Error("APX observation cancelled");
-    const facts = await this.sensor.capture(sessionRef, options, context);
+    const captureOptions = situationRequested ? Object.freeze({ ...options, budget: APX_MAX_BUDGET }) : options;
+    const facts = await this.sensor.capture(sessionRef, captureOptions, context);
     const documentEpoch = normalizedEpoch(facts.documentEpoch);
     const identitySnapshot = this.identity.snapshot(sessionRef);
     const sessionKey = perceptionSessionKey(sessionRef);
@@ -228,6 +229,11 @@ export class PerceptionSpace {
       if (delta && !options.query) {
         const selectedRefs = new Set([...delta.added, ...delta.changed.map((entry) => entry.entityRef)]);
         selected = Object.freeze(state.entities.filter((entity) => selectedRefs.has(entity.entityRef)));
+      }
+      if (situationRequested) {
+        selected = Object.freeze([...new Map(options.focus.requirements.flatMap((requirement) =>
+          queryPerceptionEntities(state.entities, requirement.select, null))
+          .map((entity) => [entity.entityRef, entity])).values()]);
       }
       if (options.visual.mode !== "off" && this.visualProbe && options.visual.maxCrops > 0) {
         const visualCandidates = situationRequested

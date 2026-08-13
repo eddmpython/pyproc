@@ -3,6 +3,7 @@ export const AUTOMATION_SPACE_OPERATIONS = Object.freeze([
   "automation.space.inspect",
   "automation.target.list",
   "automation.target.open",
+  "automation.target.close",
   "automation.session.attach",
   "automation.command",
   "automation.session.detach",

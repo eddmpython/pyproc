@@ -278,3 +278,14 @@ controlled page is never the approving service.
 
 See the [protocol specification](../specs/rehearseCommit/README.md),
 [Execution Memory](executionMemory.md), and [trust and permission contract](trustPermissions.md).
+
+## Motor integration
+
+Motor may carry `approvalGrantRef` and `commitLeaseRef` in one absolute intent, but it does not issue or widen
+them. Rehearse-Commit remains the only owner of consequential-effect approval and one-shot live dispatch. A
+`ControlLease` adds physical-device occupancy only and cannot replace either authority.
+
+Rehearsal may evaluate an exact plan in AppSpace or ReplayGraph. A live Motor route must still recheck the current
+APX capability, target binding, origin, effect authority, and provider preconditions at contact. A Motor receipt
+links existing action or effect evidence instead of copying a second business receipt. See
+[Proof-Carrying Motor](actuation.md).

@@ -205,6 +205,30 @@ Native CDP supports verified pixel-on-demand attachments. FrameSpace supports AP
 but rejects visual inference. See the [APX 1.0 product contract](../specs/apx/README.md) for the graph and evidence
 contract.
 
+## Proof-Carrying Motor from Python
+
+The Python facade shares the same durable Motor records and receipt digests as JavaScript and MCP:
+
+```python
+motor = client.executeMotor({
+    "sessionRef": attached.output,
+    "situation": situation.output,
+    "requirementRef": "requirement:save",
+    "intent": absolute_intent,
+})
+assert motor.output["terminal"] in {"confirmed", "alreadySatisfied"}
+
+records = client.listMotorRecords()
+assert any(row["receiptSha256"] == motor.output["receipt"]["receiptSha256"]
+           for row in records.output)
+```
+
+`absolute_intent` must carry the exact Situation world, entity, surface epoch, action capability, desired final
+state, expected transition, and actuator allowlist. Python does not receive raw coordinates or provider handles.
+Windows physical input additionally requires `acquireMotorControl()` and a one-shot control lease. Use
+`revokeMotorControl()` before execution when the surrounding product cancels the task. See
+[the Motor guide](actuation.md).
+
 ## Cancellation and errors
 
 `requestAsync` returns a `ControlRequest`:
@@ -276,6 +300,11 @@ audited = client.auditExperience(
     outputDir=".pyproc/evidence/current",
     environmentId="desktop",
     repository=repository,
+    motorJourneys=[{
+        "receiptSha256": receipt_sha256,
+        "scenarioId": "save-document",
+        "checkpointId": "post-save",
+    }],
 )
 client.replayEvidencePack(".pyproc/evidence/current")
 client.verifyExperience(".pyproc/evidence/reference", ".pyproc/evidence/current")

@@ -431,12 +431,43 @@ await eyes.actAffordance(save, {
 
 자세한 계약은 [APX 1.0 제품 계약](docs/specs/apx/README.md)에 있다.
 
+**Proof-Carrying Motor**는 complete Situation과 absolute desired state를 bounded provider effect 한 번,
+검증된 terminal, durable receipt, redacted episode로 바꾼다. Native CDP, cooperative AppSpace, effect-free
+ReplayGraph, optional Windows accessibility와 physical-input host를 결정적으로 합성한다. ambiguous, stale,
+source-truncated target은 contact 전에 실패한다. cleanup 실패는 effect 결과와 분리해 보고하고 effect를
+다시 보내지 않는다.
+
+```js
+const task = await client.openMotorTask({
+  url: "https://app.example/document/42",
+  expectedRisk: "externalEffect",
+  waitUntil: "load",
+});
+try {
+  const observed = await task.situate({ requirements: [{
+    requirementRef: "requirement:save",
+    select: { role: "button", name: "Save", actionable: true },
+    need: ["fact", "affordance"],
+    cardinality: "one",
+  }] });
+  console.log(task.diagnoseAmbiguity(observed, "requirement:save"));
+  // 이 exact Situation에서 absolute intent를 만들고 task.execute(...)를 호출한다.
+} finally {
+  await task.close();
+}
+```
+
+Motor는 stable `pyproc/control`, Control, MCP, Python 표면 안에 있다. 저장된 journey는 기존 Evidence Pack의
+canonical sidecar와 finding으로 들어간다. optional Windows host는 기본 비활성이며 exact application
+allowlist와 명시적 setup, status, update, integrity, removal 경로를 가진다. 자세한 내용은
+[Motor 가이드](docs/usage/actuation.md)와 [Motor 1.0 계약](docs/specs/actuation/README.md)에 있다.
+
 `{ "enabled": false }`이면 설치 제품은 네 Python 도구와 effect-free `eyesVerify`, `eyesReplay`를
 노출한다. browser를 켜면 lifecycle, compatibility, observation, action, raw command, artifact를 위한
-열 개 도구와 `eyesAudit`이 추가된다.
+열한 개 도구와 `eyesAudit`이 추가된다.
 
 `"provider": "frame"`을 지정하면 DevTools port 없이 cooperative credentialless sandbox를 사용한다.
-snapshot 허용 시 browser 도구 아홉 개를 제공하고 raw command는 열지 않으며 target이 출하 bridge를
+snapshot 허용 시 browser 도구 열 개를 제공하고 raw command는 열지 않으며 target이 출하 bridge를
 로딩해야 한다. 정확한 격리와 screenshot 경계는 [FrameSpace 가이드](docs/usage/frameSpace.md)에 있다.
 
 `browser.recording`을 추가하면 승인된 여정을 hash chain으로 저장하고, 이후
@@ -516,6 +547,7 @@ FrameSpace는 이 facade를 공유하면서 서로 다른 정직한 conformance 
 | Device FS, permission jail, GPU, socket | Probe |
 | PyProc Eyes graph, SituationCapsule, proof-carrying action과 action evidence | Bounded |
 | Verified Change Loop와 canonical Evidence Pack | Bounded |
+| Proof-Carrying Motor absolute intent, receipt, bounded actuator | Bounded |
 | 설치형 MCP browser automation과 artifact 제품 | Bounded |
 | 설치형 JavaScript Control SDK | Bounded |
 | Transactional AppSpace logical state와 Machine pair | Bounded |

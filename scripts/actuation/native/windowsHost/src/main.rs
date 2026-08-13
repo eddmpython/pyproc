@@ -5,14 +5,17 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::io::{self, Read, Write};
 use std::mem::size_of;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use windows::core::{BOOL, BSTR};
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::core::{BOOL, BSTR, PWSTR};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
 };
+use windows::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_LEFTDOWN,
@@ -97,11 +100,26 @@ struct TargetInvariant {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct BindInput {
-    #[serde(rename = "processId")]
-    process_id: u32,
+struct ApplicationPolicy {
+    #[serde(rename = "applicationId")]
+    application_id: String,
+    #[serde(rename = "executablePath")]
+    executable_path: String,
     #[serde(rename = "windowTitle")]
     window_title: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativePolicy {
+    applications: Vec<ApplicationPolicy>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BindInput {
+    #[serde(rename = "applicationId")]
+    application_id: String,
     #[serde(rename = "surfaceEpoch")]
     surface_epoch: String,
     target: TargetInvariant,
@@ -109,7 +127,9 @@ struct BindInput {
 
 #[derive(Clone, Debug)]
 struct Binding {
+    application_id: String,
     process_id: u32,
+    executable_path: String,
     window_title: String,
     surface_epoch: String,
     target: TargetInvariant,
@@ -148,8 +168,8 @@ struct NativeLease {
     intent_sha256: String,
     #[serde(rename = "surfaceEpoch")]
     surface_epoch: String,
-    #[serde(rename = "processId")]
-    process_id: u32,
+    #[serde(rename = "applicationId")]
+    application_id: String,
     #[serde(rename = "expiresAt")]
     expires_at: u64,
     #[serde(rename = "userInputEpoch")]
@@ -176,6 +196,7 @@ struct ExecuteOsInput {
 
 struct Host {
     automation: IUIAutomation,
+    applications: HashMap<String, ApplicationPolicy>,
     bindings: HashMap<String, Binding>,
     used_leases: HashSet<String>,
     sequence: u64,
@@ -212,6 +233,22 @@ fn window_title(hwnd: HWND) -> Result<String, Failure> {
     Ok(String::from_utf16_lossy(&buffer[..copied as usize]))
 }
 
+fn process_path(process_id: u32) -> Result<String, Failure> {
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) }
+        .map_err(|error| Failure::not_sent("NATIVE_PROCESS_ACCESS_DENIED", error.to_string()))?;
+    let mut buffer = vec![0u16; 32768];
+    let mut length = buffer.len() as u32;
+    let result = unsafe { QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32,
+        PWSTR(buffer.as_mut_ptr()), &mut length) };
+    let _ = unsafe { CloseHandle(process) };
+    result.map_err(|error| Failure::not_sent("NATIVE_PROCESS_ACCESS_DENIED", error.to_string()))?;
+    Ok(String::from_utf16_lossy(&buffer[..length as usize]))
+}
+
+fn same_windows_path(left: &str, right: &str) -> bool {
+    left.replace('/', "\\").to_lowercase() == right.replace('/', "\\").to_lowercase()
+}
+
 fn foreground_for(process_id: u32, expected_title: &str) -> Result<HWND, Failure> {
     let hwnd = unsafe { GetForegroundWindow() };
     if hwnd.0.is_null() {
@@ -246,6 +283,25 @@ fn window_for(process_id: u32, expected_title: &str) -> Result<HWND, Failure> {
     if matches.len() != 1 {
         return Err(Failure::not_sent(if matches.len() > 1 { "NATIVE_WINDOW_AMBIGUOUS" } else { "NATIVE_WINDOW_STALE" },
             format!("exact process and title fence requires one window, found {}", matches.len())));
+    }
+    Ok(matches[0])
+}
+
+fn application_window(policy: &ApplicationPolicy) -> Result<(HWND, u32), Failure> {
+    let mut windows = Vec::new();
+    unsafe { EnumWindows(Some(collect_visible_window), LPARAM(&mut windows as *mut _ as isize)) }
+        .map_err(|error| Failure::not_sent("NATIVE_WINDOW_INVALID", error.to_string()))?;
+    let matches: Vec<_> = windows.into_iter().filter_map(|hwnd| {
+        if !window_title(hwnd).is_ok_and(|title| title == policy.window_title) { return None; }
+        let mut process_id = 0u32;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut process_id)); }
+        if process_id == 0 || !process_path(process_id)
+            .is_ok_and(|path| same_windows_path(&path, &policy.executable_path)) { return None; }
+        Some((hwnd, process_id))
+    }).collect();
+    if matches.len() != 1 {
+        return Err(Failure::not_sent(if matches.len() > 1 { "NATIVE_WINDOW_AMBIGUOUS" } else { "NATIVE_WINDOW_STALE" },
+            format!("allowed application fence requires one window, found {}", matches.len())));
     }
     Ok(matches[0])
 }
@@ -299,6 +355,10 @@ fn exact_element(automation: &IUIAutomation, binding: &Binding, require_foregrou
     -> Result<(HWND, IUIAutomationElement), Failure> {
     let hwnd = if require_foreground { foreground_for(binding.process_id, &binding.window_title)? }
         else { window_for(binding.process_id, &binding.window_title)? };
+    let executable_path = process_path(binding.process_id)?;
+    if !same_windows_path(&executable_path, &binding.executable_path) {
+        return Err(Failure::not_sent("NATIVE_PROCESS_MISMATCH", "process executable differs from the allowed application fence"));
+    }
     let root = unsafe { automation.ElementFromHandle(hwnd) }
         .map_err(|error| Failure::not_sent("NATIVE_UIA_UNAVAILABLE", error.to_string()))?;
     let matches: Vec<_> = elements(&root, automation)?.into_iter()
@@ -499,19 +559,31 @@ fn start_input_observer() -> Result<(), Failure> {
 }
 
 impl Host {
-    fn new() -> Result<Self, Failure> {
+    fn new(policy: NativePolicy) -> Result<Self, Failure> {
+        if policy.applications.is_empty() || policy.applications.len() > 128 {
+            return Err(Failure::not_sent("NATIVE_POLICY_INVALID", "native policy requires one to 128 applications"));
+        }
+        let mut applications = HashMap::new();
+        for application in policy.applications {
+            if !valid_ref(&application.application_id, "application:")
+                || !Path::new(&application.executable_path).is_absolute()
+                || application.window_title.is_empty() || application.window_title.len() > 500
+                || applications.insert(application.application_id.clone(), application).is_some() {
+                return Err(Failure::not_sent("NATIVE_POLICY_INVALID", "native application policy is invalid"));
+            }
+        }
         unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }.ok()
             .map_err(|error| Failure::not_sent("NATIVE_COM_UNAVAILABLE", error.to_string()))?;
         let automation = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }
             .map_err(|error| Failure::not_sent("NATIVE_UIA_UNAVAILABLE", error.to_string()))?;
         start_input_observer()?;
-        Ok(Self { automation, bindings: HashMap::new(), used_leases: HashSet::new(), sequence: 0 })
+        Ok(Self { automation, applications, bindings: HashMap::new(), used_leases: HashSet::new(), sequence: 0 })
     }
 
     fn dispatch(&mut self, operation: &str, input: Value) -> Result<Value, Failure> {
         match operation {
             "inspect" => self.inspect(input),
-            "bind" => self.bind(input),
+            "bindApplication" => self.bind(input),
             "executeAccessibility" => self.execute_accessibility(input),
             "executeOsInput" => self.execute_os_input(input),
             _ => Err(Failure::not_sent("NATIVE_OPERATION_UNKNOWN", "native operation is not allowed")),
@@ -531,17 +603,21 @@ impl Host {
     fn bind(&mut self, input: Value) -> Result<Value, Failure> {
         let request: BindInput = serde_json::from_value(input)
             .map_err(|error| Failure::not_sent("NATIVE_INPUT_INVALID", error.to_string()))?;
-        if request.process_id == 0 || request.window_title.is_empty() || request.window_title.len() > 500
+        if !valid_ref(&request.application_id, "application:")
             || !valid_ref(&request.surface_epoch, "surface:") || request.target.name.is_empty()
             || request.target.name.len() > 300 || request.target.control_type.is_empty() {
             return Err(Failure::not_sent("NATIVE_BINDING_INVALID", "native binding input is invalid"));
         }
-        let binding = Binding { process_id: request.process_id, window_title: request.window_title,
+        let application = self.applications.get(&request.application_id).cloned()
+            .ok_or_else(|| Failure::not_sent("NATIVE_APPLICATION_DENIED", "application is outside the native allowlist"))?;
+        let (_, process_id) = application_window(&application)?;
+        let binding = Binding { application_id: application.application_id,
+            process_id, executable_path: application.executable_path, window_title: application.window_title,
             surface_epoch: request.surface_epoch, target: request.target };
         let (hwnd, element) = exact_element(&self.automation, &binding, false)?;
         self.sequence += 1;
         let binding_ref = format!("nativeBinding:{}", digest(&[&self.sequence.to_string(),
-            &binding.process_id.to_string(), &binding.window_title, &binding.surface_epoch,
+            &binding.application_id, &binding.process_id.to_string(), &binding.window_title, &binding.surface_epoch,
             &binding.target.name, &binding.target.control_type]));
         let intents = supported_intents(&element);
         self.bindings.insert(binding_ref.clone(), binding);
@@ -586,8 +662,8 @@ impl Host {
             return Err(Failure::not_sent("NATIVE_CONTROL_LEASE_INVALID", "OS input requires an exact active ControlLease"));
         }
         let binding = self.binding(&request.binding_ref, &request.surface_epoch)?.clone();
-        if binding.process_id != request.lease.process_id {
-            return Err(Failure::not_sent("NATIVE_CONTROL_LEASE_INVALID", "ControlLease process differs from target binding"));
+        if binding.application_id != request.lease.application_id {
+            return Err(Failure::not_sent("NATIVE_CONTROL_LEASE_INVALID", "ControlLease application differs from target binding"));
         }
         if self.used_leases.contains(&request.lease.lease_ref) {
             return Err(Failure::not_sent("NATIVE_CONTROL_LEASE_CONSUMED", "ControlLease was already consumed"));
@@ -635,8 +711,9 @@ fn response<'a>(request_id: &'a str, result: Result<Value, Failure>) -> Response
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let expected_bootstrap = env::var("PYPROC_NATIVE_BOOTSTRAP")?;
+    let policy: NativePolicy = serde_json::from_str(&env::var("PYPROC_NATIVE_POLICY")?)?;
     if !valid_digest(&expected_bootstrap) { return Err("PYPROC_NATIVE_BOOTSTRAP must be a lowercase SHA-256 value".into()); }
-    let mut host = Host::new().map_err(|error| error.message)?;
+    let mut host = Host::new(policy).map_err(|error| error.message)?;
     let mut authenticated = false;
     let stdin = io::stdin();
     let stdout = io::stdout();

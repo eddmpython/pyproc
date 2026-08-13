@@ -1,13 +1,16 @@
 # Agent experience initiatives
 
 pyproc을 에이전트가 바로 소비할 수 있는 제품으로 닫은 뒤, browser cognition, 변경 검증, Machine 동면,
-실행 기억, one-shot effect transaction, 협력 app state, replay world, proof-carrying actuation까지 확장하는
-순차 기획이다. 이 문서는 Initiative 0부터 8까지의 지속 계획 정본이고, 현재 능력의 주장은 코드와 gate에만
+실행 기억, one-shot effect transaction, 협력 app state, replay world, proof-carrying actuation, 검증된
+interaction loop, 독립 Python kernel, single-source Skill OS까지 확장하는 순차 기획이다. 이 문서는
+Initiative 0부터 11까지의
+지속 계획 정본이고,
+현재 능력의 주장은 코드와 gate에만
 둔다.
 
 ## 결정
 
-아홉 initiative를 직렬로 진행한다.
+열두 initiative를 직렬로 진행한다.
 
 0. **Machine Entrance**를 먼저 끝낸다. exact package 설치에서 첫 Python 결과와 첫 검증된 browser
    observation까지 deep import, protocol 조립, 수작업 manifest 추측 없이 도달하게 한다.
@@ -28,6 +31,15 @@ pyproc을 에이전트가 바로 소비할 수 있는 제품으로 닫은 뒤, b
 8. **Proof-Carrying Motor**는 같은 absolute intent를 cooperative app, browser input, Windows
    accessibility, OS input에서 실행하고, target binding, ControlLease, effect window, evidence를 한
    actuation receipt로 닫고, 검증된 실행 episode에서 다음 policy revision을 effect 없이 검증한다.
+9. **Verified Interaction Loop**는 후보 집합을 출력 budget 전에 완전하게 판정하고, 필요한 sensor만
+   단계적으로 읽으며, effect 직전 authority와 actionability를 다시 확인하고, 입력 해제와 업무
+   postcondition까지 한 evidence chain으로 검증한다.
+10. **Independent Python Kernel**은 CPython/WASI build, Promise-first kernel contract, hostcall ABI, VFS,
+    package environment와 state lifecycle을 PyProc이 소유하고 Pyodide runtime, toolchain, ABI 의존을
+    배포물에서 삭제한다.
+11. **Single-Source Skill Operating System**은 설계, 사용, 운영, 검증 지식을 `skills/` 하나로 이동하고
+    `docs/`를 물리적으로 삭제하며, deterministic routing, bounded read, executable verification과
+    corpus-gated correction을 같은 source digest로 닫는다.
 
 순서를 바꾸지 않는다. 소비 경로가 불안정한 상태에서 perception 표현을 바꾸면 제품 문제와 표현
 문제를 분리해 측정할 수 없고, 새로운 구조가 좋아도 실제 사용자가 진입할 수 없다. Perception 없이
@@ -35,7 +47,13 @@ change verification을 만들면 screenshot runner로 퇴화하고, 실제 cold 
 만들면 metadata registry에 그친다. exact session revision 없이 effect approval을 만들 수 없고, one-shot
 effect law 없이 app outbox를 열 수 없으며, paired app state 없이 ReplayGraph를 만들면 linear recording을
 갈라 붙인 자료구조일 뿐이다. 이 기반보다 Motor를 먼저 만들면 perception, approval, replay를 다시
-구현한 또 하나의 browser automation stack이 된다.
+구현한 또 하나의 browser automation stack이 된다. Motor가 닫히기 전에 active perception과 상호운용
+규격부터 만들면 실제 send boundary 결함을 schema로 포장하게 되므로 Initiative 9는 Motor 다음에 둔다.
+Python kernel 교체를 앞 initiative 구현과 동시에 진행하면 runtime 의미 변화와 interaction correctness
+회귀를 분리해 판정할 수 없다. Initiative 10은 앞선 제품 gate 전체를 engine-neutral conformance로
+재실행하고 삭제까지 닫는다. runtime과 public contract가 계속 변하는 동안 knowledge system을 먼저
+전환하면 문서 이동 결함과 제품 변경 결함을 분리할 수 없다. Initiative 11은 Initiative 10까지의 실제
+제품 표면이 닫힌 뒤 48개 현행 source와 모든 gate를 원자적으로 옮기는 마지막 순서에 둔다.
 
 모든 initiative는 기존 Machine, state kernel, AutomationSpace, Control surface를 아래층 정본으로
 재사용한다. 새 npm root export, 별도 browser 제품 정체성, page나 repository 문서가 권한을 부여하는
@@ -94,6 +112,9 @@ broker가 부여한 authority, 아직 모르는 것, 행동 뒤 입증된 변화
 | app state checkpoint와 effect outbox | Initiative 6로 채택 | arbitrary browser snapshot이 아니라 cooperative logical state protocol로 제한 |
 | branched replay world | Initiative 7로 채택 | graph에 실제 recorded 또는 transactional edge만 허용하고 없는 transition은 생성하지 않음 |
 | affordance-first multi-plane motor | Initiative 8로 교정 채택 | affordance와 effect authority는 Initiative 1과 5를 재사용하고, absolute intent, deterministic actuator broker, ControlLease, effect window만 새 책임으로 둠 |
+| active perception과 verified interaction profile | Initiative 9로 교정 채택 | full-tree 절단, actionability, send-boundary, input release, postcondition 누락을 먼저 코드와 음성 시험으로 닫고 독립 구현이 일치할 때만 규격 후보를 엶 |
+| Pyodide 없는 자체 Python 실행 기반 | Initiative 10으로 채택 | non-Pyodide CPython core 실측을 기반으로 runtime, toolchain, ABI 독립을 분리하고 worker kernel, hostcall, VFS, package, native profile, 완전 삭제 gate를 한 이니셔티브가 소유 |
+| 운영문서를 Skill OS로 전환 | Initiative 11로 교정 채택 | `docs/`와 `skills/` 병행을 금지하고 repository-wide atomic cutover, compact catalog 하나, deterministic routing, digest-bound read, evidence-gated correction으로 단일 정본을 강제 |
 | server 없는 local cloud | 이미 있음 | ASGI, VirtualOrigin, OPFS의 shipped 조합이며 Machine Entrance와 Fleet golden workload로 사용 |
 | 살아 있는 program file | 이미 있음, Initiative 4에 연결 | `.pymachine`과 `.webmachine`이 state를 나르고 Execution Memory가 handoff index를 추가 |
 | 완전한 virtual Chromium | 폐기 | browser engine과 renderer state를 이중 가상화하며 현재 authority와 memory 목표를 악화 |
@@ -745,6 +766,10 @@ missing edge는 graph coverage gap이다. wrong action과 분리하고, 비슷�
 
 ## Initiative 8 - Proof-Carrying Motor
 
+상태: 구현 및 졸업 gate 통과. 지속 계약은
+[Proof-Carrying Motor 1.0](../specs/actuation/README.md)과
+[사용 가이드](../usage/actuation.md)가 소유한다.
+
 ### 제품 명제
 
 현재 browser control은 `click`, `fill`, `drag` 같은 provider action을 안전하게 실행하지만, 같은 의미 행동을
@@ -848,7 +873,249 @@ provider가 같은 conformance를 통과한 뒤에만 optional actuation operati
 16. 학습이 authority, target uniqueness, effect boundary, user precedence, redaction을 바꾼 횟수는 0이다.
 17. 같은 episode corpus와 policy revision이 만드는 plan과 promotion verdict digest 차이는 0이다.
 
-실험은 [Initiative 8 campaign](../../tests/attempts/proofCarryingMotor/)에서 시작한다.
+### 구현 결과
+
+- absolute intent, exact TargetBinding, hard eligibility, versioned route, effect window, canonical receipt와
+  redacted episode가 하나의 순수 계약을 이룬다.
+- Native CDP browser input, Transactional AppSpace cooperative route, ReplayGraph effect-free route가 같은
+  terminal contract를 사용한다.
+- optional Windows Rust host가 UI Automation과 `SendInput`을 exact application allowlist, one-shot
+  ControlLease, foreground와 surface epoch fence 아래 제공한다.
+- explicit setup, status, update, removal, locked source, CycloneDX SBOM, binary/source/SBOM digest와 local
+  installation signature가 native 수명주기를 닫는다. local signature는 publisher identity가 아니다.
+- public `pyproc/control`의 `openMotorTask()`가 owned target, session, artifact cleanup을 묶고 borrowed target은
+  닫지 않는다. cleanup failure는 effect를 재전송하지 않는다.
+- Situation은 최대 bounded source inventory에서 caller focus를 먼저 평가한다. provider omission은
+  `inventory: truncated`와 unknown으로 닫히며 action-capable pagination authority는 만들지 않는다.
+- ambiguity diagnostic은 predicate class만 반환하고 caller가 명시한 semantic refinement 뒤에만 exact
+  execution이 열린다.
+- Motor receipt와 episode는 기존 Evidence Pack의 canonical sidecar와 behavioral finding으로 투영된다.
+  별도 audit truth는 없다.
+- optional DelegatedTab extension은 `activeTab`과 `scripting`만 사용한다. 두 explicit action gesture,
+  origin, tab epoch이 authority이며 synthetic CDP gesture는 거부된다. actual positive grant는 manual user
+  gesture 경계로 남는다.
+- installed browser, Windows, DelegatedTab, JavaScript, Python, MCP와 음성 contract gate가 이 경계를
+  고정한다.
+
+## Initiative 9 - Verified Interaction Loop
+
+### 제품 명제
+
+Initiative 9는 새 vision model이나 새 input driver를 만드는 계획이 아니다. 현재 APX와 browser control의
+실행 순서에서 확인된 다섯 correctness gap을 고친다.
+
+1. `PerceptionSpace`가 graph를 budget으로 자른 뒤 `SituationCompiler`가 cardinality를 계산해, 1,001번째
+   동명 후보가 누락돼도 target 하나가 authorized가 될 수 있다.
+2. `WebCdpSensor`는 매 capture마다 full AX tree, full DOMSnapshot, layout metrics를 읽고 DOM record끼리
+   중첩 순회해 occlusion을 계산한다.
+3. browser action은 actionability wait 전에 `actionContext`를 한 번만 검사하고 effect 직전에 다시
+   검사하지 않는다.
+4. mouse press, key down 뒤 command가 실패하면 독립 safety release가 보장되지 않는다.
+5. verification은 고정 500 entity capture와 최대 100 event buffer를 사용하며, drop count와 sequence
+   watermark가 없어 postcondition 관찰 누락과 사건 부재를 구분할 수 없다.
+
+목표 경로는 다음과 같다.
+
+```text
+requirement
+-> complete candidate evaluation before projection budget
+-> query pushdown and focused hydration
+-> unique world-bound target
+-> actionability and authority recheck at send boundary
+-> guarded at-most-one send
+-> mandatory safety release if input remains down
+-> postcondition-conditioned observation with event watermark
+-> canonical evidence terminal
+```
+
+### 기존 계약과 새 책임
+
+- WorldModel의 기존 attestation을 sensor provenance 정본으로 확장한다. 별도 `SensorClaim` truth store를
+  만들지 않는다.
+- Initiative 5의 `EffectTransactionCoordinator`, `CommitLease`, sending recovery를 one-shot send 정본으로
+  재사용한다. 두 번째 lease protocol을 만들지 않는다.
+- Initiative 8의 intent, binding, effect window, ActuationReceipt를 재사용한다. 새 Motor와 새 public
+  low-level input API를 만들지 않는다.
+- [WebDriver interactability](https://www.w3.org/TR/webdriver2/)의 viewport-clipped center와 hit-test 규칙을
+  browser actionability 기준선으로 삼는다.
+- CDP의 experimental `Accessibility.queryAXTree`와 partial AX, DOM geometry query는 capability discovery 뒤
+  최적화로만 사용하고 full-tree fallback도 같은 correctness gate를 통과시킨다.
+
+### 졸업 gate
+
+1. 1,001번째 동명 후보가 숨은 fixture에서 authorized capability는 0이다.
+2. candidate completeness를 알 수 없는 상태에서 unique target과 effect send는 0이다.
+3. partially offscreen target, shadow DOM, nested frame, parent-frame overlay의 actionability verdict가
+   WebDriver 기준과 어긋난 횟수는 0이다.
+4. actionability wait 중 capability expiry, rotation, world change가 발생한 뒤 live send는 0이다.
+5. mouse 또는 key down 뒤 command failure, cancellation, transport loss에서 가능한 safety release 누락은
+   0이며 release 결과가 evidence에 남는다.
+6. postcondition target이 500번째 entity 뒤에 있거나 event buffer가 넘쳐도 false confirmed는 0이다.
+7. 객체 key insertion order만 다른 claim이 conflicted가 된 횟수는 0이다.
+8. focused provider가 지원되는 fixture의 full AX와 full DOMSnapshot 호출은 요구가 닫힌 뒤 0이다.
+9. `queryAXTree` 미지원 provider의 fallback이 candidate completeness와 terminal meaning을 바꾼 횟수는 0이다.
+10. PyProc package를 import하지 않는 validator와 두 binding의 canonical core digest와 terminal 차이는 0이다.
+
+상세 재현, 알고리즘, schema, 복잡도 예산, negative fixture와 구현 순서는
+[mainPlan queue](../../mainPlan/README.md)에 등록된 `mainPlan/9-verifiedInteractionLoop/README.md`가 소유한다.
+실험은 [attempt registry](../../tests/attempts/README.md)에 등록된
+`tests/attempts/verifiedInteractionLoop/`에서 시작한다.
+
+## Initiative 10 - Independent Python Kernel
+
+### 제품 명제
+
+Initiative 10은 `loadPyodide`를 다른 loader로 바꾸는 계획이 아니다. Pyodide가 현재 함께 제공하는 boot,
+JS FFI, Emscripten FS, package 설치, snapshot과 Python object bridge 책임을 PyProc의 명시적 계약으로
+분해하고 다시 소유한다.
+
+```text
+signed CPython/WASI engine image
+-> dedicated worker kernel
+-> Promise-first command and value protocol
+-> versioned hostcall ABI
+-> transactional VFS and standard-metadata package environment
+-> engine-bound checkpoint
+-> session, process and Machine
+-> Pyodide implementation and toolchain deletion
+```
+
+독립은 세 수준을 모두 만족해야 한다.
+
+1. runtime 독립은 설치 제품의 지원 경로가 Pyodide code와 asset 없이 동작하는 상태다.
+2. toolchain 독립은 pinned CPython source, WASI SDK, wasi-libc와 PyProc recipe로 engine profile을 재현하는
+   상태다.
+3. ABI와 ecosystem 독립은 PyProc hostcall과 package 계약이 Pyodide JS FFI와 Emscripten binary ABI를
+   요구하지 않는 상태다.
+
+기존 `enginePort` browser probe는 CPython/WASI boot, 반복 실행, JSON 값 bridge, linear memory checkpoint,
+heap growth 뒤 restore와 branch를 이미 증명했다. 반면 2026-08-13 source 감사에서는 `src/` 34개 파일에
+Pyodide 관련 이름 또는 경로가 남고 runtime, session, process, Machine, FFI, device FS, package에 결합이
+분산되어 있음이 확인됐다. 전자는 feasibility 근거이고 후자는 아직 제품 독립이 아니라는 근거다.
+
+### 기술 방향
+
+- CPython과 linear memory의 단일 owner를 dedicated worker로 둔다. consumer는 heap과 Python live object를
+  직접 받지 않는다.
+- runtime contract는 모두 Promise를 반환하며 command ID, generation, cancellation, ordered output과
+  canonical terminal을 보존한다.
+- `_pyproc_host` built-in module이 versioned SharedArrayBuffer hostcall ABI를 사용한다. worker만
+  `Atomics.wait`를 하고 host broker가 authority, quota와 effect receipt를 재검사한다.
+- 값은 null, bool, finite number, bigint, string, bytes, list, string-key map, artifact, generation-bound
+  ephemeral ref의 closed envelope를 사용한다. `PyProxy` equivalent는 durable state에 두지 않는다.
+- VFS는 immutable kernel root, content-addressed `/site`, transactional `/home`, typed `/dev`, synthetic
+  `/proc`를 분리한다. checkpoint는 heap과 VFS root의 pair를 안전 경계에서만 봉인한다.
+- pure Python wheel은 PyPA Simple API, compatibility tag, Requires-Python, marker, yanked와 hash를 검증해
+  transactional install한다.
+- native extension은 `PyImport_AppendInittab`과 정적 link를 사용하는 signed engine profile로 제공한다.
+  arbitrary binary wheel을 runtime에서 설치한다는 약속은 하지 않는다.
+- WASI 0.3은 장기 adapter 후보지만 current CPython target인 wasip1을 먼저 출하한다. upstream designated
+  support와 browser component runtime 실측 전에는 prerequisite로 올리지 않는다.
+
+[PEP 11](https://peps.python.org/pep-0011/)과
+[PEP 816](https://peps.python.org/pep-0816/)은 CPython version별 WASI와 WASI SDK target 및 wasi-libc ABI
+pinning 필요를 뒷받침한다. [PEP 776](https://peps.python.org/pep-0776/)은 upstream Emscripten CPython이
+안정 JS bootstrap API와 JS FFI를 아직 제공하지 않음을 명시하므로 Pyodide와 같은 glue를 재구축하는 안을
+기본 경로에서 제외한다. package resolver는
+[PyPA Simple API](https://packaging.python.org/en/latest/specifications/simple-repository-api/)와
+[platform compatibility tags](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/)
+를 기준으로 한다.
+
+### 졸업 gate
+
+1. clean package의 default boot, execute, package, checkpoint, terminal, session, process와 Machine이
+   Chrome과 Edge에서 Pyodide asset 없이 green이다.
+2. HTTP, socket, ASGI, GPU, IPC가 `pyodide.ffi` 없이 hostcall conformance를 통과한다.
+3. effect hostcall의 duplicate provider send와 false completed는 0이다.
+4. pinned source에서 두 isolated runner가 만든 engine artifact digest 차이는 0이다.
+5. build manifest에 source, patch, compiler, sysroot, flags, SBOM과 artifact digest 누락은 0이다.
+6. pure wheel의 hash, metadata, tag, marker와 archive 안전 검증 누락은 0이다.
+7. unsupported binary wheel은 install 전에 stable error로 거부된다.
+8. native profile의 engine identity와 checkpoint compatibility 누락은 0이다.
+9. heap growth와 100 branch 뒤 restore mismatch, wrong engine restore, VFS one-sided commit은 0이다.
+10. source, packed tarball, generated asset, dependency graph와 boot network trace의 실행 가능한 Pyodide
+    reference는 0이다.
+11. production build가 `pyodide build`, Pyodide recipe, lock generator를 호출한 횟수 0이다.
+12. 전체 `npm test`, installed browser product gate와 앞 Initiative golden workload가 green이다.
+
+상세 architecture, ABI record layout, schema, package transaction, build provenance, threat fixture, migration
+milestone과 삭제 원장은 [mainPlan queue](../../mainPlan/README.md)에 등록된
+`mainPlan/10-independentPythonKernel/README.md`가 소유한다. 실험은
+[attempt registry](../../tests/attempts/README.md)에 등록된 `tests/attempts/independentPythonKernel/`에서
+시작한다.
+
+## Initiative 11 - Single-Source Skill Operating System
+
+### 제품 명제
+
+Initiative 11은 `docs/`에 agent용 요약을 추가하는 계획이 아니다. 사람과 AI가 수정하고 읽는 현재 지식의
+authored owner를 `skills/` 하나로 만들고, 다른 표면은 동일 source를 읽거나 ephemeral render만 하게 한다.
+
+```text
+one authored skill tree
+-> deterministic compact catalog
+-> task and changed-path routing
+-> bounded body and direct-reference read
+-> executable verification
+-> reviewed correction corpus
+-> source, package, MCP, website digest parity
+```
+
+2026-08-14 기준 `docs/`에는 Markdown 42개, APX JSON example 6개, 총 8,609줄과 554,367 bytes가 있다.
+저장소 안의 활성 `docs/` 경로 참조는 150개이며 API, bundle, capability, benchmark, architecture, package,
+contract와 testing gate가 특정 문서를 직접 읽는다. 따라서 bulk copy 뒤 cleanup 방식은 허용하지 않는다.
+
+문서별 old digest와 heading은 conservation ledger로 검증하지만 shared branch에는 부분 전환을 merge하지
+않는다. 48개 source의 skill owner, 모든 inbound link와 exact-path gate, package, MCP를 한 repository-wide
+cutover에서 바꾸고 같은 final diff에서 `docs/` 전체를 삭제한다. 최종 상태에는 pointer README, symlink,
+archive, full-body projection도 없다.
+
+`AGENTS.md`와 `CLAUDE.md`는 skill 발견 전의 thin bootstrap, README는 package landing, SECURITY는 disclosure,
+CHANGELOG는 history, `mainPlan/`은 unfinished plan, `tests/attempts/`는 evidence만 소유한다. 이 파일들이 상세
+제품 규칙을 다시 소유하면 두 번째 docs system으로 판정한다.
+
+### 기술 방향
+
+- `SKILL.md` frontmatter는 native `name`, `description`만 허용하고 body는 outcome, read-first, procedure,
+  verification, failure modes, references를 가진다.
+- initial taxonomy는 start, understand, develop, verify, benchmark, ship, asset, evolution, runtime, Machine,
+  control, browser automation, experience verification, effect commit, AppSpace, ReplayGraph, API reference의
+  17개 intent owner다.
+- `skills/catalog.json` 하나만 committed derived artifact로 허용한다. body를 넣지 않고 128 KiB, skill entry
+  2 KiB 이내로 제한한다.
+- search는 NFKC normalization, exact name과 phrase, all-token, path prefix, partial match, UTF-8 byte order
+  tie-break를 사용한다. filesystem order와 `localeCompare`는 사용하지 않는다.
+- 첫 탐색 응답은 body 없이 최대 3개, 4 KiB 이하다. body와 direct reference는 expected digest를 요구하는
+  bounded reader로 따로 연다.
+- changed path와 required skill, required gate의 map은 `start-pyproc` 아래 한 reference만 소유하고 CI와
+  agent가 같은 parser를 사용한다.
+- 기존 MCP에는 read-only `skills.search`, `skills.read`만 추가한다. package, MCP와 website는 별도 지식
+  copy가 아니라 같은 reader 또는 deploy-time rendering을 사용한다.
+- 실패 log는 raw prompt나 secret을 저장하지 않고 route, read bytes, required gate, stable failure class를
+  episode로 남긴다. 실패가 바로 policy를 바꾸지 않으며 minimized conformance vector와 full regression,
+  사람 review를 통과한 수정만 skill source에 승격한다.
+
+### 졸업 gate
+
+1. repository와 packed package의 `docs/` directory, active path reference, stub, symlink와 hidden mirror가
+   모두 0이다.
+2. 기존 48개 source의 모든 heading과 asset은 moved, merged, generated, historical, removed-invalid 중
+   하나로 evidence와 함께 귀속되고 미분류는 0이다.
+3. fixed positive routing corpus top-1 recall 100%, forbidden top-1 0, changed-path required gate omission 0이다.
+4. 첫 hop은 body 없이 최대 3개, 4 KiB 이하이고 대표 task의 median authored read는 전체 tree의 20% 미만이다.
+5. catalog drift, platform별 ordering 차이와 full-body projection은 0이다.
+6. source checkout, packed package, MCP와 rendered public output의 source digest mismatch는 0이다.
+7. malformed frontmatter, path와 symlink escape, duplicate name, oversized resource, stale digest 허용은 0이다.
+8. 기존 document reality assertion의 강도 감소는 0이며 전체 test와 installed browser product gate가 green이다.
+9. unreviewed failure episode가 active instruction, ranking 또는 effect authority를 바꾼 횟수는 0이다.
+10. 별도 clean-room parser와 reader가 공개 conformance vector에서 같은 valid, invalid와 digest 결과를 내기
+    전에는 universal standard를 주장하지 않는다.
+
+상세 ownership map, schema, migration transaction, search algorithm, reader limits, security fixture, 27개
+정량 gate와 12개 milestone은 [mainPlan queue](../../mainPlan/README.md)에 등록된
+`mainPlan/11-skillOperatingSystem/README.md`가 소유한다. 실험은
+[attempt registry](../../tests/attempts/README.md)에 등록된 `tests/attempts/skillOperatingSystem/`에서
+시작한다.
 
 ## 단계와 산출물
 
@@ -863,6 +1130,9 @@ provider가 같은 conformance를 통과한 뒤에만 optional actuation operati
 | 6 Transactional AppSpace | cooperative state, pair commit, outbox probes | logical app state, paired branch, effect staging | one-sided state와 unauthorized effect 0 |
 | 7 ReplayGraph Worlds | graph import, traversal, coverage, integrity probes | state graph, world contract, evaluator | effect 0 traversal과 invented edge 0 |
 | 8 Proof-Carrying Motor | binding, effect window, user preemption, native host, correction promotion probes | semantic intents, actuator broker, ControlLease, ActuationReceipt, experience ledger | wrong target, unsafe continuation, authority escalation, unverified learning 0 |
+| 9 Verified Interaction Loop | hidden candidate, cross-frame hit test, send-boundary expiry, stuck input, event loss probes | candidate-complete compiler, focused provider, input guard, postcondition observer, conformance vectors | omitted target effect, stale send, false confirmed, unreleased input 0 |
+| 10 Independent Python Kernel | owned build, kernel, hostcall, VFS, package, native profile, deletion probes | CPython/WASI engine image, KernelRuntimeContract v2, Hostcall ABI, KernelVfs, environment lock | runtime, toolchain, ABI 독립과 Pyodide reference 0 |
+| 11 Single-Source Skill OS | format, routing, atomic move, package, MCP, forward-task probes | authored skill tree, compact catalog, bounded reader, path router, correction corpus | `docs/`와 mirror 0, routing 100%, source/package/MCP digest parity |
 
 ## 중단 조건
 
@@ -885,3 +1155,25 @@ provider가 같은 conformance를 통과한 뒤에만 optional actuation operati
 - user input을 막아야 OS journey가 성공하거나 effect 뒤 새 target과 actuator로 갈아타면 실패다.
 - live 실행 중 policy를 바꾸거나 실패 log가 replay와 음성 시험 없이 다음 effect 경로를 바꾸면 실패다.
 - 학습이 authority, target uniqueness, effect boundary, user precedence, redaction을 완화하면 실패다.
+- output budget 뒤 candidate cardinality를 계산하거나 omitted candidate를 unique target으로 승인하면
+  Verified Interaction Loop 가설은 실패다.
+- actionability wait 뒤 authority를 재검사하지 않거나 input down 뒤 release 책임이 없는 send path는
+  졸업시키지 않는다.
+- full capture 비용을 그대로 둔 채 active perception이라는 이름만 붙이거나 visual confidence가
+  completeness를 대신하면 폐기한다.
+- 독립 구현과 implementation report 전에 universal 또는 standards-track 호환성을 주장하지 않는다.
+- upstream Emscripten에 Pyodide와 같은 JS FFI를 다시 쌓거나 raw heap과 live Python proxy를 영구 공개해야
+  하면 Independent Python Kernel 설계를 재검토한다.
+- arbitrary binary wheel 지원을 위해 unsigned side module, hash 미검증 package 또는 best-effort checkpoint
+  restore를 허용하면 졸업시키지 않는다.
+- Pyodide를 default-off fallback, build tool 또는 package ABI로 남기고 완전 독립을 선언하면 Initiative 10은
+  실패다.
+- `docs/`와 `skills/`가 같은 현재 지식을 동시에 소유하거나 old path에 pointer, symlink, archive를 남기면
+  Single-Source Skill OS는 실패다.
+- MCP, website, 번역 또는 agent consumer를 위해 full skill body의 별도 committed projection이 필요하면
+  architecture를 재검토한다.
+- heading ledger를 닫기 위해 기존 문서 reality assertion을 삭제하거나 약화하면 migration을 중단한다.
+- 개인 history나 비결정적 model ranking이 없으면 fixed routing corpus를 통과하지 못하면 기본 search로
+  채택하지 않는다.
+- 실패 episode가 conformance vector와 사람 review 없이 active skill 또는 effect authority를 바꾸면
+  자기 교정 가설은 실패다.

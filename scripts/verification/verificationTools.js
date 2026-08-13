@@ -7,12 +7,19 @@ const REPOSITORY_IDENTITY = Object.freeze({ type: "object", properties: {
   commit: { type: "string", minLength: 1 }, treeSha256: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" },
   diffSha256: { type: "string", pattern: "^sha256:[0-9a-f]{64}$" }, untracked: { type: "boolean" },
 }, required: ["commit", "treeSha256", "diffSha256", "untracked"], additionalProperties: false });
+const MOTOR_JOURNEY_REFERENCE = Object.freeze({ type: "object", properties: {
+  receiptSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+  scenarioId: { type: "string", minLength: 1, maxLength: 192 },
+  checkpointId: { type: "string", minLength: 1, maxLength: 192 },
+}, required: ["receiptSha256", "scenarioId", "checkpointId"], additionalProperties: false });
 
 export const VERIFICATION_TOOLS = Object.freeze([
   Object.freeze({ name: "eyesAudit", description: "Run a strict repository Experience Contract and publish one canonical Evidence Pack.",
     inputSchema: { type: "object", properties: { contractRoot: ABSOLUTE_PATH, repositoryRoot: ABSOLUTE_PATH,
       outputDir: { type: "string", minLength: 1 }, environmentId: { type: "string", minLength: 1 },
-      repository: REPOSITORY_IDENTITY }, required: ["contractRoot", "repositoryRoot", "outputDir", "environmentId", "repository"],
+      repository: REPOSITORY_IDENTITY,
+      motorJourneys: { type: "array", items: MOTOR_JOURNEY_REFERENCE, maxItems: 256 } },
+    required: ["contractRoot", "repositoryRoot", "outputDir", "environmentId", "repository"],
     additionalProperties: false } }),
   Object.freeze({ name: "eyesVerify", description: "Compare two complete exact Evidence Packs without sending a browser effect.",
     inputSchema: { type: "object", properties: { referenceDir: ABSOLUTE_PATH, currentDir: ABSOLUTE_PATH },
@@ -25,8 +32,8 @@ export const VERIFICATION_OFFLINE_TOOLS = Object.freeze(VERIFICATION_TOOLS.filte
   (tool) => tool.name !== "eyesAudit",
 ));
 
-export function createVerificationHandlers({ automation, producerVersion }) {
-  const runner = automation ? new VerificationRunner({ automation, producerVersion }) : null;
+export function createVerificationHandlers({ automation, producerVersion, motorJourneyResolver = null }) {
+  const runner = automation ? new VerificationRunner({ automation, producerVersion, motorJourneyResolver }) : null;
   return Object.freeze({
     "verification.audit": (input, context) => {
       if (!runner) {

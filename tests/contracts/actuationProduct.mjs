@@ -18,7 +18,7 @@ async function errorOf(operation) {
   catch (error) { return error; }
 }
 
-function fixtureSensor({ checked = false } = {}) {
+function fixtureSensor({ checked = false, omitted = 0 } = {}) {
   return { capture: async () => ({ documentEpoch: 1,
     page: { url: "https://fixture.test", title: "Fixture",
       viewport: { width: 800, height: 600, scale: 1 }, scroll: { x: 0, y: 0 } },
@@ -33,15 +33,39 @@ function fixtureSensor({ checked = false } = {}) {
         structure: { mode: "observed", source: "fixture", trust: "browser" },
         geometry: { mode: "observed", source: "fixture", trust: "browser" },
         interaction: { mode: "derived", source: "fixture", trust: "broker" } } }],
-    relations: [], events: [], completeness: { semantic: "complete", structure: "complete",
+    relations: [], events: [], omitted: { entities: omitted }, completeness: { semantic: "complete", structure: "complete",
       geometry: "complete", interaction: "complete", network: "complete" },
   }), dropSession() {}, close() {} };
 }
 
-async function situation({ checked = false, now }) {
+function denseSensor() {
+  const entities = Array.from({ length: 1501 }, (_, index) => ({
+    nativeRef: `native:dense:${index}`,
+    locatorData: { backendNodeId: index + 1 },
+    kind: "ui.control",
+    semantic: { role: "button", name: index === 1500 ? "Save" : `Item ${index}`,
+      states: { disabled: false }, sensitivity: "public" },
+    structure: { frameNativeRef: "frame:main", nodeName: "BUTTON" },
+    geometry: { rect: { x: index % 20, y: Math.floor(index / 20), width: 1, height: 1 },
+      viewportRatio: 1, paintOrder: index, visible: true, occluded: false },
+    interaction: { supportedActions: ["click"], actionable: true, reasons: [] },
+    provenance: { semantic: { mode: "observed", source: "fixture", trust: "browser" },
+      structure: { mode: "observed", source: "fixture", trust: "browser" },
+      geometry: { mode: "observed", source: "fixture", trust: "browser" },
+      interaction: { mode: "derived", source: "fixture", trust: "broker" } },
+  }));
+  return { capture: async () => ({ documentEpoch: 1,
+    page: { url: "https://fixture.test", title: "Dense fixture",
+      viewport: { width: 800, height: 600, scale: 1 }, scroll: { x: 0, y: 0 } },
+    entities, relations: [], events: [], completeness: { semantic: "complete", structure: "complete",
+      geometry: "complete", interaction: "complete", network: "complete" },
+  }), dropSession() {}, close() {} };
+}
+
+async function situation({ checked = false, omitted = 0, now }) {
   let sequence = 0;
   const transition = { entityState: { entityRef: "entity:placeholder", disabled: false } };
-  const perception = new PerceptionSpace({ sensor: fixtureSensor({ checked }), now: () => now,
+  const perception = new PerceptionSpace({ sensor: fixtureSensor({ checked, omitted }), now: () => now,
     idFactory: () => `motor_${++sequence}`,
     locatorIssuer: () => `locator:motor_${sequence}`,
     capabilityPolicy: ({ action, entity }) => ({ risk: "externalEffect",
@@ -90,6 +114,36 @@ export async function assertActuationProductContracts() {
     assert.equal(result.receipt.actionEvidenceRef, "evidence:motor_1");
     assert.equal(JSON.stringify(result.receipt).includes("locator:"), false);
     assert.equal((await motor.list()).length, 1);
+
+    let denseIdentity = 0;
+    let denseLocator = 0;
+    const densePerception = new PerceptionSpace({ sensor: denseSensor(), now: () => now,
+      idFactory: () => `dense_${++denseIdentity}`,
+      locatorIssuer: () => `locator:dense_${++denseLocator}`,
+      capabilityPolicy: () => ({ risk: "externalEffect", expectedTransition: {
+        entityState: { entityRef: "entity:placeholder", disabled: false },
+      } }) });
+    const denseCapsule = await densePerception.observe({ protocolVersion: "1", spaceId: "space:motor",
+      sessionId: "session:dense", targetRef: "target:dense" }, { representation: "apx.situation",
+      focus: { requirements: [{ requirementRef: "requirement:denseSave",
+        select: { role: "button", name: "Save" }, need: ["fact", "affordance"], cardinality: "one" }] },
+      visual: { mode: "off" }, budget: { maxEntities: 20, maxRelations: 20, maxBytes: 65536 } });
+    assert.equal(denseCapsule.requirements[0].state, "satisfied");
+    assert.equal(denseCapsule.requirements[0].matched, 1);
+    assert.equal(denseCapsule.completeness.inventory, "taskComplete");
+    assert.equal(denseCapsule.budget.omitted.sourceEntities, 0);
+
+    const truncated = await situation({ now, omitted: 1 });
+    const truncatedEntityRef = truncated.capsule.requirements[0].entityRefs[0];
+    assert.equal(truncated.capsule.completeness.inventory, "truncated");
+    assert.equal(truncated.capsule.requirements[0].state, "unknown");
+    const truncatedError = await errorOf(() => motor.execute({ sessionRef: { protocolVersion: "1",
+      spaceId: automation.spaceId, sessionId: "session:fixture", targetRef: "target:fixture" },
+    situation: truncated.capsule, requirementRef: "requirement:target", intent: { ...intent, target: {
+      ...intent.target, entityRef: truncatedEntityRef, worldRef: truncated.capsule.worldRef,
+    } } }));
+    assert.equal(truncatedError?.code, "ACTUATION_PERCEPTION_INCOMPLETE");
+    assert.equal(providerCalls, 1);
 
     const incomplete = structuredClone(observed.capsule);
     incomplete.requirements[0].state = "unknown";
@@ -160,6 +214,8 @@ export async function assertActuationProductContracts() {
     assert.equal(replayed.providerCalls, 0);
     assert.equal(providerCalls, callsBeforeReplay);
     observed.perception.close();
+    densePerception.close();
+    truncated.perception.close();
     selected.perception.close();
   } finally {
     await rm(root, { recursive: true, force: true });

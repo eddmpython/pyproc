@@ -114,6 +114,20 @@ planning; `replayGraphCoordinator.js` and `replayGraphTools.js` adapt the twelve
 The directory does not import a browser provider, send a live effect, infer a missing edge, or own AppSpace
 restore. It is publicly composed only through the existing `pyproc/control` subpath.
 
+`scripts/actuation/` owns Proof-Carrying Motor above Perception, AutomationSpace, AppSpace, ReplayGraph, and
+Execution Memory. `actuationCanonical.js` owns absolute intents, exact bindings, plans, receipts, episodes,
+policy revisions, and digests. `actuatorBroker.js`, `situationBinding.js`, and `effectWindow.js` own hard
+eligibility, complete target binding, deterministic routing, and the one-effect boundary. Provider adapters
+consume existing high-level provider contracts and never expose raw handles or coordinates. `fileActuationStore.js`
+owns immutable records and policy HEAD compare-and-swap. `motorTaskSession.js` is a public client resource scope,
+not a second wire protocol. The optional Windows host is verified before spawn and communicates only over owned
+framed stdio. DelegatedTab extension source owns its two-gesture tab lease and cannot widen the host manifest.
+
+`scripts/verification/motorJourneyEvidence.js` is the only bridge from Motor records into Evidence Pack. It reads
+canonical receipt and episode values and projects one standard artifact and finding. Verification never imports
+provider adapters or executes an effect, and Motor never owns a parallel audit format. The whole capability is
+publicly composed only through the existing `pyproc/control`, Control, MCP, and Python surfaces.
+
 ## Layer ranks
 
 The layer contract is a total order, and every import edge must point downward. Peers do not import peers.

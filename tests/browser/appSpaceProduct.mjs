@@ -125,7 +125,7 @@ let clientClosed = false;
 console.log("installed Transactional AppSpace product gate");
 try {
   check("one public wire exposes AppSpace and Motor operations",
-    client.operations.length === 48 && ["app.attach", "app.checkpoint", "app.branch", "app.restore",
+    client.operations.length === 51 && ["app.attach", "app.checkpoint", "app.branch", "app.restore",
       "app.adopt", "app.inspect", "app.list", "app.effect.stage", "app.effect.finalize"]
       .every((operation) => client.operations.includes(operation)), `${client.operations.length} operations`);
 

@@ -12,7 +12,7 @@ report = PyProcClient.check(configPath)
 assert report["ok"] is True and report["automation"]["provider"] == "frame"
 
 with PyProcClient.start(configPath, startupTimeout=60.0) as client:
-    assert len(client.operations) == 16 and "automation.command" not in client.operations
+    assert len(client.operations) == 17 and "automation.command" not in client.operations
     assert client.runPython("frame_python = 40", timeout=60.0).output.get("value") is None
     assert client.runPython("frame_python + 2", timeout=60.0).output["value"] == "42"
     inspected = client.inspectSpace(timeout=30.0)

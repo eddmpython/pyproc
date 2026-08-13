@@ -194,3 +194,11 @@ declared source and prevents another edge from reusing the same restoration even
 The graph stores pair digests and state identity, not an independent copy of browser authority. It does not call
 the adapter during traversal, adopt a candidate, stage an effect, or cold-import the Machine side. See
 [ReplayGraph Worlds](replayGraph.md).
+
+## Motor integration
+
+The Motor `cooperative` actuator compiles the same absolute intent into an already authorized AppSpace action.
+It does not add a raw page RPC, bypass app revision fencing, consume an outbox item without Rehearse-Commit, or
+claim that paired restore undoes a remote effect. The resulting ActuationReceipt keeps the same terminal
+vocabulary as browser and Windows routes and references the cooperative evidence. See
+[Proof-Carrying Motor](actuation.md).

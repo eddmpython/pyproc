@@ -151,6 +151,7 @@ export class WorldModel {
       changes: replacement ? [{ kind: "documentReplacement", beforeWorldRef: previous.worldRef,
         afterDocumentEpoch: observation.documentEpoch, causality: "unknown" }] : changes,
       completeness: observation.completeness,
+      budget: observation.budget,
       integrity: { worldSha256: digest, sourceGraphSha256: observation.integrity.canonicalSha256 } });
     let committed = false;
     const commit = () => {

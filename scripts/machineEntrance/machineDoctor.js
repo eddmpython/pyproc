@@ -10,6 +10,7 @@ import { CONTROL_PYTHON_TOOLS } from "../controlProtocol/controlProduct.mjs";
 import { controlOperationCatalog } from "../controlProtocol/controlOperations.js";
 import { loadMcpProductConfig } from "../mcpProductConfig.mjs";
 import { inspectEngineDistribution } from "./engineInspection.js";
+import { verifyWindowsNativeInstallation } from "../actuation/windowsNativeHost.js";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -120,6 +121,25 @@ export async function inspectMachineProfile(configPath, {
     checks.push(check("MACHINE_AUTOMATION_BLOCKED", "blocking", String(error?.message || error)));
   }
 
+  let windowsNative = Object.freeze({ enabled: false, installed: false });
+  if (loaded.config.actuation.native.enabled) {
+    try {
+      const installation = await verifyWindowsNativeInstallation(loaded.config.actuation.native);
+      windowsNative = Object.freeze({ enabled: true, installed: true, installation });
+      checks.push(check("MACHINE_WINDOWS_MOTOR_VERIFIED", "pass",
+        "The optional Windows Motor host passed source, binary digest, and installation signature verification.",
+      { installation }));
+    } catch (error) {
+      windowsNative = Object.freeze({ enabled: true, installed: false });
+      checks.push(check("MACHINE_WINDOWS_MOTOR_BLOCKED", "blocking", String(error?.message || error), {
+        nextCommand: `pyproc-control native setup --config "${resolvedConfig}"`,
+      }));
+    }
+  } else {
+    checks.push(check("MACHINE_WINDOWS_MOTOR_CLOSED", "pass",
+      "The optional Windows Motor host is disabled and no native process will be started."));
+  }
+
   checks.push(check("MACHINE_PROFILE_EPHEMERAL", "pass",
     "Runtime browser profiles are product-owned temporary directories; no default user profile is configured."));
   checks.push(check("MACHINE_TARGET_NOT_PROBED", "advisory",
@@ -137,6 +157,7 @@ export async function inspectMachineProfile(configPath, {
     blocking: Object.freeze(blocking),
     advisory: Object.freeze(advisory),
     automation,
+    windowsNative,
     next: safeNext(loaded.configPath),
   });
 }

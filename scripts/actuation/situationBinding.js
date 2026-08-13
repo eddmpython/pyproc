@@ -151,6 +151,10 @@ export function compileSituationBinding({ intent, situation, requirementRef, des
   providerKind, spaceId, now = Date.now(), resolveValue = () => undefined } = {}) {
   assertActuationIntent(intent);
   assertSituationCapsule(situation);
+  if (situation.completeness.inventory !== "taskComplete") {
+    throw actuationError(ACTUATION_ERROR_CODES.perceptionIncomplete,
+      "target binding requires a complete task-conditioned perception inventory");
+  }
   const actuatorKind = PROVIDER_ACTUATORS[providerKind];
   if (!actuatorKind) throw actuationError(ACTUATION_ERROR_CODES.actuatorUnavailable,
     `automation provider has no Motor actuator: ${String(providerKind)}`);

@@ -28,7 +28,11 @@ const APPROVAL_AUTHORITY_KEYS = new Set(["authorityId", "publicKeyFile"]);
 const APP_SPACE_KEYS = new Set(["enabled", "apps", "maxStateBytes"]);
 const APP_IDENTITY_KEYS = new Set(["appId", "origin", "adapterVersion", "stateSchema"]);
 const REPLAY_GRAPH_KEYS = new Set(["enabled"]);
-const ACTUATION_KEYS = new Set(["enabled"]);
+const ACTUATION_KEYS = new Set(["enabled", "native"]);
+const NATIVE_ACTUATION_KEYS = new Set(["enabled", "installRoot", "applications", "installation"]);
+const NATIVE_APPLICATION_KEYS = new Set(["applicationId", "executablePath", "windowTitle"]);
+const NATIVE_INSTALLATION_KEYS = new Set(["hostPath", "sha256", "sourceSha256", "sbomSha256",
+  "signature", "publicKey"]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_INDEX_URL", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
@@ -45,7 +49,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_EFFECT_TRANSACTIONS", "PYPROC_EFFECT_APPROVAL_AUTHORITIES", "PYPROC_EFFECT_SECRET_BINDINGS",
   "PYPROC_APP_SPACE",
   "PYPROC_REPLAY_GRAPH",
-  "PYPROC_ACTUATION", "PYPROC_ACTUATION_VALUE_BINDINGS",
+  "PYPROC_ACTUATION", "PYPROC_ACTUATION_VALUE_BINDINGS", "PYPROC_WINDOWS_MOTOR",
 ]);
 
 function plainObject(value, label) {
@@ -395,7 +399,70 @@ function normalizedActuation(input = { enabled: false }, { executionMemory, brow
     || !browser.actions.some((action) => motorActions.has(action)))) {
     throw new TypeError("actuation requires snapshot and at least one permitted external-effect Motor action");
   }
-  return Object.freeze({ enabled });
+  const nativeInput = actuation.native === undefined ? { enabled: false } : plainObject(actuation.native,
+    "actuation.native");
+  knownKeys(nativeInput, NATIVE_ACTUATION_KEYS, "actuation.native");
+  const nativeEnabled = optionalBoolean(nativeInput.enabled, "actuation.native.enabled");
+  let native = Object.freeze({ enabled: false });
+  if (nativeEnabled) {
+    if (!enabled) throw new TypeError("actuation.native requires actuation.enabled true");
+    if (process.platform !== "win32") throw new TypeError("actuation.native is supported only on Windows");
+    if (typeof nativeInput.installRoot !== "string" || !isAbsolute(nativeInput.installRoot)) {
+      throw new TypeError("actuation.native.installRoot must be an absolute directory");
+    }
+    const installRoot = resolve(nativeInput.installRoot);
+    if (!Array.isArray(nativeInput.applications) || nativeInput.applications.length < 1
+      || nativeInput.applications.length > 128) {
+      throw new TypeError("actuation.native.applications requires one to 128 applications");
+    }
+    const applicationIds = new Set();
+    const applications = nativeInput.applications.map((entry) => {
+      const application = plainObject(entry, "actuation.native application");
+      knownKeys(application, NATIVE_APPLICATION_KEYS, "actuation.native application");
+      if (typeof application.applicationId !== "string"
+        || !/^application:[A-Za-z0-9._:-]{1,192}$/.test(application.applicationId)
+        || applicationIds.has(application.applicationId)) {
+        throw new TypeError("actuation.native applicationId is invalid or duplicated");
+      }
+      applicationIds.add(application.applicationId);
+      if (typeof application.executablePath !== "string" || !isAbsolute(application.executablePath)) {
+        throw new TypeError("actuation.native executablePath must be absolute");
+      }
+      let executablePath;
+      try {
+        executablePath = realpathSync(resolve(application.executablePath));
+        if (!statSync(executablePath).isFile()) throw new Error("not a file");
+      } catch (error) { throw new TypeError(`actuation.native executable is unavailable: ${application.executablePath}`); }
+      if (typeof application.windowTitle !== "string" || !application.windowTitle
+        || application.windowTitle.length > 500) {
+        throw new TypeError("actuation.native windowTitle is invalid");
+      }
+      return Object.freeze({ applicationId: application.applicationId, executablePath,
+        windowTitle: application.windowTitle });
+    });
+    const installationInput = plainObject(nativeInput.installation, "actuation.native.installation");
+    knownKeys(installationInput, NATIVE_INSTALLATION_KEYS, "actuation.native.installation");
+    if (typeof installationInput.hostPath !== "string" || !isAbsolute(installationInput.hostPath)
+      || resolve(dirname(installationInput.hostPath)) !== installRoot) {
+      throw new TypeError("actuation.native installation hostPath must be directly inside installRoot");
+    }
+    for (const key of ["sha256", "sourceSha256", "sbomSha256"]) {
+      if (!/^[0-9a-f]{64}$/.test(installationInput[key] || "")) {
+        throw new TypeError(`actuation.native installation ${key} must be a lowercase SHA-256 digest`);
+      }
+    }
+    for (const key of ["signature", "publicKey"]) {
+      if (typeof installationInput[key] !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(installationInput[key])) {
+        throw new TypeError(`actuation.native installation ${key} must be base64`);
+      }
+    }
+    native = Object.freeze({ enabled: true, installRoot, applications: Object.freeze(applications),
+      installation: Object.freeze({ hostPath: resolve(installationInput.hostPath),
+        sha256: installationInput.sha256, sourceSha256: installationInput.sourceSha256,
+        sbomSha256: installationInput.sbomSha256,
+        signature: installationInput.signature, publicKey: installationInput.publicKey }) });
+  }
+  return Object.freeze({ enabled, native });
 }
 
 function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [], effectSecretBindings = {}) {
@@ -422,6 +489,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   if (config.actuation.enabled) {
     env.PYPROC_ACTUATION = "1";
     env.PYPROC_ACTUATION_VALUE_BINDINGS = JSON.stringify(effectSecretBindings);
+    if (config.actuation.native.enabled) env.PYPROC_WINDOWS_MOTOR = JSON.stringify(config.actuation.native);
   }
   if (!config.browser.enabled) return env;
   const browser = config.browser;

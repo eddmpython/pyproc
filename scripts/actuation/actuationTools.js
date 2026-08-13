@@ -9,6 +9,10 @@ const SESSION_REF = Object.freeze({ type: "object", properties: {
   protocolVersion: { type: "string", const: "1" }, spaceId: { type: "string", minLength: 1, maxLength: 256 },
   sessionId: { type: "string", minLength: 1, maxLength: 256 }, targetRef: { type: "string", minLength: 1, maxLength: 256 },
 }, required: ["protocolVersion", "spaceId", "sessionId", "targetRef"], additionalProperties: false });
+const NATIVE_POSTCONDITION = Object.freeze({ type: "object", properties: {
+  name: { type: "string", minLength: 1, maxLength: 300 },
+  controlType: { type: "string", minLength: 1, maxLength: 64 },
+}, required: ["name", "controlType"], additionalProperties: false });
 const PROPOSAL = Object.freeze({ type: "object", properties: {
   changeKind: { type: "string", enum: ["probeOrder", "approach", "gestureSegmentation", "actuatorTieBreak",
     "budgetAllocation"] },
@@ -24,8 +28,19 @@ export const ACTUATION_TOOLS = Object.freeze([
     inputSchema: { type: "object", properties: { sessionRef: SESSION_REF, situation: { type: "object" },
       requirementRef: { type: "string", pattern: "^requirement:[A-Za-z0-9._:-]{1,128}$" },
       destinationRequirementRef: { type: "string", pattern: "^requirement:[A-Za-z0-9._:-]{1,128}$" },
+      applicationId: { type: "string", pattern: "^application:[A-Za-z0-9._:-]{1,192}$" },
+      nativePostcondition: NATIVE_POSTCONDITION,
       intent: { type: "object" } }, required: ["sessionRef", "situation", "requirementRef", "intent"],
     additionalProperties: false } }),
+  Object.freeze({ name: "motorControlAcquire", description: "Acquire one short-lived, one-shot Windows physical input lease for an exact application, intent digest, and surface epoch.",
+    inputSchema: { type: "object", properties: {
+      applicationId: { type: "string", pattern: "^application:[A-Za-z0-9._:-]{1,192}$" },
+      intent: { type: "object" },
+      expiresInMs: { type: "integer", minimum: 100, maximum: 30000 },
+    }, required: ["applicationId", "intent"], additionalProperties: false } }),
+  Object.freeze({ name: "motorControlRevoke", description: "Revoke one Windows physical input lease without sending an effect.",
+    inputSchema: { type: "object", properties: { leaseRef: REF }, required: ["leaseRef"],
+      additionalProperties: false } }),
   Object.freeze({ name: "motorInspect", description: "Inspect the pinned Motor policy, current provider, and durable record count.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false } }),
   Object.freeze({ name: "motorList", description: "List durable actuation receipt summaries without exposing provider handles or value payloads.",
@@ -50,14 +65,17 @@ export const ACTUATION_TOOLS = Object.freeze([
 ]);
 
 export async function createActuationHandlers({ root, automationRouter = null, replayGraphProduct = null,
-  appProduct = null, valueBindings = {}, authorityValidator = null, cleanup = null } = {}) {
+  appProduct = null, windowsNative = null, valueBindings = {}, authorityValidator = null, cleanup = null } = {}) {
   const store = await FileActuationStore.open(root);
   const cooperative = appProduct && automationRouter?.providerKind === "frame"
     ? new CooperativeActuator({ appCoordinator: appProduct.coordinator, automation: automationRouter }) : null;
   const coordinator = await ActuationCoordinator.open({ store, automation: automationRouter,
-    replayGraph: replayGraphProduct?.coordinator || null, cooperative, valueBindings, authorityValidator, cleanup });
+    replayGraph: replayGraphProduct?.coordinator || null, cooperative, windowsNative,
+    valueBindings, authorityValidator, cleanup });
   return Object.freeze({ store, coordinator, handlers: Object.freeze({
     "motor.execute": (input, context) => coordinator.execute(input, context),
+    "motor.control.acquire": (input) => coordinator.acquireControl(input),
+    "motor.control.revoke": (input) => coordinator.revokeControl(input),
     "motor.inspect": () => coordinator.inspect(),
     "motor.list": () => coordinator.list(),
     "motor.replay": (input) => coordinator.replay(input),

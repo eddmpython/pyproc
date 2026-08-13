@@ -14,7 +14,7 @@ report = PyProcClient.check(configPath)
 assert report["ok"] is True and report["automation"]["enabled"] is True
 
 with PyProcClient.start(configPath, startupTimeout=60.0) as client:
-    assert len(client.operations) == 33
+    assert len(client.operations) == 34
     prepared = client.runPython("prepared = [10, 20, 30]", timeout=60.0)
     assert prepared.terminal == "completed"
     checkpoint = client.saveCheckpoint(timeout=60.0)

@@ -31,7 +31,7 @@ export async function assertFrameSpaceContract() {
           provenance: { semantic: { mode: "reported", source: "frame.dom", trust: "page" } } }],
         relations: [], events: [], completeness: { semantic: "complete", structure: "complete",
           geometry: "complete", interaction: "complete", network: "notAvailable" },
-        omitted: { entities: 2 },
+        omitted: { entities: input.maxEntities >= 1000 ? 0 : 2 },
       };
       if (operation === "automation.act") return { completed: [{ index: 0, kind: input.actions[0].kind }], results: [{}] };
       return { operation, input };
@@ -45,7 +45,7 @@ export async function assertFrameSpaceContract() {
     artifacts: {},
   };
   const tools = createFrameSpaceTools(config);
-  assert.equal(tools.length, 9);
+  assert.equal(tools.length, 10);
   assert.equal(tools.some((tool) => tool.name === "browserCommand"), false);
   assert.equal(tools.find((tool) => tool.name === "browserObserve")
     .inputSchema.properties.representation.enum.includes(APX_REPRESENTATION), true);

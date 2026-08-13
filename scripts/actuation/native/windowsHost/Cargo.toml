@@ -25,7 +25,3 @@ windows = { version = "0.62.2", features = [
 [[bin]]
 name = "pyproc-windows-motor-host"
 path = "src/main.rs"
-
-[[bin]]
-name = "motor-fixture"
-path = "src/bin/motor_fixture.rs"

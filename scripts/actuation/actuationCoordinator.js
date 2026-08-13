@@ -13,6 +13,8 @@ import {
 import { chooseActuator } from "./actuatorBroker.js";
 import { ActuationEffectWindow } from "./effectWindow.js";
 import { compileSituationBinding } from "./situationBinding.js";
+import { WindowsControlLeaseRegistry } from "./windowsControlLease.js";
+import { WindowsNativeActuator } from "./windowsNativeActuator.js";
 
 const DEFAULT_POLICY = Object.freeze({
   providerPreference: Object.freeze(["cooperative", "replay", "browserInput", "accessibility", "osInput"]),
@@ -46,7 +48,10 @@ function errorTerminal(error) {
 
 function effectOutcome(error, evidence) {
   const outcome = error?.outcome || evidence?.effectOutcome || "applied";
-  return ["applied", "notSent", "rejected", "outcomeUnknown"].includes(outcome) ? outcome : "outcomeUnknown";
+  if (outcome === "notSent") return "notSent";
+  if (outcome === "rejected") return "rejected";
+  if (outcome === "outcomeUnknown") return "outcomeUnknown";
+  return "applied";
 }
 
 function cleanupSummary(errors) {
@@ -62,7 +67,7 @@ export class ActuationCoordinator {
   }
 
   constructor({ store, automation = null, replayGraph = null, valueBindings = {}, authorityValidator = null,
-    cooperative = null, cleanup = null, now = () => Date.now() } = {}) {
+    cooperative = null, windowsNative = null, cleanup = null, now = () => Date.now() } = {}) {
     if (!store) throw new TypeError("ActuationCoordinator requires a durable store");
     if (automation && typeof automation.invoke !== "function") {
       throw new TypeError("ActuationCoordinator automation provider is invalid");
@@ -77,6 +82,10 @@ export class ActuationCoordinator {
     this.automation = automation;
     this.replayGraph = replayGraph;
     this.cooperative = cooperative;
+    this.windowsNative = windowsNative;
+    this.windowsLeases = windowsNative ? new WindowsControlLeaseRegistry({ nativeHost: windowsNative, now }) : null;
+    this.windowsActuator = windowsNative ? new WindowsNativeActuator({ nativeHost: windowsNative,
+      leases: this.windowsLeases, now }) : null;
     this.valueBindings = new Map(Object.entries(valueBindings));
     this.authorityValidator = authorityValidator;
     this.cleanup = cleanup;
@@ -87,7 +96,7 @@ export class ActuationCoordinator {
     if (!this.automation) throw actuationError(ACTUATION_ERROR_CODES.actuatorUnavailable,
       "Motor requires an enabled automation provider");
     const intent = createActuationIntent(input.intent);
-    await this._assertAuthority(intent, context);
+    await this._assertAuthority(intent, context, input.applicationId || null);
     const policy = await this.store.policy();
     const compiled = compileSituationBinding({ intent, situation: input.situation,
       requirementRef: input.requirementRef, destinationRequirementRef: input.destinationRequirementRef || null,
@@ -103,8 +112,21 @@ export class ActuationCoordinator {
         && (kind !== "cooperative" || this.cooperative !== null), effectWindowRepresentable: true,
       semanticSetter: ["setValue", "setSelected", "setExpanded"].includes(intent.intent),
       additionalAuthority: false, postconditionEvidence: true, sharedInput: false });
-    const decision = chooseActuator(intent, [candidate], policy.policy.providerPreference || []);
-    const plan = createActuationPlan({ intent, binding: compiled.binding, decision,
+    const candidates = [candidate];
+    if (input.applicationId !== undefined) {
+      if (!this.windowsActuator) throw actuationError(ACTUATION_ERROR_CODES.actuatorUnavailable,
+        "Windows native Motor is not installed and enabled");
+      candidates.push(await this.windowsActuator.prepare({ intent, situation: input.situation, compiled,
+        applicationId: input.applicationId, nativePostcondition: input.nativePostcondition }));
+    }
+    const decision = chooseActuator(intent, candidates, policy.policy.providerPreference || []);
+    const binding = decision.selected.binding;
+    for (const examined of candidates) {
+      if (examined.binding.bindingSha256 !== binding.bindingSha256) {
+        this.windowsActuator?.discard(examined.binding.bindingSha256);
+      }
+    }
+    const plan = createActuationPlan({ intent, binding, decision,
       preflight: { situationSha256: input.situation.integrity.canonicalSha256,
         requirementRef: input.requirementRef, actionCapabilityRef: compiled.affordance.capabilityRef,
         targetAlreadySatisfied: compiled.alreadySatisfied },
@@ -115,10 +137,10 @@ export class ActuationCoordinator {
       verification: compiled.transition,
       budgets: { preContactFallback: Math.min(Number(policy.policy.preContactFallbackBudget) || 0,
         intent.policy.allowPreContactFallback ? 1 : 0) } });
-    return this._perform({ input, context, intent, compiled, policy, decision, plan });
+    return this._perform({ input, context, intent, compiled, binding, policy, decision, plan });
   }
 
-  async _perform({ input, context, intent, compiled, policy, decision, plan }) {
+  async _perform({ input, context, intent, compiled, binding, policy, decision, plan }) {
     const window = new ActuationEffectWindow();
     const timeline = [{ phase: "preflight", at: this.now(), worldRef: intent.target.worldRef,
       situationSha256: input.situation.integrity.canonicalSha256 }];
@@ -126,17 +148,26 @@ export class ActuationCoordinator {
     let operationError = null;
     let evidence = null;
     if (!compiled.alreadySatisfied) {
-      window.approach({ kind: "targetResolved", bindingSha256: compiled.binding.bindingSha256 });
-      window.cross("provider.effectDispatch");
-      window.sent({ kind: compiled.actionKind });
-      timeline.push({ phase: "committedGesture", at: this.now(), worldRef: intent.target.worldRef });
+      window.approach({ kind: "targetResolved", bindingSha256: binding.bindingSha256 });
       try {
+        if (["accessibility", "osInput"].includes(decision.selected.kind)) {
+          const nativePrepared = await this.windowsActuator.preflight({ intent, plan });
+          window.approach({ kind: "nativePreflight", bindingRef: nativePrepared.bindingRef });
+        }
+        window.cross("provider.effectDispatch");
+        window.sent({ kind: compiled.actionKind });
+        timeline.push({ phase: "committedGesture", at: this.now(), worldRef: intent.target.worldRef });
         output = decision.selected.kind === "cooperative"
           ? await this.cooperative.execute({ input, intent, compiled, plan }, context)
-          : await this.automation.invoke("automation.act", {
+          : ["accessibility", "osInput"].includes(decision.selected.kind)
+            ? await this.windowsActuator.execute({ intent, plan })
+            : await this.automation.invoke("automation.act", {
             sessionRef: input.sessionRef, actions: [compiled.action],
           }, { signal: context.signal, requestId: context.requestId || null });
-        evidence = evidenceFrom(output);
+        if (["accessibility", "osInput"].includes(decision.selected.kind)) {
+          evidence = output.evidence;
+          output = output.output;
+        } else evidence = evidenceFrom(output);
       } catch (error) {
         operationError = error;
         evidence = error?.actionEvidence || null;
@@ -154,19 +185,23 @@ export class ActuationCoordinator {
       try { await this.cleanup({ intent, plan, terminal, output, error: operationError }, context); }
       catch (error) { cleanupErrors.push(error); }
     }
-    const receipt = createActuationReceipt({ intent, binding: compiled.binding, plan, decision, effectWindow,
+    const receipt = createActuationReceipt({ intent, binding, plan, decision, effectWindow,
       terminal, effectOutcome: compiled.alreadySatisfied ? "notSent" : effectOutcome(operationError, evidence),
       actionEvidenceRef: evidence?.evidenceRef || null,
       cleanup: cleanupSummary(cleanupErrors) });
     const episode = createActuationEpisode({ receipt, worldRef: intent.target.worldRef,
       policyRevisionSha256: policy.policySha256,
       provider: { kind: decision.selected.kind, version: decision.selected.adapterVersion,
-        environmentSha256: actuationDigest({ providerKind: this.automation.providerKind,
-          spaceId: this.automation.spaceId }) }, timeline,
+        environmentSha256: ["accessibility", "osInput"].includes(decision.selected.kind)
+          ? actuationDigest({ sourceSha256: this.windowsNative.verified.sourceSha256,
+            providerId: decision.selected.providerId })
+          : actuationDigest({ providerKind: this.automation.providerKind,
+            spaceId: this.automation.spaceId }) }, timeline,
       failurePoint: terminal === "confirmed" || terminal === "alreadySatisfied" ? null
         : { phase: operationError ? "effect" : "verification",
           code: String(operationError?.code || "ACTUATION_POSTCONDITION_UNRESOLVED"),
-          observedCause: operationError?.outcome === "notSent" },
+          observedCause: operationError?.outcome === "notSent",
+          ...(operationError?.details?.nativeCode ? { providerCode: operationError.details.nativeCode } : {}) },
       evidenceRefs: evidence?.evidenceRef ? [evidence.evidenceRef] : [],
       redactionManifestSha256: REDACTION_MANIFEST_SHA256,
       experienceState: cleanupErrors.length ? "incomplete" : "complete" });
@@ -194,10 +229,27 @@ export class ActuationCoordinator {
     return Object.freeze({ policy, records: records.length, provider: this.automation
       ? Object.freeze({ spaceId: this.automation.spaceId, providerKind: this.automation.providerKind,
         actuatorKind: providerActuator(this.automation.providerKind) }) : null,
-    replayGraph: !!this.replayGraph });
+    replayGraph: !!this.replayGraph, windowsNative: this.windowsNative
+      ? Object.freeze({ enabled: true, verified: true }) : Object.freeze({ enabled: false, verified: false }) });
   }
 
   list() { return this.store.list(); }
+
+  journey(receiptSha256) { return this.store.journey(receiptSha256); }
+
+  acquireControl(input) {
+    if (!this.windowsLeases) throw actuationError(ACTUATION_ERROR_CODES.actuatorUnavailable,
+      "Windows native Motor is unavailable");
+    return this.windowsLeases.acquire(input);
+  }
+
+  revokeControl({ leaseRef } = {}) {
+    if (!this.windowsLeases || typeof leaseRef !== "string") throw actuationError(
+      ACTUATION_ERROR_CODES.controlRevoked, "Windows ControlLease is unavailable");
+    return this.windowsLeases.revoke(leaseRef);
+  }
+
+  close() { this.windowsLeases?.close(); }
 
   evaluate(input) { return evaluateCorrection(input); }
 
@@ -224,13 +276,18 @@ export class ActuationCoordinator {
     return this.store.rollbackPolicy(current.policySha256, current.previousSha256);
   }
 
-  async _assertAuthority(intent, context) {
-    const delegated = [intent.authority.approvalGrantRef, intent.authority.commitLeaseRef,
-      intent.authority.controlLeaseRef].filter(Boolean);
-    if (!delegated.length) return;
-    if (!this.authorityValidator || await this.authorityValidator(intent, context) !== true) {
+  async _assertAuthority(intent, context, applicationId) {
+    const business = [intent.authority.approvalGrantRef, intent.authority.commitLeaseRef].filter(Boolean);
+    if (business.length && (!this.authorityValidator || await this.authorityValidator(intent, context) !== true)) {
       throw actuationError(ACTUATION_ERROR_CODES.authorityRequired,
         "delegated authority references require an exact external validator");
+    }
+    if (intent.authority.controlLeaseRef) {
+      if (!this.windowsLeases || !applicationId) throw actuationError(ACTUATION_ERROR_CODES.authorityRequired,
+        "Windows ControlLease requires one configured native application");
+      this.windowsLeases.assert(intent.authority.controlLeaseRef, { applicationId,
+        intent,
+        surfaceEpoch: intent.target.surfaceEpoch.replace(/^document:/, "surface:") });
     }
   }
 }

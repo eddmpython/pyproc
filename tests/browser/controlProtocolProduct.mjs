@@ -256,10 +256,10 @@ try {
   const preflight = await PyProcControlClient.check(configPath, { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
   client = await PyProcControlClient.start(configPath, { cwd: installed.appDir,
     startupTimeoutMs: TIMEOUT_MS, maxAttachmentChunkBytes: 64 });
-  check("공개 JavaScript 입구가 Execution Memory와 Rehearse-Commit 포함 operation 33종을 제공",
+  check("공개 JavaScript 입구가 Execution Memory와 Rehearse-Commit 포함 operation 34종을 제공",
     preflight.ok === true
       && controlEntry === join(packageRoot, "scripts", "controlProtocol", "controlApi.js")
-      && client.operations.length === 33 && client.operations.includes("machine.run")
+      && client.operations.length === 34 && client.operations.includes("machine.run")
       && client.operations.includes("automation.act") && client.operations.includes("memory.create")
       && client.operations.includes("effect.commit") && preflight.effectTransactions?.enabled === true,
   client.operations.join(","));

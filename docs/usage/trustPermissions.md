@@ -114,3 +114,20 @@ widen its configured origin, actions, risk, state limit, or approval authority. 
 data, scanned for forbidden credential and browser-internal keys plus configured secret literals, and revalidated
 when reopened. A pair digest proves content identity, not permission, remote truth, or rollback of server state.
 See [Transactional AppSpace](appSpace.md).
+
+## Motor native and delegated-tab authority
+
+Proof-Carrying Motor adds two optional authorities without merging them into Machine image trust.
+
+The Windows host requires explicit setup, an exact install root, and an allowlist of executable paths and window
+titles. Setup records binary, source, and SBOM digests and creates a local installation signature. This detects a
+changed local installation before spawn. It is not a publisher signature, application approval, or site
+authorization. The host uses owned stdio and exposes no network listener or shell.
+
+The DelegatedTab extension uses a loopback host request followed by explicit extension action gestures on the
+host and target tabs. `activeTab` creates a tab and origin-epoch lease, not broad profile authority. Same-origin
+navigation rotates the epoch. Cross-origin navigation, host or target close, and stale capability data revoke
+access. Synthetic browser input is not accepted as the required extension gesture.
+
+Neither authority replaces APX action capability, consequential-effect approval, or a one-shot commit lease.
+See [Proof-Carrying Motor](actuation.md).

@@ -194,7 +194,7 @@ try {
     env: { ...process.env, PATH: `${productPath}${delimiter}${process.env.PATH || ""}` } });
   const report = JSON.parse(journey.stdout.trim().split(/\r?\n/).at(-1));
   check("wheel 설치본이 Python, checkpoint, cancel, permission, screenshot 여정을 완주",
-    report.ok === true && report.operations === 33 && report.checkpoint > 0
+    report.ok === true && report.operations === 34 && report.checkpoint > 0
       && report.attachmentBytes > 0 && report.cancelOutcome === "outcomeUnknown"
       && report.cancelTerminal === "outcomeUnknown" && report.timeoutOutcome === "outcomeUnknown"
       && report.timeoutTerminal === "outcomeUnknown" && report.permissionTerminal === "rejected"
@@ -207,7 +207,7 @@ try {
     env: { ...process.env, PATH: `${productPath}${delimiter}${process.env.PATH || ""}` } });
   const frameReport = JSON.parse(frameJourney.stdout.trim().split(/\r?\n/).at(-1));
   check("wheel 설치본이 FrameSpace Python, 격리, screenshot 여정을 완주",
-    frameReport.ok === true && frameReport.operations === 16 && frameReport.attachmentBytes > 0
+    frameReport.ok === true && frameReport.operations === 17 && frameReport.attachmentBytes > 0
       && frameReport.perceptionEntityRef?.startsWith("entity:")
       && frameReport.situationRef?.startsWith("situation:"),
     `${frameReport.attachmentBytes} bytes`);

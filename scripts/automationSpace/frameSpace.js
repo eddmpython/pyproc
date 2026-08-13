@@ -31,6 +31,7 @@ const FRAME_OPERATIONS = Object.freeze([
   "automation.space.inspect",
   "automation.target.list",
   "automation.target.open",
+  "automation.target.close",
   "automation.session.attach",
   "automation.session.detach",
   "automation.observe",
@@ -112,14 +113,14 @@ export class FrameSpace {
       throw frameError("AUTOMATION_SPACE_OPERATION_UNSUPPORTED", `FrameSpace operation is unsupported: ${operation}`);
     }
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new TypeError("FrameSpace input must be an object");
-    if (operation === "automation.target.open") {
+    if (operation === "automation.target.open" || operation === "automation.target.close") {
       if (input.expectedRisk !== "externalEffect") {
-        throw frameError("FRAME_SPACE_PERMISSION_DENIED", "target open requires expectedRisk externalEffect");
+        throw frameError("FRAME_SPACE_PERMISSION_DENIED", "target lifecycle requires expectedRisk externalEffect");
       }
       if (BROWSER_CONTROL_RISKS.externalEffect > BROWSER_CONTROL_RISKS[this.config.maxRisk]) {
         throw frameError("FRAME_SPACE_PERMISSION_DENIED", `target open exceeds max risk ${this.config.maxRisk}`);
       }
-      this._assertAllowedUrl(input.url);
+      if (operation === "automation.target.open") this._assertAllowedUrl(input.url);
     }
     if (operation === "automation.observe") {
       if (input.expectedRisk !== "read") {

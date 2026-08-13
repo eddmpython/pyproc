@@ -266,6 +266,17 @@ export function parseMachineDoctorArguments(argv) {
   return Object.freeze({ config: parsed.config });
 }
 
+export function parseWindowsNativeArguments(argv) {
+  if (!Array.isArray(argv) || !["setup", "remove", "status"].includes(argv[0])) {
+    throw new TypeError("pyproc-control native requires setup, remove, or status");
+  }
+  const command = argv[0];
+  const parsed = parseSingleValueOptions(argv.slice(1), new Map([["--config", "config"]]),
+    `pyproc-control native ${command}`);
+  if (!parsed.config) throw new TypeError(`pyproc-control native ${command} requires --config <file>`);
+  return Object.freeze({ command, config: parsed.config });
+}
+
 export function parseMachineInvokeArguments(argv) {
   const parsed = parseSingleValueOptions(argv, new Map([
     ["--config", "config"], ["--operation", "operation"], ["--input", "input"],

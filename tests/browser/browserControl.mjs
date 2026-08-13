@@ -162,9 +162,11 @@ try {
 
   const listedTools = await request("tools/list", {});
   const names = listedTools.result.tools.map((tool) => tool.name).sort();
-  check("opt-in에서 Python 4종과 browser 10종", names.length === 14 && names.includes("pythonRun")
+  check("opt-in에서 Python 4종, browser 11종, verification 3종", names.length === 18 && names.includes("pythonRun")
     && names.includes("browserCommand") && names.includes("browserObserve") && names.includes("browserAct")
-    && names.includes("browserArtifactRead") && names.includes("browserArtifactDelete"), names.join(","));
+    && names.includes("browserClose") && names.includes("browserArtifactRead")
+    && names.includes("browserArtifactDelete") && names.includes("eyesAudit")
+    && names.includes("eyesVerify") && names.includes("eyesReplay"), names.join(","));
 
   // 엔진 부팅과 CDP target 생성이 CPU를 놓고 경쟁하면 공유 CI에서 준비 시간이 크게 흔들린다.
   // Python Machine을 먼저 준비한 뒤 외부 browser target을 여는 것이 실제 agent 소비 순서이기도 하다.
@@ -182,7 +184,7 @@ try {
     && inspected.space?.spaceId === "space:native" && inspected.space?.providerKind === "nativeCdp"
     && inspected.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception"
     && inspected.space?.restoreBoundary === "externalEffectsRemain"
-    && inspected.space?.replayBoundary === "recordOnly" && inspected.space?.operations?.length === 10,
+    && inspected.space?.replayBoundary === "recordOnly" && inspected.space?.operations?.length === 11,
   `${inspected.automation?.actions?.length} actions`);
 
   const openWithoutRisk = await callTool("browserOpen", { url: targetUrl });

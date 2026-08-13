@@ -65,6 +65,7 @@ export class NodeBrowserControlBroker {
     this.compatibility = compatibility || null;
     this._timeoutMs = timeoutMs;
     this._viewport = viewport;
+    this._ownedTargets = new Set();
   }
 
   listTargets() { return this.port.listTargets(); }
@@ -80,6 +81,15 @@ export class NodeBrowserControlBroker {
   }
   command(sessionRef, command, { signal } = {}) { return this.port.send(sessionRef, command, { signal }); }
   detach(sessionRef) { return this.port.detach(sessionRef); }
+  async closeTarget(targetRef) {
+    if (!this._ownedTargets.has(String(targetRef))) {
+      throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
+        "only a target created by this broker can be closed");
+    }
+    const output = await this.port.closeTarget(targetRef);
+    this._ownedTargets.delete(String(targetRef));
+    return output;
+  }
 
   async openTarget(url, { waitUntil = "commit" } = {}) {
     if (!OPEN_WAIT_STATES.has(waitUntil)) throw new TypeError("browser open waitUntil is invalid");
@@ -160,8 +170,9 @@ export class NodeBrowserControlBroker {
       sessionId = "";
       const deadlineAfterDetach = Date.now() + this._timeoutMs;
       while (Date.now() < deadlineAfterDetach) {
-        const target = (await this.port.listTargets()).find((entry) => entry.url === finalTarget.url);
-        if (target) {
+        try {
+          const target = await this.port.resolveCreatedTarget(targetId);
+          this._ownedTargets.add(target.targetRef);
           return Object.freeze({
             ...target,
             startup: Object.freeze({
@@ -171,6 +182,8 @@ export class NodeBrowserControlBroker {
               ...startupObservation(events, rawEventsTruncated),
             }),
           });
+        } catch (error) {
+          if (error?.code !== BROWSER_CONTROL_ERROR_CODES.targetUnavailable) throw error;
         }
         await delay(RETRY_MS);
       }

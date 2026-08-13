@@ -3,6 +3,9 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ControlRemoteError, ControlStdioClient } from "./controlClient.js";
+import { MotorTaskSession } from "../actuation/motorTaskSession.js";
+
+export { MotorTaskSession } from "../actuation/motorTaskSession.js";
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 30000;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5000;
@@ -454,6 +457,9 @@ export class PyProcControlClient extends ControlStdioClient {
   openTarget(url, { expectedRisk, waitUntil = "commit", ...options } = {}) {
     return this.request("automation.target.open", { url, expectedRisk, waitUntil }, options);
   }
+  closeTarget(targetRef, { expectedRisk = "externalEffect", ...options } = {}) {
+    return this.request("automation.target.close", { targetRef, expectedRisk }, options);
+  }
   attachSession(targetRef, options = {}) {
     return this.request("automation.session.attach", { targetRef }, options);
   }
@@ -476,10 +482,11 @@ export class PyProcControlClient extends ControlStdioClient {
   deleteArtifact(artifactRef, options = {}) {
     return this.request("artifact.delete", { artifactRef }, options);
   }
-  auditExperience(contractRoot, { repositoryRoot, outputDir, environmentId, repository,
+  auditExperience(contractRoot, { repositoryRoot, outputDir, environmentId, repository, motorJourneys,
     ...options } = {}) {
     return this.request("verification.audit", { contractRoot: resolve(contractRoot),
-      repositoryRoot: resolve(repositoryRoot), outputDir, environmentId, repository }, options);
+      repositoryRoot: resolve(repositoryRoot), outputDir, environmentId, repository,
+      ...(motorJourneys === undefined ? {} : { motorJourneys }) }, options);
   }
   verifyExperience(referenceDir, currentDir, options = {}) {
     return this.request("verification.verify", { referenceDir: resolve(referenceDir),
@@ -593,6 +600,10 @@ export class PyProcControlClient extends ControlStdioClient {
   }
   listReplayGraphs(options = {}) { return this.request("world.list", {}, options); }
   executeMotor(input, options = {}) { return this.request("motor.execute", input, options); }
+  acquireMotorControl(input, options = {}) { return this.request("motor.control.acquire", input, options); }
+  revokeMotorControl(leaseRef, options = {}) {
+    return this.request("motor.control.revoke", { leaseRef }, options);
+  }
   inspectMotor(options = {}) { return this.request("motor.inspect", {}, options); }
   listMotorRecords(options = {}) { return this.request("motor.list", {}, options); }
   replayMotor(receiptSha256, worldRef, expectedNodeRef, options = {}) {
@@ -603,6 +614,7 @@ export class PyProcControlClient extends ControlStdioClient {
   rollbackMotorPolicy(expectedPolicySha256, options = {}) {
     return this.request("motor.policy.rollback", { expectedPolicySha256 }, options);
   }
+  openMotorTask(input, options = {}) { return MotorTaskSession.open(this, input, options); }
   perception(sessionRef = null) { return new PerceptionClient(this, sessionRef); }
 
   async close() {

@@ -533,6 +533,7 @@ export async function assertBrowserAutomationContract() {
     inspect: () => ({ transport: "fake", listener: null }),
     listTargets: async () => [],
     openTarget: async (...args) => { openedWith = args; return { targetRef: "target:opened" }; },
+    closeTarget: async (targetRef) => ({ closed: true, targetRef }),
     attach: async () => session,
     command: (ref, command, options) => mcpPort.send(ref, command, options),
     detach: async () => {},
@@ -557,6 +558,9 @@ export async function assertBrowserAutomationContract() {
   assert(openDenied?.code === "BROWSER_CONTROL_PERMISSION_DENIED",
     "browserOpen 호출별 external risk 확인이 없다");
   assert(brokerStarts === 0, "전송 전 permission 거부가 CDP broker를 불필요하게 시작했다");
+  const closeDenied = await errorOf(() => mcp.invoke("browserClose", { targetRef: "target:opened" }));
+  assert(closeDenied?.code === "BROWSER_CONTROL_PERMISSION_DENIED" && brokerStarts === 0,
+    "browserClose 호출별 external risk 확인이 없다");
   await mcp.invoke("browserOpen", { url: "http://allowed.test/app", expectedRisk: "externalEffect" });
   assert(openedWith?.[1]?.waitUntil === "commit", "browserOpen 기본 완료 경계가 navigation commit이 아니다");
   await mcp.invoke("browserOpen", {

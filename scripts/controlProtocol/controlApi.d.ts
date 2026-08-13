@@ -309,6 +309,8 @@ export interface MotorExecuteInput extends Readonly<Record<string, unknown>> {
   readonly situation: Readonly<Record<string, unknown>>;
   readonly requirementRef: string;
   readonly destinationRequirementRef?: string;
+  readonly applicationId?: string;
+  readonly nativePostcondition?: Readonly<{ readonly name: string; readonly controlType: string }>;
   readonly intent: ActuationIntentInput;
 }
 
@@ -316,6 +318,29 @@ export interface MotorExecuteOutput extends Readonly<Record<string, unknown>> {
   readonly receipt: ActuationReceipt;
   readonly episode: ActuationEpisode;
   readonly terminal: ActuationTerminal;
+}
+
+export interface MotorTaskCleanup {
+  readonly protocol: "pyproc.motorTaskCleanup";
+  readonly version: 1;
+  readonly state: "complete" | "incomplete";
+  readonly effectRetried: false;
+  readonly targetOwnership: "owned" | "borrowed";
+  readonly artifactsRetained: number;
+  readonly failures: readonly Readonly<{ readonly phase: string; readonly code: string }>[];
+}
+
+export interface MotorAmbiguityDiagnostic {
+  readonly protocol: "pyproc.motorAmbiguityDiagnostic";
+  readonly version: 1;
+  readonly requirementRef: string;
+  readonly state: "unique" | "ambiguous" | "incomplete";
+  readonly matched: number;
+  readonly canExecute: boolean;
+  readonly requiredCallerRefinement: readonly Readonly<{
+    readonly predicate: string;
+    readonly operator: string;
+  }>[];
 }
 
 export interface CheckpointSaveOutput {
@@ -343,6 +368,12 @@ export interface VerificationRepositoryIdentity {
   readonly treeSha256: `sha256:${string}`;
   readonly diffSha256: `sha256:${string}`;
   readonly untracked: boolean;
+}
+
+export interface VerificationMotorJourneyReference {
+  readonly receiptSha256: string;
+  readonly scenarioId: string;
+  readonly checkpointId: string;
 }
 
 export interface VerificationOutput extends Readonly<Record<string, unknown>> {
@@ -804,6 +835,29 @@ export class PerceptionClient {
     requestOptions?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
 }
 
+export class MotorTaskSession {
+  private constructor();
+  static open(client: PyProcControlClient, input: Readonly<{
+    readonly url?: string;
+    readonly targetRef?: string;
+    readonly expectedRisk?: "externalEffect";
+    readonly waitUntil?: "commit" | "domcontentloaded" | "load";
+    readonly retainArtifacts?: boolean;
+  }>, requestOptions?: ControlRequestOptions): Promise<MotorTaskSession>;
+  readonly targetRef: string;
+  readonly sessionRef: ControlSessionRef;
+  readonly ownedTarget: boolean;
+  situate(focus: SituationFocus, options?: SituationOptions,
+    requestOptions?: ControlRequestOptions): Promise<SituationResult>;
+  diagnoseAmbiguity(situation: SituationResult | Readonly<Record<string, unknown>>,
+    requirementRef: string): MotorAmbiguityDiagnostic;
+  execute(input: Omit<MotorExecuteInput, "sessionRef" | "situation"> & Readonly<{
+    readonly situation: SituationResult | Readonly<Record<string, unknown>>;
+  }>, requestOptions?: ControlRequestOptions): Promise<ControlResult<MotorExecuteOutput>>;
+  retainArtifact(artifactRef: string): Readonly<{ readonly artifactRef: string; readonly retained: true }>;
+  close(requestOptions?: ControlRequestOptions): Promise<MotorTaskCleanup>;
+}
+
 export class PyProcControlClient {
   private constructor();
   static start(configPath: string, options?: ControlProcessOptions): Promise<PyProcControlClient>;
@@ -827,6 +881,9 @@ export class PyProcControlClient {
   listTargets(options?: ControlRequestOptions): Promise<ControlResult>;
   openTarget(url: string, options: ControlRequestOptions & { readonly expectedRisk: string; readonly waitUntil?: string }):
     Promise<ControlResult<AutomationTargetOutput>>;
+  closeTarget(targetRef: string,
+    options?: ControlRequestOptions & { readonly expectedRisk?: "externalEffect" }):
+    Promise<ControlResult<Readonly<{ readonly closed: boolean; readonly targetRef: string }>>>;
   attachSession(targetRef: string, options?: ControlRequestOptions): Promise<ControlResult<ControlSessionRef>>;
   observe(sessionRef: ControlSessionRef, observation?: Readonly<Record<string, unknown>>,
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
@@ -843,6 +900,7 @@ export class PyProcControlClient {
     outputDir: string;
     environmentId: string;
     repository: VerificationRepositoryIdentity;
+    motorJourneys?: readonly VerificationMotorJourneyReference[];
   }>): Promise<ControlResult<VerificationOutput>>;
   verifyExperience(referenceDir: string, currentDir: string,
     options?: ControlRequestOptions): Promise<ControlResult<VerificationOutput>>;
@@ -950,6 +1008,11 @@ export class PyProcControlClient {
     Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
   executeMotor(input: MotorExecuteInput,
     options?: ControlRequestOptions): Promise<ControlResult<MotorExecuteOutput>>;
+  acquireMotorControl(input: Readonly<{ readonly applicationId: string; readonly intent: ActuationIntentInput;
+    readonly expiresInMs?: number }>,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
+  revokeMotorControl(leaseRef: string,
+    options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   inspectMotor(options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   listMotorRecords(options?: ControlRequestOptions):
     Promise<ControlResult<readonly Readonly<Record<string, unknown>>[]>>;
@@ -961,6 +1024,13 @@ export class PyProcControlClient {
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   rollbackMotorPolicy(expectedPolicySha256: string,
     options?: ControlRequestOptions): Promise<ControlResult<ActuationPolicyRevision>>;
+  openMotorTask(input: Readonly<{
+    readonly url?: string;
+    readonly targetRef?: string;
+    readonly expectedRisk?: "externalEffect";
+    readonly waitUntil?: "commit" | "domcontentloaded" | "load";
+    readonly retainArtifacts?: boolean;
+  }>, options?: ControlRequestOptions): Promise<MotorTaskSession>;
   perception(sessionRef?: ControlSessionRef | null): PerceptionClient;
   close(): Promise<void>;
 }

@@ -106,14 +106,20 @@ export class BrowserControlPort {
     const rawTargets = await this._transport.listTargets();
     const visible = [];
     for (const raw of rawTargets || []) {
-      const target = copyTarget(raw);
-      if (!target.id || !this.policy.allowsTarget(target)) continue;
-      let targetRef = [...this._targets.entries()].find(([, value]) => value.id === target.id)?.[0];
-      if (!targetRef) targetRef = `target:${this._idFactory()}`;
-      this._targets.set(targetRef, target);
-      visible.push(Object.freeze({ targetRef, type: target.type, url: target.url, title: target.title }));
+      const target = this._rememberVisibleTarget(raw);
+      if (target) visible.push(target);
     }
     return Object.freeze(visible);
+  }
+
+  async resolveCreatedTarget(targetId) {
+    this._requireOpen();
+    const raw = (await this._transport.listTargets())
+      .find((target) => String(target?.id || "") === String(targetId));
+    const target = raw ? this._rememberVisibleTarget(raw) : null;
+    if (!target) throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
+      "created browser target is unavailable or outside permission");
+    return target;
   }
 
   async attach(targetRef) {
@@ -160,6 +166,28 @@ export class BrowserControlPort {
     session.unsubscribe = this._transport.subscribe(transportSession, (event) => this._receiveEvent(session, event));
     this._sessions.set(sessionId, session);
     return this._sessionRef(session);
+  }
+
+  async closeTarget(targetRef) {
+    this._requireOpen();
+    const ref = String(targetRef);
+    const target = this._targets.get(ref);
+    if (!target) throw this._error(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
+      `unknown target reference: ${targetRef}`);
+    const attached = [...this._sessions.values()].filter((session) => session.targetRef === ref);
+    await Promise.allSettled(attached.map((session) => this.detach(this._sessionRef(session))));
+    await this._transport.closeTarget(target.id);
+    this._targets.delete(ref);
+    return Object.freeze({ closed: true, targetRef: ref });
+  }
+
+  _rememberVisibleTarget(raw) {
+    const target = copyTarget(raw);
+    if (!target.id || !this.policy.allowsTarget(target)) return null;
+    let targetRef = [...this._targets.entries()].find(([, value]) => value.id === target.id)?.[0];
+    if (!targetRef) targetRef = `target:${this._idFactory()}`;
+    this._targets.set(targetRef, target);
+    return Object.freeze({ targetRef, type: target.type, url: target.url, title: target.title });
   }
 
   async beginPopupCapture(sessionRef) {

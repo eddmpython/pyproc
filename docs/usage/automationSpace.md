@@ -120,3 +120,14 @@ operation mappings, authorize-before-execute, permission denial with zero execut
 unchanged artifact payloads, non-retryable unknown outcomes, unsupported operations, inspect boundaries, and
 idempotent close. The installed MCP, native Control Protocol, and Python SDK gates then run the real provider
 through that router on Chrome and Edge.
+
+## Motor integration
+
+Proof-Carrying Motor is a consumer of AutomationSpace, not another provider. Native CDP supplies
+`browserInput`, FrameSpace supplies the cooperative route together with AppSpace, and ReplaySpace remains an
+effect-free exact provider. Motor feeds only broker-authorized high-level actions through `automation.act` and
+uses returned ActionEvidence for its receipt.
+
+`automation.target.close` is part of the lifecycle contract. Native CDP closes only a target that the broker
+created, identified by its exact internal target identity rather than URL. FrameSpace closes only its own frame
+target. A borrowed target must be detached and left open. See [Proof-Carrying Motor](actuation.md).

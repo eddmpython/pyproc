@@ -70,6 +70,24 @@ exact binary에 포함된 component, source revision, build config를 모르면 
 | `python_stdlib.zip` | CPython stdlib + Pyodide 패치. exact release와 catalog SHA-256 | verified same-origin 기본 배포 |
 | `pyodide-lock.json` | Pyodide 빌드 package metadata. catalog가 lock을 봉인하고 CLI가 그 안의 354 package hash를 전수 검사 | verified same-origin 기본 배포 |
 
+Windows Motor optional host:
+
+| 자산 | 확인된 provenance | 배포 판정 |
+|---|---|---|
+| `scripts/actuation/native/windowsHost/src/main.rs` | 저장소가 소유한 Rust source, `Cargo.toml`과 `Cargo.lock` exact dependency graph | npm에 source와 lock 포함, 명시 setup 때만 local build |
+| `pyproc-windows-motor-host.exe` | 위 source를 `cargo build --release --locked`로 local build, 설치 binary SHA-256과 source-set SHA-256 기록 | npm binary 미포함, Windows explicit opt-in installation만 |
+| `scripts/actuation/native/windowsHost/sbom.json` | CycloneDX 1.6, Cargo.lock dependency와 license inventory | source와 함께 npm 포함, 설치 때 SBOM digest 고정 |
+| `windowsMotorHost.json` | package version, platform, arch, locked build profile, binary/source/SBOM digest, local Ed25519 integrity signature | configured install root의 local receipt, 배포 서명 아님 |
+
+setup은 임시 target directory에서 build하고 owned `installRoot` 바로 아래의 정해진 파일명만 설치한다.
+startup은 binary, source set, SBOM digest와 local signature를 모두 검사한 뒤 host를 spawn한다. 재실행 setup은
+update이며 remove는 executable과 receipt 두 파일만 지운다. 이 서명은 한 local setup 이후 변조를 탐지하지만
+publisher identity나 Windows Authenticode를 증명하지 않는다. host는 npm tarball에 binary로 들어가지 않는다.
+
+DelegatedTab은 JavaScript extension source와 strict manifest만 npm에 포함한다. broad host permission,
+debugger, native messaging과 bundled third-party binary는 없다. manifest version은 package version과 함께
+검사한다. 실제 user gesture는 build artifact가 아니라 runtime authority다.
+
 Web Machine fixture(v86 계열):
 
 | 자산 | 확인된 provenance | 배포 판정 |

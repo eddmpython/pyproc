@@ -353,6 +353,22 @@ The content digest provides integrity and stable comparison. It does not provide
 signature. Store packs according to their sensitivity. Situations and diagnostics are redacted before pack
 assembly, but page text and product state can still contain private information.
 
+### Motor journey projection
+
+An audit may include `motorJourneys`, each naming an exact durable `receiptSha256`, a declared `scenarioId`, and a
+`checkpointId`. This is a reference, not caller-supplied receipt content. The runner resolves one exact stored
+`ActuationReceipt` and `ActuationEpisode`, verifies their canonical digests and lineage, and writes the pair as a
+content-addressed `application/vnd.pyproc.motor-journey+json` artifact sidecar.
+
+`confirmed` and `alreadySatisfied` preserve a verified scenario. `contradicted` and `rejected` reject it.
+Unknown, unobserved, ambiguous, or cleanup-incomplete journeys make it incomplete. Non-verified journeys also
+produce a stable behavioral finding linked to the sidecar. Missing records, duplicate episode lineage, quota
+failure, and mutation fail the audit before publication.
+
+Motor does not define another audit report. The journey lives in the existing scenario, finding, artifact,
+verdict, comparison, and effect-free replay contract. The sidecar carries redacted canonical Motor objects, not a
+raw semantic tree, provider handle, or screenshot body.
+
 ## Boundaries
 
 - Audit does not start a development server, execute repository prose, or edit source.

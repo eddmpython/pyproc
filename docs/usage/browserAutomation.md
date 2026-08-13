@@ -292,6 +292,11 @@ the bytes enter this store.
 
 ## Locators, lifecycle, and privacy
 
+`browserClose` is an explicit `externalEffect` lifecycle operation. The broker accepts it only for a target
+created by that same broker. It tracks the exact underlying target identity, so an existing tab with the same URL
+cannot be mistaken for the owned target. Closing detaches sessions first. Borrowed targets can be detached but
+cannot be closed through this operation.
+
 A target is exactly one CSS selector, opaque `locatorRef`, or semantic locator. Semantic locators support
 CSS, role, text, label, test ID, open shadow roots, inherited same-origin frames, and explicitly authorized
 cross-origin frame chains. Closed shadow roots are unsupported. Effects wait for strict uniqueness,
@@ -415,3 +420,7 @@ See [experience verification](experienceVerification.md).
 For consequential actions that need separate approval and a durable one-shot send boundary, enable
 [Rehearse-Commit](rehearseCommit.md). It composes this same AutomationSpace and ActionEvidence path. It does not
 add a second browser implementation or claim remote rollback.
+
+For absolute desired-state execution, deterministic actuator selection, one-effect receipts, and task-owned
+cleanup, enable [Proof-Carrying Motor](actuation.md). Motor consumes the same APX observations and broker actions.
+It does not add a raw browser route or turn pixels into action authority.

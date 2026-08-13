@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline";
@@ -19,7 +20,7 @@ const fixture = createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(`<!doctype html><html><body>
     <button id="save">Save</button><input id="keep" type="checkbox" aria-label="Keep" checked>
-    <button>Duplicate</button><button>Duplicate</button>
+    <button disabled>Duplicate</button><button>Duplicate</button>
     <script>document.getElementById("save").addEventListener("click", async () => {
       const response = await fetch("/save", { method: "POST" });
       const status = document.createElement("p"); status.setAttribute("role", "status");
@@ -57,25 +58,24 @@ check("preflight enables browser-only Motor with one durable root",
   preflight.ok === true && preflight.actuation?.enabled === true
     && preflight.executionMemory?.enabled === true && preflight.automation?.provider === "nativeCdp");
 
-const { ControlRemoteError, PyProcControlClient } = await import(pathToFileURL(join(packageRoot,
-  "scripts", "controlProtocol", "controlApi.js")).href);
+const publicRequire = createRequire(join(installed.appDir, "package.json"));
+const { PyProcControlClient } = await import(pathToFileURL(publicRequire.resolve("pyproc/control")).href);
 const controlScript = join(packageRoot, "scripts", "pyprocControl.mjs");
 const client = await PyProcControlClient.start(configPath, { command: [process.execPath, controlScript],
   cwd: installed.appDir, startupTimeoutMs: TIMEOUT_MS, shutdownTimeoutMs: 10000 });
 let clientClosed = false;
 let mcpChild = null;
+let task = null;
 console.log("installed Proof-Carrying Motor product gate");
 try {
   const inspectedSpace = await client.inspectSpace();
   const motorSpaceRef = inspectedSpace.output.space.spaceId;
-  const target = await client.openTarget(`${origin}/fixture`, { expectedRisk: "externalEffect" });
-  const session = await client.attachSession(target.output.targetRef);
-  const sessionRef = session.output;
-  const observe = (requirementRef, role, name) => client.observe(sessionRef, { expectedRisk: "read",
-    representation: "apx.situation", focus: { requirements: [{ requirementRef,
-      select: { role, name }, need: ["fact", "affordance"], cardinality: "one" }] },
+  task = await client.openMotorTask({ url: `${origin}/fixture`, expectedRisk: "externalEffect" });
+  const sessionRef = task.sessionRef;
+  const observe = (requirementRef, role, name, select = {}) => task.situate({ requirements: [{ requirementRef,
+    select: { role, name, ...select }, need: ["fact", "affordance"], cardinality: "one" }] }, {
     visual: { mode: "off" }, budget: { maxEntities: 100, maxRelations: 200, maxBytes: 131072 } });
-  const saveSituation = (await observe("requirement:save", "button", "Save")).output;
+  const saveSituation = (await observe("requirement:save", "button", "Save")).situation;
   const saveRequirement = saveSituation.requirements[0];
   const saveAffordance = saveSituation.affordances.find((entry) => entry.kind === "authorized"
     && entry.action === "click");
@@ -91,7 +91,7 @@ try {
   ], withinMs: 5000 }, authority: { actionCapabilityRef: saveAffordance.capabilityRef,
     approvalGrantRef: null, commitLeaseRef: null, controlLeaseRef: null },
   policy: { allowedActuatorKinds: ["browserInput"], allowPreContactFallback: false } };
-  const executed = await client.executeMotor({ sessionRef, situation: saveSituation,
+  const executed = await task.execute({ situation: saveSituation,
     requirementRef: "requirement:save", intent }, { timeoutMs: TIMEOUT_MS });
   const receiptSha256 = executed.output.receipt.receiptSha256;
   check("absolute intent sends one provider effect and closes with semantic plus network proof",
@@ -101,10 +101,10 @@ try {
   check("public Motor output carries no locator, coordinate, or provider handle",
     !/locator:|backendNode|objectId|"x"\s*:|"y"\s*:/.test(JSON.stringify(executed.output)));
 
-  const selectedSituation = (await observe("requirement:keep", "checkbox", "Keep")).output;
+  const selectedSituation = (await observe("requirement:keep", "checkbox", "Keep")).situation;
   const selectedAffordance = selectedSituation.affordances.find((entry) => entry.kind === "authorized"
     && entry.action === "check");
-  const selected = await client.executeMotor({ sessionRef, situation: selectedSituation,
+  const selected = await task.execute({ situation: selectedSituation,
     requirementRef: "requirement:keep", intent: { intent: "setSelected", target: {
       spaceRef: motorSpaceRef, entityRef: selectedSituation.requirements[0].entityRefs[0],
       worldRef: selectedSituation.worldRef, surfaceEpoch: `document:${selectedSituation.documentEpoch}` },
@@ -117,21 +117,35 @@ try {
       && selected.output.receipt.effectWindow.providerCalls === 0 && effects === 1,
     `terminal=${selected.output.terminal}, providerCalls=${selected.output.receipt.effectWindow.providerCalls}, effects=${effects}`);
 
-  const ambiguousSituation = (await observe("requirement:duplicate", "button", "Duplicate")).output;
+  const ambiguousSituation = (await observe("requirement:duplicate", "button", "Duplicate")).situation;
+  const diagnostic = task.diagnoseAmbiguity(ambiguousSituation, "requirement:duplicate");
   let ambiguousError = null;
   try {
-    await client.executeMotor({ sessionRef, situation: ambiguousSituation,
+    await task.execute({ situation: ambiguousSituation,
       requirementRef: "requirement:duplicate", intent: { ...intent, target: { ...intent.target,
         entityRef: ambiguousSituation.requirements[0].entityRefs[0], worldRef: ambiguousSituation.worldRef,
         surfaceEpoch: `document:${ambiguousSituation.documentEpoch}` } } }, { timeoutMs: TIMEOUT_MS });
   } catch (error) { ambiguousError = error; }
-  check("ambiguous target is rejected before another provider effect",
-    ambiguousError instanceof ControlRemoteError
-      && ambiguousError.code === "ACTUATION_TARGET_AMBIGUOUS" && effects === 1);
+  check("safe ambiguity diagnostic requires caller predicates and rejects effect",
+    diagnostic.state === "ambiguous" && diagnostic.canExecute === false
+      && diagnostic.requiredCallerRefinement.every((entry) => !/locator|coordinate|candidate/i.test(entry.predicate))
+      && ambiguousError instanceof TypeError && effects === 1);
+  const refinedSituation = (await observe("requirement:duplicate-actionable", "button", "Duplicate",
+    { actionable: true })).situation;
+  const refinedDiagnostic = task.diagnoseAmbiguity(refinedSituation, "requirement:duplicate-actionable");
+  check("caller-owned semantic refinement reaches one complete target without exposing candidates",
+    refinedDiagnostic.state === "unique" && refinedDiagnostic.canExecute === true
+      && refinedSituation.requirements[0].matched === 1 && effects === 1);
   check("Control surface exposes all Motor lifecycle operations",
     ["motor.execute", "motor.inspect", "motor.list", "motor.replay", "motor.policy.evaluate",
       "motor.policy.promote", "motor.policy.rollback"].every((operation) => client.operations.includes(operation)));
-  await client.detachSession(sessionRef);
+  const taskTargetRef = task.targetRef;
+  const cleanup = await task.close();
+  task = null;
+  const remainingTargets = await client.listTargets();
+  check("Motor task cleanup detaches the session and closes its owned target without retrying the effect",
+    cleanup.state === "complete" && cleanup.effectRetried === false
+      && !remainingTargets.output.some((entry) => entry.targetRef === taskTargetRef) && effects === 1);
   await client.close();
   clientClosed = true;
 
@@ -177,6 +191,7 @@ try {
   check("installed Motor journey has no exception", false,
     `${String(error?.stack || error).slice(-1600)} details=${JSON.stringify(error?.details || null)}`);
 } finally {
+  await task?.close().catch(() => {});
   if (!clientClosed) await client.close();
   if (mcpChild?.exitCode === null) mcpChild.kill("SIGTERM");
   if (mcpChild) await new Promise((resolve) => mcpChild.exitCode === null ? mcpChild.once("exit", resolve) : resolve());

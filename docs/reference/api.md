@@ -613,6 +613,13 @@ Stable Node.js facade for the installed Control product, typed in
 - ReplayGraph direct host values: `createReplayGraphRegistry`, `ReplayGraphRegistry`, `FileReplayGraphStore`,
   `ReplayWorld`, `evaluateReplayGraph`, `inspectReplayGraphCoverage`, and `retainedReplayGraphObjects`. They own
   immutable known-state graph truth and effect-free cursors, not live provider or effect authority.
+- Motor verbs: `executeMotor`, `acquireMotorControl`, `revokeMotorControl`, `inspectMotor`,
+  `listMotorRecords`, `replayMotor`, `evaluateMotorPolicy`, `promoteMotorPolicy`, and `rollbackMotorPolicy`.
+  They are present only when `actuation.enabled` is true. Every live execution consumes one complete Situation
+  and absolute intent and returns a canonical receipt and episode.
+- `openMotorTask(input, options?)` returns a `MotorTaskSession`. `situate`, `diagnoseAmbiguity`, `execute`,
+  `retainArtifact`, and `close` compose existing Control operations while tracking owned target, session, and
+  artifact cleanup. This helper adds no operation or provider authority.
 - `client.perception(sessionRef)` returns `PerceptionClient`. `observe`, `query`, `one`,
   `explainActionability`, `whatChanged`, and evidence-backed `act` retain the APX graph path. `situate` returns
   an immutable `SituationResult`, and `actAffordance` binds an authorized `SituationAffordance` to the effect.
@@ -631,6 +638,7 @@ client.auditExperience(contractRoot, {
   outputDir,
   environmentId,
   repository: { commit, treeSha256, diffSha256, untracked },
+  motorJourneys?: [{ receiptSha256, scenarioId, checkpointId }],
   timeoutMs?,
 })
 client.verifyExperience(referenceDir, currentDir, options?)
@@ -664,6 +672,16 @@ client.restoreReplayWorld(worldRef, checkpoint, options?)
 client.evaluateReplayWorld(graphId, rootSha256, contract, edgeRefs, options?)
 client.inspectReplayWorldCoverage(worldRef, options?)
 client.listReplayGraphs(options?)
+client.executeMotor(input, options?)
+client.acquireMotorControl({ applicationId, intent, expiresInMs? }, options?)
+client.revokeMotorControl(leaseRef, options?)
+client.inspectMotor(options?)
+client.listMotorRecords(options?)
+client.replayMotor(receiptSha256, worldRef, expectedNodeRef, options?)
+client.evaluateMotorPolicy(input, options?)
+client.promoteMotorPolicy(input, options?)
+client.rollbackMotorPolicy(expectedPolicySha256, options?)
+client.openMotorTask({ url?, targetRef?, expectedRisk?, waitUntil?, retainArtifacts? }, options?)
 ```
 
 ### Installed Machine Entrance commands
@@ -685,6 +703,8 @@ client.listReplayGraphs(options?)
   `--overwrite`. The output directory must remain inside the selected project root.
 - `pyproc-control doctor --config <file>` verifies the strict manifest, installed package version, local engine
   core and package digests, Machine browser, provider pins, operation catalog, and cleanup policy without launch.
+- `pyproc-control native setup|status|remove --config <file>` manages the optional Windows Motor host. Setup and
+  removal are explicit. The default browser-only profile neither builds nor starts it.
 - `pyproc-control run --config <file> --code <python>` performs one `machine.run`, emits a completed JSON terminal,
   and closes the owned product. `invoke` is the generic one-operation form.
 

@@ -81,6 +81,7 @@ export class SituationCompiler {
     const unknowns = [];
     const seedRefs = new Set();
     const ageMs = Math.max(0, this.now() - Date.parse(world.capturedAt));
+    const sourceTruncated = world.budget?.truncated === true;
 
     for (const requirement of focus.requirements) {
       const matches = world.entities.filter((entity) => matchesPerceptionQuery(entity, requirement.select));
@@ -97,6 +98,10 @@ export class SituationCompiler {
           state = "unknown";
           stateReason = "missingChangeBaseline";
         }
+      }
+      if (sourceTruncated) {
+        state = "unknown";
+        stateReason = "inventoryTruncated";
       }
 
       for (const entity of matches) seedRefs.add(entity.entityRef);
@@ -161,9 +166,11 @@ export class SituationCompiler {
       unknowns: unknowns.sort(compareRef),
       suggestedProbes,
       ...(visualProbes.length ? { visualProbes } : {}),
-      completeness: world.completeness,
+      completeness: { ...world.completeness, inventory: sourceTruncated ? "truncated" : "taskComplete" },
       budget: { used: { requirements: requirements.length, facts: facts.size,
-        affordances: affordances.length, bytes: 0 }, omitted: {}, requiredPreserved: true },
+        affordances: affordances.length, bytes: 0 },
+      omitted: { sourceEntities: Number(world.budget?.omitted?.entities) || 0,
+        sourceRelations: Number(world.budget?.omitted?.relations) || 0 }, requiredPreserved: true },
       integrity: { canonicalSha256: null, worldSha256: world.integrity.worldSha256,
         sourceGraphSha256: world.integrity.sourceGraphSha256 },
     };

@@ -12,6 +12,7 @@ import {
   redactVerificationEvidence,
   verificationScenarioTerminal,
 } from "./verificationOracle.js";
+import { projectMotorJourneyEvidence } from "./motorJourneyEvidence.js";
 
 function fail(code, message) { throw verificationError(code, message); }
 function sessionValue(attached) { return attached?.sessionRef || attached; }
@@ -46,6 +47,20 @@ function abortCheck(signal) {
 function readinessSatisfied(situation) {
   return situation.requirements.every((entry) => entry.state === "satisfied");
 }
+function retainArtifact(artifact, bytes, artifactBytes, artifacts, quota) {
+  if (artifactBytes.has(artifact.sha256)) return;
+  const totalBytes = [...artifactBytes.values()].reduce((total, entry) => total + entry.byteLength, 0);
+  if (bytes.byteLength > quota.maxArtifactBytes || artifacts.length >= quota.maxArtifacts
+    || totalBytes + bytes.byteLength > quota.maxTotalBytes) {
+    fail("EYES_ARTIFACT_QUOTA", "evidence exceeds the Experience Contract artifact quota");
+  }
+  artifactBytes.set(artifact.sha256, bytes);
+  artifacts.push(artifact);
+}
+function strongerTerminal(left, right) {
+  const rank = { verified: 0, rejected: 1, incomplete: 2 };
+  return rank[right] > rank[left] ? right : left;
+}
 function extractArtifacts(value, artifactBytes, artifacts, quota) {
   if (Array.isArray(value)) return value.map((entry) => extractArtifacts(entry, artifactBytes, artifacts, quota));
   if (!value || typeof value !== "object") return value;
@@ -55,14 +70,9 @@ function extractArtifacts(value, artifactBytes, artifacts, quota) {
     if (bytes.toString("base64") !== value.dataBase64 || bytes.byteLength !== value.byteLength
       || verificationBytesDigest(bytes) !== value.sha256) fail("EYES_ARTIFACT_INVALID", "visual evidence metadata mismatch");
     if (!artifactBytes.has(value.sha256)) {
-      const totalBytes = [...artifactBytes.values()].reduce((total, artifact) => total + artifact.byteLength, 0);
-      if (bytes.byteLength > quota.maxArtifactBytes || artifacts.length >= quota.maxArtifacts
-        || totalBytes + bytes.byteLength > quota.maxTotalBytes) {
-        fail("EYES_ARTIFACT_QUOTA", "visual evidence exceeds the Experience Contract artifact quota");
-      }
-      artifactBytes.set(value.sha256, bytes);
-      artifacts.push(Object.freeze({ artifactRef: `artifact:sha_${value.sha256}`, sha256: value.sha256, byteLength: bytes.byteLength,
-        mimeType: value.mimeType, purpose: "unresolved visual claim" }));
+      retainArtifact(Object.freeze({ artifactRef: `artifact:sha_${value.sha256}`, sha256: value.sha256,
+        byteLength: bytes.byteLength, mimeType: value.mimeType, purpose: "unresolved visual claim" }),
+      bytes, artifactBytes, artifacts, quota);
     }
     const { dataBase64, ...descriptor } = value;
     return { ...descriptor, artifactRef: `artifact:sha_${value.sha256}` };
@@ -72,14 +82,20 @@ function extractArtifacts(value, artifactBytes, artifacts, quota) {
 }
 
 export class VerificationRunner {
-  constructor({ automation, producerVersion = "0.0.0", now = () => new Date().toISOString() } = {}) {
+  constructor({ automation, producerVersion = "0.0.0", now = () => new Date().toISOString(),
+    motorJourneyResolver = null } = {}) {
     if (!automation || typeof automation.invoke !== "function") throw new TypeError("verification runner requires AutomationSpace");
+    if (motorJourneyResolver !== null && typeof motorJourneyResolver !== "function") {
+      throw new TypeError("motorJourneyResolver must be a function");
+    }
     this.automation = automation;
     this.producerVersion = producerVersion;
     this.now = now;
+    this.motorJourneyResolver = motorJourneyResolver;
   }
 
-  async audit({ contractRoot, repositoryRoot, outputDir, environmentId, repository }, { signal } = {}) {
+  async audit({ contractRoot, repositoryRoot, outputDir, environmentId, repository,
+    motorJourneys = [] }, { signal } = {}) {
     abortCheck(signal);
     const contract = await loadExperienceContract(contractRoot);
     const environment = contract.experience.environments.find((entry) => entry.environmentId === environmentId);
@@ -116,6 +132,31 @@ export class VerificationRunner {
         scenarioRuns.push(result);
         findings.push(...result.findings);
       }
+    }
+    if (!Array.isArray(motorJourneys)) fail("EYES_MOTOR_JOURNEY_INVALID", "motorJourneys must be an array");
+    if (motorJourneys.length && !this.motorJourneyResolver) {
+      fail("EYES_MOTOR_JOURNEY_UNAVAILABLE", "Motor journey evidence requires an enabled Motor store");
+    }
+    for (const reference of motorJourneys) {
+      abortCheck(signal);
+      if (!reference || typeof reference !== "object" || typeof reference.receiptSha256 !== "string"
+        || typeof reference.scenarioId !== "string" || typeof reference.checkpointId !== "string") {
+        fail("EYES_MOTOR_JOURNEY_INVALID", "Motor journey reference is invalid");
+      }
+      const scenarioIndex = scenarioRuns.findIndex((run) => run.scenarioId === reference.scenarioId);
+      if (scenarioIndex < 0) fail("EYES_MOTOR_SCENARIO_UNKNOWN",
+        `Motor journey scenario is not declared: ${reference.scenarioId}`);
+      const journey = await this.motorJourneyResolver(reference.receiptSha256);
+      const projected = projectMotorJourneyEvidence({ ...journey,
+        projectId: contract.experience.project.id, scenarioId: reference.scenarioId,
+        checkpointId: reference.checkpointId, environmentClass: environmentId });
+      retainArtifact(projected.artifact, projected.bytes, artifactBytes, artifacts,
+        contract.experience.policy.artifactQuota);
+      if (projected.finding) findings.push(projected.finding);
+      const scenarioRun = scenarioRuns[scenarioIndex];
+      scenarioRuns[scenarioIndex] = Object.freeze({ ...scenarioRun,
+        terminal: strongerTerminal(scenarioRun.terminal, projected.verdict),
+        motorJourneys: Object.freeze([...(scenarioRun.motorJourneys || []), projected.summary]) });
     }
     const verdict = scenarioRuns.some((run) => run.terminal === "incomplete") ? "incomplete"
       : scenarioRuns.some((run) => run.terminal === "rejected") ? "rejected" : "verified";

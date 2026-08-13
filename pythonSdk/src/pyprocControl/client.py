@@ -436,14 +436,18 @@ class PyProcClient:
     def auditExperience(self, contractRoot: str | os.PathLike[str], *,
                         repositoryRoot: str | os.PathLike[str], outputDir: str,
                         environmentId: str, repository: dict[str, Any],
+                        motorJourneys: list[dict[str, Any]] | None = None,
                         timeout: float | None = None) -> ControlResult:
-        return self.request("verification.audit", {
+        input: dict[str, Any] = {
             "contractRoot": str(Path(contractRoot).resolve()),
             "repositoryRoot": str(Path(repositoryRoot).resolve()),
             "outputDir": outputDir,
             "environmentId": environmentId,
             "repository": repository,
-        }, timeout=timeout)
+        }
+        if motorJourneys is not None:
+            input["motorJourneys"] = motorJourneys
+        return self.request("verification.audit", input, timeout=timeout)
 
     def verifyExperience(self, referenceDir: str | os.PathLike[str],
                          currentDir: str | os.PathLike[str], *,
@@ -664,6 +668,14 @@ class PyProcClient:
     def executeMotor(self, input: dict[str, Any], *,
                      timeout: float | None = None) -> ControlResult:
         return self.request("motor.execute", input, timeout=timeout)
+
+    def acquireMotorControl(self, input: dict[str, Any], *,
+                            timeout: float | None = None) -> ControlResult:
+        return self.request("motor.control.acquire", input, timeout=timeout)
+
+    def revokeMotorControl(self, leaseRef: str, *,
+                           timeout: float | None = None) -> ControlResult:
+        return self.request("motor.control.revoke", {"leaseRef": leaseRef}, timeout=timeout)
 
     def inspectMotor(self, *, timeout: float | None = None) -> ControlResult:
         return self.request("motor.inspect", timeout=timeout)

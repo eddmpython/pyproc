@@ -32,6 +32,7 @@ import { createEffectTransactionHandlers, EFFECT_TRANSACTION_TOOLS }
 import { createAppSpaceHandlers, APP_SPACE_TOOLS } from "../appSpace/appSpaceTools.js";
 import { createReplayGraphHandlers, REPLAY_GRAPH_TOOLS } from "../replayGraph/replayGraphTools.js";
 import { createActuationHandlers, ACTUATION_TOOLS } from "../actuation/actuationTools.js";
+import { WindowsNativeHostClient } from "../actuation/windowsNativeHost.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 180000;
 const POLL_HOLD_MS = 20000;
@@ -139,6 +140,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   }
   const replayGraphTools = replayGraphEnabled ? REPLAY_GRAPH_TOOLS : [];
   const actuationEnabled = env.PYPROC_ACTUATION === "1";
+  const windowsNativeConfig = env.PYPROC_WINDOWS_MOTOR ? JSON.parse(env.PYPROC_WINDOWS_MOTOR) : null;
   if (actuationEnabled && (!executionMemoryEnabled || !browserEnabled)) {
     throw new TypeError("Motor requires Execution Memory and an automation provider");
   }
@@ -263,7 +265,9 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   let browserControl = null;
   let automationSpace = null;
   let automationRouter = null;
+  let windowsNative = null;
   try {
+    windowsNative = windowsNativeConfig ? await WindowsNativeHostClient.open(windowsNativeConfig) : null;
     browserSession = browserLauncher(launchUrl, {
       prefix: "pyprocControl-",
       extraArgs: providerKind === "nativeCdp" ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : [],
@@ -282,7 +286,6 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     }
     browserControl = automationSpace?.control || null;
     automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
-    const verificationHandlers = createVerificationHandlers({ automation: automationRouter, producerVersion });
     const memoryProduct = executionMemoryEnabled ? await createExecutionMemoryHandlers({
       root: env.PYPROC_EXECUTION_MEMORY_ROOT,
       pageBridge,
@@ -326,8 +329,12 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       automationRouter,
       replayGraphProduct,
       appProduct,
+      windowsNative,
       valueBindings: JSON.parse(env.PYPROC_ACTUATION_VALUE_BINDINGS || "{}"),
     }) : null;
+    const verificationHandlers = createVerificationHandlers({ automation: automationRouter, producerVersion,
+      motorJourneyResolver: actuationProduct
+        ? (receiptSha256) => actuationProduct.coordinator.journey(receiptSha256) : null });
     const operationCatalog = controlOperationCatalog(tools);
     const operationHandlers = Object.fromEntries(operationCatalog.map(({ name, toolName }) => [name,
       async (input, { signal, requestId, spaceId }) => {
@@ -384,11 +391,14 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       appSpace: appProduct?.registry || null,
       replayGraph: replayGraphProduct?.registry || null,
       actuation: actuationProduct?.coordinator || null,
+      windowsNative,
       browserControl, browserSession, serverOrigin, pageUrl,
       async close() {
         if (closed) return;
         closed = true;
         await host.close("control product is shutting down");
+        actuationProduct?.coordinator.close();
+        await windowsNative?.close();
         try { await automationRouter?.close(); } catch (error) {}
         pageBridge.close();
         try { browserSession?.close(); } catch (error) {}
@@ -397,6 +407,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     });
   } catch (error) {
     pageBridge.close();
+    await windowsNative?.close();
     try { await automationRouter?.close(); } catch (closeError) {}
     if (!automationRouter) try { await automationSpace?.close(); } catch (closeError) {}
     try { browserSession?.close(); } catch (closeError) {}

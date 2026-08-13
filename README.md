@@ -433,12 +433,43 @@ await eyes.actAffordance(save, {
 
 See the [APX 1.0 product contract](docs/specs/apx/README.md).
 
+**Proof-Carrying Motor** turns one complete Situation and an absolute desired state into one bounded provider
+effect, verified terminal, durable receipt, and redacted episode. It deterministically composes Native CDP,
+cooperative AppSpace, effect-free ReplayGraph, and the optional Windows accessibility and physical-input host.
+Ambiguous, stale, or source-truncated targets fail before contact. Cleanup failures are reported separately and
+never resend the effect.
+
+```js
+const task = await client.openMotorTask({
+  url: "https://app.example/document/42",
+  expectedRisk: "externalEffect",
+  waitUntil: "load",
+});
+try {
+  const observed = await task.situate({ requirements: [{
+    requirementRef: "requirement:save",
+    select: { role: "button", name: "Save", actionable: true },
+    need: ["fact", "affordance"],
+    cardinality: "one",
+  }] });
+  console.log(task.diagnoseAmbiguity(observed, "requirement:save"));
+  // Compile the absolute intent from this exact Situation, then call task.execute(...).
+} finally {
+  await task.close();
+}
+```
+
+Motor remains inside the stable `pyproc/control`, Control, MCP, and Python surfaces. Stored journeys can enter
+the existing Evidence Pack as canonical sidecars and findings. The optional Windows host is disabled by default,
+uses an exact application allowlist, and has explicit setup, status, update, integrity, and removal paths. See
+the [Motor guide](docs/usage/actuation.md) and [Motor 1.0 contract](docs/specs/actuation/README.md).
+
 With `{ "enabled": false }`, the installed product exposes four Python tools plus effect-free `eyesVerify` and
-`eyesReplay`. Enabling the browser adds ten lifecycle, compatibility, observation, action, raw-command, and
+`eyesReplay`. Enabling the browser adds eleven lifecycle, compatibility, observation, action, raw-command, and
 artifact tools plus `eyesAudit`.
 
 Set `"provider": "frame"` for a cooperative credentialless sandbox that opens no DevTools port. It exposes
-nine browser tools when snapshot is allowed, omits raw commands, and requires the target to load the shipped
+ten browser tools when snapshot is allowed, omits raw commands, and requires the target to load the shipped
 bridge. See the [FrameSpace guide](docs/usage/frameSpace.md) for its exact isolation and screenshot boundary.
 
 Add `browser.recording` to persist a hash-chained authorized journey, then select `"provider": "replay"` to
@@ -520,6 +551,7 @@ These states measure only pyproc's own invariants. They never depend on adoption
 | Installed JavaScript Control SDK | Bounded |
 | PyProc Eyes graph, SituationCapsule, proof-carrying action, and action evidence | Bounded |
 | Verified Change Loop and canonical Evidence Packs | Bounded |
+| Proof-Carrying Motor absolute intents, receipts, and bounded actuators | Bounded |
 | Transactional AppSpace logical-state and Machine pairs | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 

@@ -162,6 +162,34 @@ SHA-256 roots and object references detect content changes but do not authentica
 graph signature and does not delete unreachable objects automatically. Do not treat a complete coverage flag as
 proof that every site action is represented, or treat a missing edge as permission to invent a transition.
 
+### Proof-Carrying Motor does not turn perception into permission
+
+Motor is disabled by default and requires explicit browser and Execution Memory configuration. A Situation must
+be task-complete, fresh, and uniquely matched before contact. `entityRef`, accessible names, page content,
+geometry, pixels, reported capabilities, ambiguity diagnostics, and historical episodes never create authority.
+The exact APX action capability and any required approval, commit, or control lease remain independent checks.
+
+Motor plans are immutable at contact. Fallback is allowed only after the previous route proves zero provider
+calls. A contacted, applied, contradicted, unobserved, or unknown effect is never automatically resent. Cleanup
+failure remains a separate terminal fact and cannot change or retry the original action. Borrowed browser targets
+are detached and never closed. Owned target closure uses the exact underlying target identity rather than a URL.
+
+The optional Windows host is an explicitly installed child process with framed stdio and an exact application
+allowlist. It has no network listener, shell, unrestricted target, or public raw-coordinate command. Setup records
+binary, shipped source, and SBOM digests and a local Ed25519 integrity signature. This detects change since setup,
+but is not publisher signing or authorization for the target application. Physical input requires a short-lived,
+one-shot `ControlLease`; user activity, foreground loss, target substitution, expiry, or reuse revokes it.
+
+The optional DelegatedTab extension uses only `activeTab` and `scripting`. A loopback host request plus explicit
+extension action gestures bind the host and target tab. Synthetic browser input cannot forge that gesture.
+Same-origin navigation rotates the tab epoch, while cross-origin navigation and tab close revoke access. The
+extension does not grant broad profile, debugger, navigation, or closure authority.
+
+Motor receipts and episodes may contain private application state even after structural redaction. Keep the
+Execution Memory root private. Evidence Pack projection resolves an exact stored receipt and episode and applies
+the existing artifact quota and replay integrity checks. A pack digest and a Motor receipt prove integrity and
+lineage, not identity, consent, site ownership, business approval, or remote exactly-once application.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`
