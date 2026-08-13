@@ -110,6 +110,16 @@ sealed = client.sealEffectTransaction(
 does not mint approval authority; pass a canonical grant produced by the separately trusted issuer. Recovery
 from a durable `sending` state never repeats the provider call. See [Rehearse-Commit](rehearseCommit.md).
 
+## Transactional AppSpace
+
+An AppSpace-enabled FrameSpace profile exposes `attachApp`, `checkpointApp`, `branchApp`, `restoreApp`,
+`adoptApp`, `inspectApp`, `listAppPairs`, `stageAppEffect`, and `finalizeAppEffect`. These methods send the same
+canonical `app.*` operations as JavaScript and MCP. The installed AppSpace gate reopens the durable list through
+all three clients and requires the same active pair digest.
+
+The Python client does not implement an independent app state machine. Live pair restore still requires the
+originating control process and its in-process Machine checkpoints. See [Transactional AppSpace](appSpace.md).
+
 ## Browser automation and screenshots
 
 Browser operations appear only when the manifest grants automation authority. Risk is fixed by the product

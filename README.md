@@ -70,6 +70,7 @@
 - [Hibernate a Machine Fleet](#hibernate-a-machine-fleet)
 - [Resume work with Execution Memory](#resume-work-with-execution-memory)
 - [Rehearse and commit an approved effect](#rehearse-and-commit-an-approved-effect)
+- [Pair a cooperative app with the Machine](#pair-a-cooperative-app-with-the-machine)
 - [Capability paths](#capability-paths)
 - [Dependency boundary](#dependency-boundary)
 - [Setup](#setup)
@@ -104,6 +105,7 @@ the same contract, not separate identities.
 | **Permissions** | capability contracts + permission jail | Network, storage, devices, memory, and execution policy |
 | **Eyes and hands** | `pyproc/control` + APX + AutomationSpace | Bounded perception, authorized action, screenshots, and postcondition evidence |
 | **Effect transaction** | Rehearse-Commit through `pyproc/control` | Exact intent, signed approval, durable one-shot send, honest terminal, and sealed receipt |
+| **App state pair** | Transactional AppSpace through `pyproc/control` | Cooperative logical state and one Machine checkpoint restored and adopted together |
 
 These are product concepts, not competing top-level APIs. A Machine remains the browser-app root, and its
 verbs reveal only the capability being used. Internal engine objects stay behind that boundary.
@@ -255,7 +257,7 @@ than competing products.
 | A multi-guest browser computer | `createWebComputer()` | `WebComputer`: guest lifecycle, shared devices, durable generations, and signed computer images |
 | Platform readiness | `checkEnvironment()` | Structured capability report with actionable issues |
 | Programmatic failure handling | `PyProcError`, `PYPROC_ERROR_CODES` | One error-code contract shared by every root path |
-| Installed Node.js control | `PyProcControlClient` from `pyproc/control` | Persistent Python, browser lifecycle, PyProc Eyes, actions, verified artifacts, cancellation, and bounded shutdown |
+| Installed Node.js control | `PyProcControlClient` from `pyproc/control` | Persistent Python, browser lifecycle, PyProc Eyes, actions, transactional app pairs, verified artifacts, cancellation, and bounded shutdown |
 
 Deterministic replay is the shared foundation: `boot({ deterministic: true })` fixes the boot
 entropy so the same manifest reproduces byte-identical memory at the replay boundary (cp0), which is what makes delta save,
@@ -516,6 +518,7 @@ These states measure only pyproc's own invariants. They never depend on adoption
 | Installed JavaScript Control SDK | Bounded |
 | PyProc Eyes graph, SituationCapsule, proof-carrying action, and action evidence | Bounded |
 | Verified Change Loop and canonical Evidence Packs | Bounded |
+| Transactional AppSpace logical-state and Machine pairs | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## What it guarantees, and what it doesn't
@@ -692,6 +695,39 @@ Evidence Pack links the exact intent, EffectResult, and terminal session revisio
 JavaScript, Python, MCP, and Control Protocol clients share the seven operations from prepare through seal.
 See the [Rehearse-Commit guide](docs/usage/rehearseCommit.md) and
 [protocol specification](docs/specs/rehearseCommit/README.md).
+
+## Pair a cooperative app with the Machine
+
+Transactional AppSpace is for a web application you control. Its adapter exports bounded versioned logical state,
+not a DOM dump or renderer heap. pyproc fences that state, pairs it with an in-process Python Machine checkpoint
+and exact Execution Session revision, and publishes an immutable candidate. Restore and adopt move the app and
+Python state together. A stale adopt rolls both live sides back and leaves the existing active HEAD unchanged.
+
+```sh
+npx pyproc-mcp init \
+  --recipe transactionalApp \
+  --engine-root /absolute/path/to/pyodide \
+  --origin https://workspace.example.test \
+  --action snapshot --action click \
+  --purpose "branch the cooperative workspace" \
+  --acknowledge-effects \
+  --execution-memory-root /absolute/private/pyproc-memory \
+  --enable-effect-transactions \
+  --effect-approval-authority operator:workspace=/absolute/keys/workspace-public.pem \
+  --enable-app-space \
+  --app-id com.example.workspace \
+  --app-origin https://workspace.example.test \
+  --app-adapter-version 1.0.0 \
+  --app-state-schema workspace/3
+```
+
+The target remains a credentialless FrameSpace. AppSpace adds no raw page RPC, cookie access, approval, or send
+authority. `app.effect.stage` records only an exact existing Rehearse-Commit intent and returns `sent: false`;
+`effect.commit` remains the sole live send path. Persisted pair objects can be verified after restart, but
+AppSpace 1.0 restores the Machine side only while the originating in-process checkpoint tree is alive.
+
+See the [Transactional AppSpace guide](docs/usage/appSpace.md) and
+[protocol specification](docs/specs/appSpace/README.md).
 
 ## Capability paths
 

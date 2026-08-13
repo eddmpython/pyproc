@@ -65,7 +65,6 @@ and graduation gates live in [agent experience initiatives](../operations/agentE
 8. **Carry one intent across actuator planes.** A deterministic broker preserves absolute target bindings,
    authority, effect windows, user precedence, and one receipt across cooperative app, browser input, and native
    accessibility providers without making any provider mandatory for the browser-only installation path.
-
 The Machine Entrance is delivered through the installed initializer, doctor, and client parity gates. The
 Perception Computer is delivered through `apx.situation`, the JavaScript and Python `situate()` facades, and the
 Chrome and Edge `test:perception-computer` gate. It does not claim general superiority over Playwright. The narrow
@@ -81,8 +80,11 @@ with separate permission approval. Installed JavaScript, Python, and MCP gates c
 image. Rehearse-Commit Transactions is delivered through immutable exact intents, honest coverage receipts,
 trust-domain-bound Ed25519 approvals, a durable one-shot lease, live APX and destination revalidation,
 non-resending recovery, and an Evidence Pack-linked EffectReceipt. Installed JavaScript, MCP, and Python gates
-send one real HTTP effect and converge on the same terminal chain. The next active campaign is
-[`transactionalAppSpace`](../../tests/attempts/transactionalAppSpace/README.md). Later initiatives remain
+send one real HTTP effect and converge on the same terminal chain. Transactional AppSpace is delivered through
+content-addressed objects with strict completion markers and app HEAD compare-and-swap. Installed JavaScript,
+Python, and MCP clients return the same pair digest; the browser gate proves paired restore, stale-adopt rollback,
+secret rejection, and no-send effect staging. The next active campaign is
+[`replayGraphWorlds`](../../tests/attempts/replayGraphWorlds/README.md). Later initiatives remain
 locked behind their immediate predecessor. No initiative changes a North Star score before its browser evidence
 is registered in the ledger.
 

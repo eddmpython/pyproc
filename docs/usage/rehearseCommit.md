@@ -7,6 +7,10 @@ similar operations where a timeout must not cause an automatic duplicate.
 It does not make a remote service transactional. The local guarantee is narrower: pyproc publishes a durable
 one-shot lease before provider dispatch and never automatically dispatches that intent again.
 
+Transactional AppSpace may stage the public identity of one exact transaction in a cooperative app outbox.
+Staging sends nothing and grants no approval. `effect.commit` remains the only live send owner, and only an exact
+terminal transaction can finalize the cooperative outbox. See [Transactional AppSpace](appSpace.md).
+
 ## Configure the trust boundary
 
 Create an Ed25519 approval key outside the controlled page. Keep the private key with the approving authority

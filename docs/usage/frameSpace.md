@@ -49,6 +49,12 @@ Requests and responses stay on that private port. Navigation creates another epo
 without the bridge fails with `FRAME_SPACE_BRIDGE_UNAVAILABLE` instead of being treated as controllable.
 The host waits at most ten seconds for readiness and handshake.
 
+For an explicitly configured application that also needs logical-state checkpointing, load the separate
+`scripts/appSpace/appSpaceTarget.js` bridge first and register an adapter before loading the FrameSpace bridge.
+FrameSpace remains the isolated transport and DOM automation provider. Transactional AppSpace owns logical state,
+Machine pairing, and effect outbox rules. It does not widen the iframe sandbox or turn the FrameSpace bridge into
+arbitrary RPC. See [Transactional AppSpace](appSpace.md).
+
 ## Isolation contract
 
 Each target iframe has exactly these properties:
@@ -105,3 +111,7 @@ control-page epoch, preserves a partial-effect outcome, verifies APX identity an
 negative PNG cases, and proves that a denied origin receives zero requests. `npm run test:python-sdk` repeats
 the FrameSpace APX query and screenshot journey from an installed wheel. Chrome on Ubuntu and Edge on Windows
 run both gates in CI.
+
+`npm run test:app-space` separately proves exact adapter identity, fenced logical-state export, app and Machine
+restore, stale-adopt rollback, configured-secret rejection, no-send effect staging, and JavaScript, Python, MCP
+pair-digest parity from the packed artifact.

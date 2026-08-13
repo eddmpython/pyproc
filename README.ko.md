@@ -70,6 +70,7 @@
 - [Machine Fleet 동면](#machine-fleet-동면)
 - [Execution Memory로 작업 재개](#execution-memory로-작업-재개)
 - [승인된 effect를 연습하고 한 번만 전송](#승인된-effect를-연습하고-한-번만-전송)
+- [협력 app과 Machine을 한 쌍으로 묶기](#협력-app과-machine을-한-쌍으로-묶기)
 - [능력 경로](#능력-경로)
 - [의존성 경계](#의존성-경계)
 - [셋업](#셋업)
@@ -104,6 +105,7 @@ capability이지 별도 정체성이 아니다.
 | **Permissions** | capability contract + permission jail | network, storage, device, memory, 실행 정책 |
 | **눈과 손** | `pyproc/control` + APX + AutomationSpace | bounded perception, 승인된 action, screenshot, postcondition evidence |
 | **Effect transaction** | `pyproc/control`의 Rehearse-Commit | exact intent, 서명 승인, durable one-shot send, 정직한 terminal, 봉인 receipt |
+| **App state pair** | `pyproc/control`의 Transactional AppSpace | 협력 app logical state와 Machine checkpoint의 동시 restore, adopt |
 
 이것들은 서로 경쟁하는 최상위 API가 아니라 제품 개념이다. browser application에서는 Machine
 handle이 root로 남고, 그 동사가 필요한 capability만 드러낸다. 내부 engine object는 이 경계 뒤에 둔다.
@@ -255,7 +257,7 @@ stable `pyproc/control` subpath는 설치형 Node.js host adapter이고, 나머�
 | multi-guest 브라우저 컴퓨터 | `createWebComputer()` | `WebComputer`: guest lifecycle, 공유 장치, 내구 generation, 서명 computer image |
 | 플랫폼 준비 상태 | `checkEnvironment()` | 해결 방법이 포함된 구조화 capability report |
 | 프로그램 실패 처리 | `PyProcError`, `PYPROC_ERROR_CODES` | 모든 root 경로가 공유하는 단일 error-code 계약 |
-| 설치형 Node.js control | `pyproc/control`의 `PyProcControlClient` | persistent Python, browser lifecycle, PyProc Eyes, action, 검증 artifact, cancel, bounded shutdown |
+| 설치형 Node.js control | `pyproc/control`의 `PyProcControlClient` | persistent Python, browser lifecycle, PyProc Eyes, action, transactional app pair, 검증 artifact, cancel, bounded shutdown |
 
 공통 기반은 결정적 리플레이다: `boot({ deterministic: true })`가 부팅 엔트로피를 고정해 같은
 매니페스트가 리플레이 경계(cp0)에서 바이트 동일한 메모리를 재현하고, 그것이 델타 저장/저널 부활/워커 간 `fork`를
@@ -514,6 +516,7 @@ FrameSpace는 이 facade를 공유하면서 서로 다른 정직한 conformance 
 | Verified Change Loop와 canonical Evidence Pack | Bounded |
 | 설치형 MCP browser automation과 artifact 제품 | Bounded |
 | 설치형 JavaScript Control SDK | Bounded |
+| Transactional AppSpace logical state와 Machine pair | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## 보장하는 것과 아직 아닌 것
@@ -691,6 +694,40 @@ terminal session revision을 연결해야만 최종 `EffectReceipt`를 만든다
 JavaScript, Python, MCP, Control Protocol client는 prepare부터 seal까지 같은 일곱 operation을 공유한다.
 [Rehearse-Commit 가이드](docs/usage/rehearseCommit.md)와
 [protocol 명세](docs/specs/rehearseCommit/README.md)를 참고한다.
+
+## 협력 app과 Machine을 한 쌍으로 묶기
+
+Transactional AppSpace는 직접 통제하는 web application을 위한 경로다. adapter는 DOM dump나 renderer
+heap이 아니라 bounded versioned logical state를 export한다. pyproc은 그 상태를 fence하고 in-process Python
+Machine checkpoint와 exact Execution Session revision에 묶어 immutable candidate로 게시한다. restore와
+adopt는 app과 Python 상태를 함께 옮긴다. stale adopt는 두 live state를 모두 되돌리고 기존 active HEAD를
+유지한다.
+
+```sh
+npx pyproc-mcp init \
+  --recipe transactionalApp \
+  --engine-root /absolute/path/to/pyodide \
+  --origin https://workspace.example.test \
+  --action snapshot --action click \
+  --purpose "branch the cooperative workspace" \
+  --acknowledge-effects \
+  --execution-memory-root /absolute/private/pyproc-memory \
+  --enable-effect-transactions \
+  --effect-approval-authority operator:workspace=/absolute/keys/workspace-public.pem \
+  --enable-app-space \
+  --app-id com.example.workspace \
+  --app-origin https://workspace.example.test \
+  --app-adapter-version 1.0.0 \
+  --app-state-schema workspace/3
+```
+
+target은 credentialless FrameSpace에 남는다. AppSpace는 raw page RPC, cookie access, approval, send authority를
+추가하지 않는다. `app.effect.stage`는 기존 Rehearse-Commit intent의 exact identity만 기록하고
+`sent: false`를 반환한다. live send는 계속 `effect.commit`만 소유한다. 저장된 pair object는 재시작 뒤에도
+검증할 수 있지만 AppSpace 1.0의 Machine restore는 원래 process의 checkpoint tree가 살아 있을 때만 가능하다.
+
+[Transactional AppSpace 가이드](docs/usage/appSpace.md)와
+[protocol 명세](docs/specs/appSpace/README.md)를 참고한다.
 
 ## 능력 경로
 

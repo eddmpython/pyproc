@@ -113,6 +113,18 @@ The stable subpath also exports `createApprovalGrant`, `verifyApprovalGrant`,
 approving or embedded Node.js host. The private signing key must remain outside the page and manifest. See the
 [Rehearse-Commit guide](rehearseCommit.md).
 
+## Transactional AppSpace
+
+An AppSpace-enabled FrameSpace profile adds `attachApp`, `checkpointApp`, `branchApp`, `restoreApp`, `adoptApp`,
+`inspectApp`, `listAppPairs`, `stageAppEffect`, and `finalizeAppEffect`. They map directly to the shared `app.*`
+operations. The subpath also exports `createAppSpaceRegistry`, `AppSpaceRegistry`, and `FileAppSpaceStore` for an
+embedded Node.js host.
+
+App state is adapter-declared canonical JSON. A pair includes the exact app snapshot, live Machine checkpoint,
+exported Machine generation, and Execution Session revision. Restore and adopt operate on both live sides;
+effect staging returns `sent: false` and leaves dispatch to Rehearse-Commit. See
+[Transactional AppSpace](appSpace.md).
+
 ## PyProc Eyes and evidence-backed action
 
 ```js

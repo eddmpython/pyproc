@@ -4,6 +4,12 @@ Execution Memory keeps the exact Machine, repository, browser observation bounda
 evidence needed to resume or hand off work. It is opt-in and lives in the installed Control product or the
 existing `pyproc/control` subpath.
 
+Transactional AppSpace stores its immutable paired objects and app HEADs beneath the same configured root, but
+does not add them to an Execution Memory revision or handoff inventory in version 1. Each pair independently links
+the exact Execution Session revision and exported Machine image. Its live restore handle is an in-process Machine
+checkpoint, so reopening the filesystem registry proves the pair but does not cold-import it into a new running
+Machine. See [Transactional AppSpace](appSpace.md).
+
 ## Configure it
 
 Add `executionMemory` to the version 1 product manifest. The root and every import root must be absolute.

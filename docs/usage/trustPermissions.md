@@ -107,3 +107,10 @@ approval issuers, while the private key remains outside the page and product man
 intent, destination, risk, base session revision, local trust domain, expiry, nonce, and policy version. It is
 not portable authority. Commit still requires a current broker-issued APX affordance and matching live target
 origin. See [Rehearse-Commit](rehearseCommit.md).
+
+Transactional AppSpace adds no browser or effect authority. It requires the existing credentialless FrameSpace,
+an exact configured app identity, Execution Memory, and Rehearse-Commit. The cooperative page description cannot
+widen its configured origin, actions, risk, state limit, or approval authority. App state is treated as untrusted
+data, scanned for forbidden credential and browser-internal keys plus configured secret literals, and revalidated
+when reopened. A pair digest proves content identity, not permission, remote truth, or rollback of server state.
+See [Transactional AppSpace](appSpace.md).

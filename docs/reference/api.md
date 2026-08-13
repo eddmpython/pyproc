@@ -600,6 +600,11 @@ Stable Node.js facade for the installed Control product, typed in
 - Approval and direct host values: `createApprovalGrant`, `verifyApprovalGrant`,
   `createEffectTransactionRegistry`, `EffectTransactionRegistry`, and `FileEffectTransactionStore`. The
   approval helper signs one exact `EffectIntent`; it does not grant page authority or bypass manifest policy.
+- Transactional AppSpace verbs: `attachApp`, `checkpointApp`, `branchApp`, `restoreApp`, `adoptApp`,
+  `inspectApp`, `listAppPairs`, `stageAppEffect`, and `finalizeAppEffect`. They are present only when
+  `appSpace.enabled` is true and reuse FrameSpace, Execution Memory, and Rehearse-Commit.
+- AppSpace direct host values: `createAppSpaceRegistry`, `AppSpaceRegistry`, and `FileAppSpaceStore`. They own
+  content-addressed cooperative state and paired-generation HEADs, not browser or effect authority.
 - `client.perception(sessionRef)` returns `PerceptionClient`. `observe`, `query`, `one`,
   `explainActionability`, `whatChanged`, and evidence-backed `act` retain the APX graph path. `situate` returns
   an immutable `SituationResult`, and `actAffordance` binds an authorized `SituationAffordance` to the effect.
@@ -629,18 +634,30 @@ client.commitEffectTransaction(transactionId, expectedRevisionSha256, options?)
 client.inspectEffectTransaction(transactionId, options?)
 client.listEffectTransactions(options?)
 client.sealEffectTransaction(transactionId, expectedRevisionSha256, evidencePackDir, options?)
+client.attachApp(sessionRef, options?)
+client.checkpointApp(input, options?)
+client.branchApp({ ...input, parentPairId }, options?)
+client.restoreApp(appRef, pairId, options?)
+client.adoptApp(appRef, pairId, expectedActivePairSha256, options?)
+client.inspectApp(appRef, options?)
+client.listAppPairs(options?)
+client.stageAppEffect(appRef, transactionId, expectedTransactionRevisionSha256, options?)
+client.finalizeAppEffect(appRef, transactionId, expectedTransactionRevisionSha256, options?)
 ```
 
 ### Installed Machine Entrance commands
 
-- `pyproc-mcp init --recipe <name> ...` compiles `pythonOnly`, `observeLocal`, `authorizedBrowser`, or
-  `replayPinned` into `.pyproc/manifest.json`, a common MCP `client.json`, and exact next commands.
+- `pyproc-mcp init --recipe <name> ...` compiles `pythonOnly`, `observeLocal`, `authorizedBrowser`,
+  `replayPinned`, or `transactionalApp` into `.pyproc/manifest.json`, a common MCP `client.json`, and exact next
+  commands.
 - `--execution-memory-root`, repeated `--execution-memory-import-root`, and repeated
   `--execution-memory-secret-env` opt any recipe into immutable Execution Memory. Relative paths resolve from
   the project root; secret values are validated from the environment and never serialized.
 - `--enable-effect-transactions` plus repeated
   `--effect-approval-authority <authority-id>=<public-key-file>` enables the exact-intent transaction
   lifecycle. It requires Execution Memory and an acknowledged `externalEffect` browser profile.
+- `--enable-app-space` plus exact app identity flags enables Transactional AppSpace. The `transactionalApp`
+  recipe requires FrameSpace, Execution Memory, Rehearse-Commit, and explicit actions and purpose.
 - `--dry-run` performs path and authority validation without writing. Existing generated files require
   `--overwrite`. The output directory must remain inside the selected project root.
 - `pyproc-control doctor --config <file>` verifies the strict manifest, installed package version, local engine

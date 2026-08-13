@@ -37,6 +37,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   rehearsal receipts, externally signed approval grants, durable commit leases, terminal effect results, and
   Evidence Pack-gated receipts share one immutable revision chain. JavaScript, Python, MCP, Control, and CLI
   entrances use the same fail-closed coordinator and never resend after the durable sending boundary.
+- **Transactional AppSpace pairs cooperative application state with the Python Machine.** Exact app identity,
+  fenced logical-state export, host-side canonical validation, immutable completion markers, in-process Machine
+  checkpoints, paired restore, CAS adoption, rollback, and a no-send effect outbox share one Control lifecycle.
+  JavaScript, Python, and MCP reopen the same durable pair digest from the packed product.
 
 ### Compatibility
 
@@ -51,6 +55,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - Rehearse-Commit is additive on the existing `pyproc/control` subpath and disabled by default. Enabling it adds
   seven `effect.*` Control operations and requires Execution Memory, acknowledged `externalEffect` authority,
   and an external Ed25519 approval authority. It does not claim remote exactly-once delivery or rollback.
+- Transactional AppSpace is additive on the existing `pyproc/control` subpath and disabled by default. Enabling
+  it adds nine `app.*` Control operations and requires FrameSpace, Execution Memory, and Rehearse-Commit. It does
+  not capture a renderer heap, cookies, arbitrary site state, or remote effects, and adds no root or subpath.
 
 한국어 요약: 기존 `automation.observe`에 opt-in `apx.situation` 표현을 추가했다. typed focus가 최소 충분
 상황과 명시적 불확실성을 만들고, broker가 발급한 capability만 현재 world와 epoch에 묶여 effect에 쓰인다.
@@ -64,6 +71,9 @@ opt-in 기능이며 새 root, subpath, image format은 만들지 않는다.
 Rehearse-Commit Transactions는 exact intent, effect-free rehearsal, 외부 서명 승인, durable send lease,
 terminal result, Evidence Pack receipt를 하나의 immutable chain으로 묶는다. sending 경계 이후에는 자동으로
 재전송하지 않으며, 원격 exactly-once나 rollback을 주장하지 않는다.
+Transactional AppSpace는 협력 app의 fenced logical state와 Python Machine checkpoint를 immutable pair로
+묶는다. marker 없는 object는 후보가 아니며 stale adopt는 app, Machine, active HEAD를 함께 rollback한다.
+effect outbox staging은 live send를 0회 수행하고 기존 Rehearse-Commit transaction만 참조한다.
 
 ## 0.0.21 - 2026-08-13
 

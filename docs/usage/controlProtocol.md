@@ -125,6 +125,23 @@ enabled. A configured Ed25519 public authority verifies approvals; the controlle
 durable CommitLease is published before `automation.act`. Recovery from `sending` records `outcomeUnknown` and
 never dispatches again. See [Rehearse-Commit](rehearseCommit.md).
 
+When `appSpace.enabled` is true, nine additional operations appear:
+
+| Operation | Meaning | Success outcome |
+|---|---|---|
+| `app.attach` | Bind an exact configured cooperative adapter to one live FrameSpace session | `applied` |
+| `app.checkpoint` | Publish a complete app and Machine pair and move the active app HEAD | `applied` |
+| `app.branch` | Publish a complete sibling candidate without changing the active HEAD | `applied` |
+| `app.restore` | Restore app state and the in-process Machine checkpoint without adoption | `applied` |
+| `app.adopt` | Restore both sides and compare-and-swap the active HEAD | `applied` |
+| `app.inspect` | Inspect the live adapter and reverified active pair | `observed` |
+| `app.list` | List complete pair markers and active status | `observed` |
+| `app.effect.stage` | Stage an exact existing transaction identity without sending | `applied` |
+| `app.effect.finalize` | Copy an exact terminal transaction result into the outbox | `applied` |
+
+AppSpace requires FrameSpace, Execution Memory, and Rehearse-Commit. It adds no raw page RPC and no live send
+path. See [Transactional AppSpace](appSpace.md).
+
 APX adds no operation. Pass `representation: "apx.graph"` for a provider-neutral graph or
 `representation: "apx.situation"` with typed `focus.requirements` for a SituationCapsule.
 An authorized affordance can be bound to `automation.act` through `actionContext`; stale bindings fail before

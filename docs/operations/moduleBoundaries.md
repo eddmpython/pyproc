@@ -94,6 +94,16 @@ affordances, rehearsal providers, one-shot live dispatch, verification, and seal
 perception, automation, recording, and evidence producers never import this directory. It is publicly composed
 only through the existing `pyproc/control` subpath.
 
+`scripts/appSpace/` owns cooperative logical application state above FrameSpace, Execution Memory, and
+Rehearse-Commit. `appSpaceTarget.js` owns the closed page adapter and fence protocol;
+`appSpaceCanonical.js` owns identity, snapshot, outbox, paired-generation validation, quotas, and digests;
+`fileAppSpaceStore.js` owns immutable objects, completion markers, and active app HEAD compare-and-swap;
+`appSpaceRegistry.js` owns candidate publication and current-configuration revalidation;
+`appSpaceCoordinator.js` alone coordinates app fences, in-process Machine checkpoints, paired rollback, and
+existing effect transaction identities; `appSpaceTools.js` adapts the nine operations to Control and MCP. The
+directory never owns arbitrary page RPC, browser credentials, effect approval, or live effect dispatch. It is
+publicly composed only through the existing `pyproc/control` subpath.
+
 ## Layer ranks
 
 The layer contract is a total order, and every import edge must point downward. Peers do not import peers.

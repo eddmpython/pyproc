@@ -21,6 +21,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [machineFleet/README.md](specs/machineFleet/README.md) | Hibernating Machine Fleet protocol: state, lease, commit-before-stop, exact resume, hot admission, and resource evidence |
 | | [executionMemory/README.md](specs/executionMemory/README.md) | Execution Memory protocol: immutable revisions, verified links, CAS HEAD, completion truth, signed handoff, privacy, and retention |
 | | [rehearseCommit/README.md](specs/rehearseCommit/README.md) | Rehearse-Commit protocol: exact intent, signed approval, durable one-shot lease, honest outcome, and evidence-linked receipt |
+| | [appSpace/README.md](specs/appSpace/README.md) | Transactional AppSpace protocol: cooperative logical state, fenced capture, immutable app and Machine pairs, CAS adoption, and effect outbox boundary |
 | [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: documentation, executable truth, experiments, git history, memory operations, development principles |
 | | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
 | | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
@@ -48,6 +49,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 | | [frameSpace.md](usage/frameSpace.md) | Cooperative credentialless frame automation, target bridge, sandbox, screenshot, and origin boundaries |
 | | [replaySpace.md](usage/replaySpace.md) | Hash-chained automation recording, artifact completeness, effect-free replay, and checkpoint-aligned resume |
 | | [rehearseCommit.md](usage/rehearseCommit.md) | Configure, rehearse, approve, commit once, recover without resend, and seal an external effect |
+| | [appSpace.md](usage/appSpace.md) | Configure a cooperative app adapter, pair its logical state with a Machine checkpoint, branch, restore, adopt, and stage effects without sending |
 | [reference/](reference/) | [api.md](reference/api.md) | The function-level API reference: the six root exports and the machine handle vocabulary, escape hatches and subpaths, the full error code table (a machine gate forces every root export to be anchored) |
 | | [bundleFormat.md](reference/bundleFormat.md) | The canonical layout of the portable bundle (`PYBUNDLE1`) envelope: byte placement, header fields, the separation of integrity from signature |
 
@@ -77,6 +79,7 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 - Automation provider contract: [usage/automationSpace.md](usage/automationSpace.md)
 - Cooperative frame provider: [usage/frameSpace.md](usage/frameSpace.md)
 - Automation recording and replay: [usage/replaySpace.md](usage/replaySpace.md)
+- Cooperative app and Machine state pairs: [usage/appSpace.md](usage/appSpace.md)
 - PyProc Eyes graph, SituationCapsule, and evidence contract: [APX 1.0](specs/apx/README.md)
 - Repository change verdict and Evidence Pack contract: [Experience Verification 1.0](specs/verification/README.md)
 - Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

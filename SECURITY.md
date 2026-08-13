@@ -128,6 +128,24 @@ A terminal transaction is not an audit receipt until `effect.seal` verifies an E
 repository identity and exact transaction, intent, EffectResult, and terminal session links. A pack digest
 proves content integrity, not issuer identity or legal authorization.
 
+### Transactional AppSpace captures declared state, not browser authority
+
+AppSpace is disabled by default and requires credentialless FrameSpace, Execution Memory, Rehearse-Commit, and
+an exact configured app identity. Its cooperative target runs without `allow-same-origin`, parent DOM access,
+default-profile credentials, popup authority, or a raw page method channel. A page-reported identity or
+capability cannot widen the manifest.
+
+Treat exported app state as untrusted data. The host enforces canonical JSON, structural and byte limits,
+forbidden credential and browser-internal keys, exact schema identity, and configured secret literal scans. These
+checks do not discover transformed secrets or arbitrary sensitive business data. Applications must export only
+the minimum declared logical state and keep their own domain redaction and access controls.
+
+A pair marker proves that the app snapshot, in-process Machine checkpoint, exported Machine generation, and
+Execution Session link were published together. It does not authenticate business truth, grant permission, or
+make a remote service transactional. AppSpace staging sends nothing. Only Rehearse-Commit owns approval and live
+dispatch. Restoring a pair cannot undo an external request. A failed paired rollback is `outcomeUnknown`; stop
+and investigate rather than retrying either side.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`

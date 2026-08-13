@@ -135,6 +135,33 @@ seven `effect.*` operations only after strict product validation confirms Execut
 `externalEffect` browser profile, and at least one authority. Omit both effect options to keep the transaction
 coordinator closed. See [Rehearse-Commit Transactions](rehearseCommit.md).
 
+## Transactional cooperative app
+
+`transactionalApp` selects credentialless FrameSpace and requires Execution Memory, Rehearse-Commit, an exact app
+identity, explicit actions, purpose, and effect acknowledgement:
+
+```sh
+npx pyproc-mcp init \
+  --recipe transactionalApp \
+  --engine-root ./vendor/pyodide \
+  --origin https://workspace.example.test \
+  --action snapshot --action click \
+  --purpose "branch the cooperative workspace" \
+  --acknowledge-effects \
+  --execution-memory-root ./.pyproc/memory \
+  --enable-effect-transactions \
+  --effect-approval-authority operator:workspace=./keys/workspace-public.pem \
+  --enable-app-space \
+  --app-id com.example.workspace \
+  --app-origin https://workspace.example.test \
+  --app-adapter-version 1.0.0 \
+  --app-state-schema workspace/3
+```
+
+The app origin must exactly match an allowed origin. `--app-max-state-bytes` may lower the bounded logical-state
+limit. This recipe adds no raw browser method and never sends a staged app effect. See
+[Transactional AppSpace](appSpace.md).
+
 ## Pinned replay
 
 `replayPinned` accepts an existing recording only with its identity and final digest:

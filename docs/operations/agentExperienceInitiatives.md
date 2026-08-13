@@ -628,8 +628,8 @@ idempotency capability를 제공할 때만 별도 선언한다. 그 지원이 �
 
 ## Initiative 6 - Transactional AppSpace
 
-상태: 착수. Initiative 5의 sealed EffectReceipt와 one-shot CommitLease를 app outbox의 유일한 live effect
-경계로 재사용한다.
+상태: 구현됨. exact identity의 협력 app state와 in-process Machine checkpoint를 불변 pair로 묶고,
+JavaScript, Python, MCP 설치 gate가 같은 pair digest와 paired rollback을 검증한다.
 
 ### 제품 명제
 
@@ -639,10 +639,10 @@ outbox를 선언할 때만 Python Machine과 함께 branch, restore, adopt한다
 ```text
 app quiesce
 -> export logical state and outbox
--> capture SituationCapsule
--> pause Machine
--> verify cross-state invariants
--> commit paired generation
+-> host canonical validation and digest
+-> save in-process Machine checkpoint
+-> export portable Machine generation evidence
+-> write immutable paired object
 -> publish transaction marker
 -> resume
 ```
@@ -652,13 +652,19 @@ logical state에는 router, form draft, domain store, declared IndexedDB records
 server state는 포함하지 않는다.
 
 FrameSpace의 credentialless sandbox와 origin 경계를 유지한다. AppSpace protocol은 arbitrary RPC가 아니며
-app ID, origin, adapter version, state schema를 모두 pin한다. app-reported invariant는 `reported` provenance고
-host 또는 Python oracle이 검증한 것만 deterministic pass다.
+app ID, origin, adapter version, state schema를 모두 pin한다. host가 canonical JSON, scope, outbox, quota,
+금지 key, configured secret literal, state와 pair digest를 검증한다.
+
+pair object, `pairMarker:<pairId>`, `appHead:<appId>`를 분리한다. marker 없는 object는 candidate가 아니며,
+branch는 active pair를 parent로 가진 immutable sibling만 만든다. restore는 app import를 다시 export해
+state와 outbox를 검증한 뒤 Machine checkpoint를 복원한다. adopt CAS가 경쟁에서 지면 app과 Machine을
+이전 rollback pair로 함께 되돌린다. rollback 자체가 실패하면 `outcomeUnknown`으로 멈춘다.
 
 ### effect outbox
 
-app은 effect를 즉시 보내지 않고 intent로 stage한다. Initiative 5 ApprovalGrant와 CommitLease만 live
-`commitEffect`를 열 수 있다. app revision이 바뀌면 grant가 stale이고, sent 뒤 자동 재시도하지 않는다.
+app은 effect를 즉시 보내지 않고 기존 exact EffectTransaction의 공개 identity만 stage한다. AppSpace는
+approval과 send를 소유하지 않으며 `effect.commit`만 live CommitLease를 소비한다. terminal 또는 sealed
+transaction만 outbox를 finalize할 수 있고, app restore가 외부 effect를 되돌렸다고 주장하지 않는다.
 
 ### 졸업 gate
 
@@ -671,7 +677,10 @@ app은 effect를 즉시 보내지 않고 intent로 stage한다. Initiative 5 App
 7. approval 없는 live effect send는 0이다.
 8. page capability의 permission 확대와 secret export는 0이다.
 
-실험은 [Initiative 6 campaign](../../tests/attempts/transactionalAppSpace/)에서 시작한다.
+지속 구현 계약과 검증 명령은
+[Transactional AppSpace specification](../specs/appSpace/README.md)이 소유한다. 현재 persisted pair는 새
+process에서 재검증하고 list할 수 있지만 Machine side restore는 원 process의 checkpoint tree가 살아 있는
+동안만 가능하다. cold Machine image import는 AppSpace 1.0 계약이 아니다.
 
 ## Initiative 7 - ReplayGraph Worlds
 
