@@ -1,0 +1,23 @@
+{
+  "lockedAt": "2026-08-13",
+  "packageVersion": "0.0.21",
+  "repositoryCommit": "462698431e9f16a5a9763210b2d0c1ec32f518cc",
+  "browser": {
+    "family": "edge",
+    "version": "151.0.4129.78",
+    "platform": "windows-x64",
+    "headless": true,
+    "profile": "isolated-temporary"
+  },
+  "environment": {
+    "viewport": { "width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": false, "touch": false },
+    "locale": "ko-KR",
+    "timezoneId": "Asia/Seoul",
+    "colorScheme": "dark",
+    "reducedMotion": true,
+    "fontFingerprint": "fixture-fonts-v1"
+  },
+  "fixtureSha256": "sha256:ef6fe3b82ff62fbba421d7a3d139df3551bf31f4788b3639b867e78ff0b68ac1",
+  "perceptionContract": "apx.situation/1.0",
+  "comparison": "deterministic-oracle"
+}

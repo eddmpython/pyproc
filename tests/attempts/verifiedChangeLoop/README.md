@@ -89,7 +89,10 @@ browser lifecycle, situation, action, attachment, recording은 기존 제품 계
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-08-13 | 기획과 반증 gate 설계 | APX 1.0, AutomationSpace, ReplaySpace, installed clients 문서와 코드 대조 | probe 미실행 | Perception Computer와 분리된 repository experience verification 가설로 고정 | 선행 이니셔티브 졸업 뒤 contract boundary probe |
+| 2026-08-13 | strict contract와 deterministic kernel | package 0.0.21, Edge 151.0.4129.78 lock, 1280x800, deterministic synthetic capsule | 18/18 PASS, unsafe contract 5종 effect 전 거부, false verified 0, secret leak 0, semantic screenshot 0 | human prose와 machine authority를 분리하고 세 terminal, issue identity, exact comparability, pack replay를 본진 후보로 유지 | real browser scenario와 atomic pack writer |
 
 ## 판정
 
-대기 중. 기획과 반증 gate만 확정했으며 Perception Computer 졸업 전에는 probe를 실행하지 않는다.
+진행 중. Perception Computer 졸업 뒤 strict contract와 deterministic kernel prototype 18개 양성 및 음성
+probe가 통과했다. 다음은 real browser scenario, artifact sidecar, atomic publish, installed client parity를
+반증한 뒤 본진 승격 여부를 결정한다.
