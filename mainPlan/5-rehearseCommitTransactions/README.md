@@ -1,6 +1,6 @@
 # Initiative 5: Rehearse-Commit Transactions 실행 계획
 
-상태: **Initiative 4 후행 대기**
+상태: **착수**
 
 이 문서는 위험한 외부 effect를 안전한 환경에서 연습하고, exact intent에 대한 승인을 받은 뒤, 현실에는
 한 번만 전송하고 결과를 봉인하는 여섯 번째 이니셔티브의 임시 실행 계획이다.

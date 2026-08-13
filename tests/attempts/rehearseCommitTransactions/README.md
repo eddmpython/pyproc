@@ -1,5 +1,7 @@
 # Initiative 5: rehearseCommitTransactions - 연습한 effect를 승인 뒤 현실에 한 번만 보낼 수 있는가
 
+상태: **진행 중**
+
 ## 가설
 
 EffectIntent, RehearsalReceipt, ApprovalGrant, one-shot CommitLease, ActionEvidence를 하나의 state machine으로
@@ -55,4 +57,4 @@ Initiative 4가 졸업해 intent와 receipt가 exact Execution Session revision�
 
 ## 판정
 
-후행 대기 중. Initiative 4 졸업 전에는 probe를 실행하지 않는다.
+진행 중. Initiative 4의 Execution Session revision에 exact intent와 receipt를 연결하는 prototype부터 검증한다.
