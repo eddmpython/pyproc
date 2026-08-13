@@ -78,6 +78,7 @@
     "scripts/effectTransaction",
     "scripts/appSpace",
     "scripts/replayGraph",
+    "scripts/actuation",
     "scripts/browserControl",
     "scripts/perception",
     "scripts/verification",

@@ -177,7 +177,9 @@ export function chooseActuator(intent, candidates, preference = []) {
       left.postconditionEvidence ? 0 : 1, left.sharedInput ? 1 : 0, rank.get(left.kind) ?? 999, left.providerId];
     const rightTuple = [right.semanticSetter ? 0 : 1, right.additionalAuthority ? 1 : 0,
       right.postconditionEvidence ? 0 : 1, right.sharedInput ? 1 : 0, rank.get(right.kind) ?? 999, right.providerId];
-    return canonical(leftTuple).localeCompare(canonical(rightTuple), "en");
+    const leftKey = canonical(leftTuple);
+    const rightKey = canonical(rightTuple);
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
   });
   if (!ordered.length) fail("ACTUATION_ACTUATOR_UNAVAILABLE", "no actuator passed hard eligibility", {
     excluded: inspected.map(({ kind, providerId, exclusionReasons }) => ({ kind, providerId, exclusionReasons })) });
