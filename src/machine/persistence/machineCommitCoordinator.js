@@ -44,7 +44,15 @@ export class MachineCommitCoordinator {
     return this._store.readHead(groupId);
   }
 
-  async commitPaused({ groupId, machines, devices = {}, expectedHead, ownerToken, control }) {
+  async commitPaused({
+    groupId,
+    machines,
+    devices = {},
+    expectedHead,
+    ownerToken,
+    environmentFingerprint = null,
+    control,
+  }) {
     if (!groupId) throw new TypeError("a groupId is required");
     if (expectedHead === undefined) throw new TypeError("an expectedHead is required");
     if (!ownerToken) throw new TypeError("an ownerToken is required");
@@ -98,7 +106,9 @@ export class MachineCommitCoordinator {
     const commit = grammar.makeStateCommit({
       parents: expectedHead ? [expectedHead] : [],
       tree: treeAddress,
-      env: {},
+      env: environmentFingerprint === null
+        ? {}
+        : { h0: String(environmentFingerprint) },
       fence: { ownerId: ownerToken.ownerId, epoch: ownerToken.epoch },
       createdAt: String(Number(this._nowFactory())),
     });
@@ -117,7 +127,13 @@ export class MachineCommitCoordinator {
     return { schemaVersion: GENERATION_SCHEMA_VERSION, commitAddress, commit, entries: tree.entries, record, head };
   }
 
-  async restoreLatest({ groupId, machines, devices = {}, control }) {
+  async restoreLatest({
+    groupId,
+    machines,
+    devices = {},
+    expectedEnvironmentFingerprint = null,
+    control,
+  }) {
     throwIfOperationAborted(control, `${groupId}: restore latest`);
     const head = await this._store.readHead(groupId);
     if (!head?.head) throw new WebMachineError("WEB_MACHINE_RECOVERY_EMPTY", `${groupId}: no HEAD`);
@@ -130,6 +146,15 @@ export class MachineCommitCoordinator {
         if (!RECOVERABLE_CODES.has(error?.code)) throw error;
         failures.push({ generationId, code: error.code });
         continue;
+      }
+      const actualEnvironmentFingerprint = verified.commit.env?.h0 ?? null;
+      if (expectedEnvironmentFingerprint !== null
+        && actualEnvironmentFingerprint !== String(expectedEnvironmentFingerprint)) {
+        throw new WebMachineError(
+          "WEB_MACHINE_ENVIRONMENT_MISMATCH",
+          `${groupId}: generation environment ${String(actualEnvironmentFingerprint)} does not match ${String(expectedEnvironmentFingerprint)}`,
+          { generationId, expectedEnvironmentFingerprint, actualEnvironmentFingerprint },
+        );
       }
       await this._applyGeneration(groupId, verified, machines, devices, control);
       return {

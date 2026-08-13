@@ -1,6 +1,6 @@
 # Initiative 3: Hibernating Machine Fleet 실행 계획
 
-상태: **착수**
+상태: **졸업 검증 완료, 삭제 대기**
 
 이 문서는 여러 프로젝트 Machine을 등록해 두되 정해진 수만 실행 상태로 유지하고, 나머지는 durable
 generation으로 안전하게 동면시키는 네 번째 이니셔티브의 임시 실행 계획이다.
@@ -264,3 +264,15 @@ memory 문구는 “inactive execution owner terminated”로 말하고 “0 MB�
 
 여러 project Machine이 durable registry에 존재하고, 제한된 수만 live execution owner를 가지며, safe idle
 Machine은 commit 뒤 실제로 종료되고, 새 owner가 exact generation에서 다시 작업을 이어갈 때 끝난다.
+
+## 15. 실행 결과
+
+- `createMachineFleet`을 새 root나 subpath 없이 기존 `pyproc/machine` 표면에 승격했다.
+- durable Web Computer에 explicit `suspend`, `resume`, cleanup retry, environment fence를 결합했다.
+- real Pyodide Worker의 생성과 종료 identity를 계측하고 cold resource owner 0을 확인했다.
+- Edge와 Chrome에서 같은 IndexedDB profile로 browser process를 실제 재시작해 새 owner epoch, 새 Worker,
+  Python heap, `/home/web`, exact HEAD 복구를 확인했다.
+- packed npm artifact에서 공개 subpath만으로 commit, terminate, cold resume를 확인했다.
+- executable `createComputer` factory는 직렬화할 수 없으므로 Fleet registry identity는 application
+  configuration이 재등록한다. Control, MCP, Python guest가 browser factory를 거짓으로 소유하지 않으며,
+  cross-client durable session 연결은 다음 Initiative 4의 Execution Memory Registry가 맡는다.

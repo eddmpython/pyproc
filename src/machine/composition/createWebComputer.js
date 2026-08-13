@@ -70,6 +70,7 @@ function createBasicWebComputer({
   host.registerAdapter("pyproc-worker", createWorkerHostedGuestFactory({
     createPort: createRpcPort,
     workerURL: new URL("./workerHostedGuestWorker.js", import.meta.url).href,
+    onWorkerLifecycle: python.onWorkerLifecycle ?? null,
     ...(builtInDevices.network ? { networkDeviceName: "network" } : {}),
   }));
   host.registerAdapter("pyproc-block", createPyprocGuestFactory({
@@ -221,7 +222,10 @@ export function createWebComputer(options = {}) {
     adoptOwnership: (token) => active.adoptOwnership(token),
     invalidateOwnership: (reason) => active.invalidateOwnership(reason),
     initialize: durable.initialize,
+    resume: durable.resume,
     save: durable.save,
+    suspend: durable.suspend,
+    retrySuspendCleanup: durable.retrySuspendCleanup,
     exportImage: durable.exportImage,
     importImage: durable.importImage,
     inspect: durable.inspect,

@@ -72,8 +72,11 @@ Chrome and Edge `test:perception-computer` gate. It does not claim general super
 LLM perception contract preserves the pinned baseline's action reach while adding smaller task-conditioned state,
 explicit uncertainty, broker authority, transition truth, and effect-free replay. Verified Change Loop is delivered
 through strict Experience Contracts, canonical Evidence Packs, exact comparison, effect-free pack replay, and the
-installed `test:experience-verification` gate. The next active campaign is
-[`hibernatingMachineFleet`](../../tests/attempts/hibernatingMachineFleet/README.md). Later initiatives remain locked
+installed `test:experience-verification` gate. Hibernating Machine Fleet is delivered through durable
+`WebComputer.suspend()` and `createMachineFleet`: safe terminals commit and verify HEAD before adapters terminate,
+cold records own no live computer, stale leases fail, and exact generations resume in fresh Workers under a hot
+budget. The next active campaign is
+[`executionMemoryRegistry`](../../tests/attempts/executionMemoryRegistry/README.md). Later initiatives remain locked
 behind their immediate predecessor. No initiative changes a North Star score before its browser evidence is registered
 in the ledger.
 
@@ -89,6 +92,10 @@ root is one Machine handle that owns Python execution, processes, files, permiss
 virtualization, and rewindable history in the browser with no application server. The
 `src/machine/` layer and `apps/webComputer/` extend that same lifecycle to Python and Linux under
 shared device and signed-image contracts. Package-internal reads are forbidden.
+
+The same layer now manages a bounded set of those computers through `pyproc/machine`. Only leased hot members
+retain execution owners. A cold member is a verified durable generation, not a paused heap, and the product makes
+no claim that Chromium or the host operating system reaches zero memory.
 
 Even as the higher goal grows, present-tense claims do not widen with it. The general host, shared `.webmachine` image, and Linux dual-boot are represented by the shipped `src/machine/` contract and the browser evidence registered in [`tests/northStar.mjs`](../../tests/northStar.mjs). The host ships through the single `createWebComputer` entry point and the `pyproc/machine` subpath. The reproducible Buildroot Linux guest also ships, separately from npm, as the hash-pinned `buildroot-pyproc-i686-v2` project release with exact source, complete legal material, SBOM, configuration, and independent-build receipt. The x86 emulator and remaining firmware are externally supplied assets; pyproc does not redistribute them or claim their provenance as its own.
 

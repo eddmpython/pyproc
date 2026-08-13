@@ -17,20 +17,38 @@ import { indexRequirements, resolveRequiredDevice } from "../../contracts/device
 import { WebMachineError } from "../../contracts/webMachineError.js";
 import { serveBridgedDevice } from "./portBridgedDevice.js";
 
+let workerIdentitySerial = 0;
+
 // createPort는 주입이다. guest는 순수 계약만 소비하고 machine 밖(runtime의 rpcChannel)은 조립
 // 지점만 만질 수 있다는 층 법의 결과이며, 출하 pyproc 어댑터가 bootSession/openMachine을 받는
 // 것과 같은 형태다. workerURL도 주입인 이유는 같다: 자산 위치는 조립이 안다.
-export function createWorkerHostedGuestFactory({ createPort, workerURL, networkDeviceName = null } = {}) {
+export function createWorkerHostedGuestFactory({
+  createPort,
+  workerURL,
+  networkDeviceName = null,
+  onWorkerLifecycle = null,
+} = {}) {
   if (typeof createPort !== "function") throw new TypeError("a createPort function is required");
   if (!workerURL) throw new TypeError("a workerURL is required");
-  return () => new WorkerHostedGuestAdapter({ createPort, workerURL, networkDeviceName });
+  if (onWorkerLifecycle !== null && typeof onWorkerLifecycle !== "function") {
+    throw new TypeError("onWorkerLifecycle must be a function");
+  }
+  return () => new WorkerHostedGuestAdapter({
+    createPort,
+    workerURL,
+    networkDeviceName,
+    onWorkerLifecycle,
+    nextWorkerId: () => `worker-${++workerIdentitySerial}`,
+  });
 }
 
 class WorkerHostedGuestAdapter {
-  constructor({ createPort, workerURL, networkDeviceName }) {
+  constructor({ createPort, workerURL, networkDeviceName, onWorkerLifecycle, nextWorkerId }) {
     this._createPort = createPort;
     this._workerURL = workerURL;
     this._networkDeviceName = networkDeviceName ? String(networkDeviceName) : null;
+    this._onWorkerLifecycle = onWorkerLifecycle;
+    this._nextWorkerId = nextWorkerId;
     // The declaration is the single truth about what this guest needs, exactly as the in-process
     // adapter has it: the host reads `requiredDevices` for its allowlist, and the adapter resolves
     // devices only through that declaration. A bridge does not earn an exemption from that law.
@@ -52,6 +70,8 @@ class WorkerHostedGuestAdapter {
     this._context = null;
     this._deviceServer = null;
     this._manifest = null;
+    this._workerId = null;
+    this._lifecycleError = null;
   }
 
   async boot(context, manifest) {
@@ -127,8 +147,10 @@ class WorkerHostedGuestAdapter {
       engine: "pyodide",
       hosted: "worker",
       ready: !!this._port,
+      workerId: this._workerId,
       snapshotScope: this.capabilities.snapshotScope,
       networkBridged: !!this._deviceServer,
+      lifecycleError: this._lifecycleError,
     };
   }
 
@@ -136,6 +158,8 @@ class WorkerHostedGuestAdapter {
   // and restore differ only in that message. Two copies of this wiring would drift.
   async _spawn(context, first) {
     this._worker = new Worker(this._workerURL, { type: "module" });
+    this._workerId = `${context.machineId}:${this._nextWorkerId()}`;
+    this._notifyWorkerLifecycle("spawned", this._workerId);
     this._port = this._createPort(this._worker, { label: "workerHostedGuest" });
     const transfer = [];
     if (this._networkDeviceName) {
@@ -154,10 +178,22 @@ class WorkerHostedGuestAdapter {
   }
 
   async _teardown() {
+    const workerId = this._workerId;
     this._deviceServer?.stop();
     this._deviceServer = null;
     this._worker?.terminate();
     this._worker = null;
+    this._workerId = null;
     this._port = null;
+    if (workerId) this._notifyWorkerLifecycle("terminated", workerId);
+  }
+
+  _notifyWorkerLifecycle(state, workerId) {
+    if (!this._onWorkerLifecycle) return;
+    try {
+      this._onWorkerLifecycle(Object.freeze({ state, workerId, machineId: this._context?.machineId || null }));
+    } catch (error) {
+      this._lifecycleError = String(error?.message || error);
+    }
   }
 }

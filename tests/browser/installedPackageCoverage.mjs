@@ -13,6 +13,7 @@ export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
       "`boot`",
       "`open`",
       "`createWebComputer`",
+      "`createMachineFleet`",
       "`checkEnvironment`",
       "`getPyProcAssetManifest`",
       "`verifyPyProcAssetIntegrity`",
@@ -98,9 +99,9 @@ export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
   }),
   Object.freeze({
     gate: "installed package - web computer",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["`createWebComputer`"]),
-    contract: "Assembling a browser computer from the installed package alone: booting the Python guest, running code, and stopping the whole thing",
+    specifiers: Object.freeze(["`pyproc`", "`pyproc/machine`"]),
+    publicSurface: Object.freeze(["`createWebComputer`", "`createMachineFleet`"]),
+    contract: "Assembling a browser computer from the installed package alone, plus committing, terminating, and cold-resuming a bounded durable Machine Fleet",
   }),
 ]);
 

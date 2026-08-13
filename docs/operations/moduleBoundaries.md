@@ -94,6 +94,11 @@ imports only other pure files. That set used to be a hand-kept list of file path
 silently exempt from the purity check until someone remembered to register it; it is now derived from the
 folder, so a new file is checked by default.
 
+`composition/machineFleet.js` coordinates durable `WebComputer` handles. It may call the public computer
+lifecycle and read inspection summaries, but it does not import a guest adapter, storage implementation, or
+product project model. Generation truth remains in `persistence/`, guest termination remains in the adapter,
+and the product supplies registration factories and candidate policy.
+
 The only upward edge is a worker asset URL, not an ESM import: a capability may point at a worker entrypoint
 that lives above it, because the spawning side has to know where the worker file is. Those edges are
 enumerated in `tests/run.mjs`, and the asset manifest publishes the same paths as a consumer contract. A

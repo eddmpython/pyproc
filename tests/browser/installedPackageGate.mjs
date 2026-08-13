@@ -63,7 +63,8 @@ const html = `<!DOCTYPE html>
       "imports": {
         "pyproc": "/node_modules/pyproc/index.js",
         "pyproc/assets": "/node_modules/pyproc/src/runtime/assets.js",
-        "pyproc/history": "/node_modules/pyproc/src/state/index.js"
+        "pyproc/history": "/node_modules/pyproc/src/state/index.js",
+        "pyproc/machine": "/node_modules/pyproc/src/machine/index.js"
       }
     }
   </script>
@@ -79,6 +80,7 @@ const html = `<!DOCTYPE html>
     import { boot, open, createWebComputer } from "pyproc";
     import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
     import { createStateKeyPair, exportStatePublicKey, fingerprintStatePublicKey } from "pyproc/history";
+    import { MemoryMachineStore, createMachineFleet } from "pyproc/machine";
 
     const out = document.getElementById("out");
     const checks = [];
@@ -538,6 +540,65 @@ const html = `<!DOCTYPE html>
       await computer.shutdownAll();
       check("installed web computer shuts down clean",
         computer.machine("pythonOs").state === "stopped");
+
+      const fleetStore = new MemoryMachineStore();
+      let fleetOwnerSerial = 0;
+      const fleetMetrics = { shutdowns: 0 };
+      const fleetAdapter = () => {
+        let value = 0;
+        return {
+          capabilities: { adapterVersion: "installed-fleet-v1", snapshotScope: "portable",
+            pauseMode: "strong", shutdownMode: "terminate",
+            requiredDevices: [{ name: "console", kind: "console" }] },
+          async boot(_context, manifest) { value = Number(manifest.initialValue || 0); },
+          async pause() {},
+          async resume() {},
+          async snapshot() { return new TextEncoder().encode(JSON.stringify({ value })); },
+          async restore(payload) { value = JSON.parse(new TextDecoder().decode(payload)).value; },
+          async shutdown() { fleetMetrics.shutdowns += 1; },
+          async request(message) {
+            if (message.type === "add") { value += Number(message.value || 0); return value; }
+            if (message.type === "get") return value;
+            throw new Error("unsupported installed fleet request");
+          },
+          inspect() { return { value }; },
+        };
+      };
+      const createFleetComputer = ({ machineId, environmentFingerprint }) => {
+        const candidate = createWebComputer({
+          createMachines: false,
+          adapters: { installedFleet: fleetAdapter },
+          cryptoProvider: crypto,
+          durability: {
+            groupId: "installedFleet/" + machineId,
+            store: fleetStore,
+            lockManager: { request(_name, _options, callback) { return Promise.resolve().then(callback); } },
+            ownerId: "installed-owner-" + (++fleetOwnerSerial),
+            environmentFingerprint,
+          },
+        });
+        const runtime = candidate.host.createMachine({ machineId: "runtime", adapterId: "installedFleet",
+          manifest: { initialValue: 40 }, permissions: { devices: ["console"] } });
+        candidate.adoptMachines(new Map([[runtime.machineId, runtime]]));
+        return candidate;
+      };
+      const installedFleet = createMachineFleet({ hotLimit: 1 });
+      installedFleet.register({ machineId: "project", environmentFingerprint: "installed-fleet-env-v1",
+        createComputer: createFleetComputer });
+      const fleetLease = await installedFleet.acquire("project", "installed package gate");
+      const fleetValue = await installedFleet.use(fleetLease,
+        (activeComputer) => activeComputer.machine("runtime").request({ type: "add", value: 2 }));
+      installedFleet.release(fleetLease, {});
+      const fleetSuspended = await installedFleet.suspend("project", { lease: fleetLease });
+      const fleetResumeLease = await installedFleet.resume("project", "installed cold resume");
+      const fleetRestored = await installedFleet.use(fleetResumeLease,
+        (activeComputer) => activeComputer.machine("runtime").request({ type: "get" }));
+      check("installed Machine Fleet commits, terminates, and cold-resumes",
+        fleetValue === 42 && fleetRestored === 42 && fleetSuspended.terminal === "suspended"
+        && fleetMetrics.shutdowns === 1 && installedFleet.inspect().hot === 1,
+        "value=" + fleetRestored + ", shutdowns=" + fleetMetrics.shutdowns);
+      installedFleet.release(fleetResumeLease, {});
+      await installedFleet.dispose();
 
       t = performance.now();
       const openedMachine = await open(imageBlob, { trustedPublicKeys: [trustedPublicKey], requireSignature: true });

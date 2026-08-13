@@ -67,6 +67,7 @@
 - [어떻게 도나 (한 장)](#어떻게-도나-한-장)
 - [형태가 값을 하는 자리](#형태가-값을-하는-자리)
 - [Web Computer 실행](#web-computer-실행)
+- [Machine Fleet 동면](#machine-fleet-동면)
 - [능력 경로](#능력-경로)
 - [의존성 경계](#의존성-경계)
 - [셋업](#셋업)
@@ -605,6 +606,31 @@ Linux 실행 catalog는 프로젝트가 재현 빌드한 guest image를 가리�
 전체 legal-info, SBOM, config와 재현 manifest를 한 자산 릴리즈에서 제공하며, image binary는
 git과 npm package에서 계속 제외된다.
 
+## Machine Fleet 동면
+
+`pyproc/machine`의 `createMachineFleet`은 여러 durable Web Computer를 등록해 두면서 정해진 수만 live
+execution owner로 유지한다. 안전한 suspend는 이미 받은 작업을 끝내고 exact generation을 commit한 뒤
+HEAD를 다시 확인하고, adapter와 Worker guest를 종료하고, owner를 반납한 다음에만 `cold`를 게시한다.
+resume은 새 owner로 부팅하며 stale lease와 environment drift를 거부한다.
+
+```js
+import { createMachineFleet } from "pyproc/machine";
+
+const fleet = createMachineFleet({ hotLimit: 2 });
+fleet.register({ machineId: "forecast", environmentFingerprint, createComputer });
+
+const lease = await fleet.acquire("forecast", "refresh model");
+await fleet.use(lease, (computer) =>
+  computer.machine("runtime").request({ type: "run", code: "refresh()" }));
+fleet.release(lease, {}); // caller가 safe terminal을 증명한다
+await fleet.suspend("forecast", { lease });
+```
+
+active command, pending approval, unresolved effect, `outcomeUnknown`, unsaved state, pin은 자동 suspend하지
+않는다. cold Machine은 Fleet을 통한 live computer를 소유하지 않지만 메모리 0 주장은 아니다. Chromium,
+cache asset, OPFS state, registry는 자원을 계속 쓴다. [Machine Fleet 사용법](docs/usage/machineFleet.md)과
+[명세](docs/specs/machineFleet/README.md)를 참고한다.
+
 ## 능력 경로
 
 먼저 [제품 진입점](#제품-진입점) 표에서 시작한다. 그 handle 아래 capability는 opt-in이며 engine 내부(`HEAPU8` 등)가 아니라 capability 계약을 쓴다. 자체 능력표 전체는 [능력 매트릭스](docs/usage/capabilityMatrix.md)에 있다.
@@ -616,8 +642,8 @@ git과 npm package에서 계속 제외된다.
 import { Runtime, bootRuntime, checkEnvironment } from "pyproc/runtime";
 // 내구 상태 커널: 오브젝트 모델, commit/open 프로토콜, store, 서명 bundle.
 import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
-// 브라우저 컴퓨터 내부(호스트, 장치, guest 어댑터, 머신 store).
-import { createMachineCryptoProvider, MachineCommitCoordinator } from "pyproc/machine";
+// 브라우저 컴퓨터 상세와 제한된 durable Fleet 수명주기.
+import { createMachineFleet, createMachineCryptoProvider, MachineCommitCoordinator } from "pyproc/machine";
 // 배포 자산: manifest, SRI 검증, Service Worker 등록.
 import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
 // 강등 표면(headless CI 게이트 불가 또는 research preview) - 의도적으로 루트 밖:

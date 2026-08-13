@@ -24,17 +24,26 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   exact environment observation, deterministic structural and behavioral rules, bounded perceptual review,
   atomic Evidence Packs, comparison, and effect-free replay are available through Control, MCP, JavaScript,
   Python, and CLI entrances.
+- **Hibernating Machine Fleet bounds live execution owners.** `createMachineFleet` in `pyproc/machine` registers
+  durable Web Computers, issues owner-epoch leases, admits only within a hot limit, commits and verifies exact
+  generations before terminating adapters, and cold-resumes in fresh Workers. `WebComputer.suspend()` and
+  `resume()` expose the same single-computer lifecycle. Unsafe effects, stale leases, commit failures, environment
+  drift, and cleanup failures fail closed.
 
 ### Compatibility
 
 - `apx.graph` 1.0 remains compatible and the situation representation is opt-in. The root export, package subpath,
   and bin sets are unchanged. Control adds `verification.audit`, `verification.verify`, and `verification.replay`;
   browser-disabled profiles expose only the two effect-free operations.
+- The root remains exactly six exports. Machine Fleet is additive on the existing `pyproc/machine` subpath.
+  Existing non-durable and `save()` Web Computer behavior remains unchanged.
 
 한국어 요약: 기존 `automation.observe`에 opt-in `apx.situation` 표현을 추가했다. typed focus가 최소 충분
 상황과 명시적 불확실성을 만들고, broker가 발급한 capability만 현재 world와 epoch에 묶여 effect에 쓰인다.
 strict Experience Contract와 exact 환경을 실제 browser에서 판정하고 canonical Evidence Pack으로 발행한다.
 Control, MCP, JavaScript, Python, CLI가 같은 audit, verify, replay 의미론을 공유한다.
+`pyproc/machine`에는 hot 수를 제한하고 safe generation을 commit한 뒤 Worker를 종료하는 Machine Fleet을
+추가했다. cold는 pause가 아니며 exact HEAD, fresh owner, stale lease 거부로 다시 부활한다.
 
 ## 0.0.21 - 2026-08-13
 

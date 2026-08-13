@@ -34,6 +34,8 @@ const ASSET_FREE = [
   // 공개 createWebComputer가 보편 내구 수명주기를 한 핸들에서 소유한다. fake portable guest와
   // memory store로 owner, restore-or-boot, save, signed import/export, dispose를 전부 문다.
   "tests/webMachine/browser/probes/durableComputerProbe.html",
+  // Initiative 3: durable generation commit 뒤 실제 Worker owner를 종료하고 hot budget에서 재개한다.
+  "tests/webMachine/browser/probes/machineFleetProbe.html",
 ];
 const WASI_BACKED = [
   "tests/webMachine/browser/probes/dualEngineProbe.html",

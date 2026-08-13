@@ -2,7 +2,8 @@
 //
 // 제품은 store/group/lock, signer 승인, guest 자산을 정한다. 이 파일은 제품마다 같아야 하는
 // 순서만 소유한다: owner claim -> restore-or-boot, pause -> flush/snapshot -> fenced commit ->
-// resume, signed export, 검증된 candidate import와 원자적 active-context 교체, dispose.
+// resume 또는 verify -> shutdown -> owner release, signed export, 검증된 candidate import와
+// 원자적 active-context 교체, dispose.
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { MachineEnvelopeCoordinator } from "../image/machineEnvelopeCoordinator.js";
 import { MachineCommitCoordinator } from "../persistence/machineCommitCoordinator.js";
@@ -69,6 +70,36 @@ function inspectComputer(computer) {
   });
 }
 
+function normalizeSuspendSafety(value) {
+  if (!value || typeof value !== "object") {
+    throw new WebMachineError(
+      "WEB_MACHINE_SUSPEND_UNSAFE",
+      "suspend requires an explicit safety terminal",
+    );
+  }
+  const safety = Object.freeze({
+    activeCommands: Number(value.activeCommands || 0),
+    pendingApprovals: Number(value.pendingApprovals || 0),
+    unresolvedEffects: Number(value.unresolvedEffects || 0),
+    outcomeUnknown: value.outcomeUnknown === true,
+    unsaved: value.unsaved === true,
+  });
+  if (!Number.isSafeInteger(safety.activeCommands) || safety.activeCommands < 0
+    || !Number.isSafeInteger(safety.pendingApprovals) || safety.pendingApprovals < 0
+    || !Number.isSafeInteger(safety.unresolvedEffects) || safety.unresolvedEffects < 0) {
+    throw new TypeError("suspend safety counters must be non-negative safe integers");
+  }
+  if (safety.activeCommands || safety.pendingApprovals || safety.unresolvedEffects
+    || safety.outcomeUnknown || safety.unsaved) {
+    throw new WebMachineError(
+      "WEB_MACHINE_SUSPEND_UNSAFE",
+      "the Web Computer is not at a safe suspend terminal",
+      { safety },
+    );
+  }
+  return safety;
+}
+
 export function createDurableWebComputerFacade({
   getActive,
   setActive,
@@ -91,12 +122,17 @@ export function createDurableWebComputerFacade({
   let cleanupError = null;
   let commitCoordinator = null;
   let envelopeCoordinator = null;
+  let lifecycleState = durability ? "registered" : "unconfigured";
+  let lastSuspend = null;
+  let lastResume = null;
+  let resolvedLockManager = null;
+  let resolvedOwnerId = null;
 
   if (durability) {
     if (!durability.store) throw new TypeError("durability.store is required");
     if (!durability.groupId || typeof durability.groupId !== "string") throw new TypeError("durability.groupId is required");
-    const lockManager = durability.lockManager ?? globalThis.navigator?.locks;
-    if (!lockManager || typeof lockManager.request !== "function") throw new TypeError("durability.lockManager is required");
+    resolvedLockManager = durability.lockManager ?? globalThis.navigator?.locks;
+    if (!resolvedLockManager || typeof resolvedLockManager.request !== "function") throw new TypeError("durability.lockManager is required");
     const machineCrypto = createMachineCryptoProvider(cryptoProvider);
     const nowFactory = durability.nowFactory ?? (() => Date.now());
     commitCoordinator = new MachineCommitCoordinator({
@@ -105,26 +141,27 @@ export function createDurableWebComputerFacade({
       nowFactory,
     });
     envelopeCoordinator = new MachineEnvelopeCoordinator({ cryptoProvider: machineCrypto, nowFactory });
-    const ownerId = durability.ownerId ?? cryptoProvider?.randomUUID?.();
-    if (!ownerId) throw new TypeError("durability.ownerId is required when cryptoProvider.randomUUID is unavailable");
-    ownerCoordinator = new WebLockOwnerCoordinator({
-      lockManager,
-      ownerStore: durability.store,
-      groupId: durability.groupId,
-      ownerId,
-      onAcquired: (token) => {
-        ownerToken = token;
-        getActive().adoptOwnership(token);
-        durability.onOwnerChanged?.(Object.freeze({ state: "acquired", token }));
-      },
-      onLost: (_token, reason) => {
-        getActive().invalidateOwnership(reason);
-        ownerToken = null;
-        durability.onOwnerChanged?.(Object.freeze({ state: "lost", reason }));
-      },
-    });
+    resolvedOwnerId = durability.ownerId ?? cryptoProvider?.randomUUID?.();
+    if (!resolvedOwnerId) throw new TypeError("durability.ownerId is required when cryptoProvider.randomUUID is unavailable");
     durabilityState = "clean";
   }
+
+  const createOwnerCoordinator = () => new WebLockOwnerCoordinator({
+    lockManager: resolvedLockManager,
+    ownerStore: durability.store,
+    groupId: durability.groupId,
+    ownerId: resolvedOwnerId,
+    onAcquired: (token) => {
+      ownerToken = token;
+      getActive().adoptOwnership(token);
+      durability.onOwnerChanged?.(Object.freeze({ state: "acquired", token }));
+    },
+    onLost: (_token, reason) => {
+      getActive().invalidateOwnership(reason);
+      ownerToken = null;
+      durability.onOwnerChanged?.(Object.freeze({ state: "lost", reason }));
+    },
+  });
 
   const assertLive = () => {
     if (disposed) throw new WebMachineError("WEB_MACHINE_COMPUTER_DISPOSED", "The Web Computer is disposed");
@@ -133,6 +170,13 @@ export function createDurableWebComputerFacade({
     const config = requireDurability(durability);
     if (!initialized || !ownerToken) {
       throw new WebMachineError("WEB_MACHINE_OWNER_STATE", `${config.groupId}: initialize() must acquire ownership first`);
+    }
+    return config;
+  };
+  const assertHot = () => {
+    const config = assertOwned();
+    if (lifecycleState !== "hot") {
+      throw new WebMachineError("WEB_MACHINE_SUSPEND_STATE", `${config.groupId}: operation requires hot state, got ${lifecycleState}`);
     }
     return config;
   };
@@ -160,13 +204,14 @@ export function createDurableWebComputerFacade({
       devices: blockDevices(computer),
       expectedHead,
       ownerToken,
+      environmentFingerprint: config.environmentFingerprint ?? null,
       control,
     });
   };
 
   const save = async (control) => {
     assertLive();
-    const config = assertOwned();
+    const config = assertHot();
     const computer = getActive();
     try {
       const committed = await withPaused(computer, control, () => commitPausedComputer(computer, config, control));
@@ -187,64 +232,211 @@ export function createDurableWebComputerFacade({
       ...computer,
       owner: ownerCoordinator?.inspect() || null,
       startupMode,
+      lifecycleState,
       persistence: Object.freeze({
         configured: !!durability,
+        environmentFingerprint: durability?.environmentFingerprint ?? null,
         durabilityState,
         durabilityError: durabilityError ? durabilityError?.code || String(durabilityError) : null,
         cleanupPending,
         lastPrune,
         cleanupError: cleanupError ? cleanupError?.code || String(cleanupError) : null,
+        lastSuspend,
+        lastResume,
       }),
     });
   };
 
-  return Object.freeze({
-    async initialize({
-      deferBoot = false,
-      control,
-      ownerControl = control,
-      restoreControl = control,
-      resumeControl = control,
-      pruneControl = control,
-    } = {}) {
-      assertLive();
-      const config = requireDurability(durability);
-      if (initialized) throw new WebMachineError("WEB_MACHINE_OWNER_STATE", `${config.groupId}: computer is already initialized`);
-      try {
-        await ownerCoordinator.start(ownerControl);
-        initialized = true;
-        if (deferBoot) {
-          startupMode = "deferred";
-          return inspect();
-        }
-        const head = await commitCoordinator.readHead(config.groupId);
-        if (head?.head) {
-          const computer = getActive();
-          await commitCoordinator.restoreLatest({
-            groupId: config.groupId,
-            machines: computer.machines,
-            devices: blockDevices(computer),
-            control: restoreControl,
-          });
-          await computer.resumeAll(resumeControl);
-          startupMode = "restored";
-          await prune(config, pruneControl);
-        } else {
-          await getActive().bootAll(restoreControl);
-          startupMode = "booted";
-        }
+  const initialize = async ({
+    deferBoot = false,
+    control,
+    ownerControl = control,
+    restoreControl = control,
+    resumeControl = control,
+    pruneControl = control,
+  } = {}) => {
+    assertLive();
+    const config = requireDurability(durability);
+    if (initialized) throw new WebMachineError("WEB_MACHINE_OWNER_STATE", `${config.groupId}: computer is already initialized`);
+    if (lifecycleState === "cleanupIncomplete") {
+      throw new WebMachineError("WEB_MACHINE_SUSPEND_CLEANUP_INCOMPLETE", `${config.groupId}: cleanup must be resolved before resume`);
+    }
+    lifecycleState = "waking";
+    ownerCoordinator = createOwnerCoordinator();
+    try {
+      await ownerCoordinator.start(ownerControl);
+      initialized = true;
+      if (deferBoot) {
+        startupMode = "deferred";
+        lifecycleState = "hot";
         return inspect();
-      } catch (error) {
-        initialized = false;
-        ownerToken = null;
-        await ownerCoordinator?.stop("initialization failed").catch(() => undefined);
-        throw error;
       }
-    },
+      const head = await commitCoordinator.readHead(config.groupId);
+      if (head?.head) {
+        const computer = getActive();
+        const restored = await commitCoordinator.restoreLatest({
+          groupId: config.groupId,
+          machines: computer.machines,
+          devices: blockDevices(computer),
+          expectedEnvironmentFingerprint: config.environmentFingerprint ?? null,
+          control: restoreControl,
+        });
+        await computer.resumeAll(resumeControl);
+        startupMode = "restored";
+        lastResume = Object.freeze({
+          generationId: restored.generationId,
+          recoveredFrom: restored.recoveredFrom,
+          environmentFingerprint: config.environmentFingerprint ?? null,
+        });
+        await prune(config, pruneControl);
+      } else {
+        await getActive().bootAll(restoreControl);
+        startupMode = "booted";
+        lastResume = Object.freeze({
+          generationId: null,
+          recoveredFrom: null,
+          environmentFingerprint: config.environmentFingerprint ?? null,
+        });
+      }
+      lifecycleState = "hot";
+      return inspect();
+    } catch (error) {
+      initialized = false;
+      ownerToken = null;
+      lifecycleState = "failed";
+      await ownerCoordinator?.stop("initialization failed").catch(() => undefined);
+      throw error;
+    }
+  };
+
+  const suspend = async ({ safety, control, pruneControl = control, shutdownControl = control } = {}) => {
+    assertLive();
+    const config = assertHot();
+    normalizeSuspendSafety(safety);
+    const computer = getActive();
+    const runningIds = computer.runningMachineIds();
+    lifecycleState = "draining";
+    try {
+      await computer.pauseRunning(control);
+    } catch (error) {
+      lifecycleState = "hot";
+      throw error;
+    }
+    let committed;
+    try {
+      lifecycleState = "committing";
+      committed = await commitPausedComputer(computer, config, control);
+      const durableHead = await commitCoordinator.readHead(config.groupId);
+      if (durableHead?.head !== committed.commitAddress) {
+        throw new WebMachineError(
+          "WEB_MACHINE_SUSPEND_COMMIT_UNVERIFIED",
+          `${config.groupId}: committed generation is not the durable HEAD`,
+          { committed: committed.commitAddress, head: durableHead?.head || null },
+        );
+      }
+      const actualFingerprint = committed.commit.env?.h0 ?? null;
+      const expectedFingerprint = config.environmentFingerprint ?? null;
+      if (actualFingerprint !== expectedFingerprint) {
+        throw new WebMachineError(
+          "WEB_MACHINE_ENVIRONMENT_MISMATCH",
+          `${config.groupId}: committed environment fingerprint does not match`,
+          { expectedFingerprint, actualFingerprint },
+        );
+      }
+    } catch (error) {
+      durabilityState = "unsaved";
+      durabilityError = error;
+      lifecycleState = "hot";
+      try { await computer.resumeMachineIds(runningIds, control); }
+      catch (resumeError) {
+        lifecycleState = "failed";
+        throw new AggregateError([error, resumeError], "Web Computer suspend commit and rollback both failed");
+      }
+      throw error;
+    }
+    await prune(config, pruneControl);
+    lifecycleState = "stopping";
+    try {
+      await computer.shutdownAll(shutdownControl);
+      await ownerCoordinator.stop("computer suspended");
+    } catch (error) {
+      cleanupPending = true;
+      cleanupError = error;
+      lifecycleState = "cleanupIncomplete";
+      lastSuspend = Object.freeze({
+        terminal: "cleanupIncomplete",
+        generationId: committed.commitAddress,
+        environmentFingerprint: config.environmentFingerprint ?? null,
+        error: error?.code || String(error),
+      });
+      throw new WebMachineError(
+        "WEB_MACHINE_SUSPEND_CLEANUP_INCOMPLETE",
+        `${config.groupId}: generation is durable but runtime cleanup is incomplete`,
+        { generationId: committed.commitAddress, cause: error?.code || String(error) },
+      );
+    }
+    ownerToken = null;
+    initialized = false;
+    lifecycleState = "cold";
+    startupMode = "cold";
+    durabilityState = "clean";
+    durabilityError = null;
+    cleanupError = null;
+    lastSuspend = Object.freeze({
+      terminal: "suspended",
+      generationId: committed.commitAddress,
+      environmentFingerprint: config.environmentFingerprint ?? null,
+    });
+    return Object.freeze({ ...lastSuspend, retention: lastPrune, cleanupPending });
+  };
+
+  const retrySuspendCleanup = async (control) => {
+    assertLive();
+    const config = requireDurability(durability);
+    if (lifecycleState !== "cleanupIncomplete" || !lastSuspend?.generationId) {
+      throw new WebMachineError(
+        "WEB_MACHINE_SUSPEND_STATE",
+        `${config.groupId}: there is no incomplete suspend cleanup to retry`,
+      );
+    }
+    try {
+      await getActive().shutdownAll(control);
+      await ownerCoordinator?.stop("suspend cleanup retried");
+    } catch (error) {
+      cleanupPending = true;
+      cleanupError = error;
+      lastSuspend = Object.freeze({ ...lastSuspend, error: error?.code || String(error) });
+      throw new WebMachineError(
+        "WEB_MACHINE_SUSPEND_CLEANUP_INCOMPLETE",
+        `${config.groupId}: runtime cleanup is still incomplete`,
+        { generationId: lastSuspend.generationId, cause: error?.code || String(error) },
+      );
+    }
+    ownerToken = null;
+    initialized = false;
+    lifecycleState = "cold";
+    startupMode = "cold";
+    cleanupPending = false;
+    cleanupError = null;
+    durabilityState = "clean";
+    durabilityError = null;
+    lastSuspend = Object.freeze({
+      terminal: "suspended",
+      generationId: lastSuspend.generationId,
+      environmentFingerprint: config.environmentFingerprint ?? null,
+    });
+    return lastSuspend;
+  };
+
+  return Object.freeze({
+    initialize,
+    resume: initialize,
     save,
+    suspend,
+    retrySuspendCleanup,
     async exportImage({ signingKeyPair, requiredCapabilities, control } = {}) {
       assertLive();
-      const config = assertOwned();
+      const config = assertHot();
       const computer = getActive();
       const pair = await resolveSigningKeyPair(config, signingKeyPair);
       return withPaused(computer, control, () => envelopeCoordinator.exportPaused({
@@ -263,7 +455,7 @@ export function createDurableWebComputerFacade({
       control,
     } = {}) {
       assertLive();
-      const config = assertOwned();
+      const config = assertHot();
       if (!approvedPermissions) throw new TypeError("importImage: approvedPermissions is required");
       const archive = await envelopeCoordinator.read({ file, trustedPublicKeys, control });
       const current = getActive();
@@ -320,6 +512,7 @@ export function createDurableWebComputerFacade({
       catch (error) { failure ||= error; }
       ownerToken = null;
       initialized = false;
+      lifecycleState = "disposed";
       if (failure) throw failure;
     },
   });

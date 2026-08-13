@@ -61,3 +61,4 @@ export { createV86GuestFactory } from "./guests/v86/v86GuestAdapter.js";
 export { createBrowserHost } from "./composition/createBrowserHost.js";
 export { createMachineCryptoProvider } from "./composition/machineCryptoProvider.js";
 export { createWebComputer, WEB_COMPUTER_MACHINE_IDS } from "./composition/createWebComputer.js";
+export { createMachineFleet } from "./composition/machineFleet.js";

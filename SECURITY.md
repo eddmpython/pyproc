@@ -72,6 +72,20 @@ environment mismatch, cleanup failure, and artifact quota failure cannot become 
 detect mutation but do not authenticate the producer or constitute human approval. Protect packs as potentially
 sensitive product data.
 
+### Fleet suspension never overrides effect safety
+
+`createMachineFleet` accepts a caller-owned safe terminal because only the surrounding product knows whether an
+approval or external effect is pending. Page text, model output, and a released UI control cannot prove that
+terminal. An omitted terminal is conservatively unsaved. Active commands, pending approval, unresolved effects,
+`outcomeUnknown`, unsaved state, pins, and stale leases block automatic suspension.
+
+Suspend commits and rereads the durable HEAD with the owner fence and exact environment fingerprint before any
+adapter is terminated. A commit or environment failure performs no shutdown. A cleanup failure after commit is
+reported as `cleanupIncomplete`, not cold. Cold generations still contain live interpreter and application data,
+so protect the MachineStore with the same confidentiality and quota policy as `.pymachine` files. Prefetch does
+not grant permission, and restoring a signed generation does not silently reopen network, device, or browser
+authority.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`

@@ -93,6 +93,28 @@ trust and permissions in an isolated candidate before atomically replacing the a
 If a save fails, the computer remains explicitly `unsaved` rather than presenting the old generation
 as current.
 
+`suspend({ safety })` is the stronger durable boundary. It requires an explicit safe terminal, pauses
+and commits the whole computer with `environmentFingerprint` in commit `env.h0`, rereads HEAD, then
+terminates adapters and releases the owner. Commit failure resumes the former running set and performs
+no shutdown. Cleanup failure is `cleanupIncomplete`, never `cold`. `resume()` acquires a new owner epoch,
+rejects environment drift, restores HEAD into fresh portable guests, and returns only after they are hot.
+
+### `createMachineFleet(options?)` in `pyproc/machine`
+
+Coordinates many durable `WebComputer` instances under a numeric `hotLimit`. `register()` records a
+Machine ID, exact environment fingerprint, and product-owned `createComputer` factory. `acquire()` or
+`resume()` returns a lease bound to the Fleet epoch and durable owner epoch. `use()` is the command fence;
+`release()` publishes the caller's safe terminal; `suspend()` performs commit, HEAD verification, runtime
+termination, and owner release; `setHotLimit()` suspends only eligible safe Machines; `prefetch()` records
+a cache hint without creating a live Machine; `inspect()` reports states, generations, lease safety, and
+execution-owner counts.
+
+Automatic admission rejects active commands, active leases, pending approval, unresolved effects,
+`outcomeUnknown`, unsaved state, and pins. If no safe candidate exists it returns
+`WEB_MACHINE_FLEET_CAPACITY` instead of force-stopping work. The complete protocol and runnable example are
+in the [Machine Fleet guide](../usage/machineFleet.md) and
+[specification](../specs/machineFleet/README.md).
+
 ### `checkEnvironment()`
 
 Honest onboarding answer: are `crossOriginIsolated`, `SharedArrayBuffer`, JSPI ready, and

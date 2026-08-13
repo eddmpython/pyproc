@@ -75,6 +75,10 @@ errors, and withholds binary output until byte length and SHA-256 verification s
 dependency and adds no JavaScript export. Its official installation sources are the exact-version wheel and
 source distribution assets on the matching GitHub Release, not PyPI. See the [Python SDK guide](pythonSdk.md).
 
+`pyproc/machine` also exports `createMachineFleet`. It coordinates durable `WebComputer` handles and does
+not create a new root entry or package subpath. Fleet registration keeps executable factories in the product,
+while the existing MachineStore HEAD remains the durable state. See [machineFleet.md](machineFleet.md).
+
 ## Runtime-asset deployment contract
 
 ### The Service Worker asset (pyprocSw.js)
@@ -208,7 +212,7 @@ After a revival - journal, session, or image open - process resources such as fi
 
 | Gate | Exposed specifiers | Actual public surface | Contract verified |
 | --- | --- | --- | --- |
-| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine`, `pyproc/control` | `boot`, `open`, `createWebComputer`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PyProcControlClient`, `PerceptionClient`, a `commitState`/`openState` kernel round trip, the four installed bins | package exports, stable subpath types, npm files, engine preparation, CLI graph copy and SRI manifest |
+| package surface | `pyproc`, `pyproc/assets`, `pyproc/history`, `pyproc/machine`, `pyproc/control` | `boot`, `open`, `createWebComputer`, `createMachineFleet`, `checkEnvironment`, `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker`, `PyProcControlClient`, `PerceptionClient`, a `commitState`/`openState` kernel round trip, the four installed bins | package exports, stable subpath types, npm files, engine preparation, CLI graph copy and SRI manifest |
 | installed package - asset path | `pyproc`, `pyproc/assets` | `getPyProcAssetManifest`, `verifyPyProcAssetIntegrity`, `registerPyProcServiceWorker` | An asset manifest rooted at `/node_modules/pyproc/`, worker graph SRI, registration of the installed `pyprocSw.js`, and rejection of a bad worker SRI before spawn |
 | installed package - runtime/server | `pyproc` | `boot`, the machine runtime's `enableAsgiServer`, ASGI delegation wiring of the installed `pyprocSw.js` | Machine boot from the installed package, a Python ASGI app, a `fetch("/pyproc/...")` virtual-origin round trip, the S3 timing source |
 | installed package - device filesystem | `pyproc` | machine runtime `enableDeviceFs` | Reading and writing `/dev/productState` and `/proc/meminfo` through the Python `open()` file contract on an installed-package machine |
@@ -219,7 +223,7 @@ After a revival - journal, session, or image open - process resources such as fi
 | installed package - immortal python machine | `pyproc` | `open()` / `open({ name })`, the `KernelElection` handle | The default durable auto-commit Machine plus three independent browsing contexts sharing one Python state and prepared environment, continuing after forced leader removal, and cold-reopening automatically committed heap plus `/home/web` after every context closes |
 | installed package - permission policy | `pyproc` | the machine `runtime` escape hatch (the `setGlobal` chokepoint plus the CSP `connect-src`) | Enforcement of a product permission manifest (`net=false`, `clipboard=false`, `home=true`, `workers=false`) and of the Python chokepoints |
 | installed package - portable machine | `pyproc`, `pyproc/history` | `boot({ deterministic: true })`, `open(blob)`, `createStateKeyPair`, `exportStatePublicKey`, `fingerprintStatePublicKey`, machine `history.export({ signingKey })`, Runtime `enableInit` | Signed `.pymachine` plus `/home/web` export, signer fingerprint, untrusted and wrong-key rejection, trusted open, reopening the `resume.py` SQLite resource, the S4 timing source |
-| installed package - web computer | `pyproc` | `createWebComputer` | Assembling a browser computer from the installed package alone: booting the Python guest, running code, and stopping the whole thing |
+| installed package - web computer | `pyproc`, `pyproc/machine` | `createWebComputer`, `createMachineFleet` | Assembling a browser computer from the installed package alone, plus committing, terminating, and cold-resuming a bounded durable Machine Fleet |
 
 ## Direction and boundaries
 

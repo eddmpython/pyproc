@@ -187,6 +187,18 @@ export type WebMachineErrorCode =
   | "WEB_MACHINE_DURABILITY_UNAVAILABLE"
   | "WEB_MACHINE_ENTROPY_SIZE"
   | "WEB_MACHINE_ENTROPY_SOURCE_FAILURE"
+  | "WEB_MACHINE_ENVIRONMENT_MISMATCH"
+  | "WEB_MACHINE_FLEET_BUSY"
+  | "WEB_MACHINE_FLEET_CAPACITY"
+  | "WEB_MACHINE_FLEET_COMMIT_UNVERIFIED"
+  | "WEB_MACHINE_FLEET_DISPOSED"
+  | "WEB_MACHINE_FLEET_DUPLICATE"
+  | "WEB_MACHINE_FLEET_LEASE_STALE"
+  | "WEB_MACHINE_FLEET_POLICY_INVALID"
+  | "WEB_MACHINE_FLEET_PREFETCH_UNAVAILABLE"
+  | "WEB_MACHINE_FLEET_STATE"
+  | "WEB_MACHINE_FLEET_UNAVAILABLE"
+  | "WEB_MACHINE_FLEET_UNSAFE"
   | "WEB_MACHINE_GENERATION_CORRUPT"
   | "WEB_MACHINE_GENERATION_EXISTS"
   | "WEB_MACHINE_GENERATION_INVALID"
@@ -247,6 +259,10 @@ export type WebMachineErrorCode =
   | "WEB_MACHINE_SNAPSHOT_SCOPE"
   | "WEB_MACHINE_SNAPSHOT_UNSUPPORTED"
   | "WEB_MACHINE_STORE_FAILURE"
+  | "WEB_MACHINE_SUSPEND_CLEANUP_INCOMPLETE"
+  | "WEB_MACHINE_SUSPEND_COMMIT_UNVERIFIED"
+  | "WEB_MACHINE_SUSPEND_STATE"
+  | "WEB_MACHINE_SUSPEND_UNSAFE"
   | "WEB_MACHINE_UNAVAILABLE"
   | "WEB_MACHINE_VOLUME_CAPACITY"
   | "WEB_MACHINE_VOLUME_EMPTY"
@@ -707,12 +723,14 @@ export class MachineCommitCoordinator {
     devices?: Record<string, BlockDevice>;
     expectedHead: string | null;
     ownerToken: OwnerToken;
+    environmentFingerprint?: string | null;
     control?: OperationControl;
   }): Promise<GenerationCommitResult>;
   restoreLatest(options: {
     groupId: string;
     machines: ReadonlyMap<string, MachineHandle> | Record<string, MachineHandle>;
     devices?: Record<string, BlockDevice>;
+    expectedEnvironmentFingerprint?: string | null;
     control?: OperationControl;
   }): Promise<{ generationId: string; recoveredFrom: string | null; failures: Array<{ generationId: string; code: string }>; commit: Record<string, unknown>; machines: Array<Record<string, unknown>>; devices: Array<Record<string, unknown>> }>;
   dryRunRecoveryWindow(options: { groupId: string; ownerToken: OwnerToken }): Promise<PruneReport>;
@@ -868,6 +886,12 @@ export interface WebComputerPythonOptions {
   diskBytes?: number;
   bootSession?: (options: Record<string, unknown>) => Promise<unknown>;
   openMachine?: (...args: unknown[]) => Promise<unknown>;
+  /** Optional evidence hook for spawned and terminated worker-hosted guest owners. */
+  onWorkerLifecycle?: ((event: Readonly<{
+    state: "spawned" | "terminated";
+    workerId: string;
+    machineId: string | null;
+  }>) => void) | null;
 }
 
 export interface WebComputerLinuxOptions {
@@ -888,6 +912,8 @@ export interface WebComputerDurabilityOptions {
   getSigningKeyPair?: () => Promise<CryptoKeyPair> | CryptoKeyPair;
   requiredCapabilities?: Record<string, string[]> | Map<string, string[]>;
   availableCapabilities?: string[];
+  /** Exact engine, manifest, and asset identity persisted in every generation. */
+  environmentFingerprint?: string | null;
   onOwnerChanged?: (event: Readonly<{
     state: "acquired" | "lost";
     token?: unknown;
@@ -899,15 +925,40 @@ export interface WebComputerInspection {
   readonly machines: Readonly<Record<string, MachineInspection>>;
   readonly devices: Readonly<Record<string, unknown>>;
   readonly owner: Readonly<Record<string, unknown>> | null;
-  readonly startupMode: "none" | "deferred" | "booted" | "restored" | "imported";
+  readonly startupMode: "none" | "deferred" | "booted" | "restored" | "imported" | "cold";
+  readonly lifecycleState: "unconfigured" | "registered" | "waking" | "hot" | "draining" | "committing" | "stopping" | "cold" | "cleanupIncomplete" | "failed" | "disposed";
   readonly persistence: Readonly<{
     configured: boolean;
+    environmentFingerprint: string | null;
     durabilityState: "unconfigured" | "clean" | "unsaved";
     durabilityError: string | null;
     cleanupPending: boolean;
     lastPrune: PruneReport | Readonly<{ error: string }> | null;
     cleanupError: string | null;
+    lastSuspend: WebComputerSuspendReceipt | null;
+    lastResume: Readonly<{
+      generationId: string | null;
+      recoveredFrom: string | null;
+      environmentFingerprint: string | null;
+    }> | null;
   }>;
+}
+
+export interface MachineSuspendSafety {
+  activeCommands?: number;
+  pendingApprovals?: number;
+  unresolvedEffects?: number;
+  outcomeUnknown?: boolean;
+  unsaved?: boolean;
+}
+
+export interface WebComputerSuspendReceipt {
+  readonly terminal: "suspended" | "cleanupIncomplete";
+  readonly generationId: string;
+  readonly environmentFingerprint: string | null;
+  readonly error?: string;
+  readonly retention?: PruneReport | Readonly<{ error: string }> | null;
+  readonly cleanupPending?: boolean;
 }
 
 export interface WebComputer {
@@ -938,11 +989,29 @@ export interface WebComputer {
     resumeControl?: OperationControl;
     pruneControl?: OperationControl;
   }): Promise<WebComputerInspection>;
+  /** Reacquire ownership and restore the exact durable generation after a successful suspend. */
+  resume(options?: {
+    deferBoot?: boolean;
+    control?: OperationControl;
+    ownerControl?: OperationControl;
+    restoreControl?: OperationControl;
+    resumeControl?: OperationControl;
+    pruneControl?: OperationControl;
+  }): Promise<WebComputerInspection>;
   /** Pause every running guest, flush block devices, publish one fenced generation, then resume. */
   save(control?: OperationControl): Promise<GenerationCommitResult & {
     retention: PruneReport | Readonly<{ error: string }> | null;
     cleanupPending: boolean;
   }>;
+  /** Commit and verify a safe terminal, terminate runtime owners, then release durable ownership. */
+  suspend(options: {
+    safety: MachineSuspendSafety;
+    control?: OperationControl;
+    pruneControl?: OperationControl;
+    shutdownControl?: OperationControl;
+  }): Promise<WebComputerSuspendReceipt>;
+  /** Retry only the termination and owner-release half after a durable cleanupIncomplete terminal. */
+  retrySuspendCleanup(control?: OperationControl): Promise<WebComputerSuspendReceipt>;
   /** Export all paused guest snapshots and block devices as one signed `.webmachine`. */
   exportImage(options?: {
     signingKeyPair?: CryptoKeyPair;
@@ -1004,3 +1073,64 @@ export type WebComputerOptions = WebComputerBaseOptions & (
 );
 
 export function createWebComputer(options?: WebComputerOptions): WebComputer;
+
+// ─── Composition: bounded fleet of durable computers ───
+export interface MachineFleetLease {
+  readonly machineId: string;
+  readonly leaseId: string;
+  readonly epoch: number;
+  readonly ownerEpoch: number;
+  readonly purpose: string;
+}
+
+export interface MachineFleetRegistration {
+  machineId: string;
+  environmentFingerprint: string;
+  createComputer(context: { machineId: string; environmentFingerprint: string }): WebComputer | Promise<WebComputer>;
+  prefetch?: ((context: { machineId: string; environmentFingerprint: string; control?: OperationControl }) =>
+    Promise<{ byteLength?: number } | void> | { byteLength?: number } | void) | null;
+  priority?: number;
+  pinned?: boolean;
+}
+
+export interface MachineFleetInspection {
+  readonly hotLimit: number;
+  readonly hot: number;
+  readonly cold: number;
+  readonly states: Readonly<Record<string, number>>;
+  readonly machines: Readonly<Record<string, Readonly<{
+    state: "registered" | "waking" | "hot" | "draining" | "committing" | "stopping" | "cold" | "cleanupIncomplete" | "failed";
+    generationId: string | null;
+    environmentFingerprint: string;
+    leaseEpoch: number;
+    leaseActive: boolean;
+    activeCommands: number;
+    safety: Readonly<Required<MachineSuspendSafety>>;
+    lastTerminal: string | null;
+    lastSuspend: WebComputerSuspendReceipt | null;
+    lastResume: WebComputerInspection["persistence"]["lastResume"];
+    prefetched: Readonly<{ environmentFingerprint: string; byteLength: number; completedAt: number }> | null;
+    resources: Readonly<{ workers: number; runtimes: number; deviceLeases: number; timers: number | null }>;
+  }>>>;
+}
+
+export interface MachineFleet {
+  register(spec: MachineFleetRegistration): string;
+  acquire(machineId: string, purpose?: string, control?: OperationControl): Promise<MachineFleetLease>;
+  resume(machineId: string, purpose?: string, control?: OperationControl): Promise<MachineFleetLease>;
+  use<T>(lease: MachineFleetLease, operation: (computer: WebComputer, lease: MachineFleetLease) => T | Promise<T>): Promise<T>;
+  release(lease: MachineFleetLease, safety?: MachineSuspendSafety): Readonly<{ machineId: string; state: string; safety: Readonly<Required<MachineSuspendSafety>> }>;
+  suspend(machineId: string, options: { lease: MachineFleetLease; control?: OperationControl }): Promise<WebComputerSuspendReceipt & { machineId: string; state: "cold" }>;
+  retryCleanup(machineId: string, control?: OperationControl): Promise<WebComputerSuspendReceipt & { machineId: string; state: "cold" }>;
+  setHotLimit(limit: number, control?: OperationControl): Promise<number>;
+  prefetch(machineId: string, control?: OperationControl): Promise<Readonly<{ environmentFingerprint: string; byteLength: number; completedAt: number }>>;
+  inspect(): MachineFleetInspection;
+  dispose(control?: OperationControl): Promise<void>;
+}
+
+export function createMachineFleet(options?: {
+  hotLimit?: number;
+  idFactory?: () => string;
+  nowFactory?: () => number;
+  chooseCandidate?: ((candidates: ReadonlyArray<Readonly<{ machineId: string; lastUsedAt: number; priority: number; pinned: boolean }>>) => string) | null;
+}): MachineFleet;

@@ -67,6 +67,7 @@
 - [How it works (one page)](#how-it-works-one-page)
 - [Where the shape pays off](#where-the-shape-pays-off)
 - [Run the Web Computer](#run-the-web-computer)
+- [Hibernate a Machine Fleet](#hibernate-a-machine-fleet)
 - [Capability paths](#capability-paths)
 - [Dependency boundary](#dependency-boundary)
 - [Setup](#setup)
@@ -605,6 +606,31 @@ Open `http://localhost:8788/apps/webComputer/` in Edge or Chromium. The product 
 
 The current Linux execution catalog is a hash-pinned development channel. Its engine and image binaries are prepared locally and excluded from git and npm packages; public redistribution remains disabled until the complete source and license inventory is reproducible.
 
+## Hibernate a Machine Fleet
+
+`createMachineFleet` on `pyproc/machine` keeps many durable Web Computers registered while admitting only a
+bounded number of live execution owners. Safe suspension drains accepted work, commits and rereads the exact
+generation, terminates adapters and Worker-hosted guests, releases ownership, and only then reports `cold`.
+Resume creates a fresh owner and rejects stale leases or environment drift.
+
+```js
+import { createMachineFleet } from "pyproc/machine";
+
+const fleet = createMachineFleet({ hotLimit: 2 });
+fleet.register({ machineId: "forecast", environmentFingerprint, createComputer });
+
+const lease = await fleet.acquire("forecast", "refresh model");
+await fleet.use(lease, (computer) =>
+  computer.machine("runtime").request({ type: "run", code: "refresh()" }));
+fleet.release(lease, {}); // the caller proves a safe terminal
+await fleet.suspend("forecast", { lease });
+```
+
+Active commands, pending approval, unresolved effects, `outcomeUnknown`, unsaved state, and pins are never
+automatically suspended. A cold Machine owns no live computer through the Fleet, but this is not a zero-memory
+claim: Chromium, cached assets, OPFS state, and the registry still consume resources. See the
+[Machine Fleet guide](docs/usage/machineFleet.md) and [specification](docs/specs/machineFleet/README.md).
+
 ## Capability paths
 
 Start from the [Product entrances](#product-entrances) table. Capabilities below those handles are opt-in; use their contracts rather than engine internals (`HEAPU8` and friends). The full intrinsic capability table lives in the [capability matrix](docs/usage/capabilityMatrix.md).
@@ -616,8 +642,8 @@ Plumbing subpaths carry the contracts underneath the handle:
 import { Runtime, bootRuntime, checkEnvironment } from "pyproc/runtime";
 // The durable-state kernel: object model, commit/open protocol, stores, signed bundles.
 import { commitState, openState, OpfsStateStore, decodeStateBundle } from "pyproc/history";
-// The browser-computer internals (hosts, devices, guest adapters, machine stores).
-import { createMachineCryptoProvider, MachineCommitCoordinator } from "pyproc/machine";
+// Browser-computer details and bounded durable Fleet lifecycle.
+import { createMachineFleet, createMachineCryptoProvider, MachineCommitCoordinator } from "pyproc/machine";
 // Deployment assets: manifest, SRI verification, Service Worker registration.
 import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
 // Demoted (no headless CI gate, or research preview) - deliberately off the root surface:

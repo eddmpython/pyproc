@@ -21,6 +21,7 @@ Recommended reason values:
 | `journal.recover` | After `machine.history.recover()` |
 | `image.open` | After `open(blob, trustOptions)` |
 | `kernel.failover` | A follower took over after a tab leader change and revived from the journal |
+| `fleet.resume` | A durable Web Computer was reconstructed after Fleet suspension |
 
 ## Currently pinned surfaces
 
@@ -28,6 +29,7 @@ Recommended reason values:
 |---|---|---|---|
 | `tests/attempts/pythonMachine/resumeHookProbe.html` | Contract probe | Reopens a sqlite connection as `resumeConn` and records reason and value. Covers all three revival paths (`open({ dir, name })`, `machine.history.recover()`, `open(blob, trustOpts)`) plus the no-op when the file is absent | `node tests/browser/run.mjs tests/attempts/pythonMachine/resumeHookProbe.html` |
 | `examples/machine.html` | Live demo surface | On a first boot or after a revival, `/home/web/resume.py` opens the `appDb` SQLite connection and records the reason in `resumeEvent`. The same hook runs after casting a signed `.pymachine` through `open(blob, trustOpts)` | `npm run test:examples`, or `node tests/browser/run.mjs examples/machine.html?gate=1` |
+| `tests/webMachine/browser/probes/machineFleetProbe.html` | Fleet product probe | Restores Python heap and `/home/web` into a fresh Worker. Host resources are rebound by the guest adapter; application-owned descriptors still require an idempotent hook | `npm run test:web-machine` |
 
 ## Application boundary
 

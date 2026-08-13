@@ -85,6 +85,18 @@ export class WebLockOwnerCoordinator {
       this._state = "stopped";
       return;
     }
+    // stop의 첫 releaseOwner가 실패해도 lock callback의 finally가 같은 epoch를 한 번 더
+    // 해제할 수 있다. 그 뒤 coordinator는 failed였지만 durable owner는 이미 사라진 상태다.
+    // suspend cleanup 재시도는 새 owner를 만들거나 callback을 재실행하지 않고 이 terminal을
+    // 재확인해야 한다. epoch가 아직 남았다면 같은 token으로 release만 다시 시도한다.
+    if (this._state === "failed" && this._token) {
+      if (!this._epochReleased) await this._releaseOwner();
+      this._releaseHold?.();
+      await this._requestPromise?.catch(() => undefined);
+      if (!this._epochReleased) throw this._error;
+      this._state = "stopped";
+      return;
+    }
     if (this._state === "stopping") {
       await this._requestPromise?.catch(() => undefined);
       return;

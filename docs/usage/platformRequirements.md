@@ -22,6 +22,7 @@ This table states the technical conditions each pyproc capability needs. It is n
 | Python execution, packages, file IO, checkpoint/restore/time travel | required | - | - | Needs the exact package plus `pyproc-engine` prepared at the same-origin engine path; no headers |
 | Terminal, borrowed syscalls, subprocess, in-kernel ASGI server | required | required | - | The synchronous blocking paths depend on JSPI |
 | Process OS (fork/forkMany/map/mapArray/matmul), sockets, interrupts, multi-tab persistence using SAB capabilities | required | required | required | Only under `crossOriginIsolated` |
+| Hibernating Machine Fleet with `pyproc-worker` guests | required | - | - | Dedicated module Workers and durable storage; exact environment fingerprint required for cold resume |
 
 ## Engine
 
@@ -33,6 +34,7 @@ This table states the technical conditions each pyproc capability needs. It is n
 - **A checkpoint boundary costs O(heap).** WASM has no mprotect and no dirty-page tracking, so at every execution boundary the full heap is hashed page by page to reconstruct the delta - and that completeness is the condition for restore soundness. So one boundary's hashing cost is proportional to heap size. What dominates this cost is not heap size itself but **commit frequency** (the churnProbe law): commit per statement and you walk the whole heap every time.
 - **Peak memory is the resident base plus accumulated deltas.** Restore-based reactivity keeps a base - a full copy of the heap - resident in RAM, and checkpoint deltas accumulate on top. The relief valves are `history.prune` (`pruneTo`) and `dispose`; `saveBase` offloads the base to OPFS but does not reduce RAM, because the restore path assumes the base stays resident.
 - **In the process OS each worker is an independent interpreter with an independent heap.** N workers means N independent Python heaps consuming real memory - and in exchange, N independent GILs, which is physical parallelism. Snapshot-fork shares the initial state through a SAB to avoid a full copy per worker, but once workers diverge each owns its own state.
+- **A cold Fleet Machine releases execution owners, not all browser memory.** `createMachineFleet` commits and verifies the whole durable Web Computer before terminating its adapters and Worker-hosted guests. Cached engine assets, OPFS generations, the Fleet registry, and Chromium process overhead remain. Public inspection reports owner counts and does not promise a numeric MB drop.
 - Measurements for large heaps (hundreds of MB and up) and for low-end or mobile devices are not posted on public surfaces. Measure them on your own machine with the [Speed Lab](../../examples/speedLab.html). Development measurements live in [benchmarking.md](../operations/benchmarking.md), the ledgers, and the artifacts.
 
 ### Easing reactive memory pressure (by workload)
