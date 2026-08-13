@@ -1,5 +1,7 @@
 # Initiative 6: transactionalAppSpace - 협력 app 상태와 Machine을 한 transaction으로 분기할 수 있는가
 
+상태: **진행 중**
+
 ## 가설
 
 versioned logical app state, quiesce, paired generation commit, effect outbox를 cooperative bridge로 제공하면
@@ -52,7 +54,10 @@ Initiative 5이 졸업해 effect outbox가 approval과 one-shot CommitLease를 �
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-08-13 | source contract audit | FrameSpace sandbox, Machine generation, transaction 계획 대조 | probe 미실행 | 협력 app의 logical state protocol만 현실적인 transaction 경로 | Initiative 5 졸업 뒤 app contract fixture |
+| 2026-08-13 | `run.mjs` | Node canonical state와 in-memory paired registry | identity, secret, stale revision, partial marker, sibling race 16개 검사 | app snapshot과 Machine link를 먼저 immutable candidate로 묶고 marker만 HEAD를 열어야 한다 | browser sandbox와 strict durability 대조 |
+| 2026-08-13 | `runBrowser.mjs` | Chromium credentialless iframe과 IndexedDB strict durability | 격리, quiesce, round trip, race, outbox, marker 11개 검사 | cooperative state는 브라우저 heap이 아니라 exact identity와 fenced logical archive이며 effect는 staged 상태로 0회 전송된다 | 제품 AppSpace protocol과 paired store로 승격 |
 
 ## 판정
 
-후행 대기 중. Initiative 5 졸업 전에는 probe를 실행하지 않는다.
+개념 확립. exact identity, fenced logical state, host digest, immutable paired candidate, strict commit marker,
+staged outbox의 경계가 Node와 Chromium에서 일치했다. 이를 별도 AppSpace protocol과 paired store로 승격한다.

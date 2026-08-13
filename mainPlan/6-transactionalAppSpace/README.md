@@ -1,6 +1,6 @@
 # Initiative 6: Transactional AppSpace 실행 계획
 
-상태: **Initiative 5 후행 대기**
+상태: **착수**
 
 이 문서는 사용자가 소유하거나 협력 가능한 web app의 논리 상태와 pending effect를 Machine transaction에
 참여시키는 일곱 번째 이니셔티브의 임시 실행 계획이다.

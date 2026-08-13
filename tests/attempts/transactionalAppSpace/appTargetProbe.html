@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Transactional AppSpace target probe</title></head>
+<body><output id="state">ready</output>
+<script>
+(() => {
+  "use strict";
+  const identity = Object.freeze({ appId: "com.example.erp", origin: location.origin,
+    adapterVersion: "1", stateSchema: "erp-state/3" });
+  let revision = 1;
+  let quiesced = false;
+  let fence = null;
+  let state = { route: "/invoice/7", form: { amount: 42 }, domain: { invoice: 7 }, records: [{ id: 7 }] };
+  let outbox = [];
+  const privateState = { secret: "probe-private-value", cookie: "probe-cookie" };
+  const replyError = (error) => ({ code: error.code || "APP_PROBE_FAILED", message: String(error.message || error) });
+  const fail = (code, message) => { const error = new Error(message); error.code = code; throw error; };
+  const exactIdentity = (value) => value?.appId === identity.appId && value?.origin === identity.origin
+    && value?.adapterVersion === identity.adapterVersion && value?.stateSchema === identity.stateSchema;
+  const dispatch = async (operation, input = {}) => {
+    if (operation === "describe") return { identity, revision: `apprev:${revision}`, quiesced,
+      capabilities: ["exportState", "importState", "stageEffect"] };
+    if (operation === "quiesce") {
+      if (input.expectedRevision !== `apprev:${revision}`) fail("APP_REVISION_CONFLICT", "revision changed");
+      quiesced = true;
+      fence = crypto.randomUUID();
+      return { revision: `apprev:${revision}`, fence };
+    }
+    if (operation === "export") {
+      if (!quiesced || input.fence !== fence || input.expectedRevision !== `apprev:${revision}`) {
+        fail("APP_NOT_QUIESCED", "export requires the current fence and revision");
+      }
+      return structuredClone({ identity, revision: `apprev:${revision}`, state, outbox,
+        scope: ["router", "form", "domainStore", "declaredRecords", "effectOutbox"] });
+    }
+    if (operation === "resume") { quiesced = false; fence = null; return { resumed: true }; }
+    if (operation === "mutate") {
+      if (quiesced) fail("APP_QUIESCED", "mutation is fenced");
+      state.form.amount = Number(input.amount);
+      revision += 1;
+      return { revision: `apprev:${revision}` };
+    }
+    if (operation === "forceRace") {
+      state.form.amount += 1;
+      revision += 1;
+      return { revision: `apprev:${revision}` };
+    }
+    if (operation === "import") {
+      if (!quiesced || input.fence !== fence) fail("APP_NOT_QUIESCED", "import requires the current fence");
+      if (!exactIdentity(input.envelope?.identity)) fail("APP_IDENTITY_MISMATCH", "identity or schema differs");
+      state = structuredClone(input.envelope.state);
+      outbox = structuredClone(input.envelope.outbox || []);
+      revision += 1;
+      return { revision: `apprev:${revision}` };
+    }
+    if (operation === "stageEffect") {
+      if (quiesced) fail("APP_QUIESCED", "effect staging is fenced");
+      if (!/^[0-9a-f]{64}$/.test(input.intentSha256 || "")) fail("APP_EFFECT_INVALID", "intent digest is invalid");
+      outbox.push({ intentSha256: input.intentSha256, state: "staged" });
+      revision += 1;
+      return { revision: `apprev:${revision}`, staged: true };
+    }
+    fail("APP_OPERATION_UNSUPPORTED", "operation is not in the app protocol");
+  };
+  addEventListener("message", (event) => {
+    const hello = event.data;
+    const port = event.ports?.[0];
+    if (event.source !== parent || hello?.protocol !== "pyproc-app-probe" || hello?.version !== 1
+      || hello?.type !== "hello" || !port) return;
+    port.onmessage = async ({ data }) => {
+      if (data?.protocol !== "pyproc-app-probe" || data?.version !== 1 || data?.type !== "request") return;
+      try { port.postMessage({ protocol: "pyproc-app-probe", version: 1, type: "response", id: data.id,
+        ok: true, value: await dispatch(data.operation, data.input) }); }
+      catch (error) { port.postMessage({ protocol: "pyproc-app-probe", version: 1, type: "response", id: data.id,
+        ok: false, error: replyError(error) }); }
+    };
+    port.start();
+    let parentAccessible = false;
+    let storageAccessible = false;
+    let cookieAccessible = false;
+    try { void parent.document.documentElement; parentAccessible = true; } catch (error) {}
+    try { void localStorage.length; storageAccessible = true; } catch (error) {}
+    try { void document.cookie; cookieAccessible = true; } catch (error) {}
+    port.postMessage({ protocol: "pyproc-app-probe", version: 1, type: "hello", nonce: hello.nonce,
+      url: location.href, identity, parentAccessible, storageAccessible, cookieAccessible });
+  });
+  parent.postMessage({ protocol: "pyproc-app-probe", version: 1, type: "ready" }, "*");
+})();
+</script></body></html>
