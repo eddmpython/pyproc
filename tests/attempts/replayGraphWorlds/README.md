@@ -54,7 +54,11 @@ Initiative 6이 졸업해 exact source state를 restore한 뒤 안전하게 bran
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-08-13 | source contract audit | ReplaySpace linear cursor, APX, AppSpace 계획 대조 | probe 미실행 | 가상 인터넷이 아니라 verified transition graph 가설로 제한 | Initiative 6 졸업 뒤 linear import |
+| 2026-08-13 | `run.mjs` | Node, content-addressed prototype | 16/16 GREEN | linear import, exact traversal, identity, integrity, coverage, evaluator, retention 경계 확립 | 정식 모듈 분해 |
+| 2026-08-13 | `runBrowser.mjs` | headless Chromium, credentialless frame | 7/7 GREEN, external effect 0 | exact AppSpace source restore에서 두 branch를 만들고 offline traversal 가능 | installed product gate |
 
 ## 판정
 
-진행 중. Initiative 6의 exact AppSpace pair와 restore 계약을 바닥으로 linear import probe부터 실행한다.
+개념 확립 완료. graph에 없는 transition을 생성하지 않고, exact source restore가 있는 branch만 추가하며,
+content-addressed integrity와 effect 0 traversal이 Node와 Chromium에서 입증됐다. 정식 모듈, 저장소, Control,
+JavaScript, Python, MCP parity와 installed package gate로 승격한다.

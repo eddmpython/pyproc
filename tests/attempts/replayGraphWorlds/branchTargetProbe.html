@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>ReplayGraph branch target</title></head>
+<body><output id="state">base</output>
+<script>
+(() => {
+  "use strict";
+  const identity = Object.freeze({ appId: "com.example.replay", origin: location.origin,
+    adapterVersion: "1", stateSchema: "replay-state/1" });
+  let revision = 1;
+  let quiesced = false;
+  let fence = null;
+  let state = { route: "/task", value: "base", records: [{ id: "task:1", selected: false }] };
+  const fail = (code, message) => { const error = new Error(message); error.code = code; throw error; };
+  const render = () => { document.querySelector("#state").textContent = state.value; };
+  const dispatch = async (operation, input = {}) => {
+    if (operation === "describe") return { identity, revision: `apprev:${revision}`, quiesced };
+    if (operation === "quiesce") {
+      if (input.expectedRevision !== `apprev:${revision}`) fail("APP_REVISION_CONFLICT", "revision changed");
+      quiesced = true;
+      fence = crypto.randomUUID();
+      return { revision: `apprev:${revision}`, fence };
+    }
+    if (operation === "export") {
+      if (!quiesced || input.fence !== fence || input.expectedRevision !== `apprev:${revision}`) {
+        fail("APP_NOT_QUIESCED", "export requires the current fence and revision");
+      }
+      return structuredClone({ identity, revision: `apprev:${revision}`, state, outbox: [] });
+    }
+    if (operation === "import") {
+      if (!quiesced || input.fence !== fence) fail("APP_NOT_QUIESCED", "import requires the current fence");
+      if (input.snapshot?.identity?.appId !== identity.appId
+        || input.snapshot?.identity?.stateSchema !== identity.stateSchema) {
+        fail("APP_IDENTITY_MISMATCH", "snapshot identity differs");
+      }
+      state = structuredClone(input.snapshot.state);
+      revision += 1;
+      render();
+      return { revision: `apprev:${revision}` };
+    }
+    if (operation === "resume") { quiesced = false; fence = null; return { resumed: true }; }
+    if (operation === "transition") {
+      if (quiesced) fail("APP_QUIESCED", "transition is fenced");
+      if (!["left", "right"].includes(input.value)) fail("APP_TRANSITION_MISSING", "transition is unavailable");
+      state.value = input.value;
+      state.records[0].selected = true;
+      revision += 1;
+      render();
+      return { revision: `apprev:${revision}` };
+    }
+    fail("APP_OPERATION_UNSUPPORTED", "operation is unavailable");
+  };
+  addEventListener("message", (event) => {
+    const hello = event.data;
+    const port = event.ports?.[0];
+    if (event.source !== parent || hello?.protocol !== "pyproc-replay-graph-probe" || hello?.version !== 1
+      || hello?.type !== "hello" || !port) return;
+    port.onmessage = async ({ data }) => {
+      if (data?.protocol !== "pyproc-replay-graph-probe" || data?.version !== 1 || data?.type !== "request") return;
+      try {
+        port.postMessage({ protocol: "pyproc-replay-graph-probe", version: 1, type: "response", id: data.id,
+          ok: true, value: await dispatch(data.operation, data.input) });
+      } catch (error) {
+        port.postMessage({ protocol: "pyproc-replay-graph-probe", version: 1, type: "response", id: data.id,
+          ok: false, error: { code: error.code || "APP_PROBE_FAILED", message: String(error.message || error) } });
+      }
+    };
+    port.start();
+    let parentAccessible = false;
+    let storageAccessible = false;
+    let cookieAccessible = false;
+    try { void parent.document.documentElement; parentAccessible = true; } catch (error) {}
+    try { void localStorage.length; storageAccessible = true; } catch (error) {}
+    try { void document.cookie; cookieAccessible = true; } catch (error) {}
+    port.postMessage({ protocol: "pyproc-replay-graph-probe", version: 1, type: "hello", nonce: hello.nonce,
+      url: location.href, identity, parentAccessible, storageAccessible, cookieAccessible });
+  });
+  render();
+  parent.postMessage({ protocol: "pyproc-replay-graph-probe", version: 1, type: "ready" }, "*");
+})();
+</script></body></html>

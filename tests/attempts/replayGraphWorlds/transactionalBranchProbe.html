@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>ReplayGraph transactional branch probe</title></head>
+<body><output id="result">running</output>
+<script type="module">
+const checks = [];
+const check = (name, pass, detail = null) => checks.push({ name, pass: !!pass, detail });
+const canonical = (value) => {
+  if (value === null || typeof value === "boolean" || typeof value === "string" || typeof value === "number") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+};
+const digest = async (value) => [...new Uint8Array(await crypto.subtle.digest("SHA-256",
+  new TextEncoder().encode(canonical(value))))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+const iframe = document.createElement("iframe");
+iframe.sandbox = "allow-scripts allow-forms";
+iframe.setAttribute("credentialless", "");
+iframe.src = "/tests/attempts/replayGraphWorlds/branchTargetProbe.html";
+document.body.append(iframe);
+await new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error("target ready timeout")), 5000);
+  addEventListener("message", function ready(event) {
+    if (event.source !== iframe.contentWindow || event.data?.protocol !== "pyproc-replay-graph-probe"
+      || event.data?.type !== "ready") return;
+    clearTimeout(timer);
+    removeEventListener("message", ready);
+    resolve();
+  });
+});
+const channel = new MessageChannel();
+const nonce = crypto.randomUUID();
+const hello = await new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error("target hello timeout")), 5000);
+  channel.port1.onmessage = ({ data }) => {
+    if (data?.type !== "hello" || data?.nonce !== nonce) return;
+    clearTimeout(timer);
+    resolve(data);
+  };
+  channel.port1.start();
+  iframe.contentWindow.postMessage({ protocol: "pyproc-replay-graph-probe", version: 1,
+    type: "hello", nonce }, "*", [channel.port2]);
+});
+let sequence = 0;
+let targetCalls = 0;
+const pending = new Map();
+channel.port1.onmessage = ({ data }) => {
+  const waiter = pending.get(data?.id);
+  if (!waiter) return;
+  pending.delete(data.id);
+  data.ok ? waiter.resolve(data.value)
+    : waiter.reject(Object.assign(new Error(data.error.message), { code: data.error.code }));
+};
+const call = (operation, input = {}) => new Promise((resolve, reject) => {
+  targetCalls += 1;
+  const id = `graph:${++sequence}`;
+  pending.set(id, { resolve, reject });
+  channel.port1.postMessage({ protocol: "pyproc-replay-graph-probe", version: 1,
+    type: "request", id, operation, input });
+});
+const snapshot = async () => {
+  const described = await call("describe");
+  const locked = await call("quiesce", { expectedRevision: described.revision });
+  const value = await call("export", { expectedRevision: described.revision, fence: locked.fence });
+  await call("resume");
+  return value;
+};
+const restore = async (value) => {
+  const described = await call("describe");
+  const locked = await call("quiesce", { expectedRevision: described.revision });
+  await call("import", { snapshot: value, fence: locked.fence });
+  await call("resume");
+  const restored = await snapshot();
+  return { restored, stateSha256: await digest(restored.state) };
+};
+check("credentialless opaque target", hello.parentAccessible === false && hello.storageAccessible === false
+  && hello.cookieAccessible === false, hello);
+const base = await snapshot();
+const baseSha256 = await digest(base.state);
+const baseNodeRef = `node:${baseSha256}`;
+const branches = [];
+for (const value of ["left", "right"]) {
+  const source = await restore(base);
+  check(`exact source restored before ${value}`, source.stateSha256 === baseSha256, source);
+  await call("transition", { value });
+  const target = await snapshot();
+  const targetSha256 = await digest(target.state);
+  branches.push(Object.freeze({ sourceNodeRef: baseNodeRef, targetNodeRef: `node:${targetSha256}`,
+    operation: "automation.act", input: { value }, terminal: { ok: true, output: { value } },
+    provenance: "transactional", transitionProof: { restored: true, pairSha256: baseSha256 } }));
+}
+check("same URL keeps distinct logical state nodes",
+  branches[0].targetNodeRef !== branches[1].targetNodeRef && branches.every((edge) => edge.sourceNodeRef === baseNodeRef),
+  branches.map((edge) => edge.targetNodeRef));
+const callsBeforeReplay = targetCalls;
+let currentNodeRef = baseNodeRef;
+const traverse = (input) => {
+  const candidates = branches.filter((edge) => edge.sourceNodeRef === currentNodeRef
+    && canonical(edge.input) === canonical(input));
+  if (candidates.length !== 1) return { code: "REPLAY_GRAPH_EDGE_MISSING", currentNodeRef };
+  currentNodeRef = candidates[0].targetNodeRef;
+  return { terminal: candidates[0].terminal, currentNodeRef, replayedEffect: false };
+};
+const replayed = traverse({ value: "left" });
+check("offline exact branch traversal performs no target call",
+  replayed.terminal?.output?.value === "left" && replayed.replayedEffect === false && targetCalls === callsBeforeReplay,
+  { callsBeforeReplay, targetCalls });
+currentNodeRef = baseNodeRef;
+const missing = traverse({ value: "invented" });
+check("missing branch remains explicit without search ahead",
+  missing.code === "REPLAY_GRAPH_EDGE_MISSING" && targetCalls === callsBeforeReplay, missing);
+globalThis.replayGraphProbe = Object.freeze({ checks, branches, targetCalls });
+document.querySelector("#result").textContent = checks.every((entry) => entry.pass) ? "green" : "red";
+</script></body></html>
