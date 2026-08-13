@@ -52,8 +52,10 @@ Initiative 3가 졸업해 session의 suspended state가 실제 cold Machine과 �
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-08-13 | source contract audit | generation, branch, recording, Evidence Pack 계획 대조 | probe 미실행 | 실행 상태 사이의 durable index가 실제 간극 | Initiative 3 졸업 뒤 revision prototype |
+| 2026-08-13 | `executionMemoryPrototype.mjs`, `run.mjs` | Node 24, isolated in-memory stores, Ed25519 handoff | 22 checks PASS, stale overwrite 0, false completed 0, permission 자동 grant 0, secret leak 0 | immutable revision, verified links, CAS HEAD, handoff와 retention의 최소 결정 커널 성립 | durable file store와 실제 product verifier에 결합 |
 
 ## 판정
 
-진행 중. Initiative 3의 cold Machine과 exact generation 계약이 졸업했으므로 immutable revision,
-reference verification, CAS HEAD의 최소 반증 커널부터 실행한다.
+진행 중. immutable revision, reference verification, CAS HEAD, completion truth, signed handoff,
+permission 분리, redaction, retention의 최소 반증 커널이 통과했다. 다음은 같은 계약을 durable file store와
+Machine, SituationCapsule, recording, Evidence Pack의 실제 verifier에 결합한다.
