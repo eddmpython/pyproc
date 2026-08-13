@@ -99,6 +99,9 @@ initiative 번호는 이 agent-computer 실행 포트폴리오의 직렬 순서�
 
 ## Initiative 0 - Machine Entrance
 
+상태: 구현됨. 설치 package의 initializer, effect-free doctor, JavaScript, Python, MCP parity와 Chrome 및
+Edge 제품 gate가 아래 출구 조건을 집행한다.
+
 ### 사용자 결과
 
 사용자는 exact-version package와 한 설정 파일로 다음 여정을 완주한다.

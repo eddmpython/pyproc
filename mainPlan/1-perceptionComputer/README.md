@@ -1,10 +1,9 @@
 # Initiative 1: Perception Computer 실행 계획
 
-상태: **Initiative 0 후행 대기**
+상태: **구현 중**
 
 이 문서는 APX를 화면 관찰 형식에서 브라우저 인지 커널로 완성하는 단일 이니셔티브의 임시 실행
-계획이다. 다른 세션의 진행 작업이 끝나고 사용자가 착수를 지시하기 전에는 구현하지 않는다. 착수한
-뒤에는 아래 종료 조건을 모두 만족할 때까지 다른 이니셔티브로 이동하지 않는다.
+계획이다. 아래 종료 조건을 모두 만족할 때까지 다른 이니셔티브로 이동하지 않는다.
 
 지속 제품 결정은
 [Agent experience initiatives](../../docs/operations/agentExperienceInitiatives.md#initiative-1---perception-computer),

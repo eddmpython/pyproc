@@ -19,8 +19,7 @@
 
 현재 직렬 실행 순서는 다음과 같다.
 
-0. [Machine Entrance](0-machineEntrance/README.md): 착수
-1. [Perception Computer](1-perceptionComputer/README.md): Initiative 0 후행 대기
+1. [Perception Computer](1-perceptionComputer/README.md): 착수
 2. [Verified Change Loop](2-verifiedChangeLoop/README.md): Initiative 1 후행 대기
 3. [Hibernating Machine Fleet](3-hibernatingMachineFleet/README.md): Initiative 2 후행 대기
 4. [Execution Memory Registry](4-executionMemoryRegistry/README.md): Initiative 3 후행 대기
@@ -28,7 +27,7 @@
 6. [Transactional AppSpace](6-transactionalAppSpace/README.md): Initiative 5 후행 대기
 7. [ReplayGraph Worlds](7-replayGraphWorlds/README.md): Initiative 6 후행 대기
 
-Initiative 0부터 착수한다. 여러 계획 폴더는 직렬 실행 대기열이며, 각 이니셔티브의 구현, browser gate,
+Initiative 1부터 진행한다. 여러 계획 폴더는 직렬 실행 대기열이며, 각 이니셔티브의 구현, browser gate,
 정식 문서, attempt와 계획 삭제가 모두 끝난 뒤에만 다음 번호로 이동한다. 둘 이상을 동시에 구현하지
 않는다.
 

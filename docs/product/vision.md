@@ -63,9 +63,8 @@ and graduation gates live in [agent experience initiatives](../operations/agentE
 7. **Build verified replay worlds.** Content-addressed state nodes and exact action edges allow effect-free traversal
    and deterministic evaluation. Missing graph edges remain missing and are never synthesized.
 
-The first initiative begins as the
-[`machineEntrance` attempt](../../tests/attempts/machineEntrance/README.md). The second begins as the
-[`perceptionComputer` attempt](../../tests/attempts/perceptionComputer/README.md). It makes no claim of general
+The Machine Entrance is delivered through the installed initializer, doctor, and client parity gates. The active
+campaign is the [`perceptionComputer` attempt](../../tests/attempts/perceptionComputer/README.md). It makes no claim of general
 superiority over Playwright. That statement becomes admissible only for the narrow LLM perception contract after
 the pinned Playwright baseline, action reach, authority integrity, transition truth, minimality, and replay gates
 all pass. The third begins as the follow-on
