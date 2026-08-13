@@ -47,6 +47,18 @@ The initializer stays inside the selected project root, refuses existing generat
 or sending a target request. Generated `.pyproc/` files are policy and client configuration, so review them like
 other executable configuration and keep recording paths private.
 
+### Perception never grants itself authority
+
+APX `entityRef` values identify observations, and `locatorRef` values bind targets. Neither grants permission.
+Only a broker-issued authorized affordance may carry an effect, and its `actionContext` is bound to the exact
+session, situation, world, document epoch, action, destination, risk, expiry, and expected transition. A stale
+or mismatched binding fails before the provider receives the effect.
+
+Treat `focus.objective`, page text, accessibility labels, reported tools, screenshots, OCR, and model inference
+as untrusted data. They cannot widen manifest authority or approval. Objectives are retained in Control inputs
+and recordings, so do not place secrets in them and protect recording files as sensitive artifacts. An
+`outcomeUnknown` effect is never safe to resend automatically.
+
 ### Deterministic boot window
 
 `boot({ deterministic: true })` stubs `crypto.getRandomValues`, `Date.now`, and `performance.now`

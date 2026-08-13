@@ -7,6 +7,7 @@ import {
   perceptionOptionsFromInput,
   validatePerceptionOptions,
 } from "../perception/apxCatalog.js";
+import { APX_SITUATION_REPRESENTATION, validateActionContext } from "../perception/situationCatalog.js";
 import { PerceptionSpace } from "../perception/perceptionSpace.js";
 import { FrameSensor } from "../perception/profiles/frameSensor.js";
 
@@ -94,6 +95,9 @@ export class FrameSpace {
       locatorIssuer: (sessionRef, documentEpoch, locatorData) => locatorData.locatorRef || null,
       providerKind: "frame",
       conformanceLevel: "L3",
+      capabilityPolicy: ({ action }) => this.config.actions.includes(action)
+        ? { risk: FRAME_SPACE_ACTION_RISKS[action], destination: null }
+        : null,
     });
     this._authorities = new WeakSet();
     this._sequence = 0;
@@ -120,7 +124,7 @@ export class FrameSpace {
         throw frameError("FRAME_SPACE_PERMISSION_DENIED", "observe requires expectedRisk read");
       }
       const apxKeys = APX_OBSERVE_OPTION_KEYS.filter((key) => key !== "representation" && input[key] !== undefined);
-      if (input.representation === APX_REPRESENTATION) {
+      if ([APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(input.representation)) {
         const legacyKey = LEGACY_OBSERVE_KEYS.find((key) => input[key] !== undefined);
         if (legacyKey) throw frameError("FRAME_SPACE_ACTION_INVALID", `APX observe does not accept ${legacyKey}`);
         validatePerceptionOptions(perceptionOptionsFromInput(input));
@@ -144,8 +148,14 @@ export class FrameSpace {
       throw frameError("FRAME_SPACE_PERMISSION_DENIED", "FrameSpace operation requires a current authorization token");
     }
     this._authorities.delete(authority);
-    if (operation === "automation.observe" && input.representation === APX_REPRESENTATION) {
+    if (operation === "automation.observe"
+      && [APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(input.representation)) {
       return this._perception.observe(input.sessionRef, perceptionOptionsFromInput(input), { signal });
+    }
+    if (operation === "automation.act") {
+      for (const action of input.actions) {
+        if (action.actionContext) this._perception.assertActionContext(input.sessionRef, action.actionContext, action);
+      }
     }
     const output = await this.pageBridge.dispatch(operation, input, {
       signal,
@@ -179,6 +189,7 @@ export class FrameSpace {
       if (action?.verify !== undefined) {
         throw frameError("APX_PROFILE_UNSUPPORTED", "FrameSpace does not provide Action Evidence");
       }
+      if (action?.actionContext !== undefined) validateActionContext(action.actionContext);
       if (!action || typeof action !== "object" || Array.isArray(action)
         || !this.config.actions.includes(action.kind)) {
         throw frameError("FRAME_SPACE_PERMISSION_DENIED", `FrameSpace action is outside permission: ${action?.kind}`);

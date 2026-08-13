@@ -291,8 +291,15 @@ try {
       && perceptionGraph.entities.length > 0
       && heading.role === "heading" && heading.name === "control-ready"
       && !JSON.stringify(perceptionGraph).includes("backendNodeId"));
-  const verify = (await eyes.query({ role: "button", name: "Verify", actionable: true })).one();
-  const evidenced = await eyes.act("click", verify.locatorRef, { verify: { all: [
+  const situation = await eyes.situate({ objective: "Verify and prove the accepted state", requirements: [{
+    requirementRef: "requirement:verify", select: { role: "button", name: "Verify", actionable: true },
+    need: ["fact", "affordance"], cardinality: "one",
+  }] });
+  const verify = situation.requirement("requirement:verify").oneAffordance("click");
+  check("공개 JavaScript Eyes가 목표별 SituationCapsule과 broker capability를 반환",
+    situation.situationRef.startsWith("situation:") && situation.worldRef.startsWith("world:")
+      && verify.capabilityRef?.startsWith("capability:"));
+  const evidenced = await eyes.actAffordance(verify, { intent: "Verify the product state", verify: { all: [
     { entityAppeared: { role: "status", nameContains: "verified" } },
     { networkResponse: { method: "POST", urlPath: "/evidence", status: 200 } },
   ], withinMs: 5000 } });
@@ -334,11 +341,14 @@ try {
   const frameAttached = await frameClient.attachSession(frameOpened.output.targetRef);
   const frameEyes = frameClient.perception(frameAttached.output);
   const frameHeading = (await frameEyes.query({ role: "heading", name: "control-ready" })).one();
+  const frameSituation = await frameEyes.situate({ requirements: [{ requirementRef: "requirement:heading",
+    select: { role: "heading", name: "control-ready" }, need: ["fact"], cardinality: "one" }] });
   const frameSpace = await frameClient.inspectSpace();
   const framePass = frameHeading.name === "control-ready"
       && frameSpace.output.space.providerKind === "frame"
       && frameSpace.output.perception.level === "L3"
-      && frameSpace.output.perception.visualModes.join(",") === "off";
+      && frameSpace.output.perception.visualModes.join(",") === "off"
+      && frameSituation.requirement("requirement:heading").state === "satisfied";
   check("같은 JavaScript Eyes가 FrameSpace L3 경계에서 작동", framePass,
     framePass ? "" : JSON.stringify({ heading: frameHeading.value, inspect: frameSpace.output }));
   await frameClient.detachSession(frameAttached.output);

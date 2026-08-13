@@ -1,7 +1,8 @@
 # APX 1.0 Product Contract
 
 APX, Agent Perception Exchange, is the provider-neutral data contract behind PyProc Eyes. It turns browser
-facts into a bounded, temporal graph and keeps observation identity separate from action authority. This
+facts into either a bounded temporal graph or a goal-specific SituationCapsule, while keeping observation
+identity separate from action authority. This
 document describes the shipped 1.0 product contract. It is not a standards-body publication.
 
 The normative implementation artifacts are:
@@ -10,9 +11,14 @@ The normative implementation artifacts are:
 - [APX Web schema](../../../scripts/perception/schemas/apxWebSchema.json)
 - [APX Action schema](../../../scripts/perception/schemas/apxActionSchema.json)
 - [APX Visual schema](../../../scripts/perception/schemas/apxVisualSchema.json)
+- [APX Focus schema](../../../scripts/perception/schemas/apxFocusSchema.json)
+- [APX Situation schema](../../../scripts/perception/schemas/apxSituationSchema.json)
 - [Full observation example](examples/fullObservation.json)
 - [Delta observation example](examples/deltaObservation.json)
 - [Action evidence example](examples/actionEvidence.json)
+- [Unknown situation example](examples/situationUnknown.json)
+- [Conflicted situation example](examples/situationConflict.json)
+- [Proof-carrying action example](examples/proofCarryingAction.json)
 
 ## Product definition
 
@@ -25,6 +31,7 @@ semantic facts
   + temporal identity and delta
   + pixels only for unresolved regions
   + post-action evidence
+  + typed requirements, explicit unknowns, and broker capabilities
 ```
 
 Sensors stay behind `PerceptionSpace`. A provider can use CDP, a cooperative frame bridge, or another driver
@@ -44,6 +51,42 @@ An APX 1.0 implementation MUST preserve these rules:
 8. Truncation MUST be reported through `budget.truncated` and `budget.omitted`.
 9. Visual inference MUST NOT expand origin, action, or risk permission.
 10. Replay MUST return recorded terminals without sending the recorded effect again.
+11. A required answer MUST NOT be omitted to fit a byte budget.
+12. Page-reported and inferred capabilities MUST NOT become broker authorization.
+
+## Representations
+
+`apx.graph` is the complete bounded observation contract. Its 1.0 byte meaning is unchanged. `apx.situation`
+is an opt-in projection over an atomically reconciled world. It answers typed `focus.requirements`, preserves
+`known`, `conflicted`, `unknown`, and `stale` truth states, and returns only the facts, changes, unknowns, and
+affordances needed for those requirements.
+
+```json
+{
+  "representation": "apx.situation",
+  "focus": {
+    "objective": "Submit and prove acceptance",
+    "requirements": [{
+      "requirementRef": "requirement:submit",
+      "select": { "role": "button", "name": "Submit order" },
+      "need": ["fact", "affordance"],
+      "cardinality": "one"
+    }]
+  },
+  "visual": { "mode": "auto" },
+  "budget": { "maxEntities": 120, "maxRelations": 300, "maxBytes": 65536 }
+}
+```
+
+`objective` is descriptive content. It is never an instruction channel or permission source. Typed requirements
+alone control deterministic projection. A cardinality conflict stays conflicted and emits no authorized
+affordance. Sensitive semantic values are represented by redacted attestations rather than exported values.
+
+The four affordance kinds are `observed`, `derived`, `reported`, and `authorized`. Only `authorized` carries a
+broker-issued `capabilityRef`. The capability binds the situation, world, session, target, document epoch,
+action kind, locator, risk, destination, and expiry. `actionContext` re-presents those bindings immediately
+before an effect. A stale or mismatched binding fails with `APX_CAPABILITY_STALE`, `outcome: "notSent"`, and no
+provider call.
 
 ## Observation lifecycle
 
@@ -160,7 +203,8 @@ sandboxed. APX does not attach to a person's default browser profile and does no
 
 ## Compatibility
 
-Calls without `representation: "apx.graph"` retain the existing legacy accessibility-list result. APX adds no
+Calls without `representation: "apx.graph"` or `representation: "apx.situation"` retain the existing legacy
+accessibility-list result. APX adds no
 npm root export and no new Control Protocol operation. MCP and the Python SDK adapt the same operation catalog.
 The public compatibility and policy boundaries remain documented in the
 [browser automation guide](../../usage/browserAutomation.md).

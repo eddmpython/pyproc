@@ -169,10 +169,30 @@ try {
       && apxImages.length >= 1
       && !apxResponse.result.content[0].text.includes("dataBase64")
       && !JSON.stringify(apx).includes("backendNodeId"));
+  const situation = toolText(await callTool("browserObserve", {
+    sessionRef,
+    expectedRisk: "read",
+    representation: "apx.situation",
+    focus: { objective: "Verify and prove the accepted state", requirements: [{
+      requirementRef: "requirement:verify", select: { role: "button", name: "Verify", actionable: true },
+      need: ["fact", "affordance"], cardinality: "one",
+    }] },
+    visual: { mode: "off" },
+    budget: { maxEntities: 80, maxRelations: 160, maxBytes: 131072 },
+  }));
+  const verifyAffordance = situation.affordances.find((entry) =>
+    entry.kind === "authorized" && entry.requirementRef === "requirement:verify" && entry.action === "click");
+  check("설치 MCP가 같은 browserObserve에서 SituationCapsule과 broker capability를 반환",
+    situation.situationRef?.startsWith("situation:") && situation.worldRef?.startsWith("world:")
+      && verifyAffordance?.capabilityRef?.startsWith("capability:")
+      && situation.visualProbes === undefined);
 
   const evidenced = toolText(await callTool("browserAct", {
     sessionRef,
-    actions: [{ kind: "click", locatorRef: verifyEntity.locatorRef, expectedRisk: "externalEffect",
+    actions: [{ kind: "click", locatorRef: verifyAffordance.locatorRef, expectedRisk: "externalEffect",
+      actionContext: { intent: "Verify the installed product", situationRef: situation.situationRef,
+        worldRef: situation.worldRef, capabilityRef: verifyAffordance.capabilityRef,
+        expectedTransition: verifyAffordance.expectedTransition },
       verify: { all: [
         { entityAppeared: { role: "status", nameContains: "verified" } },
         { networkResponse: { method: "POST", urlPath: "/evidence", status: 200 } },

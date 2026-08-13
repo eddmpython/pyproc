@@ -195,6 +195,20 @@ class PerceptionFixtureClient:
 
     def observe(self, sessionRef, options, timeout=None):
         self.calls.append(("observe", sessionRef, options, timeout))
+        if options.get("representation") == "apx.situation":
+            return ControlResult({"protocol": "apx", "representation": "apx.situation",
+                                  "situationRef": "situation:" + "a" * 64,
+                                  "worldRef": "world:" + "b" * 64,
+                                  "facts": [], "unknowns": [],
+                                  "requirements": [{"requirementRef": "requirement:save", "state": "satisfied",
+                                                    "claimRefs": []}],
+                                  "affordances": [{"kind": "authorized", "action": "click",
+                                                   "requirementRef": "requirement:save",
+                                                   "locatorRef": "locator:save", "risk": "externalEffect",
+                                                   "capabilityRef": "capability:" + "c" * 64,
+                                                   "situationRef": "situation:" + "a" * 64,
+                                                   "worldRef": "world:" + "b" * 64,
+                                                   "expectedTransition": {}}]}, "observed")
         return ControlResult({"protocol": "apx", "entities": [{"entityRef": "entity:save",
                               "kind": "ui.control", "semantic": {"role": "button", "name": "Save"},
                               "interaction": {"actionable": True}, "locatorRef": "locator:save"}]}, "observed")
@@ -214,6 +228,13 @@ assert evidenced.output["actions"][0]["result"]["evidence"]["verification"]["sta
 assert perceptionFixture.calls[0][2]["representation"] == "apx.graph"
 assert perceptionFixture.calls[0][2]["expectedRisk"] == "read"
 assert perceptionFixture.calls[1][2][0]["verify"]["entityAppeared"]["role"] == "status"
+situation = eyes.situate({"requirements": [{"requirementRef": "requirement:save",
+                                            "select": {"role": "button"},
+                                            "need": ["fact", "affordance"]}]})
+saveAffordance = situation.requirement("requirement:save").oneAffordance("click")
+eyes.actAffordance(saveAffordance, intent="Save the document")
+assert perceptionFixture.calls[2][2]["representation"] == "apx.situation"
+assert perceptionFixture.calls[3][2][0]["actionContext"]["capabilityRef"].startswith("capability:")
 
 truncatedAmbiguous = None
 try:

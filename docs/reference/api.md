@@ -557,8 +557,11 @@ Stable Node.js facade for the installed Control product, typed in
 - Machine verbs: `runPython`, `saveCheckpoint`, `restoreCheckpoint`, and `reset`.
 - Automation verbs: `inspectSpace`, `listTargets`, `openTarget`, `attachSession`, `observe`, `act`, `command`,
   `detachSession`, `readArtifact`, and `deleteArtifact`.
-- `client.perception(sessionRef)` returns `PerceptionClient`, whose `observe`, `query`, `one`,
-  `explainActionability`, `whatChanged`, and evidence-backed `act` methods use APX 1.0.
+- `client.perception(sessionRef)` returns `PerceptionClient`. `observe`, `query`, `one`,
+  `explainActionability`, `whatChanged`, and evidence-backed `act` retain the APX graph path. `situate` returns
+  an immutable `SituationResult`, and `actAffordance` binds an authorized `SituationAffordance` to the effect.
+- `SituationResult`, `SituationRequirement`, `SituationFact`, `SituationAffordance`, and `SituationUnknown`
+  are typed immutable views over the canonical `apx.situation` wire object. They add no Control operation.
 - `requestAsync` returns a `ControlRequest` with the request ID, terminal Promise, explicit cancel, and an
   effect-safe deadline wait. `ControlRemoteError` preserves `code`, `outcome`, `retryable`, and `details`.
 - `close()` drains the owned product process under a bounded shutdown deadline.

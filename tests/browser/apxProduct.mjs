@@ -99,10 +99,30 @@ try {
   check("raw driver ID 비노출", !serialized.includes("backendNodeId") && !serialized.includes("DOMSnapshot")
     && !serialized.includes('"nativeRef"'));
 
+  const situationRun = await automation.observe(sessionRef, {
+    representation: "apx.situation",
+    focus: { objective: "Save and prove completion", requirements: [{
+      requirementRef: "requirement:save", select: { role: "button", name: "저장", actionable: true },
+      need: ["fact", "affordance"], cardinality: "one",
+    }] },
+    visual: { mode: "off" },
+    budget: { maxEntities: 120, maxRelations: 300, maxBytes: 256 * 1024 },
+  });
+  const situation = situationRun.result;
+  const saveAffordance = situation.affordances.find((entry) =>
+    entry.kind === "authorized" && entry.requirementRef === "requirement:save" && entry.action === "click");
+  check("goal-specific SituationCapsule과 broker capability",
+    situation.representation === "apx.situation" && situation.requirements[0].state === "satisfied"
+      && saveAffordance?.capabilityRef?.startsWith("capability:")
+      && !situation.visualProbes && JSON.stringify(situation).length < JSON.stringify(first).length);
+
   const acted = await automation.run(sessionRef, [{
     kind: "click",
-    locatorRef: save.locatorRef,
+    locatorRef: saveAffordance.locatorRef,
     expectedRisk: "externalEffect",
+    actionContext: { intent: "Save the prepared order", situationRef: situation.situationRef,
+      worldRef: situation.worldRef, capabilityRef: saveAffordance.capabilityRef,
+      expectedTransition: saveAffordance.expectedTransition },
     verify: { all: [
       { entityAppeared: { role: "status", nameContains: "저장 완료" } },
       { networkResponse: { method: "POST", urlPath: "/apxProbeOrder", status: 201 } },
@@ -125,6 +145,23 @@ try {
     && second.delta.changed.some((entry) => entry.entityRef === save.entityRef)
     && changedSave.locatorRef !== save.locatorRef,
   `${second.delta?.changed?.length || 0} changed`);
+
+  const afterSituation = (await automation.observe(sessionRef, {
+    representation: "apx.situation",
+    focus: { requirements: [{ requirementRef: "requirement:status", select: { role: "status" },
+      need: ["fact"], cardinality: "oneOrMore" }] },
+    visual: { mode: "off" },
+    budget: { maxEntities: 120, maxRelations: 300, maxBytes: 256 * 1024 },
+  })).result;
+  let staleCapability = null;
+  try {
+    await automation.run(sessionRef, [{ kind: "click", locatorRef: saveAffordance.locatorRef,
+      expectedRisk: "externalEffect", actionContext: { situationRef: situation.situationRef,
+        worldRef: situation.worldRef, capabilityRef: saveAffordance.capabilityRef } }]);
+  } catch (error) { staleCapability = error; }
+  check("changed world가 old capability를 provider effect 전에 거부",
+    afterSituation.worldRef !== situation.worldRef && staleCapability?.code === "APX_CAPABILITY_STALE"
+      && staleCapability?.outcome === "notSent");
 
   await broker.detach(sessionRef);
 } catch (error) {

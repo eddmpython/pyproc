@@ -46,9 +46,10 @@ function sensorEntity(nativeRef, { role, name, kind = "ui.control", disabled = f
 export async function assertPerceptionSpaceContract() {
   const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
   const workflow = await readFile(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
-  assert(packageJson.scripts?.["test:apx"] === "node tests/browser/apxProduct.mjs",
+  assert(packageJson.scripts?.["test:apx"] === "node tests/browser/apxProduct.mjs"
+    && packageJson.scripts?.["test:perception-computer"] === "node tests/browser/apxProduct.mjs",
     "APX 정식 제품 게이트 npm script가 고정되지 않았다");
-  assert((workflow.match(/npm run test:apx/g) || []).length === 2,
+  assert((workflow.match(/npm run test:perception-computer/g) || []).length === 2,
     "APX 정식 제품 게이트가 Chrome과 Edge CI에 모두 배선되지 않았다");
   const schemas = await Promise.all(["apxCore", "apxWeb", "apxAction", "apxVisual"].map(async (name) =>
     JSON.parse(await readFile(new URL(`../../scripts/perception/schemas/${name}Schema.json`, import.meta.url), "utf8"))));
@@ -59,9 +60,14 @@ export async function assertPerceptionSpaceContract() {
   const fullExample = JSON.parse(await readFile(new URL("fullObservation.json", exampleRoot), "utf8"));
   const deltaExample = JSON.parse(await readFile(new URL("deltaObservation.json", exampleRoot), "utf8"));
   const evidenceExample = JSON.parse(await readFile(new URL("actionEvidence.json", exampleRoot), "utf8"));
+  const situationUnknown = JSON.parse(await readFile(new URL("situationUnknown.json", exampleRoot), "utf8"));
+  const situationConflict = JSON.parse(await readFile(new URL("situationConflict.json", exampleRoot), "utf8"));
   assertApxObservation(fullExample);
   assertApxObservation(deltaExample);
   assertActionEvidence(evidenceExample);
+  const { assertSituationCapsule } = await import("../../scripts/perception/situationCatalog.js");
+  assertSituationCapsule(situationUnknown);
+  assertSituationCapsule(situationConflict);
   const frames = [
     [
       sensorEntity("native:11", { role: "button", name: "저장" }),

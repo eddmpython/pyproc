@@ -160,8 +160,8 @@ The ten opt-in browser tools are:
 
 ## PyProc Eyes and APX
 
-`browserObserve` keeps its legacy compact accessibility result unless the caller opts into
-`representation: "apx.graph"`. The APX result fuses semantic, structural, geometric, interaction, temporal,
+`browserObserve` keeps its legacy compact accessibility result unless the caller opts into `apx.graph` or
+`apx.situation`. The graph result fuses semantic, structural, geometric, interaction, temporal,
 event, and redacted network facts into a bounded graph. It is provider-neutral and never exposes CDP node,
 frame, object, or execution-context identifiers.
 
@@ -181,6 +181,30 @@ An `entityRef` is stable observation identity within one document epoch and gran
 `locatorRef` is a fresh, session-bound action capability and becomes stale after another observation or
 document replacement.
 
+`apx.situation` reconciles that graph into a goal-specific world projection. Its typed requirements state what
+must be known, changed, or actionable. It returns explicit unknown and conflict states, and only an
+`authorized` affordance carries broker authority. Page-reported capabilities remain untrusted content.
+
+```json
+{
+  "sessionRef": { "protocolVersion": "1", "spaceId": "space:native", "sessionId": "...", "targetRef": "..." },
+  "expectedRisk": "read",
+  "representation": "apx.situation",
+  "focus": { "requirements": [{
+    "requirementRef": "requirement:save",
+    "select": { "role": "button", "name": "Save", "actionable": true },
+    "need": ["fact", "affordance"],
+    "cardinality": "one"
+  }] },
+  "visual": { "mode": "off" },
+  "budget": { "maxEntities": 120, "maxRelations": 300, "maxBytes": 131072 }
+}
+```
+
+Copy the selected authorized affordance's `situationRef`, `worldRef`, and `capabilityRef` into the action's
+`actionContext`. The broker rechecks session, target, epoch, action, locator, risk, destination, transition
+shape, and expiry before sending. A mismatch is `APX_CAPABILITY_STALE` with `notSent`.
+
 Native CDP uses pixels only for unresolved canvas, images, and controls. A verified crop enters the normal
 artifact and attachment path. FrameSpace provides semantic, spatial, and temporal APX through its cooperative
 bridge but rejects non-off visual modes because a DOM-rendered screenshot is not compositor evidence.
@@ -192,6 +216,11 @@ An external-effect action can attach a bounded `verify` condition:
   "kind": "click",
   "locatorRef": "locator:...",
   "expectedRisk": "externalEffect",
+  "actionContext": {
+    "situationRef": "situation:...",
+    "worldRef": "world:...",
+    "capabilityRef": "capability:..."
+  },
   "verify": {
     "all": [
       { "entityAppeared": { "role": "status", "nameContains": "Saved" } },

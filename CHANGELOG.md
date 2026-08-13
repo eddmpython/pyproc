@@ -12,6 +12,23 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **PyProc Eyes now returns task-conditioned situations.** The existing `automation.observe` operation accepts
+  `representation: "apx.situation"` and typed focus requirements. It returns a canonical `SituationCapsule`
+  with explicit known, conflicted, unknown, and stale claims, bounded probes, and broker-issued affordances.
+- **Proof-carrying actions bind authority to observed state.** JavaScript and Python clients expose `situate()`
+  and `actAffordance()`. An `actionContext` binds the capability to its session, situation, world, document
+  epoch, action, risk, destination, expiry, and expected transition, and stale bindings fail before the effect.
+
+### Compatibility
+
+- `apx.graph` 1.0 and the Control operation set are unchanged. The situation representation is opt-in, adds no
+  root export or bin, and replays through the existing canonical recording contract without live provider calls.
+
+한국어 요약: 기존 `automation.observe`에 opt-in `apx.situation` 표현을 추가했다. typed focus가 최소 충분
+상황과 명시적 불확실성을 만들고, broker가 발급한 capability만 현재 world와 epoch에 묶여 effect에 쓰인다.
+
 ## 0.0.21 - 2026-08-13
 
 ### Added

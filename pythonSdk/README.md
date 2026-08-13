@@ -26,9 +26,9 @@ with PyProcClient.start("pyproc-mcp.json") as client:
     print(result.output["value"])
 ```
 
-An automation-enabled manifest also exposes PyProc Eyes through
-`client.perception(sessionRef)`: bounded APX semantic, spatial, and temporal queries plus evidence-backed
-actions, without a JavaScript application layer or a raw CDP handle.
+An automation-enabled manifest also exposes PyProc Eyes through `client.perception(sessionRef)`: bounded APX
+graph queries, goal-specific `situate(...)`, broker-bound `actAffordance(...)`, and evidence-backed actions,
+without a JavaScript application layer or a raw CDP handle.
 
 The npm `pyproc` package and its engine assets are separate installation prerequisites. See the repository
 [Python SDK guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/pythonSdk.md) for setup,

@@ -97,6 +97,78 @@ export class PerceptionQueryResult {
   one(): PerceptionEntity;
 }
 
+export class SituationFact {
+  private constructor();
+  readonly value: Readonly<Record<string, unknown>>;
+  readonly claimRef: string;
+  readonly subjectRef: string;
+  readonly predicate: string;
+  readonly state: string;
+}
+
+export class SituationAffordance {
+  private constructor();
+  readonly value: Readonly<Record<string, unknown>>;
+  readonly kind: string;
+  readonly action: string;
+  readonly entityRef: string | null;
+  readonly locatorRef: string | null;
+  readonly capabilityRef: string | null;
+  readonly risk: string | null;
+}
+
+export class SituationUnknown {
+  private constructor();
+  readonly value: Readonly<Record<string, unknown>>;
+  readonly unknownRef: string;
+  readonly requirementRef: string;
+  readonly reason: string;
+}
+
+export class SituationRequirement {
+  private constructor();
+  readonly value: Readonly<Record<string, unknown>>;
+  readonly requirementRef: string;
+  readonly state: string;
+  readonly facts: readonly SituationFact[];
+  readonly affordances: readonly SituationAffordance[];
+  readonly unknowns: readonly SituationUnknown[];
+  oneAffordance(action: string): SituationAffordance;
+}
+
+export class SituationResult {
+  private constructor();
+  readonly result: ControlResult<Readonly<Record<string, unknown>>>;
+  readonly situation: Readonly<Record<string, unknown>>;
+  readonly situationRef: string;
+  readonly worldRef: string;
+  readonly facts: readonly SituationFact[];
+  readonly affordances: readonly SituationAffordance[];
+  readonly unknowns: readonly SituationUnknown[];
+  readonly requirements: readonly SituationRequirement[];
+  requirement(requirementRef: string): SituationRequirement;
+}
+
+export interface SituationFocus {
+  readonly objective?: string;
+  readonly requirements: readonly Readonly<{
+    requirementRef: string;
+    select: Readonly<Record<string, unknown>>;
+    need: readonly ("fact" | "affordance" | "change")[];
+    cardinality?: "one" | "oneOrMore" | "zeroOrMore";
+  }>[];
+  readonly changedSince?: string;
+  readonly freshness?: Readonly<{ mode: "live" | "recorded"; maxAgeMs: number }>;
+}
+
+export interface SituationOptions {
+  readonly sessionRef?: ControlSessionRef;
+  readonly channels?: readonly string[];
+  readonly visual?: Readonly<Record<string, unknown>>;
+  readonly budget?: Readonly<Record<string, unknown>>;
+  readonly profile?: readonly string[];
+}
+
 export interface PerceptionObserveOptions {
   readonly sessionRef?: ControlSessionRef;
   readonly since?: string;
@@ -124,8 +196,12 @@ export class PerceptionClient {
   observe(options?: PerceptionObserveOptions, requestOptions?: ControlRequestOptions):
     Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   query(query?: PerceptionQueryOptions, requestOptions?: ControlRequestOptions): Promise<PerceptionQueryResult>;
+  situate(focus: SituationFocus, options?: SituationOptions,
+    requestOptions?: ControlRequestOptions): Promise<SituationResult>;
   act(kind: string, locatorRef: string, options?: Readonly<Record<string, unknown>>,
     requestOptions?: ControlRequestOptions): Promise<ControlResult>;
+  actAffordance(affordance: SituationAffordance | Readonly<Record<string, unknown>>,
+    options?: Readonly<Record<string, unknown>>, requestOptions?: ControlRequestOptions): Promise<ControlResult>;
   explainActionability(entityRef: string, options?: Readonly<{ sessionRef?: ControlSessionRef } & ControlRequestOptions>):
     Promise<PerceptionEntity>;
   whatChanged(since: string, options?: PerceptionObserveOptions,

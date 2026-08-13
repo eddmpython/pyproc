@@ -81,6 +81,164 @@ class PerceptionQueryResult:
         return matches[0]
 
 
+@dataclass(frozen=True, slots=True)
+class SituationFact:
+    """One epistemic fact in a SituationCapsule."""
+
+    value: Mapping[str, Any]
+
+    @property
+    def claimRef(self) -> str:
+        return str(self.value.get("claimRef") or "")
+
+    @property
+    def subjectRef(self) -> str:
+        return str(self.value.get("subjectRef") or "")
+
+    @property
+    def predicate(self) -> str:
+        return str(self.value.get("predicate") or "")
+
+    @property
+    def state(self) -> str:
+        return str(self.value.get("state") or "unknown")
+
+
+@dataclass(frozen=True, slots=True)
+class SituationAffordance:
+    """Observed or broker-authorized action possibility."""
+
+    value: Mapping[str, Any]
+
+    @property
+    def kind(self) -> str:
+        return str(self.value.get("kind") or "")
+
+    @property
+    def action(self) -> str:
+        return str(self.value.get("action") or "")
+
+    @property
+    def locatorRef(self) -> str | None:
+        value = self.value.get("locatorRef")
+        return str(value) if value is not None else None
+
+    @property
+    def capabilityRef(self) -> str | None:
+        value = self.value.get("capabilityRef")
+        return str(value) if value is not None else None
+
+    @property
+    def risk(self) -> str | None:
+        value = self.value.get("risk")
+        return str(value) if value is not None else None
+
+
+@dataclass(frozen=True, slots=True)
+class SituationUnknown:
+    """One explicit reason the requested situation could not be settled."""
+
+    value: Mapping[str, Any]
+
+    @property
+    def unknownRef(self) -> str:
+        return str(self.value.get("unknownRef") or "")
+
+    @property
+    def requirementRef(self) -> str:
+        return str(self.value.get("requirementRef") or "")
+
+    @property
+    def reason(self) -> str:
+        return str(self.value.get("reason") or "")
+
+
+@dataclass(frozen=True, slots=True)
+class SituationRequirement:
+    """A typed requirement and its projected facts, affordances, and unknowns."""
+
+    value: Mapping[str, Any]
+    facts: tuple[SituationFact, ...]
+    affordances: tuple[SituationAffordance, ...]
+    unknowns: tuple[SituationUnknown, ...]
+
+    @property
+    def requirementRef(self) -> str:
+        return str(self.value.get("requirementRef") or "")
+
+    @property
+    def state(self) -> str:
+        return str(self.value.get("state") or "unknown")
+
+    def oneAffordance(self, action: str) -> SituationAffordance:
+        matches = tuple(item for item in self.affordances
+                        if item.kind == "authorized" and item.action == action)
+        if len(matches) != 1:
+            raise LookupError(
+                f"APX requirement expected one authorized {action} affordance, received {len(matches)}"
+            )
+        return matches[0]
+
+
+@dataclass(frozen=True, slots=True)
+class SituationResult:
+    """Immutable ergonomic view over one canonical SituationCapsule terminal."""
+
+    result: ControlResult
+
+    @property
+    def situation(self) -> Mapping[str, Any]:
+        if not isinstance(self.result.output, Mapping) or self.result.output.get("representation") != "apx.situation":
+            raise TypeError("APX situation output is required")
+        return self.result.output
+
+    @property
+    def situationRef(self) -> str:
+        return str(self.situation.get("situationRef") or "")
+
+    @property
+    def worldRef(self) -> str:
+        return str(self.situation.get("worldRef") or "")
+
+    @property
+    def facts(self) -> tuple[SituationFact, ...]:
+        return tuple(SituationFact(value) for value in self.situation.get("facts", [])
+                     if isinstance(value, Mapping))
+
+    @property
+    def affordances(self) -> tuple[SituationAffordance, ...]:
+        return tuple(SituationAffordance(value) for value in self.situation.get("affordances", [])
+                     if isinstance(value, Mapping))
+
+    @property
+    def unknowns(self) -> tuple[SituationUnknown, ...]:
+        return tuple(SituationUnknown(value) for value in self.situation.get("unknowns", [])
+                     if isinstance(value, Mapping))
+
+    @property
+    def requirements(self) -> tuple[SituationRequirement, ...]:
+        facts = {item.claimRef: item for item in self.facts}
+        output = []
+        for value in self.situation.get("requirements", []):
+            if not isinstance(value, Mapping):
+                continue
+            requirementRef = str(value.get("requirementRef") or "")
+            output.append(SituationRequirement(
+                value,
+                tuple(facts[ref] for ref in value.get("claimRefs", []) if ref in facts),
+                tuple(item for item in self.affordances
+                      if item.value.get("requirementRef") == requirementRef),
+                tuple(item for item in self.unknowns if item.requirementRef == requirementRef),
+            ))
+        return tuple(output)
+
+    def requirement(self, requirementRef: str) -> SituationRequirement:
+        matches = tuple(item for item in self.requirements if item.requirementRef == requirementRef)
+        if len(matches) != 1:
+            raise LookupError(f"APX situation requirement is not unique: {requirementRef}")
+        return matches[0]
+
+
 class PerceptionClient:
     """Session-bound APX observe, query, and evidence-backed action facade."""
 
@@ -133,10 +291,58 @@ class PerceptionClient:
                               budget=budget, query=query, timeout=timeout)
         return PerceptionQueryResult(result)
 
+    def situate(self, focus: Mapping[str, Any], *, sessionRef: Mapping[str, Any] | None = None,
+                channels: Sequence[str] | None = None, visual: Mapping[str, Any] | None = None,
+                budget: Mapping[str, Any] | None = None, profile: Sequence[str] | None = None,
+                timeout: float | None = None) -> SituationResult:
+        options: dict[str, Any] = {
+            "expectedRisk": "read",
+            "representation": "apx.situation",
+            "focus": plainMapping(focus, "focus"),
+        }
+        if channels is not None:
+            options["channels"] = list(channels)
+        if visual is not None:
+            options["visual"] = plainMapping(visual, "visual")
+        if budget is not None:
+            options["budget"] = plainMapping(budget, "budget")
+        if profile is not None:
+            options["profile"] = list(profile)
+        return SituationResult(self.client.observe(self._session(sessionRef), options, timeout=timeout))
+
     def act(self, kind: str, locatorRef: str, *, sessionRef: Mapping[str, Any] | None = None,
             expectedRisk: str = "externalEffect", verify: Mapping[str, Any] | None = None,
             timeout: float | None = None, **options: Any) -> ControlResult:
         action = {"kind": kind, "locatorRef": locatorRef, "expectedRisk": expectedRisk, **options}
+        if verify is not None:
+            action["verify"] = plainMapping(verify, "verify")
+        return self.client.act(self._session(sessionRef), [action], timeout=timeout)
+
+    def actAffordance(self, affordance: SituationAffordance | Mapping[str, Any], *,
+                      sessionRef: Mapping[str, Any] | None = None,
+                      verify: Mapping[str, Any] | None = None, intent: str | None = None,
+                      expectedTransition: Mapping[str, Any] | None = None,
+                      timeout: float | None = None, **options: Any) -> ControlResult:
+        selected = affordance if isinstance(affordance, SituationAffordance) else SituationAffordance(
+            plainMapping(affordance, "affordance")
+        )
+        if selected.kind != "authorized" or selected.locatorRef is None or selected.capabilityRef is None:
+            raise TypeError("APX action requires an authorized SituationAffordance")
+        reserved = {"kind", "locatorRef", "expectedRisk", "actionContext"}.intersection(options)
+        if reserved:
+            raise TypeError("APX affordance action binding cannot be overridden")
+        actionContext: dict[str, Any] = {
+            "situationRef": selected.value.get("situationRef"),
+            "worldRef": selected.value.get("worldRef"),
+            "capabilityRef": selected.capabilityRef,
+        }
+        if intent is not None:
+            actionContext["intent"] = intent
+        transition = expectedTransition if expectedTransition is not None else selected.value.get("expectedTransition")
+        if isinstance(transition, Mapping):
+            actionContext["expectedTransition"] = dict(transition)
+        action = {"kind": selected.action, "locatorRef": selected.locatorRef,
+                  "expectedRisk": selected.risk, "actionContext": actionContext, **options}
         if verify is not None:
             action["verify"] = plainMapping(verify, "verify")
         return self.client.act(self._session(sessionRef), [action], timeout=timeout)

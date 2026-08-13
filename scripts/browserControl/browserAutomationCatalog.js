@@ -20,6 +20,8 @@ import {
   perceptionOptionsFromInput,
   validatePerceptionOptions,
 } from "../perception/apxCatalog.js";
+import { APX_ACTION_CONTEXT_SCHEMA, APX_SITUATION_REPRESENTATION,
+  validateActionContext } from "../perception/situationCatalog.js";
 import { validatePostcondition } from "../perception/postconditionVerifier.js";
 
 export const BROWSER_AUTOMATION_MAX_ACTIONS = 16;
@@ -86,7 +88,8 @@ function actionSpec({ risk, description, methods, trustedReadMethods = [], event
       properties: Object.freeze({
         kind: { type: "string" },
         expectedRisk: { type: "string", const: risk },
-        ...(risk === "externalEffect" ? { verify: APX_POSTCONDITION_SCHEMA } : {}),
+        ...(risk === "externalEffect" ? { verify: APX_POSTCONDITION_SCHEMA,
+          actionContext: APX_ACTION_CONTEXT_SCHEMA } : {}),
         ...properties,
       }),
       required: Object.freeze(["kind", "expectedRisk", ...required]),
@@ -417,9 +420,9 @@ export function validateBrowserAutomationAction(action) {
       if (action[key] !== undefined && typeof action[key] !== "boolean") fail(`snapshot.${key} must be boolean`);
     }
     if (action.maxEvents !== undefined) validateInteger(action.maxEvents, "snapshot.maxEvents", 1, BROWSER_OBSERVATION_MAX_EVENTS);
-    const apxFields = ["profile", "since", "query", "visual", "budget", "channels"]
+    const apxFields = ["profile", "since", "query", "focus", "visual", "budget", "channels"]
       .filter((key) => action[key] !== undefined);
-    if (action.representation === APX_REPRESENTATION) {
+    if ([APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(action.representation)) {
       for (const key of ["mode", "maxNodes", "includeScreenshot", "includeConsole", "includeNetwork", "maxEvents"]) {
         if (action[key] !== undefined) fail(`APX snapshot does not accept legacy option ${key}`);
       }
@@ -430,6 +433,7 @@ export function validateBrowserAutomationAction(action) {
       fail(`legacy snapshot does not accept APX option ${apxFields[0]}`);
     }
   }
+  if (action.actionContext !== undefined) validateActionContext(action.actionContext);
   if (action.kind === "screenshot") {
     if (action.format !== undefined && !BROWSER_SCREENSHOT_FORMATS.includes(action.format)) {
       fail("screenshot.format is invalid");

@@ -1,0 +1,15 @@
+{
+  "kind": "click",
+  "locatorRef": "locator:7:submit",
+  "expectedRisk": "externalEffect",
+  "actionContext": {
+    "intent": "Submit the prepared order",
+    "situationRef": "situation:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "worldRef": "world:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "capabilityRef": "capability:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "expectedTransition": {}
+  },
+  "verify": {
+    "entityAppeared": { "role": "status", "nameContains": "Accepted" }
+  }
+}

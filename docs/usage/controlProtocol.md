@@ -77,7 +77,7 @@ When the manifest enables browser authority, ten more operations appear:
 | `automation.target.list` | List allowed targets |
 | `automation.target.open` | Open an allowed URL |
 | `automation.session.attach` | Create an opaque controlled session |
-| `automation.observe` | Return a legacy semantic observation or opt-in APX graph |
+| `automation.observe` | Return a legacy semantic observation, APX graph, or goal-specific SituationCapsule |
 | `automation.act` | Run an ordered high-level action pipeline |
 | `automation.command` | Send one separately allowlisted low-level command |
 | `automation.session.detach` | Drop session-owned state and detach |
@@ -88,9 +88,12 @@ The operation names, error outcomes, permission checks, action catalog, and arti
 host. The MCP adapter only maps tool names and native image content. This prevents the native and MCP paths
 from assigning different meaning to the same action.
 
-APX adds no operation. Pass `representation: "apx.graph"` to `automation.observe` for the provider-neutral
-semantic, spatial, temporal, and visual-on-demand graph. Pixel probes use the existing verified attachment
-framing. An action `verify` condition returns `ActionEvidence` inside the normal `automation.act` terminal.
+APX adds no operation. Pass `representation: "apx.graph"` for a provider-neutral graph or
+`representation: "apx.situation"` with typed `focus.requirements` for a SituationCapsule.
+An authorized affordance can be bound to `automation.act` through `actionContext`; stale bindings fail before
+the provider is called. The graph combines semantic, spatial, temporal, and visual-on-demand facts. Pixel probes
+use the existing verified attachment framing. An action `verify` condition returns `ActionEvidence` inside the
+normal `automation.act` terminal.
 The [APX 1.0 contract](../specs/apx/README.md) defines the envelope, provenance, budgets, and verification states.
 
 The optional request `spaceId` is a fence, not an alternate router. Omit it to use the configured machine or

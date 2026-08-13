@@ -197,6 +197,7 @@ npm run bench:compare -- .tmp/pyproc-s1l.json .tmp/webvm-s1l.json --out .tmp/s1l
 npm run test:mcp
 npm run test:mcp-product
 npm run test:apx
+npm run test:perception-computer
 npm run test:browser-control
 npm run test:browser-control-stress
 ```
@@ -204,9 +205,11 @@ npm run test:browser-control-stress
 `test:mcp`는 browser opt-in이 없을 때 Python 도구 네 개만 보이고 remote-debugging authority가 열리지
 않는 기본 회귀다. `test:mcp-product`는 npm pack/install한 tarball의 stable bin과 versioned config를
 검증하고, 설치본만으로 Python persistence, 첫 탐색 trace, ordered PNG/JPEG/WebP native image,
-artifact chunk 재조립, digest와 delete를 완주한다. `test:apx`는 Native CDP의 semantic-spatial fusion,
-occlusion, stable identity, delta, pixel-on-demand, raw identifier 비노출, DOM과 network postcondition을
-한 실제 browser 여정으로 고정한다. `test:browser-control`의 71개 단정은 별도 automation
+artifact chunk 재조립, digest와 delete를 완주한다. `test:apx`와 `test:perception-computer`는 같은 Native
+CDP 제품 gate를 두 이름으로 고정한다. graph 1.0의 semantic-spatial fusion, occlusion, stable identity,
+delta, pixel-on-demand, raw identifier 비노출, DOM과 network postcondition에 더해 목표 조건부
+SituationCapsule, broker-issued capability, stale world의 effect 전 거부를 한 실제 browser 여정으로
+검증한다. `test:browser-control`의 71개 단정은 별도 automation
 profile에서 exact origin과 23개 action catalog, manifest viewport, 첫 탐색 trace, 8-state 의미 기반 대기,
 명시적 lazy hydration, compact accessibility snapshot, opaque locator, open shadow root, same-origin 및
 허용 cross-origin frame, strict actionability, trusted input, popup, dialog, upload, download, native drag,

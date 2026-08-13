@@ -1,6 +1,7 @@
 // frameSpaceTools.js - FrameSpace가 제공하는 MCP 이름과 strict input schema.
 import { FRAME_SPACE_ACTION_RISKS } from "./frameSpace.js";
 import { APX_OBSERVE_PROPERTIES } from "../perception/apxCatalog.js";
+import { APX_ACTION_CONTEXT_SCHEMA } from "../perception/situationCatalog.js";
 
 const TARGET_PROPERTIES = Object.freeze({
   selector: { type: "string", minLength: 1, maxLength: 2000 },
@@ -32,6 +33,7 @@ function actionSchema(name) {
   const properties = {
     kind: { type: "string", const: name },
     expectedRisk: { type: "string", const: risk },
+    ...(risk === "externalEffect" ? { actionContext: APX_ACTION_CONTEXT_SCHEMA } : {}),
   };
   const required = ["kind", "expectedRisk"];
   if (["waitFor", "click", "focus", "fill", "press", "select", "check", "uncheck", "scroll"].includes(name)) {

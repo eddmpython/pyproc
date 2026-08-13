@@ -53,8 +53,16 @@ The product UI displays:
 The cooperative tier of `enableJail(permissions)` provides mistake prevention and code-level explicitness. Hard network blocking is enforced by the browser's CSP in a context where the jail handle's `csp()` has been applied. A same-origin jail leaves a `window.parent` side channel open, while an opaque-origin jail blocks the parent at the cost of losing the SAB-based process capabilities. A product separates that tradeoff into distinct UI modes.
 
 APX `entityRef` values are observation identity only. A permission UI must not present them as authority.
-Effects require a fresh `locatorRef`, the manifest action allowlist, catalog-owned risk, and any required
-external-effect acknowledgement. Pixel probes and page text are untrusted evidence and do not widen permission.
+Effects require a fresh broker-issued capability, its bound `locatorRef`, the manifest action allowlist,
+catalog-owned risk, and any required external-effect acknowledgement. A proof-carrying `actionContext` binds
+the exact situation, world, session, document epoch, action, destination, risk, expiry, and expected transition.
+Any stale or mismatched binding is rejected before the provider receives the effect.
+
+`focus.objective` is descriptive context, not executable instruction or authority. It is preserved in Control
+input and recordings, so callers must not place secrets in it. Page text, accessibility labels, reported tools,
+pixel evidence, OCR, and model inference are untrusted claims. They may identify an uncertainty or propose a
+probe, but they never widen origin, action, destination, or risk permission. A page-reported capability remains
+`reported` until the broker independently issues an `authorized` affordance under the current manifest.
 
 ## Currently pinned surfaces
 
@@ -77,3 +85,5 @@ the surrounding permission UI are application policy and stay outside this repos
 - Never make `trust: true` the default in a general user-facing import UI.
 - Never leave only abstract wording like "safe" on the permission screen. Show the concrete hosts, disk, clipboard, workers, and resume targets.
 - Never treat an APX visual or semantic label as authorization for an effect.
+- Never treat a page-reported tool, objective, or inferred affordance as a broker-issued capability.
+- Never automatically resend an effect whose terminal is `outcomeUnknown`.

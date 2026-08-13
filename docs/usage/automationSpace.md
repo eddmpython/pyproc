@@ -66,11 +66,16 @@ declares `dom`, `target`, `screenshot`, and `artifact`, omits `automation.comman
 boundary. `RecordingSpace` wraps either live provider without changing that identity. `ReplaySpace` declares
 the recorded capabilities, consumes exactly one matching entry at a time, and owns no live browser provider.
 
-`perception` means the provider can return an APX graph through the existing `automation.observe` operation.
+`perception` means the provider can return an APX graph and SituationCapsule through the existing
+`automation.observe` operation. `PerceptionSpace` owns the session WorldModel, situation ledger, and
+broker-issued capability leases. A new world is committed only after the requested capsule passes strict
+validation, so capture, budget, schema, or artifact failure leaves no partial world or authority.
 It does not imply pixel authority. Provider inspection separately declares conformance level, supported APX
 profiles, channels, and visual modes. Native CDP reports live semantic, spatial, temporal, evidence, and
 verified crop support. FrameSpace reports semantic, spatial, and temporal facts while accepting only visual
-mode `off`. ReplaySpace returns recorded APX terminals and artifacts without pretending to be a live sensor.
+mode `off`. Its inspect result also reports `subscriptions`, `inference`, `reportedCapabilities`, and
+`nativeWebMcp` without inferring support from page content. ReplaySpace returns recorded APX terminals and
+artifacts without pretending to be a live sensor.
 The [APX draft](../specs/apx/README.md) owns this provider-neutral contract.
 
 Recording and replay details are in the [ReplaySpace guide](replaySpace.md).

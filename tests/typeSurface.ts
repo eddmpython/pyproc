@@ -38,6 +38,14 @@ async function controlSurface() {
   const eyes = client.perception({ sessionId: "session:typed" });
   const save = (await eyes.query({ role: "button", name: "Save", actionable: true })).one();
   await eyes.act("click", save.locatorRef!, { verify: { entityAppeared: { role: "status" } } });
+  const situation = await eyes.situate({ requirements: [{ requirementRef: "requirement:save",
+    select: { role: "button", name: "Save" }, need: ["fact", "affordance"], cardinality: "one" }] });
+  const saveAffordance = situation.requirement("requirement:save").oneAffordance("click");
+  await eyes.actAffordance(saveAffordance, { intent: "Save the document",
+    verify: { entityAppeared: { role: "status" } } });
+  await eyes.situate({ requirements: [{ requirementRef: "requirement:bad", select: { role: "button" },
+    // @ts-expect-error situation requirements use the closed fact, affordance, change vocabulary
+    need: ["screenshot"] }] });
   await client.close();
   return value;
 }

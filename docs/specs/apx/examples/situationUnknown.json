@@ -1,0 +1,49 @@
+{
+  "protocol": "apx",
+  "version": "1.0",
+  "representation": "apx.situation",
+  "profile": ["apx-core/1", "apx-web/1", "apx-situation/1"],
+  "situationRef": "situation:7aaafbc2513d9ed2c843d84ce5b3158b2cff76c293e758280c86c8588822be9e",
+  "worldRef": "world:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "observationRef": "observation:example_unknown",
+  "documentEpoch": 1,
+  "capturedAt": "2026-08-13T00:00:00.000Z",
+  "focus": {
+    "requirements": [{
+      "requirementRef": "requirement:submit",
+      "select": { "role": "button", "name": "Submit order" },
+      "need": ["fact", "affordance"],
+      "cardinality": "one"
+    }],
+    "freshness": { "mode": "recorded", "maxAgeMs": 0 }
+  },
+  "requirements": [{
+    "requirementRef": "requirement:submit",
+    "state": "unknown",
+    "cardinality": "one",
+    "matched": 0,
+    "entityRefs": [],
+    "claimRefs": []
+  }],
+  "facts": [],
+  "affordances": [],
+  "changes": [],
+  "unknowns": [{
+    "unknownRef": "unknown:missing_submit",
+    "requirementRef": "requirement:submit",
+    "reason": "missingFact",
+    "evidenceRefs": []
+  }],
+  "suggestedProbes": [],
+  "completeness": { "semantic": "complete", "subscriptions": false },
+  "budget": {
+    "used": { "requirements": 1, "facts": 0, "affordances": 0, "bytes": 0 },
+    "omitted": {},
+    "requiredPreserved": true
+  },
+  "integrity": {
+    "canonicalSha256": "2c08898d4ad55a162c4a7bfc2f29e023a2e8023c47b226ffef4a1b3d556bbc39",
+    "worldSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sourceGraphSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

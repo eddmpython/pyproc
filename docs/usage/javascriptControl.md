@@ -66,21 +66,28 @@ const opened = await client.openTarget("https://example.test", {
 const attached = await client.attachSession(opened.output.targetRef);
 const eyes = client.perception(attached.output);
 
-const save = (await eyes.query({
-  role: "button",
-  name: "Save",
-  actionable: true,
-})).one();
-
-const applied = await eyes.act("click", save.locatorRef, {
+const situation = await eyes.situate({
+  objective: "Save and prove completion",
+  requirements: [{
+    requirementRef: "requirement:save",
+    select: { role: "button", name: "Save", actionable: true },
+    need: ["fact", "affordance"],
+    cardinality: "one",
+  }],
+});
+const save = situation.requirement("requirement:save").oneAffordance("click");
+const applied = await eyes.actAffordance(save, {
+  intent: "Save the document",
   verify: { entityAppeared: { role: "status", nameContains: "Saved" } },
 });
 console.log(applied.output.actions[0].result.evidence.verification.state);
 ```
 
 `query().one()` checks APX `query.matched` and rejects zero or multiple matches even if the byte budget returned
-only one of several candidates. `entityRef` is observation identity;
-only the fresh `locatorRef` grants short-lived action authority. `whatChanged(observationRef)` requests a
+only one of several candidates. `entityRef` is observation identity. Only a fresh broker-issued authorized
+affordance is proof-carrying action authority. The older locator action remains available for compatibility.
+`SituationResult`, `SituationRequirement`, `SituationFact`, `SituationAffordance`, and `SituationUnknown` are
+immutable wire views. `whatChanged(observationRef)` requests a
 delta, and `explainActionability(entityRef)` returns the semantic, geometry, and interaction slice.
 
 Native CDP and FrameSpace use the same facade. Native CDP can return verified pixel-on-demand attachments at

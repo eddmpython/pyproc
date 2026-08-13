@@ -60,9 +60,14 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
 
     opened = client.openTarget(targetUrl, expectedRisk="externalEffect", waitUntil="load", timeout=60.0)
     attached = client.attachSession(opened.output["targetRef"], timeout=30.0)
-    heading = client.perception(attached.output).query(
+    eyes = client.perception(attached.output)
+    heading = eyes.query(
         role="heading", name="python-sdk-ready", timeout=30.0).one()
     assert heading.entityRef.startswith("entity:") and heading.name == "python-sdk-ready"
+    situation = eyes.situate({"requirements": [{"requirementRef": "requirement:heading",
+                              "select": {"role": "heading", "name": "python-sdk-ready"},
+                              "need": ["fact"], "cardinality": "one"}]}, timeout=30.0)
+    assert situation.requirement("requirement:heading").state == "satisfied"
     captured = client.act(attached.output, [
         {"kind": "screenshot", "format": "png", "expectedRisk": "read"}
     ], timeout=60.0)
@@ -92,4 +97,5 @@ print(json.dumps({"ok": True, "operations": 14, "checkpoint": checkpoint.output[
                   "attachmentBytes": attachment.byteLength, "cancelOutcome": cancelError.outcome,
                   "cancelTerminal": cancelError.terminal, "timeoutOutcome": timeoutError.outcome,
                   "timeoutTerminal": timeoutError.terminal, "permissionTerminal": permissionError.terminal,
-                  "successTerminal": captured.terminal, "perceptionEntityRef": heading.entityRef}))
+                  "successTerminal": captured.terminal, "perceptionEntityRef": heading.entityRef,
+                  "situationRef": situation.situationRef}))

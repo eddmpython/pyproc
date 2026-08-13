@@ -1,12 +1,13 @@
 # Agent experience initiatives
 
 pyproc을 에이전트가 바로 소비할 수 있는 제품으로 닫은 뒤, browser cognition, 변경 검증, Machine 동면,
-실행 기억, one-shot effect transaction, 협력 app state, replay world까지 확장하는 순차 기획이다. 이 문서는
-Initiative 0부터 7까지의 지속 계획 정본이고, 현재 능력의 주장은 코드와 gate에만 둔다.
+실행 기억, one-shot effect transaction, 협력 app state, replay world, proof-carrying actuation까지 확장하는
+순차 기획이다. 이 문서는 Initiative 0부터 8까지의 지속 계획 정본이고, 현재 능력의 주장은 코드와 gate에만
+둔다.
 
 ## 결정
 
-여덟 initiative를 직렬로 진행한다.
+아홉 initiative를 직렬로 진행한다.
 
 0. **Machine Entrance**를 먼저 끝낸다. exact package 설치에서 첫 Python 결과와 첫 검증된 browser
    observation까지 deep import, protocol 조립, 수작업 manifest 추측 없이 도달하게 한다.
@@ -24,13 +25,17 @@ Initiative 0부터 7까지의 지속 계획 정본이고, 현재 능력의 주�
    generation에 함께 branch, restore, adopt한다.
 7. **ReplayGraph Worlds**는 verified state node와 action edge로 여러 recorded path를 live
    effect 없이 탐색하고 deterministic oracle로 평가한다.
+8. **Proof-Carrying Motor**는 같은 absolute intent를 cooperative app, browser input, Windows
+   accessibility, OS input에서 실행하고, target binding, ControlLease, effect window, evidence를 한
+   actuation receipt로 닫고, 검증된 실행 episode에서 다음 policy revision을 effect 없이 검증한다.
 
 순서를 바꾸지 않는다. 소비 경로가 불안정한 상태에서 perception 표현을 바꾸면 제품 문제와 표현
 문제를 분리해 측정할 수 없고, 새로운 구조가 좋아도 실제 사용자가 진입할 수 없다. Perception 없이
 change verification을 만들면 screenshot runner로 퇴화하고, 실제 cold lifecycle 없이 Execution Memory를
 만들면 metadata registry에 그친다. exact session revision 없이 effect approval을 만들 수 없고, one-shot
 effect law 없이 app outbox를 열 수 없으며, paired app state 없이 ReplayGraph를 만들면 linear recording을
-갈라 붙인 자료구조일 뿐이다.
+갈라 붙인 자료구조일 뿐이다. 이 기반보다 Motor를 먼저 만들면 perception, approval, replay를 다시
+구현한 또 하나의 browser automation stack이 된다.
 
 모든 initiative는 기존 Machine, state kernel, AutomationSpace, Control surface를 아래층 정본으로
 재사용한다. 새 npm root export, 별도 browser 제품 정체성, page나 repository 문서가 권한을 부여하는
@@ -46,7 +51,7 @@ effect law 없이 app outbox를 열 수 없으며, paired app state 없이 Repla
 | Playwright MCP | accessibility snapshot, element ref, bounding box, 부분 검색, action, screenshot | 한 시점의 tree가 중심이고 지속 world, conflict, unknown, effect truth가 하나의 perception 계약은 아니다 |
 | raw CDP | DOM, accessibility, layout, paint, network, lifecycle의 원천 사실 | driver ID와 원시량이 크고 LLM용 trust, attention, authority 계약이 없다 |
 | WebMCP | page가 선언한 구조화 tool과 form capability | opt-in page에만 있고 page가 보고한 설명은 관찰 사실이나 실행 권한이 아니다 |
-| APX 1.0 | semantic, spatial, temporal graph, pixel-on-demand, stable identity, ActionEvidence | predicate query는 있지만 목표별 최소 충분 상태, 명시적 conflict와 unknown, 선언 tool 융합은 없다 |
+| APX 1.0 | semantic, spatial, temporal graph, pixel-on-demand, stable identity, SituationCapsule, ActionEvidence | typed focus의 최소 충분 projection, explicit conflict와 unknown, reported capability와 broker authority 분리가 출하 계약이다 |
 
 근거는 다음 정본에 둔다.
 
@@ -88,6 +93,7 @@ broker가 부여한 authority, 아직 모르는 것, 행동 뒤 입증된 변화
 | signed Evidence Bundle | Initiative 2과 06으로 분리 | change verdict는 Evidence Pack, live effect receipt는 transaction이 소유. integrity와 signature 분리 |
 | app state checkpoint와 effect outbox | Initiative 6로 채택 | arbitrary browser snapshot이 아니라 cooperative logical state protocol로 제한 |
 | branched replay world | Initiative 7로 채택 | graph에 실제 recorded 또는 transactional edge만 허용하고 없는 transition은 생성하지 않음 |
+| affordance-first multi-plane motor | Initiative 8로 교정 채택 | affordance와 effect authority는 Initiative 1과 5를 재사용하고, absolute intent, deterministic actuator broker, ControlLease, effect window만 새 책임으로 둠 |
 | server 없는 local cloud | 이미 있음 | ASGI, VirtualOrigin, OPFS의 shipped 조합이며 Machine Entrance와 Fleet golden workload로 사용 |
 | 살아 있는 program file | 이미 있음, Initiative 4에 연결 | `.pymachine`과 `.webmachine`이 state를 나르고 Execution Memory가 handoff index를 추가 |
 | 완전한 virtual Chromium | 폐기 | browser engine과 renderer state를 이중 가상화하며 현재 authority와 memory 목표를 악화 |
@@ -159,6 +165,9 @@ Initiative 0은 다음이 모두 green일 때만 끝난다.
 - engine 또는 browser binary를 package 안에 복제
 
 ## Initiative 1 - Perception Computer
+
+상태: 구현됨. `apx.situation`, WorldModel, broker-issued capability, proof-carrying action, provider parity,
+effect-free replay가 contract, installed package, Chrome, Edge 제품 gate에서 검증된다.
 
 ### 제품 명제
 
@@ -272,10 +281,11 @@ WorldModel, SituationCapsule, evidence는 recording에 담겨 replay할 수 있�
 world ref와 recording cursor를 저장할 수 있다. Python restore는 browser effect를 되돌리지 않는다는
 기존 경계를 유지한다. replay는 과거 evidence를 다시 계산하거나 effect를 다시 보내지 않는다.
 
-## Perception Computer 검증 캠페인
+## Perception Computer 검증 계약
 
-새 능력은 [Initiative 1 attempt](../../tests/attempts/perceptionComputer/)에서만 시작한다.
-`scripts/perception/`이나 공개 APX schema로 바로 들어가지 않는다.
+초기 probe는 exact Playwright 1.62.0과 Edge 151.0.4129.78 기준선을 고정했고, 졸업된 책임은
+`scripts/perception/`과 [APX 제품 계약](../specs/apx/README.md)이 소유한다. 정식 회귀는
+`tests/contracts/perceptionComputer.mjs`와 `npm run test:perception-computer`가 소유한다.
 
 ### 고정 비교 대상
 
@@ -327,7 +337,10 @@ Playwright snapshot 기준선을 넘어섰다**고 말할 수 있다.
 5. action 결과를 DOM과 network transition evidence로 입증하고 불명확한 effect를 재전송하지 않는다.
 6. 같은 observation과 evidence를 live effect 없이 replay한다.
 
-하나라도 실패하면 우월성 주장은 폐기하고 실패한 축만 initiative에 남긴다.
+현재 exact Playwright 기준선 probe, deterministic contract oracle, Native CDP 9개 시나리오,
+FrameSpace, ReplaySpace, JavaScript, Python, MCP installed gate가 여섯 항목을 모두 통과한다. 따라서
+주장은 이 좁은 LLM perception contract에만 현재형으로 사용한다. 하나라도 회귀하면 우월성 주장을
+폐기하고 실패한 축을 다시 열린 debt로 돌린다.
 
 ## Initiative 2 - Verified Change Loop
 
@@ -685,6 +698,113 @@ missing edge는 graph coverage gap이다. wrong action과 분리하고, 비슷�
 
 실험은 [Initiative 7 campaign](../../tests/attempts/replayGraphWorlds/)에서 시작한다.
 
+## Initiative 8 - Proof-Carrying Motor
+
+### 제품 명제
+
+현재 browser control은 `click`, `fill`, `drag` 같은 provider action을 안전하게 실행하지만, 같은 의미 행동을
+cooperative app, browser input, accessibility action, OS input 사이에서 보존하는 계약은 없다. 기존 계획의
+perception, approval, app state, replay를 복제하지 않고 이 간극만 닫는다.
+
+```text
+SituationCapsule + desired-state intent + existing authority
+-> target binding
+-> deterministic actuator plan
+-> pre-contact correction
+-> one bounded effect window
+-> transition verification
+-> ActuationReceipt
+```
+
+핵심 명제는 물리 마우스가 아니다. 같은 `activate`, `focus`, `setValue`, `setSelected`, `setExpanded`,
+`scrollTo`, `dragTo` intent가 어느 plane을 통과하더라도 target, authority, effect boundary, terminal truth를 잃지 않는
+것이 제품 차이다. 상대 동사인 `toggle`, `increment`, `decrement`는 stale state에서 반대 결과를 만들 수 있어
+canonical intent로 두지 않는다.
+
+### 기존 계약과 새 책임
+
+- Initiative 1의 affordance와 action capability가 무엇을 할 수 있고 실행해도 되는지를 소유한다.
+- Initiative 5의 ApprovalGrant, CommitLease, EffectReceipt가 consequential effect의 승인을 소유한다.
+- Initiative 6의 AppSpace와 outbox가 cooperative business action을 소유한다.
+- Initiative 7의 ReplayGraph가 effect-free rehearsal과 exact path provenance를 소유한다.
+- Motor는 target binding, actuator reach, deterministic route selection, shared input 점유, bounded gesture,
+  actuation trace, evidence-backed correction proposal만 소유한다.
+
+`ControlLease`는 사용자와 agent가 같은 물리 입력 장치를 놓고 경쟁하지 않게 하는 점유권이다. effect 승인이나
+business 권한이 아니다. isolated browser input에는 필요하지 않을 수 있고, delegated tab과 OS input에는
+필수다. 사용자의 실제 입력, foreground 변경, window 또는 origin epoch 변경이 lease를 회수한다.
+
+### effect window
+
+단순한 "effect 이후 보정 금지"는 drag와 text composition을 구현할 수 없다. 대신 plan을 effect 전에
+불변 digest로 고정하고 다음 세 구역을 둔다.
+
+1. `preContact`: 재관찰, 정렬, 재계획, 같은 권한 안의 fallback을 허용한다.
+2. `committedGesture`: 첫 effect 가능 입력 뒤 plan을 바꾸지 않는다. 미리 승인된 path corridor, text budget,
+   release tail 안에서 같은 gesture를 완결할 수 있지만 새 target, 새 actuator, 재시작은 금지한다.
+3. `postContact`: 입력을 더 보내지 않고 관찰, verification, seal만 수행한다.
+
+사용자 개입이나 binding 상실이 `committedGesture`에서 발생하면 stuck key나 pointer를 막는 safety release만
+보내고 `outcomeUnknown`으로 끝낸다. safety release는 새 업무 시도가 아니다.
+
+### evidence-backed growth
+
+Motor는 실행 중 policy를 몰래 바꾸지 않는다. 각 시도를 immutable `ActuationEpisode`로 남기고, 실패한
+phase와 처음 어긋난 invariant, effect 전 복구한 지점, terminal evidence를 연결한다. episode는 다음 실행의
+교정 후보를 만들 수 있지만 authority가 아니다.
+
+```text
+ActuationEpisode ledger
+-> repeated failure and robustness pattern
+-> CorrectionProposal
+-> ReplayGraph and fixture counterfactual evaluation
+-> safety invariant and regression gate
+-> versioned ActuationPolicyRevision
+-> later execution only
+```
+
+자동 승격 가능한 것은 hard eligibility를 모두 통과한 actuator 사이의 순서, probe 순서, contact region과
+approach heuristic, manifest 상한 안의 budget뿐이다. origin, process, risk, permission, approval, target
+uniqueness, effect boundary, user preemption, secret redaction은 학습으로 넓히거나 약화하지 않는다. 같은 input과
+policy revision은 같은 plan을 만들어야 하며, regression이 생기면 content-addressed 이전 revision으로
+되돌린다. page content와 `confirmed`가 아닌 episode는 positive label을 만들지 못한다.
+
+### provider와 공개 경계
+
+첫 졸업 범위는 기존 Native CDP browser input, Transactional AppSpace의 cooperative action, Windows UIA,
+Windows `SendInput`, 사용자가 명시적으로 연 `activeTab` delegated tab이다. macOS AX와 Linux AT-SPI는 같은
+adapter conformance를 위한 후속 provider이며 Initiative 8 완료 조건에 넣지 않는다.
+
+Motor는 기존 `pyproc/control`, `pyproc-control`, `pyproc-mcp` 안에서 제공한다. 새 npm root export, subpath,
+bin을 만들지 않는다. browser milestone은 기존 `automation.observe`와 `automation.act`를 재사용하고, 두 live
+provider가 같은 conformance를 통과한 뒤에만 optional actuation operation family를 고정한다.
+
+### 졸업 gate
+
+1. pinned browser baseline이 도달하는 fixture action을 semantic intent 경로가 잃은 횟수는 0이다.
+2. 같은 absolute intent가 cooperative, browser input, Windows accessibility, Windows OS input에서 같은
+   semantic terminal을 반환한다.
+3. ambiguity, stale binding, foreground substitution 뒤 wrong target effect는 0이다.
+4. effect window 뒤 actuator fallback, target reinterpretation, gesture restart는 0이다.
+5. 한 CommitLease의 live consequential effect send는 최대 1이다.
+6. ControlLease 없이 OS input을 보낸 횟수와 사용자 preemption 뒤 새 effect segment를 보낸 횟수는 0이다.
+7. committed gesture 중단 뒤 허용 입력은 safety release뿐이며 terminal을 confirmed로 축약하지 않는다.
+8. Replay와 ReplayGraph traversal의 native host, browser provider, live app request는 0이다.
+9. ActuationReceipt가 plan, binding, authority, provider decision, effect window, terminal, evidence를 연결한다.
+10. visual inference, page content, accessibility label, weighted score가 authority나 target uniqueness를 만든
+    횟수는 0이다.
+11. native host는 임의 network listener, raw coordinate API, unrestricted process target을 제공하지 않는다.
+12. delegated tab은 user gesture 전, origin 변경 뒤, tab close 뒤에 접근하거나 입력하지 않는다.
+13. 기본 browser-only 설치 경로는 native host 설치나 실행을 요구하지 않는다.
+14. 모든 terminal이 redacted ActuationEpisode를 남기고 failure phase, first divergence, correction, evidence를
+    잃지 않는다.
+15. policy 후보는 live effect 없이 replay와 fixture를 통과하며, safety regression이나 reach 손실이 있으면
+    승격되지 않는다.
+16. 학습이 authority, target uniqueness, effect boundary, user precedence, redaction을 바꾼 횟수는 0이다.
+17. 같은 episode corpus와 policy revision이 만드는 plan과 promotion verdict digest 차이는 0이다.
+
+실험은 [Initiative 8 campaign](../../tests/attempts/proofCarryingMotor/)에서 시작한다.
+
 ## 단계와 산출물
 
 | Initiative | reality와 attempt | contract와 product | graduation 핵심 |
@@ -697,6 +817,7 @@ missing edge는 graph coverage gap이다. wrong action과 분리하고, 비슷�
 | 06 Rehearse-Commit Transactions | intent, approval, one-shot, outcome probes | rehearsal and effect receipts, CommitLease | live send 최대 1, false confirmed 0 |
 | 07 Transactional AppSpace | cooperative state, pair commit, outbox probes | logical app state, paired branch, effect staging | one-sided state와 unauthorized effect 0 |
 | 08 ReplayGraph Worlds | graph import, traversal, coverage, integrity probes | state graph, world contract, evaluator | effect 0 traversal과 invented edge 0 |
+| 09 Proof-Carrying Motor | binding, effect window, user preemption, native host, correction promotion probes | semantic intents, actuator broker, ControlLease, ActuationReceipt, experience ledger | wrong target, unsafe continuation, authority escalation, unverified learning 0 |
 
 ## 중단 조건
 
@@ -714,3 +835,8 @@ missing edge는 graph coverage gap이다. wrong action과 분리하고, 비슷�
 - rehearsal을 live effect prediction으로 표현하거나 post-send retry를 허용하면 transaction 가설은 실패다.
 - browser 전체 snapshot을 주장하기 위해 AppSpace sandbox와 origin 경계를 약화하면 실패다.
 - graph에 없는 transition을 생성하거나 coverage gap을 caller failure로 숨기면 ReplayGraph 가설은 실패다.
+- visual fallback을 독립 actuator로 만들거나 raw coordinate를 public intent로 노출하면 Motor 가설은 실패다.
+- weighted confidence가 target uniqueness나 effect authority를 대신하면 실패다.
+- user input을 막아야 OS journey가 성공하거나 effect 뒤 새 target과 actuator로 갈아타면 실패다.
+- live 실행 중 policy를 바꾸거나 실패 log가 replay와 음성 시험 없이 다음 effect 경로를 바꾸면 실패다.
+- 학습이 authority, target uniqueness, effect boundary, user precedence, redaction을 완화하면 실패다.

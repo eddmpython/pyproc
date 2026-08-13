@@ -18,6 +18,8 @@ import { ControlHost } from "../../scripts/controlProtocol/controlHost.js";
 import { controlBase } from "../../scripts/controlProtocol/controlProtocol.js";
 import { apxDigest } from "../../scripts/perception/apxCanonical.js";
 import { assertApxObservation } from "../../scripts/perception/apxCatalog.js";
+import { SituationCompiler } from "../../scripts/perception/situationCompiler.js";
+import { WorldModel } from "../../scripts/perception/worldModel.js";
 
 async function errorOf(operation) {
   try { await operation(); return null; } catch (error) { return error; }
@@ -53,6 +55,13 @@ export async function assertAutomationRecordingContract() {
       integrity: { ...apxObservationBody.integrity, canonicalSha256: null } }),
   } });
   assertApxObservation(apxObservation);
+  const recordedWorld = new WorldModel().prepare("recording", apxObservation).world;
+  const situationInput = { expectedRisk: "read", representation: "apx.situation", focus: { requirements: [{
+    requirementRef: "requirement:saved", select: { role: "status", name: "Saved" }, need: ["fact"],
+    cardinality: "one",
+  }] } };
+  const situationObservation = new SituationCompiler({ now: () => Date.parse(apxObservation.capturedAt) })
+    .compile(recordedWorld, situationInput.focus);
   const actionEvidence = Object.freeze({ evidenceRef: "evidence:recorded", actionRef: "action:recorded",
     beforeObservationRef: "observation:before", afterObservationRef: apxObservation.observationRef,
     effectOutcome: "applied", verification: Object.freeze({ state: "confirmed",
@@ -90,7 +99,8 @@ export async function assertAutomationRecordingContract() {
         throw error;
       }
       if (operation === "automation.observe") {
-        return input.representation === "apx.graph" ? apxObservation : { title: "recorded" };
+        return input.representation === "apx.graph" ? apxObservation
+          : input.representation === "apx.situation" ? situationObservation : { title: "recorded" };
       }
       if (input.evidence === true) return { actions: [{ result: { evidence: actionEvidence } }] };
       return { results: [{ kind: "screenshot", artifactRef: "artifact:recording_contract",
@@ -108,6 +118,7 @@ export async function assertAutomationRecordingContract() {
     assert.deepEqual(await recordingRouter.invoke("automation.observe", {
       expectedRisk: "read", representation: "apx.graph",
     }), apxObservation);
+    assert.deepEqual(await recordingRouter.invoke("automation.observe", situationInput), situationObservation);
     const recordedEvidence = await recordingRouter.invoke("automation.act", { evidence: true });
     assert.deepEqual(recordedEvidence.actions[0].result.evidence, actionEvidence);
     const captured = await recordingRouter.invoke("automation.act", {
@@ -120,7 +131,7 @@ export async function assertAutomationRecordingContract() {
 
     const recording = await loadAutomationRecording(file);
     const originalGeneration = recording.artifactGeneration;
-    assert.equal(recording.entries.length, 5);
+    assert.equal(recording.entries.length, 6);
     assert.equal(recording.complete, true);
     assert.equal(Object.hasOwn(recording.artifacts["artifact:recording_contract"], "dataBase64"), false);
     assert.match(recording.artifacts["artifact:recording_contract"].file, /^[0-9a-f]{64}\.bin$/);
@@ -134,6 +145,9 @@ export async function assertAutomationRecordingContract() {
     assert.deepEqual(await replayRouter.invoke("automation.observe", {
       expectedRisk: "read", representation: "apx.graph",
     }), apxObservation);
+    const effectsBeforeSituationReplay = effects;
+    assert.deepEqual(await replayRouter.invoke("automation.observe", situationInput), situationObservation);
+    assert.equal(effects, effectsBeforeSituationReplay);
     const replayEvidence = await replayRouter.invoke("automation.act", { evidence: true });
     assert.deepEqual(replayEvidence.actions[0].result.evidence, actionEvidence);
     const checkpoint = replay.checkpoint();
@@ -151,7 +165,7 @@ export async function assertAutomationRecordingContract() {
     assert.deepEqual(replayError?.details?.actionability, { reason: "covered" });
     assert.deepEqual(replayError?.details?.trace, { phase: "contract" });
     assert.equal(replayError?.details?.actionEvidence?.verification?.state, "outcomeUnknown");
-    assert.equal(effects, 5);
+    assert.equal(effects, 6);
     const exhausted = await errorOf(() => replayRouter.invoke("automation.observe", { expectedRisk: "read" }));
     assert.equal(exhausted?.code, "AUTOMATION_REPLAY_EXHAUSTED");
 

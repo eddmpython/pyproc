@@ -1,0 +1,74 @@
+{
+  "protocol": "apx",
+  "version": "1.0",
+  "representation": "apx.situation",
+  "profile": ["apx-core/1", "apx-web/1", "apx-situation/1"],
+  "situationRef": "situation:fbe73545e4c67212074a54312d7a5fc47ea2eeeb37e0319b992425ea373447ce",
+  "worldRef": "world:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "observationRef": "observation:example_conflict",
+  "documentEpoch": 1,
+  "capturedAt": "2026-08-13T00:00:00.000Z",
+  "focus": {
+    "requirements": [{
+      "requirementRef": "requirement:submit",
+      "select": { "role": "button" },
+      "need": ["fact", "affordance"],
+      "cardinality": "one"
+    }],
+    "freshness": { "mode": "recorded", "maxAgeMs": 0 }
+  },
+  "requirements": [{
+    "requirementRef": "requirement:submit",
+    "state": "conflicted",
+    "cardinality": "one",
+    "matched": 1,
+    "entityRefs": ["entity:submit"],
+    "claimRefs": ["claim:ba83c9d22e0f832974db79d835be558fe2a4f6e135672d68033cc6c2f2a3e426"]
+  }],
+  "facts": [{
+    "claimRef": "claim:ba83c9d22e0f832974db79d835be558fe2a4f6e135672d68033cc6c2f2a3e426",
+    "subjectRef": "entity:submit",
+    "predicate": "semantic.name",
+    "scope": "document",
+    "state": "conflicted",
+    "attestations": [{
+      "subjectRef": "entity:submit",
+      "predicate": "semantic.name",
+      "scope": "document",
+      "value": "Submit order",
+      "provenance": { "mode": "observed", "source": "fixture.semantic", "trust": "browser" },
+      "evidenceRefs": ["observation:example_conflict"],
+      "freshness": { "status": "fresh", "capturedAt": "2026-08-13T00:00:00.000Z", "documentEpoch": 1 },
+      "sensitivity": "public"
+    }, {
+      "subjectRef": "entity:submit",
+      "predicate": "semantic.name",
+      "scope": "document",
+      "value": "Delete everything",
+      "provenance": { "mode": "reported", "source": "page.capability", "trust": "page" },
+      "evidenceRefs": ["observation:example_conflict"],
+      "freshness": { "status": "fresh", "capturedAt": "2026-08-13T00:00:00.000Z", "documentEpoch": 1 },
+      "sensitivity": "public"
+    }]
+  }],
+  "affordances": [],
+  "changes": [],
+  "unknowns": [{
+    "unknownRef": "unknown:conflicted_submit",
+    "requirementRef": "requirement:submit",
+    "reason": "cardinalityOrClaimConflict",
+    "evidenceRefs": ["entity:submit"]
+  }],
+  "suggestedProbes": [],
+  "completeness": { "semantic": "complete", "reportedCapabilities": true },
+  "budget": {
+    "used": { "requirements": 1, "facts": 1, "affordances": 0, "bytes": 0 },
+    "omitted": {},
+    "requiredPreserved": true
+  },
+  "integrity": {
+    "canonicalSha256": "c2239ee3b1df49ea5bd7e1301e3c53f4042ad0fff6eb97b02d906b589ab928a7",
+    "worldSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "sourceGraphSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  }
+}

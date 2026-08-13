@@ -24,11 +24,11 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=5b8cff&labelColor=0a0f1c" alt="npm"></a>
-  <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=0a0f1c" alt="ci"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-7c4dff?labelColor=0a0f1c" alt="license MPL-2.0"></a>
-  <img src="https://img.shields.io/badge/runtime_npm_dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero runtime npm dependencies">
-  <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-5b8cff?labelColor=0a0f1c" alt="CPython 3.14 on WebAssembly">
+  <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=ff5a36&labelColor=12100e" alt="npm"></a>
+  <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=12100e" alt="ci"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-ff8a6a?labelColor=12100e" alt="license MPL-2.0"></a>
+  <img src="https://img.shields.io/badge/runtime_npm_dependencies-0-55d6a9?labelColor=12100e" alt="zero runtime npm dependencies">
+  <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-ff5a36?labelColor=12100e" alt="CPython 3.14 on WebAssembly">
 </p>
 
 <p align="center">
@@ -169,8 +169,9 @@ restored. A fail-closed network policy can also keep selected data local while c
 - **Data can stay local under a fail-closed policy.** Process data in the tab and export only selected
   results. Local execution alone is not a no-exfiltration boundary.
 - **Isolated execution.** Python runs off the main UI thread, across multiple workers you manage.
-- **Eyes, hands, and proof for allowed pages.** PyProc Eyes returns a bounded semantic, spatial, and temporal
-  graph. Controlled actions can require DOM or network postconditions, and screenshots arrive as verified bytes.
+- **Eyes, hands, and proof for allowed pages.** PyProc Eyes returns a bounded graph or the smallest
+  evidence-linked situation that answers a typed focus. Controlled actions use broker authority, can require DOM
+  or network postconditions, and request verified pixels only when structured evidence is insufficient.
 
 ## Quick start
 
@@ -381,13 +382,30 @@ with PyProcClient.start(".pyproc/manifest.json") as client:
 The [Python SDK guide](docs/usage/pythonSdk.md) covers installation, checkpoint recovery, cancellation,
 browser actions, and verified screenshot bytes.
 
-**PyProc Eyes** is the opt-in APX perception path behind the same `automation.observe` operation. It fuses
-semantic facts, structure, geometry and occlusion, stable temporal identity, bounded deltas, and pixels only
-for unresolved regions. `entityRef` is observation identity, while a fresh `locatorRef` is the short-lived
-action capability. Actions can declare DOM and network postconditions and return `ActionEvidence` instead of
-treating a completed click as proof of success. Native CDP, FrameSpace, ReplaySpace, MCP, Control Protocol,
-and `client.perception(sessionRef)` in the Python SDK share this one contract. See the
-[APX 1.0 product contract](docs/specs/apx/README.md).
+**PyProc Eyes** is the opt-in APX perception path behind the same `automation.observe` operation. It does not
+hand the consumer a page dump. `apx.situation` returns the smallest evidence-linked `SituationCapsule` that
+answers typed requirements, states what is known, conflicted, unknown, or stale, and binds every executable
+affordance to broker authority. `entityRef` is observation identity and `locatorRef` is only a target binding.
+Pixels are requested only for unresolved regions. Actions can declare DOM and network postconditions and return
+`ActionEvidence` instead of treating a completed click as proof of success. Native CDP, FrameSpace, ReplaySpace,
+MCP, Control Protocol, and the JavaScript and Python perception clients share this contract.
+
+```js
+const eyes = client.perception(attached.output);
+const situation = await eyes.situate({ requirements: [{
+  requirementRef: "requirement:save",
+  select: { role: "button", name: "Save", actionable: true },
+  need: ["fact", "affordance"],
+  cardinality: "one",
+}] });
+const save = situation.requirement("requirement:save").oneAffordance("click");
+await eyes.actAffordance(save, {
+  intent: "Save the document",
+  verify: { entityAppeared: { role: "status", nameContains: "Saved" } },
+});
+```
+
+See the [APX 1.0 product contract](docs/specs/apx/README.md).
 
 With `{ "enabled": false }`, the server exposes exactly four Python tools: `pythonRun`, `checkpointSave`,
 `checkpointRestore`, and `sandboxReset`. Enabling the browser adds ten tools for lifecycle, compatibility,
@@ -474,7 +492,7 @@ These states measure only pyproc's own invariants. They never depend on adoption
 | Device FS, permission jail, GPU, and sockets | Probe |
 | Installed MCP browser automation and artifact product | Bounded |
 | Installed JavaScript Control SDK | Bounded |
-| PyProc Eyes APX perception and action evidence | Bounded |
+| PyProc Eyes graph, SituationCapsule, proof-carrying action, and action evidence | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |
 
 ## What it guarantees, and what it doesn't

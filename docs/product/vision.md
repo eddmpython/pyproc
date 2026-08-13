@@ -41,7 +41,7 @@ New work names the axis it moves. Work that moves no axis, weakens a guardrail i
 
 ## Ordered agent-experience initiatives
 
-Agent-computer work follows eight ordered initiatives. The detailed plan, research baseline, failure conditions,
+Agent-computer work follows nine ordered initiatives. The detailed plan, research baseline, failure conditions,
 and graduation gates live in [agent experience initiatives](../operations/agentExperienceInitiatives.md).
 
 0. **Finish the Machine Entrance.** An exact package install must reach a useful Python result and an optional,
@@ -62,15 +62,17 @@ and graduation gates live in [agent experience initiatives](../operations/agentE
    an effect outbox so the application and Python Machine can branch and adopt as one paired generation.
 7. **Build verified replay worlds.** Content-addressed state nodes and exact action edges allow effect-free traversal
    and deterministic evaluation. Missing graph edges remain missing and are never synthesized.
+8. **Carry one intent across actuator planes.** A deterministic broker preserves absolute target bindings,
+   authority, effect windows, user precedence, and one receipt across cooperative app, browser input, and native
+   accessibility providers without making any provider mandatory for the browser-only installation path.
 
-The Machine Entrance is delivered through the installed initializer, doctor, and client parity gates. The active
-campaign is the [`perceptionComputer` attempt](../../tests/attempts/perceptionComputer/README.md). It makes no claim of general
-superiority over Playwright. That statement becomes admissible only for the narrow LLM perception contract after
-the pinned Playwright baseline, action reach, authority integrity, transition truth, minimality, and replay gates
-all pass. The third begins as the follow-on
-[`verifiedChangeLoop` attempt](../../tests/attempts/verifiedChangeLoop/README.md) and remains locked until that
-graduation. Initiatives four through eight remain locked behind their immediate predecessor and begin in the
-corresponding attempt campaign. No initiative changes a North Star score before its browser evidence is registered
+The Machine Entrance is delivered through the installed initializer, doctor, and client parity gates. The
+Perception Computer is delivered through `apx.situation`, the JavaScript and Python `situate()` facades, and the
+Chrome and Edge `test:perception-computer` gate. It does not claim general superiority over Playwright. The narrow
+LLM perception contract preserves the pinned baseline's action reach while adding smaller task-conditioned state,
+explicit uncertainty, broker authority, transition truth, and effect-free replay. The next active campaign is
+[`verifiedChangeLoop`](../../tests/attempts/verifiedChangeLoop/README.md). Later initiatives remain locked behind
+their immediate predecessor. No initiative changes a North Star score before its browser evidence is registered
 in the ledger.
 
 This portfolio does not duplicate the separate ceiling ladder. Serverless local applications, portable Machine

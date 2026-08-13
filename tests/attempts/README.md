@@ -59,4 +59,5 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 | [Initiative 5](rehearseCommitTransactions/) | 연습한 effect를 승인 뒤 현실에 한 번만 보낼 수 있는가 | Initiative 4 후행 대기 |
 | [Initiative 6](transactionalAppSpace/) | 협력 app 상태와 Machine을 한 transaction으로 분기할 수 있는가 | Initiative 5 후행 대기 |
 | [Initiative 7](replayGraphWorlds/) | recorded state graph에서 여러 선택을 effect 없이 탐색할 수 있는가 | Initiative 6 후행 대기 |
+| [Initiative 8](proofCarryingMotor/) | 같은 intent를 여러 actuator에서 같은 증거 계약으로 실행할 수 있는가 | Initiative 7 후행 대기 |
 | [Web Machine](../webMachine/) | 서로 다른 guest engine을 같은 browser computer lifecycle/device/image 계약으로 다룰 수 있는가 | 졸업 -> `src/machine` + `tests/webMachine` |

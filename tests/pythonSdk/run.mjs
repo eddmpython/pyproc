@@ -128,7 +128,8 @@ try {
       && report.attachmentBytes > 0 && report.cancelOutcome === "outcomeUnknown"
       && report.cancelTerminal === "outcomeUnknown" && report.timeoutOutcome === "outcomeUnknown"
       && report.timeoutTerminal === "outcomeUnknown" && report.permissionTerminal === "rejected"
-      && report.successTerminal === "completed" && report.perceptionEntityRef?.startsWith("entity:"),
+      && report.successTerminal === "completed" && report.perceptionEntityRef?.startsWith("entity:")
+      && report.situationRef?.startsWith("situation:"),
   `${report.attachmentBytes} bytes`);
   const frameJourney = await runAsync(wheelPython, [join(HERE, "frameJourney.py"), frameConfigPath,
     `${targetOrigin}/frame`], { cwd: installed.appDir,
@@ -136,7 +137,8 @@ try {
   const frameReport = JSON.parse(frameJourney.stdout.trim().split(/\r?\n/).at(-1));
   check("wheel 설치본이 FrameSpace Python, 격리, screenshot 여정을 완주",
     frameReport.ok === true && frameReport.operations === 13 && frameReport.attachmentBytes > 0
-      && frameReport.perceptionEntityRef?.startsWith("entity:"),
+      && frameReport.perceptionEntityRef?.startsWith("entity:")
+      && frameReport.situationRef?.startsWith("situation:"),
     `${frameReport.attachmentBytes} bytes`);
 } catch (error) {
   check("Python SDK 제품 흐름 예외 없음", false, String(error?.stack || error).slice(-1200));

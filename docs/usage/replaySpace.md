@@ -105,7 +105,8 @@ outcome and never become retryable after an `applied` or `outcomeUnknown` termin
 Screenshot bytes are rehydrated only for descriptors that were inline in the original terminal, then pass
 through the normal Control Protocol byte length and SHA-256 attachment verification.
 
-APX observations and `ActionEvidence` are ordinary canonical terminals in the same chain. Replay preserves
+APX graph observations, SituationCapsules, proof-carrying action terminals, and `ActionEvidence` are ordinary
+canonical terminals in the same chain. Replay preserves
 their graph digests, entity and observation references, verification state, and attachment order byte-for-byte.
 It does not recapture the page, rerun a postcondition, or resend the original effect. This gives deterministic
 perception review without misrepresenting recorded evidence as a new live observation.

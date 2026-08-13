@@ -35,6 +35,7 @@ import {
   APX_REPRESENTATION,
   perceptionOptionsFromInput,
 } from "../perception/apxCatalog.js";
+import { APX_SITUATION_REPRESENTATION } from "../perception/situationCatalog.js";
 import { ActionEvidenceLoop } from "../perception/actionEvidence.js";
 import { PerceptionSpace } from "../perception/perceptionSpace.js";
 import { WebCdpSensor } from "../perception/profiles/webCdpSensor.js";
@@ -352,6 +353,9 @@ export class BrowserAutomation {
         this._captureVisualProbe(sessionRef, entity, visual, context) : null,
       visualRelease: visualProbeEnabled ? (probe) => artifactStore.delete(probe.artifact.artifactRef) : null,
       providerKind: "nativeCdp",
+      capabilityPolicy: ({ action }) => this._allowedActions.has(action)
+        ? { risk: BROWSER_AUTOMATION_ACTIONS[action].risk, destination: null }
+        : null,
     });
     this._evidence = new ActionEvidenceLoop({ idFactory });
     this._lifecycle = new BrowserLifecycle({ port });
@@ -477,6 +481,7 @@ export class BrowserAutomation {
   }
 
   async _execute(sessionRef, action, commandResults, signal) {
+    if (action.actionContext) this._perception.assertActionContext(sessionRef, action.actionContext, action);
     if (action.kind === "snapshot") return this._snapshot(sessionRef, action, commandResults, signal);
     if (action.kind === "screenshot") {
       if (!this._screenshot) throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionDenied,
@@ -497,7 +502,7 @@ export class BrowserAutomation {
   }
 
   async _snapshot(sessionRef, action, commandResults, signal) {
-    if (action.representation === APX_REPRESENTATION) {
+    if ([APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(action.representation)) {
       return this._perception.observe(sessionRef, perceptionOptionsFromInput(action), { signal, commandResults });
     }
     const command = await this._command(sessionRef, "Accessibility.getFullAXTree", {}, commandResults, signal);

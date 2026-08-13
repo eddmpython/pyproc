@@ -164,6 +164,94 @@ export class PerceptionQueryResult {
   }
 }
 
+export class SituationFact {
+  constructor(value) {
+    this.value = plainObject(value, "SituationFact");
+    Object.freeze(this);
+  }
+
+  get claimRef() { return String(this.value.claimRef || ""); }
+  get subjectRef() { return String(this.value.subjectRef || ""); }
+  get predicate() { return String(this.value.predicate || ""); }
+  get state() { return String(this.value.state || "unknown"); }
+}
+
+export class SituationAffordance {
+  constructor(value) {
+    this.value = plainObject(value, "SituationAffordance");
+    Object.freeze(this);
+  }
+
+  get kind() { return String(this.value.kind || ""); }
+  get action() { return String(this.value.action || ""); }
+  get entityRef() { return this.value.entityRef === undefined ? null : String(this.value.entityRef); }
+  get locatorRef() { return this.value.locatorRef === undefined ? null : String(this.value.locatorRef); }
+  get capabilityRef() { return this.value.capabilityRef === undefined ? null : String(this.value.capabilityRef); }
+  get risk() { return this.value.risk === undefined ? null : String(this.value.risk); }
+}
+
+export class SituationUnknown {
+  constructor(value) {
+    this.value = plainObject(value, "SituationUnknown");
+    Object.freeze(this);
+  }
+
+  get unknownRef() { return String(this.value.unknownRef || ""); }
+  get requirementRef() { return String(this.value.requirementRef || ""); }
+  get reason() { return String(this.value.reason || ""); }
+}
+
+export class SituationRequirement {
+  constructor(value, situation) {
+    this.value = plainObject(value, "SituationRequirement");
+    this.situation = situation;
+    this.facts = Object.freeze((value.claimRefs || []).map((claimRef) =>
+      situation.facts.find((fact) => fact.claimRef === claimRef)).filter(Boolean));
+    this.affordances = Object.freeze(situation.affordances.filter((affordance) =>
+      affordance.value.requirementRef === value.requirementRef));
+    this.unknowns = Object.freeze(situation.unknowns.filter((unknownValue) =>
+      unknownValue.requirementRef === value.requirementRef));
+    Object.freeze(this);
+  }
+
+  get requirementRef() { return String(this.value.requirementRef || ""); }
+  get state() { return String(this.value.state || "unknown"); }
+
+  oneAffordance(action) {
+    const matches = this.affordances.filter((affordance) => affordance.kind === "authorized"
+      && affordance.action === action);
+    if (matches.length !== 1) {
+      throw new Error(`APX requirement expected one authorized ${action} affordance, received ${matches.length}`);
+    }
+    return matches[0];
+  }
+}
+
+export class SituationResult {
+  constructor(result) {
+    if (!result?.output || result.output.representation !== "apx.situation") {
+      throw new TypeError("APX situation output is required");
+    }
+    this.result = result;
+    this.situation = result.output;
+    this.facts = Object.freeze(result.output.facts.map((value) => new SituationFact(value)));
+    this.affordances = Object.freeze(result.output.affordances.map((value) => new SituationAffordance(value)));
+    this.unknowns = Object.freeze(result.output.unknowns.map((value) => new SituationUnknown(value)));
+    this.requirements = Object.freeze(result.output.requirements.map((value) =>
+      new SituationRequirement(value, this)));
+    Object.freeze(this);
+  }
+
+  get situationRef() { return String(this.situation.situationRef || ""); }
+  get worldRef() { return String(this.situation.worldRef || ""); }
+
+  requirement(requirementRef) {
+    const matches = this.requirements.filter((entry) => entry.requirementRef === requirementRef);
+    if (matches.length !== 1) throw new Error(`APX situation requirement is not unique: ${requirementRef}`);
+    return matches[0];
+  }
+}
+
 function plainObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${label} must be an object`);
   return value;
@@ -204,6 +292,20 @@ export class PerceptionClient {
     return new PerceptionQueryResult(result);
   }
 
+  async situate(focus, options = {}, requestOptions = {}) {
+    const { sessionRef, visual, budget, profile, channels } = plainObject(options, "APX situation options");
+    const result = await this.client.observe(this._session(sessionRef), definedEntries({
+      expectedRisk: "read",
+      representation: "apx.situation",
+      focus: plainObject(focus, "APX situation focus"),
+      visual,
+      budget,
+      profile,
+      channels,
+    }), requestOptions);
+    return new SituationResult(result);
+  }
+
   act(kind, locatorRef, options = {}, requestOptions = {}) {
     if (typeof kind !== "string" || !kind) throw new TypeError("APX action kind must be a non-empty string");
     if (typeof locatorRef !== "string" || !locatorRef) throw new TypeError("APX locatorRef must be a non-empty string");
@@ -211,6 +313,27 @@ export class PerceptionClient {
       "APX action options");
     return this.client.act(this._session(sessionRef), [{ kind, locatorRef, expectedRisk, ...actionOptions,
       ...(verify === undefined ? {} : { verify: plainObject(verify, "verify") }) }], requestOptions);
+  }
+
+  actAffordance(affordanceInput, options = {}, requestOptions = {}) {
+    const affordance = affordanceInput instanceof SituationAffordance
+      ? affordanceInput : new SituationAffordance(affordanceInput);
+    if (affordance.kind !== "authorized" || !affordance.locatorRef || !affordance.capabilityRef) {
+      throw new TypeError("APX action requires an authorized SituationAffordance");
+    }
+    const { sessionRef, verify, intent, expectedTransition = affordance.value.expectedTransition,
+      actionContext: suppliedContext, kind: suppliedKind, locatorRef: suppliedLocator,
+      expectedRisk: suppliedRisk,
+      ...actionOptions } = plainObject(options, "APX affordance action options");
+    if ([suppliedContext, suppliedKind, suppliedLocator, suppliedRisk].some((value) => value !== undefined)) {
+      throw new TypeError("APX affordance action binding cannot be overridden");
+    }
+    const actionContext = definedEntries({ intent, situationRef: affordance.value.situationRef,
+      worldRef: affordance.value.worldRef, capabilityRef: affordance.capabilityRef, expectedTransition });
+    return this.client.act(this._session(sessionRef), [definedEntries({ kind: affordance.action,
+      locatorRef: affordance.locatorRef, expectedRisk: affordance.risk, actionContext,
+      ...actionOptions, ...(verify === undefined ? {} : { verify: plainObject(verify, "verify") }) })],
+    requestOptions);
   }
 
   async explainActionability(entityRef, options = {}) {

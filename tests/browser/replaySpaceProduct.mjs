@@ -120,6 +120,11 @@ try {
     sessionRef: attached.output, expectedRisk: "read", representation: "apx.graph",
     budget: { maxEntities: 40, maxRelations: 80, maxBytes: 65536 },
   });
+  const situationInput = { sessionRef: attached.output, expectedRisk: "read", representation: "apx.situation",
+    focus: { requirements: [{ requirementRef: "requirement:heading", select: { role: "heading",
+      name: "Replay target" }, need: ["fact"], cardinality: "one" }] },
+    budget: { maxEntities: 40, maxRelations: 80, maxBytes: 65536 } };
+  const situationObserved = await recordProduct.client.request("automation.observe", situationInput);
   const captured = await recordProduct.client.request("automation.act", {
     sessionRef: attached.output, actions: [{ kind: "screenshot", expectedRisk: "read" }],
   });
@@ -138,7 +143,7 @@ try {
 
   const recording = JSON.parse(await readFile(recordingFile, "utf8"));
   check("recording persists a converged hash chain and screenshot artifact",
-    recording.complete === true && recording.entries.length === 8
+    recording.complete === true && recording.entries.length === 9
       && Object.keys(recording.artifacts).length === 2 && /^[0-9a-f]{64}$/.test(recording.finalSha256)
       && Object.values(recording.artifacts).every((artifact) => artifact.file && !artifact.dataBase64));
 
@@ -148,7 +153,7 @@ try {
   }), null, 2));
   const replayCheck = JSON.parse(run(cli, ["--config", replayConfig, "--check"], { cwd: installed.appDir }).stdout);
   check("replay preflight verifies recording digest before browser launch",
-    replayCheck.automation.provider === "replay" && replayCheck.automation.replay.entries === 8
+    replayCheck.automation.provider === "replay" && replayCheck.automation.replay.entries === 9
       && replayCheck.automation.replay.finalSha256 === recording.finalSha256);
   const mcpReplayCheck = JSON.parse(run(mcpCli, ["--config", replayConfig, "--check"], { cwd: installed.appDir }).stdout);
   check("MCP preflight shares replay identity, policy, chain, and sidecar verification",
@@ -183,6 +188,7 @@ try {
     sessionRef: replayAttached.output, expectedRisk: "read", representation: "apx.graph",
     budget: { maxEntities: 40, maxRelations: 80, maxBytes: 65536 },
   });
+  const replaySituationObserved = await replayProduct.client.request("automation.observe", situationInput);
   const replayCaptured = await replayProduct.client.request("automation.act", {
     sessionRef: replayAttached.output, actions: [{ kind: "screenshot", expectedRisk: "read" }],
   });
@@ -197,6 +203,8 @@ try {
   check("full replay returns byte-identical observation and PNG with external requests zero",
     JSON.stringify(replayObserved.output) === JSON.stringify(observed.output)
       && JSON.stringify(replayApxObserved.output) === JSON.stringify(apxObserved.output)
+      && JSON.stringify(replaySituationObserved.output) === JSON.stringify(situationObserved.output)
+      && replaySituationObserved.output.representation === "apx.situation"
       && replayApxObserved.output.protocol === "apx"
       && replayPng.equals(recordedPng)
       && Buffer.from(replayDeferredChunk.output.dataBase64, "base64").equals(recordedDeferredPng)
@@ -222,6 +230,7 @@ try {
     sessionRef: attached.output, expectedRisk: "read", representation: "apx.graph",
     budget: { maxEntities: 40, maxRelations: 80, maxBytes: 65536 },
   });
+  await resumeProduct.client.request("automation.observe", situationInput);
   const resumedCapture = await resumeProduct.client.request("automation.act", {
     sessionRef: attached.output, actions: [{ kind: "screenshot", expectedRisk: "read" }],
   });

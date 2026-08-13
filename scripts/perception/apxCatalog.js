@@ -1,11 +1,19 @@
 // apxCatalog.js - APX v1 vocabulary, input limits, conformance, strict validation의 SSOT.
 import { createHash } from "node:crypto";
 import { apxDigest } from "./apxCanonical.js";
+import {
+  APX_FOCUS_SCHEMA,
+  APX_SITUATION_PROFILE,
+  APX_SITUATION_REPRESENTATION,
+  validateSituationFocus,
+} from "./situationCatalog.js";
 
 export const APX_REPRESENTATION = "apx.graph";
 export const APX_LEGACY_REPRESENTATION = "legacy.ax-list";
 export const APX_VERSION = "1.0";
-export const APX_PROFILES = Object.freeze(["apx-core/1", "apx-web/1", "apx-action/1", "apx-visual/1"]);
+export const APX_GRAPH_PROFILES = Object.freeze(["apx-core/1", "apx-web/1", "apx-action/1", "apx-visual/1"]);
+export const APX_PROFILES = Object.freeze([...APX_GRAPH_PROFILES, APX_SITUATION_PROFILE]);
+export const APX_REPRESENTATIONS = Object.freeze([APX_REPRESENTATION, APX_SITUATION_REPRESENTATION]);
 export const APX_CHANNELS = Object.freeze([
   "semantic", "structure", "geometry", "interaction", "events", "networkMetadata", "visual",
 ]);
@@ -29,6 +37,7 @@ export const APX_ERROR_CODES = Object.freeze({
   verificationAmbiguous: "APX_VERIFICATION_AMBIGUOUS",
   replayDiverged: "APX_REPLAY_DIVERGED",
   artifactIntegrityFailed: "APX_ARTIFACT_INTEGRITY_FAILED",
+  capabilityStale: "APX_CAPABILITY_STALE",
 });
 
 const OBSERVATION_REF_RE = /^observation:[A-Za-z0-9_-]{1,128}$/;
@@ -37,7 +46,7 @@ const OPAQUE_REF_RE = /^[A-Za-z][A-Za-z0-9]*:[A-Za-z0-9._:-]{1,128}$/;
 const LOCATOR_REF_RE = /^locator:[A-Za-z0-9._:-]{1,256}$/;
 const ARTIFACT_REF_RE = /^artifact:[A-Za-z0-9_-]+$/;
 const DIGEST_RE = /^[a-f0-9]{64}$/;
-const TOP_LEVEL_KEYS = new Set(["representation", "profile", "since", "query", "visual", "budget", "channels"]);
+const TOP_LEVEL_KEYS = new Set(["representation", "profile", "since", "query", "focus", "visual", "budget", "channels"]);
 const QUERY_KEYS = new Set(["entityRef", "kind", "role", "name", "state", "actionable", "changedSince"]);
 const OBSERVATION_KEYS = new Set(["protocol", "version", "representation", "profile", "kind", "spaceRef",
   "targetRef", "sessionRef", "observationRef", "baseObservationRef", "documentEpoch", "capturedAt", "page",
@@ -53,8 +62,8 @@ const PROVENANCE_TRUST = new Set(["broker", "browser", "page", "model", "externa
 export const APX_OBSERVE_OPTION_KEYS = Object.freeze([...TOP_LEVEL_KEYS]);
 
 export const APX_OBSERVE_PROPERTIES = Object.freeze({
-  representation: { type: "string", enum: [APX_REPRESENTATION, APX_LEGACY_REPRESENTATION] },
-  profile: { type: "array", items: { type: "string", enum: APX_PROFILES }, uniqueItems: true, minItems: 1, maxItems: 4 },
+  representation: { type: "string", enum: [...APX_REPRESENTATIONS, APX_LEGACY_REPRESENTATION] },
+  profile: { type: "array", items: { type: "string", enum: APX_PROFILES }, uniqueItems: true, minItems: 1, maxItems: 5 },
   since: { type: "string", pattern: "^observation:[A-Za-z0-9_-]{1,128}$" },
   channels: { type: "array", items: { type: "string", enum: APX_CHANNELS }, uniqueItems: true, minItems: 1, maxItems: 7 },
   query: {
@@ -79,6 +88,7 @@ export const APX_OBSERVE_PROPERTIES = Object.freeze({
     },
     additionalProperties: false,
   },
+  focus: APX_FOCUS_SCHEMA,
   visual: {
     type: "object",
     properties: {
@@ -219,10 +229,25 @@ export function validatePerceptionOptions(input = {}) {
   plainObject(input, "APX observation options");
   exactKeys(input, TOP_LEVEL_KEYS, "APX observation options");
   const representation = input.representation || APX_REPRESENTATION;
-  if (representation !== APX_REPRESENTATION) fail(`APX observation representation is unsupported: ${representation}`);
+  if (!APX_REPRESENTATIONS.includes(representation)) {
+    fail(`APX observation representation is unsupported: ${representation}`);
+  }
   if (input.profile !== undefined) stringArray(input.profile, APX_PROFILES, "profile", APX_PROFILES.length);
   if (input.profile !== undefined && (!input.profile.includes("apx-core/1") || !input.profile.includes("apx-web/1"))) {
     fail("profile requires apx-core/1 and apx-web/1");
+  }
+  if (representation === APX_REPRESENTATION && input.profile?.includes(APX_SITUATION_PROFILE)) {
+    fail("apx.graph does not accept the situation profile");
+  }
+  if (representation === APX_REPRESENTATION && input.focus !== undefined) fail("apx.graph does not accept focus");
+  if (representation === APX_SITUATION_REPRESENTATION) {
+    if (input.since !== undefined || input.query !== undefined) {
+      fail("apx.situation uses focus and does not accept graph since or query");
+    }
+    validateSituationFocus(input.focus);
+    if (input.profile !== undefined && !input.profile.includes(APX_SITUATION_PROFILE)) {
+      fail(`apx.situation profile requires ${APX_SITUATION_PROFILE}`);
+    }
   }
   if (input.channels !== undefined) stringArray(input.channels, APX_CHANNELS, "channels", APX_CHANNELS.length);
   if (input.since !== undefined && !OBSERVATION_REF_RE.test(input.since)) fail("since is invalid");
@@ -245,7 +270,8 @@ export function validatePerceptionOptions(input = {}) {
   }
   const visual = Object.freeze({ mode: input.visual?.mode || "off", overview: input.visual?.overview || "none",
     maxCrops: input.visual?.maxCrops ?? 4 });
-  const profile = [...(input.profile || ["apx-core/1", "apx-web/1"])];
+  const profile = [...(input.profile || ["apx-core/1", "apx-web/1",
+    ...(representation === APX_SITUATION_REPRESENTATION ? [APX_SITUATION_PROFILE] : [])])];
   if (visual.mode !== "off" && !profile.includes("apx-visual/1")) profile.push("apx-visual/1");
   const channels = [...(input.channels || APX_DEFAULT_CHANNELS)];
   if (visual.mode !== "off" && !channels.includes("visual")) channels.push("visual");
@@ -255,6 +281,7 @@ export function validatePerceptionOptions(input = {}) {
     channels: Object.freeze(channels),
     ...(input.since ? { since: input.since } : {}),
     ...(input.query ? { query: Object.freeze({ ...input.query }) } : {}),
+    ...(input.focus ? { focus: validateSituationFocus(input.focus) } : {}),
     visual,
     budget: Object.freeze({ ...APX_DEFAULT_BUDGET, ...(input.budget || {}) }),
   });
@@ -266,22 +293,30 @@ export function perceptionOptionsFromInput(input = {}) {
   return selected;
 }
 
-export function inspectApxConformance({ visual = true, providerKind = "nativeCdp", level = "L4" } = {}) {
+export function inspectApxConformance({ visual = true, providerKind = "nativeCdp", level = "L4",
+  subscriptions = false, inference = false, reportedCapabilities = false,
+  nativeWebMcp = "unsupported" } = {}) {
   const levelNumber = Number(level.slice(1));
   const profiles = ["apx-core/1", "apx-web/1"];
   if (levelNumber >= 4) profiles.push("apx-action/1");
   if (visual) profiles.push("apx-visual/1");
+  profiles.push(APX_SITUATION_PROFILE);
   return Object.freeze({
     name: "APX",
     version: APX_VERSION,
     representation: APX_REPRESENTATION,
+    representations: APX_REPRESENTATIONS,
     providerKind,
     profiles: Object.freeze(profiles),
     channels: APX_CHANNELS,
     visualModes: Object.freeze(visual ? [...APX_VISUAL_MODES] : ["off"]),
     delta: true,
     query: true,
-    subscriptions: false,
+    subscriptions,
+    situation: true,
+    inference,
+    reportedCapabilities,
+    nativeWebMcp,
     level,
     conformance: Object.freeze(["L0", "L1", "L2", "L3", "L4"].slice(0, levelNumber + 1)),
   });
@@ -305,7 +340,7 @@ export function assertApxObservation(value) {
     || !plainObjectForCheck(value.budget) || !plainObjectForCheck(value.integrity)
     || !DIGEST_RE.test(String(value.integrity.canonicalSha256 || ""))
     || !DIGEST_RE.test(String(value.integrity.graphSha256 || ""))) fail("APX observation envelope is invalid");
-  stringArray(value.profile, APX_PROFILES, "APX observation profile", APX_PROFILES.length);
+  stringArray(value.profile, APX_GRAPH_PROFILES, "APX observation profile", APX_GRAPH_PROFILES.length);
   if (!value.profile.includes("apx-core/1") || !value.profile.includes("apx-web/1")) {
     fail("APX observation profile requires core and web");
   }

@@ -95,7 +95,8 @@ terminal descriptor. The JSON output retains the opaque artifact reference for b
 
 ## PyProc Eyes from Python
 
-`client.perception(sessionRef)` binds the provider-neutral APX graph to one attached session. It uses the same
+`client.perception(sessionRef)` binds provider-neutral APX graph and situation representations to one attached
+session. It uses the same
 `automation.observe` and `automation.act` operations as MCP and native JavaScript clients, so Python does not
 gain a second automation meaning or a raw CDP entrance.
 
@@ -109,15 +110,23 @@ with PyProcClient.start(".pyproc/manifest.json") as client:
     attached = client.attachSession(opened.output["targetRef"])
     eyes = client.perception(attached.output)
 
-    save = eyes.query(role="button", name="Save", actionable=True).one()
-    result = eyes.act(
-        "click",
-        save.locatorRef,
+    situation = eyes.situate({"requirements": [{
+        "requirementRef": "requirement:save",
+        "select": {"role": "button", "name": "Save", "actionable": True},
+        "need": ["fact", "affordance"],
+        "cardinality": "one",
+    }]})
+    save = situation.requirement("requirement:save").oneAffordance("click")
+    result = eyes.actAffordance(
+        save,
+        intent="Save the document",
         verify={"entityAppeared": {"role": "status", "nameContains": "Saved"}},
     )
     assert result.output["actions"][0]["result"]["evidence"]["verification"]["state"] == "confirmed"
 ```
 
+`SituationResult` exposes immutable requirements, facts, affordances, and unknowns. Only an authorized
+`SituationAffordance` can be passed to `actAffordance`; page-reported affordances remain content. The older
 `PerceptionEntity` exposes `entityRef`, `locatorRef`, `kind`, `role`, `name`, and `actionable` properties.
 `query(...).one()` checks APX `query.matched` and rejects zero or multiple matches even when the byte budget
 returns only one candidate. `whatChanged(observationRef)` requests

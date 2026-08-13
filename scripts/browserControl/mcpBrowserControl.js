@@ -245,7 +245,7 @@ export function createBrowserControlTools(config) {
   if (config.actions.includes("snapshot")) {
     tools.push({
       name: "browserObserve",
-      description: "Capture a legacy accessibility snapshot or an opt-in bounded APX perception graph.",
+      description: "Capture a legacy accessibility snapshot, an APX graph, or a goal-specific APX SituationCapsule.",
       inputSchema: {
         type: "object",
         properties: {

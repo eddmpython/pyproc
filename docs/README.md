@@ -16,12 +16,12 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 |---|---|---|
 | [product/](product/) | [vision.md](product/vision.md) | Product direction: the North Star, what it is and is not, success and failure criteria, the support boundary |
 | | [glossary.md](product/glossary.md) | Glossary: the naming boundary between the pyproc kernel and the Web Machine layer (`src/machine`, bundled in npm) |
-| [specs/](specs/) | [apx/README.md](specs/apx/README.md) | APX 1.0 product contract: PyProc Eyes graph, provenance, temporal identity, visual evidence, action verification, and conformance |
+| [specs/](specs/) | [apx/README.md](specs/apx/README.md) | APX 1.0 product contract: graph and situation representations, provenance, uncertainty, broker authority, visual evidence, action verification, and conformance |
 | [operations/](operations/) | [operatingModel.md](operations/operatingModel.md) | Operating model: documentation, executable truth, experiments, git history, memory operations, development principles |
 | | [contractReality.md](operations/contractReality.md) | Contract reality: continuous tracking of the gap between contract and actual (recorded on discovery, deleted when closed). Open debt, standing re-verification, tradeoffs, the frontier |
 | | [assetProvenance.md](operations/assetProvenance.md) | Provenance and distribution policy for runtime assets: no evidence is not a pass, SSOT versus derivatives, the seven-item official image distribution gate, known risks |
 | | [testing.md](operations/testing.md) | The test gates (`npm test`) and the browser measurement procedure (a COOP/COEP server) |
-| | [agentExperienceInitiatives.md](operations/agentExperienceInitiatives.md) | Ordered Initiative 0 through 7 plan: entrance, browser cognition, verified changes, hibernating fleets, execution memory, one-shot effects, transactional apps, and replay worlds |
+| | [agentExperienceInitiatives.md](operations/agentExperienceInitiatives.md) | Ordered Initiative 0 through 8 plan: entrance, browser cognition, verified changes, hibernating fleets, execution memory, one-shot effects, transactional apps, replay worlds, and proof-carrying actuation |
 | | [experimentalFreeze.md](operations/experimentalFreeze.md) | The freeze on new Experimental public surfaces and the conditions for lifting it |
 | | [moduleBoundaries.md](operations/moduleBoundaries.md) | Ownership boundaries between Runtime capability clusters, policy modules, contract suites, and runtime assets |
 | | [benchmarking.md](operations/benchmarking.md) | The measurement contract for internal benchmarks, canonical scenarios, and raw-evidence rules (posting on a public surface is forbidden: the no-bragging-with-numbers rule) |
@@ -67,5 +67,5 @@ Language: `usage/`, `reference/`, and `product/` are English. `operations/` is t
 - Automation provider contract: [usage/automationSpace.md](usage/automationSpace.md)
 - Cooperative frame provider: [usage/frameSpace.md](usage/frameSpace.md)
 - Automation recording and replay: [usage/replaySpace.md](usage/replaySpace.md)
-- PyProc Eyes wire and evidence contract: [APX 1.0](specs/apx/README.md)
+- PyProc Eyes graph, SituationCapsule, and evidence contract: [APX 1.0](specs/apx/README.md)
 - Contributing from outside: [CONTRIBUTING.md](../CONTRIBUTING.md)

@@ -5,6 +5,7 @@ import { createFrameSpaceTools } from "../../scripts/automationSpace/frameSpaceT
 import { AutomationSpaceRouter } from "../../scripts/automationSpace/automationSpace.js";
 import { PageCommandBridge } from "../../scripts/controlProtocol/pageCommandBridge.mjs";
 import { APX_REPRESENTATION } from "../../scripts/perception/apxCatalog.js";
+import { APX_SITUATION_REPRESENTATION } from "../../scripts/perception/situationCatalog.js";
 
 async function errorOf(operation) {
   try { await operation(); return null; } catch (error) { return error; }
@@ -47,6 +48,8 @@ export async function assertFrameSpaceContract() {
   assert.equal(tools.some((tool) => tool.name === "browserCommand"), false);
   assert.equal(tools.find((tool) => tool.name === "browserObserve")
     .inputSchema.properties.representation.enum.includes(APX_REPRESENTATION), true);
+  assert.equal(tools.find((tool) => tool.name === "browserObserve")
+    .inputSchema.properties.representation.enum.includes(APX_SITUATION_REPRESENTATION), true);
   const space = new FrameSpace({ pageBridge, config, spaceId: "space:frameContract" });
   assert.equal(space.providerKind, "frame");
   assert.deepEqual(space.capabilities, ["dom", "target", "screenshot", "artifact", "perception"]);
@@ -70,6 +73,22 @@ export async function assertFrameSpaceContract() {
   assert.equal(observed.budget.omitted.entities, 2);
   assert.equal(JSON.stringify(observed).includes("frameNode:private"), false);
   assert.equal(observed.page.url, "https://allowed.example/path");
+  const situation = await router.invoke("automation.observe", {
+    sessionRef: { protocolVersion: "1", spaceId: "space:frameContract",
+      sessionId: "session:contract", targetRef: "target:contract" },
+    expectedRisk: "read", representation: APX_SITUATION_REPRESENTATION,
+    focus: { requirements: [{ requirementRef: "requirement:save", select: { role: "button", name: "Save" },
+      need: ["fact", "affordance"], cardinality: "one" }] },
+  }, { requestId: "contract:situation" });
+  const save = situation.affordances.find((entry) => entry.kind === "authorized" && entry.action === "click");
+  assert.equal(situation.requirements[0].state, "satisfied");
+  assert.equal(save.capabilityRef.startsWith("capability:"), true);
+  await router.invoke("automation.act", { sessionRef: { protocolVersion: "1", spaceId: "space:frameContract",
+    sessionId: "session:contract", targetRef: "target:contract" }, actions: [{ kind: "click",
+    locatorRef: save.locatorRef, expectedRisk: "externalEffect", actionContext: {
+      situationRef: situation.situationRef, worldRef: situation.worldRef, capabilityRef: save.capabilityRef,
+    } }] }, { requestId: "contract:proof-action" });
+  assert.equal(calls.at(-1)[1], "automation.act");
 
   const beforeUnsupported = calls.length;
   const unsupportedProfile = await errorOf(() => router.invoke("automation.observe", {

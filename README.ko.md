@@ -24,11 +24,11 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=5b8cff&labelColor=0a0f1c" alt="npm"></a>
-  <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=0a0f1c" alt="ci"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-7c4dff?labelColor=0a0f1c" alt="license MPL-2.0"></a>
-  <img src="https://img.shields.io/badge/runtime_npm_dependencies-0-00d4c8?labelColor=0a0f1c" alt="zero runtime npm dependencies">
-  <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-5b8cff?labelColor=0a0f1c" alt="CPython 3.14 on WebAssembly">
+  <a href="https://www.npmjs.com/package/pyproc"><img src="https://img.shields.io/npm/v/pyproc?label=npm&color=ff5a36&labelColor=12100e" alt="npm"></a>
+  <a href="https://github.com/eddmpython/pyproc/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/eddmpython/pyproc/ci.yml?branch=main&label=ci&labelColor=12100e" alt="ci"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-ff8a6a?labelColor=12100e" alt="license MPL-2.0"></a>
+  <img src="https://img.shields.io/badge/runtime_npm_dependencies-0-55d6a9?labelColor=12100e" alt="zero runtime npm dependencies">
+  <img src="https://img.shields.io/badge/CPython-3.14%20on%20WebAssembly-ff5a36?labelColor=12100e" alt="CPython 3.14 on WebAssembly">
 </p>
 
 <p align="center">
@@ -169,9 +169,9 @@ fail-closed network policy를 적용하면 선택한 데이터도 code 실행 �
 - **fail-closed 정책 아래 데이터는 로컬에 둘 수 있다.** 데이터를 탭에서 처리하고 선택한
   결과만 내보낸다. 로컬 실행만으로는 no-exfiltration 경계가 되지 않는다.
 - **격리된 실행.** Python이 메인 UI 스레드와 분리돼, 관리하는 여러 워커에서 돈다.
-- **허용한 페이지를 보는 눈, 움직이는 손, 성공 증거.** PyProc Eyes가 bounded semantic, spatial,
-  temporal graph를 돌려준다. 통제된 action은 DOM 또는 network postcondition을 요구할 수 있고
-  screenshot은 검증된 byte로 도착한다.
+- **허용한 페이지를 보는 눈, 움직이는 손, 성공 증거.** PyProc Eyes가 bounded graph 또는 typed focus에
+  답하는 최소 evidence-linked situation을 돌려준다. 통제된 action은 broker authority를 사용하고 DOM이나
+  network postcondition을 요구할 수 있으며, 구조 evidence가 부족할 때만 검증된 pixel을 요청한다.
 
 ## 빠른 시작
 
@@ -379,13 +379,30 @@ with PyProcClient.start(".pyproc/manifest.json") as client:
 [Python SDK 가이드](docs/usage/pythonSdk.md)는 설치, checkpoint 복구, cancel, browser action,
 검증된 screenshot byte를 설명한다.
 
-**PyProc Eyes**는 같은 `automation.observe` operation 뒤에 있는 opt-in APX perception 경로다. semantic
-fact, structure, geometry와 occlusion, stable temporal identity, bounded delta를 융합하고 해결되지 않은
-영역에만 pixel을 요청한다. `entityRef`는 observation identity이고 fresh `locatorRef`는 단기 action
-capability다. action은 DOM과 network postcondition을 선언하고, click 완료를 성공 증거로 오인하는 대신
-`ActionEvidence`를 반환할 수 있다. Native CDP, FrameSpace, ReplaySpace, MCP, Control Protocol, Python SDK의
-`client.perception(sessionRef)`가 이 한 계약을 공유한다. 자세한 계약은
-[APX 1.0 제품 계약](docs/specs/apx/README.md)에 있다.
+**PyProc Eyes**는 같은 `automation.observe` operation 뒤에 있는 opt-in APX perception 경로다. 소비자에게
+page dump를 넘기지 않는다. `apx.situation`은 typed requirement에 답하는 최소 evidence-linked
+`SituationCapsule`을 반환하고, 무엇이 `known`, `conflicted`, `unknown`, `stale`인지 밝히며, 실행 가능한
+affordance를 broker authority에 묶는다. `entityRef`는 observation identity이고 `locatorRef`는 target
+binding일 뿐이다. 해결되지 않은 영역에만 pixel을 요청한다. action은 DOM과 network postcondition을
+선언하고 click 완료를 성공 증거로 오인하는 대신 `ActionEvidence`를 반환할 수 있다. Native CDP,
+FrameSpace, ReplaySpace, MCP, Control Protocol, JavaScript와 Python perception client가 이 계약을 공유한다.
+
+```js
+const eyes = client.perception(attached.output);
+const situation = await eyes.situate({ requirements: [{
+  requirementRef: "requirement:save",
+  select: { role: "button", name: "Save", actionable: true },
+  need: ["fact", "affordance"],
+  cardinality: "one",
+}] });
+const save = situation.requirement("requirement:save").oneAffordance("click");
+await eyes.actAffordance(save, {
+  intent: "Save the document",
+  verify: { entityAppeared: { role: "status", nameContains: "Saved" } },
+});
+```
+
+자세한 계약은 [APX 1.0 제품 계약](docs/specs/apx/README.md)에 있다.
 
 `{ "enabled": false }`이면 서버는 `pythonRun`, `checkpointSave`, `checkpointRestore`, `sandboxReset`
 네 Python 도구만 노출한다. browser를 켜면 lifecycle, compatibility, semantic observation, 순차 action,
@@ -470,7 +487,7 @@ FrameSpace는 이 facade를 공유하면서 서로 다른 정직한 conformance 
 | 기본 내구 Machine(`open()` / `open({ name })`) | Complete |
 | 프로세스 OS, 복원 reactivity, ASGI, 선언 environment, terminal, machine image, journal | Bounded |
 | Device FS, permission jail, GPU, socket | Probe |
-| PyProc Eyes APX perception과 action evidence | Bounded |
+| PyProc Eyes graph, SituationCapsule, proof-carrying action과 action evidence | Bounded |
 | 설치형 MCP browser automation과 artifact 제품 | Bounded |
 | 설치형 JavaScript Control SDK | Bounded |
 | non-Pyodide CPython 3.14 (`bootWasi` / `WasiSession`) | Engine proof |

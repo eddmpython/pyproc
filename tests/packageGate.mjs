@@ -12,7 +12,8 @@ try {
     import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
     import { commitState, openState, MemoryStateStore, decodeStateBundle, PAGE_SIZE } from "pyproc/history";
     import { createWebComputer as fromMachine, createMachineCryptoProvider } from "pyproc/machine";
-    import { PyProcControlClient, ControlRemoteError, ControlRequest, PerceptionClient } from "pyproc/control";
+    import { PyProcControlClient, ControlRemoteError, ControlRequest, PerceptionClient,
+      SituationResult, SituationRequirement, SituationFact, SituationAffordance, SituationUnknown } from "pyproc/control";
 
     for (const [name, fn] of [["boot", boot], ["open", open], ["createWebComputer", createWebComputer], ["checkEnvironment", checkEnvironment]]) {
       if (typeof fn !== "function") throw new Error(name + " export missing");
@@ -31,7 +32,8 @@ try {
     for (const fn of [commitState, openState, decodeStateBundle, createMachineCryptoProvider]) {
       if (typeof fn !== "function") throw new Error("kernel surface missing");
     }
-    for (const [name, value] of Object.entries({ PyProcControlClient, ControlRemoteError, ControlRequest, PerceptionClient })) {
+    for (const [name, value] of Object.entries({ PyProcControlClient, ControlRemoteError, ControlRequest,
+      PerceptionClient, SituationResult, SituationRequirement, SituationFact, SituationAffordance, SituationUnknown })) {
       if (typeof value !== "function") throw new Error("control surface missing: " + name);
     }
     // 커널 프로토콜이 설치본에서도 실동작하는가(Node webcrypto로 커밋 왕복).
@@ -105,12 +107,21 @@ try {
     ["scripts", "perception", "apxCatalog.js"],
     ["scripts", "perception", "perceptionSpace.js"],
     ["scripts", "perception", "actionEvidence.js"],
+    ["scripts", "perception", "worldModel.js"],
+    ["scripts", "perception", "situationCatalog.js"],
+    ["scripts", "perception", "situationCompiler.js"],
+    ["scripts", "perception", "probePlanner.js"],
+    ["scripts", "perception", "capabilityProjector.js"],
+    ["scripts", "perception", "transitionLedger.js"],
     ["scripts", "perception", "profiles", "webCdpSensor.js"],
     ["scripts", "perception", "profiles", "frameSensor.js"],
+    ["scripts", "perception", "profiles", "reportedCapabilitySensor.js"],
     ["scripts", "perception", "schemas", "apxCoreSchema.json"],
     ["scripts", "perception", "schemas", "apxWebSchema.json"],
     ["scripts", "perception", "schemas", "apxActionSchema.json"],
     ["scripts", "perception", "schemas", "apxVisualSchema.json"],
+    ["scripts", "perception", "schemas", "apxFocusSchema.json"],
+    ["scripts", "perception", "schemas", "apxSituationSchema.json"],
     ["scripts", "browserControl", "mcpMachine.html"],
     ["scripts", "browserControl", "browserArtifactStore.js"],
   ]) {

@@ -82,9 +82,11 @@ profile 여부는 probe가 wire 호환성을 판정한 뒤 결정한다.
 | 2026-08-13 | exact Playwright 기준선 | Playwright 1.62.0, Edge 151.0.4129.78, Windows x64, 1280x800 | ARIA+box, role locator, bounding box, element screenshot, click reach PASS, artifact digest 재현 | 약한 대조군 금지, 동일 fixture에서 전체 허용 reach를 기준선으로 고정 | world와 capsule prototype |
 | 2026-08-13 | WorldModel과 SituationCompiler | deterministic fixture graph와 120개 noise entity | 8 prototype probe PASS, semantic visual artifact 0, old capability provider call 0 | `apx.situation`을 graph 1.0과 분리한 representation으로 승격 가능 | schema와 본진 승격 |
 | 2026-08-13 | authority와 transition 반증 | reported tool, page instruction, document replacement, unrelated response | authority widening 0, weak-only confirmed 0, replay provider call 0 | broker capability와 transition proof를 독립 불변식으로 유지 | installed provider 통합 |
+| 2026-08-13 | 본진 승격과 설치 제품 검증 | Edge 151, packed npm, clean Python wheel 및 sdist, Native CDP, FrameSpace, ReplaySpace | Native CDP 9/9, FrameSpace 21/21, ReplaySpace 14/14, JavaScript Control 18/18, Python SDK 5/5, browser control 71/71, installed 37/37 | graph 1.0을 보존한 opt-in `apx.situation`, broker capability, effect 전 stale 거부, effect-free replay를 출하 계약으로 승격 | attempt와 mainPlan 삭제 뒤 Initiative 2 착수 |
 
 ## 판정
 
-Prototype 졸업. exact Playwright 기준선과 deterministic oracle을 고정했고, world atomicity, 최소 충분
-projection, active perception, capability boundary, transition proof, replay의 양성 및 음성 probe가 모두
-통과했다. 다음 단계는 shortcut 없이 `scripts/perception/` 책임 모듈과 strict schema로 다시 작성하는 것이다.
+졸업 -> `scripts/perception`. exact Playwright 기준선과 deterministic oracle을 고정했고, world
+atomicity, 최소 충분 projection, active perception, capability boundary, transition proof, replay의 양성
+및 음성 probe가 모두 통과했다. 정식 schema, validator, JavaScript와 Python facade, MCP input,
+Native CDP, FrameSpace, ReplaySpace, CI와 문서가 같은 계약으로 승격됐다.
