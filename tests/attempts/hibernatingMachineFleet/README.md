@@ -50,7 +50,9 @@ Initiative 0, 1, 2가 모두 졸업해야 한다. 이 캠페인은 pause나 `sav
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
 | 2026-08-13 | source contract audit | root open, worker guest, Durable Web Computer, state kernel | probe 미실행 | explicit worker termination과 fleet lease가 실제 간극 | Initiative 2 졸업 뒤 worker reclaim baseline |
+| 2026-08-13 | `fleetPrototype.mjs`, `run.mjs` | Node 24, deterministic injected runtime owner | 16 checks PASS, hot 1/1, commit failure stop 0, unsafe eviction 0, stale lease mutation 0, cleanup failure cold 판정 0 | state, lease, admission, commit-verify-stop 순서가 최소 커널에서 성립 | 실제 Durable Web Computer와 Worker에 결합 |
 
 ## 판정
 
-진행 중. worker reclaim baseline부터 직렬로 검증한다.
+진행 중. 최소 반증 커널은 통과했다. 다음은 같은 순서를 Durable Web Computer와 실제 Worker owner에
+결합하고 브라우저에서 cold worker 0과 exact generation 복구를 측정한다.
