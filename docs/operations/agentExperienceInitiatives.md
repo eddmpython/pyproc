@@ -581,7 +581,8 @@ provenance이며 permission grant가 아니고, 외부 browser cookie와 unknown
 
 ## Initiative 5 - Rehearse-Commit Transactions
 
-상태: 착수. Initiative 4의 immutable session revision을 effect intent와 receipt의 정본 경계로 사용한다.
+상태: 구현됨. Initiative 4의 immutable session revision을 effect intent와 receipt의 정본 경계로 사용하며,
+installed JavaScript, MCP, Python과 Chrome, Edge 제품 gate가 같은 one-shot effect와 sealed receipt를 검증한다.
 
 ### 제품 명제
 
@@ -622,10 +623,13 @@ idempotency capability를 제공할 때만 별도 선언한다. 그 지원이 �
 7. EffectReceipt가 intent, rehearsal, approval, lease, before와 after, evidence, generation을 연결한다.
 8. secret 유출과 outcomeUnknown 축약은 0이다.
 
-실험은
-[Initiative 5 campaign](../../tests/attempts/rehearseCommitTransactions/)에서 시작한다.
+지속 구현 계약과 검증 명령은
+[Rehearse-Commit specification](../specs/rehearseCommit/README.md)이 소유한다.
 
 ## Initiative 6 - Transactional AppSpace
+
+상태: 착수. Initiative 5의 sealed EffectReceipt와 one-shot CommitLease를 app outbox의 유일한 live effect
+경계로 재사용한다.
 
 ### 제품 명제
 
