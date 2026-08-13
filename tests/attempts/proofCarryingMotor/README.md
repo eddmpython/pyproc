@@ -81,4 +81,4 @@ ActionCapability, CommitLease, evidence terminal이 정식 계약이어야 한�
 
 ## 판정
 
-후행 대기 중. Initiative 7 졸업 전에는 probe를 실행하지 않는다.
+진행 중. Initiative 7의 durable ReplayGraph root와 effect-free traversal을 선행 계약으로 사용한다.

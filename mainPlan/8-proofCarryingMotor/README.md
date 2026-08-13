@@ -1,6 +1,6 @@
 # Initiative 8: Proof-Carrying Motor 제품 요구사항과 실행 계획
 
-상태: **Initiative 7 후행 대기**
+상태: **착수**
 
 이 문서는 APX가 이해한 대상에 같은 의미 행동을 cooperative app, browser input, Windows accessibility,
 OS input 중 적합한 경로로 수행하고, 사용자 제어권과 effect 경계를 지키며, 실제 결과를 증명하는 아홉 번째
