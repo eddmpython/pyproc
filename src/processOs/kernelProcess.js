@@ -6,10 +6,13 @@ export class KernelProcess {
   #state = "running";
   #result = null;
   #execution = null;
+  #onClose;
+  #closeNotified = false;
 
-  constructor(pid, session) {
+  constructor(pid, session, { onClose = null } = {}) {
     this.pid = pid;
     this.#session = session;
+    this.#onClose = onClose;
   }
 
   get kernel() { return this.#session.kernel; }
@@ -50,7 +53,13 @@ export class KernelProcess {
   }
 
   async close() {
-    await this.#session.close();
+    try { await this.#session.close(); }
+    finally {
+      if (!this.#closeNotified) {
+        this.#closeNotified = true;
+        await this.#onClose?.(this.#session);
+      }
+    }
     if (this.#state === "running") this.#state = "terminated";
     return Object.freeze({ pid: this.pid, state: this.#state });
   }
@@ -61,13 +70,17 @@ export class KernelProcessManager {
   #openSession;
   #processes = new Map();
   #counter = 0;
+  #onSessionOpen;
+  #onSessionClose;
 
-  constructor(factory, { openSession } = {}) {
+  constructor(factory, { openSession, onSessionOpen = null, onSessionClose = null } = {}) {
     if (!factory || typeof factory.open !== "function" || typeof openSession !== "function") {
       throw new PyProcError("PYPROC_INPUT_INVALID", "KernelProcessManager requires KernelFactory.open and an openSession composition port");
     }
     this.#factory = factory;
     this.#openSession = openSession;
+    this.#onSessionOpen = onSessionOpen;
+    this.#onSessionClose = onSessionClose;
   }
 
   async spawn(manifest, options = {}) {
@@ -86,7 +99,9 @@ export class KernelProcessManager {
     } else {
       session = await this.#openSession(this.#factory, manifest, { ...options, kernelRef: `kernel:process:${pid}` });
     }
-    const process = new KernelProcess(pid, session);
+    try { await this.#onSessionOpen?.(session); }
+    catch (error) { await session.close(); throw error; }
+    const process = new KernelProcess(pid, session, { onClose: this.#onSessionClose });
     this.#processes.set(pid, process);
     if (typeof options.code === "string") process.execute(options.code);
     return Object.freeze({ process, checkpoint });

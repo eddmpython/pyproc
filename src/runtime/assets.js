@@ -35,6 +35,14 @@ const ASSETS = Object.freeze([
     usedBy: ["KernelMachine.tools"],
     reason: "source-pinned ripgrep 15.1.0 WASI 실행 자산",
   }),
+  Object.freeze({
+    role: "wasmToolBinary",
+    path: "src/runtime/tools/owned/git.wasm",
+    kind: "wasm-module",
+    sameOrigin: true,
+    usedBy: ["KernelMachine.tools"],
+    reason: "source-pinned libgit2 1.9.7 WASI 로컬 저장소 실행 자산",
+  }),
 ]);
 
 function packageRootFrom(metaUrl) {

@@ -256,7 +256,7 @@ export const NORTH_STAR_AXES = Object.freeze([
       }),
       Object.freeze({
         id: "nodeGuest",
-        rung: 7,
+        rung: 6,
         en: "Boot a Node guest beside Python and Linux, making JavaScript CLI tools residents of the computer",
         ko: "Python과 Linux 옆에 Node guest를 부팅해 JavaScript CLI 도구를 이 컴퓨터의 거주자로 만든다",
       }),
@@ -338,15 +338,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "localPythonParity",
-    score: 8.9,
+    score: 9.1,
     en: Object.freeze({
       title: "Everything local Python does",
-      state: "The package environment resolves standard metadata, canonicalizes equivalent Requires-Python declarations, hashes wheels, and installs them transactionally. The installed core and data engines ship as separate reproducible distributions. Their source-pinned catalogs seal wrapper wheels, metadata, native sources and ABIs to exact engines and profiles. The data engine runs real wasm-simd128 float64 oracles and NumPy 2.5.1 built from its exact sdist as 13 static modules, with array, dot, FFT, linalg, seeded random, clone, and Machine image oracles. Verified package layers survive process clone and Machine image revival, while mutated embedded wheels fail closed. The installed GPU subpath verifies registered compute and rendered-pixel results on real hardware. The Machine also runs source-pinned ripgrep 15.1.0 in an isolated WASI worker over a bounded read-only VFS snapshot, with exact argv, input digest, exit, output, timing, cancellation, and integrity receipts. SciPy, pandas, Polars, Git, Python subprocess integration, and arbitrary native wheels remain explicit absences.",
+      state: "The package environment resolves standard metadata, canonicalizes equivalent Requires-Python declarations, hashes wheels, and installs them transactionally. The installed core and data engines ship as separate reproducible distributions. Their source-pinned catalogs seal wrapper wheels, metadata, native sources and ABIs to exact engines and profiles. The data engine runs real wasm-simd128 float64 oracles and NumPy 2.5.1 built from its exact sdist as 13 static modules, with array, dot, FFT, linalg, seeded random, clone, and Machine image oracles. Verified package layers survive process clone and Machine image revival, while mutated embedded wheels fail closed. The installed GPU subpath verifies registered compute and rendered-pixel results on real hardware. The Machine runs source-pinned ripgrep 15.1.0 over a bounded read-only snapshot and libgit2 1.9.7 Git over compare-and-swap KernelVfs transactions. Both use isolated WASI workers and the same argv-only receipt catalog is callable from main and cloned Python kernels through `pyprocTools`. SciPy, pandas, Polars, Python standard-library subprocess, remote Git, shell grammar, and arbitrary native wheels remain explicit absences.",
       target: "Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology.",
     }),
     ko: Object.freeze({
       title: "로컬 파이썬이 하는 전부",
-      state: "package environment가 표준 metadata와 의미가 같은 Requires-Python 선언을 canonicalize하고 wheel을 hash 검증해 transaction으로 설치한다. 설치 core와 data engine은 별도 재현 배포본으로 배송된다. 각 source-pinned catalog는 wrapper wheel, metadata, native source와 ABI를 exact engine과 profile에 봉인한다. data engine은 실제 wasm-simd128 float64 oracle과 exact sdist에서 13개 static module로 빌드한 NumPy 2.5.1을 실행한다. array, dot, FFT, linalg, seeded random, process clone과 Machine image oracle이 이를 검증한다. 포함 wheel 변조는 안전 거절되고 설치 GPU subpath는 실제 hardware에서 compute와 rendered-pixel 결과를 검증한다. Machine은 source-pinned ripgrep 15.1.0도 격리 WASI worker에서 bounded read-only VFS snapshot 위로 실행하며 argv, 입력 digest, exit, 출력, 시간, 취소와 무결성 receipt를 반환한다. SciPy, pandas, Polars, Git, Python subprocess 연결과 임의 native wheel은 명시적 미지원이다.",
+      state: "package environment가 표준 metadata와 의미가 같은 Requires-Python 선언을 canonicalize하고 wheel을 hash 검증해 transaction으로 설치한다. 설치 core와 data engine은 별도 재현 배포본으로 배송된다. 각 source-pinned catalog는 wrapper wheel, metadata, native source와 ABI를 exact engine과 profile에 봉인한다. data engine은 실제 wasm-simd128 float64 oracle과 exact sdist에서 13개 static module로 빌드한 NumPy 2.5.1을 실행한다. array, dot, FFT, linalg, seeded random, process clone과 Machine image oracle이 이를 검증한다. 포함 wheel 변조는 안전 거절되고 설치 GPU subpath는 실제 hardware에서 compute와 rendered-pixel 결과를 검증한다. Machine은 source-pinned ripgrep 15.1.0을 bounded read-only snapshot에서, libgit2 1.9.7 Git을 CAS KernelVfs transaction에서 실행한다. 둘 다 격리 WASI worker를 쓰며 main과 clone Python kernel의 `pyprocTools`도 같은 argv-only receipt catalog를 호출한다. SciPy, pandas, Polars, Python 표준 라이브러리 subprocess, remote Git, shell grammar와 임의 native wheel은 명시적 미지원이다.",
       target: "로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다.",
     }),
     evidence: Object.freeze([
@@ -361,10 +361,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "residentGitAndPythonToolBridge",
-        rung: 6,
-        en: "Add a source-pinned Git implementation and bridge the same argv-only tool receipts into Python without pretending stdlib subprocess works",
-        ko: "source-pinned Git 구현을 추가하고 표준 라이브러리 subprocess가 된 척하지 않으면서 같은 argv-only 도구 receipt를 Python에 연결한다",
+        id: "scientificPackageBreadth",
+        en: "Add SciPy as the next source-pinned scientific profile with numeric, failure, clone, image, and reproducibility oracles",
+        ko: "SciPy를 다음 source-pinned scientific profile로 추가하고 수치, 실패, clone, image와 재현 oracle을 함께 고정한다",
       }),
     ]),
   }),
@@ -431,12 +430,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 9.0,
     en: Object.freeze({
       title: "A supply chain you can verify",
-      state: "The zero-dependency engine CLI verifies catalog-pinned boot anchors and every lock-listed package before same-origin deployment; runtime pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. The asset CLI seals the worker, Service Worker, resident tool worker, and WASM binary graph, bad hashes refuse spawn, and machine images verify signers before import. Ripgrep is fixed to tag 15.1.0, commit, Cargo.lock digest, Rust toolchain, WASI target, build profile, byte length, SHA-256, and license, and two isolated target builds are byte-identical. The Linux guest and data engine are checked by byte-identical independent rebuilds. The NumPy lane additionally seals the exact sdist, build tools, compatibility overlay, static module registry, wheel, numeric oracle, SBOM, and manifest.",
+      state: "The zero-dependency engine CLI verifies catalog-pinned boot anchors and every lock-listed package before same-origin deployment; runtime pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. The asset CLI seals the worker, Service Worker, resident tool worker, and WASM binary graph, bad hashes refuse spawn, and machine images verify signers before import. Ripgrep is fixed to tag 15.1.0, commit, Cargo.lock digest, Rust toolchain, WASI target, build profile, byte length, SHA-256, and license. Git is fixed to libgit2 1.9.7 and its exact commit, source patch, archive digests, WASI SDK, CMake, Ninja, build flags, binary digest, and license. Both resident tools have byte-identical isolated rebuilds. The Linux guest and data engine are checked by byte-identical independent rebuilds. The NumPy lane additionally seals the exact sdist, build tools, compatibility overlay, static module registry, wheel, numeric oracle, SBOM, and manifest.",
       target: "Every byte pyproc executes is either built by a repository recipe or pinned by a digest, and every mismatch fails before execution.",
     }),
     ko: Object.freeze({
       title: "검증 가능한 공급망",
-      state: "무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. 자산 CLI는 worker, Service Worker, 상주 도구 worker와 WASM binary graph를 봉인하고 나쁜 hash는 spawn을 거부하며 Machine image는 import 전에 서명자를 검증한다. ripgrep은 15.1.0 tag, commit, Cargo.lock digest, Rust toolchain, WASI target, build profile, byte 길이, SHA-256과 license까지 고정하고 두 격리 target build가 byte-identical이다. Linux guest와 data engine은 독립 byte-identical rebuild로 확인한다. NumPy 레인은 exact sdist, build tool, compatibility overlay, static module registry, wheel, 수치 oracle, SBOM과 manifest까지 봉인한다.",
+      state: "무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. 자산 CLI는 worker, Service Worker, 상주 도구 worker와 WASM binary graph를 봉인하고 나쁜 hash는 spawn을 거부하며 Machine image는 import 전에 서명자를 검증한다. ripgrep은 15.1.0 tag, commit, Cargo.lock digest, Rust toolchain, WASI target, build profile, byte 길이, SHA-256과 license까지 고정한다. Git은 libgit2 1.9.7과 exact commit, source patch, archive digest, WASI SDK, CMake, Ninja, build flag, binary digest와 license까지 고정한다. 두 상주 도구 모두 격리 rebuild가 byte-identical이다. Linux guest와 data engine은 독립 byte-identical rebuild로 확인한다. NumPy 레인은 exact sdist, build tool, compatibility overlay, static module registry, wheel, 수치 oracle, SBOM과 manifest까지 봉인한다.",
       target: "pyproc이 실행하는 모든 byte는 저장소 recipe로 build되거나 digest로 pin되고, 불일치는 실행 전에 실패한다.",
     }),
     evidence: Object.freeze([

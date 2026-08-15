@@ -307,11 +307,21 @@ try {
   const byPath = new Map(manifest.files.map((f) => [f.path, f]));
   for (const path of ["src/runtime/engines/wasi/wasiWorker.js",
     "src/runtime/engines/wasi/browserWasiShim.js", "src/runtime/errors.js",
-    "src/runtime/tools/wasmToolWorker.js", "src/runtime/tools/owned/rg.wasm"]) {
+    "src/runtime/tools/wasmToolWorker.js", "src/runtime/tools/owned/rg.wasm",
+    "src/runtime/tools/owned/git.wasm"]) {
     const file = byPath.get(path);
     if (!file) throw new Error(`installed CLI graph 파일 누락: ${path}`);
     if (!/^sha256-[A-Za-z0-9+/]+=*$/.test(file.integrity)) throw new Error(`installed CLI SRI 형식 오류: ${path}`);
     if (!existsSync(join(copyTo, ...path.split("/")))) throw new Error(`installed CLI copy 누락: ${path}`);
+  }
+  for (const path of [
+    "src/runtime/tools/owned/LICENSE.libgit2",
+    "src/runtime/tools/owned/libgit2-1.9.7.provenance.json",
+    "scripts/wasmToolBuilder/patches/libgit2-1.9.7-wasi.patch",
+  ]) {
+    if (!existsSync(join(appDir, "node_modules", "pyproc", ...path.split("/")))) {
+      throw new Error(`installed Git provenance input 누락: ${path}`);
+    }
   }
 
   console.log(`package gate ok: ${manifest.files.length} files`);

@@ -73,6 +73,8 @@ export const HOSTCALL_OPCODE = Object.freeze({
   processWait: 0x0301,
   processSignal: 0x0302,
   processPipe: 0x0303,
+  toolRun: 0x0400,
+  toolInspect: 0x0401,
   gpuDispatch: 0x0600,
   clipboardRead: 0x0500,
   clipboardWrite: 0x0501,

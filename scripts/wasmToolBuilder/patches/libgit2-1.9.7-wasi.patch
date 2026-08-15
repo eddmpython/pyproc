@@ -1,0 +1,361 @@
+diff --git a/examples/lg2.c b/examples/lg2.c
+index 7946bc2..e8a2ccd 100644
+--- a/examples/lg2.c
++++ b/examples/lg2.c
+@@ -73,6 +73,11 @@ int main(int argc, char **argv)
+ 	int return_code = 1;
+ 	size_t i;
+ 
++	if (argc == 2 && !strcmp(argv[1], "--version")) {
++		printf("libgit2 %s\n", LIBGIT2_VERSION);
++		return 0;
++	}
++
+ 	if (argc < 2)
+ 		usage(argv[0]);
+ 
+diff --git a/src/libgit2/config_file.c b/src/libgit2/config_file.c
+index 870b137..456129c 100644
+--- a/src/libgit2/config_file.c
++++ b/src/libgit2/config_file.c
+@@ -120,7 +120,13 @@ static int config_file_open(git_config_backend *cfg, git_config_level_t level, c
+ 	 * important for sandboxed applications on macOS where the
+ 	 * git configuration files may not be readable.
+ 	 */
+-	if (p_access(b->file.path, R_OK) < 0)
++	if (
++#ifndef __wasi__
++		p_access(b->file.path, R_OK) < 0
++#else
++		false
++#endif
++	)
+ 		return GIT_ENOTFOUND;
+ 
+ 	if (res < 0 || (res = config_file_read(b->config_list, repo, &b->file, level, 0)) < 0) {
+diff --git a/src/libgit2/streams/socket.c b/src/libgit2/streams/socket.c
+index d064f86..087b8a0 100644
+--- a/src/libgit2/streams/socket.c
++++ b/src/libgit2/streams/socket.c
+@@ -7,6 +7,23 @@
+ 
+ #include "streams/socket.h"
+ 
++#if defined(__wasi__)
++
++int git_socket_stream__connect_timeout = 0;
++int git_socket_stream__timeout = 0;
++
++int git_socket_stream_new(git_stream **out, const char *host, const char *port)
++{
++	GIT_UNUSED(host); GIT_UNUSED(port);
++	if (out) *out = NULL;
++	git_error_set(GIT_ERROR_NET, "network sockets are unavailable on WASI");
++	return -1;
++}
++
++int git_socket_stream_global_init(void) { return 0; }
++
++#else
++
+ #include "posix.h"
+ #include "registry.h"
+ #include "runtime.h"
+@@ -456,3 +473,5 @@ int git_socket_stream_global_init(void)
+ }
+ 
+  #endif
++
++#endif
+diff --git a/src/libgit2/sysdir.c b/src/libgit2/sysdir.c
+index 7838a67..424c87b 100644
+--- a/src/libgit2/sysdir.c
++++ b/src/libgit2/sysdir.c
+@@ -17,7 +17,9 @@
+ # include "win32/utf-conv.h"
+ #else
+ # include <unistd.h>
+-# include <pwd.h>
++# if !defined(__wasi__)
++#  include <pwd.h>
++# endif
+ #endif
+ 
+ #ifdef GIT_WIN32
+@@ -283,7 +285,7 @@ static int git_sysdir_guess_system_dirs(git_str *out)
+ #endif
+ }
+ 
+-#ifndef GIT_WIN32
++#if !defined(GIT_WIN32) && !defined(__wasi__)
+ static int get_passwd_home(git_str *out, uid_t uid)
+ {
+ 	struct passwd pwd, *pwdptr;
+@@ -332,6 +334,11 @@ static int git_sysdir_guess_home_dirs(git_str *out)
+ 	};
+ 
+ 	return find_win32_dirs(out, global_tmpls);
++#else
++#if defined(__wasi__)
++	int error = git__getenv(out, "HOME");
++	if (error == GIT_ENOTFOUND) { git_error_clear(); return 0; }
++	return error;
+ #else
+ 	int error;
+ 	uid_t uid, euid;
+@@ -365,6 +372,7 @@ static int git_sysdir_guess_home_dirs(git_str *out)
+ 
+ 	return error;
+ #endif
++#endif
+ }
+ 
+ static int git_sysdir_guess_global_dirs(git_str *out)
+@@ -386,6 +394,16 @@ static int git_sysdir_guess_xdg_dirs(git_str *out)
+ 	};
+ 
+ 	return find_win32_dirs(out, global_tmpls);
++#else
++#if defined(__wasi__)
++	git_str env = GIT_STR_INIT;
++	int error = git__getenv(&env, "XDG_CONFIG_HOME");
++	if (error == 0) error = git_str_joinpath(out, env.ptr, "git");
++	if (error == GIT_ENOTFOUND && (error = git__getenv(&env, "HOME")) == 0)
++		error = git_str_joinpath(out, env.ptr, ".config/git");
++	if (error == GIT_ENOTFOUND) { git_error_clear(); error = 0; }
++	git_str_dispose(&env);
++	return error;
+ #else
+ 	git_str env = GIT_STR_INIT;
+ 	int error;
+@@ -417,6 +435,7 @@ static int git_sysdir_guess_xdg_dirs(git_str *out)
+ 	git_str_dispose(&env);
+ 	return error;
+ #endif
++#endif
+ }
+ 
+ static int git_sysdir_guess_template_dirs(git_str *out)
+diff --git a/src/util/fs_path.c b/src/util/fs_path.c
+index 5b00b1b..568af56 100644
+--- a/src/util/fs_path.c
++++ b/src/util/fs_path.c
+@@ -587,8 +587,13 @@ int git_fs_path_walk_up(
+ 
+ bool git_fs_path_exists(const char *path)
+ {
++	struct stat st;
+ 	GIT_ASSERT_ARG_WITH_RETVAL(path, false);
++#ifdef __wasi__
++	return p_stat(path, &st) == 0;
++#else
+ 	return p_access(path, F_OK) == 0;
++#endif
+ }
+ 
+ bool git_fs_path_isdir(const char *path)
+@@ -2005,7 +2010,11 @@ int git_fs_path_owner_is(
+ 		return 0;
+ 	}
+ 
++#if defined(__wasi__)
++	euid = 0;
++#else
+ 	euid = geteuid();
++#endif
+ 
+ 	if (p_lstat(path, &st) != 0) {
+ 		if (errno == ENOENT)
+diff --git a/src/util/integer.h b/src/util/integer.h
+index a9e416c..6bcd014 100644
+--- a/src/util/integer.h
++++ b/src/util/integer.h
+@@ -53,24 +53,10 @@ GIT_INLINE(int) git__is_int(int64_t p)
+ #if (__has_builtin(__builtin_add_overflow) || \
+      (defined(__GNUC__) && (__GNUC__ >= 5)))
+ 
+-# if (SIZE_MAX == UINT_MAX)
+-#  define git__add_sizet_overflow(out, one, two) \
+-     __builtin_uadd_overflow(one, two, out)
+-#  define git__multiply_sizet_overflow(out, one, two) \
+-     __builtin_umul_overflow(one, two, out)
+-# elif (SIZE_MAX == ULONG_MAX)
+-#  define git__add_sizet_overflow(out, one, two) \
+-     __builtin_uaddl_overflow(one, two, out)
+-#  define git__multiply_sizet_overflow(out, one, two) \
+-     __builtin_umull_overflow(one, two, out)
+-# elif (SIZE_MAX == ULLONG_MAX)
+-#  define git__add_sizet_overflow(out, one, two) \
+-     __builtin_uaddll_overflow(one, two, out)
+-#  define git__multiply_sizet_overflow(out, one, two) \
+-     __builtin_umulll_overflow(one, two, out)
+-# else
+-#  error compiler has add with overflow intrinsics but SIZE_MAX is unknown
+-# endif
++# define git__add_sizet_overflow(out, one, two) \
++    __builtin_add_overflow(one, two, out)
++# define git__multiply_sizet_overflow(out, one, two) \
++    __builtin_mul_overflow(one, two, out)
+ 
+ # define git__add_int_overflow(out, one, two) \
+     __builtin_sadd_overflow(one, two, out)
+diff --git a/src/util/rand.c b/src/util/rand.c
+index 2b137a5..7b14d2b 100644
+--- a/src/util/rand.c
++++ b/src/util/rand.c
+@@ -112,12 +112,14 @@ GIT_INLINE(int) getseed(uint64_t *seed)
+ 	*seed |= ((uint64_t)tv.tv_usec << 40);
+ 	*seed |= ((uint64_t)tv.tv_sec);
+ 
++# if !defined(__wasi__)
+ 	*seed ^= ((uint64_t)getpid() << 48);
+ 	*seed ^= ((uint64_t)getppid() << 32);
+ 	*seed ^= ((uint64_t)getpgid(0) << 28);
+ 	*seed ^= ((uint64_t)getsid(0) << 16);
+ 	*seed ^= ((uint64_t)getuid() << 8);
+ 	*seed ^= ((uint64_t)getgid());
++# endif
+ 
+ # if defined(GIT_RAND_GETLOADAVG)
+ 	getloadavg(loadavg, 3);
+diff --git a/src/util/unix/process.c b/src/util/unix/process.c
+index 72308b1..95383cd 100644
+--- a/src/util/unix/process.c
++++ b/src/util/unix/process.c
+@@ -5,6 +5,58 @@
+  * a Linking Exception. For full terms see the included COPYING file.
+  */
+ 
++#if defined(__wasi__)
++
++#include <git2.h>
++
++#include "git2_util.h"
++#include "process.h"
++
++struct git_process { int unavailable; };
++
++static int wasi_process_unavailable(void)
++{
++	git_error_set(GIT_ERROR_OS, "child processes are unavailable on WASI");
++	return -1;
++}
++
++int git_process_new(git_process **out, const char **args, size_t args_len,
++	const char **env, size_t env_len, git_process_options *opts)
++{
++	GIT_UNUSED(args); GIT_UNUSED(args_len); GIT_UNUSED(env); GIT_UNUSED(env_len); GIT_UNUSED(opts);
++	if (out) *out = NULL;
++	return wasi_process_unavailable();
++}
++
++int git_process_new_from_cmdline(git_process **out, const char *cmdline,
++	const char **env, size_t env_len, git_process_options *opts)
++{
++	GIT_UNUSED(cmdline); GIT_UNUSED(env); GIT_UNUSED(env_len); GIT_UNUSED(opts);
++	if (out) *out = NULL;
++	return wasi_process_unavailable();
++}
++
++int git_process_start(git_process *process) { GIT_UNUSED(process); return wasi_process_unavailable(); }
++int git_process_id(p_pid_t *out, git_process *process)
++{ GIT_UNUSED(out); GIT_UNUSED(process); return wasi_process_unavailable(); }
++ssize_t git_process_read(git_process *process, void *buf, size_t count)
++{ GIT_UNUSED(process); GIT_UNUSED(buf); GIT_UNUSED(count); return wasi_process_unavailable(); }
++ssize_t git_process_read_err(git_process *process, void *buf, size_t count)
++{ GIT_UNUSED(process); GIT_UNUSED(buf); GIT_UNUSED(count); return wasi_process_unavailable(); }
++ssize_t git_process_write(git_process *process, const void *buf, size_t count)
++{ GIT_UNUSED(process); GIT_UNUSED(buf); GIT_UNUSED(count); return wasi_process_unavailable(); }
++int git_process_close_in(git_process *process) { GIT_UNUSED(process); return 0; }
++int git_process_close_out(git_process *process) { GIT_UNUSED(process); return 0; }
++int git_process_close_err(git_process *process) { GIT_UNUSED(process); return 0; }
++int git_process_close(git_process *process) { GIT_UNUSED(process); return 0; }
++int git_process_wait(git_process_result *result, git_process *process)
++{ GIT_UNUSED(result); GIT_UNUSED(process); return wasi_process_unavailable(); }
++int git_process_result_msg(git_str *out, git_process_result *result)
++{ GIT_UNUSED(result); return git_str_puts(out, "child processes are unavailable on WASI"); }
++void git_process_free(git_process *process) { git__free(process); }
++
++#else
++
+ #include <stdio.h>
+ #include <sys/wait.h>
+ #include <signal.h>
+@@ -704,3 +756,5 @@ void git_process_free(git_process *process)
+ 	git_strlist_free_with_null(process->env);
+ 	git__free(process);
+ }
++
++#endif
+diff --git a/src/util/unix/realpath.c b/src/util/unix/realpath.c
+index 2565e2e..dd80d96 100644
+--- a/src/util/unix/realpath.c
++++ b/src/util/unix/realpath.c
+@@ -18,6 +18,26 @@ char *p_realpath(const char *pathname, char *resolved)
+ {
+ 	char *result;
+ 
++#ifdef __wasi__
++	size_t length;
++
++	if (!pathname || pathname[0] != '/') {
++		errno = ENOTSUP;
++		return NULL;
++	}
++	length = strlen(pathname);
++	if (length >= GIT_PATH_MAX) {
++		errno = ENAMETOOLONG;
++		return NULL;
++	}
++	result = resolved ? resolved : git__malloc(length + 1);
++	if (!result) {
++		errno = ENOMEM;
++		return NULL;
++	}
++	memcpy(result, pathname, length + 1);
++	return result;
++#else
+ 	if ((result = realpath(pathname, resolved)) == NULL)
+ 		return NULL;
+ 
+@@ -45,6 +65,7 @@ char *p_realpath(const char *pathname, char *resolved)
+ 	}
+ 
+ 	return result;
++#endif
+ }
+ 
+ #endif
+diff --git a/examples/add.c b/examples/add.c
+index 110cf31..44763fd 100644
+--- a/examples/add.c
++++ b/examples/add.c
+@@ -45,6 +45,7 @@ static void parse_opts(const char **repo_path, struct index_options *opts, struc
+ int lg2_add(git_repository *repo, int argc, char **argv)
+ {
+ 	git_index_matched_path_cb matched_cb = NULL;
++	size_t path_index;
+ 	git_index *index;
+ 	git_strarray array = {0};
+ 	struct index_options options = {0};
+@@ -67,12 +68,19 @@ int lg2_add(git_repository *repo, int argc, char **argv)
+ 
+ 	options.repo = repo;
+ 
++#ifdef __wasi__
++	for (path_index = 0; path_index < array.count; path_index++) {
++		check_lg2(git_index_add_bypath(index, array.strings[path_index]),
++			"Could not add path", array.strings[path_index]);
++	}
++#else
+ 	/* Perform the requested action with the index and files */
+ 	if (options.add_update) {
+ 		git_index_update_all(index, &array, matched_cb, &options);
+ 	} else {
+ 		git_index_add_all(index, &array, 0, matched_cb, &options);
+ 	}
++#endif
+ 
+ 	/* Cleanup memory */
+ 	git_index_write(index);
+

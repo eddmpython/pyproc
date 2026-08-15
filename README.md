@@ -77,8 +77,10 @@ heap view.
 
 ## Resident WASM tools
 
-The Machine includes source-pinned ripgrep 15.1.0 as a real WASI command. It accepts an argument vector, not a
-shell string, and runs in a fresh worker over a read-only input snapshot with file, byte, output, and time limits.
+The Machine includes source-pinned ripgrep 15.1.0 and a libgit2 1.9.7 Git command as real WASI programs. Each
+accepts an argument vector, never a shell string, and runs in a fresh worker with file, byte, output, and time
+limits. Ripgrep reads a bounded snapshot. Git applies a bounded local repository transaction to the attached
+`KernelVfs` only after its input root still matches.
 
 ```js
 const result = await machine.tools.run("rg", ["-n", "TODO", "/home"], {
@@ -90,10 +92,27 @@ const result = await machine.tools.run("rg", ["-n", "TODO", "/home"], {
 console.log(result.exitCode, result.stdout, result.input.sha256);
 ```
 
-When a `KernelVfs` is attached at boot, omitting `files` snapshots its committed `/home` files. A nonzero command
-exit is a normal receipt. Unsupported commands, cancellation, limit failures, and asset mismatch use structured
-`PyProcError` codes. The current resident catalog contains `rg`; Git and Python `subprocess` integration are not
-yet supported.
+With a `KernelVfs` attached at boot, local Git can initialize a repository, read and write config, add exact paths,
+commit, inspect status and log, and read local refs through the same receipt contract:
+
+```js
+await machine.tools.run("git", ["init", "/home/project"]);
+const status = await machine.tools.run("git", ["--git-dir=/home/project/.git", "status"]);
+```
+
+Python kernels owned by the Machine reach the identical catalog without claiming operating-system process support:
+
+```js
+const python = await machine.run.python(`
+import pyprocTools
+receipt = pyprocTools.run("git", ["--version"])
+print(receipt["stdout"])
+`);
+```
+
+A nonzero command exit is a normal receipt. Unsupported commands, cancellation, limit failures, and asset
+mismatch use structured `PyProcError` codes. Shell grammar, pipes, remote Git transports, arbitrary Git CLI
+coverage, and Python standard-library `subprocess` remain outside the contract.
 
 ## Packages and terminal
 
@@ -247,9 +266,10 @@ npm run test:installed
 npm run test:wasm-tools
 ```
 
-The installed-package gate packs and installs the real tarball, boots the included engine in Chrome and
-Edge, checks package installation, checkpoint restore, offline image reopen, process clone, terminal behavior,
-resident WASI search, and verifies that the clean boot makes no undeclared external engine request.
+The installed product gates pack and install the real tarball, boot the included engine in Chrome and Edge, check
+package installation, checkpoint restore, offline image reopen, process clone, terminal behavior, resident WASI
+search, local Git transactions, the Python tool bridge, and verify that clean boot makes no undeclared external
+engine request.
 
 See [API reference](skills/reference-pyproc-api/references/api.md), [platform requirements](skills/use-pyproc-runtime/references/platform-requirements.md),
 and [kernel factory contract](skills/use-pyproc-runtime/references/kernel-contracts.md).

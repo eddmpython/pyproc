@@ -1,0 +1,59 @@
+{
+  "protocol": "pyproc.owned-wasm-tool-provenance",
+  "version": 1,
+  "command": "git",
+  "implementation": "libgit2-lg2",
+  "upstream": {
+    "repository": "https://github.com/libgit2/libgit2",
+    "tag": "v1.9.7",
+    "commit": "49e408b3208bc3093757a1c2db938d3590f3f412",
+    "license": "GPL-2.0-only WITH LicenseRef-libgit2-linking-exception",
+    "licensePath": "LICENSE.libgit2",
+    "licenseSha256": "5ae5d094e490008c24e8af7aa59e9035ccae1724b3e76ba8158d7152569bf008"
+  },
+  "patch": {
+    "path": "../../../../scripts/wasmToolBuilder/patches/libgit2-1.9.7-wasi.patch",
+    "sha256": "530b48e6ce295643ed67ac257e23f79e3c2faac5452c4928122fc53048a5ba82",
+    "scope": "WASI process and network denial, lexical paths, exact-path add, deterministic version reporting"
+  },
+  "build": {
+    "wasiSdk": "33.0",
+    "wasiSdkArchive": "wasi-sdk-33.0-x86_64-windows.tar.gz",
+    "wasiSdkArchiveSha256": "df14ca2a2127c2d6b6be07e6f5549b3af9c1b3c0112430c200a4749970c59f06",
+    "clang": "22.1.0 (4434dabb69916856b824f68a64b029c67175e532)",
+    "cmake": "4.3.1",
+    "ninja": "1.13.2",
+    "ninjaArchiveSha256": "07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65",
+    "target": "wasm32-wasip1",
+    "profile": {
+      "cmakeBuildType": "MinSizeRel",
+      "sharedLibraries": false,
+      "tests": false,
+      "examples": true,
+      "cli": false,
+      "threads": false,
+      "ssh": false,
+      "https": false,
+      "gssapi": false,
+      "ntlm": false,
+      "iconv": false,
+      "bundledZlib": true,
+      "regexBackend": "builtin",
+      "mmap": false,
+      "reproducibleBuilds": true,
+      "stackBytes": 1048576,
+      "filePrefixMap": "/src/libgit2-1.9.7"
+    }
+  },
+  "runtimeBoundary": {
+    "network": false,
+    "childProcesses": false,
+    "filesystem": "isolated worker snapshot committed to KernelVfs by outer root-digest CAS"
+  },
+  "artifact": {
+    "path": "git.wasm",
+    "byteLength": 1636225,
+    "sha256": "d346092d818597359d5bf1b78f52dfdc6e15e8f6ed18e70740e2087030f2d3b0",
+    "reproducibility": "two isolated clean worktrees produced byte-identical output after source path mapping"
+  }
+}

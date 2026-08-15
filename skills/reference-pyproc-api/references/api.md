@@ -52,7 +52,7 @@ and restores that image, including any digest-sealed package environment. Other 
 - `history.export(options?)` creates a portable Machine image.
 - `proc.spawn(manifest, options?)` starts a worker process.
 - `proc.clone(options?)` starts a worker process from the current state.
-- `tools.run("rg", args?, options?)` runs source-pinned ripgrep in an isolated WASI worker.
+- `tools.run("rg" | "git", args?, options?)` runs a source-pinned resident command in an isolated WASI worker.
 - `tools.inspect()` returns the versioned command catalog, confinement, limits, source revision, and digest.
 - `createPackageEnvironment(options?)` creates the package policy boundary.
 - `terminal(options?)` creates a version 2 kernel terminal.
@@ -115,9 +115,16 @@ the resident binary. The binary has a second compiled-in length and SHA-256 chec
 `machine.tools.run(command, args, options)` never parses a shell string. Options may provide an explicit
 absolute-path `files` object, `stdin`, `timeoutMs`, `maxOutputBytes`, and an `AbortSignal`. Without `files`, the
 Machine snapshots committed `/home` files from its attached `KernelVfs`. The version 1 receipt contains exact
-tool version and revision, argv, exit code, stdout, stderr, timing, and a content digest of the read-only input.
-Exit codes such as ripgrep's no-match `1` remain normal receipts. The current command catalog contains only
-`rg` 15.1.0. Git and Python `subprocess` integration remain unsupported.
+tool version and revision, argv, exit code, stdout, stderr, timing, an input content digest, and any committed
+output root. Ripgrep 15.1.0 uses a read-only snapshot. The libgit2 1.9.7 Git command requires an attached
+`KernelVfs`, then applies a compare-and-swap local repository transaction. Its tested surface is init, config,
+exact-path add, commit, status, log, and local refs. Exit codes such as ripgrep's no-match `1` remain normal
+receipts.
+
+Every `KernelMachine` boot and its cloned process path install a pure Python `pyprocTools` module with `inspect()` and
+`run(command, args, stdin="", timeoutMs=15000, maxOutputBytes=262144)`. It crosses the hostcall boundary into the
+same catalog and returns the same receipt. It is not Python standard-library `subprocess`; shell grammar, pipes,
+remote Git transports, and arbitrary Git CLI coverage remain unsupported.
 
 ## `pyproc/history`
 

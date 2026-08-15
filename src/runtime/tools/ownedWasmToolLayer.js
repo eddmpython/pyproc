@@ -1,4 +1,4 @@
-// ownedWasmToolLayer.js - verified argv-only commands over bounded read-only Machine snapshots.
+// ownedWasmToolLayer.js - verified argv-only commands over bounded Machine snapshots.
 import { verifyPyProcAssetIntegrity } from "../assets.js";
 import { sha256Address } from "../contentDigest.js";
 import { PyProcError } from "../errors.js";
@@ -69,6 +69,10 @@ async function vfsFiles(vfs) {
 
 async function normalizeFiles(value, vfs) {
   const files = await explicitFiles(value) ?? await vfsFiles(vfs);
+  return finalizeFiles(files, vfs?.rootDigest || null);
+}
+
+async function finalizeFiles(files, vfsRootDigest = null) {
   if (files.length > OWNED_WASM_TOOL_LIMITS.maxFiles) {
     throw inputError(`Tool snapshot exceeds ${OWNED_WASM_TOOL_LIMITS.maxFiles} files`);
   }
@@ -92,7 +96,40 @@ async function normalizeFiles(value, vfs) {
   const descriptors = [];
   for (const file of files) descriptors.push({ path: file.path, byteLength: file.bytes.byteLength,
     sha256: await sha256Address(file.bytes) });
-  return { files, total, digest: await sha256Address(JSON.stringify(descriptors)) };
+  return { files, total, digest: await sha256Address(JSON.stringify(descriptors)), vfsRootDigest };
+}
+
+async function writeOutput(vfs, input, rawFiles) {
+  if (!Array.isArray(rawFiles)) throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "Machine tool output snapshot is missing");
+  const output = await finalizeFiles(rawFiles.map((file) => ({ path: normalizePath(file.path),
+    bytes: bytesOf(file.bytes, file.path) })));
+  if (output.files.some((file) => !file.path.startsWith("/home/"))) {
+    throw new PyProcError("PYPROC_WORKER_TASK_ERROR", "Machine tool attempted to persist outside /home");
+  }
+  if (vfs.rootDigest !== input.vfsRootDigest) {
+    throw new PyProcError("PYPROC_STATE_FENCE_STALE", "KernelVfs changed while the Machine tool was running", {
+      context: { expectedRootDigest: input.vfsRootDigest, actualRootDigest: vfs.rootDigest },
+    });
+  }
+  const before = new Map(input.files.map((file) => [file.path, file]));
+  const after = new Map(output.files.map((file) => [file.path, file]));
+  const removed = [...before.keys()].filter((path) => !after.has(path));
+  const written = output.files.filter((file) => {
+    const previous = before.get(file.path);
+    return !previous || previous.bytes.byteLength !== file.bytes.byteLength
+      || previous.bytes.some((byte, index) => byte !== file.bytes[index]);
+  });
+  if (!removed.length && !written.length) return { output, commit: null, removed: 0, written: 0 };
+  const transaction = vfs.beginTransaction();
+  try {
+    for (const path of removed) transaction.remove(path);
+    for (const file of written) await transaction.write(file.path, file.bytes);
+    const commit = await transaction.commit();
+    return { output, commit, removed: removed.length, written: written.length };
+  } catch (error) {
+    if (transaction.state === "open") transaction.abort();
+    throw error;
+  }
 }
 
 function timeoutValue(value) {
@@ -111,11 +148,23 @@ function outputLimit(value) {
   return limit;
 }
 
+function reconstructedDirectories(tool, files) {
+  if (tool.command !== "git") return [];
+  const directories = new Set();
+  for (const file of files) {
+    if (!file.path.endsWith("/.git/HEAD")) continue;
+    const gitDir = file.path.slice(0, -"/HEAD".length);
+    for (const suffix of ["objects", "objects/info", "objects/pack", "refs", "refs/heads", "refs/tags"])
+      directories.add(`${gitDir}/${suffix}`);
+  }
+  return [...directories].sort();
+}
+
 export class OwnedWasmToolLayer {
   #assetIntegrity;
   #fetch;
   #vfs;
-  #wasmPromise = null;
+  #wasmPromises = new Map();
   #active = new Map();
   #closed = false;
   #verified = false;
@@ -134,8 +183,8 @@ export class OwnedWasmToolLayer {
   }
 
   async #wasm(tool) {
-    if (this.#wasmPromise) return this.#wasmPromise;
-    this.#wasmPromise = (async () => {
+    if (this.#wasmPromises.has(tool.command)) return this.#wasmPromises.get(tool.command);
+    const promise = (async () => {
       if (typeof this.#fetch !== "function") throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "Machine tools require fetch");
       if (this.#assetIntegrity) await verifyPyProcAssetIntegrity(this.#assetIntegrity, {
         roles: ["wasmToolWorker", "wasmToolBinary"], fetch: this.#fetch,
@@ -154,8 +203,9 @@ export class OwnedWasmToolLayer {
       this.#verified = true;
       return bytes;
     })();
-    try { return await this.#wasmPromise; }
-    catch (error) { this.#wasmPromise = null; throw error; }
+    this.#wasmPromises.set(tool.command, promise);
+    try { return await promise; }
+    catch (error) { this.#wasmPromises.delete(tool.command); throw error; }
   }
 
   async run(command, args = [], options = {}) {
@@ -164,6 +214,11 @@ export class OwnedWasmToolLayer {
     const tool = OWNED_WASM_TOOLS.find((candidate) => candidate.command === command);
     if (!tool) throw inputError(`Unsupported owned tool: ${String(command)}`, { commands: OWNED_WASM_TOOLS.map((entry) => entry.command) });
     const normalizedArgs = normalizeArgs(args);
+    const writesVfs = tool.filesystem === "transactional-kernel-vfs";
+    if (writesVfs && options.files !== undefined) {
+      throw inputError(`${tool.command} uses the attached KernelVfs and does not accept explicit files`);
+    }
+    if (writesVfs && !this.#vfs) throw inputError(`${tool.command} requires an attached KernelVfs`);
     const timeoutMs = timeoutValue(options.timeoutMs);
     const maxOutputBytes = outputLimit(options.maxOutputBytes);
     const stdin = bytesOf(options.stdin ?? "", "Tool stdin");
@@ -219,7 +274,8 @@ export class OwnedWasmToolLayer {
         const wasmBytes = wasm.slice();
         const stdinBytes = stdin.slice();
         worker.postMessage({ type: "run", requestId, command, args: normalizedArgs, files: fileCopies,
-          stdin: stdinBytes, maxOutputBytes, wasmBytes },
+          stdin: stdinBytes, maxOutputBytes, wasmBytes, captureFiles: writesVfs,
+          directories: reconstructedDirectories(tool, snapshot.files) },
         [wasmBytes.buffer, stdinBytes.buffer, ...fileCopies.map((file) => file.bytes.buffer)]);
       });
       if (!result.ok) {
@@ -227,6 +283,7 @@ export class OwnedWasmToolLayer {
           context: { command, errorKind: result.errorKind, stdout: result.stdout, stderr: result.stderr },
         });
       }
+      const writeback = writesVfs ? await writeOutput(this.#vfs, snapshot, result.files) : null;
       return Object.freeze({
         protocol: "pyproc.wasm-tool-receipt",
         version: 1,
@@ -239,6 +296,10 @@ export class OwnedWasmToolLayer {
         stderr: result.stderr,
         input: Object.freeze({ source: options.files === undefined ? this.#vfs ? "kernel-vfs" : "empty" : "explicit",
           fileCount: snapshot.files.length, byteLength: snapshot.total, sha256: snapshot.digest }),
+        output: writeback ? Object.freeze({ fileCount: writeback.output.files.length,
+          byteLength: writeback.output.total, sha256: writeback.output.digest,
+          rootDigest: this.#vfs.rootDigest, written: writeback.written, removed: writeback.removed,
+          committed: writeback.commit !== null }) : null,
         durationMs: Math.round(performance.now() - startedAt),
         workerDurationMs: result.workerDurationMs,
       });

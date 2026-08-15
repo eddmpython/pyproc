@@ -3,8 +3,18 @@ import { WASI, File, OpenFile, ConsoleStdout, PreopenDirectory, Directory } from
 
 class OutputLimitError extends Error {}
 
-function buildEntries(files) {
+function buildEntries(files, directories = []) {
   const root = new Map();
+  for (const path of directories) {
+    const parts = path.split("/").filter(Boolean);
+    let node = root;
+    for (const part of parts) {
+      if (!node.has(part)) node.set(part, new Map());
+      const child = node.get(part);
+      if (!(child instanceof Map)) throw new TypeError(`Directory path collision: ${path}`);
+      node = child;
+    }
+  }
   for (const file of files) {
     const parts = file.path.split("/").filter(Boolean);
     let node = root;
@@ -22,6 +32,17 @@ function buildEntries(files) {
     value instanceof Map ? directory(value) : new File(value),
   ]));
   return [...root].map(([name, value]) => [name, value instanceof Map ? directory(value) : new File(value)]);
+}
+
+function snapshotFiles(directory, prefix = "") {
+  const files = [];
+  for (const [name, entry] of [...directory.contents.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const path = `${prefix}/${name}`;
+    if (entry instanceof Directory) files.push(...snapshotFiles(entry, path));
+    else if (entry instanceof File) files.push({ path, bytes: entry.data.slice() });
+    else throw new TypeError(`Unsupported tool filesystem entry: ${path}`);
+  }
+  return files;
 }
 
 function outputSink(limit, state, onText) {
@@ -45,21 +66,26 @@ self.onmessage = async (event) => {
     const output = { bytes: 0 };
     stdoutSink = outputSink(message.maxOutputBytes, output, (text) => { stdout += text; });
     stderrSink = outputSink(message.maxOutputBytes, output, (text) => { stderr += text; });
+    const root = new PreopenDirectory("/", buildEntries(message.files, message.directories));
     const fds = [
       new OpenFile(new File(message.stdin)),
       stdoutSink.fd,
       stderrSink.fd,
-      new PreopenDirectory("/", buildEntries(message.files)),
+      root,
     ];
-    const wasi = new WASI([message.command, ...message.args], ["TERM=dumb", "NO_COLOR=1"], fds, { debug: false });
+    const wasi = new WASI([message.command, ...message.args], ["TERM=dumb", "NO_COLOR=1", "HOME=/home"], fds,
+      { debug: false });
     const { instance } = await WebAssembly.instantiate(message.wasmBytes, {
       wasi_snapshot_preview1: wasi.wasiImport,
     });
     const exitCode = wasi.start(instance);
     stdoutSink.flush();
     stderrSink.flush();
+    const files = message.captureFiles ? snapshotFiles(root.dir) : [];
     self.postMessage({ type: "result", requestId: message.requestId, ok: true,
-      exitCode, stdout, stderr, workerDurationMs: Math.round(performance.now() - startedAt) });
+      exitCode, stdout, stderr, files,
+      workerDurationMs: Math.round(performance.now() - startedAt) },
+    files.map((file) => file.bytes.buffer));
   } catch (error) {
     stdoutSink?.flush();
     stderrSink?.flush();

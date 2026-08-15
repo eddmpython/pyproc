@@ -16,7 +16,7 @@
 |---|---|---|---|
 | agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M3 컴퓨팅 몸체 확대와 독립 구현 conformance |
 | 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.5 | APX Situation, 20회 무잔류 수명주기, bounded action 수렴, 실제 hardware compute와 pixel 결과 영수증 | 두 번째 독립 hardware와 browser 구현의 visual conformance |
-| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.9 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package, quota 실패와 OPFS 축출의 명시적 계약, 상주 ripgrep 15.1.0 | Git 상주 구현과 Python 도구 bridge, Node guest, 과학 패키지 폭, 외부 사본 기반 축출 복구 |
+| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 9.1 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package, quota 실패와 OPFS 축출 계약, 상주 ripgrep과 local Git, 같은 Python 도구 receipt | Node guest, 과학 패키지 폭, shared-memory thread, 외부 사본 기반 축출 복구 |
 | 단독 자립성 | Python 기본과 data Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython, stdlib, NumPy가 npm에 포함되고 기본 부팅과 package install의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
 
@@ -128,10 +128,13 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - 완료: `localPythonParity.wasmToolLayer`의 첫 제품 단위를 닫았다. source-pinned ripgrep 15.1.0을
   `machine.tools.run("rg", argv)`로 실행하고 읽기 전용 VFS snapshot, 고정 상한, 입력 digest, exit와 출력,
   취소와 자산 무결성을 version 1 receipt로 봉인했다.
-- 진행 중: `localPythonParity.residentGitAndPythonToolBridge`를 소진한다. durable disk의 다음 ceiling은
-  `evictionRecoveryCopy`다.
+- 완료: `localPythonParity.residentGitAndPythonToolBridge`를 닫았다. source-pinned libgit2 1.9.7 Git이
+  KernelVfs snapshot을 CAS fence로 확인하고 local repository transaction을 반영하며, Python의
+  main과 clone kernel에 있는 `pyprocTools`가 rg와 Git의 같은 argv-only receipt를 호출한다.
+- 진행 중: 천장 사다리의 다음 자력 단인 `multiGuestComputer.nodeGuest`를 소진한다. durable disk의 다음
+  국소 ceiling은 `evictionRecoveryCopy`다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
-- Git 상주 구현과 Python 도구 bridge를 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
+- Node guest는 Python과 Linux 옆에서 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
 ### M4. 전체 자립 공급망
 
@@ -546,7 +549,43 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   두 파일 재귀 검색, 반복 입력 digest와 출력 일치, no-match exit 1, 출력 상한, 사전 취소, 변조 binary 거절,
   제3자 요청 0을 한 시나리오로 통과했다. 실제 검색은 60ms였고 직접 눈검수한 최종 922 x 920 screenshot은
   98,488 bytes, SHA-256 `db74ac2ca3af74a363fb3c1a6ebc437dc2838069286e64397778d400bdb1b196`다.
-- 정직한 경계: Python 표준 라이브러리 `subprocess`가 동작한다고 주장하지 않는다. 현재 catalog는 `rg`
-  하나이고 쓰기 가능한 도구 filesystem, Git, pipe와 shell grammar도 없다.
-- 다음 직렬 작업: `localPythonParity.residentGitAndPythonToolBridge`다. WASI에서 실제 동작하는 source-pinned
-  Git 구현을 고르고 같은 argv-only receipt를 Python에서 호출하되 `subprocess` 호환으로 위장하지 않는다.
+- 이 단의 경계: Python 표준 라이브러리 `subprocess`가 동작한다고 주장하지 않았다. 이 시점의 catalog는
+  `rg` 하나였고 쓰기 가능한 도구 filesystem, Git, pipe와 shell grammar도 없었다.
+- 이 단의 다음 직렬 작업이었던 `localPythonParity.residentGitAndPythonToolBridge`는 아래 12절에서 완료했다.
+
+## 12. 해결 판정: 상주 Git과 Python 도구 bridge
+
+- 첫 RED: 11절의 exact packed 제품에 `git`을 요청하면 `PYPROC_INPUT_INVALID`였고 Python에서
+  `import pyprocTools`는 `ModuleNotFoundError`였다. 직접 확인한 첫 screenshot SHA-256은
+  `ab1cb9d8db3dce59a30a43c92f1c180169d2eb0d7a3beebdee53c6fd3ac83ca1`다.
+- 구현 선택: Gitoxide 0.54.0의 signal 의존 실패 뒤 libgit2 v1.9.7 exact commit
+  `49e408b3208bc3093757a1c2db938d3590f3f412`의 `lg2` example을 최소 local Git frontend로 선택했다.
+  WASI patch는 version, exact-path add, lexical realpath, config와 sysdir, process와 socket 거절, filesystem
+  ownership을 명시한다. network transport는 build와 runtime 모두 닫았다.
+- 첫 불일치와 수정: add는 linker 기본 stack에서 trap이 났고 stack 상한을 명시해 닫았다. 임시 object가
+  finalize되지 않은 원인은 우회한 file buffer가 upstream lock rename을 건너뛴 것이었다. 그 우회를 제거해
+  원래 lock과 rename 경로를 복원했다. 같은 우회가 config를 truncate하던 문제도 함께 사라졌다. Git이
+  요구한 WASI Preview1 `filestat` timestamp offset은 40, 48, 56이며 source contract로 고정했다.
+- 공급망: WASI SDK 33.0 archive, CMake 4.3.1, Ninja 1.13.2 archive와 실행 파일, source revision, patch,
+  build flags와 license를 provenance에 고정했다. 무작위 clean worktree 경로는
+  `-ffile-prefix-map`으로 canonicalize했다. 두 독립 clean-worktree build의 `git.wasm`은 byte-identical이고
+  1,636,225 bytes, SHA-256 `d346092d818597359d5bf1b78f52dfdc6e15e8f6ed18e70740e2087030f2d3b0`다.
+- 제품 계약: `machine.tools.run("git", argv)`는 연결된 `KernelVfs`의 bounded snapshot에서 실행한다. worker
+  결과와 시작 root를 다시 검증한 뒤 remove와 write를 한 transaction으로 commit하고, 경합이면 반영하지
+  않는다. receipt는 입력과 출력 digest, 새 root, write와 remove count, commit 여부를 싣는다. 현재 제품
+  surface는 init, config, exact-path add, commit, status, log와 local refs다.
+- Python 계약: Machine main과 clone kernel의 boot가 만드는 pure Python `pyprocTools`는
+  `inspect()`와 `run()`만 공개한다. hostcall
+  opcode가 같은 도구 layer로 exact argv, stdin, timeout과 output 상한을 전달하고 같은 version 1 receipt를
+  반환한다. 표준 라이브러리 `subprocess`, shell grammar, pipe, remote Git과 임의 Git CLI 전체로 위장하지
+  않는다. child kernelRef는 같은 bounded Machine 도구층에 붙고 process close에서 반드시 분리된다.
+- 제품 증거: exact tarball과 공개 `pyproc-control`이 연 headed Edge에서 rg, Git init, config, 두 exact path
+  add, commit, log, clean status와 local ref가 통과했다. 이어 Python에서 rg version과 같은 저장소의 Git
+  log를 같은 receipt로 읽었고 clone Python도 같은 Git log를 다시 읽었다. 출력 상한, 사전 취소, binary
+  변조 거절과 제3자 요청 0까지 10/10 GREEN이다.
+  직접 눈검수한 screenshot은 104,507 bytes, SHA-256
+  `2f6137c7d0354c7c0807347d2448195655f50a05b809ada60619330bbaf2f2c3`다.
+- 원장 승격: `localPythonParity`는 9.1로 올라갔고 완료한 6단은 `next`에서 제거했다. 공급망 원장과
+  API, runtime contract, contract reality, attempt 증거를 현재 구현과 맞췄다.
+- 다음 직렬 작업: upstream 시점을 기다리는 memory64 5단을 capability boundary로 유지하면서 자력으로
+  움직일 수 있는 천장 사다리 6단 `multiGuestComputer.nodeGuest`를 같은 lifecycle과 image 계약으로 닫는다.

@@ -117,15 +117,20 @@ export async function assertKernelFactory() {
   "installed owned data kernel distribution identity drifted");
 
   const opened = [];
+  const lifecycle = [];
   const fakeFactory = { async open() { const kernel = fakeKernel(); opened.push(kernel); return kernel; } };
-  const manager = new KernelProcessManager(fakeFactory, { openSession: KernelSession.open });
+  const manager = new KernelProcessManager(fakeFactory, { openSession: KernelSession.open,
+    onSessionOpen: (session) => lifecycle.push(["open", session]),
+    onSessionClose: (session) => lifecycle.push(["close", session]) });
   const { process } = await manager.spawn(manifest, { pid: "contract-process" });
   const execution = await process.execute("contract-output");
   const waited = await process.wait();
   assert(execution.output === "contract-output" && waited.state === "exited" && waited.exitCode === 0,
     "kernel process execution and wait terminal truth drifted");
   await manager.close();
-  assert(opened[0].closed, "kernel process manager did not close an exited worker");
+  assert(opened[0].closed && lifecycle.length === 2 && lifecycle[0][0] === "open" && lifecycle[1][0] === "close"
+    && lifecycle[0][1] === lifecycle[1][1],
+  "kernel process manager did not preserve child broker attachment lifecycle");
 
   const sourcePaths = [
     "../../src/composition/kernelFactory.js",

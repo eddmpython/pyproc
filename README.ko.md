@@ -74,8 +74,10 @@ await parent.close();
 
 ## 상주 WASM 도구
 
-Machine에는 source-pinned ripgrep 15.1.0이 실제 WASI 명령으로 들어 있다. shell 문자열이 아니라 인자
-배열을 받고, 읽기 전용 입력 snapshot과 파일, byte, 출력, 시간 상한을 적용한 새 worker에서 실행한다.
+Machine에는 source-pinned ripgrep 15.1.0과 libgit2 1.9.7 기반 Git 명령이 실제 WASI 프로그램으로 들어
+있다. 둘 다 shell 문자열이 아닌 인자 배열을 받고 파일, byte, 출력, 시간 상한을 둔 새 worker에서
+실행한다. ripgrep은 bounded snapshot을 읽는다. Git은 입력 root가 그대로일 때만 연결된 `KernelVfs`에
+bounded local repository transaction을 반영한다.
 
 ```js
 const result = await machine.tools.run("rg", ["-n", "TODO", "/home"], {
@@ -87,9 +89,28 @@ const result = await machine.tools.run("rg", ["-n", "TODO", "/home"], {
 console.log(result.exitCode, result.stdout, result.input.sha256);
 ```
 
-boot에 `KernelVfs`를 연결하고 `files`를 생략하면 커밋된 `/home` 파일을 snapshot으로 사용한다. 명령의
-0이 아닌 exit는 정상 receipt다. 미지원 명령, 취소, 상한 초과, 자산 불일치는 구조화된 `PyProcError`로
-닫힌다. 현재 상주 catalog는 `rg` 하나이며 Git과 Python `subprocess` 연결은 아직 지원하지 않는다.
+boot에 `KernelVfs`를 연결하면 같은 receipt 계약으로 로컬 Git 저장소 초기화, config 읽기와 쓰기, 정확한
+경로 add, commit, status와 log 확인, local ref 읽기를 수행할 수 있다.
+
+```js
+await machine.tools.run("git", ["init", "/home/project"]);
+const status = await machine.tools.run("git", ["--git-dir=/home/project/.git", "status"]);
+```
+
+Machine이 소유한 main과 clone Python kernel에서도 운영체제 process 지원인 척하지 않고 같은 catalog를
+사용한다.
+
+```js
+const python = await machine.run.python(`
+import pyprocTools
+receipt = pyprocTools.run("git", ["--version"])
+print(receipt["stdout"])
+`);
+```
+
+명령의 0이 아닌 exit는 정상 receipt다. 미지원 명령, 취소, 상한 초과, 자산 불일치는 구조화된
+`PyProcError`로 닫힌다. shell grammar, pipe, remote Git transport, 임의 Git CLI 전체와 Python 표준
+라이브러리 `subprocess`는 계약 밖이다.
 
 ## Package와 terminal
 
@@ -216,9 +237,9 @@ npm run test:installed
 npm run test:wasm-tools
 ```
 
-Installed package gate는 실제 tarball을 pack하고 설치한 뒤 Chrome과 Edge에서 포함된 engine을 부팅한다.
-Package 설치, checkpoint restore, offline image reopen, process clone, terminal, 상주 WASI 검색과 clean boot의 미선언
-외부 engine request 0을 검증한다.
+Installed 제품 gate들은 실제 tarball을 pack하고 설치한 뒤 Chrome과 Edge에서 포함된 engine을 부팅한다.
+Package 설치, checkpoint restore, offline image reopen, process clone, terminal, 상주 WASI 검색, 로컬 Git
+transaction, Python 도구 bridge와 clean boot의 미선언 외부 engine request 0을 검증한다.
 
 [API reference](skills/reference-pyproc-api/references/api.md), [platform requirements](skills/use-pyproc-runtime/references/platform-requirements.md),
 [KernelFactory 계약](skills/use-pyproc-runtime/references/kernel-contracts.md)을 함께 본다.

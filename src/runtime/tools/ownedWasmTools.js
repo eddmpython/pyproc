@@ -26,14 +26,33 @@ const RIPGREP = Object.freeze({
   source: "https://github.com/BurntSushi/ripgrep",
   sourceTag: "15.1.0",
   license: "MIT OR Unlicense",
+  filesystem: "read-only-input-snapshot",
+  network: false,
   capabilities: Object.freeze(["recursive-search", "regex", "glob", "file-type-filter"]),
 });
 
-export const OWNED_WASM_TOOLS = Object.freeze([RIPGREP]);
+const GIT = Object.freeze({
+  command: "git",
+  version: "1.9.7",
+  revision: "49e408b3208bc3093757a1c2db938d3590f3f412",
+  target: "wasm32-wasip1",
+  binaryPath: "src/runtime/tools/owned/git.wasm",
+  binarySha256: "sha256:d346092d818597359d5bf1b78f52dfdc6e15e8f6ed18e70740e2087030f2d3b0",
+  byteLength: 1636225,
+  source: "https://github.com/libgit2/libgit2",
+  sourceTag: "v1.9.7",
+  license: "GPL-2.0-only WITH LicenseRef-libgit2-linking-exception",
+  implementation: "libgit2-lg2",
+  filesystem: "transactional-kernel-vfs",
+  network: false,
+  capabilities: Object.freeze(["init", "config", "exact-path-add", "commit", "status", "log", "local-refs"]),
+});
+
+export const OWNED_WASM_TOOLS = Object.freeze([RIPGREP, GIT]);
 
 export function ownedWasmToolURL(tool = RIPGREP) {
-  if (tool.command !== "rg") throw new TypeError(`Unsupported owned tool: ${String(tool.command)}`);
-  return new URL("./owned/rg.wasm", import.meta.url).href;
+  if (!OWNED_WASM_TOOLS.includes(tool)) throw new TypeError(`Unsupported owned tool: ${String(tool.command)}`);
+  return new URL(`./owned/${tool.command}.wasm`, import.meta.url).href;
 }
 
 export function inspectOwnedWasmTools() {
@@ -41,7 +60,7 @@ export function inspectOwnedWasmTools() {
     protocol: OWNED_WASM_TOOL_PROTOCOL,
     version: OWNED_WASM_TOOL_VERSION,
     execution: "isolated-worker",
-    filesystem: "read-only-input-snapshot",
+    filesystem: "per-command-snapshot-policy",
     network: false,
     shellParsing: false,
     limits: OWNED_WASM_TOOL_LIMITS,

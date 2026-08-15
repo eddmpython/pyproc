@@ -6,6 +6,7 @@ import { getDefaultKernelEngineManifest } from "../../runtime/engines/wasi/owned
 import { KernelSession } from "../../session/kernelSession.js";
 import { KernelProcessManager } from "../../processOs/kernelProcess.js";
 import { OwnedWasmToolLayer } from "../../runtime/tools/ownedWasmToolLayer.js";
+import { MachineToolHostBridge } from "./machineToolHostBridge.js";
 
 const defaultKernelFactory = new KernelFactory();
 
@@ -13,12 +14,19 @@ export class KernelMachine {
   #session;
   #processes;
   #toolLayer;
+  #toolBridge;
+  #kernelRef;
 
   constructor(session, options = {}) {
     this.#session = session;
-    this.#processes = new KernelProcessManager(session.factory, { openSession: KernelSession.open });
+    this.#kernelRef = session.kernel.kernelRef;
     this.#toolLayer = new OwnedWasmToolLayer({ assetIntegrity: options.assetIntegrity,
       fetchImpl: options.fetchImpl, kernelVfs: session.kernel.vfs });
+    this.#toolBridge = options.machineToolHostBridge || null;
+    this.#toolBridge?.attach(this.#kernelRef, this.#toolLayer);
+    this.#processes = new KernelProcessManager(session.factory, { openSession: KernelSession.open,
+      onSessionOpen: (child) => this.#toolBridge?.attach(child.kernel.kernelRef, this.#toolLayer),
+      onSessionClose: (child) => this.#toolBridge?.detach(child.kernel.kernelRef) });
     const run = (code, options) => this.#session.run(code, options);
     run.python = run;
     run.get = (name) => this.#session.get(name);
@@ -56,17 +64,43 @@ export class KernelMachine {
 
   async close() {
     this.#toolLayer.close();
-    await this.#processes.close();
-    return this.#session.close();
+    let processFailure = null;
+    let receipt;
+    try {
+      try { await this.#processes.close(); }
+      catch (error) { processFailure = error; }
+      receipt = await this.#session.close();
+    } finally {
+      this.#toolBridge?.detach(this.#kernelRef);
+      this.#toolBridge?.close();
+    }
+    if (processFailure) throw processFailure;
+    return receipt;
   }
 }
 
 export async function bootKernelMachine(factory, manifest, options = {}) {
-  return new KernelMachine(await KernelSession.open(factory, manifest, options), options);
+  const bridge = options.hostBroker instanceof MachineToolHostBridge
+    ? options.hostBroker : new MachineToolHostBridge(options.hostBroker || null);
+  try {
+    const session = await KernelSession.open(factory, manifest, { ...options, hostBroker: bridge });
+    return new KernelMachine(session, { ...options, machineToolHostBridge: bridge });
+  } catch (error) {
+    bridge.close("Machine boot failed");
+    throw error;
+  }
 }
 
 export async function openKernelMachineImage(factory, image, options = {}) {
-  return new KernelMachine(new KernelSession(factory, await factory.openImage(image, options)), options);
+  const bridge = options.hostBroker instanceof MachineToolHostBridge
+    ? options.hostBroker : new MachineToolHostBridge(options.hostBroker || null);
+  try {
+    const session = new KernelSession(factory, await factory.openImage(image, { ...options, hostBroker: bridge }));
+    return new KernelMachine(session, { ...options, machineToolHostBridge: bridge });
+  } catch (error) {
+    bridge.close("Machine image open failed");
+    throw error;
+  }
 }
 
 export async function bootDefaultKernelMachine(options = {}) {

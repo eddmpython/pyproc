@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:64fa24760045aca5325661ad0f5038e0a89c454535a9cd2541036be8ce371741",
-  "catalogDigest": "sha256:c770372f4fb96d5484223aaf93e2fcfcf5f65b4688493aa74f381a7a44f13d1c",
+  "generatedFromDigest": "sha256:b17e14d532b6996e0f531def4c92d50d708a1d0cce42ca53cf40ce21355da5ab",
+  "catalogDigest": "sha256:0f53f339135c2dc5024970ab42166445951eaa611e6e780f03e9f199c5523fc8",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -314,8 +314,8 @@
     },
     {
       "path": "skills/evolve-pyproc/references/contract-reality.md",
-      "bytes": 4191,
-      "sha256": "sha256:56ec64924c90721c5d7d36a726f5026210727121cb31ff102c15650c0f0691cf"
+      "bytes": 4288,
+      "sha256": "sha256:4d8db00ac720c2134990959695cfae695107f83cb7fff1ec6749adb8499bc125"
     },
     {
       "path": "skills/evolve-pyproc/references/experimental-freeze.md",
@@ -339,8 +339,8 @@
     },
     {
       "path": "skills/reference-pyproc-api/references/api.md",
-      "bytes": 6928,
-      "sha256": "sha256:5364f79cf1d47d3a59839eda2d9ef0a121a381538195727e8083f60448a859d4"
+      "bytes": 7521,
+      "sha256": "sha256:361e3f6060930c28932d85f0f727dd6bccc42585ea38201a19fefa959dfc4e04"
     },
     {
       "path": "skills/reference-pyproc-api/references/bundle-format.md",
@@ -389,8 +389,8 @@
     },
     {
       "path": "skills/understand-pyproc/references/vision.md",
-      "bytes": 2634,
-      "sha256": "sha256:612c86dda52b83e343b91dfa882feab28b8680d1fb4519378dcc226820701e32"
+      "bytes": 4861,
+      "sha256": "sha256:ddfbfaeb3f1be0b576af1017bd6b2094ab04435406d8347aec8a27558b74095a"
     },
     {
       "path": "skills/use-pyproc-machine/references/execution-memory.md",
@@ -419,8 +419,8 @@
     },
     {
       "path": "skills/use-pyproc-runtime/references/consumer-contract.md",
-      "bytes": 5628,
-      "sha256": "sha256:95dfdd7e936163d4b24584f952817d67ac04deb47a4eded7e32188743f8f8062"
+      "bytes": 6336,
+      "sha256": "sha256:64d26c06cb75e97d3618309f6be13af55c06c1a8e202947963ddb59f96306e30"
     },
     {
       "path": "skills/use-pyproc-runtime/references/hostcall-abi.md",

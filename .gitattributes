@@ -13,6 +13,9 @@
 *.html text eol=lf
 *.yml  text eol=lf
 *.yaml text eol=lf
+# 재현 빌드 입력은 원본 문맥 공백과 정확한 바이트 해시를 보존한다.
+scripts/wasmToolBuilder/patches/*.patch text eol=lf -whitespace
+src/runtime/tools/owned/LICENSE.* text eol=lf -whitespace
 # 네이티브 엔진 잠금은 원본 바이트 해시를 검증하므로 빌드 입력도 LF로 고정한다.
 *.c    text eol=lf
 scripts/engineBuilder/Setup*.local text eol=lf

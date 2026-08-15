@@ -14,10 +14,10 @@
 
 ## Installation and assets
 
-`npm install pyproc` includes the owned CPython/WASI core, standard library, source-pinned ripgrep WASI binary,
-build manifests, licenses, SBOM, standard library inventory, and reproducibility receipts. Serve the package and
-its relative `src/` graph from one origin. The runtime verifies engine manifest identity, artifact byte length,
-and SHA-256 before boot.
+`npm install pyproc` includes the owned CPython/WASI core, standard library, source-pinned ripgrep and libgit2 Git
+WASI binaries, build manifests, patches, licenses, SBOM, standard library inventory, and reproducibility receipts.
+Serve the package and its relative `src/` graph from one origin. The runtime verifies engine manifest identity,
+artifact byte length, and SHA-256 before boot.
 
 ```js
 import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
@@ -55,10 +55,17 @@ only an argument vector. With no explicit `files`, it snapshots committed `/home
 `KernelVfs`; otherwise it accepts a bounded absolute-path file object. The snapshot is read-only and the worker
 has no network capability.
 
+`machine.tools.run("git", args, options)` executes the source-pinned libgit2 1.9.7 example frontend without its
+network transports. It requires an attached `KernelVfs`, rejects an explicit `files` object, runs against a bounded
+snapshot, and commits its local repository delta only when the input root still matches. The supported product
+surface is init, config, exact-path add, commit, status, log, and local refs.
+
 The version 1 receipt binds tool version and source revision, argv, exit code, stdout, stderr, timing, file count,
-byte length, and input SHA-256. Nonzero command exit is a normal receipt. Input, output, time, cancellation, worker,
-and asset failures remain distinguishable. The current catalog contains no Git command and does not make Python
-standard library `subprocess` work.
+byte length, and input SHA-256. A mutating receipt also binds the output digest, committed root, file counts, and
+write and removal counts. Nonzero command exit is a normal receipt. Input, output, time, cancellation, worker, and
+asset failures remain distinguishable. The Machine's main and cloned Python kernels can import `pyprocTools`
+to inspect or call the identical argv-only catalog. This does not make Python standard-library `subprocess`, shell grammar, pipes, remote Git
+transports, or arbitrary Git CLI commands work.
 
 ## State contract
 

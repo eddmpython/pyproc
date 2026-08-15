@@ -118,6 +118,7 @@ export class CpythonWasiKernelRuntime {
   }
 
   get runtimeContractVersion() { return KERNEL_RUNTIME_CONTRACT_VERSION; }
+  get kernelRef() { return this.#kernelRef; }
   get runtimeKind() { return KERNEL_RUNTIME_KIND; }
 
   async #stateDigest() {

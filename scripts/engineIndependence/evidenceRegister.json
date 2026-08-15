@@ -82,6 +82,64 @@
       }
     },
     {
+      "evidenceId": "local-resident-git-python-bridge-20260816",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows 11",
+        "browser": "Microsoft Edge 151.0.4129.86",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "source": "libgit2 v1.9.7 at 49e408b3208bc3093757a1c2db938d3590f3f412",
+        "target": "wasm32-wasip1",
+        "wasiSdk": "33.0",
+        "cmake": "4.3.1",
+        "ninja": "1.13.2"
+      },
+      "commands": [
+        "npm run assets:wasm-tools",
+        "node --input-type=module -e import('./tests/contracts/wasmToolLayer.mjs').then(m=>m.assertWasmToolLayer())",
+        "node tests/attempts/runtimeParity/residentGitAndPythonToolBridgeProbe.mjs"
+      ],
+      "result": "GREEN two isolated clean-worktree builds were byte-identical; exact packed public Control completed rg, Git init, config, exact-path add, commit, log, clean status, local ref, main and cloned Python rg and Git receipts, bounded failures, asset mutation rejection, and zero third-party requests; 10/10 checks",
+      "artifacts": [
+        {
+          "role": "residentWasiGit",
+          "path": "src/runtime/tools/owned/git.wasm",
+          "byteLength": 1636225,
+          "sha256": "d346092d818597359d5bf1b78f52dfdc6e15e8f6ed18e70740e2087030f2d3b0",
+          "sourceRevision": "49e408b3208bc3093757a1c2db938d3590f3f412"
+        },
+        {
+          "role": "sourcePatch",
+          "path": "scripts/wasmToolBuilder/patches/libgit2-1.9.7-wasi.patch",
+          "byteLength": 10866,
+          "sha256": "530b48e6ce295643ed67ac257e23f79e3c2faac5452c4928122fc53048a5ba82"
+        },
+        {
+          "role": "wasiShim",
+          "path": "src/runtime/engines/wasi/browserWasiShim.js",
+          "byteLength": 28953,
+          "sha256": "bfefd433525a3568b55b0af317e765ccc4530aafa787edd6542f95c2ae955b28"
+        },
+        {
+          "role": "headedProductScreenshot",
+          "byteLength": 104507,
+          "sha256": "2f6137c7d0354c7c0807347d2448195655f50a05b809ada60619330bbaf2f2c3"
+        }
+      ],
+      "negative": {
+        "initialGit": "PYPROC_INPUT_INVALID",
+        "initialPython": "ModuleNotFoundError",
+        "outputLimit": "PYPROC_WORKER_TASK_ERROR",
+        "cancelled": "PYPROC_PROCESS_UNAVAILABLE",
+        "mutatedAsset": "PYPROC_ASSET_INTEGRITY",
+        "network": false,
+        "shellParsing": false,
+        "pythonSubprocess": false,
+        "remoteGit": false
+      }
+    },
+    {
       "evidenceId": "local-wasi-product-20260814",
       "classification": "PROVEN_LOCAL",
       "environment": { "os": "Windows", "browser": "Microsoft Edge 151.0.4129.78", "crossOriginIsolated": true, "node": "22.19.0" },

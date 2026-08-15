@@ -9,6 +9,42 @@ import { MemoryValueArtifactStore } from "../runtime/kernel/valueEnvelope.js";
 export const KERNEL_MACHINE_IMAGE_PROTOCOL = "pyproc.kernel-machine-image";
 export const KERNEL_MACHINE_IMAGE_VERSION = 1;
 
+const PYTHON_TOOL_BRIDGE_HELPER = `
+import json as _pyprocToolJson
+import sys as _pyprocToolSys
+import types as _pyprocToolTypes
+import _pyprocHost as _pyprocToolHost
+
+def _pyprocToolInspect():
+    responseBytes = _pyprocToolHost.call(0x0401, b"{}", deadline_ms=5000, response_capacity=65536)
+    return _pyprocToolJson.loads(responseBytes.decode("utf-8"))
+
+def _pyprocToolRun(command, args=(), *, stdin="", timeoutMs=15000, maxOutputBytes=262144):
+    if not isinstance(command, str) or not command or "\\0" in command:
+        raise TypeError("command must be a nonempty NUL-free string")
+    if not isinstance(args, (list, tuple)) or len(args) > 128 or any(
+            not isinstance(arg, str) or "\\0" in arg for arg in args):
+        raise TypeError("args must contain at most 128 NUL-free strings")
+    if not isinstance(stdin, str):
+        raise TypeError("stdin must be a string")
+    if not isinstance(timeoutMs, int) or isinstance(timeoutMs, bool) or not 1 <= timeoutMs <= 60000:
+        raise ValueError("timeoutMs must be between 1 and 60000")
+    if not isinstance(maxOutputBytes, int) or isinstance(maxOutputBytes, bool) or not 1 <= maxOutputBytes <= 393216:
+        raise ValueError("maxOutputBytes must be between 1 and 393216")
+    payload = _pyprocToolJson.dumps({"command": command, "args": list(args), "options": {
+        "stdin": stdin, "timeoutMs": timeoutMs, "maxOutputBytes": maxOutputBytes}},
+        separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    responseCapacity = min(900000, maxOutputBytes * 2 + 65536)
+    responseBytes = _pyprocToolHost.call(0x0400, payload, deadline_ms=min(60000, timeoutMs + 1000),
+        response_capacity=responseCapacity)
+    return _pyprocToolJson.loads(responseBytes.decode("utf-8"))
+
+_pyprocToolModule = _pyprocToolTypes.ModuleType("pyprocTools")
+_pyprocToolModule.__dict__.update({"__all__": ("inspect", "run"), "inspect": _pyprocToolInspect,
+    "run": _pyprocToolRun})
+_pyprocToolSys.modules["pyprocTools"] = _pyprocToolModule
+`;
+
 function inputError(message) {
   return new PyProcError("PYPROC_INPUT_INVALID", message);
 }
@@ -276,7 +312,7 @@ export class KernelFactory {
       throw new PyProcError("PYPROC_BOOT_FAILED", "KernelFactory protocol negotiation failed");
     }
     const selfTest = await kernel.execute({ commandId: `${kernelRef}:self-test`,
-      code: `import sys\nassert sys.version.split()[0] == ${JSON.stringify(manifest.pythonVersion)}` });
+      code: `import sys\nassert sys.version.split()[0] == ${JSON.stringify(manifest.pythonVersion)}\n${PYTHON_TOOL_BRIDGE_HELPER}` });
     if (selfTest.state !== "completed") {
       await kernel.close();
       throw new PyProcError("PYPROC_BOOT_FAILED", selfTest.error?.message || "KernelFactory self-test failed");
