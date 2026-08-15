@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
@@ -60,6 +60,14 @@ const check = (name, pass, info = "") => {
   else { failed += 1; console.log(`  FAIL ${name}${info ? ` (${info})` : ""}`); }
 };
 
+const samePath = (left, right) => {
+  if (typeof left !== "string" || typeof right !== "string") return false;
+  const values = [left, right].map((value) => resolve(value));
+  return process.platform === "win32"
+    ? values[0].toLowerCase() === values[1].toLowerCase()
+    : values[0] === values[1];
+};
+
 const installed = await installPackedPyProc("pyprocInstalledMcpProduct-");
 const configPath = join(installed.appDir, ".pyproc-mcp-product", "manifest.json");
 const memoryRoot = join(installed.appDir, ".pyproc-mcp-memory");
@@ -100,12 +108,12 @@ try {
     join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core")], { cwd: installed.appDir });
 } catch (error) { unknownRecipeError = error; }
 check("installed bin help, version, check가 제품 시작 표면과 권한을 검증",
-  initializedProfile.manifestPath === configPath
+  samePath(initializedProfile.manifestPath, configPath)
     && versionRun.stdout.trim() === installed.packed.version && helpRun.stdout.includes("--config <file>")
     && helpRun.stdout.includes("pyproc-mcp init --recipe") && helpRun.stdout.includes("--check") && checkReport.ok === true
     && checkReport.browser.actions.includes("screenshot")
     && checkReport.executionMemory?.enabled === true
-    && checkReport.executionMemory?.root === memoryRoot
+    && samePath(checkReport.executionMemory?.root, memoryRoot)
     && checkReport.effectTransactions?.enabled === true
     && checkReport.browser.rawMethods.join(",") === "Runtime.evaluate"
     && checkReport.engine.mode === "root",
@@ -343,12 +351,19 @@ try {
   check("설치 MCP가 approved effect를 한 번만 보내고 terminal evidence를 보존",
     committedEffects === 1 && effectTerminal.state === "terminal"
       && effectTerminal.effectResult?.terminal === "confirmed"
-      && effectTerminal.effectResult?.actionEvidence?.length === 1
-      && effectRetried.contentSha256 === effectTerminal.contentSha256
+      && effectTerminal.effectResult?.actionEvidence?.length === 1,
+  JSON.stringify({ committedEffects, state: effectTerminal.state, terminal: effectTerminal.effectResult?.terminal,
+    actionEvidence: effectTerminal.effectResult?.actionEvidence?.length }));
+  check("설치 MCP effect 재호출과 조회가 terminal revision을 바꾸지 않는다",
+    effectRetried.contentSha256 === effectTerminal.contentSha256
       && effectListed.some((entry) => entry.transactionId === "effect:mcp-product")
-      && effectInspected.transaction.contentSha256 === effectTerminal.contentSha256
-      && effectSealed.state === "sealed" && effectSealed.receipt?.evidencePackSha256 === effectEvidence.contentSha256,
-  JSON.stringify({ committedEffects, state: effectTerminal.state, terminal: effectTerminal.effectResult?.terminal }));
+      && effectInspected.transaction.contentSha256 === effectTerminal.contentSha256,
+  JSON.stringify({ terminal: effectTerminal.contentSha256, retried: effectRetried.contentSha256,
+    inspected: effectInspected.transaction.contentSha256 }));
+  check("설치 MCP effect가 검증된 Evidence Pack으로 봉인된다",
+    effectSealed.state === "sealed" && effectSealed.receipt?.evidencePackSha256 === effectEvidence.contentSha256,
+  JSON.stringify({ state: effectSealed.state, receipt: effectSealed.receipt?.evidencePackSha256,
+    evidence: effectEvidence.contentSha256 }));
   const wrongMemory = toolText(await callTool("memoryCreate", { executionSessionId: "session:mcp-destination",
     project: projectIdentity }));
   const wrongPrepared = toolText(await callTool("effectPrepare", {
