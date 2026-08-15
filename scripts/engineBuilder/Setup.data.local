@@ -1,3 +1,4 @@
 # PyProc owned data profile. Every source and ABI is pinned by engineBuildLock.json.
 _pyprocHost _pyprocHost.c
-_pyprocData _pyprocData.c
+MODULE__PYPROCDATA_CFLAGS=-msimd128
+_pyprocData _pyprocData.c $(MODULE__PYPROCDATA_CFLAGS)

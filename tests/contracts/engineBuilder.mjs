@@ -32,8 +32,9 @@ export async function assertOwnedEngineBuilder() {
     && lock.wasiSdk.version === "24.0"
     && lock.cflags === "-O3 -g0 -fno-ident",
   "owned engine build lock drifted");
-  assert(lock.nativeProfiles?.data?.engineId === "cpython-wasi-3.14.6-pyproc-data-1"
+  assert(lock.nativeProfiles?.data?.engineId === "cpython-wasi-3.14.6-pyproc-data-2"
     && lock.nativeProfiles.data.modules.map((module) => module.name).join(",") === "_pyprocHost,_pyprocData"
+    && lock.nativeProfiles.data.modules[1].abiVersion === "pyproc.data/2"
     && lock.nativeProfiles.data.budgets.maxWasmBytes === 7850000,
   "owned data native profile lock is incomplete");
   const hashes = [
@@ -54,9 +55,10 @@ export async function assertOwnedEngineBuilder() {
     && hostSource.includes("pyproc.hostcall/1")
     && setup.split(/\r?\n/u).includes("_pyprocHost _pyprocHost.c"),
   "static PyProc host module recipe is incomplete");
-  assert(dataSource.includes("PyInit__pyprocData") && dataSource.includes("pyproc_data_vector_add")
-    && dataSource.includes("pyproc_data_dot")
-    && dataSetup.split(/\r?\n/u).includes("_pyprocData _pyprocData.c"),
+  assert(dataSource.includes("PyInit__pyprocData") && dataSource.includes("wasm_f64x2_add")
+    && dataSource.includes("wasm_f64x2_mul") && dataSource.includes("wasm-simd128")
+    && dataSetup.split(/\r?\n/u).includes("MODULE__PYPROCDATA_CFLAGS=-msimd128")
+    && dataSetup.split(/\r?\n/u).includes("_pyprocData _pyprocData.c $(MODULE__PYPROCDATA_CFLAGS)"),
   "static data profile module recipe is incomplete");
   const compiledData = await nativeProfileBuildInput("data");
   const compiledCore = await nativeProfileBuildInput("core");
@@ -67,6 +69,7 @@ export async function assertOwnedEngineBuilder() {
     && /^[0-9a-f]{64}$/u.test(compiledData.input.recipe.linuxBuilderSha256)
     && /^[0-9a-f]{64}$/u.test(compiledData.input.recipe.windowsBuilderSha256)
     && compiledData.input.recipe.modules[1].sourceSha256 === lock.nativeProfiles.data.modules[1].sourceSha256
+    && compiledData.input.recipe.setupSha256 === lock.nativeProfiles.data.setupSha256
     && compiledData.input.outputs.includes("native-profile-build-input.json"),
   "native profile compiler did not seal source, ABI, engine, and output provenance");
 

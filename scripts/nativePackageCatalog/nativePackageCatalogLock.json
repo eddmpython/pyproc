@@ -1,29 +1,67 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "sourceDateEpoch": 1781085833,
-  "engine": {
-    "engineId": "cpython-wasi-3.14.6-pyproc-host-1",
-    "nativeProfile": "core",
-    "pythonVersion": "3.14.6",
-    "target": "wasm32-wasip1",
-    "buildManifestSha256": "sha256:ca8f61b32b89af2fcd56a0534c1bf29ad19f41e219ee73bb6ef81876bb363f14"
-  },
-  "package": {
-    "name": "pyproc-native-host",
-    "version": "1.0.0",
-    "module": "pyproc_native_host",
-    "tag": "py3-none-any",
-    "requiresPython": ">=3.14,<3.15",
-    "wrapperSource": "packages/pyproc_native_host/__init__.py",
-    "wrapperSourceSha256": "0e592358ba961ad2881096094d694c1c4d24e52a51a4b78b09126e62e14a2343"
-  },
-  "nativeModules": [
-    {
-      "name": "_pyprocHost",
-      "source": "../engineBuilder/_pyprocHost.c",
-      "sourceSha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66",
-      "abiVersion": "pyproc.hostcall/1",
-      "origin": "built-in"
+  "profiles": {
+    "core": {
+      "engine": {
+        "engineId": "cpython-wasi-3.14.6-pyproc-host-1",
+        "nativeProfile": "core",
+        "pythonVersion": "3.14.6",
+        "target": "wasm32-wasip1",
+        "buildManifestSha256": "sha256:ca8f61b32b89af2fcd56a0534c1bf29ad19f41e219ee73bb6ef81876bb363f14"
+      },
+      "package": {
+        "name": "pyproc-native-host",
+        "version": "1.0.0",
+        "module": "pyproc_native_host",
+        "tag": "py3-none-any",
+        "requiresPython": ">=3.14,<3.15",
+        "wrapperSource": "packages/pyproc_native_host/__init__.py",
+        "wrapperSourceSha256": "0e592358ba961ad2881096094d694c1c4d24e52a51a4b78b09126e62e14a2343"
+      },
+      "nativeModules": [
+        {
+          "name": "_pyprocHost",
+          "source": "../engineBuilder/_pyprocHost.c",
+          "sourceSha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66",
+          "abiVersion": "pyproc.hostcall/1",
+          "origin": "built-in"
+        }
+      ]
+    },
+    "data": {
+      "engine": {
+        "engineId": "cpython-wasi-3.14.6-pyproc-data-2",
+        "nativeProfile": "data",
+        "pythonVersion": "3.14.6",
+        "target": "wasm32-wasip1",
+        "buildManifestSha256": "sha256:81cfee69313ef1d0c77b1fcbc73b46ff3aa4a4470ef16ec54f47d998cd8a0953"
+      },
+      "package": {
+        "name": "pyproc-native-data",
+        "version": "1.0.0",
+        "module": "pyproc_native_data",
+        "tag": "py3-none-any",
+        "requiresPython": ">=3.14,<3.15",
+        "wrapperSource": "packages/pyproc_native_data/__init__.py",
+        "wrapperSourceSha256": "8848184782031d7fbd05cd22788687d3ec16cc0b811bf1a676e68f0003ba3c65"
+      },
+      "nativeModules": [
+        {
+          "name": "_pyprocHost",
+          "source": "../engineBuilder/_pyprocHost.c",
+          "sourceSha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66",
+          "abiVersion": "pyproc.hostcall/1",
+          "origin": "built-in"
+        },
+        {
+          "name": "_pyprocData",
+          "source": "../engineBuilder/_pyprocData.c",
+          "sourceSha256": "eb088d6a713d2cf7e5a4508e8ac50a851a1a31dd35b1ed6a14ee1921f1ce8495",
+          "abiVersion": "pyproc.data/2",
+          "origin": "built-in"
+        }
+      ]
     }
-  ]
+  }
 }

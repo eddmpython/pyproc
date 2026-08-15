@@ -24,6 +24,9 @@ contact an index.
 source, native source, ABI, exact engine ID, and native profile are sealed. Package-owned bytes are reported as
 source `package`, then become ordinary verified content-store hits.
 
+The default profile is `core`. Select `{ profile: "data" }` only with `getDataKernelEngineManifest()`. That
+catalog provides the source-built `pyproc.data/2` SIMD facade and rejects use with the core engine before install.
+
 ## Wheel transaction
 
 `inspectPurePythonWheel` validates the ZIP central directory before extraction. It rejects traversal, absolute

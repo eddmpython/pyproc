@@ -1,0 +1,95 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "cpython-wasi-3.14.6-pyproc-data-2",
+      "version": "3.14.6"
+    }
+  },
+  "components": [
+    {
+      "type": "framework",
+      "name": "CPython",
+      "version": "3.14.6",
+      "bomRef": "cpython:c63aec69bd59c55314c06c23f4c22c03de76fe45",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "74d0d71d0600e477651a077101d6e62d1e2e69b8e992ba18c993dd643b7ba222"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "name": "WASI SDK",
+      "version": "24.0",
+      "bomRef": "wasi-sdk:24.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0f934c6e7e171b5627c81b697a9e57e96d65cd889f56ce6077350de48978afd3"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "_pyprocHost",
+      "version": "pyproc.hostcall/1",
+      "bomRef": "native:_pyprocHost:pyproc.hostcall/1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "_pyprocData",
+      "version": "pyproc.data/2",
+      "bomRef": "native:_pyprocData:pyproc.data/2",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "eb088d6a713d2cf7e5a4508e8ac50a851a1a31dd35b1ed6a14ee1921f1ce8495"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "python.wasm",
+      "bomRef": "artifact:645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "python314-stdlib.zip",
+      "bomRef": "artifact:ce468413329cdc90d2ba26c90f915b1b11126ea4f4351a81d31a9fd668d53ded",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ce468413329cdc90d2ba26c90f915b1b11126ea4f4351a81d31a9fd668d53ded"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "native-profile-build-input.json",
+      "bomRef": "artifact:187367312d26e89f5d4ba324832aa46e8cb34ea588ca15608c55f94d365dc2a1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "187367312d26e89f5d4ba324832aa46e8cb34ea588ca15608c55f94d365dc2a1"
+        }
+      ]
+    }
+  ]
+}

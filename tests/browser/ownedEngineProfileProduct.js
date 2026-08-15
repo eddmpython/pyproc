@@ -137,7 +137,7 @@ export async function runOwnedEngineDataProduct() {
       && sbom.components.some((entry) => entry.name === "_pyprocData"));
     const wasmDelta = dataManifest.outputs.engine.byteLength - coreManifest.outputs.engine.byteLength;
     gate.check("profile identity and size budget", dataManifest.nativeProfile === "data"
-      && dataManifest.engineId === "cpython-wasi-3.14.6-pyproc-data-1"
+      && dataManifest.engineId === "cpython-wasi-3.14.6-pyproc-data-2"
       && dataManifest.engineId !== coreManifest.engineId
       && dataManifest.outputs.engine.byteLength <= profileInput.budgets.maxWasmBytes
       && dataManifest.outputs.stdlib.byteLength <= profileInput.budgets.maxStdlibZipBytes
@@ -151,14 +151,36 @@ export async function runOwnedEngineDataProduct() {
     gate.timings.dataBootMs = Math.round(performance.now() - started);
     const oracle = JSON.parse(await runPython(dataKernel, "data:oracle", `
 import json, _pyprocData
+from array import array
+left = array("d", [1, 2.5, -4])
+right = array("d", [3, 4.5, 6])
+added = array("d")
+added.frombytes(_pyprocData.vector_add_f64(left, right))
 print(json.dumps({"origin": _pyprocData.__spec__.origin, "profile": _pyprocData.profile(),
-                  "sum": _pyprocData.vector_add([1, 2.5], [3, 4.5]),
-                  "dot": _pyprocData.dot([1, 2, 3], [4, 5, 6])}, sort_keys=True))
+                  "simd": _pyprocData.simd(), "sum": _pyprocData.vector_add([1, 2.5], [3, 4.5]),
+                  "dot": _pyprocData.dot([1, 2, 3], [4, 5, 6]), "simdSum": list(added),
+                  "simdDot": _pyprocData.dot_f64(left, right)}, sort_keys=True))
 `));
     gate.check("source-built data module static import", oracle.origin === "built-in"
-      && oracle.profile === "pyproc.data/1", `${oracle.origin}, ${gate.timings.dataBootMs}ms`);
-    gate.check("data profile numerical oracle", oracle.sum.join(",") === "4,7" && oracle.dot === 32,
+      && oracle.profile === "pyproc.data/2" && oracle.simd === "wasm-simd128",
+    `${oracle.origin}, ${oracle.simd}, ${gate.timings.dataBootMs}ms`);
+    gate.check("data profile scalar and SIMD numerical oracles", oracle.sum.join(",") === "4,7"
+      && oracle.dot === 32 && oracle.simdSum.join(",") === "4,7,2" && oracle.simdDot === -9.75,
       JSON.stringify(oracle));
+    const scientific = JSON.parse(await runPython(dataKernel, "data:scientific-boundary", `
+import importlib, json
+result = {}
+for name in ("numpy", "scipy", "pandas", "polars"):
+    try:
+        importlib.import_module(name)
+    except Exception as error:
+        result[name] = type(error).__name__
+    else:
+        result[name] = "IMPORTED"
+print(json.dumps(result, sort_keys=True))
+`));
+    gate.check("representative scientific import boundary remains explicit",
+      Object.values(scientific).every((value) => value === "ModuleNotFoundError"), JSON.stringify(scientific));
     const workload = JSON.parse(await runPython(dataKernel, "data:workload", `
 import json, _pyprocData
 value = 0.0
@@ -170,10 +192,13 @@ print(json.dumps({"calls": 10000, "value": value}))
       workload.calls === 10000 && workload.value === 50305000);
     const rejected = JSON.parse(await runPython(dataKernel, "data:negative", `
 import json, _pyprocData
+from array import array
 errors = []
 for operation in (lambda: _pyprocData.vector_add([1], [2, 3]),
                   lambda: _pyprocData.dot([float("nan")], [1]),
-                  lambda: _pyprocData.dot(["not-a-number"], [1])):
+                  lambda: _pyprocData.dot(["not-a-number"], [1]),
+                  lambda: _pyprocData.dot_f64(array("d", [1]), array("d", [2, 3])),
+                  lambda: _pyprocData.vector_add_f64(array("d", [float("nan")]), array("d", [1]))):
     try:
         operation()
     except Exception as error:
@@ -181,7 +206,7 @@ for operation in (lambda: _pyprocData.vector_add([1], [2, 3]),
 print(json.dumps(errors))
 `));
     gate.check("invalid native inputs fail closed",
-      rejected.join(",") === "ValueError,ValueError,TypeError", rejected.join(","));
+      rejected.join(",") === "ValueError,ValueError,TypeError,ValueError,ValueError", rejected.join(","));
     await runPython(dataKernel, "data:state",
       "native_profile_state = _pyprocData.dot([3, 4], [5, 6])");
     const checkpoint = await dataFactory.checkpoint(dataKernel, { commandId: "data:checkpoint" });
@@ -190,7 +215,7 @@ print(json.dumps(errors))
     gate.check("data profile checkpoint restores exact state",
       (await runPython(dataKernel, "data:restored-value",
         "print(native_profile_state, _pyprocData.profile())")).trim()
-        === "39.0 pyproc.data/1");
+        === "39.0 pyproc.data/2");
     await dataKernel.close();
     dataKernel = null;
 

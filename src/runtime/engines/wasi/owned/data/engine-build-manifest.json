@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "protocol": "pyproc.engine-build-manifest",
+  "engineId": "cpython-wasi-3.14.6-pyproc-data-2",
+  "nativeProfile": "data",
+  "target": "wasm32-wasip1",
+  "sourceDateEpoch": 1781085833,
+  "source": {
+    "version": "3.14.6",
+    "tagObject": "8594736f5057fdc979d42d2135895d56274589a8",
+    "commit": "c63aec69bd59c55314c06c23f4c22c03de76fe45",
+    "url": "https://www.python.org/ftp/python/3.14.6/Python-3.14.6.tgz",
+    "archiveSha256": "74d0d71d0600e477651a077101d6e62d1e2e69b8e992ba18c993dd643b7ba222"
+  },
+  "toolchain": {
+    "wasiSdkVersion": "24.0",
+    "wasiSdkArchiveSha256": "0f934c6e7e171b5627c81b697a9e57e96d65cd889f56ce6077350de48978afd3",
+    "wasiSysrootTreeSha256": "fca0364a42e1aaf6dd9026bddf933a7d59b8bae0015b11cfbf9399629f05150e",
+    "compiler": {
+      "file": "clang.exe",
+      "byteLength": 55412224,
+      "sha256": "4878b6a267df7505f3f94efbe36a44ca6e24f60164e90099faf2c9a45c90616d"
+    }
+  },
+  "recipe": {
+    "configureArgs": [
+      "--disable-test-modules",
+      "--without-ensurepip"
+    ],
+    "requestedCflags": "-O3 -g0 -fno-ident",
+    "observedMakeVariables": {
+      "baseCflags": "-fno-strict-overflow -Wsign-compare -Wunreachable-code",
+      "optimizationFlags": "-DNDEBUG -g -O3 -Wall",
+      "configureCflags": "-O3 -g0 -fno-ident",
+      "configureLdflags": ""
+    },
+    "hostModule": {
+      "name": "_pyprocHost",
+      "abiVersion": "pyproc.hostcall/1"
+    },
+    "hostModuleSourceSha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66",
+    "setupLocalSha256": "8e42e525bee03dd78986347960b5293ec3645904cbb0c48b6129e042ef37e1d2",
+    "setupFile": "Setup.data.local",
+    "nativeModules": [
+      {
+        "name": "_pyprocHost",
+        "source": "_pyprocHost.c",
+        "sourceSha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66",
+        "abiVersion": "pyproc.hostcall/1",
+        "byteLength": 9108
+      },
+      {
+        "name": "_pyprocData",
+        "source": "_pyprocData.c",
+        "sourceSha256": "eb088d6a713d2cf7e5a4508e8ac50a851a1a31dd35b1ed6a14ee1921f1ce8495",
+        "abiVersion": "pyproc.data/2",
+        "byteLength": 11421
+      }
+    ],
+    "nativeProfileInputSha256": "187367312d26e89f5d4ba324832aa46e8cb34ea588ca15608c55f94d365dc2a1",
+    "budgets": {
+      "maxWasmBytes": 7850000,
+      "maxStdlibZipBytes": 2800000,
+      "maxWasmDeltaFromCoreBytes": 50000
+    }
+  },
+  "staticModules": [
+    "_abc",
+    "_ast",
+    "_asyncio",
+    "_bisect",
+    "_blake2",
+    "_codecs",
+    "_codecs_cn",
+    "_codecs_hk",
+    "_codecs_iso2022",
+    "_codecs_jp",
+    "_codecs_kr",
+    "_codecs_tw",
+    "_collections",
+    "_contextvars",
+    "_csv",
+    "_datetime",
+    "_decimal",
+    "_elementtree",
+    "_functools",
+    "_heapq",
+    "_hmac",
+    "_imp",
+    "_io",
+    "_json",
+    "_locale",
+    "_lsprof",
+    "_md5",
+    "_multibytecodec",
+    "_opcode",
+    "_operator",
+    "_pickle",
+    "_pyprocData",
+    "_pyprocHost",
+    "_queue",
+    "_random",
+    "_sha1",
+    "_sha2",
+    "_sha3",
+    "_signal",
+    "_socket",
+    "_sre",
+    "_stat",
+    "_statistics",
+    "_string",
+    "_struct",
+    "_suggestions",
+    "_symtable",
+    "_sysconfig",
+    "_thread",
+    "_tokenize",
+    "_tracemalloc",
+    "_types",
+    "_typing",
+    "_weakref",
+    "_zoneinfo",
+    "array",
+    "atexit",
+    "binascii",
+    "cmath",
+    "errno",
+    "faulthandler",
+    "gc",
+    "itertools",
+    "math",
+    "posix",
+    "pyexpat",
+    "select",
+    "time",
+    "unicodedata"
+  ],
+  "outputs": {
+    "engine": {
+      "file": "python.wasm",
+      "byteLength": 7736600,
+      "sha256": "645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7"
+    },
+    "stdlib": {
+      "file": "python314-stdlib.zip",
+      "byteLength": 2773525,
+      "sha256": "ce468413329cdc90d2ba26c90f915b1b11126ea4f4351a81d31a9fd668d53ded"
+    },
+    "stdlibInventory": {
+      "file": "stdlib-inventory.json",
+      "byteLength": 90152,
+      "sha256": "001ee9a1f677e59c3303e179b6483595f7ca76d089bcd9c72b39ab1e9621d553"
+    },
+    "nativeProfileBuildInput": {
+      "file": "native-profile-build-input.json",
+      "byteLength": 2357,
+      "sha256": "187367312d26e89f5d4ba324832aa46e8cb34ea588ca15608c55f94d365dc2a1"
+    }
+  }
+}

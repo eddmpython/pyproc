@@ -1,0 +1,3 @@
+// Produced from scripts/nativePackageCatalog/buildNativePackageCatalog.mjs.
+export const DATA_OWNED_PACKAGE_CATALOG_DIGEST = "sha256:1b4b7f087be1b824d734d71c52a05b746e2dfb40d83b318eaf8cf0d280b66edc";
+export const DATA_OWNED_PACKAGE_WHEEL_DIGEST = "sha256:cf3988d6f2544e75e2e512039c13d4a5a0a5022f02a6428bad26c34f0f8b1260";

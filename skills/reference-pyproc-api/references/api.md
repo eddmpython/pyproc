@@ -59,7 +59,9 @@ and restores that image, including any digest-sealed package environment. Other 
 
 `pyproc/wasi.createOwnedPackageResolver()` creates the exact engine and profile fenced resolver for package-owned
 source-built native facades. The default catalog provides `pyproc-native-host==1.0.0` without a third-party
-package fetch.
+package fetch. `{ profile: "data" }` selects `pyproc-native-data==1.0.0` for the separate manifest returned by
+`getDataKernelEngineManifest()`. The data facade reports `pyproc.data/2` and `wasm-simd128`; it is not a claim of
+general scientific package compatibility.
 
 ### `createWebComputer(options?)`
 

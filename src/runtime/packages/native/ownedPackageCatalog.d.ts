@@ -36,6 +36,9 @@ export interface OwnedPackageCatalog {
   }>[];
 }
 
-export function createOwnedPackageResolver(options?: { fetch?: typeof fetch }): Promise<SimpleApiPackageResolver & {
+export function createOwnedPackageResolver(options?: {
+  fetch?: typeof fetch;
+  profile?: "core" | "data";
+}): Promise<SimpleApiPackageResolver & {
   readonly ownedCatalog: OwnedPackageCatalog;
 }>;

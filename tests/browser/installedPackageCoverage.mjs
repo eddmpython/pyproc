@@ -1,5 +1,5 @@
 // Installed tarball browser coverage shared by the gate and its report.
-export const INSTALLED_PACKAGE_COVERAGE_VERSION = 5;
+export const INSTALLED_PACKAGE_COVERAGE_VERSION = 6;
 
 export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
   Object.freeze({
@@ -18,8 +18,8 @@ export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
     gate: "installed owned kernel",
     specifiers: Object.freeze(["`pyproc`", "`pyproc/runtime`", "`pyproc/wasi`"]),
     publicSurface: Object.freeze(["execution", "value transfer", "checkpoint restore", "process clone", "terminal",
-      "source-pinned native package catalog"]),
-    contract: "The packed owned CPython WASI engine boots and runs only through the worker-owned kernel protocol",
+      "source-pinned native package catalogs", "data profile SIMD numerical oracle"]),
+    contract: "The packed core and data CPython WASI engines boot and remain exactly profile fenced",
   }),
   Object.freeze({
     gate: "installed Machine lifecycle",

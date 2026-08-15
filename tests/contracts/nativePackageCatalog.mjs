@@ -38,26 +38,30 @@ function packageFileFetch({ corruptWheel = false } = {}) {
   };
 }
 
-export async function assertNativePackageCatalogContract() {
-  const resolver = await createOwnedPackageResolver({ fetch: packageFileFetch() });
+async function assertProfile({ profile, requirement, absentRequirement, lockProfile }) {
+  const resolver = await createOwnedPackageResolver({ fetch: packageFileFetch(), profile });
   const catalog = resolver.ownedCatalog;
-  assert(OWNED_PACKAGE_CATALOG_PROTOCOL === "pyproc.owned-package-catalog"
-    && OWNED_PACKAGE_CATALOG_VERSION === 1 && catalog.protocol === OWNED_PACKAGE_CATALOG_PROTOCOL
-    && catalog.packages.length === 1, "owned package catalog protocol drifted");
+  assert(catalog.protocol === OWNED_PACKAGE_CATALOG_PROTOCOL && catalog.packages.length === 1
+    && catalog.engine.nativeProfile === profile, `owned ${profile} package catalog protocol drifted`);
   const entry = catalog.packages[0];
-  const lockResult = await resolver.resolve(["pyproc-native-host==1.0.0"]);
+  const lockResult = await resolver.resolve([requirement]);
   assert(lockResult.lock.engineId === catalog.engine.engineId
     && lockResult.lock.nativeProfile === catalog.engine.nativeProfile
     && lockResult.lock.packages[0].sha256 === entry.sha256,
-  "owned package lock lost its exact engine, profile, or artifact identity");
+  `owned ${profile} package lock lost its exact engine, profile, or artifact identity`);
+
+  const unavailable = await rejectionOf(() => resolver.resolve([absentRequirement]));
+  assert(unavailable?.code === "PYPROC_PACKAGE_RESOLUTION",
+    `owned ${profile} catalog resolved a package from another native profile`);
 
   const store = new MemoryPackageContentStore();
   const materialized = await resolver.materialize(lockResult.lock, { contentStore: store, offline: true });
   assert(materialized.wheels.length === 1 && materialized.wheels[0].source === "package"
     && await sha256Address(materialized.wheels[0].bytes) === entry.sha256,
-  "owned wheel did not materialize from package bytes while offline");
+  `owned ${profile} wheel did not materialize from package bytes while offline`);
   const cached = await resolver.materialize(lockResult.lock, { contentStore: store, offline: true });
-  assert(cached.wheels[0].source === "content-store", "owned wheel did not become a verified content-store hit");
+  assert(cached.wheels[0].source === "content-store",
+    `owned ${profile} wheel did not become a verified content-store hit`);
 
   let installCalls = 0;
   const wrongEngine = new PackageEnvironment({ resolver, contentStore: new MemoryPackageContentStore(), kernel: {
@@ -66,25 +70,43 @@ export async function assertNativePackageCatalogContract() {
   } });
   const fenced = await rejectionOf(() => wrongEngine.install({ lock: lockResult.lock, offline: true }));
   assert(fenced?.code === "PYPROC_PACKAGE_ABI_UNSUPPORTED" && installCalls === 0,
-    "owned package crossed its engine fence or reached an install side effect");
+    `owned ${profile} package crossed its engine fence or reached an install side effect`);
 
-  const corrupted = await rejectionOf(() => createOwnedPackageResolver({ fetch: packageFileFetch({ corruptWheel: true }) }));
+  const corrupted = await rejectionOf(() => createOwnedPackageResolver({
+    fetch: packageFileFetch({ corruptWheel: true }), profile,
+  }));
   assert(corrupted?.code === "PYPROC_PACKAGE_INTEGRITY",
-    "owned package artifact mutation crossed catalog verification");
+    `owned ${profile} package artifact mutation crossed catalog verification`);
 
-  const buildLock = JSON.parse(await readFile(new URL("../../scripts/nativePackageCatalog/nativePackageCatalogLock.json",
-    import.meta.url), "utf8"));
-  const wrapper = await readFile(new URL(`../../scripts/nativePackageCatalog/${buildLock.package.wrapperSource}`,
-    import.meta.url));
-  const hostSource = await readFile(new URL(`../../scripts/nativePackageCatalog/${buildLock.nativeModules[0].source}`,
-    import.meta.url));
   const hex = (bytes) => createHash("sha256").update(bytes).digest("hex");
-  assert(hex(wrapper) === buildLock.package.wrapperSourceSha256
-    && hex(hostSource) === buildLock.nativeModules[0].sourceSha256
-    && entry.wrapper.sourceSha256 === `sha256:${hex(wrapper)}`
-    && entry.nativeModules[0].sourceSha256 === `sha256:${hex(hostSource)}`,
-  "owned catalog no longer traces to its locked wrapper or native source");
+  const wrapper = await readFile(new URL(`../../scripts/nativePackageCatalog/${lockProfile.package.wrapperSource}`,
+    import.meta.url));
+  assert(hex(wrapper) === lockProfile.package.wrapperSourceSha256
+    && entry.wrapper.sourceSha256 === `sha256:${hex(wrapper)}`,
+  `owned ${profile} catalog no longer traces to its locked wrapper source`);
+  for (const [index, module] of lockProfile.nativeModules.entries()) {
+    const source = await readFile(new URL(`../../scripts/nativePackageCatalog/${module.source}`, import.meta.url));
+    assert(hex(source) === module.sourceSha256
+      && entry.nativeModules[index].sourceSha256 === `sha256:${hex(source)}`
+      && entry.nativeModules[index].abiVersion === module.abiVersion,
+    `owned ${profile} catalog no longer traces to native source ${module.name}`);
+  }
   const { catalogDigest, ...catalogBody } = catalog;
   assert(await sha256Address(canonicalPackageJson(catalogBody)) === catalogDigest,
-    "owned catalog canonical identity is not reproducible");
+    `owned ${profile} catalog canonical identity is not reproducible`);
+}
+
+export async function assertNativePackageCatalogContract() {
+  assert(OWNED_PACKAGE_CATALOG_PROTOCOL === "pyproc.owned-package-catalog"
+    && OWNED_PACKAGE_CATALOG_VERSION === 1, "owned package catalog protocol drifted");
+  const buildLock = JSON.parse(await readFile(new URL(
+    "../../scripts/nativePackageCatalog/nativePackageCatalogLock.json", import.meta.url), "utf8"));
+  assert(buildLock.schemaVersion === 2 && Object.keys(buildLock.profiles).sort().join(",") === "core,data",
+    "owned package profile lock is incomplete");
+  await assertProfile({ profile: "core", requirement: "pyproc-native-host==1.0.0",
+    absentRequirement: "pyproc-native-data==1.0.0", lockProfile: buildLock.profiles.core });
+  await assertProfile({ profile: "data", requirement: "pyproc-native-data==1.0.0",
+    absentRequirement: "pyproc-native-host==1.0.0", lockProfile: buildLock.profiles.data });
+  const invalid = await rejectionOf(() => createOwnedPackageResolver({ profile: "unknown" }));
+  assert(invalid?.code === "PYPROC_INPUT_INVALID", "unknown owned package profile did not fail closed");
 }

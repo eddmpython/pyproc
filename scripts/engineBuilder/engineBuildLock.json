@@ -82,9 +82,9 @@
       }
     },
     "data": {
-      "engineId": "cpython-wasi-3.14.6-pyproc-data-1",
+      "engineId": "cpython-wasi-3.14.6-pyproc-data-2",
       "setupFile": "Setup.data.local",
-      "setupSha256": "085b9e5072a90b77e14b239d3e9cf87ea376e608c8937a69fb78dcc549bf33e3",
+      "setupSha256": "8e42e525bee03dd78986347960b5293ec3645904cbb0c48b6129e042ef37e1d2",
       "modules": [
         {
           "name": "_pyprocHost",
@@ -95,13 +95,13 @@
         {
           "name": "_pyprocData",
           "source": "_pyprocData.c",
-          "sourceSha256": "e69a52c26777927c12891f8cfec7fd64c7b5e1e7c3bb0dec5cc267da437500f2",
-          "abiVersion": "pyproc.data/1"
+          "sourceSha256": "eb088d6a713d2cf7e5a4508e8ac50a851a1a31dd35b1ed6a14ee1921f1ce8495",
+          "abiVersion": "pyproc.data/2"
         }
       ],
       "oracle": {
-        "code": "import _pyprocData; print(_pyprocData.profile(), _pyprocData.vector_add([1,2.5],[3,4.5]), _pyprocData.dot([1,2,3],[4,5,6]))",
-        "stdout": "pyproc.data/1 [4.0, 7.0] 32.0"
+        "code": "import _pyprocData; from array import array; a=array('d',[1,2.5,-4]); b=array('d',[3,4.5,6]); out=array('d'); out.frombytes(_pyprocData.vector_add_f64(a,b)); print(_pyprocData.profile(), _pyprocData.simd(), list(out), _pyprocData.dot_f64(a,b))",
+        "stdout": "pyproc.data/2 wasm-simd128 [4.0, 7.0, 2.0] -9.75"
       },
       "budgets": {
         "maxWasmBytes": 7850000,

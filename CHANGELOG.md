@@ -12,6 +12,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **A reproducible data engine now ships beside the default core engine.** `pyproc/wasi` exposes its exact
+  manifest and a profile-selected package-owned catalog. The static `pyproc.data/2` module executes float64
+  buffer addition and dot products with `wasm-simd128`, and its verified facade survives process clone and
+  Machine image revival. Representative NumPy, SciPy, pandas, and Polars imports remain explicitly unsupported.
+
 ## 0.0.22 - 2026-08-15
 
 ### Added

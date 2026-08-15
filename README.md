@@ -93,6 +93,22 @@ await packages.install({ requirements: ["pyproc-native-host==1.0.0"] });
 await machine.run("import pyproc_native_host; print(pyproc_native_host.ABI_VERSION)");
 ```
 
+The separate data profile is selected explicitly and remains isolated from the default core engine:
+
+```js
+import { boot } from "pyproc";
+import { createOwnedPackageResolver, getDataKernelEngineManifest } from "pyproc/wasi";
+
+const dataMachine = await boot({ engineManifest: await getDataKernelEngineManifest() });
+const dataResolver = await createOwnedPackageResolver({ profile: "data" });
+const dataPackages = dataMachine.createPackageEnvironment({ resolver: dataResolver });
+await dataPackages.install({ requirements: ["pyproc-native-data==1.0.0"] });
+await dataMachine.run("import pyproc_native_data; print(pyproc_native_data.inspect())");
+```
+
+This facade reports `pyproc.data/2` and runs float64 buffer addition and dot products through
+`wasm-simd128`. It does not claim NumPy, SciPy, pandas, Polars, or arbitrary native-wheel compatibility.
+
 The catalog seals the wrapper wheel, native source digest, ABI, engine ID, and profile. A mismatch fails before
 the install command reaches the kernel. Verified package layers also travel with process clones and Machine
 images. Image import rechecks every embedded wheel digest before a fresh worker sees it.

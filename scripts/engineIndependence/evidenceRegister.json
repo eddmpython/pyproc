@@ -693,6 +693,82 @@
       ]
     },
     {
+      "evidenceId": "local-owned-data-simd-profile-m3-20260815",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows 11",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "cpython-wasi-3.14.6-pyproc-data-2",
+        "nativeProfile": "data"
+      },
+      "commands": [
+        "node scripts/engineBuilder/buildOwnedEngineWindowsProbe.mjs --workspace C:\\pp12-data-simd-20260815\\a --out C:\\pp12-data-simd-20260815\\dist-a --input-cache C:\\pp11-inputs-20260815 --profile data",
+        "node scripts/engineBuilder/buildOwnedEngineWindowsProbe.mjs --workspace C:\\pp12-data-simd-20260815\\b --out C:\\pp12-data-simd-20260815\\dist-b --input-cache C:\\pp11-inputs-20260815 --profile data",
+        "node scripts/engineBuilder/verifyOwnedEngine.mjs --artifact-dir C:\\pp12-data-simd-20260815\\dist-a --compare C:\\pp12-data-simd-20260815\\dist-b --require-production-flags --profile data --receipt C:\\pp12-data-simd-20260815\\reproducibility-manifest.json",
+        "node scripts/nativePackageCatalog/buildNativePackageCatalog.mjs",
+        "PYPROC_KEEP_ATTEMPT_EVIDENCE=1 node tests/attempts/runtimeParity/ownedScientificSimdProbe.mjs",
+        "node tests/browser/run.mjs tests/browser/ownedEngineDataProduct.html",
+        "npm run test:installed"
+      ],
+      "result": "two clean source builds produced byte-identical data artifacts; exact packed public Control installed the data facade from package-owned bytes; Edge executed wasm-simd128 float64 addition and dot-product oracles; core separation, process clone, Machine image revival, and the explicit representative scientific import boundary passed",
+      "measurements": {
+        "independentBuilds": 2,
+        "byteIdentical": true,
+        "engineBytes": 7736600,
+        "engineSha256": "645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7",
+        "stdlibBytes": 2773525,
+        "stdlibSha256": "ce468413329cdc90d2ba26c90f915b1b11126ea4f4351a81d31a9fd668d53ded",
+        "coreWasmDeltaBytes": 5463,
+        "wheelBytes": 1329,
+        "wheelSha256": "cf3988d6f2544e75e2e512039c13d4a5a0a5022f02a6428bad26c34f0f8b1260",
+        "catalogSha256": "1b4b7f087be1b824d734d71c52a05b746e2dfb40d83b318eaf8cf0d280b66edc",
+        "nativeAbi": "pyproc.data/2",
+        "simd": "wasm-simd128",
+        "installedChecks": "30/30",
+        "dataBrowserChecks": "10/10",
+        "scientificImports": "numpy, scipy, pandas, polars: ModuleNotFoundError",
+        "screenshotViewport": "922x920"
+      },
+      "invariants": [
+        "the data native module refuses to compile when its module-local -msimd128 flag is removed",
+        "core and data engines, catalogs, package names, ABIs, and build manifests remain exactly separated",
+        "the actual native SIMD path handles contiguous float64 buffers, odd tails, finite validation, and overflow rejection",
+        "the data package facade survives process clone and Machine image revival in a fresh worker",
+        "representative scientific imports remain explicitly unsupported rather than being inferred from the SIMD facade"
+      ],
+      "artifacts": [
+        {
+          "role": "installedDataEngine",
+          "file": "src/runtime/engines/wasi/owned/data/python.wasm",
+          "byteLength": 7736600,
+          "sha256": "645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7"
+        },
+        {
+          "role": "ownedDataWheel",
+          "file": "src/runtime/packages/native/data/pyproc_native_data-1.0.0-py3-none-any.whl",
+          "byteLength": 1329,
+          "sha256": "cf3988d6f2544e75e2e512039c13d4a5a0a5022f02a6428bad26c34f0f8b1260"
+        },
+        {
+          "role": "nativeDataSource",
+          "file": "scripts/engineBuilder/_pyprocData.c",
+          "sha256": "eb088d6a713d2cf7e5a4508e8ac50a851a1a31dd35b1ed6a14ee1921f1ce8495"
+        },
+        {
+          "role": "browserGreenScreenshot",
+          "viewport": "922x920",
+          "sha256": "aade1f5ea3478b8a68805712c2fe19259bfc8e44d5930141a7b694f1b8f8bb0b"
+        },
+        {
+          "role": "browserRedScreenshot",
+          "viewport": "922x920",
+          "sha256": "a6ecc18d9c8343e4e720783a1360bb4e22513863d94e8194d68e084a0111ce5a"
+        }
+      ]
+    },
+    {
       "evidenceId": "upstream-pep11-20260814",
       "classification": "UPSTREAM_CONTRACT",
       "url": "https://peps.python.org/pep-0011/",

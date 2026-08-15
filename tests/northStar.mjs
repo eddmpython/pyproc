@@ -336,15 +336,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "localPythonParity",
-    score: 8.2,
+    score: 8.4,
     en: Object.freeze({
       title: "Everything local Python does",
-      state: "The package environment resolves standard metadata, canonicalizes equivalent Requires-Python declarations, hashes pure-Python wheels, and installs them transactionally. The installed owned engine ships target-generated, workspace-canonical sysconfig and build details. Its source-pinned native catalog seals the wrapper wheel, metadata, native source and ABI to the exact engine and profile, then an exact packed Edge journey installs the package-owned facade and imports its compiled built-in. Verified package layers survive process clone and Machine image revival, while mutated embedded wheels fail closed. The installed GPU subpath verifies registered compute and rendered-pixel results on real hardware. Broad scientific-package reach remains unsupported, and arbitrary native wheels await dynamic linking.",
+      state: "The package environment resolves standard metadata, canonicalizes equivalent Requires-Python declarations, hashes pure-Python wheels, and installs them transactionally. The installed core and data engines ship as separate reproducible distributions. Their source-pinned catalogs seal wrapper wheels, metadata, native sources and ABIs to exact engines and profiles. The data engine runs real wasm-simd128 float64 buffer addition and dot-product oracles. Verified package layers survive process clone and Machine image revival, while mutated embedded wheels fail closed. The installed GPU subpath verifies registered compute and rendered-pixel results on real hardware. NumPy, SciPy, pandas, and Polars still fail import explicitly, and arbitrary native wheels await dynamic linking.",
       target: "Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology.",
     }),
     ko: Object.freeze({
       title: "로컬 파이썬이 하는 전부",
-      state: "package environment가 표준 metadata와 의미가 같은 Requires-Python 선언을 canonicalize하고 pure Python wheel을 hash 검증해 transaction으로 설치한다. 설치 owned engine은 target이 생성하고 workspace를 canonicalize한 sysconfig와 build details를 배송한다. source-pinned native catalog는 wrapper wheel, metadata, native source와 ABI를 exact engine과 profile에 봉인하며, exact packed Edge 여정이 package-owned facade를 설치하고 compiled built-in을 import한다. 검증된 package layer는 process clone과 Machine image 부활 뒤에도 남고 포함 wheel 변조는 안전 거절된다. 설치 GPU subpath는 실제 hardware에서 compute와 rendered-pixel 결과를 검증한다. 넓은 scientific package 도달 범위는 아직 없고 임의 native wheel은 dynamic linking을 기다린다.",
+      state: "package environment가 표준 metadata와 의미가 같은 Requires-Python 선언을 canonicalize하고 pure Python wheel을 hash 검증해 transaction으로 설치한다. 설치 core와 data engine은 별도 재현 배포본으로 배송된다. 각 source-pinned catalog는 wrapper wheel, metadata, native source와 ABI를 exact engine과 profile에 봉인한다. data engine은 실제 wasm-simd128 float64 buffer 덧셈과 내적 oracle을 실행한다. 검증된 package layer는 process clone과 Machine image 부활 뒤에도 남고 포함 wheel 변조는 안전 거절된다. 설치 GPU subpath는 실제 hardware에서 compute와 rendered-pixel 결과를 검증한다. NumPy, SciPy, pandas, Polars import는 아직 명시적으로 실패하고 임의 native wheel은 dynamic linking을 기다린다.",
       target: "로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다.",
     }),
     evidence: Object.freeze([
@@ -358,9 +358,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "scientificSimdProfile",
-        en: "Ship the distinct data engine and package catalog, prove its SIMD numeric oracle, then remeasure representative scientific imports",
-        ko: "별도 data engine과 package catalog를 배송하고 SIMD 수치 oracle을 증명한 뒤 대표 scientific import를 재측정한다",
+        id: "scientificPackageStack",
+        en: "Ship the first real representative scientific package stack for the exact data profile, starting with NumPy, then rerun the four-import boundary",
+        ko: "정확한 data profile에 첫 실제 대표 scientific package stack을 배송하되 NumPy부터 시작하고 네 import 경계를 다시 실행한다",
       }),
       Object.freeze({
         id: "wasmToolLayer",

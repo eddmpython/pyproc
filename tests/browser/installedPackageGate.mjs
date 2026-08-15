@@ -24,6 +24,15 @@ function createInstalledServer(appDir, publicDir, onReport) {
       catch (error) { onReport({ checks: [{ name: "report JSON", pass: false, info: String(error) }] }); }
       return;
     }
+    if (request.method === "POST" && url.pathname === "/gateStage") {
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      server.stages.push({ at: new Date().toISOString(), name: body.slice(0, 120) });
+      console.log(`  STAGE ${body.slice(0, 120)}`);
+      response.writeHead(204);
+      response.end();
+      return;
+    }
     let file;
     if (url.pathname === "/") file = join(publicDir, "installedPackageGate.html");
     else if (url.pathname === "/pyproc-assets.json") file = join(publicDir, "pyproc-assets.json");
@@ -37,6 +46,7 @@ function createInstalledServer(appDir, publicDir, onReport) {
     await sendFile(response, file);
   });
   server.requests = 0;
+  server.stages = [];
   return server;
 }
 
@@ -56,6 +66,13 @@ const html = `<!doctype html>
   }}</script>
 </head>
 <body><pre id="out">running</pre>
+<script>
+fetch("/gateStage", { method: "POST", body: "document:loaded" });
+window.addEventListener("error", (event) => fetch("/gateStage", { method: "POST",
+  body: "document:error:" + String(event.message || event.error || "unknown") }));
+window.addEventListener("unhandledrejection", (event) => fetch("/gateStage", { method: "POST",
+  body: "document:rejection:" + String(event.reason || "unknown") }));
+</script>
 <script type="module">
 import * as root from "pyproc";
 import * as assets from "pyproc/assets";
@@ -68,15 +85,20 @@ import * as wasi from "pyproc/wasi";
 const checks = [];
 const timings = {};
 const check = (name, pass, info = "") => checks.push({ name, pass: pass === true, info: String(info || "") });
+const stage = async (name) => fetch("/gateStage", { method: "POST", body: name });
 let machine = null;
 let revived = null;
+let dataMachine = null;
+let dataRevived = null;
 let computer = null;
 try {
+  await stage("surface:start");
   check("root exports the owned product entrances",
     JSON.stringify(Object.keys(root).sort()) === JSON.stringify(["PYPROC_ERROR_CODES", "PyProcError", "boot", "checkEnvironment", "createWebComputer", "open"].sort()));
   check("installed plumbing subpaths resolve",
     typeof runtime.KernelFactory === "function" && typeof runtime.KernelSession === "function"
       && typeof runtime.KernelProcess === "function" && typeof wasi.getDefaultKernelEngineManifest === "function"
+      && typeof wasi.getDataKernelEngineManifest === "function"
       && typeof wasi.createOwnedPackageResolver === "function"
       && typeof history.MemoryStateStore === "function" && typeof machineApi.createWebComputer === "function"
       && typeof gpu.createWebGpuHostAdapter === "function" && typeof gpu.runHardwareVisualOracle === "function"
@@ -99,6 +121,7 @@ try {
 
   let startedAt = performance.now();
   machine = await root.boot({ deterministic: true });
+  await stage("core:booted");
   timings.ownedBootMs = Math.round(performance.now() - startedAt);
   const inspection = await machine.inspect();
   check("installed owned kernel boots", inspection.kernel.runtimeKind === "cpython-wasi"
@@ -117,6 +140,7 @@ try {
   const ownedPackageResolver = await wasi.createOwnedPackageResolver();
   const ownedPackages = machine.createPackageEnvironment({ resolver: ownedPackageResolver });
   const ownedPackageReceipt = await ownedPackages.install({ requirements: ["pyproc-native-host==1.0.0"] });
+  await stage("core:package-installed");
   const ownedHost = JSON.parse((await machine.run(
     "import json,pyproc_native_host; print(json.dumps(pyproc_native_host.inspect(),sort_keys=True))"
   )).output.trim());
@@ -129,6 +153,10 @@ try {
     ownedPackageReceipt.sources[0] === "package" && ownedHost.origin === "built-in"
       && ownedHost.abiVersion === "pyproc.hostcall/1",
     JSON.stringify({ source: ownedPackageReceipt.sources[0], host: ownedHost }));
+  const coreDataImport = (await machine.run(
+    "try:\\n import _pyprocData\\nexcept Exception as error:\\n print(type(error).__name__)\\nelse:\\n print('IMPORTED')"
+  )).output.trim();
+  check("installed core profile excludes the data module", coreDataImport === "ModuleNotFoundError", coreDataImport);
   await machine.run.set("installedValue", { text: "설치본", value: 41 });
   const value = await machine.run.get("installedValue");
   check("installed kernel transfers structured values", value.text === "설치본" && value.value === 41);
@@ -170,6 +198,7 @@ try {
   timings.machineMB = +(new TextEncoder().encode(JSON.stringify(image)).byteLength / 1048576).toFixed(2);
   startedAt = performance.now();
   revived = await root.open(image);
+  await stage("core:image-opened");
   timings.imageOpenMs = Math.round(performance.now() - startedAt);
   const revivedHost = JSON.parse((await revived.run(
     "import json,pyproc_native_host; print(json.dumps(pyproc_native_host.inspect(),sort_keys=True))"
@@ -178,9 +207,68 @@ try {
     && revivedHost.origin === "built-in" && revivedHost.abiVersion === "pyproc.hostcall/1"
     && image.protocol === "pyproc.kernel-machine-image", timings.imageOpenMs + "ms");
 
+  await revived.close();
+  revived = null;
+  await machine.close();
+  machine = null;
+  await stage("core:closed");
+
+  const dataManifest = await wasi.getDataKernelEngineManifest();
+  startedAt = performance.now();
+  dataMachine = await root.boot({ engineManifest: dataManifest, deterministic: true });
+  await stage("data:booted");
+  timings.dataBootMs = Math.round(performance.now() - startedAt);
+  const dataResolver = await wasi.createOwnedPackageResolver({ profile: "data" });
+  const dataPackages = dataMachine.createPackageEnvironment({ resolver: dataResolver });
+  const dataReceipt = await dataPackages.install({ requirements: ["pyproc-native-data==1.0.0"] });
+  await stage("data:package-installed");
+  const dataOracle = JSON.parse((await dataMachine.run(\`
+import json
+from array import array
+import pyproc_native_data
+left = array("d", [1.0, 2.5, -4.0, 8.0, 3.0])
+right = array("d", [3.0, 4.5, 6.0, -2.0, 7.0])
+added = array("d")
+added.frombytes(pyproc_native_data.vector_add_f64(left, right))
+print(json.dumps({"info": pyproc_native_data.inspect(), "added": list(added),
+                  "dot": pyproc_native_data.dot_f64(left, right)}, sort_keys=True))
+\`)).output.trim());
+  check("installed data package is engine and profile fenced",
+    dataReceipt.engineId === dataManifest.engineId && dataReceipt.nativeProfile === "data"
+      && dataReceipt.lock.engineId === dataManifest.engineId && dataReceipt.lock.nativeProfile === "data"
+      && dataReceipt.sources[0] === "package", timings.dataBootMs + "ms");
+  check("installed data facade runs actual WASM SIMD numerical oracles",
+    dataOracle.info.abiVersion === "pyproc.data/2" && dataOracle.info.origin === "built-in"
+      && dataOracle.info.simd === "wasm-simd128" && dataOracle.added.join(",") === "4,7,2,6,10"
+      && dataOracle.dot === -4.75, JSON.stringify(dataOracle));
+  const dataClone = await dataMachine.proc.clone({ pid: "installed-data-child" });
+  const dataChild = await dataClone.process.execute(
+    "from array import array; import pyproc_native_data; print(pyproc_native_data.dot_f64(array('d',[2,3]),array('d',[4,5])))"
+  );
+  const dataChildExit = await dataClone.process.wait();
+  check("installed data process clone retains the SIMD package layer",
+    dataChild.output.trim() === "23.0" && dataChildExit.exitCode === 0);
+  await dataClone.process.close();
+  await stage("data:clone-closed");
+  const dataImage = await dataMachine.history.export({ createdAt: "2026-08-15T00:00:00.000Z" });
+  dataRevived = await root.open(dataImage);
+  await stage("data:image-opened");
+  const revivedData = JSON.parse((await dataRevived.run(
+    "import json,pyproc_native_data; print(json.dumps(pyproc_native_data.inspect(),sort_keys=True))"
+  )).output.trim());
+  check("installed data Machine image restores the verified SIMD package layer",
+    dataImage.packageEnvironment?.wheels?.length === 1 && revivedData.abiVersion === "pyproc.data/2"
+      && revivedData.simd === "wasm-simd128" && revivedData.origin === "built-in");
+  await dataRevived.close();
+  dataRevived = null;
+  await dataMachine.close();
+  dataMachine = null;
+  await stage("data:closed");
+
   const consoleLines = [];
   computer = root.createWebComputer({ onConsole: (line) => consoleLines.push(line) });
   await computer.bootAll();
+  await stage("web-computer:booted");
   const computerResult = await computer.machine("pythonOs").request({ type: "run", code: "print(7 * 6)" });
   check("installed WebComputer boots the default Python guest",
     computer.runningMachineIds().includes("pythonOs") && computerResult.trim() === "42"
@@ -197,6 +285,8 @@ try {
   check("installed WebComputer shuts down", !computer || computer.machine("pythonOs").state === "stopped",
     timings.webComputerShutdownMs + "ms");
   cleanupStartedAt = performance.now();
+  if (dataRevived) await dataRevived.close();
+  if (dataMachine) await dataMachine.close();
   if (revived) await revived.close();
   if (machine) await machine.close();
   timings.kernelShutdownMs = Math.round(performance.now() - cleanupStartedAt);
@@ -232,6 +322,7 @@ try {
   server.close();
   if (result.timedOut) {
     console.log(`FAIL gate timeout (${TIMEOUT_MS / 1000}s)`);
+    console.log(`stages: ${JSON.stringify(server.stages)}`);
     process.exitCode = 1;
   } else {
     const coverageOk = JSON.stringify(result.coverageManifest) === JSON.stringify(COVERAGE);

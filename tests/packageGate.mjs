@@ -52,8 +52,9 @@ try {
       ProductHostCapabilityPort, createFetchHostAdapter, KERNEL_RUNTIME_CONTRACT_VERSION,
       SimpleApiPackageResolver, MemoryPackageContentStore, PackageEnvironment,
       KernelTerminal, KernelEnvironmentManager, KernelFactory, MemoryKernelAssetStore,
-      createKernelEngineManifest, DEFAULT_KERNEL_ENGINE_ID,
-      getDefaultKernelEngineManifest, createOwnedPackageResolver } from "pyproc/wasi";
+      createKernelEngineManifest, DATA_KERNEL_ENGINE_ID, DEFAULT_KERNEL_ENGINE_ID,
+      getDataKernelEngineManifest, getDefaultKernelEngineManifest,
+      inspectDataKernelEngineDistribution, createOwnedPackageResolver } from "pyproc/wasi";
 
     for (const [name, fn] of [["boot", boot], ["open", open], ["createWebComputer", createWebComputer], ["checkEnvironment", checkEnvironment]]) {
       if (typeof fn !== "function") throw new Error(name + " export missing");
@@ -76,7 +77,10 @@ try {
       if (typeof value !== "function") throw new Error("package environment surface missing: " + name);
     }
     if (DEFAULT_KERNEL_ENGINE_ID !== "cpython-wasi-3.14.6-pyproc-host-1"
+      || DATA_KERNEL_ENGINE_ID !== "cpython-wasi-3.14.6-pyproc-data-2"
       || typeof getDefaultKernelEngineManifest !== "function"
+      || typeof getDataKernelEngineManifest !== "function"
+      || typeof inspectDataKernelEngineDistribution !== "function"
       || typeof createOwnedPackageResolver !== "function") {
       throw new Error("installed owned kernel distribution surface missing");
     }
@@ -148,21 +152,28 @@ try {
   if (incompleteCode !== "CONTROL_INVALID_FRAME") {
     throw new Error(`incomplete documented hello error drift: ${incompleteCode}`);
   }
-  for (const file of ["python.wasm", "python314-stdlib.zip", "engine-build-manifest.json",
-    "engine.cyclonedx.json", "stdlib-inventory.json", "native-profile-build-input.json",
-    "reproducibility-manifest.json"]) {
-    if (!existsSync(join(appDir, "node_modules", "pyproc", "src", "runtime", "engines", "wasi", "owned", "core", file))) {
-      throw new Error(`installed owned kernel asset 누락: ${file}`);
+  for (const profile of ["core", "data"]) {
+    for (const file of ["python.wasm", "python314-stdlib.zip", "engine-build-manifest.json",
+      "engine.cyclonedx.json", "stdlib-inventory.json", "native-profile-build-input.json",
+      "reproducibility-manifest.json"]) {
+      if (!existsSync(join(appDir, "node_modules", "pyproc", "src", "runtime", "engines", "wasi", "owned", profile, file))) {
+        throw new Error(`installed owned ${profile} kernel asset 누락: ${file}`);
+      }
     }
   }
   for (const path of [
     ["src", "runtime", "packages", "native", "core", "catalog.json"],
     ["src", "runtime", "packages", "native", "core", "catalogIdentity.js"],
     ["src", "runtime", "packages", "native", "core", "pyproc_native_host-1.0.0-py3-none-any.whl"],
+    ["src", "runtime", "packages", "native", "data", "catalog.json"],
+    ["src", "runtime", "packages", "native", "data", "catalogIdentity.js"],
+    ["src", "runtime", "packages", "native", "data", "pyproc_native_data-1.0.0-py3-none-any.whl"],
     ["scripts", "nativePackageCatalog", "buildNativePackageCatalog.mjs"],
     ["scripts", "nativePackageCatalog", "nativePackageCatalogLock.json"],
     ["scripts", "nativePackageCatalog", "packages", "pyproc_native_host", "__init__.py"],
+    ["scripts", "nativePackageCatalog", "packages", "pyproc_native_data", "__init__.py"],
     ["scripts", "engineBuilder", "_pyprocHost.c"],
+    ["scripts", "engineBuilder", "_pyprocData.c"],
   ]) {
     if (!existsSync(join(packageRoot, ...path))) throw new Error(`installed native package input 누락: ${path.join("/")}`);
   }

@@ -1,0 +1,45 @@
+{
+  "protocol": "pyproc.owned-package-catalog",
+  "version": 1,
+  "engine": {
+    "engineId": "cpython-wasi-3.14.6-pyproc-data-2",
+    "nativeProfile": "data",
+    "pythonVersion": "3.14.6",
+    "target": "wasm32-wasip1",
+    "buildManifestSha256": "sha256:81cfee69313ef1d0c77b1fcbc73b46ff3aa4a4470ef16ec54f47d998cd8a0953"
+  },
+  "packages": [
+    {
+      "name": "pyproc-native-data",
+      "version": "1.0.0",
+      "filename": "pyproc_native_data-1.0.0-py3-none-any.whl",
+      "artifactPath": "./data/pyproc_native_data-1.0.0-py3-none-any.whl",
+      "sha256": "sha256:cf3988d6f2544e75e2e512039c13d4a5a0a5022f02a6428bad26c34f0f8b1260",
+      "size": 1329,
+      "requiresPython": ">=3.14,<3.15",
+      "dependencies": [],
+      "metadata": "Metadata-Version: 2.4\nName: pyproc-native-data\nVersion: 1.0.0\nRequires-Python: >=3.14,<3.15\nSummary: Package facade for a source-built pyproc native profile\n\n",
+      "metadataSha256": "sha256:bc7e2ec164499af1a96d2319c282b76221538d99a3646bbde4b4fbf365126661",
+      "tag": "py3-none-any",
+      "wrapper": {
+        "module": "pyproc_native_data",
+        "sourceSha256": "sha256:8848184782031d7fbd05cd22788687d3ec16cc0b811bf1a676e68f0003ba3c65"
+      },
+      "nativeModules": [
+        {
+          "name": "_pyprocHost",
+          "abiVersion": "pyproc.hostcall/1",
+          "origin": "built-in",
+          "sourceSha256": "sha256:a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66"
+        },
+        {
+          "name": "_pyprocData",
+          "abiVersion": "pyproc.data/2",
+          "origin": "built-in",
+          "sourceSha256": "sha256:eb088d6a713d2cf7e5a4508e8ac50a851a1a31dd35b1ed6a14ee1921f1ce8495"
+        }
+      ]
+    }
+  ],
+  "catalogDigest": "sha256:1b4b7f087be1b824d734d71c52a05b746e2dfb40d83b318eaf8cf0d280b66edc"
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "protocol": "pyproc.engine-reproducibility-receipt",
+  "engineId": "cpython-wasi-3.14.6-pyproc-data-2",
+  "nativeProfile": "data",
+  "independentBuilds": 2,
+  "byteIdentical": true,
+  "outputs": {
+    "engine": {
+      "file": "python.wasm",
+      "byteLength": 7736600,
+      "sha256": "645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7"
+    },
+    "stdlib": {
+      "file": "python314-stdlib.zip",
+      "byteLength": 2773525,
+      "sha256": "ce468413329cdc90d2ba26c90f915b1b11126ea4f4351a81d31a9fd668d53ded"
+    },
+    "stdlibInventory": {
+      "file": "stdlib-inventory.json",
+      "byteLength": 90152,
+      "sha256": "001ee9a1f677e59c3303e179b6483595f7ca76d089bcd9c72b39ab1e9621d553"
+    },
+    "nativeProfileBuildInput": {
+      "file": "native-profile-build-input.json",
+      "byteLength": 2357,
+      "sha256": "187367312d26e89f5d4ba324832aa46e8cb34ea588ca15608c55f94d365dc2a1"
+    }
+  }
+}

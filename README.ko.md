@@ -89,6 +89,22 @@ await packages.install({ requirements: ["pyproc-native-host==1.0.0"] });
 await machine.run("import pyproc_native_host; print(pyproc_native_host.ABI_VERSION)");
 ```
 
+별도 data profile은 명시적으로 선택하며 기본 core engine과 격리된다.
+
+```js
+import { boot } from "pyproc";
+import { createOwnedPackageResolver, getDataKernelEngineManifest } from "pyproc/wasi";
+
+const dataMachine = await boot({ engineManifest: await getDataKernelEngineManifest() });
+const dataResolver = await createOwnedPackageResolver({ profile: "data" });
+const dataPackages = dataMachine.createPackageEnvironment({ resolver: dataResolver });
+await dataPackages.install({ requirements: ["pyproc-native-data==1.0.0"] });
+await dataMachine.run("import pyproc_native_data; print(pyproc_native_data.inspect())");
+```
+
+이 facade는 `pyproc.data/2`를 보고하며 float64 buffer 덧셈과 내적을 `wasm-simd128`로 실행한다.
+NumPy, SciPy, pandas, Polars 또는 임의 native wheel 호환성을 주장하지 않는다.
+
 catalog는 wrapper wheel, native source digest, ABI, engine ID, profile을 함께 봉인한다. 하나라도 다르면
 install 명령이 kernel에 도달하기 전에 실패한다. 검증된 package layer는 process clone과 Machine image에도
 따라가며, 새 worker가 보기 전에 image import가 포함 wheel의 digest를 다시 검사한다.

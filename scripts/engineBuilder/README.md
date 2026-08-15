@@ -19,7 +19,9 @@ node scripts/engineBuilder/buildOwnedEngine.mjs \
 ```
 
 The locked profiles are `core` and `data`. `core` contains `_pyprocHost`. `data` adds the source-built static
-`_pyprocData` module and receives a distinct engine identity. `nativeProfileCompiler.mjs` validates every source
+`_pyprocData` module, requires `simd128` for that module, and receives a distinct engine identity. Its float64
+buffer addition and dot product execute WASM SIMD instructions while the scalar sequence API remains compatible.
+`nativeProfileCompiler.mjs` validates every source
 and Setup digest, then emits `native-profile-build-input.json`. That file is a declared reproducible build
 artifact and records the compiler inputs, Linux and Windows builder digests, packager digest, outputs,
 functional oracle, and size budgets.
@@ -58,5 +60,6 @@ gate proves that `_pyprocData` is built-in only in the data engine, its numerica
 retain its state, and the WASM growth stays inside the locked profile budget. Arbitrary binary wheel
 installation remains unsupported.
 
-Only the independently verified `core` set is promoted to `src/runtime/engines/wasi/owned/core/` for package
-delivery. Other generated profile bytes remain evidence artifacts outside the repository.
+Independently verified `core` and `data` sets are promoted to their matching
+`src/runtime/engines/wasi/owned/<profile>/` directories for package delivery. The package-owned resolver keeps
+their facade catalogs exactly engine and profile fenced.

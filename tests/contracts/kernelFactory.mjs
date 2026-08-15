@@ -6,7 +6,8 @@ import { KernelSession } from "../../src/session/kernelSession.js";
 import { KernelProcess, KernelProcessManager } from "../../src/processOs/kernelProcess.js";
 import { createKernelEngineManifest, MemoryKernelAssetStore,
   verifyKernelEngineManifest } from "../../src/runtime/kernel/engineManifest.js";
-import { DEFAULT_KERNEL_ENGINE_ID, getDefaultKernelEngineManifest,
+import { DATA_KERNEL_ENGINE_ID, DEFAULT_KERNEL_ENGINE_ID, getDataKernelEngineManifest,
+  getDefaultKernelEngineManifest, inspectDataKernelEngineDistribution,
   inspectDefaultKernelEngineDistribution } from "../../src/runtime/engines/wasi/ownedEngineDistribution.js";
 import { encodeValueEnvelope } from "../../src/runtime/kernel/valueEnvelope.js";
 
@@ -82,6 +83,25 @@ export async function assertKernelFactory() {
     && installedManifest.artifacts.wasm.url.endsWith("/owned/core/python.wasm")
     && installedManifest.artifacts.stdlib.url.endsWith("/owned/core/python314-stdlib.zip"),
   "installed owned kernel distribution identity drifted");
+
+  const dataManifest = await getDataKernelEngineManifest();
+  const dataDistribution = inspectDataKernelEngineDistribution();
+  const dataDescriptor = JSON.stringify({
+    protocol: "pyproc.base-kernel-environment",
+    version: 1,
+    engineId: dataDistribution.engineId,
+    wasmSha256: dataDistribution.artifacts.wasm.sha256,
+    stdlibSha256: dataDistribution.artifacts.stdlib.sha256,
+  });
+  const dataEnvironmentId = `sha256:${await globalThis.crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode(dataDescriptor)).then((value) => [...new Uint8Array(value)]
+    .map((item) => item.toString(16).padStart(2, "0")).join(""))}`;
+  assert(dataManifest.engineId === DATA_KERNEL_ENGINE_ID
+    && dataDistribution.environmentId === dataEnvironmentId
+    && dataManifest.nativeProfile === "data"
+    && dataManifest.artifacts.wasm.url.endsWith("/owned/data/python.wasm")
+    && dataManifest.artifacts.stdlib.url.endsWith("/owned/data/python314-stdlib.zip"),
+  "installed owned data kernel distribution identity drifted");
 
   const opened = [];
   const fakeFactory = { async open() { const kernel = fakeKernel(); opened.push(kernel); return kernel; } };

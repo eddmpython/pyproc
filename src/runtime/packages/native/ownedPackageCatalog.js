@@ -3,18 +3,32 @@ import { parseSha256Address, sha256Address } from "../../contentDigest.js";
 import { PyProcError } from "../../errors.js";
 import { canonicalPackageJson, immutablePackageValue, normalizePackageName } from "../../packageCanonical.js";
 import { SimpleApiPackageResolver } from "../../packageResolver.js";
-import { inspectDefaultKernelEngineDistribution } from "../../engines/wasi/ownedEngineDistribution.js";
+import {
+  inspectDataKernelEngineDistribution,
+  inspectDefaultKernelEngineDistribution,
+} from "../../engines/wasi/ownedEngineDistribution.js";
 import {
   DEFAULT_OWNED_PACKAGE_CATALOG_DIGEST,
   DEFAULT_OWNED_PACKAGE_WHEEL_DIGEST,
 } from "./core/catalogIdentity.js";
+import {
+  DATA_OWNED_PACKAGE_CATALOG_DIGEST,
+  DATA_OWNED_PACKAGE_WHEEL_DIGEST,
+} from "./data/catalogIdentity.js";
 
 export const OWNED_PACKAGE_CATALOG_PROTOCOL = "pyproc.owned-package-catalog";
 export const OWNED_PACKAGE_CATALOG_VERSION = 1;
 
 const INDEX_URL = "https://packages.pyproc.invalid/simple/";
 const FILES_URL = "https://packages.pyproc.invalid/files/";
-const CATALOG_URL = new URL("./core/catalog.json", import.meta.url);
+const PROFILES = Object.freeze({
+  core: Object.freeze({ inspect: inspectDefaultKernelEngineDistribution,
+    catalogDigest: DEFAULT_OWNED_PACKAGE_CATALOG_DIGEST,
+    wheelDigest: DEFAULT_OWNED_PACKAGE_WHEEL_DIGEST }),
+  data: Object.freeze({ inspect: inspectDataKernelEngineDistribution,
+    catalogDigest: DATA_OWNED_PACKAGE_CATALOG_DIGEST,
+    wheelDigest: DATA_OWNED_PACKAGE_WHEEL_DIGEST }),
+});
 
 function exactKeys(value, allowed, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -44,7 +58,7 @@ function response(bytes, contentType, status = 200) {
   });
 }
 
-function packageEntry(value) {
+function packageEntry(value, profile) {
   exactKeys(value, new Set(["name", "version", "filename", "artifactPath", "sha256", "size",
     "requiresPython", "dependencies", "metadata", "metadataSha256", "tag", "wrapper", "nativeModules"]),
   "Owned package catalog entry");
@@ -62,7 +76,8 @@ function packageEntry(value) {
   }
   if (normalizePackageName(value.name) !== value.name || typeof value.version !== "string" || !value.version
     || typeof value.filename !== "string" || !value.filename.endsWith(".whl")
-    || typeof value.artifactPath !== "string" || !/^\.\/core\/[A-Za-z0-9_.-]+\.whl$/u.test(value.artifactPath)
+    || typeof value.artifactPath !== "string"
+    || value.artifactPath !== `./${profile}/${value.filename}`
     || !Number.isSafeInteger(value.size) || value.size < 1 || typeof value.requiresPython !== "string"
     || !Array.isArray(value.dependencies) || value.dependencies.length !== 0 || typeof value.metadata !== "string"
     || value.tag !== "py3-none-any" || typeof value.wrapper.module !== "string" || !value.wrapper.module) {
@@ -74,9 +89,11 @@ function packageEntry(value) {
   return value;
 }
 
-async function loadCatalog(fetchImpl) {
+async function loadCatalog(fetchImpl, profile) {
+  const identity = PROFILES[profile];
+  const catalogUrl = new URL(`./${profile}/catalog.json`, import.meta.url);
   let fetched;
-  try { fetched = await fetchImpl(CATALOG_URL); }
+  try { fetched = await fetchImpl(catalogUrl); }
   catch (error) {
     throw new PyProcError("PYPROC_ASSET_MISSING", "Owned package catalog could not be loaded", { cause: error });
   }
@@ -92,15 +109,15 @@ async function loadCatalog(fetchImpl) {
     || !Array.isArray(catalog.packages) || catalog.packages.length !== 1) {
     throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", "Owned package catalog protocol is invalid");
   }
-  const entry = packageEntry(catalog.packages[0]);
+  const entry = packageEntry(catalog.packages[0], profile);
   const { catalogDigest, ...body } = catalog;
   const actualCatalogDigest = await sha256Address(canonicalPackageJson(body));
-  if (digest(catalogDigest, "Owned package catalog") !== DEFAULT_OWNED_PACKAGE_CATALOG_DIGEST
-    || actualCatalogDigest !== DEFAULT_OWNED_PACKAGE_CATALOG_DIGEST
-    || entry.sha256 !== DEFAULT_OWNED_PACKAGE_WHEEL_DIGEST) {
+  if (digest(catalogDigest, "Owned package catalog") !== identity.catalogDigest
+    || actualCatalogDigest !== identity.catalogDigest
+    || entry.sha256 !== identity.wheelDigest) {
     throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", "Owned package catalog digest differs from the installed identity");
   }
-  const distribution = inspectDefaultKernelEngineDistribution();
+  const distribution = identity.inspect();
   for (const field of ["engineId", "nativeProfile", "pythonVersion", "target", "buildManifestSha256"]) {
     if (catalog.engine[field] !== distribution[field]) {
       throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Owned package catalog engine ${field} drifted`);
@@ -130,14 +147,18 @@ export async function createOwnedPackageResolver(options = {}) {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
     throw new PyProcError("PYPROC_INPUT_INVALID", "createOwnedPackageResolver options must be an object");
   }
-  const unknown = Object.keys(options).filter((key) => key !== "fetch");
+  const unknown = Object.keys(options).filter((key) => key !== "fetch" && key !== "profile");
   if (unknown.length) throw new PyProcError("PYPROC_INPUT_INVALID",
     `createOwnedPackageResolver does not accept option(s): ${unknown.join(", ")}`);
+  const profile = options.profile === undefined ? "core" : options.profile;
+  if (!Object.hasOwn(PROFILES, profile)) {
+    throw new PyProcError("PYPROC_INPUT_INVALID", `Owned package profile is unsupported: ${profile}`);
+  }
   const fetchImpl = options.fetch || (typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : null);
   if (typeof fetchImpl !== "function") {
     throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "Owned package catalog requires fetch");
   }
-  const loaded = await loadCatalog(fetchImpl);
+  const loaded = await loadCatalog(fetchImpl, profile);
   const projectUrl = `${INDEX_URL}${encodeURIComponent(loaded.entry.name)}/`;
   const artifactUrl = `${FILES_URL}${encodeURIComponent(loaded.entry.filename)}`;
   const simpleDocument = immutablePackageValue({ meta: { "api-version": "1.0" }, name: loaded.entry.name,

@@ -16,7 +16,7 @@
 |---|---|---|---|
 | agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M3 컴퓨팅 몸체 확대와 독립 구현 conformance |
 | 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.5 | APX Situation, 20회 무잔류 수명주기, bounded action 수렴, 실제 hardware compute와 pixel 결과 영수증 | 두 번째 독립 hardware와 browser 구현의 visual conformance |
-| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.2 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned native package | 넓은 scientific package reach, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
+| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.4 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned core와 SIMD data package | 실제 scientific package reach, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
 | 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
 
@@ -116,8 +116,10 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   build details, workspace 경로 canonicalization, 두 격리 build의 byte-identical stdlib를 제품화했다.
 - 완료: source-pinned native package catalog, exact engine/profile lock, package-owned offline artifact,
   compiled built-in facade의 설치와 import를 packed browser 제품 gate로 닫았다.
-- 진행 중: 별도 data engine 배포와 scientific SIMD profile로 넓힌다. 이후 `parallelProcesses`,
-  `durableDisk` next를 순서대로 소진한다.
+- 완료: 별도 `data-2` engine과 catalog를 재현 배포하고 실제 `wasm-simd128` float64 수치 oracle,
+  core 격리, process clone과 Machine image 이식을 닫았다.
+- 진행 중: NumPy부터 첫 실제 scientific package stack을 data profile에 넣는다. 이후
+  `parallelProcesses`, `durableDisk` next를 순서대로 소진한다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
 - wasm 도구층을 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
@@ -393,6 +395,30 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   image wheel을 변조한 뒤 바깥 digest를 다시 계산해도 `PYPROC_MACHINE_INTEGRITY`로 거절하며, 정상 image는
   facade와 Python 상태를 함께 복원한다. 환경 변경은 이전 delta 계보를 끊어 다음 checkpoint를 새 full
   root로 만든다. 전체 설치 gate는 25/25 GREEN이다.
-- 다음 직렬 작업: 이미 source recipe와 이전 재현성 증거가 있는 data profile을 package-owned engine
-  manifest와 catalog로 분리 배송하고, SIMD 수치 oracle과 대표 scientific import 경계를 다시 측정한다.
-  임의 PyPI native wheel 지원은 먼저 주장하지 않는다.
+- 다섯 번째 RED: exact packed `pyproc/wasi`에는 설치된 data engine manifest가 없었다. 공개 Control이 연
+  headed Edge 화면은 `PYPROC_ASSET_MISSING`을 첫 불일치로 보고했다. RED screenshot SHA-256은
+  `a6ecc18d9c8343e4e720783a1360bb4e22513863d94e8194d68e084a0111ce5a`다.
+- SIMD build 계약: `_pyprocData`만 `-msimd128`로 컴파일하고 소스 자체가 기능 flag가 없으면 compile을
+  거부한다. `pyproc.data/2`는 contiguous native float64 buffer 덧셈과 내적, 홀수 tail, nonfinite와
+  overflow 거절을 제공한다. flag 제거 음성 변이는 `The data native profile requires WebAssembly SIMD`로
+  종료 코드 1 RED였다.
+- 재현성과 배포: 두 새 Windows workspace의 선언 산출물 6개가 byte-identical이다. data engine은
+  7,736,600 bytes, `sha256:645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7`,
+  stdlib은 2,773,525 bytes,
+  `sha256:ce468413329cdc90d2ba26c90f915b1b11126ea4f4351a81d31a9fd668d53ded`다. core 대비 WASM 증가는
+  5,463 bytes다.
+- data catalog 계약: `createOwnedPackageResolver({ profile: "data" })`가
+  `pyproc-native-data==1.0.0`을 exact `data-2` engine에만 결합한다. wheel은 1,329 bytes,
+  `sha256:cf3988d6f2544e75e2e512039c13d4a5a0a5022f02a6428bad26c34f0f8b1260`, catalog는
+  `sha256:1b4b7f087be1b824d734d71c52a05b746e2dfb40d83b318eaf8cf0d280b66edc`다. 기존 core catalog와
+  wheel digest는 바뀌지 않았다.
+- 설치 제품 증거: exact packed Edge에서 data package 출처는 `package`, origin은 `built-in`, 구현은
+  `wasm-simd128`이었다. float64 덧셈은 `[4,7,2,6,10]`, 내적은 `-4.75`다. 설치 gate는 core 격리,
+  data process clone, Machine image 복원을 포함해 30/30 GREEN이고 별도 data browser gate는 10/10
+  GREEN이다.
+- 대표 import 재측정: 같은 data engine에서 NumPy, SciPy, pandas, Polars는 모두
+  `ModuleNotFoundError`다. GREEN 화면이 성공과 한계를 함께 표시하며 직접 확인한 screenshot SHA-256은
+  `aade1f5ea3478b8a68805712c2fe19259bfc8e44d5930141a7b694f1b8f8bb0b`다.
+- 다음 직렬 작업: exact source, license, reproducibility, size와 수치 oracle을 갖춘 첫 실제 scientific
+  package stack을 NumPy부터 data profile에 넣고 네 import 경계를 다시 측정한다. 임의 PyPI native wheel
+  지원은 먼저 주장하지 않는다.
