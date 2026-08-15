@@ -103,6 +103,11 @@ as NativeCdpSpace. The cooperative target captures at most 10,000 candidates, wh
 the target epoch and makes the old continuation fail with `AUTOMATION_OBSERVATION_CONTINUATION_STALE`. Detach,
 target close, timeout, and product close discard retained inventory state.
 
+`automation.space.inspect.resources` uses the same ownership vocabulary as NativeCdpSpace. FrameSpace asks each
+live cooperative target for its locator count and combines it with host target, session, pending bridge,
+artifact, semantic inventory, and provider-neutral perception counts. After explicit artifact deletion, detach,
+and target close, every value is zero in an isolated profile.
+
 FrameSpace declares APX conformance level L3 with core, web, and situation profiles. It can issue authorized
 affordances from its configured action allowlist and rejects stale `actionContext` before bridge dispatch. It
 does not claim L4 Action Evidence
@@ -126,7 +131,8 @@ authoritative page screenshot.
 `npm run test:frame-space` packs and installs the npm artifact, starts the Control and MCP products, keeps
 Python state, opens cooperative targets on two origins, proves parent and storage isolation, rejects a forged
 control-page epoch, preserves a partial-effect outcome, verifies APX identity and delta plus positive and
-negative PNG cases, and proves that a denied origin receives zero requests. `npm run test:python-sdk` repeats
+negative PNG cases, proves that a denied origin receives zero requests, and requires every owner resource to
+return to zero. `npm run test:python-sdk` repeats
 the FrameSpace APX query and screenshot journey from an installed wheel. Chrome on Ubuntu and Edge on Windows
 run both gates in CI.
 

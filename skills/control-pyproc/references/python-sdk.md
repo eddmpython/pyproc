@@ -327,6 +327,7 @@ each into a separate clean virtual environment, and runs these installed-package
 - permission denial before browser effect;
 - APX query through both Native CDP and FrameSpace;
 - real browser open, attach, PNG capture, SHA-256 verification, artifact deletion, and detach.
+- provider-neutral `inspectSpace().output["resources"]` convergence after target close.
 - real Machine image capture, immutable Execution Memory publication, reopen, and list through the installed
   Python wheel.
 - signed exact-intent approval, one live HTTP effect, no resend, and verified EffectReceipt sealing through the

@@ -54,10 +54,14 @@ try {
     completed += run.actions.length;
   }
   automation.dropSession(sessionRef);
-  const resources = automation.inspect();
   await broker.detach(sessionRef);
-  if (resources.locators !== 0 || resources.lifecycle.sessions !== 0 || resources.observation.sessions !== 0) {
-    throw new Error(`stress cleanup failed: ${JSON.stringify(resources)}`);
+  const resources = automation.inspect();
+  const brokerResources = broker.inspect();
+  if (resources.locators !== 0 || resources.lifecycle.sessions !== 0 || resources.observation.sessions !== 0
+    || brokerResources.sessions !== 0 || brokerResources.retainedSessions !== 0
+    || brokerResources.transport?.sessions !== 0 || brokerResources.connection?.pending !== 0
+    || brokerResources.connection?.listeners !== 0) {
+    throw new Error(`stress cleanup failed: ${JSON.stringify({ resources, brokerResources })}`);
   }
   console.log(`browser control stress green: ${completed} actions across ${ROUNDS} rounds`);
 } catch (error) {

@@ -371,6 +371,19 @@ try {
     chunk.attachments.length === 0 && chunk.output.offset === 0 && typeof chunk.output.dataBase64 === "string");
   await client.request("artifact.delete", { artifactRef: descriptor.artifactRef });
   await client.request("automation.session.detach", { sessionRef: attached.output });
+  await client.request("automation.target.close", {
+    targetRef: badOpened.output.targetRef, expectedRisk: "externalEffect",
+  });
+  await client.request("automation.target.close", {
+    targetRef: opened.output.targetRef, expectedRisk: "externalEffect",
+  });
+  const cleaned = await client.request("automation.space.inspect", {});
+  const cleanedResources = cleaned.output.resources;
+  check("FrameSpace detach와 target close 뒤 owner resource가 모두 0으로 수렴",
+    Object.values(cleanedResources).filter(Number.isFinite).every((value) => value === 0)
+      && cleanedResources.transport.sessions === 0 && cleanedResources.transport.pending === 0
+      && cleanedResources.transport.listeners === 0
+      && Object.values(cleanedResources.perception).every((value) => value === 0));
 
   mcpChild = spawn(process.execPath, [join(packageRoot, "scripts", "pyprocMcp.mjs"), "--config", configPath], {
     cwd: installed.appDir, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env },

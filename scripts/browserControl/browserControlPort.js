@@ -416,7 +416,9 @@ export class BrowserControlPort {
       closed: this._closed,
       targets: this._targets.size,
       sessions: [...this._sessions.values()].filter((session) => session.state === "attached").length,
+      retainedSessions: this._sessions.size,
       popupCaptures: this._popupCaptures.size,
+      transport: this._transport.inspect?.() || null,
       policy: this.policy.inspect(),
     });
   }
@@ -478,7 +480,8 @@ export class BrowserControlPort {
       method = "Transport.contextReplaced";
       params = { sourceMethod: event.method, contextEpoch: session.contextEpoch };
     }
-    if (method === "Transport.detached") this._markDetached(session, params.reason || "transport_detach");
+    const detachedListeners = method === "Transport.detached" ? [...session.listeners] : null;
+    if (detachedListeners) this._markDetached(session, params.reason || "transport_detach");
     if (session.authorizationState !== "verified"
       && method !== "Transport.contextReplaced" && method !== "Transport.detached") return;
     if (!this.policy.allowsEvent(method)) return;
@@ -488,7 +491,7 @@ export class BrowserControlPort {
       params: Object.freeze({ ...params }),
       sessionRef: this._sessionRef(session),
     });
-    for (const listener of [...session.listeners]) listener(normalized);
+    for (const listener of detachedListeners || [...session.listeners]) listener(normalized);
   }
 
   _markDetached(session, reason, removeTransportListener = true) {
@@ -496,6 +499,9 @@ export class BrowserControlPort {
     session.state = "detached";
     session.detachReason = reason;
     if (removeTransportListener) session.unsubscribe?.();
+    session.unsubscribe = null;
+    session.listeners.clear();
+    this._sessions.delete(session.sessionId);
   }
 
   _error(code, message, options = {}) {

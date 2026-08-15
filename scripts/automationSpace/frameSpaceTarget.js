@@ -426,6 +426,7 @@
     }
     if (operation === "observe") return snapshot(input);
     if (operation === "observe.epoch") return Object.freeze({ targetEpoch, url: location.href, title: document.title });
+    if (operation === "observe.inspect") return Object.freeze({ locators: locatorByRef.size });
     if (operation === "perception.capture") return perceptionSnapshot(input);
     if (operation === "action.snapshot") return snapshot(input);
     if (operation === "action.screenshot") return screenshot();

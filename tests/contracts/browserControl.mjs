@@ -122,8 +122,18 @@ class FakeTransport {
     this.listeners.clear();
   }
 
+  inspect() {
+    return Object.freeze({ sessions: this.sessions.size, listeners: this.listeners.size });
+  }
+
   emit(targetId, method, params = {}) {
-    this.listeners.get(`raw:${targetId}`)?.({ method, params });
+    const id = `raw:${targetId}`;
+    const listener = this.listeners.get(id);
+    if (method === "Transport.detached") {
+      this.sessions.delete(id);
+      this.listeners.delete(id);
+    }
+    listener?.({ method, params });
   }
 }
 
@@ -449,6 +459,14 @@ export async function assertBrowserControlContract() {
   const detached = await errorOf(() => port.send(session, { method: "DOM.getDocument" }));
   assert(detached?.code === BROWSER_CONTROL_ERROR_CODES.sessionDetached, "target close 뒤 session이 detached가 아니다");
   assert(events.at(-1)?.method === "Transport.detached" && events.at(-1)?.params.reason === "target_closed", "detach reason이 보존되지 않았다");
+  assert(port.inspect().retainedSessions === 0 && port.inspect().transport.sessions === 0
+    && port.inspect().transport.listeners === 0,
+  "transport detach가 port와 transport session handle을 즉시 회수하지 않았다");
+
+  const explicitSession = await port.attach(targets[0].targetRef);
+  await port.detach(explicitSession);
+  assert(port.inspect().retainedSessions === 0 && port.inspect().transport.sessions === 0,
+    "명시적 detach가 port와 transport session handle을 즉시 회수하지 않았다");
 
   await port.close();
   const closed = await errorOf(() => port.listTargets());

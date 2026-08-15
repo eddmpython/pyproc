@@ -103,6 +103,11 @@ emit no native identifier. `browserAutomation.js` composes perception with polic
 orchestration. MCP, Control, recording, replay, and Python code adapt this one result rather than reimplementing
 it. The directory ships in the tarball but is not an npm JavaScript export.
 
+Live resource accounting stays with each owner. Perception identity, timeline, world, capability, sensor, and
+space expose bounded counts; CDP connection, transport, port, broker, automation, artifact, observation, and
+lifecycle modules expose only their own counts. `McpBrowserControl` and `FrameSpace` compose those values into
+the provider-neutral `automation.space.inspect.resources` receipt and never infer hidden Map sizes in an adapter.
+
 `scripts/executionMemory/` owns the installed filesystem registry above those existing artifacts.
 `executionMemoryCanonical.js` owns the closed revision schema and digest;
 `fileExecutionMemoryStore.js` owns immutable objects, session HEAD compare-and-swap, locks, and confinement;

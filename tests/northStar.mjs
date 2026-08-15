@@ -178,7 +178,6 @@ export const NORTH_STAR_AXES = Object.freeze([
       target: "탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다.",
     }),
     evidence: Object.freeze([
-      Object.freeze({ path: "tests/browser/immortalProductGate.js", lane: "test:installed" }),
       Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
@@ -208,7 +207,6 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
-      Object.freeze({ path: "tests/webMachine/browser/probes/imagePortabilityProbe.html", lane: "test:web-machine" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
@@ -239,13 +237,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/webMachine/browser/probes/hostContractProbe.html", lane: "test:web-machine" }),
-      Object.freeze({ path: "tests/webMachine/browser/probes/dualEngineProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/ownerSuccessorProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
       Object.freeze({ path: "tests/browser/gate.js", lane: "test:browser" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/dualBootProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/linuxGuestProbe.html", lane: "test:web-machine:v86" }),
-      Object.freeze({ path: "tests/webMachine/browser/probes/packetNetworkProbe.html", lane: "test:web-machine:v86" }),
+      Object.freeze({ path: "tests/webMachine/browser/probes/nestedBrowserBoundaryProbe.html", lane: "test:web-machine:v86" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
@@ -278,8 +275,8 @@ export const NORTH_STAR_AXES = Object.freeze([
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/ownedEngineCoreProduct.html", lane: "owned-engine" }),
-      Object.freeze({ path: "tests/webMachine/browser/probes/dualEngineProbe.html", lane: "test:web-machine" }),
-      Object.freeze({ path: "tests/contracts/runtimeContract.mjs", lane: "test" }),
+      Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
+      Object.freeze({ path: "tests/contracts/kernelRuntimeV2.mjs", lane: "test:contracts" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
@@ -306,9 +303,8 @@ export const NORTH_STAR_AXES = Object.freeze([
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
-      Object.freeze({ path: "tests/webMachine/browser/probes/guestNetworkProbe.html", lane: "test:web-machine" }),
-      Object.freeze({ path: "tests/webMachine/browser/probes/packetNetworkProbe.html", lane: "test:web-machine:v86" }),
-      Object.freeze({ path: "tests/browser/socketLane.mjs", lane: "test:socket" }),
+      Object.freeze({ path: "tests/contracts/productHostCapabilities.mjs", lane: "test:contracts" }),
+      Object.freeze({ path: "tests/webMachine/browser/probes/nestedBrowserBoundaryProbe.html", lane: "test:web-machine:v86" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
@@ -375,6 +371,36 @@ export const NORTH_STAR_AXES = Object.freeze([
     ]),
   }),
   Object.freeze({
+    id: "agentBrowserAutomation",
+    score: 8.8,
+    en: Object.freeze({
+      title: "Browser eyes and hands for an agent",
+      state: "The exact-installed Control, MCP, FrameSpace, and Python paths share Situation, paged semantic inventory, durable locators, proof-carrying actions, and provider-neutral resource accounting. A product gate repeats observe, screenshot, confirmed click, artifact deletion, detach, and target close 20 times and returns every owned resource, process, and temporary profile to baseline. The first document replacement converges without resending an effect, but stale, ambiguous, and occluded recovery do not yet have one bounded end-to-end convergence contract.",
+      target: "A Situation-to-effect loop that re-observes and rebinds across document changes, disambiguates targets, makes occluded targets interactable, never sends an unproven duplicate effect, and returns every owned resource to baseline within a fixed bound.",
+    }),
+    ko: Object.freeze({
+      title: "agent의 브라우저 눈과 팔",
+      state: "정확히 설치한 Control, MCP, FrameSpace, Python 경로가 Situation, page 단위 의미 inventory, 내구 locator, 증거를 싣는 action, provider-neutral 자원 계수를 공유한다. 제품 gate는 관찰, screenshot, confirmed click, artifact 삭제, detach, target close를 20회 반복하고 소유 자원, process, 임시 profile을 모두 기준선으로 되돌린다. 첫 document 교체는 effect 재전송 없이 수렴하지만 stale, ambiguous, occluded 복구는 아직 하나의 bounded end-to-end 수렴 계약을 갖지 못했다.",
+      target: "Situation에서 effect까지 document 교체를 다시 관찰하고 rebind하며, 대상을 명확히 고르고 occlusion을 해소하고, 증명되지 않은 effect를 중복 전송하지 않으며, 모든 소유 자원을 고정 상한 안에 기준선으로 되돌린다.",
+    }),
+    evidence: Object.freeze([
+      Object.freeze({ path: "tests/contracts/perceptionSpace.mjs", lane: "test:contracts" }),
+      Object.freeze({ path: "tests/browser/apxProduct.mjs", lane: "test:apx" }),
+      Object.freeze({ path: "tests/browser/automationLifecycleProduct.mjs", lane: "test:automation-lifecycle" }),
+      Object.freeze({ path: "tests/browser/frameSpaceProduct.mjs", lane: "test:frame-space" }),
+      Object.freeze({ path: "tests/browser/installedMcpProduct.mjs", lane: "test:mcp-product" }),
+      Object.freeze({ path: "tests/pythonSdk/frameJourney.py", lane: "test:python-sdk" }),
+    ]),
+    manual: Object.freeze([]),
+    next: Object.freeze([
+      Object.freeze({
+        id: "wrongEffectFreeConvergence",
+        en: "Bound stale, ambiguous, occluded, and navigation replacement recovery by attempts and time while proving that no unverified effect is sent twice",
+        ko: "stale, ambiguous, occluded, navigation 교체 복구의 횟수와 시간을 고정하고 검증되지 않은 effect가 두 번 전송되지 않음을 증명한다",
+      }),
+    ]),
+  }),
+  Object.freeze({
     id: "gatheredProductEntry",
     score: 10.0,
     en: Object.freeze({
@@ -432,8 +458,10 @@ export const NORTH_STAR_AXES = Object.freeze([
 // 브라우저 레인의 집합. WASM 런타임의 진짜 검증은 브라우저에서만 가능하므로(테스트 규칙),
 // 축마다 최소 하나는 여기 속한 레인이어야 한다. Node 게이트만 든 축은 구조만 본 것이다.
 export const NORTH_STAR_BROWSER_LANES = Object.freeze([
-  "test:browser", "test:installed", "test:examples", "test:mcp",
-  "test:preflight", "test:web-machine", "test:web-machine:v86", "test:web-computer", "ci",
+  "test:browser", "test:installed", "test:examples", "test:mcp", "owned-engine",
+  "test:mcp-product", "test:frame-space", "test:python-sdk", "test:apx",
+  "test:automation-lifecycle", "test:preflight", "test:web-machine", "test:web-machine:v86",
+  "test:web-computer", "ci",
 ]);
 
 /** 총점, 만점, 평균. 표의 숫자는 전부 여기서 나온다(손으로 더한 총점 = 표류의 씨앗). */

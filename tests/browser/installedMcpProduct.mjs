@@ -316,6 +316,7 @@ try {
   const apx = toolText(apxResponse);
   const verifyEntity = apx.entities.find((entity) => entity.semantic?.name === "Verify");
   const apxImages = apxResponse.result.content.filter((entry) => entry.type === "image");
+  const apxArtifactRefs = (apx.visualProbes || []).map((probe) => probe.artifact?.artifactRef).filter(Boolean);
   check("설치 MCP가 APX semantic, spatial, temporal graph와 pixel-on-demand를 반환",
     apx.protocol === "apx"
       && apx.kind === "full"
@@ -324,6 +325,7 @@ try {
       && apxImages.length >= 1
       && !apxResponse.result.content[0].text.includes("dataBase64")
       && !JSON.stringify(apx).includes("backendNodeId"));
+  for (const artifactRef of apxArtifactRefs) await callTool("browserArtifactDelete", { artifactRef });
   const situation = toolText(await callTool("browserObserve", {
     sessionRef,
     expectedRisk: "read",
@@ -493,6 +495,9 @@ try {
   check("설치 제품 artifact 삭제와 stale ref 오류",
     deleted.deleted === true && stale.result?.isError === true
       && toolText(stale).code === "BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND");
+  for (const artifact of artifacts.slice(1)) {
+    await callTool("browserArtifactDelete", { artifactRef: artifact.artifactRef });
+  }
 
   const bootstrapOpened = toolText(await callTool("browserOpen", {
     url: `${targetOrigin}/bootstrap-initial`, expectedRisk: "externalEffect", waitUntil: "load",
@@ -524,6 +529,15 @@ try {
   await callTool("browserDetach", { sessionRef: bootstrapSession });
   await callTool("browserClose", { targetRef: bootstrapOpened.targetRef, expectedRisk: "externalEffect" });
   await callTool("browserDetach", { sessionRef });
+  await callTool("browserClose", { targetRef: opened.targetRef, expectedRisk: "externalEffect" });
+  const cleanedResources = toolText(await callTool("browserInspect"));
+  check("설치 MCP detach와 target close 뒤 owner resource가 모두 0으로 수렴",
+    Object.values(cleanedResources.resources).filter(Number.isFinite).every((value) => value === 0)
+      && cleanedResources.resources.transport.sessions === 0
+      && cleanedResources.resources.transport.pending === 0
+      && cleanedResources.resources.transport.listeners === 0
+      && Object.values(cleanedResources.resources.perception).every((value) => value === 0),
+    JSON.stringify(cleanedResources.resources));
 } catch (error) {
   check("제품 흐름 예외 없음", false, String(error?.stack || error).slice(-1200));
 } finally {

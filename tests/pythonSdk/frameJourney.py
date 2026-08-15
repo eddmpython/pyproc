@@ -65,7 +65,13 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     artifactRef = captured.output["results"][0]["artifactRef"]
     assert client.deleteArtifact(artifactRef, timeout=30.0).output["deleted"] is True
     client.detachSession(attached.output, timeout=30.0)
+    client.closeTarget(opened.output["targetRef"], timeout=30.0)
+    resources = client.inspectSpace(timeout=30.0).output["resources"]
+    assert all(value == 0 for value in resources.values() if isinstance(value, (int, float)))
+    assert all(value == 0 for value in resources["transport"].values())
+    assert all(value == 0 for value in resources["perception"].values())
 
 print(json.dumps({"ok": True, "operations": len(client.operations), "attachmentBytes": attachment.byteLength,
                   "inventoryNodes": len(syntheticInventory), "inventoryDigestVerified": True,
-                  "perceptionEntityRef": heading.entityRef, "situationRef": situation.situationRef}))
+                  "perceptionEntityRef": heading.entityRef, "situationRef": situation.situationRef,
+                  "resourcesReturnedToZero": True}))

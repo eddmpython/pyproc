@@ -131,6 +131,10 @@ export class CapabilityProjector {
     }
   }
 
+  inspect() {
+    return Object.freeze({ capabilities: this.capabilities.size });
+  }
+
   close() {
     this.capabilities.clear();
   }

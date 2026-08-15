@@ -121,6 +121,17 @@ export async function assertPerceptionSpaceContract() {
     && reissued.convergence.fromDocumentEpoch === 1 && reissued.convergence.toDocumentEpoch === 2
     && reissued.convergence.effectRetries === 0,
   "문서 교체 재발급이 같은 semantic requirement를 새 epoch capability로 다시 묶지 않았다");
+  const activePerceptionResources = reissueSpace.inspect().resources;
+  assert(activePerceptionResources.identitySessions === 1
+    && activePerceptionResources.timelineSessions === 1
+    && activePerceptionResources.worldSessions === 1
+    && activePerceptionResources.situations === 1
+    && activePerceptionResources.situationHistoryEntries === 2
+    && activePerceptionResources.capabilities > 0,
+  "PerceptionSpace가 보유한 session ledger와 capability를 계측하지 않았다");
+  reissueSpace.dropSession(reissueSession);
+  assert(Object.values(reissueSpace.inspect().resources).every((value) => value === 0),
+    "PerceptionSpace dropSession 뒤 bounded resource가 0으로 돌아오지 않았다");
   reissueSpace.close();
 
   let ambiguousCapture = 0;

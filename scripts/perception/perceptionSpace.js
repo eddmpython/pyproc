@@ -422,9 +422,32 @@ export class PerceptionSpace {
   }
 
   inspect() {
+    const identity = this.identity.inspect();
+    const timeline = this.timeline.inspect();
+    const worlds = this.worldModel.inspect();
+    const capabilities = this.capabilityProjector.inspect();
+    let situationHistoryEntries = 0;
+    for (const history of this.situationHistory.values()) situationHistoryEntries += history.size;
     return Object.freeze({ ...inspectApxConformance({ visual: !!this.visualProbe, providerKind: this.providerKind,
       level: this.conformanceLevel, ...this.providerFeatures }),
-      observations: this.observations });
+      observations: this.observations,
+      resources: Object.freeze({
+        sensorSessions: this.sensor.inspect?.().sessions || 0,
+        identitySessions: identity.sessions,
+        entities: identity.entities,
+        frames: identity.frames,
+        timelineSessions: timeline.sessions,
+        timelineObservations: timeline.observations,
+        temporalEntities: timeline.temporalEntities,
+        worldSessions: worlds.sessions,
+        worlds: worlds.worlds,
+        claims: worlds.claims,
+        situations: this.situations.size,
+        situationHistorySessions: this.situationHistory.size,
+        situationHistoryEntries,
+        capabilities: capabilities.capabilities,
+        turns: this.turns.size,
+      }) });
   }
 
   async reissueAction(sessionRef, action, context = {}) {

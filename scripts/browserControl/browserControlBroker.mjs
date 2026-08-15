@@ -206,7 +206,8 @@ export class NodeBrowserControlBroker {
 
   inspect() {
     return Object.freeze({ transport: "node-cdp", listener: null, compatibility: this.compatibility,
-      viewport: this._viewport, ...this.port.inspect() });
+      viewport: this._viewport, ownedTargets: this._ownedTargets.size,
+      connection: this._connection.inspect?.() || null, ...this.port.inspect() });
   }
 
   close() { return this.port.close(); }

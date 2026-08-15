@@ -749,6 +749,61 @@ export class ControlLease {
 
 export type ControlSessionRef = Readonly<Record<string, unknown>>;
 
+export interface AutomationTransportResources {
+  readonly sessions: number;
+  readonly pending: number;
+  readonly listeners: number;
+}
+
+export interface AutomationPerceptionResources {
+  readonly sensorSessions: number;
+  readonly identitySessions: number;
+  readonly entities: number;
+  readonly frames: number;
+  readonly timelineSessions: number;
+  readonly timelineObservations: number;
+  readonly temporalEntities: number;
+  readonly worldSessions: number;
+  readonly worlds: number;
+  readonly claims: number;
+  readonly situations: number;
+  readonly situationHistorySessions: number;
+  readonly situationHistoryEntries: number;
+  readonly capabilities: number;
+  readonly turns: number;
+}
+
+export interface AutomationResourceSnapshot {
+  readonly targets: number;
+  readonly ownedTargets: number;
+  readonly sessions: number;
+  readonly locators: number;
+  readonly quarantinedSessions: number;
+  readonly semanticInventories: number;
+  readonly continuations: number;
+  readonly observationListeners: number;
+  readonly observationEvents: number;
+  readonly lifecycleSessions: number;
+  readonly lifecycleWatchers: number;
+  readonly lifecycleQueuedEvents: number;
+  readonly artifacts: number;
+  readonly artifactBytes: number;
+  readonly transport: AutomationTransportResources;
+  readonly perception: AutomationPerceptionResources;
+}
+
+export interface AutomationSpaceInspection extends Readonly<Record<string, unknown>> {
+  readonly space: Readonly<{
+    readonly spaceId: string;
+    readonly providerKind: string;
+    readonly operations: readonly string[];
+    readonly capabilities: readonly string[];
+    readonly restoreBoundary: "externalEffectsRemain";
+    readonly replayBoundary: string;
+  }>;
+  readonly resources: AutomationResourceSnapshot;
+}
+
 export interface SemanticInventoryReceipt {
   readonly protocol: "pyproc.semanticInventory";
   readonly version: 1;
@@ -975,7 +1030,7 @@ export class PyProcControlClient {
   saveCheckpoint(options?: ControlRequestOptions): Promise<ControlResult<CheckpointSaveOutput>>;
   restoreCheckpoint(index?: number, options?: ControlRequestOptions): Promise<ControlResult<CheckpointRestoreOutput>>;
   reset(options?: ControlRequestOptions): Promise<ControlResult<CheckpointRestoreOutput>>;
-  inspectSpace(options?: ControlRequestOptions): Promise<ControlResult>;
+  inspectSpace(options?: ControlRequestOptions): Promise<ControlResult<AutomationSpaceInspection>>;
   listTargets(options?: ControlRequestOptions): Promise<ControlResult>;
   openTarget(url: string, options: ControlRequestOptions & { readonly expectedRisk: string; readonly waitUntil?: string }):
     Promise<ControlResult<AutomationTargetOutput>>;

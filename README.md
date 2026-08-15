@@ -139,6 +139,11 @@ continued with a continuation-only `automation.observe` call. Every page carries
 snapshot receipt, complete-inventory digest, and observation evidence binding. A document replacement rejects
 the old continuation instead of treating a partial prefix as complete.
 
+`automation.space.inspect` also returns one provider-neutral `resources` snapshot. After deleting owned
+artifacts, detaching sessions, and closing owned targets, every counter returns to the starting baseline. A new
+isolated profile therefore returns zero for targets, sessions, locators, continuations, watchers, artifacts,
+perception ledgers, transport sessions, pending commands, and listeners.
+
 Start with [Machine Entrance](skills/use-pyproc-machine/references/machine-entrance.md), then use the
 [JavaScript Control SDK](skills/control-pyproc/references/javascript-control.md), the
 [Python SDK](skills/control-pyproc/references/python-sdk.md), or the complete

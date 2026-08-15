@@ -174,6 +174,18 @@ The ten opt-in browser tools are:
 | `browserArtifactDelete` | Delete an artifact before its TTL expires |
 | `browserDetach` | Detach and clear locators, watchers, download state, and popup captures |
 
+`browserInspect.resources` is the provider-neutral live ownership snapshot. It contains target and owned-target
+handles, retained sessions, locators, quarantined sessions, semantic inventories and continuations, observation
+listeners and events, lifecycle sessions and watchers, artifact count and bytes, transport sessions, pending
+commands and listeners, plus the perception sensor, identity, timeline, world, Situation history, capability,
+and turn counts. Each count comes from the module that owns the resource. An accumulated operation count such as
+`perception.observations` is diagnostic history and is deliberately outside `resources`.
+
+For an isolated profile, explicit artifact deletion, `browserDetach`, and `browserClose` must return every
+`resources` value to zero. In a shared allowed profile, compare with the snapshot taken before the owned flow so
+borrowed targets are not mistaken for leaks. A detach event and an explicit detach both remove the port and
+transport session immediately while preserving the stale-session error contract.
+
 ## PyProc Eyes and APX
 
 `browserObserve` keeps its legacy compact accessibility result unless the caller opts into `apx.graph` or
@@ -418,7 +430,8 @@ An `outcomeUnknown` effect is never retried automatically.
    ordered `browserAct` pipeline.
 4. Reconstruct large artifacts with `browserArtifactRead` and verify their SHA-256.
 5. Delete consumed artifacts and call `browserDetach`.
-6. On failure, inspect `outcome`, `completed`, `failedActionIndex`, and `trace` before deciding what can run.
+6. Close targets created by the broker, then require `browserInspect.resources` to equal the starting baseline.
+7. On failure, inspect `outcome`, `completed`, `failedActionIndex`, and `trace` before deciding what can run.
 
 Example screenshot action:
 
@@ -463,6 +476,9 @@ Example screenshot action:
   semantic actions, lifecycle effects, redirect denial, cancellation, browser death, cleanup, and the
   Python restore boundary.
 - `npm run test:browser-control-stress` repeats 48 semantic focus actions and remote-object release boundaries.
+- `npm run test:automation-lifecycle` uses the packed Control product for 20 Situation, visual screenshot,
+  proof-carrying action, action screenshot, artifact deletion, detach, and target-close rounds. Every owner count,
+  the Control process, and the temporary browser profile return to zero.
 
 Chrome on Ubuntu and Microsoft Edge on Windows run the installed product and browser-control gates in CI.
 APX also exposes an opt-in `environment` channel. Native CDP and FrameSpace observe locale, timezone, color

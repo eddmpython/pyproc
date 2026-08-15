@@ -101,6 +101,14 @@ export class CdpConnection {
     return () => this._listeners.delete(listener);
   }
 
+  inspect() {
+    return Object.freeze({
+      closed: this._closed,
+      pending: this._pending.size,
+      listeners: this._listeners.size,
+    });
+  }
+
   once(method, predicate = () => true, timeoutMs = this._timeoutMs) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

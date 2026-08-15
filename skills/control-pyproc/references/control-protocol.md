@@ -98,7 +98,7 @@ browser-disabled installed profile. When the manifest enables browser authority,
 
 | Operation | Meaning |
 |---|---|
-| `automation.space.inspect` | Inspect provider, policy, actions, and limits |
+| `automation.space.inspect` | Inspect provider, policy, limits, and provider-neutral live resource ownership |
 | `automation.target.list` | List allowed targets |
 | `automation.target.open` | Open an allowed URL |
 | `automation.session.attach` | Create an opaque controlled session |
@@ -118,6 +118,12 @@ and the returned `continuationRef` until `inventory.complete` is true. Each toke
 original provider, session, snapshot, document epoch, ordering, full digest, and evidence receipt. A caller must
 not infer completeness from `truncated` or from a short final page. Document replacement is the canonical
 `AUTOMATION_OBSERVATION_CONTINUATION_STALE` error with `notSent` and no partial-success terminal.
+
+The additive `resources` object on `automation.space.inspect` is a point-in-time cleanup receipt. It reports
+target, session, locator, continuation, watcher, artifact, perception ledger, transport session, pending command,
+and listener counts without exposing a browser endpoint or native identifier. Delete owned artifacts, detach the
+session, close targets created by the product, and compare the result with the pre-flow baseline. A new isolated
+profile has an all-zero baseline.
 
 When `executionMemory.enabled` is true, nine additional operations appear:
 

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Automation lifecycle product gate</title></head>
+<body>
+  <h1>Lifecycle target</h1>
+  <button id="advance" type="button">Advance</button>
+  <output id="status" role="status">ready</output>
+  <script>
+    document.getElementById("advance").addEventListener("click", () => {
+      document.getElementById("status").textContent = "round complete";
+    });
+  </script>
+</body>
+</html>

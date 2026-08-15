@@ -173,5 +173,14 @@ export class WorldModel {
     return this.sessions.get(sessionKey)?.worlds.find((world) => world.worldRef === worldRef) || null;
   }
   dropSession(sessionKey) { this.sessions.delete(sessionKey); }
+  inspect() {
+    let worlds = 0;
+    let claims = 0;
+    for (const session of this.sessions.values()) {
+      worlds += session.worlds.length;
+      claims += session.worlds.reduce((total, world) => total + world.claims.length, 0);
+    }
+    return Object.freeze({ sessions: this.sessions.size, worlds, claims });
+  }
   close() { this.sessions.clear(); }
 }

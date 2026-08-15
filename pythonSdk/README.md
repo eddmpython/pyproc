@@ -32,6 +32,9 @@ without a JavaScript application layer or a raw CDP handle.
 Legacy `client.observe(...)` results also support single-use, document-epoch-bound `continuationRef` values for
 complete semantic inventories larger than one 1,000-node page. Continue with no repeated first-page options and
 accept completeness only when the final `inventory.complete` and full digest agree.
+After artifact deletion, session detach, and `closeTarget(...)`, use `inspectSpace().output["resources"]` as the
+provider-neutral cleanup receipt. A new isolated profile returns zero for every top-level, transport, and
+perception resource counter.
 
 Repository experience verification uses `auditExperience`, `verifyExperience`, and `replayEvidencePack` over the
 same Control Protocol. The repository

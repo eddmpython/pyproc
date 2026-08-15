@@ -98,8 +98,13 @@ export class FrameSpacePage {
     });
   }
 
-  inspect() {
+  async inspect() {
     this._reap();
+    const targetResources = await Promise.all([...this.targets.values()]
+      .map((target) => this._call(target, "observe.inspect", {})));
+    const locators = targetResources.reduce((total, resource) => total + (resource.locators || 0), 0);
+    const pending = [...this.targets.values()].reduce((total, target) => total + target.pending.size, 0);
+    const semanticInventory = this.semanticInventory.inspect();
     return Object.freeze({
       transport: "messageChannel",
       sandbox: "allow-scripts allow-forms",
@@ -109,7 +114,24 @@ export class FrameSpacePage {
       targetCount: this.targets.size,
       sessionCount: this.sessions.size,
       artifactCount: this.artifacts.size,
-      semanticInventory: this.semanticInventory.inspect(),
+      semanticInventory,
+      resources: Object.freeze({
+        targets: this.targets.size,
+        ownedTargets: this.targets.size,
+        sessions: this.sessions.size,
+        locators,
+        quarantinedSessions: 0,
+        semanticInventories: semanticInventory.active,
+        continuations: semanticInventory.continuations,
+        observationListeners: 0,
+        observationEvents: 0,
+        lifecycleSessions: 0,
+        lifecycleWatchers: 0,
+        lifecycleQueuedEvents: 0,
+        artifacts: this.artifacts.size,
+        artifactBytes: this.totalArtifactBytes,
+        transport: Object.freeze({ sessions: this.targets.size, pending, listeners: this.targets.size }),
+      }),
     });
   }
 

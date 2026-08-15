@@ -61,6 +61,15 @@ export class PerceptionIdentity {
   }
 
   dropSession(sessionRef) { this.sessions.delete(sessionKey(sessionRef)); }
+  inspect() {
+    let entities = 0;
+    let frames = 0;
+    for (const state of this.sessions.values()) {
+      entities += state.entities.size;
+      frames += state.frames.size;
+    }
+    return Object.freeze({ sessions: this.sessions.size, entities, frames });
+  }
   close() { this.sessions.clear(); }
 }
 

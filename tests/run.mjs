@@ -7,6 +7,7 @@ import { runContractSuites } from "./contracts/run.mjs";
 import { assertAssetProvenanceArtifacts } from "../scripts/assetProvenance.mjs";
 import { assertCouplingInventory, assertVerifiedAbsent }
   from "../scripts/engineIndependence/scanEngineIndependence.mjs";
+import { ceilingLadder, NORTH_STAR_AXES, NORTH_STAR_BROWSER_LANES } from "./northStar.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const checks = [];
@@ -220,6 +221,46 @@ await check("workflow actions use exact commits", () => {
 });
 
 await check("asset provenance derived files", () => assertAssetProvenanceArtifacts());
+
+await check("north-star ledger evidence and progression", () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  const runnableLanes = new Set([...Object.keys(pkg.scripts || {}), "ci", "owned-engine"]);
+  const browserLanes = new Set(NORTH_STAR_BROWSER_LANES);
+  const axisIds = new Set();
+  const moveIds = new Set();
+  for (const axis of NORTH_STAR_AXES) {
+    if (!axis.id || axisIds.has(axis.id)) throw new Error(`duplicate north-star axis: ${axis.id || "missing"}`);
+    axisIds.add(axis.id);
+    if (!Number.isFinite(axis.score) || axis.score < 0 || axis.score > 10) {
+      throw new Error(`${axis.id}: invalid score ${axis.score}`);
+    }
+    if (!axis.evidence?.length) throw new Error(`${axis.id}: evidence is empty`);
+    if (axis.manual?.length && axis.score >= 9) throw new Error(`${axis.id}: manual evidence caps score below 9`);
+    if (axis.score === 10 && axis.next?.length) throw new Error(`${axis.id}: score 10 still has a next move`);
+    if (axis.score < 10 && !axis.next?.length) throw new Error(`${axis.id}: unfinished axis has no next move`);
+    if (!axis.evidence.some((entry) => browserLanes.has(entry.lane))) {
+      throw new Error(`${axis.id}: no real-browser evidence lane`);
+    }
+    const evidencePaths = new Set();
+    for (const evidence of axis.evidence) {
+      if (!evidence.path || evidencePaths.has(evidence.path)) {
+        throw new Error(`${axis.id}: duplicate or missing evidence path ${evidence.path || "missing"}`);
+      }
+      evidencePaths.add(evidence.path);
+      if (!existsSync(join(ROOT, evidence.path))) throw new Error(`${axis.id}: missing evidence ${evidence.path}`);
+      if (!runnableLanes.has(evidence.lane)) throw new Error(`${axis.id}: unknown lane ${evidence.lane}`);
+    }
+    for (const move of axis.next || []) {
+      if (!move.id || moveIds.has(move.id)) throw new Error(`duplicate north-star move: ${move.id || "missing"}`);
+      moveIds.add(move.id);
+      if (!move.en || !move.ko) throw new Error(`${move.id}: localized move text is incomplete`);
+    }
+  }
+  const rungs = ceilingLadder().map(({ move }) => move.rung);
+  if (rungs.join(",") !== rungs.map((_, index) => index + 1).join(",")) {
+    throw new Error(`north-star ladder is not contiguous: ${rungs.join(",")}`);
+  }
+});
 
 await check("TypeScript surface", () => {
   const tsc = join(ROOT, "node_modules", "typescript", "bin", "tsc");

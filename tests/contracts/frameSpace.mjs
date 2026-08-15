@@ -17,7 +17,12 @@ export async function assertFrameSpaceContract() {
     async waitForReady() { calls.push(["ready"]); },
     dispatch(operation, input, options) {
       calls.push(["dispatch", operation, input, options.requestId]);
-      if (operation === "automation.space.inspect") return { transport: "messageChannel" };
+      if (operation === "automation.space.inspect") return { transport: "messageChannel", resources: {
+        targets: 0, ownedTargets: 0, sessions: 0, locators: 0, quarantinedSessions: 0,
+        semanticInventories: 0, continuations: 0, observationListeners: 0, observationEvents: 0,
+        lifecycleSessions: 0, lifecycleWatchers: 0, lifecycleQueuedEvents: 0,
+        artifacts: 0, artifactBytes: 0, transport: { sessions: 0, pending: 0, listeners: 0 },
+      } };
       if (operation === "frame.perception.capture") return {
         documentEpoch: 3,
         page: { url: "https://allowed.example/path?secret=hidden", title: "Frame target",
@@ -60,6 +65,8 @@ export async function assertFrameSpaceContract() {
   assert.equal(inspect.transport, "messageChannel");
   assert.equal(inspect.perception.level, "L3");
   assert.equal(inspect.perception.profiles.includes("apx-action/1"), false);
+  assert.equal(inspect.resources.targets, 0);
+  assert.equal(inspect.resources.perception.identitySessions, 0);
 
   const observed = await router.invoke("automation.observe", {
     sessionRef: { protocolVersion: "1", spaceId: "space:frameContract",
@@ -160,6 +167,10 @@ export async function assertFrameSpaceContract() {
     dataBase64: "", width: 1, height: 1,
   }, true));
   assert.equal(oversized?.code, "FRAME_SPACE_ARTIFACT_INVALID");
+  const emptyResources = (await artifactPage.inspect()).resources;
+  assert.equal(emptyResources.targets, 0);
+  assert.equal(emptyResources.artifacts, 0);
+  assert.equal(emptyResources.transport.listeners, 0);
 
   await router.invoke("automation.target.open", {
     url: "https://allowed.example/path", expectedRisk: "externalEffect",

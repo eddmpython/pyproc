@@ -29,11 +29,16 @@ npm run test:installed
 npm run test:examples
 npm run test:preflight
 npm run test:web-machine
+npm run test:automation-lifecycle
 ```
 
 Chrome은 `PYPROC_BROWSER`를 Chrome executable로 바꿔 같은 명령을 실행한다. 브라우저 게이트는 owned kernel
 boot, execution, typed values, checkpoint restore, process clone, terminal, Machine image와 installed asset
 integrity를 실제 WASM으로 검증한다.
+
+`test:automation-lifecycle`은 packed 제품에서 Situation, visual screenshot, proof-carrying action,
+screenshot, artifact 삭제, detach와 target close를 반복한다. 모든 live owner count, Control process와 임시
+browser profile이 격리된 0 기준선으로 돌아와야 한다.
 
 ## Local server
 

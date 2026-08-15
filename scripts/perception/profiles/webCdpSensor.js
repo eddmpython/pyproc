@@ -600,5 +600,9 @@ export class WebCdpSensor {
     this.enabledSessions.delete(key);
     this.focusedSupport.delete(key);
   }
+  inspect() {
+    return Object.freeze({ sessions: new Set([...this.enabledSessions, ...this.focusedSupport.keys()]).size,
+      enabledSessions: this.enabledSessions.size, focusedSupport: this.focusedSupport.size });
+  }
   close() { this.enabledSessions.clear(); this.focusedSupport.clear(); }
 }

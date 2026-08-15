@@ -870,6 +870,12 @@ export async function assertBrowserAutomationContract() {
     url: "http://allowed.test/app", expectedRisk: "externalEffect", waitUntil: "load",
   });
   assert(openedWith?.[1]?.waitUntil === "load", "browserOpen의 명시적 load 경계가 broker로 전달되지 않았다");
+  const mcpInspection = await mcp.invoke("browserInspect", {});
+  assert(mcpInspection.resources.targets === 0 && mcpInspection.resources.sessions === 0
+    && mcpInspection.resources.locators === 0 && mcpInspection.resources.continuations === 0
+    && mcpInspection.resources.artifacts === 0 && mcpInspection.resources.transport.sessions === 0
+    && Object.values(mcpInspection.resources.perception).every((value) => value === 0),
+  "browserInspect가 owner별 bounded resource 기준선을 공개하지 않았다");
   await mcp.close();
 
   const serverSource = await readFile(new URL("../../scripts/mcpSandboxServer.mjs", import.meta.url), "utf8");

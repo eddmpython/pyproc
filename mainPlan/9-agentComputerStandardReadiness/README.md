@@ -14,8 +14,8 @@
 
 | 질문 | 현재 판정 | 실사용 증거 | 완성까지 남은 것 |
 |---|---|---|---|
-| agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M2의 반복 작업과 정리 수명주기 |
-| 눈과 팔 | 강함, 완성 아님 | APX Situation이 링크를 식별하고 proof-carrying click 뒤 `Smallest start` 출현을 confirmed로 봉인. 현재 main은 첫 문서 교체를 effect 재시도 없이 수렴 | 장기 반복 수명주기와 실제 GPU visual oracle 확대 |
+| agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M2의 wrong-effect 없는 자동 수렴 상한 |
+| 눈과 팔 | 강함, 완성 아님, 북극성 8.8 | APX Situation이 링크를 식별하고 proof-carrying click 뒤 `Smallest start` 출현을 confirmed로 봉인. 설치 제품 20회가 모든 소유 자원을 기준선으로 되돌림 | stale, ambiguous, occluded 자동 수렴과 실제 GPU visual oracle 확대 |
 | 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate | 임의 native wheel, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
 | 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, GPU 실기 CI, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
@@ -101,7 +101,9 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   continuation, 5분 TTL, 10,000 node와 16 MiB 전체 상한, page와 prefix 및 전체 digest, screenshot과 event
   evidence binding을 NativeCdpSpace와 FrameSpace, Control, MCP, JavaScript와 Python SDK에 같은 의미로 둔다.
   문서 교체는 `AUTOMATION_OBSERVATION_CONTINUATION_STALE`로 일부 결과를 complete로 승격하지 않는다.
-- 반복 Situation, screenshot, proof-carrying action, artifact cleanup에서 handle과 process 잔류 0을 증명한다.
+- 완료: 반복 Situation, screenshot, proof-carrying action, artifact cleanup에서 handle과 process 잔류 0을
+  증명한다. 각 owner가 직접 센 자원을 `automation.space.inspect.resources`로 합성하고, 격리 profile의
+  packed Control 제품 20회와 NativeCdpSpace, FrameSpace, MCP, Python adapter가 0 수렴을 검증한다.
 - stale, ambiguous, occluded, navigation 교체를 wrong effect 없이 자동 수렴시키는 상한을 고정한다.
 - hardware GPU runner에서 pixel 결과 oracle을 추가해 수동 증거 상한을 제거한다.
 
@@ -266,8 +268,42 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - 음성 증거: consumed token, TTL 만료, item 상한, 다른 document epoch를 모두 고유 오류로 거부한다.
   navigation 뒤 continuation은 NativeCdpSpace와 FrameSpace 설치 제품 모두 stale, `notSent`, 비재시도로
   종결되고 retained inventory state는 0이다.
-- 정식 게이트: contract 36 suites, FrameSpace 23개, JavaScript Control 26개, 설치 MCP 24개, Python wheel과
-  source distribution 5개가 GREEN이다. 전체 `npm test` 12개와 package gate 7개 파일도 GREEN이다.
-- 다음 직렬 작업: 반복 Situation, screenshot, proof-carrying action, artifact cleanup을 장시간 돌리고 매
-  iteration의 locator, continuation, watcher, artifact, target, process, profile 수가 기준선으로 돌아오는지
-  검증한다.
+- 정식 게이트: contract 36 suites, FrameSpace 24개, JavaScript Control 26개, 설치 MCP 25개, Python wheel과
+  source distribution 5개가 GREEN이다. 전체 `npm test` 13개와 package gate 7개 파일도 GREEN이다.
+- 후속 판정: 반복 Situation, screenshot, proof-carrying action과 artifact cleanup의 장기 무잔류는 아래
+  6절에서 완료했다. 다음 직렬 작업은 wrong-effect 없는 자동 수렴 상한이다.
+
+## 6. 해결 판정: automation 장기 수명주기 무잔류
+
+- 첫 불일치: 기존 `browserInspect.sessions`는 연결된 session만 세어 detach 뒤 0을 반환했지만,
+  `BrowserControlPort._sessions`와 `NodeCdpTransport._sessions`에는 이미 detach된 session handle이 남았다.
+  perception identity, timeline, world, Situation history와 capability, CDP pending과 listener도 공개
+  inspect에서 보이지 않아 기존 stress green은 무잔류 증거가 아니었다.
+- 실측 순서: exact packed `pyproc@0.0.22` source product, Windows 11, Edge 151, Node.js 22에서 공개
+  `pyproc/control`만 사용했다. 매 회 새 target을 열고 Situation과 native visual screenshot을 얻어 artifact를
+  삭제하고, broker capability로 click한 뒤 DOM postcondition을 confirmed로 봉인했다. action screenshot도
+  digest 검증 뒤 삭제하고 detach와 target close를 수행했다.
+- 첫 실행: effect와 두 artifact cleanup까지 성공했으나 기존 공개 inspect에 완전한 `resources`가 없어
+  첫 회 0/20에서 RED였다.
+- 수정: detach event와 명시적 detach가 port와 transport Map에서 session을 즉시 삭제한다. perception
+  identity, timeline, world, capability와 sensor, CDP connection, transport, port, broker, artifact,
+  observation, lifecycle owner가 자기 bounded count만 보고하고 NativeCdpSpace와 FrameSpace가 같은
+  provider-neutral receipt로 합성한다.
+- 무손실 증거: 정식 `test:automation-lifecycle`은 packed 제품 20/20회에서 target, session, locator,
+  continuation, watcher, artifact, perception ledger, transport session, pending command와 listener를 매 회
+  0으로 되돌렸다. client close 뒤 Control process가 종료됐고 새 임시 browser profile도 0개였다.
+- 게이트 이빨: `BrowserControlPort`의 session 삭제 한 줄을 제거한 음성 변형은 첫 회에
+  `sessions=1`을 보고 0/1 RED였다. 정리 코드를 복원하면 같은 설치 제품 20/20이 GREEN이다.
+- adapter 증거: 설치 MCP와 FrameSpace는 detach와 target close 뒤 같은 resource vector를 0으로 확인한다.
+  clean wheel과 source distribution의 Python SDK도 `closeTarget()` 뒤 top-level, transport, perception count
+  전체를 독립 확인한다.
+- adapter 첫 RED: 기존 설치 MCP 여정은 읽고 남겨 둔 APX와 PNG, JPEG, WebP artifact 네 개 때문에
+  24/25에서 `artifacts=4`, `artifactBytes=83069`를 보고 실패했다. 모든 소유 artifact를 명시 삭제한 뒤
+  전체 resource vector가 0이 되어 25/25 GREEN이 됐다.
+- 원장 무결성: `tests/northStar.mjs`에 눈과 팔 축을 8.8로 추가하고 다음 수를
+  `wrongEffectFreeConvergence`로 고정했다. 삭제된 과거 probe 여덟 경로는 현재 정식 gate로 교체했으며,
+  전체 axis의 score, next, browser lane, 실행 lane, evidence 실존과 사다리 연속성을 `npm test`가 검사한다.
+- 원장 gate 이빨: 새 축의 lifecycle evidence를 존재하지 않는 `.missing` 경로로 바꾼 음성 변형은
+  `agentBrowserAutomation: missing evidence`를 보고 12/13 RED였고, 복원 뒤 13/13 GREEN이다.
+- 다음 직렬 작업: stale, ambiguous, occluded, navigation 교체를 wrong effect 없이 자동 수렴시키는 횟수와
+  시간 상한을 고정한다.

@@ -66,9 +66,14 @@ export class NodeCdpTransport {
     return this._connection.subscribe((event) => {
       if (event.sessionId === session.id) listener({ method: event.method, params: event.params });
       if (event.method === "Target.detachedFromTarget" && event.params.sessionId === session.id) {
+        this._sessions.delete(session.id);
         listener({ method: "Transport.detached", params: { reason: event.params.reason || "target_closed" } });
       }
     });
+  }
+
+  inspect() {
+    return Object.freeze({ sessions: this._sessions.size });
   }
 
   async detach(session) {

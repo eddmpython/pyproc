@@ -244,6 +244,22 @@ descriptor. A successful `ControlResult` has `terminal: "completed"`; `ControlRe
 `rejected`, `partial`, `outcomeUnknown`, or `cancelled`. JSON keeps the opaque artifact reference for bounded
 reads and explicit deletion.
 
+After the owned flow, verify resource convergence through the existing inspect operation:
+
+```js
+await client.detachSession(attached.output);
+await client.closeTarget(opened.output.targetRef);
+const { output } = await client.inspectSpace();
+if (output.resources.sessions !== 0 || output.resources.artifacts !== 0
+  || Object.values(output.resources.perception).some((value) => value !== 0)) {
+  throw new Error("automation resources did not return to the isolated baseline");
+}
+```
+
+The complete vector also includes target, locator, continuation, watcher, transport session, pending command,
+and listener counts. Shared profiles compare against their starting snapshot rather than assuming zero borrowed
+targets.
+
 ## Proof-Carrying Motor
 
 When `actuation.enabled` is true, use `openMotorTask()` to bind target, session, Situation, artifact, and cleanup

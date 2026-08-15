@@ -71,6 +71,32 @@ function permissionError(message) {
   return new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied, message, { outcome: "notSent" });
 }
 
+function inspectBrowserResources(broker, automation) {
+  const perception = automation.perception?.resources || {};
+  return Object.freeze({
+    targets: broker.targets || 0,
+    ownedTargets: broker.ownedTargets || 0,
+    sessions: broker.retainedSessions || 0,
+    locators: automation.locators || 0,
+    quarantinedSessions: automation.quarantinedSessions || 0,
+    semanticInventories: automation.semanticInventory?.active || 0,
+    continuations: automation.semanticInventory?.continuations || 0,
+    observationListeners: automation.observation?.sessions || 0,
+    observationEvents: (automation.observation?.consoleEvents || 0) + (automation.observation?.networkEvents || 0),
+    lifecycleSessions: automation.lifecycle?.sessions || 0,
+    lifecycleWatchers: automation.lifecycle?.watchers || 0,
+    lifecycleQueuedEvents: automation.lifecycle?.queuedEvents || 0,
+    artifacts: automation.artifacts?.artifacts || 0,
+    artifactBytes: automation.artifacts?.totalBytes || 0,
+    transport: Object.freeze({
+      sessions: broker.transport?.sessions || 0,
+      pending: broker.connection?.pending || 0,
+      listeners: broker.connection?.listeners || 0,
+    }),
+    perception: Object.freeze({ ...perception }),
+  });
+}
+
 function parsePurpose(value) {
   const purpose = String(value || "").trim();
   if (!purpose) return "";
@@ -383,10 +409,12 @@ export class McpBrowserControl {
     if (tool === "browserInspect") {
       await artifactStore.reap();
       const automationInspection = automation.inspect();
+      const brokerInspection = broker.inspect();
       return Object.freeze({
-        ...broker.inspect(),
+        ...brokerInspection,
         automation: automationInspection,
         perception: automationInspection.perception,
+        resources: inspectBrowserResources(brokerInspection, automationInspection),
         rawMethods: this.config.rawMethods,
         purposeDeclared: !!this.config.purpose,
         externalEffectsAcknowledged: this.config.externalEffectsAcknowledged,

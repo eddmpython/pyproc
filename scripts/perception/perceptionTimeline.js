@@ -119,5 +119,14 @@ export class PerceptionTimeline {
   }
 
   dropSession(sessionKey) { this.sessions.delete(sessionKey); }
+  inspect() {
+    let observations = 0;
+    let temporalEntities = 0;
+    for (const session of this.sessions.values()) {
+      observations += session.observations.size;
+      temporalEntities += session.temporal.size;
+    }
+    return Object.freeze({ sessions: this.sessions.size, observations, temporalEntities });
+  }
   close() { this.sessions.clear(); }
 }
