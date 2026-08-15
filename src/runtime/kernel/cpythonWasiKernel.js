@@ -69,7 +69,7 @@ export class CpythonWasiKernelRuntime {
   #checkpointCoordinators;
 
   constructor(session, { kernelRef = "kernel:cpython-wasi:default", engineId = null,
-    nativeProfile = "unidentified", environmentId = null, artifactStore = null, valueLimits = undefined,
+    nativeProfile = "unidentified", threading = null, environmentId = null, artifactStore = null, valueLimits = undefined,
     checkpointCoordinator = null, kernelVfs = null, restoredCheckpoint = null,
     restoredCheckpoints = [], onEnvironmentChanged = null } = {}) {
     if (!session || typeof session.run !== "function" || typeof session.onFailure !== "function") {
@@ -79,6 +79,7 @@ export class CpythonWasiKernelRuntime {
     this.#kernelRef = kernelRef;
     this.engineId = engineId || "engine:unidentified";
     this.nativeProfile = nativeProfile;
+    this.threading = threading;
     this.#environmentId = environmentId || `environment:unidentified:${this.engineId}`;
     if (onEnvironmentChanged !== null && typeof onEnvironmentChanged !== "function") {
       throw new PyProcError("PYPROC_INPUT_INVALID", "onEnvironmentChanged must be a function or null");
@@ -188,6 +189,7 @@ export class CpythonWasiKernelRuntime {
       lifecycleState: this.#state,
       engineId: this.engineId,
       nativeProfile: this.nativeProfile,
+      threading: this.threading,
       environmentId: this.#environmentId,
       workerOwned: true,
       directHeapAccess: false,
@@ -544,6 +546,7 @@ export async function bootCpythonWasiKernel(manifest) {
     kernelRef: manifest.kernelRef,
     engineId: manifest.engineId,
     nativeProfile: manifest.nativeProfile,
+    threading: manifest.threading,
     environmentId: manifest.environmentId,
     onEnvironmentChanged: manifest.onEnvironmentChanged,
     artifactStore: manifest.artifactStore,

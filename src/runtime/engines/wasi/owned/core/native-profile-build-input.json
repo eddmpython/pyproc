@@ -1,6 +1,6 @@
 {
   "protocol": "pyproc.native-profile-build-input",
-  "version": 1,
+  "version": 3,
   "profile": "core",
   "engineId": "cpython-wasi-3.14.6-pyproc-host-1",
   "target": "wasm32-wasip1",
@@ -14,6 +14,19 @@
     "linuxArchiveSha256": "c6c38aab56e5de88adf6c1ebc9c3ae8da72f88ec2b656fb024eda8d4167a0bc5",
     "windowsArchiveSha256": "0f934c6e7e171b5627c81b697a9e57e96d65cd889f56ce6077350de48978afd3"
   },
+  "threading": {
+    "protocol": "pyproc.thread-capability",
+    "version": 1,
+    "mode": "worker-processes",
+    "pythonImplementation": "pthread-stubs",
+    "pythonThreadCreation": false,
+    "sharedWasmMemory": false,
+    "wasiThreadSpawn": false,
+    "failure": {
+      "pythonType": "RuntimeError",
+      "message": "can't start new thread"
+    }
+  },
   "recipe": {
     "sourceDateEpoch": 1781085833,
     "configureArgs": [
@@ -23,9 +36,10 @@
     "cflags": "-O3 -g0 -fno-ident",
     "setupFile": "Setup.local",
     "setupSha256": "90d3f4c86446456bf9dd066b4c0b4870e627b217b801f292329d518fa4c51452",
-    "packagerSha256": "531db10d5d346725aa03bff3ddec24de03353ef98aba1b359c945c9f6b01eca8",
-    "linuxBuilderSha256": "04e7920a629d2c6fa62a9e10cd4c3236c1eed10f7e4c95af2c7fec3564046557",
-    "windowsBuilderSha256": "2e7fb3820129809748d938c0b7b281f0f727e42e346c6fcb20c64f33a70004f0",
+    "packagerSha256": "f1bb78377136c41f77b14070a5bb73d28b853739eb0ab2aeff76f3c0fd53650f",
+    "threadInspectorSha256": "a2a1cbd3c5a3712f4088f38e9b9a866edd297cbaf6bec5a34494771caaa1e400",
+    "linuxBuilderSha256": "3f0d84266fcf663b588ff64a013faf409d6558c19d02b329b6f2eb68c5b3782b",
+    "windowsBuilderSha256": "3982e4414e51c7f7f302542718732af2fe70d6da03fbded3bdf86abd88911818",
     "modules": [
       {
         "name": "_pyprocHost",
@@ -40,6 +54,7 @@
     "code": "import _pyprocHost,sys; print(sys.version.split()[0], _pyprocHost.__spec__.origin, _pyprocHost.abiVersion(), _pyprocHost.noop())",
     "stdout": "3.14.6 built-in pyproc.hostcall/1 None"
   },
+  "scientificPackages": [],
   "budgets": {
     "maxWasmBytes": 7800000,
     "maxStdlibZipBytes": 2800000

@@ -1,4 +1,4 @@
-import type { KernelEngineManifest } from "../../kernel/engineManifest.js";
+import type { KernelEngineManifest, KernelThreadCapability } from "../../kernel/engineManifest.js";
 
 export const DEFAULT_KERNEL_ENGINE_ID: "cpython-wasi-3.14.6-pyproc-host-1";
 export const DATA_KERNEL_ENGINE_ID: "cpython-wasi-3.14.6-pyproc-data-3";
@@ -18,6 +18,7 @@ export function inspectDefaultKernelEngineDistribution(): Readonly<{
     byteLength: number;
   }>>>;
   buildManifestSha256: `sha256:${string}`;
+  threading: KernelThreadCapability;
 }>;
 export function getDefaultKernelEngineManifest(): Promise<KernelEngineManifest>;
 export function inspectDataKernelEngineDistribution(): Readonly<{
@@ -34,5 +35,6 @@ export function inspectDataKernelEngineDistribution(): Readonly<{
     byteLength: number;
   }>>>;
   buildManifestSha256: `sha256:${string}`;
+  threading: KernelThreadCapability;
 }>;
 export function getDataKernelEngineManifest(): Promise<KernelEngineManifest>;

@@ -6,7 +6,7 @@
     "nativeProfile": "data",
     "pythonVersion": "3.14.6",
     "target": "wasm32-wasip1",
-    "buildManifestSha256": "sha256:e7ea950cdaf6b3282d9342877fde8cb978020211793892d28e103e0f2765b6d6"
+    "buildManifestSha256": "sha256:e8d930b00025d985cca9ee05a6c43aa0762a1f1a0cbcdbd435f9bdb4cff795e5"
   },
   "packages": [
     {
@@ -138,5 +138,5 @@
       ]
     }
   ],
-  "catalogDigest": "sha256:aa77504151ec7d69edb1f1fd614f96106893a4503594d70feea78c33d040e87a"
+  "catalogDigest": "sha256:2d0f0f0a8d82b936caedd4b7bea0ff91201464f71875c45fdde1db199795ab99"
 }

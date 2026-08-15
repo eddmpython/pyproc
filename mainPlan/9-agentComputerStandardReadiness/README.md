@@ -120,8 +120,10 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   core 격리, process clone과 Machine image 이식을 닫았다.
 - 완료: 공식 NumPy 2.5.1 sdist와 exact toolchain을 `data-3` engine의 13개 static module로 재현 빌드했다.
   array, dot, FFT, linalg, seeded random과 음성 경계, package clone과 Machine image 복원을 정식 gate로 닫았다.
-- 진행 중: `parallelProcesses.sharedMemoryThreads`의 현재 upstream capability를 정확히 판정한 뒤,
-  `durableDisk.quotaEviction`, `localPythonParity.wasmToolLayer` 순서로 소진한다.
+- 완료: `parallelProcesses.sharedMemoryThreads`의 현재 경계를 exact packed Control로 실측했다. 설치 엔진은
+  `worker-processes` mode이고 Python shared-memory thread는 미지원이다. build lock, manifest,
+  `machine.inspect()`와 실제 Python 실패가 같은 versioned capability를 보고한다.
+- 진행 중: `durableDisk.quotaEviction`, `localPythonParity.wasmToolLayer` 순서로 소진한다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
 - wasm 도구층을 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
@@ -454,7 +456,28 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   `sha256:698ca96aeb85d96e150045b46751cbd1bd7f22ee6167e088d5eedc044b35b099`다. 첫 실행의 255.8초 중
   240초는 probe가 승리한 Promise 뒤 패배한 timeout timer를 취소하지 않은 잔류였고, 이를 고친 같은
   시나리오는 24.1초에 종료됐다.
-- 다음 직렬 작업: `parallelProcesses.sharedMemoryThreads`의 실제 플랫폼과 CPython 지원 경계를 음성 probe로
-  고정한다. 지원되지 않으면 없는 능력을 우회해 주장하지 않고 그 좌표를 기록한 뒤
-  `durableDisk.quotaEviction`으로 이동한다. 임의 PyPI native wheel 지원은 dynamic linking 전까지 주장하지
-  않는다.
+- 다음 직렬 작업: `durableDisk.quotaEviction`을 실제 OPFS quota와 persistence 경계에서 음성 probe로
+  고정한다. 임의 PyPI native wheel 지원은 dynamic linking 전까지 주장하지 않는다.
+
+## 9. 해결 판정: shared-memory thread capability boundary
+
+- 첫 관찰: browser는 cross-origin isolation, `SharedArrayBuffer`, 논리 코어 16개를 제공했다. 그러나 설치
+  core WASM은 flags 0인 defined memory 640 pages이고 maximum과 shared bit가 없었다. thread spawn import도
+  없었다.
+- Python 관찰: `_thread`는 built-in이지만 `sys.thread_info.name`은 `pthread-stubs`이고
+  `threading.Thread.start()`는 `RuntimeError: can't start new thread`로 실패했다.
+- 첫 불일치: 설치 manifest와 kernel descriptor에는 이 경계를 선언하는 필드가 없었다. 첫 screenshot
+  SHA-256은 `cd5799af7dbdcfa457b9a5bc6309ffefd211e74f95e42e9f1d9d6e98064209b8`다.
+- 제품 계약: `pyproc.thread-capability/1`이 `mode=worker-processes`, Python 구현, thread 생성 가능 여부,
+  WASM shared memory, WASI spawn import와 정확한 Python failure를 함께 봉인한다. `machine.inspect()`가 같은
+  값을 반환하고 Machine image digest도 engine manifest를 통해 이를 포함한다.
+- 공급망: packager가 `pyconfig.h`, CPython pthread stub source, `_threadmodule.c`, WASM memory section과 import를
+  직접 읽는다. core와 data 각각 두 독립 output set이 새 profile input, manifest와 SBOM까지 byte-identical로
+  통과했고 기존 `python.wasm`과 stdlib SHA는 유지됐다.
+- 제품 증거: core browser gate가 build 선언, descriptor와 실제 thread 실패의 일치를 검증하고 exact packed
+  installed gate도 같은 경계를 포함해 34/34로 통과한다. Control probe의 최종 screenshot은 SHA-256
+  `879d2edf89296063f58423c062266d80d390ca09d4ba76a550fa66de96c9a0d5`이며 직접 눈검수했다.
+- 안전 경계: 브라우저 host 제어 채널의 공유 버퍼는 Python heap 공유를 뜻하지 않는다. shared WASM memory,
+  thread spawn import, 실제 Python thread join과 checkpoint quiescence가 같은 gate를 통과하기 전에는
+  `shared-memory` mode를 선언하지 않는다.
+- 다음 직렬 작업: `durableDisk.quotaEviction`이다.

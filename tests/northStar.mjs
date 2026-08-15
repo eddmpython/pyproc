@@ -111,28 +111,29 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "parallelProcesses",
-    score: 8.5,
+    score: 8.6,
     en: Object.freeze({
       title: "Processes and real parallelism",
-      state: "Workers are processes: snapshot-fork spawn, `map`, `forkMany`, a signal table, kill, job control, nested containers, pool exhaustion, and mid-flight worker death all converge under the browser gate. N interpreters are N GILs, so the parallelism is structural rather than scheduled. There is no shared-memory threading and no arbitrary POSIX process tree.",
+      state: "Workers are processes: snapshot-fork spawn, `map`, `forkMany`, a signal table, kill, job control, nested containers, pool exhaustion, and mid-flight worker death all converge under the browser gate. N interpreters are N GILs, so the parallelism is structural rather than scheduled. The installed engine build-seals a versioned `worker-processes` thread capability: its WASM memory is not shared, it has no thread spawn import, and CPython reports `pthread-stubs` with the exact thread-creation failure. There is no shared-memory threading and no arbitrary POSIX process tree.",
       target: "A process model with the vocabulary of a real operating system, threads included once the platform allows them.",
     }),
     ko: Object.freeze({
       title: "프로세스와 진짜 병렬",
-      state: "워커가 프로세스다: 스냅샷 fork 생성, `map`, `forkMany`, 시그널 표, kill, 잡 컨트롤, 중첩 컨테이너, 풀 소진, mid-flight 워커 사망까지 브라우저 게이트에서 수렴한다. 독립 인터프리터 N개 = 독립 GIL N개라 병렬성이 스케줄이 아니라 구조에서 나온다. 공유 메모리 스레딩과 임의의 POSIX 프로세스 트리는 없다.",
+      state: "워커가 프로세스다: 스냅샷 fork 생성, `map`, `forkMany`, 시그널 표, kill, 잡 컨트롤, 중첩 컨테이너, 풀 소진, mid-flight 워커 사망까지 브라우저 게이트에서 수렴한다. 독립 인터프리터 N개 = 독립 GIL N개라 병렬성이 스케줄이 아니라 구조에서 나온다. 설치 엔진은 versioned `worker-processes` thread capability를 build에 봉인한다. WASM memory는 비공유이고 thread spawn import가 없으며 CPython은 `pthread-stubs`와 정확한 thread 생성 실패를 보고한다. 공유 메모리 스레딩과 임의의 POSIX 프로세스 트리는 없다.",
       target: "진짜 운영체제의 어휘를 가진 프로세스 모델. 플랫폼이 허락하는 순간 스레드까지.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/browser/examples.mjs", lane: "test:examples" }),
+      Object.freeze({ path: "tests/browser/ownedEngineCoreProduct.html", lane: "owned-engine" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
         id: "sharedMemoryThreads",
-        en: "Take shared-memory threading the moment nogil and WASM threads land upstream, without changing the process vocabulary",
-        ko: "nogil과 WASM 스레드가 upstream에 착륙하는 순간 프로세스 어휘를 바꾸지 않은 채 공유 메모리 스레딩을 받는다",
+        en: "Replace the build-sealed worker-process boundary only when shared WASM memory, a thread spawn import, Python thread join, and checkpoint quiescence pass one product gate",
+        ko: "공유 WASM memory, thread spawn import, Python thread join과 checkpoint quiescence가 한 제품 gate를 통과할 때만 build에 봉인된 worker-process 경계를 교체한다",
       }),
     ]),
   }),

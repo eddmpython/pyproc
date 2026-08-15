@@ -55,6 +55,19 @@
     "--without-ensurepip"
   ],
   "cflags": "-O3 -g0 -fno-ident",
+  "threading": {
+    "protocol": "pyproc.thread-capability",
+    "version": 1,
+    "mode": "worker-processes",
+    "pythonImplementation": "pthread-stubs",
+    "pythonThreadCreation": false,
+    "sharedWasmMemory": false,
+    "wasiThreadSpawn": false,
+    "failure": {
+      "pythonType": "RuntimeError",
+      "message": "can't start new thread"
+    }
+  },
   "hostModule": {
     "name": "_pyprocHost",
     "abiVersion": "pyproc.hostcall/1"

@@ -7,6 +7,17 @@ export interface KernelEngineArtifact {
   readonly byteLength: number;
 }
 
+export interface KernelThreadCapability {
+  readonly protocol: "pyproc.thread-capability";
+  readonly version: 1;
+  readonly mode: "worker-processes" | "shared-memory";
+  readonly pythonImplementation: string;
+  readonly pythonThreadCreation: boolean;
+  readonly sharedWasmMemory: boolean;
+  readonly wasiThreadSpawn: boolean;
+  readonly failure: Readonly<{ pythonType: string; message: string }> | null;
+}
+
 export interface KernelEngineManifest {
   readonly protocol: "pyproc.kernel-engine-manifest";
   readonly version: 1;
@@ -20,6 +31,7 @@ export interface KernelEngineManifest {
   readonly stdlibDir: string;
   readonly artifacts: Readonly<{ wasm: KernelEngineArtifact; stdlib: KernelEngineArtifact }>;
   readonly buildManifestSha256: `sha256:${string}` | null;
+  readonly threading: KernelThreadCapability;
 }
 
 export function createKernelEngineManifest(input: Omit<KernelEngineManifest,

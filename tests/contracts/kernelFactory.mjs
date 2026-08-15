@@ -15,6 +15,11 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+const THREADING = Object.freeze({ protocol:"pyproc.thread-capability", version:1,
+  mode:"worker-processes", pythonImplementation:"pthread-stubs", pythonThreadCreation:false,
+  sharedWasmMemory:false, wasiThreadSpawn:false,
+  failure:Object.freeze({ pythonType:"RuntimeError", message:"can't start new thread" }) });
+
 async function rejectsCode(fn, code) {
   let actual = null;
   try { await fn(); }
@@ -57,11 +62,13 @@ export async function assertKernelFactory() {
     nativeProfile: "core", stdlibDir: "python3.14", artifacts: {
       wasm: { url: "/python.wasm", sha256: actualDigest, byteLength: bytes.byteLength },
       stdlib: { url: "/stdlib.zip", sha256: actualDigest, byteLength: bytes.byteLength },
-    }, buildManifestSha256: actualDigest });
+    }, buildManifestSha256: actualDigest, threading:THREADING });
   assert((await verifyKernelEngineManifest(manifest)).digest === manifest.digest,
     "kernel engine manifest did not round-trip");
   await rejectsCode(() => verifyKernelEngineManifest({ ...manifest, engineId: "engine:tampered" }),
     "PYPROC_ASSET_INTEGRITY");
+  await rejectsCode(() => verifyKernelEngineManifest({ ...manifest, threading:{ ...THREADING,
+    pythonThreadCreation:true } }), "PYPROC_INPUT_INVALID");
 
   const installedManifest = await getDefaultKernelEngineManifest();
   const installedDistribution = inspectDefaultKernelEngineDistribution();
@@ -78,6 +85,12 @@ export async function assertKernelFactory() {
   assert(installedManifest.engineId === DEFAULT_KERNEL_ENGINE_ID
     && installedDistribution.environmentId === expectedEnvironmentId
     && installedManifest.nativeProfile === "core"
+    && installedManifest.threading.mode === "worker-processes"
+    && installedManifest.threading.pythonImplementation === "pthread-stubs"
+    && installedManifest.threading.pythonThreadCreation === false
+    && installedManifest.threading.sharedWasmMemory === false
+    && installedManifest.threading.wasiThreadSpawn === false
+    && installedManifest.threading.failure?.message === "can't start new thread"
     && installedManifest.artifacts.wasm.byteLength === installedDistribution.artifacts.wasm.byteLength
     && installedManifest.artifacts.stdlib.byteLength === installedDistribution.artifacts.stdlib.byteLength
     && installedManifest.artifacts.wasm.url.endsWith("/owned/core/python.wasm")

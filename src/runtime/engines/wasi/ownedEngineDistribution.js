@@ -7,6 +7,17 @@ export const DATA_KERNEL_ENGINE_ID = "cpython-wasi-3.14.6-pyproc-data-3";
 export const DEFAULT_KERNEL_ENVIRONMENT_ID = "sha256:6a0b4d46d7fe45669860e0964e9fb9114ce1eacace5e381b5d6fb2e7112a2534";
 export const DATA_KERNEL_ENVIRONMENT_ID = "sha256:3b8d0a01cb77cd565a0c296daaa7ce43c97427292b7668008ef001813b2399c7";
 
+const THREADING = Object.freeze({
+  protocol:"pyproc.thread-capability",
+  version:1,
+  mode:"worker-processes",
+  pythonImplementation:"pthread-stubs",
+  pythonThreadCreation:false,
+  sharedWasmMemory:false,
+  wasiThreadSpawn:false,
+  failure:Object.freeze({ pythonType:"RuntimeError", message:"can't start new thread" }),
+});
+
 const CORE = Object.freeze({
   engineId: DEFAULT_KERNEL_ENGINE_ID,
   environmentId: DEFAULT_KERNEL_ENVIRONMENT_ID,
@@ -23,7 +34,8 @@ const CORE = Object.freeze({
       sha256: "sha256:297e22960319563421b9dcbed67dc7c43e42e456fcc01447ceb4de335ce5a236",
       byteLength: 2773481 }),
   }),
-  buildManifestSha256: "sha256:ca8f61b32b89af2fcd56a0534c1bf29ad19f41e219ee73bb6ef81876bb363f14",
+  buildManifestSha256: "sha256:9df4d7cdacdfb47a29abaf2f5cbaecb55aed6f6f25573147830835be594d054c",
+  threading: THREADING,
 });
 
 const DATA = Object.freeze({
@@ -42,7 +54,8 @@ const DATA = Object.freeze({
       sha256: "sha256:ce468413329cdc90d2ba26c90f915b1b11126ea4f4351a81d31a9fd668d53ded",
       byteLength: 2773525 }),
   }),
-  buildManifestSha256: "sha256:e7ea950cdaf6b3282d9342877fde8cb978020211793892d28e103e0f2765b6d6",
+  buildManifestSha256: "sha256:e8d930b00025d985cca9ee05a6c43aa0762a1f1a0cbcdbd435f9bdb4cff795e5",
+  threading: THREADING,
 });
 
 let coreManifestPromise = null;

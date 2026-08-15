@@ -19,6 +19,7 @@ import {
   ownedBuildDetailsArguments,
 } from "../../scripts/engineBuilder/packageOwnedEngine.mjs";
 import { unzipWheel } from "../../src/runtime/engines/wasi/wheelUnzip.js";
+import { inspectWasmThreadCapability } from "../../scripts/engineBuilder/wasmThreadCapability.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -30,7 +31,12 @@ export async function assertOwnedEngineBuilder() {
   assert(lock.engineId === "cpython-wasi-3.14.6-pyproc-host-1"
     && lock.cpython.commit === "c63aec69bd59c55314c06c23f4c22c03de76fe45"
     && lock.wasiSdk.version === "24.0"
-    && lock.cflags === "-O3 -g0 -fno-ident",
+    && lock.cflags === "-O3 -g0 -fno-ident"
+    && lock.threading?.mode === "worker-processes"
+    && lock.threading.pythonImplementation === "pthread-stubs"
+    && lock.threading.pythonThreadCreation === false
+    && lock.threading.sharedWasmMemory === false
+    && lock.threading.wasiThreadSpawn === false,
   "owned engine build lock drifted");
   assert(lock.nativeProfiles?.data?.engineId === "cpython-wasi-3.14.6-pyproc-data-3"
     && lock.nativeProfiles.data.modules.map((module) => module.name).join(",") === "_pyprocHost,_pyprocData"
@@ -82,6 +88,8 @@ export async function assertOwnedEngineBuilder() {
     && compiledData.input.version === NATIVE_PROFILE_COMPILER_VERSION
     && compiledData.input.engineId !== compiledCore.input.engineId
     && /^[0-9a-f]{64}$/u.test(compiledData.input.recipe.packagerSha256)
+    && /^[0-9a-f]{64}$/u.test(compiledData.input.recipe.threadInspectorSha256)
+    && JSON.stringify(compiledData.input.threading) === JSON.stringify(lock.threading)
     && /^[0-9a-f]{64}$/u.test(compiledData.input.recipe.linuxBuilderSha256)
     && /^[0-9a-f]{64}$/u.test(compiledData.input.recipe.windowsBuilderSha256)
     && compiledData.input.recipe.modules[1].sourceSha256 === lock.nativeProfiles.data.modules[1].sourceSha256
@@ -92,6 +100,29 @@ export async function assertOwnedEngineBuilder() {
     && /^[0-9a-f]{64}$/u.test(compiledData.input.scientificPackages[0].builderSha256)
     && /^[0-9a-f]{64}$/u.test(compiledData.input.scientificPackages[0].lockSha256),
   "native profile compiler did not seal source, ABI, engine, and output provenance");
+
+  const installedCoreBytes = await readFile(new URL(
+    "../../src/runtime/engines/wasi/owned/core/python.wasm", import.meta.url));
+  const installedThreading = inspectWasmThreadCapability(installedCoreBytes);
+  assert(installedThreading.memory.source === "defined" && installedThreading.memory.shared === false
+    && installedThreading.memory.maximumPages === null && installedThreading.threadSpawnImports.length === 0,
+  "installed engine thread substrate differs from the build lock");
+  const sharedFixture = new Uint8Array([
+    0x00,0x61,0x73,0x6d,0x01,0x00,0x00,0x00,
+    0x05,0x04,0x01,0x03,0x01,0x01,
+  ]);
+  assert(inspectWasmThreadCapability(sharedFixture).memory.shared === true,
+    "thread substrate inspector did not detect shared WASM memory");
+  let truncatedRejected = false;
+  try { inspectWasmThreadCapability(sharedFixture.subarray(0,-1)); }
+  catch (error) { truncatedRejected = /truncated|exceeds/u.test(error.message); }
+  assert(truncatedRejected, "thread substrate inspector accepted a truncated memory contract");
+  const trailingPayloadFixture = new Uint8Array([...sharedFixture.slice(0,9),0x05,
+    ...sharedFixture.slice(10),0x00]);
+  let trailingPayloadRejected = false;
+  try { inspectWasmThreadCapability(trailingPayloadFixture); }
+  catch (error) { trailingPayloadRejected = /payload is malformed/u.test(error.message); }
+  assert(trailingPayloadRejected, "thread substrate inspector accepted trailing memory payload bytes");
 
   const sysconfigFixture = await mkdtemp(join(tmpdir(), "pyprocSysconfigData-"));
   try {

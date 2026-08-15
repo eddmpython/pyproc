@@ -7,7 +7,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOCK_PATH = join(SCRIPT_DIR, "engineBuildLock.json");
 
 export const NATIVE_PROFILE_INPUT_PROTOCOL = "pyproc.native-profile-build-input";
-export const NATIVE_PROFILE_COMPILER_VERSION = 2;
+export const NATIVE_PROFILE_COMPILER_VERSION = 3;
 
 function sha256(bytes) { return createHash("sha256").update(bytes).digest("hex"); }
 
@@ -54,6 +54,7 @@ export async function nativeProfileBuildInput(profileName) {
   const setupBytes = await readFile(join(SCRIPT_DIR, profile.setupFile));
   const setupSha256 = sha256(setupBytes);
   const packagerSha256 = sha256(await readFile(join(SCRIPT_DIR, "packageOwnedEngine.mjs")));
+  const threadInspectorSha256 = sha256(await readFile(join(SCRIPT_DIR, "wasmThreadCapability.mjs")));
   const linuxBuilderSha256 = sha256(await readFile(join(SCRIPT_DIR, "buildOwnedEngine.mjs")));
   const windowsBuilderSha256 = sha256(await readFile(join(SCRIPT_DIR, "buildOwnedEngineWindowsProbe.mjs")));
   if (setupSha256 !== profile.setupSha256) throw new Error(`native profile Setup digest mismatch: ${profile.setupFile}`);
@@ -108,9 +109,10 @@ export async function nativeProfileBuildInput(profileName) {
     toolchain: { wasiSdkVersion: lock.wasiSdk.version,
       linuxArchiveSha256: lock.wasiSdk.linuxX8664.archiveSha256,
       windowsArchiveSha256: lock.wasiSdk.windowsX8664.archiveSha256 },
+    threading: Object.freeze(lock.threading),
     recipe: { sourceDateEpoch: lock.sourceDateEpoch, configureArgs: lock.configureArgs,
       cflags: lock.cflags, setupFile: profile.setupFile, setupSha256, packagerSha256,
-      linuxBuilderSha256, windowsBuilderSha256, modules },
+      threadInspectorSha256, linuxBuilderSha256, windowsBuilderSha256, modules },
     oracle: profile.oracle, scientificPackages: Object.freeze(scientificPackages), budgets: profile.budgets,
     outputs: Object.freeze(outputNames) });
   const serialized = `${JSON.stringify(input, null, 2)}\n`;

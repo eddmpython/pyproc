@@ -1,6 +1,6 @@
 {
   "protocol": "pyproc.native-profile-build-input",
-  "version": 2,
+  "version": 3,
   "profile": "data",
   "engineId": "cpython-wasi-3.14.6-pyproc-data-3",
   "target": "wasm32-wasip1",
@@ -14,6 +14,19 @@
     "linuxArchiveSha256": "c6c38aab56e5de88adf6c1ebc9c3ae8da72f88ec2b656fb024eda8d4167a0bc5",
     "windowsArchiveSha256": "0f934c6e7e171b5627c81b697a9e57e96d65cd889f56ce6077350de48978afd3"
   },
+  "threading": {
+    "protocol": "pyproc.thread-capability",
+    "version": 1,
+    "mode": "worker-processes",
+    "pythonImplementation": "pthread-stubs",
+    "pythonThreadCreation": false,
+    "sharedWasmMemory": false,
+    "wasiThreadSpawn": false,
+    "failure": {
+      "pythonType": "RuntimeError",
+      "message": "can't start new thread"
+    }
+  },
   "recipe": {
     "sourceDateEpoch": 1781085833,
     "configureArgs": [
@@ -23,7 +36,8 @@
     "cflags": "-O3 -g0 -fno-ident",
     "setupFile": "Setup.data.local",
     "setupSha256": "8e42e525bee03dd78986347960b5293ec3645904cbb0c48b6129e042ef37e1d2",
-    "packagerSha256": "a623aa94699ee6b00b726e60538725bbee39824df7400dd6eba9bde3a4a74fb3",
+    "packagerSha256": "f1bb78377136c41f77b14070a5bb73d28b853739eb0ab2aeff76f3c0fd53650f",
+    "threadInspectorSha256": "a2a1cbd3c5a3712f4088f38e9b9a866edd297cbaf6bec5a34494771caaa1e400",
     "linuxBuilderSha256": "3f0d84266fcf663b588ff64a013faf409d6558c19d02b329b6f2eb68c5b3782b",
     "windowsBuilderSha256": "3982e4414e51c7f7f302542718732af2fe70d6da03fbded3bdf86abd88911818",
     "modules": [

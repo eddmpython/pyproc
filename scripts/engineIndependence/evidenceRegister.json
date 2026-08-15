@@ -856,6 +856,95 @@
       ]
     },
     {
+      "evidenceId": "local-owned-thread-capability-20260816",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows 11",
+        "browser": "Microsoft Edge 151.0.4129.86",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "targetCompiler": "WASI SDK 24 clang 18.1.2",
+        "hostRunner": "Wasmtime 47.0.3"
+      },
+      "commands": [
+        "PYPROC_KEEP_ATTEMPT_EVIDENCE=1 node tests/attempts/runtimeParity/ownedThreadCapabilityProbe.mjs",
+        "node scripts/engineBuilder/buildOwnedEngineWindowsProbe.mjs --workspace C:\\pp15-thread-core-20260816\\a --out C:\\pp15-thread-core-20260816\\dist-a --input-cache C:\\pp11-inputs-20260815 --profile core",
+        "node scripts/engineBuilder/buildOwnedEngineWindowsProbe.mjs --workspace C:\\pp15-thread-core-20260816\\b --out C:\\pp15-thread-core-20260816\\dist-b --input-cache C:\\pp11-inputs-20260815 --profile core",
+        "node scripts/engineBuilder/verifyOwnedEngine.mjs --artifact-dir C:\\pp15-thread-core-20260816\\dist-a-thread-contract-parser --compare C:\\pp15-thread-core-20260816\\dist-b-thread-contract-parser --profile core --require-production-flags",
+        "node scripts/engineBuilder/verifyOwnedEngine.mjs --artifact-dir C:\\pp14-numpy-product-20260816\\dist-a-thread-contract-parser --compare C:\\pp14-numpy-product-20260816\\dist-b-thread-contract-parser --profile data --require-production-flags",
+        "node tests/browser/run.mjs tests/browser/ownedEngineCoreProduct.html"
+      ],
+      "result": "the browser supplied shared control buffers while the installed Python engine exposed non-shared defined memory, no thread spawn import, pthread stubs, and an exact thread-creation failure; build provenance, engine manifest, runtime descriptor, and Python behavior now report one versioned worker-process capability",
+      "measurements": {
+        "logicalProcessors": 16,
+        "wasmInitialPages": 640,
+        "wasmMaximumPages": null,
+        "sharedWasmMemory": false,
+        "threadSpawnImports": 0,
+        "pythonThreadCreation": false,
+        "coreIndependentBuilds": 2,
+        "dataIndependentBuilds": 2,
+        "byteIdentical": true,
+        "installedChecks": "34/34",
+        "screenshotViewport": "922x920",
+        "screenshotBytes": 104244
+      },
+      "invariants": [
+        "host SharedArrayBuffer availability is separate from Python WASM heap sharing",
+        "the build lock and packager derive the capability from pyconfig, CPython source, the WASM memory section, and imports",
+        "a manifest cannot claim Python thread creation without shared memory, a thread spawn import, and no failure",
+        "KernelFactory rejects a descriptor whose threading capability differs from its verified engine manifest",
+        "current Python parallelism remains independent Worker processes with independent interpreters and GILs",
+        "shared-memory mode stays closed until thread join and checkpoint quiescence pass a browser product gate"
+      ],
+      "artifacts": [
+        {
+          "role": "coreBuildManifest",
+          "file": "src/runtime/engines/wasi/owned/core/engine-build-manifest.json",
+          "byteLength": 4328,
+          "sha256": "9df4d7cdacdfb47a29abaf2f5cbaecb55aed6f6f25573147830835be594d054c"
+        },
+        {
+          "role": "dataBuildManifest",
+          "file": "src/runtime/engines/wasi/owned/data/engine-build-manifest.json",
+          "byteLength": 7212,
+          "sha256": "e8d930b00025d985cca9ee05a6c43aa0762a1f1a0cbcdbd435f9bdb4cff795e5"
+        },
+        {
+          "role": "coreReproducibilityReceipt",
+          "file": "src/runtime/engines/wasi/owned/core/reproducibility-manifest.json",
+          "byteLength": 944,
+          "sha256": "990e5d386b5c01b5758e2c034bdafbeeb4d69be12d37ac199701f95d1c7ce85a"
+        },
+        {
+          "role": "dataReproducibilityReceipt",
+          "file": "src/runtime/engines/wasi/owned/data/reproducibility-manifest.json",
+          "byteLength": 1330,
+          "sha256": "46bbfae381b300eeb3b19bc2122a4652571cf2867ee868bebb509829b88552c7"
+        },
+        {
+          "role": "browserGreenScreenshot",
+          "viewport": "922x920",
+          "byteLength": 104244,
+          "sha256": "879d2edf89296063f58423c062266d80d390ca09d4ba76a550fa66de96c9a0d5"
+        }
+      ]
+    },
+    {
+      "evidenceId": "upstream-wasi-threads-20260816",
+      "classification": "UPSTREAM_CONTRACT",
+      "url": "https://github.com/WebAssembly/wasi-threads",
+      "retrievedAt": "2026-08-16",
+      "claim": "the Preview 1 thread spawn proposal is Phase 1 and retained as a legacy path while future work moves to shared-everything threads"
+    },
+    {
+      "evidenceId": "upstream-wasi-sdk-threads-20260816",
+      "classification": "UPSTREAM_CONTRACT",
+      "url": "https://github.com/WebAssembly/wasi-sdk",
+      "retrievedAt": "2026-08-16",
+      "claim": "most WASI targets cannot spawn threads and the wasm32-wasip1-threads target is experimental"
+    },
+    {
       "evidenceId": "upstream-pep11-20260814",
       "classification": "UPSTREAM_CONTRACT",
       "url": "https://peps.python.org/pep-0011/",

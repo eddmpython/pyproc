@@ -5,6 +5,11 @@ import { CpythonWasiKernelRuntime } from "../../src/runtime/kernel/cpythonWasiKe
 import { assertKernelRuntimeContract } from "../../src/runtime/kernel/kernelRuntimeContract.js";
 import { decodeValueEnvelope } from "../../src/runtime/kernel/valueEnvelope.js";
 
+const THREADING = Object.freeze({ protocol:"pyproc.thread-capability", version:1,
+  mode:"worker-processes", pythonImplementation:"pthread-stubs", pythonThreadCreation:false,
+  sharedWasmMemory:false, wasiThreadSpawn:false,
+  failure:Object.freeze({ pythonType:"RuntimeError", message:"can't start new thread" }) });
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -76,13 +81,15 @@ export async function assertKernelRuntimeV2() {
     kernelRef: "kernel:test",
     engineId: "engine:test",
     nativeProfile: "core",
+    threading: THREADING,
     onEnvironmentChanged: (environment) => { capturedEnvironment = environment; },
   }));
   const descriptorPromise = kernel.describe();
   assert(descriptorPromise instanceof Promise, "KernelRuntimeContract describe is not Promise-first");
   const descriptor = await descriptorPromise;
   assert(descriptor.runtimeContractVersion === 2 && descriptor.nativeProfile === "core" && descriptor.workerOwned
-    && descriptor.directHeapAccess === false && descriptor.liveObjectProxy === false,
+    && descriptor.directHeapAccess === false && descriptor.liveObjectProxy === false
+    && descriptor.threading === THREADING,
   "KernelRuntimeContract descriptor boundary is incomplete");
 
   const events = [];

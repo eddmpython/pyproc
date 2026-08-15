@@ -19,6 +19,7 @@ engine manifest and are not copied into Machine images.
 import { boot, open } from "pyproc";
 
 const machine = await boot();
+const { threading } = (await machine.inspect()).kernel;
 const result = await machine.run.python("print(40 + 2)");
 const image = await machine.history.export();
 await machine.close();
@@ -29,6 +30,10 @@ const restored = await open(image);
 Commands are Promise-first and ordered. Receipts carry explicit terminal states. Values use structured,
 versioned envelopes. Browser handles, worker objects, WebAssembly memory views, and live interpreter objects
 do not enter durable state.
+
+Check `threading.pythonThreadCreation` before choosing a Python thread algorithm. The installed engines currently
+report `mode: "worker-processes"`; use `machine.proc` for independent-interpreter parallelism. A browser having
+`SharedArrayBuffer` does not mean the Python WASM memory is shared.
 
 ## State contract
 

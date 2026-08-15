@@ -8,7 +8,7 @@
         "nativeProfile": "core",
         "pythonVersion": "3.14.6",
         "target": "wasm32-wasip1",
-        "buildManifestSha256": "sha256:ca8f61b32b89af2fcd56a0534c1bf29ad19f41e219ee73bb6ef81876bb363f14"
+        "buildManifestSha256": "sha256:9df4d7cdacdfb47a29abaf2f5cbaecb55aed6f6f25573147830835be594d054c"
       },
       "package": {
         "name": "pyproc-native-host",
@@ -35,7 +35,7 @@
         "nativeProfile": "data",
         "pythonVersion": "3.14.6",
         "target": "wasm32-wasip1",
-        "buildManifestSha256": "sha256:e7ea950cdaf6b3282d9342877fde8cb978020211793892d28e103e0f2765b6d6"
+        "buildManifestSha256": "sha256:e8d930b00025d985cca9ee05a6c43aa0762a1f1a0cbcdbd435f9bdb4cff795e5"
       },
       "package": {
         "name": "pyproc-native-data",

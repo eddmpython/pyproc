@@ -1,9 +1,22 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "protocol": "pyproc.engine-build-manifest",
   "engineId": "cpython-wasi-3.14.6-pyproc-host-1",
   "nativeProfile": "core",
   "target": "wasm32-wasip1",
+  "threading": {
+    "protocol": "pyproc.thread-capability",
+    "version": 1,
+    "mode": "worker-processes",
+    "pythonImplementation": "pthread-stubs",
+    "pythonThreadCreation": false,
+    "sharedWasmMemory": false,
+    "wasiThreadSpawn": false,
+    "failure": {
+      "pythonType": "RuntimeError",
+      "message": "can't start new thread"
+    }
+  },
   "sourceDateEpoch": 1781085833,
   "source": {
     "version": "3.14.6",
@@ -50,7 +63,8 @@
         "byteLength": 9108
       }
     ],
-    "nativeProfileInputSha256": "f0a361c6195ea46028cc1d1215c32e2bdde0fd6cfc1c09cba9028791306418a8",
+    "nativeProfileInputSha256": "285f0a5fe1296c29a76483e7c8bb7e62097d30d44e5f7a1c3fa41494d721dc52",
+    "scientificPackages": [],
     "budgets": {
       "maxWasmBytes": 7800000,
       "maxStdlibZipBytes": 2800000
@@ -144,8 +158,8 @@
     },
     "nativeProfileBuildInput": {
       "file": "native-profile-build-input.json",
-      "byteLength": 1945,
-      "sha256": "f0a361c6195ea46028cc1d1215c32e2bdde0fd6cfc1c09cba9028791306418a8"
+      "byteLength": 2428,
+      "sha256": "285f0a5fe1296c29a76483e7c8bb7e62097d30d44e5f7a1c3fa41494d721dc52"
     }
   }
 }

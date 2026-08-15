@@ -30,12 +30,49 @@ function artifact(value, role) {
   return Object.freeze({ url: value.url, sha256: value.sha256, byteLength: value.byteLength });
 }
 
+function threadFailure(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw inputError("Kernel engine threading failure is required when Python threads are unavailable");
+  }
+  exactKeys(value, new Set(["pythonType", "message"]), "Kernel engine threading failure");
+  if (typeof value.pythonType !== "string" || !value.pythonType
+    || typeof value.message !== "string" || !value.message) {
+    throw inputError("Kernel engine threading failure is invalid");
+  }
+  return Object.freeze({ pythonType:value.pythonType, message:value.message });
+}
+
+function threading(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw inputError("Kernel engine threading capability is required");
+  }
+  exactKeys(value, new Set(["protocol", "version", "mode", "pythonImplementation",
+    "pythonThreadCreation", "sharedWasmMemory", "wasiThreadSpawn", "failure"]),
+  "Kernel engine threading capability");
+  if (value.protocol !== "pyproc.thread-capability" || value.version !== 1
+    || !["worker-processes", "shared-memory"].includes(value.mode)
+    || typeof value.pythonImplementation !== "string" || !value.pythonImplementation
+    || typeof value.pythonThreadCreation !== "boolean" || typeof value.sharedWasmMemory !== "boolean"
+    || typeof value.wasiThreadSpawn !== "boolean") {
+    throw inputError("Kernel engine threading capability is invalid");
+  }
+  const failure = value.pythonThreadCreation ? null : threadFailure(value.failure);
+  if (value.pythonThreadCreation
+    && (value.mode !== "shared-memory" || !value.sharedWasmMemory || !value.wasiThreadSpawn || value.failure !== null)
+    || !value.pythonThreadCreation && value.mode !== "worker-processes") {
+    throw inputError("Kernel engine threading capability is inconsistent");
+  }
+  return Object.freeze({ protocol:"pyproc.thread-capability", version:1, mode:value.mode,
+    pythonImplementation:value.pythonImplementation, pythonThreadCreation:value.pythonThreadCreation,
+    sharedWasmMemory:value.sharedWasmMemory, wasiThreadSpawn:value.wasiThreadSpawn, failure });
+}
+
 function core(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw inputError("Kernel engine manifest must be an object");
   }
   exactKeys(value, new Set(["protocol", "version", "digest", "engineId", "environmentId", "runtimeKind",
-    "target", "pythonVersion", "nativeProfile", "stdlibDir", "artifacts", "buildManifestSha256"]),
+    "target", "pythonVersion", "nativeProfile", "stdlibDir", "artifacts", "buildManifestSha256", "threading"]),
   "Kernel engine manifest");
   if (value.protocol !== KERNEL_ENGINE_MANIFEST_PROTOCOL || value.version !== KERNEL_ENGINE_MANIFEST_VERSION
     || typeof value.engineId !== "string" || !value.engineId
@@ -65,6 +102,7 @@ function core(value) {
     artifacts: Object.freeze({ wasm: artifact(value.artifacts.wasm, "wasm"),
       stdlib: artifact(value.artifacts.stdlib, "stdlib") }),
     buildManifestSha256: value.buildManifestSha256 || null,
+    threading: threading(value.threading),
   });
 }
 

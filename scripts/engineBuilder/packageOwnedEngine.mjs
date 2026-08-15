@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { createDeterministicZip } from "./deterministicZip.mjs";
 import { nativeProfileBuildInput } from "./nativeProfileCompiler.mjs";
+import { inspectWasmThreadCapability } from "./wasmThreadCapability.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOCK_PATH = join(SCRIPT_DIR, "engineBuildLock.json");
@@ -156,6 +157,35 @@ function makeVariable(makefile, name) {
   return match ? match[1].trim() : null;
 }
 
+async function observedThreading({ sourceDir, buildDir, wasmBytes }) {
+  const pyconfig = await readFile(join(buildDir, "pyconfig.h"), "utf8");
+  const substrate = inspectWasmThreadCapability(wasmBytes);
+  const usesStubs = /^#define HAVE_PTHREAD_STUBS 1$/mu.test(pyconfig);
+  const hasPosixThreads = /^#define _POSIX_THREADS 1$/mu.test(pyconfig);
+  if (usesStubs) {
+    const [stubs, threadModule] = await Promise.all([
+      readFile(join(sourceDir, "Python", "thread_pthread_stubs.h"), "utf8"),
+      readFile(join(sourceDir, "Modules", "_threadmodule.c"), "utf8"),
+    ]);
+    if (!/pthread_create[\s\S]*return EAGAIN;/u.test(stubs)
+      || !threadModule.includes("can't start new thread")) {
+      throw new Error("CPython pthread stub failure contract drifted");
+    }
+  }
+  const canStart = hasPosixThreads && !usesStubs && substrate.memory.shared
+    && substrate.threadSpawnImports.length > 0;
+  return Object.freeze({
+    protocol:"pyproc.thread-capability",
+    version:1,
+    mode:canStart ? "shared-memory" : "worker-processes",
+    pythonImplementation:usesStubs ? "pthread-stubs" : "pthread",
+    pythonThreadCreation:canStart,
+    sharedWasmMemory:substrate.memory.shared,
+    wasiThreadSpawn:substrate.threadSpawnImports.length > 0,
+    failure:canStart ? null : Object.freeze({ pythonType:"RuntimeError", message:"can't start new thread" }),
+  });
+}
+
 export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
   profileName = "core", profileBuild = null, scientificBuild = null }) {
   const lock = JSON.parse(await readFile(LOCK_PATH, "utf8"));
@@ -165,6 +195,10 @@ export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
   const configSource = await readFile(join(buildDir, "Modules", "config.c"), "utf8");
   const makefile = await readFile(join(buildDir, "Makefile"), "utf8");
   const wasmBytes = await readFile(wasmSource);
+  const threading = await observedThreading({ sourceDir, buildDir, wasmBytes });
+  if (JSON.stringify(threading) !== JSON.stringify(compiledProfile.input.threading)) {
+    throw new Error("owned engine threading capability differs from the locked profile");
+  }
   for (const module of compiledProfile.input.recipe.modules) {
     const initializer = module.name.replace(/^_/u, "PyInit__");
     if (!configSource.includes(`{"${module.name}", ${initializer}}`)) {
@@ -255,11 +289,12 @@ export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
   }
   const hostModule = compiledProfile.input.recipe.modules.find((module) => module.name === "_pyprocHost");
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     protocol: "pyproc.engine-build-manifest",
     engineId: compiledProfile.input.engineId,
     nativeProfile: profileName,
     target: lock.target,
+    threading,
     sourceDateEpoch: lock.sourceDateEpoch,
     source: lock.cpython,
     toolchain: {

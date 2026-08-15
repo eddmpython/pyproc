@@ -134,6 +134,16 @@ async function kernelFactorySurface() {
     target: "wasm32-wasip1",
     pythonVersion: "3.14.6",
     nativeProfile: "core",
+    threading: {
+      protocol: "pyproc.thread-capability",
+      version: 1,
+      mode: "worker-processes",
+      pythonImplementation: "pthread-stubs",
+      pythonThreadCreation: false,
+      sharedWasmMemory: false,
+      wasiThreadSpawn: false,
+      failure: { pythonType: "RuntimeError", message: "can't start new thread" },
+    },
     stdlibDir: "python3.14",
     artifacts: {
       wasm: { url: "/python.wasm", sha256, byteLength: bytes.byteLength },
@@ -142,6 +152,7 @@ async function kernelFactorySurface() {
     buildManifestSha256: sha256,
   });
   const factory = new KernelFactory({ assetStore: new MemoryKernelAssetStore() });
+  const threadCreation: boolean = manifest.threading.pythonThreadCreation;
   const machine: Promise<KernelMachine> = bootKernelMachine(factory, manifest);
   const sessionType: typeof KernelSession = KernelSession;
   const processType: typeof KernelProcess = KernelProcess;
@@ -150,6 +161,7 @@ async function kernelFactorySurface() {
   void sessionType;
   void processType;
   void processManagerType;
+  void threadCreation;
 }
 void kernelFactorySurface;
 

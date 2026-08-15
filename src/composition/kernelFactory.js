@@ -251,6 +251,7 @@ export class KernelFactory {
       deterministic: options.deterministic === true,
       engineId: manifest.engineId,
       nativeProfile: manifest.nativeProfile,
+      threading: manifest.threading,
       environmentId,
       kernelRef,
       artifactStore: this.#checkpointStore,
@@ -266,6 +267,7 @@ export class KernelFactory {
     const descriptor = await kernel.describe();
     if (descriptor.runtimeContractVersion !== 2 || descriptor.runtimeKind !== "cpython-wasi"
       || descriptor.engineId !== manifest.engineId || descriptor.nativeProfile !== manifest.nativeProfile
+      || JSON.stringify(descriptor.threading) !== JSON.stringify(manifest.threading)
       || descriptor.environmentId !== environmentId
       || descriptor.workerOwned !== true || descriptor.directHeapAccess !== false) {
       await kernel.close();

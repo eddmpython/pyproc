@@ -84,6 +84,20 @@ try {
       || typeof createOwnedPackageResolver !== "function") {
       throw new Error("installed owned kernel distribution surface missing");
     }
+    const defaultEngineManifest = await getDefaultKernelEngineManifest();
+    const dataEngineManifest = await getDataKernelEngineManifest();
+    for (const engineManifest of [defaultEngineManifest, dataEngineManifest]) {
+      if (engineManifest.threading?.protocol !== "pyproc.thread-capability"
+        || engineManifest.threading.mode !== "worker-processes"
+        || engineManifest.threading.pythonImplementation !== "pthread-stubs"
+        || engineManifest.threading.pythonThreadCreation !== false
+        || engineManifest.threading.sharedWasmMemory !== false
+        || engineManifest.threading.wasiThreadSpawn !== false
+        || engineManifest.threading.failure?.pythonType !== "RuntimeError"
+        || engineManifest.threading.failure?.message !== "can't start new thread") {
+        throw new Error("installed engine threading boundary drifted");
+      }
+    }
     const hostBroker = new HostCapabilityBroker();
     const productPort = new ProductHostCapabilityPort();
     if (typeof productPort.install !== "function" || typeof createFetchHostAdapter !== "function") {

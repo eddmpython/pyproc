@@ -11,6 +11,7 @@
 - KernelFactory
 - Input
 - Boot
+- Thread capability
 - Checkpoint and clone
 - Machine image
 - KernelRuntimeContract v2
@@ -112,14 +113,32 @@ claim.
 ## Input
 
 A canonical `KernelEngineManifest` binds engine ID, environment ID, runtime kind, target, Python version, native
-profile, stdlib directory, build-manifest digest, and exact WASM and stdlib artifact descriptors. Each descriptor
-contains a URL, SHA-256, and byte length.
+profile, stdlib directory, build-manifest digest, thread capability, and exact WASM and stdlib artifact descriptors.
+Each artifact descriptor contains a URL, SHA-256, and byte length.
 
 ## Boot
 
 The factory verifies the manifest, loads each artifact through its content-addressed store, checks byte length and
 digest, and passes bytes to the worker session. It accepts the kernel only after protocol negotiation and a Python
 version self-test prove the requested identity. There is no alternate loader or compatibility selector.
+
+## Thread capability
+
+`pyproc.thread-capability` version 1 separates browser coordination buffers from the Python WASM heap. Its fields
+declare the parallel mode, Python thread implementation, Python thread creation, shared WASM memory, WASI thread
+spawn import, and exact Python failure when creation is unavailable.
+
+The shipped core and data engines declare `worker-processes`, `pthread-stubs`, no Python thread creation, no shared
+WASM memory, and no thread spawn import. Starting `threading.Thread` fails with the declared
+`RuntimeError: can't start new thread`. Independent interpreters in independent Workers remain the supported
+parallel model.
+
+The build packager derives these values from target `pyconfig.h`, pinned CPython source, the WASM memory section,
+and imports. `KernelFactory` rejects runtime negotiation when `describe().threading` differs from the verified
+engine manifest. A Machine image carries the manifest and therefore retains the same boundary after revival.
+
+Shared-memory mode requires one browser product gate to prove shared WASM memory, a thread spawn import, actual
+Python thread join, and checkpoint quiescence. Browser `SharedArrayBuffer` availability alone is not sufficient.
 
 ## Checkpoint and clone
 

@@ -47,6 +47,7 @@ async function loadBuildManifest(root, nativeProfile) {
     target: "wasm32-wasip1",
     pythonVersion: build.source.version,
     nativeProfile,
+    threading: build.threading,
     stdlibDir: "python3.14",
     artifacts: {
       wasm: { url: root + build.outputs.engine.file,
@@ -78,6 +79,12 @@ export async function runOwnedEngineCoreProduct() {
     gate.check("pinned source and SDK manifest", build.source.commit
       === "c63aec69bd59c55314c06c23f4c22c03de76fe45"
       && build.toolchain.wasiSdkVersion === "24.0");
+    gate.check("threading boundary is build-sealed", build.threading?.protocol === "pyproc.thread-capability"
+      && build.threading.mode === "worker-processes" && build.threading.pythonImplementation === "pthread-stubs"
+      && build.threading.pythonThreadCreation === false && build.threading.sharedWasmMemory === false
+      && build.threading.wasiThreadSpawn === false
+      && build.threading.failure?.pythonType === "RuntimeError"
+      && build.threading.failure?.message === "can't start new thread");
     gate.check("stdlib inventory", inventory.fileCount >= 500
       && inventory.files.some((entry) => entry.path === "asyncio/__init__.py"), inventory.fileCount);
 
@@ -95,6 +102,25 @@ print(json.dumps({"version": sys.version.split()[0], "origin": _pyprocHost.__spe
       `${host.version}, ${gate.timings.bootMs}ms`);
     gate.check("static _pyprocHost import", host.origin === "built-in"
       && host.abi === "pyproc.hostcall/1" && host.noop === null, JSON.stringify(host));
+    const threadBoundary = JSON.parse(await runPython(kernel, "core:thread-boundary", `
+import json, sys, threading
+try:
+    thread = threading.Thread(target=lambda: None)
+    thread.start()
+except Exception as error:
+    result = {"type": type(error).__name__, "message": str(error)}
+else:
+    thread.join()
+    result = None
+print(json.dumps({"implementation": sys.thread_info.name, "failure": result}, sort_keys=True))
+`));
+    const descriptor = await kernel.describe();
+    gate.check("Python thread creation fails by declared contract",
+      descriptor.threading?.pythonThreadCreation === false
+      && descriptor.threading.pythonImplementation === threadBoundary.implementation
+      && descriptor.threading.failure?.pythonType === threadBoundary.failure?.type
+      && descriptor.threading.failure?.message === threadBoundary.failure?.message,
+    JSON.stringify(threadBoundary));
     const stdlib = await runPython(kernel, "core:stdlib-oracle",
       "import decimal, hashlib, pathlib\nprint(decimal.Decimal('1.25') + decimal.Decimal('2.75'), hashlib.sha256(b'pyproc').hexdigest()[:8], pathlib.PurePosixPath('/a') / 'b')");
     gate.check("external stdlib import and oracle", stdlib.trim() === "4.00 efca726f /a/b", stdlib.trim());
@@ -131,8 +157,9 @@ export async function runOwnedEngineDataProduct() {
     const dataModules = dataManifest.recipe?.nativeModules?.map((entry) => entry.name) || [];
     const inputModules = profileInput.recipe?.modules?.map((entry) => entry.name) || [];
     gate.check("profile compiler seals source and provenance",
-      profileInput.protocol === "pyproc.native-profile-build-input" && profileInput.version === 2
+      profileInput.protocol === "pyproc.native-profile-build-input" && profileInput.version === 3
       && profileInput.profile === "data" && profileInput.engineId === dataManifest.engineId
+      && JSON.stringify(profileInput.threading) === JSON.stringify(dataManifest.threading)
       && dataManifest.recipe.nativeProfileInputSha256 === dataManifest.outputs.nativeProfileBuildInput.sha256
       && inputModules.join(",") === "_pyprocHost,_pyprocData"
       && dataModules.join(",") === "_pyprocHost,_pyprocData"

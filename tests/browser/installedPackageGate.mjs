@@ -127,6 +127,28 @@ try {
   check("installed owned kernel boots", inspection.kernel.runtimeKind === "cpython-wasi"
     && inspection.kernel.workerOwned === true && inspection.kernel.directHeapAccess === false,
     timings.ownedBootMs + "ms");
+  const threadBoundary = JSON.parse((await machine.run(\`
+import json, sys, threading
+try:
+    thread = threading.Thread(target=lambda: None)
+    thread.start()
+except Exception as error:
+    failure = {"type": type(error).__name__, "message": str(error)}
+else:
+    thread.join()
+    failure = None
+print(json.dumps({"implementation": sys.thread_info.name, "failure": failure}, sort_keys=True))
+\`)).output.trim());
+  check("installed thread capability matches Python behavior",
+    inspection.kernel.threading?.protocol === "pyproc.thread-capability"
+      && inspection.kernel.threading.mode === "worker-processes"
+      && inspection.kernel.threading.pythonImplementation === threadBoundary.implementation
+      && inspection.kernel.threading.pythonThreadCreation === false
+      && inspection.kernel.threading.sharedWasmMemory === false
+      && inspection.kernel.threading.wasiThreadSpawn === false
+      && inspection.kernel.threading.failure?.pythonType === threadBoundary.failure?.type
+      && inspection.kernel.threading.failure?.message === threadBoundary.failure?.message,
+    JSON.stringify(threadBoundary));
   const executed = await machine.run("print(sum(range(20)))");
   check("installed kernel executes Python", executed.output.trim() === "190");
   const sysconfig = JSON.parse((await machine.run(

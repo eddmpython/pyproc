@@ -276,6 +276,7 @@ export interface KernelDescriptor {
   readonly lifecycleState: string;
   readonly engineId: string | null;
   readonly nativeProfile: string;
+  readonly threading: import("./engineManifest.js").KernelThreadCapability | null;
   readonly environmentId: string;
   readonly workerOwned: true;
   readonly directHeapAccess: false;
@@ -369,6 +370,7 @@ export interface KernelRuntimeContractV2 {
 
 export class CpythonWasiKernelRuntime implements KernelRuntimeContractV2 {
   constructor(session: WasiSession, options?: { kernelRef?: string; engineId?: string | null; nativeProfile?: string;
+    threading?: import("./engineManifest.js").KernelThreadCapability | null;
     environmentId?: string | null;
     artifactStore?: ValueArtifactStore; valueLimits?: ValueEnvelopeLimits;
     checkpointCoordinator?: KernelCheckpointCoordinator;
@@ -400,6 +402,7 @@ export interface CpythonWasiKernelManifest extends WasiManifest {
   kernelRef?: string;
   engineId?: string;
   nativeProfile?: string;
+  threading?: import("./engineManifest.js").KernelThreadCapability | null;
   environmentId?: string;
   artifactStore?: ValueArtifactStore;
   valueLimits?: ValueEnvelopeLimits;

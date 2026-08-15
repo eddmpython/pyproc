@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { nativeProfileBuildInput } from "./nativeProfileCompiler.mjs";
+import { inspectWasmThreadCapability } from "./wasmThreadCapability.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOCK = JSON.parse(await readFile(join(SCRIPT_DIR, "engineBuildLock.json"), "utf8"));
@@ -34,9 +35,12 @@ async function verifyFolder(folder, requireProductionFlags, profileName) {
   const sbom = JSON.parse(await readFile(join(folder, "engine.cyclonedx.json"), "utf8"));
   const profileInput = await readFile(join(folder, "native-profile-build-input.json"), "utf8");
   if (profileInput !== compiledProfile.serialized) throw new Error("native profile build input differs from the locked compiler output");
-  if (manifest.protocol !== "pyproc.engine-build-manifest"
+  if (manifest.schemaVersion !== 2 || manifest.protocol !== "pyproc.engine-build-manifest"
     || manifest.engineId !== compiledProfile.input.engineId || manifest.nativeProfile !== profileName) {
     throw new Error("engine manifest identity mismatch");
+  }
+  if (JSON.stringify(manifest.threading) !== JSON.stringify(compiledProfile.input.threading)) {
+    throw new Error("engine manifest threading capability differs from the locked profile");
   }
   if (manifest.source.commit !== LOCK.cpython.commit || manifest.toolchain.wasiSdkVersion !== LOCK.wasiSdk.version) throw new Error("engine manifest pin mismatch");
   if (manifest.recipe.nativeProfileInputSha256 !== compiledProfile.sha256
@@ -72,6 +76,11 @@ async function verifyFolder(folder, requireProductionFlags, profileName) {
   for (const output of Object.values(manifest.outputs)) {
     const actual = await bytes(join(folder, output.file));
     if (actual.byteLength !== output.byteLength || sha256(actual) !== output.sha256) throw new Error(`declared artifact mismatch: ${output.file}`);
+  }
+  const observedThreading = inspectWasmThreadCapability(await bytes(join(folder, manifest.outputs.engine.file)));
+  if (observedThreading.memory.shared !== manifest.threading.sharedWasmMemory
+    || (observedThreading.threadSpawnImports.length > 0) !== manifest.threading.wasiThreadSpawn) {
+    throw new Error("engine binary threading substrate differs from its manifest");
   }
   if (requireProductionFlags) {
     const observed = manifest.recipe.observedMakeVariables.configureCflags || "";
