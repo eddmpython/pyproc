@@ -103,6 +103,7 @@ async function assertResolvedProfileConfig() {
     "BR2_TOOLCHAIN_BUILDROOT_CXX=y",
     "BR2_INSTALL_LIBSTDCPP=y",
     "BR2_PACKAGE_NODEJS=y",
+    "BR2_PACKAGE_OPENSSL=y",
     "BR2_PACKAGE_HOST_QEMU=y",
     "BR2_PACKAGE_HOST_QEMU_LINUX_USER_MODE=y",
   ];
