@@ -336,26 +336,25 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "localPythonParity",
-    score: 7.5,
+    score: 7.8,
     en: Object.freeze({
       title: "Everything local Python does",
-      state: "The package environment resolves standard metadata, hashes pure-Python wheels, installs them transactionally, and binds curated static native profiles to the engine identity. Arbitrary native wheels remain unsupported, and the GPU lane still has no headless adapter, so CI verifies the exact WGSL bytes rather than a hardware result.",
+      state: "The package environment resolves standard metadata, hashes pure-Python wheels, installs them transactionally, and binds curated static native profiles to the engine identity. The installed GPU subpath now verifies registered compute and rendered-pixel results on a real hardware adapter through the hostcall boundary. Arbitrary native wheels and broad scientific-package reach remain unsupported.",
       target: "Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology.",
     }),
     ko: Object.freeze({
       title: "로컬 파이썬이 하는 전부",
-      state: "package environment가 표준 metadata를 해석하고 pure Python wheel을 hash 검증해 transaction으로 설치하며 curated static native profile을 engine identity에 묶는다. 임의 native wheel은 지원하지 않고 GPU 레인은 headless adapter가 없어 CI는 hardware 결과 대신 정확한 WGSL bytes를 검증한다.",
+      state: "package environment가 표준 metadata를 해석하고 pure Python wheel을 hash 검증해 transaction으로 설치하며 curated static native profile을 engine identity에 묶는다. 설치 GPU subpath는 실제 hardware adapter와 hostcall 경계에서 등록된 compute와 rendered-pixel 결과를 검증한다. 임의 native wheel과 넓은 scientific package 도달 범위는 아직 지원하지 않는다.",
       target: "로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/browser/ownedEngineDataProduct.html", lane: "owned-engine" }),
       Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
+      Object.freeze({ path: "tests/browser/hardwareVisualOracleProduct.mjs", lane: "test:hardware-visual-oracle" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
-    manual: Object.freeze([
-      Object.freeze({ path: "tests/manualProbes/gpuPythonProbe.html", why: "headless CI has no WebGPU adapter, so shader byte identity is the ceiling" }),
-    ]),
+    manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
         id: "packageReach",
@@ -372,15 +371,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "agentBrowserAutomation",
-    score: 9.3,
+    score: 9.5,
     en: Object.freeze({
       title: "Browser eyes and hands for an agent",
-      state: "The exact-installed Control, MCP, FrameSpace, and Python paths share Situation, paged semantic inventory, durable locators, proof-carrying actions, provider-neutral action convergence, and resource accounting. A product gate repeats observe, screenshot, confirmed click, artifact deletion, detach, and target close 20 times and returns every owned resource, process, and temporary profile to baseline. The packed convergence gate binds every proof-carrying action to at most two candidates, one reobservation, zero effect retries, and 30 seconds before the first effect. Same-document stale and navigation replacement each send one verified effect, transient occlusion waits then sends one, and ambiguous or persistently occluded targets send zero. FrameSpace proves the same receipt and records one unknown effect attempt without retry.",
+      state: "The exact-installed Control, MCP, FrameSpace, and Python paths share Situation, paged semantic inventory, durable locators, proof-carrying actions, provider-neutral action convergence, and resource accounting. A product gate repeats observe, screenshot, confirmed click, artifact deletion, detach, and target close 20 times and returns every owned resource, process, and temporary profile to baseline. The packed convergence gate binds every proof-carrying action to at most two candidates, one reobservation, zero effect retries, and 30 seconds before the first effect. Same-document stale and navigation replacement each send one verified effect, transient occlusion waits then sends one, and ambiguous or persistently occluded targets send zero. FrameSpace proves the same receipt and records one unknown effect attempt without retry. A headed installed-package gate now verifies registered compute and rendered-pixel results on a nonfallback hardware adapter through two request-scoped GPU hostcalls.",
       target: "A Situation-to-effect loop that re-observes and rebinds across document changes, disambiguates targets, makes occluded targets interactable, never sends an unproven duplicate effect, and returns every owned resource to baseline within a fixed bound.",
     }),
     ko: Object.freeze({
       title: "agent의 브라우저 눈과 팔",
-      state: "정확히 설치한 Control, MCP, FrameSpace, Python 경로가 Situation, page 단위 의미 inventory, 내구 locator, 증거를 싣는 action, provider-neutral action 수렴과 자원 계수를 공유한다. 제품 gate는 관찰, screenshot, confirmed click, artifact 삭제, detach, target close를 20회 반복하고 소유 자원, process, 임시 profile을 모두 기준선으로 되돌린다. 설치 tarball 수렴 gate는 proof-carrying action마다 후보 최대 2개, 재관찰 최대 1회, effect retry 0회, 첫 effect 전 30초를 고정한다. 같은 문서 stale과 navigation 교체는 각각 검증된 effect 1회, 일시 가림은 기다린 뒤 1회, ambiguous와 지속 가림은 0회다. FrameSpace도 같은 영수증을 내고 outcome unknown effect 1회를 재시도하지 않음을 증명한다.",
+      state: "정확히 설치한 Control, MCP, FrameSpace, Python 경로가 Situation, page 단위 의미 inventory, 내구 locator, 증거를 싣는 action, provider-neutral action 수렴과 자원 계수를 공유한다. 제품 gate는 관찰, screenshot, confirmed click, artifact 삭제, detach, target close를 20회 반복하고 소유 자원, process, 임시 profile을 모두 기준선으로 되돌린다. 설치 tarball 수렴 gate는 proof-carrying action마다 후보 최대 2개, 재관찰 최대 1회, effect retry 0회, 첫 effect 전 30초를 고정한다. 같은 문서 stale과 navigation 교체는 각각 검증된 effect 1회, 일시 가림은 기다린 뒤 1회, ambiguous와 지속 가림은 0회다. FrameSpace도 같은 영수증을 내고 outcome unknown effect 1회를 재시도하지 않음을 증명한다. headed 설치 제품 gate는 nonfallback hardware adapter와 request-scoped GPU hostcall 2회로 등록된 compute와 rendered-pixel 결과를 검증한다.",
       target: "Situation에서 effect까지 document 교체를 다시 관찰하고 rebind하며, 대상을 명확히 고르고 occlusion을 해소하고, 증명되지 않은 effect를 중복 전송하지 않으며, 모든 소유 자원을 고정 상한 안에 기준선으로 되돌린다.",
     }),
     evidence: Object.freeze([
@@ -389,6 +388,7 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/browser/actionConvergenceProduct.mjs", lane: "test:action-convergence" }),
       Object.freeze({ path: "tests/browser/apxProduct.mjs", lane: "test:apx" }),
       Object.freeze({ path: "tests/browser/automationLifecycleProduct.mjs", lane: "test:automation-lifecycle" }),
+      Object.freeze({ path: "tests/browser/hardwareVisualOracleProduct.mjs", lane: "test:hardware-visual-oracle" }),
       Object.freeze({ path: "tests/browser/frameSpaceProduct.mjs", lane: "test:frame-space" }),
       Object.freeze({ path: "tests/browser/installedMcpProduct.mjs", lane: "test:mcp-product" }),
       Object.freeze({ path: "tests/pythonSdk/frameJourney.py", lane: "test:python-sdk" }),
@@ -396,9 +396,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "hardwareVisualOracle",
-        en: "Run the registered GPU and pixel-result oracles on a hardware adapter so visual and compute evidence no longer stop at exact command bytes",
-        ko: "등록된 GPU와 pixel 결과 oracle을 hardware adapter에서 실행해 visual과 compute 증거가 정확한 command byte에서 멈추지 않게 한다",
+        id: "multiVendorVisualConformance",
+        en: "Run the same result receipt on a second independent hardware and browser implementation and bind it into provider conformance",
+        ko: "같은 결과 영수증을 두 번째 독립 hardware와 browser 구현에서 실행하고 provider conformance에 묶는다",
       }),
     ]),
   }),
@@ -463,7 +463,7 @@ export const NORTH_STAR_BROWSER_LANES = Object.freeze([
   "test:browser", "test:installed", "test:examples", "test:mcp", "owned-engine",
   "test:mcp-product", "test:frame-space", "test:python-sdk", "test:apx",
   "test:automation-lifecycle", "test:preflight", "test:web-machine", "test:web-machine:v86",
-  "test:web-computer", "ci",
+  "test:web-computer", "test:hardware-visual-oracle", "ci",
 ]);
 
 /** 총점, 만점, 평균. 표의 숫자는 전부 여기서 나온다(손으로 더한 총점 = 표류의 씨앗). */

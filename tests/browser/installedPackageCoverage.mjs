@@ -1,11 +1,11 @@
 // Installed tarball browser coverage shared by the gate and its report.
-export const INSTALLED_PACKAGE_COVERAGE_VERSION = 3;
+export const INSTALLED_PACKAGE_COVERAGE_VERSION = 4;
 
 export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
   Object.freeze({
     gate: "package surface",
-    specifiers: Object.freeze(["`pyproc`", "`pyproc/runtime`", "`pyproc/history`", "`pyproc/machine`", "`pyproc/assets`", "`pyproc/wasi`"]),
-    publicSurface: Object.freeze(["`boot`", "`open`", "`createWebComputer`", "`checkEnvironment`", "owned kernel classes"]),
+    specifiers: Object.freeze(["`pyproc`", "`pyproc/runtime`", "`pyproc/history`", "`pyproc/machine`", "`pyproc/assets`", "`pyproc/wasi`", "`pyproc/gpu`"]),
+    publicSurface: Object.freeze(["`boot`", "`open`", "`createWebComputer`", "`checkEnvironment`", "owned kernel classes", "registered GPU oracle"]),
     contract: "The installed native ESM exports resolve without package-internal consumer imports",
   }),
   Object.freeze({

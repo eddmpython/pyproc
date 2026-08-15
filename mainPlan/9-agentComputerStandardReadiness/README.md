@@ -1,6 +1,6 @@
 # Initiative 9: agent computer와 웹 표준 후보 준비도
 
-상태: **진행 중, M0과 M1 완료, M2 진행 중**
+상태: **진행 중, M0부터 M2 완료, M3 진행 중**
 
 이 문서는 agent가 pyproc에 들어와 보고, 행동하고, 계산하고, 세션을 넘겨 계속 일하는 전 과정을
 제품 기준으로 끌어올리는 실행 원장이다. 기존 능력 점수와 증거의 정본은
@@ -14,10 +14,10 @@
 
 | 질문 | 현재 판정 | 실사용 증거 | 완성까지 남은 것 |
 |---|---|---|---|
-| agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | hardware GPU 결과 oracle과 이후 몸체 확대 |
-| 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.3 | APX Situation, 20회 무잔류 수명주기, stale, ambiguous, occluded, navigation의 2후보, 1재관찰, effect retry 0회 수렴 영수증 | 실제 GPU visual oracle 확대 |
-| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate | 임의 native wheel, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
-| 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, GPU 실기 CI, 브라우저 범위 확대 |
+| agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M3 컴퓨팅 몸체 확대와 독립 구현 conformance |
+| 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.5 | APX Situation, 20회 무잔류 수명주기, bounded action 수렴, 실제 hardware compute와 pixel 결과 영수증 | 두 번째 독립 hardware와 browser 구현의 visual conformance |
+| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 7.8 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate | 임의 native wheel, 넓은 package reach, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
+| 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
 
 첫 Pages 진입에서는 COI Service Worker가 문서를 실제 교체했다. 기존 affordance 실행은
@@ -95,7 +95,7 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 ### M2. Eyes와 Arms 장기 수명주기
 
-판정: **진행 중**
+판정: **완료**
 
 - 완료: legacy 의미 관찰을 같은 document epoch에 고정된 1,000개 이하 page로 순회한다. single-use
   continuation, 5분 TTL, 10,000 node와 16 MiB 전체 상한, page와 prefix 및 전체 digest, screenshot과 event
@@ -106,11 +106,14 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   packed Control 제품 20회와 NativeCdpSpace, FrameSpace, MCP, Python adapter가 0 수렴을 검증한다.
 - 완료: stale, ambiguous, occluded, navigation 교체를 후보 최대 2개, 재관찰 최대 1회, effect retry 0회,
   첫 effect 전 30000 ms로 고정한다. 성공과 안전 거절은 같은 version 1 영수증을 반환한다.
-- hardware GPU runner에서 pixel 결과 oracle을 추가해 수동 증거 상한을 제거한다.
+- 완료: installed `pyproc/gpu`의 닫힌 WebGPU provider를 hostcall 경계에 연결하고 실제 nonfallback
+  hardware에서 compute와 RGBA8 pixel 결과를 version 1 oracle receipt로 검증한다. adapter, buffer,
+  texture, target, process와 임시 profile을 모두 정리하며 software fallback과 결과 불일치는 RED다.
 
 ### M3. 컴퓨팅 몸체 확대
 
-- `tests/northStar.mjs`의 `localPythonParity`, `parallelProcesses`, `durableDisk` next를 순서대로 소진한다.
+- 진행 중: `tests/northStar.mjs`의 `localPythonParity.packageReach`부터 시작하고 `parallelProcesses`,
+  `durableDisk` next를 순서대로 소진한다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
 - wasm 도구층을 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
@@ -315,5 +318,31 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   지속 가림과 outcome unknown 1회 무재시도를 같은 영수증으로 증명한다.
 - action 수렴 gate 이빨: `ACTION_CONVERGENCE_MAX_ATTEMPTS`를 2에서 3으로 바꾼 음성 변형은
   `3 !== 2`를 보고 RED였고, 2로 복원한 같은 계약 gate는 GREEN이다.
-- 다음 직렬 작업: hardware GPU runner에서 pixel과 compute 결과 oracle을 실행해 정확한 command byte
-  검증에 머문 수동 증거 상한을 제거한다.
+- 다음 직렬 작업: 아래 7절의 hardware 결과 oracle을 완료한 뒤 M3 `packageReach`로 이동한다.
+
+## 7. 해결 판정: hardware visual과 compute 결과 oracle
+
+- 첫 불일치: exact packed `pyproc@0.0.22`의 `pyproc/gpu`는 기존 주입 adapter만 내보냈고
+  `createWebGpuHostAdapter`가 없었다. 반면 headed Edge의 raw WebGPU는 AMD RDNA 3 nonfallback adapter에서
+  vector `[5,2,5,1]`과 RGBA8 `[64,128,191,255]`를 오차 0으로 반환했다. 기존 수동 GPU probe 일곱 개는
+  삭제된 `GpuCompute`와 `enableGpu()`를 import했고 `tests/shaderDigests.json`은 어떤 gate도 읽지 않았다.
+- 제품 계약: `src/runtime/gpuOracle.js`가 등록된 WGSL, CPU expected value, digest와 typed mismatch를
+  소유한다. `src/capabilities/webGpuHostAdapter.js`는 `vectorAdd`와 `solidRgba8`만 받고 device, pipeline,
+  buffer, texture와 readback 수명을 소유한다. `pyproc/gpu`는 새 root나 subpath 없이 둘을 조립한다.
+- 설치 제품 증거: 빈 app에 설치한 tarball의 bare `pyproc/gpu`와 `pyproc/wasi`만 import했다. 공개 Control이
+  연 headed Edge에서 AMD RDNA 3, `isFallbackAdapter: false`, hostcall 2회를 확인했다. compute expected와
+  actual digest는 모두 `sha256:f30cec7be08a06afc4c889f52d2d8bcfb66cc66328187ce9bf30ced10e670fa8`,
+  pixel digest는 모두 `sha256:048402e9c4d980772355b55651974f77b1eca456a62116b54bfce1871d725ff1`,
+  두 결과 오차는 0이었다.
+- 시각 검수: terminal 화면 PNG는 922 x 920이고 adapter, compute error 0, pixel error 0, hostcall 2와
+  expected color swatch를 직접 확인했다. artifact SHA-256은
+  `ba2933ed74bfb66e8304c4cf32deb77b331d638b0427cb8be752c94451d8043a`다. 제품 gate는 Control artifact를
+  삭제하고 detach, target close, adapter close와 임시 profile 정리를 검증한다.
+- 지속 실행 경계: `.github/workflows/hardware-gpu.yml`은 `pyproc-webgpu` label의 interactive Windows
+  self-hosted runner에서 수동 dispatch하고 screenshot과 JSON을 artifact로 남긴다. 현재 증거는 로컬 MSI
+  hardware 실행이며 외부 self-hosted runner의 등록이나 workflow 실행은 아직 증거로 주장하지 않는다.
+- gate 이빨: expected pixel 첫 channel을 64에서 67로 바꾼 음성 변형은
+  `PYPROC_GPU_RESULT_MISMATCH`, `stage: pixel`, `maxChannelError: 3`으로 RED였다. 64로 복원한 같은
+  hardware oracle 계약은 GREEN이다.
+- 다음 직렬 작업: M3 `localPythonParity.packageReach`다. GPU 축 자체의 다음 ceiling은 두 번째 독립
+  hardware와 browser 구현에서 같은 receipt를 통과시키는 `multiVendorVisualConformance`로 남긴다.

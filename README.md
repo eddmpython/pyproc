@@ -107,6 +107,21 @@ const port = new ProductHostCapabilityPort({
 port.install(broker);
 ```
 
+Hardware WebGPU stays behind the same request-scoped boundary. `pyproc/gpu` exposes only registered
+operations and returns a versioned result receipt instead of exposing a device to the guest.
+
+```js
+import { createWebGpuHostAdapter, runHardwareVisualOracle } from "pyproc/gpu";
+
+const gpu = await createWebGpuHostAdapter({ requireHardware: true });
+try {
+  const receipt = await runHardwareVisualOracle(gpu);
+  console.log(receipt.state, receipt.adapter.class);
+} finally {
+  gpu.close();
+}
+```
+
 ## WebComputer
 
 `createWebComputer()` composes the owned kernel guest with WebMachine devices, signed images, ownership,
@@ -122,7 +137,7 @@ contract as root `boot()` and `open()`.
 | `pyproc/machine` | WebMachine host, devices, images, fleet, and kernel guest |
 | `pyproc/assets` | Same-origin worker asset manifest and integrity verification |
 | `pyproc/wasi` | Low-level session, kernel, hostcall, package, and factory contracts |
-| `pyproc/gpu` | GPU host adapter |
+| `pyproc/gpu` | Closed WebGPU host adapter and versioned hardware result oracle |
 | `pyproc/socket` | Socket relay host adapter |
 | `pyproc/control` | Local control protocol client and registries |
 

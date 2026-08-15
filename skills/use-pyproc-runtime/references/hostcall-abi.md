@@ -99,8 +99,10 @@ Clipboard read and write plus framebuffer publish occupy `0x0500` through `0x050
 `0x0700`.
 
 Every adapter is injected. The supplied browser factories bind Fetch, WebSocket relay, Clipboard,
-framebuffer publication, `GpuCompute`, `AsgiServer`, and a future `KernelFactory` without exposing those
-objects to Python. Authority is checked before the adapter is called. Effect providers use an explicit
+framebuffer publication, the installed `createWebGpuHostAdapter`, `AsgiServer`, and a future `KernelFactory`
+without exposing those objects to Python. The WebGPU adapter accepts only `vectorAdd` and `solidRgba8`, and
+`runHardwareVisualOracle` seals adapter identity plus compute and pixel digests in a version 1 receipt.
+Authority is checked before the adapter is called. Effect providers use an explicit
 send marker immediately before the adapter call, so invalid input and denial remain known not sent while
 cancellation after the call starts remains `outcomeUnknown`. Receipt identity still prevents duplicate
 external sends.
@@ -114,6 +116,8 @@ Open HTTP bodies, sockets, and processes are reported as forbidden checkpoint re
 disappear after exact drain or cancel, sockets after full close, and processes after terminal wait. A
 write-half-closed socket remains open and blocks checkpoint. GPU dispatch, clipboard operations,
 framebuffer publication, and ASGI exchange are request scoped and leave no live handle in the checkpoint.
+WebGPU buffers, textures, readback mappings, and the device are owned by the injected adapter and are closed
+without crossing the hostcall byte boundary.
 
 ## Cancellation and uncertain effects
 

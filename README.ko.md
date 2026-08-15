@@ -87,6 +87,21 @@ tag, `Requires-Python`, marker, yanked policy를 검사한다. 선별된 native 
 relay, ASGI, process, GPU, clipboard, framebuffer, artifact effect는 명시적 authority를 요구하고 version이
 있는 hostcall ABI를 지난다. Browser object와 live Python object는 durable state에 저장되지 않는다.
 
+hardware WebGPU도 같은 request-scoped 경계 뒤에 둔다. `pyproc/gpu`는 등록된 operation만 제공하고 guest에
+device를 노출하는 대신 versioned 결과 영수증을 반환한다.
+
+```js
+import { createWebGpuHostAdapter, runHardwareVisualOracle } from "pyproc/gpu";
+
+const gpu = await createWebGpuHostAdapter({ requireHardware: true });
+try {
+  const receipt = await runHardwareVisualOracle(gpu);
+  console.log(receipt.state, receipt.adapter.class);
+} finally {
+  gpu.close();
+}
+```
+
 ## WebComputer
 
 `createWebComputer()`는 소유 kernel guest와 WebMachine device, signed image, ownership, 선택적 durable
@@ -102,7 +117,7 @@ Machine image 계약을 사용한다.
 | `pyproc/machine` | WebMachine host, device, image, fleet, kernel guest |
 | `pyproc/assets` | same-origin worker asset manifest와 integrity 검증 |
 | `pyproc/wasi` | 저수준 session, kernel, hostcall, package, factory 계약 |
-| `pyproc/gpu` | GPU host adapter |
+| `pyproc/gpu` | 닫힌 WebGPU host adapter와 versioned hardware 결과 oracle |
 | `pyproc/socket` | Socket relay host adapter |
 | `pyproc/control` | Local control protocol client와 registry |
 

@@ -1,0 +1,42 @@
+# 실제 hardware WebGPU 결과 gate. 표준 hosted runner에는 GPU가 없으므로 interactive Windows
+# self-hosted runner에 pyproc-webgpu label을 명시적으로 붙인 경우에만 workflow_dispatch로 실행한다.
+name: hardware-gpu
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hardware-gpu-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  visual-oracle:
+    runs-on: [self-hosted, Windows, X64, pyproc-webgpu]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Hardware Edge 확인
+        shell: pwsh
+        run: |
+          $edge = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          if (-not (Test-Path -LiteralPath $edge -PathType Leaf)) {
+            throw "Microsoft Edge executable not found: $edge"
+          }
+          Write-Host "Microsoft Edge $((Get-Item -LiteralPath $edge).VersionInfo.ProductVersion)"
+      - run: npm run test:hardware-visual-oracle
+        env:
+          PYPROC_BROWSER: 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          PYPROC_HARDWARE_EVIDENCE_DIR: hardwareGpuEvidence
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: hardware-gpu-evidence
+          path: hardwareGpuEvidence
+          if-no-files-found: error

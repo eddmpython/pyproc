@@ -19,6 +19,8 @@
     "../src/composition/runtimeSubpath.d.ts",
     "../src/machine/index.d.ts",
     "../src/capabilities/productHostCapabilities.d.ts",
+    "../src/capabilities/webGpuHostAdapter.d.ts",
+    "../src/composition/gpuSubpath.d.ts",
     "../src/runtime/kernel/index.d.ts",
     "../src/composition/wasiSubpath.d.ts",
     "../src/state/index.d.ts",

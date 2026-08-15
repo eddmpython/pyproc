@@ -114,6 +114,12 @@ and `KernelMachine`.
 These subpaths export product host adapter factories. They do not grant authority or create a kernel by
 themselves.
 
+`pyproc/gpu` exports `createWebGpuHostAdapter`, `runHardwareVisualOracle`,
+`GPU_ORACLE_PROTOCOL`, and `GPU_ORACLE_VERSION`. The adapter accepts the closed `vectorAdd` and
+`solidRgba8` operation set. The oracle rejects software or unknown adapters by default and returns a receipt
+that binds adapter classification, expected and actual result digests, and bounded numeric error. The legacy
+`createGpuComputeHostAdapter` remains available for an already supplied GPU provider.
+
 ## Errors
 
 Branch on `error.code`, not message text. Integrity and identity errors are fail-closed. A terminated worker

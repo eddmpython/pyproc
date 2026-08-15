@@ -39,6 +39,7 @@ export type PyProcErrorCode =
   | "PYPROC_PARTICIPANT_LEFT"
   | "PYPROC_KERNEL_EXECUTION_ERROR"
   | "PYPROC_GPU_UNAVAILABLE"
+  | "PYPROC_GPU_RESULT_MISMATCH"
   | "PYPROC_INTERNAL";
 
 export const PYPROC_ERROR_CODES: readonly PyProcErrorCode[];

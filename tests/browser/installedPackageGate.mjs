@@ -51,6 +51,7 @@ const html = `<!doctype html>
     "pyproc/history":"/node_modules/pyproc/src/state/index.js",
     "pyproc/machine":"/node_modules/pyproc/src/machine/index.js",
     "pyproc/runtime":"/node_modules/pyproc/src/composition/runtimeSubpath.js",
+    "pyproc/gpu":"/node_modules/pyproc/src/composition/gpuSubpath.js",
     "pyproc/wasi":"/node_modules/pyproc/src/composition/wasiSubpath.js"
   }}</script>
 </head>
@@ -61,6 +62,7 @@ import * as assets from "pyproc/assets";
 import * as history from "pyproc/history";
 import * as machineApi from "pyproc/machine";
 import * as runtime from "pyproc/runtime";
+import * as gpu from "pyproc/gpu";
 import * as wasi from "pyproc/wasi";
 
 const checks = [];
@@ -75,7 +77,9 @@ try {
   check("installed plumbing subpaths resolve",
     typeof runtime.KernelFactory === "function" && typeof runtime.KernelSession === "function"
       && typeof runtime.KernelProcess === "function" && typeof wasi.getDefaultKernelEngineManifest === "function"
-      && typeof history.MemoryStateStore === "function" && typeof machineApi.createWebComputer === "function");
+      && typeof history.MemoryStateStore === "function" && typeof machineApi.createWebComputer === "function"
+      && typeof gpu.createWebGpuHostAdapter === "function" && typeof gpu.runHardwareVisualOracle === "function"
+      && gpu.GPU_ORACLE_PROTOCOL === "pyproc.hardwareVisualOracle" && gpu.GPU_ORACLE_VERSION === 1);
 
   const contract = assets.getPyProcAssetManifest({ baseURL: "/node_modules/pyproc/" });
   check("asset contract names the installed worker", contract.assets.length === 1

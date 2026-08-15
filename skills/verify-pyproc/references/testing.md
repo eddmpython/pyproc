@@ -40,6 +40,19 @@ integrity를 실제 WASM으로 검증한다.
 screenshot, artifact 삭제, detach와 target close를 반복한다. 모든 live owner count, Control process와 임시
 browser profile이 격리된 0 기준선으로 돌아와야 한다.
 
+실제 hardware compute와 pixel readback은 headed Edge에서 별도 gate로 실행한다.
+
+```powershell
+$env:PYPROC_BROWSER='C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+npm run test:hardware-visual-oracle
+```
+
+이 gate는 packed tarball의 `pyproc/gpu`와 `pyproc/wasi` 공개 specifier만 import하고 hardware adapter,
+두 GPU hostcall, compute digest, RGBA8 pixel digest, 자원 정리와 terminal screenshot을 판정한다.
+adapter 부재, software fallback, device loss, validation 오류와 결과 불일치는 SKIP 없이 RED다. 표준 hosted
+runner에는 hardware GPU가 없으므로 `.github/workflows/hardware-gpu.yml`은 `pyproc-webgpu` label을 가진
+interactive Windows self-hosted runner에서 수동 dispatch한다. workflow 등록 자체는 실행 증거가 아니다.
+
 ## Local server
 
 ```powershell

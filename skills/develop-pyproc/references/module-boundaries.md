@@ -38,6 +38,12 @@ The current clusters are:
 | `service` | Syscalls, ASGI, virtual origins, and terminals |
 | `environment` | Wheel cache, device filesystem, and init |
 
+The existing Experimental GPU surface follows the same direction. `src/runtime/gpuOracle.js` owns the
+provider-neutral registered programs, expected values, digest receipt, and mismatch error. The optional
+`src/capabilities/webGpuHostAdapter.js` owns WebGPU device, pipeline, buffer, texture, and readback lifecycle.
+`src/composition/gpuSubpath.js` only gathers those contracts under `pyproc/gpu`; it does not move a browser
+device or arbitrary WGSL across the hostcall boundary.
+
 ## Policy and mechanism
 
 Keep state-changing mechanisms separate from pure policy such as input normalization and budget checks.

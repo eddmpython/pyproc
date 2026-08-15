@@ -63,7 +63,7 @@ interrupted, and outcome-unknown terminals.
 | `pyproc/machine` | WebMachine host, device, image, and fleet contracts |
 | `pyproc/assets` | Worker graph and integrity verification |
 | `pyproc/wasi` | Low-level kernel, hostcall, VFS, package, and owned distribution contracts |
-| `pyproc/gpu` | GPU host adapter |
+| `pyproc/gpu` | Closed WebGPU host adapter and versioned hardware result oracle |
 | `pyproc/socket` | Socket relay host adapter |
 | `pyproc/control` | Local control protocol |
 

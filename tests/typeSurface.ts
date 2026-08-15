@@ -22,6 +22,7 @@ import {
 import { bootKernelMachine, KernelMachine } from "../src/machine/index.js";
 import { KernelProcess, KernelProcessManager } from "../src/processOs/kernelProcess.js";
 import { KernelSession } from "../src/session/kernelSession.js";
+import { createWebGpuHostAdapter, runHardwareVisualOracle } from "../src/composition/gpuSubpath.js";
 import {
   createEffectTransactionRegistry,
   createAppSpaceRegistry,
@@ -59,6 +60,21 @@ async function durableMachineSurface() {
   return inspection.protocol;
 }
 void durableMachineSurface;
+
+async function gpuSurface() {
+  const adapter = await createWebGpuHostAdapter({ requireHardware: true, powerPreference: "high-performance" });
+  const receipt = await runHardwareVisualOracle(adapter);
+  const protocol: "pyproc.hardwareVisualOracle" = receipt.protocol;
+  const version: 1 = receipt.version;
+  const operation: "solidRgba8" = receipt.pixel.operation;
+  void protocol;
+  void version;
+  void operation;
+  adapter.close();
+  // @ts-expect-error power preference is a closed WebGPU vocabulary
+  await createWebGpuHostAdapter({ powerPreference: "fastest" });
+}
+void gpuSurface;
 
 async function kernelValueSurface() {
   const hostBroker = new HostCapabilityBroker({ authorize: ({ capability }) => capability === "terminal.write" });

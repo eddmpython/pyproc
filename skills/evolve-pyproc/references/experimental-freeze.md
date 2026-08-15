@@ -19,6 +19,10 @@ driver나 wire operation을 추가하지 않고 packed install의 기존 Control
 승격한 사례다. 공개 예제 실행 대조, 독립 타입과 계약 gate, 실제 Chrome과 Edge installed browser
 gate, capability와 오류 경계, attempts의 rollback 기록을 같은 변경에서 갖췄다.
 
+`pyproc/gpu`는 2026-08-15에 새 subpath나 root export 없이 닫힌 WebGPU operation과 versioned hardware
+결과 oracle을 기존 표면에 더했다. packed install의 bare specifier, hostcall 경계, 실제 hardware compute와
+pixel readback, software fallback 거절, 타입과 결과 불일치 음성 gate를 함께 둔 안정화 사례다.
+
 동결 해제 조건은 전부 충족해야 한다.
 
 1. 공개 Markdown import 예제가 설치 package에 대해 실행 대조된다.

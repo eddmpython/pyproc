@@ -24,6 +24,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "engineIndependence.mjs",
   "executionMemory.mjs",
   "frameSpace.mjs",
+  "hardwareVisualOracle.mjs",
   "hostcallAbi.mjs",
   "kernelCheckpoint.mjs",
   "kernelFactory.mjs",

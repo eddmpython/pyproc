@@ -41,6 +41,7 @@ export const PYPROC_ERROR_CODES = Object.freeze([
   "PYPROC_PARTICIPANT_LEFT",     // participant 이탈
   "PYPROC_KERNEL_EXECUTION_ERROR", // 리더 실행 일반 오류
   "PYPROC_GPU_UNAVAILABLE",      // GPU 어댑터/디바이스 부재
+  "PYPROC_GPU_RESULT_MISMATCH",  // GPU compute 또는 pixel conformance 결과 불일치
   "PYPROC_INTERNAL",             // 그 밖의 내부 불변식 위반
 ]);
 

@@ -18,7 +18,7 @@
 ## 현재 상태
 
 현재 미완료 이니셔티브는 [9-agentComputerStandardReadiness](9-agentComputerStandardReadiness/README.md)다.
-M2의 wrong-effect 없는 action 수렴까지 완료했고 hardware GPU 결과 oracle부터 직렬로 이어간다.
+M2의 hardware GPU 결과 oracle까지 완료했고 M3의 `packageReach`부터 직렬로 이어간다.
 
 이 번호는 agent-computer 포트폴리오의 실행 순서다. North Star ceiling ladder의 기존 번호와 우선순위를
 대체하지 않는다.
