@@ -25,6 +25,32 @@ function verifyGoldenWorkflowImports(goldenPage, packageJson) {
   }
 }
 
+function verifyBuildrootWorkflow(recipe, workflow) {
+  if (!workflow.includes("npm run assets:buildroot -- --profile ${{ matrix.profile }}")) {
+    throw new Error("Buildroot profile 재현 배선 누락");
+  }
+  if (!/profile:\s*\[linux, node\]/.test(workflow)) throw new Error("Buildroot Linux와 Node matrix 누락");
+  if (!/uses:\s*actions\/upload-artifact@[0-9a-f]{40}\b/.test(workflow)) {
+    throw new Error("Buildroot artifact 보존 배선 누락");
+  }
+  if (!recipe.includes("sourceSha256") || recipe.includes('git", ["clone"')) {
+    throw new Error("Buildroot source가 검증된 release archive 계약이 아니다");
+  }
+  const imageNames = [...recipe.matchAll(/outputName:\s*"(buildroot-[\w.-]+\.bin)"/g)].map((match) => match[1]);
+  if (imageNames.join(",") !== "buildroot-pyproc-i686.bin,buildroot-pyproc-node-i686.bin") {
+    throw new Error(`Buildroot profile output 불일치: ${imageNames.join(",")}`);
+  }
+  if (!workflow.includes("manifest.output.name") || !workflow.includes("left.equals(right)")) {
+    throw new Error("Buildroot profile별 image 바이트 동일성 대조 누락");
+  }
+  if (!recipe.includes('version: "22.22.0"')
+    || !recipe.includes('revision: "6add85e4c46b8be383c8b637102d6b6fd206adce"')
+    || !recipe.includes('sourceSha256: "4c138012bb5352f49822a8f3e6d1db71e00639d0c36d5b6756f91e4c6f30b683"')
+    || !recipe.includes('"qemu-i386"')) {
+    throw new Error("Buildroot Node source 또는 runtime oracle 고정 누락");
+  }
+}
+
 export function assertModuleBoundaries() {
   const runtimeSubpath = readFileSync(join(ROOT, "src", "composition", "runtimeSubpath.js"), "utf8");
   if (!runtimeSubpath.includes("wasiSubpath.js") || runtimeSubpath.includes("runtimeBindings")) {
@@ -59,22 +85,11 @@ export function assertModuleBoundaries() {
   if (!caughtGoldenMapDrift) throw new Error("golden workflow import map 표류 음성 fixture를 놓쳤다");
 
   const buildrootWorkflow = readFileSync(join(ROOT, ".github", "workflows", "buildroot-guest.yml"), "utf8");
-  if (!buildrootWorkflow.includes("npm run assets:buildroot")) {
-    throw new Error("Buildroot Linux 재현 배선 누락");
-  }
-  // 공급망 입력은 exact commit이어야 하고, 별도 CI 배관 gate가 승인 SHA와 전수 대조한다.
-  if (!/uses:\s*actions\/upload-artifact@[0-9a-f]{40}\b/.test(buildrootWorkflow)) {
-    throw new Error("Buildroot artifact 보존 배선 누락");
-  }
   const buildrootRecipe = readFileSync(join(ROOT, "scripts", "buildroot", "buildGuest.mjs"), "utf8");
-  if (!buildrootRecipe.includes("sourceSha256") || buildrootRecipe.includes('git", ["clone"')) {
-    throw new Error("Buildroot source가 검증된 release archive 계약이 아니다");
-  }
-  // 이미지 파일명은 recipe가 정본이다. workflow가 다른 이름을 대조하면 재현 증거가 빈다.
-  const imageName = buildrootRecipe.match(/name:\s*"(buildroot-[\w.-]+\.bin)"/)?.[1];
-  if (!imageName) throw new Error("Buildroot recipe가 출력 이미지 이름을 manifest에 담지 않는다");
-  if (!new RegExp(`cmp[^\\n]*${imageName.replace(/\./g, "\\.")}`).test(buildrootWorkflow)) {
-    throw new Error("Buildroot 독립 빌드의 바이트 동일성 대조가 recipe 출력 이름과 어긋난다");
-  }
+  verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow);
+  let caughtNodeMatrixDrift = false;
+  try { verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow.replaceAll("profile: [linux, node]", "profile: [linux]")); }
+  catch (error) { caughtNodeMatrixDrift = String(error.message).includes("Node matrix"); }
+  if (!caughtNodeMatrixDrift) throw new Error("Buildroot Node matrix 음성 fixture를 놓쳤다");
   return true;
 }

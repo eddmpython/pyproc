@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Node guest RED probe</title>
+  <style>body{font:14px/1.5 system-ui;margin:2rem;max-width:62rem}pre{background:#f4f4f5;padding:1rem;border-radius:8px;white-space:pre-wrap}</style>
+</head>
+<body>
+<h1>Node guest RED probe</h1>
+<p>현재 source-pinned Linux image에 실제 Node CLI가 있는지 같은 guest lifecycle에서 확인한다.</p>
+<pre id="out">실행 중...</pre>
+<script type="module">
+  import { WebMachineHost, createV86GuestFactory } from "../../../src/machine/index.js";
+  import { V86 } from "../../webMachine/fixtures/v86/assets/libv86.mjs";
+  import { V86_ADAPTER_VERSION, createV86ProbeManifest } from "../../webMachine/fixtures/v86/config.js";
+
+  const out = document.getElementById("out");
+  const checks = [];
+  const check = (name, pass, info = "") => {
+    checks.push({ name, pass: !!pass, info: String(info) });
+    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+  };
+  const consoleLines = [];
+  const host = new WebMachineHost({
+    idFactory: () => "node-red-instance",
+    devices: { console: { kind: "console", write: (line) => consoleLines.push(String(line)) } },
+  });
+  host.registerAdapter("x86-node", createV86GuestFactory({
+    V86,
+    adapterVersion: `${V86_ADAPTER_VERSION}-node-red-v1`,
+  }));
+  const manifest = createV86ProbeManifest();
+  manifest.v86.engineTimeoutMs = 120000;
+  manifest.v86.options.wasm_path = "/tests/webMachine/fixtures/v86/assets/v86.wasm";
+  manifest.v86.options.bios.url = "/tests/webMachine/fixtures/v86/assets/seabios.bin";
+  manifest.v86.options.vga_bios.url = "/tests/webMachine/fixtures/v86/assets/vgabios.bin";
+  manifest.v86.options.bzimage.url = "/tests/webMachine/fixtures/v86/assets/buildroot-pyproc-i686.bin";
+  const machine = host.createMachine({
+    machineId: "nodeOs",
+    adapterId: "x86-node",
+    manifest,
+    permissions: { devices: ["console"] },
+  });
+
+  try {
+    await machine.boot();
+    const result = await machine.request({
+      type: "serial",
+      data: "node --version 2>&1 || echo PYPROC_NODE_ABSENT\n",
+      waitFor: "# ",
+      timeoutMs: 30000,
+    });
+    const version = result.match(/v\d+\.\d+\.\d+/)?.[0] || null;
+    check("real Node CLI", version === "v22.22.0", version || result.trim().slice(-240));
+  } catch (error) {
+    check("real Node CLI", false, String(error?.stack || error).slice(-800));
+  } finally {
+    try {
+      if (["running", "paused", "failed"].includes(machine.state)) await machine.shutdown();
+    } catch (cleanupError) {
+      check("clean shutdown", false, String(cleanupError));
+    }
+  }
+
+  const ok = checks.length > 0 && checks.every((entry) => entry.pass);
+  await fetch("/gateReport", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ok, checks, consoleLines }),
+  });
+</script>
+</body>
+</html>

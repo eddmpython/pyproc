@@ -128,6 +128,7 @@
     "assets:manifest": "node scripts/assetManifest.mjs --pretty",
     "assets:web-computer": "node scripts/prepareWebComputerAssets.mjs",
     "assets:buildroot": "node scripts/buildroot/buildGuest.mjs",
+    "assets:buildroot-node": "node scripts/buildroot/buildGuest.mjs --profile node",
     "assets:native-packages": "node scripts/nativePackageCatalog/buildNativePackageCatalog.mjs",
     "assets:wasm-tools": "node scripts/wasmToolBuilder/buildOwnedWasmTools.mjs --check",
     "serve": "node scripts/staticServer.mjs",

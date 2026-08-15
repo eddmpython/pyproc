@@ -11,9 +11,22 @@ Linux 또는 WSL에서 Buildroot 필수 host package를 설치한 뒤 실행한�
 npm run assets:buildroot
 ```
 
+실제 Node CLI를 포함한 별도 `node` profile은 같은 base config와 source epoch를 쓰고
+`node.fragment`만 추가한다. Buildroot catalog가 고정한 Node 22.22.0 source archive와 upstream
+revision을 manifest에 기록하며, target `node`를 QEMU user mode에서 실행한 version과 crypto workload가
+일치해야 build가 끝난다.
+
+```sh
+npm run assets:buildroot-node
+```
+
+두 profile은 별도 workspace와 output 이름을 써서 기존 Linux image를 조용히 교체하지 않는다. CI는
+각 profile을 두 격리 workspace에서 만들고 image, manifest, SBOM을 대조한다.
+
 산출물은 `.cache/buildrootGuest/dist/`에 생긴다.
 
 - `buildroot-pyproc-i686.bin`: initramfs가 포함된 v86용 bzImage
+- `buildroot-pyproc-node-i686.bin`: Node 22.22.0을 포함한 별도 v86용 bzImage
 - `build-manifest.json`: source/config/output digest 영수증
 - `buildroot.cyclonedx.json`: Buildroot `show-info` 기반 SBOM
 - `output/legal-info/`: source, license, manifest, 경고

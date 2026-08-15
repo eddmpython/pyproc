@@ -9,7 +9,41 @@ import { spawnSync } from "node:child_process";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDir, "..", "..");
-const workspace = resolve(process.env.PYPROC_BUILDROOT_WORKSPACE || join(root, ".cache", "buildrootGuest"));
+const profileIndex = process.argv.indexOf("--profile");
+const profileName = profileIndex >= 0 ? String(process.argv[profileIndex + 1] || "") : "linux";
+const NODE_RUNTIME = Object.freeze({
+  name: "node",
+  version: "22.22.0",
+  revision: "6add85e4c46b8be383c8b637102d6b6fd206adce",
+  repository: "https://github.com/nodejs/node.git",
+  sourceUrl: "https://nodejs.org/dist/v22.22.0/node-v22.22.0.tar.xz",
+  sourceSha256: "4c138012bb5352f49822a8f3e6d1db71e00639d0c36d5b6756f91e4c6f30b683",
+  oracle: Object.freeze({
+    source: "pyproc-node-guest",
+    sha256: "b3aed4be1f24f10fa77253e267fe69403144d97072cfe305c828a7ce0c8589c0",
+  }),
+});
+const PROFILES = Object.freeze({
+  linux: Object.freeze({
+    recipe: "pyproc-buildroot-i686-v2",
+    outputName: "buildroot-pyproc-i686.bin",
+    configFragments: Object.freeze([]),
+    runtime: null,
+  }),
+  node: Object.freeze({
+    recipe: "pyproc-buildroot-node-i686-v1",
+    outputName: "buildroot-pyproc-node-i686.bin",
+    configFragments: Object.freeze(["node.fragment"]),
+    runtime: NODE_RUNTIME,
+  }),
+});
+const profile = PROFILES[profileName];
+if (!profile) throw new Error(`지원하지 않는 Buildroot profile: ${profileName}`);
+if (profileIndex >= 0 && (!process.argv[profileIndex + 1] || process.argv.length !== profileIndex + 2)) {
+  throw new Error("--profile은 마지막 인자로 linux 또는 node 하나를 받는다");
+}
+const workspaceName = profileName === "linux" ? "buildrootGuest" : `buildrootGuest-${profileName}`;
+const workspace = resolve(process.env.PYPROC_BUILDROOT_WORKSPACE || join(root, ".cache", workspaceName));
 const sourceDir = join(workspace, "source");
 const outputDir = join(workspace, "output");
 const distDir = join(workspace, "dist");
@@ -33,12 +67,55 @@ function run(command, args, options = {}) {
     input: options.input,
     stdio: options.capture ? "pipe" : "inherit",
   });
-  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} 실패(${result.status})`);
+  if (result.status !== 0) {
+    const diagnostic = options.capture ? `\n${String(result.stderr || result.stdout || "").trim()}` : "";
+    throw new Error(`${command} ${args.join(" ")} 실패(${result.status})${diagnostic}`);
+  }
   return result;
 }
 
 async function sha256(path) {
   return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
+async function prepareConfig() {
+  const target = join(outputDir, ".config");
+  if (!profile.configFragments.length) {
+    await copyFile(configPath, target);
+    return [];
+  }
+  let config = await readFile(configPath, "utf8");
+  const fragments = [];
+  for (const name of profile.configFragments) {
+    const path = join(scriptDir, name);
+    const source = await readFile(path, "utf8");
+    config = `${config.replace(/\s*$/, "\n")}${source.replace(/^\s*/, "").replace(/\s*$/, "\n")}`;
+    fragments.push({ path: `scripts/buildroot/${name}`, sha256: await sha256(path) });
+  }
+  await writeFile(target, config);
+  return fragments;
+}
+
+function runRuntimeOracle() {
+  if (!profile.runtime) return null;
+  const qemu = join(outputDir, "host", "bin", "qemu-i386");
+  const targetDir = join(outputDir, "target");
+  const executable = join(targetDir, "usr", "bin", "node");
+  if (!existsSync(qemu) || !existsSync(executable)) throw new Error("Node runtime oracle executable이 없다");
+  const source = JSON.stringify(profile.runtime.oracle.source);
+  const program = [
+    "const crypto = require('node:crypto')",
+    `const sha256 = crypto.createHash('sha256').update(${source}).digest('hex')`,
+    "process.stdout.write(JSON.stringify({ version: process.version, sha256 }))",
+  ].join(";");
+  const stdout = run(qemu, ["-L", targetDir, executable, "-e", program], { capture: true }).stdout.trim();
+  let result;
+  try { result = JSON.parse(stdout); }
+  catch (error) { throw new Error(`Node runtime oracle JSON 불일치: ${stdout}`, { cause: error }); }
+  if (result.version !== `v${profile.runtime.version}` || result.sha256 !== profile.runtime.oracle.sha256) {
+    throw new Error(`Node runtime oracle 불일치: ${stdout}`);
+  }
+  return Object.freeze({ version: result.version, sha256: result.sha256 });
 }
 
 async function prepareSource() {
@@ -80,7 +157,7 @@ await rm(outputDir, { recursive: true, force: true });
 await rm(distDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 await mkdir(distDir, { recursive: true });
-await copyFile(configPath, join(outputDir, ".config"));
+const profileFragments = await prepareConfig();
 const sourceDateEpoch = String(BUILDROOT.sourceDateEpoch);
 const env = {
   ...process.env,
@@ -93,6 +170,7 @@ const env = {
 };
 run("make", [`O=${outputDir}`, "olddefconfig"], { cwd: sourceDir, env });
 run("make", [`O=${outputDir}`], { cwd: sourceDir, env });
+const runtimeOracle = runRuntimeOracle();
 run("make", [`O=${outputDir}`, "legal-info"], { cwd: sourceDir, env });
 const showInfo = run("make", [`O=${outputDir}`, "show-info"], { cwd: sourceDir, env, capture: true }).stdout;
 const sbom = run(join(sourceDir, "utils", "generate-cyclonedx"), [], {
@@ -102,7 +180,7 @@ const sbom = run(join(sourceDir, "utils", "generate-cyclonedx"), [], {
   capture: true,
 }).stdout;
 const imageSource = join(outputDir, "images", "bzImage");
-const imageTarget = join(distDir, "buildroot-pyproc-i686.bin");
+const imageTarget = join(distDir, profile.outputName);
 await copyFile(imageSource, imageTarget);
 await writeFile(join(distDir, "buildroot.cyclonedx.json"), sbom);
 const legalReadme = join(outputDir, "legal-info", "README");
@@ -118,12 +196,15 @@ const acceptedNotices = reportedLegalWarnings.filter((line) => acceptedLegalNoti
 const legalWarnings = reportedLegalWarnings.filter((line) => !acceptedLegalNotices.has(line));
 const manifest = {
   schemaVersion: 1,
-  recipe: "pyproc-buildroot-i686-v2",
+  recipe: profile.recipe,
+  ...(profileName !== "linux" ? { profile: profileName } : {}),
   buildroot: BUILDROOT,
+  ...(profile.runtime ? { runtime: profile.runtime, runtimeOracle } : {}),
   sourceDateEpoch: Number(sourceDateEpoch),
   config: {
     path: "scripts/buildroot/buildroot.config",
     sha256: await sha256(configPath),
+    ...(profileFragments.length ? { profileFragments } : {}),
     linuxFragment: {
       path: "scripts/buildroot/linux.fragment",
       sha256: await sha256(join(scriptDir, "linux.fragment")),
@@ -138,7 +219,7 @@ const manifest = {
     },
   },
   output: {
-    name: "buildroot-pyproc-i686.bin",
+    name: profile.outputName,
     byteLength: (await stat(imageTarget)).size,
     sha256: await sha256(imageTarget),
   },
