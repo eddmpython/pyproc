@@ -42,16 +42,24 @@ export async function assertSkillPerformance() {
   const fullSamples = await measure(3, () => validateSkillOs());
   const metrics = Object.freeze({ catalog: statistics(catalogSamples), search: statistics(searchSamples),
     read: statistics(readSamples), route1000: statistics(routeSamples), full: statistics(fullSamples) });
+  // Windows hosted runners and Defender-backed worktrees have wider filesystem and scheduler
+  // variance. Linux keeps the original ceilings; Windows gets bounded 1.5x release-lane margin.
+  const platformBudgetFactor = process.platform === "win32" ? 1.5 : 1;
 
-  assert(catalogSamples[0] <= 250 && metrics.catalog.medianMs <= 100,
+  assert(catalogSamples[0] <= 250 * platformBudgetFactor
+    && metrics.catalog.medianMs <= 100 * platformBudgetFactor,
     `catalog performance budget exceeded: ${JSON.stringify(metrics.catalog)}`);
-  assert(searchSamples[0] <= 20 && metrics.search.medianMs <= 5,
+  assert(searchSamples[0] <= 20 * platformBudgetFactor
+    && metrics.search.medianMs <= 5 * platformBudgetFactor,
     `search performance budget exceeded: ${JSON.stringify(metrics.search)}`);
-  assert(readSamples[0] <= 20 && metrics.read.medianMs <= 5,
+  assert(readSamples[0] <= 20 * platformBudgetFactor
+    && metrics.read.medianMs <= 5 * platformBudgetFactor,
     `read performance budget exceeded: ${JSON.stringify(metrics.read)}`);
-  assert(routeSamples[0] <= 50 && metrics.route1000.medianMs <= 20,
+  assert(routeSamples[0] <= 50 * platformBudgetFactor
+    && metrics.route1000.medianMs <= 20 * platformBudgetFactor,
     `path routing performance budget exceeded: ${JSON.stringify(metrics.route1000)}`);
-  assert(fullSamples[0] <= 2000 && metrics.full.medianMs <= 1000,
+  assert(fullSamples[0] <= 2000 * platformBudgetFactor
+    && metrics.full.medianMs <= 1000 * platformBudgetFactor,
     `full validation performance budget exceeded: ${JSON.stringify(metrics.full)}`);
   return metrics;
 }
