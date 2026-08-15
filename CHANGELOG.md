@@ -70,6 +70,16 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   revisions, one-shot cursor capabilities, deterministic path evaluation, coverage, retention planning, and
   installed JavaScript, Python, MCP, and Control parity share one durable root.
 
+### Fixed
+
+- Fatal MCP shutdown now resolves a held page long poll with `CONTROL_BRIDGE_CLOSED` before closing the HTTP
+  server. Duplicate request IDs still produce one fatal terminal and the process no longer waits on an abandoned
+  browser poll during Linux cleanup.
+- Native profile C sources and `Setup.local` inputs are pinned to LF checkout bytes. Their locked SHA-256 values
+  now validate identically on Windows and Linux before the reproducible CPython WASI build starts.
+- The GitHub Pages demo now establishes cross-origin isolation through its versioned service-worker bootstrap
+  before starting the owned kernel, while the no-header preflight continues to fail closed outside that entry.
+
 ### Compatibility
 
 - `apx.graph` 1.0 remains compatible and the situation representation is opt-in. The root export, package subpath,
@@ -108,6 +118,9 @@ effect outbox staging은 live send를 0회 수행하고 기존 Rehearse-Commit t
 ReplayGraph Worlds는 봉인된 recording과 exact AppSpace pair를 content-addressed node와 edge로 만든다.
 one-shot cursor와 pinned root에서 effect 없이 분기를 탐색하고 deterministic evaluation과 coverage를
 공유한다. graph 밖 transition은 생성하지 않으며 digest를 작성자 신원으로 해석하지 않는다.
+MCP fatal 종료는 보류 중인 page long poll을 명시적으로 닫고, 네이티브 프로필의 C와 Setup 입력은
+Windows와 Linux에서 같은 LF 바이트로 검증한다. GitHub Pages 데모는 versioned service worker로
+cross-origin isolation을 확보한 뒤 소유 커널을 시작한다.
 
 ## 0.0.21 - 2026-08-13
 
