@@ -7,9 +7,8 @@
 // ReferenceError와 PyProcError로 다르게 실패했다. 내용 주소는 값이 한 비트만 달라도 계약이
 // 깨지는 자리라 구현이 갈라지는 것 자체가 결함이다.
 //
-// pyprocSw.js는 이 파일을 쓰지 않는다: import 0인 자기충족 Service Worker 자산이라
-// 의존을 들이면 SW 등록 계약(단일 파일 fetch)이 깨진다. 그 중복은 의도된 것이고
-// 자산 매니페스트 graph가 그 사실을 게시한다.
+// 런타임 자산과 상태 객체는 이 구현을 공유한다. 브라우저와 Node의 SHA-256 결과를 같은
+// 주소 문법으로 봉인해야 asset manifest와 Machine image가 서로 다른 값을 만들지 않는다.
 import { PyProcError } from "./errors.js";
 
 function asBytes(data) {
@@ -44,18 +43,19 @@ export async function sha256HexWith(cryptoProvider, data) {
 
 // 정본 주소 형식은 "sha256:<hex>" 하나다(알고리즘 자기 기술형). bare hex는 살아있는 저장
 // 포맷(저널 blob 키, .pymachine 봉투 필드)의 인코딩 세부로만 남고, 판정은 코덱이 흡수한다.
+export const SHA256_ADDRESS_PREFIX = "sha256:";
 export const SHA256_ADDRESS_RE = /^sha256:[0-9a-f]{64}$/;
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 
 export async function sha256AddressWith(cryptoProvider, data) {
-  return "sha256:" + await sha256HexWith(cryptoProvider, data);
+  return SHA256_ADDRESS_PREFIX + await sha256HexWith(cryptoProvider, data);
 }
 
 // 주소/키 -> hex. "sha256:<hex>"와 bare hex(구 포맷 인코딩)를 모두 받는 유일한 지점이다.
 // 두 인코딩을 아는 곳이 여기 하나여야 형식 표류가 멈춘다. 그 외 값은 null(판정은 호출자 몫).
 export function parseSha256Address(value) {
   const s = String(value || "");
-  if (SHA256_ADDRESS_RE.test(s)) return s.slice("sha256:".length);
+  if (SHA256_ADDRESS_RE.test(s)) return s.slice(SHA256_ADDRESS_PREFIX.length);
   if (SHA256_HEX_RE.test(s)) return s;
   return null;
 }

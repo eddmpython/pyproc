@@ -1,13 +1,10 @@
-// engineInspection.js - local Pyodide distribution integrity inspection used by Machine Entrance doctor.
+// engineInspection.js - local owned CPython/WASI distribution integrity inspection.
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { PYODIDE_VERSION } from "../../src/runtime/pyodideDistribution.js";
-
-const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const CATALOG_PATH = join(PACKAGE_ROOT, "scripts", "assetCatalog.json");
+import { join, resolve } from "node:path";
+import { inspectDefaultKernelEngineDistribution }
+  from "../../src/runtime/engines/wasi/ownedEngineDistribution.js";
 
 async function sha256(path) {
   const hash = createHash("sha256");
@@ -30,43 +27,48 @@ async function verifiedFile(path, expected, label) {
     throw inspectionError("MACHINE_ENGINE_SIZE_MISMATCH", `${label} byteLength mismatch: ${path}`);
   }
   const actual = await sha256(path);
-  if (actual !== expected.sha256) {
+  const expectedSha256 = String(expected.sha256).replace(/^sha256:/u, "");
+  if (actual !== expectedSha256) {
     throw inspectionError("MACHINE_ENGINE_DIGEST_MISMATCH", `${label} SHA-256 mismatch: ${path}`);
   }
   return Object.freeze({ path, byteLength: facts.size, sha256: actual });
 }
 
-export async function inspectEngineDistribution(root, { catalogPath = CATALOG_PATH } = {}) {
+export async function inspectEngineDistribution(root) {
   const engineRoot = resolve(root);
-  let catalog;
-  try { catalog = JSON.parse(await readFile(catalogPath, "utf8")); }
-  catch (error) { throw inspectionError("MACHINE_ENGINE_CATALOG_INVALID", "installed engine catalog is unavailable or invalid"); }
-  const lockPath = join(engineRoot, "pyodide-lock.json");
-  let lock;
-  try { lock = JSON.parse(await readFile(lockPath, "utf8")); }
-  catch (error) { throw inspectionError("MACHINE_ENGINE_LOCK_INVALID", `engine lock is unavailable or invalid: ${lockPath}`); }
-  const version = PYODIDE_VERSION;
-  const component = catalog.assets?.filter((asset) => asset.componentId === `pyodide-release-${version}`
-    && asset.consumers?.includes("pyproc"));
-  if (!component?.length) {
-    throw inspectionError("MACHINE_ENGINE_VERSION_UNTRUSTED", `engine version is not pinned by this package: ${version || "unknown"}`);
+  const distribution = inspectDefaultKernelEngineDistribution();
+  const manifestPath = join(engineRoot, "engine-build-manifest.json");
+  let buildManifest;
+  try { buildManifest = JSON.parse(await readFile(manifestPath, "utf8")); }
+  catch (error) {
+    throw inspectionError("MACHINE_ENGINE_MANIFEST_INVALID",
+      `engine build manifest is unavailable or invalid: ${manifestPath}`);
   }
-  const core = [];
-  for (const asset of component) core.push(await verifiedFile(join(engineRoot, asset.name), asset, `engine core ${asset.name}`));
-  const packages = Object.values(lock.packages || {}).filter((entry) => entry?.file_name && entry?.sha256);
-  if (!packages.length) throw inspectionError("MACHINE_ENGINE_LOCK_EMPTY", "engine lock contains no verifiable packages");
-  let packageBytes = 0;
-  for (const entry of packages) {
-    const checked = await verifiedFile(join(engineRoot, entry.file_name), { sha256: entry.sha256 },
-      `engine package ${entry.file_name}`);
-    packageBytes += checked.byteLength;
+  if (buildManifest.engineId !== distribution.engineId
+    || buildManifest.source?.version !== distribution.pythonVersion
+    || buildManifest.target !== distribution.target) {
+    throw inspectionError("MACHINE_ENGINE_VERSION_UNTRUSTED",
+      `engine build identity does not match ${distribution.engineId}`);
   }
+  const buildManifestBytes = await readFile(manifestPath);
+  const buildManifestSha256 = `sha256:${createHash("sha256").update(buildManifestBytes).digest("hex")}`;
+  if (buildManifestSha256 !== distribution.buildManifestSha256) {
+    throw inspectionError("MACHINE_ENGINE_DIGEST_MISMATCH", "engine build manifest SHA-256 mismatch");
+  }
+  const artifacts = await Promise.all([
+    verifiedFile(join(engineRoot, "python.wasm"), distribution.artifacts.wasm, "engine core python.wasm"),
+    verifiedFile(join(engineRoot, "python314-stdlib.zip"), distribution.artifacts.stdlib,
+      "engine core python314-stdlib.zip"),
+  ]);
   return Object.freeze({
     root: engineRoot,
-    version,
-    coreAssets: core.length,
-    packages: packages.length,
-    byteLength: core.reduce((sum, asset) => sum + asset.byteLength, 0) + packageBytes,
+    engineId: distribution.engineId,
+    version: distribution.pythonVersion,
+    target: distribution.target,
+    coreAssets: artifacts.length,
+    packages: 0,
+    byteLength: artifacts.reduce((sum, asset) => sum + asset.byteLength, 0) + buildManifestBytes.byteLength,
+    buildManifestSha256,
     integrity: "verified",
   });
 }

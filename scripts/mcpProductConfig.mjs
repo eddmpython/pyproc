@@ -10,7 +10,7 @@ import {
 } from "./automationSpace/automationRecording.js";
 
 const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "replayGraph", "actuation", "timeoutMs"]);
-const ENGINE_KEYS = new Set(["root", "indexURL"]);
+const ENGINE_KEYS = new Set(["root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
@@ -34,7 +34,7 @@ const NATIVE_APPLICATION_KEYS = new Set(["applicationId", "executablePath", "win
 const NATIVE_INSTALLATION_KEYS = new Set(["hostPath", "sha256", "sourceSha256", "sbomSha256",
   "signature", "publicKey"]);
 const CONTROLLED_ENV = Object.freeze([
-  "PYPROC_MCP_ENGINE_ROOT", "PYPROC_INDEX_URL", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
+  "PYPROC_MCP_ENGINE_ROOT", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
   "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
@@ -86,37 +86,21 @@ function optionalBoolean(value, label, fallback = false) {
 function normalizedEngine(input) {
   const engine = plainObject(input, "engine");
   knownKeys(engine, ENGINE_KEYS, "engine");
-  if (Number(engine.root !== undefined) + Number(engine.indexURL !== undefined) !== 1) {
-    throw new TypeError("engine requires exactly one of root or indexURL");
+  if (typeof engine.root !== "string" || !isAbsolute(engine.root)) {
+    throw new TypeError("engine.root must be an absolute directory");
   }
-  if (engine.root !== undefined) {
-    if (typeof engine.root !== "string" || !isAbsolute(engine.root)) {
-      throw new TypeError("engine.root must be an absolute directory");
+  let root;
+  try { root = realpathSync(resolve(engine.root)); }
+  catch (error) { throw new TypeError(`engine.root is unavailable: ${engine.root}`); }
+  if (!statSync(root).isDirectory()) throw new TypeError("engine.root must be a directory");
+  for (const file of ["python.wasm", "python314-stdlib.zip", "engine-build-manifest.json"]) {
+    try {
+      if (!statSync(join(root, file)).isFile()) throw new Error("not a file");
+    } catch (error) {
+      throw new TypeError(`engine.root is missing ${file}`);
     }
-    let root;
-    try { root = realpathSync(resolve(engine.root)); }
-    catch (error) { throw new TypeError(`engine.root is unavailable: ${engine.root}`); }
-    if (!statSync(root).isDirectory()) throw new TypeError("engine.root must be a directory");
-    for (const file of ["pyodide.js", "pyodide-lock.json"]) {
-      try {
-        if (!statSync(join(root, file)).isFile()) throw new Error("not a file");
-      } catch (error) {
-        throw new TypeError(`engine.root is missing ${file}`);
-      }
-    }
-    return Object.freeze({ root });
   }
-  if (typeof engine.indexURL !== "string" || !engine.indexURL) {
-    throw new TypeError("engine.indexURL must be an absolute HTTP(S) URL");
-  }
-  let url;
-  try { url = new URL(engine.indexURL); }
-  catch (error) { throw new TypeError("engine.indexURL must be an absolute HTTP(S) URL"); }
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    throw new TypeError("engine.indexURL must be an HTTP(S) URL without credentials, query, or fragment");
-  }
-  if (!url.pathname.endsWith("/")) url.pathname += "/";
-  return Object.freeze({ indexURL: url.href });
+  return Object.freeze({ root });
 }
 
 function normalizedArtifacts(input = {}) {
@@ -469,8 +453,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   const env = { ...baseEnv };
   for (const key of CONTROLLED_ENV) delete env[key];
   env.PYPROC_MCP_TIMEOUT = String(config.timeoutMs);
-  if (config.engine.root) env.PYPROC_MCP_ENGINE_ROOT = config.engine.root;
-  else env.PYPROC_INDEX_URL = config.engine.indexURL;
+  env.PYPROC_MCP_ENGINE_ROOT = config.engine.root;
   if (config.executionMemory.enabled) {
     env.PYPROC_EXECUTION_MEMORY_ROOT = config.executionMemory.root;
     env.PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS = config.executionMemory.importRoots.join(delimiter);

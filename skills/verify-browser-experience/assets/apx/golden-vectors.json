@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "apx.interop/1",
+  "extensionPolicy": "rejectUnknown",
+  "canonicalVectors": [
+    {"id": "key-order", "value": {"b": 1, "a": 2}, "canonical": "{\"a\":2,\"b\":1}", "sha256": "d3626ac30a87e6f7a6428233b3c68299976865fa5508e4267c5415c76af7a772"},
+    {"id": "nested-negative-zero", "value": {"rect": {"height": 4, "width": 3, "y": 2, "x": 1}, "items": [true, null, -0.0]}, "canonical": "{\"items\":[true,null,0],\"rect\":{\"height\":4,\"width\":3,\"x\":1,\"y\":2}}", "sha256": "59a0f0167c7afa2c28cfa1c7018db0b9e1103e5124c2f23936c6c61a61ad5aaf"},
+    {"id": "number-boundaries", "value": {"fraction": 1.25, "smallFixed": 0.000001, "smallExponent": 1e-7, "largeFixed": 1e20, "largeExponent": 1e21}, "canonical": "{\"fraction\":1.25,\"largeExponent\":1e+21,\"largeFixed\":100000000000000000000,\"smallExponent\":1e-7,\"smallFixed\":0.000001}", "sha256": "bc132667c0610aabcef3c0ef4ddce1e263fa7c957a5d6dd165f525bb7278dd1e"},
+    {"id": "unicode-control", "value": {"한글": "값", "combining": "é", "control": "line\nbreak\tend"}, "canonical": "{\"combining\":\"é\",\"control\":\"line\\nbreak\\tend\",\"한글\":\"값\"}", "sha256": "eb2972597687707c4d84a4d414196016d410ec3f0fd653633d5fb6321ebbd684"}
+  ],
+  "candidateVectors": [
+    {"id": "one-complete-unique", "cardinality": "one", "enumeration": "complete", "matched": 1, "expectedState": "satisfied", "expectedAuthorized": true},
+    {"id": "one-incomplete-unique", "cardinality": "one", "enumeration": "incomplete", "matched": 1, "expectedState": "unknown", "expectedAuthorized": false},
+    {"id": "one-duplicate", "cardinality": "one", "enumeration": "complete", "matched": 2, "expectedState": "conflicted", "expectedAuthorized": false},
+    {"id": "many-unknown", "cardinality": "oneOrMore", "enumeration": "unknown", "matched": 3, "expectedState": "unknown", "expectedAuthorized": false}
+  ],
+  "verificationVectors": [
+    {"id": "direct-match-incomplete", "directMatch": true, "windowComplete": false, "expectedState": "confirmed"},
+    {"id": "absence-complete", "directMatch": false, "windowComplete": true, "expectedState": "notObserved"},
+    {"id": "absence-incomplete", "directMatch": false, "windowComplete": false, "expectedState": "ambiguous"},
+    {"id": "mismatch-complete", "directMatch": false, "directMismatch": true, "windowComplete": true, "expectedState": "contradicted"}
+  ],
+  "negativeEnvelopes": [
+    {"id": "schema-downgrade", "value": {"schemaVersion": "apx.interop/0", "extensionPolicy": "rejectUnknown"}, "expectedRejected": true},
+    {"id": "unknown-extension", "value": {"schemaVersion": "apx.interop/1", "extensionPolicy": "rejectUnknown", "vendorTruth": true}, "expectedRejected": true}
+  ]
+}

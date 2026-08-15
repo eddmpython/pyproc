@@ -1,0 +1,516 @@
+{
+  "format": "pyproc-skill-catalog",
+  "version": 1,
+  "generatedFromDigest": "sha256:3700caf89256d04ac10458b34761ca874c11324a59279a67c77786ee61e4c627",
+  "catalogDigest": "sha256:3050266485b8f8473d1f988db32a6229d3b166e952c63f76d0631c9acf0a8e1f",
+  "skills": [
+    {
+      "name": "automate-browser-with-pyproc",
+      "description": "Automate browser targets with PyProc Browser Control, AutomationSpace, FrameSpace, ReplaySpace, and actuation contracts. Use for browser observation, locators, screenshots, clicks, frames, replay, 브라우저 자동화, or trusted input.",
+      "path": "skills/automate-browser-with-pyproc/SKILL.md",
+      "sha256": "sha256:89dd585b30e856e400d6d6fb85afc2960410256eafc8f18af59f8b11e6951244",
+      "bytes": 1402,
+      "references": [
+        "references/actuation.md",
+        "references/automation-space.md",
+        "references/browser-automation.md",
+        "references/frame-space.md",
+        "references/replay-space.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "benchmark-pyproc",
+      "description": "Run, compare, and interpret PyProc runtime and browser benchmarks with controlled fixtures and evidence budgets. Use for performance investigation, baseline updates, speed regression, 벤치마크, or measurement review.",
+      "path": "skills/benchmark-pyproc/SKILL.md",
+      "sha256": "sha256:a9bf55b454f5d5527a7743ef4eadc5464f9c7b4813a1b1df2765e2e35ea2bf40",
+      "bytes": 1051,
+      "references": [
+        "references/benchmarking.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "commit-pyproc-effects",
+      "description": "Rehearse, approve, commit, inspect, retry safely, and seal one-shot PyProc effect transactions. Use for external effects, effect approval, rehearse commit, one-shot action, 외부 효과, or evidence sealing.",
+      "path": "skills/commit-pyproc-effects/SKILL.md",
+      "sha256": "sha256:7e9202ae4deeba2758b68bfe41678e0f3196069c64fe35a3536ba1b6edf5d7f0",
+      "bytes": 1156,
+      "references": [
+        "references/rehearse-commit.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "control-pyproc",
+      "description": "Control PyProc through JavaScript, Python SDK, CLI, and MCP using the versioned control protocol, cancellation, attachment, authority, and terminal contracts. Use for control client code, python SDK, MCP tools, 제어 프로토콜, or automation transport.",
+      "path": "skills/control-pyproc/SKILL.md",
+      "sha256": "sha256:f340299a04e87ffbb776724f63466f8be765269c631392718ca31b3488c4b434",
+      "bytes": 1458,
+      "references": [
+        "references/control-protocol.md",
+        "references/javascript-control.md",
+        "references/python-sdk.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "develop-pyproc",
+      "description": "Develop and review PyProc source within its module boundaries, operating model, contribution workflow, and repository safety rules. Use when implementing, refactoring, debugging, reviewing code, 개발, or changing architecture.",
+      "path": "skills/develop-pyproc/SKILL.md",
+      "sha256": "sha256:9f33a081422286741bb32fc2d8a2fac30ba42f9d940041fa9482b14a9f950966",
+      "bytes": 1257,
+      "references": [
+        "references/module-boundaries.md",
+        "references/operating-model.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "evolve-pyproc",
+      "description": "Evolve PyProc contracts through reality audits, consumer feedback, experimental freeze, initiatives, attempts, and evidence-based promotion. Use for roadmap decisions, contract gaps, feedback intake, 계획, or capability graduation.",
+      "path": "skills/evolve-pyproc/SKILL.md",
+      "sha256": "sha256:c28759ba5a6e5a2b4436a1c4774e7400cb65a5e5c168b12c1a556182541d3340",
+      "bytes": 1389,
+      "references": [
+        "references/consumer-feedback.md",
+        "references/contract-reality.md",
+        "references/experimental-freeze.md",
+        "references/initiative-lessons.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "explore-pyproc-replays",
+      "description": "Explore PyProc ReplayGraph worlds, branches, recordings, coverage, dead ends, provenance, and counterfactual replays. Use for replay graph inspection, branch exploration, world coverage, 리플레이 탐색, or recorded evidence.",
+      "path": "skills/explore-pyproc-replays/SKILL.md",
+      "sha256": "sha256:7fb592c13c4b4fcb1ae45287ca1cb0b758d50249cc21933ff4f499a00ab77db9",
+      "bytes": 1090,
+      "references": [
+        "references/replay-graph.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "manage-pyproc-assets",
+      "description": "Manage PyProc generated runtime assets, catalogs, SBOM, provenance, integrity, and deterministic rebuilds. Use when asset bytes, digests, manifests, engine artifacts, provenance, 생성 자산, or package assets change.",
+      "path": "skills/manage-pyproc-assets/SKILL.md",
+      "sha256": "sha256:86c6a90afb6f3ee4f2eff7373eda95c11443a8b0c9b289c74957977d6a491ba3",
+      "bytes": 1080,
+      "references": [
+        "references/asset-provenance.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "reference-pyproc-api",
+      "description": "Reference exact PyProc public JavaScript APIs, TypeScript surfaces, package subpaths, protocols, and bundle format fields. Use for API lookup, signature review, bundle schema, type contract, API 참조, or exact field questions.",
+      "path": "skills/reference-pyproc-api/SKILL.md",
+      "sha256": "sha256:0c88b89a6b822e4f9b12c4649fddd07b0efa3b5b83396276ebf08bc41c15a148",
+      "bytes": 1195,
+      "references": [
+        "references/api.md",
+        "references/bundle-format.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "ship-pyproc",
+      "description": "Package, release, publish, and host PyProc with exact version, provenance, clean-install, demo, and rollback verification. Use for npm pack, release preparation, 배포, publishing, or demo hosting.",
+      "path": "skills/ship-pyproc/SKILL.md",
+      "sha256": "sha256:d60f7bd4e5502d13541884a9fba4d3db3c6808de37d22024b3b0f1316bf2377c",
+      "bytes": 1117,
+      "references": [
+        "references/demo-hosting.md",
+        "references/release.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "start-pyproc",
+      "description": "Route PyProc tasks and changed repository paths to the required skill knowledge and verification gates. Use for first entry, task routing, changed-path review, 작업 라우팅, or when the correct PyProc workflow is unclear.",
+      "path": "skills/start-pyproc/SKILL.md",
+      "sha256": "sha256:278e498f53d44c3eb5bc521d5fe257b7b2c206a183a768ea5d266375b2ff7b85",
+      "bytes": 1378,
+      "references": [
+        "references/entry-map.md",
+        "references/path-routing.md",
+        "references/skill-os-contract.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "transact-pyproc-app-state",
+      "description": "Transact PyProc AppSpace logical application state with paired generations, preconditions, conflicts, evidence, and durable revisions. Use for app state mutation, AppSpace, application transaction, 상태 트랜잭션, or paired state.",
+      "path": "skills/transact-pyproc-app-state/SKILL.md",
+      "sha256": "sha256:01c9f5d09134ad9f86ab429155ae4d5c31f695a581bf0acca333d6dd2cfb17e4",
+      "bytes": 1030,
+      "references": [
+        "references/app-space.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "understand-pyproc",
+      "description": "Understand and explain PyProc product vision, concepts, glossary, browser support, runtime capabilities, and compatibility boundaries. Use for architecture orientation, capability questions, 제품 이해, or terminology.",
+      "path": "skills/understand-pyproc/SKILL.md",
+      "sha256": "sha256:0e7d24176f079c3e2640491a89cf1ab997c90fc70ebed241963c11173618a8fe",
+      "bytes": 1176,
+      "references": [
+        "references/capability-matrix.md",
+        "references/glossary.md",
+        "references/vision.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "use-pyproc-machine",
+      "description": "Use PyProc Machine and WebComputer lifecycle, fleet, checkpoint, resume, execution memory, signed image, trust, permission, and persistence contracts. Use for createWebComputer, machine restore, portable state, fleet, resume, 머신, or trust review.",
+      "path": "skills/use-pyproc-machine/SKILL.md",
+      "sha256": "sha256:37302185546451aee077083abd5007b7ff7e548a057ba4bf6c0b64283967ce91",
+      "bytes": 1392,
+      "references": [
+        "references/execution-memory.md",
+        "references/machine-entrance.md",
+        "references/machine-fleet.md",
+        "references/resume-catalog.md",
+        "references/trust-permissions.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "use-pyproc-runtime",
+      "description": "Install and use the owned CPython WASI PyProc runtime, platform requirements, kernel protocols, packages, hostcalls, native profiles, checkpoints, and value transfer. Use for clean install, first Python run, runtime API, WASI, 패키지 환경, or compatibility.",
+      "path": "skills/use-pyproc-runtime/SKILL.md",
+      "sha256": "sha256:690bdc4b7a460273e781413f528e87e7142497b3d0f059dbedd5f9055442fb35",
+      "bytes": 1546,
+      "references": [
+        "references/consumer-contract.md",
+        "references/hostcall-abi.md",
+        "references/kernel-contracts.md",
+        "references/native-profiles.md",
+        "references/package-environment.md",
+        "references/platform-requirements.md",
+        "references/value-envelope.md"
+      ],
+      "scripts": [],
+      "assets": []
+    },
+    {
+      "name": "verify-browser-experience",
+      "description": "Verify browser experiences with APX observations, situations, action evidence, perceptual claims, Evidence Packs, replay, and independent interop vectors. Use for visual QA, experience audit, APX, screenshot evidence, 눈검수, or postcondition verification.",
+      "path": "skills/verify-browser-experience/SKILL.md",
+      "sha256": "sha256:d90bd64f8c07b9c5c7e16451300f513d65163bd7489444d5f82cf8502efafb99",
+      "bytes": 1401,
+      "references": [
+        "references/apx.md",
+        "references/interop.md",
+        "references/situation-capsule.md",
+        "references/verification.md"
+      ],
+      "scripts": [],
+      "assets": [
+        "assets/apx/action-evidence.json",
+        "assets/apx/delta-observation.json",
+        "assets/apx/full-observation.json",
+        "assets/apx/golden-vectors.json",
+        "assets/apx/proof-carrying-action.json",
+        "assets/apx/situation-conflict.json",
+        "assets/apx/situation-unknown.json"
+      ]
+    },
+    {
+      "name": "verify-pyproc",
+      "description": "Verify PyProc changes, select required Node, type, package, browser, installed, and product gates, and diagnose contract drift. Use for testing, CI failures, verification review, 테스트, or changed-path gate selection.",
+      "path": "skills/verify-pyproc/SKILL.md",
+      "sha256": "sha256:19872f0e7045dcd89791fbca590b04109e8fd4a6cdda965b23cb451b4119411d",
+      "bytes": 1173,
+      "references": [
+        "references/testing.md"
+      ],
+      "scripts": [],
+      "assets": []
+    }
+  ],
+  "resources": [
+    {
+      "path": "skills/automate-browser-with-pyproc/references/actuation.md",
+      "bytes": 21084,
+      "sha256": "sha256:ef538faf22f05c33bd304eae40a2d2dec9dfd6b3567cf880265be37aab8f725e"
+    },
+    {
+      "path": "skills/automate-browser-with-pyproc/references/automation-space.md",
+      "bytes": 8683,
+      "sha256": "sha256:8cbe7e473bf4923a766b318f2a246403adbb5c4dc519bb596b3d9b0e44ce50d5"
+    },
+    {
+      "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
+      "bytes": 24898,
+      "sha256": "sha256:e4d1521aa7e437d9518b8a70f688d5df74dbd27a72f5acd65d9a249240ff1e84"
+    },
+    {
+      "path": "skills/automate-browser-with-pyproc/references/frame-space.md",
+      "bytes": 6629,
+      "sha256": "sha256:b1fa99a1afe889e93281946a10d7e94ca1fe2289a278c69a9a5f805b93372224"
+    },
+    {
+      "path": "skills/automate-browser-with-pyproc/references/replay-space.md",
+      "bytes": 10246,
+      "sha256": "sha256:532051400bd3b0a37076219388bc601a7cc33152f547a505699e5b751c6550b4"
+    },
+    {
+      "path": "skills/benchmark-pyproc/references/benchmarking.md",
+      "bytes": 9747,
+      "sha256": "sha256:9bf5b28ccd58540768de3b1e8a97cd396c15248006fe3dd5a4f657b129ae6dd4"
+    },
+    {
+      "path": "skills/commit-pyproc-effects/references/rehearse-commit.md",
+      "bytes": 23161,
+      "sha256": "sha256:1db925b8a4869a5df11da96e5c13fd4a48b8b080cb7a9e8294d4da222130b63f"
+    },
+    {
+      "path": "skills/control-pyproc/references/control-protocol.md",
+      "bytes": 17721,
+      "sha256": "sha256:a0cfd3bf7a32384ead125c19e0c5d53ebc52bb11fa95a476bc76425ccf77c497"
+    },
+    {
+      "path": "skills/control-pyproc/references/javascript-control.md",
+      "bytes": 13418,
+      "sha256": "sha256:a8039207d55f0bd8188702566733adf58f430ce18ea1c4612d1b7c172f3918ea"
+    },
+    {
+      "path": "skills/control-pyproc/references/python-sdk.md",
+      "bytes": 14967,
+      "sha256": "sha256:8bf700408f7cd8c580b49c41a72fc6c458c3b68e30af26b176311c291442def3"
+    },
+    {
+      "path": "skills/develop-pyproc/references/module-boundaries.md",
+      "bytes": 13532,
+      "sha256": "sha256:db34fe81b93a63a58030e59aa3d715e13989db67906db3b82f410b118eb478a0"
+    },
+    {
+      "path": "skills/develop-pyproc/references/operating-model.md",
+      "bytes": 6506,
+      "sha256": "sha256:c458d39ed56a13225513e8af33a19d0d574fb08f79a460f6fd41f7a136e6bc23"
+    },
+    {
+      "path": "skills/evolve-pyproc/references/consumer-feedback.md",
+      "bytes": 6188,
+      "sha256": "sha256:c6ac1742ae6c7a69f705bd88b7e74274e828bc45571c29149a6b212b5b5d990e"
+    },
+    {
+      "path": "skills/evolve-pyproc/references/contract-reality.md",
+      "bytes": 1431,
+      "sha256": "sha256:26630b8231020473fd43620aeef7c3f2ea7a355d7a19ddcf90e964eb75dee26f"
+    },
+    {
+      "path": "skills/evolve-pyproc/references/experimental-freeze.md",
+      "bytes": 1791,
+      "sha256": "sha256:1e4fd4f5a9deb1586a0ec79285185ee2f3236a4d87b5ed618ea0267d926d80e6"
+    },
+    {
+      "path": "skills/evolve-pyproc/references/initiative-lessons.md",
+      "bytes": 1650,
+      "sha256": "sha256:aaf280332ac808047d976290de7a2d4ed1bd17cf824fc94efdcd6b8323d6c709"
+    },
+    {
+      "path": "skills/explore-pyproc-replays/references/replay-graph.md",
+      "bytes": 14877,
+      "sha256": "sha256:41539e5587e6dc43b09e9fccb8a9d1a314bd29899e7ae78fbf170957df1542d0"
+    },
+    {
+      "path": "skills/manage-pyproc-assets/references/asset-provenance.md",
+      "bytes": 1911,
+      "sha256": "sha256:7a8c3cfb53ef920319e87d848da6a724a7589367e23a7f46ba88d6f016b025f3"
+    },
+    {
+      "path": "skills/reference-pyproc-api/references/api.md",
+      "bytes": 4072,
+      "sha256": "sha256:f8cb3812c80595fd28b9f73d84056218ea47970e7fff2da6f6338b49ec04835f"
+    },
+    {
+      "path": "skills/reference-pyproc-api/references/bundle-format.md",
+      "bytes": 3423,
+      "sha256": "sha256:fac4eac207fa6f2c9feee0baac8e77d4f2b3461a56edfd9cc97d0378b559791c"
+    },
+    {
+      "path": "skills/ship-pyproc/references/demo-hosting.md",
+      "bytes": 765,
+      "sha256": "sha256:293510dad4f0261ad44ab0748f2ddf419aca42887c3967e358ca8fbc00ce9f52"
+    },
+    {
+      "path": "skills/ship-pyproc/references/release.md",
+      "bytes": 1169,
+      "sha256": "sha256:ddc0632de2c64b741d5394b0d599b9c25dbfd3079131ba11972be77f05b07eac"
+    },
+    {
+      "path": "skills/start-pyproc/references/entry-map.md",
+      "bytes": 2140,
+      "sha256": "sha256:973e8dc0f3537d0e3e2a9a666e845918c8225520e80f0a52ff1cafb5b28523a1"
+    },
+    {
+      "path": "skills/start-pyproc/references/path-routing.md",
+      "bytes": 4235,
+      "sha256": "sha256:6cddd7b697d4fc1dbbf4f2ce0df6f5dbd121e44f1f51a61822507a326c7da841"
+    },
+    {
+      "path": "skills/start-pyproc/references/skill-os-contract.md",
+      "bytes": 3505,
+      "sha256": "sha256:878180577c8df556111ca1f061e58941f9be9e84d94f3432991e7b97ffbf56cc"
+    },
+    {
+      "path": "skills/transact-pyproc-app-state/references/app-space.md",
+      "bytes": 17480,
+      "sha256": "sha256:20456153aa33fe25ad5707b797dbe349b5ce120d90a7d212a2f935545ab24ae9"
+    },
+    {
+      "path": "skills/understand-pyproc/references/capability-matrix.md",
+      "bytes": 1781,
+      "sha256": "sha256:f2ffa08d67019a3a22b8938c6fb03cb874644685a064ac320622ced1806eedf6"
+    },
+    {
+      "path": "skills/understand-pyproc/references/glossary.md",
+      "bytes": 2991,
+      "sha256": "sha256:2cada542af20d35c820182644d9cb7164b81d19b0393ea3956acd4b87061c929"
+    },
+    {
+      "path": "skills/understand-pyproc/references/vision.md",
+      "bytes": 2634,
+      "sha256": "sha256:612c86dda52b83e343b91dfa882feab28b8680d1fb4519378dcc226820701e32"
+    },
+    {
+      "path": "skills/use-pyproc-machine/references/execution-memory.md",
+      "bytes": 16245,
+      "sha256": "sha256:177cb53b951e7a39100635c8fe018dc83aed137157fecfb17048bdb1d17dd672"
+    },
+    {
+      "path": "skills/use-pyproc-machine/references/machine-entrance.md",
+      "bytes": 8896,
+      "sha256": "sha256:f86431134980d6e9b8fcde47fe87057be63865b5213b6b9d39964c47e10ec201"
+    },
+    {
+      "path": "skills/use-pyproc-machine/references/machine-fleet.md",
+      "bytes": 15716,
+      "sha256": "sha256:2e88cc950d7ccfc2ef59a6bdb52e56858b35417b32bbedfbc184f711973e6592"
+    },
+    {
+      "path": "skills/use-pyproc-machine/references/resume-catalog.md",
+      "bytes": 4158,
+      "sha256": "sha256:5b1d39f4b73d05f6be2f2a8cc8e38a3f2090d0ec987219ff160eb536803312ea"
+    },
+    {
+      "path": "skills/use-pyproc-machine/references/trust-permissions.md",
+      "bytes": 9693,
+      "sha256": "sha256:172e0dcec0190a2e7aeb258100dba9ffc99f4f4ad587543bbd2fb3720a60047a"
+    },
+    {
+      "path": "skills/use-pyproc-runtime/references/consumer-contract.md",
+      "bytes": 3155,
+      "sha256": "sha256:03234c262c681f4614b41caf94d73fcc1bd48e63c17592a7ce42b6b757fae321"
+    },
+    {
+      "path": "skills/use-pyproc-runtime/references/hostcall-abi.md",
+      "bytes": 8187,
+      "sha256": "sha256:6c366bf08c5eccf667b479eaa3c81f727b1e6742e5a03fe66e712a298d4d642f"
+    },
+    {
+      "path": "skills/use-pyproc-runtime/references/kernel-contracts.md",
+      "bytes": 15543,
+      "sha256": "sha256:f4e5d12f847fb09a995c249a3a1a1363cd0066abc5630204ed79d5f5572548e6"
+    },
+    {
+      "path": "skills/use-pyproc-runtime/references/native-profiles.md",
+      "bytes": 2197,
+      "sha256": "sha256:87c6ec0ba919436aadc8d58e49bc417653d6354ab8dd136336f251068f391c55"
+    },
+    {
+      "path": "skills/use-pyproc-runtime/references/package-environment.md",
+      "bytes": 3129,
+      "sha256": "sha256:afd589043a071b60874c939894cdfda0640b9a2cf535c2a63f802c9a9388111a"
+    },
+    {
+      "path": "skills/use-pyproc-runtime/references/platform-requirements.md",
+      "bytes": 1252,
+      "sha256": "sha256:d39788244948ae96c388407caea3370dd95d8981b8d4d552e79902414fde72d4"
+    },
+    {
+      "path": "skills/use-pyproc-runtime/references/value-envelope.md",
+      "bytes": 4129,
+      "sha256": "sha256:155a6e4465b6574ec3e1780cd336d8541c8bc4b12744946d62d6154bd65ae613"
+    },
+    {
+      "path": "skills/verify-browser-experience/assets/apx/action-evidence.json",
+      "bytes": 1179,
+      "sha256": "sha256:652c1b0b773ab88d58d222a771c151f6a0da7ae154800c17473f992d47980df0"
+    },
+    {
+      "path": "skills/verify-browser-experience/assets/apx/delta-observation.json",
+      "bytes": 1877,
+      "sha256": "sha256:78c1f5a1c1d479c34e6ab7c85b1ca4bcf1a3bc86a59a4a2befa19b817d102749"
+    },
+    {
+      "path": "skills/verify-browser-experience/assets/apx/full-observation.json",
+      "bytes": 2177,
+      "sha256": "sha256:351a1e20e307313ca7326e49da8f07b79cfad2488c3fa296d9b8efb551d24cf3"
+    },
+    {
+      "path": "skills/verify-browser-experience/assets/apx/golden-vectors.json",
+      "bytes": 2704,
+      "sha256": "sha256:9c42f8a7cd9d1db858bf57bf0c2f96d1b32643266499dd117429f8f15e95db6b"
+    },
+    {
+      "path": "skills/verify-browser-experience/assets/apx/proof-carrying-action.json",
+      "bytes": 570,
+      "sha256": "sha256:024283035d0f4bd940cbc92406eb8b2c19da09f2ff566a85082c3a33b5470295"
+    },
+    {
+      "path": "skills/verify-browser-experience/assets/apx/situation-conflict.json",
+      "bytes": 3390,
+      "sha256": "sha256:ef2949ac85dc547243638d0e35927cc244f71bc9bc13808a86e2294ad94dfa80"
+    },
+    {
+      "path": "skills/verify-browser-experience/assets/apx/situation-unknown.json",
+      "bytes": 2198,
+      "sha256": "sha256:895c12188fea7c1ae82b076cde968938fdc6f50327ae87be3a211eee7ca58280"
+    },
+    {
+      "path": "skills/verify-browser-experience/references/apx.md",
+      "bytes": 14185,
+      "sha256": "sha256:b7dbd9aa82a79674a40cddc9b4dcf9fd577f52555277a71a76765c74def415dc"
+    },
+    {
+      "path": "skills/verify-browser-experience/references/interop.md",
+      "bytes": 4133,
+      "sha256": "sha256:130b97ca2e59350b074699cb80892596258844daed70f6a65fbd2f05dd549e8d"
+    },
+    {
+      "path": "skills/verify-browser-experience/references/situation-capsule.md",
+      "bytes": 3138,
+      "sha256": "sha256:7c323966f4dae203303177265a95c7382c3ed3b67cf965b9e506fa5227c98052"
+    },
+    {
+      "path": "skills/verify-browser-experience/references/verification.md",
+      "bytes": 27576,
+      "sha256": "sha256:23ede4d16fc39502c41d37f2e0f62b2328483e9f3eda967103f333ea4a568a37"
+    },
+    {
+      "path": "skills/verify-pyproc/references/testing.md",
+      "bytes": 1579,
+      "sha256": "sha256:c3c376b4aa8c3a8d7d991f71402c5b52471cae95341e771c86af91661d3a69fc"
+    }
+  ]
+}

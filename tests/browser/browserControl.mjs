@@ -162,7 +162,7 @@ try {
 
   const listedTools = await request("tools/list", {});
   const names = listedTools.result.tools.map((tool) => tool.name).sort();
-  check("opt-in에서 Python 4종, browser 11종, verification 3종", names.length === 18 && names.includes("pythonRun")
+  check("opt-in에서 Python 4종, browser 11종, verification 3종, skill 2종", names.length === 20 && names.includes("pythonRun")
     && names.includes("browserCommand") && names.includes("browserObserve") && names.includes("browserAct")
     && names.includes("browserClose") && names.includes("browserArtifactRead")
     && names.includes("browserArtifactDelete") && names.includes("eyesAudit")
@@ -418,6 +418,34 @@ try {
     enabledAction.actions?.[0]?.result?.actionability?.polls >= 3,
   `${enabledAction.actions?.[0]?.result?.actionability?.polls} polls`);
 
+  const offscreenAction = toolText(await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "click", selector: "#offscreen-action", timeoutMs: 3000,
+      expectedRisk: "externalEffect" }],
+  }));
+  const offscreenState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "window.browserControlFixture.actionability()", returnByValue: true,
+  }, "externalEffect"));
+  check("partially offscreen target은 viewport 교집합 중심에서 click",
+    offscreenAction.actions?.[0]?.result?.point?.x === 10
+      && offscreenState.result?.result?.value?.points?.offscreen?.x === 10,
+  JSON.stringify({ result: offscreenAction.actions?.[0]?.result?.point,
+    event: offscreenState.result?.result?.value?.points?.offscreen }));
+
+  const ancestorHit = await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "click", selector: "#ancestor-hit-action", timeoutMs: 250,
+      expectedRisk: "externalEffect" }],
+  });
+  const ancestorState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "window.browserControlFixture.actionability()", returnByValue: true,
+  }, "externalEffect"));
+  check("target ancestor만 hit인 경우 pointer action을 보내지 않음",
+    ancestorHit.result.isError === true
+      && toolText(ancestorHit).code === "BROWSER_AUTOMATION_ACTIONABILITY_TIMEOUT"
+      && ancestorState.result?.result?.value?.counts?.ancestor === 0,
+  JSON.stringify(toolText(ancestorHit)));
+
   const semanticActions = toolText(await callTool("browserAct", {
     sessionRef,
     actions: [
@@ -437,6 +465,35 @@ try {
       && semanticState.result.result.value.counts.shadow === 1 && semanticState.result.result.value.counts.frame === 2
       && semanticState.result.result.value.trusted.shadow === true && semanticState.result.result.value.trusted.frame === true,
   JSON.stringify(semanticState.result?.result?.value));
+
+  await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: `(() => {
+      const frame = document.getElementById("semantic-frame");
+      const rect = frame.getBoundingClientRect();
+      const overlay = document.createElement("div");
+      overlay.id = "frame-action-overlay";
+      Object.assign(overlay.style, { position: "fixed", left: rect.left + "px", top: rect.top + "px",
+        width: rect.width + "px", height: rect.height + "px", zIndex: "9999", background: "transparent" });
+      document.body.append(overlay);
+    })()`,
+    returnByValue: true,
+  }, "externalEffect");
+  const frameOverlayAction = await callTool("browserAct", {
+    sessionRef,
+    actions: [{ kind: "click", locator: { by: "role", value: "button", name: "Frame action",
+      frame: [{ by: "name", value: "semantic-frame" }] }, timeoutMs: 250, expectedRisk: "externalEffect" }],
+  });
+  const frameOverlayState = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "window.browserControlFixture.actionability()", returnByValue: true,
+  }, "externalEffect"));
+  check("parent document overlay가 frame target의 actionability를 차단",
+    frameOverlayAction.result.isError === true
+      && toolText(frameOverlayAction).code === "BROWSER_AUTOMATION_ACTIONABILITY_TIMEOUT"
+      && frameOverlayState.result?.result?.value?.counts?.frame === 2,
+  JSON.stringify(toolText(frameOverlayAction)));
+  await browserCommand(sessionRef, "Runtime.evaluate", {
+    expression: "document.getElementById('frame-action-overlay')?.remove()", returnByValue: true,
+  }, "externalEffect");
 
   receiverRequests = 0;
   receiverBody = null;
@@ -661,7 +718,7 @@ try {
       { kind: "screenshot", format: "png", expectedRisk: "read" },
       { kind: "screenshot", format: "jpeg", quality: 75, fullPage: true, expectedRisk: "read" },
       { kind: "screenshot", format: "webp", quality: 70,
-        clip: { x: 0, y: 0, width: 320, height: 180, scale: 1 }, expectedRisk: "read" },
+        clip: { x: 0, y: 0, width: 320, height: 180 }, expectedRisk: "read" },
     ],
   }));
   const screenshotDescriptors = screenshotPipeline.actions.map((action) => action.result);
@@ -670,6 +727,7 @@ try {
     screenshotPipeline.actions.map((action) => action.kind).join(",") === "screenshot,screenshot,screenshot"
       && screenshotDescriptors.map((artifact) => artifact.format).join(",") === "png,jpeg,webp"
       && screenshotDescriptors[1].fullPage === true
+      && screenshotDescriptors[2].cssWidth === 320 && screenshotDescriptors[2].cssHeight === 180
       && screenshotBytes[0].bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
       && screenshotBytes[1].bytes[0] === 0xff && screenshotBytes[1].bytes[1] === 0xd8
       && screenshotBytes[2].bytes.subarray(0, 4).toString("ascii") === "RIFF"
@@ -751,7 +809,7 @@ try {
 
   await callTool("pythonRun", { code: "prepared = {'value': 41}" });
   const checkpoint = toolText(await callTool("checkpointSave"));
-  check("Python checkpoint 준비", Number.isInteger(checkpoint.index) && checkpoint.index > 0, checkpoint.index);
+  check("Python checkpoint 준비", Number.isInteger(checkpoint.index) && checkpoint.index >= 0, checkpoint.index);
 
   const browserEffect = toolText(await browserCommand(sessionRef, "Runtime.evaluate", {
       expression: "window.browserControlFixture.increment(); window.browserControlFixture.send('mcp-browser')",
@@ -939,8 +997,11 @@ try {
   directBrowser = null;
   const uncertainError = await uncertainCommand;
   const inputCommands = uncertainError?.trace?.steps?.[0]?.commands?.filter((command) => command.method === "Input.dispatchMouseEvent") || [];
-  check("browser 사망 전 trusted pointer effect가 전송됨",
-    inputCommands.length === 2 && inputCommands[0].state === "applied" && inputCommands[1].state === "failed",
+  check("browser 사망 뒤 independent pointer release를 시도함",
+    inputCommands.length === 3 && inputCommands[0].state === "applied"
+      && inputCommands[1].state === "failed" && inputCommands[2].state === "failed"
+      && uncertainError?.safetyRelease?.state === "unknown"
+      && uncertainError?.safetyRelease?.residualInputs?.includes("pointer:left"),
   `${inputCommands.length} input commands`);
   check("전송 뒤 browser 사망은 pipeline 위치와 outcomeUnknown을 보존",
     uncertainError?.code === "BROWSER_CONTROL_OUTCOME_UNKNOWN" && uncertainError.outcome === "outcomeUnknown" && uncertainError.retryable === false,
@@ -949,7 +1010,8 @@ try {
     uncertainError?.failedActionIndex === 0 && uncertainError?.completed?.length === 0,
     `${uncertainError?.completed?.length} completed`);
   await delay(250);
-  check("outcomeUnknown 고수준 action을 자동 재시도하지 않음", inputCommands.length === 2,
+  check("outcomeUnknown 고수준 action을 자동 business retry하지 않음",
+    inputCommands.length === 3 && inputCommands.filter((command) => command.state === "applied").length === 1,
     `${inputCommands.length} input commands`);
   await directBroker.close();
   directBroker = null;

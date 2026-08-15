@@ -1,0 +1,6 @@
+{"id":"security-01","operation":"stale-digest","expected":"SKILL_READ_STALE","reason":"A caller must bind reads to catalog metadata."}
+{"id":"security-02","operation":"path-escape","expected":"SKILL_REFERENCE_ESCAPE","reason":"A relative resource cannot leave its skill root."}
+{"id":"security-03","operation":"duplicate-frontmatter","expected":"SKILL_FRONTMATTER_INVALID","reason":"Duplicate or undeclared frontmatter fields are rejected."}
+{"id":"security-04","operation":"name-mismatch","expected":"SKILL_NAME_MISMATCH","reason":"Directory and frontmatter names must agree."}
+{"id":"security-05","operation":"missing-heading","expected":"SKILL_STRUCTURE_INVALID","reason":"Required procedural headings are mandatory."}
+{"id":"security-06","operation":"junction-escape","expected":"SKILL_REFERENCE_ESCAPE","reason":"Junctions and symlinks cannot escape a skill root."}

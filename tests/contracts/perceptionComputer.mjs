@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { CapabilityProjector } from "../../scripts/perception/capabilityProjector.js";
 import { PerceptionSpace } from "../../scripts/perception/perceptionSpace.js";
 import { SituationCompiler } from "../../scripts/perception/situationCompiler.js";
@@ -11,8 +13,11 @@ import { createTransitionProof } from "../../scripts/perception/transitionLedger
 import { WorldModel } from "../../scripts/perception/worldModel.js";
 import { validatePerceptionOptions } from "../../scripts/perception/apxCatalog.js";
 import { apxDigest, canonicalApxJson } from "../../scripts/perception/apxCanonical.js";
+import { assertCandidateContinuation, evaluateRequirementCandidates, projectCandidateEvidence }
+  from "../../scripts/perception/requirementCandidateEvaluator.js";
 import { inspectReportedCapabilitySupport, normalizeReportedCapabilities }
   from "../../scripts/perception/profiles/reportedCapabilitySensor.js";
+import { verifyPostcondition } from "../../scripts/perception/postconditionVerifier.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -196,6 +201,153 @@ export async function assertPerceptionComputerContract() {
   }).world;
   assert(pureWorld.claims.find((claim) => claim.predicate === "semantic.name")?.state === "conflicted",
     "world collapsed conflicting attestations to known");
+  const canonicalWorld = new WorldModel().prepare("canonical", graphObservation(observationEntity("canonical")), {
+    reportedClaims: [{ subjectRef: "entity:canonical", predicate: "geometry.rect",
+      value: { height: 4, width: 3, y: 2, x: 1 },
+      provenance: { mode: "reported", source: "fixture.page", trust: "page" } },
+    { subjectRef: "entity:canonical", predicate: "geometry.rect",
+      value: { x: 1, y: 2, width: 3, height: 4 },
+      provenance: { mode: "reported", source: "fixture.browser", trust: "browser" } }],
+  }).world;
+  assert(canonicalWorld.claims.find((claim) => claim.predicate === "geometry.rect")?.state === "known",
+    "property insertion order changed canonical claim equality");
+  const distinctWorld = new WorldModel().prepare("canonical-distinct",
+    graphObservation(observationEntity("canonical")), { reportedClaims: [
+      { subjectRef: "entity:canonical", predicate: "geometry.rect", value: { x: 1, y: 2, width: 3, height: 4 },
+        provenance: { mode: "reported", source: "fixture.browser", trust: "browser" } },
+      { subjectRef: "entity:canonical", predicate: "geometry.rect", value: { x: 1, y: 2, width: 4, height: 4 },
+        provenance: { mode: "reported", source: "fixture.page", trust: "page" } },
+    ] }).world;
+  assert(distinctWorld.claims.find((claim) => claim.predicate === "geometry.rect")?.state === "conflicted",
+    "different canonical claim values were falsely merged");
+  const invalidCanonical = await errorOf(() => Promise.resolve(new WorldModel().prepare("canonical-invalid",
+    graphObservation(observationEntity("canonical")), { reportedClaims: [{ subjectRef: "entity:canonical",
+      predicate: "geometry.rect", value: Number.NaN,
+      provenance: { mode: "reported", source: "fixture.page", trust: "page" } }] })));
+  assert(invalidCanonical instanceof TypeError, "nonfinite claim value silently entered the world");
+
+  const pythonCanonical = spawnSync("python", [fileURLToPath(new URL("../support/apxCanonical.py", import.meta.url))], {
+    encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+  });
+  assert(pythonCanonical.status === 0, `Python canonical parity fixture failed: ${pythonCanonical.stderr}`);
+  const pythonVectors = JSON.parse(pythonCanonical.stdout);
+  assert(pythonVectors.rejected === 3 && pythonVectors.vectors.every((vector, index) =>
+    canonicalApxJson(vector) === pythonVectors.output[index].canonical
+      && apxDigest(vector) === pythonVectors.output[index].sha256),
+  "JavaScript and Python APX custom canonical vectors diverged");
+
+  const interopUrl = new URL("../../skills/verify-browser-experience/assets/apx/golden-vectors.json", import.meta.url);
+  const interopVectors = JSON.parse(await readFile(interopUrl, "utf8"));
+  const independentValidatorUrl = new URL("../support/apxIndependentValidator.py", import.meta.url);
+  const independentSource = await readFile(independentValidatorUrl, "utf8");
+  assert(!/(?:from|import)\s+pyproc|scripts\/perception/iu.test(independentSource),
+    "independent validator가 PyProc package 또는 product source를 import한다");
+  const independentRun = spawnSync("python", [fileURLToPath(independentValidatorUrl), fileURLToPath(interopUrl)], {
+    encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+  });
+  assert(independentRun.status === 0,
+    `independent APX validator failed: ${independentRun.stderr}`);
+  const independent = JSON.parse(independentRun.stdout);
+  const canonicalDigests = interopVectors.canonicalVectors.map((vector) => {
+    assert(canonicalApxJson(vector.value) === vector.canonical && apxDigest(vector.value) === vector.sha256,
+      `JavaScript canonical interop vector failed: ${vector.id}`);
+    return vector.sha256;
+  });
+  const candidateTerminals = interopVectors.candidateVectors.map((vector) => {
+    const entities = Array.from({ length: vector.matched }, (_, index) =>
+      observationEntity(`${vector.id}_${index}`, { role: "button", name: "Target" }));
+    const evaluation = evaluateRequirementCandidates({ requirements: [{
+      requirementRef: `requirement:${vector.id}`, select: { role: "button", name: "Target" },
+      need: ["fact"], cardinality: vector.cardinality,
+    }] }, entities, { enumeration: vector.enumeration,
+      droppedCount: vector.enumeration === "incomplete" ? 1 : 0 })[0];
+    return { id: vector.id, state: evaluation.state, authorized: evaluation.state === "satisfied" };
+  });
+  const verificationTerminals = interopVectors.verificationVectors.map((vector) => {
+    const events = vector.directMatch || vector.directMismatch ? [
+      { eventId: `event:${vector.id}_request`, kind: "network", phase: "request",
+        method: "POST", url: "https://interop.example/result", requestRef: `request:${vector.id}` },
+      { eventId: `event:${vector.id}_response`, kind: "network", phase: "response",
+        status: vector.directMatch ? 201 : 500, url: "https://interop.example/result",
+        requestRef: `request:${vector.id}` },
+    ] : [];
+    const result = verifyPostcondition({ networkResponse: {
+      method: "POST", urlPath: "/result", status: 201,
+    } }, { observation: { entities: [], delta: { added: [], removed: [], changed: [] } }, events,
+      coverage: { completeness: vector.windowComplete ? "complete" : "incomplete" }, final: true });
+    return { id: vector.id, state: result.state };
+  });
+  const core = { canonicalDigests, candidateTerminals, verificationTerminals };
+  assert(apxDigest(core) === independent.coreDigest
+    && JSON.stringify(candidateTerminals) === JSON.stringify(independent.candidateTerminals)
+    && JSON.stringify(verificationTerminals) === JSON.stringify(independent.verificationTerminals)
+    && independent.negativeVerdicts.every((entry) => entry.rejected),
+  "PyProc와 independent validator의 canonical core 또는 terminal verdict가 다르다");
+
+  const denseEntities = Array.from({ length: 10000 }, (_, index) => sensorEntity(`native:${index + 1000}`, {
+    role: "button", name: "Save", actions: ["click"], actionable: true,
+  }));
+  const incompleteEvaluation = evaluateRequirementCandidates({ requirements: [{
+    requirementRef: "requirement:paged", select: { role: "button" }, need: ["fact"], cardinality: "one",
+  }] }, [observationEntity("page-one")], { documentEpoch: 4, enumeration: "incomplete", droppedCount: 1,
+    continuationSeed: "provider-page-two", expiresAt: "2026-08-14T01:00:00.000Z" })[0];
+  const incompleteEvidence = projectCandidateEvidence(incompleteEvaluation, ["entity:page-one"]);
+  assert(incompleteEvidence.enumeration === "incomplete" && incompleteEvidence.matchedLowerBound === 1
+    && incompleteEvidence.continuationRef?.startsWith("continuation:")
+    && incompleteEvidence.continuationRef.length === 77
+    && incompleteEvaluation.state === "unknown",
+  "incomplete candidate enumeration이 lower bound와 opaque continuation을 보존하지 않았다");
+  const continuationBinding = { continuationSeed: "provider-page-two",
+    worldRef: `world:${apxDigest(["entity:page-one"])}`, surfaceEpoch: "document:4",
+    requirementRef: "requirement:paged", selectorSha256: apxDigest({ role: "button" }),
+    orderingSha256: apxDigest({ order: "entityRefLexicographic", entityRefs: ["entity:page-one"] }),
+    nextOffset: 1, expiresAt: "2026-08-14T01:00:00.000Z" };
+  assert(assertCandidateContinuation(incompleteEvidence.continuationRef, continuationBinding,
+    { now: Date.parse("2026-08-14T00:59:59.000Z") }).nextOffset === 1,
+  "candidate continuation의 exact read binding이 검증되지 않았다");
+  for (const mutation of [
+    { worldRef: `world:${"f".repeat(64)}` },
+    { surfaceEpoch: "document:5" },
+    { requirementRef: "requirement:other" },
+    { orderingSha256: "f".repeat(64) },
+  ]) {
+    const mismatch = await errorOf(() => Promise.resolve(assertCandidateContinuation(
+      incompleteEvidence.continuationRef, { ...continuationBinding, ...mutation },
+      { now: Date.parse("2026-08-14T00:59:59.000Z") })));
+    assert(mismatch instanceof TypeError, "candidate continuation binding mismatch가 수락됐다");
+  }
+  const expiredContinuation = await errorOf(() => Promise.resolve(assertCandidateContinuation(
+    incompleteEvidence.continuationRef, continuationBinding,
+    { now: Date.parse("2026-08-14T01:00:00.000Z") })));
+  assert(expiredContinuation instanceof TypeError, "만료된 candidate continuation이 수락됐다");
+  let denseId = 0;
+  const densePerception = new PerceptionSpace({ sensor: { capture: async () => ({ documentEpoch: 3, page: {},
+    entities: denseEntities, relations: [], events: [], completeness: { semantic: "complete",
+      structure: "complete", geometry: "complete", interaction: "complete" } }) },
+  idFactory: () => `candidate_${++denseId}`,
+  locatorIssuer: () => `locator:candidate_${denseId}`,
+  capabilityPolicy: () => ({ risk: "externalEffect" }), now: () => now });
+  const denseFocus = { requirements: [{ requirementRef: "requirement:denseSave",
+    select: { role: "button", name: "Save" }, need: ["affordance"], cardinality: "one" }] };
+  const denseSmall = await densePerception.observe({ ...sessionRef, sessionId: "session:dense-small" }, {
+    representation: APX_SITUATION_REPRESENTATION, focus: denseFocus,
+    budget: { maxEntities: 1, maxRelations: 0, maxBytes: 65536 },
+  });
+  const denseWide = await densePerception.observe({ ...sessionRef, sessionId: "session:dense-small" }, {
+    representation: APX_SITUATION_REPRESENTATION, focus: denseFocus,
+    budget: { maxEntities: 2, maxRelations: 0, maxBytes: 65536 },
+  });
+  const smallRequirement = denseSmall.requirements[0];
+  const wideRequirement = denseWide.requirements[0];
+  assert(smallRequirement.state === "conflicted" && smallRequirement.matched === 10000
+    && smallRequirement.candidateEvidence.matchedCount === 10000
+    && smallRequirement.candidateEvidence.projectedCount === 1
+    && smallRequirement.candidateEvidence.omittedMatchedCount === 9999
+    && denseSmall.affordances.every((entry) => entry.kind !== "authorized")
+    && wideRequirement.state === smallRequirement.state
+    && wideRequirement.candidateEvidence.matchSetSha256 === smallRequirement.candidateEvidence.matchSetSha256,
+  "candidate truth changed across output budgets or authorized a hidden duplicate");
+  densePerception.close();
   const projector = new CapabilityProjector({ authorize: ({ action: kind }) =>
     kind === "click" ? { risk: "externalEffect" } : null, now: () => now });
   const compiler = new SituationCompiler({ capabilityProjector: projector, now: () => now });

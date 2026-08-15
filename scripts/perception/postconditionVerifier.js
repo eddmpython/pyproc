@@ -89,7 +89,7 @@ function entityState(expected, observation) {
   return { verdict: matches ? "confirmed" : "contradicted", evidenceRefs: [entity.entityRef] };
 }
 
-function networkResponse(expected, events) {
+function networkResponse(expected, events, coverage) {
   const pathMatches = (event) => expected.urlPath === undefined || (() => {
     try { return new URL(event.url).pathname === expected.urlPath; } catch (error) { return false; }
   })();
@@ -104,7 +104,9 @@ function networkResponse(expected, events) {
   const evidenceRefs = (selected) => [...requests.filter((event) => selected.some((response) =>
     response.requestRef === event.requestRef)), ...selected].map((event) => event.eventId);
   return matching ? { verdict: "confirmed", evidenceRefs: evidenceRefs([matching]) }
-    : { verdict: "contradicted", evidenceRefs: evidenceRefs(responses) };
+    : coverage?.completeness !== "incomplete"
+      ? { verdict: "contradicted", evidenceRefs: evidenceRefs(responses) }
+      : { verdict: "pending", evidenceRefs: evidenceRefs(responses) };
 }
 
 function evaluate(condition, context) {
@@ -122,7 +124,7 @@ function evaluate(condition, context) {
   }
   if (condition.entityAppeared) return entityAppeared(condition.entityAppeared, context.observation);
   if (condition.entityState) return entityState(condition.entityState, context.observation);
-  return networkResponse(condition.networkResponse, context.events || []);
+  return networkResponse(condition.networkResponse, context.events || [], context.coverage);
 }
 
 export function verifyPostcondition(condition, context = {}) {
@@ -130,9 +132,12 @@ export function verifyPostcondition(condition, context = {}) {
   const result = evaluate(condition, context);
   let state = result.verdict;
   if (state === "pending" && context.final) {
-    const changed = (context.observation?.delta?.added?.length || 0) + (context.observation?.delta?.changed?.length || 0)
-      + (context.events?.length || 0);
-    state = changed > 0 ? "ambiguous" : "notObserved";
+    if (context.coverage?.completeness === "incomplete") state = "ambiguous";
+    else {
+      const changed = (context.observation?.delta?.added?.length || 0)
+        + (context.observation?.delta?.changed?.length || 0) + (context.events?.length || 0);
+      state = changed > 0 ? "ambiguous" : "notObserved";
+    }
   }
   return Object.freeze({ state, postcondition: condition,
     evidenceRefs: Object.freeze([...new Set(result.evidenceRefs.filter(Boolean))]) });

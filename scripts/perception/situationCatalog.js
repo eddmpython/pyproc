@@ -193,7 +193,8 @@ export function assertSituationCapsule(value) {
   const requirementRefs = new Set();
   for (const requirement of value.requirements) {
     plain(requirement, "SituationCapsule.requirements[]");
-    exactKeys(requirement, new Set(["requirementRef", "state", "cardinality", "matched", "entityRefs", "claimRefs"]),
+    exactKeys(requirement, new Set(["requirementRef", "state", "cardinality", "matched", "entityRefs", "claimRefs",
+      "candidateEvidence"]),
       "SituationCapsule.requirements[]");
     if (!REF_PATTERNS.requirement.test(requirement.requirementRef) || requirementRefs.has(requirement.requirementRef)
       || !APX_REQUIREMENT_STATES.includes(requirement.state) || !CARDINALITIES.has(requirement.cardinality)
@@ -201,6 +202,34 @@ export function assertSituationCapsule(value) {
       || !Array.isArray(requirement.entityRefs) || requirement.entityRefs.some((ref) => !REF_PATTERNS.entity.test(ref))
       || !Array.isArray(requirement.claimRefs) || requirement.claimRefs.some((ref) => !REF_PATTERNS.claim.test(ref))) {
       fail("SituationCapsule requirement is invalid");
+    }
+    const candidate = plain(requirement.candidateEvidence, "SituationCapsule requirement candidateEvidence");
+    exactKeys(candidate, new Set(["surfaceEpoch", "universeScopeSha256", "enumeration", "observedCount",
+      "droppedCount", "matchedCount", "matchedLowerBound", "projectedCount", "omittedMatchedCount",
+      "matchSetSha256", "orderingSha256", "continuationRef"]),
+    "SituationCapsule requirement candidateEvidence");
+    const complete = candidate.enumeration === "complete";
+    const matchCount = complete ? candidate.matchedCount : candidate.matchedLowerBound;
+    if (!/^document:\d+$/u.test(String(candidate.surfaceEpoch || ""))
+      || !DIGEST.test(String(candidate.universeScopeSha256 || ""))
+      || !["complete", "incomplete", "unknown"].includes(candidate.enumeration)
+      || !Number.isInteger(candidate.observedCount) || candidate.observedCount < 0
+      || !Number.isInteger(candidate.droppedCount) || candidate.droppedCount < 0
+      || !Number.isInteger(matchCount) || matchCount < 0
+      || complete !== Object.hasOwn(candidate, "matchedCount")
+      || complete !== Object.hasOwn(candidate, "matchSetSha256")
+      || complete === Object.hasOwn(candidate, "matchedLowerBound")
+      || (complete && !DIGEST.test(String(candidate.matchSetSha256 || "")))
+      || !Number.isInteger(candidate.projectedCount) || candidate.projectedCount < 0
+      || !Number.isInteger(candidate.omittedMatchedCount) || candidate.omittedMatchedCount < 0
+      || !DIGEST.test(String(candidate.orderingSha256 || ""))
+      || (candidate.continuationRef !== null
+        && !/^continuation:[a-f0-9]{64}$/u.test(String(candidate.continuationRef)))
+      || (complete && candidate.continuationRef !== null)
+      || requirement.matched !== matchCount
+      || candidate.projectedCount !== requirement.entityRefs.length
+      || candidate.projectedCount + candidate.omittedMatchedCount !== matchCount) {
+      fail("SituationCapsule requirement candidate evidence is invalid");
     }
     requirementRefs.add(requirement.requirementRef);
   }
@@ -245,12 +274,12 @@ export function assertSituationCapsule(value) {
       assertProvenance(attestation.provenance, "SituationCapsule fact provenance");
     }
     const attestedValues = new Map(fact.attestations.filter((item) => !item.redacted)
-      .map((item) => [JSON.stringify(item.value), item.value]));
+      .map((item) => [apxDigest(item.value), item.value]));
     const expectedState = fact.attestations.length > 0
       && fact.attestations.every((item) => item.freshness.status === "stale") ? "stale"
       : attestedValues.size === 0 ? "unknown" : attestedValues.size === 1 ? "known" : "conflicted";
     if (fact.state !== expectedState || (expectedState === "known"
-      && JSON.stringify(fact.value) !== JSON.stringify(attestedValues.values().next().value))) {
+      && apxDigest(fact.value) !== apxDigest(attestedValues.values().next().value))) {
       fail("SituationCapsule fact does not reconcile its attestations");
     }
     const claimBody = { subjectRef: fact.subjectRef, predicate: fact.predicate, scope: fact.scope,

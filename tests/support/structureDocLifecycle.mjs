@@ -63,11 +63,11 @@ check("탐지기가 문다: 완료 뒤 남은 빈 mainPlan 폴더", () => {
     throw new Error("빈 mainPlan 카테고리 음성 fixture를 놓쳤다");
   }
 });
-check("지속 제품·운영 계약 문서가 존재한다", () => {
+check("지속 제품·운영 skill owner가 존재한다", () => {
   for (const path of [
-    ["docs", "product", "vision.md"],
-    ["docs", "operations", "operatingModel.md"],
-    ["docs", "operations", "contractReality.md"],
+    ["skills", "understand-pyproc", "references", "vision.md"],
+    ["skills", "develop-pyproc", "references", "operating-model.md"],
+    ["skills", "evolve-pyproc", "references", "contract-reality.md"],
   ]) {
     if (!existsSync(join(ROOT, ...path))) throw new Error(`${path.join("/")}: 지속 계약 없음`);
   }

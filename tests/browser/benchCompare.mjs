@@ -1,5 +1,5 @@
 // benchCompare.mjs - benchmark JSON artifact들을 검증하고 비교 Markdown 표로 합친다.
-// 입력 artifact schema는 docs/operations/benchmarking.md의 raw output 계약을 따른다.
+// 입력 artifact schema는 skills/benchmark-pyproc/references/benchmarking.md의 raw output 계약을 따른다.
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { normalizeBenchArtifactFile, renderBenchCompareMarkdown } from "./benchArtifacts.mjs";

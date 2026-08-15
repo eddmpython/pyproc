@@ -56,9 +56,11 @@ export { MachineCommitCoordinator } from "./persistence/machineCommitCoordinator
 export { WebLockOwnerCoordinator, webMachineOwnerLockName } from "./persistence/webLockOwnerCoordinator.js";
 
 // 게스트 어댑터와 조립
-export { createPyprocGuestFactory } from "./guests/pyproc/pyprocGuestAdapter.js";
+export { createCpythonWasiGuestFactory } from "./guests/cpythonWasi/cpythonWasiGuestAdapter.js";
 export { createV86GuestFactory } from "./guests/v86/v86GuestAdapter.js";
 export { createBrowserHost } from "./composition/createBrowserHost.js";
 export { createMachineCryptoProvider } from "./composition/machineCryptoProvider.js";
 export { createWebComputer, WEB_COMPUTER_MACHINE_IDS } from "./composition/createWebComputer.js";
 export { createMachineFleet } from "./composition/machineFleet.js";
+export { KernelMachine, bootDefaultKernelMachine, bootKernelMachine,
+  openDefaultKernelMachineImage, openKernelMachineImage } from "./composition/kernelMachine.js";

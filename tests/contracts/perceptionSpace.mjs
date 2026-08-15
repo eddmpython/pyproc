@@ -12,6 +12,11 @@ import { apxDigest, canonicalApxJson } from "../../scripts/perception/apxCanonic
 import { PerceptionSpace } from "../../scripts/perception/perceptionSpace.js";
 import { ActionEvidenceLoop, assertActionEvidence } from "../../scripts/perception/actionEvidence.js";
 import { validatePostcondition, verifyPostcondition } from "../../scripts/perception/postconditionVerifier.js";
+import { planPostconditionObservation } from "../../scripts/perception/postconditionObservationPlanner.js";
+import { WebCdpSensor, computeWebOcclusion } from "../../scripts/perception/profiles/webCdpSensor.js";
+import { planSituationProbes } from "../../scripts/perception/probePlanner.js";
+import { APX_UNRESOLVED_REASONS, isVisualApxUnresolvedReason }
+  from "../../scripts/perception/unresolvedVocabulary.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -44,6 +49,159 @@ function sensorEntity(nativeRef, { role, name, kind = "ui.control", disabled = f
 }
 
 export async function assertPerceptionSpaceContract() {
+  assert(APX_UNRESOLVED_REASONS.join(",")
+    === "canvas,unlabelledImage,unlabelledControl,geometryUnavailable,semanticUnavailable"
+    && isVisualApxUnresolvedReason("unlabelledImage")
+    && !isVisualApxUnresolvedReason("geometryUnavailable")
+    && !isVisualApxUnresolvedReason("imageOnly"),
+  "APX unresolved vocabulary가 producer와 visual 경계의 단일 enum이 아니다");
+  const vocabularyProbes = planSituationProbes(APX_UNRESOLVED_REASONS.map((reason) => ({
+    reason, requirementRef: `requirement:${reason}`, entityRef: `entity:${reason}`,
+  })), { visualMode: "auto" });
+  assert(vocabularyProbes.filter((probe) => probe.kind === "entityCrop").length === 3
+    && vocabularyProbes.every((probe) => !probe.requirementRef.endsWith("geometryUnavailable")
+      && !probe.requirementRef.endsWith("semanticUnavailable")),
+  "visual unresolved reason이 entityCrop probe까지 도달하지 않았다");
+  const contextProbes = planSituationProbes(APX_UNRESOLVED_REASONS.map((reason) => ({
+    reason, requirementRef: `requirement:${reason}`, entityRef: `entity:${reason}`,
+  })), { visualMode: "full" });
+  assert(contextProbes.filter((probe) => probe.kind === "contextCrop").length === 3,
+    "full visual mode가 unresolved entity의 contextCrop read를 계획하지 않았다");
+
+  let contextCropSequence = 0;
+  let cropArtifactSequence = 0;
+  const cropBytes = Buffer.from("bounded-crop");
+  const contextCropSpace = new PerceptionSpace({
+    sensor: { capture: async () => ({ documentEpoch: 1,
+      page: { viewport: { width: 800, height: 600 }, scroll: { x: 0, y: 0 } },
+      entities: [sensorEntity("native:crop", { role: "canvas", name: "", kind: "content.canvas",
+        unresolved: { reason: "canvas" } })], relations: [], events: [], completeness: {} }) },
+    idFactory: () => `context_${++contextCropSequence}`,
+    visualProbe: async (sessionRef, entity, visual, context) => ({
+      kind: context.cropKind, entityRef: entity.entityRef, reason: entity.unresolved.reason,
+      artifact: { kind: "screenshot", mimeType: "image/png",
+        artifactRef: `artifact:context_${++cropArtifactSequence}`, byteLength: cropBytes.byteLength,
+        sha256: createHash("sha256").update(cropBytes).digest("hex") },
+      provenance: { mode: "observed", source: "fixture.crop", trust: "browser" },
+    }),
+  });
+  const contextCrops = await contextCropSpace.observe({ sessionId: "context-crop" }, {
+    representation: APX_REPRESENTATION, visual: { mode: "full", maxCrops: 2 },
+  });
+  assert(contextCrops.visualProbes.map((probe) => probe.kind).join(",") === "entityCrop,contextCrop",
+    "unresolved entity의 exact crop과 context crop이 bounded pair로 생성되지 않았다");
+  contextCropSpace.close();
+
+  const focusedPlan = planPostconditionObservation({
+    entityAppeared: { role: "status", name: "Saved" },
+  });
+  assert(focusedPlan.channels.join(",") === "semantic" && focusedPlan.entityQueries.length === 1
+    && focusedPlan.eventChannels.length === 0 && /^[a-f0-9]{64}$/.test(focusedPlan.planSha256),
+  "entity postcondition이 deterministic focused read plan으로 변환되지 않았다");
+  const networkPlan = planPostconditionObservation({
+    networkResponse: { method: "POST", urlPath: "/orders", status: 201 },
+  });
+  assert(networkPlan.networkOnly && networkPlan.channels.join(",") === "networkMetadata",
+    "network-only postcondition이 DOM 없는 read plan으로 변환되지 않았다");
+
+  const focusedCalls = [];
+  const focusedParams = [];
+  const focusedSensor = new WebCdpSensor({
+    command: async (sessionRef, method, params) => {
+      focusedCalls.push(method);
+      focusedParams.push(params);
+      if (method === "DOM.getDocument") return { contextEpoch: 7,
+        target: { url: "https://focused.example/app" }, result: { root: { nodeId: 1 } } };
+      if (method === "Accessibility.queryAXTree") return { contextEpoch: 7,
+        target: { url: "https://focused.example/app" }, result: { nodes: [{
+          nodeId: "status-1", backendDOMNodeId: 501, frameId: "main", ignored: false,
+          role: { value: "status" }, name: { value: "Saved" }, properties: [], childIds: [],
+        }] } };
+      return { contextEpoch: 7, result: {} };
+    },
+  });
+  const focusedFacts = await focusedSensor.capture({ sessionId: "focused" },
+    { channels: ["semantic"] }, { postconditionPlan: focusedPlan });
+  assert(focusedFacts.entities.length === 1 && focusedFacts.entities[0].semantic.name === "Saved"
+    && focusedFacts.enumeration.entities === "focused"
+    && focusedCalls.includes("Accessibility.queryAXTree")
+    && focusedParams[focusedCalls.indexOf("Accessibility.queryAXTree")]?.accessibleName === undefined
+    && !focusedCalls.includes("Accessibility.getFullAXTree")
+    && !focusedCalls.includes("DOMSnapshot.captureSnapshot"),
+  "focused AX provider가 닫힌 semantic requirement 뒤 full tree를 읽었다");
+
+  const fallbackCalls = [];
+  const fallbackSensor = new WebCdpSensor({ command: async (sessionRef, method) => {
+    fallbackCalls.push(method);
+    if (method === "DOM.getDocument") return { contextEpoch: 7, result: { root: { nodeId: 1 } } };
+    if (method === "Accessibility.queryAXTree") throw new Error("Accessibility.queryAXTree wasn't found");
+    if (method === "Accessibility.getFullAXTree") return { contextEpoch: 7,
+      target: { url: "https://fallback.example/app" }, result: { nodes: [] } };
+    if (method === "DOMSnapshot.captureSnapshot") return { contextEpoch: 7,
+      result: { strings: [], documents: [] } };
+    if (method === "Page.getLayoutMetrics") return { contextEpoch: 7,
+      result: { cssVisualViewport: { clientWidth: 800, clientHeight: 600 } } };
+    return { contextEpoch: 7, result: {} };
+  } });
+  const fallbackFacts = await fallbackSensor.capture({ sessionId: "fallback" },
+    { channels: ["semantic"] }, { postconditionPlan: focusedPlan });
+  assert(fallbackFacts.enumeration.entities === "complete"
+    && fallbackCalls.includes("Accessibility.getFullAXTree")
+    && fallbackCalls.includes("DOMSnapshot.captureSnapshot"),
+  "queryAXTree unsupported provider가 typed full enumeration fallback을 수행하지 않았다");
+
+  const networkOnlyCalls = [];
+  const networkOnlySensor = new WebCdpSensor({
+    command: async (sessionRef, method) => {
+      networkOnlyCalls.push(method);
+      return { contextEpoch: 9, target: { url: "https://network.example/app" },
+        result: { frameTree: { frame: { url: "https://network.example/app" } } } };
+    },
+    eventCapture: async () => ({ network: [], eventWindows: [{ channel: "network", startSequence: 0,
+      endSequence: 0, returnedCount: 0, droppedBeforeStart: 0, droppedWithinWindow: 0, complete: true }] }),
+  });
+  const networkOnlyFacts = await networkOnlySensor.capture({ sessionId: "network" },
+    { channels: ["networkMetadata"] }, { postconditionPlan: networkPlan });
+  assert(networkOnlyFacts.entities.length === 0 && networkOnlyFacts.eventWindows[0].complete
+    && networkOnlyCalls.join(",") === "Page.getFrameTree",
+  "network-only postcondition이 AX 또는 DOM sensor를 호출했다");
+
+  const denseDom = Array.from({ length: 4000 }, (_, index) => ({
+    documentIndex: 0,
+    nodeIndex: index,
+    parentIndex: -1,
+    visible: true,
+    rect: { x: (index % 100) * 16, y: Math.floor(index / 100) * 16, width: 12, height: 12 },
+    paintOrder: index,
+    styles: { "pointer-events": "auto" },
+  }));
+  const occlusionStats = computeWebOcclusion(denseDom, new Map([[0, denseDom]]));
+  assert(occlusionStats.comparisons < denseDom.length * 100,
+    `dense DOM occlusion scan이 quadratic comparison을 남겼다: ${occlusionStats.comparisons}`);
+
+  let focusedIdentity = 0;
+  const lateEntityPlan = planPostconditionObservation({
+    entityAppeared: { role: "status", name: "Needle 1001" },
+  });
+  const lateEntitySpace = new PerceptionSpace({
+    sensor: { capture: async () => ({ documentEpoch: 1, page: {},
+      entities: Array.from({ length: 1001 }, (_, index) => sensorEntity(`native:${index + 1}`, {
+        role: "status", name: index === 1000 ? "Needle 1001" : `noise ${index + 1}`, kind: "ui.status",
+      })), relations: [], events: [], enumeration: { entities: "complete" },
+      completeness: { semantic: "complete" } }) },
+    idFactory: () => `focused_${++focusedIdentity}`,
+  });
+  const lateEntity = await lateEntitySpace.observe({ sessionId: "late-entity" }, {
+    representation: APX_REPRESENTATION,
+    channels: ["semantic"],
+    budget: { maxEntities: 1000, maxRelations: 0, maxBytes: 1024 * 1024 },
+  }, { postconditionPlan: lateEntityPlan, issueLocators: false });
+  assert(lateEntity.entities.length === 1 && lateEntity.entities[0].semantic.name === "Needle 1001"
+    && lateEntity.completeness.entityEnumeration === "focusedComplete"
+    && lateEntity.completeness.omittedRelevantCount === 0,
+  "1,001번째 relevant entity가 projection limit 때문에 verification에서 누락됐다");
+  lateEntitySpace.close();
+
   const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
   const workflow = await readFile(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
   assert(packageJson.scripts?.["test:apx"] === "node tests/browser/apxProduct.mjs"
@@ -56,12 +214,12 @@ export async function assertPerceptionSpaceContract() {
   assert(schemas.every((schema) => schema.$schema === "https://json-schema.org/draft/2020-12/schema"
     && schema.$id?.includes("/schemas/apx/1/")),
   "APX 공개 schema가 JSON Schema 2020-12 정본이 아니다");
-  const exampleRoot = new URL("../../docs/specs/apx/examples/", import.meta.url);
-  const fullExample = JSON.parse(await readFile(new URL("fullObservation.json", exampleRoot), "utf8"));
-  const deltaExample = JSON.parse(await readFile(new URL("deltaObservation.json", exampleRoot), "utf8"));
-  const evidenceExample = JSON.parse(await readFile(new URL("actionEvidence.json", exampleRoot), "utf8"));
-  const situationUnknown = JSON.parse(await readFile(new URL("situationUnknown.json", exampleRoot), "utf8"));
-  const situationConflict = JSON.parse(await readFile(new URL("situationConflict.json", exampleRoot), "utf8"));
+  const exampleRoot = new URL("../../skills/verify-browser-experience/assets/apx/", import.meta.url);
+  const fullExample = JSON.parse(await readFile(new URL("full-observation.json", exampleRoot), "utf8"));
+  const deltaExample = JSON.parse(await readFile(new URL("delta-observation.json", exampleRoot), "utf8"));
+  const evidenceExample = JSON.parse(await readFile(new URL("action-evidence.json", exampleRoot), "utf8"));
+  const situationUnknown = JSON.parse(await readFile(new URL("situation-unknown.json", exampleRoot), "utf8"));
+  const situationConflict = JSON.parse(await readFile(new URL("situation-conflict.json", exampleRoot), "utf8"));
   assertApxObservation(fullExample);
   assertApxObservation(deltaExample);
   assertActionEvidence(evidenceExample);
@@ -307,6 +465,16 @@ export async function assertPerceptionSpaceContract() {
   } }, { observation: second, events: [events[0], { ...events[1], requestRef: "request:other" }], final: true });
   assert(falseCorrelation.state !== "confirmed",
     "EvidenceLoop가 서로 다른 network request와 response를 거짓 상관시켰다");
+  const incompleteAbsence = verifyPostcondition({ networkResponse: {
+    method: "POST", urlPath: "/order", status: 201,
+  } }, { observation: second, events: [], final: true,
+    coverage: { completeness: "incomplete" } });
+  const incompleteMatch = verifyPostcondition({ networkResponse: {
+    method: "POST", urlPath: "/order", status: 201,
+  } }, { observation: second, events, final: true,
+    coverage: { completeness: "incomplete" } });
+  assert(incompleteAbsence.state === "ambiguous" && incompleteMatch.state === "confirmed",
+    "incomplete event window가 absence를 확정하거나 direct match를 막았다");
 
   let effectCalls = 0;
   const loop = new ActionEvidenceLoop({ idFactory: () => "capture_failure", now: (() => {

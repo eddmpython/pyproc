@@ -1,61 +1,22 @@
-<!DOCTYPE html>
-<!--
-소비자 온보딩 안전 게이트: 헤더 없는 페이지(COI 없이 서빙)에서 (1) checkEnvironment가 정확히
-무엇이 빠졌는지 + 어떻게 고칠지 돌려주고 (2) 프로세스 OS를 그냥 쓰면 암호 같은
-SharedArrayBuffer 실패 대신 실행 가능한 에러(어느 헤더를 달지)가 나는가.
-실행: npm run test:preflight (러너가 페이지 이름으로 COI 없는 서빙을 선택한다)
-
-2026-07-27: 이 페이지는 0.0.10 porcelain 개명 이후 깨진 채 방치돼 있었다(루트에서 사라진
-PyProc을 import해 모듈이 아예 실행되지 않았다). 아무 러너도 이 페이지를 돌리지 않아 그 사실이
-드러나지 않았다. 이제 npm script와 CI가 돌고, 구조 게이트가 "실행 경로 없는 게이트 페이지 0"을 문다.
--->
-<html lang="ko">
-<head><meta charset="utf-8"><title>preflight (no COI)</title></head>
-<body>
-<pre id="out">실행 중...</pre>
-<script type="module">
-  import { checkEnvironment, boot } from "../../index.js";
-  const out = document.getElementById("out");
-  const checks = [];
-  const check = (name, pass, info = "") => { checks.push({ name, pass: !!pass, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? " (" + info + ")" : ""}`; };
-  const report = async () => {
-    const ok = checks.length > 0 && checks.every((c) => c.pass);
-    try { await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok, checks }) }); } catch (e) {}
-  };
-  try {
-    check("전제: 헤더 없는 페이지(crossOriginIsolated=false)", crossOriginIsolated === false, `crossOriginIsolated=${crossOriginIsolated}`);
-
-    // 1) 진단: SAB 없음을 정확히 잡고 조치를 준다. 메시지는 영문이다(진입 표면 언어 계약).
-    const env = checkEnvironment();
-    const coiIssue = env.issues.find((i) => i.code === "no-cross-origin-isolation");
-    check("checkEnvironment: COI 부재를 issue로 보고 + 조치 포함",
-      env.ok === false && !!coiIssue && coiIssue.fix.includes("Cross-Origin-Embedder-Policy"),
-      coiIssue ? coiIssue.need : "issue 없음");
-    check("checkEnvironment: 진단 문장이 영문(README와 같은 언어)",
-      !!coiIssue && !/[가-힣]/.test(coiIssue.why + coiIssue.fix), coiIssue ? coiIssue.why.slice(0, 60) : "");
-
-    // 2) 기본 표면은 헤더 없이도 동작(온보딩의 관대함): boot + run + history 시간여행.
-    const machine = await boot();
-    machine.run("x = 1");
-    const cp = machine.history.checkpoint();
-    machine.run("x = 999");
-    machine.history.checkpoint(); // 경계 닫기(리액티브 계약)
-    machine.history.restore(cp);
-    check("헤더 없이 기본 표면 동작(boot/run/history)",
-      machine.run("x") === 1 && machine.run("sum(range(10))") === 45);
-
-    // 3) 프로세스 OS는 실행 가능한 에러(암호 SharedArrayBuffer 실패 대신).
-    let message = "";
-    try { await machine.proc({ lanes: 1 }); check("proc가 헤더 없이 성공하면 안 됨", false); }
-    catch (e) { message = String(e.message || e); }
-    check("machine.proc: 실행 가능한 에러(헤더 안내 포함)",
-      message.includes("Cross-Origin-Embedder-Policy") && message.includes("crossOriginIsolated") && !message.includes("is not defined"),
-      message.slice(0, 90));
-    await machine.dispose();
-  } catch (e) {
-    check("예외 없음", false, String(e).slice(-200));
-  }
-  await report();
-</script>
-</body>
-</html>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>owned kernel preflight without COI</title></head>
+<body><pre id="out">실행 중...</pre><script type="module">
+import { boot, checkEnvironment } from "../../index.js";
+import { requireCoi } from "../../src/runtime/preflight.js";
+const out = document.getElementById("out");
+const checks = [];
+const check = (name, pass, info = "") => { checks.push({ name, pass: pass === true, info: String(info) }); out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}`; };
+check("헤더 없는 페이지", crossOriginIsolated === false);
+const environment = checkEnvironment();
+const issue = environment.issues.find((entry) => entry.code === "no-cross-origin-isolation");
+check("환경 진단이 COI 부재를 보고", environment.ok === false && !!issue);
+check("진단이 필요한 두 헤더를 안내", issue?.fix.includes("Cross-Origin-Opener-Policy") && issue.fix.includes("Cross-Origin-Embedder-Policy"));
+let guardError = null;
+try { requireCoi("owned kernel"); } catch (error) { guardError = error; }
+check("COI guard가 typed error를 반환", guardError?.code === "PYPROC_ENV_UNSUPPORTED");
+let bootError = null;
+try { await boot(); } catch (error) { bootError = error; }
+check("owned kernel boot가 암호 오류 없이 실패", bootError?.code === "PYPROC_ENV_UNSUPPORTED"
+  && bootError.message.includes("Cross-Origin-Embedder-Policy"));
+await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ ok: checks.every((entry) => entry.pass), checks }) });
+</script></body></html>

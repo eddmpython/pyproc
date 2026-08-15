@@ -25,7 +25,7 @@ async function reportFailure(error) {
 
 async function initialPhase(runtime, startupMs) {
   const startedAt = performance.now();
-  const python = await runtime.runPython("from pathlib import Path\nmachineValue = 91\nPath('/home/web/product_value').write_text('PYTHON_PRODUCT:91')\nf'{machineValue}:{Path(\"/home/web/product_value\").read_text()}'");
+  const python = await runtime.runPython("from pathlib import Path\nmachineValue = 91\nPath('/home/web').mkdir(parents=True, exist_ok=True)\nPath('/home/web/product_value').write_text('PYTHON_PRODUCT:91')\nf'{machineValue}:{Path(\"/home/web/product_value\").read_text()}'");
   const linux = await runtime.runLinux("machine_value=91; mkdir -p /mnt/web; printf LINUX_PRODUCT:91 > /mnt/web/product_value; sync; echo PRODUCT:$machine_value:$(cat /mnt/web/product_value)");
   if (python !== "91:PYTHON_PRODUCT:91" || !linux.includes("PRODUCT:91:LINUX_PRODUCT:91")) throw new Error("Initial dual guest interaction failed");
   const committed = await runtime.save();

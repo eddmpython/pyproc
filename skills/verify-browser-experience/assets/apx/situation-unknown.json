@@ -1,0 +1,62 @@
+{
+  "protocol": "apx",
+  "version": "1.0",
+  "representation": "apx.situation",
+  "profile": ["apx-core/1", "apx-web/1", "apx-situation/1"],
+  "situationRef": "situation:7aaafbc2513d9ed2c843d84ce5b3158b2cff76c293e758280c86c8588822be9e",
+  "worldRef": "world:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "observationRef": "observation:example_unknown",
+  "documentEpoch": 1,
+  "capturedAt": "2026-08-13T00:00:00.000Z",
+  "focus": {
+    "requirements": [{
+      "requirementRef": "requirement:submit",
+      "select": { "role": "button", "name": "Submit order" },
+      "need": ["fact", "affordance"],
+      "cardinality": "one"
+    }],
+    "freshness": { "mode": "recorded", "maxAgeMs": 0 }
+  },
+  "requirements": [{
+    "requirementRef": "requirement:submit",
+    "state": "unknown",
+    "cardinality": "one",
+    "matched": 0,
+    "entityRefs": [],
+    "claimRefs": [],
+    "candidateEvidence": {
+      "surfaceEpoch": "document:1",
+      "universeScopeSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "enumeration": "complete",
+      "observedCount": 0,
+      "droppedCount": 0,
+      "matchedCount": 0,
+      "projectedCount": 0,
+      "omittedMatchedCount": 0,
+      "matchSetSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "orderingSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "continuationRef": null
+    }
+  }],
+  "facts": [],
+  "affordances": [],
+  "changes": [],
+  "unknowns": [{
+    "unknownRef": "unknown:missing_submit",
+    "requirementRef": "requirement:submit",
+    "reason": "missingFact",
+    "evidenceRefs": []
+  }],
+  "suggestedProbes": [],
+  "completeness": { "semantic": "complete", "subscriptions": false },
+  "budget": {
+    "used": { "requirements": 1, "facts": 0, "affordances": 0, "bytes": 0 },
+    "omitted": {},
+    "requiredPreserved": true
+  },
+  "integrity": {
+    "canonicalSha256": "b352a7d5c8c4b75261c41b19fd967032917ec626fbbfe57e2e6e7467b9a04843",
+    "worldSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sourceGraphSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

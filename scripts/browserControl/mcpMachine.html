@@ -10,7 +10,6 @@
   <pre id="out">booting</pre>
   <script id="pyprocControlBootstrap" type="module">
     import { boot } from "../../index.js";
-    import { readStateBundleHeader } from "../../src/state/index.js";
     import { FrameSpacePage } from "../automationSpace/frameSpacePage.js";
     import { installFailClosedNetworkPolicy } from "./mcpMachinePolicy.js";
 
@@ -19,7 +18,7 @@
     const log = (message) => { out.textContent += "\n" + message; };
     const trustedFetch = globalThis.fetch.bind(globalThis);
     const RUN_HARNESS = [
-      "import io as _mcpIo, contextlib as _mcpCtx",
+      "import io as _mcpIo, contextlib as _mcpCtx, json as _mcpJson",
       "_mcpBuf = _mcpIo.StringIO()",
       "_mcpVal = None",
       "with _mcpCtx.redirect_stdout(_mcpBuf), _mcpCtx.redirect_stderr(_mcpBuf):",
@@ -27,7 +26,7 @@
       "        _mcpVal = eval(compile(_mcpSrc, '<mcp>', 'eval'), globals())",
       "    except SyntaxError:",
       "        exec(_mcpSrc, globals())",
-      "[_mcpBuf.getvalue(), None if _mcpVal is None else repr(_mcpVal)]",
+      "print(_mcpJson.dumps({'stdout': _mcpBuf.getvalue(), 'value': None if _mcpVal is None else repr(_mcpVal)}, ensure_ascii=False))",
     ].join("\n");
     const params = new URLSearchParams(location.search);
     const controlToken = "__PYPROC_CONTROL_TOKEN__";
@@ -38,9 +37,6 @@
       ...options,
       headers: { ...(options.headers || {}), "X-PyProc-Control-Token": controlToken },
     });
-    const requestedIndex = params.get("indexURL");
-    if (!requestedIndex) throw new Error("pyproc machine requires indexURL");
-    const indexURL = new URL(requestedIndex, location.href).href;
     const automationProvider = params.get("automationProvider") || "";
     let frameConfig = null;
     if (automationProvider === "frame") {
@@ -49,26 +45,26 @@
       const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
       frameConfig = JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0))));
     }
-    const machine = await boot({ deterministic: true, indexURL });
+    const machine = await boot({ deterministic: true });
     const installPolicy = () => installFailClosedNetworkPolicy(machine, {
       frameOrigins: frameConfig?.targetOrigins || [],
     });
     installPolicy();
     const saved = [];
+    const baseCheckpoint = await machine.history.checkpoint();
     log("machine ready");
 
     const operations = {
-      "machine.run"({ code }) {
-        machine.runtime.setGlobal("_mcpSrc", String(code ?? ""));
-        const result = machine.run(RUN_HARNESS);
-        const [stdout, value] = result && result.toJs ? result.toJs() : result;
-        if (result && result.destroy) result.destroy();
-        return { stdout, value };
+      async "machine.run"({ code }) {
+        await machine.run.set("_mcpSrc", String(code ?? ""));
+        const result = await machine.run.python(RUN_HARNESS);
+        const line = result.output.split("\n").filter(Boolean).at(-1);
+        if (!line) return { stdout: "", value: null };
+        return JSON.parse(line);
       },
       async "machine.image.export"() {
         const image = await machine.history.export();
-        const bytes = new Uint8Array(await image.arrayBuffer());
-        const header = await readStateBundleHeader(crypto, bytes);
+        const bytes = new TextEncoder().encode(JSON.stringify(image));
         const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
         const sha256 = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
         let binary = "";
@@ -78,26 +74,30 @@
         }
         return { kind: "machineImage", mimeType: "application/x-pymachine",
           artifactRef: `artifact:machine_${sha256}`, byteLength: bytes.byteLength,
-          sha256, generation: header.commit, dataBase64: btoa(binary) };
+          sha256, generation: image.digest, dataBase64: btoa(binary) };
       },
-      "machine.checkpoint.save"() {
-        const checkpoint = machine.history.checkpoint();
+      async "machine.checkpoint.save"() {
+        const checkpoint = await machine.history.checkpoint();
         saved.push(checkpoint);
-        return { index: checkpoint.index, changedPages: checkpoint.changedPages, kind: checkpoint.kind };
+        return { index: saved.length - 1, checkpointRef: checkpoint.checkpointRef,
+          deltaDepth: checkpoint.deltaDepth,
+          memoryBytes: checkpoint.memoryLayout.currentPages * 65536 };
       },
-      "machine.checkpoint.restore"({ index } = {}) {
-        const target = index === undefined || index === null
-          ? saved[saved.length - 1]
-          : saved.find((checkpoint) => checkpoint.index === index);
-        if (!target) throw new Error(`checkpointRestore: no saved checkpoint (index ${index ?? "latest"})`);
-        const info = target.restore();
-        return { index: target.index, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
+      async "machine.checkpoint.restore"({ checkpointRef, index } = {}) {
+        const target = Number.isInteger(index) ? saved[index]
+          : checkpointRef === undefined || checkpointRef === null
+            ? saved[saved.length - 1]
+            : saved.find((checkpoint) => checkpoint.checkpointRef === checkpointRef);
+        if (!target) throw new Error(`checkpointRestore: no saved checkpoint (${checkpointRef ?? index ?? "latest"})`);
+        const info = await machine.history.restore(target);
+        return { index: saved.indexOf(target), checkpointRef: target.checkpointRef,
+          restored: info.state === "completed" };
       },
-      "machine.reset"() {
-        const info = machine.history.restore(0);
+      async "machine.reset"() {
+        const info = await machine.history.restore(baseCheckpoint);
         saved.length = 0;
         installPolicy();
-        return { index: 0, pagesWritten: info.pagesWritten, rehashed: info.rehashed };
+        return { checkpointRef: baseCheckpoint.checkpointRef, restored: info.state === "completed" };
       },
     };
     const frameSpace = frameConfig ? new FrameSpacePage(frameConfig) : null;

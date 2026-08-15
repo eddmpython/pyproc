@@ -36,7 +36,7 @@ let client = null;
 try {
   const browser = process.env.PYPROC_BROWSER || undefined;
   run(binPath(installed.appDir, "pyproc-mcp"), ["init", "--recipe", "authorizedBrowser",
-    "--project-root", installed.appDir, "--out", ".pyproc-eyes", "--engine-root", join(ROOT, "vendor", "pyodide"),
+    "--project-root", installed.appDir, "--out", ".pyproc-eyes", "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
     "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
     "--purpose", "verified-change-loop-product-gate", "--acknowledge-effects",
     "--viewport-width", "1280", "--viewport-height", "800", "--device-scale-factor", "1",
@@ -136,7 +136,7 @@ try {
     const outputRoot = `.pyproc-eyes-${profile.environmentId}`;
     const profileConfig = join(installed.appDir, outputRoot, "manifest.json");
     run(binPath(installed.appDir, "pyproc-mcp"), ["init", "--recipe", "authorizedBrowser",
-      "--project-root", installed.appDir, "--out", outputRoot, "--engine-root", join(ROOT, "vendor", "pyodide"),
+      "--project-root", installed.appDir, "--out", outputRoot, "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
       "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
       "--purpose", `verified-change-loop-${profile.environmentId}`, "--acknowledge-effects",
       "--viewport-width", String(profile.width), "--viewport-height", String(profile.height),

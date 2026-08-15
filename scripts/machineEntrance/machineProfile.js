@@ -10,12 +10,12 @@ export const MACHINE_PROFILE_RECIPES = Object.freeze([
 ]);
 
 const INPUT_KEYS = new Set([
-  "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executable", "headed", "gpu",
+  "recipe", "engineRoot", "timeoutMs", "executable", "headed", "gpu",
   "allowedOrigins", "actions", "methods", "fileRoots", "maxRisk", "externalEffects", "purpose",
   "artifacts", "viewport", "recording", "executionMemory", "effectTransactions", "appSpace",
 ]);
 const BROWSER_INPUT_KEYS = Object.freeze([...INPUT_KEYS].filter((key) => ![
-  "recipe", "engineRoot", "engineIndexURL", "timeoutMs", "executionMemory", "effectTransactions", "appSpace",
+  "recipe", "engineRoot", "timeoutMs", "executionMemory", "effectTransactions", "appSpace",
 ].includes(key)));
 const OBSERVE_ACTIONS = Object.freeze(["snapshot", "screenshot", "waitFor"]);
 
@@ -31,10 +31,10 @@ function rejectUnknownKeys(input) {
 }
 
 function engineFrom(input) {
-  if (Number(input.engineRoot !== undefined) + Number(input.engineIndexURL !== undefined) !== 1) {
-    throw new TypeError("Machine Entrance profile requires exactly one of engineRoot or engineIndexURL");
+  if (typeof input.engineRoot !== "string" || !input.engineRoot) {
+    throw new TypeError("Machine Entrance profile requires engineRoot");
   }
-  return input.engineRoot !== undefined ? { root: input.engineRoot } : { indexURL: input.engineIndexURL };
+  return { root: input.engineRoot };
 }
 
 function requiredArray(value, label) {

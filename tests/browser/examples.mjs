@@ -20,7 +20,6 @@ const label = (page) => page || "/ (랜딩 히어로 라이브 데모)";
 // 약화시키면 이 레인이 통째로 무의미해진다(그것을 막는 층은 여기밖에 없다). 하한은
 // tests/browser/gateFloor.json 한 곳에 산다: 브라우저 레인의 하한 정본이 갈리면 안 된다.
 const FLOORS = JSON.parse(readFileSync(new URL("./gateFloor.json", import.meta.url), "utf8")).floors;
-const indexQuery = process.env.PYPROC_INDEX_URL ? `&indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
 
 const browser = findBrowser();
 let resolveReport = null;
@@ -41,10 +40,10 @@ console.log(`pyproc 예제 게이트\n  browser: ${browser}\n`);
 let failed = 0;
 for (const page of PAGES) {
   // speedLab의 speedup 문턱만 환경으로 조정 가능(공유 러너의 물리 코어 한계).
-  // 속도 주장 자체의 인증은 artifact 계약이 담당한다(docs/operations/benchmarking.md S1).
+  // 속도 주장 자체의 인증은 artifact 계약이 담당한다(skills/benchmark-pyproc/references/benchmarking.md S1).
   const minSpeedup = page === "examples/speedLab.html" && process.env.PYPROC_EXAMPLES_MIN_SPEEDUP
     ? `&minSpeedup=${process.env.PYPROC_EXAMPLES_MIN_SPEEDUP}` : "";
-  const launch = () => launchBrowser(`http://127.0.0.1:${port}/${page}?gate=1${indexQuery}${minSpeedup}`, { browser, prefix: "pyprocExample-" });
+  const launch = () => launchBrowser(`http://127.0.0.1:${port}/${page}?gate=1${minSpeedup}`, { browser, prefix: "pyprocExample-" });
   const before = totalRequests();
   const reportPromise = new Promise((res) => { resolveReport = res; });
   const awaited = await awaitGateReport({

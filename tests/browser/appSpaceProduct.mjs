@@ -87,7 +87,7 @@ await writeFile(approvalKeyFile, approvalPair.publicKey.export({ type: "spki", f
 const configPath = join(installed.appDir, "pyproc-app-space.json");
 await writeFile(configPath, JSON.stringify({
   schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") },
+  engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") },
   timeoutMs: TIMEOUT_MS,
   executionMemory: { enabled: true, root: executionRoot, secretEnv: ["APP_SPACE_PRODUCT_SECRET"] },
   effectTransactions: { enabled: true, approvalAuthorities: [{

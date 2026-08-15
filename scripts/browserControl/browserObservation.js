@@ -120,8 +120,18 @@ export class BrowserObservation {
         format: "png", inline: true,
       }, commandResults, signal);
     }
-    if (includeConsole) artifact.console = Object.freeze(this._drain(session.console, maxEvents));
-    if (includeNetwork) artifact.network = Object.freeze(this._drain(session.network, maxEvents));
+    const windows = [];
+    if (includeConsole) {
+      const captured = this._read(session.console, maxEvents, options.eventWatermarks?.console);
+      artifact.console = captured.events;
+      windows.push(captured.window);
+    }
+    if (includeNetwork) {
+      const captured = this._read(session.network, maxEvents, options.eventWatermarks?.network);
+      artifact.network = captured.events;
+      windows.push(captured.window);
+    }
+    if (windows.length) artifact.eventWindows = Object.freeze(windows);
     return Object.freeze(artifact);
   }
 
@@ -140,8 +150,8 @@ export class BrowserObservation {
     let consoleEvents = 0;
     let networkEvents = 0;
     for (const session of this._sessions.values()) {
-      consoleEvents += session.console.length;
-      networkEvents += session.network.length;
+      consoleEvents += session.console.events.length;
+      networkEvents += session.network.events.length;
     }
     return Object.freeze({ sessions: this._sessions.size, consoleEvents, networkEvents });
   }
@@ -150,7 +160,8 @@ export class BrowserObservation {
     const key = sessionKey(sessionRef);
     const present = this._sessions.get(key);
     if (present) return present;
-    const state = { console: [], network: [], requestRefs: new Map(),
+    const bucket = (channel) => ({ channel, events: [], nextSequence: 1, droppedThrough: 0 });
+    const state = { console: bucket("console"), network: bucket("network"), requestRefs: new Map(),
       consoleEnabled: false, networkEnabled: false, unsubscribe: null };
     state.unsubscribe = this._port.subscribe(sessionRef, (event) => {
       const nativeRequestId = event.params?.requestId;
@@ -172,18 +183,36 @@ export class BrowserObservation {
       const normalized = normalizeBrowserObservationEvent(event, this._idFactory, requestRef);
       if (event.method === "Network.loadingFailed" && nativeRequestId) state.requestRefs.delete(nativeRequestId);
       if (!normalized) return;
-      const bucket = normalized.kind === "console" ? state.console : state.network;
-      bucket.push(normalized);
-      if (bucket.length > BROWSER_OBSERVATION_MAX_EVENTS) bucket.splice(0, bucket.length - BROWSER_OBSERVATION_MAX_EVENTS);
+      const target = normalized.kind === "console" ? state.console : state.network;
+      target.events.push(Object.freeze({ ...normalized, sequence: target.nextSequence++ }));
+      if (target.events.length > BROWSER_OBSERVATION_MAX_EVENTS) {
+        const removed = target.events.splice(0, target.events.length - BROWSER_OBSERVATION_MAX_EVENTS);
+        target.droppedThrough = removed.at(-1)?.sequence || target.droppedThrough;
+      }
     });
     this._sessions.set(key, state);
     return state;
   }
 
-  _drain(bucket, maxEvents) {
-    const start = Math.max(0, bucket.length - maxEvents);
-    const selected = bucket.slice(start);
-    bucket.splice(0, bucket.length);
-    return selected;
+  _read(bucket, maxEvents, watermark) {
+    const startSequence = Number.isInteger(watermark) && watermark >= 0 ? watermark : 0;
+    const endSequence = bucket.nextSequence - 1;
+    const eligible = bucket.events.filter((event) => event.sequence > startSequence);
+    const selected = eligible.slice(Math.max(0, eligible.length - maxEvents));
+    const droppedByProjection = Math.max(0, eligible.length - selected.length);
+    const droppedByRetention = Math.max(0, Math.min(endSequence, bucket.droppedThrough) - startSequence);
+    const droppedWithinWindow = droppedByProjection + droppedByRetention;
+    return Object.freeze({
+      events: Object.freeze(selected),
+      window: Object.freeze({
+        channel: bucket.channel,
+        startSequence,
+        endSequence,
+        returnedCount: selected.length,
+        droppedBeforeStart: Math.min(startSequence, bucket.droppedThrough),
+        droppedWithinWindow,
+        complete: droppedWithinWindow === 0,
+      }),
+    });
   }
 }

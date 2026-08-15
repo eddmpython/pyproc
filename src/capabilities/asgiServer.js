@@ -11,6 +11,7 @@
 // lifespan 이벤트는 발화하지 않는다(dispatch 단위 계약).
 import { PyProcError } from "../runtime/errors.js";
 import { bytesFromBase64 } from "../runtime/contentDigest.js";
+import { decodeValueEnvelope, encodeValueEnvelope } from "../runtime/kernel/valueEnvelope.js";
 
 const HELPER = (appVar) => `
 import json as _pyprocJson
@@ -18,7 +19,12 @@ import base64 as _pyprocB64
 
 async def _pyprocAsgiCall(method, path, body, query="", reqHeaders=None):
     _app = ${appVar}
-    bodyBytes = body.encode() if isinstance(body, str) else body.to_bytes()
+    if isinstance(body, str):
+        bodyBytes = body.encode()
+    elif isinstance(body, (bytes, bytearray, memoryview)):
+        bodyBytes = bytes(body)
+    else:
+        bodyBytes = body.to_bytes()
     hdrs = []
     hasType = False
     for pair in reqHeaders:
@@ -57,9 +63,32 @@ async def _pyprocAsgiCall(method, path, body, query="", reqHeaders=None):
 export class AsgiServer {
   // cfg.app: 파이썬 전역에 있는 ASGI 앱 변수명(기본 "app"). 하드코딩 대신 계약으로 받는다.
   // 헬퍼는 매 요청 그 전역을 다시 읽으므로, 전역 재대입만으로 앱이 핫스왑된다(dev loop의 근거).
-  constructor(rt, cfg = {}) { this._rt = rt; this._appVar = cfg.app || "app"; this._fn = null; }
+  constructor(rt, cfg = {}) {
+    this._rt = rt;
+    this._appVar = cfg.app || "app";
+    this._fn = null;
+    this._applicationRef = null;
+  }
 
   async install() {
+    if (this._rt.runtimeContractVersion === 2
+      && typeof this._rt.registerApplication === "function"
+      && typeof this._rt.invokeApplication === "function") {
+      const installed = await this._rt.execute({ code: HELPER(this._appVar) });
+      if (installed.state !== "completed") {
+        throw new PyProcError("PYPROC_KERNEL_EXECUTION_ERROR", "asgi.install: kernel helper installation failed", {
+          context: { kernelError: installed.error },
+        });
+      }
+      const registration = await this._rt.registerApplication({
+        name: "_pyprocAsgiCall",
+        type: "asgi",
+        operations: ["dispatch"],
+      });
+      this._applicationRef = registration.applicationRef;
+      this._fn = null;
+      return { app: this._appVar, transport: "kernel-application-ref", applicationRef: this._applicationRef };
+    }
     this._rt.run(HELPER(this._appVar));
     if (this._fn && this._fn.destroy) this._fn.destroy(); // 재설치 시 이전 프록시 해제
     this._fn = this._rt.getGlobal("_pyprocAsgiCall"); // 비동기 함수 프록시(세션 수명 동안 유지)
@@ -72,6 +101,21 @@ export class AsgiServer {
   // 각자의 지역이라 인터리빙에 안전하다. null/undefined 정규화는 JS 경계에서 한다
   // (null 전달은 Python None이 아니라 JsNull 프록시가 되는 실측 함정).
   async serve(method, path, body = null, query = "", headers = null) {
+    if (this._applicationRef) {
+      const args = [];
+      for (const value of [method, path, body == null ? "" : body, query, headers == null ? [] : headers]) {
+        args.push(await encodeValueEnvelope(value));
+      }
+      const result = await this._rt.invokeApplication({
+        applicationRef: this._applicationRef,
+        operation: "dispatch",
+        args,
+      });
+      const raw = await decodeValueEnvelope(result.value);
+      const r = JSON.parse(raw);
+      const bodyBytes = bytesFromBase64(r.bodyB64);
+      return { status: r.status, headers: r.headers, body: new TextDecoder().decode(bodyBytes), bodyBytes };
+    }
     if (!this._fn) throw new PyProcError("PYPROC_INPUT_INVALID", "asgi.serve: call install() first");
     this._rt.execSeq++; // 전역 무변이라 수동 증가: 저널 유휴 판정이 요청 처리를 실행으로 본다
     const raw = await this._fn(method, path, body == null ? "" : body, query, headers == null ? [] : headers);

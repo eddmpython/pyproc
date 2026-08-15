@@ -1,0 +1,4 @@
+interface:
+  display_name: "Start PyProc"
+  short_description: "Route PyProc tasks and changed paths"
+  default_prompt: "Use $start-pyproc to route this PyProc task to the right knowledge and gates."

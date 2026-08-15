@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify PyProc"
+  short_description: "Select and run required PyProc verification"
+  default_prompt: "Use $verify-pyproc to select and run the required gates for this change."

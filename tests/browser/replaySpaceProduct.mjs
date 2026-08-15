@@ -45,7 +45,7 @@ const browser = process.env.PYPROC_BROWSER || undefined;
 function manifest(provider, recording) {
   return {
     schemaVersion: 1,
-    engine: { root: join(ROOT, "vendor", "pyodide") },
+    engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") },
     timeoutMs: TIMEOUT_MS,
     browser: {
       enabled: true,

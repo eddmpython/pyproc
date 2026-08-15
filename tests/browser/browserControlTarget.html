@@ -11,6 +11,9 @@
     #actionability-cover { position: absolute; inset: 0; z-index: 2; background: rgba(255, 0, 0, .1); }
     @keyframes browser-control-settle { from { left: 0; } to { left: 80px; } }
     #drag-source, #drop-target { display: inline-grid; place-items: center; width: 120px; height: 48px; border: 1px solid; }
+    #offscreen-action { position: fixed; left: -80px; top: 180px; width: 100px; height: 40px; }
+    #ancestor-hit-wrap { width: 180px; height: 40px; }
+    #ancestor-hit-action { width: 100%; height: 100%; pointer-events: none; }
     #readiness-hidden { position: fixed; inset: 0; opacity: 0; pointer-events: none; }
     #lazy-asset { display: block; margin-top: 2200px; width: 320px; height: 180px; background: #ddd; }
   </style>
@@ -37,6 +40,8 @@
       <button id="moving-action" type="button">Moving action</button>
       <div id="actionability-wrap"><button id="covered-action" type="button">Covered action</button></div>
       <button id="enabled-action" type="button">Enable later</button>
+      <button id="offscreen-action" type="button">Offscreen action</button>
+      <div id="ancestor-hit-wrap"><button id="ancestor-hit-action" type="button">Ancestor hit action</button></div>
       <label for="semantic-email">Work email</label>
       <input id="semantic-email" type="email" data-testid="email-field">
       <button id="hover-action" type="button" data-testid="hover-action">Hover action</button>
@@ -119,15 +124,20 @@
       sessionStorage.setItem("browserControlHungClick", String(Number(sessionStorage.getItem("browserControlHungClick") || 0) + 1));
       while (true) { /* renderer를 고의로 멈춰 post-send browser death를 실측한다. */ }
     });
-    const actionabilityCounts = { moving: 0, covered: 0, enabled: 0, shadow: 0, frame: 0, hover: 0, check: 0, drag: 0 };
+    const actionabilityCounts = { moving: 0, covered: 0, enabled: 0, offscreen: 0, ancestor: 0,
+      shadow: 0, frame: 0, hover: 0, check: 0, drag: 0 };
     const trusted = {};
+    const points = {};
     const recordAction = (name, event) => {
       actionabilityCounts[name] += 1;
       trusted[name] = event.isTrusted;
+      points[name] = { x: event.clientX, y: event.clientY };
     };
     document.getElementById("moving-action").addEventListener("click", (event) => recordAction("moving", event));
     document.getElementById("covered-action").addEventListener("click", (event) => recordAction("covered", event));
     document.getElementById("enabled-action").addEventListener("click", (event) => recordAction("enabled", event));
+    document.getElementById("offscreen-action").addEventListener("click", (event) => recordAction("offscreen", event));
+    document.getElementById("ancestor-hit-action").addEventListener("click", (event) => recordAction("ancestor", event));
     document.getElementById("hover-action").addEventListener("mouseenter", (event) => recordAction("hover", event));
     document.getElementById("check-action").addEventListener("change", (event) => recordAction("check", event));
     let dialogDecision = null;
@@ -205,6 +215,7 @@
       actionability: () => ({
         counts: { ...actionabilityCounts },
         trusted: { ...trusted },
+        points: { ...points },
         email: document.getElementById("semantic-email").value,
         focused: document.activeElement?.id || null,
         checked: document.getElementById("check-action").checked,

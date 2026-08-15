@@ -2,6 +2,9 @@
 // The four index.d.ts files of the former @web-machine/{core,browser,guest-pyproc,guest-v86}
 // are merged into one module. The contract meanings are unchanged: the gate checks that
 // GenerationHead and MachineStore still mean the same thing.
+import type { KernelMachine } from "./composition/kernelMachine.js";
+import type { KernelMachineImage } from "../composition/kernelFactory.js";
+export * from "./composition/kernelMachine.js";
 
 // ─── formerly @web-machine/core ───
 export type SnapshotScope = "portable" | "session" | "none";
@@ -821,38 +824,10 @@ export function readWebMachineFile(options: {
 export function assertWebMachineArchive(value: unknown): asserts value is WebMachineArchive;
 
 
-// ─── formerly @web-machine/guest-pyproc ───
-export interface PyprocFileSystem {
-  exists(path: string): boolean;
-  mkdirTree(path: string): void;
-  readdir(path: string): string[];
-  stat(path: string): { isDir: boolean; isFile: boolean };
-  readFile(path: string): Uint8Array;
-  writeFile(path: string, value: ArrayBuffer | ArrayBufferView): void;
-  unlink(path: string): void;
-  rmdir(path: string): void;
-}
-
-export interface PyprocGuestSession {
-  rt: {
-    fs: PyprocFileSystem;
-    memory: { byteLength(): number };
-    run(code: string): unknown;
-  };
-  exportImage(options: { includeHome: boolean }): Promise<Blob>;
-}
-
-export function createPyprocGuestFactory(options: {
-  bootSession: (options: Record<string, unknown>) => Promise<PyprocGuestSession>;
-  openMachine: (image: Blob, options: { trust: true }) => Promise<PyprocGuestSession>;
-  blockDeviceName?: string | null;
-  /**
-   * Attaches the Python guest to the `network`/`packet` device of this name. Once attached,
-   * `pyprocNet.send(frame)` / `recv()` / `pending()` / `address()` live inside the guest, and the
-   * port answers ARP requests and ICMP echo itself, so a peer guest resolves this address even
-   * with no Python code running.
-   */
-  packetDeviceName?: string | null;
+// Owned CPython/WASI guest adapter.
+export function createCpythonWasiGuestFactory(options?: {
+  bootMachine?: (options?: Record<string, unknown>) => Promise<KernelMachine>;
+  openMachineImage?: (image: KernelMachineImage, options?: Record<string, unknown>) => Promise<KernelMachine>;
 }): GuestAdapterFactory;
 
 
@@ -882,16 +857,10 @@ export function createV86GuestFactory(options: V86GuestFactoryOptions): GuestAda
 // ─── Composition: one computer ───
 export interface WebComputerPythonOptions {
   manifest?: Record<string, unknown>;
-  session?: Record<string, unknown>;
+  kernel?: Record<string, unknown>;
   diskBytes?: number;
-  bootSession?: (options: Record<string, unknown>) => Promise<unknown>;
-  openMachine?: (...args: unknown[]) => Promise<unknown>;
-  /** Optional evidence hook for spawned and terminated worker-hosted guest owners. */
-  onWorkerLifecycle?: ((event: Readonly<{
-    state: "spawned" | "terminated";
-    workerId: string;
-    machineId: string | null;
-  }>) => void) | null;
+  bootMachine?: (options?: Record<string, unknown>) => Promise<KernelMachine>;
+  openMachineImage?: (image: KernelMachineImage, options?: Record<string, unknown>) => Promise<KernelMachine>;
 }
 
 export interface WebComputerLinuxOptions {

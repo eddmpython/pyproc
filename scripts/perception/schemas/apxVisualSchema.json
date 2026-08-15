@@ -8,7 +8,7 @@
       "type": "object",
       "required": ["kind", "entityRef", "reason", "artifact", "provenance"],
       "properties": {
-        "kind": { "enum": ["entityCrop", "overview"] },
+        "kind": { "enum": ["entityCrop", "contextCrop", "overview"] },
         "entityRef": { "type": ["string", "null"], "pattern": "^entity:[A-Za-z0-9_-]{1,128}$" },
         "reason": { "type": "string", "minLength": 1 },
         "artifact": { "type": "object", "required": ["kind", "mimeType", "artifactRef", "byteLength", "sha256"], "properties": { "kind": { "const": "screenshot" }, "mimeType": { "type": "string", "pattern": "^image/" }, "artifactRef": { "type": "string", "pattern": "^artifact:[A-Za-z0-9_-]+$" }, "byteLength": { "type": "integer", "minimum": 1 }, "sha256": { "$ref": "#/$defs/digest" }, "dataBase64": { "type": "string" }, "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } }, "additionalProperties": true },

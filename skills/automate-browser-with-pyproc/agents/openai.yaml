@@ -1,0 +1,4 @@
+interface:
+  display_name: "Automate Browser with PyProc"
+  short_description: "Automate browsers through bounded spaces"
+  default_prompt: "Use $automate-browser-with-pyproc to observe and act in a browser through PyProc."

@@ -31,7 +31,7 @@ existing generated profile explicitly.
 `;
 
 const INIT_HELP = `Usage:
-  pyproc-mcp init --recipe <name> (--engine-root <directory> | --engine-index-url <url>) [options]
+  pyproc-mcp init --recipe <name> --engine-root <directory> [options]
 
 Profile:
   --project-root <directory>  Existing project root, defaults to the current directory
@@ -128,8 +128,7 @@ try {
           ok: true,
           schemaVersion: loaded.config.schemaVersion,
           configPath: loaded.configPath,
-          engine: loaded.config.engine.root ? { mode: "root", root: loaded.config.engine.root }
-            : { mode: "indexURL", indexURL: loaded.config.engine.indexURL },
+          engine: { mode: "root", root: loaded.config.engine.root },
           executionMemory: loaded.config.executionMemory.enabled ? {
             enabled: true,
             root: loaded.config.executionMemory.root,

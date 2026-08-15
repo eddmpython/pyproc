@@ -99,7 +99,7 @@ const fixturePath = join(process.env.SystemRoot || "C:\\Windows", "System32", "W
   "v1.0", "powershell.exe");
 const installRoot = join(installed.appDir, "native install 한글");
 const configPath = join(installed.appDir, "Motor 설정.json");
-const engineRoot = join(ROOT, "vendor", "pyodide");
+const engineRoot = join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core");
 const memoryRoot = join(installed.appDir, "Motor 실행 기억 한글");
 const webServer = createServer((request, response) => {
   response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

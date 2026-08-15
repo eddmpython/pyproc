@@ -6,13 +6,10 @@
 // 게스트 정책:
 // - python: 기본 탑재. pyproc 자신이 엔진이므로 주입 없이 즉시 부팅한다.
 // - linux: V86 constructor를 주입할 때만 등록한다. third-party binary를 package에 싣지
-//   않는 provenance 정책(docs/operations/assetProvenance.md 결정 1)이 그대로 산다.
-import { bootSession, openMachine } from "../../session/session.js";
+//   않는 provenance 정책(skills/manage-pyproc-assets/references/asset-provenance.md 결정 1)이 그대로 산다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { createBrowserHost } from "./createBrowserHost.js";
-import { createPyprocGuestFactory } from "../guests/pyproc/pyprocGuestAdapter.js";
-import { createWorkerHostedGuestFactory } from "../guests/bridged/workerHostedGuestAdapter.js";
-import { createRpcPort } from "../../runtime/rpcChannel.js";
+import { createCpythonWasiGuestFactory } from "../guests/cpythonWasi/cpythonWasiGuestAdapter.js";
 import { createV86GuestFactory } from "../guests/v86/v86GuestAdapter.js";
 import { MemoryEthernetSwitch } from "../devices/memoryEthernetSwitch.js";
 import { MemoryBlockDevice } from "../devices/memoryBlockDevice.js";
@@ -63,24 +60,9 @@ function createBasicWebComputer({
   };
 
   const host = createBrowserHost({ devices, cryptoProvider });
-  // 워커 호스팅 어댑터. 등록만 하고 머신은 만들지 않는다: 소비자가 adapterId로 고르는 모드다.
-  // 한 스레드를 나누는 기본 어댑터와 달리 guest 커널이 자기 스레드를 갖는다(CPU 바운드 guest가
-  // 다른 guest를 막지 않는다). 조립이 platform 조각 둘을 주입하는 이유는 층 법이다: guest는
-  // 순수 계약만 소비하고, machine 밖(rpcChannel)과 자산 URL은 조립 지점이 안다.
-  host.registerAdapter("pyproc-worker", createWorkerHostedGuestFactory({
-    createPort: createRpcPort,
-    workerURL: new URL("./workerHostedGuestWorker.js", import.meta.url).href,
-    onWorkerLifecycle: python.onWorkerLifecycle ?? null,
-    ...(builtInDevices.network ? { networkDeviceName: "network" } : {}),
-  }));
-  host.registerAdapter("pyproc-block", createPyprocGuestFactory({
-    bootSession: python.bootSession ?? bootSession,
-    openMachine: python.openMachine ?? openMachine,
-    blockDeviceName: "pythonDisk",
-    // 파이썬 머신도 와이어에 붙는다. 이 배선이 없던 동안 파이썬 머신은 아래 permissions에서
-    // `network`를 받고도 그것을 쓸 코드가 없었다: 권한만 있고 port가 없으면 두 guest는
-    // 같은 스위치에 있어도 바이트를 교환할 수 없다(공존이지 통신이 아니다).
-    ...(builtInDevices.network ? { packetDeviceName: "network" } : {}),
+  host.registerAdapter("cpython-wasi", createCpythonWasiGuestFactory({
+    ...(python.bootMachine ? { bootMachine: python.bootMachine } : {}),
+    ...(python.openMachineImage ? { openMachineImage: python.openMachineImage } : {}),
   }));
   if (linux) {
     if (typeof linux.V86 !== "function") throw new TypeError("a linux.V86 constructor is required");
@@ -102,8 +84,8 @@ function createBasicWebComputer({
   const machines = new Map();
   if (createMachines) machines.set("pythonOs", host.createMachine({
     machineId: "pythonOs",
-    adapterId: "pyproc-block",
-    manifest: python.manifest ?? { session: { ...(python.session || {}) } },
+    adapterId: "cpython-wasi",
+    manifest: python.manifest ?? { kernel: { ...(python.kernel || {}) } },
     permissions: { devices: ["console", "pythonDisk", ...(builtInDevices.network ? ["network"] : [])] },
   }));
   if (createMachines && linux) {

@@ -3,23 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>pyproc - a persistent Python computer in your browser</title>
-  <meta name="description" content="A persistent Python computer in the browser: real CPython, durable workspaces, processes, rewindable history, and signed machine images. No application server.">
+  <title>pyproc - an owned Python kernel in your browser</title>
+  <meta name="description" content="A worker-owned CPython WASI kernel in the browser with verified assets, checkpoints, processes, and portable Machine images.">
   <link rel="icon" href="assets/logo.svg">
   <meta name="theme-color" content="#101514">
   <!-- Social cards. The image is assets/socialCard.png (source: assets/socialCard.html), deployed with this page. -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="pyproc">
-  <meta property="og:title" content="pyproc - a persistent Python computer in your browser">
-  <meta property="og:description" content="Real CPython in a browser tab: processes, rewindable history, durable workspaces, signed machine images. Kill the tab, reopen, it continues. No application server.">
+  <meta property="og:title" content="pyproc - an owned Python kernel in your browser">
+  <meta property="og:description" content="Real CPython in a dedicated worker with verified assets, checkpoints, independent processes, and portable Machine images.">
   <meta property="og:url" content="https://eddmpython.github.io/pyproc/">
   <meta property="og:image" content="https://eddmpython.github.io/pyproc/assets/socialCard.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="pyproc: a persistent Python computer in your browser. Kill the tab. Reopen. It continues.">
+  <meta property="og:image:alt" content="pyproc: an owned Python kernel in your browser.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="pyproc - a persistent Python computer in your browser">
-  <meta name="twitter:description" content="Real CPython in a browser tab: processes, rewindable history, durable workspaces, signed machine images. No application server.">
+  <meta name="twitter:title" content="pyproc - an owned Python kernel in your browser">
+  <meta name="twitter:description" content="Real CPython in a dedicated worker with verified assets, checkpoints, processes, and portable Machine images.">
   <meta name="twitter:image" content="https://eddmpython.github.io/pyproc/assets/socialCard.png">
   <link rel="stylesheet" href="examples/demo.css">
   <!-- This file is copied to the deploy root as index.html and served from there (pages.yml), so relative paths are root-relative. -->
@@ -50,10 +50,10 @@
     <section class="landingHero" id="product">
       <div class="heroCopy">
         <p class="eyebrow">PYPROC / BROWSER-NATIVE MACHINE</p>
-        <h1>The tab can close.<br><span>Your Python computer keeps going.</span></h1>
-        <p class="heroLead">Prepare Python once. Keep its memory, files, environment, and history across tabs and browser restarts. Rewind it, branch it, run real processes, then carry the whole Machine as a signed file.</p>
+        <h1>The browser now owns<br><span>its Python kernel.</span></h1>
+        <p class="heroLead">Run source-built CPython in a dedicated worker. Transfer typed values, checkpoint the interpreter, clone independent processes, and carry state in a verified Machine image.</p>
         <div class="heroActions">
-          <a class="primaryAction" href="examples/immortal.html">Open the Python Machine</a>
+          <a class="primaryAction" href="examples/basic.html">Open the Python kernel</a>
           <a class="secondaryAction" href="https://github.com/eddmpython/pyproc">View on GitHub</a>
           <button class="installAction" id="installChip" type="button" title="Copy install command"><span>$</span> npm install pyproc</button>
         </div>
@@ -76,7 +76,7 @@
         </div>
         <noscript><p class="dim">The Machine runs real CPython in your tab, so it needs JavaScript.</p></noscript>
         <div class="machineFooter">
-          <span>memory</span><b>durable</b><span>history</span><b>rewindable</b><span>processes</span><b>independent</b>
+          <span>assets</span><b>verified</b><span>history</span><b>rewindable</b><span>processes</span><b>independent</b>
         </div>
       </div>
     </section>
@@ -100,11 +100,11 @@
         <p>A runtime becomes a computer when its work survives, its history can move in both directions, and the result can leave the browser intact.</p>
       </div>
       <ol class="lifecycle" aria-label="Machine lifecycle">
-        <li><span>01</span><b>Open</b><p>Start a new Machine or revive a named durable one.</p><code>open({ name: "lab" })</code></li>
-        <li><span>02</span><b>Work</b><p>Run CPython with a real workspace and exact environment.</p><code>machine.run(code)</code></li>
-        <li><span>03</span><b>Commit</b><p>Close each execution boundary into durable history.</p><code>auto-commit</code></li>
-        <li><span>04</span><b>Branch</b><p>Try another future without contaminating the prepared state.</p><code>history.branch()</code></li>
-        <li><span>05</span><b>Carry</b><p>Export the complete state through an explicit trust gate.</p><code>.pymachine</code></li>
+        <li><span>01</span><b>Boot</b><p>Verify the owned engine manifest and start CPython in its worker.</p><code>await boot()</code></li>
+        <li><span>02</span><b>Work</b><p>Run CPython through a Promise-first kernel contract.</p><code>await machine.run(code)</code></li>
+        <li><span>03</span><b>Checkpoint</b><p>Seal an execution boundary into content-addressed state.</p><code>await history.checkpoint()</code></li>
+        <li><span>04</span><b>Clone</b><p>Open prepared state in an independent worker process.</p><code>await machine.proc.clone()</code></li>
+        <li><span>05</span><b>Carry</b><p>Export state and integrity metadata as a Machine image.</p><code>await history.export()</code></li>
       </ol>
     </section>
 
@@ -118,8 +118,8 @@
       <div class="proofList">
         <article class="proofItem">
           <div class="proofNumber">01</div>
-          <div class="proofCopy"><p class="proofLabel">PERSIST</p><h3>Close the tab.<br>Keep the Machine.</h3><p>Completed work commits memory, files, and outcomes locally. When another tab takes over, it revives the same logical Python state instead of starting from zero.</p><a href="examples/immortal.html">See tab survival <span>↗</span></a></div>
-          <div class="proofDiagram persistDiagram" aria-hidden="true"><span>tab</span><i></i><span>commit</span><i></i><strong>same Machine</strong></div>
+          <div class="proofCopy"><p class="proofLabel">OWN</p><h3>One worker.<br>One kernel owner.</h3><p>The interpreter and linear memory stay behind a versioned worker protocol. Consumers receive typed values and receipts, never raw heap access or live Python proxies.</p><a href="examples/basic.html">Run the kernel <span>↗</span></a></div>
+          <div class="proofDiagram persistDiagram" aria-hidden="true"><span>host</span><i></i><span>protocol</span><i></i><strong>kernel worker</strong></div>
         </article>
 
         <article class="proofItem">
@@ -136,8 +136,8 @@
 
         <article class="proofItem">
           <div class="proofNumber">04</div>
-          <div class="proofCopy"><p class="proofLabel">CARRY</p><h3>The file is<br>the computer.</h3><p>A signed Machine image carries heap state, files, environment identity, and history through an integrity envelope. Opening it is an explicit trust decision.</p><a href="examples/machine.html">Export a Machine <span>↗</span></a></div>
-          <div class="proofDiagram imageDiagram" aria-hidden="true"><img src="assets/logo.svg" width="42" height="42" alt=""><strong>computer.pymachine</strong><span>signed · portable · verified</span></div>
+          <div class="proofCopy"><p class="proofLabel">CARRY</p><h3>The image carries<br>the prepared state.</h3><p>A Machine image carries checkpoint objects, engine identity, and integrity metadata without embedding the engine binary.</p><a href="examples/machine.html">Export a Machine <span>↗</span></a></div>
+          <div class="proofDiagram imageDiagram" aria-hidden="true"><img src="assets/logo.svg" width="42" height="42" alt=""><strong>Machine image</strong><span>portable · verified</span></div>
         </article>
       </div>
     </section>
@@ -149,7 +149,7 @@
         <p>Each surface below runs the public package in your browser. They are not mockups, recordings, or backend sessions.</p>
       </div>
       <div class="demoIndex">
-        <a href="examples/immortal.html"><span>01 / PERSISTENCE</span><h3>Immortal Python Machine</h3><p>Close the leader tab and recover the same state locally.</p><b>Open demo ↗</b></a>
+        <a href="examples/immortal.html"><span>01 / REVIVAL</span><h3>Revived Python Machine</h3><p>Export a checkpoint and reopen the same state in a fresh worker.</p><b>Open demo ↗</b></a>
         <a href="examples/agentSandbox.html"><span>02 / HISTORY</span><h3>Agent sandbox loop</h3><p>Prepare, fail, rewind, branch, compare, and adopt.</p><b>Open demo ↗</b></a>
         <a href="examples/processOs.html"><span>03 / PROCESSES</span><h3>Process OS</h3><p>Fork independent interpreters across real CPU cores.</p><b>Open demo ↗</b></a>
         <a href="examples/serverDev.html"><span>04 / SERVER</span><h3>In-kernel web app</h3><p>Serve FastAPI through a real browser URL with no backend.</p><b>Open demo ↗</b></a>
@@ -171,9 +171,9 @@
       </div>
       <div class="contractIndex">
         <a href="https://github.com/eddmpython/pyproc#product-entrances"><span>01</span><div><h3>Product entrances</h3><p>Choose the public door by task and see the runnable proof behind it.</p></div><b>↗</b></a>
-        <a href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/capabilityMatrix.md"><span>02</span><div><h3>Capability matrix</h3><p>Compare product value, browser requirements, status, and hard boundaries.</p></div><b>↗</b></a>
-        <a href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md"><span>03</span><div><h3>Package contract</h3><p>Pin exact versions, keep imports clean, and deploy verified same-origin assets.</p></div><b>↗</b></a>
-        <a href="https://github.com/eddmpython/pyproc/blob/main/docs/operations/benchmarking.md"><span>04</span><div><h3>Benchmark contract</h3><p>Measure the structure honestly without turning temporary numbers into product claims.</p></div><b>↗</b></a>
+        <a href="https://github.com/eddmpython/pyproc/blob/main/skills/understand-pyproc/references/capability-matrix.md"><span>02</span><div><h3>Capability matrix</h3><p>Compare product value, browser requirements, status, and hard boundaries.</p></div><b>↗</b></a>
+        <a href="https://github.com/eddmpython/pyproc/blob/main/skills/use-pyproc-runtime/references/consumer-contract.md"><span>03</span><div><h3>Package contract</h3><p>Pin exact versions, keep imports clean, and deploy verified same-origin assets.</p></div><b>↗</b></a>
+        <a href="https://github.com/eddmpython/pyproc/blob/main/skills/benchmark-pyproc/references/benchmarking.md"><span>04</span><div><h3>Benchmark contract</h3><p>Measure the structure honestly without turning temporary numbers into product claims.</p></div><b>↗</b></a>
       </div>
     </section>
 
@@ -185,13 +185,13 @@
       </div>
       <div class="installPanel">
         <div class="installCommand"><code>npm install pyproc</code><button type="button" id="installCopy">Copy</button></div>
-        <pre><code><span>// open a durable Machine and keep working</span>
-import { open } from "pyproc";
+        <pre><code><span>// boot the verified worker-owned kernel</span>
+import { boot } from "pyproc";
 
-const machine = await open({ name: "lab" });
-await machine.run("counter = globals().get('counter', 0) + 1");
-await machine.run("counter");</code></pre>
-        <p>Pin an exact npm version. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/docs/usage/contract.md">package contract</a>.</p>
+const machine = await boot();
+const result = await machine.run("print(6 * 7)");
+console.log(result.output);</code></pre>
+        <p>Pin an exact npm version. Release-before-pinning alternatives and asset deployment rules live in the <a href="https://github.com/eddmpython/pyproc/blob/main/skills/use-pyproc-runtime/references/consumer-contract.md">package contract</a>.</p>
       </div>
     </section>
   </main>
@@ -199,12 +199,12 @@ await machine.run("counter");</code></pre>
   <footer class="landingFooter">
     <div class="footerBrand">
       <a class="logo" href="./"><img class="logoMark" src="assets/logo.svg" width="34" height="34" alt=""><span>pyproc</span></a>
-      <p>A persistent Python computer in your browser.</p>
+      <p>An owned Python kernel in your browser.</p>
     </div>
     <div class="footerColumn"><b>Product</b><a href="#lifecycle">Lifecycle</a><a href="#demos">Demos</a><a href="#install">Install</a></div>
     <div class="footerColumn"><b>Developers</b><a href="https://github.com/eddmpython/pyproc">GitHub</a><a href="https://www.npmjs.com/package/pyproc">npm</a><a href="https://github.com/eddmpython/pyproc#product-entrances">Documentation</a></div>
     <div class="footerColumn"><b>Family</b><a href="https://eddmpython.com">eddmpython</a><a href="https://buymeacoffee.com/eddmpython">Support</a></div>
-    <p class="footerLegal">MPL-2.0 · built on Pyodide and WebAssembly · Chromium / Edge</p>
+    <p class="footerLegal">MPL-2.0 · source-built CPython WASI · Chromium / Edge</p>
   </footer>
 
   <script type="module">

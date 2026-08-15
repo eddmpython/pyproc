@@ -3,6 +3,7 @@ import { PassThrough } from "node:stream";
 import {
   CONTROL_ATTACHMENT_CHUNK_BYTES,
   ControlClientConversation,
+  acceptControlHello,
   controlBase,
   decodeControlFrame,
   encodeControlFrame,
@@ -44,6 +45,20 @@ export async function assertControlProtocolContract() {
   };
   assert(JSON.stringify(decodeControlFrame(encodeControlFrame(hello))) === JSON.stringify(hello),
     "control hello가 NDJSON roundtrip하지 않는다");
+  const clientHello = {
+    ...controlBase("hello"), requestId: "hello:documented", role: "client",
+    peer: { name: "example-client", version: "1" },
+    capabilities: { cancel: true, events: false,
+      attachments: { encoding: "base64", maxChunkBytes: CONTROL_ATTACHMENT_CHUNK_BYTES } },
+  };
+  const accepted = acceptControlHello(clientHello, { operations: ["machine.run"] });
+  assert(accepted.response.requestId === clientHello.requestId
+    && accepted.response.operations.join(",") === "machine.run",
+  "complete client hello가 server hello로 수락되지 않는다");
+  const incompleteHello = { ...clientHello };
+  delete incompleteHello.capabilities;
+  assert((await errorOf(() => acceptControlHello(incompleteHello, { operations: ["machine.run"] })))?.code
+    === "CONTROL_INVALID_FRAME", "필수 hello 필드 누락 오류가 안정적이지 않다");
   assert((await errorOf(() => validateControlFrame({ ...request("bad-version"), version: 2 })))?.code === "CONTROL_VERSION_UNSUPPORTED",
     "control version mismatch가 fail-closed가 아니다");
   assert((await errorOf(() => validateControlFrame({ ...request("bad-field"), surprise: true })))?.code === "CONTROL_INVALID_FRAME",

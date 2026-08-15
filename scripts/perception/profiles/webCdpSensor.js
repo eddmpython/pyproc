@@ -1,6 +1,7 @@
 // webCdpSensor.js - CDP AX, DOMSnapshot, layout, event facts를 driver-neutral sensor facts로 정규화한다.
 import { redactBrowserUrl } from "../../browserControl/browserObservation.js";
 import { perceptionSessionKey } from "../perceptionIdentity.js";
+import { APX_UNRESOLVED_REASONS } from "../unresolvedVocabulary.js";
 
 export const APX_WEB_COMPUTED_STYLES = Object.freeze([
   "display", "visibility", "opacity", "pointer-events", "overflow", "position", "z-index",
@@ -27,6 +28,7 @@ const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"]);
 const CONTAINER_ROLES = new Set(["form", "group", "list", "listitem", "row", "table", "tree", "document"]);
 const LANDMARK_ROLES = new Set(["banner", "complementary", "contentinfo", "main", "navigation", "region", "search"]);
 const STATUS_ROLES = new Set(["alert", "log", "marquee", "status", "timer"]);
+const [CANVAS_UNRESOLVED, UNLABELLED_IMAGE, UNLABELLED_CONTROL, GEOMETRY_UNAVAILABLE] = APX_UNRESOLVED_REASONS;
 const ENVIRONMENT_EXPRESSION = `(() => {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
@@ -102,6 +104,54 @@ function isAncestor(documentIndex, ancestorIndex, child, recordsByDocument) {
     index = records[index]?.parentIndex ?? -1;
   }
   return false;
+}
+
+export function computeWebOcclusion(records, recordsByDocument, { cellSize = 128 } = {}) {
+  if (!Number.isFinite(cellSize) || cellSize < 16) throw new TypeError("occlusion cellSize is invalid");
+  const cells = new Map();
+  const global = [];
+  const keyOf = (x, y) => `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`;
+  for (const candidate of records) {
+    if (!candidate.visible || !candidate.rect || candidate.paintOrder === null
+      || candidate.styles?.["pointer-events"] === "none") continue;
+    const minX = Math.floor(candidate.rect.x / cellSize);
+    const maxX = Math.floor((candidate.rect.x + candidate.rect.width) / cellSize);
+    const minY = Math.floor(candidate.rect.y / cellSize);
+    const maxY = Math.floor((candidate.rect.y + candidate.rect.height) / cellSize);
+    const cellCount = Math.max(0, maxX - minX + 1) * Math.max(0, maxY - minY + 1);
+    if (cellCount > 4096) {
+      global.push(candidate);
+      continue;
+    }
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let y = minY; y <= maxY; y += 1) {
+        const key = `${x}:${y}`;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(candidate);
+      }
+    }
+  }
+  for (const bucket of cells.values()) bucket.sort((left, right) => right.paintOrder - left.paintOrder);
+  global.sort((left, right) => right.paintOrder - left.paintOrder);
+  let comparisons = 0;
+  for (const record of records) {
+    record.occludedBy = null;
+    if (!record.visible || !record.rect || record.paintOrder === null) continue;
+    const centerX = record.rect.x + record.rect.width / 2;
+    const centerY = record.rect.y + record.rect.height / 2;
+    const candidates = [...(cells.get(keyOf(centerX, centerY)) || []), ...global]
+      .sort((left, right) => right.paintOrder - left.paintOrder);
+    for (const candidate of candidates) {
+      comparisons += 1;
+      if (candidate.paintOrder <= record.paintOrder) break;
+      if (candidate === record || !containsPoint(candidate.rect, centerX, centerY)
+        || isAncestor(record.documentIndex, record.nodeIndex, candidate, recordsByDocument)
+        || isAncestor(candidate.documentIndex, candidate.nodeIndex, record, recordsByDocument)) continue;
+      record.occludedBy = candidate;
+      break;
+    }
+  }
+  return Object.freeze({ comparisons, cells: cells.size, globalCandidates: global.length });
 }
 
 function nodeKind(role, nodeName) {
@@ -194,21 +244,7 @@ export function parseWebDomSnapshot(payload, metrics) {
     record.viewportRatio = intersectionRatio(record.rect, viewport);
     record.occludedBy = null;
   }
-  for (const record of records) {
-    if (!record.visible || !record.rect || record.paintOrder === null) continue;
-    const centerX = record.rect.x + record.rect.width / 2;
-    const centerY = record.rect.y + record.rect.height / 2;
-    let blocker = null;
-    for (const candidate of records) {
-      if (candidate === record || candidate.paintOrder === null || candidate.paintOrder <= record.paintOrder
-        || !candidate.visible || candidate.styles["pointer-events"] === "none"
-        || !containsPoint(candidate.rect, centerX, centerY)
-        || isAncestor(record.documentIndex, record.nodeIndex, candidate, recordsByDocument)
-        || isAncestor(candidate.documentIndex, candidate.nodeIndex, record, recordsByDocument)) continue;
-      if (!blocker || candidate.paintOrder > blocker.paintOrder) blocker = candidate;
-    }
-    record.occludedBy = blocker;
-  }
+  computeWebOcclusion(records, recordsByDocument);
   return { records, recordsByDocument, byBackend, viewport, strings, documents: payload.documents || [] };
 }
 
@@ -244,6 +280,57 @@ function axDescendantText(node, axById) {
 
 function provenance(mode, source, trust) { return Object.freeze({ mode, source, trust }); }
 
+function focusedAxSource(node, axById = new Map()) {
+  const role = clipped(remoteValue(node.role) || "unknown", 80);
+  let name = clipped(remoteValue(node.name));
+  if (!name && STATUS_ROLES.has(role)) name = axDescendantText(node, axById);
+  const description = clipped(remoteValue(node.description));
+  const rawValue = remoteValue(node.value);
+  const states = axStates(node);
+  const supported = supportedActions(role, "", states);
+  const frameNativeRef = `frame:${node.frameId || "main"}`;
+  const backendNodeId = Number(node.backendDOMNodeId);
+  const nativeRef = Number.isInteger(backendNodeId) && backendNodeId > 0
+    ? `dom:${frameNativeRef}:${backendNodeId}` : `ax:${node.frameId || "main"}:${node.nodeId}`;
+  return Object.freeze({
+    nativeRef,
+    ...(Number.isInteger(backendNodeId) && backendNodeId > 0 ? { locatorData: { backendNodeId } } : {}),
+    kind: nodeKind(role, ""),
+    semantic: {
+      role,
+      ...(name ? { name } : {}),
+      ...(description ? { description } : {}),
+      ...(rawValue !== undefined ? { value: clipped(rawValue) } : {}),
+      states,
+      sensitivity: "public",
+    },
+    structure: { parentNativeRef: null, frameNativeRef, nodeName: null, shadowRoot: null },
+    interaction: { supportedActions: supported, actionable: false,
+      reasons: supported.length ? [GEOMETRY_UNAVAILABLE] : [] },
+    provenance: {
+      semantic: provenance("observed", "cdp.accessibility.query", "page"),
+      interaction: provenance("derived", "pyproc.actionability", "broker"),
+    },
+    ...(supported.length ? { unresolved: { reason: GEOMETRY_UNAVAILABLE } } : {}),
+  });
+}
+
+function focusedQueryParams(query) {
+  if (query.focusedUnsupported) return null;
+  if (Number.isInteger(query.backendNodeId) && query.backendNodeId > 0) {
+    return { backendNodeId: query.backendNodeId };
+  }
+  const params = {};
+  if (query.role) params.role = query.role;
+  if (query.name?.exact && !STATUS_ROLES.has(query.role)) params.accessibleName = query.name.exact;
+  if (query.name?.contains && !query.role) return null;
+  return Object.keys(params).length ? params : null;
+}
+
+function focusedUnsupported(error) {
+  return /queryAXTree|method.*(?:not found|unsupported)|wasn.t found/iu.test(String(error?.message || ""));
+}
+
 export class WebCdpSensor {
   constructor({ command, eventCapture = null, environmentCommand = null } = {}) {
     if (typeof command !== "function") throw new TypeError("WebCdpSensor command is required");
@@ -255,13 +342,29 @@ export class WebCdpSensor {
     this.eventCapture = eventCapture;
     this.environmentCommand = environmentCommand || command;
     this.enabledSessions = new Set();
+    this.focusedSupport = new Map();
   }
 
   async capture(sessionRef, options, context = {}) {
+    const plan = context.postconditionPlan;
+    if (plan?.networkOnly) return this._captureFocused(sessionRef, options, context, []);
     const key = perceptionSessionKey(sessionRef);
     if (!this.enabledSessions.has(key)) {
       await this.command(sessionRef, "Accessibility.enable", {}, context.commandResults || [], context.signal);
       this.enabledSessions.add(key);
+    }
+    if (plan?.entityQueries?.length && this.focusedSupport.get(key) !== "unsupported") {
+      const queries = plan.entityQueries.map(focusedQueryParams);
+      if (queries.every(Boolean)) {
+        try {
+          const focused = await this._captureFocused(sessionRef, options, context, queries);
+          this.focusedSupport.set(key, "supported");
+          return focused;
+        } catch (error) {
+          if (!focusedUnsupported(error)) throw error;
+          this.focusedSupport.set(key, "unsupported");
+        }
+      }
     }
     const axCommand = await this.command(sessionRef, "Accessibility.getFullAXTree", {}, context.commandResults || [], context.signal);
     const domCommand = await this.command(sessionRef, "DOMSnapshot.captureSnapshot", {
@@ -298,7 +401,7 @@ export class WebCdpSensor {
       if (domNode && !domNode.visible) reasons.push("hidden");
       if (domNode?.viewportRatio === 0) reasons.push("outsideViewport");
       if (domNode?.occludedBy) reasons.push("occluded");
-      if (!domNode && supported.length) reasons.push("geometryUnavailable");
+      if (!domNode && supported.length) reasons.push(GEOMETRY_UNAVAILABLE);
       sources.push({
         nativeRef,
         ...(domNode ? { locatorData: { backendNodeId: domNode.backendNodeId } } : {}),
@@ -328,15 +431,15 @@ export class WebCdpSensor {
         },
         ...(domNode && ((domNode.nodeName === "CANVAS")
           || ((domNode.nodeName === "IMG" || domNode.clickable) && !name))
-          ? { unresolved: { reason: domNode.nodeName === "CANVAS" ? "canvas" : domNode.nodeName === "IMG"
-            ? "unlabelledImage" : "unlabelledControl" } } : {}),
+          ? { unresolved: { reason: domNode.nodeName === "CANVAS" ? CANVAS_UNRESOLVED : domNode.nodeName === "IMG"
+            ? UNLABELLED_IMAGE : UNLABELLED_CONTROL } } : {}),
       });
     }
     for (const domNode of dom.records) {
       if (includedBackends.has(domNode.backendNodeId) || !domNode.visible || !domNode.rect) continue;
-      const unresolvedReason = domNode.nodeName === "CANVAS" ? "canvas"
-        : domNode.nodeName === "IMG" ? "unlabelledImage"
-          : domNode.clickable ? "unlabelledControl" : null;
+      const unresolvedReason = domNode.nodeName === "CANVAS" ? CANVAS_UNRESOLVED
+        : domNode.nodeName === "IMG" ? UNLABELLED_IMAGE
+          : domNode.clickable ? UNLABELLED_CONTROL : null;
       if (!unresolvedReason) continue;
       const role = domNode.nodeName === "CANVAS" ? "canvas" : domNode.nodeName === "IMG" ? "img" : "control";
       const supported = domNode.clickable ? ["focus", "click"] : [];
@@ -398,6 +501,7 @@ export class WebCdpSensor {
       includeConsole: options.channels.includes("events"),
       includeNetwork: options.channels.includes("networkMetadata"),
       maxEvents: 100,
+      ...(context.eventWatermarks ? { eventWatermarks: context.eventWatermarks } : {}),
     }, context.commandResults || [], context.signal);
     const rootDocument = dom.documents[0] || {};
     const pageUrl = redactBrowserUrl(axCommand.target?.url || stringAt(dom.strings, rootDocument.documentURL));
@@ -414,12 +518,87 @@ export class WebCdpSensor {
       entities: Object.freeze(sources),
       relations: Object.freeze(relations),
       events: Object.freeze([...(capturedEvents.console || []), ...(capturedEvents.network || [])]),
+      eventWindows: Object.freeze([...(capturedEvents.eventWindows || [])]),
+      enumeration: Object.freeze({ entities: "complete" }),
       completeness: Object.freeze({ semantic: "complete", structure: "complete", geometry: "complete",
         interaction: "complete", network: options.channels.includes("networkMetadata") ? "metadata-only" : "notRequested",
         environment: options.channels.includes("environment") ? "complete" : "notRequested" }),
     });
   }
 
-  dropSession(sessionRef) { this.enabledSessions.delete(perceptionSessionKey(sessionRef)); }
-  close() { this.enabledSessions.clear(); }
+  async _captureFocused(sessionRef, options, context, queries) {
+    let rootNodeId = null;
+    if (queries.some((params) => !params.nodeId && !params.backendNodeId && !params.objectId)) {
+      const document = await this.command(
+        sessionRef, "DOM.getDocument", { depth: 0, pierce: true }, context.commandResults || [], context.signal,
+      );
+      rootNodeId = Number(document.result?.root?.nodeId) || null;
+      if (!rootNodeId) throw new Error("Accessibility.queryAXTree document root is unavailable");
+    }
+    const commands = [];
+    for (const params of queries) {
+      commands.push(await this.command(
+        sessionRef, "Accessibility.queryAXTree", rootNodeId && !params.nodeId && !params.backendNodeId && !params.objectId
+          ? { ...params, nodeId: rootNodeId } : params, context.commandResults || [], context.signal,
+      ));
+    }
+    const primaryNodes = commands.flatMap((command) => command.result?.nodes || []);
+    const axById = new Map(primaryNodes.map((node) => [node.nodeId, node]));
+    for (const node of primaryNodes) {
+      const role = clipped(remoteValue(node.role) || "unknown", 80);
+      const backendNodeId = Number(node.backendDOMNodeId);
+      if (!STATUS_ROLES.has(role) || clipped(remoteValue(node.name))
+        || !Number.isInteger(backendNodeId) || backendNodeId < 1) continue;
+      const partial = await this.command(sessionRef, "Accessibility.getPartialAXTree",
+        { backendNodeId, fetchRelatives: true }, context.commandResults || [], context.signal);
+      for (const related of partial.result?.nodes || []) axById.set(related.nodeId, related);
+    }
+    const pageCommand = commands[0] || await this.command(
+      sessionRef, "Page.getFrameTree", {}, context.commandResults || [], context.signal,
+    );
+    const byNative = new Map();
+    for (const initial of primaryNodes) {
+      const node = axById.get(initial.nodeId) || initial;
+      if (node.ignored) continue;
+      const source = focusedAxSource(node, axById);
+      byNative.set(source.nativeRef, source);
+    }
+    let capturedEvents = {};
+    if (this.eventCapture) capturedEvents = await this.eventCapture(sessionRef, {
+      includeConsole: options.channels.includes("events"),
+      includeNetwork: options.channels.includes("networkMetadata"),
+      maxEvents: 100,
+      ...(context.eventWatermarks ? { eventWatermarks: context.eventWatermarks } : {}),
+    }, context.commandResults || [], context.signal);
+    const frame = pageCommand.result?.frameTree?.frame || {};
+    return Object.freeze({
+      documentEpoch: Number(pageCommand.contextEpoch) || 0,
+      page: Object.freeze({
+        url: redactBrowserUrl(pageCommand.target?.url || frame.url || ""),
+        title: "",
+        viewport: Object.freeze({ width: 0, height: 0, scale: 1 }),
+        scroll: Object.freeze({ x: 0, y: 0 }),
+      }),
+      entities: Object.freeze([...byNative.values()]),
+      relations: Object.freeze([]),
+      events: Object.freeze([...(capturedEvents.console || []), ...(capturedEvents.network || [])]),
+      eventWindows: Object.freeze([...(capturedEvents.eventWindows || [])]),
+      enumeration: Object.freeze({ entities: queries.length ? "focused" : "notRequested" }),
+      completeness: Object.freeze({
+        semantic: queries.length ? "complete" : "notRequested",
+        structure: "notRequested",
+        geometry: "notRequested",
+        interaction: "notRequested",
+        network: options.channels.includes("networkMetadata") ? "metadata-only" : "notRequested",
+        environment: "notRequested",
+      }),
+    });
+  }
+
+  dropSession(sessionRef) {
+    const key = perceptionSessionKey(sessionRef);
+    this.enabledSessions.delete(key);
+    this.focusedSupport.delete(key);
+  }
+  close() { this.enabledSessions.clear(); this.focusedSupport.clear(); }
 }

@@ -14,6 +14,7 @@ import { applyPerceptionBudget } from "./perceptionBudget.js";
 import { PerceptionIdentity, perceptionSessionKey } from "./perceptionIdentity.js";
 import { queryPerceptionEntities } from "./perceptionQuery.js";
 import { PerceptionTimeline } from "./perceptionTimeline.js";
+import { evaluateRequirementCandidates } from "./requirementCandidateEvaluator.js";
 import { SituationCompiler } from "./situationCompiler.js";
 import { APX_SITUATION_PROFILE, APX_SITUATION_REPRESENTATION } from "./situationCatalog.js";
 import { WorldModel } from "./worldModel.js";
@@ -77,6 +78,19 @@ function selectEntityChannels(entity, channels) {
 function artifactRefOf(probe) {
   const ref = probe?.artifact?.artifactRef;
   return typeof ref === "string" ? ref : null;
+}
+
+function postconditionEntityQuery(query) {
+  if (query.kind === "entityState") return Object.freeze({ entityRef: query.entityRef });
+  return Object.freeze({
+    ...(query.role ? { role: query.role } : {}),
+    ...(query.name ? { name: query.name } : {}),
+  });
+}
+
+function withoutTemporal(entity) {
+  const { temporal, ...body } = entity;
+  return Object.freeze(body);
 }
 
 function normalizedPage(page = {}) {
@@ -159,9 +173,23 @@ export class PerceptionSpace {
     }
     if (context.signal?.aborted) throw context.signal.reason || new Error("APX observation cancelled");
     const captureOptions = situationRequested ? Object.freeze({ ...options, budget: APX_MAX_BUDGET }) : options;
-    const facts = await this.sensor.capture(sessionRef, captureOptions, context);
-    const documentEpoch = normalizedEpoch(facts.documentEpoch);
     const identitySnapshot = this.identity.snapshot(sessionRef);
+    let sensorContext = context;
+    if (context.postconditionPlan) {
+      const nativeByEntity = new Map([...(identitySnapshot?.entities || new Map())]
+        .map(([nativeRef, entityRef]) => [entityRef, nativeRef]));
+      const entityQueries = context.postconditionPlan.entityQueries.map((query) => {
+        if (!query.entityRef) return query;
+        const nativeRef = nativeByEntity.get(query.entityRef);
+        const match = /:(\d+)$/u.exec(String(nativeRef || ""));
+        return Object.freeze({ ...query,
+          ...(match ? { backendNodeId: Number(match[1]) } : { focusedUnsupported: true }) });
+      });
+      sensorContext = { ...context, postconditionPlan: Object.freeze({ ...context.postconditionPlan,
+        entityQueries: Object.freeze(entityQueries) }) };
+    }
+    const facts = await this.sensor.capture(sessionRef, captureOptions, sensorContext);
+    const documentEpoch = normalizedEpoch(facts.documentEpoch);
     const sessionKey = perceptionSessionKey(sessionRef);
     const visualProbes = [];
     const releasedArtifactRefs = new Set();
@@ -190,8 +218,9 @@ export class PerceptionSpace {
         const { subjectNativeRef, ...publicClaim } = claim;
         return Object.freeze({ ...publicClaim, subjectRef });
       });
-      this.identity.retainEntities(identityState, refByNative.keys());
-      const relations = [];
+      const focusedEnumeration = facts.enumeration?.entities === "focused";
+      if (!focusedEnumeration) this.identity.retainEntities(identityState, refByNative.keys());
+      let relations = [];
       const seenRelations = new Set();
       for (const relation of facts.relations || []) {
         const from = refByNative.get(relation.fromNativeRef);
@@ -204,10 +233,33 @@ export class PerceptionSpace {
           provenance: frozenObject(relation.provenance
             || { mode: "observed", source: "provider", trust: "browser" }) }));
       }
+      let sourceEntities = entities;
+      if (focusedEnumeration) {
+        const previousState = this.timeline.latest(sessionKey);
+        if (previousState?.documentEpoch === documentEpoch) {
+          const refreshedQueries = context.postconditionPlan.entityQueries.map(postconditionEntityQuery);
+          const refreshedRefs = new Set(entities.map((entity) => entity.entityRef));
+          const retained = previousState.entities.filter((entity) =>
+            !refreshedRefs.has(entity.entityRef)
+            && !refreshedQueries.some((query) => queryPerceptionEntities([entity], query, null).length));
+          sourceEntities = [...retained.map(withoutTemporal), ...entities];
+          const sourceRefs = new Set(sourceEntities.map((entity) => entity.entityRef));
+          relations = [...previousState.relations, ...relations].filter((relation) =>
+            sourceRefs.has(relation.from) && sourceRefs.has(relation.to));
+        }
+      }
       const observationRef = `observation:${this.idFactory()}`;
-      const committed = this.timeline.commit(sessionKey, documentEpoch, observationRef, entities, relations);
+      const committed = this.timeline.commit(sessionKey, documentEpoch, observationRef, sourceEntities, relations);
       const { state } = committed;
       rollbackTimeline = committed.rollback;
+      const candidateEvaluations = situationRequested ? evaluateRequirementCandidates(options.focus, state.entities, {
+        documentEpoch,
+        sourceGraphSha256: state.graphSha256,
+        enumeration: facts.enumeration?.entities || "complete",
+        droppedCount: Math.max(0, Number(facts.omitted?.entities) || 0),
+        continuationSeed: facts.enumeration?.continuationRef || null,
+        expiresAt: facts.enumeration?.expiresAt || null,
+      }) : null;
 
       let base = null;
       let resyncRequired = false;
@@ -226,13 +278,18 @@ export class PerceptionSpace {
       if (options.query?.changedSince && !changedRefs) resyncRequired = true;
       const queried = queryPerceptionEntities(state.entities, options.query, changedRefs);
       let selected = queried;
+      if (context.postconditionPlan?.entityQueries?.length) {
+        selected = Object.freeze([...new Map(context.postconditionPlan.entityQueries.flatMap((query) =>
+          queryPerceptionEntities(state.entities, postconditionEntityQuery(query), null))
+          .map((entity) => [entity.entityRef, entity])).values()]);
+      }
       if (delta && !options.query) {
         const selectedRefs = new Set([...delta.added, ...delta.changed.map((entry) => entry.entityRef)]);
         selected = Object.freeze(state.entities.filter((entity) => selectedRefs.has(entity.entityRef)));
       }
       if (situationRequested) {
-        selected = Object.freeze([...new Map(options.focus.requirements.flatMap((requirement) =>
-          queryPerceptionEntities(state.entities, requirement.select, null))
+        selected = Object.freeze([...new Map(candidateEvaluations.flatMap((evaluation) =>
+          evaluation.matchedEntities)
           .map((entity) => [entity.entityRef, entity])).values()]);
       }
       if (options.visual.mode !== "off" && this.visualProbe && options.visual.maxCrops > 0) {
@@ -242,11 +299,16 @@ export class PerceptionSpace {
             .map((entity) => [entity.entityRef, entity])).values()]
           : selected;
         const unresolved = visualCandidates.filter((entity) => entity.unresolved);
-        for (const entity of unresolved.slice(0, options.visual.maxCrops)) {
-          const probe = await this.visualProbe(sessionRef, entity, options.visual,
-            { ...context, page: facts.page });
-          assertApxVisualProbe(probe);
-          visualProbes.push(Object.freeze(probe));
+        for (const entity of unresolved) {
+          const cropKinds = options.visual.mode === "full" ? ["entityCrop", "contextCrop"] : ["entityCrop"];
+          for (const cropKind of cropKinds) {
+            if (visualProbes.length >= options.visual.maxCrops) break;
+            const probe = await this.visualProbe(sessionRef, entity, options.visual,
+              { ...context, page: facts.page, cropKind });
+            assertApxVisualProbe(probe);
+            visualProbes.push(Object.freeze(probe));
+          }
+          if (visualProbes.length >= options.visual.maxCrops) break;
         }
         if (options.visual.mode === "full" && options.visual.overview === "lowResolution"
           && visualProbes.length < options.visual.maxCrops) {
@@ -280,10 +342,16 @@ export class PerceptionSpace {
         entities: [...selected],
         relations: selectedRelations,
         events: Object.freeze([...(facts.events || [])]),
+        ...(facts.eventWindows?.length ? { eventWindows: Object.freeze([...facts.eventWindows]) } : {}),
         unresolved: Object.freeze(selected.filter((entity) => entity.unresolved)
           .map((entity) => Object.freeze({ entityRef: entity.entityRef, ...entity.unresolved }))),
         ...(visualProbes.length ? { visualProbes } : {}),
         completeness: Object.freeze({ ...(facts.completeness || {}),
+          ...(context.postconditionPlan?.entityQueries?.length ? {
+            entityEnumeration: focusedEnumeration || facts.enumeration?.entities !== "incomplete"
+              ? "focusedComplete" : "unknown",
+            omittedRelevantCount: 0,
+          } : {}),
           visual: options.visual.mode === "off" ? "notRequested" : `${visualProbes.length}-probes` }),
         ...(options.query ? { query: Object.freeze({ matched: queried.length, total: state.entities.length }) } : {}),
         ...(resyncRequired ? { resyncRequired: true } : {}),
@@ -319,6 +387,7 @@ export class PerceptionSpace {
           budget: options.budget,
           visual: options.visual,
           visualProbes: bounded.visualProbes || [],
+          candidateEvaluations,
         });
         prepared.commit();
         const priorSituation = this.situations.get(sessionKey);

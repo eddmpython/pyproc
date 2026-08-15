@@ -53,7 +53,11 @@ const LIVE_UNEXPORTED_IDENTIFIERS = Object.freeze({
 const MIGRATION_MARKERS = Object.freeze(["formerly", "구 ", "retired", "no longer", "->", "renamed"]);
 // 내부 운영 문서는 내부 함수 이름으로 말하는 것이 정확하다(예: contractReality의 결정적 부팅
 // 경로 서술). 소비자에게 "이렇게 호출하라"고 말하는 문서만 금칙어 스코프다.
-const USER_DOC_ROOTS = Object.freeze(["README.md", "README.ko.md", "SECURITY.md", "docs/usage", "docs/product", "docs/reference"]);
+const USER_DOC_ROOTS = Object.freeze(["README.md", "README.ko.md", "SECURITY.md",
+  "skills/use-pyproc-runtime", "skills/use-pyproc-machine", "skills/control-pyproc",
+  "skills/automate-browser-with-pyproc", "skills/verify-browser-experience",
+  "skills/commit-pyproc-effects", "skills/transact-pyproc-app-state",
+  "skills/explore-pyproc-replays", "skills/reference-pyproc-api"]);
 
 function collectMarkdown(dir, acc = []) {
   for (const entry of readdirSync(dir)) {
@@ -140,7 +144,7 @@ export async function assertPublicSurface() {
   // 이력이라 옛 이름을 쓰는 것이 정확하므로 스코프 밖이다.
   const docFiles = [
     ...readdirSync(ROOT).filter((entry) => entry.endsWith(".md") && entry !== "CHANGELOG.md"),
-    ...collectMarkdown(join(ROOT, "docs")).map((full) => full.slice(ROOT.length + 1)),
+    ...collectMarkdown(join(ROOT, "skills")).map((full) => full.slice(ROOT.length + 1)),
   ].map((relative) => relative.replaceAll("\\", "/"));
   for (const file of docFiles) {
     const markdown = readFileSync(join(ROOT, file), "utf8");
@@ -185,7 +189,7 @@ export async function assertPublicSurface() {
   const unreleasedSubpaths = declared.split(",").map((name) => name.trim()).filter(Boolean);
   const MARKERS = ["unreleased", "미출하", "SHA pin", "SHA 핀"];
   // 스코프는 손으로 적지 않는다. 3파일 고정 목록이던 판정은 소비자 진입점이 가리키는 다른
-  // 문서를 못 봤다: `docs/usage/contract.md`가 정확한 버전 핀을 지시하면서 그 버전에 없는
+  // 문서를 못 봤다: `skills/use-pyproc-runtime/references/consumer-contract.md`가 정확한 버전 핀을 지시하면서 그 버전에 없는
   // subpath의 import 예제를 표식 없이 담고 있었다(외부 감사 실측 - 소비자가 그대로 따르면
   // ERR_PACKAGE_PATH_NOT_EXPORTED다). 언어 게이트와 같은 링크 유도 스코프를 쓴다.
   const resolveHref = (fromFile, href) => {
@@ -198,13 +202,13 @@ export async function assertPublicSurface() {
     }
     return stack.join("/");
   };
-  const markerScope = new Set(["README.md", "README.ko.md", "docs/reference/api.md"]);
+  const markerScope = new Set(["README.md", "README.ko.md", "skills/reference-pyproc-api/references/api.md"]);
   for (const entry of [...markerScope]) {
     const text = readFileSync(join(ROOT, entry), "utf8");
     for (const m of text.matchAll(/\]\((?!https?:)([A-Za-z0-9/_.-]+\.md)\)/g)) {
       const resolved = resolveHref(entry, m[1]);
       // 소비자 대면 트리만. 내부 운영 문서는 핀 지시를 하지 않는다.
-      if (!resolved.startsWith("docs/usage/") && !resolved.startsWith("docs/reference/")) continue;
+      if (!resolved.startsWith("skills/")) continue;
       if (existsSync(join(ROOT, resolved))) markerScope.add(resolved);
     }
   }
@@ -218,7 +222,7 @@ export async function assertPublicSurface() {
     }
   }
 
-  const freeze = readFileSync(join(ROOT, "docs", "operations", "experimentalFreeze.md"), "utf8");
+  const freeze = readFileSync(join(ROOT, "skills", "evolve-pyproc", "references", "experimental-freeze.md"), "utf8");
   for (const subpath of EXPERIMENTAL_SUBPATHS) {
     if (!freeze.includes("`pyproc/" + subpath.slice(2) + "`")) throw new Error(`동결 문서에 ${subpath} 누락`);
   }

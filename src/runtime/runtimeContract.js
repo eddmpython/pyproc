@@ -1,6 +1,6 @@
 // runtimeContract.js - Layer 0: 엔진 종류와 동기/비동기 배치가 달라도 공유하는 최소 런타임 계약.
 //
-// Runtime(Pyodide)과 WasiSession은 둘 다 이 계약을 구현한다. 반환값이 즉시 값인지 Promise인지는
+// Low-level sessions implement this adapter contract. Whether a value is immediate or a Promise is
 // 배치에 따라 다르므로 공통 소비자는 await를 사용한다. heap/checkpoint/package 같은 확장 능력은
 // capabilities()로 판정하고 최소 계약에 억지로 넣지 않는다.
 import { PyProcError } from "./errors.js";

@@ -18,6 +18,12 @@ import { BROWSER_CONTROL_COMMAND_RISKS } from "../../scripts/browserControl/brow
 import { NodeCdpTransport } from "../../scripts/browserControl/nodeCdpTransport.js";
 import { redactBrowserUrl } from "../../scripts/browserControl/browserObservation.js";
 import { BrowserArtifactStore } from "../../scripts/browserControl/browserArtifactStore.js";
+import {
+  browserActionabilityFingerprint,
+  mapViewportPointToQuad,
+  viewportClippedCenter,
+  waitForBrowserActionability,
+} from "../../scripts/browserControl/browserActionability.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -45,6 +51,8 @@ class FakePort {
     this.contextEpoch = 3;
     this.failMethod = null;
     this.failExpression = null;
+    this.failPredicate = null;
+    this.afterCommand = null;
     this.queryAttached = true;
     this.listeners = new Set();
     this.dialogOnClick = false;
@@ -78,6 +86,12 @@ class FakePort {
     this.commands.push({ ref, command });
     if (command.method === this.failMethod
       && (!this.failExpression || String(command.params?.expression || "").includes(this.failExpression))) {
+      const error = new Error(`failed ${command.method}`);
+      error.code = "BROWSER_CONTROL_COMMAND_REJECTED";
+      error.outcome = "rejected";
+      throw error;
+    }
+    if (this.failPredicate?.(command)) {
       const error = new Error(`failed ${command.method}`);
       error.code = "BROWSER_CONTROL_COMMAND_REJECTED";
       error.outcome = "rejected";
@@ -129,7 +143,9 @@ class FakePort {
           : { result: { type: "object", objectId: "remote:semantic" } };
     }
     if (command.method === "Runtime.callFunctionOn") {
-      result = command.params?.functionDeclaration?.includes("const connected = this.isConnected")
+      result = command.params?.functionDeclaration?.includes("this === other")
+        ? { result: { value: command.params?.objectId === command.params?.arguments?.[0]?.objectId } }
+        : command.params?.functionDeclaration?.includes("const connected = this.isConnected")
         ? { result: { value: {
             tag: "button", connected: true, rect: { x: 10, y: 10, width: 100, height: 30 },
             point: { x: 60, y: 25 }, visible: true, enabled: true, editable: true,
@@ -165,6 +181,7 @@ class FakePort {
     if (this.dialogOnClick && command.method === "Input.dispatchMouseEvent" && command.params?.type === "mouseReleased") {
       queueMicrotask(() => this.emit("Page.javascriptDialogOpening", { type: "confirm", hasBrowserHandler: false }));
     }
+    this.afterCommand?.(command);
     return Object.freeze({
       requestId: `request:${this.commands.length}`,
       state: BROWSER_CONTROL_COMMAND_RISKS[command.method] === "read" ? "observed" : "applied",
@@ -177,6 +194,56 @@ class FakePort {
 }
 
 export async function assertBrowserAutomationContract() {
+  const clippedPoint = viewportClippedCenter(
+    { x: -80, y: 180, width: 100, height: 40 },
+    { width: 800, height: 600 },
+  );
+  assert(clippedPoint?.x === 10 && clippedPoint?.y === 200,
+    "partially offscreen target의 viewport 교집합 중심을 계산하지 않았다");
+  const mappedPoint = mapViewportPointToQuad(
+    { x: 50, y: 25 },
+    { width: 100, height: 50 },
+    [10, 20, 210, 20, 210, 120, 10, 120],
+  );
+  assert(mappedPoint?.x === 110 && mappedPoint?.y === 70,
+    "frame content quad 좌표 변환이 affine 중심을 보존하지 않았다");
+  const fingerprintBase = {
+    contextEpoch: 3,
+    targetIdentity: "backend:11",
+    rect: { x: 10, y: 20, width: 30, height: 40 },
+    point: { x: 25, y: 40 },
+    connected: true,
+    visible: true,
+    enabled: true,
+    editable: false,
+    hitTargetPath: "button:0/span:0",
+    frameChain: [{ ownerBackendNodeId: 8, parentHitPath: "self" }],
+  };
+  assert(browserActionabilityFingerprint(fingerprintBase)
+    !== browserActionabilityFingerprint({ ...fingerprintBase, hitTargetPath: "button:0/span:1" })
+    && browserActionabilityFingerprint(fingerprintBase)
+      !== browserActionabilityFingerprint({ ...fingerprintBase, contextEpoch: 4 })
+    && browserActionabilityFingerprint(fingerprintBase)
+      !== browserActionabilityFingerprint({ ...fingerprintBase, frameChain: [] }),
+  "actionability fingerprint가 hit target, context epoch, frame chain 변화를 구분하지 않았다");
+
+  let actionabilityPoll = 0;
+  const stabilityStart = Date.now();
+  const stableResult = await waitForBrowserActionability({
+    kind: "click",
+    timeoutMs: 1000,
+    resolveTarget: async () => ({ objectId: "target" }),
+    inspectTarget: async () => ({
+      ...fingerprintBase,
+      hitTargetPath: actionabilityPoll++ < 2 ? "button:0/span:0" : "button:0/span:1",
+      receivesEvents: true,
+      reasons: [],
+    }),
+    scrollTarget: async () => {},
+  });
+  assert(stableResult.polls >= 5 && Date.now() - stabilityStart >= 190,
+    "같은 rect 안 hit target 교체가 stable window를 다시 시작하지 않았다");
+
   const deniedExternal = await errorOf(async () => parseBrowserControlConfig({
     PYPROC_BROWSER_ALLOWED_ORIGINS: "http://allowed.test",
     PYPROC_BROWSER_MAX_RISK: "externalEffect",
@@ -381,6 +448,21 @@ export async function assertBrowserAutomationContract() {
   assert(redactBrowserUrl("data:text/plain,secret") === "[redacted-url]",
     "non-HTTP observation URL이 노출됐다");
 
+  const overflowSession = sessionRef("event-overflow");
+  await automation.observe(overflowSession, { maxNodes: 1, includeNetwork: true, maxEvents: 100 });
+  for (let index = 1; index <= 101; index += 1) {
+    port.emit("Network.responseReceived", { requestId: `overflow-${index}`, timestamp: index,
+      type: "Fetch", response: { status: 200, mimeType: "application/json",
+        url: `http://allowed.test/overflow/${index}` } });
+  }
+  const overflow = await automation.observe(overflowSession,
+    { maxNodes: 1, includeNetwork: true, maxEvents: 100 });
+  const overflowWindow = overflow.result.eventWindows.find((window) => window.channel === "network");
+  assert(overflow.result.network.length === 100 && overflowWindow.startSequence === 0
+    && overflowWindow.endSequence === 101 && overflowWindow.droppedWithinWindow === 1
+    && overflowWindow.complete === false,
+  "100개 초과 network event overflow가 sequence와 dropped metadata를 보존하지 않았다");
+
   const locatorRef = artifacts.result.nodes[0].locatorRef;
   const locatorClick = await automation.run(session, [{ kind: "click", locatorRef, expectedRisk: "externalEffect" }]);
   assert(locatorClick.actions[0].result.trusted === true
@@ -432,6 +514,96 @@ export async function assertBrowserAutomationContract() {
   assert(semanticTarget.actions[0].result.actionability?.polls >= 3
     && port.commands.some((entry) => entry.command.params?.expression?.includes('"by":"label"')),
   "semantic locator가 strict resolver와 actionability를 거치지 않았다");
+
+  const actionContext = {
+    situationRef: `situation:${"1".repeat(64)}`,
+    worldRef: `world:${"2".repeat(64)}`,
+    capabilityRef: `capability:${"3".repeat(64)}`,
+  };
+  const originalAssertActionContext = automation._perception.assertActionContext;
+  let authorityChecks = 0;
+  automation._perception.assertActionContext = () => {
+    authorityChecks += 1;
+    if (authorityChecks === 2) {
+      const error = new Error("capability expired at send boundary");
+      error.code = "APX_CAPABILITY_STALE";
+      error.outcome = "notSent";
+      error.retryable = false;
+      throw error;
+    }
+    return { worldRef: actionContext.worldRef, documentEpoch: port.contextEpoch };
+  };
+  const inputBeforeExpiry = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  const expiredAtBoundary = await errorOf(() => automation.run(session, [{
+    kind: "click", selector: "#save", expectedRisk: "externalEffect", actionContext,
+  }]));
+  automation._perception.assertActionContext = originalAssertActionContext;
+  const inputAfterExpiry = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  assert(expiredAtBoundary?.code === "APX_CAPABILITY_STALE" && expiredAtBoundary.outcome === "notSent"
+    && authorityChecks === 2 && inputAfterExpiry === inputBeforeExpiry,
+  "capability expiry가 first input send 직전 재검사에서 차단되지 않았다");
+
+  let rotatedAtIdentity = false;
+  port.afterCommand = (command) => {
+    if (!rotatedAtIdentity && command.method === "Runtime.callFunctionOn"
+      && command.params?.functionDeclaration?.includes("this === other")) {
+      rotatedAtIdentity = true;
+      port.contextEpoch += 1;
+    }
+  };
+  const inputBeforeRotation = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  const rotatedDocument = await errorOf(() => automation.run(session, [{
+    kind: "click", selector: "#save", expectedRisk: "externalEffect",
+  }]));
+  port.afterCommand = null;
+  port.contextEpoch = 3;
+  const inputAfterRotation = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  assert(rotatedDocument?.code === "APX_CAPABILITY_STALE" && rotatedDocument.outcome === "notSent"
+    && inputAfterRotation === inputBeforeRotation,
+  "document epoch rotation이 target binding recheck 뒤 input을 허용했다");
+
+  const releaseFailureSession = sessionRef("release-failure");
+  port.failPredicate = (command) => command.method === "Input.dispatchMouseEvent"
+    && command.params?.type === "mouseReleased";
+  const releaseFailureStart = port.commands.length;
+  const releaseFailure = await errorOf(() => automation.run(releaseFailureSession, [{
+    kind: "click", selector: "#save", expectedRisk: "externalEffect",
+  }]));
+  port.failPredicate = null;
+  const releaseCommands = port.commands.slice(releaseFailureStart)
+    .filter((entry) => entry.command.method === "Input.dispatchMouseEvent"
+      && entry.command.params?.type === "mouseReleased");
+  assert(releaseFailure?.code === "BROWSER_CONTROL_COMMAND_REJECTED"
+    && releaseFailure.outcome === "outcomeUnknown" && releaseFailure.retryable === false
+    && releaseFailure.safetyRelease?.state === "unknown"
+    && releaseFailure.safetyRelease?.residualInputs?.includes("pointer:left")
+    && releaseCommands.length === 2,
+  "mouse release 실패가 independent safety release와 residual risk를 남기지 않았다");
+  const quarantinedInputCount = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  const quarantined = await errorOf(() => automation.run(releaseFailureSession, [{
+    kind: "click", selector: "#save", expectedRisk: "externalEffect",
+  }]));
+  assert(quarantined?.code === "BROWSER_INPUT_RELEASE_FAILED"
+    && port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length === quarantinedInputCount,
+  "residual input session이 다음 effect 전에 quarantine되지 않았다");
+
+  const cancelledController = new AbortController();
+  port.afterCommand = (command) => {
+    if (command.method === "Input.dispatchKeyEvent" && command.params?.type === "keyDown") {
+      cancelledController.abort();
+    }
+  };
+  const cancelledKeyStart = port.commands.length;
+  const cancelledKey = await errorOf(() => automation.run(sessionRef("cancelled-key"), [{
+    kind: "press", key: "Enter", expectedRisk: "externalEffect",
+  }], { signal: cancelledController.signal }));
+  port.afterCommand = null;
+  const cancelledKeyUps = port.commands.slice(cancelledKeyStart)
+    .filter((entry) => entry.command.method === "Input.dispatchKeyEvent" && entry.command.params?.type === "keyUp");
+  assert(cancelledKey?.code === "BROWSER_CONTROL_COMMAND_CANCELLED"
+    && cancelledKey.safetyRelease?.state === "released"
+    && cancelledKey.safetyRelease?.residualInputs?.length === 0 && cancelledKeyUps.length === 1,
+  "취소된 business signal과 독립된 key safety release가 실행되지 않았다");
 
   port.dialogOnClick = true;
   const dialogClick = await automation.run(session, [{

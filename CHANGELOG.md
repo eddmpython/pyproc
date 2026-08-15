@@ -12,8 +12,32 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.22 - 2026-08-15
+
 ### Added
 
+- **The owned CPython WASI kernel now powers the default product and `pyproc/wasi`.**
+  `bootCpythonWasiKernel` opens a worker-owned CPython WASI kernel with Promise-first commands,
+  ordered output events, retry identity, generation fences, structured terminal errors, hard
+  interrupt truth, and idempotent close. Root `boot()`, WebComputer, and installed Control compose
+  the same verified engine through `KernelFactory` and `KernelMachine`.
+- **ValueEnvelope v1 removes live Python objects from the v2 value boundary.** Finite scalars,
+  bigint, bytes, lists, canonical string maps, verified artifact spill, and generation-bound
+  application references cover kernel values and the v2 ASGI and IPC seams with explicit limits.
+- **Kernel checkpoint v2 keeps reactive memory ownership inside the WASI worker.** Engine and
+  environment-bound descriptors seal opaque full or 64KiB page-delta artifacts, reject busy or
+  incompatible boundaries before restore, compact at bounded depth, and fence generations.
+- **KernelVfs v1 adds immutable roots and crash-consistent OPFS volumes to the owned kernel.**
+  Intent, marker, HEAD CAS, adoption recovery, owner epochs, typed devices, and checkpoint root
+  pairing reject partial objects, stale writers, forbidden resources, and corrupt candidates.
+- **Hostcall ABI v1 connects the static CPython module to an authority broker.** A dedicated SAB
+  record and worker-only atomic wait carry byte requests through `/hostcall`; stable receipts prevent
+  duplicate external sends, preserve uncertain outcomes, bound streamed responses, and block unsafe
+  checkpoints. Core no-op, clock, entropy, and terminal providers ship behind the same authority boundary.
+- **Product host capability ports extend the owned kernel without browser handles in Python.**
+  Explicit HTTP credit streams, socket relay, process, GPU, clipboard, framebuffer, and ASGI opcodes
+  share destination-aware authority, exact effect boundaries, receipt replay, cancellation truth, and
+  checkpoint resource classification through injected adapters.
 - **PyProc Eyes now returns task-conditioned situations.** The existing `automation.observe` operation accepts
   `representation: "apx.situation"` and typed focus requirements. It returns a canonical `SituationCapsule`
   with explicit known, conflicted, unknown, and stale claims, bounded probes, and broker-issued affordances.
@@ -566,7 +590,7 @@ option에는 위 Breaking 절의 이관이 필요하다.
   `pyproc/socket` / `pyproc/wasi`.
 - **One bundle format (`PYBUNDLE1`).** `machine.history.export()` writes a single signed,
   content-addressed envelope; `open` reads it. The layout is authoritative in
-  `docs/reference/bundleFormat.md`. The legacy `.pymachine` envelopes (meta v2/v3) are
+  `skills/reference-pyproc-api/references/bundle-format.md`. The legacy `.pymachine` envelopes (meta v2/v3) are
   still readable through a format-detecting reader, and that legacy reader sunsets at the
   next breaking release: re-export machines you intend to keep.
 - **State kernel (`src/state`) refounds the journal.** Durable commits are now

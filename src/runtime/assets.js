@@ -1,5 +1,5 @@
 // assets.js - Layer 0: 같은 오리진에 배포해야 하는 실행 자산 manifest.
-// 브라우저 Worker/SharedWorker/Service Worker는 same-origin 경계가 강하고, import 그래프는 런타임에
+// 브라우저 module Worker는 same-origin 경계가 강하고, import 그래프는 런타임에
 // 브라우저가 직접 가져간다. 따라서 제품은 "어떤 파일이 실행 자산인가"를 문서 추측이 아니라
 // 공개 계약으로 받아야 한다. 실제 SRI 해시 봉인은 배포 파이프라인 단계가 담당하고, 이 모듈은
 // 경로/역할/스코프를 고정한다. pyproc-assets CLI가 만든 SRI manifest를 주면 런타임은 Worker를
@@ -12,44 +12,12 @@ export const PYPROC_ASSET_MANIFEST_VERSION = 1;
 
 const ASSETS = Object.freeze([
   Object.freeze({
-    role: "processWorker",
-    path: "src/processOs/worker.js",
-    kind: "module-worker",
-    sameOrigin: true,
-    usedBy: ["PyProc", "SyscallBridge"],
-    reason: "프로세스 OS 워커와 subprocess 워커 엔트리포인트",
-  }),
-  Object.freeze({
-    role: "machineWorker",
-    path: "src/processOs/machineWorker.js",
-    kind: "module-worker",
-    sameOrigin: true,
-    usedBy: ["MachineContainer"],
-    reason: "컨테이너 커널과 중첩 컨테이너 워커 엔트리포인트",
-  }),
-  Object.freeze({
     role: "wasiWorker",
     path: "src/runtime/engines/wasi/wasiWorker.js",
     kind: "module-worker",
     sameOrigin: true,
     usedBy: ["WasiSession"],
-    reason: "non-Pyodide CPython WASI 세션 워커 엔트리포인트",
-  }),
-  Object.freeze({
-    role: "workerHostedGuestWorker",
-    path: "src/machine/composition/workerHostedGuestWorker.js",
-    kind: "module-worker",
-    sameOrigin: true,
-    usedBy: ["WorkerHostedGuestAdapter", "createWebComputer"],
-    reason: "guest를 자기 워커에 얹는 host 어댑터의 워커 엔트리포인트",
-  }),
-  Object.freeze({
-    role: "pyprocServiceWorker",
-    path: "src/capabilities/pyprocSw.js",
-    kind: "service-worker",
-    sameOrigin: true,
-    usedBy: ["VirtualOrigin", "COI bootstrap", "offline core cache"],
-    reason: "가상 오리진, COOP/COEP 주입, 오프라인 코어 캐시 서비스 워커",
+    reason: "소유 CPython WASI 세션 워커 엔트리포인트",
   }),
 ]);
 
@@ -81,41 +49,6 @@ function matchesSelection(file, roleSet, pathSet) {
 // 예전엔 여기서 경로를 한 번 더 하드코딩하고 안 맞으면 selected[0]으로 폴백했는데,
 // 그 role을 가진 파일이 원래 하나뿐이라 폴백이 늘 같은 답을 냈다: 경로가 바뀌어도
 // 아무 일도 안 일어나고 의도만 조용히 사라진다. 둘 이상이면 매니페스트가 틀린 것이므로 던진다.
-function serviceWorkerFile(manifest) {
-  const files = Array.isArray(manifest?.files) ? manifest.files : [];
-  const selected = files.filter((file) => Array.isArray(file.roles) && file.roles.includes("pyprocServiceWorker"));
-  if (!selected.length) throw new PyProcError("PYPROC_ASSET_INTEGRITY", "assetIntegrity: no pyprocServiceWorker file");
-  if (selected.length > 1) {
-    throw new PyProcError("PYPROC_ASSET_INTEGRITY", `assetIntegrity: ${selected.length} pyprocServiceWorker files (${selected.map((f) => f.path).join(", ")}). The role must point at exactly one file.`);
-  }
-  return selected[0];
-}
-
-function applyServiceWorkerQuery(url, opts) {
-  const base = globalThis.location?.href || "https://pyproc.invalid/";
-  const u = new URL(url, base);
-  const setParam = (name, value) => {
-    if (value === undefined || value === null || value === false) return;
-    u.searchParams.set(name, value === true ? "1" : String(value));
-  };
-  setParam("cache", opts.cache);
-  setParam("asgi", opts.asgi);
-  setParam("coi", opts.coi);
-  setParam("cdn", opts.cdn);
-  setParam("coreIntegrity", opts.coreIntegrity);
-  if (opts.coreRequired === false) u.searchParams.set("coreRequired", "0");
-  else setParam("coreRequired", opts.coreRequired);
-  setParam("asgiTimeout", opts.asgiTimeout);
-  const query = opts.query;
-  if (query instanceof URLSearchParams) {
-    for (const [key, value] of query) setParam(key, value);
-  } else if (query && typeof query === "object") {
-    for (const [key, value] of Object.entries(query)) setParam(key, value);
-  }
-  if (globalThis.location) return u.href;
-  return `${u.pathname}${u.search}${u.hash}`;
-}
-
 /**
  * pyproc 실행 자산 manifest.
  *
@@ -131,7 +64,7 @@ export function getPyProcAssetManifest(opts = {}) {
       sameOriginRequired: true,
       preserveRelativeImports: true,
       runtimePreflight: true,
-      note: "Deploy the src/ tree on your own origin with its relative import structure intact. Leaving only the Worker and Service Worker entrypoints on a cross-origin CDN fails.",
+      note: "Deploy the src/ tree on your own origin with its relative import structure intact. Leaving only the Worker entrypoint on a cross-origin CDN fails.",
     },
     assets: ASSETS.map((asset) => ({ ...asset, url: joinAssetURL(root, asset.path) })),
   };
@@ -176,29 +109,4 @@ export async function verifyPyProcAssetIntegrity(manifest, opts = {}) {
     verified.push(file.path);
   }
   return { verified: verified.length, bytes: total, files: verified };
-}
-
-/**
- * pyproc Service Worker 자산을 SRI 검증한 뒤 manifest에 기록된 URL로 등록한다.
- *
- * 소비자가 별도 문자열로 register 경로를 만들면 "검증한 파일"과 "등록한 파일"이 갈라질 수 있다.
- * 이 helper는 pyproc-assets 산출물의 pyprocServiceWorker role을 먼저 검증하고, 같은 file.url만
- * register에 넘긴다. query 옵션은 pyprocSw.js의 cache/asgi/coi 모드를 켜는 공개 계약이다.
- */
-export async function registerPyProcServiceWorker(manifest, opts = {}) {
-  const nav = opts.navigator || globalThis.navigator;
-  if (!nav?.serviceWorker?.register) throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "pyprocServiceWorker: navigator.serviceWorker.register is required");
-  const file = serviceWorkerFile(manifest);
-  const integrity = await verifyPyProcAssetIntegrity(manifest, {
-    roles: ["pyprocServiceWorker"],
-    fetch: opts.fetch,
-    cache: opts.verifyCache,
-    credentials: opts.credentials,
-  });
-  const url = applyServiceWorkerQuery(file.url, opts);
-  const registrationOptions = {};
-  if (opts.scope) registrationOptions.scope = opts.scope;
-  if (opts.updateViaCache) registrationOptions.updateViaCache = opts.updateViaCache;
-  const registration = await nav.serviceWorker.register(url, registrationOptions);
-  return { registration, integrity, url, file: file.path };
 }

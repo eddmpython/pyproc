@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "protocol": "pyproc.engine-build-manifest",
+  "engineId": "cpython-wasi-3.14.6-pyproc-host-1",
+  "target": "wasm32-wasip1",
+  "sourceDateEpoch": 1781085833,
+  "source": {
+    "version": "3.14.6",
+    "tagObject": "8594736f5057fdc979d42d2135895d56274589a8",
+    "commit": "c63aec69bd59c55314c06c23f4c22c03de76fe45",
+    "url": "https://api.github.com/repos/python/cpython/tarball/c63aec69bd59c55314c06c23f4c22c03de76fe45",
+    "archiveSha256": "c6b8133e056dd5992782b84eb7269a9ac7402f4c35b2f8ecd333cba9fc630d41"
+  },
+  "toolchain": {
+    "wasiSdkVersion": "24.0",
+    "wasiSdkArchiveSha256": "0f934c6e7e171b5627c81b697a9e57e96d65cd889f56ce6077350de48978afd3",
+    "wasiSysrootTreeSha256": "fca0364a42e1aaf6dd9026bddf933a7d59b8bae0015b11cfbf9399629f05150e",
+    "compiler": {
+      "file": "clang.exe",
+      "byteLength": 55412224,
+      "sha256": "4878b6a267df7505f3f94efbe36a44ca6e24f60164e90099faf2c9a45c90616d"
+    }
+  },
+  "recipe": {
+    "configureArgs": [
+      "--disable-test-modules",
+      "--without-ensurepip"
+    ],
+    "requestedCflags": "-O3 -g0 -fno-ident",
+    "observedMakeVariables": {
+      "baseCflags": "-fno-strict-overflow -Wsign-compare -Wunreachable-code",
+      "optimizationFlags": "-DNDEBUG -g -O3 -Wall",
+      "configureCflags": "-O3 -g0 -fno-ident",
+      "configureLdflags": ""
+    },
+    "hostModule": {
+      "name": "_pyprocHost",
+      "abiVersion": "pyproc.hostcall/1"
+    },
+    "hostModuleSourceSha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66",
+    "setupLocalSha256": "90d3f4c86446456bf9dd066b4c0b4870e627b217b801f292329d518fa4c51452"
+  },
+  "staticModules": [
+    "_abc",
+    "_ast",
+    "_asyncio",
+    "_bisect",
+    "_blake2",
+    "_codecs",
+    "_codecs_cn",
+    "_codecs_hk",
+    "_codecs_iso2022",
+    "_codecs_jp",
+    "_codecs_kr",
+    "_codecs_tw",
+    "_collections",
+    "_contextvars",
+    "_csv",
+    "_datetime",
+    "_decimal",
+    "_elementtree",
+    "_functools",
+    "_heapq",
+    "_hmac",
+    "_imp",
+    "_io",
+    "_json",
+    "_locale",
+    "_lsprof",
+    "_md5",
+    "_multibytecodec",
+    "_opcode",
+    "_operator",
+    "_pickle",
+    "_pyprocHost",
+    "_queue",
+    "_random",
+    "_sha1",
+    "_sha2",
+    "_sha3",
+    "_signal",
+    "_socket",
+    "_sre",
+    "_stat",
+    "_statistics",
+    "_string",
+    "_struct",
+    "_suggestions",
+    "_symtable",
+    "_sysconfig",
+    "_thread",
+    "_tokenize",
+    "_tracemalloc",
+    "_types",
+    "_typing",
+    "_weakref",
+    "_zoneinfo",
+    "array",
+    "atexit",
+    "binascii",
+    "cmath",
+    "errno",
+    "faulthandler",
+    "gc",
+    "itertools",
+    "math",
+    "posix",
+    "pyexpat",
+    "select",
+    "time",
+    "unicodedata"
+  ],
+  "outputs": {
+    "engine": {
+      "file": "python.wasm",
+      "byteLength": 7731201,
+      "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+    },
+    "stdlib": {
+      "file": "python314-stdlib.zip",
+      "byteLength": 2753291,
+      "sha256": "be3c2d5802108d0714921153e1e86737fff1e086823630a523663198284eee57"
+    },
+    "stdlibInventory": {
+      "file": "stdlib-inventory.json",
+      "byteLength": 89612,
+      "sha256": "1fade82d731dff7418b255366f66d0d93680d94fb90955fd5582e8a8a68802fc"
+    }
+  }
+}

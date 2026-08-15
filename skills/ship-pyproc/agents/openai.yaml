@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ship PyProc"
+  short_description: "Package release and host PyProc safely"
+  default_prompt: "Use $ship-pyproc to prepare and verify this PyProc package or release."

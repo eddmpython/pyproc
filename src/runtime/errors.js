@@ -11,6 +11,10 @@ export const PYPROC_ERROR_CODES = Object.freeze([
   "PYPROC_INPUT_INVALID",        // 공개 API 입력 형식 위반
   "PYPROC_BOOT_FAILED",          // 엔진/워커 부팅 실패
   "PYPROC_ASSET_INTEGRITY",      // 자산 SRI/manifest 검증 실패
+  "PYPROC_ASSET_MISSING",        // exact digest engine 또는 checkpoint 자산이 offline cache에 없음
+  "PYPROC_PACKAGE_RESOLUTION",   // package dependency 또는 candidate resolution 실패
+  "PYPROC_PACKAGE_INTEGRITY",    // wheel hash, metadata, RECORD 또는 archive 검증 실패
+  "PYPROC_PACKAGE_ABI_UNSUPPORTED", // 현재 engine profile이 설치할 수 없는 binary package
   "PYPROC_MACHINE_FORMAT_INVALID", // .pymachine/저장 메타 형식 위반
   "PYPROC_MACHINE_INTEGRITY",    // .pymachine 봉투 해시/서명 검증 실패(손상 또는 변조)
   "PYPROC_MACHINE_UNTRUSTED",    // trust 게이트 미승인
@@ -79,7 +83,7 @@ export function toErrorPayload(error) {
     code: error && CODE_SET.has(error.code) ? error.code : "PYPROC_WORKER_TASK_ERROR",
     retryable: !!(error && error.retryable === true),
   };
-  // Pyodide PythonError는 type에 파이썬 예외 클래스명을 싣는다(KeyboardInterrupt 등).
+  // Python execution errors carry their exception class in type (KeyboardInterrupt and so on).
   if (error && typeof error.type === "string" && error.type) payload.pyExcType = error.type;
   return payload;
 }

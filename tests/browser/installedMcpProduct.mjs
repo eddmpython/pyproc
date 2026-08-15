@@ -1,6 +1,7 @@
 // installedMcpProduct.mjs - packed pyproc-mcp command, Python machine, browser and artifacts in one gate.
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
@@ -73,7 +74,7 @@ const { createEvidencePack, publishEvidencePack } = await import(pathToFileURL(j
 const browser = process.env.PYPROC_BROWSER || undefined;
 const cli = binPath(installed.appDir, "pyproc-mcp");
 const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
-  "--out", ".pyproc-mcp-product", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--out", ".pyproc-mcp-product", "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
   "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
   "--purpose", "installed-browser-automation-product-gate", "--acknowledge-effects",
   "--method", "Runtime.evaluate", "--viewport-width", "390", "--viewport-height", "844",
@@ -91,10 +92,17 @@ const versionRun = run(cli, ["--version"], { cwd: installed.appDir });
 const helpRun = run(cli, ["--help"], { cwd: installed.appDir });
 const checkRun = run(cli, ["--config", configPath, "--check"], { cwd: installed.appDir });
 const checkReport = JSON.parse(checkRun.stdout);
+const unknownRecipeOutput = join(installed.appDir, ".pyproc-unknown-recipe");
+let unknownRecipeError = null;
+try {
+  run(cli, ["init", "--recipe", "unknownRecipe", "--project-root", installed.appDir,
+    "--out", ".pyproc-unknown-recipe", "--engine-root",
+    join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core")], { cwd: installed.appDir });
+} catch (error) { unknownRecipeError = error; }
 check("installed bin help, version, check가 제품 시작 표면과 권한을 검증",
   initializedProfile.manifestPath === configPath
     && versionRun.stdout.trim() === installed.packed.version && helpRun.stdout.includes("--config <file>")
-    && helpRun.stdout.includes("--check") && checkReport.ok === true
+    && helpRun.stdout.includes("pyproc-mcp init --recipe") && helpRun.stdout.includes("--check") && checkReport.ok === true
     && checkReport.browser.actions.includes("screenshot")
     && checkReport.executionMemory?.enabled === true
     && checkReport.executionMemory?.root === memoryRoot
@@ -102,6 +110,8 @@ check("installed bin help, version, check가 제품 시작 표면과 권한을 �
     && checkReport.browser.rawMethods.join(",") === "Runtime.evaluate"
     && checkReport.engine.mode === "root",
 `${versionRun.stdout.trim()}, ${checkReport.browser.actions.length} actions`);
+check("installed init가 unknown recipe를 쓰기 전에 거부",
+  unknownRecipeError?.message.includes("recipe must be one of") && !existsSync(unknownRecipeOutput));
 
 const installedScript = join(installed.appDir, "node_modules", "pyproc", "scripts", "pyprocMcp.mjs");
 const child = spawn(process.execPath, [installedScript, "--config", configPath], {
@@ -162,7 +172,7 @@ try {
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
   const tools = (await request("tools/list")).result.tools.map((tool) => tool.name);
   check("설치 제품이 Python, browser, Execution Memory, Rehearse-Commit operation을 함께 제공",
-    tools.length === 34 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete")
+    tools.length === 36 && tools.includes("browserArtifactRead") && tools.includes("browserArtifactDelete")
       && tools.includes("browserClose")
       && tools.includes("machineImageExport") && tools.includes("memoryCreate") && tools.includes("memoryImport")
       && tools.includes("eyesAudit") && tools.includes("eyesVerify") && tools.includes("eyesReplay")
@@ -260,14 +270,15 @@ try {
       { kind: "screenshot", format: "png", expectedRisk: "read" },
       { kind: "screenshot", format: "jpeg", quality: 75, fullPage: true, expectedRisk: "read" },
       { kind: "screenshot", format: "webp", quality: 70,
-        clip: { x: 0, y: 0, width: 320, height: 180, scale: 1 }, expectedRisk: "read" },
+        clip: { x: 0, y: 0, width: 320, height: 180 }, expectedRisk: "read" },
     ],
   });
   const pipeline = toolText(pipelineResponse);
   const artifacts = pipeline.actions.slice(2).map((action) => action.result);
   check("설치 제품에서 effect 뒤 ordered screenshot 3종 생성",
     pipeline.actions.length === 5 && artifacts.map((artifact) => artifact.format).join(",") === "png,jpeg,webp"
-      && artifacts.every((artifact) => artifact.artifactRef.startsWith("artifact:")),
+      && artifacts.every((artifact) => artifact.artifactRef.startsWith("artifact:"))
+      && artifacts[2].cssWidth === 320 && artifacts[2].cssHeight === 180,
   artifacts.map((artifact) => `${artifact.format}:${artifact.byteLength}`).join(", "));
   const nativeImages = pipelineResponse.result.content.filter((entry) => entry.type === "image");
   check("설치 제품 screenshot이 artifact와 ordered native image를 함께 반환",
@@ -305,17 +316,21 @@ try {
       cardinality: "one" }] }, actions: [{ kind: "click", requirementRef: "requirement:commit",
       expectedRisk: "externalEffect", verify: effectTransition }] }, expectedTransition: effectTransition,
   }));
+  if (!effectPrepared?.transaction) throw new Error(`effectPrepare failed: ${JSON.stringify(effectPrepared)}`);
   const effectRehearsed = toolText(await callTool("effectRehearse", { transactionId: "effect:mcp-product",
     expectedRevisionSha256: effectPrepared.transaction.contentSha256, mode: "computed", code: "6 * 7",
     expectedValue: "42" }));
+  if (!effectRehearsed?.intent) throw new Error(`effectRehearse failed: ${JSON.stringify(effectRehearsed)}`);
   const effectGrant = createApprovalGrant({ intent: effectRehearsed.intent, authorityId: "operator:mcp-product",
     trustDomainSha256: effectPrepared.trustDomain.trustDomainSha256,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), nonce: "nonce:mcp-product",
     policyVersion: "mcp-product/1" }, approvalPair.privateKey);
   const effectApproved = toolText(await callTool("effectApprove", { transactionId: "effect:mcp-product",
     expectedRevisionSha256: effectRehearsed.contentSha256, grant: effectGrant }));
+  if (!effectApproved?.contentSha256) throw new Error(`effectApprove failed: ${JSON.stringify(effectApproved)}`);
   const effectTerminal = toolText(await callTool("effectCommit", { transactionId: "effect:mcp-product",
     expectedRevisionSha256: effectApproved.contentSha256 }));
+  if (!effectTerminal?.contentSha256) throw new Error(`effectCommit failed: ${JSON.stringify(effectTerminal)}`);
   const effectRetried = toolText(await callTool("effectCommit", { transactionId: "effect:mcp-product",
     expectedRevisionSha256: effectTerminal.contentSha256 }));
   const effectListed = toolText(await callTool("effectList"));
@@ -346,9 +361,11 @@ try {
       cardinality: "one" }] }, actions: [{ kind: "click", requirementRef: "requirement:commit",
       expectedRisk: "externalEffect", verify: effectTransition }] }, expectedTransition: effectTransition,
   }));
+  if (!wrongPrepared?.transaction) throw new Error(`wrong effectPrepare failed: ${JSON.stringify(wrongPrepared)}`);
   const wrongRehearsed = toolText(await callTool("effectRehearse", { transactionId: "effect:mcp-destination",
     expectedRevisionSha256: wrongPrepared.transaction.contentSha256, mode: "computed", code: "6 * 7",
     expectedValue: "42" }));
+  if (!wrongRehearsed?.intent) throw new Error(`wrong effectRehearse failed: ${JSON.stringify(wrongRehearsed)}`);
   const wrongGrant = createApprovalGrant({ intent: wrongRehearsed.intent, authorityId: "operator:mcp-product",
     trustDomainSha256: wrongPrepared.trustDomain.trustDomainSha256,
     expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), nonce: "nonce:mcp-destination",
@@ -375,7 +392,7 @@ try {
       && toolText(stale).code === "BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND");
   await callTool("browserDetach", { sessionRef });
 } catch (error) {
-  check("제품 흐름 예외 없음", false, String(error).slice(-500));
+  check("제품 흐름 예외 없음", false, String(error?.stack || error).slice(-1200));
 } finally {
   child.kill("SIGTERM");
   await new Promise((resolve) => child.once("exit", resolve));

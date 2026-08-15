@@ -1,6 +1,28 @@
 import { createWebComputer, open } from "../index.js";
 import type { MachineStore } from "../src/machine/index.js";
 import {
+  bootCpythonWasiKernel,
+  decodeValueEnvelope,
+  encodeValueEnvelope,
+  HostCapabilityBroker,
+  KernelReactiveController,
+  KernelVfs,
+  MemoryKernelVfsStore,
+  MemoryPackageContentStore,
+  PackageEnvironment,
+  ProductHostCapabilityPort,
+  SimpleApiPackageResolver,
+  KernelEnvironmentManager,
+  KernelTerminal,
+  KernelFactory,
+  MemoryKernelAssetStore,
+  createKernelEngineManifest,
+  createFramebufferHostAdapter,
+} from "../src/composition/wasiSubpath.js";
+import { bootKernelMachine, KernelMachine } from "../src/machine/index.js";
+import { KernelProcess, KernelProcessManager } from "../src/processOs/kernelProcess.js";
+import { KernelSession } from "../src/session/kernelSession.js";
+import {
   createEffectTransactionRegistry,
   createAppSpaceRegistry,
   createExecutionMemoryRegistry,
@@ -27,12 +49,82 @@ createWebComputer({ cryptoProvider: minimalCrypto, durability: { groupId: "typed
 
 async function durableMachineSurface() {
   const defaultMachine = await open();
-  const namedMachine = await open({ name: "typed-machine" });
-  const autoCommit: boolean = defaultMachine.status().autoCommit;
-  await namedMachine.run("typedValue = 1");
-  return autoCommit;
+  await defaultMachine.run.python("typedValue = 1");
+  const image = await defaultMachine.history.export();
+  const reopenedMachine = await open(image);
+  await reopenedMachine.run.python("typedValue += 1");
+  await defaultMachine.close();
+  const inspection = await reopenedMachine.inspect();
+  await reopenedMachine.close();
+  return inspection.protocol;
 }
 void durableMachineSurface;
+
+async function kernelValueSurface() {
+  const hostBroker = new HostCapabilityBroker({ authorize: ({ capability }) => capability === "terminal.write" });
+  const productPort = new ProductHostCapabilityPort({
+    framebuffer: createFramebufferHostAdapter(async ({ byteLength }) => { void byteLength; }),
+  }).install(hostBroker);
+  const vfs = new KernelVfs(new MemoryKernelVfsStore(), { volumeId: "typed", ownerId: "owner:typed" });
+  await vfs.open();
+  const transaction = vfs.beginTransaction();
+  await transaction.write("/home/typed.txt", "typed");
+  await transaction.commit();
+  const kernel = await bootCpythonWasiKernel({ wasmBytes: new Uint8Array(), stdlibBytes: new Uint8Array(),
+    kernelVfs: vfs, hostBroker, checkpointCoordinator: hostBroker });
+  const packageStore = new MemoryPackageContentStore();
+  const packageResolver = new SimpleApiPackageResolver({
+    indexes: [{ url: "https://packages.example/simple/", trustRef: "trust:typed" }],
+  });
+  const packageEnvironment = new PackageEnvironment({ kernel, resolver: packageResolver,
+    contentStore: packageStore });
+  const terminal = new KernelTerminal(kernel, { packageEnvironment });
+  const environmentManager = new KernelEnvironmentManager(kernel, packageEnvironment);
+  void terminal;
+  void environmentManager;
+  const envelope = await encodeValueEnvelope({ exact: 9007199254740993n, bytes: new Uint8Array([1, 2]) });
+  await kernel.setValue({ name: "typed", value: envelope });
+  const result = await kernel.getValue({ name: "typed" });
+  const decoded: unknown = await decodeValueEnvelope(result.value);
+  const registration = await kernel.registerApplication({ name: "app", type: "callable", operations: ["call"] });
+  await kernel.invokeApplication({ applicationRef: registration.applicationRef, operation: "call", args: [envelope] });
+  const reactive = new KernelReactiveController(kernel);
+  const checkpoint = await reactive.checkpoint();
+  await reactive.restore(checkpoint.checkpointRef);
+  await kernel.close();
+  await productPort.close();
+  return decoded;
+}
+void kernelValueSurface;
+
+async function kernelFactorySurface() {
+  const bytes = new Uint8Array([1]);
+  const sha256 = `sha256:${"a".repeat(64)}` as const;
+  const manifest = await createKernelEngineManifest({
+    engineId: "engine:typed",
+    environmentId: sha256,
+    runtimeKind: "cpython-wasi",
+    target: "wasm32-wasip1",
+    pythonVersion: "3.14.6",
+    nativeProfile: "core",
+    stdlibDir: "python3.14",
+    artifacts: {
+      wasm: { url: "/python.wasm", sha256, byteLength: bytes.byteLength },
+      stdlib: { url: "/stdlib.zip", sha256, byteLength: bytes.byteLength },
+    },
+    buildManifestSha256: sha256,
+  });
+  const factory = new KernelFactory({ assetStore: new MemoryKernelAssetStore() });
+  const machine: Promise<KernelMachine> = bootKernelMachine(factory, manifest);
+  const sessionType: typeof KernelSession = KernelSession;
+  const processType: typeof KernelProcess = KernelProcess;
+  const processManagerType: typeof KernelProcessManager = KernelProcessManager;
+  void machine;
+  void sessionType;
+  void processType;
+  void processManagerType;
+}
+void kernelFactorySurface;
 
 async function controlSurface() {
   const client = await PyProcControlClient.start("pyproc-control.json");

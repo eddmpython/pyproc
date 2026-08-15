@@ -132,6 +132,21 @@ try {
   check("EvidenceLoop confirmed", evidence?.effectOutcome === "applied"
     && evidence.verification?.state === "confirmed" && evidence.verification.evidenceRefs.length >= 2,
   JSON.stringify(evidence));
+  const actedMethods = acted.trace.steps[0].commands.map((command) => command.method);
+  check("focused verification이 full AX와 DOMSnapshot을 생략",
+    actedMethods.includes("Accessibility.queryAXTree")
+      && !actedMethods.includes("Accessibility.getFullAXTree")
+      && !actedMethods.includes("DOMSnapshot.captureSnapshot"), actedMethods.join(","));
+  check("send boundary와 input release evidence가 verified action에 결합",
+    acted.actions[0].result.sendBoundary?.authorityRecheckedAt
+      && acted.actions[0].result.sendBoundary?.providerAcknowledgedAt
+      && acted.actions[0].result.sendBoundary?.checkedWorldRef === situation.worldRef
+      && acted.actions[0].result.safetyRelease?.state === "notRequired"
+      && evidence.observationCoverage?.completeness === "complete"
+      && evidence.observationCoverage?.eventWindows?.[0]?.complete === true,
+  JSON.stringify({ sendBoundary: acted.actions[0].result.sendBoundary,
+    safetyRelease: acted.actions[0].result.safetyRelease,
+    observationCoverage: evidence.observationCoverage }));
 
   const secondRun = await automation.observe(sessionRef, {
     representation: "apx.graph",

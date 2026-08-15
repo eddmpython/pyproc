@@ -1,0 +1,4 @@
+interface:
+  display_name: "Explore PyProc Replays"
+  short_description: "Explore ReplayGraph branches and evidence"
+  default_prompt: "Use $explore-pyproc-replays to inspect or explore this replay graph."

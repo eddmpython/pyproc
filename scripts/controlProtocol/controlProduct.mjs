@@ -245,9 +245,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
 
   await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
   const serverOrigin = `http://127.0.0.1:${server.address().port}`;
-  const engineIndexURL = engineRoot ? `${serverOrigin}/pyprocEngine/`
-    : (env.PYPROC_INDEX_URL || `${serverOrigin}/vendor/pyodide/`);
-  const pageParams = new URLSearchParams({ indexURL: engineIndexURL });
+  const pageParams = new URLSearchParams();
   if (providerKind === "frame") {
     pageParams.set("automationProvider", "frame");
     pageParams.set("frameConfig", Buffer.from(JSON.stringify({

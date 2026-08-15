@@ -95,7 +95,7 @@ export function validateV86AssetCatalog(value) {
     throw new TypeError("webComputer: development/disabled 정책 필요");
   }
   assertString(product.catalogId, "webComputer.catalogId");
-  // policyVersion: 봉투가 나르는 값. docs/operations/assetProvenance.md의 버전과 같아야 한다.
+  // policyVersion: 봉투가 나르는 값. skills/manage-pyproc-assets/references/asset-provenance.md의 버전과 같아야 한다.
   if (!Number.isSafeInteger(product.policyVersion) || product.policyVersion < 1) throw new TypeError("webComputer.policyVersion: 양의 정수 필요");
   if (!Array.isArray(product.promotionRequires) || !product.promotionRequires.length) {
     throw new TypeError("webComputer.promotionRequires 필요");

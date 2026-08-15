@@ -237,6 +237,25 @@ export function decodeControlFrame(line) {
 
 export const controlBase = (type) => ({ protocol: CONTROL_PROTOCOL, version: CONTROL_VERSION, type });
 
+export function acceptControlHello(frame, { operations = [],
+  peer = { name: "pyproc", version: "1" } } = {}) {
+  validateControlFrame(frame);
+  if (frame.type !== "hello" || frame.role !== "client") {
+    fail("CONTROL_HELLO_REQUIRED", "the first control frame must be a client hello");
+  }
+  const response = {
+    ...controlBase("hello"), requestId: frame.requestId, role: "server", peer,
+    capabilities: { cancel: true, events: false,
+      attachments: { encoding: "base64", maxChunkBytes: CONTROL_ATTACHMENT_CHUNK_BYTES } },
+    operations: [...operations],
+  };
+  validateControlFrame(response);
+  return Object.freeze({
+    response: Object.freeze(response),
+    maxAttachmentChunkBytes: frame.capabilities.attachments.maxChunkBytes,
+  });
+}
+
 export class ControlClientConversation {
   constructor({ maxAttachmentChunkBytes = CONTROL_ATTACHMENT_CHUNK_BYTES } = {}) {
     if (!Number.isSafeInteger(maxAttachmentChunkBytes) || maxAttachmentChunkBytes < 1

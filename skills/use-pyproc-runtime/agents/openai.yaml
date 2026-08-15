@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use PyProc Runtime"
+  short_description: "Install and run the owned Python runtime"
+  default_prompt: "Use $use-pyproc-runtime to install PyProc and run Python within its supported platform boundary."

@@ -34,12 +34,10 @@ export const MIME = {
   ".svg": "image/svg+xml",
 };
 
-// crossOriginIsolated 요건: 앞의 두 헤더가 없으면 SharedArrayBuffer가 잠긴다.
-// Service-Worker-Allowed는 pyprocSw를 루트 스코프로 등록하기 위함(가상 오리진/오프라인 캐시).
+// crossOriginIsolated 요건: 두 헤더가 없으면 SharedArrayBuffer가 잠긴다.
 export const COI_HEADERS = Object.freeze({
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
-  "Service-Worker-Allowed": "/",
 });
 
 // 경로 탈출 방어의 정본. urlPath가 root 밖을 가리키면 null(호출자가 403).
@@ -69,8 +67,7 @@ export async function sendFile(res, file, opts = {}) {
 // COOP/COEP 정적 서버를 만든다(listen은 호출자 몫).
 // onRequest(req, res)가 true를 반환하면 그 요청은 호출자가 처리한 것으로 보고 넘긴다
 // (게이트 하네스의 POST 백채널 같은 동적 엔드포인트용).
-// opts.coi=false면 COOP/COEP/SW 헤더를 뺀다: GitHub Pages처럼 헤더를 못 다는 호스팅을
-// 로컬에서 재현하는 실측용(pythonMachine/noCoiProbe, swCoiProbe).
+// opts.coi=false면 COOP/COEP 헤더를 뺀다: 헤더를 못 다는 호스팅을 로컬에서 재현하는 실측용이다.
 // opts.root로 서빙 루트를 바꾼다(기본 = 저장소 루트).
 export function createStaticServer(onRequest = null, opts = {}) {
   const coi = opts.coi !== false;

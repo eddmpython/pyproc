@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyproc-control"
-version = "0.0.21"
+version = "0.0.22"
 description = "Python client for the pyproc Control Protocol"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,7 +22,7 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/eddmpython/pyproc"
-Documentation = "https://github.com/eddmpython/pyproc/blob/main/docs/usage/pythonSdk.md"
+Documentation = "https://github.com/eddmpython/pyproc/blob/main/skills/control-pyproc/references/python-sdk.md"
 Issues = "https://github.com/eddmpython/pyproc/issues"
 
 [tool.setuptools]

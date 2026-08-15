@@ -1,0 +1,2 @@
+# PyProc owned static built-in. CPython's WASI build tool preserves this file.
+_pyprocHost _pyprocHost.c

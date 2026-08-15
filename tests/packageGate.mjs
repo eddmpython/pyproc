@@ -1,19 +1,59 @@
 // tests/packageGate.mjs - npm tarball 공개 표면 게이트.
 // 저장소 소스가 아니라 설치된 패키지 표면만 써서 exports, bin, files 계약을 검증한다.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { binPath, installPackedPyProc, run } from "./packageHarness.mjs";
 
 const { tmp, appDir } = await installPackedPyProc("pyprocPackageGate-");
 
+function markdownLinks(source) {
+  return [...source.matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)].map((match) => match[1].trim());
+}
+
+function readDocumentJsonFixture(source, marker) {
+  const markerOffset = source.indexOf(`<!-- ${marker} -->`);
+  if (markerOffset < 0) throw new Error(`document fixture marker missing: ${marker}`);
+  const fenceOffset = source.indexOf("```json", markerOffset);
+  const valueOffset = fenceOffset < 0 ? -1 : fenceOffset + "```json".length;
+  const endOffset = valueOffset < 0 ? -1 : source.indexOf("```", valueOffset);
+  if (valueOffset < 0 || endOffset < 0) throw new Error(`document fixture fence missing: ${marker}`);
+  return JSON.parse(source.slice(valueOffset, endOffset).trim());
+}
+
+function assertInstalledReadmeLinks(packageRoot, readmeNames) {
+  const broken = [];
+  for (const readmeName of readmeNames) {
+    const readmePath = join(packageRoot, readmeName);
+    const source = readFileSync(readmePath, "utf8");
+    for (const href of markdownLinks(source)) {
+      if (!href || href.startsWith("#") || /^[a-z][a-z0-9+.-]*:/iu.test(href)) continue;
+      const clean = href.replace(/^<|>$/gu, "").split(/[?#]/u)[0];
+      if (!clean || clean.includes("{") || clean.includes("}")) continue;
+      const target = resolve(dirname(readmePath), decodeURIComponent(clean));
+      const fromRoot = relative(packageRoot, target);
+      if (fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot)
+        || !existsSync(target) || !statSync(target).isFile()) broken.push(`${readmeName} -> ${href}`);
+    }
+  }
+  if (broken.length) throw new Error(`installed README link missing: ${broken.join(", ")}`);
+}
+
 try {
   const smoke = `
     import { boot, open, createWebComputer, checkEnvironment, PyProcError, PYPROC_ERROR_CODES } from "pyproc";
-    import { getPyProcAssetManifest, verifyPyProcAssetIntegrity, registerPyProcServiceWorker } from "pyproc/assets";
+    import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
     import { commitState, openState, MemoryStateStore, decodeStateBundle, PAGE_SIZE } from "pyproc/history";
-    import { createWebComputer as fromMachine, createMachineCryptoProvider } from "pyproc/machine";
+    import { createWebComputer as fromMachine, createMachineCryptoProvider, bootKernelMachine,
+      KernelMachine } from "pyproc/machine";
     import { PyProcControlClient, ControlRemoteError, ControlRequest, PerceptionClient,
       SituationResult, SituationRequirement, SituationFact, SituationAffordance, SituationUnknown } from "pyproc/control";
+    import { bootCpythonWasiKernel, CpythonWasiKernelRuntime, HostCapabilityBroker,
+      ProductHostCapabilityPort, createFetchHostAdapter, KERNEL_RUNTIME_CONTRACT_VERSION,
+      SimpleApiPackageResolver, MemoryPackageContentStore, PackageEnvironment,
+      KernelTerminal, KernelEnvironmentManager, KernelFactory, MemoryKernelAssetStore,
+      createKernelEngineManifest, DEFAULT_KERNEL_ENGINE_ID,
+      getDefaultKernelEngineManifest } from "pyproc/wasi";
 
     for (const [name, fn] of [["boot", boot], ["open", open], ["createWebComputer", createWebComputer], ["checkEnvironment", checkEnvironment]]) {
       if (typeof fn !== "function") throw new Error(name + " export missing");
@@ -28,6 +68,23 @@ try {
     if (durabilityCode !== "WEB_MACHINE_DURABILITY_UNAVAILABLE") throw new Error("durability opt-in error drift: " + durabilityCode);
     await computer.dispose();
     if (!Array.isArray(PYPROC_ERROR_CODES) || typeof PyProcError !== "function") throw new Error("error contract missing");
+    if (typeof bootCpythonWasiKernel !== "function" || typeof CpythonWasiKernelRuntime !== "function"
+      || KERNEL_RUNTIME_CONTRACT_VERSION !== 2) throw new Error("Promise-first kernel surface missing");
+    for (const [name, value] of Object.entries({ SimpleApiPackageResolver, MemoryPackageContentStore,
+      PackageEnvironment, KernelTerminal, KernelEnvironmentManager, KernelFactory, MemoryKernelAssetStore,
+      createKernelEngineManifest, bootKernelMachine, KernelMachine })) {
+      if (typeof value !== "function") throw new Error("package environment surface missing: " + name);
+    }
+    if (DEFAULT_KERNEL_ENGINE_ID !== "cpython-wasi-3.14.6-pyproc-host-1"
+      || typeof getDefaultKernelEngineManifest !== "function") {
+      throw new Error("installed owned kernel distribution surface missing");
+    }
+    const hostBroker = new HostCapabilityBroker();
+    const productPort = new ProductHostCapabilityPort();
+    if (typeof productPort.install !== "function" || typeof createFetchHostAdapter !== "function") {
+      throw new Error("product host capability surface missing");
+    }
+    hostBroker.close("package surface probe");
     if (PAGE_SIZE !== 65536) throw new Error("history PAGE_SIZE drift");
     for (const fn of [commitState, openState, decodeStateBundle, createMachineCryptoProvider]) {
       if (typeof fn !== "function") throw new Error("kernel surface missing");
@@ -46,20 +103,18 @@ try {
     const manifest = getPyProcAssetManifest({ baseURL: "/vendor/pyproc/" });
     if (manifest.packageRoot !== "/vendor/pyproc/") throw new Error("baseURL normalization failed");
     if (typeof verifyPyProcAssetIntegrity !== "function") throw new Error("verify export missing");
-    if (typeof registerPyProcServiceWorker !== "function") throw new Error("service worker register export missing");
-    if (!manifest.assets.some((a) => a.role === "processWorker")) throw new Error("processWorker role missing");
+    if (!manifest.assets.some((a) => a.role === "wasiWorker")) throw new Error("wasiWorker role missing");
   `;
   run(process.execPath, ["--input-type=module", "-e", smoke], { cwd: appDir });
 
   const cli = binPath(appDir, "pyproc-assets");
   if (!existsSync(cli)) throw new Error("installed pyproc-assets bin shim 없음");
-  const engineCli = binPath(appDir, "pyproc-engine");
-  if (!existsSync(engineCli)) throw new Error("installed pyproc-engine bin shim 없음");
   const controlCli = binPath(appDir, "pyproc-control");
   if (!existsSync(controlCli)) throw new Error("installed pyproc-control bin shim 없음");
   const mcpCli = binPath(appDir, "pyproc-mcp");
   if (!existsSync(mcpCli)) throw new Error("installed pyproc-mcp bin shim 없음");
   const installedPackage = JSON.parse(readFileSync(join(appDir, "node_modules", "pyproc", "package.json"), "utf8"));
+  const packageRoot = join(appDir, "node_modules", "pyproc");
   if (installedPackage.bin?.["pyproc-mcp"] !== "./scripts/pyprocMcp.mjs") {
     throw new Error("installed pyproc-mcp bin manifest 불일치");
   }
@@ -72,8 +127,37 @@ try {
   if (installedPackage.dependencies && Object.keys(installedPackage.dependencies).length) {
     throw new Error("installed pyproc runtime dependency 0 계약 위반");
   }
-  const installedEngineCli = readFileSync(join(appDir, "node_modules", "pyproc", "scripts", "fetchEngine.mjs"), "utf8");
-  if (!installedEngineCli.includes('argv[index] === "--out"')) throw new Error("installed pyproc-engine --out 계약 누락");
+  assertInstalledReadmeLinks(packageRoot, ["README.md", "README.ko.md"]);
+  const controlProtocolPath = join(packageRoot, "skills", "control-pyproc", "references", "control-protocol.md");
+  const documentedHello = readDocumentJsonFixture(readFileSync(controlProtocolPath, "utf8"),
+    "pyproc-control-client-hello");
+  const { acceptControlHello } = await import(pathToFileURL(join(packageRoot,
+    "scripts", "controlProtocol", "controlProtocol.js")).href);
+  const acceptedHello = acceptControlHello(documentedHello, { operations: ["machine.run"] });
+  if (acceptedHello.response.requestId !== documentedHello.requestId
+    || acceptedHello.response.role !== "server"
+    || acceptedHello.response.operations.join(",") !== "machine.run") {
+    throw new Error("installed control document hello was not accepted");
+  }
+  const incompleteHello = { ...documentedHello };
+  delete incompleteHello.capabilities;
+  let incompleteCode = null;
+  try { acceptControlHello(incompleteHello, { operations: ["machine.run"] }); }
+  catch (error) { incompleteCode = error?.code || null; }
+  if (incompleteCode !== "CONTROL_INVALID_FRAME") {
+    throw new Error(`incomplete documented hello error drift: ${incompleteCode}`);
+  }
+  for (const file of ["python.wasm", "python314-stdlib.zip", "engine-build-manifest.json",
+    "engine.cyclonedx.json", "stdlib-inventory.json", "reproducibility-manifest.json"]) {
+    if (!existsSync(join(appDir, "node_modules", "pyproc", "src", "runtime", "engines", "wasi", "owned", "core", file))) {
+      throw new Error(`installed owned kernel asset 누락: ${file}`);
+    }
+  }
+  const installedRootSource = readFileSync(join(appDir, "node_modules", "pyproc", "index.js"), "utf8");
+  if (!installedRootSource.includes("bootDefaultKernelMachine")
+    || installedRootSource.includes("engine ===")) {
+    throw new Error("installed root owned default selection drifted");
+  }
   if (!existsSync(join(appDir, "node_modules", "pyproc", "scripts", "assetCatalog.json"))) throw new Error("installed engine catalog 누락");
   for (const path of [
     ["scripts", "pyprocMcp.mjs"],
@@ -144,16 +228,17 @@ try {
   const initHelp = run(mcpCli, ["init", "--help"], { cwd: appDir });
   if (!controlHelp.stdout.includes("pyproc-control --config") || !controlHelp.stdout.includes("pyproc-control doctor")
     || !controlHelp.stdout.includes("pyproc-control run")
-    || !initHelp.stdout.includes("--engine-index-url") || !initHelp.stdout.includes("--recording-sha256")
+    || !initHelp.stdout.includes("--engine-root") || !initHelp.stdout.includes("--recording-sha256")
     || controlVersion.stdout.trim() !== installedPackage.version) {
     throw new Error("installed pyproc-control help/version 계약 불일치");
   }
-  const entranceEngine = join(appDir, "entrance", "vendor", "pyodide");
+  const entranceEngine = join(appDir, "entrance", "vendor", "cpython-wasi");
   mkdirSync(entranceEngine, { recursive: true });
-  writeFileSync(join(entranceEngine, "pyodide.js"), "fixture");
-  writeFileSync(join(entranceEngine, "pyodide-lock.json"), "{}");
+  writeFileSync(join(entranceEngine, "python.wasm"), "fixture");
+  writeFileSync(join(entranceEngine, "python314-stdlib.zip"), "fixture");
+  writeFileSync(join(entranceEngine, "engine-build-manifest.json"), "{}");
   const entrance = JSON.parse(run(mcpCli, ["init", "--recipe", "pythonOnly", "--project-root",
-    join(appDir, "entrance"), "--engine-root", "vendor/pyodide"], { cwd: appDir }).stdout);
+    join(appDir, "entrance"), "--engine-root", "vendor/cpython-wasi"], { cwd: appDir }).stdout);
   if (!entrance.ok || !existsSync(entrance.manifestPath) || !existsSync(entrance.clientPath)
     || !existsSync(entrance.readmePath)) {
     throw new Error("installed pyproc-mcp init journey가 profile 산출물을 만들지 않았다");
@@ -170,7 +255,8 @@ try {
   const manifest = JSON.parse(readFileSync(manifestOut, "utf8"));
   if (manifest.packageRoot !== "/vendor/pyproc/") throw new Error("installed CLI baseURL 반영 실패");
   const byPath = new Map(manifest.files.map((f) => [f.path, f]));
-  for (const path of ["src/processOs/worker.js", "src/processOs/ipc.js", "src/runtime/runtime.js"]) {
+  for (const path of ["src/runtime/engines/wasi/wasiWorker.js",
+    "src/runtime/engines/wasi/browserWasiShim.js", "src/runtime/errors.js"]) {
     const file = byPath.get(path);
     if (!file) throw new Error(`installed CLI graph 파일 누락: ${path}`);
     if (!/^sha256-[A-Za-z0-9+/]+=*$/.test(file.integrity)) throw new Error(`installed CLI SRI 형식 오류: ${path}`);

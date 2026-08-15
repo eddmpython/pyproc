@@ -43,7 +43,7 @@ const memoryRoot = join(installed.appDir, ".motor-memory");
 const configPath = join(installed.appDir, "pyproc-motor.json");
 await mkdir(memoryRoot, { recursive: true });
 await writeFile(configPath, JSON.stringify({ schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") }, timeoutMs: TIMEOUT_MS,
+  engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") }, timeoutMs: TIMEOUT_MS,
   browser: { enabled: true, provider: "nativeCdp", ...(process.env.PYPROC_BROWSER
     ? { executable: process.env.PYPROC_BROWSER } : {}), allowedOrigins: [origin], maxRisk: "externalEffect",
     actions: ["snapshot", "click", "check", "uncheck"], methods: [], externalEffects: "acknowledged",
@@ -97,7 +97,10 @@ try {
   check("absolute intent sends one provider effect and closes with semantic plus network proof",
     effects === 1 && executed.output.terminal === "confirmed"
       && executed.output.receipt.effectWindow.providerCalls === 1
-      && executed.output.receipt.actionEvidenceRef?.startsWith("evidence:"));
+      && executed.output.receipt.actionEvidenceRef?.startsWith("evidence:"),
+  JSON.stringify({ effects, terminal: executed.output.terminal,
+    providerCalls: executed.output.receipt.effectWindow.providerCalls,
+    actionEvidenceRef: executed.output.receipt.actionEvidenceRef || null }));
   check("public Motor output carries no locator, coordinate, or provider handle",
     !/locator:|backendNode|objectId|"x"\s*:|"y"\s*:/.test(JSON.stringify(executed.output)));
 

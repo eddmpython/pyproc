@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { decodeStateBundle, isStateBundle } from "../../src/state/index.js";
+import { verifyKernelMachineImage } from "../../src/composition/kernelFactory.js";
+import { parseSha256Address } from "../../src/runtime/contentDigest.js";
 import {
   assertAutomationRecordingSelection,
   loadAutomationRecording,
@@ -65,6 +67,26 @@ async function writeImmutable(file, bytes) {
   }
 }
 
+async function inspectMachineImage(source) {
+  if (isStateBundle(source)) {
+    const decoded = await decodeStateBundle(globalThis.crypto, source);
+    if (!decoded.commit) throw executionMemoryError("EXECUTION_MEMORY_MACHINE_INVALID", "Machine image has no generation commit");
+    const manifest = typeof decoded.meta?.manifest === "string" ? decoded.meta.manifest : decoded.meta;
+    return Object.freeze({ generation: decoded.commit, environment: executionMemoryDigest(manifest ?? null) });
+  }
+  let image;
+  try { image = JSON.parse(source.toString("utf8")); }
+  catch (error) {
+    throw executionMemoryError("EXECUTION_MEMORY_MACHINE_INVALID", "Machine image is neither a state bundle nor kernel image", {
+      cause: error?.code || String(error),
+    });
+  }
+  const verified = await verifyKernelMachineImage(image);
+  const environment = parseSha256Address(verified.manifest.environmentId);
+  if (!environment) throw executionMemoryError("EXECUTION_MEMORY_MACHINE_INVALID", "Kernel Machine environment identity is invalid");
+  return Object.freeze({ generation: verified.image.digest, environment });
+}
+
 export class ExecutionMemoryArtifacts {
   constructor({ store, secretValues = [] }) {
     this.store = store;
@@ -82,29 +104,26 @@ export class ExecutionMemoryArtifacts {
   async captureMachineImage({ bytes, machineId, lifecycle = "portable", coldReceipt = null }) {
     const source = Buffer.from(bytes);
     this.assertBytesNoSecrets(source, "Machine image");
-    if (!isStateBundle(source)) throw executionMemoryError("EXECUTION_MEMORY_MACHINE_INVALID", "Machine image is not a state bundle");
-    let decoded;
-    try { decoded = await decodeStateBundle(globalThis.crypto, source); }
+    let inspected;
+    try { inspected = await inspectMachineImage(source); }
     catch (error) {
       throw executionMemoryError("EXECUTION_MEMORY_MACHINE_INVALID", "Machine image integrity verification failed", {
-        cause: error?.code || String(error),
+        cause: `${error?.code || "ERROR"}: ${error?.message || String(error)}`,
       });
     }
-    if (!decoded.commit) throw executionMemoryError("EXECUTION_MEMORY_MACHINE_INVALID", "Machine image has no generation commit");
     const imageSha256 = digestBytes(source);
-    const manifest = typeof decoded.meta?.manifest === "string" ? decoded.meta.manifest : decoded.meta;
-    const environment = executionMemoryDigest(manifest ?? null);
     await writeImmutable(this.machinePath(imageSha256), source);
     if (lifecycle === "cold") {
       const receipt = coldReceiptFor({ coldReceipt, machineId: String(machineId),
-        generation: decoded.commit, environment });
+        generation: inspected.generation, environment: inspected.environment });
       await writeImmutable(this.coldReceiptPath(imageSha256),
         Buffer.from(`${canonicalExecutionMemoryJson(receipt)}\n`));
     } else if (lifecycle !== "portable") {
       throw executionMemoryError("EXECUTION_MEMORY_MACHINE_INVALID",
         "captured Machine image lifecycle must be portable or cold");
     }
-    return Object.freeze({ machineId: String(machineId), generation: decoded.commit, environment, imageSha256, lifecycle });
+    return Object.freeze({ machineId: String(machineId), generation: inspected.generation,
+      environment: inspected.environment, imageSha256, lifecycle });
   }
 
   async captureSituation(capsule) {

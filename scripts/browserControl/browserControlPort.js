@@ -22,7 +22,7 @@ export const BROWSER_CONTROL_ERROR_CODES = Object.freeze({
 // 직전 verified target을 사용해야 modal을 닫을 수 있다. 다른 method는 매번 origin을 재검사한다.
 const MODAL_UNBLOCK_METHODS = new Set(["Page.handleJavaScriptDialog"]);
 const TRUSTED_READ_METHODS = new Set([
-  "DOM.getBoxModel", "DOM.getFrameOwner", "DOM.resolveNode", "Page.createIsolatedWorld",
+  "Accessibility.getPartialAXTree", "Accessibility.queryAXTree", "DOM.getDocument", "DOM.getBoxModel", "DOM.getFrameOwner", "DOM.getNodeForLocation", "DOM.resolveNode", "Page.createIsolatedWorld",
   "Page.getFrameTree", "Runtime.callFunctionOn", "Runtime.evaluate", "Runtime.releaseObject",
 ]);
 

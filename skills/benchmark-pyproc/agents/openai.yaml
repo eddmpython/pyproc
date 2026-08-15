@@ -1,0 +1,4 @@
+interface:
+  display_name: "Benchmark PyProc"
+  short_description: "Run and interpret PyProc benchmarks"
+  default_prompt: "Use $benchmark-pyproc to measure this PyProc behavior with the repository benchmark protocol."

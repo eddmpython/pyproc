@@ -5,7 +5,7 @@
 // 각 소비자의 감지형 reader가 읽기만 지원). 신뢰 도메인 차이는 검증 정책의 차이지 포맷의
 // 차이가 아니다: 파서 2벌 = 취약면 2배(구 .pymachine v1 헤더 변조 적발 전과가 실증).
 //
-// 바이트 레이아웃(버전 있는 공개 계약, docs/reference/bundleFormat.md와 게이트로 대조):
+// 바이트 레이아웃(버전 있는 공개 계약, skills/reference-pyproc-api/references/bundle-format.md와 게이트로 대조):
 //   [0..10)   MAGIC "PYBUNDLE1\n" (ASCII 10바이트)
 //   [10..74)  봉투 다이제스트: sha256(body)의 hex 64바이트 (ASCII)
 //   [74..]    body = u32(BE, 헤더 길이) || 헤더 JSON(UTF-8) || 오브젝트 바이트 연속

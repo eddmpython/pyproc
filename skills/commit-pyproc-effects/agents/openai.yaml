@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commit PyProc Effects"
+  short_description: "Rehearse approve and commit effects once"
+  default_prompt: "Use $commit-pyproc-effects to rehearse approve and commit this external effect safely."

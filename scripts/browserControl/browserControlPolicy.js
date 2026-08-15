@@ -12,6 +12,8 @@ export const BROWSER_CONTROL_RISKS = Object.freeze({
 export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
   "Accessibility.enable": "read",
   "Accessibility.getFullAXTree": "read",
+  "Accessibility.getPartialAXTree": "read",
+  "Accessibility.queryAXTree": "read",
   "Browser.getVersion": "read",
   "DOM.describeNode": "read",
   "DOM.getAttributes": "read",
@@ -19,6 +21,7 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
   "DOM.getOuterHTML": "read",
   "DOM.getBoxModel": "read",
   "DOM.getFrameOwner": "read",
+  "DOM.getNodeForLocation": "read",
   "DOM.querySelector": "read",
   "DOM.querySelectorAll": "read",
   "DOM.requestNode": "read",
@@ -60,6 +63,8 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
 export const BROWSER_CONTROL_DEFAULT_READ_METHODS = Object.freeze([
   "Accessibility.enable",
   "Accessibility.getFullAXTree",
+  "Accessibility.getPartialAXTree",
+  "Accessibility.queryAXTree",
   "DOM.describeNode",
   "DOM.getAttributes",
   "DOM.getDocument",

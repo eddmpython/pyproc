@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>PyProc owned engine data profile product gate</title></head>
+<body><pre id="out">running</pre>
+<script>
+window.__ownedEngineReported = false;
+window.__ownedEngineStage = "module-bootstrap";
+window.__ownedEngineReportFailure = async (info) => {
+  if (window.__ownedEngineReported) return;
+  window.__ownedEngineReported = true;
+  await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ok: false,
+      checks: [{ name: "owned engine module bootstrap", pass: false, info: String(info) }], timings: {} }) });
+};
+window.addEventListener("error", (event) => window.__ownedEngineReportFailure(
+  `${event.message} at ${event.filename}:${event.lineno}`));
+window.addEventListener("unhandledrejection", (event) => window.__ownedEngineReportFailure(event.reason));
+setTimeout(() => window.__ownedEngineReportFailure(
+  `owned engine data watchdog exceeded 90000ms at ${window.__ownedEngineStage}`), 90000);
+</script>
+<script type="module">
+import { runOwnedEngineDataProduct } from "./ownedEngineProfileProduct.js";
+await runOwnedEngineDataProduct();
+</script></body></html>

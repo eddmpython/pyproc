@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 1,
+  "baselineHead": "5269943d9d081d68c11d4e03ee283b6ac6c2a73d",
+  "capturedAt": "2026-08-14",
+  "sourceTokenPattern": "pyodide|loadPyodide|pyproxy|pyodide\\.ffi|micropip",
+  "allowedStatuses": [
+    "pending",
+    "shadowed",
+    "defaultOff",
+    "deleted",
+    "verifiedAbsent"
+  ],
+  "entries": [
+    {
+      "path": "src/capabilities/gpuCompute.js",
+      "responsibility": "gpu host integration",
+      "replacementOwner": "host capability broker",
+      "deletionMilestone": "M7",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/capabilities/image/machineHome.js",
+      "responsibility": "machine filesystem image",
+      "replacementOwner": "kernel checkpoint and VFS",
+      "deletionMilestone": "M5",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/capabilities/machineJail.js",
+      "responsibility": "engine CSP policy",
+      "replacementOwner": "kernel factory policy",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/capabilities/pyprocSw.js",
+      "responsibility": "engine asset caching",
+      "replacementOwner": "signed engine manifest cache",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/capabilities/reactive.js",
+      "responsibility": "heap checkpoint mutation tracking",
+      "replacementOwner": "worker kernel checkpoint",
+      "deletionMilestone": "M4",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/capabilities/socketBridge.js",
+      "responsibility": "socket host integration",
+      "replacementOwner": "host capability broker",
+      "deletionMilestone": "M7",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/capabilities/syscallBridge.js",
+      "responsibility": "blocking host integration",
+      "replacementOwner": "hostcall ABI",
+      "deletionMilestone": "M7",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/capabilities/terminal.js",
+      "responsibility": "package command",
+      "replacementOwner": "package environment",
+      "deletionMilestone": "M8",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/capabilities/wheelCache.js",
+      "responsibility": "package fetch cache",
+      "replacementOwner": "package resolver and installer",
+      "deletionMilestone": "M8",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/composition/envManager.js",
+      "responsibility": "environment compilation",
+      "replacementOwner": "kernel factory and package environment",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/machine/composition/pyprocMachine.js",
+      "responsibility": "machine composition",
+      "replacementOwner": "kernel factory",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/machine/composition/workerHostedGuestWorker.js",
+      "responsibility": "guest worker engine boot",
+      "replacementOwner": "kernel factory",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/machine/guests/bridged/workerHostedGuestAdapter.js",
+      "responsibility": "guest descriptor",
+      "replacementOwner": "kernel descriptor",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/machine/guests/pyproc/pyprocGuestAdapter.js",
+      "responsibility": "default guest engine",
+      "replacementOwner": "cpython WASI guest adapter",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/machine/guests/pyproc/pyprocPacketPort.js",
+      "responsibility": "guest packet bridge",
+      "replacementOwner": "value hostcall channel",
+      "deletionMilestone": "M7",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/processOs/ipc.js",
+      "responsibility": "process value bridge",
+      "replacementOwner": "ValueEnvelope IPC",
+      "deletionMilestone": "M3",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/processOs/machineContainer.js",
+      "responsibility": "container engine boot",
+      "replacementOwner": "kernel factory",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/processOs/machineWorker.js",
+      "responsibility": "machine worker boot",
+      "replacementOwner": "kernel factory",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/processOs/pyProc.js",
+      "responsibility": "process spawn and fork",
+      "replacementOwner": "kernel client and checkpoint clone",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/processOs/shardCompute.js",
+      "responsibility": "process data bridge",
+      "replacementOwner": "ValueEnvelope bytes",
+      "deletionMilestone": "M3",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/processOs/worker.js",
+      "responsibility": "process worker engine boot",
+      "replacementOwner": "kernel factory",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/assets.js",
+      "responsibility": "worker asset catalog",
+      "replacementOwner": "engine manifest",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/engines/pyodideEngine.js",
+      "responsibility": "legacy engine adapter",
+      "replacementOwner": "cpython WASI kernel",
+      "deletionMilestone": "M12",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/engines/wasi/wasiSession.d.ts",
+      "responsibility": "research session type",
+      "replacementOwner": "kernel contract type",
+      "deletionMilestone": "M2",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/engines/wasi/wasiSession.js",
+      "responsibility": "research kernel client",
+      "replacementOwner": "kernel client",
+      "deletionMilestone": "M2",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/engines/wasi/wasiWorker.js",
+      "responsibility": "research kernel worker",
+      "replacementOwner": "cpython WASI kernel worker",
+      "deletionMilestone": "M2",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/errors.js",
+      "responsibility": "legacy engine error normalization",
+      "replacementOwner": "kernel error contract",
+      "deletionMilestone": "M2",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/fileSystem.js",
+      "responsibility": "legacy engine filesystem facade",
+      "replacementOwner": "KernelVfs",
+      "deletionMilestone": "M5",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/index.d.ts",
+      "responsibility": "legacy runtime type",
+      "replacementOwner": "kernel runtime type",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/index.js",
+      "responsibility": "legacy runtime barrel",
+      "replacementOwner": "kernel runtime barrel",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/pyodideDistribution.js",
+      "responsibility": "legacy engine distribution",
+      "replacementOwner": "signed engine manifest",
+      "deletionMilestone": "M12",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/runtime.js",
+      "responsibility": "default engine boot and runtime",
+      "replacementOwner": "kernel factory and client",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/runtime/runtimeContract.js",
+      "responsibility": "sync-first runtime contract",
+      "replacementOwner": "KernelRuntimeContract v2",
+      "deletionMilestone": "M2",
+      "status": "verifiedAbsent"
+    },
+    {
+      "path": "src/session/session.js",
+      "responsibility": "session engine boot and restore",
+      "replacementOwner": "kernel factory and checkpoint",
+      "deletionMilestone": "M10",
+      "status": "verifiedAbsent"
+    }
+  ]
+}

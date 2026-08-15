@@ -17,7 +17,7 @@
 // `rung`을 단 항목은 천장 사다리의 한 단이고(전역 순서 1..N, 벽을 무는 순서), 없는 항목은 그 축
 // 국소의 다음 수다. **계획은 증거가 아니다**: next 항목은 path/lane을 갖지 않는다. 한 단이 실현되면
 // 그 항목은 next에서 사라지고 evidence가 늘어나며 점수가 움직인다. 그것이 이 원장이 기록하는 졸업이다.
-// 각 단의 저장소 내부 수용 조건과 순서는 docs/product/vision.md가 정본이다.
+// 각 단의 저장소 내부 수용 조건과 순서는 skills/understand-pyproc/references/vision.md가 정본이다.
 
 export const NORTH_STAR = Object.freeze({
   en: Object.freeze({
@@ -39,17 +39,17 @@ export const NORTH_STAR = Object.freeze({
 });
 
 // 천장 사다리의 틀. 단 목록 자체는 축의 next에 살고(단이 어느 축을 움직이는지가 강제된다),
-// 여기에는 두 벽의 프레이밍과 정본 링크만 둔다. 벽의 논증은 docs/product/vision.md가 정본이다.
+// 여기에는 두 벽의 프레이밍과 정본 링크만 둔다. 벽의 논증은 skills/understand-pyproc/references/vision.md가 정본이다.
 export const CEILING_LADDER = Object.freeze({
   en: Object.freeze({
     intro: "The distance that remains is two walls with different fates. The transport wall (a tab accepting an inbound connection) is opening, so it gets climbed in order. The native wall (web content spawning a native process) never opens, by the design of the web itself, so what only local machines run moves inward instead. Every rung names the axis it moves:",
     axis: (title) => `moves: ${title}`,
-    outro: "The repo-local acceptance condition and order of every rung are in the [product direction](docs/product/vision.md#where-the-ceiling-moves-next). The rungs are registered in the axis ledger, so no outside adoption signal can move a score or reorder the work.",
+    outro: "The repo-local acceptance condition and order of every rung are in the [product direction](skills/understand-pyproc/references/vision.md#where-the-ceiling-moves-next). The rungs are registered in the axis ledger, so no outside adoption signal can move a score or reorder the work.",
   }),
   ko: Object.freeze({
     intro: "남은 거리는 운명이 다른 두 벽이다. 전송 벽(탭이 인바운드 연결을 받는 것)은 열리는 중이라 순서대로 오른다. 네이티브 벽(웹 콘텐츠가 네이티브 프로세스를 띄우는 것)은 웹 자체의 설계상 열리지 않으니, 로컬 머신만 돌리는 것은 대신 안으로 옮긴다. 모든 단은 자기가 움직이는 축을 밝힌다:",
     axis: (title) => `움직이는 축: ${title}`,
-    outro: "각 단의 저장소 내부 수용 조건과 순서는 [제품 방향](docs/product/vision.md#where-the-ceiling-moves-next)에 있다. 단은 축 원장에 등재되므로 외부 채택 신호가 점수나 작업 순서를 움직일 수 없다.",
+    outro: "각 단의 저장소 내부 수용 조건과 순서는 [제품 방향](skills/understand-pyproc/references/vision.md#where-the-ceiling-moves-next)에 있다. 단은 축 원장에 등재되므로 외부 채택 신호가 점수나 작업 순서를 움직일 수 없다.",
   }),
 });
 
@@ -169,12 +169,12 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 9.7,
     en: Object.freeze({
       title: "A machine that outlives its tab",
-      state: "Argument-free `open()` now enters the named OPFS Machine rather than a transient kernel. Commands and commits are serialized, and every completed run reaches a generation carrying heap, `/home/web`, and forwarded outcome before settling; the installed package cold-reopens that state without a manual commit. Leader election spans same-origin tabs, a repeated request ID is answered from its durable record, and commit failure is non-retryable outcome-unknown. A normal follower still cannot prove a cut-off leader heap portable, so failover of an in-flight call remains `PYPROC_RPC_OUTCOME_UNKNOWN`. The complete rule is the [durable RPC state table](docs/usage/contract.md#durable-rpc-state-table-normative).",
+      state: "Argument-free `open()` now enters the named OPFS Machine rather than a transient kernel. Commands and commits are serialized, and every completed run reaches a generation carrying heap, `/home/web`, and forwarded outcome before settling; the installed package cold-reopens that state without a manual commit. Leader election spans same-origin tabs, a repeated request ID is answered from its durable record, and commit failure is non-retryable outcome-unknown. A normal follower still cannot prove a cut-off leader heap portable, so failover of an in-flight call remains `PYPROC_RPC_OUTCOME_UNKNOWN`. The complete rule is the [durable RPC state table](skills/use-pyproc-runtime/references/consumer-contract.md#durable-rpc-state-table-normative).",
       target: "The machine keeps running while any tab is open, and every command it accepted resolves exactly once.",
     }),
     ko: Object.freeze({
       title: "탭보다 오래 사는 머신",
-      state: "인자 없는 `open()`이 휘발 kernel 대신 이름 있는 OPFS Machine으로 들어간다. 명령과 commit은 직렬화되고, 완료된 run은 heap, `/home/web`, 전달된 outcome을 실은 generation에 도달한 뒤 settle된다. 설치 package는 수동 commit 없이 그 상태를 cold reopen한다. leader 선출이 동일 origin tab을 가로지르고 반복 request ID는 durable record로 답하며 commit 실패는 non-retryable outcome-unknown이다. 일반 follower는 끊긴 leader heap의 이식성을 증명할 수 없으므로 in-flight failover는 여전히 `PYPROC_RPC_OUTCOME_UNKNOWN`이다. 전체 규칙은 [durable RPC 상태표](docs/usage/contract.md#durable-rpc-state-table-normative)다.",
+      state: "인자 없는 `open()`이 휘발 kernel 대신 이름 있는 OPFS Machine으로 들어간다. 명령과 commit은 직렬화되고, 완료된 run은 heap, `/home/web`, 전달된 outcome을 실은 generation에 도달한 뒤 settle된다. 설치 package는 수동 commit 없이 그 상태를 cold reopen한다. leader 선출이 동일 origin tab을 가로지르고 반복 request ID는 durable record로 답하며 commit 실패는 non-retryable outcome-unknown이다. 일반 follower는 끊긴 leader heap의 이식성을 증명할 수 없으므로 in-flight failover는 여전히 `PYPROC_RPC_OUTCOME_UNKNOWN`이다. 전체 규칙은 [durable RPC 상태표](skills/use-pyproc-runtime/references/consumer-contract.md#durable-rpc-state-table-normative)다.",
       target: "탭이 하나라도 열려 있는 동안 머신은 계속 살고, 받아들인 명령은 정확히 한 번 수렴한다.",
     }),
     evidence: Object.freeze([
@@ -242,7 +242,7 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/webMachine/browser/probes/dualEngineProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/ownerSuccessorProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
-      Object.freeze({ path: "tests/webMachine/browser/probes/workerHostedGuestProbe.html", lane: "test:web-machine" }),
+      Object.freeze({ path: "tests/browser/gate.js", lane: "test:browser" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/dualBootProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/linuxGuestProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/packetNetworkProbe.html", lane: "test:web-machine:v86" }),
@@ -268,16 +268,16 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 7.0,
     en: Object.freeze({
       title: "Primitives that outlive the engine",
-      state: "A non-Pyodide lane boots CPython 3.14.6 on WASI in the browser and takes checkpoint, time travel, repeated branching, and pure-Python wheel installation through the same contracts, which is what proves the primitives are not Pyodide internals. That lane has no `dlopen`, so it carries no dynamic C extensions, and its value bridge is JSON only.",
+      state: "The installed owned-kernel lane boots source-built CPython 3.14.6 on WASI in a worker and verifies typed values, checkpoints, restore, process clone, terminal, pure-Python packages, and Machine images through PyProc contracts.",
       target: "Every primitive runs on any CPython-on-WebAssembly engine, with the same package reach on each.",
     }),
     ko: Object.freeze({
       title: "엔진보다 오래 사는 프리미티브",
-      state: "비 Pyodide 레인이 브라우저에서 WASI 위 CPython 3.14.6을 부팅하고, 체크포인트, 시간여행, 반복 분기, 순수 파이썬 wheel 설치를 같은 계약으로 통과한다. 프리미티브가 Pyodide 내부가 아니라는 증명이 이것이다. 그 레인에는 `dlopen`이 없어 동적 C 확장을 못 싣고, 값 다리는 JSON뿐이다.",
+      state: "설치된 owned kernel 레인이 브라우저 worker에서 source-built CPython 3.14.6을 부팅하고 typed value, checkpoint, restore, process clone, terminal, pure Python package와 Machine image를 PyProc 계약으로 검증한다.",
       target: "모든 프리미티브가 어떤 CPython-on-WebAssembly 엔진에서도 돌고, 패키지 도달 범위도 같다.",
     }),
     evidence: Object.freeze([
-      Object.freeze({ path: "tests/browser/wasiGate.html", lane: "ci" }),
+      Object.freeze({ path: "tests/browser/ownedEngineCoreProduct.html", lane: "owned-engine" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/dualEngineProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/contracts/runtimeContract.mjs", lane: "test" }),
     ]),
@@ -343,17 +343,17 @@ export const NORTH_STAR_AXES = Object.freeze([
     score: 7.5,
     en: Object.freeze({
       title: "Everything local Python does",
-      state: "Pyodide's `dlopen` already loads native C-extension wheels (numpy, pandas, scipy and more), packages install from a cache, `%pip` and `freeze` work inside the machine, and the WASI lane installs pure-Python wheels. The long tail is what is missing: an arbitrary package needs a published pyemscripten wheel, numpy has no SIMD build, threading is upstream-pending, and the GPU lane has no headless adapter, so what CI holds is the byte identity of the WGSL each integration path compiles, not its result on a GPU.",
+      state: "The package environment resolves standard metadata, hashes pure-Python wheels, installs them transactionally, and binds curated static native profiles to the engine identity. Arbitrary native wheels remain unsupported, and the GPU lane still has no headless adapter, so CI verifies the exact WGSL bytes rather than a hardware result.",
       target: "Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology.",
     }),
     ko: Object.freeze({
       title: "로컬 파이썬이 하는 전부",
-      state: "Pyodide의 `dlopen`이 이미 네이티브 C 확장 wheel(numpy, pandas, scipy 등)을 싣고, 패키지가 캐시에서 설치되고, 머신 안에서 `%pip`과 `freeze`가 돌고, WASI 레인이 순수 파이썬 wheel을 설치한다. 없는 것은 롱테일이다: 임의 패키지는 게시된 pyemscripten wheel을 요구하고, numpy에는 SIMD 빌드가 없고, 스레딩은 upstream 대기이며, GPU 레인은 헤드리스 어댑터가 없어 CI가 무는 것은 통합 경로가 컴파일에 넘기는 WGSL의 바이트 동일성이지 GPU에서의 결과가 아니다.",
+      state: "package environment가 표준 metadata를 해석하고 pure Python wheel을 hash 검증해 transaction으로 설치하며 curated static native profile을 engine identity에 묶는다. 임의 native wheel은 지원하지 않고 GPU 레인은 headless adapter가 없어 CI는 hardware 결과 대신 정확한 WGSL bytes를 검증한다.",
       target: "로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
-      Object.freeze({ path: "tests/browser/wasiGate.html", lane: "ci" }),
+      Object.freeze({ path: "tests/browser/ownedEngineDataProduct.html", lane: "owned-engine" }),
       Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
@@ -433,7 +433,7 @@ export const NORTH_STAR_AXES = Object.freeze([
 // 축마다 최소 하나는 여기 속한 레인이어야 한다. Node 게이트만 든 축은 구조만 본 것이다.
 export const NORTH_STAR_BROWSER_LANES = Object.freeze([
   "test:browser", "test:installed", "test:examples", "test:mcp",
-  "test:preflight", "test:web-machine", "test:web-machine:v86", "test:web-computer", "test:socket", "ci",
+  "test:preflight", "test:web-machine", "test:web-machine:v86", "test:web-computer", "ci",
 ]);
 
 /** 총점, 만점, 평균. 표의 숫자는 전부 여기서 나온다(손으로 더한 총점 = 표류의 씨앗). */

@@ -24,8 +24,9 @@ export async function assertBrowserAutomationProductContract() {
   const root = await mkdtemp(join(tmpdir(), "pyprocBrowserProductContract-"));
   const engineRoot = join(root, "engine");
   await mkdir(engineRoot);
-  await writeFile(join(engineRoot, "pyodide.js"), "fixture");
-  await writeFile(join(engineRoot, "pyodide-lock.json"), "{}");
+  await writeFile(join(engineRoot, "python.wasm"), "fixture");
+  await writeFile(join(engineRoot, "python314-stdlib.zip"), "fixture");
+  await writeFile(join(engineRoot, "engine-build-manifest.json"), "{}");
 
   const manifest = {
     schemaVersion: 1,
@@ -150,15 +151,14 @@ export async function assertBrowserAutomationProductContract() {
   }));
   assert(/browser\.viewport does not accept colorDepth/.test(unknownViewportKey?.message),
     "제품 browser viewport unknown key가 fail-closed가 아니다");
-  const hostedEngine = validateMcpProductConfig({
-    schemaVersion: 1,
-    engine: { indexURL: "https://engine.example.test/pyodide-v1" },
+  const remoteEngine = await errorOf(() => validateMcpProductConfig({
+    schemaVersion: 1, engine: { remote: "https://engine.example.test/cpython-wasi-v1" },
     browser: { enabled: false },
-  });
-  assert(hostedEngine.config.engine.indexURL === "https://engine.example.test/pyodide-v1/",
-    "제품 engine.indexURL이 absolute directory URL로 정규화되지 않았다");
+  }));
+  assert(/engine does not accept remote/.test(remoteEngine?.message),
+    "제품 engine이 검증 전 remote artifact를 허용했다");
   const relativeEngine = await errorOf(() => validateMcpProductConfig({
-    ...manifest, engine: { root: "vendor/pyodide" },
+    ...manifest, engine: { root: "vendor/cpython-wasi" },
   }));
   assert(/must be an absolute directory/.test(relativeEngine?.message), "상대 engine root가 허용됐다");
   const wildcardOrigin = await errorOf(() => validateMcpProductConfig({
@@ -219,8 +219,22 @@ export async function assertBrowserAutomationProductContract() {
   const captured = await screenshot.capture({}, { format: "png", fullPage: true, inline: true }, [], null);
   assert(captured.format === "png" && captured.fullPage === true && captured.cssHeight === 1400
     && Buffer.from(captured.dataBase64, "base64").equals(pngBytes)
-    && commands[1].params.clip.height === 1400 && commands[1].params.captureBeyondViewport === true,
+    && commands[1].params.clip.height === 1400 && commands[1].params.clip.scale === 1
+    && commands[1].params.captureBeyondViewport === true,
   "full-page screenshot이 layout guard와 artifact store를 통과하지 않았다");
+  const omittedScaleAction = { kind: "screenshot", format: "png",
+    clip: { x: 0, y: 0, width: 100, height: 100 }, expectedRisk: "read" };
+  validateBrowserAutomationAction(omittedScaleAction);
+  const omittedScale = await screenshot.capture({}, omittedScaleAction, [], null);
+  const omittedScaleCommand = commands.filter((command) => command.method === "Page.captureScreenshot").at(-1);
+  assert(omittedScale.cssWidth === 100 && omittedScale.cssHeight === 100
+    && omittedScaleCommand.params.clip.scale === 1 && omittedScaleCommand.params.clip.width === 100,
+  "optional screenshot clip scale이 CDP 전송 전에 1로 정규화되지 않았다");
+  const directZeroScale = await errorOf(() => screenshot.capture({}, {
+    kind: "screenshot", format: "png", clip: { x: 0, y: 0, width: 100, height: 100, scale: 0 },
+  }, [], null));
+  assert(directZeroScale?.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS",
+    "screenshot capture 경계가 0 scale을 직접 호출에서 거부하지 않았다");
   const invalidQuality = await errorOf(() => validateBrowserAutomationAction({
     kind: "screenshot", format: "png", quality: 80, expectedRisk: "read",
   }));
@@ -229,9 +243,15 @@ export async function assertBrowserAutomationProductContract() {
     kind: "screenshot", fullPage: true, clip: { x: 0, y: 0, width: 1, height: 1 }, expectedRisk: "read",
   }));
   assert(/fullPage or clip/.test(invalidClip?.message), "full-page와 clip 동시 지정이 허용됐다");
+  const invalidScale = await errorOf(() => validateBrowserAutomationAction({
+    kind: "screenshot", clip: { x: 0, y: 0, width: 1, height: 1, scale: 0 }, expectedRisk: "read",
+  }));
+  assert(/clip.scale is invalid/.test(invalidScale?.message), "0 screenshot clip scale이 action validation을 우회했다");
 
   const capturedDelete = await store.delete(captured.artifactRef);
-  assert(capturedDelete.deleted === true, "artifact 명시 삭제가 파일을 회수하지 않았다");
+  const omittedDelete = await store.delete(omittedScale.artifactRef);
+  assert(capturedDelete.deleted === true && omittedDelete.deleted === true,
+    "artifact 명시 삭제가 파일을 회수하지 않았다");
 
   const soakRoot = join(root, "artifactSoak");
   let soakId = 0;

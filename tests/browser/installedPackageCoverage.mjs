@@ -1,116 +1,35 @@
-// 설치 패키지 브라우저 게이트 coverage의 데이터 정본.
-// contract.md와 installedPackageGate.mjs가 같은 배열을 본다.
-// state-kernel 7b 표면 개편 반영: 루트는 porcelain 6개(boot/open/createWebComputer/
-// checkEnvironment/PyProcError/PYPROC_ERROR_CODES)이고, 능력 상세는 machine 핸들의
-// runtime escape hatch, the proc() pool, the history verbs, and the pyproc/history signature core.
-export const INSTALLED_PACKAGE_COVERAGE_VERSION = 2;
+// Installed tarball browser coverage shared by the gate and its report.
+export const INSTALLED_PACKAGE_COVERAGE_VERSION = 3;
 
 export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
   Object.freeze({
     gate: "package surface",
-    specifiers: Object.freeze(["`pyproc`", "`pyproc/assets`", "`pyproc/history`", "`pyproc/machine`", "`pyproc/control`"]),
-    publicSurface: Object.freeze([
-      "`boot`",
-      "`open`",
-      "`createWebComputer`",
-      "`createMachineFleet`",
-      "`checkEnvironment`",
-      "`getPyProcAssetManifest`",
-      "`verifyPyProcAssetIntegrity`",
-      "`registerPyProcServiceWorker`",
-      "`PyProcControlClient`",
-      "`PerceptionClient`",
-      "`createExecutionMemoryRegistry`",
-      "a `commitState`/`openState` kernel round trip",
-      "the four installed bins",
-    ]),
-    contract: "package exports, stable subpath types, npm files, engine preparation, CLI graph copy and SRI manifest",
+    specifiers: Object.freeze(["`pyproc`", "`pyproc/runtime`", "`pyproc/history`", "`pyproc/machine`", "`pyproc/assets`", "`pyproc/wasi`"]),
+    publicSurface: Object.freeze(["`boot`", "`open`", "`createWebComputer`", "`checkEnvironment`", "owned kernel classes"]),
+    contract: "The installed native ESM exports resolve without package-internal consumer imports",
   }),
   Object.freeze({
-    gate: "installed package - asset path",
-    specifiers: Object.freeze(["`pyproc`", "`pyproc/assets`"]),
-    publicSurface: Object.freeze([
-      "`getPyProcAssetManifest`",
-      "`verifyPyProcAssetIntegrity`",
-      "`registerPyProcServiceWorker`",
-    ]),
-    contract: "An asset manifest rooted at `/node_modules/pyproc/`, worker graph SRI, registration of the installed `pyprocSw.js`, and rejection of a bad worker SRI before spawn",
+    gate: "installed asset graph",
+    specifiers: Object.freeze(["`pyproc/assets`", "the `pyproc-assets` binary"]),
+    publicSurface: Object.freeze(["`getPyProcAssetManifest`", "`verifyPyProcAssetIntegrity`"]),
+    contract: "The generated seven-file worker graph is same-origin and every byte passes SHA-256 verification",
   }),
   Object.freeze({
-    gate: "installed package - runtime/server",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["`boot`", "the machine runtime's `enableAsgiServer`", "ASGI delegation wiring of the installed `pyprocSw.js`"]),
-    contract: "Machine boot from the installed package, a Python ASGI app, a `fetch(\"/pyproc/...\")` virtual-origin round trip, the S3 timing source",
+    gate: "installed owned kernel",
+    specifiers: Object.freeze(["`pyproc`", "`pyproc/runtime`", "`pyproc/wasi`"]),
+    publicSurface: Object.freeze(["execution", "value transfer", "checkpoint restore", "process clone", "terminal"]),
+    contract: "The packed owned CPython WASI engine boots and runs only through the worker-owned kernel protocol",
   }),
   Object.freeze({
-    gate: "installed package - device filesystem",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["machine runtime `enableDeviceFs`"]),
-    contract: "Reading and writing `/dev/productState` and `/proc/meminfo` through the Python `open()` file contract on an installed-package machine",
-  }),
-  Object.freeze({
-    gate: "installed package - process OS",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["the machine's `proc()` pool"]),
-    contract: "Running pool `map` and `terminate` on the installed worker graph, rejection of a bad worker SRI before spawn, and no collision between the SRI and the ASGI Service Worker prefix",
-  }),
-  Object.freeze({
-    gate: "installed package - shell jobs",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["`fork`/`repl`/`signal` on a `proc({ replay })` pool"]),
-    contract: "Building an interactive namespace on the installed worker graph and running the `expr &`, `fg`, `kill`, `terminate` job lifecycle",
-  }),
-  Object.freeze({
-    gate: "installed package - machine container",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["child kernels of the machine's `proc()` (a `setup` manifest plus `exec`/`kill`)"]),
-    contract: "Spawning, running, measuring heapLen, killing a child machine on the installed worker graph, and rejecting calls after the kill",
-  }),
-  Object.freeze({
-    gate: "installed package - crash resume",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["`boot({ deterministic: true })`", "machine `history.commit`/`history.recover`"]),
-    contract: "Leaving a reactive boundary on an installed-package `deterministic` machine with `history.commit()` and recovering product state in a new machine with `history.recover()`",
-  }),
-  Object.freeze({
-    gate: "installed package - immortal python machine",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["`open()` / `open({ name })`", "the `KernelElection` handle"]),
-    contract: "The default durable auto-commit Machine plus three independent browsing contexts sharing one Python state and prepared environment, continuing after forced leader removal, and cold-reopening automatically committed heap plus `/home/web` after every context closes",
-  }),
-  Object.freeze({
-    gate: "installed package - permission policy",
-    specifiers: Object.freeze(["`pyproc`"]),
-    publicSurface: Object.freeze(["the machine `runtime` escape hatch (the `setGlobal` chokepoint plus the CSP `connect-src`)"]),
-    contract: "Enforcement of a product permission manifest (`net=false`, `clipboard=false`, `home=true`, `workers=false`) and of the Python chokepoints",
-  }),
-  Object.freeze({
-    gate: "installed package - portable machine",
-    specifiers: Object.freeze(["`pyproc`", "`pyproc/history`"]),
-    publicSurface: Object.freeze([
-      "`boot({ deterministic: true })`",
-      "`open(blob)`",
-      "`createStateKeyPair`",
-      "`exportStatePublicKey`",
-      "`fingerprintStatePublicKey`",
-      "machine `history.export({ signingKey })`",
-      "Runtime `enableInit`",
-    ]),
-    contract: "Signed `.pymachine` plus `/home/web` export, signer fingerprint, untrusted and wrong-key rejection, trusted open, reopening the `resume.py` SQLite resource, the S4 timing source",
-  }),
-  Object.freeze({
-    gate: "installed package - web computer",
+    gate: "installed Machine lifecycle",
     specifiers: Object.freeze(["`pyproc`", "`pyproc/machine`"]),
-    publicSurface: Object.freeze(["`createWebComputer`", "`createMachineFleet`"]),
-    contract: "Assembling a browser computer from the installed package alone, plus committing, terminating, and cold-resuming a bounded durable Machine Fleet",
+    publicSurface: Object.freeze(["Machine image export and open", "`createWebComputer`"]),
+    contract: "Portable state and the default Python guest work from node_modules alone",
   }),
 ]);
 
 export function installedPackageCoverageManifest() {
-  return {
-    schemaVersion: INSTALLED_PACKAGE_COVERAGE_VERSION,
-    rows: INSTALLED_PACKAGE_COVERAGE,
-  };
+  return { schemaVersion: INSTALLED_PACKAGE_COVERAGE_VERSION, rows: INSTALLED_PACKAGE_COVERAGE };
 }
 
 export function renderInstalledPackageCoverageMarkdown(rows = INSTALLED_PACKAGE_COVERAGE) {

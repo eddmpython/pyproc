@@ -1,12 +1,13 @@
 // actionEvidence.js - Observe, Act, Capture, Verify를 한 번만 전송되는 effect 경계로 묶는다.
 import { verifyPostcondition, validatePostcondition } from "./postconditionVerifier.js";
+import { planPostconditionObservation } from "./postconditionObservationPlanner.js";
 
 const POLL_MS = 100;
 const EVIDENCE_REF_RE = /^evidence:[A-Za-z0-9_-]{1,128}$/;
 const ACTION_REF_RE = /^action:[A-Za-z0-9_-]{1,128}$/;
 const OBSERVATION_REF_RE = /^observation:[A-Za-z0-9_-]{1,128}$/;
 const EVIDENCE_KEYS = new Set(["evidenceRef", "actionRef", "beforeObservationRef", "afterObservationRef",
-  "effectOutcome", "verification", "correlatedEvidence", "effectWindow"]);
+  "effectOutcome", "verification", "correlatedEvidence", "effectWindow", "observationCoverage"]);
 const delay = (ms, signal) => new Promise((resolve, reject) => {
   let timer;
   const finish = () => {
@@ -53,6 +54,32 @@ function exactKeys(value, allowed, label) {
   for (const key of Object.keys(value)) if (!allowed.has(key)) evidenceInvalid(`${label} does not accept ${key}`);
 }
 
+function eventWatermarks(observation) {
+  return Object.freeze(Object.fromEntries((observation?.eventWindows || [])
+    .map((window) => [window.channel, window.endSequence])));
+}
+
+function observationCoverage(plan, observation) {
+  const eventWindows = Object.freeze([...(observation?.eventWindows || [])]);
+  const entityEnumeration = plan.entityQueries.length
+    ? String(observation?.completeness?.entityEnumeration || "unknown") : "notRequested";
+  const entityComplete = plan.entityQueries.length === 0
+    || ["complete", "focusedComplete"].includes(entityEnumeration);
+  const requiredEventWindows = plan.eventChannels.map((channel) =>
+    eventWindows.find((window) => window.channel === channel)).filter(Boolean);
+  const eventsComplete = plan.eventChannels.length === 0
+    || (requiredEventWindows.length === plan.eventChannels.length
+      && requiredEventWindows.every((window) => window.complete));
+  const omittedRelevantCount = Math.max(0, Number(observation?.completeness?.omittedRelevantCount) || 0);
+  return Object.freeze({
+    postconditionPlanSha256: plan.planSha256,
+    entityEnumeration,
+    eventWindows,
+    omittedRelevantCount,
+    completeness: entityComplete && eventsComplete && omittedRelevantCount === 0 ? "complete" : "incomplete",
+  });
+}
+
 export function assertActionEvidence(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) evidenceInvalid("ActionEvidence is invalid");
   exactKeys(value, EVIDENCE_KEYS, "ActionEvidence");
@@ -95,6 +122,18 @@ export function assertActionEvidence(value) {
       evidenceInvalid("ActionEvidence correlation is invalid");
     }
   }
+  const coverage = value.observationCoverage;
+  if (!coverage || typeof coverage !== "object" || Array.isArray(coverage)) {
+    evidenceInvalid("ActionEvidence observation coverage is invalid");
+  }
+  exactKeys(coverage, new Set(["postconditionPlanSha256", "entityEnumeration", "eventWindows",
+    "omittedRelevantCount", "completeness"]), "ActionEvidence observation coverage");
+  if (!/^[a-f0-9]{64}$/.test(String(coverage.postconditionPlanSha256 || ""))
+    || typeof coverage.entityEnumeration !== "string" || !Array.isArray(coverage.eventWindows)
+    || !Number.isInteger(coverage.omittedRelevantCount) || coverage.omittedRelevantCount < 0
+    || !["complete", "incomplete"].includes(coverage.completeness)) {
+    evidenceInvalid("ActionEvidence observation coverage is invalid");
+  }
   return value;
 }
 
@@ -106,11 +145,12 @@ export class ActionEvidenceLoop {
 
   async run({ actionRef, postcondition, capture, effect, signal }) {
     validatePostcondition(postcondition);
+    const observationPlan = planPostconditionObservation(postcondition);
     const evidenceRef = `evidence:${this.idFactory()}`;
     if (!ACTION_REF_RE.test(String(actionRef || "")) || !EVIDENCE_REF_RE.test(evidenceRef)) {
       evidenceInvalid("ActionEvidence references are invalid");
     }
-    const before = await capture({ phase: "before", signal });
+    const before = await capture({ phase: "before", signal, observationPlan });
     if (!before || !OBSERVATION_REF_RE.test(String(before.observationRef || ""))) {
       evidenceInvalid("ActionEvidence before observation is invalid");
     }
@@ -123,7 +163,8 @@ export class ActionEvidenceLoop {
         effectOutcome: error?.outcome || "notSent",
         verification: Object.freeze({ state: error?.outcome === "outcomeUnknown" ? "outcomeUnknown" : "notObserved",
           postcondition, evidenceRefs: Object.freeze([]) }),
-        effectWindow: Object.freeze({ startedAt, endedAt: this.now() }) });
+        effectWindow: Object.freeze({ startedAt, endedAt: this.now() }),
+        observationCoverage: observationCoverage(observationPlan, before) });
       const failure = mutableFailure(error);
       failure.actionEvidence = assertActionEvidence(evidence);
       throw failure;
@@ -133,9 +174,11 @@ export class ActionEvidenceLoop {
     let verification;
     const accumulatedEvents = [];
     const eventRefs = new Set();
+    const watermarks = eventWatermarks(before);
     try {
       do {
-        after = await capture({ phase: "after", signal, since: before.observationRef });
+        after = await capture({ phase: "after", signal, since: before.observationRef,
+          eventWatermarks: watermarks, observationPlan });
         if (!after || !OBSERVATION_REF_RE.test(String(after.observationRef || ""))
           || !Array.isArray(after.events)) evidenceInvalid("ActionEvidence after observation is invalid");
         for (const event of after.events || []) {
@@ -144,12 +187,16 @@ export class ActionEvidenceLoop {
           if (ref) eventRefs.add(ref);
           accumulatedEvents.push(event);
         }
-        verification = verifyPostcondition(postcondition, { observation: after, events: accumulatedEvents, final: false });
+        const coverage = observationCoverage(observationPlan, after);
+        verification = verifyPostcondition(postcondition,
+          { observation: after, events: accumulatedEvents, coverage, final: false });
         if (["confirmed", "contradicted"].includes(verification.state) || this.now() >= deadline) break;
         await delay(Math.min(POLL_MS, Math.max(1, deadline - this.now())), signal);
       } while (this.now() <= deadline);
       if (!["confirmed", "contradicted"].includes(verification.state)) {
-        verification = verifyPostcondition(postcondition, { observation: after, events: accumulatedEvents, final: true });
+        const coverage = observationCoverage(observationPlan, after);
+        verification = verifyPostcondition(postcondition,
+          { observation: after, events: accumulatedEvents, coverage, final: true });
       }
     } catch (error) {
       throw outcomeUnknown(error, Object.freeze({ evidenceRef, actionRef,
@@ -157,7 +204,8 @@ export class ActionEvidenceLoop {
         effectOutcome: "outcomeUnknown",
         verification: Object.freeze({ state: "outcomeUnknown", postcondition,
           evidenceRefs: Object.freeze([...eventRefs]) }),
-        effectWindow: Object.freeze({ startedAt, endedAt: this.now() }) }));
+        effectWindow: Object.freeze({ startedAt, endedAt: this.now() }),
+        observationCoverage: observationCoverage(observationPlan, after || before) }));
     }
     const evidence = Object.freeze({ evidenceRef, actionRef,
       beforeObservationRef: before.observationRef,
@@ -169,7 +217,8 @@ export class ActionEvidenceLoop {
         eventRefs: Object.freeze(accumulatedEvents.map((event) => event.eventId).filter(Boolean)),
         delta: after.delta || null,
       }),
-      effectWindow: Object.freeze({ startedAt, endedAt: this.now() }) });
+      effectWindow: Object.freeze({ startedAt, endedAt: this.now() }),
+      observationCoverage: observationCoverage(observationPlan, after) });
     assertActionEvidence(evidence);
     return Object.freeze({
       effectResult,

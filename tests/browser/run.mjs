@@ -111,8 +111,6 @@ const server = createStaticServer(async (req, res) => {
 
 await new Promise((res) => server.listen(0, "127.0.0.1", res));
 
-// PYPROC_INDEX_URL: 게이트/probe를 다른 배포 지점으로 전 검사한다(자가 호스팅 P0 게이트:
-// PYPROC_INDEX_URL=/vendor/pyodide/ 가 CDN 0으로 같은 검사를 돌린다). 페이지는 ?indexURL=로 받는다.
 const baseUrl = `http://127.0.0.1:${server.address().port}/${page}`;
 function pageUrl(nextSearch = "") {
   const params = new URLSearchParams(String(nextSearch).replace(/^\?/, ""));
@@ -121,7 +119,6 @@ function pageUrl(nextSearch = "") {
   // 이 침묵을 src 회귀로 오독해 유령을 한 시간 추적했다. 정본 레인은 test:examples이고,
   // 이 러너는 단일 페이지 재현용이다). 조건을 페이지 경로에서 유도해 함정을 없앤다.
   if ((page.startsWith("examples/") || page === "") && !params.has("gate")) params.set("gate", "1");
-  if (process.env.PYPROC_INDEX_URL && !params.has("indexURL")) params.set("indexURL", process.env.PYPROC_INDEX_URL);
   const search = params.toString();
   return `${baseUrl}${search ? `?${search}` : ""}`;
 }
@@ -189,7 +186,7 @@ server.close();
 try { rmSync(runRoot, { recursive: true, force: true }); } catch (e) {}
 
 if (result.timedOut) {
-  console.log(`FAIL 게이트 타임아웃(${TIMEOUT_MS / 1000}s). 네트워크(Pyodide CDN) 또는 브라우저 실행을 확인하라.`);
+  console.log(`FAIL 게이트 타임아웃(${TIMEOUT_MS / 1000}s). owned asset 경로 또는 브라우저 실행을 확인하라.`);
   console.log(`  진단: ${JSON.stringify(result.diagnosis)}`);
   process.exit(1);
 }

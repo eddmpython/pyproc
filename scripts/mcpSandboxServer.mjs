@@ -1,9 +1,10 @@
 // mcpSandboxServer.mjs - pyproc 샌드박스를 MCP(stdio) 도구로 노출하는 설치 런타임(Node 전용, 의존성 0).
-// 에이전트가 이 서버를 붙이면 기본 도구 4개를 얻는다:
+// 에이전트가 이 서버를 붙이면 Python 제어, 검증, read-only skill 도구를 얻는다:
 //   pythonRun(code)          - 준비된 파이썬 머신에서 실행(stdout + 마지막 식 repr)
 //   checkpointSave()         - 지금 상태를 복원 핸들로 저장
 //   checkpointRestore(index) - 저장 지점으로 밀리초 복귀(생략 시 마지막)
 //   sandboxReset()           - 부팅 직후 준비 상태(cp0)로 복귀
+//   skills.search/read       - catalog metadata 검색과 digest-bound 단일 resource 읽기
 // PYPROC_BROWSER_CONTROL=1을 명시하면 격리 profile의 저수준 및 고수준 browser 도구가 더 열린다.
 // CDP endpoint는 Node broker만 소유하고 MCP stdio 밖에 listener를 추가하지 않는다.
 // 구조: COOP/COEP 정적 서버 + product browser launcher
@@ -13,11 +14,14 @@
 import { createInterface } from "node:readline";
 import { createControlProduct } from "./controlProtocol/controlProduct.mjs";
 import { McpControlAdapter, mcpToolResult } from "./controlProtocol/mcpControlAdapter.js";
+import { createSkillMcpSurface } from "./skillOs/skillMcp.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18"; // 지원 MCP 스펙 리비전(클라이언트 제안을 에코 우선)
 const product = await createControlProduct();
 const { host: controlHost, tools: TOOLS } = product;
 const mcpAdapter = new McpControlAdapter({ host: controlHost, tools: TOOLS });
+const skillMcp = await createSkillMcpSurface();
+const MCP_TOOLS = Object.freeze([...TOOLS, ...skillMcp.tools]);
 process.stderr.write(`pyproc MCP sandbox: ${product.browserSession.browser} -> ${product.pageUrl}\n`);
 
 let shuttingDown = false;
@@ -102,12 +106,16 @@ rl.on("line", async (line) => {
     } else if (method === "ping") {
       resultOf(id, {});
     } else if (method === "tools/list") {
-      resultOf(id, { tools: TOOLS });
+      resultOf(id, { tools: MCP_TOOLS });
     } else if (method === "tools/call") {
       const tool = params && params.name;
-      if (!mcpAdapter.hasTool(tool)) { errorOf(id, -32602, `unknown tool: ${tool}`); return; }
+      if (!mcpAdapter.hasTool(tool) && !skillMcp.hasTool(tool)) {
+        errorOf(id, -32602, `unknown tool: ${tool}`); return;
+      }
       try {
-        resultOf(id, mcpToolResult(await mcpAdapter.invoke(id, tool, (params && params.arguments) || {})));
+        resultOf(id, skillMcp.hasTool(tool)
+          ? await skillMcp.invoke(tool, (params && params.arguments) || {})
+          : mcpToolResult(await mcpAdapter.invoke(id, tool, (params && params.arguments) || {})));
       } catch (error) {
         if (error?.code === "CONTROL_REQUEST_DUPLICATE") errorOf(id, -32600, error.message);
         else resultOf(id, { content: [{ type: "text", text: JSON.stringify({

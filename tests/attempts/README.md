@@ -6,7 +6,7 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 
 - **카테고리 = 개념 캠페인 하나 = 폴더 하나.** 질문 하나마다 폴더를 파지 않는다. 세부 질문은 캠페인 **안에서 probe 파일로** 늘리고, README 결론 표에 행으로 쌓는다.
 - **양극단 금지.** 질문마다 폴더(증식)도, 개념이 달라도 한 폴더(쓰레기장)도 아니다. 판정 질문: "이 질문이 이 캠페인의 가설 문장 아래 있는가?" 아니면 새 캠페인이 맞다(예: runtimeParity=로컬 따라잡기 vs pythonMachine=파일로 이동하는 머신). 캠페인은 보통 독립된 제품 가설 하나와 1:1이다.
-- **개설했으면 끝까지 그 폴더에서 운영한다.** 캠페인이 종결(전 질문 졸업/폐기)되면 기록은 진행 원장·계약 실태 표([docs/operations/contractReality.md](../../docs/operations/contractReality.md))가 정본이므로 폴더째 삭제한다(git 이력이 보존). attempts에는 살아 있는 캠페인만 남는다.
+- **개설했으면 끝까지 그 폴더에서 운영한다.** 캠페인이 종결(전 질문 졸업/폐기)되면 기록은 진행 원장·계약 실태 표([skills/evolve-pyproc/references/contract-reality.md](../../skills/evolve-pyproc/references/contract-reality.md))가 정본이므로 폴더째 삭제한다(git 이력이 보존). attempts에는 살아 있는 캠페인만 남는다.
 - 각 카테고리 폴더에는 README.md가 필수다(아래 형식). `tests/run.mjs`가 기계 검사한다.
 
 ## 카테고리 README 형식
@@ -31,13 +31,13 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 ## 졸업 게이트 (순서 강제. 전 단계 통과 = 본진 배치 자격)
 
 1. **카테고리 생성** - 폴더 + README(질문·가설·졸업 게이트 명문화). 추측으로 시작하지 않는다.
-2. **개념 확립** - probe(HTML/JS)를 [실측 서버](../../docs/operations/testing.md)로 브라우저에서 돌려 가설을 실측으로 입증. 실패도 결론 표에 기록한다(실패 기록이 다음 시도의 바닥이다).
+2. **개념 확립** - probe(HTML/JS)를 [실측 서버](../../skills/verify-pyproc/references/testing.md)로 브라우저에서 돌려 가설을 실측으로 입증. 실패도 결론 표에 기록한다(실패 기록이 다음 시도의 바닥이다).
 3. **결과 기록** - probe 파일 상단 주석에 결과 절(날짜/환경/핵심 수치/결론/다음), 카테고리 README 결론 표 갱신.
 4. **모듈화 설계** - flat dump 금지. 승격 형태를 정한다: 어느 레이어 폴더로 가는가, 능력 계약은 무엇인가, 공개 표면에 무엇이 늘어나는가.
 5. **덕지덕지 제거** - 특수 케이스·플래그 누적 자가 점검. 강함은 쌓아서가 아니라 깎아서.
 6. **클린코드** - camelCase, 빌드 없는 ESM, 능력 계약 경유, 엔진 내부 직접 접근 없음.
 7. **계약 확정** - `index.d.ts` 타입 + README 사용례 + (필요시) 패키지 계약 문서 갱신을 승격과 같은 변경에서.
-8. **본진 배치** - 위 1~7 확정 후에만 `src/` 이관. 이 README의 결론 표와 [계약 실태 표](../../docs/operations/contractReality.md)에 결정 기록 + `npm test` green.
+8. **본진 배치** - 위 1~7 확정 후에만 `src/` 이관. 이 README의 결론 표와 [계약 실태 표](../../skills/evolve-pyproc/references/contract-reality.md)에 결정 기록 + `npm test` green.
 
 기계 강제는 1(README 존재 + 졸업 게이트 절)과 8(`npm test`)에 걸려 있고, 2~7은 판단 게이트다(리뷰로 강제).
 
@@ -49,7 +49,6 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 | [pythonMachine/](pythonMachine/) | 꺼지지 않고 파일 하나로 이동하는 컴퓨터 (browser-os) | 진행 중 (핵심 OS 질문 실측 + src 승격 지속) |
 | [envManager/](envManager/) | 환경의 선언·캐시·재현을 uv급으로 (local-parity 라이브러리 축) | 진행 중 (4개 질문 실측 + 승격) |
 | [selfHost/](selfHost/) | 이 OS 위에서 서버와 웹을 개발할 수 있는가 (러너가 아니라 플랫폼) | 진행 중 (풀스택 실측 8/8, 1번 질문 졸업) |
-| [enginePort/](enginePort/) | EngineContract를 non-Pyodide CPython(WASI)이 구현 가능한가 (Pyodide 제거의 실증, D2 관문) | 진행 중 (부팅+계약 코어 6/6 + 반복 실행/값 프로토콜/**완전 시간여행** 12/12) |
 | [largeHeapEnvelope/](largeHeapEnvelope/) | 대형 힙에서 OS 프리미티브 비용은 어디서 무너지는가 (Browser Python OS 성능 봉투) | 진행 중 |
 | [stateKernel/](stateKernel/) | 내구 상태 3벌(저널·세션 이미지·machine generation)을 이중 구역 커널 하나로 통합할 수 있는가 | 진행 중 |
 | [Web Machine](../webMachine/) | 서로 다른 guest engine을 같은 browser computer lifecycle/device/image 계약으로 다룰 수 있는가 | 졸업 -> `src/machine` + `tests/webMachine` |

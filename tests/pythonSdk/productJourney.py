@@ -38,7 +38,7 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
                for entry in memoryListed.output)
 
     cancelRequest = client.requestAsync("machine.run", {
-        "code": "import time\npythonEffect = 'applied'\ntime.sleep(1.0)"
+        "code": "pythonEffect = 'applied'\nsum(i * i for i in range(5000000))"
     }, requestId="python:cancel")
     time.sleep(0.1)
     assert cancelRequest.cancel("Python SDK product cancellation") is True
@@ -55,7 +55,8 @@ with PyProcClient.start(configPath, startupTimeout=60.0) as client:
 
     timeoutError = None
     try:
-        client.runPython("import time\ntimeoutEffect = 'applied'\ntime.sleep(1.0)", timeout=0.1)
+        client.runPython(
+            "timeoutEffect = 'applied'\nsum(i * i for i in range(5000000))", timeout=0.1)
     except ControlError as error:
         timeoutError = error
     assert timeoutError is not None and timeoutError.code == "CONTROL_CANCELLED"

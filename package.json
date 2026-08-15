@@ -1,6 +1,6 @@
 {
   "name": "pyproc",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "A persistent Python computer in the browser: real CPython, durable workspaces, rewindable history, and evidence-backed browser eyes and hands. No application server. (브라우저에 영속하는 Python 컴퓨터.)",
   "type": "module",
   "repository": {
@@ -15,7 +15,6 @@
   "types": "./index.d.ts",
   "bin": {
     "pyproc-assets": "./scripts/assetManifest.mjs",
-    "pyproc-engine": "./scripts/fetchEngine.mjs",
     "pyproc-control": "./scripts/pyprocControl.mjs",
     "pyproc-mcp": "./scripts/pyprocMcp.mjs"
   },
@@ -36,7 +35,7 @@
       "types": "./src/machine/index.d.ts",
       "default": "./src/machine/index.js"
     },
-    "./worker": "./src/processOs/worker.js",
+    "./worker": "./src/runtime/engines/wasi/wasiWorker.js",
     "./assets": {
       "types": "./src/runtime/assets.d.ts",
       "default": "./src/runtime/assets.js"
@@ -46,16 +45,16 @@
       "default": "./scripts/controlProtocol/controlApi.js"
     },
     "./gpu": {
-      "types": "./src/capabilities/gpuCompute.d.ts",
-      "default": "./src/capabilities/gpuCompute.js"
+      "types": "./src/capabilities/productHostCapabilities.d.ts",
+      "default": "./src/capabilities/productHostCapabilities.js"
     },
     "./socket": {
-      "types": "./src/capabilities/socketBridge.d.ts",
-      "default": "./src/capabilities/socketBridge.js"
+      "types": "./src/capabilities/productHostCapabilities.d.ts",
+      "default": "./src/capabilities/productHostCapabilities.js"
     },
     "./wasi": {
-      "types": "./src/runtime/engines/wasi/wasiSession.d.ts",
-      "default": "./src/runtime/engines/wasi/wasiSession.js"
+      "types": "./src/composition/wasiSubpath.d.ts",
+      "default": "./src/composition/wasiSubpath.js"
     }
   },
   "files": [
@@ -64,7 +63,6 @@
     "src",
     "scripts/assetManifest.mjs",
     "scripts/assetCatalog.json",
-    "scripts/fetchEngine.mjs",
     "scripts/pyprocControl.mjs",
     "scripts/controlProtocolServer.mjs",
     "scripts/pyprocMcp.mjs",
@@ -82,6 +80,8 @@
     "scripts/browserControl",
     "scripts/perception",
     "scripts/verification",
+    "scripts/skillOs",
+    "skills",
     "README.md",
     "README.ko.md",
     "LICENSE"
@@ -90,6 +90,7 @@
     "test": "node tests/run.mjs",
     "test:types": "tsc -p tests/tsconfig.json",
     "test:contracts": "node tests/contracts/run.mjs",
+    "test:engine-independence": "node scripts/engineIndependence/scanEngineIndependence.mjs --packed",
     "assets:provenance": "node scripts/assetProvenance.mjs",
     "test:package": "node tests/packageGate.mjs",
     "test:installed": "node tests/browser/installedPackageGate.mjs",
@@ -119,14 +120,18 @@
     "assets:web-computer": "node scripts/prepareWebComputerAssets.mjs",
     "assets:buildroot": "node scripts/buildroot/buildGuest.mjs",
     "serve": "node scripts/staticServer.mjs",
-    "fetch:engine": "node scripts/fetchEngine.mjs --out vendor/pyodide",
     "mcp:sandbox": "node scripts/mcpSandboxServer.mjs",
     "test:preflight": "node tests/browser/run.mjs tests/browser/preflightNoCoi.html",
     "test:web-machine": "node tests/webMachine/run.mjs",
-    "test:web-machine:wasi": "node scripts/fetchWasiAssets.mjs && node tests/webMachine/run.mjs --wasi",
     "test:web-machine:v86": "node tests/webMachine/fixtures/v86/prepareAssets.mjs && node tests/webMachine/run.mjs --v86",
-    "test:socket": "node tests/browser/socketLane.mjs",
-    "test:golden": "node tests/browser/goldenWorkflow.mjs"
+    "test:golden": "node tests/browser/goldenWorkflow.mjs",
+    "skills:catalog": "node scripts/skillOs/catalog.mjs",
+    "skills:check": "node scripts/skillOs/validate.mjs",
+    "skills:test-routing": "node tests/skillOs/routing.mjs",
+    "skills:test-package": "node tests/skillOs/package.mjs",
+    "skills:test-mcp": "node tests/skillOs/mcp.mjs",
+    "skills:test-forward": "node tests/skillOs/forward.mjs",
+    "skills:test-performance": "node tests/skillOs/performance.mjs"
   },
   "devDependencies": {
     "typescript": "5.9.3"
@@ -138,7 +143,6 @@
     "persistent-state",
     "machine-image",
     "cpython",
-    "pyodide",
     "browser",
     "wasm",
     "webassembly",

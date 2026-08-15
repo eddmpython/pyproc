@@ -160,7 +160,7 @@ export function verifyStateTag(
   opts?: { trustedPublicKeys?: Array<JsonWebKey | CryptoKey | string> },
 ): Promise<{ valid: boolean; trusted: boolean; signerFingerprint: string | null }>;
 
-// ---- Portable bundle (one envelope format; docs/reference/bundleFormat.md is the layout canon) ----
+// ---- Portable bundle (one envelope format; skills/reference-pyproc-api/references/bundle-format.md is the layout canon) ----
 export const STATE_BUNDLE_MAGIC: "PYBUNDLE1\n";
 export const STATE_BUNDLE_VERSION: 1;
 export const STATE_BUNDLE_HEAD_MAX_BYTES: number;

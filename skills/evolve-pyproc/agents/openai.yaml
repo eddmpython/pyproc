@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evolve PyProc"
+  short_description: "Manage contract evolution and initiatives"
+  default_prompt: "Use $evolve-pyproc to assess and record this PyProc contract evolution."

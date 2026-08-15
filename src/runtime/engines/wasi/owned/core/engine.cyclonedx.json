@@ -1,0 +1,72 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "cpython-wasi-3.14.6-pyproc-host-1",
+      "version": "3.14.6"
+    }
+  },
+  "components": [
+    {
+      "type": "framework",
+      "name": "CPython",
+      "version": "3.14.6",
+      "bomRef": "cpython:c63aec69bd59c55314c06c23f4c22c03de76fe45",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c6b8133e056dd5992782b84eb7269a9ac7402f4c35b2f8ecd333cba9fc630d41"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "name": "WASI SDK",
+      "version": "24.0",
+      "bomRef": "wasi-sdk:24.0",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0f934c6e7e171b5627c81b697a9e57e96d65cd889f56ce6077350de48978afd3"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "_pyprocHost",
+      "version": "pyproc.hostcall/1",
+      "bomRef": "pyproc-host:1",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "python.wasm",
+      "bomRef": "artifact:ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "python314-stdlib.zip",
+      "bomRef": "artifact:be3c2d5802108d0714921153e1e86737fff1e086823630a523663198284eee57",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "be3c2d5802108d0714921153e1e86737fff1e086823630a523663198284eee57"
+        }
+      ]
+    }
+  ]
+}

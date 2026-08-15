@@ -20,16 +20,17 @@ export async function assertMachineEntranceContract() {
   const root = await mkdtemp(join(tmpdir(), "pyprocMachineEntranceContract-"));
   try {
     const projectRoot = join(root, "project");
-    const engineRoot = join(projectRoot, "vendor", "pyodide");
+    const engineRoot = join(projectRoot, "vendor", "cpython-wasi");
     await mkdir(engineRoot, { recursive: true });
-    await writeFile(join(engineRoot, "pyodide.js"), "fixture");
-    await writeFile(join(engineRoot, "pyodide-lock.json"), "{}");
+    await writeFile(join(engineRoot, "python.wasm"), "fixture");
+    await writeFile(join(engineRoot, "python314-stdlib.zip"), "fixture");
+    await writeFile(join(engineRoot, "engine-build-manifest.json"), "{}");
     const approvalPublicKey = join(projectRoot, "approval-public.pem");
     await writeFile(approvalPublicKey, generateKeyPairSync("ed25519").publicKey
       .export({ type: "spki", format: "pem" }));
 
     const parsed = parseMachineProfileInitArguments([
-      "--recipe", "pythonOnly", "--project-root", projectRoot, "--engine-root", "vendor/pyodide", "--dry-run",
+      "--recipe", "pythonOnly", "--project-root", projectRoot, "--engine-root", "vendor/cpython-wasi", "--dry-run",
       "--execution-memory-root", ".pyproc/memory", "--execution-memory-import-root", "handoffs",
     ]);
     assert(parsed.profile.engineRoot === engineRoot && parsed.dryRun === true,
@@ -38,7 +39,7 @@ export async function assertMachineEntranceContract() {
       && parsed.profile.executionMemory.importRoots[0] === join(projectRoot, "handoffs"),
     "Machine Entrance CLI가 Execution Memory 경로를 absolute profile로 컴파일하지 않았다");
     const effectParsed = parseMachineProfileInitArguments([
-      "--recipe", "authorizedBrowser", "--project-root", projectRoot, "--engine-root", "vendor/pyodide",
+      "--recipe", "authorizedBrowser", "--project-root", projectRoot, "--engine-root", "vendor/cpython-wasi",
       "--origin", "https://example.test", "--max-risk", "externalEffect", "--purpose", "Commit fixture",
       "--acknowledge-effects", "--action", "snapshot", "--action", "click",
       "--execution-memory-root", ".pyproc/effect-memory", "--enable-effect-transactions",
@@ -61,6 +62,8 @@ export async function assertMachineEntranceContract() {
     const wildcard = await errorOf(() => compileMachineProfile({ recipe: "observeLocal", engineRoot,
       allowedOrigins: ["http://*.test"], purpose: "fixture", externalEffects: "acknowledged" }));
     assert(/exact HTTP\(S\) origin/.test(wildcard?.message), "Machine Entrance가 wildcard origin을 거부하지 않았다");
+    const unknownRecipe = await errorOf(() => compileMachineProfile({ recipe: "unknownRecipe", engineRoot }));
+    assert(/recipe must be one of/.test(unknownRecipe?.message), "Machine Entrance가 unknown recipe를 effect 전에 거부하지 않았다");
     const leaked = await errorOf(() => compileMachineProfile({ ...profile, actions: ["snapshot"] }));
     assert(/pythonOnly does not accept actions/.test(leaked?.message), "pythonOnly가 action 입력을 무시하고 통과했다");
 

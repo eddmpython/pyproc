@@ -14,7 +14,7 @@ is a pass-through because the relay already did the crypto). That is honest and 
 has one consequence that shapes everything above it: **the relay must be trusted.** It sees plaintext.
 
 That requirement is what rung 1 of the ceiling ladder exists to remove
-([product direction](../../../docs/product/vision.md#where-the-ceiling-moves-next)). If TLS terminates
+([product direction](../../../skills/understand-pyproc/references/vision.md#where-the-ceiling-moves-next)). If TLS terminates
 inside the tab, the relay becomes untrusted infrastructure and the requirement drops from "a relay you
 trust" to "any relay at all". Every later rung inherits that trust model, which is why it is first.
 

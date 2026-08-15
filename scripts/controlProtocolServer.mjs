@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { createControlProduct } from "./controlProtocol/controlProduct.mjs";
 import {
   CONTROL_ATTACHMENT_CHUNK_BYTES,
+  acceptControlHello,
   controlBase,
   decodeControlFrame,
   encodeControlFrame,
@@ -80,21 +81,15 @@ async function handleLine(line) {
   try { frame = decodeControlFrame(line); }
   catch (error) { await sendFatal(error); return; }
   if (!helloComplete) {
-    if (frame.type !== "hello" || frame.role !== "client") {
-      const error = new Error("the first control frame must be a client hello");
-      error.code = "CONTROL_HELLO_REQUIRED";
-      await sendFatal(error);
-      return;
-    }
+    let accepted;
+    try {
+      accepted = acceptControlHello(frame, {
+        operations: product.operationCatalog.map((operation) => operation.name),
+      });
+    } catch (error) { await sendFatal(error); return; }
     helloComplete = true;
-    attachmentChunkBytes = frame.capabilities.attachments.maxChunkBytes;
-    await queueFrames([{
-      ...controlBase("hello"), requestId: frame.requestId, role: "server",
-      peer: { name: "pyproc", version: "1" },
-      capabilities: { cancel: true, events: false,
-        attachments: { encoding: "base64", maxChunkBytes: CONTROL_ATTACHMENT_CHUNK_BYTES } },
-      operations: product.operationCatalog.map((operation) => operation.name),
-    }]);
+    attachmentChunkBytes = accepted.maxAttachmentChunkBytes;
+    await queueFrames([accepted.response]);
     return;
   }
   if (frame.type === "request") {

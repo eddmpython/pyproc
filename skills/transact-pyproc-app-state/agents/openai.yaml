@@ -1,0 +1,4 @@
+interface:
+  display_name: "Transact PyProc App State"
+  short_description: "Transact logical application state safely"
+  default_prompt: "Use $transact-pyproc-app-state to perform this AppSpace state transaction."

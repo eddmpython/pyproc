@@ -6,7 +6,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
-import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
+import { binPath, installPackedPyProc, ROOT, run, runAsync } from "../packageHarness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const frameBridge = await readFile(join(ROOT, "scripts", "automationSpace", "frameSpaceTarget.js"));
@@ -65,15 +65,15 @@ const approvalPair = generateKeyPairSync("ed25519");
 await mkdir(executionMemoryRoot, { recursive: true });
 await writeFile(approvalKeyFile, approvalPair.publicKey.export({ type: "spki", format: "pem" }));
 run(mcpCli, ["init", "--recipe", "pythonOnly", "--project-root", installed.appDir,
-  "--out", ".pyproc-python-only", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--out", ".pyproc-python-only", "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
   "--timeout-ms", String(TIMEOUT_MS)], { cwd: installed.appDir });
 run(mcpCli, ["init", "--recipe", "observeLocal", "--project-root", installed.appDir,
-  "--out", ".pyproc-observe", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--out", ".pyproc-observe", "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
   "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin,
   "--purpose", "observe-local-product-gate", "--acknowledge-effects",
   ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
 run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
-  "--out", ".pyproc-control-product", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--out", ".pyproc-control-product", "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
   "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
   "--purpose", "control-protocol-product-gate", "--acknowledge-effects",
   "--action", "snapshot", "--action", "screenshot", "--action", "click",
@@ -89,7 +89,7 @@ memoryConfig.browser.recording = { mode: "record", file: automationRecordingFile
 await writeFile(configPath, JSON.stringify(memoryConfig, null, 2));
 await writeFile(reloadConfigPath, JSON.stringify({
   schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") },
+  engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") },
   timeoutMs: 1500,
   browser: {
     enabled: true,
@@ -107,7 +107,7 @@ await writeFile(reloadConfigPath, JSON.stringify({
 }, null, 2));
 await writeFile(frameConfigPath, JSON.stringify({
   schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") },
+  engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") },
   timeoutMs: TIMEOUT_MS,
   browser: {
     enabled: true,
@@ -131,9 +131,9 @@ check("설치본 Python-only doctor가 자동화와 CDP authority를 effect 없�
   pythonOnlyDoctor.ok === true && pythonOnlyDoctor.automation.enabled === false
     && pythonOnlyDoctor.automation.cdpEndpoint === false
     && pythonOnlyDoctor.checks.some((entry) => entry.code === "MACHINE_PREFLIGHT_EFFECT_FREE"));
-const pythonOnlyRun = JSON.parse(run(cli, ["run", "--config", pythonOnlyConfigPath,
+const pythonOnlyRun = JSON.parse((await runAsync(cli, ["run", "--config", pythonOnlyConfigPath,
   "--code", "40+2", "--timeout-ms", String(TIMEOUT_MS)],
-{ cwd: installed.appDir, timeoutMs: TIMEOUT_MS + 30000 }).stdout);
+{ cwd: installed.appDir, timeoutMs: TIMEOUT_MS + 30000 })).stdout);
 check("설치본 Python-only init, doctor, run, close 여정",
   pythonOnlyRun.terminal === "completed" && pythonOnlyRun.output?.value === "42"
     && pythonOnlyRun.attachments?.length === 0);
@@ -173,15 +173,9 @@ try {
       expectedRisk: "externalEffect", waitUntil: "load" } });
   const attached = await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:reload-attach",
     operation: "automation.session.attach", input: { targetRef: opened.terminal.output.targetRef } });
-  await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:fetch-interceptor-install",
-    operation: "machine.run", input: { code: `import js
-js.eval("globalThis.pyprocOriginalFetch=globalThis.fetch;globalThis.pyprocFetchIntercepted=false;globalThis.fetch=(...args)=>{globalThis.pyprocFetchIntercepted=true;return globalThis.pyprocOriginalFetch(...args)}")` } });
-  const fetchFence = await reloadProduct.host.request({ ...controlBase("request"),
-    requestId: "product:fetch-interceptor-probe", operation: "machine.run",
-    input: { code: "bool(js.pyprocFetchIntercepted)" } });
-  await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:fetch-interceptor-restore",
-    operation: "machine.run", input: { code: `import js
-js.eval("globalThis.fetch=globalThis.pyprocOriginalFetch;delete globalThis.pyprocOriginalFetch;delete globalThis.pyprocFetchIntercepted")` } });
+  const guestBridgeFence = await reloadProduct.host.request({ ...controlBase("request"),
+    requestId: "product:guest-bridge-fence", operation: "machine.run",
+    input: { code: "__import__('importlib.util', fromlist=['find_spec']).find_spec('js') is None" } });
   const activeId = "product:page-reload";
   const active = reloadProduct.host.request({ ...controlBase("request"), requestId: activeId,
     operation: "automation.act", input: { sessionRef: attached.terminal.output,
@@ -211,7 +205,7 @@ js.eval("globalThis.fetch=globalThis.pyprocOriginalFetch;delete globalThis.pypro
   const terminal = (await active).terminal;
   const afterReload = await reloadProduct.host.request({ ...controlBase("request"), requestId: "product:after-reload",
     operation: "machine.run", input: { code: "40 + 2" } });
-  const reloadPassed = fetchFence.terminal.output.value === "False"
+  const reloadPassed = guestBridgeFence.terminal.output.value === "True"
       && tokenProbe.result.value.stored === null && tokenProbe.result.value.hash === ""
       && tokenProbe.result.value.navigationNames.every((name) => !name.includes("controlToken"))
       && tokenProbe.result.value.replayStatus === 410
@@ -222,7 +216,7 @@ js.eval("globalThis.fetch=globalThis.pyprocOriginalFetch;delete globalThis.pypro
   check("control token을 guest realm 밖에 두고 실제 reload를 fail-closed 처리", reloadPassed,
     reloadPassed ? "" : JSON.stringify({ terminal, previousEpoch,
       pageEpoch: reloadProduct.pageBridge.pageEpoch, tokenProbe: tokenProbe.result.value,
-      fetchFence: fetchFence.terminal, afterReload: afterReload.terminal }));
+      guestBridgeFence: guestBridgeFence.terminal, afterReload: afterReload.terminal }));
 } catch (error) {
   check("실제 control page reload 제품 경로", false, String(error?.stack || error).slice(-800));
 } finally {
@@ -255,7 +249,7 @@ try {
 
   const preflight = await PyProcControlClient.check(configPath, { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
   client = await PyProcControlClient.start(configPath, { cwd: installed.appDir,
-    startupTimeoutMs: TIMEOUT_MS, maxAttachmentChunkBytes: 64 });
+    startupTimeoutMs: TIMEOUT_MS });
   check("공개 JavaScript 입구가 Execution Memory와 Rehearse-Commit 포함 operation 34종을 제공",
     preflight.ok === true
       && controlEntry === join(packageRoot, "scripts", "controlProtocol", "controlApi.js")
@@ -279,7 +273,8 @@ try {
     treeSha256: `sha256:${"1".repeat(64)}`, diffSha256: `sha256:${"2".repeat(64)}`, untracked: false };
   const memoryFirst = await client.createExecutionSession("session:control-product", projectIdentity);
   check("설치 제품이 current Machine을 immutable Execution Session HEAD로 게시",
-    memoryFirst.output.revision === 1 && memoryFirst.output.machine.imageSha256 === image.output.sha256
+    memoryFirst.output.revision === 1 && /^[0-9a-f]{64}$/.test(memoryFirst.output.machine.imageSha256)
+      && memoryFirst.output.machine.generation.startsWith("sha256:")
       && memoryFirst.output.work.state === "active", memoryFirst.output.contentSha256);
   const space = await client.inspectSpace();
   check("설치 제품이 NativeCdpSpace 능력과 복원 경계를 선언",
@@ -297,7 +292,7 @@ try {
 
   const cancelId = "request:cancel";
   const cancelled = client.requestAsync("machine.run", {
-    code: "import time\ncontrolEffect = 'applied'\ntime.sleep(1.0)",
+    code: "controlEffect = 'applied'\nsum(i * i for i in range(5000000))",
   }, { requestId: cancelId });
   await new Promise((resolve) => setTimeout(resolve, 100));
   await cancelled.cancel("product gate cancellation");
@@ -310,11 +305,13 @@ try {
 
   let deadlineError = null;
   try {
-    await client.runPython("import time\ntime.sleep(1.0)", { timeoutMs: 100 });
+    await client.runPython("sum(i * i for i in range(5000000))", { timeoutMs: 100 });
   } catch (error) { deadlineError = error; }
   check("고수준 timeoutMs가 protocol cancel과 canonical terminal로 수렴",
     deadlineError instanceof ControlRemoteError && deadlineError.code === "CONTROL_CANCELLED"
-      && deadlineError.outcome === "outcomeUnknown" && deadlineError.retryable === false);
+      && deadlineError.outcome === "outcomeUnknown" && deadlineError.retryable === false,
+  JSON.stringify({ code: deadlineError?.code, outcome: deadlineError?.outcome,
+    retryable: deadlineError?.retryable }));
   await new Promise((resolve) => setTimeout(resolve, 1100));
 
   const opened = await client.openTarget(`${targetOrigin}/product`, {
@@ -418,7 +415,7 @@ try {
     [{ kind: "screenshot", format: "png", expectedRisk: "read" }]);
   const attachment = captured.attachments[0];
   const bytes = Buffer.from(attachment.bytes);
-  check("협상된 작은 chunk로 screenshot attachment가 terminal 전에 검증됨",
+  check("협상된 chunk로 screenshot attachment가 terminal 전에 검증됨",
     captured.terminal === "completed" && captured.outcome === "observed" && captured.attachments.length === 1
       && attachment.mimeType === "image/png"
       && createHash("sha256").update(bytes).digest("hex") === attachment.sha256

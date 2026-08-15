@@ -1,0 +1,6 @@
+{"id":"negative-01","task":"Python SDK control","forbidden":"automate-browser-with-pyproc","expected":"control-pyproc"}
+{"id":"negative-02","task":"browser observation locators","forbidden":"commit-pyproc-effects","expected":"automate-browser-with-pyproc"}
+{"id":"negative-03","task":"mainPlan initiative consumer feedback","forbidden":"understand-pyproc","expected":"evolve-pyproc"}
+{"id":"negative-04","task":"API signature bundle","forbidden":"develop-pyproc","expected":"reference-pyproc-api"}
+{"id":"negative-05","task":"generated asset provenance","forbidden":"ship-pyproc","expected":"manage-pyproc-assets"}
+{"id":"negative-06","task":"AppSpace logical state","forbidden":"use-pyproc-machine","expected":"transact-pyproc-app-state"}

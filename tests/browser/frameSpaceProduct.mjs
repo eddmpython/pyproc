@@ -81,7 +81,7 @@ targetA.setRedirect(`${deniedOrigin}/redirected`);
 const configPath = join(installed.appDir, "pyproc-frame.json");
 await writeFile(configPath, JSON.stringify({
   schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") },
+  engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") },
   timeoutMs: TIMEOUT_MS,
   browser: {
     enabled: true,
@@ -347,7 +347,8 @@ try {
     actions: [{ kind: "screenshot", expectedRisk: "read" }] });
   const mcpImages = mcpCapture.result.content.filter((entry) => entry.type === "image");
   check("installed MCP adapter keeps the FrameSpace tool and native image contract",
-    mcpTools.length === 17 && !mcpTools.includes("browserCommand") && mcpImages.length === 1
+    mcpTools.length === 19 && mcpTools.includes("skills.search") && mcpTools.includes("skills.read")
+      && !mcpTools.includes("browserCommand") && mcpImages.length === 1
       && Buffer.from(mcpImages[0].data, "base64").subarray(0, 8)
         .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
   `tools=${mcpTools.length}, images=${mcpImages.length}`);

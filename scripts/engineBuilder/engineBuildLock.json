@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "engineId": "cpython-wasi-3.14.6-pyproc-host-1",
+  "sourceDateEpoch": 1781085833,
+  "target": "wasm32-wasip1",
+  "cpython": {
+    "version": "3.14.6",
+    "tagObject": "8594736f5057fdc979d42d2135895d56274589a8",
+    "commit": "c63aec69bd59c55314c06c23f4c22c03de76fe45",
+    "url": "https://api.github.com/repos/python/cpython/tarball/c63aec69bd59c55314c06c23f4c22c03de76fe45",
+    "archiveSha256": "c6b8133e056dd5992782b84eb7269a9ac7402f4c35b2f8ecd333cba9fc630d41"
+  },
+  "wasiSdk": {
+    "version": "24.0",
+    "linuxX8664": {
+      "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-linux.tar.gz",
+      "archiveSha256": "c6c38aab56e5de88adf6c1ebc9c3ae8da72f88ec2b656fb024eda8d4167a0bc5"
+    },
+    "windowsX8664": {
+      "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24/wasi-sdk-24.0-x86_64-windows.tar.gz",
+      "archiveSha256": "0f934c6e7e171b5627c81b697a9e57e96d65cd889f56ce6077350de48978afd3"
+    }
+  },
+  "wasmtime": {
+    "version": "47.0.3",
+    "linuxX8664": {
+      "url": "https://github.com/bytecodealliance/wasmtime/releases/download/v47.0.3/wasmtime-v47.0.3-x86_64-linux.tar.xz",
+      "archiveSha256": "ca1fc56d1afc40c8782e96c297fd182a0da162f9a8f52a1e7b094e1dd648e178"
+    },
+    "windowsX8664": {
+      "url": "https://github.com/bytecodealliance/wasmtime/releases/download/v47.0.3/wasmtime-v47.0.3-x86_64-windows.zip",
+      "archiveSha256": "80ddf037820b35a9a53c13519632f52947e848d6ba69a483840b7330110408f3"
+    }
+  },
+  "windowsProbeTools": {
+    "hostPython": {
+      "url": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-amd64.zip",
+      "archiveSha256": "df901e84a896ff1ee720ad03377e0c8d8c2244fda79808aeeaff6316df1cb75c"
+    },
+    "make": {
+      "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-make-4.4.1-5-any.pkg.tar.zst",
+      "archiveSha256": "c19e7caf09bbc89b2730556b2da73004118d4e1f967a685cc48524c7ff80d864"
+    },
+    "gettextRuntime": {
+      "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst",
+      "archiveSha256": "be68d7f260633284b910c588c6d82ee304a81c8817a686d2cd9df83f872c27af"
+    },
+    "libiconv": {
+      "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libiconv-1.19-1-any.pkg.tar.zst",
+      "archiveSha256": "21e334d0911f25de75d3e18e0697648bcecfa9658256d600cad0827d719c2f35"
+    }
+  },
+  "configureArgs": [
+    "--disable-test-modules",
+    "--without-ensurepip"
+  ],
+  "cflags": "-O3 -g0 -fno-ident",
+  "hostModule": {
+    "name": "_pyprocHost",
+    "abiVersion": "pyproc.hostcall/1"
+  },
+  "nativeProfiles": {
+    "core": {
+      "engineId": "cpython-wasi-3.14.6-pyproc-host-1",
+      "setupFile": "Setup.local",
+      "setupSha256": "90d3f4c86446456bf9dd066b4c0b4870e627b217b801f292329d518fa4c51452",
+      "modules": [
+        {
+          "name": "_pyprocHost",
+          "source": "_pyprocHost.c",
+          "sourceSha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66",
+          "abiVersion": "pyproc.hostcall/1"
+        }
+      ],
+      "oracle": {
+        "code": "import _pyprocHost,sys; print(sys.version.split()[0], _pyprocHost.__spec__.origin, _pyprocHost.abiVersion(), _pyprocHost.noop())",
+        "stdout": "3.14.6 built-in pyproc.hostcall/1 None"
+      },
+      "budgets": {
+        "maxWasmBytes": 7800000,
+        "maxStdlibZipBytes": 2800000
+      }
+    },
+    "data": {
+      "engineId": "cpython-wasi-3.14.6-pyproc-data-1",
+      "setupFile": "Setup.data.local",
+      "setupSha256": "085b9e5072a90b77e14b239d3e9cf87ea376e608c8937a69fb78dcc549bf33e3",
+      "modules": [
+        {
+          "name": "_pyprocHost",
+          "source": "_pyprocHost.c",
+          "sourceSha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66",
+          "abiVersion": "pyproc.hostcall/1"
+        },
+        {
+          "name": "_pyprocData",
+          "source": "_pyprocData.c",
+          "sourceSha256": "e69a52c26777927c12891f8cfec7fd64c7b5e1e7c3bb0dec5cc267da437500f2",
+          "abiVersion": "pyproc.data/1"
+        }
+      ],
+      "oracle": {
+        "code": "import _pyprocData; print(_pyprocData.profile(), _pyprocData.vector_add([1,2.5],[3,4.5]), _pyprocData.dot([1,2,3],[4,5,6]))",
+        "stdout": "pyproc.data/1 [4.0, 7.0] 32.0"
+      },
+      "budgets": {
+        "maxWasmBytes": 7850000,
+        "maxStdlibZipBytes": 2800000,
+        "maxWasmDeltaFromCoreBytes": 50000
+      }
+    }
+  }
+}

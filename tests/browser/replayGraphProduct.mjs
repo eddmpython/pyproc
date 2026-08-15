@@ -47,7 +47,7 @@ await writer.close();
 
 const configPath = join(installed.appDir, "pyproc-replay-graph.json");
 await writeFile(configPath, JSON.stringify({ schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") }, timeoutMs: TIMEOUT_MS,
+  engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") }, timeoutMs: TIMEOUT_MS,
   browser: { enabled: false },
   executionMemory: { enabled: true, root: memoryRoot, importRoots: [importRoot], secretEnv: [] },
   replayGraph: { enabled: true },

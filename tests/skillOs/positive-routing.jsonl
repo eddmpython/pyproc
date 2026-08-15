@@ -1,0 +1,20 @@
+{"id":"positive-01","task":"first entry task routing","expected":"start-pyproc"}
+{"id":"positive-02","task":"product vision glossary capability","expected":"understand-pyproc"}
+{"id":"positive-03","task":"module boundaries refactoring architecture","expected":"develop-pyproc"}
+{"id":"positive-04","task":"CI failures verification gate selection","expected":"verify-pyproc"}
+{"id":"positive-05","task":"performance benchmark baseline updates","expected":"benchmark-pyproc"}
+{"id":"positive-06","task":"npm pack release publishing","expected":"ship-pyproc"}
+{"id":"positive-07","task":"asset SBOM provenance digests","expected":"manage-pyproc-assets"}
+{"id":"positive-08","task":"consumer feedback initiative contract gaps","expected":"evolve-pyproc"}
+{"id":"positive-09","task":"clean install WASI runtime","expected":"use-pyproc-runtime"}
+{"id":"positive-10","task":"Machine checkpoint resume trust","expected":"use-pyproc-machine"}
+{"id":"positive-11","task":"Python SDK MCP control","expected":"control-pyproc"}
+{"id":"positive-12","task":"browser locators screenshots clicks","expected":"automate-browser-with-pyproc"}
+{"id":"positive-13","task":"APX Evidence Packs visual QA","expected":"verify-browser-experience"}
+{"id":"positive-14","task":"rehearse approve external effect","expected":"commit-pyproc-effects"}
+{"id":"positive-15","task":"AppSpace state transaction","expected":"transact-pyproc-app-state"}
+{"id":"positive-16","task":"ReplayGraph branch coverage","expected":"explore-pyproc-replays"}
+{"id":"positive-17","task":"API bundle format fields","expected":"reference-pyproc-api"}
+{"id":"positive-18","task":"changed-path review workflow","expected":"start-pyproc"}
+{"id":"positive-19","task":"browser support runtime compatibility","expected":"understand-pyproc"}
+{"id":"positive-20","task":"portable state fleet restore","expected":"use-pyproc-machine"}

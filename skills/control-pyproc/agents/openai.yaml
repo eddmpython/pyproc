@@ -1,0 +1,4 @@
+interface:
+  display_name: "Control PyProc"
+  short_description: "Use JavaScript Python and MCP control"
+  default_prompt: "Use $control-pyproc to control PyProc through JavaScript Python or MCP."

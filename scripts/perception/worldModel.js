@@ -62,7 +62,7 @@ function reconcile(attestations) {
   for (const item of attestations) {
     if (item.redacted) redacted = true;
     else {
-      const key = JSON.stringify(item.value);
+      const key = apxDigest(item.value);
       if (!values.has(key)) values.set(key, item.value);
     }
     if (item.freshness.status !== "stale") stale = false;

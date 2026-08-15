@@ -188,8 +188,7 @@ try {
           ok: true,
           schemaVersion: loaded.config.schemaVersion,
           configPath: loaded.configPath,
-          engine: loaded.config.engine.root ? { mode: "root", root: loaded.config.engine.root }
-            : { mode: "indexURL", indexURL: loaded.config.engine.indexURL },
+          engine: { mode: "root", root: loaded.config.engine.root },
           machineBrowser: browserExecutable,
           executionMemory: loaded.config.executionMemory.enabled ? {
             enabled: true,

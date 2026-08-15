@@ -26,19 +26,14 @@ function verifyGoldenWorkflowImports(goldenPage, packageJson) {
 }
 
 export function assertModuleBoundaries() {
-  const runtimeBindings = readFileSync(join(ROOT, "src", "composition", "runtimeBindings.js"), "utf8");
-  if (runtimeBindings.includes("../capabilities/")) {
-    throw new Error("중앙 runtimeBindings가 capability 구현을 직접 import한다");
-  }
-  for (const cluster of ["stateBindings.js", "serviceBindings.js", "environmentBindings.js"]) {
-    if (!existsSync(join(ROOT, "src", "composition", "runtimeBindings", cluster))) {
-      throw new Error(`Runtime capability cluster 누락: ${cluster}`);
-    }
+  const runtimeSubpath = readFileSync(join(ROOT, "src", "composition", "runtimeSubpath.js"), "utf8");
+  if (!runtimeSubpath.includes("wasiSubpath.js") || runtimeSubpath.includes("runtimeBindings")) {
+    throw new Error("runtime subpath가 owned kernel composition을 직접 게시하지 않는다");
   }
 
   const nodeGate = readFileSync(join(ROOT, "tests", "run.mjs"), "utf8");
   if (!nodeGate.includes('./contracts/run.mjs')) throw new Error("Node gate가 contract aggregator를 소비하지 않는다");
-  if (/\.\/contracts\/(publicSurface|runtimeContract|runtimeCapabilityClusters|retentionPolicy)\.mjs/.test(nodeGate)) {
+  if (/\.\/contracts\/(publicSurface|retentionPolicy)\.mjs/.test(nodeGate)) {
     throw new Error("Node gate가 개별 contract suite를 직접 import한다");
   }
 
@@ -62,11 +57,6 @@ export function assertModuleBoundaries() {
     caughtGoldenMapDrift = String(error.message).includes("package exports 정본");
   }
   if (!caughtGoldenMapDrift) throw new Error("golden workflow import map 표류 음성 fixture를 놓쳤다");
-
-  const reactive = readFileSync(join(ROOT, "src", "capabilities", "reactive.js"), "utf8");
-  if (!reactive.includes('./reactive/retentionPolicy.js')) {
-    throw new Error("ReactiveController가 retention 정책 모듈을 소비하지 않는다");
-  }
 
   const buildrootWorkflow = readFileSync(join(ROOT, ".github", "workflows", "buildroot-guest.yml"), "utf8");
   if (!buildrootWorkflow.includes("npm run assets:buildroot")) {

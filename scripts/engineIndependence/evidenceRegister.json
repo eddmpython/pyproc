@@ -1,0 +1,592 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-14",
+  "recordPolicy": "PROVEN_LOCAL entries are immutable measurement snapshots. Commands and artifact paths inside those snapshots describe the observed run and can refer to retired research probes. Use currentProductGates for supported, runnable verification.",
+  "currentProductGates": [
+    {
+      "path": "tests/browser/ownedEngineCoreProduct.html",
+      "lane": "owned-engine core and browser matrix",
+      "command": "node tests/browser/run.mjs tests/browser/ownedEngineCoreProduct.html"
+    },
+    {
+      "path": "tests/browser/ownedEngineDataProduct.html",
+      "lane": "owned-engine data and browser matrix",
+      "command": "node tests/browser/run.mjs tests/browser/ownedEngineDataProduct.html"
+    },
+    {
+      "path": "tests/browser/installedPackageGate.mjs",
+      "lane": "installed package",
+      "command": "npm run test:installed"
+    },
+    {
+      "path": "tests/contracts/run.mjs",
+      "lane": "source contracts",
+      "command": "npm run test:contracts"
+    },
+    {
+      "path": "tests/packageGate.mjs",
+      "lane": "packed artifact",
+      "command": "npm run test:package"
+    }
+  ],
+  "evidence": [
+    {
+      "evidenceId": "local-wasi-product-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": { "os": "Windows", "browser": "Microsoft Edge 151.0.4129.78", "crossOriginIsolated": true, "node": "22.19.0" },
+      "command": "node tests/browser/run.mjs tests/browser/wasiGate.html",
+      "result": "GREEN 14/14, boot 739 ms, pure wheel install 570 ms",
+      "artifacts": [
+        { "role": "cpythonWasm", "path": "tests/attempts/enginePort/python-3.14.6.wasm", "byteLength": 30397600, "sha256": "cd71a34d8467882a4ad0e6a5e64509d68975ed6bd6831ca549bcd0517ac14655" },
+        { "role": "stdlib", "path": "tests/attempts/enginePort/python314-stdlib.zip", "byteLength": 2693399, "sha256": "e61310937d54168f4b96a1adbdf4e99730830e52587eb4cf0837c928769f1f1b" },
+        { "role": "wasiShim", "path": "src/runtime/engines/wasi/browserWasiShim.js", "byteLength": 28952, "sha256": "c625d3c4188c87b9a510f89aee0890e345e6b32c50759860edda9062ed40f30d" }
+      ]
+    },
+    {
+      "evidenceId": "local-owned-engine-m1-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "targetCompiler": "WASI SDK 24 clang 18.1.2",
+        "hostRunner": "Wasmtime 47.0.3"
+      },
+      "commands": [
+        "node scripts/engineBuilder/buildOwnedEngineWindowsProbe.mjs --workspace C:\\pp10-m7-engine-20260814\\a2 --out C:\\pp10-m7-engine-20260814\\a2\\dist --input-cache C:\\pp10-inputs-20260814",
+        "node scripts/engineBuilder/buildOwnedEngineWindowsProbe.mjs --workspace C:\\pp10-m7-engine-20260814\\b2 --out C:\\pp10-m7-engine-20260814\\b2\\dist --input-cache C:\\pp10-inputs-20260814",
+        "node scripts/engineBuilder/verifyOwnedEngine.mjs --artifact-dir C:\\pp10-m7-engine-20260814\\a2\\dist --compare C:\\pp10-m7-engine-20260814\\b2\\dist --require-production-flags --receipt C:\\pp10-m7-engine-20260814\\reproducibility-manifest.json",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/ownedEngineBuildProbe.html"
+      ],
+      "result": "two isolated builds byte-identical across five declared artifacts; Wasmtime oracle 2/2; Edge browser gate GREEN 8/8; boot 952 ms",
+      "artifacts": [
+        { "role": "cpythonWasm", "file": "python.wasm", "byteLength": 7731201, "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d" },
+        { "role": "stdlib", "file": "python314-stdlib.zip", "byteLength": 2753291, "sha256": "be3c2d5802108d0714921153e1e86737fff1e086823630a523663198284eee57" },
+        { "role": "stdlibInventory", "file": "stdlib-inventory.json", "byteLength": 89612, "sha256": "1fade82d731dff7418b255366f66d0d93680d94fb90955fd5582e8a8a68802fc" },
+        { "role": "buildManifest", "file": "engine-build-manifest.json", "byteLength": 3253, "sha256": "61d7bbb8bd132a4cc0dfdfe3b4c793f01beb1065b2b0303cca49584d6f9fcab1" },
+        { "role": "sbom", "file": "engine.cyclonedx.json", "byteLength": 1802, "sha256": "15c879e7ac19100c0a754ee888408d26a1f76658fe183b1fc72359729f687adb" }
+      ]
+    },
+    {
+      "evidenceId": "local-kernel-runtime-m2-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build"
+      },
+      "commands": [
+        "node tests/contracts/run.mjs",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/kernelProtocolProbe.html",
+        "npm run test:types",
+        "node tests/packageGate.mjs"
+      ],
+      "result": "KernelRuntimeContract v2 source conformance GREEN; Edge browser gate GREEN 14/14; 1000 serial executions in 1211 ms; hard interrupt terminated the active worker; replacement boot and execution in 736 ms",
+      "invariants": [
+        "same command ID and canonical input reused one sealed receipt",
+        "different input under the same command ID rejected with KERNEL_COMMAND_CONFLICT",
+        "output sequence was commandStarted, output, commandCompleted",
+        "restore advanced generation and stale generation was rejected",
+        "running Python hard interrupt resolved terminated with retry newGeneration",
+        "v2 consumer direct heap, raw engine, and synchronous execution access count was zero"
+      ],
+      "artifacts": [
+        {
+          "role": "cpythonWasm",
+          "file": "python.wasm",
+          "byteLength": 7731201,
+          "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        },
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/kernelProtocolProbe.html",
+          "checks": "14/14"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-value-envelope-m3-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build"
+      },
+      "commands": [
+        "node tests/contracts/run.mjs",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/valueEnvelopeProbe.html",
+        "npm run test:types",
+        "node tests/packageGate.mjs"
+      ],
+      "result": "ValueEnvelope source fixtures GREEN; Edge browser gate GREEN 8/8; bigint, bytes, Unicode, and nesting crossed the Python boundary; 71680 bytes spilled and verified; ASGI application ref dispatch 3 ms; stale ref rejected after restore",
+      "invariants": [
+        "map digest is independent of insertion order",
+        "NaN, infinity, cycles, shared identity, and limits fail with stable kernel codes",
+        "large bytes use a digest-verified artifact reference",
+        "v2 ASGI invocation performs zero getGlobal or live proxy calls",
+        "application and IPC references are fenced by kernel generation"
+      ],
+      "artifacts": [
+        {
+          "role": "cpythonWasm",
+          "file": "python.wasm",
+          "byteLength": 7731201,
+          "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        },
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/valueEnvelopeProbe.html",
+          "checks": "8/8"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-kernel-checkpoint-m4-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build"
+      },
+      "commands": [
+        "node tests/contracts/run.mjs",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/kernelCheckpointProbe.html",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/valueEnvelopeProbe.html",
+        "npm run test:types",
+        "node tests/packageGate.mjs"
+      ],
+      "result": "kernel checkpoint source fixtures GREEN; Edge browser gate GREEN 7/7; memory grew 640 to 654 pages and forced full image; exception dirty state restored; 100 checkpoints in 6576 ms with depth-50 compaction; four sampled restores in 920 ms; negative candidates preserved generation",
+      "measurements": {
+        "checkpointCount": 100,
+        "fullImages": 2,
+        "deltaImages": 98,
+        "artifactBytes": 396282320,
+        "checkpoint100Ms": 6576,
+        "sampleRestoreCount": 4,
+        "restore4Ms": 920
+      },
+      "invariants": [
+        "accepted hostcall and forbidden resource boundaries rejected checkpoint",
+        "memory growth forced a full checkpoint",
+        "mutation before a Python exception was restored exactly",
+        "wrong engine, corrupt delta, and parent mismatch did not change active generation",
+        "v2 reactive consumer direct heap and stack access count was zero"
+      ],
+      "artifacts": [
+        {
+          "role": "cpythonWasm",
+          "file": "python.wasm",
+          "byteLength": 7731201,
+          "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        },
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/kernelCheckpointProbe.html",
+          "checks": "7/7"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-kernel-vfs-m5-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "storage": "OPFS with Web Locks"
+      },
+      "commands": [
+        "node tests/contracts/run.mjs",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/kernelVfsCrashProbe.html",
+        "npm run test:types",
+        "node tests/packageGate.mjs"
+      ],
+      "result": "KernelVfs source fixtures GREEN; Edge browser gate GREEN 7/7; six injected OPFS commit faults selected only committed roots in 2512 ms; owner crash reopened at epoch 2; stale HEAD lost; corrupt HEAD recovered from adoption; checkpoint bound exact VFS root",
+      "invariants": [
+        "partial object, root-only, intent-only, and marker-only candidates were not selected",
+        "HEAD and adoption boundaries were recovered as committed",
+        "stale compare-and-swap writer could not replace the winning root",
+        "typed device invocation required authority and declared checkpoint disposition",
+        "active VFS transaction blocked memory checkpoint",
+        "migrated KernelVfs direct Emscripten FS access count was zero"
+      ],
+      "artifacts": [
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/kernelVfsCrashProbe.html",
+          "checks": "7/7"
+        },
+        {
+          "role": "pairedVfsRoot",
+          "sha256": "9ce75c5a41ab7f2f233cdd844f1a1c55e9f144f54fae35ce70b592c274c59ab4"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-hostcall-abi-m6-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build",
+        "engineSha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+      },
+      "commands": [
+        "node tests/contracts/run.mjs",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/hostcallStressProbe.html",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/ownedEngineBuildProbe.html",
+        "npm run test:types",
+        "node tests/packageGate.mjs"
+      ],
+      "result": "Hostcall ABI source fixtures GREEN; Edge browser gate GREEN 10/10; 10000 static-module SAB round trips in 4643 ms with zero mismatch or deadlock; p50 290 us and p95 970 us; owned engine Edge gate GREEN 8/8",
+      "measurements": {
+        "hostcallCount": 10000,
+        "hostcall10000Ms": 4643,
+        "hostcallP50Us": 290,
+        "hostcallP95Us": 970,
+        "mismatches": 0,
+        "deadlocks": 0,
+        "duplicateExternalEffectSends": 0,
+        "unauthorizedProviderSends": 0
+      },
+      "invariants": [
+        "only the worker used Atomics.wait and the host thread remained asynchronous",
+        "clock, entropy, terminal, and bounded streamed response bytes crossed the static module boundary",
+        "overflow, stream overflow, timeout, cancellation, broker loss, and uncertain outcome had stable typed terminals",
+        "same external-effect request identity reused one receipt and sent the provider exactly once",
+        "HTTP, socket, process, GPU, and clipboard authority denial occurred before provider send",
+        "an accepted hostcall blocked kernel checkpoint",
+        "hard interrupt during an external-effect hostcall terminated the kernel and preserved an outcomeUnknown broker receipt"
+      ],
+      "artifacts": [
+        {
+          "role": "cpythonWasm",
+          "file": "python.wasm",
+          "byteLength": 7731201,
+          "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        },
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/hostcallStressProbe.html",
+          "checks": "10/10"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-product-host-capabilities-m7-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build",
+        "engineSha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+      },
+      "commands": [
+        "node tests/contracts/run.mjs",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/productHostCapabilitiesProbe.html",
+        "npm run test:types",
+        "node tests/packageGate.mjs"
+      ],
+      "result": "product host capability source fixtures GREEN across 37 suites; Edge browser gate GREEN 10/10; HTTP redirected 70000 bytes through four credited reads; socket half-close blocked checkpoint; all resources closed before checkpoint; provider send counts remained exact",
+      "measurements": {
+        "httpBodyBytes": 70000,
+        "httpReads": 4,
+        "httpProviderSends": 1,
+        "socketProviderSends": 4,
+        "processProviderSends": 1,
+        "gpuProviderSends": 1,
+        "clipboardProviderSends": 1,
+        "framebufferProviderSends": 1,
+        "asgiProviderSends": 1
+      },
+      "invariants": [
+        "authority received destination payload, digest, quota, deadline, kernel, command, flags, and effect class before send",
+        "invalid input and same-kernel ASGI reentrancy were rejected before an external effect",
+        "after-send cancellation and transport failure preserved outcomeUnknown truth",
+        "HTTP body reads and process pipe reads stayed within the 64 KiB credit contract",
+        "clipboard write response was redacted and framebuffer publication returned a content digest",
+        "open HTTP bodies, sockets, and processes blocked checkpoint until drained or closed"
+      ],
+      "artifacts": [
+        {
+          "role": "cpythonWasm",
+          "file": "python.wasm",
+          "byteLength": 7731201,
+          "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        },
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/productHostCapabilitiesProbe.html",
+          "checks": "10/10"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-pure-package-environment-m8-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build",
+        "engineSha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+      },
+      "commands": [
+        "npm test",
+        "node tests/contracts/run.mjs",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/pureWheelResolverProbe.html",
+        "npm run test:types",
+        "node tests/packageGate.mjs",
+        "node scripts/engineIndependence/scanEngineIndependence.mjs --packed"
+      ],
+      "result": "package source fixtures GREEN across 38 suites; Edge browser gate GREEN 10/10; exact online dependency environment imported, v1 to v2 package generation switched, locked offline restore made zero network requests, and failed import smoke preserved the active environment",
+      "measurements": {
+        "browserChecks": "10/10",
+        "bootMs": 931,
+        "onlineInstallMs": 1532,
+        "offlineInstallMs": 42,
+        "initialOnlineRequests": 6,
+        "offlineRequests": 0,
+        "lockDigest": "56bde40e591fd91ef0ec064e27b0b74ba8ed6410b1e6b085cf3cf508b6abd3b7",
+        "environmentId": "8857bc9907a7b7ad99c0fd275d4cf96ba2ac85d0deb8bd96dd045727d32fe233"
+      },
+      "invariants": [
+        "remote artifacts without locked SHA-256, byte length, and PEP 658 metadata digest were not candidates",
+        "the first owning source index was locked and candidates from multiple indexes were not merged",
+        "Requires-Python, markers, extras, prerelease, yanked state, allowed tags, and dependency conflicts were applied before selection",
+        "offline materialization read only the canonical lock and verified content store",
+        "traversal, absolute, symlink, duplicate, case collision, reserved path, script, archive bomb, corrupt RECORD, and native content fixtures installed zero times",
+        "wheel files were staged in digest layers and the environment head changed only after import smoke",
+        "a failed import smoke changed neither the active environment identity nor the prior package import",
+        "terminal package commands and the PEP 723 environment manager used PackageEnvironment with zero micropip calls"
+      ],
+      "artifacts": [
+        {
+          "role": "cpythonWasm",
+          "file": "python.wasm",
+          "byteLength": 7731201,
+          "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        },
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/pureWheelResolverProbe.html",
+          "checks": "10/10"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-static-native-profile-m9-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "targetCompiler": "WASI SDK 24 clang 18.1.2",
+        "hostRunner": "Wasmtime 47.0.3"
+      },
+      "commands": [
+        "node scripts/engineBuilder/reproduceOwnedEngineWindowsProbe.mjs --root C:\\pp10-m9-data2-20260814 --input-cache C:\\pp10-inputs-20260814 --profile data",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/staticNativeProfileProbe.html",
+        "node tests/contracts/run.mjs"
+      ],
+      "result": "data native profile built from pinned C source in two isolated workspaces; six declared artifacts were byte-identical; Wasmtime oracle 2/2; Edge browser gate GREEN 10/10; data-only built-in import and core exclusion passed",
+      "measurements": {
+        "browserChecks": "10/10",
+        "dataBootMs": 507,
+        "nativeCallCount": 10000,
+        "nativeCallsMs": 11,
+        "dataWasmBytes": 7733990,
+        "coreWasmBytes": 7731201,
+        "wasmDeltaBytes": 2789,
+        "maxWasmDeltaBytes": 50000
+      },
+      "invariants": [
+        "the data engine identity differs from the core engine identity",
+        "source, Setup, toolchain, oracle, outputs, and budgets are sealed by one canonical profile input digest",
+        "the static data module imported with built-in origin and was absent from the core engine",
+        "finite vector and dot oracles were exact across 10000 repeated native calls",
+        "length mismatch, non-finite input, and non-numeric input failed as Python exceptions",
+        "checkpoint restore retained the data profile module and exact Python state",
+        "the pure wheel installer continues to reject undeclared native binary content"
+      ],
+      "artifacts": [
+        {
+          "role": "dataProfileInput",
+          "file": "native-profile-build-input.json",
+          "byteLength": 1937,
+          "sha256": "86f3f3191ad6f9828af6660fee9df0ec57459de4e2d77520432997eebe518869"
+        },
+        {
+          "role": "dataProfileWasm",
+          "file": "python.wasm",
+          "byteLength": 7733990,
+          "sha256": "a1457b55bae8367079434537bd5604d58b48b551f9b3284aafa180a9ef0ebea0"
+        },
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/staticNativeProfileProbe.html",
+          "checks": "10/10"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-kernel-factory-m10-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build",
+        "engineSha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+      },
+      "commands": [
+        "node tests/contracts/run.mjs",
+        "node tests/browser/run.mjs tests/attempts/independentPythonKernel/processMachineProbe.html",
+        "npm run test:types",
+        "node tests/packageGate.mjs",
+        "node scripts/engineIndependence/scanEngineIndependence.mjs --packed"
+      ],
+      "result": "KernelFactory source fixtures GREEN across 39 suites; Edge browser gate GREEN 10/10; canonical manifest verified boot in 574 ms; independent clone in 658 ms with zero extra network; process wait terminal exact; engine-reference-only Machine image restored exact state offline in 897 ms with zero network",
+      "measurements": {
+        "browserChecks": "10/10",
+        "bootMs": 574,
+        "cloneMs": 658,
+        "offlineWakeMs": 897,
+        "initialAssetRequests": 2,
+        "cloneAssetRequests": 0,
+        "offlineAssetRequests": 0,
+        "imageCheckpoints": 2,
+        "imageCheckpointObjects": 2
+      },
+      "invariants": [
+        "engine and standard library bytes matched the canonical manifest digest and byte length before worker use",
+        "protocol negotiation and the exact Python version self-test completed before factory boot success",
+        "checkpoint clone restored a new worker while parent Python state remained independent",
+        "Machine image embedded checkpoint objects but no engine or standard library bytes",
+        "offline wake used only preverified engine assets and restored exact Python state",
+        "wrong engine checkpoint identity failed closed before the restored worker became usable",
+        "session, process, and Machine consumers contained zero executable direct engine loader calls"
+      ],
+      "artifacts": [
+        {
+          "role": "cpythonWasm",
+          "file": "python.wasm",
+          "byteLength": 7731201,
+          "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        },
+        {
+          "role": "browserProbe",
+          "file": "tests/attempts/independentPythonKernel/processMachineProbe.html",
+          "checks": "10/10"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-installed-default-m11-20260814",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows",
+        "browsers": ["Microsoft Edge 151.0.4129.78", "Google Chrome 151"],
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "package": "npm pack installed in an isolated consumer",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build",
+        "engineSha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+      },
+      "commands": [
+        "PYPROC_BROWSER=Microsoft Edge npm run test:installed",
+        "PYPROC_BROWSER=Google Chrome npm run test:installed",
+        "node tests/contracts/run.mjs",
+        "npm run test:types",
+        "node tests/packageGate.mjs"
+      ],
+      "result": "installed owned-kernel default and explicit compatibility product journey GREEN 47/47 in Edge and Chrome; Edge owned boot 536 ms and 1000-command p95 0.5 ms; Chrome owned boot 504 ms and p95 0.585 ms; default package, terminal, checkpoint, image reopen, and zero Pyodide network requests passed; dual-engine blocker mismatch zero",
+      "measurements": {
+        "edgeChecks": "47/47",
+        "edgeBootMs": 536,
+        "edgeCommandCount": 1000,
+        "edgeCommandP95Ms": 0.5,
+        "chromeChecks": "47/47",
+        "chromeBootMs": 504,
+        "chromeCommandCount": 1000,
+        "chromeCommandP95Ms": 0.585,
+        "defaultPyodideRequests": 0,
+        "blockerConformanceMismatches": 0,
+        "bootBudgetMs": 1500,
+        "commandP95BudgetMs": 10
+      },
+      "invariants": [
+        "argument-free installed boot selected the package-owned CPython WASI engine",
+        "the npm tarball carried the exact engine, stdlib, build manifest, SBOM, inventory, and reproducibility receipt",
+        "1000 sequential mutations preserved exact final Python state inside the warm-command budget",
+        "the installed default checkpointed, exported, and reopened exact state",
+        "the installed default terminal and pure-wheel environment used KernelRuntimeContract v2",
+        "the default phase made zero Pyodide network requests in both browsers",
+        "the compatibility engine was reachable only through explicit engine selection",
+        "value, Unicode, mutation, and failure terminal vectors had zero blocker mismatch"
+      ],
+      "artifacts": [
+        {
+          "role": "installedCoreEngine",
+          "file": "src/runtime/engines/wasi/owned/core/python.wasm",
+          "byteLength": 7731201,
+          "sha256": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+        },
+        {
+          "role": "installedCoreStdlib",
+          "file": "src/runtime/engines/wasi/owned/core/python314-stdlib.zip",
+          "byteLength": 2753291,
+          "sha256": "be3c2d5802108d0714921153e1e86737fff1e086823630a523663198284eee57"
+        },
+        {
+          "role": "installedBrowserGate",
+          "file": "tests/browser/installedPackageGate.mjs",
+          "checks": "47/47"
+        }
+      ]
+    },
+    {
+      "evidenceId": "upstream-pep11-20260814",
+      "classification": "UPSTREAM_CONTRACT",
+      "url": "https://peps.python.org/pep-0011/",
+      "retrievedAt": "2026-08-14",
+      "claim": "wasm32-unknown-wasip1 is CPython tier 2; Python 3.14 uses WASI 0.1 and WASI SDK 24"
+    },
+    {
+      "evidenceId": "upstream-cpython-build-20260814",
+      "classification": "UPSTREAM_CONTRACT",
+      "url": "https://devguide.python.org/getting-started/setup-building/#wasi",
+      "retrievedAt": "2026-08-14",
+      "claim": "CPython owns the WASI cross-build entrypoint and source build guidance"
+    },
+    {
+      "evidenceId": "upstream-simple-api-20260814",
+      "classification": "UPSTREAM_CONTRACT",
+      "url": "https://packaging.python.org/en/latest/specifications/simple-repository-api/",
+      "retrievedAt": "2026-08-14",
+      "claim": "package index metadata and artifact hashes are standardized inputs to an independent resolver"
+    },
+    {
+      "evidenceId": "inference-worker-kernel-20260814",
+      "classification": "ENGINEERING_INFERENCE",
+      "dependsOn": ["local-wasi-product-20260814", "upstream-pep11-20260814"],
+      "claim": "the research WasiSession can be replaced by a worker-owned Promise-first kernel without a main-thread heap surface",
+      "resolvedBy": "local-kernel-runtime-m2-20260814"
+    }
+  ]
+}

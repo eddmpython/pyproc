@@ -1,5 +1,5 @@
 # npm 퍼블리시: 버전 태그(v0.0.x) 푸시가 트리거. 릴리즈 절차의 마지막 단계를 자동화한다.
-# 정본 절차는 docs/operations/release.md (여기는 집행만).
+# 정본 절차는 skills/ship-pyproc/references/release.md (여기는 집행만).
 #
 # 인증은 npm Trusted Publishing(OIDC)이다. 장수 토큰(NPM_TOKEN 시크릿)을 두지 않는다:
 # 러너가 GitHub OIDC로 자기 신원을 증명하고 npm이 단기 자격을 발급한다. 유출될 비밀이

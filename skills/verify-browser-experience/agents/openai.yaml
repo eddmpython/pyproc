@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Browser Experience"
+  short_description: "Verify browser experience with APX evidence"
+  default_prompt: "Use $verify-browser-experience to verify this browser experience with APX evidence."

@@ -14,6 +14,18 @@ export function countRequests(server) {
   return () => seen;
 }
 
+async function raceWithDeadline(arms, delayMs, timeoutKind) {
+  let timer = null;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve({ kind: timeoutKind }), delayMs);
+  });
+  try {
+    return await Promise.race([...arms, timeout]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
+
 export async function awaitGateReport({ reportPromise, timeoutMs, session, relaunch = null, requestCount = null, progress = null, log = console.log }) {
   const startedAt = Date.now();
   let current = session;
@@ -24,18 +36,15 @@ export async function awaitGateReport({ reportPromise, timeoutMs, session, relau
   while (true) {
     const remaining = timeoutMs - (Date.now() - startedAt);
     if (remaining <= 0) break;
-    const arms = [report, new Promise((resolve) => setTimeout(() => resolve({ kind: "timeout" }), remaining))];
+    const arms = [report];
     if (!exitHeard) arms.push(current.whenExited.then(() => ({ kind: "exit" })));
-    const raced = await Promise.race(arms);
+    const raced = await raceWithDeadline(arms, remaining, "timeout");
     if (raced.kind === "report") return { result: raced.result, session: current };
     if (raced.kind === "timeout") break;
     exitHeard = true;
     if ((requests() ?? 0) === 0) {
       const grace = Math.min(3000, Math.max(0, timeoutMs - (Date.now() - startedAt)));
-      const followup = await Promise.race([
-        report,
-        new Promise((resolve) => setTimeout(() => resolve({ kind: "grace-over" }), grace)),
-      ]);
+      const followup = await raceWithDeadline([report], grace, "grace-over");
       if (followup.kind === "report") return { result: followup.result, session: current };
     }
     if ((requests() ?? 0) > 0) continue;

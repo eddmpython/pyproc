@@ -1,5 +1,5 @@
 // tests/packageHarness.mjs - npm tarball 소비자 게이트 공용 조각.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -40,6 +40,7 @@ export function run(cmd, args, opts = {}) {
     encoding: "utf8",
     stdio: "pipe",
     shell: spec.shell ?? false,
+    ...(opts.timeoutMs === undefined ? {} : { timeout: opts.timeoutMs }),
   });
   if (r.status !== 0) {
     const out = `${r.stdout ?? ""}\n${r.stderr ?? ""}`.trim();
@@ -47,6 +48,42 @@ export function run(cmd, args, opts = {}) {
     throw new Error(`${spec.display} failed${reason}\n${out.slice(-4000)}`);
   }
   return r;
+}
+
+export async function runAsync(cmd, args, opts = {}) {
+  const spec = commandSpec(cmd, args);
+  const timeoutMs = opts.timeoutMs;
+  if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs < 1)) {
+    throw new TypeError("runAsync timeoutMs must be positive");
+  }
+  const child = spawn(spec.command, spec.args, {
+    cwd: opts.cwd ?? ROOT,
+    env: opts.env ?? process.env,
+    stdio: "pipe",
+    shell: spec.shell ?? false,
+    windowsHide: true,
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  let timedOut = false;
+  const timeout = timeoutMs === undefined ? null : setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGKILL");
+  }, timeoutMs);
+  const result = await new Promise((resolveResult, rejectResult) => {
+    child.once("error", rejectResult);
+    child.once("close", (status, signal) => resolveResult({ status, signal }));
+  }).finally(() => { if (timeout) clearTimeout(timeout); });
+  if (result.status !== 0) {
+    const out = `${stdout}\n${stderr}`.trim();
+    const reason = timedOut ? ` after ${timeoutMs} ms` : "";
+    throw new Error(`${spec.display} failed${timedOut ? " by timeout" : ""}${reason}\n${out.slice(-4000)}`);
+  }
+  return Object.freeze({ status: result.status, signal: result.signal, stdout, stderr });
 }
 
 export function binPath(appDir, name) {
@@ -68,6 +105,6 @@ export async function installPackedPyProc(prefix = "pyprocConsumer-") {
   const appDir = join(tmp, "app");
   await mkdir(appDir, { recursive: true });
   await writeFile(join(appDir, "package.json"), JSON.stringify({ private: true, type: "module" }, null, 2));
-  run("npm", ["install", join(tmp, packed.filename), "--package-lock=false", "--ignore-scripts", "--no-audit", "--no-fund", "--silent"], { cwd: appDir });
+  run("npm", ["install", join(tmp, packed.filename), "--offline", "--package-lock=false", "--ignore-scripts", "--no-audit", "--no-fund", "--silent"], { cwd: appDir });
   return { tmp, appDir, packed };
 }

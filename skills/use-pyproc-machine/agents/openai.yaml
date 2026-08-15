@@ -1,0 +1,4 @@
+interface:
+  display_name: "Use PyProc Machine"
+  short_description: "Operate Machine lifecycle state and trust"
+  default_prompt: "Use $use-pyproc-machine to create persist restore or inspect a PyProc Machine."

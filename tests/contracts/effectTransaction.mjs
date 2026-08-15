@@ -22,7 +22,10 @@ function actionEvidence(state = "confirmed") {
     effectOutcome: state === "outcomeUnknown" ? "outcomeUnknown" : "applied",
     verification: Object.freeze({ state, postcondition: { networkResponse: { method: "POST",
       urlPath: "/payments", status: 201 } }, evidenceRefs: Object.freeze([`event:${state}`]) }),
-    effectWindow: Object.freeze({ startedAt: 1, endedAt: 2 }) });
+    effectWindow: Object.freeze({ startedAt: 1, endedAt: 2 }),
+    observationCoverage: Object.freeze({ postconditionPlanSha256: "0".repeat(64),
+      entityEnumeration: "notRequested", eventWindows: Object.freeze([]), omittedRelevantCount: 0,
+      completeness: "complete" }) });
 }
 function effectTemplate(secretEnv = null) {
   return Object.freeze({

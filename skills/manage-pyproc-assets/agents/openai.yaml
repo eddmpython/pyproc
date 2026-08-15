@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage PyProc Assets"
+  short_description: "Maintain generated assets and provenance"
+  default_prompt: "Use $manage-pyproc-assets to update and verify PyProc generated assets and provenance."

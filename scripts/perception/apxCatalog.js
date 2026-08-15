@@ -1,6 +1,7 @@
 // apxCatalog.js - APX v1 vocabulary, input limits, conformance, strict validation의 SSOT.
 import { createHash } from "node:crypto";
 import { apxDigest } from "./apxCanonical.js";
+import { isApxUnresolvedReason } from "./unresolvedVocabulary.js";
 import {
   APX_FOCUS_SCHEMA,
   APX_SITUATION_PROFILE,
@@ -51,7 +52,7 @@ const QUERY_KEYS = new Set(["entityRef", "kind", "role", "name", "state", "actio
 const OBSERVATION_KEYS = new Set(["protocol", "version", "representation", "profile", "kind", "spaceRef",
   "targetRef", "sessionRef", "observationRef", "baseObservationRef", "documentEpoch", "capturedAt", "page",
   "channels", "entities", "relations", "events", "delta", "unresolved", "visualProbes", "completeness",
-  "query", "resyncRequired", "budget", "integrity"]);
+  "eventWindows", "query", "resyncRequired", "budget", "integrity"]);
 const ENTITY_KEYS = new Set(["entityRef", "kind", "semantic", "structure", "geometry", "interaction",
   "temporal", "provenance", "locatorRef", "unresolved"]);
 const RELATION_KEYS = new Set(["type", "from", "to", "provenance"]);
@@ -382,9 +383,18 @@ export function assertApxObservation(value) {
     assertApxProvenance(relation.provenance);
   }
   if (value.events.some((event) => !plainObjectForCheck(event))) fail("APX event is invalid");
+  if (value.eventWindows !== undefined && (!Array.isArray(value.eventWindows)
+    || value.eventWindows.some((window) => !plainObjectForCheck(window)
+      || !["console", "network"].includes(window.channel)
+      || !Number.isInteger(window.startSequence) || window.startSequence < 0
+      || !Number.isInteger(window.endSequence) || window.endSequence < window.startSequence
+      || !Number.isInteger(window.returnedCount) || window.returnedCount < 0
+      || !Number.isInteger(window.droppedBeforeStart) || window.droppedBeforeStart < 0
+      || !Number.isInteger(window.droppedWithinWindow) || window.droppedWithinWindow < 0
+      || typeof window.complete !== "boolean"))) fail("APX event window is invalid");
   for (const unresolved of value.unresolved) {
     if (!plainObjectForCheck(unresolved) || !entityRefs.has(unresolved.entityRef)
-      || typeof unresolved.reason !== "string" || !unresolved.reason) fail("APX unresolved entry is invalid");
+      || !isApxUnresolvedReason(unresolved.reason)) fail("APX unresolved entry is invalid");
   }
   for (const probe of value.visualProbes || []) assertApxVisualProbe(probe);
   if ((value.visualProbes?.length || 0) > 0 && !value.profile.includes("apx-visual/1")) {
@@ -419,8 +429,8 @@ function assertApxProvenance(value) {
 export function assertApxVisualProbe(value) {
   plainObject(value, "APX visual probe");
   exactKeys(value, VISUAL_PROBE_KEYS, "APX visual probe");
-  if (!["entityCrop", "overview"].includes(value.kind)
-    || (value.kind === "entityCrop" && !ENTITY_REF_RE.test(String(value.entityRef || "")))
+  if (!["entityCrop", "contextCrop", "overview"].includes(value.kind)
+    || (["entityCrop", "contextCrop"].includes(value.kind) && !ENTITY_REF_RE.test(String(value.entityRef || "")))
     || (value.kind === "overview" && value.entityRef !== null)
     || typeof value.reason !== "string" || !value.reason
     || !plainObjectForCheck(value.artifact)

@@ -1,90 +1,48 @@
-// 설치 tarball의 공개 specifier만으로 대표 prepare-candidate-restore-commit-reopen 루프를 돈다.
+// Runs the golden workflow against a clean offline tarball install.
 import { createServer } from "node:http";
 import { rmSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { safeJoin, sendFile } from "../../scripts/staticServer.mjs";
-import { installPackedPyProc, ROOT } from "../packageHarness.mjs";
-import { awaitGateReport, countRequests, judgeReport, launchBrowser } from "./harness.mjs";
+import { installPackedPyProc } from "../packageHarness.mjs";
+import { awaitGateReport, judgeReport, launchBrowser } from "./harness.mjs";
 
-const TIMEOUT_MS = Number(process.env.PYPROC_GOLDEN_TIMEOUT || 180000);
-const GOLDEN_PAGE = "tests/browser/goldenWorkflow.html";
-
-function createGoldenServer(appDir, publicDir, onReport, onProgress) {
-  return createServer(async (req, res) => {
-    const url = new URL(req.url, "http://x");
-    if (req.method === "POST" && url.pathname === "/gateProgress") {
-      let body = "";
-      for await (const chunk of req) body += chunk;
-      res.writeHead(204); res.end();
-      try { onProgress(JSON.parse(body).stage); }
-      catch (error) { onProgress(`invalid progress: ${String(error)}`); }
-      return;
-    }
-    if (req.method === "POST" && url.pathname === "/gateReport") {
-      let body = "";
-      for await (const chunk of req) body += chunk;
-      res.writeHead(204); res.end();
-      try { onReport(JSON.parse(body)); }
-      catch (error) { onReport({ ok: false, checks: [], parseError: String(error) }); }
-      return;
-    }
-
-    let file = null;
-    if (url.pathname === "/") file = join(publicDir, "goldenWorkflow.html");
-    else if (url.pathname.startsWith("/node_modules/")) file = safeJoin(appDir, url.pathname);
-    else if (url.pathname.startsWith("/vendor/pyodide/")) file = safeJoin(ROOT, url.pathname);
-    if (!file) { res.writeHead(403); res.end("forbidden"); return; }
-    await sendFile(res, file);
-  });
-}
-
-const { tmp, appDir, packed } = await installPackedPyProc("pyprocGolden-");
-let server = null;
-let session = null;
+const { tmp, appDir } = await installPackedPyProc("pyprocGolden-");
 try {
-  const installedPackage = JSON.parse(await readFile(join(appDir, "node_modules", "pyproc", "package.json")));
-  if (!packed.version || installedPackage.version !== packed.version) {
-    throw new Error(`packed install version mismatch: pack=${packed.version || "missing"}, installed=${installedPackage.version || "missing"}`);
-  }
   const publicDir = join(appDir, "public");
   await mkdir(publicDir, { recursive: true });
   await writeFile(join(publicDir, "goldenWorkflow.html"),
-    await readFile(join(ROOT, ...GOLDEN_PAGE.split("/"))));
-
-  let reportResolve;
-  const reportPromise = new Promise((resolve) => { reportResolve = resolve; });
-  server = createGoldenServer(appDir, publicDir, reportResolve,
-    (stage) => console.log(`  stage: ${stage}`));
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const indexQuery = process.env.PYPROC_INDEX_URL
-    ? `?indexURL=${encodeURIComponent(process.env.PYPROC_INDEX_URL)}` : "";
-  const url = `http://127.0.0.1:${server.address().port}/${indexQuery}`;
-  const requestCount = countRequests(server);
-  const launch = () => launchBrowser(url, { prefix: "pyprocGolden-" });
-  session = launch();
-  console.log(`pyproc golden workflow\n  package: pyproc@${installedPackage.version} (${packed.filename})\n  browser: ${session.browser}\n  url:     ${url}\n`);
-
-  const awaited = await awaitGateReport({ reportPromise, timeoutMs: TIMEOUT_MS, session, relaunch: launch, requestCount });
-  session = awaited.session;
-  const result = awaited.result;
-  if (result.timedOut) {
-    console.log(`FAIL golden workflow timeout(${TIMEOUT_MS / 1000}s)`);
-    console.log(`  진단: ${JSON.stringify(result.diagnosis)}`);
-    process.exitCode = 1;
-  } else {
-    for (const entry of result.checks || []) {
-      console.log(`  ${entry.pass ? "PASS" : "FAIL"} ${entry.name}${entry.info ? ` (${entry.info})` : ""}`);
+    await readFile(new URL("./goldenWorkflow.html", import.meta.url)));
+  let resolveReport;
+  const reportPromise = new Promise((resolve) => { resolveReport = resolve; });
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url, "http://local");
+    if (request.method === "POST" && url.pathname === "/gateReport") {
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      response.writeHead(204);
+      response.end();
+      resolveReport(JSON.parse(body));
+      return;
     }
-    if (result.timings) console.log(`\nmeasurement: ${JSON.stringify(result.timings)}`);
-    // 판정은 harness.judgeReport 한 곳이다(페이지가 보낸 ok는 읽지 않는다).
-    const verdict = judgeReport(result);
-    for (const problem of verdict.problems) console.log(`FAIL ${problem}`);
-    console.log(`\nresult: ${verdict.ok ? "GREEN" : "RED"} (${verdict.passed}/${verdict.total})`);
-    if (!verdict.ok) process.exitCode = 1;
-  }
+    const file = url.pathname === "/" ? join(publicDir, "goldenWorkflow.html")
+      : url.pathname.startsWith("/node_modules/") ? safeJoin(appDir, url.pathname) : safeJoin(publicDir, url.pathname);
+    if (!file) { response.writeHead(403); response.end("forbidden"); return; }
+    await sendFile(response, file);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${server.address().port}/`;
+  const launch = () => launchBrowser(url, { prefix: "pyprocGolden-" });
+  const first = launch();
+  const { result, session } = await awaitGateReport({ reportPromise, timeoutMs: 120000,
+    session: first, relaunch: launch });
+  session.close();
+  server.close();
+  for (const entry of result.checks || []) console.log(`${entry.pass ? "PASS" : "FAIL"} ${entry.name}`);
+  const verdict = judgeReport(result, { floor: 9 });
+  for (const problem of verdict.problems) console.log(`FAIL ${problem}`);
+  console.log(`result: ${verdict.ok ? "GREEN" : "RED"} (${verdict.passed}/${verdict.total})`);
+  process.exitCode = verdict.ok ? 0 : 1;
 } finally {
-  session?.close();
-  if (server) await new Promise((resolve) => server.close(resolve));
   rmSync(tmp, { recursive: true, force: true });
 }

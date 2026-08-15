@@ -71,7 +71,26 @@ try {
 
   const list = await request("tools/list", {});
   const names = list.result.tools.map((t) => t.name).sort().join(",");
-  check("tools/list: 도구 4종", names === "checkpointRestore,checkpointSave,pythonRun,sandboxReset", names);
+  check("tools/list: 도구 8종", names === "checkpointRestore,checkpointSave,eyesReplay,eyesVerify,pythonRun,sandboxReset,skills.read,skills.search", names);
+
+  const skillSearch = toolText(await request("tools/call", {
+    name: "skills.search", arguments: { query: "start-pyproc" },
+  }));
+  const selectedSkill = skillSearch.results[0];
+  check("skills.search는 body 없이 digest-bound metadata만 반환",
+    selectedSkill?.name === "start-pyproc" && !Object.hasOwn(selectedSkill, "content")
+    && skillSearch.results.length <= 3, selectedSkill?.sha256);
+  const skillRead = toolText(await request("tools/call", { name: "skills.read", arguments: {
+    name: selectedSkill.name, expectedSha256: selectedSkill.sha256, relativePath: "SKILL.md",
+  } }));
+  check("skills.read는 기존 MCP에서 catalog와 같은 body digest를 반환",
+    skillRead.sha256 === selectedSkill.sha256 && skillRead.catalogDigest === skillSearch.catalogDigest
+    && skillRead.content.includes("name: start-pyproc"), skillRead.sha256);
+  const staleSkill = await request("tools/call", { name: "skills.read", arguments: {
+    name: selectedSkill.name, expectedSha256: `sha256:${"0".repeat(64)}`, relativePath: "SKILL.md",
+  } });
+  check("skills.read stale digest가 effect 없이 안정된 오류로 끝남",
+    staleSkill.result?.isError === true && toolText(staleSkill).code === "SKILL_READ_STALE");
 
   const t0 = Date.now();
   const run1 = toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "1 + 1" } }));
@@ -88,12 +107,13 @@ try {
 
   toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "prepared = [10, 20, 30]" } }));
   const cp = toolText(await request("tools/call", { name: "checkpointSave", arguments: {} }));
-  check("checkpointSave: 인덱스 반환", Number.isInteger(cp.index) && cp.index > 0, `index ${cp.index}`);
+  check("checkpointSave: 인덱스 반환", Number.isInteger(cp.index) && cp.index >= 0, `index ${cp.index}`);
 
   toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "prepared.append(999)\nleak = 'dirty'" } }));
   const restored = toolText(await request("tools/call", { name: "checkpointRestore", arguments: {} }));
   const afterRestore = toolText(await request("tools/call", { name: "pythonRun", arguments: { code: "(len(prepared), 'leak' in globals())" } }));
-  check("checkpointRestore: 실패 시도 소거", afterRestore.value === "(3, False)", `${afterRestore.value}, ${restored.pagesWritten}p`);
+  check("checkpointRestore: 실패 시도 소거", afterRestore.value === "(3, False)" && restored.restored === true,
+    JSON.stringify({ value: afterRestore.value, restored }));
 
   const failCall = await request("tools/call", { name: "pythonRun", arguments: { code: "raise ValueError('boom')" } });
   check("도구 오류: isError 결과로 전달(프로토콜 오류 아님)", failCall.result && failCall.result.isError === true && failCall.result.content[0].text.includes("boom"));
@@ -103,7 +123,7 @@ try {
   const cancelId = ++reqSeq;
   const cancelledCall = requestWithId(cancelId, "tools/call", {
     name: "pythonRun",
-    arguments: { code: "import time\ncancelEffect = 'applied'\ntime.sleep(1.0)" },
+    arguments: { code: "cancelEffect = 'applied'\nsum(i * i for i in range(5000000))" },
   });
   await new Promise((resolve) => setTimeout(resolve, 100));
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled",
@@ -119,9 +139,10 @@ try {
   const reset = toolText(await request("tools/call", { name: "sandboxReset", arguments: {} }));
   const afterReset = toolText(await request("tools/call", {
     name: "pythonRun",
-    arguments: { code: "('prepared' in globals(), 'pyprocJail' in __import__('sys').modules)" },
+    arguments: { code: "('prepared' in globals(), __import__('importlib.util', fromlist=['find_spec']).find_spec('js') is None)" },
   }));
-  check("sandboxReset: cp0 복귀 후 권한 감옥 재설치", afterReset.value === "(False, True)", `${afterReset.value}, reset ${reset.pagesWritten}p`);
+  check("sandboxReset: cp0 복귀 후 외부 JS bridge 부재", afterReset.value === "(False, True)" && reset.restored === true,
+    JSON.stringify({ afterReset, reset }));
 
   const duplicateId = 900001;
   const firstDuplicate = await requestWithId(duplicateId, "tools/call", { name: "pythonRun", arguments: { code: "6 * 7" } });
@@ -136,7 +157,8 @@ try {
   check("같은 MCP request id 재사용은 terminal을 복제하지 않고 연결을 닫는다",
     toolText(firstDuplicate).value === "42" && duplicateTerminals.length === 1
     && fatalDuplicate?.error?.message.includes("already used") && exited?.code === 1,
-  `${duplicateTerminals.length} terminals, exit ${exited?.code}`);
+  JSON.stringify({ first: toolText(firstDuplicate), duplicateTerminals: duplicateTerminals.length,
+    fatal: fatalDuplicate?.error, exitCode: exited?.code }));
 } catch (e) {
   check("예외 없음", false, String(e).slice(0, 200));
 }

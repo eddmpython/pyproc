@@ -6,7 +6,6 @@ const VALUE_OPTIONS = new Map([
   ["--project-root", "projectRoot"],
   ["--out", "outputDir"],
   ["--engine-root", "engineRoot"],
-  ["--engine-index-url", "engineIndexURL"],
   ["--browser", "executable"],
   ["--origin", "allowedOrigins"],
   ["--action", "actions"],
@@ -216,7 +215,6 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
     ...(raw.engineRoot === undefined ? {} : {
       engineRoot: isAbsolute(raw.engineRoot) ? raw.engineRoot : resolve(projectRoot, raw.engineRoot),
     }),
-    ...(raw.engineIndexURL === undefined ? {} : { engineIndexURL: raw.engineIndexURL }),
     ...(raw.executable === undefined ? {} : { executable: raw.executable }),
     ...(raw.headed ? { headed: true } : {}),
     ...(raw.gpu ? { gpu: true } : {}),

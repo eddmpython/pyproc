@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reference PyProc API"
+  short_description: "Look up exact PyProc APIs and formats"
+  default_prompt: "Use $reference-pyproc-api to look up the exact PyProc API or bundle field."

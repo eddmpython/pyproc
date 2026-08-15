@@ -2,11 +2,11 @@
 
 언어: [English](CONTRIBUTING.md) · 한국어
 
-pyproc은 재사용 가능한 브라우저 파이썬 런타임이다(Pyodide 위의 프로세스·병렬·복원 리액티브). 관심에 감사한다. 이 문서가 저장소 참여의 계약이다.
+pyproc은 worker-owned CPython WASI kernel, 검증된 자산, checkpoint와 독립 process를 제공하는 재사용 가능한 브라우저 Python runtime이다. 관심에 감사한다. 이 문서가 저장소 참여의 계약이다.
 
 ## 라이선스와 기여 조건
 
-pyproc은 [Mozilla Public License 2.0](LICENSE)이다(엔진 Pyodide와 같은 라이선스). 기여를 제출하면 그 기여도 같은 라이선스로 제공하는 데 동의한 것이다. MPL-2.0에서는 기여하는 행위 자체가 그 기여분의 저작권·특허 라이선스 허여이므로(2.1절) inbound = outbound가 성립하고 별도 CLA는 없다. 이 조건에 동의할 수 없으면 코드를 제출하지 않는다.
+pyproc은 [Mozilla Public License 2.0](LICENSE)이다. 기여를 제출하면 그 기여도 같은 라이선스로 제공하는 데 동의한 것이다. MPL-2.0에서는 기여하는 행위 자체가 그 기여분의 저작권·특허 라이선스 허여이므로(2.1절) inbound = outbound가 성립하고 별도 CLA는 없다. 이 조건에 동의할 수 없으면 코드를 제출하지 않는다.
 
 실질 의미: pyproc을 비공개 앱에 임베드하는 것은 자유지만, pyproc 자체 파일의 수정분은 MPL-2.0으로 소스 공개한다.
 
@@ -21,12 +21,12 @@ pyproc은 [Mozilla Public License 2.0](LICENSE)이다(엔진 Pyodide와 같은 �
 ## 작업 흐름
 
 1. **신규 능력은 `tests/attempts/<카테고리>/`에서 시작한다.** `src/` 직행 금지. 카테고리는 가설과 명시적 졸업 게이트를 가진 질문 하나이고, 브라우저 실측으로 입증한다. [tests/attempts/README.md](tests/attempts/README.md) 참조.
-2. **졸업한 학습은 지속 계약은 `docs/`, 자동 증거는 `tests/`, 검토 가능한 결정은 git 이력에 남긴다.** 임시 기획 archive는 저장소에 보존하지 않는다.
+2. **졸업한 학습은 지속 계약은 `skills/`, 자동 증거는 `tests/`, 검토 가능한 결정은 git 이력에 남긴다.** 임시 기획 archive는 저장소에 보존하지 않는다.
 3. **그 다음에야 코드가 `src/`에 들어간다.** src는 폴더 = 레이어이고 import는 아래로만 흐른다: `runtime/`(0: 엔진 core) <- `state/`(1: 내구 상태 커널) <- `capabilities/`(2: 런타임에 얹히는 것들) <- `composition/`(3: 능력 registry 설치 + public 표면) <- `session/`(4)·`processOs/`(4) <- `machine/`(5: 브라우저 컴퓨터 host와 guest). 모든 edge가 순위를 낮추므로 순환은 불가능하다. 엔진 내부는 능력 계약 뒤에 머문다.
 
    `src/`의 모든 파일은 첫 줄에 자기 순위를 적는다. 게이트 소스를 열지 않고도 층을 알 수 있어야 한다: `// fileName.js - Layer 2: 무엇을 하는가`. `machine/` 아래 파일은 내부 파일 rank까지 적는다. import 방향과 순수성 판정의 실제 기준이 폴더가 아니라 그 rank이기 때문이다: `// v86SerialPort.js - Layer 5/guests: ...`, 순서는 `pure` <- `platform` <- `guests` <- `composition`. 라벨이 없거나 rank 맵과 다르면 `npm test`가 실패한다.
 
-운영 상세는 [docs/](docs/README.md).
+운영 상세는 [skills](skills/start-pyproc/SKILL.md).
 
 ## 개발 환경
 
@@ -37,7 +37,7 @@ npm test                              # Node 구조 게이트, 의존성 0
 npm run serve                         # 브라우저 실측용 COOP/COEP 정적 서버
 ```
 
-브라우저 실측: Chrome/Edge에서 `http://localhost:8788/examples/basic.html`과 `processOs.html`을 연다. 페이지에서 `crossOriginIsolated === true`여야 한다. WASM 런타임의 진짜 검증은 브라우저에서만 가능하다. [docs/operations/testing.md](docs/operations/testing.md) 참조.
+브라우저 실측: Chrome/Edge에서 `http://localhost:8788/examples/basic.html`과 `processOs.html`을 연다. 페이지에서 `crossOriginIsolated === true`여야 한다. WASM 런타임의 진짜 검증은 브라우저에서만 가능하다. [skills/verify-pyproc/references/testing.md](skills/verify-pyproc/references/testing.md) 참조.
 
 ## 절대 게이트 (기계 강제)
 
@@ -67,7 +67,7 @@ npm run serve                         # 브라우저 실측용 COOP/COEP 정적 
   - **도구·생성 흔적 금지**: 모델명·도구명·생성 표식·공동 저자 트레일러를 커밋 메시지·주석·문서에 넣지 않는다. 같은 판정 정본이 차단한다.
   - `git`이 스스로 만드는 제목(`Merge`, `Revert`, `fixup!`)은 형식 검사 밖이고 흔적 검사만 남는다.
   - 여기서 강제되는 관례는 한국어다. 포크 기여는 명확한 영어로 와도 되고, 병합할 때 관례로 다시 쓴다.
-- 버전은 `0.0.x` 라인 유지. 릴리즈 때만 올리고 태그와 `package.json`이 일치해야 한다. [docs/operations/release.md](docs/operations/release.md) 참조.
+- 버전은 `0.0.x` 라인 유지. 릴리즈 때만 올리고 태그와 `package.json`이 일치해야 한다. [skills/ship-pyproc/references/release.md](skills/ship-pyproc/references/release.md) 참조.
 
 ## PR 체크리스트
 

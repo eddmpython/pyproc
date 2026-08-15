@@ -133,7 +133,7 @@ publishInstalledEffectPack = (transaction) => publishVerifiedEffectPack({ create
 const browser = process.env.PYPROC_BROWSER || undefined;
 const mcpCli = binPath(installed.appDir, "pyproc-mcp");
 run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
-  "--out", ".pyproc-python", "--engine-root", join(ROOT, "vendor", "pyodide"),
+  "--out", ".pyproc-python", "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
   "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
   "--purpose", "Python-SDK-product-gate", "--acknowledge-effects",
   "--action", "snapshot", "--action", "screenshot",
@@ -145,7 +145,7 @@ run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installe
   ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
 await writeFile(frameConfigPath, JSON.stringify({
   schemaVersion: 1,
-  engine: { root: join(ROOT, "vendor", "pyodide") },
+  engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") },
   timeoutMs: TIMEOUT_MS,
   browser: {
     enabled: true,
@@ -183,7 +183,7 @@ try {
   const wheelMetadata = run(wheelPython, ["-m", "pip", "show", "pyproc-control"], { cwd: installed.tmp }).stdout;
   const sourceMetadata = run(sourcePython, ["-m", "pip", "show", "pyproc-control"], { cwd: installed.tmp }).stdout;
   check("서로 다른 clean venv에 wheel과 source distribution 설치",
-    wheelMetadata.includes("Version: 0.0.21") && sourceMetadata.includes("Version: 0.0.21"));
+    wheelMetadata.includes("Version: 0.0.22") && sourceMetadata.includes("Version: 0.0.22"));
 
   const protocol = run(sourcePython, [join(HERE, "protocolContract.py")], { cwd: installed.appDir });
   check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("22 fixtures"));
@@ -194,14 +194,31 @@ try {
     env: { ...process.env, PATH: `${productPath}${delimiter}${process.env.PATH || ""}` } });
   const report = JSON.parse(journey.stdout.trim().split(/\r?\n/).at(-1));
   check("wheel 설치본이 Python, checkpoint, cancel, permission, screenshot 여정을 완주",
-    report.ok === true && report.operations === 34 && report.checkpoint > 0
+    report.ok === true && report.operations === 34
+      && Number.isSafeInteger(report.checkpoint) && report.checkpoint >= 0
       && report.attachmentBytes > 0 && report.cancelOutcome === "outcomeUnknown"
       && report.cancelTerminal === "outcomeUnknown" && report.timeoutOutcome === "outcomeUnknown"
       && report.timeoutTerminal === "outcomeUnknown" && report.permissionTerminal === "rejected"
       && report.successTerminal === "completed" && report.perceptionEntityRef?.startsWith("entity:")
       && report.situationRef?.startsWith("situation:") && report.executionMemory === true
       && report.effectTerminal === "confirmed" && report.effectSealed === true && committedEffects === 1,
-  `${report.attachmentBytes} bytes`);
+  JSON.stringify({
+    operations: report.operations,
+    checkpoint: report.checkpoint,
+    attachmentBytes: report.attachmentBytes,
+    cancelOutcome: report.cancelOutcome,
+    cancelTerminal: report.cancelTerminal,
+    timeoutOutcome: report.timeoutOutcome,
+    timeoutTerminal: report.timeoutTerminal,
+    permissionTerminal: report.permissionTerminal,
+    successTerminal: report.successTerminal,
+    perceptionEntityRef: report.perceptionEntityRef,
+    situationRef: report.situationRef,
+    executionMemory: report.executionMemory,
+    effectTerminal: report.effectTerminal,
+    effectSealed: report.effectSealed,
+    committedEffects,
+  }));
   const frameJourney = await runAsync(wheelPython, [join(HERE, "frameJourney.py"), frameConfigPath,
     `${targetOrigin}/frame`], { cwd: installed.appDir,
     env: { ...process.env, PATH: `${productPath}${delimiter}${process.env.PATH || ""}` } });

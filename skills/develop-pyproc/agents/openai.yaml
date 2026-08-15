@@ -1,0 +1,4 @@
+interface:
+  display_name: "Develop PyProc"
+  short_description: "Develop PyProc within repository boundaries"
+  default_prompt: "Use $develop-pyproc to implement this change within PyProc module and repository rules."

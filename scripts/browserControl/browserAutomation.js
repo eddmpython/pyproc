@@ -23,8 +23,12 @@ import {
 import {
   BROWSER_ACTIONABILITY_DEFAULT_TIMEOUT_MS,
   BROWSER_ACTIONABILITY_FUNCTION,
+  browserActionabilityFingerprint,
+  browserActionabilityRequirements,
+  mapViewportPointToQuad,
   waitForBrowserActionability,
 } from "./browserActionability.js";
+import { InputStateGuard } from "./inputStateGuard.js";
 import { BrowserObservation } from "./browserObservation.js";
 import { BrowserTrace } from "./browserTrace.js";
 import { BrowserLifecycle } from "./browserLifecycle.js";
@@ -48,6 +52,7 @@ export const BROWSER_AUTOMATION_ERROR_CODES = Object.freeze({
   strictLocator: "BROWSER_AUTOMATION_STRICT_LOCATOR",
   targetMissing: "BROWSER_AUTOMATION_TARGET_MISSING",
   actionabilityTimeout: "BROWSER_AUTOMATION_ACTIONABILITY_TIMEOUT",
+  inputReleaseFailed: "BROWSER_INPUT_RELEASE_FAILED",
   waitTimeout: "BROWSER_AUTOMATION_WAIT_TIMEOUT",
 });
 
@@ -68,6 +73,11 @@ const AX_CONTEXT_ROLES = new Set([
 ]);
 const AX_LIVE_ROLES = new Set(["alert", "status"]);
 const AX_TEXT_ROLES = new Set(["InlineTextBox", "StaticText"]);
+
+const TARGET_IDENTITY_FUNCTION = `function(other) {
+  "use strict";
+  return !!this && this === other;
+}`;
 
 const FILL_FUNCTION = `function(value) {
   "use strict";
@@ -313,10 +323,11 @@ function modifierBits(modifiers = []) {
 
 export class BrowserAutomation {
   constructor({ port, actions = Object.keys(BROWSER_AUTOMATION_ACTIONS), idFactory = () => crypto.randomUUID(),
-    onAudit = () => {}, downloadDir = null, artifactStore = null } = {}) {
+    onAudit = () => {}, downloadDir = null, artifactStore = null, now = () => Date.now() } = {}) {
     if (!port || typeof port.send !== "function" || !port.policy) throw new TypeError("browser automation port is required");
     if (typeof idFactory !== "function") throw new TypeError("browser automation idFactory must be a function");
     if (typeof onAudit !== "function") throw new TypeError("browser automation onAudit must be a function");
+    if (typeof now !== "function") throw new TypeError("browser automation clock must be a function");
     this._port = port;
     this._allowedActions = new Set(actions);
     for (const name of this._allowedActions) {
@@ -324,8 +335,10 @@ export class BrowserAutomation {
     }
     this._idFactory = idFactory;
     this._onAudit = onAudit;
+    this._now = now;
     this._locators = new Map();
     this._sessionLocators = new Map();
+    this._quarantinedSessions = new Map();
     this._artifactStore = artifactStore;
     this._screenshot = artifactStore ? new BrowserScreenshot({
       command: (sessionRef, method, params, commandResults, signal) => this._command(sessionRef, method, params, commandResults, signal),
@@ -355,6 +368,7 @@ export class BrowserAutomation {
         this._captureVisualProbe(sessionRef, entity, visual, context) : null,
       visualRelease: visualProbeEnabled ? (probe) => artifactStore.delete(probe.artifact.artifactRef) : null,
       providerKind: "nativeCdp",
+      now,
       capabilityPolicy: ({ action }) => this._allowedActions.has(action)
         ? { risk: BROWSER_AUTOMATION_ACTIONS[action].risk, destination: null }
         : null,
@@ -395,13 +409,14 @@ export class BrowserAutomation {
             actionRef: actionId,
             postcondition: action.verify,
             signal,
-            capture: ({ since }) => this._perception.observe(sessionRef, {
+            capture: ({ since, eventWatermarks, observationPlan }) => this._perception.observe(sessionRef, {
               representation: APX_REPRESENTATION,
               ...(since ? { since } : {}),
-              channels: ["semantic", "structure", "geometry", "interaction", "events", "networkMetadata"],
+              channels: observationPlan.channels,
               visual: { mode: "off" },
-              budget: { maxEntities: 500, maxRelations: 1000, maxBytes: 512 * 1024 },
-            }, { signal, commandResults, issueLocators: false }),
+              budget: { maxEntities: 1000, maxRelations: 1000, maxBytes: 1024 * 1024 },
+            }, { signal, commandResults, issueLocators: false, postconditionPlan: observationPlan,
+              ...(eventWatermarks ? { eventWatermarks } : {}) }),
             effect: () => this._execute(sessionRef, action, commandResults, signal),
           });
           result = Object.freeze({ ...(evidenced.effectResult || {}), evidence: evidenced.evidence });
@@ -447,6 +462,7 @@ export class BrowserAutomation {
   }
 
   dropSession(sessionRef) {
+    this._quarantinedSessions.delete(sessionKey(sessionRef));
     this._clearSessionLocators(sessionKey(sessionRef));
     this._observation.dropSession(sessionRef);
     this._perception.dropSession(sessionRef);
@@ -461,6 +477,7 @@ export class BrowserAutomation {
     this._download?.close();
     this._locators.clear();
     this._sessionLocators.clear();
+    this._quarantinedSessions.clear();
   }
 
   inspect() {
@@ -468,6 +485,7 @@ export class BrowserAutomation {
       actions: inspectBrowserAutomationActions([...this._allowedActions]),
       maxActions: BROWSER_AUTOMATION_MAX_ACTIONS,
       locators: this._locators.size,
+      quarantinedSessions: this._quarantinedSessions.size,
       observation: this._observation.inspect(),
       perception: this._perception.inspect(),
       lifecycle: this._lifecycle.inspect(),
@@ -483,6 +501,13 @@ export class BrowserAutomation {
   }
 
   async _execute(sessionRef, action, commandResults, signal) {
+    const quarantine = this._quarantinedSessions.get(sessionKey(sessionRef));
+    if (quarantine && BROWSER_AUTOMATION_ACTIONS[action.kind].risk === "externalEffect") {
+      const error = automationError(BROWSER_AUTOMATION_ERROR_CODES.inputReleaseFailed,
+        "browser session has unresolved input state", { outcome: "outcomeUnknown", retryable: false });
+      error.safetyRelease = quarantine;
+      throw error;
+    }
     if (action.actionContext) this._perception.assertActionContext(sessionRef, action.actionContext, action);
     if (action.kind === "snapshot") return this._snapshot(sessionRef, action, commandResults, signal);
     if (action.kind === "screenshot") {
@@ -809,29 +834,41 @@ export class BrowserAutomation {
     const prepared = await this._prepareTarget(sessionRef, action, commandResults, signal);
     try {
       let result;
+      const sendBoundary = action.kind === "drag" ? null
+        : await this._recheckSendBoundary(sessionRef, action, prepared, commandResults, signal);
       if (action.kind === "click") {
         result = action.dialog
-          ? await this._clickWithDialog(sessionRef, prepared, action, commandResults, signal)
+          ? await this._clickWithDialog(sessionRef, prepared, action, commandResults, signal, sendBoundary)
           : action.download
-            ? await this._clickWithDownload(sessionRef, prepared, action, commandResults, signal)
+            ? await this._clickWithDownload(sessionRef, prepared, action, commandResults, signal, sendBoundary)
             : action.popup
-              ? await this._clickWithPopup(sessionRef, prepared, action, commandResults, signal)
-          : await this._clickTarget(sessionRef, prepared, commandResults, signal);
-      } else if (action.kind === "hover") result = await this._hoverTarget(sessionRef, prepared, commandResults, signal);
+              ? await this._clickWithPopup(sessionRef, prepared, action, commandResults, signal, sendBoundary)
+          : await this._clickTarget(sessionRef, prepared, commandResults, signal, sendBoundary);
+      } else if (action.kind === "hover") {
+        result = await this._hoverTarget(sessionRef, prepared, commandResults, signal, sendBoundary);
+      }
       else if (action.kind === "focus") {
-        result = await this._callTargetFunction(sessionRef, prepared.target, FOCUS_FUNCTION, [], commandResults, signal);
+        result = await this._callTargetFunction(
+          sessionRef, prepared.target, FOCUS_FUNCTION, [], commandResults, signal, sendBoundary,
+        );
       } else if (action.kind === "check" || action.kind === "uncheck") {
-        result = await this._setChecked(sessionRef, prepared, action.kind === "check", commandResults, signal);
+        result = await this._setChecked(
+          sessionRef, prepared, action.kind === "check", commandResults, signal, sendBoundary,
+        );
       } else if (action.kind === "upload") {
-        result = await this._uploadTarget(sessionRef, prepared, action.files, commandResults, signal);
+        result = await this._uploadTarget(
+          sessionRef, prepared, action.files, commandResults, signal, sendBoundary,
+        );
       } else if (action.kind === "drag") {
         result = await this._dragTarget(sessionRef, prepared, action, commandResults, signal);
       } else if (action.kind === "fill") {
         result = await this._callTargetFunction(
-          sessionRef, prepared.target, FILL_FUNCTION, [action.value], commandResults, signal,
+          sessionRef, prepared.target, FILL_FUNCTION, [action.value], commandResults, signal, sendBoundary,
         );
         if (result.contenteditable === true) {
-          await this._command(sessionRef, "Input.insertText", { text: action.value }, commandResults, signal);
+          await this._effectCommand(
+            sessionRef, "Input.insertText", { text: action.value }, commandResults, signal, sendBoundary,
+          );
           result = await this._callTargetFunction(
             sessionRef, prepared.target, CONTENTEDITABLE_FILL_RESULT_FUNCTION, [], commandResults, signal,
           );
@@ -842,26 +879,32 @@ export class BrowserAutomation {
           scroll: [SCROLL_FUNCTION, [action.block || "center"]],
         };
         const [functionDeclaration, args] = functions[action.kind];
-        result = await this._callTargetFunction(sessionRef, prepared.target, functionDeclaration, args, commandResults, signal);
+        result = await this._callTargetFunction(
+          sessionRef, prepared.target, functionDeclaration, args, commandResults, signal, sendBoundary,
+        );
       }
       return Object.freeze({
         ...result,
         actionability: Object.freeze({ polls: prepared.polls, scrolled: prepared.scrolled }),
+        ...(sendBoundary ? { sendBoundary: this._sendBoundaryEvidence(sendBoundary) } : {}),
       });
     } finally {
       await this._releaseTarget(sessionRef, prepared.target, commandResults, signal);
     }
   }
 
-  async _callTargetFunction(sessionRef, target, functionDeclaration, args, commandResults, signal) {
-    const command = await this._command(sessionRef, "Runtime.callFunctionOn", {
+  async _callTargetFunction(sessionRef, target, functionDeclaration, args, commandResults, signal, sendBoundary = null) {
+    const params = {
       objectId: target.objectId,
       functionDeclaration,
       arguments: args.map((value) => ({ value })),
       awaitPromise: true,
       returnByValue: true,
       userGesture: true,
-    }, commandResults, signal);
+    };
+    const command = sendBoundary
+      ? await this._effectCommand(sessionRef, "Runtime.callFunctionOn", params, commandResults, signal, sendBoundary)
+      : await this._command(sessionRef, "Runtime.callFunctionOn", params, commandResults, signal);
     const scriptError = exceptionText(command);
     if (scriptError) {
       const missing = /target is missing|not an Element|not editable|not a select|not focusable/i.test(scriptError);
@@ -874,24 +917,68 @@ export class BrowserAutomation {
     return Object.freeze(commandValue(command) || {});
   }
 
-  async _clickTarget(sessionRef, prepared, commandResults, signal) {
-    const { x, y } = prepared.status.point;
-    await this._command(sessionRef, "Input.dispatchMouseEvent", {
-      type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1,
-    }, commandResults, signal);
-    await this._command(sessionRef, "Input.dispatchMouseEvent", {
-      type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1,
-    }, commandResults, signal);
-    return Object.freeze({ tag: prepared.status.tag, point: Object.freeze({ x, y }), trusted: true });
+  _inputStateGuard(sessionRef, commandResults) {
+    return new InputStateGuard({
+      releasePointer: ({ button, point }, releaseSignal) => this._command(
+        sessionRef,
+        "Input.dispatchMouseEvent",
+        { type: "mouseReleased", x: point?.x || 0, y: point?.y || 0,
+          button, buttons: 0, clickCount: 1 },
+        commandResults,
+        releaseSignal,
+      ),
+      releaseKey: (key, releaseSignal) => this._command(
+        sessionRef,
+        "Input.dispatchKeyEvent",
+        { type: "keyUp", ...key, text: undefined, unmodifiedText: undefined },
+        commandResults,
+        releaseSignal,
+      ),
+      releaseDragIntercept: (releaseSignal) => this._command(
+        sessionRef, "Input.setInterceptDrags", { enabled: false }, commandResults, releaseSignal,
+      ),
+      now: this._now,
+    });
   }
 
-  async _clickWithDialog(sessionRef, prepared, action, commandResults, signal) {
+  async _raiseInputFailure(sessionRef, guard, error) {
+    const safetyRelease = await guard.safetyRelease();
+    error.safetyRelease = safetyRelease;
+    if (safetyRelease.residualInputs.length) {
+      error.outcome = "outcomeUnknown";
+      error.retryable = false;
+      this._quarantinedSessions.set(sessionKey(sessionRef), safetyRelease);
+    }
+    throw error;
+  }
+
+  async _clickTarget(sessionRef, prepared, commandResults, signal, sendBoundary) {
+    const { x, y } = prepared.status.point;
+    const guard = this._inputStateGuard(sessionRef, commandResults);
+    try {
+      guard.pointerPossiblyDown("left", { x, y });
+      await this._effectCommand(sessionRef, "Input.dispatchMouseEvent", {
+        type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1,
+      }, commandResults, signal, sendBoundary);
+      guard.pointerDown("left");
+      await this._effectCommand(sessionRef, "Input.dispatchMouseEvent", {
+        type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1,
+      }, commandResults, signal, sendBoundary);
+      guard.pointerUp("left");
+      return Object.freeze({ tag: prepared.status.tag, point: Object.freeze({ x, y }), trusted: true,
+        safetyRelease: guard.evidence() });
+    } catch (error) {
+      return this._raiseInputFailure(sessionRef, guard, error);
+    }
+  }
+
+  async _clickWithDialog(sessionRef, prepared, action, commandResults, signal, sendBoundary) {
     const watcher = this._lifecycle.watch(sessionRef, "Page.javascriptDialogOpening", {
       timeoutMs: action.timeoutMs || BROWSER_ACTIONABILITY_DEFAULT_TIMEOUT_MS,
       signal,
       timeoutOutcome: "applied",
     });
-    const clickPromise = this._clickTarget(sessionRef, prepared, commandResults, signal);
+    const clickPromise = this._clickTarget(sessionRef, prepared, commandResults, signal, sendBoundary);
     clickPromise.catch(() => {});
     const clickFailure = clickPromise.then(() => new Promise(() => {}), (error) => Promise.reject(error));
     try {
@@ -915,7 +1002,7 @@ export class BrowserAutomation {
     }
   }
 
-  async _clickWithDownload(sessionRef, prepared, action, commandResults, signal) {
+  async _clickWithDownload(sessionRef, prepared, action, commandResults, signal, sendBoundary) {
     if (!this._download) {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionDenied,
         "browser download capture is unavailable", { outcome: "notSent" });
@@ -925,15 +1012,15 @@ export class BrowserAutomation {
       timeoutMs: action.timeoutMs || BROWSER_ACTIONABILITY_DEFAULT_TIMEOUT_MS,
       commandResults,
       signal,
-      click: () => this._clickTarget(sessionRef, prepared, commandResults, signal),
+      click: () => this._clickTarget(sessionRef, prepared, commandResults, signal, sendBoundary),
     });
     return Object.freeze({ ...captured.click, download: captured.artifact });
   }
 
-  async _clickWithPopup(sessionRef, prepared, action, commandResults, signal) {
+  async _clickWithPopup(sessionRef, prepared, action, commandResults, signal, sendBoundary) {
     const captureRef = await this._port.beginPopupCapture(sessionRef);
     try {
-      const click = await this._clickTarget(sessionRef, prepared, commandResults, signal);
+      const click = await this._clickTarget(sessionRef, prepared, commandResults, signal, sendBoundary);
       const popup = await this._port.finishPopupCapture(sessionRef, captureRef, {
         timeoutMs: action.timeoutMs || BROWSER_ACTIONABILITY_DEFAULT_TIMEOUT_MS,
         signal,
@@ -944,15 +1031,15 @@ export class BrowserAutomation {
     }
   }
 
-  async _hoverTarget(sessionRef, prepared, commandResults, signal) {
+  async _hoverTarget(sessionRef, prepared, commandResults, signal, sendBoundary) {
     const { x, y } = prepared.status.point;
-    await this._command(sessionRef, "Input.dispatchMouseEvent", {
+    await this._effectCommand(sessionRef, "Input.dispatchMouseEvent", {
       type: "mouseMoved", x, y, button: "none", buttons: 0,
-    }, commandResults, signal);
+    }, commandResults, signal, sendBoundary);
     return Object.freeze({ tag: prepared.status.tag, point: Object.freeze({ x, y }), trusted: true });
   }
 
-  async _setChecked(sessionRef, prepared, checked, commandResults, signal) {
+  async _setChecked(sessionRef, prepared, checked, commandResults, signal, sendBoundary) {
     const type = prepared.status.type;
     if (prepared.status.tag !== "input" || !["checkbox", "radio"].includes(type) || (!checked && type === "radio")) {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.targetMissing,
@@ -960,7 +1047,7 @@ export class BrowserAutomation {
         { outcome: "notSent" });
     }
     if (prepared.status.checked === checked) return Object.freeze({ type, checked, changed: false });
-    await this._clickTarget(sessionRef, prepared, commandResults, signal);
+    await this._clickTarget(sessionRef, prepared, commandResults, signal, sendBoundary);
     const state = await this._callTargetFunction(sessionRef, prepared.target, CHECKED_FUNCTION, [], commandResults, signal);
     if (state.checked !== checked) {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionRejected,
@@ -969,12 +1056,15 @@ export class BrowserAutomation {
     return Object.freeze({ type, checked, changed: true });
   }
 
-  async _uploadTarget(sessionRef, prepared, files, commandResults, signal) {
+  async _uploadTarget(sessionRef, prepared, files, commandResults, signal, sendBoundary) {
     if (prepared.status.tag !== "input" || prepared.status.type !== "file") {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.targetMissing,
         "browser upload target is not a file input", { outcome: "notSent" });
     }
-    await this._command(sessionRef, "DOM.setFileInputFiles", { objectId: prepared.target.objectId, files }, commandResults, signal);
+    await this._effectCommand(
+      sessionRef, "DOM.setFileInputFiles", { objectId: prepared.target.objectId, files },
+      commandResults, signal, sendBoundary,
+    );
     return this._callTargetFunction(sessionRef, prepared.target, UPLOAD_STATE_FUNCTION, [], commandResults, signal);
   }
 
@@ -989,28 +1079,41 @@ export class BrowserAutomation {
       signal,
       timeoutOutcome: "outcomeUnknown",
     });
-    let interceptEnabled = false;
+    const guard = this._inputStateGuard(sessionRef, commandResults);
+    let sendBoundary = null;
+    let result = null;
+    let failure = null;
     try {
+      sendBoundary = await this._recheckSendBoundary(
+        sessionRef, action, [source, destination], commandResults, signal,
+      );
       const from = source.status.point;
       const to = destination.status.point;
-      await this._command(sessionRef, "Input.setInterceptDrags", { enabled: true }, commandResults, signal);
-      interceptEnabled = true;
-      await this._command(sessionRef, "Input.dispatchMouseEvent", {
+      guard.dragInterceptPossiblyOn();
+      await this._effectCommand(
+        sessionRef, "Input.setInterceptDrags", { enabled: true }, commandResults, signal, sendBoundary,
+      );
+      guard.dragInterceptOn();
+      await this._effectCommand(sessionRef, "Input.dispatchMouseEvent", {
         type: "mouseMoved", x: from.x, y: from.y, button: "none", buttons: 0,
-      }, commandResults, signal);
-      await this._command(sessionRef, "Input.dispatchMouseEvent", {
+      }, commandResults, signal, sendBoundary);
+      guard.pointerPossiblyDown("left", from);
+      await this._effectCommand(sessionRef, "Input.dispatchMouseEvent", {
         type: "mousePressed", x: from.x, y: from.y, button: "left", buttons: 1, clickCount: 1,
-      }, commandResults, signal);
+      }, commandResults, signal, sendBoundary);
+      guard.pointerDown("left");
       const steps = 6;
       for (let index = 1; index <= steps; index += 1) {
         const ratio = index / steps;
-        await this._command(sessionRef, "Input.dispatchMouseEvent", {
+        const point = { x: from.x + (to.x - from.x) * ratio, y: from.y + (to.y - from.y) * ratio };
+        guard.lastPointerPoint = Object.freeze(point);
+        await this._effectCommand(sessionRef, "Input.dispatchMouseEvent", {
           type: "mouseMoved",
-          x: from.x + (to.x - from.x) * ratio,
-          y: from.y + (to.y - from.y) * ratio,
+          x: point.x,
+          y: point.y,
           button: "left",
           buttons: 1,
-        }, commandResults, signal);
+        }, commandResults, signal, sendBoundary);
       }
       const intercepted = await watcher.promise;
       const data = intercepted.params?.data;
@@ -1019,38 +1122,49 @@ export class BrowserAutomation {
           "browser drag interception returned no drag data", { outcome: "outcomeUnknown" });
       }
       for (const type of ["dragEnter", "dragOver", "drop"]) {
-        await this._command(sessionRef, "Input.dispatchDragEvent", {
+        await this._effectCommand(sessionRef, "Input.dispatchDragEvent", {
           type, x: to.x, y: to.y, data,
-        }, commandResults, signal);
+        }, commandResults, signal, sendBoundary);
       }
-      await this._command(sessionRef, "Input.dispatchMouseEvent", {
+      await this._effectCommand(sessionRef, "Input.dispatchMouseEvent", {
         type: "mouseReleased", x: to.x, y: to.y, button: "left", buttons: 0, clickCount: 1,
-      }, commandResults, signal);
-      return Object.freeze({
+      }, commandResults, signal, sendBoundary);
+      guard.pointerUp("left");
+      result = {
         from: Object.freeze({ x: from.x, y: from.y }),
         to: Object.freeze({ x: to.x, y: to.y }),
         trusted: true,
         destinationActionability: Object.freeze({ polls: destination.polls, scrolled: destination.scrolled }),
-      });
+      };
+    } catch (error) {
+      failure = error;
     } finally {
       watcher.cancel();
-      if (interceptEnabled) {
-        await this._command(sessionRef, "Input.setInterceptDrags", { enabled: false }, commandResults, signal);
+      if (guard.dragIntercept !== "off") {
+        try {
+          await this._effectCommand(
+            sessionRef, "Input.setInterceptDrags", { enabled: false }, commandResults, signal, sendBoundary,
+          );
+          guard.dragInterceptOff();
+        } catch (error) {
+          if (!failure) failure = error;
+        }
       }
       await this._releaseTarget(sessionRef, destination.target, commandResults, signal);
     }
+    if (failure) return this._raiseInputFailure(sessionRef, guard, failure);
+    return Object.freeze({ ...result, safetyRelease: guard.evidence(),
+      sendBoundary: this._sendBoundaryEvidence(sendBoundary) });
   }
 
   async _press(sessionRef, action, commandResults, signal) {
     let actionability = null;
+    let prepared = null;
+    const guard = this._inputStateGuard(sessionRef, commandResults);
+    let sendBoundary = null;
     if (action.selector || action.locatorRef || action.locator) {
-      const prepared = await this._prepareTarget(sessionRef, action, commandResults, signal);
-      try {
-        await this._callTargetFunction(sessionRef, prepared.target, FOCUS_FUNCTION, [], commandResults, signal);
-        actionability = Object.freeze({ polls: prepared.polls, scrolled: prepared.scrolled });
-      } finally {
-        await this._releaseTarget(sessionRef, prepared.target, commandResults, signal);
-      }
+      prepared = await this._prepareTarget(sessionRef, action, commandResults, signal);
+      actionability = Object.freeze({ polls: prepared.polls, scrolled: prepared.scrolled });
     }
     const definition = keyDefinition(action.key);
     const modifiers = modifierBits(action.modifiers);
@@ -1062,29 +1176,136 @@ export class BrowserAutomation {
     } else if (definition.text) {
       base.unmodifiedText = definition.text;
     }
-    await this._command(sessionRef, "Input.dispatchKeyEvent", { type: "keyDown", ...base }, commandResults, signal);
-    await this._command(sessionRef, "Input.dispatchKeyEvent", { type: "keyUp", ...base, text: undefined, unmodifiedText: undefined }, commandResults, signal);
-    return Object.freeze({ key: action.key, modifiers: Object.freeze([...(action.modifiers || [])]),
-      ...(actionability ? { actionability } : {}) });
+    try {
+      sendBoundary = await this._recheckSendBoundary(
+        sessionRef, action, prepared ? [prepared] : [], commandResults, signal,
+      );
+      if (prepared) {
+        await this._callTargetFunction(
+          sessionRef, prepared.target, FOCUS_FUNCTION, [], commandResults, signal, sendBoundary,
+        );
+      }
+      guard.keyPossiblyDown(base);
+      await this._effectCommand(
+        sessionRef, "Input.dispatchKeyEvent", { type: "keyDown", ...base }, commandResults, signal, sendBoundary,
+      );
+      guard.keyDown(base.code || base.key);
+      await this._effectCommand(sessionRef, "Input.dispatchKeyEvent", {
+        type: "keyUp", ...base, text: undefined, unmodifiedText: undefined,
+      }, commandResults, signal, sendBoundary);
+      guard.keyUp(base.code || base.key);
+      return Object.freeze({ key: action.key, modifiers: Object.freeze([...(action.modifiers || [])]),
+        ...(actionability ? { actionability } : {}), safetyRelease: guard.evidence(),
+        sendBoundary: this._sendBoundaryEvidence(sendBoundary) });
+    } catch (error) {
+      return this._raiseInputFailure(sessionRef, guard, error);
+    } finally {
+      if (prepared) await this._releaseTarget(sessionRef, prepared.target, commandResults, signal, true);
+    }
   }
 
   async _prepareTarget(sessionRef, action, commandResults, signal) {
-    return waitForBrowserActionability({
+    const preflightStartedAt = this._now();
+    const prepared = await waitForBrowserActionability({
       kind: action.kind,
       timeoutMs: action.timeoutMs || BROWSER_ACTIONABILITY_DEFAULT_TIMEOUT_MS,
-      resolveTarget: () => this._resolveActionTarget(sessionRef, action, commandResults, signal),
-      inspectTarget: (target, requirements) => this._inspectTarget(sessionRef, target, requirements, commandResults, signal),
+      resolveTarget: () => this._resolveActionTarget(sessionRef, action, commandResults, signal, true),
+      inspectTarget: (target, requirements) =>
+        this._inspectTarget(sessionRef, target, requirements, commandResults, signal, true),
       scrollTarget: (target) => this._callTargetFunction(sessionRef, target, SCROLL_FUNCTION, ["center"], commandResults, signal),
-      releaseTarget: (target) => this._releaseTarget(sessionRef, target, commandResults, signal),
+      releaseTarget: (target) => this._releaseTarget(sessionRef, target, commandResults, signal, true),
       signal,
     });
+    return Object.freeze({ ...prepared, bindingAction: action, preflightStartedAt,
+      actionabilitySatisfiedAt: this._now() });
+  }
+
+  async _recheckSendBoundary(sessionRef, action, preparedTargets, commandResults, signal) {
+    const targets = Array.isArray(preparedTargets) ? preparedTargets : [preparedTargets];
+    const boundaryStartedAt = this._now();
+    let checkedDocumentEpoch = null;
+    for (const prepared of targets) {
+      const rebound = await this._resolveActionTarget(
+        sessionRef, prepared.bindingAction, commandResults, signal, true,
+      );
+      if (!rebound) {
+        throw automationError(APX_ERROR_CODES.capabilityStale,
+          "browser target binding disappeared before send", { outcome: "notSent", retryable: false });
+      }
+      try {
+        const identity = await this._sendCommand(sessionRef, "Runtime.callFunctionOn", {
+          objectId: prepared.target.objectId,
+          functionDeclaration: TARGET_IDENTITY_FUNCTION,
+          arguments: [{ objectId: rebound.objectId }],
+          returnByValue: true,
+        }, commandResults, signal, true);
+        const status = await this._inspectTarget(sessionRef, prepared.target,
+          browserActionabilityRequirements(prepared.bindingAction.kind), commandResults, signal, true);
+        checkedDocumentEpoch = status.contextEpoch;
+        const unchanged = commandValue(identity) === true
+          && status.contextEpoch === prepared.status.contextEpoch
+          && browserActionabilityFingerprint(status) === browserActionabilityFingerprint(prepared.status)
+          && !(status.reasons || []).length;
+        if (!unchanged) {
+          throw automationError(APX_ERROR_CODES.capabilityStale,
+            "browser target binding or actionability changed before send",
+            { outcome: "notSent", retryable: false });
+        }
+      } finally {
+        if (rebound.objectId !== prepared.target.objectId) {
+          await this._releaseTarget(sessionRef, rebound, commandResults, signal, true);
+        }
+      }
+    }
+    const capability = action.actionContext
+      ? this._perception.assertActionContext(sessionRef, action.actionContext, action) : null;
+    const authorityRecheckedAt = this._now();
+    return {
+      preflightStartedAt: targets.length
+        ? Math.min(...targets.map((prepared) => prepared.preflightStartedAt)) : boundaryStartedAt,
+      actionabilitySatisfiedAt: targets.length
+        ? Math.max(...targets.map((prepared) => prepared.actionabilitySatisfiedAt)) : boundaryStartedAt,
+      authorityRecheckedAt,
+      sendRequestedAt: null,
+      providerAcknowledgedAt: null,
+      checkedWorldRef: capability?.worldRef || action.actionContext?.worldRef || null,
+      checkedDocumentEpoch: capability?.documentEpoch ?? checkedDocumentEpoch,
+    };
+  }
+
+  _sendBoundaryEvidence(boundary) {
+    if (!boundary) return null;
+    return Object.freeze({
+      preflightStartedAt: new Date(boundary.preflightStartedAt).toISOString(),
+      actionabilitySatisfiedAt: new Date(boundary.actionabilitySatisfiedAt).toISOString(),
+      authorityRecheckedAt: new Date(boundary.authorityRecheckedAt).toISOString(),
+      sendRequestedAt: boundary.sendRequestedAt === null ? null : new Date(boundary.sendRequestedAt).toISOString(),
+      providerAcknowledgedAt: boundary.providerAcknowledgedAt === null
+        ? null : new Date(boundary.providerAcknowledgedAt).toISOString(),
+      checkToSendMs: boundary.sendRequestedAt === null ? null
+        : Math.max(0, boundary.sendRequestedAt - boundary.authorityRecheckedAt),
+      checkedWorldRef: boundary.checkedWorldRef,
+      checkedDocumentEpoch: boundary.checkedDocumentEpoch,
+    });
+  }
+
+  async _effectCommand(sessionRef, method, params, commandResults, signal, boundary) {
+    if (boundary.sendRequestedAt === null) boundary.sendRequestedAt = this._now();
+    try {
+      const result = await this._command(sessionRef, method, params, commandResults, signal);
+      if (boundary.providerAcknowledgedAt === null) boundary.providerAcknowledgedAt = this._now();
+      return result;
+    } catch (error) {
+      error.sendBoundary = this._sendBoundaryEvidence(boundary);
+      throw error;
+    }
   }
 
   async _inspectTarget(sessionRef, target, requirements, commandResults, signal, trustedRead = false) {
     const command = await this._sendCommand(sessionRef, "Runtime.callFunctionOn", {
       objectId: target.objectId,
       functionDeclaration: BROWSER_ACTIONABILITY_FUNCTION,
-      arguments: [{ value: requirements }],
+      arguments: [{ value: { ...requirements, hostFrameChain: !!target.frameChain?.length } }],
       returnByValue: true,
     }, commandResults, signal, trustedRead);
     const scriptError = exceptionText(command);
@@ -1093,13 +1314,48 @@ export class BrowserAutomation {
         `browser actionability target is unavailable: ${scriptError}`, { outcome: "notSent", retryable: true });
     }
     const status = commandValue(command) || {};
-    if (target.pointOffset && !status.topTranslated && status.point) {
-      status.point = {
-        x: status.point.x + target.pointOffset.x,
-        y: status.point.y + target.pointOffset.y,
-      };
-    }
+    status.contextEpoch = command.contextEpoch;
+    status.targetIdentity = target.objectId;
+    if (target.frameChain?.length) await this._inspectFrameChain(sessionRef, target, status,
+      commandResults, signal, trustedRead);
     return status;
+  }
+
+  async _inspectFrameChain(sessionRef, target, status, commandResults, signal, trustedRead) {
+    const frameChain = [];
+    for (const entry of target.frameChain) {
+      const box = await this._sendCommand(sessionRef, "DOM.getBoxModel", {
+        backendNodeId: entry.ownerBackendNodeId,
+      }, commandResults, signal, trustedRead);
+      const quad = box.result?.model?.content || box.result?.model?.border;
+      if (!Array.isArray(quad) || quad.length !== 8) {
+        status.receivesEvents = false;
+        status.reasons = [...new Set([...(status.reasons || []), "frameTransformUnsupported"])];
+        status.frameChain = frameChain;
+        return;
+      }
+      frameChain.push({ frameId: entry.frameId, ownerQuad: quad.map(Number) });
+    }
+    const final = frameChain.at(-1);
+    const point = status.topTranslated ? status.point
+      : mapViewportPointToQuad(status.point, status.viewport, final?.ownerQuad);
+    if (!point) {
+      status.receivesEvents = false;
+      status.reasons = [...new Set([...(status.reasons || []), "frameTransformUnsupported"])];
+      status.frameChain = frameChain;
+      return;
+    }
+    const hit = await this._sendCommand(sessionRef, "DOM.getNodeForLocation", {
+      x: point.x, y: point.y, includeUserAgentShadowDOM: true,
+    }, commandResults, signal, trustedRead);
+    const hitFrameId = hit.result?.frameId || null;
+    final.parentHitFrameId = hitFrameId;
+    status.point = point;
+    status.frameChain = frameChain;
+    if (hitFrameId !== target.frameId) {
+      status.receivesEvents = false;
+      status.reasons = [...new Set([...(status.reasons || []), "frameIntercepted"])];
+    }
   }
 
   async _resolveActionTarget(sessionRef, action, commandResults, signal, trustedRead = false) {
@@ -1127,7 +1383,7 @@ export class BrowserAutomation {
     const objectId = command.result?.result?.objectId;
     if (!objectId) return null;
     return Object.freeze({ objectId, description: describeBrowserLocator(locator), contextEpoch: command.contextEpoch,
-      ...(frame ? { pointOffset: frame.pointOffset } : {}) });
+      ...(frame ? { frameId: frame.frameId, frameChain: frame.frameChain } : {}) });
   }
 
   async _resolveFrameContext(sessionRef, locator, commandResults, signal, trustedRead = false) {
@@ -1135,6 +1391,7 @@ export class BrowserAutomation {
     const treeCommand = await this._sendCommand(sessionRef, "Page.getFrameTree", {}, commandResults, signal, trustedRead);
     let branch = treeCommand.result?.frameTree;
     let authorityUrl = branch?.frame?.url || "";
+    const branches = [];
     for (const frameLocator of locator.frame) {
       const matches = (branch?.childFrames || []).filter((candidate) => {
         const frame = candidate.frame || {};
@@ -1148,6 +1405,7 @@ export class BrowserAutomation {
           `browser frame locator resolved to ${matches.length} frames`, { outcome: "notSent" });
       }
       branch = matches[0];
+      branches.push(branch);
       try {
         const frameUrl = branch.frame?.url || "";
         if (!/^about:(?:blank|srcdoc)$/.test(frameUrl)) authorityUrl = frameUrl;
@@ -1166,13 +1424,16 @@ export class BrowserAutomation {
     }, commandResults, signal, trustedRead);
     const contextId = isolated.result?.executionContextId;
     if (!Number.isInteger(contextId)) return null;
-    const owner = await this._sendCommand(sessionRef, "DOM.getFrameOwner", { frameId }, commandResults, signal, trustedRead);
-    const backendNodeId = owner.result?.backendNodeId;
-    if (!Number.isInteger(backendNodeId)) return null;
-    const box = await this._sendCommand(sessionRef, "DOM.getBoxModel", { backendNodeId }, commandResults, signal, trustedRead);
-    const quad = box.result?.model?.content || box.result?.model?.border;
-    if (!Array.isArray(quad) || quad.length < 2) return null;
-    return Object.freeze({ contextId, pointOffset: Object.freeze({ x: Number(quad[0]) || 0, y: Number(quad[1]) || 0 }) });
+    const frameChain = [];
+    for (const frameBranch of branches) {
+      const owner = await this._sendCommand(sessionRef, "DOM.getFrameOwner", {
+        frameId: frameBranch.frame.id,
+      }, commandResults, signal, trustedRead);
+      const ownerBackendNodeId = owner.result?.backendNodeId;
+      if (!Number.isInteger(ownerBackendNodeId)) return null;
+      frameChain.push(Object.freeze({ frameId: frameBranch.frame.id, ownerBackendNodeId }));
+    }
+    return Object.freeze({ contextId, frameId, frameChain: Object.freeze(frameChain) });
   }
 
   async _resolveOpaqueLocator(sessionRef, locatorRef, commandResults, signal, trustedRead = false) {
@@ -1258,10 +1519,17 @@ export class BrowserAutomation {
     let action;
     if (entity?.geometry?.rect) {
       const rect = entity.geometry.rect;
-      const x = Math.max(0, rect.x);
-      const y = Math.max(0, rect.y);
-      const width = Math.max(1, rect.width - Math.max(0, -rect.x));
-      const height = Math.max(1, rect.height - Math.max(0, -rect.y));
+      const page = context.page || {};
+      const contextCrop = context.cropKind === "contextCrop";
+      const margin = contextCrop ? Math.max(24, Math.min(160, Math.max(rect.width, rect.height) / 2)) : 0;
+      const viewportLeft = Math.max(0, Number(page.scroll?.x) || 0);
+      const viewportTop = Math.max(0, Number(page.scroll?.y) || 0);
+      const viewportRight = viewportLeft + Math.max(1, Number(page.viewport?.width) || rect.width);
+      const viewportBottom = viewportTop + Math.max(1, Number(page.viewport?.height) || rect.height);
+      const x = Math.max(viewportLeft, rect.x - margin);
+      const y = Math.max(viewportTop, rect.y - margin);
+      const width = Math.max(1, Math.min(viewportRight, rect.x + rect.width + margin) - x);
+      const height = Math.max(1, Math.min(viewportBottom, rect.y + rect.height + margin) - y);
       action = { format: "png", inline: true, clip: { x, y, width, height, scale: 1 } };
     } else {
       const page = context.page || {};
@@ -1276,7 +1544,7 @@ export class BrowserAutomation {
     const artifact = await this._screenshot.capture(sessionRef, action,
       context.commandResults || [], context.signal);
     return Object.freeze({
-      kind: entity ? "entityCrop" : "overview",
+      kind: entity ? context.cropKind || "entityCrop" : "overview",
       entityRef: entity?.entityRef || null,
       reason: entity?.unresolved?.reason || (visual.overview === "lowResolution" ? "overview" : "requested"),
       artifact,

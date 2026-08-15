@@ -1,0 +1,4 @@
+interface:
+  display_name: "Understand PyProc"
+  short_description: "Understand PyProc concepts and capabilities"
+  default_prompt: "Use $understand-pyproc to explain the PyProc product model and capability boundary."

@@ -22,7 +22,7 @@ or you explicitly accept the risk with `trust: true`. Integrity is a full-envelo
 rejected). Signing is WebCrypto ECDSA P-256; `fingerprintStatePublicKey` (from `pyproc/history`) gives the
 stable `sha256:<hex>` shown in approval UIs. Signature verifies **origin**, not safety:
 key distribution and permission UI belong to the product
-(see [trustPermissions](docs/usage/trustPermissions.md), Korean).
+(see [trustPermissions](skills/use-pyproc-machine/references/trust-permissions.md), Korean).
 
 ### Supply chain: every executed byte is pinned
 
@@ -32,7 +32,7 @@ key distribution and permission UI belong to the product
   graph; `verifyPyProcAssetIntegrity` enforces it **before any worker spawns**, and
   `registerPyProcServiceWorker` registers the service worker only from a verified graph.
 - Engine boot supports `engineScriptIntegrity` / `coreIntegrity` (fail-closed SRI on the
-  Pyodide script and core assets) plus an OPFS offline cache that re-verifies on read.
+  owned CPython WASI engine and stdlib assets) plus a content-addressed cache that re-verifies on read.
 
 ### Generated Machine profiles do not grant hidden authority
 
@@ -71,6 +71,14 @@ current broker affordance, an exact risk match, and an explicit postcondition. `
 environment mismatch, cleanup failure, and artifact quota failure cannot become `verified`. Pack SHA-256 values
 detect mutation but do not authenticate the producer or constitute human approval. Protect packs as potentially
 sensitive product data.
+
+APX evaluates the complete provider candidate inventory before public output projection. Incomplete enumeration
+never authorizes an effect; its optional continuation is read-only, opaque, expiry-bound, and tied to the exact
+world, document epoch, requirement, selector, ordering, and offset. Page text, accessibility names, screenshots,
+visual inference, and continuation values cannot widen authority. Immediately before provider input, the broker
+rechecks action context and target binding. Possibly-down input uses a separate bounded release signal, and a
+release failure quarantines the session instead of being hidden as success. Event loss or relevant observation
+omission cannot prove absence.
 
 ### Fleet suspension never overrides effect safety
 
@@ -229,4 +237,4 @@ as a first boot. A sent RPC is re-asked after leader loss only when the caller c
 can prove both a durable generation and a proxy-free session. Ordinary followers cannot
 inspect the leader session and fail closed with `PYPROC_RPC_OUTCOME_UNKNOWN`; live-leader
 timeouts and caller loss do too. The full resend and result boundary is the
-[durable RPC state table](docs/usage/contract.md#durable-rpc-state-table-normative).
+[durable RPC state table](skills/use-pyproc-runtime/references/consumer-contract.md#durable-rpc-state-table-normative).

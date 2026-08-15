@@ -8,7 +8,7 @@ Install the exact wheel from the matching GitHub Release:
 
 ```sh
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.21/pyproc_control-0.0.21-py3-none-any.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.22/pyproc_control-0.0.22-py3-none-any.whl"
 ```
 
 PyPI is not an installation source yet. The versioned GitHub Release also contains the source distribution.
@@ -32,16 +32,16 @@ without a JavaScript application layer or a raw CDP handle.
 
 Repository experience verification uses `auditExperience`, `verifyExperience`, and `replayEvidencePack` over the
 same Control Protocol. The repository
-[experience verification guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/experienceVerification.md)
+[experience verification guide](https://github.com/eddmpython/pyproc/blob/main/skills/verify-browser-experience/references/verification.md)
 defines the strict `qa/eyes` contract and canonical Evidence Pack.
 
 An Execution Memory-enabled manifest adds `createExecutionSession`, `checkpointExecutionSession`,
 `completeExecutionSession`, `openExecutionSession`, `listExecutionSessions`, `inspectExecutionSession`,
 `exportExecutionHandoff`, and `importExecutionHandoff`. These methods publish and verify immutable session
 revisions over the current Machine image. The
-[Execution Memory guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/executionMemory.md) defines
+[Execution Memory guide](https://github.com/eddmpython/pyproc/blob/main/skills/use-pyproc-machine/references/execution-memory.md) defines
 repository identity, compare-and-swap updates, completion evidence, handoff trust, and storage boundaries.
 
 The npm `pyproc` package and its engine assets are separate installation prerequisites. See the repository
-[Python SDK guide](https://github.com/eddmpython/pyproc/blob/main/docs/usage/pythonSdk.md) for setup,
+[Python SDK guide](https://github.com/eddmpython/pyproc/blob/main/skills/control-pyproc/references/python-sdk.md) for setup,
 automation, perception, cancellation, and recovery examples.

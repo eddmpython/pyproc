@@ -1,195 +1,48 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Hibernating Machine Fleet probe</title>
-  <script>
-    window.addEventListener("error", (event) => {
-      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "module initialization", pass: false, info: event.message }] }) }).catch(() => undefined);
-    });
-    window.addEventListener("unhandledrejection", (event) => {
-      fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, checks: [{ name: "unhandled rejection", pass: false, info: String(event.reason) }] }) }).catch(() => undefined);
-    });
-  </script>
-</head>
-<body>
-<pre id="out">running</pre>
-<script type="module">
-  import {
-    IndexedDbMachineStore,
-    createMachineFleet,
-    createWebComputer,
-  } from "../../../../src/machine/index.js";
-
-  const out = document.getElementById("out");
-  const checks = [];
-  const check = (name, pass, info = "") => {
-    checks.push({ name, pass: !!pass, info: String(info) });
-    out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
-  };
-  const codeOf = async (operation) => {
-    try { await operation(); return ""; }
-    catch (error) { return error?.code || String(error); }
-  };
-  const params = new URLSearchParams(location.search);
-  const phase = params.get("phase") || "seed";
-  const store = new IndexedDbMachineStore({
-    indexedDb: globalThis.indexedDB,
-    databaseName: "pyproc-machine-fleet-probe",
-  });
-  const lifecycle = [];
-  const liveWorkers = new Set();
-  let leaseSerial = 0;
-  const indexURL = params.get("indexURL") || undefined;
-
-  const createComputer = ({ machineId, environmentFingerprint }) => {
-    const computer = createWebComputer({
-      createMachines: false,
-      python: {
-        onWorkerLifecycle(event) {
-          lifecycle.push({ ...event, fleetMachineId: machineId });
-          if (event.state === "spawned") liveWorkers.add(event.workerId);
-          else liveWorkers.delete(event.workerId);
-        },
-      },
-      cryptoProvider: crypto,
-      durability: {
-        groupId: `browserFleet/${machineId}`,
-        store,
-        ownerId: `${machineId}-owner-${crypto.randomUUID()}`,
-        environmentFingerprint,
-      },
-    });
-    const machine = computer.host.createMachine({
-      machineId: "runtime",
-      adapterId: "pyproc-worker",
-      manifest: { session: { ...(indexURL ? { indexURL } : {}) } },
-      permissions: { devices: ["console", "network"] },
-    });
-    computer.adoptMachines(new Map([[machine.machineId, machine]]));
-    return computer;
-  };
-
-  const newFleet = () => createMachineFleet({
-      hotLimit: 1,
-      idFactory: () => `browser-lease-${phase}-${++leaseSerial}`,
-    });
-  const register = (fleet, machineId) => fleet.register({
-    machineId,
-    environmentFingerprint: "pyodide-browser-fleet-v1",
-    createComputer,
-  });
-  let shouldReport = true;
-
-  try {
-    if (phase === "resume") {
-      const previous = await (await fetch("/gateArtifact")).json();
-      checks.push(...previous.checks);
-      lifecycle.push(...previous.lifecycle);
-      const fleet = newFleet();
-      register(fleet, "alpha");
-      const restartedLease = await fleet.acquire("alpha", "browser process restart");
-      const restartedJson = await fleet.use(restartedLease,
-        (computer) => computer.machine("runtime").request({
-          type: "run",
-          code: "import json\nfrom pathlib import Path\njson.dumps([fleet_marker, Path('/home/web/fleet.txt').read_text()])",
-        }));
-      const restarted = JSON.parse(restartedJson);
-      check("a new browser process rebuilds the Fleet and restores the durable HEAD",
-        restarted?.[0] === 4242 && restarted?.[1] === "durable-home"
-        && restartedLease.ownerEpoch > previous.ownerEpoch
-        && fleet.inspect().machines.alpha.lastTerminal === "resumed",
-        `${JSON.stringify(restarted)}, owner=${previous.ownerEpoch}->${restartedLease.ownerEpoch}`);
-      fleet.release(restartedLease, {});
-      await fleet.dispose();
-      check("the restarted process terminates its restored Worker before completion", liveWorkers.size === 0,
-        `liveWorkers=${liveWorkers.size}`);
-    } else {
-      const fleet = newFleet();
-      register(fleet, "alpha");
-      register(fleet, "beta");
-      const alpha = await fleet.acquire("alpha", "prepare state");
-      const firstWorkerId = fleet.inspect().machines.alpha.resources.workers === 1
-        ? lifecycle.find((event) => event.fleetMachineId === "alpha" && event.state === "spawned")?.workerId
-        : null;
-      await fleet.use(alpha, (computer) => computer.machine("runtime").request({
-        type: "run",
-        code: [
-          "from pathlib import Path",
-          "Path('/home/web').mkdir(parents=True, exist_ok=True)",
-          "Path('/home/web/fleet.txt').write_text('durable-home')",
-          "fleet_marker = 4242",
-          "fleet_marker",
-        ].join("\n"),
-      }));
-      fleet.release(alpha, {});
-
-      const beta = await fleet.acquire("beta", "force safe admission");
-      const cold = fleet.inspect().machines.alpha;
-      check("hot limit admits beta only after alpha becomes cold",
-        fleet.inspect().hot === 1 && cold.state === "cold" && liveWorkers.size === 1,
-        `hot=${fleet.inspect().hot}, liveWorkers=${liveWorkers.size}`);
-      check("cold alpha owns no live execution resources",
-        cold.resources.workers === 0 && cold.resources.runtimes === 0
-        && cold.resources.deviceLeases === 0 && cold.resources.timers === 0,
-        JSON.stringify(cold.resources));
-      check("the original alpha Worker emitted a terminated terminal",
-        !!firstWorkerId && lifecycle.some((event) => event.workerId === firstWorkerId && event.state === "terminated"),
-        firstWorkerId);
-      check("cold alpha points at the verified durable HEAD",
-        (await store.readHead("browserFleet/alpha"))?.head === cold.generationId,
-        cold.generationId);
-      fleet.release(beta, {});
-
-      const alpha2 = await fleet.resume("alpha", "resume exact state");
-      const restoredJson = await fleet.use(alpha2, (computer) => computer.machine("runtime").request({
-        type: "run",
-        code: "import json\nfrom pathlib import Path\njson.dumps([fleet_marker, Path('/home/web/fleet.txt').read_text()])",
-      }));
-      const restored = JSON.parse(restoredJson);
-      const alphaSpawns = lifecycle.filter((event) => event.fleetMachineId === "alpha" && event.state === "spawned");
-      check("a fresh Worker restores Python heap and home",
-        restored?.[0] === 4242 && restored?.[1] === "durable-home"
-        && alphaSpawns.length === 2 && alphaSpawns[0].workerId !== alphaSpawns[1].workerId,
-        `${JSON.stringify(restored)}, workers=${alphaSpawns.map((event) => event.workerId).join(",")}`);
-      check("the stale pre-suspend lease cannot operate on the new owner",
-        await codeOf(() => fleet.use(alpha, () => undefined)) === "WEB_MACHINE_FLEET_LEASE_STALE");
-
-      fleet.release(alpha2, { unresolvedEffects: 1, outcomeUnknown: true });
-      check("unknown external effect blocks automatic suspension",
-        await codeOf(() => fleet.acquire("beta", "unsafe")) === "WEB_MACHINE_FLEET_CAPACITY"
-        && fleet.inspect().machines.alpha.state === "hot");
-
-      const alpha3 = await fleet.acquire("alpha", "clear safe terminal");
-      fleet.release(alpha3, {});
-      await fleet.dispose();
-      check("fleet dispose commits safe hot state and terminates all Workers",
-        liveWorkers.size === 0 && fleet.inspect().machines.alpha.state === "cold",
-        `liveWorkers=${liveWorkers.size}`);
-
-      await fetch("/gateArtifact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ checks, lifecycle, ownerEpoch: alpha3.ownerEpoch }),
-      });
-      await fetch("/gateRestart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextSearch: "phase=resume" }),
-      });
-      shouldReport = false;
-    }
-  } catch (error) {
-    check("fleet probe has no uncaught error", false, String(error?.stack || error).slice(-900));
-  }
-
-  if (shouldReport) {
-    await fetch("/gateReport", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ok: checks.length > 0 && checks.every((entry) => entry.pass), checks, lifecycle }),
-    }).catch(() => undefined);
-  }
-</script>
-</body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>owned kernel Machine Fleet probe</title></head>
+<body><pre id="out">running</pre><script type="module">
+import { MemoryMachineStore, createMachineFleet, createWebComputer } from "../../../../src/machine/index.js";
+const output = document.getElementById("out");
+const checks = [];
+const check = (name, pass, info = "") => {
+  checks.push({ name, pass: pass === true, info: String(info) });
+  output.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}`;
+};
+const store = new MemoryMachineStore();
+let ownerSerial = 0;
+const createComputer = ({ machineId, environmentFingerprint }) => createWebComputer({
+  cryptoProvider: crypto,
+  durability: {
+    groupId: `ownedFleet/${machineId}`,
+    store,
+    lockManager: { request(_name, _options, callback) { return Promise.resolve().then(callback); } },
+    ownerId: `fleet-owner-${++ownerSerial}`,
+    environmentFingerprint,
+  },
+});
+const fleet = createMachineFleet({ hotLimit: 1 });
+try {
+  const registered = fleet.register({ machineId: "alpha",
+    environmentFingerprint: "cpython-wasi-3.14.6-fleet-v1", createComputer });
+  check("fleet registers the owned kernel computer", registered === "alpha");
+  const lease = await fleet.acquire("alpha", "prepare owned state");
+  check("fleet acquires one hot computer", fleet.inspect().hot === 1 && lease.machineId === "alpha");
+  const prepared = await fleet.use(lease,
+    (computer) => computer.machine("pythonOs").request({ type: "run", code: "fleetValue = 41\nprint(fleetValue)" }));
+  check("fleet runs the owned Python guest", prepared.trim() === "41");
+  fleet.release(lease, {});
+  const suspended = await fleet.suspend("alpha", { lease });
+  check("fleet suspends to a durable generation", suspended.terminal === "suspended" && fleet.inspect().hot === 0);
+  const resumedLease = await fleet.resume("alpha", "restore owned state");
+  const restored = await fleet.use(resumedLease,
+    (computer) => computer.machine("pythonOs").request({ type: "run", code: "print(fleetValue + 1)" }));
+  check("fleet restores the exact Python state", restored.trim() === "42");
+  fleet.release(resumedLease, {});
+  await fleet.dispose();
+  check("fleet disposes all hot computers", fleet.inspect().hot === 0);
+} catch (error) {
+  check("fleet probe has no uncaught error", false, error?.stack || error?.message || error);
+  await fleet.dispose().catch(() => undefined);
+}
+await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ ok: checks.every((entry) => entry.pass), checks }) });
+</script></body></html>

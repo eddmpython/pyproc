@@ -25,6 +25,15 @@ function boundedDimension(value, label) {
   return number;
 }
 
+function boundedScale(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0.1 || number > 3) {
+    throw new BrowserControlError("BROWSER_AUTOMATION_SCREENSHOT_BOUNDS",
+      "browser screenshot clip scale is outside the supported bounds", { outcome: "notSent" });
+  }
+  return number;
+}
+
 export class BrowserScreenshot {
   constructor({ command, artifactStore } = {}) {
     if (typeof command !== "function") throw new TypeError("browser screenshot command callback is required");
@@ -45,7 +54,7 @@ export class BrowserScreenshot {
     let cssWidth;
     let cssHeight;
     if (options.clip) {
-      clip = { ...options.clip };
+      clip = { ...options.clip, scale: boundedScale(options.clip.scale ?? 1) };
       cssWidth = boundedDimension(clip.width, "clip width");
       cssHeight = boundedDimension(clip.height, "clip height");
     } else if (options.fullPage === true) {
@@ -56,7 +65,7 @@ export class BrowserScreenshot {
       cssWidth = boundedDimension(viewport.clientWidth, "viewport width");
       cssHeight = boundedDimension(viewport.clientHeight, "viewport height");
     }
-    const scale = clip?.scale || 1;
+    const scale = clip?.scale ?? 1;
     if (cssWidth * cssHeight * scale * scale > BROWSER_SCREENSHOT_MAX_CSS_PIXELS) {
       throw new BrowserControlError("BROWSER_AUTOMATION_SCREENSHOT_BOUNDS",
         "browser screenshot exceeds the CSS pixel area limit", { outcome: "notSent" });
