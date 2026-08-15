@@ -1,6 +1,6 @@
 # Initiative 9: agent computer와 웹 표준 후보 준비도
 
-상태: **진행 중, M0 완료, M1 두 하위 계약 완료**
+상태: **진행 중, M0과 M1 완료, M2 다음 작업**
 
 이 문서는 agent가 pyproc에 들어와 보고, 행동하고, 계산하고, 세션을 넘겨 계속 일하는 전 과정을
 제품 기준으로 끌어올리는 실행 원장이다. 기존 능력 점수와 증거의 정본은
@@ -14,7 +14,7 @@
 
 | 질문 | 현재 판정 | 실사용 증거 | 완성까지 남은 것 |
 |---|---|---|---|
-| agent 진입점 | 강함, 완성 아님 | exact install 뒤 `pythonOnly` init, effect-free doctor, CPython 실행이 공개 명령으로 완결되고 현재 main은 package engine을 자동 선택 | client별 다음 명령 의미 통일 |
+| agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M2의 반복 작업과 정리 수명주기 |
 | 눈과 팔 | 강함, 완성 아님 | APX Situation이 링크를 식별하고 proof-carrying click 뒤 `Smallest start` 출현을 confirmed로 봉인. 현재 main은 첫 문서 교체를 effect 재시도 없이 수렴 | 장기 반복 수명주기와 실제 GPU visual oracle 확대 |
 | 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate | 임의 native wheel, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
 | 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, GPU 실기 CI, 브라우저 범위 확대 |
@@ -69,13 +69,15 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 ### M1. Machine Entrance 첫 결과 수렴
 
-판정: **진행 중**
+판정: **완료**
 
 - 완료: exact version 설치 뒤 engine 경로를 사람이 조립하지 않아도 package-owned CPython을 선택한다.
   명시한 `--engine-root`만 override로 사용하며 결과와 생성 README에 선택 출처와 절대 경로를 남긴다.
 - 완료: COI bootstrap의 첫 문서 교체를 관찰하고 같은 typed focus의 새 capability를 한 번 재발급한다.
   `notSent` 외에는 재시도하지 않고, 유일성이나 권한이 달라지거나 두 번째 교체가 생기면 중단한다.
-- doctor의 다음 명령이 shell, JavaScript, Python, MCP에서 같은 의미를 가진다.
+- 완료: initializer와 doctor가 같은 구조화된 `next.firstResult`를 반환한다. 부모 의미는
+  `machine.run`과 한 입력으로 고정하고 shell argument vector, JavaScript와 Python SDK method, MCP tool을
+  adapter로 둔다.
 
 첫 하위 계약 증거:
 
@@ -85,8 +87,15 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - 첫 문서 교체 probe는 수정 전 stale locator와 effect 0을 재현했고, 수정 후 postcondition confirmed와
   effect 정확히 1회로 수렴했다. 설치 MCP 제품 gate도 같은 여정을 고정한다.
 - browser control, 3회 48-action stress, APX 11개 실브라우저 게이트가 GREEN이다.
+- `PyProcControlClient.doctor()`와 `PyProcClient.doctor()`는 complete doctor와 representable blocking report를
+  그대로 반환한다. 기존 `check()`는 startup compatibility surface로 유지한다.
+- packed install에서 doctor가 준 exact shell arguments, JavaScript method, Python method, MCP tool이 모두
+  canonical `machine.run`으로 42를 반환했다. Control 23개, MCP 22개, Python wheel과 sdist 5개 제품 gate가
+  GREEN이다.
 
 ### M2. Eyes와 Arms 장기 수명주기
+
+판정: **다음 작업**
 
 - 반복 Situation, screenshot, proof-carrying action, artifact cleanup에서 handle과 process 잔류 0을 증명한다.
 - stale, ambiguous, occluded, navigation 교체를 wrong effect 없이 자동 수렴시키는 상한을 고정한다.

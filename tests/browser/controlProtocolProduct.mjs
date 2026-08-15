@@ -130,9 +130,12 @@ const pythonOnlyDoctor = JSON.parse(run(cli, ["doctor", "--config", pythonOnlyCo
 check("설치본 Python-only doctor가 자동화와 CDP authority를 effect 없이 닫음",
   pythonOnlyDoctor.ok === true && pythonOnlyDoctor.automation.enabled === false
     && pythonOnlyDoctor.automation.cdpEndpoint === false
+    && pythonOnlyDoctor.next.firstResult.operation === "machine.run"
+    && pythonOnlyDoctor.next.firstResult.shell.arguments.join("\0")
+      === ["run", "--config", pythonOnlyConfigPath, "--code", "40 + 2"].join("\0")
     && pythonOnlyDoctor.checks.some((entry) => entry.code === "MACHINE_PREFLIGHT_EFFECT_FREE"));
-const pythonOnlyRun = JSON.parse((await runAsync(cli, ["run", "--config", pythonOnlyConfigPath,
-  "--code", "40+2", "--timeout-ms", String(TIMEOUT_MS)],
+const pythonOnlyRun = JSON.parse((await runAsync(cli, [...pythonOnlyDoctor.next.firstResult.shell.arguments,
+  "--timeout-ms", String(TIMEOUT_MS)],
 { cwd: installed.appDir, timeoutMs: TIMEOUT_MS + 30000 })).stdout);
 check("설치본 Python-only init, doctor, run, close 여정",
   pythonOnlyRun.terminal === "completed" && pythonOnlyRun.output?.value === "42"
@@ -230,10 +233,17 @@ let observeClient = null;
 
 console.log("installed pyproc-control product gate");
 try {
-  const observeDoctor = await PyProcControlClient.check(observeConfigPath,
+  const blockedDoctor = await PyProcControlClient.doctor(join(installed.appDir, "missing-manifest.json"),
+    { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
+  check("공개 JavaScript doctor가 representable blocking report를 예외로 지우지 않음",
+    blockedDoctor.ok === false && blockedDoctor.blocking[0]?.code === "MACHINE_MANIFEST_BLOCKED"
+      && blockedDoctor.next.firstResult.operation === "machine.run");
+  const observeDoctor = await PyProcControlClient.doctor(observeConfigPath,
     { cwd: installed.appDir, timeoutMs: TIMEOUT_MS });
   observeClient = await PyProcControlClient.start(observeConfigPath,
     { cwd: installed.appDir, startupTimeoutMs: TIMEOUT_MS });
+  const firstResult = observeDoctor.next.firstResult;
+  const firstMachine = await observeClient[firstResult.javascript.method](...firstResult.javascript.arguments);
   const observeOpened = await observeClient.openTarget(`${targetOrigin}/observe`, {
     expectedRisk: "externalEffect", waitUntil: "load",
   });
@@ -242,6 +252,7 @@ try {
     .query({ role: "heading", name: "control-ready" })).one();
   check("observeLocal 설치 profile이 고정 read catalog로 APX observation을 완료",
     observeDoctor.automation.actions.join(",") === "snapshot,screenshot,waitFor"
+      && firstResult.operation === "machine.run" && firstMachine.output.value === "42"
       && observeHeading.name === "control-ready");
   await observeClient.detachSession(observeAttached.output);
   await observeClient.close();

@@ -53,9 +53,14 @@ npx pyproc-control doctor --config ./.pyproc/manifest.json
 ```python
 from pyprocControl import PyProcClient
 
-report = PyProcClient.check(".pyproc/manifest.json")
-print(report["engine"])
+report = PyProcClient.doctor(".pyproc/manifest.json")
+print(report["next"]["firstResult"])
 ```
+
+`doctor()` returns the complete effect-free report, including a structured `next.firstResult` that maps the same
+`machine.run` input to shell, JavaScript, Python, and MCP. It returns representable blocking reports with
+`ok == False`, so a caller can inspect `blocking` before deciding whether to start. `check()` remains the lighter
+startup-configuration compatibility check.
 
 The npm bin directory must be on `PATH`. An embedded application can instead pass an explicit command list
 such as `command=[nodePath, controlScriptPath]`.

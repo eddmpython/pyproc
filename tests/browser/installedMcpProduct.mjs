@@ -118,6 +118,9 @@ const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", ins
   ...(browser ? ["--browser", browser] : []),
 ];
 const initializedProfile = JSON.parse(run(cli, initArgs, { cwd: installed.appDir }).stdout);
+const controlCli = binPath(installed.appDir, "pyproc-control");
+const doctorReport = JSON.parse(run(controlCli, ["doctor", "--config", configPath],
+  { cwd: installed.appDir }).stdout);
 const versionRun = run(cli, ["--version"], { cwd: installed.appDir });
 const helpRun = run(cli, ["--help"], { cwd: installed.appDir });
 const checkRun = run(cli, ["--config", configPath, "--check"], { cwd: installed.appDir });
@@ -209,6 +212,11 @@ try {
       && tools.includes("machineImageExport") && tools.includes("memoryCreate") && tools.includes("memoryImport")
       && tools.includes("eyesAudit") && tools.includes("eyesVerify") && tools.includes("eyesReplay")
       && tools.includes("effectPrepare") && tools.includes("effectCommit") && tools.includes("effectSeal"), tools.join(","));
+  const firstResult = doctorReport.next.firstResult;
+  const firstMachine = toolText(await callTool(firstResult.mcp.tool, firstResult.mcp.arguments));
+  check("doctor의 MCP 다음 행동이 canonical Machine 첫 결과를 실행",
+    firstResult.operation === "machine.run" && firstResult.input.code === "40 + 2"
+      && firstResult.mcp.serverArguments[1] === configPath && firstMachine.value === "42");
   await callTool("pythonRun", { code: "product_state = 41" });
   const pythonResponse = await callTool("pythonRun", { code: "product_state + 1" });
   const python = toolText(pythonResponse);

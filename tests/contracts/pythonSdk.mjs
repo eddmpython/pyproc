@@ -46,6 +46,7 @@ export async function assertPythonSdkContract() {
     throw new Error("Python SDK Chrome/Edge CI 배선 불일치");
   }
   const clientSource = readFileSync(join(ROOT, "pythonSdk", "src", "pyprocControl", "client.py"), "utf8");
+  if (!clientSource.includes("def doctor(")) throw new Error("Python Machine doctor 누락");
   for (const method of ["attachApp", "checkpointApp", "branchApp", "restoreApp", "adoptApp",
     "inspectApp", "listAppPairs", "stageAppEffect", "finalizeAppEffect"]) {
     if (!clientSource.includes(`def ${method}(`)) throw new Error(`Python AppSpace facade 누락: ${method}`);

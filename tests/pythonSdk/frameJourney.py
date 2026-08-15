@@ -8,7 +8,7 @@ from pyprocControl import PyProcClient
 
 
 configPath, targetUrl = sys.argv[1:3]
-report = PyProcClient.check(configPath)
+report = PyProcClient.doctor(configPath)
 assert report["ok"] is True and report["automation"]["provider"] == "frame"
 
 with PyProcClient.start(configPath, startupTimeout=60.0) as client:

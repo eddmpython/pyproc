@@ -42,9 +42,14 @@ npx pyproc-control doctor --config ./.pyproc/manifest.json
 ```js
 import { PyProcControlClient } from "pyproc/control";
 
-const report = await PyProcControlClient.check(".pyproc/manifest.json");
+const report = await PyProcControlClient.doctor(".pyproc/manifest.json");
 console.log(report.ok);
 ```
+
+`doctor()` runs the same complete digest-verifying preflight as the shell command and returns its blocking report
+without starting the Machine. `check()` remains the lighter startup-configuration compatibility check. The
+doctor's `next.firstResult.javascript` names `start()` and `runPython()` while the parent action fixes the
+canonical `machine.run` operation and input shared with shell, Python, and MCP.
 
 `start()` runs the matching `pyproc-control` file from the installed package. It does not depend on a global
 bin lookup. An embedded host can pass `command: [nodePath, controlScriptPath]` explicitly.

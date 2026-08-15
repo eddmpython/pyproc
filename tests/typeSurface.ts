@@ -127,9 +127,14 @@ async function kernelFactorySurface() {
 void kernelFactorySurface;
 
 async function controlSurface() {
+  const doctor = await PyProcControlClient.doctor("pyproc-control.json");
+  const firstOperation: "machine.run" = doctor.next.firstResult.operation;
+  const firstTool: "pythonRun" = doctor.next.firstResult.mcp.tool;
   const client = await PyProcControlClient.start("pyproc-control.json");
   const result = await client.runPython("40 + 2", { timeoutMs: 1000 });
   const value: string | null = result.output.value;
+  void firstOperation;
+  void firstTool;
   const checkpoint = await client.saveCheckpoint();
   await client.restoreCheckpoint(checkpoint.output.index);
   const request = client.requestAsync("machine.run", { code: "6 * 7" });

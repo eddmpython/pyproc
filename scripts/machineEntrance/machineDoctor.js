@@ -10,20 +10,13 @@ import { CONTROL_PYTHON_TOOLS } from "../controlProtocol/controlProduct.mjs";
 import { controlOperationCatalog } from "../controlProtocol/controlOperations.js";
 import { loadMcpProductConfig } from "../mcpProductConfig.mjs";
 import { inspectEngineDistribution } from "./engineInspection.js";
+import { createMachineNext } from "./machineNext.js";
 import { verifyWindowsNativeInstallation } from "../actuation/windowsNativeHost.js";
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function check(code, severity, explanation, details = {}) {
   return Object.freeze({ code, severity, explanation, ...details });
-}
-
-function safeNext(configPath) {
-  return Object.freeze({
-    doctor: `pyproc-control doctor --config "${configPath}"`,
-    start: `pyproc-control --config "${configPath}"`,
-    run: `pyproc-control run --config "${configPath}" --code "40 + 2"`,
-  });
 }
 
 async function installedVersion(packageRoot) {
@@ -49,6 +42,11 @@ async function automationFacts(loaded) {
     enabled: true,
     provider,
     cdpEndpoint: provider === "nativeCdp",
+    allowedOrigins: loaded.browserControl.targetOrigins,
+    actions: loaded.browserControl.actions,
+    rawMethods: loaded.browserControl.rawMethods,
+    maxRisk: loaded.browserControl.maxRisk,
+    artifacts: loaded.browserControl.artifacts,
     operations: controlOperationCatalog(tools).map((entry) => entry.name),
     ...(replay ? { replay: Object.freeze({ recordingId: replay.recordingId, entries: replay.entries.length,
       finalSha256: replay.finalSha256, sourceProvider: replay.provider.providerKind }) } : {}),
@@ -72,7 +70,7 @@ export async function inspectMachineProfile(configPath, {
     }));
     return Object.freeze({ ok: false, configPath: resolvedConfig, checks: Object.freeze(checks),
       blocking: Object.freeze(checks.filter((entry) => entry.severity === "blocking")),
-      advisory: Object.freeze([]), next: safeNext(resolvedConfig) });
+      advisory: Object.freeze([]), next: createMachineNext(resolvedConfig) });
   }
 
   try {
@@ -152,6 +150,6 @@ export async function inspectMachineProfile(configPath, {
     advisory: Object.freeze(advisory),
     automation,
     windowsNative,
-    next: safeNext(loaded.configPath),
+    next: createMachineNext(loaded.configPath),
   });
 }

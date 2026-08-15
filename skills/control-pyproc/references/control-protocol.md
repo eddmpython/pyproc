@@ -39,8 +39,10 @@ npx pyproc-control --config ./.pyproc/manifest.json
 ```
 
 `doctor` verifies every local engine core and package digest and reports blocking facts, advisories, and next
-commands without launching a browser. `run` starts one product, performs `machine.run`, returns a completed JSON
-terminal, and closes it. See [Machine Entrance](../../use-pyproc-machine/references/machine-entrance.md) for browser recipes and cleanup.
+commands without launching a browser. `next.firstResult` fixes one canonical `machine.run` input and maps it to
+the shell argument vector, JavaScript and Python methods, and MCP tool. `run` starts one product, performs that
+operation, returns a completed JSON terminal, and closes it. See
+[Machine Entrance](../../use-pyproc-machine/references/machine-entrance.md) for browser recipes and cleanup.
 
 The command reserves stdout for UTF-8 NDJSON protocol frames and writes diagnostics to stderr. Do not mix
 MCP JSON-RPC and Control Protocol frames on one process. Start `pyproc-mcp` for MCP, or `pyproc-control` for

@@ -4,6 +4,7 @@ import { access, lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileMachineProfile } from "./machineProfile.js";
+import { createMachineNext } from "./machineNext.js";
 
 export const MACHINE_PROFILE_DIRECTORY = ".pyproc";
 export const MACHINE_PROFILE_FILES = Object.freeze(["manifest.json", "client.json", "README.md"]);
@@ -184,10 +185,6 @@ export async function initializeMachineProfile({
     readmePath: join(paths.output, "README.md"),
     dryRun,
     overwritten: overwrite && present.length > 0,
-    next: Object.freeze({
-      doctor: `pyproc-control doctor --config "${join(paths.output, "manifest.json")}"`,
-      run: `pyproc-control run --config "${join(paths.output, "manifest.json")}" --code "40 + 2"`,
-      mcp: `pyproc-mcp --config "${join(paths.output, "manifest.json")}"`,
-    }),
+    next: createMachineNext(join(paths.output, "manifest.json")),
   });
 }

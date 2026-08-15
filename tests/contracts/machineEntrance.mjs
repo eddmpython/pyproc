@@ -80,7 +80,10 @@ export async function assertMachineEntranceContract() {
     assert(/pythonOnly does not accept actions/.test(leaked?.message), "pythonOnly가 action 입력을 무시하고 통과했다");
 
     const dry = await initializeMachineProfile({ projectRoot, profile, dryRun: true });
-    assert(dry.dryRun && dry.next.run.includes("--code"), "initializer dry-run과 다음 명령 계약이 불일치한다");
+    assert(dry.dryRun && dry.next.run.includes("--code")
+      && dry.next.firstResult.operation === "machine.run"
+      && dry.next.firstResult.mcp.tool === "pythonRun",
+    "initializer dry-run과 다음 명령 계약이 불일치한다");
     const packageDefault = await initializeMachineProfile({ projectRoot, outputDir: ".pyproc-default",
       profile: defaultParsed.profile, packageRoot });
     const packageManifest = JSON.parse(await readFile(packageDefault.manifestPath, "utf8"));
@@ -112,6 +115,20 @@ export async function assertMachineEntranceContract() {
       && doctor.automation.cdpEndpoint === false
       && doctor.checks.some((entry) => entry.code === "MACHINE_PREFLIGHT_EFFECT_FREE"),
     "doctor가 effect-free Python-only preflight를 증명하지 않았다");
+    const first = doctor.next.firstResult;
+    assert(first.schemaVersion === 1 && first.operation === "machine.run"
+      && first.input.code === "40 + 2"
+      && first.shell.command === "pyproc-control" && first.shell.arguments[0] === "run"
+      && first.javascript.module === "pyproc/control" && first.javascript.method === "runPython"
+      && first.python.module === "pyprocControl" && first.python.method === "runPython"
+      && first.mcp.command === "pyproc-mcp" && first.mcp.tool === "pythonRun"
+      && first.mcp.arguments === first.input
+      && [first.shell.arguments[2], first.javascript.startArguments[0], first.python.startArguments[0],
+        first.mcp.serverArguments[1]].every((value) => value === initialized.manifestPath),
+    "doctor 첫 결과가 네 adapter에서 같은 Machine operation과 입력을 가리키지 않았다");
+    assert(Object.isFrozen(doctor.next) && Object.isFrozen(first) && Object.isFrozen(first.input)
+      && Object.isFrozen(first.shell.arguments) && Object.isFrozen(first.javascript.startArguments),
+    "doctor 다음 행동이 호출자 변경에 열려 있다");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

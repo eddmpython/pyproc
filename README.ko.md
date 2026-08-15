@@ -111,6 +111,8 @@ Machine image 계약을 사용한다.
 지원 JavaScript client는 `pyproc/control`의 `PyProcControlClient`를 사용하고, 언어 중립 NDJSON 연결은
 설치된 `pyproc-control` 명령을 사용한다. 두 경로는 같은 strict manifest, operation catalog, 취소 규칙,
 검증된 attachment framing을 사용한다.
+Effect-free doctor는 `machine.run`을 정본 의미로 고정하고 shell, JavaScript, Python, MCP에 매핑한 하나의
+구조화된 첫 결과 행동도 반환한다.
 
 [Machine Entrance](skills/use-pyproc-machine/references/machine-entrance.md)에서 시작한 뒤
 [JavaScript Control SDK](skills/control-pyproc/references/javascript-control.md),

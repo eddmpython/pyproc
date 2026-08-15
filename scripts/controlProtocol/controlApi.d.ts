@@ -21,6 +21,50 @@ export interface MachineRunOutput {
   readonly value: string | null;
 }
 
+export interface MachineFirstResult {
+  readonly schemaVersion: 1;
+  readonly operation: "machine.run";
+  readonly input: Readonly<{ readonly code: string }>;
+  readonly shell: Readonly<{ readonly command: "pyproc-control"; readonly arguments: readonly string[] }>;
+  readonly javascript: Readonly<{
+    readonly module: "pyproc/control";
+    readonly client: "PyProcControlClient";
+    readonly startMethod: "start";
+    readonly startArguments: readonly string[];
+    readonly method: "runPython";
+    readonly arguments: readonly string[];
+  }>;
+  readonly python: Readonly<{
+    readonly module: "pyprocControl";
+    readonly client: "PyProcClient";
+    readonly startMethod: "start";
+    readonly startArguments: readonly string[];
+    readonly method: "runPython";
+    readonly arguments: readonly string[];
+  }>;
+  readonly mcp: Readonly<{
+    readonly command: "pyproc-mcp";
+    readonly serverArguments: readonly string[];
+    readonly tool: "pythonRun";
+    readonly arguments: Readonly<{ readonly code: string }>;
+  }>;
+}
+
+export interface MachineDoctorReport extends Readonly<Record<string, unknown>> {
+  readonly ok: boolean;
+  readonly configPath: string;
+  readonly checks: readonly Readonly<Record<string, unknown>>[];
+  readonly blocking: readonly Readonly<Record<string, unknown>>[];
+  readonly advisory: readonly Readonly<Record<string, unknown>>[];
+  readonly next: Readonly<{
+    readonly doctor: string;
+    readonly start: string;
+    readonly run: string;
+    readonly mcp: string;
+    readonly firstResult: MachineFirstResult;
+  }>;
+}
+
 export interface MachineImageOutput {
   readonly kind: "machineImage";
   readonly mimeType: "application/x-pymachine";
@@ -863,6 +907,8 @@ export class PyProcControlClient {
   static start(configPath: string, options?: ControlProcessOptions): Promise<PyProcControlClient>;
   static check(configPath: string, options?: ControlProcessOptions & { readonly timeoutMs?: number }):
     Promise<Readonly<Record<string, unknown>>>;
+  static doctor(configPath: string, options?: ControlProcessOptions & { readonly timeoutMs?: number }):
+    Promise<MachineDoctorReport>;
   readonly ready: Promise<this>;
   readonly operations: readonly string[];
   readonly diagnostics: string;

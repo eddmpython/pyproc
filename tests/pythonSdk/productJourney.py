@@ -10,11 +10,19 @@ from pyprocControl import ControlError, PyProcClient
 
 
 configPath, targetUrl, approvalUrl, effectEvidenceUrl = sys.argv[1:5]
-report = PyProcClient.check(configPath)
+report = PyProcClient.doctor(configPath)
+firstResult = report["next"]["firstResult"]
 assert report["ok"] is True and report["automation"]["enabled"] is True
+assert firstResult["operation"] == "machine.run"
+assert firstResult["python"]["module"] == "pyprocControl"
+assert firstResult["python"]["method"] == "runPython"
+assert firstResult["mcp"]["tool"] == "pythonRun"
 
 with PyProcClient.start(configPath, startupTimeout=60.0) as client:
     assert len(client.operations) == 34
+    firstMachine = getattr(client, firstResult["python"]["method"])(
+        *firstResult["python"]["arguments"], timeout=60.0)
+    assert firstMachine.output["value"] == "42"
     prepared = client.runPython("prepared = [10, 20, 30]", timeout=60.0)
     assert prepared.terminal == "completed"
     checkpoint = client.saveCheckpoint(timeout=60.0)

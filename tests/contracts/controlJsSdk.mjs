@@ -59,6 +59,7 @@ export async function assertControlJsSdkContract() {
     createReplayGraphRegistry, retainedReplayGraphObjects, createActuationIntent]) {
     assert(typeof value === "function", "pyproc/control Rehearse-Commit factory가 누락됐다");
   }
+  assert(typeof PyProcControlClient.doctor === "function", "JavaScript Machine doctor가 누락됐다");
   for (const method of ["importReplayGraphRecording", "createReplayGraphAppWorld",
     "captureReplayGraphAppBranch", "openReplayWorld", "inspectReplayWorld", "listReplayWorldEdges",
     "traverseReplayWorld", "checkpointReplayWorld", "restoreReplayWorld", "evaluateReplayWorld",

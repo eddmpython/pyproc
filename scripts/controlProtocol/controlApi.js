@@ -65,10 +65,12 @@ async function waitForExit(child, timeoutMs) {
   await exited;
 }
 
-async function runCheck(configPath, options) {
+async function runEntranceReport(configPath, options, mode) {
   const command = controlCommand(options.command);
-  const timeoutMs = positiveTimeout(options.timeoutMs, "control check timeoutMs", DEFAULT_STARTUP_TIMEOUT_MS);
-  const child = spawn(command[0], [...command.slice(1), "--config", controlConfigPath(configPath), "--check"], {
+  const timeoutMs = positiveTimeout(options.timeoutMs, `control ${mode} timeoutMs`, DEFAULT_STARTUP_TIMEOUT_MS);
+  const args = mode === "doctor" ? ["doctor", "--config", controlConfigPath(configPath)]
+    : ["--config", controlConfigPath(configPath), "--check"];
+  const child = spawn(command[0], [...command.slice(1), ...args], {
     cwd: options.cwd || process.cwd(), env: options.env || process.env, windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -86,17 +88,34 @@ async function runCheck(configPath, options) {
   if (outcome.state === "timeout") {
     child.kill("SIGTERM");
     await waitForExit(child, DEFAULT_SHUTDOWN_TIMEOUT_MS);
-    throw timeoutError("pyproc-control preflight timed out");
+    throw timeoutError(`pyproc-control ${mode} timed out`);
   }
   const { code, signal } = unwrap(outcome);
-  if (code !== 0) throw new Error(`pyproc-control preflight failed (${code ?? signal})\n${stderr}`);
-  let report;
+  let report = null;
   try { report = JSON.parse(stdout); }
-  catch (error) { throw new Error("pyproc-control preflight did not return JSON", { cause: error }); }
+  catch (error) {
+    if (code !== 0) throw new Error(`pyproc-control ${mode} failed (${code ?? signal})\n${stderr}`);
+    throw new Error(`pyproc-control ${mode} did not return JSON`, { cause: error });
+  }
+  if (mode === "doctor" && report && typeof report === "object" && typeof report.ok === "boolean") {
+    if (report.ok !== (code === 0)) {
+      throw new Error(`pyproc-control doctor exit and report disagree (${code ?? signal})`);
+    }
+    return Object.freeze(report);
+  }
+  if (code !== 0) throw new Error(`pyproc-control ${mode} failed (${code ?? signal})\n${stderr}`);
   if (!report || typeof report !== "object" || report.ok !== true) {
-    throw new Error("pyproc-control preflight did not return an ok report");
+    throw new Error(`pyproc-control ${mode} did not return an ok report`);
   }
   return Object.freeze(report);
+}
+
+function runCheck(configPath, options) {
+  return runEntranceReport(configPath, options, "check");
+}
+
+function runDoctor(configPath, options) {
+  return runEntranceReport(configPath, options, "doctor");
 }
 
 export { ControlRemoteError } from "./controlClient.js";
@@ -437,6 +456,10 @@ export class PyProcControlClient extends ControlStdioClient {
 
   static check(configPath, options = {}) {
     return runCheck(configPath, options);
+  }
+
+  static doctor(configPath, options = {}) {
+    return runDoctor(configPath, options);
   }
 
   requestAsync(operation, input = {}, { requestId, spaceId } = {}) {

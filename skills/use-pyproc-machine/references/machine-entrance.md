@@ -67,6 +67,13 @@ Machine browser discovery, provider authority, operation catalog, and temporary-
 launch a browser, create a profile, open a CDP endpoint, or send a target request. Target readiness remains an
 explicit advisory until the caller opens an allowed URL.
 
+The report's `next.firstResult` is the machine-readable first-result contract. Its canonical meaning is always
+`operation: "machine.run"` with one `input` object. The `shell`, `javascript`, `python`, and `mcp` members map
+that operation to an argument vector, SDK method, or MCP tool without asking a caller to parse a display command.
+The initializer and doctor return the same frozen shape. `PyProcControlClient.doctor()` and
+`PyProcClient.doctor()` return the complete report for programmatic entrances, including an `ok: false` report
+when a blocking fact can be represented safely.
+
 ## Read-only application observation
 
 `observeLocal` fixes the action catalog to `snapshot`, `screenshot`, and `waitFor`. Opening the initial URL can
@@ -206,6 +213,7 @@ durable browser-restart state is the separate root `open({ name })` Machine cont
 
 ## Failure shape
 
-`doctor` returns a JSON report with `checks`, `blocking`, `advisory`, and exact next commands. `run` and `invoke`
-return a completed terminal on success. Programmatic Control errors preserve `code`, `outcome`, `retryable`, and
-details such as the completed action prefix. Fix a blocking preflight fact and run `doctor` again before startup.
+`doctor` returns a JSON report with `checks`, `blocking`, `advisory`, display commands, and a structured
+`next.firstResult`. `run` and `invoke` return a completed terminal on success. Programmatic Control errors preserve
+`code`, `outcome`, `retryable`, and details such as the completed action prefix. Fix a blocking preflight fact and
+run `doctor` again before startup.

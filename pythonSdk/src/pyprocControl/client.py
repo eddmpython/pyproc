@@ -179,12 +179,34 @@ class PyProcClient:
     def check(cls, configPath: str | os.PathLike[str], *,
               command: str | os.PathLike[str] | Sequence[str | os.PathLike[str]] | None = None,
               timeout: float = 30.0) -> dict[str, Any]:
-        args = [*resolvedCommand(command), "--config", str(Path(configPath).resolve()), "--check"]
-        completed = subprocess.run(args, text=True, encoding="utf-8", errors="strict",
-                                   capture_output=True, timeout=timeout, check=True)
-        report = json.loads(completed.stdout)
+        return cls._entranceReport(configPath, command=command, timeout=timeout, mode="check")
+
+    @classmethod
+    def doctor(cls, configPath: str | os.PathLike[str], *,
+               command: str | os.PathLike[str] | Sequence[str | os.PathLike[str]] | None = None,
+               timeout: float = 30.0) -> dict[str, Any]:
+        return cls._entranceReport(configPath, command=command, timeout=timeout, mode="doctor")
+
+    @classmethod
+    def _entranceReport(cls, configPath: str | os.PathLike[str], *,
+                        command: str | os.PathLike[str] | Sequence[str | os.PathLike[str]] | None,
+                        timeout: float, mode: str) -> dict[str, Any]:
+        config = str(Path(configPath).resolve())
+        entrance = ["doctor", "--config", config] if mode == "doctor" else ["--config", config, "--check"]
+        completed = subprocess.run([*resolvedCommand(command), *entrance], text=True, encoding="utf-8",
+                                   errors="strict", capture_output=True, timeout=timeout, check=False)
+        try:
+            report = json.loads(completed.stdout)
+        except json.JSONDecodeError as error:
+            completed.check_returncode()
+            raise RuntimeError(f"pyproc-control {mode} did not return JSON") from error
+        if mode == "doctor" and isinstance(report, dict) and isinstance(report.get("ok"), bool):
+            if report["ok"] != (completed.returncode == 0):
+                raise RuntimeError("pyproc-control doctor exit and report disagree")
+            return report
+        completed.check_returncode()
         if not isinstance(report, dict) or report.get("ok") is not True:
-            raise RuntimeError("pyproc-control preflight did not return an ok report")
+            raise RuntimeError(f"pyproc-control {mode} did not return an ok report")
         return report
 
     @property

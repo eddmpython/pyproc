@@ -131,6 +131,8 @@ contract as root `boot()` and `open()`.
 Use `PyProcControlClient` from `pyproc/control` for a supported JavaScript client, or the installed
 `pyproc-control` command for a language-neutral NDJSON connection. Both use the same strict manifest,
 operation catalog, cancellation rules, and verified attachment framing.
+The effect-free doctor also returns one structured first-result action mapped to shell, JavaScript, Python, and
+MCP, with `machine.run` as the canonical meaning.
 
 Start with [Machine Entrance](skills/use-pyproc-machine/references/machine-entrance.md), then use the
 [JavaScript Control SDK](skills/control-pyproc/references/javascript-control.md), the
