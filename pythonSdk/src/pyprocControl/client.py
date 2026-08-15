@@ -424,6 +424,11 @@ class PyProcClient:
         return self.request("automation.target.open", {"url": url, "expectedRisk": expectedRisk,
                                                        "waitUntil": waitUntil}, timeout=timeout)
 
+    def closeTarget(self, targetRef: str, *, expectedRisk: str = "externalEffect",
+                    timeout: float | None = None) -> ControlResult:
+        return self.request("automation.target.close", {"targetRef": targetRef,
+                                                         "expectedRisk": expectedRisk}, timeout=timeout)
+
     def attachSession(self, targetRef: str, *, timeout: float | None = None) -> ControlResult:
         return self.request("automation.session.attach", {"targetRef": targetRef}, timeout=timeout)
 

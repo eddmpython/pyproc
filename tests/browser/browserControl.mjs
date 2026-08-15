@@ -951,6 +951,8 @@ try {
     afterDetach.sessions === 0 && afterDetach.popupCaptures === 0
       && afterDetach.automation?.locators === 0
       && afterDetach.automation?.observation?.sessions === 0
+      && afterDetach.automation?.semanticInventory?.active === 0
+      && afterDetach.automation?.semanticInventory?.continuations === 0
       && afterDetach.automation?.lifecycle?.sessions === 0
       && afterDetach.automation?.lifecycle?.watchers === 0
       && afterDetach.automation?.download?.enabledSessions === 0,
@@ -959,6 +961,8 @@ try {
     popupCaptures: afterDetach.popupCaptures,
     locators: afterDetach.automation?.locators,
     observationSessions: afterDetach.automation?.observation?.sessions,
+    semanticInventories: afterDetach.automation?.semanticInventory?.active,
+    semanticContinuations: afterDetach.automation?.semanticInventory?.continuations,
     lifecycleSessions: afterDetach.automation?.lifecycle?.sessions,
     lifecycleWatchers: afterDetach.automation?.lifecycle?.watchers,
     downloadSessions: afterDetach.automation?.download?.enabledSessions,

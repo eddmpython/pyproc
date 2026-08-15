@@ -85,6 +85,12 @@ surface imported by `mcpSandboxServer.mjs`. A contract test rejects browser sche
 that return to the server composition root. The installed-package gate requires the bin runtime while also
 rejecting any browser JavaScript export or runtime dependency.
 
+`scripts/automationSpace/semanticInventory.js` owns the provider-neutral legacy semantic paging primitive:
+finite retained inventory, single-use continuation, epoch fencing, canonical page, prefix, and full digests,
+and evidence receipt binding. NativeCdpSpace and FrameSpace materialize provider facts once and delegate paging
+to it. MCP, Control, and SDK adapters pass the opaque continuation through and do not invent offsets or a second
+completeness meaning.
+
 `scripts/perception/` owns the provider-neutral APX contract. `apxCatalog.js` and the JSON schemas own strict
 wire validation and conformance vocabulary; `perceptionIdentity.js` and `perceptionTimeline.js` own epoch-bound
 identity and deltas; `perceptionBudget.js` and `perceptionQuery.js` own bounded attention;

@@ -749,6 +749,58 @@ export class ControlLease {
 
 export type ControlSessionRef = Readonly<Record<string, unknown>>;
 
+export interface SemanticInventoryReceipt {
+  readonly protocol: "pyproc.semanticInventory";
+  readonly version: 1;
+  readonly inventoryRef: string;
+  readonly snapshotRef: string;
+  readonly documentEpoch: unknown;
+  readonly ordering: "provider";
+  readonly offset: number;
+  readonly returned: number;
+  readonly nextOffset: number;
+  readonly total: number;
+  readonly byteLength: number;
+  readonly complete: boolean;
+  readonly pageSha256: string;
+  readonly prefixSha256: string;
+  readonly nodesSha256: string;
+  readonly bindingSha256: string;
+  readonly evidenceSha256: string;
+  readonly receiptSha256: string;
+  readonly binding: Readonly<Record<string, unknown>>;
+  readonly evidence: Readonly<Record<string, unknown>>;
+  readonly continuationExpiresAt: string | null;
+}
+
+export interface SemanticInventoryObservation {
+  readonly nodes: readonly Readonly<Record<string, unknown>>[];
+  readonly continuationRef: string | null;
+  readonly inventory: SemanticInventoryReceipt;
+  readonly truncated: boolean;
+  readonly [key: string]: unknown;
+}
+
+export type SemanticInventoryObserveOptions = Readonly<{
+  expectedRisk: "read";
+  mode?: "all" | "interactive";
+  maxNodes?: number;
+  includeScreenshot?: boolean;
+  includeConsole?: boolean;
+  includeNetwork?: boolean;
+  maxEvents?: number;
+  continuationRef?: never;
+}> | Readonly<{
+  expectedRisk: "read";
+  continuationRef: string;
+  mode?: never;
+  maxNodes?: never;
+  includeScreenshot?: never;
+  includeConsole?: never;
+  includeNetwork?: never;
+  maxEvents?: never;
+}>;
+
 export class PerceptionEntity {
   private constructor();
   readonly value: Readonly<Record<string, unknown>>;
@@ -931,6 +983,11 @@ export class PyProcControlClient {
     options?: ControlRequestOptions & { readonly expectedRisk?: "externalEffect" }):
     Promise<ControlResult<Readonly<{ readonly closed: boolean; readonly targetRef: string }>>>;
   attachSession(targetRef: string, options?: ControlRequestOptions): Promise<ControlResult<ControlSessionRef>>;
+  observe(sessionRef: ControlSessionRef, observation: SemanticInventoryObserveOptions,
+    options?: ControlRequestOptions): Promise<ControlResult<SemanticInventoryObservation | Readonly<{
+      readonly result: SemanticInventoryObservation;
+      readonly [key: string]: unknown;
+    }>>>;
   observe(sessionRef: ControlSessionRef, observation?: Readonly<Record<string, unknown>>,
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   act(sessionRef: ControlSessionRef, actions: readonly Readonly<Record<string, unknown>>[],

@@ -43,6 +43,13 @@ import { APX_SITUATION_REPRESENTATION } from "../perception/situationCatalog.js"
 import { ActionEvidenceLoop } from "../perception/actionEvidence.js";
 import { PerceptionSpace } from "../perception/perceptionSpace.js";
 import { WebCdpSensor } from "../perception/profiles/webCdpSensor.js";
+import {
+  createSemanticInventoryError,
+  createSemanticInventoryEvidence,
+  SEMANTIC_INVENTORY_ERROR_CODES,
+  SEMANTIC_INVENTORY_MAX_ITEMS,
+  SemanticInventory,
+} from "../automationSpace/semanticInventory.js";
 
 export const BROWSER_AUTOMATION_ERROR_CODES = Object.freeze({
   actionRejected: "BROWSER_AUTOMATION_ACTION_REJECTED",
@@ -336,8 +343,10 @@ export class BrowserAutomation {
     this._idFactory = idFactory;
     this._onAudit = onAudit;
     this._now = now;
+    this._semanticInventory = new SemanticInventory({ idFactory, now });
     this._locators = new Map();
     this._sessionLocators = new Map();
+    this._sessionTargets = new Map();
     this._quarantinedSessions = new Map();
     this._artifactStore = artifactStore;
     this._screenshot = artifactStore ? new BrowserScreenshot({
@@ -482,13 +491,21 @@ export class BrowserAutomation {
     this._download?.dropSession(sessionRef);
   }
 
+  dropTarget(targetRef) {
+    for (const [key, knownTargetRef] of [...this._sessionTargets]) {
+      if (knownTargetRef === targetRef) this._clearSessionLocators(key);
+    }
+  }
+
   close() {
     this._observation.close();
     this._perception.close();
     this._lifecycle.close();
     this._download?.close();
+    this._semanticInventory.close();
     this._locators.clear();
     this._sessionLocators.clear();
+    this._sessionTargets.clear();
     this._quarantinedSessions.clear();
   }
 
@@ -498,6 +515,7 @@ export class BrowserAutomation {
       maxActions: BROWSER_AUTOMATION_MAX_ACTIONS,
       locators: this._locators.size,
       quarantinedSessions: this._quarantinedSessions.size,
+      semanticInventory: this._semanticInventory.inspect(),
       observation: this._observation.inspect(),
       perception: this._perception.inspect(),
       lifecycle: this._lifecycle.inspect(),
@@ -544,11 +562,28 @@ export class BrowserAutomation {
     if ([APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(action.representation)) {
       return this._perception.observe(sessionRef, perceptionOptionsFromInput(action), { signal, commandResults });
     }
+    if (action.continuationRef) {
+      const epoch = await this._command(sessionRef, "Page.getFrameTree", {}, commandResults, signal);
+      const page = await this._semanticInventory.continue({
+        sessionKey: sessionKey(sessionRef),
+        continuationRef: action.continuationRef,
+        documentEpoch: epoch.contextEpoch,
+      });
+      const response = {
+        ...page.metadata,
+        nodes: page.nodes,
+        continuationRef: page.continuationRef,
+        inventory: page.inventory,
+        truncated: page.metadata.candidateNodes > page.nodes.length,
+      };
+      response.compactBytes = byteLength(response);
+      return Object.freeze(response);
+    }
+    const key = sessionKey(sessionRef);
+    this._clearSessionLocators(key);
     const command = await this._command(sessionRef, "Accessibility.getFullAXTree", {}, commandResults, signal);
     const raw = command.result || {};
     const maxNodes = action.maxNodes || BROWSER_AUTOMATION_DEFAULT_MAX_NODES;
-    const key = sessionKey(sessionRef);
-    this._clearSessionLocators(key);
     const mode = action.mode || "all";
     const eligibleNodes = [];
     const rawNodeById = new Map((raw.nodes || []).map((node) => [node.nodeId, node]));
@@ -588,8 +623,12 @@ export class BrowserAutomation {
       ? eligibleNodes.filter((entry) => AX_INTERACTIVE_ROLES.has(entry.compact.role)
         || AX_CONTEXT_ROLES.has(entry.compact.role) || liveText(entry))
       : eligibleNodes;
+    if (candidates.length > SEMANTIC_INVENTORY_MAX_ITEMS) {
+      throw createSemanticInventoryError(SEMANTIC_INVENTORY_ERROR_CODES.inventoryTooLarge,
+        `semantic inventory has ${candidates.length} items; maximum is ${SEMANTIC_INVENTORY_MAX_ITEMS}`);
+    }
     const nodes = [];
-    for (const { node, compact } of candidates.slice(0, maxNodes)) {
+    for (const { node, compact } of candidates) {
       if (Number.isInteger(node.backendDOMNodeId) && node.backendDOMNodeId > 0) {
         const locatorRef = `locator:${this._idFactory()}`;
         compact.locatorRef = locatorRef;
@@ -603,20 +642,47 @@ export class BrowserAutomation {
       nodes.push(Object.freeze(compact));
     }
     this._sessionLocators.set(key, locatorRefs);
-    const response = {
-      snapshotId: `snapshot:${this._idFactory()}`,
+    this._sessionTargets.set(key, sessionRef.targetRef);
+    const snapshotId = `snapshot:${this._idFactory()}`;
+    const metadata = {
+      snapshotId,
       contextEpoch: command.contextEpoch,
       url: command.target.url,
       mode,
-      nodes: Object.freeze(nodes),
       eligibleNodes: eligibleNodes.length,
       candidateNodes: candidates.length,
-      truncated: candidates.length > nodes.length,
       rawBytes: byteLength(raw),
     };
-    response.compactBytes = byteLength(response);
     const artifacts = await this._observation.capture(sessionRef, action, commandResults, signal);
-    return Object.freeze({ ...response, ...artifacts });
+    try {
+      const evidence = await createSemanticInventoryEvidence(artifacts);
+      const page = await this._semanticInventory.open({
+        sessionKey: key,
+        documentEpoch: command.contextEpoch,
+        snapshotRef: snapshotId,
+        nodes,
+        pageSize: maxNodes,
+        metadata,
+        binding: metadata,
+        evidence,
+      });
+      const response = {
+        ...metadata,
+        nodes: page.nodes,
+        continuationRef: page.continuationRef,
+        inventory: page.inventory,
+        truncated: candidates.length > page.nodes.length,
+        ...artifacts,
+      };
+      response.compactBytes = byteLength(response);
+      return Object.freeze(response);
+    } catch (error) {
+      this._clearSessionLocators(key);
+      if (artifacts.screenshot?.artifactRef) {
+        await Promise.allSettled([this._artifactStore?.delete(artifacts.screenshot.artifactRef)]);
+      }
+      throw error;
+    }
   }
 
   async _waitFor(sessionRef, action, commandResults, signal) {
@@ -697,7 +763,7 @@ export class BrowserAutomation {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionRejected,
         `browser navigation was rejected: ${clipped(command.result.errorText, 200)}`, { outcome: "rejected" });
     }
-    this._clearSessionLocators(sessionKey(sessionRef));
+    this._clearSessionLocators(sessionKey(sessionRef), { semanticInventory: false });
     const waitUntil = action.waitUntil || "load";
     const timeoutMs = action.timeoutMs || BROWSER_AUTOMATION_DEFAULT_WAIT_MS;
     const deadline = Date.now() + timeoutMs;
@@ -1504,9 +1570,11 @@ export class BrowserAutomation {
     }
   }
 
-  _clearSessionLocators(key) {
+  _clearSessionLocators(key, { semanticInventory = true } = {}) {
+    if (semanticInventory) this._semanticInventory.invalidateSession(key);
     for (const locatorRef of this._sessionLocators.get(key) || []) this._locators.delete(locatorRef);
     this._sessionLocators.delete(key);
+    if (semanticInventory) this._sessionTargets.delete(key);
   }
 
   _issueOpaqueLocator(sessionRef, contextEpoch, backendNodeId) {

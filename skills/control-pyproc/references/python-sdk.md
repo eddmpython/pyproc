@@ -179,10 +179,33 @@ with PyProcClient.start(".pyproc/manifest.json") as client:
         file.write(png.bytes)
 
     client.detachSession(attached.output)
+    client.closeTarget(opened.output["targetRef"])
 ```
 
 The client does not expose attachment bytes until chunk order, byte length, MIME type, and SHA-256 match the
 terminal descriptor. The JSON output retains the opaque artifact reference for bounded reads and deletion.
+
+Large legacy semantic inventories use the same bounded continuation contract:
+
+```python
+pages = []
+observed = client.observe(attached.output, {
+    "expectedRisk": "read", "mode": "all", "maxNodes": 500})
+while True:
+    page = observed.output.get("result", observed.output)
+    pages.append(page)
+    if page["inventory"]["complete"]:
+        break
+    observed = client.observe(attached.output, {
+        "expectedRisk": "read", "continuationRef": page["continuationRef"]})
+
+nodes = [node for page in pages for node in page["nodes"]]
+assert len(nodes) == pages[-1]["inventory"]["total"]
+```
+
+Pass no first-page options with `continuationRef`. Every page must retain one `receiptSha256`, and the final
+canonical sorted-key JSON digest must equal `nodesSha256`. A document replacement raises `ControlError` with
+code `AUTOMATION_OBSERVATION_CONTINUATION_STALE`; do not mark the collected prefix complete.
 
 ## PyProc Eyes from Python
 

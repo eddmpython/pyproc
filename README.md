@@ -134,6 +134,11 @@ operation catalog, cancellation rules, and verified attachment framing.
 The effect-free doctor also returns one structured first-result action mapped to shell, JavaScript, Python, and
 MCP, with `machine.run` as the canonical meaning.
 
+Legacy semantic observation keeps each response at 1,000 nodes or fewer. A result with `continuationRef` can be
+continued with a continuation-only `automation.observe` call. Every page carries the same document epoch,
+snapshot receipt, complete-inventory digest, and observation evidence binding. A document replacement rejects
+the old continuation instead of treating a partial prefix as complete.
+
 Start with [Machine Entrance](skills/use-pyproc-machine/references/machine-entrance.md), then use the
 [JavaScript Control SDK](skills/control-pyproc/references/javascript-control.md), the
 [Python SDK](skills/control-pyproc/references/python-sdk.md), or the complete

@@ -4,6 +4,7 @@ export const BROWSER_OBSERVATION_MAX_EVENTS = 100;
 export const BROWSER_OBSERVATION_DEFAULT_EVENTS = 40;
 export const BROWSER_OBSERVATION_MAX_NODES = 1000;
 export const BROWSER_OBSERVATION_TEXT_LIMIT = 300;
+export const BROWSER_OBSERVATION_CONTINUATION_PATTERN = "^continuation:[A-Za-z0-9_-]+$";
 
 export const BROWSER_OBSERVATION_METHODS = Object.freeze([
   "Accessibility.enable",
@@ -28,6 +29,8 @@ export const BROWSER_OBSERVATION_EVENTS = Object.freeze([
 
 export const BROWSER_OBSERVATION_PROPERTIES = Object.freeze({
   maxNodes: { type: "integer", minimum: 1, maximum: BROWSER_OBSERVATION_MAX_NODES },
+  continuationRef: { type: "string", pattern: BROWSER_OBSERVATION_CONTINUATION_PATTERN,
+    minLength: 14, maxLength: 173 },
   includeScreenshot: { type: "boolean" },
   includeConsole: { type: "boolean" },
   includeNetwork: { type: "boolean" },

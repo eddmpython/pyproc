@@ -181,6 +181,33 @@ The ten opt-in browser tools are:
 event, and redacted network facts into a bounded graph. It is provider-neutral and never exposes CDP node,
 frame, object, or execution-context identifiers.
 
+### Complete legacy semantic inventories
+
+A legacy observation returns at most 1,000 nodes per call. When more nodes belong to the captured snapshot,
+the result includes an opaque `continuationRef` and `inventory.complete` is false. Continue it with only the
+same `sessionRef`, `expectedRisk: "read"`, and that reference:
+
+```json
+{
+  "sessionRef": { "protocolVersion": "1", "spaceId": "space:native", "sessionId": "...", "targetRef": "..." },
+  "expectedRisk": "read",
+  "continuationRef": "continuation:..."
+}
+```
+
+Do not repeat `mode`, `maxNodes`, screenshot, event, or representation options on continuation calls. Pages are
+single-use, expire after five minutes, and preserve provider order. `inventory.offset`, `returned`, `nextOffset`,
+and `total` make omissions and duplicates observable. `pageSha256` covers the current page, `prefixSha256` covers
+the returned prefix, and `nodesSha256` covers the full captured inventory. On the final page,
+`inventory.complete` is true and `prefixSha256` equals `nodesSha256`.
+
+The same `receiptSha256`, `snapshotRef`, `documentEpoch`, `bindingSha256`, and `evidenceSha256` appear on every
+page. Screenshot, console, and network payloads are emitted only on the first page; the compact `evidence`
+descriptor binds their digests to every later page. Starting another observation invalidates the older
+continuation. A replaced document returns `AUTOMATION_OBSERVATION_CONTINUATION_STALE`, and an expired or consumed
+reference never resumes from a guessed offset. The complete inventory is capped at 10,000 nodes and 16 MiB;
+larger captures fail explicitly with `AUTOMATION_OBSERVATION_INVENTORY_TOO_LARGE`.
+
 ```json
 {
   "sessionRef": { "protocolVersion": "1", "spaceId": "space:native", "sessionId": "...", "targetRef": "..." },
@@ -335,9 +362,10 @@ effect command.
 
 `browserObserve` uses `mode: "all"` by default for compatibility. Use `mode: "interactive"` on large product
 pages when the next step is an action. This mode scans the full accessibility tree, selects controls,
-landmarks, live regions, and live-region text, and only then applies `maxNodes`. The result reports `mode`,
+landmarks, live regions, and live-region text, and only then applies the per-page `maxNodes`. The result reports `mode`,
 `eligibleNodes`, `candidateNodes`, and `truncated`, so a caller can distinguish page size from the focused
-result size. It keeps opaque `locatorRef` values for immediate actions. A later observation replaces the
+result size. `truncated` remains a compatibility statement about one page; use `inventory.complete` for full
+traversal state. It keeps opaque `locatorRef` values for immediate actions. A later observation replaces the
 session's locator set, so finish actions derived from one snapshot before observing again.
 
 `fill` uses the native value setter for `input` and `textarea`. For contenteditable editors it focuses and

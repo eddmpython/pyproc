@@ -48,6 +48,11 @@ const bootstrapFinalHtml = `<!doctype html><html><body><button id="continue">Con
     document.querySelector("output").textContent = response.ok ? "done" : "failed";
   });
 </script></body></html>`;
+const semanticInventoryHtml = `<!doctype html><html><body><h1>Semantic inventory</h1><section id="inventory"></section>
+  <output>ready:1001</output><script>{const fragment=document.createDocumentFragment();
+  for(let index=0;index<1001;index+=1){const button=document.createElement('button');button.type='button';
+    button.textContent='inventory-'+String(index).padStart(4,'0');fragment.append(button)}
+  document.querySelector('#inventory').append(fragment);console.info('semantic-inventory-ready',1001)}</script></body></html>`;
 
 let committedEffects = 0;
 let bootstrapEffects = 0;
@@ -66,7 +71,8 @@ const targetServer = createServer((req, res) => {
   }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(req.url === "/bootstrap-initial" ? bootstrapInitialHtml
-    : req.url === "/bootstrap-final" ? bootstrapFinalHtml : targetHtml);
+    : req.url === "/bootstrap-final" ? bootstrapFinalHtml
+      : req.url?.startsWith("/semantic-inventory") ? semanticInventoryHtml : targetHtml);
 });
 await new Promise((resolve) => targetServer.listen(0, "127.0.0.1", resolve));
 const targetOrigin = `http://127.0.0.1:${targetServer.address().port}`;
@@ -114,7 +120,8 @@ const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", ins
   "--artifact-ttl-ms", String(ARTIFACT_TTL_MS),
   "--execution-memory-root", memoryRoot,
   "--enable-effect-transactions", "--effect-approval-authority", `operator:mcp-product=${approvalKeyFile}`,
-  ...["snapshot", "screenshot", "waitFor", "hydrateLazy", "fill", "click"].flatMap((action) => ["--action", action]),
+  ...["snapshot", "screenshot", "waitFor", "hydrateLazy", "fill", "click", "navigate"]
+    .flatMap((action) => ["--action", action]),
   ...(browser ? ["--browser", browser] : []),
 ];
 const initializedProfile = JSON.parse(run(cli, initArgs, { cwd: installed.appDir }).stdout);
@@ -250,6 +257,55 @@ try {
       && opened.startup?.console?.some((event) => event.args?.includes("installed-startup"))
       && !JSON.stringify(opened.startup).includes("must-redact"));
   const sessionRef = toolText(await callTool("browserAttach", { targetRef: opened.targetRef }));
+  const inventoryOpened = toolText(await callTool("browserOpen", {
+    url: `${targetOrigin}/semantic-inventory`, expectedRisk: "externalEffect", waitUntil: "load",
+  }));
+  const inventorySession = toolText(await callTool("browserAttach", { targetRef: inventoryOpened.targetRef }));
+  const inventoryPages = [];
+  const inventoryResponses = [];
+  let inventoryResponse = await callTool("browserObserve", {
+    sessionRef: inventorySession, expectedRisk: "read", mode: "all", maxNodes: 400,
+    includeScreenshot: true, includeConsole: true,
+  });
+  let inventoryPage = toolText(inventoryResponse);
+  inventoryResponses.push(inventoryResponse);
+  inventoryPages.push(inventoryPage.result);
+  while (inventoryPage.result.continuationRef) {
+    inventoryResponse = await callTool("browserObserve", { sessionRef: inventorySession, expectedRisk: "read",
+      continuationRef: inventoryPage.result.continuationRef });
+    inventoryPage = toolText(inventoryResponse);
+    inventoryResponses.push(inventoryResponse);
+    inventoryPages.push(inventoryPage.result);
+  }
+  const inventoryNodes = inventoryPages.flatMap((page) => page.nodes);
+  const inventoryNames = inventoryNodes.filter((node) => node.role === "button"
+    && typeof node.name === "string" && node.name.startsWith("inventory-")).map((node) => node.name);
+  const inventoryFirst = inventoryPages[0];
+  const inventoryLast = inventoryPages.at(-1);
+  check("설치 MCP가 같은 snapshot의 대형 의미 inventory와 화면 증거를 누락 없이 순회",
+    inventoryPages.length >= 3 && inventoryNames.length === 1001 && new Set(inventoryNames).size === 1001
+      && inventoryNodes.length === inventoryLast.inventory.total
+      && inventoryLast.inventory.complete === true
+      && inventoryLast.inventory.prefixSha256 === inventoryLast.inventory.nodesSha256
+      && inventoryPages.every((page) => page.inventory.receiptSha256 === inventoryFirst.inventory.receiptSha256)
+      && inventoryResponses[0].result.content.some((entry) => entry.type === "image")
+      && typeof inventoryLast.inventory.evidence.console?.sha256 === "string"
+      && inventoryFirst.screenshot.sha256 === inventoryLast.inventory.evidence.screenshot.sha256,
+  `${inventoryPages.length} pages, ${inventoryNames.length}/${inventoryNodes.length}`);
+  const inventoryStaleFirst = toolText(await callTool("browserObserve", {
+    sessionRef: inventorySession, expectedRisk: "read", mode: "all", maxNodes: 500,
+  }));
+  await callTool("browserAct", { sessionRef: inventorySession, actions: [{ kind: "navigate",
+    url: `${targetOrigin}/semantic-inventory?epoch=2`, expectedRisk: "externalEffect" }] });
+  const inventoryStale = await callTool("browserObserve", { sessionRef: inventorySession, expectedRisk: "read",
+    continuationRef: inventoryStaleFirst.result.continuationRef });
+  check("설치 MCP가 document epoch 교체 뒤 partial inventory를 stale로 거부",
+    inventoryStale.result?.isError === true
+      && toolText(inventoryStale).code === "AUTOMATION_OBSERVATION_CONTINUATION_STALE"
+      && toolText(inventoryStale).outcome === "notSent");
+  await callTool("browserArtifactDelete", { artifactRef: inventoryFirst.screenshot.artifactRef });
+  await callTool("browserDetach", { sessionRef: inventorySession });
+  await callTool("browserClose", { targetRef: inventoryOpened.targetRef, expectedRisk: "externalEffect" });
   const apxResponse = await callTool("browserObserve", {
     sessionRef,
     expectedRisk: "read",

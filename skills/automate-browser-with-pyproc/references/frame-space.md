@@ -97,6 +97,12 @@ removes native identifiers, redacts sensitive values and URL query data, and com
 If the target-side entity ceiling truncates capture, that omitted count enters the public APX budget and every
 affected completeness channel reports `partial`.
 
+Legacy semantic observation uses the same `pyproc.semanticInventory` version 1 continuation and digest contract
+as NativeCdpSpace. The cooperative target captures at most 10,000 candidates, while public pages remain at most
+1,000 nodes. The host freezes the first capture, so later pages do not reread mutable DOM. A navigation changes
+the target epoch and makes the old continuation fail with `AUTOMATION_OBSERVATION_CONTINUATION_STALE`. Detach,
+target close, timeout, and product close discard retained inventory state.
+
 FrameSpace declares APX conformance level L3 with core, web, and situation profiles. It can issue authorized
 affordances from its configured action allowlist and rejects stale `actionContext` before bridge dispatch. It
 does not claim L4 Action Evidence

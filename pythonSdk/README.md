@@ -29,6 +29,9 @@ with PyProcClient.start("pyproc-mcp.json") as client:
 An automation-enabled manifest also exposes PyProc Eyes through `client.perception(sessionRef)`: bounded APX
 graph queries, goal-specific `situate(...)`, broker-bound `actAffordance(...)`, and evidence-backed actions,
 without a JavaScript application layer or a raw CDP handle.
+Legacy `client.observe(...)` results also support single-use, document-epoch-bound `continuationRef` values for
+complete semantic inventories larger than one 1,000-node page. Continue with no repeated first-page options and
+accept completeness only when the final `inventory.complete` and full digest agree.
 
 Repository experience verification uses `auditExperience`, `verifyExperience`, and `replayEvidencePack` over the
 same Control Protocol. The repository

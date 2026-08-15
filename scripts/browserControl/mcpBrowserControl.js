@@ -17,7 +17,8 @@ import {
   BROWSER_CONTROL_RISKS,
 } from "./browserControlPolicy.js";
 import { BrowserControlError, BROWSER_CONTROL_ERROR_CODES } from "./browserControlPort.js";
-import { BROWSER_OBSERVATION_MAX_EVENTS } from "./browserObservationCatalog.js";
+import { BROWSER_OBSERVATION_CONTINUATION_PATTERN,
+  BROWSER_OBSERVATION_MAX_EVENTS } from "./browserObservationCatalog.js";
 import {
   BrowserArtifactStore,
   BROWSER_ARTIFACT_DEFAULT_INLINE_BYTES,
@@ -258,13 +259,15 @@ export function createBrowserControlTools(config) {
   if (config.actions.includes("snapshot")) {
     tools.push({
       name: "browserObserve",
-      description: "Capture a legacy accessibility snapshot, an APX graph, or a goal-specific APX SituationCapsule.",
+      description: "Capture or continue a bounded legacy semantic inventory, an APX graph, or a goal-specific APX SituationCapsule. Continue a legacy page with only sessionRef, expectedRisk, and continuationRef until inventory.complete is true.",
       inputSchema: {
         type: "object",
         properties: {
           sessionRef: BROWSER_SESSION_SCHEMA,
           expectedRisk: { type: "string", const: "read" },
           maxNodes: { type: "integer", minimum: 1, maximum: BROWSER_AUTOMATION_MAX_NODES },
+          continuationRef: { type: "string", pattern: BROWSER_OBSERVATION_CONTINUATION_PATTERN,
+            minLength: 14, maxLength: 173 },
           mode: { type: "string", enum: ["all", "interactive"] },
           includeScreenshot: { type: "boolean" },
           includeConsole: { type: "boolean" },
@@ -396,7 +399,11 @@ export class McpBrowserControl {
       this._audit({ kind: "open", risk: "externalEffect", state: "applied" });
       return target;
     }
-    if (tool === "browserClose") return broker.closeTarget(args.targetRef);
+    if (tool === "browserClose") {
+      const output = await broker.closeTarget(args.targetRef);
+      automation.dropTarget(args.targetRef);
+      return output;
+    }
     if (tool === "browserAttach") return broker.attach(args.targetRef);
     if (tool === "browserCommand") {
       return broker.command(args.sessionRef, {
@@ -410,6 +417,7 @@ export class McpBrowserControl {
         .filter((key) => args[key] !== undefined).map((key) => [key, args[key]]));
       return automation.observe(args.sessionRef, {
         ...(args.maxNodes === undefined ? {} : { maxNodes: args.maxNodes }),
+        ...(args.continuationRef === undefined ? {} : { continuationRef: args.continuationRef }),
         ...(args.mode === undefined ? {} : { mode: args.mode }),
         ...(args.includeScreenshot === undefined ? {} : { includeScreenshot: args.includeScreenshot }),
         ...(args.includeConsole === undefined ? {} : { includeConsole: args.includeConsole }),

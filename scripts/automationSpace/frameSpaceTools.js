@@ -2,6 +2,7 @@
 import { FRAME_SPACE_ACTION_RISKS } from "./frameSpace.js";
 import { APX_OBSERVE_PROPERTIES } from "../perception/apxCatalog.js";
 import { APX_ACTION_CONTEXT_SCHEMA } from "../perception/situationCatalog.js";
+import { BROWSER_OBSERVATION_CONTINUATION_PATTERN } from "../browserControl/browserObservationCatalog.js";
 
 const TARGET_PROPERTIES = Object.freeze({
   selector: { type: "string", minLength: 1, maxLength: 2000 },
@@ -42,6 +43,8 @@ function actionSchema(name) {
   if (name === "snapshot") Object.assign(properties, {
     maxNodes: { type: "integer", minimum: 1, maximum: 1000 },
     mode: { type: "string", enum: ["all", "interactive"] },
+    continuationRef: { type: "string", pattern: BROWSER_OBSERVATION_CONTINUATION_PATTERN,
+      minLength: 14, maxLength: 173 },
   });
   if (name === "screenshot") properties.inline = { type: "boolean" };
   if (name === "waitFor") properties.state = { type: "string",
@@ -95,11 +98,13 @@ export function createFrameSpaceTools(config) {
         required: ["sessionRef"], additionalProperties: false } },
   ];
   if (config.actions.includes("snapshot")) tools.push({
-    name: "browserObserve", description: "Capture a legacy semantic snapshot or an opt-in bounded APX graph from a cooperative target.",
+    name: "browserObserve", description: "Capture or continue a bounded legacy semantic inventory, or capture an opt-in bounded APX graph from a cooperative target. Continue with only sessionRef, expectedRisk, and continuationRef.",
     inputSchema: { type: "object", properties: {
       sessionRef: FRAME_SESSION_SCHEMA,
       expectedRisk: { type: "string", const: "read" },
       maxNodes: { type: "integer", minimum: 1, maximum: 1000 },
+      continuationRef: { type: "string", pattern: BROWSER_OBSERVATION_CONTINUATION_PATTERN,
+        minLength: 14, maxLength: 173 },
       mode: { type: "string", enum: ["all", "interactive"] },
       includeScreenshot: { type: "boolean" },
       ...APX_OBSERVE_PROPERTIES,

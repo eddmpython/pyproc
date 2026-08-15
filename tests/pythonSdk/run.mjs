@@ -91,7 +91,11 @@ const targetServer = createServer((req, res) => {
     return;
   }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  const inventory = req.url?.startsWith("/frame-inventory")
+    ? Array.from({ length: 1001 }, (_, index) => `<button>inventory-${String(index).padStart(4, "0")}</button>`).join("")
+    : "";
   res.end(`<!doctype html><html><body><h1>python-sdk-ready</h1>
+    <section id="inventory">${inventory}</section>
     <button id="commit">Commit</button><output id="committed" role="status">not committed</output>
     <script>document.getElementById("commit").addEventListener("click", async () => {
       const response = await fetch("/effect", { method: "POST" });
@@ -220,11 +224,12 @@ try {
     committedEffects,
   }));
   const frameJourney = await runAsync(wheelPython, [join(HERE, "frameJourney.py"), frameConfigPath,
-    `${targetOrigin}/frame`], { cwd: installed.appDir,
+    `${targetOrigin}/frame`, `${targetOrigin}/frame-inventory`], { cwd: installed.appDir,
     env: { ...process.env, PATH: `${productPath}${delimiter}${process.env.PATH || ""}` } });
   const frameReport = JSON.parse(frameJourney.stdout.trim().split(/\r?\n/).at(-1));
   check("wheel 설치본이 FrameSpace Python, 격리, screenshot 여정을 완주",
     frameReport.ok === true && frameReport.operations === 17 && frameReport.attachmentBytes > 0
+      && frameReport.inventoryNodes === 1001 && frameReport.inventoryDigestVerified === true
       && frameReport.perceptionEntityRef?.startsWith("entity:")
       && frameReport.situationRef?.startsWith("situation:"),
     `${frameReport.attachmentBytes} bytes`);

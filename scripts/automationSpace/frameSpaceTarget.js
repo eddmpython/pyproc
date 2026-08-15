@@ -3,6 +3,7 @@
   "use strict";
   const PROTOCOL = "pyproc-frame";
   const VERSION = 1;
+  const MAX_SEMANTIC_NODES = 10000;
   const targetEpoch = crypto.randomUUID();
   const locatorByRef = new Map();
   const nativeRefByElement = new WeakMap();
@@ -292,16 +293,22 @@
   }
 
   function snapshot({ maxNodes = 200, mode = "interactive" } = {}) {
-    const selector = mode === "all"
-      ? "body *"
-      : "button,input,select,textarea,a[href],output,[role],[tabindex]";
-    const limit = Math.max(1, Math.min(1000, Number(maxNodes) || 200));
+    const eligible = [...document.querySelectorAll("body *")];
+    const candidates = mode === "all" ? eligible
+      : [...document.querySelectorAll("button,input,select,textarea,a[href],output,[role],[tabindex]")];
+    const limit = Math.max(1, Math.min(MAX_SEMANTIC_NODES, Number(maxNodes) || 200));
+    locatorByRef.clear();
+    const nodes = candidates.slice(0, limit).map(elementSummary);
     return Object.freeze({
       url: location.href,
       title: document.title,
       targetEpoch,
       parentAccessible: parentAccessible(),
-      nodes: Object.freeze([...document.querySelectorAll(selector)].slice(0, limit).map(elementSummary)),
+      mode,
+      nodes: Object.freeze(nodes),
+      eligibleNodes: eligible.length,
+      candidateNodes: candidates.length,
+      truncated: candidates.length > nodes.length,
     });
   }
 
@@ -418,6 +425,7 @@
       return appTarget.dispatch(operation.slice(4), input);
     }
     if (operation === "observe") return snapshot(input);
+    if (operation === "observe.epoch") return Object.freeze({ targetEpoch, url: location.href, title: document.title });
     if (operation === "perception.capture") return perceptionSnapshot(input);
     if (operation === "action.snapshot") return snapshot(input);
     if (operation === "action.screenshot") return screenshot();

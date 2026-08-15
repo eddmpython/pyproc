@@ -50,6 +50,16 @@ function targetServer(label) {
       </script>`);
       return;
     }
+    if (req.url?.startsWith("/semantic-inventory")) {
+      res.writeHead(200, { ...headers, "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>frame inventory</title></head>
+        <body><h1>Frame semantic inventory</h1><section id="inventory"></section><output>ready:1001</output>
+        <script>{const fragment=document.createDocumentFragment();for(let index=0;index<1001;index+=1){
+          const button=document.createElement('button');button.type='button';button.textContent='inventory-'+String(index).padStart(4,'0');
+          fragment.append(button)}document.querySelector('#inventory').append(fragment)}</script>
+        <script src="/frameSpaceTarget.js"></script></body></html>`);
+      return;
+    }
     res.writeHead(200, { ...headers, "Content-Type": "text/html; charset=utf-8" });
     res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${label}</title></head>
       <body><h1>${label}</h1><label>Name <input id="name" value="before"></label>
@@ -159,6 +169,56 @@ try {
       && opened.output.cookieAccessible === false && opened.output.credentialless === true
       && first.output.parentAccessible === false && first.output.nodes.some((node) => node.id === "name"));
 
+  const inventoryOpened = await client.request("automation.target.open", {
+    url: `${originA}/semantic-inventory`, expectedRisk: "externalEffect", waitUntil: "load",
+  });
+  const inventorySession = await client.request("automation.session.attach", {
+    targetRef: inventoryOpened.output.targetRef,
+  });
+  const inventoryPages = [];
+  let inventoryPage = await client.request("automation.observe", {
+    sessionRef: inventorySession.output, expectedRisk: "read", mode: "all", maxNodes: 400,
+  });
+  inventoryPages.push(inventoryPage.output);
+  while (inventoryPage.output.continuationRef) {
+    inventoryPage = await client.request("automation.observe", {
+      sessionRef: inventorySession.output, expectedRisk: "read",
+      continuationRef: inventoryPage.output.continuationRef,
+    });
+    inventoryPages.push(inventoryPage.output);
+  }
+  const inventoryNodes = inventoryPages.flatMap((page) => page.nodes);
+  const inventoryNames = inventoryNodes.map((node) => node.text).filter((text) => /^inventory-[0-9]{4}$/u.test(text));
+  check("FrameSpace가 같은 epoch의 1,001개 의미 node를 누락 없이 순회",
+    inventoryPages.length >= 3 && inventoryNames.length === 1001 && new Set(inventoryNames).size === 1001
+      && inventoryNodes.length === inventoryPages.at(-1).inventory.total
+      && inventoryPages.at(-1).inventory.complete === true
+      && inventoryPages.at(-1).inventory.prefixSha256 === inventoryPages.at(-1).inventory.nodesSha256
+      && inventoryPages.every((page) => page.inventory.receiptSha256
+        === inventoryPages[0].inventory.receiptSha256),
+  `${inventoryPages.length} pages, ${inventoryNames.length}/${inventoryNodes.length}`);
+  const frameStaleFirst = await client.request("automation.observe", {
+    sessionRef: inventorySession.output, expectedRisk: "read", mode: "all", maxNodes: 500,
+  });
+  await client.request("automation.act", { sessionRef: inventorySession.output, actions: [{
+    kind: "navigate", url: `${originA}/semantic-inventory?epoch=2`, expectedRisk: "externalEffect",
+  }] });
+  let frameStale = null;
+  try {
+    await client.request("automation.observe", { sessionRef: inventorySession.output, expectedRisk: "read",
+      continuationRef: frameStaleFirst.output.continuationRef });
+  } catch (error) { frameStale = error; }
+  const afterFrameStale = await client.request("automation.space.inspect", {});
+  check("FrameSpace가 document epoch 교체 뒤 continuation과 partial complete를 거부",
+    frameStale instanceof ControlRemoteError
+      && frameStale.code === "AUTOMATION_OBSERVATION_CONTINUATION_STALE"
+      && frameStale.outcome === "notSent" && frameStale.retryable === false
+      && afterFrameStale.output.semanticInventory.active === 0);
+  await client.request("automation.session.detach", { sessionRef: inventorySession.output });
+  await client.request("automation.target.close", {
+    targetRef: inventoryOpened.output.targetRef, expectedRisk: "externalEffect",
+  });
+
   const firstApx = await client.request("automation.observe", {
     sessionRef: attached.output,
     expectedRisk: "read",
@@ -224,7 +284,7 @@ try {
     sessionRef: attached.output,
     actions: [
       { kind: "fill", selector: "#name", value: "frame-ready", expectedRisk: "externalEffect" },
-      { kind: "click", locatorRef: applyEntity.locatorRef, expectedRisk: "externalEffect" },
+      { kind: "click", selector: "#apply", expectedRisk: "externalEffect" },
       { kind: "waitFor", selector: "#result", state: "visible", expectedRisk: "read" },
     ],
   });

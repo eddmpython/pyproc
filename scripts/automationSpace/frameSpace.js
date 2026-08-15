@@ -41,7 +41,7 @@ const FRAME_OPERATIONS = Object.freeze([
 ]);
 const TARGET_ACTIONS = new Set(["waitFor", "click", "focus", "fill", "press", "select", "check", "uncheck", "scroll"]);
 const ARTIFACT_REF = /^artifact:[A-Za-z0-9_-]+$/;
-const LEGACY_OBSERVE_KEYS = Object.freeze(["maxNodes", "mode", "includeScreenshot"]);
+const LEGACY_OBSERVE_KEYS = Object.freeze(["maxNodes", "mode", "includeScreenshot", "continuationRef"]);
 
 function frameError(code, message, outcome = "notSent") {
   const error = new Error(message);
@@ -136,6 +136,15 @@ export class FrameSpace {
       } else if (apxKeys.length) {
         throw frameError("FRAME_SPACE_ACTION_INVALID", `legacy observe does not accept ${apxKeys[0]}`);
       }
+      if (input.continuationRef !== undefined) {
+        if (typeof input.continuationRef !== "string" || !/^continuation:[A-Za-z0-9_-]+$/u.test(input.continuationRef)) {
+          throw frameError("FRAME_SPACE_ACTION_INVALID", "observe continuationRef is invalid");
+        }
+        const incompatible = ["maxNodes", "mode", "includeScreenshot", "representation"]
+          .find((key) => input[key] !== undefined);
+        if (incompatible) throw frameError("FRAME_SPACE_ACTION_INVALID",
+          `observe continuation does not accept ${incompatible}`);
+      }
     }
     if (operation === "automation.act") this._assertActions(input.actions);
     if ((operation === "artifact.read" || operation === "artifact.delete") && !ARTIFACT_REF.test(String(input.artifactRef || ""))) {
@@ -208,6 +217,15 @@ export class FrameSpace {
         throw frameError("FRAME_SPACE_PERMISSION_DENIED", `FrameSpace action risk mismatch: ${action.kind}`);
       }
       if (action.kind === "navigate") this._assertAllowedUrl(action.url);
+      if (action.kind === "snapshot" && action.continuationRef !== undefined) {
+        if (typeof action.continuationRef !== "string"
+          || !/^continuation:[A-Za-z0-9_-]+$/u.test(action.continuationRef)) {
+          throw frameError("FRAME_SPACE_ACTION_INVALID", "snapshot continuationRef is invalid");
+        }
+        const incompatible = ["maxNodes", "mode"].find((key) => action[key] !== undefined);
+        if (incompatible) throw frameError("FRAME_SPACE_ACTION_INVALID",
+          `snapshot continuation does not accept ${incompatible}`);
+      }
       if (TARGET_ACTIONS.has(action.kind)) {
         const targetCount = Number(typeof action.selector === "string" && !!action.selector)
           + Number(typeof action.locatorRef === "string" && !!action.locatorRef);

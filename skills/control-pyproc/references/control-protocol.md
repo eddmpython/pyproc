@@ -102,7 +102,7 @@ browser-disabled installed profile. When the manifest enables browser authority,
 | `automation.target.list` | List allowed targets |
 | `automation.target.open` | Open an allowed URL |
 | `automation.session.attach` | Create an opaque controlled session |
-| `automation.observe` | Return a legacy semantic observation, APX graph, or goal-specific SituationCapsule |
+| `automation.observe` | Return or continue a bounded legacy semantic inventory, APX graph, or goal-specific SituationCapsule |
 | `automation.act` | Run an ordered high-level action pipeline |
 | `automation.command` | Send one separately allowlisted low-level command |
 | `automation.session.detach` | Drop session-owned state and detach |
@@ -112,6 +112,12 @@ browser-disabled installed profile. When the manifest enables browser authority,
 The operation names, error outcomes, permission checks, action catalog, and artifacts are owned by the shared
 host. The MCP adapter only maps tool names and native image content. This prevents the native and MCP paths
 from assigning different meaning to the same action.
+
+For a legacy semantic result, call `automation.observe` again with only `sessionRef`, `expectedRisk: "read"`,
+and the returned `continuationRef` until `inventory.complete` is true. Each token is single-use and bound to the
+original provider, session, snapshot, document epoch, ordering, full digest, and evidence receipt. A caller must
+not infer completeness from `truncated` or from a short final page. Document replacement is the canonical
+`AUTOMATION_OBSERVATION_CONTINUATION_STALE` error with `notSent` and no partial-success terminal.
 
 When `executionMemory.enabled` is true, nine additional operations appear:
 

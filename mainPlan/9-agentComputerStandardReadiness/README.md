@@ -1,6 +1,6 @@
 # Initiative 9: agent computer와 웹 표준 후보 준비도
 
-상태: **진행 중, M0과 M1 완료, M2 다음 작업**
+상태: **진행 중, M0과 M1 완료, M2 진행 중**
 
 이 문서는 agent가 pyproc에 들어와 보고, 행동하고, 계산하고, 세션을 넘겨 계속 일하는 전 과정을
 제품 기준으로 끌어올리는 실행 원장이다. 기존 능력 점수와 증거의 정본은
@@ -95,8 +95,12 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 ### M2. Eyes와 Arms 장기 수명주기
 
-판정: **다음 작업**
+판정: **진행 중**
 
+- 완료: legacy 의미 관찰을 같은 document epoch에 고정된 1,000개 이하 page로 순회한다. single-use
+  continuation, 5분 TTL, 10,000 node와 16 MiB 전체 상한, page와 prefix 및 전체 digest, screenshot과 event
+  evidence binding을 NativeCdpSpace와 FrameSpace, Control, MCP, JavaScript와 Python SDK에 같은 의미로 둔다.
+  문서 교체는 `AUTOMATION_OBSERVATION_CONTINUATION_STALE`로 일부 결과를 complete로 승격하지 않는다.
 - 반복 Situation, screenshot, proof-carrying action, artifact cleanup에서 handle과 process 잔류 0을 증명한다.
 - stale, ambiguous, occluded, navigation 교체를 wrong effect 없이 자동 수렴시키는 상한을 고정한다.
 - hardware GPU runner에서 pixel 결과 oracle을 추가해 수동 증거 상한을 제거한다.
@@ -127,3 +131,143 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 3. 실사용에서 새 간극을 찾으면 같은 단계의 첫 불일치와 재현으로 기록한다.
 4. 단계 완료 시 구현 결과는 정식 tests와 지속 문서로 옮기고 이 원장에는 다음 미완료 단계만 남긴다.
 5. M0부터 M5까지 자력 종료 조건을 모두 만족하면 이 폴더를 물리 삭제하고 `npm test`를 다시 통과한다.
+
+## 5. 소비 관찰: 대형 의미 트리의 완전 검수 경로
+
+### 접수 판정
+
+- 관찰한 호출 제품과 목적: 합성 데이터만 쓰는 세무 대시보드에서 데스크톱 전체 화면의 접근성 의미와
+  스크린샷을 함께 검수했다.
+- pyproc 소유라고 판정한 근거: 공개 `automation.observe`의 `all` 모드는 `maxNodes`를 1,000까지만
+  허용하고 잘림을 정확히 보고하지만, 같은 문서 epoch를 완전하게 순회할 공개 continuation 또는
+  의미 영역 focus가 없다. 이 경계는 대형 관리 화면과 카탈로그 등 둘 이상의 소비 시나리오에 공통이다.
+- 검색한 중복 후보와 차이: `mainPlan`, `skills`, `tests/attempts`, 관련 Git 이력에서 source truncation의
+  안전 판정은 확인했으나, 전체 의미 트리를 무손실로 분할 순회하는 이니셔티브는 찾지 못했다. M2의
+  장기 Eyes와 Arms 수명주기에 포함한다.
+- 현재 직렬 대기열 위치: M1 완료 뒤 M2에서 다룬다. 선행 단계를 건너뛰어 구현하지 않는다.
+
+### 정확한 환경
+
+- 관찰 시각과 시간대: 2026-08-15, Asia/Seoul.
+- 소비 저장소 revision: `308d07173806e417eca02672a09f49d6c2900ed6`, 관련 working tree diff digest
+  `3833bb16d9f2ef25252083e7261ce329746b3273`.
+- 해석된 pyproc 버전, 패키지 무결성 또는 소스 SHA: `pyproc@0.0.20`,
+  `sha512-sd/jz2Q9yPjsMuM4gIwYjercCSsMFLdKuYF0vxc5ef5aLqGAtUC2g5reiXJ9cHNS1aBjLfoPnwKK9Eu5d7OfLg==`.
+- 운영체제, 브라우저 이름과 정확한 버전, 런타임 버전: Windows 11 Home 10.0.26200,
+  Microsoft Edge 151.0.4129.78, Node.js 22.19.0.
+- 사용한 공개 명령 또는 공개 API: `npm exec -- pyproc-control --config <synthetic-manifest>`와
+  `automation.observe`의 `mode: all`, `maxNodes: 1000`, screenshot 및 console 포함.
+- 권한 manifest와 관련 설정의 비밀 제거 요약: 새 임시 profile, 합성 loopback origin 하나, native CDP,
+  읽기와 명시된 합성 페이지 열기만 허용, raw method 없음, 종료 시 browser와 profile 제거.
+
+### 목적과 시작 상태
+
+- 사용자가 달성하려던 결과: 처음 보는 회사도 바로 이해할 수 있는 대시보드의 전체 의미, 콘솔 상태,
+  픽셀 결과를 한 검수 실행에서 증명한다.
+- 대상 URL 범위, viewport, 페이지 상태, 사전 조건: 합성 loopback URL, 1600 x 1000 viewport, 경영 답변과
+  지표 근거가 준비된 데스크톱 화면, 새 browser profile.
+- 읽기, 외부 효과, 비가역 작업의 승인 경계: 합성 페이지 open만 외부 효과로 사전 승인했다. 원격 요청,
+  자격증명, 사용자 데이터, 비가역 작업은 없었다.
+
+### 실행 기록
+
+| 순서 | 목적 | 실행한 공개 명령 또는 API | 입력 경계 | 관찰 결과 | 증거 |
+|---|---|---|---|---|---|
+| 1 | 설치본 확인 | `pyproc-control --version` | 로컬 exact install | `0.0.20` | 명령 stdout |
+| 2 | 전체 의미와 화면 동시 관찰 | `automation.observe` | `all`, 1,000 nodes, 합성 화면 | 1,071 후보 중 1,000 반환, `truncated: true` | 비식별 오류 요약 |
+| 3 | 상호작용 의미로 축소 | `automation.observe` | `interactive`, 같은 화면 | 149개 전부 반환, screenshot과 console 정상 | 소비 검수 receipt digest |
+
+### 첫 불일치
+
+- 처음 기대와 달라진 단계: 전체 의미 관찰 단계.
+- 기대 결과: 페이지의 전체 접근성 의미와 같은 시점의 screenshot, console이 잘림 없이 반환된다.
+- 실제 결과: `candidateNodes: 1071`, 반환 1,000개, `truncated: true`로 종료됐다.
+- 반환 코드, 오류 계약, 완료된 효과의 범위: 관찰 호출 자체는 성공하고 명시적 잘림을 반환했다. 페이지 open
+  외 추가 효과는 없었으며, 소비 검수기는 불완전 증거를 성공으로 봉인하지 않고 중단했다.
+
+### 재현성
+
+- 최소 합성 재현 fixture 또는 절차: 접근 가능한 제목, 표, 카드, 정적 설명과 버튼을 합쳐 1,001개 이상의
+  의미 후보를 만든 loopback 문서를 새 profile로 열고 `mode: all`, `maxNodes: 1000`으로 관찰한다.
+- 반복 횟수와 성공, 실패 횟수: 해당 대시보드 상태에서 1회 실행, 1회 동일 경계 재현. 별도 대형 카탈로그도
+  같은 상한을 만났으나 제품이 선택 상세 렌더링으로 정리한 뒤 328개로 줄었다.
+- 브라우저 재시작, 새 profile, viewport 등 바꿔 본 조건: 매 실행마다 새 profile을 썼다. 같은 제품의
+  390 x 844 축약 화면은 551개로 잘리지 않았다.
+- 재현하지 못한 조건과 남은 불확실성: Firefox와 Safari는 지원 범위 밖이라 확인하지 않았다. APX graph의
+  byte budget과 legacy semantic node 상한의 최적 통합 계약은 아직 정하지 않았다.
+
+### 증거
+
+- 비식별화한 로그 또는 artifact 경로와 digest: 소비 작업의 성공 screenshot receipt 중 데스크톱 첫 화면
+  digest는 `sha256:bb86ec33c961ca40c33de35b970bf33ce68118ab6fac414602110f3b7a5d2631`이다. 원본 artifact와
+  로컬 경로는 반입하지 않았다.
+- 스크린샷의 대상 상태, viewport, 촬영 단계와 digest: 합성 경영 대시보드, 1600 x 1000, 준비 완료 뒤 첫
+  viewport. 위 digest는 픽셀 결과를 입증하지만 1,071개 전체 의미 반환을 입증하지 않는다.
+- DOM, 네트워크, console, 실행 receipt 가운데 판정에 사용한 것: semantic `candidateNodes`, 반환 수,
+  `truncated`, console error 0, screenshot digest, cleanup receipt를 사용했다.
+- 증거가 입증하는 범위와 입증하지 못하는 범위: 공개 상한에서 완전 관찰이 불가능하고 잘림은 정확히
+  드러난다는 점을 입증한다. omitted node의 내용과 continuation 설계의 성능은 입증하지 않는다.
+
+### 시도한 대응
+
+- 시도한 진단과 변경: 제품 카탈로그는 모든 레시피 상세를 동시에 렌더링하지 않도록 정보 구조를 고쳤다.
+  대시보드는 `interactive` 관찰과 별도 전체 screenshot을 사용하고 모바일 축약 화면은 `all`로 유지했다.
+- 각 시도의 결과: 카탈로그 전체 의미는 328개로 줄어 완전 관찰됐다. 데스크톱 대시보드 상호작용 의미는
+  149개로 완전 관찰됐지만 정적 설명 전체의 의미 증거는 빠진다.
+- 소비 저장소 우회가 근본 해결이 아닌 이유: UI를 상한에 맞춰 임의 축소하면 제품 정보 구조가 도구 예산에
+  종속된다. `interactive` 모드는 픽셀과 조작 가능성을 검수하지만 정적 의미 전체를 증명하지 못한다.
+
+### 영향과 안전 경계
+
+- 영향을 받는 제품 흐름과 빈도: 데이터가 많은 대시보드, 관리면, 카탈로그의 전체 화면 접근성 검수마다
+  발생할 수 있다.
+- 심각도와 사용자가 보게 되는 실패: 제품 런타임은 정상이나 검수 자동화가 불완전 증거를 거부해 출시
+  증거 생성이 중단된다.
+- 데이터, 권한, 외부 효과, 재시도 위험: 읽기 관찰 경계라 데이터 변형은 없다. continuation이 생겨도 같은
+  document epoch, 같은 권한, zero effect를 강제해야 한다.
+- 기존 호환성 또는 공개 표면에 미치는 영향: 현재 명시적 truncation은 유지해야 한다. 기존 결과 형태를
+  깨지 않는 선택형 continuation 또는 focused observation 계약이 필요하다.
+
+### 제안하는 pyproc 계약
+
+- pyproc이 소유해야 할 동작: 동일 document epoch에서 전체 의미 후보를 안정적으로 분할 순회하고, 각
+  조각과 최종 receipt가 중복, 누락, epoch 교체 여부를 검증할 수 있어야 한다. 대안으로 접근성 landmark나
+  broker가 발행한 semantic root를 focus로 받되 전체 coverage를 합성할 수 있어야 한다.
+- 공개 표면 변경 여부와 비목표: 공개 관찰 입력과 결과에 continuation 또는 focus 계약을 추가할 수 있다.
+  무제한 payload, raw DOM selector 권한, 잘림 은폐, 소비 UI 축소는 비목표다.
+- 가장 작은 수용 테스트와 음성 시험: 1,001개 합성 후보를 두 개 이상 page로 받아 합집합이 정확히
+  1,001개임을 검증한다. 중간에 document epoch가 바뀌면 continuation을 stale로 거부하고 일부 결과를
+  complete로 표시하지 않는 음성 시험을 둔다.
+- 브라우저 실측 시나리오: Edge 새 profile에서 대형 의미 fixture를 완전 순회하고, screenshot과 console은
+  지정된 한 관찰 시점 또는 명시된 시간 범위에 결합하며, 종료 뒤 process와 profile이 남지 않아야 한다.
+- 완료 조건, 지속 문서 승격 위치, 계획과 attempt 삭제 조건: public protocol, JavaScript와 Python SDK,
+  control 문서, browser product gate가 같은 계약을 통과한다. 음성 시험과 installed product 실측 뒤 관련
+  지속 문서로 승격하고 M2의 남은 항목까지 끝난 사이클에 이 계획과 대응 attempt를 삭제한다.
+
+### 다음 행동
+
+- 선행 조건: M1 Machine Entrance 계약 완료.
+- 첫 probe: 1,001개 합성 의미 후보에서 cursor 안정성, epoch 교체, screenshot 시간 결합을 실측한다.
+- 예상 수정 소유 영역: browser observation catalog와 provider, control protocol과 SDK, browser contract 및
+  installed product gate.
+
+### 해결 판정
+
+- 해결 시각과 제품: 2026-08-15 Asia/Seoul, packed `pyproc@0.0.22` source product, Edge headless.
+- 공개 계약: 첫 호출은 기존 `maxNodes` 상한을 page 크기로 유지하고 `continuationRef`와
+  `pyproc.semanticInventory` version 1 receipt를 추가한다. 후속 호출은 session, read risk, continuation만
+  받는다. `truncated`는 기존 한 page 의미를 유지하고 전체 완료는 `inventory.complete`만 말한다.
+- 무손실 증거: NativeCdpSpace는 접근성 node 2,009개를 6 page로 합쳐 합성 버튼 1,001개를 정확히 한 번씩
+  확인했다. 설치 MCP는 2,010개를 6 page로 합쳤고 첫 native screenshot digest와 마지막 evidence binding이
+  일치했다. FrameSpace는 node 1,006개를 3 page로 합쳐 합성 버튼 1,001개를 확인했다.
+- 독립 소비 증거: clean wheel Python SDK가 FrameSpace 전체 배열을 canonical sorted-key JSON으로 다시
+  직렬화하고 제품의 `nodesSha256`과 같은 SHA-256을 계산했다. Python SDK에는 target cleanup의 대칭 공개
+  메서드 `closeTarget()`도 추가했다.
+- 음성 증거: consumed token, TTL 만료, item 상한, 다른 document epoch를 모두 고유 오류로 거부한다.
+  navigation 뒤 continuation은 NativeCdpSpace와 FrameSpace 설치 제품 모두 stale, `notSent`, 비재시도로
+  종결되고 retained inventory state는 0이다.
+- 정식 게이트: contract 36 suites, FrameSpace 23개, JavaScript Control 26개, 설치 MCP 24개, Python wheel과
+  source distribution 5개가 GREEN이다. 전체 `npm test` 12개와 package gate 7개 파일도 GREEN이다.
+- 다음 직렬 작업: 반복 Situation, screenshot, proof-carrying action, artifact cleanup을 장시간 돌리고 매
+  iteration의 locator, continuation, watcher, artifact, target, process, profile 수가 기준선으로 돌아오는지
+  검증한다.

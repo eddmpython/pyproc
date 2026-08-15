@@ -413,6 +413,16 @@ export function validateBrowserAutomationAction(action) {
     validateInteger(action.maxNodes, "snapshot.maxNodes", 1, BROWSER_AUTOMATION_MAX_NODES);
   }
   if (action.kind === "snapshot") {
+    if (action.continuationRef !== undefined) {
+      requireString(action.continuationRef, "snapshot.continuationRef", { min: 14, max: 173 });
+      if (!/^continuation:[A-Za-z0-9_-]+$/u.test(action.continuationRef)) {
+        fail("snapshot.continuationRef is invalid");
+      }
+      const incompatible = ["mode", "maxNodes", "includeScreenshot", "includeConsole", "includeNetwork", "maxEvents",
+        "representation", "profile", "since", "query", "focus", "visual", "budget", "channels"]
+        .find((key) => action[key] !== undefined);
+      if (incompatible) fail(`snapshot continuation does not accept ${incompatible}`);
+    }
     if (action.mode !== undefined && !["all", "interactive"].includes(action.mode)) {
       fail("snapshot.mode must be all or interactive");
     }
@@ -423,7 +433,7 @@ export function validateBrowserAutomationAction(action) {
     const apxFields = ["profile", "since", "query", "focus", "visual", "budget", "channels"]
       .filter((key) => action[key] !== undefined);
     if ([APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(action.representation)) {
-      for (const key of ["mode", "maxNodes", "includeScreenshot", "includeConsole", "includeNetwork", "maxEvents"]) {
+      for (const key of ["mode", "maxNodes", "continuationRef", "includeScreenshot", "includeConsole", "includeNetwork", "maxEvents"]) {
         if (action[key] !== undefined) fail(`APX snapshot does not accept legacy option ${key}`);
       }
       validatePerceptionOptions(perceptionOptionsFromInput(action));

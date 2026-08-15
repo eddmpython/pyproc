@@ -10,6 +10,7 @@ import { binPath, installPackedPyProc, ROOT, run, runAsync } from "../packageHar
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const frameBridge = await readFile(join(ROOT, "scripts", "automationSpace", "frameSpaceTarget.js"));
+const semanticInventoryProbe = await readFile(join(ROOT, "tests", "browser", "semanticInventoryTarget.html"));
 let committedEffects = 0;
 const targetServer = createServer((req, res) => {
   if (req.url === "/evidence" && req.method === "POST") {
@@ -26,6 +27,11 @@ const targetServer = createServer((req, res) => {
   if (req.url === "/frameSpaceTarget.js") {
     res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
     res.end(frameBridge);
+    return;
+  }
+  if (req.url?.startsWith("/semantic-inventory")) {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(semanticInventoryProbe);
     return;
   }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -76,7 +82,7 @@ run(mcpCli, ["init", "--recipe", "authorizedBrowser", "--project-root", installe
   "--out", ".pyproc-control-product", "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
   "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
   "--purpose", "control-protocol-product-gate", "--acknowledge-effects",
-  "--action", "snapshot", "--action", "screenshot", "--action", "click",
+  "--action", "snapshot", "--action", "screenshot", "--action", "click", "--action", "navigate",
   "--artifact-max-bytes", String(8 * 1024 * 1024), "--artifact-total-bytes", String(16 * 1024 * 1024),
   "--artifact-max-count", "8", "--artifact-inline-bytes", String(4 * 1024 * 1024),
   "--artifact-ttl-ms", "120000", ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
@@ -254,6 +260,20 @@ try {
     observeDoctor.automation.actions.join(",") === "snapshot,screenshot,waitFor"
       && firstResult.operation === "machine.run" && firstMachine.output.value === "42"
       && observeHeading.name === "control-ready");
+  const inventoryOpened = await observeClient.openTarget(`${targetOrigin}/semantic-inventory`, {
+    expectedRisk: "externalEffect", waitUntil: "load",
+  });
+  const inventoryAttached = await observeClient.attachSession(inventoryOpened.output.targetRef);
+  const inventoryFirst = await observeClient.observe(inventoryAttached.output,
+    { expectedRisk: "read", mode: "all", maxNodes: 1000 });
+  check("설치 제품이 1,001개 합성 의미 후보에서 기존 단일 page 상한을 정확히 보고",
+    inventoryFirst.output.result.nodes.length === 1000
+      && inventoryFirst.output.result.candidateNodes > 1000
+      && inventoryFirst.output.result.truncated === true
+      && inventoryFirst.output.result.continuationRef?.startsWith("continuation:")
+      && inventoryFirst.output.result.inventory.complete === false,
+  `${inventoryFirst.output.result.nodes.length}/${inventoryFirst.output.result.candidateNodes}`);
+  await observeClient.detachSession(inventoryAttached.output);
   await observeClient.detachSession(observeAttached.output);
   await observeClient.close();
   observeClient = null;
@@ -293,6 +313,56 @@ try {
       && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception"
       && space.output.space?.restoreBoundary === "externalEffectsRemain"
       && space.output.space?.replayBoundary === "deterministicRecording");
+  const fullOpened = await client.openTarget(`${targetOrigin}/semantic-inventory`, {
+    expectedRisk: "externalEffect", waitUntil: "load",
+  });
+  const fullAttached = await client.attachSession(fullOpened.output.targetRef);
+  const fullPages = [];
+  let fullResult = await client.observe(fullAttached.output, {
+    expectedRisk: "read", mode: "all", maxNodes: 400, includeScreenshot: true, includeConsole: true,
+  });
+  fullPages.push(fullResult);
+  while (fullResult.output.result.continuationRef) {
+    fullResult = await client.observe(fullAttached.output, {
+      expectedRisk: "read", continuationRef: fullResult.output.result.continuationRef,
+    });
+    fullPages.push(fullResult);
+  }
+  const fullNodes = fullPages.flatMap((page) => page.output.result.nodes);
+  const syntheticNames = fullNodes.filter((node) => node.role === "button"
+    && typeof node.name === "string" && node.name.startsWith("inventory-")).map((node) => node.name);
+  const fullFirst = fullPages[0];
+  const fullLast = fullPages.at(-1);
+  check("설치 JavaScript SDK가 같은 snapshot의 대형 의미 inventory를 누락 없이 순회",
+    fullPages.length >= 3
+      && syntheticNames.length === 1001 && new Set(syntheticNames).size === 1001
+      && fullNodes.length === fullLast.output.result.inventory.total
+      && fullLast.output.result.inventory.complete === true
+      && fullLast.output.result.inventory.prefixSha256 === fullLast.output.result.inventory.nodesSha256
+      && fullPages.every((page) => page.output.result.inventory.receiptSha256
+        === fullFirst.output.result.inventory.receiptSha256)
+      && fullPages.every((page) => page.output.result.inventory.evidenceSha256
+        === fullFirst.output.result.inventory.evidenceSha256)
+      && typeof fullLast.output.result.inventory.evidence.console?.sha256 === "string"
+      && fullFirst.attachments[0]?.sha256
+        === fullLast.output.result.inventory.evidence.screenshot.sha256,
+  `${fullPages.length} pages, ${syntheticNames.length}/${fullNodes.length}`);
+  const staleFirst = await client.observe(fullAttached.output,
+    { expectedRisk: "read", mode: "all", maxNodes: 500 });
+  await client.act(fullAttached.output, [{ kind: "navigate",
+    url: `${targetOrigin}/semantic-inventory?epoch=2`, expectedRisk: "externalEffect" }]);
+  let staleContinuation = null;
+  try {
+    await client.observe(fullAttached.output,
+      { expectedRisk: "read", continuationRef: staleFirst.output.result.continuationRef });
+  } catch (error) { staleContinuation = error; }
+  check("설치 제품이 document epoch 교체 뒤 일부 inventory를 complete로 승격하지 않음",
+    staleContinuation instanceof ControlRemoteError
+      && staleContinuation.code === "AUTOMATION_OBSERVATION_CONTINUATION_STALE"
+      && staleContinuation.outcome === "notSent" && staleContinuation.retryable === false);
+  await client.deleteArtifact(fullFirst.output.result.screenshot.artifactRef);
+  await client.detachSession(fullAttached.output);
+  await client.closeTarget(fullOpened.output.targetRef, { expectedRisk: "externalEffect" });
   let wrongSpace = null;
   try {
     await client.inspectSpace({ spaceId: "space:wrong" });

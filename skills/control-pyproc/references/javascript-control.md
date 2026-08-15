@@ -161,6 +161,30 @@ checkpoints are process-local, while graph revisions and HEADs are durable. See 
 
 ## PyProc Eyes and evidence-backed action
 
+Legacy semantic pages can be collected without a raw browser handle:
+
+```js
+const pages = [];
+let observed = await client.observe(attached.output, {
+  expectedRisk: "read", mode: "all", maxNodes: 500,
+});
+for (;;) {
+  const page = "result" in observed.output ? observed.output.result : observed.output;
+  pages.push(page);
+  if (page.inventory.complete) break;
+  observed = await client.observe(attached.output, {
+    expectedRisk: "read", continuationRef: page.continuationRef,
+  });
+}
+const nodes = pages.flatMap((page) => page.nodes);
+if (nodes.length !== pages.at(-1).inventory.total) throw new Error("semantic inventory is incomplete");
+```
+
+The final page's `nodesSha256` is the canonical sorted-key JSON digest of the complete node array. Every page
+must have the same `receiptSha256`; a changed document rejects the continuation. NativeCdpSpace wraps the page
+inside the snapshot action's `result`, while FrameSpace returns the page directly, so the example normalizes
+that provider envelope explicitly.
+
 ```js
 const opened = await client.openTarget("https://example.test", {
   expectedRisk: "externalEffect",

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Semantic inventory target</title>
+</head>
+<body>
+  <main aria-label="semantic inventory target">
+    <h1>Semantic inventory target</h1>
+    <section id="inventory" aria-label="synthetic inventory"></section>
+    <output id="ready">building</output>
+  </main>
+  <script>
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < 1001; index += 1) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.inventoryIndex = String(index);
+      button.textContent = `inventory-${String(index).padStart(4, "0")}`;
+      fragment.append(button);
+    }
+    document.getElementById("inventory").append(fragment);
+    document.getElementById("ready").value = "ready:1001";
+    console.info("semantic-inventory-ready", 1001);
+  </script>
+</body>
+</html>

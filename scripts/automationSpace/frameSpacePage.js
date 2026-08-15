@@ -1,4 +1,6 @@
 // frameSpacePage.js - machine page 안의 credentialless sandbox와 cooperative target bridge를 관리한다.
+import { createSemanticInventoryError, createSemanticInventoryEvidence, SemanticInventory,
+  SEMANTIC_INVENTORY_ERROR_CODES, SEMANTIC_INVENTORY_MAX_ITEMS } from "./semanticInventory.js";
 const PROTOCOL = "pyproc-frame";
 const VERSION = 1;
 const MAX_ACTIONS = 16;
@@ -64,6 +66,7 @@ export class FrameSpacePage {
     this.targets = new Map();
     this.sessions = new Map();
     this.artifacts = new Map();
+    this.semanticInventory = new SemanticInventory();
     this.totalArtifactBytes = 0;
     this.sequence = 0;
   }
@@ -106,6 +109,7 @@ export class FrameSpacePage {
       targetCount: this.targets.size,
       sessionCount: this.sessions.size,
       artifactCount: this.artifacts.size,
+      semanticInventory: this.semanticInventory.inspect(),
     });
   }
 
@@ -156,7 +160,10 @@ export class FrameSpacePage {
   closeTarget({ targetRef } = {}) {
     const target = this._target(targetRef);
     for (const [sessionId, record] of this.sessions) {
-      if (record.targetRef === targetRef) this.sessions.delete(sessionId);
+      if (record.targetRef === targetRef) {
+        this.semanticInventory.invalidateSession(this._inventorySessionKey(record.session));
+        this.sessions.delete(sessionId);
+      }
     }
     for (const pending of target.pending.values()) pending.reject(frameError(
       "FRAME_SPACE_TARGET_CLOSED", "FrameSpace target closed after command delivery", "outcomeUnknown"));
@@ -169,22 +176,65 @@ export class FrameSpacePage {
 
   detach({ sessionRef } = {}) {
     const record = this._session(sessionRef);
+    this.semanticInventory.invalidateSession(this._inventorySessionKey(record.session));
     this.sessions.delete(record.session.sessionId);
     return Object.freeze({ detached: true });
   }
 
-  async observe({ sessionRef, expectedRisk, maxNodes, mode, includeScreenshot } = {}) {
+  async observe({ sessionRef, expectedRisk, maxNodes, mode, includeScreenshot, continuationRef } = {}) {
     if (expectedRisk !== "read") throw frameError("FRAME_SPACE_PERMISSION_DENIED", "observe requires expectedRisk read");
     const target = this._targetForSession(sessionRef);
+    const key = this._inventorySessionKey(sessionRef);
+    if (continuationRef) {
+      const epoch = await this._call(target, "observe.epoch", {});
+      const page = await this.semanticInventory.continue({
+        sessionKey: key,
+        continuationRef,
+        documentEpoch: epoch.targetEpoch,
+      });
+      const response = Object.freeze({ ...page.metadata, nodes: page.nodes,
+        continuationRef: page.continuationRef, inventory: page.inventory,
+        truncated: page.metadata.candidateNodes > page.nodes.length });
+      return response;
+    }
+    this.semanticInventory.invalidateSession(key);
     const observed = await this._call(target, "observe", {
-      ...(maxNodes === undefined ? {} : { maxNodes }),
+      maxNodes: SEMANTIC_INVENTORY_MAX_ITEMS,
       ...(mode === undefined ? {} : { mode }),
     });
     target.url = observed.url;
     target.title = observed.title;
-    if (!includeScreenshot) return observed;
-    const captured = await this._call(target, "action.screenshot", {});
-    return Object.freeze({ ...observed, screenshot: await this._storeScreenshot(captured, true) });
+    if (observed.truncated) {
+      throw createSemanticInventoryError(SEMANTIC_INVENTORY_ERROR_CODES.inventoryTooLarge,
+        `cooperative semantic inventory exceeds ${SEMANTIC_INVENTORY_MAX_ITEMS} items`);
+    }
+    const snapshotId = `snapshot:${crypto.randomUUID()}`;
+    const metadata = Object.freeze({ snapshotId, url: observed.url, title: observed.title,
+      targetEpoch: observed.targetEpoch, parentAccessible: observed.parentAccessible,
+      mode: observed.mode, eligibleNodes: observed.eligibleNodes, candidateNodes: observed.candidateNodes });
+    const artifacts = {};
+    if (includeScreenshot) {
+      const captured = await this._call(target, "action.screenshot", {});
+      artifacts.screenshot = await this._storeScreenshot(captured, true);
+    }
+    try {
+      const page = await this.semanticInventory.open({
+        sessionKey: key,
+        documentEpoch: observed.targetEpoch,
+        snapshotRef: snapshotId,
+        nodes: observed.nodes,
+        pageSize: maxNodes || 200,
+        metadata,
+        binding: metadata,
+        evidence: await createSemanticInventoryEvidence(artifacts),
+      });
+      return Object.freeze({ ...metadata, nodes: page.nodes, continuationRef: page.continuationRef,
+        inventory: page.inventory, truncated: observed.candidateNodes > page.nodes.length, ...artifacts });
+    } catch (error) {
+      this.semanticInventory.invalidateSession(key);
+      if (artifacts.screenshot?.artifactRef) this.deleteArtifact({ artifactRef: artifacts.screenshot.artifactRef });
+      throw error;
+    }
   }
 
   async perceptionCapture({ sessionRef, maxEntities, issueLocators, includeEnvironment } = {}) {
@@ -213,6 +263,8 @@ export class FrameSpacePage {
         if (action.kind === "navigate") {
           await this._navigate(target, action.url);
           value = Object.freeze({ url: target.url, targetEpoch: target.targetEpoch });
+        } else if (action.kind === "snapshot") {
+          value = await this.observe({ sessionRef, ...action });
         } else {
           value = await this._call(target, `action.${action.kind}`, action);
           if (action.kind === "screenshot") value = await this._storeScreenshot(value, action.inline !== false);
@@ -298,6 +350,7 @@ export class FrameSpacePage {
     }
     this.targets.clear();
     this.sessions.clear();
+    this.semanticInventory.close();
     this.artifacts.clear();
     this.totalArtifactBytes = 0;
     return Object.freeze({ closed: true });
@@ -331,6 +384,10 @@ export class FrameSpacePage {
 
   _targetForSession(sessionRef) {
     return this._target(this._session(sessionRef).targetRef);
+  }
+
+  _inventorySessionKey(sessionRef) {
+    return `${sessionRef?.protocolVersion || ""}:${sessionRef?.spaceId || ""}:${sessionRef?.sessionId || ""}:${sessionRef?.targetRef || ""}`;
   }
 
   _appCall(sessionRef, operation, input) {

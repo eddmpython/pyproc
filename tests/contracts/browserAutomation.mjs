@@ -18,6 +18,7 @@ import { BROWSER_CONTROL_COMMAND_RISKS } from "../../scripts/browserControl/brow
 import { NodeCdpTransport } from "../../scripts/browserControl/nodeCdpTransport.js";
 import { redactBrowserUrl } from "../../scripts/browserControl/browserObservation.js";
 import { BrowserArtifactStore } from "../../scripts/browserControl/browserArtifactStore.js";
+import { SemanticInventory } from "../../scripts/automationSpace/semanticInventory.js";
 import {
   browserActionabilityFingerprint,
   mapViewportPointToQuad,
@@ -194,6 +195,28 @@ class FakePort {
 }
 
 export async function assertBrowserAutomationContract() {
+  let inventoryNow = 1000;
+  let inventoryId = 0;
+  const boundedInventory = new SemanticInventory({ idFactory: () => `contract-${++inventoryId}`,
+    now: () => inventoryNow, ttlMs: 10, maxItems: 3, maxBytes: 4096, maxPageItems: 2 });
+  const boundedFirst = await boundedInventory.open({ sessionKey: "session:bounded", documentEpoch: 1,
+    snapshotRef: "snapshot:bounded", nodes: [{ index: 0 }, { index: 1 }, { index: 2 }], pageSize: 1 });
+  const boundedSecond = await boundedInventory.continue({ sessionKey: "session:bounded",
+    continuationRef: boundedFirst.continuationRef, documentEpoch: 1 });
+  const consumed = await errorOf(() => boundedInventory.continue({ sessionKey: "session:bounded",
+    continuationRef: boundedFirst.continuationRef, documentEpoch: 1 }));
+  inventoryNow = 1011;
+  const expired = await errorOf(() => boundedInventory.continue({ sessionKey: "session:bounded",
+    continuationRef: boundedSecond.continuationRef, documentEpoch: 1 }));
+  const tooLarge = await errorOf(() => boundedInventory.open({ sessionKey: "session:large", documentEpoch: 1,
+    snapshotRef: "snapshot:large", nodes: [{ index: 0 }, { index: 1 }, { index: 2 }, { index: 3 }], pageSize: 1 }));
+  assert(consumed?.code === "AUTOMATION_OBSERVATION_CONTINUATION_INVALID"
+    && expired?.code === "AUTOMATION_OBSERVATION_CONTINUATION_EXPIRED"
+    && tooLarge?.code === "AUTOMATION_OBSERVATION_INVENTORY_TOO_LARGE"
+    && boundedInventory.inspect().active === 0,
+  "semantic inventory single-use, expiry, 또는 item 상한이 fail-closed가 아니다");
+  boundedInventory.close();
+
   const clippedPoint = viewportClippedCenter(
     { x: -80, y: 180, width: 100, height: 40 },
     { width: 800, height: 600 },
@@ -327,6 +350,11 @@ export async function assertBrowserAutomationContract() {
     kind: "snapshot", mode: "interactive", maxNodes: 3, expectedRisk: "read",
   });
   assert(interactiveSnapshot.mode === "interactive", "interactive snapshot mode가 action 계약을 통과하지 못했다");
+  const continuationWithOptions = await errorOf(() => validateBrowserAutomationAction({
+    kind: "snapshot", continuationRef: "continuation:valid", maxNodes: 10, expectedRisk: "read",
+  }));
+  assert(continuationWithOptions?.code === BROWSER_AUTOMATION_ERROR_CODES.invalidAction,
+    "continuation이 첫 관찰 option과 섞여 새 snapshot으로 재해석됐다");
   const invalidWaitState = await errorOf(() => validateBrowserAutomationAction({
     kind: "waitFor", selector: "#save", state: "painted", expectedRisk: "read",
   }));
@@ -374,8 +402,62 @@ export async function assertBrowserAutomationContract() {
   "bounded trace가 observation command와 action 위치를 보존하지 않았다");
   assert(observed.result.nodes.length === 2 && observed.result.nodes.every((node) => node.locatorRef),
     "compact accessibility snapshot 또는 opaque locator가 어긋났다");
-  assert(observed.result.compactBytes < observed.result.rawBytes,
-    `compact snapshot이 raw payload보다 작지 않다 (${observed.result.compactBytes}/${observed.result.rawBytes})`);
+  assert(new TextEncoder().encode(JSON.stringify(observed.result.nodes)).byteLength < observed.result.rawBytes
+    && !JSON.stringify(observed.result.nodes).includes("frame-internal-value"),
+  `compact semantic node가 raw provider payload를 복사했다 (${observed.result.compactBytes}/${observed.result.rawBytes})`);
+
+  port.axNodes = Array.from({ length: 1001 }, (_, index) => ({
+    nodeId: `inventory:${index}`,
+    backendDOMNodeId: 1000 + index,
+    ignored: false,
+    role: { type: "role", value: "button" },
+    name: { type: "computedString", value: `inventory-${String(index).padStart(4, "0")}` },
+    childIds: [],
+  }));
+  const inventoryFirst = await automation.observe(session, { mode: "all", maxNodes: 400, includeScreenshot: true });
+  const inventorySecond = await automation.observe(session,
+    { continuationRef: inventoryFirst.result.continuationRef });
+  const inventoryThird = await automation.observe(session,
+    { continuationRef: inventorySecond.result.continuationRef });
+  const inventoryNames = [inventoryFirst, inventorySecond, inventoryThird]
+    .flatMap((page) => page.result.nodes.map((node) => node.name));
+  assert(inventoryFirst.result.nodes.length === 400 && inventorySecond.result.nodes.length === 400
+    && inventoryThird.result.nodes.length === 201
+    && new Set(inventoryNames).size === 1001
+    && inventoryFirst.result.inventory.complete === false
+    && inventorySecond.result.inventory.complete === false
+    && inventoryThird.result.inventory.complete === true
+    && inventoryThird.result.inventory.prefixSha256 === inventoryThird.result.inventory.nodesSha256
+    && inventoryFirst.result.inventory.receiptSha256 === inventoryThird.result.inventory.receiptSha256
+    && inventoryFirst.result.inventory.evidenceSha256 === inventoryThird.result.inventory.evidenceSha256
+    && inventoryThird.result.inventory.evidence.screenshot.sha256 === inventoryFirst.result.screenshot.sha256
+    && inventoryThird.result.continuationRef === null,
+  "semantic inventory continuation이 같은 snapshot의 1,001개 node와 evidence binding을 보존하지 않았다");
+
+  const staleFirst = await automation.observe(session, { mode: "all", maxNodes: 500 });
+  port.contextEpoch += 1;
+  const staleContinuation = await errorOf(() => automation.observe(session,
+    { continuationRef: staleFirst.result.continuationRef }));
+  assert(staleContinuation?.code === "AUTOMATION_OBSERVATION_CONTINUATION_STALE"
+    && staleContinuation?.outcome === "notSent"
+    && automation.inspect().semanticInventory.active === 0,
+  "document epoch 교체가 이전 semantic continuation을 폐기하지 않았다");
+  port.contextEpoch -= 1;
+
+  port.axNodes = Array.from({ length: 10001 }, (_, index) => ({
+    nodeId: `inventory-limit:${index}`,
+    backendDOMNodeId: 20000 + index,
+    ignored: false,
+    role: { type: "role", value: "button" },
+    name: { type: "computedString", value: `inventory-limit-${index}` },
+    childIds: [],
+  }));
+  const oversizedInventory = await errorOf(() => automation.observe(session, { mode: "all", maxNodes: 1000 }));
+  assert(oversizedInventory?.code === "AUTOMATION_OBSERVATION_INVENTORY_TOO_LARGE"
+    && oversizedInventory?.outcome === "notSent"
+    && automation.inspect().locators === 0
+    && automation.inspect().semanticInventory.active === 0,
+  "semantic inventory item 상한이 locator 발급 전에 fail-closed되지 않았다");
 
   port.axNodes = [
     ...Array.from({ length: 8 }, (_, index) => ({
