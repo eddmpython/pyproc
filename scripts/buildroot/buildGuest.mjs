@@ -96,12 +96,27 @@ async function prepareConfig() {
   return fragments;
 }
 
+async function assertResolvedProfileConfig() {
+  if (!profile.runtime) return;
+  const config = await readFile(join(outputDir, ".config"), "utf8");
+  const required = [
+    "BR2_TOOLCHAIN_BUILDROOT_CXX=y",
+    "BR2_INSTALL_LIBSTDCPP=y",
+    "BR2_PACKAGE_NODEJS=y",
+    "BR2_PACKAGE_HOST_QEMU=y",
+    "BR2_PACKAGE_HOST_QEMU_LINUX_USER_MODE=y",
+  ];
+  const missing = required.filter((line) => !config.split(/\r?\n/).includes(line));
+  if (missing.length) throw new Error(`Node profile resolved config 누락: ${missing.join(", ")}`);
+}
+
 function runRuntimeOracle() {
   if (!profile.runtime) return null;
   const qemu = join(outputDir, "host", "bin", "qemu-i386");
   const targetDir = join(outputDir, "target");
   const executable = join(targetDir, "usr", "bin", "node");
-  if (!existsSync(qemu) || !existsSync(executable)) throw new Error("Node runtime oracle executable이 없다");
+  if (!existsSync(qemu)) throw new Error("Node runtime oracle의 qemu-i386 executable이 없다");
+  if (!existsSync(executable)) throw new Error("Node runtime oracle의 target node executable이 없다");
   const source = JSON.stringify(profile.runtime.oracle.source);
   const program = [
     "const crypto = require('node:crypto')",
@@ -169,6 +184,7 @@ const env = {
   GIT_CEILING_DIRECTORIES: root,
 };
 run("make", [`O=${outputDir}`, "olddefconfig"], { cwd: sourceDir, env });
+await assertResolvedProfileConfig();
 run("make", [`O=${outputDir}`], { cwd: sourceDir, env });
 const runtimeOracle = runRuntimeOracle();
 run("make", [`O=${outputDir}`, "legal-info"], { cwd: sourceDir, env });
