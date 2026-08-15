@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
     paths:
+      - ".gitattributes"
       - "scripts/engineBuilder/**"
       - "tests/browser/ownedEngineCoreProduct.html"
       - "tests/browser/ownedEngineDataProduct.html"

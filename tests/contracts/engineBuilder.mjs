@@ -82,9 +82,14 @@ export async function assertOwnedEngineBuilder() {
     "Windows make quoting patch no longer preserves C string literals");
 
   const workflow = await readFile(new URL("../../.github/workflows/owned-engine.yml", import.meta.url), "utf8");
+  const attributes = await readFile(new URL("../../.gitattributes", import.meta.url), "utf8");
+  assert(attributes.includes("*.c    text eol=lf")
+    && attributes.includes("scripts/engineBuilder/Setup*.local text eol=lf"),
+  "native engine build inputs are not pinned to LF checkout bytes");
   assert(workflow.includes("slot: [a, b]")
     && workflow.includes("profile: [core, data]")
     && workflow.includes("byte-identical-and-browser-boot")
+    && workflow.includes('- ".gitattributes"')
     && workflow.includes("name: pyproc-owned-engine-core-a")
     && workflow.includes("tests/browser/ownedEngineCoreProduct.html")
     && workflow.includes("tests/browser/ownedEngineDataProduct.html")
