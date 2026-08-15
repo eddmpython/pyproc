@@ -42,8 +42,12 @@ function settled(promise) {
     (error) => ({ state: "rejected", error }));
 }
 
-function delay(ms, value) {
-  return new Promise((resolveDelay) => setTimeout(() => resolveDelay(value), ms));
+function raceWithTimeout(promise, timeoutMs, timeoutValue) {
+  let timer = null;
+  const timeout = new Promise((resolveTimeout) => {
+    timer = setTimeout(() => resolveTimeout(timeoutValue), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function unwrap(result) {
@@ -54,9 +58,9 @@ function unwrap(result) {
 async function waitForExit(child, timeoutMs) {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = new Promise((resolveExit) => child.once("exit", resolveExit));
-  if (await Promise.race([exited.then(() => true), delay(timeoutMs, false)])) return;
+  if (await raceWithTimeout(exited.then(() => true), timeoutMs, false)) return;
   child.kill("SIGTERM");
-  if (await Promise.race([exited.then(() => true), delay(timeoutMs, false)])) return;
+  if (await raceWithTimeout(exited.then(() => true), timeoutMs, false)) return;
   child.kill("SIGKILL");
   await exited;
 }
@@ -78,7 +82,7 @@ async function runCheck(configPath, options) {
     child.once("error", rejectExit);
     child.once("exit", (code, signal) => resolveExit({ code, signal }));
   });
-  const outcome = await Promise.race([settled(exit), delay(timeoutMs, { state: "timeout" })]);
+  const outcome = await raceWithTimeout(settled(exit), timeoutMs, { state: "timeout" });
   if (outcome.state === "timeout") {
     child.kill("SIGTERM");
     await waitForExit(child, DEFAULT_SHUTDOWN_TIMEOUT_MS);
@@ -152,14 +156,14 @@ export class ControlRequest {
     const deadlineMs = positiveTimeout(timeoutMs, "control request timeoutMs");
     const settleMs = positiveTimeout(cancelSettleTimeoutMs, "control cancelSettleTimeoutMs",
       this.client.cancelSettleTimeoutMs);
-    const first = await Promise.race([settled(this.result), delay(deadlineMs, { state: "timeout" })]);
+    const first = await raceWithTimeout(settled(this.result), deadlineMs, { state: "timeout" });
     if (first.state !== "timeout") return unwrap(first);
     try { await this.cancel("control request deadline reached"); }
     catch (error) {
       try { await this.client.close(); } catch (closeError) { void closeError; }
       throw timeoutError("control request deadline expired and cancellation could not be sent");
     }
-    const terminal = await Promise.race([settled(this.result), delay(settleMs, { state: "timeout" })]);
+    const terminal = await raceWithTimeout(settled(this.result), settleMs, { state: "timeout" });
     if (terminal.state !== "timeout") return unwrap(terminal);
     try { await this.client.close(); } catch (error) { void error; }
     throw timeoutError("control request did not settle after cancellation");
@@ -421,7 +425,7 @@ export class PyProcControlClient extends ControlStdioClient {
     child.once("error", (error) => client._fail(error));
     const startupTimeoutMs = positiveTimeout(options.startupTimeoutMs,
       "control startupTimeoutMs", DEFAULT_STARTUP_TIMEOUT_MS);
-    const ready = await Promise.race([settled(client.ready), delay(startupTimeoutMs, { state: "timeout" })]);
+    const ready = await raceWithTimeout(settled(client.ready), startupTimeoutMs, { state: "timeout" });
     if (ready.state === "timeout") {
       await client.close();
       throw timeoutError(`pyproc-control hello timed out\n${client.diagnostics}`);

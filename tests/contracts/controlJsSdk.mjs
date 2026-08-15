@@ -1,5 +1,7 @@
 // 공개 JavaScript Control facade가 기존 protocol 의미론 위에만 사는지 고정한다.
+import { spawnSync } from "node:child_process";
 import { PassThrough } from "node:stream";
+import { fileURLToPath } from "node:url";
 import {
   createApprovalGrant,
   createAppSpaceRegistry,
@@ -161,4 +163,13 @@ export async function assertControlJsSdkContract() {
   await ownedClient.close();
   assert(Object.values(released).every(Boolean),
     "종료된 installed Control child의 소유 pipe와 process handle이 해제되지 않았다");
+
+  const lifecycleProbe = spawnSync(process.execPath,
+    [fileURLToPath(new URL("../fixtures/controlLifecycleProbe.mjs", import.meta.url))], {
+      encoding: "utf8",
+      timeout: 1500,
+      windowsHide: true,
+    });
+  assert(lifecycleProbe.status === 0 && !lifecycleProbe.error,
+    `성공한 Control startup timeout timer가 호출자 프로세스에 남았다: ${lifecycleProbe.error || lifecycleProbe.stderr}`);
 }
