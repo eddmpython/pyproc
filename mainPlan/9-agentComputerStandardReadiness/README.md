@@ -16,7 +16,7 @@
 |---|---|---|---|
 | agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M3 컴퓨팅 몸체 확대와 독립 구현 conformance |
 | 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.5 | APX Situation, 20회 무잔류 수명주기, bounded action 수렴, 실제 hardware compute와 pixel 결과 영수증 | 두 번째 독립 hardware와 browser 구현의 visual conformance |
-| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.7 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package | shared-memory thread, wasm 도구층, Node guest, 과학 패키지 폭, quota 축출 계약 |
+| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.7 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package, quota 실패와 OPFS 축출의 명시적 계약 | wasm 도구층, Node guest, 과학 패키지 폭, 외부 사본 기반 축출 복구 |
 | 단독 자립성 | Python 기본과 data Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython, stdlib, NumPy가 npm에 포함되고 기본 부팅과 package install의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
 
@@ -123,7 +123,10 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - 완료: `parallelProcesses.sharedMemoryThreads`의 현재 경계를 exact packed Control로 실측했다. 설치 엔진은
   `worker-processes` mode이고 Python shared-memory thread는 미지원이다. build lock, manifest,
   `machine.inspect()`와 실제 Python 실패가 같은 versioned capability를 보고한다.
-- 진행 중: `durableDisk.quotaEviction`, `localPythonParity.wasmToolLayer` 순서로 소진한다.
+- 완료: `durableDisk.quotaEviction`을 exact packed Control과 실제 OPFS에서 닫았다. best-effort와
+  persistent mode, rough estimate, quota 실패 안전성, 외부 witness 기반 축출 탐지를 한 계약으로 봉인했다.
+- 진행 중: `localPythonParity.wasmToolLayer`를 소진한다. durable disk의 다음 ceiling은
+  `evictionRecoveryCopy`다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
 - wasm 도구층을 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
@@ -456,8 +459,8 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   `sha256:698ca96aeb85d96e150045b46751cbd1bd7f22ee6167e088d5eedc044b35b099`다. 첫 실행의 255.8초 중
   240초는 probe가 승리한 Promise 뒤 패배한 timeout timer를 취소하지 않은 잔류였고, 이를 고친 같은
   시나리오는 24.1초에 종료됐다.
-- 다음 직렬 작업: `durableDisk.quotaEviction`을 실제 OPFS quota와 persistence 경계에서 음성 probe로
-  고정한다. 임의 PyPI native wheel 지원은 dynamic linking 전까지 주장하지 않는다.
+- 후속 `durableDisk.quotaEviction`은 아래 10절에서 완료했다. 임의 PyPI native wheel 지원은 dynamic
+  linking 전까지 주장하지 않는다.
 
 ## 9. 해결 판정: shared-memory thread capability boundary
 
@@ -480,4 +483,35 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - 안전 경계: 브라우저 host 제어 채널의 공유 버퍼는 Python heap 공유를 뜻하지 않는다. shared WASM memory,
   thread spawn import, 실제 Python thread join과 checkpoint quiescence가 같은 gate를 통과하기 전에는
   `shared-memory` mode를 선언하지 않는다.
-- 다음 직렬 작업: `durableDisk.quotaEviction`이다.
+- 다음 직렬 작업이었던 `durableDisk.quotaEviction`은 아래 10절에서 완료했다.
+
+## 10. 해결 판정: browser storage quota와 OPFS 축출
+
+- 첫 RED: exact packed Control과 Edge 151의 fresh origin은 `persisted=false`이고 OPFS sentinel 왕복에는
+  성공했지만 제품에는 persistence mode, quota failure, cold-start eviction을 설명하는 계약이 없었다.
+  첫 screenshot SHA-256은
+  `1ab44fd1bac6228170a60f34fe0200830eafb4ab730771a49d9dbe3173fed575`다.
+- 첫 불일치: `navigator.storage.estimate()`는 usage 401 bytes, quota 10,737,418,641 bytes를 보고했지만
+  같은 origin의 browser 제어 관찰은 quota 592,332,401,049 bytes였다. test control로 quota를 262,144
+  bytes로 고정한 뒤 4 MiB OPFS 쓰기는 즉시 `QuotaExceededError`였다. estimate는 예약이나 사전 허가가
+  아님을 실제 실패로 확인했다.
+- 제품 계약: `pyproc.storage-durability/1`이 persistent와 best-effort mode, rough estimate,
+  `PYPROC_STORAGE_QUOTA_EXCEEDED`, `PYPROC_STORAGE_EVICTED`를 공개한다. persistence 요청은 명시 호출로만
+  수행하고 quota 실패를 자동 재시도하지 않는다.
+- 실패 안전성: 내용 주소 object 쓰기가 quota로 실패하면 기존 sentinel과 witness는 그대로이고, 파일
+  handle 생성 뒤 남을 수 있던 거짓 빈 object는 제거된다. 같은 정규화가 state OPFS store, kernel VFS,
+  IndexedDB Machine store의 공개 실패 경계에 적용된다.
+- 축출 경계: origin 밖에 보관한 `pyproc.storage-eviction-witness/1` receipt가 있으면 OPFS 전체 삭제 뒤
+  fresh root를 조용한 첫 부팅으로 보지 않고 `PYPROC_STORAGE_EVICTED`로 끝낸다. 지워진 bucket 안에는
+  복구할 바이트가 남지 않으므로 local self recovery는 false이고 외부 Machine 사본이 필요하다.
+- 표준 근거: [WHATWG Storage Standard](https://storage.spec.whatwg.org/)는 default bucket을 best-effort로
+  두고 storage pressure에서 통째로 제거할 수 있으며 persistent bucket은 origin 또는 사용자의 개입 없이
+  제거하지 않는다고 정의한다. [Chrome DevTools Protocol Storage domain](https://chromedevtools.github.io/devtools-protocol/tot/Storage/)의
+  usage/quota 관찰, exact-origin quota override, storage clear는 제품 의존성이 아니라 음성 시험 control로만
+  사용했다.
+- 제품 증거: `npm run test:storage-durability`이 exact tarball, 공개 `pyproc-control`, headed Edge,
+  실 OPFS에서 quota 실패, placeholder 부재, 이전 상태 생존, 외부 witness 검증, 전체 OPFS 삭제 뒤 eviction을
+  한 시나리오로 검증한다. 최종 922 x 920 screenshot은 직접 눈검수했으며 SHA-256은
+  `a1f30604693daf312a5fdd4399b8c08a50555c8f9d96d991cc3d8361aecdfc8c`다.
+- 다음 직렬 작업: `localPythonParity.wasmToolLayer`다. durable disk 자체의 다음 ceiling은 외부 Machine
+  사본을 witness에 묶어 전체 browser bucket 삭제 뒤 복원하는 `evictionRecoveryCopy`다.

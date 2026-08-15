@@ -1,5 +1,6 @@
 // kernelVfs.js - Layer 0: journaled content-addressed kernel filesystem.
 import { PyProcError } from "../errors.js";
+import { normalizeBrowserStorageWriteError } from "../browserStorageDurability.js";
 import { sha256Address } from "../contentDigest.js";
 
 export const KERNEL_VFS_ROOT_PROTOCOL = "pyproc.kernel-vfs-root";
@@ -125,10 +126,27 @@ async function readFileHandle(directory, name) {
 }
 
 async function writeFileHandle(directory, name, bytes) {
-  const handle = await directory.getFileHandle(name, { create: true });
-  const writable = await handle.createWritable();
-  try { await writable.write(bytes); await writable.close(); }
-  catch (error) { try { await writable.abort(); } catch (ignored) {} throw error; }
+  let existed = true;
+  let handle = null;
+  let writable = null;
+  try {
+    try { handle = await directory.getFileHandle(name); }
+    catch (error) {
+      if (error?.name !== "NotFoundError") throw error;
+      existed = false;
+      handle = await directory.getFileHandle(name,{create:true});
+    }
+    writable = await handle.createWritable();
+    await writable.write(bytes);
+    await writable.close();
+  }
+  catch (error) {
+    if (writable) try { await writable.abort(); } catch (ignored) {}
+    if (!existed) try { await directory.removeEntry(name); } catch (ignored) {}
+    throw normalizeBrowserStorageWriteError(error, {
+      operation:"kernelVfs.write", file:name, requiredBytes:bytes.byteLength,
+    });
+  }
 }
 
 export class OpfsKernelVfsStore {

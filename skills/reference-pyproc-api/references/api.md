@@ -111,6 +111,18 @@ selected graph files and checks SHA-256 SRI before worker creation.
 Exports content-addressed state objects, memory and OPFS stores, commit/open protocols, signed tags, and
 the state bundle format. These are storage contracts, not a second Python runtime.
 
+`BrowserStorageDurability.open({ root, namespace?, storageManager? })` opens the version 1 browser-storage
+contract over an owned OPFS directory.
+
+- `inspect()` reports persistent or best-effort mode, rough usage and quota, and the eviction boundary.
+- `requestPersistence()` explicitly asks the browser for persistent treatment.
+- `createWitness({ witnessId })` writes a local witness and returns its portable receipt.
+- `verifyWitness(receipt)` confirms the local witness or throws `PYPROC_STORAGE_EVICTED`.
+- `runWrite(operation, context?)` normalizes a browser quota rejection to
+  `PYPROC_STORAGE_QUOTA_EXCEEDED` without retrying it.
+
+The witness detects loss but does not contain a copy of deleted Machine bytes.
+
 ## `pyproc/machine`
 
 Exports WebMachine contracts, devices, stores, signed archives, fleet composition, the owned kernel guest,

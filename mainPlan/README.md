@@ -19,7 +19,8 @@
 
 현재 미완료 이니셔티브는 [9-agentComputerStandardReadiness](9-agentComputerStandardReadiness/README.md)다.
 M2의 hardware GPU 결과 oracle과 M3의 NumPy 2.5.1 static data profile, thread capability boundary까지
-완료했다. 다음은 `durableDisk.quotaEviction`부터 직렬로 이어간다.
+완료했다. browser storage quota와 OPFS 축출의 명시적 계약도 닫았다. 다음은
+`localPythonParity.wasmToolLayer`부터 직렬로 이어간다.
 
 이 번호는 agent-computer 포트폴리오의 실행 순서다. North Star ceiling ladder의 기존 번호와 우선순위를
 대체하지 않는다.

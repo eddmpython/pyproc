@@ -24,11 +24,15 @@ fence 전제조건은 고의 위반 주입을 전부 잡아낸다.
   감지 + PREV 후퇴), PREV 미보존(첫 부팅 위장 없이 명시 예외), stale fence 거부,
   env(h0) 불일치 즉시 예외(PREV 후퇴 금지), 변조 blob verify-on-read 적발이 전부 RED로
   잡힘. 하나라도 통과(미적발)되면 프로토콜 시안 기각.
+- probe 4: 설치 browser의 best-effort storage에서 quota 실패가 안정 code로 끝나고 기존
+  object와 witness를 보존하며 새 빈 placeholder를 남기지 않는다. origin 밖 receipt가 있는
+  상태에서 OPFS 전체 삭제는 첫 부팅으로 위장하지 않고 명시적 eviction으로 판정한다.
 
 ## 결론 표
 
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 다음 |
 |---|---|---|---|---|---|
+| 2026-08-16 | ownedStorageDurabilityProbe | Edge 151 headed, exact packed Control, 실 OPFS와 IndexedDB | 첫 RED screenshot `sha256:1ab44fd1bac6228170a60f34fe0200830eafb4ab730771a49d9dbe3173fed575`. 제품화 뒤 256 KiB 상한에서 4 MiB 쓰기가 OPFS에서는 `PYPROC_STORAGE_QUOTA_EXCEEDED`, Machine store에서는 `WEB_MACHINE_STORAGE_QUOTA_EXCEEDED`로 끝났다. placeholder와 HEAD 없음, 기존 sentinel과 witness 생존. OPFS clear 뒤 외부 receipt로 `PYPROC_STORAGE_EVICTED`. 최종 screenshot `sha256:a1f30604693daf312a5fdd4399b8c08a50555c8f9d96d991cc3d8361aecdfc8c` | `estimate()`는 예약량이 아니며 완전 삭제된 bucket 내부만으로 cold-start 축출 탐지나 데이터 자가 복구는 불가능하다. 읽기 전용 durability receipt, 명시적 persistence 요청, 안정 quota 오류, 외부 witness 계약을 제품에 승격했다 | 외부 Machine 사본을 witness에 결속해 전체 bucket 삭제 뒤 복구하는 정식 gate로 이동 |
 | 2026-08-12 | commitDeltaLossProbe 수리 후 | Edge headless, 실 OPFS + 실 힙 | GREEN 2/2. 결정적 stale-address 수명주기와 기존 release 순서 10회 모두 통과. 정식 browser gate 137/137 | Runtime+directory coordination domain이 연산을 직렬화하고 주소를 hint로 대조하며 delete storage epoch를 공유한다 | 정식 게이트 승격 완료. 북극성 이니셔티브 1단계로 이동 |
 | 2026-08-12 | commitDeltaLossProbe | Edge headless, 실 OPFS + 실 힙 | RED. controller A가 X 주소를 cache한 뒤 controller B가 X를 HEAD/PREV 밖으로 밀고 pack하면, A의 다음 X 커밋은 성공하지만 recover가 PREV로 후퇴 | 원인은 `collectDelta` 유실이 아니라 controller별 stale address 단언과 공유 저장소 연산의 비직렬화다 | Runtime+dir coordination domain, 주소 hint 존재 대조, commit/recover/pack/prune/delete 직렬화를 src와 정식 게이트에 흡수 |
 | 2026-08-04 | branchRefsProbe | Edge headless, 실 OPFS + 실 힙 | 10/10 GREEN | 이름 있는 가지(commitBranch/listBranches/recoverBranch/adoptBranch)가 ref 프로토콜 (5') 위에서 성립. pack 뒤 가지 부활 = live 판정이 가지를 지킨다. 가지 존재 = 마커 v2(구 버전 fail-closed), 전부 삭제 = v1 복원. note(provenance)와 갈림점 parents 왕복 확인 | src 흡수 완료(가지 동사 + attempts). 게이트는 gate.js 3검사 + [state 가지] 2검사가 상시 판정 |

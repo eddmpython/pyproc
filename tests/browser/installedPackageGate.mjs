@@ -100,7 +100,9 @@ try {
       && typeof runtime.KernelProcess === "function" && typeof wasi.getDefaultKernelEngineManifest === "function"
       && typeof wasi.getDataKernelEngineManifest === "function"
       && typeof wasi.createOwnedPackageResolver === "function"
-      && typeof history.MemoryStateStore === "function" && typeof machineApi.createWebComputer === "function"
+      && typeof history.MemoryStateStore === "function"
+      && typeof history.BrowserStorageDurability === "function"
+      && typeof machineApi.createWebComputer === "function"
       && typeof gpu.createWebGpuHostAdapter === "function" && typeof gpu.runHardwareVisualOracle === "function"
       && gpu.GPU_ORACLE_PROTOCOL === "pyproc.hardwareVisualOracle" && gpu.GPU_ORACLE_VERSION === 1);
 

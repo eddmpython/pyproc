@@ -18,6 +18,49 @@ export function verifySha256(bytes: Uint8Array, expected: string): Promise<{ ok:
 export function verifySha256With(cryptoProvider: StateCryptoProvider, bytes: Uint8Array, expected: string): Promise<{ ok: boolean; actual: string; expectedHex: string | null }>;
 export const PAGE_SIZE: number;
 
+export interface StorageDurabilityInspection {
+  readonly protocol: "pyproc.storage-durability";
+  readonly version: 1;
+  readonly mode: "persistent" | "best-effort";
+  readonly persisted: boolean;
+  readonly estimate: Readonly<{ usage: number | null; quota: number | null;
+    remaining: number | null; exact: false }>;
+  readonly eviction: Readonly<{
+    protection: "user-mediated" | "browser-heuristic";
+    detection: "external-witness-required";
+    recovery: "external-copy-required";
+  }>;
+  readonly quotaFailureCode: "PYPROC_STORAGE_QUOTA_EXCEEDED";
+  readonly evictionFailureCode: "PYPROC_STORAGE_EVICTED";
+}
+export interface StorageEvictionWitness {
+  readonly protocol: "pyproc.storage-eviction-witness";
+  readonly version: 1;
+  readonly namespace: string;
+  readonly witnessId: string;
+  readonly digest: `sha256:${string}`;
+}
+export const STORAGE_DURABILITY_PROTOCOL: "pyproc.storage-durability";
+export const STORAGE_DURABILITY_VERSION: 1;
+export const STORAGE_EVICTION_WITNESS_PROTOCOL: "pyproc.storage-eviction-witness";
+export const STORAGE_EVICTION_WITNESS_VERSION: 1;
+export class BrowserStorageDurability {
+  constructor(options: { storageManager: StorageManager; directory: FileSystemDirectoryHandle; namespace?: string });
+  static open(options?: { storageManager?: StorageManager; directory?: FileSystemDirectoryHandle | null;
+    namespace?: string }): Promise<BrowserStorageDurability>;
+  inspect(): Promise<StorageDurabilityInspection>;
+  requestPersistence(): Promise<Readonly<{ protocol: "pyproc.storage-persistence-receipt"; version: 1;
+    granted: boolean; durability: StorageDurabilityInspection }>>;
+  createWitness(input: { witnessId: string }): Promise<StorageEvictionWitness>;
+  verifyWitness(witness: StorageEvictionWitness): Promise<Readonly<{
+    protocol: "pyproc.storage-witness-verification"; version: 1; state: "available";
+    witness: StorageEvictionWitness;
+  }>>;
+  runWrite<T>(operation: () => T | Promise<T>, options?: {
+    operation?: string; requiredBytes?: number | null;
+  }): Promise<T>;
+}
+
 // ---- Object model ----
 export interface StatePageTableTree {
   kind: "pageTable";

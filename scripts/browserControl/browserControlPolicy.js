@@ -38,6 +38,7 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
   "Runtime.enable": "read",
   "Runtime.getProperties": "read",
   "Runtime.releaseObject": "read",
+  "Storage.getUsageAndQuota": "read",
   "DOM.focus": "mutate",
   "DOM.setAttributeValue": "mutate",
   "DOM.setFileInputFiles": "externalEffect",
@@ -58,6 +59,7 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
   "Runtime.callFunctionOn": "externalEffect",
   "Runtime.evaluate": "externalEffect",
   "Storage.clearDataForOrigin": "externalEffect",
+  "Storage.overrideQuotaForOrigin": "externalEffect",
 });
 
 export const BROWSER_CONTROL_DEFAULT_READ_METHODS = Object.freeze([
@@ -177,7 +179,13 @@ export class BrowserControlPolicy {
     const input = params && typeof params === "object" ? params : {};
     if (method === "Page.navigate") this._authorizeCommandUrl(input.url);
     if (method === "Fetch.continueRequest" && input.url !== undefined) this._authorizeCommandUrl(input.url);
-    if (method === "Storage.clearDataForOrigin") this._authorizeExactOrigin(input.origin);
+    if (["Storage.clearDataForOrigin","Storage.getUsageAndQuota","Storage.overrideQuotaForOrigin"].includes(method)) {
+      this._authorizeExactOrigin(input.origin);
+    }
+    if (method === "Storage.overrideQuotaForOrigin"
+      && (input.quotaSize !== undefined && (!Number.isSafeInteger(input.quotaSize) || input.quotaSize < 0))) {
+      this._denyCommandTarget();
+    }
     if (method === "Network.setCookie") {
       if (!input.url || input.domain) this._denyCommandTarget();
       this._authorizeCommandUrl(input.url);

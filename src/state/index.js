@@ -41,5 +41,12 @@ export {
 } from "./bundleFormat.js";
 export { MemoryStateStore } from "./memoryStateStore.js";
 export { OpfsStateStore } from "./opfsStateStore.js";
+export {
+  BrowserStorageDurability,
+  STORAGE_DURABILITY_PROTOCOL,
+  STORAGE_DURABILITY_VERSION,
+  STORAGE_EVICTION_WITNESS_PROTOCOL,
+  STORAGE_EVICTION_WITNESS_VERSION,
+} from "../runtime/browserStorageDurability.js";
 export { SHA256_ADDRESS_RE, parseSha256Address, sha256Address, sha256AddressWith, sha256HexWith, verifySha256, verifySha256With } from "../runtime/contentDigest.js";
 export { PAGE_SIZE } from "../runtime/memoryLayout.js";

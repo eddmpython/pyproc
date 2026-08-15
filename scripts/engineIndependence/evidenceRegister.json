@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-15",
+  "updatedAt": "2026-08-16",
   "recordPolicy": "PROVEN_LOCAL entries are immutable measurement snapshots. Commands and artifact paths inside those snapshots describe the observed run and can refer to retired research probes. Use currentProductGates for supported, runnable verification.",
   "currentProductGates": [
     {
@@ -27,6 +27,11 @@
       "path": "tests/packageGate.mjs",
       "lane": "packed artifact",
       "command": "npm run test:package"
+    },
+    {
+      "path": "tests/browser/storageDurabilityProduct.mjs",
+      "lane": "browser storage durability",
+      "command": "npm run test:storage-durability"
     }
   ],
   "evidence": [
@@ -936,6 +941,74 @@
       "url": "https://github.com/WebAssembly/wasi-threads",
       "retrievedAt": "2026-08-16",
       "claim": "the Preview 1 thread spawn proposal is Phase 1 and retained as a legacy path while future work moves to shared-everything threads"
+    },
+    {
+      "evidenceId": "local-browser-storage-durability-20260816",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows 11",
+        "browser": "Microsoft Edge 151.0.4129.86",
+        "node": "22.19.0",
+        "control": "exact packed public pyproc-control",
+        "storage": "real OPFS"
+      },
+      "commands": [
+        "npm run test:storage-durability"
+      ],
+      "result": "a forced quota failure returned one stable error, preserved prior OPFS state and the eviction witness, removed the new empty placeholder, and a total OPFS clear became an explicit eviction when checked against an external receipt",
+      "measurements": {
+        "persisted": false,
+        "navigatorUsageBytes": 401,
+        "navigatorQuotaBytes": 10737418641,
+        "controlQuotaBeforeBytes": 592332401049,
+        "forcedQuotaBytes": 262144,
+        "attemptedWriteBytes": 4194304,
+        "placeholderAfterFailure": false,
+        "localSelfRecoveryAfterClear": false,
+        "firstRedScreenshotSha256": "1ab44fd1bac6228170a60f34fe0200830eafb4ab730771a49d9dbe3173fed575",
+        "finalScreenshotSha256": "a1f30604693daf312a5fdd4399b8c08a50555c8f9d96d991cc3d8361aecdfc8c",
+        "finalScreenshotBytes": 104134,
+        "viewport": "922x920"
+      },
+      "invariants": [
+        "storage estimates are rough observations and never write reservations",
+        "persistence is requested only by an explicit caller operation",
+        "quota rejection is not retried automatically",
+        "a failed new OPFS write leaves no false object while preserving prior data",
+        "cold-start eviction detection requires a receipt held outside the origin",
+        "deleted bytes require an external Machine copy for recovery",
+        "browser debugging protocol methods are test controls and not runtime dependencies"
+      ],
+      "artifacts": [
+        {
+          "role": "productGate",
+          "file": "tests/browser/storageDurabilityProduct.mjs"
+        },
+        {
+          "role": "firstRedProbe",
+          "file": "tests/attempts/stateKernel/ownedStorageDurabilityProbe.mjs"
+        },
+        {
+          "role": "browserGreenScreenshot",
+          "viewport": "922x920",
+          "byteLength": 104134,
+          "sha256": "a1f30604693daf312a5fdd4399b8c08a50555c8f9d96d991cc3d8361aecdfc8c"
+        }
+      ]
+    },
+    {
+      "evidenceId": "upstream-whatwg-storage-20260816",
+      "classification": "UPSTREAM_CONTRACT",
+      "url": "https://storage.spec.whatwg.org/",
+      "retrievedAt": "2026-08-16",
+      "claim": "default local buckets are best-effort, usage and quota are implementation-defined estimates, and storage pressure can clear a best-effort bucket as a unit"
+    },
+    {
+      "evidenceId": "upstream-cdp-storage-20260816",
+      "classification": "UPSTREAM_CONTRACT",
+      "url": "https://chromedevtools.github.io/devtools-protocol/tot/Storage/",
+      "retrievedAt": "2026-08-16",
+      "claim": "the Storage domain provides usage and quota observation plus experimental exact-origin quota override and data clearing used only as product test controls"
     },
     {
       "evidenceId": "upstream-wasi-sdk-threads-20260816",

@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:5d4c9baaed1223d534fabbbaac561a08e606a47f2f0f14a2e93db56272c1e0e1",
-  "catalogDigest": "sha256:de9244f652c8b57bfa6df1985580122477e515d8f522c411ab61b29bd6716644",
+  "generatedFromDigest": "sha256:35ed6163ebacbc2c52e6714e30768969ddee473af8ceae5b4d5db13204ae8e89",
+  "catalogDigest": "sha256:ef928ed8844df7de08ea519e88b0aa2c48110efca893bb9eb4f40205c7a3231f",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -314,8 +314,8 @@
     },
     {
       "path": "skills/evolve-pyproc/references/contract-reality.md",
-      "bytes": 3043,
-      "sha256": "sha256:eed3b62e60369482cae3aeeddb03f3dbdbe454c897e7c6e3f25713fa1f28a10d"
+      "bytes": 3633,
+      "sha256": "sha256:e3ae0e5a3a047c65d972019a7168a263567595f0f2687cfeecf910920cd5b7e8"
     },
     {
       "path": "skills/evolve-pyproc/references/experimental-freeze.md",
@@ -339,8 +339,8 @@
     },
     {
       "path": "skills/reference-pyproc-api/references/api.md",
-      "bytes": 5087,
-      "sha256": "sha256:35948b93f7cd21558937d284bdba0db85c4b892ec6456de44296f473e07ab9c3"
+      "bytes": 5807,
+      "sha256": "sha256:0f4bb86c9835dd856eed5525f8554e48aab8574900176f73494d39b7566558bb"
     },
     {
       "path": "skills/reference-pyproc-api/references/bundle-format.md",
@@ -419,8 +419,8 @@
     },
     {
       "path": "skills/use-pyproc-runtime/references/consumer-contract.md",
-      "bytes": 3553,
-      "sha256": "sha256:83b400fb57d0c913d3c1adef271f5e1a62d2f55296e6bae7edbdaf7726c3a0f6"
+      "bytes": 4533,
+      "sha256": "sha256:b953620955718c922c7a59642e8952510e62915fe23065c38cf3ee97f3ffd64d"
     },
     {
       "path": "skills/use-pyproc-runtime/references/hostcall-abi.md",
@@ -444,8 +444,8 @@
     },
     {
       "path": "skills/use-pyproc-runtime/references/platform-requirements.md",
-      "bytes": 1252,
-      "sha256": "sha256:d39788244948ae96c388407caea3370dd95d8981b8d4d552e79902414fde72d4"
+      "bytes": 1898,
+      "sha256": "sha256:26d8c923ec242e8a5931c1669b12b6cb72e6e5c7bf5aabc9d05924bf67bcee1e"
     },
     {
       "path": "skills/use-pyproc-runtime/references/value-envelope.md",

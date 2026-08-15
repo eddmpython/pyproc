@@ -33,6 +33,8 @@ export const PYPROC_ERROR_CODES = Object.freeze([
   "PYPROC_JOURNAL_IO",           // 저널 저장소 IO 실패(커밋 실패 관측 채널)
   "PYPROC_STATE_CORRUPT",        // 상태 커널 오브젝트/세대 파손(verify-on-read 불일치, PREV 후퇴 가능 축)
   "PYPROC_STATE_FENCE_STALE",    // 상태 커널 ref 갱신의 fence 전제조건 위반(승계된 owner의 옛 토큰)
+  "PYPROC_STORAGE_QUOTA_EXCEEDED", // browser bucket이 새 durable write를 quota로 거부
+  "PYPROC_STORAGE_EVICTED",      // 외부 witness가 가리킨 browser bucket이 사라짐
   "PYPROC_RPC_OUTCOME_UNKNOWN",  // 전송 후 결과 불명(자동 재실행 금지)
   "PYPROC_LEADER_UNAVAILABLE",   // 리더 부재/타임아웃
   "PYPROC_SPLIT_BRAIN",          // 같은 epoch에 리더 둘

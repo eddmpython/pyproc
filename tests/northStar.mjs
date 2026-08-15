@@ -139,15 +139,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "durableDisk",
-    score: 9.0,
+    score: 9.2,
     en: Object.freeze({
       title: "A disk that survives",
-      state: "The state kernel commits content-addressed generations into OPFS under a write-order law: a tampered blob is caught, a broken HEAD falls back to PREV instead of impersonating a first boot, journals pack, an unchanged re-commit writes zero bytes, and the durable generation is what the browser computer restores after its process restarts. There is exactly one format on disk now: the legacy envelope reader was retired, and a file written by an older version is refused with what to do about it rather than half-read.",
+      state: "The state kernel commits content-addressed generations into OPFS under a write-order law: a tampered blob is caught, a broken HEAD falls back to PREV instead of impersonating a first boot, journals pack, and an unchanged re-commit writes zero bytes. A versioned browser-storage receipt now distinguishes persistent from best-effort mode and marks usage and quota as rough estimates. A forced quota failure returns one stable code, preserves prior state, and removes the false empty object created before the failed write. After a total OPFS clear, a receipt retained outside the origin turns silent first boot into an explicit eviction error. The browser cannot recover the deleted bytes from the deleted bucket, so recovery still requires an external Machine copy.",
       target: "Durability with the guarantees of a real filesystem: no torn commit, no silent loss, exactly one format.",
     }),
     ko: Object.freeze({
       title: "살아남는 디스크",
-      state: "상태 커널이 내용 주소 세대를 쓰기 순서 법 아래 OPFS에 커밋한다: 변조된 blob은 적발되고, 파손된 HEAD는 첫 부팅을 위장하지 않고 PREV로 후퇴하며, 저널은 pack되고, 바뀐 것이 없는 재커밋은 0바이트를 쓴다. 브라우저 컴퓨터가 프로세스 재시작 뒤 복원하는 것이 바로 그 내구 세대다. 디스크 위 포맷은 이제 하나다: 구 봉투 reader를 일몰했고, 옛 버전이 쓴 파일은 반쯤 읽히는 대신 무엇을 해야 하는지와 함께 거부된다.",
+      state: "상태 커널이 내용 주소 세대를 쓰기 순서 법 아래 OPFS에 커밋한다: 변조된 blob은 적발되고, 파손된 HEAD는 첫 부팅을 위장하지 않고 PREV로 후퇴하며, 저널은 pack되고, 바뀐 것이 없는 재커밋은 0바이트를 쓴다. 이제 versioned browser-storage 영수증이 persistent와 best-effort를 구분하고 usage와 quota가 거친 추정임을 밝힌다. 강제 quota 실패는 한 안정 code로 끝나며 기존 상태를 보존하고 쓰기 전 생성된 거짓 빈 object를 제거한다. OPFS 전체 삭제 뒤에는 origin 밖에 보관한 영수증이 조용한 첫 부팅을 명시적 축출 오류로 바꾼다. 지워진 bucket 스스로는 바이트를 복구할 수 없으므로 복구에는 외부 Machine 사본이 필요하다.",
       target: "진짜 파일시스템의 보장을 가진 내구성: 찢어진 커밋 없음, 조용한 손실 없음, 포맷은 하나.",
     }),
     evidence: Object.freeze([
@@ -155,13 +155,14 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/generationContractProbe.html", lane: "test:web-machine" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
+      Object.freeze({ path: "tests/browser/storageDurabilityProduct.mjs", lane: "test:storage-durability" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "quotaEviction",
-        en: "Survive an OPFS quota eviction as explicitly as a torn commit: today persistence is requested best-effort and a denial is a browser heuristic",
-        ko: "OPFS quota 축출을 찢어진 커밋만큼 명시적으로 다룬다: 지금 지속성은 best-effort 요청이고 거절은 브라우저 휴리스틱이다",
+        id: "evictionRecoveryCopy",
+        en: "Bind an external Machine copy to the eviction witness and restore it after a total browser bucket clear",
+        ko: "외부 Machine 사본을 축출 witness에 묶고 browser bucket 전체 삭제 뒤 그 사본으로 복구한다",
       }),
     ]),
   }),
@@ -460,7 +461,7 @@ export const NORTH_STAR_BROWSER_LANES = Object.freeze([
   "test:browser", "test:installed", "test:examples", "test:mcp", "owned-engine",
   "test:mcp-product", "test:frame-space", "test:python-sdk", "test:apx",
   "test:automation-lifecycle", "test:preflight", "test:web-machine", "test:web-machine:v86",
-  "test:web-computer", "test:hardware-visual-oracle", "ci",
+  "test:web-computer", "test:storage-durability", "test:hardware-visual-oracle", "ci",
 ]);
 
 /** 총점, 만점, 평균. 표의 숫자는 전부 여기서 나온다(손으로 더한 총점 = 표류의 씨앗). */

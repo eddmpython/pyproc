@@ -43,7 +43,8 @@ try {
   const smoke = `
     import { boot, open, createWebComputer, checkEnvironment, PyProcError, PYPROC_ERROR_CODES } from "pyproc";
     import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
-    import { commitState, openState, MemoryStateStore, decodeStateBundle, PAGE_SIZE } from "pyproc/history";
+    import { BrowserStorageDurability, commitState, openState, MemoryStateStore,
+      decodeStateBundle, PAGE_SIZE } from "pyproc/history";
     import { createWebComputer as fromMachine, createMachineCryptoProvider, bootKernelMachine,
       KernelMachine } from "pyproc/machine";
     import { PyProcControlClient, ControlRemoteError, ControlRequest, PerceptionClient,
@@ -105,7 +106,8 @@ try {
     }
     hostBroker.close("package surface probe");
     if (PAGE_SIZE !== 65536) throw new Error("history PAGE_SIZE drift");
-    for (const fn of [commitState, openState, decodeStateBundle, createMachineCryptoProvider]) {
+    for (const fn of [BrowserStorageDurability, commitState, openState,
+      decodeStateBundle, createMachineCryptoProvider]) {
       if (typeof fn !== "function") throw new Error("kernel surface missing");
     }
     for (const [name, value] of Object.entries({ PyProcControlClient, ControlRemoteError, ControlRequest,

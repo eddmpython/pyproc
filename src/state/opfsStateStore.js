@@ -4,10 +4,33 @@
 // createWritable은 close 시 원자 교체라 ref 부분 쓰기는 없다(저널 HEAD와 같은 근거).
 // 계약 문면은 refProtocol.js 상단이 정본이다.
 import { PyProcError } from "../runtime/errors.js";
+import { normalizeBrowserStorageWriteError } from "../runtime/browserStorageDurability.js";
 import { SHA256_ADDRESS_RE, parseSha256Address } from "../runtime/contentDigest.js";
 
 const OBJECT_DIR = "objects";
 const HEX_RE = /^[0-9a-f]{64}$/;
+
+async function writeEntry(directory,name,bytes,context) {
+  let existed = true;
+  let handle = null;
+  let writable = null;
+  try {
+    try { handle = await directory.getFileHandle(name); }
+    catch (error) {
+      if (error?.name !== "NotFoundError") throw error;
+      existed = false;
+      handle = await directory.getFileHandle(name,{create:true});
+    }
+    writable = await handle.createWritable();
+    await writable.write(bytes);
+    await writable.close();
+  }
+  catch (error) {
+    if (writable) try { await writable.abort(); } catch (ignored) {}
+    if (!existed) try { await directory.removeEntry(name); } catch (ignored) {}
+    throw normalizeBrowserStorageWriteError(error,context);
+  }
+}
 
 export class OpfsStateStore {
   constructor(dir) {
@@ -40,9 +63,8 @@ export class OpfsStateStore {
   }
   async writeObject(address, bytes) {
     const dir = await this._objects(true);
-    const fh = await dir.getFileHandle(this._fileName(address), { create: true });
-    const w = await fh.createWritable();
-    await w.write(bytes); await w.close();
+    const fileName = this._fileName(address);
+    await writeEntry(dir,fileName,bytes,{ operation:"state.writeObject", address, requiredBytes:bytes.byteLength });
   }
   async readObject(address) {
     const dir = await this._objects(false);
@@ -69,10 +91,9 @@ export class OpfsStateStore {
   }
   async writeRef(name, ref) {
     if (typeof ref?.commit !== "string") throw new PyProcError("PYPROC_INPUT_INVALID", "OpfsStateStore: ref.commit is required");
-    const fh = await this._dir.getFileHandle(name + ".json", { create: true });
-    const w = await fh.createWritable();
-    await w.write(JSON.stringify({ commit: ref.commit }));
-    await w.close();
+    const value = JSON.stringify({ commit: ref.commit });
+    await writeEntry(this._dir,name + ".json",value,{ operation:"state.writeRef", ref:name,
+      requiredBytes:new TextEncoder().encode(value).byteLength });
   }
   // ref 열거: state 디렉터리의 <name>.json 전부(오브젝트 디렉터리는 제외). 가지 목록의 정본은
   // 색인 파일이 아니라 실재하는 ref 파일이다(색인은 두 번째 진실이 되어 표류한다).

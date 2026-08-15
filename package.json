@@ -118,6 +118,7 @@
     "test:action-convergence": "node tests/browser/actionConvergenceProduct.mjs",
     "test:hardware-visual-oracle": "node tests/browser/hardwareVisualOracleProduct.mjs",
     "test:browser": "node tests/browser/run.mjs",
+    "test:storage-durability": "node tests/browser/storageDurabilityProduct.mjs",
     "test:examples": "node tests/browser/examples.mjs",
     "bench:speed": "node tests/browser/speedBench.mjs",
     "bench:artifact": "node tests/browser/benchArtifact.mjs",

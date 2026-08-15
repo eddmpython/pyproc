@@ -44,6 +44,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "replayGraph.mjs",
   "skillOs.mjs",
   "sourceParses.mjs",
+  "storageDurability.mjs",
   "valueEnvelope.mjs",
   "verification.mjs",
 ]);

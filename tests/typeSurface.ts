@@ -25,6 +25,8 @@ import {
 import { bootKernelMachine, KernelMachine } from "../src/machine/index.js";
 import { KernelProcess, KernelProcessManager } from "../src/processOs/kernelProcess.js";
 import { KernelSession } from "../src/session/kernelSession.js";
+import { BrowserStorageDurability, type StorageDurabilityInspection,
+  type StorageEvictionWitness } from "../src/state/index.js";
 import { createWebGpuHostAdapter, runHardwareVisualOracle } from "../src/composition/gpuSubpath.js";
 import {
   createEffectTransactionRegistry,
@@ -37,6 +39,18 @@ import {
 
 declare const minimalCrypto: { randomUUID(): string };
 declare const store: MachineStore;
+declare const storageDirectory: FileSystemDirectoryHandle;
+
+async function storageDurabilitySurface() {
+  const durability = new BrowserStorageDurability({ storageManager: navigator.storage,
+    directory: storageDirectory, namespace: "typed" });
+  const inspection: StorageDurabilityInspection = await durability.inspect();
+  const witness: StorageEvictionWitness = await durability.createWitness({ witnessId: "outside-copy" });
+  await durability.verifyWitness(witness);
+  await durability.runWrite(async () => undefined, { operation: "typed.write", requiredBytes: 1 });
+  void inspection;
+}
+void storageDurabilitySurface;
 
 // 0.0.10의 비내구 provider 계약은 그대로 컴파일돼야 한다.
 createWebComputer({ cryptoProvider: minimalCrypto });

@@ -235,7 +235,8 @@ export async function assertBrowserControlContract() {
     methods: [
       "Page.navigate", "Network.getCookies", "Network.setCookie", "Network.deleteCookies",
       "DOMStorage.getDOMStorageItems", "DOMStorage.setDOMStorageItem",
-      "Storage.clearDataForOrigin", "DOM.setFileInputFiles",
+      "Storage.clearDataForOrigin", "Storage.getUsageAndQuota", "Storage.overrideQuotaForOrigin",
+      "DOM.setFileInputFiles",
     ],
     fileRoots: [process.cwd()],
     maxRisk: "externalEffect",
@@ -252,6 +253,9 @@ export async function assertBrowserControlContract() {
     ["DOMStorage.getDOMStorageItems", { storageId: { securityOrigin: "http://denied.test", isLocalStorage: true } }],
     ["DOMStorage.setDOMStorageItem", { storageId: { securityOrigin: "http://allowed.test" }, key: "x", value: "y" }],
     ["Storage.clearDataForOrigin", { origin: "http://denied.test" }],
+    ["Storage.getUsageAndQuota", { origin: "http://denied.test" }],
+    ["Storage.overrideQuotaForOrigin", { origin: "http://denied.test", quotaSize:1024 }],
+    ["Storage.overrideQuotaForOrigin", { origin: "http://allowed.test", quotaSize:-1 }],
     ["DOM.setFileInputFiles", { files: [process.execPath], nodeId: 1 }],
   ]) {
     const deniedParams = await errorOf(async () => guardedPolicy.authorizeCommand(guardedTarget, method, params));
@@ -266,6 +270,11 @@ export async function assertBrowserControlContract() {
   assert(guardedPolicy.authorizeCommand(guardedTarget, "DOMStorage.setDOMStorageItem", {
     storageId: { securityOrigin: "http://allowed.test", isLocalStorage: true }, key: "mode", value: "ready",
   }) === "externalEffect", "허용 origin storage destination을 parameter guard가 막았다");
+  assert(guardedPolicy.authorizeCommand(guardedTarget,"Storage.getUsageAndQuota",{
+    origin:"http://allowed.test",
+  }) === "read" && guardedPolicy.authorizeCommand(guardedTarget,"Storage.overrideQuotaForOrigin",{
+    origin:"http://allowed.test",quotaSize:1024,
+  }) === "externalEffect", "허용 origin quota 진단 또는 override를 parameter guard가 막았다");
 
   const blankTransport = new FakeTransport();
   const blankPort = new BrowserControlPort({

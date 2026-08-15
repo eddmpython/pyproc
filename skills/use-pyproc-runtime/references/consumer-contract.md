@@ -44,6 +44,21 @@ objects. Corruption, substitution, a missing parent, or wrong identity fails bef
 VFS state and kernel memory share a coordinated commit boundary. An active transaction, accepted hostcall,
 or forbidden open resource blocks checkpoint.
 
+## Browser storage durability contract
+
+`BrowserStorageDurability` is exported from `pyproc/history`. `inspect()` is read-only and reports whether
+the origin bucket is persistent or best-effort. Its usage and quota values are rough observations, never a
+reservation or permission to start a write. `requestPersistence()` is the only operation that asks the browser
+for persistent treatment and is never called automatically.
+
+A rejected browser write ends as `PYPROC_STORAGE_QUOTA_EXCEEDED` without an automatic retry. OPFS state and
+kernel stores preserve prior data and remove a new empty file handle created before the failed write.
+
+`createWitness()` returns a small receipt that the caller must retain outside the origin. On a later cold
+start, `verifyWitness(receipt)` turns a missing local witness into `PYPROC_STORAGE_EVICTED`. Data deleted with
+the bucket cannot be reconstructed from that bucket. Recovery requires an external Machine bundle copy bound
+to the witness.
+
 ## Package contract
 
 The resolver consumes standard Simple API JSON metadata. Selection checks normalized name, version,

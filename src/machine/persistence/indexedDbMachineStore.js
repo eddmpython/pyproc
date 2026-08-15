@@ -1,6 +1,7 @@
 // indexedDbMachineStore.js - Layer 5/platform: owner, blob, generation, HEAD를 한 IndexedDB transaction으로 fence한다.
 import { operationAbortError, throwIfOperationAborted } from "../contracts/operationControl.js";
 import { WebMachineError } from "../contracts/webMachineError.js";
+import { isBrowserStorageQuotaError } from "../../runtime/browserStorageDurability.js";
 import { copyGenerationBytes } from "./generationIntegrity.js";
 import { generationStorageKey, planGenerationRetention } from "./generationRetention.js";
 
@@ -157,6 +158,12 @@ export class IndexedDbMachineStore {
       try { transaction.abort(); } catch (abortError) {}
       await done.catch(() => undefined);
       if (control?.signal?.aborted) throw operationAbortError(control, `${group}: generation commit`);
+      if (isBrowserStorageQuotaError(error)) {
+        throw new WebMachineError("WEB_MACHINE_STORAGE_QUOTA_EXCEEDED",
+          `${group}: browser storage quota rejected the generation before HEAD publication`, {
+            expectedHead, generationId:generation, browserErrorName:error?.name || null,
+          });
+      }
       throw error;
     } finally {
       control?.signal?.removeEventListener("abort", onAbort);
