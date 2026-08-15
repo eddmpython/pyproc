@@ -1,4 +1,5 @@
 // executionMemoryTools.js - Control과 MCP가 공유하는 Execution Memory operation과 handler.
+import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { createExecutionMemoryRegistry } from "./executionMemoryRegistry.js";
 import { executionMemoryError } from "./executionMemoryCanonical.js";
@@ -72,9 +73,16 @@ function allowedPath(pathInput, roots, label) {
   if (typeof pathInput !== "string" || !isAbsolute(pathInput)) {
     throw executionMemoryError("EXECUTION_MEMORY_PATH", `${label} must be an absolute path`);
   }
-  const target = resolve(pathInput);
+  let target;
+  try { target = realpathSync.native(resolve(pathInput)); }
+  catch (error) {
+    throw executionMemoryError("EXECUTION_MEMORY_PATH", `${label} must reference an existing path`);
+  }
   if (!roots.some((root) => {
-    const rel = relative(root, target);
+    let canonicalRoot;
+    try { canonicalRoot = realpathSync.native(resolve(root)); }
+    catch (error) { return false; }
+    const rel = relative(canonicalRoot, target);
     return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
   })) throw executionMemoryError("EXECUTION_MEMORY_PATH", `${label} is outside configured roots`);
   return target;

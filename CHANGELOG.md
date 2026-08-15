@@ -77,6 +77,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   browser poll during Linux cleanup.
 - Native profile C sources and `Setup.local` inputs are pinned to LF checkout bytes. Their locked SHA-256 values
   now validate identically on Windows and Linux before the reproducible CPython WASI build starts.
+- Execution Memory import authority now compares canonical existing filesystem paths. Windows short and long
+  aliases for the same approved root no longer reject Evidence Pack sealing, while missing paths and escapes
+  remain outside the authority boundary.
 - The GitHub Pages demo now establishes cross-origin isolation through its versioned service-worker bootstrap
   before starting the owned kernel, while the no-header preflight continues to fail closed outside that entry.
 
@@ -121,6 +124,8 @@ one-shot cursor와 pinned root에서 effect 없이 분기를 탐색하고 determ
 MCP fatal 종료는 보류 중인 page long poll을 명시적으로 닫고, 네이티브 프로필의 C와 Setup 입력은
 Windows와 Linux에서 같은 LF 바이트로 검증한다. GitHub Pages 데모는 versioned service worker로
 cross-origin isolation을 확보한 뒤 소유 커널을 시작한다.
+Execution Memory는 Windows의 short path와 long path를 실제 파일시스템 경로로 정규화해 같은 승인
+root로 판정하고, 존재하지 않는 경로와 root 밖 경로는 계속 거부한다.
 
 ## 0.0.21 - 2026-08-13
 

@@ -1,4 +1,5 @@
 import { createHash, sign } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -66,6 +67,10 @@ export async function assertExecutionMemoryContract() {
       permissionManifest: { pythonNetwork: "denied", browser: null }, importRoots: [targetRoot] });
     assert(handlerProduct.registry instanceof ExecutionMemoryRegistry,
       "비어 있지 않은 importRoots가 제품 handler 초기화를 깨뜨렸다");
+    assert(handlerProduct.allowedImportPath(targetRoot, "fixtureRoot") === realpathSync.native(targetRoot),
+      "existing import root의 canonical path가 보존되지 않았다");
+    assert((await errorOf(() => handlerProduct.allowedImportPath(join(targetRoot, "missing"), "missing")))?.code
+      === "EXECUTION_MEMORY_PATH", "존재하지 않는 import path가 권한 경계를 통과했다");
     const source = await ExecutionMemoryRegistry.open({ root: sourceRoot, secretValues: ["fixture-secret"] });
     assert((await errorOf(async () => source.artifacts.captureMachineImage({
       bytes: await machineImage("fixture-secret"), machineId: "machine:secret", lifecycle: "portable",

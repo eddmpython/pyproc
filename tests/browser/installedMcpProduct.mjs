@@ -1,7 +1,7 @@
 // installedMcpProduct.mjs - packed pyproc-mcp command, Python machine, browser and artifacts in one gate.
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
@@ -62,7 +62,10 @@ const check = (name, pass, info = "") => {
 
 const samePath = (left, right) => {
   if (typeof left !== "string" || typeof right !== "string") return false;
-  const values = [left, right].map((value) => resolve(value));
+  const values = [left, right].map((value) => {
+    const absolute = resolve(value);
+    return existsSync(absolute) ? realpathSync.native(absolute) : absolute;
+  });
   return process.platform === "win32"
     ? values[0].toLowerCase() === values[1].toLowerCase()
     : values[0] === values[1];
