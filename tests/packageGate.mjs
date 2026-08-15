@@ -1,6 +1,6 @@
 // tests/packageGate.mjs - npm tarball 공개 표면 게이트.
 // 저장소 소스가 아니라 설치된 패키지 표면만 써서 exports, bin, files 계약을 검증한다.
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { binPath, installPackedPyProc, run } from "./packageHarness.mjs";
@@ -228,24 +228,25 @@ try {
   const initHelp = run(mcpCli, ["init", "--help"], { cwd: appDir });
   if (!controlHelp.stdout.includes("pyproc-control --config") || !controlHelp.stdout.includes("pyproc-control doctor")
     || !controlHelp.stdout.includes("pyproc-control run")
-    || !initHelp.stdout.includes("--engine-root") || !initHelp.stdout.includes("--recording-sha256")
+    || !initHelp.stdout.includes("Override the installed package's owned CPython engine")
+    || !initHelp.stdout.includes("--recording-sha256")
     || controlVersion.stdout.trim() !== installedPackage.version) {
     throw new Error("installed pyproc-control help/version 계약 불일치");
   }
-  const entranceEngine = join(appDir, "entrance", "vendor", "cpython-wasi");
-  mkdirSync(entranceEngine, { recursive: true });
-  writeFileSync(join(entranceEngine, "python.wasm"), "fixture");
-  writeFileSync(join(entranceEngine, "python314-stdlib.zip"), "fixture");
-  writeFileSync(join(entranceEngine, "engine-build-manifest.json"), "{}");
+  const entranceProject = join(appDir, "entrance");
+  mkdirSync(entranceProject, { recursive: true });
   const entrance = JSON.parse(run(mcpCli, ["init", "--recipe", "pythonOnly", "--project-root",
-    join(appDir, "entrance"), "--engine-root", "vendor/cpython-wasi"], { cwd: appDir }).stdout);
+    entranceProject], { cwd: appDir }).stdout);
   if (!entrance.ok || !existsSync(entrance.manifestPath) || !existsSync(entrance.clientPath)
     || !existsSync(entrance.readmePath)) {
     throw new Error("installed pyproc-mcp init journey가 profile 산출물을 만들지 않았다");
   }
   const entranceManifest = JSON.parse(readFileSync(entrance.manifestPath, "utf8"));
-  if (entranceManifest.browser.enabled !== false || Object.keys(entranceManifest.browser).length !== 1) {
-    throw new Error("installed pythonOnly profile이 browser authority를 열었다");
+  const installedEngine = join(appDir, "node_modules", "pyproc", "src", "runtime", "engines", "wasi", "owned", "core");
+  if (entrance.engine?.source !== "packageDefault" || entrance.engine?.root !== installedEngine
+    || entranceManifest.engine.root !== installedEngine
+    || entranceManifest.browser.enabled !== false || Object.keys(entranceManifest.browser).length !== 1) {
+    throw new Error("installed pythonOnly profile이 package engine 기본값 또는 닫힌 browser authority를 잃었다");
   }
 
   const manifestOut = join(appDir, "public", "pyproc-assets.json");

@@ -53,7 +53,6 @@ and put only its public key in the product profile.
 ```sh
 npx pyproc-mcp init \
   --recipe authorizedBrowser \
-  --engine-root /absolute/path/to/cpython-wasi \
   --origin https://work.example.test \
   --action snapshot --action click \
   --max-risk externalEffect \

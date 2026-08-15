@@ -10,7 +10,7 @@ import { parseMachineProfileInitArguments } from "./machineEntrance/entranceCli.
 import { initializeMachineProfile } from "./machineEntrance/profileInitializer.js";
 
 const HELP = `Usage:
-  pyproc-mcp init --recipe <name> --engine-root <directory> [options]
+  pyproc-mcp init --recipe <name> [options]
   pyproc-mcp --config <file> [--check]
 
 Options:
@@ -31,12 +31,13 @@ existing generated profile explicitly.
 `;
 
 const INIT_HELP = `Usage:
-  pyproc-mcp init --recipe <name> --engine-root <directory> [options]
+  pyproc-mcp init --recipe <name> [options]
 
 Profile:
   --project-root <directory>  Existing project root, defaults to the current directory
   --out <directory>           Project-relative output, defaults to .pyproc
   --recipe <name>             pythonOnly, observeLocal, authorizedBrowser, replayPinned, or transactionalApp
+  --engine-root <directory>   Override the installed package's owned CPython engine
   --timeout-ms <n>            Product operation timeout
   --dry-run                   Compile and report paths without writing
   --overwrite                 Explicitly replace an existing generated profile

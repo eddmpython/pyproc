@@ -46,7 +46,7 @@ Create the version 1 manifest with [Machine Entrance](../../use-pyproc-machine/r
 `"browser": { "enabled": false }`. Run the complete doctor before use:
 
 ```sh
-npx pyproc-mcp init --recipe pythonOnly --engine-root /absolute/path/to/cpython-wasi
+npx pyproc-mcp init --recipe pythonOnly
 npx pyproc-control doctor --config ./.pyproc/manifest.json
 ```
 

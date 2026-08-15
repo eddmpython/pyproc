@@ -25,6 +25,13 @@ export async function assertMachineEntranceContract() {
     await writeFile(join(engineRoot, "python.wasm"), "fixture");
     await writeFile(join(engineRoot, "python314-stdlib.zip"), "fixture");
     await writeFile(join(engineRoot, "engine-build-manifest.json"), "{}");
+    const packageRoot = join(root, "installed-package");
+    const packageEngineRoot = join(packageRoot, "src", "runtime", "engines", "wasi", "owned", "core");
+    await mkdir(packageEngineRoot, { recursive: true });
+    await writeFile(join(packageRoot, "package.json"), JSON.stringify({ version: "1.2.3" }));
+    await writeFile(join(packageEngineRoot, "python.wasm"), "fixture");
+    await writeFile(join(packageEngineRoot, "python314-stdlib.zip"), "fixture");
+    await writeFile(join(packageEngineRoot, "engine-build-manifest.json"), "{}");
     const approvalPublicKey = join(projectRoot, "approval-public.pem");
     await writeFile(approvalPublicKey, generateKeyPairSync("ed25519").publicKey
       .export({ type: "spki", format: "pem" }));
@@ -35,6 +42,11 @@ export async function assertMachineEntranceContract() {
     ]);
     assert(parsed.profile.engineRoot === engineRoot && parsed.dryRun === true,
       "Machine Entrance CLI가 project-relative engine을 absolute profile로 컴파일하지 않았다");
+    const defaultParsed = parseMachineProfileInitArguments([
+      "--recipe", "pythonOnly", "--project-root", projectRoot, "--dry-run",
+    ]);
+    assert(defaultParsed.profile.engineRoot === undefined,
+      "Machine Entrance CLI parser가 설치 패키지 경계를 알기 전에 engine 경로를 추측했다");
     assert(parsed.profile.executionMemory.root === join(projectRoot, ".pyproc", "memory")
       && parsed.profile.executionMemory.importRoots[0] === join(projectRoot, "handoffs"),
     "Machine Entrance CLI가 Execution Memory 경로를 absolute profile로 컴파일하지 않았다");
@@ -69,10 +81,18 @@ export async function assertMachineEntranceContract() {
 
     const dry = await initializeMachineProfile({ projectRoot, profile, dryRun: true });
     assert(dry.dryRun && dry.next.run.includes("--code"), "initializer dry-run과 다음 명령 계약이 불일치한다");
+    const packageDefault = await initializeMachineProfile({ projectRoot, outputDir: ".pyproc-default",
+      profile: defaultParsed.profile, packageRoot });
+    const packageManifest = JSON.parse(await readFile(packageDefault.manifestPath, "utf8"));
+    assert(packageDefault.engine.source === "packageDefault"
+      && packageDefault.engine.root === packageEngineRoot
+      && packageManifest.engine.root === packageEngineRoot,
+    "initializer가 설치 패키지의 owned CPython을 기본 engine으로 고정하지 않았다");
     const initialized = await initializeMachineProfile({ projectRoot, profile });
     const manifest = JSON.parse(await readFile(initialized.manifestPath, "utf8"));
     const client = JSON.parse(await readFile(initialized.clientPath, "utf8"));
-    assert(manifest.browser.enabled === false && manifest.executionMemory.root === memoryRoot
+    assert(initialized.engine.source === "explicit" && initialized.engine.root === engineRoot
+      && manifest.browser.enabled === false && manifest.executionMemory.root === memoryRoot
       && client.mcpServers.pyproc.command === "npx"
       && client.mcpServers.pyproc.args.includes("--no-install")
       && client.mcpServers.pyproc.args.at(-1) === initialized.manifestPath,

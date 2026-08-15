@@ -21,20 +21,22 @@ that execute it.
 
 ## Python-only first result
 
-Install and pin the package, then prepare the engine once:
+Install and pin the package:
 
 ```sh
 npm install pyproc@0.0.22 --save-exact
-npm install pyproc@<exact-version>
 ```
 
 From the project root, create the default closed profile:
 
 ```sh
 npx pyproc-mcp init \
-  --recipe pythonOnly \
-  --engine-root ./node_modules/pyproc/src/runtime/engines/wasi/owned/core
+  --recipe pythonOnly
 ```
+
+The initializer selects the owned CPython engine shipped by that exact package. Use `--engine-root` only to
+override it with another complete local engine distribution. The generated result and README record which source
+and absolute path were selected.
 
 This writes three project-local files:
 
@@ -73,7 +75,6 @@ still cause a server-side effect, so exact origin, purpose, and acknowledgement 
 ```sh
 npx pyproc-mcp init \
   --recipe observeLocal \
-  --engine-root ./node_modules/pyproc/src/runtime/engines/wasi/owned/core \
   --origin http://127.0.0.1:4173 \
   --purpose "inspect the caller-owned local application" \
   --acknowledge-effects
@@ -88,7 +89,6 @@ Choose every action explicitly. A recipe never lowers the risk assigned by the c
 ```sh
 npx pyproc-mcp init \
   --recipe authorizedBrowser \
-  --engine-root ./node_modules/pyproc/src/runtime/engines/wasi/owned/core \
   --origin http://127.0.0.1:4173 \
   --action snapshot \
   --action screenshot \
@@ -115,7 +115,6 @@ Any recipe can opt into the same immutable session registry without editing the 
 ```sh
 npx pyproc-mcp init \
   --recipe pythonOnly \
-  --engine-root ./node_modules/pyproc/src/runtime/engines/wasi/owned/core \
   --execution-memory-root ./.pyproc/memory \
   --execution-memory-import-root ./approved-handoffs \
   --execution-memory-secret-env WORKSPACE_SECRET
@@ -133,7 +132,6 @@ An authorized browser recipe can opt into Rehearse-Commit only when Execution Me
 ```sh
 npx pyproc-mcp init \
   --recipe authorizedBrowser \
-  --engine-root ./node_modules/pyproc/src/runtime/engines/wasi/owned/core \
   --origin https://records.example.test \
   --action snapshot \
   --action click \
@@ -159,7 +157,6 @@ identity, explicit actions, purpose, and effect acknowledgement:
 ```sh
 npx pyproc-mcp init \
   --recipe transactionalApp \
-  --engine-root ./node_modules/pyproc/src/runtime/engines/wasi/owned/core \
   --origin https://workspace.example.test \
   --action snapshot --action click \
   --purpose "branch the cooperative workspace" \
@@ -185,7 +182,6 @@ limit. This recipe adds no raw browser method and never sends a staged app effec
 ```sh
 npx pyproc-mcp init \
   --recipe replayPinned \
-  --engine-root ./node_modules/pyproc/src/runtime/engines/wasi/owned/core \
   --origin https://example.test \
   --action snapshot \
   --max-risk read \

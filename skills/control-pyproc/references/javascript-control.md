@@ -35,7 +35,7 @@ Create the version 1 policy manifest with [Machine Entrance](../../use-pyproc-ma
 starting a live product:
 
 ```sh
-npx pyproc-mcp init --recipe pythonOnly --engine-root /absolute/path/to/cpython-wasi
+npx pyproc-mcp init --recipe pythonOnly
 npx pyproc-control doctor --config ./.pyproc/manifest.json
 ```
 
@@ -81,7 +81,6 @@ Enable it when creating the profile, then publish the current Machine as an immu
 ```sh
 npx pyproc-mcp init \
   --recipe pythonOnly \
-  --engine-root /absolute/path/to/cpython-wasi \
   --execution-memory-root /absolute/private/pyproc-memory
 ```
 

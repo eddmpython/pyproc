@@ -7,7 +7,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
+import { binPath, installPackedPyProc, run } from "../packageHarness.mjs";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
@@ -85,7 +85,7 @@ const { createEvidencePack, publishEvidencePack } = await import(pathToFileURL(j
 const browser = process.env.PYPROC_BROWSER || undefined;
 const cli = binPath(installed.appDir, "pyproc-mcp");
 const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", installed.appDir,
-  "--out", ".pyproc-mcp-product", "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
+  "--out", ".pyproc-mcp-product",
   "--timeout-ms", String(TIMEOUT_MS), "--origin", targetOrigin, "--max-risk", "externalEffect",
   "--purpose", "installed-browser-automation-product-gate", "--acknowledge-effects",
   "--method", "Runtime.evaluate", "--viewport-width", "390", "--viewport-height", "844",
@@ -107,8 +107,7 @@ const unknownRecipeOutput = join(installed.appDir, ".pyproc-unknown-recipe");
 let unknownRecipeError = null;
 try {
   run(cli, ["init", "--recipe", "unknownRecipe", "--project-root", installed.appDir,
-    "--out", ".pyproc-unknown-recipe", "--engine-root",
-    join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core")], { cwd: installed.appDir });
+    "--out", ".pyproc-unknown-recipe"], { cwd: installed.appDir });
 } catch (error) { unknownRecipeError = error; }
 check("installed bin help, version, check가 제품 시작 표면과 권한을 검증",
   samePath(initializedProfile.manifestPath, configPath)
@@ -119,7 +118,10 @@ check("installed bin help, version, check가 제품 시작 표면과 권한을 �
     && samePath(checkReport.executionMemory?.root, memoryRoot)
     && checkReport.effectTransactions?.enabled === true
     && checkReport.browser.rawMethods.join(",") === "Runtime.evaluate"
-    && checkReport.engine.mode === "root",
+    && checkReport.engine.mode === "root"
+    && initializedProfile.engine?.source === "packageDefault"
+    && samePath(initializedProfile.engine?.root, join(installed.appDir, "node_modules", "pyproc",
+      "src", "runtime", "engines", "wasi", "owned", "core")),
 `${versionRun.stdout.trim()}, ${checkReport.browser.actions.length} actions`);
 check("installed init가 unknown recipe를 쓰기 전에 거부",
   unknownRecipeError?.message.includes("recipe must be one of") && !existsSync(unknownRecipeOutput));

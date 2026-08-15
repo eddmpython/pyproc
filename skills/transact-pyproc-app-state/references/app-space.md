@@ -38,7 +38,6 @@ compile the `transactionalApp` recipe:
 ```sh
 npx pyproc-mcp init \
   --recipe transactionalApp \
-  --engine-root /absolute/path/to/cpython-wasi \
   --origin https://workspace.example.test \
   --action snapshot --action click \
   --purpose "branch the cooperative workspace" \

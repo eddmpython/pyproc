@@ -1,6 +1,6 @@
 # Initiative 9: agent computer와 웹 표준 후보 준비도
 
-상태: **진행 중, M0 완료, M1 대기**
+상태: **진행 중, M0 완료, M1 첫 하위 계약 완료**
 
 이 문서는 agent가 pyproc에 들어와 보고, 행동하고, 계산하고, 세션을 넘겨 계속 일하는 전 과정을
 제품 기준으로 끌어올리는 실행 원장이다. 기존 능력 점수와 증거의 정본은
@@ -14,7 +14,7 @@
 
 | 질문 | 현재 판정 | 실사용 증거 | 완성까지 남은 것 |
 |---|---|---|---|
-| agent 진입점 | 강함, 완성 아님 | exact install, `pythonOnly` init, effect-free doctor, CPython 실행이 공개 명령으로 완결 | 성공한 startup timeout timer가 Node를 기본 30초까지 붙잡는 수명주기 결함 제거 |
+| agent 진입점 | 강함, 완성 아님 | exact install 뒤 `pythonOnly` init, effect-free doctor, CPython 실행이 공개 명령으로 완결되고 현재 main은 package engine을 자동 선택 | 첫 문서 교체 자동 수렴과 client별 다음 명령 의미 통일 |
 | 눈과 팔 | 강함, 완성 아님 | APX Situation이 링크를 식별하고 proof-carrying click 뒤 `Smallest start` 출현을 confirmed로 봉인 | 첫 문서 교체 복구 여정, 장기 반복 수명주기, 실제 GPU visual oracle 확대 |
 | 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate | 임의 native wheel, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
 | 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, GPU 실기 CI, 브라우저 범위 확대 |
@@ -69,11 +69,18 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 ### M1. Machine Entrance 첫 결과 수렴
 
-판정: **다음 작업**
+판정: **진행 중**
 
-- exact version 설치 뒤 engine 경로를 사람이 조립하지 않아도 되는 공개 recipe를 확정한다.
+- 완료: exact version 설치 뒤 engine 경로를 사람이 조립하지 않아도 package-owned CPython을 선택한다.
+  명시한 `--engine-root`만 override로 사용하며 결과와 생성 README에 선택 출처와 절대 경로를 남긴다.
 - COI bootstrap의 첫 문서 교체를 관찰, 재발급, bounded retry 계약으로 한 번에 수렴시킨다.
 - doctor의 다음 명령이 shell, JavaScript, Python, MCP에서 같은 의미를 가진다.
+
+첫 하위 계약 증거:
+
+- `pyproc-mcp init --recipe pythonOnly`가 설치 tarball 내부 owned engine으로 manifest를 만든다.
+- 순수 parser는 package 경로를 추측하지 않고 initializer만 설치 경계를 해석한다.
+- contract 36 suites, package gate, 전체 12개 게이트, 설치 MCP 제품 20개가 GREEN이다.
 
 ### M2. Eyes와 Arms 장기 수명주기
 

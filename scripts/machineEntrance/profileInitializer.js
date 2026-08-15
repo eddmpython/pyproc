@@ -7,6 +7,9 @@ import { compileMachineProfile } from "./machineProfile.js";
 
 export const MACHINE_PROFILE_DIRECTORY = ".pyproc";
 export const MACHINE_PROFILE_FILES = Object.freeze(["manifest.json", "client.json", "README.md"]);
+export const MACHINE_PROFILE_ENGINE_RELATIVE_PATH = Object.freeze([
+  "src", "runtime", "engines", "wasi", "owned", "core",
+]);
 
 async function exists(path) {
   try { await access(path, constants.F_OK); return true; } catch (error) { return false; }
@@ -47,10 +50,11 @@ function clientSource(manifestPath) {
   }, null, 2)}\n`;
 }
 
-function readmeSource({ recipe, manifestPath, output }) {
+function readmeSource({ recipe, manifestPath, output, engine }) {
   return `# pyproc Machine profile
 
 Recipe: \`${recipe}\`
+Engine: \`${engine.root}\` (${engine.source === "packageDefault" ? "installed package default" : "explicit override"})
 
 This directory contains a fully expanded authority manifest. The recipe name is descriptive and does not
 grant authority at runtime. The manifest remains subject to the strict product validator.
@@ -82,14 +86,15 @@ async function packageVersion(packageRoot) {
   return version;
 }
 
-function sourcesFor({ profile, output }) {
+function sourcesFor({ profile, output, engineSource }) {
   const manifestPath = join(output, "manifest.json");
-  const manifest = `${JSON.stringify(compileMachineProfile(profile), null, 2)}\n`;
-  return new Map([
-    [manifestPath, manifest],
+  const compiled = compileMachineProfile(profile);
+  const engine = Object.freeze({ source: engineSource, root: compiled.engine.root });
+  return Object.freeze({ engine, files: new Map([
+    [manifestPath, `${JSON.stringify(compiled, null, 2)}\n`],
     [join(output, "client.json"), clientSource(manifestPath)],
-    [join(output, "README.md"), readmeSource({ recipe: profile.recipe, manifestPath, output })],
-  ]);
+    [join(output, "README.md"), readmeSource({ recipe: profile.recipe, manifestPath, output, engine })],
+  ]) });
 }
 
 async function writeAtomically(files, { overwrite }) {
@@ -144,7 +149,13 @@ export async function initializeMachineProfile({
     throw new TypeError("Machine profile overwrite and dryRun must be boolean");
   }
   const paths = await normalizedOutput(projectRoot, outputDir);
-  const files = sourcesFor({ profile, output: paths.output });
+  const usesPackageEngine = profile?.engineRoot === undefined;
+  const resolvedProfile = usesPackageEngine && profile && typeof profile === "object" && !Array.isArray(profile)
+    ? { ...profile, engineRoot: join(resolve(packageRoot), ...MACHINE_PROFILE_ENGINE_RELATIVE_PATH) }
+    : profile;
+  const generated = sourcesFor({ profile: resolvedProfile, output: paths.output,
+    engineSource: usesPackageEngine ? "packageDefault" : "explicit" });
+  const files = generated.files;
   const present = [];
   for (const path of files.keys()) if (await exists(path)) present.push(path);
   if (present.length && !overwrite) {
@@ -163,8 +174,9 @@ export async function initializeMachineProfile({
   }
   return Object.freeze({
     ok: true,
-    recipe: profile.recipe,
+    recipe: resolvedProfile.recipe,
     package: Object.freeze({ name: "pyproc", version }),
+    engine: generated.engine,
     projectRoot: paths.root,
     output: paths.output,
     manifestPath: join(paths.output, "manifest.json"),

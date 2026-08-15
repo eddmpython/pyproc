@@ -26,7 +26,7 @@ the official Python client is documented in the [Python SDK guide](./python-sdk.
 Compile a profile and run the complete effect-free doctor before starting the protocol:
 
 ```sh
-npx pyproc-mcp init --recipe pythonOnly --engine-root /absolute/path/to/cpython-wasi
+npx pyproc-mcp init --recipe pythonOnly
 npx pyproc-control doctor --config ./.pyproc/manifest.json
 npx pyproc-control run --config ./.pyproc/manifest.json --code "40 + 2"
 ```

@@ -42,7 +42,6 @@ Compile the common authorized profile without hand-editing JSON:
 ```sh
 npx pyproc-mcp init \
   --recipe authorizedBrowser \
-  --engine-root /absolute/path/to/cpython-wasi \
   --origin https://example.test \
   --action snapshot --action screenshot --action waitFor \
   --action hydrateLazy --action navigate --action fill --action click \

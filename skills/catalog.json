@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:73d00e9b3bbfc2ac4ef12dbaef447ff58f26006c5b4f221a69244fca14271a05",
-  "catalogDigest": "sha256:e8ea587cf3d39528009491509b46e4f6b48e85ac92784a34bbcfd48093b5b790",
+  "generatedFromDigest": "sha256:9c06919dd70f238862b63ebad7cbee841a1a729b4ef6e8fad7bb8f7c89c7b752",
+  "catalogDigest": "sha256:891dd216f8d13753cefd65d64000e0974ece48da29315938b2dc3874be2d3cc6",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -259,8 +259,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
-      "bytes": 24898,
-      "sha256": "sha256:e4d1521aa7e437d9518b8a70f688d5df74dbd27a72f5acd65d9a249240ff1e84"
+      "bytes": 24849,
+      "sha256": "sha256:2e227a6abdab284468f73d640935f2de3ecc3bbb260eb8c657648a480f646812"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/frame-space.md",
@@ -279,23 +279,23 @@
     },
     {
       "path": "skills/commit-pyproc-effects/references/rehearse-commit.md",
-      "bytes": 23161,
-      "sha256": "sha256:1db925b8a4869a5df11da96e5c13fd4a48b8b080cb7a9e8294d4da222130b63f"
+      "bytes": 23112,
+      "sha256": "sha256:32a701b9a4051380d294ba770322055094f07b6f3fbc4a6dce8c0ef22fdb0fc5"
     },
     {
       "path": "skills/control-pyproc/references/control-protocol.md",
-      "bytes": 17721,
-      "sha256": "sha256:a0cfd3bf7a32384ead125c19e0c5d53ebc52bb11fa95a476bc76425ccf77c497"
+      "bytes": 17676,
+      "sha256": "sha256:0eef53dddc2a170007da9deecfa23da5ab888d236e0afd007f45d1fe3d883c13"
     },
     {
       "path": "skills/control-pyproc/references/javascript-control.md",
-      "bytes": 13418,
-      "sha256": "sha256:a8039207d55f0bd8188702566733adf58f430ce18ea1c4612d1b7c172f3918ea"
+      "bytes": 13324,
+      "sha256": "sha256:9aa6c56619822bb1d976002a7f2ebe0de5a219e43dbb6d4adadd645510df98d0"
     },
     {
       "path": "skills/control-pyproc/references/python-sdk.md",
-      "bytes": 14967,
-      "sha256": "sha256:8bf700408f7cd8c580b49c41a72fc6c458c3b68e30af26b176311c291442def3"
+      "bytes": 14922,
+      "sha256": "sha256:68301dc1ad32c591af3490d3dfd0c49a7c68b1ae5f803133ea0bc28ec5482d75"
     },
     {
       "path": "skills/develop-pyproc/references/module-boundaries.md",
@@ -374,8 +374,8 @@
     },
     {
       "path": "skills/transact-pyproc-app-state/references/app-space.md",
-      "bytes": 17480,
-      "sha256": "sha256:20456153aa33fe25ad5707b797dbe349b5ce120d90a7d212a2f935545ab24ae9"
+      "bytes": 17431,
+      "sha256": "sha256:6f47730d99e511b38845f0aec4d25a0fdf3455621c041e00e68ab944bf5ccf29"
     },
     {
       "path": "skills/understand-pyproc/references/capability-matrix.md",
@@ -399,8 +399,8 @@
     },
     {
       "path": "skills/use-pyproc-machine/references/machine-entrance.md",
-      "bytes": 8896,
-      "sha256": "sha256:f86431134980d6e9b8fcde47fe87057be63865b5213b6b9d39964c47e10ec201"
+      "bytes": 8554,
+      "sha256": "sha256:efeb28d4bf4564481cdee5f2f7197f44c7704b0cd1c7bf5100ac3a4290cd701c"
     },
     {
       "path": "skills/use-pyproc-machine/references/machine-fleet.md",
