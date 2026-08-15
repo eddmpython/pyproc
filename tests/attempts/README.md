@@ -51,4 +51,5 @@ pyproc의 실험 졸업 게이트다. **신규 능력·실험은 `src/` 직행 �
 | [selfHost/](selfHost/) | 이 OS 위에서 서버와 웹을 개발할 수 있는가 (러너가 아니라 플랫폼) | 진행 중 (풀스택 실측 8/8, 1번 질문 졸업) |
 | [largeHeapEnvelope/](largeHeapEnvelope/) | 대형 힙에서 OS 프리미티브 비용은 어디서 무너지는가 (Browser Python OS 성능 봉투) | 진행 중 |
 | [stateKernel/](stateKernel/) | 내구 상태 3벌(저널·세션 이미지·machine generation)을 이중 구역 커널 하나로 통합할 수 있는가 | 진행 중 |
+| [actionConvergence/](actionConvergence/) | stale, ambiguous, occluded, navigation replacement를 잘못된 effect 없이 제한 안에서 수렴시키는가 | 진행 중 |
 | [Web Machine](../webMachine/) | 서로 다른 guest engine을 같은 browser computer lifecycle/device/image 계약으로 다룰 수 있는가 | 졸업 -> `src/machine` + `tests/webMachine` |

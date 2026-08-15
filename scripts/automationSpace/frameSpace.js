@@ -9,6 +9,7 @@ import {
 } from "../perception/apxCatalog.js";
 import { APX_SITUATION_REPRESENTATION, validateActionContext } from "../perception/situationCatalog.js";
 import { ActionEvidenceLoop } from "../perception/actionEvidence.js";
+import { ActionConvergence, shouldReobserveAction } from "../perception/actionConvergence.js";
 import { PerceptionSpace } from "../perception/perceptionSpace.js";
 import { FrameSensor } from "../perception/profiles/frameSensor.js";
 
@@ -83,7 +84,8 @@ export class FrameSpace {
     this.config = assertFrameSpaceConfig(config);
     this.spaceId = spaceId;
     this.providerKind = "frame";
-    this.capabilities = Object.freeze(["dom", "target", "screenshot", "artifact", "perception", "actionEvidence"]);
+    this.capabilities = Object.freeze(["dom", "target", "screenshot", "artifact", "perception", "actionEvidence",
+      "actionConvergence"]);
     this.operations = Object.freeze(FRAME_OPERATIONS.filter((operation) => operation !== "automation.observe"
       || this.config.actions.includes("snapshot")));
     this.replayBoundary = "recordOnly";
@@ -164,7 +166,7 @@ export class FrameSpace {
       && [APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(input.representation)) {
       return this._perception.observe(input.sessionRef, perceptionOptionsFromInput(input), { signal });
     }
-    if (operation === "automation.act" && input.actions.some((action) => action.verify)) {
+    if (operation === "automation.act" && input.actions.some((action) => action.verify || action.actionContext)) {
       return this._act(input, { signal, requestId });
     }
     if (operation === "automation.act") {
@@ -242,35 +244,61 @@ export class FrameSpace {
     const results = [];
     for (let index = 0; index < input.actions.length; index += 1) {
       const action = input.actions[index];
-      if (action.actionContext) this._perception.assertActionContext(input.sessionRef, action.actionContext, action);
-      const { verify, actionContext: _actionContext, ...providerAction } = action;
-      const effect = async () => {
-        const output = await this.pageBridge.dispatch("automation.act", {
-          sessionRef: input.sessionRef, actions: [providerAction],
-        }, { signal, requestId: `${requestId || "frame"}:effect:${index}` });
-        return output.results[0];
-      };
+      const convergence = action.actionContext ? new ActionConvergence({ signal }) : null;
       try {
-        const result = verify ? await this._evidence.run({
-          actionRef: `action:${crypto.randomUUID()}`,
-          postcondition: verify,
-          signal,
-          capture: ({ since }) => this._perception.observe(input.sessionRef, {
-            representation: APX_REPRESENTATION,
-            ...(since ? { since } : {}),
-            channels: ["semantic", "structure", "geometry", "interaction", "events"],
-            visual: { mode: "off" },
-            budget: { maxEntities: 500, maxRelations: 1000, maxBytes: 512 * 1024 },
-          }, { signal, issueLocators: false }),
-          effect,
-        }) : { effectResult: await effect(), evidence: null };
+        const perform = async (candidate) => {
+          if (candidate.actionContext) {
+            this._perception.assertActionContext(input.sessionRef, candidate.actionContext, candidate);
+          }
+          const { verify, actionContext: _actionContext, ...providerAction } = candidate;
+          const actionSignal = convergence?.signal || signal;
+          const effect = async () => {
+            const output = await this.pageBridge.dispatch("automation.act", {
+              sessionRef: input.sessionRef, actions: [providerAction],
+            }, { signal: actionSignal, requestId: `${requestId || "frame"}:effect:${index}` });
+            const { effectSent, ...effectResult } = output.results[0] || {};
+            if (effectSent === true) convergence?.markEffectAttempt();
+            return Object.freeze(effectResult);
+          };
+          return verify ? this._evidence.run({
+            actionRef: `action:${crypto.randomUUID()}`,
+            postcondition: verify,
+            signal: actionSignal,
+            capture: ({ since }) => this._perception.observe(input.sessionRef, {
+              representation: APX_REPRESENTATION,
+              ...(since ? { since } : {}),
+              channels: ["semantic", "structure", "geometry", "interaction", "events"],
+              visual: { mode: "off" },
+              budget: { maxEntities: 500, maxRelations: 1000, maxBytes: 512 * 1024 },
+            }, { signal: actionSignal, issueLocators: false }),
+            effect,
+          }) : { effectResult: await effect(), evidence: null };
+        };
+        let result;
+        try {
+          result = await perform(action);
+        } catch (error) {
+          if (error?.details?.effectSent === true) convergence?.markEffectAttempt();
+          if (!convergence || !shouldReobserveAction(error)) throw error;
+          convergence.recordActionability(error.actionability || error.details?.actionability);
+          convergence.beginReobservation();
+          const reissued = await this._perception.reissueAction(input.sessionRef, action,
+            { signal: convergence.signal });
+          convergence.adoptBinding(reissued.convergence);
+          result = await perform(reissued.action);
+        }
+        const receipt = convergence?.success(result.effectResult) || null;
         completed.push(Object.freeze({ index, kind: action.kind }));
         results.push(Object.freeze({ ...(result.effectResult || {}),
-          ...(result.evidence ? { evidence: result.evidence } : {}) }));
+          ...(result.evidence ? { evidence: result.evidence } : {}),
+          ...(receipt ? { convergence: receipt } : {}) }));
+        convergence?.close();
       } catch (error) {
-        error.failedActionIndex = index;
-        error.completed = Object.freeze([...completed]);
-        throw error;
+        const failure = convergence && !error.convergence ? convergence.failure(error) : error;
+        failure.failedActionIndex = index;
+        failure.completed = Object.freeze([...completed]);
+        convergence?.close();
+        throw failure;
       }
     }
     return Object.freeze({ completed: Object.freeze(completed), results: Object.freeze(results) });

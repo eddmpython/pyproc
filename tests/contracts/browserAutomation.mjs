@@ -644,6 +644,10 @@ export async function assertBrowserAutomationContract() {
   }]);
   const inputsAfterReissue = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
   assert(reissueCalls === 1 && convergedDocument.actions[0].convergence?.reason === "documentReplacement"
+    && convergedDocument.actions[0].convergence?.protocol === "pyproc.actionConvergence"
+    && convergedDocument.actions[0].convergence?.maxAttempts === 2
+    && convergedDocument.actions[0].convergence?.reobservations === 1
+    && convergedDocument.actions[0].convergence?.effectAttempts === 1
     && convergedDocument.actions[0].convergence?.effectRetries === 0
     && inputsAfterReissue === inputsBeforeReissue + 2,
   `proof-carrying action이 notSent 문서 교체에서만 한 번 재발급되지 않았다: ${JSON.stringify({
@@ -668,7 +672,10 @@ export async function assertBrowserAutomationContract() {
     kind: "click", locatorRef: boundedLocator, expectedRisk: "externalEffect", actionContext,
   }]));
   assert(boundedReplacement?.code === "BROWSER_AUTOMATION_STALE_LOCATOR"
-    && reissueCalls === reissuesBeforeBounded + 1,
+    && reissueCalls === reissuesBeforeBounded + 1
+    && boundedReplacement.convergence?.reason === "targetUnavailable"
+    && boundedReplacement.convergence?.attempts === 2
+    && boundedReplacement.convergence?.effectAttempts === 0,
   "두 번째 문서 교체가 추가 effect retry로 반복되지 않았다");
   port.contextEpoch = 3;
   automation._perception.assertActionContext = originalAssertActionContext;

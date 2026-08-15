@@ -3,7 +3,7 @@
 import threading
 from concurrent.futures import Future
 
-from pyprocControl import ControlError, ControlProtocolError, ControlResult, PerceptionClient, PerceptionQueryResult, controlBase, decodeFrame, encodeFrame, validateFrame
+from pyprocControl import ActionConvergenceReceipt, ControlError, ControlProtocolError, ControlResult, PerceptionClient, PerceptionQueryResult, controlBase, decodeFrame, encodeFrame, validateFrame
 from pyprocControl.client import ControlRequest, PyProcClient
 
 
@@ -31,6 +31,15 @@ fatal = {**controlBase("error"), "fatal": True,
 assert decodeFrame(encodeFrame(fatal))["fatal"] is True
 assert errorCode(lambda: validateFrame({**fatal, "requestId": "bad:fatal"})) == "CONTROL_INVALID_FRAME"
 assert ControlResult({"value": "42"}, "applied").terminal == "completed"
+convergence = ActionConvergenceReceipt.fromMapping({
+    "protocol": "pyproc.actionConvergence", "version": 1, "state": "converged", "reason": "staleTarget",
+    "attempts": 2, "maxAttempts": 2, "reobservations": 1, "maxReobservations": 1,
+    "effectAttempts": 1, "effectRetries": 0, "effectOutcome": "applied",
+    "maxPreEffectDurationMs": 30000, "preEffectDurationMs": 100, "durationMs": 125,
+    "actionabilityPolls": 4,
+    "actionabilityReasonsSeen": ["notAttached"],
+})
+assert convergence.maxAttempts == 2 and convergence.effectRetries == 0
 assert ControlError({"code": "CONTROL_CANCELLED", "message": "cancelled",
                      "retryable": False, "outcome": "notSent"}).terminal == "cancelled"
 assert ControlError({"code": "CONTROL_FAILED", "message": "partial",

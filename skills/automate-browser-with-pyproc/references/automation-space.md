@@ -66,7 +66,7 @@ one reproducible order. A queued request cancelled before its turn reaches no pr
   "spaceId": "space:native",
   "providerKind": "nativeCdp",
   "operations": ["automation.space.inspect"],
-  "capabilities": ["dom", "network", "target", "storage", "runtime", "screenshot", "artifact", "perception"],
+  "capabilities": ["dom", "network", "target", "storage", "runtime", "screenshot", "artifact", "perception", "actionConvergence"],
   "restoreBoundary": "externalEffectsRemain",
   "replayBoundary": "recordOnly"
 }

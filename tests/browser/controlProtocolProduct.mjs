@@ -310,7 +310,7 @@ try {
   const space = await client.inspectSpace();
   check("설치 제품이 NativeCdpSpace 능력과 복원 경계를 선언",
     space.output.space?.providerKind === "nativeCdp"
-      && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception"
+      && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception,actionConvergence"
       && space.output.space?.restoreBoundary === "externalEffectsRemain"
       && space.output.space?.replayBoundary === "deterministicRecording");
   const fullOpened = await client.openTarget(`${targetOrigin}/semantic-inventory`, {

@@ -63,8 +63,22 @@ function targetServer(label) {
     res.writeHead(200, { ...headers, "Content-Type": "text/html; charset=utf-8" });
     res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${label}</title></head>
       <body><h1>${label}</h1><label>Name <input id="name" value="before"></label>
-      <button id="apply">Apply</button><button id="effect-then-throw">Effect then throw</button><output id="result">waiting</output>
-      <script>document.querySelector('#apply').addEventListener('click',()=>{document.querySelector('#result').textContent=document.querySelector('#name').value})</script>
+      <span id="apply-zone" style="position:relative;display:inline-block"><button id="apply">Apply</button></span>
+      <button id="replace-apply">Replace Apply</button><button id="cover-apply">Cover Apply</button>
+      <button id="cover-persistent">Keep Apply covered</button><button id="clear-cover">Clear cover</button>
+      <button id="effect-then-throw">Effect then throw</button><output id="result">waiting</output>
+      <script>{let applyCount=0;const bindApply=(button)=>button.addEventListener('click',()=>{
+        applyCount+=1;const result=document.querySelector('#result');result.dataset.applyCount=String(applyCount);
+        result.textContent=document.querySelector('#name').value});bindApply(document.querySelector('#apply'));
+        const cover=(persistent)=>{document.querySelector('#cover')?.remove();const overlay=document.createElement('span');
+          overlay.id='cover';overlay.textContent='blocked';Object.assign(overlay.style,{position:'absolute',inset:'0',zIndex:'2',
+            background:'#b42318',color:'white',display:'grid',placeItems:'center'});document.querySelector('#apply-zone').append(overlay);
+          if(!persistent)setTimeout(()=>overlay.remove(),700)};
+        document.querySelector('#replace-apply').addEventListener('click',()=>{const button=document.createElement('button');
+          button.id='apply';button.textContent='Apply';document.querySelector('#apply-zone').replaceChildren(button);bindApply(button)});
+        document.querySelector('#cover-apply').addEventListener('click',()=>cover(false));
+        document.querySelector('#cover-persistent').addEventListener('click',()=>cover(true));
+        document.querySelector('#clear-cover').addEventListener('click',()=>document.querySelector('#cover')?.remove());}</script>
       <script>{const button=document.querySelector('#effect-then-throw'), nativeClick=button.click.bind(button);
         button.addEventListener('click',()=>{document.querySelector('#result').textContent='effect-once'});
         button.click=()=>{nativeClick();throw new Error('after effect')};}</script>
@@ -147,7 +161,7 @@ try {
   const inspected = await client.request("automation.space.inspect", {});
   check("inspect declares credentialless sandbox and provider boundary",
     inspected.output.space?.providerKind === "frame"
-      && inspected.output.space?.capabilities?.join(",") === "dom,target,screenshot,artifact,perception,actionEvidence"
+      && inspected.output.space?.capabilities?.join(",") === "dom,target,screenshot,artifact,perception,actionEvidence,actionConvergence"
       && inspected.output.transport === "messageChannel"
       && inspected.output.sandbox === "allow-scripts allow-forms"
       && inspected.output.credentialless === true
@@ -236,6 +250,57 @@ try {
       && !JSON.stringify(firstApx.output).includes("frameNode:")
       && !firstApx.output.page.url.includes("?"));
 
+  const proofAction = (situation) => {
+    const affordance = situation.output.affordances.find((entry) => entry.kind === "authorized"
+      && entry.requirementRef === "requirement:apply" && entry.action === "click");
+    return { kind: "click", locatorRef: affordance.locatorRef, expectedRisk: affordance.risk,
+      actionContext: { situationRef: situation.output.situationRef, worldRef: situation.output.worldRef,
+        capabilityRef: affordance.capabilityRef } };
+  };
+  const situateApply = () => client.request("automation.observe", {
+    sessionRef: attached.output, expectedRisk: "read", representation: "apx.situation",
+    focus: { requirements: [{ requirementRef: "requirement:apply",
+      select: { role: "button", name: "Apply", actionable: true }, need: ["fact", "affordance"],
+      cardinality: "one" }] }, visual: { mode: "off" },
+  });
+  const staleSituation = await situateApply();
+  await client.request("automation.act", { sessionRef: attached.output,
+    actions: [{ kind: "click", selector: "#replace-apply", expectedRisk: "externalEffect" }] });
+  const staleConverged = await client.request("automation.act", { sessionRef: attached.output,
+    actions: [proofAction(staleSituation)] });
+  check("FrameSpace same-document stale target converges once through the shared receipt",
+    staleConverged.output.results[0].convergence?.protocol === "pyproc.actionConvergence"
+      && staleConverged.output.results[0].convergence?.reason === "staleTarget"
+      && staleConverged.output.results[0].convergence?.attempts === 2
+      && staleConverged.output.results[0].convergence?.effectAttempts === 1
+      && staleConverged.output.results[0].convergence?.effectRetries === 0);
+
+  const coveredSituation = await situateApply();
+  await client.request("automation.act", { sessionRef: attached.output,
+    actions: [{ kind: "click", selector: "#cover-apply", expectedRisk: "externalEffect" }] });
+  const coverConverged = await client.request("automation.act", { sessionRef: attached.output,
+    actions: [{ ...proofAction(coveredSituation), timeoutMs: 2000 }] });
+  check("FrameSpace transient occlusion waits before one effect and reports convergence",
+    coverConverged.output.results[0].convergence?.reason === "occlusionCleared"
+      && coverConverged.output.results[0].convergence?.effectAttempts === 1
+      && coverConverged.output.results[0].convergence?.actionabilityReasonsSeen?.includes("intercepted"));
+
+  const blockedSituation = await situateApply();
+  await client.request("automation.act", { sessionRef: attached.output,
+    actions: [{ kind: "click", selector: "#cover-persistent", expectedRisk: "externalEffect" }] });
+  let blockedAction = null;
+  try {
+    await client.request("automation.act", { sessionRef: attached.output,
+      actions: [{ ...proofAction(blockedSituation), timeoutMs: 250 }] });
+  } catch (error) { blockedAction = error; }
+  check("FrameSpace persistent occlusion refuses with zero effects and the shared receipt",
+    blockedAction instanceof ControlRemoteError && blockedAction.outcome === "notSent"
+      && blockedAction.details?.convergence?.reason === "actionabilityTimeout"
+      && blockedAction.details?.convergence?.effectAttempts === 0
+      && blockedAction.details?.convergence?.effectRetries === 0);
+  await client.request("automation.act", { sessionRef: attached.output,
+    actions: [{ kind: "click", selector: "#clear-cover", expectedRisk: "externalEffect" }] });
+
   let visualDenied = null;
   try {
     await client.request("automation.observe", {
@@ -279,6 +344,27 @@ try {
     firstUnknown instanceof ControlRemoteError && firstUnknown.outcome === "outcomeUnknown"
       && firstUnknown.retryable === false
       && effectObserved.output.nodes.some((node) => node.id === "result" && node.text === "effect-once"));
+
+  const unknownSituation = await client.request("automation.observe", {
+    sessionRef: attached.output, expectedRisk: "read", representation: "apx.situation",
+    focus: { requirements: [{ requirementRef: "requirement:unknown",
+      select: { role: "button", name: "Effect then throw", actionable: true }, need: ["fact", "affordance"],
+      cardinality: "one" }] }, visual: { mode: "off" },
+  });
+  const unknownAffordance = unknownSituation.output.affordances.find((entry) => entry.kind === "authorized");
+  let proofUnknown = null;
+  try {
+    await client.request("automation.act", { sessionRef: attached.output, actions: [{
+      kind: "click", locatorRef: unknownAffordance.locatorRef, expectedRisk: unknownAffordance.risk,
+      actionContext: { situationRef: unknownSituation.output.situationRef,
+        worldRef: unknownSituation.output.worldRef, capabilityRef: unknownAffordance.capabilityRef },
+    }] });
+  } catch (error) { proofUnknown = error; }
+  check("proof-carrying unknown effect records one attempt and never retries",
+    proofUnknown instanceof ControlRemoteError && proofUnknown.outcome === "outcomeUnknown"
+      && proofUnknown.details?.convergence?.state === "unknown"
+      && proofUnknown.details?.convergence?.effectAttempts === 1
+      && proofUnknown.details?.convergence?.effectRetries === 0);
 
   await client.request("automation.act", {
     sessionRef: attached.output,

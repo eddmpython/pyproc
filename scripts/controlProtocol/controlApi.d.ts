@@ -895,6 +895,40 @@ export class SituationAffordance {
   readonly risk: string | null;
 }
 
+export interface ActionConvergenceReceipt extends Readonly<Record<string, unknown>> {
+  readonly protocol: "pyproc.actionConvergence";
+  readonly version: 1;
+  readonly state: "converged" | "refused" | "unknown" | "effectObserved";
+  readonly reason: "ready" | "staleTarget" | "documentReplacement" | "occlusionCleared"
+    | "ambiguousTarget" | "targetUnavailable" | "authorityChanged" | "actionabilityTimeout"
+    | "convergenceTimeout" | "cancelled" | "providerRejected";
+  readonly attempts: 1 | 2;
+  readonly maxAttempts: 2;
+  readonly reobservations: 0 | 1;
+  readonly maxReobservations: 1;
+  readonly effectAttempts: 0 | 1;
+  readonly effectRetries: 0;
+  readonly effectOutcome: ControlOutcome;
+  readonly maxPreEffectDurationMs: 30000;
+  readonly preEffectDurationMs: number;
+  readonly durationMs: number;
+  readonly actionabilityPolls: number;
+  readonly actionabilityReasonsSeen: readonly string[];
+  readonly fromSituationRef?: string;
+  readonly toSituationRef?: string;
+  readonly fromDocumentEpoch?: number;
+  readonly toDocumentEpoch?: number;
+}
+
+export interface AutomationActionTerminal extends Readonly<Record<string, unknown>> {
+  readonly convergence?: ActionConvergenceReceipt;
+}
+
+export interface AutomationActOutput extends Readonly<Record<string, unknown>> {
+  readonly actions?: readonly AutomationActionTerminal[];
+  readonly results?: readonly AutomationActionTerminal[];
+}
+
 export class SituationUnknown {
   private constructor();
   readonly value: Readonly<Record<string, unknown>>;
@@ -977,9 +1011,10 @@ export class PerceptionClient {
   situate(focus: SituationFocus, options?: SituationOptions,
     requestOptions?: ControlRequestOptions): Promise<SituationResult>;
   act(kind: string, locatorRef: string, options?: Readonly<Record<string, unknown>>,
-    requestOptions?: ControlRequestOptions): Promise<ControlResult>;
+    requestOptions?: ControlRequestOptions): Promise<ControlResult<AutomationActOutput>>;
   actAffordance(affordance: SituationAffordance | Readonly<Record<string, unknown>>,
-    options?: Readonly<Record<string, unknown>>, requestOptions?: ControlRequestOptions): Promise<ControlResult>;
+    options?: Readonly<Record<string, unknown>>, requestOptions?: ControlRequestOptions):
+    Promise<ControlResult<AutomationActOutput>>;
   explainActionability(entityRef: string, options?: Readonly<{ sessionRef?: ControlSessionRef } & ControlRequestOptions>):
     Promise<PerceptionEntity>;
   whatChanged(since: string, options?: PerceptionObserveOptions,
@@ -1046,7 +1081,7 @@ export class PyProcControlClient {
   observe(sessionRef: ControlSessionRef, observation?: Readonly<Record<string, unknown>>,
     options?: ControlRequestOptions): Promise<ControlResult<Readonly<Record<string, unknown>>>>;
   act(sessionRef: ControlSessionRef, actions: readonly Readonly<Record<string, unknown>>[],
-    options?: ControlRequestOptions): Promise<ControlResult>;
+    options?: ControlRequestOptions): Promise<ControlResult<AutomationActOutput>>;
   command(sessionRef: ControlSessionRef, method: string, params: Readonly<Record<string, unknown>>,
     options: ControlRequestOptions & { readonly expectedRisk: string }): Promise<ControlResult>;
   detachSession(sessionRef: ControlSessionRef, options?: ControlRequestOptions): Promise<ControlResult>;

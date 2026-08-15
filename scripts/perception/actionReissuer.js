@@ -1,12 +1,13 @@
-// actionReissuer.js - replaced document의 typed focus를 새 capability에 한 번 다시 묶는 순수 계약.
+// actionReissuer.js - typed focus를 바뀐 target의 새 capability에 한 번 다시 묶는 순수 계약.
 import { apxDigest } from "./apxCanonical.js";
 import { validateActionContext } from "./situationCatalog.js";
 
-function failure(message) {
+function failure(message, convergenceReason = "authorityChanged") {
   const error = new Error(message);
   error.code = "APX_CAPABILITY_STALE";
   error.outcome = "notSent";
   error.retryable = false;
+  error.convergenceReason = convergenceReason;
   return error;
 }
 
@@ -14,9 +15,13 @@ function oneAuthorizedAffordance(capsule, requirementRef, action) {
   const matches = capsule.affordances.filter((entry) => entry.kind === "authorized"
     && entry.requirementRef === requirementRef && entry.action === action);
   const requirement = capsule.requirements.filter((entry) => entry.requirementRef === requirementRef);
+  if (requirement.length === 1 && (requirement[0].state === "ambiguous" || requirement[0].matched > 1
+    || matches.length > 1)) {
+    throw failure("action reissue found more than one target for the original requirement", "ambiguousTarget");
+  }
   if (requirement.length !== 1 || requirement[0].state !== "satisfied" || requirement[0].matched !== 1
     || matches.length !== 1) {
-    throw failure("document replacement no longer has one authorized target for the original requirement");
+    throw failure("action reissue no longer has one authorized target for the original requirement", "targetUnavailable");
   }
   return matches[0];
 }
@@ -47,13 +52,13 @@ export function prepareActionReissue(history, action) {
   const actionContext = validateActionContext(action?.actionContext);
   const prior = history?.get(actionContext.situationRef);
   if (!prior || prior.worldRef !== actionContext.worldRef) {
-    throw failure("document replacement no longer has the original SituationCapsule");
+    throw failure("action reissue no longer has the original SituationCapsule", "targetUnavailable");
   }
   const original = prior.affordances.filter((entry) => entry.kind === "authorized"
     && entry.capabilityRef === actionContext.capabilityRef);
   if (original.length !== 1 || original[0].locatorRef !== action.locatorRef
     || original[0].action !== action.kind || original[0].risk !== action.expectedRisk) {
-    throw failure("document replacement action does not match its original capability");
+    throw failure("action reissue does not match its original capability");
   }
   return Object.freeze({ action, actionContext, prior, original: original[0] });
 }
@@ -68,19 +73,19 @@ export function completeActionReissue(prepared, refreshed) {
   if (replacement.risk !== original.risk || !equalValue(replacement.destination, original.destination)
     || !equalValue(replacement.expectedTransition, authorityTransition)
     || (expectedTransition !== undefined && !equalValue(replacement.expectedTransition, expectedTransition))) {
-    throw failure("document replacement changed the action authority or expected transition");
+    throw failure("action reissue changed the action authority or expected transition");
   }
   let toLocatorRef = action.toLocatorRef;
   if (toLocatorRef !== undefined) {
     const destinationRequirements = [...new Set(prior.affordances.filter((entry) => entry.kind === "authorized"
       && entry.locatorRef === toLocatorRef).map((entry) => entry.requirementRef))];
     if (destinationRequirements.length !== 1) {
-      throw failure("document replacement lost the original drag destination requirement");
+      throw failure("action reissue lost the original drag destination requirement", "targetUnavailable");
     }
     const destinationLocators = [...new Set(refreshed.affordances.filter((entry) => entry.kind === "authorized"
       && entry.requirementRef === destinationRequirements[0]).map((entry) => entry.locatorRef).filter(Boolean))];
     if (destinationLocators.length !== 1) {
-      throw failure("document replacement no longer has one drag destination");
+      throw failure("action reissue no longer has one drag destination", "ambiguousTarget");
     }
     [toLocatorRef] = destinationLocators;
   }
@@ -97,7 +102,8 @@ export function completeActionReissue(prepared, refreshed) {
     action: Object.freeze({ ...action, locatorRef: replacement.locatorRef,
       ...(action.verify === undefined ? {} : { verify: rebaseEntityRefs(action.verify, refs) }),
       ...(toLocatorRef === undefined ? {} : { toLocatorRef }), actionContext: reboundContext }),
-    convergence: Object.freeze({ reason: "documentReplacement", attempts: 2, effectRetries: 0,
+    convergence: Object.freeze({ reason: prior.documentEpoch === refreshed.documentEpoch
+      ? "staleTarget" : "documentReplacement",
       fromSituationRef: prior.situationRef, toSituationRef: refreshed.situationRef,
       fromDocumentEpoch: prior.documentEpoch, toDocumentEpoch: refreshed.documentEpoch }),
   });

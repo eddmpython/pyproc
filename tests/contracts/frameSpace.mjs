@@ -58,7 +58,8 @@ export async function assertFrameSpaceContract() {
     .inputSchema.properties.representation.enum.includes(APX_SITUATION_REPRESENTATION), true);
   const space = new FrameSpace({ pageBridge, config, spaceId: "space:frameContract" });
   assert.equal(space.providerKind, "frame");
-  assert.deepEqual(space.capabilities, ["dom", "target", "screenshot", "artifact", "perception", "actionEvidence"]);
+  assert.deepEqual(space.capabilities,
+    ["dom", "target", "screenshot", "artifact", "perception", "actionEvidence", "actionConvergence"]);
   const router = new AutomationSpaceRouter(space);
   const inspect = await router.invoke("automation.space.inspect", {}, { requestId: "contract:inspect" });
   assert.equal(inspect.space.providerKind, "frame");

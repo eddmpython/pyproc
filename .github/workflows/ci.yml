@@ -124,6 +124,9 @@ jobs:
       - run: npm run test:automation-lifecycle
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      - run: npm run test:action-convergence
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
 
   # 실제 Microsoft Edge의 Windows 배포 경계. 설치 tarball/골든 경로와 핵심 브라우저
   # 계약을 Chrome과 독립해 문다. examples는 Chrome의 동일 쇼케이스를 그대로 반복해 비용이
@@ -181,6 +184,7 @@ jobs:
       - run: npm run test:browser-control
       - run: npm run test:browser-control-stress
       - run: npm run test:automation-lifecycle
+      - run: npm run test:action-convergence
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:

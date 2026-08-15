@@ -96,7 +96,7 @@ wire validation and conformance vocabulary; `perceptionIdentity.js` and `percept
 identity and deltas; `perceptionBudget.js` and `perceptionQuery.js` own bounded attention;
 `requirementCandidateEvaluator.js` owns candidate truth and read-only continuation binding before projection;
 `unresolvedVocabulary.js` owns the shared unresolved enum; `perceptionSpace.js` owns sensor fusion;
-`postconditionObservationPlanner.js`, `postconditionVerifier.js`, and `actionEvidence.js` own focused observation,
+`postconditionObservationPlanner.js`, `postconditionVerifier.js`, `actionEvidence.js`, and `actionConvergence.js` own focused observation,
 coverage-aware terminal truth, and one-shot verification. Provider
 adapters live only under `scripts/perception/profiles/`. They may consume private CDP or Frame facts but must
 emit no native identifier. `browserAutomation.js` composes perception with policy, artifact, and action

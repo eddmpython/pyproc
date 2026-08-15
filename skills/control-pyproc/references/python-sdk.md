@@ -162,6 +162,8 @@ Browser operations appear only when the manifest grants automation authority. Ri
 catalog and must be acknowledged on each effect:
 
 ```python
+from pyprocControl import ActionConvergenceReceipt
+
 with PyProcClient.start(".pyproc/manifest.json") as client:
     opened = client.openTarget(
         "https://example.test",
@@ -237,6 +239,8 @@ with PyProcClient.start(".pyproc/manifest.json") as client:
         verify={"entityAppeared": {"role": "status", "nameContains": "Saved"}},
     )
     assert result.output["actions"][0]["result"]["evidence"]["verification"]["state"] == "confirmed"
+    receipt = ActionConvergenceReceipt.fromMapping(result.output["actions"][0]["convergence"])
+    assert receipt.maxAttempts == 2 and receipt.effectRetries == 0
 ```
 
 `SituationResult` exposes immutable requirements, facts, affordances, and unknowns. Only an authorized
@@ -251,6 +255,11 @@ Each requirement exposes `candidateEvidence` from the pre-projection candidate u
 carry an exact count and digest; incomplete inventories carry only a lower bound and authorize no effect. Verified
 action output includes send-boundary timing, independent input-release evidence, and `observationCoverage` for
 focused entities and monotonic event windows. An incomplete window never proves that an event was absent.
+
+Use `ActionConvergenceReceipt.fromMapping(...)` for a successful action terminal or
+`ControlError.details["convergence"]`. Native CDP uses `output["actions"][0]`; FrameSpace uses
+`output["results"][0]`. The receipt fixes two candidate attempts, one reobservation, zero effect retries, and a
+30000 ms first-effect deadline while reporting the actual effect count and timing.
 
 Native CDP supports verified pixel-on-demand attachments. FrameSpace supports APX through temporal level L3
 but rejects visual inference. See the [APX 1.0 product contract](../../verify-browser-experience/references/apx.md) for the graph and evidence

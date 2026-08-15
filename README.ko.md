@@ -114,6 +114,12 @@ Machine image 계약을 사용한다.
 Effect-free doctor는 `machine.run`을 정본 의미로 고정하고 shell, JavaScript, Python, MCP에 매핑한 하나의
 구조화된 첫 결과 행동도 반환한다.
 
+proof-carrying browser action은 provider-neutral `pyproc.actionConvergence` version 1 영수증을 반환한다.
+Native CDP와 FrameSpace는 후보 최대 2개, 재관찰 최대 1회, effect retry 0회, 첫 effect 전 30000 ms를
+같이 지킨다. 같은 문서 stale target과 교체된 문서는 유일한 동일 권한 대상에만 수렴하고, ambiguous와
+지속 가림은 effect 0회인 같은 영수증으로 거절한다. 성공은 action terminal, 안전 거절은 error details에
+영수증을 싣는다.
+
 [Machine Entrance](skills/use-pyproc-machine/references/machine-entrance.md)에서 시작한 뒤
 [JavaScript Control SDK](skills/control-pyproc/references/javascript-control.md),
 [Python SDK](skills/control-pyproc/references/python-sdk.md), 또는 완전한

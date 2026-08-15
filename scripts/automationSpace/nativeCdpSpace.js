@@ -11,6 +11,7 @@ export const NATIVE_CDP_CAPABILITIES = Object.freeze([
   "screenshot",
   "artifact",
   "perception",
+  "actionConvergence",
 ]);
 
 export class NativeCdpSpace extends BrowserControlSpace {

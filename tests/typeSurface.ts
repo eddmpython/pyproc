@@ -145,8 +145,15 @@ async function controlSurface() {
   const situation = await eyes.situate({ requirements: [{ requirementRef: "requirement:save",
     select: { role: "button", name: "Save" }, need: ["fact", "affordance"], cardinality: "one" }] });
   const saveAffordance = situation.requirement("requirement:save").oneAffordance("click");
-  await eyes.actAffordance(saveAffordance, { intent: "Save the document",
+  const converged = await eyes.actAffordance(saveAffordance, { intent: "Save the document",
     verify: { entityAppeared: { role: "status" } } });
+  const convergence = converged.output.actions?.[0]?.convergence || converged.output.results?.[0]?.convergence;
+  if (convergence) {
+    const maxAttempts: 2 = convergence.maxAttempts;
+    const effectRetries: 0 = convergence.effectRetries;
+    void maxAttempts;
+    void effectRetries;
+  }
   await eyes.situate({ requirements: [{ requirementRef: "requirement:bad", select: { role: "button" },
     // @ts-expect-error situation requirements use the closed fact, affordance, change vocabulary
     need: ["screenshot"] }] });

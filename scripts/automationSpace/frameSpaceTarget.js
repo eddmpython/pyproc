@@ -10,11 +10,12 @@
   let locatorSequence = 0;
   let nativeSequence = 0;
 
-  function frameError(code, message, outcome = "rejected") {
+  function frameError(code, message, outcome = "rejected", details = null) {
     const error = new Error(message);
     error.code = code;
     error.outcome = outcome;
     error.retryable = false;
+    if (details) error.details = details;
     return error;
   }
 
@@ -326,7 +327,7 @@
       element = locatorByRef.get(input.locatorRef);
     }
     if (!element || !element.isConnected) {
-      throw frameError("FRAME_SPACE_TARGET_NOT_FOUND", "target element is unavailable");
+      throw frameError("FRAME_SPACE_TARGET_NOT_FOUND", "target element is unavailable", "notSent");
     }
     return element;
   }
@@ -335,6 +336,49 @@
     const style = getComputedStyle(element);
     const rect = element.getBoundingClientRect();
     return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+  }
+
+  function actionability(element, operation) {
+    const visible = isVisible(element);
+    const enabled = !element.matches(":disabled,[aria-disabled='true']");
+    const editable = element.isContentEditable || ((element instanceof HTMLInputElement
+      || element instanceof HTMLTextAreaElement) && !element.readOnly && !element.disabled);
+    const rect = element.getBoundingClientRect();
+    const x = Math.floor(Math.max(0, Math.min(innerWidth, rect.left + rect.width / 2)));
+    const y = Math.floor(Math.max(0, Math.min(innerHeight, rect.top + rect.height / 2)));
+    const hit = document.elementFromPoint(x, y);
+    const receivesEvents = hit === element || element.contains(hit);
+    const reasons = [];
+    if (!element.isConnected) reasons.push("notAttached");
+    if (!visible) reasons.push("notVisible");
+    if (["action.click", "action.check", "action.uncheck"].includes(operation) && !receivesEvents) {
+      reasons.push("intercepted");
+    }
+    if (!["action.scroll"].includes(operation) && !enabled) reasons.push("notEnabled");
+    if (operation === "action.fill" && !editable) reasons.push("notEditable");
+    return Object.freeze({ ready: reasons.length === 0, reasons: Object.freeze(reasons) });
+  }
+
+  async function waitForActionTarget(input, operation) {
+    const timeoutMs = Math.max(1, Math.min(30000, Number(input.timeoutMs) || 5000));
+    const started = performance.now();
+    let polls = 0;
+    const reasonsSeen = new Set();
+    for (;;) {
+      const element = targetElement(input);
+      const status = actionability(element, operation);
+      polls += 1;
+      for (const reason of status.reasons) reasonsSeen.add(reason);
+      if (status.ready) return Object.freeze({ element,
+        actionability: Object.freeze({ polls, reasonsSeen: Object.freeze([...reasonsSeen]) }) });
+      if (performance.now() - started >= timeoutMs) {
+        throw frameError("FRAME_SPACE_ACTIONABILITY_TIMEOUT",
+          `target actionability timed out (${status.reasons.join(",")})`, "notSent",
+          { actionability: { kind: operation.slice(7), polls,
+            reasons: status.reasons, reasonsSeen: Object.freeze([...reasonsSeen]) } });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
   }
 
   async function waitFor(input) {
@@ -431,36 +475,52 @@
     if (operation === "action.snapshot") return snapshot(input);
     if (operation === "action.screenshot") return screenshot();
     if (operation === "action.waitFor") return waitFor(input);
-    const element = targetElement(input);
-    if (operation === "action.click") element.click();
-    else if (operation === "action.focus") element.focus();
-    else if (operation === "action.fill") {
-      element.value = String(input.value ?? "");
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-    } else if (operation === "action.press") {
-      const key = String(input.key || "");
-      element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-      element.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
-    } else if (operation === "action.select") {
-      if (!(element instanceof HTMLSelectElement)) throw frameError("FRAME_SPACE_ACTION_INVALID", "select requires a select element");
-      const values = Array.isArray(input.values) ? input.values.map(String) : [String(input.value ?? "")];
-      for (const option of element.options) option.selected = values.includes(option.value);
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-    } else if (operation === "action.check" || operation === "action.uncheck") {
-      if (!(element instanceof HTMLInputElement) || !["checkbox", "radio"].includes(element.type)) {
-        throw frameError("FRAME_SPACE_ACTION_INVALID", `${operation.slice(7)} requires a checkbox or radio`);
+    const prepared = await waitForActionTarget(input, operation);
+    const element = prepared.element;
+    let effectSent = false;
+    try {
+      if (operation === "action.click") { effectSent = true; element.click(); }
+      else if (operation === "action.focus") { effectSent = true; element.focus(); }
+      else if (operation === "action.fill") {
+        effectSent = true;
+        element.value = String(input.value ?? "");
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      } else if (operation === "action.press") {
+        const key = String(input.key || "");
+        effectSent = true;
+        element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+        element.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
+      } else if (operation === "action.select") {
+        if (!(element instanceof HTMLSelectElement)) throw frameError("FRAME_SPACE_ACTION_INVALID", "select requires a select element");
+        const values = Array.isArray(input.values) ? input.values.map(String) : [String(input.value ?? "")];
+        effectSent = true;
+        for (const option of element.options) option.selected = values.includes(option.value);
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      } else if (operation === "action.check" || operation === "action.uncheck") {
+        if (!(element instanceof HTMLInputElement) || !["checkbox", "radio"].includes(element.type)) {
+          throw frameError("FRAME_SPACE_ACTION_INVALID", `${operation.slice(7)} requires a checkbox or radio`);
+        }
+        effectSent = true;
+        element.checked = operation === "action.check";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      } else if (operation === "action.scroll") {
+        effectSent = true;
+        element.scrollIntoView({ behavior: "instant", block: input.block || "center", inline: input.inline || "nearest" });
+      } else {
+        throw frameError("FRAME_SPACE_OPERATION_UNSUPPORTED", `unsupported frame operation: ${operation}`, "notSent");
       }
-      element.checked = operation === "action.check";
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-    } else if (operation === "action.scroll") {
-      element.scrollIntoView({ behavior: "instant", block: input.block || "center", inline: input.inline || "nearest" });
-    } else {
-      throw frameError("FRAME_SPACE_OPERATION_UNSUPPORTED", `unsupported frame operation: ${operation}`, "notSent");
+    } catch (error) {
+      if (effectSent) {
+        error.outcome = "outcomeUnknown";
+        error.retryable = false;
+        error.details = Object.freeze({ ...(error.details || {}), effectSent: true });
+      }
+      throw error;
     }
-    return elementSummary(element);
+    return Object.freeze({ ...elementSummary(element), actionability: prepared.actionability, effectSent: true });
   }
 
   addEventListener("message", (event) => {
@@ -482,7 +542,8 @@
         port.postMessage({ protocol: PROTOCOL, version: VERSION, type: "response", id: data.id,
           ok: false, error: { code: error?.code || "FRAME_SPACE_TARGET_FAILED",
             message: String(error?.message || error).slice(-1000), outcome,
-            retryable: error?.retryable === true } });
+            retryable: error?.retryable === true,
+            ...(error?.details && typeof error.details === "object" ? { details: error.details } : {}) } });
       }
     };
     port.start();

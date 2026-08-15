@@ -104,7 +104,8 @@ export async function assertAutomationSpaceContract() {
   const nativeInspect = await nativeRouter.invoke("automation.space.inspect", {});
   assert.equal(nativeInspect.space.providerKind, "nativeCdp");
   assert.deepEqual(nativeInspect.space.capabilities,
-    ["dom", "network", "target", "storage", "runtime", "screenshot", "artifact", "perception"]);
+    ["dom", "network", "target", "storage", "runtime", "screenshot", "artifact", "perception",
+      "actionConvergence"]);
   await nativeRouter.close();
   await router.close();
   await router.close();

@@ -23,7 +23,7 @@ attaches to a normal browser profile, and never puts the CDP endpoint inside Pyt
 
 The same host is available through `pyproc-control` and the Python SDK. `browser.provider` selects a provider
 behind the [AutomationSpace contract](./automation-space.md). The default `NativeCdpSpace` declares DOM,
-network, target, storage, runtime, screenshot, artifact, and perception capabilities while keeping endpoint and provider
+network, target, storage, runtime, screenshot, artifact, perception, and action-convergence capabilities while keeping endpoint and provider
 objects private. The cooperative [FrameSpace provider](./frame-space.md) uses a credentialless sandbox and no
 DevTools port.
 
@@ -264,12 +264,19 @@ Copy the selected authorized affordance's `situationRef`, `worldRef`, and `capab
 fingerprint, epoch, action, locator, risk, destination, transition shape, and expiry at the send boundary. A
 mismatch is `APX_CAPABILITY_STALE` with `notSent`.
 
-If a proof-carrying action reaches that boundary after a document replacement, Control replays the original
-typed focus as a fresh Situation exactly once. It proceeds only when the same requirement again has one
-authorized target with unchanged risk, destination, and transition. The action result then includes
-`convergence.reason: "documentReplacement"`, `attempts: 2`, and `effectRetries: 0`. Ambiguity, changed authority,
-a second replacement, any sent effect, or an unknown outcome stops without another provider effect. Actions
-without `actionContext` are never reissued.
+If a proof-carrying action finds a detached target or a replaced document before the first effect, Control
+replays the original typed focus as a fresh Situation exactly once. It proceeds only when the same requirement
+again has one authorized target with unchanged risk, destination, and transition. The provider-neutral
+`pyproc.actionConvergence` version 1 receipt fixes `maxAttempts: 2`, `maxReobservations: 1`,
+`effectRetries: 0`, and `maxPreEffectDurationMs: 30000`. It records actual attempts, reobservations,
+`effectAttempts`, `preEffectDurationMs`, total `durationMs`, actionability polls and reasons, and both Situation
+and document epochs when rebinding occurred.
+
+`reason` is `staleTarget` for a same-document rebind, `documentReplacement` for a new document, and
+`occlusionCleared` when a temporarily intercepted target becomes actionable. Ambiguity and persistent occlusion
+return `ambiguousTarget` or `actionabilityTimeout` in the error's `details.convergence` with zero effect
+attempts. A second mismatch, changed authority, any sent effect, or an unknown outcome is terminal and never
+causes another provider effect. Actions without `actionContext` are never reissued.
 
 Native CDP uses pixels only for unresolved canvas, images, and controls. A verified crop enters the normal
 artifact and attachment path. FrameSpace provides semantic, spatial, and temporal APX through its cooperative

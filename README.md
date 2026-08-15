@@ -139,6 +139,12 @@ continued with a continuation-only `automation.observe` call. Every page carries
 snapshot receipt, complete-inventory digest, and observation evidence binding. A document replacement rejects
 the old continuation instead of treating a partial prefix as complete.
 
+Proof-carrying browser actions expose one provider-neutral `pyproc.actionConvergence` version 1 receipt. Native
+CDP and FrameSpace inspect at most two candidates, reobserve the original typed focus at most once, never retry a
+sent effect, and bound the first-effect search to 30000 ms. A unique same-document stale target or replaced
+document can converge; ambiguity and persistent occlusion return the same receipt with zero effect attempts.
+Successful Control output carries it on the action terminal, while a safe refusal carries it in error details.
+
 `automation.space.inspect` also returns one provider-neutral `resources` snapshot. After deleting owned
 artifacts, detaching sessions, and closing owned targets, every counter returns to the starting baseline. A new
 isolated profile therefore returns zero for targets, sessions, locators, continuations, watchers, artifacts,

@@ -1,7 +1,7 @@
 """Official Python client for the pyproc Control Protocol."""
 
 from .client import ControlRequest, PyProcClient
-from .models import Attachment, ControlError, ControlResult
+from .models import ActionConvergenceReceipt, Attachment, ControlError, ControlResult
 from .perception import (
     PerceptionClient,
     PerceptionEntity,
@@ -27,6 +27,7 @@ from .protocol import (
 
 __all__ = [
     "Attachment",
+    "ActionConvergenceReceipt",
     "ControlError",
     "ControlProtocolError",
     "ControlRequest",

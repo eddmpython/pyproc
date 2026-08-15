@@ -208,6 +208,7 @@ const applied = await eyes.actAffordance(save, {
   verify: { entityAppeared: { role: "status", nameContains: "Saved" } },
 });
 console.log(applied.output.actions[0].result.evidence.verification.state);
+console.log(applied.output.actions[0].convergence);
 ```
 
 `query().one()` checks APX `query.matched` and rejects zero or multiple matches even if the byte budget returned
@@ -221,6 +222,12 @@ delta, and `explainActionability(entityRef)` returns the semantic, geometry, and
 lower bound, projected and omitted matches, and canonical ordering. An opaque continuation is read-only and bound
 to the exact world and expiry. Verified actions recheck authority at the send boundary, perform independent input
 release when needed, and return `observationCoverage`; incomplete relevant coverage cannot prove absence.
+
+Every proof-carrying action also returns an `ActionConvergenceReceipt`. Native CDP places it on
+`output.actions[0].convergence`; FrameSpace places it on `output.results[0].convergence`. A safe refusal exposes
+the same value at `ControlRemoteError.details.convergence`. The receipt bounds the first-effect search to two
+candidates, one reobservation, zero effect retries, and 30000 ms. `effectAttempts` is zero or one and an
+`outcomeUnknown` terminal is never retried.
 
 Native CDP and FrameSpace use the same facade. Native CDP can return verified pixel-on-demand attachments at
 level L4. FrameSpace reports its honest L3 boundary and rejects visual inference.

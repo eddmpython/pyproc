@@ -14,8 +14,8 @@
 
 | 질문 | 현재 판정 | 실사용 증거 | 완성까지 남은 것 |
 |---|---|---|---|
-| agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M2의 wrong-effect 없는 자동 수렴 상한 |
-| 눈과 팔 | 강함, 완성 아님, 북극성 8.8 | APX Situation이 링크를 식별하고 proof-carrying click 뒤 `Smallest start` 출현을 confirmed로 봉인. 설치 제품 20회가 모든 소유 자원을 기준선으로 되돌림 | stale, ambiguous, occluded 자동 수렴과 실제 GPU visual oracle 확대 |
+| agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | hardware GPU 결과 oracle과 이후 몸체 확대 |
+| 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.3 | APX Situation, 20회 무잔류 수명주기, stale, ambiguous, occluded, navigation의 2후보, 1재관찰, effect retry 0회 수렴 영수증 | 실제 GPU visual oracle 확대 |
 | 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate | 임의 native wheel, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
 | 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, GPU 실기 CI, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
@@ -83,7 +83,7 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 - `pyproc-mcp init --recipe pythonOnly`가 설치 tarball 내부 owned engine으로 manifest를 만든다.
 - 순수 parser는 package 경로를 추측하지 않고 initializer만 설치 경계를 해석한다.
-- contract 36 suites, package gate, 전체 12개 게이트, 설치 MCP 제품 21개가 GREEN이다.
+- contract 37 suites, package gate, 전체 13개 게이트, 설치 MCP 제품 gate가 GREEN이다.
 - 첫 문서 교체 probe는 수정 전 stale locator와 effect 0을 재현했고, 수정 후 postcondition confirmed와
   effect 정확히 1회로 수렴했다. 설치 MCP 제품 gate도 같은 여정을 고정한다.
 - browser control, 3회 48-action stress, APX 11개 실브라우저 게이트가 GREEN이다.
@@ -104,7 +104,8 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - 완료: 반복 Situation, screenshot, proof-carrying action, artifact cleanup에서 handle과 process 잔류 0을
   증명한다. 각 owner가 직접 센 자원을 `automation.space.inspect.resources`로 합성하고, 격리 profile의
   packed Control 제품 20회와 NativeCdpSpace, FrameSpace, MCP, Python adapter가 0 수렴을 검증한다.
-- stale, ambiguous, occluded, navigation 교체를 wrong effect 없이 자동 수렴시키는 상한을 고정한다.
+- 완료: stale, ambiguous, occluded, navigation 교체를 후보 최대 2개, 재관찰 최대 1회, effect retry 0회,
+  첫 effect 전 30000 ms로 고정한다. 성공과 안전 거절은 같은 version 1 영수증을 반환한다.
 - hardware GPU runner에서 pixel 결과 oracle을 추가해 수동 증거 상한을 제거한다.
 
 ### M3. 컴퓨팅 몸체 확대
@@ -305,5 +306,14 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   전체 axis의 score, next, browser lane, 실행 lane, evidence 실존과 사다리 연속성을 `npm test`가 검사한다.
 - 원장 gate 이빨: 새 축의 lifecycle evidence를 존재하지 않는 `.missing` 경로로 바꾼 음성 변형은
   `agentBrowserAutomation: missing evidence`를 보고 12/13 RED였고, 복원 뒤 13/13 GREEN이다.
-- 다음 직렬 작업: stale, ambiguous, occluded, navigation 교체를 wrong effect 없이 자동 수렴시키는 횟수와
-  시간 상한을 고정한다.
+- action 수렴 첫 RED: 같은 문서에서 분리된 target을 5.09초 동안 60회 확인한 뒤 재관찰 없이
+  actionability timeout으로 끝났다. ambiguous도 effect 0회로 안전했지만 모호함을 판정하지 못했고,
+  다섯 시나리오 모두 공통 영수증이 없었다.
+- action 수렴 제품 증거: packed Control과 Edge에서 first-effect 시간은 같은 문서 stale 259 ms,
+  ambiguous 172 ms, 일시 가림 1288 ms, 지속 가림 711 ms, navigation 교체 201 ms였다. effect 횟수는
+  각각 1, 0, 1, 0, 1이며 terminal PNG 756x488을 직접 확인했다. FrameSpace도 stale, 일시 가림,
+  지속 가림과 outcome unknown 1회 무재시도를 같은 영수증으로 증명한다.
+- action 수렴 gate 이빨: `ACTION_CONVERGENCE_MAX_ATTEMPTS`를 2에서 3으로 바꾼 음성 변형은
+  `3 !== 2`를 보고 RED였고, 2로 복원한 같은 계약 gate는 GREEN이다.
+- 다음 직렬 작업: hardware GPU runner에서 pixel과 compute 결과 oracle을 실행해 정확한 command byte
+  검증에 머문 수동 증거 상한을 제거한다.

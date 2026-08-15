@@ -114,10 +114,11 @@ action kind, locator, risk, destination, and expiry. `actionContext` re-presents
 before an effect. A stale or mismatched binding fails with `APX_CAPABILITY_STALE`, `outcome: "notSent"`, and no
 provider call.
 
-The browser provider may consume that retryable `notSent` terminal once by replaying the stored typed focus and
-issuing a new Situation capability. It sends only if cardinality remains one and authority, destination, risk,
-and transition are unchanged. This is document replacement convergence, not an effect retry. A second mismatch
-or any non-`notSent` outcome remains terminal.
+The browser provider may consume a detached-target or document-replacement `notSent` terminal once by replaying
+the stored typed focus and issuing a new Situation capability. It sends only if cardinality remains one and
+authority, destination, risk, and transition are unchanged. The common version 1 convergence receipt limits
+this to two candidates, one reobservation, zero effect retries, and 30000 ms before the first effect. A second
+mismatch or any non-`notSent` outcome remains terminal.
 
 ## Observation lifecycle
 

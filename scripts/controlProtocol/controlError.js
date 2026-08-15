@@ -5,6 +5,7 @@ export function controlErrorDetails(error) {
     ...(error?.failedAction ? { failedAction: error.failedAction } : {}),
     ...(Array.isArray(error?.completed) ? { completed: error.completed } : {}),
     ...(error?.actionability ? { actionability: error.actionability } : {}),
+    ...(error?.convergence ? { convergence: error.convergence } : {}),
     ...(error?.actionEvidence ? { actionEvidence: error.actionEvidence } : {}),
     ...(error?.trace ? { trace: error.trace } : {}),
     ...(error?.details && typeof error.details === "object" ? error.details : {}),

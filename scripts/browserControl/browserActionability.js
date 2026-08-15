@@ -194,6 +194,7 @@ export async function waitForBrowserActionability({
   inspectTarget,
   scrollTarget,
   releaseTarget = async () => {},
+  detachedTargetIsStale = false,
   signal,
 } = {}) {
   if (!Object.hasOwn(REQUIREMENTS, kind)) throw new TypeError(`actionability is not defined for ${kind}`);
@@ -211,6 +212,7 @@ export async function waitForBrowserActionability({
   let polls = 0;
   let scrolled = false;
   let lastReasons = ["notAttached"];
+  const reasonsSeen = new Set();
   let target = null;
   while (Date.now() <= deadline) {
     if (signal?.aborted) throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.commandCancelled,
@@ -221,9 +223,17 @@ export async function waitForBrowserActionability({
         const status = await inspectTarget(target, requirements);
         polls += 1;
         lastReasons = status.reasons || [];
+        for (const reason of lastReasons) reasonsSeen.add(reason);
         if (!status.connected) {
           await releaseTarget(target);
           target = null;
+          if (detachedTargetIsStale) {
+            const error = new BrowserControlError("BROWSER_AUTOMATION_TARGET_MISSING",
+              "browser locator target is detached", { outcome: "notSent", retryable: false });
+            error.actionability = Object.freeze({ kind, polls, scrolled,
+              reasons: Object.freeze([...lastReasons]), reasonsSeen: Object.freeze([...reasonsSeen]) });
+            throw error;
+          }
           previousFingerprint = null;
           stablePolls = 0;
           stableSince = 0;
@@ -248,7 +258,8 @@ export async function waitForBrowserActionability({
           const stable = !requirements.stable || (stablePolls >= BROWSER_ACTIONABILITY_STABLE_POLLS
             && Date.now() - stableSince >= BROWSER_ACTIONABILITY_MIN_STABLE_MS);
           if (baseReady && stable) {
-            return Object.freeze({ target, status: Object.freeze(status), polls, scrolled });
+            return Object.freeze({ target, status: Object.freeze(status), polls, scrolled,
+              reasonsSeen: Object.freeze([...reasonsSeen]) });
           }
         }
       } catch (error) {
@@ -273,6 +284,7 @@ export async function waitForBrowserActionability({
   const error = new BrowserControlError("BROWSER_AUTOMATION_ACTIONABILITY_TIMEOUT",
     `browser ${kind} actionability timed out (${lastReasons.join(",") || "notStable"})`,
     { outcome: scrolled ? "applied" : "notSent", retryable: !scrolled });
-  error.actionability = Object.freeze({ kind, polls, scrolled, reasons: Object.freeze([...lastReasons]) });
+  error.actionability = Object.freeze({ kind, polls, scrolled, reasons: Object.freeze([...lastReasons]),
+    reasonsSeen: Object.freeze([...reasonsSeen]) });
   throw error;
 }

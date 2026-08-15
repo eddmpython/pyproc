@@ -35,6 +35,7 @@ export async function assertPythonSdkContract() {
   }
   const source = readFileSync(join(ROOT, "pythonSdk", "src", "pyprocControl", "__init__.py"), "utf8");
   for (const name of ["PyProcClient", "ControlRequest", "ControlResult", "ControlError", "Attachment",
+    "ActionConvergenceReceipt",
     "PerceptionClient", "PerceptionEntity", "PerceptionQueryResult"]) {
     if (!source.includes(`"${name}"`)) throw new Error(`Python SDK 공개 값 누락: ${name}`);
   }

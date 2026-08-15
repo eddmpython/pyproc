@@ -41,6 +41,7 @@ import {
 } from "../perception/apxCatalog.js";
 import { APX_SITUATION_REPRESENTATION } from "../perception/situationCatalog.js";
 import { ActionEvidenceLoop } from "../perception/actionEvidence.js";
+import { ActionConvergence, shouldReobserveAction } from "../perception/actionConvergence.js";
 import { PerceptionSpace } from "../perception/perceptionSpace.js";
 import { WebCdpSensor } from "../perception/profiles/webCdpSensor.js";
 import {
@@ -411,36 +412,49 @@ export class BrowserAutomation {
       const actionId = `action:${this._idFactory()}`;
       const commandResults = [];
       const traceToken = trace.begin({ index, actionId, kind: action.kind, risk: BROWSER_AUTOMATION_ACTIONS[action.kind].risk });
+      const actionConvergence = action.actionContext ? new ActionConvergence({ signal, now: this._now }) : null;
       try {
-        let convergence = null;
         const perform = async (candidate) => {
-          if (!candidate.verify) return this._execute(sessionRef, candidate, commandResults, signal);
+          const actionSignal = actionConvergence?.signal || signal;
+          if (!candidate.verify) return this._execute(
+            sessionRef, candidate, commandResults, actionSignal, actionConvergence,
+          );
           const evidenced = await this._evidence.run({
             actionRef: actionId,
             postcondition: candidate.verify,
-            signal,
+            signal: actionSignal,
             capture: ({ since, eventWatermarks, observationPlan }) => this._perception.observe(sessionRef, {
               representation: APX_REPRESENTATION,
               ...(since ? { since } : {}),
               channels: observationPlan.channels,
               visual: { mode: "off" },
               budget: { maxEntities: 1000, maxRelations: 1000, maxBytes: 1024 * 1024 },
-            }, { signal, commandResults, issueLocators: false, postconditionPlan: observationPlan,
+            }, { signal: actionSignal, commandResults, issueLocators: false, postconditionPlan: observationPlan,
               ...(eventWatermarks ? { eventWatermarks } : {}) }),
-            effect: () => this._execute(sessionRef, candidate, commandResults, signal),
+            effect: () => this._execute(
+              sessionRef, candidate, commandResults, actionSignal, actionConvergence,
+            ),
           });
           return Object.freeze({ ...(evidenced.effectResult || {}), evidence: evidenced.evidence });
         };
         let result;
         try { result = await perform(action); }
         catch (error) {
-          if (!action.actionContext || ![BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
-            APX_ERROR_CODES.capabilityStale].includes(error?.code)
-            || error?.outcome !== "notSent" || error?.retryable !== true) throw error;
-          const reissued = await this._perception.reissueAction(sessionRef, action, { signal, commandResults });
-          convergence = reissued.convergence;
+          if (!actionConvergence || !shouldReobserveAction(error)) throw error;
+          actionConvergence.recordActionability(error.actionability || error.details?.actionability);
+          actionConvergence.beginReobservation();
+          let reissued;
+          try {
+            reissued = await this._perception.reissueAction(sessionRef, action,
+              { signal: actionConvergence.signal, commandResults });
+          } catch (reissueError) {
+            if (error.actionEvidence && !reissueError.actionEvidence) reissueError.actionEvidence = error.actionEvidence;
+            throw reissueError;
+          }
+          actionConvergence.adoptBinding(reissued.convergence);
           result = await perform(reissued.action);
         }
+        const convergence = actionConvergence?.success(result) || null;
         const summary = summarizeCommands(commandResults);
         const normalized = Object.freeze({
           actionId,
@@ -454,8 +468,10 @@ export class BrowserAutomation {
         this._audit({ runId, actionId, index, kind: action.kind, risk: normalized.risk, state: normalized.state });
         completed.push(normalized);
         trace.complete(traceToken, commandResults);
+        actionConvergence?.close();
       } catch (error) {
-        const enriched = error instanceof Error ? error : new Error(String(error));
+        let enriched = error instanceof Error ? error : new Error(String(error));
+        if (actionConvergence && !enriched.convergence) enriched = actionConvergence.failure(enriched);
         enriched.runId = runId;
         enriched.failedActionIndex = index;
         enriched.failedAction = Object.freeze({
@@ -476,6 +492,7 @@ export class BrowserAutomation {
           outcome: enriched.outcome || "notSent",
           code: enriched.code || "PYPROC_INTERNAL",
         });
+        actionConvergence?.close();
         throw enriched;
       }
     }
@@ -530,7 +547,7 @@ export class BrowserAutomation {
       `browser action is outside permission: ${kind}`, { outcome: "notSent" });
   }
 
-  async _execute(sessionRef, action, commandResults, signal) {
+  async _execute(sessionRef, action, commandResults, signal, convergence = null) {
     const quarantine = this._quarantinedSessions.get(sessionKey(sessionRef));
     if (quarantine && BROWSER_AUTOMATION_ACTIONS[action.kind].risk === "externalEffect") {
       const error = automationError(BROWSER_AUTOMATION_ERROR_CODES.inputReleaseFailed,
@@ -554,8 +571,8 @@ export class BrowserAutomation {
     if (["storageGet", "storageSet", "storageRemove", "storageClear"].includes(action.kind)) {
       return this._storage(sessionRef, action, commandResults, signal);
     }
-    if (action.kind === "press") return this._press(sessionRef, action, commandResults, signal);
-    return this._targetAction(sessionRef, action, commandResults, signal);
+    if (action.kind === "press") return this._press(sessionRef, action, commandResults, signal, convergence);
+    return this._targetAction(sessionRef, action, commandResults, signal, convergence);
   }
 
   async _snapshot(sessionRef, action, commandResults, signal) {
@@ -908,12 +925,12 @@ export class BrowserAutomation {
     return Object.freeze({ origin: url.origin, area: action.area, cleared: true });
   }
 
-  async _targetAction(sessionRef, action, commandResults, signal) {
+  async _targetAction(sessionRef, action, commandResults, signal, convergence = null) {
     const prepared = await this._prepareTarget(sessionRef, action, commandResults, signal);
     try {
       let result;
       const sendBoundary = action.kind === "drag" ? null
-        : await this._recheckSendBoundary(sessionRef, action, prepared, commandResults, signal);
+        : await this._recheckSendBoundary(sessionRef, action, prepared, commandResults, signal, convergence);
       if (action.kind === "click") {
         result = action.dialog
           ? await this._clickWithDialog(sessionRef, prepared, action, commandResults, signal, sendBoundary)
@@ -938,7 +955,7 @@ export class BrowserAutomation {
           sessionRef, prepared, action.files, commandResults, signal, sendBoundary,
         );
       } else if (action.kind === "drag") {
-        result = await this._dragTarget(sessionRef, prepared, action, commandResults, signal);
+        result = await this._dragTarget(sessionRef, prepared, action, commandResults, signal, convergence);
       } else if (action.kind === "fill") {
         result = await this._callTargetFunction(
           sessionRef, prepared.target, FILL_FUNCTION, [action.value], commandResults, signal, sendBoundary,
@@ -963,7 +980,8 @@ export class BrowserAutomation {
       }
       return Object.freeze({
         ...result,
-        actionability: Object.freeze({ polls: prepared.polls, scrolled: prepared.scrolled }),
+        actionability: Object.freeze({ polls: prepared.polls, scrolled: prepared.scrolled,
+          reasonsSeen: prepared.reasonsSeen }),
         ...(sendBoundary ? { sendBoundary: this._sendBoundaryEvidence(sendBoundary) } : {}),
       });
     } finally {
@@ -1146,7 +1164,7 @@ export class BrowserAutomation {
     return this._callTargetFunction(sessionRef, prepared.target, UPLOAD_STATE_FUNCTION, [], commandResults, signal);
   }
 
-  async _dragTarget(sessionRef, source, action, commandResults, signal) {
+  async _dragTarget(sessionRef, source, action, commandResults, signal, convergence = null) {
     const destination = await this._prepareTarget(sessionRef, {
       kind: "drag",
       ...(action.toLocatorRef ? { locatorRef: action.toLocatorRef } : { locator: action.to }),
@@ -1163,7 +1181,7 @@ export class BrowserAutomation {
     let failure = null;
     try {
       sendBoundary = await this._recheckSendBoundary(
-        sessionRef, action, [source, destination], commandResults, signal,
+        sessionRef, action, [source, destination], commandResults, signal, convergence,
       );
       const from = source.status.point;
       const to = destination.status.point;
@@ -1212,7 +1230,8 @@ export class BrowserAutomation {
         from: Object.freeze({ x: from.x, y: from.y }),
         to: Object.freeze({ x: to.x, y: to.y }),
         trusted: true,
-        destinationActionability: Object.freeze({ polls: destination.polls, scrolled: destination.scrolled }),
+        destinationActionability: Object.freeze({ polls: destination.polls, scrolled: destination.scrolled,
+          reasonsSeen: destination.reasonsSeen }),
       };
     } catch (error) {
       failure = error;
@@ -1235,14 +1254,15 @@ export class BrowserAutomation {
       sendBoundary: this._sendBoundaryEvidence(sendBoundary) });
   }
 
-  async _press(sessionRef, action, commandResults, signal) {
+  async _press(sessionRef, action, commandResults, signal, convergence = null) {
     let actionability = null;
     let prepared = null;
     const guard = this._inputStateGuard(sessionRef, commandResults);
     let sendBoundary = null;
     if (action.selector || action.locatorRef || action.locator) {
       prepared = await this._prepareTarget(sessionRef, action, commandResults, signal);
-      actionability = Object.freeze({ polls: prepared.polls, scrolled: prepared.scrolled });
+      actionability = Object.freeze({ polls: prepared.polls, scrolled: prepared.scrolled,
+        reasonsSeen: prepared.reasonsSeen });
     }
     const definition = keyDefinition(action.key);
     const modifiers = modifierBits(action.modifiers);
@@ -1256,7 +1276,7 @@ export class BrowserAutomation {
     }
     try {
       sendBoundary = await this._recheckSendBoundary(
-        sessionRef, action, prepared ? [prepared] : [], commandResults, signal,
+        sessionRef, action, prepared ? [prepared] : [], commandResults, signal, convergence,
       );
       if (prepared) {
         await this._callTargetFunction(
@@ -1292,13 +1312,14 @@ export class BrowserAutomation {
         this._inspectTarget(sessionRef, target, requirements, commandResults, signal, true),
       scrollTarget: (target) => this._callTargetFunction(sessionRef, target, SCROLL_FUNCTION, ["center"], commandResults, signal),
       releaseTarget: (target) => this._releaseTarget(sessionRef, target, commandResults, signal, true),
+      detachedTargetIsStale: !!action.actionContext && !!action.locatorRef,
       signal,
     });
     return Object.freeze({ ...prepared, bindingAction: action, preflightStartedAt,
       actionabilitySatisfiedAt: this._now() });
   }
 
-  async _recheckSendBoundary(sessionRef, action, preparedTargets, commandResults, signal) {
+  async _recheckSendBoundary(sessionRef, action, preparedTargets, commandResults, signal, convergence = null) {
     const targets = Array.isArray(preparedTargets) ? preparedTargets : [preparedTargets];
     const boundaryStartedAt = this._now();
     let checkedDocumentEpoch = null;
@@ -1348,6 +1369,7 @@ export class BrowserAutomation {
       providerAcknowledgedAt: null,
       checkedWorldRef: capability?.worldRef || action.actionContext?.worldRef || null,
       checkedDocumentEpoch: capability?.documentEpoch ?? checkedDocumentEpoch,
+      convergence,
     };
   }
 
@@ -1368,7 +1390,10 @@ export class BrowserAutomation {
   }
 
   async _effectCommand(sessionRef, method, params, commandResults, signal, boundary) {
-    if (boundary.sendRequestedAt === null) boundary.sendRequestedAt = this._now();
+    if (boundary.sendRequestedAt === null) {
+      boundary.convergence?.markEffectAttempt();
+      boundary.sendRequestedAt = this._now();
+    }
     try {
       const result = await this._command(sessionRef, method, params, commandResults, signal);
       if (boundary.providerAcknowledgedAt === null) boundary.providerAcknowledgedAt = this._now();

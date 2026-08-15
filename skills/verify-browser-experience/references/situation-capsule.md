@@ -33,9 +33,10 @@ document epoch, transition shape, session, and expiry. A verified action prepare
 actionability fingerprint, then repeats authority and binding checks immediately before the first provider
 effect command. Any changed field fails with `APX_CAPABILITY_STALE` and `outcome: "notSent"`.
 
-For a retryable document replacement only, the browser provider can replay the original typed focus once and
-reissue a capability. It requires one matching target and unchanged authority facts. The public convergence
-record says two observation/action attempts and zero effect retries. It never repeats an effect after dispatch.
+For a detached target or document replacement before the first effect, the browser provider can replay the
+original typed focus once and reissue a capability. It requires one matching target and unchanged authority
+facts. The public `pyproc.actionConvergence` version 1 record limits candidates to two, reobservation to one,
+effect retries to zero, and the first-effect search to 30000 ms. It never repeats an effect after dispatch.
 
 This recheck is not atomic with CDP input. The receipt therefore includes preflight, actionability, authority,
 send-request, and provider-acknowledgement times. Business success still belongs to postcondition evidence, not

@@ -119,7 +119,7 @@ export async function assertPerceptionSpaceContract() {
   assert(reissued.action.locatorRef === "locator:2:71"
     && reissued.action.actionContext.situationRef !== originalSituation.situationRef
     && reissued.convergence.fromDocumentEpoch === 1 && reissued.convergence.toDocumentEpoch === 2
-    && reissued.convergence.effectRetries === 0,
+    && reissued.convergence.reason === "documentReplacement",
   "문서 교체 재발급이 같은 semantic requirement를 새 epoch capability로 다시 묶지 않았다");
   const activePerceptionResources = reissueSpace.inspect().resources;
   assert(activePerceptionResources.identitySessions === 1
@@ -156,7 +156,8 @@ export async function assertPerceptionSpaceContract() {
     actionContext: { situationRef: ambiguousOriginal.situationRef, worldRef: ambiguousOriginal.worldRef,
       capabilityRef: ambiguousAffordance.capabilityRef },
   }));
-  assert(ambiguousReissue?.code === "APX_CAPABILITY_STALE" && ambiguousReissue.outcome === "notSent",
+  assert(ambiguousReissue?.code === "APX_CAPABILITY_STALE" && ambiguousReissue.outcome === "notSent"
+    && ambiguousReissue.convergenceReason === "ambiguousTarget",
     "문서 교체 뒤 semantic target이 여러 개면 재발급이 fail-closed가 아니다");
   ambiguousReissueSpace.close();
 

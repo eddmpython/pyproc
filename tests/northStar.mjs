@@ -372,19 +372,21 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "agentBrowserAutomation",
-    score: 8.8,
+    score: 9.3,
     en: Object.freeze({
       title: "Browser eyes and hands for an agent",
-      state: "The exact-installed Control, MCP, FrameSpace, and Python paths share Situation, paged semantic inventory, durable locators, proof-carrying actions, and provider-neutral resource accounting. A product gate repeats observe, screenshot, confirmed click, artifact deletion, detach, and target close 20 times and returns every owned resource, process, and temporary profile to baseline. The first document replacement converges without resending an effect, but stale, ambiguous, and occluded recovery do not yet have one bounded end-to-end convergence contract.",
+      state: "The exact-installed Control, MCP, FrameSpace, and Python paths share Situation, paged semantic inventory, durable locators, proof-carrying actions, provider-neutral action convergence, and resource accounting. A product gate repeats observe, screenshot, confirmed click, artifact deletion, detach, and target close 20 times and returns every owned resource, process, and temporary profile to baseline. The packed convergence gate binds every proof-carrying action to at most two candidates, one reobservation, zero effect retries, and 30 seconds before the first effect. Same-document stale and navigation replacement each send one verified effect, transient occlusion waits then sends one, and ambiguous or persistently occluded targets send zero. FrameSpace proves the same receipt and records one unknown effect attempt without retry.",
       target: "A Situation-to-effect loop that re-observes and rebinds across document changes, disambiguates targets, makes occluded targets interactable, never sends an unproven duplicate effect, and returns every owned resource to baseline within a fixed bound.",
     }),
     ko: Object.freeze({
       title: "agent의 브라우저 눈과 팔",
-      state: "정확히 설치한 Control, MCP, FrameSpace, Python 경로가 Situation, page 단위 의미 inventory, 내구 locator, 증거를 싣는 action, provider-neutral 자원 계수를 공유한다. 제품 gate는 관찰, screenshot, confirmed click, artifact 삭제, detach, target close를 20회 반복하고 소유 자원, process, 임시 profile을 모두 기준선으로 되돌린다. 첫 document 교체는 effect 재전송 없이 수렴하지만 stale, ambiguous, occluded 복구는 아직 하나의 bounded end-to-end 수렴 계약을 갖지 못했다.",
+      state: "정확히 설치한 Control, MCP, FrameSpace, Python 경로가 Situation, page 단위 의미 inventory, 내구 locator, 증거를 싣는 action, provider-neutral action 수렴과 자원 계수를 공유한다. 제품 gate는 관찰, screenshot, confirmed click, artifact 삭제, detach, target close를 20회 반복하고 소유 자원, process, 임시 profile을 모두 기준선으로 되돌린다. 설치 tarball 수렴 gate는 proof-carrying action마다 후보 최대 2개, 재관찰 최대 1회, effect retry 0회, 첫 effect 전 30초를 고정한다. 같은 문서 stale과 navigation 교체는 각각 검증된 effect 1회, 일시 가림은 기다린 뒤 1회, ambiguous와 지속 가림은 0회다. FrameSpace도 같은 영수증을 내고 outcome unknown effect 1회를 재시도하지 않음을 증명한다.",
       target: "Situation에서 effect까지 document 교체를 다시 관찰하고 rebind하며, 대상을 명확히 고르고 occlusion을 해소하고, 증명되지 않은 effect를 중복 전송하지 않으며, 모든 소유 자원을 고정 상한 안에 기준선으로 되돌린다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/contracts/perceptionSpace.mjs", lane: "test:contracts" }),
+      Object.freeze({ path: "tests/contracts/actionConvergence.mjs", lane: "test:contracts" }),
+      Object.freeze({ path: "tests/browser/actionConvergenceProduct.mjs", lane: "test:action-convergence" }),
       Object.freeze({ path: "tests/browser/apxProduct.mjs", lane: "test:apx" }),
       Object.freeze({ path: "tests/browser/automationLifecycleProduct.mjs", lane: "test:automation-lifecycle" }),
       Object.freeze({ path: "tests/browser/frameSpaceProduct.mjs", lane: "test:frame-space" }),
@@ -394,9 +396,9 @@ export const NORTH_STAR_AXES = Object.freeze([
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "wrongEffectFreeConvergence",
-        en: "Bound stale, ambiguous, occluded, and navigation replacement recovery by attempts and time while proving that no unverified effect is sent twice",
-        ko: "stale, ambiguous, occluded, navigation 교체 복구의 횟수와 시간을 고정하고 검증되지 않은 effect가 두 번 전송되지 않음을 증명한다",
+        id: "hardwareVisualOracle",
+        en: "Run the registered GPU and pixel-result oracles on a hardware adapter so visual and compute evidence no longer stop at exact command bytes",
+        ko: "등록된 GPU와 pixel 결과 oracle을 hardware adapter에서 실행해 visual과 compute 증거가 정확한 command byte에서 멈추지 않게 한다",
       }),
     ]),
   }),
