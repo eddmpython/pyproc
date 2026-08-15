@@ -119,7 +119,11 @@ export class PageCommandBridge {
         outcome: delivered ? "outcomeUnknown" : "notSent", retryable: !delivered,
       }));
     }
-    this._pollWaiter = null;
+    if (this._pollWaiter) {
+      const waiter = this._pollWaiter;
+      this._pollWaiter = null;
+      waiter.deliver(null, new PageCommandError("CONTROL_BRIDGE_CLOSED", "page command bridge closed"));
+    }
   }
 
   _drainPoll() {

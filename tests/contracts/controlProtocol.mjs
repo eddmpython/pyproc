@@ -311,5 +311,9 @@ export async function assertControlProtocolContract() {
   assert(reloadError?.code === "CONTROL_PAGE_REPLACED" && reloadError.outcome === "outcomeUnknown"
     && replacedPoll?.commandValue === null && replacedPoll?.error?.code === "CONTROL_PAGE_REPLACED",
   "page epoch 교체가 전달된 명령과 이전 poll을 fence하지 않았다");
+  let closedPoll = null;
+  queuedBridge.holdPoll("page:2", (commandValue, error) => { closedPoll = { commandValue, error }; });
   queuedBridge.close();
+  assert(closedPoll?.commandValue === null && closedPoll?.error?.code === "CONTROL_BRIDGE_CLOSED",
+    "page bridge 종료가 보류 중인 long poll을 닫지 않았다");
 }
