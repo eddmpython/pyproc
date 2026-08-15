@@ -1,4 +1,7 @@
+import { ensureCrossOriginIsolation } from "./coiBootstrap.js";
 import { boot, open } from "../index.js";
+
+await ensureCrossOriginIsolation();
 
 const output = document.getElementById("output");
 const status = document.getElementById("status");

@@ -1,7 +1,6 @@
 # GitHub Pages 데모 배포. 빌드 없음(네이티브 ESM): 저장소 파일을 그대로 조립해 올린다.
-# GH Pages는 응답 헤더를 못 달지만 실측으로 경로를 확보했다(pythonMachine 캠페인):
-#   - SAB 없는 데모(machine/terminal/basic)는 헤더 없이 그대로 돈다(noCoiProbe 7/7).
-#   - SAB 필요한 processOs는 pyprocSw(?coi=1) 헤더 주입 + 1회 새로고침으로 연다(swCoiProbe 4/4).
+# GH Pages는 응답 헤더를 직접 달 수 없으므로 데모 전용 Service Worker가 COOP, COEP를
+# 주입하고 첫 방문에 한 번만 다시 연다. 패키지 소비자는 README의 서버 헤더 계약을 따른다.
 name: pages
 
 on:
@@ -33,18 +32,18 @@ jobs:
       # 의존성 0이라 여기서 도는 비용이 거의 없다(브라우저 게이트는 ci job이 본다).
       - run: npm ci
       - run: npm test
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: vendor/pyodide
-          key: pyodide-${{ hashFiles('src/runtime/pyodideDistribution.js', 'scripts/assetCatalog.json') }}
-      - run: npm run fetch:engine
-      - name: 데모 사이트 조립 (예제 + 라이브러리 + 브랜드 자산 + SW 루트 사본 + 랜딩 루트 승격)
+      - name: GitHub Pages 무헤더 환경에서 데모 COI 부트스트랩 검증
+        run: npm run test:examples
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
+          PYPROC_NO_COI: "1"
+      - name: 데모 사이트 조립 (예제 + 소유 엔진 + 브랜드 자산 + COI 진입점 + 랜딩 루트 승격)
         run: |
           mkdir -p _site
           # assets: 파비콘·헤더 로고가 참조하는 브랜드 마크 정본(랜딩은 assets/, 예제는 ../assets/).
-          cp -r examples src assets vendor _site/
+          cp -r examples src assets _site/
           cp index.js index.d.ts LICENSE _site/
-          cp src/capabilities/pyprocSw.js _site/pyprocSw.js
+          cp coiServiceWorker.js _site/coiServiceWorker.js
           # 랜딩은 examples/index.html이 정본이고 배포 루트로 승격된다(상대 경로가 루트 기준).
           mv _site/examples/index.html _site/index.html
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3

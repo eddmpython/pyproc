@@ -7,8 +7,8 @@
     "version": "3.14.6",
     "tagObject": "8594736f5057fdc979d42d2135895d56274589a8",
     "commit": "c63aec69bd59c55314c06c23f4c22c03de76fe45",
-    "url": "https://api.github.com/repos/python/cpython/tarball/c63aec69bd59c55314c06c23f4c22c03de76fe45",
-    "archiveSha256": "c6b8133e056dd5992782b84eb7269a9ac7402f4c35b2f8ecd333cba9fc630d41"
+    "url": "https://www.python.org/ftp/python/3.14.6/Python-3.14.6.tgz",
+    "archiveSha256": "74d0d71d0600e477651a077101d6e62d1e2e69b8e992ba18c993dd643b7ba222"
   },
   "wasiSdk": {
     "version": "24.0",

@@ -1,4 +1,7 @@
 // heroConsole.js - live landing proof built only on the public owned-kernel API.
+import { ensureCrossOriginIsolation } from "./coiBootstrap.js";
+
+await ensureCrossOriginIsolation();
 
 const PROMPT = '<span class="ok">&gt;&gt;&gt;</span>';
 const dim = (text) => `<span class="dim">${text}</span>`;

@@ -36,6 +36,16 @@ function gitSurface() {
 }
 
 const files = gitSurface();
+const fileSurface = new Set(files);
+const declaredPreparedAssetRoots = new Set([
+  "apps/webComputer/machineConfig.js -> ./assets/",
+  "apps/webComputer/webComputerRuntime.js -> ./assets/",
+]);
+
+function surfacePathExists(path) {
+  const relativePath = path.slice(ROOT.length + 1).replaceAll("\\", "/").replace(/\/$/u, "");
+  return fileSurface.has(relativePath) || files.some((file) => file.startsWith(`${relativePath}/`));
+}
 const textExtensions = new Set([".js", ".mjs", ".cjs", ".ts", ".json", ".md", ".html", ".css",
   ".yml", ".yaml", ".py", ".rs", ".toml", ".txt", ".sh"]);
 const textFiles = files.filter((path) => textExtensions.has(extname(path).toLowerCase()));
@@ -57,7 +67,10 @@ function resolveModule(from, specifier) {
   const clean = specifier.split(/[?#]/u)[0];
   const target = resolve(dirname(join(ROOT, from)), clean);
   const candidates = [target, `${target}.js`, `${target}.mjs`, `${target}.json`, join(target, "index.js")];
-  return candidates.find((path) => existsSync(path) && statSync(path).isFile()) || target;
+  return candidates.find((path) => {
+    const relativePath = path.slice(ROOT.length + 1).replaceAll("\\", "/");
+    return fileSurface.has(relativePath) && existsSync(path) && statSync(path).isFile();
+  }) || target;
 }
 
 function markdownLinks(source) {
@@ -144,7 +157,8 @@ await check("relative module references resolve", () => {
     const source = readFileSync(join(ROOT, path), "utf8");
     for (const specifier of moduleRefs(source)) {
       const target = resolveModule(path, specifier);
-      if (target && !existsSync(target)) problems.push(`${path} -> ${specifier}`);
+      if (target && !surfacePathExists(target)
+        && !declaredPreparedAssetRoots.has(`${path} -> ${specifier}`)) problems.push(`${path} -> ${specifier}`);
     }
   }
   if (problems.length) throw new Error(problems.slice(0, 12).join(", "));

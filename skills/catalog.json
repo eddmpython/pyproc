@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:3700caf89256d04ac10458b34761ca874c11324a59279a67c77786ee61e4c627",
-  "catalogDigest": "sha256:3050266485b8f8473d1f988db32a6229d3b166e952c63f76d0631c9acf0a8e1f",
+  "generatedFromDigest": "sha256:98821f660c60b50575bba6710700605cf17f687c215785021159b62f95174be3",
+  "catalogDigest": "sha256:02b3fcd7d7f3af12ed97f74ade8f8912c1b0ef72b3b4ed08c6c0cf7683cd9890",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -349,8 +349,8 @@
     },
     {
       "path": "skills/ship-pyproc/references/demo-hosting.md",
-      "bytes": 765,
-      "sha256": "sha256:293510dad4f0261ad44ab0748f2ddf419aca42887c3967e358ca8fbc00ce9f52"
+      "bytes": 1132,
+      "sha256": "sha256:36e2122cdb3c06b93f2b91375cabf9c271691977d096f005ad6ccb7a805b0ced"
     },
     {
       "path": "skills/ship-pyproc/references/release.md",

@@ -1,7 +1,7 @@
 import { lstat, readFile, realpath } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 
-import { SkillOsError, containedPath, sha256, slash } from "./common.mjs";
+import { SkillOsError, containedPath, portableResourceBytes, sha256, slash } from "./common.mjs";
 import { findCatalogSkill, readSkillCatalog } from "./skillCatalog.mjs";
 
 const BODY_LIMIT = 96 * 1024;
@@ -50,7 +50,8 @@ export async function readSkillResource(skillsRoot, catalog, request) {
   }
   const limit = declared.kind === "body" ? BODY_LIMIT : REFERENCE_LIMIT;
   if (stat.size > limit) throw new SkillOsError("SKILL_RESOURCE_LIMIT", `${relativePath} exceeds read limit`);
-  const bytes = await readFile(path);
+  const sourceBytes = await readFile(path);
+  const bytes = portableResourceBytes(relativePath, sourceBytes);
   if (bytes.byteLength !== declared.bytes || sha256(bytes) !== declared.sha256) {
     throw new SkillOsError("SKILL_READ_STALE", `resource bytes do not match catalog: ${relativePath}`);
   }

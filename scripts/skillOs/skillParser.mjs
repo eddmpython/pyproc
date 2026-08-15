@@ -1,7 +1,7 @@
 import { lstat, readFile, realpath, readdir } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 
-import { SkillOsError, containedPath, sha256, slash, stableName, utf8Compare } from "./common.mjs";
+import { SkillOsError, containedPath, portableResourceBytes, sha256, slash, stableName, utf8Compare } from "./common.mjs";
 
 const BODY_LIMIT = 96 * 1024;
 const REFERENCE_LIMIT = 256 * 1024;
@@ -112,7 +112,8 @@ async function resourceFiles(skillRoot, folder, limit) {
         if ((folder === "references" || folder === "scripts" || folder === "agents") && bytes.includes(0)) {
           fail("SKILL_STRUCTURE_INVALID", `text resource contains NUL: ${relativePath}`);
         }
-        output.push(Object.freeze({ path: relativePath, bytes: bytes.byteLength, sha256: sha256(bytes) }));
+        const portable = portableResourceBytes(relativePath, bytes);
+        output.push(Object.freeze({ path: relativePath, bytes: portable.byteLength, sha256: sha256(portable) }));
       }
     }
   }
@@ -131,6 +132,7 @@ export async function parseSkill(skillPath, { skillsRoot = dirname(skillPath) } 
   try { text = TEXT_DECODER.decode(bytes); }
   catch { fail("SKILL_STRUCTURE_INVALID", "SKILL.md is not valid UTF-8"); }
   text = text.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+  const portable = Buffer.from(text);
   const frontmatter = parseFrontmatter(text);
   if (!stableName(frontmatter.name)) fail("SKILL_FRONTMATTER_INVALID", `invalid skill name: ${frontmatter.name}`);
   if (frontmatter.name !== basename(directory)) fail("SKILL_NAME_MISMATCH", `${frontmatter.name} does not match ${basename(directory)}`);
@@ -149,8 +151,8 @@ export async function parseSkill(skillPath, { skillsRoot = dirname(skillPath) } 
   ]);
   if (references.length > 8) fail("SKILL_RESOURCE_LIMIT", "a skill may declare at most eight direct references");
   return Object.freeze({ name: frontmatter.name, description: frontmatter.description,
-    path: slash(relative(resolve(skillsRoot), path)), sourcePath: path, bytes: bytes.byteLength,
-    sha256: sha256(bytes), normalizedSha256: sha256(Buffer.from(text)), headings,
+    path: slash(relative(resolve(skillsRoot), path)), sourcePath: path, bytes: portable.byteLength,
+    sha256: sha256(portable), normalizedSha256: sha256(portable), headings,
     references, scripts, assets, agents });
 }
 

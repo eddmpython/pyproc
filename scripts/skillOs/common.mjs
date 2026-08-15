@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
+
+const PORTABLE_TEXT_EXTENSIONS = new Set([
+  ".css", ".html", ".js", ".json", ".jsonl", ".md", ".mjs", ".py", ".sh", ".toml", ".txt", ".yaml", ".yml",
+]);
+const UTF8 = new TextDecoder("utf-8", { fatal: true });
 
 export class SkillOsError extends Error {
   constructor(code, message, context = {}) {
@@ -14,6 +19,15 @@ export const sha256 = (bytes) => `sha256:${createHash("sha256").update(bytes).di
 export const utf8Compare = (left, right) => Buffer.from(String(left)).compare(Buffer.from(String(right)));
 export const slash = (value) => String(value).replaceAll("\\", "/");
 export const canonicalJson = (value) => `${JSON.stringify(value, null, 2)}\n`;
+
+export function portableResourceBytes(path, bytes) {
+  const source = Buffer.from(bytes);
+  if (!PORTABLE_TEXT_EXTENSIONS.has(extname(String(path)).toLowerCase())) return source;
+  let text;
+  try { text = UTF8.decode(source); }
+  catch (error) { throw new SkillOsError("SKILL_STRUCTURE_INVALID", `text resource is not valid UTF-8: ${path}`, { cause: error }); }
+  return Buffer.from(text.replaceAll("\r\n", "\n").replaceAll("\r", "\n"));
+}
 
 export function containedPath(root, relativePath, code = "SKILL_REFERENCE_ESCAPE") {
   const text = String(relativePath || "");

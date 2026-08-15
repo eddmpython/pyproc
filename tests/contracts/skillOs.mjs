@@ -84,8 +84,13 @@ export async function assertSkillOs() {
     const validDir = resolve(temporary, "valid-skill");
     await mkdir(resolve(validDir, "references"), { recursive: true });
     await writeFile(resolve(validDir, "SKILL.md"), validSkill("valid-skill"));
-    assert((await parseSkill(resolve(validDir, "SKILL.md"), { skillsRoot: temporary })).name === "valid-skill",
+    const lfRecord = await parseSkill(resolve(validDir, "SKILL.md"), { skillsRoot: temporary });
+    assert(lfRecord.name === "valid-skill",
       "valid strict fixture was rejected");
+    await writeFile(resolve(validDir, "SKILL.md"), validSkill("valid-skill").replaceAll("\n", "\r\n"));
+    const crlfRecord = await parseSkill(resolve(validDir, "SKILL.md"), { skillsRoot: temporary });
+    assert(crlfRecord.sha256 === lfRecord.sha256 && crlfRecord.bytes === lfRecord.bytes,
+      "skill digest is not portable across line endings");
     await writeFile(resolve(validDir, "SKILL.md"), validSkill("valid-skill", "name: duplicate\n"));
     await rejectsCode(() => parseSkill(resolve(validDir, "SKILL.md"), { skillsRoot: temporary }), "SKILL_FRONTMATTER_INVALID");
     securityTerminals.set("security-03", "SKILL_FRONTMATTER_INVALID");
