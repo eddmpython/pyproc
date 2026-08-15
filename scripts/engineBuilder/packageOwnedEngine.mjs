@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, readlink, writeFile } from "node:fs/promises";
-import { dirname, extname, join, relative, resolve } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createDeterministicZip } from "./deterministicZip.mjs";
@@ -9,6 +9,7 @@ import { nativeProfileBuildInput } from "./nativeProfileCompiler.mjs";
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOCK_PATH = join(SCRIPT_DIR, "engineBuildLock.json");
 const SKIPPED_DIRECTORIES = new Set(["__pycache__", "test", "tests", "ensurepip", "idlelib", "tkinter", "turtledemo", "venv"]);
+export const CANONICAL_BUILD_ROOT = "/build/pyproc";
 
 function sha256(bytes) { return createHash("sha256").update(bytes).digest("hex"); }
 function option(name) {
@@ -34,6 +35,93 @@ async function collectFiles(folder, base = folder) {
     else if (entry.isSymbolicLink()) throw new Error(`stdlib symlink is not allowed: ${path}`);
   }
   return files.sort((left, right) => Buffer.from(left.archivePath).compare(Buffer.from(right.archivePath)));
+}
+
+async function generatedPlatformDirectory(buildDir) {
+  const relativeFolder = (await readFile(join(buildDir, "pybuilddir.txt"), "utf8")).trim();
+  if (!relativeFolder || isAbsolute(relativeFolder) || relativeFolder.split(/[\\/]/u).includes("..")) {
+    throw new Error("owned engine pybuilddir.txt is unsafe");
+  }
+  const folder = resolve(buildDir, relativeFolder);
+  const relativeToBuild = relative(resolve(buildDir), folder);
+  if (!relativeToBuild || relativeToBuild.startsWith("..") || isAbsolute(relativeToBuild)) {
+    throw new Error("owned engine generated platform folder escapes the build directory");
+  }
+  return Object.freeze({ folder, relativeFolder: relativeFolder.replaceAll("\\", "/") });
+}
+
+function workspaceSpellings(workspaceRoot) {
+  const native = resolve(workspaceRoot);
+  const slash = native.replaceAll("\\", "/");
+  const spellings = new Set([native, slash]);
+  if (/^[A-Za-z]:\//u.test(slash)) spellings.add(`/${slash[0].toLowerCase()}${slash.slice(2)}`);
+  return [...spellings].sort((left, right) => right.length - left.length);
+}
+
+export async function canonicalizeGeneratedPlatformData({ buildDir, workspaceRoot }) {
+  const { folder } = await generatedPlatformDirectory(buildDir);
+  const entries = await readdir(folder, { withFileTypes: true });
+  const files = entries.filter((entry) => entry.isFile()
+    && (/^_sysconfigdata_[A-Za-z0-9_.-]+\.py$/u.test(entry.name)
+      || /^_sysconfig_vars_[A-Za-z0-9_.-]+\.json$/u.test(entry.name)));
+  if (files.length !== 2) throw new Error(`owned engine expected two generated sysconfig files, got ${files.length}`);
+  const spellings = workspaceSpellings(workspaceRoot);
+  for (const entry of files) {
+    const path = join(folder, entry.name);
+    const original = await readFile(path, "utf8");
+    let canonical = original.replaceAll("\r\n", "\n");
+    for (const spelling of spellings) canonical = canonical.replaceAll(spelling, CANONICAL_BUILD_ROOT);
+    if (!canonical.includes(CANONICAL_BUILD_ROOT)) {
+      throw new Error(`generated ${entry.name} does not expose a canonicalizable build root`);
+    }
+    if (spellings.some((spelling) => canonical.includes(spelling))) {
+      throw new Error(`generated ${entry.name} still exposes its workspace root`);
+    }
+    if (entry.name.endsWith(".json")) JSON.parse(canonical);
+    if (canonical !== original) await writeFile(path, canonical);
+  }
+}
+
+export async function ownedBuildDetailsArguments({ sourceDir, buildDir, target }) {
+  if (!/^[a-z0-9_-]+$/u.test(target)) throw new Error("owned engine target is unsafe");
+  const generated = await generatedPlatformDirectory(buildDir);
+  const guestFolder = `/cross-build/${target}/${generated.relativeFolder}`;
+  return Object.freeze({
+    args: Object.freeze([
+      "run", "--wasm", "max-wasm-stack=16777216", "--dir", `${sourceDir}::/`,
+      "--env", "PYTHONPATH=/Lib", "--env", `_PYTHON_SYSCONFIGDATA_PATH=${guestFolder}`,
+      join(buildDir, "python.wasm"), "/Tools/build/generate-build-details.py",
+      `${guestFolder}/build-details.json`,
+    ]),
+    output: join(generated.folder, "build-details.json"),
+  });
+}
+
+export async function collectGeneratedPlatformData(buildDir) {
+  const { folder } = await generatedPlatformDirectory(buildDir);
+  const entries = await readdir(folder, { withFileTypes: true });
+  const contracts = [
+    { label: "sysconfig data", pattern: /^_sysconfigdata_[A-Za-z0-9_.-]+\.py$/u },
+    { label: "sysconfig vars", pattern: /^_sysconfig_vars_[A-Za-z0-9_.-]+\.json$/u },
+    { label: "build details", pattern: /^build-details\.json$/u },
+  ];
+  const result = [];
+  for (const contract of contracts) {
+    const matches = entries.filter((entry) => contract.pattern.test(entry.name));
+    if (matches.length !== 1 || !matches[0].isFile()) {
+      throw new Error(`owned engine build must contain exactly one generated ${contract.label}, got ${matches.length}`);
+    }
+    result.push(Object.freeze({ path: join(folder, matches[0].name), archivePath: matches[0].name }));
+  }
+  const details = JSON.parse(await readFile(join(folder, "build-details.json"), "utf8"));
+  if (details.schema_version !== "1.0" || details.base_prefix !== "/usr/local"
+    || details.base_interpreter !== "/usr/local/bin/python3.14"
+    || !/^wasi-[0-9.]+-wasm32$/u.test(details.platform)
+    || !details.suffixes?.extensions?.includes(".cpython-314-wasm32-wasi.so")) {
+    throw new Error("owned engine build details do not describe the target WASI runtime");
+  }
+  return Object.freeze(result.sort((left, right) =>
+    Buffer.from(left.archivePath).compare(Buffer.from(right.archivePath))));
 }
 
 async function treeDigest(folder) {
@@ -89,7 +177,10 @@ export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
   const wasmOut = join(outDir, "python.wasm");
   await copyFile(wasmSource, wasmOut);
 
-  const stdlibFiles = await collectFiles(join(sourceDir, "Lib"));
+  await canonicalizeGeneratedPlatformData({ buildDir, workspaceRoot: dirname(sourceDir) });
+  const stdlibFiles = [...await collectFiles(join(sourceDir, "Lib")),
+    ...await collectGeneratedPlatformData(buildDir)]
+    .sort((left, right) => Buffer.from(left.archivePath).compare(Buffer.from(right.archivePath)));
   const zipEntries = [];
   const inventoryFiles = [];
   for (const file of stdlibFiles) {

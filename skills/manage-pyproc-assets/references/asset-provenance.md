@@ -14,11 +14,15 @@ pyproc은 실행 자산을 URL 관습이 아니라 manifest, digest, build recei
 | `python314-stdlib.zip` | exact bytes, stdlib inventory와 SHA-256이 engine manifest에 고정된다 |
 | `engine-build-manifest.json` | source, toolchain, recipe, static modules와 output digest를 기록한다 |
 | `engine.cyclonedx.json` | 배포 engine의 CycloneDX component와 provenance를 기록한다 |
+| `native-profile-build-input.json` | profile source, builder, packager와 예산의 canonical 입력 digest를 기록한다 |
 | `reproducibility-manifest.json` | 두 격리 build의 declared output 비교를 기록한다 |
 | `stdlib-inventory.json` | stdlib 파일 목록과 digest를 기록한다 |
 
 `KernelFactory`는 manifest의 byte length와 SHA-256을 검증한 뒤에만 worker를 만든다. 저수준 WASI session은
 검증된 `wasmBytes`와 `stdlibBytes`만 받으며 remote fallback이나 loader 선택을 소유하지 않는다.
+stdlib ZIP 루트의 `_sysconfigdata_*.py`, `_sysconfig_vars_*.json`, `build-details.json`은 target WASI가
+생성한 ABI와 platform 정보를 담는다. build workspace 경로는 `/build/pyproc`으로 canonicalize되고 두
+격리 build에서 ZIP 전체가 byte-identical이어야 한다.
 
 ## Browser worker graph
 

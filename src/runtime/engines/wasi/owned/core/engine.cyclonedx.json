@@ -18,7 +18,7 @@
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "c6b8133e056dd5992782b84eb7269a9ac7402f4c35b2f8ecd333cba9fc630d41"
+          "content": "74d0d71d0600e477651a077101d6e62d1e2e69b8e992ba18c993dd643b7ba222"
         }
       ]
     },
@@ -38,7 +38,7 @@
       "type": "library",
       "name": "_pyprocHost",
       "version": "pyproc.hostcall/1",
-      "bomRef": "pyproc-host:1",
+      "bomRef": "native:_pyprocHost:pyproc.hostcall/1",
       "hashes": [
         {
           "alg": "SHA-256",
@@ -49,22 +49,33 @@
     {
       "type": "file",
       "name": "python.wasm",
-      "bomRef": "artifact:ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d",
+      "bomRef": "artifact:9cf100f0ee12eb0cbce3396f1649f3cd26e17d482dc2ac982fce3d7927d2081d",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "ce49c8fa05580b98c11755be2bd2aeac43054cb158757bcce2b20cfe1265411d"
+          "content": "9cf100f0ee12eb0cbce3396f1649f3cd26e17d482dc2ac982fce3d7927d2081d"
         }
       ]
     },
     {
       "type": "file",
       "name": "python314-stdlib.zip",
-      "bomRef": "artifact:be3c2d5802108d0714921153e1e86737fff1e086823630a523663198284eee57",
+      "bomRef": "artifact:297e22960319563421b9dcbed67dc7c43e42e456fcc01447ceb4de335ce5a236",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "be3c2d5802108d0714921153e1e86737fff1e086823630a523663198284eee57"
+          "content": "297e22960319563421b9dcbed67dc7c43e42e456fcc01447ceb4de335ce5a236"
+        }
+      ]
+    },
+    {
+      "type": "file",
+      "name": "native-profile-build-input.json",
+      "bomRef": "artifact:f0a361c6195ea46028cc1d1215c32e2bdde0fd6cfc1c09cba9028791306418a8",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f0a361c6195ea46028cc1d1215c32e2bdde0fd6cfc1c09cba9028791306418a8"
         }
       ]
     }

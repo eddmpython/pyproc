@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:2819ad6824ebf5781abbdc9667f7996798070436485921dff59836c2aa151d0d",
-  "catalogDigest": "sha256:fc018d2ee90a2296a67ac3110e10ca020b75ef7fc396c201f9b7983cee327582",
+  "generatedFromDigest": "sha256:d7e0bad689e820484bfc5e2ad22edae7dd2699bd18ca537f6c6a4e40b7bfb427",
+  "catalogDigest": "sha256:cffbd08e037cb250cf1d09ae067b63d70f17b8e7a2e7bb3c4f2a1e0637a4a0a1",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -314,8 +314,8 @@
     },
     {
       "path": "skills/evolve-pyproc/references/contract-reality.md",
-      "bytes": 1548,
-      "sha256": "sha256:2d31a21ade3ff3efe6a38626f6db2e8c955bec4c9ecd0ebefd40881ca20bf241"
+      "bytes": 2090,
+      "sha256": "sha256:7cef4656e2a5435f5a7373d53352338e266600de16e72155462170337cae9c6f"
     },
     {
       "path": "skills/evolve-pyproc/references/experimental-freeze.md",
@@ -334,8 +334,8 @@
     },
     {
       "path": "skills/manage-pyproc-assets/references/asset-provenance.md",
-      "bytes": 1911,
-      "sha256": "sha256:7a8c3cfb53ef920319e87d848da6a724a7589367e23a7f46ba88d6f016b025f3"
+      "bytes": 2330,
+      "sha256": "sha256:271caf6e97d5dae2d571b6af8747b9e713f6b9a8ebb50b10caab3922aa0bceae"
     },
     {
       "path": "skills/reference-pyproc-api/references/api.md",

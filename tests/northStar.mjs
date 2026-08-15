@@ -336,15 +336,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "localPythonParity",
-    score: 7.8,
+    score: 8.0,
     en: Object.freeze({
       title: "Everything local Python does",
-      state: "The package environment resolves standard metadata, hashes pure-Python wheels, installs them transactionally, and binds curated static native profiles to the engine identity. The installed GPU subpath now verifies registered compute and rendered-pixel results on a real hardware adapter through the hostcall boundary. Arbitrary native wheels and broad scientific-package reach remain unsupported.",
+      state: "The package environment resolves standard metadata, canonicalizes equivalent Requires-Python declarations, hashes pure-Python wheels, installs them transactionally, and binds curated static native profiles to the engine identity. The installed owned engine now ships target-generated, workspace-canonical sysconfig and build details, and an exact packed Edge journey imports six 1.17.0 while reporting the WASI platform and extension suffixes. The installed GPU subpath verifies registered compute and rendered-pixel results on a real hardware adapter through the hostcall boundary. Arbitrary native wheels and broad scientific-package reach remain unsupported.",
       target: "Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology.",
     }),
     ko: Object.freeze({
       title: "로컬 파이썬이 하는 전부",
-      state: "package environment가 표준 metadata를 해석하고 pure Python wheel을 hash 검증해 transaction으로 설치하며 curated static native profile을 engine identity에 묶는다. 설치 GPU subpath는 실제 hardware adapter와 hostcall 경계에서 등록된 compute와 rendered-pixel 결과를 검증한다. 임의 native wheel과 넓은 scientific package 도달 범위는 아직 지원하지 않는다.",
+      state: "package environment가 표준 metadata와 의미가 같은 Requires-Python 선언을 canonicalize하고 pure Python wheel을 hash 검증해 transaction으로 설치하며 curated static native profile을 engine identity에 묶는다. 설치 owned engine은 target이 생성하고 workspace를 canonicalize한 sysconfig와 build details를 배송한다. exact packed Edge 여정은 six 1.17.0을 import하고 WASI platform과 extension suffix를 보고한다. 설치 GPU subpath는 실제 hardware adapter와 hostcall 경계에서 등록된 compute와 rendered-pixel 결과를 검증한다. 임의 native wheel과 넓은 scientific package 도달 범위는 아직 지원하지 않는다.",
       target: "로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다.",
     }),
     evidence: Object.freeze([
@@ -358,8 +358,8 @@ export const NORTH_STAR_AXES = Object.freeze([
     next: Object.freeze([
       Object.freeze({
         id: "packageReach",
-        en: "Widen package reach where it is thin: a pyemscripten wheel for the long tail, and a SIMD numpy build",
-        ko: "얇은 곳의 패키지 도달 범위를 넓힌다: 롱테일의 pyemscripten wheel과 SIMD numpy 빌드",
+        en: "Build a source-pinned native package catalog for owned WASI profiles, prove one compiled extension end to end, then add a scientific SIMD profile",
+        ko: "owned WASI profile용 source-pinned native package catalog를 만들고 compiled extension 하나를 끝까지 증명한 뒤 scientific SIMD profile을 추가한다",
       }),
       Object.freeze({
         id: "wasmToolLayer",

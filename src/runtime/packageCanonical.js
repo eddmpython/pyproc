@@ -9,6 +9,16 @@ export function normalizePackageName(value) {
   return value.toLowerCase().replace(/[-_.]+/gu, "-");
 }
 
+export function canonicalRequiresPython(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") {
+    throw new PyProcError("PYPROC_INPUT_INVALID", "Requires-Python must be text or null");
+  }
+  const clauses = value.split(",").map((clause) => clause.replace(/\s+/gu, "")).filter(Boolean);
+  if (!clauses.length) return null;
+  return [...new Set(clauses)].sort(compareNames).join(",");
+}
+
 function canonicalValue(value) {
   if (value === null || typeof value === "boolean" || typeof value === "string") return value;
   if (typeof value === "number" && Number.isFinite(value)) return Object.is(value, -0) ? 0 : value;

@@ -8,7 +8,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
-import { packageOwnedEngine } from "./packageOwnedEngine.mjs";
+import { ownedBuildDetailsArguments, packageOwnedEngine } from "./packageOwnedEngine.mjs";
 import { nativeProfileBuildInput } from "./nativeProfileCompiler.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -141,6 +141,8 @@ async function main() {
     "--env", "PYTHONPATH=/Lib", join(targetBuildDir, "python.wasm"), "-c", profileBuild.input.oracle.code],
   { capture: true });
   if (oracle.trim() !== profileBuild.input.oracle.stdout) throw new Error(`owned ${profileName} oracle failed: ${oracle}`);
+  const buildDetails = await ownedBuildDetailsArguments({ sourceDir, buildDir: targetBuildDir, target: lock.target });
+  run(wasmtime, buildDetails.args);
   const packaged = await packageOwnedEngine({ sourceDir, buildDir: targetBuildDir, sdkDir, outDir,
     profileName, profileBuild });
   console.log(`\nowned ${profileName} engine complete: ${JSON.stringify(packaged.outputs, null, 2)}`);

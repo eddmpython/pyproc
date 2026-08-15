@@ -8,7 +8,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 
-import { packageOwnedEngine } from "./packageOwnedEngine.mjs";
+import { ownedBuildDetailsArguments, packageOwnedEngine } from "./packageOwnedEngine.mjs";
 import { nativeProfileBuildInput } from "./nativeProfileCompiler.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -87,6 +87,48 @@ export function patchWindowsMakefile(makefile) {
   return patched;
 }
 
+export const WINDOWS_CROSS_SYSCONFIG_WRAPPER = [
+  "import os, runpy, sys",
+  "os.name = 'posix'",
+  "sys.platform = os.environ['_PYPROC_TARGET_PLATFORM']",
+  "os.uname = lambda: (sys.platform, '', '', '', os.environ['_PYPROC_TARGET_MACHINE'])",
+  "sys.abiflags = os.environ['_PYPROC_TARGET_ABIFLAGS']",
+  "runpy.run_module('sysconfig', run_name='__main__')",
+].join("; ");
+
+function requiredMakeVariable(makefile, name) {
+  const matches = [...makefile.matchAll(new RegExp(`^${name}=[ \\t]*(.*)$`, "gmu"))];
+  if (matches.length !== 1) throw new Error(`Windows cross build requires exactly one ${name} Makefile variable`);
+  return matches[0][1].trim();
+}
+
+export async function generateWindowsCrossSysconfigData({ buildDir, sourceDir, hostPython, baseEnv }) {
+  const makefile = await readFile(join(buildDir, "Makefile"), "utf8");
+  const abiflags = requiredMakeVariable(makefile, "ABIFLAGS");
+  const platform = requiredMakeVariable(makefile, "MACHDEP");
+  const multiarch = requiredMakeVariable(makefile, "MULTIARCH");
+  const hostPlatform = requiredMakeVariable(makefile, "_PYTHON_HOST_PLATFORM");
+  const separator = hostPlatform.indexOf("-");
+  if (platform !== "wasi" || separator < 1 || !multiarch) {
+    throw new Error("Windows cross sysconfig target is not a complete WASI platform");
+  }
+  await writeFile(join(buildDir, "pybuilddir.txt"), "none");
+  run(hostPython, ["-S", "-c", WINDOWS_CROSS_SYSCONFIG_WRAPPER, "--generate-posix-vars"], {
+    cwd: buildDir,
+    env: {
+      ...baseEnv,
+      PYTHONPATH: join(sourceDir, "Lib"),
+      _PYTHON_PROJECT_BASE: buildDir,
+      _PYTHON_HOST_PLATFORM: hostPlatform,
+      _PYTHON_SYSCONFIGDATA_NAME: `_sysconfigdata_${abiflags}_${platform}_${multiarch}`,
+      _PYTHON_SYSCONFIGDATA_PATH: "",
+      _PYPROC_TARGET_PLATFORM: platform,
+      _PYPROC_TARGET_MACHINE: hostPlatform.slice(separator + 1),
+      _PYPROC_TARGET_ABIFLAGS: abiflags,
+    },
+  });
+}
+
 async function main() {
   if (process.platform !== "win32" || process.arch !== "x64") throw new Error("Windows probe builder requires Windows x64");
   const workspace = option("--workspace");
@@ -142,6 +184,7 @@ async function main() {
   const baseEnv = {
     ...process.env,
     PATH: `${toolBin};${join(sdkDir, "bin")};${process.env.PATH}`,
+    MSYS2_ARG_CONV_EXCL: "-DPREFIX=;-DEXEC_PREFIX=;-DPYTHONPATH=",
     SOURCE_DATE_EPOCH: String(LOCK.sourceDateEpoch),
   };
   const configure = [
@@ -160,6 +203,8 @@ async function main() {
   run(gitBash, ["-lc", configure], { env: baseEnv });
   const makefilePath = join(buildDir, "Makefile");
   await writeFile(makefilePath, patchWindowsMakefile(await readFile(makefilePath, "utf8")));
+  await generateWindowsCrossSysconfigData({ buildDir, sourceDir,
+    hostPython: join(hostPythonDir, "python.exe"), baseEnv });
   const makeCommand = `set -euo pipefail; cd ${buildBash}; export SOURCE_DATE_EPOCH=${LOCK.sourceDateEpoch}; make --jobs ${availableParallelism()} python.wasm`;
   run(gitBash, ["-lc", makeCommand], { env: baseEnv });
 
@@ -172,6 +217,8 @@ async function main() {
   if (wasmtimeOutput.trim() !== profileBuild.input.oracle.stdout) {
     throw new Error(`owned Windows ${profileName} probe oracle failed: ${wasmtimeOutput}`);
   }
+  const buildDetails = await ownedBuildDetailsArguments({ sourceDir, buildDir, target: LOCK.target });
+  run(join(toolBin, "wasmtime.exe"), buildDetails.args);
   const result = await packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir, profileName, profileBuild });
   console.log(JSON.stringify({ profile: profileName, oracle: wasmtimeOutput, outputs: result.outputs }, null, 2));
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-08-14",
+  "updatedAt": "2026-08-15",
   "recordPolicy": "PROVEN_LOCAL entries are immutable measurement snapshots. Commands and artifact paths inside those snapshots describe the observed run and can refer to retired research probes. Use currentProductGates for supported, runnable verification.",
   "currentProductGates": [
     {
@@ -557,6 +557,73 @@
           "role": "installedBrowserGate",
           "file": "tests/browser/installedPackageGate.mjs",
           "checks": "47/47"
+        }
+      ]
+    },
+    {
+      "evidenceId": "local-package-reach-foundation-m3-20260815",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows 11",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "CPython 3.14.6 owned WASI SDK 24 build",
+        "engineSha256": "9cf100f0ee12eb0cbce3396f1649f3cd26e17d482dc2ac982fce3d7927d2081d"
+      },
+      "commands": [
+        "node scripts/engineBuilder/buildOwnedEngineWindowsProbe.mjs --workspace C:\\pp11-package-reach-20260815\\a4 --out C:\\pp11-package-reach-20260815\\a4\\dist --input-cache C:\\pp11-inputs-20260815 --profile core",
+        "node scripts/engineBuilder/buildOwnedEngineWindowsProbe.mjs --workspace C:\\pp11-package-reach-20260815\\b4 --out C:\\pp11-package-reach-20260815\\b4\\dist --input-cache C:\\pp11-inputs-20260815 --profile core",
+        "node scripts/engineBuilder/verifyOwnedEngine.mjs --artifact-dir C:\\pp11-package-reach-20260815\\a4\\canonical-dist --compare C:\\pp11-package-reach-20260815\\b4\\canonical-dist --require-production-flags --profile core --receipt C:\\pp11-package-reach-20260815\\reproducibility-manifest.json",
+        "PYPROC_BROWSER=Microsoft Edge node tests/attempts/runtimeParity/ownedPackageReachProbe.mjs",
+        "PYPROC_BROWSER=Microsoft Edge npm run test:installed",
+        "npm test",
+        "npm run test:package",
+        "npm run test:types"
+      ],
+      "result": "two clean source builds produced byte-identical declared artifacts after workspace canonicalization; exact packed Control installed and imported six 1.17.0; target sysconfig reported wasi-0.0.0-wasm32 and .cpython-314-wasm32-wasi.so; NumPy 2.5.2 stopped at the explicit package resolution boundary",
+      "measurements": {
+        "independentBuilds": 2,
+        "byteIdentical": true,
+        "engineBytes": 7731137,
+        "stdlibBytes": 2773481,
+        "installedChecks": "20/20",
+        "installedBootMs": 1136,
+        "imageOpenMs": 2300,
+        "purePackage": "six==1.17.0",
+        "nativeBoundary": "PYPROC_PACKAGE_RESOLUTION",
+        "screenshotViewport": "922x920"
+      },
+      "invariants": [
+        "semantically equivalent Requires-Python declarations canonicalize before index and wheel metadata comparison",
+        "the shipped standard library contains target-generated sysconfig data, sysconfig variables, and build details",
+        "generated platform metadata contains no local build workspace and is reproducible across isolated workspaces",
+        "the installed pure wheel transaction imports from its committed environment",
+        "unsupported native package reach fails before download or installation and does not claim arbitrary binary wheel support"
+      ],
+      "artifacts": [
+        {
+          "role": "installedCoreEngine",
+          "file": "src/runtime/engines/wasi/owned/core/python.wasm",
+          "byteLength": 7731137,
+          "sha256": "9cf100f0ee12eb0cbce3396f1649f3cd26e17d482dc2ac982fce3d7927d2081d"
+        },
+        {
+          "role": "installedCoreStdlib",
+          "file": "src/runtime/engines/wasi/owned/core/python314-stdlib.zip",
+          "byteLength": 2773481,
+          "sha256": "297e22960319563421b9dcbed67dc7c43e42e456fcc01447ceb4de335ce5a236"
+        },
+        {
+          "role": "profileInput",
+          "file": "src/runtime/engines/wasi/owned/core/native-profile-build-input.json",
+          "byteLength": 1945,
+          "sha256": "f0a361c6195ea46028cc1d1215c32e2bdde0fd6cfc1c09cba9028791306418a8"
+        },
+        {
+          "role": "visualBoundaryReceipt",
+          "viewport": "922x920",
+          "sha256": "16ce862b69982ce556a0b1a7c5e7bb4daa3d83775d2701e6a2982b8d7d7b1c0f"
         }
       ]
     },

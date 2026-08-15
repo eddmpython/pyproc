@@ -38,11 +38,11 @@ function recordHash(bytes) {
 }
 
 function wheelFixture(name, version, dependencies = [], moduleSource = `value = ${JSON.stringify(version)}\n`,
-  modulePath = `${name}/__init__.py`, extraModules = []) {
+  modulePath = `${name}/__init__.py`, extraModules = [], requiresPython = ">=3.14") {
   const filename = `${name}-${version}-py3-none-any.whl`;
   const distInfo = `${name}-${version}.dist-info`;
   const metadata = encoder.encode(["Metadata-Version: 2.4", `Name: ${name}`, `Version: ${version}`,
-    "Requires-Python: >=3.14", ...dependencies.map((value) => `Requires-Dist: ${value}`), "", ""].join("\n"));
+    `Requires-Python: ${requiresPython}`, ...dependencies.map((value) => `Requires-Dist: ${value}`), "", ""].join("\n"));
   const wheel = encoder.encode(["Wheel-Version: 1.0", "Generator: pyproc-contract",
     "Root-Is-Purelib: true", "Tag: py3-none-any", "", ""].join("\n"));
   const module = encoder.encode(moduleSource);
@@ -56,13 +56,13 @@ function wheelFixture(name, version, dependencies = [], moduleSource = `value = 
   records.push(`${distInfo}/RECORD,,`);
   entries.push({ path: `${distInfo}/RECORD`, bytes: encoder.encode(records.join("\n") + "\n") });
   const bytes = new Uint8Array(createDeterministicZip(entries, 1704067200));
-  return { name, version, filename, metadata, bytes, dependencies };
+  return { name, version, filename, metadata, bytes, dependencies, requiresPython };
 }
 
 async function packageFile(fixture, overrides = {}) {
   return { filename: fixture.filename, url: `https://packages.test/files/${fixture.filename}`,
     hashes: { sha256: (await sha256Address(fixture.bytes)).slice(7) }, size: fixture.bytes.byteLength,
-    "requires-python": ">=3.14", "core-metadata": { sha256: (await sha256Address(fixture.metadata)).slice(7) },
+    "requires-python": fixture.requiresPython, "core-metadata": { sha256: (await sha256Address(fixture.metadata)).slice(7) },
     yanked: false, ...(fixture.fileOverrides || {}), ...overrides };
 }
 
@@ -150,7 +150,9 @@ export async function assertPackageEnvironmentContract() {
     && comparePackageVersions("1.0rc1", "1.0") < 0
     && (await packageEnvironmentIdentity({ engineId: "engine:test", lock: {}, treeDigests: [],
       policyDigest: "policy:test" })).startsWith("sha256:"), "package protocol or identity exports drifted");
-  const demo = wheelFixture("demo", "1.0.0", ["helper>=1; python_version >= '3.14'"]);
+  const demo = wheelFixture("demo", "1.0.0", ["helper>=1; python_version >= '3.14'"],
+    undefined, undefined, [], ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*");
+  demo.fileOverrides = { "requires-python": "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7" };
   const helper = wheelFixture("helper", "1.1.0");
   const tree = await inspectPurePythonWheel(demo.bytes, { filename: demo.filename,
     expectedName: "demo", expectedVersion: "1.0.0", expectedSha256: await sha256Address(demo.bytes),

@@ -63,7 +63,18 @@ export async function assertKernelFactory() {
 
   const installedManifest = await getDefaultKernelEngineManifest();
   const installedDistribution = inspectDefaultKernelEngineDistribution();
+  const environmentDescriptor = JSON.stringify({
+    protocol: "pyproc.base-kernel-environment",
+    version: 1,
+    engineId: installedDistribution.engineId,
+    wasmSha256: installedDistribution.artifacts.wasm.sha256,
+    stdlibSha256: installedDistribution.artifacts.stdlib.sha256,
+  });
+  const expectedEnvironmentId = `sha256:${await globalThis.crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode(environmentDescriptor)).then((value) => [...new Uint8Array(value)]
+    .map((item) => item.toString(16).padStart(2, "0")).join(""))}`;
   assert(installedManifest.engineId === DEFAULT_KERNEL_ENGINE_ID
+    && installedDistribution.environmentId === expectedEnvironmentId
     && installedManifest.nativeProfile === "core"
     && installedManifest.artifacts.wasm.byteLength === installedDistribution.artifacts.wasm.byteLength
     && installedManifest.artifacts.stdlib.byteLength === installedDistribution.artifacts.stdlib.byteLength

@@ -112,8 +112,10 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 ### M3. 컴퓨팅 몸체 확대
 
-- 진행 중: `tests/northStar.mjs`의 `localPythonParity.packageReach`부터 시작하고 `parallelProcesses`,
-  `durableDisk` next를 순서대로 소진한다.
+- 완료: `packageReach` 기반으로 Requires-Python canonicalization, target-generated WASI sysconfig와
+  build details, workspace 경로 canonicalization, 두 격리 build의 byte-identical stdlib를 제품화했다.
+- 진행 중: source-pinned native package catalog와 compiled extension 하나의 설치 제품 gate를 먼저 닫고
+  scientific SIMD profile로 넓힌다. 이후 `parallelProcesses`, `durableDisk` next를 순서대로 소진한다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
 - wasm 도구층을 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
@@ -346,3 +348,29 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   hardware oracle 계약은 GREEN이다.
 - 다음 직렬 작업: M3 `localPythonParity.packageReach`다. GPU 축 자체의 다음 ceiling은 두 번째 독립
   hardware와 browser 구현에서 같은 receipt를 통과시키는 `multiVendorVisualConformance`로 남긴다.
+
+## 8. 진행 판정: owned WASI package reach 기반
+
+- 계획 현실화: 과거 `pyemscripten`과 Emscripten 전제를 현재 owned `wasm32-wasip1` 엔진에 그대로
+  적용하지 않는다. 첫 목표를 pure wheel 설치와 target ABI metadata의 신뢰 가능한 배포로 다시 측정했다.
+- 첫 RED: exact packed Edge에서 `six==1.17.0`의 index와 wheel이 의미상 같은 Requires-Python을 다른
+  순서와 공백으로 표현해 `PYPROC_PACKAGE_INTEGRITY`가 났다. specifier를 canonicalize한 뒤 통과했다.
+- 두 번째 RED: pure wheel 뒤 `sysconfig`가 `_sysconfigdata__wasi_wasm32-wasi`를 찾지 못했다. 기존 Windows
+  builder는 `python.wasm`만 만들고 generated platform data를 stdlib에 넣지 않았다.
+- build 계약: Windows host Python은 target POSIX 문맥으로 sysconfig를 생성하고, 실제 WASI runtime이
+  `build-details.json`을 만든다. Git Bash의 prefix 변환을 제한하고 build workspace는 `/build/pyproc`으로
+  canonicalize한다. Linux builder도 같은 target build-details 계약을 쓴다.
+- 재현성: `a4`와 `b4` 독립 build의 6개 declared output이 byte-identical이다. engine은 7,731,137 bytes,
+  `sha256:9cf100f0ee12eb0cbce3396f1649f3cd26e17d482dc2ac982fce3d7927d2081d`, stdlib은
+  2,773,481 bytes, `sha256:297e22960319563421b9dcbed67dc7c43e42e456fcc01447ceb4de335ce5a236`다.
+- 설치 제품 실측: 공개 Control이 연 Edge에서 `six 1.17.0`을 설치하고 import했다. runtime은
+  `wasi-0.0.0-wasm32`, `.cpython-314-wasm32-wasi.so`, `.abi3.so`, `.so`를 보고했다.
+- 현재 정확한 RED: NumPy 2.5.2는 허용 tag가 `py3-none-any`뿐인 core resolver에서
+  `PYPROC_PACKAGE_RESOLUTION`로 멈춘다. screenshot은 922 x 920으로 직접 확인했고 SHA-256은
+  `16ce862b69982ce556a0b1a7c5e7bb4daa3d83775d2701e6a2982b8d7d7b1c0f`다.
+- gate 이빨: workspace 치환을 무력화한 음성 변형은
+  `generated _sysconfigdata__wasi_wasm32-wasi.py does not expose a canonicalizable build root`로 RED였다.
+  복원 뒤 engine builder 계약과 설치 Edge 20/20은 GREEN이다.
+- 다음 직렬 작업: source-pinned native package catalog를 정의하고 가장 작은 compiled extension을
+  profile build, lock, resolver, transactional install, browser import까지 관통시킨다. 그 뒤 SIMD
+  scientific profile을 추가하며 임의 PyPI native wheel 지원을 먼저 주장하지 않는다.

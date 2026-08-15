@@ -53,6 +53,9 @@ export async function nativeProfileBuildInput(profileName) {
   }
   const setupBytes = await readFile(join(SCRIPT_DIR, profile.setupFile));
   const setupSha256 = sha256(setupBytes);
+  const packagerSha256 = sha256(await readFile(join(SCRIPT_DIR, "packageOwnedEngine.mjs")));
+  const linuxBuilderSha256 = sha256(await readFile(join(SCRIPT_DIR, "buildOwnedEngine.mjs")));
+  const windowsBuilderSha256 = sha256(await readFile(join(SCRIPT_DIR, "buildOwnedEngineWindowsProbe.mjs")));
   if (setupSha256 !== profile.setupSha256) throw new Error(`native profile Setup digest mismatch: ${profile.setupFile}`);
   for (const module of modules) {
     if (!new TextDecoder().decode(setupBytes).split(/\r?\n/u)
@@ -72,7 +75,8 @@ export async function nativeProfileBuildInput(profileName) {
       linuxArchiveSha256: lock.wasiSdk.linuxX8664.archiveSha256,
       windowsArchiveSha256: lock.wasiSdk.windowsX8664.archiveSha256 },
     recipe: { sourceDateEpoch: lock.sourceDateEpoch, configureArgs: lock.configureArgs,
-      cflags: lock.cflags, setupFile: profile.setupFile, setupSha256, modules },
+      cflags: lock.cflags, setupFile: profile.setupFile, setupSha256, packagerSha256,
+      linuxBuilderSha256, windowsBuilderSha256, modules },
     oracle: profile.oracle, budgets: profile.budgets,
     outputs: ["python.wasm", "python314-stdlib.zip", "stdlib-inventory.json",
       "native-profile-build-input.json", "engine-build-manifest.json", "engine.cyclonedx.json"] });

@@ -3,6 +3,7 @@ import { parseSha256Address, sha256Address, SHA256_ADDRESS_PREFIX } from "./cont
 import { PyProcError } from "./errors.js";
 import { compareNames } from "./memoryLayout.js";
 import {
+  canonicalRequiresPython,
   canonicalPackageJson,
   immutablePackageValue,
   normalizePackageName,
@@ -424,7 +425,7 @@ export class SimpleApiPackageResolver {
         if (!file.hashes?.sha256 || !Number.isSafeInteger(file.size) || file.size < 0) continue;
         const metadataHash = typeof file["core-metadata"] === "object" ? file["core-metadata"]?.sha256 : null;
         if (!metadataHash) continue;
-        const requiresPython = file["requires-python"] || null;
+        const requiresPython = canonicalRequiresPython(file["requires-python"] || null);
         if (requiresPython && !String(requiresPython).split(",").every((item) => matchesSpecifier(this.pythonVersion, item))) continue;
         if (this.prereleasePolicy === "forbid" && isPrerelease(wheel.version)) continue;
         if (file.yanked) continue;
@@ -559,7 +560,7 @@ export class SimpleApiPackageResolver {
         || !wheel.tags.some((tag) => this.allowedTags.includes(tag))
         || !Number.isSafeInteger(entry.size) || entry.size < 0 || dependencies === null
         || canonicalPackageJson(entry.dependencies) !== canonicalPackageJson(dependencies)
-        || entry.requiresPython !== null && typeof entry.requiresPython !== "string"
+        || entry.requiresPython !== canonicalRequiresPython(entry.requiresPython)
         || entry.yanked !== false && entry.yanked !== true && typeof entry.yanked !== "string"
         || this.yankedPolicy === "forbid" && entry.yanked !== false) {
         throw resolution("Package lock package entries are not canonical");

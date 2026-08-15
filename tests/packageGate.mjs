@@ -148,7 +148,8 @@ try {
     throw new Error(`incomplete documented hello error drift: ${incompleteCode}`);
   }
   for (const file of ["python.wasm", "python314-stdlib.zip", "engine-build-manifest.json",
-    "engine.cyclonedx.json", "stdlib-inventory.json", "reproducibility-manifest.json"]) {
+    "engine.cyclonedx.json", "stdlib-inventory.json", "native-profile-build-input.json",
+    "reproducibility-manifest.json"]) {
     if (!existsSync(join(appDir, "node_modules", "pyproc", "src", "runtime", "engines", "wasi", "owned", "core", file))) {
       throw new Error(`installed owned kernel asset 누락: ${file}`);
     }

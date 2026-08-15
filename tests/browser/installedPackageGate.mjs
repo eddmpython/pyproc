@@ -105,6 +105,13 @@ try {
     timings.ownedBootMs + "ms");
   const executed = await machine.run("print(sum(range(20)))");
   check("installed kernel executes Python", executed.output.trim() === "190");
+  const sysconfig = JSON.parse((await machine.run(
+    "import json,sysconfig; print(json.dumps({'platform':sysconfig.get_platform(),"
+      + "'extSuffix':sysconfig.get_config_var('EXT_SUFFIX')},sort_keys=True))")).output.trim());
+  check("installed owned stdlib carries generated sysconfig data",
+    sysconfig.platform === "wasi-0.0.0-wasm32"
+      && sysconfig.extSuffix === ".cpython-314-wasm32-wasi.so",
+    JSON.stringify(sysconfig));
   await machine.run.set("installedValue", { text: "설치본", value: 41 });
   const value = await machine.run.get("installedValue");
   check("installed kernel transfers structured values", value.text === "설치본" && value.value === 41);

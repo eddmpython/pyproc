@@ -1,8 +1,9 @@
 {
   "schemaVersion": 1,
   "engineId": "cpython-wasi-3.14.6-pyproc-host-1",
+  "nativeProfile": "core",
   "sourceCommit": "c63aec69bd59c55314c06c23f4c22c03de76fe45",
-  "fileCount": 564,
+  "fileCount": 567,
   "files": [
     {
       "path": "__future__.py",
@@ -260,6 +261,16 @@
       "sha256": "3283216b39dc619ad1b0c0ccbed0c6a13c69884177e8032211087736fedacf4d"
     },
     {
+      "path": "_sysconfig_vars__wasi_wasm32-wasi.json",
+      "byteLength": 46636,
+      "sha256": "b137af268d489e6ce9e664069ef8c6a68afdc3c606a1aba1b4b3384f5db67bd2"
+    },
+    {
+      "path": "_sysconfigdata__wasi_wasm32-wasi.py",
+      "byteLength": 48428,
+      "sha256": "1a1be0bd1066061de1baf4d27d4fec7a178d4c0a1158a94df60bf1941b2be7e5"
+    },
+    {
       "path": "_threading_local.py",
       "byteLength": 4363,
       "sha256": "c28a8fee862741e9173f5a76f0c680761b5f61e1dd9f2ca479b02c69c9ada4e7"
@@ -483,6 +494,11 @@
       "path": "bisect.py",
       "byteLength": 3423,
       "sha256": "f1cf7b85fc36b5da249813fc5ab97d9464f8cc1bc817f7146206fa2713e35999"
+    },
+    {
+      "path": "build-details.json",
+      "byteLength": 1041,
+      "sha256": "ec2241f4ff895696135d2f9640b40c0b8b7e28ca1fae6697b9a52bb36d44d315"
     },
     {
       "path": "bz2.py",

@@ -18,6 +18,7 @@
 | 탭이 진짜 터미널이 되나 | [terminalProbe.html](terminalProbe.html) | REPL 시맨틱 + REPL 안 `input()` 블로킹 재개 -> Terminal 능력 계약으로 승격 |
 | 예외로 더러워진 힙을 안전 복원할 수 있나 | [exceptionRestoreProbe.html](exceptionRestoreProbe.html) | 결함 재현 + rehash 복원 정확 -> `restoreLive({rehash})` 승격 |
 | 대표 패키지 스택이 v314에서 도는가 | [versionParityProbe.html](versionParityProbe.html) | fastapi/pydantic/polars/numpy/requests 설치·import 성공률 보고 |
+| owned WASI 제품의 package reach 첫 경계가 어디인가 | [ownedPackageReachProbe.mjs](ownedPackageReachProbe.mjs) | packed `pyproc`의 pure wheel 설치, native wheel 거절, platform과 extension loading 표면을 같은 browser에서 보고 |
 | FastAPI가 커널 안에서 소켓 0으로 도는가 | [asgiProbe.html](asgiProbe.html) | GET 200 + POST 검증 200/422 -> `AsgiServer` 능력 승격 |
 | 행 워커를 kill 없이 회수할 수 있나 | [interruptProbe.html](interruptProbe.html) | SIGINT 수렴 + 같은 워커 재사용 -> `interrupt(pid)` 승격 |
 | 대표 라이브러리가 얼마나 깔리나 | [libCoverageProbe.html](libCoverageProbe.html) | 대표군 설치·import 성공률 실측(성공/실패 분류가 산출물) |
@@ -65,6 +66,7 @@
 
 | 2026-07-12 | originFidelityProbe | Edge headless | 셀프호스팅 심판이 찾은 4구멍 수리 실측 GREEN 7/7: 요청 헤더 전달(Authorization), 바이너리 응답(PNG)/요청(512B, 0x00-0xFF) 무손상, 204/404 정합, **iframe(커널 밖 문서)의 fetch가 hello 등록 라우팅으로 커널 도달 20ms**, 커널 부재 시 10s 후 504(무한 대기 소거). 발견 2건: `setGlobal(null)`은 None이 아니라 JsNull 프록시(널 정규화는 JS 경계에서), SW 합성 응답에 COI 헤더가 없으면 부모 COEP가 iframe을 차단 | **서빙된 웹앱이 커널 페이지 밖에서 산다**(진짜 웹앱 동선 성립) | 졸업 -> `pyprocSw.js`(커널 등록부 + 타임아웃 + COI 헤더) + `virtualOrigin.js`(hello) + `asgiServer.js`(headers/bodyBytes). 벽: Set-Cookie 스트립(토큰 방식), WebSocket 미가로채기, 스트리밍/SSE 미지원 |
 | 2026-07-15 | virtualOriginBoundaryProbe | Edge headless | GREEN 4/4. Set-Cookie 응답 후 `set-cookie` header null, `document.cookie` empty, 다음 요청 cookie empty. WebSocket `/pyproc/ws`는 `error`이고 Python ASGI `seenPaths`에 `/ws` 없음. SSE body는 `asyncio.sleep(0.16)` 뒤 fetch 170ms에 `data: first` + `data: second` 일괄 수신 | **VirtualOrigin의 로컬 서버 흉내 한계가 실행 계약이 됐다**. 쿠키 세션, WebSocket upgrade, 청크 스트리밍은 의존 대상이 아니다 | 승격 -> 패키지 계약의 boundary lab. 토큰/header auth, 별도 WS relay, 일괄 응답 또는 다른 스트림 경로를 쓴다 |
+| 2026-08-15 | ownedPackageReachProbe | Windows 11, headed Edge, exact packed Control | 첫 RED는 `six` Requires-Python 순서 차이, 두 번째 RED는 `_sysconfigdata__wasi_wasm32-wasi` 누락이었다. 수정 뒤 `six 1.17.0` import, `wasi-0.0.0-wasm32`, `.cpython-314-wasm32-wasi.so`가 GREEN이고 NumPy 2.5.2만 `PYPROC_PACKAGE_RESOLUTION` RED다. screenshot SHA-256 `16ce862b69982ce556a0b1a7c5e7bb4daa3d83775d2701e6a2982b8d7d7b1c0f` | pure wheel과 target ABI metadata 기반은 제품화됐다. 현재 첫 실제 벽은 owned native package catalog 부재다 | attempt 유지. 가장 작은 source-pinned compiled extension을 profile과 resolver를 통해 설치, import한 뒤 scientific SIMD profile로 넓힌다 |
 
 ## 판정
 

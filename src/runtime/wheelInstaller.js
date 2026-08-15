@@ -1,7 +1,7 @@
 // wheelInstaller.js - Layer 0: bounded pure Python wheel validation and immutable tree preparation.
 import { base64FromBytes, parseSha256Address, sha256Address, sha256Hex } from "./contentDigest.js";
 import { PyProcError } from "./errors.js";
-import { canonicalPackageJson, normalizePackageName } from "./packageCanonical.js";
+import { canonicalPackageJson, canonicalRequiresPython, normalizePackageName } from "./packageCanonical.js";
 import { unzipWheel } from "./engines/wasi/wheelUnzip.js";
 import { compareNames } from "./memoryLayout.js";
 
@@ -334,7 +334,8 @@ export async function inspectPurePythonWheel(input, options = {}) {
   const treeDigest = await sha256Address(canonicalPackageJson(fileReceipts));
   return Object.freeze({ protocol: "pyproc.pure-wheel-tree", version: 1, name: normalizePackageName(name),
     displayName: name, packageVersion: version, filename: options.filename || `${name}-${version}-py3-none-any.whl`,
-    wheelDigest, treeDigest, requiresPython: metadata.get("requires-python")?.[0] || null,
+    wheelDigest, treeDigest,
+    requiresPython: canonicalRequiresPython(metadata.get("requires-python")?.[0] || null),
     dependencies: Object.freeze([...(metadata.get("requires-dist") || [])]),
     files: Object.freeze([...files].sort(([left], [right]) => compareNames(left, right))
       .map(([path, content]) => Object.freeze([path, content.slice()]))),
