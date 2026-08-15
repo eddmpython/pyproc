@@ -1,8 +1,8 @@
 {
   "protocol": "pyproc.native-profile-build-input",
-  "version": 1,
+  "version": 2,
   "profile": "data",
-  "engineId": "cpython-wasi-3.14.6-pyproc-data-2",
+  "engineId": "cpython-wasi-3.14.6-pyproc-data-3",
   "target": "wasm32-wasip1",
   "source": {
     "version": "3.14.6",
@@ -23,9 +23,9 @@
     "cflags": "-O3 -g0 -fno-ident",
     "setupFile": "Setup.data.local",
     "setupSha256": "8e42e525bee03dd78986347960b5293ec3645904cbb0c48b6129e042ef37e1d2",
-    "packagerSha256": "531db10d5d346725aa03bff3ddec24de03353ef98aba1b359c945c9f6b01eca8",
-    "linuxBuilderSha256": "04e7920a629d2c6fa62a9e10cd4c3236c1eed10f7e4c95af2c7fec3564046557",
-    "windowsBuilderSha256": "2e7fb3820129809748d938c0b7b281f0f727e42e346c6fcb20c64f33a70004f0",
+    "packagerSha256": "a623aa94699ee6b00b726e60538725bbee39824df7400dd6eba9bde3a4a74fb3",
+    "linuxBuilderSha256": "3f0d84266fcf663b588ff64a013faf409d6558c19d02b329b6f2eb68c5b3782b",
+    "windowsBuilderSha256": "3982e4414e51c7f7f302542718732af2fe70d6da03fbded3bdf86abd88911818",
     "modules": [
       {
         "name": "_pyprocHost",
@@ -47,10 +47,42 @@
     "code": "import _pyprocData; from array import array; a=array('d',[1,2.5,-4]); b=array('d',[3,4.5,6]); out=array('d'); out.frombytes(_pyprocData.vector_add_f64(a,b)); print(_pyprocData.profile(), _pyprocData.simd(), list(out), _pyprocData.dot_f64(a,b))",
     "stdout": "pyproc.data/2 wasm-simd128 [4.0, 7.0, 2.0] -9.75"
   },
+  "scientificPackages": [
+    {
+      "name": "numpy",
+      "version": "2.5.1",
+      "builderFile": "../scientificPackageBuilder/numpyStaticBuilder.mjs",
+      "builderSha256": "eb2785688ca2eeca4d649548a8f8c4fa0ba7ba9e5b13246a8fda18b539580e76",
+      "lockFile": "../scientificPackageBuilder/scientificPackageLock.json",
+      "lockSha256": "73b24295329258e751de67ad245ade6123067edef43b7f80ffbdf07e3b117012",
+      "sourceSha256": "a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3",
+      "wheelFile": "numpy-2.5.1-py3-none-any.whl",
+      "maxWheelBytes": 1400000,
+      "modules": [
+        "numpy._core._multiarray_umath",
+        "numpy.fft._pocketfft_umath",
+        "numpy.linalg.lapack_lite",
+        "numpy.linalg._umath_linalg",
+        "numpy.random._bounded_integers",
+        "numpy.random._common",
+        "numpy.random._mt19937",
+        "numpy.random._philox",
+        "numpy.random._pcg64",
+        "numpy.random._sfc64",
+        "numpy.random.bit_generator",
+        "numpy.random._generator",
+        "numpy.random.mtrand"
+      ],
+      "oracle": {
+        "code": "import json,numpy as np; print(json.dumps({'version':np.__version__,'sum':np.arange(6,dtype=np.float64).reshape(2,3).sum(axis=1).tolist(),'dot':np.dot(np.array([1.,2.,3.]),np.array([4.,5.,6.])), 'fft':[str(v) for v in np.fft.fft(np.array([1.,0.,0.,0.])).tolist()],'solve':np.linalg.solve(np.array([[3.,1.],[1.,2.]]),np.array([9.,8.])).tolist(),'random':np.random.default_rng(123).integers(0,100,5).tolist()},sort_keys=True))",
+        "stdout": "{\"dot\": 32.0, \"fft\": [\"(1+0j)\", \"(1+0j)\", \"(1+0j)\", \"(1+0j)\"], \"random\": [1, 68, 59, 5, 90], \"solve\": [2.0, 3.0], \"sum\": [3.0, 12.0], \"version\": \"2.5.1\"}"
+      }
+    }
+  ],
   "budgets": {
-    "maxWasmBytes": 7850000,
+    "maxWasmBytes": 18000000,
     "maxStdlibZipBytes": 2800000,
-    "maxWasmDeltaFromCoreBytes": 50000
+    "maxWasmDeltaFromCoreBytes": 10000000
   },
   "outputs": [
     "python.wasm",
@@ -58,6 +90,8 @@
     "stdlib-inventory.json",
     "native-profile-build-input.json",
     "engine-build-manifest.json",
-    "engine.cyclonedx.json"
+    "engine.cyclonedx.json",
+    "numpy-2.5.1-py3-none-any.whl",
+    "scientific-package-build.json"
   ]
 }

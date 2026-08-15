@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import { ownedBuildDetailsArguments, packageOwnedEngine } from "./packageOwnedEngine.mjs";
 import { nativeProfileBuildInput } from "./nativeProfileCompiler.mjs";
+import { buildOwnedNumpy, numpyMakeSyslibs } from "../scientificPackageBuilder/numpyStaticBuilder.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOCK_PATH = join(SCRIPT_DIR, "engineBuildLock.json");
@@ -137,14 +138,37 @@ async function main() {
   ], { cwd: targetBuildDir, env: targetEnv });
   run("make", ["--jobs", String(availableParallelism()), "all"], { cwd: targetBuildDir, env: targetEnv });
 
+  let scientificBuild = null;
+  if (profileBuild.input.scientificPackages.length) {
+    if (profileBuild.input.scientificPackages.length !== 1
+      || profileBuild.input.scientificPackages[0].name !== "numpy") {
+      throw new Error(`owned ${profileName} scientific package recipe is unsupported`);
+    }
+    scientificBuild = await buildOwnedNumpy({ workspace: join(workspace, "scientific", "numpy"),
+      cacheDir: downloads, cpythonSource: sourceDir, targetBuildDir, sdkDir,
+      hostPython: join(nativeBuildDir, "python") });
+    run("make", ["--jobs", String(availableParallelism()), "python.wasm",
+      `SYSLIBS=${numpyMakeSyslibs(scientificBuild.archive)}`], { cwd: targetBuildDir, env: targetEnv });
+  }
+
   const oracle = run(wasmtime, ["run", "--wasm", "max-wasm-stack=16777216", "--dir", `${sourceDir}::/`,
     "--env", "PYTHONPATH=/Lib", join(targetBuildDir, "python.wasm"), "-c", profileBuild.input.oracle.code],
   { capture: true });
   if (oracle.trim() !== profileBuild.input.oracle.stdout) throw new Error(`owned ${profileName} oracle failed: ${oracle}`);
+  if (scientificBuild) {
+    const scientific = profileBuild.input.scientificPackages[0];
+    const scientificOracle = run(wasmtime, ["run", "--wasm", "max-wasm-stack=16777216",
+      "--dir", `${sourceDir}::/`, "--dir", `${scientificBuild.layer}::/numpy-site`,
+      "--env", "PYTHONPATH=/numpy-site:/Lib", join(targetBuildDir, "python.wasm"), "-c", scientific.oracle.code],
+    { capture: true });
+    if (scientificOracle.trim() !== scientific.oracle.stdout) {
+      throw new Error(`owned ${profileName} ${scientific.name} oracle failed: ${scientificOracle}`);
+    }
+  }
   const buildDetails = await ownedBuildDetailsArguments({ sourceDir, buildDir: targetBuildDir, target: lock.target });
   run(wasmtime, buildDetails.args);
   const packaged = await packageOwnedEngine({ sourceDir, buildDir: targetBuildDir, sdkDir, outDir,
-    profileName, profileBuild });
+    profileName, profileBuild, scientificBuild });
   console.log(`\nowned ${profileName} engine complete: ${JSON.stringify(packaged.outputs, null, 2)}`);
 }
 

@@ -7,7 +7,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOCK_PATH = join(SCRIPT_DIR, "engineBuildLock.json");
 
 export const NATIVE_PROFILE_INPUT_PROTOCOL = "pyproc.native-profile-build-input";
-export const NATIVE_PROFILE_COMPILER_VERSION = 1;
+export const NATIVE_PROFILE_COMPILER_VERSION = 2;
 
 function sha256(bytes) { return createHash("sha256").update(bytes).digest("hex"); }
 
@@ -63,11 +63,45 @@ export async function nativeProfileBuildInput(profileName) {
       throw new Error(`native profile Setup omits ${module.name}`);
     }
   }
+  const scientificPackages = [];
+  for (const descriptor of profile.scientificPackages || []) {
+    if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)
+      || !/^[a-z0-9][a-z0-9._-]*$/u.test(descriptor.name)
+      || typeof descriptor.version !== "string" || !descriptor.version
+      || !/^\.\.\/scientificPackageBuilder\/[A-Za-z0-9_.-]+$/u.test(descriptor.builder)
+      || !/^\.\.\/scientificPackageBuilder\/[A-Za-z0-9_.-]+$/u.test(descriptor.lock)) {
+      throw new Error(`native profile scientific package declaration is invalid: ${profileName}`);
+    }
+    const builderBytes = await readFile(resolve(SCRIPT_DIR, descriptor.builder));
+    const packageLockBytes = await readFile(resolve(SCRIPT_DIR, descriptor.lock));
+    const packageLock = JSON.parse(packageLockBytes);
+    if (packageLock.schemaVersion !== 1 || packageLock.target !== lock.target
+      || packageLock.pythonVersion !== lock.cpython.version || packageLock.sourceDateEpoch !== lock.sourceDateEpoch
+      || packageLock.numpy?.name !== descriptor.name || packageLock.numpy?.version !== descriptor.version
+      || !/^[0-9a-f]{64}$/u.test(packageLock.numpy?.archiveSha256)
+      || !Array.isArray(packageLock.numpy?.moduleNames) || packageLock.numpy.moduleNames.length < 1
+      || !Number.isSafeInteger(packageLock.numpy?.maxWheelBytes) || packageLock.numpy.maxWheelBytes < 1
+      || typeof packageLock.numpy?.oracle?.code !== "string"
+      || typeof packageLock.numpy?.oracle?.stdout !== "string") {
+      throw new Error(`native profile scientific package lock is incompatible: ${descriptor.name}`);
+    }
+    scientificPackages.push(Object.freeze({ name: descriptor.name, version: descriptor.version,
+      builderFile: descriptor.builder, builderSha256: sha256(builderBytes), lockFile: descriptor.lock,
+      lockSha256: sha256(packageLockBytes), sourceSha256: packageLock.numpy.archiveSha256,
+      wheelFile: packageLock.numpy.wheelName, maxWheelBytes: packageLock.numpy.maxWheelBytes,
+      modules: Object.freeze([...packageLock.numpy.moduleNames]), oracle: Object.freeze(packageLock.numpy.oracle) }));
+  }
+  if (new Set(scientificPackages.map((entry) => entry.name)).size !== scientificPackages.length) {
+    throw new Error(`native profile scientific packages are duplicated: ${profileName}`);
+  }
   if (!Number.isSafeInteger(profile.budgets?.maxWasmBytes) || !Number.isSafeInteger(profile.budgets?.maxStdlibZipBytes)
     || profile.budgets.maxWasmBytes < 1 || profile.budgets.maxStdlibZipBytes < 1
     || typeof profile.oracle?.code !== "string" || typeof profile.oracle?.stdout !== "string") {
     throw new Error(`native profile oracle or budgets are invalid: ${profileName}`);
   }
+  const outputNames = [...new Set(["python.wasm", "python314-stdlib.zip", "stdlib-inventory.json",
+    "native-profile-build-input.json", "engine-build-manifest.json", "engine.cyclonedx.json",
+    ...scientificPackages.flatMap((entry) => [entry.wheelFile, "scientific-package-build.json"])])];
   const input = Object.freeze({ protocol: NATIVE_PROFILE_INPUT_PROTOCOL, version: NATIVE_PROFILE_COMPILER_VERSION,
     profile: profileName, engineId: profile.engineId, target: lock.target,
     source: { version: lock.cpython.version, commit: lock.cpython.commit, archiveSha256: lock.cpython.archiveSha256 },
@@ -77,9 +111,8 @@ export async function nativeProfileBuildInput(profileName) {
     recipe: { sourceDateEpoch: lock.sourceDateEpoch, configureArgs: lock.configureArgs,
       cflags: lock.cflags, setupFile: profile.setupFile, setupSha256, packagerSha256,
       linuxBuilderSha256, windowsBuilderSha256, modules },
-    oracle: profile.oracle, budgets: profile.budgets,
-    outputs: ["python.wasm", "python314-stdlib.zip", "stdlib-inventory.json",
-      "native-profile-build-input.json", "engine-build-manifest.json", "engine.cyclonedx.json"] });
+    oracle: profile.oracle, scientificPackages: Object.freeze(scientificPackages), budgets: profile.budgets,
+    outputs: Object.freeze(outputNames) });
   const serialized = `${JSON.stringify(input, null, 2)}\n`;
   return Object.freeze({ input, serialized, sha256: sha256(serialized) });
 }

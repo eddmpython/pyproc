@@ -1,3 +1,3 @@
 // Produced from scripts/nativePackageCatalog/buildNativePackageCatalog.mjs.
-export const DATA_OWNED_PACKAGE_CATALOG_DIGEST = "sha256:1b4b7f087be1b824d734d71c52a05b746e2dfb40d83b318eaf8cf0d280b66edc";
-export const DATA_OWNED_PACKAGE_WHEEL_DIGEST = "sha256:cf3988d6f2544e75e2e512039c13d4a5a0a5022f02a6428bad26c34f0f8b1260";
+export const DATA_OWNED_PACKAGE_CATALOG_DIGEST = "sha256:aa77504151ec7d69edb1f1fd614f96106893a4503594d70feea78c33d040e87a";
+export const DATA_OWNED_PACKAGE_WHEEL_DIGESTS = Object.freeze({"numpy":"sha256:c17a9e6ff30fd1371d6308a58142b04b6f6db52c3f233cfc7bf24bb44dca4cd0","pyproc-native-data":"sha256:cf3988d6f2544e75e2e512039c13d4a5a0a5022f02a6428bad26c34f0f8b1260"});

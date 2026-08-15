@@ -9,11 +9,11 @@ import {
 } from "../../engines/wasi/ownedEngineDistribution.js";
 import {
   DEFAULT_OWNED_PACKAGE_CATALOG_DIGEST,
-  DEFAULT_OWNED_PACKAGE_WHEEL_DIGEST,
+  DEFAULT_OWNED_PACKAGE_WHEEL_DIGESTS,
 } from "./core/catalogIdentity.js";
 import {
   DATA_OWNED_PACKAGE_CATALOG_DIGEST,
-  DATA_OWNED_PACKAGE_WHEEL_DIGEST,
+  DATA_OWNED_PACKAGE_WHEEL_DIGESTS,
 } from "./data/catalogIdentity.js";
 
 export const OWNED_PACKAGE_CATALOG_PROTOCOL = "pyproc.owned-package-catalog";
@@ -24,10 +24,10 @@ const FILES_URL = "https://packages.pyproc.invalid/files/";
 const PROFILES = Object.freeze({
   core: Object.freeze({ inspect: inspectDefaultKernelEngineDistribution,
     catalogDigest: DEFAULT_OWNED_PACKAGE_CATALOG_DIGEST,
-    wheelDigest: DEFAULT_OWNED_PACKAGE_WHEEL_DIGEST }),
+    wheelDigests: DEFAULT_OWNED_PACKAGE_WHEEL_DIGESTS }),
   data: Object.freeze({ inspect: inspectDataKernelEngineDistribution,
     catalogDigest: DATA_OWNED_PACKAGE_CATALOG_DIGEST,
-    wheelDigest: DATA_OWNED_PACKAGE_WHEEL_DIGEST }),
+    wheelDigests: DATA_OWNED_PACKAGE_WHEEL_DIGESTS }),
 });
 
 function exactKeys(value, allowed, label) {
@@ -106,15 +106,19 @@ async function loadCatalog(fetchImpl, profile) {
   exactKeys(catalog.engine, new Set(["engineId", "nativeProfile", "pythonVersion", "target",
     "buildManifestSha256"]), "Owned package catalog engine");
   if (catalog.protocol !== OWNED_PACKAGE_CATALOG_PROTOCOL || catalog.version !== OWNED_PACKAGE_CATALOG_VERSION
-    || !Array.isArray(catalog.packages) || catalog.packages.length !== 1) {
+    || !Array.isArray(catalog.packages) || catalog.packages.length < 1) {
     throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", "Owned package catalog protocol is invalid");
   }
-  const entry = packageEntry(catalog.packages[0], profile);
+  const entries = catalog.packages.map((entry) => packageEntry(entry, profile));
+  if (new Set(entries.map((entry) => entry.name)).size !== entries.length) {
+    throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", "Owned package catalog contains duplicate packages");
+  }
   const { catalogDigest, ...body } = catalog;
   const actualCatalogDigest = await sha256Address(canonicalPackageJson(body));
+  const wheelDigests = Object.fromEntries(entries.map((entry) => [entry.name, entry.sha256]));
   if (digest(catalogDigest, "Owned package catalog") !== identity.catalogDigest
     || actualCatalogDigest !== identity.catalogDigest
-    || entry.sha256 !== identity.wheelDigest) {
+    || canonicalPackageJson(wheelDigests) !== canonicalPackageJson(identity.wheelDigests)) {
     throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", "Owned package catalog digest differs from the installed identity");
   }
   const distribution = identity.inspect();
@@ -123,24 +127,28 @@ async function loadCatalog(fetchImpl, profile) {
       throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Owned package catalog engine ${field} drifted`);
     }
   }
-  const metadataBytes = new TextEncoder().encode(entry.metadata);
-  if (await sha256Address(metadataBytes) !== entry.metadataSha256) {
-    throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", "Owned package metadata digest differs from the catalog");
+  const packages = [];
+  for (const entry of entries) {
+    const metadataBytes = new TextEncoder().encode(entry.metadata);
+    if (await sha256Address(metadataBytes) !== entry.metadataSha256) {
+      throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", "Owned package metadata digest differs from the catalog");
+    }
+    const artifactUrl = new URL(entry.artifactPath, import.meta.url);
+    let wheelResponse;
+    try { wheelResponse = await fetchImpl(artifactUrl); }
+    catch (error) {
+      throw new PyProcError("PYPROC_ASSET_MISSING", `Owned package artifact could not be loaded: ${entry.filename}`, { cause: error });
+    }
+    if (!wheelResponse?.ok || typeof wheelResponse.arrayBuffer !== "function") {
+      throw new PyProcError("PYPROC_ASSET_MISSING", `Owned package artifact fetch failed: ${entry.filename}`);
+    }
+    const wheelBytes = new Uint8Array(await wheelResponse.arrayBuffer());
+    if (wheelBytes.byteLength !== entry.size || await sha256Address(wheelBytes) !== entry.sha256) {
+      throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Owned package artifact differs from the catalog: ${entry.filename}`);
+    }
+    packages.push(Object.freeze({ entry, metadataBytes, wheelBytes }));
   }
-  const artifactUrl = new URL(entry.artifactPath, import.meta.url);
-  let wheelResponse;
-  try { wheelResponse = await fetchImpl(artifactUrl); }
-  catch (error) {
-    throw new PyProcError("PYPROC_ASSET_MISSING", `Owned package artifact could not be loaded: ${entry.filename}`, { cause: error });
-  }
-  if (!wheelResponse?.ok || typeof wheelResponse.arrayBuffer !== "function") {
-    throw new PyProcError("PYPROC_ASSET_MISSING", `Owned package artifact fetch failed: ${entry.filename}`);
-  }
-  const wheelBytes = new Uint8Array(await wheelResponse.arrayBuffer());
-  if (wheelBytes.byteLength !== entry.size || await sha256Address(wheelBytes) !== entry.sha256) {
-    throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Owned package artifact differs from the catalog: ${entry.filename}`);
-  }
-  return Object.freeze({ catalog: immutablePackageValue(catalog), entry, metadataBytes, wheelBytes });
+  return Object.freeze({ catalog: immutablePackageValue(catalog), packages: Object.freeze(packages) });
 }
 
 export async function createOwnedPackageResolver(options = {}) {
@@ -159,24 +167,28 @@ export async function createOwnedPackageResolver(options = {}) {
     throw new PyProcError("PYPROC_ENV_UNSUPPORTED", "Owned package catalog requires fetch");
   }
   const loaded = await loadCatalog(fetchImpl, profile);
-  const projectUrl = `${INDEX_URL}${encodeURIComponent(loaded.entry.name)}/`;
-  const artifactUrl = `${FILES_URL}${encodeURIComponent(loaded.entry.filename)}`;
-  const simpleDocument = immutablePackageValue({ meta: { "api-version": "1.0" }, name: loaded.entry.name,
-    files: [{ filename: loaded.entry.filename, url: artifactUrl,
-      hashes: { sha256: loaded.entry.sha256 }, size: loaded.entry.size,
-      "requires-python": loaded.entry.requiresPython,
-      "core-metadata": { sha256: loaded.entry.metadataSha256 }, yanked: false }] });
+  const routes = new Map();
+  for (const item of loaded.packages) {
+    const projectUrl = `${INDEX_URL}${encodeURIComponent(item.entry.name)}/`;
+    const artifactUrl = `${FILES_URL}${encodeURIComponent(item.entry.filename)}`;
+    const simpleDocument = immutablePackageValue({ meta: { "api-version": "1.0" }, name: item.entry.name,
+      files: [{ filename: item.entry.filename, url: artifactUrl,
+        hashes: { sha256: item.entry.sha256 }, size: item.entry.size,
+        "requires-python": item.entry.requiresPython,
+        "core-metadata": { sha256: item.entry.metadataSha256 }, yanked: false }] });
+    routes.set(projectUrl, response(JSON.stringify(simpleDocument), "application/vnd.pypi.simple.v1+json"));
+    routes.set(`${artifactUrl}.metadata`, response(item.metadataBytes, "text/plain"));
+  }
   const catalogFetch = async (url) => {
     const href = String(url);
-    if (href === projectUrl) return response(JSON.stringify(simpleDocument), "application/vnd.pypi.simple.v1+json");
-    if (href === `${artifactUrl}.metadata`) return response(loaded.metadataBytes, "text/plain");
-    return response("missing", "text/plain", 404);
+    return routes.get(href) || response("missing", "text/plain", 404);
   };
   const resolver = new SimpleApiPackageResolver({ fetch: catalogFetch,
     indexes: [{ url: INDEX_URL, trustRef: `trust:pyproc-owned:${loaded.catalog.catalogDigest}` }],
-    pythonVersion: loaded.catalog.engine.pythonVersion, allowedTags: [loaded.entry.tag],
+    pythonVersion: loaded.catalog.engine.pythonVersion,
+    allowedTags: [...new Set(loaded.packages.map((item) => item.entry.tag))],
     engineId: loaded.catalog.engine.engineId, nativeProfile: loaded.catalog.engine.nativeProfile,
-    bundledArtifacts: [{ sha256: loaded.entry.sha256, bytes: loaded.wheelBytes }] });
+    bundledArtifacts: loaded.packages.map((item) => ({ sha256: item.entry.sha256, bytes: item.wheelBytes })) });
   Object.defineProperty(resolver, "ownedCatalog", { value: loaded.catalog, enumerable: true });
   return resolver;
 }

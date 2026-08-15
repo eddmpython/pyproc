@@ -7,15 +7,6 @@ import { nativeProfileBuildInput } from "./nativeProfileCompiler.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOCK = JSON.parse(await readFile(join(SCRIPT_DIR, "engineBuildLock.json"), "utf8"));
-const DECLARED_FILES = Object.freeze([
-  "python.wasm",
-  "python314-stdlib.zip",
-  "stdlib-inventory.json",
-  "native-profile-build-input.json",
-  "engine-build-manifest.json",
-  "engine.cyclonedx.json",
-]);
-
 function sha256(bytes) { return createHash("sha256").update(bytes).digest("hex"); }
 function option(name, required = false) {
   const index = process.argv.indexOf(name);
@@ -61,6 +52,23 @@ async function verifyFolder(folder, requireProductionFlags, profileName) {
       && entry.hashes?.some((hash) => hash.content === module.sourceSha256)))) {
     throw new Error("engine SBOM is incomplete");
   }
+  const scientificPackages = compiledProfile.input.scientificPackages || [];
+  if (scientificPackages.length) {
+    const expected = scientificPackages[0];
+    const scientific = JSON.parse(await readFile(join(folder, "scientific-package-build.json"), "utf8"));
+    if (scientific.protocol !== "pyproc.scientific-package-build"
+      || scientific.package?.name !== expected.name || scientific.package?.version !== expected.version
+      || scientific.package?.sourceSha256 !== expected.sourceSha256
+      || scientific.package?.wheel?.file !== expected.wheelFile
+      || scientific.package.wheel.byteLength > expected.maxWheelBytes
+      || expected.modules.some((module) => !manifest.staticModules.includes(module))
+      || manifest.recipe.scientificPackages?.[0]?.builderSha256 !== expected.builderSha256
+      || !sbom.components.some((entry) => entry.name === expected.name && entry.version === expected.version)) {
+      throw new Error("engine scientific package provenance is incomplete");
+    }
+  } else if (manifest.outputs.scientificWheel || manifest.outputs.scientificPackageBuild) {
+    throw new Error("core engine unexpectedly declares scientific package artifacts");
+  }
   for (const output of Object.values(manifest.outputs)) {
     const actual = await bytes(join(folder, output.file));
     if (actual.byteLength !== output.byteLength || sha256(actual) !== output.sha256) throw new Error(`declared artifact mismatch: ${output.file}`);
@@ -85,7 +93,8 @@ async function main() {
   const manifest = await verifyFolder(folder, requireProductionFlags, profileName);
   if (compare) {
     await verifyFolder(compare, requireProductionFlags, profileName);
-    for (const name of DECLARED_FILES) {
+    const declaredFiles = (await nativeProfileBuildInput(profileName)).input.outputs;
+    for (const name of declaredFiles) {
       const left = await bytes(join(folder, name));
       const right = await bytes(join(compare, name));
       if (!left.equals(right)) throw new Error(`independent build mismatch: ${name}`);

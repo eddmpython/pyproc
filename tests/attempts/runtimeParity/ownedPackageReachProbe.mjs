@@ -64,7 +64,7 @@ try {
       + "'extensionSuffixes':_imp.extension_suffixes(),'hasDlopenFlags':hasattr(sys,'getdlopenflags')},sort_keys=True))");
   const platform = JSON.parse(platformRun.output.trim());
   let nativeError = null;
-  try { await environment.install({ requirements: ["numpy==2.5.2"] }); }
+  try { await environment.install({ requirements: ["numpy==2.5.1"] }); }
   catch (error) { nativeError = { code: error?.code || null, message: String(error?.message || error) }; }
   const report = {
     ok: pureRun.output.trim() === "1.17.0" && nativeError === null,

@@ -154,9 +154,10 @@ try {
       && ownedHost.abiVersion === "pyproc.hostcall/1",
     JSON.stringify({ source: ownedPackageReceipt.sources[0], host: ownedHost }));
   const coreDataImport = (await machine.run(
-    "try:\\n import _pyprocData\\nexcept Exception as error:\\n print(type(error).__name__)\\nelse:\\n print('IMPORTED')"
+    "import json\\nresult = {}\\nfor name in ('_pyprocData', 'numpy'):\\n try:\\n  __import__(name)\\n except Exception as error:\\n  result[name] = type(error).__name__\\n else:\\n  result[name] = 'IMPORTED'\\nprint(json.dumps(result, sort_keys=True))"
   )).output.trim();
-  check("installed core profile excludes the data module", coreDataImport === "ModuleNotFoundError", coreDataImport);
+  check("installed core profile excludes data native and Python layers",
+    coreDataImport === '{"_pyprocData": "ModuleNotFoundError", "numpy": "ModuleNotFoundError"}', coreDataImport);
   await machine.run.set("installedValue", { text: "설치본", value: 41 });
   const value = await machine.run.get("installedValue");
   check("installed kernel transfers structured values", value.text === "설치본" && value.value === 41);
@@ -220,45 +221,81 @@ try {
   timings.dataBootMs = Math.round(performance.now() - startedAt);
   const dataResolver = await wasi.createOwnedPackageResolver({ profile: "data" });
   const dataPackages = dataMachine.createPackageEnvironment({ resolver: dataResolver });
-  const dataReceipt = await dataPackages.install({ requirements: ["pyproc-native-data==1.0.0"] });
+  const dataReceipt = await dataPackages.install({ requirements: [
+    "pyproc-native-data==1.0.0", "numpy==2.5.1",
+  ] });
   await stage("data:package-installed");
+  const repeatedDataReceipt = await dataPackages.install({ requirements: [
+    "pyproc-native-data==1.0.0", "numpy==2.5.1",
+  ] });
+  const repeatedDataImport = (await dataMachine.run(
+    "import numpy as np, pyproc_native_data; print(np.__version__, pyproc_native_data.inspect()['simd'])"
+  )).output.trim();
+  check("installed identical data environment retains loaded static modules",
+    repeatedDataReceipt.environmentId === dataReceipt.environmentId
+      && repeatedDataImport === "2.5.1 wasm-simd128", repeatedDataImport);
   const dataOracle = JSON.parse((await dataMachine.run(\`
 import json
 from array import array
 import pyproc_native_data
+import numpy as np
 left = array("d", [1.0, 2.5, -4.0, 8.0, 3.0])
 right = array("d", [3.0, 4.5, 6.0, -2.0, 7.0])
 added = array("d")
 added.frombytes(pyproc_native_data.vector_add_f64(left, right))
+unavailable = {}
+for name in ("scipy", "pandas", "polars"):
+    try:
+        __import__(name)
+    except Exception as error:
+        unavailable[name] = type(error).__name__
+    else:
+        unavailable[name] = "IMPORTED"
 print(json.dumps({"info": pyproc_native_data.inspect(), "added": list(added),
-                  "dot": pyproc_native_data.dot_f64(left, right)}, sort_keys=True))
+                  "dot": pyproc_native_data.dot_f64(left, right), "numpy": {
+                  "version": np.__version__,
+                  "sum": np.arange(6, dtype=np.float64).reshape(2, 3).sum(axis=1).tolist(),
+                  "dot": np.dot(np.array([1., 2., 3.]), np.array([4., 5., 6.])),
+                  "solve": np.linalg.solve(np.array([[3., 1.], [1., 2.]]),
+                                           np.array([9., 8.])).tolist(),
+                  "random": np.random.default_rng(123).integers(0, 100, 5).tolist()},
+                  "unavailable": unavailable}, sort_keys=True))
 \`)).output.trim());
   check("installed data package is engine and profile fenced",
     dataReceipt.engineId === dataManifest.engineId && dataReceipt.nativeProfile === "data"
       && dataReceipt.lock.engineId === dataManifest.engineId && dataReceipt.lock.nativeProfile === "data"
-      && dataReceipt.sources[0] === "package", timings.dataBootMs + "ms");
+      && dataReceipt.sources.length === 2
+      && dataReceipt.sources.every((source) => source === "package"), timings.dataBootMs + "ms");
   check("installed data facade runs actual WASM SIMD numerical oracles",
     dataOracle.info.abiVersion === "pyproc.data/2" && dataOracle.info.origin === "built-in"
       && dataOracle.info.simd === "wasm-simd128" && dataOracle.added.join(",") === "4,7,2,6,10"
       && dataOracle.dot === -4.75, JSON.stringify(dataOracle));
+  check("installed NumPy runs array, dot, linalg, and seeded random oracles",
+    dataOracle.numpy.version === "2.5.1" && dataOracle.numpy.sum.join(",") === "3,12"
+      && dataOracle.numpy.dot === 32 && dataOracle.numpy.solve.join(",") === "2,3"
+      && dataOracle.numpy.random.join(",") === "1,68,59,5,90", JSON.stringify(dataOracle.numpy));
+  check("unbundled scientific packages remain an explicit boundary",
+    Object.values(dataOracle.unavailable).every((value) => value === "ModuleNotFoundError"),
+    JSON.stringify(dataOracle.unavailable));
   const dataClone = await dataMachine.proc.clone({ pid: "installed-data-child" });
   const dataChild = await dataClone.process.execute(
-    "from array import array; import pyproc_native_data; print(pyproc_native_data.dot_f64(array('d',[2,3]),array('d',[4,5])))"
+    "from array import array; import numpy as np, pyproc_native_data; print(pyproc_native_data.dot_f64(array('d',[2,3]),array('d',[4,5])), np.dot(np.array([2.,3.]),np.array([4.,5.])))"
   );
   const dataChildExit = await dataClone.process.wait();
   check("installed data process clone retains the SIMD package layer",
-    dataChild.output.trim() === "23.0" && dataChildExit.exitCode === 0);
+    dataChild.output.trim() === "23.0 23.0" && dataChildExit.exitCode === 0);
   await dataClone.process.close();
   await stage("data:clone-closed");
   const dataImage = await dataMachine.history.export({ createdAt: "2026-08-15T00:00:00.000Z" });
   dataRevived = await root.open(dataImage);
   await stage("data:image-opened");
   const revivedData = JSON.parse((await dataRevived.run(
-    "import json,pyproc_native_data; print(json.dumps(pyproc_native_data.inspect(),sort_keys=True))"
+    "import json,numpy as np,pyproc_native_data; value=pyproc_native_data.inspect(); value['numpy']=np.arange(4).tolist(); print(json.dumps(value,sort_keys=True))"
   )).output.trim());
-  check("installed data Machine image restores the verified SIMD package layer",
-    dataImage.packageEnvironment?.wheels?.length === 1 && revivedData.abiVersion === "pyproc.data/2"
-      && revivedData.simd === "wasm-simd128" && revivedData.origin === "built-in");
+  check("installed data Machine image restores verified SIMD and NumPy layers",
+    dataImage.packageEnvironment?.wheels?.length === 2 && revivedData.abiVersion === "pyproc.data/2"
+      && revivedData.simd === "wasm-simd128" && revivedData.origin === "built-in"
+      && revivedData.numpy.join(",") === "0,1,2,3");
   await dataRevived.close();
   dataRevived = null;
   await dataMachine.close();

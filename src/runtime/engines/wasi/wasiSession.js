@@ -177,9 +177,11 @@ export async function bootWasi(manifest = {}) {
   const session = new WasiSession(wasmBytes, !!manifest.deterministic, stdlibFiles, stdlibDir,
     manifest.assetIntegrity || null, manifest.hostBroker || null, manifest.bootstrapSnapshot || null);
   await session._boot();
-  if (manifest.bootstrapSnapshot) await session.importBootstrapSnapshot();
+  // Recreate content-addressed package files before restoring memory. A checkpoint already contains
+  // the imported module graph, and importing a statically linked extension again is not valid.
   if (manifest.packageEnvironment) await session.installEnvironment(manifest.packageEnvironment);
   for (const wheel of manifest.wheels || []) await session.installWheel(wheel);
+  if (manifest.bootstrapSnapshot) await session.importBootstrapSnapshot();
   await session._ensureValueEnvelope();
   return session;
 }
@@ -199,6 +201,7 @@ export class WasiSession {
     this._packageTransactions = 0;
     this._environmentPaths = [];
     this._environmentNames = [];
+    this._environmentNameDigests = new Map();
     this._hostBroker = hostBroker || new CoreHostcallBroker();
     this._ownsHostBroker = !hostBroker;
     this._hostcallNamespace = `wasi-session:${++hostcallSessionCounter}`;
@@ -466,10 +469,12 @@ export class WasiSession {
   async _installWheelTrees(trees, environmentId, { preserveExisting = false } = {}) {
     const paths = [];
     const names = new Set();
+    const incomingNameDigests = new Map();
     let files = 0;
     for (const tree of trees) {
       const layerPath = `${SITE_PATH}/.pyprocLayers/${tree.treeDigest.slice(SHA256_ADDRESS_PREFIX.length)}`;
       paths.push(layerPath);
+      const treeNames = new Set();
       for (const [path, bytes] of tree.files) {
         const purelib = /^[^/]+\.data\/purelib\/(.+)$/u.exec(path)?.[1] || path;
         await this._writeSiteFile(purelib, bytes, layerPath);
@@ -477,62 +482,61 @@ export class WasiSession {
         const top = purelib.split("/")[0];
         if (purelib.endsWith(".py") && top && !top.endsWith(".dist-info") && !top.endsWith(".data")
           && (/^[A-Za-z_][A-Za-z0-9_]*\.py$/u.test(top) || /^[A-Za-z_][A-Za-z0-9_]*$/u.test(top))) {
-          names.add(top.replace(/\.py$/u, ""));
+          const name = top.replace(/\.py$/u, "");
+          names.add(name);
+          treeNames.add(name);
         }
+      }
+      for (const name of treeNames) {
+        const existing = incomingNameDigests.get(name);
+        if (existing && existing !== tree.treeDigest) {
+          throw new PyProcError("PYPROC_PACKAGE_INTEGRITY",
+            `Package environment contains conflicting top-level module: ${name}`);
+        }
+        incomingNameDigests.set(name, tree.treeDigest);
       }
     }
     const nextPaths = [...new Set([...(preserveExisting ? this._environmentPaths : []), ...paths])];
-    const switchNames = [...new Set([...this._environmentNames, ...names])].sort();
-    const switchCode = `
-import importlib as _pyprocPackageImportlib
-import sys as _pyprocPackageSys
-_pyprocEnvSwitchOldPaths = list(_pyprocPackageSys.path)
-_pyprocEnvSwitchNames = ${JSON.stringify(switchNames)}
-_pyprocEnvSwitchPrefixes = tuple(_pyprocEnvSwitchNames)
-_pyprocEnvSwitchModules = {key: value for key, value in _pyprocPackageSys.modules.items()
-    if key in _pyprocEnvSwitchPrefixes or key.startswith(tuple(name + "." for name in _pyprocEnvSwitchPrefixes))}
-try:
-    for _pyprocEnvSwitchKey in list(_pyprocEnvSwitchModules):
-        _pyprocPackageSys.modules.pop(_pyprocEnvSwitchKey, None)
-    for _pyprocPackagePath in list(globals().get("_pyprocEnvironmentPaths", [])):
-        while _pyprocPackagePath in _pyprocPackageSys.path:
-            _pyprocPackageSys.path.remove(_pyprocPackagePath)
-    _pyprocEnvironmentPaths = ${JSON.stringify(nextPaths)}
-    _pyprocPackageSys.path[0:0] = _pyprocEnvironmentPaths
-    _pyprocPackageImportlib.invalidate_caches()
-except BaseException:
-    _pyprocPackageSys.path[:] = _pyprocEnvSwitchOldPaths
-    _pyprocPackageSys.modules.update(_pyprocEnvSwitchModules)
-    _pyprocPackageImportlib.invalidate_caches()
-    raise
-`;
+    const nextNameDigests = new Map(preserveExisting ? this._environmentNameDigests : []);
+    for (const entry of incomingNameDigests) nextNameDigests.set(...entry);
+    const retainedNames = new Set([...nextNameDigests]
+      .filter(([name, treeDigest]) => this._environmentNameDigests.get(name) === treeDigest)
+      .map(([name]) => name));
+    const switchNames = [...new Set([...this._environmentNames, ...nextNameDigests.keys()])]
+      .filter((name) => !retainedNames.has(name)).sort();
+    const smokeNames = [...nextNameDigests.keys()].filter((name) => !retainedNames.has(name)).sort();
     const smokeCode = `
 import importlib as _pyprocPackageImportlib
 import sys as _pyprocPackageSys
-_pyprocSmokeNames = ${JSON.stringify([...names].sort())}
-_pyprocSmokePrefixes = tuple(_pyprocSmokeNames)
+_pyprocSmokeNames = ${JSON.stringify(smokeNames)}
+_pyprocSmokeSwitchNames = ${JSON.stringify(switchNames)}
+_pyprocSmokePrefixes = tuple(_pyprocSmokeSwitchNames)
 _pyprocSmokePaths = list(_pyprocPackageSys.path)
+_pyprocSmokeEnvironmentPaths = list(globals().get("_pyprocEnvironmentPaths", []))
 _pyprocSmokeModules = {key: value for key, value in _pyprocPackageSys.modules.items()
     if key in _pyprocSmokePrefixes or key.startswith(tuple(name + "." for name in _pyprocSmokePrefixes))}
 for _pyprocSmokeKey in list(_pyprocSmokeModules):
     _pyprocPackageSys.modules.pop(_pyprocSmokeKey, None)
 try:
     _pyprocPackageSys.path[:] = ${JSON.stringify(nextPaths)} + [path for path in _pyprocPackageSys.path if path not in ${JSON.stringify(nextPaths)}]
+    _pyprocEnvironmentPaths = ${JSON.stringify(nextPaths)}
     _pyprocPackageImportlib.invalidate_caches()
     for _pyprocPackageName in _pyprocSmokeNames:
         _pyprocPackageImportlib.import_module(_pyprocPackageName)
-finally:
+except BaseException:
     for _pyprocSmokeKey in list(_pyprocPackageSys.modules):
         if _pyprocSmokeKey in _pyprocSmokePrefixes or _pyprocSmokeKey.startswith(tuple(name + "." for name in _pyprocSmokePrefixes)):
             _pyprocPackageSys.modules.pop(_pyprocSmokeKey, None)
     _pyprocPackageSys.modules.update(_pyprocSmokeModules)
     _pyprocPackageSys.path[:] = _pyprocSmokePaths
+    _pyprocEnvironmentPaths = _pyprocSmokeEnvironmentPaths
     _pyprocPackageImportlib.invalidate_caches()
+    raise
 `;
     await this.run(smokeCode);
-    await this.run(switchCode);
     this._environmentPaths = nextPaths;
-    this._environmentNames = [...names].sort();
+    this._environmentNames = [...nextNameDigests.keys()].sort();
+    this._environmentNameDigests = nextNameDigests;
     return Object.freeze({ protocol: "pyproc.session-environment", version: 1, environmentId,
       files, names: Object.freeze([...names].sort()),
       layers: Object.freeze(trees.map((tree, index) => Object.freeze({ path: paths[index],

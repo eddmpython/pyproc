@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "sourceDateEpoch": 1781085833,
+  "target": "wasm32-wasip1",
+  "pythonVersion": "3.14.6",
+  "numpy": {
+    "name": "numpy",
+    "version": "2.5.1",
+    "url": "https://files.pythonhosted.org/packages/22/fd/89965aa4ac08c74998539fcbf24fa3540f3e15237fbeb6bcf9c908f4aade/numpy-2.5.1.tar.gz",
+    "archiveSha256": "a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3",
+    "archiveBytes": 20755553,
+    "wheelName": "numpy-2.5.1-py3-none-any.whl",
+    "maxWheelBytes": 1400000,
+    "requiresPython": ">=3.14,<3.15",
+    "moduleNames": [
+      "numpy._core._multiarray_umath",
+      "numpy.fft._pocketfft_umath",
+      "numpy.linalg.lapack_lite",
+      "numpy.linalg._umath_linalg",
+      "numpy.random._bounded_integers",
+      "numpy.random._common",
+      "numpy.random._mt19937",
+      "numpy.random._philox",
+      "numpy.random._pcg64",
+      "numpy.random._sfc64",
+      "numpy.random.bit_generator",
+      "numpy.random._generator",
+      "numpy.random.mtrand"
+    ],
+    "linkLibraries": [
+      "c++",
+      "c++abi",
+      "c-printscan-long-double"
+    ],
+    "oracle": {
+      "code": "import json,numpy as np; print(json.dumps({'version':np.__version__,'sum':np.arange(6,dtype=np.float64).reshape(2,3).sum(axis=1).tolist(),'dot':np.dot(np.array([1.,2.,3.]),np.array([4.,5.,6.])), 'fft':[str(v) for v in np.fft.fft(np.array([1.,0.,0.,0.])).tolist()],'solve':np.linalg.solve(np.array([[3.,1.],[1.,2.]]),np.array([9.,8.])).tolist(),'random':np.random.default_rng(123).integers(0,100,5).tolist()},sort_keys=True))",
+      "stdout": "{\"dot\": 32.0, \"fft\": [\"(1+0j)\", \"(1+0j)\", \"(1+0j)\", \"(1+0j)\"], \"random\": [1, 68, 59, 5, 90], \"solve\": [2.0, 3.0], \"sum\": [3.0, 12.0], \"version\": \"2.5.1\"}"
+    }
+  },
+  "cython": {
+    "version": "3.1.2",
+    "url": "https://files.pythonhosted.org/packages/25/d6/ef8557d5e75cc57d55df579af4976935ee111a85bbee4a5b72354e257066/cython-3.1.2-py3-none-any.whl",
+    "archiveSha256": "d23fd7ffd7457205f08571a42b108a3cf993e83a59fe4d72b42e6fc592cf2639",
+    "archiveBytes": 1224753
+  },
+  "ninja": {
+    "version": "1.13.0",
+    "linuxX8664": {
+      "url": "https://files.pythonhosted.org/packages/ed/de/0e6edf44d6a04dabd0318a519125ed0415ce437ad5a1ec9b9be03d9048cf/ninja-1.13.0-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+      "archiveSha256": "fb46acf6b93b8dd0322adc3a4945452a4e774b75b91293bafcc7b7f8e6517dfa",
+      "archiveBytes": 180716,
+      "binary": "ninja-1.13.0.data/scripts/ninja"
+    },
+    "windowsX8664": {
+      "url": "https://files.pythonhosted.org/packages/29/45/c0adfbfb0b5895aa18cec400c535b4f7ff3e52536e0403602fc1a23f7de9/ninja-1.13.0-py3-none-win_amd64.whl",
+      "archiveSha256": "fb8ee8719f8af47fed145cced4a85f0755dd55d45b2bddaf7431fa89803c5f3e",
+      "archiveBytes": 309975,
+      "binary": "ninja-1.13.0.data/scripts/ninja.exe"
+    }
+  }
+}

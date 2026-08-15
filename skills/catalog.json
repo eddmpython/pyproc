@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:5a30626a3b20d2b8b97d71134ea0f4b5316e1e3f24159e6ae8a90b485a759548",
-  "catalogDigest": "sha256:3cd2bd45d4cb7a2874f47aca4b26cfb3f099c9c2b328c117bebda68a17b988fd",
+  "generatedFromDigest": "sha256:973b90301de6d8836a43c639df42827ba30f2db0464d2892640cf0eba7f0e42b",
+  "catalogDigest": "sha256:c5a1d35f06ff6c1fb74df9b02184bd36071f5eebb79fcdd3a2f44a3580bbab67",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -314,8 +314,8 @@
     },
     {
       "path": "skills/evolve-pyproc/references/contract-reality.md",
-      "bytes": 2034,
-      "sha256": "sha256:006bc2b8058662c50f5312907410a151c908ca7ad12cab1f440a3604e9fdf08e"
+      "bytes": 2164,
+      "sha256": "sha256:1da4fe1dec85d2d5ac8f7da5f202eda4997a6c75280375f40f820e3794df7605"
     },
     {
       "path": "skills/evolve-pyproc/references/experimental-freeze.md",

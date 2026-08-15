@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import { ownedBuildDetailsArguments, packageOwnedEngine } from "./packageOwnedEngine.mjs";
 import { nativeProfileBuildInput } from "./nativeProfileCompiler.mjs";
+import { buildOwnedNumpy, numpyMakeSyslibs } from "../scientificPackageBuilder/numpyStaticBuilder.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const LOCK = JSON.parse(await readFile(join(SCRIPT_DIR, "engineBuildLock.json"), "utf8"));
@@ -208,6 +209,22 @@ async function main() {
   const makeCommand = `set -euo pipefail; cd ${buildBash}; export SOURCE_DATE_EPOCH=${LOCK.sourceDateEpoch}; make --jobs ${availableParallelism()} python.wasm`;
   run(gitBash, ["-lc", makeCommand], { env: baseEnv });
 
+  let scientificBuild = null;
+  if (profileBuild.input.scientificPackages.length) {
+    if (profileBuild.input.scientificPackages.length !== 1
+      || profileBuild.input.scientificPackages[0].name !== "numpy") {
+      throw new Error(`owned Windows ${profileName} scientific package recipe is unsupported`);
+    }
+    scientificBuild = await buildOwnedNumpy({ workspace: join(workspace, "scientific", "numpy"),
+      cacheDir, cpythonSource: sourceDir, targetBuildDir: buildDir, sdkDir,
+      hostPython: join(hostPythonDir, "python.exe") });
+    const scientificSyslibs = numpyMakeSyslibs(bashPath(scientificBuild.archive));
+    const relinkCommand = ["set -euo pipefail", `cd ${buildBash}`,
+      `export SOURCE_DATE_EPOCH=${LOCK.sourceDateEpoch}`,
+      `make --jobs ${availableParallelism()} python.wasm 'SYSLIBS=${scientificSyslibs}'`].join("; ");
+    run(gitBash, ["-lc", relinkCommand], { env: baseEnv });
+  }
+
   const wasmtimeOutput = run(join(toolBin, "wasmtime.exe"), [
     "run", "--wasm", "max-wasm-stack=16777216", "--dir", `${sourceDir}::/`,
     "--env", "PYTHONPATH=/Lib",
@@ -217,9 +234,21 @@ async function main() {
   if (wasmtimeOutput.trim() !== profileBuild.input.oracle.stdout) {
     throw new Error(`owned Windows ${profileName} probe oracle failed: ${wasmtimeOutput}`);
   }
+  if (scientificBuild) {
+    const scientific = profileBuild.input.scientificPackages[0];
+    const scientificOutput = run(join(toolBin, "wasmtime.exe"), [
+      "run", "--wasm", "max-wasm-stack=16777216", "--dir", `${sourceDir}::/`,
+      "--dir", `${scientificBuild.layer}::/numpy-site`, "--env", "PYTHONPATH=/numpy-site:/Lib",
+      join(buildDir, "python.wasm"), "-c", scientific.oracle.code,
+    ], { capture: true });
+    if (scientificOutput.trim() !== scientific.oracle.stdout) {
+      throw new Error(`owned Windows ${profileName} ${scientific.name} oracle failed: ${scientificOutput}`);
+    }
+  }
   const buildDetails = await ownedBuildDetailsArguments({ sourceDir, buildDir, target: LOCK.target });
   run(join(toolBin, "wasmtime.exe"), buildDetails.args);
-  const result = await packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir, profileName, profileBuild });
+  const result = await packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir, profileName, profileBuild,
+    scientificBuild });
   console.log(JSON.stringify({ profile: profileName, oracle: wasmtimeOutput, outputs: result.outputs }, null, 2));
 }
 

@@ -32,10 +32,12 @@ export async function assertOwnedEngineBuilder() {
     && lock.wasiSdk.version === "24.0"
     && lock.cflags === "-O3 -g0 -fno-ident",
   "owned engine build lock drifted");
-  assert(lock.nativeProfiles?.data?.engineId === "cpython-wasi-3.14.6-pyproc-data-2"
+  assert(lock.nativeProfiles?.data?.engineId === "cpython-wasi-3.14.6-pyproc-data-3"
     && lock.nativeProfiles.data.modules.map((module) => module.name).join(",") === "_pyprocHost,_pyprocData"
     && lock.nativeProfiles.data.modules[1].abiVersion === "pyproc.data/2"
-    && lock.nativeProfiles.data.budgets.maxWasmBytes === 7850000,
+    && lock.nativeProfiles.data.budgets.maxWasmBytes === 18000000
+    && lock.nativeProfiles.data.scientificPackages?.[0]?.name === "numpy"
+    && lock.nativeProfiles.data.scientificPackages[0].version === "2.5.1",
   "owned data native profile lock is incomplete");
   const hashes = [
     lock.cpython.archiveSha256,
@@ -51,6 +53,10 @@ export async function assertOwnedEngineBuilder() {
   const setup = await readFile(new URL("Setup.local", base), "utf8");
   const dataSource = await readFile(new URL("_pyprocData.c", base), "utf8");
   const dataSetup = await readFile(new URL("Setup.data.local", base), "utf8");
+  const scientificLock = JSON.parse(await readFile(new URL(
+    "../scientificPackageBuilder/scientificPackageLock.json", base), "utf8"));
+  const scientificBuilder = await readFile(new URL(
+    "../scientificPackageBuilder/numpyStaticBuilder.mjs", base), "utf8");
   assert(hostSource.includes("PyInit__pyprocHost") && hostSource.includes("abiVersion")
     && hostSource.includes("pyproc.hostcall/1")
     && setup.split(/\r?\n/u).includes("_pyprocHost _pyprocHost.c"),
@@ -60,6 +66,16 @@ export async function assertOwnedEngineBuilder() {
     && dataSetup.split(/\r?\n/u).includes("MODULE__PYPROCDATA_CFLAGS=-msimd128")
     && dataSetup.split(/\r?\n/u).includes("_pyprocData _pyprocData.c $(MODULE__PYPROCDATA_CFLAGS)"),
   "static data profile module recipe is incomplete");
+  assert(scientificLock.numpy.name === "numpy" && scientificLock.numpy.version === "2.5.1"
+    && scientificLock.numpy.moduleNames.length === 13
+    && scientificLock.cython.version === "3.1.2" && scientificLock.ninja.version === "1.13.0"
+    && [scientificLock.numpy.archiveSha256, scientificLock.cython.archiveSha256,
+      scientificLock.ninja.linuxX8664.archiveSha256, scientificLock.ninja.windowsX8664.archiveSha256]
+      .every((hash) => /^[0-9a-f]{64}$/u.test(hash))
+    && scientificBuilder.includes("activateIsolatedHostPython")
+    && scientificBuilder.includes("canonicalNumpyConfig")
+    && scientificBuilder.includes("NumPy static symbol audit failed"),
+  "scientific package source, tools, isolated host, or static symbol audit is incomplete");
   const compiledData = await nativeProfileBuildInput("data");
   const compiledCore = await nativeProfileBuildInput("core");
   assert(compiledData.input.protocol === NATIVE_PROFILE_INPUT_PROTOCOL
@@ -70,7 +86,11 @@ export async function assertOwnedEngineBuilder() {
     && /^[0-9a-f]{64}$/u.test(compiledData.input.recipe.windowsBuilderSha256)
     && compiledData.input.recipe.modules[1].sourceSha256 === lock.nativeProfiles.data.modules[1].sourceSha256
     && compiledData.input.recipe.setupSha256 === lock.nativeProfiles.data.setupSha256
-    && compiledData.input.outputs.includes("native-profile-build-input.json"),
+    && compiledData.input.outputs.includes("native-profile-build-input.json")
+    && compiledData.input.outputs.includes("numpy-2.5.1-py3-none-any.whl")
+    && compiledData.input.scientificPackages[0].modules.length === 13
+    && /^[0-9a-f]{64}$/u.test(compiledData.input.scientificPackages[0].builderSha256)
+    && /^[0-9a-f]{64}$/u.test(compiledData.input.scientificPackages[0].lockSha256),
   "native profile compiler did not seal source, ABI, engine, and output provenance");
 
   const sysconfigFixture = await mkdtemp(join(tmpdir(), "pyprocSysconfigData-"));
@@ -159,6 +179,7 @@ export async function assertOwnedEngineBuilder() {
     && workflow.includes("name: pyproc-owned-engine-core-a")
     && workflow.includes("tests/browser/ownedEngineCoreProduct.html")
     && workflow.includes("tests/browser/ownedEngineDataProduct.html")
+    && workflow.includes("scripts/scientificPackageBuilder/**")
     && !workflow.includes("tests/attempts/")
     && !/uses:\s+[^@\s]+@(v|main|master)/u.test(workflow),
   "owned engine workflow is not an exact two-runner gate");

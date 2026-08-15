@@ -64,6 +64,7 @@
     "scripts/assetManifest.mjs",
     "scripts/assetCatalog.json",
     "scripts/engineBuilder",
+    "scripts/scientificPackageBuilder",
     "scripts/nativePackageCatalog",
     "scripts/pyprocControl.mjs",
     "scripts/controlProtocolServer.mjs",

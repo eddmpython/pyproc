@@ -98,14 +98,29 @@ import { createOwnedPackageResolver, getDataKernelEngineManifest } from "pyproc/
 const dataMachine = await boot({ engineManifest: await getDataKernelEngineManifest() });
 const dataResolver = await createOwnedPackageResolver({ profile: "data" });
 const dataPackages = dataMachine.createPackageEnvironment({ resolver: dataResolver });
-await dataPackages.install({ requirements: ["pyproc-native-data==1.0.0"] });
-await dataMachine.run("import pyproc_native_data; print(pyproc_native_data.inspect())");
+await dataPackages.install({ requirements: [
+  "pyproc-native-data==1.0.0",
+  "numpy==2.5.1",
+] });
+await dataMachine.run(`
+import numpy as np
+import pyproc_native_data
+print(pyproc_native_data.inspect())
+print(np.linalg.solve(np.array([[3., 1.], [1., 2.]]), np.array([9., 8.])))
+`);
 ```
 
 이 facade는 `pyproc.data/2`를 보고하며 float64 buffer 덧셈과 내적을 `wasm-simd128`로 실행한다.
-NumPy, SciPy, pandas, Polars 또는 임의 native wheel 호환성을 주장하지 않는다.
+같은 catalog는 NumPy 2.5.1 Python layer를 포함하고 정확한 data engine은 13개 native module을 built-in으로
+가진다. 두 wheel은 실행 중 network 요청 없이 package byte에서 설치된다. SciPy, pandas, Polars와 임의
+native wheel은 계속 지원 범위 밖이다.
 
-catalog는 wrapper wheel, native source digest, ABI, engine ID, profile을 함께 봉인한다. 하나라도 다르면
+NumPy build는 source-pinned sdist와 정확한 Cython, Ninja, WASI SDK, CPython 입력을 쓴다. 현재 WASI C++
+runtime에는 exception 구현이 없으므로 memory 할당 실패나 pocketfft 내부 invariant 위반은 process를
+중단할 수 있다. 빈 FFT 같은 일반 입력 오류는 Python exception으로 유지된다.
+
+catalog는 두 wheel, scientific source와 build receipt, native source digest, ABI, engine ID, profile을 함께
+봉인한다. 하나라도 다르면
 install 명령이 kernel에 도달하기 전에 실패한다. 검증된 package layer는 process clone과 Machine image에도
 따라가며, 새 worker가 보기 전에 image import가 포함 wheel의 digest를 다시 검사한다.
 

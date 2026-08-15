@@ -82,7 +82,7 @@
       }
     },
     "data": {
-      "engineId": "cpython-wasi-3.14.6-pyproc-data-2",
+      "engineId": "cpython-wasi-3.14.6-pyproc-data-3",
       "setupFile": "Setup.data.local",
       "setupSha256": "8e42e525bee03dd78986347960b5293ec3645904cbb0c48b6129e042ef37e1d2",
       "modules": [
@@ -99,14 +99,22 @@
           "abiVersion": "pyproc.data/2"
         }
       ],
+      "scientificPackages": [
+        {
+          "name": "numpy",
+          "version": "2.5.1",
+          "builder": "../scientificPackageBuilder/numpyStaticBuilder.mjs",
+          "lock": "../scientificPackageBuilder/scientificPackageLock.json"
+        }
+      ],
       "oracle": {
         "code": "import _pyprocData; from array import array; a=array('d',[1,2.5,-4]); b=array('d',[3,4.5,6]); out=array('d'); out.frombytes(_pyprocData.vector_add_f64(a,b)); print(_pyprocData.profile(), _pyprocData.simd(), list(out), _pyprocData.dot_f64(a,b))",
         "stdout": "pyproc.data/2 wasm-simd128 [4.0, 7.0, 2.0] -9.75"
       },
       "budgets": {
-        "maxWasmBytes": 7850000,
+        "maxWasmBytes": 18000000,
         "maxStdlibZipBytes": 2800000,
-        "maxWasmDeltaFromCoreBytes": 50000
+        "maxWasmDeltaFromCoreBytes": 10000000
       }
     }
   }

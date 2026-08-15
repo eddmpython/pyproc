@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "protocol": "pyproc.scientific-package-build",
+  "sourceDateEpoch": 1781085833,
+  "target": "wasm32-wasip1",
+  "pythonVersion": "3.14.6",
+  "package": {
+    "name": "numpy",
+    "version": "2.5.1",
+    "sourceSha256": "a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3",
+    "wheel": {
+      "file": "numpy-2.5.1-py3-none-any.whl",
+      "byteLength": 1297310,
+      "sha256": "c17a9e6ff30fd1371d6308a58142b04b6f6db52c3f233cfc7bf24bb44dca4cd0",
+      "fileCount": 376
+    },
+    "staticArchive": {
+      "file": "libnumpy-2.5.1-pyproc.a",
+      "byteLength": 12715714,
+      "sha256": "fe19483eaa634550b648b261a9328bbe53931d40250f2d3a3c6956337121b5e5"
+    },
+    "modules": [
+      "numpy._core._multiarray_umath",
+      "numpy.fft._pocketfft_umath",
+      "numpy.linalg.lapack_lite",
+      "numpy.linalg._umath_linalg",
+      "numpy.random._bounded_integers",
+      "numpy.random._common",
+      "numpy.random._mt19937",
+      "numpy.random._philox",
+      "numpy.random._pcg64",
+      "numpy.random._sfc64",
+      "numpy.random.bit_generator",
+      "numpy.random._generator",
+      "numpy.random.mtrand"
+    ]
+  },
+  "tools": {
+    "cython": {
+      "version": "3.1.2",
+      "sha256": "d23fd7ffd7457205f08571a42b108a3cf993e83a59fe4d72b42e6fc592cf2639"
+    },
+    "ninja": {
+      "version": "1.13.0",
+      "sha256": "fb8ee8719f8af47fed145cced4a85f0755dd55d45b2bddaf7431fa89803c5f3e"
+    },
+    "meson": {
+      "source": "numpy-sdist-vendored",
+      "version": "1.11.1"
+    }
+  },
+  "compatibilityOverlay": {
+    "files": {
+      "numpy/random/meson.build": "b8d981e36a499296991722858b258988c3b63fdf396be91c652bacd2531bff8a",
+      "numpy/random/src/pyproc_static_mtrand.h": "1dd8fb9b2b96a21e04b0ff409581a39c63d2f2c63d789b693768ae42f2429f73",
+      "numpy/_core/meson.build": "11a023209e2d839d8c1f2877d4cac1470070acf794c8c2b3260b3d1c4d47c423",
+      "numpy/_core/src/multiarray/unique.cpp": "2f2b6f824ee0b3cba8f72e8a1d1ebe3cdb91d4fbdde3c001fadd7a98d9c50432",
+      "numpy/fft/_pocketfft_umath.cpp": "5e6daa889a1fd45abd62ce7785331616deb746a003d7ad7f5ee5f5cc1c1717dc",
+      "numpy/fft/pocketfft/pocketfft_hdronly.h": "b171329ee8bff77448dd5291946613bfeadc22168b8a6c84b5d96e2beb30392a"
+    },
+    "legacyRandomSymbolCount": 66,
+    "cxxExceptions": "disabled",
+    "unsupportedFailureMode": "abort-on-allocation-or-pocketfft-invariant",
+    "pythonConfig": "canonical-tool-names"
+  },
+  "linkLibraries": [
+    "c++",
+    "c++abi",
+    "c-printscan-long-double"
+  ]
+}

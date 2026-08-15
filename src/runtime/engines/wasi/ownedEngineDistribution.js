@@ -2,10 +2,10 @@
 import { createKernelEngineManifest } from "../../kernel/engineManifest.js";
 
 export const DEFAULT_KERNEL_ENGINE_ID = "cpython-wasi-3.14.6-pyproc-host-1";
-export const DATA_KERNEL_ENGINE_ID = "cpython-wasi-3.14.6-pyproc-data-2";
+export const DATA_KERNEL_ENGINE_ID = "cpython-wasi-3.14.6-pyproc-data-3";
 // SHA-256 of the ordered base environment descriptor enforced by the kernel factory contract.
 export const DEFAULT_KERNEL_ENVIRONMENT_ID = "sha256:6a0b4d46d7fe45669860e0964e9fb9114ce1eacace5e381b5d6fb2e7112a2534";
-export const DATA_KERNEL_ENVIRONMENT_ID = "sha256:88b292d1060cfbd9079c390334483cdb2d2d23cca27a22e410aa2ea9e7790f10";
+export const DATA_KERNEL_ENVIRONMENT_ID = "sha256:3b8d0a01cb77cd565a0c296daaa7ce43c97427292b7668008ef001813b2399c7";
 
 const CORE = Object.freeze({
   engineId: DEFAULT_KERNEL_ENGINE_ID,
@@ -36,13 +36,13 @@ const DATA = Object.freeze({
   stdlibDir: "python3.14",
   artifacts: Object.freeze({
     wasm: Object.freeze({ path: "./owned/data/python.wasm",
-      sha256: "sha256:645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7",
-      byteLength: 7736600 }),
+      sha256: "sha256:42869426bd18a19004fe7244f2260144c4a217680f7dbcbc2c6302277826644e",
+      byteLength: 17606733 }),
     stdlib: Object.freeze({ path: "./owned/data/python314-stdlib.zip",
       sha256: "sha256:ce468413329cdc90d2ba26c90f915b1b11126ea4f4351a81d31a9fd668d53ded",
       byteLength: 2773525 }),
   }),
-  buildManifestSha256: "sha256:81cfee69313ef1d0c77b1fcbc73b46ff3aa4a4470ef16ec54f47d998cd8a0953",
+  buildManifestSha256: "sha256:e7ea950cdaf6b3282d9342877fde8cb978020211793892d28e103e0f2765b6d6",
 });
 
 let coreManifestPromise = null;

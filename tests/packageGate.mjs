@@ -77,7 +77,7 @@ try {
       if (typeof value !== "function") throw new Error("package environment surface missing: " + name);
     }
     if (DEFAULT_KERNEL_ENGINE_ID !== "cpython-wasi-3.14.6-pyproc-host-1"
-      || DATA_KERNEL_ENGINE_ID !== "cpython-wasi-3.14.6-pyproc-data-2"
+      || DATA_KERNEL_ENGINE_ID !== "cpython-wasi-3.14.6-pyproc-data-3"
       || typeof getDefaultKernelEngineManifest !== "function"
       || typeof getDataKernelEngineManifest !== "function"
       || typeof inspectDataKernelEngineDistribution !== "function"
@@ -153,9 +153,11 @@ try {
     throw new Error(`incomplete documented hello error drift: ${incompleteCode}`);
   }
   for (const profile of ["core", "data"]) {
-    for (const file of ["python.wasm", "python314-stdlib.zip", "engine-build-manifest.json",
+    const files = ["python.wasm", "python314-stdlib.zip", "engine-build-manifest.json",
       "engine.cyclonedx.json", "stdlib-inventory.json", "native-profile-build-input.json",
-      "reproducibility-manifest.json"]) {
+      "reproducibility-manifest.json"];
+    if (profile === "data") files.push("numpy-2.5.1-py3-none-any.whl", "scientific-package-build.json");
+    for (const file of files) {
       if (!existsSync(join(appDir, "node_modules", "pyproc", "src", "runtime", "engines", "wasi", "owned", profile, file))) {
         throw new Error(`installed owned ${profile} kernel asset 누락: ${file}`);
       }
@@ -168,12 +170,15 @@ try {
     ["src", "runtime", "packages", "native", "data", "catalog.json"],
     ["src", "runtime", "packages", "native", "data", "catalogIdentity.js"],
     ["src", "runtime", "packages", "native", "data", "pyproc_native_data-1.0.0-py3-none-any.whl"],
+    ["src", "runtime", "packages", "native", "data", "numpy-2.5.1-py3-none-any.whl"],
     ["scripts", "nativePackageCatalog", "buildNativePackageCatalog.mjs"],
     ["scripts", "nativePackageCatalog", "nativePackageCatalogLock.json"],
     ["scripts", "nativePackageCatalog", "packages", "pyproc_native_host", "__init__.py"],
     ["scripts", "nativePackageCatalog", "packages", "pyproc_native_data", "__init__.py"],
     ["scripts", "engineBuilder", "_pyprocHost.c"],
     ["scripts", "engineBuilder", "_pyprocData.c"],
+    ["scripts", "scientificPackageBuilder", "numpyStaticBuilder.mjs"],
+    ["scripts", "scientificPackageBuilder", "scientificPackageLock.json"],
   ]) {
     if (!existsSync(join(packageRoot, ...path))) throw new Error(`installed native package input 누락: ${path.join("/")}`);
   }

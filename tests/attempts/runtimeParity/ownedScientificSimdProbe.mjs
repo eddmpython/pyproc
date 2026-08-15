@@ -12,6 +12,17 @@ import { binPath, installPackedPyProc, ROOT, run } from "../../packageHarness.mj
 const timeoutMs = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 const keepEvidence = process.env.PYPROC_KEEP_ATTEMPT_EVIDENCE === "1";
 
+async function withTimeout(promise, timeout, message) {
+  let timer = null;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), timeout);
+    })]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
+
 function page(importMap) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -46,17 +57,18 @@ try {
   machine = await boot({ engineManifest:manifest, deterministic:true });
   const resolver = await wasi.createOwnedPackageResolver({ profile:"data" });
   const packages = machine.createPackageEnvironment({ resolver });
-  const receipt = await packages.install({ requirements:["pyproc-native-data==1.0.0"] });
+  const receipt = await packages.install({ requirements:["pyproc-native-data==1.0.0","numpy==2.5.1"] });
   const oracle = JSON.parse((await machine.run(\`
 import importlib, json
 from array import array
 import pyproc_native_data
+import numpy as np
 left = array("d", [1.0, 2.5, -4.0, 8.0, 3.0])
 right = array("d", [3.0, 4.5, 6.0, -2.0, 7.0])
 added = array("d")
 added.frombytes(pyproc_native_data.vector_add_f64(left, right))
 scientific = {}
-for name in ("numpy", "scipy", "pandas", "polars"):
+for name in ("scipy", "pandas", "polars"):
     try:
         importlib.import_module(name)
     except Exception as error:
@@ -65,21 +77,32 @@ for name in ("numpy", "scipy", "pandas", "polars"):
         scientific[name] = "IMPORTED"
 print(json.dumps({"info": pyproc_native_data.inspect(), "added": list(added),
                   "dot": pyproc_native_data.dot_f64(left, right),
+                  "numpy":{"version":np.__version__,
+                  "sum":np.arange(6,dtype=np.float64).reshape(2,3).sum(axis=1).tolist(),
+                  "dot":np.dot(np.array([1.,2.,3.]),np.array([4.,5.,6.])),
+                  "solve":np.linalg.solve(np.array([[3.,1.],[1.,2.]]),np.array([9.,8.])).tolist(),
+                  "random":np.random.default_rng(123).integers(0,100,5).tolist()},
                   "scientific": scientific}, sort_keys=True))
 \`)).output.trim());
-  const entry = receipt.lock.packages[0] || {};
   const report = { ok: manifest.nativeProfile === "data" && receipt.engineId === manifest.engineId
     && receipt.nativeProfile === "data" && receipt.lock.engineId === manifest.engineId
-    && receipt.sources[0] === "package" && entry.name === "pyproc-native-data"
+    && receipt.sources.length === 2 && receipt.sources.every((source) => source === "package")
+    && receipt.lock.packages.some((item) => item.name === "pyproc-native-data")
+    && receipt.lock.packages.some((item) => item.name === "numpy")
     && oracle.info.simd === "wasm-simd128" && oracle.info.origin === "built-in"
     && oracle.added.join(",") === "4,7,2,6,10" && oracle.dot === -4.75
+    && oracle.numpy.version === "2.5.1" && oracle.numpy.sum.join(",") === "3,12"
+    && oracle.numpy.dot === 32 && oracle.numpy.solve.join(",") === "2,3"
+    && oracle.numpy.random.join(",") === "1,68,59,5,90"
     && Object.values(oracle.scientific).every((value) => value === "ModuleNotFoundError"),
-    engine:{ engineId:manifest.engineId, nativeProfile:manifest.nativeProfile }, source:receipt.sources[0] || null,
-    package:{ name:entry.name || null, filename:entry.filename || null, sha256:entry.sha256 || null }, oracle };
+    engine:{ engineId:manifest.engineId, nativeProfile:manifest.nativeProfile }, source:receipt.sources,
+    packages:receipt.lock.packages.map(({name,filename,sha256}) => ({name,filename,sha256})), oracle };
   document.getElementById("engine").textContent = report.engine.engineId + " / " + report.engine.nativeProfile;
-  document.getElementById("source").textContent = report.source + " / " + report.package.filename;
+  document.getElementById("source").textContent = report.source.join(",") + " / "
+    + report.packages.map((item) => item.filename).join(",");
   document.getElementById("simd").textContent = report.oracle.info.simd + " / " + report.oracle.info.origin;
-  document.getElementById("numeric").textContent = JSON.stringify({ added:report.oracle.added, dot:report.oracle.dot });
+  document.getElementById("numeric").textContent = JSON.stringify({ added:report.oracle.added,
+    dot:report.oracle.dot, numpy:report.oracle.numpy });
   document.getElementById("boundary").textContent = JSON.stringify(report.oracle.scientific);
   for (const id of ["engine","source","simd","numeric","boundary"]) document.getElementById(id).className = report.ok ? "pass" : "red";
   document.getElementById("status").textContent = report.ok ? "GREEN" : "RED: data SIMD identity or result drifted";
@@ -135,8 +158,8 @@ try {
   client = await PyProcControlClient.start(configPath,{cwd:installed.appDir,startupTimeoutMs:timeoutMs,shutdownTimeoutMs:10000});
   const opened = await client.openTarget(`${origin}/`,{expectedRisk:"externalEffect",waitUntil:"load"});
   targetRef = opened.output.targetRef;
-  const report = await Promise.race([reportPromise,new Promise((_,reject) => setTimeout(() =>
-    reject(new Error(`scientific SIMD report timed out after ${timeoutMs} ms`)),timeoutMs))]);
+  const report = await withTimeout(reportPromise, timeoutMs,
+    `scientific SIMD report timed out after ${timeoutMs} ms`);
   const attached = await client.attachSession(targetRef); sessionRef = attached.output;
   const screenshot = await client.act(sessionRef,[{kind:"screenshot",format:"png",expectedRisk:"read"}]);
   const action = screenshot.output.actions[0].result;

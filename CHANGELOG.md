@@ -17,7 +17,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - **A reproducible data engine now ships beside the default core engine.** `pyproc/wasi` exposes its exact
   manifest and a profile-selected package-owned catalog. The static `pyproc.data/2` module executes float64
   buffer addition and dot products with `wasm-simd128`, and its verified facade survives process clone and
-  Machine image revival. Representative NumPy, SciPy, pandas, and Polars imports remain explicitly unsupported.
+  Machine image revival. The exact data profile now also builds NumPy 2.5.1 from its official sdist as 13
+  static modules, installs its verified Python layer from the package-owned multi-wheel catalog, and preserves
+  it through process clone and Machine image revival. SciPy, pandas, Polars, and arbitrary native wheels remain
+  explicitly unsupported.
 
 ## 0.0.22 - 2026-08-15
 

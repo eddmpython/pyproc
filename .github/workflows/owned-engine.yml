@@ -7,6 +7,7 @@ on:
     paths:
       - ".gitattributes"
       - "scripts/engineBuilder/**"
+      - "scripts/scientificPackageBuilder/**"
       - "tests/browser/ownedEngineCoreProduct.html"
       - "tests/browser/ownedEngineDataProduct.html"
       - "tests/browser/ownedEngineProfileProduct.js"

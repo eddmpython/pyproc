@@ -1,6 +1,8 @@
 import { KernelFactory } from "../../src/composition/kernelFactory.js";
+import { PackageEnvironment } from "../../src/capabilities/packageEnvironment.js";
 import { sha256Address } from "../../src/runtime/contentDigest.js";
 import { createKernelEngineManifest } from "../../src/runtime/kernel/engineManifest.js";
+import { createOwnedPackageResolver } from "../../src/runtime/packages/native/ownedPackageCatalog.js";
 
 const CORE_ASSET_ROOT = "/.cache/owned-engine/core/a/";
 const DATA_ASSET_ROOT = "/.cache/owned-engine/data/a/";
@@ -129,15 +131,18 @@ export async function runOwnedEngineDataProduct() {
     const dataModules = dataManifest.recipe?.nativeModules?.map((entry) => entry.name) || [];
     const inputModules = profileInput.recipe?.modules?.map((entry) => entry.name) || [];
     gate.check("profile compiler seals source and provenance",
-      profileInput.protocol === "pyproc.native-profile-build-input" && profileInput.version === 1
+      profileInput.protocol === "pyproc.native-profile-build-input" && profileInput.version === 2
       && profileInput.profile === "data" && profileInput.engineId === dataManifest.engineId
       && dataManifest.recipe.nativeProfileInputSha256 === dataManifest.outputs.nativeProfileBuildInput.sha256
       && inputModules.join(",") === "_pyprocHost,_pyprocData"
       && dataModules.join(",") === "_pyprocHost,_pyprocData"
+      && profileInput.scientificPackages?.[0]?.name === "numpy"
+      && profileInput.scientificPackages[0].version === "2.5.1"
+      && dataManifest.outputs.scientificWheel?.file === "numpy-2.5.1-py3-none-any.whl"
       && sbom.components.some((entry) => entry.name === "_pyprocData"));
     const wasmDelta = dataManifest.outputs.engine.byteLength - coreManifest.outputs.engine.byteLength;
     gate.check("profile identity and size budget", dataManifest.nativeProfile === "data"
-      && dataManifest.engineId === "cpython-wasi-3.14.6-pyproc-data-2"
+      && dataManifest.engineId === "cpython-wasi-3.14.6-pyproc-data-3"
       && dataManifest.engineId !== coreManifest.engineId
       && dataManifest.outputs.engine.byteLength <= profileInput.budgets.maxWasmBytes
       && dataManifest.outputs.stdlib.byteLength <= profileInput.budgets.maxStdlibZipBytes
@@ -149,6 +154,22 @@ export async function runOwnedEngineDataProduct() {
     const dataFactory = new KernelFactory();
     dataKernel = await withTimeout(dataFactory.open(dataLoaded.manifest), 30000, "owned data browser boot");
     gate.timings.dataBootMs = Math.round(performance.now() - started);
+    const resolver = await createOwnedPackageResolver({ profile: "data" });
+    const packageEnvironment = new PackageEnvironment({ kernel: dataKernel, resolver });
+    const receipt = await packageEnvironment.install({ requirements: [
+      "pyproc-native-data==1.0.0", "numpy==2.5.1",
+    ] });
+    gate.check("data catalog installs facade and NumPy from package bytes",
+      receipt.engineId === dataManifest.engineId && receipt.nativeProfile === "data"
+      && receipt.sources.length === 2 && receipt.sources.every((source) => source === "package"));
+    const repeatedReceipt = await packageEnvironment.install({ requirements: [
+      "pyproc-native-data==1.0.0", "numpy==2.5.1",
+    ] });
+    const repeatedImport = (await runPython(dataKernel, "data:repeated-environment",
+      "import numpy as np, _pyprocData; print(np.__version__, _pyprocData.simd())")).trim();
+    gate.check("identical data environment reinstall retains loaded static modules",
+      repeatedReceipt.environmentId === receipt.environmentId
+      && repeatedImport === "2.5.1 wasm-simd128", repeatedImport);
     const oracle = JSON.parse(await runPython(dataKernel, "data:oracle", `
 import json, _pyprocData
 from array import array
@@ -167,20 +188,34 @@ print(json.dumps({"origin": _pyprocData.__spec__.origin, "profile": _pyprocData.
     gate.check("data profile scalar and SIMD numerical oracles", oracle.sum.join(",") === "4,7"
       && oracle.dot === 32 && oracle.simdSum.join(",") === "4,7,2" && oracle.simdDot === -9.75,
       JSON.stringify(oracle));
-    const scientific = JSON.parse(await runPython(dataKernel, "data:scientific-boundary", `
+    const scientific = JSON.parse(await runPython(dataKernel, "data:scientific-oracle", `
 import importlib, json
-result = {}
-for name in ("numpy", "scipy", "pandas", "polars"):
+import numpy as np
+unavailable = {}
+for name in ("scipy", "pandas", "polars"):
     try:
         importlib.import_module(name)
     except Exception as error:
-        result[name] = type(error).__name__
+        unavailable[name] = type(error).__name__
     else:
-        result[name] = "IMPORTED"
-print(json.dumps(result, sort_keys=True))
+        unavailable[name] = "IMPORTED"
+print(json.dumps({"version": np.__version__,
+                  "sum": np.arange(6, dtype=np.float64).reshape(2, 3).sum(axis=1).tolist(),
+                  "dot": np.dot(np.array([1., 2., 3.]), np.array([4., 5., 6.])),
+                  "fft": [str(v) for v in np.fft.fft(np.array([1., 0., 0., 0.])).tolist()],
+                  "solve": np.linalg.solve(np.array([[3., 1.], [1., 2.]]),
+                                           np.array([9., 8.])).tolist(),
+                  "random": np.random.default_rng(123).integers(0, 100, 5).tolist(),
+                  "unavailable": unavailable}, sort_keys=True))
 `));
-    gate.check("representative scientific import boundary remains explicit",
-      Object.values(scientific).every((value) => value === "ModuleNotFoundError"), JSON.stringify(scientific));
+    gate.check("NumPy array, FFT, linalg, and random oracles run in the data engine",
+      scientific.version === "2.5.1" && scientific.sum.join(",") === "3,12"
+      && scientific.dot === 32 && scientific.fft.every((value) => value === "(1+0j)")
+      && scientific.solve.join(",") === "2,3" && scientific.random.join(",") === "1,68,59,5,90",
+    JSON.stringify(scientific));
+    gate.check("unbundled scientific package boundary remains explicit",
+      Object.values(scientific.unavailable).every((value) => value === "ModuleNotFoundError"),
+    JSON.stringify(scientific.unavailable));
     const workload = JSON.parse(await runPython(dataKernel, "data:workload", `
 import json, _pyprocData
 value = 0.0

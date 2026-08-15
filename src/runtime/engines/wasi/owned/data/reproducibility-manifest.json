@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "protocol": "pyproc.engine-reproducibility-receipt",
-  "engineId": "cpython-wasi-3.14.6-pyproc-data-2",
+  "engineId": "cpython-wasi-3.14.6-pyproc-data-3",
   "nativeProfile": "data",
   "independentBuilds": 2,
   "byteIdentical": true,
   "outputs": {
     "engine": {
       "file": "python.wasm",
-      "byteLength": 7736600,
-      "sha256": "645a8b8c9a4eaf8a8de2132edfeac2b12af7b2df4a71de3fdd9973cba5db62c7"
+      "byteLength": 17606733,
+      "sha256": "42869426bd18a19004fe7244f2260144c4a217680f7dbcbc2c6302277826644e"
     },
     "stdlib": {
       "file": "python314-stdlib.zip",
@@ -19,12 +19,22 @@
     "stdlibInventory": {
       "file": "stdlib-inventory.json",
       "byteLength": 90152,
-      "sha256": "001ee9a1f677e59c3303e179b6483595f7ca76d089bcd9c72b39ab1e9621d553"
+      "sha256": "d8c90dc46592e56d1a71cf72ad783d668ac50bbbce580d460abebb2a147ee749"
     },
     "nativeProfileBuildInput": {
       "file": "native-profile-build-input.json",
-      "byteLength": 2357,
-      "sha256": "187367312d26e89f5d4ba324832aa46e8cb34ea588ca15608c55f94d365dc2a1"
+      "byteLength": 4180,
+      "sha256": "66aa5e915e296b96082815638caf6dae6c81488d4e5ce8318c9ede90ab69abda"
+    },
+    "scientificWheel": {
+      "file": "numpy-2.5.1-py3-none-any.whl",
+      "byteLength": 1297310,
+      "sha256": "c17a9e6ff30fd1371d6308a58142b04b6f6db52c3f233cfc7bf24bb44dca4cd0"
+    },
+    "scientificPackageBuild": {
+      "file": "scientific-package-build.json",
+      "byteLength": 2511,
+      "sha256": "716f613040f55099a2fab082c480b7b0c744db99b67f554dec5c8d99d3acb7f9"
     }
   }
 }

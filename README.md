@@ -102,14 +102,29 @@ import { createOwnedPackageResolver, getDataKernelEngineManifest } from "pyproc/
 const dataMachine = await boot({ engineManifest: await getDataKernelEngineManifest() });
 const dataResolver = await createOwnedPackageResolver({ profile: "data" });
 const dataPackages = dataMachine.createPackageEnvironment({ resolver: dataResolver });
-await dataPackages.install({ requirements: ["pyproc-native-data==1.0.0"] });
-await dataMachine.run("import pyproc_native_data; print(pyproc_native_data.inspect())");
+await dataPackages.install({ requirements: [
+  "pyproc-native-data==1.0.0",
+  "numpy==2.5.1",
+] });
+await dataMachine.run(`
+import numpy as np
+import pyproc_native_data
+print(pyproc_native_data.inspect())
+print(np.linalg.solve(np.array([[3., 1.], [1., 2.]]), np.array([9., 8.])))
+`);
 ```
 
 This facade reports `pyproc.data/2` and runs float64 buffer addition and dot products through
-`wasm-simd128`. It does not claim NumPy, SciPy, pandas, Polars, or arbitrary native-wheel compatibility.
+`wasm-simd128`. The same catalog includes the NumPy 2.5.1 Python layer while the exact data engine embeds its
+13 native modules. Both wheels install from package bytes without a runtime network request. SciPy, pandas,
+Polars, and arbitrary native wheels remain unsupported.
 
-The catalog seals the wrapper wheel, native source digest, ABI, engine ID, and profile. A mismatch fails before
+The NumPy build uses a source-pinned sdist and exact Cython, Ninja, WASI SDK, and CPython inputs. The current
+WASI C++ runtime has no exception implementation, so allocation failure or an internal pocketfft invariant may
+abort the process. Normal input errors such as an empty FFT remain Python exceptions.
+
+The catalog seals both wheels, scientific source and build receipts, native source digests, ABI, engine ID, and
+profile. A mismatch fails before
 the install command reaches the kernel. Verified package layers also travel with process clones and Machine
 images. Image import rechecks every embedded wheel digest before a fresh worker sees it.
 

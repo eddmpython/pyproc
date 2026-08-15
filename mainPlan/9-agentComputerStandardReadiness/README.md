@@ -16,8 +16,8 @@
 |---|---|---|---|
 | agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M3 컴퓨팅 몸체 확대와 독립 구현 conformance |
 | 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.5 | APX Situation, 20회 무잔류 수명주기, bounded action 수렴, 실제 hardware compute와 pixel 결과 영수증 | 두 번째 독립 hardware와 browser 구현의 visual conformance |
-| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.4 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned core와 SIMD data package | 실제 scientific package reach, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
-| 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
+| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.7 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package | shared-memory thread, wasm 도구층, Node guest, 과학 패키지 폭, quota 축출 계약 |
+| 단독 자립성 | Python 기본과 data Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython, stdlib, NumPy가 npm에 포함되고 기본 부팅과 package install의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
 
 첫 Pages 진입에서는 COI Service Worker가 문서를 실제 교체했다. 기존 affordance 실행은
@@ -118,8 +118,10 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   compiled built-in facade의 설치와 import를 packed browser 제품 gate로 닫았다.
 - 완료: 별도 `data-2` engine과 catalog를 재현 배포하고 실제 `wasm-simd128` float64 수치 oracle,
   core 격리, process clone과 Machine image 이식을 닫았다.
-- 진행 중: NumPy부터 첫 실제 scientific package stack을 data profile에 넣는다. 이후
-  `parallelProcesses`, `durableDisk` next를 순서대로 소진한다.
+- 완료: 공식 NumPy 2.5.1 sdist와 exact toolchain을 `data-3` engine의 13개 static module로 재현 빌드했다.
+  array, dot, FFT, linalg, seeded random과 음성 경계, package clone과 Machine image 복원을 정식 gate로 닫았다.
+- 진행 중: `parallelProcesses.sharedMemoryThreads`의 현재 upstream capability를 정확히 판정한 뒤,
+  `durableDisk.quotaEviction`, `localPythonParity.wasmToolLayer` 순서로 소진한다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
 - wasm 도구층을 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
@@ -369,8 +371,9 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   2,773,481 bytes, `sha256:297e22960319563421b9dcbed67dc7c43e42e456fcc01447ceb4de335ce5a236`다.
 - 설치 제품 실측: 공개 Control이 연 Edge에서 `six 1.17.0`을 설치하고 import했다. runtime은
   `wasi-0.0.0-wasm32`, `.cpython-314-wasm32-wasi.so`, `.abi3.so`, `.so`를 보고했다.
-- 현재 정확한 RED: NumPy 2.5.2는 허용 tag가 `py3-none-any`뿐인 core resolver에서
-  `PYPROC_PACKAGE_RESOLUTION`로 멈춘다. screenshot은 922 x 920으로 직접 확인했고 SHA-256은
+- 당시 probe의 NumPy 2.5.2 요청은 배포되지 않은 좌표였으므로 native package reach의 증거가 아니었다.
+  이 사실을 확인한 뒤 probe를 실제 배포된 2.5.1로 바로잡았다. 당시 안전 거절 화면은 922 x 920으로
+  직접 확인했고 SHA-256은
   `16ce862b69982ce556a0b1a7c5e7bb4daa3d83775d2701e6a2982b8d7d7b1c0f`다.
 - gate 이빨: workspace 치환을 무력화한 음성 변형은
   `generated _sysconfigdata__wasi_wasm32-wasi.py does not expose a canonicalizable build root`로 RED였다.
@@ -416,9 +419,42 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   `wasm-simd128`이었다. float64 덧셈은 `[4,7,2,6,10]`, 내적은 `-4.75`다. 설치 gate는 core 격리,
   data process clone, Machine image 복원을 포함해 30/30 GREEN이고 별도 data browser gate는 10/10
   GREEN이다.
-- 대표 import 재측정: 같은 data engine에서 NumPy, SciPy, pandas, Polars는 모두
+- data-2 역사 기준선: 같은 data engine에서 NumPy, SciPy, pandas, Polars는 모두
   `ModuleNotFoundError`다. GREEN 화면이 성공과 한계를 함께 표시하며 직접 확인한 screenshot SHA-256은
   `aade1f5ea3478b8a68805712c2fe19259bfc8e44d5930141a7b694f1b8f8bb0b`다.
-- 다음 직렬 작업: exact source, license, reproducibility, size와 수치 oracle을 갖춘 첫 실제 scientific
-  package stack을 NumPy부터 data profile에 넣고 네 import 경계를 다시 측정한다. 임의 PyPI native wheel
-  지원은 먼저 주장하지 않는다.
+- NumPy source 계약: 공식 2.5.1 sdist
+  `sha256:a48a113e6afea91f5608793bafa7ef2ad481fefbda87ec5069f483de61cb9fa3`, Cython 3.1.2,
+  Ninja 1.13.0과 sdist 내 Meson 1.11.1을 exact lock으로 고정했다. 13개 static module registry,
+  중복, 누락과 금지 symbol 검사, deterministic archive와 wheel, config 경로 canonicalization을 build 계약에
+  넣었다. 현재 C++ exception은 비활성이고 allocation 또는 PocketFFT invariant 위반은 abort하는 제한을
+  manifest와 README에 공개했다.
+- build 중 첫 RED는 Windows embedded Python이 `PYTHONPATH`를 무시해 builder module을 찾지 못한 것이고,
+  두 번째 RED는 Meson 자식 프로세스가 NumPy code generator 경로를 잃은 것이었다. 격리된 startup shim과
+  자식 환경 복원으로 두 문제를 닫았다.
+- data-3 재현성: 두 격리 workspace의 선언 산출물 6개와 static archive가 byte-identical이다. engine은
+  17,606,733 bytes,
+  `sha256:42869426bd18a19004fe7244f2260144c4a217680f7dbcbc2c6302277826644e`, core 대비 증가는
+  9,875,596 bytes다. NumPy wheel은 1,297,310 bytes,
+  `sha256:c17a9e6ff30fd1371d6308a58142b04b6f6db52c3f233cfc7bf24bb44dca4cd0`, static archive는
+  `sha256:fe19483eaa634550b648b261a9328bbe53931d40250f2d3a3c6956337121b5e5`다.
+- multi-wheel catalog: data catalog schema 3이 `pyproc-native-data==1.0.0`과 `numpy==2.5.1`을 exact
+  `data-3` engine에 함께 묶는다. catalog identity는
+  `sha256:aa77504151ec7d69edb1f1fd614f96106893a4503594d70feea78c33d040e87a`다.
+- 상태 전이 RED: 설치 smoke 뒤 NumPy module을 지우면 static extension을 실제 import할 때 두 번째 초기화가
+  `ImportError`로 멈췄다. 성공한 smoke import 자체를 commit 상태로 유지하고 실패 때만 이전 module과 path를
+  복원하도록 고쳤다. 이어 package snapshot을 복제할 때 새 worker가 같은 static extension을 다시 초기화한
+  문제는 package files를 먼저 재생하고 checkpoint memory를 나중에 복원해 닫았다.
+- 제품 증거: data browser gate 13/13, exact packed installed gate 33/33가 GREEN이다. 동일 environment를
+  반복 설치해도 static module을 다시 초기화하지 않는 회귀 시험을 포함한다. NumPy 2.5.1의
+  `sum=[3,12]`, `dot=32`, FFT 네 값 `(1+0j)`, `solve=[2,3]`, seeded random `[1,68,59,5,90]`을
+  실제 WASI에서 검증했다. SciPy, pandas, Polars는 모두 `ModuleNotFoundError`로 남는다. process clone과
+  Machine image는 facade와 NumPy layer를 함께 복원한다.
+- 공개 Control 시각 증거: exact packed `pyproc-control`이 만든 GREEN 화면을 922 x 920 viewport에서 직접
+  확인했다. screenshot은 162,736 bytes,
+  `sha256:698ca96aeb85d96e150045b46751cbd1bd7f22ee6167e088d5eedc044b35b099`다. 첫 실행의 255.8초 중
+  240초는 probe가 승리한 Promise 뒤 패배한 timeout timer를 취소하지 않은 잔류였고, 이를 고친 같은
+  시나리오는 24.1초에 종료됐다.
+- 다음 직렬 작업: `parallelProcesses.sharedMemoryThreads`의 실제 플랫폼과 CPython 지원 경계를 음성 probe로
+  고정한다. 지원되지 않으면 없는 능력을 우회해 주장하지 않고 그 좌표를 기록한 뒤
+  `durableDisk.quotaEviction`으로 이동한다. 임의 PyPI native wheel 지원은 dynamic linking 전까지 주장하지
+  않는다.

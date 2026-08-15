@@ -1,7 +1,7 @@
 import type { KernelEngineManifest } from "../../kernel/engineManifest.js";
 
 export const DEFAULT_KERNEL_ENGINE_ID: "cpython-wasi-3.14.6-pyproc-host-1";
-export const DATA_KERNEL_ENGINE_ID: "cpython-wasi-3.14.6-pyproc-data-2";
+export const DATA_KERNEL_ENGINE_ID: "cpython-wasi-3.14.6-pyproc-data-3";
 export const DEFAULT_KERNEL_ENVIRONMENT_ID: `sha256:${string}`;
 export const DATA_KERNEL_ENVIRONMENT_ID: `sha256:${string}`;
 export function inspectDefaultKernelEngineDistribution(): Readonly<{

@@ -157,7 +157,7 @@ function makeVariable(makefile, name) {
 }
 
 export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
-  profileName = "core", profileBuild = null }) {
+  profileName = "core", profileBuild = null, scientificBuild = null }) {
   const lock = JSON.parse(await readFile(LOCK_PATH, "utf8"));
   const compiledProfile = profileBuild || await nativeProfileBuildInput(profileName);
   if (compiledProfile.input.profile !== profileName) throw new Error("native profile compiler input mismatch");
@@ -171,6 +171,27 @@ export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
       throw new Error(`owned engine is missing static ${module.name} registration`);
     }
     if (!wasmBytes.includes(Buffer.from(module.name))) throw new Error(`owned engine bytes do not name ${module.name}`);
+  }
+  const scientificPackages = compiledProfile.input.scientificPackages || [];
+  if (scientificPackages.length !== (scientificBuild ? 1 : 0)) {
+    throw new Error("owned engine scientific package build is incomplete");
+  }
+  if (scientificBuild) {
+    const expected = scientificPackages[0];
+    const built = scientificBuild.manifest;
+    if (built?.protocol !== "pyproc.scientific-package-build" || built.target !== compiledProfile.input.target
+      || built.pythonVersion !== compiledProfile.input.source.version || built.package?.name !== expected.name
+      || built.package?.version !== expected.version || built.package?.sourceSha256 !== expected.sourceSha256
+      || built.package?.wheel?.file !== expected.wheelFile
+      || built.package.wheel.byteLength > expected.maxWheelBytes
+      || built.package.wheel.sha256 !== sha256(await readFile(scientificBuild.wheelPath))) {
+      throw new Error("owned engine scientific package provenance differs from the compiled profile");
+    }
+    for (const module of expected.modules) {
+      if (!configSource.includes(`{"${module}", PyInit_`) || !wasmBytes.includes(Buffer.from(module))) {
+        throw new Error(`owned engine is missing scientific built-in registration: ${module}`);
+      }
+    }
   }
 
   await mkdir(outDir, { recursive: true });
@@ -206,12 +227,25 @@ export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
   const profileInputOut = join(outDir, "native-profile-build-input.json");
   await writeFile(profileInputOut, compiledProfile.serialized);
 
+  let scientificOutputs = {};
+  if (scientificBuild) {
+    const wheelOut = join(outDir, compiledProfile.input.scientificPackages[0].wheelFile);
+    const buildOut = join(outDir, "scientific-package-build.json");
+    await copyFile(scientificBuild.wheelPath, wheelOut);
+    await copyFile(scientificBuild.manifestPath, buildOut);
+    scientificOutputs = {
+      scientificWheel: await artifact(wheelOut),
+      scientificPackageBuild: await artifact(buildOut),
+    };
+  }
+
   const compiler = await artifact(join(sdkDir, "bin", process.platform === "win32" ? "clang.exe" : "clang"));
   const outputs = {
     engine: await artifact(wasmOut),
     stdlib: await artifact(stdlibOut),
     stdlibInventory: await artifact(inventoryOut),
     nativeProfileBuildInput: await artifact(profileInputOut),
+    ...scientificOutputs,
   };
   if (outputs.engine.byteLength > compiledProfile.input.budgets.maxWasmBytes) {
     throw new Error(`native profile WASM exceeds budget: ${outputs.engine.byteLength}`);
@@ -249,6 +283,7 @@ export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
       setupFile: compiledProfile.input.recipe.setupFile,
       nativeModules: compiledProfile.input.recipe.modules,
       nativeProfileInputSha256: compiledProfile.sha256,
+      scientificPackages,
       budgets: compiledProfile.input.budgets,
     },
     staticModules: [...configSource.matchAll(/\{"([^"}]+)",\s*PyInit_/gu)].map((match) => match[1]).sort(),
@@ -268,11 +303,16 @@ export async function packageOwnedEngine({ sourceDir, buildDir, sdkDir, outDir,
       ...compiledProfile.input.recipe.modules.map((module) => ({ type: "library", name: module.name,
         version: module.abiVersion, bomRef: `native:${module.name}:${module.abiVersion}`,
         hashes: [{ alg: "SHA-256", content: module.sourceSha256 }] })),
+      ...scientificPackages.map((entry) => ({ type: "library", name: entry.name,
+        version: entry.version, bomRef: `scientific:${entry.name}:${entry.version}`,
+        hashes: [{ alg: "SHA-256", content: entry.sourceSha256 }] })),
       { type: "file", name: outputs.engine.file, bomRef: `artifact:${outputs.engine.sha256}`, hashes: [{ alg: "SHA-256", content: outputs.engine.sha256 }] },
       { type: "file", name: outputs.stdlib.file, bomRef: `artifact:${outputs.stdlib.sha256}`, hashes: [{ alg: "SHA-256", content: outputs.stdlib.sha256 }] },
       { type: "file", name: outputs.nativeProfileBuildInput.file,
         bomRef: `artifact:${outputs.nativeProfileBuildInput.sha256}`,
         hashes: [{ alg: "SHA-256", content: outputs.nativeProfileBuildInput.sha256 }] },
+      ...Object.values(scientificOutputs).map((output) => ({ type: "file", name: output.file,
+        bomRef: `artifact:${output.sha256}`, hashes: [{ alg: "SHA-256", content: output.sha256 }] })),
     ],
   };
   const sbomOut = join(outDir, "engine.cyclonedx.json");
