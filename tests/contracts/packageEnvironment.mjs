@@ -145,8 +145,8 @@ function markSymlink(wheel, path) {
 }
 
 export async function assertPackageEnvironmentContract() {
-  assert(PACKAGE_LOCK_PROTOCOL === "pyproc.package-lock" && PACKAGE_LOCK_VERSION === 1
-    && PACKAGE_ENVIRONMENT_PROTOCOL === "pyproc.package-environment" && PACKAGE_ENVIRONMENT_VERSION === 1
+  assert(PACKAGE_LOCK_PROTOCOL === "pyproc.package-lock" && PACKAGE_LOCK_VERSION === 2
+    && PACKAGE_ENVIRONMENT_PROTOCOL === "pyproc.package-environment" && PACKAGE_ENVIRONMENT_VERSION === 2
     && comparePackageVersions("1.0rc1", "1.0") < 0
     && (await packageEnvironmentIdentity({ engineId: "engine:test", lock: {}, treeDigests: [],
       policyDigest: "policy:test" })).startsWith("sha256:"), "package protocol or identity exports drifted");
@@ -254,7 +254,7 @@ export async function assertPackageEnvironmentContract() {
 
   const kernelCalls = [];
   const kernel = {
-    async describe() { return { engineId: "sha256:" + "a".repeat(64) }; },
+    async describe() { return { engineId: "sha256:" + "a".repeat(64), nativeProfile: "core" }; },
     async installEnvironment(request) {
       kernelCalls.push(request);
       return { protocol: "pyproc.environment-receipt", version: 2, environmentId: request.environmentId,
@@ -263,7 +263,8 @@ export async function assertPackageEnvironmentContract() {
   };
   const environment = new PackageEnvironment({ kernel, resolver: onlineResolver, contentStore: store });
   const receipt = await environment.install({ lock: locked.lock, offline: true });
-  assert(receipt.environmentId.startsWith("sha256:") && receipt.sources.every((source) => source === "content-store")
+  assert(receipt.environmentId.startsWith("sha256:") && receipt.nativeProfile === "core"
+    && receipt.sources.every((source) => source === "content-store")
     && kernelCalls.length === 1 && kernelCalls[0].wheels.length === 2 && environment.inspect() === receipt,
   "package environment did not atomically bind lock, trees, policy, and engine identity");
 

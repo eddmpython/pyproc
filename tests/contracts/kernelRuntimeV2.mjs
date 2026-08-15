@@ -25,6 +25,7 @@ class FakeWasiSession {
     this.runCount = 0;
     this.activeRuns = 0;
     this.maxActiveRuns = 0;
+    this.lineageResets = 0;
     this.blockers = [];
   }
 
@@ -57,6 +58,7 @@ class FakeWasiSession {
     if (this.failEnvironment) throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", "synthetic environment failure");
     return { environmentId: request.environmentId, files: request.wheels.length, names: ["fixture"] };
   }
+  async resetCheckpointLineage() { this.lineageResets += 1; return { state: "reset" }; }
   onFailure(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   crash() {
     const error = new PyProcError("PYPROC_WORKER_CRASHED", "synthetic worker crash");
@@ -69,14 +71,17 @@ class FakeWasiSession {
 
 export async function assertKernelRuntimeV2() {
   const session = new FakeWasiSession();
+  let capturedEnvironment = undefined;
   const kernel = assertKernelRuntimeContract(new CpythonWasiKernelRuntime(session, {
     kernelRef: "kernel:test",
     engineId: "engine:test",
+    nativeProfile: "core",
+    onEnvironmentChanged: (environment) => { capturedEnvironment = environment; },
   }));
   const descriptorPromise = kernel.describe();
   assert(descriptorPromise instanceof Promise, "KernelRuntimeContract describe is not Promise-first");
   const descriptor = await descriptorPromise;
-  assert(descriptor.runtimeContractVersion === 2 && descriptor.workerOwned
+  assert(descriptor.runtimeContractVersion === 2 && descriptor.nativeProfile === "core" && descriptor.workerOwned
     && descriptor.directHeapAccess === false && descriptor.liveObjectProxy === false,
   "KernelRuntimeContract descriptor boundary is incomplete");
 
@@ -114,6 +119,11 @@ export async function assertKernelRuntimeV2() {
       sha256: "sha256:" + "c".repeat(64), bytes: wheelBytes }] });
   assert(environment.environmentId === environmentId && (await kernel.describe()).environmentId === environmentId,
     "successful package transaction did not advance the kernel environment identity");
+  assert(capturedEnvironment?.environmentId === environmentId
+    && capturedEnvironment.wheels[0].bytes !== wheelBytes
+    && capturedEnvironment.wheels[0].bytes.join(",") === wheelBytes.join(","),
+  "successful package transaction did not expose a copied clone bootstrap");
+  assert(session.lineageResets === 1, "package transaction did not reset the prior checkpoint lineage");
   session.failEnvironment = true;
   const environmentFailure = await kernel.installEnvironment({ environmentId: "sha256:" + "d".repeat(64),
     allowedTags: ["py3-none-any"], wheels: [{ filename: "fixture-2.0-py3-none-any.whl",

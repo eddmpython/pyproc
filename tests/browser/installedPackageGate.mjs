@@ -77,6 +77,7 @@ try {
   check("installed plumbing subpaths resolve",
     typeof runtime.KernelFactory === "function" && typeof runtime.KernelSession === "function"
       && typeof runtime.KernelProcess === "function" && typeof wasi.getDefaultKernelEngineManifest === "function"
+      && typeof wasi.createOwnedPackageResolver === "function"
       && typeof history.MemoryStateStore === "function" && typeof machineApi.createWebComputer === "function"
       && typeof gpu.createWebGpuHostAdapter === "function" && typeof gpu.runHardwareVisualOracle === "function"
       && gpu.GPU_ORACLE_PROTOCOL === "pyproc.hardwareVisualOracle" && gpu.GPU_ORACLE_VERSION === 1);
@@ -112,10 +113,29 @@ try {
     sysconfig.platform === "wasi-0.0.0-wasm32"
       && sysconfig.extSuffix === ".cpython-314-wasm32-wasi.so",
     JSON.stringify(sysconfig));
+  const prePackageCheckpoint = await machine.history.checkpoint();
+  const ownedPackageResolver = await wasi.createOwnedPackageResolver();
+  const ownedPackages = machine.createPackageEnvironment({ resolver: ownedPackageResolver });
+  const ownedPackageReceipt = await ownedPackages.install({ requirements: ["pyproc-native-host==1.0.0"] });
+  const ownedHost = JSON.parse((await machine.run(
+    "import json,pyproc_native_host; print(json.dumps(pyproc_native_host.inspect(),sort_keys=True))"
+  )).output.trim());
+  check("installed native package is engine and profile fenced",
+    ownedPackageReceipt.engineId === machine.manifest.engineId
+      && ownedPackageReceipt.nativeProfile === machine.manifest.nativeProfile
+      && ownedPackageReceipt.lock.engineId === machine.manifest.engineId
+      && ownedPackageReceipt.lock.nativeProfile === machine.manifest.nativeProfile);
+  check("installed native facade resolves from package-owned verified bytes",
+    ownedPackageReceipt.sources[0] === "package" && ownedHost.origin === "built-in"
+      && ownedHost.abiVersion === "pyproc.hostcall/1",
+    JSON.stringify({ source: ownedPackageReceipt.sources[0], host: ownedHost }));
   await machine.run.set("installedValue", { text: "설치본", value: 41 });
   const value = await machine.run.get("installedValue");
   check("installed kernel transfers structured values", value.text === "설치본" && value.value === 41);
   const checkpoint = await machine.history.checkpoint();
+  check("package install starts a fresh checkpoint lineage",
+    checkpoint.parentCheckpointRef === null && checkpoint.snapshotKind === "full"
+      && checkpoint.environmentId !== prePackageCheckpoint.environmentId);
   await machine.run.set("installedValue", { value: 99 });
   await machine.history.restore(checkpoint);
   check("installed checkpoint restores state", (await machine.run.get("installedValue")).value === 41);
@@ -125,17 +145,37 @@ try {
   const terminalResult = await terminal.push("print(6 * 7)");
   check("installed terminal uses the kernel protocol", terminalResult.out.trim() === "42");
   const cloned = await machine.proc.clone({ pid: "installed-child" });
-  const childResult = await cloned.process.execute("print(installedValue['value'] + 1)");
+  const childResult = await cloned.process.execute(
+    "import pyproc_native_host; print(installedValue['value'] + 1, pyproc_native_host.ABI_VERSION)"
+  );
   const childExit = await cloned.process.wait();
-  check("installed process clone executes", childResult.output.trim() === "42" && childExit.exitCode === 0);
+  check("installed process clone retains package layers",
+    childResult.output.trim() === "42 pyproc.hostcall/1" && childExit.exitCode === 0);
   await cloned.process.close();
 
   const image = await machine.history.export({ createdAt: "2026-08-14T00:00:00.000Z" });
+  check("Machine image carries verified package layers", image.packageEnvironment?.wheels?.length === 1
+    && image.packageEnvironment.environmentId === ownedPackageReceipt.environmentId);
+  const corruptPackageImage = structuredClone(image);
+  corruptPackageImage.packageEnvironment.wheels[0].base64 = "A"
+    + corruptPackageImage.packageEnvironment.wheels[0].base64.slice(1);
+  const { digest: ignoredDigest, ...corruptCore } = corruptPackageImage;
+  const corruptDigestBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(corruptCore)));
+  corruptPackageImage.digest = "sha256:" + [...new Uint8Array(corruptDigestBytes)]
+    .map((value) => value.toString(16).padStart(2, "0")).join("");
+  let corruptPackageCode = null;
+  try { await root.open(corruptPackageImage); }
+  catch (error) { corruptPackageCode = error?.code || null; }
+  check("Machine image rejects mutated package bytes", corruptPackageCode === "PYPROC_MACHINE_INTEGRITY");
   timings.machineMB = +(new TextEncoder().encode(JSON.stringify(image)).byteLength / 1048576).toFixed(2);
   startedAt = performance.now();
   revived = await root.open(image);
   timings.imageOpenMs = Math.round(performance.now() - startedAt);
-  check("installed Machine image opens", (await revived.run.get("installedValue")).value === 41
+  const revivedHost = JSON.parse((await revived.run(
+    "import json,pyproc_native_host; print(json.dumps(pyproc_native_host.inspect(),sort_keys=True))"
+  )).output.trim());
+  check("installed Machine image opens with package layers", (await revived.run.get("installedValue")).value === 41
+    && revivedHost.origin === "built-in" && revivedHost.abiVersion === "pyproc.hostcall/1"
     && image.protocol === "pyproc.kernel-machine-image", timings.imageOpenMs + "ms");
 
   const consoleLines = [];

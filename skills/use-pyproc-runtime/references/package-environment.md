@@ -1,4 +1,4 @@
-# Package environment contract v1
+# Package environment contract v2
 
 Status: supported public contract on `pyproc/wasi`.
 
@@ -13,11 +13,16 @@ multiple indexes are never merged.
 
 Every remote wheel needs a SHA-256 digest, byte length, PEP 658 metadata digest, compatible
 `Requires-Python`, and an allowed pure Python tag. The canonical lock records the exact artifact URL, source
-index, provenance URL, dependency strings, yanked state, marker environment, Python version, native profile,
+index, provenance URL, dependency strings, yanked state, marker environment, Python version, engine ID, native profile,
 and resolver policy. Its digest changes when any of those values changes.
 
-`materialize(lock, { contentStore, offline: true })` reads only the lock and hash-addressed content store. A cache
-miss is terminal and does not contact an index.
+`materialize(lock, { contentStore, offline: true })` reads only the lock, hash-addressed content store, and any
+digest-verified artifact shipped with the package. A miss across all of those sources is terminal and does not
+contact an index.
+
+`createOwnedPackageResolver()` loads the installed package's source-pinned catalog. Its wheel, metadata, wrapper
+source, native source, ABI, exact engine ID, and native profile are sealed. Package-owned bytes are reported as
+source `package`, then become ordinary verified content-store hits.
 
 ## Wheel transaction
 
@@ -34,7 +39,10 @@ validation, write, or smoke test leaves the active paths, modules, and environme
 
 The environment identity is the SHA-256 digest of the engine identity, resolver version, canonical lock, ordered
 wheel tree digests, and install policy digest. Checkpoints retain that identity and reject restore into a different
-environment.
+environment. A process clone replays the same verified wheel layers after importing the checkpoint. A Machine
+image carries those layers as digest-checked bytes and rejects mutation even when its outer digest is recomputed.
+Installing a different package environment starts a new full checkpoint lineage, so deltas never cross an
+environment identity change.
 
 ## Public preview
 
@@ -44,6 +52,7 @@ import {
   PackageEnvironment,
   SimpleApiPackageResolver,
   KernelFactory,
+  createOwnedPackageResolver,
   getDefaultKernelEngineManifest,
 } from "pyproc/wasi";
 
@@ -62,6 +71,10 @@ const packages = new PackageEnvironment({
 
 const installed = await packages.install({ requirements: ["example==1.2.3"] });
 const restored = await packages.install({ lock: installed.lock, offline: true });
+
+const ownedResolver = await createOwnedPackageResolver();
+const ownedPackages = new PackageEnvironment({ kernel, resolver: ownedResolver });
+await ownedPackages.install({ requirements: ["pyproc-native-host==1.0.0"] });
 ```
 
 `KernelTerminal` routes `%pip install ...` through `PackageEnvironment`. `KernelEnvironmentManager` uses the same

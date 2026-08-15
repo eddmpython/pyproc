@@ -275,6 +275,7 @@ export interface KernelDescriptor {
   readonly generation: number;
   readonly lifecycleState: string;
   readonly engineId: string | null;
+  readonly nativeProfile: string;
   readonly environmentId: string;
   readonly workerOwned: true;
   readonly directHeapAccess: false;
@@ -282,6 +283,18 @@ export interface KernelDescriptor {
   readonly valueEnvelopeVersion: 1;
   readonly applicationReferences: "generation-bound";
   readonly vfsRootDigest: string | null;
+}
+
+export interface KernelPackageEnvironmentBootstrap {
+  readonly protocol: "pyproc.package-environment-bootstrap";
+  readonly version: 1;
+  readonly environmentId: `sha256:${string}`;
+  readonly lockDigest: string | null;
+  readonly policyDigest: string | null;
+  readonly allowedTags: readonly string[];
+  readonly limits: Readonly<Record<string, number>> | null;
+  readonly wheels: readonly Readonly<{ filename: string; name: string; version: string;
+    sha256: `sha256:${string}`; bytes: Uint8Array }>[];
 }
 
 export interface KernelError {
@@ -355,14 +368,17 @@ export interface KernelRuntimeContractV2 {
 }
 
 export class CpythonWasiKernelRuntime implements KernelRuntimeContractV2 {
-  constructor(session: WasiSession, options?: { kernelRef?: string; engineId?: string | null; environmentId?: string | null;
+  constructor(session: WasiSession, options?: { kernelRef?: string; engineId?: string | null; nativeProfile?: string;
+    environmentId?: string | null;
     artifactStore?: ValueArtifactStore; valueLimits?: ValueEnvelopeLimits;
     checkpointCoordinator?: KernelCheckpointCoordinator;
     kernelVfs?: KernelVfs; restoredCheckpoint?: KernelCheckpointDescriptor | null;
-    restoredCheckpoints?: KernelCheckpointDescriptor[] });
+    restoredCheckpoints?: KernelCheckpointDescriptor[];
+    onEnvironmentChanged?: ((environment: KernelPackageEnvironmentBootstrap | null) => void) | null });
   readonly runtimeContractVersion: 2;
   readonly runtimeKind: "cpython-wasi";
   readonly engineId: string | null;
+  readonly nativeProfile: string;
   onEvent(listener: (event: KernelEvent) => void): () => void;
   describe(): Promise<KernelDescriptor>;
   execute(request: ExecutionRequest): Promise<ExecutionResult>;
@@ -383,6 +399,7 @@ export class CpythonWasiKernelRuntime implements KernelRuntimeContractV2 {
 export interface CpythonWasiKernelManifest extends WasiManifest {
   kernelRef?: string;
   engineId?: string;
+  nativeProfile?: string;
   environmentId?: string;
   artifactStore?: ValueArtifactStore;
   valueLimits?: ValueEnvelopeLimits;
@@ -390,6 +407,8 @@ export interface CpythonWasiKernelManifest extends WasiManifest {
   kernelVfs?: KernelVfs;
   restoredCheckpoint?: KernelCheckpointDescriptor;
   restoredCheckpoints?: KernelCheckpointDescriptor[];
+  packageEnvironment?: KernelPackageEnvironmentBootstrap;
+  onEnvironmentChanged?: ((environment: KernelPackageEnvironmentBootstrap | null) => void) | null;
 }
 
 export function assertKernelRuntimeContract<T extends KernelRuntimeContractV2>(runtime: T): T;

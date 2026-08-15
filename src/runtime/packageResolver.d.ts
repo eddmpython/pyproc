@@ -1,6 +1,6 @@
 export const PACKAGE_LOCK_PROTOCOL: "pyproc.package-lock";
-export const PACKAGE_LOCK_VERSION: 1;
-export const PACKAGE_RESOLVER_VERSION: "pyproc.simple-resolver/1";
+export const PACKAGE_LOCK_VERSION: 2;
+export const PACKAGE_RESOLVER_VERSION: "pyproc.simple-resolver/2";
 
 export interface PackageIndex {
   readonly url: string;
@@ -24,13 +24,14 @@ export interface LockedPackage {
 
 export interface PackageLock {
   readonly protocol: "pyproc.package-lock";
-  readonly version: 1;
-  readonly resolverVersion: "pyproc.simple-resolver/1";
+  readonly version: 2;
+  readonly resolverVersion: "pyproc.simple-resolver/2";
   readonly requirements: readonly string[];
   readonly indexes: readonly PackageIndex[];
   readonly pythonVersion: string;
   readonly markerEnvironment: Readonly<Record<string, string>>;
   readonly allowedTags: readonly string[];
+  readonly engineId: string | null;
   readonly nativeProfile: string;
   readonly prereleasePolicy: "forbid" | "explicit";
   readonly yankedPolicy: "forbid" | "lockedOnly";
@@ -68,13 +69,16 @@ export class SimpleApiPackageResolver {
     pythonVersion?: string;
     markerEnvironment?: Record<string, string>;
     allowedTags?: string[];
+    engineId?: string | null;
     nativeProfile?: string;
+    bundledArtifacts?: Array<{ sha256: string; bytes: ArrayBuffer | Uint8Array }>;
     prereleasePolicy?: "forbid" | "explicit";
     yankedPolicy?: "forbid" | "lockedOnly";
   });
   readonly pythonVersion: string;
   readonly markerEnvironment: Readonly<Record<string, string>>;
   readonly allowedTags: readonly string[];
+  readonly engineId: string | null;
   readonly nativeProfile: string;
   readonly prereleasePolicy: "forbid" | "explicit";
   readonly yankedPolicy: "forbid" | "lockedOnly";
@@ -84,6 +88,6 @@ export class SimpleApiPackageResolver {
     lock: PackageLock;
     lockDigest: `sha256:${string}`;
     offline: boolean;
-    wheels: readonly Readonly<{ package: LockedPackage; bytes: Uint8Array; source: "content-store" | "network" }>[];
+    wheels: readonly Readonly<{ package: LockedPackage; bytes: Uint8Array; source: "content-store" | "package" | "network" }>[];
   }>>;
 }

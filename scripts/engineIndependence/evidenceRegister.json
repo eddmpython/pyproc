@@ -628,6 +628,71 @@
       ]
     },
     {
+      "evidenceId": "local-owned-native-package-catalog-m3-20260815",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows 11",
+        "browser": "Microsoft Edge 151.0.4129.78",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "engine": "cpython-wasi-3.14.6-pyproc-host-1",
+        "nativeProfile": "core"
+      },
+      "commands": [
+        "node scripts/nativePackageCatalog/buildNativePackageCatalog.mjs",
+        "node tests/contracts/nativePackageCatalog.mjs through tests/contracts/run.mjs",
+        "PYPROC_KEEP_ATTEMPT_EVIDENCE=1 node tests/attempts/runtimeParity/ownedNativeCatalogProbe.mjs",
+        "npm run test:package",
+        "npm run test:types"
+      ],
+      "result": "the exact packed public Control path installed pyproc-native-host 1.0.0 from package-owned bytes, bound lock and receipt to the core engine and profile, and imported the source-built module facade with built-in origin",
+      "measurements": {
+        "lockVersion": 2,
+        "environmentReceiptVersion": 2,
+        "wheelBytes": 1387,
+        "wheelSha256": "deb829cf0127babd3f6742704ed835ba262a8945f2e7a78f8e6af48adf136f79",
+        "catalogSha256": "0fa6944f46991cb1e70651733f17c073b6cbcf037230d521d3088151b962760c",
+        "nativeAbi": "pyproc.hostcall/1",
+        "nativeOrigin": "built-in",
+        "installedChecks": "25/25",
+        "screenshotViewport": "922x920"
+      },
+      "invariants": [
+        "the catalog binds wrapper wheel, metadata, wrapper source, native source, ABI, exact engine ID, native profile, and engine build manifest",
+        "package-owned artifact materialization works offline and reports source package before becoming a verified content-store hit",
+        "a wrong engine or profile is rejected before the kernel install command",
+        "a one-character catalog digest mutation fails with PYPROC_PACKAGE_INTEGRITY",
+        "the installed tarball contains the deterministic build recipe and every pinned source input",
+        "the package facade imports the compiled source-built module rather than carrying an unverified binary wheel",
+        "process clone and Machine image revival replay the verified package layers into a fresh worker",
+        "a mutated embedded wheel is rejected even when the outer Machine image digest is recomputed",
+        "an environment change severs the previous delta lineage and the next checkpoint is a new full root"
+      ],
+      "artifacts": [
+        {
+          "role": "ownedNativeWheel",
+          "file": "src/runtime/packages/native/core/pyproc_native_host-1.0.0-py3-none-any.whl",
+          "byteLength": 1387,
+          "sha256": "deb829cf0127babd3f6742704ed835ba262a8945f2e7a78f8e6af48adf136f79"
+        },
+        {
+          "role": "nativeSource",
+          "file": "scripts/engineBuilder/_pyprocHost.c",
+          "sha256": "a3eef4c1768cdf32bb684e15e59dea32268f98a94d48807eb78572c4817d1e66"
+        },
+        {
+          "role": "browserGreenScreenshot",
+          "viewport": "922x920",
+          "sha256": "cacae1290dc47dd1505abe2d52872b52a411ee0c5679360544ea2f544401ae8d"
+        },
+        {
+          "role": "browserRedScreenshot",
+          "viewport": "922x920",
+          "sha256": "6eecded88b3463045845cf790340cf182f259c0e192536a2bd76adf5b597a616"
+        }
+      ]
+    },
+    {
       "evidenceId": "upstream-pep11-20260814",
       "classification": "UPSTREAM_CONTRACT",
       "url": "https://peps.python.org/pep-0011/",

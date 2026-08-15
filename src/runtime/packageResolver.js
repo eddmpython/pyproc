@@ -11,8 +11,8 @@ import {
 import { parseWheelFilename } from "./wheelInstaller.js";
 
 export const PACKAGE_LOCK_PROTOCOL = "pyproc.package-lock";
-export const PACKAGE_LOCK_VERSION = 1;
-export const PACKAGE_RESOLVER_VERSION = "pyproc.simple-resolver/1";
+export const PACKAGE_LOCK_VERSION = 2;
+export const PACKAGE_RESOLVER_VERSION = "pyproc.simple-resolver/2";
 
 const SIMPLE_JSON_MEDIA = "application/vnd.pypi.simple.v1+json";
 const requirementName = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?/u;
@@ -348,6 +348,7 @@ export class MemoryPackageContentStore {
 export class SimpleApiPackageResolver {
   #fetch;
   #indexes;
+  #bundledArtifacts;
   #candidateCache = new Map();
   #metadataCache = new Map();
 
@@ -357,6 +358,17 @@ export class SimpleApiPackageResolver {
     }
     this.#fetch = options.fetch || globalThis.fetch.bind(globalThis);
     this.#indexes = acceptedIndexes(options.indexes || []);
+    this.#bundledArtifacts = new Map();
+    if (options.bundledArtifacts !== undefined && !Array.isArray(options.bundledArtifacts)) {
+      throw new PyProcError("PYPROC_INPUT_INVALID", "Package bundledArtifacts must be an array");
+    }
+    for (const [index, artifact] of (options.bundledArtifacts || []).entries()) {
+      const sha256 = acceptedSha256(artifact?.sha256, `Bundled artifact ${index} hash`);
+      if (this.#bundledArtifacts.has(sha256)) {
+        throw new PyProcError("PYPROC_INPUT_INVALID", `Bundled package artifact digest is duplicated: ${sha256}`);
+      }
+      this.#bundledArtifacts.set(sha256, bytesValue(artifact?.bytes, `Bundled artifact ${index}`));
+    }
     this.pythonVersion = options.pythonVersion || "3.14.6";
     versionParts(this.pythonVersion);
     const markerEnvironment = { implementation_name: "cpython",
@@ -381,6 +393,11 @@ export class SimpleApiPackageResolver {
       throw new PyProcError("PYPROC_INPUT_INVALID", "Package nativeProfile must be a non-empty string");
     }
     this.nativeProfile = options.nativeProfile || "pure-python";
+    if (options.engineId !== undefined && options.engineId !== null
+      && (typeof options.engineId !== "string" || !options.engineId)) {
+      throw new PyProcError("PYPROC_INPUT_INVALID", "Package engineId must be null or a non-empty string");
+    }
+    this.engineId = options.engineId || null;
     this.prereleasePolicy = acceptedPolicy(options.prereleasePolicy, ["forbid", "explicit"], "forbid", "Prerelease");
     this.yankedPolicy = acceptedPolicy(options.yankedPolicy, ["forbid", "lockedOnly"], "forbid", "Yanked");
   }
@@ -525,7 +542,8 @@ export class SimpleApiPackageResolver {
     const lock = immutablePackageValue({ protocol: PACKAGE_LOCK_PROTOCOL, version: PACKAGE_LOCK_VERSION,
       resolverVersion: PACKAGE_RESOLVER_VERSION, requirements: parsed.map((item) => item.raw),
       indexes: this.#indexes.map(({ url, trustRef }) => ({ url, trustRef })), pythonVersion: this.pythonVersion,
-      markerEnvironment: this.markerEnvironment, allowedTags: [...this.allowedTags], nativeProfile: this.nativeProfile,
+      markerEnvironment: this.markerEnvironment, allowedTags: [...this.allowedTags], engineId: this.engineId,
+      nativeProfile: this.nativeProfile,
       prereleasePolicy: this.prereleasePolicy, yankedPolicy: this.yankedPolicy, packages });
     return Object.freeze({ lock, lockDigest: await sha256Address(canonicalPackageJson(lock)) });
   }
@@ -533,7 +551,8 @@ export class SimpleApiPackageResolver {
   async validateLock(input) {
     if (!input || typeof input !== "object" || input.protocol !== PACKAGE_LOCK_PROTOCOL
       || input.version !== PACKAGE_LOCK_VERSION || input.resolverVersion !== PACKAGE_RESOLVER_VERSION
-      || input.pythonVersion !== this.pythonVersion || input.nativeProfile !== this.nativeProfile
+      || input.pythonVersion !== this.pythonVersion || input.engineId !== this.engineId
+      || input.nativeProfile !== this.nativeProfile
       || input.prereleasePolicy !== this.prereleasePolicy || input.yankedPolicy !== this.yankedPolicy
       || canonicalPackageJson(input.markerEnvironment) !== canonicalPackageJson(this.markerEnvironment)
       || canonicalPackageJson(input.allowedTags) !== canonicalPackageJson(this.allowedTags)
@@ -593,19 +612,25 @@ export class SimpleApiPackageResolver {
       let bytes = await contentStore.get(entry.sha256);
       let source = "content-store";
       if (!bytes) {
-        if (offline) throw resolution(`Offline package artifact is absent from the content store: ${entry.filename}`);
-        const response = await this.#request(entry.url, { headers: { Accept: "application/octet-stream" } }, entry.filename);
-        if (!response?.ok) throw resolution(`Package artifact request failed for ${entry.filename}`, { status: response?.status });
-        const declaredLength = responseHeader(response, "content-length");
-        bytes = await responseBytes(response);
-        if (declaredLength !== null && Number(declaredLength) !== entry.size) {
-          throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Package Content-Length differs from lock: ${entry.filename}`);
-        }
-        if (bytes.byteLength !== entry.size || await sha256Address(bytes) !== entry.sha256) {
-          throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Package bytes differ from lock: ${entry.filename}`);
+        const bundled = this.#bundledArtifacts.get(entry.sha256);
+        if (bundled) {
+          bytes = bundled.slice();
+          source = "package";
+        } else {
+          if (offline) throw resolution(`Offline package artifact is absent from the content store or package: ${entry.filename}`);
+          const response = await this.#request(entry.url, { headers: { Accept: "application/octet-stream" } }, entry.filename);
+          if (!response?.ok) throw resolution(`Package artifact request failed for ${entry.filename}`, { status: response?.status });
+          const declaredLength = responseHeader(response, "content-length");
+          bytes = await responseBytes(response);
+          if (declaredLength !== null && Number(declaredLength) !== entry.size) {
+            throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Package Content-Length differs from lock: ${entry.filename}`);
+          }
+          if (bytes.byteLength !== entry.size || await sha256Address(bytes) !== entry.sha256) {
+            throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Package bytes differ from lock: ${entry.filename}`);
+          }
+          source = "network";
         }
         await contentStore.put(entry.sha256, bytes);
-        source = "network";
       }
       if (bytes.byteLength !== entry.size || await sha256Address(bytes) !== entry.sha256) {
         throw new PyProcError("PYPROC_PACKAGE_INTEGRITY", `Cached package bytes differ from lock: ${entry.filename}`);

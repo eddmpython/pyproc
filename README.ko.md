@@ -78,6 +78,21 @@ await parent.close();
 tag, `Requires-Python`, marker, yanked policy를 검사한다. 선별된 native module은 정확한 engine profile에
 묶인다. 지원하지 않는 binary wheel은 설치 전에 `PYPROC_PACKAGE_ABI_UNSUPPORTED`로 실패한다.
 
+기본 source-built host module은 package에 포함된 network-free catalog로 설치한다.
+
+```js
+import { createOwnedPackageResolver } from "pyproc/wasi";
+
+const resolver = await createOwnedPackageResolver();
+const packages = machine.createPackageEnvironment({ resolver });
+await packages.install({ requirements: ["pyproc-native-host==1.0.0"] });
+await machine.run("import pyproc_native_host; print(pyproc_native_host.ABI_VERSION)");
+```
+
+catalog는 wrapper wheel, native source digest, ABI, engine ID, profile을 함께 봉인한다. 하나라도 다르면
+install 명령이 kernel에 도달하기 전에 실패한다. 검증된 package layer는 process clone과 Machine image에도
+따라가며, 새 worker가 보기 전에 image import가 포함 wheel의 digest를 다시 검사한다.
+
 `machine.terminal()`은 version 2 terminal 계약이다. `%pip install`도 같은 package environment를 거쳐
 정책을 우회하지 않는다.
 

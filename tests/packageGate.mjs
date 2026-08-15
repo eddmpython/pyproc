@@ -53,7 +53,7 @@ try {
       SimpleApiPackageResolver, MemoryPackageContentStore, PackageEnvironment,
       KernelTerminal, KernelEnvironmentManager, KernelFactory, MemoryKernelAssetStore,
       createKernelEngineManifest, DEFAULT_KERNEL_ENGINE_ID,
-      getDefaultKernelEngineManifest } from "pyproc/wasi";
+      getDefaultKernelEngineManifest, createOwnedPackageResolver } from "pyproc/wasi";
 
     for (const [name, fn] of [["boot", boot], ["open", open], ["createWebComputer", createWebComputer], ["checkEnvironment", checkEnvironment]]) {
       if (typeof fn !== "function") throw new Error(name + " export missing");
@@ -76,7 +76,8 @@ try {
       if (typeof value !== "function") throw new Error("package environment surface missing: " + name);
     }
     if (DEFAULT_KERNEL_ENGINE_ID !== "cpython-wasi-3.14.6-pyproc-host-1"
-      || typeof getDefaultKernelEngineManifest !== "function") {
+      || typeof getDefaultKernelEngineManifest !== "function"
+      || typeof createOwnedPackageResolver !== "function") {
       throw new Error("installed owned kernel distribution surface missing");
     }
     const hostBroker = new HostCapabilityBroker();
@@ -154,6 +155,19 @@ try {
       throw new Error(`installed owned kernel asset 누락: ${file}`);
     }
   }
+  for (const path of [
+    ["src", "runtime", "packages", "native", "core", "catalog.json"],
+    ["src", "runtime", "packages", "native", "core", "catalogIdentity.js"],
+    ["src", "runtime", "packages", "native", "core", "pyproc_native_host-1.0.0-py3-none-any.whl"],
+    ["scripts", "nativePackageCatalog", "buildNativePackageCatalog.mjs"],
+    ["scripts", "nativePackageCatalog", "nativePackageCatalogLock.json"],
+    ["scripts", "nativePackageCatalog", "packages", "pyproc_native_host", "__init__.py"],
+    ["scripts", "engineBuilder", "_pyprocHost.c"],
+  ]) {
+    if (!existsSync(join(packageRoot, ...path))) throw new Error(`installed native package input 누락: ${path.join("/")}`);
+  }
+  run(process.execPath, [join(packageRoot, "scripts", "nativePackageCatalog", "buildNativePackageCatalog.mjs")],
+    { cwd: packageRoot });
   const installedRootSource = readFileSync(join(appDir, "node_modules", "pyproc", "index.js"), "utf8");
   if (!installedRootSource.includes("bootDefaultKernelMachine")
     || installedRootSource.includes("engine ===")) {

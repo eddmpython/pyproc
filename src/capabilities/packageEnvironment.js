@@ -9,7 +9,7 @@ import {
 import { DEFAULT_WHEEL_LIMITS, inspectPurePythonWheel } from "../runtime/wheelInstaller.js";
 
 export const PACKAGE_ENVIRONMENT_PROTOCOL = "pyproc.package-environment";
-export const PACKAGE_ENVIRONMENT_VERSION = 1;
+export const PACKAGE_ENVIRONMENT_VERSION = 2;
 
 export async function packageEnvironmentIdentity({ engineId, lock, treeDigests, policyDigest }) {
   if (typeof engineId !== "string" || !engineId || !Array.isArray(treeDigests)
@@ -56,6 +56,20 @@ export class PackageEnvironment {
       }
       locked = await this.#resolver.resolve(requirements);
     }
+    const descriptor = await this.#kernel.describe();
+    if (typeof descriptor.engineId !== "string" || !descriptor.engineId
+      || typeof descriptor.nativeProfile !== "string" || !descriptor.nativeProfile) {
+      throw new PyProcError("PYPROC_PACKAGE_ABI_UNSUPPORTED",
+        "Kernel descriptor does not expose an engine and native profile identity");
+    }
+    if (locked.lock.engineId !== null && locked.lock.engineId !== descriptor.engineId) {
+      throw new PyProcError("PYPROC_PACKAGE_ABI_UNSUPPORTED",
+        `Package lock requires engine ${locked.lock.engineId}, received ${descriptor.engineId}`);
+    }
+    if (locked.lock.nativeProfile !== "pure-python" && locked.lock.nativeProfile !== descriptor.nativeProfile) {
+      throw new PyProcError("PYPROC_PACKAGE_ABI_UNSUPPORTED",
+        `Package lock requires native profile ${locked.lock.nativeProfile}, received ${descriptor.nativeProfile}`);
+    }
     const materialized = await this.#resolver.materialize(locked.lock, { contentStore: this.#store, offline });
     const trees = [];
     for (const wheel of materialized.wheels) {
@@ -72,7 +86,6 @@ export class PackageEnvironment {
       trees.push(tree);
     }
     const policyDigest = await sha256Address(canonicalPackageJson(this.#policy));
-    const descriptor = await this.#kernel.describe();
     const environmentId = await packageEnvironmentIdentity({ engineId: descriptor.engineId,
       lock: locked.lock, treeDigests: trees.map((tree) => tree.treeDigest), policyDigest });
     const installed = await this.#kernel.installEnvironment({ environmentId,
@@ -83,6 +96,7 @@ export class PackageEnvironment {
       })) });
     const receipt = immutablePackageValue({ protocol: PACKAGE_ENVIRONMENT_PROTOCOL,
       version: PACKAGE_ENVIRONMENT_VERSION, environmentId, engineId: descriptor.engineId,
+      nativeProfile: descriptor.nativeProfile,
       lock: locked.lock, lockDigest: locked.lockDigest, policyDigest,
       treeDigests: trees.map((tree) => tree.treeDigest), offline,
       sources: materialized.wheels.map((wheel) => wheel.source), installed });

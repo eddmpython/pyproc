@@ -211,6 +211,9 @@ class SabStdin extends OpenFile {
           this._checkpoint();
         } else if (cmd === "import") {
           this._importBootstrap();
+        } else if (cmd === "reset-checkpoint-lineage") {
+          this.activeSnapshotIdx = null;
+          postMessage({ type: "meta", kind: "reset-checkpoint-lineage" });
         } else if (cmd.startsWith("restore ")) {
           const i = +cmd.slice(8);
           // 파티션 복원: [0, stackTop)=shadow stack(라이브 fd_read 호출 체인)은 보존, [stackTop, end)=

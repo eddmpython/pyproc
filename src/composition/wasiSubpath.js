@@ -15,6 +15,7 @@ export {
 } from "../capabilities/productHostCapabilities.js";
 export * from "../runtime/packageCanonical.js";
 export * from "../runtime/packageResolver.js";
+export * from "../runtime/packages/native/ownedPackageCatalog.js";
 export * from "../runtime/wheelInstaller.js";
 export * from "../capabilities/packageEnvironment.js";
 export * from "../capabilities/kernelTerminal.js";

@@ -17,6 +17,7 @@ import {
   KernelFactory,
   MemoryKernelAssetStore,
   createKernelEngineManifest,
+  createOwnedPackageResolver,
   createFramebufferHostAdapter,
 } from "../src/composition/wasiSubpath.js";
 import { bootKernelMachine, KernelMachine } from "../src/machine/index.js";
@@ -92,6 +93,8 @@ async function kernelValueSurface() {
   const packageResolver = new SimpleApiPackageResolver({
     indexes: [{ url: "https://packages.example/simple/", trustRef: "trust:typed" }],
   });
+  const ownedPackageResolver = createOwnedPackageResolver();
+  void ownedPackageResolver;
   const packageEnvironment = new PackageEnvironment({ kernel, resolver: packageResolver,
     contentStore: packageStore });
   const terminal = new KernelTerminal(kernel, { packageEnvironment });

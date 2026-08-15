@@ -39,7 +39,8 @@ with `PYPROC_INPUT_INVALID`.
 ### `open(image?, options?)`
 
 With no image, boots a fresh `KernelMachine`. With a `pyproc.kernel-machine-image` version 1 object, verifies
-and restores that image. Other inputs fail with `PYPROC_INPUT_INVALID`.
+and restores that image, including any digest-sealed package environment. Other inputs fail with
+`PYPROC_INPUT_INVALID`.
 
 ### `KernelMachine`
 
@@ -55,6 +56,10 @@ and restores that image. Other inputs fail with `PYPROC_INPUT_INVALID`.
 - `terminal(options?)` creates a version 2 kernel terminal.
 - `inspect()` returns engine, process, and worker ownership facts.
 - `close()` closes child processes and the kernel worker.
+
+`pyproc/wasi.createOwnedPackageResolver()` creates the exact engine and profile fenced resolver for package-owned
+source-built native facades. The default catalog provides `pyproc-native-host==1.0.0` without a third-party
+package fetch.
 
 ### `createWebComputer(options?)`
 

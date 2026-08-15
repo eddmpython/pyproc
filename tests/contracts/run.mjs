@@ -34,6 +34,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "machineFleet.mjs",
   "moduleBoundaries.mjs",
   "motorTask.mjs",
+  "nativePackageCatalog.mjs",
   "packageEnvironment.mjs",
   "perceptionComputer.mjs",
   "perceptionSpace.mjs",

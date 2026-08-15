@@ -178,6 +178,7 @@ export async function bootWasi(manifest = {}) {
     manifest.assetIntegrity || null, manifest.hostBroker || null, manifest.bootstrapSnapshot || null);
   await session._boot();
   if (manifest.bootstrapSnapshot) await session.importBootstrapSnapshot();
+  if (manifest.packageEnvironment) await session.installEnvironment(manifest.packageEnvironment);
   for (const wheel of manifest.wheels || []) await session.installWheel(wheel);
   await session._ensureValueEnvelope();
   return session;
@@ -561,6 +562,11 @@ finally:
       deltaDepth: m.deltaDepth, stackBoundary: m.stackBoundary, initialPages: m.initialPages,
       currentPages: m.currentPages, memoryBytes: m.memoryBytes, regionBytes: m.regionBytes,
       changedPages: m.changedPages, pages: m.pages };
+  }
+  async resetCheckpointLineage() {
+    const metadata = await this._send(new TextEncoder().encode(
+      String.fromCharCode(SIGNAL_META) + "reset-checkpoint-lineage"));
+    return Object.freeze({ state: metadata.kind === "reset-checkpoint-lineage" ? "reset" : "unknown" });
   }
   async importBootstrapSnapshot() {
     if (!this._bootstrapSnapshot) {

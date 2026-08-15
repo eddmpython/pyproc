@@ -82,6 +82,21 @@ with hash, tag, `Requires-Python`, marker, and yanked-policy checks. Curated nat
 exact engine profile. Unsupported binary wheels fail before installation with
 `PYPROC_PACKAGE_ABI_UNSUPPORTED`.
 
+The default source-built host module is available through a package-owned, network-free catalog:
+
+```js
+import { createOwnedPackageResolver } from "pyproc/wasi";
+
+const resolver = await createOwnedPackageResolver();
+const packages = machine.createPackageEnvironment({ resolver });
+await packages.install({ requirements: ["pyproc-native-host==1.0.0"] });
+await machine.run("import pyproc_native_host; print(pyproc_native_host.ABI_VERSION)");
+```
+
+The catalog seals the wrapper wheel, native source digest, ABI, engine ID, and profile. A mismatch fails before
+the install command reaches the kernel. Verified package layers also travel with process clones and Machine
+images. Image import rechecks every embedded wheel digest before a fresh worker sees it.
+
 `machine.terminal()` exposes the version 2 terminal contract. Its `%pip install` command routes through the
 same package environment and does not bypass package policy.
 

@@ -65,19 +65,25 @@ export class CpythonWasiKernelRuntime {
   #checkpointArtifactStore;
   #activeCheckpointRef = null;
   #environmentId;
+  #onEnvironmentChanged;
   #checkpointCoordinators;
 
   constructor(session, { kernelRef = "kernel:cpython-wasi:default", engineId = null,
-    environmentId = null, artifactStore = null, valueLimits = undefined,
+    nativeProfile = "unidentified", environmentId = null, artifactStore = null, valueLimits = undefined,
     checkpointCoordinator = null, kernelVfs = null, restoredCheckpoint = null,
-    restoredCheckpoints = [] } = {}) {
+    restoredCheckpoints = [], onEnvironmentChanged = null } = {}) {
     if (!session || typeof session.run !== "function" || typeof session.onFailure !== "function") {
       throw new PyProcError("PYPROC_INPUT_INVALID", "CpythonWasiKernelRuntime requires a worker-backed WasiSession");
     }
     this.#session = session;
     this.#kernelRef = kernelRef;
     this.engineId = engineId || "engine:unidentified";
+    this.nativeProfile = nativeProfile;
     this.#environmentId = environmentId || `environment:unidentified:${this.engineId}`;
+    if (onEnvironmentChanged !== null && typeof onEnvironmentChanged !== "function") {
+      throw new PyProcError("PYPROC_INPUT_INVALID", "onEnvironmentChanged must be a function or null");
+    }
+    this.#onEnvironmentChanged = onEnvironmentChanged;
     this.#checkpointArtifactStore = artifactStore || new MemoryValueArtifactStore();
     this.#checkpointCoordinators = [...new Set([checkpointCoordinator, kernelVfs, session]
       .filter((candidate) => typeof candidate?.inspectCheckpointBoundary === "function"))];
@@ -181,6 +187,7 @@ export class CpythonWasiKernelRuntime {
       generation: this.#generation,
       lifecycleState: this.#state,
       engineId: this.engineId,
+      nativeProfile: this.nativeProfile,
       environmentId: this.#environmentId,
       workerOwned: true,
       directHeapAccess: false,
@@ -426,6 +433,9 @@ export class CpythonWasiKernelRuntime {
       const beforeStateDigest = await this.#stateDigest();
       const installed = await this.#session.installWheel(wheelBytes);
       if (parseSha256Address(installed.environmentId)) this.#environmentId = installed.environmentId;
+      if (typeof this.#session.resetCheckpointLineage === "function") await this.#session.resetCheckpointLineage();
+      this.#activeCheckpointRef = null;
+      if (this.#onEnvironmentChanged) this.#onEnvironmentChanged(null);
       this.#stateVersion += 1;
       return Object.freeze({ protocol: "pyproc.environment-receipt", version: 1, commandId: command.commandId,
         state: "completed", wheelDigest, installed, beforeStateDigest, afterStateDigest: await this.#stateDigest() });
@@ -461,6 +471,17 @@ export class CpythonWasiKernelRuntime {
       const installed = await this.#session.installEnvironment({ environmentId: acceptedRequest.environmentId,
         wheels, allowedTags: acceptedRequest.allowedTags, limits: acceptedRequest.limits });
       this.#environmentId = acceptedRequest.environmentId;
+      if (typeof this.#session.resetCheckpointLineage === "function") await this.#session.resetCheckpointLineage();
+      this.#activeCheckpointRef = null;
+      if (this.#onEnvironmentChanged) this.#onEnvironmentChanged(Object.freeze({
+        protocol: "pyproc.package-environment-bootstrap", version: 1,
+        environmentId: acceptedRequest.environmentId,
+        lockDigest: acceptedRequest.lockDigest || null,
+        policyDigest: acceptedRequest.policyDigest || null,
+        allowedTags: Object.freeze([...acceptedRequest.allowedTags]),
+        limits: acceptedRequest.limits ? Object.freeze({ ...acceptedRequest.limits }) : null,
+        wheels: Object.freeze(wheels.map((wheel) => Object.freeze({ ...wheel, bytes: wheel.bytes.slice() }))),
+      }));
       this.#stateVersion += 1;
       return Object.freeze({ protocol: "pyproc.environment-receipt", version: 2,
         commandId: command.commandId, state: "completed", environmentId: this.#environmentId,
@@ -522,7 +543,9 @@ export async function bootCpythonWasiKernel(manifest) {
   return assertKernelRuntimeContract(new CpythonWasiKernelRuntime(session, {
     kernelRef: manifest.kernelRef,
     engineId: manifest.engineId,
+    nativeProfile: manifest.nativeProfile,
     environmentId: manifest.environmentId,
+    onEnvironmentChanged: manifest.onEnvironmentChanged,
     artifactStore: manifest.artifactStore,
     valueLimits: manifest.valueLimits,
     checkpointCoordinator: manifest.checkpointCoordinator,

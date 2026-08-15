@@ -16,7 +16,7 @@
 |---|---|---|---|
 | agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M3 컴퓨팅 몸체 확대와 독립 구현 conformance |
 | 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.5 | APX Situation, 20회 무잔류 수명주기, bounded action 수렴, 실제 hardware compute와 pixel 결과 영수증 | 두 번째 독립 hardware와 browser 구현의 visual conformance |
-| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 7.8 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate | 임의 native wheel, 넓은 package reach, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
+| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.2 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned native package | 넓은 scientific package reach, shared-memory thread, wasm 도구층, Node guest, quota 축출 계약 |
 | 단독 자립성 | Python 기본 Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython과 stdlib가 npm에 포함되고 기본 부팅의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
 
@@ -114,8 +114,10 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 - 완료: `packageReach` 기반으로 Requires-Python canonicalization, target-generated WASI sysconfig와
   build details, workspace 경로 canonicalization, 두 격리 build의 byte-identical stdlib를 제품화했다.
-- 진행 중: source-pinned native package catalog와 compiled extension 하나의 설치 제품 gate를 먼저 닫고
-  scientific SIMD profile로 넓힌다. 이후 `parallelProcesses`, `durableDisk` next를 순서대로 소진한다.
+- 완료: source-pinned native package catalog, exact engine/profile lock, package-owned offline artifact,
+  compiled built-in facade의 설치와 import를 packed browser 제품 gate로 닫았다.
+- 진행 중: 별도 data engine 배포와 scientific SIMD profile로 넓힌다. 이후 `parallelProcesses`,
+  `durableDisk` next를 순서대로 소진한다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
 - wasm 도구층을 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
@@ -349,7 +351,7 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - 다음 직렬 작업: M3 `localPythonParity.packageReach`다. GPU 축 자체의 다음 ceiling은 두 번째 독립
   hardware와 browser 구현에서 같은 receipt를 통과시키는 `multiVendorVisualConformance`로 남긴다.
 
-## 8. 진행 판정: owned WASI package reach 기반
+## 8. 진행 판정: owned WASI package reach와 native catalog
 
 - 계획 현실화: 과거 `pyemscripten`과 Emscripten 전제를 현재 owned `wasm32-wasip1` 엔진에 그대로
   적용하지 않는다. 첫 목표를 pure wheel 설치와 target ABI metadata의 신뢰 가능한 배포로 다시 측정했다.
@@ -371,6 +373,26 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - gate 이빨: workspace 치환을 무력화한 음성 변형은
   `generated _sysconfigdata__wasi_wasm32-wasi.py does not expose a canonicalizable build root`로 RED였다.
   복원 뒤 engine builder 계약과 설치 Edge 20/20은 GREEN이다.
-- 다음 직렬 작업: source-pinned native package catalog를 정의하고 가장 작은 compiled extension을
-  profile build, lock, resolver, transactional install, browser import까지 관통시킨다. 그 뒤 SIMD
-  scientific profile을 추가하며 임의 PyPI native wheel 지원을 먼저 주장하지 않는다.
+- 세 번째 RED: exact packed `pyproc/wasi`에는 package-owned native resolver helper가 없었다. headed Edge
+  화면과 JSON이 `PYPROC_PACKAGE_RESOLUTION`을 첫 불일치로 기록했다.
+- catalog 계약: `pyproc-native-host==1.0.0` facade wheel, wrapper source, `_pyprocHost.c` source,
+  `pyproc.hostcall/1`, core engine ID와 profile, metadata와 artifact digest를 한 catalog identity로 봉인한다.
+  lock과 environment receipt는 version 2에서 exact engine과 profile을 기록한다.
+- package 독립성: catalog, 1,387-byte wheel, source recipe, deterministic builder와 native C source를 npm
+  tarball에 포함한다. `createOwnedPackageResolver()`는 제3자 index나 artifact 요청 없이 source `package`로
+  materialize하고, 이후에는 hash-addressed content store를 사용한다.
+- 음성 증거: catalog digest 한 글자 변형은 `PYPROC_PACKAGE_INTEGRITY`로 RED였다. wrong engine은 kernel
+  install 호출 0회에서 `PYPROC_PACKAGE_ABI_UNSUPPORTED`로 끝났다. 복원 뒤 같은 계약은 GREEN이다.
+- 설치 제품 실측: 공개 Control이 연 headed Edge에서 wrapper를 transaction으로 설치하고 import했다.
+  lock, receipt, descriptor의 engine/profile이 일치했고 compiled origin은 `built-in`, ABI는
+  `pyproc.hostcall/1`이었다. GREEN screenshot SHA-256은
+  `cacae1290dc47dd1505abe2d52872b52a411ee0c5679360544ea2f544401ae8d`다.
+- 네 번째 RED: package 설치로 kernel environment가 바뀐 뒤 process clone이 base manifest environment로
+  checkpoint를 검증해 안전 거절했다. Factory가 검증된 wheel bootstrap을 소유하도록 하고 clone과 Machine
+  image가 같은 layer를 새 worker에 재생하도록 고쳤다. 설치 gate는 clone에서 ABI를 다시 import하고,
+  image wheel을 변조한 뒤 바깥 digest를 다시 계산해도 `PYPROC_MACHINE_INTEGRITY`로 거절하며, 정상 image는
+  facade와 Python 상태를 함께 복원한다. 환경 변경은 이전 delta 계보를 끊어 다음 checkpoint를 새 full
+  root로 만든다. 전체 설치 gate는 25/25 GREEN이다.
+- 다음 직렬 작업: 이미 source recipe와 이전 재현성 증거가 있는 data profile을 package-owned engine
+  manifest와 catalog로 분리 배송하고, SIMD 수치 oracle과 대표 scientific import 경계를 다시 측정한다.
+  임의 PyPI native wheel 지원은 먼저 주장하지 않는다.

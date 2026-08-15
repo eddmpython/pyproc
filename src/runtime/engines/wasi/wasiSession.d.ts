@@ -22,6 +22,8 @@ export interface WasiManifest {
   hostBroker?: import("../../../capabilities/hostCapabilityBroker.js").HostCapabilityBroker;
   /** A materialized exact-engine checkpoint injected by KernelFactory at the first safe command boundary. */
   bootstrapSnapshot?: { stackBoundary: number; memoryBytes: number; deltaDepth: number; bytes: Uint8Array };
+  /** Verified package layers replayed after a checkpoint is imported into a fresh worker. */
+  packageEnvironment?: import("../../kernel/index.js").KernelPackageEnvironmentBootstrap;
 }
 
 /**
@@ -53,6 +55,7 @@ export class WasiSession {
   invokeApplication(name: string, args: Array<import("../../kernel/index.js").ValueEnvelope>): Promise<import("../../kernel/index.js").ValueEnvelope>;
   /** Checkpoints the current state (a heap snapshot at the boundary). */
   checkpoint(): Promise<import("../../kernel/index.js").KernelMemorySnapshot & { idx: number; mb: number }>;
+  resetCheckpointLineage(): Promise<Readonly<{ state: "reset" | "unknown" }>>;
   readonly bootstrapSnapshotIndex: number | null;
   importBootstrapSnapshot(): Promise<Readonly<Record<string, unknown>>>;
   /** Time travel: restores checkpoint idx. Python resumes from that state afterwards, and may branch. */

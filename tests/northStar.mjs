@@ -336,30 +336,31 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "localPythonParity",
-    score: 8.0,
+    score: 8.2,
     en: Object.freeze({
       title: "Everything local Python does",
-      state: "The package environment resolves standard metadata, canonicalizes equivalent Requires-Python declarations, hashes pure-Python wheels, installs them transactionally, and binds curated static native profiles to the engine identity. The installed owned engine now ships target-generated, workspace-canonical sysconfig and build details, and an exact packed Edge journey imports six 1.17.0 while reporting the WASI platform and extension suffixes. The installed GPU subpath verifies registered compute and rendered-pixel results on a real hardware adapter through the hostcall boundary. Arbitrary native wheels and broad scientific-package reach remain unsupported.",
+      state: "The package environment resolves standard metadata, canonicalizes equivalent Requires-Python declarations, hashes pure-Python wheels, and installs them transactionally. The installed owned engine ships target-generated, workspace-canonical sysconfig and build details. Its source-pinned native catalog seals the wrapper wheel, metadata, native source and ABI to the exact engine and profile, then an exact packed Edge journey installs the package-owned facade and imports its compiled built-in. Verified package layers survive process clone and Machine image revival, while mutated embedded wheels fail closed. The installed GPU subpath verifies registered compute and rendered-pixel results on real hardware. Broad scientific-package reach remains unsupported, and arbitrary native wheels await dynamic linking.",
       target: "Whatever runs in a local interpreter runs in the tab, at a speed that needs no apology.",
     }),
     ko: Object.freeze({
       title: "로컬 파이썬이 하는 전부",
-      state: "package environment가 표준 metadata와 의미가 같은 Requires-Python 선언을 canonicalize하고 pure Python wheel을 hash 검증해 transaction으로 설치하며 curated static native profile을 engine identity에 묶는다. 설치 owned engine은 target이 생성하고 workspace를 canonicalize한 sysconfig와 build details를 배송한다. exact packed Edge 여정은 six 1.17.0을 import하고 WASI platform과 extension suffix를 보고한다. 설치 GPU subpath는 실제 hardware adapter와 hostcall 경계에서 등록된 compute와 rendered-pixel 결과를 검증한다. 임의 native wheel과 넓은 scientific package 도달 범위는 아직 지원하지 않는다.",
+      state: "package environment가 표준 metadata와 의미가 같은 Requires-Python 선언을 canonicalize하고 pure Python wheel을 hash 검증해 transaction으로 설치한다. 설치 owned engine은 target이 생성하고 workspace를 canonicalize한 sysconfig와 build details를 배송한다. source-pinned native catalog는 wrapper wheel, metadata, native source와 ABI를 exact engine과 profile에 봉인하며, exact packed Edge 여정이 package-owned facade를 설치하고 compiled built-in을 import한다. 검증된 package layer는 process clone과 Machine image 부활 뒤에도 남고 포함 wheel 변조는 안전 거절된다. 설치 GPU subpath는 실제 hardware에서 compute와 rendered-pixel 결과를 검증한다. 넓은 scientific package 도달 범위는 아직 없고 임의 native wheel은 dynamic linking을 기다린다.",
       target: "로컬 인터프리터에서 도는 것은 무엇이든 탭에서 돌고, 그 속도에 변명이 필요 없다.",
     }),
     evidence: Object.freeze([
       Object.freeze({ path: "tests/browser/gate.html", lane: "test:browser" }),
       Object.freeze({ path: "tests/browser/ownedEngineDataProduct.html", lane: "owned-engine" }),
       Object.freeze({ path: "tests/browser/installedPackageGate.mjs", lane: "test:installed" }),
+      Object.freeze({ path: "tests/contracts/nativePackageCatalog.mjs", lane: "test:contracts" }),
       Object.freeze({ path: "tests/browser/hardwareVisualOracleProduct.mjs", lane: "test:hardware-visual-oracle" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
       Object.freeze({
-        id: "packageReach",
-        en: "Build a source-pinned native package catalog for owned WASI profiles, prove one compiled extension end to end, then add a scientific SIMD profile",
-        ko: "owned WASI profile용 source-pinned native package catalog를 만들고 compiled extension 하나를 끝까지 증명한 뒤 scientific SIMD profile을 추가한다",
+        id: "scientificSimdProfile",
+        en: "Ship the distinct data engine and package catalog, prove its SIMD numeric oracle, then remeasure representative scientific imports",
+        ko: "별도 data engine과 package catalog를 배송하고 SIMD 수치 oracle을 증명한 뒤 대표 scientific import를 재측정한다",
       }),
       Object.freeze({
         id: "wasmToolLayer",

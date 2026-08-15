@@ -3,19 +3,20 @@ import type { PackageContentStore, PackageLock, SimpleApiPackageResolver } from 
 import type { WheelLimits } from "../runtime/wheelInstaller.js";
 
 export const PACKAGE_ENVIRONMENT_PROTOCOL: "pyproc.package-environment";
-export const PACKAGE_ENVIRONMENT_VERSION: 1;
+export const PACKAGE_ENVIRONMENT_VERSION: 2;
 
 export interface PackageEnvironmentReceipt {
   readonly protocol: "pyproc.package-environment";
-  readonly version: 1;
+  readonly version: 2;
   readonly environmentId: `sha256:${string}`;
   readonly engineId: string;
+  readonly nativeProfile: string;
   readonly lock: PackageLock;
   readonly lockDigest: `sha256:${string}`;
   readonly policyDigest: `sha256:${string}`;
   readonly treeDigests: readonly `sha256:${string}`[];
   readonly offline: boolean;
-  readonly sources: readonly ("content-store" | "network")[];
+  readonly sources: readonly ("content-store" | "package" | "network")[];
   readonly installed: Readonly<Record<string, unknown>>;
 }
 
