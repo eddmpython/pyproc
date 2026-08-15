@@ -9,6 +9,7 @@ import {
   validatePerceptionOptions,
 } from "./apxCatalog.js";
 import { apxDigest } from "./apxCanonical.js";
+import { completeActionReissue, prepareActionReissue } from "./actionReissuer.js";
 import { CapabilityProjector } from "./capabilityProjector.js";
 import { applyPerceptionBudget } from "./perceptionBudget.js";
 import { PerceptionIdentity, perceptionSessionKey } from "./perceptionIdentity.js";
@@ -424,6 +425,17 @@ export class PerceptionSpace {
     return Object.freeze({ ...inspectApxConformance({ visual: !!this.visualProbe, providerKind: this.providerKind,
       level: this.conformanceLevel, ...this.providerFeatures }),
       observations: this.observations });
+  }
+
+  async reissueAction(sessionRef, action, context = {}) {
+    const key = perceptionSessionKey(sessionRef);
+    const prepared = prepareActionReissue(this.situationHistory.get(key), action);
+    const refreshed = await this.observe(sessionRef, {
+      representation: APX_SITUATION_REPRESENTATION,
+      focus: prepared.prior.focus,
+      visual: { mode: "off" },
+    }, context);
+    return completeActionReissue(prepared, refreshed);
   }
 
   assertActionContext(sessionRef, actionContext, action) {

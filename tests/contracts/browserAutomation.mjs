@@ -543,6 +543,55 @@ export async function assertBrowserAutomationContract() {
     && authorityChecks === 2 && inputAfterExpiry === inputBeforeExpiry,
   "capability expiry가 first input send 직전 재검사에서 차단되지 않았다");
 
+  let reissueCalls = 0;
+  automation._perception.assertActionContext = () => ({ worldRef: actionContext.worldRef,
+    documentEpoch: port.contextEpoch });
+  const replacementLocator = automation._issueOpaqueLocator(session, port.contextEpoch, 11);
+  port.contextEpoch += 1;
+  automation._perception.reissueAction = async (ref, staleAction) => {
+    reissueCalls += 1;
+    return { action: Object.freeze({ ...staleAction,
+      locatorRef: automation._issueOpaqueLocator(ref, port.contextEpoch, 11) }),
+    convergence: Object.freeze({ reason: "documentReplacement", attempts: 2, effectRetries: 0,
+      fromSituationRef: actionContext.situationRef, toSituationRef: `situation:${"4".repeat(64)}`,
+      fromDocumentEpoch: port.contextEpoch - 1, toDocumentEpoch: port.contextEpoch }) };
+  };
+  const inputsBeforeReissue = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  const convergedDocument = await automation.run(session, [{
+    kind: "click", locatorRef: replacementLocator, expectedRisk: "externalEffect", actionContext,
+  }]);
+  const inputsAfterReissue = port.commands.filter((entry) => entry.command.method.startsWith("Input.")).length;
+  assert(reissueCalls === 1 && convergedDocument.actions[0].convergence?.reason === "documentReplacement"
+    && convergedDocument.actions[0].convergence?.effectRetries === 0
+    && inputsAfterReissue === inputsBeforeReissue + 2,
+  `proof-carrying action이 notSent 문서 교체에서만 한 번 재발급되지 않았다: ${JSON.stringify({
+    reissueCalls, convergence: convergedDocument.actions[0].convergence,
+    inputsBeforeReissue, inputsAfterReissue,
+  })}`);
+
+  const boundedLocator = automation._issueOpaqueLocator(session, port.contextEpoch, 11);
+  automation._perception.reissueAction = async (ref, staleAction) => {
+    reissueCalls += 1;
+    const locatorRef = automation._issueOpaqueLocator(ref, port.contextEpoch, 11);
+    port.contextEpoch += 1;
+    return { action: Object.freeze({ ...staleAction, locatorRef }), convergence: Object.freeze({
+      reason: "documentReplacement", attempts: 2, effectRetries: 0,
+      fromSituationRef: actionContext.situationRef, toSituationRef: `situation:${"5".repeat(64)}`,
+      fromDocumentEpoch: port.contextEpoch - 2, toDocumentEpoch: port.contextEpoch - 1,
+    }) };
+  };
+  port.contextEpoch += 1;
+  const reissuesBeforeBounded = reissueCalls;
+  const boundedReplacement = await errorOf(() => automation.run(session, [{
+    kind: "click", locatorRef: boundedLocator, expectedRisk: "externalEffect", actionContext,
+  }]));
+  assert(boundedReplacement?.code === "BROWSER_AUTOMATION_STALE_LOCATOR"
+    && reissueCalls === reissuesBeforeBounded + 1,
+  "두 번째 문서 교체가 추가 effect retry로 반복되지 않았다");
+  port.contextEpoch = 3;
+  automation._perception.assertActionContext = originalAssertActionContext;
+  delete automation._perception.reissueAction;
+
   let rotatedAtIdentity = false;
   port.afterCommand = (command) => {
     if (!rotatedAtIdentity && command.method === "Runtime.callFunctionOn"

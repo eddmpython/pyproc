@@ -92,6 +92,63 @@ export async function assertPerceptionSpaceContract() {
     "unresolved entity의 exact crop과 context crop이 bounded pair로 생성되지 않았다");
   contextCropSpace.close();
 
+  let reissueEpoch = 0;
+  let reissueId = 0;
+  const reissueSpace = new PerceptionSpace({
+    sensor: { capture: async () => ({ documentEpoch: ++reissueEpoch, page: {},
+      entities: [sensorEntity("native:71", { role: "button", name: "Continue" })],
+      relations: [], events: [], completeness: {} }) },
+    idFactory: () => `reissue_${++reissueId}`,
+    locatorIssuer: (sessionRef, documentEpoch, locatorData) =>
+      `locator:${documentEpoch}:${locatorData.backendNodeId}`,
+    capabilityPolicy: ({ action }) => action === "click" ? { risk: "externalEffect" } : null,
+  });
+  const reissueSession = { protocolVersion: "1", sessionId: "session-reissue", targetRef: "target-reissue" };
+  const reissueFocus = { requirements: [{ requirementRef: "requirement:continue",
+    select: { role: "button", name: "Continue", actionable: true }, need: ["fact", "affordance"],
+    cardinality: "one" }] };
+  const originalSituation = await reissueSpace.observe(reissueSession, {
+    representation: "apx.situation", focus: reissueFocus, visual: { mode: "off" },
+  });
+  const originalAffordance = originalSituation.affordances.find((entry) => entry.kind === "authorized");
+  const reissued = await reissueSpace.reissueAction(reissueSession, {
+    kind: "click", locatorRef: originalAffordance.locatorRef, expectedRisk: "externalEffect",
+    actionContext: { situationRef: originalSituation.situationRef, worldRef: originalSituation.worldRef,
+      capabilityRef: originalAffordance.capabilityRef },
+  });
+  assert(reissued.action.locatorRef === "locator:2:71"
+    && reissued.action.actionContext.situationRef !== originalSituation.situationRef
+    && reissued.convergence.fromDocumentEpoch === 1 && reissued.convergence.toDocumentEpoch === 2
+    && reissued.convergence.effectRetries === 0,
+  "문서 교체 재발급이 같은 semantic requirement를 새 epoch capability로 다시 묶지 않았다");
+  reissueSpace.close();
+
+  let ambiguousCapture = 0;
+  const ambiguousReissueSpace = new PerceptionSpace({
+    sensor: { capture: async () => ({ documentEpoch: ++ambiguousCapture, page: {},
+      entities: ambiguousCapture === 1
+        ? [sensorEntity("native:81", { role: "button", name: "Continue" })]
+        : [sensorEntity("native:81", { role: "button", name: "Continue" }),
+          sensorEntity("native:82", { role: "button", name: "Continue" })],
+      relations: [], events: [], completeness: {} }) },
+    idFactory: (() => { let value = 0; return () => `ambiguous_reissue_${++value}`; })(),
+    locatorIssuer: (sessionRef, documentEpoch, locatorData) =>
+      `locator:${documentEpoch}:${locatorData.backendNodeId}`,
+    capabilityPolicy: ({ action }) => action === "click" ? { risk: "externalEffect" } : null,
+  });
+  const ambiguousOriginal = await ambiguousReissueSpace.observe(reissueSession, {
+    representation: "apx.situation", focus: reissueFocus, visual: { mode: "off" },
+  });
+  const ambiguousAffordance = ambiguousOriginal.affordances.find((entry) => entry.kind === "authorized");
+  const ambiguousReissue = await errorOf(() => ambiguousReissueSpace.reissueAction(reissueSession, {
+    kind: "click", locatorRef: ambiguousAffordance.locatorRef, expectedRisk: "externalEffect",
+    actionContext: { situationRef: ambiguousOriginal.situationRef, worldRef: ambiguousOriginal.worldRef,
+      capabilityRef: ambiguousAffordance.capabilityRef },
+  }));
+  assert(ambiguousReissue?.code === "APX_CAPABILITY_STALE" && ambiguousReissue.outcome === "notSent",
+    "문서 교체 뒤 semantic target이 여러 개면 재발급이 fail-closed가 아니다");
+  ambiguousReissueSpace.close();
+
   const focusedPlan = planPostconditionObservation({
     entityAppeared: { role: "status", name: "Saved" },
   });

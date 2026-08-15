@@ -16,3 +16,7 @@ manifest와 SRI를 생성하고 전체 7파일 graph를 함께 배포한다.
 열어 같은 헤더를 주입한다. `.github/workflows/pages.yml`은 `PYPROC_NO_COI=1 npm run test:examples`로
 이 경로를 배포 전에 검증한다. 다른 정적 호스팅에서 이 우회로를 채택하지 않으면
 `npm run test:preflight`가 실행 가능한 오류와 필요한 서버 헤더를 안내한다.
+
+이 첫 문서 교체 사이에 발급된 proof-carrying browser action은 `notSent`일 때만 원래 typed focus를 한 번
+다시 관찰한다. 최종 문서에서 같은 requirement가 유일하고 권한이 같을 때 새 capability로 진행하며,
+effect를 보낸 뒤에는 재시도하지 않는다.

@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:9c06919dd70f238862b63ebad7cbee841a1a729b4ef6e8fad7bb8f7c89c7b752",
-  "catalogDigest": "sha256:891dd216f8d13753cefd65d64000e0974ece48da29315938b2dc3874be2d3cc6",
+  "generatedFromDigest": "sha256:4001c8694559c4d9d7ee9e824361d93b564f168e39128c28871457c2de08545d",
+  "catalogDigest": "sha256:51b1a6d5989870c3cf473d4b5651d204d1cc68aca4ea0f793476b3a9afe33e87",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -259,8 +259,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
-      "bytes": 24849,
-      "sha256": "sha256:2e227a6abdab284468f73d640935f2de3ecc3bbb260eb8c657648a480f646812"
+      "bytes": 25428,
+      "sha256": "sha256:bb79f5815c9f7cf0c7f7f45642babf645f7bb59c80b5dce0312a59e04c8ae077"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/frame-space.md",
@@ -349,8 +349,8 @@
     },
     {
       "path": "skills/ship-pyproc/references/demo-hosting.md",
-      "bytes": 1132,
-      "sha256": "sha256:36e2122cdb3c06b93f2b91375cabf9c271691977d096f005ad6ccb7a805b0ced"
+      "bytes": 1441,
+      "sha256": "sha256:214dd66c292703a95f7be44594df71ace7ea91e9db556aafc9ff494b59228012"
     },
     {
       "path": "skills/ship-pyproc/references/release.md",
@@ -489,8 +489,8 @@
     },
     {
       "path": "skills/verify-browser-experience/references/apx.md",
-      "bytes": 14185,
-      "sha256": "sha256:b7dbd9aa82a79674a40cddc9b4dcf9fd577f52555277a71a76765c74def415dc"
+      "bytes": 14567,
+      "sha256": "sha256:5b62edf1743f9f8e424d3761b8e5914b9dc4e0bd2e6dde3288918e330014a62a"
     },
     {
       "path": "skills/verify-browser-experience/references/interop.md",
@@ -499,8 +499,8 @@
     },
     {
       "path": "skills/verify-browser-experience/references/situation-capsule.md",
-      "bytes": 3138,
-      "sha256": "sha256:7c323966f4dae203303177265a95c7382c3ed3b67cf965b9e506fa5227c98052"
+      "bytes": 3468,
+      "sha256": "sha256:7d5197c8ef2702411579d0b0fcec555e9b35e743549718abde2b66c87838b9fd"
     },
     {
       "path": "skills/verify-browser-experience/references/verification.md",

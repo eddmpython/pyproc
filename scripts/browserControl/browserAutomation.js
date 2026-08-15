@@ -403,11 +403,12 @@ export class BrowserAutomation {
       const commandResults = [];
       const traceToken = trace.begin({ index, actionId, kind: action.kind, risk: BROWSER_AUTOMATION_ACTIONS[action.kind].risk });
       try {
-        let result;
-        if (action.verify) {
+        let convergence = null;
+        const perform = async (candidate) => {
+          if (!candidate.verify) return this._execute(sessionRef, candidate, commandResults, signal);
           const evidenced = await this._evidence.run({
             actionRef: actionId,
-            postcondition: action.verify,
+            postcondition: candidate.verify,
             signal,
             capture: ({ since, eventWatermarks, observationPlan }) => this._perception.observe(sessionRef, {
               representation: APX_REPRESENTATION,
@@ -417,10 +418,20 @@ export class BrowserAutomation {
               budget: { maxEntities: 1000, maxRelations: 1000, maxBytes: 1024 * 1024 },
             }, { signal, commandResults, issueLocators: false, postconditionPlan: observationPlan,
               ...(eventWatermarks ? { eventWatermarks } : {}) }),
-            effect: () => this._execute(sessionRef, action, commandResults, signal),
+            effect: () => this._execute(sessionRef, candidate, commandResults, signal),
           });
-          result = Object.freeze({ ...(evidenced.effectResult || {}), evidence: evidenced.evidence });
-        } else result = await this._execute(sessionRef, action, commandResults, signal);
+          return Object.freeze({ ...(evidenced.effectResult || {}), evidence: evidenced.evidence });
+        };
+        let result;
+        try { result = await perform(action); }
+        catch (error) {
+          if (!action.actionContext || ![BROWSER_AUTOMATION_ERROR_CODES.staleLocator,
+            APX_ERROR_CODES.capabilityStale].includes(error?.code)
+            || error?.outcome !== "notSent" || error?.retryable !== true) throw error;
+          const reissued = await this._perception.reissueAction(sessionRef, action, { signal, commandResults });
+          convergence = reissued.convergence;
+          result = await perform(reissued.action);
+        }
         const summary = summarizeCommands(commandResults);
         const normalized = Object.freeze({
           actionId,
@@ -428,6 +439,7 @@ export class BrowserAutomation {
           risk: BROWSER_AUTOMATION_ACTIONS[action.kind].risk,
           state: BROWSER_AUTOMATION_ACTIONS[action.kind].risk === "read" ? "observed" : "applied",
           ...summary,
+          ...(convergence ? { convergence } : {}),
           result,
         });
         this._audit({ runId, actionId, index, kind: action.kind, risk: normalized.risk, state: normalized.state });

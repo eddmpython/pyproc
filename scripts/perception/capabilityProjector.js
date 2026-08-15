@@ -16,7 +16,7 @@ function stale(message) {
   const error = new Error(message);
   error.code = "APX_CAPABILITY_STALE";
   error.outcome = "notSent";
-  error.retryable = false;
+  error.retryable = true;
   return error;
 }
 

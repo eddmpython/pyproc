@@ -11,6 +11,7 @@ import { binPath, installPackedPyProc, run } from "../packageHarness.mjs";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
+const ARTIFACT_TTL_MS = 10 * 60 * 1000;
 const targetHtml = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>installed product target</title></head>
 <body style="margin:0;min-height:1800px;background:#f8fafc">
@@ -37,8 +38,19 @@ const targetHtml = `<!doctype html>
     context.fillRect(10, 10, 90, 35);
   </script>
 </body></html>`;
+const bootstrapInitialHtml = `<!doctype html><html><body><button>Continue</button><script>
+  addEventListener("load", () => setTimeout(() => location.replace("/bootstrap-final"), 1000));
+</script></body></html>`;
+const bootstrapFinalHtml = `<!doctype html><html><body><button id="continue">Continue</button>
+  <output role="status">ready</output><script>
+  document.querySelector("#continue").addEventListener("click", async () => {
+    const response = await fetch("/bootstrap-effect", { method: "POST" });
+    document.querySelector("output").textContent = response.ok ? "done" : "failed";
+  });
+</script></body></html>`;
 
 let committedEffects = 0;
+let bootstrapEffects = 0;
 const targetServer = createServer((req, res) => {
   if (req.url === "/effect" && req.method === "POST") {
     committedEffects += 1;
@@ -46,8 +58,15 @@ const targetServer = createServer((req, res) => {
     res.end(JSON.stringify({ committedEffects }));
     return;
   }
-  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(targetHtml);
+  if (req.url === "/bootstrap-effect" && req.method === "POST") {
+    bootstrapEffects += 1;
+    res.writeHead(201, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ bootstrapEffects }));
+    return;
+  }
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(req.url === "/bootstrap-initial" ? bootstrapInitialHtml
+    : req.url === "/bootstrap-final" ? bootstrapFinalHtml : targetHtml);
 });
 await new Promise((resolve) => targetServer.listen(0, "127.0.0.1", resolve));
 const targetOrigin = `http://127.0.0.1:${targetServer.address().port}`;
@@ -92,7 +111,7 @@ const initArgs = ["init", "--recipe", "authorizedBrowser", "--project-root", ins
   "--device-scale-factor", "3", "--mobile", "--touch",
   "--artifact-max-bytes", String(16 * 1024 * 1024), "--artifact-total-bytes", String(32 * 1024 * 1024),
   "--artifact-max-count", "16", "--artifact-inline-bytes", String(4 * 1024 * 1024),
-  "--artifact-ttl-ms", "120000",
+  "--artifact-ttl-ms", String(ARTIFACT_TTL_MS),
   "--execution-memory-root", memoryRoot,
   "--enable-effect-transactions", "--effect-approval-authority", `operator:mcp-product=${approvalKeyFile}`,
   ...["snapshot", "screenshot", "waitFor", "hydrateLazy", "fill", "click"].flatMap((action) => ["--action", action]),
@@ -410,6 +429,36 @@ try {
   check("설치 제품 artifact 삭제와 stale ref 오류",
     deleted.deleted === true && stale.result?.isError === true
       && toolText(stale).code === "BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND");
+
+  const bootstrapOpened = toolText(await callTool("browserOpen", {
+    url: `${targetOrigin}/bootstrap-initial`, expectedRisk: "externalEffect", waitUntil: "load",
+  }));
+  const bootstrapSession = toolText(await callTool("browserAttach", { targetRef: bootstrapOpened.targetRef }));
+  const bootstrapSituation = toolText(await callTool("browserObserve", {
+    sessionRef: bootstrapSession, expectedRisk: "read", representation: "apx.situation",
+    focus: { requirements: [{ requirementRef: "requirement:continue",
+      select: { role: "button", name: "Continue", actionable: true },
+      need: ["fact", "affordance"], cardinality: "one" }] },
+    visual: { mode: "off" },
+  }));
+  const bootstrapAffordance = bootstrapSituation.affordances.find((entry) =>
+    entry.kind === "authorized" && entry.requirementRef === "requirement:continue" && entry.action === "click");
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 1500));
+  const bootstrapActed = toolText(await callTool("browserAct", {
+    sessionRef: bootstrapSession,
+    actions: [{ kind: "click", locatorRef: bootstrapAffordance.locatorRef, expectedRisk: "externalEffect",
+      actionContext: { situationRef: bootstrapSituation.situationRef, worldRef: bootstrapSituation.worldRef,
+        capabilityRef: bootstrapAffordance.capabilityRef },
+      verify: { entityAppeared: { role: "status", name: "done" }, withinMs: 5000 } }],
+  }));
+  check("첫 load 뒤 문서 교체가 새 Situation 재발급과 한 번의 verified effect로 수렴",
+    bootstrapActed.actions[0].convergence?.reason === "documentReplacement"
+      && bootstrapActed.actions[0].convergence?.attempts === 2
+      && bootstrapActed.actions[0].convergence?.effectRetries === 0
+      && bootstrapActed.actions[0].result.evidence?.verification?.state === "confirmed"
+      && bootstrapEffects === 1);
+  await callTool("browserDetach", { sessionRef: bootstrapSession });
+  await callTool("browserClose", { targetRef: bootstrapOpened.targetRef, expectedRisk: "externalEffect" });
   await callTool("browserDetach", { sessionRef });
 } catch (error) {
   check("제품 흐름 예외 없음", false, String(error?.stack || error).slice(-1200));

@@ -225,6 +225,13 @@ Copy the selected authorized affordance's `situationRef`, `worldRef`, and `capab
 fingerprint, epoch, action, locator, risk, destination, transition shape, and expiry at the send boundary. A
 mismatch is `APX_CAPABILITY_STALE` with `notSent`.
 
+If a proof-carrying action reaches that boundary after a document replacement, Control replays the original
+typed focus as a fresh Situation exactly once. It proceeds only when the same requirement again has one
+authorized target with unchanged risk, destination, and transition. The action result then includes
+`convergence.reason: "documentReplacement"`, `attempts: 2`, and `effectRetries: 0`. Ambiguity, changed authority,
+a second replacement, any sent effect, or an unknown outcome stops without another provider effect. Actions
+without `actionContext` are never reissued.
+
 Native CDP uses pixels only for unresolved canvas, images, and controls. A verified crop enters the normal
 artifact and attachment path. FrameSpace provides semantic, spatial, and temporal APX through its cooperative
 bridge but rejects non-off visual modes because a DOM-rendered screenshot is not compositor evidence.

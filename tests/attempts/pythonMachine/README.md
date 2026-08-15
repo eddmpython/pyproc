@@ -26,6 +26,7 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 | 머신이 탭 밖에서 사나(커널 데몬) | [sharedKernelProbe.html](sharedKernelProbe.html) | 연결 2개(=탭 2개)가 같은 파이썬 상태 공유 + 동시 요청 정합 |
 | 헤더 못 다는 호스팅(GH Pages)에서 머신이 뜨나 | [noCoiProbe.html](noCoiProbe.html) | COI=false에서 부팅/세션 부활/.pymachine/디스크 전부 정상(SAB만 경계) |
 | SW 헤더 주입으로 SAB를 열 수 있나 | [swCoiProbe.html](swCoiProbe.html) | ?coi=1 등록 + 1회 새로고침 후 crossOriginIsolated=true + SAB 실사용 |
+| COI 첫 문서 교체 중 action이 한 번에 수렴하나 | [coiDocumentReplacementProbe.mjs](coiDocumentReplacementProbe.mjs) | 첫 capability는 `notSent`, 최종 문서는 같은 typed focus로 한 번 재발급, verified effect 정확히 1회 |
 | 브라우저 능력이 파이썬 파일이 되나(Plan 9) | [deviceFsProbe.html](deviceFsProbe.html) | open() 쌍방 브리지 + 동적 읽기 + /proc 커널 상태 + with/부분읽기 정합 |
 | 머신이 스스로 일하나(init/cron) | [initProbe.html](initProbe.html) | boot.py 오토스타트 + cron 주기 틱 + /home으로 세대 계승 + 파일 없으면 no-op |
 | 부활 후 프로세스 자원을 다시 여나 | [resumeHookProbe.html](resumeHookProbe.html) | Session.load/MachineJournal.recover/openMachine 뒤 resume.py가 sqlite connection 재개설 + reason 주입 + 파일 없으면 no-op |
@@ -45,6 +46,7 @@ runtimeParity(로컬 따라잡기)와 별개의 개념 캠페인이다: **꺼지
 
 | 날짜 | probe | 환경 | 핵심 수치 | 결론 | 판정 |
 |---|---|---|---|---|---|
+| 2026-08-15 | coiDocumentReplacementProbe | Edge, 설치 tarball, 공개 Control | 수정 전 `BROWSER_AUTOMATION_STALE_LOCATOR`, `notSent`, effect 0. 수정 후 document epoch 재관찰 1회, action completed, postcondition confirmed, effect 1 | 임의 대기 없이 저장된 typed focus를 재사용하면 COI bootstrap 문서 교체를 안전하게 수렴시킨다. 재발급 뒤에도 target이 유일하고 권한이 같아야 한다 | 졸업 -> `PerceptionSpace.reissueAction` + browser action bounded convergence + 설치 MCP 제품 gate |
 | 2026-07-11 | crossKernelProbe | Edge headless | A(30MB) 이미지를 새 부팅 B에 전체 되쓰기 + 스택 복원 -> `SystemError: Type does not define the tp_name field` | **벽 좌표**: 커널 상태는 선형 메모리만이 아니다(WASM globals + JS 측 미러가 이미지 밖). 동일 인스턴스 복원(우리 리액티브)은 그래서 되고, 크로스 인스턴스는 전체 머신 상태 캡처가 필요 | 불멸 커널은 (a) 부팅 결정성 실측, (b) 전역/JS 상태 목록화 후 재시도. 프론티어 후보 |
 | 2026-07-11 | bootDeterminismProbe | Edge headless | 무조치 2회 부팅 = 180p 상이. **PYTHONHASHSEED=0 + 엔트로피/시간 스텁 = 0p 상이(bare와 numpy 리플레이 모두, 힙 길이 동일)** | 부팅이 바이트 단위 결정적. tp_name 크래시 원인(시드 레이아웃 시프트) 확증 | 리플레이+델타 경로 개방 |
 | 2026-07-11 | replayForkProbe | Edge headless | A의 사용자 상태(변수+numpy 배열)를 델타 160p/10MB로 수확, 동형 리플레이 B에 **1.5ms 적용** -> 상태 생존·연산·연속 실행 전부 정확 | **불멸 커널/warm-fork 실증**. hiwire 벽을 upstream 수정 없이 우회 | 졸업 -> `session.js` `bootSession`/`Session.save/load`(게이트 상시: 크로스 커널 부활 95p/5.9MB) |
