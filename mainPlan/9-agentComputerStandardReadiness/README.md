@@ -16,7 +16,7 @@
 |---|---|---|---|
 | agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M3 컴퓨팅 몸체 확대와 독립 구현 conformance |
 | 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.5 | APX Situation, 20회 무잔류 수명주기, bounded action 수렴, 실제 hardware compute와 pixel 결과 영수증 | 두 번째 독립 hardware와 browser 구현의 visual conformance |
-| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.7 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package, quota 실패와 OPFS 축출의 명시적 계약 | wasm 도구층, Node guest, 과학 패키지 폭, 외부 사본 기반 축출 복구 |
+| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 8.9 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package, quota 실패와 OPFS 축출의 명시적 계약, 상주 ripgrep 15.1.0 | Git 상주 구현과 Python 도구 bridge, Node guest, 과학 패키지 폭, 외부 사본 기반 축출 복구 |
 | 단독 자립성 | Python 기본과 data Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython, stdlib, NumPy가 npm에 포함되고 기본 부팅과 package install의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
 
@@ -125,10 +125,13 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   `machine.inspect()`와 실제 Python 실패가 같은 versioned capability를 보고한다.
 - 완료: `durableDisk.quotaEviction`을 exact packed Control과 실제 OPFS에서 닫았다. best-effort와
   persistent mode, rough estimate, quota 실패 안전성, 외부 witness 기반 축출 탐지를 한 계약으로 봉인했다.
-- 진행 중: `localPythonParity.wasmToolLayer`를 소진한다. durable disk의 다음 ceiling은
+- 완료: `localPythonParity.wasmToolLayer`의 첫 제품 단위를 닫았다. source-pinned ripgrep 15.1.0을
+  `machine.tools.run("rg", argv)`로 실행하고 읽기 전용 VFS snapshot, 고정 상한, 입력 digest, exit와 출력,
+  취소와 자산 무결성을 version 1 receipt로 봉인했다.
+- 진행 중: `localPythonParity.residentGitAndPythonToolBridge`를 소진한다. durable disk의 다음 ceiling은
   `evictionRecoveryCopy`다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
-- wasm 도구층을 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
+- Git 상주 구현과 Python 도구 bridge를 먼저 넣고 Node guest는 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
 ### M4. 전체 자립 공급망
 
@@ -513,5 +516,37 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   실 OPFS에서 quota 실패, placeholder 부재, 이전 상태 생존, 외부 witness 검증, 전체 OPFS 삭제 뒤 eviction을
   한 시나리오로 검증한다. 최종 922 x 920 screenshot은 직접 눈검수했으며 SHA-256은
   `a1f30604693daf312a5fdd4399b8c08a50555c8f9d96d991cc3d8361aecdfc8c`다.
-- 다음 직렬 작업: `localPythonParity.wasmToolLayer`다. durable disk 자체의 다음 ceiling은 외부 Machine
-  사본을 witness에 묶어 전체 browser bucket 삭제 뒤 복원하는 `evictionRecoveryCopy`다.
+- 다음 직렬 작업이었던 `localPythonParity.wasmToolLayer`의 첫 제품 단위는 아래 11절에서 완료했다.
+  durable disk 자체의 다음 ceiling은 외부 Machine 사본을 witness에 묶어 전체 browser bucket 삭제 뒤
+  복원하는 `evictionRecoveryCopy`다.
+
+## 11. 해결 판정: source-pinned 상주 WASM 도구층
+
+- 첫 RED: exact packed Control이 연 CPython WASI는 `sys.platform=wasi`, 빈 `sys.executable`,
+  `shutil.which("git"|"grep"|"rg")=None`이었다. 격리 clone에서 `subprocess.run(["rg","--version"])`은
+  `RuntimeError: memory access out of bounds`로 끝났고 `machine.tools`와 `machine.inspect().tools`는 없었다.
+  직접 확인한 첫 불일치 screenshot SHA-256은
+  `1d93dc98521f965721035bb7676eb470882fb0667a8243957ec391a90d9a94da`다.
+- 상류 판정: 공식 ripgrep 15.1.0 commit
+  `af60c2de9d85e7f3d81c78601669468cf02dabab`은 `wasm32-wasip1`으로 실제 빌드되고 재귀 검색까지
+  exit 0이었다. Gitoxide 0.54.0의 `gix`는 같은 target에서 `signal-hook-registry`가 요구하는
+  `sigaction`, `SIGKILL`, `SIGSEGV` 등 WASI에 없는 POSIX signal API 때문에 compile되지 않았다.
+  따라서 `git` 호환을 꾸며내지 않고 다음 결손으로 남겼다.
+- 공급망: Cargo.lock SHA-256
+  `efc8f078eb02da18f454972e5d286b13660e1f2a58e3700f73abacad75e07004`, rustc 1.97.1 commit
+  `8bab26f4f68e0e26f0bb7960be334d5b520ea452`, cargo 1.97.1, `wasm32-wasip1`, 크기 최적화 profile과
+  MIT 또는 Unlicense를 고정했다. 두 격리 target build가 byte-identical이었다. 최종 `rg.wasm`은 2,193,626 bytes, SHA-256
+  `4d89e862853619ad81e3104bb97a725b5db6793932569831bebda9496d81812a`다.
+- 제품 계약: `pyproc.wasm-tool-layer/1`은 실제 명령 catalog와 revision, isolated Worker, network false,
+  shell parsing false, read-only input snapshot과 모든 상한을 보고한다. `machine.tools.run("rg", argv)`는
+  exact argv만 받고 committed KernelVfs `/home` 또는 명시 파일을 snapshot으로 만든다. receipt는 tool
+  version과 revision, exit, stdout, stderr, 시간, file count와 byte length, 입력 SHA-256을 싣는다.
+  0이 아닌 명령 exit는 정상 receipt이고 미지원 명령, 취소, 출력 초과, 자산 변조는 구조화 오류다.
+- 제품 증거: `npm run test:wasm-tools`가 exact tarball, 공개 `pyproc-control`, headed Edge에서 `--version`,
+  두 파일 재귀 검색, 반복 입력 digest와 출력 일치, no-match exit 1, 출력 상한, 사전 취소, 변조 binary 거절,
+  제3자 요청 0을 한 시나리오로 통과했다. 실제 검색은 60ms였고 직접 눈검수한 최종 922 x 920 screenshot은
+  98,488 bytes, SHA-256 `db74ac2ca3af74a363fb3c1a6ebc437dc2838069286e64397778d400bdb1b196`다.
+- 정직한 경계: Python 표준 라이브러리 `subprocess`가 동작한다고 주장하지 않는다. 현재 catalog는 `rg`
+  하나이고 쓰기 가능한 도구 filesystem, Git, pipe와 shell grammar도 없다.
+- 다음 직렬 작업: `localPythonParity.residentGitAndPythonToolBridge`다. WASI에서 실제 동작하는 source-pinned
+  Git 구현을 고르고 같은 argv-only receipt를 Python에서 호출하되 `subprocess` 호환으로 위장하지 않는다.

@@ -72,6 +72,25 @@ await parent.close();
 각 process는 별도 worker와 kernel을 소유한다. clone은 live heap view가 아니라 검증된 checkpoint에서
 시작한다.
 
+## 상주 WASM 도구
+
+Machine에는 source-pinned ripgrep 15.1.0이 실제 WASI 명령으로 들어 있다. shell 문자열이 아니라 인자
+배열을 받고, 읽기 전용 입력 snapshot과 파일, byte, 출력, 시간 상한을 적용한 새 worker에서 실행한다.
+
+```js
+const result = await machine.tools.run("rg", ["-n", "TODO", "/home"], {
+  files: {
+    "/home/notes.txt": "done\nTODO 브라우저 gate 확인\n",
+  },
+});
+
+console.log(result.exitCode, result.stdout, result.input.sha256);
+```
+
+boot에 `KernelVfs`를 연결하고 `files`를 생략하면 커밋된 `/home` 파일을 snapshot으로 사용한다. 명령의
+0이 아닌 exit는 정상 receipt다. 미지원 명령, 취소, 상한 초과, 자산 불일치는 구조화된 `PyProcError`로
+닫힌다. 현재 상주 catalog는 `rg` 하나이며 Git과 Python `subprocess` 연결은 아직 지원하지 않는다.
+
 ## Package와 terminal
 
 `machine.createPackageEnvironment()`는 표준 Simple API metadata에서 pure Python wheel을 선택하고 hash,
@@ -194,10 +213,11 @@ npm test
 npm run test:types
 npm run test:package
 npm run test:installed
+npm run test:wasm-tools
 ```
 
 Installed package gate는 실제 tarball을 pack하고 설치한 뒤 Chrome과 Edge에서 포함된 engine을 부팅한다.
-Package 설치, checkpoint restore, offline image reopen, process clone, terminal 동작과 clean boot의 미선언
+Package 설치, checkpoint restore, offline image reopen, process clone, terminal, 상주 WASI 검색과 clean boot의 미선언
 외부 engine request 0을 검증한다.
 
 [API reference](skills/reference-pyproc-api/references/api.md), [platform requirements](skills/use-pyproc-runtime/references/platform-requirements.md),

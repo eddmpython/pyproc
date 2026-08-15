@@ -47,6 +47,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "storageDurability.mjs",
   "valueEnvelope.mjs",
   "verification.mjs",
+  "wasmToolLayer.mjs",
 ]);
 
 export async function runContractSuites() {

@@ -107,11 +107,12 @@ try {
       && gpu.GPU_ORACLE_PROTOCOL === "pyproc.hardwareVisualOracle" && gpu.GPU_ORACLE_VERSION === 1);
 
   const contract = assets.getPyProcAssetManifest({ baseURL: "/node_modules/pyproc/" });
-  check("asset contract names the installed worker", contract.assets.length === 1
-    && contract.assets[0].role === "wasiWorker" && contract.assets[0].sameOrigin === true);
+  check("asset contract names installed workers and resident binary", contract.assets.length === 3
+    && contract.assets.map((asset) => asset.role).join(",") === "wasiWorker,wasmToolWorker,wasmToolBinary"
+    && contract.assets.every((asset) => asset.sameOrigin === true));
   const generated = await fetch("/pyproc-assets.json").then((response) => response.json());
-  check("installed asset graph has seven files", generated.files.length === 7
-    && generated.entrypoints.length === 1 && generated.packageRoot === "/node_modules/pyproc/");
+  check("installed asset graph has nine files and three entrypoints", generated.files.length === 9
+    && generated.entrypoints.length === 3 && generated.packageRoot === "/node_modules/pyproc/");
   const verified = await assets.verifyPyProcAssetIntegrity(generated, { roles: ["wasiWorker"] });
   check("installed asset bytes pass SHA-256", verified.verified === 7 && verified.bytes > 0);
   const bad = structuredClone(generated);

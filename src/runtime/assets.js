@@ -19,6 +19,22 @@ const ASSETS = Object.freeze([
     usedBy: ["WasiSession"],
     reason: "소유 CPython WASI 세션 워커 엔트리포인트",
   }),
+  Object.freeze({
+    role: "wasmToolWorker",
+    path: "src/runtime/tools/wasmToolWorker.js",
+    kind: "module-worker",
+    sameOrigin: true,
+    usedBy: ["KernelMachine.tools"],
+    reason: "검증된 WASI 명령을 실행별로 격리하는 워커 엔트리포인트",
+  }),
+  Object.freeze({
+    role: "wasmToolBinary",
+    path: "src/runtime/tools/owned/rg.wasm",
+    kind: "wasm-module",
+    sameOrigin: true,
+    usedBy: ["KernelMachine.tools"],
+    reason: "source-pinned ripgrep 15.1.0 WASI 실행 자산",
+  }),
 ]);
 
 function packageRootFrom(metaUrl) {

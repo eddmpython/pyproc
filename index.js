@@ -18,7 +18,7 @@ import { PyProcError } from "./src/runtime/errors.js";
 
 const DEFAULT_BOOT_OPTIONS = new Set([
   "engineManifest", "kernelFactory", "assetStore", "checkpointStore", "fetchImpl",
-  "deterministic", "kernelRef", "hostBroker", "checkpointCoordinator", "kernelVfs",
+  "deterministic", "kernelRef", "hostBroker", "assetIntegrity", "checkpointCoordinator", "kernelVfs",
 ]);
 
 export async function boot(options = {}) {

@@ -1,17 +1,30 @@
 # Package contract
 
+## Contents
+
+- Installation and assets
+- Runtime contract
+- Resident tool contract
+- State contract
+- Browser storage durability contract
+- Package contract
+- Host capability contract
+- Public subpaths
+- Browser boundary
+
 ## Installation and assets
 
-`npm install pyproc` includes the owned CPython/WASI core, standard library, build manifest, SBOM, standard
-library inventory, and reproducibility receipt. Serve the package and its relative `src/` graph from one
-origin. The runtime verifies engine manifest identity, artifact byte length, and SHA-256 before boot.
+`npm install pyproc` includes the owned CPython/WASI core, standard library, source-pinned ripgrep WASI binary,
+build manifests, licenses, SBOM, standard library inventory, and reproducibility receipts. Serve the package and
+its relative `src/` graph from one origin. The runtime verifies engine manifest identity, artifact byte length,
+and SHA-256 before boot.
 
 ```js
 import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/assets";
 ```
 
-The public asset graph contains the worker entrypoint. Engine binaries are addressed by the signed kernel
-engine manifest and are not copied into Machine images.
+The public asset graph contains the kernel worker, resident tool worker, and resident WASM binary entrypoints.
+Engine binaries are addressed by the signed kernel engine manifest and are not copied into Machine images.
 
 ## Runtime contract
 
@@ -34,6 +47,18 @@ do not enter durable state.
 Check `threading.pythonThreadCreation` before choosing a Python thread algorithm. The installed engines currently
 report `mode: "worker-processes"`; use `machine.proc` for independent-interpreter parallelism. A browser having
 `SharedArrayBuffer` does not mean the Python WASM memory is shared.
+
+## Resident tool contract
+
+`machine.tools.run("rg", args, options)` executes source-pinned ripgrep 15.1.0 in a fresh WASI worker. It accepts
+only an argument vector. With no explicit `files`, it snapshots committed `/home` entries from the attached
+`KernelVfs`; otherwise it accepts a bounded absolute-path file object. The snapshot is read-only and the worker
+has no network capability.
+
+The version 1 receipt binds tool version and source revision, argv, exit code, stdout, stderr, timing, file count,
+byte length, and input SHA-256. Nonzero command exit is a normal receipt. Input, output, time, cancellation, worker,
+and asset failures remain distinguishable. The current catalog contains no Git command and does not make Python
+standard library `subprocess` work.
 
 ## State contract
 

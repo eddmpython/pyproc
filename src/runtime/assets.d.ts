@@ -1,9 +1,9 @@
 export const PYPROC_ASSET_MANIFEST_VERSION: 1;
 
 export interface PyProcAssetEntry {
-  role: "wasiWorker";
+  role: "wasiWorker" | "wasmToolWorker" | "wasmToolBinary";
   path: string;
-  kind: "module-worker";
+  kind: "module-worker" | "wasm-module";
   sameOrigin: true;
   usedBy: string[];
   reason: string;

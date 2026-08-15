@@ -32,9 +32,55 @@
       "path": "tests/browser/storageDurabilityProduct.mjs",
       "lane": "browser storage durability",
       "command": "npm run test:storage-durability"
+    },
+    {
+      "path": "tests/browser/wasmToolLayerProduct.mjs",
+      "lane": "resident WASI command layer",
+      "command": "npm run test:wasm-tools"
     }
   ],
   "evidence": [
+    {
+      "evidenceId": "local-owned-wasm-tool-20260816",
+      "classification": "PROVEN_LOCAL",
+      "environment": {
+        "os": "Windows 11",
+        "browser": "Microsoft Edge 151.0.4129.86",
+        "crossOriginIsolated": true,
+        "node": "22.19.0",
+        "rustc": "1.97.1 (8bab26f4f68e0e26f0bb7960be334d5b520ea452)",
+        "cargo": "1.97.1 (c980f4866)",
+        "target": "wasm32-wasip1"
+      },
+      "commands": [
+        "cargo build --release --locked --target wasm32-wasip1 --bin rg",
+        "npm run assets:wasm-tools",
+        "npm run test:wasm-tools"
+      ],
+      "result": "GREEN two isolated target builds were byte-identical; exact packed public Control: rg version and two-file recursive search, stable input digest and output, no-match exit 1, bounded output and cancellation failures, mutated binary rejection, zero third-party requests; search 60 ms",
+      "artifacts": [
+        {
+          "role": "residentWasiCommand",
+          "path": "src/runtime/tools/owned/rg.wasm",
+          "byteLength": 2193626,
+          "sha256": "4d89e862853619ad81e3104bb97a725b5db6793932569831bebda9496d81812a",
+          "sourceRevision": "af60c2de9d85e7f3d81c78601669468cf02dabab",
+          "cargoLockSha256": "efc8f078eb02da18f454972e5d286b13660e1f2a58e3700f73abacad75e07004"
+        },
+        {
+          "role": "headedProductScreenshot",
+          "byteLength": 98488,
+          "sha256": "db74ac2ca3af74a363fb3c1a6ebc437dc2838069286e64397778d400bdb1b196"
+        }
+      ],
+      "negative": {
+        "unsupportedCommand": "PYPROC_INPUT_INVALID",
+        "outputLimit": "PYPROC_WORKER_TASK_ERROR",
+        "cancelled": "PYPROC_PROCESS_UNAVAILABLE",
+        "mutatedAsset": "PYPROC_ASSET_INTEGRITY",
+        "gitoxideWasiBuild": "signal-hook-registry requires POSIX signal APIs unavailable on wasm32-wasip1"
+      }
+    },
     {
       "evidenceId": "local-wasi-product-20260814",
       "classification": "PROVEN_LOCAL",

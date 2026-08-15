@@ -2,6 +2,7 @@ import type { HostCapabilityBroker } from "../capabilities/hostCapabilityBroker.
 import type { KernelCheckpointCoordinator, KernelCheckpointDescriptor, KernelRuntimeContractV2,
   KernelPackageEnvironmentBootstrap, KernelVfs, MemoryValueArtifactStore } from "../runtime/kernel/index.js";
 import type { KernelEngineManifest, MemoryKernelAssetStore } from "../runtime/kernel/engineManifest.js";
+import type { PyProcAssetIntegrityManifest } from "../runtime/assets.js";
 
 export const KERNEL_MACHINE_IMAGE_PROTOCOL: "pyproc.kernel-machine-image";
 export const KERNEL_MACHINE_IMAGE_VERSION: 1;
@@ -46,6 +47,7 @@ export interface KernelOpenOptions {
   kernelRef?: string;
   restore?: KernelCheckpointDescriptor | { checkpoint: KernelCheckpointDescriptor };
   hostBroker?: HostCapabilityBroker;
+  assetIntegrity?: PyProcAssetIntegrityManifest;
   checkpointCoordinator?: KernelCheckpointCoordinator;
   kernelVfs?: KernelVfs;
   packageEnvironment?: KernelPackageEnvironmentBootstrap | null;

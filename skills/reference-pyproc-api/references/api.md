@@ -33,7 +33,7 @@ The root has exactly six value exports: `boot`, `open`, `createWebComputer`, `ch
 Boots the installed owned CPython/WASI engine in a dedicated worker and returns a `KernelMachine`.
 
 Accepted options are `engineManifest`, `kernelFactory`, `assetStore`, `checkpointStore`, `fetchImpl`,
-`deterministic`, `kernelRef`, `hostBroker`, `checkpointCoordinator`, and `kernelVfs`. Unknown options fail
+`deterministic`, `kernelRef`, `hostBroker`, `assetIntegrity`, `checkpointCoordinator`, and `kernelVfs`. Unknown options fail
 with `PYPROC_INPUT_INVALID`.
 
 ### `open(image?, options?)`
@@ -52,9 +52,11 @@ and restores that image, including any digest-sealed package environment. Other 
 - `history.export(options?)` creates a portable Machine image.
 - `proc.spawn(manifest, options?)` starts a worker process.
 - `proc.clone(options?)` starts a worker process from the current state.
+- `tools.run("rg", args?, options?)` runs source-pinned ripgrep in an isolated WASI worker.
+- `tools.inspect()` returns the versioned command catalog, confinement, limits, source revision, and digest.
 - `createPackageEnvironment(options?)` creates the package policy boundary.
 - `terminal(options?)` creates a version 2 kernel terminal.
-- `inspect()` returns engine, process, and worker ownership facts.
+- `inspect()` returns engine, process, tool, and worker ownership facts.
 - `close()` closes child processes and the kernel worker.
 
 `pyproc/wasi.createOwnedPackageResolver()` creates the exact engine and profile fenced resolver for package-owned
@@ -104,7 +106,18 @@ import { getPyProcAssetManifest, verifyPyProcAssetIntegrity } from "pyproc/asset
 ```
 
 The manifest contains the same-origin `wasiWorker` module entrypoint. Integrity verification fetches the
-selected graph files and checks SHA-256 SRI before worker creation.
+selected graph files and checks SHA-256 SRI before worker creation. It also lists `wasmToolWorker` and
+`wasmToolBinary`. Passing the generated manifest as `boot({ assetIntegrity })` verifies both worker graphs and
+the resident binary. The binary has a second compiled-in length and SHA-256 check before execution.
+
+### Resident tool receipt
+
+`machine.tools.run(command, args, options)` never parses a shell string. Options may provide an explicit
+absolute-path `files` object, `stdin`, `timeoutMs`, `maxOutputBytes`, and an `AbortSignal`. Without `files`, the
+Machine snapshots committed `/home` files from its attached `KernelVfs`. The version 1 receipt contains exact
+tool version and revision, argv, exit code, stdout, stderr, timing, and a content digest of the read-only input.
+Exit codes such as ripgrep's no-match `1` remain normal receipts. The current command catalog contains only
+`rg` 15.1.0. Git and Python `subprocess` integration remain unsupported.
 
 ## `pyproc/history`
 

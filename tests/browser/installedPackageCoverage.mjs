@@ -1,5 +1,5 @@
 // Installed tarball browser coverage shared by the gate and its report.
-export const INSTALLED_PACKAGE_COVERAGE_VERSION = 6;
+export const INSTALLED_PACKAGE_COVERAGE_VERSION = 7;
 
 export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
   Object.freeze({
@@ -12,14 +12,14 @@ export const INSTALLED_PACKAGE_COVERAGE = Object.freeze([
     gate: "installed asset graph",
     specifiers: Object.freeze(["`pyproc/assets`", "the `pyproc-assets` binary"]),
     publicSurface: Object.freeze(["`getPyProcAssetManifest`", "`verifyPyProcAssetIntegrity`"]),
-    contract: "The generated seven-file worker graph is same-origin and every byte passes SHA-256 verification",
+    contract: "The generated nine-file graph seals three entrypoints, including the resident WASI command, and every selected byte passes SHA-256 verification",
   }),
   Object.freeze({
     gate: "installed owned kernel",
     specifiers: Object.freeze(["`pyproc`", "`pyproc/runtime`", "`pyproc/wasi`"]),
     publicSurface: Object.freeze(["execution", "value transfer", "checkpoint restore", "process clone", "terminal",
       "source-pinned native package catalogs", "data profile SIMD numerical oracle"]),
-    contract: "The packed core and data CPython WASI engines boot and remain exactly profile fenced",
+    contract: "The packed core and data CPython WASI engines boot and the separate resident command remains exactly source fenced",
   }),
   Object.freeze({
     gate: "installed Machine lifecycle",

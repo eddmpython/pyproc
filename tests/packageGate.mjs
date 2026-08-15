@@ -125,6 +125,8 @@ try {
     if (manifest.packageRoot !== "/vendor/pyproc/") throw new Error("baseURL normalization failed");
     if (typeof verifyPyProcAssetIntegrity !== "function") throw new Error("verify export missing");
     if (!manifest.assets.some((a) => a.role === "wasiWorker")) throw new Error("wasiWorker role missing");
+    if (!manifest.assets.some((a) => a.role === "wasmToolWorker")) throw new Error("wasmToolWorker role missing");
+    if (!manifest.assets.some((a) => a.role === "wasmToolBinary")) throw new Error("wasmToolBinary role missing");
   `;
   run(process.execPath, ["--input-type=module", "-e", smoke], { cwd: appDir });
 
@@ -304,7 +306,8 @@ try {
   if (manifest.packageRoot !== "/vendor/pyproc/") throw new Error("installed CLI baseURL 반영 실패");
   const byPath = new Map(manifest.files.map((f) => [f.path, f]));
   for (const path of ["src/runtime/engines/wasi/wasiWorker.js",
-    "src/runtime/engines/wasi/browserWasiShim.js", "src/runtime/errors.js"]) {
+    "src/runtime/engines/wasi/browserWasiShim.js", "src/runtime/errors.js",
+    "src/runtime/tools/wasmToolWorker.js", "src/runtime/tools/owned/rg.wasm"]) {
     const file = byPath.get(path);
     if (!file) throw new Error(`installed CLI graph 파일 누락: ${path}`);
     if (!/^sha256-[A-Za-z0-9+/]+=*$/.test(file.integrity)) throw new Error(`installed CLI SRI 형식 오류: ${path}`);

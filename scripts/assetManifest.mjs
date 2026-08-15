@@ -20,7 +20,7 @@ function usage() {
   return `usage: pyproc-assets [--baseURL /vendor/pyproc/] [--out file] [--copy-to dir] [--pretty]
 
 Generates a JSON manifest for pyproc runtime assets. The manifest includes every Worker,
-SharedWorker, and Service Worker entrypoint plus its relative import graph, with sha256 SRI.
+SharedWorker, Service Worker, and resident WASM binary plus its relative import graph, with sha256 SRI.
 `;
 }
 
@@ -103,7 +103,7 @@ async function buildManifest(opts) {
   const fileRoles = new Map();
   const entrypoints = [];
   for (const asset of contract.assets) {
-    const graph = await collectGraph(asset.path);
+    const graph = asset.kind === "module-worker" ? await collectGraph(asset.path) : [asset.path];
     entrypoints.push({ ...asset, graph });
     for (const p of graph) {
       if (!fileRoles.has(p)) fileRoles.set(p, new Set());

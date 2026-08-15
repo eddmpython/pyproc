@@ -3,6 +3,7 @@ import type { KernelFactory, KernelMachineImage } from "./src/composition/kernel
 import type { KernelMachine } from "./src/machine/composition/kernelMachine.js";
 import type { MemoryKernelAssetStore, KernelEngineManifest } from "./src/runtime/kernel/engineManifest.js";
 import type { KernelCheckpointCoordinator, KernelVfs } from "./src/runtime/kernel/index.js";
+import type { PyProcAssetIntegrityManifest } from "./src/runtime/assets.js";
 
 export type PyProcErrorCode =
   | "PYPROC_ENV_UNSUPPORTED"
@@ -82,6 +83,7 @@ export interface CpythonWasiBootOptions {
   deterministic?: boolean;
   kernelRef?: string;
   hostBroker?: HostCapabilityBroker;
+  assetIntegrity?: PyProcAssetIntegrityManifest;
   checkpointCoordinator?: KernelCheckpointCoordinator;
   kernelVfs?: KernelVfs;
 }

@@ -1,0 +1,30 @@
+{
+  "protocol": "pyproc.owned-wasm-tool-provenance",
+  "version": 1,
+  "command": "rg",
+  "upstream": {
+    "repository": "https://github.com/BurntSushi/ripgrep",
+    "tag": "15.1.0",
+    "commit": "af60c2de9d85e7f3d81c78601669468cf02dabab",
+    "license": "MIT OR Unlicense"
+  },
+  "build": {
+    "cargoLockSha256": "efc8f078eb02da18f454972e5d286b13660e1f2a58e3700f73abacad75e07004",
+    "rustc": "1.97.1 (8bab26f4f68e0e26f0bb7960be334d5b520ea452)",
+    "cargo": "1.97.1 (c980f4866)",
+    "target": "wasm32-wasip1",
+    "profile": {
+      "optLevel": "z",
+      "lto": true,
+      "codegenUnits": 1,
+      "strip": "symbols",
+      "panic": "abort"
+    }
+  },
+  "artifact": {
+    "path": "rg.wasm",
+    "byteLength": 2193626,
+    "sha256": "4d89e862853619ad81e3104bb97a725b5db6793932569831bebda9496d81812a",
+    "reproducibility": "two isolated target directories produced byte-identical output"
+  }
+}

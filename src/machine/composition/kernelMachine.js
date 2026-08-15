@@ -5,16 +5,20 @@ import { PackageEnvironment } from "../../capabilities/packageEnvironment.js";
 import { getDefaultKernelEngineManifest } from "../../runtime/engines/wasi/ownedEngineDistribution.js";
 import { KernelSession } from "../../session/kernelSession.js";
 import { KernelProcessManager } from "../../processOs/kernelProcess.js";
+import { OwnedWasmToolLayer } from "../../runtime/tools/ownedWasmToolLayer.js";
 
 const defaultKernelFactory = new KernelFactory();
 
 export class KernelMachine {
   #session;
   #processes;
+  #toolLayer;
 
-  constructor(session) {
+  constructor(session, options = {}) {
     this.#session = session;
     this.#processes = new KernelProcessManager(session.factory, { openSession: KernelSession.open });
+    this.#toolLayer = new OwnedWasmToolLayer({ assetIntegrity: options.assetIntegrity,
+      fetchImpl: options.fetchImpl, kernelVfs: session.kernel.vfs });
     const run = (code, options) => this.#session.run(code, options);
     run.python = run;
     run.get = (name) => this.#session.get(name);
@@ -26,6 +30,8 @@ export class KernelMachine {
     this.proc = Object.freeze({ spawn: (manifest, options) => this.#processes.spawn(manifest, options),
       clone: (options = {}) => this.#processes.spawn(this.manifest, { ...options, cloneFrom: this.#session }),
       inspect: () => this.#processes.inspect() });
+    this.tools = Object.freeze({ run: (command, args, options) => this.#toolLayer.run(command, args, options),
+      inspect: () => this.#toolLayer.inspect() });
   }
 
   get kernel() { return this.#session.kernel; }
@@ -45,21 +51,22 @@ export class KernelMachine {
   async inspect() {
     return Object.freeze({ protocol: "pyproc.kernel-machine-inspection", version: 1,
       kernel: await this.#session.describe(), processes: this.#processes.inspect(),
-      engineManifestDigest: this.manifest.digest });
+      tools: this.#toolLayer.inspect(), engineManifestDigest: this.manifest.digest });
   }
 
   async close() {
+    this.#toolLayer.close();
     await this.#processes.close();
     return this.#session.close();
   }
 }
 
 export async function bootKernelMachine(factory, manifest, options = {}) {
-  return new KernelMachine(await KernelSession.open(factory, manifest, options));
+  return new KernelMachine(await KernelSession.open(factory, manifest, options), options);
 }
 
 export async function openKernelMachineImage(factory, image, options = {}) {
-  return new KernelMachine(new KernelSession(factory, await factory.openImage(image, options)));
+  return new KernelMachine(new KernelSession(factory, await factory.openImage(image, options)), options);
 }
 
 export async function bootDefaultKernelMachine(options = {}) {
@@ -72,6 +79,8 @@ export async function bootDefaultKernelMachine(options = {}) {
     deterministic: options.deterministic === true,
     kernelRef: options.kernelRef,
     hostBroker: options.hostBroker,
+    assetIntegrity: options.assetIntegrity,
+    fetchImpl: options.fetchImpl,
     checkpointCoordinator: options.checkpointCoordinator,
     kernelVfs: options.kernelVfs,
   });

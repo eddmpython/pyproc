@@ -75,6 +75,26 @@ await parent.close();
 Each process owns a separate worker and kernel. Clone starts from a verified checkpoint, never from a live
 heap view.
 
+## Resident WASM tools
+
+The Machine includes source-pinned ripgrep 15.1.0 as a real WASI command. It accepts an argument vector, not a
+shell string, and runs in a fresh worker over a read-only input snapshot with file, byte, output, and time limits.
+
+```js
+const result = await machine.tools.run("rg", ["-n", "TODO", "/home"], {
+  files: {
+    "/home/notes.txt": "done\nTODO verify the browser gate\n",
+  },
+});
+
+console.log(result.exitCode, result.stdout, result.input.sha256);
+```
+
+When a `KernelVfs` is attached at boot, omitting `files` snapshots its committed `/home` files. A nonzero command
+exit is a normal receipt. Unsupported commands, cancellation, limit failures, and asset mismatch use structured
+`PyProcError` codes. The current resident catalog contains `rg`; Git and Python `subprocess` integration are not
+yet supported.
+
 ## Packages and terminal
 
 `machine.createPackageEnvironment()` installs pure Python wheels selected from standard Simple API metadata,
@@ -224,11 +244,12 @@ npm test
 npm run test:types
 npm run test:package
 npm run test:installed
+npm run test:wasm-tools
 ```
 
 The installed-package gate packs and installs the real tarball, boots the included engine in Chrome and
 Edge, checks package installation, checkpoint restore, offline image reopen, process clone, terminal behavior,
-and verifies that the clean boot makes no undeclared external engine request.
+resident WASI search, and verifies that the clean boot makes no undeclared external engine request.
 
 See [API reference](skills/reference-pyproc-api/references/api.md), [platform requirements](skills/use-pyproc-runtime/references/platform-requirements.md),
 and [kernel factory contract](skills/use-pyproc-runtime/references/kernel-contracts.md).

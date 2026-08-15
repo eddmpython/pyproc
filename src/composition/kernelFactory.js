@@ -243,7 +243,8 @@ export class KernelFactory {
       };
     }
     const kernelRef = options.kernelRef || `kernel:factory:${++this.#kernelCounter}`;
-    const record = { manifest, restoredCheckpoint, packageEnvironment };
+    const record = { manifest, restoredCheckpoint, packageEnvironment,
+      assetIntegrity: options.assetIntegrity || null, hostBroker: options.hostBroker || null };
     const kernel = await bootCpythonWasiKernel({
       wasmBytes,
       stdlibBytes,
@@ -256,6 +257,7 @@ export class KernelFactory {
       kernelRef,
       artifactStore: this.#checkpointStore,
       hostBroker: options.hostBroker,
+      assetIntegrity: options.assetIntegrity,
       checkpointCoordinator: options.checkpointCoordinator,
       kernelVfs: options.kernelVfs,
       bootstrapSnapshot,
@@ -322,7 +324,9 @@ export class KernelFactory {
     const manifest = record.manifest;
     const checkpoint = await this.checkpoint(kernel, options.checkpoint || {});
     const cloned = await this.open(manifest, { ...options, restore: checkpoint,
-      kernelRef: options.kernelRef, packageEnvironment: record.packageEnvironment });
+      kernelRef: options.kernelRef, packageEnvironment: record.packageEnvironment,
+      hostBroker: options.hostBroker || record.hostBroker,
+      assetIntegrity: options.assetIntegrity || record.assetIntegrity });
     return Object.freeze({ kernel: cloned, checkpoint });
   }
 
