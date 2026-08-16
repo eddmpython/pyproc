@@ -12,10 +12,13 @@ export class V86DisplayPort {
     this._port = null;
     this._presentPromise = null;
     this._cellWrites = 0;
+    this._clippedCells = 0;
     this._presentations = 0;
     this._unsupportedModes = 0;
     this._errors = 0;
     this._lastError = null;
+    this._columns = 80;
+    this._rows = 25;
     this._onSize = (size) => this._acceptSize(size);
     this._onCell = (cell) => this._acceptCell(cell);
   }
@@ -30,6 +33,8 @@ export class V86DisplayPort {
       this._emulator = emulator;
       this._port = port;
       port.configure({ columns: 80, rows: 25 });
+      this._columns = 80;
+      this._rows = 25;
       emulator.add_listener("screen-set-size", this._onSize);
       emulator.add_listener("screen-put-char", this._onCell);
       this._schedulePresent();
@@ -60,6 +65,7 @@ export class V86DisplayPort {
       endpointId: this._endpointId,
       attached: !!this._emulator,
       cellWrites: this._cellWrites,
+      clippedCells: this._clippedCells,
       presentations: this._presentations,
       unsupportedModes: this._unsupportedModes,
       errors: this._errors,
@@ -75,6 +81,8 @@ export class V86DisplayPort {
         return;
       }
       this._port.configure({ columns, rows });
+      this._columns = columns;
+      this._rows = rows;
       this._schedulePresent();
     } catch (error) {
       this._recordError(error);
@@ -84,6 +92,13 @@ export class V86DisplayPort {
   _acceptCell(cell) {
     try {
       const [row, column, glyph] = cell || [];
+      // v86 itself treats transient text updates outside the announced screen
+      // as clipped. They occur while VGA start and line-compare registers move.
+      if (Number.isInteger(row) && Number.isInteger(column)
+        && (row < 0 || column < 0 || row >= this._rows || column >= this._columns)) {
+        this._clippedCells += 1;
+        return;
+      }
       this._port.writeCell({ row, column, glyph });
       this._cellWrites += 1;
       this._schedulePresent();

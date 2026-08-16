@@ -230,3 +230,10 @@ jobs:
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
           PYPROC_GATE_TIMEOUT: "600000"
+      # exact packed package가 Python, Linux, source-pinned Node를 한 signed computer로 옮기고
+      # 변조 Node image를 active swap 전에 거절하는지 같은 x86 asset lane에서 반복한다.
+      - run: npm run test:node-guest
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
+          PYPROC_GATE_TIMEOUT: "900000"
+          PYPROC_NODE_GUEST_HEADED: "0"

@@ -17,10 +17,13 @@
 
 ## 현재 상태
 
-현재 미완료 이니셔티브는 [9-agentComputerStandardReadiness](9-agentComputerStandardReadiness/README.md)다.
-M2의 hardware GPU 결과 oracle과 M3의 NumPy 2.5.1 static data profile, thread capability boundary까지
-완료했다. browser storage quota와 OPFS 축출 계약, source-pinned 상주 ripgrep과 local Git, 같은 Python
-도구 receipt도 닫았다. 다음 자력 단은 `multiGuestComputer.nodeGuest`다.
+현재 실행 중인 이니셔티브는 [9-agentComputerStandardReadiness](9-agentComputerStandardReadiness/README.md)다.
+M0부터 M3까지 완료했다. Node 22.22.0 guest는 Python과 Linux 옆에서 같은 lifecycle과 signed image를
+통과하고, 독립 byte-identical build와 공개 source, legal material, SBOM을 갖췄다. 다음 자력 단은 M4의
+`supplyChainIntegrity.remainingReproducibleAssets`이며 V86 engine과 firmware 재현부터 닫는다.
+
+소비 저장소에서 확인한 [10-longPageScreenshotEvidence](10-longPageScreenshotEvidence/README.md)는 9번 뒤의
+직렬 대기열이다. 긴 content bounds가 `fullPage` screenshot 한계를 넘을 때 공개 오류 계약을 정규화한다.
 
 이 번호는 agent-computer 포트폴리오의 실행 순서다. North Star ceiling ladder의 기존 번호와 우선순위를
 대체하지 않는다.

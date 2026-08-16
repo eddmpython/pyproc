@@ -1,6 +1,6 @@
 # Initiative 9: agent computer와 웹 표준 후보 준비도
 
-상태: **진행 중, M0부터 M2 완료, M3 진행 중**
+상태: **진행 중, M0부터 M3 완료, M4 진행 중**
 
 이 문서는 agent가 pyproc에 들어와 보고, 행동하고, 계산하고, 세션을 넘겨 계속 일하는 전 과정을
 제품 기준으로 끌어올리는 실행 원장이다. 기존 능력 점수와 증거의 정본은
@@ -16,7 +16,7 @@
 |---|---|---|---|
 | agent 진입점 | 매우 강함, 장기 수명주기 검증은 계속 | exact install 뒤 package engine 자동 선택, effect-free doctor, 네 adapter의 같은 CPython 첫 결과가 공개 계약으로 완결 | M3 컴퓨팅 몸체 확대와 독립 구현 conformance |
 | 눈과 팔 | 매우 강함, 완성 아님, 북극성 9.5 | APX Situation, 20회 무잔류 수명주기, bounded action 수렴, 실제 hardware compute와 pixel 결과 영수증 | 두 번째 독립 hardware와 browser 구현의 visual conformance |
-| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 9.1 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python과 x86 guest gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package, quota 실패와 OPFS 축출 계약, 상주 ripgrep과 local Git, 같은 Python 도구 receipt | Node guest, 과학 패키지 폭, shared-memory thread, 외부 사본 기반 축출 복구 |
+| 비-agent 컴퓨팅 몸체 | 훌륭한 브라우저 컴퓨터, 로컬 OS 완전 대체는 아님, 북극성 9.3 | owned CPython, worker process, OPFS disk, checkpoint, Machine image, Python, Linux, Node 공동 gate, hardware GPU 결과 gate, source-pinned SIMD와 NumPy 2.5.1 data package, quota 실패와 OPFS 축출 계약, 상주 ripgrep과 local Git, 같은 Python 도구 receipt | memory64, 과학 패키지 폭, shared-memory thread, 외부 사본 기반 축출 복구 |
 | 단독 자립성 | Python 기본과 data Machine은 높음, 전체 WebComputer는 미완성 | source-built CPython, stdlib, NumPy가 npm에 포함되고 기본 부팅과 package install의 제3자 요청은 0 | x86 emulator와 firmware의 독립 재현, 외부 hardware runner 등록, 브라우저 범위 확대 |
 | 웹 표준 후보 가능성 | 기반은 있음, 후보라고 부르기에는 이름 | WebAssembly, Worker, cross-origin isolation, bucket file system 같은 표준 기반 위에 제품 계약이 동작 | vendor-neutral specification, 독립 구현, WPT형 conformance, 공개 incubation과 wide review |
 
@@ -63,7 +63,7 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 - 배포된 0.0.22 최소 lifecycle은 startup timeout timer 때문에 약 5.3초 뒤 종료됐다.
 - 수정 소스의 같은 fixture는 약 0.7초에 종료됐다.
-- 이전 구현이면 1.5초에 걸리는 process 음성 gate를 `tests/fixtures/controlLifecycleProbe.mjs`와
+- 이전 구현이면 3초에 걸리는 process 음성 gate를 `tests/fixtures/controlLifecycleProbe.mjs`와
   `tests/contracts/controlJsSdk.mjs`에 상시화했다.
 - `npm test`, `npm run test:control-product` 22개, `npm run test:mcp-product` 20개가 GREEN이다.
 
@@ -112,6 +112,8 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 ### M3. 컴퓨팅 몸체 확대
 
+판정: **완료**
+
 - 완료: `packageReach` 기반으로 Requires-Python canonicalization, target-generated WASI sysconfig와
   build details, workspace 경로 canonicalization, 두 격리 build의 byte-identical stdlib를 제품화했다.
 - 완료: source-pinned native package catalog, exact engine/profile lock, package-owned offline artifact,
@@ -131,12 +133,53 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 - 완료: `localPythonParity.residentGitAndPythonToolBridge`를 닫았다. source-pinned libgit2 1.9.7 Git이
   KernelVfs snapshot을 CAS fence로 확인하고 local repository transaction을 반영하며, Python의
   main과 clone kernel에 있는 `pyprocTools`가 rg와 Git의 같은 argv-only receipt를 호출한다.
-- 진행 중: 천장 사다리의 다음 자력 단인 `multiGuestComputer.nodeGuest`를 소진한다. durable disk의 다음
-  국소 ceiling은 `evictionRecoveryCopy`다.
+- 완료: `multiGuestComputer.nodeGuest`를 source-pinned Node 22.22.0, 재현 image, 전체 legal material,
+  asset integrity와 설치 제품 gate로 닫았다. durable disk의 다음 국소 ceiling은 `evictionRecoveryCopy`다.
 - upstream이 열어 주는 thread와 dynamic linking은 capability detection과 exact failure로 받는다.
 - Node guest는 Python과 Linux 옆에서 같은 Machine lifecycle과 image 계약을 통과시킨다.
 
+#### `multiGuestComputer.nodeGuest` 완료 원장
+
+- 첫 RED: 기존 재현 Linux image를 `x86-node` adapter로 부팅해 `node --version`을 실행하자
+  `node: not found`였다. 이 결과는 `tests/attempts/runtimeParity/nodeGuestProbe.html`과
+  `tests/attempts/runtimeParity/README.md`에 보존한다.
+- 고정한 공급망: Buildroot 2025.02.16, source revision
+  `2d05bb10d08410c59856ff4022ba8b762f77441a`, commit
+  `135af563b945b8c3d18f8fd370370075b9edb140`, Node 22.22.0 source revision
+  `6add85e4c46b8be383c8b637102d6b6fd206adce`, source SHA-256
+  `4c138012bb5352f49822a8f3e6d1db71e00639d0c36d5b6756f91e4c6f30b683`이다.
+- runtime oracle은 `node:crypto`가 `pyproc-node-guest`를 SHA-256으로 계산한
+  `b3aed4be1f24f10fa77253e267fe69403144d97072cfe305c828a7ce0c8589c0`이다. target Node를
+  `qemu-i386`로 직접 실행해 version과 digest를 build manifest에 봉인한다.
+- 첫 재현 run `31913691708`은 Node와 C++가 실제 resolved Kconfig에 남지 않아 실패했다. derived symbol을
+  직접 쓰지 않고 `BR2_TOOLCHAIN_BUILDROOT_CXX=y`와 Node package input을 profile fragment에 고정했다.
+- 두 번째 run `31915588274`는 target OpenSSL이 없어 Buildroot가 Node를 `--without-ssl`로 구성하는 것을
+  확인하고 중단했다. `BR2_PACKAGE_OPENSSL=y`를 profile input과 음성 계약에 추가했다.
+- 세 번째 run `31915773121`은 Node와 V8 compile에 진입했지만 120분 상한에서 `[1799/3439]` 상태로
+  취소됐다. code failure가 아니라 시간 예산 실패였으며 180분 run `31920012945`도 충분하지 않다고
+  판정해 중단했다.
+- 첫 전체 재현 run `31922087913`은 두 image가 같은 source에서 나왔어도 절대 workspace 경로가 달라
+  최종 byte 대조에서 실패했다. 두 격리 runner의 build path를 같은 절대 경로로 고정했다.
+- 권위 run `31930864003`은 exact main commit `99e7c91b8c5e0348ea0bd5839ad89133a559c879`에서 Linux와
+  Node A/B 및 두 byte 대조를 모두 통과했다. Node image 두 개는 31,048,192 bytes, SHA-256
+  `210fa467af2b718670e163f6802217086a9995661ac5a13e1529626a475568fc`로 같고 manifest와 SBOM도 같다.
+- 제품은 `nodeOs`와 독립 `nodeDisk`, source identity가 있는 manifest, engine 생성 전 image
+  byte length와 SHA-256 검증, redirect 없는 same-origin 기본 loader, 선언 크기 밖 응답의 streaming
+  선제 차단을 제공한다. ready 전 부분 V86 종료는 unsafe `stop`과 `destroy`를 호출하지 않는다.
+- `buildroot-pyproc-node-i686-v1` asset release는 image, Buildroot source, 전체 legal material, CycloneDX
+  SBOM, build와 재현 manifest를 SHA-256과 함께 공개했고 catalog가 그 release를 정본으로 가리킨다.
+- 실제 packed Edge와 Chrome은 Python, Linux, Node 공동 lifecycle, Node crypto와 filesystem workload, 변조
+  image 선거부, signed image 상태 42 복원, 제3자 요청 0을 각각 8/8 통과했다. 직접 확인한 screenshot
+  SHA-256은 Edge `aa5d502758d35e5810fc017005b505e6f155ec0cc9d9fb266a93df6b05c0d359`, Chrome
+  `62b1e6582d82a72fb169b3e700471e4703a47b68608f29e8c76b6fb6ff349650`다.
+
 ### M4. 전체 자립 공급망
+
+판정: **진행 중**
+
+현재 직렬 작업은 `supplyChainIntegrity.remainingReproducibleAssets`다. V86 engine과 SeaBIOS 및 VGA BIOS의
+exact source revision, 저장소 build recipe, 두 격리 build byte 대조, license와 SBOM을 먼저 닫는다. 완료 전
+독립 구현이나 표준 후보 문서로 이동하지 않는다.
 
 - emulator, firmware, guest image의 source, lock, license, SBOM, 두 번 build byte 대조를 완결한다.
 - 기본 Python, optional x86, GPU 경로별 외부 요청과 자산 출처를 설치 제품 gate가 전수 판정한다.
@@ -587,5 +630,5 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   `2f6137c7d0354c7c0807347d2448195655f50a05b809ada60619330bbaf2f2c3`다.
 - 원장 승격: `localPythonParity`는 9.1로 올라갔고 완료한 6단은 `next`에서 제거했다. 공급망 원장과
   API, runtime contract, contract reality, attempt 증거를 현재 구현과 맞췄다.
-- 다음 직렬 작업: upstream 시점을 기다리는 memory64 5단을 capability boundary로 유지하면서 자력으로
-  움직일 수 있는 천장 사다리 6단 `multiGuestComputer.nodeGuest`를 같은 lifecycle과 image 계약으로 닫는다.
+- 이어 수행한 `multiGuestComputer.nodeGuest`는 위 M3 완료 원장의 재현 build, asset release, 설치 제품
+  증거로 닫았다. 다음 직렬 작업은 M4 `supplyChainIntegrity.remainingReproducibleAssets`다.

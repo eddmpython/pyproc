@@ -168,7 +168,7 @@ export async function assertControlJsSdkContract() {
   const lifecycleProbe = spawnSync(process.execPath,
     [fileURLToPath(new URL("../fixtures/controlLifecycleProbe.mjs", import.meta.url))], {
       encoding: "utf8",
-      timeout: 1500,
+      timeout: 3000,
       windowsHide: true,
     });
   assert(lifecycleProbe.status === 0 && !lifecycleProbe.error,

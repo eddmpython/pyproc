@@ -18,6 +18,7 @@ import { createV86WasmHostFunction } from "./v86WasmHostBridge.js";
 import { V86SerialPort } from "./v86SerialPort.js";
 import { indexRequirements, resolveRequiredDevice } from "../../contracts/deviceRequirement.js";
 import { awaitV86Readiness } from "./v86Readiness.js";
+import { resolveV86AssetOptions } from "./v86AssetIntegrity.js";
 
 function consoleWrite(context, message) {
   context.devices.console?.write?.(String(message));
@@ -41,10 +42,16 @@ export function createV86GuestFactory({
   clockDeviceName = null,
   entropyDeviceName = null,
   instantiateWasm = null,
+  loadAsset = null,
+  digestBytes = null,
 }) {
   if (typeof V86 !== "function") throw new TypeError("a V86 constructor is required");
   if ((clockDeviceName || entropyDeviceName) && typeof instantiateWasm !== "function") {
     throw new TypeError("a v86 clock or entropy device requires an instantiateWasm function");
+  }
+  if ((loadAsset === null) !== (digestBytes === null)
+    || (loadAsset !== null && (typeof loadAsset !== "function" || typeof digestBytes !== "function"))) {
+    throw new TypeError("v86 asset integrity requires loadAsset and digestBytes functions together");
   }
   return () => new V86GuestAdapter({
     V86,
@@ -60,6 +67,8 @@ export function createV86GuestFactory({
     clockDeviceName,
     entropyDeviceName,
     instantiateWasm,
+    loadAsset,
+    digestBytes,
   });
 }
 
@@ -78,6 +87,8 @@ class V86GuestAdapter {
     clockDeviceName,
     entropyDeviceName,
     instantiateWasm,
+    loadAsset,
+    digestBytes,
   }) {
     this._blockDeviceName = blockDeviceName ? String(blockDeviceName) : null;
     this._blockMode = this._blockDeviceName ? String(blockMode || "ata") : null;
@@ -95,6 +106,8 @@ class V86GuestAdapter {
     this._clockDeviceName = clockDeviceName ? String(clockDeviceName) : null;
     this._entropyDeviceName = entropyDeviceName ? String(entropyDeviceName) : null;
     this._instantiateWasm = instantiateWasm;
+    this._loadAsset = loadAsset;
+    this._digestBytes = digestBytes;
     this.capabilities = {
       adapterVersion,
       snapshotScope: "portable",
@@ -116,6 +129,7 @@ class V86GuestAdapter {
     };
     this._V86 = V86;
     this._emulator = null;
+    this._emulatorReady = false;
     this._context = null;
     this._manifest = null;
     this._blockBuffer = null;
@@ -128,6 +142,7 @@ class V86GuestAdapter {
     this._pointerPort = null;
     this._clockPort = null;
     this._entropyPort = null;
+    this._assetInspection = Object.freeze([]);
     this._serialPort = new V86SerialPort({ writeLine: (line) => consoleWrite(this._context, `x86:${line}`) });
     this._onSerialByte = (byte) => this._serialPort.acceptByte(byte);
   }
@@ -236,27 +251,33 @@ class V86GuestAdapter {
     throwIfOperationAborted(control, "v86 shutdown");
     this._serialPort.rejectAll(new WebMachineError("WEB_MACHINE_GUEST_ABORTED", "x86 adapter: shutdown"));
     if (this._emulator) {
-      await this._inputPort?.drain();
-      await this._pointerPort?.drain();
-      this._inputPort?.detach();
-      this._pointerPort?.detach();
-      await this._emulator.stop();
-      await this._blockBuffer?.drain();
-      await this._packetPort?.drain();
-      await this._displayPort?.drain();
-      await this._framebufferPort?.drain();
-      if (this._blockMode === "filesystem" && this._emulator.fs9p) {
-        this._volumeStats = await writeV86FileSystemVolume({ device: this._device(this._blockDeviceName), fileSystem: this._fileSystem() });
+      if (this._emulatorReady) {
+        await this._inputPort?.drain();
+        await this._pointerPort?.drain();
+        this._inputPort?.detach();
+        this._pointerPort?.detach();
+        await this._emulator.stop();
+        await this._blockBuffer?.drain();
+        await this._packetPort?.drain();
+        await this._displayPort?.drain();
+        await this._framebufferPort?.drain();
+        if (this._blockMode === "filesystem" && this._emulator.fs9p) {
+          this._volumeStats = await writeV86FileSystemVolume({ device: this._device(this._blockDeviceName), fileSystem: this._fileSystem() });
+        }
+        if (this._blockDeviceName) await this._device(this._blockDeviceName).flush();
+      } else {
+        this._inputPort?.detach();
+        this._pointerPort?.detach();
       }
-      if (this._blockDeviceName) await this._device(this._blockDeviceName).flush();
       this._emulator.remove_listener("serial0-output-byte", this._onSerialByte);
       this._packetPort?.detach();
       this._displayPort?.detach();
       this._framebufferPort?.detach();
       this._clockPort?.detach();
-      await this._emulator.destroy();
+      if (this._emulatorReady) await this._emulator.destroy();
     }
     this._emulator = null;
+    this._emulatorReady = false;
     this._packetPort = null;
     this._displayPort = null;
     this._inputPort = null;
@@ -283,7 +304,7 @@ class V86GuestAdapter {
   inspect() {
     return {
       engine: "v86",
-      ready: !!this._emulator,
+      ready: this._emulatorReady,
       running: this._emulator?.is_running?.() || false,
       serialChars: this._serialPort.length,
       serial: this._serialPort.inspect(),
@@ -297,14 +318,22 @@ class V86GuestAdapter {
       pointer: this._pointerPort?.inspect() || null,
       clock: this._clockPort?.inspect() || null,
       entropy: this._entropyPort?.inspect() || null,
+      assets: this._assetInspection,
     };
   }
 
   async _createEmulator({ autostart, attachInteractiveInputs, control }) {
     throwIfOperationAborted(control, "v86 engine create");
-    const sourceOptions = this._manifest?.v86?.options;
-    if (!sourceOptions || typeof sourceOptions !== "object") throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "x86 adapter: manifest.v86.options is missing");
-    const options = { ...sourceOptions };
+    this._emulatorReady = false;
+    this._assetInspection = Object.freeze([]);
+    const resolvedAssets = await resolveV86AssetOptions({
+      options: this._manifest?.v86?.options,
+      assets: this._manifest?.v86?.assets,
+      loadAsset: this._loadAsset,
+      digestBytes: this._digestBytes,
+    });
+    const options = resolvedAssets.options;
+    this._assetInspection = resolvedAssets.assets;
     if (this._packetDeviceName && (options.network_relay_url || options.net_device?.relay_url)) {
       throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "x86 adapter: a packet device and a relay cannot be used together");
     }
@@ -377,6 +406,7 @@ class V86GuestAdapter {
         method(value);
       };
       const onReady = () => {
+        this._emulatorReady = true;
         finish(resolve);
       };
       const onDownloadError = (event) => {

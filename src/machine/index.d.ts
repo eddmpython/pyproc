@@ -157,6 +157,7 @@ export class WebMachineHost {
 // in tests/run.mjs compares this union against the codes src/machine actually throws, in both
 // directions, so growing only one side turns it RED.
 export type WebMachineErrorCode =
+  | "WEB_MACHINE_ASSET_INTEGRITY"
   | "WEB_MACHINE_ADAPTER_DUPLICATE"
   | "WEB_MACHINE_ADAPTER_INVALID"
   | "WEB_MACHINE_ADAPTER_UNAVAILABLE"
@@ -841,7 +842,7 @@ export interface V86GuestFactoryOptions {
   V86: V86Constructor;
   adapterVersion?: string;
   blockDeviceName?: string | null;
-  blockMode?: "drive" | "9p" | null;
+  blockMode?: "ata" | "filesystem" | null;
   packetDeviceName?: string | null;
   displayDeviceName?: string | null;
   inputDeviceName?: string | null;
@@ -851,9 +852,19 @@ export interface V86GuestFactoryOptions {
   clockDeviceName?: string | null;
   entropyDeviceName?: string | null;
   instantiateWasm?: ((...args: unknown[]) => unknown) | null;
+  loadAsset?: ((url: string, descriptor: Readonly<V86AssetDescriptor>) =>
+    Promise<ArrayBuffer | ArrayBufferView> | ArrayBuffer | ArrayBufferView) | null;
+  digestBytes?: ((bytes: Uint8Array) => Promise<string> | string) | null;
 }
 
 export function createV86GuestFactory(options: V86GuestFactoryOptions): GuestAdapterFactory;
+
+export interface V86AssetDescriptor {
+  target: "bios" | "bzimage" | "cdrom" | "fda" | "vga_bios";
+  url: string;
+  byteLength: number;
+  sha256: string;
+}
 
 // ─── Composition: one computer ───
 export interface WebComputerPythonOptions {
@@ -870,6 +881,27 @@ export interface WebComputerLinuxOptions {
   diskBytes?: number;
   adapterVersion?: string;
   adapterOptions?: Record<string, unknown>;
+  loadAsset?: V86GuestFactoryOptions["loadAsset"];
+  digestBytes?: V86GuestFactoryOptions["digestBytes"];
+}
+
+export interface WebComputerNodeOptions {
+  V86: V86Constructor;
+  manifest: Record<string, unknown> & {
+    node: {
+      runtime: "node";
+      version: string;
+      sourceRevision: string;
+      sourceUrl: string;
+      sourceSha256: string;
+    };
+    v86: Record<string, unknown> & { assets: readonly V86AssetDescriptor[] };
+  };
+  diskBytes?: number;
+  adapterVersion?: string;
+  adapterOptions?: Record<string, unknown>;
+  loadAsset?: V86GuestFactoryOptions["loadAsset"];
+  digestBytes?: V86GuestFactoryOptions["digestBytes"];
 }
 
 export interface WebComputerDurabilityOptions {
@@ -1004,11 +1036,12 @@ export interface WebComputer {
   dispose(control?: OperationControl): Promise<void>;
 }
 
-export const WEB_COMPUTER_MACHINE_IDS: readonly string[];
+export const WEB_COMPUTER_MACHINE_IDS: readonly ["pythonOs", "linuxOs", "nodeOs"];
 
 export interface WebComputerBaseOptions {
   python?: WebComputerPythonOptions;
   linux?: WebComputerLinuxOptions | null;
+  node?: WebComputerNodeOptions | null;
   /** Additional adapter factories, installed in both the active and import-candidate contexts. */
   adapters?: Record<string, GuestAdapterFactory>;
   devices?: Record<string, unknown>;
@@ -1021,7 +1054,7 @@ export interface WebComputerBaseOptions {
    */
   network?: boolean | { maxFrameBytes?: number; maxQueuedFrames?: number };
   /**
-   * Whether to create the two default machines here. With `false` only the hardware is
+   * Whether to create the configured built-in machines here. With `false` only the hardware is
    * assembled and the machines come from an image manifest instead; three call sites use that
    * mode (trust-screen preflight, assembling an import candidate, deferred-boot restore).
    */

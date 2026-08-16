@@ -226,15 +226,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "multiGuestComputer",
-    score: 9.0,
+    score: 9.3,
     en: Object.freeze({
       title: "A computer that boots guests",
-      state: "The Web Machine host lives inside this package behind `createWebComputer`, and Python and x86 Linux guests use the same lifecycle, device, generation, and envelope contracts. Host contract, dual-engine, owner succession, durable generation, and guest-network probes run in CI, and the product gate boots both guests, survives a browser-process restart, and moves the pair as one signed image. The x86 lane puts the real Python and Linux guests on one switch: Linux pings Python, a Python-sent Ethernet frame increments Linux's NIC receive counter, and both directions survive one generation commit and a process cold restore. A guest can also run in its own worker (`pyproc-worker`), so a CPU-bound guest no longer stalls the others. The reproducible Linux build is checked against exact source, legal inventory, SBOM, config, and an independent byte-identical build receipt.",
+      state: "The Web Machine host lives inside this package behind `createWebComputer`, and Python, x86 Linux, and x86 Node guests use the same lifecycle, device, generation, and envelope contracts. Host contract, owner succession, durable generation, and guest-network probes run in CI. The installed product gate boots all three guests, executes Node 22.22.0 crypto and filesystem workloads, rejects a mutated image before engine creation, survives a browser-process restart, and moves the trio as one signed image. The x86 lane puts the real Python and Linux guests on one switch, and a guest can also run in its own worker. The reproducible Linux and Node builds are checked against exact sources, legal inventories, SBOMs, configs, and independent byte-identical build receipts.",
       target: "Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does.",
     }),
     ko: Object.freeze({
       title: "guest를 부팅하는 컴퓨터",
-      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 살고, Python guest와 x86 Linux guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 쓴다. host 계약, dual-engine, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돌고, 제품 게이트는 두 guest를 부팅해 브라우저 프로세스 재시작을 견디고 둘을 한 서명 image로 옮긴다. x86 레인은 실제 Python과 Linux guest를 한 switch에 올리고 양방향 통신을 한 세대 commit과 process cold restore 뒤에도 유지한다. guest를 자기 worker에 얹는 길과 frame을 canvas에 올리는 경로도 CI가 문다. 재현 Linux build는 exact source, 전체 legal inventory, SBOM, config, 독립 byte-identical build 영수증에 대조된다.",
+      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 살고, Python, x86 Linux, x86 Node guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 쓴다. host 계약, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돈다. 설치 제품 게이트는 세 guest를 함께 부팅하고 Node 22.22.0 crypto와 filesystem workload를 실행하며, 변조 image를 engine 생성 전에 거부하고, 브라우저 process 재시작을 견디며 셋을 한 서명 image로 옮긴다. x86 레인은 실제 Python과 Linux guest를 한 switch에 올리고 guest를 자기 worker에 얹는 길도 제공한다. 재현 Linux와 Node build는 exact source, 전체 legal inventory, SBOM, config, 독립 byte-identical build 영수증에 대조된다.",
       target: "어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다.",
     }),
     evidence: Object.freeze([
@@ -245,6 +245,7 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/webMachine/browser/probes/dualBootProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/linuxGuestProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/nestedBrowserBoundaryProbe.html", lane: "test:web-machine:v86" }),
+      Object.freeze({ path: "tests/browser/nodeGuestProduct.mjs", lane: "test:node-guest" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([
@@ -253,12 +254,6 @@ export const NORTH_STAR_AXES = Object.freeze([
         rung: 5,
         en: "Enable memory64 once the engine contract can prove it, lifting the per-module heap ceiling a large guest hits first",
         ko: "engine 계약이 증명할 수 있게 되면 memory64를 켜서 큰 guest가 먼저 부딪히는 모듈별 힙 상한을 올린다",
-      }),
-      Object.freeze({
-        id: "nodeGuest",
-        rung: 6,
-        en: "Boot a Node guest beside Python and Linux, making JavaScript CLI tools residents of the computer",
-        ko: "Python과 Linux 옆에 Node guest를 부팅해 JavaScript CLI 도구를 이 컴퓨터의 거주자로 만든다",
       }),
     ]),
   }),
@@ -356,6 +351,7 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/contracts/nativePackageCatalog.mjs", lane: "test:contracts" }),
       Object.freeze({ path: "tests/browser/hardwareVisualOracleProduct.mjs", lane: "test:hardware-visual-oracle" }),
       Object.freeze({ path: "tests/browser/wasmToolLayerProduct.mjs", lane: "test:wasm-tools" }),
+      Object.freeze({ path: "tests/browser/nodeGuestProduct.mjs", lane: "test:node-guest" }),
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
     ]),
     manual: Object.freeze([]),
@@ -427,15 +423,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "supplyChainIntegrity",
-    score: 9.0,
+    score: 9.2,
     en: Object.freeze({
       title: "A supply chain you can verify",
-      state: "The zero-dependency engine CLI verifies catalog-pinned boot anchors and every lock-listed package before same-origin deployment; runtime pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. The asset CLI seals the worker, Service Worker, resident tool worker, and WASM binary graph, bad hashes refuse spawn, and machine images verify signers before import. Ripgrep is fixed to tag 15.1.0, commit, Cargo.lock digest, Rust toolchain, WASI target, build profile, byte length, SHA-256, and license. Git is fixed to libgit2 1.9.7 and its exact commit, source patch, archive digests, WASI SDK, CMake, Ninja, build flags, binary digest, and license. Both resident tools have byte-identical isolated rebuilds. The Linux guest and data engine are checked by byte-identical independent rebuilds. The NumPy lane additionally seals the exact sdist, build tools, compatibility overlay, static module registry, wheel, numeric oracle, SBOM, and manifest.",
+      state: "The zero-dependency engine CLI verifies catalog-pinned boot anchors and every lock-listed package before same-origin deployment; runtime pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. V86 assets have closed byte-length and SHA-256 descriptors, bounded streaming loads, and pre-engine mismatch rejection. The asset CLI seals the worker, Service Worker, resident tool worker, and WASM binary graph, while machine images verify signers before import. Ripgrep and Git have exact source, toolchain, binary digest, license, and byte-identical isolated rebuild evidence. The Linux, Node, and data guests are checked by independent byte-identical rebuilds. The Node release includes Buildroot and Node source identities, complete legal material, a CycloneDX SBOM, manifests, and a runtime oracle. The NumPy lane additionally seals the exact sdist, build tools, compatibility overlay, static module registry, wheel, numeric oracle, SBOM, and manifest.",
       target: "Every byte pyproc executes is either built by a repository recipe or pinned by a digest, and every mismatch fails before execution.",
     }),
     ko: Object.freeze({
       title: "검증 가능한 공급망",
-      state: "무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. 자산 CLI는 worker, Service Worker, 상주 도구 worker와 WASM binary graph를 봉인하고 나쁜 hash는 spawn을 거부하며 Machine image는 import 전에 서명자를 검증한다. ripgrep은 15.1.0 tag, commit, Cargo.lock digest, Rust toolchain, WASI target, build profile, byte 길이, SHA-256과 license까지 고정한다. Git은 libgit2 1.9.7과 exact commit, source patch, archive digest, WASI SDK, CMake, Ninja, build flag, binary digest와 license까지 고정한다. 두 상주 도구 모두 격리 rebuild가 byte-identical이다. Linux guest와 data engine은 독립 byte-identical rebuild로 확인한다. NumPy 레인은 exact sdist, build tool, compatibility overlay, static module registry, wheel, 수치 oracle, SBOM과 manifest까지 봉인한다.",
+      state: "무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. V86 자산은 닫힌 byte length와 SHA-256 descriptor, bounded streaming load, engine 생성 전 불일치 거부를 갖는다. 자산 CLI는 worker, Service Worker, 상주 도구 worker와 WASM binary graph를 봉인하고 Machine image는 import 전에 서명자를 검증한다. ripgrep과 Git은 exact source, toolchain, binary digest, license, 격리 byte-identical rebuild 증거를 갖는다. Linux, Node, data guest는 독립 byte-identical rebuild로 확인한다. Node release는 Buildroot와 Node source identity, 전체 legal material, CycloneDX SBOM, manifest, runtime oracle을 포함한다. NumPy 레인은 exact sdist, build tool, compatibility overlay, static module registry, wheel, 수치 oracle, SBOM과 manifest까지 봉인한다.",
       target: "pyproc이 실행하는 모든 byte는 저장소 recipe로 build되거나 digest로 pin되고, 불일치는 실행 전에 실패한다.",
     }),
     evidence: Object.freeze([
@@ -463,7 +459,7 @@ export const NORTH_STAR_BROWSER_LANES = Object.freeze([
   "test:mcp-product", "test:frame-space", "test:python-sdk", "test:apx",
   "test:automation-lifecycle", "test:preflight", "test:web-machine", "test:web-machine:v86",
   "test:web-computer", "test:storage-durability", "test:hardware-visual-oracle", "ci",
-  "test:wasm-tools",
+  "test:wasm-tools", "test:node-guest",
 ]);
 
 /** 총점, 만점, 평균. 표의 숫자는 전부 여기서 나온다(손으로 더한 총점 = 표류의 씨앗). */

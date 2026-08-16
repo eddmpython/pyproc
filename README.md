@@ -213,6 +213,22 @@ try {
 and optional durable storage. The default Python guest uses the same `KernelMachine` and Machine image
 contract as root `boot()` and `open()`.
 
+Optional Linux and Node guests join that same lifecycle when a V86 constructor and guest manifest are supplied.
+A Node manifest must name the exact runtime version, source revision, source URL, and source SHA-256, and must
+describe its boot image with byte length and SHA-256. pyproc fetches and verifies those bytes before constructing the emulator, reports the
+verified asset through `inspect()`, and rejects a changed image with `WEB_MACHINE_ASSET_INTEGRITY` before an
+imported Machine can replace the active one. Linux and Node manifests can declare the BIOS, kernel image, and
+VGA BIOS through the same verified descriptor path.
+Each guest receives its own block device while the signed
+`.webmachine` envelope carries all configured guests together. V86, firmware, and optional guest images are not
+bundled into the npm package. `bootAll()` is all-or-clean: if any configured guest fails, it waits for every boot
+attempt and shuts down every partial guest before rejecting.
+
+The versioned external-asset SSOT is [`scripts/assetCatalog.json`](scripts/assetCatalog.json). The exact packed
+reference journey is [the Node guest product gate](https://github.com/eddmpython/pyproc/blob/main/tests/browser/nodeGuestProduct.mjs), and the complete
+manifest, source identity, permission, and inspection contract is documented under `createWebComputer` in the
+[API reference](skills/reference-pyproc-api/references/api.md).
+
 ## Package subpaths
 
 | Subpath | Contract |

@@ -69,7 +69,20 @@ general scientific package compatibility.
 
 Creates a WebMachine host with an owned CPython/WASI guest, browser devices, signed image support, and
 optional durable storage. The Python guest uses adapter ID `cpython-wasi` and a portable Kernel Machine
-image.
+image. Supplying `linux` adds the `x86-linux` adapter and `linuxOs`. Supplying `node` adds the `x86-node`
+adapter, `nodeOs`, and an independent `nodeDisk`.
+
+`node.manifest.node` requires `runtime: "node"`, an exact version, a 40-character source revision, an HTTPS
+source URL, and the source archive SHA-256 as 64 lowercase hexadecimal characters.
+`node.manifest.v86.assets` must contain a `bzimage` descriptor with URL, byte length, and `sha256:` digest.
+The adapter resolves every declared asset to bytes and verifies it before V86 construction. `loadAsset` and
+`digestBytes` may be injected together; otherwise redirect-free same-origin `fetch` and `cryptoProvider.subtle` are used.
+Duplicate raw and verified sources fail at boot, while a byte or digest mismatch fails with
+`WEB_MACHINE_ASSET_INTEGRITY`. The verified descriptors are visible at `machine("nodeOs").inspect().guest.assets`.
+`linux.manifest.v86.assets` uses the same optional descriptor and default-loader contract, so a consumer can
+verify both x86 guests without maintaining a second loading path.
+`bootAll()` waits for every configured boot attempt. If any guest fails, it shuts down all successful and failed
+partial guests before rejecting; a cleanup failure is returned with the original failure in an `AggregateError`.
 
 ### `checkEnvironment()`
 

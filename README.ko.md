@@ -194,6 +194,22 @@ try {
 storage를 조립한다. 기본 Python guest는 root `boot()`와 `open()`이 쓰는 것과 같은 `KernelMachine`과
 Machine image 계약을 사용한다.
 
+선택적 Linux와 Node guest는 V86 constructor와 guest manifest를 주입하면 같은 lifecycle에 합류한다.
+Node manifest는 정확한 runtime version, source revision, source URL, source SHA-256을 밝히고, boot image의
+byte length와 SHA-256을 기술해야 한다. pyproc은 emulator를 만들기 전에 그 byte를 가져와 검증하고 `inspect()`에 검증 영수증을
+남긴다. 변조된 image는 가져온 Machine이 active computer를 교체하기 전에
+`WEB_MACHINE_ASSET_INTEGRITY`로 거절한다. Linux와 Node manifest는 BIOS, kernel image, VGA BIOS를 모두
+같은 검증 descriptor 경로로 선언할 수 있다.
+guest마다 독립 block device를 받고, signed `.webmachine`
+봉투는 설정된 guest 전체를 함께 나른다. V86, firmware, 선택적 guest image는 npm package에 포함하지
+않는다. `bootAll()`은 전체 수렴 계약이다. 설정된 guest 하나라도 실패하면 모든 boot 시도의 결론을
+기다린 뒤 부분 부팅된 guest를 전부 종료하고 거절한다.
+
+버전이 붙은 외부 자산 정본은 [`scripts/assetCatalog.json`](scripts/assetCatalog.json)이다. exact packed
+기준 여정은 [Node guest 제품 gate](https://github.com/eddmpython/pyproc/blob/main/tests/browser/nodeGuestProduct.mjs)에 있고, 전체 manifest,
+source identity, permission, inspect 계약은 [API reference](skills/reference-pyproc-api/references/api.md)의
+`createWebComputer` 절에 있다.
+
 ## Package subpath
 
 | Subpath | 계약 |

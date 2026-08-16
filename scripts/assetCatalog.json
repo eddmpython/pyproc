@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "catalogId": "web-machine-execution-assets-v1",
-  "createdAt": "2026-07-19T00:00:00Z",
+  "createdAt": "2026-08-16T00:00:00Z",
   "packagePolicy": {
     "thirdPartyBinaryBundling": "forbidden",
     "fixtureUse": "local-test-only",
@@ -34,6 +34,22 @@
       "configPath": "scripts/buildroot/buildroot.config",
       "buildScript": "scripts/buildroot/buildGuest.mjs",
       "expectedOutput": "buildroot-pyproc-i686.bin",
+      "promotionRequires": [
+        "two-independent-builds-byte-identical",
+        "legal-info-warnings-zero",
+        "cyclonedx-sbom",
+        "web-computer-browser-gate"
+      ]
+    },
+    {
+      "recipeId": "pyproc-buildroot-node-i686-v1",
+      "replacesAsset": "buildroot-pyproc-node-i686.bin",
+      "sourceLocation": "https://gitlab.com/buildroot.org/buildroot.git",
+      "sourceRevision": "2d05bb10d08410c59856ff4022ba8b762f77441a",
+      "version": "2025.02.16",
+      "configPath": "scripts/buildroot/buildroot.config",
+      "buildScript": "scripts/buildroot/buildGuest.mjs",
+      "expectedOutput": "buildroot-pyproc-node-i686.bin",
       "promotionRequires": [
         "two-independent-builds-byte-identical",
         "legal-info-warnings-zero",
@@ -103,6 +119,41 @@
       ]
     },
     {
+      "componentId": "buildroot-pyproc-node-i686-v1",
+      "name": "pyproc reproducible Buildroot Node guest",
+      "version": "2025.02.16-node-22.22.0",
+      "downloadLocation": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot-pyproc-node-i686.bin",
+      "sourceLocation": "https://buildroot.org/downloads/buildroot-2025.02.16.tar.xz",
+      "sourceRevision": "135af563b945b8c3d18f8fd370370075b9edb140",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "provenanceStatus": "reproducible-project-release-with-complete-source-and-legal-material",
+      "evidenceManifest": {
+        "url": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/releaseAssets.json",
+        "sha256": "8fff6998c3b8ae289af8b7f22a50f6612fa37b1085ddfad26b439a0956e8adb0",
+        "byteLength": 2112,
+        "assetCount": 11
+      },
+      "runtime": {
+        "name": "Node.js",
+        "version": "22.22.0",
+        "sourceRevision": "6add85e4c46b8be383c8b637102d6b6fd206adce",
+        "sourceUrl": "https://nodejs.org/dist/v22.22.0/node-v22.22.0.tar.xz",
+        "sourceSha256": "4c138012bb5352f49822a8f3e6d1db71e00639d0c36d5b6756f91e4c6f30b683",
+        "oracleSha256": "b3aed4be1f24f10fa77253e267fe69403144d97072cfe305c828a7ce0c8589c0"
+      },
+      "evidence": [
+        "https://github.com/eddmpython/pyproc/releases/tag/buildroot-pyproc-node-i686-v1",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/releaseAssets.json",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot-2025.02.16.tar.xz",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot-legal-info-complete.zip",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot.cyclonedx.json",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/build-manifest.json",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/reproducibility-manifest.json"
+      ]
+    },
+    {
       "componentId": "kolibri-image-opaque",
       "name": "KolibriOS guest image",
       "version": "NOASSERTION",
@@ -125,7 +176,8 @@
       "role": "engine-module",
       "consumers": [
         "v86Probe",
-        "webComputer"
+        "webComputer",
+        "nodeGuest"
       ],
       "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
       "sha1": "b73519e406e5c91e34b99bd59f5b4a336a434629",
@@ -148,7 +200,8 @@
       "role": "engine-binary",
       "consumers": [
         "v86Probe",
-        "webComputer"
+        "webComputer",
+        "nodeGuest"
       ],
       "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
       "sha1": "0eba04d11fa23dd27eb7e75c4154ccddccc3cd93",
@@ -172,7 +225,8 @@
       "role": "firmware",
       "consumers": [
         "v86Probe",
-        "webComputer"
+        "webComputer",
+        "nodeGuest"
       ],
       "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
       "sha1": "f10fa015b059186dcfe961fae3acbe3fe7f83e7f",
@@ -196,7 +250,8 @@
       "role": "firmware",
       "consumers": [
         "v86Probe",
-        "webComputer"
+        "webComputer",
+        "nodeGuest"
       ],
       "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
       "sha1": "97df04d5423bccc5b986da0ecde01839997d966d",
@@ -220,7 +275,8 @@
       "role": "guest-image",
       "consumers": [
         "v86Probe",
-        "webComputer"
+        "webComputer",
+        "nodeGuest"
       ],
       "url": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-i686-v2/buildroot-pyproc-i686.bin",
       "sha1": "a36d46069ca49da9650c3eecd2122e7a94284b35",
@@ -235,6 +291,27 @@
       ],
       "sources": [
         "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-i686-v2/buildroot-pyproc-i686.bin"
+      ]
+    },
+    {
+      "name": "buildroot-pyproc-node-i686.bin",
+      "role": "guest-image",
+      "consumers": [
+        "nodeGuest"
+      ],
+      "url": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot-pyproc-node-i686.bin",
+      "sha1": "e13b2906e00d009a76e02abcfc3fa16ff26c20b1",
+      "sha256": "210fa467af2b718670e163f6802217086a9995661ac5a13e1529626a475568fc",
+      "byteLength": 31048192,
+      "componentId": "buildroot-pyproc-node-i686-v1",
+      "licenseConcluded": "NOASSERTION",
+      "distribution": "project-release-runtime-reference",
+      "localPath": "./assets/buildroot-pyproc-node-i686.bin",
+      "bundleBlockers": [
+        "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot-pyproc-node-i686.bin"
       ]
     },
     {

@@ -4,6 +4,23 @@ import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+const profileCleanupWaiter = new Int32Array(new SharedArrayBuffer(4));
+
+function removeBrowserProfile(profile) {
+  const deadline = Date.now() + 10000;
+  let lastError = null;
+  do {
+    try { rmSync(profile, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 }); }
+    catch (error) { lastError = error; }
+    if (!existsSync(profile)) return;
+    Atomics.wait(profileCleanupWaiter, 0, 0, 100);
+  } while (Date.now() < deadline);
+  const error = new Error(`browser profile cleanup did not converge: ${profile}`,
+    lastError ? { cause: lastError } : undefined);
+  error.code = "BROWSER_PROFILE_CLEANUP_FAILED";
+  throw error;
+}
+
 export function findBrowser({ executable = process.env.PYPROC_BROWSER || "" } = {}) {
   if (executable) {
     if (!existsSync(executable)) throw new Error(`Chromium executable is unavailable: ${executable}`);
@@ -95,10 +112,9 @@ export function launchBrowser(url, opts = {}) {
     whenExited,
     close() {
       if (closed) return;
-      closed = true;
       killBrowserProcess(proc, profile);
-      try { rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); }
-      catch (error) { if (existsSync(profile)) process.stderr.write(`pyproc browser profile cleanup deferred: ${error?.code || error}\n`); }
+      removeBrowserProfile(profile);
+      closed = true;
     },
   });
 }

@@ -7,7 +7,7 @@ function positiveInteger(value, label) {
 }
 
 export class MemoryTextDisplayDevice {
-  constructor({ maxColumns = 240, maxRows = 120 } = {}) {
+  constructor({ maxColumns = 240, maxRows = 512 } = {}) {
     this.kind = "display";
     this.mode = "text-cells";
     this.maxColumns = positiveInteger(maxColumns, "maxColumns");

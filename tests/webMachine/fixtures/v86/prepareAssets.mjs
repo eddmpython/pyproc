@@ -6,8 +6,15 @@ import { fileURLToPath } from "node:url";
 import { assertAssetProvenanceArtifacts, readV86AssetCatalog } from "../../../../scripts/assetProvenance.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "assets");
+const consumerOptionIndex = process.argv.indexOf("--consumer");
+const consumer = consumerOptionIndex === -1 ? "v86Probe" : process.argv[consumerOptionIndex + 1];
+if (!consumer || process.argv.filter((value) => value === "--consumer").length !== (consumerOptionIndex === -1 ? 0 : 1)) {
+  throw new TypeError("--consumer는 값 하나만 받아야 한다");
+}
 await assertAssetProvenanceArtifacts();
 const { assets } = await readV86AssetCatalog();
+const selectedAssets = assets.filter((asset) => asset.consumers.includes(consumer));
+if (!selectedAssets.length) throw new TypeError(`등록되지 않은 asset consumer: ${consumer}`);
 
 function digest(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -75,7 +82,7 @@ async function download(asset, path) {
 }
 
 await mkdir(root, { recursive: true });
-for (const asset of assets) {
+for (const asset of selectedAssets) {
   const path = join(root, asset.name);
   let current = null;
   try { current = await readFile(path); } catch (error) {}
@@ -87,3 +94,4 @@ for (const asset of assets) {
   await download(asset, path);
   console.log(`FETCH ${asset.name} ${asset.byteLength} bytes`);
 }
+console.log(`CONSUMER ${consumer} ${selectedAssets.length} assets`);

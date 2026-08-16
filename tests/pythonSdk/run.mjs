@@ -12,6 +12,7 @@ import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const PYTHON = process.env.PYPROC_PYTHON || "python";
 const HERE = fileURLToPath(new URL(".", import.meta.url));
+const PACKAGE_VERSION = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")).version;
 const approvalPair = generateKeyPairSync("ed25519");
 let createInstalledApprovalGrant = null;
 let publishInstalledEffectPack = null;
@@ -187,7 +188,7 @@ try {
   const wheelMetadata = run(wheelPython, ["-m", "pip", "show", "pyproc-control"], { cwd: installed.tmp }).stdout;
   const sourceMetadata = run(sourcePython, ["-m", "pip", "show", "pyproc-control"], { cwd: installed.tmp }).stdout;
   check("서로 다른 clean venv에 wheel과 source distribution 설치",
-    wheelMetadata.includes("Version: 0.0.22") && sourceMetadata.includes("Version: 0.0.22"));
+    wheelMetadata.includes(`Version: ${PACKAGE_VERSION}`) && sourceMetadata.includes(`Version: ${PACKAGE_VERSION}`));
 
   const protocol = run(sourcePython, [join(HERE, "protocolContract.py")], { cwd: installed.appDir });
   check("source 설치본 Python codec과 transport outcome 음성 fixture", protocol.stdout.includes("22 fixtures"));

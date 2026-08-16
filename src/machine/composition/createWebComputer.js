@@ -7,6 +7,7 @@
 // - python: 기본 탑재. pyproc 자신이 엔진이므로 주입 없이 즉시 부팅한다.
 // - linux: V86 constructor를 주입할 때만 등록한다. third-party binary를 package에 싣지
 //   않는 provenance 정책(skills/manage-pyproc-assets/references/asset-provenance.md 결정 1)이 그대로 산다.
+// - node: source identity와 digest가 있는 image를 주입할 때만 별도 x86-node adapter로 등록한다.
 import { WebMachineError } from "../contracts/webMachineError.js";
 import { createBrowserHost } from "./createBrowserHost.js";
 import { createCpythonWasiGuestFactory } from "../guests/cpythonWasi/cpythonWasiGuestAdapter.js";
@@ -20,18 +21,102 @@ import { createDurableWebComputerFacade } from "./durableWebComputer.js";
 // 기본 디스크 크기. 출처: 제품 실측 상수(apps/webComputer/machineConfig.js의 2MiB)와 동일값.
 const DEFAULT_DISK_BYTES = 2 * 1024 * 1024;
 
-export const WEB_COMPUTER_MACHINE_IDS = Object.freeze(["pythonOs", "linuxOs"]);
+export const WEB_COMPUTER_MACHINE_IDS = Object.freeze(["pythonOs", "linuxOs", "nodeOs"]);
+
+function isPublicHttpsUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !url.hash;
+  } catch (error) { return false; }
+}
+
+function assertNodeManifest(manifest) {
+  const node = manifest?.node;
+  if (!node || node.runtime !== "node" || typeof node.version !== "string" || !/^\d+\.\d+\.\d+$/.test(node.version)
+    || typeof node.sourceRevision !== "string" || !/^[0-9a-f]{40}$/.test(node.sourceRevision)
+    || typeof node.sourceUrl !== "string" || !isPublicHttpsUrl(node.sourceUrl)
+    || typeof node.sourceSha256 !== "string" || !/^[0-9a-f]{64}$/.test(node.sourceSha256)) {
+    throw new TypeError("node.manifest.node requires runtime node, an exact version, source revision, URL, and SHA-256");
+  }
+  const assets = manifest?.v86?.assets;
+  if (!Array.isArray(assets) || !assets.some((entry) => entry?.target === "bzimage")) {
+    throw new TypeError("node.manifest.v86.assets requires a digest-pinned bzimage");
+  }
+}
+
+async function loadBrowserAsset(url, descriptor) {
+  const base = globalThis.location?.href;
+  const origin = globalThis.location?.origin;
+  if (!base || !origin) {
+    throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "the default node asset loader requires a browser location");
+  }
+  const resolved = new URL(String(url), base);
+  if (resolved.origin !== origin || resolved.username || resolved.password) {
+    throw new WebMachineError("WEB_MACHINE_GUEST_BOOT", "the default node asset loader accepts same-origin URLs only");
+  }
+  const response = await fetch(resolved.href, { redirect: "error", credentials: "omit", cache: "no-store" });
+  if (!response.ok) throw new Error(`asset response ${response.status}`);
+  const expectedBytes = descriptor?.byteLength;
+  const contentLength = response.headers?.get?.("content-length");
+  const declaredBytes = contentLength === null || contentLength === undefined || contentLength === ""
+    ? null
+    : Number(contentLength);
+  if (declaredBytes !== null && (!Number.isSafeInteger(declaredBytes) || declaredBytes < 0)) {
+    throw new Error(`asset Content-Length is invalid: ${contentLength}`);
+  }
+  if (declaredBytes !== null && declaredBytes !== expectedBytes) {
+    throw new Error(`asset Content-Length ${declaredBytes} does not match ${expectedBytes}`);
+  }
+  if (!response.body?.getReader) throw new Error("asset response requires a readable byte stream");
+  const output = new Uint8Array(expectedBytes);
+  const reader = response.body.getReader();
+  let offset = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!ArrayBuffer.isView(value) || offset + value.byteLength > expectedBytes) {
+        await reader.cancel("asset exceeded its declared byteLength").catch(() => undefined);
+        throw new Error(`asset body exceeds ${expectedBytes} bytes`);
+      }
+      output.set(new Uint8Array(value.buffer, value.byteOffset, value.byteLength), offset);
+      offset += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (offset !== expectedBytes) throw new Error(`asset body ${offset} does not match ${expectedBytes}`);
+  return output;
+}
+
+function browserDigestBytes(cryptoProvider) {
+  if (!cryptoProvider?.subtle) throw new TypeError("a node guest requires cryptoProvider.subtle or node.digestBytes");
+  return async (bytes) => {
+    const digest = new Uint8Array(await cryptoProvider.subtle.digest("SHA-256", bytes));
+    return `sha256:${[...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  };
+}
+
+function v86AssetIntegrityOptions(config, cryptoProvider) {
+  const declaresAssets = Array.isArray(config?.manifest?.v86?.assets);
+  if (!declaresAssets && config?.loadAsset == null && config?.digestBytes == null) return {};
+  return {
+    loadAsset: config?.loadAsset ?? loadBrowserAsset,
+    digestBytes: config?.digestBytes ?? browserDigestBytes(cryptoProvider),
+  };
+}
 
 // 컴퓨터 한 대를 조립한다. 반환값은 host/장치/머신과 수명주기 제어다.
-// python은 항상 만들어지고, linux는 options.linux.V86이 주입될 때만 만들어진다.
+// python은 항상 만들어지고, linux와 node는 각 V86 설정이 주입될 때만 만들어진다.
 function createBasicWebComputer({
   python = {},
   linux = null,
+  node = null,
   adapters = {},
   devices: extraDevices = {},
   onConsole = null,
   cryptoProvider = globalThis.crypto,
-  // 머신의 출처를 정하는 모드다(동사 부재의 우회가 아니다): true면 기본 머신 2대를 여기서
+  // 머신의 출처를 정하는 모드다(동사 부재의 우회가 아니다): true면 설정된 기본 머신을 여기서
   // 만들고, false면 하드웨어(장치+host+어댑터)만 조립해 머신은 image manifest가 만든다.
   // 세 호출부가 후자를 쓴다: 신뢰 화면 preflight, import 후보 조립, deferBoot 복원.
   // host.destroyMachine으로 대체하지 않는 이유: 어댑터를 만들어 곧 버리는 낭비가 된다.
@@ -50,6 +135,7 @@ function createBasicWebComputer({
     builtInDevices.display = new MemoryTextDisplayDevice();
     builtInDevices.input = new MemoryScanCodeInputDevice({ maxBatchBytes: 512, maxQueuedBatches: 32 });
   }
+  if (node) builtInDevices.nodeDisk = new MemoryBlockDevice({ byteLength: node.diskBytes ?? DEFAULT_DISK_BYTES });
   const devices = {
     console: {
       kind: "console",
@@ -75,6 +161,21 @@ function createBasicWebComputer({
       inputDeviceName: "input",
       ...(builtInDevices.network ? { packetDeviceName: "network" } : {}),
       ...(linux.adapterOptions || {}),
+      ...v86AssetIntegrityOptions(linux, cryptoProvider),
+    }));
+  }
+  if (node) {
+    if (typeof node.V86 !== "function") throw new TypeError("a node.V86 constructor is required");
+    if (!node.manifest) throw new TypeError("node.manifest is required");
+    assertNodeManifest(node.manifest);
+    host.registerAdapter("x86-node", createV86GuestFactory({
+      V86: node.V86,
+      ...(node.adapterVersion ? { adapterVersion: node.adapterVersion } : {}),
+      blockDeviceName: "nodeDisk",
+      blockMode: "filesystem",
+      ...(builtInDevices.network ? { packetDeviceName: "network" } : {}),
+      ...(node.adapterOptions || {}),
+      ...v86AssetIntegrityOptions(node, cryptoProvider),
     }));
   }
   for (const [adapterId, factory] of Object.entries(adapters || {})) {
@@ -97,6 +198,14 @@ function createBasicWebComputer({
       permissions: { devices: ["console", "linuxDisk", "display", "input", ...(builtInDevices.network ? ["network"] : [])] },
     }));
   }
+  if (createMachines && node) {
+    machines.set("nodeOs", host.createMachine({
+      machineId: "nodeOs",
+      adapterId: "x86-node",
+      manifest: node.manifest,
+      permissions: { devices: ["console", "nodeDisk", ...(builtInDevices.network ? ["network"] : [])] },
+    }));
+  }
 
   const machine = (machineId) => {
     const found = machines.get(machineId);
@@ -114,7 +223,22 @@ function createBasicWebComputer({
     machine,
     runningMachineIds,
     async bootAll(control) {
-      await Promise.all([...machines.values()].map((m) => m.boot(control)));
+      const candidates = [...machines.values()];
+      const outcomes = await Promise.allSettled(candidates.map((m) => m.boot(control)));
+      const bootFailures = outcomes.filter((entry) => entry.status === "rejected").map((entry) => entry.reason);
+      if (bootFailures.length) {
+        const cleanup = await Promise.allSettled(candidates
+          .filter((m) => m.state !== "stopped")
+          .map((m) => m.shutdown()));
+        const cleanupFailures = cleanup.filter((entry) => entry.status === "rejected").map((entry) => entry.reason);
+        const failures = [...bootFailures, ...cleanupFailures];
+        if (failures.length > 1) {
+          throw new AggregateError(failures, cleanupFailures.length
+            ? "Web Computer boot and cleanup both failed"
+            : "Multiple Web Computer guests failed to boot");
+        }
+        throw failures[0];
+      }
     },
     // 실행 중인 머신만 순서대로 멈춘다. 중간 실패 시 이미 멈춘 것들을 되살리고 던진다
     // (절반만 멈춘 컴퓨터를 남기지 않는다).

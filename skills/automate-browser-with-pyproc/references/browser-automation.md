@@ -33,7 +33,7 @@ Install the exact package and point `engine.root` at the installed owned engine 
 `python.wasm`, `python314-stdlib.zip`, and `engine-build-manifest.json`.
 
 ```sh
-npm install pyproc@0.0.22 --save-exact
+npm install pyproc@0.0.23 --save-exact
 npm install pyproc@<exact-version>
 ```
 

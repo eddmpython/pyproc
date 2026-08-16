@@ -27,10 +27,22 @@ stdlib ZIP 루트의 `_sysconfigdata_*.py`, `_sysconfig_vars_*.json`, `build-det
 ## Browser worker graph
 
 `pyproc-assets`는 `wasiWorker` 진입점의 상대 import graph를 계산하고 각 파일에 SHA-256 SRI를 붙인다. 현재
-설치 graph는 7파일이며 same-origin 배포와 상대 import 구조 보존이 계약이다. `npm run test:package`와
+설치 graph는 10파일과 4개 entrypoint이며 same-origin 배포와 상대 import 구조 보존이 계약이다. `npm run test:package`와
 `npm run test:installed`가 packed tarball에서 같은 graph를 다시 검증한다.
 
 ## Externally supplied guests
 
 V86 engine, firmware와 guest image는 npm package에 포함하지 않는다. Web Machine 소비자가 exact digest와
-provenance를 가진 자산을 주입하며 pyproc은 자신이 build하지 않은 자산의 출처를 주장하지 않는다.
+provenance를 가진 자산을 주입한다. project가 재현 build한 Linux와 Node guest는 source, config, legal-info,
+SBOM, 독립 build 영수증을 함께 게시한 별도 release만 catalog가 참조한다. 상류 V86와 firmware는 상류가
+제공한 출처 이상을 주장하지 않는다. Node image descriptor는 emulator 생성 전에 byte length와 SHA-256을
+검증하며 기본 loader는 redirect 없는 same-origin URL만 허용한다.
+
+catalog의 `consumers`가 download 범위의 정본이다. `v86Probe`는 기본 x86 probe, `webComputer`는 기본
+Python과 Linux 제품, `nodeGuest`는 Python, Linux, Node 공동 제품 gate를 뜻한다. Node image는
+`nodeGuest`에만 속하므로 기본 probe와 기본 Web Computer 준비 과정이 선택 자산을 묵시적으로 받지 않는다.
+
+`npm run assets:buildroot-release`는 검증 artifact, complete legal-info, exact source와 config input을
+`.cache` 아래 release directory에 조립한다. legal manifest가 요구하는 source archive와 license file이
+하나라도 없거나 허용하지 않은 warning이 있으면 실패하고, `releaseAssets.json`이 원본 자산 전부의 크기와
+SHA-256을 봉인한다.

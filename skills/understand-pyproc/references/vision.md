@@ -67,9 +67,5 @@ repository-local acceptance conditions for the remaining rungs:
 5. `memory64`: change the guest engine contract only after an exact installed engine reports memory64 and a real
    browser gate crosses the memory32 heap boundary, restores its image, and fails a memory32 substitution before
    activation.
-6. `nodeGuest`: ship a source-pinned Node guest beside Python and Linux through the registered guest adapter. It
-   must run a real JavaScript CLI workload, use the common lifecycle and resource inspection, survive Machine image
-   materialization, reject mutated assets, and boot from the installed package without an undeclared request.
-
 Independent adoption cannot complete any rung. It can only add conformance evidence after the repository-local
 contract is already green.

@@ -1,6 +1,6 @@
 {
   "name": "pyproc",
-  "version": "0.0.22",
+  "version": "0.0.23",
   "description": "A persistent Python computer in the browser: real CPython, durable workspaces, rewindable history, and evidence-backed browser eyes and hands. No application server. (브라우저에 영속하는 Python 컴퓨터.)",
   "type": "module",
   "repository": {
@@ -99,6 +99,7 @@
     "test:package": "node tests/packageGate.mjs",
     "test:installed": "node tests/browser/installedPackageGate.mjs",
     "test:web-computer": "node scripts/prepareWebComputerAssets.mjs && node tests/browser/webComputerProduct.mjs",
+    "test:node-guest": "node tests/webMachine/fixtures/v86/prepareAssets.mjs --consumer nodeGuest && node tests/browser/nodeGuestProduct.mjs",
     "test:mcp": "node tests/browser/mcpSandbox.mjs",
     "test:mcp-product": "node tests/browser/installedMcpProduct.mjs",
     "test:control-product": "node tests/browser/controlProtocolProduct.mjs",
@@ -129,6 +130,7 @@
     "assets:web-computer": "node scripts/prepareWebComputerAssets.mjs",
     "assets:buildroot": "node scripts/buildroot/buildGuest.mjs",
     "assets:buildroot-node": "node scripts/buildroot/buildGuest.mjs --profile node",
+    "assets:buildroot-release": "node scripts/release/assembleBuildrootRelease.mjs",
     "assets:native-packages": "node scripts/nativePackageCatalog/buildNativePackageCatalog.mjs",
     "assets:wasm-tools": "node scripts/wasmToolBuilder/buildOwnedWasmTools.mjs --check",
     "serve": "node scripts/staticServer.mjs",

@@ -14,13 +14,68 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Added
 
-- **A reproducible data engine now ships beside the default core engine.** `pyproc/wasi` exposes its exact
-  manifest and a profile-selected package-owned catalog. The static `pyproc.data/2` module executes float64
-  buffer addition and dot products with `wasm-simd128`, and its verified facade survives process clone and
-  Machine image revival. The exact data profile now also builds NumPy 2.5.1 from its official sdist as 13
-  static modules, installs its verified Python layer from the package-owned multi-wheel catalog, and preserves
-  it through process clone and Machine image revival. SciPy, pandas, Polars, and arbitrary native wheels remain
-  explicitly unsupported.
+No unreleased public changes.
+
+## 0.0.23 - 2026-08-16
+
+### Added
+
+- **The installed package is now the default engine entrance.** Root `open()` and `boot()`, `createWebComputer`,
+  Control, and the package-owned engine catalog converge on one exact installed product without deep imports.
+- **Browser eyes and hands now carry bounded proof through document change.** Paged semantic inventory,
+  durable locators, action convergence, occlusion handling, document replacement, 20-cycle resource cleanup,
+  and a headed hardware receipt for compute and rendered pixels run through exact packed-product gates.
+- **A reproducible data engine ships beside the default core engine.** `pyproc/wasi` exposes its exact manifest
+  and a profile-selected package-owned catalog. The static `pyproc.data/2` module executes float64 SIMD oracles.
+  NumPy 2.5.1 is built from its exact sdist as 13 static modules and survives process clone and Machine image
+  revival. The build-sealed thread capability reports the actual worker-process boundary. SciPy, pandas,
+  Polars, shared-memory threads, and arbitrary native wheels remain explicit absences.
+- **Browser storage failures are explicit and recoverable where bytes still exist.** Persistence receipts,
+  quota rollback, eviction witnesses, and OPFS generation recovery distinguish best-effort durability from
+  silent first boot while preserving the last valid state.
+- **Source-pinned ripgrep and local Git are resident Machine tools.** Isolated WASI workers run ripgrep 15.1.0
+  over bounded snapshots and libgit2 1.9.7 over compare-and-swap KernelVfs transactions. Main and cloned Python
+  kernels call the same argv-only catalog through `pyprocTools` and receive the same receipts.
+- **An optional source-pinned Node guest joins Python and Linux in one Web Computer.** `createWebComputer({ node })`
+  creates `nodeOs` and `nodeDisk`, verifies Node source identity and every declared V86 boot asset before engine
+  construction, and carries all configured guests in one signed `.webmachine`. The exact packed product runs
+  Node crypto and filesystem work, rejects a changed boot image before active replacement, and restores all
+  three guests. A separate reproducible Buildroot release carries the image, source, configuration, SBOM,
+  complete legal material, and two-build byte-identity receipt.
+
+### Fixed
+
+- Successful Control startup now clears its timeout timer immediately, so a completed product lifecycle does
+  not wait for an obsolete process timer.
+- Chromium profile cleanup now waits for Windows pending deletion to converge and reports a structured failure
+  if the exact temporary profile remains, closing a Chrome-only race after an otherwise clean 20-cycle run.
+- V86 inspection reports readiness only after the engine event. A pre-ready timeout no longer calls unsafe
+  partial-instance stop or destroy methods, while a ready instance retains the full drain, flush, and destroy
+  path.
+- V86 verified asset descriptors are closed and type-exact. The default Node loader accepts only same-origin
+  credential-free URLs, refuses redirects and unbounded response bodies, enforces declared lengths, hashes
+  independent bytes, and returns `WEB_MACHINE_ASSET_INTEGRITY` on mismatch.
+- `WebComputer.bootAll()` now rolls every partial guest back to `stopped` when one configured guest fails. If
+  cleanup also fails, an `AggregateError` retains the original boot failure and every cleanup failure.
+- The TypeScript V86 block mode now names the implemented `ata` and `filesystem` values rather than stale names.
+- V86 text display accepts the engine's transient 256-row boot geometry and reports only genuinely invalid
+  updates as errors, so a normal Linux boot returns `errors: 0` instead of accumulating clipped VGA cells.
+
+### Compatibility
+
+- The root remains exactly six exports and no package subpath or executable is added. The `node` option is
+  additive on `createWebComputer`; `WEB_COMPUTER_MACHINE_IDS` now lists the optional `nodeOs` identifier.
+- The npm package retains zero runtime dependencies. V86, firmware, and optional guest images remain external,
+  digest-pinned assets rather than bundled package bytes.
+- Existing Python-only and Python plus Linux Web Computers keep their machine IDs, device names, lifecycle,
+  image format, and durability behavior.
+
+한국어 요약: 설치 패키지를 엔진 기본 진입점으로 통일하고, 문서 교체와 가림을 다시 관찰해 안전하게
+수렴하는 브라우저 눈과 팔, 실제 hardware 결과 영수증, 무잔류 수명주기를 제품화했다. 별도 재현 data
+engine과 NumPy 2.5.1, 정확한 thread 경계, 저장소 quota와 축출 영수증, 상주 ripgrep과 local Git 및 같은
+Python 도구 영수증을 추가했다. 선택적 Node guest는 Python과 Linux 옆에서 같은 Web Computer, 독립 disk,
+서명 image 계약을 쓰며 source와 boot asset을 실행 전에 검증한다. npm package는 계속 runtime 의존성 0이고
+V86, firmware, guest image는 별도 digest-pinned 공급망으로 남는다.
 
 ## 0.0.22 - 2026-08-15
 

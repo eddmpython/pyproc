@@ -1,5 +1,5 @@
 import { createWebComputer, open } from "../index.js";
-import type { MachineStore } from "../src/machine/index.js";
+import type { MachineStore, V86Constructor } from "../src/machine/index.js";
 import {
   bootCpythonWasiKernel,
   decodeValueEnvelope,
@@ -40,6 +40,7 @@ import {
 declare const minimalCrypto: { randomUUID(): string };
 declare const store: MachineStore;
 declare const storageDirectory: FileSystemDirectoryHandle;
+declare const v86Constructor: V86Constructor;
 
 async function storageDurabilitySurface() {
   const durability = new BrowserStorageDurability({ storageManager: navigator.storage,
@@ -54,6 +55,28 @@ void storageDurabilitySurface;
 
 // 0.0.10의 비내구 provider 계약은 그대로 컴파일돼야 한다.
 createWebComputer({ cryptoProvider: minimalCrypto });
+
+createWebComputer({
+  cryptoProvider: globalThis.crypto,
+  node: {
+    V86: v86Constructor,
+    manifest: {
+      node: {
+        runtime: "node",
+        version: "22.22.0",
+        sourceRevision: "6add85e4c46b8be383c8b637102d6b6fd206adce",
+        sourceUrl: "https://nodejs.org/dist/v22.22.0/node-v22.22.0.tar.xz",
+        sourceSha256: "4c138012bb5352f49822a8f3e6d1db71e00639d0c36d5b6756f91e4c6f30b683",
+      },
+      v86: {
+        assets: [{ target: "bzimage", url: "/node.bin", byteLength: 1, sha256: `sha256:${"0".repeat(64)}` }],
+        options: { wasm_path: "/v86.wasm", filesystem: {} },
+      },
+    },
+    loadAsset: async () => new Uint8Array([0]),
+    digestBytes: async () => `sha256:${"0".repeat(64)}`,
+  },
+});
 
 // Web Locks는 브라우저 전역 fallback이 있으므로 durability 안에서 선택 사항이다.
 createWebComputer({

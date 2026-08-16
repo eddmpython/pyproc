@@ -31,8 +31,9 @@ const allowedDistributions = new Set([
   "project-release-runtime-reference",
 ]);
 // 이 자산들을 적재하는 곳. pyproc은 라이브러리 런타임 자신(엔진 부팅 집합),
-// v86Probe는 수동 probe 6개, webComputer는 제품(두 guest OS의 실행 자산 전부).
-const knownConsumers = new Set(["pyproc", "v86Probe", "webComputer"]);
+// v86Probe는 수동 probe 6개, webComputer는 기본 제품의 두 guest OS 실행 자산,
+// nodeGuest는 Python, Linux, Node 제품 gate에만 필요한 명시적 확장 집합이다.
+const knownConsumers = new Set(["pyproc", "v86Probe", "webComputer", "nodeGuest"]);
 const mutableSourceHosts = new Set(["i.copy.sh"]);
 // 출처: SPDX License List 3.28.0(이 문서가 쓰는 라이선스 식별자의 발행 버전).
 const SPDX_LICENSE_LIST_VERSION = "3.28.0";

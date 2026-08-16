@@ -28,5 +28,9 @@ node tests/browser/run.mjs tests/webMachine/browser/probes/deviceBackedDualBootP
 node tests/browser/run.mjs tests/webMachine/browser/probes/machineEnvelopeProbe.html
 ```
 
+기본 준비 명령은 `v86Probe` 소비자 집합만 받는다. Python, Linux, Node 공동 제품 gate의 확장 집합은
+`node tests/webMachine/fixtures/v86/prepareAssets.mjs --consumer nodeGuest`로 명시한다. 소비자 이름이
+catalog에 없거나 선택되는 자산이 하나도 없으면 실패한다.
+
 `assetCatalog.json`이 fixture URL, SHA-256, byte length, license 결론, bundle blocker의 SSOT다.
 기존 Buildroot와 Kolibri image는 exact source와 build inventory가 없어 계속 `local-test-only`다.
