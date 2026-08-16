@@ -233,8 +233,57 @@ export async function assertBrowserAutomationProductContract() {
   const directZeroScale = await errorOf(() => screenshot.capture({}, {
     kind: "screenshot", format: "png", clip: { x: 0, y: 0, width: 100, height: 100, scale: 0 },
   }, [], null));
-  assert(directZeroScale?.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS",
-    "screenshot capture 경계가 0 scale을 직접 호출에서 거부하지 않았다");
+  assert(directZeroScale?.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS"
+    && directZeroScale.details?.reason === "scale"
+    && directZeroScale.details?.measured.scale === 0
+    && directZeroScale.details?.limits.maxCssDimension === 32768,
+  "screenshot capture 경계가 0 scale과 측정 detail을 직접 호출에서 거부하지 않았다");
+  let guardedCaptureCalls = 0;
+  const guarded = new BrowserScreenshot({
+    artifactStore: store,
+    command: async (sessionRef, method) => {
+      if (method === "Page.getLayoutMetrics") {
+        return { result: {
+          cssVisualViewport: { clientWidth: 800, clientHeight: 600 },
+          cssContentSize: { width: 800, height: 32769 },
+          contentSize: { width: 100, height: 100 },
+        } };
+      }
+      guardedCaptureCalls += 1;
+      throw new Error("raw provider screenshot error");
+    },
+  });
+  const contentBounds = await errorOf(() => guarded.capture({}, {
+    kind: "screenshot", format: "png", fullPage: true,
+  }, [], null));
+  assert(contentBounds?.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS"
+    && contentBounds.outcome === "notSent" && contentBounds.retryable === false
+    && contentBounds.details?.reason === "dimension"
+    && contentBounds.details?.source === "content"
+    && contentBounds.details?.measured.cssWidth === 800
+    && contentBounds.details?.measured.cssHeight === 32769
+    && contentBounds.details?.limits.maxCssDimension === 32768
+    && contentBounds.details?.limits.maxScaledCssPixels === 67108864
+    && contentBounds.details?.recovery.viewportScrollMayTriggerEffects === true
+    && guardedCaptureCalls === 0,
+  "최신 CSS content bounds 초과가 capture 전에 안정 code와 측정 detail로 닫히지 않았다");
+  const areaGuarded = new BrowserScreenshot({
+    artifactStore: store,
+    command: async (sessionRef, method) => {
+      if (method === "Page.getLayoutMetrics") {
+        return { result: { cssVisualViewport: { clientWidth: 800, clientHeight: 600 },
+          cssContentSize: { width: 32768, height: 2049 } } };
+      }
+      throw new Error("area guard dispatched capture");
+    },
+  });
+  const areaBounds = await errorOf(() => areaGuarded.capture({}, {
+    kind: "screenshot", format: "png", fullPage: true,
+  }, [], null));
+  assert(areaBounds?.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS"
+    && areaBounds.details?.reason === "area"
+    && areaBounds.details?.measured.scaledCssPixels === 67141632,
+  "scaled CSS area 초과가 capture 전에 측정값으로 거부되지 않았다");
   const invalidQuality = await errorOf(() => validateBrowserAutomationAction({
     kind: "screenshot", format: "png", quality: 80, expectedRisk: "read",
   }));
@@ -246,7 +295,16 @@ export async function assertBrowserAutomationProductContract() {
   const invalidScale = await errorOf(() => validateBrowserAutomationAction({
     kind: "screenshot", clip: { x: 0, y: 0, width: 1, height: 1, scale: 0 }, expectedRisk: "read",
   }));
-  assert(/clip.scale is invalid/.test(invalidScale?.message), "0 screenshot clip scale이 action validation을 우회했다");
+  assert(invalidScale?.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS"
+    && invalidScale.details?.reason === "scale", "0 screenshot clip scale이 action bounds 계약을 우회했다");
+  const invalidExtent = await errorOf(() => validateBrowserAutomationAction({
+    kind: "screenshot", clip: { x: 0, y: 32768, width: 1, height: 1 }, expectedRisk: "read",
+  }));
+  assert(invalidExtent?.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS"
+    && invalidExtent.details?.reason === "extent"
+    && invalidExtent.details?.measured.y === 32768
+    && invalidExtent.details?.measured.cssHeight === 1,
+  "절대 clip extent 초과가 공개 bounds code와 측정 detail로 거부되지 않았다");
 
   const capturedDelete = await store.delete(captured.artifactRef);
   const omittedDelete = await store.delete(omittedScale.artifactRef);

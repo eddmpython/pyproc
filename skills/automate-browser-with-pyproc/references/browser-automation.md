@@ -335,6 +335,24 @@ Width and height are each limited to 32768 CSS pixels and the scaled area to 671
 returned bytes must match the requested PNG, JPEG, or WebP signature before they enter the artifact store.
 The per-artifact byte limit is then enforced independently.
 
+The guard reads `cssContentSize` from `Page.getLayoutMetrics`, as required by the current
+[Chrome DevTools Protocol Page contract](https://chromedevtools.github.io/devtools-protocol/tot/Page/), and uses
+the deprecated `contentSize` only as a compatibility fallback. A bounds failure happens before
+`Page.captureScreenshot` and returns `BROWSER_AUTOMATION_SCREENSHOT_BOUNDS`, `outcome: notSent`, and
+`retryable: false`. Its stable detail fields are:
+
+| Field | Meaning |
+|---|---|
+| `reason` | `dimension`, `area`, `extent`, `origin`, or `scale` |
+| `source` | `content`, `viewport`, or `clip` |
+| `measured` | `x`, `y`, `cssWidth`, `cssHeight`, `scale`, and `scaledCssPixels` |
+| `limits` | `maxCssDimension`, `maxScaledCssPixels`, `minScale`, and `maxScale` |
+| `recovery` | Automatic retry is false and viewport scrolling may trigger effects |
+
+Do not infer a provider limit from its raw message. A caller may request a smaller clip. Viewport scrolling is
+not an automatic screenshot retry because it can run observers and lazy loaders, so it requires the same
+explicit effect approval as `hydrateLazy`.
+
 When an inline screenshot fits the configured bound, the MCP result contains its text descriptor followed by
 one native `image` content block. The text descriptor omits the duplicate base64. Multiple screenshots keep
 action order. When a screenshot exceeds the inline bound, capture still succeeds and the descriptor plus
@@ -460,7 +478,7 @@ Example screenshot action:
 | `BROWSER_CONTROL_PERMISSION_DENIED` before send | Check exact origins, action and method lists, fixed risk, acknowledgement, purpose, and file roots |
 | `BROWSER_CONTROL_PERMISSION_DENIED` with `outcome: applied` | A popup or navigation reached a denied final origin after send. Do not retry automatically |
 | `BROWSER_AUTOMATION_ACTIONABILITY_TIMEOUT` | The target never became unique, visible, stable, enabled, editable, or hittable within the bound |
-| `BROWSER_AUTOMATION_SCREENSHOT_BOUNDS` | The document or clip exceeds dimension or scaled-area limits |
+| `BROWSER_AUTOMATION_SCREENSHOT_BOUNDS` | Read `details.measured` and `details.limits`. Request a smaller clip, or explicitly approve a viewport-scroll workflow because scrolling may trigger effects |
 | `BROWSER_AUTOMATION_ARTIFACT_QUOTA` | Delete artifacts or wait for TTL reap before capturing more |
 | `BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND` | The ref expired, was deleted, belongs to another process, or was invalidated by restart |
 | `BROWSER_CONTROL_COMMAND_UNSUPPORTED` at startup | Browser family, Chromium major, or CDP protocol is outside the supported range |

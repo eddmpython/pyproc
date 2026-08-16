@@ -13,7 +13,6 @@
 | Web Machine x86 guest assets external | host contract와 digest-pinned asset preparation을 분리한다 | emulator와 firmware의 독립 재현 범위를 계속 넓힌다 |
 | Kernel Machine image integrity, not signature | digest가 engine identity와 checkpoint objects를 봉인한다 | 제품이 외부 발행자를 신뢰해야 할 때 signing policy를 별도 version으로 추가한다 |
 | Web Machine protocol standard readiness | 표준 WebAssembly, Worker, cross-origin isolation, bucket file system 위에서 pyproc 제품 계약이 동작한다 | [legacy WASI threads proposal](https://github.com/WebAssembly/wasi-threads)은 Phase 1이고 후속은 [shared-everything threads](https://github.com/WebAssembly/shared-everything-threads)에서 진행 중이다. vendor-neutral 명세, WPT형 conformance, 독립 구현과 공개 incubation 전에는 웹 표준이라고 주장하지 않는다 |
-| Native CDP full-page screenshot above Chromium CSS bounds leaks a provider error | `screenshot` 문서는 dimension 또는 area 초과를 `BROWSER_AUTOMATION_SCREENSHOT_BOUNDS`로 보고한다고 선언한다 | 실제 content bounds를 capture 전에 측정하고 code, 측정값, 제한을 정규화하는 installed browser gate가 필요하다 |
 
 완료된 owned-kernel 계약은 `skills/use-pyproc-runtime/references/kernel-contracts.md`, `skills/use-pyproc-runtime/references/consumer-contract.md`,
 `tests/contracts/`와 installed browser gate가 정본이다.

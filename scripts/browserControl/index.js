@@ -56,6 +56,7 @@ export {
   BROWSER_SCREENSHOT_FORMATS,
   BROWSER_SCREENSHOT_MAX_CSS_DIMENSION,
   BROWSER_SCREENSHOT_MAX_CSS_PIXELS,
+  validateBrowserScreenshotBounds,
 } from "./browserScreenshot.js";
 export { BrowserObservation, redactBrowserUrl } from "./browserObservation.js";
 export {

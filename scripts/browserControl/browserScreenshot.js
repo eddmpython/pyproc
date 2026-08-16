@@ -16,22 +16,70 @@ function validSignature(bytes, format) {
     && bytes.subarray(8, 12).toString("ascii") === "WEBP";
 }
 
-function boundedDimension(value, label) {
+function reportedNumber(value) {
   const number = Number(value);
-  if (!Number.isFinite(number) || number <= 0 || number > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION) {
-    throw new BrowserControlError("BROWSER_AUTOMATION_SCREENSHOT_BOUNDS",
-      `browser screenshot ${label} is outside the supported CSS bounds`, { outcome: "notSent" });
-  }
-  return number;
+  return Number.isFinite(number) ? number : null;
 }
 
-function boundedScale(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0.1 || number > 3) {
-    throw new BrowserControlError("BROWSER_AUTOMATION_SCREENSHOT_BOUNDS",
-      "browser screenshot clip scale is outside the supported bounds", { outcome: "notSent" });
+function boundsError(source, reason, measured) {
+  const details = Object.freeze({
+    reason,
+    source,
+    measured: Object.freeze({
+      x: reportedNumber(measured.x),
+      y: reportedNumber(measured.y),
+      cssWidth: reportedNumber(measured.width),
+      cssHeight: reportedNumber(measured.height),
+      scale: reportedNumber(measured.scale),
+      scaledCssPixels: reportedNumber(measured.scaledCssPixels),
+    }),
+    limits: Object.freeze({
+      maxCssDimension: BROWSER_SCREENSHOT_MAX_CSS_DIMENSION,
+      maxScaledCssPixels: BROWSER_SCREENSHOT_MAX_CSS_PIXELS,
+      minScale: 0.1,
+      maxScale: 3,
+    }),
+    recovery: Object.freeze({ automatic: false, viewportScrollMayTriggerEffects: true }),
+  });
+  return new BrowserControlError("BROWSER_AUTOMATION_SCREENSHOT_BOUNDS",
+    `browser screenshot ${source} exceeds the supported ${reason} bounds`, {
+      outcome: "notSent",
+      retryable: false,
+      details,
+    });
+}
+
+export function validateBrowserScreenshotBounds({ source, x = 0, y = 0, width, height, scale = 1 }) {
+  const measured = {
+    x: Number(x),
+    y: Number(y),
+    width: Number(width),
+    height: Number(height),
+    scale: Number(scale),
+  };
+  measured.scaledCssPixels = measured.width * measured.height * measured.scale * measured.scale;
+  if (!Number.isFinite(measured.scale) || measured.scale < 0.1 || measured.scale > 3) {
+    throw boundsError(source, "scale", measured);
   }
-  return number;
+  if (!Number.isFinite(measured.x) || !Number.isFinite(measured.y) || measured.x < 0 || measured.y < 0) {
+    throw boundsError(source, "origin", measured);
+  }
+  if (!Number.isFinite(measured.width) || !Number.isFinite(measured.height)
+    || measured.width <= 0 || measured.height <= 0
+    || measured.width > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+    || measured.height > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION) {
+    throw boundsError(source, "dimension", measured);
+  }
+  if (measured.x > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+    || measured.y > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+    || measured.x + measured.width > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
+    || measured.y + measured.height > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION) {
+    throw boundsError(source, "extent", measured);
+  }
+  if (measured.scaledCssPixels > BROWSER_SCREENSHOT_MAX_CSS_PIXELS) {
+    throw boundsError(source, "area", measured);
+  }
+  return Object.freeze(measured);
 }
 
 export class BrowserScreenshot {
@@ -49,26 +97,37 @@ export class BrowserScreenshot {
     const layout = await this._command(sessionRef, "Page.getLayoutMetrics", {}, commandResults, signal);
     const metrics = layout.result || {};
     const viewport = metrics.cssVisualViewport || metrics.visualViewport || {};
-    const content = metrics.contentSize || {};
+    // 최신 CDP의 CSS pixel 필드를 우선한다. deprecated contentSize는 device pixel일 수 있다.
+    const content = metrics.cssContentSize || metrics.contentSize || {};
     let clip = null;
     let cssWidth;
     let cssHeight;
     if (options.clip) {
-      clip = { ...options.clip, scale: boundedScale(options.clip.scale ?? 1) };
-      cssWidth = boundedDimension(clip.width, "clip width");
-      cssHeight = boundedDimension(clip.height, "clip height");
+      const bounds = validateBrowserScreenshotBounds({
+        source: "clip",
+        ...options.clip,
+        scale: options.clip.scale ?? 1,
+      });
+      clip = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, scale: bounds.scale };
+      cssWidth = bounds.width;
+      cssHeight = bounds.height;
     } else if (options.fullPage === true) {
-      cssWidth = boundedDimension(content.width, "content width");
-      cssHeight = boundedDimension(content.height, "content height");
-      clip = { x: 0, y: 0, width: cssWidth, height: cssHeight, scale: 1 };
+      const bounds = validateBrowserScreenshotBounds({
+        source: "content",
+        width: content.width,
+        height: content.height,
+      });
+      cssWidth = bounds.width;
+      cssHeight = bounds.height;
+      clip = { x: 0, y: 0, width: bounds.width, height: bounds.height, scale: 1 };
     } else {
-      cssWidth = boundedDimension(viewport.clientWidth, "viewport width");
-      cssHeight = boundedDimension(viewport.clientHeight, "viewport height");
-    }
-    const scale = clip?.scale ?? 1;
-    if (cssWidth * cssHeight * scale * scale > BROWSER_SCREENSHOT_MAX_CSS_PIXELS) {
-      throw new BrowserControlError("BROWSER_AUTOMATION_SCREENSHOT_BOUNDS",
-        "browser screenshot exceeds the CSS pixel area limit", { outcome: "notSent" });
+      const bounds = validateBrowserScreenshotBounds({
+        source: "viewport",
+        width: viewport.clientWidth,
+        height: viewport.clientHeight,
+      });
+      cssWidth = bounds.width;
+      cssHeight = bounds.height;
     }
     const captured = await this._command(sessionRef, "Page.captureScreenshot", {
       format,

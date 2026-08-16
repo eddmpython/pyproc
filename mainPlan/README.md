@@ -17,9 +17,8 @@
 
 ## 현재 상태
 
-현재 실행 중인 이니셔티브는 [10-longPageScreenshotEvidence](10-longPageScreenshotEvidence/README.md)다.
-긴 content bounds가 `fullPage` screenshot 한계를 넘을 때 provider 원문 대신 공개 오류 코드와 측정
-detail을 반환하도록 계약을 정규화한다.
+현재 실행 중인 이니셔티브는 없다. 새 제품 간극이 재현되면 이 규칙에 따라 다음 번호의 폴더를 만들고,
+종료 조건까지 같은 직렬 흐름에서 수행한다.
 
 이 번호는 agent-computer 포트폴리오의 실행 순서다. North Star ceiling ladder의 기존 번호와 우선순위를
 대체하지 않는다.

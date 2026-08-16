@@ -27,12 +27,13 @@ const TRUSTED_READ_METHODS = new Set([
 ]);
 
 export class BrowserControlError extends Error {
-  constructor(code, message, { outcome = "notSent", retryable = false, cause = undefined } = {}) {
+  constructor(code, message, { outcome = "notSent", retryable = false, cause = undefined, details = undefined } = {}) {
     super(message, cause ? { cause } : undefined);
     this.name = "BrowserControlError";
     this.code = code;
     this.outcome = outcome;
     this.retryable = retryable;
+    if (details !== undefined) this.details = details;
   }
 }
 

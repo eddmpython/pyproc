@@ -34,6 +34,18 @@ const targetServer = createServer((req, res) => {
     res.end(semanticInventoryProbe);
     return;
   }
+  if (req.url?.startsWith("/screenshot-bounds")) {
+    const url = new URL(req.url, "http://fixture.invalid");
+    const width = Number(url.searchParams.get("width"));
+    const height = Number(url.searchParams.get("height"));
+    if (!Number.isInteger(width) || width < 1 || width > 40000
+      || !Number.isInteger(height) || height < 1 || height > 40000) {
+      res.writeHead(400); res.end("invalid bounds fixture"); return;
+    }
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(`<!doctype html><html><head><style>html,body{margin:0;padding:0}#surface{width:${width}px;height:${height}px;background:#17324d}</style></head><body><div id=surface></div></body></html>`);
+    return;
+  }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(`<!doctype html><html><body><h1 id=title>control-ready</h1><button id=commit>Commit</button>
     <output id=committed role=status>not committed</output><button id=verify>Verify</button>
@@ -313,6 +325,80 @@ try {
       && space.output.space?.capabilities?.join(",") === "dom,network,target,storage,runtime,screenshot,artifact,perception,actionConvergence"
       && space.output.space?.restoreBoundary === "externalEffectsRemain"
       && space.output.space?.replayBoundary === "deterministicRecording");
+
+  const thresholdOpened = await client.openTarget(`${targetOrigin}/screenshot-bounds?width=800&height=32768`, {
+    expectedRisk: "externalEffect", waitUntil: "load",
+  });
+  const thresholdAttached = await client.attachSession(thresholdOpened.output.targetRef);
+  const thresholdCapture = await client.act(thresholdAttached.output, [
+    { kind: "screenshot", format: "png", fullPage: true, expectedRisk: "read" },
+  ]);
+  check("설치 제품이 최대 CSS dimension full-page를 한 artifact로 캡처",
+    thresholdCapture.output.actions[0].result.cssHeight === 32768
+      && thresholdCapture.output.actions[0].result.fullPage === true
+      && thresholdCapture.attachments[0]?.mimeType === "image/png",
+  `${thresholdCapture.output.actions[0].result.cssWidth}x${thresholdCapture.output.actions[0].result.cssHeight}`);
+  await client.deleteArtifact(thresholdCapture.output.actions[0].result.artifactRef);
+  let clipBounds = null;
+  try {
+    await client.act(thresholdAttached.output, [{ kind: "screenshot", format: "png",
+      clip: { x: 0, y: 32768, width: 1, height: 1 }, expectedRisk: "read" }]);
+  } catch (error) { clipBounds = error; }
+  check("설치 제품이 absolute clip extent를 provider 전송 전에 공개 detail로 거부",
+    clipBounds instanceof ControlRemoteError
+      && clipBounds.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS"
+      && clipBounds.outcome === "notSent" && clipBounds.retryable === false
+      && clipBounds.details?.reason === "extent"
+      && clipBounds.details?.measured?.y === 32768
+      && clipBounds.details?.limits?.maxCssDimension === 32768);
+  await client.detachSession(thresholdAttached.output);
+  await client.closeTarget(thresholdOpened.output.targetRef, { expectedRisk: "externalEffect" });
+
+  const dimensionOpened = await client.openTarget(`${targetOrigin}/screenshot-bounds?width=800&height=32769`, {
+    expectedRisk: "externalEffect", waitUntil: "load",
+  });
+  const dimensionAttached = await client.attachSession(dimensionOpened.output.targetRef);
+  let dimensionBounds = null;
+  try {
+    await client.act(dimensionAttached.output, [
+      { kind: "screenshot", format: "png", fullPage: true, expectedRisk: "read" },
+    ]);
+  } catch (error) { dimensionBounds = error; }
+  check("설치 제품이 full-page dimension 초과를 capture 전에 측정 detail로 거부",
+    dimensionBounds instanceof ControlRemoteError
+      && dimensionBounds.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS"
+      && dimensionBounds.outcome === "notSent" && dimensionBounds.retryable === false
+      && dimensionBounds.details?.reason === "dimension"
+      && dimensionBounds.details?.source === "content"
+      && dimensionBounds.details?.measured?.cssHeight === 32769
+      && dimensionBounds.details?.limits?.maxCssDimension === 32768
+      && dimensionBounds.details?.limits?.maxScaledCssPixels === 67108864
+      && dimensionBounds.details?.recovery?.viewportScrollMayTriggerEffects === true,
+  JSON.stringify(dimensionBounds?.details || null));
+  await client.detachSession(dimensionAttached.output);
+  await client.closeTarget(dimensionOpened.output.targetRef, { expectedRisk: "externalEffect" });
+
+  const areaOpened = await client.openTarget(`${targetOrigin}/screenshot-bounds?width=16385&height=4096`, {
+    expectedRisk: "externalEffect", waitUntil: "load",
+  });
+  const areaAttached = await client.attachSession(areaOpened.output.targetRef);
+  let areaBounds = null;
+  try {
+    await client.act(areaAttached.output, [
+      { kind: "screenshot", format: "png", fullPage: true, expectedRisk: "read" },
+    ]);
+  } catch (error) { areaBounds = error; }
+  check("설치 제품이 scaled CSS area 초과를 capture 전에 측정 detail로 거부",
+    areaBounds instanceof ControlRemoteError
+      && areaBounds.code === "BROWSER_AUTOMATION_SCREENSHOT_BOUNDS"
+      && areaBounds.details?.reason === "area"
+      && areaBounds.details?.measured?.cssWidth === 16385
+      && areaBounds.details?.measured?.cssHeight === 4096
+      && areaBounds.details?.measured?.scaledCssPixels === 67112960,
+  JSON.stringify(areaBounds?.details || null));
+  await client.detachSession(areaAttached.output);
+  await client.closeTarget(areaOpened.output.targetRef, { expectedRisk: "externalEffect" });
+
   const fullOpened = await client.openTarget(`${targetOrigin}/semantic-inventory`, {
     expectedRisk: "externalEffect", waitUntil: "load",
   });

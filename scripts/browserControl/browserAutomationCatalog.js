@@ -11,6 +11,7 @@ import {
 import {
   BROWSER_SCREENSHOT_FORMATS,
   BROWSER_SCREENSHOT_MAX_CSS_DIMENSION,
+  validateBrowserScreenshotBounds,
 } from "./browserScreenshot.js";
 import {
   APX_LEGACY_REPRESENTATION,
@@ -470,17 +471,10 @@ export function validateBrowserAutomationAction(action) {
       for (const key of ["x", "y", "width", "height"]) {
         if (typeof action.clip[key] !== "number" || !Number.isFinite(action.clip[key])) fail(`screenshot.clip.${key} must be finite`);
       }
-      if (action.clip.x < 0 || action.clip.y < 0 || action.clip.width <= 0 || action.clip.height <= 0
-        || action.clip.x > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
-        || action.clip.y > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
-        || action.clip.width > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
-        || action.clip.height > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
-        || action.clip.x + action.clip.width > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION
-        || action.clip.y + action.clip.height > BROWSER_SCREENSHOT_MAX_CSS_DIMENSION) {
-        fail("screenshot.clip is outside CSS bounds");
+      if (action.clip.scale !== undefined && (typeof action.clip.scale !== "number" || !Number.isFinite(action.clip.scale))) {
+        fail("screenshot.clip.scale must be finite");
       }
-      if (action.clip.scale !== undefined && (typeof action.clip.scale !== "number" || !Number.isFinite(action.clip.scale)
-        || action.clip.scale < 0.1 || action.clip.scale > 3)) fail("screenshot.clip.scale is invalid");
+      validateBrowserScreenshotBounds({ source: "clip", ...action.clip, scale: action.clip.scale ?? 1 });
     }
   }
   if (action.kind === "waitFor") {
