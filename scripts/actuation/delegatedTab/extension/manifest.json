@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PyProc Delegated Tab",
   "description": "Delegates one explicitly chosen tab to a locally bound PyProc control host.",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "permissions": [
     "activeTab",
     "scripting"

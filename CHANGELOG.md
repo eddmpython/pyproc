@@ -16,6 +16,31 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 No unreleased public changes.
 
+## 0.0.24 - 2026-08-16
+
+### Added
+
+- **Web Machine Core v1 is a reviewable product protocol.** The package now includes a normative protocol,
+  requirement and surface locks, shared conformance vectors, a public product binding, a dependency-free
+  minimal implementation, browser coverage, and a WPT-shaped test. Both implementations produce the same
+  nine transcripts and reject malformed graphs, missing vectors, and inconsistent attachment lengths.
+- **Full-page screenshot limits are measured before capture.** Current CSS content bounds are preferred over
+  the deprecated metric, and oversized dimensions, areas, origins, extents, and scales fail with a stable code,
+  measured details, explicit limits, and a recovery boundary before the capture request is sent.
+- **Pipeline cancellation preserves honest transport outcomes.** Browser automation verification now accepts
+  both a provably unsent read poll and an unknown result when cancellation crosses the send boundary, while
+  preserving the completed effect prefix and forbidding unsafe effect retries.
+
+### 한국어 요약
+
+- Web Machine Core v1은 규범 protocol, requirement와 surface lock, 공통 conformance vector, 공개 제품 binding,
+  무의존 최소 구현, 브라우저 gate, WPT 형태 검증을 한 package에 담는다. 두 구현은 9개 transcript가 같고
+  잘못된 graph, 누락 vector, attachment 길이 불일치를 거부한다.
+- 긴 full-page screenshot은 capture 전에 CSS content 크기를 측정하고 dimension, area, origin, extent, scale
+  한계를 넘으면 안정 code, 측정 detail, 한계와 복구 경계를 포함해 거부한다.
+- pipeline 취소가 send 경계를 가로지를 때 전송 전 거부와 결과 불명확을 모두 정직하게 보존하고, 완료된
+  effect prefix를 유지하며 effect 재시도를 막는다.
+
 ## 0.0.23 - 2026-08-16
 
 ### Added

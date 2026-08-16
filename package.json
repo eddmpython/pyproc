@@ -1,6 +1,6 @@
 {
   "name": "pyproc",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "description": "A persistent Python computer in the browser: real CPython, durable workspaces, rewindable history, and evidence-backed browser eyes and hands. No application server. (브라우저에 영속하는 Python 컴퓨터.)",
   "type": "module",
   "repository": {
