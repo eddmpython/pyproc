@@ -38,7 +38,6 @@
       "binutils",
       "clang-18",
       "gcc",
-      "libc6-dev-i386",
       "make",
       "python3"
     ],
