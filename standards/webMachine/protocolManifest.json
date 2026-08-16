@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "protocol": "web-machine-core",
+  "version": 1,
+  "status": "standard-ready-product-protocol",
+  "normativeDocument": "protocol.md",
+  "vectorModule": "vectors/coreVectors.js",
+  "surfaceLock": "surfaceLock.json",
+  "artifacts": {
+    "protocol.md": "sha256:abc9f5eafd12b89281848fde19461a7a9ab681baad9600e67c6ff2626fdfba1b",
+    "vectors/coreVectors.js": "sha256:5261e97bfcb92c52d9aaa34178714e8c78e1aa2081cf5f5730fa608ed55fb151",
+    "surfaceLock.json": "sha256:eeb309da8bd6cea18150a05a3110dc70c92a77a14e4472f99751abbefc829c60",
+    "reference/minimalWebMachine.js": "sha256:c74075f30c02a629c0f8a144a6b81057d71a3bc0e8e1189052709fb58abf6721"
+  },
+  "requirements": [
+    "WM-CORE-001",
+    "WM-CORE-002",
+    "WM-CORE-003",
+    "WM-CORE-004",
+    "WM-CORE-005",
+    "WM-CORE-006",
+    "WM-CORE-007",
+    "WM-CORE-008",
+    "WM-CORE-009",
+    "WM-CORE-010",
+    "WM-CORE-011",
+    "WM-CORE-012",
+    "WM-CORE-013",
+    "WM-CORE-014",
+    "WM-CORE-015",
+    "WM-CORE-016",
+    "WM-CORE-017",
+    "WM-CORE-018",
+    "WM-CORE-019",
+    "WM-CORE-020",
+    "WM-CORE-021",
+    "WM-CORE-022",
+    "WM-CORE-023"
+  ]
+}

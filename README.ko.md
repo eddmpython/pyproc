@@ -210,6 +210,12 @@ guest마다 독립 block device를 받고, signed `.webmachine`
 source identity, permission, inspect 계약은 [API reference](skills/reference-pyproc-api/references/api.md)의
 `createWebComputer` 절에 있다.
 
+lifecycle, device permission, operation 순서, snapshot, abort, 이동형 image metadata 경계는
+[Web Machine Core v1](standards/webMachine/README.md)으로 공개한다. 제품 binding과 제품 source를 가져오지
+않는 의존성 없는 최소 구현이 브라우저 CI에서 같은 실행 vector를 통과한다. 현재 주장은
+`standard-ready product protocol`로 제한한다. 외부 독립 구현, 공개 incubation, wide review가 있기 전에는
+web standard라고 주장하지 않는다.
+
 ## Package subpath
 
 | Subpath | 계약 |

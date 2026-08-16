@@ -77,6 +77,9 @@ jobs:
       - run: npm run test:web-machine
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      - run: npm run test:web-machine-conformance
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       # MCP 레시피 게이트: stdio JSON-RPC, sandbox control, read-only skill 도구의 실왕복.
       - run: npm run test:mcp
         env:
@@ -164,6 +167,7 @@ jobs:
       - run: npm run test:golden
       # 무자산 Web Machine 계약만 실행한다. 실제 WASI/v86 guest는 Ubuntu 레인이 소유한다.
       - run: npm run test:web-machine
+      - run: npm run test:web-machine-conformance
       - run: npm run test:mcp
       - run: npm run test:mcp-product
       - run: npm run test:control-product

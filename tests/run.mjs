@@ -141,7 +141,7 @@ await check("package exports and bins resolve", () => {
 
 await check("contract suites", async () => {
   const result = await runContractSuites();
-  if (result.suites !== 46) throw new Error(`expected 46 suites, got ${result.suites}`);
+  if (result.suites !== 47) throw new Error(`expected 47 suites, got ${result.suites}`);
 });
 
 await check("engine deletion inventory and packed zero reference", async () => {

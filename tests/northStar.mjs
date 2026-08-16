@@ -226,15 +226,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "multiGuestComputer",
-    score: 9.3,
+    score: 9.4,
     en: Object.freeze({
       title: "A computer that boots guests",
-      state: "The Web Machine host lives inside this package behind `createWebComputer`, and Python, x86 Linux, and x86 Node guests use the same lifecycle, device, generation, and envelope contracts. Host contract, owner succession, durable generation, and guest-network probes run in CI. The installed product gate boots all three guests, executes Node 22.22.0 crypto and filesystem workloads, rejects a mutated image before engine creation, survives a browser-process restart, and moves the trio as one signed image. The x86 lane puts the real Python and Linux guests on one switch, and a guest can also run in its own worker. The reproducible Linux and Node builds are checked against exact sources, legal inventories, SBOMs, configs, and independent byte-identical build receipts.",
+      state: "The Web Machine host lives inside this package behind `createWebComputer`, and Python, x86 Linux, and x86 Node guests use the same lifecycle, device, generation, and envelope contracts. Host contract, owner succession, durable generation, and guest-network probes run in CI. Web Machine Core v1 now freezes 23 vendor-neutral lifecycle, permission, serialization, abort, snapshot, and portable image requirements. The public product binding and a dependency-free repository-local implementation pass the same nine transcripts in a browser, with a WPT-shaped suite and a candid external-adoption gap report. This is protocol readiness, not external independent implementation evidence. The installed product gate boots all three guests, rejects a mutated image before engine creation, survives a browser-process restart, and moves the trio as one signed image. The reproducible Linux and Node builds are checked against exact sources, legal inventories, SBOMs, configs, and independent byte-identical build receipts.",
       target: "Any guest with an adapter boots on the browser computer, and its image ships as freely as the host does.",
     }),
     ko: Object.freeze({
       title: "guest를 부팅하는 컴퓨터",
-      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 살고, Python, x86 Linux, x86 Node guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 쓴다. host 계약, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돈다. 설치 제품 게이트는 세 guest를 함께 부팅하고 Node 22.22.0 crypto와 filesystem workload를 실행하며, 변조 image를 engine 생성 전에 거부하고, 브라우저 process 재시작을 견디며 셋을 한 서명 image로 옮긴다. x86 레인은 실제 Python과 Linux guest를 한 switch에 올리고 guest를 자기 worker에 얹는 길도 제공한다. 재현 Linux와 Node build는 exact source, 전체 legal inventory, SBOM, config, 독립 byte-identical build 영수증에 대조된다.",
+      state: "Web Machine host가 `createWebComputer` 뒤에서 이 패키지 안에 살고, Python, x86 Linux, x86 Node guest가 같은 lifecycle, 장치, 세대, 봉투 계약을 쓴다. host 계약, owner 승계, 내구 세대, guest 네트워크 probe가 CI에서 돈다. Web Machine Core v1은 lifecycle, permission, 직렬화, abort, snapshot, 이동형 image의 vendor-neutral 요구 23개를 고정한다. 공개 제품 binding과 의존성 없는 저장소 내부 구현은 브라우저에서 같은 vector 9개의 transcript를 통과하며, WPT형 suite와 외부 채택 간극 보고서가 있다. 이는 protocol 준비 증거이며 외부 독립 구현 증거는 아니다. 설치 제품 게이트는 세 guest를 함께 부팅하고 변조 image를 engine 생성 전에 거부하며, 브라우저 process 재시작을 견디고 셋을 한 서명 image로 옮긴다. 재현 Linux와 Node build는 exact source, 전체 legal inventory, SBOM, config, 독립 byte-identical build 영수증에 대조된다.",
       target: "어댑터를 가진 guest는 무엇이든 브라우저 컴퓨터에서 부팅하고, 그 이미지는 host만큼 자유롭게 나간다.",
     }),
     evidence: Object.freeze([
@@ -246,6 +246,8 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/webMachine/browser/probes/linuxGuestProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/webMachine/browser/probes/nestedBrowserBoundaryProbe.html", lane: "test:web-machine:v86" }),
       Object.freeze({ path: "tests/browser/nodeGuestProduct.mjs", lane: "test:node-guest" }),
+      Object.freeze({ path: "standards/webMachine/protocol.md", lane: "test:contracts" }),
+      Object.freeze({ path: "standards/webMachine/conformance/browserGate.html", lane: "test:web-machine-conformance" }),
     ]),
     manual: Object.freeze([]),
     next: Object.freeze([

@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Web Machine Core v1 conformance</title></head>
+<body><pre id="out">Running Web Machine Core v1 conformance...</pre><script type="module">
+import { createProductConformanceFactory } from "./productImplementation.js";
+import { runConformance } from "./runVectors.js";
+import { createReferenceConformanceFactory } from "../reference/minimalWebMachine.js";
+
+const out = document.getElementById("out");
+const checks = [];
+const check = (name, pass, info = "") => {
+  checks.push({ name, pass: pass === true, info: String(info) });
+  out.textContent += `\n${pass ? "PASS" : "FAIL"} ${name}${info ? ` (${info})` : ""}`;
+};
+
+try {
+  const product = await runConformance(createProductConformanceFactory());
+  const reference = await runConformance(createReferenceConformanceFactory());
+  for (const result of product) check(`product ${result.id}`, true, JSON.stringify(result.transcript));
+  for (const result of reference) check(`reference ${result.id}`, true, JSON.stringify(result.transcript));
+  check("cross-implementation transcripts", JSON.stringify(product) === JSON.stringify(reference));
+} catch (error) {
+  check("conformance execution", false, error?.stack || error);
+}
+
+await fetch("/gateReport", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ checks }),
+});
+</script></body></html>
+

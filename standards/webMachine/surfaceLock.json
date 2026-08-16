@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "protocol": "web-machine-core",
+  "version": 1,
+  "productModule": "pyproc/machine",
+  "machineStates": ["created", "running", "paused", "stopped", "failed"],
+  "snapshotScopes": ["portable", "session", "none"],
+  "adapterMethods": ["boot", "pause", "resume", "snapshot", "restore", "shutdown", "request", "inspect"],
+  "machineMethods": ["boot", "pause", "resume", "snapshot", "restore", "shutdown", "request", "inspect"],
+  "hostMethods": ["registerAdapter", "registerDevice", "createMachine", "getMachine", "listDevices", "detachDevice", "destroyMachine", "preflightMachine"],
+  "imageExports": [
+    "createSnapshotEnvelope",
+    "validateSnapshotEnvelope",
+    "createWebMachineManifestContent",
+    "createWebMachineManifest",
+    "validateWebMachineManifest"
+  ],
+  "errorCodes": [
+    "WEB_MACHINE_ADAPTER_INVALID",
+    "WEB_MACHINE_DEVICE_PERMISSION_DENIED",
+    "WEB_MACHINE_INVALID_STATE",
+    "WEB_MACHINE_OPERATION_ABORTED",
+    "WEB_MACHINE_OUTCOME_UNKNOWN",
+    "WEB_MACHINE_SNAPSHOT_INCOMPATIBLE",
+    "WEB_MACHINE_SNAPSHOT_INVALID",
+    "WEB_MACHINE_SNAPSHOT_SCOPE",
+    "WEB_MACHINE_SNAPSHOT_UNSUPPORTED",
+    "WEB_MACHINE_IMAGE_MANIFEST_INVALID"
+  ]
+}

@@ -151,6 +151,18 @@ try {
     throw new Error("installed pyproc runtime dependency 0 계약 위반");
   }
   assertInstalledReadmeLinks(packageRoot, ["README.md", "README.ko.md"]);
+  for (const path of [
+    "standards/webMachine/README.md",
+    "standards/webMachine/protocol.md",
+    "standards/webMachine/protocolManifest.json",
+    "standards/webMachine/vectors/coreVectors.js",
+    "standards/webMachine/reference/minimalWebMachine.js",
+    "standards/webMachine/conformance/runVectors.js",
+    "standards/webMachine/conformance/productImplementation.js",
+    "standards/webMachine/conformance/wpt/webMachineCore.any.js",
+  ]) {
+    if (!existsSync(join(packageRoot, ...path.split("/")))) throw new Error(`installed conformance file 누락: ${path}`);
+  }
   const controlProtocolPath = join(packageRoot, "skills", "control-pyproc", "references", "control-protocol.md");
   const documentedHello = readDocumentJsonFixture(readFileSync(controlProtocolPath, "utf8"),
     "pyproc-control-client-hello");

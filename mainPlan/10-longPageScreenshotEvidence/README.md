@@ -9,7 +9,7 @@
   Chromium 원문 오류가 노출됐다
 - 검색한 중복 후보와 차이: `mainPlan`, `skills`, `tests/attempts`, Git 이력에서 screenshot과 bounds를
   검색했다. 크기 제한과 오류 코드는 문서에 있지만 실제 content bounds 초과를 재현한 이니셔티브는 없다
-- 현재 직렬 대기열 위치: `9-agentComputerStandardReadiness` 다음인 10번 대기열이다
+- 현재 직렬 대기열 위치: 9번 종료 뒤 착수한 현재 이니셔티브다
 
 ## 정확한 환경
 
@@ -111,7 +111,7 @@
 
 ## 다음 행동
 
-- 선행 조건: 9번 이니셔티브의 현재 직렬 작업을 끝낸다
+- 선행 조건: 완료했다
 - 첫 probe: 32,767px부터 32,769px까지 합성 문서와 scale 및 area 조합을 설치본에서 측정한다
 - 예상 수정 소유 영역: Native CDP screenshot bounds 정규화, action error detail, contract 및 installed
   browser gate, browser automation reference

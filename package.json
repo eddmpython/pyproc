@@ -88,6 +88,7 @@
     "scripts/verification",
     "scripts/skillOs",
     "skills",
+    "standards",
     "README.md",
     "README.ko.md",
     "LICENSE"
@@ -144,6 +145,7 @@
     "mcp:sandbox": "node scripts/mcpSandboxServer.mjs",
     "test:preflight": "node tests/browser/run.mjs tests/browser/preflightNoCoi.html",
     "test:web-machine": "node tests/webMachine/run.mjs",
+    "test:web-machine-conformance": "node tests/browser/run.mjs standards/webMachine/conformance/browserGate.html",
     "test:web-machine:v86": "node tests/webMachine/fixtures/v86/prepareAssets.mjs && node tests/webMachine/run.mjs --v86",
     "test:golden": "node tests/browser/goldenWorkflow.mjs",
     "skills:catalog": "node scripts/skillOs/catalog.mjs",

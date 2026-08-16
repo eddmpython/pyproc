@@ -229,6 +229,12 @@ reference journey is [the Node guest product gate](https://github.com/eddmpython
 manifest, source identity, permission, and inspection contract is documented under `createWebComputer` in the
 [API reference](skills/reference-pyproc-api/references/api.md).
 
+The lifecycle, device permission, operation ordering, snapshot, abort, and portable image metadata boundary is
+published as [Web Machine Core v1](standards/webMachine/README.md). A product binding and a dependency-free
+minimal implementation pass the same executable vectors in browser CI. The current claim is limited to a
+standard-ready product protocol. External independent implementation, public incubation, and wide review are
+still required before any web-standard claim.
+
 ## Package subpaths
 
 | Subpath | Contract |
