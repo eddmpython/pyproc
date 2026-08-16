@@ -103,6 +103,9 @@ export async function assertNativePackageCatalogContract() {
     && OWNED_PACKAGE_CATALOG_VERSION === 1, "owned package catalog protocol drifted");
   const buildLock = JSON.parse(await readFile(new URL(
     "../../scripts/nativePackageCatalog/nativePackageCatalogLock.json", import.meta.url), "utf8"));
+  const attributes = await readFile(new URL("../../.gitattributes", import.meta.url), "utf8");
+  assert(attributes.includes("*.py   text eol=lf"),
+    "locked Python wrapper sources are not LF-pinned for fresh Windows checkouts");
   assert(buildLock.schemaVersion === 3 && Object.keys(buildLock.profiles).sort().join(",") === "core,data",
     "owned package profile lock is incomplete");
   await assertProfile({ profile: "core", requirements: ["pyproc-native-host==1.0.0"],

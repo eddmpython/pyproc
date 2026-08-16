@@ -47,8 +47,10 @@ No unreleased public changes.
 
 - Successful Control startup now clears its timeout timer immediately, so a completed product lifecycle does
   not wait for an obsolete process timer.
-- Chromium profile cleanup now waits for Windows pending deletion to converge and reports a structured failure
-  if the exact temporary profile remains, closing a Chrome-only race after an otherwise clean 20-cycle run.
+- Chromium profile cleanup now waits for stable absence after Windows pending deletion, and POSIX launches use an
+  isolated process group that is terminated as a whole. A remaining exact profile becomes a structured failure.
+- Digest-locked Python wrapper sources are checked out as LF on every platform, so fresh Windows runners verify
+  the same supply-chain bytes as Linux and repository builds.
 - V86 inspection reports readiness only after the engine event. A pre-ready timeout no longer calls unsafe
   partial-instance stop or destroy methods, while a ready instance retains the full drain, flush, and destroy
   path.

@@ -13,6 +13,7 @@
 *.html text eol=lf
 *.yml  text eol=lf
 *.yaml text eol=lf
+*.py   text eol=lf
 # 재현 빌드 입력은 원본 문맥 공백과 정확한 바이트 해시를 보존한다.
 scripts/wasmToolBuilder/patches/*.patch text eol=lf -whitespace
 src/runtime/tools/owned/LICENSE.* text eol=lf -whitespace

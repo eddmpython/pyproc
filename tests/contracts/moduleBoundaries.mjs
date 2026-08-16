@@ -112,6 +112,19 @@ function verifyReleaseVersionSurfaces(packageJson) {
   }
 }
 
+function verifyBrowserLauncherCleanup(source) {
+  for (const required of [
+    "PROFILE_ABSENCE_STABILITY_MS",
+    'process.kill(-proc.pid, "SIGKILL")',
+    'detached: process.platform !== "win32"',
+  ]) {
+    if (!source.includes(required)) throw new Error(`browser process tree cleanup 불변식 누락: ${required}`);
+  }
+  if (!/killBrowserProcess\(proc, profile\);\s*removeBrowserProfile\(profile\);/u.test(source)) {
+    throw new Error("browser profile을 process tree 종료보다 먼저 지운다");
+  }
+}
+
 export function assertModuleBoundaries() {
   const runtimeSubpath = readFileSync(join(ROOT, "src", "composition", "runtimeSubpath.js"), "utf8");
   if (!runtimeSubpath.includes("wasiSubpath.js") || runtimeSubpath.includes("runtimeBindings")) {
@@ -131,6 +144,7 @@ export function assertModuleBoundaries() {
 
   const goldenPage = readFileSync(join(ROOT, "tests", "browser", "goldenWorkflow.html"), "utf8");
   const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+  verifyBrowserLauncherCleanup(readFileSync(join(ROOT, "scripts", "browserControl", "browserLauncher.mjs"), "utf8"));
   verifyReleaseVersionSurfaces(packageJson);
   verifyGoldenWorkflowImports(goldenPage, packageJson);
   // 음성 fixture: 공개 specifier는 그대로여도 import map이 package export target에서 표류하면

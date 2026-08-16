@@ -5,14 +5,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const profileCleanupWaiter = new Int32Array(new SharedArrayBuffer(4));
+const PROFILE_ABSENCE_STABILITY_MS = 750;
 
 function removeBrowserProfile(profile) {
   const deadline = Date.now() + 10000;
   let lastError = null;
+  let absentSince = null;
   do {
+    if (existsSync(profile)) absentSince = null;
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 2, retryDelay: 50 }); }
     catch (error) { lastError = error; }
-    if (!existsSync(profile)) return;
+    if (!existsSync(profile)) {
+      absentSince ??= Date.now();
+      if (Date.now() - absentSince >= PROFILE_ABSENCE_STABILITY_MS) return;
+    } else {
+      absentSince = null;
+    }
     Atomics.wait(profileCleanupWaiter, 0, 0, 100);
   } while (Date.now() < deadline);
   const error = new Error(`browser profile cleanup did not converge: ${profile}`,
@@ -65,9 +73,15 @@ export function browserLaunchArgs(profileDir, opts = {}) {
 export const headlessArgs = browserLaunchArgs;
 
 export function killBrowserProcess(proc, profileDir = null) {
-  if (proc && proc.exitCode === null) {
-    if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
-    else proc.kill("SIGKILL");
+  if (process.platform === "win32") {
+    if (proc && proc.exitCode === null) {
+      spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
+    }
+  } else if (proc?.pid) {
+    try { process.kill(-proc.pid, "SIGKILL"); }
+    catch (error) {
+      if (error?.code !== "ESRCH") throw error;
+    }
   }
   if (process.platform === "win32" && profileDir) {
     const needle = profileDir.replace(/'/g, "''").replace(/\\/g, "*");
@@ -89,7 +103,10 @@ export function launchBrowser(url, opts = {}) {
   if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) {
     throw new TypeError("launchBrowser: extraArgs must be an array of strings");
   }
-  const proc = spawn(browser, [...browserLaunchArgs(profile, opts), ...extraArgs, url], { stdio: "ignore" });
+  const proc = spawn(browser, [...browserLaunchArgs(profile, opts), ...extraArgs, url], {
+    stdio: "ignore",
+    detached: process.platform !== "win32",
+  });
   const spawnedAt = Date.now();
   let exitInfo = null;
   const whenExited = new Promise((resolve) => {
