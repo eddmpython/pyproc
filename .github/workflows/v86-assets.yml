@@ -1,0 +1,92 @@
+name: v86-assets
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/v86Builder/**"
+      - "tests/contracts/v86Builder.mjs"
+      - ".github/workflows/v86-assets.yml"
+
+permissions:
+  contents: read
+
+env:
+  PYPROC_UBUNTU_SNAPSHOT: 20260705T120000Z
+
+jobs:
+  build:
+    name: build-${{ matrix.slot }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [a, b]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24.17.0
+          cache: npm
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 17.0.19+10
+      - run: npm ci
+      - name: Install exact Rust and required firmware tools
+        run: |
+          rustup toolchain install 1.96.1 --profile minimal --target wasm32-unknown-unknown
+          rustup default 1.96.1
+          sudo apt-get update --snapshot "$PYPROC_UBUNTU_SNAPSHOT"
+          sudo apt-get install -y --snapshot "$PYPROC_UBUNTU_SNAPSHOT" \
+            acpica-tools binutils clang-18 gcc libc6-dev-i386 make python3
+      - name: Build source-pinned V86 engine and firmware
+        run: npm run assets:v86 -- --workspace "$RUNNER_TEMP/pyproc-v86-assets"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: pyproc-v86-assets-${{ matrix.slot }}
+          path: ${{ runner.temp }}/pyproc-v86-assets/dist/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  verify:
+    name: verify-byte-identical-and-browser-boot
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pyproc-v86-assets-a
+          path: .cache/v86-assets/a
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pyproc-v86-assets-b
+          path: .cache/v86-assets/b
+      - name: Verify independent build identity
+        run: npm run assets:v86:verify -- --left .cache/v86-assets/a --right .cache/v86-assets/b --receipt .cache/v86-assets/a/reproducibility-manifest.json
+      - name: Boot verified assets through the V86 product gate
+        run: |
+          node tests/webMachine/fixtures/v86/prepareAssets.mjs
+          cp .cache/v86-assets/a/libv86.mjs tests/webMachine/fixtures/v86/assets/libv86.mjs
+          cp .cache/v86-assets/a/v86.wasm tests/webMachine/fixtures/v86/assets/v86.wasm
+          cp .cache/v86-assets/a/seabios.bin tests/webMachine/fixtures/v86/assets/seabios.bin
+          cp .cache/v86-assets/a/vgabios.bin tests/webMachine/fixtures/v86/assets/vgabios.bin
+          node tests/webMachine/run.mjs --v86
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pyproc-v86-assets-verified
+          path: .cache/v86-assets/a/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90

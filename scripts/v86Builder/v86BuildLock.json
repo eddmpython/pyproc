@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "recipe": "pyproc-v86-assets-v1",
+  "v86": {
+    "version": "0.5.424",
+    "repository": "https://github.com/copy/v86.git",
+    "revision": "2f1346b0e7d88d4cbbbcc05fe15b4e369c3de23f",
+    "tree": "d84c58b48267b2c0f1933744e26fd0f29cd0035b",
+    "sourceDateEpoch": 1783235065,
+    "upstreamRun": "https://github.com/copy/v86/actions/runs/28732810855",
+    "attestations": "https://registry.npmjs.org/-/npm/v1/attestations/v86@0.5.424",
+    "npm": {
+      "tarball": "https://registry.npmjs.org/v86/-/v86-0.5.424.tgz",
+      "integrity": "sha512-YEFGBGKVjipcUIQskAXzC9992guXg39r3Fst3rn/jNA9kiHnu5Q/dNQxXYPk6ZlWXcqxMNDaUkdEBsNY1AIYBg==",
+      "sha1": "d35e6fbc314cf43fa1734fb25fc0776303f50147"
+    },
+    "inputs": {
+      "Cargo.toml": "733244233c5ab82c4c404616c437718844b6e0d435ed01a3c03935196d402f00",
+      "Makefile": "124390c282a785aea33aeb8b5cd5f8d2ef87e024f7ec7fadcd9d691ed63bcc7",
+      "bios/seabios.config": "38c1a54d9f56de73ad6ea02eda6c89bd75ab721a2879cce8eb9bf1ad98a416a9",
+      "bios/seabios-debug.config": "3075ef9b21eadc5e309cf748a9145a5ec6f95aee5f9a53db592a0bd8b5b52062",
+      "bios/fetch-and-build-seabios.sh": "ed4ba8b4010d3d4a6c201776211c7aff7d7e837453137230bef0fd38d775ed1d"
+    }
+  },
+  "seabios": {
+    "version": "rel-1.16.2",
+    "repository": "https://git.seabios.org/seabios.git",
+    "revision": "ea1b7a0733906b8425d948ae94fba63c32b1d425",
+    "tree": "22c6a019e54b333a381eecd6e1a3d4739de0f99b",
+    "sourceDateEpoch": 1675300479,
+    "license": "LGPL-3.0-only"
+  },
+  "toolchain": {
+    "runnerImage": "ubuntu-24.04",
+    "ubuntuSnapshot": "20260705T120000Z",
+    "ubuntuPackages": [
+      "acpica-tools",
+      "binutils",
+      "clang-18",
+      "gcc",
+      "libc6-dev-i386",
+      "make",
+      "python3"
+    ],
+    "node": "24.17.0",
+    "rust": {
+      "version": "1.96.1",
+      "commit": "31fca3adb",
+      "target": "wasm32-unknown-unknown"
+    },
+    "clang": "18.1.3",
+    "java": "17.0.19",
+    "closureCompiler": {
+      "version": "v20210601",
+      "url": "https://repo1.maven.org/maven2/com/google/javascript/closure-compiler/v20210601/closure-compiler-v20210601.jar",
+      "sha256": "64f161c65a3dba42c9a4f5a79db335ac0e757fcba486cd7928205ac4c258ef08",
+      "byteLength": 12634009
+    }
+  },
+  "referenceOutputs": {
+    "libv86.mjs": {
+      "sha256": "b58774370dcd62e534e05d2b6bb734f7057ef2166c3cc034e45847945d0910d1",
+      "byteLength": 353724
+    },
+    "v86.wasm": {
+      "sha256": "aec2c16bb0a1618aa641bb44d9c0fe14681f8c1459fa08c32e3e0562020884e8",
+      "byteLength": 2084417
+    },
+    "seabios.bin": {
+      "sha256": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98",
+      "byteLength": 131072
+    },
+    "vgabios.bin": {
+      "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880",
+      "byteLength": 36352
+    }
+  }
+}
