@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "recipe": "pyproc-canonical-npm-package-v1",
+  "toolchain": {
+    "node": "22.19.0",
+    "npm": "11.19.0",
+    "gitCoreAutocrlf": false
+  },
+  "knownReproduction": {
+    "version": "0.0.23",
+    "commit": "4fb4d4e31f310477e910b02ec003decbb77fa19c",
+    "tree": "3e2788694acebc85068bab1a8e18ef7b0ece9c06",
+    "filename": "pyproc-0.0.23.tgz",
+    "byteLength": 17421256,
+    "sha256": "084b42764f53269e92c2c9e938d31c27ee62f8120e35d577bc97792ddc3cfc61",
+    "sha1": "4e628e2a22bf7d6cdeb42148a0fce9320d10b9b4",
+    "integrity": "sha512-hwlGqmwQnp1dt+5FrP8T2fEWw34zI5n5uSyoM1DvylAEdtyJJDKANRnbPKSzojPnvQMqWz6kMQ5cH3G7EIkrcw==",
+    "fileCount": 448,
+    "unpackedSize": 40686732
+  }
+}

@@ -1,0 +1,82 @@
+name: package-reproducibility
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "scripts/packageBuilder/**"
+      - "tests/contracts/canonicalNpmPackage.mjs"
+      - ".github/workflows/package-reproducibility.yml"
+      - ".github/workflows/publish.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: pack-${{ matrix.slot }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slot: ubuntu
+            os: ubuntu-24.04
+          - slot: windows
+            os: windows-2025
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm install -g npm@11.19.0
+      - run: npm ci
+      - name: Pack exact Git tree
+        shell: pwsh
+        run: |
+          $packageDir = Join-Path $env:RUNNER_TEMP "pyproc-package"
+          npm run package:reproduce -- --tree $env:GITHUB_SHA --out $packageDir
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pyproc-package-${{ matrix.slot }}
+          path: ${{ runner.temp }}/pyproc-package/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  verify:
+    name: verify-ubuntu-windows-byte-identical
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pyproc-package-ubuntu
+          path: .cache/canonical-package/ubuntu
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pyproc-package-windows
+          path: .cache/canonical-package/windows
+      - name: Verify cross-platform package identity
+        run: >-
+          node scripts/packageBuilder/verifyCanonicalPackage.mjs
+          --left .cache/canonical-package/ubuntu
+          --right .cache/canonical-package/windows
+          --left-os ubuntu-24.04
+          --right-os windows-2025
+          --receipt .cache/canonical-package/ubuntu/canonical-package-reproducibility.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pyproc-package-verified
+          path: .cache/canonical-package/ubuntu/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90

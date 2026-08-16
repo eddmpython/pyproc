@@ -83,6 +83,7 @@ function assertVersion(actual, expected, label) {
 
 function exactClone(source, target) {
   run("git", ["init", target]);
+  run("git", ["-C", target, "config", "core.autocrlf", "false"]);
   run("git", ["-C", target, "remote", "add", "origin", source.repository]);
   run("git", ["-C", target, "fetch", "--depth", "1", "origin", source.revision]);
   run("git", ["-C", target, "checkout", "--detach", "FETCH_HEAD"]);

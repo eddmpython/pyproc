@@ -15,11 +15,11 @@
       "sha1": "d35e6fbc314cf43fa1734fb25fc0776303f50147"
     },
     "inputs": {
-      "Cargo.toml": "733244233c5ab82c4c404616c437718844b6e0d435ed01a3c03935196d402f00",
-      "Makefile": "124390c282a785aea33aeb8b5cd5f8d2ef87e024f7ec7fadcd9d691ed63bcc7",
-      "bios/seabios.config": "38c1a54d9f56de73ad6ea02eda6c89bd75ab721a2879cce8eb9bf1ad98a416a9",
-      "bios/seabios-debug.config": "3075ef9b21eadc5e309cf748a9145a5ec6f95aee5f9a53db592a0bd8b5b52062",
-      "bios/fetch-and-build-seabios.sh": "ed4ba8b4010d3d4a6c201776211c7aff7d7e837453137230bef0fd38d775ed1d"
+      "Cargo.toml": "727880ec3730700c5f07b92f80e96d6c7649efe6e7461b42763f196aa6eb9e2f",
+      "Makefile": "5686395e21fad85cb7cd57faf9b55e8fc6e7bbf66b02dcf99af9629e30cea4c4",
+      "bios/seabios.config": "0edc4229d66686e6262009db2dde7a612521f0c68c137c38baf2a1d8c539f96c",
+      "bios/seabios-debug.config": "87f5b8dbd7573bf3934b385c432b4725fe43abff1caafbd0e04d96c6468509ba",
+      "bios/fetch-and-build-seabios.sh": "057856a817ae3dc85b18dc00f19274f6e877e6f28a36dce1afc5be751739e24a"
     }
   },
   "seabios": {

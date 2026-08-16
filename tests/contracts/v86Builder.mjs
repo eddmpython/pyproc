@@ -44,6 +44,9 @@ export async function assertV86Builder() {
     && lock.v86.tree === "d84c58b48267b2c0f1933744e26fd0f29cd0035b", "V86 source identity drifted");
   assert(lock.seabios.revision === "ea1b7a0733906b8425d948ae94fba63c32b1d425"
     && lock.seabios.tree === "22c6a019e54b333a381eecd6e1a3d4739de0f99b", "SeaBIOS source identity drifted");
+  assert(lock.v86.inputs["Cargo.toml"] === "727880ec3730700c5f07b92f80e96d6c7649efe6e7461b42763f196aa6eb9e2f"
+    && lock.v86.inputs.Makefile === "5686395e21fad85cb7cd57faf9b55e8fc6e7bbf66b02dcf99af9629e30cea4c4",
+  "V86 exact Git blob input identity drifted");
   assert(lock.toolchain.rust.version === "1.96.1" && lock.toolchain.node === "24.17.0",
     "V86 build toolchain is not exact");
   assert(/^\d{8}T\d{6}Z$/u.test(lock.toolchain.ubuntuSnapshot)

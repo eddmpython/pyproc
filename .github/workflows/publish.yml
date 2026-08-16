@@ -39,7 +39,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: 22
+          node-version: 22.19.0
           registry-url: https://registry.npmjs.org
 
       # trusted publishing은 npm >= 11.5.1에서만 동작한다(node 22 번들은 10.x).
@@ -68,4 +68,10 @@ jobs:
           esac
 
       - run: npm ci
-      - run: npm publish
+      - name: exact Git tree에서 canonical package 생성 및 게시
+        run: |
+          set -eu
+          packageDir="$RUNNER_TEMP/pyproc-package"
+          npm run package:reproduce -- --tree "$GITHUB_SHA" --out "$packageDir"
+          pkgVersion="$(node -p "require('./package.json').version")"
+          npm publish "$packageDir/pyproc-$pkgVersion.tgz"
