@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "releaseTag": "pyproc-v86-assets-v2",
+  "targetCommit": "c81aed063b7a9969923f4d671da783cc0d9f975e",
+  "githubRunId": "31949344862",
+  "sources": {
+    "v86": {
+      "version": "0.5.424",
+      "repository": "https://github.com/copy/v86.git",
+      "revision": "2f1346b0e7d88d4cbbbcc05fe15b4e369c3de23f",
+      "tree": "d84c58b48267b2c0f1933744e26fd0f29cd0035b",
+      "sourceDateEpoch": 1783235065,
+      "npm": {
+        "tarball": "https://registry.npmjs.org/v86/-/v86-0.5.424.tgz",
+        "integrity": "sha512-YEFGBGKVjipcUIQskAXzC9992guXg39r3Fst3rn/jNA9kiHnu5Q/dNQxXYPk6ZlWXcqxMNDaUkdEBsNY1AIYBg==",
+        "sha1": "d35e6fbc314cf43fa1734fb25fc0776303f50147"
+      },
+      "attestations": "https://registry.npmjs.org/-/npm/v1/attestations/v86@0.5.424"
+    },
+    "seabios": {
+      "version": "rel-1.16.2",
+      "repository": "https://git.seabios.org/seabios.git",
+      "revision": "ea1b7a0733906b8425d948ae94fba63c32b1d425",
+      "tree": "22c6a019e54b333a381eecd6e1a3d4739de0f99b",
+      "sourceDateEpoch": 1675300479
+    }
+  },
+  "assets": [
+    {
+      "name": "build-manifest.json",
+      "byteLength": 7014,
+      "sha256": "be7df2912694d706243b6b97ebe9312caa584c54864dc384aa020ac826e4f66c"
+    },
+    {
+      "name": "libv86.mjs",
+      "byteLength": 353724,
+      "sha256": "b58774370dcd62e534e05d2b6bb734f7057ef2166c3cc034e45847945d0910d1"
+    },
+    {
+      "name": "reproducibility-manifest.json",
+      "byteLength": 2836,
+      "sha256": "51113f760a4c1cab5c12245a085fec6cc66dcd1c1b7727bd71cf112eacb936af"
+    },
+    {
+      "name": "seabios-rel-1.16.2-source.tar",
+      "byteLength": 2938880,
+      "sha256": "b673e28fa55e7250a92b286e59fde674599d2ab43090b0b3c689284f432961b2"
+    },
+    {
+      "name": "seabios.bin",
+      "byteLength": 131072,
+      "sha256": "f0302e4917c59f856d02d24e378a32438f35a111036498dcc2b342f54a94e1d6"
+    },
+    {
+      "name": "v86-0.5.424-source.tar",
+      "byteLength": 7219200,
+      "sha256": "e7efc64ad065f16bf41984b93810d879476a4eeb5edbcbba3b26289d260afefe"
+    },
+    {
+      "name": "v86-assets-inputs.zip",
+      "byteLength": 6195,
+      "sha256": "d1a312cdb632bd8e15f008c7e63472f77014804530b811a08e6fcfa0e843d108"
+    },
+    {
+      "name": "v86-assets-legal.zip",
+      "byteLength": 1949384,
+      "sha256": "51212e7a4271908eb5eaf0b1bd0b4f8f1fa06b66f7e36badc47948a7ef7db1a8"
+    },
+    {
+      "name": "v86-assets.cyclonedx.json",
+      "byteLength": 3701,
+      "sha256": "7164614995a1bed66a63f94cfe8362e1366a4dd66cbd20b834857a706f4333eb"
+    },
+    {
+      "name": "v86.wasm",
+      "byteLength": 2084417,
+      "sha256": "aec2c16bb0a1618aa641bb44d9c0fe14681f8c1459fa08c32e3e0562020884e8"
+    },
+    {
+      "name": "vgabios.bin",
+      "byteLength": 36352,
+      "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880"
+    }
+  ],
+  "legalEntries": 6,
+  "inputEntries": 3
+}

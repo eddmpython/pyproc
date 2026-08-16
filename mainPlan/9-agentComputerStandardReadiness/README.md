@@ -1,6 +1,6 @@
 # Initiative 9: agent computer와 웹 표준 후보 준비도
 
-상태: **진행 중, M0부터 M3 완료, M4 진행 중**
+상태: **진행 중, M0부터 M4 완료, M5 진행 중**
 
 이 문서는 agent가 pyproc에 들어와 보고, 행동하고, 계산하고, 세션을 넘겨 계속 일하는 전 과정을
 제품 기준으로 끌어올리는 실행 원장이다. 기존 능력 점수와 증거의 정본은
@@ -182,11 +182,7 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
 
 ### M4. 전체 자립 공급망
 
-판정: **진행 중**
-
-현재 직렬 작업은 `supplyChainIntegrity.remainingReproducibleAssets`다. V86 engine과 SeaBIOS 및 VGA BIOS의
-exact source revision, 저장소 build recipe, 두 격리 build byte 대조, license와 SBOM을 먼저 닫는다. 완료 전
-독립 구현이나 표준 후보 문서로 이동하지 않는다.
+판정: **완료**
 
 - emulator, firmware, guest image의 source, lock, license, SBOM, 두 번 build byte 대조를 완결한다.
 - 기본 Python, optional x86, GPU 경로별 외부 요청과 자산 출처를 설치 제품 gate가 전수 판정한다.
@@ -196,7 +192,35 @@ exact source revision, 저장소 build recipe, 두 격리 build byte 대조, lic
   pack 환경을 고정한 두 격리 build에서 게시 tarball이 byte-identical이거나, 게시 서비스가 바꾸는
   byte를 별도 정본 계약과 무결성 gate로 설명해야 M4를 종료한다.
 
+완료 증거:
+
+- V86 0.5.424 commit `2f1346b0e7d88d4cbbbcc05fe15b4e369c3de23f`와 SeaBIOS rel-1.16.2
+  commit `ea1b7a0733906b8425d948ae94fba63c32b1d425`, Git tree, 입력 blob, Ubuntu snapshot, Node,
+  Rust, Clang, Java, Closure compiler, GCC와 firmware tool package를 exact lock으로 고정했다.
+- 권위 run `31949344862`의 두 격리 build에서 `libv86.mjs`, `v86.wasm`, `seabios.bin`,
+  `vgabios.bin`이 모두 byte-identical이었다. 네 output은 A/B 일치뿐 아니라 catalog 승격 digest와도
+  같아야 build가 성공하며, 같은 run의 실제 x86 browser gate가 GREEN이다.
+- 공개 `pyproc-v86-assets-v2` release는 exact source archive, 전체 legal material, CycloneDX SBOM,
+  build manifest, 재현 영수증과 네 runtime byte를 함께 제공한다. `releaseAssets.json`은 2,889 bytes,
+  SHA-256 `ada279e809958b9e161c667a2f2c5fc77fbc98574d03ace1a3057bb5fac1eb6c`이고 저장소
+  `releaseAssetsV2.json`과 같다.
+- catalog 승격 뒤 exact V86 제품 gate 11개 probe, Web Computer 13개, Python, Linux, Node 공동 제품
+  gate 8개가 GREEN이다. Node 공동 gate는 제3자 요청 0과 새 SeaBIOS digest의 engine 생성 전 검증을
+  확인했다. hardware gate도 nonfallback AMD RDNA 3에서 compute와 RGBA8 oracle을 통과했다.
+- canonical package recipe는 `core.autocrlf=false`, Node 22.19.0, npm 11.19.0과 exact Git tree를
+  고정한다. run `31948147959`에서 Ubuntu와 Windows tarball이 byte-identical이었고, Windows에서
+  게시된 `pyproc@0.0.23` 17,421,256 bytes를 SHA-256
+  `084b42764f53269e92c2c9e938d31c27ee62f8120e35d577bc97792ddc3cfc61`로 정확히 재현했다.
+- Python 기본, optional x86와 hardware GPU는 same-origin 준비 뒤 제3자 요청 0 또는 닫힌 hardware
+  provider 계약을 검증한다. 브라우저와 OS가 제공하는 표준 substrate와 npm 또는 별도 project release가
+  제공하는 byte의 책임 경계는 asset provenance 문서에 고정했다.
+
 ### M5. 표준 후보 자료와 conformance
+
+판정: **진행 중**
+
+현재 직렬 작업은 vendor-neutral protocol, conformance vector와 제품 코드를 import하지 않는 별도 최소
+구현을 같은 명세 revision에 봉인하는 것이다.
 
 - vendor-neutral Web Machine explainer와 normative protocol을 분리한다.
 - WPT형 test suite와 별도 최소 reference implementation을 만든다.

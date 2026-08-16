@@ -34,9 +34,26 @@ stdlib ZIP 루트의 `_sysconfigdata_*.py`, `_sysconfig_vars_*.json`, `build-det
 
 V86 engine, firmware와 guest image는 npm package에 포함하지 않는다. Web Machine 소비자가 exact digest와
 provenance를 가진 자산을 주입한다. project가 재현 build한 Linux와 Node guest는 source, config, legal-info,
-SBOM, 독립 build 영수증을 함께 게시한 별도 release만 catalog가 참조한다. 상류 V86와 firmware는 상류가
-제공한 출처 이상을 주장하지 않는다. Node image descriptor는 emulator 생성 전에 byte length와 SHA-256을
-검증하며 기본 loader는 redirect 없는 same-origin URL만 허용한다.
+SBOM, 독립 build 영수증을 함께 게시한 별도 release만 catalog가 참조한다. V86 0.5.424와 SeaBIOS
+rel-1.16.2도 exact Git revision과 tree, Ubuntu snapshot, compiler와 build tool version을 고정해 두 격리
+build로 재현한다. 네 runtime output은 A/B 일치뿐 아니라 catalog 승격 digest와도 같아야 build가 성공한다.
+별도 `pyproc-v86-assets-v2` release는 source archive, legal material, CycloneDX SBOM, build manifest와
+재현 영수증을 runtime byte와 함께 공개하고 `releaseAssetsV2.json`이 그 공개 manifest를 봉인한다. Node
+image descriptor는 emulator 생성 전에 byte length와 SHA-256을 검증하며 기본 loader는 redirect 없는
+same-origin URL만 허용한다.
+
+실행 경계는 다음처럼 구분한다.
+
+| 경계 | 제공자 | pyproc의 무결성 책임 |
+| --- | --- | --- |
+| WebAssembly, Worker, IndexedDB, OPFS, WebCrypto, WebGPU | 브라우저 또는 OS | feature와 권한을 preflight하고 실패를 구조화한다 |
+| CPython WASI, stdlib, data engine, 상주 도구 | npm package | exact source build와 package 내부 digest를 검증한다 |
+| V86, SeaBIOS, VGA BIOS, Linux와 Node image | 별도 project release | source, legal material, SBOM, A/B 재현과 runtime digest를 catalog에 봉인한다 |
+| GPU driver와 hardware | 브라우저 또는 OS | 닫힌 compute와 pixel oracle로 결과를 검증하고 fallback을 거부한다 |
+
+Python 기본 부팅, optional x86 guest와 GPU 제품 gate는 필요한 자산을 same-origin으로 준비한 뒤 제3자
+요청 0을 각각 확인한다. 이 판정은 브라우저와 OS가 제공하는 표준 substrate까지 pyproc이 배송한다는 뜻이
+아니다.
 
 catalog의 `consumers`가 download 범위의 정본이다. `v86Probe`는 기본 x86 probe, `webComputer`는 기본
 Python과 Linux 제품, `nodeGuest`는 Python, Linux, Node 공동 제품 gate를 뜻한다. Node image는

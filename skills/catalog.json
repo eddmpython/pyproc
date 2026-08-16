@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:049cdde658d826d5eb9b3152348d8bbad183a765fa2adbe0f7dc50b1851ac5f4",
-  "catalogDigest": "sha256:d52b2ebe6179a24ae128f9de606d389c927fddde70d8208545b30842a213d085",
+  "generatedFromDigest": "sha256:1138406e42570fe7ef92ac596e3c96e4333cfbdcc04d3a942d0ac980db375098",
+  "catalogDigest": "sha256:7064a37781956ffbacc4073d540b84c2f06e749e45c2200d8cb83a52bb8c8694",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -334,8 +334,8 @@
     },
     {
       "path": "skills/manage-pyproc-assets/references/asset-provenance.md",
-      "bytes": 3421,
-      "sha256": "sha256:b9a994219721b4ba53bb25f73227dbb998d6f386d36fedf130262e46617dd4dc"
+      "bytes": 4794,
+      "sha256": "sha256:1ebf2c084be517c32911947b4c6ccd4f9e7b390f0c9d746fc67cdb041b4336ce"
     },
     {
       "path": "skills/reference-pyproc-api/references/api.md",

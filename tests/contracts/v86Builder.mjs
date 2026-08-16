@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { validateV86AssetCatalog } from "../../scripts/assetProvenance.mjs";
 import { verifyV86AssetBuild } from "../../scripts/v86Builder/verifyV86Assets.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -60,6 +61,33 @@ export async function assertV86Builder() {
   assert(lock.expectedOutputs["seabios.bin"].sha256
     === "f0302e4917c59f856d02d24e378a32438f35a111036498dcc2b342f54a94e1d6",
   "V86 reproducible SeaBIOS output is not locked");
+  const releaseLockBytes = await readFile(resolve(root, "scripts/v86Builder/releaseAssetsV2.json"));
+  const releaseLock = JSON.parse(releaseLockBytes);
+  const catalog = JSON.parse(await readFile(resolve(root, "scripts/assetCatalog.json"), "utf8"));
+  const releasedComponents = catalog.components.filter((entry) =>
+    ["v86-project-0.5.424", "seabios-project-rel-1.16.2"].includes(entry.componentId));
+  assert(releaseLock.releaseTag === "pyproc-v86-assets-v2"
+    && releaseLock.targetCommit === "c81aed063b7a9969923f4d671da783cc0d9f975e"
+    && releaseLock.githubRunId === "31949344862" && releaseLock.assets.length === 11,
+  "V86 public release identity drifted");
+  assert(releasedComponents.length === 2 && releasedComponents.every((entry) =>
+    entry.provenanceStatus === "reproducible-project-release-with-complete-source-and-legal-material"
+      && entry.evidenceManifest.sha256 === sha256(releaseLockBytes)
+      && entry.evidenceManifest.byteLength === releaseLockBytes.byteLength
+      && entry.evidenceManifest.assetCount === releaseLock.assets.length),
+  "V86 catalog no longer seals the public release evidence manifest");
+  const invalidCatalog = structuredClone(catalog);
+  invalidCatalog.components.find((entry) => entry.componentId === "v86-project-0.5.424")
+    .evidenceManifest.sha256 = "0".repeat(63);
+  let invalidReleaseRejected = false;
+  try { validateV86AssetCatalog(invalidCatalog); }
+  catch (error) { invalidReleaseRejected = /release lock descriptor/u.test(error.message); }
+  assert(invalidReleaseRejected, "V86 malformed public release digest passed catalog validation");
+  for (const [name, expected] of Object.entries(lock.expectedOutputs)) {
+    const released = releaseLock.assets.find((entry) => entry.name === name);
+    assert(released?.sha256 === expected.sha256 && released.byteLength === expected.byteLength,
+      `V86 release runtime differs from build lock: ${name}`);
+  }
 
   const temporary = await mkdtemp(resolve(tmpdir(), "pyproc-v86-builder-"));
   const left = resolve(temporary, "a");

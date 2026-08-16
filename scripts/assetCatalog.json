@@ -60,35 +60,61 @@
   ],
   "components": [
     {
-      "componentId": "v86-npm-0.5.424",
+      "componentId": "v86-project-0.5.424",
       "name": "v86",
       "version": "0.5.424",
-      "downloadLocation": "https://registry.npmjs.org/v86/-/v86-0.5.424.tgz",
-      "sourceLocation": "https://github.com/copy/v86",
-      "sourceRevision": "NOASSERTION",
+      "downloadLocation": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-0.5.424-source.tar",
+      "sourceLocation": "https://github.com/copy/v86.git",
+      "sourceRevision": "2f1346b0e7d88d4cbbbcc05fe15b4e369c3de23f",
       "licenseDeclared": "BSD-2-Clause",
-      "licenseConcluded": "NOASSERTION",
+      "licenseConcluded": "BSD-2-Clause AND MIT AND BSD-3-Clause",
       "copyrightText": "NOASSERTION",
-      "provenanceStatus": "registry-integrity-without-source-revision",
+      "provenanceStatus": "reproducible-project-release-with-complete-source-and-legal-material",
+      "evidenceManifest": {
+        "releaseTag": "pyproc-v86-assets-v2",
+        "targetCommit": "c81aed063b7a9969923f4d671da783cc0d9f975e",
+        "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/releaseAssets.json",
+        "sha256": "ada279e809958b9e161c667a2f2c5fc77fbc98574d03ace1a3057bb5fac1eb6c",
+        "byteLength": 2889,
+        "assetCount": 11,
+        "localLock": "scripts/v86Builder/releaseAssetsV2.json"
+      },
       "evidence": [
-        "https://www.npmjs.com/package/v86/v/0.5.424",
-        "https://github.com/copy/v86/blob/master/LICENSE"
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/releaseAssets.json",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-0.5.424-source.tar",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-assets-legal.zip",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-assets.cyclonedx.json",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/build-manifest.json",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/reproducibility-manifest.json"
       ]
     },
     {
-      "componentId": "seabios-rel-1.16.2",
+      "componentId": "seabios-project-rel-1.16.2",
       "name": "SeaBIOS",
       "version": "rel-1.16.2",
-      "downloadLocation": "https://git.seabios.org/seabios.git",
+      "downloadLocation": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/seabios-rel-1.16.2-source.tar",
       "sourceLocation": "https://git.seabios.org/seabios.git",
-      "sourceRevision": "rel-1.16.2",
+      "sourceRevision": "ea1b7a0733906b8425d948ae94fba63c32b1d425",
       "licenseDeclared": "LGPL-3.0-only",
       "licenseConcluded": "LGPL-3.0-only",
       "copyrightText": "NOASSERTION",
-      "provenanceStatus": "upstream-source-recipe-not-reproduced",
+      "provenanceStatus": "reproducible-project-release-with-complete-source-and-legal-material",
+      "evidenceManifest": {
+        "releaseTag": "pyproc-v86-assets-v2",
+        "targetCommit": "c81aed063b7a9969923f4d671da783cc0d9f975e",
+        "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/releaseAssets.json",
+        "sha256": "ada279e809958b9e161c667a2f2c5fc77fbc98574d03ace1a3057bb5fac1eb6c",
+        "byteLength": 2889,
+        "assetCount": 11,
+        "localLock": "scripts/v86Builder/releaseAssetsV2.json"
+      },
       "evidence": [
-        "https://github.com/copy/v86/blob/2f1346b/bios/fetch-and-build-seabios.sh",
-        "https://github.com/copy/v86/blob/2f1346b/bios/COPYING.LESSER"
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/releaseAssets.json",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/seabios-rel-1.16.2-source.tar",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-assets-legal.zip",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-assets.cyclonedx.json",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/build-manifest.json",
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/reproducibility-manifest.json"
       ]
     },
     {
@@ -179,20 +205,19 @@
         "webComputer",
         "nodeGuest"
       ],
-      "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
+      "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/libv86.mjs",
       "sha1": "b73519e406e5c91e34b99bd59f5b4a336a434629",
       "sha256": "b58774370dcd62e534e05d2b6bb734f7057ef2166c3cc034e45847945d0910d1",
       "byteLength": 353724,
-      "componentId": "v86-npm-0.5.424",
+      "componentId": "v86-project-0.5.424",
       "licenseConcluded": "BSD-2-Clause",
-      "distribution": "local-test-only",
+      "distribution": "project-release-runtime-reference",
       "localPath": "./assets/libv86.mjs",
       "bundleBlockers": [
         "package-policy-external-engine"
       ],
       "sources": [
-        "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/libv86.mjs",
-        "https://unpkg.com/v86@0.5.424/build/libv86.mjs"
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/libv86.mjs"
       ]
     },
     {
@@ -203,21 +228,19 @@
         "webComputer",
         "nodeGuest"
       ],
-      "url": "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
+      "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86.wasm",
       "sha1": "0eba04d11fa23dd27eb7e75c4154ccddccc3cd93",
       "sha256": "aec2c16bb0a1618aa641bb44d9c0fe14681f8c1459fa08c32e3e0562020884e8",
       "byteLength": 2084417,
-      "componentId": "v86-npm-0.5.424",
-      "licenseConcluded": "NOASSERTION",
-      "distribution": "local-test-only",
+      "componentId": "v86-project-0.5.424",
+      "licenseConcluded": "BSD-2-Clause AND MIT AND BSD-3-Clause",
+      "distribution": "project-release-runtime-reference",
       "localPath": "./assets/v86.wasm",
       "bundleBlockers": [
-        "composite-binary-license-inventory-not-verified",
         "package-policy-external-engine"
       ],
       "sources": [
-        "https://cdn.jsdelivr.net/npm/v86@0.5.424/build/v86.wasm",
-        "https://unpkg.com/v86@0.5.424/build/v86.wasm"
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86.wasm"
       ]
     },
     {
@@ -228,21 +251,19 @@
         "webComputer",
         "nodeGuest"
       ],
-      "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
-      "sha1": "f10fa015b059186dcfe961fae3acbe3fe7f83e7f",
-      "sha256": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98",
+      "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/seabios.bin",
+      "sha1": "bf540cd710340462d8b705337629e7704fc620bf",
+      "sha256": "f0302e4917c59f856d02d24e378a32438f35a111036498dcc2b342f54a94e1d6",
       "byteLength": 131072,
-      "componentId": "seabios-rel-1.16.2",
+      "componentId": "seabios-project-rel-1.16.2",
       "licenseConcluded": "LGPL-3.0-only",
-      "distribution": "local-test-only",
+      "distribution": "project-release-runtime-reference",
       "localPath": "./assets/seabios.bin",
       "bundleBlockers": [
-        "reproducible-build-not-verified",
-        "license-and-source-delivery-not-packaged"
+        "package-policy-external-engine"
       ],
       "sources": [
-        "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/seabios.bin",
-        "https://cdn.jsdelivr.net/gh/copy/v86@2f1346b/bios/seabios.bin"
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/seabios.bin"
       ]
     },
     {
@@ -253,21 +274,19 @@
         "webComputer",
         "nodeGuest"
       ],
-      "url": "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
+      "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/vgabios.bin",
       "sha1": "97df04d5423bccc5b986da0ecde01839997d966d",
       "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880",
       "byteLength": 36352,
-      "componentId": "seabios-rel-1.16.2",
+      "componentId": "seabios-project-rel-1.16.2",
       "licenseConcluded": "LGPL-3.0-only",
-      "distribution": "local-test-only",
+      "distribution": "project-release-runtime-reference",
       "localPath": "./assets/vgabios.bin",
       "bundleBlockers": [
-        "reproducible-build-not-verified",
-        "license-and-source-delivery-not-packaged"
+        "package-policy-external-engine"
       ],
       "sources": [
-        "https://raw.githubusercontent.com/copy/v86/2f1346b/bios/vgabios.bin",
-        "https://cdn.jsdelivr.net/gh/copy/v86@2f1346b/bios/vgabios.bin"
+        "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/vgabios.bin"
       ]
     },
     {

@@ -3,7 +3,7 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "web-machine-execution-assets-v1",
-  "documentNamespace": "https://github.com/eddmpython/pyproc/sbom/web-machine-execution-assets-v1/536011feacf10a34",
+  "documentNamespace": "https://github.com/eddmpython/pyproc/sbom/web-machine-execution-assets-v1/25240043b5da0292",
   "creationInfo": {
     "created": "2026-08-16T00:00:00Z",
     "creators": [
@@ -14,28 +14,28 @@
   "documentComment": "이 문서는 pyproc이 실행 시 적재하는 미번들 자산 전부를 기술한다(엔진 부팅 집합 + Web Machine fixture). package 배포 목록이 아니다.",
   "packages": [
     {
-      "SPDXID": "SPDXRef-Package-v86-npm-0.5.424",
+      "SPDXID": "SPDXRef-Package-v86-project-0.5.424",
       "name": "v86",
       "versionInfo": "0.5.424",
-      "downloadLocation": "https://registry.npmjs.org/v86/-/v86-0.5.424.tgz",
+      "downloadLocation": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-0.5.424-source.tar",
       "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
+      "licenseConcluded": "BSD-2-Clause AND MIT AND BSD-3-Clause",
       "licenseDeclared": "BSD-2-Clause",
       "copyrightText": "NOASSERTION",
-      "sourceInfo": "source=https://github.com/copy/v86 revision=NOASSERTION provenance=registry-integrity-without-source-revision",
-      "packageComment": "evidence=https://www.npmjs.com/package/v86/v/0.5.424,https://github.com/copy/v86/blob/master/LICENSE"
+      "sourceInfo": "source=https://github.com/copy/v86.git revision=2f1346b0e7d88d4cbbbcc05fe15b4e369c3de23f provenance=reproducible-project-release-with-complete-source-and-legal-material",
+      "packageComment": "evidence=https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/releaseAssets.json,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-0.5.424-source.tar,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-assets-legal.zip,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-assets.cyclonedx.json,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/build-manifest.json,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/reproducibility-manifest.json"
     },
     {
-      "SPDXID": "SPDXRef-Package-seabios-rel-1.16.2",
+      "SPDXID": "SPDXRef-Package-seabios-project-rel-1.16.2",
       "name": "SeaBIOS",
       "versionInfo": "rel-1.16.2",
-      "downloadLocation": "https://git.seabios.org/seabios.git",
+      "downloadLocation": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/seabios-rel-1.16.2-source.tar",
       "filesAnalyzed": false,
       "licenseConcluded": "LGPL-3.0-only",
       "licenseDeclared": "LGPL-3.0-only",
       "copyrightText": "NOASSERTION",
-      "sourceInfo": "source=https://git.seabios.org/seabios.git revision=rel-1.16.2 provenance=upstream-source-recipe-not-reproduced",
-      "packageComment": "evidence=https://github.com/copy/v86/blob/2f1346b/bios/fetch-and-build-seabios.sh,https://github.com/copy/v86/blob/2f1346b/bios/COPYING.LESSER"
+      "sourceInfo": "source=https://git.seabios.org/seabios.git revision=ea1b7a0733906b8425d948ae94fba63c32b1d425 provenance=reproducible-project-release-with-complete-source-and-legal-material",
+      "packageComment": "evidence=https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/releaseAssets.json,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/seabios-rel-1.16.2-source.tar,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-assets-legal.zip,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86-assets.cyclonedx.json,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/build-manifest.json,https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/reproducibility-manifest.json"
     },
     {
       "SPDXID": "SPDXRef-Package-buildroot-pyproc-i686-v2",
@@ -93,7 +93,7 @@
         "BSD-2-Clause"
       ],
       "copyrightText": "NOASSERTION",
-      "comment": "distribution=local-test-only; role=engine-module; bundleBlockers=package-policy-external-engine"
+      "comment": "distribution=project-release-runtime-reference; role=engine-module; bundleBlockers=package-policy-external-engine"
     },
     {
       "SPDXID": "SPDXRef-File-v86.wasm",
@@ -108,12 +108,12 @@
           "checksumValue": "aec2c16bb0a1618aa641bb44d9c0fe14681f8c1459fa08c32e3e0562020884e8"
         }
       ],
-      "licenseConcluded": "NOASSERTION",
+      "licenseConcluded": "BSD-2-Clause AND MIT AND BSD-3-Clause",
       "licenseInfoInFiles": [
-        "NOASSERTION"
+        "BSD-2-Clause AND MIT AND BSD-3-Clause"
       ],
       "copyrightText": "NOASSERTION",
-      "comment": "distribution=local-test-only; role=engine-binary; bundleBlockers=composite-binary-license-inventory-not-verified,package-policy-external-engine"
+      "comment": "distribution=project-release-runtime-reference; role=engine-binary; bundleBlockers=package-policy-external-engine"
     },
     {
       "SPDXID": "SPDXRef-File-seabios.bin",
@@ -121,11 +121,11 @@
       "checksums": [
         {
           "algorithm": "SHA1",
-          "checksumValue": "f10fa015b059186dcfe961fae3acbe3fe7f83e7f"
+          "checksumValue": "bf540cd710340462d8b705337629e7704fc620bf"
         },
         {
           "algorithm": "SHA256",
-          "checksumValue": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98"
+          "checksumValue": "f0302e4917c59f856d02d24e378a32438f35a111036498dcc2b342f54a94e1d6"
         }
       ],
       "licenseConcluded": "LGPL-3.0-only",
@@ -133,7 +133,7 @@
         "LGPL-3.0-only"
       ],
       "copyrightText": "NOASSERTION",
-      "comment": "distribution=local-test-only; role=firmware; bundleBlockers=reproducible-build-not-verified,license-and-source-delivery-not-packaged"
+      "comment": "distribution=project-release-runtime-reference; role=firmware; bundleBlockers=package-policy-external-engine"
     },
     {
       "SPDXID": "SPDXRef-File-vgabios.bin",
@@ -153,7 +153,7 @@
         "LGPL-3.0-only"
       ],
       "copyrightText": "NOASSERTION",
-      "comment": "distribution=local-test-only; role=firmware; bundleBlockers=reproducible-build-not-verified,license-and-source-delivery-not-packaged"
+      "comment": "distribution=project-release-runtime-reference; role=firmware; bundleBlockers=package-policy-external-engine"
     },
     {
       "SPDXID": "SPDXRef-File-buildroot-pyproc-i686.bin",
@@ -220,12 +220,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-v86-npm-0.5.424"
+      "relatedSpdxElement": "SPDXRef-Package-v86-project-0.5.424"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-seabios-rel-1.16.2"
+      "relatedSpdxElement": "SPDXRef-Package-seabios-project-rel-1.16.2"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -280,22 +280,22 @@
     {
       "spdxElementId": "SPDXRef-File-libv86.mjs",
       "relationshipType": "GENERATED_FROM",
-      "relatedSpdxElement": "SPDXRef-Package-v86-npm-0.5.424"
+      "relatedSpdxElement": "SPDXRef-Package-v86-project-0.5.424"
     },
     {
       "spdxElementId": "SPDXRef-File-v86.wasm",
       "relationshipType": "GENERATED_FROM",
-      "relatedSpdxElement": "SPDXRef-Package-v86-npm-0.5.424"
+      "relatedSpdxElement": "SPDXRef-Package-v86-project-0.5.424"
     },
     {
       "spdxElementId": "SPDXRef-File-seabios.bin",
       "relationshipType": "GENERATED_FROM",
-      "relatedSpdxElement": "SPDXRef-Package-seabios-rel-1.16.2"
+      "relatedSpdxElement": "SPDXRef-Package-seabios-project-rel-1.16.2"
     },
     {
       "spdxElementId": "SPDXRef-File-vgabios.bin",
       "relationshipType": "GENERATED_FROM",
-      "relatedSpdxElement": "SPDXRef-Package-seabios-rel-1.16.2"
+      "relatedSpdxElement": "SPDXRef-Package-seabios-project-rel-1.16.2"
     },
     {
       "spdxElementId": "SPDXRef-File-buildroot-pyproc-i686.bin",

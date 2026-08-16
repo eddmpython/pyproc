@@ -125,6 +125,24 @@ export function validateV86AssetCatalog(value) {
     if (!Array.isArray(component.evidence) || !component.evidence.length || component.evidence.some((url) => !String(url).startsWith("https://"))) {
       throw new TypeError(`${label}.evidence: HTTPS URL 필요`);
     }
+    if (component.evidenceManifest !== undefined) {
+      const manifest = component.evidenceManifest;
+      for (const field of ["url", "sha256"]) {
+        assertString(manifest?.[field], `${label}.evidenceManifest.${field}`);
+      }
+      if (!sha256Pattern.test(manifest.sha256) || !manifest.url.startsWith("https://")
+        || !Number.isSafeInteger(manifest.byteLength) || manifest.byteLength < 1
+        || !Number.isSafeInteger(manifest.assetCount) || manifest.assetCount < 1) {
+        throw new TypeError(`${label}.evidenceManifest: release lock descriptor 불일치`);
+      }
+      const extendedFields = ["releaseTag", "targetCommit", "localLock"];
+      if (extendedFields.some((field) => manifest[field] !== undefined)) {
+        for (const field of extendedFields) assertString(manifest[field], `${label}.evidenceManifest.${field}`);
+        if (!/^[0-9a-f]{40}$/u.test(manifest.targetCommit) || !manifest.localLock.startsWith("scripts/")) {
+          throw new TypeError(`${label}.evidenceManifest: local release lock identity 불일치`);
+        }
+      }
+    }
     return componentId;
   });
   unique(componentIds, "componentId");

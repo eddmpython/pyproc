@@ -423,15 +423,15 @@ export const NORTH_STAR_AXES = Object.freeze([
   }),
   Object.freeze({
     id: "supplyChainIntegrity",
-    score: 9.2,
+    score: 10,
     en: Object.freeze({
       title: "A supply chain you can verify",
-      state: "The zero-dependency engine CLI verifies catalog-pinned boot anchors and every lock-listed package before same-origin deployment; runtime pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. V86 assets have closed byte-length and SHA-256 descriptors, bounded streaming loads, and pre-engine mismatch rejection. The asset CLI seals the worker, Service Worker, resident tool worker, and WASM binary graph, while machine images verify signers before import. Ripgrep and Git have exact source, toolchain, binary digest, license, and byte-identical isolated rebuild evidence. The Linux, Node, and data guests are checked by independent byte-identical rebuilds. The Node release includes Buildroot and Node source identities, complete legal material, a CycloneDX SBOM, manifests, and a runtime oracle. The NumPy lane additionally seals the exact sdist, build tools, compatibility overlay, static module registry, wheel, numeric oracle, SBOM, and manifest.",
+      state: "The zero-dependency engine CLI verifies catalog-pinned boot anchors and every lock-listed package before same-origin deployment; runtime pins the script SRI, re-verifies fetched core bytes, and the browser gate proves zero third-party requests. Exact V86 and SeaBIOS revisions, Git trees, inputs, Ubuntu snapshot, compilers, and output digests are repository locks. Two isolated builds produce identical engine and firmware bytes, then a real x86 browser boot must pass before a project release publishes runtime bytes with source archives, complete legal material, a CycloneDX SBOM, and build receipts. The asset CLI seals the worker, Service Worker, resident tool worker, and WASM binary graph, while machine images verify signers before import. Ripgrep, Git, Linux, Node, data engines, and scientific packages carry equivalent source, toolchain, license, manifest, and isolated rebuild evidence. The canonical package builder archives an exact Git tree with line-ending conversion disabled under pinned Node and npm versions. Ubuntu and Windows produce the same tarball, and that recipe reproduces the published 0.0.23 registry bytes exactly.",
       target: "Every byte pyproc executes is either built by a repository recipe or pinned by a digest, and every mismatch fails before execution.",
     }),
     ko: Object.freeze({
       title: "검증 가능한 공급망",
-      state: "무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. V86 자산은 닫힌 byte length와 SHA-256 descriptor, bounded streaming load, engine 생성 전 불일치 거부를 갖는다. 자산 CLI는 worker, Service Worker, 상주 도구 worker와 WASM binary graph를 봉인하고 Machine image는 import 전에 서명자를 검증한다. ripgrep과 Git은 exact source, toolchain, binary digest, license, 격리 byte-identical rebuild 증거를 갖는다. Linux, Node, data guest는 독립 byte-identical rebuild로 확인한다. Node release는 Buildroot와 Node source identity, 전체 legal material, CycloneDX SBOM, manifest, runtime oracle을 포함한다. NumPy 레인은 exact sdist, build tool, compatibility overlay, static module registry, wheel, 수치 oracle, SBOM과 manifest까지 봉인한다.",
+      state: "무의존 engine CLI가 catalog에 pin된 boot anchor와 lock이 등재한 package를 전수 검증한 뒤 same-origin에 배포하고, runtime은 script SRI와 fetch된 core를 다시 검증하며 브라우저 gate는 제3자 요청 0을 증명한다. V86와 SeaBIOS의 exact revision, Git tree, input, Ubuntu snapshot, compiler, output digest를 저장소 lock으로 고정한다. 두 격리 build의 engine과 firmware byte가 같고 실제 x86 브라우저 부팅이 통과해야 source archive, 전체 legal material, CycloneDX SBOM, build 영수증과 runtime byte를 project release로 공개한다. 자산 CLI는 worker, Service Worker, 상주 도구 worker와 WASM binary graph를 봉인하고 Machine image는 import 전에 서명자를 검증한다. ripgrep, Git, Linux, Node, data engine과 과학 package도 source, toolchain, license, manifest, 격리 rebuild 증거를 갖는다. canonical package builder는 줄바꿈 변환을 끈 exact Git tree와 고정 Node 및 npm으로 pack한다. Ubuntu와 Windows tarball이 같고 같은 recipe가 게시된 0.0.23 registry byte를 정확히 재현한다.",
       target: "pyproc이 실행하는 모든 byte는 저장소 recipe로 build되거나 digest로 pin되고, 불일치는 실행 전에 실패한다.",
     }),
     evidence: Object.freeze([
@@ -440,15 +440,13 @@ export const NORTH_STAR_AXES = Object.freeze([
       Object.freeze({ path: "tests/run.mjs", lane: "test" }),
       Object.freeze({ path: "tests/browser/webComputerProduct.mjs", lane: "test:web-computer" }),
       Object.freeze({ path: "tests/browser/wasmToolLayerProduct.mjs", lane: "test:wasm-tools" }),
+      Object.freeze({ path: "tests/contracts/v86Builder.mjs", lane: "test:contracts" }),
+      Object.freeze({ path: "tests/contracts/canonicalNpmPackage.mjs", lane: "test:contracts" }),
+      Object.freeze({ path: ".github/workflows/v86-assets.yml", lane: "ci" }),
+      Object.freeze({ path: ".github/workflows/package-reproducibility.yml", lane: "ci" }),
     ]),
     manual: Object.freeze([]),
-    next: Object.freeze([
-      Object.freeze({
-        id: "remainingReproducibleAssets",
-        en: "Build the remaining firmware and emulator assets twice from repository recipes, reproduce the published package bytes from exact inputs, and gate every digest in the final execution graph",
-        ko: "남은 firmware와 emulator 자산을 저장소 recipe로 두 번 build하고 exact input에서 게시 package byte를 재현하며 최종 실행 graph의 모든 digest를 gate로 대조한다",
-      }),
-    ]),
+    next: Object.freeze([]),
   }),
 ]);
 
