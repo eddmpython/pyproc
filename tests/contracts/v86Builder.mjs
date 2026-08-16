@@ -50,8 +50,9 @@ export async function assertV86Builder() {
   assert(lock.toolchain.rust.version === "1.96.1" && lock.toolchain.node === "24.17.0",
     "V86 build toolchain is not exact");
   assert(/^\d{8}T\d{6}Z$/u.test(lock.toolchain.ubuntuSnapshot)
-    && lock.toolchain.ubuntuPackages.includes("gcc")
-    && lock.toolchain.ubuntuPackages.includes("acpica-tools"),
+    && lock.toolchain.ubuntuPackages.gcc === "4:13.2.0-7ubuntu1"
+    && lock.toolchain.ubuntuPackages["acpica-tools"] === "20230628-1"
+    && lock.toolchain.gcc.includes("13.3.0") && lock.toolchain.iasl.includes("20230628"),
   "V86 Ubuntu package snapshot is not exact");
   assert(Object.values(lock.referenceOutputs).every((entry) => /^[0-9a-f]{64}$/u.test(entry.sha256)
     && Number.isSafeInteger(entry.byteLength)), "V86 reference output descriptors are incomplete");

@@ -164,11 +164,28 @@ const clangPath = output("which", ["clang-18"]);
 const clangVersion = output(clangPath, ["--version"]);
 const javaVersion = output("java", ["-version"]);
 const pythonVersion = output("python3", ["--version"]);
+const gccVersion = output("gcc", ["--version"]);
+const ldVersion = output("ld", ["--version"]);
+const makeVersion = output("make", ["--version"]);
+const iaslVersion = output("iasl", ["-v"]);
+const packageVersions = output("dpkg-query", [
+  "-W", "-f=${binary:Package}\t${Version}\n", ...Object.keys(lock.toolchain.ubuntuPackages),
+]).split("\n").sort();
+const expectedPackageVersions = Object.entries(lock.toolchain.ubuntuPackages)
+  .map(([name, version]) => `${name}\t${version}`).sort();
 assertVersion(nodeVersion, `v${lock.toolchain.node}`, "Node");
 assertVersion(rustcVersion, `rustc ${lock.toolchain.rust.version}`, "Rust");
 assertVersion(rustcVersion, `commit-hash: ${lock.toolchain.rust.commit}`, "Rust commit");
 assertVersion(clangVersion, lock.toolchain.clang, "Clang");
 assertVersion(javaVersion, lock.toolchain.java, "Java");
+assertVersion(pythonVersion, lock.toolchain.python, "Python");
+assertVersion(gccVersion, lock.toolchain.gcc, "GCC");
+assertVersion(ldVersion, lock.toolchain.ld, "ld");
+assertVersion(makeVersion, lock.toolchain.make, "make");
+assertVersion(iaslVersion, lock.toolchain.iasl, "IASL");
+if (packageVersions.join("\n") !== expectedPackageVersions.join("\n")) {
+  throw new Error(`Ubuntu package version mismatch: ${packageVersions.join(", ")}`);
+}
 await symlink(clangPath, join(toolBin, "clang"));
 
 const closurePath = join(downloads, "closure-compiler-v20210601.jar");
@@ -271,19 +288,17 @@ const manifest = {
   toolchain: {
     runnerImage: lock.toolchain.runnerImage,
     ubuntuSnapshot,
-    ubuntuPackages: output("dpkg-query", [
-      "-W", "-f=${binary:Package}\t${Version}\n", ...lock.toolchain.ubuntuPackages,
-    ]).split("\n"),
+    ubuntuPackages: packageVersions,
     node: nodeVersion,
     rustc: rustcVersion.split("\n"),
     cargo: cargoVersion.split("\n"),
     clang: clangVersion.split("\n"),
     java: javaVersion.split("\n"),
     python: pythonVersion.split("\n"),
-    gcc: output("gcc", ["--version"]).split("\n"),
-    ld: output("ld", ["--version"]).split("\n"),
-    make: output("make", ["--version"]).split("\n"),
-    iasl: output("iasl", ["-v"]).split("\n"),
+    gcc: gccVersion.split("\n"),
+    ld: ldVersion.split("\n"),
+    make: makeVersion.split("\n"),
+    iasl: iaslVersion.split("\n"),
     closureCompiler: lock.toolchain.closureCompiler,
   },
   sourceInputs,

@@ -137,6 +137,7 @@
     "assets:wasm-tools": "node scripts/wasmToolBuilder/buildOwnedWasmTools.mjs --check",
     "assets:v86": "node scripts/v86Builder/buildV86Assets.mjs",
     "assets:v86:verify": "node scripts/v86Builder/verifyV86Assets.mjs",
+    "assets:v86-release": "node scripts/release/assembleV86Release.mjs",
     "package:reproduce": "node scripts/packageBuilder/buildCanonicalPackage.mjs",
     "package:verify": "node scripts/packageBuilder/verifyCanonicalPackage.mjs",
     "serve": "node scripts/staticServer.mjs",

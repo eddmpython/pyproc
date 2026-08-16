@@ -33,14 +33,14 @@
   "toolchain": {
     "runnerImage": "ubuntu-24.04",
     "ubuntuSnapshot": "20260705T120000Z",
-    "ubuntuPackages": [
-      "acpica-tools",
-      "binutils",
-      "clang-18",
-      "gcc",
-      "make",
-      "python3"
-    ],
+    "ubuntuPackages": {
+      "acpica-tools": "20230628-1",
+      "binutils": "2.42-4ubuntu2.10",
+      "clang-18": "1:18.1.3-1ubuntu1",
+      "gcc": "4:13.2.0-7ubuntu1",
+      "make": "4.3-4.1build2",
+      "python3": "3.12.3-0ubuntu2.1"
+    },
     "node": "24.17.0",
     "rust": {
       "version": "1.96.1",
@@ -49,6 +49,11 @@
     },
     "clang": "18.1.3",
     "java": "17.0.19",
+    "python": "Python 3.12.3",
+    "gcc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+    "ld": "GNU ld (GNU Binutils for Ubuntu) 2.42",
+    "make": "GNU Make 4.3",
+    "iasl": "ASL+ Optimizing Compiler/Disassembler version 20230628",
     "closureCompiler": {
       "version": "v20210601",
       "url": "https://repo1.maven.org/maven2/com/google/javascript/closure-compiler/v20210601/closure-compiler-v20210601.jar",
