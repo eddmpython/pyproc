@@ -872,7 +872,9 @@ try {
   const pipelineCancelledPayload = toolText(pipelineCancelled);
   const cancelledAtClick = pipelineCancelledPayload.outcome === "outcomeUnknown"
     && pipelineCancelledPayload.failedActionIndex === 0 && pipelineCancelledPayload.completed?.length === 0;
-  const cancelledAfterClick = pipelineCancelledPayload.outcome === "notSent"
+  // 두 번째 read poll은 cancel이 transport send 전이면 notSent, send 뒤면 outcomeUnknown이다.
+  // 어느 쪽이든 이미 완료한 click 하나만 prefix에 남고 effect는 다시 보내지 않는다.
+  const cancelledAfterClick = ["notSent", "outcomeUnknown"].includes(pipelineCancelledPayload.outcome)
     && pipelineCancelledPayload.failedActionIndex === 1 && pipelineCancelledPayload.completed?.length === 1
     && pipelineCancelledPayload.completed[0]?.kind === "click";
   check("pipeline 취소가 실제 command 응답 경계의 completed prefix를 보존", pipelineCancelled.result.isError === true
