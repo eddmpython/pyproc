@@ -218,6 +218,8 @@ export async function assertOwnedEngineBuilder() {
     && windowsBuilder.includes("generateWindowsCrossSysconfigData")
     && windowsBuilder.includes("ownedBuildDetailsArguments"),
     "Windows owned engine build does not generate platform metadata");
-  assert(linuxBuilder.includes("ownedBuildDetailsArguments"),
-    "Linux owned engine build does not generate platform metadata");
+  assert(linuxBuilder.includes("ownedBuildDetailsArguments")
+    && linuxBuilder.includes("prepareModuleSources(sourceDir, profileBuild.input)")
+    && !linuxBuilder.includes("prepareSetup(sourceDir, nativeBuildDir"),
+  "Linux owned engine host bootstrap incorrectly applies target-only native modules");
 }

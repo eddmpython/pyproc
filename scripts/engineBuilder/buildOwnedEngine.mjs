@@ -51,10 +51,14 @@ async function download(url, path, sha256) {
   await verify(path, sha256);
 }
 
-async function prepareSetup(sourceDir, buildDir, profileInput) {
+async function prepareModuleSources(sourceDir, profileInput) {
   for (const module of profileInput.recipe.modules) {
     await copyFile(join(SCRIPT_DIR, module.source), join(sourceDir, "Modules", module.source));
   }
+}
+
+async function prepareSetup(sourceDir, buildDir, profileInput) {
+  await prepareModuleSources(sourceDir, profileInput);
   await mkdir(join(buildDir, "Modules"), { recursive: true });
   await copyFile(join(SCRIPT_DIR, profileInput.recipe.setupFile), join(buildDir, "Modules", "Setup.local"));
 }
@@ -100,7 +104,8 @@ async function main() {
   };
   const buildTriple = run(join(sourceDir, "config.guess"), [], { cwd: sourceDir, env: baseEnv, capture: true });
   const nativeBuildDir = join(sourceDir, "cross-build", buildTriple);
-  await prepareSetup(sourceDir, nativeBuildDir, profileBuild.input);
+  await prepareModuleSources(sourceDir, profileBuild.input);
+  await mkdir(nativeBuildDir, { recursive: true });
   run("../../configure", lock.configureArgs, {
     cwd: nativeBuildDir,
     env: { ...baseEnv, CFLAGS: lock.cflags },
