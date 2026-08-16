@@ -55,8 +55,11 @@ export async function assertV86Builder() {
     && lock.toolchain.ubuntuPackages["acpica-tools"] === "20230628-1"
     && lock.toolchain.gcc.includes("13.3.0") && lock.toolchain.iasl.includes("20230628"),
   "V86 Ubuntu package snapshot is not exact");
-  assert(Object.values(lock.referenceOutputs).every((entry) => /^[0-9a-f]{64}$/u.test(entry.sha256)
-    && Number.isSafeInteger(entry.byteLength)), "V86 reference output descriptors are incomplete");
+  assert(Object.values(lock.expectedOutputs).every((entry) => /^[0-9a-f]{64}$/u.test(entry.sha256)
+    && Number.isSafeInteger(entry.byteLength)), "V86 expected output descriptors are incomplete");
+  assert(lock.expectedOutputs["seabios.bin"].sha256
+    === "f0302e4917c59f856d02d24e378a32438f35a111036498dcc2b342f54a94e1d6",
+  "V86 reproducible SeaBIOS output is not locked");
 
   const temporary = await mkdtemp(resolve(tmpdir(), "pyproc-v86-builder-"));
   const left = resolve(temporary, "a");

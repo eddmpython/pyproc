@@ -56,6 +56,8 @@ async function makeFixture(directory, lock, targetCommit) {
       seabios: { version: lock.seabios.version, revision: lock.seabios.revision, tree: lock.seabios.tree },
     },
     toolchain: { ubuntuSnapshot: lock.toolchain.ubuntuSnapshot },
+    expectedMatches: Object.fromEntries(["libv86.mjs", "v86.wasm", "seabios.bin", "vgabios.bin"]
+      .map((name) => [name, true])),
     artifacts,
   };
   const receipt = {

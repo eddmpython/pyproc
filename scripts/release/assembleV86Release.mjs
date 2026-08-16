@@ -92,6 +92,8 @@ export async function validateV86VerifiedDirectory({ verifiedDir, targetCommit }
     || receipt.schemaVersion !== 1 || receipt.recipe !== manifest.recipe
     || receipt.headSha !== targetCommit || !/^\d+$/u.test(receipt.runId || "")
     || receipt.independentBuilds?.join(",") !== "a,b" || receipt.byteIdentical !== true
+    || Object.values(manifest.expectedMatches || {}).length !== runtimeNames.length
+    || Object.values(manifest.expectedMatches || {}).some((entry) => entry !== true)
     || JSON.stringify(receipt.artifacts) !== JSON.stringify(manifest.artifacts)) {
     throw new Error("V86 build manifest and reproducibility receipt mismatch");
   }

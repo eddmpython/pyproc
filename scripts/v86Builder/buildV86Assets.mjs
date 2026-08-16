@@ -259,11 +259,14 @@ const artifactPaths = [
   "inputs/v86BuildLock.json",
 ].sort();
 const artifacts = await Promise.all(artifactPaths.map((name) => descriptor(join(dist, ...name.split("/")), name)));
-const referenceMatches = Object.fromEntries(runtimeOutputs.map((entry) => {
-  const reference = lock.referenceOutputs[entry.name];
-  return [entry.name, Boolean(reference && reference.sha256 === entry.sha256
-    && reference.byteLength === entry.byteLength)];
+const expectedMatches = Object.fromEntries(runtimeOutputs.map((entry) => {
+  const expected = lock.expectedOutputs[entry.name];
+  return [entry.name, Boolean(expected && expected.sha256 === entry.sha256
+    && expected.byteLength === entry.byteLength)];
 }));
+if (Object.values(expectedMatches).some((matches) => !matches)) {
+  throw new Error(`V86 locked runtime output mismatch: ${JSON.stringify(expectedMatches)}`);
+}
 const manifest = {
   schemaVersion: 1,
   recipe: lock.recipe,
@@ -303,7 +306,7 @@ const manifest = {
   },
   sourceInputs,
   artifacts,
-  referenceMatches,
+  expectedMatches,
 };
 await writeFile(join(dist, "build-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-console.log(JSON.stringify({ dist, runtimeOutputs, referenceMatches }, null, 2));
+console.log(JSON.stringify({ dist, runtimeOutputs, expectedMatches }, null, 2));

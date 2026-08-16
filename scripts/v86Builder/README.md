@@ -19,6 +19,6 @@ npm run assets:v86
 - V86, QEMU 유래 부분, SoftFloat, Zstandard, SeaBIOS legal material
 - source, toolchain, 입력, 모든 산출물 digest를 담은 build manifest
 
-두 build의 manifest와 선언 파일이 모두 byte-identical이어야 verified artifact가 생긴다. builder는 기존
-상류 배포 byte와의 일치 여부도 기록하지만, 그 값이 자체 build의 성공 조건은 아니다. catalog 승격은
+두 build의 manifest와 선언 파일이 모두 byte-identical이어야 verified artifact가 생긴다. builder는
+catalog 승격으로 확정한 네 runtime digest도 lock과 대조하며 하나라도 다르면 실패한다. catalog 승격은
 verified artifact의 digest, 실제 x86 browser gate, source와 legal release가 모두 준비된 뒤에만 한다.
