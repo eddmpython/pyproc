@@ -445,8 +445,8 @@ export const NORTH_STAR_AXES = Object.freeze([
     next: Object.freeze([
       Object.freeze({
         id: "remainingReproducibleAssets",
-        en: "Build the remaining firmware and emulator assets twice from repository recipes and gate every digest in the final execution graph",
-        ko: "남은 firmware와 emulator 자산을 저장소 recipe로 두 번 build하고 최종 실행 graph의 모든 digest를 gate로 대조한다",
+        en: "Build the remaining firmware and emulator assets twice from repository recipes, reproduce the published package bytes from exact inputs, and gate every digest in the final execution graph",
+        ko: "남은 firmware와 emulator 자산을 저장소 recipe로 두 번 build하고 exact input에서 게시 package byte를 재현하며 최종 실행 graph의 모든 digest를 gate로 대조한다",
       }),
     ]),
   }),

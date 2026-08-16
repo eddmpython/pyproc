@@ -172,6 +172,13 @@ implementation experience는 독립적이고 상호운용 가능한 구현, 저�
   image 선거부, signed image 상태 42 복원, 제3자 요청 0을 각각 8/8 통과했다. 직접 확인한 screenshot
   SHA-256은 Edge `aa5d502758d35e5810fc017005b505e6f155ec0cc9d9fb266a93df6b05c0d359`, Chrome
   `62b1e6582d82a72fb169b3e700471e4703a47b68608f29e8c76b6fb6ff349650`다.
+- `v0.0.23` release는 commit `4fb4d4e31f310477e910b02ec003decbb77fa19c`를 가리키고 publish run
+  `31944080879`의 browser, Edge, Web Computer, x86, structure gate와 publish를 모두 통과했다. npm
+  registry tarball은 SHA-1 `4e628e2a22bf7d6cdeb42148a0fce9320d10b9b4`, SHA-256
+  `084b42764f53269e92c2c9e938d31c27ee62f8120e35d577bc97792ddc3cfc61`이며, 새 project에서
+  `pyproc@0.0.23`, runtime dependency 0, root `createWebComputer`를 확인했다. Python wheel과 sdist release
+  asset의 SHA-256은 각각 `d1e0dc4f8cd78f67d3a7f07548a31de83cb34257aeb588823128fbeadb1dee46`,
+  `63de342964372d46d029d6e92d6c8342ae79370c3af2b67e28c1f418c6e26da8`다.
 
 ### M4. 전체 자립 공급망
 
@@ -184,6 +191,10 @@ exact source revision, 저장소 build recipe, 두 격리 build byte 대조, lic
 - emulator, firmware, guest image의 source, lock, license, SBOM, 두 번 build byte 대조를 완결한다.
 - 기본 Python, optional x86, GPU 경로별 외부 요청과 자산 출처를 설치 제품 gate가 전수 판정한다.
 - 브라우저 또는 OS가 제공하는 표준 substrate와 pyproc이 배송하는 byte를 명확히 구분한다.
+- `v0.0.23` Windows local pack과 registry pack은 같은 448개 경로를 포함하고 55개 text file이
+  CRLF와 LF만 달랐지만 tarball SHA-256은 같지 않았다. exact source checkout, npm version,
+  pack 환경을 고정한 두 격리 build에서 게시 tarball이 byte-identical이거나, 게시 서비스가 바꾸는
+  byte를 별도 정본 계약과 무결성 gate로 설명해야 M4를 종료한다.
 
 ### M5. 표준 후보 자료와 conformance
 
