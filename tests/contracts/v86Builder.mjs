@@ -51,6 +51,7 @@ export async function assertV86Builder() {
     "V86 build toolchain is not exact");
   assert(/^\d{8}T\d{6}Z$/u.test(lock.toolchain.ubuntuSnapshot)
     && lock.toolchain.ubuntuPackages.gcc === "4:13.2.0-7ubuntu1"
+    && lock.toolchain.ubuntuPackages["gcc-13"] === "13.3.0-6ubuntu2~24.04.1"
     && lock.toolchain.ubuntuPackages["acpica-tools"] === "20230628-1"
     && lock.toolchain.gcc.includes("13.3.0") && lock.toolchain.iasl.includes("20230628"),
   "V86 Ubuntu package snapshot is not exact");

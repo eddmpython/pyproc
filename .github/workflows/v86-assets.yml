@@ -40,8 +40,14 @@ jobs:
           rustup toolchain install 1.96.1 --profile minimal --target wasm32-unknown-unknown
           rustup default 1.96.1
           sudo apt-get update --snapshot "$PYPROC_UBUNTU_SNAPSHOT"
-          sudo apt-get install -y --snapshot "$PYPROC_UBUNTU_SNAPSHOT" \
-            acpica-tools binutils clang-18 gcc make python3
+          mapfile -t package_specs < <(node -e '
+            const lock = require("./scripts/v86Builder/v86BuildLock.json");
+            for (const [name, version] of Object.entries(lock.toolchain.ubuntuPackages)) {
+              console.log(`${name}=${version}`);
+            }
+          ')
+          sudo apt-get install -y --allow-downgrades --snapshot "$PYPROC_UBUNTU_SNAPSHOT" \
+            "${package_specs[@]}"
       - name: Build source-pinned V86 engine and firmware
         run: npm run assets:v86 -- --workspace "$RUNNER_TEMP/pyproc-v86-assets"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
