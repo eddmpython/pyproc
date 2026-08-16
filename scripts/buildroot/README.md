@@ -5,6 +5,10 @@
 `linux.fragment`는 v86의 9P virtio와 VT console driver를 고정하고, `rootfsOverlay/`는
 `host9p`를 `/mnt/web`에 mount하며 serial/VGA shell을 분리한다.
 
+독립 빌드는 서로 격리된 runner에서 동일한 절대 workspace 경로를 사용한다. Node 실행 파일은
+cross-toolchain 경로를 내장하므로 slot 이름을 workspace 경로에 넣으면 동일 입력도 바이트가 달라진다.
+재현 gate는 같은 recipe, 환경, 절대 경로로 두 번 처음부터 빌드한 결과를 비교한다.
+
 Linux 또는 WSL에서 Buildroot 필수 host package를 설치한 뒤 실행한다.
 
 ```sh
