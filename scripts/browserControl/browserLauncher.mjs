@@ -81,6 +81,7 @@ export function killBrowserProcess(proc, profileDir = null) {
     try { process.kill(-proc.pid, "SIGKILL"); }
     catch (error) {
       if (error?.code !== "ESRCH") throw error;
+      if (proc.exitCode === null) proc.kill("SIGKILL");
     }
   }
   if (process.platform === "win32" && profileDir) {

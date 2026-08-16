@@ -132,7 +132,10 @@ function launch(url, phase) {
   console.log(`${phase === 1 ? "pyproc 브라우저 게이트" : `\n브라우저 재시작 phase ${phase}`}\n  browser: ${browser}\n  url:     ${url}\n`);
   launcherExit = null;
   const spawnedAt = Date.now();
-  const child = spawn(browser, [...headlessArgs(currentProfile), url], { stdio: "ignore" });
+  const child = spawn(browser, [...headlessArgs(currentProfile), url], {
+    stdio: "ignore",
+    detached: process.platform !== "win32",
+  });
   child.on("exit", (code, signal) => { launcherExit = { code, signal, afterMs: Date.now() - spawnedAt }; });
   return child;
 }

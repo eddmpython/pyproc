@@ -112,7 +112,7 @@ function verifyReleaseVersionSurfaces(packageJson) {
   }
 }
 
-function verifyBrowserLauncherCleanup(source) {
+function verifyBrowserLauncherCleanup(source, browserRunner) {
   for (const required of [
     "PROFILE_ABSENCE_STABILITY_MS",
     'process.kill(-proc.pid, "SIGKILL")',
@@ -122,6 +122,9 @@ function verifyBrowserLauncherCleanup(source) {
   }
   if (!/killBrowserProcess\(proc, profile\);\s*removeBrowserProfile\(profile\);/u.test(source)) {
     throw new Error("browser profile을 process tree 종료보다 먼저 지운다");
+  }
+  if (!browserRunner.includes('detached: process.platform !== "win32"')) {
+    throw new Error("browser restart runner가 POSIX process group 경계를 만들지 않는다");
   }
 }
 
@@ -144,7 +147,10 @@ export function assertModuleBoundaries() {
 
   const goldenPage = readFileSync(join(ROOT, "tests", "browser", "goldenWorkflow.html"), "utf8");
   const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  verifyBrowserLauncherCleanup(readFileSync(join(ROOT, "scripts", "browserControl", "browserLauncher.mjs"), "utf8"));
+  verifyBrowserLauncherCleanup(
+    readFileSync(join(ROOT, "scripts", "browserControl", "browserLauncher.mjs"), "utf8"),
+    readFileSync(join(ROOT, "tests", "browser", "run.mjs"), "utf8"),
+  );
   verifyReleaseVersionSurfaces(packageJson);
   verifyGoldenWorkflowImports(goldenPage, packageJson);
   // 음성 fixture: 공개 specifier는 그대로여도 import map이 package export target에서 표류하면
