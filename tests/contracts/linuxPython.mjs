@@ -8,6 +8,7 @@ import { PYTHON_RUNTIME, PROFILES, pythonOracleProgram } from "../../scripts/bui
 import {
   createLinuxPythonSession,
   createWebComputer,
+  LINUX_PYTHON_PIP_TIMEOUT_MS,
   LINUX_PYTHON_PROTOCOL,
   LINUX_PYTHON_RECEIPT_PROTOCOL,
   LINUX_PYTHON_VERSION,
@@ -39,7 +40,8 @@ function mockLinuxHandle(request) {
 export async function assertLinuxPythonContract() {
   const rootApi = await import(pathToFileURL(join(ROOT, "index.js")).href);
   assert(!("createLinuxPythonSession" in rootApi)
-    && !("LINUX_PYTHON_PROTOCOL" in rootApi),
+    && !("LINUX_PYTHON_PROTOCOL" in rootApi)
+    && !("LINUX_PYTHON_PIP_TIMEOUT_MS" in rootApi),
   "native Linux CPython plumbing leaked onto the pyproc root");
   assert(typeof rootApi.createWebComputer === "function"
     && typeof rootApi.boot === "function",
@@ -47,7 +49,8 @@ export async function assertLinuxPythonContract() {
 
   assert(LINUX_PYTHON_PROTOCOL === "pyproc.linux-python"
     && LINUX_PYTHON_RECEIPT_PROTOCOL === "pyproc.linux-python-receipt"
-    && LINUX_PYTHON_VERSION === 1,
+    && LINUX_PYTHON_VERSION === 1
+    && LINUX_PYTHON_PIP_TIMEOUT_MS === 120000,
   "linux Python protocol identity drifted");
 
   const computer = createWebComputer();
@@ -165,4 +168,21 @@ export async function assertLinuxPythonContract() {
     && product.includes("createWebComputer")
     && !product.includes("machine.request({type:\"serial\""),
   "product gate does not drive the shipped linuxPython door");
+  const catalog = JSON.parse(readFileSync(join(ROOT, "scripts", "assetCatalog.json"), "utf8"));
+  const pythonAsset = catalog.assets.find((entry) => entry.name === PROFILES.python.outputName);
+  const slimAsset = catalog.assets.find((entry) => entry.name === PROFILES.linux.outputName);
+  const pythonRecipe = catalog.guestRecipes.find((entry) => entry.recipeId === PROFILES.python.recipe);
+  const pythonComponent = catalog.components.find((entry) => entry.componentId === "buildroot-pyproc-python-i686-v1");
+  assert(pythonAsset
+    && pythonAsset.consumers.join(",") === "linuxPython"
+    && pythonAsset.sha256 === "265388e84a83fccf2cd0f57497dd5d67199cdba8971033e3605316293f4c7d6d"
+    && pythonAsset.byteLength === 24605184
+    && pythonAsset.url.endsWith("/buildroot-pyproc-python-i686-v1/buildroot-pyproc-python-i686.bin")
+    && pythonRecipe?.expectedOutput === PROFILES.python.outputName
+    && pythonComponent?.runtime?.version === PYTHON_RUNTIME.version
+    && pythonComponent?.runtime?.sourceSha256 === PYTHON_RUNTIME.sourceSha256
+    && slimAsset
+    && !slimAsset.consumers.includes("linuxPython")
+    && slimAsset.sha256 !== pythonAsset.sha256,
+  "owned catalog did not pin the python guest without replacing slim linux");
 }

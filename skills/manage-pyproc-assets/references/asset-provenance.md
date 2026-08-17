@@ -33,7 +33,7 @@ stdlib ZIP 루트의 `_sysconfigdata_*.py`, `_sysconfig_vars_*.json`, `build-det
 ## Externally supplied guests
 
 V86 engine, firmware와 guest image는 npm package에 포함하지 않는다. Web Machine 소비자가 exact digest와
-provenance를 가진 자산을 주입한다. project가 재현 build한 Linux와 Node guest는 source, config, legal-info,
+provenance를 가진 자산을 주입한다. project가 재현 build한 Linux, Node, Python guest는 source, config, legal-info,
 SBOM, 독립 build 영수증을 함께 게시한 별도 release만 catalog가 참조한다. V86 0.5.424와 SeaBIOS
 rel-1.16.2도 exact Git revision과 tree, Ubuntu snapshot, compiler와 build tool version을 고정해 두 격리
 build로 재현한다. 네 runtime output은 A/B 일치뿐 아니라 catalog 승격 digest와도 같아야 build가 성공한다.
@@ -48,7 +48,7 @@ same-origin URL만 허용한다.
 | --- | --- | --- |
 | WebAssembly, Worker, IndexedDB, OPFS, WebCrypto, WebGPU | 브라우저 또는 OS | feature와 권한을 preflight하고 실패를 구조화한다 |
 | CPython WASI, stdlib, data engine, 상주 도구 | npm package | exact source build와 package 내부 digest를 검증한다 |
-| V86, SeaBIOS, VGA BIOS, Linux와 Node image | 별도 project release | source, legal material, SBOM, A/B 재현과 runtime digest를 catalog에 봉인한다 |
+| V86, SeaBIOS, VGA BIOS, Linux, Node, Python image | 별도 project release | source, legal material, SBOM, A/B 재현과 runtime digest를 catalog에 봉인한다 |
 | GPU driver와 hardware | 브라우저 또는 OS | 닫힌 compute와 pixel oracle로 결과를 검증하고 fallback을 거부한다 |
 
 Python 기본 부팅, optional x86 guest와 GPU 제품 gate는 필요한 자산을 same-origin으로 준비한 뒤 제3자
@@ -56,8 +56,10 @@ Python 기본 부팅, optional x86 guest와 GPU 제품 gate는 필요한 자산�
 아니다.
 
 catalog의 `consumers`가 download 범위의 정본이다. `v86Probe`는 기본 x86 probe, `webComputer`는 기본
-Python과 Linux 제품, `nodeGuest`는 Python, Linux, Node 공동 제품 gate를 뜻한다. Node image는
-`nodeGuest`에만 속하므로 기본 probe와 기본 Web Computer 준비 과정이 선택 자산을 묵시적으로 받지 않는다.
+Python과 Linux 제품, `nodeGuest`는 Python, Linux, Node 공동 제품 gate, `linuxPython`은 네이티브
+Linux CPython 제품 gate를 뜻한다. Node image는 `nodeGuest`에만, Python image는 `linuxPython`에만
+속하므로 기본 probe와 기본 Web Computer 준비 과정이 선택 자산을 묵시적으로 받지 않는다. slim
+Linux image는 `linuxPython` consumer가 아니다.
 
 `npm run assets:buildroot-release`는 검증 artifact, complete legal-info, exact source와 config input을
 `.cache` 아래 release directory에 조립한다. legal manifest가 요구하는 source archive와 license file이

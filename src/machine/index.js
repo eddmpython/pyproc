@@ -63,6 +63,7 @@ export { createMachineCryptoProvider } from "./composition/machineCryptoProvider
 export { createWebComputer, WEB_COMPUTER_MACHINE_IDS } from "./composition/createWebComputer.js";
 export {
   createLinuxPythonSession,
+  LINUX_PYTHON_PIP_TIMEOUT_MS,
   LINUX_PYTHON_PROTOCOL,
   LINUX_PYTHON_RECEIPT_PROTOCOL,
   LINUX_PYTHON_VERSION,

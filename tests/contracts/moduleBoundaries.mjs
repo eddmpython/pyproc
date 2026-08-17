@@ -86,7 +86,7 @@ function verifyNodeGuestProductGate(packageJson) {
 
 function verifyLinuxPythonProductGate(packageJson) {
   const command = packageJson.scripts?.["test:linux-python"] || "";
-  if (!command.startsWith("node tests/webMachine/fixtures/v86/prepareAssets.mjs --consumer webComputer && ")
+  if (!command.startsWith("node tests/webMachine/fixtures/v86/prepareAssets.mjs --consumer linuxPython && ")
     || !command.endsWith("node tests/browser/linuxPythonProduct.mjs")) {
     throw new Error("Linux native CPython이 정식 browser 제품 gate에 연결되지 않았다");
   }

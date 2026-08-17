@@ -23,7 +23,7 @@ async function resolvePythonAsset() {
   if (!injectedPythonImage) {
     if (!catalogPythonAsset) {
       throw new Error(
-        "Linux Python guest asset is absent. Build with npm run assets:buildroot-python and set PYPROC_LINUX_PYTHON_IMAGE.",
+        "Linux Python guest asset is absent from scripts/assetCatalog.json. Publish the python guest release and pin linuxPython.",
       );
     }
     return { ...catalogPythonAsset, sourcePath: join(fixtureDir, catalogPythonAsset.name) };

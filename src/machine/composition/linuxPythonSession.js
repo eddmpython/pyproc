@@ -5,6 +5,9 @@ import { WebMachineError } from "../contracts/webMachineError.js";
 export const LINUX_PYTHON_PROTOCOL = "pyproc.linux-python";
 export const LINUX_PYTHON_RECEIPT_PROTOCOL = "pyproc.linux-python-receipt";
 export const LINUX_PYTHON_VERSION = 1;
+// python3 -c는 30초면 충분하다. guest `python3 -m pip`는 i686 V86에서 첫 import가
+// 그 경계를 넘긴다. 2026-08-17 제품 게이트가 --version에서 출력 없이 30초를 넘겼다.
+export const LINUX_PYTHON_PIP_TIMEOUT_MS = 120000;
 
 function quoteSingle(value) {
   return `'${String(value).replaceAll("'", "'\\''")}'`;
@@ -31,7 +34,7 @@ export function createLinuxPythonSession(options = {}) {
   const interpreterVersion = typeof options.interpreterVersion === "string" && options.interpreterVersion
     ? options.interpreterVersion : null;
 
-  async function send(command, requestOptions = {}) {
+  async function send(command, requestOptions = {}, defaultTimeoutMs = 30000) {
     const handle = readHandle(getMachine);
     const data = String(command).endsWith("\n") ? String(command) : `${command}\n`;
     const waitFor = requestOptions.waitFor || prompt;
@@ -39,7 +42,7 @@ export function createLinuxPythonSession(options = {}) {
       type: "serial",
       data,
       ...(waitFor ? { waitFor } : {}),
-      timeoutMs: requestOptions.timeoutMs || 30000,
+      timeoutMs: requestOptions.timeoutMs || defaultTimeoutMs,
     }, requestOptions.control);
     return String(serial ?? "");
   }
@@ -85,7 +88,11 @@ export function createLinuxPythonSession(options = {}) {
       if (!Array.isArray(args) || !args.length || args.some((item) => typeof item !== "string" || !item)) {
         throw new TypeError("linuxPython.pip requires a nonempty argv of strings");
       }
-      const stdout = await send([python, "-m", "pip", ...args.map(quoteSingle)].join(" "), requestOptions);
+      const stdout = await send(
+        [python, "-m", "pip", ...args.map(quoteSingle)].join(" "),
+        requestOptions,
+        LINUX_PYTHON_PIP_TIMEOUT_MS,
+      );
       return Object.freeze({
         protocol: LINUX_PYTHON_RECEIPT_PROTOCOL,
         version: LINUX_PYTHON_VERSION,

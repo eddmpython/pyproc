@@ -17,7 +17,7 @@
 | Clipboard and framebuffer | product host adapters | Bounded | Redaction and frame digest contracts |
 | WebComputer | `createWebComputer` | Complete | Owned kernel guest and signed WebMachine image |
 | x86 guest | `createV86GuestFactory` | Optional | Consumer supplies emulator and boot assets |
-| Native Linux CPython | `computer.linuxPython` | Optional | `linuxOs` plus CPython 3.12.13. Distinct from WASI 3.14.6. Catalog publish is the remaining install path |
+| Native Linux CPython | `computer.linuxPython` | Optional | `linuxOs` plus catalog-pinned CPython 3.12.13. Distinct from WASI 3.14.6. Slim linux stays without `python3` |
 
 The package does not claim native POSIX parity, arbitrary binary wheel support, raw sockets, native `fork`,
 or cross-browser support outside the documented boundary.

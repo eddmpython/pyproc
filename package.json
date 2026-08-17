@@ -108,7 +108,7 @@
     "test:installed": "node tests/browser/installedPackageGate.mjs",
     "test:web-computer": "node scripts/prepareWebComputerAssets.mjs && node tests/browser/webComputerProduct.mjs",
     "test:node-guest": "node tests/webMachine/fixtures/v86/prepareAssets.mjs --consumer nodeGuest && node tests/browser/nodeGuestProduct.mjs",
-    "test:linux-python": "node tests/webMachine/fixtures/v86/prepareAssets.mjs --consumer webComputer && node tests/browser/linuxPythonProduct.mjs",
+    "test:linux-python": "node tests/webMachine/fixtures/v86/prepareAssets.mjs --consumer linuxPython && node tests/browser/linuxPythonProduct.mjs",
     "test:mcp": "node tests/browser/mcpSandbox.mjs",
     "test:mcp-product": "node tests/browser/installedMcpProduct.mjs",
     "test:control-product": "node tests/browser/controlProtocolProduct.mjs",

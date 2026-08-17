@@ -56,6 +56,22 @@
         "cyclonedx-sbom",
         "web-computer-browser-gate"
       ]
+    },
+    {
+      "recipeId": "pyproc-buildroot-python-i686-v1",
+      "replacesAsset": "buildroot-pyproc-python-i686.bin",
+      "sourceLocation": "https://gitlab.com/buildroot.org/buildroot.git",
+      "sourceRevision": "2d05bb10d08410c59856ff4022ba8b762f77441a",
+      "version": "2025.02.16",
+      "configPath": "scripts/buildroot/buildroot.config",
+      "buildScript": "scripts/buildroot/buildGuest.mjs",
+      "expectedOutput": "buildroot-pyproc-python-i686.bin",
+      "promotionRequires": [
+        "two-independent-builds-byte-identical",
+        "legal-info-warnings-zero",
+        "cyclonedx-sbom",
+        "web-computer-browser-gate"
+      ]
     }
   ],
   "components": [
@@ -177,6 +193,41 @@
         "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot.cyclonedx.json",
         "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/build-manifest.json",
         "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/reproducibility-manifest.json"
+      ]
+    },
+    {
+      "componentId": "buildroot-pyproc-python-i686-v1",
+      "name": "pyproc reproducible Buildroot Python guest",
+      "version": "2025.02.16-python-3.12.13",
+      "downloadLocation": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot-pyproc-python-i686.bin",
+      "sourceLocation": "https://buildroot.org/downloads/buildroot-2025.02.16.tar.xz",
+      "sourceRevision": "135af563b945b8c3d18f8fd370370075b9edb140",
+      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "provenanceStatus": "reproducible-project-release-with-complete-source-and-legal-material",
+      "evidenceManifest": {
+        "url": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/releaseAssets.json",
+        "sha256": "20e0f9c300195c6a240dfa218591af23af7acbda6e7bc6ea0d21266b6a0dec63",
+        "byteLength": 2117,
+        "assetCount": 11
+      },
+      "runtime": {
+        "name": "CPython",
+        "version": "3.12.13",
+        "sourceRevision": "3bb231a6a5dc02b95658877318bf61501a7209e9",
+        "sourceUrl": "https://www.python.org/ftp/python/3.12.13/Python-3.12.13.tar.xz",
+        "sourceSha256": "c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684",
+        "oracleSha256": "7db90ff6cb9fbe037eee80ca9ed8c5bc516b51d1f9745dd0900a66269fcf7d9f"
+      },
+      "evidence": [
+        "https://github.com/eddmpython/pyproc/releases/tag/buildroot-pyproc-python-i686-v1",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/releaseAssets.json",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot-2025.02.16.tar.xz",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot-legal-info-complete.zip",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot.cyclonedx.json",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/build-manifest.json",
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/reproducibility-manifest.json"
       ]
     },
     {
@@ -335,6 +386,27 @@
       ],
       "sources": [
         "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot-pyproc-node-i686.bin"
+      ]
+    },
+    {
+      "name": "buildroot-pyproc-python-i686.bin",
+      "role": "guest-image",
+      "consumers": [
+        "linuxPython"
+      ],
+      "url": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot-pyproc-python-i686.bin",
+      "sha1": "47aa2da0bc3f26a377e9af0015552b8f99e89c26",
+      "sha256": "265388e84a83fccf2cd0f57497dd5d67199cdba8971033e3605316293f4c7d6d",
+      "byteLength": 24605184,
+      "componentId": "buildroot-pyproc-python-i686-v1",
+      "licenseConcluded": "NOASSERTION",
+      "distribution": "project-release-runtime-reference",
+      "localPath": "./assets/buildroot-pyproc-python-i686.bin",
+      "bundleBlockers": [
+        "package-policy-external-engine"
+      ],
+      "sources": [
+        "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot-pyproc-python-i686.bin"
       ]
     },
     {

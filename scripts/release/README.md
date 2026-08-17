@@ -13,6 +13,13 @@ npm run assets:buildroot-release -- \
   --tag buildroot-pyproc-node-i686-v1 \
   --target-commit "$buildCommit" \
   --out .cache/node-release/release
+
+npm run assets:buildroot-release -- \
+  --verified-dir .cache/python-release/verified \
+  --legal-dir .cache/python-release/legal \
+  --tag buildroot-pyproc-python-i686-v1 \
+  --target-commit "$buildCommit" \
+  --out .cache/python-release/release
 ```
 
 `--verified-dir`에는 일치가 확인된 image, build manifest, SBOM, reproducibility manifest가 있어야 한다.

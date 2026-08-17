@@ -3,7 +3,7 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "web-machine-execution-assets-v1",
-  "documentNamespace": "https://github.com/eddmpython/pyproc/sbom/web-machine-execution-assets-v1/b704e76a5e5ef2c2",
+  "documentNamespace": "https://github.com/eddmpython/pyproc/sbom/web-machine-execution-assets-v1/43e37a1625fd6f75",
   "creationInfo": {
     "created": "2026-08-16T00:00:00Z",
     "creators": [
@@ -60,6 +60,18 @@
       "copyrightText": "NOASSERTION",
       "sourceInfo": "source=https://buildroot.org/downloads/buildroot-2025.02.16.tar.xz revision=135af563b945b8c3d18f8fd370370075b9edb140 provenance=reproducible-project-release-with-complete-source-and-legal-material",
       "packageComment": "evidence=https://github.com/eddmpython/pyproc/releases/tag/buildroot-pyproc-node-i686-v1,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/releaseAssets.json,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot-2025.02.16.tar.xz,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot-legal-info-complete.zip,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/buildroot.cyclonedx.json,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/build-manifest.json,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-node-i686-v1/reproducibility-manifest.json"
+    },
+    {
+      "SPDXID": "SPDXRef-Package-buildroot-pyproc-python-i686-v1",
+      "name": "pyproc reproducible Buildroot Python guest",
+      "versionInfo": "2025.02.16-python-3.12.13",
+      "downloadLocation": "https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot-pyproc-python-i686.bin",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "sourceInfo": "source=https://buildroot.org/downloads/buildroot-2025.02.16.tar.xz revision=135af563b945b8c3d18f8fd370370075b9edb140 provenance=reproducible-project-release-with-complete-source-and-legal-material",
+      "packageComment": "evidence=https://github.com/eddmpython/pyproc/releases/tag/buildroot-pyproc-python-i686-v1,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/releaseAssets.json,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot-2025.02.16.tar.xz,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot-legal-info-complete.zip,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/buildroot.cyclonedx.json,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/build-manifest.json,https://github.com/eddmpython/pyproc/releases/download/buildroot-pyproc-python-i686-v1/reproducibility-manifest.json"
     },
     {
       "SPDXID": "SPDXRef-Package-kolibri-image-opaque",
@@ -196,6 +208,26 @@
       "comment": "distribution=project-release-runtime-reference; role=guest-image; bundleBlockers=package-policy-external-engine"
     },
     {
+      "SPDXID": "SPDXRef-File-buildroot-pyproc-python-i686.bin",
+      "fileName": "./assets/buildroot-pyproc-python-i686.bin",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "47aa2da0bc3f26a377e9af0015552b8f99e89c26"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "265388e84a83fccf2cd0f57497dd5d67199cdba8971033e3605316293f4c7d6d"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseInfoInFiles": [
+        "NOASSERTION"
+      ],
+      "copyrightText": "NOASSERTION",
+      "comment": "distribution=project-release-runtime-reference; role=guest-image; bundleBlockers=package-policy-external-engine"
+    },
+    {
       "SPDXID": "SPDXRef-File-kolibri.img",
       "fileName": "./assets/kolibri.img",
       "checksums": [
@@ -240,6 +272,11 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-buildroot-pyproc-python-i686-v1"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-kolibri-image-opaque"
     },
     {
@@ -275,6 +312,11 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-File-buildroot-pyproc-python-i686.bin"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-File-kolibri.img"
     },
     {
@@ -306,6 +348,11 @@
       "spdxElementId": "SPDXRef-File-buildroot-pyproc-node-i686.bin",
       "relationshipType": "GENERATED_FROM",
       "relatedSpdxElement": "SPDXRef-Package-buildroot-pyproc-node-i686-v1"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-buildroot-pyproc-python-i686.bin",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-buildroot-pyproc-python-i686-v1"
     },
     {
       "spdxElementId": "SPDXRef-File-kolibri.img",

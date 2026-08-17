@@ -27,6 +27,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   CPython 3.14.6 kernel. The guest interpreter on the python profile is CPython 3.12.13.
   `inspect().interpreter` reports that split. Receipt `stdout` is the serial transcript.
   Offline missing wheels fail through guest pip. The slim linux image still has no `python3`.
+  The python guest is a digest-pinned project release, not an npm bundle. `test:linux-python`
+  prepares that catalog consumer without an injected image path.
 
 ### 한국어 요약
 
@@ -39,7 +41,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - 네이티브 Linux CPython은 두 번째 문이다. `createWebComputer().linuxPython`이 `linuxOs` serial로
   `python3`와 `python -m pip`를 친다. 기본 `boot()`는 WASI 커널이다. 별도 Buildroot python
   profile이 CPython 3.12.13과 pip 25.2를 Node guest와 같은 재현/SBOM/oracle 계약으로 싣는다.
-  slim linux image에는 여전히 `python3`가 없다.
+  slim linux image에는 여전히 `python3`가 없다. python guest는 npm이 아니라
+  digest-pinned project release다. `test:linux-python`은 그 catalog consumer만 받는다.
 
 ## 0.0.24 - 2026-08-16
 

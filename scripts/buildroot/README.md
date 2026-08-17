@@ -36,6 +36,10 @@ npm run assets:buildroot-python
 세 profile은 별도 workspace와 output 이름을 써서 기존 Linux image를 조용히 교체하지 않는다. CI는
 각 profile을 두 격리 workspace에서 만들고 image, manifest, SBOM을 대조한다.
 
+공식 python guest는 `buildroot-pyproc-python-i686-v1` release다. catalog가 image digest와
+`releaseAssets.json`을 핀하고 `linuxPython` consumer만 받는다. slim linux image는 그대로
+`python3`가 없다.
+
 산출물은 `.cache/buildrootGuest/dist/`에 생긴다.
 
 - `buildroot-pyproc-i686.bin`: initramfs가 포함된 v86용 bzImage

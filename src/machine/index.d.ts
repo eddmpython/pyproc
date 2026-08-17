@@ -894,6 +894,7 @@ export interface WebComputerLinuxOptions {
 export const LINUX_PYTHON_PROTOCOL: "pyproc.linux-python";
 export const LINUX_PYTHON_RECEIPT_PROTOCOL: "pyproc.linux-python-receipt";
 export const LINUX_PYTHON_VERSION: 1;
+export const LINUX_PYTHON_PIP_TIMEOUT_MS: 120000;
 
 export interface LinuxPythonInspection {
   readonly protocol: typeof LINUX_PYTHON_PROTOCOL;
