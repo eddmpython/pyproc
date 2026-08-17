@@ -32,7 +32,10 @@ check("mainPlan은 계획 작업 공간이라 린트 표면 밖이다", () => {
   if (!skips) throw new Error("collect가 mainPlan을 건너뛰지 않는다");
 });
 check("mainPlan은 큰 카테고리 자력 완결과 삭제를 요구한다", () => {
-  const body = readFileSync(join(ROOT, "mainPlan", "README.md"), "utf8");
+  const planReadme = join(ROOT, "mainPlan", "README.md");
+  // mainPlan은 git 미추적 로컬 공간이다. 클론에 폴더가 없을 수 있다.
+  if (!existsSync(planReadme)) return;
+  const body = readFileSync(planReadme, "utf8");
   for (const requiredRule of [
     "이니셔티브 하나를 큰 작업 카테고리로 고정한다",
     "자력으로 수행할 수 있는 모든",
@@ -47,6 +50,7 @@ check("mainPlan은 큰 카테고리 자력 완결과 삭제를 요구한다", ()
 // README를 갖는지 검사하면 완료 뒤 남거나 다시 생긴 빈 폴더가 commit과 push 전에 RED가 된다.
 check("mainPlan 카테고리는 빈 물리 폴더로 남을 수 없다", () => {
   const dir = join(ROOT, "mainPlan");
+  if (!existsSync(dir)) return;
   const directoryNames = readdirSync(dir).filter((entry) => statSync(join(dir, entry)).isDirectory());
   const missing = missingCategoryReadmes({
     directoryNames,

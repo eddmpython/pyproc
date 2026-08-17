@@ -2,6 +2,10 @@
 CLAUDE.md
 AGENTS.md
 .claude/
+# 끝나지 않은 실행 계획. 로컬 전용. Git이 추적하지 않는다.
+mainPlan/
+
+
 
 node_modules/
 .tmp/
