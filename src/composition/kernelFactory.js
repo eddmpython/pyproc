@@ -43,6 +43,17 @@ _pyprocToolModule = _pyprocToolTypes.ModuleType("pyprocTools")
 _pyprocToolModule.__dict__.update({"__all__": ("inspect", "run"), "inspect": _pyprocToolInspect,
     "run": _pyprocToolRun})
 _pyprocToolSys.modules["pyprocTools"] = _pyprocToolModule
+
+def _pyprocPipInstall(*requirements):
+    raise RuntimeError("use %pip install <requirement> or python -m pip install <requirement>")
+
+def _pyprocPipMain(argv=None):
+    raise RuntimeError("use %pip install <requirement> or python -m pip install <requirement>")
+
+_pyprocPipModule = _pyprocToolTypes.ModuleType("pip")
+_pyprocPipModule.__dict__.update({"__all__": ("install", "main"), "install": _pyprocPipInstall,
+    "main": _pyprocPipMain})
+_pyprocToolSys.modules["pip"] = _pyprocPipModule
 `;
 
 function inputError(message) {

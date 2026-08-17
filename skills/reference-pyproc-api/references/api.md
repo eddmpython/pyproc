@@ -84,6 +84,21 @@ verify both x86 guests without maintaining a second loading path.
 `bootAll()` waits for every configured boot attempt. If any guest fails, it shuts down all successful and failed
 partial guests before rejecting; a cleanup failure is returned with the original failure in an `AggregateError`.
 
+`computer.linuxPython` is the native Linux CPython door. It is available only while the computer has a
+`linuxOs` handle. `run(source)` sends `python3 -c`, and `pip(args)` sends `python3 -m pip`. This does not
+replace root `boot()`, which stays the owned WASI kernel. The consumer supplies V86 and a Linux image that
+contains CPython. The slim Buildroot linux image does not include `python3`. The separate
+`buildroot-pyproc-python-i686.bin` profile, built with `npm run assets:buildroot-python`, pins CPython
+3.12.13 and pip 25.2.
+
+```js
+import { createLinuxPythonSession, createWebComputer } from "pyproc/machine";
+
+const computer = createWebComputer({ linux: { V86, manifest } });
+computer.linuxPython.inspect().replacesDefaultBoot === false;
+createLinuxPythonSession({ machine: computer.machine("linuxOs") });
+```
+
 ### `checkEnvironment()`
 
 Reports cross-origin isolation, `SharedArrayBuffer`, JSPI, and actionable issues. It does not mutate the

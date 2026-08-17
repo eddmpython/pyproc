@@ -136,6 +136,8 @@ try {
   if (!existsSync(controlCli)) throw new Error("installed pyproc-control bin shim 없음");
   const mcpCli = binPath(appDir, "pyproc-mcp");
   if (!existsSync(mcpCli)) throw new Error("installed pyproc-mcp bin shim 없음");
+  const playgroundCli = binPath(appDir, "pyproc-playground");
+  if (!existsSync(playgroundCli)) throw new Error("installed pyproc-playground bin shim 없음");
   const installedPackage = JSON.parse(readFileSync(join(appDir, "node_modules", "pyproc", "package.json"), "utf8"));
   const packageRoot = join(appDir, "node_modules", "pyproc");
   if (installedPackage.bin?.["pyproc-mcp"] !== "./scripts/pyprocMcp.mjs") {
@@ -143,6 +145,9 @@ try {
   }
   if (installedPackage.bin?.["pyproc-control"] !== "./scripts/pyprocControl.mjs") {
     throw new Error("installed pyproc-control bin manifest 불일치");
+  }
+  if (installedPackage.bin?.["pyproc-playground"] !== "./scripts/pyprocPlayground.mjs") {
+    throw new Error("installed pyproc-playground bin manifest 불일치");
   }
   if (Object.keys(installedPackage.exports || {}).some((key) => key.includes("browser"))) {
     throw new Error("browser automation이 JS package export를 추가했다");

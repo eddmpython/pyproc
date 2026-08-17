@@ -1,6 +1,7 @@
 // kernelTerminal.js - Layer 2: async CPython terminal with locked package commands.
 import { PyProcError } from "../runtime/errors.js";
 import { decodeValueEnvelope } from "../runtime/kernel/valueEnvelope.js";
+import { parsePackageCommandLine } from "./packageCommands.js";
 
 const KERNEL_TERMINAL_SETUP = `
 import code as _pyprocTermCode
@@ -44,17 +45,19 @@ export class KernelTerminal {
 
   async push(line) {
     if (typeof line !== "string") throw new PyProcError("PYPROC_INPUT_INVALID", "KernelTerminal line must be a string");
-    const packageCommand = /^%pip\s+install\s+(.+)$/u.exec(line.trim());
-    if (packageCommand) {
-      if (!this.#packages) return Object.freeze({ more: false, out: "%pip: package environment is not configured\n" });
+    const packageRequirement = parsePackageCommandLine(line);
+    if (packageRequirement) {
+      if (!this.#packages) {
+        return Object.freeze({ more: false, out: "pip: package environment is not configured\n" });
+      }
       try {
-        const receipt = await this.#packages.install({ requirements: [packageCommand[1].trim()], extend: true });
+        const receipt = await this.#packages.install({ requirements: [packageRequirement], extend: true });
         if (this.#timeTravel) {
           this.#marks = [(await this.#checkpoint()).checkpointRef];
         }
         return Object.freeze({ more: false, out: `environment: ${receipt.environmentId}\n` });
       } catch (error) {
-        return Object.freeze({ more: false, out: `%pip: ${error?.code || "PYPROC_INTERNAL"}: ${String(error?.message || error).slice(-160)}\n` });
+        return Object.freeze({ more: false, out: `pip: ${error?.code || "PYPROC_INTERNAL"}: ${String(error?.message || error).slice(-160)}\n` });
       }
     }
     if (this.#timeTravel && line.trim() === "%undo") {

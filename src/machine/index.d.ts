@@ -883,7 +883,58 @@ export interface WebComputerLinuxOptions {
   adapterOptions?: Record<string, unknown>;
   loadAsset?: V86GuestFactoryOptions["loadAsset"];
   digestBytes?: V86GuestFactoryOptions["digestBytes"];
+  /** Guest `python3` path. The shipped Buildroot linux image does not include CPython. */
+  python?: string;
+  /** Serial prompt used as `waitFor`. Omit to use the adapter or image default. */
+  shellPrompt?: string;
 }
+
+export const LINUX_PYTHON_PROTOCOL: "pyproc.linux-python";
+export const LINUX_PYTHON_RECEIPT_PROTOCOL: "pyproc.linux-python-receipt";
+export const LINUX_PYTHON_VERSION: 1;
+
+export interface LinuxPythonInspection {
+  readonly protocol: typeof LINUX_PYTHON_PROTOCOL;
+  readonly version: typeof LINUX_PYTHON_VERSION;
+  readonly available: boolean;
+  readonly machineId: string | null;
+  readonly adapterId: string | null;
+  readonly python: string;
+  readonly prompt: string | null;
+  readonly nativeAbi: "linux-elf";
+  readonly replacesDefaultBoot: false;
+}
+
+export interface LinuxPythonReceipt {
+  readonly protocol: typeof LINUX_PYTHON_RECEIPT_PROTOCOL;
+  readonly version: typeof LINUX_PYTHON_VERSION;
+  readonly kind: "run" | "pip";
+  readonly python: string;
+  readonly argv: readonly string[];
+  readonly stdout: string;
+  readonly native: true;
+}
+
+export interface LinuxPythonSession {
+  readonly available: boolean;
+  inspect(): LinuxPythonInspection;
+  run(source: string, options?: {
+    waitFor?: string;
+    timeoutMs?: number;
+    control?: OperationControl;
+  }): Promise<LinuxPythonReceipt>;
+  pip(args: readonly string[], options?: {
+    waitFor?: string;
+    timeoutMs?: number;
+    control?: OperationControl;
+  }): Promise<LinuxPythonReceipt>;
+}
+
+export function createLinuxPythonSession(options?: {
+  machine?: MachineHandle | null | (() => MachineHandle | null | undefined);
+  python?: string;
+  prompt?: string | null;
+}): LinuxPythonSession;
 
 export interface WebComputerNodeOptions {
   V86: V86Constructor;
@@ -926,6 +977,7 @@ export interface WebComputerDurabilityOptions {
 export interface WebComputerInspection {
   readonly machines: Readonly<Record<string, MachineInspection>>;
   readonly devices: Readonly<Record<string, unknown>>;
+  readonly linuxPython: LinuxPythonInspection;
   readonly owner: Readonly<Record<string, unknown>> | null;
   readonly startupMode: "none" | "deferred" | "booted" | "restored" | "imported" | "cold";
   readonly lifecycleState: "unconfigured" | "registered" | "waking" | "hot" | "draining" | "committing" | "stopping" | "cold" | "cleanupIncomplete" | "failed" | "disposed";
@@ -1032,6 +1084,11 @@ export interface WebComputer {
     committed: GenerationCommitResult;
     cleanupError: unknown;
   }>>;
+  /**
+   * Native Linux CPython over `linuxOs` serial. Default `boot()` remains the WASI kernel.
+   * `available` is true only when this computer currently has a `linuxOs` handle.
+   */
+  readonly linuxPython: LinuxPythonSession;
   inspect(): WebComputerInspection;
   dispose(control?: OperationControl): Promise<void>;
 }

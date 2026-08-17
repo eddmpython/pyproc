@@ -14,7 +14,7 @@ const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 240000);
 // 빈 문자열 = 랜딩("/"). 랜딩 히어로가 진짜로 CPython을 부팅해 체크포인트/복원을 돌리므로 예제와
 // 같은 급의 실행 표면이다. 랜딩은 배포 루트 기준 상대 경로를 쓰니 반드시 "/"로 열어야 한다
 // (examples/index.html 경로로 열면 assets/와 index.js가 어긋난다. staticServer가 "/"를 랜딩에 매핑한다).
-const PAGES = ["tests/browser/brandGate.html", "", "examples/basic.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/immortal.html", "examples/serverDev.html", "examples/speedLab.html", "examples/processOs.html"];
+const PAGES = ["tests/browser/brandGate.html", "", "examples/basic.html", "examples/durable.html", "examples/agentSandbox.html", "examples/terminal.html", "examples/machine.html", "examples/immortal.html", "examples/serverDev.html", "examples/speedLab.html", "examples/processOs.html"];
 const label = (page) => page || "/ (랜딩 히어로 라이브 데모)";
 // 페이지별 통과 체크 수 하한. 예제 페이지는 단정이 하나뿐인 것이 많아서, 그 하나를 지우거나
 // 약화시키면 이 레인이 통째로 무의미해진다(그것을 막는 층은 여기밖에 없다). 하한은

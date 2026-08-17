@@ -50,6 +50,7 @@ export class KernelMachine {
     inspect(): Readonly<Record<string, unknown>> }>;
   createPackageEnvironment(options: Omit<ConstructorParameters<typeof PackageEnvironment>[0], "kernel">): PackageEnvironment;
   terminal(options?: { packageEnvironment?: PackageEnvironment; timeTravel?: boolean }): KernelTerminal;
+  attachDefaultPackages(): Promise<KernelMachine>;
   inspect(): Promise<Readonly<Record<string, unknown>>>;
   close(): Promise<unknown>;
 }

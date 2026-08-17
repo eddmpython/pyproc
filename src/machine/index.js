@@ -61,6 +61,12 @@ export { createV86GuestFactory } from "./guests/v86/v86GuestAdapter.js";
 export { createBrowserHost } from "./composition/createBrowserHost.js";
 export { createMachineCryptoProvider } from "./composition/machineCryptoProvider.js";
 export { createWebComputer, WEB_COMPUTER_MACHINE_IDS } from "./composition/createWebComputer.js";
+export {
+  createLinuxPythonSession,
+  LINUX_PYTHON_PROTOCOL,
+  LINUX_PYTHON_RECEIPT_PROTOCOL,
+  LINUX_PYTHON_VERSION,
+} from "./composition/linuxPythonSession.js";
 export { createMachineFleet } from "./composition/machineFleet.js";
 export { KernelMachine, bootDefaultKernelMachine, bootKernelMachine,
   openDefaultKernelMachineImage, openKernelMachineImage } from "./composition/kernelMachine.js";

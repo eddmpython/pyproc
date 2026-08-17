@@ -3,10 +3,12 @@ import { KernelFactory } from "../../composition/kernelFactory.js";
 import { KernelTerminal } from "../../capabilities/kernelTerminal.js";
 import { PackageEnvironment } from "../../capabilities/packageEnvironment.js";
 import { getDefaultKernelEngineManifest } from "../../runtime/engines/wasi/ownedEngineDistribution.js";
+import { createOwnedPackageResolver } from "../../runtime/packages/native/ownedPackageCatalog.js";
 import { KernelSession } from "../../session/kernelSession.js";
 import { KernelProcessManager } from "../../processOs/kernelProcess.js";
 import { OwnedWasmToolLayer } from "../../runtime/tools/ownedWasmToolLayer.js";
 import { MachineToolHostBridge } from "./machineToolHostBridge.js";
+import { applyGuestPipSource } from "./guestPackageInstall.js";
 
 const defaultKernelFactory = new KernelFactory();
 
@@ -16,6 +18,8 @@ export class KernelMachine {
   #toolLayer;
   #toolBridge;
   #kernelRef;
+  #packages = null;
+  #packageResolver = null;
 
   constructor(session, options = {}) {
     this.#session = session;
@@ -27,7 +31,7 @@ export class KernelMachine {
     this.#processes = new KernelProcessManager(session.factory, { openSession: KernelSession.open,
       onSessionOpen: (child) => this.#toolBridge?.attach(child.kernel.kernelRef, this.#toolLayer),
       onSessionClose: (child) => this.#toolBridge?.detach(child.kernel.kernelRef) });
-    const run = (code, options) => this.#session.run(code, options);
+    const run = async (code, options) => this.#session.run(await applyGuestPipSource(this.#packages, code), options);
     run.python = run;
     run.get = (name) => this.#session.get(name);
     run.set = (name, value) => this.#session.set(name, value);
@@ -52,8 +56,16 @@ export class KernelMachine {
   terminal(options = {}) {
     return new KernelTerminal(this.#session.kernel, {
       ...options,
+      packageEnvironment: options.packageEnvironment || this.#packages,
       checkpoint: (request) => this.#session.checkpoint(request),
     });
+  }
+
+  async attachDefaultPackages() {
+    const profile = this.manifest.nativeProfile === "data" ? "data" : "core";
+    this.#packageResolver = await createOwnedPackageResolver({ profile });
+    this.#packages = new PackageEnvironment({ kernel: this.#session.kernel, resolver: this.#packageResolver });
+    return this;
   }
 
   async inspect() {
@@ -84,7 +96,7 @@ export async function bootKernelMachine(factory, manifest, options = {}) {
     ? options.hostBroker : new MachineToolHostBridge(options.hostBroker || null);
   try {
     const session = await KernelSession.open(factory, manifest, { ...options, hostBroker: bridge });
-    return new KernelMachine(session, { ...options, machineToolHostBridge: bridge });
+    return new KernelMachine(session, { ...options, machineToolHostBridge: bridge }).attachDefaultPackages();
   } catch (error) {
     bridge.close("Machine boot failed");
     throw error;
@@ -96,7 +108,7 @@ export async function openKernelMachineImage(factory, image, options = {}) {
     ? options.hostBroker : new MachineToolHostBridge(options.hostBroker || null);
   try {
     const session = new KernelSession(factory, await factory.openImage(image, { ...options, hostBroker: bridge }));
-    return new KernelMachine(session, { ...options, machineToolHostBridge: bridge });
+    return new KernelMachine(session, { ...options, machineToolHostBridge: bridge }).attachDefaultPackages();
   } catch (error) {
     bridge.close("Machine image open failed");
     throw error;

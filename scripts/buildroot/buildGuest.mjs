@@ -6,58 +6,30 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import {
+  BUILDROOT,
+  PROFILES,
+  expectedRuntimeOracleVersion,
+  nodeOracleProgram,
+  pythonOracleProgram,
+} from "./buildrootProfiles.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDir, "..", "..");
 const profileIndex = process.argv.indexOf("--profile");
 const profileName = profileIndex >= 0 ? String(process.argv[profileIndex + 1] || "") : "linux";
-const NODE_RUNTIME = Object.freeze({
-  name: "node",
-  version: "22.22.0",
-  revision: "6add85e4c46b8be383c8b637102d6b6fd206adce",
-  repository: "https://github.com/nodejs/node.git",
-  sourceUrl: "https://nodejs.org/dist/v22.22.0/node-v22.22.0.tar.xz",
-  sourceSha256: "4c138012bb5352f49822a8f3e6d1db71e00639d0c36d5b6756f91e4c6f30b683",
-  oracle: Object.freeze({
-    source: "pyproc-node-guest",
-    sha256: "b3aed4be1f24f10fa77253e267fe69403144d97072cfe305c828a7ce0c8589c0",
-  }),
-});
-const PROFILES = Object.freeze({
-  linux: Object.freeze({
-    recipe: "pyproc-buildroot-i686-v2",
-    outputName: "buildroot-pyproc-i686.bin",
-    configFragments: Object.freeze([]),
-    runtime: null,
-  }),
-  node: Object.freeze({
-    recipe: "pyproc-buildroot-node-i686-v1",
-    outputName: "buildroot-pyproc-node-i686.bin",
-    configFragments: Object.freeze(["node.fragment"]),
-    runtime: NODE_RUNTIME,
-  }),
-});
 const profile = PROFILES[profileName];
 if (!profile) throw new Error(`지원하지 않는 Buildroot profile: ${profileName}`);
 if (profileIndex >= 0 && (!process.argv[profileIndex + 1] || process.argv.length !== profileIndex + 2)) {
-  throw new Error("--profile은 마지막 인자로 linux 또는 node 하나를 받는다");
+  throw new Error(`--profile은 마지막 인자로 ${Object.keys(PROFILES).join(", ")} 하나를 받는다`);
 }
 const workspaceName = profileName === "linux" ? "buildrootGuest" : `buildrootGuest-${profileName}`;
 const workspace = resolve(process.env.PYPROC_BUILDROOT_WORKSPACE || join(root, ".cache", workspaceName));
 const sourceDir = join(workspace, "source");
 const outputDir = join(workspace, "output");
 const distDir = join(workspace, "dist");
-const archivePath = join(workspace, "buildroot-2025.02.16.tar.xz");
+const archivePath = join(workspace, `buildroot-${BUILDROOT.version}.tar.xz`);
 const configPath = join(scriptDir, "buildroot.config");
-const BUILDROOT = Object.freeze({
-  version: "2025.02.16",
-  revision: "2d05bb10d08410c59856ff4022ba8b762f77441a",
-  commit: "135af563b945b8c3d18f8fd370370075b9edb140",
-  repository: "https://gitlab.com/buildroot.org/buildroot.git",
-  sourceUrl: "https://buildroot.org/downloads/buildroot-2025.02.16.tar.xz",
-  sourceSha256: "15305e3d366eeaf4a5ecaf2ed42f685fd6af7fe5dbf1f62e1de5f46ee83225e2",
-  sourceDateEpoch: 1784143163,
-});
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -97,39 +69,37 @@ async function prepareConfig() {
 }
 
 async function assertResolvedProfileConfig() {
-  if (!profile.runtime) return;
+  if (!profile.requiredConfig.length) return;
   const config = await readFile(join(outputDir, ".config"), "utf8");
-  const required = [
-    "BR2_TOOLCHAIN_BUILDROOT_CXX=y",
-    "BR2_INSTALL_LIBSTDCPP=y",
-    "BR2_PACKAGE_NODEJS=y",
-    "BR2_PACKAGE_OPENSSL=y",
-    "BR2_PACKAGE_HOST_QEMU=y",
-    "BR2_PACKAGE_HOST_QEMU_LINUX_USER_MODE=y",
-  ];
-  const missing = required.filter((line) => !config.split(/\r?\n/).includes(line));
-  if (missing.length) throw new Error(`Node profile resolved config 누락: ${missing.join(", ")}`);
+  const missing = profile.requiredConfig.filter((line) => !config.split(/\r?\n/).includes(line));
+  if (missing.length) throw new Error(`${profileName} profile resolved config 누락: ${missing.join(", ")}`);
+}
+
+function runtimeOracleArgv(executable) {
+  const source = profile.runtime.oracle.source;
+  if (profile.runtime.name === "node") return [executable, "-e", nodeOracleProgram(source)];
+  if (profile.runtime.name === "python") return [executable, "-c", pythonOracleProgram(source)];
+  throw new Error(`지원하지 않는 runtime oracle: ${profile.runtime.name}`);
 }
 
 function runRuntimeOracle() {
   if (!profile.runtime) return null;
   const qemu = join(outputDir, "host", "bin", "qemu-i386");
   const targetDir = join(outputDir, "target");
-  const executable = join(targetDir, "usr", "bin", "node");
-  if (!existsSync(qemu)) throw new Error("Node runtime oracle의 qemu-i386 executable이 없다");
-  if (!existsSync(executable)) throw new Error("Node runtime oracle의 target node executable이 없다");
-  const source = JSON.stringify(profile.runtime.oracle.source);
-  const program = [
-    "const crypto = require('node:crypto')",
-    `const sha256 = crypto.createHash('sha256').update(${source}).digest('hex')`,
-    "process.stdout.write(JSON.stringify({ version: process.version, sha256 }))",
-  ].join(";");
-  const stdout = run(qemu, ["-L", targetDir, executable, "-e", program], { capture: true }).stdout.trim();
+  const executable = join(targetDir, ...profile.oracleExecutable);
+  if (!existsSync(qemu)) throw new Error(`${profileName} runtime oracle의 qemu-i386 executable이 없다`);
+  if (!existsSync(executable)) {
+    throw new Error(`${profileName} runtime oracle의 target ${profile.oracleExecutable.join("/")} 가 없다`);
+  }
+  const stdout = run(qemu, ["-L", targetDir, ...runtimeOracleArgv(executable)], {
+    capture: true,
+  }).stdout.trim();
   let result;
   try { result = JSON.parse(stdout); }
-  catch (error) { throw new Error(`Node runtime oracle JSON 불일치: ${stdout}`, { cause: error }); }
-  if (result.version !== `v${profile.runtime.version}` || result.sha256 !== profile.runtime.oracle.sha256) {
-    throw new Error(`Node runtime oracle 불일치: ${stdout}`);
+  catch (error) { throw new Error(`${profileName} runtime oracle JSON 불일치: ${stdout}`, { cause: error }); }
+  const expectedVersion = expectedRuntimeOracleVersion(profile.runtime);
+  if (result.version !== expectedVersion || result.sha256 !== profile.runtime.oracle.sha256) {
+    throw new Error(`${profileName} runtime oracle 불일치: ${stdout}`);
   }
   return Object.freeze({ version: result.version, sha256: result.sha256 });
 }

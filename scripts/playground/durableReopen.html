@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>pyproc keep work after close</title>
+  <style>
+    body { margin: 1.2rem; font: 15px/1.5 ui-monospace, Consolas, monospace; background: #101514; color: #f5f3ee; }
+    button { background: #c94122; color: #fff; border: 0; border-radius: 8px; padding: .55rem 1rem; font: inherit; }
+    pre { white-space: pre-wrap; }
+    .dim { color: #aaa095; }
+  </style>
+</head>
+<body>
+  <p class="dim">Installed package durable reopen</p>
+  <h1>Keep work after close</h1>
+  <p>Record a value, export a Machine image, close, then open the same value.</p>
+  <button id="run" type="button">Record and reopen</button>
+  <p id="status">Ready.</p>
+  <pre id="output"></pre>
+  <script type="module">
+    import { boot, open } from "../../index.js";
+    import { runDurableReopen } from "./runFirstSuccess.js";
+
+    const status = document.getElementById("status");
+    const output = document.getElementById("output");
+    const runButton = document.getElementById("run");
+
+    async function run() {
+      runButton.disabled = true;
+      output.textContent = "";
+      status.textContent = "Loading the verified CPython WASI package...";
+      let pass = false;
+      let info = "";
+      try {
+        const result = await runDurableReopen(boot, open);
+        output.textContent = `recorded: ${result.recorded}\nrestored: ${result.restored}`;
+        pass = result.recorded === result.restored;
+        status.textContent = pass ? "Reopened the same value." : "The restored value did not match.";
+      } catch (error) {
+        info = `${error?.code || ""} ${error?.message || error}`.trim();
+        output.textContent = info;
+        status.textContent = "The durable reopen path failed.";
+      } finally {
+        runButton.disabled = false;
+      }
+      if (new URLSearchParams(location.search).has("gate")) {
+        await fetch("/gateReport", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ok: pass, checks: [{ name: "durableReopen", pass, info }] }) });
+      }
+    }
+
+    runButton.addEventListener("click", run);
+    if (new URLSearchParams(location.search).has("gate")) run();
+  </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import { ensureCrossOriginIsolation } from "./coiBootstrap.js";
 import { boot, open } from "../index.js";
+import { runDurableReopen, runFirstSuccess } from "./runFirstSuccess.js";
 
 await ensureCrossOriginIsolation();
 
@@ -18,15 +19,21 @@ async function runScenario() {
   let child = null;
   try {
     status.textContent = "Loading the verified CPython WASI package...";
+    if (scenario === "basic") {
+      const result = await runFirstSuccess(boot);
+      write(`Python result: ${result.output}`);
+      return result.output === result.expectedOutput;
+    }
+    if (scenario === "durable") {
+      const result = await runDurableReopen(boot, open);
+      write(`recorded: ${result.recorded}`);
+      write(`restored: ${result.restored}`);
+      return result.recorded === result.restored;
+    }
     machine = await boot({ deterministic: true });
     const inspection = await machine.inspect();
     write(`kernel: ${inspection.kernel.runtimeKind}, workerOwned=${inspection.kernel.workerOwned}`);
 
-    if (scenario === "basic") {
-      const result = await machine.run("print(sum(i * i for i in range(10)))");
-      write(`Python result: ${result.output.trim()}`);
-      return result.output.trim() === "285";
-    }
     if (scenario === "history" || scenario === "immortal") {
       await machine.run("demoValue = 41");
       const checkpoint = await machine.history.checkpoint();

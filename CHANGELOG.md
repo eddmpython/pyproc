@@ -14,7 +14,33 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Added
 
-No unreleased public changes.
+- **Setup is a public first-hour contract.** Both READMEs document Chromium and Edge, the two isolation
+  headers, and Vite and Next snippets. `checkEnvironment()` points at the live `#setup` heading.
+- **`npx pyproc-playground` serves the installed package graph with those headers** and opens the first
+  Python receipt path. Default `boot()` still loads only the core engine.
+- **The second public example reopens a Machine image** and reads back the recorded value.
+- **Default Machines accept Python package requests.** `%pip install` and `python -m pip install` use
+  the attached package environment. Unsupported native wheels and `subprocess` pip stay readable
+  failures and do not stop later Python execution.
+- **Native Linux CPython is a second door, not the default kernel.** `createWebComputer().linuxPython`
+  runs `python3` and `python -m pip` over `linuxOs` serial. Root `boot()` stays the owned WASI kernel.
+  The door is closed without a linux guest. A separate Buildroot `python` profile
+  (`buildroot-pyproc-python-i686.bin`) pins CPython 3.12.13 and pip 25.2 with the same
+  reproducible A/B, SBOM, legal-info, and QEMU oracle contract as the Node guest. The slim
+  linux image still has no `python3`.
+
+### 한국어 요약
+
+- Setup 절이 Chromium/Edge, 헤더 두 줄, Vite와 Next 스니펫을 공개하고, 환경 진단이 `#setup`으로 연결된다.
+- `npx pyproc-playground`가 설치 그래프를 COOP/COEP로 서빙해 첫 Python receipt를 연다. 기본 `boot()`는
+  core engine만 로드한다.
+- 두 번째 공개 예제가 Machine image를 다시 열어 기록한 값을 읽는다.
+- 기본 Machine에서 `%pip install`과 `python -m pip install`로 패키지를 요청한다. 지원하지 않는
+  native wheel과 `subprocess` pip는 패키지 오류로 거절되고 이후 파이썬 실행은 계속된다.
+- 네이티브 Linux CPython은 두 번째 문이다. `createWebComputer().linuxPython`이 `linuxOs` serial로
+  `python3`와 `python -m pip`를 친다. 기본 `boot()`는 WASI 커널이다. 별도 Buildroot python
+  profile이 CPython 3.12.13과 pip 25.2를 Node guest와 같은 재현/SBOM/oracle 계약으로 싣는다.
+  slim linux image에는 여전히 `python3`가 없다.
 
 ## 0.0.24 - 2026-08-16
 

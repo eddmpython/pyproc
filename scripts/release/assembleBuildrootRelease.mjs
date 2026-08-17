@@ -100,9 +100,29 @@ function assertBuildrootIdentity(manifest) {
   }
 }
 
+function runtimeOracleVersion(runtime) {
+  if (!runtime) return null;
+  return runtime.name === "node" ? `v${runtime.version}` : runtime.version;
+}
+
+function assertRuntimeIdentity(manifest) {
+  if (!manifest.runtime) return;
+  const runtime = manifest.runtime;
+  const oracle = manifest.runtimeOracle;
+  if (!runtime.name || !/^\d+\.\d+\.\d+$/.test(runtime.version || "")
+    || !COMMIT_PATTERN.test(runtime.revision || "") || !publicHttpsUrl(runtime.repository)
+    || !publicHttpsUrl(runtime.sourceUrl) || !SHA256_PATTERN.test(runtime.sourceSha256 || "")
+    || typeof runtime.oracle?.source !== "string" || !runtime.oracle.source || runtime.oracle.source.length > 1024
+    || !SHA256_PATTERN.test(runtime.oracle?.sha256 || "")
+    || oracle?.version !== runtimeOracleVersion(runtime) || oracle?.sha256 !== runtime.oracle.sha256) {
+    throw new Error(`검증 ${runtime.name} runtime source와 실행 oracle이 불완전하다`);
+  }
+}
+
 async function assertCycloneDx(path, manifest) {
   const sbom = JSON.parse(await readFile(path, "utf8"));
   const nodeComponent = sbom.components?.find((entry) => entry?.name === "nodejs-src");
+  const pythonComponent = sbom.components?.find((entry) => entry?.name === "python3" || entry?.name === "Python");
   if (sbom.bomFormat !== "CycloneDX" || sbom.specVersion !== "1.6"
     || sbom.metadata?.component?.name !== "buildroot"
     || sbom.metadata?.component?.version !== manifest.buildroot.version
@@ -113,6 +133,9 @@ async function assertCycloneDx(path, manifest) {
   }
   if (manifest.profile === "node" && nodeComponent?.version !== manifest.runtime?.version) {
     throw new Error("Buildroot CycloneDX SBOM에 exact Node runtime이 없다");
+  }
+  if (manifest.profile === "python" && pythonComponent?.version !== manifest.runtime?.version) {
+    throw new Error("Buildroot CycloneDX SBOM에 exact Python runtime이 없다");
   }
 }
 
@@ -397,18 +420,7 @@ async function main() {
     || manifest.evidence?.legalWarnings?.length !== 0) {
     throw new Error("검증 build manifest와 재현 영수증이 일치하지 않는다");
   }
-  if (manifest.profile === "node") {
-    const runtime = manifest.runtime;
-    const oracle = manifest.runtimeOracle;
-    if (runtime?.name !== "node" || !/^\d+\.\d+\.\d+$/.test(runtime.version || "")
-      || !COMMIT_PATTERN.test(runtime.revision || "") || !publicHttpsUrl(runtime.repository)
-      || !publicHttpsUrl(runtime.sourceUrl) || !SHA256_PATTERN.test(runtime.sourceSha256 || "")
-      || typeof runtime.oracle?.source !== "string" || !runtime.oracle.source || runtime.oracle.source.length > 1024
-      || !SHA256_PATTERN.test(runtime.oracle?.sha256 || "")
-      || oracle?.version !== `v${runtime.version}` || oracle?.sha256 !== runtime.oracle.sha256) {
-      throw new Error("검증 Node runtime source와 실행 oracle이 불완전하다");
-    }
-  }
+  assertRuntimeIdentity(manifest);
 
   await assertFile(join(options.verifiedDir, manifest.output.name), manifest.output);
   await assertCycloneDx(join(options.verifiedDir, "buildroot.cyclonedx.json"), manifest);

@@ -3,7 +3,8 @@ import { PyProcError } from "./errors.js";
 
 const HEADER_SNIPPET =
   "Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Embedder-Policy: require-corp";
-const SETUP_URL = "https://github.com/eddmpython/pyproc#setup";
+export const SETUP_FRAGMENT = "setup";
+export const SETUP_URL = `https://github.com/eddmpython/pyproc#${SETUP_FRAGMENT}`;
 
 function hasCrossOriginIsolation() {
   return typeof globalThis.crossOriginIsolated === "boolean" && globalThis.crossOriginIsolated;

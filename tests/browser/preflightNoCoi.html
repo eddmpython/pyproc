@@ -10,6 +10,7 @@ const environment = checkEnvironment();
 const issue = environment.issues.find((entry) => entry.code === "no-cross-origin-isolation");
 check("환경 진단이 COI 부재를 보고", environment.ok === false && !!issue);
 check("진단이 필요한 두 헤더를 안내", issue?.fix.includes("Cross-Origin-Opener-Policy") && issue.fix.includes("Cross-Origin-Embedder-Policy"));
+check("진단이 Setup 앵커로 연결", issue?.fix.includes("#setup"));
 let guardError = null;
 try { requireCoi("owned kernel"); } catch (error) { guardError = error; }
 check("COI guard가 typed error를 반환", guardError?.code === "PYPROC_ENV_UNSUPPORTED");

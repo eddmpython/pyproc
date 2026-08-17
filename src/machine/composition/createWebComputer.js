@@ -17,6 +17,7 @@ import { MemoryBlockDevice } from "../devices/memoryBlockDevice.js";
 import { MemoryScanCodeInputDevice } from "../devices/memoryScanCodeInputDevice.js";
 import { MemoryTextDisplayDevice } from "../devices/memoryTextDisplayDevice.js";
 import { createDurableWebComputerFacade } from "./durableWebComputer.js";
+import { createLinuxPythonSession } from "./linuxPythonSession.js";
 
 // 기본 디스크 크기. 출처: 제품 실측 상수(apps/webComputer/machineConfig.js의 2MiB)와 동일값.
 const DEFAULT_DISK_BYTES = 2 * 1024 * 1024;
@@ -313,6 +314,15 @@ export function createWebComputer(options = {}) {
     durability: options.durability,
     cryptoProvider: options.cryptoProvider ?? globalThis.crypto,
   });
+  // linuxOs가 있을 때만 네이티브 CPython을 친다. 기본 pythonOs/WASI boot는 그대로다.
+  const linuxPython = createLinuxPythonSession({
+    machine: () => active.machines.get("linuxOs") || null,
+    python: options.linux?.python,
+    prompt: options.linux?.shellPrompt
+      || options.linux?.manifest?.v86?.shellPrompt
+      || options.linux?.manifest?.v86?.readyPattern
+      || null,
+  });
   return Object.freeze({
     get host() { return active.host; },
     get devices() { return active.devices; },
@@ -334,7 +344,11 @@ export function createWebComputer(options = {}) {
     retrySuspendCleanup: durable.retrySuspendCleanup,
     exportImage: durable.exportImage,
     importImage: durable.importImage,
-    inspect: durable.inspect,
+    linuxPython,
+    inspect: () => Object.freeze({
+      ...durable.inspect(),
+      linuxPython: linuxPython.inspect(),
+    }),
     dispose: durable.dispose,
   });
 }

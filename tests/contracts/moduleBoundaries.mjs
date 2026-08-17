@@ -25,11 +25,13 @@ function verifyGoldenWorkflowImports(goldenPage, packageJson) {
   }
 }
 
-function verifyBuildrootWorkflow(recipe, workflow, nodeFragment) {
+function verifyBuildrootWorkflow(recipe, workflow, fragments) {
   if (!workflow.includes("npm run assets:buildroot -- --profile ${{ matrix.profile }}")) {
     throw new Error("Buildroot profile 재현 배선 누락");
   }
-  if (!/profile:\s*\[linux, node\]/.test(workflow)) throw new Error("Buildroot Linux와 Node matrix 누락");
+  if (!/profile:\s*\[linux, node, python\]/.test(workflow)) {
+    throw new Error("Buildroot Linux, Node, Python matrix 누락");
+  }
   if (!workflow.includes("PYPROC_BUILDROOT_WORKSPACE: ${{ github.workspace }}/../pyproc-buildroot-${{ matrix.profile }}")
     || workflow.includes("PYPROC_BUILDROOT_WORKSPACE: ${{ github.workspace }}/../pyproc-buildroot-${{ matrix.profile }}-${{ matrix.slot }}")) {
     throw new Error("Buildroot 독립 runner의 절대 workspace 경로가 서로 다르다");
@@ -45,7 +47,7 @@ function verifyBuildrootWorkflow(recipe, workflow, nodeFragment) {
     throw new Error("Buildroot source가 검증된 release archive 계약이 아니다");
   }
   const imageNames = [...recipe.matchAll(/outputName:\s*"(buildroot-[\w.-]+\.bin)"/g)].map((match) => match[1]);
-  if (imageNames.join(",") !== "buildroot-pyproc-i686.bin,buildroot-pyproc-node-i686.bin") {
+  if (imageNames.join(",") !== "buildroot-pyproc-i686.bin,buildroot-pyproc-node-i686.bin,buildroot-pyproc-python-i686.bin") {
     throw new Error(`Buildroot profile output 불일치: ${imageNames.join(",")}`);
   }
   if (!workflow.includes("manifest.output.name") || !workflow.includes("left.equals(right)")) {
@@ -57,8 +59,17 @@ function verifyBuildrootWorkflow(recipe, workflow, nodeFragment) {
     || !recipe.includes('"qemu-i386"')) {
     throw new Error("Buildroot Node source 또는 runtime oracle 고정 누락");
   }
+  if (!recipe.includes('version: "3.12.13"')
+    || !recipe.includes('revision: "3bb231a6a5dc02b95658877318bf61501a7209e9"')
+    || !recipe.includes('sourceSha256: "c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684"')
+    || !recipe.includes('pipVersion: "25.2"')) {
+    throw new Error("Buildroot Python source 또는 runtime oracle 고정 누락");
+  }
   for (const input of ["BR2_TOOLCHAIN_BUILDROOT_CXX=y", "BR2_PACKAGE_NODEJS=y", "BR2_PACKAGE_OPENSSL=y"]) {
-    if (!nodeFragment.split(/\r?\n/).includes(input)) throw new Error(`Buildroot Node profile input 누락: ${input}`);
+    if (!fragments.node.split(/\r?\n/).includes(input)) throw new Error(`Buildroot Node profile input 누락: ${input}`);
+  }
+  for (const input of ["BR2_PACKAGE_PYTHON3=y", "BR2_PACKAGE_PYTHON_PIP=y", "BR2_PACKAGE_OPENSSL=y"]) {
+    if (!fragments.python.split(/\r?\n/).includes(input)) throw new Error(`Buildroot Python profile input 누락: ${input}`);
   }
 }
 
@@ -70,6 +81,20 @@ function verifyNodeGuestProductGate(packageJson) {
   }
   if (!existsSync(join(ROOT, "tests", "browser", "nodeGuestProduct.mjs"))) {
     throw new Error("Node guest browser 제품 gate가 없다");
+  }
+}
+
+function verifyLinuxPythonProductGate(packageJson) {
+  const command = packageJson.scripts?.["test:linux-python"] || "";
+  if (!command.startsWith("node tests/webMachine/fixtures/v86/prepareAssets.mjs --consumer webComputer && ")
+    || !command.endsWith("node tests/browser/linuxPythonProduct.mjs")) {
+    throw new Error("Linux native CPython이 정식 browser 제품 gate에 연결되지 않았다");
+  }
+  if (!existsSync(join(ROOT, "tests", "browser", "linuxPythonProduct.mjs"))) {
+    throw new Error("Linux native CPython browser 제품 gate가 없다");
+  }
+  if (packageJson.scripts?.["assets:buildroot-python"] !== "node scripts/buildroot/buildGuest.mjs --profile python") {
+    throw new Error("Buildroot python profile 공개 명령 누락");
   }
 }
 
@@ -167,37 +192,55 @@ export function assertModuleBoundaries() {
   if (!caughtGoldenMapDrift) throw new Error("golden workflow import map 표류 음성 fixture를 놓쳤다");
 
   const buildrootWorkflow = readFileSync(join(ROOT, ".github", "workflows", "buildroot-guest.yml"), "utf8");
-  const buildrootRecipe = readFileSync(join(ROOT, "scripts", "buildroot", "buildGuest.mjs"), "utf8");
-  const buildrootNodeFragment = readFileSync(join(ROOT, "scripts", "buildroot", "node.fragment"), "utf8");
+  const buildrootRecipe = [
+    readFileSync(join(ROOT, "scripts", "buildroot", "buildrootProfiles.js"), "utf8"),
+    readFileSync(join(ROOT, "scripts", "buildroot", "buildGuest.mjs"), "utf8"),
+  ].join("\n");
+  const buildrootFragments = {
+    node: readFileSync(join(ROOT, "scripts", "buildroot", "node.fragment"), "utf8"),
+    python: readFileSync(join(ROOT, "scripts", "buildroot", "python.fragment"), "utf8"),
+  };
   const buildrootRelease = readFileSync(join(ROOT, "scripts", "release", "assembleBuildrootRelease.mjs"), "utf8");
-  verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow, buildrootNodeFragment);
+  verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow, buildrootFragments);
   verifyNodeGuestProductGate(packageJson);
+  verifyLinuxPythonProductGate(packageJson);
   verifyBuildrootReleaseAssembler(buildrootRelease, packageJson);
   let caughtNodeMatrixDrift = false;
   try {
-    verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow.replaceAll("profile: [linux, node]", "profile: [linux]"),
-      buildrootNodeFragment);
+    verifyBuildrootWorkflow(buildrootRecipe,
+      buildrootWorkflow.replaceAll("profile: [linux, node, python]", "profile: [linux, node]"),
+      buildrootFragments);
   }
-  catch (error) { caughtNodeMatrixDrift = String(error.message).includes("Node matrix"); }
-  if (!caughtNodeMatrixDrift) throw new Error("Buildroot Node matrix 음성 fixture를 놓쳤다");
+  catch (error) { caughtNodeMatrixDrift = String(error.message).includes("Python matrix"); }
+  if (!caughtNodeMatrixDrift) throw new Error("Buildroot Python matrix 음성 fixture를 놓쳤다");
   let caughtWorkspaceDrift = false;
   try {
     verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow.replace("${{ matrix.profile }}\n", "${{ matrix.profile }}-${{ matrix.slot }}\n"),
-      buildrootNodeFragment);
+      buildrootFragments);
   }
   catch (error) { caughtWorkspaceDrift = String(error.message).includes("절대 workspace"); }
   if (!caughtWorkspaceDrift) throw new Error("Buildroot workspace 경로 음성 fixture를 놓쳤다");
   let caughtNodeTimeoutDrift = false;
   try {
     verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow.replace("timeout-minutes: 300", "timeout-minutes: 120"),
-      buildrootNodeFragment);
+      buildrootFragments);
   }
   catch (error) { caughtNodeTimeoutDrift = String(error.message).includes("시간 예산 부족"); }
   if (!caughtNodeTimeoutDrift) throw new Error("Buildroot Node 시간 예산 음성 fixture를 놓쳤다");
   let caughtNodeCryptoDrift = false;
-  try { verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow, buildrootNodeFragment.replace("BR2_PACKAGE_OPENSSL=y", "")); }
+  try {
+    verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow,
+      { ...buildrootFragments, node: buildrootFragments.node.replace("BR2_PACKAGE_OPENSSL=y", "") });
+  }
   catch (error) { caughtNodeCryptoDrift = String(error.message).includes("BR2_PACKAGE_OPENSSL"); }
   if (!caughtNodeCryptoDrift) throw new Error("Buildroot Node crypto 음성 fixture를 놓쳤다");
+  let caughtPythonFragmentDrift = false;
+  try {
+    verifyBuildrootWorkflow(buildrootRecipe, buildrootWorkflow,
+      { ...buildrootFragments, python: buildrootFragments.python.replace("BR2_PACKAGE_PYTHON3=y", "") });
+  }
+  catch (error) { caughtPythonFragmentDrift = String(error.message).includes("BR2_PACKAGE_PYTHON3"); }
+  if (!caughtPythonFragmentDrift) throw new Error("Buildroot Python fragment 음성 fixture를 놓쳤다");
   let caughtReleaseDrift = false;
   try { verifyBuildrootReleaseAssembler(buildrootRelease.replace("profileFragments", "fragments"), packageJson); }
   catch (error) { caughtReleaseDrift = String(error.message).includes("profileFragments"); }

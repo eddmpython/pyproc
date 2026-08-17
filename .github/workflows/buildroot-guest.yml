@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [linux, node]
+        profile: [linux, node, python]
         slot: [a, b]
     env:
       # Matrix slots have isolated runners. Node records its cross-toolchain
@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [linux, node]
+        profile: [linux, node, python]
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -95,12 +95,15 @@ jobs:
           if (actualSha256 !== manifest.output.sha256) throw new Error("verified image SHA-256 mismatch");
           if (image.byteLength !== manifest.output.byteLength) throw new Error("verified image byteLength mismatch");
           if (manifest.evidence.legalWarnings.length) throw new Error("verified legal-info warnings are not empty");
-          if (manifest.profile === "node") {
-            if (manifest.runtime?.name !== "node" || manifest.runtimeOracle?.version !== `v${manifest.runtime.version}`) {
-              throw new Error("verified Node runtime oracle mismatch");
+          if (manifest.runtime) {
+            const expectedVersion = manifest.runtime.name === "node"
+              ? `v${manifest.runtime.version}`
+              : manifest.runtime.version;
+            if (!manifest.runtime.name || manifest.runtimeOracle?.version !== expectedVersion) {
+              throw new Error(`verified ${manifest.runtime.name} runtime oracle mismatch`);
             }
             if (manifest.runtimeOracle.sha256 !== manifest.runtime.oracle.sha256) {
-              throw new Error("verified Node workload digest mismatch");
+              throw new Error(`verified ${manifest.runtime.name} workload digest mismatch`);
             }
           }
           const receipt = {
