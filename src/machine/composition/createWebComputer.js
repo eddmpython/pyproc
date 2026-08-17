@@ -318,6 +318,7 @@ export function createWebComputer(options = {}) {
   const linuxPython = createLinuxPythonSession({
     machine: () => active.machines.get("linuxOs") || null,
     python: options.linux?.python,
+    interpreterVersion: options.linux?.interpreterVersion || null,
     prompt: options.linux?.shellPrompt
       || options.linux?.manifest?.v86?.shellPrompt
       || options.linux?.manifest?.v86?.readyPattern

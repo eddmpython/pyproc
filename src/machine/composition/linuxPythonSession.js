@@ -28,6 +28,8 @@ export function createLinuxPythonSession(options = {}) {
   const getMachine = typeof options.machine === "function" ? options.machine : () => options.machine || null;
   const python = typeof options.python === "string" && options.python ? options.python : "python3";
   const prompt = typeof options.prompt === "string" && options.prompt ? options.prompt : null;
+  const interpreterVersion = typeof options.interpreterVersion === "string" && options.interpreterVersion
+    ? options.interpreterVersion : null;
 
   async function send(command, requestOptions = {}) {
     const handle = readHandle(getMachine);
@@ -55,6 +57,11 @@ export function createLinuxPythonSession(options = {}) {
         python,
         prompt,
         nativeAbi: "linux-elf",
+        interpreter: Object.freeze({
+          implementation: "CPython",
+          version: interpreterVersion,
+          nativeAbi: "linux-elf",
+        }),
         replacesDefaultBoot: false,
       });
     },
@@ -70,6 +77,7 @@ export function createLinuxPythonSession(options = {}) {
         python,
         argv: Object.freeze([python, "-c", source]),
         stdout,
+        serial: stdout,
         native: true,
       });
     },
@@ -85,6 +93,7 @@ export function createLinuxPythonSession(options = {}) {
         python,
         argv: Object.freeze([python, "-m", "pip", ...args]),
         stdout,
+        serial: stdout,
         native: true,
       });
     },

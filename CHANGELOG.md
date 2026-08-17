@@ -23,11 +23,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   the attached package environment. Unsupported native wheels and `subprocess` pip stay readable
   failures and do not stop later Python execution.
 - **Native Linux CPython is a second door, not the default kernel.** `createWebComputer().linuxPython`
-  runs `python3` and `python -m pip` over `linuxOs` serial. Root `boot()` stays the owned WASI kernel.
-  The door is closed without a linux guest. A separate Buildroot `python` profile
-  (`buildroot-pyproc-python-i686.bin`) pins CPython 3.12.13 and pip 25.2 with the same
-  reproducible A/B, SBOM, legal-info, and QEMU oracle contract as the Node guest. The slim
-  linux image still has no `python3`.
+  runs `python3` and `python -m pip` over `linuxOs` serial. Root `boot()` stays the owned WASI
+  CPython 3.14.6 kernel. The guest interpreter on the python profile is CPython 3.12.13.
+  `inspect().interpreter` reports that split. Receipt `stdout` is the serial transcript.
+  Offline missing wheels fail through guest pip. The slim linux image still has no `python3`.
 
 ### 한국어 요약
 

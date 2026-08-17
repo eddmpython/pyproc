@@ -82,6 +82,23 @@ await machine.close();
 Every execution returns a structured receipt. Python exceptions produce a stable `PyProcError` with
 `code === "PYPROC_KERNEL_EXECUTION_ERROR"`.
 
+### Packages
+
+Install with the same commands a Python session already uses:
+
+```js
+await machine.run.python(`
+%pip install pyproc-native-host==1.0.0
+import pyproc_native_host
+print(pyproc_native_host.ABI_VERSION)
+`);
+```
+
+`python -m pip install ...` is the same door. `import` is ordinary CPython import. `subprocess` pip and
+arbitrary native wheels are outside this engine: there is no OS process, and WASI cannot load those ABIs.
+The [package environment](skills/use-pyproc-runtime/references/package-environment.md) is the host contract
+behind those Python commands.
+
 ## Next
 
 ### Keep work after close
@@ -106,27 +123,10 @@ not duplicate the engine binary.
 
 [Checkpoint, restore, and export](skills/reference-pyproc-api/references/api.md) live on `machine.history`.
 
-### Packages
-
-Install with the same commands a Python session already uses:
-
-```js
-await machine.run.python(`
-%pip install pyproc-native-host==1.0.0
-import pyproc_native_host
-print(pyproc_native_host.ABI_VERSION)
-`);
-```
-
-`python -m pip install ...` is the same door. `import` is ordinary CPython import. `subprocess` pip and
-arbitrary native wheels are outside this engine: there is no OS process, and WASI cannot load those ABIs.
-The [package environment](skills/use-pyproc-runtime/references/package-environment.md) is the host contract
-behind those Python commands.
-
 ### Native Linux Python
 
-Default `boot()` stays the owned WASI kernel. When `createWebComputer({ linux })` has a `linuxOs`
-guest, the same computer also exposes native Linux CPython over that guest's serial console:
+Default `boot()` stays the owned WASI kernel (CPython 3.14.6). When `createWebComputer({ linux })` has
+a `linuxOs` guest, the same computer also exposes native Linux CPython over that guest's serial console:
 
 ```js
 import { createWebComputer } from "pyproc";
@@ -139,13 +139,13 @@ if (computer.linuxPython.available) {
 }
 ```
 
-This door does not replace `boot()`. The consumer supplies V86 and a Linux image that actually
-contains `python3`. The slim Buildroot linux image stays without CPython. The separate
-`buildroot-pyproc-python-i686.bin` profile is the image that carries CPython 3.12.13 and pip:
+This door does not replace `boot()`. The guest interpreter is CPython 3.12.13, not the WASI 3.14.6
+kernel. The slim Buildroot linux image stays without CPython. The catalog asset
+`buildroot-pyproc-python-i686.bin` is the image that contains `python3` and pip 25.2.
 
-```sh
-npm run assets:buildroot-python
-```
+`linuxPython.pip` sends `python3 -m pip` over serial. The receipt `stdout` is that serial transcript.
+Network indexes and arbitrary wheels are outside the tested door. WASI `%pip` stays on the owned
+catalog and is a different path.
 
 ### Control
 

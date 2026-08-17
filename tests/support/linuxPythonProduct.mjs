@@ -125,7 +125,7 @@ try {
   await progress("module-loaded");
   const consoleLines=[];
   computer=createWebComputer({cryptoProvider:crypto,onConsole:(line)=>consoleLines.push(String(line)),
-    linux:{V86,adapterVersion:"v86-0.5.424-python312-state-v1",manifest:linuxManifest()}});
+    linux:{V86,adapterVersion:"v86-0.5.424-python312-state-v1",interpreterVersion:"3.12.13",manifest:linuxManifest()}});
   await progress("computer-created");
   let started=performance.now();
   await computer.bootAll();
@@ -133,7 +133,8 @@ try {
   await progress("computer-booted");
   const door=computer.linuxPython.inspect();
   const doorOk=door.available===true&&door.replacesDefaultBoot===false&&door.nativeAbi==="linux-elf"
-    &&door.python==="python3"&&computer.machines.has("pythonOs")&&computer.machines.has("linuxOs");
+    &&door.python==="python3"&&door.interpreter?.implementation==="CPython"
+    &&door.interpreter?.version==="3.12.13"&&computer.machines.has("pythonOs")&&computer.machines.has("linuxOs");
   check("native door sits beside default WASI pythonOs",doorOk,JSON.stringify(door));
   show("door",doorOk?"linuxPython available, replacesDefaultBoot false":"door drift",doorOk);
   stage="execute";
@@ -145,14 +146,20 @@ try {
   const native=await computer.linuxPython.run("print(40 + 2)");
   timings.nativeMs=Math.round(performance.now()-started);
   const nativeOk=native.native===true&&native.kind==="run"&&native.python==="python3"
+    &&native.serial===native.stdout
     &&native.argv.join(" ")==="python3 -c print(40 + 2)"&&String(native.stdout).includes("42");
   check("shipped linuxPython.run executes guest python3",nativeOk,String(native.stdout).slice(-240));
   show("native",nativeOk?native.stdout.slice(-120):"missing 42",nativeOk);
   const pip=await computer.linuxPython.pip(["--version"]);
   const pipOk=pip.native===true&&pip.kind==="pip"&&pip.argv.join(" ")==="python3 -m pip --version"
-    &&/pip/i.test(String(pip.stdout));
+    &&pip.serial===pip.stdout&&/pip 25\.2/i.test(String(pip.stdout));
   check("shipped linuxPython.pip executes guest python3 -m pip",pipOk,String(pip.stdout).slice(-240));
   show("pip",pipOk?pip.stdout.slice(-120):"pip missing",pipOk);
+  const rejected=await computer.linuxPython.pip(
+    ["install","--no-index","--find-links","/tmp/pyproc-empty-index","pyproc-missing-wheel==0.0.0"],
+    {waitFor:"No matching distribution found",timeoutMs:60000});
+  const rejectOk=/no matching distribution found/i.test(String(rejected.stdout));
+  check("native pip rejects an offline missing wheel",rejectOk,String(rejected.stdout).slice(-240));
   const network=performance.getEntriesByType("resource").map((entry)=>entry.name)
     .filter((url)=>new URL(url,location.href).origin!==location.origin);
   const networkOk=network.length===0;

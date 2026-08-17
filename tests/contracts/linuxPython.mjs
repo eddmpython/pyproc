@@ -56,14 +56,17 @@ export async function assertLinuxPythonContract() {
   assert(computer.linuxPython.available === false
     && computer.inspect().linuxPython.available === false
     && computer.inspect().linuxPython.replacesDefaultBoot === false
-    && computer.inspect().linuxPython.protocol === LINUX_PYTHON_PROTOCOL,
+    && computer.inspect().linuxPython.protocol === LINUX_PYTHON_PROTOCOL
+    && computer.inspect().linuxPython.interpreter.implementation === "CPython"
+    && computer.inspect().linuxPython.interpreter.version === null
+    && computer.inspect().linuxPython.interpreter.nativeAbi === "linux-elf",
   "default computer advertised native Linux CPython");
   const missing = await errorOf(() => computer.linuxPython.run("print(1)"));
   assert(missing instanceof WebMachineError && missing.code === "WEB_MACHINE_UNAVAILABLE",
     `missing linuxOs must fail closed: ${missing?.code || missing}`);
 
   const linuxComputer = createWebComputer({
-    linux: { V86() {}, manifest: { v86: { options: {}, shellPrompt: "# " } } },
+    linux: { V86() {}, interpreterVersion: "3.12.13", manifest: { v86: { options: {}, shellPrompt: "# " } } },
   });
   assert(linuxComputer.machines.has("pythonOs") && linuxComputer.machines.has("linuxOs"),
     "linux option must add linuxOs beside pythonOs");
@@ -73,6 +76,7 @@ export async function assertLinuxPythonContract() {
     && linuxComputer.linuxPython.inspect().python === "python3"
     && linuxComputer.linuxPython.inspect().prompt === "# "
     && linuxComputer.linuxPython.inspect().nativeAbi === "linux-elf"
+    && linuxComputer.linuxPython.inspect().interpreter.version === "3.12.13"
     && linuxComputer.linuxPython.inspect().replacesDefaultBoot === false,
   "configured linuxOs did not expose the native Python door");
 
@@ -90,7 +94,7 @@ export async function assertLinuxPythonContract() {
   assert(ran.protocol === LINUX_PYTHON_RECEIPT_PROTOCOL && ran.kind === "run"
     && ran.native === true && ran.python === "python3"
     && ran.argv.join("\0") === "python3\0-c\0print('x')"
-    && ran.stdout === "ok\n# ",
+    && ran.stdout === "ok\n# " && ran.serial === ran.stdout,
   "native run receipt drifted");
   assert(serial[0].type === "serial"
     && serial[0].data === "python3 -c 'print('\\''x'\\'')'\n"
@@ -157,6 +161,7 @@ export async function assertLinuxPythonContract() {
   const product = readFileSync(join(ROOT, "tests", "support", "linuxPythonProduct.mjs"), "utf8");
   assert(product.includes("computer.linuxPython.run(\"print(40 + 2)\")")
     && product.includes("computer.linuxPython.pip([\"--version\"])")
+    && product.includes("pyproc-missing-wheel==0.0.0")
     && product.includes("createWebComputer")
     && !product.includes("machine.request({type:\"serial\""),
   "product gate does not drive the shipped linuxPython door");

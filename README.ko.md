@@ -81,6 +81,22 @@ await machine.close();
 모든 실행은 구조화된 receipt를 반환한다. Python 예외는
 `code === "PYPROC_KERNEL_EXECUTION_ERROR"`인 안정된 `PyProcError`가 된다.
 
+### 패키지
+
+파이썬 세션이 이미 쓰는 명령으로 설치한다.
+
+```js
+await machine.run.python(`
+%pip install pyproc-native-host==1.0.0
+import pyproc_native_host
+print(pyproc_native_host.ABI_VERSION)
+`);
+```
+
+`python -m pip install ...`도 같은 문이다. `import`는 보통의 CPython import다. `subprocess` pip와
+임의 native wheel은 이 엔진 밖이다. OS process가 없고 WASI가 그 ABI를 로드하지 못한다.
+호스트 계약은 [package environment](skills/use-pyproc-runtime/references/package-environment.md)다.
+
 ## 다음
 
 ### 닫은 뒤에도 남기기
@@ -105,26 +121,10 @@ Machine image는 검증된 engine reference와 내용 주소 checkpoint object�
 
 [checkpoint, restore, export](skills/reference-pyproc-api/references/api.md)는 `machine.history`에 있다.
 
-### 패키지
-
-파이썬 세션이 이미 쓰는 명령으로 설치한다.
-
-```js
-await machine.run.python(`
-%pip install pyproc-native-host==1.0.0
-import pyproc_native_host
-print(pyproc_native_host.ABI_VERSION)
-`);
-```
-
-`python -m pip install ...`도 같은 문이다. `import`는 보통의 CPython import다. `subprocess` pip와
-임의 native wheel은 이 엔진 밖이다. OS process가 없고 WASI가 그 ABI를 로드하지 못한다.
-호스트 계약은 [package environment](skills/use-pyproc-runtime/references/package-environment.md)다.
-
 ### 네이티브 Linux Python
 
-기본 `boot()`는 소유 WASI 커널이다. `createWebComputer({ linux })`에 `linuxOs` guest가 있으면
-같은 컴퓨터가 그 guest의 serial로 네이티브 Linux CPython도 연다.
+기본 `boot()`는 소유 WASI 커널(CPython 3.14.6)이다. `createWebComputer({ linux })`에 `linuxOs`
+guest가 있으면 같은 컴퓨터가 그 guest의 serial로 네이티브 Linux CPython도 연다.
 
 ```js
 import { createWebComputer } from "pyproc";
@@ -137,13 +137,12 @@ if (computer.linuxPython.available) {
 }
 ```
 
-이 문은 `boot()`를 대체하지 않는다. 소비자가 V86과 실제로 `python3`가 들어 있는 Linux image를
-공급한다. slim Buildroot linux image에는 CPython이 없다. CPython 3.12.13과 pip는 별도
-`buildroot-pyproc-python-i686.bin` profile이 싣는다.
+이 문은 `boot()`를 대체하지 않는다. guest 인터프리터는 CPython 3.12.13이고 WASI 3.14.6이 아니다.
+slim Buildroot linux image에는 CPython이 없다. catalog 자산
+`buildroot-pyproc-python-i686.bin`이 `python3`와 pip 25.2를 싣는다.
 
-```sh
-npm run assets:buildroot-python
-```
+`linuxPython.pip`는 serial로 `python3 -m pip`를 보낸다. receipt `stdout`은 그 serial 원문이다.
+네트워크 index와 임의 wheel은 시험된 문 밖이다. WASI `%pip`는 소유 카탈로그의 다른 경로다.
 
 ### 제어
 

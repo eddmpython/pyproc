@@ -883,8 +883,10 @@ export interface WebComputerLinuxOptions {
   adapterOptions?: Record<string, unknown>;
   loadAsset?: V86GuestFactoryOptions["loadAsset"];
   digestBytes?: V86GuestFactoryOptions["digestBytes"];
-  /** Guest `python3` path. The shipped Buildroot linux image does not include CPython. */
+  /** Guest `python3` path. The slim Buildroot linux image does not include CPython. */
   python?: string;
+  /** Guest CPython version string, for example 3.12.13 on the python profile image. */
+  interpreterVersion?: string;
   /** Serial prompt used as `waitFor`. Omit to use the adapter or image default. */
   shellPrompt?: string;
 }
@@ -902,6 +904,11 @@ export interface LinuxPythonInspection {
   readonly python: string;
   readonly prompt: string | null;
   readonly nativeAbi: "linux-elf";
+  readonly interpreter: Readonly<{
+    implementation: "CPython";
+    version: string | null;
+    nativeAbi: "linux-elf";
+  }>;
   readonly replacesDefaultBoot: false;
 }
 
@@ -911,7 +918,9 @@ export interface LinuxPythonReceipt {
   readonly kind: "run" | "pip";
   readonly python: string;
   readonly argv: readonly string[];
+  /** Serial transcript, including echoed command and shell prompt. */
   readonly stdout: string;
+  readonly serial: string;
   readonly native: true;
 }
 
@@ -933,6 +942,7 @@ export interface LinuxPythonSession {
 export function createLinuxPythonSession(options?: {
   machine?: MachineHandle | null | (() => MachineHandle | null | undefined);
   python?: string;
+  interpreterVersion?: string | null;
   prompt?: string | null;
 }): LinuxPythonSession;
 

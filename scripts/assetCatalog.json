@@ -203,7 +203,8 @@
       "consumers": [
         "v86Probe",
         "webComputer",
-        "nodeGuest"
+        "nodeGuest",
+        "linuxPython"
       ],
       "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/libv86.mjs",
       "sha1": "b73519e406e5c91e34b99bd59f5b4a336a434629",
@@ -226,7 +227,8 @@
       "consumers": [
         "v86Probe",
         "webComputer",
-        "nodeGuest"
+        "nodeGuest",
+        "linuxPython"
       ],
       "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/v86.wasm",
       "sha1": "0eba04d11fa23dd27eb7e75c4154ccddccc3cd93",
@@ -249,7 +251,8 @@
       "consumers": [
         "v86Probe",
         "webComputer",
-        "nodeGuest"
+        "nodeGuest",
+        "linuxPython"
       ],
       "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/seabios.bin",
       "sha1": "bf540cd710340462d8b705337629e7704fc620bf",
@@ -272,7 +275,8 @@
       "consumers": [
         "v86Probe",
         "webComputer",
-        "nodeGuest"
+        "nodeGuest",
+        "linuxPython"
       ],
       "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-v86-assets-v2/vgabios.bin",
       "sha1": "97df04d5423bccc5b986da0ecde01839997d966d",

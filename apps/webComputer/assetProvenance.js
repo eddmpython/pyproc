@@ -7,5 +7,5 @@ export const WEB_COMPUTER_ASSET_PROVENANCE = Object.freeze({
   policyVersion: 3,
   catalogId: "web-computer-development-assets-v1",
   sourceCatalogId: "web-machine-execution-assets-v1",
-  sbomDigest: "sha256:c55f1b60c64c778fe4bc3e409ce323eebfead94d5aad95440fb573a8c1c927ec",
+  sbomDigest: "sha256:13ea7f910bfa9574dcf934015bbde3158cd91e1ebc413b4a321d6a97a5658350",
 });

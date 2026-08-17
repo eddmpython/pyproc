@@ -85,11 +85,11 @@ verify both x86 guests without maintaining a second loading path.
 partial guests before rejecting; a cleanup failure is returned with the original failure in an `AggregateError`.
 
 `computer.linuxPython` is the native Linux CPython door. It is available only while the computer has a
-`linuxOs` handle. `run(source)` sends `python3 -c`, and `pip(args)` sends `python3 -m pip`. This does not
-replace root `boot()`, which stays the owned WASI kernel. The consumer supplies V86 and a Linux image that
-contains CPython. The slim Buildroot linux image does not include `python3`. The separate
-`buildroot-pyproc-python-i686.bin` profile, built with `npm run assets:buildroot-python`, pins CPython
-3.12.13 and pip 25.2.
+`linuxOs` handle. `run(source)` sends `python3 -c`, and `pip(args)` sends `python3 -m pip`. Receipt
+`stdout` is the serial transcript, also exposed as `serial`. This does not replace root `boot()`, which
+stays the owned WASI CPython 3.14.6 kernel. The guest interpreter on the catalog python image is
+CPython 3.12.13. `inspect().interpreter` reports that identity. The slim Buildroot linux image does not
+include `python3`. Network package indexes and arbitrary wheels are outside the tested native pip door.
 
 ```js
 import { createLinuxPythonSession, createWebComputer } from "pyproc/machine";
