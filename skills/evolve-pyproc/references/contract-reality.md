@@ -4,6 +4,7 @@
 
 | Current boundary | Shipped contract | Remaining work |
 | --- | --- | --- |
+| Installed 0.0.23 control engine documentation drift | 같은 배포물의 browser-automation 문서는 engine.indexURL을 허용한다고 설명하지만 공개 doctor는 MACHINE_MANIFEST_BLOCKED로 필드 자체를 거절한다 | 배포 문서의 manifest 예제를 같은 설치본 doctor로 검증하고 실제 engine.root 계약과 이행 안내를 일치시킨다 |
 | Chromium and Edge only | owned kernel boot requires cross-origin isolation and SharedArrayBuffer | 다른 browser가 동등한 worker shared-memory 계약을 제공할 때 재검증한다 |
 | Dynamic native wheels unsupported | pure Python wheel과 source-pinned package-owned facade 및 NumPy를 exact engine과 curated static native profile에 묶어 install 전에 검증한다 | profile 확대는 source build, oracle, reproducibility와 size gate가 있어야 하며 임의 binary wheel은 dynamic linking 전까지 받지 않는다 |
 | Scientific package reach incomplete | 별도 `data-3` engine과 multi-wheel catalog가 실제 `wasm-simd128` float64 oracle과 source-built NumPy 2.5.1의 array, dot, FFT, linalg, seeded random을 실행한다. package clone과 Machine image도 같은 layer를 복원한다 | SciPy, pandas, Polars는 명시적 미포함이다. C++ exception 비활성과 allocation 또는 PocketFFT invariant 위반 abort 경계를 유지한 채 source-pinned profile을 하나씩 넓힌다 |
