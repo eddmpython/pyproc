@@ -281,12 +281,13 @@ export class KernelFactory {
     let bootstrapSnapshot = null;
     if (restoredCheckpoint) {
       if (!this.#checkpoints.has(restoredCheckpoint.checkpointRef)) this.#registerCheckpoint(restoredCheckpoint);
-      await verifyKernelCheckpointDescriptor(restoredCheckpoint, this.#checkpointContext(manifest, environmentId));
+      const verified = await verifyKernelCheckpointDescriptor(restoredCheckpoint, this.#checkpointContext(manifest, environmentId));
       bootstrapSnapshot = {
         stackBoundary: restoredCheckpoint.memoryLayout.stackBoundary,
         memoryBytes: restoredCheckpoint.memoryLayout.currentPages * 65536,
         deltaDepth: restoredCheckpoint.deltaDepth,
         bytes: await materializeKernelCheckpoint(restoredCheckpoint, this.#checkpointContext(manifest, environmentId)),
+        filesystem: verified.image.filesystem,
       };
     }
     const kernelRef = options.kernelRef || `kernel:factory:${++this.#kernelCounter}`;

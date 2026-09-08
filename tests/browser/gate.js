@@ -47,10 +47,14 @@ try {
     transferred.label === "한글" && transferred.values.join(",") === "2,3,5");
 
   await machine.run("checkpointValue = 41");
+  await machine.run("import os\nos.mkdir('savedFolder')\nwith open('savedFolder/state.txt', 'w') as stream:\n    stream.write('before')\nreader = open('savedFolder/state.txt')\nreader.read(2)");
   const checkpoint = await machine.history.checkpoint();
   await machine.run("checkpointValue = 99");
+  await machine.run("reader.close()\nos.rename('savedFolder/state.txt', 'renamed.txt')\nwith open('renamed.txt', 'w') as stream:\n    stream.write('after')");
   await machine.history.restore(checkpoint);
   check("checkpoint restore rewinds live state", await machine.run.get("checkpointValue") === 41);
+  const filesRestored = await machine.run("print(open('savedFolder/state.txt').read(), os.path.exists('renamed.txt'), reader.read())");
+  check("checkpoint restores files, directories and open positions", filesRestored.output.trim() === "before False fore", filesRestored.output);
 
   const image = await machine.history.export({ createdAt: "2026-08-14T00:00:00.000Z" });
   check("Machine image has a verified owned kernel envelope",
@@ -64,15 +68,19 @@ try {
   timings.imageOpenMs = Math.round(performance.now() - startedAt);
   check("Machine image opens through the root API",
     await opened.run.get("checkpointValue") === 41, `${timings.imageOpenMs}ms`);
+  check("Machine image retains Python files",
+    (await opened.run("print(open('savedFolder/state.txt').read())")).output.trim() === "before");
 
   startedAt = performance.now();
   const cloned = await machine.proc.clone({ pid: "gate-child" });
   child = cloned.process;
-  const childResult = await child.execute("print(checkpointValue + 1)");
+  const childResult = await child.execute("print(checkpointValue + 1)\nprint(open('savedFolder/state.txt').read())\nwith open('savedFolder/state.txt', 'w') as stream:\n    stream.write('child')");
   timings.cloneMs = Math.round(performance.now() - startedAt);
   const childExit = await child.wait();
   check("process clone runs in an independent kernel",
-    childResult.output.trim() === "42" && childExit.exitCode === 0, `${timings.cloneMs}ms`);
+    childResult.output.trim() === "42\nbefore" && childExit.exitCode === 0, `${timings.cloneMs}ms`);
+  check("clone file writes preserve the parent",
+    (await machine.run("print(open('savedFolder/state.txt').read())")).output.trim() === "before");
 
   const terminal = machine.terminal({ timeTravel: true });
   await terminal.install();

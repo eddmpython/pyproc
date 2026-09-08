@@ -111,10 +111,10 @@ try {
     && contract.assets.map((asset) => asset.role).join(",") === "wasiWorker,wasmToolWorker,wasmToolBinary,wasmToolBinary"
     && contract.assets.every((asset) => asset.sameOrigin === true));
   const generated = await fetch("/pyproc-assets.json").then((response) => response.json());
-  check("installed asset graph has ten files and four entrypoints", generated.files.length === 10
+  check("installed asset graph includes filesystem checkpoints and four entrypoints", generated.files.length === 11
     && generated.entrypoints.length === 4 && generated.packageRoot === "/node_modules/pyproc/");
   const verified = await assets.verifyPyProcAssetIntegrity(generated, { roles: ["wasiWorker"] });
-  check("installed asset bytes pass SHA-256", verified.verified === 7 && verified.bytes > 0);
+  check("installed asset bytes pass SHA-256", verified.verified === 8 && verified.bytes > 0);
   const bad = structuredClone(generated);
   bad.files[0].integrity = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
   let badRejected = false;
@@ -193,6 +193,12 @@ print(json.dumps({"implementation": sys.thread_info.name, "failure": failure}, s
   await machine.run.set("installedValue", { value: 99 });
   await machine.history.restore(checkpoint);
   check("installed checkpoint restores state", (await machine.run.get("installedValue")).value === 41);
+  await machine.run("with open('installed.txt', 'w') as stream:\\n    stream.write('saved')");
+  const fileCheckpoint = await machine.history.checkpoint();
+  await machine.run("with open('installed.txt', 'w') as stream:\\n    stream.write('changed')");
+  await machine.history.restore(fileCheckpoint);
+  check("installed checkpoint restores Python files",
+    (await machine.run("print(open('installed.txt').read())")).output.trim() === "saved");
 
   const terminal = machine.terminal({ timeTravel: true });
   await terminal.install();
@@ -200,11 +206,11 @@ print(json.dumps({"implementation": sys.thread_info.name, "failure": failure}, s
   check("installed terminal uses the kernel protocol", terminalResult.out.trim() === "42");
   const cloned = await machine.proc.clone({ pid: "installed-child" });
   const childResult = await cloned.process.execute(
-    "import pyproc_native_host; print(installedValue['value'] + 1, pyproc_native_host.ABI_VERSION)"
+    "import pyproc_native_host; print(installedValue['value'] + 1, pyproc_native_host.ABI_VERSION)\\nprint(open('installed.txt').read())"
   );
   const childExit = await cloned.process.wait();
   check("installed process clone retains package layers",
-    childResult.output.trim() === "42 pyproc.hostcall/1" && childExit.exitCode === 0);
+    childResult.output.trim() === "42 pyproc.hostcall/1\\nsaved" && childExit.exitCode === 0);
   await cloned.process.close();
 
   const image = await machine.history.export({ createdAt: "2026-08-14T00:00:00.000Z" });

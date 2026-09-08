@@ -12,8 +12,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.25 - 2026-09-09
+
 ### Added
 
+- Python checkpoints, Machine images and process clones preserve files, directories, hard links and open
+  file positions together with interpreter memory. Unchanged engine files use the exact engine baseline.
+  New checkpoint images require this reader; existing memory-only images remain readable.
 - **Setup is a public first-hour contract.** Both READMEs document Chromium and Edge, the two isolation
   headers, and Vite and Next snippets. `checkEnvironment()` points at the live `#setup` heading.
 - **`npx pyproc-playground` serves the installed package graph with those headers** and opens the first
@@ -32,6 +37,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### 한국어 요약
 
+- 체크포인트, Machine image와 프로세스 복제가 파일·디렉터리·하드 링크·열린 파일 위치를 함께 보존한다.
+  변경 없는 엔진 파일은 같은 엔진의 기준 자산을 참조한다. 새 이미지는 이 판독기가 필요하고 기존
+  메모리 전용 이미지는 계속 읽을 수 있다.
 - Setup 절이 Chromium/Edge, 헤더 두 줄, Vite와 Next 스니펫을 공개하고, 환경 진단이 `#setup`으로 연결된다.
 - `npx pyproc-playground`가 설치 그래프를 COOP/COEP로 서빙해 첫 Python receipt를 연다. 기본 `boot()`는
   core engine만 로드한다.

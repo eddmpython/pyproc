@@ -6,7 +6,7 @@ import { parseSha256Address, sha256Address } from "../contentDigest.js";
 export const KERNEL_CHECKPOINT_PROTOCOL = "pyproc.kernel-checkpoint";
 export const KERNEL_CHECKPOINT_VERSION = 2;
 const IMAGE_MAGIC = 0x50434b50;
-const IMAGE_VERSION = 1;
+const IMAGE_VERSION = 2;
 const IMAGE_HEADER_BYTES = 32;
 
 function checkpointError(message, kernelCode = "KERNEL_CHECKPOINT_CORRUPT", context = {}) {
@@ -63,6 +63,9 @@ export function packKernelMemoryImage(snapshot) {
   const pages = normalizePages(snapshot);
   let byteLength = IMAGE_HEADER_BYTES;
   for (const [, bytes] of pages) byteLength += 8 + bytes.byteLength;
+  const filesystem = snapshot.filesystem ?? new Uint8Array();
+  if (!(filesystem instanceof Uint8Array)) throw checkpointError("Kernel checkpoint filesystem is invalid");
+  byteLength += 4 + filesystem.byteLength;
   const packed = new Uint8Array(byteLength);
   const view = new DataView(packed.buffer);
   view.setUint32(0, IMAGE_MAGIC, true);
@@ -80,6 +83,8 @@ export function packKernelMemoryImage(snapshot) {
     packed.set(bytes, offset + 8);
     offset += 8 + bytes.byteLength;
   }
+  view.setUint32(offset, filesystem.byteLength, true);
+  packed.set(filesystem, offset + 4);
   return packed;
 }
 
@@ -87,7 +92,8 @@ export function unpackKernelMemoryImage(input) {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   if (bytes.byteLength < IMAGE_HEADER_BYTES) throw checkpointError("Kernel checkpoint image is truncated");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint32(0, true) !== IMAGE_MAGIC || view.getUint32(4, true) !== IMAGE_VERSION
+  const imageVersion = view.getUint32(4, true);
+  if (view.getUint32(0, true) !== IMAGE_MAGIC || ![1, IMAGE_VERSION].includes(imageVersion)
     || view.getUint32(24, true) !== PAGE_SIZE) throw checkpointError("Kernel checkpoint image header is invalid");
   const kindCode = view.getUint32(8, true);
   if (kindCode > 1) throw checkpointError("Kernel checkpoint image kind is invalid");
@@ -110,6 +116,14 @@ export function unpackKernelMemoryImage(input) {
     offset += 8;
     if (offset + length > bytes.byteLength) throw checkpointError("Kernel checkpoint page is truncated");
     snapshot.pages.push([pageIndex, bytes.slice(offset, offset + length)]);
+    offset += length;
+  }
+  if (imageVersion === IMAGE_VERSION) {
+    if (offset + 4 > bytes.byteLength) throw checkpointError("Kernel checkpoint filesystem header is truncated");
+    const length = view.getUint32(offset, true);
+    offset += 4;
+    if (offset + length !== bytes.byteLength) throw checkpointError("Kernel checkpoint filesystem length is invalid");
+    if (length) snapshot.filesystem = bytes.slice(offset, offset + length);
     offset += length;
   }
   if (offset !== bytes.byteLength) throw checkpointError("Kernel checkpoint image has trailing bytes");

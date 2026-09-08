@@ -9,6 +9,7 @@ import { DRIVER_SOURCE } from "./wasiReplDriver.js";
 import { SIGNAL_META, EOT, CMD_PATH, DRIVER_PATH, SITE_PATH, FILETYPE_CHARACTER_DEVICE } from "./wasiProtocol.js";
 import { PyProcError, toErrorPayload } from "../../errors.js";
 import { PAGE_SIZE, bytesToMb } from "../../memoryLayout.js";
+import { captureWasiFiles, createWasiFileBaseline, restoreWasiFiles } from "./wasiFileSnapshot.js";
 import {
   HOSTCALL_ABI_VERSION,
   HOSTCALL_DATA_BYTES,
@@ -121,6 +122,7 @@ class SabStdin extends OpenFile {
       if (changed) pages.push([pageIndex, current.slice()]);
     }
     const snapshot = {
+      filesystem: captureWasiFiles(this.fileRoot, this.fds, this.reservedFiles, this.fileBaseline),
       kind: requiresFull ? "full" : "delta",
       parentIdx: requiresFull ? null : parentIdx,
       deltaDepth: requiresFull ? 0 : parent.deltaDepth + 1,
@@ -137,7 +139,7 @@ class SabStdin extends OpenFile {
       snapshotKind: snapshot.kind, parentIdx: snapshot.parentIdx, deltaDepth: snapshot.deltaDepth,
       stackBoundary, initialPages: this.initialPages, currentPages: heap.byteLength / PAGE_SIZE,
       memoryBytes: heap.byteLength, regionBytes: region.byteLength, changedPages: pages.length,
-      pages: exportedPages }, exportedPages.map((entry) => entry[1].buffer));
+      pages: exportedPages, filesystem: snapshot.filesystem }, exportedPages.map((entry) => entry[1].buffer));
   }
   _restore(index) {
     const snapshot = this.snapshots[index];
@@ -147,6 +149,7 @@ class SabStdin extends OpenFile {
       throw new PyProcError("PYPROC_STATE_CORRUPT", "WASI checkpoint memory layout is incompatible");
     }
     const region = current.subarray(snapshot.stackBoundary);
+    restoreWasiFiles(snapshot.filesystem, this.fileRoot, this.fds, this.reservedFiles, this.fileBaseline);
     region.fill(0);
     region.set(materialized);
     this.activeSnapshotIdx = index;
@@ -176,6 +179,7 @@ class SabStdin extends OpenFile {
     if (current.byteLength !== incoming.memoryBytes) {
       throw new PyProcError("PYPROC_STATE_CORRUPT", "WASI bootstrap checkpoint memory growth did not reach the requested size");
     }
+    if (incoming.filesystem) restoreWasiFiles(incoming.filesystem, this.fileRoot, this.fds, this.reservedFiles, this.fileBaseline);
     const region = current.subarray(incoming.stackBoundary);
     region.set(incoming.bytes);
     const pages = [];
@@ -184,7 +188,8 @@ class SabStdin extends OpenFile {
     }
     const snapshot = { kind: "full", parentIdx: null, deltaDepth: incoming.deltaDepth,
       stackBoundary: incoming.stackBoundary, memoryBytes: incoming.memoryBytes,
-      regionBytes: region.byteLength, pages };
+      regionBytes: region.byteLength, pages,
+      filesystem: captureWasiFiles(this.fileRoot, this.fds, this.reservedFiles, this.fileBaseline) };
     this.snapshots.push(snapshot);
     const idx = this.snapshots.length - 1;
     this.activeSnapshotIdx = idx;
@@ -362,7 +367,7 @@ onmessage = async (e) => {
     const cmdFile = new File([]);
     // /site = 쓰기 가능한 빈 preopen 디렉터리(브라우저판 site-packages). installWheel이 파이썬을
     // 통해 여기에 순수 파이썬 wheel 파일을 쓰고, 드라이버가 /site를 sys.path에 끼워 import한다.
-    // 파일은 shim(JS) 쪽에 산다 = wasm 힙 밖 = 시간여행 스냅샷과 무관(패키지는 안정 상태).
+    // Files live in the shim and travel with the heap through the filesystem checkpoint.
     const entries = [
       [DRIVER_PATH.slice(1), new File(new TextEncoder().encode(DRIVER_SOURCE))],
       [CMD_PATH.slice(1), cmdFile],
@@ -380,6 +385,10 @@ onmessage = async (e) => {
     const stdin = new SabStdin(ctlSab, dataSab, cmdFile, bootstrapSnapshot || null);
     const fds = [stdin, ConsoleStdout.lineBuffered(emit("stdout")), ConsoleStdout.lineBuffered(emit("stderr")), preopen];
     const wasiInst = new WASI(["python", "-B", DRIVER_PATH], env, fds);
+    stdin.fileRoot = preopen.dir;
+    stdin.fds = wasiInst.fds;
+    stdin.reservedFiles = new Map(entries.slice(0, 3));
+    stdin.fileBaseline = createWasiFileBaseline(stdin.fileRoot, stdin.reservedFiles);
     let inst = null;
     if (deterministic) makeDeterministic(wasiInst, () => inst);
     ({ instance: inst } = await WebAssembly.instantiate(wasmBytes, { wasi_snapshot_preview1: wasiInst.wasiImport }));

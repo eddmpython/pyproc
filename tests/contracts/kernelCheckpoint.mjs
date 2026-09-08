@@ -8,6 +8,8 @@ import {
 } from "../../src/runtime/kernel/kernelCheckpoint.js";
 import { KernelReactiveController } from "../../src/runtime/kernel/kernelReactiveController.js";
 import { PyProcError } from "../../src/runtime/errors.js";
+import { Directory, File, OpenFile } from "../../src/runtime/engines/wasi/browserWasiShim.js";
+import { captureWasiFiles, createWasiFileBaseline, restoreWasiFiles } from "../../src/runtime/engines/wasi/wasiFileSnapshot.js";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -56,6 +58,31 @@ class FakeCheckpointSession {
 }
 
 export async function assertKernelCheckpointContract() {
+  const file = new File([0, 255, 1]);
+  const rootFiles = new Directory([["first", file], ["linked", file], ["empty", new Directory([])]]);
+  const handle = new OpenFile(file);
+  handle.file_pos = 2n;
+  const fds = [null, null, null, null, handle];
+  const filesystem = captureWasiFiles(rootFiles, fds, new Map());
+  const baseline = createWasiFileBaseline(rootFiles, new Map());
+  const compact = captureWasiFiles(rootFiles, fds, new Map(), baseline);
+  file.data.fill(7);
+  rootFiles.contents.delete("first");
+  restoreWasiFiles(filesystem, rootFiles, fds, new Map());
+  assert(rootFiles.contents.get("first") === rootFiles.contents.get("linked")
+    && fds[4].file === rootFiles.contents.get("first") && fds[4].file_pos === 2n
+    && fds[4].file.data.join(",") === "0,255,1" && rootFiles.contents.get("empty") instanceof Directory,
+  "filesystem checkpoint lost binary bytes, hard links, empty directories or descriptor positions");
+  const restoredRoot = rootFiles.contents;
+  assert((await rejectionOf(() => restoreWasiFiles(filesystem.slice(0, 8), rootFiles, fds, new Map())))?.code
+    === "PYPROC_STATE_CORRUPT" && rootFiles.contents === restoredRoot,
+  "corrupt filesystem checkpoint changed the running filesystem");
+  fds[4].file.data.fill(8);
+  const changed = captureWasiFiles(rootFiles, fds, new Map(), baseline);
+  restoreWasiFiles(compact, rootFiles, fds, new Map(), baseline);
+  assert(fds[4].file.data.join(",") === "0,255,1", "baseline files were not restored from owned engine bytes");
+  restoreWasiFiles(changed, rootFiles, fds, new Map(), baseline);
+  assert(fds[4].file.data.join(",") === "8,8,8", "modified baseline file was mistaken for its original");
   const store = new TamperableArtifactStore();
   const descriptors = new Map();
   const context = {
@@ -65,7 +92,9 @@ export async function assertKernelCheckpointContract() {
     executionCursor: 1,
     resolveParent: async (ref) => descriptors.get(ref) || null,
   };
-  const full = await sealKernelCheckpoint(snapshot(), context);
+  const full = await sealKernelCheckpoint({ ...snapshot(), filesystem }, context);
+  assert((await verifyKernelCheckpointDescriptor(full, context)).image.filesystem.join(",") === filesystem.join(","),
+    "sealed checkpoint dropped filesystem bytes");
   descriptors.set(full.checkpointRef, full);
   const delta = await sealKernelCheckpoint(snapshot({ kind: "delta", value: 9, deltaDepth: 1, changed: [1] }),
     { ...context, executionCursor: 2, parentCheckpointRef: full.checkpointRef });

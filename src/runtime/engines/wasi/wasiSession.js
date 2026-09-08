@@ -565,7 +565,7 @@ except BaseException:
     return { idx: m.idx, mb: m.mb, snapshotKind: m.snapshotKind, parentIdx: m.parentIdx,
       deltaDepth: m.deltaDepth, stackBoundary: m.stackBoundary, initialPages: m.initialPages,
       currentPages: m.currentPages, memoryBytes: m.memoryBytes, regionBytes: m.regionBytes,
-      changedPages: m.changedPages, pages: m.pages };
+      changedPages: m.changedPages, pages: m.pages, filesystem: m.filesystem };
   }
   async resetCheckpointLineage() {
     const metadata = await this._send(new TextEncoder().encode(
