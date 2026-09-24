@@ -203,6 +203,19 @@ export async function assertBrowserAutomationProductContract() {
     "artifact TTL reap가 만료 레코드를 회수하지 않았다");
   const stale = await errorOf(() => store.read(first.artifactRef));
   assert(stale?.code === "BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND", "만료 artifact ref가 stale 처리되지 않았다");
+  // 한 세션이 캡처를 이어 갈 때 quota는 TTL을 기다리지 않고 명시 해제로 풀린다(control 경로 artifact.delete와
+  // MCP browserArtifactDelete가 같은 store.delete를 부른다). 소비 저장소가 개수 quota에 막힌 실측의 폐루프다.
+  const kept = await store.put(Buffer.from("kept"));
+  const released = await store.put(Buffer.from("released"));
+  const countQuota = await errorOf(() => store.put(Buffer.from("third")));
+  assert(countQuota?.code === "BROWSER_AUTOMATION_ARTIFACT_QUOTA", "artifact count quota가 세 번째 쓰기를 거부하지 않았다");
+  await store.delete(released.artifactRef);
+  const resumed = await store.put(Buffer.from("third"));
+  assert(resumed.artifactRef && store.inspect().artifacts === 2
+    && (await errorOf(() => store.read(released.artifactRef)))?.code === "BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND",
+  "명시 해제가 TTL 없이 quota를 풀고 해제한 ref를 stale로 만들지 않았다");
+  await store.delete(kept.artifactRef);
+  await store.delete(resumed.artifactRef);
 
   const pngBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const commands = [];
