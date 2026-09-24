@@ -294,11 +294,13 @@ function summarizeCommands(commandResults) {
   });
 }
 
+// text가 있는 키만 keypress와 기본 활성화를 만든다. Enter와 Space는 사람의 키처럼 활성화하고(단추 click, form
+// submit), 이동과 편집 제어 키는 문자를 넣지 않는다.
 function keyDefinition(key) {
   const named = {
     Backspace: { code: "Backspace", windowsVirtualKeyCode: 8 },
     Tab: { code: "Tab", windowsVirtualKeyCode: 9 },
-    Enter: { code: "Enter", windowsVirtualKeyCode: 13 },
+    Enter: { code: "Enter", text: "\r", windowsVirtualKeyCode: 13 },
     Escape: { code: "Escape", windowsVirtualKeyCode: 27 },
     Space: { code: "Space", text: " ", windowsVirtualKeyCode: 32 },
     ArrowLeft: { code: "ArrowLeft", windowsVirtualKeyCode: 37 },

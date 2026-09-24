@@ -331,6 +331,10 @@ The 23-action catalog includes `snapshot`, `screenshot`, `waitFor`, `hydrateLazy
 `check`, `uncheck`, `drag`, `fill`, `press`, `select`, `scroll`, `upload`, cookie get/set/delete, and Web
 Storage get/set/remove/clear.
 
+`press` sends a key the way a person's keyboard does. `Enter` and `Space` carry their text, so a focused button
+activates and a form submits; navigation and editing control keys such as `Tab`, `Escape`, and the arrows
+carry no text.
+
 `screenshot` is an ordered read action. A pipeline can fill and click, capture the resulting page, continue
 with another effect, and capture again without a client-side race. Supported options are:
 

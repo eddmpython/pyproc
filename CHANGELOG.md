@@ -32,6 +32,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Fixed
 
+- **`press Enter` activates like a person's key.** The key now carries its text, so a focused button
+  receives a trusted click and a form submits. Automation that relied on Enter doing nothing on a focused
+  control will now activate it.
 - **Public surface removals are disclosed.** A release that removes or renames a name from a package entry point now
   lists it in a `### Breaking` table with its replacement or `none`. A contract gate compares the type surface with
   the last release, so an undisclosed removal cannot ship. The 0.0.22 and 0.0.23 sections below now disclose the
@@ -51,6 +54,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - 실행이 stderr에 쓴 글은 순서대로 `output`에 들어가고 예외만 실행을 실패시킨다.
 - 자체 서명 인증서를 쓰는 로컬 HTTPS 대상을 `browser.trustedCertificates`로 명시해 신뢰한다. 공개키만 고정해
   격리 브라우저의 예외로 넘기고 원격 호스트는 받지 않는다. 인증서 실패는 원인을 지목하는 오류 코드로 끝난다.
+- `press Enter`가 사람의 키처럼 초점을 둔 단추를 trusted click으로 활성화하고 form을 제출한다. Enter가
+  아무 일도 하지 않는다고 가정한 자동화는 이제 활성화를 일으킨다.
 
 ## 0.0.25 - 2026-09-09
 

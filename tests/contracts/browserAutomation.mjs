@@ -567,6 +567,18 @@ export async function assertBrowserAutomationContract() {
     "fill이 contenteditable 호환 trusted text 입력 경로를 사용하지 않았다");
   assert(new Set(highLevel.actions.map((action) => action.actionId)).size === 7,
     "action ID가 pipeline 안에서 고유하지 않다");
+  // Chromium은 text가 있는 keyDown에만 keypress와 활성화(단추 click, form submit)를 만든다. Enter는 사람의 키처럼
+  // 활성화해야 하고, 제어 키는 문자를 넣지 않아야 한다(소비 저장소가 Enter 무반응을 성공으로 받은 실측).
+  const keyDowns = (key) => port.commands.filter((entry) => entry.command.method === "Input.dispatchKeyEvent"
+    && entry.command.params?.type === "keyDown" && entry.command.params?.key === key).map((entry) => entry.command.params);
+  const enterDown = keyDowns("Enter").at(-1);
+  await automation.run(session, [
+    { kind: "press", selector: "#title", key: "Tab", expectedRisk: "externalEffect" },
+    { kind: "press", selector: "#title", key: "Escape", expectedRisk: "externalEffect" },
+  ]);
+  assert(enterDown?.text === "\r" && enterDown.unmodifiedText === "\r"
+    && ["Tab", "Escape"].every((key) => keyDowns(key).at(-1) && keyDowns(key).at(-1).text === undefined),
+  "press Enter가 활성화 text를 싣지 않았거나 제어 키가 문자를 실었다");
   assert(audit.some((record) => record.kind === "click" && record.state === "applied"),
     "external action 감사 이벤트가 없다");
 

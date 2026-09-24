@@ -377,6 +377,17 @@ try {
     { expression: "window.browserControlFixture.form()", returnByValue: true }, "externalEffect"));
   check("fill, select, press, scroll, click 결과가 실제 DOM에 반영", highLevelState.result?.result?.value?.applied === "hello:fast:Enter",
     JSON.stringify(highLevelState.result?.result?.value));
+  const keyActivations = async () => toolText(await browserCommand(sessionRef, "Runtime.evaluate",
+    { expression: "window.browserControlFixture.keyActivations()", returnByValue: true }, "externalEffect")).result?.result?.value;
+  toolText(await callTool("browserAct", { sessionRef, actions: [
+    { kind: "press", selector: "#enter-activation", key: "Enter", expectedRisk: "externalEffect" },
+  ] }));
+  const afterEnter = await keyActivations();
+  toolText(await callTool("browserAct", { sessionRef, actions: [
+    { kind: "press", selector: "#enter-activation", key: "Space", expectedRisk: "externalEffect" },
+  ] }));
+  check("초점을 둔 native 단추를 Enter와 Space가 사람의 키처럼 trusted click으로 활성화",
+    afterEnter === 1 && await keyActivations() === 2, `${afterEnter}`);
 
   const resetActionability = async (kind) => browserCommand(sessionRef, "Runtime.evaluate", {
     expression: `window.browserControlFixture.resetActionability(${JSON.stringify(kind)})`,

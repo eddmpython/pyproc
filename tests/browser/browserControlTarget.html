@@ -33,6 +33,7 @@
       </select>
     </label>
     <button id="apply" type="button">Apply</button>
+    <button id="enter-activation" type="button">Enter activation</button>
     <button id="signal" type="button">Signal</button>
     <button id="hang" type="button">Hang</button>
     <output id="form-status">idle</output>
@@ -112,6 +113,10 @@
       structuredEditorState.textContent = `${structuredDraft}:${structuredTrusted}`;
     });
     title.addEventListener("keydown", (event) => { title.dataset.lastKey = event.key; });
+    let keyActivations = 0;
+    document.getElementById("enter-activation").addEventListener("click", (event) => {
+      if (event.isTrusted) keyActivations += 1;
+    });
     document.getElementById("apply").addEventListener("click", () => {
       document.getElementById("applied")?.remove();
       const applied = document.createElement("output");
@@ -211,6 +216,7 @@
         applied: document.getElementById("applied")?.textContent || null,
       }),
       structuredEditor: () => ({ draft: structuredDraft, trusted: structuredTrusted }),
+      keyActivations: () => keyActivations,
       resetActionability,
       actionability: () => ({
         counts: { ...actionabilityCounts },
