@@ -266,9 +266,10 @@ try {
     run(hostPython, ["-m", "pip", "install", "--disable-pip-version-check", "--no-deps",
       join(distDir, hostWheel.filename)], { cwd: installed.tmp });
     const systemRoot = process.env.SystemRoot || "C:\\Windows";
+    // System folders stay on PATH (the Linux Chrome launcher is a shell script); the journey asserts Node is absent.
     const hostPath = process.platform === "win32"
       ? [join(hostVenv, "Scripts"), join(systemRoot, "System32"), systemRoot].join(delimiter)
-      : join(hostVenv, "bin");
+      : [join(hostVenv, "bin"), "/usr/bin", "/bin"].join(delimiter);
     const hostEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"));
     const hostRun = await runAsync(hostPython, [join(HERE, "hostJourney.py"), join(installed.tmp, "hostProject"),
       targetOrigin, PACKAGE_VERSION, ...(browser ? [browser] : [])],

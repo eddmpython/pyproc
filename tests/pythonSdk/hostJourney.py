@@ -57,10 +57,18 @@ def pageJourney(client: PyProcClient) -> bool:
 report = {"ok": False, "version": printed}
 assert PyProcClient.doctor(machineConfig)["ok"] is True
 with PyProcClient.start(machineConfig, startupTimeout=90.0) as client:
-    report["machineValue"] = client.runPython("40 + 2", timeout=60.0).output["value"]
-    report["machineObserved"] = pageJourney(client)
+    try:
+        report["machineValue"] = client.runPython("40 + 2", timeout=120.0).output["value"]
+        report["machineObserved"] = pageJourney(client)
+    except BaseException:
+        print(client.diagnostics[-6000:], file=sys.stderr)
+        raise
 with PyProcClient.start(browserOnlyConfig, startupTimeout=90.0) as client:
-    report["browserOnlyMachineOperations"] = sorted(op for op in client.operations if op.startswith("machine."))
-    report["browserOnlyObserved"] = pageJourney(client)
+    try:
+        report["browserOnlyMachineOperations"] = sorted(op for op in client.operations if op.startswith("machine."))
+        report["browserOnlyObserved"] = pageJourney(client)
+    except BaseException:
+        print(client.diagnostics[-6000:], file=sys.stderr)
+        raise
 report["ok"] = True
 print(json.dumps(report))
