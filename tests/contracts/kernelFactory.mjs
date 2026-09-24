@@ -27,17 +27,24 @@ async function rejectsCode(fn, code) {
   assert(actual === code, `expected ${code}, got ${actual}`);
 }
 
+// KernelSession.run은 사용자 코드를 REPL 셀 helper로 감싸 보내고 마지막 식의 repr을 pyprocCellValue로 읽는다.
+// 이 가짜 커널은 Python을 돌리지 않으므로 받은 소스를 기록하고 print 한 줄과 빈 값(None)을 흉내 낸다.
 function fakeKernel() {
   const values = new Map();
+  const executed = [];
   let closed = false;
   return {
+    executed,
     runtimeContractVersion: 2,
     runtimeKind: "cpython-wasi",
     async describe() { return { runtimeContractVersion: 2, runtimeKind: "cpython-wasi",
       engineId: "fake", nativeProfile: "core", environmentId: "fake-env",
       workerOwned: true, directHeapAccess: false }; },
-    async execute({ code }) { return { state: "completed", stdout: [{ stream: "stdout", text: code }],
-      stderr: [], timing: { durationMs: 0 } }; },
+    async execute({ code }) {
+      executed.push(code);
+      values.set("pyprocCellValue", null);
+      return { state: "completed", stdout: [{ stream: "stdout", text: "fake-cell" }], stderr: [], timing: { durationMs: 0 } };
+    },
     async getValue({ name }) { return { value: await encodeValueEnvelope(values.get(name)) }; },
     async setValue({ name, value }) { values.set(name, value); return { state: "completed" }; },
     async close() { closed = true; return { state: "closed" }; },
@@ -125,8 +132,9 @@ export async function assertKernelFactory() {
   const { process } = await manager.spawn(manifest, { pid: "contract-process" });
   const execution = await process.execute("contract-output");
   const waited = await process.wait();
-  assert(execution.output === "contract-output" && waited.state === "exited" && waited.exitCode === 0,
-    "kernel process execution and wait terminal truth drifted");
+  assert(execution.output === "fake-cell" && execution.value === null && waited.state === "exited" && waited.exitCode === 0
+    && opened[0].executed.length === 1 && opened[0].executed[0].includes(JSON.stringify("contract-output")),
+  "kernel process execution and wait terminal truth drifted");
   await manager.close();
   assert(opened[0].closed && lifecycle.length === 2 && lifecycle[0][0] === "open" && lifecycle[1][0] === "close"
     && lifecycle[0][1] === lifecycle[1][1],

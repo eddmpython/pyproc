@@ -44,7 +44,10 @@ and restores that image, including any digest-sealed package environment. Other 
 
 ### `KernelMachine`
 
-- `run.python(code, options?)` returns an execution receipt.
+- `run.python(code, options?)` returns a completed `KernelMachineRunReceipt`. `output` holds the print output of that
+  run, with text the code wrote to stderr kept in order. When the last statement is an expression, `value` is its
+  `repr()` like a REPL echo; it is `null` for `None` or a trailing statement. An exception rejects the run. State
+  persists between runs, so a notebook cell or a Control `machine.run` is one call.
 - `run.get(name)` reads a value through a value envelope.
 - `run.set(name, value)` writes a value through a value envelope.
 - `history.checkpoint(request?)` seals a checkpoint.

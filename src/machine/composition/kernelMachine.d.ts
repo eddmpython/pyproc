@@ -2,12 +2,21 @@ import type { KernelEngineManifest } from "../../runtime/kernel/engineManifest.j
 import type { KernelFactory, KernelMachineImage, KernelOpenOptions } from "../../composition/kernelFactory.js";
 import type { KernelTerminal } from "../../capabilities/kernelTerminal.js";
 import type { PackageEnvironment } from "../../capabilities/packageEnvironment.js";
-import type { MemoryValueArtifactStore } from "../../runtime/kernel/index.js";
+import type { ExecutionResult, MemoryValueArtifactStore } from "../../runtime/kernel/index.js";
 import type { MemoryKernelAssetStore } from "../../runtime/kernel/engineManifest.js";
 
+/** One Python run: print output (stderr text merged in order) and the repr of a trailing expression. */
+export interface KernelMachineRunReceipt extends ExecutionResult {
+  readonly state: "completed";
+  /** Output lines joined with "\n"; text the code wrote to stderr appears in order. */
+  readonly output: string;
+  /** repr() of the last statement when it is an expression, like a REPL; null for None or a statement. */
+  readonly value: string | null;
+}
+
 export interface KernelMachineRun {
-  (code: string, options?: Record<string, unknown>): Promise<unknown>;
-  python(code: string, options?: Record<string, unknown>): Promise<unknown>;
+  (code: string, options?: Record<string, unknown>): Promise<KernelMachineRunReceipt>;
+  python(code: string, options?: Record<string, unknown>): Promise<KernelMachineRunReceipt>;
   get(name: string): Promise<unknown>;
   set(name: string, value: unknown): Promise<unknown>;
 }

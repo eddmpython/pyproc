@@ -305,6 +305,9 @@ try {
   const machine = await client.runPython("controlState + 2");
   check("JavaScript facade의 persistent Python Machine과 canonical terminal",
     machine.terminal === "completed" && machine.output.value === "42", machine.output.value);
+  const cell = await client.runPython('print("a")\nprint("b")\ncontrolState + 2');
+  check("machine.run 한 번이 print 출력과 마지막 식의 repr을 함께 돌려줌",
+    cell.output.stdout === "a\nb" && cell.output.value === "42", JSON.stringify(cell.output));
   const image = await client.exportMachineImage();
   const imageAttachment = image.attachments[0];
   check("설치 제품이 current Machine generation을 binary attachment로 내보냄",

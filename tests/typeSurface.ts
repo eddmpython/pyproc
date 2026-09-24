@@ -93,7 +93,12 @@ async function durableMachineSurface() {
   await defaultMachine.run.python("typedValue = 1");
   const image = await defaultMachine.history.export();
   const reopenedMachine = await open(image);
-  await reopenedMachine.run.python("typedValue += 1");
+  const cell = await reopenedMachine.run.python("typedValue += 1\ntypedValue");
+  const cellOutput: string = cell.output;
+  const cellValue: string | null = cell.value;
+  // @ts-expect-error a run receipt is completed; failures reject instead of resolving
+  const failedState: "failed" = cell.state;
+  void [cellOutput, cellValue, failedState];
   await defaultMachine.close();
   const inspection = await reopenedMachine.inspect();
   await reopenedMachine.close();

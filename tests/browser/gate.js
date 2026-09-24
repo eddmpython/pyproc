@@ -82,6 +82,20 @@ try {
   check("clone file writes preserve the parent",
     (await machine.run("print(open('savedFolder/state.txt').read())")).output.trim() === "before");
 
+  const cell = await machine.run.python('print("a")\nprint("b")\n1 + 1');
+  const statementCell = await machine.run.python("cellCount = 5");
+  const noneCell = await machine.run.python("None");
+  const stderrCell = await machine.run.python('import sys\nprint("out")\nprint("err", file=sys.stderr)\ncellCount');
+  let raisedCell = null;
+  try { await machine.run.python('print("partial")\nraise ValueError("cell boom")'); } catch (error) { raisedCell = error; }
+  check("one run returns print output and the trailing expression repr",
+    cell.output === "a\nb" && cell.value === "2" && statementCell.value === null && noneCell.value === null,
+    JSON.stringify({ output: cell.output, value: cell.value }));
+  check("code stderr text stays in order in output and only exceptions fail a run",
+    stderrCell.output === "out\nerr" && stderrCell.value === "5"
+      && /ValueError/.test(String(raisedCell?.message)) && (await machine.run.python("cellCount + 1")).value === "6",
+    JSON.stringify({ output: stderrCell.output, error: String(raisedCell?.message || "") }));
+
   const terminal = machine.terminal({ timeTravel: true });
   await terminal.install();
   const terminalResult = await terminal.push("print(6 * 7)");

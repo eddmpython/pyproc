@@ -12,6 +12,18 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **One run returns print output and the value of a trailing expression.** `run.python(code)` resolves to a
+  `KernelMachineRunReceipt` whose `value` is the `repr()` of the last statement when it is an expression, like a REPL
+  echo, and `null` for `None` or a trailing statement, next to that run's `output`. Control `machine.run` uses the same
+  run, so it now reports the value after statements too (`print(1)` then `2` reports `"2"`, where it reported `null`).
+
+### Changed
+
+- **Text a run writes to stderr no longer fails the run.** It appears in `output` in the order it was written and only
+  an exception rejects the run. Control `machine.run` returns that output as `stdout`, lines joined with `\n`.
+
 ### Fixed
 
 - **Public surface removals are disclosed.** A release that removes or renames a name from a package entry point now
@@ -28,6 +40,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   타입 표면과 대조해 공시 없는 제거를 막는다. 아래 0.0.22와 0.0.23 절에 당시 공시하지 않은 제거를 적었다.
 - 브라우저 자동화 안내가 validator가 받은 적 없는 `engine.indexURL`을 더 이상 설명하지 않는다. 안내의 manifest
   예제와 필드 표는 doctor와 같은 validator로 검사한다.
+- `run.python(code)` 한 번이 print 출력과 마지막 식의 `repr()`(REPL 의미론, None과 문장은 null)을 함께 돌려준다.
+  Control `machine.run`도 같은 실행을 써서 문장 뒤의 마지막 식 값을 보고한다.
+- 실행이 stderr에 쓴 글은 순서대로 `output`에 들어가고 예외만 실행을 실패시킨다.
 
 ## 0.0.25 - 2026-09-09
 

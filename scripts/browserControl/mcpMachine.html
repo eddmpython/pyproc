@@ -17,17 +17,6 @@
     const out = document.getElementById("out");
     const log = (message) => { out.textContent += "\n" + message; };
     const trustedFetch = globalThis.fetch.bind(globalThis);
-    const RUN_HARNESS = [
-      "import io as _mcpIo, contextlib as _mcpCtx, json as _mcpJson",
-      "_mcpBuf = _mcpIo.StringIO()",
-      "_mcpVal = None",
-      "with _mcpCtx.redirect_stdout(_mcpBuf), _mcpCtx.redirect_stderr(_mcpBuf):",
-      "    try:",
-      "        _mcpVal = eval(compile(_mcpSrc, '<mcp>', 'eval'), globals())",
-      "    except SyntaxError:",
-      "        exec(_mcpSrc, globals())",
-      "print(_mcpJson.dumps({'stdout': _mcpBuf.getvalue(), 'value': None if _mcpVal is None else repr(_mcpVal)}, ensure_ascii=False))",
-    ].join("\n");
     const params = new URLSearchParams(location.search);
     const controlToken = "__PYPROC_CONTROL_TOKEN__";
     if (!controlToken) throw new Error("pyproc machine requires a control token");
@@ -56,11 +45,8 @@
 
     const operations = {
       async "machine.run"({ code }) {
-        await machine.run.set("_mcpSrc", String(code ?? ""));
-        const result = await machine.run.python(RUN_HARNESS);
-        const line = result.output.split("\n").filter(Boolean).at(-1);
-        if (!line) return { stdout: "", value: null };
-        return JSON.parse(line);
+        const receipt = await machine.run.python(String(code ?? ""));
+        return { stdout: receipt.output, value: receipt.value };
       },
       async "machine.image.export"() {
         const image = await machine.history.export();
