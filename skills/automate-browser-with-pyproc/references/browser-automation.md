@@ -96,9 +96,9 @@ npx pyproc-mcp --config ./.pyproc/manifest.json
 `pyproc-control doctor` is the stronger first-use preflight: it also verifies every local engine digest and
 returns blocking facts, advisories, and next commands. See [Machine Entrance](../../use-pyproc-machine/references/machine-entrance.md).
 
-`engine.indexURL` can replace `engine.root` when an immutable HTTP(S) engine directory is already hosted.
-The local root is the recommended deployment because the command serves it on the machine page's isolated
-loopback origin and boot needs no third-party request.
+`engine.root` is the only engine source. The command serves it on the machine page's isolated loopback
+origin, so boot needs no third-party request. A hosted `engine.indexURL` was described by earlier releases of
+this guide but the validator never accepted it; such a manifest fails with `engine does not accept indexURL`.
 
 To run only the Python Machine, set `browser` to `{ "enabled": false }`. The surface then remains exactly
 `pythonRun`, `checkpointSave`, `checkpointRestore`, and `sandboxReset` with no debugging authority.
@@ -112,7 +112,6 @@ and incomplete external-effect approval fail closed.
 | Field | Contract |
 |---|---|
 | `engine.root` | Existing absolute owned engine directory with the three verified core files |
-| `engine.indexURL` | Absolute HTTP(S) directory URL without credentials, query, or fragment |
 | `timeoutMs` | Positive integer, at most 900000 |
 | `browser.executable` | Optional absolute Chrome, Chromium, or Edge executable. Discovery is used when absent |
 | `browser.provider` | `nativeCdp` by default, or `frame` for a cooperative credentialless target bridge |

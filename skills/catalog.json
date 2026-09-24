@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:01a43780040d0caaf9308e8ebdcf4e4822d39e8212b6cdbeff9ea57d04cca703",
-  "catalogDigest": "sha256:e190fe4a8981c78f1684f745eac8646b0316c3bfb3f177923670ea87f4f7a404",
+  "generatedFromDigest": "sha256:f576e5ae20df54d3ae5bc3a2791f12cc4d2520b241965cf90e01c7ee4c35ff7f",
+  "catalogDigest": "sha256:e32f8b306dc3985ce95086f81032028ca2a5fa4f55a9e993480c9175b5150068",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -259,8 +259,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
-      "bytes": 30496,
-      "sha256": "sha256:a930d95a332bcd5301e9f89da2ca6036855f8c033b13e73f59c8f26291d0c430"
+      "bytes": 30457,
+      "sha256": "sha256:1569e151398a3b805b52d8e1a4e05954364e88c3728ae4bad9fa7658e46b6fe3"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/frame-space.md",
@@ -314,8 +314,8 @@
     },
     {
       "path": "skills/evolve-pyproc/references/contract-reality.md",
-      "bytes": 5237,
-      "sha256": "sha256:a9f830f0e66ee2a65be5141f4cd344dd78fb2c0aa1a7111387ed4ffbd3d6ce4e"
+      "bytes": 4864,
+      "sha256": "sha256:1be9bdd37bb4b7d51996550b67b1d6bc3666d229f508e00c277f649ee5fca71a"
     },
     {
       "path": "skills/evolve-pyproc/references/experimental-freeze.md",
@@ -354,8 +354,8 @@
     },
     {
       "path": "skills/ship-pyproc/references/release.md",
-      "bytes": 1169,
-      "sha256": "sha256:ddc0632de2c64b741d5394b0d599b9c25dbfd3079131ba11972be77f05b07eac"
+      "bytes": 2416,
+      "sha256": "sha256:8bcb64f0c773d7f26c12228b135843c92748709d3a98bedb69f7e49c1f3db857"
     },
     {
       "path": "skills/start-pyproc/references/entry-map.md",

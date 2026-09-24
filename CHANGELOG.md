@@ -12,6 +12,23 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Fixed
+
+- **Public surface removals are disclosed.** A release that removes or renames a name from a package entry point now
+  lists it in a `### Breaking` table with its replacement or `none`. A contract gate compares the type surface with
+  the last release, so an undisclosed removal cannot ship. The 0.0.22 and 0.0.23 sections below now disclose the
+  removals those releases did not.
+- **The browser automation guide no longer describes `engine.indexURL`.** The manifest validator never accepted it;
+  `engine.root` is the only engine source. Manifest examples and field tables in the guides are checked against the
+  validator that `doctor` uses.
+
+### 한국어 요약
+
+- 진입점에서 이름을 지우거나 바꾸는 릴리즈는 Breaking 표에 대체 경로나 없음을 적는다. 계약 게이트가 마지막 릴리즈의
+  타입 표면과 대조해 공시 없는 제거를 막는다. 아래 0.0.22와 0.0.23 절에 당시 공시하지 않은 제거를 적었다.
+- 브라우저 자동화 안내가 validator가 받은 적 없는 `engine.indexURL`을 더 이상 설명하지 않는다. 안내의 manifest
+  예제와 필드 표는 doctor와 같은 validator로 검사한다.
+
 ## 0.0.25 - 2026-09-09
 
 ### Added
@@ -79,6 +96,17 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ## 0.0.23 - 2026-08-16
 
+### Breaking
+
+Disclosed on 2026-09-25. `pyproc/gpu` stopped exporting the host adapter names it shared with `pyproc/socket`.
+
+| Removed | Replacement |
+|---|---|
+| `pyproc/gpu: HostcallRequest`, `pyproc/gpu: ProductHostAdapter`, `pyproc/gpu: ProductHostCapabilityAdapters`, `pyproc/gpu: ProductHostCapabilityPort`, `pyproc/gpu: createAsgiHostAdapter`, `pyproc/gpu: createBrowserClipboardHostAdapter`, `pyproc/gpu: createFetchHostAdapter`, `pyproc/gpu: createFramebufferHostAdapter`, `pyproc/gpu: createKernelProcessHostAdapter`, `pyproc/gpu: createSocketRelayHostAdapter` | the same names from `pyproc/socket`. In 0.0.22 both subpaths exported one host adapter file; `pyproc/gpu` became the WebGPU entry |
+
+한국어 요약: 0.0.23에서 `pyproc/gpu`가 `pyproc/socket`과 함께 내보내던 host adapter 이름이 빠졌다. 같은 이름을
+`pyproc/socket`에서 가져온다.
+
 ### Added
 
 - **The installed package is now the default engine entrance.** Root `open()` and `boot()`, `createWebComputer`,
@@ -143,6 +171,54 @@ Python 도구 영수증을 추가했다. 선택적 Node guest는 Python과 Linux
 V86, firmware, guest image는 별도 digest-pinned 공급망으로 남는다.
 
 ## 0.0.22 - 2026-08-15
+
+### Breaking
+
+Disclosed on 2026-09-25. This release replaced the Pyodide engine with the owned CPython WASI kernel and removed the
+public type surface listed below. Its notes said the root surface was unchanged because only runtime values were
+compared; the six root values did stay, but 81 root names and 34 subpath names went away. `boot()` and `open()`
+resolve to `KernelMachine`. Boot options are `CpythonWasiBootOptions`: `deterministic` and `assetIntegrity` keep their
+meaning, the engine is described by `engineManifest`, packages are installed through
+`KernelMachine.createPackageEnvironment()`, and print output is returned per call as `run.python(code).output`.
+`indexURL`, `packages`, `env`, `setup`, `lockFileURL`, `wheelDir`, `coreCacheDir`, `coreIntegrity`,
+`engineScriptIntegrity`, `loadPyodide`, `stdout` and `stderr` have no boot option replacement.
+
+| Removed | Replacement |
+|---|---|
+| `pyproc: PyprocMachine`, `pyproc: PyprocHistory` | `pyproc/runtime: KernelMachine` with `run`, `history`, `proc`, `terminal`, `close` |
+| `pyproc: BootMachineOptions`, `pyproc: BootOptions`, `pyproc/runtime: BootOptions` | `pyproc: CpythonWasiBootOptions` |
+| `pyproc: Runtime`, `pyproc: RuntimeContract`, `pyproc: EngineContract`, `pyproc: PyodideEngine`, `pyproc: MemoryCapability`, `pyproc: EngineHostValueOptions`, `pyproc/runtime: Runtime`, `pyproc/runtime: RuntimeContract`, `pyproc/runtime: EngineContract`, `pyproc/runtime: MemoryCapability`, `pyproc/runtime: DEFAULT_INDEX`, `pyproc/runtime: ENGINE_CAPABILITIES`, `pyproc/runtime: ENGINE_CONTRACT_VERSION`, `pyproc/runtime: RUNTIME_CAPABILITIES`, `pyproc/runtime: RUNTIME_CONTRACT_VERSION`, `pyproc/runtime: assertEngineContract`, `pyproc/runtime: assertRuntimeContract`, `pyproc/runtime: bootRuntime`, `pyproc/runtime: engineCapabilities`, `pyproc/runtime: ensureEngineScript`, `pyproc/runtime: hasEngineCapability`, `pyproc/runtime: requireEngineCapability` | none: the swappable Pyodide engine contract was removed. The kernel contract is `pyproc/runtime: KernelRuntimeContractV2`, booted by `pyproc/runtime: bootCpythonWasiKernel` |
+| `pyproc: FileSystem`, `pyproc/runtime: FileSystem` | `pyproc/runtime: KernelVfs` |
+| `pyproc: PyProc`, `pyproc: PyProcOptions`, `pyproc: PyProcBootInfo`, `pyproc: PyProcEntry`, `pyproc: ForkInfo` | `KernelMachine.proc` (`spawn`, `clone`, `inspect`) |
+| `pyproc: PyProcMapOptions`, `pyproc: PyProcMatmulOptions`, `pyproc: PyProcShardOptions`, `pyproc: Matrix` | none: the worker pool map, matmul and shard verbs were removed |
+| `pyproc: Pipe`, `pyproc: Lock`, `pyproc: Shm` | none |
+| `pyproc: ReactiveController`, `pyproc: CheckpointInfo`, `pyproc: CheckpointNode`, `pyproc: RestoreInfo` | `pyproc/runtime: KernelReactiveController` (`checkpoint`, `restore`, `branch`, `prune`) and `KernelMachine.history` |
+| `pyproc: ReactiveStats`, `pyproc: ReactiveRetentionPolicy`, `pyproc: ReactivePressureEvent` | none: retention policies and pressure events were removed |
+| `pyproc: MachineJournal`, `pyproc: JournalConfig`, `pyproc: JournalAutoPackPolicy`, `pyproc: JournalCommitResult`, `pyproc: JournalPackResult`, `pyproc: JournalPruneResult`, `pyproc: JournalDeleteResult`, `pyproc: JournalRecoverResult` | `pyproc/history: commitState` over `pyproc/history: StateStore` (`pyproc/history: OpfsStateStore` in the browser) |
+| `pyproc: KernelElection`, `pyproc: KernelElectionOptions`, `pyproc: KernelLeaderInfo`, `pyproc: KernelStatus`, `pyproc: PersistentMachineOptions` | none: multi-tab leader election was removed. Single-writer ownership of a Web Computer is `pyproc/machine: MachineStore` |
+| `pyproc: AsgiServer`, `pyproc: AsgiServerConfig`, `pyproc: AsgiResponse` | `pyproc/socket: createAsgiHostAdapter` |
+| `pyproc: VirtualOrigin` | none |
+| `pyproc: SyscallBridge`, `pyproc: SyscallBridgeConfig`, `pyproc: SyscallInstallInfo` | `pyproc/runtime: HostCapabilityBroker` over the hostcall ABI. It is not a one-to-one replacement |
+| `pyproc: MachineJail`, `pyproc: JailPermissions` | none |
+| `pyproc: MachineContainer`, `pyproc: MachineContainerOptions`, `pyproc: ContainerManifest`, `pyproc: ContainerHandle` | `KernelMachine.proc.spawn(manifest)` starts an independent kernel process. Nested container handles were removed |
+| `pyproc: JobControl`, `pyproc: JobControlOptions`, `pyproc: JobInfo`, `pyproc: ReplOutcome` | none |
+| `pyproc: Terminal`, `pyproc: TerminalConfig` | `pyproc/runtime: KernelTerminal` from `KernelMachine.terminal()` |
+| `pyproc: Init`, `pyproc: InitConfig` | none |
+| `pyproc: DeviceFs`, `pyproc: DeviceFsConfig`, `pyproc: DeviceProvider` | none: kernel devices are `pyproc/runtime: KernelDeviceRegistry`, which is not a file-backed device tree |
+| `pyproc: WheelCache`, `pyproc: WheelCacheConfig`, `pyproc: EnvManifest`, `pyproc: EnvBootStats` | `pyproc/runtime: PackageEnvironment` from `KernelMachine.createPackageEnvironment()` |
+| `pyproc: CoreIntegrityMap`, `pyproc: CoreIntegrityPolicy`, `pyproc: CoreAssetStats` | none: engine assets are described and verified by `pyproc/runtime: KernelEngineManifest` |
+| `pyproc: Session`, `pyproc: SessionManifest`, `pyproc: SessionIo`, `pyproc: SessionImageOptions`, `pyproc: ImagePortabilityOptions`, `pyproc: OpenTrustOptions` | `pyproc/runtime: KernelMachineImage` from `KernelMachine.history.export()`, reopened with `open(image)` |
+| `pyproc/machine: PyprocFileSystem`, `pyproc/machine: PyprocGuestSession`, `pyproc/machine: createPyprocGuestFactory` | `pyproc/machine: createCpythonWasiGuestFactory` |
+| `pyproc/assets: PyProcAssetEntrypoint`, `pyproc/assets: PyProcServiceWorkerRegisterOptions`, `pyproc/assets: PyProcServiceWorkerRegisterResult`, `pyproc/assets: registerPyProcServiceWorker` | none: the package no longer registers a service worker |
+| `pyproc/assets: PyProcAssetIntegrityVerifyOptions` | the options parameter of `pyproc/assets: verifyPyProcAssetIntegrity` |
+| `pyproc/gpu: GpuArray`, `pyproc/gpu: GpuBridge`, `pyproc/gpu: GpuCompute` | `pyproc/gpu: createGpuComputeHostAdapter` over a GPU implementation the caller supplies |
+| `pyproc/socket: SocketBridge`, `pyproc/socket: SocketBridgeConfig` | `pyproc/socket: createSocketRelayHostAdapter` |
+| `pyproc: WebComputer` | `pyproc/machine: WebComputer` |
+| `pyproc/runtime: EnvReport`, `pyproc/runtime: checkEnvironment` | `pyproc: EnvReport`, `pyproc: checkEnvironment` |
+| `pyproc/runtime: PAGE_SIZE` | `pyproc/history: PAGE_SIZE` |
+
+한국어 요약: 0.0.22는 Pyodide 엔진을 소유 CPython WASI 커널로 바꾸며 위 공개 타입 표면을 지웠지만 당시 노트는 값
+export만 비교해 root가 그대로라고 적었다. 2026-09-25에 제거된 이름마다 대체 경로나 없음을 공시한다.
 
 ### Added
 

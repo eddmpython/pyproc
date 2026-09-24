@@ -1,12 +1,19 @@
 // Machine Entrance의 recipe, initializer, doctor, CLI argument 계약을 고정한다.
 import { generateKeyPairSync } from "node:crypto";
+import { readdirSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseMachineProfileInitArguments, parseMachineRunArguments } from "../../scripts/machineEntrance/entranceCli.js";
 import { inspectMachineProfile } from "../../scripts/machineEntrance/machineDoctor.js";
 import { compileMachineProfile } from "../../scripts/machineEntrance/machineProfile.js";
 import { initializeMachineProfile } from "../../scripts/machineEntrance/profileInitializer.js";
+import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
+
+const REPOSITORY = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const OWNED_ENGINE = join(REPOSITORY, "src", "runtime", "engines", "wasi", "owned", "core");
+const MANIFEST_SECTIONS = ["engine", "browser", "executionMemory", "effectTransactions", "appSpace", "replayGraph", "actuation"];
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -14,6 +21,76 @@ function assert(condition, message) {
 
 async function errorOf(operation) {
   try { await operation(); return null; } catch (error) { return error; }
+}
+
+function markdownFiles(dir, acc = []) {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) markdownFiles(full, acc);
+    else if (entry.endsWith(".md")) acc.push(full);
+  }
+  return acc;
+}
+
+// 문서 예제의 자리표시 절대 경로를 실제 경로로 묶는다. engine.root는 이 저장소의 소유 engine이고, 나머지
+// 디렉터리는 새로 만들며, 파일 이름 경로는 기록 모드가 새로 쓸 수 있게 만들지 않고 둔다.
+async function bindExamplePaths(value, scratch, key = "", counter = { next: 0 }) {
+  if (Array.isArray(value)) return Promise.all(value.map((entry) => bindExamplePaths(entry, scratch, key, counter)));
+  if (value && typeof value === "object") {
+    const bound = {};
+    for (const [name, entry] of Object.entries(value)) {
+      bound[name] = await bindExamplePaths(entry, scratch, key ? `${key}.${name}` : name, counter);
+    }
+    return bound;
+  }
+  if (typeof value !== "string" || !/^(\/|[A-Za-z]:\/)/.test(value)) return value;
+  if (key === "engine.root") return OWNED_ENGINE;
+  const target = join(scratch, `path${counter.next++}`);
+  if (/\.[a-z]+$/i.test(value)) return `${target}${value.slice(value.lastIndexOf("."))}`;
+  await mkdir(target, { recursive: true });
+  return target;
+}
+
+// 배포 문서의 manifest 예제와 필드 표는 doctor와 같은 validator가 받아들이는 것만 말한다. 0.0.23 설치본
+// 문서가 engine.indexURL을 허용한다고 적었지만 doctor는 필드 자체를 거절했다(소비 저장소 실측).
+async function assertDocumentedManifests(scratch) {
+  const docs = [join(REPOSITORY, "README.md"), join(REPOSITORY, "README.ko.md"), ...markdownFiles(join(REPOSITORY, "skills"))];
+  let examples = 0;
+  let fields = 0;
+  let reference = null;
+  for (const file of docs) {
+    const markdown = await readFile(file, "utf8");
+    for (const block of markdown.matchAll(/```json\n([\s\S]*?)```/g)) {
+      if (!/"schemaVersion"\s*:\s*1/.test(block[1])) continue;
+      const example = await bindExamplePaths(JSON.parse(block[1]), scratch);
+      const secrets = Object.fromEntries((example.executionMemory?.secretEnv || []).map((name) => [name, "documented-example-secret-value-0123456789"]));
+      const failure = await errorOf(() => validateMcpProductConfig(example, { baseEnv: secrets }));
+      assert(!failure, `${file}: 문서 manifest 예제를 validator가 거절한다: ${failure?.message}`);
+      if (!reference && example.browser?.enabled) reference = example;
+      examples += 1;
+    }
+  }
+  assert(examples > 0 && reference, "문서 manifest 예제를 하나도 찾지 못했다");
+  for (const file of docs) {
+    const markdown = await readFile(file, "utf8");
+    for (const row of markdown.matchAll(/^\|([^|\n]+)\|/gm)) {
+      for (const span of row[1].matchAll(/`([A-Za-z]+)\.([A-Za-z]+)`/g)) {
+        const [, section, field] = span;
+        if (!MANIFEST_SECTIONS.includes(section)) continue;
+        const probe = structuredClone(reference);
+        probe[section] = { ...(probe[section] || {}), [field]: Symbol.for("documentedField") };
+        const failure = await errorOf(() => validateMcpProductConfig(probe, { baseEnv: {} }));
+        assert(failure?.message !== `${section} does not accept ${field}`,
+          `${file}: 문서 필드 표가 validator에 없는 ${section}.${field}를 설명한다`);
+        fields += 1;
+      }
+    }
+  }
+  const unknown = structuredClone(reference);
+  unknown.engine = { ...unknown.engine, indexURL: "https://example.test/engine/" };
+  assert((await errorOf(() => validateMcpProductConfig(unknown, { baseEnv: {} })))?.message === "engine does not accept indexURL",
+    "음성 시험: 알 수 없는 manifest 필드를 받아들였다");
+  assert(fields > 0, "문서 manifest 필드 표를 하나도 찾지 못했다");
 }
 
 export async function assertMachineEntranceContract() {
@@ -129,6 +206,7 @@ export async function assertMachineEntranceContract() {
     assert(Object.isFrozen(doctor.next) && Object.isFrozen(first) && Object.isFrozen(first.input)
       && Object.isFrozen(first.shell.arguments) && Object.isFrozen(first.javascript.startArguments),
     "doctor 다음 행동이 호출자 변경에 열려 있다");
+    await assertDocumentedManifests(join(root, "documented"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
