@@ -14,6 +14,7 @@ from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Sequence, TextIO
 
+from .bundledHost import bundledCommand
 from .models import Attachment, ControlError, ControlResult
 from .perception import PerceptionClient
 from .protocol import (
@@ -28,9 +29,13 @@ from .protocol import (
 
 def resolvedCommand(command: str | os.PathLike[str] | Sequence[str | os.PathLike[str]] | None) -> list[str]:
     if command is None:
+        bundled = bundledCommand("pyproc-control")
+        if bundled is not None:
+            return bundled
         found = shutil.which("pyproc-control")
         if not found:
-            raise FileNotFoundError("pyproc-control was not found on PATH; install the pyproc npm package or pass command")
+            raise FileNotFoundError("pyproc-control was not found; install the platform wheel that carries the host, "
+                                    "install the pyproc npm package, or pass command")
         return [found]
     if isinstance(command, (str, os.PathLike)):
         return [os.fspath(command)]

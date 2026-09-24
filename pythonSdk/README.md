@@ -4,13 +4,16 @@ Official Python client for the pyproc Control Protocol. It starts the installed 
 verifies every protocol frame and binary attachment, and exposes persistent Python plus optional browser
 automation without requiring JavaScript application code.
 
-Install the exact wheel from the matching GitHub Release:
+Install the exact platform wheel from the matching GitHub Release. It carries the pyproc host (the npm
+`pyproc` package of the same version and a checksum-pinned Node.js runtime), so it needs no Node or npm:
 
 ```sh
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.25/pyproc_control-0.0.25-py3-none-any.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.25/pyproc_control-0.0.25-py3-none-win_amd64.whl"
 ```
 
+Linux x64 uses `pyproc_control-0.0.25-py3-none-manylinux_2_28_x86_64.whl`. On other platforms install
+`pyproc_control-0.0.25-py3-none-any.whl` together with `npm install --save-exact pyproc@0.0.25`.
 PyPI is not an installation source yet. The versioned GitHub Release also contains the source distribution.
 
 Synchronous `timeout=` values cancel the protocol request and wait for its canonical terminal. A delivered
@@ -48,6 +51,6 @@ revisions over the current Machine image. The
 [Execution Memory guide](https://github.com/eddmpython/pyproc/blob/main/skills/use-pyproc-machine/references/execution-memory.md) defines
 repository identity, compare-and-swap updates, completion evidence, handoff trust, and storage boundaries.
 
-The npm `pyproc` package and its engine assets are separate installation prerequisites. See the repository
+The platform wheel also installs the `pyproc-control` and `pyproc-mcp` commands. See the repository
 [Python SDK guide](https://github.com/eddmpython/pyproc/blob/main/skills/control-pyproc/references/python-sdk.md) for setup,
 automation, perception, cancellation, and recovery examples.

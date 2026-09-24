@@ -75,3 +75,59 @@ jobs:
           npm run package:reproduce -- --tree "$GITHUB_SHA" --out "$packageDir"
           pkgVersion="$(node -p "require('./package.json').version")"
           npm publish "$packageDir/pyproc-$pkgVersion.tgz"
+
+  # Python 배포 자산: sdist, 순수 wheel, 그리고 Node와 npm package를 싣는 platform wheel. npm 게시 뒤에 돈다.
+  # platform wheel이 싣는 host가 방금 게시한 npm package와 같은 byte인지 integrity로 확인한 뒤에만 첨부한다.
+  # 정본 절차는 skills/ship-pyproc/references/release.md다.
+  python:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # GitHub Release 자산 첨부
+      id-token: write # build provenance 서명
+      attestations: write
+    steps:
+      # 쓰기 토큰을 .git/config에 남기지 않는다. 업로드는 GH_TOKEN으로만 한다.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+      - run: npm install -g npm@11.19.0
+      - run: npm ci
+      - run: python -m pip install -r pythonSdk/buildRequirements.txt
+      - name: exact Git tree에서 Python 배포 자산 생성
+        run: npm run package:python -- --tree "$GITHUB_SHA" --out "$RUNNER_TEMP/pyproc-python"
+      - name: platform wheel의 host가 게시된 npm package와 같은지 확인
+        run: |
+          set -eu
+          pkgVersion="$(node -p "require('./package.json').version")"
+          built="$(node -p "require(process.env.RUNNER_TEMP + '/pyproc-python/python-distributions-manifest.json').hostPackage.integrity")"
+          published=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            published="$(npm view "pyproc@$pkgVersion" dist.integrity 2>/dev/null || true)"
+            [ -n "$published" ] && break
+            sleep 10
+          done
+          echo "built=$built published=$published"
+          test "$built" = "$published"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/pyproc-python/*.whl
+            ${{ runner.temp }}/pyproc-python/*.tar.gz
+            ${{ runner.temp }}/pyproc-python/python-distributions-manifest.json
+      # 같은 이름의 자산이 이미 있으면 gh가 실패한다. 게시한 자산을 조용히 바꾸지 않는다.
+      - name: GitHub Release에 Python 자산 첨부
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tag="v$(node -p "require('./package.json').version")"
+          cd "$RUNNER_TEMP/pyproc-python"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$tag" --notes ""
+          fi
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" ./*.whl ./*.tar.gz python-distributions-manifest.json

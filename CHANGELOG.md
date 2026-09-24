@@ -29,6 +29,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   engine files, no machine page, no loopback listener, and no `machine.*` operations. Browser observe, act, Motor,
   and Execution Memory work; revisions carry `machine: null`. FrameSpace and Rehearse-Commit still need the Machine.
 
+- **A Python wheel that carries the whole product.** Each release adds platform wheels for Windows x64
+  (`win_amd64`) and Linux x64 (`manylinux_2_28_x86_64`) that hold the npm `pyproc` package of the same version and
+  a checksum-pinned official Node.js runtime, with `pyproc-control` and `pyproc-mcp` commands. `PyProcClient.start`
+  uses the host inside the wheel, so one `pip install` runs pyproc with no Node or npm. The same commit yields the
+  same wheel bytes on any build host, and release assets carry build provenance. The pure wheel and the source
+  distribution still carry only the client.
+
 ### Changed
 
 - **The browser no longer opens a DevTools port.** The broker speaks CDP over the browser's
@@ -75,6 +82,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - `engine.enabled` false인 브라우저 전용 host는 Python Machine, machine page, loopback listener, `machine.*`
   operation 없이 브라우저 관찰, 행동, Motor, Execution Memory(machine null revision)를 제공한다.
 - 브라우저가 DevTools port를 열지 않는다. broker는 `--remote-debugging-pipe`로만 CDP를 쓴다.
+- Windows x64와 Linux x64 platform wheel이 같은 버전의 npm `pyproc` package와 checksum으로 고정한 공식 Node
+  runtime, `pyproc-control`과 `pyproc-mcp` 명령을 함께 싣는다. `pip install` 하나로 Node와 npm 없이 시작하고,
+  같은 commit이면 어느 build host에서도 같은 byte이며 release 자산에는 build provenance가 붙는다.
 - 예산을 넘는 큰 페이지의 APX graph가 잘린 entity를 가리키는 unresolved와 crop 때문에 자기 schema 검사에서
   실패하던 결함을 고쳤다. 절단 뒤에도 모든 참조가 온전하고 잘린 crop은 회수된다.
 

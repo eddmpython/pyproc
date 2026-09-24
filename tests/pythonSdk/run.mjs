@@ -1,5 +1,7 @@
 // run.mjs - Python wheel/sdist clean install and packed npm product integration gate.
-import { generateKeyPairSync } from "node:crypto";
+// The platform wheel scenario installs the wheel that carries Node and the npm package into a venv whose PATH has
+// no Node, and opens Machine and browser-only sessions through the bundled host alone.
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
@@ -8,11 +10,18 @@ import { delimiter, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
+import { unzipWheel } from "../../src/runtime/engines/wasi/wheelUnzip.js";
+import { assembleHostWheel } from "../../scripts/pythonSdkBuilder/assembleHostWheel.mjs";
+import { extractNodeRuntime, fetchNodeArchive, readPackageTree } from "../../scripts/pythonSdkBuilder/hostPayload.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const PYTHON = process.env.PYPROC_PYTHON || "python";
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const PACKAGE_VERSION = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")).version;
+const DISTRIBUTION_LOCK = JSON.parse(await readFile(join(ROOT, "scripts", "pythonSdkBuilder",
+  "pythonDistributionLock.json"), "utf8"));
+const HOST_PLATFORM = { "win32-x64": "win_amd64", "linux-x64": "manylinux_2_28_x86_64" }[
+  `${process.platform}-${process.arch}`];
 const approvalPair = generateKeyPairSync("ed25519");
 let createInstalledApprovalGrant = null;
 let publishInstalledEffectPack = null;
@@ -118,6 +127,7 @@ const installed = await installPackedPyProc("pyprocPythonSdk-");
 const distDir = join(installed.tmp, "pythonDist");
 const wheelVenv = join(installed.tmp, "wheelVenv");
 const sourceVenv = join(installed.tmp, "sourceVenv");
+const hostVenv = join(installed.tmp, "hostVenv");
 const configPath = join(installed.appDir, ".pyproc-python", "manifest.json");
 const memoryRoot = join(installed.appDir, ".pyproc-python-memory");
 const approvalKeyFile = join(memoryRoot, "approval-public.pem");
@@ -234,6 +244,42 @@ try {
       && frameReport.perceptionEntityRef?.startsWith("entity:")
       && frameReport.situationRef?.startsWith("situation:"),
     `${frameReport.attachmentBytes} bytes`);
+
+  if (!HOST_PLATFORM) {
+    console.log(`  SKIP platform wheel: ${process.platform}-${process.arch} has no platform wheel`);
+  } else {
+    const tarball = await readFile(join(installed.tmp, installed.packed.filename));
+    const hostWheel = assembleHostWheel({
+      platform: HOST_PLATFORM,
+      pureWheel: { filename: wheel, files: await unzipWheel(await readFile(join(distDir, wheel))) },
+      packageFiles: await readPackageTree(tarball),
+      packageIdentity: { name: installed.packed.name, version: installed.packed.version,
+        filename: installed.packed.filename, sha256: createHash("sha256").update(tarball).digest("hex"),
+        integrity: installed.packed.integrity },
+      nodeRuntime: await extractNodeRuntime(await fetchNodeArchive(DISTRIBUTION_LOCK.hostNode, HOST_PLATFORM,
+        join(ROOT, ".cache", "node-dist")), DISTRIBUTION_LOCK.hostNode, HOST_PLATFORM),
+      sourceDateEpoch: Number(run("git", ["show", "-s", "--format=%ct", "HEAD"]).stdout.trim()),
+    });
+    await writeFile(join(distDir, hostWheel.filename), hostWheel.bytes);
+    run(PYTHON, ["-m", "venv", hostVenv], { cwd: installed.tmp });
+    const hostPython = venvPython(hostVenv);
+    run(hostPython, ["-m", "pip", "install", "--disable-pip-version-check", "--no-deps",
+      join(distDir, hostWheel.filename)], { cwd: installed.tmp });
+    const systemRoot = process.env.SystemRoot || "C:\\Windows";
+    const hostPath = process.platform === "win32"
+      ? [join(hostVenv, "Scripts"), join(systemRoot, "System32"), systemRoot].join(delimiter)
+      : join(hostVenv, "bin");
+    const hostEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== "PATH"));
+    const hostRun = await runAsync(hostPython, [join(HERE, "hostJourney.py"), join(installed.tmp, "hostProject"),
+      targetOrigin, PACKAGE_VERSION, ...(browser ? [browser] : [])],
+    { cwd: installed.tmp, env: { ...hostEnv, PATH: hostPath } });
+    const hostReport = JSON.parse(hostRun.stdout.trim().split(/\r?\n/).at(-1));
+    check("platform wheel 하나가 Node 없는 PATH에서 번들 host로 Machine과 브라우저 전용 세션을 열고 닫음",
+      hostReport.ok === true && hostReport.version === PACKAGE_VERSION && hostReport.machineValue === "42"
+        && hostReport.machineObserved === true && hostReport.browserOnlyObserved === true
+        && hostReport.browserOnlyMachineOperations.length === 0,
+      `${hostWheel.filename} ${hostWheel.bytes.byteLength} bytes`);
+  }
 } catch (error) {
   check("Python SDK 제품 흐름 예외 없음", false, String(error?.stack || error).slice(-1200));
 } finally {

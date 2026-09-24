@@ -1,0 +1,89 @@
+name: python-distribution-reproducibility
+
+# 같은 commit에서 Ubuntu와 Windows가 각각 만든 platform wheel이 byte 단위로 같은지 본다.
+# wheel은 canonical npm package, lock이 checksum으로 고정한 Node, setuptools가 만든 순수 wheel 내용만의 함수다.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+      - "pythonSdk/**"
+      - "scripts/pythonSdkBuilder/**"
+      - "scripts/packageBuilder/**"
+      - "scripts/engineBuilder/deterministicZip.mjs"
+      - "src/runtime/engines/wasi/wheelUnzip.js"
+      - "tests/contracts/pythonDistributions.mjs"
+      - ".github/workflows/python-distribution-reproducibility.yml"
+      - ".github/workflows/publish.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build-${{ matrix.slot }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slot: ubuntu
+            os: ubuntu-24.04
+          - slot: windows
+            os: windows-2025
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm install -g npm@11.19.0
+      - run: npm ci
+      - run: python -m pip install -r pythonSdk/buildRequirements.txt
+      - name: Build Python distributions from the exact Git tree
+        shell: pwsh
+        run: |
+          $outDir = Join-Path $env:RUNNER_TEMP "pyproc-python"
+          npm run package:python -- --tree $env:GITHUB_SHA --out $outDir
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pyproc-python-${{ matrix.slot }}
+          path: ${{ runner.temp }}/pyproc-python/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  verify:
+    name: verify-ubuntu-windows-platform-wheels
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pyproc-python-ubuntu
+          path: .cache/python-distributions/ubuntu
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pyproc-python-windows
+          path: .cache/python-distributions/windows
+      - name: Verify cross-host platform wheel identity
+        run: >-
+          node scripts/pythonSdkBuilder/verifyPythonDistributions.mjs
+          --left .cache/python-distributions/ubuntu
+          --right .cache/python-distributions/windows
+          --left-os ubuntu-24.04
+          --right-os windows-2025
+          --receipt .cache/python-distributions/ubuntu/python-distributions-reproducibility.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pyproc-python-verified
+          path: .cache/python-distributions/ubuntu/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90

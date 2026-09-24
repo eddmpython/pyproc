@@ -130,10 +130,16 @@ function verifyReleaseVersionSurfaces(packageJson) {
       throw new Error(`${path}: 현재 exact npm release 누락`);
     }
   }
-  const wheelName = `pyproc_control-${version}-py3-none-any.whl`;
   for (const path of ["pythonSdk/README.md", "skills/control-pyproc/references/python-sdk.md"]) {
     const source = readFileSync(join(ROOT, ...path.split("/")), "utf8");
-    if (!source.includes(`/v${version}/${wheelName}`)) throw new Error(`${path}: 현재 Python release URL 누락`);
+    if (!source.includes(`/v${version}/pyproc_control-${version}-py3-none-win_amd64.whl`)) {
+      throw new Error(`${path}: 현재 Python platform wheel release URL 누락`);
+    }
+    for (const tag of ["manylinux_2_28_x86_64", "any"]) {
+      if (!source.includes(`pyproc_control-${version}-py3-none-${tag}.whl`)) {
+        throw new Error(`${path}: 현재 Python ${tag} wheel 이름 누락`);
+      }
+    }
   }
 }
 

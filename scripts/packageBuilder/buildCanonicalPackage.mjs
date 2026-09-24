@@ -87,7 +87,8 @@ export async function buildCanonicalPackage({ treeish, outputDir }) {
   try {
     await mkdir(source);
     run("git", ["-c", "core.autocrlf=false", "archive", "--format=tar", `--output=${archive}`, commit]);
-    run("tar", ["-xf", archive, "-C", source]);
+    // 상대 경로로 부른다. Windows에서 GNU tar가 먼저 잡혀도 드라이브 문자를 원격 host로 읽지 않는다.
+    run("tar", ["-xf", "source.tar", "-C", "source"], { cwd: workspace });
     const packageJson = JSON.parse(await readFile(join(source, "package.json"), "utf8"));
     if (packageJson.name !== "pyproc" || !/^\d+\.\d+\.\d+$/u.test(packageJson.version || "")) {
       throw new Error("canonical package identity is invalid");

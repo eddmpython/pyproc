@@ -18,37 +18,51 @@
 
 # Python SDK
 
-The official `pyproc-control` Python package starts and controls the installed npm product without
-JavaScript application code. The SDK has no runtime dependency and supports Python 3.10 or newer.
+The official `pyproc-control` Python package starts and controls pyproc without JavaScript application code.
+The SDK has no runtime dependency and supports Python 3.10 or newer.
 
-The two packages have separate jobs:
+Every release builds three Python distributions from the same commit:
 
-- npm `pyproc` ships the browser runtime, `pyproc-control` command, policy manifest, and engine tooling.
-- Python `pyproc-control` ships the strict protocol client, typed values, cancellation, and attachment
-  verification.
-
-Pin both packages to the same version. This release uses `0.0.25` for each.
+- A platform wheel for Windows x64 (`win_amd64`) or Linux x64 (`manylinux_2_28_x86_64`, glibc 2.28 or newer)
+  carries the host itself: the npm `pyproc` package of the same version and a checksum-pinned official Node.js
+  runtime. It needs no Node, npm, or `PATH` setup, and it installs the `pyproc-control` and `pyproc-mcp` commands.
+- The pure wheel (`py3-none-any`) and the source distribution carry only the protocol client, typed values,
+  cancellation, and attachment verification. They start the `pyproc-control` command that the npm `pyproc`
+  package puts on `PATH`, or an explicit command.
 
 ## Install
 
 ```sh
+python -m pip install \
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.25/pyproc_control-0.0.25-py3-none-win_amd64.whl"
+```
+
+On Linux x64 install `pyproc_control-0.0.25-py3-none-manylinux_2_28_x86_64.whl` from the same release. The
+platform wheel is the whole product: `PyProcClient.start` uses its own host even when another `pyproc-control`
+is on `PATH`, because that host is the exact release this client was built with. The same commit always yields
+the same wheel bytes, the release's `python-distributions-manifest.json` lists each SHA-256, and every asset has
+a GitHub build provenance attestation (`gh attestation verify <file> --repo eddmpython/pyproc`).
+
+On other platforms, install the pure wheel and the npm package at the same exact version:
+
+```sh
 npm install --save-exact pyproc@0.0.25
-npm install pyproc@<exact-version>
 python -m pip install \
   "https://github.com/eddmpython/pyproc/releases/download/v0.0.25/pyproc_control-0.0.25-py3-none-any.whl"
 ```
 
-The Python distribution is currently published as wheel and source distribution assets on the matching
-GitHub Release. PyPI is not an installation source yet. Use the exact-version asset URL because floating
-release URLs are outside the reproducible installation contract.
+PyPI is not an installation source yet. Use the exact-version asset URL because floating release URLs are
+outside the reproducible installation contract.
 
 Create the version 1 manifest with [Machine Entrance](../../use-pyproc-machine/references/machine-entrance.md). A Python-only recipe expands to
 `"browser": { "enabled": false }`. Run the complete doctor before use:
 
 ```sh
-npx pyproc-mcp init --recipe pythonOnly
-npx pyproc-control doctor --config ./.pyproc/manifest.json
+pyproc-mcp init --recipe pythonOnly
+pyproc-control doctor --config ./.pyproc/manifest.json
 ```
+
+With the pure wheel, run the same commands through `npx`.
 
 ```python
 from pyprocControl import PyProcClient
@@ -62,8 +76,8 @@ print(report["next"]["firstResult"])
 `ok == False`, so a caller can inspect `blocking` before deciding whether to start. `check()` remains the lighter
 startup-configuration compatibility check.
 
-The npm bin directory must be on `PATH`. An embedded application can instead pass an explicit command list
-such as `command=[nodePath, controlScriptPath]`.
+Without a platform wheel, the npm bin directory must be on `PATH`. An embedded application can always pass an
+explicit command list such as `command=[nodePath, controlScriptPath]`.
 
 ## Persistent Python and checkpoint recovery
 
@@ -329,6 +343,10 @@ or digest violations fail the whole client and reject every outstanding request.
 `npm run test:python-sdk` builds both the wheel and source distribution with pinned build tools, installs
 each into a separate clean virtual environment, and runs these installed-package checks:
 
+- the platform wheel for the running host, installed alone into a virtual environment whose `PATH` has no Node,
+  starts its bundled host through `pyproc-control` and `pyproc-mcp init`, runs Python, and opens and closes a
+  Machine session and a browser-only session;
+
 - strict codec positive and negative fixtures;
 - PATH-based product preflight and handshake;
 - persistent Python and checkpoint restore;
@@ -342,7 +360,9 @@ each into a separate clean virtual environment, and runs these installed-package
 - signed exact-intent approval, one live HTTP effect, no resend, and verified EffectReceipt sealing through the
   installed Python wheel.
 
-Chrome on Ubuntu and Edge on Windows run the same gate in CI.
+Chrome on Ubuntu and Edge on Windows run the same gate in CI. `npm run package:python -- --tree <commit> --out
+<empty-directory>` builds the release set, and the `python-distribution-reproducibility` workflow builds it on
+Ubuntu and Windows and requires byte-identical platform wheels.
 ## Repository experience verification
 
 The Python facade uses the same three Control operations as JavaScript and MCP:

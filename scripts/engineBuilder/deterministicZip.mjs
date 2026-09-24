@@ -22,6 +22,12 @@ function dosDateTime(epochSeconds) {
   });
 }
 
+// entry.mode는 선택 Unix 권한 비트다(기본 0o644). 실행 파일을 담는 wheel이 설치 뒤 실행 비트를 받게 한다.
+function externalAttributes(mode = 0o644) {
+  if (!Number.isInteger(mode) || mode < 0 || mode > 0o777) throw new TypeError(`invalid zip entry mode: ${mode}`);
+  return (0o100000 | mode) * 0x10000;
+}
+
 export function createDeterministicZip(entries, epochSeconds) {
   const sorted = [...entries].sort((left, right) => Buffer.from(left.path).compare(Buffer.from(right.path)));
   const localParts = [];
@@ -62,7 +68,7 @@ export function createDeterministicZip(entries, epochSeconds) {
     central.writeUInt32LE(compressed.byteLength, 20);
     central.writeUInt32LE(bytes.byteLength, 24);
     central.writeUInt16LE(name.byteLength, 28);
-    central.writeUInt32LE(0x81a40000, 38);
+    central.writeUInt32LE(externalAttributes(entry.mode), 38);
     central.writeUInt32LE(offset, 42);
     centralParts.push(central, name);
     offset += local.byteLength + name.byteLength + compressed.byteLength;

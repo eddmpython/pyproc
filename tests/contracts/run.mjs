@@ -46,6 +46,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "productHostCapabilities.mjs",
   "publicSurface.mjs",
   "publicTypeSurface.mjs",
+  "pythonDistributions.mjs",
   "pythonSdk.mjs",
   "replayGraph.mjs",
   "skillOs.mjs",
