@@ -1,5 +1,5 @@
 {
- "version": "0.0.25",
+ "version": "0.0.26",
  "surfaces": {
   "pyproc": [
    "CpythonWasiBootOptions",
@@ -71,6 +71,7 @@
    "KernelMachine",
    "KernelMachineImage",
    "KernelMachineRun",
+   "KernelMachineRunReceipt",
    "KernelMemorySnapshot",
    "KernelOpenOptions",
    "KernelPackageEnvironmentBootstrap",
@@ -252,6 +253,7 @@
    "IndexedDbMachineStore",
    "KernelMachine",
    "KernelMachineRun",
+   "KernelMachineRunReceipt",
    "LINUX_PYTHON_PIP_TIMEOUT_MS",
    "LINUX_PYTHON_PROTOCOL",
    "LINUX_PYTHON_RECEIPT_PROTOCOL",
