@@ -987,10 +987,10 @@ try {
   // trace의 두 command 경계로 effect 전송과 무재시도를 판정한다.
   directBrowser = launchBrowser(targetUrl, {
     prefix: "pyprocBrowserControlDeath-",
-    extraArgs: ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"],
+    cdpPipe: true,
   });
   directBroker = await connectNodeBrowserControl({
-    profileDir: directBrowser.profile,
+    cdpPipe: directBrowser.cdpPipe,
     targetOrigins: [targetOrigin],
     methods: BROWSER_AUTOMATION_ACTIONS.click.methods,
     maxRisk: "externalEffect",

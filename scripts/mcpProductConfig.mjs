@@ -11,7 +11,7 @@ import {
 } from "./automationSpace/automationRecording.js";
 
 const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "replayGraph", "actuation", "timeoutMs"]);
-const ENGINE_KEYS = new Set(["root"]);
+const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
@@ -35,7 +35,7 @@ const NATIVE_APPLICATION_KEYS = new Set(["applicationId", "executablePath", "win
 const NATIVE_INSTALLATION_KEYS = new Set(["hostPath", "sha256", "sourceSha256", "sbomSha256",
   "signature", "publicKey"]);
 const CONTROLLED_ENV = Object.freeze([
-  "PYPROC_MCP_ENGINE_ROOT", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
+  "PYPROC_MCP_ENGINE_ROOT", "PYPROC_MACHINE_ENGINE", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
   "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
@@ -85,9 +85,16 @@ function optionalBoolean(value, label, fallback = false) {
   return value;
 }
 
+// engine.enabled false는 Python Machine 없는 브라우저 전용 host다. machine page와 그 loopback server를 만들지 않고
+// machine.* operation을 내지 않는다. 켜진 engine의 정규화 결과는 기존 manifest와 같은 { root }다.
 function normalizedEngine(input) {
   const engine = plainObject(input, "engine");
   knownKeys(engine, ENGINE_KEYS, "engine");
+  if (!optionalBoolean(engine.enabled, "engine.enabled", true)) {
+    const extra = Object.keys(engine).filter((key) => key !== "enabled");
+    if (extra.length) throw new TypeError(`disabled engine does not accept ${extra[0]}`);
+    return Object.freeze({ enabled: false });
+  }
   if (typeof engine.root !== "string" || !isAbsolute(engine.root)) {
     throw new TypeError("engine.root must be an absolute directory");
   }
@@ -461,7 +468,8 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   const env = { ...baseEnv };
   for (const key of CONTROLLED_ENV) delete env[key];
   env.PYPROC_MCP_TIMEOUT = String(config.timeoutMs);
-  env.PYPROC_MCP_ENGINE_ROOT = config.engine.root;
+  if (config.engine.enabled === false) env.PYPROC_MACHINE_ENGINE = "0";
+  else env.PYPROC_MCP_ENGINE_ROOT = config.engine.root;
   if (config.executionMemory.enabled) {
     env.PYPROC_EXECUTION_MEMORY_ROOT = config.executionMemory.root;
     env.PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS = config.executionMemory.importRoots.join(delimiter);
@@ -518,11 +526,19 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
   const value = plainObject(input, "pyproc-mcp config");
   knownKeys(value, ROOT_KEYS, "pyproc-mcp config");
   if (value.schemaVersion !== 1) throw new TypeError("schemaVersion must be 1");
+  const engine = normalizedEngine(value.engine);
   const executionMemory = normalizedExecutionMemory(value.executionMemory, baseEnv);
   const browser = normalizedBrowser(value.browser);
+  if (engine.enabled === false) {
+    if (!browser.enabled) throw new TypeError("a disabled engine requires browser.enabled true");
+    if (browser.provider === "frame") throw new TypeError("FrameSpace requires the Python Machine page; enable engine");
+  }
   const effectTransactions = normalizedEffectTransactions(value.effectTransactions, {
     executionMemory: executionMemory.config, browser,
   });
+  if (engine.enabled === false && effectTransactions.enabled) {
+    throw new TypeError("effectTransactions rehearse in the Python Machine; enable engine");
+  }
   const appSpace = normalizedAppSpace(value.appSpace, {
     executionMemory: executionMemory.config, effectTransactions, browser,
   });
@@ -532,7 +548,7 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
   });
   const config = Object.freeze({
     schemaVersion: 1,
-    engine: normalizedEngine(value.engine),
+    engine,
     browser,
     executionMemory: executionMemory.config,
     effectTransactions,

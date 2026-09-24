@@ -214,6 +214,27 @@ export async function assertBrowserAutomationProductContract() {
     browser: { enabled: false, trustedCertificates: [{ origin: localOrigin, certificate: certificateFile }] } }));
   assert(/disabled browser does not accept trustedCertificates/.test(disabledTrust?.message),
     "꺼진 browser가 신뢰 인증서를 받았다");
+
+  // 브라우저 전용 host: engine.enabled false면 engine root도 machine page도 없고 환경 투영은 엔진을 끈다.
+  const browserOnly = validateMcpProductConfig({ schemaVersion: 1, engine: { enabled: false }, browser: manifest.browser });
+  const browserOnlyRoundTrip = validateMcpProductConfig(browserOnly.config);
+  assert(browserOnly.config.engine.enabled === false && browserOnly.env.PYPROC_MACHINE_ENGINE === "0"
+    && browserOnly.env.PYPROC_MCP_ENGINE_ROOT === undefined && browserOnlyRoundTrip.config.engine.enabled === false
+    && validated.env.PYPROC_MACHINE_ENGINE === undefined && validated.config.engine.enabled === undefined,
+  "브라우저 전용 manifest가 엔진 없이 투영되지 않았거나 기존 engine root manifest의 정규화가 바뀌었다");
+  for (const [label, input, pattern] of [
+    ["root가 있는 꺼진 engine", { schemaVersion: 1, engine: { enabled: false, root: engineRoot }, browser: manifest.browser },
+      /disabled engine does not accept root/],
+    ["브라우저도 꺼진 host", { schemaVersion: 1, engine: { enabled: false }, browser: { enabled: false } },
+      /requires browser.enabled true/],
+    ["FrameSpace", { schemaVersion: 1, engine: { enabled: false }, browser: { ...manifest.browser, provider: "frame" } },
+      /FrameSpace requires the Python Machine page/],
+    ["Rehearse-Commit", { ...effectManifest, engine: { enabled: false } }, /rehearse in the Python Machine/],
+  ]) {
+    const refused = await errorOf(() => validateMcpProductConfig(input,
+      { baseEnv: { PYPROC_CONTRACT_SECRET: "fixture-secret-value" } }));
+    assert(pattern.test(refused?.message), `브라우저 전용 manifest가 ${label}을 거절하지 않았다: ${refused?.message}`);
+  }
   const unacknowledgedEffect = await errorOf(() => validateMcpProductConfig({
     ...manifest,
     browser: { ...manifest.browser, maxRisk: "externalEffect", actions: ["screenshot", "click"] },

@@ -103,6 +103,18 @@ this guide but the validator never accepted it; such a manifest fails with `engi
 To run only the Python Machine, set `browser` to `{ "enabled": false }`. The surface then remains exactly
 `pythonRun`, `checkpointSave`, `checkpointRestore`, and `sandboxReset` with no debugging authority.
 
+To run only the browser, set `engine` to `{ "enabled": false }`. The host then boots no Python Machine, serves no
+machine page, and opens no loopback listener of its own; the browser starts on `about:blank`. Every `machine.*`
+operation is absent, and Execution Memory revisions carry `machine: null` (such a session cannot be `suspended`).
+A browser-only host supports the `nativeCdp` and `replay` providers; FrameSpace and Rehearse-Commit need the
+Machine and are refused.
+
+```json
+{ "schemaVersion": 1, "engine": { "enabled": false },
+  "browser": { "enabled": true, "allowedOrigins": ["https://example.test"], "maxRisk": "read",
+    "actions": ["snapshot", "screenshot"] } }
+```
+
 ## Manifest contract
 
 The manifest is validated before browser launch. Unknown keys, a schema version other than `1`, relative or
@@ -111,6 +123,7 @@ and incomplete external-effect approval fail closed.
 
 | Field | Contract |
 |---|---|
+| `engine.enabled` | Optional boolean, `true` by default. `false` is a browser-only host and then accepts no other engine field |
 | `engine.root` | Existing absolute owned engine directory with the three verified core files |
 | `timeoutMs` | Positive integer, at most 900000 |
 | `browser.executable` | Optional absolute Chrome, Chromium, or Edge executable. Discovery is used when absent |
@@ -159,15 +172,17 @@ MCP client
 pyproc-mcp
   | validated manifest
   v
-machine page + Node CDP broker
+machine page (unless engine is disabled) + Node CDP broker
   | exact origin, action, method, event, file, artifact, and risk policy
+  | CDP over the browser's --remote-debugging-pipe (fd 3 and fd 4), no DevTools port
   v
 broker-owned temporary Chrome or Edge profile
 ```
 
 The command supports Chromium-family major 137 or newer with CDP protocol major 1. It reads
 `Browser.getVersion` before opening a target and reports bounded compatibility information through
-`browserInspect`. The broker owns the loopback DevTools WebSocket. MCP receives versioned opaque target,
+`browserInspect`. The broker is the only CDP client: it talks to the browser over the process pipe it launched
+with, and the browser opens no DevTools port another local process could join. MCP receives versioned opaque target,
 session, locator, and artifact references. It receives no CDP endpoint, backend node ID, download staging
 name, or filesystem path.
 

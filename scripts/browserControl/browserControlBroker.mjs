@@ -1,6 +1,4 @@
-// browserControlBroker.mjs - 임시 profile CDP authority를 제한된 port로 감싸는 Node broker.
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+// browserControlBroker.mjs - 임시 profile 브라우저의 CDP pipe authority를 제한된 port로 감싸는 Node broker.
 import { CdpConnection } from "./cdpConnection.mjs";
 import { BrowserControlError, BrowserControlPort, BROWSER_CONTROL_ERROR_CODES } from "./browserControlPort.js";
 import { BrowserControlPolicy, BROWSER_CONTROL_RISKS } from "./browserControlPolicy.js";
@@ -35,26 +33,6 @@ function startupObservation(events, rawTruncated = false) {
     network: Object.freeze(networkEvents),
     truncated,
   });
-}
-
-export async function readDevToolsEndpoint(profileDir, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-  if (!profileDir || typeof profileDir !== "string") throw new TypeError("profileDir is required");
-  const path = join(profileDir, "DevToolsActivePort");
-  const deadline = Date.now() + timeoutMs;
-  let lastError = null;
-  while (Date.now() < deadline) {
-    try {
-      const [port, browserPath] = (await readFile(path, "utf8")).trim().split(/\r?\n/);
-      if (Number(port) > 0 && browserPath?.startsWith("/devtools/browser/")) {
-        return `ws://127.0.0.1:${port}${browserPath}`;
-      }
-    } catch (error) {
-      lastError = error;
-    }
-    await delay(RETRY_MS);
-  }
-  throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.brokerUnavailable,
-    `DevToolsActivePort unavailable: ${lastError?.code || "invalid contents"}`);
 }
 
 export class NodeBrowserControlBroker {
@@ -221,7 +199,7 @@ export class NodeBrowserControlBroker {
 }
 
 export async function connectNodeBrowserControl({
-  profileDir,
+  cdpPipe,
   targetOrigins,
   methods,
   events = [],
@@ -232,8 +210,7 @@ export async function connectNodeBrowserControl({
   viewport = null,
 } = {}) {
   const policy = new BrowserControlPolicy({ targetOrigins, methods, events, fileRoots, downloadRoot, maxRisk });
-  const endpoint = await readDevToolsEndpoint(profileDir, { timeoutMs });
-  const connection = await CdpConnection.connect(endpoint, { timeoutMs });
+  const connection = CdpConnection.overPipe(cdpPipe, { timeoutMs });
   try {
     const compatibility = assertBrowserCompatibility(await connection.send("Browser.getVersion"));
     const port = new BrowserControlPort({ transport: new NodeCdpTransport(connection), policy });

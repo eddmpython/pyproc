@@ -204,6 +204,17 @@ export async function assertMachineEntranceContract() {
       && doctor.automation.cdpEndpoint === false
       && doctor.checks.some((entry) => entry.code === "MACHINE_PREFLIGHT_EFFECT_FREE"),
     "doctor가 effect-free Python-only preflight를 증명하지 않았다");
+    const browserOnlyPath = join(root, "browserOnly.json");
+    await writeFile(browserOnlyPath, JSON.stringify({ schemaVersion: 1, engine: { enabled: false },
+      browser: { enabled: true, allowedOrigins: ["http://allowed.test"], actions: ["snapshot"], maxRisk: "read" } }));
+    let engineInspections = 0;
+    const browserOnlyDoctor = await inspectMachineProfile(browserOnlyPath, {
+      browserFinder: () => "fixture-browser",
+      engineInspector: async () => { engineInspections += 1; return { version: "fixture" }; },
+    });
+    assert(browserOnlyDoctor.ok && engineInspections === 0 && browserOnlyDoctor.next === null
+      && browserOnlyDoctor.checks.some((entry) => entry.code === "MACHINE_ENGINE_CLOSED" && entry.severity === "pass"),
+    "브라우저 전용 프로필의 doctor가 엔진을 검사했거나 Python 첫 결과를 안내했다");
     const first = doctor.next.firstResult;
     assert(first.schemaVersion === 1 && first.operation === "machine.run"
       && first.input.code === "40 + 2"

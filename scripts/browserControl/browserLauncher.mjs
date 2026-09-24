@@ -104,8 +104,11 @@ export function launchBrowser(url, opts = {}) {
   if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) {
     throw new TypeError("launchBrowser: extraArgs must be an array of strings");
   }
-  const proc = spawn(browser, [...browserLaunchArgs(profile, opts), ...extraArgs, url], {
-    stdio: "ignore",
+  // cdpPipe: CDP를 loopback port가 아니라 브라우저 fd 3(읽기)과 fd 4(쓰기) pipe로 연다. 부모 쪽에서는
+  // stdio[3]에 쓰고 stdio[4]에서 읽는다. listener가 없으므로 이 브라우저에 붙을 수 있는 것은 이 프로세스뿐이다.
+  const pipeArgs = opts.cdpPipe === true ? ["--remote-debugging-pipe"] : [];
+  const proc = spawn(browser, [...browserLaunchArgs(profile, opts), ...pipeArgs, ...extraArgs, url], {
+    stdio: opts.cdpPipe === true ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore",
     detached: process.platform !== "win32",
   });
   const spawnedAt = Date.now();
@@ -126,6 +129,7 @@ export function launchBrowser(url, opts = {}) {
     browser,
     profile,
     proc,
+    cdpPipe: opts.cdpPipe === true ? Object.freeze({ write: proc.stdio[3], read: proc.stdio[4] }) : null,
     exited: () => exitInfo,
     whenExited,
     close() {

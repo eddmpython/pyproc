@@ -20,10 +20,10 @@ let automation = null;
 try {
   browser = launchBrowser(targetUrl, {
     prefix: "pyprocBrowserControlStress-",
-    extraArgs: ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"],
+    cdpPipe: true,
   });
   broker = await connectNodeBrowserControl({
-    profileDir: browser.profile,
+    cdpPipe: browser.cdpPipe,
     targetOrigins: [origin],
     methods: BROWSER_AUTOMATION_ACTIONS.focus.methods,
     maxRisk: "externalEffect",

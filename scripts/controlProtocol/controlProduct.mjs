@@ -95,73 +95,10 @@ function sendJson(res, status, value) {
   res.end(JSON.stringify(value));
 }
 
-export async function createControlProduct({ env = process.env, browserLauncher = launchBrowser } = {}) {
-  if (typeof browserLauncher !== "function") throw new TypeError("control product browserLauncher must be a function");
-  const timeoutMs = Number(env.PYPROC_MCP_TIMEOUT || DEFAULT_COMMAND_TIMEOUT_MS);
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new TypeError("PYPROC_MCP_TIMEOUT must be positive");
-  const browserEnabled = env.PYPROC_BROWSER_CONTROL === "1";
-  const providerKind = browserEnabled ? (env.PYPROC_AUTOMATION_PROVIDER || "nativeCdp") : null;
-  if (browserEnabled && !["nativeCdp", "frame", "replay"].includes(providerKind)) {
-    throw new TypeError(`unsupported automation provider: ${providerKind}`);
-  }
-  let recordingConfig = null;
-  if (env.PYPROC_AUTOMATION_RECORDING) {
-    try { recordingConfig = JSON.parse(env.PYPROC_AUTOMATION_RECORDING); }
-    catch (error) { throw new TypeError("PYPROC_AUTOMATION_RECORDING must be JSON"); }
-  }
-  if (providerKind === "replay" && recordingConfig?.mode !== "replay") {
-    throw new TypeError("ReplaySpace requires replay recording config");
-  }
-  const browserConfig = browserEnabled ? parseBrowserControlConfig(env, { timeoutMs }) : null;
-  const replayRecording = providerKind === "replay" ? await loadAutomationRecording(recordingConfig.file) : null;
-  if (replayRecording) assertAutomationRecordingSelection(replayRecording, recordingConfig, browserConfig);
-  if (providerKind === "frame") assertFrameSpaceConfig(browserConfig);
-  if (providerKind === "replay" && replayRecording.provider.providerKind === "frame") assertFrameSpaceConfig(browserConfig);
-  const frameToolProvider = providerKind === "frame"
-    || (providerKind === "replay" && replayRecording.provider.providerKind === "frame");
-  const browserTools = browserConfig
-    ? (frameToolProvider ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig)) : [];
-  const verificationTools = browserEnabled ? VERIFICATION_TOOLS : VERIFICATION_OFFLINE_TOOLS;
-  const executionMemoryEnabled = !!env.PYPROC_EXECUTION_MEMORY_ROOT;
-  const memoryTools = executionMemoryEnabled ? EXECUTION_MEMORY_TOOLS : [];
-  const effectTransactionsEnabled = env.PYPROC_EFFECT_TRANSACTIONS === "1";
-  if (effectTransactionsEnabled && !executionMemoryEnabled) {
-    throw new TypeError("effect transactions require Execution Memory");
-  }
-  const effectTools = effectTransactionsEnabled ? EFFECT_TRANSACTION_TOOLS : [];
-  const appSpaceConfig = env.PYPROC_APP_SPACE ? JSON.parse(env.PYPROC_APP_SPACE) : null;
-  const appSpaceEnabled = !!appSpaceConfig;
-  if (appSpaceEnabled && (!executionMemoryEnabled || !effectTransactionsEnabled || providerKind !== "frame")) {
-    throw new TypeError("AppSpace requires Execution Memory, Rehearse-Commit, and FrameSpace");
-  }
-  const appTools = appSpaceEnabled ? APP_SPACE_TOOLS : [];
-  const replayGraphEnabled = env.PYPROC_REPLAY_GRAPH === "1";
-  if (replayGraphEnabled && !executionMemoryEnabled) {
-    throw new TypeError("ReplayGraph requires Execution Memory");
-  }
-  const replayGraphTools = replayGraphEnabled ? REPLAY_GRAPH_TOOLS : [];
-  const actuationEnabled = env.PYPROC_ACTUATION === "1";
-  const windowsNativeConfig = env.PYPROC_WINDOWS_MOTOR ? JSON.parse(env.PYPROC_WINDOWS_MOTOR) : null;
-  if (actuationEnabled && (!executionMemoryEnabled || !browserEnabled)) {
-    throw new TypeError("Motor requires Execution Memory and an automation provider");
-  }
-  if (actuationEnabled && providerKind === "frame" && !appSpaceEnabled) {
-    throw new TypeError("Motor with FrameSpace requires AppSpace");
-  }
-  const actuationTools = actuationEnabled ? ACTUATION_TOOLS : [];
-  const machineImageTools = executionMemoryEnabled ? CONTROL_MACHINE_IMAGE_TOOLS : [];
-  const pythonTools = [...CONTROL_PYTHON_TOOLS, ...machineImageTools];
-  const tools = Object.freeze([...pythonTools, ...browserTools, ...verificationTools, ...memoryTools,
-    ...effectTools, ...appTools, ...replayGraphTools, ...actuationTools]);
-  const pythonToolNames = new Set(pythonTools.map((tool) => tool.name));
-  const verificationToolNames = new Set(VERIFICATION_TOOLS.map((tool) => tool.name));
-  const memoryToolNames = new Set(memoryTools.map((tool) => tool.name));
-  const effectToolNames = new Set(effectTools.map((tool) => tool.name));
-  const appToolNames = new Set(appTools.map((tool) => tool.name));
-  const replayGraphToolNames = new Set(replayGraphTools.map((tool) => tool.name));
-  const actuationToolNames = new Set(actuationTools.map((tool) => tool.name));
-  const producerVersion = JSON.parse(await readFile(resolve(PACKAGE_ROOT, "package.json"), "utf8")).version;
-  const engineRoot = configuredEngineRoot(env.PYPROC_MCP_ENGINE_ROOT);
+// Python Machine page: loopback server, page bridge, control token, and the one-time bootstrap URL the browser
+// opens. Only an enabled engine has it; a browser-only host opens about:blank and has no listener of its own.
+async function startMachinePage({ engineRootValue, timeoutMs, providerKind, browserConfig, appSpaceEnabled }) {
+  const engineRoot = configuredEngineRoot(engineRootValue);
   const pageBridge = new PageCommandBridge({ timeoutMs });
   const controlToken = randomBytes(32).toString("base64url");
   const bootstrapNonce = randomBytes(32).toString("base64url");
@@ -260,6 +197,89 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   }
   const pageUrl = `${serverOrigin}/scripts/browserControl/mcpMachine.html?${pageParams}`;
   const launchUrl = `${pageUrl}&controlBootstrap=${encodeURIComponent(bootstrapNonce)}`;
+  return Object.freeze({
+    pageBridge, serverOrigin, pageUrl, launchUrl,
+    close: () => new Promise((resolveClose) => server.close(resolveClose)),
+  });
+}
+
+export async function createControlProduct({ env = process.env, browserLauncher = launchBrowser } = {}) {
+  if (typeof browserLauncher !== "function") throw new TypeError("control product browserLauncher must be a function");
+  const timeoutMs = Number(env.PYPROC_MCP_TIMEOUT || DEFAULT_COMMAND_TIMEOUT_MS);
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new TypeError("PYPROC_MCP_TIMEOUT must be positive");
+  const browserEnabled = env.PYPROC_BROWSER_CONTROL === "1";
+  const engineEnabled = env.PYPROC_MACHINE_ENGINE !== "0";
+  if (!engineEnabled && !browserEnabled) throw new TypeError("a disabled engine requires browser control");
+  const providerKind = browserEnabled ? (env.PYPROC_AUTOMATION_PROVIDER || "nativeCdp") : null;
+  if (browserEnabled && !["nativeCdp", "frame", "replay"].includes(providerKind)) {
+    throw new TypeError(`unsupported automation provider: ${providerKind}`);
+  }
+  let recordingConfig = null;
+  if (env.PYPROC_AUTOMATION_RECORDING) {
+    try { recordingConfig = JSON.parse(env.PYPROC_AUTOMATION_RECORDING); }
+    catch (error) { throw new TypeError("PYPROC_AUTOMATION_RECORDING must be JSON"); }
+  }
+  if (providerKind === "replay" && recordingConfig?.mode !== "replay") {
+    throw new TypeError("ReplaySpace requires replay recording config");
+  }
+  const browserConfig = browserEnabled ? parseBrowserControlConfig(env, { timeoutMs }) : null;
+  const replayRecording = providerKind === "replay" ? await loadAutomationRecording(recordingConfig.file) : null;
+  if (replayRecording) assertAutomationRecordingSelection(replayRecording, recordingConfig, browserConfig);
+  if (!engineEnabled && providerKind === "frame") throw new TypeError("FrameSpace requires the Python Machine page");
+  if (providerKind === "frame") assertFrameSpaceConfig(browserConfig);
+  if (providerKind === "replay" && replayRecording.provider.providerKind === "frame") assertFrameSpaceConfig(browserConfig);
+  const frameToolProvider = providerKind === "frame"
+    || (providerKind === "replay" && replayRecording.provider.providerKind === "frame");
+  const browserTools = browserConfig
+    ? (frameToolProvider ? createFrameSpaceTools(browserConfig) : createBrowserControlTools(browserConfig)) : [];
+  const verificationTools = browserEnabled ? VERIFICATION_TOOLS : VERIFICATION_OFFLINE_TOOLS;
+  const executionMemoryEnabled = !!env.PYPROC_EXECUTION_MEMORY_ROOT;
+  const memoryTools = executionMemoryEnabled ? EXECUTION_MEMORY_TOOLS : [];
+  const effectTransactionsEnabled = env.PYPROC_EFFECT_TRANSACTIONS === "1";
+  if (effectTransactionsEnabled && !executionMemoryEnabled) {
+    throw new TypeError("effect transactions require Execution Memory");
+  }
+  if (effectTransactionsEnabled && !engineEnabled) {
+    throw new TypeError("effect transactions rehearse in the Python Machine");
+  }
+  const effectTools = effectTransactionsEnabled ? EFFECT_TRANSACTION_TOOLS : [];
+  const appSpaceConfig = env.PYPROC_APP_SPACE ? JSON.parse(env.PYPROC_APP_SPACE) : null;
+  const appSpaceEnabled = !!appSpaceConfig;
+  if (appSpaceEnabled && (!executionMemoryEnabled || !effectTransactionsEnabled || providerKind !== "frame")) {
+    throw new TypeError("AppSpace requires Execution Memory, Rehearse-Commit, and FrameSpace");
+  }
+  const appTools = appSpaceEnabled ? APP_SPACE_TOOLS : [];
+  const replayGraphEnabled = env.PYPROC_REPLAY_GRAPH === "1";
+  if (replayGraphEnabled && !executionMemoryEnabled) {
+    throw new TypeError("ReplayGraph requires Execution Memory");
+  }
+  const replayGraphTools = replayGraphEnabled ? REPLAY_GRAPH_TOOLS : [];
+  const actuationEnabled = env.PYPROC_ACTUATION === "1";
+  const windowsNativeConfig = env.PYPROC_WINDOWS_MOTOR ? JSON.parse(env.PYPROC_WINDOWS_MOTOR) : null;
+  if (actuationEnabled && (!executionMemoryEnabled || !browserEnabled)) {
+    throw new TypeError("Motor requires Execution Memory and an automation provider");
+  }
+  if (actuationEnabled && providerKind === "frame" && !appSpaceEnabled) {
+    throw new TypeError("Motor with FrameSpace requires AppSpace");
+  }
+  const actuationTools = actuationEnabled ? ACTUATION_TOOLS : [];
+  const machineImageTools = engineEnabled && executionMemoryEnabled ? CONTROL_MACHINE_IMAGE_TOOLS : [];
+  const pythonTools = engineEnabled ? [...CONTROL_PYTHON_TOOLS, ...machineImageTools] : [];
+  const tools = Object.freeze([...pythonTools, ...browserTools, ...verificationTools, ...memoryTools,
+    ...effectTools, ...appTools, ...replayGraphTools, ...actuationTools]);
+  const pythonToolNames = new Set(pythonTools.map((tool) => tool.name));
+  const verificationToolNames = new Set(VERIFICATION_TOOLS.map((tool) => tool.name));
+  const memoryToolNames = new Set(memoryTools.map((tool) => tool.name));
+  const effectToolNames = new Set(effectTools.map((tool) => tool.name));
+  const appToolNames = new Set(appTools.map((tool) => tool.name));
+  const replayGraphToolNames = new Set(replayGraphTools.map((tool) => tool.name));
+  const actuationToolNames = new Set(actuationTools.map((tool) => tool.name));
+  const producerVersion = JSON.parse(await readFile(resolve(PACKAGE_ROOT, "package.json"), "utf8")).version;
+  const machinePage = engineEnabled ? await startMachinePage({ engineRootValue: env.PYPROC_MCP_ENGINE_ROOT,
+    timeoutMs, providerKind, browserConfig, appSpaceEnabled }) : null;
+  const pageBridge = machinePage?.pageBridge || null;
+  const serverOrigin = machinePage?.serverOrigin || null;
+  const pageUrl = machinePage?.pageUrl || null;
   let browserSession = null;
   let browserControl = null;
   let automationSpace = null;
@@ -267,12 +287,10 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   let windowsNative = null;
   try {
     windowsNative = windowsNativeConfig ? await WindowsNativeHostClient.open(windowsNativeConfig) : null;
-    browserSession = browserLauncher(launchUrl, {
+    browserSession = browserLauncher(machinePage?.launchUrl || "about:blank", {
       prefix: "pyprocControl-",
-      extraArgs: [
-        ...(providerKind === "nativeCdp" ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : []),
-        ...trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
-      ],
+      cdpPipe: providerKind === "nativeCdp",
+      extraArgs: trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
     });
     automationSpace = browserEnabled
       ? (providerKind === "frame"
@@ -281,7 +299,8 @@ export async function createControlProduct({ env = process.env, browserLauncher 
           ? new ReplaySpace({ recording: replayRecording,
               cursor: recordingConfig.startCursor || 0,
               prefixSha256: recordingConfig.prefixSha256 || null })
-          : new NativeCdpSpace({ profileDir: browserSession.profile, config: browserConfig })) : null;
+          : new NativeCdpSpace({ profileDir: browserSession.profile, cdpPipe: browserSession.cdpPipe,
+              config: browserConfig })) : null;
     if (automationSpace && recordingConfig?.mode === "record") {
       automationSpace = await RecordingSpace.open({ provider: automationSpace, file: recordingConfig.file,
         overwrite: recordingConfig.overwrite });
@@ -360,22 +379,22 @@ export async function createControlProduct({ env = process.env, browserLauncher 
           return verificationHandlers[name](input, { signal, requestId });
         }
         if (memoryToolNames.has(toolName)) {
-          await pageBridge.waitForReady();
+          await pageBridge?.waitForReady();
           return memoryProduct.handlers[name](input, { signal, requestId });
         }
         if (effectToolNames.has(toolName)) {
-          await pageBridge.waitForReady();
+          await pageBridge?.waitForReady();
           return effectProduct.handlers[name](input, { signal, requestId });
         }
         if (appToolNames.has(toolName)) {
-          await pageBridge.waitForReady();
+          await pageBridge?.waitForReady();
           return appProduct.handlers[name](input, { signal, requestId });
         }
         if (replayGraphToolNames.has(toolName)) {
           return replayGraphProduct.handlers[name](input, { signal, requestId });
         }
         if (actuationToolNames.has(toolName)) {
-          await pageBridge.waitForReady();
+          await pageBridge?.waitForReady();
           return actuationProduct.handlers[name](input, { signal, requestId });
         }
         if (automationRouter) return automationRouter.invoke(name, input, { signal, requestId });
@@ -402,18 +421,18 @@ export async function createControlProduct({ env = process.env, browserLauncher 
         actuationProduct?.coordinator.close();
         await windowsNative?.close();
         try { await automationRouter?.close(); } catch (error) {}
-        pageBridge.close();
+        pageBridge?.close();
         try { browserSession?.close(); } catch (error) {}
-        await new Promise((resolveClose) => server.close(resolveClose));
+        await machinePage?.close();
       },
     });
   } catch (error) {
-    pageBridge.close();
+    pageBridge?.close();
     await windowsNative?.close();
     try { await automationRouter?.close(); } catch (closeError) {}
     if (!automationRouter) try { await automationSpace?.close(); } catch (closeError) {}
     try { browserSession?.close(); } catch (closeError) {}
-    await new Promise((resolveClose) => server.close(resolveClose));
+    await machinePage?.close();
     throw error;
   }
 }

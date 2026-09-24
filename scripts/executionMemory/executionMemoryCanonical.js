@@ -113,7 +113,7 @@ export function createExecutionMemoryRevision({
     revision,
     parents: [...parents],
     project: structuredClone(project),
-    machine: structuredClone(machine),
+    machine: machine === null ? null : structuredClone(machine),
     work: structuredClone(work),
     browser: browser === null ? null : structuredClone(browser),
     evidence: evidence === null ? null : structuredClone(evidence),
@@ -126,7 +126,7 @@ export function createExecutionMemoryRevision({
 export function validateExecutionMemoryRevision(revision) {
   exact(revision, REVISION_KEYS, "revision");
   exact(revision.project, PROJECT_KEYS, "revision.project");
-  exact(revision.machine, MACHINE_KEYS, "revision.machine");
+  if (revision.machine !== null) exact(revision.machine, MACHINE_KEYS, "revision.machine");
   exact(revision.work, WORK_KEYS, "revision.work");
   exact(revision.permissions, PERMISSION_KEYS, "revision.permissions");
   exact(revision.provenance, PROVENANCE_KEYS, "revision.provenance");
@@ -147,12 +147,16 @@ export function validateExecutionMemoryRevision(revision) {
     || typeof revision.project.untracked !== "boolean") {
     throw executionMemoryError("EXECUTION_MEMORY_INVALID", "project identity is invalid");
   }
-  boundedText(revision.machine.machineId, "revision.machine.machineId", 256);
-  if (!EXECUTION_MEMORY_ADDRESS.test(revision.machine.generation)
-    || !EXECUTION_MEMORY_DIGEST.test(revision.machine.environment)
-    || !EXECUTION_MEMORY_DIGEST.test(revision.machine.imageSha256)
-    || !["cold", "portable"].includes(revision.machine.lifecycle)) {
-    throw executionMemoryError("EXECUTION_MEMORY_INVALID", "Machine link is invalid");
+  // A browser-only host has no Python Machine: machine is null and the revision links project, permissions,
+  // work, and any browser boundary or evidence. Such a session cannot be suspended because nothing goes cold.
+  if (revision.machine !== null) {
+    boundedText(revision.machine.machineId, "revision.machine.machineId", 256);
+    if (!EXECUTION_MEMORY_ADDRESS.test(revision.machine.generation)
+      || !EXECUTION_MEMORY_DIGEST.test(revision.machine.environment)
+      || !EXECUTION_MEMORY_DIGEST.test(revision.machine.imageSha256)
+      || !["cold", "portable"].includes(revision.machine.lifecycle)) {
+      throw executionMemoryError("EXECUTION_MEMORY_INVALID", "Machine link is invalid");
+    }
   }
   if (!STATES.has(revision.work.state) || typeof revision.work.outcomeUnknown !== "boolean"
     || (revision.work.branch !== null && (typeof revision.work.branch !== "string"
@@ -171,7 +175,7 @@ export function validateExecutionMemoryRevision(revision) {
   if (["suspended", "completed"].includes(revision.work.state) && revision.work.outcomeUnknown) {
     throw executionMemoryError("EXECUTION_MEMORY_OUTCOME_UNKNOWN", "unknown external effect blocks a safe terminal");
   }
-  if (revision.work.state === "suspended" && revision.machine.lifecycle !== "cold") {
+  if (revision.work.state === "suspended" && revision.machine?.lifecycle !== "cold") {
     throw executionMemoryError("EXECUTION_MEMORY_SUSPEND_UNVERIFIED", "suspended requires a cold Machine");
   }
   if (revision.browser !== null) {

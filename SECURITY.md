@@ -41,6 +41,10 @@ key distribution and permission UI belong to the product
 preserve the canonical risk of every action; wildcard origins are rejected. Initial navigation still requires a
 purpose and explicit effect acknowledgement even when the action catalog is read-only.
 
+The browser the host launches opens no DevTools port: the broker speaks CDP over the browser's
+`--remote-debugging-pipe` descriptors, so no other local process can attach to it. A browser-only host
+(`engine.enabled` false) also serves no machine page and has no loopback listener at all.
+
 Certificate checks are never switched off. A self-signed local HTTPS target is trusted only when the manifest
 lists a loopback HTTPS origin with a certificate file that names that host; the manifest pins its public key and the
 isolated browser receives only that key as a certificate exception. Remote hosts cannot be listed.

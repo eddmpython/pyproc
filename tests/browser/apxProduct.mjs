@@ -36,11 +36,11 @@ console.log("APX Native CDP product gate");
 try {
   browser = launchBrowser("about:blank", {
     prefix: "pyprocApxProductProbe-",
-    extraArgs: ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"],
+    cdpPipe: true,
   });
   const actionNames = ["snapshot", "screenshot", "click"];
   broker = await connectNodeBrowserControl({
-    profileDir: browser.profile,
+    cdpPipe: browser.cdpPipe,
     targetOrigins: [origin],
     methods: [...new Set(actionNames.flatMap((name) => BROWSER_AUTOMATION_ACTIONS[name].methods))],
     events: [...new Set(actionNames.flatMap((name) => BROWSER_AUTOMATION_ACTIONS[name].events))],

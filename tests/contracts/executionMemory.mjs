@@ -199,8 +199,47 @@ export async function assertExecutionMemoryContract() {
     } finally {
       await rm(tamperedRoot, { recursive: true, force: true });
     }
+    await assertBrowserOnlyExecutionMemory();
   } finally {
     await rm(sourceRoot, { recursive: true, force: true });
     await rm(targetRoot, { recursive: true, force: true });
+  }
+}
+
+// 브라우저 전용 host(engine.enabled false)의 revision: Machine page가 없어 machine은 null이고 project, 권한,
+// work, evidence가 revision을 잇는다. 잠글 Machine이 없으므로 suspended는 받지 않는다.
+async function assertBrowserOnlyExecutionMemory() {
+  const root = await mkdtemp(join(tmpdir(), "pyproc-execution-memory-browser-only-"));
+  const importRoot = await mkdtemp(join(tmpdir(), "pyproc-execution-memory-browser-only-import-"));
+  try {
+    const product = await createExecutionMemoryHandlers({ root, pageBridge: null,
+      permissionManifest: { pythonNetwork: "denied", browser: { providerKind: "nativeCdp",
+        targetOrigins: ["http://allowed.test"], actions: ["snapshot"], maxRisk: "read" } } });
+    const context = { requestId: "request:browser-only", signal: undefined };
+    const created = await product.handlers["memory.create"]({ executionSessionId: "session:browser-only",
+      project: project() }, context);
+    const work = { state: "active", branch: "candidate:browser", checkpoint: "checkpoint:browser",
+      outcomeUnknown: false, pendingIntentSha256: null };
+    const advanced = await product.handlers["memory.checkpoint"]({ executionSessionId: "session:browser-only",
+      expectedRevisionSha256: created.contentSha256, work }, context);
+    const suspendedWithoutMachine = await errorOf(() => product.registry.checkpointSession("session:browser-only",
+      advanced.contentSha256, { work: { ...work, state: "suspended" } }));
+    const listed = (await product.registry.listSessions()).find((entry) => entry.executionSessionId === "session:browser-only");
+    assert(created.machine === null && advanced.machine === null && advanced.parents[0] === created.contentSha256
+      && suspendedWithoutMachine?.code === "EXECUTION_MEMORY_SUSPEND_UNVERIFIED" && listed?.machineLifecycle === null
+      && (await product.registry.openSession("session:browser-only")).contentSha256 === advanced.contentSha256,
+    "브라우저 전용 revision이 machine 없이 이어지지 않았거나 잠글 Machine 없는 suspended를 받았다");
+    const exported = await product.registry.exportHandoff("session:browser-only", "browser-only-handoff");
+    const target = await ExecutionMemoryRegistry.open({ root: importRoot });
+    const imported = await target.importHandoff(exported.outputDir, { trustedPublicKeyFile: exported.signerPublicKeyFile,
+      approvedPermissionManifestSha256: exported.requestedPermissionManifestSha256 });
+    const retention = await product.registry.retentionPlan();
+    assert(imported.contentSha256 === advanced.contentSha256 && imported.machine === null
+      && JSON.parse(await readFile(join(exported.outputDir, "descriptor.json"), "utf8")).inventory.machineImages.length === 0
+      && retention.orphaned.length === 0 && retention.artifacts.machine.reachable.length === 0,
+    "machine 없는 revision chain의 handoff와 retention이 성립하지 않았다");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(importRoot, { recursive: true, force: true });
   }
 }

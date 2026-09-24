@@ -113,7 +113,9 @@ export async function createExecutionMemoryHandlers({
   const permissions = await registry.artifacts.capturePermissions(permissionManifest);
   const roots = Object.freeze([resolve(root), ...importRoots.map((importRoot) => resolve(importRoot))]);
 
+  // A browser-only host has no Machine page: its revisions carry machine null.
   const captureMachine = async (machineId, signal, requestId) => {
+    if (!pageBridge) return null;
     const result = await pageBridge.dispatch("machine.image.export", {}, { signal, requestId: `${requestId}:image` });
     return registry.artifacts.captureMachineImage({ bytes: decodeMachineResult(result), machineId, lifecycle: "portable" });
   };
@@ -159,7 +161,7 @@ export async function createExecutionMemoryHandlers({
       "memory.checkpoint": async (input, { signal, requestId }) => {
         const current = await registry.openSession(input.executionSessionId);
         return registry.checkpointSession(input.executionSessionId, input.expectedRevisionSha256, {
-          machine: await captureMachine(current.machine.machineId, signal, requestId),
+          machine: await captureMachine(current.machine?.machineId, signal, requestId),
           work: input.work,
           browser: input.browser === undefined ? current.browser : await captureBrowser(input.browser),
         });
@@ -167,7 +169,7 @@ export async function createExecutionMemoryHandlers({
       "memory.complete": async (input, { signal, requestId }) => {
         const current = await registry.openSession(input.executionSessionId);
         const evidence = await captureEvidence(input.evidencePackDir);
-        const machine = await captureMachine(current.machine.machineId, signal, requestId);
+        const machine = await captureMachine(current.machine?.machineId, signal, requestId);
         return registry.completeSession(input.executionSessionId, input.expectedRevisionSha256, { machine, evidence });
       },
       "memory.open": (input) => registry.openSession(input.executionSessionId),

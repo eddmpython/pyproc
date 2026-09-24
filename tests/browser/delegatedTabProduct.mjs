@@ -3,7 +3,6 @@ import { strict as assert } from "node:assert";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { launchBrowser } from "../../scripts/browserControl/browserLauncher.mjs";
-import { readDevToolsEndpoint } from "../../scripts/browserControl/browserControlBroker.mjs";
 import { CdpConnection } from "../../scripts/browserControl/cdpConnection.mjs";
 
 if (process.platform !== "win32") {
@@ -20,9 +19,8 @@ const server = createServer((request, response) => {
 });
 await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const browser = launchBrowser(`${origin}/host`, { enableExtensions: true,
-  extraArgs: [`--disable-extensions-except=${extensionRoot}`, `--load-extension=${extensionRoot}`,
-    "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] });
+const browser = launchBrowser(`${origin}/host`, { enableExtensions: true, cdpPipe: true,
+  extraArgs: [`--disable-extensions-except=${extensionRoot}`, `--load-extension=${extensionRoot}`] });
 let connection = null;
 let passed = 0;
 
@@ -48,8 +46,7 @@ async function evaluate(sessionId, expression) {
 }
 
 try {
-  connection = await CdpConnection.connect(await readDevToolsEndpoint(browser.profile, { timeoutMs: 30000 }),
-    { timeoutMs: 30000 });
+  connection = CdpConnection.overPipe(browser.cdpPipe, { timeoutMs: 30000 });
   const targets = () => connection.send("Target.getTargets").then((output) => output.targetInfos);
   const extensionTarget = await waitFor(async () => (await targets()).find((entry) =>
     entry.url.startsWith("chrome-extension://") && entry.url.endsWith("/serviceWorker.js")));

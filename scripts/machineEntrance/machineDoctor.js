@@ -80,14 +80,19 @@ export async function inspectMachineProfile(configPath, {
     checks.push(check("MACHINE_PACKAGE_BLOCKED", "blocking", String(error?.message || error)));
   }
 
-  try {
-    const engine = await engineInspector(loaded.config.engine.root);
-    checks.push(check("MACHINE_ENGINE_VERIFIED", "pass",
-      `Local engine ${engine.version} passed core and package digest verification.`, { engine }));
-  } catch (error) {
-    checks.push(check(error?.code || "MACHINE_ENGINE_BLOCKED", "blocking", String(error?.message || error), {
-      nextCommand: "Provision the exact owned engine files recorded by the installed package manifest.",
-    }));
+  if (loaded.config.engine.enabled === false) {
+    checks.push(check("MACHINE_ENGINE_CLOSED", "pass",
+      "The Python Machine is disabled; the host serves browser automation only and opens no machine page."));
+  } else {
+    try {
+      const engine = await engineInspector(loaded.config.engine.root);
+      checks.push(check("MACHINE_ENGINE_VERIFIED", "pass",
+        `Local engine ${engine.version} passed core and package digest verification.`, { engine }));
+    } catch (error) {
+      checks.push(check(error?.code || "MACHINE_ENGINE_BLOCKED", "blocking", String(error?.message || error), {
+        nextCommand: "Provision the exact owned engine files recorded by the installed package manifest.",
+      }));
+    }
   }
 
   try {
@@ -150,6 +155,6 @@ export async function inspectMachineProfile(configPath, {
     advisory: Object.freeze(advisory),
     automation,
     windowsNative,
-    next: createMachineNext(loaded.configPath),
+    next: loaded.config.engine.enabled === false ? null : createMachineNext(loaded.configPath),
   });
 }

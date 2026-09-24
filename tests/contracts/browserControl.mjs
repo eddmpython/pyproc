@@ -1,12 +1,12 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebMachineHost } from "../../src/machine/host/webMachineHost.js";
 import { resolveRequiredDevice } from "../../src/machine/contracts/deviceRequirement.js";
+import { PassThrough } from "node:stream";
 import {
   NodeBrowserControlBroker,
-  readDevToolsEndpoint,
+  connectNodeBrowserControl,
 } from "../../scripts/browserControl/browserControlBroker.mjs";
+import { CdpConnection } from "../../scripts/browserControl/cdpConnection.mjs";
 import {
   BrowserControlPort,
   BROWSER_CONTROL_ERROR_CODES,
@@ -172,14 +172,39 @@ export async function assertBrowserControlContract() {
   const extensionArgs = headlessArgs("contract-profile", { enableExtensions: true });
   assert(!extensionArgs.includes("--disable-extensions"), "명시적 extension probe opt-in이 닫혀 있다");
 
-  const profileDir = await mkdtemp(join(tmpdir(), "pyprocBrowserControlContract-"));
-  try {
-    const unavailable = await errorOf(() => readDevToolsEndpoint(profileDir, { timeoutMs: 5 }));
-    assert(unavailable?.code === BROWSER_CONTROL_ERROR_CODES.brokerUnavailable,
-      "remote debugging authority가 없는 profile이 fail-closed가 아니다");
-  } finally {
-    await rm(profileDir, { recursive: true, force: true });
-  }
+  // CDP는 브라우저 fd 3과 fd 4 pipe로만 잇는다. 메시지는 NUL로 끝나는 JSON이고 청크 경계와 무관하게 조립된다.
+  const toBrowser = new PassThrough();
+  const fromBrowser = new PassThrough();
+  const written = [];
+  toBrowser.on("data", (chunk) => written.push(chunk));
+  const pipeConnection = CdpConnection.overPipe({ write: toBrowser, read: fromBrowser }, { timeoutMs: 1000 });
+  const pipeEvents = [];
+  pipeConnection.subscribe((event) => pipeEvents.push(event));
+  const first = pipeConnection.send("Browser.getVersion");
+  const second = pipeConnection.send("Target.getTargets", {}, "session-a");
+  await new Promise((resolveTick) => setImmediate(resolveTick));
+  const frames = Buffer.concat(written).toString("utf8").split("\0");
+  assert(frames.length === 3 && frames[2] === ""
+    && JSON.parse(frames[0]).method === "Browser.getVersion" && JSON.parse(frames[1]).sessionId === "session-a",
+  "CDP pipe가 요청을 NUL로 끝나는 JSON 한 줄씩 쓰지 않았다");
+  const reply = Buffer.from(`${JSON.stringify({ id: 1, result: { product: "Chrome/200.0" } })}\0`
+    + `${JSON.stringify({ method: "Target.targetCreated", params: { targetInfo: {} } })}\0`
+    + `${JSON.stringify({ id: 2, result: { targetInfos: [] } })}\0`);
+  fromBrowser.write(reply.subarray(0, 7));
+  fromBrowser.write(reply.subarray(7, 60));
+  fromBrowser.write(reply.subarray(60));
+  const [version, pipeTargets] = await Promise.all([first, second]);
+  assert(version.product === "Chrome/200.0" && Array.isArray(pipeTargets.targetInfos)
+    && pipeEvents.length === 1 && pipeEvents[0].method === "Target.targetCreated",
+  "CDP pipe가 청크 경계에 걸친 응답과 이벤트를 조립하지 못했다");
+  const pending = pipeConnection.send("Page.navigate", { url: "about:blank" });
+  fromBrowser.end();
+  const lost = await errorOf(() => pending);
+  assert(lost?.outcomeUnknown === true && pipeConnection.inspect().closed,
+    "브라우저가 pipe를 닫았는데 보낸 요청이 결과 불명으로 끝나지 않았다");
+  const missingPipe = await errorOf(() => connectNodeBrowserControl({ targetOrigins: ["http://allowed.test"], methods: [] }));
+  assert(missingPipe instanceof TypeError && /fd 3/.test(missingPipe.message),
+    "CDP pipe 없이 broker가 브라우저 권한을 열었다");
 
   let rejected = false;
   try { new BrowserControlPolicy({ targetOrigins: ["http://allowed.test"], methods: ["Unknown.doThing"] }); }

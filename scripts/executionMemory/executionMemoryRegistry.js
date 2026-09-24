@@ -70,7 +70,7 @@ async function identity(root) {
 }
 
 function safeTerminal(work, machine) {
-  if (work.state === "suspended" && machine.lifecycle !== "cold") {
+  if (work.state === "suspended" && machine?.lifecycle !== "cold") {
     throw executionMemoryError("EXECUTION_MEMORY_SUSPEND_UNVERIFIED", "suspended requires a cold Machine receipt");
   }
   if (["suspended", "completed"].includes(work.state) && work.outcomeUnknown) {
@@ -97,9 +97,10 @@ function validateInventory(inventory) {
 
 function inventoryForRevisions(revisions) {
   return Object.freeze({
-    machineImages: Object.freeze([...new Set(revisions.map((revision) => revision.machine.imageSha256))].sort()),
+    machineImages: Object.freeze([...new Set(revisions.flatMap((revision) =>
+      revision.machine ? [revision.machine.imageSha256] : []))].sort()),
     coldReceipts: Object.freeze([...new Set(revisions.flatMap((revision) =>
-      revision.machine.lifecycle === "cold" ? [revision.machine.imageSha256] : []))].sort()),
+      revision.machine?.lifecycle === "cold" ? [revision.machine.imageSha256] : []))].sort()),
     situations: Object.freeze([...new Set(revisions.flatMap((revision) =>
       revision.browser ? [revision.browser.situationSha256] : []))].sort()),
     recordings: Object.freeze([...new Set(revisions.flatMap((revision) =>
@@ -169,7 +170,7 @@ export class ExecutionMemoryRegistry {
     return this._publish(expectedRevisionSha256, {
       executionSessionId,
       project: project || current.project,
-      machine: machine || current.machine,
+      machine: machine === undefined ? current.machine : machine,
       work: work || current.work,
       browser: browser === undefined ? current.browser : browser,
       evidence: evidence === undefined ? current.evidence : evidence,
@@ -215,7 +216,7 @@ export class ExecutionMemoryRegistry {
         revision: revision.revision,
         contentSha256: revision.contentSha256,
         state: revision.work.state,
-        machineLifecycle: revision.machine.lifecycle,
+        machineLifecycle: revision.machine?.lifecycle ?? null,
         updatedAt: revision.provenance.createdAt,
       }));
     }

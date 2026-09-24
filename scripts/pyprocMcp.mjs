@@ -130,7 +130,8 @@ try {
           ok: true,
           schemaVersion: loaded.config.schemaVersion,
           configPath: loaded.configPath,
-          engine: { mode: "root", root: loaded.config.engine.root },
+          engine: loaded.config.engine.enabled === false ? { enabled: false }
+            : { mode: "root", root: loaded.config.engine.root },
           executionMemory: loaded.config.executionMemory.enabled ? {
             enabled: true,
             root: loaded.config.executionMemory.root,

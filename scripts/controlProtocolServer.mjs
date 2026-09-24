@@ -116,7 +116,7 @@ async function shutdown(code = 0) {
   return shutdownPromise;
 }
 
-process.stderr.write(`pyproc control: ${product.browserSession.browser} -> ${product.pageUrl}\n`);
+process.stderr.write(`pyproc control: ${product.browserSession.browser} -> ${product.pageUrl || "about:blank (browser-only host)"}\n`);
 process.on("SIGINT", () => void shutdown(0));
 process.on("SIGTERM", () => void shutdown(0));
 

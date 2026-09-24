@@ -25,8 +25,15 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   browser. A certificate failure now reports `BROWSER_CONTROL_TARGET_CERTIFICATE_UNTRUSTED` with the browser error
   instead of a generic target timeout.
 
+- **A browser-only host.** `engine: { "enabled": false }` starts the control host without the Python Machine: no
+  engine files, no machine page, no loopback listener, and no `machine.*` operations. Browser observe, act, Motor,
+  and Execution Memory work; revisions carry `machine: null`. FrameSpace and Rehearse-Commit still need the Machine.
+
 ### Changed
 
+- **The browser no longer opens a DevTools port.** The broker speaks CDP over the browser's
+  `--remote-debugging-pipe` descriptors instead of `--remote-debugging-port`, so no local process can join the
+  automation browser.
 - **Text a run writes to stderr no longer fails the run.** It appears in `output` in the order it was written and only
   an exception rejects the run. Control `machine.run` returns that output as `stdout`, lines joined with `\n`.
 
@@ -65,6 +72,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   아무 일도 하지 않는다고 가정한 자동화는 이제 활성화를 일으킨다.
 - native `<summary>`(Chromium `DisclosureTriangle`)가 click과 expanded 상태를 가진 control로 분류되어
   situate가 click affordance를 준다. 같은 이름의 글은 행동 대상이 아니다.
+- `engine.enabled` false인 브라우저 전용 host는 Python Machine, machine page, loopback listener, `machine.*`
+  operation 없이 브라우저 관찰, 행동, Motor, Execution Memory(machine null revision)를 제공한다.
+- 브라우저가 DevTools port를 열지 않는다. broker는 `--remote-debugging-pipe`로만 CDP를 쓴다.
 - 예산을 넘는 큰 페이지의 APX graph가 잘린 entity를 가리키는 unresolved와 crop 때문에 자기 schema 검사에서
   실패하던 결함을 고쳤다. 절단 뒤에도 모든 참조가 온전하고 잘린 crop은 회수된다.
 

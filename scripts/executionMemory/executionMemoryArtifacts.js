@@ -189,26 +189,34 @@ export class ExecutionMemoryArtifacts {
   }
 
   async verifyRevision(revision) {
-    const machineBytes = await readOptional(this.machinePath(revision.machine.imageSha256));
-    if (!machineBytes || digestBytes(machineBytes) !== revision.machine.imageSha256) {
+    if (revision.machine !== null) await this.verifyMachine(revision.machine);
+    await this.verifyRevisionArtifacts(revision);
+  }
+
+  async verifyMachine(link) {
+    const machineBytes = await readOptional(this.machinePath(link.imageSha256));
+    if (!machineBytes || digestBytes(machineBytes) !== link.imageSha256) {
       throw executionMemoryError("EXECUTION_MEMORY_REFERENCE_MISSING", "Machine image is missing or mutated");
     }
     let coldReceipt = null;
-    if (revision.machine.lifecycle === "cold") {
-      const receiptBytes = await readOptional(this.coldReceiptPath(revision.machine.imageSha256));
+    if (link.lifecycle === "cold") {
+      const receiptBytes = await readOptional(this.coldReceiptPath(link.imageSha256));
       if (!receiptBytes) throw executionMemoryError("EXECUTION_MEMORY_REFERENCE_MISSING", "cold suspend receipt is missing");
       try { coldReceipt = JSON.parse(receiptBytes.toString("utf8")); }
       catch (error) { throw executionMemoryError("EXECUTION_MEMORY_REFERENCE_MISMATCH", "cold suspend receipt is invalid"); }
     }
     const machine = await this.captureMachineImage({
       bytes: machineBytes,
-      machineId: revision.machine.machineId,
-      lifecycle: revision.machine.lifecycle,
+      machineId: link.machineId,
+      lifecycle: link.lifecycle,
       coldReceipt,
     });
-    if (machine.generation !== revision.machine.generation || machine.environment !== revision.machine.environment) {
+    if (machine.generation !== link.generation || machine.environment !== link.environment) {
       throw executionMemoryError("EXECUTION_MEMORY_REFERENCE_MISMATCH", "Machine generation or environment does not match");
     }
+  }
+
+  async verifyRevisionArtifacts(revision) {
     const permissionBytes = await readOptional(this.permissionPath(revision.permissions.manifestSha256));
     if (!permissionBytes) throw executionMemoryError("EXECUTION_MEMORY_REFERENCE_MISSING", "permission manifest is missing");
     const permission = JSON.parse(permissionBytes.toString("utf8"));
@@ -281,8 +289,10 @@ export class ExecutionMemoryArtifacts {
       machine: new Set(), situation: new Set(), recording: new Set(), evidence: new Set(), permissions: new Set(),
     };
     for (const revision of revisions) {
-      expected.machine.add(`${revision.machine.imageSha256}.pymachine`);
-      if (revision.machine.lifecycle === "cold") expected.machine.add(`${revision.machine.imageSha256}.cold.json`);
+      if (revision.machine) {
+        expected.machine.add(`${revision.machine.imageSha256}.pymachine`);
+        if (revision.machine.lifecycle === "cold") expected.machine.add(`${revision.machine.imageSha256}.cold.json`);
+      }
       expected.permissions.add(`${revision.permissions.manifestSha256}.json`);
       if (revision.browser) {
         expected.situation.add(`${revision.browser.situationSha256}.json`);

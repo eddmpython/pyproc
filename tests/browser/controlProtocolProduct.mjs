@@ -9,6 +9,8 @@ import { pathToFileURL } from "node:url";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 import { binPath, installPackedPyProc, ROOT, run, runAsync } from "../packageHarness.mjs";
 import { createSelfSignedCertificate } from "../support/selfSignedCertificate.mjs";
+import { connectCdpWebSocket, readDevToolsEndpoint } from "../support/cdpWebSocket.mjs";
+import { listeningSocketsOf } from "../support/listeningSockets.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const frameBridge = await readFile(join(ROOT, "scripts", "automationSpace", "frameSpaceTarget.js"));
@@ -174,10 +176,6 @@ const { loadMcpProductConfig } = await import(pathToFileURL(join(packageRoot,
   "scripts", "mcpProductConfig.mjs")).href);
 const { launchBrowser } = await import(pathToFileURL(join(packageRoot,
   "scripts", "browserControl", "browserLauncher.mjs")).href);
-const { readDevToolsEndpoint } = await import(pathToFileURL(join(packageRoot,
-  "scripts", "browserControl", "browserControlBroker.mjs")).href);
-const { CdpConnection } = await import(pathToFileURL(join(packageRoot,
-  "scripts", "browserControl", "cdpConnection.mjs")).href);
 const { controlBase } = await import(pathToFileURL(join(packageRoot,
   "scripts", "controlProtocol", "controlProtocol.js")).href);
 const { createEvidencePack, publishEvidencePack } = await import(pathToFileURL(join(packageRoot,
@@ -207,7 +205,9 @@ try {
   while (reloadProduct.pageBridge._pending.get(activeId)?.state !== "delivered"
     && Date.now() < deliveryDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
   const previousEpoch = reloadProduct.pageBridge.pageEpoch;
-  reloadConnection = await CdpConnection.connect(await readDevToolsEndpoint(reloadProduct.browserSession.profile));
+  // The product holds the only CDP pipe; this gate adds a DevTools port to its launcher to reload the page
+  // from outside the product.
+  reloadConnection = await connectCdpWebSocket(await readDevToolsEndpoint(reloadProduct.browserSession.profile));
   const targets = await reloadConnection.send("Target.getTargets");
   const controlTarget = targets.targetInfos.find((target) => target.type === "page"
     && target.url.startsWith(reloadProduct.pageUrl));
@@ -252,6 +252,7 @@ let frameClient = null;
 let observeClient = null;
 let trustClient = null;
 let untrustClient = null;
+let browserOnlyClient = null;
 let trustServers = [];
 
 console.log("installed pyproc-control product gate");
@@ -672,6 +673,43 @@ try {
   check("명시한 인증서의 로컬 HTTPS 대상만 열리고 다른 키와 신뢰 없는 경우는 인증서 원인으로 거절",
     trustedHeading.name === "trusted-local" && certificateRefusal(otherKey) && certificateRefusal(withoutTrust),
     JSON.stringify({ otherKey: [otherKey?.code, otherKey?.details], withoutTrust: [withoutTrust?.code, withoutTrust?.details] }));
+
+  // 브라우저 전용 host: Python Machine과 machine page 없이 CDP pipe로만 브라우저를 다룬다. host와 브라우저
+  // 어느 쪽도 listen socket을 열지 않는 것을 운영체제 표로 확인한다.
+  const browserOnlyPath = join(installed.appDir, ".pyproc-browser-only", "manifest.json");
+  await mkdir(join(installed.appDir, ".pyproc-browser-only"), { recursive: true });
+  await writeFile(browserOnlyPath, JSON.stringify({ schemaVersion: 1, engine: { enabled: false }, timeoutMs: TIMEOUT_MS,
+    browser: { enabled: true, provider: "nativeCdp", allowedOrigins: [targetOrigin], maxRisk: "externalEffect",
+      actions: ["snapshot", "screenshot", "click"], methods: [], externalEffects: "acknowledged",
+      purpose: "browser-only-host-gate", ...(browser ? { executable: browser } : {}) } }));
+  browserOnlyClient = await PyProcControlClient.start(browserOnlyPath, { cwd: installed.appDir,
+    startupTimeoutMs: TIMEOUT_MS });
+  let browserOnlyRounds = 0;
+  let browserOnlyListeners = null;
+  for (let round = 0; round < 20; round += 1) {
+    const opened = await browserOnlyClient.openTarget(`${targetOrigin}/`, { expectedRisk: "externalEffect", waitUntil: "load" });
+    const attached = await browserOnlyClient.attachSession(opened.output.targetRef);
+    const heading = (await browserOnlyClient.perception(attached.output).query({ role: "heading", name: "control-ready" })).one();
+    if (round === 0) browserOnlyListeners = listeningSocketsOf(browserOnlyClient.process.pid);
+    await browserOnlyClient.detachSession(attached.output);
+    await browserOnlyClient.closeTarget(opened.output.targetRef, { expectedRisk: "externalEffect" });
+    if (heading.name === "control-ready") browserOnlyRounds += 1;
+  }
+  const flatCounts = (value) => Object.values(value).flatMap((entry) => typeof entry === "object" && entry !== null
+    ? flatCounts(entry) : [entry]);
+  const browserOnlyResources = (await browserOnlyClient.inspectSpace()).output.resources;
+  let browserOnlyPython = null;
+  try { await browserOnlyClient.runPython("1 + 1"); } catch (error) { browserOnlyPython = error; }
+  check("브라우저 전용 host가 Python Machine 없이 20회 열고 닫고 listen socket 0개, 자원 0으로 복귀",
+    browserOnlyRounds === 20 && browserOnlyListeners.length === 0
+      && !browserOnlyClient.operations.some((operation) => operation.startsWith("machine."))
+      && browserOnlyPython !== null && flatCounts(browserOnlyResources).every((count) => count === 0),
+    JSON.stringify({ rounds: browserOnlyRounds, listeners: browserOnlyListeners, resources: browserOnlyResources,
+      python: browserOnlyPython?.code || null }));
+  const machineHostListeners = listeningSocketsOf(client.process.pid);
+  check("Machine host의 listen socket은 machine page 서버 하나뿐이고 브라우저 DevTools port는 없음",
+    machineHostListeners.length === 1 && machineHostListeners[0].pid !== browserOnlyClient.process.pid,
+    JSON.stringify(machineHostListeners));
 } catch (error) {
   check("Control Protocol 제품 흐름 예외 없음", false, String(error?.stack || error).slice(-800));
 } finally {
@@ -680,6 +718,7 @@ try {
   await observeClient?.close();
   await trustClient?.close();
   await untrustClient?.close();
+  await browserOnlyClient?.close();
   for (const site of trustServers) site.server.close();
   targetServer.close();
   await rm(installed.tmp, { recursive: true, force: true });
