@@ -35,6 +35,9 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - **`press Enter` activates like a person's key.** The key now carries its text, so a focused button
   receives a trusted click and a form submits. Automation that relied on Enter doing nothing on a focused
   control will now activate it.
+- **A native `<summary>` is an actionable control.** PyProc Eyes classified Chromium's `DisclosureTriangle`
+  as a container, so situate gave it no click affordance. It is now a `ui.control` with `click` and its
+  `expanded` state; text with the same name stays non-actionable.
 - **Public surface removals are disclosed.** A release that removes or renames a name from a package entry point now
   lists it in a `### Breaking` table with its replacement or `none`. A contract gate compares the type surface with
   the last release, so an undisclosed removal cannot ship. The 0.0.22 and 0.0.23 sections below now disclose the
@@ -56,6 +59,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   격리 브라우저의 예외로 넘기고 원격 호스트는 받지 않는다. 인증서 실패는 원인을 지목하는 오류 코드로 끝난다.
 - `press Enter`가 사람의 키처럼 초점을 둔 단추를 trusted click으로 활성화하고 form을 제출한다. Enter가
   아무 일도 하지 않는다고 가정한 자동화는 이제 활성화를 일으킨다.
+- native `<summary>`(Chromium `DisclosureTriangle`)가 click과 expanded 상태를 가진 control로 분류되어
+  situate가 click affordance를 준다. 같은 이름의 글은 행동 대상이 아니다.
 
 ## 0.0.25 - 2026-09-09
 

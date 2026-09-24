@@ -199,6 +199,27 @@ export async function assertPerceptionSpaceContract() {
     && !focusedCalls.includes("DOMSnapshot.captureSnapshot"),
   "focused AX provider가 닫힌 semantic requirement 뒤 full tree를 읽었다");
 
+  // native <summary>는 Chromium AX에서 DisclosureTriangle이다. 누르면 펼쳐지는 control이지 컨테이너가 아니다.
+  const disclosureSensor = new WebCdpSensor({
+    command: async (sessionRef, method) => {
+      if (method === "DOM.getDocument") return { contextEpoch: 7,
+        target: { url: "https://disclosure.example/" }, result: { root: { nodeId: 1 } } };
+      if (method === "Accessibility.queryAXTree") return { contextEpoch: 7,
+        target: { url: "https://disclosure.example/" }, result: { nodes: [{
+          nodeId: "summary-1", backendDOMNodeId: 601, frameId: "main", ignored: false,
+          role: { value: "DisclosureTriangle" }, name: { value: "내 기록과 보관" },
+          properties: [{ name: "expanded", value: { value: false } }], childIds: [],
+        }] } };
+      return { contextEpoch: 7, result: {} };
+    },
+  });
+  const disclosureFacts = await disclosureSensor.capture({ sessionId: "disclosure" }, { channels: ["semantic"] },
+    { postconditionPlan: planPostconditionObservation({ entityAppeared: { name: "내 기록과 보관" } }) });
+  const disclosure = disclosureFacts.entities[0];
+  assert(disclosure?.kind === "ui.control" && disclosure.interaction.supportedActions.includes("click")
+    && disclosure.semantic.states.expanded === false,
+  "native summary(DisclosureTriangle)가 click을 지원하는 control로 분류되지 않았다");
+
   const fallbackCalls = [];
   const fallbackSensor = new WebCdpSensor({ command: async (sessionRef, method) => {
     fallbackCalls.push(method);

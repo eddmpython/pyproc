@@ -178,6 +178,32 @@ try {
     afterSituation.worldRef !== situation.worldRef && staleCapability?.code === "APX_CAPABILITY_STALE"
       && staleCapability?.outcome === "notSent");
 
+  // native <summary>는 이름 하나로 click affordance를 받고, 같은 이름의 문단은 받지 않는다.
+  const archiveBudget = { maxEntities: 120, maxRelations: 300, maxBytes: 256 * 1024 };
+  const archiveSituation = (await automation.observe(sessionRef, {
+    representation: "apx.situation",
+    focus: { objective: "Open the archive", requirements: [{ requirementRef: "requirement:archive",
+      select: { name: "내 기록과 보관", actionable: true }, need: ["fact", "affordance"], cardinality: "one" }] },
+    visual: { mode: "off" }, budget: archiveBudget,
+  })).result;
+  const openArchive = archiveSituation.affordances.find((entry) =>
+    entry.kind === "authorized" && entry.requirementRef === "requirement:archive" && entry.action === "click");
+  if (openArchive) {
+    await automation.run(sessionRef, [{ kind: "click", locatorRef: openArchive.locatorRef, expectedRisk: "externalEffect",
+      actionContext: { situationRef: archiveSituation.situationRef, worldRef: archiveSituation.worldRef,
+        capabilityRef: openArchive.capabilityRef } }]);
+  }
+  const archiveGraph = (await automation.observe(sessionRef, {
+    representation: "apx.graph", query: { name: "내 기록과 보관" }, visual: { mode: "off" }, budget: archiveBudget,
+  })).result;
+  const archiveControl = archiveGraph.entities.find((entity) => entity.kind === "ui.control");
+  const archiveText = archiveGraph.entities.find((entity) => entity.kind === "content.text");
+  check("native summary가 click affordance로 펼쳐지고 같은 이름의 글은 행동 대상이 아님",
+    archiveSituation.requirements[0].state === "satisfied" && openArchive?.capabilityRef
+      && archiveControl?.semantic?.states?.expanded === true && archiveText?.interaction?.actionable !== true,
+  JSON.stringify({ state: archiveSituation.requirements[0]?.state, unknowns: archiveSituation.unknowns,
+    control: archiveControl?.semantic, text: archiveText?.interaction }));
+
   await broker.detach(sessionRef);
 } catch (error) {
   check("gate 예외 없음", false, String(error?.stack || error).slice(0, 700));

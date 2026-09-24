@@ -271,6 +271,10 @@ An incomplete or unknown inventory cannot prove a unique target, even if the res
 }
 ```
 
+Native controls without an ARIA widget role are still controls: a `<summary>` (Chromium role
+`DisclosureTriangle`) is a `ui.control` that supports `click` and reports its `expanded` state, while text with
+the same name stays non-actionable content.
+
 Copy the selected authorized affordance's `situationRef`, `worldRef`, and `capabilityRef` into the action's
 `actionContext`. After target preparation, the broker rechecks session, target identity, actionability
 fingerprint, epoch, action, locator, risk, destination, transition shape, and expiry at the send boundary. A

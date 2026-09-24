@@ -20,9 +20,11 @@ const RELATION_TYPES = Object.freeze({
   activedescendant: "activeDescendant",
   errormessage: "errorMessageFor",
 });
+// DisclosureTriangle은 Chromium이 native <summary>에 주는 AX 역할이다. 누르면 details가 펼쳐지는 control이다.
 const CONTROL_ROLES = new Set([
-  "button", "checkbox", "combobox", "gridcell", "link", "listbox", "menuitem", "menuitemcheckbox",
-  "menuitemradio", "option", "radio", "scrollbar", "slider", "spinbutton", "switch", "tab", "treeitem",
+  "button", "checkbox", "combobox", "DisclosureTriangle", "gridcell", "link", "listbox", "menuitem",
+  "menuitemcheckbox", "menuitemradio", "option", "radio", "scrollbar", "slider", "spinbutton", "switch", "tab",
+  "treeitem",
 ]);
 const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"]);
 const CONTAINER_ROLES = new Set(["form", "group", "list", "listitem", "row", "table", "tree", "document"]);
