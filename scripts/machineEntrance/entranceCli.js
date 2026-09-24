@@ -11,6 +11,7 @@ const VALUE_OPTIONS = new Map([
   ["--action", "actions"],
   ["--method", "methods"],
   ["--file-root", "fileRoots"],
+  ["--trusted-certificate", "trustedCertificates"],
   ["--max-risk", "maxRisk"],
   ["--purpose", "purpose"],
   ["--timeout-ms", "timeoutMs"],
@@ -38,7 +39,7 @@ const VALUE_OPTIONS = new Map([
   ["--app-max-state-bytes", "appMaxStateBytes"],
 ]);
 const REPEATABLE = new Set([
-  "allowedOrigins", "actions", "methods", "fileRoots", "executionMemoryImportRoots",
+  "allowedOrigins", "actions", "methods", "fileRoots", "trustedCertificates", "executionMemoryImportRoots",
   "executionMemorySecretEnv",
   "effectApprovalAuthorities",
 ]);
@@ -164,6 +165,18 @@ function executionMemoryFrom(raw, projectRoot) {
   };
 }
 
+function trustedCertificatesFrom(raw, projectRoot) {
+  if (raw.trustedCertificates === undefined) return undefined;
+  return raw.trustedCertificates.map((entry) => {
+    const separator = entry.indexOf("=", entry.indexOf("://") + 3);
+    if (separator < 1 || separator === entry.length - 1) {
+      throw new TypeError("--trusted-certificate requires <https-origin>=<certificate-file>");
+    }
+    const file = entry.slice(separator + 1);
+    return { origin: entry.slice(0, separator), certificate: isAbsolute(file) ? file : resolve(projectRoot, file) };
+  });
+}
+
 function effectTransactionsFrom(raw, projectRoot) {
   const present = raw.enableEffectTransactions || raw.effectApprovalAuthorities !== undefined;
   if (!present) return undefined;
@@ -210,6 +223,7 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
   const executionMemory = executionMemoryFrom(raw, projectRoot);
   const effectTransactions = effectTransactionsFrom(raw, projectRoot);
   const appSpace = appSpaceFrom(raw);
+  const trustedCertificates = trustedCertificatesFrom(raw, projectRoot);
   const profile = {
     recipe: raw.recipe,
     ...(raw.engineRoot === undefined ? {} : {
@@ -222,6 +236,7 @@ export function parseMachineProfileInitArguments(argv, { cwd = process.cwd() } =
     ...(raw.actions === undefined ? {} : { actions: raw.actions }),
     ...(raw.methods === undefined ? {} : { methods: raw.methods }),
     ...(raw.fileRoots === undefined ? {} : { fileRoots: raw.fileRoots }),
+    ...(trustedCertificates === undefined ? {} : { trustedCertificates }),
     ...(raw.maxRisk === undefined ? {} : { maxRisk: raw.maxRisk }),
     ...(raw.purpose === undefined ? {} : { purpose: raw.purpose }),
     ...(raw.acknowledgeEffects ? { externalEffects: "acknowledged" } : {}),

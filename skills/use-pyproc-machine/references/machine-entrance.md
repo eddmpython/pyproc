@@ -111,8 +111,9 @@ initialization before a generated file is changed. `--dry-run` validates the rec
 creating the profile directory. An unknown recipe or option also fails before the output directory or any browser
 effect is created.
 
-Advanced bounded options include repeated `--method` and `--file-root`, viewport width and height, device scale,
-mobile and touch flags, and artifact byte, count, inline, and TTL limits. File roots remain absolute and existing.
+Advanced bounded options include repeated `--method`, `--file-root`, and
+`--trusted-certificate <https-origin>=<certificate-file>` for a self-signed loopback HTTPS target, viewport width
+and height, device scale, mobile and touch flags, and artifact byte, count, inline, and TTL limits. File roots remain absolute and existing.
 Origins remain exact HTTP(S) origins. Wildcards, credentials, paths, queries, and fragments are rejected.
 
 ## Durable Execution Memory

@@ -122,10 +122,23 @@ and incomplete external-effect approval fail closed.
 | `browser.methods` | Separate exact raw CDP allowlist. An empty list opens no raw command |
 | `browser.viewport` | Optional strict `{width,height,deviceScaleFactor?,mobile?,touch?}` device metrics. Dimensions are 1 to 10000 and scale is 0.1 to 10 |
 | `browser.fileRoots` | Existing absolute upload roots. Required when upload is enabled |
+| `browser.trustedCertificates` | Optional `{origin,certificate,spkiSha256?}` list for self-signed local HTTPS targets. Each origin is an exact loopback HTTPS origin in `allowedOrigins`, and the absolute PEM certificate must name its host and be inside its validity period. Only its public key is trusted |
 | `browser.externalEffects` | Must equal `acknowledged` when `maxRisk` is `externalEffect` |
 | `browser.purpose` | Required printable purpose for an external-effect configuration |
 | `browser.artifacts` | Optional disk, count, inline, and TTL limits described below |
 | `browser.recording` | Optional `{mode:"record",file,overwrite?}` for native/frame, or required `{mode:"replay",file,recordingId,finalSha256,startCursor?,prefixSha256?}` for ReplaySpace. Paths are absolute and nonzero cursors require a prefix digest |
+
+A self-signed local HTTPS server is trusted by its public key, never by turning certificate checks off:
+
+```sh
+npx pyproc-mcp init --recipe observeLocal --origin https://localhost:4443 \
+  --trusted-certificate https://localhost:4443=certs/dev.pem \
+  --purpose "inspect the local HTTPS build" --acknowledge-effects
+```
+
+The generated manifest pins the certificate's `spkiSha256`, so a later key change fails at startup. The pin is
+passed to the isolated profile's browser as its only certificate exception; remote hosts are never exempt, and
+`allowedOrigins` still bounds navigation.
 
 FrameSpace supports a smaller action catalog and requires `browser.methods` to be empty. Its exact setup,
 sandbox, screenshot, and credentialless-session limits are in the [FrameSpace guide](./frame-space.md).
@@ -481,6 +494,7 @@ Example screenshot action:
 | `BROWSER_AUTOMATION_ARTIFACT_QUOTA` | Delete artifacts or wait for TTL reap before capturing more |
 | `BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND` | The ref expired, was deleted, belongs to another process, or was invalidated by restart |
 | `BROWSER_CONTROL_COMMAND_UNSUPPORTED` at startup | Browser family, Chromium major, or CDP protocol is outside the supported range |
+| `BROWSER_CONTROL_TARGET_CERTIFICATE_UNTRUSTED` | The target's TLS certificate failed. `details.errorText` holds the browser error. For a self-signed local HTTPS server, list its certificate in `browser.trustedCertificates` |
 | `BROWSER_CONTROL_OUTCOME_UNKNOWN` | The connection died after send. Inspect the external system before a deliberate retry |
 
 ## Verification

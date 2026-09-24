@@ -19,6 +19,12 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   echo, and `null` for `None` or a trailing statement, next to that run's `output`. Control `machine.run` uses the same
   run, so it now reports the value after statements too (`print(1)` then `2` reports `"2"`, where it reported `null`).
 
+- **Self-signed local HTTPS targets can be trusted explicitly.** `browser.trustedCertificates` (and
+  `pyproc-mcp init --trusted-certificate <origin>=<file>`) lists a loopback HTTPS origin with its certificate file.
+  The manifest pins the certificate's public key and only that key becomes a certificate exception in the isolated
+  browser. A certificate failure now reports `BROWSER_CONTROL_TARGET_CERTIFICATE_UNTRUSTED` with the browser error
+  instead of a generic target timeout.
+
 ### Changed
 
 - **Text a run writes to stderr no longer fails the run.** It appears in `output` in the order it was written and only
@@ -43,6 +49,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - `run.python(code)` 한 번이 print 출력과 마지막 식의 `repr()`(REPL 의미론, None과 문장은 null)을 함께 돌려준다.
   Control `machine.run`도 같은 실행을 써서 문장 뒤의 마지막 식 값을 보고한다.
 - 실행이 stderr에 쓴 글은 순서대로 `output`에 들어가고 예외만 실행을 실패시킨다.
+- 자체 서명 인증서를 쓰는 로컬 HTTPS 대상을 `browser.trustedCertificates`로 명시해 신뢰한다. 공개키만 고정해
+  격리 브라우저의 예외로 넘기고 원격 호스트는 받지 않는다. 인증서 실패는 원인을 지목하는 오류 코드로 끝난다.
 
 ## 0.0.25 - 2026-09-09
 

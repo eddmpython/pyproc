@@ -41,6 +41,10 @@ key distribution and permission UI belong to the product
 preserve the canonical risk of every action; wildcard origins are rejected. Initial navigation still requires a
 purpose and explicit effect acknowledgement even when the action catalog is read-only.
 
+Certificate checks are never switched off. A self-signed local HTTPS target is trusted only when the manifest
+lists a loopback HTTPS origin with a certificate file that names that host; the manifest pins its public key and the
+isolated browser receives only that key as a certificate exception. Remote hosts cannot be listed.
+
 The initializer stays inside the selected project root, refuses existing generated files without
 `--overwrite`, and never writes credentials, a default browser profile, or a repository command. Run
 `pyproc-control doctor` before startup to verify the local engine chain and authority without launching a browser

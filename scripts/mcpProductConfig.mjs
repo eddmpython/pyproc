@@ -4,6 +4,7 @@ import { lstatSync, realpathSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseBrowserControlConfig } from "./browserControl/mcpBrowserControl.js";
 import { normalizeBrowserViewport } from "./browserControl/browserViewport.js";
+import { normalizeTrustedCertificates, trustedCertificateEnvironment } from "./browserControl/trustedCertificates.js";
 import {
   AUTOMATION_RECORDING_MAX_ARTIFACT_BYTES,
   AUTOMATION_RECORDING_MAX_TOTAL_ARTIFACT_BYTES,
@@ -14,7 +15,7 @@ const ENGINE_KEYS = new Set(["root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
-  "recording",
+  "recording", "trustedCertificates",
 ]);
 const RECORDING_KEYS = new Set([
   "mode", "file", "overwrite", "recordingId", "finalSha256", "startCursor", "prefixSha256",
@@ -43,6 +44,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_BROWSER_ARTIFACT_MAX_COUNT", "PYPROC_BROWSER_ARTIFACT_INLINE_BYTES",
   "PYPROC_BROWSER_ARTIFACT_TTL_MS",
   "PYPROC_BROWSER_VIEWPORT",
+  "PYPROC_BROWSER_TRUSTED_CERTIFICATES",
   "PYPROC_AUTOMATION_RECORDING",
   "PYPROC_EXECUTION_MEMORY_ROOT", "PYPROC_EXECUTION_MEMORY_IMPORT_ROOTS",
   "PYPROC_EXECUTION_MEMORY_SECRET_VALUES",
@@ -223,13 +225,18 @@ function normalizedBrowser(input = { enabled: false }) {
   const purpose = (browser.purpose || "").trim();
   const artifacts = normalizedArtifacts(browser.artifacts);
   const recording = normalizedRecording(browser.recording, provider, artifacts);
+  const allowedOrigins = stringArray(browser.allowedOrigins, "browser.allowedOrigins", { allowEmpty: false });
+  if (provider === "replay" && browser.trustedCertificates !== undefined) {
+    throw new TypeError("replay provider does not accept browser.trustedCertificates");
+  }
+  const trustedCertificates = normalizeTrustedCertificates(browser.trustedCertificates, allowedOrigins);
   const normalized = {
     enabled: true,
     provider,
     ...(browser.executable === undefined ? {} : { executable: resolve(browser.executable) }),
     headed: optionalBoolean(browser.headed, "browser.headed"),
     gpu: optionalBoolean(browser.gpu, "browser.gpu"),
-    allowedOrigins: stringArray(browser.allowedOrigins, "browser.allowedOrigins", { allowEmpty: false }),
+    allowedOrigins,
     maxRisk: browser.maxRisk || "read",
     actions: stringArray(browser.actions, "browser.actions", { allowEmpty: false }),
     methods: browser.methods === undefined ? [] : stringArray(browser.methods, "browser.methods"),
@@ -238,6 +245,7 @@ function normalizedBrowser(input = { enabled: false }) {
     purpose,
     artifacts,
     ...(recording === null ? {} : { recording }),
+    ...(trustedCertificates.length ? { trustedCertificates } : {}),
     ...(browser.viewport === undefined ? {} : {
       viewport: normalizeBrowserViewport(browser.viewport, { label: "browser.viewport" }),
     }),
@@ -490,6 +498,9 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   if (browser.purpose) env.PYPROC_BROWSER_PURPOSE = browser.purpose;
   if (browser.viewport) env.PYPROC_BROWSER_VIEWPORT = JSON.stringify(browser.viewport);
   if (browser.recording) env.PYPROC_AUTOMATION_RECORDING = JSON.stringify(browser.recording);
+  if (browser.trustedCertificates) {
+    env.PYPROC_BROWSER_TRUSTED_CERTIFICATES = trustedCertificateEnvironment(browser.trustedCertificates);
+  }
   const artifactEnv = {
     maxArtifactBytes: "PYPROC_BROWSER_ARTIFACT_MAX_BYTES",
     maxTotalBytes: "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",

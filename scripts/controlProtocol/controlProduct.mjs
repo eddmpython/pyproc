@@ -6,6 +6,7 @@ import { delimiter, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COI_HEADERS, createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
+import { trustedCertificateLaunchArgs } from "../browserControl/trustedCertificates.js";
 import { createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
 import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
 import { FrameSpace, assertFrameSpaceConfig } from "../automationSpace/frameSpace.js";
@@ -268,7 +269,10 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     windowsNative = windowsNativeConfig ? await WindowsNativeHostClient.open(windowsNativeConfig) : null;
     browserSession = browserLauncher(launchUrl, {
       prefix: "pyprocControl-",
-      extraArgs: providerKind === "nativeCdp" ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : [],
+      extraArgs: [
+        ...(providerKind === "nativeCdp" ? ["--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"] : []),
+        ...trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
+      ],
     });
     automationSpace = browserEnabled
       ? (providerKind === "frame"

@@ -31,6 +31,7 @@ import {
 import { realpathSync, statSync } from "node:fs";
 import { delimiter, isAbsolute, join, resolve } from "node:path";
 import { parseBrowserViewportEnvironment } from "./browserViewport.js";
+import { parseTrustedCertificateEnvironment } from "./trustedCertificates.js";
 import {
   APX_OBSERVE_PROPERTIES,
   APX_OBSERVE_OPTION_KEYS,
@@ -185,8 +186,10 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   if (artifacts.inlineMaxBytes > artifacts.maxArtifactBytes) {
     throw new Error("PYPROC_BROWSER_ARTIFACT_INLINE_BYTES must not exceed max artifact bytes");
   }
+  const targetOrigins = Object.freeze(parseOrigins(env.PYPROC_BROWSER_ALLOWED_ORIGINS));
   return Object.freeze({
-    targetOrigins: Object.freeze(parseOrigins(env.PYPROC_BROWSER_ALLOWED_ORIGINS)),
+    targetOrigins,
+    trustedCertificates: parseTrustedCertificateEnvironment(env.PYPROC_BROWSER_TRUSTED_CERTIFICATES, targetOrigins),
     rawMethods: Object.freeze(rawMethods),
     actions: Object.freeze(actions),
     methods: Object.freeze(unique([...rawMethods, ...actionMethods])),

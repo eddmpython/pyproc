@@ -10,6 +10,8 @@ import {
 import { BrowserScreenshot } from "../../scripts/browserControl/browserScreenshot.js";
 import { validateBrowserAutomationAction } from "../../scripts/browserControl/browserAutomationCatalog.js";
 import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
+import { trustedCertificateLaunchArgs } from "../../scripts/browserControl/trustedCertificates.js";
+import { createSelfSignedCertificate } from "../support/selfSignedCertificate.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -165,6 +167,53 @@ export async function assertBrowserAutomationProductContract() {
     ...manifest, browser: { ...manifest.browser, allowedOrigins: ["http://*.test"] },
   }));
   assert(/exact HTTP\(S\) origin/.test(wildcardOrigin?.message), "wildcard browser origin이 허용됐다");
+
+  // 로컬 HTTPS 대상의 자체 서명 인증서 신뢰: loopback origin마다 인증서를 명시하고 공개키 hash만 브라우저로 간다.
+  const localOrigin = "https://localhost:4443";
+  const localCertificate = createSelfSignedCertificate({ hosts: ["localhost"] });
+  const certificateFile = join(root, "localhost.pem");
+  await writeFile(certificateFile, localCertificate.cert);
+  const trustManifest = (trustedCertificates, allowedOrigins = [localOrigin]) => ({ ...manifest,
+    browser: { ...manifest.browser, allowedOrigins, trustedCertificates } });
+  const trusted = validateMcpProductConfig(trustManifest([{ origin: localOrigin, certificate: certificateFile }]));
+  const launchArgs = trustedCertificateLaunchArgs(trusted.browserControl.trustedCertificates);
+  assert(trusted.config.browser.trustedCertificates[0].spkiSha256 === localCertificate.spkiSha256
+    && !trusted.env.PYPROC_BROWSER_TRUSTED_CERTIFICATES.includes(certificateFile)
+    && trusted.browserControl.trustedCertificates[0].origin === localOrigin
+    && launchArgs.join() === `--ignore-certificate-errors-spki-list=${localCertificate.spkiSha256}`
+    && validated.browserControl.trustedCertificates.length === 0 && trustedCertificateLaunchArgs([]).length === 0,
+  "신뢰 인증서가 공개키 hash 하나로 브라우저 기동까지 투영되지 않았다");
+  const trustRoundTrip = validateMcpProductConfig(trusted.config);
+  const otherKeyFile = join(root, "otherKey.pem");
+  await writeFile(otherKeyFile, createSelfSignedCertificate({ hosts: ["localhost"] }).cert);
+  const swappedKey = await errorOf(() => validateMcpProductConfig(trustManifest([{ origin: localOrigin,
+    certificate: otherKeyFile, spkiSha256: localCertificate.spkiSha256 }])));
+  assert(trustRoundTrip.config.browser.trustedCertificates[0].spkiSha256 === localCertificate.spkiSha256
+    && /does not match the pinned spkiSha256/.test(swappedKey?.message),
+  "정규화된 신뢰 manifest가 다시 검증되지 않거나 고정한 공개키와 다른 인증서를 받았다");
+  const expiredFile = join(root, "expired.pem");
+  await writeFile(expiredFile, createSelfSignedCertificate({ hosts: ["localhost"], days: 1,
+    notBefore: new Date(Date.now() - 3 * 86_400_000) }).cert);
+  const notCertificate = join(root, "notCertificate.pem");
+  await writeFile(notCertificate, "not a certificate");
+  for (const [label, input, pattern] of [
+    ["원격 origin", trustManifest([{ origin: "https://example.test", certificate: certificateFile }], ["https://example.test"]), /loopback HTTPS origin/],
+    ["HTTP origin", trustManifest([{ origin: "http://localhost:4443", certificate: certificateFile }], ["http://localhost:4443"]), /exact HTTPS origin/],
+    ["허용 밖 origin", trustManifest([{ origin: "https://localhost:9443", certificate: certificateFile }]), /one of browser.allowedOrigins/],
+    ["상대 경로", trustManifest([{ origin: localOrigin, certificate: "localhost.pem" }]), /absolute PEM certificate path/],
+    ["다른 이름의 인증서", trustManifest([{ origin: "https://127.0.0.1:4443", certificate: certificateFile }], ["https://127.0.0.1:4443"]), /does not name 127.0.0.1/],
+    ["만료된 인증서", trustManifest([{ origin: localOrigin, certificate: expiredFile }]), /outside its validity period/],
+    ["인증서가 아닌 파일", trustManifest([{ origin: localOrigin, certificate: notCertificate }]), /not a readable X.509 certificate/],
+    ["알 수 없는 키", trustManifest([{ origin: localOrigin, certificate: certificateFile, ignoreAll: true }]), /does not accept ignoreAll/],
+    ["중복 origin", trustManifest([{ origin: localOrigin, certificate: certificateFile }, { origin: localOrigin, certificate: certificateFile }]), /listed twice/],
+  ]) {
+    const refused = await errorOf(() => validateMcpProductConfig(input));
+    assert(pattern.test(refused?.message), `신뢰 인증서 manifest가 ${label}을 거절하지 않았다: ${refused?.message}`);
+  }
+  const disabledTrust = await errorOf(() => validateMcpProductConfig({ ...manifest,
+    browser: { enabled: false, trustedCertificates: [{ origin: localOrigin, certificate: certificateFile }] } }));
+  assert(/disabled browser does not accept trustedCertificates/.test(disabledTrust?.message),
+    "꺼진 browser가 신뢰 인증서를 받았다");
   const unacknowledgedEffect = await errorOf(() => validateMcpProductConfig({
     ...manifest,
     browser: { ...manifest.browser, maxRisk: "externalEffect", actions: ["screenshot", "click"] },

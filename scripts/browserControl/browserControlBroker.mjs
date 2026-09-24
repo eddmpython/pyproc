@@ -130,6 +130,13 @@ export class NodeBrowserControlBroker {
         await applyBrowserViewport((method, params) => this._connection.send(method, params, sessionId), this._viewport);
       }
       const navigation = await this._connection.send("Page.navigate", { url: normalized }, sessionId);
+      // 인증서 실패는 원인을 지목한다: 호출자가 자기 코드를 의심하지 않고 browser.trustedCertificates를 본다.
+      if (/^net::ERR_CERT_/.test(navigation.errorText || "")) {
+        throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.targetCertificateUntrusted,
+          `browser target certificate is not trusted (${navigation.errorText}): ${normalized}`, {
+            outcome: "applied", details: Object.freeze({ errorText: navigation.errorText, url: normalized }),
+          });
+      }
       if (navigation.errorText) throw new Error(`navigation rejected: ${navigation.errorText}`);
       const deadline = Date.now() + this._timeoutMs;
       let finalTarget = null;

@@ -11,7 +11,7 @@ export const MACHINE_PROFILE_RECIPES = Object.freeze([
 
 const INPUT_KEYS = new Set([
   "recipe", "engineRoot", "timeoutMs", "executable", "headed", "gpu",
-  "allowedOrigins", "actions", "methods", "fileRoots", "maxRisk", "externalEffects", "purpose",
+  "allowedOrigins", "actions", "methods", "fileRoots", "trustedCertificates", "maxRisk", "externalEffects", "purpose",
   "artifacts", "viewport", "recording", "executionMemory", "effectTransactions", "appSpace",
 ]);
 const BROWSER_INPUT_KEYS = Object.freeze([...INPUT_KEYS].filter((key) => ![
@@ -68,6 +68,7 @@ function commonBrowser(input, { provider, actions, maxRisk }) {
     ...(input.artifacts === undefined ? {} : { artifacts: input.artifacts }),
     ...(input.viewport === undefined ? {} : { viewport: input.viewport }),
     ...(input.recording === undefined ? {} : { recording: input.recording }),
+    ...(input.trustedCertificates === undefined ? {} : { trustedCertificates: input.trustedCertificates }),
   };
 }
 

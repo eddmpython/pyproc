@@ -48,6 +48,7 @@ Browser authority:
   --action <name>             Allowed action, repeatable
   --method <name>             Allowed raw method, repeatable
   --file-root <directory>     Absolute guarded file root, repeatable
+  --trusted-certificate <origin>=<file>  Trust a loopback HTTPS origin's self-signed certificate, repeatable
   --max-risk <risk>           Maximum fixed broker risk
   --purpose <text>            Explicit non-secret purpose
   --acknowledge-effects       Acknowledge the declared external-effect boundary

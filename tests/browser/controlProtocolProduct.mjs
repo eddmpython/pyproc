@@ -1,12 +1,14 @@
 // controlProtocolProduct.mjs - packed pyproc-control의 machine, cancel, automation, attachment 제품 게이트.
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { createServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import { createRequire } from "node:module";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 import { binPath, installPackedPyProc, ROOT, run, runAsync } from "../packageHarness.mjs";
+import { createSelfSignedCertificate } from "../support/selfSignedCertificate.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const frameBridge = await readFile(join(ROOT, "scripts", "automationSpace", "frameSpaceTarget.js"));
@@ -248,6 +250,9 @@ try {
 let client = null;
 let frameClient = null;
 let observeClient = null;
+let trustClient = null;
+let untrustClient = null;
+let trustServers = [];
 
 console.log("installed pyproc-control product gate");
 try {
@@ -626,12 +631,56 @@ try {
   check("같은 JavaScript Eyes가 FrameSpace L3 경계에서 작동", framePass,
     framePass ? "" : JSON.stringify({ heading: frameHeading.value, inspect: frameSpace.output }));
   await frameClient.detachSession(frameAttached.output);
+
+  // 로컬 HTTPS 대상: 명시한 인증서의 공개키만 신뢰하고, 신뢰가 없거나 다른 키면 원인을 지목해 실패한다.
+  const localHttps = async (label) => {
+    const certificate = createSelfSignedCertificate({ hosts: ["localhost"] });
+    const server = createHttpsServer({ key: certificate.key, cert: certificate.cert }, (req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html><body><h1>${label}</h1></body></html>`);
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return { server, certificate, origin: `https://localhost:${server.address().port}` };
+  };
+  trustServers = [await localHttps("trusted-local"), await localHttps("other-key")];
+  const [trustedSite, otherSite] = trustServers;
+  const trustedCertificateFile = join(installed.appDir, "trusted-local.pem");
+  await writeFile(trustedCertificateFile, trustedSite.certificate.cert);
+  const trustProfile = (out, extra) => run(mcpCli, ["init", "--recipe", "observeLocal", "--project-root", installed.appDir,
+    "--out", out, "--engine-root", join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core"),
+    "--timeout-ms", String(TIMEOUT_MS), "--origin", trustedSite.origin, "--origin", otherSite.origin,
+    "--purpose", "local-https-trust-gate", "--acknowledge-effects", ...extra,
+    ...(browser ? ["--browser", browser] : [])], { cwd: installed.appDir });
+  trustProfile(".pyproc-trust", ["--trusted-certificate", `${trustedSite.origin}=trusted-local.pem`]);
+  trustProfile(".pyproc-untrusted", []);
+  const refusal = async (session, url) => {
+    try { await session.openTarget(url, { expectedRisk: "externalEffect", waitUntil: "load" }); return null; }
+    catch (error) { return error; }
+  };
+  trustClient = await PyProcControlClient.start(join(installed.appDir, ".pyproc-trust", "manifest.json"),
+    { cwd: installed.appDir, startupTimeoutMs: TIMEOUT_MS });
+  const trustedOpened = await trustClient.openTarget(`${trustedSite.origin}/`, { expectedRisk: "externalEffect", waitUntil: "load" });
+  const trustedAttached = await trustClient.attachSession(trustedOpened.output.targetRef);
+  const trustedHeading = (await trustClient.perception(trustedAttached.output).query({ role: "heading", name: "trusted-local" })).one();
+  await trustClient.detachSession(trustedAttached.output);
+  const otherKey = await refusal(trustClient, `${otherSite.origin}/`);
+  untrustClient = await PyProcControlClient.start(join(installed.appDir, ".pyproc-untrusted", "manifest.json"),
+    { cwd: installed.appDir, startupTimeoutMs: TIMEOUT_MS });
+  const withoutTrust = await refusal(untrustClient, `${trustedSite.origin}/`);
+  const certificateRefusal = (error) => error?.code === "BROWSER_CONTROL_TARGET_CERTIFICATE_UNTRUSTED"
+    && /^net::ERR_CERT_/.test(error.details?.errorText || "");
+  check("명시한 인증서의 로컬 HTTPS 대상만 열리고 다른 키와 신뢰 없는 경우는 인증서 원인으로 거절",
+    trustedHeading.name === "trusted-local" && certificateRefusal(otherKey) && certificateRefusal(withoutTrust),
+    JSON.stringify({ otherKey: [otherKey?.code, otherKey?.details], withoutTrust: [withoutTrust?.code, withoutTrust?.details] }));
 } catch (error) {
   check("Control Protocol 제품 흐름 예외 없음", false, String(error?.stack || error).slice(-800));
 } finally {
   await client?.close();
   await frameClient?.close();
   await observeClient?.close();
+  await trustClient?.close();
+  await untrustClient?.close();
+  for (const site of trustServers) site.server.close();
   targetServer.close();
   await rm(installed.tmp, { recursive: true, force: true });
 }

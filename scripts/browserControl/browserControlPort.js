@@ -16,6 +16,7 @@ export const BROWSER_CONTROL_ERROR_CODES = Object.freeze({
   sessionDetached: "BROWSER_CONTROL_SESSION_DETACHED",
   staleBroker: "BROWSER_CONTROL_STALE_BROKER",
   targetUnavailable: "BROWSER_CONTROL_TARGET_UNAVAILABLE",
+  targetCertificateUntrusted: "BROWSER_CONTROL_TARGET_CERTIFICATE_UNTRUSTED",
 });
 
 // JavaScript dialog가 열린 동안 Page.getFrameTree도 멈춘다. 이 한 method만 dialog를 연

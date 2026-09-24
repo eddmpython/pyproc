@@ -127,6 +127,18 @@ export async function assertMachineEntranceContract() {
     assert(parsed.profile.executionMemory.root === join(projectRoot, ".pyproc", "memory")
       && parsed.profile.executionMemory.importRoots[0] === join(projectRoot, "handoffs"),
     "Machine Entrance CLI가 Execution Memory 경로를 absolute profile로 컴파일하지 않았다");
+    const trustParsed = parseMachineProfileInitArguments([
+      "--recipe", "authorizedBrowser", "--project-root", projectRoot, "--dry-run",
+      "--trusted-certificate", "https://localhost:4443=certs/dev.pem",
+    ]);
+    assert(trustParsed.profile.trustedCertificates?.[0]?.origin === "https://localhost:4443"
+      && trustParsed.profile.trustedCertificates[0].certificate === join(projectRoot, "certs", "dev.pem"),
+    "Machine Entrance CLI가 신뢰 인증서를 origin과 absolute 경로로 컴파일하지 않았다");
+    const trustMissingFile = await errorOf(() => parseMachineProfileInitArguments([
+      "--recipe", "authorizedBrowser", "--project-root", projectRoot, "--trusted-certificate", "https://localhost:4443",
+    ]));
+    assert(/requires <https-origin>=<certificate-file>/.test(trustMissingFile?.message),
+      "Machine Entrance CLI가 인증서 파일 없는 신뢰 선언을 받았다");
     const effectParsed = parseMachineProfileInitArguments([
       "--recipe", "authorizedBrowser", "--project-root", projectRoot, "--engine-root", "vendor/cpython-wasi",
       "--origin", "https://example.test", "--max-risk", "externalEffect", "--purpose", "Commit fixture",
