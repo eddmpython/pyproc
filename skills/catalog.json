@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:3917399c69b100651c24483b62e1dc37cdf28a220a052613168efd302a773d0d",
-  "catalogDigest": "sha256:f15786fabfe6c52353ac69f00bfd9ed4930efdb978bdef19bd983e0b2c42554f",
+  "generatedFromDigest": "sha256:d60d6aaa45bc6b9f91d92147c8b384cc9ba04994588f1389718e0aa285223b18",
+  "catalogDigest": "sha256:31f3128948a5764006a458864ea728bbd47623fddde1e44fd05e21d2193afac9",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -489,8 +489,8 @@
     },
     {
       "path": "skills/verify-browser-experience/references/apx.md",
-      "bytes": 14681,
-      "sha256": "sha256:1f3f3ff1274172956cf11023838233fd17938b21b4b3818fba5c15f4347b78e2"
+      "bytes": 14902,
+      "sha256": "sha256:1f4b6800512ebd9c67d0d64bbc8d2d8712857389806f2ea2217e43e353050365"
     },
     {
       "path": "skills/verify-browser-experience/references/interop.md",

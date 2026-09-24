@@ -73,6 +73,8 @@ An APX 1.0 implementation MUST preserve these rules:
 10. Replay MUST return recorded terminals without sending the recorded effect again.
 11. A required answer MUST NOT be omitted to fit a byte budget.
 12. Page-reported and inferred capabilities MUST NOT become broker authorization.
+13. Budget truncation MUST keep references whole. A relation keeps both ends, `unresolved` annotates only included
+    entities, and an entity crop is dropped with its entity and counted in `budget.omitted.visualProbes`.
 
 ## Representations
 

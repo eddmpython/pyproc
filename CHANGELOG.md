@@ -38,6 +38,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 - **A native `<summary>` is an actionable control.** PyProc Eyes classified Chromium's `DisclosureTriangle`
   as a container, so situate gave it no click affordance. It is now a `ui.control` with `click` and its
   `expanded` state; text with the same name stays non-actionable.
+- **APX graphs of large pages no longer fail their own schema check.** Budget truncation kept `unresolved`
+  entries and entity crops for entities it had cut, so any page larger than the budget with an unlabelled image
+  or control failed with `APX unresolved entry is invalid`. Truncation now keeps every reference whole and
+  releases the cut crops.
 - **Public surface removals are disclosed.** A release that removes or renames a name from a package entry point now
   lists it in a `### Breaking` table with its replacement or `none`. A contract gate compares the type surface with
   the last release, so an undisclosed removal cannot ship. The 0.0.22 and 0.0.23 sections below now disclose the
@@ -61,6 +65,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   아무 일도 하지 않는다고 가정한 자동화는 이제 활성화를 일으킨다.
 - native `<summary>`(Chromium `DisclosureTriangle`)가 click과 expanded 상태를 가진 control로 분류되어
   situate가 click affordance를 준다. 같은 이름의 글은 행동 대상이 아니다.
+- 예산을 넘는 큰 페이지의 APX graph가 잘린 entity를 가리키는 unresolved와 crop 때문에 자기 schema 검사에서
+  실패하던 결함을 고쳤다. 절단 뒤에도 모든 참조가 온전하고 잘린 crop은 회수된다.
 
 ## 0.0.25 - 2026-09-09
 

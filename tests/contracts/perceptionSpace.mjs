@@ -292,6 +292,41 @@ export async function assertPerceptionSpaceContract() {
   "1,001번째 relevant entity가 projection limit 때문에 verification에서 누락됐다");
   lateEntitySpace.close();
 
+  // 예산이 잘라낸 entity를 가리키는 unresolved와 entity crop은 envelope에 남지 않는다. 남으면 APX가 자기 schema
+  // 검사에 걸려 관찰 전체가 실패한다(라벨 없는 이미지가 있는 큰 실제 페이지에서 항상 나던 결함).
+  const budgetReleased = [];
+  const budgetCropBytes = Buffer.alloc(64, 1);
+  const budgetSpace = new PerceptionSpace({
+    sensor: { capture: async () => ({ documentEpoch: 1, page: {},
+      entities: [
+        ...Array.from({ length: 200 }, (_, index) => sensorEntity(`native:${index + 1}`,
+          { role: "button", name: `item ${index + 1}`, bounds: [10, 10 + index * 4, 80, 3] })),
+        sensorEntity("native:201", { role: "canvas", name: "", kind: "content.canvas",
+          unresolved: { reason: "canvas" } }),
+      ],
+      relations: [], events: [], enumeration: { entities: "complete" }, completeness: { semantic: "complete" } }) },
+    idFactory: () => `budget_${++focusedIdentity}`,
+    visualProbe: async (sessionRef, entity) => ({ kind: "entityCrop", entityRef: entity.entityRef, reason: "canvas",
+      artifact: { kind: "screenshot", mimeType: "image/png", artifactRef: "artifact:budget_crop",
+        byteLength: budgetCropBytes.byteLength, sha256: createHash("sha256").update(budgetCropBytes).digest("hex") },
+      provenance: { mode: "observed", source: "fixture.crop", trust: "browser" } }),
+    visualRelease: async (probe) => budgetReleased.push(probe.artifact.artifactRef),
+  });
+  const budgeted = await budgetSpace.observe({ sessionId: "budget" }, {
+    representation: APX_REPRESENTATION, visual: { mode: "auto", maxCrops: 1 },
+  });
+  assertApxObservation(budgeted);
+  assert(budgeted.budget.truncated && budgeted.entities.length <= 120
+    && budgeted.budget.omitted.entities === 201 - budgeted.entities.length && budgeted.unresolved.length === 0
+    && !budgeted.visualProbes?.length && budgeted.budget.omitted.visualProbes === 1
+    && budgetReleased.join() === "artifact:budget_crop",
+  `예산 절단 뒤 잘린 entity를 가리키는 unresolved나 crop이 남았거나 crop artifact가 회수되지 않았다 ${JSON.stringify({ entities: budgeted.entities.length, unresolved: budgeted.unresolved.length, probes: budgeted.visualProbes?.length, omitted: budgeted.budget.omitted, released: budgetReleased })}`);
+  let danglingRefused = false;
+  try { assertApxObservation({ ...budgeted, unresolved: [{ entityRef: "entity:absent", reason: "canvas" }] }); }
+  catch { danglingRefused = true; }
+  assert(danglingRefused, "APX 검증기가 없는 entity를 가리키는 unresolved를 받아들였다");
+  budgetSpace.close();
+
   const packageJson = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
   const workflow = await readFile(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
   assert(packageJson.scripts?.["test:apx"] === "node tests/browser/apxProduct.mjs"
