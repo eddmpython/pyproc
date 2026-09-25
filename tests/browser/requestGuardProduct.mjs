@@ -29,6 +29,8 @@ const frameDocuments = [];
 const prefetchPurposes = [];
 const upgrades = [];
 let frameOrigin = "";
+// A second other site, by loopback address instead of a name, to tell a name-resolution quirk from a frame problem.
+let altFrameOrigin = "";
 
 // The first script of a page tries a socket before anything else runs; the title says whether it was constructed.
 const firstScriptSocket = (tag) => `<script>
@@ -60,6 +62,7 @@ function pageFor(pathname, search) {
 <form id="postForm" method="post" action="/sink/form-post"><input name="q" value="1"></form>
 <form id="getForm" method="get" action="/sink/get-form"><input name="q" value="1"></form>
 <iframe id="frame" src="${frameOrigin}/frame.html"></iframe>
+<iframe id="altFrame" src="${altFrameOrigin}/frame.html"></iframe>
 <iframe name="sinkFrame"></iframe>
 <a id="pingLink" href="/sink/ping-target" ping="/sink/ping" target="sinkFrame">ping</a>
 <a id="crossLink" href="${frameOrigin}/guard-popup.html?via=link" target="_blank">cross-site tab</a>`);
@@ -135,11 +138,14 @@ const handler = async (req, res) => {
 
 const mainServer = createStaticServer(handler, { coi: false });
 const frameServer = createStaticServer(handler, { coi: false });
-for (const server of [mainServer, frameServer]) {
+const altFrameServer = createStaticServer(handler, { coi: false });
+for (const server of [mainServer, frameServer, altFrameServer]) {
   server.on("upgrade", (req, socket) => { upgrades.push(new URL(req.url, "http://x.invalid").pathname); socket.destroy(); });
 }
 await new Promise((resolve) => mainServer.listen(0, "127.0.0.1", resolve));
 await new Promise((resolve) => frameServer.listen(0, "127.0.0.1", resolve));
+await new Promise((resolve) => altFrameServer.listen(0, "127.0.0.2", resolve));
+altFrameOrigin = `http://127.0.0.2:${altFrameServer.address().port}`;
 const mainOrigin = `http://127.0.0.1:${mainServer.address().port}`;
 // A different host is a different site, so the frame and cross-site tabs run in processes of their own.
 frameOrigin = `http://localhost:${frameServer.address().port}`;
@@ -443,6 +449,7 @@ try {
   }
   await new Promise((resolve) => mainServer.close(resolve));
   await new Promise((resolve) => frameServer.close(resolve));
+  await new Promise((resolve) => altFrameServer.close(resolve));
 }
 
 console.log(`\nresult: ${failed === 0 ? "GREEN" : "RED"} (${passed}/${passed + failed})`);
