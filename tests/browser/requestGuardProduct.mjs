@@ -329,8 +329,11 @@ try {
   check("a page whose bytes are not UTF-8 reaches the tab unchanged", outcome.eucKr === "안녕", outcome.eucKr);
   check("a POST form submission leaves the page where it was", stayed === "/guard.html", stayed);
   check("a GET form navigates", moved === "/sink/get-form?q=1", moved);
+  const frameState = (await guarded.run("automation.space.inspect", {})).requests;
   check("the out-of-process frame's reads work and its POST is refused",
-    seen.some((request) => request.path === "/sink/frame-get") && !seen.some((request) => request.path === "/sink/frame-post"));
+    seen.some((request) => request.path === "/sink/frame-get") && !seen.some((request) => request.path === "/sink/frame-post"),
+    JSON.stringify({ frameHits: seen.filter((request) => request.path.includes("frame")).map((r) => r.path),
+      pending: frameState?.pendingTargets, paused: frameState?.pausedSample, refusals: frameState?.refusals }));
   check("refused requests are reported by method, path, and resource type",
     ["POST /sink/fetch-post", "PUT /sink/fetch-put", "POST /sink/beacon", "POST /sink/keepalive", "POST /sink/ping",
       "POST /sink/frame-post", "POST /sink/worker-post", "POST /sink/url-worker-post", "POST /sink/form-post"]
@@ -357,8 +360,9 @@ try {
   const guardState = (await guarded.run("automation.space.inspect", {})).requests;
   check("inspect says the session is read-only", guardState?.mode === "safe" && guardState.blockedTotal >= 10,
     JSON.stringify(guardState));
-  check("every target the pages made was guarded and resumed", guardState.refusedTargets === 0,
-    JSON.stringify(guardState.refusals));
+  check("every target the pages made was guarded and resumed, and no request waits undecided",
+    guardState.refusedTargets === 0 && guardState.pendingTargets.length === 0 && guardState.pausedRequests === 0,
+    JSON.stringify({ refusals: guardState.refusals, pending: guardState.pendingTargets, paused: guardState.pausedSample }));
 
   // A read-only session may be given any site: it follows a cross-site navigation and still refuses writes there.
   const anySite = await session("safe", ["*"]);

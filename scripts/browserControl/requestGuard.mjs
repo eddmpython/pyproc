@@ -104,6 +104,11 @@ export function assertBrowserRequestHost({ requests, targetOrigins, providerKind
   }
 }
 
+// Where a URL points, without its path or query, for the guard's own diagnostics.
+function originOf(url) {
+  try { return new URL(String(url || "")).origin; } catch { return ""; }
+}
+
 // Browser arguments a session with this request mode starts with.
 export function requestGuardLaunchArgs(mode) {
   return mode === "safe" ? ["--disable-quic"] : [];
@@ -131,6 +136,10 @@ export class RequestGuard {
     this._blockedTotal = 0;
     this._guarded = new Set();
     this._issues = new Set();
+    // Targets attached but not yet guarded and released, and requests paused but not yet decided: a guard that stalls
+    // shows here instead of as a page that silently never runs.
+    this._pending = new Map();
+    this._paused = new Map();
     this._refused = [];
     this._unsubscribe = null;
   }
@@ -142,7 +151,10 @@ export class RequestGuard {
     } else if (event.method === "Fetch.requestPaused") {
       const params = event.params || {};
       const answered = params.responseStatusCode !== undefined || params.responseErrorReason !== undefined;
-      void (answered ? this._reserve(event.sessionId, params) : this._decide(event.sessionId, params));
+      this._paused.set(params.requestId, Object.freeze({ stage: answered ? "response" : "request",
+        resourceType: String(params.resourceType || ""), origin: originOf(params.request?.url) }));
+      void (answered ? this._reserve(event.sessionId, params) : this._decide(event.sessionId, params))
+        .finally(() => this._paused.delete(params.requestId));
     } else if (event.method === "Audits.issueAdded") {
       this._rememberSocket(event.params?.issue);
     } else if (event.method === "Browser.downloadWillBegin") {
@@ -154,12 +166,13 @@ export class RequestGuard {
 
   async _guardTarget(sessionId, info, waiting) {
     if (!sessionId) return;
-    const resume = () => this._connection.send("Runtime.runIfWaitingForDebugger", {}, sessionId).catch(() => {});
+    const resume = () => this._connection.send("Runtime.runIfWaitingForDebugger", {}, sessionId);
     if (QUIET_TYPES.has(info.type) || BROWSER_OWN_URL.test(String(info.url || ""))) {
-      if (waiting) await resume();
+      if (waiting) await resume().catch(() => {});
       return;
     }
     let running = !waiting;
+    this._pending.set(sessionId, Object.freeze({ type: String(info.type || ""), origin: originOf(info.url) }));
     try {
       const { pageReady } = await this._install(sessionId, info.type);
       if (waiting) {
@@ -173,6 +186,8 @@ export class RequestGuard {
       this._refuseTarget(info.type, error);
       // A page whose guard failed after it started is closed rather than left running unguarded.
       if (running && info.targetId) await this._connection.send("Target.closeTarget", { targetId: info.targetId }).catch(() => {});
+    } finally {
+      this._pending.delete(sessionId);
     }
   }
 
@@ -307,7 +322,9 @@ export class RequestGuard {
 
   inspect() {
     return Object.freeze({ mode: "safe", guardedSessions: this._guarded.size, blockedTotal: this._blockedTotal,
-      refusedTargets: this._refused.length, refusals: [...this._refused] });
+      refusedTargets: this._refused.length, refusals: [...this._refused],
+      pendingTargets: [...this._pending.values()], pausedRequests: this._paused.size,
+      pausedSample: [...this._paused.values()].slice(0, 10) });
   }
 
   close() {
