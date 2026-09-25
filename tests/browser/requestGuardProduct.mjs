@@ -313,6 +313,9 @@ const opened = [];
 try {
   const guarded = await session("safe");
   opened.push(guarded);
+  await delay(1500);
+  // The guard's view right after the first page and its frames loaded, before later pages push it out.
+  const early = (await guarded.run("automation.space.inspect", {})).requests;
   const outcome = await sendAll(guarded);
   await guarded.evaluate(`document.getElementById("postForm").submit(); "submitted"`);
   await delay(1500);
@@ -359,8 +362,8 @@ try {
   check("the out-of-process frame's reads work and its POST is refused",
     seen.some((request) => request.path === "/sink/frame-get") && !seen.some((request) => request.path === "/sink/frame-post"),
     JSON.stringify({ frameHits: seen.filter((request) => request.path.includes("frame")).map((r) => r.path),
-      frameDocuments, frameTiming, failed: frameState?.failedDecisions,
-      targets: frameState?.recentTargets?.filter((target) => ["page", "iframe"].includes(target.type)),
+      frameDocuments, frameTiming, failed: frameState?.failedDecisions, documents: early?.recentDocuments,
+      targets: early?.recentTargets?.filter((target) => ["page", "iframe"].includes(target.type)),
       pending: frameState?.pendingTargets, paused: frameState?.pausedSample, refusals: frameState?.refusals }));
   check("refused requests are reported by method, path, and resource type",
     ["POST /sink/fetch-post", "PUT /sink/fetch-put", "POST /sink/beacon", "POST /sink/keepalive", "POST /sink/ping",

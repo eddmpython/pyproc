@@ -168,6 +168,7 @@ export class RequestGuard {
     this._attached = [];
     this._detached = new Set();
     this._failedDecisions = [];
+    this._documents = [];
     this._refused = [];
     this._unsubscribe = null;
   }
@@ -181,6 +182,12 @@ export class RequestGuard {
       const answered = params.responseStatusCode !== undefined || params.responseErrorReason !== undefined;
       this._paused.set(params.requestId, Object.freeze({ stage: answered ? "response" : "request",
         resourceType: String(params.resourceType || ""), origin: originOf(params.request?.url) }));
+      if (params.resourceType === "Document") {
+        this._documents.push(Object.freeze({ stage: answered ? "response" : "request", method: String(params.request?.method || ""),
+          origin: originOf(params.request?.url), status: Number(params.responseStatusCode || 0),
+          error: String(params.responseErrorReason || "") }));
+        if (this._documents.length > ATTACHED_KEEP) this._documents.shift();
+      }
       void (answered ? this._reserve(event.sessionId, params) : this._decide(event.sessionId, params))
         .finally(() => this._paused.delete(params.requestId));
     } else if (event.method === "Audits.issueAdded") {
@@ -378,7 +385,7 @@ export class RequestGuard {
       refusedTargets: this._refused.length, refusals: [...this._refused],
       pendingTargets: [...this._pending.values()], pausedRequests: this._paused.size,
       pausedSample: [...this._paused.values()].slice(0, 10), recentTargets: [...this._attached],
-      failedDecisions: [...this._failedDecisions] });
+      failedDecisions: [...this._failedDecisions], recentDocuments: [...this._documents] });
   }
 
   close() {
