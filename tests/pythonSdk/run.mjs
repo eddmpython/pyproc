@@ -12,7 +12,8 @@ import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 import { unzipWheel } from "../../src/runtime/engines/wasi/wheelUnzip.js";
 import { assembleHostWheel } from "../../scripts/pythonSdkBuilder/assembleHostWheel.mjs";
-import { extractNodeRuntime, fetchNodeArchive, readPackageTree } from "../../scripts/pythonSdkBuilder/hostPayload.mjs";
+import { extractNodeRuntime, extractUserBrowserHost, fetchNodeArchive, fetchUserBrowserHost, readPackageTree }
+  from "../../scripts/pythonSdkBuilder/hostPayload.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
 const PYTHON = process.env.PYPROC_PYTHON || "python";
@@ -258,6 +259,10 @@ try {
         integrity: installed.packed.integrity },
       nodeRuntime: await extractNodeRuntime(await fetchNodeArchive(DISTRIBUTION_LOCK.hostNode, HOST_PLATFORM,
         join(ROOT, ".cache", "node-dist")), DISTRIBUTION_LOCK.hostNode, HOST_PLATFORM),
+      // The win_amd64 wheel carries the prebuilt user-browser host, as the release builds it.
+      userBrowserHost: HOST_PLATFORM === "win_amd64" ? await extractUserBrowserHost(await fetchUserBrowserHost(
+        DISTRIBUTION_LOCK.userBrowserHost, join(ROOT, ".cache", "user-browser-host")), DISTRIBUTION_LOCK.userBrowserHost)
+        : null,
       sourceDateEpoch: Number(run("git", ["show", "-s", "--format=%ct", "HEAD"]).stdout.trim()),
     });
     await writeFile(join(distDir, hostWheel.filename), hostWheel.bytes);
