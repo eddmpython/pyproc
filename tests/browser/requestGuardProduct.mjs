@@ -171,8 +171,12 @@ async function session(requests, allowedOrigins = [mainOrigin, frameOrigin]) {
     timeoutMs: TIMEOUT_MS,
   });
   const preferences = requestGuardProfilePreferences(requests);
+  // The gate's sites are loopback servers standing in for public ones. A page the guard re-serves has no network
+  // endpoint, so Chromium (142 and later) counts it as public and refuses its frames into the local network without a
+  // permission prompt; the gate turns that check off so its loopback frames behave as public sites' frames would.
   const browser = launchBrowser("about:blank", { prefix: `pyprocRequestGuard-${requests}-`, cdpPipe: true,
-    extraArgs: requestGuardLaunchArgs(requests), ...(preferences ? { preferences } : {}) });
+    extraArgs: [...requestGuardLaunchArgs(requests), "--disable-features=LocalNetworkAccessChecks"],
+    ...(preferences ? { preferences } : {}) });
   const space = new NativeCdpSpace({ profileDir: browser.profile, cdpPipe: browser.cdpPipe,
     config: parseBrowserControlConfig(env, { timeoutMs: TIMEOUT_MS }), auditWriter: () => {} });
   // Every refusal an observe or act result carries is kept, whichever call happened to drain it.
