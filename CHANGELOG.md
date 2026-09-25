@@ -12,7 +12,7 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
-## 0.0.27 - 2026-09-25
+## 0.0.28 - 2026-09-26
 
 ### Added
 
@@ -23,9 +23,13 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   page where it was. `automation.observe` and `automation.act` results carry `blockedRequests` (method, origin, and
   path of each refused request, download, and page socket since the last result; a request an action set off may come
   with the next result) and `blockedRequestsDropped` when more than 50 did not fit. `automation.space.inspect`
-  reports the guard under `requests`. A read-only session runs in a browser-only host (`engine.enabled: false`) with
-  the `nativeCdp` provider, and only a read-only session may name `allowedOrigins: ["*"]` (any http(s) site, not
-  recorded). The default `any` is unchanged.
+  reports the guard under `requests`, with the targets and document requests it saw recently. A read-only session runs
+  in a browser-only host (`engine.enabled: false`) with the `nativeCdp` provider, its fresh profile starts with page
+  preloading off (a preloaded page would skip request interception), and only a read-only session may name
+  `allowedOrigins: ["*"]` (any http(s) site, not recorded). A blob: or data: download is reported by its scheme and
+  origin, never its content. Pages are served again with their connection policy, so Chromium counts them as public
+  and its Local Network Access check refuses their frames and requests into the local network. `launchBrowser` takes
+  `preferences` for the fresh profile. The default `any` is unchanged.
 
 ### 한국어 요약
 
@@ -35,8 +39,11 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   실행되지 않는다. 거절된 이동은 페이지를 그대로 둔다. observe와 act 결과가 `blockedRequests`로 지난 결과 이후
   거절한 요청, 다운로드, 페이지 socket의 method, origin, path를 알리고, 50건을 넘어 담지 못한 수는
   `blockedRequestsDropped`로 알린다. 읽기 전용 세션은 브라우저 전용 host(`engine.enabled: false`)와 `nativeCdp`
-  provider에서만 되고, `allowedOrigins: ["*"]`(모든 http(s) 사이트, 녹화 불가)는 읽기 전용 세션만 쓴다. 기본값
-  `any`는 그대로다.
+  provider에서만 되고, 새 profile은 페이지 미리 로드를 끈 채 시작하며(미리 로드한 페이지는 요청 가로채기를
+  거치지 않는다), `allowedOrigins: ["*"]`(모든 http(s) 사이트, 녹화 불가)는 읽기 전용 세션만 쓴다. blob:과 data:
+  다운로드는 내용 없이 scheme과 origin으로 알린다. 페이지를 연결 정책과 함께 다시 내보내므로 Chromium은 그 페이지를
+  공용으로 보고, Local Network Access 검사가 그 페이지에서 local network로 가는 frame과 요청을 거절한다.
+  `launchBrowser`는 새 profile의 `preferences`를 받는다. 기본값 `any`는 그대로다.
 
 ## 0.0.26 - 2026-09-25
 
