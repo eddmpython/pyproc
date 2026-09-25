@@ -35,4 +35,5 @@ Stop on stale locators, intercepted targets, undeclared destinations, cross-orig
 - [AutomationSpace](references/automation-space.md)
 - [FrameSpace](references/frame-space.md)
 - [ReplaySpace](references/replay-space.md)
+- [User browser](references/user-browser.md)
 - [Actuation](references/actuation.md)

@@ -36,10 +36,24 @@ function startupObservation(events, rawTruncated = false) {
   });
 }
 
+// How a broker creates, attaches to, and closes the raw targets it opens: the browser's own Target domain on a native
+// CDP pipe. The user-browser provider supplies the same four through its extension.
+export function cdpTargets(connection) {
+  return Object.freeze({
+    kind: "node-cdp",
+    create: async (url) => (await connection.send("Target.createTarget", { url })).targetId,
+    attach: async (targetId) => (await connection.send("Target.attachToTarget", { targetId, flatten: true })).sessionId,
+    detach: (sessionId) => connection.send("Target.detachFromTarget", { sessionId }),
+    close: (targetId) => connection.send("Target.closeTarget", { targetId }),
+  });
+}
+
 export class NodeBrowserControlBroker {
-  constructor({ connection, port, compatibility, timeoutMs = DEFAULT_TIMEOUT_MS, viewport = null, guard = null } = {}) {
+  constructor({ connection, port, compatibility, timeoutMs = DEFAULT_TIMEOUT_MS, viewport = null, guard = null,
+    targets = cdpTargets(connection) } = {}) {
     if (!connection || !port) throw new TypeError("connection and port are required");
     this._connection = connection;
+    this._targets = targets;
     this._guard = guard;
     this.port = port;
     this.compatibility = compatibility || null;
@@ -95,9 +109,9 @@ export class NodeBrowserControlBroker {
     const events = [];
     let rawEventsTruncated = false;
     try {
-      ({ targetId } = await this._connection.send("Target.createTarget", { url: "about:blank" }));
+      targetId = await this._targets.create("about:blank");
       created = true;
-      ({ sessionId } = await this._connection.send("Target.attachToTarget", { targetId, flatten: true }));
+      sessionId = await this._targets.attach(targetId);
       unsubscribe = this._connection.subscribe((event) => {
         if (event.sessionId !== sessionId) return;
         if (events.length < STARTUP_RAW_EVENT_LIMIT) events.push(event);
@@ -153,7 +167,7 @@ export class NodeBrowserControlBroker {
       }
       unsubscribe();
       unsubscribe = null;
-      await this._connection.send("Target.detachFromTarget", { sessionId });
+      await this._targets.detach(sessionId);
       sessionId = "";
       const deadlineAfterDetach = Date.now() + this._timeoutMs;
       while (Date.now() < deadlineAfterDetach) {
@@ -176,7 +190,7 @@ export class NodeBrowserControlBroker {
       }
       throw new Error(`opened browser target did not become visible: ${finalTarget.url}`);
     } catch (error) {
-      if (created) await Promise.allSettled([this._connection.send("Target.closeTarget", { targetId })]);
+      if (created) await Promise.allSettled([this._targets.close(targetId)]);
       if (error instanceof BrowserControlError) throw error;
       throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.targetUnavailable,
         `opened browser target did not become ready: ${normalized}`, {
@@ -185,14 +199,12 @@ export class NodeBrowserControlBroker {
         });
     } finally {
       unsubscribe?.();
-      if (sessionId) await Promise.allSettled([
-        this._connection.send("Target.detachFromTarget", { sessionId }),
-      ]);
+      if (sessionId) await Promise.allSettled([this._targets.detach(sessionId)]);
     }
   }
 
   inspect() {
-    return Object.freeze({ transport: "node-cdp", listener: null, compatibility: this.compatibility,
+    return Object.freeze({ transport: this._targets.kind, listener: null, compatibility: this.compatibility,
       viewport: this._viewport, ownedTargets: this._ownedTargets.size,
       requests: this._guard ? this._guard.inspect() : Object.freeze({ mode: "any" }),
       connection: this._connection.inspect?.() || null, ...this.port.inspect() });

@@ -333,7 +333,8 @@ function modifierBits(modifiers = []) {
 
 export class BrowserAutomation {
   constructor({ port, actions = Object.keys(BROWSER_AUTOMATION_ACTIONS), idFactory = () => crypto.randomUUID(),
-    onAudit = () => {}, downloadDir = null, artifactStore = null, now = () => Date.now() } = {}) {
+    onAudit = () => {}, downloadDir = null, artifactStore = null, now = () => Date.now(),
+    providerKind = "nativeCdp" } = {}) {
     if (!port || typeof port.send !== "function" || !port.policy) throw new TypeError("browser automation port is required");
     if (typeof idFactory !== "function") throw new TypeError("browser automation idFactory must be a function");
     if (typeof onAudit !== "function") throw new TypeError("browser automation onAudit must be a function");
@@ -379,7 +380,7 @@ export class BrowserAutomation {
       visualProbe: visualProbeEnabled ? (sessionRef, entity, visual, context) =>
         this._captureVisualProbe(sessionRef, entity, visual, context) : null,
       visualRelease: visualProbeEnabled ? (probe) => artifactStore.delete(probe.artifact.artifactRef) : null,
-      providerKind: "nativeCdp",
+      providerKind,
       now,
       capabilityPolicy: ({ action }) => this._allowedActions.has(action)
         ? { risk: BROWSER_AUTOMATION_ACTIONS[action].risk, destination: null }

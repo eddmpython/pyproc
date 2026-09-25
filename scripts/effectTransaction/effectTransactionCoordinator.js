@@ -3,6 +3,9 @@ import { loadEvidencePack } from "../verification/evidencePack.js";
 import { effectTransactionDigest, effectTransactionError } from "./effectTransactionCanonical.js";
 import { bindEffectTemplate, materializeEffectTemplate } from "./effectInput.js";
 
+// Providers whose pages are live, so a commit reaches the real service.
+const LIVE_BROWSER_PROVIDERS = new Set(["nativeCdp", "userBrowser"]);
+
 const APX_OBSERVE_INPUT = Object.freeze({
   expectedRisk: "read",
   representation: "apx.situation",
@@ -129,8 +132,8 @@ export class EffectTransactionCoordinator {
     if (transaction.state !== "approved") {
       throw effectTransactionError("EFFECT_TRANSACTION_STATE", "commit requires an approved transaction");
     }
-    if (!this.automation || this.automation.providerKind !== "nativeCdp") {
-      throw effectTransactionError("EFFECT_LIVE_PROVIDER_REQUIRED", "live commit requires NativeCdpSpace");
+    if (!this.automation || !LIVE_BROWSER_PROVIDERS.has(this.automation.providerKind)) {
+      throw effectTransactionError("EFFECT_LIVE_PROVIDER_REQUIRED", "live commit requires a live browser provider");
     }
     const pendingSession = await this.memory.registry.openSession(transaction.session.executionSessionId);
     if (pendingSession.contentSha256 !== transaction.session.pendingSha256
@@ -268,7 +271,7 @@ export class EffectTransactionCoordinator {
     if (!this.automation) throw effectTransactionError("EFFECT_AUTOMATION_UNAVAILABLE", "browser provider is unavailable");
     const situation = await this._observe(transaction.intent.effectTemplate, context, "rehearsal");
     const providerKind = this.automation.providerKind;
-    if (providerKind === "nativeCdp") {
+    if (LIVE_BROWSER_PROVIDERS.has(providerKind)) {
       return Object.freeze({ coverage: "liveReadOnly", terminal: "pass",
         source: { kind: "liveSituation", contentSha256: situation.integrity.canonicalSha256 },
         branch: null, checkpoint: null, situationSha256: situation.integrity.canonicalSha256,

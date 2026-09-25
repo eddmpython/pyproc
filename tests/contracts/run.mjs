@@ -52,6 +52,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "skillOs.mjs",
   "sourceParses.mjs",
   "storageDurability.mjs",
+  "userBrowser.mjs",
   "v86AssetIntegrity.mjs",
   "v86Builder.mjs",
   "v86ReleaseAssembler.mjs",

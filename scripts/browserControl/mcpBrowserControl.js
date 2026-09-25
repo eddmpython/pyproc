@@ -383,7 +383,7 @@ function defaultAuditWriter(record) {
 
 export class McpBrowserControl {
   constructor({ profileDir, cdpPipe = null, config, brokerFactory = connectNodeBrowserControl,
-    auditWriter = defaultAuditWriter } = {}) {
+    auditWriter = defaultAuditWriter, providerKind = "nativeCdp" } = {}) {
     if (!profileDir || typeof profileDir !== "string") throw new TypeError("browser MCP profileDir is required");
     if (!config || typeof config !== "object") throw new TypeError("browser MCP config is required");
     if (typeof brokerFactory !== "function") throw new TypeError("browser MCP brokerFactory is required");
@@ -397,6 +397,7 @@ export class McpBrowserControl {
     this._artifactStore = null;
     this._profileDir = profileDir;
     this._cdpPipe = cdpPipe;
+    this._providerKind = providerKind;
     this._brokerFactory = brokerFactory;
     this._auditWriter = auditWriter;
     this._authorities = new WeakSet();
@@ -538,6 +539,7 @@ export class McpBrowserControl {
         },
         downloadDir,
         artifactStore: this._artifactStore,
+        providerKind: this._providerKind,
       });
     }
     return { broker, automation: this._automation, artifactStore: this._artifactStore };

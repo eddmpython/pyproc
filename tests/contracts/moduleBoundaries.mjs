@@ -120,6 +120,11 @@ function verifyReleaseVersionSurfaces(packageJson) {
   const extension = JSON.parse(readFileSync(
     join(ROOT, "scripts", "actuation", "delegatedTab", "extension", "manifest.json"), "utf8"));
   if (extension.version !== version) throw new Error("delegated tab extension version이 package version과 어긋난다");
+  const userBrowserExtension = JSON.parse(readFileSync(
+    join(ROOT, "scripts", "browserControl", "userBrowser", "extension", "manifest.json"), "utf8"));
+  if (userBrowserExtension.version !== version) {
+    throw new Error("user browser extension version이 package version과 어긋난다");
+  }
   const exactNpmDocs = [
     "skills/automate-browser-with-pyproc/references/browser-automation.md",
     "skills/control-pyproc/references/javascript-control.md",

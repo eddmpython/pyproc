@@ -28,7 +28,7 @@ const REDACTION_MANIFEST_SHA256 = actuationDigest({ format: "pyproc.actuationRed
   excluded: ["secretValues", "providerHandles", "rawSemanticTree", "pixels"] });
 
 function providerActuator(providerKind) {
-  return providerKind === "nativeCdp" ? "browserInput"
+  return providerKind === "nativeCdp" || providerKind === "userBrowser" ? "browserInput"
     : providerKind === "frame" ? "cooperative" : providerKind === "replay" ? "replay" : null;
 }
 

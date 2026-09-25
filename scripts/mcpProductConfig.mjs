@@ -16,7 +16,7 @@ const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
-  "recording", "trustedCertificates", "requests",
+  "recording", "trustedCertificates", "requests", "userBrowser",
 ]);
 const RECORDING_KEYS = new Set([
   "mode", "file", "overwrite", "recordingId", "finalSha256", "startCursor", "prefixSha256",
@@ -37,7 +37,7 @@ const NATIVE_INSTALLATION_KEYS = new Set(["hostPath", "sha256", "sourceSha256", 
   "signature", "publicKey"]);
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_MACHINE_ENGINE", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
-  "PYPROC_AUTOMATION_PROVIDER",
+  "PYPROC_AUTOMATION_PROVIDER", "PYPROC_USER_BROWSER",
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
   "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_REQUESTS", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
   "PYPROC_BROWSER_FILE_ROOTS", "PYPROC_BROWSER_EXTERNAL_EFFECTS", "PYPROC_BROWSER_PURPOSE",
@@ -218,8 +218,20 @@ function normalizedBrowser(input = { enabled: false }) {
     throw new TypeError("browser.executable must be an absolute file path");
   }
   const provider = browser.provider === undefined ? "nativeCdp" : browser.provider;
-  if (!["nativeCdp", "frame", "replay"].includes(provider)) {
-    throw new TypeError("browser.provider must be nativeCdp, frame, or replay");
+  if (!["nativeCdp", "userBrowser", "frame", "replay"].includes(provider)) {
+    throw new TypeError("browser.provider must be nativeCdp, userBrowser, frame, or replay");
+  }
+  // The user's own browser is already running: pyproc chooses which one, never how it is launched.
+  if (provider === "userBrowser") {
+    if (process.platform !== "win32") throw new TypeError("browser.provider userBrowser is available only on Windows");
+    if (!["chrome", "edge"].includes(browser.userBrowser)) {
+      throw new TypeError("browser.provider userBrowser requires browser.userBrowser chrome or edge");
+    }
+    for (const key of ["executable", "headed", "gpu", "trustedCertificates"]) {
+      if (browser[key] !== undefined) throw new TypeError(`browser.provider userBrowser does not accept browser.${key}`);
+    }
+  } else if (browser.userBrowser !== undefined) {
+    throw new TypeError("browser.userBrowser needs browser.provider userBrowser");
   }
   if (browser.maxRisk !== undefined && typeof browser.maxRisk !== "string") {
     throw new TypeError("browser.maxRisk must be a string");
@@ -242,6 +254,7 @@ function normalizedBrowser(input = { enabled: false }) {
   const normalized = {
     enabled: true,
     provider,
+    ...(provider === "userBrowser" ? { userBrowser: browser.userBrowser } : {}),
     ...(browser.executable === undefined ? {} : { executable: resolve(browser.executable) }),
     headed: optionalBoolean(browser.headed, "browser.headed"),
     gpu: optionalBoolean(browser.gpu, "browser.gpu"),
@@ -497,6 +510,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   const browser = config.browser;
   env.PYPROC_BROWSER_CONTROL = "1";
   env.PYPROC_AUTOMATION_PROVIDER = browser.provider;
+  if (browser.userBrowser) env.PYPROC_USER_BROWSER = browser.userBrowser;
   if (browser.executable) env.PYPROC_BROWSER = browser.executable;
   if (browser.headed) env.PYPROC_HEADED = "1";
   if (browser.gpu) env.PYPROC_GPU = "1";

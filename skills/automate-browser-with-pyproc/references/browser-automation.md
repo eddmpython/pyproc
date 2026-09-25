@@ -25,7 +25,8 @@ The same host is available through `pyproc-control` and the Python SDK. `browser
 behind the [AutomationSpace contract](./automation-space.md). The default `NativeCdpSpace` declares DOM,
 network, target, storage, runtime, screenshot, artifact, perception, and action-convergence capabilities while keeping endpoint and provider
 objects private. The cooperative [FrameSpace provider](./frame-space.md) uses a credentialless sandbox and no
-DevTools port.
+DevTools port. The [user-browser provider](./user-browser.md) works in one task window of the user's own signed-in
+Chrome or Edge through a paired extension.
 
 ## Install and start
 
@@ -127,7 +128,7 @@ and incomplete external-effect approval fail closed.
 | `engine.root` | Existing absolute owned engine directory with the three verified core files |
 | `timeoutMs` | Positive integer, at most 900000 |
 | `browser.executable` | Optional absolute Chrome, Chromium, or Edge executable. Discovery is used when absent |
-| `browser.provider` | `nativeCdp` by default, or `frame` for a cooperative credentialless target bridge |
+| `browser.provider` | `nativeCdp` by default, `userBrowser` for a task window of the user's own Chrome or Edge (Windows, with `browser.userBrowser` `chrome` or `edge`), or `frame` for a cooperative credentialless target bridge |
 | `browser.headed`, `browser.gpu` | Optional booleans. Headless with an isolated profile is the default |
 | `browser.allowedOrigins` | Non-empty list of exact HTTP(S) origins. Paths and credentials are rejected. `["*"]` alone means every http(s) site and is accepted only with `requests: "safe"` |
 | `browser.maxRisk` | `read`, `mutate`, or `externalEffect` |

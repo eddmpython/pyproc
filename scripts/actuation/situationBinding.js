@@ -9,7 +9,8 @@ import {
   createTargetBinding,
 } from "./actuationCanonical.js";
 
-const PROVIDER_ACTUATORS = Object.freeze({ nativeCdp: "browserInput", frame: "cooperative", replay: "replay" });
+const PROVIDER_ACTUATORS = Object.freeze({ nativeCdp: "browserInput", userBrowser: "browserInput",
+  frame: "cooperative", replay: "replay" });
 const INTENT_ACTIONS = Object.freeze({ activate: "click", focus: "focus", setValue: "fill",
   setExpanded: "click", scrollTo: "scroll", dragTo: "drag" });
 

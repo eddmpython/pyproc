@@ -255,6 +255,13 @@ The lease is one-shot. Never retry a physical result after contact. Remove the i
 npx pyproc-control native remove --config .\.pyproc\manifest.json
 ```
 
+## User's own browser
+
+`browser.provider: "userBrowser"` runs Motor in one task window of the user's signed-in Chrome or Edge through the
+paired User Browser extension, with the same absolute intents, receipts, and `browserInput` actuator as `nativeCdp`
+(`dragTo` stays `nativeCdp` only). See [the user-browser provider](./user-browser.md) for setup, pairing, and the
+authority boundary.
+
 ## Delegated signed-in tab
 
 The optional extension source is under `scripts/actuation/delegatedTab/extension`. Load it only when a product
@@ -447,6 +454,13 @@ code-signing claim.
 
 `status` is effect-free. Re-running `setup` is the update path. `remove` deletes only the owned executable and
 installation receipt and clears the installation block from the profile.
+
+## User-browser boundary
+
+The User Browser extension attaches only to its task window's tabs, refuses profile-wide domains and cookie methods,
+and withdraws the task when the user cancels the debugging bar. Its native host admits one local client of the
+current Windows user, which must present the paired key. Motor receipts from it carry the same lineage as native CDP
+receipts; they prove what the task window did, not that the user's other tabs were untouched by anything else.
 
 ## Delegated tab boundary
 

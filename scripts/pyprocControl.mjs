@@ -18,12 +18,17 @@ import {
 import { inspectMachineProfile } from "./machineEntrance/machineDoctor.js";
 import { inspectWindowsNativeHostConfig, removeWindowsNativeHost,
   setupWindowsNativeHost } from "./actuation/windowsNativeInstaller.mjs";
+import { removeUserBrowser, setupUserBrowser, userBrowserInstallStatus }
+  from "./browserControl/userBrowser/userBrowserInstaller.mjs";
+import { pairUserBrowser, unpairUserBrowser } from "./browserControl/userBrowser/userBrowserChannel.mjs";
 
 const HELP = `Usage:
   pyproc-control doctor --config <file>
   pyproc-control native setup --config <file>
   pyproc-control native status --config <file>
   pyproc-control native remove --config <file>
+  pyproc-control user-browser setup|status|remove
+  pyproc-control user-browser pair|unpair --browser <chrome|edge> [--profile <id>]
   pyproc-control run --config <file> --code <python>
   pyproc-control invoke --config <file> --operation <name> [--input <json>]
   pyproc-control eyes audit --config <file> --contract-root <dir> --repository-root <dir> --output-dir <relative-dir> --environment <id>
@@ -38,6 +43,25 @@ Options:
   --help           Show this help
   --version        Print the installed package version
 `;
+
+function parseUserBrowserArgs(argv) {
+  const command = argv[0];
+  if (!new Set(["setup", "status", "remove", "pair", "unpair"]).has(command)) {
+    throw new TypeError("user-browser requires setup, status, remove, pair, or unpair");
+  }
+  const values = { command };
+  for (let index = 1; index < argv.length; index += 1) {
+    const key = { "--browser": "browser", "--profile": "profileId" }[argv[index]];
+    if (!key) throw new TypeError(`unknown user-browser option: ${argv[index]}`);
+    const value = argv[++index];
+    if (!value) throw new TypeError(`${argv[index - 1]} requires a value`);
+    values[key] = value;
+  }
+  if ((command === "pair" || command === "unpair") && !values.browser) {
+    throw new TypeError(`user-browser ${command} requires --browser chrome or edge`);
+  }
+  return values;
+}
 
 function parseEyesArgs(argv) {
   const mode = argv[0];
@@ -135,6 +159,14 @@ try {
     const result = args.command === "setup" ? await setupWindowsNativeHost(args.config)
       : args.command === "remove" ? await removeWindowsNativeHost(args.config)
         : await inspectWindowsNativeHostConfig(args.config);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  } else if (argv[0] === "user-browser") {
+    const args = parseUserBrowserArgs(argv.slice(1));
+    const result = args.command === "setup" ? await setupUserBrowser()
+      : args.command === "remove" ? await removeUserBrowser()
+        : args.command === "pair" ? await pairUserBrowser({ browser: args.browser, profileId: args.profileId || "" })
+          : args.command === "unpair" ? await unpairUserBrowser({ browser: args.browser })
+            : await userBrowserInstallStatus();
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else if (argv[0] === "eyes") {
     const args = parseEyesArgs(argv.slice(1));

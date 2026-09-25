@@ -201,6 +201,24 @@ extension action gestures bind the host and target tab. Synthetic browser input 
 Same-origin navigation rotates the tab epoch, while cross-origin navigation and tab close revoke access. The
 extension does not grant broad profile, debugger, navigation, or closure authority.
 
+### The user's own browser is reached through one task window, one paired user, and one local pipe
+
+The optional User Browser extension attaches `chrome.debugger` only to the window it opened for a task and the tabs
+in it or opened from it; the browser shows its debugging bar meanwhile, and cancelling it withdraws the task. The
+extension refuses the Target, Fetch, Storage, Browser, and other profile-wide domains, cookie and cache methods,
+`Network.loadNetworkResource`, tab closing, and history navigation, strips cookie headers from the network events it
+forwards, and binds every reply and effect to the client connection that asked, so the provider cannot read or change
+the profile's cookie store, other origins' storage, or other tabs, and nothing one control host started reaches the
+next. Page script it evaluates can still read what the page itself can (non-HttpOnly cookies, that origin's storage).
+Its native host serves one named pipe instance that only the current Windows user can open and that refuses remote
+clients; the Control host is a client with no listener. A client must present the key the user paired by clicking
+the extension action, which automation cannot forge; the extension keeps only its SHA-256.
+
+The boundary is the Windows user. A process running as the same user can read the pairing key and drive the task
+windows it opens, visibly, as it could already drive the browser through input automation; it still cannot reach the
+cookie store, other origins' storage, or tabs outside the task. Unpairing forgets the key on both sides, and removing the provider
+unregisters the native host.
+
 Motor receipts and episodes may contain private application state even after structural redaction. Keep the
 Execution Memory root private. Evidence Pack projection resolves an exact stored receipt and episode and applies
 the existing artifact quota and replay integrity checks. A pack digest and a Motor receipt prove integrity and

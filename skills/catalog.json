@@ -1,21 +1,22 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:1968abdc7b98d3ab955db499f23621f0d7c5fb63716ea64dacbb26027d11f802",
-  "catalogDigest": "sha256:ac260cacf51f1d6df2c2a0d6f9bb7777e8194e1d9fd582faa3afa0ab3f9fc501",
+  "generatedFromDigest": "sha256:70589e17cf8c98440de001a4a29fd163e2ae5cb8ad6d8e583f9126d7916b8f11",
+  "catalogDigest": "sha256:5a7d81f1cd113b69955f2e37b2a7eeb3432cee9128122350ce1f4a380ff3386d",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
       "description": "Automate browser targets with PyProc Browser Control, AutomationSpace, FrameSpace, ReplaySpace, and actuation contracts. Use for browser observation, locators, screenshots, clicks, frames, replay, 브라우저 자동화, or trusted input.",
       "path": "skills/automate-browser-with-pyproc/SKILL.md",
-      "sha256": "sha256:89dd585b30e856e400d6d6fb85afc2960410256eafc8f18af59f8b11e6951244",
-      "bytes": 1402,
+      "sha256": "sha256:f6e647d2b90de9540d99637e04d16923a0da9d09ff808ced8020c5ef82a08818",
+      "bytes": 1447,
       "references": [
         "references/actuation.md",
         "references/automation-space.md",
         "references/browser-automation.md",
         "references/frame-space.md",
-        "references/replay-space.md"
+        "references/replay-space.md",
+        "references/user-browser.md"
       ],
       "scripts": [],
       "assets": []
@@ -249,8 +250,8 @@
   "resources": [
     {
       "path": "skills/automate-browser-with-pyproc/references/actuation.md",
-      "bytes": 21084,
-      "sha256": "sha256:ef538faf22f05c33bd304eae40a2d2dec9dfd6b3567cf880265be37aab8f725e"
+      "bytes": 21956,
+      "sha256": "sha256:8d5d002cdce8a3f34a950d052304ca31e328c3ec92b9e584f3e1475accecdd37"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/automation-space.md",
@@ -259,8 +260,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
-      "bytes": 35162,
-      "sha256": "sha256:3b927bb26ebdee0a56f8e20172fbb515801ac133ddd4b6bc42fb6e715f6d5d03"
+      "bytes": 35428,
+      "sha256": "sha256:1d611be1e5b234ece33e814b005e80dbb58a9125f30adf95cc04d8d4e4dba547"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/frame-space.md",
@@ -271,6 +272,11 @@
       "path": "skills/automate-browser-with-pyproc/references/replay-space.md",
       "bytes": 10246,
       "sha256": "sha256:532051400bd3b0a37076219388bc601a7cc33152f547a505699e5b751c6550b4"
+    },
+    {
+      "path": "skills/automate-browser-with-pyproc/references/user-browser.md",
+      "bytes": 6775,
+      "sha256": "sha256:689a672a174ed46e929c07c2411ddb7d175653edeac3a5b9dc7717f05f80bebf"
     },
     {
       "path": "skills/benchmark-pyproc/references/benchmarking.md",
@@ -314,8 +320,8 @@
     },
     {
       "path": "skills/evolve-pyproc/references/contract-reality.md",
-      "bytes": 4864,
-      "sha256": "sha256:1be9bdd37bb4b7d51996550b67b1d6bc3666d229f508e00c277f649ee5fca71a"
+      "bytes": 5940,
+      "sha256": "sha256:be3aa243173e25bc3a7e299fef87fa151488f5fd7c507bddbfb7e30d23ef5fcc"
     },
     {
       "path": "skills/evolve-pyproc/references/experimental-freeze.md",

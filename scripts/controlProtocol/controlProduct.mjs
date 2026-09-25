@@ -1,8 +1,9 @@
 // controlProduct.mjs - Python machine page와 automation provider를 한 ControlHost로 조립한다.
 import { realpathSync, statSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { delimiter, dirname, isAbsolute, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COI_HEADERS, createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
@@ -17,6 +18,7 @@ import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
 import { FrameSpace, assertFrameSpaceConfig } from "../automationSpace/frameSpace.js";
 import { createFrameSpaceTools } from "../automationSpace/frameSpaceTools.js";
 import { NativeCdpSpace } from "../automationSpace/nativeCdpSpace.js";
+import { UserBrowserSpace } from "../automationSpace/userBrowserSpace.js";
 import {
   assertAutomationRecordingSelection,
   loadAutomationRecording,
@@ -216,8 +218,12 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   const engineEnabled = env.PYPROC_MACHINE_ENGINE !== "0";
   if (!engineEnabled && !browserEnabled) throw new TypeError("a disabled engine requires browser control");
   const providerKind = browserEnabled ? (env.PYPROC_AUTOMATION_PROVIDER || "nativeCdp") : null;
-  if (browserEnabled && !["nativeCdp", "frame", "replay"].includes(providerKind)) {
+  if (browserEnabled && !["nativeCdp", "userBrowser", "frame", "replay"].includes(providerKind)) {
     throw new TypeError(`unsupported automation provider: ${providerKind}`);
+  }
+  const userBrowser = providerKind === "userBrowser" ? env.PYPROC_USER_BROWSER : null;
+  if (providerKind === "userBrowser" && !["chrome", "edge"].includes(userBrowser)) {
+    throw new TypeError("the userBrowser provider needs PYPROC_USER_BROWSER chrome or edge");
   }
   let recordingConfig = null;
   if (env.PYPROC_AUTOMATION_RECORDING) {
@@ -290,13 +296,17 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   const serverOrigin = machinePage?.serverOrigin || null;
   const pageUrl = machinePage?.pageUrl || null;
   let browserSession = null;
+  // The user-browser provider's downloads and artifacts go to a pyproc scratch folder, never the user's profile.
+  let userBrowserScratch = null;
   let browserControl = null;
   let automationSpace = null;
   let automationRouter = null;
   let windowsNative = null;
   try {
     windowsNative = windowsNativeConfig ? await WindowsNativeHostClient.open(windowsNativeConfig) : null;
-    browserSession = browserLauncher(machinePage?.launchUrl || "about:blank", {
+    // A user browser is already running; pyproc launches one only to host the Machine page.
+    browserSession = providerKind === "userBrowser" && !machinePage ? null : browserLauncher(
+      machinePage?.launchUrl || "about:blank", {
       prefix: "pyprocControl-",
       cdpPipe: providerKind === "nativeCdp",
       extraArgs: [...trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
@@ -304,6 +314,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       ...(requestGuardProfilePreferences(browserConfig?.requests)
         ? { preferences: requestGuardProfilePreferences(browserConfig?.requests) } : {}),
     });
+    if (providerKind === "userBrowser") userBrowserScratch = await mkdtemp(join(tmpdir(), "pyprocUserBrowser-"));
     automationSpace = browserEnabled
       ? (providerKind === "frame"
         ? new FrameSpace({ pageBridge, config: browserConfig, spaceId: "space:frame" })
@@ -311,8 +322,10 @@ export async function createControlProduct({ env = process.env, browserLauncher 
           ? new ReplaySpace({ recording: replayRecording,
               cursor: recordingConfig.startCursor || 0,
               prefixSha256: recordingConfig.prefixSha256 || null })
-          : new NativeCdpSpace({ profileDir: browserSession.profile, cdpPipe: browserSession.cdpPipe,
-              config: browserConfig })) : null;
+          : providerKind === "userBrowser"
+            ? new UserBrowserSpace({ profileDir: userBrowserScratch, config: browserConfig, browser: userBrowser })
+            : new NativeCdpSpace({ profileDir: browserSession.profile, cdpPipe: browserSession.cdpPipe,
+                config: browserConfig })) : null;
     if (automationSpace && recordingConfig?.mode === "record") {
       automationSpace = await RecordingSpace.open({ provider: automationSpace, file: recordingConfig.file,
         overwrite: recordingConfig.overwrite });
@@ -436,6 +449,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
         pageBridge?.close();
         try { browserSession?.close(); } catch (error) {}
         await machinePage?.close();
+        if (userBrowserScratch) await rm(userBrowserScratch, { recursive: true, force: true }).catch(() => {});
       },
     });
   } catch (error) {
@@ -445,6 +459,7 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     if (!automationRouter) try { await automationSpace?.close(); } catch (closeError) {}
     try { browserSession?.close(); } catch (closeError) {}
     await machinePage?.close();
+    if (userBrowserScratch) await rm(userBrowserScratch, { recursive: true, force: true }).catch(() => {});
     throw error;
   }
 }
