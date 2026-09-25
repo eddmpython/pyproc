@@ -2,6 +2,20 @@
 
 from .client import ControlRequest, PyProcClient
 from .models import ActionConvergenceReceipt, Attachment, ControlError, ControlResult
+from .motor import (
+    ActuationIntent,
+    ActuationIntentKind,
+    ActuatorKind,
+    MotorAmbiguityDiagnostic,
+    MotorAuthority,
+    MotorCleanupFailure,
+    MotorPolicy,
+    MotorTarget,
+    MotorTaskCleanup,
+    MotorTaskSession,
+    actuationDigest,
+    canonicalActuationJson,
+)
 from .perception import (
     PerceptionClient,
     PerceptionEntity,
@@ -28,6 +42,18 @@ from .protocol import (
 __all__ = [
     "Attachment",
     "ActionConvergenceReceipt",
+    "ActuationIntent",
+    "ActuationIntentKind",
+    "ActuatorKind",
+    "MotorAmbiguityDiagnostic",
+    "MotorAuthority",
+    "MotorCleanupFailure",
+    "MotorPolicy",
+    "MotorTarget",
+    "MotorTaskCleanup",
+    "MotorTaskSession",
+    "actuationDigest",
+    "canonicalActuationJson",
     "ControlError",
     "ControlProtocolError",
     "ControlRequest",

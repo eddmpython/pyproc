@@ -281,24 +281,46 @@ contract.
 
 ## Proof-Carrying Motor from Python
 
-The Python facade shares the same durable Motor records and receipt digests as JavaScript and MCP:
+`openMotorTask()` binds target, session, Situation, artifact, and cleanup ownership to one task, with the same meaning
+as the JavaScript task, and shares the same durable Motor records and receipt digests as JavaScript and MCP:
 
 ```python
-motor = client.executeMotor({
-    "sessionRef": attached.output,
-    "situation": situation.output,
-    "requirementRef": "requirement:save",
-    "intent": absolute_intent,
-})
-assert motor.output["terminal"] in {"confirmed", "alreadySatisfied"}
+from pyprocControl import (ActuationIntent, MotorAuthority, MotorPolicy, MotorTarget, actuationDigest)
 
-records = client.listMotorRecords()
-assert any(row["receiptSha256"] == motor.output["receipt"]["receiptSha256"]
-           for row in records.output)
+with client.openMotorTask(url="https://app.example/work", waitUntil="load") as task:
+    observed = task.situate({"requirements": [{
+        "requirementRef": "requirement:save",
+        "select": {"role": "button", "name": "Save", "actionable": True},
+        "need": ["fact", "affordance"], "cardinality": "one",
+    }]})
+    if not task.diagnoseAmbiguity(observed, "requirement:save").canExecute:
+        raise RuntimeError("caller refinement is required")
+    situation = observed.situation
+    affordance = next(entry for entry in situation["affordances"]
+                      if entry["kind"] == "authorized" and entry["action"] == "click")
+    motor = task.execute(observed, "requirement:save", ActuationIntent(
+        intent="activate",
+        target=MotorTarget(spaceRef=spaceRef, entityRef=situation["requirements"][0]["entityRefs"][0],
+                           worldRef=situation["worldRef"], surfaceEpoch=f"document:{situation['documentEpoch']}"),
+        desired={"activated": True},
+        authority=MotorAuthority(actionCapabilityRef=affordance["capabilityRef"]),
+        policy=MotorPolicy(allowedActuatorKinds=("browserInput",)),
+        expectedTransition={"entityAppeared": {"role": "status", "name": "saved"}},
+    ))
+    receipt = dict(motor.output["receipt"])
+    assert actuationDigest({k: v for k, v in receipt.items() if k != "receiptSha256"}) == receipt["receiptSha256"]
 ```
 
-`absolute_intent` must carry the exact Situation world, entity, surface epoch, action capability, desired final
-state, expected transition, and actuator allowlist. Python does not receive raw coordinates or provider handles.
+The task executes only a Situation it observed whose requirement settled on one complete target; otherwise
+`execute()` raises `TypeError`, and `diagnoseAmbiguity()` names the caller-owned predicates that would refine it.
+Leaving the `with` block (or `close()`) detaches the session, deletes the artifacts the task did not retain, and
+closes a target it opened; it returns a `MotorTaskCleanup` and never retries an effect. A closed task raises
+`RuntimeError("Motor task session is closed")`. `executeMotor()` still takes an intent mapping directly.
+
+`ActuationIntent` carries the exact Situation world, entity, surface epoch, action capability, desired final state,
+expected transition, and actuator allowlist. `canonicalActuationJson()` and `actuationDigest()` produce the Control
+host's canonical JSON and digest byte for byte, so a receipt can be checked locally. Python does not receive raw
+coordinates or provider handles.
 Windows physical input additionally requires `acquireMotorControl()` and a one-shot control lease. Use
 `revokeMotorControl()` before execution when the surrounding product cancels the task. See
 [the Motor guide](../../automate-browser-with-pyproc/references/actuation.md).

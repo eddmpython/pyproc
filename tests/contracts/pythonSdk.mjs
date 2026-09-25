@@ -11,6 +11,7 @@ const requiredFiles = [
   "pythonSdk/src/pyprocControl/bundledHost.py",
   "pythonSdk/src/pyprocControl/client.py",
   "pythonSdk/src/pyprocControl/models.py",
+  "pythonSdk/src/pyprocControl/motor.py",
   "pythonSdk/src/pyprocControl/perception.py",
   "pythonSdk/src/pyprocControl/protocol.py",
   "pythonSdk/src/pyprocControl/py.typed",
@@ -20,6 +21,7 @@ const requiredFiles = [
   "tests/pythonSdk/appSpaceList.py",
   "tests/pythonSdk/replayGraphList.py",
   "tests/pythonSdk/motorList.py",
+  "tests/pythonSdk/motorTask.py",
   "tests/pythonSdk/run.mjs",
 ];
 
@@ -38,7 +40,9 @@ export async function assertPythonSdkContract() {
   const source = readFileSync(join(ROOT, "pythonSdk", "src", "pyprocControl", "__init__.py"), "utf8");
   for (const name of ["PyProcClient", "ControlRequest", "ControlResult", "ControlError", "Attachment",
     "ActionConvergenceReceipt",
-    "PerceptionClient", "PerceptionEntity", "PerceptionQueryResult"]) {
+    "PerceptionClient", "PerceptionEntity", "PerceptionQueryResult",
+    "MotorTaskSession", "ActuationIntent", "MotorTarget", "MotorAuthority", "MotorPolicy",
+    "MotorAmbiguityDiagnostic", "MotorTaskCleanup", "actuationDigest", "canonicalActuationJson"]) {
     if (!source.includes(`"${name}"`)) throw new Error(`Python SDK 공개 값 누락: ${name}`);
   }
   if (pkg.scripts?.["test:python-sdk"] !== "node tests/pythonSdk/run.mjs") {
@@ -60,7 +64,7 @@ export async function assertPythonSdkContract() {
     "inspectReplayWorldCoverage", "listReplayGraphs"]) {
     if (!clientSource.includes(`def ${method}(`)) throw new Error(`Python ReplayGraph facade 누락: ${method}`);
   }
-  for (const method of ["executeMotor", "inspectMotor", "listMotorRecords", "replayMotor",
+  for (const method of ["openMotorTask", "executeMotor", "inspectMotor", "listMotorRecords", "replayMotor",
     "evaluateMotorPolicy", "promoteMotorPolicy", "rollbackMotorPolicy"]) {
     if (!clientSource.includes(`def ${method}(`)) throw new Error(`Python Motor facade 누락: ${method}`);
   }

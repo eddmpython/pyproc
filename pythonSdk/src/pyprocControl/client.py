@@ -12,10 +12,11 @@ import threading
 from collections import deque
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from pathlib import Path
-from typing import Any, BinaryIO, Callable, Sequence, TextIO
+from typing import Any, BinaryIO, Callable, Mapping, Sequence, TextIO
 
 from .bundledHost import bundledCommand
 from .models import Attachment, ControlError, ControlResult
+from .motor import MotorTaskSession
 from .perception import PerceptionClient
 from .protocol import (
     CONTROL_ATTACHMENT_CHUNK_BYTES,
@@ -437,20 +438,20 @@ class PyProcClient:
     def attachSession(self, targetRef: str, *, timeout: float | None = None) -> ControlResult:
         return self.request("automation.session.attach", {"targetRef": targetRef}, timeout=timeout)
 
-    def observe(self, sessionRef: str, options: dict[str, Any] | None = None, *,
+    def observe(self, sessionRef: Mapping[str, Any], options: dict[str, Any] | None = None, *,
                 timeout: float | None = None) -> ControlResult:
         return self.request("automation.observe", {"sessionRef": sessionRef, **(options or {})}, timeout=timeout)
 
-    def act(self, sessionRef: str, actions: list[dict[str, Any]], *,
+    def act(self, sessionRef: Mapping[str, Any], actions: list[dict[str, Any]], *,
             timeout: float | None = None) -> ControlResult:
         return self.request("automation.act", {"sessionRef": sessionRef, "actions": actions}, timeout=timeout)
 
-    def command(self, sessionRef: str, method: str, params: dict[str, Any], *, expectedRisk: str,
+    def command(self, sessionRef: Mapping[str, Any], method: str, params: dict[str, Any], *, expectedRisk: str,
                 timeout: float | None = None) -> ControlResult:
         return self.request("automation.command", {"sessionRef": sessionRef, "method": method,
                                                     "params": params, "expectedRisk": expectedRisk}, timeout=timeout)
 
-    def detachSession(self, sessionRef: str, *, timeout: float | None = None) -> ControlResult:
+    def detachSession(self, sessionRef: Mapping[str, Any], *, timeout: float | None = None) -> ControlResult:
         return self.request("automation.session.detach", {"sessionRef": sessionRef}, timeout=timeout)
 
     def readArtifact(self, artifactRef: str, *, offset: int | None = None, maxBytes: int | None = None,
@@ -733,8 +734,16 @@ class PyProcClient:
         return self.request("motor.policy.rollback", {"expectedPolicySha256": expectedPolicySha256},
                             timeout=timeout)
 
-    def perception(self, sessionRef: dict[str, Any] | None = None) -> PerceptionClient:
+    def perception(self, sessionRef: Mapping[str, Any] | None = None) -> PerceptionClient:
         return PerceptionClient(self, sessionRef)
+
+    def openMotorTask(self, *, url: str | None = None, targetRef: str | None = None,
+                      expectedRisk: str = "externalEffect", waitUntil: str = "commit",
+                      retainArtifacts: bool = False, timeout: float | None = None) -> MotorTaskSession:
+        """Open a Motor task on a new target at `url` or on an existing `targetRef` (see `MotorTaskSession`)."""
+
+        return MotorTaskSession.open(self, url=url, targetRef=targetRef, expectedRisk=expectedRisk,
+                                     waitUntil=waitUntil, retainArtifacts=retainArtifacts, timeout=timeout)
 
     def close(self, timeout: float = 5.0) -> None:
         with self._stateLock:

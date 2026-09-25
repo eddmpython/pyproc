@@ -1,10 +1,12 @@
 // actuationProduct.mjs - installed browser Motor의 exact bind, one-shot effect, receipt, client parity gate.
+// Python은 같은 fixture에서 같은 Motor task 여정을 공개 client로 다시 돌리고, 결과와 receipt digest를 JavaScript와 대조한다.
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { createInterface } from "node:readline";
 import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 
@@ -59,7 +61,15 @@ check("preflight enables browser-only Motor with one durable root",
     && preflight.executionMemory?.enabled === true && preflight.automation?.provider === "nativeCdp");
 
 const publicRequire = createRequire(join(installed.appDir, "package.json"));
-const { PyProcControlClient } = await import(pathToFileURL(publicRequire.resolve("pyproc/control")).href);
+const { PyProcControlClient, canonicalActuationJson } = await import(
+  pathToFileURL(publicRequire.resolve("pyproc/control")).href);
+// Values whose canonical JSON is easy to get wrong outside JavaScript: signed zero, exponent forms, the largest and
+// smallest doubles, integers past 2^53, escapes, unpaired surrogates, and keys ordered by UTF-16 code unit.
+const CANONICAL_CORPUS = [0, -0, 1, -1.5, 0.1, 0.30000000000000004, 1e21, 1e20, 1e-7, 1.5e-6, 0.000001,
+  9007199254740993, 1.7976931348623157e308, 5e-324, 123e-20, 4.35, 1234.5678,
+  "a\"\\\n\t\u0001\u001f\u007f\u2028\u00e9\ud83d\ude00", "\ud800", "\udfff x",
+  { b: 1, a: [true, null, { z: "\uffff", "\ud83d\ude00": 1, "\ue000": 2, A: 3 }] }];
+const javascript = {};
 const controlScript = join(packageRoot, "scripts", "pyprocControl.mjs");
 const client = await PyProcControlClient.start(configPath, { command: [process.execPath, controlScript],
   cwd: installed.appDir, startupTimeoutMs: TIMEOUT_MS, shutdownTimeoutMs: 10000 });
@@ -144,6 +154,13 @@ try {
       "motor.policy.promote", "motor.policy.rollback"].every((operation) => client.operations.includes(operation)));
   const taskTargetRef = task.targetRef;
   const cleanup = await task.close();
+  let closedError = null;
+  try { await task.situate({ requirements: [] }); } catch (error) { closedError = error; }
+  Object.assign(javascript, { terminals: [executed.output.terminal, selected.output.terminal],
+    providerCalls: [executed.output.receipt.effectWindow.providerCalls,
+      selected.output.receipt.effectWindow.providerCalls],
+    diagnostic, refinedDiagnostic, cleanup, ambiguousError: String(ambiguousError?.message || ""),
+    closedError: String(closedError?.message || "") });
   task = null;
   const remainingTargets = await client.listTargets();
   check("Motor task cleanup detaches the session and closes its owned target without retrying the effect",
@@ -158,6 +175,33 @@ try {
   const pythonRecords = JSON.parse(pythonResult.stdout.trim());
   check("Python facade preserves the same durable receipt digest",
     pythonRecords.some((entry) => entry.receiptSha256 === receiptSha256));
+
+  const corpusPath = join(installed.appDir, "canonicalCorpus.json");
+  await writeFile(corpusPath, JSON.stringify(CANONICAL_CORPUS));
+  // Asynchronous: the fixture server lives in this process and must keep answering the Python task's browser.
+  const pythonTask = JSON.parse((await promisify(execFile)(process.env.PYTHON || "python", [join(ROOT, "tests",
+    "pythonSdk", "motorTask.py"), configPath, process.execPath, controlScript, origin, corpusPath], {
+    cwd: installed.appDir, timeout: TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, PYTHONPATH: join(ROOT, "pythonSdk", "src") } })).stdout.trim());
+  const same = (left, right) => canonicalActuationJson(left) === canonicalActuationJson(right);
+  check("Python Motor task reaches the same terminals and provider effects as JavaScript",
+    same(pythonTask.receipts.map((entry) => entry.terminal), javascript.terminals)
+      && same(pythonTask.receipts.map((entry) => entry.providerCalls), javascript.providerCalls) && effects === 2,
+    JSON.stringify({ python: pythonTask.receipts.map((entry) => entry.terminal), effects }));
+  check("Python recomputes every receipt digest the Control host wrote",
+    pythonTask.receipts.length === 2 && pythonTask.receipts.every((entry) => entry.local === entry.server),
+    JSON.stringify(pythonTask.receipts.map((entry) => [entry.server, entry.local])));
+  check("Python ambiguity diagnostics and refusal match JavaScript",
+    same(pythonTask.diagnostic, javascript.diagnostic) && same(pythonTask.refinedDiagnostic,
+      javascript.refinedDiagnostic) && pythonTask.ambiguousError === javascript.ambiguousError,
+    JSON.stringify({ python: pythonTask.diagnostic, javascript: javascript.diagnostic }));
+  check("Python task cleanup and the closed-task error match JavaScript",
+    same(pythonTask.cleanup, javascript.cleanup) && pythonTask.closedAgain === true
+      && pythonTask.targetClosed === true && pythonTask.closedError === javascript.closedError
+      && javascript.closedError === "Motor task session is closed",
+    JSON.stringify({ python: pythonTask.cleanup, closedError: pythonTask.closedError }));
+  check("Python canonical actuation JSON is byte-identical to JavaScript",
+    CANONICAL_CORPUS.every((value, index) => canonicalActuationJson(value) === pythonTask.canonical[index]));
 
   mcpChild = spawn(process.execPath, [join(packageRoot, "scripts", "pyprocMcp.mjs"), "--config", configPath], {
     cwd: installed.appDir, stdio: ["pipe", "pipe", "pipe"], env: process.env,
@@ -189,7 +233,8 @@ try {
   check("MCP facade exposes every Motor tool and preserves the same receipt digest",
     ["motorExecute", "motorInspect", "motorList", "motorReplay", "motorPolicyEvaluate",
       "motorPolicyPromote", "motorPolicyRollback"].every((name) => toolNames.includes(name))
-      && mcpRecords.some((entry) => entry.receiptSha256 === receiptSha256));
+      && mcpRecords.some((entry) => entry.receiptSha256 === receiptSha256)
+      && pythonTask.receipts.every((receipt) => mcpRecords.some((entry) => entry.receiptSha256 === receipt.server)));
 } catch (error) {
   check("installed Motor journey has no exception", false,
     `${String(error?.stack || error).slice(-1600)} details=${JSON.stringify(error?.details || null)}`);
