@@ -1,5 +1,6 @@
-// hostPayload.mjs - platform wheel이 싣는 host 두 가지를 읽는다: lock의 SHA-256과 맞는 공식 Node runtime,
-// 그리고 같은 commit의 canonical npm package tree. checksum이 다르면 어떤 byte도 wheel로 넘어가지 않는다.
+// hostPayload.mjs - platform wheel이 싣는 host를 읽는다: lock의 SHA-256과 맞는 공식 Node runtime, 같은 commit의
+// canonical npm package tree, 그리고 win_amd64에는 lock이 고정한 사용자 브라우저 native host(프로젝트 release 자산).
+// checksum이 다르면 어떤 byte도 wheel로 넘어가지 않는다.
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -112,6 +113,55 @@ export async function extractNodeRuntime(bytes, hostNode, platform) {
     binaryName: platformLock.binary.split("/").at(-1),
     binary,
     license,
+  });
+}
+
+function assertUserBrowserHostArchive(bytes, lockEntry, source = "input") {
+  const actual = createHash("sha256").update(bytes).digest("hex");
+  if (actual !== lockEntry.sha256) {
+    throw new Error(`user-browser host checksum mismatch for ${lockEntry.archive} from ${source}: ${actual}`);
+  }
+}
+
+// Node와 같다: cache의 byte도 매번 다시 보고, 새로 받은 byte는 확인된 뒤에만 cache로 옮긴다.
+export async function fetchUserBrowserHost(lockEntry, cacheDir) {
+  const cached = join(cacheDir, lockEntry.archive);
+  if (existsSync(cached)) {
+    const bytes = await readFile(cached);
+    assertUserBrowserHostArchive(bytes, lockEntry, cached);
+    return bytes;
+  }
+  const response = await fetch(lockEntry.url);
+  if (!response.ok) throw new Error(`user-browser host download failed(${response.status}): ${lockEntry.url}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  assertUserBrowserHostArchive(bytes, lockEntry, response.url);
+  await mkdir(cacheDir, { recursive: true });
+  const partial = `${cached}.${process.pid}.partial`;
+  await writeFile(partial, bytes);
+  await rename(partial, cached);
+  return bytes;
+}
+
+/** The host and its notices from the verified release zip, whose identity must name the source tree the lock pins. */
+export async function extractUserBrowserHost(bytes, lockEntry) {
+  assertUserBrowserHostArchive(bytes, lockEntry);
+  const entries = new Map(await unzipWheel(bytes));
+  const digest = (value) => createHash("sha256").update(value).digest("hex");
+  const identity = JSON.parse(Buffer.from(entries.get("userBrowserHost.json") || "null").toString("utf8"));
+  const binary = entries.get(identity?.host?.file);
+  const notices = entries.get(identity?.notices?.file);
+  if (identity?.sourceTree !== lockEntry.sourceTree || !binary || !notices
+    || digest(binary) !== identity.host.sha256 || digest(notices) !== identity.notices.sha256) {
+    throw new Error(`user-browser host ${lockEntry.archive} does not hold the host of source tree ${lockEntry.sourceTree}`);
+  }
+  return Object.freeze({
+    sourceTree: identity.sourceTree,
+    archive: lockEntry.archive,
+    archiveSha256: lockEntry.sha256,
+    binaryName: identity.host.file,
+    binary: Buffer.from(binary),
+    sha256: identity.host.sha256,
+    notices: Buffer.from(notices),
   });
 }
 

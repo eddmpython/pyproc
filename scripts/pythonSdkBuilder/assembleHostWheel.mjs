@@ -30,14 +30,14 @@ function lineFeeds(bytes) {
   return Buffer.from(Buffer.from(bytes).toString("utf8").replaceAll("\r\n", "\n"));
 }
 
-// METADATA 머리말 끝(첫 빈 줄) 안에서 마지막 License-File 뒤에 Node의 license 고지를 더한다.
-function withNodeLicense(metadata) {
+// METADATA 머리말 끝(첫 빈 줄) 안에서 마지막 License-File 뒤에 host가 싣는 license 고지들을 더한다.
+function withLicenses(metadata, licenseFiles) {
   const headerEnd = metadata.indexOf("\n\n");
   const header = headerEnd < 0 ? metadata : metadata.slice(0, headerEnd);
   const lines = header.split("\n");
   const last = lines.findLastIndex((line) => line.startsWith("License-File: "));
   if (last < 0) throw new Error("pure wheel METADATA declares no License-File");
-  lines.splice(last + 1, 0, "License-File: node/LICENSE");
+  lines.splice(last + 1, 0, ...licenseFiles.map((file) => `License-File: ${file}`));
   return `${lines.join("\n")}${headerEnd < 0 ? "" : metadata.slice(headerEnd)}`;
 }
 
@@ -47,9 +47,14 @@ function withNodeLicense(metadata) {
  * packageFiles: [{ path: "package/...", bytes }] from the canonical npm package tarball.
  * packageIdentity: { name, version, filename, sha256, integrity } of that tarball.
  * nodeRuntime: the checksum-verified result of extractNodeRuntime.
+ * userBrowserHost: the verified result of extractUserBrowserHost, which exactly the win_amd64 wheel carries.
  */
-export function assembleHostWheel({ platform, pureWheel, packageFiles, packageIdentity, nodeRuntime, sourceDateEpoch }) {
+export function assembleHostWheel({ platform, pureWheel, packageFiles, packageIdentity, nodeRuntime, userBrowserHost = null,
+  sourceDateEpoch }) {
   if (!/^(win_amd64|manylinux_\d+_\d+_x86_64)$/u.test(platform)) throw new TypeError(`unsupported wheel platform: ${platform}`);
+  if ((platform === "win_amd64") !== Boolean(userBrowserHost)) {
+    throw new Error(`the user-browser native host belongs in exactly the win_amd64 wheel, not ${platform}`);
+  }
   if (!Number.isSafeInteger(sourceDateEpoch) || sourceDateEpoch < 315532800) {
     throw new TypeError("sourceDateEpoch must be a Unix time from 1980 onward");
   }
@@ -96,10 +101,22 @@ export function assembleHostWheel({ platform, pureWheel, packageFiles, packageId
       sha256: packageIdentity.sha256, integrity: packageIdentity.integrity },
     commands: COMMANDS,
   };
+  const licenseFiles = ["node/LICENSE"];
+  if (userBrowserHost) {
+    // The installer finds the host through host.json and checks its SHA-256 before installing it.
+    const hostPath = `userBrowserHost/${userBrowserHost.binaryName}`;
+    descriptor.userBrowserHost = { path: hostPath, sha256: userBrowserHost.sha256, sourceTree: userBrowserHost.sourceTree,
+      archive: userBrowserHost.archive, archiveSha256: userBrowserHost.archiveSha256 };
+    licenseFiles.push("userBrowserHost/THIRD-PARTY-NOTICES.txt");
+    entries.push(
+      { path: `${HOST}/${hostPath}`, bytes: userBrowserHost.binary, mode: 0o755 },
+      { path: `${distInfo}/licenses/userBrowserHost/THIRD-PARTY-NOTICES.txt`, bytes: userBrowserHost.notices },
+    );
+  }
   entries.push(
     { path: `${HOST}/${nodePath}`, bytes: nodeRuntime.binary, mode: 0o755 },
     { path: `${HOST}/host.json`, bytes: Buffer.from(`${JSON.stringify(descriptor, null, 2)}\n`) },
-    { path: `${distInfo}/METADATA`, bytes: Buffer.from(withNodeLicense(metadata)) },
+    { path: `${distInfo}/METADATA`, bytes: Buffer.from(withLicenses(metadata, licenseFiles)) },
     { path: `${distInfo}/licenses/node/LICENSE`, bytes: nodeRuntime.license },
     { path: `${distInfo}/entry_points.txt`, bytes: Buffer.from(ENTRY_POINTS) },
     { path: `${distInfo}/WHEEL`, bytes: Buffer.from([

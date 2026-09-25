@@ -29,8 +29,11 @@ opened. The provider declares `dom`, `network`, `target`, `runtime`, `screenshot
 npx pyproc-control user-browser setup
 ```
 
-Setup builds the native host with Cargo, installs it with the extension folder under
-`%LOCALAPPDATA%\pyproc\userBrowser\install`, and registers the host for Chrome and Edge under HKCU. Load the
+Setup installs the native host with the extension folder under `%LOCALAPPDATA%\pyproc\userBrowser\install` and
+registers the host for Chrome and Edge under HKCU. The `win_amd64` `pyproc-control` platform wheel carries a prebuilt
+host (built twice byte-identically in CI, with build provenance, pinned by SHA-256), so `pyproc-control user-browser
+setup` from the wheel needs no Rust toolchain; an npm install or a source checkout builds the host with Cargo. Setup
+again while a browser runs the host swaps the file in and leaves the running host serving. Load the
 installed `extension` folder once from the browser's extension page (developer mode); its ID is always
 `olckphbppfoanoakaaemgfpobocgdogh`. Then pair:
 

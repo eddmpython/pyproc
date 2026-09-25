@@ -18,7 +18,8 @@ import { launchBrowser } from "../../scripts/browserControl/browserLauncher.mjs"
 import { CdpConnection } from "../../scripts/browserControl/cdpConnection.mjs";
 import { listUserBrowserHosts, userBrowserPipeChannel, userBrowserStatus }
   from "../../scripts/browserControl/userBrowser/userBrowserChannel.mjs";
-import { removeUserBrowser, setupUserBrowser } from "../../scripts/browserControl/userBrowser/userBrowserInstaller.mjs";
+import { removeUserBrowser, setupUserBrowser, userBrowserInstallStatus }
+  from "../../scripts/browserControl/userBrowser/userBrowserInstaller.mjs";
 
 if (process.platform !== "win32") {
   console.log("user browser gate skipped outside Windows");
@@ -67,6 +68,9 @@ const localAppData = await mkdtemp(join(tmpdir(), "pyprocUserBrowserGate-"));
 // The browser (and so the native host it starts) and the control host all inherit this LOCALAPPDATA.
 process.env.LOCALAPPDATA = localAppData;
 const installRoot = join(localAppData, "install");
+// PYPROC_GATE_USER_BROWSER_HOST runs the gate on a prebuilt host (a release candidate) instead of building one.
+const setupOptions = { installRoot, hostName, presetPairingSha256: createHash("sha256").update(key).digest("hex"),
+  browsers: ["edge", "chrome"], hostBinary: process.env.PYPROC_GATE_USER_BROWSER_HOST || null };
 const BROWSERS = [
   { kind: "edge", product: /^Edg\/\d+/, executable: findInstalled(["C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
     "C:/Program Files/Microsoft/Edge/Application/msedge.exe"]) },
@@ -298,6 +302,16 @@ async function journey({ kind, product, executable }, installed, app) {
     afterEnd.tabs.length === 0 && pageTargets.length === 0, JSON.stringify({ tabs: afterEnd.tabs, pageTargets }));
   paired.close();
 
+  if (kind === BROWSERS[0].kind) {
+    // Setting up again while this browser runs the host swaps the file in without stopping the running host.
+    const again = await setupUserBrowser(setupOptions);
+    const { hostIntact } = await userBrowserInstallStatus({ installRoot });
+    const serving = (await listUserBrowserHosts()).some((entry) => entry.profileId === host.profileId);
+    check(`${label}setting up again while the host runs replaces its file and leaves the running host serving`,
+      again.hostPath === installed.hostPath && hostIntact && serving,
+      JSON.stringify({ hostSource: again.hostSource, hostIntact, serving }));
+  }
+
   browser.close();
   browser = null;
   const gone = await waitFor(async () => !(await listUserBrowserHosts()).some((entry) => product.test(entry.product)),
@@ -311,10 +325,9 @@ async function journey({ kind, product, executable }, installed, app) {
 try {
   check("Edge and Chrome are both installed for the gate", BROWSERS.length === 2,
     BROWSERS.map((entry) => entry.kind).join(","));
-  const installed = await setupUserBrowser({ installRoot, hostName,
-    presetPairingSha256: createHash("sha256").update(key).digest("hex"), browsers: ["edge", "chrome"] });
-  check("setup builds the native host and registers it for Chrome and Edge under the given name",
-    existsSync(installed.hostPath) && ["Microsoft\\Edge", "Google\\Chrome"].every((vendor) => execFileSync("reg",
+  const installed = await setupUserBrowser(setupOptions);
+  check(`setup installs the ${installed.hostSource} native host and registers it for Chrome and Edge under the given name`,
+    installed.hostSource === (setupOptions.hostBinary ? "given" : "cargo") && existsSync(installed.hostPath) && ["Microsoft\\Edge", "Google\\Chrome"].every((vendor) => execFileSync("reg",
       ["query", `HKCU\\Software\\${vendor}\\NativeMessagingHosts\\${hostName}`, "/ve"]).toString()
       .includes(installed.manifestPath)));
   await hostChecks(installed.hostPath);

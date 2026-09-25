@@ -12,7 +12,9 @@ import { fileURLToPath } from "node:url";
 import { unzipWheel } from "../../src/runtime/engines/wasi/wheelUnzip.js";
 import { buildCanonicalPackage } from "../packageBuilder/buildCanonicalPackage.mjs";
 import { assembleHostWheel } from "./assembleHostWheel.mjs";
-import { extractNodeRuntime, fetchNodeArchive, readPackageTree } from "./hostPayload.mjs";
+import { extractNodeRuntime, extractUserBrowserHost, fetchNodeArchive, fetchUserBrowserHost, readPackageTree }
+  from "./hostPayload.mjs";
+import { userBrowserHostSourceTree } from "../userBrowserHostBuilder/buildUserBrowserHost.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDir, "..", "..");
@@ -57,6 +59,15 @@ export async function buildPythonDistributions({ treeish, outputDir }) {
     throw new Error("Python distribution source identity is invalid");
   }
 
+  // A host built from other source than this commit's must never ride in its wheel.
+  const hostTree = userBrowserHostSourceTree(commit);
+  if (hostTree !== lock.userBrowserHost.sourceTree) {
+    throw new Error(`the user-browser host source at ${commit} is tree ${hostTree}, but the lock pins `
+      + `${lock.userBrowserHost.sourceTree}; build and pin its host first (skills/ship-pyproc/references/release.md)`);
+  }
+  const userBrowserHost = await extractUserBrowserHost(
+    await fetchUserBrowserHost(lock.userBrowserHost, join(root, ".cache", "user-browser-host")), lock.userBrowserHost);
+
   const workspace = await mkdtemp(join(tmpdir(), "pyproc-python-distributions-"));
   try {
     run("git", ["-c", "core.autocrlf=false", "archive", "--format=tar", `--output=${join(workspace, "source.tar")}`,
@@ -91,6 +102,7 @@ export async function buildPythonDistributions({ treeish, outputDir }) {
         packageFiles,
         packageIdentity: { name, version, filename, sha256: packageSha256, integrity },
         nodeRuntime: await extractNodeRuntime(archive, lock.hostNode, platform),
+        userBrowserHost: platform === "win_amd64" ? userBrowserHost : null,
         sourceDateEpoch,
       });
       await writeFile(join(target, wheel.filename), wheel.bytes);
@@ -102,6 +114,7 @@ export async function buildPythonDistributions({ treeish, outputDir }) {
       source: { commit, tree, sourceDateEpoch },
       hostPackage: { name, version, filename, sha256: packageSha256, integrity },
       hostNode: { version: lock.hostNode.version },
+      userBrowserHost: { sourceTree: userBrowserHost.sourceTree, archiveSha256: userBrowserHost.archiveSha256 },
       distributions,
     };
     await writeFile(join(target, "python-distributions-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

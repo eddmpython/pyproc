@@ -1,4 +1,5 @@
-// pythonDistributions.mjs - platform wheel 조립, Node runtime checksum, 교차 host 대조의 계약을 합성 입력으로 고정한다.
+// pythonDistributions.mjs - platform wheel 조립, Node runtime과 사용자 브라우저 host의 checksum, 교차 host 대조의 계약을
+// 합성 입력으로 고정한다.
 // 실제 Node와 npm package를 싣은 wheel의 설치와 세션은 tests/pythonSdk/run.mjs의 제품 게이트가 본다.
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -10,8 +11,10 @@ import { fileURLToPath } from "node:url";
 import { unzipWheel } from "../../src/runtime/engines/wasi/wheelUnzip.js";
 import { createDeterministicZip } from "../../scripts/engineBuilder/deterministicZip.mjs";
 import { assembleHostWheel } from "../../scripts/pythonSdkBuilder/assembleHostWheel.mjs";
-import { extractNodeRuntime, fetchNodeArchive, readPackageTree }
+import { extractNodeRuntime, extractUserBrowserHost, fetchNodeArchive, fetchUserBrowserHost, readPackageTree }
   from "../../scripts/pythonSdkBuilder/hostPayload.mjs";
+import { userBrowserHostArchiveName, userBrowserHostSourceTree }
+  from "../../scripts/userBrowserHostBuilder/buildUserBrowserHost.mjs";
 import { verifyPythonDistributions } from "../../scripts/pythonSdkBuilder/verifyPythonDistributions.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -76,6 +79,7 @@ async function manifestFixture(directory, wheelBytes) {
     source: { commit: "a".repeat(40), tree: "b".repeat(40), sourceDateEpoch: 1790000000 },
     hostPackage: { name: "pyproc", version: "1.2.3" },
     hostNode: { version: "9.9.9" },
+    userBrowserHost: { sourceTree: "d".repeat(40), archiveSha256: "f".repeat(64) },
     distributions: [{ filename, kind: "hostWheel", platform: "win_amd64", byteLength: wheelBytes.byteLength,
       sha256: sha256(wheelBytes) }],
   };
@@ -89,6 +93,13 @@ export async function assertPythonDistributions() {
     && Object.values(lock.hostNode.platforms).every((item) => /^[0-9a-f]{64}$/u.test(item.sha256)
       && item.archive.startsWith(`node-v${lock.hostNode.version}-`)),
   "Python distribution lock must pin a checksum for each official Node archive");
+  // The lock pins the host built from exactly this commit's host source; changing the source needs a new pinned build.
+  const pinned = lock.userBrowserHost;
+  assert(/^[0-9a-f]{64}$/u.test(pinned?.sha256 || "") && pinned.sourceTree === userBrowserHostSourceTree("HEAD", root)
+    && pinned.archive === userBrowserHostArchiveName(pinned.sourceTree)
+    && pinned.url === `https://github.com/eddmpython/pyproc/releases/download/${pinned.archive.slice(0, -4)}/${
+      pinned.archive}`,
+  "Python distribution lock must pin the released user-browser host of this commit's host source");
 
   const temporary = await mkdtemp(join(tmpdir(), "pyproc-python-distributions-contract-"));
   try {
@@ -147,12 +158,38 @@ export async function assertPythonDistributions() {
     "npm package tree was not read exactly");
     const packageIdentity = { name: "pyproc", version: "1.2.3", filename: "pyproc-1.2.3.tgz",
       sha256: "c".repeat(64), integrity: "sha512-fixture" };
+
+    // The user-browser host rides only in the win_amd64 wheel, from a release zip whose checksum and identity match.
+    const hostTree = "d".repeat(40);
+    const hostZip = (identity) => createDeterministicZip([
+      { path: "fake-host.exe", bytes: Buffer.from("MZ fake host"), mode: 0o755 },
+      { path: "THIRD-PARTY-NOTICES.txt", bytes: Buffer.from("crate notices\n") },
+      { path: "userBrowserHost.json", bytes: Buffer.from(JSON.stringify(identity)) },
+    ], 1790000000);
+    const identity = { sourceTree: hostTree, host: { file: "fake-host.exe", sha256: sha256(Buffer.from("MZ fake host")) },
+      notices: { file: "THIRD-PARTY-NOTICES.txt", sha256: sha256(Buffer.from("crate notices\n")) } };
+    const hostArchive = hostZip(identity);
+    const hostLock = { sourceTree: hostTree, archive: userBrowserHostArchiveName(hostTree), sha256: sha256(hostArchive),
+      url: "https://pyproc.invalid/host.zip" };
+    const userBrowserHost = await extractUserBrowserHost(hostArchive, hostLock);
+    const tamperedHost = Buffer.from(hostArchive);
+    tamperedHost[tamperedHost.length - 30] ^= 1;
+    await rejects(() => extractUserBrowserHost(tamperedHost, hostLock), /host checksum mismatch/u);
+    const otherTree = hostZip({ ...identity, sourceTree: "e".repeat(40) });
+    await rejects(() => extractUserBrowserHost(otherTree, { ...hostLock, sha256: sha256(otherTree) }),
+      /does not hold the host of source tree d{40}/u);
+    await writeFile(join(cacheDir, hostLock.archive), tamperedHost);
+    await rejects(() => fetchUserBrowserHost(hostLock, cacheDir), /host checksum mismatch/u);
+    await writeFile(join(cacheDir, hostLock.archive), hostArchive);
+    assert((await fetchUserBrowserHost(hostLock, cacheDir)).equals(hostArchive), "a verified cached host was not reused");
+
     const build = async (platform, archive, overrides = {}) => assembleHostWheel({
       platform,
       pureWheel: pureWheelFixture(),
       packageFiles,
       packageIdentity,
       nodeRuntime: await extractNodeRuntime(archive, hostNode, platform),
+      userBrowserHost: platform === "win_amd64" ? userBrowserHost : null,
       sourceDateEpoch: 1790000000,
       ...overrides,
     });
@@ -172,16 +209,23 @@ export async function assertPythonDistributions() {
       + "pyproc-control = pyprocControl.bundledHost:controlMain\npyproc-mcp = pyprocControl.bundledHost:mcpMain\n",
     "platform wheel commands are wrong");
     assert(text(`${distInfo}/METADATA`).startsWith("Metadata-Version: 2.4\nName: pyproc-control\nVersion: 1.2.3\n"
-      + "License-Expression: MPL-2.0\nLicense-File: LICENSE.txt\nLicense-File: node/LICENSE\n\nlong description"),
-    "platform wheel METADATA must add the Node license after the existing notices");
+      + "License-Expression: MPL-2.0\nLicense-File: LICENSE.txt\nLicense-File: node/LICENSE\n"
+      + "License-File: userBrowserHost/THIRD-PARTY-NOTICES.txt\n\nlong description"),
+    "platform wheel METADATA must add the Node and user-browser host notices after the existing notices");
     assert(text(`${distInfo}/licenses/node/LICENSE`) === "Node license\r\n", "Node license notice is missing");
+    assert(text(`${distInfo}/licenses/userBrowserHost/THIRD-PARTY-NOTICES.txt`) === "crate notices\n",
+      "user-browser host notices are missing");
     const descriptor = JSON.parse(text("pyprocControl/host/host.json"));
     assert(descriptor.node.path === "node/node.exe" && descriptor.node.archiveSha256 === sha256(winArchive)
       && descriptor.package.integrity === "sha512-fixture"
       && descriptor.commands["pyproc-control"] === "package/scripts/pyprocControl.mjs"
       && files.get("pyprocControl/host/node/node.exe")?.toString() === "MZ fake node"
       && text("pyprocControl/host/package/scripts/pyprocMcp.mjs") === "mcp"
-      && !files.has("pyprocControl/host/node_modules/npm/index.js"),
+      && !files.has("pyprocControl/host/node_modules/npm/index.js")
+      && descriptor.userBrowserHost.path === "userBrowserHost/fake-host.exe"
+      && descriptor.userBrowserHost.sha256 === identity.host.sha256 && descriptor.userBrowserHost.sourceTree === hostTree
+      && files.get("pyprocControl/host/userBrowserHost/fake-host.exe")?.toString() === "MZ fake host"
+      && zipModes(windows.bytes).get("pyprocControl/host/userBrowserHost/fake-host.exe") === 0o100755,
     "platform wheel host layout is wrong");
     const record = text(`${distInfo}/RECORD`).trim().split("\n");
     assert(record.length === files.size && record.includes(`${distInfo}/RECORD,,`), "RECORD does not list every file");
@@ -199,8 +243,11 @@ export async function assertPythonDistributions() {
     const modes = zipModes(linux.bytes);
     assert(linux.filename === "pyproc_control-1.2.3-py3-none-manylinux_2_28_x86_64.whl"
       && modes.get("pyprocControl/host/node/node") === 0o100755
-      && modes.get("pyprocControl/host/host.json") === 0o100644,
-    "the Linux node binary must install executable and every other file must not");
+      && modes.get("pyprocControl/host/host.json") === 0o100644
+      && ![...modes.keys()].some((path) => path.includes("userBrowserHost")),
+    "the Linux node binary must install executable, every other file must not, and no user-browser host rides along");
+    await rejects(() => build("win_amd64", winArchive, { userBrowserHost: null }), /exactly the win_amd64 wheel/u);
+    await rejects(() => build("manylinux_2_28_x86_64", linuxArchive, { userBrowserHost }), /exactly the win_amd64 wheel/u);
 
     await rejects(() => build("win_amd64", winArchive, { pureWheel: pureWheelFixture([
       [`${distInfo}/entry_points.txt`, Buffer.from("[console_scripts]\n")]]) }), /must not declare commands/u);
@@ -228,6 +275,9 @@ export async function assertPythonDistributions() {
     await writeFile(rightManifestPath, rightManifest.replace('"version": "9.9.9"', '"version": "9.9.8"'));
     await rejects(() => verifyPythonDistributions({ leftDir: left, rightDir: right, leftOs: "ubuntu",
       rightOs: "windows" }), /hostNode differs/u);
+    await writeFile(rightManifestPath, rightManifest.replace('"sourceTree": "d', '"sourceTree": "e'));
+    await rejects(() => verifyPythonDistributions({ leftDir: left, rightDir: right, leftOs: "ubuntu",
+      rightOs: "windows" }), /userBrowserHost differs/u);
     await writeFile(rightManifestPath, rightManifest);
     const receipt = await verifyPythonDistributions({ leftDir: left, rightDir: right, leftOs: "ubuntu",
       rightOs: "windows" });

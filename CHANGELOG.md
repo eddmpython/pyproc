@@ -12,6 +12,29 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **Prebuilt user-browser native host.** The `win_amd64` platform wheel carries the native host, built from one source
+  tree with a pinned Rust toolchain twice on the same CI image (byte-identical, with build provenance), published as
+  a project release asset, and pinned by SHA-256 in the Python distribution lock with its third-party notices. Setup
+  from the wheel installs it after checking its SHA-256 and needs no Rust toolchain; an npm install or a source
+  checkout still builds the host with Cargo. A wheel build refuses a commit whose host source differs from the pinned
+  build.
+
+### Changed
+
+- `user-browser setup` run again while a browser runs the host swaps the file in beside the running host instead of
+  failing on the locked file, and records where the host came from (`hostSource`).
+
+### 한국어 요약
+
+- `win_amd64` platform wheel이 사용자 브라우저 native host를 싣는다. 고정 Rust toolchain으로 같은 CI image에서 두 번
+  빌드해 byte가 같고 build provenance가 붙은 프로젝트 release 자산이며, Python 배포 lock이 SHA-256과 제3자 고지와 함께
+  고정한다. wheel에서의 설치는 SHA-256을 확인한 뒤 이 host를 쓰므로 Rust가 필요 없고, npm 설치와 소스 checkout은 여전히
+  Cargo로 빌드한다. host 원본이 고정된 빌드와 다른 commit의 wheel 빌드는 멈춘다.
+- 브라우저가 host를 실행 중일 때 다시 setup하면 잠긴 파일에서 실패하지 않고 옆에서 바꿔 끼우며, host의 출처
+  (`hostSource`)를 기록한다.
+
 ## 0.0.29 - 2026-09-26
 
 ### Added
