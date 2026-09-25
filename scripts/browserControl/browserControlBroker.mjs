@@ -201,6 +201,9 @@ export class NodeBrowserControlBroker {
   // Requests the read-only guard refused since the last call ({requests, dropped}); null when any request may be sent.
   blockedRequests() { return this._guard ? this._guard.drainBlocked() : null; }
 
+  // Lets a navigation or submission an action set off be decided before its result is drained (read-only only).
+  settle() { return this._guard ? this._guard.settle() : Promise.resolve(); }
+
   close() {
     this._guard?.close();
     return this.port.close();

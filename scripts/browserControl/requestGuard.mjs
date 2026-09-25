@@ -69,15 +69,23 @@ const FRAME_SCRIPT = `(() => {
   }
 })();`;
 // Run in a paused dedicated worker, whose scope exists before its first script. Idempotent, since a worker can be
-// attached from the browser and from its parent.
-const WORKER_SCRIPT = `(() => {
+// attached from the browser and from its parent. A refused socket is told to the guard through its binding.
+const workerScript = (binding) => `(() => {
+  const report = globalThis[${JSON.stringify(binding)}];
   for (const name of ["WebSocket", "WebSocketStream", "WebTransport"]) {
     if (!globalThis[name] || globalThis[name].readOnlySession === true) continue;
-    const refuse = function () { throw new DOMException(name + " is refused in a read-only session", "SecurityError"); };
+    const refuse = function (url) {
+      try { report?.(JSON.stringify({ kind: name, url: String(url), id: Math.random() })); } catch {}
+      throw new DOMException(name + " is refused in a read-only session", "SecurityError");
+    };
     refuse.readOnlySession = true;
     Object.defineProperty(globalThis, name, { value: refuse, configurable: false, writable: false });
   }
 })();`;
+// After an action that can set off a navigation or a form submission, how long the browser has to start it before
+// the result is drained, and the quiet time that ends the wait early.
+const SETTLE_MAX_MS = 400;
+const SETTLE_QUIET_MS = 120;
 const BLOCKED_KEEP = 50;
 const SOCKET_URL = /^wss?:/i;
 // Policy issues already reported; the browser can report one issue to more than one session.
@@ -169,6 +177,8 @@ export class RequestGuard {
     this._detached = new Set();
     this._failedDecisions = [];
     this._documents = [];
+    this._binding = `pyprocReadOnly${Math.random().toString(36).slice(2, 10)}`;
+    this._lastPause = 0;
     this._refused = [];
     this._unsubscribe = null;
   }
@@ -180,6 +190,7 @@ export class RequestGuard {
     } else if (event.method === "Fetch.requestPaused") {
       const params = event.params || {};
       const answered = params.responseStatusCode !== undefined || params.responseErrorReason !== undefined;
+      this._lastPause = Date.now();
       this._paused.set(params.requestId, Object.freeze({ stage: answered ? "response" : "request",
         resourceType: String(params.resourceType || ""), origin: originOf(params.request?.url) }));
       if (params.resourceType === "Document") {
@@ -190,6 +201,8 @@ export class RequestGuard {
       }
       void (answered ? this._reserve(event.sessionId, params) : this._decide(event.sessionId, params))
         .finally(() => this._paused.delete(params.requestId));
+    } else if (event.method === "Runtime.bindingCalled" && event.params?.name === this._binding) {
+      this._rememberWorkerSocket(event.params.payload);
     } else if (event.method === "Audits.issueAdded") {
       this._rememberSocket(event.params?.issue);
     } else if (event.method === "Browser.downloadWillBegin") {
@@ -259,7 +272,9 @@ export class RequestGuard {
     if (type === "worker") {
       // A dedicated worker's requests are intercepted on the browser connection; its sockets are refused here, and the
       // workers it makes are attached paused in turn.
-      const refused = await this._connection.send("Runtime.evaluate", { expression: WORKER_SCRIPT }, sessionId);
+      await this._connection.send("Runtime.addBinding", { name: this._binding }, sessionId);
+      const refused = await this._connection.send("Runtime.evaluate", { expression: workerScript(this._binding) },
+        sessionId);
       if (refused?.exceptionDetails) throw new Error("the worker kept its sockets");
       await this._connection.send("Target.setAutoAttach", AUTO_ATTACH, sessionId);
       return { pageReady: null };
@@ -349,6 +364,29 @@ export class RequestGuard {
   _refuseTarget(type, error) {
     this._refused.push(Object.freeze({ type: String(type || "unknown"), reason: String(error?.message || error) }));
     if (this._refused.length > 10) this._refused.shift();
+  }
+
+  _rememberWorkerSocket(payload) {
+    let told;
+    try { told = JSON.parse(String(payload)); } catch { return; }
+    // A worker attached through two sessions tells one refusal to both.
+    const key = `worker:${told?.id}`;
+    if (this._issues.has(key)) return;
+    this._issues.add(key);
+    if (this._issues.size > ISSUES_KEEP) this._issues.delete(this._issues.values().next().value);
+    const url = String(told?.url || "");
+    this._remember("GET", url, told?.kind === "WebTransport" ? "WebTransport" : "WebSocket");
+  }
+
+  // Waits until a navigation or submission an action set off has been decided, so its refusal comes with that
+  // action's result: up to SETTLE_MAX_MS, ending once no request waits and none was paused for SETTLE_QUIET_MS.
+  async settle() {
+    const started = Date.now();
+    while (Date.now() - started < SETTLE_MAX_MS) {
+      const quiet = this._paused.size === 0 && Date.now() - Math.max(this._lastPause, started) >= SETTLE_QUIET_MS;
+      if (quiet) return;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
   }
 
   _rememberSocket(issue) {

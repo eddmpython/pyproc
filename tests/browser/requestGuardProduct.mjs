@@ -83,6 +83,9 @@ try { new child.contentWindow.WebSocket("ws://" + location.host + "/sink/ws-oopi
   }
   if (pathname === "/guard-popup.html") return page("<p>popup</p>", firstScriptSocket(`popup-${search.get("via") || "n"}`));
   if (pathname === "/guard-cached.html") return page("<p>cached</p>", firstScriptSocket("cached"));
+  if (pathname === "/guard-submit.html") {
+    return page(`<form method="post" action="/sink/act-post"><input name="q" value="1"><button>save</button></form>`);
+  }
   if (pathname === "/guard-prefetch.html") {
     // The page asks the browser to preload a page and then goes there by itself.
     return page(`<p>prefetch</p><script>
@@ -169,7 +172,8 @@ async function session(requests, allowedOrigins = [mainOrigin, frameOrigin]) {
     engine: { enabled: false },
     browser: {
       enabled: true, provider: "nativeCdp", allowedOrigins, maxRisk: "externalEffect",
-      actions: ["snapshot", "navigate"], methods: ["Runtime.enable", "Runtime.evaluate"], externalEffects: "acknowledged",
+      actions: ["snapshot", "navigate", "click"], methods: ["Runtime.enable", "Runtime.evaluate"],
+      externalEffects: "acknowledged",
       purpose: "read-only browsing gate", ...(requests === "any" ? {} : { requests }),
     },
     timeoutMs: TIMEOUT_MS,
@@ -213,7 +217,16 @@ async function session(requests, allowedOrigins = [mainOrigin, frameOrigin]) {
       setTimeout(() => popup.close(), 800); return 1; })()`);
     await delay(2500);
   };
-  return { browser, space, run, evaluate, observe, navigate, blocked, closeUnloadingTab };
+  // Clicks the page's "save" button the way an agent does (an act on a located element) and returns that act's
+  // own report of refused requests.
+  const clickSave = async () => {
+    const seen = await run("automation.observe", { sessionRef, expectedRisk: "read", mode: "interactive" });
+    const button = (seen?.result?.nodes || seen?.nodes || []).find((node) => node.role === "button" && node.name === "save");
+    const acted = await run("automation.act", { sessionRef,
+      actions: [{ kind: "click", locatorRef: button.locatorRef, expectedRisk: "externalEffect" }] });
+    return acted?.blockedRequests || [];
+  };
+  return { browser, space, run, evaluate, observe, navigate, blocked, closeUnloadingTab, clickSave };
 }
 
 const SENDS = `(async () => {
@@ -349,6 +362,8 @@ try {
   await delay(4000);
   await delay(1500);
   await guarded.observe();
+  await guarded.navigate(`${mainOrigin}/guard-submit.html`);
+  const actReport = await guarded.clickSave();
   const blocked = [...guarded.blocked];
   const unsafe = seen.filter((request) => request.method !== "GET");
   const blockedPaths = new Set(blocked.map((item) => `${item.method} ${new URL(item.url).pathname}`));
@@ -405,6 +420,14 @@ try {
     blocked.some((item) => item.resourceType === "Download" && item.url === `blob:${mainOrigin}`)
       && blocked.some((item) => item.resourceType === "Download" && item.url === "data:"),
     JSON.stringify(blocked.filter((item) => item.resourceType === "Download")));
+  check("a form an act submits is refused and reported with that act's own result",
+    actReport.some((item) => item.method === "POST" && item.url.endsWith("/sink/act-post") && item.resourceType === "Document")
+      && !seen.some((request) => request.path === "/sink/act-post"),
+    JSON.stringify(actReport));
+  check("a socket a worker tried to open is reported",
+    ["/sink/ws-worker", "/sink/ws-nested-worker", "/sink/ws-url-worker"].every((path) =>
+      blocked.some((item) => item.resourceType === "WebSocket" && item.url.endsWith(path))),
+    blocked.filter((item) => item.resourceType === "WebSocket" && item.url.includes("worker")).map((item) => item.url).join(","));
   check("a socket a page tried to open is reported",
     blocked.some((item) => item.resourceType === "WebSocket" && new URL(item.url).pathname === "/sink/ws-page"),
     blocked.filter((item) => item.resourceType === "WebSocket").map((item) => new URL(item.url).pathname).join(","));

@@ -12,6 +12,17 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Changed
+
+- A read-only session's act that clicks, presses, selects, or navigates waits briefly for the navigation or
+  submission it set off, so its refusal comes with that act's result, and a socket a dedicated worker tries to open is
+  reported in `blockedRequests` like a page's.
+
+### 한국어 요약
+
+- 읽기 전용 세션에서 click, press, select, navigate를 담은 act는 그 행동이 일으킨 이동이나 제출이 결정될 때까지 잠깐
+  기다려 그 거절을 같은 결과에 싣고, dedicated worker가 연 socket 시도도 `blockedRequests`에 알린다.
+
 ## 0.0.28 - 2026-09-26
 
 ### Added

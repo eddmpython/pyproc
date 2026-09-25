@@ -164,9 +164,9 @@ is served again with its connection policy, so the browser counts it as coming f
 and requests into the local network (loopback or private addresses) meet Chromium's Local Network Access check and are
 refused without a prompt. Each `automation.observe` or `automation.act`
 result carries `blockedRequests`: the method, origin, and path (never the query or body) of each request, download,
-and page socket refused since the last result, and `blockedRequestsDropped` when more than 50 did not fit. A request an
-action set off can still be on its way when the action returns; it then comes with the next result. A socket a worker
-tries to open is refused without a report. `automation.space.inspect` reports the mode and counts under `requests`.
+and socket (from a page or a worker) refused since the last result, and `blockedRequestsDropped` when more than 50 did
+not fit. After a click, press, select, or navigate, the act waits briefly for the navigation or submission it set off to
+be decided, so its refusal comes with that act's result. `automation.space.inspect` reports the mode and counts under `requests`.
 `allowedOrigins: ["*"]` (every http(s) site, as the only entry) is accepted only for a read-only session, which cannot
 also be recorded.
 

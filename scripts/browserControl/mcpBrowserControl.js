@@ -367,6 +367,9 @@ export function createBrowserControlTools(config) {
 // In read-only mode every observe and act result says which requests the browser refused since the last one, so an
 // agent learns that its click tried to change the site instead of seeing a page that silently did not change. A
 // request an action set off can still be on its way when the action returns; it then comes with the next result.
+// Actions that can set off a navigation or a form submission.
+const SETTLING_ACTIONS = new Set(["click", "press", "select", "navigate"]);
+
 function withBlockedRequests(broker, output) {
   const blocked = broker.blockedRequests();
   if (blocked === null) return output;
@@ -479,7 +482,11 @@ export class McpBrowserControl {
         ...perceptionOptions,
       }, { signal }));
     }
-    if (tool === "browserAct") return withBlockedRequests(broker, await automation.run(args.sessionRef, args.actions, { signal }));
+    if (tool === "browserAct") {
+      const acted = await automation.run(args.sessionRef, args.actions, { signal });
+      if ((args.actions || []).some((action) => SETTLING_ACTIONS.has(action?.kind))) await broker.settle();
+      return withBlockedRequests(broker, acted);
+    }
     if (tool === "browserArtifactRead") {
       return artifactStore.read(args.artifactRef, {
         ...(args.offset === undefined ? {} : { offset: args.offset }),
