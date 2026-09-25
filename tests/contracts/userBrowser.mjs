@@ -89,7 +89,8 @@ export async function assertUserBrowserContract() {
     "BCryptGenRandom", "MAX_TO_BROWSER: usize = 1024 * 1024", "PyprocUserBrowserHost.ready", "WRITE_TIMEOUT_MS"]) {
     assert.equal(host.includes(needle), true, `native host lost ${needle}`);
   }
-  assert.match(host, /CreateNamedPipeW\([\s\S]*?\n\s+1,\n/);
+  // Windows checkouts may carry CRLF line endings.
+  assert.match(host, /CreateNamedPipeW\([\s\S]*?\r?\n\s+1,\r?\n/);
 
   // The transport maps the task's tabs onto the port contract and turns the extension's detach into Transport.detached.
   const connection = new FakeConnection();
