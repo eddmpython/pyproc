@@ -30,9 +30,12 @@ function oid(dotted) {
   return node(0x06, Buffer.from(bytes));
 }
 
+// DER INTEGER in its one minimal form: no leading zero byte unless the next byte's high bit needs it.
 function positiveInteger(bytes) {
-  const trimmed = bytes[0] & 0x80 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes;
-  return node(0x02, trimmed);
+  let start = 0;
+  while (start < bytes.length - 1 && bytes[start] === 0 && !(bytes[start + 1] & 0x80)) start += 1;
+  const minimal = bytes.subarray(start);
+  return node(0x02, minimal[0] & 0x80 ? Buffer.concat([Buffer.from([0]), minimal]) : minimal);
 }
 
 function utcTime(date) {
