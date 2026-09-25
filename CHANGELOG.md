@@ -12,6 +12,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.29 - 2026-09-26
+
 ### Added
 
 - **User-browser provider (Windows).** `browser.provider: "userBrowser"` with `browser.userBrowser` `chrome` or
@@ -20,7 +22,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   window's tabs and the tabs they open, refuses profile-wide domains and cookie methods, and withdraws the task when
   the debugging bar is cancelled. A Rust native host relays to one named pipe only the current user can open, and a
   client must present the key the user paired by clicking the extension action. `pyproc-control user-browser
-  setup|status|pair|unpair|remove`, and `npm run test:user-browser` (isolated Edge and Chrome).
+  setup|status|pair|unpair|remove` (`status` also lists the pairings kept and whether their browser runs now), and
+  `npm run test:user-browser` (isolated Edge and Chrome).
 - **Python Motor tasks.** `PyProcClient.openMotorTask()` returns a `MotorTaskSession` with the JavaScript task's
   meaning (`situate`, `diagnoseAmbiguity`, `execute`, `retainArtifact`, `close`, and a context manager), typed
   intents (`ActuationIntent`, `MotorTarget`, `MotorAuthority`, `MotorPolicy`), typed diagnostics and cleanup, and
@@ -42,6 +45,7 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   창 하나에서 같은 APX, Motor, 수명 계약을 낸다. 확장은 과업 창의 탭과 그 탭이 연 탭에만 `chrome.debugger`로 붙고,
   profile 전역 도메인과 쿠키 명령을 거절하며, 디버깅 알림을 취소하면 과업을 거둔다. Rust native host는 현재
   사용자만 여는 named pipe 하나로 중계하고, client는 사용자가 확장 action을 눌러 페어링한 키를 내야 한다.
+  `user-browser status`는 남은 페어링과 그 브라우저가 지금 실행 중인지도 알린다.
 - Python `openMotorTask()`가 JavaScript와 같은 의미의 Motor task(situate, diagnoseAmbiguity, execute,
   retainArtifact, close, context manager)와 typed intent, 진단, cleanup, Control host와 바이트까지 같은
   `canonicalActuationJson()`과 `actuationDigest()`를 준다. 설치본 actuation gate가 같은 여정을 두 언어로 돌려 결과와
