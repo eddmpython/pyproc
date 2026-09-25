@@ -116,7 +116,9 @@ async function shutdown(code = 0) {
   return shutdownPromise;
 }
 
-process.stderr.write(`pyproc control: ${product.browserSession.browser} -> ${product.pageUrl || "about:blank (browser-only host)"}\n`);
+// A user-browser host without a Machine launches no browser of its own.
+process.stderr.write(`pyproc control: ${product.browserSession?.browser || "the user's own browser"} -> ${
+  product.pageUrl || "about:blank (browser-only host)"}\n`);
 process.on("SIGINT", () => void shutdown(0));
 process.on("SIGTERM", () => void shutdown(0));
 

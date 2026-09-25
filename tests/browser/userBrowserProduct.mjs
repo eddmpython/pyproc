@@ -211,8 +211,10 @@ async function journey({ kind, product, executable }, installed, app) {
   const memoryRoot = join(app.appDir, `.motor-memory-${kind}`);
   await mkdir(memoryRoot, { recursive: true });
   const configPath = join(app.appDir, `pyproc-user-browser-${kind}.json`);
-  await writeFile(configPath, JSON.stringify({ schemaVersion: 1,
-    engine: { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") }, timeoutMs: TIMEOUT_MS,
+  // Edge runs beside a Machine; Chrome runs in a browser-only host, the way a consumer that needs no Python uses it.
+  const engine = kind === "edge" ? { root: join(ROOT, "src", "runtime", "engines", "wasi", "owned", "core") }
+    : { enabled: false };
+  await writeFile(configPath, JSON.stringify({ schemaVersion: 1, engine, timeoutMs: TIMEOUT_MS,
     browser: { enabled: true, provider: "userBrowser", userBrowser: kind, allowedOrigins: [origin],
       maxRisk: "externalEffect", actions: ["snapshot", "screenshot", "click"], methods: [],
       externalEffects: "acknowledged", purpose: "Verify the user-browser provider fixture", artifacts: {} },

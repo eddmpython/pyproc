@@ -22,7 +22,8 @@ const { host: controlHost, tools: TOOLS } = product;
 const mcpAdapter = new McpControlAdapter({ host: controlHost, tools: TOOLS });
 const skillMcp = await createSkillMcpSurface();
 const MCP_TOOLS = Object.freeze([...TOOLS, ...skillMcp.tools]);
-process.stderr.write(`pyproc MCP sandbox: ${product.browserSession.browser} -> ${product.pageUrl || "about:blank (browser-only host)"}\n`);
+process.stderr.write(`pyproc MCP sandbox: ${product.browserSession?.browser || "the user's own browser"} -> ${
+  product.pageUrl || "about:blank (browser-only host)"}\n`);
 
 let shuttingDown = false;
 let rl = null;
