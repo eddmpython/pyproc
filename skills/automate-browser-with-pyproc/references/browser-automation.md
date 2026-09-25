@@ -158,7 +158,8 @@ A read-only session (`browser.requests: "safe"`) lets an agent browse, read, cli
 being able to change any server. Request interception runs on the browser connection itself, so it also refuses what
 a closing tab sends from its unload handlers; every target the browser creates is held until its guard is in place,
 and a target that cannot be guarded never runs. A refused navigation leaves the page where it was, other refused
-requests fail as blocked by the client, and downloads are refused. Each `automation.observe` or `automation.act`
+requests fail as blocked by the client, and downloads are refused. Its fresh profile starts with page preloading off,
+since a prefetched or prerendered page would be shown from a response fetched outside request interception. Each `automation.observe` or `automation.act`
 result carries `blockedRequests`: the method, origin, and path (never the query or body) of each request, download,
 and page socket refused since the last result, and `blockedRequestsDropped` when more than 50 did not fit. A request an
 action set off can still be on its way when the action returns; it then comes with the next result. A socket a worker

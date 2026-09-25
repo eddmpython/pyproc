@@ -7,7 +7,11 @@ import { fileURLToPath } from "node:url";
 import { COI_HEADERS, createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
 import { trustedCertificateLaunchArgs } from "../browserControl/trustedCertificates.js";
-import { assertBrowserRequestHost, requestGuardLaunchArgs } from "../browserControl/requestGuard.mjs";
+import {
+  assertBrowserRequestHost,
+  requestGuardLaunchArgs,
+  requestGuardProfilePreferences,
+} from "../browserControl/requestGuard.mjs";
 import { createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
 import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
 import { FrameSpace, assertFrameSpaceConfig } from "../automationSpace/frameSpace.js";
@@ -297,6 +301,8 @@ export async function createControlProduct({ env = process.env, browserLauncher 
       cdpPipe: providerKind === "nativeCdp",
       extraArgs: [...trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
         ...requestGuardLaunchArgs(browserConfig?.requests)],
+      ...(requestGuardProfilePreferences(browserConfig?.requests)
+        ? { preferences: requestGuardProfilePreferences(browserConfig?.requests) } : {}),
     });
     automationSpace = browserEnabled
       ? (providerKind === "frame"

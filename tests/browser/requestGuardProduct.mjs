@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { NativeCdpSpace } from "../../scripts/automationSpace/nativeCdpSpace.js";
 import { parseBrowserControlConfig } from "../../scripts/browserControl/mcpBrowserControl.js";
-import { requestGuardLaunchArgs } from "../../scripts/browserControl/requestGuard.mjs";
+import { requestGuardLaunchArgs, requestGuardProfilePreferences } from "../../scripts/browserControl/requestGuard.mjs";
 import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
 import { APX_REPRESENTATION } from "../../scripts/perception/apxCatalog.js";
 import { createStaticServer } from "../../scripts/staticServer.mjs";
@@ -25,6 +25,8 @@ const DOWNLOAD_NAME = `pyprocGuard-${process.pid}-${Date.now()}.bin`;
 const seen = [];
 // Every frame document either server was asked for, so a frame that never ran can be told from one never requested.
 const frameDocuments = [];
+// What the preload page asked for with a Sec-Purpose header (a preload the browser still made).
+const prefetchPurposes = [];
 const upgrades = [];
 let frameOrigin = "";
 
@@ -74,6 +76,17 @@ try { new child.contentWindow.WebSocket("ws://" + location.host + "/sink/ws-oopi
   }
   if (pathname === "/guard-popup.html") return page("<p>popup</p>", firstScriptSocket(`popup-${search.get("via") || "n"}`));
   if (pathname === "/guard-cached.html") return page("<p>cached</p>", firstScriptSocket("cached"));
+  if (pathname === "/guard-prefetch.html") {
+    // The page asks the browser to preload a page and then goes there by itself.
+    return page(`<p>prefetch</p><script>
+const rules = document.createElement("script"); rules.type = "speculationrules";
+rules.textContent = JSON.stringify({ prefetch: [{ source: "list", urls: ["/guard-prefetched.html"] }],
+  prerender: [{ source: "list", urls: ["/guard-prefetched.html?rendered=1"] }] });
+document.head.appendChild(rules);
+setTimeout(() => { location.href = "/guard-prefetched.html"; }, 1500);
+</script>`);
+  }
+  if (pathname === "/guard-prefetched.html") return page("<p>prefetched</p>", firstScriptSocket("prefetched"));
   if (pathname === "/guard-unload.html") {
     // A page that sends as it goes away, the way analytics and draft autosave do.
     return page(`<p>unload</p><script>
@@ -96,6 +109,7 @@ const handler = async (req, res) => {
   for await (const _chunk of req) { /* drain the body */ }
   if (url.pathname.startsWith("/sink")) seen.push({ method: req.method, path: url.pathname });
   if (url.pathname === "/frame.html") frameDocuments.push(`${req.method} ${req.headers.host}`);
+  if (req.headers["sec-purpose"]) prefetchPurposes.push(`${url.pathname} ${req.headers["sec-purpose"]}`);
   if (url.pathname === "/guard-sw.js" || url.pathname === "/guard-worker.js") {
     res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
     res.end(url.pathname === "/guard-sw.js" ? SERVICE_WORKER : WORKER_SCRIPT);
@@ -150,8 +164,9 @@ async function session(requests, allowedOrigins = [mainOrigin, frameOrigin]) {
     },
     timeoutMs: TIMEOUT_MS,
   });
+  const preferences = requestGuardProfilePreferences(requests);
   const browser = launchBrowser("about:blank", { prefix: `pyprocRequestGuard-${requests}-`, cdpPipe: true,
-    extraArgs: requestGuardLaunchArgs(requests) });
+    extraArgs: requestGuardLaunchArgs(requests), ...(preferences ? { preferences } : {}) });
   const space = new NativeCdpSpace({ profileDir: browser.profile, cdpPipe: browser.cdpPipe,
     config: parseBrowserControlConfig(env, { timeoutMs: TIMEOUT_MS }), auditWriter: () => {} });
   // Every refusal an observe or act result carries is kept, whichever call happened to drain it.
@@ -307,6 +322,11 @@ try {
   const moved = await guarded.evaluate("location.pathname + location.search");
   await guarded.closeUnloadingTab();
   await guarded.navigate(`${mainOrigin}/guard-download.bin`).catch(() => {});
+  await guarded.evaluate(`(() => { for (const href of [URL.createObjectURL(new Blob(["blob-bytes"])),
+    "data:text/plain;base64,ZGF0YS1ieXRlcw=="]) { const a = document.createElement("a"); a.href = href;
+    a.download = "x.txt"; document.body.appendChild(a); a.click(); } return 1; })()`);
+  await guarded.navigate(`${mainOrigin}/guard-prefetch.html`);
+  await delay(4000);
   await delay(1500);
   await guarded.observe();
   const blocked = [...guarded.blocked];
@@ -339,7 +359,7 @@ try {
   check("the out-of-process frame's reads work and its POST is refused",
     seen.some((request) => request.path === "/sink/frame-get") && !seen.some((request) => request.path === "/sink/frame-post"),
     JSON.stringify({ frameHits: seen.filter((request) => request.path.includes("frame")).map((r) => r.path),
-      frameDocuments, frameTiming,
+      frameDocuments, frameTiming, targets: frameState?.recentTargets,
       pending: frameState?.pendingTargets, paused: frameState?.pausedSample, refusals: frameState?.refusals }));
   check("refused requests are reported by method, path, and resource type",
     ["POST /sink/fetch-post", "PUT /sink/fetch-put", "POST /sink/beacon", "POST /sink/keepalive", "POST /sink/ping",
@@ -355,6 +375,14 @@ try {
   check("a download is refused, reported, and never saved",
     blocked.some((item) => item.resourceType === "Download" && item.url.endsWith("/guard-download.bin"))
       && !existsSync(join(homedir(), "Downloads", DOWNLOAD_NAME)),
+    JSON.stringify(blocked.filter((item) => item.resourceType === "Download")));
+  check("a page the browser was asked to preload is fetched only when visited, and its socket is refused",
+    !seen.some((request) => request.path === "/sink/ws-prefetched") && !upgrades.includes("/sink/ws-prefetched")
+      && blocked.some((item) => item.resourceType === "WebSocket" && item.url.endsWith("/sink/ws-prefetched")),
+    JSON.stringify({ purposes: prefetchPurposes, upgrades }));
+  check("a blob: or data: download is reported by its scheme and origin, never its content",
+    blocked.some((item) => item.resourceType === "Download" && item.url === `blob:${mainOrigin}`)
+      && blocked.some((item) => item.resourceType === "Download" && item.url === "data:"),
     JSON.stringify(blocked.filter((item) => item.resourceType === "Download")));
   check("a socket a page tried to open is reported",
     blocked.some((item) => item.resourceType === "WebSocket" && new URL(item.url).pathname === "/sink/ws-page"),

@@ -1,5 +1,5 @@
 // browserLauncher.mjs - 설치 제품과 browser gate가 공유하는 격리 Chromium process 수명주기.
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -99,10 +99,19 @@ export const killBrowser = killBrowserProcess;
 
 export function launchBrowser(url, opts = {}) {
   const browser = opts.browser || findBrowser({ executable: opts.executable });
-  const profile = mkdtempSync(join(opts.profileRoot || tmpdir(), opts.prefix || "pyprocBrowser-"));
   const extraArgs = opts.extraArgs === undefined ? [] : opts.extraArgs;
   if (!Array.isArray(extraArgs) || extraArgs.some((arg) => typeof arg !== "string")) {
     throw new TypeError("launchBrowser: extraArgs must be an array of strings");
+  }
+  const preferences = opts.preferences === undefined ? null : opts.preferences;
+  if (preferences !== null && (typeof preferences !== "object" || Array.isArray(preferences))) {
+    throw new TypeError("launchBrowser: preferences must be an object");
+  }
+  const profile = mkdtempSync(join(opts.profileRoot || tmpdir(), opts.prefix || "pyprocBrowser-"));
+  // 새 profile의 첫 설정은 브라우저가 뜨기 전에 써야 첫 페이지부터 적용된다.
+  if (preferences) {
+    mkdirSync(join(profile, "Default"), { recursive: true });
+    writeFileSync(join(profile, "Default", "Preferences"), JSON.stringify(preferences));
   }
   // cdpPipe: CDP를 loopback port가 아니라 브라우저 fd 3(읽기)과 fd 4(쓰기) pipe로 연다. 부모 쪽에서는
   // stdio[3]에 쓰고 stdio[4]에서 읽는다. listener가 없으므로 이 브라우저에 붙을 수 있는 것은 이 프로세스뿐이다.

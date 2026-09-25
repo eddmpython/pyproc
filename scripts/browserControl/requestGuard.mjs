@@ -23,6 +23,9 @@
 // internal pages) are not web content and run unchanged.
 // - Downloads: the browser refuses every download a page starts; pyproc's own click download still saves into its
 //   artifact folder.
+// - Speculative loads: a prefetched or prerendered page is shown from a response the browser fetched outside request
+//   interception, so without the connection policy. The browser of a read-only session starts with preloading off
+//   (`requestGuardProfilePreferences`), so every page is fetched when it is really visited.
 // Refusals are reported by method, origin, and path: requests, downloads, and sockets a document tried to open (the
 // browser reports those as policy issues). A socket a worker tried to open is refused without a report.
 // A read-only session runs only in a browser-only host with the nativeCdp provider (`assertBrowserRequestHost`); the
@@ -79,6 +82,8 @@ const BLOCKED_KEEP = 50;
 const SOCKET_URL = /^wss?:/i;
 // Policy issues already reported; the browser can report one issue to more than one session.
 const ISSUES_KEEP = 500;
+// Recent targets and what the guard did with each, for inspect.
+const ATTACHED_KEEP = 40;
 
 // The request mode and the scope agree: a mode pyproc knows, and "*" (any site) only for a read-only session. The
 // environment parser and the broker check this before anything else about the host is known.
@@ -109,9 +114,29 @@ function originOf(url) {
   try { return new URL(String(url || "")).origin; } catch { return ""; }
 }
 
+// How a refused request is reported: origin and path of an http(s) or socket URL, never its query or body; only the
+// scheme (and the origin that made it) of a blob: or data: URL, whose text is the content itself.
+function reportedUrl(url) {
+  const text = String(url || "");
+  if (/^data:/i.test(text)) return "data:";
+  if (/^blob:/i.test(text)) return `blob:${originOf(text.slice(5))}`;
+  try {
+    const parsed = new URL(text);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
 // Browser arguments a session with this request mode starts with.
 export function requestGuardLaunchArgs(mode) {
   return mode === "safe" ? ["--disable-quic"] : [];
+}
+
+// First preferences of the fresh profile a session with this request mode starts with: a read-only session never
+// preloads pages (speculation rules prefetch and prerender run outside request interception).
+export function requestGuardProfilePreferences(mode) {
+  return mode === "safe" ? { net: { network_prediction_options: 2 } } : null;
 }
 
 export class RequestGuard {
@@ -140,6 +165,8 @@ export class RequestGuard {
     // shows here instead of as a page that silently never runs.
     this._pending = new Map();
     this._paused = new Map();
+    this._attached = [];
+    this._detached = new Set();
     this._refused = [];
     this._unsubscribe = null;
   }
@@ -160,8 +187,20 @@ export class RequestGuard {
     } else if (event.method === "Browser.downloadWillBegin") {
       this._remember("GET", String(event.params?.url || ""), "Download");
     } else if (event.method === "Target.detachedFromTarget") {
-      this._guarded.delete(event.params?.sessionId);
+      const detached = event.params?.sessionId;
+      this._guarded.delete(detached);
+      this._pending.delete(detached);
+      if (detached) {
+        this._detached.add(detached);
+        if (this._detached.size > ISSUES_KEEP) this._detached.delete(this._detached.values().next().value);
+      }
     }
+  }
+
+  _noteTarget(info, waiting, outcome) {
+    this._attached.push(Object.freeze({ type: String(info.type || ""), origin: originOf(info.url), waiting,
+      outcome }));
+    if (this._attached.length > ATTACHED_KEEP) this._attached.shift();
   }
 
   async _guardTarget(sessionId, info, waiting) {
@@ -169,6 +208,7 @@ export class RequestGuard {
     const resume = () => this._connection.send("Runtime.runIfWaitingForDebugger", {}, sessionId);
     if (QUIET_TYPES.has(info.type) || BROWSER_OWN_URL.test(String(info.url || ""))) {
       if (waiting) await resume().catch(() => {});
+      this._noteTarget(info, waiting, "unguarded");
       return;
     }
     let running = !waiting;
@@ -182,7 +222,14 @@ export class RequestGuard {
       const failure = await pageReady;
       if (failure) throw failure;
       if (!CONTAINER_TYPES.has(info.type)) this._guarded.add(sessionId);
+      this._noteTarget(info, waiting, "guarded");
     } catch (error) {
+      // A target that went away while its guard was being installed (its tab closed) was never left running.
+      if (this._detached.has(sessionId)) {
+        this._noteTarget(info, waiting, "gone");
+        return;
+      }
+      this._noteTarget(info, waiting, "refused");
       this._refuseTarget(info.type, error);
       // A page whose guard failed after it started is closed rather than left running unguarded.
       if (running && info.targetId) await this._connection.send("Target.closeTarget", { targetId: info.targetId }).catch(() => {});
@@ -299,11 +346,7 @@ export class RequestGuard {
   }
 
   _remember(method, url, resourceType) {
-    let where = url;
-    try {
-      const parsed = new URL(url);
-      where = `${parsed.origin}${parsed.pathname}`;
-    } catch { /* keep the raw text; it came from the browser */ }
+    const where = reportedUrl(url);
     this._blockedTotal += 1;
     this._blocked.push(Object.freeze({ method, url: where, resourceType: String(resourceType || ""), at: Date.now() }));
     if (this._blocked.length > BLOCKED_KEEP) {
@@ -324,7 +367,7 @@ export class RequestGuard {
     return Object.freeze({ mode: "safe", guardedSessions: this._guarded.size, blockedTotal: this._blockedTotal,
       refusedTargets: this._refused.length, refusals: [...this._refused],
       pendingTargets: [...this._pending.values()], pausedRequests: this._paused.size,
-      pausedSample: [...this._paused.values()].slice(0, 10) });
+      pausedSample: [...this._paused.values()].slice(0, 10), recentTargets: [...this._attached] });
   }
 
   close() {
