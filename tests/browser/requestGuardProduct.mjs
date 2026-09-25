@@ -23,6 +23,8 @@ const EUC_KR_HELLO = Buffer.from([0xbe, 0xc8, 0xb3, 0xe7]);
 const DOWNLOAD_NAME = `pyprocGuard-${process.pid}-${Date.now()}.bin`;
 
 const seen = [];
+// Every frame document either server was asked for, so a frame that never ran can be told from one never requested.
+const frameDocuments = [];
 const upgrades = [];
 let frameOrigin = "";
 
@@ -93,6 +95,7 @@ const handler = async (req, res) => {
   }
   for await (const _chunk of req) { /* drain the body */ }
   if (url.pathname.startsWith("/sink")) seen.push({ method: req.method, path: url.pathname });
+  if (url.pathname === "/frame.html") frameDocuments.push(`${req.method} ${req.headers.host}`);
   if (url.pathname === "/guard-sw.js" || url.pathname === "/guard-worker.js") {
     res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
     res.end(url.pathname === "/guard-sw.js" ? SERVICE_WORKER : WORKER_SCRIPT);
@@ -330,9 +333,13 @@ try {
   check("a POST form submission leaves the page where it was", stayed === "/guard.html", stayed);
   check("a GET form navigates", moved === "/sink/get-form?q=1", moved);
   const frameState = (await guarded.run("automation.space.inspect", {})).requests;
+  const frameTiming = await guarded.evaluate(`JSON.stringify(performance.getEntriesByType("resource")
+    .filter((entry) => entry.name.includes("/frame.html"))
+    .map((entry) => ({ type: entry.initiatorType, status: entry.responseStatus, ms: Math.round(entry.duration) })))`);
   check("the out-of-process frame's reads work and its POST is refused",
     seen.some((request) => request.path === "/sink/frame-get") && !seen.some((request) => request.path === "/sink/frame-post"),
     JSON.stringify({ frameHits: seen.filter((request) => request.path.includes("frame")).map((r) => r.path),
+      frameDocuments, frameTiming,
       pending: frameState?.pendingTargets, paused: frameState?.pausedSample, refusals: frameState?.refusals }));
   check("refused requests are reported by method, path, and resource type",
     ["POST /sink/fetch-post", "PUT /sink/fetch-put", "POST /sink/beacon", "POST /sink/keepalive", "POST /sink/ping",
