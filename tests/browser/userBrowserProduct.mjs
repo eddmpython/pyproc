@@ -16,7 +16,7 @@ import { pathToFileURL } from "node:url";
 import { installPackedPyProc, ROOT } from "../packageHarness.mjs";
 import { launchBrowser } from "../../scripts/browserControl/browserLauncher.mjs";
 import { CdpConnection } from "../../scripts/browserControl/cdpConnection.mjs";
-import { listUserBrowserHosts, userBrowserPipeChannel }
+import { listUserBrowserHosts, userBrowserPipeChannel, userBrowserStatus }
   from "../../scripts/browserControl/userBrowser/userBrowserChannel.mjs";
 import { removeUserBrowser, setupUserBrowser } from "../../scripts/browserControl/userBrowser/userBrowserInstaller.mjs";
 
@@ -303,6 +303,9 @@ async function journey({ kind, product, executable }, installed, app) {
   const gone = await waitFor(async () => !(await listUserBrowserHosts()).some((entry) => product.test(entry.product)),
     20000);
   check(`${label}once the browser is gone no host is announced, even when the browser was killed`, gone === true);
+  const pairing = (await userBrowserStatus()).pairings.find((entry) => entry.profileId === host.profileId);
+  check(`${label}a paired browser that is closed is still reported as paired, not running`,
+    pairing?.browser === kind && pairing.running === false, JSON.stringify(pairing));
 }
 
 try {

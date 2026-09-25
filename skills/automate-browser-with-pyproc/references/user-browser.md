@@ -39,7 +39,8 @@ npx pyproc-control user-browser pair --browser edge
 ```
 
 The extension shows `PAIR` on its action; clicking it within two minutes pairs this user's pyproc with that browser
-profile. Automation cannot click the action for you. `user-browser status` lists the running and paired profiles,
+profile. Automation cannot click the action for you. `user-browser status` lists the running profiles (with whether
+each is paired) and every pairing kept here (with whether its profile runs now),
 `user-browser unpair --browser edge` forgets the pairing on both sides, and `user-browser remove` unregisters the host
 and deletes the install.
 

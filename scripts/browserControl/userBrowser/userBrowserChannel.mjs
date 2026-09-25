@@ -181,12 +181,24 @@ export async function pairUserBrowser({ browser, profileId = "", env = process.e
 /** Paired and running profiles per browser, without connecting. */
 export async function userBrowserStatus({ env = process.env } = {}) {
   const hosts = await listUserBrowserHosts({ env });
+  const running = new Set(hosts.map((host) => host.profileId));
   const profiles = [];
   for (const host of hosts) {
     profiles.push(Object.freeze({ profileId: host.profileId, product: host.product,
       paired: Boolean(await readKey(env, host.profileId)) }));
   }
-  return Object.freeze({ extensionId: USER_BROWSER_EXTENSION_ID, profiles: Object.freeze(profiles) });
+  // Pairings kept here, with whether their browser profile runs now (a paired browser that is closed is not lost).
+  let names = [];
+  try { names = await readdir(join(userBrowserRoot(env), "pairing")); }
+  catch (error) { if (error?.code !== "ENOENT") throw error; }
+  const pairings = [];
+  for (const profileId of names.filter((name) => name.endsWith(".key")).map((name) => name.slice(0, -4)).sort()) {
+    const pairing = await readPairing(env, profileId);
+    if (pairing) pairings.push(Object.freeze({ profileId, browser: String(pairing.browser || ""),
+      product: String(pairing.product || ""), running: running.has(profileId) }));
+  }
+  return Object.freeze({ extensionId: USER_BROWSER_EXTENSION_ID, profiles: Object.freeze(profiles),
+    pairings: Object.freeze(pairings) });
 }
 
 /** Forget every pairing of `browser` here, and in the extension of each profile that is running. */
