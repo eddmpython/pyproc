@@ -223,7 +223,6 @@ function normalizedBrowser(input = { enabled: false }) {
   }
   // The user's own browser is already running: pyproc chooses which one, never how it is launched.
   if (provider === "userBrowser") {
-    if (process.platform !== "win32") throw new TypeError("browser.provider userBrowser is available only on Windows");
     if (!["chrome", "edge"].includes(browser.userBrowser)) {
       throw new TypeError("browser.provider userBrowser requires browser.userBrowser chrome or edge");
     }

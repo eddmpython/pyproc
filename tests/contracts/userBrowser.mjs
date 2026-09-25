@@ -117,20 +117,17 @@ export async function assertUserBrowserContract() {
   const manifestBase = { schemaVersion: 1, engine: { enabled: false }, browser: { enabled: true,
     provider: "userBrowser", userBrowser: "edge", allowedOrigins: ["https://work.example"], maxRisk: "read",
     actions: ["snapshot"] } };
-  if (process.platform === "win32") {
-    assert.equal(validateMcpProductConfig(manifestBase).env.PYPROC_USER_BROWSER, "edge");
-    for (const [change, message] of [
-      [{ userBrowser: "firefox" }, /userBrowser chrome or edge/],
-      [{ executable: "C:\\\\browser.exe" }, /does not accept browser.executable/],
-      [{ headed: true }, /does not accept browser.headed/],
-      [{ requests: "safe" }, /nativeCdp/],
-    ]) {
-      const error = await errorOf(() => validateMcpProductConfig({ ...manifestBase,
-        browser: { ...manifestBase.browser, ...change } }));
-      assert.match(String(error?.message), message, JSON.stringify(change));
-    }
-  } else {
-    assert.match(String((await errorOf(() => validateMcpProductConfig(manifestBase)))?.message), /only on Windows/);
+  // Validation does not depend on the platform it runs on; the provider refuses to start outside Windows.
+  assert.equal(validateMcpProductConfig(manifestBase).env.PYPROC_USER_BROWSER, "edge");
+  for (const [change, message] of [
+    [{ userBrowser: "firefox" }, /userBrowser chrome or edge/],
+    [{ executable: "C:\\\\browser.exe" }, /does not accept browser.executable/],
+    [{ headed: true }, /does not accept browser.headed/],
+    [{ requests: "safe" }, /nativeCdp/],
+  ]) {
+    const error = await errorOf(() => validateMcpProductConfig({ ...manifestBase,
+      browser: { ...manifestBase.browser, ...change } }));
+    assert.match(String(error?.message), message, JSON.stringify(change));
   }
   const misplaced = await errorOf(() => validateMcpProductConfig({ ...manifestBase,
     browser: { ...manifestBase.browser, provider: "nativeCdp" } }));

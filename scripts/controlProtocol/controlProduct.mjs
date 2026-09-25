@@ -225,6 +225,10 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   if (providerKind === "userBrowser" && !["chrome", "edge"].includes(userBrowser)) {
     throw new TypeError("the userBrowser provider needs PYPROC_USER_BROWSER chrome or edge");
   }
+  // A manifest is valid everywhere; the provider itself runs only where its native host does.
+  if (providerKind === "userBrowser" && process.platform !== "win32") {
+    throw new TypeError("the userBrowser provider is available only on Windows");
+  }
   let recordingConfig = null;
   if (env.PYPROC_AUTOMATION_RECORDING) {
     try { recordingConfig = JSON.parse(env.PYPROC_AUTOMATION_RECORDING); }
