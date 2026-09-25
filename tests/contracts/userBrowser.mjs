@@ -4,6 +4,7 @@ import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { USER_BROWSER_EXTENSION_ID, USER_BROWSER_HOST_NAME }
   from "../../scripts/browserControl/userBrowser/userBrowserChannel.mjs";
@@ -121,7 +122,7 @@ export async function assertUserBrowserContract() {
   assert.equal(validateMcpProductConfig(manifestBase).env.PYPROC_USER_BROWSER, "edge");
   for (const [change, message] of [
     [{ userBrowser: "firefox" }, /userBrowser chrome or edge/],
-    [{ executable: "C:\\\\browser.exe" }, /does not accept browser.executable/],
+    [{ executable: resolve("browser.exe") }, /does not accept browser.executable/],
     [{ headed: true }, /does not accept browser.headed/],
     [{ requests: "safe" }, /nativeCdp/],
   ]) {
