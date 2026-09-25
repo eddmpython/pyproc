@@ -167,6 +167,7 @@ export class RequestGuard {
     this._paused = new Map();
     this._attached = [];
     this._detached = new Set();
+    this._failedDecisions = [];
     this._refused = [];
     this._unsubscribe = null;
   }
@@ -215,10 +216,11 @@ export class RequestGuard {
     this._pending.set(sessionId, Object.freeze({ type: String(info.type || ""), origin: originOf(info.url) }));
     try {
       const { pageReady } = await this._install(sessionId, info.type);
-      if (waiting) {
-        await resume();
-        running = true;
-      }
+      // A page, frame, or worker is released whether or not it said it was waiting: Chromium can hold a frame's
+      // navigation for an auto-attached client that never reported the wait, and releasing a target that is not held
+      // does nothing. A tab or browser container has no script to release unless it waits.
+      if (waiting || !CONTAINER_TYPES.has(info.type)) await resume();
+      running = true;
       const failure = await pageReady;
       if (failure) throw failure;
       if (!CONTAINER_TYPES.has(info.type)) this._guarded.add(sessionId);
@@ -284,8 +286,8 @@ export class RequestGuard {
       }
       await this._connection.send("Fetch.failRequest", { requestId: params.requestId, errorReason: "BlockedByClient" },
         sessionId);
-    } catch {
-      // The request's target went away between the pause and the decision.
+    } catch (error) {
+      this._decisionFailed("request", params, error);
     }
   }
 
@@ -324,9 +326,17 @@ export class RequestGuard {
         // A body that is not valid UTF-8 (an EUC-KR page, say) arrives base64-encoded; either way the bytes are kept.
         body: body.base64Encoded ? body.body : Buffer.from(body.body, "utf8").toString("base64"),
       }, sessionId);
-    } catch {
-      // The request's target went away between the pause and the decision.
+    } catch (error) {
+      this._decisionFailed("response", params, error);
     }
+  }
+
+  // A decision the browser did not take leaves its request waiting unseen; it usually means the request's target went
+  // away between the pause and the decision, and inspect lists the recent ones.
+  _decisionFailed(stage, params, error) {
+    this._failedDecisions.push(Object.freeze({ stage, resourceType: String(params.resourceType || ""),
+      origin: originOf(params.request?.url), reason: String(error?.message || error).slice(0, 200) }));
+    if (this._failedDecisions.length > 10) this._failedDecisions.shift();
   }
 
   _refuseTarget(type, error) {
@@ -367,7 +377,8 @@ export class RequestGuard {
     return Object.freeze({ mode: "safe", guardedSessions: this._guarded.size, blockedTotal: this._blockedTotal,
       refusedTargets: this._refused.length, refusals: [...this._refused],
       pendingTargets: [...this._pending.values()], pausedRequests: this._paused.size,
-      pausedSample: [...this._paused.values()].slice(0, 10), recentTargets: [...this._attached] });
+      pausedSample: [...this._paused.values()].slice(0, 10), recentTargets: [...this._attached],
+      failedDecisions: [...this._failedDecisions] });
   }
 
   close() {

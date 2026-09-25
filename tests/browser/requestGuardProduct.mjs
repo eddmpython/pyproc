@@ -359,7 +359,8 @@ try {
   check("the out-of-process frame's reads work and its POST is refused",
     seen.some((request) => request.path === "/sink/frame-get") && !seen.some((request) => request.path === "/sink/frame-post"),
     JSON.stringify({ frameHits: seen.filter((request) => request.path.includes("frame")).map((r) => r.path),
-      frameDocuments, frameTiming, targets: frameState?.recentTargets,
+      frameDocuments, frameTiming, failed: frameState?.failedDecisions,
+      targets: frameState?.recentTargets?.filter((target) => ["page", "iframe"].includes(target.type)),
       pending: frameState?.pendingTargets, paused: frameState?.pausedSample, refusals: frameState?.refusals }));
   check("refused requests are reported by method, path, and resource type",
     ["POST /sink/fetch-post", "PUT /sink/fetch-put", "POST /sink/beacon", "POST /sink/keepalive", "POST /sink/ping",
