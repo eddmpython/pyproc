@@ -9,11 +9,11 @@ Install the exact platform wheel from the matching GitHub Release. It carries th
 
 ```sh
 python -m pip install \
-  "https://github.com/eddmpython/pyproc/releases/download/v0.0.26/pyproc_control-0.0.26-py3-none-win_amd64.whl"
+  "https://github.com/eddmpython/pyproc/releases/download/v0.0.27/pyproc_control-0.0.27-py3-none-win_amd64.whl"
 ```
 
-Linux x64 uses `pyproc_control-0.0.26-py3-none-manylinux_2_28_x86_64.whl`. On other platforms install
-`pyproc_control-0.0.26-py3-none-any.whl` together with `npm install --save-exact pyproc@0.0.26`.
+Linux x64 uses `pyproc_control-0.0.27-py3-none-manylinux_2_28_x86_64.whl`. On other platforms install
+`pyproc_control-0.0.27-py3-none-any.whl` together with `npm install --save-exact pyproc@0.0.27`.
 PyPI is not an installation source yet. The versioned GitHub Release also contains the source distribution.
 
 Synchronous `timeout=` values cancel the protocol request and wait for its canonical terminal. A delivered
