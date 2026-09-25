@@ -16,6 +16,10 @@ import { launchBrowser } from "./harness.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 120000);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function waitUntil(condition, ms) {
+  const deadline = Date.now() + ms;
+  while (!condition() && Date.now() < deadline) await delay(50);
+}
 const POPUP_PAGES = 5;
 // "안녕" in EUC-KR: a page whose bytes are not UTF-8 must reach the tab unchanged after the guard re-serves it.
 const EUC_KR_HELLO = Buffer.from([0xbe, 0xc8, 0xb3, 0xe7]);
@@ -305,8 +309,11 @@ async function sendAll(item) {
   // A page served from the cache on a second visit is guarded like the first.
   await item.navigate(`${mainOrigin}/guard-cached.html`);
   await item.navigate(`${mainOrigin}/guard.html`);
+  const cachedSockets = upgrades.filter((path) => path === "/sink/ws-cached").length;
   await item.navigate(`${mainOrigin}/guard-cached.html`);
-  await delay(500);
+  // The cached page's first script starts a socket as the page loads; leaving at once could cancel the handshake
+  // before it is sent, so wait until the server sees it (an unguarded browser) or a bound passes (a guarded one).
+  await waitUntil(() => upgrades.filter((path) => path === "/sink/ws-cached").length > cachedSockets, 3000);
   await item.navigate(`${mainOrigin}/guard-euckr.html`);
   outcome.eucKr = await item.evaluate(`document.getElementById("hello").textContent`);
   await item.navigate(`${mainOrigin}/guard.html`);
