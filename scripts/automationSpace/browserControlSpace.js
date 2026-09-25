@@ -26,7 +26,10 @@ export class BrowserControlSpace {
     const output = await this.control.invokeAuthorized(tool, input, { signal, authority });
     if (operation === "automation.observe"
       && [APX_REPRESENTATION, APX_SITUATION_REPRESENTATION].includes(input.representation)) {
-      return output.result;
+      // A read-only session's refused requests travel with every observe, whatever its representation.
+      return output.blockedRequests === undefined ? output.result
+        : Object.freeze({ ...output.result, blockedRequests: output.blockedRequests,
+          ...(output.blockedRequestsDropped ? { blockedRequestsDropped: output.blockedRequestsDropped } : {}) });
     }
     return output;
   }

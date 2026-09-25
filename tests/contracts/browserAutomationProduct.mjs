@@ -10,6 +10,7 @@ import {
 import { BrowserScreenshot } from "../../scripts/browserControl/browserScreenshot.js";
 import { validateBrowserAutomationAction } from "../../scripts/browserControl/browserAutomationCatalog.js";
 import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
+import { createControlProduct } from "../../scripts/controlProtocol/controlProduct.mjs";
 import { trustedCertificateLaunchArgs } from "../../scripts/browserControl/trustedCertificates.js";
 import { createSelfSignedCertificate } from "../support/selfSignedCertificate.mjs";
 
@@ -214,6 +215,45 @@ export async function assertBrowserAutomationProductContract() {
     browser: { enabled: false, trustedCertificates: [{ origin: localOrigin, certificate: certificateFile }] } }));
   assert(/disabled browser does not accept trustedCertificates/.test(disabledTrust?.message),
     "꺼진 browser가 신뢰 인증서를 받았다");
+
+  // 읽기 전용 브라우징: requests safe는 브라우저 전용 host에서만 되고 환경과 broker 설정까지 투영된다. 기본값 any는
+  // 환경을 남기지 않는다. 모든 사이트("*")는 읽기 전용에서만, 녹화 없이 된다.
+  const safeBrowser = { ...manifest.browser, requests: "safe" };
+  const readOnly = validateMcpProductConfig({ schemaVersion: 1, engine: { enabled: false }, browser: safeBrowser });
+  const readOnlyRoundTrip = validateMcpProductConfig(readOnly.config);
+  const anySite = validateMcpProductConfig({ schemaVersion: 1, engine: { enabled: false },
+    browser: { ...safeBrowser, allowedOrigins: ["*"] } });
+  assert(readOnly.env.PYPROC_BROWSER_REQUESTS === "safe" && readOnly.browserControl.requests === "safe"
+    && readOnlyRoundTrip.config.browser.requests === "safe"
+    && anySite.env.PYPROC_BROWSER_ALLOWED_ORIGINS === "*" && anySite.browserControl.targetOrigins.join() === "*"
+    && validated.config.browser.requests === "any" && validated.env.PYPROC_BROWSER_REQUESTS === undefined
+    && validated.browserControl.requests === "any",
+  "browser.requests가 환경과 broker 설정으로 투영되지 않았거나 기본값이 any가 아니다");
+  const browserOnlyWith = (browser) => ({ schemaVersion: 1, engine: { enabled: false }, browser });
+  for (const [label, input, pattern] of [
+    ["알 수 없는 값", browserOnlyWith({ ...manifest.browser, requests: "readOnly" }), /requests must be any or safe/],
+    ["Python Machine과 함께", { ...manifest, browser: safeBrowser }, /needs a browser-only host/],
+    ["nativeCdp가 아닌 provider", { ...manifest, browser: { ...safeBrowser, provider: "frame" } },
+      /needs the nativeCdp provider/],
+    ["any인 모든 사이트", browserOnlyWith({ ...manifest.browser, allowedOrigins: ["*"] }), /origin \* needs requests safe/],
+    ["다른 origin과 섞인 모든 사이트", browserOnlyWith({ ...safeBrowser, allowedOrigins: ["*", "https://a.test"] }),
+      /must be the only origin/],
+    ["녹화하는 모든 사이트", browserOnlyWith({ ...safeBrowser, allowedOrigins: ["*"],
+      recording: { mode: "record", file: join(engineRoot, "..", "readOnly.recording.jsonl") } }), /cannot be recorded/],
+    ["꺼진 browser", { ...manifest, browser: { enabled: false, requests: "safe" } }, /disabled browser does not accept requests/],
+  ]) {
+    const refused = await errorOf(() => validateMcpProductConfig(input));
+    assert(pattern.test(refused?.message), `browser.requests manifest가 ${label}을 거절하지 않았다: ${refused?.message}`);
+  }
+  // 환경 경로도 같은 규칙을 쓴다: frame provider와 Python Machine은 읽기 전용 세션을 열지 않는다.
+  for (const [label, env, pattern] of [
+    ["frame provider", { PYPROC_AUTOMATION_PROVIDER: "frame" }, /needs the nativeCdp provider/],
+    ["Python Machine", {}, /needs a browser-only host/],
+  ]) {
+    const refused = await errorOf(() => createControlProduct({ env: { ...readOnly.env, PYPROC_MACHINE_ENGINE: "1",
+      PYPROC_MCP_ENGINE_ROOT: engineRoot, ...env }, browserLauncher: () => { throw new Error("launched"); } }));
+    assert(pattern.test(refused?.message), `환경 경로가 ${label}의 읽기 전용 세션을 거절하지 않았다: ${refused?.message}`);
+  }
 
   // 브라우저 전용 host: engine.enabled false면 engine root도 machine page도 없고 환경 투영은 엔진을 끈다.
   const browserOnly = validateMcpProductConfig({ schemaVersion: 1, engine: { enabled: false }, browser: manifest.browser });

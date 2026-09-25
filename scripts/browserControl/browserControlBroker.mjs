@@ -6,6 +6,7 @@ import { NodeCdpTransport } from "./nodeCdpTransport.js";
 import { assertBrowserCompatibility } from "./browserCompatibility.js";
 import { applyBrowserViewport } from "./browserViewport.js";
 import { normalizeBrowserObservationEvent } from "./browserObservation.js";
+import { RequestGuard, assertBrowserRequestScope } from "./requestGuard.mjs";
 
 const RETRY_MS = 50;
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -36,9 +37,10 @@ function startupObservation(events, rawTruncated = false) {
 }
 
 export class NodeBrowserControlBroker {
-  constructor({ connection, port, compatibility, timeoutMs = DEFAULT_TIMEOUT_MS, viewport = null } = {}) {
+  constructor({ connection, port, compatibility, timeoutMs = DEFAULT_TIMEOUT_MS, viewport = null, guard = null } = {}) {
     if (!connection || !port) throw new TypeError("connection and port are required");
     this._connection = connection;
+    this._guard = guard;
     this.port = port;
     this.compatibility = compatibility || null;
     this._timeoutMs = timeoutMs;
@@ -192,10 +194,17 @@ export class NodeBrowserControlBroker {
   inspect() {
     return Object.freeze({ transport: "node-cdp", listener: null, compatibility: this.compatibility,
       viewport: this._viewport, ownedTargets: this._ownedTargets.size,
+      requests: this._guard ? this._guard.inspect() : Object.freeze({ mode: "any" }),
       connection: this._connection.inspect?.() || null, ...this.port.inspect() });
   }
 
-  close() { return this.port.close(); }
+  // Requests the read-only guard refused since the last call ({requests, dropped}); null when any request may be sent.
+  blockedRequests() { return this._guard ? this._guard.drainBlocked() : null; }
+
+  close() {
+    this._guard?.close();
+    return this.port.close();
+  }
 }
 
 export async function connectNodeBrowserControl({
@@ -208,14 +217,20 @@ export async function connectNodeBrowserControl({
   maxRisk = "read",
   timeoutMs = DEFAULT_TIMEOUT_MS,
   viewport = null,
+  requests = "any",
 } = {}) {
+  assertBrowserRequestScope({ requests, targetOrigins });
   const policy = new BrowserControlPolicy({ targetOrigins, methods, events, fileRoots, downloadRoot, maxRisk });
   const connection = CdpConnection.overPipe(cdpPipe, { timeoutMs });
+  let guard = null;
   try {
     const compatibility = assertBrowserCompatibility(await connection.send("Browser.getVersion"));
+    // Installed before the first target is opened, so no request of the session ever runs unguarded.
+    guard = requests === "safe" ? await RequestGuard.install(connection) : null;
     const port = new BrowserControlPort({ transport: new NodeCdpTransport(connection), policy });
-    return new NodeBrowserControlBroker({ connection, port, compatibility, timeoutMs, viewport });
+    return new NodeBrowserControlBroker({ connection, port, compatibility, timeoutMs, viewport, guard });
   } catch (error) {
+    guard?.close();
     connection.close();
     throw error;
   }

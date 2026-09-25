@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { COI_HEADERS, createStaticServer, safeJoin, sendFile } from "../staticServer.mjs";
 import { launchBrowser } from "../browserControl/browserLauncher.mjs";
 import { trustedCertificateLaunchArgs } from "../browserControl/trustedCertificates.js";
+import { assertBrowserRequestHost, requestGuardLaunchArgs } from "../browserControl/requestGuard.mjs";
 import { createBrowserControlTools, parseBrowserControlConfig } from "../browserControl/index.js";
 import { AutomationSpaceRouter } from "../automationSpace/automationSpace.js";
 import { FrameSpace, assertFrameSpaceConfig } from "../automationSpace/frameSpace.js";
@@ -223,6 +224,10 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     throw new TypeError("ReplaySpace requires replay recording config");
   }
   const browserConfig = browserEnabled ? parseBrowserControlConfig(env, { timeoutMs }) : null;
+  if (browserConfig) {
+    assertBrowserRequestHost({ requests: browserConfig.requests, targetOrigins: browserConfig.targetOrigins,
+      providerKind, engineEnabled, recordingMode: recordingConfig?.mode || "" });
+  }
   const replayRecording = providerKind === "replay" ? await loadAutomationRecording(recordingConfig.file) : null;
   if (replayRecording) assertAutomationRecordingSelection(replayRecording, recordingConfig, browserConfig);
   if (!engineEnabled && providerKind === "frame") throw new TypeError("FrameSpace requires the Python Machine page");
@@ -290,7 +295,8 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     browserSession = browserLauncher(machinePage?.launchUrl || "about:blank", {
       prefix: "pyprocControl-",
       cdpPipe: providerKind === "nativeCdp",
-      extraArgs: trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
+      extraArgs: [...trustedCertificateLaunchArgs(browserConfig?.trustedCertificates || []),
+        ...requestGuardLaunchArgs(browserConfig?.requests)],
     });
     automationSpace = browserEnabled
       ? (providerKind === "frame"

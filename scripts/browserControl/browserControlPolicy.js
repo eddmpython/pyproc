@@ -86,8 +86,15 @@ function stringSet(values, label) {
   return new Set(values);
 }
 
+// "*" alone is any http(s) origin; only a read-only session may be given it (the broker and the manifest check).
+export const ANY_TARGET_ORIGIN = "*";
+
 function originSet(values) {
   const origins = stringSet(values, "targetOrigins");
+  if (origins.has(ANY_TARGET_ORIGIN)) {
+    if (origins.size !== 1) throw new TypeError("browser target origin * must be the only origin");
+    return origins;
+  }
   for (const value of origins) {
     let parsed;
     try { parsed = new URL(value); }
@@ -130,6 +137,7 @@ function insideRoot(root, candidate) {
 export class BrowserControlPolicy {
   constructor({ targetOrigins = [], targetTypes = ["page"], methods = [], events = [], fileRoots: roots = [], downloadRoot = null, maxRisk = "read" } = {}) {
     this._targetOrigins = originSet(targetOrigins);
+    this._anyOrigin = this._targetOrigins.has(ANY_TARGET_ORIGIN);
     this._targetTypes = stringSet(targetTypes, "targetTypes");
     this._methods = stringSet(methods, "methods");
     this._events = stringSet(events, "events");
@@ -151,8 +159,7 @@ export class BrowserControlPolicy {
 
   allowsTarget(target) {
     if (!target || !this._targetTypes.has(String(target.type || ""))) return false;
-    const origin = targetOrigin(target.url);
-    return !!origin && this._targetOrigins.has(origin);
+    return this._allowsOrigin(targetOrigin(target.url));
   }
 
   authorizeTarget(target) {
@@ -227,13 +234,16 @@ export class BrowserControlPolicy {
     });
   }
 
+  _allowsOrigin(origin) {
+    return !!origin && (this._anyOrigin || this._targetOrigins.has(origin));
+  }
+
   _authorizeCommandUrl(value) {
-    const parsed = targetUrl(value);
-    if (!parsed || !this._targetOrigins.has(parsed.origin)) this._denyCommandTarget();
+    if (!this._allowsOrigin(targetOrigin(value))) this._denyCommandTarget();
   }
 
   _authorizeExactOrigin(value) {
-    if (typeof value !== "string" || !this._targetOrigins.has(value)) this._denyCommandTarget();
+    if (typeof value !== "string" || targetOrigin(value) !== value || !this._allowsOrigin(value)) this._denyCommandTarget();
   }
 
   _authorizeFiles(values) {

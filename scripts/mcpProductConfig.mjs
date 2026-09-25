@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseBrowserControlConfig } from "./browserControl/mcpBrowserControl.js";
+import { assertBrowserRequestHost } from "./browserControl/requestGuard.mjs";
 import { normalizeBrowserViewport } from "./browserControl/browserViewport.js";
 import { normalizeTrustedCertificates, trustedCertificateEnvironment } from "./browserControl/trustedCertificates.js";
 import {
@@ -15,7 +16,7 @@ const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
-  "recording", "trustedCertificates",
+  "recording", "trustedCertificates", "requests",
 ]);
 const RECORDING_KEYS = new Set([
   "mode", "file", "overwrite", "recordingId", "finalSha256", "startCursor", "prefixSha256",
@@ -38,7 +39,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_MACHINE_ENGINE", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER",
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
-  "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
+  "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_REQUESTS", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
   "PYPROC_BROWSER_FILE_ROOTS", "PYPROC_BROWSER_EXTERNAL_EFFECTS", "PYPROC_BROWSER_PURPOSE",
   "PYPROC_BROWSER_ARTIFACT_MAX_BYTES", "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",
   "PYPROC_BROWSER_ARTIFACT_MAX_COUNT", "PYPROC_BROWSER_ARTIFACT_INLINE_BYTES",
@@ -230,6 +231,7 @@ function normalizedBrowser(input = { enabled: false }) {
     throw new TypeError("browser.purpose must be a string");
   }
   const purpose = (browser.purpose || "").trim();
+  const requests = browser.requests === undefined ? "any" : browser.requests;
   const artifacts = normalizedArtifacts(browser.artifacts);
   const recording = normalizedRecording(browser.recording, provider, artifacts);
   const allowedOrigins = stringArray(browser.allowedOrigins, "browser.allowedOrigins", { allowEmpty: false });
@@ -244,6 +246,7 @@ function normalizedBrowser(input = { enabled: false }) {
     headed: optionalBoolean(browser.headed, "browser.headed"),
     gpu: optionalBoolean(browser.gpu, "browser.gpu"),
     allowedOrigins,
+    requests,
     maxRisk: browser.maxRisk || "read",
     actions: stringArray(browser.actions, "browser.actions", { allowEmpty: false }),
     methods: browser.methods === undefined ? [] : stringArray(browser.methods, "browser.methods"),
@@ -499,6 +502,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   if (browser.gpu) env.PYPROC_GPU = "1";
   env.PYPROC_BROWSER_ALLOWED_ORIGINS = browser.allowedOrigins.join(",");
   env.PYPROC_BROWSER_MAX_RISK = browser.maxRisk;
+  if (browser.requests === "safe") env.PYPROC_BROWSER_REQUESTS = "safe";
   env.PYPROC_BROWSER_ACTIONS = browser.actions.join(",");
   env.PYPROC_BROWSER_METHODS = browser.methods.join(",");
   env.PYPROC_BROWSER_FILE_ROOTS = browser.fileRoots.join(delimiter);
@@ -529,6 +533,11 @@ export function validateMcpProductConfig(input, { baseEnv = {} } = {}) {
   const engine = normalizedEngine(value.engine);
   const executionMemory = normalizedExecutionMemory(value.executionMemory, baseEnv);
   const browser = normalizedBrowser(value.browser);
+  if (browser.enabled) {
+    assertBrowserRequestHost({ requests: browser.requests, targetOrigins: browser.allowedOrigins,
+      providerKind: browser.provider, engineEnabled: engine.enabled !== false,
+      recordingMode: browser.recording?.mode || "" });
+  }
   if (engine.enabled === false) {
     if (!browser.enabled) throw new TypeError("a disabled engine requires browser.enabled true");
     if (browser.provider === "frame") throw new TypeError("FrameSpace requires the Python Machine page; enable engine");

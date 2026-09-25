@@ -12,6 +12,30 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **Read-only browser sessions.** `browser.requests: "safe"` makes the browser itself refuse every request other
+  than GET, HEAD, and OPTIONS, and every WebSocket and WebTransport, from pages, cross-site frames, popups, and
+  workers, including what a closing tab sends from its unload handlers, and refuses every download a page starts.
+  Each target is held until it is guarded and one that cannot be guarded never runs. A refused navigation leaves the
+  page where it was. `automation.observe` and `automation.act` results carry `blockedRequests` (method, origin, and
+  path of each refused request, download, and page socket since the last result; a request an action set off may come
+  with the next result) and `blockedRequestsDropped` when more than 50 did not fit. `automation.space.inspect`
+  reports the guard under `requests`. A read-only session runs in a browser-only host (`engine.enabled: false`) with
+  the `nativeCdp` provider, and only a read-only session may name `allowedOrigins: ["*"]` (any http(s) site, not
+  recorded). The default `any` is unchanged.
+
+### 한국어 요약
+
+- `browser.requests: "safe"`는 읽기 전용 세션이다. 브라우저가 GET, HEAD, OPTIONS 밖의 요청과 WebSocket,
+  WebTransport를 페이지, 교차 사이트 frame, 팝업, worker 어디서든 거절하고, 닫히는 탭이 unload 처리기에서 보내는
+  요청과 페이지가 시작한 다운로드도 거절한다. 모든 대상은 가드가 걸린 뒤에야 실행되고 가드를 걸 수 없는 대상은
+  실행되지 않는다. 거절된 이동은 페이지를 그대로 둔다. observe와 act 결과가 `blockedRequests`로 지난 결과 이후
+  거절한 요청, 다운로드, 페이지 socket의 method, origin, path를 알리고, 50건을 넘어 담지 못한 수는
+  `blockedRequestsDropped`로 알린다. 읽기 전용 세션은 브라우저 전용 host(`engine.enabled: false`)와 `nativeCdp`
+  provider에서만 되고, `allowedOrigins: ["*"]`(모든 http(s) 사이트, 녹화 불가)는 읽기 전용 세션만 쓴다. 기본값
+  `any`는 그대로다.
+
 ## 0.0.26 - 2026-09-25
 
 ### Added

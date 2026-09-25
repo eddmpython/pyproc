@@ -11,7 +11,9 @@ import {
   inspectBrowserAutomationActions,
 } from "./browserAutomationCatalog.js";
 import { connectNodeBrowserControl } from "./browserControlBroker.mjs";
+import { assertBrowserRequestScope } from "./requestGuard.mjs";
 import {
+  ANY_TARGET_ORIGIN,
   BROWSER_CONTROL_COMMAND_RISKS,
   BROWSER_CONTROL_DEFAULT_READ_METHODS,
   BROWSER_CONTROL_RISKS,
@@ -109,7 +111,12 @@ function parsePurpose(value) {
 
 function parseOrigins(value) {
   const origins = [];
-  for (const entry of csv(value)) {
+  const entries = csv(value);
+  if (entries.includes(ANY_TARGET_ORIGIN)) {
+    if (entries.length !== 1) throw new Error("browser target origin * must be the only origin");
+    return [ANY_TARGET_ORIGIN];
+  }
+  for (const entry of entries) {
     const parsed = new URL(entry);
     if ((parsed.protocol !== "http:" && parsed.protocol !== "https:")
       || parsed.username || parsed.password || parsed.hostname.includes("*")
@@ -187,8 +194,11 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
     throw new Error("PYPROC_BROWSER_ARTIFACT_INLINE_BYTES must not exceed max artifact bytes");
   }
   const targetOrigins = Object.freeze(parseOrigins(env.PYPROC_BROWSER_ALLOWED_ORIGINS));
+  const requests = env.PYPROC_BROWSER_REQUESTS || "any";
+  assertBrowserRequestScope({ requests, targetOrigins });
   return Object.freeze({
     targetOrigins,
+    requests,
     trustedCertificates: parseTrustedCertificateEnvironment(env.PYPROC_BROWSER_TRUSTED_CERTIFICATES, targetOrigins),
     rawMethods: Object.freeze(rawMethods),
     actions: Object.freeze(actions),
@@ -354,6 +364,16 @@ export function createBrowserControlTools(config) {
   return Object.freeze(tools.map((tool) => Object.freeze(tool)));
 }
 
+// In read-only mode every observe and act result says which requests the browser refused since the last one, so an
+// agent learns that its click tried to change the site instead of seeing a page that silently did not change. A
+// request an action set off can still be on its way when the action returns; it then comes with the next result.
+function withBlockedRequests(broker, output) {
+  const blocked = broker.blockedRequests();
+  if (blocked === null) return output;
+  return Object.freeze({ ...output, blockedRequests: blocked.requests,
+    ...(blocked.dropped ? { blockedRequestsDropped: blocked.dropped } : {}) });
+}
+
 function defaultAuditWriter(record) {
   process.stderr.write(`pyproc browser audit: ${JSON.stringify(record)}\n`);
 }
@@ -448,7 +468,7 @@ export class McpBrowserControl {
     if (tool === "browserObserve") {
       const perceptionOptions = Object.fromEntries(APX_OBSERVE_OPTION_KEYS
         .filter((key) => args[key] !== undefined).map((key) => [key, args[key]]));
-      return automation.observe(args.sessionRef, {
+      return withBlockedRequests(broker, await automation.observe(args.sessionRef, {
         ...(args.maxNodes === undefined ? {} : { maxNodes: args.maxNodes }),
         ...(args.continuationRef === undefined ? {} : { continuationRef: args.continuationRef }),
         ...(args.mode === undefined ? {} : { mode: args.mode }),
@@ -457,9 +477,9 @@ export class McpBrowserControl {
         ...(args.includeNetwork === undefined ? {} : { includeNetwork: args.includeNetwork }),
         ...(args.maxEvents === undefined ? {} : { maxEvents: args.maxEvents }),
         ...perceptionOptions,
-      }, { signal });
+      }, { signal }));
     }
-    if (tool === "browserAct") return automation.run(args.sessionRef, args.actions, { signal });
+    if (tool === "browserAct") return withBlockedRequests(broker, await automation.run(args.sessionRef, args.actions, { signal }));
     if (tool === "browserArtifactRead") {
       return artifactStore.read(args.artifactRef, {
         ...(args.offset === undefined ? {} : { offset: args.offset }),
@@ -495,6 +515,7 @@ export class McpBrowserControl {
         maxRisk: this.config.maxRisk,
         timeoutMs: this.config.timeoutMs,
         viewport: this.config.viewport,
+        requests: this.config.requests,
       });
     }
     const broker = await this._brokerPromise;

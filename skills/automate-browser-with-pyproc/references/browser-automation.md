@@ -129,13 +129,14 @@ and incomplete external-effect approval fail closed.
 | `browser.executable` | Optional absolute Chrome, Chromium, or Edge executable. Discovery is used when absent |
 | `browser.provider` | `nativeCdp` by default, or `frame` for a cooperative credentialless target bridge |
 | `browser.headed`, `browser.gpu` | Optional booleans. Headless with an isolated profile is the default |
-| `browser.allowedOrigins` | Non-empty list of exact HTTP(S) origins. Paths and credentials are rejected |
+| `browser.allowedOrigins` | Non-empty list of exact HTTP(S) origins. Paths and credentials are rejected. `["*"]` alone means every http(s) site and is accepted only with `requests: "safe"` |
 | `browser.maxRisk` | `read`, `mutate`, or `externalEffect` |
 | `browser.actions` | Non-empty exact high-level action allowlist |
 | `browser.methods` | Separate exact raw CDP allowlist. An empty list opens no raw command |
 | `browser.viewport` | Optional strict `{width,height,deviceScaleFactor?,mobile?,touch?}` device metrics. Dimensions are 1 to 10000 and scale is 0.1 to 10 |
 | `browser.fileRoots` | Existing absolute upload roots. Required when upload is enabled |
 | `browser.trustedCertificates` | Optional `{origin,certificate,spkiSha256?}` list for self-signed local HTTPS targets. Each origin is an exact loopback HTTPS origin in `allowedOrigins`, and the absolute PEM certificate must name its host and be inside its validity period. Only its public key is trusted |
+| `browser.requests` | `any` by default. `safe` makes a read-only session, only in a browser-only host (`engine.enabled: false`) with the `nativeCdp` provider: the browser itself refuses every request other than GET, HEAD, and OPTIONS, every WebSocket and WebTransport, and every download, from pages, frames, closing tabs, and workers |
 | `browser.externalEffects` | Must equal `acknowledged` when `maxRisk` is `externalEffect` |
 | `browser.purpose` | Required printable purpose for an external-effect configuration |
 | `browser.artifacts` | Optional disk, count, inline, and TTL limits described below |
@@ -152,6 +153,18 @@ npx pyproc-mcp init --recipe observeLocal --origin https://localhost:4443 \
 The generated manifest pins the certificate's `spkiSha256`, so a later key change fails at startup. The pin is
 passed to the isolated profile's browser as its only certificate exception; remote hosts are never exempt, and
 `allowedOrigins` still bounds navigation.
+
+A read-only session (`browser.requests: "safe"`) lets an agent browse, read, click links, and use GET forms without
+being able to change any server. Request interception runs on the browser connection itself, so it also refuses what
+a closing tab sends from its unload handlers; every target the browser creates is held until its guard is in place,
+and a target that cannot be guarded never runs. A refused navigation leaves the page where it was, other refused
+requests fail as blocked by the client, and downloads are refused. Each `automation.observe` or `automation.act`
+result carries `blockedRequests`: the method, origin, and path (never the query or body) of each request, download,
+and page socket refused since the last result, and `blockedRequestsDropped` when more than 50 did not fit. A request an
+action set off can still be on its way when the action returns; it then comes with the next result. A socket a worker
+tries to open is refused without a report. `automation.space.inspect` reports the mode and counts under `requests`.
+`allowedOrigins: ["*"]` (every http(s) site, as the only entry) is accepted only for a read-only session, which cannot
+also be recorded.
 
 FrameSpace supports a smaller action catalog and requires `browser.methods` to be empty. Its exact setup,
 sandbox, screenshot, and credentialless-session limits are in the [FrameSpace guide](./frame-space.md).

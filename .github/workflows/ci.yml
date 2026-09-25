@@ -124,6 +124,10 @@ jobs:
       - run: npm run test:browser-control-stress
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # 읽기 전용 브라우징: 쓰기 요청은 어느 frame, worker, socket에서도 서버에 닿지 않고 읽기는 그대로 된다.
+      - run: npm run test:request-guard
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       - run: npm run test:automation-lifecycle
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -187,6 +191,7 @@ jobs:
       - run: npm run test:experience-verification
       - run: npm run test:browser-control
       - run: npm run test:browser-control-stress
+      - run: npm run test:request-guard
       - run: npm run test:automation-lifecycle
       - run: npm run test:action-convergence
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
