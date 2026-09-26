@@ -1,6 +1,8 @@
 // perceptionReuseProduct.mjs - warm situate through the public Control client. On an unchanged page of 3,000 buttons a
-// situate after the first answers from the last full capture (its evidence is unchanged): warm P95 at most 150 ms. It
-// never answers stale. After each change the next situate reads the page again and shows it:
+// situate after the first answers from the last full capture (its evidence is unchanged). Warm and full reads of the
+// same page are measured in turn, so both meet the same machine and the same load: the warm median is at most a quarter
+// of the full one and the warm P95 at most half of it (a reuse that stopped working costs a full read). It never
+// answers stale. After each change the next situate reads the page again and shows it:
 // - DOM text, and text inside an open shadow root;
 // - a value, checked, or indeterminate state set by script, and a custom validity;
 // - a style rule, CSS alt text and inertness from a constructed style sheet, generated content changed by CSSOM;
@@ -17,7 +19,9 @@ import { ROOT } from "../packageHarness.mjs";
 import { PyProcControlClient } from "../../scripts/controlProtocol/controlApi.js";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 120000);
-const WARM_P95_MS = 150;
+// Warm reads against the median full read of the same page, measured in turn in the same run.
+const WARM_MEDIAN_SHARE = 0.25;
+const WARM_P95_SHARE = 0.5;
 const executable = process.env.PYPROC_BROWSER || undefined;
 let passed = 0;
 let failed = 0;
@@ -109,11 +113,28 @@ try {
     if (!factOf(situation)) throw new Error(`row ${index * 200} was not found`);
   }
   const reusedWarm = await reused();
-  const p95 = quantile(warm.slice(2), 0.95);
   check("an unchanged page is answered from the last capture after the first read", reusedWarm >= 12,
     `${reusedWarm} reused of ${warm.length}`);
-  check(`warm situate on 3,000 buttons is at most ${WARM_P95_MS} ms at P95`, p95 <= WARM_P95_MS,
-    `P95 ${Math.round(p95)} ms, P50 ${Math.round(quantile(warm.slice(2), 0.5))} ms, first ${Math.round(warm[0])} ms`);
+  // In turn: a change the evidence sees and the graph does not, a full read, then two warm reads.
+  const full = [];
+  const warmInTurn = [];
+  const timedSituate = async (row) => {
+    const started = performance.now();
+    await situate({ role: "button", name: `row ${row}` }, ["fact", "affordance"]);
+    return performance.now() - started;
+  };
+  for (let index = 0; index < 6; index += 1) {
+    await run(`document.body.dataset.round = "${index}"`);
+    full.push(await timedSituate(index * 300 + 1));
+    warmInTurn.push(await timedSituate(index * 300 + 2), await timedSituate(index * 300 + 3));
+  }
+  const fullMedian = quantile(full, 0.5);
+  const warmMedian = quantile(warmInTurn, 0.5);
+  const p95 = quantile(warmInTurn, 0.95);
+  check("warm situate on 3,000 buttons costs at most a quarter of a full read (median) and half of one (P95)",
+    warmMedian <= fullMedian * WARM_MEDIAN_SHARE && p95 <= fullMedian * WARM_P95_SHARE,
+    `warm P50 ${Math.round(warmMedian)} ms, P95 ${Math.round(p95)} ms, full read median ${Math.round(fullMedian)} ms, `
+      + `first ${Math.round(warm[0])} ms, first warm run P50 ${Math.round(quantile(warm.slice(2), 0.5))} ms`);
 
   // Never stale: each change is read, whatever a DOM snapshot or a mutation observer would have seen.
   const graphValue = (name) => client.observe(session, { expectedRisk: "read", representation: "apx.graph",
