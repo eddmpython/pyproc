@@ -12,6 +12,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+## 0.0.34 - 2026-09-27
+
 ### Added
 
 - **Uncaught exceptions and the browser's log in the console channel.** An observation with `includeConsole` now
@@ -58,12 +60,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
     properties.
 
   A capture is kept only when the page did not change while its tree was read. Pages with a closed shadow root or more
-  than 24 custom elements are read in full every time. The graph digest no longer copies every entity twice. On an
-  unchanged page of 3,000 buttons a warm situate went from about 0.8 to 1.1 s (P95) to about a tenth of that (about
-  110 ms on a desktop). The gate `test:perception-reuse` measures warm and full reads of the page in turn and holds the
-  warm median at a quarter of a full read and the warm P95 at half of one. It also checks 18 kinds of change, the
-  verifier's reproductions among them, and each must be read. It also checks that a page with a closed shadow root and a page changing every 23 ms are never
-  answered from a capture. `browserInspect.perception.reusedObservations` counts reused answers.
+  than 24 custom elements are read in full every time. The graph digest no longer copies every entity twice. The gate
+  `test:perception-reuse` compares warm and full reads of the same page and checks that changed pages are read again,
+  including verifier reproductions and pages that change rapidly. `browserInspect.perception.reusedObservations`
+  counts reused answers.
 
 ### Fixed
 
@@ -73,6 +73,11 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   reloading frame, used to time out.
 - An observation after CSS generated content changed no longer fails with `APX entityRef is duplicated`: Chromium
   lists that content's inline text box twice, and each accessibility node is now read once.
+- A download can report success only after response interception is released. If disabling interception and detaching
+  the session both fail, the action reports an unknown outcome and closes the transport when needed; a saved receipt
+  remains named in the error so the caller can inspect it before retrying.
+- A child frame reloading between actionability and input no longer invalidates an unchanged main-page target. A main
+  document replacement still stops the action before input is sent.
 
 ## 0.0.33 - 2026-09-26
 
