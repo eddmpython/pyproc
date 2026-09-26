@@ -638,6 +638,28 @@ export async function assertBrowserControlContract() {
     && outside?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld,
   `보류 화면 해제, 권한 밖 event의 해제, port 자체 해제가 어긋났다: ${JSON.stringify({ target: heldRelease.target,
     unheard, own, outside: outside?.code })}`);
+  const beforeForged = releaseTransport.commands.length;
+  const forgedRelease = await errorOf(() => releasePort.releaseInterception({ ...releaseSession,
+    targetRef: "target:forged" }));
+  assert(forgedRelease?.code === BROWSER_CONTROL_ERROR_CODES.sessionDetached
+    && releaseTransport.commands.length === beforeForged,
+  "다른 target reference가 붙은 해제 요청은 raw 명령을 보내면 안 된다");
+  releaseTransport.failure = "unsupported";
+  const failedRelease = await errorOf(() => releasePort.releaseInterception(releaseSession));
+  assert(failedRelease?.code === BROWSER_CONTROL_ERROR_CODES.outcomeUnknown
+    && failedRelease.outcome === "outcomeUnknown"
+    && releaseTransport.sessions.size === 0,
+  "interception 해제가 거절되면 실패를 알리고 세션을 분리해야 한다");
+  const beforeDetachedRelease = releaseTransport.commands.length;
+  await releasePort.releaseInterception(releaseSession);
+  assert(releaseTransport.commands.length === beforeDetachedRelease,
+    "분리된 세션에는 해제 명령을 다시 보내면 안 된다");
+  const retrySession = await releasePort.attach(releaseTarget.targetRef);
+  releaseTransport.detach = async () => { throw new Error("detach failed"); };
+  const failedDetachRelease = await errorOf(() => releasePort.releaseInterception(retrySession));
+  assert(failedDetachRelease?.code === BROWSER_CONTROL_ERROR_CODES.outcomeUnknown
+    && releaseTransport.closed && releaseTransport.sessions.size === 0,
+  "interception 해제와 세션 분리가 모두 실패하면 transport를 닫아야 한다");
 
   // The manifest opts a controller host in; other providers and unknown values are refused.
   const optInBase = { schemaVersion: 1, engine: { enabled: false }, browser: { enabled: true,

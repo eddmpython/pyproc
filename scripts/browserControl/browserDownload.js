@@ -8,7 +8,7 @@
 // first (`downloadReceipt.js`), with the declared type beside it.
 import { lstat, mkdir, readFile, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { BrowserControlError } from "./browserControlPort.js";
+import { BrowserControlError, BROWSER_CONTROL_ERROR_CODES } from "./browserControlPort.js";
 import { redactBrowserUrl } from "./browserObservation.js";
 import { dataUrlMimeType, downloadMimeType, exportNameFrom, exportNameProblem } from "./downloadReceipt.js";
 
@@ -133,9 +133,7 @@ export class BrowserDownload {
     if (browserSaves !== null && typeof browserSaves !== "function") {
       throw new TypeError("browser download browserSaves is invalid");
     }
-    if (releaseInterception !== null && typeof releaseInterception !== "function") {
-      throw new TypeError("browser download releaseInterception is invalid");
-    }
+    if (typeof releaseInterception !== "function") throw new TypeError("browser download releaseInterception is required");
     if (verifySurface !== null && typeof verifySurface !== "function") {
       throw new TypeError("browser download verifySurface is invalid");
     }
@@ -166,11 +164,24 @@ export class BrowserDownload {
     await this._enable(sessionRef, commandResults, signal);
     const responses = [];
     const stopReading = await this._readResponses(sessionRef, responses, commandResults, signal);
-    try {
-      return await this._capture(sessionRef, { timeoutMs, signal, click, saveAs, responses });
-    } finally {
-      await stopReading();
+    let receipt = null;
+    let captureError = null;
+    try { receipt = await this._capture(sessionRef, { timeoutMs, signal, click, saveAs, responses }); }
+    catch (error) { captureError = error; }
+    try { await stopReading(); }
+    catch (error) {
+      // The click may already have saved an artifact or exported a file. Keep its reference when cleanup cannot prove
+      // that the page's response interception ended, and keep both the capture and cleanup failures when both occurred.
+      const details = { ...(captureError?.details || {}), ...(error?.details || {}) };
+      if (receipt?.download?.artifactRef) details.artifactRef = receipt.download.artifactRef;
+      if (receipt?.download?.exportedFile) details.exportedFile = receipt.download.exportedFile;
+      throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.outcomeUnknown,
+        "browser download interception could not be released",
+        { outcome: "outcomeUnknown", cause: captureError ? new AggregateError([captureError, error]) : error,
+          details: Object.freeze(details) });
     }
+    if (captureError) throw captureError;
+    return receipt;
   }
 
   async _capture(sessionRef, { timeoutMs, signal, click, saveAs, responses }) {
@@ -336,8 +347,13 @@ export class BrowserDownload {
       try {
         await Promise.allSettled([...releasing]);
         await this._command(sessionRef, "Fetch.disable", {}, commandResults, undefined);
-      } catch {
-        await this._releaseInterception?.(sessionRef);
+      } catch (commandError) {
+        try { await this._releaseInterception(sessionRef); }
+        catch (releaseError) {
+          throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.outcomeUnknown,
+            "browser download interception could not be released",
+            { outcome: "outcomeUnknown", cause: new AggregateError([commandError, releaseError]) });
+        }
       } finally {
         stopListening();
       }

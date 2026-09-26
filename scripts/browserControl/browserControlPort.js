@@ -320,11 +320,32 @@ export class BrowserControlPort {
 
   // Turns the session's own interception off, whatever the permission now says: an effect that turned it on (a
   // download reading its response) must be able to turn it off after a revision took the method away. It changes
-  // nothing the page asked for, needs no surface, and returns nothing.
+  // nothing the page asked for and needs no surface. If disabling fails, detach the session so a later command cannot
+  // use a tab whose document responses may still be paused. If detach fails too, close the transport.
   async releaseInterception(sessionRef) {
+    if (!sessionRef || sessionRef.protocolVersion !== this.protocolVersion || sessionRef.brokerId !== this.brokerId
+      || sessionRef.brokerEpoch !== this._brokerEpoch) {
+      throw this._error(BROWSER_CONTROL_ERROR_CODES.staleBroker, "browser session belongs to a stale broker");
+    }
     const session = this._sessions.get(String(sessionRef?.sessionId || ""));
     if (!session || session.state !== "attached") return;
-    await this._transport.send(session.transportSession, { method: "Fetch.disable", params: {} }).catch(() => {});
+    if (session.targetRef !== sessionRef.targetRef) {
+      throw this._error(BROWSER_CONTROL_ERROR_CODES.sessionDetached, "browser session is detached");
+    }
+    try {
+      await this._transport.send(session.transportSession, { method: "Fetch.disable", params: {} });
+    } catch (error) {
+      const causes = [error];
+      try { await this.detach(sessionRef); }
+      catch (detachError) {
+        causes.push(detachError);
+        try { await this.close(); }
+        catch (closeError) { causes.push(closeError); }
+      }
+      throw this._error(BROWSER_CONTROL_ERROR_CODES.outcomeUnknown,
+        "browser interception could not be released; the session was invalidated",
+        { outcome: "outcomeUnknown", cause: causes.length === 1 ? error : new AggregateError(causes) });
+    }
   }
 
   // A paused request nobody will hear of is let go: a response that already came is continued unchanged, and a

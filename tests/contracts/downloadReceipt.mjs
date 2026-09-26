@@ -13,7 +13,8 @@ import {
   exportNameProblem,
   signatureMimeType,
 } from "../../scripts/browserControl/downloadReceipt.js";
-import { DOWNLOAD_RESPONSE_PATTERNS, exportDownload } from "../../scripts/browserControl/browserDownload.js";
+import { BrowserDownload, DOWNLOAD_RESPONSE_PATTERNS, exportDownload } from "../../scripts/browserControl/browserDownload.js";
+import { BrowserControlError, BROWSER_CONTROL_ERROR_CODES } from "../../scripts/browserControl/browserControlPort.js";
 import { BrowserControlPolicy } from "../../scripts/browserControl/browserControlPolicy.js";
 import { validateBrowserAutomationActions } from "../../scripts/browserControl/browserAutomationCatalog.js";
 import { validateMcpProductConfig } from "../../scripts/mcpProductConfig.mjs";
@@ -233,6 +234,41 @@ export async function assertDownloadReceipt() {
     await assert.rejects(exportDownload(root, "taken.txt", Buffer.from("x")), /already holds 100 files/);
   } finally {
     await rm(work, { recursive: true, force: true });
+  }
+
+  // A completed download cannot be reported as successful while its response interception may still be active.
+  const cleanupRoot = await mkdtemp(join(tmpdir(), "pyproc-download-cleanup-contract-"));
+  try {
+    await writeFile(join(cleanupRoot, "receipt-guid"), "downloaded");
+    let stoppedListening = false;
+    const releaseFailure = new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.outcomeUnknown,
+      "browser interception could not be released", { outcome: "outcomeUnknown" });
+    const download = new BrowserDownload({
+      lifecycle: {
+        listen: () => () => { stoppedListening = true; },
+        watch: (_session, method) => ({
+          promise: Promise.resolve({ params: method === "Page.downloadWillBegin"
+            ? { guid: "receipt-guid", url: "data:text/plain,downloaded", suggestedFilename: "receipt.txt" }
+            : { guid: "receipt-guid", state: "completed" } }),
+          cancel: () => {},
+        }),
+      },
+      command: async (_session, method) => {
+        if (method === "Fetch.disable") throw new Error("permission was revised");
+        return { state: "applied" };
+      },
+      downloadDir: cleanupRoot,
+      artifactStore: { maxArtifactBytes: 1024, put: async () => ({ artifactRef: "artifact:receipt" }) },
+      releaseInterception: async () => { throw releaseFailure; },
+    });
+    await assert.rejects(download.run({ sessionRef: { sessionId: "session:receipt" }, timeoutMs: 1000,
+      commandResults: [], click: async () => ({ clicked: true }) }), (error) =>
+      error?.code === BROWSER_CONTROL_ERROR_CODES.outcomeUnknown && error.outcome === "outcomeUnknown"
+      && error.details?.artifactRef === "artifact:receipt"
+      && error.cause?.cause?.errors?.[1] === releaseFailure);
+    assert.equal(stoppedListening, true);
+  } finally {
+    await rm(cleanupRoot, { recursive: true, force: true });
   }
 
   // The one interception a download may set: document responses, paused at the response stage, nothing else.
