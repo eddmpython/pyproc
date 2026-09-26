@@ -97,10 +97,12 @@ try {
     note: document.getElementById("note").value, visible: document.visibilityState, frames: window.frames_,
     userAgent: navigator.userAgent })`));
   const seen = await watcher.mark("private");
+  const shot = captured.attachments?.[0]?.bytes?.byteLength || 0;
   check("the page renders, takes a click and typing, and captures on the private desktop",
-    acted.output?.completed?.length === 2 && page.pressed === "pressed" && page.note === "typed on a private desktop"
-      && page.visible === "visible" && page.frames - firstFrames > 10 && captured.output?.completed?.length === 1,
-    JSON.stringify({ openMs, frames: page.frames - firstFrames, visible: page.visible }));
+    acted.output?.actions?.length === 2 && page.pressed === "pressed" && page.note === "typed on a private desktop"
+      && page.visible === "visible" && page.frames - firstFrames > 10 && shot > 1000,
+    JSON.stringify({ openMs, acted: acted.output?.actions?.length, pressed: page.pressed, note: page.note,
+      frames: page.frames - firstFrames, visible: page.visible, shot }));
   check("the browser is headed, not headless", !page.userAgent.includes("HeadlessChrome"), page.userAgent);
   check("the foreground never left the gate's window", seen.left.length === 0 && seen.foreground === ready.start,
     JSON.stringify(seen.left));

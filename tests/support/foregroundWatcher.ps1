@@ -1,7 +1,8 @@
 # foregroundWatcher.ps1 - the gate's own window and eyes on the user's desktop. It shows a window, brings it to the
 # front, then samples the foreground window every 25 ms and remembers every moment it was another window. On stdin,
 # `mark <name>` answers with the foreground so far and the visible top-level windows on this desktop whose process
-# command line contains the marker; `quit` answers with everything it saw and exits. It only reports; the gate judges.
+# command line contains the marker (never its own window: its command line names the marker too); `quit` answers with
+# everything it saw and exits. It only reports; the gate judges.
 param([Parameter(Mandatory = $true)][string]$Marker)
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms
@@ -57,7 +58,7 @@ function MarkedWindows {
   $marked = @()
   foreach ($hwnd in [ForegroundEyes]::VisibleWindows()) {
     $processId = [ForegroundEyes]::ProcessOf($hwnd)
-    if ((CommandLineOf $processId).Contains($Marker)) {
+    if ($processId -ne $PID -and (CommandLineOf $processId).Contains($Marker)) {
       $marked += @{ hwnd = [int64]$hwnd; pid = $processId; title = [ForegroundEyes]::TitleOf($hwnd) }
     }
   }
