@@ -31,19 +31,65 @@ const INPUT_ROLES = new Set(["textbox", "searchbox", "combobox", "spinbutton"]);
 const CONTAINER_ROLES = new Set(["form", "group", "list", "listitem", "row", "table", "tree", "document"]);
 const LANDMARK_ROLES = new Set(["banner", "complementary", "contentinfo", "main", "navigation", "region", "search"]);
 const STATUS_ROLES = new Set(["alert", "log", "marquee", "status", "timer"]);
-// An isolated world the page cannot see or change: it counts focus moves, including those inside closed shadow roots
-// (focusin and focusout are composed), which a DOM snapshot does not carry.
+// Styles the DOM snapshot reads beyond the ones the facts use, for the evidence only: `content` carries CSS alt text
+// (an accessible name), and `interactivity` makes content inert where the browser has it.
+const EVIDENCE_STYLES = Object.freeze(["content", "interactivity"]);
+// An isolated world the page cannot see or change reads the page state a DOM snapshot does not carry, over the
+// document and every open shadow root: how many DOM changes it has seen (a mutation observer, so a change undone
+// before the next read still counts), which element has focus (and whether the page has it), the elements in each
+// state the accessibility tree reads from outside the DOM (indeterminate, invalid, a select or details or dialog open,
+// an open popover, a modal), and element references set as properties (ARIA element reflection). A selector the
+// browser does not know fails the read, and so the reuse.
 const EVIDENCE_WORLD = "pyprocApxEvidence";
-const FOCUS_MOVES_EXPRESSION = `(() => {
-  const evidence = globalThis.__pyprocApxEvidence || (globalThis.__pyprocApxEvidence = (() => {
-    let moves = 0;
-    const count = () => { moves += 1; };
-    for (const type of ["focusin", "focusout"]) document.addEventListener(type, count, true);
-    for (const type of ["focus", "blur"]) window.addEventListener(type, count, true);
-    return { read: () => moves };
+const PAGE_STATE_EXPRESSION = `(() => {
+  const changes = globalThis.__pyprocApxChanges || (globalThis.__pyprocApxChanges = (() => {
+    let count = 0;
+    const watched = new WeakSet();
+    const observer = new MutationObserver((records) => { count += records.length; });
+    return {
+      watch(root) {
+        if (watched.has(root)) return;
+        watched.add(root);
+        observer.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
+      },
+      read() { count += observer.takeRecords().length; return count; },
+    };
   })());
-  return evidence.read();
+  const scopes = [document];
+  const elements = [];
+  for (let scope = 0; scope < scopes.length; scope += 1) {
+    changes.watch(scopes[scope]);
+    for (const element of scopes[scope].querySelectorAll("*")) {
+      elements.push(element);
+      if (element.shadowRoot) scopes.push(element.shadowRoot);
+    }
+  }
+  const index = new Map(elements.map((element, position) => [element, position]));
+  const at = (element) => (index.has(element) ? index.get(element) : -1);
+  const focus = [];
+  for (let active = document.activeElement; active && focus.length < 64;
+    active = active.shadowRoot ? active.shadowRoot.activeElement : null) focus.push(at(active));
+  const states = [":indeterminate", ":invalid", ":open", ":popover-open", ":modal"].map((selector) => {
+    const matched = [];
+    for (const scope of scopes) for (const element of scope.querySelectorAll(selector)) matched.push(at(element));
+    return matched;
+  });
+  const reflected = ["ariaActiveDescendantElement", "ariaControlsElements", "ariaDescribedByElements",
+    "ariaDetailsElements", "ariaErrorMessageElements", "ariaFlowToElements", "ariaLabelledByElements",
+    "ariaOwnsElements"];
+  const references = [];
+  for (let position = 0; position < elements.length; position += 1) {
+    for (const name of reflected) {
+      const value = elements[position][name];
+      if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) continue;
+      references.push([position, name, Array.isArray(value) ? value.map(at) : at(value)]);
+    }
+  }
+  return JSON.stringify([changes.read(), document.hasFocus(), focus, states, references]);
 })()`;
+// A page with more custom elements than this is read in full every time: each one's own accessibility node is part of
+// the evidence (ElementInternals can change its role, name, and states without touching the DOM).
+const EVIDENCE_CUSTOM_ELEMENTS = 24;
 const [CANVAS_UNRESOLVED, UNLABELLED_IMAGE, UNLABELLED_CONTROL, GEOMETRY_UNAVAILABLE] = APX_UNRESOLVED_REASONS;
 const ENVIRONMENT_EXPRESSION = `(() => {
   const canvas = document.createElement("canvas");
@@ -362,6 +408,17 @@ function focusedQueryParams(query) {
   return Object.keys(params).length ? params : null;
 }
 
+// Each accessibility node once, in the order the browser gave: Chromium can list one node twice (an inline text box
+// of CSS generated content), and two sources would then claim one entity.
+function distinctAxNodes(nodes) {
+  const seen = new Set();
+  return nodes.filter((node) => {
+    if (seen.has(node.nodeId)) return false;
+    seen.add(node.nodeId);
+    return true;
+  });
+}
+
 function focusedUnsupported(error) {
   return /queryAXTree|method.*(?:not found|unsupported)|wasn.t found/iu.test(String(error?.message || ""));
 }
@@ -379,11 +436,65 @@ export class WebCdpSensor {
     this.enabledSessions = new Set();
     this.focusedSupport = new Map();
     this.evidenceWorlds = new Map();
+    this.snapshotStyles = Object.freeze([...APX_WEB_COMPUTED_STYLES, ...EVIDENCE_STYLES]);
   }
 
-  // The focus moves counted in the session's evidence world, as `<world>:<moves>`, or null when it cannot be read (the
-  // world is created on first use and again after the document that held it went away).
-  async _focusMoves(sessionRef, context) {
+  // The DOM snapshot with the styles the facts and the evidence use. A browser without `interactivity` refuses the
+  // name, and then cannot make content inert with it either, so the snapshot goes on without it.
+  async _snapshot(sessionRef, context) {
+    try {
+      return await this.command(sessionRef, "DOMSnapshot.captureSnapshot", {
+        computedStyles: this.snapshotStyles, includePaintOrder: true, includeDOMRects: true,
+      }, context.commandResults || [], context.signal);
+    } catch (error) {
+      const refused = /invalid CSS property/i.test(`${error?.message || ""} ${error?.cause?.message || ""}`);
+      if (!refused || !this.snapshotStyles.includes("interactivity")) throw error;
+      this.snapshotStyles = Object.freeze(this.snapshotStyles.filter((name) => name !== "interactivity"));
+      return this._snapshot(sessionRef, context);
+    }
+  }
+
+  // Everything the accessibility tree is read from, as one digest, with the snapshot and layout metrics it came from.
+  // The digest is null (the page is read in full every time) when part of it cannot be read: a closed shadow root
+  // (its states are out of every world's reach), more custom elements than EVIDENCE_CUSTOM_ELEMENTS, or a page state
+  // the evidence world could not read.
+  async _evidence(sessionRef, context) {
+    const pageState = await this._pageState(sessionRef, context);
+    const domCommand = await this._snapshot(sessionRef, context);
+    const metricsCommand = await this.command(sessionRef, "Page.getLayoutMetrics", {}, context.commandResults || [],
+      context.signal);
+    const snapshot = domCommand.result || {};
+    const strings = snapshot.strings || [];
+    let closedRoot = false;
+    const customElements = [];
+    for (const document of snapshot.documents || []) {
+      const nodes = document.nodes || {};
+      if ((nodes.shadowRootType?.value || []).some((index) => stringAt(strings, index) === "closed")) closedRoot = true;
+      for (let nodeIndex = 0; nodeIndex < (nodes.nodeName || []).length; nodeIndex += 1) {
+        const name = stringAt(strings, nodes.nodeName[nodeIndex]);
+        if (name.includes("-") && !name.startsWith("::") && !name.startsWith("#")) {
+          customElements.push(nodes.backendNodeId[nodeIndex]);
+        }
+      }
+    }
+    let evidence = null;
+    if (pageState !== null && !closedRoot && customElements.length <= EVIDENCE_CUSTOM_ELEMENTS) {
+      const hash = createHash("sha256").update(`${Number(domCommand.contextEpoch) || 0}|`).update(pageState).update("|");
+      for (const backendNodeId of customElements) {
+        const partial = await this.environmentCommand(sessionRef, "Accessibility.getPartialAXTree", {
+          backendNodeId, fetchRelatives: false,
+        }, context.commandResults || [], context.signal);
+        hash.update(JSON.stringify(partial.result?.nodes || [])).update("|");
+      }
+      evidence = hash.update(JSON.stringify(snapshot)).update("|")
+        .update(JSON.stringify(metricsCommand.result || {})).digest("hex");
+    }
+    return { domCommand, metricsCommand, evidence, pageState };
+  }
+
+  // The page state read in the session's evidence world, or null when it cannot be read (the world is made on first
+  // use and again after the document that held it went away).
+  async _pageState(sessionRef, context) {
     const key = perceptionSessionKey(sessionRef);
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
@@ -399,11 +510,11 @@ export class WebCdpSensor {
           this.evidenceWorlds.set(key, world);
         }
         const read = await this.environmentCommand(sessionRef, "Runtime.evaluate", {
-          expression: FOCUS_MOVES_EXPRESSION, contextId: world, returnByValue: true,
+          expression: PAGE_STATE_EXPRESSION, contextId: world, returnByValue: true,
         }, context.commandResults || [], context.signal);
-        const moves = read.result?.result?.value;
-        if (read.result?.exceptionDetails || !Number.isInteger(moves)) throw new Error("focus evidence unavailable");
-        return `${world}:${moves}`;
+        const state = read.result?.result?.value;
+        if (read.result?.exceptionDetails || typeof state !== "string") throw new Error("page state unavailable");
+        return state;
       } catch (error) {
         if (error?.code === "BROWSER_CONTROL_COMMAND_CANCELLED" || context.signal?.aborted) throw error;
         this.evidenceWorlds.delete(key);
@@ -433,21 +544,12 @@ export class WebCdpSensor {
         }
       }
     }
-    // Evidence first, the accessibility tree last: focus moves, then the DOM snapshot (text, attributes, form values,
-    // checked state, shadow trees, layout and the computed styles that decide visibility) and the layout metrics. When
+    // Evidence first, the accessibility tree last: the page state the evidence world reads, the DOM snapshot (text,
+    // attributes, form values, checked state, author shadow trees, layout, and the computed styles that decide
+    // visibility, CSS alt text, and inertness), custom elements' own accessibility nodes, and the layout metrics. When
     // all of it equals what the caller's last full capture saw, in the same document, the page it describes is the one
     // already read, and the tree is not read again.
-    const focusMoves = await this._focusMoves(sessionRef, context);
-    const domCommand = await this.command(sessionRef, "DOMSnapshot.captureSnapshot", {
-      computedStyles: APX_WEB_COMPUTED_STYLES,
-      includePaintOrder: true,
-      includeDOMRects: true,
-    }, context.commandResults || [], context.signal);
-    const metricsCommand = await this.command(sessionRef, "Page.getLayoutMetrics", {}, context.commandResults || [], context.signal);
-    const evidence = focusMoves === null ? null : createHash("sha256")
-      .update(`${Number(domCommand.contextEpoch) || 0}|${focusMoves}|`)
-      .update(JSON.stringify(domCommand.result || {})).update("|")
-      .update(JSON.stringify(metricsCommand.result || {})).digest("hex");
+    const { domCommand, metricsCommand, evidence, pageState } = await this._evidence(sessionRef, context);
     const environmentCommand = options.channels.includes("environment")
       ? await this.environmentCommand(sessionRef, "Runtime.evaluate", { expression: ENVIRONMENT_EXPRESSION,
         returnByValue: true, awaitPromise: false }, context.commandResults || [], context.signal) : null;
@@ -472,7 +574,7 @@ export class WebCdpSensor {
     }
     const axCommand = await this.command(sessionRef, "Accessibility.getFullAXTree", {}, context.commandResults || [], context.signal);
     const dom = parseWebDomSnapshot(domCommand.result || {}, metricsCommand.result || {});
-    const axNodes = (axCommand.result?.nodes || []).filter((node) => !node.ignored);
+    const axNodes = distinctAxNodes((axCommand.result?.nodes || []).filter((node) => !node.ignored));
     const axById = new Map(axNodes.map((node) => [node.nodeId, node]));
     const nativeByAxId = new Map();
     const sources = [];
@@ -598,10 +700,14 @@ export class WebCdpSensor {
       maxEvents: 100,
       ...(context.eventWatermarks ? { eventWatermarks: context.eventWatermarks } : {}),
     }, context.commandResults || [], context.signal);
-    // The evidence belongs to this capture only when the tree was read in the document the snapshot saw.
+    // The evidence belongs to this capture only when the tree was read in the document the snapshot saw and the page
+    // did not change while it was read: the page state is read once more after the tree, and its change count covers
+    // every DOM change, even one undone before then. A capture that saw one page in its evidence and another in its
+    // tree would otherwise answer for the first.
     const sameDocument = Number(axCommand.contextEpoch) === Number(domCommand.contextEpoch);
+    const settled = evidence !== null && sameDocument && (await this._pageState(sessionRef, context)) === pageState;
     return Object.freeze({
-      ...(evidence !== null && sameDocument ? { evidence } : {}),
+      ...(settled ? { evidence } : {}),
       documentEpoch: Number(axCommand.contextEpoch) || 0,
       page: webPage(domCommand.result || {}, metricsCommand.result || {}, axCommand.target?.url, environmentCommand),
       entities: Object.freeze(sources),
@@ -631,7 +737,7 @@ export class WebCdpSensor {
           ? { ...params, nodeId: rootNodeId } : params, context.commandResults || [], context.signal,
       ));
     }
-    const primaryNodes = commands.flatMap((command) => command.result?.nodes || []);
+    const primaryNodes = distinctAxNodes(commands.flatMap((command) => command.result?.nodes || []));
     const axById = new Map(primaryNodes.map((node) => [node.nodeId, node]));
     for (const node of primaryNodes) {
       const role = clipped(remoteValue(node.role) || "unknown", 80);

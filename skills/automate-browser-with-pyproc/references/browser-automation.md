@@ -253,14 +253,23 @@ transport session immediately while preserving the stale-session error contract.
 event, and redacted network facts into a bounded graph. It is provider-neutral and never exposes CDP node,
 frame, object, or execution-context identifiers.
 
-A graph or situation observation after the first reads the page's evidence before its accessibility tree: the DOM
-snapshot (text, attributes, form values and checked state, open and closed shadow trees, layout, and the computed
-styles that decide visibility), the layout metrics, the document, and the focus moves an isolated world counts. When
-all of it equals what the session's last full capture saw, that capture answers again as a new observation (each
+A graph or situation observation after the first reads the page's evidence before its accessibility tree:
+- the DOM snapshot: text, attributes, form values and checked state, author shadow trees, layout, and the computed
+  styles that decide visibility, CSS alt text, and inertness;
+- the layout metrics and the document;
+- each custom element's own accessibility node, since ElementInternals changes it without touching the DOM;
+- what an isolated world reads over the document and its open shadow roots: how many DOM changes a mutation observer
+  has seen, so a change undone before the next read still counts; which element has focus, and whether the page has
+  it; the elements that are indeterminate, invalid, open (a select's picker, details, a dialog), popover-open, or
+  modal; and ARIA element references set as properties.
+
+When all of it equals what the session's last full capture saw, that capture answers again as a new observation (each
 entity seen again now, changed when it last changed, its locators kept or issued again), and the tree is not read.
-Anything else reads the whole page again, so a reused answer is never stale. On an unchanged page of 3,000 buttons a
-warm situate takes about 100 ms instead of about a second. `browserInspect.perception.reusedObservations` counts the
-reused answers; `resources.perception.reusableCaptures` holds one capture per session.
+A capture is kept for this only when the page did not change while its tree was read. A page with a closed shadow root
+(whose states no world can read) or more than 24 custom elements is read in full every time. Anything else reads the
+whole page again, so a reused answer is never staler than the full read it repeats. On an unchanged page of 3,000
+buttons a warm situate takes about 110 ms instead of about a second. `browserInspect.perception.reusedObservations`
+counts the reused answers; `resources.perception.reusableCaptures` holds one capture per session.
 
 ### Complete legacy semantic inventories
 

@@ -29,14 +29,27 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Changed
 
-- **Warm observations reuse an unchanged page.** A graph or situation observation reads the page's evidence first
-  (the DOM snapshot with form values, shadow trees, layout and visibility styles, the layout metrics, the document,
-  and focus moves counted in an isolated world) and answers from the session's last full capture when all of it is
-  unchanged, without reading the accessibility tree again; anything else reads the page again, so a reused answer is
-  never stale. The graph digest no longer copies every entity twice. On an unchanged page of 3,000 buttons a warm
-  situate went from about 0.8 to 1.1 s (P95) to about 100 ms; the gate `test:perception-reuse` holds P95 at 150 ms
-  and checks that text, a value or checked state set by script, open and closed shadow roots, a style rule, focus,
-  and scroll are all read. `browserInspect.perception.reusedObservations` counts reused answers.
+- **Warm observations reuse an unchanged page.** A graph or situation observation reads the page's evidence first and
+  answers from the session's last full capture when all of it is unchanged, without reading the accessibility tree
+  again. The evidence is:
+  - the DOM snapshot, with form values, author shadow trees, layout, visibility styles, CSS alt text, and inertness;
+  - the layout metrics and the document;
+  - each custom element's own accessibility node;
+  - what an isolated world reads over the document and its open shadow roots: a mutation observer's change count,
+    focus, the indeterminate, invalid, open, popover-open, and modal elements, and ARIA element references set as
+    properties.
+
+  A capture is kept only when the page did not change while its tree was read. Pages with a closed shadow root or more
+  than 24 custom elements are read in full every time. The graph digest no longer copies every entity twice. On an
+  unchanged page of 3,000 buttons a warm situate went from about 0.8 to 1.1 s (P95) to about 110 ms. The gate
+  `test:perception-reuse` holds P95 at 150 ms and checks 18 kinds of change, the verifier's reproductions among them,
+  and each must be read. It also checks that a page with a closed shadow root and a page changing every 23 ms are never
+  answered from a capture. `browserInspect.perception.reusedObservations` counts reused answers.
+
+### Fixed
+
+- An observation after CSS generated content changed no longer fails with `APX entityRef is duplicated`: Chromium
+  lists that content's inline text box twice, and each accessibility node is now read once.
 
 ## 0.0.33 - 2026-09-26
 
