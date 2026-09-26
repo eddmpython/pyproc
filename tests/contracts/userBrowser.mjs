@@ -46,11 +46,13 @@ export async function assertUserBrowserContract() {
   const config = await readFile(new URL("extension/config.js", root), "utf8");
   const host = await readFile(new URL("nativeHost/src/main.rs", root), "utf8");
 
-  // The extension: one stable ID from its public key, the permissions a task window needs and nothing broader.
+  // The extension: one stable ID from its public key, the permissions a task window needs and nothing broader
+  // (`downloads` only to learn where the browser saved a download the task's own tab started).
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.version, packageManifest.version);
   assert.equal(extensionIdOf(manifest.key), USER_BROWSER_EXTENSION_ID);
-  assert.deepEqual([...manifest.permissions].sort(), ["debugger", "nativeMessaging", "storage", "tabs", "windows"]);
+  assert.deepEqual([...manifest.permissions].sort(), ["debugger", "downloads", "nativeMessaging", "storage", "tabs",
+    "windows"]);
   for (const key of ["host_permissions", "optional_permissions", "content_scripts", "externally_connectable"]) {
     assert.equal(Object.hasOwn(manifest, key), false, `${key} is not part of the user-browser extension`);
   }
@@ -70,7 +72,8 @@ export async function assertUserBrowserContract() {
   assert.equal(/chrome\.cookies|chrome\.scripting|WebSocket|fetch\s*\(|silent-debugger/.test(worker), false);
 
   // Connection boundaries, against an in-process chrome.* in its own process: nothing one control host started, was
-  // replied to, or paired reaches the next one; tab-closing, history, file navigation, and cookie traffic stay out.
+  // replied to, or paired reaches the next one; tab-closing, history, file navigation, and cookie traffic stay out;
+  // only the download an armed task tab starts is reported, and only to the client that armed it.
   const boundaries = JSON.parse(execFileSync(process.execPath,
     [fileURLToPath(new URL("../fixtures/userBrowserWorker.mjs", import.meta.url))],
     { timeout: 60000 }).toString());
@@ -81,6 +84,11 @@ export async function assertUserBrowserContract() {
     refused: { "Page.close": true, "Page.navigateToHistoryEntry": true, "Page.navigate": true,
       "Network.getCookies": true, "Target.getTargets": true },
     navigateHttpAllowed: true, cookieHeadersForwarded: false, extraInfoForwarded: false, otherHeadersKept: true,
+    unarmedDownloadReported: false, otherPageDownloadReported: false,
+    taskDownload: [{ expectationMatches: true, state: "complete", path: "C:\\Downloads\\report.pdf",
+      mimeType: "application/pdf" }],
+    lateMatchReported: ["C:\\Downloads\\late.csv"], interruptedReported: ["interrupted:USER_CANCELED"],
+    leftClientDownloadReported: false, expectationForUnattachedSession: true, expectationWithoutTimeout: true,
     userTabAttachable: true, userTabClosable: false, userTabKeptAfterEnd: true, ownTabClosedAtEnd: true,
   });
 

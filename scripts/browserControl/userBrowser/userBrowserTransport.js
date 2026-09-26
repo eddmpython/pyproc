@@ -54,6 +54,32 @@ export class UserBrowserTransport {
     return this._connection.send(command.method, command.params || {}, session.id, options);
   }
 
+  // Arms the extension for the one download this tab starts next. `done` settles to where the browser saved it
+  // (`{ state: "complete", path, mimeType, url, byteLength }`) or why it did not (`{ state: "interrupted", error }`);
+  // `cancel` stops waiting and ends the extension's expectation.
+  async armDownload(session, { timeoutMs }) {
+    let settle;
+    const done = new Promise((resolve) => { settle = resolve; });
+    let expectation = null;
+    const unsubscribe = this._connection.subscribe((event) => {
+      if (event.method === "PyprocUserBrowser.download" && expectation !== null
+        && event.params?.expectation === expectation) settle(event.params);
+    });
+    try {
+      ({ expectation } = await this._connection.send("PyprocUserBrowser.expectDownload", { timeoutMs }, session.id));
+    } catch (error) {
+      unsubscribe();
+      throw error;
+    }
+    return Object.freeze({
+      done,
+      cancel: async () => {
+        unsubscribe();
+        try { await this._connection.send("PyprocUserBrowser.forgetDownload", { expectation }); } catch {}
+      },
+    });
+  }
+
   subscribe(session, listener) {
     return this._connection.subscribe((event) => {
       if (event.method === "PyprocUserBrowser.detached") {

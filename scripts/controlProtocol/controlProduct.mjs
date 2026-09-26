@@ -303,7 +303,8 @@ export async function createControlProduct({ env = process.env, browserLauncher 
   const serverOrigin = machinePage?.serverOrigin || null;
   const pageUrl = machinePage?.pageUrl || null;
   let browserSession = null;
-  // The user-browser provider's downloads and artifacts go to a pyproc scratch folder, never the user's profile.
+  // The user-browser provider's artifacts (and a downloaded file's copy) go to a pyproc scratch folder, never the
+  // user's profile; the browser keeps its own download where the user's settings put it.
   let userBrowserScratch = null;
   let browserControl = null;
   let automationSpace = null;

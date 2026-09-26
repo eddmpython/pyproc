@@ -400,6 +400,7 @@ export class BrowserAutomation {
       downloadDir,
       artifactStore,
       exportRoot,
+      browserSaves: port.browserSavesDownloads ? (sessionRef, options) => port.armDownload(sessionRef, options) : null,
     }) : null;
   }
 

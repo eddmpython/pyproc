@@ -23,9 +23,19 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   manifest key `browser.exportRoot` (and `--export-root` for `authorizedBrowser`), each download is also written as a
   new file directly in that folder, returned as `exportedFile: { path, name }`; `saveAs` on the click names it and must
   be one plain file name (a `..`, folder, drive, stream, or device name fails before the click), and an existing file
-  is never replaced. The gate `test:download-receipt` checks PNG, PDF, Office Open XML, a lying server, EUC-KR CSV, a
-  redirect, a `data:` URL, refused names, and a read-only session. `resources.lifecycleListeners` joins the resource
-  inventory.
+  is never replaced. An empty file is a receipt too. On Windows the exported file carries the internet zone mark
+  (`exportedFile.markOfTheWeb`), and a name a link holds, even a dangling one, is never written through. The gate
+  `test:download-receipt` checks:
+  - PNG, PDF, Office Open XML, a ZIP served as a JPEG, and an empty file;
+  - a lying server, EUC-KR CSV, a redirect, a fragment, a `data:` URL, and a `blob:` URL;
+  - a page that moves on before its download, a reloading frame, a dangling junction, the zone mark, refused names, and
+    a read-only session.
+
+  `resources.lifecycleListeners` joins the resource inventory.
+- **Downloads in the user's own browser.** A declared click download in the `userBrowser` provider returns the same
+  receipt and export. The browser saves the file where the user's settings say. The extension, which now has the
+  `downloads` permission for this alone, reports only the download the armed task tab started (by its URL or its
+  referrer), and pyproc reads the file there and leaves it in place. Downloads the user starts are never reported.
 
 ### Changed
 
@@ -41,13 +51,18 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
   A capture is kept only when the page did not change while its tree was read. Pages with a closed shadow root or more
   than 24 custom elements are read in full every time. The graph digest no longer copies every entity twice. On an
-  unchanged page of 3,000 buttons a warm situate went from about 0.8 to 1.1 s (P95) to about 110 ms. The gate
-  `test:perception-reuse` holds P95 at 150 ms and checks 18 kinds of change, the verifier's reproductions among them,
-  and each must be read. It also checks that a page with a closed shadow root and a page changing every 23 ms are never
+  unchanged page of 3,000 buttons a warm situate went from about 0.8 to 1.1 s (P95) to about a tenth of that (about
+  110 ms on a desktop). The gate `test:perception-reuse` measures warm and full reads of the page in turn and holds the
+  warm median at a quarter of a full read and the warm P95 at half of one. It also checks 18 kinds of change, the
+  verifier's reproductions among them, and each must be read. It also checks that a page with a closed shadow root and a page changing every 23 ms are never
   answered from a capture. `browserInspect.perception.reusedObservations` counts reused answers.
 
 ### Fixed
 
+- A page that moves on to another page of the permission, or whose frame navigates, keeps delivering its events: a
+  main frame that commits inside the permission is verified by the URL it committed, and a child frame's navigation no
+  longer suspends the page. A download started behind a "your download will begin" page, or on a page with a
+  reloading frame, used to time out.
 - An observation after CSS generated content changed no longer fails with `APX entityRef is duplicated`: Chromium
   lists that content's inline text box twice, and each accessibility node is now read once.
 

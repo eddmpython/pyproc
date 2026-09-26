@@ -121,10 +121,29 @@ export async function assertDownloadReceipt() {
     "application/vnd.google-earth.kmz");
   assert.equal(decide(zipWith(["a.txt"]), "application/x-zip-compressed").mimeType, "application/zip");
   assert.equal(decide(zipWith(["a.txt"]), "application/pdf").mimeType, "application/zip");
+  // A ZIP names only a format that is a ZIP inside: not a picture or a program a server calls it.
+  for (const declared of ["image/jpg", "application/x-pdf", "font/ttf", "application/x-msdos-program", "text/html"]) {
+    assert.deepEqual(decide(zipWith(["a.txt"]), declared), { mimeType: "application/zip", mimeEvidence: "signature",
+      declaredMimeType: declared }, declared);
+  }
+  for (const entry of ["text/html", "image/png", "application/pdf"]) {
+    assert.equal(signatureMimeType(storedMimetypeZip(entry)), "application/zip", `mimetype entry ${entry}`);
+  }
+  // A usual other name of a signed type is contradicted by bytes without its signature.
+  for (const declared of ["image/jpg", "image/x-png", "application/x-pdf", "application/x-zip-compressed",
+    "audio/x-wav", "application/x-msdownload"]) {
+    assert.deepEqual(decide(hex("0001020304"), declared), { mimeType: "application/octet-stream", mimeEvidence: "none",
+      declaredMimeType: declared }, declared);
+  }
+  assert.equal(decide(hex("ffd8ffe000"), "image/jpg").mimeType, "image/jpeg");
+  // After a UTF-16 byte order mark the rest must be UTF-16 text.
+  assert.equal(decide(hex("fffe41004200"), "text/csv").mimeType, "text/csv");
+  assert.equal(decide(hex("fffe00d80102"), "text/csv").mimeType, "application/octet-stream");
+  assert.equal(decide(hex("fffe01000200"), "text/csv").mimeType, "application/octet-stream");
   assert.equal(decide(hex("89504e470d0a1a0a"), "x".repeat(300) + "/y").declaredMimeType, undefined);
 
   // Names: a caller's must already be one plain file name; a server's is reduced to one.
-  for (const name of ["", "..", ".", "../x.pdf", "a/b.pdf", "a\\b.pdf", "C:x.pdf", "a:stream", "x\u0001.pdf",
+  for (const name of ["", "..", ".", "../x.pdf", "a/b.pdf", "a\\b.pdf", "C:x.pdf", "a:stream", "x\u0001.pdf", "a\uD800.txt",
     "trailing.", "trailing ", " leading", "CON", "con.txt", "LPT1.log", "COM¹", "x".repeat(201)]) {
     assert.ok(exportNameProblem(name), `refused ${JSON.stringify(name)}`);
   }
@@ -138,6 +157,7 @@ export async function assertDownloadReceipt() {
   assert.equal(exportNameFrom("..."), "download");
   assert.equal(exportNameFrom(""), "download");
   assert.equal(exportNameFrom(`${"x".repeat(300)}.pdf`).length, 200);
+  assert.equal(exportNameFrom("b\uD800.txt"), "b\uFFFD.txt");
   assert.ok(exportNameFrom(`${"x".repeat(300)}.pdf`).endsWith(".pdf"));
   for (const suggested of ["../../evil.csv", "a:b?.txt", "CON", "...", `${"y".repeat(300)}.pdf`, " x. "]) {
     assert.equal(exportNameProblem(exportNameFrom(suggested)), "", `reduced ${JSON.stringify(suggested)}`);
@@ -164,6 +184,28 @@ export async function assertDownloadReceipt() {
       const through = await exportDownload(linked, "via.txt", Buffer.from("via"));
       assert.equal(through.path, join(await (await import("node:fs/promises")).realpath(root), "via.txt"));
     }
+    // A link that points nowhere holds its name: it is never followed, and nothing appears where it points.
+    let dangling = null;
+    try {
+      await symlink(join(work, "outside", "planted"), join(root, "data.csv"), "junction");
+      dangling = join(work, "outside", "planted");
+    } catch { /* A host that cannot make a junction skips this part. */ }
+    if (dangling) {
+      const beside = await exportDownload(root, "data.csv", Buffer.from("rows"));
+      assert.equal(beside.name, "data (1).csv");
+      assert.equal(await readdir(join(work, "outside")).then(() => true, () => false), false,
+        "the export created something where a dangling link points");
+    }
+    const marked = await exportDownload(root, "marked.txt", Buffer.from("m"), { sourceUrl: "https://a.example/x?token=1" });
+    if (process.platform === "win32") {
+      assert.equal(marked.markOfTheWeb, true);
+      const zone = await readFile(`${marked.path}:Zone.Identifier`, "utf8");
+      assert.match(zone, /ZoneId=3/);
+      assert.match(zone, /HostUrl=https:\/\/a\.example\/x\r\n/);
+      assert.equal(zone.includes("token"), false);
+    } else {
+      assert.equal(marked.markOfTheWeb, false);
+    }
     await writeFile(join(root, "taken.txt"), "keep");
     for (let index = 1; index < 100; index += 1) await writeFile(join(root, `taken (${index}).txt`), "keep");
     await assert.rejects(exportDownload(root, "taken.txt", Buffer.from("x")), /already holds 100 files/);
@@ -182,6 +224,12 @@ export async function assertDownloadReceipt() {
       /outside permission/, JSON.stringify(params));
   }
   assert.equal(policy.authorizeCommand(target, "Fetch.disable", {}), "externalEffect");
+  // Letting go of interception is judged by method and parameters only, never by the surface.
+  assert.equal(policy.authorizeRelease("Fetch.continueRequest", { requestId: "r" }), "externalEffect");
+  assert.match(String(errorOf(() => policy.authorizeRelease("Fetch.continueRequest", { requestId: "r",
+    url: "http://denied.test/" }))?.message), /outside permission/);
+  assert.match(String(errorOf(() => new BrowserControlPolicy({ targetOrigins: ["http://allowed.test"], methods: [],
+    maxRisk: "externalEffect" }).authorizeRelease("Fetch.disable", {}))?.message), /outside permission/);
 
   // The action: saveAs only with a declared download, and only a plain file name.
   const click = (extra) => ({ kind: "click", selector: "#a", expectedRisk: "externalEffect", ...extra });

@@ -4,9 +4,13 @@
 // declared type or the name when the server lies, and, with an export root, the file written inside that root under
 // the caller's name or the next free one. A name that leaves the root is refused before the click; `saveAs` without an
 // export root is refused; a read-only session still reads the declared type; and no interception outlives a download.
+// A page that moves on to another page before its download starts, or holds a frame that keeps reloading, stays usable
+// after the download. A blob download is not given another response's type; a fragment does not hide the download's
+// own; a ZIP a server calls a picture is a ZIP; an empty file is a receipt too; a link that points nowhere in the export
+// root is never followed; and on Windows the exported file carries the mark of a file from the internet.
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32 } from "node:zlib";
@@ -63,10 +67,20 @@ const files = {
   "/docx": { type: "application/octet-stream", disposition: "attachment; filename=letter.docx", body: docx },
   "/lie": { type: "image/png", disposition: "attachment; filename=rows.csv", body: Buffer.from("name,count\nalpha,1\n") },
   "/euckr": { type: "text/csv; charset=euc-kr", disposition: "attachment; filename=korean.csv", body: eucKr },
+  "/zipjpg": { type: "image/jpg", disposition: "attachment; filename=photo.jpg", body: storedZip([["a.txt", "x"]]) },
+  "/empty": { type: "text/csv", disposition: "attachment; filename=empty.csv", body: Buffer.alloc(0) },
+  "/csv": { type: "text/csv", disposition: "attachment; filename=report.csv", body: Buffer.from("a,b\n1,2\n") },
+  "/linked": { type: "text/csv", disposition: "attachment; filename=linked.csv", body: Buffer.from("x,y\n") },
 };
-const links = ["png", "pdf", "docx", "lie", "euckr"].map((name) => `<a id="${name}" href="/${name}">${name}</a>`).join("")
+let ticks = 0;
+const links = ["png", "pdf", "docx", "lie", "euckr", "zipjpg", "empty", "inter", "linked"]
+  .map((name) => `<a id="${name}" href="/${name}">${name}</a>`).join("")
   + '<a id="redirect" href="/redirect" download>redirect</a>'
-  + '<a id="inline" href="data:text/csv,a%2Cb%0A" download="inline.csv">inline</a>';
+  + '<a id="inline" href="data:text/csv,a%2Cb%0A" download="inline.csv">inline</a>'
+  + '<a id="fragment" href="/euckr#part">fragment</a><a id="blob" download="note.txt">blob</a><iframe name="side"></iframe>'
+  + '<script>const blob = document.getElementById("blob");'
+  + 'blob.href = URL.createObjectURL(new Blob(["plain note"], { type: "text/plain" }));'
+  + 'blob.addEventListener("click", () => { frames.side.location = "/ping"; });</script>';
 const server = createServer((req, res) => {
   const file = files[req.url];
   if (file) {
@@ -75,6 +89,30 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.url === "/redirect") { res.writeHead(302, { Location: "/png" }); res.end(); return; }
+  if (req.url === "/ping") { res.writeHead(204, { "Content-Type": "text/html; charset=utf-8" }); res.end(); return; }
+  if (req.url === "/inter") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end('<!doctype html><title>starting</title><p>Your download starts</p><script>setTimeout(() => { location.href = "/csv"; }, 300);</script>');
+    return;
+  }
+  if (req.url === "/tick") {
+    ticks += 1;
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end("<!doctype html><p>tick</p><script>setTimeout(() => location.reload(), 200);</script>");
+    return;
+  }
+  if (req.url === "/slow") {
+    res.writeHead(200, { "Content-Type": "text/csv", "Content-Disposition": "attachment; filename=slow.csv",
+      "Cache-Control": "no-store" });
+    res.write("a,b\n");
+    setTimeout(() => res.end("1,2\n"), 1500);
+    return;
+  }
+  if (req.url === "/frames") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end('<!doctype html><title>frames</title><iframe src="/tick"></iframe><a id="slow" href="/slow">slow</a>');
+    return;
+  }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   res.end(`<!doctype html><title>downloads</title><main>${links}</main>`);
 });
@@ -82,6 +120,7 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const work = await mkdtemp(join(tmpdir(), "pyproc-download-receipt-"));
 const exportRoot = join(work, "exports");
+await mkdir(exportRoot, { recursive: true });
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 async function startHost(name, browser) {
@@ -162,9 +201,61 @@ try {
     inline.receipt?.mimeType === "text/csv" && inline.receipt.declaredMimeType === "text/csv"
       && inline.receipt.exportedFile?.name === "inline.csv", JSON.stringify(inline.receipt || inline.error?.message));
 
+  const zipped = await exporting.download("#zipjpg");
+  check("a ZIP a server calls a JPEG picture is a ZIP", zipped.receipt?.mimeType === "application/zip"
+    && zipped.receipt.declaredMimeType === "image/jpg", JSON.stringify(zipped.receipt || zipped.error?.message));
+
+  const empty = await exporting.download("#empty");
+  check("an empty file is a receipt and an exported file too", empty.receipt?.byteLength === 0
+    && (await readFile(empty.receipt.exportedFile.path)).length === 0, JSON.stringify(empty.receipt || empty.error?.message));
+
+  const fragment = await exporting.download("#fragment");
+  check("a fragment in the link does not hide the download's own declared type",
+    fragment.receipt?.declaredMimeType === "text/csv; charset=euc-kr", JSON.stringify(fragment.receipt || fragment.error?.message));
+
+  const blobbed = await exporting.download("#blob");
+  check("a blob download is never given another response's type", blobbed.receipt?.mimeType === "text/plain"
+    && blobbed.receipt.declaredMimeType === undefined, JSON.stringify(blobbed.receipt || blobbed.error?.message));
+
+  if (process.platform === "win32") {
+    const zone = await readFile(`${pixelFile.path}:Zone.Identifier`, "utf8").catch(() => "");
+    check("the exported file carries the mark of a file from the internet", pixelFile.markOfTheWeb === true
+      && /ZoneId=3/.test(zone) && zone.includes(`HostUrl=${origin}/png`), zone.replace(/\r\n/g, " "));
+    let planted = null;
+    try {
+      await symlink(join(work, "outside", "planted"), join(exportRoot, "linked.csv"), "junction");
+      planted = join(work, "outside");
+    } catch { /* A host that cannot make a junction skips this check. */ }
+    if (planted) {
+      const linked = await exporting.download("#linked");
+      const outsideMade = await readdir(planted).then(() => true, () => false);
+      check("a link that points nowhere in the export root is never followed", linked.receipt?.exportedFile?.name
+        === "linked (1).csv" && !outsideMade, JSON.stringify({ file: linked.receipt?.exportedFile, outsideMade,
+        error: linked.error?.message }));
+    }
+  }
+
+  // A page that moves on before its download starts: the download is received and the page stays usable.
+  const interTarget = (await exporting.client.openTarget(`${origin}/`, { expectedRisk: "externalEffect",
+    waitUntil: "load" })).output;
+  const interSession = (await exporting.client.attachSession(interTarget.targetRef)).output;
+  let moved;
+  try {
+    moved = { receipt: (await exporting.client.act(interSession, [{ kind: "click", selector: "#inter", download: true,
+      timeoutMs: 15000, expectedRisk: "externalEffect" }])).output.actions[0].result.download };
+  } catch (error) {
+    moved = { error };
+  }
+  const usable = await Promise.race([exporting.client.observe(interSession, { expectedRisk: "read" })
+    .then(() => true, () => false), new Promise((resolve) => setTimeout(() => resolve(false), 10000))]);
+  check("a page that moves on to another page before its download starts stays usable", moved.receipt?.mimeType
+    === "text/csv" && moved.receipt.declaredMimeType === "text/csv" && usable,
+  JSON.stringify({ receipt: moved.receipt && { mimeType: moved.receipt.mimeType, declared: moved.receipt.declaredMimeType },
+    usable, error: moved.error?.message }));
+
   const before = (await readdir(exportRoot)).sort();
   const outside = [];
-  for (const saveAs of ["../escape.pdf", "..", "sub/escape.pdf", "a:b.pdf", "CON.pdf", "trailing. "]) {
+  for (const saveAs of ["../escape.pdf", "..", "sub/escape.pdf", "a:b.pdf", "CON.pdf", "trailing. ", "a\uD800.txt"]) {
     const refused = await exporting.download("#pdf", { saveAs });
     outside.push(`${saveAs}=${refused.error?.code || "accepted"}/${refused.error?.outcome || ""}`);
     check(`saveAs ${JSON.stringify(saveAs)} is refused before the click`,
@@ -177,8 +268,29 @@ try {
   const snapshot = await exporting.client.observe(exporting.session, { expectedRisk: "read" }).then(() => true, () => false);
   const inspected = (await exporting.client.inspectSpace()).output;
   check("no interception or listener outlives the downloads", snapshot && inspected.resources?.lifecycleListeners === 0
-    && inspected.automation?.download?.exported === 8,
+    && inspected.automation?.download?.exported >= 12,
   JSON.stringify({ lifecycle: inspected.automation?.lifecycle, download: inspected.automation?.download }));
+
+  // A page with a frame that keeps reloading: the download is received and the frame goes on reloading.
+  const framesTarget = (await exporting.client.openTarget(`${origin}/frames`, { expectedRisk: "externalEffect",
+    waitUntil: "load" })).output;
+  const framesSession = (await exporting.client.attachSession(framesTarget.targetRef)).output;
+  const ticksBefore = ticks;
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const reloadsBefore = ticks - ticksBefore;
+  let slow;
+  try {
+    slow = (await exporting.client.act(framesSession, [{ kind: "click", selector: "#slow", download: true,
+      timeoutMs: 15000, expectedRisk: "externalEffect" }])).output.actions[0].result.download;
+  } catch (error) {
+    slow = { error: error?.message };
+  }
+  const ticksAfter = ticks;
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const reloadsAfter = ticks - ticksAfter;
+  check("a page whose frame keeps reloading receives its download and the frame goes on reloading",
+    slow?.mimeType === "text/csv" && reloadsBefore > 3 && reloadsAfter > 3,
+    JSON.stringify({ slow: slow?.mimeType || slow, reloadsBefore, reloadsAfter }));
 
   const plain = await startHost("plain", {});
   clients.push(plain.client);

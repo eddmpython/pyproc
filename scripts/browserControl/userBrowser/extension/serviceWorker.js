@@ -5,6 +5,11 @@
 // of the task window it opened and the tabs those tabs open, never touches profile data (cookies, storage, caches),
 // and detaches everything when the task ends, the control host goes away, or the user cancels the debugging bar.
 //
+// A download is the browser's own: it saves where the user's settings say. A click the control host declares as a
+// download arms an expectation for its tab first; the one download that tab starts while it is armed (the same URL the
+// tab's Page.downloadWillBegin named, or the tab's page as its referrer) is claimed, and only when it completes or
+// fails is the control host told where the browser saved it. Downloads the user starts are never reported.
+//
 // Every control-host connection has a number the native host gives it. A request is bound to the connection it came
 // from: its reply, and any effect it completes after an await (authorization, a tab, an attachment), is dropped or
 // undone when that connection is gone, so nothing one control host started ever reaches the next one.
@@ -35,6 +40,11 @@ let authorizedConnection = 0;
 let pendingPair = null;
 let sessionCounter = 0;
 const task = { windowId: null, tabs: new Set(), created: new Set(), sessions: new Map(), tabSessions: new Map() };
+const DOWNLOAD_WAIT_MAX_MS = 600000;
+// How long a download the browser created stays claimable by a Page.downloadWillBegin that arrives after it.
+const DOWNLOAD_MATCH_MS = 5000;
+let expectationCounter = 0;
+const downloads = { expectations: new Map(), claimed: new Map(), recent: [] };
 
 class ProviderError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -197,7 +207,66 @@ async function detachSession(sessionId) {
   return { detached: true };
 }
 
+function forgetDownload(expectationId) {
+  const expectation = downloads.expectations.get(expectationId);
+  if (!expectation) return { forgotten: false };
+  clearTimeout(expectation.timer);
+  downloads.expectations.delete(expectationId);
+  if (expectation.downloadId !== null) downloads.claimed.delete(expectation.downloadId);
+  return { forgotten: true };
+}
+
+function expectDownload(sessionId, timeoutMs, epoch) {
+  const tabId = task.sessions.get(sessionId);
+  if (tabId === undefined) throw new ProviderError(-32001, "session is not attached");
+  const wait = Number(timeoutMs);
+  if (!Number.isInteger(wait) || wait < 1 || wait > DOWNLOAD_WAIT_MAX_MS) {
+    throw new ProviderError(-32602, `timeoutMs must be an integer from 1 to ${DOWNLOAD_WAIT_MAX_MS}`);
+  }
+  const id = `download:${++expectationCounter}`;
+  const expectation = { id, tabId, epoch, urls: new Set(), downloadId: null, timer: null };
+  // Dropped a little after the control host stops waiting, so an expectation it never ended does not linger.
+  expectation.timer = setTimeout(() => forgetDownload(id), wait + 10000);
+  downloads.expectations.set(id, expectation);
+  return { expectation: id };
+}
+
+async function claimsDownload(expectation, item) {
+  if (expectation.epoch !== connection || expectation.downloadId !== null) return false;
+  if (expectation.urls.has(item.url) || (item.finalUrl && expectation.urls.has(item.finalUrl))) return true;
+  if (!item.referrer) return false;
+  try { return (await chrome.tabs.get(expectation.tabId)).url === item.referrer; } catch { return false; }
+}
+
+async function claimDownload(item) {
+  for (const expectation of downloads.expectations.values()) {
+    if (!(await claimsDownload(expectation, item))) continue;
+    if (expectation.downloadId !== null) continue;
+    expectation.downloadId = item.id;
+    downloads.claimed.set(item.id, expectation);
+    downloads.recent = downloads.recent.filter((entry) => entry.id !== item.id);
+    if (item.state === "complete" || item.state === "interrupted") void reportDownload(item.id);
+    return true;
+  }
+  return false;
+}
+
+async function reportDownload(downloadId) {
+  const expectation = downloads.claimed.get(downloadId);
+  if (!expectation) return;
+  const [item] = await chrome.downloads.search({ id: downloadId });
+  if (!item || (item.state !== "complete" && item.state !== "interrupted")) return;
+  forgetDownload(expectation.id);
+  if (expectation.epoch !== connection) return;
+  event("PyprocUserBrowser.download", item.state === "complete"
+    ? { expectation: expectation.id, state: "complete", path: item.filename, mimeType: item.mime || "",
+      url: item.finalUrl || item.url || "", byteLength: item.fileSize }
+    : { expectation: expectation.id, state: "interrupted", error: item.error || "" });
+}
+
 async function endTask(reason) {
+  for (const id of [...downloads.expectations.keys()]) forgetDownload(id);
+  downloads.recent = [];
   const created = [...task.created];
   const sessions = [...task.sessions.keys()];
   task.windowId = null;
@@ -307,6 +376,10 @@ async function handle(message, epoch) {
       const window = await chrome.windows.get(task.windowId);
       return { open: true, focused: window.focused, state: window.state };
     }
+    case "PyprocUserBrowser.expectDownload":
+      return expectDownload(String(sessionId || ""), params.timeoutMs, epoch);
+    case "PyprocUserBrowser.forgetDownload":
+      return forgetDownload(String(params.expectation || ""));
     case "PyprocUserBrowser.endTask":
       return await endTask("ended");
     default:
@@ -416,7 +489,30 @@ chrome.windows.onRemoved.addListener((windowId) => {
 chrome.windows.onFocusChanged.addListener((windowId) => {
   if (task.windowId !== null) event("PyprocUserBrowser.windowFocus", { focused: windowId === task.windowId });
 });
+chrome.downloads.onCreated.addListener((item) => {
+  if (downloads.expectations.size === 0) return;
+  void claimDownload(item).then((claimed) => {
+    if (claimed) return;
+    // Page.downloadWillBegin can arrive after the browser made the download; it may still claim it for a while.
+    const now = Date.now();
+    downloads.recent = [...downloads.recent.filter((entry) => now - entry.at < DOWNLOAD_MATCH_MS), { id: item.id,
+      at: now }].slice(-16);
+  });
+});
+chrome.downloads.onChanged.addListener((delta) => {
+  if (delta.state?.current === "complete" || delta.state?.current === "interrupted") void reportDownload(delta.id);
+});
 chrome.debugger.onEvent.addListener((source, method, params) => {
+  if (method === "Page.downloadWillBegin") {
+    for (const expectation of downloads.expectations.values()) {
+      if (expectation.tabId !== source.tabId || expectation.downloadId !== null) continue;
+      expectation.urls.add(String(params?.url || ""));
+      const now = Date.now();
+      for (const entry of downloads.recent.filter((recent) => now - recent.at < DOWNLOAD_MATCH_MS)) {
+        void chrome.downloads.search({ id: entry.id }).then(([item]) => item && claimDownload(item));
+      }
+    }
+  }
   const sessionId = task.tabSessions.get(source.tabId);
   if (!sessionId || DROPPED_EVENTS.has(method)) return;
   event(method, String(method).startsWith("Network.") ? withoutCookies(params || {}) : params || {}, sessionId);

@@ -567,6 +567,49 @@ export async function assertBrowserControlContract() {
   assert(heldByNavigation && !revisionPort.sessionHeld(revisionSession),
     "main frame 이동이 surface의 위치를 다음 요청 전에 반영하지 않았다");
 
+  // A child frame's navigation keeps the surface; a main frame that committed inside the permission is verified at
+  // once. A response the interception paused on a surface that is not verified is let go unchanged, and releasing
+  // interception never reads the frame tree nor needs a verified surface; a rewriting continue is judged as usual.
+  const releaseTransport = new FakeTransport();
+  let releaseId = 0;
+  const releasePort = new BrowserControlPort({ transport: releaseTransport, policy: new BrowserControlPolicy({
+    targetOrigins: ["http://allowed.test"], methods: ["DOM.getDocument", "Fetch.disable", "Fetch.continueRequest"],
+    events: ["Network.requestWillBeSent", "Fetch.requestPaused"], maxRisk: "externalEffect" }),
+  brokerId: "broker-release", idFactory: () => `x${++releaseId}` });
+  const [releaseTarget] = await releasePort.listTargets();
+  const releaseSession = await releasePort.attach(releaseTarget.targetRef);
+  const releaseHeard = [];
+  releasePort.subscribe(releaseSession, (event) => releaseHeard.push(event.method));
+  await releasePort.send(releaseSession, { method: "DOM.getDocument" });
+  releaseTransport.emit("allowed", "Page.frameNavigated", { frame: { id: "child", parentId: "main",
+    url: "http://elsewhere.test/frame" } });
+  releaseTransport.emit("allowed", "Network.requestWillBeSent", { request: { url: "http://allowed.test/a" } });
+  const heardAfterChild = releaseHeard.filter((method) => method === "Network.requestWillBeSent").length;
+  releaseTransport.emit("allowed", "Runtime.executionContextsCleared", {});
+  const commandsBeforePause = releaseTransport.commands.length;
+  releaseTransport.emit("allowed", "Fetch.requestPaused", { requestId: "paused-1" });
+  await Promise.resolve();
+  const letGo = releaseTransport.commands.slice(commandsBeforePause)
+    .map(({ command }) => `${command.method}:${command.params?.requestId}`);
+  releaseTransport.describeCalls = 0;
+  const disabled = await releasePort.send(releaseSession, { method: "Fetch.disable", params: {} });
+  const continuedPause = await releasePort.send(releaseSession, { method: "Fetch.continueRequest",
+    params: { requestId: "paused-2" } });
+  const describedForRelease = releaseTransport.describeCalls;
+  const rewritten = await errorOf(() => releasePort.send(releaseSession, { method: "Fetch.continueRequest",
+    params: { requestId: "paused-3", url: "http://denied.test/x" } }));
+  releaseTransport.emit("allowed", "Page.frameNavigated", { frame: { id: "main", url: "http://allowed.test/next" } });
+  releaseTransport.emit("allowed", "Network.requestWillBeSent", { request: { url: "http://allowed.test/b" } });
+  const commandsBeforeHeard = releaseTransport.commands.length;
+  releaseTransport.emit("allowed", "Fetch.requestPaused", { requestId: "paused-4" });
+  assert(heardAfterChild === 1 && JSON.stringify(letGo) === JSON.stringify(["Fetch.continueRequest:paused-1"])
+    && disabled.state === "applied" && continuedPause.state === "applied" && describedForRelease === 0
+    && rewritten?.code === BROWSER_CONTROL_ERROR_CODES.permissionDenied
+    && releaseHeard.filter((method) => method === "Network.requestWillBeSent").length === 2
+    && releaseHeard.includes("Fetch.requestPaused") && releaseTransport.commands.length === commandsBeforeHeard,
+  `interception 해제와 frame 이동 뒤 권한 상태가 어긋났다: ${JSON.stringify({ heardAfterChild, letGo,
+    describedForRelease, rewritten: rewritten?.code, releaseHeard })}`);
+
   // The manifest opts a controller host in; other providers and unknown values are refused.
   const optInBase = { schemaVersion: 1, engine: { enabled: false }, browser: { enabled: true,
     allowedOrigins: ["https://work.example"], maxRisk: "read", actions: ["snapshot"] } };

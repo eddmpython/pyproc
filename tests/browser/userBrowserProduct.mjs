@@ -1,7 +1,7 @@
 // userBrowserProduct.mjs - the user-browser provider end to end in an isolated Edge that loads the extension.
 // The gate installs the native host under a gate-only name and LOCALAPPDATA, so the user's own installation and
 // browsers are never touched, then drives the installed Control product through the extension: Motor, APX, screenshot,
-// and cleanup. Negative checks: a wrong pairing key, a tab outside the task, profile-touching commands, the pipe's
+// a download the browser saves into the gate's own folder (received as a receipt and exported), and cleanup. Negative checks: a wrong pairing key, a tab outside the task, profile-touching commands, the pipe's
 // access list and single instance, and the host leaving with the browser.
 import { createServer } from "node:http";
 import { connect, createServer as createPipeServer } from "node:net";
@@ -44,7 +44,15 @@ async function waitFor(operation, timeoutMs = 20000) {
 }
 
 let effects = 0;
+const REPORT_PDF = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
+  "latin1");
 const fixture = createServer((req, res) => {
+  if (req.url === "/report.pdf") {
+    res.writeHead(200, { "Content-Type": "application/pdf", "Content-Disposition": "attachment; filename=report.pdf",
+      "Cache-Control": "no-store" });
+    res.end(REPORT_PDF);
+    return;
+  }
   if (req.url === "/save" && req.method === "POST") {
     effects += 1;
     res.writeHead(201, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -52,7 +60,7 @@ const fixture = createServer((req, res) => {
     return;
   }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
-  res.end(`<!doctype html><title>user browser fixture</title><h1>Orders</h1><button id="save">Save</button>
+  res.end(`<!doctype html><title>user browser fixture</title><h1>Orders</h1><button id="save">Save</button><a id="report" href="/report.pdf">Report</a>
     <script>document.getElementById("save").addEventListener("click", async () => {
       const response = await fetch("/save", { method: "POST" });
       const status = document.createElement("p"); status.setAttribute("role", "status");
@@ -177,9 +185,13 @@ async function hostChecks(hostPath) {
 
 async function journey({ kind, product, executable }, installed, app) {
   const label = `${kind}: `;
-  // Branded Chrome ignores --load-extension; both browsers load an unpacked extension over the CDP pipe.
+  // Branded Chrome ignores --load-extension; both browsers load an unpacked extension over the CDP pipe. The browser
+  // saves downloads into a folder of the gate's own, never the user's download folder.
+  const downloadsDir = join(localAppData, `downloads-${kind}`);
+  await mkdir(downloadsDir, { recursive: true });
   browser = launchBrowser("about:blank", { executable, enableExtensions: true, cdpPipe: true,
-    extraArgs: ["--enable-unsafe-extension-debugging"] });
+    extraArgs: ["--enable-unsafe-extension-debugging"],
+    preferences: { download: { default_directory: downloadsDir, prompt_for_download: false } } });
   const direct = CdpConnection.overPipe(browser.cdpPipe, { timeoutMs: 30000 });
   const loaded = await direct.send("Extensions.loadUnpacked", { path: installed.extensionPath });
   const host = await waitFor(async () => (await listUserBrowserHosts()).find((entry) => product.test(entry.product)),
@@ -221,7 +233,8 @@ async function journey({ kind, product, executable }, installed, app) {
   await writeFile(configPath, JSON.stringify({ schemaVersion: 1, engine, timeoutMs: TIMEOUT_MS,
     browser: { enabled: true, provider: "userBrowser", userBrowser: kind, allowedOrigins: [origin],
       maxRisk: "externalEffect", actions: ["snapshot", "screenshot", "click"], methods: [],
-      externalEffects: "acknowledged", purpose: "Verify the user-browser provider fixture", artifacts: {} },
+      externalEffects: "acknowledged", purpose: "Verify the user-browser provider fixture", artifacts: {},
+      exportRoot: join(app.appDir, `exports-${kind}`) },
     executionMemory: { enabled: true, root: memoryRoot, importRoots: [], secretEnv: [] },
     actuation: { enabled: true } }, null, 2));
   const publicRequire = createRequire(join(app.appDir, "package.json"));
@@ -255,6 +268,17 @@ async function journey({ kind, product, executable }, installed, app) {
   const shot = await client.act(task.sessionRef, [{ kind: "screenshot", format: "png", expectedRisk: "read" }]);
   check(`${label}a screenshot of the task tab comes back as a PNG attachment`,
     shot.attachments.some((attachment) => attachment.mimeType === "image/png" && attachment.byteLength > 1000));
+  const downloaded = await client.act(task.sessionRef, [{ kind: "click", selector: "#report", download: true,
+    timeoutMs: 20000, expectedRisk: "externalEffect" }]);
+  const receipt = downloaded.output.actions[0].result.download;
+  const browserCopy = join(downloadsDir, "report.pdf");
+  check(`${label}a download the task tab starts comes back as a receipt, is exported, and stays where the browser saved it`,
+    receipt?.mimeType === "application/pdf" && receipt.mimeEvidence === "signature"
+      && receipt.declaredMimeType === "application/pdf" && receipt.exportedFile?.name === "report.pdf"
+      && existsSync(receipt.exportedFile.path) && existsSync(browserCopy)
+      && Buffer.compare(await readFile(receipt.exportedFile.path), REPORT_PDF) === 0,
+    JSON.stringify({ receipt: receipt && { mimeType: receipt.mimeType, declared: receipt.declaredMimeType,
+      exportedFile: receipt.exportedFile }, browserCopy: existsSync(browserCopy) }));
   const cleanup = await task.close();
   const remaining = await client.listTargets();
   check(`${label}closing the task detaches and closes the tab it opened, without retrying the effect`,

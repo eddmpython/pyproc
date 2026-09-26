@@ -20,19 +20,43 @@ const ascii = (text) => Buffer.from(text, "latin1");
 const startsWith = (bytes, prefix, offset = 0) => bytes.length >= offset + prefix.length
   && bytes.subarray(offset, offset + prefix.length).equals(prefix);
 
+// Other names servers use for a type below; a declared type is compared by its usual name.
+const USUAL_NAMES = Object.freeze({
+  "image/jpg": "image/jpeg", "image/pjpeg": "image/jpeg", "image/x-png": "image/png", "image/x-ms-bmp": "image/bmp",
+  "image/x-bmp": "image/bmp", "image/vnd.microsoft.icon": "image/x-icon", "application/x-pdf": "application/pdf",
+  "application/acrobat": "application/pdf", "application/x-zip-compressed": "application/zip",
+  "application/zip-compressed": "application/zip", "application/x-zip": "application/zip",
+  "application/x-gzip": "application/gzip", "application/x-rar-compressed": "application/vnd.rar",
+  "application/x-rar": "application/vnd.rar", "audio/x-wav": "audio/wav", "audio/wave": "audio/wav",
+  "audio/vnd.wave": "audio/wav", "audio/mp3": "audio/mpeg", "audio/x-mpeg": "audio/mpeg",
+  "application/x-msdownload": "application/vnd.microsoft.portable-executable",
+  "application/x-msdos-program": "application/vnd.microsoft.portable-executable",
+  "application/x-dosexec": "application/vnd.microsoft.portable-executable",
+  "application/x-font-woff": "font/woff", "application/font-woff": "font/woff", "application/x-font-otf": "font/otf",
+  "application/x-sqlite3": "application/vnd.sqlite3", "text/rtf": "application/rtf", "application/x-rtf": "application/rtf",
+});
+const usualName = (type) => USUAL_NAMES[type] || type;
+
 // Types whose bytes always start with a signature below; one of them declared on bytes without it is contradicted.
 const SIGNED_TYPES = new Set([
-  "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/x-icon", "image/vnd.microsoft.icon",
-  "image/tiff", "image/heic", "image/avif", "application/pdf", "application/zip", "application/gzip",
-  "application/x-gzip", "application/x-7z-compressed", "application/vnd.rar", "application/x-rar-compressed",
-  "application/vnd.sqlite3", "audio/wav", "audio/x-wav", "audio/flac", "audio/mpeg", "audio/ogg", "video/ogg",
+  "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/x-icon", "image/tiff", "image/heic",
+  "image/avif", "application/pdf", "application/zip", "application/gzip", "application/x-7z-compressed",
+  "application/vnd.rar", "application/vnd.sqlite3", "audio/wav", "audio/flac", "audio/mpeg", "audio/ogg", "video/ogg",
   "application/ogg", "video/mp4", "audio/mp4", "video/quicktime", "video/webm", "video/x-matroska", "video/x-msvideo",
   "font/woff", "font/woff2", "font/otf", "application/rtf", "application/vnd.microsoft.portable-executable",
-  "application/x-msdownload",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ]);
+
+// Formats that are a ZIP inside: the only types a ZIP's own `mimetype` entry or a declared type may name for it.
+const ZIP_FORMATS = new Set(["application/java-archive", "application/vnd.android.package-archive",
+  "application/vnd.google-earth.kmz", "application/x-xpinstall", "application/vnd.ms-xpsdocument", "application/oxps",
+  "application/vnd.apple.pkpass"]);
+function isZipFormat(type) {
+  return type.endsWith("+zip") || ZIP_FORMATS.has(type) || type.startsWith("application/vnd.oasis.opendocument.")
+    || type.startsWith("application/vnd.openxmlformats-officedocument.");
+}
 
 // Compound File Binary (legacy Office, HWP 5, MSI, Outlook messages): the signature proves the container only, so a
 // declared or named type of this family is taken, else the container itself.
@@ -41,7 +65,7 @@ const CFB_TYPES = new Set(["application/msword", "application/vnd.ms-excel", "ap
   "application/vnd.ms-outlook", "application/x-ole-storage"]);
 const CFB = "application/x-ole-storage";
 // Other containers whose signature names the container, not what it holds: a declared type of the same family is
-// taken (an Ogg file declared `audio/ogg`), and a ZIP takes any declared type no signature names (a `.kmz`, say).
+// taken (an Ogg file declared `audio/ogg`), and a ZIP takes a declared format that is a ZIP inside (a `.kmz`, say).
 const CONTAINER_FAMILIES = Object.freeze({
   "application/zip": new Set(),
   "application/ogg": new Set(["audio/ogg", "video/ogg", "audio/opus"]),
@@ -82,16 +106,23 @@ function isTextType(type) {
     || type === "application/csv" || type === "message/rfc822";
 }
 
+const isTextCode = (code) => !((code < 0x20 && ![0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1b].includes(code)) || code === 0x7f);
+
 // Text is bytes without NUL or the control characters text never holds (tab, line breaks, form feed, and escape
-// are text); legacy encodings such as EUC-KR are text too. A UTF-16 byte order mark marks UTF-16 text.
+// are text); legacy encodings such as EUC-KR are text too. After a UTF-16 byte order mark the rest must decode as
+// UTF-16 to the same kind of characters.
 function isText(bytes) {
-  if (startsWith(bytes, Buffer.from([0xff, 0xfe])) || startsWith(bytes, Buffer.from([0xfe, 0xff]))) return true;
-  const sample = bytes.subarray(0, SAMPLE_BYTES);
-  for (const byte of sample) {
-    if (byte < 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0b && byte !== 0x0c && byte !== 0x0d
-      && byte !== 0x1b) return false;
-    if (byte === 0x7f) return false;
+  const utf16 = startsWith(bytes, Buffer.from([0xff, 0xfe])) ? "utf-16le"
+    : startsWith(bytes, Buffer.from([0xfe, 0xff])) ? "utf-16be" : "";
+  if (utf16) {
+    const sample = bytes.subarray(2, 2 + SAMPLE_BYTES - (SAMPLE_BYTES % 2));
+    let text;
+    try { text = new TextDecoder(utf16, { fatal: true }).decode(sample.subarray(0, sample.length - (sample.length % 2))); }
+    catch { return false; }
+    for (let index = 0; index < text.length; index += 1) if (!isTextCode(text.charCodeAt(index))) return false;
+    return true;
   }
+  for (const byte of bytes.subarray(0, SAMPLE_BYTES)) if (!isTextCode(byte)) return false;
   return true;
 }
 
@@ -128,7 +159,7 @@ function zipType(bytes) {
     if (bytes.subarray(30, 30 + nameLength).toString("latin1") === "mimetype" && size > 0 && size < 100
       && start + size <= bytes.length) {
       const declared = bareMimeType(bytes.subarray(start, start + size).toString("latin1"));
-      if (declared) return declared;
+      if (declared && isZipFormat(declared)) return declared;
     }
   }
   const names = zipEntryNames(bytes);
@@ -208,6 +239,7 @@ export function signatureMimeType(bytes) {
 // (the bytes neither prove nor contradict it), or `none` (`application/octet-stream`).
 export function downloadMimeType({ bytes, declared = "", fileName = "" }) {
   const declaredType = bareMimeType(declared);
+  const usual = usualName(declaredType);
   const named = EXTENSION_TYPES[extname(String(fileName || "")).toLowerCase()] || "";
   const result = (mimeType, mimeEvidence) => Object.freeze({ mimeType, mimeEvidence,
     ...(declaredType ? { declaredMimeType: String(declared).trim().slice(0, 200) } : {}) });
@@ -217,9 +249,8 @@ export function downloadMimeType({ bytes, declared = "", fileName = "" }) {
     return result(CFB_TYPES.has(named) ? named : CFB, "signature");
   }
   if (Object.hasOwn(CONTAINER_FAMILIES, signed)) {
-    const refines = CONTAINER_FAMILIES[signed].has(declaredType) || (signed === "application/zip" && !!declaredType
-      && declaredType !== OCTET_STREAM && !SIGNED_TYPES.has(declaredType) && !isTextType(declaredType)
-      && !CFB_TYPES.has(declaredType) && !/zip-compressed$/.test(declaredType));
+    const refines = CONTAINER_FAMILIES[signed].has(declaredType)
+      || (signed === "application/zip" && isZipFormat(declaredType));
     return result(refines ? declaredType : signed, "signature");
   }
   if (signed) return result(signed, "signature");
@@ -231,8 +262,8 @@ export function downloadMimeType({ bytes, declared = "", fileName = "" }) {
     if (named && isTextType(named)) return result(named, "text");
     return result("text/plain", "text");
   }
-  if (!declaredType || declaredType === OCTET_STREAM || SIGNED_TYPES.has(declaredType) || isTextType(declaredType)
-    || CFB_TYPES.has(declaredType)) return result(OCTET_STREAM, "none");
+  if (!declaredType || declaredType === OCTET_STREAM || SIGNED_TYPES.has(usual) || isTextType(usual)
+    || CFB_TYPES.has(declaredType) || isZipFormat(declaredType)) return result(OCTET_STREAM, "none");
   return result(declaredType, "declared");
 }
 
@@ -244,6 +275,7 @@ const FORBIDDEN_NAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f\u007f]/;
 // Why a caller's file name is refused, or "" when it is one plain file name the export root can hold.
 export function exportNameProblem(name) {
   if (typeof name !== "string" || !name) return "must be a non-empty string";
+  if (!name.isWellFormed()) return "must be well-formed Unicode (no lone surrogate)";
   if (name.length > DOWNLOAD_FILE_NAME_MAX) return `must be at most ${DOWNLOAD_FILE_NAME_MAX} characters`;
   if (name === "." || name === "..") return "must name a file, not a folder";
   if (FORBIDDEN_NAME_CHARACTERS.test(name)) return "must be one file name, without a folder, drive, stream, or control character";
@@ -255,7 +287,7 @@ export function exportNameProblem(name) {
 // A server's suggested name reduced to one file name the export root can hold.
 export function exportNameFrom(suggested) {
   // Folders of either kind are dropped first; a drive letter is not a folder here, so its `:` is replaced below.
-  let name = posix.basename(String(suggested || "").replace(/\\/g, "/"))
+  let name = posix.basename(String(suggested || "").toWellFormed().replace(/\\/g, "/"))
     .replace(new RegExp(FORBIDDEN_NAME_CHARACTERS.source, "g"), "_")
     .replace(/^ +/, "").replace(/[. ]+$/, "");
   if (!name || name === "." || name === "..") name = "download";

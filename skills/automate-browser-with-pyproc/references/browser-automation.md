@@ -268,7 +268,7 @@ entity seen again now, changed when it last changed, its locators kept or issued
 A capture is kept for this only when the page did not change while its tree was read. A page with a closed shadow root
 (whose states no world can read) or more than 24 custom elements is read in full every time. Anything else reads the
 whole page again, so a reused answer is never staler than the full read it repeats. On an unchanged page of 3,000
-buttons a warm situate takes about 110 ms instead of about a second. `browserInspect.perception.reusedObservations`
+buttons a warm situate takes about a tenth of a full read (about 110 ms instead of about a second on a desktop). `browserInspect.perception.reusedObservations`
 counts the reused answers; `resources.perception.reusableCaptures` holds one capture per session.
 
 ### Complete legacy semantic inventories
@@ -472,24 +472,39 @@ the bytes enter this store.
 
 ### Download receipt
 
-A declared download (`click` with `download: true`) returns its artifact descriptor as a receipt: `byteLength`,
-`sha256`, and a `mimeType` decided from the bytes first. A known byte signature names the type outright (PNG, JPEG,
-GIF, WebP, PDF, ZIP and the Office Open XML, OpenDocument, EPUB, and HWPX files inside one, legacy Office and HWP
-containers, archives, audio, video, fonts, executables); text bytes, in any encoding such as EUC-KR, take the type the
-server declared when it is a text type, else the one the file name's extension names, else `text/plain`; bytes that
-neither prove nor contradict a declared type keep it. A declared type the bytes contradict (an `image/png` that is not
-a PNG, a text type on binary bytes) is never reported: the type is then `application/octet-stream`. `mimeEvidence`
-says which rule decided it (`signature`, `text`, `declared`, or `none`), and `declaredMimeType` is the server's own
-`Content-Type` (with any charset) or a `data:` URL's type. To read that header, the session pauses each document
-response of its own page once while the download runs and lets it continue unchanged.
+A declared download (`click` with `download: true`) returns its artifact descriptor as a receipt: `byteLength`
+(an empty file is a receipt too), `sha256`, and a `mimeType` decided from the bytes first:
+- A known byte signature names the type outright: PNG, JPEG, GIF, WebP, PDF, archives, audio, video, fonts,
+  executables, legacy Office and HWP containers, and ZIP. A ZIP is named by its entries (Office Open XML, Java, Android)
+  or its own `mimetype` entry (OpenDocument, EPUB, HWPX), and takes a declared type only when that is a format made of
+  a ZIP.
+- Text bytes, in any encoding such as EUC-KR (UTF-16 after its byte order mark), take the type the server declared
+  when it is a text type, else the one the file name's extension names, else `text/plain`.
+- Bytes that neither prove nor contradict a declared type keep it.
+- A declared type the bytes contradict is never reported, under its usual name or another one servers use (`image/jpg`
+  on bytes that are not a JPEG, a text type on binary bytes, a picture type on a ZIP). The type is then what the bytes
+  are, or `application/octet-stream`.
 
-With `browser.exportRoot`, the receipt also has `exportedFile: { path, name }`: the bytes were written as a new file
-directly inside that folder. `saveAs` on the click names the file; it must be one plain file name (no folder, `..`,
-drive, stream `:`, control character, trailing dot or space, or reserved device name such as `CON`), and anything
-else fails validation before the click. Without `saveAs` the server's suggested name is reduced to one. An existing
-file is never replaced; the next free `name (n).ext` is taken. `saveAs` without an export root is refused before the
-click. When writing the file fails after the download finished, the action fails with
+`mimeEvidence` says which rule decided it (`signature`, `text`, `declared`, or `none`). `declaredMimeType` is the
+`Content-Type` (with any charset) of the download's own response, matched by its URL after redirects and without its
+fragment; for a `data:` URL it is the URL's type. No other response of the page speaks for a download (a `blob:`
+download has none). To read that header, the session pauses each document response of its own page once while the
+download runs and lets it continue unchanged. Such a response is never left paused: one that arrives while the page's
+surface is not verified is let go at once, and turning interception off needs no verified surface. A page that moves
+on to another page of the permission before its download starts (a "your download will begin" page), or holds a frame
+that reloads, keeps its events and its download.
+
+With `browser.exportRoot`, the receipt also has `exportedFile: { path, name, markOfTheWeb }`. The bytes are written as
+a new file directly inside that folder. On Windows the file carries the mark a browser leaves on what it downloads (a
+`Zone.Identifier` stream: the internet zone and the source without its query), and `markOfTheWeb` says whether it
+could be written. `saveAs` on the click names the file; it must be one plain file name, and anything else fails
+validation before the click: a folder, `..`, a drive, a stream `:`, a control character, a lone surrogate, a trailing
+dot or space, or a reserved device name such as `CON`. Without `saveAs` the server's suggested name is reduced to one.
+A name that anything already holds (a file, a folder, or a link, even one that points nowhere) is taken, so nothing is
+replaced and no link is followed; the next free `name (n).ext` is used. `saveAs` without an export root is refused
+before the click. When writing the file fails after the download finished, the action fails with
 `BROWSER_AUTOMATION_DOWNLOAD_EXPORT_FAILED` (`outcome: "applied"`) and names the artifact that still holds the bytes.
+In the user's own browser the browser saves the download itself and pyproc reads it there (see `user-browser.md`).
 
 ## Locators, lifecycle, and privacy
 

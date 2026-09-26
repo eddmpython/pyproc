@@ -1,8 +1,8 @@
 {
   "format": "pyproc-skill-catalog",
   "version": 1,
-  "generatedFromDigest": "sha256:5746a803f742e9c07ee1695c56b8fedae8224342272536ba5d6de17e15122a48",
-  "catalogDigest": "sha256:f37c02b988e298e03ebc250d6a431bbad9a5e87020dd161c539883837739d43d",
+  "generatedFromDigest": "sha256:9580180c66c9eeb1fc0a79e3ae13bc7d5eacc85ff02332ea95ad094e1d2aea26",
+  "catalogDigest": "sha256:6c23926338f2dbec147e74690b06f5d42a5328d093539d8150d2eff909ce3be5",
   "skills": [
     {
       "name": "automate-browser-with-pyproc",
@@ -260,8 +260,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/browser-automation.md",
-      "bytes": 41213,
-      "sha256": "sha256:add769cac2fd9c78b3b661c1af83ab6f95ed10208fd2b9eee70d573c4ec06888"
+      "bytes": 42580,
+      "sha256": "sha256:2da6902bcae9fe90db27ab2e3ee9ed088c96819f158721616ad23105b80952ac"
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/frame-space.md",
@@ -275,8 +275,8 @@
     },
     {
       "path": "skills/automate-browser-with-pyproc/references/user-browser.md",
-      "bytes": 7238,
-      "sha256": "sha256:365e0171c078e56474843dda7bbf08ee553459df18b2d93e0b6b6df7a37e63c1"
+      "bytes": 8463,
+      "sha256": "sha256:40028240958442412e1134c28fd01e25bfbc297108caab3f2cbc052c2eec1fbb"
     },
     {
       "path": "skills/benchmark-pyproc/references/benchmarking.md",

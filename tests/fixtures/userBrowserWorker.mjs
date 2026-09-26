@@ -15,7 +15,9 @@ const tabs = new Map();
 const attached = new Set();
 const port = { onMessage: listeners(), onDisconnect: listeners(), postMessage: (message) => posted.push(message) };
 const events = { action: listeners(), created: listeners(), attachedTab: listeners(), detachedTab: listeners(),
-  removed: listeners(), windowRemoved: listeners(), focus: listeners(), debuggerEvent: listeners(), debuggerDetach: listeners() };
+  removed: listeners(), windowRemoved: listeners(), focus: listeners(), debuggerEvent: listeners(), debuggerDetach: listeners(),
+  downloadCreated: listeners(), downloadChanged: listeners() };
+const downloadItems = new Map();
 globalThis.chrome = {
   runtime: { connectNative: () => port, id: "fixture" },
   storage: {
@@ -48,6 +50,10 @@ globalThis.chrome = {
     remove: async (id) => { tabs.delete(id); attached.delete(id); events.removed.fire(id); },
     get: async (id) => tabs.get(id), update: async () => {},
     onCreated: events.created, onAttached: events.attachedTab, onDetached: events.detachedTab, onRemoved: events.removed,
+  },
+  downloads: {
+    search: async ({ id }) => (downloadItems.has(id) ? [{ ...downloadItems.get(id) }] : []),
+    onCreated: events.downloadCreated, onChanged: events.downloadChanged,
   },
   debugger: {
     getTargets: async () => [],
@@ -155,15 +161,78 @@ out.cookieHeadersForwarded = JSON.stringify(forwarded).toLowerCase().includes("s
 out.extraInfoForwarded = forwarded.some((message) => message.method === "Network.requestWillBeSentExtraInfo");
 out.otherHeadersKept = forwarded.some((message) => message.params?.request?.headers?.Accept === "text/html");
 
+// Downloads: only the one the armed task tab starts is claimed, reported when it ends, and only to the client that
+// armed it; a download the user starts anywhere else is never reported.
+const startDownload = (item) => {
+  downloadItems.set(item.id, { state: "in_progress", referrer: "", mime: "", filename: "", fileSize: 0, ...item });
+  events.downloadCreated.fire({ ...downloadItems.get(item.id) });
+};
+const endDownload = async (id, patch) => {
+  Object.assign(downloadItems.get(id), patch);
+  events.downloadChanged.fire({ id, state: { current: patch.state } });
+  await tick(20);
+};
+const reported = (start) => posted.slice(start).filter((message) => message.method === "PyprocUserBrowser.download");
+const arm = async () => (await reply(send("PyprocUserBrowser.expectDownload", { timeoutMs: 5000 }, session))).result.expectation;
+let downloadStart = posted.length;
+startDownload({ id: 1, url: "https://b.example/before.pdf", referrer: "https://b.example/" });
+await endDownload(1, { state: "complete", filename: "C:\\Downloads\\before.pdf" });
+out.unarmedDownloadReported = reported(downloadStart).length > 0;
+const armed = await arm();
+downloadStart = posted.length;
+startDownload({ id: 2, url: "https://c.example/other.pdf", referrer: "https://c.example/" });
+await tick(10);
+await endDownload(2, { state: "complete", filename: "C:\\Downloads\\other.pdf" });
+out.otherPageDownloadReported = reported(downloadStart).length > 0;
+events.debuggerEvent.fire({ tabId: ownTabId }, "Page.downloadWillBegin", { url: "https://b.example/report.pdf" });
+startDownload({ id: 3, url: "https://b.example/report.pdf" });
+await tick(10);
+await endDownload(3, { state: "complete", filename: "C:\\Downloads\\report.pdf", mime: "application/pdf",
+  fileSize: 10 });
+out.taskDownload = reported(downloadStart).map((message) => ({ expectationMatches: message.params.expectation === armed,
+  state: message.params.state, path: message.params.path, mimeType: message.params.mimeType }));
+// The browser can make the download before the tab's Page.downloadWillBegin arrives.
+await arm();
+downloadStart = posted.length;
+startDownload({ id: 4, url: "https://b.example/late.csv" });
+await tick(10);
+events.debuggerEvent.fire({ tabId: ownTabId }, "Page.downloadWillBegin", { url: "https://b.example/late.csv" });
+await tick(20);
+await endDownload(4, { state: "complete", filename: "C:\\Downloads\\late.csv", mime: "text/csv" });
+out.lateMatchReported = reported(downloadStart).map((message) => message.params.path);
+await arm();
+downloadStart = posted.length;
+startDownload({ id: 5, url: "https://b.example/cancel.zip", referrer: "https://b.example/" });
+await tick(10);
+await endDownload(5, { state: "interrupted", error: "USER_CANCELED" });
+out.interruptedReported = reported(downloadStart).map((message) => `${message.params.state}:${message.params.error}`);
+// An expectation armed by a client that left is gone; its download never reaches the next client.
+await arm();
+startDownload({ id: 6, url: "https://b.example/left.pdf", referrer: "https://b.example/" });
+await tick(10);
+leave();
+connectClient();
+await hello();
+downloadStart = posted.length;
+await endDownload(6, { state: "complete", filename: "C:\\Downloads\\left.pdf" });
+out.leftClientDownloadReported = reported(downloadStart).length > 0;
+const reopened = await reply(send("PyprocUserBrowser.openTab", { url: "https://b.example/" }));
+const reattached = (await reply(send("PyprocUserBrowser.attachTab", { targetId: reopened.result.targetId }))).result;
+out.expectationForUnattachedSession = Boolean((await reply(send("PyprocUserBrowser.expectDownload",
+  { timeoutMs: 5000 }, "userBrowser:none"))).error);
+out.expectationWithoutTimeout = Boolean((await reply(send("PyprocUserBrowser.expectDownload", {},
+  reattached.sessionId))).error);
+
 // A tab the user opens in the task window is attachable but never closed with the task.
 const userTab = 600;
-tabs.set(userTab, { id: userTab, windowId: tabs.get(ownTabId).windowId });
-events.created.fire({ id: userTab, windowId: tabs.get(ownTabId).windowId });
+const reopenedTabId = Number(reopened.result.targetId);
+tabs.set(userTab, { id: userTab, windowId: tabs.get(reopenedTabId).windowId });
+events.created.fire({ id: userTab, windowId: tabs.get(reopenedTabId).windowId });
 out.userTabAttachable = !(await reply(send("PyprocUserBrowser.attachTab", { targetId: String(userTab) }))).error;
 out.userTabClosable = !(await reply(send("PyprocUserBrowser.closeTab", { targetId: String(userTab) }))).error;
 await reply(send("PyprocUserBrowser.endTask"));
 out.userTabKeptAfterEnd = tabs.has(userTab);
-out.ownTabClosedAtEnd = !tabs.has(ownTabId);
+out.ownTabClosedAtEnd = !tabs.has(reopenedTabId);
 
 console.log(JSON.stringify(out));
 process.exit(0);

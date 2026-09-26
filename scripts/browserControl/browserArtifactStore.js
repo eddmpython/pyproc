@@ -58,10 +58,11 @@ export class BrowserArtifactStore {
     this._ready = null;
   }
 
-  async put(input, metadata = {}, { inline = false } = {}) {
+  // `allowEmpty` keeps an empty file (a download can be one); nothing else the store keeps is ever empty.
+  async put(input, metadata = {}, { inline = false, allowEmpty = false } = {}) {
     this._assertOpen();
     const bytes = Buffer.isBuffer(input) ? input : Buffer.from(input || []);
-    if (bytes.byteLength < 1) {
+    if (bytes.byteLength < 1 && !allowEmpty) {
       throw new BrowserControlError("BROWSER_AUTOMATION_ARTIFACT_INVALID",
         "browser artifact bytes are empty", { outcome: "notSent" });
     }

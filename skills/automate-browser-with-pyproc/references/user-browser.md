@@ -6,6 +6,7 @@
 - Install and pair
 - Product manifest
 - Authority boundary
+- Downloads
 - Transport and pairing
 - Limits
 - Verification
@@ -87,6 +88,18 @@ acknowledgement work exactly as for `nativeCdp`.
 - Ending the task, closing the Control host, or losing the native host detaches every session and closes the task's
   own tabs.
 
+## Downloads
+
+The browser saves a download itself, where the user's own settings say (their download folder, or wherever they
+answer a "save as" prompt, which the click then waits for), and the file stays there as any download the user makes.
+A `click` with `download: true` first arms the extension for its tab. The one download that tab starts while armed is
+claimed: the same URL the tab's `Page.downloadWillBegin` named, or the tab's page as its referrer. When it completes
+the extension tells the Control host where the browser saved it, and pyproc reads that file into the same receipt a
+`nativeCdp` download gives (`mimeType` decided from the bytes, `declaredMimeType` from the browser's own record of the
+server's type, and `exportedFile` inside `browser.exportRoot`). A download the user cancels fails the action with
+`BROWSER_AUTOMATION_DOWNLOAD_CANCELLED`. Downloads the user starts, in any tab, are never reported to pyproc. The
+extension's `downloads` permission serves only this.
+
 ## Transport and pairing
 
 The browser starts `pyproc-user-browser-host.exe` for the extension. The host relays length-prefixed JSON frames
@@ -112,8 +125,9 @@ seconds is let go.
   input automation. It still cannot reach the cookie store, other origins' storage, or tabs outside the task.
 - `Runtime.evaluate` runs in the page, so it reads what the page's own scripts can: cookies that are not HttpOnly
   and the storage of the origin the tab is on.
-- Uploads through `DOM.setFileInputFiles` need the extension's file URL access and are not part of the contract;
-  downloads are not yet received.
+- Uploads through `DOM.setFileInputFiles` need the extension's file URL access and are not part of the contract.
+- A download is claimed only by its URL or its referrer: one that a page starts with neither (a `no-referrer` policy
+  and no `Page.downloadWillBegin` for the tab) is not received and the click times out.
 - The extension is loaded in developer mode until it is published in the browser stores.
 - Occlusion and focus: the task window opens unfocused. Behavior of `Input.*` while the window is minimized is not
   covered by the gate.
@@ -121,6 +135,6 @@ seconds is let go.
 ## Verification
 
 `npm run test:user-browser` installs the host under a gate-only name and `LOCALAPPDATA`, loads the extension into
-isolated Edge and Chrome, and runs Motor with semantic and network proof, a screenshot, and task cleanup through the
-installed Control product. Negative checks cover a wrong pairing key, a tab outside the task, cookie, storage, and
+isolated Edge and Chrome, and runs Motor with semantic and network proof, a screenshot, a download received as a
+receipt and exported, and task cleanup through the installed Control product. Negative checks cover a wrong pairing key, a tab outside the task, cookie, storage, and
 target commands, the pipe's access list and single instance, and the host leaving with the browser.

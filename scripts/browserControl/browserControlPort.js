@@ -21,16 +21,18 @@ export const BROWSER_CONTROL_ERROR_CODES = Object.freeze({
 });
 
 // Page.getFrameTree stops answering while the page waits on something only the controller can release: an open
-// JavaScript dialog, or a document response the download's interception paused. Only the commands that release it
-// use the target verified just before (closing the dialog, letting a paused response continue unchanged, turning
-// interception off); every other command checks the origin again.
-const UNBLOCK_METHODS = new Set(["Page.handleJavaScriptDialog", "Fetch.continueRequest", "Fetch.disable"]);
+// JavaScript dialog, or a document response the download's interception paused. The commands that release it never
+// read the frame tree. Closing a dialog uses the target verified just before. Letting a paused response continue
+// unchanged and turning interception off change nothing the page did not ask for, so they go to the session's page
+// wherever it is, verified or not: a response is never left waiting. Every other command checks the origin again.
+const MODAL_UNBLOCK_METHOD = "Page.handleJavaScriptDialog";
+const FETCH_RELEASE_METHODS = new Set(["Fetch.continueRequest", "Fetch.disable"]);
 
-function releasesUnchanged(command) {
-  if (!UNBLOCK_METHODS.has(command.method)) return false;
-  if (command.method !== "Fetch.continueRequest") return true;
+function releasesInterception(command) {
+  if (!FETCH_RELEASE_METHODS.has(command.method)) return false;
   const params = command.params && typeof command.params === "object" ? command.params : {};
-  return Object.keys(params).length === 1 && typeof params.requestId === "string";
+  return command.method === "Fetch.disable" ? Object.keys(params).length === 0
+    : Object.keys(params).length === 1 && typeof params.requestId === "string";
 }
 const TRUSTED_READ_METHODS = new Set([
   "Accessibility.getPartialAXTree", "Accessibility.queryAXTree", "DOM.getDocument", "DOM.getBoxModel", "DOM.getFrameOwner", "DOM.getNodeForLocation", "DOM.resolveNode", "Page.createIsolatedWorld",
@@ -284,6 +286,24 @@ export class BrowserControlPort {
     return Object.freeze({ targetRef, type: target.type, url: target.url, title: target.title });
   }
 
+  /** Whether the browser saves a download itself and the transport says where (the user's own browser); otherwise
+   * pyproc tells the browser over CDP where to save. */
+  get browserSavesDownloads() {
+    return typeof this._transport.armDownload === "function";
+  }
+
+  // Arms the transport for the one download the session's tab starts next, once the session's surface is checked to
+  // be inside the permission. Returns `{ done, cancel }`: `done` settles to where the browser saved it, or why not.
+  async armDownload(sessionRef, { timeoutMs }) {
+    this._requireOpen();
+    const session = this._requireSession(sessionRef);
+    if (!this.browserSavesDownloads) throw new TypeError("this browser does not save downloads itself");
+    const target = await this._describe(session);
+    session.authorizationState = "verified";
+    session.authorizedTarget = target;
+    return this._transport.armDownload(session.transportSession, { timeoutMs });
+  }
+
   async beginPopupCapture(sessionRef) {
     this._requireOpen();
     const session = this._requireSession(sessionRef);
@@ -387,7 +407,10 @@ export class BrowserControlPort {
         `browser command was cancelled before send: ${command.method}`);
     }
     let target = null;
-    if (releasesUnchanged(command)) {
+    const release = !trustedRead && releasesInterception(command);
+    if (release) {
+      target = session.authorizedTarget || session.lastTarget || Object.freeze({ type: "page", url: "", title: "" });
+    } else if (command.method === MODAL_UNBLOCK_METHOD) {
       if (session.authorizationState !== "verified" || !session.authorizedTarget) {
         throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
           "browser unblock requires a verified target");
@@ -412,8 +435,10 @@ export class BrowserControlPort {
       }
       risk = "read";
     } else {
-      try { risk = this.policy.authorizeCommand(target, command.method, params); }
-      catch (error) { throw this._mapPolicyError(error); }
+      try {
+        risk = release ? this.policy.authorizeRelease(command.method, params)
+          : this.policy.authorizeCommand(target, command.method, params);
+      } catch (error) { throw this._mapPolicyError(error); }
     }
     if (command.expectedRisk !== undefined && command.expectedRisk !== risk) {
       throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
@@ -603,14 +628,20 @@ export class BrowserControlPort {
     let params = event.params || {};
     if (method === "Runtime.executionContextsCleared" || method === "Page.frameNavigated") {
       session.contextEpoch += 1;
-      session.authorizationState = "unverified";
-      session.authorizedTarget = null;
-      // Where the surface is now, for judging it against a later revision before its next request.
       const frame = method === "Page.frameNavigated" ? params.frame : null;
-      if (frame && !frame.parentId && typeof frame.url === "string" && session.lastTarget) {
+      if (frame?.parentId) {
+        // A child frame's navigation replaces the locator epoch, not the surface: the page is where it was.
+      } else if (frame && typeof frame.url === "string" && session.lastTarget) {
+        // The main frame committed this URL: the surface is judged by it at once, so a page that moved on inside the
+        // permission (an interstitial that starts a download, say) keeps its events flowing.
         session.lastTarget = Object.freeze({ ...session.lastTarget, url: frame.url });
-        session.held = this.policy.allowsTarget(session.lastTarget) ? null : heldPlace(frame.url);
-        if (session.held) session.authorizationState = "held";
+        const allowed = this.policy.allowsTarget(session.lastTarget);
+        session.held = allowed ? null : heldPlace(frame.url);
+        session.authorizationState = allowed ? "verified" : "held";
+        session.authorizedTarget = allowed ? session.lastTarget : null;
+      } else {
+        session.authorizationState = "unverified";
+        session.authorizedTarget = null;
       }
       method = "Transport.contextReplaced";
       params = { sourceMethod: event.method, contextEpoch: session.contextEpoch };
@@ -618,7 +649,15 @@ export class BrowserControlPort {
     const detachedListeners = method === "Transport.detached" ? [...session.listeners] : null;
     if (detachedListeners) this._markDetached(session, params.reason || "transport_detach");
     if (session.authorizationState !== "verified"
-      && method !== "Transport.contextReplaced" && method !== "Transport.detached") return;
+      && method !== "Transport.contextReplaced" && method !== "Transport.detached") {
+      // A response the interception paused on a surface that is not verified now is let go unchanged: nobody hears
+      // of it, and it must not wait for anyone.
+      if (method === "Fetch.requestPaused" && typeof params.requestId === "string") {
+        this._transport.send(session.transportSession, { method: "Fetch.continueRequest",
+          params: { requestId: params.requestId } }).catch(() => {});
+      }
+      return;
+    }
     if (!this.policy.allowsEvent(method)) return;
     const normalized = Object.freeze({
       sequence: ++this._eventSeq,

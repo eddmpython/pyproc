@@ -229,6 +229,19 @@ export class BrowserControlPolicy {
     }
   }
 
+  // Letting go of what the session's own interception holds (a paused response continued unchanged, or the
+  // interception itself) is judged by method and parameters only: it changes nothing the page did not ask for, so it
+  // is allowed whatever surface the page is on.
+  authorizeRelease(method, params = {}) {
+    if (!this._methods.has(method)) {
+      const error = new Error(`browser command is outside permission: ${method}`);
+      error.code = "BROWSER_CONTROL_PERMISSION_DENIED";
+      throw error;
+    }
+    this.authorizeCommandParams(method, params);
+    return BROWSER_CONTROL_COMMAND_RISKS[method];
+  }
+
   allowsEvent(method) {
     return OPERATIONAL_EVENTS.has(method) || this._events.has(method);
   }
