@@ -340,12 +340,15 @@ export async function createControlProduct({ env = process.env, browserLauncher 
     browserControl = automationSpace?.control || null;
     automationRouter = automationSpace ? new AutomationSpaceRouter(automationSpace) : null;
     // The permission Execution Memory records: the one the host started with, then each revision with its reference.
-    // File roots are recorded by digest: the manifest travels with handoffs, local folder names do not.
+    // File roots and the export root are recorded by digest: the manifest travels with handoffs, local folder names
+    // do not.
+    const folderDigest = (root) => createHash("sha256").update(root).digest("hex");
     const permissionManifestOf = (browser, reference = undefined) => Object.freeze({
       pythonNetwork: "denied",
       browser: browser ? Object.freeze({ providerKind, targetOrigins: browser.targetOrigins, actions: browser.actions,
         rawMethods: browser.rawMethods, maxRisk: browser.maxRisk,
-        fileRoots: browser.fileRoots.map((root) => createHash("sha256").update(root).digest("hex")).sort() }) : null,
+        fileRoots: browser.fileRoots.map(folderDigest).sort(),
+        ...(browser.exportRoot ? { exportRoot: folderDigest(browser.exportRoot) } : {}) }) : null,
       ...(reference === undefined ? {} : { reference }),
     });
     const memoryProduct = executionMemoryEnabled ? await createExecutionMemoryHandlers({

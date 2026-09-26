@@ -139,6 +139,10 @@ jobs:
       - run: npm run test:perception-reuse
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # download receipt: 바이트가 정한 형식, 서버가 알린 형식, export root 안 새 파일, root 밖 이름 거절.
+      - run: npm run test:download-receipt
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       - run: npm run test:automation-lifecycle
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -205,6 +209,7 @@ jobs:
       - run: npm run test:request-guard
       - run: npm run test:permission-revision
       - run: npm run test:perception-reuse
+      - run: npm run test:download-receipt
       - name: Build the browser desktop helper outside the checkout
         if: runner.os == 'Windows'
         shell: pwsh

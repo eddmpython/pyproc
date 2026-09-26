@@ -53,6 +53,17 @@ export class BrowserLifecycle {
     });
   }
 
+  // Every event of `method` on the session goes to `listener` (and never to the queue) until the returned function is
+  // called: for an effect that answers each of many events, not one.
+  listen(sessionRef, method, listener) {
+    if (typeof method !== "string" || !method) throw new TypeError("browser lifecycle event method is required");
+    if (typeof listener !== "function") throw new TypeError("browser lifecycle listener is invalid");
+    const session = this._ensureSession(sessionRef);
+    const entry = Object.freeze({ method, listener });
+    session.listeners.add(entry);
+    return () => { session.listeners.delete(entry); };
+  }
+
   dropSession(sessionRef) {
     const key = sessionKey(sessionRef);
     const session = this._sessions.get(key);
@@ -60,6 +71,7 @@ export class BrowserLifecycle {
     session.unsubscribe();
     for (const watcher of [...session.watchers]) watcher.cancel();
     session.watchers.clear();
+    session.listeners.clear();
     this._sessions.delete(key);
   }
 
@@ -67,27 +79,35 @@ export class BrowserLifecycle {
     for (const session of this._sessions.values()) {
       session.unsubscribe();
       for (const watcher of [...session.watchers]) watcher.cancel();
+      session.listeners.clear();
     }
     this._sessions.clear();
   }
 
   inspect() {
     let watchers = 0;
+    let listeners = 0;
     let queuedEvents = 0;
     for (const session of this._sessions.values()) {
       watchers += session.watchers.size;
+      listeners += session.listeners.size;
       queuedEvents += session.queue.length;
     }
-    return Object.freeze({ sessions: this._sessions.size, watchers, queuedEvents });
+    return Object.freeze({ sessions: this._sessions.size, watchers, listeners, queuedEvents });
   }
 
   _ensureSession(sessionRef) {
     const key = sessionKey(sessionRef);
     const present = this._sessions.get(key);
     if (present) return present;
-    const session = { watchers: new Set(), queue: [], unsubscribe: null };
+    const session = { watchers: new Set(), listeners: new Set(), queue: [], unsubscribe: null };
     session.unsubscribe = this._port.subscribe(sessionRef, (event) => {
       let delivered = false;
+      for (const entry of [...session.listeners]) {
+        if (entry.method !== event.method) continue;
+        entry.listener(event);
+        delivered = true;
+      }
       for (const watcher of [...session.watchers]) {
         if (watcher.method === event.method && watcher.predicate(event)) {
           watcher.deliver(event);

@@ -333,7 +333,7 @@ function modifierBits(modifiers = []) {
 
 export class BrowserAutomation {
   constructor({ port, actions = Object.keys(BROWSER_AUTOMATION_ACTIONS), idFactory = () => crypto.randomUUID(),
-    onAudit = () => {}, downloadDir = null, artifactStore = null, now = () => Date.now(),
+    onAudit = () => {}, downloadDir = null, exportRoot = null, artifactStore = null, now = () => Date.now(),
     providerKind = "nativeCdp" } = {}) {
     if (!port || typeof port.send !== "function" || !port.policy) throw new TypeError("browser automation port is required");
     if (typeof idFactory !== "function") throw new TypeError("browser automation idFactory must be a function");
@@ -399,6 +399,7 @@ export class BrowserAutomation {
       command: (sessionRef, method, params, commandResults, signal) => this._command(sessionRef, method, params, commandResults, signal),
       downloadDir,
       artifactStore,
+      exportRoot,
     }) : null;
   }
 
@@ -1125,14 +1126,19 @@ export class BrowserAutomation {
       throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionDenied,
         "browser download capture is unavailable", { outcome: "notSent" });
     }
+    if (action.saveAs !== undefined && !this._download.exports) {
+      throw automationError(BROWSER_AUTOMATION_ERROR_CODES.actionDenied,
+        "browser download saveAs needs the manifest's browser.exportRoot", { outcome: "notSent" });
+    }
     const captured = await this._download.run({
       sessionRef,
       timeoutMs: action.timeoutMs || BROWSER_ACTIONABILITY_DEFAULT_TIMEOUT_MS,
       commandResults,
       signal,
+      saveAs: action.saveAs ?? null,
       click: () => this._clickTarget(sessionRef, prepared, commandResults, signal, sendBoundary),
     });
-    return Object.freeze({ ...captured.click, download: captured.artifact });
+    return Object.freeze({ ...captured.click, download: captured.download });
   }
 
   async _clickWithPopup(sessionRef, prepared, action, commandResults, signal, sendBoundary) {

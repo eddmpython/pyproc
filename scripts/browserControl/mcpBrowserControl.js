@@ -88,6 +88,7 @@ function inspectBrowserResources(broker, automation) {
     observationEvents: (automation.observation?.consoleEvents || 0) + (automation.observation?.networkEvents || 0),
     lifecycleSessions: automation.lifecycle?.sessions || 0,
     lifecycleWatchers: automation.lifecycle?.watchers || 0,
+    lifecycleListeners: automation.lifecycle?.listeners || 0,
     lifecycleQueuedEvents: automation.lifecycle?.queuedEvents || 0,
     artifacts: automation.artifacts?.artifacts || 0,
     artifactBytes: automation.artifacts?.totalBytes || 0,
@@ -177,6 +178,8 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
   }
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new TypeError("browser control timeoutMs must be positive");
   const fileRoots = parseFileRoots(env.PYPROC_BROWSER_FILE_ROOTS);
+  const exportRoot = env.PYPROC_BROWSER_EXPORT_ROOT ? String(env.PYPROC_BROWSER_EXPORT_ROOT) : null;
+  if (exportRoot !== null && !isAbsolute(exportRoot)) throw new Error(`browser export root must be absolute: ${exportRoot}`);
   const viewport = parseBrowserViewportEnvironment(env.PYPROC_BROWSER_VIEWPORT);
   if ((actions.includes("upload") || rawMethods.includes("DOM.setFileInputFiles")) && fileRoots.length < 1) {
     throw new Error("browser file upload requires PYPROC_BROWSER_FILE_ROOTS");
@@ -216,6 +219,7 @@ export function parseBrowserControlConfig(env = process.env, { timeoutMs = 18000
     methods: Object.freeze(unique([...rawMethods, ...actionMethods])),
     events: Object.freeze(events),
     fileRoots: Object.freeze(fileRoots),
+    exportRoot,
     maxRisk,
     timeoutMs,
     purpose,
@@ -716,6 +720,7 @@ export class McpBrowserControl {
           if (record.risk === "externalEffect" || record.state === "failed") this._audit(record);
         },
         downloadDir,
+        exportRoot: this.config.exportRoot,
         artifactStore: this._artifactStore,
         providerKind: this._providerKind,
       });

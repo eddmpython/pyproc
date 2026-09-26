@@ -137,6 +137,7 @@ and incomplete external-effect approval fail closed.
 | `browser.methods` | Separate exact raw CDP allowlist. An empty list opens no raw command |
 | `browser.viewport` | Optional strict `{width,height,deviceScaleFactor?,mobile?,touch?}` device metrics. Dimensions are 1 to 10000 and scale is 0.1 to 10 |
 | `browser.fileRoots` | Existing absolute upload roots. Required when upload is enabled |
+| `browser.exportRoot` | Optional absolute folder (`nativeCdp` or `userBrowser`) that each declared click download is also written into, as a new file the receipt names. Created when the first download is written. Never widened at runtime |
 | `browser.trustedCertificates` | Optional `{origin,certificate,spkiSha256?}` list for self-signed local HTTPS targets. Each origin is an exact loopback HTTPS origin in `allowedOrigins`, and the absolute PEM certificate must name its host and be inside its validity period. Only its public key is trusted |
 | `browser.requests` | `any` by default. `safe` makes a read-only session, only in a browser-only host (`engine.enabled: false`) with the `nativeCdp` provider: the browser itself refuses every request other than GET, HEAD, and OPTIONS, every WebSocket and WebTransport, and every download, from pages, frames, closing tabs, and workers |
 | `browser.externalEffects` | Must equal `acknowledged` when `maxRisk` is `externalEffect` |
@@ -459,6 +460,27 @@ Verify the reconstructed SHA-256, then call `browserArtifactDelete`. An expired,
 restart-invalidated ref returns `BROWSER_AUTOMATION_ARTIFACT_NOT_FOUND`. TTL reap, explicit deletion, and
 command shutdown remove both the record and its file. Download staging files are removed immediately after
 the bytes enter this store.
+
+### Download receipt
+
+A declared download (`click` with `download: true`) returns its artifact descriptor as a receipt: `byteLength`,
+`sha256`, and a `mimeType` decided from the bytes first. A known byte signature names the type outright (PNG, JPEG,
+GIF, WebP, PDF, ZIP and the Office Open XML, OpenDocument, EPUB, and HWPX files inside one, legacy Office and HWP
+containers, archives, audio, video, fonts, executables); text bytes, in any encoding such as EUC-KR, take the type the
+server declared when it is a text type, else the one the file name's extension names, else `text/plain`; bytes that
+neither prove nor contradict a declared type keep it. A declared type the bytes contradict (an `image/png` that is not
+a PNG, a text type on binary bytes) is never reported: the type is then `application/octet-stream`. `mimeEvidence`
+says which rule decided it (`signature`, `text`, `declared`, or `none`), and `declaredMimeType` is the server's own
+`Content-Type` (with any charset) or a `data:` URL's type. To read that header, the session pauses each document
+response of its own page once while the download runs and lets it continue unchanged.
+
+With `browser.exportRoot`, the receipt also has `exportedFile: { path, name }`: the bytes were written as a new file
+directly inside that folder. `saveAs` on the click names the file; it must be one plain file name (no folder, `..`,
+drive, stream `:`, control character, trailing dot or space, or reserved device name such as `CON`), and anything
+else fails validation before the click. Without `saveAs` the server's suggested name is reduced to one. An existing
+file is never replaced; the next free `name (n).ext` is taken. `saveAs` without an export root is refused before the
+click. When writing the file fails after the download finished, the action fails with
+`BROWSER_AUTOMATION_DOWNLOAD_EXPORT_FAILED` (`outcome: "applied"`) and names the artifact that still holds the bytes.
 
 ## Locators, lifecycle, and privacy
 

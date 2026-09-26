@@ -1,6 +1,7 @@
 // browserAutomationCatalog.js - 고수준 action schema, risk, required method의 SSOT.
 import { BROWSER_CONTROL_RISKS } from "./browserControlPolicy.js";
 import { BROWSER_LOCATOR_SCHEMA, validateBrowserLocator } from "./browserLocator.js";
+import { DOWNLOAD_FILE_NAME_MAX, exportNameProblem } from "./downloadReceipt.js";
 import {
   BROWSER_OBSERVATION_EVENTS,
   BROWSER_OBSERVATION_MAX_EVENTS,
@@ -233,8 +234,9 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
   click: actionSpec({
     risk: "externalEffect",
     description: "Click exactly one target, with an optional declared dialog, download, or popup lifecycle effect.",
-    methods: [...TRUSTED_POINTER_METHODS, "Page.handleJavaScriptDialog", "Page.setDownloadBehavior"],
-    events: ["Page.javascriptDialogOpening", "Page.downloadWillBegin", "Page.downloadProgress"],
+    methods: [...TRUSTED_POINTER_METHODS, "Page.handleJavaScriptDialog", "Page.setDownloadBehavior", "Fetch.enable",
+      "Fetch.continueRequest", "Fetch.disable"],
+    events: ["Page.javascriptDialogOpening", "Page.downloadWillBegin", "Page.downloadProgress", "Fetch.requestPaused"],
     properties: {
       ...TARGET_PROPERTIES,
       dialog: {
@@ -247,6 +249,7 @@ export const BROWSER_AUTOMATION_ACTIONS = Object.freeze({
         additionalProperties: false,
       },
       download: { type: "boolean", const: true },
+      saveAs: { type: "string", minLength: 1, maxLength: DOWNLOAD_FILE_NAME_MAX },
       popup: { type: "boolean", const: true },
     },
     target: "required",
@@ -538,6 +541,11 @@ export function validateBrowserAutomationAction(action) {
     if (action.dialog.decision === "dismiss" && action.dialog.promptText !== undefined) fail("dismissed dialog does not accept promptText");
   }
   if (action.kind === "click" && action.download !== undefined && action.download !== true) fail("click.download must be true");
+  if (action.kind === "click" && action.saveAs !== undefined) {
+    if (action.download !== true) fail("click.saveAs needs download: true");
+    const problem = exportNameProblem(action.saveAs);
+    if (problem) fail(`click.saveAs ${problem}`);
+  }
   if (action.kind === "click" && action.popup !== undefined && action.popup !== true) fail("click.popup must be true");
   if (action.kind === "click" && Number(!!action.dialog) + Number(!!action.download) + Number(!!action.popup) > 1) {
     fail("click accepts one lifecycle expectation");

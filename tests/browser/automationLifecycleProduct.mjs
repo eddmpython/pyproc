@@ -23,7 +23,7 @@ function valueAt(root, path) {
 const zeroPaths = Object.freeze([
   "targets", "ownedTargets", "sessions", "locators", "quarantinedSessions",
   "semanticInventories", "continuations", "observationListeners", "observationEvents",
-  "lifecycleSessions", "lifecycleWatchers", "lifecycleQueuedEvents",
+  "lifecycleSessions", "lifecycleWatchers", "lifecycleListeners", "lifecycleQueuedEvents",
   "artifacts", "artifactBytes", "transport.sessions",
   "transport.pending", "transport.listeners", "perception.sensorSessions",
   "perception.identitySessions", "perception.entities", "perception.frames",

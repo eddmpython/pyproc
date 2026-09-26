@@ -12,6 +12,21 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **Download receipt and export root.** A declared click download now reports the type its bytes prove, not a fixed
+  `application/octet-stream`: a byte signature names it outright (images, PDF, ZIP and the Office Open XML,
+  OpenDocument, EPUB, and HWPX files in one, legacy Office and HWP containers, archives, media, fonts, executables),
+  text bytes in any encoding take the server's text type or the name's, and a declared type the bytes contradict is
+  never reported. `declaredMimeType` keeps the server's `Content-Type` with its charset (read from the download's own
+  response while it runs, after any redirect) and `mimeEvidence` says which rule decided the type. With the new
+  manifest key `browser.exportRoot` (and `--export-root` for `authorizedBrowser`), each download is also written as a
+  new file directly in that folder, returned as `exportedFile: { path, name }`; `saveAs` on the click names it and must
+  be one plain file name (a `..`, folder, drive, stream, or device name fails before the click), and an existing file
+  is never replaced. The gate `test:download-receipt` checks PNG, PDF, Office Open XML, a lying server, EUC-KR CSV, a
+  redirect, a `data:` URL, refused names, and a read-only session. `resources.lifecycleListeners` joins the resource
+  inventory.
+
 ### Changed
 
 - **Warm observations reuse an unchanged page.** A graph or situation observation reads the page's evidence first

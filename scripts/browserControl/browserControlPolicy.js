@@ -46,6 +46,8 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
   "DOMStorage.removeDOMStorageItem": "externalEffect",
   "DOMStorage.setDOMStorageItem": "externalEffect",
   "Fetch.continueRequest": "externalEffect",
+  "Fetch.disable": "externalEffect",
+  "Fetch.enable": "externalEffect",
   "Input.dispatchKeyEvent": "externalEffect",
   "Input.dispatchDragEvent": "externalEffect",
   "Input.dispatchMouseEvent": "externalEffect",
@@ -78,6 +80,7 @@ export const BROWSER_CONTROL_DEFAULT_READ_METHODS = Object.freeze([
 ]);
 
 const OPERATIONAL_EVENTS = new Set(["Transport.detached", "Transport.contextReplaced"]);
+const FETCH_ENABLE_PARAMS = JSON.stringify({ patterns: [{ urlPattern: "*", resourceType: "Document", requestStage: "Response" }] });
 
 function stringSet(values, label) {
   if (!Array.isArray(values) || values.some((value) => typeof value !== "string" || !value)) {
@@ -191,6 +194,9 @@ export class BrowserControlPolicy {
     const input = params && typeof params === "object" ? params : {};
     if (method === "Page.navigate") this._authorizeCommandUrl(input.url);
     if (method === "Fetch.continueRequest" && input.url !== undefined) this._authorizeCommandUrl(input.url);
+    // Interception is only ever the download's reading of its own response headers: document responses, paused at
+    // the response stage, with no authentication handling.
+    if (method === "Fetch.enable" && JSON.stringify(input) !== FETCH_ENABLE_PARAMS) this._denyCommandTarget();
     if (["Storage.clearDataForOrigin","Storage.getUsageAndQuota","Storage.overrideQuotaForOrigin"].includes(method)) {
       this._authorizeExactOrigin(input.origin);
     }

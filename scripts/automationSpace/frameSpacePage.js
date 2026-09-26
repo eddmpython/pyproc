@@ -127,6 +127,7 @@ export class FrameSpacePage {
         observationEvents: 0,
         lifecycleSessions: 0,
         lifecycleWatchers: 0,
+        lifecycleListeners: 0,
         lifecycleQueuedEvents: 0,
         artifacts: this.artifacts.size,
         artifactBytes: this.totalArtifactBytes,

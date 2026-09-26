@@ -785,6 +785,7 @@ export interface AutomationResourceSnapshot {
   readonly observationEvents: number;
   readonly lifecycleSessions: number;
   readonly lifecycleWatchers: number;
+  readonly lifecycleListeners: number;
   readonly lifecycleQueuedEvents: number;
   readonly artifacts: number;
   readonly artifactBytes: number;

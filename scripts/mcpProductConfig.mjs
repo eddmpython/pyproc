@@ -16,7 +16,7 @@ const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemor
 const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
   "enabled", "provider", "executable", "headed", "desktop", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
-  "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
+  "fileRoots", "exportRoot", "externalEffects", "purpose", "artifacts", "viewport",
   "recording", "trustedCertificates", "requests", "userBrowser", "permissionRevision",
 ]);
 const RECORDING_KEYS = new Set([
@@ -42,7 +42,7 @@ const CONTROLLED_ENV = Object.freeze([
   "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_BROWSER_DESKTOP", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
   "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_REQUESTS", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
   "PYPROC_BROWSER_PERMISSION_REVISION",
-  "PYPROC_BROWSER_FILE_ROOTS", "PYPROC_BROWSER_EXTERNAL_EFFECTS", "PYPROC_BROWSER_PURPOSE",
+  "PYPROC_BROWSER_FILE_ROOTS", "PYPROC_BROWSER_EXPORT_ROOT", "PYPROC_BROWSER_EXTERNAL_EFFECTS", "PYPROC_BROWSER_PURPOSE",
   "PYPROC_BROWSER_ARTIFACT_MAX_BYTES", "PYPROC_BROWSER_ARTIFACT_TOTAL_BYTES",
   "PYPROC_BROWSER_ARTIFACT_MAX_COUNT", "PYPROC_BROWSER_ARTIFACT_INLINE_BYTES",
   "PYPROC_BROWSER_ARTIFACT_TTL_MS",
@@ -262,6 +262,17 @@ function normalizedBrowser(input = { enabled: false }) {
   const desktop = browser.desktop === undefined ? "user" : browser.desktop;
   if (desktop !== "user" && provider !== "nativeCdp") throw new TypeError("browser.desktop is for the nativeCdp provider");
   browserDesktopOf({ desktop, headed }, {});
+  // Where a finished click download is also written as a file; the manifest names it, never the environment.
+  let exportRoot = null;
+  if (browser.exportRoot !== undefined) {
+    if (typeof browser.exportRoot !== "string" || !isAbsolute(browser.exportRoot)) {
+      throw new TypeError("browser.exportRoot must be an absolute folder path");
+    }
+    if (provider !== "nativeCdp" && provider !== "userBrowser") {
+      throw new TypeError("browser.exportRoot is for the nativeCdp and userBrowser providers");
+    }
+    exportRoot = resolve(browser.exportRoot);
+  }
   const normalized = {
     enabled: true,
     provider,
@@ -277,6 +288,7 @@ function normalizedBrowser(input = { enabled: false }) {
     actions: stringArray(browser.actions, "browser.actions", { allowEmpty: false }),
     methods: browser.methods === undefined ? [] : stringArray(browser.methods, "browser.methods"),
     fileRoots: browser.fileRoots === undefined ? [] : stringArray(browser.fileRoots, "browser.fileRoots"),
+    ...(exportRoot === null ? {} : { exportRoot }),
     externalEffects: browser.externalEffects || "",
     purpose,
     artifacts,
@@ -535,6 +547,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   env.PYPROC_BROWSER_ACTIONS = browser.actions.join(",");
   env.PYPROC_BROWSER_METHODS = browser.methods.join(",");
   env.PYPROC_BROWSER_FILE_ROOTS = browser.fileRoots.join(delimiter);
+  if (browser.exportRoot) env.PYPROC_BROWSER_EXPORT_ROOT = browser.exportRoot;
   if (browser.externalEffects) env.PYPROC_BROWSER_EXTERNAL_EFFECTS = browser.externalEffects;
   if (browser.purpose) env.PYPROC_BROWSER_PURPOSE = browser.purpose;
   if (browser.viewport) env.PYPROC_BROWSER_VIEWPORT = JSON.stringify(browser.viewport);

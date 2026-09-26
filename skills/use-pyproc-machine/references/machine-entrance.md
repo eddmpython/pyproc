@@ -111,9 +111,11 @@ initialization before a generated file is changed. `--dry-run` validates the rec
 creating the profile directory. An unknown recipe or option also fails before the output directory or any browser
 effect is created.
 
-Advanced bounded options include repeated `--method`, `--file-root`, and
+Advanced bounded options include repeated `--method`, `--file-root`, `--export-root <folder>` (the one folder an
+`authorizedBrowser` click download is also written into), and
 `--trusted-certificate <https-origin>=<certificate-file>` for a self-signed loopback HTTPS target, viewport width
-and height, device scale, mobile and touch flags, and artifact byte, count, inline, and TTL limits. File roots remain absolute and existing.
+and height, device scale, mobile and touch flags, and artifact byte, count, inline, and TTL limits. File roots remain
+absolute and existing; the export root is absolute and is created when the first download is written.
 Origins remain exact HTTP(S) origins. Wildcards, credentials, paths, queries, and fragments are rejected.
 
 ## Durable Execution Memory

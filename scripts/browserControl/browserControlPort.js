@@ -20,9 +20,18 @@ export const BROWSER_CONTROL_ERROR_CODES = Object.freeze({
   targetCertificateUntrusted: "BROWSER_CONTROL_TARGET_CERTIFICATE_UNTRUSTED",
 });
 
-// JavaScript dialog가 열린 동안 Page.getFrameTree도 멈춘다. 이 한 method만 dialog를 연
-// 직전 verified target을 사용해야 modal을 닫을 수 있다. 다른 method는 매번 origin을 재검사한다.
-const MODAL_UNBLOCK_METHODS = new Set(["Page.handleJavaScriptDialog"]);
+// Page.getFrameTree stops answering while the page waits on something only the controller can release: an open
+// JavaScript dialog, or a document response the download's interception paused. Only the commands that release it
+// use the target verified just before (closing the dialog, letting a paused response continue unchanged, turning
+// interception off); every other command checks the origin again.
+const UNBLOCK_METHODS = new Set(["Page.handleJavaScriptDialog", "Fetch.continueRequest", "Fetch.disable"]);
+
+function releasesUnchanged(command) {
+  if (!UNBLOCK_METHODS.has(command.method)) return false;
+  if (command.method !== "Fetch.continueRequest") return true;
+  const params = command.params && typeof command.params === "object" ? command.params : {};
+  return Object.keys(params).length === 1 && typeof params.requestId === "string";
+}
 const TRUSTED_READ_METHODS = new Set([
   "Accessibility.getPartialAXTree", "Accessibility.queryAXTree", "DOM.getDocument", "DOM.getBoxModel", "DOM.getFrameOwner", "DOM.getNodeForLocation", "DOM.resolveNode", "Page.createIsolatedWorld",
   "Page.getFrameTree", "Runtime.callFunctionOn", "Runtime.evaluate", "Runtime.releaseObject",
@@ -378,10 +387,10 @@ export class BrowserControlPort {
         `browser command was cancelled before send: ${command.method}`);
     }
     let target = null;
-    if (MODAL_UNBLOCK_METHODS.has(command.method)) {
+    if (releasesUnchanged(command)) {
       if (session.authorizationState !== "verified" || !session.authorizedTarget) {
         throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
-          "browser modal unblock requires a verified target");
+          "browser unblock requires a verified target");
       }
       target = session.authorizedTarget;
     } else {

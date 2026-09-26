@@ -20,7 +20,7 @@ export async function assertFrameSpaceContract() {
       if (operation === "automation.space.inspect") return { transport: "messageChannel", resources: {
         targets: 0, ownedTargets: 0, sessions: 0, locators: 0, quarantinedSessions: 0,
         semanticInventories: 0, continuations: 0, observationListeners: 0, observationEvents: 0,
-        lifecycleSessions: 0, lifecycleWatchers: 0, lifecycleQueuedEvents: 0,
+        lifecycleSessions: 0, lifecycleWatchers: 0, lifecycleListeners: 0, lifecycleQueuedEvents: 0,
         artifacts: 0, artifactBytes: 0, transport: { sessions: 0, pending: 0, listeners: 0 },
       } };
       if (operation === "frame.perception.capture") return {
