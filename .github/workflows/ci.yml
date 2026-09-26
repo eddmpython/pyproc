@@ -100,9 +100,6 @@ jobs:
         if: runner.os == 'Windows'
       - run: npm run test:delegated-tab
         if: runner.os == 'Windows'
-      # 사용자 브라우저 provider: native host 빌드, 확장, pipe, Motor를 격리 Edge와 Chrome에서 검증한다.
-      - run: npm run test:user-browser
-        if: runner.os == 'Windows'
       - run: npm run test:replay-space
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -214,6 +211,8 @@ jobs:
       - run: npm run test:permission-revision
       - run: npm run test:perception-reuse
       - run: npm run test:download-receipt
+      # 사용자 브라우저 provider: native host, 확장, pipe, Motor를 격리 Edge와 Chrome에서 검증한다.
+      - run: npm run test:user-browser
       - run: npm run test:console-diagnostics
       - name: Build the browser desktop helper outside the checkout
         if: runner.os == 'Windows'
