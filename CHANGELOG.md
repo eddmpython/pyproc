@@ -12,6 +12,23 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Added
+
+- **Private browser desktop.** `browser.desktop: "private"` (Windows, `nativeCdp`, `headed: true`) starts the headed
+  browser on a desktop of its own through the new helper `pyproc-browser-desktop.exe`, with the same DevTools pipe.
+  Windows keeps one foreground window per desktop, so the task browser can no longer take the user's foreground or
+  keyboard (a headed Chrome or Edge activates its window at start even while the user types elsewhere), while it
+  still renders, answers input, and captures as a headed browser with a headed identity. Without the helper the launch
+  fails with `BROWSER_DESKTOP_UNAVAILABLE` before any browser starts. The gate `test:browser-desktop` (Windows CI)
+  holds its own window in front and checks the foreground never leaves it and no window of that browser reaches the
+  user's desktop, with a headed-on-the-user's-desktop control.
+
+### Changed
+
+- The Windows native hosts share one reproducible build: `scripts/nativeHostBuilder/buildNativeHost.mjs --component`
+  builds `userBrowserHost` or `browserDesktop`, the `native-hosts` workflow builds each twice and attests it, and the
+  Python distribution lock pins them under `nativeHosts` (one Rust toolchain, one entry per host).
+
 ### Fixed
 
 - A new tab whose page moves to another origin by itself right after it loads is held (or, on a host without

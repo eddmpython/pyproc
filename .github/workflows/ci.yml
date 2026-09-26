@@ -200,6 +200,14 @@ jobs:
       - run: npm run test:browser-control-stress
       - run: npm run test:request-guard
       - run: npm run test:permission-revision
+      - name: Build the browser desktop helper outside the checkout
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --release --locked --manifest-path scripts/browserControl/browserDesktop/nativeHelper/Cargo.toml --target-dir "$env:RUNNER_TEMP/browser-desktop"
+          "PYPROC_BROWSER_DESKTOP_HELPER=$env:RUNNER_TEMP/browser-desktop/release/pyproc-browser-desktop.exe" >> $env:GITHUB_ENV
+      - run: npm run test:browser-desktop
+        if: runner.os == 'Windows'
       - run: npm run test:automation-lifecycle
       - run: npm run test:action-convergence
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

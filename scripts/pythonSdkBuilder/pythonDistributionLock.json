@@ -19,12 +19,16 @@
       }
     }
   },
-  "userBrowserHost": {
+  "nativeHosts": {
     "toolchain": "1.97.1",
     "target": "x86_64-pc-windows-msvc",
-    "sourceTree": "b98fe35233edf4747500fed42e6e2fd6a51ab723",
-    "archive": "pyproc-user-browser-host-b98fe35233ed.zip",
-    "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-user-browser-host-b98fe35233ed/pyproc-user-browser-host-b98fe35233ed.zip",
-    "sha256": "bb5798abb562bd9497fff0ff33eacf215f59a5435a1678ddc0676b03495ea25b"
+    "components": {
+      "userBrowserHost": {
+        "sourceTree": "b98fe35233edf4747500fed42e6e2fd6a51ab723",
+        "archive": "pyproc-user-browser-host-b98fe35233ed.zip",
+        "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-user-browser-host-b98fe35233ed/pyproc-user-browser-host-b98fe35233ed.zip",
+        "sha256": "bb5798abb562bd9497fff0ff33eacf215f59a5435a1678ddc0676b03495ea25b"
+      }
+    }
   }
 }

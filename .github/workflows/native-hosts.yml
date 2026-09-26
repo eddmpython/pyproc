@@ -1,29 +1,31 @@
-name: user-browser-host
+name: native-hosts
 
-# 사용자 브라우저 native host를 같은 runner image에서 두 번 따로 빌드해 byte가 같은지 보고, 같으면 build provenance를
-# 붙인 검증 자산으로 남긴다. 게시(프로젝트 release 자산과 Python 배포 lock 고정)는 정본 절차
-# skills/ship-pyproc/references/release.md를 따른다.
+# pyproc의 Windows native host(사용자 브라우저 host, 브라우저 데스크톱 도우미)를 host마다 같은 runner image에서 두 번 따로
+# 빌드해 byte가 같은지 보고, 같으면 build provenance를 붙인 검증 자산으로 남긴다. 게시(프로젝트 release 자산과 Python
+# 배포 lock 고정)는 정본 절차 skills/ship-pyproc/references/release.md를 따른다.
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
       - "scripts/browserControl/userBrowser/nativeHost/**"
-      - "scripts/userBrowserHostBuilder/**"
+      - "scripts/browserControl/browserDesktop/nativeHelper/**"
+      - "scripts/nativeHostBuilder/**"
       - "scripts/pythonSdkBuilder/pythonDistributionLock.json"
-      - ".github/workflows/user-browser-host.yml"
+      - ".github/workflows/native-hosts.yml"
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: build-${{ matrix.slot }}
+    name: build-${{ matrix.component }}-${{ matrix.slot }}
     runs-on: windows-2025
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        component: [userBrowserHost, browserDesktop]
         slot: [a, b]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -35,24 +37,28 @@ jobs:
       - name: Install the Rust toolchain the lock pins
         shell: pwsh
         run: |
-          $toolchain = node -p "require('./scripts/pythonSdkBuilder/pythonDistributionLock.json').userBrowserHost.toolchain"
+          $toolchain = node -p "require('./scripts/pythonSdkBuilder/pythonDistributionLock.json').nativeHosts.toolchain"
           rustup toolchain install $toolchain --profile minimal --target x86_64-pc-windows-msvc
       - name: Build the host from the exact Git tree
         shell: pwsh
-        run: node scripts/userBrowserHostBuilder/buildUserBrowserHost.mjs build --tree $env:GITHUB_SHA --out (Join-Path $env:RUNNER_TEMP "user-browser-host")
+        run: node scripts/nativeHostBuilder/buildNativeHost.mjs build --component ${{ matrix.component }} --tree $env:GITHUB_SHA --out (Join-Path $env:RUNNER_TEMP "native-host")
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: pyproc-user-browser-host-${{ matrix.slot }}
-          path: ${{ runner.temp }}/user-browser-host/
+          name: pyproc-${{ matrix.component }}-${{ matrix.slot }}
+          path: ${{ runner.temp }}/native-host/
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
 
   verify:
-    name: verify-byte-identical
+    name: verify-${{ matrix.component }}-byte-identical
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [userBrowserHost, browserDesktop]
     permissions:
       contents: read
       id-token: write # build provenance 서명
@@ -64,21 +70,21 @@ jobs:
           node-version: 22.19.0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: pyproc-user-browser-host-a
-          path: .cache/user-browser-host/a
+          name: pyproc-${{ matrix.component }}-a
+          path: .cache/native-host/a
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: pyproc-user-browser-host-b
-          path: .cache/user-browser-host/b
+          name: pyproc-${{ matrix.component }}-b
+          path: .cache/native-host/b
       - name: Verify independent build identity
-        run: node scripts/userBrowserHostBuilder/buildUserBrowserHost.mjs verify --left .cache/user-browser-host/a --right .cache/user-browser-host/b
+        run: node scripts/nativeHostBuilder/buildNativeHost.mjs verify --component ${{ matrix.component }} --left .cache/native-host/a --right .cache/native-host/b
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: .cache/user-browser-host/a/*.zip
+          subject-path: .cache/native-host/a/*.zip
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: pyproc-user-browser-host-verified
-          path: .cache/user-browser-host/a/
+          name: pyproc-${{ matrix.component }}-verified
+          path: .cache/native-host/a/
           if-no-files-found: error
           compression-level: 0
           retention-days: 90

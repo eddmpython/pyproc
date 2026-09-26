@@ -47,13 +47,13 @@ function withLicenses(metadata, licenseFiles) {
  * packageFiles: [{ path: "package/...", bytes }] from the canonical npm package tarball.
  * packageIdentity: { name, version, filename, sha256, integrity } of that tarball.
  * nodeRuntime: the checksum-verified result of extractNodeRuntime.
- * userBrowserHost: the verified result of extractUserBrowserHost, which exactly the win_amd64 wheel carries.
+ * nativeHosts: the verified results of extractNativeHost, which exactly the win_amd64 wheel carries.
  */
-export function assembleHostWheel({ platform, pureWheel, packageFiles, packageIdentity, nodeRuntime, userBrowserHost = null,
+export function assembleHostWheel({ platform, pureWheel, packageFiles, packageIdentity, nodeRuntime, nativeHosts = [],
   sourceDateEpoch }) {
   if (!/^(win_amd64|manylinux_\d+_\d+_x86_64)$/u.test(platform)) throw new TypeError(`unsupported wheel platform: ${platform}`);
-  if ((platform === "win_amd64") !== Boolean(userBrowserHost)) {
-    throw new Error(`the user-browser native host belongs in exactly the win_amd64 wheel, not ${platform}`);
+  if ((platform === "win_amd64") !== (nativeHosts.length > 0)) {
+    throw new Error(`pyproc's native hosts belong in exactly the win_amd64 wheel, not ${platform}`);
   }
   if (!Number.isSafeInteger(sourceDateEpoch) || sourceDateEpoch < 315532800) {
     throw new TypeError("sourceDateEpoch must be a Unix time from 1980 onward");
@@ -102,15 +102,16 @@ export function assembleHostWheel({ platform, pureWheel, packageFiles, packageId
     commands: COMMANDS,
   };
   const licenseFiles = ["node/LICENSE"];
-  if (userBrowserHost) {
-    // The installer finds the host through host.json and checks its SHA-256 before installing it.
-    const hostPath = `userBrowserHost/${userBrowserHost.binaryName}`;
-    descriptor.userBrowserHost = { path: hostPath, sha256: userBrowserHost.sha256, sourceTree: userBrowserHost.sourceTree,
-      archive: userBrowserHost.archive, archiveSha256: userBrowserHost.archiveSha256 };
-    licenseFiles.push("userBrowserHost/THIRD-PARTY-NOTICES.txt");
+  for (const host of nativeHosts) {
+    // Whoever uses a host (the user-browser installer, the browser launcher) finds it through host.json and checks its
+    // SHA-256 first.
+    const hostPath = `${host.component}/${host.binaryName}`;
+    descriptor[host.component] = { path: hostPath, sha256: host.sha256, sourceTree: host.sourceTree,
+      archive: host.archive, archiveSha256: host.archiveSha256 };
+    licenseFiles.push(`${host.component}/THIRD-PARTY-NOTICES.txt`);
     entries.push(
-      { path: `${HOST}/${hostPath}`, bytes: userBrowserHost.binary, mode: 0o755 },
-      { path: `${distInfo}/licenses/userBrowserHost/THIRD-PARTY-NOTICES.txt`, bytes: userBrowserHost.notices },
+      { path: `${HOST}/${hostPath}`, bytes: host.binary, mode: 0o755 },
+      { path: `${distInfo}/licenses/${host.component}/THIRD-PARTY-NOTICES.txt`, bytes: host.notices },
     );
   }
   entries.push(

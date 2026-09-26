@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BROWSER_DESKTOP_HELPER_FAILED, browserDesktopHelper, browserDesktopOf }
+  from "./browserDesktop/browserDesktopHelper.mjs";
 
 const profileCleanupWaiter = new Int32Array(new SharedArrayBuffer(4));
 const PROFILE_ABSENCE_STABILITY_MS = 750;
@@ -107,6 +109,10 @@ export function launchBrowser(url, opts = {}) {
   if (preferences !== null && (typeof preferences !== "object" || Array.isArray(preferences))) {
     throw new TypeError("launchBrowser: preferences must be an object");
   }
+  // On a private desktop the helper starts the browser with these same handles and waits for it, so its windows never
+  // take the user's foreground or keyboard; a tree kill of the helper ends the browser.
+  const desktop = browserDesktopOf(opts);
+  const helper = desktop === "private" ? browserDesktopHelper() : null;
   const profile = mkdtempSync(join(opts.profileRoot || tmpdir(), opts.prefix || "pyprocBrowser-"));
   // 새 profile의 첫 설정은 브라우저가 뜨기 전에 써야 첫 페이지부터 적용된다.
   if (preferences) {
@@ -116,15 +122,22 @@ export function launchBrowser(url, opts = {}) {
   // cdpPipe: CDP를 loopback port가 아니라 브라우저 fd 3(읽기)과 fd 4(쓰기) pipe로 연다. 부모 쪽에서는
   // stdio[3]에 쓰고 stdio[4]에서 읽는다. listener가 없으므로 이 브라우저에 붙을 수 있는 것은 이 프로세스뿐이다.
   const pipeArgs = opts.cdpPipe === true ? ["--remote-debugging-pipe"] : [];
-  const proc = spawn(browser, [...browserLaunchArgs(profile, opts), ...pipeArgs, ...extraArgs, url], {
-    stdio: opts.cdpPipe === true ? ["ignore", "ignore", "ignore", "pipe", "pipe"] : "ignore",
+  const launchArgs = [...browserLaunchArgs(profile, opts), ...pipeArgs, ...extraArgs, url];
+  // The helper says on standard error why it could not start the browser; nothing else is kept from it.
+  const errorOut = helper ? "pipe" : "ignore";
+  const proc = spawn(helper || browser, helper ? [browser, ...launchArgs] : launchArgs, {
+    stdio: opts.cdpPipe === true ? ["ignore", "ignore", errorOut, "pipe", "pipe"] : ["ignore", "ignore", errorOut],
     detached: process.platform !== "win32",
   });
+  let helperSaid = "";
+  proc.stderr?.on("data", (chunk) => { helperSaid = `${helperSaid}${chunk}`.slice(-2000); });
   const spawnedAt = Date.now();
   let exitInfo = null;
   const whenExited = new Promise((resolve) => {
     proc.on("exit", (code, signal) => {
-      exitInfo = { code, signal, afterMs: Date.now() - spawnedAt };
+      const helperFailed = helper !== null && code === BROWSER_DESKTOP_HELPER_FAILED;
+      exitInfo = { code, signal, afterMs: Date.now() - spawnedAt,
+        ...(helperFailed ? { error: helperSaid.trim() || "the browser desktop helper failed" } : {}) };
       resolve(exitInfo);
     });
     proc.on("error", (error) => {
@@ -136,6 +149,7 @@ export function launchBrowser(url, opts = {}) {
   let closed = false;
   return Object.freeze({
     browser,
+    desktop,
     profile,
     proc,
     cdpPipe: opts.cdpPipe === true ? Object.freeze({ write: proc.stdio[3], read: proc.stdio[4] }) : null,

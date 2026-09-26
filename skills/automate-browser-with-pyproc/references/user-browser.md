@@ -66,7 +66,7 @@ and deletes the install.
 }
 ```
 
-`browser.userBrowser` is `chrome` or `edge`. The provider refuses `executable`, `headed`, `gpu`, and
+`browser.userBrowser` is `chrome` or `edge`. The provider refuses `executable`, `headed`, `desktop`, `gpu`, and
 `trustedCertificates` (the browser is the user's), and `requests: "safe"`: a read-only session needs browser-level
 request interception, which only a browser pyproc launched offers. Origins, actions, risk, and the effect
 acknowledgement work exactly as for `nativeCdp`.

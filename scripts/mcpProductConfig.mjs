@@ -5,6 +5,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { assertPermissionRevisionHost, parseBrowserControlConfig } from "./browserControl/mcpBrowserControl.js";
 import { assertBrowserRequestHost } from "./browserControl/requestGuard.mjs";
 import { normalizeBrowserViewport } from "./browserControl/browserViewport.js";
+import { browserDesktopOf } from "./browserControl/browserDesktop/browserDesktopHelper.mjs";
 import { normalizeTrustedCertificates, trustedCertificateEnvironment } from "./browserControl/trustedCertificates.js";
 import {
   AUTOMATION_RECORDING_MAX_ARTIFACT_BYTES,
@@ -14,7 +15,7 @@ import {
 const ROOT_KEYS = new Set(["schemaVersion", "engine", "browser", "executionMemory", "effectTransactions", "appSpace", "replayGraph", "actuation", "timeoutMs"]);
 const ENGINE_KEYS = new Set(["enabled", "root"]);
 const BROWSER_KEYS = new Set([
-  "enabled", "provider", "executable", "headed", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
+  "enabled", "provider", "executable", "headed", "desktop", "gpu", "allowedOrigins", "maxRisk", "actions", "methods",
   "fileRoots", "externalEffects", "purpose", "artifacts", "viewport",
   "recording", "trustedCertificates", "requests", "userBrowser", "permissionRevision",
 ]);
@@ -38,7 +39,7 @@ const NATIVE_INSTALLATION_KEYS = new Set(["hostPath", "sha256", "sourceSha256", 
 const CONTROLLED_ENV = Object.freeze([
   "PYPROC_MCP_ENGINE_ROOT", "PYPROC_MACHINE_ENGINE", "PYPROC_MCP_TIMEOUT", "PYPROC_BROWSER_CONTROL",
   "PYPROC_AUTOMATION_PROVIDER", "PYPROC_USER_BROWSER",
-  "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
+  "PYPROC_BROWSER", "PYPROC_HEADED", "PYPROC_BROWSER_DESKTOP", "PYPROC_GPU", "PYPROC_BROWSER_ALLOWED_ORIGINS",
   "PYPROC_BROWSER_MAX_RISK", "PYPROC_BROWSER_REQUESTS", "PYPROC_BROWSER_ACTIONS", "PYPROC_BROWSER_METHODS",
   "PYPROC_BROWSER_PERMISSION_REVISION",
   "PYPROC_BROWSER_FILE_ROOTS", "PYPROC_BROWSER_EXTERNAL_EFFECTS", "PYPROC_BROWSER_PURPOSE",
@@ -227,7 +228,7 @@ function normalizedBrowser(input = { enabled: false }) {
     if (!["chrome", "edge"].includes(browser.userBrowser)) {
       throw new TypeError("browser.provider userBrowser requires browser.userBrowser chrome or edge");
     }
-    for (const key of ["executable", "headed", "gpu", "trustedCertificates"]) {
+    for (const key of ["executable", "headed", "desktop", "gpu", "trustedCertificates"]) {
       if (browser[key] !== undefined) throw new TypeError(`browser.provider userBrowser does not accept browser.${key}`);
     }
   } else if (browser.userBrowser !== undefined) {
@@ -255,12 +256,19 @@ function normalizedBrowser(input = { enabled: false }) {
     throw new TypeError("replay provider does not accept browser.trustedCertificates");
   }
   const trustedCertificates = normalizeTrustedCertificates(browser.trustedCertificates, allowedOrigins);
+  const headed = optionalBoolean(browser.headed, "browser.headed");
+  // A private desktop keeps a headed browser's windows off the desktop the user works on (Windows only); the manifest
+  // says so, never the environment the product was started from.
+  const desktop = browser.desktop === undefined ? "user" : browser.desktop;
+  if (desktop !== "user" && provider !== "nativeCdp") throw new TypeError("browser.desktop is for the nativeCdp provider");
+  browserDesktopOf({ desktop, headed }, {});
   const normalized = {
     enabled: true,
     provider,
     ...(provider === "userBrowser" ? { userBrowser: browser.userBrowser } : {}),
     ...(browser.executable === undefined ? {} : { executable: resolve(browser.executable) }),
-    headed: optionalBoolean(browser.headed, "browser.headed"),
+    headed,
+    ...(desktop === "user" ? {} : { desktop }),
     gpu: optionalBoolean(browser.gpu, "browser.gpu"),
     allowedOrigins,
     requests,
@@ -518,6 +526,7 @@ function projectedEnvironment(config, baseEnv = {}, executionMemorySecrets = [],
   if (browser.userBrowser) env.PYPROC_USER_BROWSER = browser.userBrowser;
   if (browser.executable) env.PYPROC_BROWSER = browser.executable;
   if (browser.headed) env.PYPROC_HEADED = "1";
+  if (browser.desktop) env.PYPROC_BROWSER_DESKTOP = browser.desktop;
   if (browser.gpu) env.PYPROC_GPU = "1";
   env.PYPROC_BROWSER_ALLOWED_ORIGINS = browser.allowedOrigins.join(",");
   env.PYPROC_BROWSER_MAX_RISK = browser.maxRisk;

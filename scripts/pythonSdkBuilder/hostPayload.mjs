@@ -8,6 +8,7 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:f
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { unzipWheel } from "../../src/runtime/engines/wasi/wheelUnzip.js";
+import { nativeHostIdentityFile } from "../nativeHostBuilder/buildNativeHost.mjs";
 
 const MANYLINUX = /^manylinux_(\d+)_(\d+)_x86_64$/u;
 
@@ -116,25 +117,25 @@ export async function extractNodeRuntime(bytes, hostNode, platform) {
   });
 }
 
-function assertUserBrowserHostArchive(bytes, lockEntry, source = "input") {
+function assertNativeHostArchive(component, bytes, lockEntry, source = "input") {
   const actual = createHash("sha256").update(bytes).digest("hex");
   if (actual !== lockEntry.sha256) {
-    throw new Error(`user-browser host checksum mismatch for ${lockEntry.archive} from ${source}: ${actual}`);
+    throw new Error(`${component}: native host checksum mismatch for ${lockEntry.archive} from ${source}: ${actual}`);
   }
 }
 
 // Node와 같다: cache의 byte도 매번 다시 보고, 새로 받은 byte는 확인된 뒤에만 cache로 옮긴다.
-export async function fetchUserBrowserHost(lockEntry, cacheDir) {
+export async function fetchNativeHost(component, lockEntry, cacheDir) {
   const cached = join(cacheDir, lockEntry.archive);
   if (existsSync(cached)) {
     const bytes = await readFile(cached);
-    assertUserBrowserHostArchive(bytes, lockEntry, cached);
+    assertNativeHostArchive(component, bytes, lockEntry, cached);
     return bytes;
   }
   const response = await fetch(lockEntry.url);
-  if (!response.ok) throw new Error(`user-browser host download failed(${response.status}): ${lockEntry.url}`);
+  if (!response.ok) throw new Error(`${component}: native host download failed(${response.status}): ${lockEntry.url}`);
   const bytes = Buffer.from(await response.arrayBuffer());
-  assertUserBrowserHostArchive(bytes, lockEntry, response.url);
+  assertNativeHostArchive(component, bytes, lockEntry, response.url);
   await mkdir(cacheDir, { recursive: true });
   const partial = `${cached}.${process.pid}.partial`;
   await writeFile(partial, bytes);
@@ -142,19 +143,21 @@ export async function fetchUserBrowserHost(lockEntry, cacheDir) {
   return bytes;
 }
 
-/** The host and its notices from the verified release zip, whose identity must name the source tree the lock pins. */
-export async function extractUserBrowserHost(bytes, lockEntry) {
-  assertUserBrowserHostArchive(bytes, lockEntry);
+/** A native host and its notices from the verified release zip, whose identity must name the source tree the lock
+ * pins. */
+export async function extractNativeHost(component, bytes, lockEntry) {
+  assertNativeHostArchive(component, bytes, lockEntry);
   const entries = new Map(await unzipWheel(bytes));
   const digest = (value) => createHash("sha256").update(value).digest("hex");
-  const identity = JSON.parse(Buffer.from(entries.get("userBrowserHost.json") || "null").toString("utf8"));
+  const identity = JSON.parse(Buffer.from(entries.get(nativeHostIdentityFile(component)) || "null").toString("utf8"));
   const binary = entries.get(identity?.host?.file);
   const notices = entries.get(identity?.notices?.file);
   if (identity?.sourceTree !== lockEntry.sourceTree || !binary || !notices
     || digest(binary) !== identity.host.sha256 || digest(notices) !== identity.notices.sha256) {
-    throw new Error(`user-browser host ${lockEntry.archive} does not hold the host of source tree ${lockEntry.sourceTree}`);
+    throw new Error(`${component}: ${lockEntry.archive} does not hold the host of source tree ${lockEntry.sourceTree}`);
   }
   return Object.freeze({
+    component,
     sourceTree: identity.sourceTree,
     archive: lockEntry.archive,
     archiveSha256: lockEntry.sha256,

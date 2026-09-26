@@ -41,7 +41,7 @@ export async function verifyPythonDistributions({ leftDir, rightDir, leftOs, rig
   const rightManifest = JSON.parse(await readFile(resolve(right, MANIFEST), "utf8"));
   const leftWheels = hostWheelsOf(leftManifest);
   const rightWheels = hostWheelsOf(rightManifest);
-  for (const field of ["source", "hostPackage", "hostNode", "userBrowserHost"]) {
+  for (const field of ["source", "hostPackage", "hostNode", "nativeHosts"]) {
     if (JSON.stringify(leftManifest[field]) !== JSON.stringify(rightManifest[field])) {
       throw new Error(`Python distribution ${field} differs between hosts`);
     }

@@ -39,3 +39,4 @@ tests/browser/wasiWheels/*.whl
 vendor/
 # Buildroot 자체 guest 빌드 작업공간과 산출물. recipe/config/manifest 계약만 추적한다.
 .cache/buildrootGuest/
+**/nativeHelper/target/

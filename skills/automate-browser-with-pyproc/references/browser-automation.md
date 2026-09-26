@@ -130,6 +130,7 @@ and incomplete external-effect approval fail closed.
 | `browser.executable` | Optional absolute Chrome, Chromium, or Edge executable. Discovery is used when absent |
 | `browser.provider` | `nativeCdp` by default, `userBrowser` for a task window of the user's own Chrome or Edge (Windows, with `browser.userBrowser` `chrome` or `edge`), or `frame` for a cooperative credentialless target bridge |
 | `browser.headed`, `browser.gpu` | Optional booleans. Headless with an isolated profile is the default |
+| `browser.desktop` | `user` by default. `private` (Windows, `nativeCdp`, `headed: true`) starts the headed browser on a desktop of its own, so none of its windows can take the user's foreground or keyboard |
 | `browser.allowedOrigins` | Non-empty list of exact HTTP(S) origins. Paths and credentials are rejected. `["*"]` alone means every http(s) site and is accepted only with `requests: "safe"` |
 | `browser.maxRisk` | `read`, `mutate`, or `externalEffect` |
 | `browser.actions` | Non-empty exact high-level action allowlist |
@@ -196,6 +197,17 @@ machine page (unless engine is disabled) + Node CDP broker
   v
 broker-owned temporary Chrome or Edge profile
 ```
+
+A headed browser on the user's desktop is a real window there: when it starts, Chrome and Edge activate it even
+while the user types in another program (the Windows foreground lock does not stop them), so keys meant for that
+program can reach the task's page. `browser.desktop: "private"` prevents that by construction. pyproc's helper
+`pyproc-browser-desktop.exe` (in the win_amd64 platform wheel; without it, one built with cargo from
+`scripts/browserControl/browserDesktop/nativeHelper` and named by `PYPROC_BROWSER_DESKTOP_HELPER`) creates a desktop for that one browser and
+starts it there with the same DevTools pipe; Windows keeps a foreground window per desktop, so nothing the browser or
+pyproc does (opening, tab switches, popups, input, screenshots) reaches the desktop the user works on. The browser stays
+headed there: it lays out, renders, answers input, and captures as on screen, with a headed browser's identity (no
+`HeadlessChrome` in its user agent). A person who wants to watch uses the host's screenshots; the private desktop is
+never shown. Without the helper, a private desktop fails with `BROWSER_DESKTOP_UNAVAILABLE` before any browser starts.
 
 The command supports Chromium-family major 137 or newer with CDP protocol major 1. It reads
 `Browser.getVersion` before opening a target and reports bounded compatibility information through

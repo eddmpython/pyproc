@@ -12,7 +12,7 @@ import { binPath, installPackedPyProc, ROOT, run } from "../packageHarness.mjs";
 import { publishVerifiedEffectPack } from "../effectTransactionFixtures.mjs";
 import { unzipWheel } from "../../src/runtime/engines/wasi/wheelUnzip.js";
 import { assembleHostWheel } from "../../scripts/pythonSdkBuilder/assembleHostWheel.mjs";
-import { extractNodeRuntime, extractUserBrowserHost, fetchNodeArchive, fetchUserBrowserHost, readPackageTree }
+import { extractNativeHost, extractNodeRuntime, fetchNativeHost, fetchNodeArchive, readPackageTree }
   from "../../scripts/pythonSdkBuilder/hostPayload.mjs";
 
 const TIMEOUT_MS = Number(process.env.PYPROC_GATE_TIMEOUT || 300000);
@@ -263,10 +263,10 @@ try {
         integrity: installed.packed.integrity },
       nodeRuntime: await extractNodeRuntime(await fetchNodeArchive(DISTRIBUTION_LOCK.hostNode, HOST_PLATFORM,
         join(ROOT, ".cache", "node-dist")), DISTRIBUTION_LOCK.hostNode, HOST_PLATFORM),
-      // The win_amd64 wheel carries the prebuilt user-browser host, as the release builds it.
-      userBrowserHost: HOST_PLATFORM === "win_amd64" ? await extractUserBrowserHost(await fetchUserBrowserHost(
-        DISTRIBUTION_LOCK.userBrowserHost, join(ROOT, ".cache", "user-browser-host")), DISTRIBUTION_LOCK.userBrowserHost)
-        : null,
+      // The win_amd64 wheel carries the prebuilt native hosts, as the release builds it.
+      nativeHosts: HOST_PLATFORM === "win_amd64" ? await Promise.all(Object.entries(
+        DISTRIBUTION_LOCK.nativeHosts.components).map(async ([component, pinned]) => extractNativeHost(component,
+        await fetchNativeHost(component, pinned, join(ROOT, ".cache", "native-hosts")), pinned))) : [],
       sourceDateEpoch: Number(run("git", ["show", "-s", "--format=%ct", "HEAD"]).stdout.trim()),
     });
     await writeFile(join(distDir, hostWheel.filename), hostWheel.bytes);

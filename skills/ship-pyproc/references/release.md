@@ -30,12 +30,15 @@ provenance를 서명한 뒤 tag의 GitHub Release에 첨부한다. Release가 �
 고정한다. Node 22 보안 릴리스가 나오면 lock의 version, archive 이름, SHA-256(공식 `SHASUMS256.txt`)을 함께
 올리고 `test:python-sdk`와 `python-distribution-reproducibility`를 다시 통과시킨다.
 
-사용자 브라우저 native host(Windows)도 같은 lock의 `userBrowserHost`가 고정한다. host 원본
-(`scripts/browserControl/userBrowser/nativeHost`)이나 lock의 Rust toolchain이 바뀌면 `user-browser-host` workflow가
-같은 runner image에서 두 번 따로 빌드해 byte가 같은지 보고 build provenance를 붙인 검증 자산(원본 Git tree id의 앞
-12자리를 이름에 담은 zip 하나: host, 제3자 고지, 식별 json)을 남긴다. 그 zip을 `user-browser-host-<tree 12자리>` 태그의
-프로젝트 release 자산으로 올리고, lock의 `sourceTree`, `release`, `archive`, `sha256`을 같은 commit에서 고친다. platform
-wheel 빌드는 commit의 host 원본 tree id가 lock과 다르면 멈추므로, 고정하지 않은 host가 wheel에 실리지 않는다.
+Windows native host(사용자 브라우저 host `userBrowserHost`, 브라우저 데스크톱 도우미 `browserDesktop`)도 같은 lock의
+`nativeHosts`가 고정한다. Rust toolchain은 `nativeHosts.toolchain` 하나이고, host마다 `nativeHosts.components.<이름>`이
+`sourceTree`, `archive`, `url`, `sha256`을 둔다. host 원본(`scripts/nativeHostBuilder/buildNativeHost.mjs`의
+`NATIVE_HOSTS`가 이름마다 원본 폴더를 정한다)이나 toolchain이 바뀌면 `native-hosts` workflow가 host마다 같은 runner
+image에서 두 번 따로 빌드해 byte가 같은지 보고 build provenance를 붙인 검증 자산(원본 Git tree id의 앞 12자리를 이름에
+담은 zip 하나: 실행 파일, 제3자 고지, `<이름>.json` 식별)을 남긴다. 식별에는 빌드한 commit이 들어가므로 lock은 그
+commit이 아니라 다음 commit에서 고친다. 순서는 원본 commit push, `native-hosts` 검증 자산 내려받기, 그 zip을 zip 이름에서
+`.zip`을 뺀 태그(`pyproc-<host 이름>-<tree 12자리>`)의 프로젝트 release 자산으로 올리기, lock 고정 commit이다. platform
+wheel 빌드는 commit의 host 원본 tree id가 lock과 다르면 멈추므로 고정하지 않은 host가 wheel에 실리지 않는다.
 
 ## Breaking disclosure
 

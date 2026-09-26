@@ -16,6 +16,7 @@ export const EXPECTED_SUITES = Object.freeze([
   "browserAutomation.mjs",
   "browserAutomationProduct.mjs",
   "browserControl.mjs",
+  "browserDesktop.mjs",
   "buildrootReleaseAssembler.mjs",
   "canonicalNpmPackage.mjs",
   "controlJsSdk.mjs",
