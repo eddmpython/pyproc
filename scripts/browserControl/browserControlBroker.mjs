@@ -226,18 +226,21 @@ export class NodeBrowserControlBroker {
           });
         } catch (error) {
           if (error?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld) {
-            // Narrowed while it opened: this task's own tab, held with its place, or closed on a host that cannot widen.
+            // Narrowed while it opened, or the loaded page moved on by itself: this task's own tab, held with its
+            // place, or closed on a host that cannot widen. The place is where the port found the tab (the page may
+            // have left the URL it loaded); a port that does not reveal it leaves the loaded URL.
             this._ownedTargets.add(error.details.targetRef);
+            const place = error.details.origin
+              ? Object.freeze({ origin: error.details.origin, path: error.details.path })
+              : heldPlace(finalTarget.url);
             if (!this._holdOutside) {
               await Promise.allSettled([this.closeTarget(error.details.targetRef)]);
               throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
-                "browser navigation final URL is outside permission", { outcome: "applied",
-                  details: heldPlace(finalTarget.url) });
+                "browser navigation final URL is outside permission", { outcome: "applied", details: place });
             }
             held = true;
             throw new BrowserControlError(BROWSER_CONTROL_ERROR_CODES.surfaceHeld, error.message,
-              { outcome: "applied", details: Object.freeze({ targetRef: error.details.targetRef,
-                ...heldPlace(finalTarget.url) }) });
+              { outcome: "applied", details: Object.freeze({ targetRef: error.details.targetRef, ...place }) });
           }
           if (error?.code !== BROWSER_CONTROL_ERROR_CODES.targetUnavailable) throw error;
         }

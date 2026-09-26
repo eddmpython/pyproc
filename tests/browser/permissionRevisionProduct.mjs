@@ -37,6 +37,8 @@ const server = createServer((req, res) => {
     return;
   }
   const body = url.pathname === "/landing" ? "<h1>Landing page</h1>"
+    : url.pathname === "/jsleave" ? `<h1>Leaving page</h1><script>addEventListener("load", () => setTimeout(() => {
+      location.href = "${otherOrigin}/landing?code=secret"; }, 0));</script>`
     : url.pathname === "/late" ? `<h1>Late page</h1><div style="height:3000px"></div><script>setTimeout(() => {
       const button = document.createElement("button"); button.id = "late"; button.textContent = "Late";
       document.body.append(button); }, 1500);</script>`
@@ -85,6 +87,23 @@ try {
   const held = (await client.inspectSpace()).output.heldSurfaces || [];
   check("attaching to a held tab is refused, and the tab stays open and listed as held",
     attachEarly?.code === HELD && held.some((entry) => entry.targetRef === heldRef), JSON.stringify(held));
+
+  // A page that moves on by itself right after it loaded is held where it went, never at the page it loaded: the open
+  // itself reports it, or (when the open finished first) the next request on the tab does.
+  const jsOpen = await client.openTarget(`${origin}/jsleave`, { expectedRisk: "externalEffect", waitUntil: "load" })
+    .then((opened) => ({ opened }), (error) => ({ error }));
+  let jsHeld = jsOpen.error || null;
+  if (!jsHeld) {
+    const jsSession = await client.attachSession(jsOpen.opened.output.targetRef).catch((error) => ({ error }));
+    const deadline = Date.now() + TIMEOUT_MS;
+    while (!jsHeld && Date.now() < deadline) {
+      jsHeld = jsSession.error || await errorOf(() => client.observe(jsSession.output, { expectedRisk: "read" }));
+      if (!jsHeld) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  check("a page that leaves right after it loads is held where it went, not where it loaded",
+    jsHeld?.code === HELD && heldPlaceOf(jsHeld) === expectedPlace,
+    JSON.stringify({ code: jsHeld?.code, details: jsHeld?.details }));
 
   // Widening needs the reference to the approval behind it.
   const unreferenced = await errorOf(() => client.revisePermission({ allowedOrigins: [origin, otherOrigin] }));

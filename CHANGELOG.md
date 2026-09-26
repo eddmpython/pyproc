@@ -12,6 +12,11 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 소비자가 핀한 버전에 아직 없는 subpath 목록이다(위 주석이 기계 판독 정본). 출하 문서가 이 이름을
 예시로 쓰면 미출하 표식이 함께 있어야 하고, tests/contracts/publicSurface.mjs가 그것을 문다.
 
+### Fixed
+
+- A new tab whose page moves to another origin by itself right after it loads is held (or, on a host without
+  revision, closed) with the place it went, not the URL it loaded.
+
 ## 0.0.32 - 2026-09-26
 
 ### Added
