@@ -92,11 +92,13 @@ acknowledgement work exactly as for `nativeCdp`.
 
 The browser saves a download itself, where the user's own settings say (their download folder, or wherever they
 answer a "save as" prompt, which the click then waits for), and the file stays there as any download the user makes.
-A `click` with `download: true` first arms the extension for its tab. The one download that tab starts while armed is
-claimed: the same URL the tab's `Page.downloadWillBegin` named, or the tab's page as its referrer. When it completes
-the extension tells the Control host where the browser saved it, and pyproc reads that file into the same receipt a
-`nativeCdp` download gives (`mimeType` decided from the bytes, `declaredMimeType` from the browser's own record of the
-server's type, and `exportedFile` inside `browser.exportRoot`). A download the user cancels fails the action with
+A `click` with `download: true` first arms the extension for its tab. The download is claimed by the URL the tab's own
+`Page.downloadWillBegin` named, never by a referrer: a download item names no tab, and another tab of the same page
+has the same referrer. When it completes the extension tells the Control host where the browser saved it. pyproc takes
+the file only if the tab is still inside the permission, and reads it into the same receipt a `nativeCdp` download gives:
+`mimeType` decided from the bytes, `declaredMimeType` from the browser's own record of the server's type, and
+`exportedFile` inside `browser.exportRoot`. Two downloads of that URL at once make the claim ambiguous: neither file is
+read and the action fails with `BROWSER_AUTOMATION_DOWNLOAD_AMBIGUOUS`. A download the user cancels fails it with
 `BROWSER_AUTOMATION_DOWNLOAD_CANCELLED`. Downloads the user starts, in any tab, are never reported to pyproc. The
 extension's `downloads` permission serves only this.
 
@@ -126,8 +128,8 @@ seconds is let go.
 - `Runtime.evaluate` runs in the page, so it reads what the page's own scripts can: cookies that are not HttpOnly
   and the storage of the origin the tab is on.
 - Uploads through `DOM.setFileInputFiles` need the extension's file URL access and are not part of the contract.
-- A download is claimed only by its URL or its referrer: one that a page starts with neither (a `no-referrer` policy
-  and no `Page.downloadWillBegin` for the tab) is not received and the click times out.
+- A download is claimed only by the URL its tab's `Page.downloadWillBegin` named; a download the browser makes without
+  one for the tab is not received and the click times out.
 - The extension is loaded in developer mode until it is published in the browser stores.
 - Occlusion and focus: the task window opens unfocused. Behavior of `Input.*` while the window is minimized is not
   covered by the gate.

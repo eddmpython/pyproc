@@ -6,9 +6,10 @@
 // and detaches everything when the task ends, the control host goes away, or the user cancels the debugging bar.
 //
 // A download is the browser's own: it saves where the user's settings say. A click the control host declares as a
-// download arms an expectation for its tab first; the one download that tab starts while it is armed (the same URL the
-// tab's Page.downloadWillBegin named, or the tab's page as its referrer) is claimed, and only when it completes or
-// fails is the control host told where the browser saved it. Downloads the user starts are never reported.
+// download arms an expectation for its tab first; the one download that tab starts while it is armed (the URL the
+// tab's own Page.downloadWillBegin named) is claimed, and only when it completes or fails is the control host told
+// where the browser saved it. A download item names no tab, so when two downloads of that URL appear together the
+// expectation is ambiguous and neither is reported. Downloads the user starts are never reported.
 //
 // Every control-host connection has a number the native host gives it. A request is bound to the connection it came
 // from: its reply, and any effect it completes after an await (authorization, a tab, an attachment), is dropped or
@@ -43,6 +44,8 @@ const task = { windowId: null, tabs: new Set(), created: new Set(), sessions: ne
 const DOWNLOAD_WAIT_MAX_MS = 600000;
 // How long a download the browser created stays claimable by a Page.downloadWillBegin that arrives after it.
 const DOWNLOAD_MATCH_MS = 5000;
+// How long a completed claim waits for a second download of its URL before it is reported.
+const DOWNLOAD_AMBIGUITY_GRACE_MS = 250;
 let expectationCounter = 0;
 const downloads = { expectations: new Map(), claimed: new Map(), recent: [] };
 
@@ -224,24 +227,26 @@ function expectDownload(sessionId, timeoutMs, epoch) {
     throw new ProviderError(-32602, `timeoutMs must be an integer from 1 to ${DOWNLOAD_WAIT_MAX_MS}`);
   }
   const id = `download:${++expectationCounter}`;
-  const expectation = { id, tabId, epoch, urls: new Set(), downloadId: null, timer: null };
+  const expectation = { id, tabId, epoch, urls: new Set(), downloadId: null, ambiguous: false, timer: null };
   // Dropped a little after the control host stops waiting, so an expectation it never ended does not linger.
   expectation.timer = setTimeout(() => forgetDownload(id), wait + 10000);
   downloads.expectations.set(id, expectation);
   return { expectation: id };
 }
 
-async function claimsDownload(expectation, item) {
-  if (expectation.epoch !== connection || expectation.downloadId !== null) return false;
-  if (expectation.urls.has(item.url) || (item.finalUrl && expectation.urls.has(item.finalUrl))) return true;
-  if (!item.referrer) return false;
-  try { return (await chrome.tabs.get(expectation.tabId)).url === item.referrer; } catch { return false; }
+function namesUrl(expectation, item) {
+  return expectation.urls.has(item.url) || (Boolean(item.finalUrl) && expectation.urls.has(item.finalUrl));
 }
 
-async function claimDownload(item) {
+// Claims the item for the armed expectation whose tab named its URL. A second item of a URL an expectation already
+// claimed makes that expectation ambiguous: a download item names no tab, so neither can be told to be the task's.
+function claimDownload(item) {
   for (const expectation of downloads.expectations.values()) {
-    if (!(await claimsDownload(expectation, item))) continue;
-    if (expectation.downloadId !== null) continue;
+    if (expectation.epoch !== connection || !namesUrl(expectation, item)) continue;
+    if (expectation.downloadId !== null) {
+      if (expectation.downloadId !== item.id) expectation.ambiguous = true;
+      return true;
+    }
     expectation.downloadId = item.id;
     downloads.claimed.set(item.id, expectation);
     downloads.recent = downloads.recent.filter((entry) => entry.id !== item.id);
@@ -256,8 +261,20 @@ async function reportDownload(downloadId) {
   if (!expectation) return;
   const [item] = await chrome.downloads.search({ id: downloadId });
   if (!item || (item.state !== "complete" && item.state !== "interrupted")) return;
+  // A moment for a second download of the same URL to show itself (and make the expectation ambiguous) before a file
+  // is handed over.
+  await new Promise((resolve) => setTimeout(resolve, DOWNLOAD_AMBIGUITY_GRACE_MS));
+  // Forgotten meanwhile (the control host stopped waiting): nothing is reported.
+  if (downloads.expectations.get(expectation.id) !== expectation) {
+    downloads.claimed.delete(downloadId);
+    return;
+  }
   forgetDownload(expectation.id);
   if (expectation.epoch !== connection) return;
+  if (expectation.ambiguous) {
+    event("PyprocUserBrowser.download", { expectation: expectation.id, state: "ambiguous" });
+    return;
+  }
   event("PyprocUserBrowser.download", item.state === "complete"
     ? { expectation: expectation.id, state: "complete", path: item.filename, mimeType: item.mime || "",
       url: item.finalUrl || item.url || "", byteLength: item.fileSize }
@@ -491,13 +508,11 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
 });
 chrome.downloads.onCreated.addListener((item) => {
   if (downloads.expectations.size === 0) return;
-  void claimDownload(item).then((claimed) => {
-    if (claimed) return;
-    // Page.downloadWillBegin can arrive after the browser made the download; it may still claim it for a while.
-    const now = Date.now();
-    downloads.recent = [...downloads.recent.filter((entry) => now - entry.at < DOWNLOAD_MATCH_MS), { id: item.id,
-      at: now }].slice(-16);
-  });
+  if (claimDownload(item)) return;
+  // Page.downloadWillBegin can arrive after the browser made the download; it may still claim it for a while.
+  const now = Date.now();
+  downloads.recent = [...downloads.recent.filter((entry) => now - entry.at < DOWNLOAD_MATCH_MS), { id: item.id,
+    at: now }].slice(-16);
 });
 chrome.downloads.onChanged.addListener((delta) => {
   if (delta.state?.current === "complete" || delta.state?.current === "interrupted") void reportDownload(delta.id);

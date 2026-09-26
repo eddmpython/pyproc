@@ -587,7 +587,7 @@ export async function assertBrowserControlContract() {
   const heardAfterChild = releaseHeard.filter((method) => method === "Network.requestWillBeSent").length;
   releaseTransport.emit("allowed", "Runtime.executionContextsCleared", {});
   const commandsBeforePause = releaseTransport.commands.length;
-  releaseTransport.emit("allowed", "Fetch.requestPaused", { requestId: "paused-1" });
+  releaseTransport.emit("allowed", "Fetch.requestPaused", { requestId: "paused-1", responseStatusCode: 200 });
   await Promise.resolve();
   const letGo = releaseTransport.commands.slice(commandsBeforePause)
     .map(({ command }) => `${command.method}:${command.params?.requestId}`);
@@ -609,6 +609,35 @@ export async function assertBrowserControlContract() {
     && releaseHeard.includes("Fetch.requestPaused") && releaseTransport.commands.length === commandsBeforeHeard,
   `interception 해제와 frame 이동 뒤 권한 상태가 어긋났다: ${JSON.stringify({ heardAfterChild, letGo,
     describedForRelease, rewritten: rewritten?.code, releaseHeard })}`);
+
+  // A release on a held surface never describes it; a paused request whose event the permission no longer names is
+  // let go (a response continued, a request not yet sent refused); the port's own release and surface check work
+  // whatever the permission says.
+  releaseTransport.emit("allowed", "Page.frameNavigated", { frame: { id: "main",
+    url: "http://denied.test/cb?token=SECRET" } });
+  const heldRelease = await releasePort.send(releaseSession, { method: "Fetch.disable", params: {} });
+  await releasePort.revisePolicy(new BrowserControlPolicy({ targetOrigins: ["http://allowed.test", "http://denied.test"],
+    methods: ["DOM.getDocument"], events: [], maxRisk: "externalEffect" }));
+  releaseTransport.describeOverride = { type: "page", url: "http://allowed.test/again", title: "again" };
+  await releasePort.send(releaseSession, { method: "DOM.getDocument" });
+  const beforeUnheard = releaseTransport.commands.length;
+  releaseTransport.emit("allowed", "Fetch.requestPaused", { requestId: "answered", responseStatusCode: 200 });
+  releaseTransport.emit("allowed", "Fetch.requestPaused", { requestId: "unsent" });
+  await Promise.resolve();
+  const unheard = releaseTransport.commands.slice(beforeUnheard)
+    .map(({ command }) => `${command.method}:${command.params?.requestId}:${command.params?.errorReason || ""}`);
+  const beforeOwn = releaseTransport.commands.length;
+  await releasePort.releaseInterception(releaseSession);
+  const own = releaseTransport.commands.slice(beforeOwn).map(({ command }) => command.method);
+  releaseTransport.describeOverride = { type: "page", url: "http://elsewhere.test/", title: "elsewhere" };
+  const outside = await errorOf(() => releasePort.verifySurface(releaseSession));
+  releaseTransport.describeOverride = null;
+  assert(heldRelease.target.url === "" && !JSON.stringify(heldRelease).includes("SECRET")
+    && JSON.stringify(unheard) === JSON.stringify(["Fetch.continueRequest:answered:", "Fetch.failRequest:unsent:BlockedByClient"])
+    && JSON.stringify(own) === JSON.stringify(["Fetch.disable"])
+    && outside?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld,
+  `보류 화면 해제, 권한 밖 event의 해제, port 자체 해제가 어긋났다: ${JSON.stringify({ target: heldRelease.target,
+    unheard, own, outside: outside?.code })}`);
 
   // The manifest opts a controller host in; other providers and unknown values are refused.
   const optInBase = { schemaVersion: 1, engine: { enabled: false }, browser: { enabled: true,

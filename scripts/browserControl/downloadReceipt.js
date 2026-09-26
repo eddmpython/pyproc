@@ -34,6 +34,10 @@ const USUAL_NAMES = Object.freeze({
   "application/x-dosexec": "application/vnd.microsoft.portable-executable",
   "application/x-font-woff": "font/woff", "application/font-woff": "font/woff", "application/x-font-otf": "font/otf",
   "application/x-sqlite3": "application/vnd.sqlite3", "text/rtf": "application/rtf", "application/x-rtf": "application/rtf",
+  "audio/x-flac": "audio/flac", "video/avi": "video/x-msvideo", "video/msvideo": "video/x-msvideo",
+  "image/x-citrix-jpeg": "image/jpeg", "image/x-citrix-png": "image/png", "image/x-tiff": "image/tiff",
+  "audio/x-m4a": "audio/mp4", "application/x-ms-dos-executable": "application/vnd.microsoft.portable-executable",
+  "application/x-winexe": "application/vnd.microsoft.portable-executable", "application/x-ogg": "application/ogg",
 });
 const usualName = (type) => USUAL_NAMES[type] || type;
 
@@ -49,13 +53,26 @@ const SIGNED_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ]);
 
-// Formats that are a ZIP inside: the only types a ZIP's own `mimetype` entry or a declared type may name for it.
-const ZIP_FORMATS = new Set(["application/java-archive", "application/vnd.android.package-archive",
-  "application/vnd.google-earth.kmz", "application/x-xpinstall", "application/vnd.ms-xpsdocument", "application/oxps",
-  "application/vnd.apple.pkpass"]);
+// Formats that are a ZIP inside, the only types a ZIP's own `mimetype` entry or a declared type may name for it: the
+// package types of OpenDocument and Office Open XML (not their flat XML or part types), a `+zip` type, and a few more.
+const OPEN_DOCUMENT_PACKAGES = ["text", "text-template", "text-master", "text-web", "spreadsheet", "spreadsheet-template",
+  "presentation", "presentation-template", "graphics", "graphics-template", "chart", "chart-template", "formula",
+  "formula-template", "image", "image-template", "database"];
+const OFFICE_OPEN_XML_PACKAGES = ["wordprocessingml.document", "wordprocessingml.template", "spreadsheetml.sheet",
+  "spreadsheetml.template", "presentationml.presentation", "presentationml.template", "presentationml.slideshow",
+  "presentationml.slide"];
+const ZIP_FORMATS = new Set([
+  "application/java-archive", "application/vnd.android.package-archive", "application/vnd.google-earth.kmz",
+  "application/x-xpinstall", "application/vnd.ms-xpsdocument", "application/oxps", "application/vnd.apple.pkpass",
+  "application/vnd.ms-word.document.macroenabled.12", "application/vnd.ms-word.template.macroenabled.12",
+  "application/vnd.ms-excel.sheet.macroenabled.12", "application/vnd.ms-excel.template.macroenabled.12",
+  "application/vnd.ms-excel.sheet.binary.macroenabled.12", "application/vnd.ms-powerpoint.presentation.macroenabled.12",
+  "application/vnd.ms-powerpoint.slideshow.macroenabled.12", "application/vnd.ms-powerpoint.template.macroenabled.12",
+  ...OPEN_DOCUMENT_PACKAGES.map((name) => `application/vnd.oasis.opendocument.${name}`),
+  ...OFFICE_OPEN_XML_PACKAGES.map((name) => `application/vnd.openxmlformats-officedocument.${name}`),
+]);
 function isZipFormat(type) {
-  return type.endsWith("+zip") || ZIP_FORMATS.has(type) || type.startsWith("application/vnd.oasis.opendocument.")
-    || type.startsWith("application/vnd.openxmlformats-officedocument.");
+  return type.endsWith("+zip") || ZIP_FORMATS.has(type);
 }
 
 // Compound File Binary (legacy Office, HWP 5, MSI, Outlook messages): the signature proves the container only, so a
@@ -115,9 +132,10 @@ function isText(bytes) {
   const utf16 = startsWith(bytes, Buffer.from([0xff, 0xfe])) ? "utf-16le"
     : startsWith(bytes, Buffer.from([0xfe, 0xff])) ? "utf-16be" : "";
   if (utf16) {
-    const sample = bytes.subarray(2, 2 + SAMPLE_BYTES - (SAMPLE_BYTES % 2));
+    const sample = bytes.subarray(2, 2 + SAMPLE_BYTES);
     let text;
-    try { text = new TextDecoder(utf16, { fatal: true }).decode(sample.subarray(0, sample.length - (sample.length % 2))); }
+    // Streaming, so a surrogate pair the sample's end cuts in two is not taken for a broken one.
+    try { text = new TextDecoder(utf16, { fatal: true }).decode(sample, { stream: true }); }
     catch { return false; }
     for (let index = 0; index < text.length; index += 1) if (!isTextCode(text.charCodeAt(index))) return false;
     return true;

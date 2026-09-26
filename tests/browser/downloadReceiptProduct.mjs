@@ -7,7 +7,9 @@
 // A page that moves on to another page before its download starts, or holds a frame that keeps reloading, stays usable
 // after the download. A blob download is not given another response's type; a fragment does not hide the download's
 // own; a ZIP a server calls a picture is a ZIP; an empty file is a receipt too; a link that points nowhere in the export
-// root is never followed; and on Windows the exported file carries the mark of a file from the internet.
+// root is never followed; and on Windows the exported file carries the mark of a file from the internet. A frame that
+// loads the same URL as another type does not speak for the download, and a permission narrowed while a download
+// runs leaves the tab usable.
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
@@ -77,7 +79,7 @@ const links = ["png", "pdf", "docx", "lie", "euckr", "zipjpg", "empty", "inter",
   .map((name) => `<a id="${name}" href="/${name}">${name}</a>`).join("")
   + '<a id="redirect" href="/redirect" download>redirect</a>'
   + '<a id="inline" href="data:text/csv,a%2Cb%0A" download="inline.csv">inline</a>'
-  + '<a id="fragment" href="/euckr#part">fragment</a><a id="blob" download="note.txt">blob</a><iframe name="side"></iframe>'
+  + '<a id="slowlink" href="/slow">slow</a><a id="fragment" href="/euckr#part">fragment</a><a id="blob" download="note.txt">blob</a><iframe name="side"></iframe>'
   + '<script>const blob = document.getElementById("blob");'
   + 'blob.href = URL.createObjectURL(new Blob(["plain note"], { type: "text/plain" }));'
   + 'blob.addEventListener("click", () => { frames.side.location = "/ping"; });</script>';
@@ -89,6 +91,11 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.url === "/redirect") { res.writeHead(302, { Location: "/png" }); res.end(); return; }
+  if (req.url === "/second") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end("<!doctype html><title>second</title><p>second</p>");
+    return;
+  }
   if (req.url === "/ping") { res.writeHead(204, { "Content-Type": "text/html; charset=utf-8" }); res.end(); return; }
   if (req.url === "/inter") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
@@ -106,6 +113,26 @@ const server = createServer((req, res) => {
       "Cache-Control": "no-store" });
     res.write("a,b\n");
     setTimeout(() => res.end("1,2\n"), 1500);
+    return;
+  }
+  if (req.url === "/dual") {
+    if (req.headers["sec-fetch-dest"] === "iframe") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      res.end("<!doctype html><p>frame</p>");
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "text/csv", "Content-Disposition": "attachment; filename=dual.csv",
+      "Cache-Control": "no-store" });
+    res.write("a,b\n");
+    setTimeout(() => res.end("1,2\n"), 1500);
+    return;
+  }
+  if (req.url === "/dualpage") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end('<!doctype html><title>dual</title><a id="dual" href="/dual">dual</a><script>'
+      + 'document.getElementById("dual").addEventListener("click", () => setTimeout(() => {'
+      + 'const frame = document.createElement("iframe"); frame.src = "/dual"; document.body.append(frame); }, 400));'
+      + "</script>");
     return;
   }
   if (req.url === "/frames") {
@@ -291,6 +318,38 @@ try {
   check("a page whose frame keeps reloading receives its download and the frame goes on reloading",
     slow?.mimeType === "text/csv" && reloadsBefore > 3 && reloadsAfter > 3,
     JSON.stringify({ slow: slow?.mimeType || slow, reloadsBefore, reloadsAfter }));
+
+  // A frame that loads the download's URL as a page does not speak for the download's own type.
+  const dualTarget = (await exporting.client.openTarget(`${origin}/dualpage`, { expectedRisk: "externalEffect",
+    waitUntil: "load" })).output;
+  const dualSession = (await exporting.client.attachSession(dualTarget.targetRef)).output;
+  let dual;
+  try {
+    dual = (await exporting.client.act(dualSession, [{ kind: "click", selector: "#dual", download: true,
+      timeoutMs: 15000, expectedRisk: "externalEffect" }])).output.actions[0].result.download;
+  } catch (error) {
+    dual = { error: error?.message };
+  }
+  check("a frame loading the download's URL as a page does not speak for the download",
+    dual?.mimeType === "text/csv" && dual.declaredMimeType === "text/csv",
+    JSON.stringify({ mimeType: dual?.mimeType, declared: dual?.declaredMimeType, error: dual?.error }));
+
+  // A permission narrowed while a download runs: the action ends, and the tab still works afterwards.
+  const revising = await startHost("revising", { permissionRevision: "controller",
+    actions: ["snapshot", "click", "navigate"] });
+  clients.push(revising.client);
+  const pending = revising.client.act(revising.session, [{ kind: "click", selector: "#slowlink", download: true,
+    timeoutMs: 6000, expectedRisk: "externalEffect" }]).then(() => "finished", (error) => error?.code || "failed");
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  await revising.client.revisePermission({ actions: ["snapshot", "navigate"] });
+  const ended = await pending;
+  const navigated = await Promise.race([revising.client.act(revising.session, [{ kind: "navigate",
+    url: `${origin}/second`, expectedRisk: "externalEffect" }]).then(() => true, () => false),
+  new Promise((resolve) => setTimeout(() => resolve(false), 15000))]);
+  const readable = await Promise.race([revising.client.observe(revising.session, { expectedRisk: "read" })
+    .then(() => true, () => false), new Promise((resolve) => setTimeout(() => resolve(false), 10000))]);
+  check("a permission narrowed while a download runs leaves the tab usable", navigated && readable,
+    JSON.stringify({ ended, navigated, readable }));
 
   const plain = await startHost("plain", {});
   clients.push(plain.client);

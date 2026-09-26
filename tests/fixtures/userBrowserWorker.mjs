@@ -170,7 +170,8 @@ const startDownload = (item) => {
 const endDownload = async (id, patch) => {
   Object.assign(downloadItems.get(id), patch);
   events.downloadChanged.fire({ id, state: { current: patch.state } });
-  await tick(20);
+  // A completed claim waits a moment for a second download of its URL before it is reported.
+  await tick(320);
 };
 const reported = (start) => posted.slice(start).filter((message) => message.method === "PyprocUserBrowser.download");
 const arm = async () => (await reply(send("PyprocUserBrowser.expectDownload", { timeoutMs: 5000 }, session))).result.expectation;
@@ -202,12 +203,41 @@ await endDownload(4, { state: "complete", filename: "C:\\Downloads\\late.csv", m
 out.lateMatchReported = reported(downloadStart).map((message) => message.params.path);
 await arm();
 downloadStart = posted.length;
+events.debuggerEvent.fire({ tabId: ownTabId }, "Page.downloadWillBegin", { url: "https://b.example/cancel.zip" });
 startDownload({ id: 5, url: "https://b.example/cancel.zip", referrer: "https://b.example/" });
 await tick(10);
 await endDownload(5, { state: "interrupted", error: "USER_CANCELED" });
 out.interruptedReported = reported(downloadStart).map((message) => `${message.params.state}:${message.params.error}`);
+// Another tab's download with the task page as its referrer is not the task's: a referrer names no tab.
+const otherTab = await arm();
+downloadStart = posted.length;
+startDownload({ id: 7, url: "https://files.other.example/private.pdf", referrer: "https://b.example/" });
+await endDownload(7, { state: "complete", filename: "C:\\Downloads\\private.pdf" });
+out.sameReferrerOtherTabReported = reported(downloadStart).length > 0;
+await reply(send("PyprocUserBrowser.forgetDownload", { expectation: otherTab }));
+// Two downloads of the URL the task tab named: neither can be told to be the task's, so neither is reported.
+await arm();
+downloadStart = posted.length;
+events.debuggerEvent.fire({ tabId: ownTabId }, "Page.downloadWillBegin", { url: "https://b.example/dup.pdf" });
+startDownload({ id: 8, url: "https://b.example/dup.pdf" });
+startDownload({ id: 9, url: "https://b.example/dup.pdf" });
+downloadItems.get(9).state = "complete";
+await endDownload(8, { state: "complete", filename: "C:\\Downloads\\dup.pdf" });
+out.sameUrlTwice = reported(downloadStart).map((message) => [message.params.state, message.params.path ?? null]);
+// An expectation the control host ends while its download completes reports nothing.
+const forgotten = await arm();
+downloadStart = posted.length;
+events.debuggerEvent.fire({ tabId: ownTabId }, "Page.downloadWillBegin", { url: "https://b.example/late-end.pdf" });
+startDownload({ id: 10, url: "https://b.example/late-end.pdf" });
+Object.assign(downloadItems.get(10), { state: "complete", filename: "C:\\Downloads\\late-end.pdf" });
+events.downloadChanged.fire({ id: 10, state: { current: "complete" } });
+await tick(50);
+await reply(send("PyprocUserBrowser.forgetDownload", { expectation: forgotten }));
+await tick(320);
+out.forgottenDuringGraceReported = reported(downloadStart).length > 0;
 // An expectation armed by a client that left is gone; its download never reaches the next client.
 await arm();
+events.debuggerEvent.fire({ tabId: ownTabId }, "Page.downloadWillBegin", { url: "https://b.example/left.pdf" });
 startDownload({ id: 6, url: "https://b.example/left.pdf", referrer: "https://b.example/" });
 await tick(10);
 leave();

@@ -88,6 +88,7 @@ export async function assertUserBrowserContract() {
     taskDownload: [{ expectationMatches: true, state: "complete", path: "C:\\Downloads\\report.pdf",
       mimeType: "application/pdf" }],
     lateMatchReported: ["C:\\Downloads\\late.csv"], interruptedReported: ["interrupted:USER_CANCELED"],
+    sameReferrerOtherTabReported: false, sameUrlTwice: [["ambiguous", null]], forgottenDuringGraceReported: false,
     leftClientDownloadReported: false, expectationForUnattachedSession: true, expectationWithoutTimeout: true,
     userTabAttachable: true, userTabClosable: false, userTabKeptAfterEnd: true, ownTabClosedAtEnd: true,
   });

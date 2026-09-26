@@ -401,6 +401,8 @@ export class BrowserAutomation {
       artifactStore,
       exportRoot,
       browserSaves: port.browserSavesDownloads ? (sessionRef, options) => port.armDownload(sessionRef, options) : null,
+      releaseInterception: (sessionRef) => port.releaseInterception(sessionRef),
+      verifySurface: (sessionRef) => port.verifySurface(sessionRef),
     }) : null;
   }
 

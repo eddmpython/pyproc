@@ -34,8 +34,10 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
   `resources.lifecycleListeners` joins the resource inventory.
 - **Downloads in the user's own browser.** A declared click download in the `userBrowser` provider returns the same
   receipt and export. The browser saves the file where the user's settings say. The extension, which now has the
-  `downloads` permission for this alone, reports only the download the armed task tab started (by its URL or its
-  referrer), and pyproc reads the file there and leaves it in place. Downloads the user starts are never reported.
+  `downloads` permission for this alone, reports only the download whose URL the armed task tab's own
+  `Page.downloadWillBegin` named. pyproc reads the file there, only while that tab is inside the permission, and
+  leaves it in place. Two downloads of that URL at once are ambiguous and neither is read
+  (`BROWSER_AUTOMATION_DOWNLOAD_AMBIGUOUS`). Downloads the user starts are never reported.
 
 ### Changed
 

@@ -136,7 +136,29 @@ export async function assertDownloadReceipt() {
       declaredMimeType: declared }, declared);
   }
   assert.equal(decide(hex("ffd8ffe000"), "image/jpg").mimeType, "image/jpeg");
-  // After a UTF-16 byte order mark the rest must be UTF-16 text.
+  // A ZIP is not named by a flat XML or a package part type, and its own `mimetype` entry is not trusted for one.
+  for (const declared of ["application/vnd.oasis.opendocument.text-flat-xml",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    "application/vnd.openxmlformats-officedocument.theme+xml", "application/vnd.openxmlformats-officedocument.vmlDrawing"]) {
+    assert.equal(decide(zipWith(["a.txt"]), declared).mimeType, "application/zip", declared);
+    assert.equal(signatureMimeType(storedMimetypeZip(declared.toLowerCase())), "application/zip", `entry ${declared}`);
+  }
+  assert.equal(decide(zipWith(["a.txt"]), "application/vnd.ms-excel.sheet.macroEnabled.12").mimeType,
+    "application/vnd.ms-excel.sheet.macroenabled.12");
+  for (const declared of ["audio/x-flac", "video/avi", "video/msvideo", "image/x-citrix-jpeg", "image/x-citrix-png",
+    "image/x-tiff", "audio/x-m4a", "application/x-ms-dos-executable", "application/x-winexe", "application/x-ogg"]) {
+    assert.equal(decide(hex("0001020304"), declared).mimeType, "application/octet-stream", declared);
+  }
+  // After a UTF-16 byte order mark the rest must be UTF-16 text; a surrogate pair cut by the sample is still text.
+  const utf16 = (text, bigEndian) => {
+    const body = Buffer.from(text, "utf16le");
+    if (bigEndian) body.swap16();
+    return Buffer.concat([Buffer.from(bigEndian ? [0xfe, 0xff] : [0xff, 0xfe]), body]);
+  };
+  for (const bigEndian of [false, true]) {
+    assert.equal(decide(utf16(`${"A".repeat(4095)}\u{1F600}tail`, bigEndian), "text/plain; charset=utf-16", "notes.txt")
+      .mimeType, "text/plain", `surrogate at the sample edge (${bigEndian ? "BE" : "LE"})`);
+  }
   assert.equal(decide(hex("fffe41004200"), "text/csv").mimeType, "text/csv");
   assert.equal(decide(hex("fffe00d80102"), "text/csv").mimeType, "application/octet-stream");
   assert.equal(decide(hex("fffe01000200"), "text/csv").mimeType, "application/octet-stream");

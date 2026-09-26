@@ -298,10 +298,45 @@ export class BrowserControlPort {
     this._requireOpen();
     const session = this._requireSession(sessionRef);
     if (!this.browserSavesDownloads) throw new TypeError("this browser does not save downloads itself");
-    const target = await this._describe(session);
-    session.authorizationState = "verified";
-    session.authorizedTarget = target;
+    await this.verifySurface(sessionRef);
     return this._transport.armDownload(session.transportSession, { timeoutMs });
+  }
+
+  // Checks again that the session's surface is inside the permission (it is described afresh); a surface outside it
+  // is held and throws BROWSER_CONTROL_SURFACE_HELD. For an effect that finished without a command of its own (a
+  // download the user's browser saved) before its result is taken.
+  async verifySurface(sessionRef) {
+    this._requireOpen();
+    const session = this._requireSession(sessionRef);
+    try {
+      const target = await this._describe(session);
+      session.authorizationState = "verified";
+      session.authorizedTarget = target;
+    } catch (error) {
+      session.authorizationState = error?.code === BROWSER_CONTROL_ERROR_CODES.surfaceHeld ? "held" : "unverified";
+      throw error;
+    }
+  }
+
+  // Turns the session's own interception off, whatever the permission now says: an effect that turned it on (a
+  // download reading its response) must be able to turn it off after a revision took the method away. It changes
+  // nothing the page asked for, needs no surface, and returns nothing.
+  async releaseInterception(sessionRef) {
+    const session = this._sessions.get(String(sessionRef?.sessionId || ""));
+    if (!session || session.state !== "attached") return;
+    await this._transport.send(session.transportSession, { method: "Fetch.disable", params: {} }).catch(() => {});
+  }
+
+  // A paused request nobody will hear of is let go: a response that already came is continued unchanged, and a
+  // request not yet sent is refused (nothing is sent from a surface that is not verified, or through interception the
+  // permission no longer names).
+  _releasePaused(session, params) {
+    if (typeof params.requestId !== "string") return;
+    const answered = params.responseStatusCode !== undefined || params.responseErrorReason !== undefined;
+    this._transport.send(session.transportSession, answered
+      ? { method: "Fetch.continueRequest", params: { requestId: params.requestId } }
+      : { method: "Fetch.failRequest", params: { requestId: params.requestId, errorReason: "BlockedByClient" } })
+      .catch(() => {});
   }
 
   async beginPopupCapture(sessionRef) {
@@ -409,7 +444,9 @@ export class BrowserControlPort {
     let target = null;
     const release = !trustedRead && releasesInterception(command);
     if (release) {
-      target = session.authorizedTarget || session.lastTarget || Object.freeze({ type: "page", url: "", title: "" });
+      // A release names no surface it has not verified: a held or unverified page is never described in its result.
+      target = session.authorizationState === "verified" && session.authorizedTarget ? session.authorizedTarget
+        : Object.freeze({ type: "page", url: "", title: "" });
     } else if (command.method === MODAL_UNBLOCK_METHOD) {
       if (session.authorizationState !== "verified" || !session.authorizedTarget) {
         throw this._error(BROWSER_CONTROL_ERROR_CODES.permissionDenied,
@@ -650,15 +687,13 @@ export class BrowserControlPort {
     if (detachedListeners) this._markDetached(session, params.reason || "transport_detach");
     if (session.authorizationState !== "verified"
       && method !== "Transport.contextReplaced" && method !== "Transport.detached") {
-      // A response the interception paused on a surface that is not verified now is let go unchanged: nobody hears
-      // of it, and it must not wait for anyone.
-      if (method === "Fetch.requestPaused" && typeof params.requestId === "string") {
-        this._transport.send(session.transportSession, { method: "Fetch.continueRequest",
-          params: { requestId: params.requestId } }).catch(() => {});
-      }
+      if (method === "Fetch.requestPaused") this._releasePaused(session, params);
       return;
     }
-    if (!this.policy.allowsEvent(method)) return;
+    if (!this.policy.allowsEvent(method)) {
+      if (method === "Fetch.requestPaused") this._releasePaused(session, params);
+      return;
+    }
     const normalized = Object.freeze({
       sequence: ++this._eventSeq,
       method,

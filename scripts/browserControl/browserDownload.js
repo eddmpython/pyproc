@@ -6,7 +6,7 @@
 // itself: the transport is armed for the one download the click starts and says where the browser saved it and the
 // type it recorded; the file is read there and left in place. Either way the receipt's type is decided from the bytes
 // first (`downloadReceipt.js`), with the declared type beside it.
-import { lstat, mkdir, readFile, realpath, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { BrowserControlError } from "./browserControlPort.js";
 import { redactBrowserUrl } from "./browserObservation.js";
@@ -31,16 +31,26 @@ function inside(root, candidate) {
 const withoutFragment = (url) => String(url || "").split("#")[0];
 
 // The Content-Type the server declared for the download's own response: the one answered at the download's URL
-// (after any redirect, the fragment aside), or none. No other response speaks for it.
-function declaredFor(responses, url) {
+// (after any redirect, the fragment aside) in the frame that started the download, or none. No other response speaks
+// for it, not even one of the same URL in another frame.
+function declaredFor(responses, url, frameId) {
   const wanted = withoutFragment(url);
   const answered = responses.filter((response) => !(response.status >= 300 && response.status < 400)
-    && withoutFragment(response.url) === wanted);
+    && withoutFragment(response.url) === wanted && (!frameId || !response.frameId || response.frameId === frameId));
   return answered.at(-1)?.contentType || "";
 }
 
+// A file larger than the artifact store keeps is refused before it is read, so one download never fills memory.
+async function refuseOversize(path, limit) {
+  const size = (await stat(path)).size;
+  if (Number.isFinite(limit) && size > limit) {
+    throw new BrowserControlError("BROWSER_AUTOMATION_ARTIFACT_TOO_LARGE",
+      "browser download exceeds the per-artifact byte limit", { outcome: "applied", details: { byteLength: size } });
+  }
+}
+
 // The bytes of the file a browser saved itself, which must be a regular file at an absolute path.
-async function savedDownloadBytes(path) {
+async function savedDownloadBytes(path, limit) {
   if (typeof path !== "string" || !isAbsolute(path)) {
     throw new BrowserControlError("BROWSER_AUTOMATION_DOWNLOAD_INVALID", "browser download has no saved file",
       { outcome: "applied" });
@@ -55,6 +65,7 @@ async function savedDownloadBytes(path) {
     throw new BrowserControlError("BROWSER_AUTOMATION_DOWNLOAD_INVALID", "browser download is not a regular file",
       { outcome: "applied" });
   }
+  await refuseOversize(path, limit);
   return readFile(path);
 }
 
@@ -108,7 +119,8 @@ export async function exportDownload(root, name, bytes, { sourceUrl = "" } = {})
 }
 
 export class BrowserDownload {
-  constructor({ lifecycle, command, downloadDir, artifactStore, exportRoot = null, browserSaves = null } = {}) {
+  constructor({ lifecycle, command, downloadDir, artifactStore, exportRoot = null, browserSaves = null,
+    releaseInterception = null, verifySurface = null } = {}) {
     if (!lifecycle || typeof lifecycle.watch !== "function" || typeof lifecycle.listen !== "function") {
       throw new TypeError("browser download lifecycle is required");
     }
@@ -121,6 +133,12 @@ export class BrowserDownload {
     if (browserSaves !== null && typeof browserSaves !== "function") {
       throw new TypeError("browser download browserSaves is invalid");
     }
+    if (releaseInterception !== null && typeof releaseInterception !== "function") {
+      throw new TypeError("browser download releaseInterception is invalid");
+    }
+    if (verifySurface !== null && typeof verifySurface !== "function") {
+      throw new TypeError("browser download verifySurface is invalid");
+    }
     this._lifecycle = lifecycle;
     this._command = command;
     this._downloadDir = resolve(downloadDir);
@@ -128,6 +146,10 @@ export class BrowserDownload {
     this._exportRoot = exportRoot === null ? null : resolve(exportRoot);
     // (sessionRef, { timeoutMs }) => { done, cancel } for a browser that saves downloads itself, else null.
     this._browserSaves = browserSaves;
+    // (sessionRef) => turns the session's interception off whatever the permission now says; (sessionRef) => checks
+    // the session's surface is still inside the permission.
+    this._releaseInterception = releaseInterception;
+    this._verifySurface = verifySurface;
     this._enabledSessions = new Set();
     this._exported = 0;
   }
@@ -182,12 +204,13 @@ export class BrowserDownload {
         throw new BrowserControlError("BROWSER_AUTOMATION_DOWNLOAD_INVALID",
           "browser download escaped the controlled directory", { outcome: "applied" });
       }
-      const bytes = await readFile(filePath);
       try {
+        await refuseOversize(filePath, this._artifactStore.maxArtifactBytes);
+        const bytes = await readFile(filePath);
         const sourceUrl = String(beginEvent.params?.url || "");
         return await this._receipt({ clickResult, bytes, sourceUrl, saveAs,
           suggestedFilename: basename(String(beginEvent.params?.suggestedFilename || "download")),
-          declared: dataUrlMimeType(sourceUrl) || declaredFor(responses, sourceUrl) });
+          declared: dataUrlMimeType(sourceUrl) || declaredFor(responses, sourceUrl, beginEvent.params?.frameId) });
       } finally {
         try { await unlink(filePath); }
         catch (error) { if (error?.code !== "ENOENT") throw error; }
@@ -217,12 +240,25 @@ export class BrowserDownload {
       });
       ended.catch(() => {});
       const saved = await Promise.race([armed.done, clickFailure, ended]);
+      if (saved?.state === "ambiguous") {
+        throw new BrowserControlError("BROWSER_AUTOMATION_DOWNLOAD_AMBIGUOUS",
+          "the browser downloaded the same file twice at once, so neither is read", { outcome: "applied" });
+      }
       if (saved?.state !== "complete") {
         throw new BrowserControlError("BROWSER_AUTOMATION_DOWNLOAD_CANCELLED",
           `browser download did not complete: ${saved?.error || saved?.state || "unknown"}`, { outcome: "applied" });
       }
       const clickResult = await clickPromise;
-      const bytes = await savedDownloadBytes(saved.path);
+      // The tab that started it must still be inside the permission before its file is taken.
+      if (this._verifySurface) {
+        try { await this._verifySurface(sessionRef); }
+        catch (error) {
+          throw new BrowserControlError(error?.code || "BROWSER_CONTROL_SURFACE_HELD",
+            "the tab left the permission, so its download is not read", { outcome: "applied", cause: error,
+              ...(error?.details ? { details: error.details } : {}) });
+        }
+      }
+      const bytes = await savedDownloadBytes(saved.path, this._artifactStore.maxArtifactBytes);
       return await this._receipt({ clickResult, bytes, sourceUrl: String(saved.url || ""), saveAs,
         suggestedFilename: basename(saved.path), declared: String(saved.mimeType || "") });
     } finally {
@@ -286,7 +322,7 @@ export class BrowserDownload {
         const header = (params.responseHeaders || [])
           .find((item) => String(item?.name || "").toLowerCase() === "content-type");
         responses.push(Object.freeze({ url: String(params.request?.url || ""), status: Number(params.responseStatusCode),
-          contentType: String(header?.value || "") }));
+          frameId: String(params.frameId || ""), contentType: String(header?.value || "") }));
         if (responses.length > RESPONSES_KEPT) responses.shift();
       }
       const released = this._command(sessionRef, "Fetch.continueRequest", { requestId: params.requestId },
@@ -294,12 +330,17 @@ export class BrowserDownload {
       releasing.add(released);
       void released.finally(() => releasing.delete(released));
     });
+    // Interception is turned off through the permission (so the action's commands show it), and, when that is refused
+    // (a revision took the method away) or fails, through the port's own release, which never needs the permission.
     const stop = async () => {
       try {
         await Promise.allSettled([...releasing]);
         await this._command(sessionRef, "Fetch.disable", {}, commandResults, undefined);
-      } catch { /* A session that went away took its interception with it. */ }
-      finally { stopListening(); }
+      } catch {
+        await this._releaseInterception?.(sessionRef);
+      } finally {
+        stopListening();
+      }
     };
     try {
       await this._command(sessionRef, "Fetch.enable", { patterns: DOWNLOAD_RESPONSE_PATTERNS }, commandResults, signal);

@@ -487,12 +487,14 @@ A declared download (`click` with `download: true`) returns its artifact descrip
 
 `mimeEvidence` says which rule decided it (`signature`, `text`, `declared`, or `none`). `declaredMimeType` is the
 `Content-Type` (with any charset) of the download's own response, matched by its URL after redirects and without its
-fragment; for a `data:` URL it is the URL's type. No other response of the page speaks for a download (a `blob:`
-download has none). To read that header, the session pauses each document response of its own page once while the
+fragment, in the frame that started it; for a `data:` URL it is the URL's type. No other response of the page speaks
+for a download, not even the same URL loaded as a page in another frame (a `blob:` download has none). A file larger
+than the artifact store keeps (`artifacts.maxArtifactBytes`) is refused before it is read. To read that header, the session pauses each document response of its own page once while the
 download runs and lets it continue unchanged. Such a response is never left paused: one that arrives while the page's
-surface is not verified is let go at once, and turning interception off needs no verified surface. A page that moves
-on to another page of the permission before its download starts (a "your download will begin" page), or holds a frame
-that reloads, keeps its events and its download.
+surface is not verified, or after a permission revision took the download's events away, is let go at once (a request
+not yet sent is refused instead), and the download turns interception off even when the permission no longer names
+the method. A page that moves on to another page of the permission before its download starts (a "your download will
+begin" page), or holds a frame that reloads, keeps its events and its download.
 
 With `browser.exportRoot`, the receipt also has `exportedFile: { path, name, markOfTheWeb }`. The bytes are written as
 a new file directly inside that folder. On Windows the file carries the mark a browser leaves on what it downloads (a
