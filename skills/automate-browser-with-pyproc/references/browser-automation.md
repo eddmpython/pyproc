@@ -548,8 +548,13 @@ Dialog, download, and popup effects must be declared on `click`. A denied popup 
 reactivated as part of the already acknowledged popup cleanup, while an allowed popup keeps its browser focus.
 This prevents later capture from inheriting a closed popup surface. Navigation and popup final origins are
 rechecked after send and report `outcome: "applied"` when the browser already crossed the effect boundary.
-Console and network observations omit headers and bodies, redact secret-shaped text,
-and remove URL credentials, query, and fragment. Cookie reads omit values.
+With `includeConsole`, the console channel carries the page's console calls (`source: "consoleApi"`), its uncaught
+exceptions (`source: "exception"`, with the script URL, line, and column), and the browser's own log (a resource that
+failed to load, a blocked request, a violation, with the log's own `source` such as `network`), each with a
+`timestamp`. Turning it on replays what the page produced before. A session that never asks turns on neither the
+Runtime nor the Log domain. Console and network observations omit headers and bodies, redact secret-shaped text,
+and remove URL credentials, query, and fragment, in the text of an exception or a log line too. Cookie reads omit
+values.
 
 The broker proves configured authority boundaries, not ownership of a site or legal permission to automate
 it. The operator owns applicable law, site terms, account authorization, data minimization, and approval for

@@ -14,6 +14,12 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 ### Added
 
+- **Uncaught exceptions and the browser's log in the console channel.** An observation with `includeConsole` now
+  carries the page's uncaught exceptions (`source: "exception"`, with the script URL, line, and column) and the
+  browser's own log entries (a resource that failed to load, a blocked request, a violation), beside the page's console
+  calls (`source: "consoleApi"`), each with a timestamp; turning the channel on replays what came before. URLs in their
+  text lose their query. A session that never asks turns on neither the Runtime nor the Log domain. Gate:
+  `test:console-diagnostics`.
 - **Download receipt and export root.** A declared click download now reports the type its bytes prove, not a fixed
   `application/octet-stream`: a byte signature names it outright (images, PDF, ZIP and the Office Open XML,
   OpenDocument, EPUB, and HWPX files in one, legacy Office and HWP containers, archives, media, fonts, executables),

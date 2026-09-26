@@ -130,6 +130,7 @@
     "test:permission-revision": "node tests/browser/permissionRevisionProduct.mjs",
     "test:perception-reuse": "node tests/browser/perceptionReuseProduct.mjs",
     "test:download-receipt": "node tests/browser/downloadReceiptProduct.mjs",
+    "test:console-diagnostics": "node tests/browser/consoleDiagnosticsProduct.mjs",
     "test:browser-desktop": "node tests/browser/browserDesktopProduct.mjs",
     "test:automation-lifecycle": "node tests/browser/automationLifecycleProduct.mjs",
     "test:action-convergence": "node tests/browser/actionConvergenceProduct.mjs",

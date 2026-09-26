@@ -508,8 +508,8 @@ export async function assertBrowserAutomationContract() {
   });
   assert(artifactReady.result.screenshot?.mimeType === "image/png" && artifactReady.result.screenshot?.dataBase64
     && artifactReady.result.screenshot?.artifactRef?.startsWith("artifact:")
-    && artifactReady.requestCount === 5,
-  "screenshot와 event domain 준비가 bounded observation으로 합쳐지지 않았다");
+    && artifactReady.requestCount === 6,
+  "screenshot와 event domain(Runtime, Log, Network) 준비가 bounded observation으로 합쳐지지 않았다");
   port.emit("Runtime.consoleAPICalled", {
     type: "info", timestamp: 1, args: [{ value: "token=must-not-leak" }, { value: 42 }],
   });

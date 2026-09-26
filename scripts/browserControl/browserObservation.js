@@ -1,4 +1,10 @@
 // browserObservation.js - bounded screenshot, console, network artifact와 redaction.
+//
+// The console channel, asked for with `includeConsole`, carries the page's console calls, its uncaught exceptions, and
+// the browser's own log (a resource that failed to load, a blocked request, a violation), each with `source`
+// (`consoleApi`, `exception`, or the browser log's own source such as `network`). A session that never asked for it
+// turns on neither the Runtime nor the Log domain. Text keeps secret-looking values out, and the URLs a text carries
+// lose their query.
 import {
   BROWSER_OBSERVATION_DEFAULT_EVENTS,
   BROWSER_OBSERVATION_MAX_EVENTS,
@@ -14,6 +20,11 @@ function sessionKey(ref) {
 function clipped(value, limit = BROWSER_OBSERVATION_TEXT_LIMIT) {
   const text = String(value ?? "").replace(SECRET_PATTERN, "$1=[redacted]");
   return text.length > limit ? `${text.slice(0, limit)}...` : text;
+}
+
+// Text with every URL in it cut before its query or fragment (an exception's stack or a log line can carry tokens there).
+function withoutUrlQueries(text) {
+  return String(text ?? "").replace(/(\b(?:https?|wss?):\/\/[^\s?#'"()<>]+)[?#][^\s'"()<>]*/gi, "$1");
 }
 
 export function redactBrowserUrl(value) {
@@ -42,9 +53,36 @@ export function normalizeBrowserObservationEvent(event, idFactory, requestRef = 
     return Object.freeze({
       eventId: `event:${idFactory()}`,
       kind: "console",
+      source: "consoleApi",
       level: clipped(params.type || "log", 20),
       timestamp: Number(params.timestamp) || null,
       args: Object.freeze((params.args || []).slice(0, 10).map(consoleArgument)),
+    });
+  }
+  if (event.method === "Runtime.exceptionThrown") {
+    const details = params.exceptionDetails || {};
+    return Object.freeze({
+      eventId: `event:${idFactory()}`,
+      kind: "console",
+      source: "exception",
+      level: "error",
+      timestamp: Number(params.timestamp) || null,
+      text: clipped(withoutUrlQueries(details.exception?.description || details.text || "uncaught exception")),
+      ...(details.url ? { url: redactBrowserUrl(details.url) } : {}),
+      ...(Number.isInteger(details.lineNumber) ? { line: details.lineNumber + 1 } : {}),
+      ...(Number.isInteger(details.columnNumber) ? { column: details.columnNumber + 1 } : {}),
+    });
+  }
+  if (event.method === "Log.entryAdded") {
+    const entry = params.entry || {};
+    return Object.freeze({
+      eventId: `event:${idFactory()}`,
+      kind: "console",
+      source: clipped(entry.source || "other", 40),
+      level: clipped(entry.level || "info", 20),
+      timestamp: Number(entry.timestamp) || null,
+      text: clipped(withoutUrlQueries(entry.text || "")),
+      ...(entry.url ? { url: redactBrowserUrl(entry.url) } : {}),
     });
   }
   if (event.method === "Network.requestWillBeSent") {
@@ -106,7 +144,10 @@ export class BrowserObservation {
     const maxEvents = options.maxEvents || BROWSER_OBSERVATION_DEFAULT_EVENTS;
     const session = (includeConsole || includeNetwork) ? this._ensureSession(sessionRef) : null;
     if (includeConsole && !session.consoleEnabled) {
+      // Runtime brings console calls and uncaught exceptions, Log the browser's own messages; both replay what the
+      // page produced before they were turned on.
       await this._command(sessionRef, "Runtime.enable", {}, commandResults, signal);
+      await this._command(sessionRef, "Log.enable", {}, commandResults, signal);
       session.consoleEnabled = true;
     }
     if (includeNetwork && !session.networkEnabled) {

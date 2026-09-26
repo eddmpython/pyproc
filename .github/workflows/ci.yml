@@ -143,6 +143,10 @@ jobs:
       - run: npm run test:download-receipt
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
+      # console 진단: 요청하면 잡히지 않은 예외와 브라우저 log가 들어오고, 요청하지 않으면 domain을 켜지 않는다.
+      - run: npm run test:console-diagnostics
+        env:
+          PYPROC_BROWSER: /usr/bin/google-chrome
       - run: npm run test:automation-lifecycle
         env:
           PYPROC_BROWSER: /usr/bin/google-chrome
@@ -210,6 +214,7 @@ jobs:
       - run: npm run test:permission-revision
       - run: npm run test:perception-reuse
       - run: npm run test:download-receipt
+      - run: npm run test:console-diagnostics
       - name: Build the browser desktop helper outside the checkout
         if: runner.os == 'Windows'
         shell: pwsh

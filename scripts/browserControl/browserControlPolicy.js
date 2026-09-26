@@ -29,6 +29,7 @@ export const BROWSER_CONTROL_COMMAND_RISKS = Object.freeze({
   "DOMSnapshot.captureSnapshot": "read",
   "DOMStorage.enable": "read",
   "DOMStorage.getDOMStorageItems": "read",
+  "Log.enable": "read",
   "Network.enable": "read",
   "Network.getCookies": "read",
   "Page.getFrameTree": "read",

@@ -17,14 +17,17 @@ export const BROWSER_OBSERVATION_METHODS = Object.freeze([
   "Page.captureScreenshot",
   "Page.getLayoutMetrics",
   "Page.getFrameTree",
+  "Log.enable",
   "Runtime.enable",
 ]);
 
 export const BROWSER_OBSERVATION_EVENTS = Object.freeze([
+  "Log.entryAdded",
   "Network.loadingFailed",
   "Network.requestWillBeSent",
   "Network.responseReceived",
   "Runtime.consoleAPICalled",
+  "Runtime.exceptionThrown",
 ]);
 
 export const BROWSER_OBSERVATION_PROPERTIES = Object.freeze({
