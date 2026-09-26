@@ -13,7 +13,8 @@ import { createDeterministicZip } from "../../scripts/engineBuilder/deterministi
 import { assembleHostWheel } from "../../scripts/pythonSdkBuilder/assembleHostWheel.mjs";
 import { extractNativeHost, extractNodeRuntime, fetchNativeHost, fetchNodeArchive, readPackageTree }
   from "../../scripts/pythonSdkBuilder/hostPayload.mjs";
-import { nativeHostArchiveName, nativeHostSourceTree } from "../../scripts/nativeHostBuilder/buildNativeHost.mjs";
+import { NATIVE_HOSTS, nativeHostArchiveName, nativeHostSourceTree }
+  from "../../scripts/nativeHostBuilder/buildNativeHost.mjs";
 import { verifyPythonDistributions } from "../../scripts/pythonSdkBuilder/verifyPythonDistributions.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -95,6 +96,9 @@ export async function assertPythonDistributions() {
   // The lock pins each host built from exactly this commit's host source; changing a source needs a new pinned build.
   assert(/^\d+\.\d+\.\d+$/u.test(lock.nativeHosts?.toolchain || "") && lock.nativeHosts.target === "x86_64-pc-windows-msvc",
     "Python distribution lock must pin the Rust toolchain of the native hosts");
+  // Every native host rides in the win_amd64 wheel: none may be left unpinned (a host the wheel lacks fails at use).
+  assert(Object.keys(lock.nativeHosts.components).join(",") === Object.keys(NATIVE_HOSTS).join(","),
+    "Python distribution lock must pin every native host, in the registry's order");
   for (const [component, pinned] of Object.entries(lock.nativeHosts.components)) {
     assert(/^[0-9a-f]{64}$/u.test(pinned?.sha256 || "") && pinned.sourceTree === nativeHostSourceTree(component, "HEAD", root)
       && pinned.archive === nativeHostArchiveName(component, pinned.sourceTree)

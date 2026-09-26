@@ -28,6 +28,12 @@
         "archive": "pyproc-user-browser-host-b98fe35233ed.zip",
         "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-user-browser-host-b98fe35233ed/pyproc-user-browser-host-b98fe35233ed.zip",
         "sha256": "bb5798abb562bd9497fff0ff33eacf215f59a5435a1678ddc0676b03495ea25b"
+      },
+      "browserDesktop": {
+        "sourceTree": "f86857b292479c6fd54e787ddf01bc370e13ea7c",
+        "archive": "pyproc-browser-desktop-f86857b29247.zip",
+        "url": "https://github.com/eddmpython/pyproc/releases/download/pyproc-browser-desktop-f86857b29247/pyproc-browser-desktop-f86857b29247.zip",
+        "sha256": "9a9cce27b7f86eec5dfc978be4b94cf9fe3eb7f41fa1cf415c27d15cd0d5e8d1"
       }
     }
   }

@@ -38,7 +38,8 @@ image에서 두 번 따로 빌드해 byte가 같은지 보고 build provenance�
 담은 zip 하나: 실행 파일, 제3자 고지, `<이름>.json` 식별)을 남긴다. 식별에는 빌드한 commit이 들어가므로 lock은 그
 commit이 아니라 다음 commit에서 고친다. 순서는 원본 commit push, `native-hosts` 검증 자산 내려받기, 그 zip을 zip 이름에서
 `.zip`을 뺀 태그(`pyproc-<host 이름>-<tree 12자리>`)의 프로젝트 release 자산으로 올리기, lock 고정 commit이다. platform
-wheel 빌드는 commit의 host 원본 tree id가 lock과 다르면 멈추므로 고정하지 않은 host가 wheel에 실리지 않는다.
+wheel 빌드는 commit의 host 원본 tree id가 lock과 다르면 멈추므로 고정하지 않은 host가 wheel에 실리지 않고,
+`tests/contracts/pythonDistributions.mjs`는 `NATIVE_HOSTS`의 모든 host가 그 순서대로 고정되어 있는지 본다.
 
 ## Breaking disclosure
 

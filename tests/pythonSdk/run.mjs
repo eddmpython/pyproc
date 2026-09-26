@@ -287,7 +287,9 @@ try {
     check("platform wheel 하나가 Node 없는 PATH에서 번들 host로 Machine과 브라우저 전용 세션을 열고 닫음",
       hostReport.ok === true && hostReport.version === PACKAGE_VERSION && hostReport.machineValue === "42"
         && hostReport.machineObserved === true && hostReport.browserOnlyObserved === true
-        && hostReport.browserOnlyMachineOperations.length === 0,
+        && hostReport.browserOnlyMachineOperations.length === 0
+        // The win_amd64 wheel's own browser desktop helper opens a headed browser on a private desktop.
+        && (HOST_PLATFORM !== "win_amd64" || hostReport.privateDesktopObserved === true),
       `${hostWheel.filename} ${hostWheel.bytes.byteLength} bytes`);
   }
 } catch (error) {

@@ -40,6 +40,12 @@ manifest = json.loads(machineConfig.read_text(encoding="utf-8"))
 assert Path(manifest["engine"]["root"]).is_relative_to(HOST_ROOT), manifest["engine"]
 browserOnlyConfig = Path(projectRoot) / "hostProfile" / "browserOnly.json"
 browserOnlyConfig.write_text(json.dumps({**manifest, "engine": {"enabled": False}}), encoding="utf-8")
+# On Windows the wheel carries the browser desktop helper: a headed browser on a private desktop needs nothing else.
+privateDesktopConfig = Path(projectRoot) / "hostProfile" / "privateDesktop.json"
+privateDesktopConfig.write_text(json.dumps({**manifest, "engine": {"enabled": False},
+                                            "browser": {**manifest["browser"], "headed": True, "desktop": "private"}}),
+                                encoding="utf-8")
+os.environ.pop("PYPROC_BROWSER_DESKTOP_HELPER", None)
 
 
 def pageJourney(client: PyProcClient) -> bool:
@@ -70,5 +76,14 @@ with PyProcClient.start(browserOnlyConfig, startupTimeout=90.0) as client:
     except BaseException:
         print(client.diagnostics[-6000:], file=sys.stderr)
         raise
+if os.name == "nt":
+    helper = HOST_ROOT / descriptor["browserDesktop"]["path"]
+    assert helper.is_file() and helper.name == "pyproc-browser-desktop.exe", descriptor.get("browserDesktop")
+    with PyProcClient.start(privateDesktopConfig, startupTimeout=90.0) as client:
+        try:
+            report["privateDesktopObserved"] = pageJourney(client)
+        except BaseException:
+            print(client.diagnostics[-6000:], file=sys.stderr)
+            raise
 report["ok"] = True
 print(json.dumps(report))

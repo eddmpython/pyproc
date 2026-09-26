@@ -27,7 +27,8 @@ happen only on an explicit maintainer decision; the Unreleased section accumulat
 
 - The Windows native hosts share one reproducible build: `scripts/nativeHostBuilder/buildNativeHost.mjs --component`
   builds `userBrowserHost` or `browserDesktop`, the `native-hosts` workflow builds each twice and attests it, and the
-  Python distribution lock pins them under `nativeHosts` (one Rust toolchain, one entry per host).
+  Python distribution lock pins them under `nativeHosts` (one Rust toolchain, one entry per host). The win_amd64
+  platform wheel now carries `pyproc-browser-desktop.exe` beside the user-browser host.
 
 ### Fixed
 
